@@ -218,7 +218,26 @@ PTO_INTERNAL bool VerifyOutputAndPrint(const SingleCardTestEnv &env, size_t coun
     return true;
 }
 
-// Multi-rank perf environment: TestContext + input/comm buffers + trash/cycle + SDMA + host barrier
+// ----------------------------------------------------------------------------
+// MultiRankPerfEnv: test-file-scoped fixture for all multi-rank TPREFETCH_L2
+// tests (both the correctness test RunPrefetchL2TputAsyncKernel and the perf
+// tests RunPrefetchL2PerfKernel / RunTloadRemotePerfKernel / RunTputSyncPerf /
+// RunTgetPerfKernel).
+//
+// Bundles:
+//   * TestContext ctx      -- HCCL communicator + ACL stream + deviceCtx
+//   * input_host           -- host-side input buffer, pre-filled with {0..count-1}
+//   * sendBuf / recvBuf    -- carved from the local HCCL window
+//   * cycleDev / trashDev  -- perf measurement + L2-cold "trash" buffer
+//                             (allocated unconditionally; correctness tests
+//                              leave them unused — cost is one uint64 + one
+//                              count*sizeof(T) allocation on the device)
+//   * sdmaMgr              -- SDMA workspace manager
+//
+// The struct intentionally does NOT call HcclHostBarrier anywhere. Collective
+// synchronization is a test-flow concern and belongs at the call site so the
+// reader can see the exact barrier count matching the kernel-launch pattern.
+// ----------------------------------------------------------------------------
 template <typename T, size_t count>
 struct MultiRankPerfEnv {
     TestContext ctx;
@@ -229,8 +248,6 @@ struct MultiRankPerfEnv {
     void *trashDev = nullptr;
     SdmaWorkspaceManager sdmaMgr;
 
-    // Allocate host input, carve sendBuf/recvBuf in HCCL window, and init host input sequence.
-    // Caller is responsible for uploading input_host → sendBuf as appropriate.
     bool Init(int rank_id, int n_ranks, int n_devices, int first_device_id, const HcclRootInfo *rootInfo)
     {
         if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
@@ -261,7 +278,6 @@ struct MultiRankPerfEnv {
             aclrtFreeHost(input_host);
             return false;
         }
-        HcclHostBarrier(ctx.comm, ctx.stream);
         return true;
     }
 
@@ -281,7 +297,6 @@ struct MultiRankPerfEnv {
 
     bool Finalize()
     {
-        HcclHostBarrier(ctx.comm, ctx.stream);
         aclrtFree(cycleDev);
         aclrtFree(trashDev);
         aclrtFreeHost(input_host);
@@ -506,11 +521,15 @@ bool RunPrefetchL2TputAsyncKernel(int rank_id, int n_ranks, int n_devices, int f
         reinterpret_cast<T *>(output_host)[i] = static_cast<T>(-1);
     aclrtMemcpy(env.recvBuf, count * sizeof(T), output_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
 
+    HcclHostBarrier(env.ctx.comm, env.ctx.stream);
+
     int enablePrefetch = prefetch ? 1 : 0;
     TPrefetchL2TputAsyncKernel<T, count><<<1, nullptr, env.ctx.stream>>>(
         env.sendBuf, n_ranks, root_rank, static_cast<int>(count), enablePrefetch,
         env.ctx.deviceCtx, (uint8_t *)env.sdmaMgr.GetWorkspaceAddr(), 0);
     env.ctx.aclStatus = aclrtSynchronizeStream(env.ctx.stream);
+
+    HcclHostBarrier(env.ctx.comm, env.ctx.stream);
 
     aclrtMemcpy(output_host, count * sizeof(T), env.recvBuf, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
     bool is_ok = VerifyTputAsyncOutput<T>(rank_id, root_rank, output_host, count, prefetch);
@@ -626,6 +645,8 @@ bool RunPrefetchL2PerfKernel(int rank_id, int n_ranks, int n_devices, int first_
         return false;
     env.UploadInputToSend();
 
+    HcclHostBarrier(env.ctx.comm, env.ctx.stream);
+
     int enablePrefetch = prefetch ? 1 : 0;
     TPrefetchL2PerfKernel<T, count><<<1, nullptr, env.ctx.stream>>>(
         env.sendBuf, n_ranks, root_rank, static_cast<int>(count), enablePrefetch,
@@ -633,6 +654,8 @@ bool RunPrefetchL2PerfKernel(int rank_id, int n_ranks, int n_devices, int first_
         reinterpret_cast<uint8_t *>(env.trashDev),
         reinterpret_cast<uint64_t *>(env.cycleDev));
     env.ctx.aclStatus = aclrtSynchronizeStream(env.ctx.stream);
+
+    HcclHostBarrier(env.ctx.comm, env.ctx.stream);
 
     env.DownloadCycles(outCycles, rank_id == root_rank);
     return env.Finalize();
@@ -989,6 +1012,8 @@ bool RunTloadRemotePerfKernel(int rank_id, int n_ranks, int n_devices, int first
     if (rank_id == root_rank)
         env.UploadInputToSend();
 
+    HcclHostBarrier(env.ctx.comm, env.ctx.stream);
+
     int enablePrefetch = prefetch ? 1 : 0;
     TloadRemotePerfKernel<T, count><<<1, nullptr, env.ctx.stream>>>(
         env.sendBuf, n_ranks, root_rank, static_cast<int>(count), enablePrefetch,
@@ -996,6 +1021,8 @@ bool RunTloadRemotePerfKernel(int rank_id, int n_ranks, int n_devices, int first
         reinterpret_cast<uint8_t *>(env.trashDev),
         reinterpret_cast<uint64_t *>(env.cycleDev));
     env.ctx.aclStatus = aclrtSynchronizeStream(env.ctx.stream);
+
+    HcclHostBarrier(env.ctx.comm, env.ctx.stream);
 
     env.DownloadCycles(outCycles, rank_id != root_rank);
     return env.Finalize();
@@ -1150,6 +1177,8 @@ bool RunTputSyncPerfKernel(int rank_id, int n_ranks, int n_devices, int first_de
     if (rank_id == root_rank)
         env.UploadInputToSend();
 
+    HcclHostBarrier(env.ctx.comm, env.ctx.stream);
+
     int enablePrefetch = prefetch ? 1 : 0;
     TputSyncPerfKernel<T, count><<<1, nullptr, env.ctx.stream>>>(
         env.sendBuf, n_ranks, root_rank, static_cast<int>(count), enablePrefetch,
@@ -1157,6 +1186,8 @@ bool RunTputSyncPerfKernel(int rank_id, int n_ranks, int n_devices, int first_de
         reinterpret_cast<uint8_t *>(env.trashDev),
         reinterpret_cast<uint64_t *>(env.cycleDev));
     env.ctx.aclStatus = aclrtSynchronizeStream(env.ctx.stream);
+
+    HcclHostBarrier(env.ctx.comm, env.ctx.stream);
 
     env.DownloadCycles(outCycles, rank_id == root_rank);
     return env.Finalize();
@@ -1298,9 +1329,13 @@ __global__ AICORE void TgetPerfKernel(__gm__ T *commBuf, int nranks, int source_
     pipe_barrier(PIPE_ALL);
 }
 
+// Launch one phase of TgetPerfKernel and host-sync. Collective barriers are
+// inserted by the caller because the exact number of barriers is part of the
+// two-phase test protocol (source-rank prefetch → inter-phase barrier → reader
+// TGET + measurement).
 template <typename T, size_t count>
-PTO_INTERNAL void LaunchTgetPhase(MultiRankPerfEnv<T, count> &env, int n_ranks, int source_rank, int enablePrefetch,
-                                  int phase)
+PTO_INTERNAL void LaunchAndSyncTgetPhase(MultiRankPerfEnv<T, count> &env, int n_ranks, int source_rank,
+                                         int enablePrefetch, int phase)
 {
     TgetPerfKernel<T, count><<<1, nullptr, env.ctx.stream>>>(
         env.sendBuf, n_ranks, source_rank, static_cast<int>(count), enablePrefetch, phase,
@@ -1308,7 +1343,6 @@ PTO_INTERNAL void LaunchTgetPhase(MultiRankPerfEnv<T, count> &env, int n_ranks, 
         reinterpret_cast<uint8_t *>(env.trashDev),
         reinterpret_cast<uint64_t *>(env.cycleDev));
     env.ctx.aclStatus = aclrtSynchronizeStream(env.ctx.stream);
-    HcclHostBarrier(env.ctx.comm, env.ctx.stream);
 }
 
 template <typename T, size_t count>
@@ -1323,8 +1357,12 @@ bool RunTgetPerfKernel(int rank_id, int n_ranks, int n_devices, int first_device
         env.UploadInputToSend();
 
     int enablePrefetch = prefetch ? 1 : 0;
-    LaunchTgetPhase<T, count>(env, n_ranks, source_rank, enablePrefetch, 0);
-    LaunchTgetPhase<T, count>(env, n_ranks, source_rank, enablePrefetch, 1);
+
+    HcclHostBarrier(env.ctx.comm, env.ctx.stream);
+    LaunchAndSyncTgetPhase<T, count>(env, n_ranks, source_rank, enablePrefetch, 0);
+    HcclHostBarrier(env.ctx.comm, env.ctx.stream);
+    LaunchAndSyncTgetPhase<T, count>(env, n_ranks, source_rank, enablePrefetch, 1);
+    HcclHostBarrier(env.ctx.comm, env.ctx.stream);
 
     env.DownloadCycles(outCycles, rank_id != source_rank);
     return env.Finalize();
