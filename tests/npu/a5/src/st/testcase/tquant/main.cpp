@@ -422,6 +422,34 @@ TEST_F(TQUANTTEST, case_mxfp8_bf16_128x128_nd)
     test_tquant_mxfp8_bf16<128, 128, 0>();
 }
 
+// ----------------------------------------------------
+// Failing cases to test on the board:
+TEST_F(TQUANTTEST, case_mxfp8_bf16_14x16_nd)
+{
+    test_tquant_mxfp8_bf16<14, 16, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_bf16_7x48_nd)
+{
+    test_tquant_mxfp8_bf16<7, 48, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_bf16_4x16_nd)
+{
+    test_tquant_mxfp8_bf16<4, 16, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_bf16_8x16_nd)
+{
+    test_tquant_mxfp8_bf16<8, 16, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_bf16_16x16_nd)
+{
+    test_tquant_mxfp8_bf16<16, 16, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_bf16_18x138_nd)
+{
+    test_tquant_mxfp8_bf16<18, 138, 0>();
+}
+// ----------------------------------------------------
+
 // Diagnostic cases for board failure root-cause analysis.
 TEST_F(TQUANTTEST, case_mxfp8_bf16_1x32_nd)
 {
@@ -455,10 +483,6 @@ TEST_F(TQUANTTEST, case_mxfp8_bf16_5x256_nd)
     test_tquant_mxfp8_bf16<5, 256, 0>();
 }
 // Additional padding coverage (non-multiple-of-32 cols / large padding).
-TEST_F(TQUANTTEST, case_mxfp8_bf16_18x138_nd)
-{
-    test_tquant_mxfp8_bf16<18, 138, 0>();
-}
 TEST_F(TQUANTTEST, case_mxfp8_bf16_1x192_nd)
 {
     test_tquant_mxfp8_bf16<1, 192, 0>();
