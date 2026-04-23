@@ -93,6 +93,44 @@ PTO_INTERNAL AICORE void BroadcastViaTputAsync(KernelGlobal<T> &sendG, __gm__ T 
     (void)lastEvent.Wait(session);
 }
 
+// BoundsOkOrFinalize — range guard for elem_count against the compile-time
+// `count` template parameter. On failure, emits the closing pipe_barrier and
+// returns false so the kernel can early-return in one line instead of four.
+template <size_t count>
+PTO_INTERNAL AICORE bool BoundsOkOrFinalize(int elem_count)
+{
+    if (elem_count <= 0 || elem_count > static_cast<int>(count)) {
+        pipe_barrier(PIPE_ALL);
+        return false;
+    }
+    return true;
+}
+
+// EnterRootBroadcastOrReturn — unified gate for "root-only TPREFETCH + broadcast"
+// kernels (TPrefetchL2TputAsyncKernel / TPrefetchL2PerfKernel). Performs bounds
+// check, root-rank gate, and session build in one call. On any failure emits
+// pipe_barrier(PIPE_ALL) and returns false so the caller can `return` immediately.
+// On success, `session` is initialized and the caller is guaranteed to be on the
+// root rank.
+template <size_t count>
+PTO_INTERNAL AICORE bool EnterRootBroadcastOrReturn(__gm__ HcclDeviceContext *hcclCtx, int root_rank,
+                                                    int elem_count, __gm__ uint8_t *sdmaWorkspace,
+                                                    uint32_t sdmaSyncId, pto::comm::AsyncSession &session)
+{
+    if (!BoundsOkOrFinalize<count>(elem_count)) {
+        return false;
+    }
+    if (static_cast<int>(hcclCtx->rankId) != root_rank) {
+        pipe_barrier(PIPE_ALL);
+        return false;
+    }
+    if (!BuildKernelSession(session, sdmaWorkspace, sdmaSyncId)) {
+        pipe_barrier(PIPE_ALL);
+        return false;
+    }
+    return true;
+}
+
 // ============================================================================
 // Common: TLOAD/TSTORE copy loop (shared by all kernels)
 // ============================================================================
@@ -127,8 +165,7 @@ PTO_INTERNAL void CopyViaTile(__gm__ T *src, __gm__ T *dst, int elem_count)
 template <typename T, size_t count>
 __global__ AICORE void BaselineKernel(__gm__ T *src, __gm__ T *dst, int elem_count)
 {
-    if (elem_count <= 0 || elem_count > static_cast<int>(count)) {
-        pipe_barrier(PIPE_ALL);
+    if (!BoundsOkOrFinalize<count>(elem_count)) {
         return;
     }
 
@@ -148,8 +185,7 @@ __global__ AICORE void TPrefetchL2CorrectnessKernel(__gm__ T *src, __gm__ T *dst
                                                      int elem_count,
                                                      __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
 {
-    if (elem_count <= 0 || elem_count > static_cast<int>(count)) {
-        pipe_barrier(PIPE_ALL);
+    if (!BoundsOkOrFinalize<count>(elem_count)) {
         return;
     }
 
@@ -176,8 +212,7 @@ __global__ AICORE void TPrefetchL2RawPtrKernel(__gm__ T *src, __gm__ T *dst,
                                                 int elem_count,
                                                 __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
 {
-    if (elem_count <= 0 || elem_count > static_cast<int>(count)) {
-        pipe_barrier(PIPE_ALL);
+    if (!BoundsOkOrFinalize<count>(elem_count)) {
         return;
     }
 
@@ -378,6 +413,49 @@ void LaunchMultiRankKernel(MultiRankPerfEnv<T, count> &env, LaunchFn &&launchFn)
 }
 
 // ----------------------------------------------------------------------------
+// PrintL2ColdWarmSummary: shared printer for all "L2-cold vs L2-warm" perf tests.
+//
+// TLOAD / Remote-TLOAD / TPUT-sync / TGET all report the same block structure
+// (title → data size → chunk line → iterations → cold cycles → warm cycles →
+// speedup verdict). The only variations are the test title, the measured
+// instruction name ("TLOAD"/"TPUT"/"TGET"), and the chunk-line style.
+// Callers fill in a small spec struct and we render the common scaffold.
+// ----------------------------------------------------------------------------
+struct L2PerfSummaryFmt {
+    const char *title;
+    const char *metric;
+    size_t dataBytes;
+    int kWarmup;
+    int kMeasured;
+    // Exactly one of the following two is used (the other left at 0):
+    //   tloadChunks    — prints "  TLOAD chunks:   <tloadChunks>"
+    //   tileChunkElems — prints "  Tile chunk:     <tileChunkElems> elements"
+    int tloadChunks;
+    int tileChunkElems;
+};
+
+inline void PrintL2ColdWarmSummary(const L2PerfSummaryFmt &fmt, uint64_t avgCold, uint64_t avgWarm)
+{
+    double speedup = (avgWarm > 0) ? static_cast<double>(avgCold) / static_cast<double>(avgWarm) : 0.0;
+
+    std::cout << "\n================================================================" << std::endl;
+    std::cout << "[PERF] " << fmt.title << std::endl;
+    std::cout << "  Data size:      " << fmt.dataBytes << " bytes (" << fmt.dataBytes / 1024 << " KB)" << std::endl;
+    if (fmt.tloadChunks > 0) {
+        std::cout << "  TLOAD chunks:   " << fmt.tloadChunks << std::endl;
+    } else if (fmt.tileChunkElems > 0) {
+        std::cout << "  Tile chunk:     " << fmt.tileChunkElems << " elements" << std::endl;
+    }
+    std::cout << "  Iterations:     " << fmt.kMeasured << " (warmup=" << fmt.kWarmup << ")" << std::endl;
+    std::cout << "  L2-cold " << fmt.metric << ":  " << avgCold << " cycles (avg)" << std::endl;
+    std::cout << "  L2-warm " << fmt.metric << ":  " << avgWarm << " cycles (avg)" << std::endl;
+    std::cout << "  Speedup:        " << speedup << "x  ("
+              << (speedup > 1.05 ? "PREFETCH HELPS" : (speedup < 0.95 ? "PREFETCH HURTS" : "NO SIGNIFICANT DIFF"))
+              << ")" << std::endl;
+    std::cout << "================================================================\n" << std::endl;
+}
+
+// ----------------------------------------------------------------------------
 // RunColdWarmPerfSweep: generic "L2 cold vs L2 warm" benchmark driver.
 //
 // Runs `kWarmup + kMeasured` iterations of `runOnce(false, cycles)` (cold),
@@ -390,6 +468,12 @@ void LaunchMultiRankKernel(MultiRankPerfEnv<T, count> &env, LaunchFn &&launchFn)
 template <typename RunOnce, typename PrintSummary>
 bool RunColdWarmPerfSweep(int kWarmup, int kMeasured, RunOnce &&runOnce, PrintSummary &&printSummary)
 {
+    // Defensive: callers supply constexpr positive values (kMeasured >= 1), but
+    // static analysis cannot prove it, so guard against div-by-zero explicitly.
+    if (kMeasured <= 0) {
+        return false;
+    }
+
     uint64_t coldTotal = 0;
     uint64_t warmTotal = 0;
 
@@ -412,8 +496,8 @@ bool RunColdWarmPerfSweep(int kWarmup, int kMeasured, RunOnce &&runOnce, PrintSu
         }
     }
 
-    uint64_t avgCold = coldTotal / kMeasured;
-    uint64_t avgWarm = warmTotal / kMeasured;
+    uint64_t avgCold = coldTotal / static_cast<uint64_t>(kMeasured);
+    uint64_t avgWarm = warmTotal / static_cast<uint64_t>(kMeasured);
     printSummary(avgCold, avgWarm);
     return true;
 }
@@ -526,32 +610,23 @@ __global__ AICORE void TPrefetchL2TputAsyncKernel(__gm__ T *commBuf, int nranks,
                                                    __gm__ HcclDeviceContext *hcclCtx,
                                                    __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
 {
-    if (elem_count <= 0 || elem_count > static_cast<int>(count)) {
-        pipe_barrier(PIPE_ALL);
+    pto::comm::AsyncSession session;
+    if (!EnterRootBroadcastOrReturn<count>(hcclCtx, root_rank, elem_count,
+                                           sdmaWorkspace, sdmaSyncId, session)) {
         return;
     }
 
     KernelShapeDyn shape(1, 1, 1, 1, elem_count);
     KernelStrideDyn stride(elem_count, elem_count, elem_count, elem_count, 1);
-
-    int my_rank = static_cast<int>(hcclCtx->rankId);
     __gm__ T *sendBuf = commBuf;
     __gm__ T *recvBuf = commBuf + count;
     KernelGlobal<T> sendG(sendBuf, shape, stride);
 
-    if (my_rank == root_rank) {
-        pto::comm::AsyncSession session;
-        if (!BuildKernelSession(session, sdmaWorkspace, sdmaSyncId)) {
-            pipe_barrier(PIPE_ALL);
-            return;
-        }
-
-        if (enablePrefetch) {
-            (void)pto::comm::TPREFETCH_L2(sendG, session);
-        }
-
-        BroadcastViaTputAsync<T>(sendG, recvBuf, shape, stride, nranks, root_rank, hcclCtx, session);
+    if (enablePrefetch) {
+        (void)pto::comm::TPREFETCH_L2(sendG, session);
     }
+
+    BroadcastViaTputAsync<T>(sendG, recvBuf, shape, stride, nranks, root_rank, hcclCtx, session);
 
     pipe_barrier(PIPE_ALL);
 }
@@ -668,34 +743,25 @@ __global__ AICORE void TPrefetchL2PerfKernel(__gm__ T *commBuf, int nranks, int 
                                               __gm__ uint8_t *trashBuf,
                                               __gm__ uint64_t *cycleOut)
 {
-    if (elem_count <= 0 || elem_count > static_cast<int>(count)) {
-        pipe_barrier(PIPE_ALL);
+    pto::comm::AsyncSession session;
+    if (!EnterRootBroadcastOrReturn<count>(hcclCtx, root_rank, elem_count,
+                                           sdmaWorkspace, sdmaSyncId, session)) {
         return;
     }
 
     KernelShapeDyn shape(1, 1, 1, 1, elem_count);
     KernelStrideDyn stride(elem_count, elem_count, elem_count, elem_count, 1);
-
-    int my_rank = static_cast<int>(hcclCtx->rankId);
     __gm__ T *sendBuf = commBuf;
     __gm__ T *recvBuf = commBuf + count;
     KernelGlobal<T> sendG(sendBuf, shape, stride);
 
-    if (my_rank == root_rank) {
-        pto::comm::AsyncSession session;
-        if (!BuildKernelSession(session, sdmaWorkspace, sdmaSyncId)) {
-            pipe_barrier(PIPE_ALL);
-            return;
-        }
+    // Prefetch hint is fire-and-forget here: TPUT_ASYNC below may overlap with it.
+    (void)PrefetchRealOrTrash<T>(sendBuf, trashBuf, elem_count, enablePrefetch, session);
 
-        // Prefetch hint is fire-and-forget here: TPUT_ASYNC below may overlap with it.
-        (void)PrefetchRealOrTrash<T>(sendBuf, trashBuf, elem_count, enablePrefetch, session);
-
-        uint64_t t0 = get_syscnt();
-        BroadcastViaTputAsync<T>(sendG, recvBuf, shape, stride, nranks, root_rank, hcclCtx, session);
-        uint64_t t1 = get_syscnt();
-        *cycleOut = t1 - t0;
-    }
+    uint64_t t0 = get_syscnt();
+    BroadcastViaTputAsync<T>(sendG, recvBuf, shape, stride, nranks, root_rank, hcclCtx, session);
+    uint64_t t1 = get_syscnt();
+    *cycleOut = t1 - t0;
 
     pipe_barrier(PIPE_ALL);
 }
@@ -786,8 +852,7 @@ __global__ AICORE void TloadPerfKernel(__gm__ T *srcBuf, int elem_count, int ena
     using ChunkShape = pto::Shape<1, 1, 1, 1, kTileCols>;
     using ChunkStride = pto::Stride<1, 1, 1, 1, 1>;
 
-    if (elem_count <= 0 || elem_count > static_cast<int>(count)) {
-        pipe_barrier(PIPE_ALL);
+    if (!BoundsOkOrFinalize<count>(elem_count)) {
         return;
     }
 
@@ -892,20 +957,14 @@ bool RunTloadPerf(int deviceId)
         return RunTloadPerfOnce<T, count>(deviceId, prefetch, cycles);
     };
     auto printSummary = [&](uint64_t avgCold, uint64_t avgWarm) {
-        double speedup = (avgWarm > 0) ? (double)avgCold / (double)avgWarm : 0.0;
-        size_t dataBytes = count * sizeof(T);
-
-        std::cout << "\n================================================================" << std::endl;
-        std::cout << "[PERF] TLOAD Latency: L2-cold vs L2-prefetched" << std::endl;
-        std::cout << "  Data size:      " << dataBytes << " bytes (" << dataBytes / 1024 << " KB)" << std::endl;
-        std::cout << "  TLOAD chunks:   " << count / ((count <= 256) ? count : 256) << std::endl;
-        std::cout << "  Iterations:     " << kMeasured << " (warmup=" << kWarmup << ")" << std::endl;
-        std::cout << "  L2-cold TLOAD:  " << avgCold << " cycles (avg)" << std::endl;
-        std::cout << "  L2-warm TLOAD:  " << avgWarm << " cycles (avg)" << std::endl;
-        std::cout << "  Speedup:        " << speedup << "x  ("
-                  << (speedup > 1.05 ? "PREFETCH HELPS" : (speedup < 0.95 ? "PREFETCH HURTS" : "NO SIGNIFICANT DIFF"))
-                  << ")" << std::endl;
-        std::cout << "================================================================\n" << std::endl;
+        L2PerfSummaryFmt fmt{};
+        fmt.title = "TLOAD Latency: L2-cold vs L2-prefetched";
+        fmt.metric = "TLOAD";
+        fmt.dataBytes = count * sizeof(T);
+        fmt.kWarmup = kWarmup;
+        fmt.kMeasured = kMeasured;
+        fmt.tloadChunks = static_cast<int>(count / ((count <= 256) ? count : 256));
+        PrintL2ColdWarmSummary(fmt, avgCold, avgWarm);
     };
     return RunColdWarmPerfSweep(kWarmup, kMeasured, runOnce, printSummary);
 }
@@ -973,8 +1032,7 @@ __global__ AICORE void TloadRemotePerfKernel(__gm__ T *commBuf, int nranks, int 
                                               __gm__ uint8_t *trashBuf,
                                               __gm__ uint64_t *cycleOut)
 {
-    if (elem_count <= 0 || elem_count > static_cast<int>(count)) {
-        pipe_barrier(PIPE_ALL);
+    if (!BoundsOkOrFinalize<count>(elem_count)) {
         return;
     }
 
@@ -1041,22 +1099,17 @@ bool RunTloadRemotePerf(int n_ranks, int n_devices, int first_rank_id, int first
             });
     };
     // Measurement lives on the receiver (rank != root), so print from non-rank-0 too.
+    // Measurement lives on the receiver (rank != root), so print from non-rank-0.
     auto printSummary = [&](uint64_t avgCold, uint64_t avgWarm) {
         if (CommMpiRank() == 0) return;
-        double speedup = (avgWarm > 0) ? (double)avgCold / (double)avgWarm : 0.0;
-        size_t dataBytes = count * sizeof(T);
-
-        std::cout << "\n================================================================" << std::endl;
-        std::cout << "[PERF] Remote TLOAD: Rank 0 → Rank 1 → TLOAD" << std::endl;
-        std::cout << "  Data size:      " << dataBytes << " bytes (" << dataBytes / 1024 << " KB)" << std::endl;
-        std::cout << "  TLOAD chunks:   " << count / ((count <= 256) ? count : 256) << std::endl;
-        std::cout << "  Iterations:     " << kMeasured << " (warmup=" << kWarmup << ")" << std::endl;
-        std::cout << "  L2-cold TLOAD:  " << avgCold << " cycles (avg)" << std::endl;
-        std::cout << "  L2-warm TLOAD:  " << avgWarm << " cycles (avg)" << std::endl;
-        std::cout << "  Speedup:        " << speedup << "x  ("
-                  << (speedup > 1.05 ? "PREFETCH HELPS" : (speedup < 0.95 ? "PREFETCH HURTS" : "NO SIGNIFICANT DIFF"))
-                  << ")" << std::endl;
-        std::cout << "================================================================\n" << std::endl;
+        L2PerfSummaryFmt fmt{};
+        fmt.title = "Remote TLOAD: Rank 0 → Rank 1 → TLOAD";
+        fmt.metric = "TLOAD";
+        fmt.dataBytes = count * sizeof(T);
+        fmt.kWarmup = kWarmup;
+        fmt.kMeasured = kMeasured;
+        fmt.tloadChunks = static_cast<int>(count / ((count <= 256) ? count : 256));
+        PrintL2ColdWarmSummary(fmt, avgCold, avgWarm);
     };
     return RunColdWarmPerfSweep(kWarmup, kMeasured, runOnce, printSummary);
 }
@@ -1088,8 +1141,7 @@ __global__ AICORE void TputSyncPerfKernel(__gm__ T *commBuf, int nranks, int roo
     static_assert(count % kTileCols == 0, "count must be a multiple of kTileCols");
     using TileData = pto::Tile<pto::TileType::Vec, T, 1, kTileCols, pto::BLayout::RowMajor>;
 
-    if (elem_count <= 0 || elem_count > static_cast<int>(count)) {
-        pipe_barrier(PIPE_ALL);
+    if (!BoundsOkOrFinalize<count>(elem_count)) {
         return;
     }
 
@@ -1169,20 +1221,14 @@ bool RunTputSyncPerf(int n_ranks, int n_devices, int first_rank_id, int first_de
     // Measurement lives on the sender (rank == root), which is mpiRank 0.
     auto printSummary = [&](uint64_t avgCold, uint64_t avgWarm) {
         if (CommMpiRank() != 0) return;
-        double speedup = (avgWarm > 0) ? (double)avgCold / (double)avgWarm : 0.0;
-        size_t dataBytes = count * sizeof(T);
-
-        std::cout << "\n================================================================" << std::endl;
-        std::cout << "[PERF] TPUT (sync): sender-side L2 prefetch" << std::endl;
-        std::cout << "  Data size:      " << dataBytes << " bytes (" << dataBytes / 1024 << " KB)" << std::endl;
-        std::cout << "  Tile chunk:     " << ((count <= 256) ? count : 256) << " elements" << std::endl;
-        std::cout << "  Iterations:     " << kMeasured << " (warmup=" << kWarmup << ")" << std::endl;
-        std::cout << "  L2-cold TPUT:   " << avgCold << " cycles (avg)" << std::endl;
-        std::cout << "  L2-warm TPUT:   " << avgWarm << " cycles (avg)" << std::endl;
-        std::cout << "  Speedup:        " << speedup << "x  ("
-                  << (speedup > 1.05 ? "PREFETCH HELPS" : (speedup < 0.95 ? "PREFETCH HURTS" : "NO SIGNIFICANT DIFF"))
-                  << ")" << std::endl;
-        std::cout << "================================================================\n" << std::endl;
+        L2PerfSummaryFmt fmt{};
+        fmt.title = "TPUT (sync): sender-side L2 prefetch";
+        fmt.metric = "TPUT";
+        fmt.dataBytes = count * sizeof(T);
+        fmt.kWarmup = kWarmup;
+        fmt.kMeasured = kMeasured;
+        fmt.tileChunkElems = static_cast<int>((count <= 256) ? count : 256);
+        PrintL2ColdWarmSummary(fmt, avgCold, avgWarm);
     };
     return RunColdWarmPerfSweep(kWarmup, kMeasured, runOnce, printSummary);
 }
@@ -1215,8 +1261,7 @@ __global__ AICORE void TgetPerfKernel(__gm__ T *commBuf, int nranks, int source_
     static_assert(count % kTileCols == 0, "count must be a multiple of kTileCols");
     using TileData = pto::Tile<pto::TileType::Vec, T, 1, kTileCols, pto::BLayout::RowMajor>;
 
-    if (elem_count <= 0 || elem_count > static_cast<int>(count)) {
-        pipe_barrier(PIPE_ALL);
+    if (!BoundsOkOrFinalize<count>(elem_count)) {
         return;
     }
 
@@ -1309,22 +1354,17 @@ bool RunTgetPerf(int n_ranks, int n_devices, int first_rank_id, int first_device
             });
     };
     // Measurement lives on the reader (rank != source), i.e. non-rank-0.
+    // Measurement lives on the reader rank (rank != source), so print from non-rank-0.
     auto printSummary = [&](uint64_t avgCold, uint64_t avgWarm) {
         if (CommMpiRank() == 0) return;
-        double speedup = (avgWarm > 0) ? (double)avgCold / (double)avgWarm : 0.0;
-        size_t dataBytes = count * sizeof(T);
-
-        std::cout << "\n================================================================" << std::endl;
-        std::cout << "[PERF] TGET: source-side L2 prefetch (HCCS coherency test)" << std::endl;
-        std::cout << "  Data size:      " << dataBytes << " bytes (" << dataBytes / 1024 << " KB)" << std::endl;
-        std::cout << "  Tile chunk:     " << ((count <= 256) ? count : 256) << " elements" << std::endl;
-        std::cout << "  Iterations:     " << kMeasured << " (warmup=" << kWarmup << ")" << std::endl;
-        std::cout << "  L2-cold TGET:   " << avgCold << " cycles (avg)" << std::endl;
-        std::cout << "  L2-warm TGET:   " << avgWarm << " cycles (avg)" << std::endl;
-        std::cout << "  Speedup:        " << speedup << "x  ("
-                  << (speedup > 1.05 ? "PREFETCH HELPS" : (speedup < 0.95 ? "PREFETCH HURTS" : "NO SIGNIFICANT DIFF"))
-                  << ")" << std::endl;
-        std::cout << "================================================================\n" << std::endl;
+        L2PerfSummaryFmt fmt{};
+        fmt.title = "TGET: source-side L2 prefetch (HCCS coherency test)";
+        fmt.metric = "TGET";
+        fmt.dataBytes = count * sizeof(T);
+        fmt.kWarmup = kWarmup;
+        fmt.kMeasured = kMeasured;
+        fmt.tileChunkElems = static_cast<int>((count <= 256) ? count : 256);
+        PrintL2ColdWarmSummary(fmt, avgCold, avgWarm);
     };
     return RunColdWarmPerfSweep(kWarmup, kMeasured, runOnce, printSummary);
 }
