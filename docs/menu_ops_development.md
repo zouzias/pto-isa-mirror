@@ -3,7 +3,6 @@
 - 产品介绍
     - [什么是PTO](../README_zh.md)
     - [PTO ISA概述](PTOISA_zh.md)
-    - [应用场景与优势](README_zh.md)
     - [支持的硬件平台](../include/README_zh.md)
     - [PTO与其他算子开发方式对比](coding/pto-comparison_zh.md)
 - 开发环境准备
