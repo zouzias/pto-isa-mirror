@@ -10,41 +10,38 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/npu/a5/MScatter.hpp>
 #include "acl/acl.h"
 #include "mscatter_common.h"
 
 using namespace std;
 using namespace pto;
 
-template <typename T, typename TIdx, int kSrcRows, int kSrcCols, int kOutSize>
-inline AICORE void runMSCATTER(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ TIdx __in__ *indices)
+template <pto::ScatterAtomicOp Atomic, pto::ScatterOOB Oob, pto::ScatterConflict Conflict, typename T, typename TIdx,
+          int kSrcRows, int kSrcCols, int kTableRows>
+inline AICORE void runRow(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ TIdx __in__ *indices)
 {
-    using DynShape_src = pto::Shape<1, 1, 1, kSrcRows, kSrcCols>;
-    using DynStrid_src = pto::Stride<1, 1, 1, kSrcCols, 1>;
-    using GlobalData_src = GlobalTensor<T, DynShape_src, DynStrid_src>;
+    using SrcShape = pto::Shape<1, 1, 1, kSrcRows, kSrcCols>;
+    using SrcStride = pto::Stride<1, 1, 1, kSrcCols, 1>;
+    using IdxShape = pto::Shape<1, 1, 1, 1, kSrcRows>;
+    using IdxStride = pto::Stride<1, 1, 1, kSrcRows, 1>;
+    using OutShape = pto::Shape<1, 1, 1, kTableRows, kSrcCols>;
+    using OutStride = pto::Stride<1, 1, 1, kSrcCols, 1>;
 
-    using DynShape_idx = pto::Shape<1, 1, 1, kSrcRows, kSrcCols>;
-    using DynStrid_idx = pto::Stride<1, 1, 1, kSrcCols, 1>;
-    using GlobalData_idx = GlobalTensor<TIdx, DynShape_idx, DynStrid_idx>;
+    GlobalTensor<T, SrcShape, SrcStride> srcGlobal(src);
+    GlobalTensor<TIdx, IdxShape, IdxStride> idxGlobal(indices);
+    GlobalTensor<T, OutShape, OutStride> outGlobal(out);
 
-    using DynShape_out = pto::Shape<1, 1, 1, 1, kOutSize>;
-    using DynStrid_out = pto::Stride<1, 1, 1, kOutSize, 1>;
-    using GlobalData_out = GlobalTensor<T, DynShape_out, DynStrid_out>;
+    using SrcTile = Tile<TileType::Vec, T, kSrcRows, kSrcCols, BLayout::RowMajor, kSrcRows, kSrcCols>;
+    using IdxTile = Tile<TileType::Vec, TIdx, 1, kSrcRows, BLayout::RowMajor, 1, kSrcRows>;
 
-    using TileData_src = Tile<TileType::Vec, T, kSrcRows, kSrcCols, BLayout::RowMajor, -1, -1>;
-    using TileData_idx = Tile<TileType::Vec, TIdx, kSrcRows, kSrcCols, BLayout::RowMajor, -1, -1>;
+    SrcTile srcTile;
+    IdxTile idxTile;
 
-    TileData_src srcTile(kSrcRows, kSrcCols);
-    TileData_idx idxTile(kSrcRows, kSrcCols);
-
+    constexpr int idxBytes = ((1 * kSrcRows * (int)sizeof(TIdx) + 31) / 32) * 32;
+    constexpr int srcBytes = ((kSrcRows * kSrcCols * (int)sizeof(T) + 31) / 32) * 32;
     TASSIGN(idxTile, 0x0);
-    constexpr int idxBytes = kSrcRows * kSrcCols * sizeof(TIdx);
-    constexpr int srcOffset = ((idxBytes + 31) / 32) * 32;
-    TASSIGN(srcTile, srcOffset);
-
-    GlobalData_src srcGlobal(src);
-    GlobalData_idx idxGlobal(indices);
-    GlobalData_out outGlobal(out);
+    TASSIGN(srcTile, idxBytes);
 
     TLOAD(idxTile, idxGlobal);
     TLOAD(srcTile, srcGlobal);
@@ -52,186 +49,39 @@ inline AICORE void runMSCATTER(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    MSCATTER(outGlobal, srcTile, idxTile);
+    MSCATTER<Coalesce::Row, Atomic, Oob, Conflict>(outGlobal, srcTile, idxTile);
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
-
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 #endif
 }
 
-extern "C" __global__ AICORE void runMSCATTER_half_8x32_1024(__gm__ half *out, __gm__ half *src,
-                                                             __gm__ int32_t *indices)
+template <pto::ScatterAtomicOp Atomic, pto::ScatterOOB Oob, pto::ScatterConflict Conflict, typename T, typename TIdx,
+          int kValidRows, int kPadIdxCols, int kSrcCols, int kTableRows>
+inline AICORE void runRowPadded(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ TIdx __in__ *indices)
 {
-    runMSCATTER<half, int32_t, 8, 32, 1024>(out, src, indices);
-}
+    using SrcShape = pto::Shape<1, 1, 1, kValidRows, kSrcCols>;
+    using SrcStride = pto::Stride<1, 1, 1, kSrcCols, 1>;
+    using IdxShape = pto::Shape<1, 1, 1, 1, kValidRows>;
+    using IdxStride = pto::Stride<1, 1, 1, kValidRows, 1>;
+    using OutShape = pto::Shape<1, 1, 1, kTableRows, kSrcCols>;
+    using OutStride = pto::Stride<1, 1, 1, kSrcCols, 1>;
 
-extern "C" __global__ AICORE void runMSCATTER_half_16x64_2048(__gm__ half *out, __gm__ half *src,
-                                                              __gm__ int32_t *indices)
-{
-    runMSCATTER<half, int32_t, 16, 64, 2048>(out, src, indices);
-}
+    GlobalTensor<T, SrcShape, SrcStride> srcGlobal(src);
+    GlobalTensor<TIdx, IdxShape, IdxStride> idxGlobal(indices);
+    GlobalTensor<T, OutShape, OutStride> outGlobal(out);
 
-extern "C" __global__ AICORE void runMSCATTER_float_8x32_512(__gm__ float *out, __gm__ float *src,
-                                                             __gm__ int32_t *indices)
-{
-    runMSCATTER<float, int32_t, 8, 32, 512>(out, src, indices);
-}
+    using SrcTile = Tile<TileType::Vec, T, kValidRows, kSrcCols, BLayout::RowMajor, kValidRows, kSrcCols>;
+    using IdxTile = Tile<TileType::Vec, TIdx, 1, kPadIdxCols, BLayout::RowMajor, 1, kValidRows>;
 
-extern "C" __global__ AICORE void runMSCATTER_float_16x32_1024(__gm__ float *out, __gm__ float *src,
-                                                               __gm__ int32_t *indices)
-{
-    runMSCATTER<float, int32_t, 16, 32, 1024>(out, src, indices);
-}
+    SrcTile srcTile;
+    IdxTile idxTile;
 
-extern "C" __global__ AICORE void runMSCATTER_float_16x64_2048(__gm__ float *out, __gm__ float *src,
-                                                               __gm__ int32_t *indices)
-{
-    runMSCATTER<float, int32_t, 16, 64, 2048>(out, src, indices);
-}
-
-extern "C" __global__ AICORE void runMSCATTER_float_8x8_128(__gm__ float *out, __gm__ float *src,
-                                                            __gm__ int32_t *indices)
-{
-    runMSCATTER<float, int32_t, 8, 8, 128>(out, src, indices);
-}
-
-extern "C" __global__ AICORE void runMSCATTER_int32_8x16_256(__gm__ int32_t *out, __gm__ int32_t *src,
-                                                             __gm__ int32_t *indices)
-{
-    runMSCATTER<int32_t, int32_t, 8, 16, 256>(out, src, indices);
-}
-
-extern "C" __global__ AICORE void runMSCATTER_int32_16x32_1024(__gm__ int32_t *out, __gm__ int32_t *src,
-                                                               __gm__ int32_t *indices)
-{
-    runMSCATTER<int32_t, int32_t, 16, 32, 1024>(out, src, indices);
-}
-
-extern "C" __global__ AICORE void runMSCATTER_int32_16x16_512(__gm__ int32_t *out, __gm__ int32_t *src,
-                                                              __gm__ int32_t *indices)
-{
-    runMSCATTER<int32_t, int32_t, 16, 16, 512>(out, src, indices);
-}
-
-extern "C" __global__ AICORE void runMSCATTER_uint8_16x32_1024(__gm__ uint8_t *out, __gm__ uint8_t *src,
-                                                               __gm__ int32_t *indices)
-{
-    runMSCATTER<uint8_t, int32_t, 16, 32, 1024>(out, src, indices);
-}
-
-extern "C" __global__ AICORE void runMSCATTER_uint8_16x64_2048(__gm__ uint8_t *out, __gm__ uint8_t *src,
-                                                               __gm__ int32_t *indices)
-{
-    runMSCATTER<uint8_t, int32_t, 16, 64, 2048>(out, src, indices);
-}
-
-template <typename T, typename TIdx, int kSrcRows, int kSrcCols, int kOutSize>
-void LaunchMSCATTER(T *out, T *src, TIdx *indices, void *stream);
-
-template <>
-void LaunchMSCATTER<float, int32_t, 8, 32, 512>(float *out, float *src, int32_t *indices, void *stream)
-{
-    runMSCATTER_float_8x32_512<<<1, nullptr, stream>>>(out, src, indices);
-}
-
-template <>
-void LaunchMSCATTER<float, int32_t, 16, 32, 1024>(float *out, float *src, int32_t *indices, void *stream)
-{
-    runMSCATTER_float_16x32_1024<<<1, nullptr, stream>>>(out, src, indices);
-}
-
-template <>
-void LaunchMSCATTER<float, int32_t, 16, 64, 2048>(float *out, float *src, int32_t *indices, void *stream)
-{
-    runMSCATTER_float_16x64_2048<<<1, nullptr, stream>>>(out, src, indices);
-}
-
-template <>
-void LaunchMSCATTER<float, int32_t, 8, 8, 128>(float *out, float *src, int32_t *indices, void *stream)
-{
-    runMSCATTER_float_8x8_128<<<1, nullptr, stream>>>(out, src, indices);
-}
-
-template <>
-void LaunchMSCATTER<int32_t, int32_t, 8, 16, 256>(int32_t *out, int32_t *src, int32_t *indices, void *stream)
-{
-    runMSCATTER_int32_8x16_256<<<1, nullptr, stream>>>(out, src, indices);
-}
-
-template <>
-void LaunchMSCATTER<int32_t, int32_t, 16, 32, 1024>(int32_t *out, int32_t *src, int32_t *indices, void *stream)
-{
-    runMSCATTER_int32_16x32_1024<<<1, nullptr, stream>>>(out, src, indices);
-}
-
-template <>
-void LaunchMSCATTER<int32_t, int32_t, 16, 16, 512>(int32_t *out, int32_t *src, int32_t *indices, void *stream)
-{
-    runMSCATTER_int32_16x16_512<<<1, nullptr, stream>>>(out, src, indices);
-}
-
-template <>
-void LaunchMSCATTER<uint8_t, int32_t, 16, 32, 1024>(uint8_t *out, uint8_t *src, int32_t *indices, void *stream)
-{
-    runMSCATTER_uint8_16x32_1024<<<1, nullptr, stream>>>(out, src, indices);
-}
-
-template <>
-void LaunchMSCATTER<uint8_t, int32_t, 16, 64, 2048>(uint8_t *out, uint8_t *src, int32_t *indices, void *stream)
-{
-    runMSCATTER_uint8_16x64_2048<<<1, nullptr, stream>>>(out, src, indices);
-}
-
-template <int kSrcRows, int kSrcCols, int kOutSize>
-void LaunchMSCATTERHalf(aclFloat16 *out, aclFloat16 *src, int32_t *indices, void *stream);
-
-template <>
-void LaunchMSCATTERHalf<8, 32, 1024>(aclFloat16 *out, aclFloat16 *src, int32_t *indices, void *stream)
-{
-    runMSCATTER_half_8x32_1024<<<1, nullptr, stream>>>((half *)out, (half *)src, indices);
-}
-
-template <>
-void LaunchMSCATTERHalf<16, 64, 2048>(aclFloat16 *out, aclFloat16 *src, int32_t *indices, void *stream)
-{
-    runMSCATTER_half_16x64_2048<<<1, nullptr, stream>>>((half *)out, (half *)src, indices);
-}
-
-extern "C" __global__ AICORE void runMSCATTER_float_skip_8x32_512(__gm__ float *out, __gm__ float *src,
-                                                                  __gm__ int32_t *indices)
-{
-    using T = float;
-    using TIdx = int32_t;
-    constexpr int kSrcRows = 8, kSrcCols = 32, kOutSize = 512;
-
-    using DynShape_src = pto::Shape<1, 1, 1, kSrcRows, kSrcCols>;
-    using DynStrid_src = pto::Stride<1, 1, 1, kSrcCols, 1>;
-    using GlobalData_src = GlobalTensor<T, DynShape_src, DynStrid_src>;
-
-    using DynShape_idx = pto::Shape<1, 1, 1, kSrcRows, kSrcCols>;
-    using DynStrid_idx = pto::Stride<1, 1, 1, kSrcCols, 1>;
-    using GlobalData_idx = GlobalTensor<TIdx, DynShape_idx, DynStrid_idx>;
-
-    using DynShape_out = pto::Shape<1, 1, 1, 1, kOutSize>;
-    using DynStrid_out = pto::Stride<1, 1, 1, kOutSize, 1>;
-    using GlobalData_out = GlobalTensor<T, DynShape_out, DynStrid_out>;
-
-    using TileData_src = Tile<TileType::Vec, T, kSrcRows, kSrcCols, BLayout::RowMajor, -1, -1>;
-    using TileData_idx = Tile<TileType::Vec, TIdx, kSrcRows, kSrcCols, BLayout::RowMajor, -1, -1>;
-
-    TileData_src srcTile(kSrcRows, kSrcCols);
-    TileData_idx idxTile(kSrcRows, kSrcCols);
-
+    constexpr int idxBytes = ((1 * kPadIdxCols * (int)sizeof(TIdx) + 31) / 32) * 32;
+    constexpr int srcBytes = ((kValidRows * kSrcCols * (int)sizeof(T) + 31) / 32) * 32;
     TASSIGN(idxTile, 0x0);
-    constexpr int idxBytes = kSrcRows * kSrcCols * sizeof(TIdx);
-    constexpr int srcOffset = ((idxBytes + 31) / 32) * 32;
-    TASSIGN(srcTile, srcOffset);
-
-    GlobalData_src srcGlobal(src);
-    GlobalData_idx idxGlobal(indices);
-    GlobalData_out outGlobal(out);
+    TASSIGN(srcTile, idxBytes);
 
     TLOAD(idxTile, idxGlobal);
     TLOAD(srcTile, srcGlobal);
@@ -239,47 +89,40 @@ extern "C" __global__ AICORE void runMSCATTER_float_skip_8x32_512(__gm__ float *
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    MSCATTER_IMPL<pto::ScatterAtomicOp::None, pto::ScatterOOB::Skip>(outGlobal, srcTile, idxTile);
+    MSCATTER<Coalesce::Row, Atomic, Oob, Conflict>(outGlobal, srcTile, idxTile);
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 #endif
+    (void)srcBytes;
 }
 
-extern "C" __global__ AICORE void runMSCATTER_int32_clamp_8x16_256(__gm__ int32_t *out, __gm__ int32_t *src,
-                                                                   __gm__ int32_t *indices)
+template <pto::ScatterAtomicOp Atomic, pto::ScatterOOB Oob, pto::ScatterConflict Conflict, typename T, typename TIdx,
+          int kSrcRows, int kSrcCols, int kTableRows>
+inline AICORE void runRowColIdx(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ TIdx __in__ *indices)
 {
-    using T = int32_t;
-    using TIdx = int32_t;
-    constexpr int kSrcRows = 8, kSrcCols = 16, kOutSize = 256;
+    using SrcShape = pto::Shape<1, 1, 1, kSrcRows, kSrcCols>;
+    using SrcStride = pto::Stride<1, 1, 1, kSrcCols, 1>;
+    using IdxShape = pto::Shape<1, 1, 1, kSrcRows, 1>;
+    using IdxStride = pto::Stride<1, 1, 1, 1, 1>;
+    using OutShape = pto::Shape<1, 1, 1, kTableRows, kSrcCols>;
+    using OutStride = pto::Stride<1, 1, 1, kSrcCols, 1>;
 
-    using DynShape_src = pto::Shape<1, 1, 1, kSrcRows, kSrcCols>;
-    using DynStrid_src = pto::Stride<1, 1, 1, kSrcCols, 1>;
-    using GlobalData_src = GlobalTensor<T, DynShape_src, DynStrid_src>;
+    GlobalTensor<T, SrcShape, SrcStride> srcGlobal(src);
+    GlobalTensor<TIdx, IdxShape, IdxStride, Layout::DN> idxGlobal(indices);
+    GlobalTensor<T, OutShape, OutStride> outGlobal(out);
 
-    using DynShape_idx = pto::Shape<1, 1, 1, kSrcRows, kSrcCols>;
-    using DynStrid_idx = pto::Stride<1, 1, 1, kSrcCols, 1>;
-    using GlobalData_idx = GlobalTensor<TIdx, DynShape_idx, DynStrid_idx>;
+    using SrcTile = Tile<TileType::Vec, T, kSrcRows, kSrcCols, BLayout::RowMajor, kSrcRows, kSrcCols>;
+    using IdxTile = Tile<TileType::Vec, TIdx, kSrcRows, 1, BLayout::ColMajor, kSrcRows, 1>;
 
-    using DynShape_out = pto::Shape<1, 1, 1, 1, kOutSize>;
-    using DynStrid_out = pto::Stride<1, 1, 1, kOutSize, 1>;
-    using GlobalData_out = GlobalTensor<T, DynShape_out, DynStrid_out>;
+    SrcTile srcTile;
+    IdxTile idxTile;
 
-    using TileData_src = Tile<TileType::Vec, T, kSrcRows, kSrcCols, BLayout::RowMajor, -1, -1>;
-    using TileData_idx = Tile<TileType::Vec, TIdx, kSrcRows, kSrcCols, BLayout::RowMajor, -1, -1>;
-
-    TileData_src srcTile(kSrcRows, kSrcCols);
-    TileData_idx idxTile(kSrcRows, kSrcCols);
-
+    constexpr int idxBytes = ((kSrcRows * 1 * (int)sizeof(TIdx) + 31) / 32) * 32;
+    constexpr int srcBytes = ((kSrcRows * kSrcCols * (int)sizeof(T) + 31) / 32) * 32;
     TASSIGN(idxTile, 0x0);
-    constexpr int idxBytes = kSrcRows * kSrcCols * sizeof(TIdx);
-    constexpr int srcOffset = ((idxBytes + 31) / 32) * 32;
-    TASSIGN(srcTile, srcOffset);
-
-    GlobalData_src srcGlobal(src);
-    GlobalData_idx idxGlobal(indices);
-    GlobalData_out outGlobal(out);
+    TASSIGN(srcTile, idxBytes);
 
     TLOAD(idxTile, idxGlobal);
     TLOAD(srcTile, srcGlobal);
@@ -287,7 +130,7 @@ extern "C" __global__ AICORE void runMSCATTER_int32_clamp_8x16_256(__gm__ int32_
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    MSCATTER_IMPL<pto::ScatterAtomicOp::None, pto::ScatterOOB::Clamp>(outGlobal, srcTile, idxTile);
+    MSCATTER<Coalesce::Row, Atomic, Oob, Conflict>(outGlobal, srcTile, idxTile);
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -295,39 +138,31 @@ extern "C" __global__ AICORE void runMSCATTER_int32_clamp_8x16_256(__gm__ int32_
 #endif
 }
 
-extern "C" __global__ AICORE void runMSCATTER_half_wrap_8x32_1024(__gm__ half *out, __gm__ half *src,
-                                                                  __gm__ int32_t *indices)
+template <pto::ScatterAtomicOp Atomic, pto::ScatterOOB Oob, pto::ScatterConflict Conflict, typename T, typename TIdx,
+          int kSrcCols, int kTableSize>
+inline AICORE void runElem(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ TIdx __in__ *indices)
 {
-    using T = half;
-    using TIdx = int32_t;
-    constexpr int kSrcRows = 8, kSrcCols = 32, kOutSize = 1024;
+    using SrcShape = pto::Shape<1, 1, 1, 1, kSrcCols>;
+    using SrcStride = pto::Stride<1, 1, 1, kSrcCols, 1>;
+    using IdxShape = pto::Shape<1, 1, 1, 1, kSrcCols>;
+    using IdxStride = pto::Stride<1, 1, 1, kSrcCols, 1>;
+    using OutShape = pto::Shape<1, 1, 1, 1, kTableSize>;
+    using OutStride = pto::Stride<1, 1, 1, kTableSize, 1>;
 
-    using DynShape_src = pto::Shape<1, 1, 1, kSrcRows, kSrcCols>;
-    using DynStrid_src = pto::Stride<1, 1, 1, kSrcCols, 1>;
-    using GlobalData_src = GlobalTensor<T, DynShape_src, DynStrid_src>;
+    GlobalTensor<T, SrcShape, SrcStride> srcGlobal(src);
+    GlobalTensor<TIdx, IdxShape, IdxStride> idxGlobal(indices);
+    GlobalTensor<T, OutShape, OutStride> outGlobal(out);
 
-    using DynShape_idx = pto::Shape<1, 1, 1, kSrcRows, kSrcCols>;
-    using DynStrid_idx = pto::Stride<1, 1, 1, kSrcCols, 1>;
-    using GlobalData_idx = GlobalTensor<TIdx, DynShape_idx, DynStrid_idx>;
+    using SrcTile = Tile<TileType::Vec, T, 1, kSrcCols, BLayout::RowMajor, 1, kSrcCols>;
+    using IdxTile = Tile<TileType::Vec, TIdx, 1, kSrcCols, BLayout::RowMajor, 1, kSrcCols>;
 
-    using DynShape_out = pto::Shape<1, 1, 1, 1, kOutSize>;
-    using DynStrid_out = pto::Stride<1, 1, 1, kOutSize, 1>;
-    using GlobalData_out = GlobalTensor<T, DynShape_out, DynStrid_out>;
+    SrcTile srcTile;
+    IdxTile idxTile;
 
-    using TileData_src = Tile<TileType::Vec, T, kSrcRows, kSrcCols, BLayout::RowMajor, -1, -1>;
-    using TileData_idx = Tile<TileType::Vec, TIdx, kSrcRows, kSrcCols, BLayout::RowMajor, -1, -1>;
-
-    TileData_src srcTile(kSrcRows, kSrcCols);
-    TileData_idx idxTile(kSrcRows, kSrcCols);
-
+    constexpr int idxBytes = ((1 * kSrcCols * (int)sizeof(TIdx) + 31) / 32) * 32;
+    constexpr int srcBytes = ((1 * kSrcCols * (int)sizeof(T) + 31) / 32) * 32;
     TASSIGN(idxTile, 0x0);
-    constexpr int idxBytes = kSrcRows * kSrcCols * sizeof(TIdx);
-    constexpr int srcOffset = ((idxBytes + 31) / 32) * 32;
-    TASSIGN(srcTile, srcOffset);
-
-    GlobalData_src srcGlobal(src);
-    GlobalData_idx idxGlobal(indices);
-    GlobalData_out outGlobal(out);
+    TASSIGN(srcTile, idxBytes);
 
     TLOAD(idxTile, idxGlobal);
     TLOAD(srcTile, srcGlobal);
@@ -335,7 +170,7 @@ extern "C" __global__ AICORE void runMSCATTER_half_wrap_8x32_1024(__gm__ half *o
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    MSCATTER_IMPL<pto::ScatterAtomicOp::None, pto::ScatterOOB::Wrap>(outGlobal, srcTile, idxTile);
+    MSCATTER<Coalesce::Elem, Atomic, Oob, Conflict>(outGlobal, srcTile, idxTile);
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -343,39 +178,31 @@ extern "C" __global__ AICORE void runMSCATTER_half_wrap_8x32_1024(__gm__ half *o
 #endif
 }
 
-extern "C" __global__ AICORE void runMSCATTER_float_atomicadd_8x32_512(__gm__ float *out, __gm__ float *src,
-                                                                       __gm__ int32_t *indices)
+template <pto::ScatterAtomicOp Atomic, pto::ScatterOOB Oob, pto::ScatterConflict Conflict, typename T, typename TIdx,
+          int kValidRows, int kValidCols, int kPadRows, int kPadCols, int kTableSize>
+inline AICORE void runElem2DPadded(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ TIdx __in__ *indices)
 {
-    using T = float;
-    using TIdx = int32_t;
-    constexpr int kSrcRows = 8, kSrcCols = 32, kOutSize = 512;
+    using SrcShape = pto::Shape<1, 1, 1, kValidRows, kValidCols>;
+    using SrcStride = pto::Stride<1, 1, 1, kValidCols, 1>;
+    using IdxShape = pto::Shape<1, 1, 1, kValidRows, kValidCols>;
+    using IdxStride = pto::Stride<1, 1, 1, kValidCols, 1>;
+    using OutShape = pto::Shape<1, 1, 1, 1, kTableSize>;
+    using OutStride = pto::Stride<1, 1, 1, kTableSize, 1>;
 
-    using DynShape_src = pto::Shape<1, 1, 1, kSrcRows, kSrcCols>;
-    using DynStrid_src = pto::Stride<1, 1, 1, kSrcCols, 1>;
-    using GlobalData_src = GlobalTensor<T, DynShape_src, DynStrid_src>;
+    GlobalTensor<T, SrcShape, SrcStride> srcGlobal(src);
+    GlobalTensor<TIdx, IdxShape, IdxStride> idxGlobal(indices);
+    GlobalTensor<T, OutShape, OutStride> outGlobal(out);
 
-    using DynShape_idx = pto::Shape<1, 1, 1, kSrcRows, kSrcCols>;
-    using DynStrid_idx = pto::Stride<1, 1, 1, kSrcCols, 1>;
-    using GlobalData_idx = GlobalTensor<TIdx, DynShape_idx, DynStrid_idx>;
+    using SrcTile = Tile<TileType::Vec, T, kPadRows, kPadCols, BLayout::RowMajor, kValidRows, kValidCols>;
+    using IdxTile = Tile<TileType::Vec, TIdx, kPadRows, kPadCols, BLayout::RowMajor, kValidRows, kValidCols>;
 
-    using DynShape_out = pto::Shape<1, 1, 1, 1, kOutSize>;
-    using DynStrid_out = pto::Stride<1, 1, 1, kOutSize, 1>;
-    using GlobalData_out = GlobalTensor<T, DynShape_out, DynStrid_out>;
+    SrcTile srcTile;
+    IdxTile idxTile;
 
-    using TileData_src = Tile<TileType::Vec, T, kSrcRows, kSrcCols, BLayout::RowMajor, -1, -1>;
-    using TileData_idx = Tile<TileType::Vec, TIdx, kSrcRows, kSrcCols, BLayout::RowMajor, -1, -1>;
-
-    TileData_src srcTile(kSrcRows, kSrcCols);
-    TileData_idx idxTile(kSrcRows, kSrcCols);
-
+    constexpr int idxBytes = ((kPadRows * kPadCols * (int)sizeof(TIdx) + 31) / 32) * 32;
+    constexpr int srcBytes = ((kPadRows * kPadCols * (int)sizeof(T) + 31) / 32) * 32;
     TASSIGN(idxTile, 0x0);
-    constexpr int idxBytes = kSrcRows * kSrcCols * sizeof(TIdx);
-    constexpr int srcOffset = ((idxBytes + 31) / 32) * 32;
-    TASSIGN(srcTile, srcOffset);
-
-    GlobalData_src srcGlobal(src);
-    GlobalData_idx idxGlobal(indices);
-    GlobalData_out outGlobal(out);
+    TASSIGN(srcTile, idxBytes);
 
     TLOAD(idxTile, idxGlobal);
     TLOAD(srcTile, srcGlobal);
@@ -383,47 +210,40 @@ extern "C" __global__ AICORE void runMSCATTER_float_atomicadd_8x32_512(__gm__ fl
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    MSCATTER_IMPL<pto::ScatterAtomicOp::Add>(outGlobal, srcTile, idxTile);
+    MSCATTER<Coalesce::Elem, Atomic, Oob, Conflict>(outGlobal, srcTile, idxTile);
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 #endif
+    (void)srcBytes;
 }
 
-extern "C" __global__ AICORE void runMSCATTER_int32_atomicadd_skip_8x16_256(__gm__ int32_t *out, __gm__ int32_t *src,
-                                                                            __gm__ int32_t *indices)
+template <pto::ScatterAtomicOp Atomic, pto::ScatterOOB Oob, pto::ScatterConflict Conflict, typename T, typename TIdx,
+          int kSrcRows, int kSrcCols, int kTableSize>
+inline AICORE void runElem2D(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ TIdx __in__ *indices)
 {
-    using T = int32_t;
-    using TIdx = int32_t;
-    constexpr int kSrcRows = 8, kSrcCols = 16, kOutSize = 256;
+    using SrcShape = pto::Shape<1, 1, 1, kSrcRows, kSrcCols>;
+    using SrcStride = pto::Stride<1, 1, 1, kSrcCols, 1>;
+    using IdxShape = pto::Shape<1, 1, 1, kSrcRows, kSrcCols>;
+    using IdxStride = pto::Stride<1, 1, 1, kSrcCols, 1>;
+    using OutShape = pto::Shape<1, 1, 1, 1, kTableSize>;
+    using OutStride = pto::Stride<1, 1, 1, kTableSize, 1>;
 
-    using DynShape_src = pto::Shape<1, 1, 1, kSrcRows, kSrcCols>;
-    using DynStrid_src = pto::Stride<1, 1, 1, kSrcCols, 1>;
-    using GlobalData_src = GlobalTensor<T, DynShape_src, DynStrid_src>;
+    GlobalTensor<T, SrcShape, SrcStride> srcGlobal(src);
+    GlobalTensor<TIdx, IdxShape, IdxStride> idxGlobal(indices);
+    GlobalTensor<T, OutShape, OutStride> outGlobal(out);
 
-    using DynShape_idx = pto::Shape<1, 1, 1, kSrcRows, kSrcCols>;
-    using DynStrid_idx = pto::Stride<1, 1, 1, kSrcCols, 1>;
-    using GlobalData_idx = GlobalTensor<TIdx, DynShape_idx, DynStrid_idx>;
+    using SrcTile = Tile<TileType::Vec, T, kSrcRows, kSrcCols, BLayout::RowMajor, kSrcRows, kSrcCols>;
+    using IdxTile = Tile<TileType::Vec, TIdx, kSrcRows, kSrcCols, BLayout::RowMajor, kSrcRows, kSrcCols>;
 
-    using DynShape_out = pto::Shape<1, 1, 1, 1, kOutSize>;
-    using DynStrid_out = pto::Stride<1, 1, 1, kOutSize, 1>;
-    using GlobalData_out = GlobalTensor<T, DynShape_out, DynStrid_out>;
+    SrcTile srcTile;
+    IdxTile idxTile;
 
-    using TileData_src = Tile<TileType::Vec, T, kSrcRows, kSrcCols, BLayout::RowMajor, -1, -1>;
-    using TileData_idx = Tile<TileType::Vec, TIdx, kSrcRows, kSrcCols, BLayout::RowMajor, -1, -1>;
-
-    TileData_src srcTile(kSrcRows, kSrcCols);
-    TileData_idx idxTile(kSrcRows, kSrcCols);
-
+    constexpr int idxBytes = ((kSrcRows * kSrcCols * (int)sizeof(TIdx) + 31) / 32) * 32;
+    constexpr int srcBytes = ((kSrcRows * kSrcCols * (int)sizeof(T) + 31) / 32) * 32;
     TASSIGN(idxTile, 0x0);
-    constexpr int idxBytes = kSrcRows * kSrcCols * sizeof(TIdx);
-    constexpr int srcOffset = ((idxBytes + 31) / 32) * 32;
-    TASSIGN(srcTile, srcOffset);
-
-    GlobalData_src srcGlobal(src);
-    GlobalData_idx idxGlobal(indices);
-    GlobalData_out outGlobal(out);
+    TASSIGN(srcTile, idxBytes);
 
     TLOAD(idxTile, idxGlobal);
     TLOAD(srcTile, srcGlobal);
@@ -431,7 +251,7 @@ extern "C" __global__ AICORE void runMSCATTER_int32_atomicadd_skip_8x16_256(__gm
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    MSCATTER_IMPL<pto::ScatterAtomicOp::Add, pto::ScatterOOB::Skip>(outGlobal, srcTile, idxTile);
+    MSCATTER<Coalesce::Elem, Atomic, Oob, Conflict>(outGlobal, srcTile, idxTile);
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -439,52 +259,118 @@ extern "C" __global__ AICORE void runMSCATTER_int32_atomicadd_skip_8x16_256(__gm
 #endif
 }
 
-template <::ScatterAtomicOp Atomic, ::ScatterOOB Mode, typename T, typename TIdx, int kSrcRows, int kSrcCols,
-          int kOutSize>
-void LaunchMSCATTER_mode(T *out, T *src, TIdx *indices, void *stream);
+#define DEFINE_ROW(NAME, THOST, T, TIDX, R, C, TR, ATOMIC, OOB, CONFLICT)                                              \
+    extern "C" __global__ AICORE void runMSCATTER_##NAME(__gm__ T *out, __gm__ T *src, __gm__ TIDX *indices)           \
+    {                                                                                                                  \
+        runRow<pto::ScatterAtomicOp::ATOMIC, pto::ScatterOOB::OOB, pto::ScatterConflict::CONFLICT, T, TIDX, R, C, TR>( \
+            out, src, indices);                                                                                        \
+    }                                                                                                                  \
+    void Launch_##NAME(THOST *out, THOST *src, TIDX *indices, void *stream)                                            \
+    {                                                                                                                  \
+        runMSCATTER_##NAME<<<1, nullptr, stream>>>(reinterpret_cast<T *>(out), reinterpret_cast<T *>(src), indices);   \
+    }
 
-template <>
-void LaunchMSCATTER_mode<::ScatterAtomicOp::None, ::ScatterOOB::Skip, float, int32_t, 8, 32, 512>(float *out,
-                                                                                                  float *src,
-                                                                                                  int32_t *indices,
-                                                                                                  void *stream)
-{
-    runMSCATTER_float_skip_8x32_512<<<1, nullptr, stream>>>(out, src, indices);
-}
+#define DEFINE_ROW_PAD(NAME, THOST, T, TIDX, VR, PIC, C, TR, ATOMIC, OOB, CONFLICT)                                   \
+    extern "C" __global__ AICORE void runMSCATTER_##NAME(__gm__ T *out, __gm__ T *src, __gm__ TIDX *indices)          \
+    {                                                                                                                 \
+        runRowPadded<pto::ScatterAtomicOp::ATOMIC, pto::ScatterOOB::OOB, pto::ScatterConflict::CONFLICT, T, TIDX, VR, \
+                     PIC, C, TR>(out, src, indices);                                                                  \
+    }                                                                                                                 \
+    void Launch_##NAME(THOST *out, THOST *src, TIDX *indices, void *stream)                                           \
+    {                                                                                                                 \
+        runMSCATTER_##NAME<<<1, nullptr, stream>>>(reinterpret_cast<T *>(out), reinterpret_cast<T *>(src), indices);  \
+    }
 
-template <>
-void LaunchMSCATTER_mode<::ScatterAtomicOp::None, ::ScatterOOB::Clamp, int32_t, int32_t, 8, 16, 256>(int32_t *out,
-                                                                                                     int32_t *src,
-                                                                                                     int32_t *indices,
-                                                                                                     void *stream)
-{
-    runMSCATTER_int32_clamp_8x16_256<<<1, nullptr, stream>>>(out, src, indices);
-}
+#define DEFINE_ROW_COLIDX(NAME, THOST, T, TIDX, R, C, TR, ATOMIC, OOB, CONFLICT)                                     \
+    extern "C" __global__ AICORE void runMSCATTER_##NAME(__gm__ T *out, __gm__ T *src, __gm__ TIDX *indices)         \
+    {                                                                                                                \
+        runRowColIdx<pto::ScatterAtomicOp::ATOMIC, pto::ScatterOOB::OOB, pto::ScatterConflict::CONFLICT, T, TIDX, R, \
+                     C, TR>(out, src, indices);                                                                      \
+    }                                                                                                                \
+    void Launch_##NAME(THOST *out, THOST *src, TIDX *indices, void *stream)                                          \
+    {                                                                                                                \
+        runMSCATTER_##NAME<<<1, nullptr, stream>>>(reinterpret_cast<T *>(out), reinterpret_cast<T *>(src), indices); \
+    }
 
-template <>
-void LaunchMSCATTER_mode<::ScatterAtomicOp::Add, ::ScatterOOB::Undefined, float, int32_t, 8, 32, 512>(float *out,
-                                                                                                      float *src,
-                                                                                                      int32_t *indices,
-                                                                                                      void *stream)
-{
-    runMSCATTER_float_atomicadd_8x32_512<<<1, nullptr, stream>>>(out, src, indices);
-}
+#define DEFINE_ELEM(NAME, THOST, T, TIDX, N, TS, ATOMIC, OOB, CONFLICT)                                              \
+    extern "C" __global__ AICORE void runMSCATTER_##NAME(__gm__ T *out, __gm__ T *src, __gm__ TIDX *indices)         \
+    {                                                                                                                \
+        runElem<pto::ScatterAtomicOp::ATOMIC, pto::ScatterOOB::OOB, pto::ScatterConflict::CONFLICT, T, TIDX, N, TS>( \
+            out, src, indices);                                                                                      \
+    }                                                                                                                \
+    void Launch_##NAME(THOST *out, THOST *src, TIDX *indices, void *stream)                                          \
+    {                                                                                                                \
+        runMSCATTER_##NAME<<<1, nullptr, stream>>>(reinterpret_cast<T *>(out), reinterpret_cast<T *>(src), indices); \
+    }
 
-template <>
-void LaunchMSCATTER_mode<::ScatterAtomicOp::Add, ::ScatterOOB::Skip, int32_t, int32_t, 8, 16, 256>(int32_t *out,
-                                                                                                   int32_t *src,
-                                                                                                   int32_t *indices,
-                                                                                                   void *stream)
-{
-    runMSCATTER_int32_atomicadd_skip_8x16_256<<<1, nullptr, stream>>>(out, src, indices);
-}
+#define DEFINE_ELEM2D(NAME, THOST, T, TIDX, R, C, TS, ATOMIC, OOB, CONFLICT)                                         \
+    extern "C" __global__ AICORE void runMSCATTER_##NAME(__gm__ T *out, __gm__ T *src, __gm__ TIDX *indices)         \
+    {                                                                                                                \
+        runElem2D<pto::ScatterAtomicOp::ATOMIC, pto::ScatterOOB::OOB, pto::ScatterConflict::CONFLICT, T, TIDX, R, C, \
+                  TS>(out, src, indices);                                                                            \
+    }                                                                                                                \
+    void Launch_##NAME(THOST *out, THOST *src, TIDX *indices, void *stream)                                          \
+    {                                                                                                                \
+        runMSCATTER_##NAME<<<1, nullptr, stream>>>(reinterpret_cast<T *>(out), reinterpret_cast<T *>(src), indices); \
+    }
 
-template <::ScatterAtomicOp Atomic, ::ScatterOOB Mode, int kSrcRows, int kSrcCols, int kOutSize>
-void LaunchMSCATTERHalf_mode(aclFloat16 *out, aclFloat16 *src, int32_t *indices, void *stream);
+#define DEFINE_ELEM2D_PAD(NAME, THOST, T, TIDX, VR, VC, PR, PC, TS, ATOMIC, OOB, CONFLICT)                           \
+    extern "C" __global__ AICORE void runMSCATTER_##NAME(__gm__ T *out, __gm__ T *src, __gm__ TIDX *indices)         \
+    {                                                                                                                \
+        runElem2DPadded<pto::ScatterAtomicOp::ATOMIC, pto::ScatterOOB::OOB, pto::ScatterConflict::CONFLICT, T, TIDX, \
+                        VR, VC, PR, PC, TS>(out, src, indices);                                                      \
+    }                                                                                                                \
+    void Launch_##NAME(THOST *out, THOST *src, TIDX *indices, void *stream)                                          \
+    {                                                                                                                \
+        runMSCATTER_##NAME<<<1, nullptr, stream>>>(reinterpret_cast<T *>(out), reinterpret_cast<T *>(src), indices); \
+    }
 
-template <>
-void LaunchMSCATTERHalf_mode<::ScatterAtomicOp::None, ::ScatterOOB::Wrap, 8, 32, 1024>(aclFloat16 *out, aclFloat16 *src,
-                                                                                       int32_t *indices, void *stream)
-{
-    runMSCATTER_half_wrap_8x32_1024<<<1, nullptr, stream>>>((half *)out, (half *)src, indices);
-}
+DEFINE_ROW(row_float_random_8x32_64rows, float, float, int32_t, 8, 32, 64, None, Undefined, Last)
+DEFINE_ROW(row_float_same_8x32_16rows, float, float, int32_t, 8, 32, 16, None, Undefined, Last)
+DEFINE_ROW(row_half_random_16x64_64rows, aclFloat16, half, int32_t, 16, 64, 64, None, Undefined, Last)
+DEFINE_ROW(row_int32_random_8x16_32rows, int32_t, int32_t, int32_t, 8, 16, 32, None, Undefined, Last)
+DEFINE_ROW(row_uint8_random_8x32_32rows, uint8_t, uint8_t, int32_t, 8, 32, 32, None, Undefined, Last)
+DEFINE_ROW(row_int16_random_8x16_32rows, int16_t, int16_t, int32_t, 8, 16, 32, None, Undefined, Last)
+DEFINE_ROW(row_float_atomicadd_8x32_8rows, float, float, int32_t, 8, 32, 8, Add, Undefined, First)
+DEFINE_ROW(row_float_skip_8x32_8rows, float, float, int32_t, 8, 32, 8, None, Skip, Last)
+DEFINE_ROW(row_int32_clamp_8x16_8rows, int32_t, int32_t, int32_t, 8, 16, 8, None, Clamp, Last)
+DEFINE_ROW(row_half_wrap_8x32_8rows, aclFloat16, half, int32_t, 8, 32, 8, None, Wrap, Last)
+
+DEFINE_ROW_COLIDX(row_colidx_float_random_8x32_64rows, float, float, int32_t, 8, 32, 64, None, Undefined, Last)
+DEFINE_ROW_COLIDX(row_colidx_int32_clamp_8x16_8rows, int32_t, int32_t, int32_t, 8, 16, 8, None, Clamp, Last)
+DEFINE_ROW_COLIDX(row_colidx_half_random_16x64_64rows, aclFloat16, half, int32_t, 16, 64, 64, None, Undefined, Last)
+
+DEFINE_ELEM(elem_float_random_64_128size, float, float, int32_t, 64, 128, None, Undefined, Last)
+DEFINE_ELEM(elem_float_same_64_8size, float, float, int32_t, 64, 8, None, Undefined, Last)
+DEFINE_ELEM(elem_float_seq_32_32size, float, float, int32_t, 32, 32, None, Undefined, Last)
+DEFINE_ELEM(elem_half_random_64_128size, aclFloat16, half, int32_t, 64, 128, None, Undefined, Last)
+DEFINE_ELEM(elem_int32_random_32_64size, int32_t, int32_t, int32_t, 32, 64, None, Undefined, Last)
+DEFINE_ELEM(elem_uint8_random_64_128size, uint8_t, uint8_t, int32_t, 64, 128, None, Undefined, Last)
+DEFINE_ELEM(elem_int16_random_32_64size, int16_t, int16_t, int32_t, 32, 64, None, Undefined, Last)
+DEFINE_ELEM(elem_float_atomicadd_32_32size, float, float, int32_t, 32, 32, Add, Undefined, First)
+DEFINE_ELEM(elem_int32_atomicadd_skip_32_16size, int32_t, int32_t, int32_t, 32, 16, Add, Skip, First)
+DEFINE_ELEM(elem_float_skip_32_16size, float, float, int32_t, 32, 16, None, Skip, Last)
+DEFINE_ELEM(elem_int32_clamp_32_16size, int32_t, int32_t, int32_t, 32, 16, None, Clamp, Last)
+DEFINE_ELEM(elem_half_wrap_32_16size, aclFloat16, half, int32_t, 32, 16, None, Wrap, Last)
+DEFINE_ELEM(elem_float_first_seq_32_32size, float, float, int32_t, 32, 32, None, Undefined, First)
+DEFINE_ELEM(elem_float_small_16_32size, float, float, int32_t, 16, 32, None, Undefined, Last)
+DEFINE_ELEM(elem_int32_atomicmax_random_32_32size, int32_t, int32_t, int32_t, 32, 32, Max, Undefined, First)
+DEFINE_ELEM(elem_float_atomicmin_random_32_32size, float, float, int32_t, 32, 32, Min, Undefined, First)
+DEFINE_ELEM(elem_float_last_same_32_8size, float, float, int32_t, 32, 8, None, Undefined, Last)
+DEFINE_ELEM(elem_int32_last_seq_32_32size, int32_t, int32_t, int32_t, 32, 32, None, Undefined, Last)
+DEFINE_ELEM(elem_float_clamp_no_dup_32_16size, float, float, int32_t, 32, 16, None, Clamp, Last)
+DEFINE_ELEM(elem_uint8_wrap_64_16size, uint8_t, uint8_t, int32_t, 64, 16, None, Wrap, Last)
+DEFINE_ELEM(elem_int16_clamp_32_16size, int16_t, int16_t, int32_t, 32, 16, None, Clamp, Last)
+
+DEFINE_ELEM2D(elem2d_float_8x32_random_256size, float, float, int32_t, 8, 32, 256, None, Undefined, Last)
+DEFINE_ELEM2D(elem2d_int32_8x16_random_256size, int32_t, int32_t, int32_t, 8, 16, 256, None, Undefined, Last)
+DEFINE_ELEM2D(elem2d_half_4x32_random_256size, aclFloat16, half, int32_t, 4, 32, 256, None, Undefined, Last)
+DEFINE_ELEM2D(elem2d_int32_unaligned_3x8_64size, int32_t, int32_t, int32_t, 3, 8, 64, None, Undefined, Last)
+DEFINE_ELEM2D(elem2d_uint8_unaligned_3x32_256size, uint8_t, uint8_t, int32_t, 3, 32, 256, None, Undefined, Last)
+DEFINE_ELEM2D_PAD(elem2d_int32_unaligned_3x3_in_3x8_64size, int32_t, int32_t, int32_t, 3, 3, 3, 8, 64, None, Undefined,
+                  Last)
+DEFINE_ELEM2D_PAD(elem2d_int32_unaligned_9x9_in_9x16_256size, int32_t, int32_t, int32_t, 9, 9, 9, 16, 256, None,
+                  Undefined, Last)
+DEFINE_ELEM2D_PAD(elem2d_int32_scalar_1x1_in_1x8_8size, int32_t, int32_t, int32_t, 1, 1, 1, 8, 8, None, Undefined, Last)
+DEFINE_ROW_PAD(row_int32_unaligned_3x8_8rows, int32_t, int32_t, int32_t, 3, 8, 8, 8, None, Undefined, Last)
+DEFINE_ROW_PAD(row_int32_unaligned_9x16_16rows, int32_t, int32_t, int32_t, 9, 16, 16, 16, None, Undefined, Last)

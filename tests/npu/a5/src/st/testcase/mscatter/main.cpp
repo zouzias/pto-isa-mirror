@@ -10,6 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "test_common.h"
 #include <gtest/gtest.h>
+#include <functional>
 #include "acl/acl.h"
 #include "mscatter_common.h"
 
@@ -24,54 +25,18 @@ protected:
     {}
 };
 
-//#define DEBUG_PRINT
-
-#ifdef DEBUG_PRINT
-template <typename T>
-void PrintFirst20(const char *name, const T *data, size_t count)
-{
-    size_t n = std::min(count, static_cast<size_t>(20));
-    std::cout << "\n=== " << name << " (first " << n << " values) ===" << std::endl;
-    for (size_t i = 0; i < n; ++i) {
-        if constexpr (std::is_same_v<T, aclFloat16>) {
-            std::cout << std::setw(10) << aclFloat16ToFloat(data[i]);
-        } else {
-            std::cout << std::setw(10) << static_cast<float>(data[i]);
-        }
-        if ((i + 1) % 10 == 0)
-            std::cout << std::endl;
-    }
-    std::cout << std::endl;
-}
-#endif
-
-std::string GetGoldenDir()
+static std::string GetGoldenDir()
 {
     const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
-    const std::string caseName = testInfo->name();
-    std::string suiteName = testInfo->test_suite_name();
-    std::string fullPath = "../" + suiteName + "." + caseName;
-    return fullPath;
+    return std::string("../") + testInfo->test_suite_name() + "." + testInfo->name();
 }
 
-template <typename T, typename TIdx, int kSrcRows, int kSrcCols, int kOutSize>
-void LaunchMSCATTER(T *out, T *src, TIdx *indices, void *stream);
-
-template <int kSrcRows, int kSrcCols, int kOutSize>
-void LaunchMSCATTERHalf(aclFloat16 *out, aclFloat16 *src, int32_t *indices, void *stream);
-
-template <ScatterAtomicOp Atomic, ScatterOOB Mode, typename T, typename TIdx, int kSrcRows, int kSrcCols, int kOutSize>
-void LaunchMSCATTER_mode(T *out, T *src, TIdx *indices, void *stream);
-
-template <ScatterAtomicOp Atomic, ScatterOOB Mode, int kSrcRows, int kSrcCols, int kOutSize>
-void LaunchMSCATTERHalf_mode(aclFloat16 *out, aclFloat16 *src, int32_t *indices, void *stream);
-
-template <typename T, typename TIdx, int kSrcRows, int kSrcCols, int kOutSize>
-void test_mscatter()
+template <typename T, typename TIdx, typename Launcher>
+void run_mscatter_test(size_t srcCount, size_t idxCount, size_t outCount, Launcher launcher)
 {
-    size_t srcByteSize = kSrcRows * kSrcCols * sizeof(T);
-    size_t outByteSize = kOutSize * sizeof(T);
-    size_t idxByteSize = kSrcRows * kSrcCols * sizeof(TIdx);
+    size_t srcByteSize = srcCount * sizeof(T);
+    size_t idxByteSize = idxCount * sizeof(TIdx);
+    size_t outByteSize = outCount * sizeof(T);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -99,11 +64,7 @@ void test_mscatter()
 
     aclrtMemset(outDevice, outByteSize, 0, outByteSize);
 
-    if constexpr (std::is_same<T, aclFloat16>::value) {
-        LaunchMSCATTERHalf<kSrcRows, kSrcCols, kOutSize>(outDevice, srcDevice, idxDevice, stream);
-    } else {
-        LaunchMSCATTER<T, TIdx, kSrcRows, kSrcCols, kOutSize>(outDevice, srcDevice, idxDevice, stream);
-    }
+    launcher(outDevice, srcDevice, idxDevice, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(outHost, outByteSize, outDevice, outByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -121,161 +82,127 @@ void test_mscatter()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(kOutSize);
-    std::vector<T> devFinal(kOutSize);
+    std::vector<T> golden(outCount);
+    std::vector<T> devFinal(outCount);
     ReadFile(GetGoldenDir() + "/golden.bin", outByteSize, golden.data(), outByteSize);
     ReadFile(GetGoldenDir() + "/output.bin", outByteSize, devFinal.data(), outByteSize);
 
-#ifdef DEBUG_PRINT
-    PrintFirst20("GOLDEN", golden.data(), golden.size());
-    PrintFirst20("OUTPUT", devFinal.data(), devFinal.size());
-#endif
-
-    bool ret = ResultCmp<T>(golden, devFinal, 0.001f);
+    bool ret = ResultCmp<T>(golden, devFinal, 0.0f);
     EXPECT_TRUE(ret);
 }
 
-TEST_F(MSCATTERTest, case_half_8x32_1024)
-{
-    test_mscatter<aclFloat16, int32_t, 8, 32, 1024>();
-}
+#define DECLARE_LAUNCH(NAME, THOST, TIDX) void Launch_##NAME(THOST *out, THOST *src, TIDX *indices, void *stream);
 
-TEST_F(MSCATTERTest, case_half_16x64_2048)
-{
-    test_mscatter<aclFloat16, int32_t, 16, 64, 2048>();
-}
+DECLARE_LAUNCH(row_float_random_8x32_64rows, float, int32_t)
+DECLARE_LAUNCH(row_float_same_8x32_16rows, float, int32_t)
+DECLARE_LAUNCH(row_half_random_16x64_64rows, aclFloat16, int32_t)
+DECLARE_LAUNCH(row_int32_random_8x16_32rows, int32_t, int32_t)
+DECLARE_LAUNCH(row_uint8_random_8x32_32rows, uint8_t, int32_t)
+DECLARE_LAUNCH(row_int16_random_8x16_32rows, int16_t, int32_t)
+DECLARE_LAUNCH(row_float_atomicadd_8x32_8rows, float, int32_t)
+DECLARE_LAUNCH(row_float_skip_8x32_8rows, float, int32_t)
+DECLARE_LAUNCH(row_int32_clamp_8x16_8rows, int32_t, int32_t)
+DECLARE_LAUNCH(row_half_wrap_8x32_8rows, aclFloat16, int32_t)
 
-TEST_F(MSCATTERTest, case_float_8x32_512)
-{
-    test_mscatter<float, int32_t, 8, 32, 512>();
-}
+DECLARE_LAUNCH(row_colidx_float_random_8x32_64rows, float, int32_t)
+DECLARE_LAUNCH(row_colidx_int32_clamp_8x16_8rows, int32_t, int32_t)
+DECLARE_LAUNCH(row_colidx_half_random_16x64_64rows, aclFloat16, int32_t)
 
-TEST_F(MSCATTERTest, case_float_16x32_1024)
-{
-    test_mscatter<float, int32_t, 16, 32, 1024>();
-}
+DECLARE_LAUNCH(elem_float_random_64_128size, float, int32_t)
+DECLARE_LAUNCH(elem_float_same_64_8size, float, int32_t)
+DECLARE_LAUNCH(elem_float_seq_32_32size, float, int32_t)
+DECLARE_LAUNCH(elem_half_random_64_128size, aclFloat16, int32_t)
+DECLARE_LAUNCH(elem_int32_random_32_64size, int32_t, int32_t)
+DECLARE_LAUNCH(elem_uint8_random_64_128size, uint8_t, int32_t)
+DECLARE_LAUNCH(elem_int16_random_32_64size, int16_t, int32_t)
+DECLARE_LAUNCH(elem_float_atomicadd_32_32size, float, int32_t)
+DECLARE_LAUNCH(elem_int32_atomicadd_skip_32_16size, int32_t, int32_t)
+DECLARE_LAUNCH(elem_float_skip_32_16size, float, int32_t)
+DECLARE_LAUNCH(elem_int32_clamp_32_16size, int32_t, int32_t)
+DECLARE_LAUNCH(elem_half_wrap_32_16size, aclFloat16, int32_t)
+DECLARE_LAUNCH(elem_float_first_seq_32_32size, float, int32_t)
+DECLARE_LAUNCH(elem_float_small_16_32size, float, int32_t)
+DECLARE_LAUNCH(elem_int32_atomicmax_random_32_32size, int32_t, int32_t)
+DECLARE_LAUNCH(elem_float_atomicmin_random_32_32size, float, int32_t)
+DECLARE_LAUNCH(elem_float_last_same_32_8size, float, int32_t)
+DECLARE_LAUNCH(elem_int32_last_seq_32_32size, int32_t, int32_t)
+DECLARE_LAUNCH(elem_float_clamp_no_dup_32_16size, float, int32_t)
+DECLARE_LAUNCH(elem_uint8_wrap_64_16size, uint8_t, int32_t)
+DECLARE_LAUNCH(elem_int16_clamp_32_16size, int16_t, int32_t)
 
-TEST_F(MSCATTERTest, case_float_16x64_2048)
-{
-    test_mscatter<float, int32_t, 16, 64, 2048>();
-}
+DECLARE_LAUNCH(elem2d_float_8x32_random_256size, float, int32_t)
+DECLARE_LAUNCH(elem2d_int32_8x16_random_256size, int32_t, int32_t)
+DECLARE_LAUNCH(elem2d_half_4x32_random_256size, aclFloat16, int32_t)
+DECLARE_LAUNCH(elem2d_int32_unaligned_3x8_64size, int32_t, int32_t)
+DECLARE_LAUNCH(elem2d_uint8_unaligned_3x32_256size, uint8_t, int32_t)
+DECLARE_LAUNCH(elem2d_int32_unaligned_3x3_in_3x8_64size, int32_t, int32_t)
+DECLARE_LAUNCH(elem2d_int32_unaligned_9x9_in_9x16_256size, int32_t, int32_t)
+DECLARE_LAUNCH(elem2d_int32_scalar_1x1_in_1x8_8size, int32_t, int32_t)
+DECLARE_LAUNCH(row_int32_unaligned_3x8_8rows, int32_t, int32_t)
+DECLARE_LAUNCH(row_int32_unaligned_9x16_16rows, int32_t, int32_t)
 
-TEST_F(MSCATTERTest, case_float_8x8_128)
-{
-    test_mscatter<float, int32_t, 8, 8, 128>();
-}
-
-TEST_F(MSCATTERTest, case_int32_8x16_256)
-{
-    test_mscatter<int32_t, int32_t, 8, 16, 256>();
-}
-
-TEST_F(MSCATTERTest, case_int32_16x32_1024)
-{
-    test_mscatter<int32_t, int32_t, 16, 32, 1024>();
-}
-
-TEST_F(MSCATTERTest, case_int32_16x16_512)
-{
-    test_mscatter<int32_t, int32_t, 16, 16, 512>();
-}
-
-TEST_F(MSCATTERTest, case_uint8_16x32_1024)
-{
-    test_mscatter<uint8_t, int32_t, 16, 32, 1024>();
-}
-
-TEST_F(MSCATTERTest, case_uint8_16x64_2048)
-{
-    test_mscatter<uint8_t, int32_t, 16, 64, 2048>();
-}
-
-template <ScatterAtomicOp Atomic, ScatterOOB Mode, typename T, typename TIdx, int kSrcRows, int kSrcCols, int kOutSize>
-void test_mscatter_mode()
-{
-    size_t srcByteSize = kSrcRows * kSrcCols * sizeof(T);
-    size_t outByteSize = kOutSize * sizeof(T);
-    size_t idxByteSize = kSrcRows * kSrcCols * sizeof(TIdx);
-
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-
-    T *srcHost, *outHost;
-    TIdx *idxHost;
-    T *srcDevice, *outDevice;
-    TIdx *idxDevice;
-
-    aclrtMallocHost((void **)(&srcHost), srcByteSize);
-    aclrtMallocHost((void **)(&idxHost), idxByteSize);
-    aclrtMallocHost((void **)(&outHost), outByteSize);
-
-    aclrtMalloc((void **)&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&idxDevice, idxByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&outDevice, outByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    ReadFile(GetGoldenDir() + "/src.bin", srcByteSize, srcHost, srcByteSize);
-    ReadFile(GetGoldenDir() + "/indices.bin", idxByteSize, idxHost, idxByteSize);
-
-    aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(idxDevice, idxByteSize, idxHost, idxByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
-
-    aclrtMemset(outDevice, outByteSize, 0, outByteSize);
-
-    if constexpr (std::is_same<T, aclFloat16>::value) {
-        LaunchMSCATTERHalf_mode<Atomic, Mode, kSrcRows, kSrcCols, kOutSize>(outDevice, srcDevice, idxDevice, stream);
-    } else {
-        LaunchMSCATTER_mode<Atomic, Mode, T, TIdx, kSrcRows, kSrcCols, kOutSize>(outDevice, srcDevice, idxDevice,
-                                                                                 stream);
+#define ROW_TEST(NAME, THOST, TIDX, R, C, TR)                                                    \
+    TEST_F(MSCATTERTest, case_##NAME)                                                            \
+    {                                                                                            \
+        run_mscatter_test<THOST, TIDX>((size_t)R * C, (size_t)R, (size_t)TR * C, Launch_##NAME); \
     }
 
-    aclrtSynchronizeStream(stream);
-    aclrtMemcpy(outHost, outByteSize, outDevice, outByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
+#define ELEM_TEST(NAME, THOST, TIDX, N, TS)                                              \
+    TEST_F(MSCATTERTest, case_##NAME)                                                    \
+    {                                                                                    \
+        run_mscatter_test<THOST, TIDX>((size_t)N, (size_t)N, (size_t)TS, Launch_##NAME); \
+    }
 
-    WriteFile(GetGoldenDir() + "/output.bin", outHost, outByteSize);
+#define ELEM2D_TEST(NAME, THOST, TIDX, R, C, TS)                                                 \
+    TEST_F(MSCATTERTest, case_##NAME)                                                            \
+    {                                                                                            \
+        run_mscatter_test<THOST, TIDX>((size_t)R * C, (size_t)R * C, (size_t)TS, Launch_##NAME); \
+    }
 
-    aclrtFree(srcDevice);
-    aclrtFree(idxDevice);
-    aclrtFree(outDevice);
+ROW_TEST(row_float_random_8x32_64rows, float, int32_t, 8, 32, 64)
+ROW_TEST(row_float_same_8x32_16rows, float, int32_t, 8, 32, 16)
+ROW_TEST(row_half_random_16x64_64rows, aclFloat16, int32_t, 16, 64, 64)
+ROW_TEST(row_int32_random_8x16_32rows, int32_t, int32_t, 8, 16, 32)
+ROW_TEST(row_uint8_random_8x32_32rows, uint8_t, int32_t, 8, 32, 32)
+ROW_TEST(row_int16_random_8x16_32rows, int16_t, int32_t, 8, 16, 32)
+ROW_TEST(row_float_atomicadd_8x32_8rows, float, int32_t, 8, 32, 8)
+ROW_TEST(row_float_skip_8x32_8rows, float, int32_t, 8, 32, 8)
+ROW_TEST(row_int32_clamp_8x16_8rows, int32_t, int32_t, 8, 16, 8)
+ROW_TEST(row_half_wrap_8x32_8rows, aclFloat16, int32_t, 8, 32, 8)
 
-    aclrtFreeHost(srcHost);
-    aclrtFreeHost(idxHost);
-    aclrtFreeHost(outHost);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
+ROW_TEST(row_colidx_float_random_8x32_64rows, float, int32_t, 8, 32, 64)
+ROW_TEST(row_colidx_int32_clamp_8x16_8rows, int32_t, int32_t, 8, 16, 8)
+ROW_TEST(row_colidx_half_random_16x64_64rows, aclFloat16, int32_t, 16, 64, 64)
 
-    std::vector<T> golden(kOutSize);
-    std::vector<T> devFinal(kOutSize);
-    ReadFile(GetGoldenDir() + "/golden.bin", outByteSize, golden.data(), outByteSize);
-    ReadFile(GetGoldenDir() + "/output.bin", outByteSize, devFinal.data(), outByteSize);
+ELEM_TEST(elem_float_random_64_128size, float, int32_t, 64, 128)
+ELEM_TEST(elem_float_same_64_8size, float, int32_t, 64, 8)
+ELEM_TEST(elem_float_seq_32_32size, float, int32_t, 32, 32)
+ELEM_TEST(elem_half_random_64_128size, aclFloat16, int32_t, 64, 128)
+ELEM_TEST(elem_int32_random_32_64size, int32_t, int32_t, 32, 64)
+ELEM_TEST(elem_uint8_random_64_128size, uint8_t, int32_t, 64, 128)
+ELEM_TEST(elem_int16_random_32_64size, int16_t, int32_t, 32, 64)
+ELEM_TEST(elem_float_atomicadd_32_32size, float, int32_t, 32, 32)
+ELEM_TEST(elem_int32_atomicadd_skip_32_16size, int32_t, int32_t, 32, 16)
+ELEM_TEST(elem_float_skip_32_16size, float, int32_t, 32, 16)
+ELEM_TEST(elem_int32_clamp_32_16size, int32_t, int32_t, 32, 16)
+ELEM_TEST(elem_half_wrap_32_16size, aclFloat16, int32_t, 32, 16)
+ELEM_TEST(elem_float_first_seq_32_32size, float, int32_t, 32, 32)
+ELEM_TEST(elem_float_small_16_32size, float, int32_t, 16, 32)
+ELEM_TEST(elem_int32_atomicmax_random_32_32size, int32_t, int32_t, 32, 32)
+ELEM_TEST(elem_float_atomicmin_random_32_32size, float, int32_t, 32, 32)
+ELEM_TEST(elem_float_last_same_32_8size, float, int32_t, 32, 8)
+ELEM_TEST(elem_int32_last_seq_32_32size, int32_t, int32_t, 32, 32)
+ELEM_TEST(elem_float_clamp_no_dup_32_16size, float, int32_t, 32, 16)
+ELEM_TEST(elem_uint8_wrap_64_16size, uint8_t, int32_t, 64, 16)
+ELEM_TEST(elem_int16_clamp_32_16size, int16_t, int32_t, 32, 16)
 
-    bool ret = ResultCmp<T>(golden, devFinal, 0.001f);
-    EXPECT_TRUE(ret);
-}
-
-TEST_F(MSCATTERTest, case_float_skip_8x32_512)
-{
-    test_mscatter_mode<ScatterAtomicOp::None, ScatterOOB::Skip, float, int32_t, 8, 32, 512>();
-}
-
-TEST_F(MSCATTERTest, case_int32_clamp_8x16_256)
-{
-    test_mscatter_mode<ScatterAtomicOp::None, ScatterOOB::Clamp, int32_t, int32_t, 8, 16, 256>();
-}
-
-TEST_F(MSCATTERTest, case_half_wrap_8x32_1024)
-{
-    test_mscatter_mode<ScatterAtomicOp::None, ScatterOOB::Wrap, aclFloat16, int32_t, 8, 32, 1024>();
-}
-
-TEST_F(MSCATTERTest, case_float_atomicadd_8x32_512)
-{
-    test_mscatter_mode<ScatterAtomicOp::Add, ScatterOOB::Undefined, float, int32_t, 8, 32, 512>();
-}
-
-TEST_F(MSCATTERTest, case_int32_atomicadd_skip_8x16_256)
-{
-    test_mscatter_mode<ScatterAtomicOp::Add, ScatterOOB::Skip, int32_t, int32_t, 8, 16, 256>();
-}
+ELEM2D_TEST(elem2d_float_8x32_random_256size, float, int32_t, 8, 32, 256)
+ELEM2D_TEST(elem2d_int32_8x16_random_256size, int32_t, int32_t, 8, 16, 256)
+ELEM2D_TEST(elem2d_half_4x32_random_256size, aclFloat16, int32_t, 4, 32, 256)
+ELEM2D_TEST(elem2d_int32_unaligned_3x8_64size, int32_t, int32_t, 3, 8, 64)
+ELEM2D_TEST(elem2d_uint8_unaligned_3x32_256size, uint8_t, int32_t, 3, 32, 256)
+ELEM2D_TEST(elem2d_int32_unaligned_3x3_in_3x8_64size, int32_t, int32_t, 3, 3, 64)
+ELEM2D_TEST(elem2d_int32_unaligned_9x9_in_9x16_256size, int32_t, int32_t, 9, 9, 256)
+ELEM2D_TEST(elem2d_int32_scalar_1x1_in_1x8_8size, int32_t, int32_t, 1, 1, 8)
+ROW_TEST(row_int32_unaligned_3x8_8rows, int32_t, int32_t, 3, 8, 8)
+ROW_TEST(row_int32_unaligned_9x16_16rows, int32_t, int32_t, 9, 16, 16)
