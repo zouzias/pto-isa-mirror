@@ -33,7 +33,7 @@ PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcG
 
 ## AsyncSession 构建
 
-使用 `include/pto/comm/async/async_event_impl.hpp` 中的 `BuildAsyncSession`。
+使用 `include/pto/comm/async_common/async_event_impl.hpp` 中的 `BuildAsyncSession`。
 该函数有两个重载——分别用于 SDMA 和 URMA，参数列表不同。
 
 ### SDMA 构建（默认）

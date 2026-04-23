@@ -10,29 +10,39 @@ PTO communication instruction set for inter-NPU data transfer, signal synchroniz
 
 ```
 comm/
-├── pto_comm_inst.hpp        # Public API: TPUT, TGET, TNOTIFY, TWAIT, TTEST,
-│                            #   TGATHER, TSCATTER, TBROADCAST, TREDUCE,
-│                            #   TPUT_ASYNC, TGET_ASYNC
-├── pto_comm_instr_impl.hpp  # Backend dispatcher — includes NPU or CPU impl
-│                            #   based on __CCE_AICORE__ / __CPU_SIM
-├── comm_types.hpp           # Shared types: ParallelGroup, Signal, Signal2D,
-│                            #   NotifyOp, WaitCmp, ReduceOp, DmaEngine, AsyncEvent
+├── pto_comm_inst.hpp            # Public API: TPUT, TGET, TNOTIFY, TWAIT, TTEST,
+│                                #   TGATHER, TSCATTER, TBROADCAST, TREDUCE,
+│                                #   TPUT_ASYNC, TGET_ASYNC
+├── pto_comm_instr_impl.hpp      # Backend dispatcher — includes NPU or CPU impl
+│                                #   based on __CCE_AICORE__ / __CPU_SIM / PTO_NPU_ARCH_A5
+├── comm_types.hpp               # Shared types: ParallelGroup, Signal, Signal2D,
+│                                #   NotifyOp, WaitCmp, ReduceOp, DmaEngine, AsyncEvent
 │
-├── TPut.hpp                 # TPUT_IMPL  — remote write (local GM → UB → remote GM)
-├── TGet.hpp                 # TGET_IMPL  — remote read  (remote GM → UB → local GM)
-├── TNotify.hpp              # TNOTIFY_IMPL — send flag notification (atomic add / set)
-├── TWait.hpp                # TWAIT_IMPL — blocking wait on signal(s)
-├── TTest.hpp                # TTEST_IMPL — non-blocking signal test
-├── TGather.hpp              # TGATHER_IMPL  — root collects from all ranks
-├── TScatter.hpp             # TSCATTER_IMPL — root distributes to all ranks
-├── TBroadCast.hpp           # TBROADCAST_IMPL — root broadcasts to all ranks
-├── TReduce.hpp              # TREDUCE_IMPL — root gathers and reduces (Sum/Max/Min)
+├── a2a3/                        # A2/A3 (Ascend 910B/910C) architecture implementations
+│   ├── TPut.hpp                 # TPUT_IMPL  — remote write (local GM → UB → remote GM)
+│   ├── TGet.hpp                 # TGET_IMPL  — remote read  (remote GM → UB → local GM)
+│   ├── TNotify.hpp              # TNOTIFY_IMPL — send flag notification
+│   ├── TWait.hpp                # TWAIT_IMPL — blocking wait on signal(s)
+│   ├── TTest.hpp                # TTEST_IMPL — non-blocking signal test
+│   ├── TGather.hpp              # TGATHER_IMPL  — root collects from all ranks
+│   ├── TScatter.hpp             # TSCATTER_IMPL — root distributes to all ranks
+│   ├── TBroadCast.hpp           # TBROADCAST_IMPL — root broadcasts to all ranks
+│   ├── TReduce.hpp              # TREDUCE_IMPL — root gathers and reduces (Sum/Max/Min)
+│   └── async/
+│       ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL (SDMA only)
+│       └── TGetAsync.hpp        # TGET_ASYNC_IMPL (SDMA only)
 │
-└── async/                   # Asynchronous GM-to-GM DMA (no UB staging)
-    ├── async_types.hpp      # SDMA/URMA session and context types
-    ├── async_event_impl.hpp # AsyncEvent::Wait/Test, BuildAsyncSession
-    ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL (SDMA / URMA)
-    └── TGetAsync.hpp        # TGET_ASYNC_IMPL (SDMA / URMA)
+├── a5/                          # A5 (Ascend 950) architecture implementations
+│   ├── T*.hpp                   # Sync instructions (include a2a3/ counterparts)
+│   └── async/
+│       ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL (SDMA with MTE fallback + URMA)
+│       └── TGetAsync.hpp        # TGET_ASYNC_IMPL (SDMA + URMA)
+│
+└── async_common/                # Common async implementations (shared by a2a3/a5)
+    ├── async_types.hpp          # SDMA/URMA session and context types
+    ├── async_event_impl.hpp     # AsyncEvent::Wait/Test, BuildAsyncSession
+    ├── TPutAsyncCommonDetail.hpp # Common TPUT_ASYNC detail helpers + SDMA impl
+    └── TGetAsyncCommonDetail.hpp # Common TGET_ASYNC detail helpers + SDMA impl
 ```
 
 ## Architecture
@@ -41,13 +51,14 @@ comm/
  User code
     │
     ▼
- pto_comm_inst.hpp          ← public API (template wrappers + event handling)
-    │
+ pto_comm_inst.hpp              ← public API (template wrappers + event handling)
+    │                              includes async_common/async_event_impl.hpp
     ▼
- pto_comm_instr_impl.hpp    ← compile-time dispatch
+ pto_comm_instr_impl.hpp        ← compile-time dispatch
     │
-    ├── __CCE_AICORE__  →  T*.hpp / async/T*Async.hpp   (NPU native intrinsics)
-    └── __CPU_SIM       →  pto/cpu/comm/T*.hpp           (CPU simulation stubs)
+    ├── PTO_NPU_ARCH_A5    →  a5/T*.hpp / a5/async/T*Async.hpp
+    ├── __CCE_AICORE__     →  a2a3/T*.hpp / a2a3/async/T*Async.hpp
+    └── __CPU_SIM          →  pto/cpu/comm/T*.hpp  (CPU simulation stubs)
 ```
 
 ## Instruction Categories
