@@ -80,8 +80,8 @@ PTO-Auto（高层）：
 
 PTO-Manual（专家）：
 
-- 你用 `TASSIGN` 显式绑定 Tile 缓冲地址。
-- 你显式表达顺序（events 或低层 flags）。
+- 你可以用 `TASSIGN` 显式绑定 Tile 缓冲地址。
+- 你可以显式表达顺序（events 或低层 flags）。
 - 你可以构造双缓冲流水线并重叠 load/compute/store。
 
 ## 3. 第一个 kernel：向量加法（PTO-Auto 风格）
