@@ -48,6 +48,7 @@ tadds
 taddsc
 tand
 tands
+taxpy
 tbroadcast
 tci
 tcmp
