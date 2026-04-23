@@ -421,9 +421,9 @@ __tf__ PTO_INTERNAL void TTransConvNCHW2NC1HWC0(typename TileDataDst::TileDType 
                                                 typename TileDataTmp::TileDType __in__ tmp, unsigned srcN, unsigned srcC,
                                                 unsigned srcH, unsigned srcW, unsigned dstC0)
 {
-    using Tdst = typename TileData::DType;
-    using Tsrc = typename TileData::DType;
-    using Ttmp = typename TileData::DType;
+    using Tdst = typename TileDataDst::DType;
+    using Tsrc = typename TileDataSrc::DType;
+    using Ttmp = typename TileDataTmp::DType;
 
     __ubuf__ Tdst *dstPtrOrig = (__ubuf__ Tdst *)__cce_get_tile_ptr(dst);
     __ubuf__ Tsrc *srcPtrOrig = (__ubuf__ Tsrc *)__cce_get_tile_ptr(src);
@@ -431,7 +431,7 @@ __tf__ PTO_INTERNAL void TTransConvNCHW2NC1HWC0(typename TileDataDst::TileDType 
     unsigned srcStride = srcH * srcW;
     unsigned dstStride = dstC0;
     if (((dstStride % blockSizeElem) != 0) || ((srcStride % blockSizeElem) != 0) || srcStride / blockSizeElem > 255) {
-        ConvNCHW2NC1HWC0Unalign<Tdst, blockSizeElem>(dstPtrOrig, srcPtrOrig, srcN, srcC, srcH, srcW, dstC0);
+        ConvNCHW2NC1HWC0Unalign<Tsrc, blockSizeElem>(dstPtrOrig, srcPtrOrig, srcN, srcC, srcH, srcW, dstC0);
         return;
     }
     unsigned validCol = srcH * srcW;
@@ -455,8 +455,8 @@ __tf__ PTO_INTERNAL void TTransConvNC1HWC02C1HWNC0(typename TileDataDst::TileDTy
                                                    typename TileDataTmp::TileDType __in__ tmp, unsigned dstN,
                                                    unsigned srcN, unsigned srcC1HW, unsigned srcC0)
 {
-    using Tdst = typename TileData::DType;
-    using Tsrc = typename TileData::DType;
+    using Tdst = typename TileDataDst::DType;
+    using Tsrc = typename TileDataSrc::DType;
 
     __ubuf__ Tdst *dstPtrOrig = (__ubuf__ Tdst *)__cce_get_tile_ptr(dst);
     __ubuf__ Tsrc *srcPtrOrig = (__ubuf__ Tsrc *)__cce_get_tile_ptr(src);
@@ -534,9 +534,9 @@ __tf__ PTO_INTERNAL void TTransConvGNCHW2GNC1HWC0(typename TileDataDst::TileDTyp
                                                   typename TileDataTmp::TileDType __in__ tmp, unsigned srcG, unsigned srcN,
                                                   unsigned srcC, unsigned srcH, unsigned srcW, unsigned dstC0)
 {
-    using Tdst = typename TileData::DType;
-    using Tsrc = typename TileData::DType;
-    using Ttmp = typename TileData::DType;
+    using Tdst = typename TileDataDst::DType;
+    using Tsrc = typename TileDataSrc::DType;
+    using Ttmp = typename TileDataTmp::DType;
 
     __ubuf__ Tdst *dstPtrOrig = (__ubuf__ Tdst *)__cce_get_tile_ptr(dst);
     __ubuf__ Tsrc *srcPtrOrig = (__ubuf__ Tsrc *)__cce_get_tile_ptr(src);
@@ -604,12 +604,12 @@ __tf__ PTO_INTERNAL void TTransConvGNC1HWC02GC1HWNC0(typename TileDataDst::TileD
                                                      unsigned srcG, unsigned srcN, unsigned srcC1HW, unsigned srcC0)
 {
     (void)tmp;
-    using Tdst = typename TileData::DType;
-    using Tsrc = typename TileData::DType;
+    using Tdst = typename TileDataDst::DType;
+    using Tsrc = typename TileDataSrc::DType;
 
     __ubuf__ Tdst *dstPtrOrig = (__ubuf__ Tdst *)__cce_get_tile_ptr(dst);
     __ubuf__ Tsrc *srcPtrOrig = (__ubuf__ Tsrc *)__cce_get_tile_ptr(src);
-    if (srcC0 * sizeof(T) % BLOCK_BYTE_SIZE == 0) {
+    if (srcC0 * sizeof(Tsrc) % BLOCK_BYTE_SIZE == 0) {
         unsigned nStride = srcC1HW * srcC0;
         unsigned gStride2 = dstN * srcC1HW * srcC0;
         uint32_t burstNum = srcC1HW;

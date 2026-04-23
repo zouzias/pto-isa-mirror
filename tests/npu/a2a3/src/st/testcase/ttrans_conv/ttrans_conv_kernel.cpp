@@ -111,10 +111,10 @@ __global__ AICORE void runTTRANSConv2(__gm__ T __out__ *out, __gm__ T __in__ *sr
         ConvTile<TileType::Vec, T, elemNum, Layout::NC1HWC0, ConvTileShape<srcN, dstC1, dstH, dstW, dstC0>>;
     TileData srcTile;
     static_assert(srcTile.totalDimCount == 5);
-#ifdef __PTO_AUTO__
-    TRESHAPE(src0Tile,srcTile);
-#endif
     TASSIGN(srcTile, 0x0);
+#ifdef __PTO_AUTO__
+    TRESHAPE(src0Tile, srcTile);
+#endif
 
     using DstTileData = ConvTile<TileType::Vec, T, elemNum, Layout::FRACTAL_Z,
                                  ConvTileShape<dstC1 * dstH * dstW, dstN1, dstN0, dstC0>>;
@@ -123,7 +123,7 @@ __global__ AICORE void runTTRANSConv2(__gm__ T __out__ *out, __gm__ T __in__ *sr
     static_assert(dstTile.totalDimCount == 4);
     SrcTileData dst0Tile;
 #ifdef __PTO_AUTO__
-    TRESHAPE(dst0Tile,dstTile);
+    TRESHAPE(dst0Tile, dstTile);
 #endif
     TASSIGN(dstTile, 0x0 + bufferSize);
     TASSIGN(dst0Tile, 0x0 + bufferSize);
@@ -131,7 +131,7 @@ __global__ AICORE void runTTRANSConv2(__gm__ T __out__ *out, __gm__ T __in__ *sr
         Tile<TileType::Vec, int32_t, 1, elemNum * sizeof(T) / 4, BLayout::RowMajor, 1, elemNum * sizeof(T) / 4>;
     ZeroTileData dst1Tile;
 #ifdef __PTO_AUTO__
-    TRESHAPE(dst1Tile,dstTile);
+    TRESHAPE(dst1Tile, dstTile);
 #endif
     TASSIGN(dst1Tile, 0x0 + bufferSize);
 
@@ -249,7 +249,7 @@ __global__ AICORE void runTTRANSGroupConv1(__gm__ T __out__ *out, __gm__ T __in_
     TASSIGN(srcTile, 0x0);
 #ifdef __PTO_AUTO__
     TRESHAPE(src0Tile, srcTile);
-#ifndef
+#endif
 
     using DstTileData =
         ConvTile<TileType::Vec, T, elemNum, Layout::GNC1HWC0, ConvTileShape<dstG, dstN, dstC1, dstH, dstW, dstC0>>;
@@ -259,7 +259,7 @@ __global__ AICORE void runTTRANSGroupConv1(__gm__ T __out__ *out, __gm__ T __in_
     SrcTileData dst0Tile;
 #ifdef __PTO_AUTO__
     TRESHAPE(dst0Tile, dstTile);
-#ifndef
+#endif
     TASSIGN(dst0Tile, 0x0 + dstG * dstN * dstC1 * dstH * dstW * dstC0 * sizeof(T));
 
     constexpr int tmpTileH = dstH * dstW;
@@ -314,8 +314,8 @@ __global__ AICORE void runTTRANSGroupConv2(__gm__ T __out__ *out, __gm__ T __in_
     TileData srcTile;
     static_assert(srcTile.totalDimCount == 6);
     TASSIGN(srcTile, 0x0);
-#ifdef
-    TRESHAPE(src0Tile,srcTile);
+#ifdef __PTO_AUTO__
+    TRESHAPE(src0Tile, srcTile);
 #endif
     using DstTileData = ConvTile<TileType::Vec, T, elemNum, Layout::FRACTAL_Z,
                                  ConvTileShape<dstG * dstC1 * dstH * dstW, dstN1, dstN0, dstC0>>;
