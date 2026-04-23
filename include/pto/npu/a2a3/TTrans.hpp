@@ -200,13 +200,23 @@ PTO_INTERNAL void TransTailTiles(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, unsigne
                                  unsigned validCol, unsigned dstStride, unsigned srcStride)
 {
     // we can use constexpr if tmpStride is known in static way
+#ifndef __PTO_AUTO__
     PtoSetWaitFlag<PIPE_V, PIPE_S>();
+#else
+    set_flag(PIPE_V, PIPE_S, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
+#endif
     for (int i = 0; i < validRow; i++) {
         for (int j = 0; j < validCol; j++) {
             dstPtr[j * dstStride + i] = srcPtr[i * srcStride + j];
         }
     }
+#ifndef __PTO_AUTO__
     PtoSetWaitFlag<PIPE_S, PIPE_V>();
+#else
+    set_flag(PIPE_S, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_S, PIPE_V, EVENT_ID0);
+#endif
     return;
 }
 
@@ -463,7 +473,12 @@ __tf__ PTO_INTERNAL void TTransConvNC1HWC02C1HWNC0(typename TileData::TileDType 
         unsigned srcStride = srcC0;
         unsigned dstStride = dstN * srcC0;
         unsigned nStride = srcC1HW * srcC0;
+#ifndef __PTO_AUTO__
         PtoSetWaitFlag<PIPE_V, PIPE_S>();
+#else
+        set_flag(PIPE_V, PIPE_S, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
+#endif
         for (uint16_t num = 0; num < (uint16_t)srcN; num++) {
             __ubuf__ T *srcPtr = srcPtrOrig + num * nStride;
             __ubuf__ T *dstPtr = dstPtrOrig + num * srcC0;
@@ -473,7 +488,12 @@ __tf__ PTO_INTERNAL void TTransConvNC1HWC02C1HWNC0(typename TileData::TileDType 
                 }
             }
         }
+#ifndef __PTO_AUTO__
         PtoSetWaitFlag<PIPE_S, PIPE_V>();
+#else
+        set_flag(PIPE_S, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_S, PIPE_V, EVENT_ID0);
+#endif
     }
 }
 
