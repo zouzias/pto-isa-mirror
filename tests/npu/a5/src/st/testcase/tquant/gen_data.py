@@ -223,12 +223,17 @@ def fp16_to_mxfp8(valid_rows, valid_cols, mode):
     src_fp16 = src_fp32.astype(np.float16)
     src_fp16.tofile("input.bin")
 
-    pad_value = np.float16(float("-inf"))
+    pad_value = np.float16(0.0)  # match kernel PadValue::Zero / ZeroPadSourceTile
     padded_src = np.full((valid_rows, padded_cols), pad_value, dtype=np.float16)
     padded_src[:, :valid_cols] = src_fp16
 
     # fp16 quantization, golden is saved in quant function
-    quant_fp16_to_e4m3(padded_src, mode=mode)
+    _, _, data_fp8 = quant_fp16_to_e4m3(padded_src, mode=mode)
+
+    # Trim FP8 golden to valid dimensions (kernel TSTORE only outputs valid columns)
+    if padded_cols != valid_cols and mode == "nd":
+        data_fp8_valid = data_fp8.reshape(valid_rows, padded_cols)[:, :valid_cols].copy()
+        data_fp8_valid.tofile("golden_fp8.bin")
     return
 
 
@@ -385,12 +390,24 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 128, 128, mode="nd", dtype=bfloat16),
         TQuantParams("mxfp8", 14, 16, mode="nd", dtype=bfloat16),
         TQuantParams("mxfp8", 7, 48, mode="nd", dtype=bfloat16),
+        # 2D reduce path: validCols < paddedCols (non-multiple of 32)
+        TQuantParams("mxfp8", 32, 48, mode="nd", dtype=bfloat16),
+        TQuantParams("mxfp8", 64, 96, mode="nd", dtype=bfloat16),
+        TQuantParams("mxfp8", 128, 80, mode="nd", dtype=bfloat16),
+        # 2D Extract/Calc path: srcCols >= 512 AND srcCols %% 512 == 0
+        TQuantParams("mxfp8", 8, 500, mode="nd", dtype=bfloat16),
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=bfloat16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=bfloat16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=bfloat16),
         TQuantParams("mxfp8", 32, 128, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 64, 128, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 128, 128, mode="nd", dtype=np.float16),
+        # 2D reduce path: validCols < paddedCols (non-multiple of 32)
+        TQuantParams("mxfp8", 14, 16, mode="nd", dtype=np.float16),
+        TQuantParams("mxfp8", 7, 48, mode="nd", dtype=np.float16),
+        TQuantParams("mxfp8", 32, 48, mode="nd", dtype=np.float16),
+        TQuantParams("mxfp8", 64, 96, mode="nd", dtype=np.float16),
+        TQuantParams("mxfp8", 128, 80, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=np.float16),

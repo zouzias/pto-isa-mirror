@@ -184,6 +184,62 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_opt(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr
     }
 }
 
+// 2D version of AbsReduceMax_b16: iterates row-by-row, respecting a physical row
+// stride (srcCols) distinct from the valid element count per row (validCols).
+// Use when the dynamic valid width differs from the static (padded) tile width so
+// rows are NOT contiguous in UB. Assumes pad columns [validCols, srcCols) of the
+// source tile have been zero-filled (e.g. by ZeroPadSourceTile) so that pad groups
+// produce a zero group-max naturally through vmax/vcgmax.
+//
+// Max buffer layout: per-row stride = srcCols / 32 (groups per row), matching the
+// flattened layout used by the downstream ExtractB8ExponentAndScaling pass.
+template <typename T>
+PTO_INTERNAL void AbsReduceMax_b16_ND_2D(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr, unsigned validRows, unsigned validCols,
+                                         unsigned srcCols)
+{
+    vector_bf16 vb16_in_1, vb16_in_2, vb16_max_1;
+    vector_align ureg_max;
+    constexpr uint32_t grp_size = 32;
+    constexpr uint32_t elements_per_vl = REPEAT_BYTE / sizeof(T);        // 128
+    constexpr uint32_t elements_per_dintlv = 2 * elements_per_vl;        // 256
+    constexpr uint32_t grps_per_dintlv = elements_per_dintlv / grp_size; // 8 group maxes per DINTLV
+    uint32_t groupsPerRow = srcCols / grp_size;                          // srcCols is always 32-aligned
+    uint16_t loop_num_per_row = CeilDivision(srcCols, elements_per_dintlv);
+    // Max buffer is packed contiguously across rows (row N's maxes sit right after row N-1's).
+    // Stream the stores through a single alignment register with POST_UPDATE so the hardware
+    // tracks its own position; a single vstas at the end drains the residual.
+    __ubuf__ T *writePtr = maxPtr;
+    for (uint16_t row = 0; row < (uint16_t)validRows; ++row) {
+        uint32_t src_row_off = row * srcCols;
+        for (uint16_t i = 0; i < loop_num_per_row; ++i) {
+            // Predicates reflect per-DINTLV-register valid element count, computed
+            // against the padded srcCols (source pad lanes are zero → safe for max).
+            uint32_t col_offset = i * elements_per_dintlv;
+            uint32_t remaining = (srcCols > col_offset) ? (srcCols - col_offset) : 0;
+            if (remaining > elements_per_dintlv)
+                remaining = elements_per_dintlv;
+            uint32_t even_count = (remaining + 1) / 2;
+            uint32_t odd_count = remaining / 2;
+            MaskReg preg_vl0 = CreatePredicate<T>(even_count);
+            MaskReg preg_vl1 = CreatePredicate<T>(odd_count);
+            vlds(vb16_in_1, vb16_in_2, srcPtr, src_row_off + col_offset, DINTLV_B16);
+            vabs((vector_f16 &)vb16_in_1, (vector_f16 &)vb16_in_1, preg_vl0);
+            vabs((vector_f16 &)vb16_in_2, (vector_f16 &)vb16_in_2, preg_vl1);
+            vmax(vb16_in_1, vb16_in_1, vb16_in_2, preg_vl0);
+            vcgmax((vector_f16 &)vb16_max_1, (vector_f16 &)vb16_in_1, preg_vl0);
+            // Clamp store width to the groups actually present in this row; writing a
+            // full grps_per_dintlv (=8) would overshoot into the next row's max slots
+            // when groupsPerRow < 8 (e.g. srcCols=32 → 1 group/row).
+            uint32_t grps_written_in_row = (uint32_t)i * grps_per_dintlv;
+            uint32_t grps_remaining = (groupsPerRow > grps_written_in_row) ? (groupsPerRow - grps_written_in_row) : 0;
+            uint32_t grps_this_iter = (grps_remaining > grps_per_dintlv) ? grps_per_dintlv : grps_remaining;
+            vstus(ureg_max, grps_this_iter, vb16_max_1, writePtr, POST_UPDATE);
+        }
+    }
+    vstas(ureg_max, writePtr, 0, POST_UPDATE);
+    (void)validCols; // padded source makes validCols implicit; retained for API symmetry
+}
+
 // Assumption: input total size is a multiple of 2K elements
 // Uses 2 VLs per inner iteration (1 DINTLV + 1 vcgmax + 1 vstus) to avoid
 // WAW hazard on the vstus auto-increment scalar register when using 2 vstus per iteration.
@@ -337,6 +393,73 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling(__ubuf__ T *maxPtr, __ubuf__ uint8
     }
 }
 
+// 2D variant of ExtractB8ExponentAndScaling for the padded (validCols != srcCols) path.
+// Iterates per row, processing only the groups backing valid columns. Max, exp and
+// scaling buffers share a packed per-row layout (row r's first group at row * groupsPerRow).
+// Only safe when groupsPerRow * sizeof(T) is a multiple of 32 B (i.e. srcCols >= 512 for
+// B16) so that each per-row NORM load/store address is 32-byte aligned. Callers must
+// gate on that condition.
+template <typename T>
+PTO_INTERNAL void ExtractB8ExponentAndScaling_2D(__ubuf__ T *maxPtr, __ubuf__ uint8_t *expPtr, __ubuf__ T *scalingPtr,
+                                                 unsigned validRows, unsigned validCols, unsigned srcCols)
+{
+    static_assert(std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
+                  "ExtractB8ExponentAndScaling_2D: T must be bfloat16_t or half");
+    static constexpr auto distValue =
+        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+    constexpr bool is_bf16 = std::is_same<T, bfloat16_t>::value;
+    constexpr int shr = is_bf16 ? 7 : 10;
+    constexpr int16_t exp_mask_val = is_bf16 ? 0x7F80 : 0x7C00;
+    constexpr int16_t nan_check = is_bf16 ? 0xFF : 0x1F;
+    constexpr int16_t exp_max_val = is_bf16 ? 0xFE : 0x1E;
+    constexpr int16_t subnorm_val = is_bf16 ? 0x7F80 : 0x7C00;
+    constexpr int16_t clamp_val = is_bf16 ? -127 : -15;
+    constexpr int16_t emax_e8m0 = is_bf16 ? 8 : (8 - 112);
+    constexpr int16_t scaling_base = exp_max_val + 8;
+
+    RegTensor<T> vb16_max;
+    vector_s16 vb16_exponent, vb16_shared_exp, vb16_scaling;
+    vector_s16 vb16_b8_nan, vb16_subnorm, vb16_b8_emax, vb16_exp_mask, vb16_scaling_base;
+    vbr(vb16_exp_mask, exp_mask_val);
+    vbr(vb16_b8_nan, 0xFF);
+    vbr(vb16_subnorm, subnorm_val);
+    vbr(vb16_scaling_base, scaling_base);
+    vbr(vb16_exponent, exp_mask_val);
+    vbr(vb16_b8_emax, emax_e8m0);
+    vector_bool preg_inf;
+
+    constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T); // 128 group-maxes per VL
+    uint32_t groupsPerRow = srcCols / 32;                       // srcCols is 32-aligned
+    uint32_t validGroupsPerRow = CeilDivision((uint32_t)validCols, 32u);
+    uint16_t loopsPerRow = CeilDivision(validGroupsPerRow, elementsPerVL);
+    for (uint16_t row = 0; row < (uint16_t)validRows; ++row) {
+        uint32_t rowOff = row * groupsPerRow; // group-indexed offset into packed buffers
+        for (uint16_t i = 0; i < loopsPerRow; ++i) {
+            uint32_t off = i * elementsPerVL;
+            uint32_t rem = (validGroupsPerRow > off) ? (validGroupsPerRow - off) : 0;
+            if (rem > elementsPerVL)
+                rem = elementsPerVL;
+            vector_bool preg_b16 = CreatePredicate<T>(rem);
+            vlds(vb16_max, maxPtr + rowOff, off, NORM);
+            vand((vector_s16 &)vb16_exponent, (vector_s16 &)vb16_max, vb16_exp_mask, preg_b16, MODE_ZEROING);
+            vshrs((vector_s16 &)vb16_exponent, (vector_s16 &)vb16_exponent, shr, preg_b16, MODE_ZEROING);
+            vsub((vector_s16 &)vb16_shared_exp, (vector_s16 &)vb16_exponent, (vector_s16 &)vb16_b8_emax, preg_b16);
+            vsub((vector_s16 &)vb16_scaling, (vector_s16 &)vb16_scaling_base, (vector_s16 &)vb16_exponent, preg_b16);
+            vshls((vector_s16 &)vb16_scaling, (vector_s16 &)vb16_scaling, shr, preg_b16, MODE_ZEROING);
+            vcmps_ne(preg_inf, (vector_s16 &)vb16_exponent, nan_check, preg_b16);
+            vsel(vb16_scaling, vb16_scaling, vb16_b8_nan, preg_inf);
+            vsel(vb16_shared_exp, vb16_shared_exp, vb16_b8_nan, preg_inf);
+            vcmps_ge(preg_inf, (vector_s16 &)vb16_scaling, clamp_val, preg_b16);
+            vsel(vb16_scaling, vb16_scaling, vb16_subnorm, preg_inf);
+            vsel(vb16_shared_exp, vb16_shared_exp, vb16_subnorm, preg_inf);
+            vsts((vector_s16 &)vb16_shared_exp, ((__ubuf__ int16_t *)(expPtr + rowOff)), i * elementsPerVL / sizeof(T),
+                 PK_B16, preg_b16);
+            vsts((vector_s16 &)vb16_scaling, ((__ubuf__ int16_t *)(scalingPtr + rowOff)), i * elementsPerVL, distValue,
+                 preg_b16);
+        }
+    }
+}
+
 // FP32 -> FP8
 PTO_INTERNAL void CalcQuantizedFP8Values(__ubuf__ float *srcPtr, __ubuf__ float *scalingPtr, __ubuf__ uint8_t *dstPtr,
                                          unsigned vl_count, unsigned elementsPerRepeat, unsigned total_elements_count,
@@ -432,6 +555,64 @@ PTO_INTERNAL void CalcQuantizedFP8Values(__ubuf__ T *srcPtr, __ubuf__ T *scaling
     }
 }
 
+// 2D variant of CalcQuantizedFP8Values for the padded (validCols != srcCols) path.
+// Iterates per row using srcCols as src/dst stride (elements) and groupsPerRow as the
+// packed scaling-buffer stride. Processes only validCols elements per row; pad-col dst
+// bytes are not written (TSTORE trims them via GM shape). Alignment requirements:
+//   - scalingPtr + row * groupsPerRow must be 16 B-aligned for E2B_B16 load
+//     (groupsPerRow * sizeof(T) % 16 == 0, i.e. srcCols % 256 == 0)
+//   - srcPtr  + row * srcCols must be 32 B-aligned for DINTLV_B16 (srcCols % 16 == 0)
+//   - dstPtr  + row * srcCols must be 32 B-aligned for NORM_B8 (srcCols % 32 == 0, always true)
+// Callers must gate on the srcCols %% 256 == 0 condition.
+template <typename T>
+PTO_INTERNAL void CalcQuantizedFP8Values_2D(__ubuf__ T *srcPtr, __ubuf__ T *scalingPtr, __ubuf__ uint8_t *dstPtr,
+                                            unsigned validRows, unsigned validCols, unsigned srcCols)
+{
+    static_assert(std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
+                  "CalcQuantizedFP8Values_2D B16: T must be bfloat16_t or half");
+    RegTensor<T> vb16_scaling, vb16_in_1, vb16_in_2, vb16_out_1, vb16_out_2;
+    vector_f32 vb32_cvt_1, vb32_cvt_2, vb32_cvt_3, vb32_cvt_4;
+    vector_f8e4m3 vb8_or1, vb8_or2, vb8_out, vb8_p0, vb8_p1, vb8_p2, vb8_p3;
+    constexpr uint32_t elementsPerVL_b16 = REPEAT_BYTE / sizeof(T);      // 128
+    constexpr uint32_t elementsPerVL_b8 = REPEAT_BYTE / sizeof(uint8_t); // 256
+    constexpr uint32_t elementsPerDintlv = 2 * elementsPerVL_b16;        // 256
+    uint32_t groupsPerRow = srcCols / 32;
+    uint16_t loopsPerRow = CeilDivision((uint32_t)validCols, elementsPerDintlv);
+    for (uint16_t row = 0; row < (uint16_t)validRows; ++row) {
+        uint32_t srcRowOff = row * srcCols;        // T-indexed
+        uint32_t dstRowOff = row * srcCols;        // uint8_t-indexed (1 byte per elem)
+        uint32_t scaleRowOff = row * groupsPerRow; // T-indexed, packed scaling layout
+        for (uint16_t i = 0; i < loopsPerRow; ++i) {
+            uint32_t colOff = i * elementsPerDintlv;
+            uint32_t remaining = (validCols > colOff) ? (validCols - colOff) : 0;
+            if (remaining > elementsPerDintlv)
+                remaining = elementsPerDintlv;
+            uint32_t even_count = (remaining + 1) / 2;
+            uint32_t odd_count = remaining / 2;
+            MaskReg preg_b16_1 = CreatePredicate<T>(even_count);
+            MaskReg preg_b16_2 = CreatePredicate<T>(odd_count);
+            MaskReg preg_b8 = CreatePredicate<uint8_t>(remaining);
+            vlds((vector_u16 &)vb16_scaling, (__ubuf__ uint16_t *)(scalingPtr + scaleRowOff), 8 * i, E2B_B16);
+            vlds(vb16_in_1, vb16_in_2, srcPtr + srcRowOff, colOff, DINTLV_B16);
+            vmul(vb16_out_1, vb16_in_1, vb16_scaling, preg_b16_1, MODE_ZEROING);
+            vmul(vb16_out_2, vb16_in_2, vb16_scaling, preg_b16_2, MODE_ZEROING);
+            vcvt(vb32_cvt_1, vb16_out_1, preg_b16_1, PART_EVEN);
+            vcvt(vb32_cvt_2, vb16_out_1, preg_b16_1, PART_ODD);
+            vcvt(vb32_cvt_3, vb16_out_2, preg_b16_2, PART_EVEN);
+            vcvt(vb32_cvt_4, vb16_out_2, preg_b16_2, PART_ODD);
+            vcvt(vb8_p0, vb32_cvt_1, preg_b16_1, ROUND_R, RS_ENABLE, PART_P0);
+            vcvt(vb8_p1, vb32_cvt_3, preg_b16_2, ROUND_R, RS_ENABLE, PART_P1);
+            vcvt(vb8_p2, vb32_cvt_2, preg_b16_1, ROUND_R, RS_ENABLE, PART_P2);
+            vcvt(vb8_p3, vb32_cvt_4, preg_b16_2, ROUND_R, RS_ENABLE, PART_P3);
+            vor(vb8_or1, vb8_p0, vb8_p1, preg_b8);
+            vor(vb8_or2, vb8_p2, vb8_p3, preg_b8);
+            vor(vb8_out, vb8_or1, vb8_or2, preg_b8);
+            vsts((vector_u8 &)vb8_out, (__ubuf__ uint8_t *)(dstPtr + dstRowOff), i * elementsPerVL_b8, NORM_B8,
+                 preg_b8);
+        }
+    }
+}
+
 // FP32 -> MXFP8 quantization: AbsReduceMax + ExponentScaling + FP8 conversion.
 template <unsigned StaticRows, unsigned StaticCols>
 PTO_INTERNAL void TQuant_MXFP8_F32(__ubuf__ float *srcPtr, __ubuf__ uint8_t *expPtr, __ubuf__ uint8_t *dstPtr,
@@ -475,27 +656,55 @@ PTO_INTERNAL void TQuant_MXFP8_F32(__ubuf__ float *srcPtr, __ubuf__ uint8_t *exp
 }
 
 // B16 (BF16/FP16) -> MXFP8 quantization: AbsReduceMax + ExponentScaling + FP8 conversion.
+// When validCols == srcCols (static == dynamic width), the source tile is contiguous in UB
+// so the flat 1D reduce variants apply. Otherwise rows are padded to srcCols (ZeroPadSourceTile)
+// and we dispatch the 2D per-row reduce that honors the row stride.
 template <typename T>
 PTO_INTERNAL void TQuant_MXFP8_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *expPtr, __ubuf__ uint8_t *dstPtr,
                                    __ubuf__ T *maxPtr, __ubuf__ T *scalingPtr, uint16_t vl_count,
-                                   unsigned exp_loop_count, uint32_t numGroups, uint32_t total_elements_count)
+                                   unsigned exp_loop_count, uint32_t numGroups, uint32_t total_elements_count,
+                                   unsigned validRows, unsigned validCols, unsigned srcCols)
 {
     __ubuf__ T *maxPtr_backup = maxPtr;
     // AbsReduceMax functions use vector_bf16 intrinsics; cast pointers for fp16 compatibility
     // (both types are 16-bit; abs/max operate on raw bit patterns identically for exponent extraction)
     __ubuf__ bfloat16_t *srcPtr_b16 = (__ubuf__ bfloat16_t *)srcPtr;
     __ubuf__ bfloat16_t *maxPtr_b16 = (__ubuf__ bfloat16_t *)maxPtr;
-    if (total_elements_count % 2048 == 0)
-        AbsReduceMax_b16_ND_largesizes(srcPtr_b16, maxPtr_b16, vl_count, total_elements_count);
-    else if (total_elements_count % 256 == 0)
-        AbsReduceMax_b16_ND_opt(srcPtr_b16, maxPtr_b16, vl_count, total_elements_count);
-    else
-        AbsReduceMax_b16_ND(srcPtr_b16, maxPtr_b16, vl_count, total_elements_count);
-    mem_bar(VST_VLD);
-    maxPtr = maxPtr_backup;
-    ExtractB8ExponentAndScaling(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups);
-    mem_bar(VST_VLD);
-    CalcQuantizedFP8Values(srcPtr, scalingPtr, dstPtr, total_elements_count);
+    if (validCols == srcCols) {
+        // 1D fast path: source is contiguous; pick the best flat reducer by size.
+        if (total_elements_count % 4096 == 0)
+            AbsReduceMax_b16_ND_largesizes(srcPtr_b16, maxPtr_b16, vl_count, total_elements_count);
+        else if (total_elements_count % 256 == 0)
+            AbsReduceMax_b16_ND_opt(srcPtr_b16, maxPtr_b16, vl_count, total_elements_count);
+        else
+            AbsReduceMax_b16_ND(srcPtr_b16, maxPtr_b16, vl_count, total_elements_count);
+        mem_bar(VST_VLD);
+        maxPtr = maxPtr_backup;
+        ExtractB8ExponentAndScaling(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups);
+        mem_bar(VST_VLD);
+        CalcQuantizedFP8Values(srcPtr, scalingPtr, dstPtr, total_elements_count);
+    } else {
+        // 2D path: iterate per row with srcCols stride. ZeroPadSourceTile has zeroed
+        // pad lanes so per-row max is correct; the 2D reducer uses vstus+POST_UPDATE
+        // for alignment safety across narrow rows.
+        AbsReduceMax_b16_ND_2D(srcPtr_b16, maxPtr_b16, validRows, validCols, srcCols);
+        mem_bar(VST_VLD);
+        maxPtr = maxPtr_backup;
+        // Downstream 2D Extract/Calc need per-row addresses to meet NORM/E2B_B16
+        // alignment. NORM B16 requires 32 B → groupsPerRow*sizeof(T) % 32 == 0,
+        // i.e. srcCols % 512 == 0. When that holds we skip the pad-col work;
+        // otherwise fall back to flat 1D over the padded buffer (pad lanes are zero
+        // so the result is exact — TSTORE trims pad cols via the GM shape).
+        if (srcCols % 512 == 0) {
+            ExtractB8ExponentAndScaling_2D<T>(maxPtr, expPtr, scalingPtr, validRows, validCols, srcCols);
+            mem_bar(VST_VLD);
+            CalcQuantizedFP8Values_2D<T>(srcPtr, scalingPtr, dstPtr, validRows, validCols, srcCols);
+        } else {
+            ExtractB8ExponentAndScaling(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups);
+            mem_bar(VST_VLD);
+            CalcQuantizedFP8Values(srcPtr, scalingPtr, dstPtr, total_elements_count);
+        }
+    }
 }
 
 // Zero-pad columns [validCols, StaticCols) in each row of a 16-bit source tile.
@@ -619,7 +828,8 @@ __tf__ PTO_INTERNAL void TQuant_MXFP8_Impl(typename TileDataOut::TileDType __out
                 expLoopCount, numGroups, elemPerVL, totalElems, validRows, validCols);
         else
             TQuant_MXFP8_B16(srcPtr, (__ubuf__ uint8_t *)expPtr, (__ubuf__ uint8_t *)dstPtr, maxPtr, scalingPtr,
-                             vlCount, expLoopCount, numGroups, totalElems);
+                             vlCount, expLoopCount, numGroups, totalElems, validRows, validCols,
+                             (unsigned)TileDataSrc::Cols);
     }
 }
 
