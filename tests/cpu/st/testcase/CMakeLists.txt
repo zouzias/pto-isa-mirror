@@ -72,6 +72,7 @@ tgather
 tgatherb
 tget
 tinsert
+tinsert_quant
 tload
 tloadconv
 tlog
