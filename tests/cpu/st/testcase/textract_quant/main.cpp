@@ -84,7 +84,7 @@ void runTEXTRACT_Scalar()
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 
     uint64_t scalarQuant = ((uint64_t *)quantDevice)[0];
-    constexpr ReluPreMode reluMode == applyRelu ? ReluPreMode::NormalRelu : ReluPreMode::NoRelu;
+    constexpr ReluPreMode reluMode = applyRelu ? ReluPreMode::NormalRelu : ReluPreMode::NoRelu;
     TEXTRACT<DT, ST, reluMode>(dstTile, srcTile, scalarQuant, static_cast<uint16_t>(idxRow), static_cast<uint16_t>(idxCol));
 
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
@@ -175,7 +175,7 @@ void runTEXTRACT_Vector()
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 
-    constexpr ReluPreMode reluMode == applyRelu ? ReluPreMode::NormalRelu : ReluPreMode::NoRelu;
+    constexpr ReluPreMode reluMode = applyRelu ? ReluPreMode::NormalRelu : ReluPreMode::NoRelu;
     TEXTRACT_FP<DT, ST, uint64_t, reluMode>(dstTile, srcTile, fpTileLocal, static_cast<uint16_t>(idxRow), static_cast<uint16_t>(idxCol));
 
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
@@ -207,57 +207,57 @@ void runTEXTRACT_Vector()
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TEXTRACTTest, case_1_int32_t_int8_t) { runTEXTRACT_Scalar<int32_t, int8_t, 128, 64, 128, 64, 128, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_2_int32_t_int8_t) { runTEXTRACT_Scalar<int32_t, int8_t, 128, 64, 128, 64, 96, 32, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_3_int32_t_int8_t) { runTEXTRACT_Scalar<int32_t, int8_t, 128, 128, 128, 128, 64, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_4_int32_t_int8_t) { runTEXTRACT_Scalar<int32_t, int8_t, 256, 128, 256, 128, 128, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_5_int32_t_int8_t) { runTEXTRACT_Vector<int32_t, int8_t, 128, 64, 128, 64, 64, 32, 8, 0>(); }
-TEST_F(TEXTRACTTest, case_6_int32_t_int8_t) { runTEXTRACT_Vector<int32_t, int8_t, 96, 96, 96, 96, 64, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_7_int32_t_int8_t) { runTEXTRACT_Vector<int32_t, int8_t, 128, 128, 128, 128, 96, 96, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_8_int32_t_int8_t) { runTEXTRACT_Vector<int32_t, int8_t, 256, 64, 256, 64, 128, 32, 0, 0>(); }
+TEST_F(TEXTRACTTest, case_1_int32_t_int8_t) { runTEXTRACT_Scalar<int32_t, int8_t, 128, 64, 128, 64, 128, 64, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_2_int32_t_int8_t) { runTEXTRACT_Scalar<int32_t, int8_t, 128, 64, 128, 64, 96, 32, 0, 0, true>(); }
+TEST_F(TEXTRACTTest, case_3_int32_t_int8_t) { runTEXTRACT_Scalar<int32_t, int8_t, 128, 128, 128, 128, 64, 64, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_4_int32_t_int8_t) { runTEXTRACT_Scalar<int32_t, int8_t, 256, 128, 256, 128, 128, 64, 0, 0, true>(); }
+TEST_F(TEXTRACTTest, case_5_int32_t_int8_t) { runTEXTRACT_Vector<int32_t, int8_t, 128, 64, 128, 64, 64, 32, 8, 0, false>(); }
+TEST_F(TEXTRACTTest, case_6_int32_t_int8_t) { runTEXTRACT_Vector<int32_t, int8_t, 96, 96, 96, 96, 64, 64, 0, 0, true>(); }
+TEST_F(TEXTRACTTest, case_7_int32_t_int8_t) { runTEXTRACT_Vector<int32_t, int8_t, 128, 128, 128, 128, 96, 96, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_8_int32_t_int8_t) { runTEXTRACT_Vector<int32_t, int8_t, 256, 64, 256, 64, 128, 32, 0, 0, true>(); }
 
-TEST_F(TEXTRACTTest, case_9_int32_t_uint8_t) { runTEXTRACT_Scalar<int32_t, uint8_t, 128, 64, 128, 64, 128, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_10_int32_t_uint8_t) { runTEXTRACT_Scalar<int32_t, uint8_t, 128, 64, 128, 64, 96, 32, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_11_int32_t_uint8_t) { runTEXTRACT_Scalar<int32_t, uint8_t, 128, 128, 128, 128, 64, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_12_int32_t_uint8_t) { runTEXTRACT_Scalar<int32_t, uint8_t, 256, 128, 256, 128, 128, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_13_int32_t_uint8_t) { runTEXTRACT_Vector<int32_t, uint8_t, 128, 64, 128, 64, 64, 32, 8, 0>(); }
-TEST_F(TEXTRACTTest, case_14_int32_t_uint8_t) { runTEXTRACT_Vector<int32_t, uint8_t, 96, 96, 96, 96, 64, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_15_int32_t_uint8_t) { runTEXTRACT_Vector<int32_t, uint8_t, 128, 128, 128, 128, 96, 96, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_16_int32_t_uint8_t) { runTEXTRACT_Vector<int32_t, uint8_t, 256, 64, 256, 64, 128, 32, 0, 0>(); }
+TEST_F(TEXTRACTTest, case_9_int32_t_uint8_t) { runTEXTRACT_Scalar<int32_t, uint8_t, 128, 64, 128, 64, 128, 64, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_10_int32_t_uint8_t) { runTEXTRACT_Scalar<int32_t, uint8_t, 128, 64, 128, 64, 96, 32, 0, 0, true>(); }
+TEST_F(TEXTRACTTest, case_11_int32_t_uint8_t) { runTEXTRACT_Scalar<int32_t, uint8_t, 128, 128, 128, 128, 64, 64, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_12_int32_t_uint8_t) { runTEXTRACT_Scalar<int32_t, uint8_t, 256, 128, 256, 128, 128, 64, 0, 0, true>(); }
+TEST_F(TEXTRACTTest, case_13_int32_t_uint8_t) { runTEXTRACT_Vector<int32_t, uint8_t, 128, 64, 128, 64, 64, 32, 8, 0, false>(); }
+TEST_F(TEXTRACTTest, case_14_int32_t_uint8_t) { runTEXTRACT_Vector<int32_t, uint8_t, 96, 96, 96, 96, 64, 64, 0, 0, true>(); }
+TEST_F(TEXTRACTTest, case_15_int32_t_uint8_t) { runTEXTRACT_Vector<int32_t, uint8_t, 128, 128, 128, 128, 96, 96, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_16_int32_t_uint8_t) { runTEXTRACT_Vector<int32_t, uint8_t, 256, 64, 256, 64, 128, 32, 0, 0, true>(); }
 
-TEST_F(TEXTRACTTest, case_17_int32_t_half) { runTEXTRACT_Scalar<int32_t, half, 128, 64, 128, 64, 128, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_18_int32_t_half) { runTEXTRACT_Scalar<int32_t, half, 128, 64, 128, 64, 96, 32, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_19_int32_t_half) { runTEXTRACT_Scalar<int32_t, half, 128, 128, 128, 128, 64, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_20_int32_t_half) { runTEXTRACT_Scalar<int32_t, half, 256, 128, 256, 128, 128, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_21_int32_t_half) { runTEXTRACT_Vector<int32_t, half, 128, 64, 128, 64, 64, 32, 8, 0>(); }
-TEST_F(TEXTRACTTest, case_22_int32_t_half) { runTEXTRACT_Vector<int32_t, half, 96, 96, 96, 96, 64, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_23_int32_t_half) { runTEXTRACT_Vector<int32_t, half, 128, 128, 128, 128, 96, 96, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_24_int32_t_half) { runTEXTRACT_Vector<int32_t, half, 256, 64, 256, 64, 128, 32, 0, 0>(); }
+TEST_F(TEXTRACTTest, case_17_int32_t_half) { runTEXTRACT_Scalar<int32_t, half, 128, 64, 128, 64, 128, 64, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_18_int32_t_half) { runTEXTRACT_Scalar<int32_t, half, 128, 64, 128, 64, 96, 32, 0, 0, true>(); }
+TEST_F(TEXTRACTTest, case_19_int32_t_half) { runTEXTRACT_Scalar<int32_t, half, 128, 128, 128, 128, 64, 64, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_20_int32_t_half) { runTEXTRACT_Scalar<int32_t, half, 256, 128, 256, 128, 128, 64, 0, 0, true>(); }
+TEST_F(TEXTRACTTest, case_21_int32_t_half) { runTEXTRACT_Vector<int32_t, half, 128, 64, 128, 64, 64, 32, 8, 0, false>(); }
+TEST_F(TEXTRACTTest, case_22_int32_t_half) { runTEXTRACT_Vector<int32_t, half, 96, 96, 96, 96, 64, 64, 0, 0, true>(); }
+TEST_F(TEXTRACTTest, case_23_int32_t_half) { runTEXTRACT_Vector<int32_t, half, 128, 128, 128, 128, 96, 96, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_24_int32_t_half) { runTEXTRACT_Vector<int32_t, half, 256, 64, 256, 64, 128, 32, 0, 0, true>(); }
 
-TEST_F(TEXTRACTTest, case_25_float_int8_t) { runTEXTRACT_Scalar<float, int8_t, 128, 64, 128, 64, 128, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_26_float_int8_t) { runTEXTRACT_Scalar<float, int8_t, 128, 64, 128, 64, 96, 32, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_27_float_int8_t) { runTEXTRACT_Scalar<float, int8_t, 128, 128, 128, 128, 64, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_28_float_int8_t) { runTEXTRACT_Scalar<float, int8_t, 256, 128, 256, 128, 128, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_29_float_int8_t) { runTEXTRACT_Vector<float, int8_t, 128, 64, 128, 64, 64, 32, 8, 0>(); }
-TEST_F(TEXTRACTTest, case_30_float_int8_t) { runTEXTRACT_Vector<float, int8_t, 96, 96, 96, 96, 64, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_31_float_int8_t) { runTEXTRACT_Vector<float, int8_t, 128, 128, 128, 128, 96, 96, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_32_float_int8_t) { runTEXTRACT_Vector<float, int8_t, 256, 64, 256, 64, 128, 32, 0, 0>(); }
+TEST_F(TEXTRACTTest, case_25_float_int8_t) { runTEXTRACT_Scalar<float, int8_t, 128, 64, 128, 64, 128, 64, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_26_float_int8_t) { runTEXTRACT_Scalar<float, int8_t, 128, 64, 128, 64, 96, 32, 0, 0, true>(); }
+TEST_F(TEXTRACTTest, case_27_float_int8_t) { runTEXTRACT_Scalar<float, int8_t, 128, 128, 128, 128, 64, 64, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_28_float_int8_t) { runTEXTRACT_Scalar<float, int8_t, 256, 128, 256, 128, 128, 64, 0, 0, true>(); }
+TEST_F(TEXTRACTTest, case_29_float_int8_t) { runTEXTRACT_Vector<float, int8_t, 128, 64, 128, 64, 64, 32, 8, 0, false>(); }
+TEST_F(TEXTRACTTest, case_30_float_int8_t) { runTEXTRACT_Vector<float, int8_t, 96, 96, 96, 96, 64, 64, 0, 0, true>(); }
+TEST_F(TEXTRACTTest, case_31_float_int8_t) { runTEXTRACT_Vector<float, int8_t, 128, 128, 128, 128, 96, 96, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_32_float_int8_t) { runTEXTRACT_Vector<float, int8_t, 256, 64, 256, 64, 128, 32, 0, 0, true>(); }
 
-TEST_F(TEXTRACTTest, case_33_float_uint8_t) { runTEXTRACT_Scalar<float, uint8_t, 128, 64, 128, 64, 128, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_34_float_uint8_t) { runTEXTRACT_Scalar<float, uint8_t, 128, 64, 128, 64, 96, 32, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_35_float_uint8_t) { runTEXTRACT_Scalar<float, uint8_t, 128, 128, 128, 128, 64, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_36_float_uint8_t) { runTEXTRACT_Scalar<float, uint8_t, 256, 128, 256, 128, 128, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_37_float_uint8_t) { runTEXTRACT_Vector<float, uint8_t, 128, 64, 128, 64, 64, 32, 8, 0>(); }
-TEST_F(TEXTRACTTest, case_38_float_uint8_t) { runTEXTRACT_Vector<float, uint8_t, 96, 96, 96, 96, 64, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_39_float_uint8_t) { runTEXTRACT_Vector<float, uint8_t, 128, 128, 128, 128, 96, 96, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_40_float_uint8_t) { runTEXTRACT_Vector<float, uint8_t, 256, 64, 256, 64, 128, 32, 0, 0>(); }
+TEST_F(TEXTRACTTest, case_33_float_uint8_t) { runTEXTRACT_Scalar<float, uint8_t, 128, 64, 128, 64, 128, 64, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_34_float_uint8_t) { runTEXTRACT_Scalar<float, uint8_t, 128, 64, 128, 64, 96, 32, 0, 0, true>(); }
+TEST_F(TEXTRACTTest, case_35_float_uint8_t) { runTEXTRACT_Scalar<float, uint8_t, 128, 128, 128, 128, 64, 64, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_36_float_uint8_t) { runTEXTRACT_Scalar<float, uint8_t, 256, 128, 256, 128, 128, 64, 0, 0, true>(); }
+TEST_F(TEXTRACTTest, case_37_float_uint8_t) { runTEXTRACT_Vector<float, uint8_t, 128, 64, 128, 64, 64, 32, 8, 0, false>(); }
+TEST_F(TEXTRACTTest, case_38_float_uint8_t) { runTEXTRACT_Vector<float, uint8_t, 96, 96, 96, 96, 64, 64, 0, 0, true>(); }
+TEST_F(TEXTRACTTest, case_39_float_uint8_t) { runTEXTRACT_Vector<float, uint8_t, 128, 128, 128, 128, 96, 96, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_40_float_uint8_t) { runTEXTRACT_Vector<float, uint8_t, 256, 64, 256, 64, 128, 32, 0, 0, true>(); }
 
-TEST_F(TEXTRACTTest, case_41_float_half) { runTEXTRACT_Scalar<float, half, 128, 64, 128, 64, 128, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_42_float_half) { runTEXTRACT_Scalar<float, half, 128, 64, 128, 64, 96, 32, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_43_float_half) { runTEXTRACT_Scalar<float, half, 128, 128, 128, 128, 64, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_44_float_half) { runTEXTRACT_Scalar<float, half, 256, 128, 256, 128, 128, 64, 0, 0>(); }
+TEST_F(TEXTRACTTest, case_41_float_half) { runTEXTRACT_Scalar<float, half, 128, 64, 128, 64, 128, 64, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_42_float_half) { runTEXTRACT_Scalar<float, half, 128, 64, 128, 64, 96, 32, 0, 0, true>(); }
+TEST_F(TEXTRACTTest, case_43_float_half) { runTEXTRACT_Scalar<float, half, 128, 128, 128, 128, 64, 64, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_44_float_half) { runTEXTRACT_Scalar<float, half, 256, 128, 256, 128, 128, 64, 0, 0, true>(); }
 
-TEST_F(TEXTRACTTest, case_45_float_bfloat16_t) { runTEXTRACT_Scalar<float, bfloat16_t, 128, 64, 128, 64, 128, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_46_float_bfloat16_t) { runTEXTRACT_Scalar<float, bfloat16_t, 128, 64, 128, 64, 96, 32, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_47_float_bfloat16_t) { runTEXTRACT_Scalar<float, bfloat16_t, 128, 128, 128, 128, 64, 64, 0, 0>(); }
-TEST_F(TEXTRACTTest, case_48_float_bfloat16_t) { runTEXTRACT_Scalar<float, bfloat16_t, 256, 128, 256, 128, 128, 64, 0, 0>(); }
+TEST_F(TEXTRACTTest, case_45_float_bfloat16_t) { runTEXTRACT_Scalar<float, bfloat16_t, 128, 64, 128, 64, 128, 64, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_46_float_bfloat16_t) { runTEXTRACT_Scalar<float, bfloat16_t, 128, 64, 128, 64, 96, 32, 0, 0, true>(); }
+TEST_F(TEXTRACTTest, case_47_float_bfloat16_t) { runTEXTRACT_Scalar<float, bfloat16_t, 128, 128, 128, 128, 64, 64, 0, 0, false>(); }
+TEST_F(TEXTRACTTest, case_48_float_bfloat16_t) { runTEXTRACT_Scalar<float, bfloat16_t, 256, 128, 256, 128, 128, 64, 0, 0, true>(); }
