@@ -10,385 +10,337 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/npu/a5/MGather.hpp>
 #include "acl/acl.h"
 #include "mgather_common.h"
 
 using namespace std;
 using namespace pto;
 
-template <typename T, typename TIdx, int kTableRows, int kTableCols, int kOutRows, int kOutCols>
-inline AICORE void runMGATHER(__gm__ T __out__ *out, __gm__ T __in__ *table, __gm__ TIdx __in__ *indices)
+template <pto::GatherOOB Oob, typename T, typename TIdx, int kDstRows, int kDstCols, int kTableRows>
+inline AICORE void runRow(__gm__ T __out__ *out, __gm__ T __in__ *table, __gm__ TIdx __in__ *indices)
 {
-    using DynShape_table = pto::Shape<1, 1, 1, kTableRows, kTableCols>;
-    using DynStrid_table = pto::Stride<1, 1, 1, kTableCols, 1>;
-    using GlobalData_table = GlobalTensor<T, DynShape_table, DynStrid_table>;
+    using TableShape = pto::Shape<1, 1, 1, kTableRows, kDstCols>;
+    using TableStride = pto::Stride<1, 1, 1, kDstCols, 1>;
+    using IdxShape = pto::Shape<1, 1, 1, 1, kDstRows>;
+    using IdxStride = pto::Stride<1, 1, 1, kDstRows, 1>;
+    using OutShape = pto::Shape<1, 1, 1, kDstRows, kDstCols>;
+    using OutStride = pto::Stride<1, 1, 1, kDstCols, 1>;
 
-    using DynShape_idx = pto::Shape<1, 1, 1, kOutRows, kOutCols>;
-    using DynStrid_idx = pto::Stride<1, 1, 1, kOutCols, 1>;
-    using GlobalData_idx = GlobalTensor<TIdx, DynShape_idx, DynStrid_idx>;
+    GlobalTensor<T, TableShape, TableStride> tableGlobal(table);
+    GlobalTensor<TIdx, IdxShape, IdxStride> idxGlobal(indices);
+    GlobalTensor<T, OutShape, OutStride> outGlobal(out);
 
-    using DynShape_out = pto::Shape<1, 1, 1, kOutRows, kOutCols>;
-    using DynStrid_out = pto::Stride<1, 1, 1, kOutCols, 1>;
-    using GlobalData_out = GlobalTensor<T, DynShape_out, DynStrid_out>;
+    using DstTile = Tile<TileType::Vec, T, kDstRows, kDstCols, BLayout::RowMajor, kDstRows, kDstCols>;
+    using IdxTile = Tile<TileType::Vec, TIdx, 1, kDstRows, BLayout::RowMajor, 1, kDstRows>;
 
-    using TileData_idx = Tile<TileType::Vec, TIdx, kOutRows, kOutCols, BLayout::RowMajor, -1, -1>;
-    using TileData_out = Tile<TileType::Vec, T, kOutRows, kOutCols, BLayout::RowMajor, -1, -1>;
+    DstTile dstTile;
+    IdxTile idxTile;
 
-    TileData_idx idxTile(kOutRows, kOutCols);
-    TileData_out outTile(kOutRows, kOutCols);
-
+    constexpr int idxBytes = ((1 * kDstRows * (int)sizeof(TIdx) + 31) / 32) * 32;
+    constexpr int dstBytes = ((kDstRows * kDstCols * (int)sizeof(T) + 31) / 32) * 32;
     TASSIGN(idxTile, 0x0);
-    TASSIGN(outTile, kOutRows * kOutCols * sizeof(TIdx));
-
-    GlobalData_table tableGlobal(table);
-    GlobalData_idx idxGlobal(indices);
-    GlobalData_out outGlobal(out);
+    TASSIGN(dstTile, idxBytes);
 
     TLOAD(idxTile, idxGlobal);
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    MGATHER(outTile, tableGlobal, idxTile);
+    MGATHER<Coalesce::Row, Oob>(dstTile, tableGlobal, idxTile);
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 #endif
-    TSTORE(outGlobal, outTile);
+    TSTORE(outGlobal, dstTile);
+    (void)dstBytes;
 }
 
-extern "C" __global__ AICORE void runMGATHER_half_16x64_8x32(__gm__ half *out, __gm__ half *table,
-                                                             __gm__ int32_t *indices)
+template <pto::GatherOOB Oob, typename T, typename TIdx, int kValidRows, int kPadIdxCols, int kDstCols, int kTableRows>
+inline AICORE void runRowPadded(__gm__ T __out__ *out, __gm__ T __in__ *table, __gm__ TIdx __in__ *indices)
 {
-    runMGATHER<half, int32_t, 16, 64, 8, 32>(out, table, indices);
-}
+    using TableShape = pto::Shape<1, 1, 1, kTableRows, kDstCols>;
+    using TableStride = pto::Stride<1, 1, 1, kDstCols, 1>;
+    using IdxShape = pto::Shape<1, 1, 1, 1, kValidRows>;
+    using IdxStride = pto::Stride<1, 1, 1, kValidRows, 1>;
+    using OutShape = pto::Shape<1, 1, 1, kValidRows, kDstCols>;
+    using OutStride = pto::Stride<1, 1, 1, kDstCols, 1>;
 
-extern "C" __global__ AICORE void runMGATHER_half_16x128_8x64(__gm__ half *out, __gm__ half *table,
-                                                              __gm__ int32_t *indices)
-{
-    runMGATHER<half, int32_t, 16, 128, 8, 64>(out, table, indices);
-}
+    GlobalTensor<T, TableShape, TableStride> tableGlobal(table);
+    GlobalTensor<TIdx, IdxShape, IdxStride> idxGlobal(indices);
+    GlobalTensor<T, OutShape, OutStride> outGlobal(out);
 
-extern "C" __global__ AICORE void runMGATHER_half_32x128_16x64(__gm__ half *out, __gm__ half *table,
-                                                               __gm__ int32_t *indices)
-{
-    runMGATHER<half, int32_t, 32, 128, 16, 64>(out, table, indices);
-}
+    using DstTile = Tile<TileType::Vec, T, kValidRows, kDstCols, BLayout::RowMajor, kValidRows, kDstCols>;
+    using IdxTile = Tile<TileType::Vec, TIdx, 1, kPadIdxCols, BLayout::RowMajor, 1, kValidRows>;
 
-extern "C" __global__ AICORE void runMGATHER_half_16x256_8x128(__gm__ half *out, __gm__ half *table,
-                                                               __gm__ int32_t *indices)
-{
-    runMGATHER<half, int32_t, 16, 256, 8, 128>(out, table, indices);
-}
+    DstTile dstTile;
+    IdxTile idxTile;
 
-extern "C" __global__ AICORE void runMGATHER_half_64x64_32x32(__gm__ half *out, __gm__ half *table,
-                                                              __gm__ int32_t *indices)
-{
-    runMGATHER<half, int32_t, 64, 64, 32, 32>(out, table, indices);
-}
-
-extern "C" __global__ AICORE void runMGATHER_float_8x64_4x32(__gm__ float *out, __gm__ float *table,
-                                                             __gm__ int32_t *indices)
-{
-    runMGATHER<float, int32_t, 8, 64, 4, 32>(out, table, indices);
-}
-
-extern "C" __global__ AICORE void runMGATHER_float_16x64_8x32(__gm__ float *out, __gm__ float *table,
-                                                              __gm__ int32_t *indices)
-{
-    runMGATHER<float, int32_t, 16, 64, 8, 32>(out, table, indices);
-}
-
-extern "C" __global__ AICORE void runMGATHER_float_32x64_16x32(__gm__ float *out, __gm__ float *table,
-                                                               __gm__ int32_t *indices)
-{
-    runMGATHER<float, int32_t, 32, 64, 16, 32>(out, table, indices);
-}
-
-extern "C" __global__ AICORE void runMGATHER_float_16x16_8x8(__gm__ float *out, __gm__ float *table,
-                                                             __gm__ int32_t *indices)
-{
-    runMGATHER<float, int32_t, 16, 16, 8, 8>(out, table, indices);
-}
-
-extern "C" __global__ AICORE void runMGATHER_int32_8x32_4x16(__gm__ int32_t *out, __gm__ int32_t *table,
-                                                             __gm__ int32_t *indices)
-{
-    runMGATHER<int32_t, int32_t, 8, 32, 4, 16>(out, table, indices);
-}
-
-extern "C" __global__ AICORE void runMGATHER_int32_16x64_8x32(__gm__ int32_t *out, __gm__ int32_t *table,
-                                                              __gm__ int32_t *indices)
-{
-    runMGATHER<int32_t, int32_t, 16, 64, 8, 32>(out, table, indices);
-}
-
-extern "C" __global__ AICORE void runMGATHER_int32_32x32_16x16(__gm__ int32_t *out, __gm__ int32_t *table,
-                                                               __gm__ int32_t *indices)
-{
-    runMGATHER<int32_t, int32_t, 32, 32, 16, 16>(out, table, indices);
-}
-
-extern "C" __global__ AICORE void runMGATHER_uint8_16x64_8x32(__gm__ uint8_t *out, __gm__ uint8_t *table,
-                                                              __gm__ int32_t *indices)
-{
-    runMGATHER<uint8_t, int32_t, 16, 64, 8, 32>(out, table, indices);
-}
-
-extern "C" __global__ AICORE void runMGATHER_uint8_32x64_16x32(__gm__ uint8_t *out, __gm__ uint8_t *table,
-                                                               __gm__ int32_t *indices)
-{
-    runMGATHER<uint8_t, int32_t, 32, 64, 16, 32>(out, table, indices);
-}
-
-template <typename T, typename TIdx, int kTableRows, int kTableCols, int kOutRows, int kOutCols>
-void LaunchMGATHER(T *out, T *table, TIdx *indices, void *stream);
-
-template <>
-void LaunchMGATHER<float, int32_t, 8, 64, 4, 32>(float *out, float *table, int32_t *indices, void *stream)
-{
-    runMGATHER_float_8x64_4x32<<<1, nullptr, stream>>>(out, table, indices);
-}
-
-template <>
-void LaunchMGATHER<float, int32_t, 16, 64, 8, 32>(float *out, float *table, int32_t *indices, void *stream)
-{
-    runMGATHER_float_16x64_8x32<<<1, nullptr, stream>>>(out, table, indices);
-}
-
-template <>
-void LaunchMGATHER<float, int32_t, 32, 64, 16, 32>(float *out, float *table, int32_t *indices, void *stream)
-{
-    runMGATHER_float_32x64_16x32<<<1, nullptr, stream>>>(out, table, indices);
-}
-
-template <>
-void LaunchMGATHER<float, int32_t, 16, 16, 8, 8>(float *out, float *table, int32_t *indices, void *stream)
-{
-    runMGATHER_float_16x16_8x8<<<1, nullptr, stream>>>(out, table, indices);
-}
-
-template <>
-void LaunchMGATHER<int32_t, int32_t, 8, 32, 4, 16>(int32_t *out, int32_t *table, int32_t *indices, void *stream)
-{
-    runMGATHER_int32_8x32_4x16<<<1, nullptr, stream>>>(out, table, indices);
-}
-
-template <>
-void LaunchMGATHER<int32_t, int32_t, 16, 64, 8, 32>(int32_t *out, int32_t *table, int32_t *indices, void *stream)
-{
-    runMGATHER_int32_16x64_8x32<<<1, nullptr, stream>>>(out, table, indices);
-}
-
-template <>
-void LaunchMGATHER<int32_t, int32_t, 32, 32, 16, 16>(int32_t *out, int32_t *table, int32_t *indices, void *stream)
-{
-    runMGATHER_int32_32x32_16x16<<<1, nullptr, stream>>>(out, table, indices);
-}
-
-template <>
-void LaunchMGATHER<uint8_t, int32_t, 16, 64, 8, 32>(uint8_t *out, uint8_t *table, int32_t *indices, void *stream)
-{
-    runMGATHER_uint8_16x64_8x32<<<1, nullptr, stream>>>(out, table, indices);
-}
-
-template <>
-void LaunchMGATHER<uint8_t, int32_t, 32, 64, 16, 32>(uint8_t *out, uint8_t *table, int32_t *indices, void *stream)
-{
-    runMGATHER_uint8_32x64_16x32<<<1, nullptr, stream>>>(out, table, indices);
-}
-
-template <int kTableRows, int kTableCols, int kOutRows, int kOutCols>
-void LaunchMGATHERHalf(aclFloat16 *out, aclFloat16 *table, int32_t *indices, void *stream);
-
-template <>
-void LaunchMGATHERHalf<16, 64, 8, 32>(aclFloat16 *out, aclFloat16 *table, int32_t *indices, void *stream)
-{
-    runMGATHER_half_16x64_8x32<<<1, nullptr, stream>>>((half *)out, (half *)table, indices);
-}
-
-template <>
-void LaunchMGATHERHalf<16, 128, 8, 64>(aclFloat16 *out, aclFloat16 *table, int32_t *indices, void *stream)
-{
-    runMGATHER_half_16x128_8x64<<<1, nullptr, stream>>>((half *)out, (half *)table, indices);
-}
-
-template <>
-void LaunchMGATHERHalf<32, 128, 16, 64>(aclFloat16 *out, aclFloat16 *table, int32_t *indices, void *stream)
-{
-    runMGATHER_half_32x128_16x64<<<1, nullptr, stream>>>((half *)out, (half *)table, indices);
-}
-
-template <>
-void LaunchMGATHERHalf<16, 256, 8, 128>(aclFloat16 *out, aclFloat16 *table, int32_t *indices, void *stream)
-{
-    runMGATHER_half_16x256_8x128<<<1, nullptr, stream>>>((half *)out, (half *)table, indices);
-}
-
-template <>
-void LaunchMGATHERHalf<64, 64, 32, 32>(aclFloat16 *out, aclFloat16 *table, int32_t *indices, void *stream)
-{
-    runMGATHER_half_64x64_32x32<<<1, nullptr, stream>>>((half *)out, (half *)table, indices);
-}
-
-extern "C" __global__ AICORE void runMGATHER_float_clamp_16x64_8x32(__gm__ float *out, __gm__ float *table,
-                                                                    __gm__ int32_t *indices)
-{
-    using T = float;
-    using TIdx = int32_t;
-    constexpr int kTableRows = 16, kTableCols = 64, kOutRows = 8, kOutCols = 32;
-
-    using DynShape_table = pto::Shape<1, 1, 1, kTableRows, kTableCols>;
-    using DynStrid_table = pto::Stride<1, 1, 1, kTableCols, 1>;
-    using GlobalData_table = GlobalTensor<T, DynShape_table, DynStrid_table>;
-
-    using DynShape_idx = pto::Shape<1, 1, 1, kOutRows, kOutCols>;
-    using DynStrid_idx = pto::Stride<1, 1, 1, kOutCols, 1>;
-    using GlobalData_idx = GlobalTensor<TIdx, DynShape_idx, DynStrid_idx>;
-
-    using DynShape_out = pto::Shape<1, 1, 1, kOutRows, kOutCols>;
-    using DynStrid_out = pto::Stride<1, 1, 1, kOutCols, 1>;
-    using GlobalData_out = GlobalTensor<T, DynShape_out, DynStrid_out>;
-
-    using TileData_idx = Tile<TileType::Vec, TIdx, kOutRows, kOutCols, BLayout::RowMajor, -1, -1>;
-    using TileData_out = Tile<TileType::Vec, T, kOutRows, kOutCols, BLayout::RowMajor, -1, -1>;
-
-    TileData_idx idxTile(kOutRows, kOutCols);
-    TileData_out outTile(kOutRows, kOutCols);
-
+    constexpr int idxBytes = ((1 * kPadIdxCols * (int)sizeof(TIdx) + 31) / 32) * 32;
+    constexpr int dstBytes = ((kValidRows * kDstCols * (int)sizeof(T) + 31) / 32) * 32;
     TASSIGN(idxTile, 0x0);
-    TASSIGN(outTile, kOutRows * kOutCols * sizeof(TIdx));
-
-    GlobalData_table tableGlobal(table);
-    GlobalData_idx idxGlobal(indices);
-    GlobalData_out outGlobal(out);
+    TASSIGN(dstTile, idxBytes);
 
     TLOAD(idxTile, idxGlobal);
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    MGATHER_IMPL<pto::GatherOOB::Clamp>(outTile, tableGlobal, idxTile);
+    MGATHER<Coalesce::Row, Oob>(dstTile, tableGlobal, idxTile);
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 #endif
-    TSTORE(outGlobal, outTile);
+    TSTORE(outGlobal, dstTile);
+    (void)dstBytes;
 }
 
-extern "C" __global__ AICORE void runMGATHER_int32_wrap_16x64_8x32(__gm__ int32_t *out, __gm__ int32_t *table,
-                                                                   __gm__ int32_t *indices)
+template <pto::GatherOOB Oob, typename T, typename TIdx, int kDstRows, int kDstCols, int kTableRows>
+inline AICORE void runRowColIdx(__gm__ T __out__ *out, __gm__ T __in__ *table, __gm__ TIdx __in__ *indices)
 {
-    using T = int32_t;
-    using TIdx = int32_t;
-    constexpr int kTableRows = 16, kTableCols = 64, kOutRows = 8, kOutCols = 32;
+    using TableShape = pto::Shape<1, 1, 1, kTableRows, kDstCols>;
+    using TableStride = pto::Stride<1, 1, 1, kDstCols, 1>;
+    using IdxShape = pto::Shape<1, 1, 1, kDstRows, 1>;
+    using IdxStride = pto::Stride<1, 1, 1, 1, 1>;
+    using OutShape = pto::Shape<1, 1, 1, kDstRows, kDstCols>;
+    using OutStride = pto::Stride<1, 1, 1, kDstCols, 1>;
 
-    using DynShape_table = pto::Shape<1, 1, 1, kTableRows, kTableCols>;
-    using DynStrid_table = pto::Stride<1, 1, 1, kTableCols, 1>;
-    using GlobalData_table = GlobalTensor<T, DynShape_table, DynStrid_table>;
+    GlobalTensor<T, TableShape, TableStride> tableGlobal(table);
+    GlobalTensor<TIdx, IdxShape, IdxStride, Layout::DN> idxGlobal(indices);
+    GlobalTensor<T, OutShape, OutStride> outGlobal(out);
 
-    using DynShape_idx = pto::Shape<1, 1, 1, kOutRows, kOutCols>;
-    using DynStrid_idx = pto::Stride<1, 1, 1, kOutCols, 1>;
-    using GlobalData_idx = GlobalTensor<TIdx, DynShape_idx, DynStrid_idx>;
+    using DstTile = Tile<TileType::Vec, T, kDstRows, kDstCols, BLayout::RowMajor, kDstRows, kDstCols>;
+    using IdxTile = Tile<TileType::Vec, TIdx, kDstRows, 1, BLayout::ColMajor, kDstRows, 1>;
 
-    using DynShape_out = pto::Shape<1, 1, 1, kOutRows, kOutCols>;
-    using DynStrid_out = pto::Stride<1, 1, 1, kOutCols, 1>;
-    using GlobalData_out = GlobalTensor<T, DynShape_out, DynStrid_out>;
+    DstTile dstTile;
+    IdxTile idxTile;
 
-    using TileData_idx = Tile<TileType::Vec, TIdx, kOutRows, kOutCols, BLayout::RowMajor, -1, -1>;
-    using TileData_out = Tile<TileType::Vec, T, kOutRows, kOutCols, BLayout::RowMajor, -1, -1>;
-
-    TileData_idx idxTile(kOutRows, kOutCols);
-    TileData_out outTile(kOutRows, kOutCols);
-
+    constexpr int idxBytes = ((kDstRows * 1 * (int)sizeof(TIdx) + 31) / 32) * 32;
+    constexpr int dstBytes = ((kDstRows * kDstCols * (int)sizeof(T) + 31) / 32) * 32;
     TASSIGN(idxTile, 0x0);
-    TASSIGN(outTile, kOutRows * kOutCols * sizeof(TIdx));
-
-    GlobalData_table tableGlobal(table);
-    GlobalData_idx idxGlobal(indices);
-    GlobalData_out outGlobal(out);
+    TASSIGN(dstTile, idxBytes);
 
     TLOAD(idxTile, idxGlobal);
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    MGATHER_IMPL<pto::GatherOOB::Wrap>(outTile, tableGlobal, idxTile);
+    MGATHER<Coalesce::Row, Oob>(dstTile, tableGlobal, idxTile);
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 #endif
-    TSTORE(outGlobal, outTile);
+    TSTORE(outGlobal, dstTile);
+    (void)dstBytes;
 }
 
-extern "C" __global__ AICORE void runMGATHER_half_zero_16x64_8x32(__gm__ half *out, __gm__ half *table,
-                                                                  __gm__ int32_t *indices)
+template <pto::GatherOOB Oob, typename T, typename TIdx, int kDstCols, int kTableSize>
+inline AICORE void runElem(__gm__ T __out__ *out, __gm__ T __in__ *table, __gm__ TIdx __in__ *indices)
 {
-    using T = half;
-    using TIdx = int32_t;
-    constexpr int kTableRows = 16, kTableCols = 64, kOutRows = 8, kOutCols = 32;
+    using TableShape = pto::Shape<1, 1, 1, 1, kTableSize>;
+    using TableStride = pto::Stride<1, 1, 1, kTableSize, 1>;
+    using IdxShape = pto::Shape<1, 1, 1, 1, kDstCols>;
+    using IdxStride = pto::Stride<1, 1, 1, kDstCols, 1>;
+    using OutShape = pto::Shape<1, 1, 1, 1, kDstCols>;
+    using OutStride = pto::Stride<1, 1, 1, kDstCols, 1>;
 
-    using DynShape_table = pto::Shape<1, 1, 1, kTableRows, kTableCols>;
-    using DynStrid_table = pto::Stride<1, 1, 1, kTableCols, 1>;
-    using GlobalData_table = GlobalTensor<T, DynShape_table, DynStrid_table>;
+    GlobalTensor<T, TableShape, TableStride> tableGlobal(table);
+    GlobalTensor<TIdx, IdxShape, IdxStride> idxGlobal(indices);
+    GlobalTensor<T, OutShape, OutStride> outGlobal(out);
 
-    using DynShape_idx = pto::Shape<1, 1, 1, kOutRows, kOutCols>;
-    using DynStrid_idx = pto::Stride<1, 1, 1, kOutCols, 1>;
-    using GlobalData_idx = GlobalTensor<TIdx, DynShape_idx, DynStrid_idx>;
+    using DstTile = Tile<TileType::Vec, T, 1, kDstCols, BLayout::RowMajor, 1, kDstCols>;
+    using IdxTile = Tile<TileType::Vec, TIdx, 1, kDstCols, BLayout::RowMajor, 1, kDstCols>;
 
-    using DynShape_out = pto::Shape<1, 1, 1, kOutRows, kOutCols>;
-    using DynStrid_out = pto::Stride<1, 1, 1, kOutCols, 1>;
-    using GlobalData_out = GlobalTensor<T, DynShape_out, DynStrid_out>;
+    DstTile dstTile;
+    IdxTile idxTile;
 
-    using TileData_idx = Tile<TileType::Vec, TIdx, kOutRows, kOutCols, BLayout::RowMajor, -1, -1>;
-    using TileData_out = Tile<TileType::Vec, T, kOutRows, kOutCols, BLayout::RowMajor, -1, -1>;
-
-    TileData_idx idxTile(kOutRows, kOutCols);
-    TileData_out outTile(kOutRows, kOutCols);
-
+    constexpr int idxBytes = ((1 * kDstCols * (int)sizeof(TIdx) + 31) / 32) * 32;
+    constexpr int dstBytes = ((1 * kDstCols * (int)sizeof(T) + 31) / 32) * 32;
     TASSIGN(idxTile, 0x0);
-    TASSIGN(outTile, kOutRows * kOutCols * sizeof(TIdx));
-
-    GlobalData_table tableGlobal(table);
-    GlobalData_idx idxGlobal(indices);
-    GlobalData_out outGlobal(out);
+    TASSIGN(dstTile, idxBytes);
 
     TLOAD(idxTile, idxGlobal);
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    MGATHER_IMPL<pto::GatherOOB::Zero>(outTile, tableGlobal, idxTile);
+    MGATHER<Coalesce::Elem, Oob>(dstTile, tableGlobal, idxTile);
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 #endif
-    TSTORE(outGlobal, outTile);
+    TSTORE(outGlobal, dstTile);
+    (void)dstBytes;
 }
 
-template <::GatherOOB Mode, typename T, typename TIdx, int kTableRows, int kTableCols, int kOutRows, int kOutCols>
-void LaunchMGATHER_mode(T *out, T *table, TIdx *indices, void *stream);
-
-template <>
-void LaunchMGATHER_mode<::GatherOOB::Clamp, float, int32_t, 16, 64, 8, 32>(float *out, float *table, int32_t *indices,
-                                                                           void *stream)
+template <pto::GatherOOB Oob, typename T, typename TIdx, int kValidRows, int kValidCols, int kPadRows, int kPadCols,
+          int kTableSize>
+inline AICORE void runElem2DPadded(__gm__ T __out__ *out, __gm__ T __in__ *table, __gm__ TIdx __in__ *indices)
 {
-    runMGATHER_float_clamp_16x64_8x32<<<1, nullptr, stream>>>(out, table, indices);
+    using TableShape = pto::Shape<1, 1, 1, 1, kTableSize>;
+    using TableStride = pto::Stride<1, 1, 1, kTableSize, 1>;
+    using IdxShape = pto::Shape<1, 1, 1, kValidRows, kValidCols>;
+    using IdxStride = pto::Stride<1, 1, 1, kValidCols, 1>;
+    using OutShape = pto::Shape<1, 1, 1, kValidRows, kValidCols>;
+    using OutStride = pto::Stride<1, 1, 1, kValidCols, 1>;
+
+    GlobalTensor<T, TableShape, TableStride> tableGlobal(table);
+    GlobalTensor<TIdx, IdxShape, IdxStride> idxGlobal(indices);
+    GlobalTensor<T, OutShape, OutStride> outGlobal(out);
+
+    using DstTile = Tile<TileType::Vec, T, kPadRows, kPadCols, BLayout::RowMajor, kValidRows, kValidCols>;
+    using IdxTile = Tile<TileType::Vec, TIdx, kPadRows, kPadCols, BLayout::RowMajor, kValidRows, kValidCols>;
+
+    DstTile dstTile;
+    IdxTile idxTile;
+
+    constexpr int idxBytes = ((kPadRows * kPadCols * (int)sizeof(TIdx) + 31) / 32) * 32;
+    constexpr int dstBytes = ((kPadRows * kPadCols * (int)sizeof(T) + 31) / 32) * 32;
+    TASSIGN(idxTile, 0x0);
+    TASSIGN(dstTile, idxBytes);
+
+    TLOAD(idxTile, idxGlobal);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+    MGATHER<Coalesce::Elem, Oob>(dstTile, tableGlobal, idxTile);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
+    TSTORE(outGlobal, dstTile);
+    (void)dstBytes;
 }
 
-template <>
-void LaunchMGATHER_mode<::GatherOOB::Wrap, int32_t, int32_t, 16, 64, 8, 32>(int32_t *out, int32_t *table,
-                                                                            int32_t *indices, void *stream)
+template <pto::GatherOOB Oob, typename T, typename TIdx, int kDstRows, int kDstCols, int kTableSize>
+inline AICORE void runElem2D(__gm__ T __out__ *out, __gm__ T __in__ *table, __gm__ TIdx __in__ *indices)
 {
-    runMGATHER_int32_wrap_16x64_8x32<<<1, nullptr, stream>>>(out, table, indices);
+    using TableShape = pto::Shape<1, 1, 1, 1, kTableSize>;
+    using TableStride = pto::Stride<1, 1, 1, kTableSize, 1>;
+    using IdxShape = pto::Shape<1, 1, 1, kDstRows, kDstCols>;
+    using IdxStride = pto::Stride<1, 1, 1, kDstCols, 1>;
+    using OutShape = pto::Shape<1, 1, 1, kDstRows, kDstCols>;
+    using OutStride = pto::Stride<1, 1, 1, kDstCols, 1>;
+
+    GlobalTensor<T, TableShape, TableStride> tableGlobal(table);
+    GlobalTensor<TIdx, IdxShape, IdxStride> idxGlobal(indices);
+    GlobalTensor<T, OutShape, OutStride> outGlobal(out);
+
+    using DstTile = Tile<TileType::Vec, T, kDstRows, kDstCols, BLayout::RowMajor, kDstRows, kDstCols>;
+    using IdxTile = Tile<TileType::Vec, TIdx, kDstRows, kDstCols, BLayout::RowMajor, kDstRows, kDstCols>;
+
+    DstTile dstTile;
+    IdxTile idxTile;
+
+    constexpr int idxBytes = ((kDstRows * kDstCols * (int)sizeof(TIdx) + 31) / 32) * 32;
+    constexpr int dstBytes = ((kDstRows * kDstCols * (int)sizeof(T) + 31) / 32) * 32;
+    TASSIGN(idxTile, 0x0);
+    TASSIGN(dstTile, idxBytes);
+
+    TLOAD(idxTile, idxGlobal);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+    MGATHER<Coalesce::Elem, Oob>(dstTile, tableGlobal, idxTile);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
+    TSTORE(outGlobal, dstTile);
+    (void)dstBytes;
 }
 
-template <::GatherOOB Mode, int kTableRows, int kTableCols, int kOutRows, int kOutCols>
-void LaunchMGATHERHalf_mode(aclFloat16 *out, aclFloat16 *table, int32_t *indices, void *stream);
+#define DEFINE_ROW(NAME, THOST, T, TIDX, R, C, TR, OOB)                                                               \
+    extern "C" __global__ AICORE void runMGATHER_##NAME(__gm__ T *out, __gm__ T *table, __gm__ TIDX *indices)         \
+    {                                                                                                                 \
+        runRow<pto::GatherOOB::OOB, T, TIDX, R, C, TR>(out, table, indices);                                          \
+    }                                                                                                                 \
+    void Launch_##NAME(THOST *out, THOST *table, TIDX *indices, void *stream)                                         \
+    {                                                                                                                 \
+        runMGATHER_##NAME<<<1, nullptr, stream>>>(reinterpret_cast<T *>(out), reinterpret_cast<T *>(table), indices); \
+    }
 
-template <>
-void LaunchMGATHERHalf_mode<::GatherOOB::Zero, 16, 64, 8, 32>(aclFloat16 *out, aclFloat16 *table, int32_t *indices,
-                                                              void *stream)
-{
-    runMGATHER_half_zero_16x64_8x32<<<1, nullptr, stream>>>((half *)out, (half *)table, indices);
-}
+#define DEFINE_ROW_PAD(NAME, THOST, T, TIDX, VR, PIC, C, TR, OOB)                                                     \
+    extern "C" __global__ AICORE void runMGATHER_##NAME(__gm__ T *out, __gm__ T *table, __gm__ TIDX *indices)         \
+    {                                                                                                                 \
+        runRowPadded<pto::GatherOOB::OOB, T, TIDX, VR, PIC, C, TR>(out, table, indices);                              \
+    }                                                                                                                 \
+    void Launch_##NAME(THOST *out, THOST *table, TIDX *indices, void *stream)                                         \
+    {                                                                                                                 \
+        runMGATHER_##NAME<<<1, nullptr, stream>>>(reinterpret_cast<T *>(out), reinterpret_cast<T *>(table), indices); \
+    }
+
+#define DEFINE_ROW_COLIDX(NAME, THOST, T, TIDX, R, C, TR, OOB)                                                        \
+    extern "C" __global__ AICORE void runMGATHER_##NAME(__gm__ T *out, __gm__ T *table, __gm__ TIDX *indices)         \
+    {                                                                                                                 \
+        runRowColIdx<pto::GatherOOB::OOB, T, TIDX, R, C, TR>(out, table, indices);                                    \
+    }                                                                                                                 \
+    void Launch_##NAME(THOST *out, THOST *table, TIDX *indices, void *stream)                                         \
+    {                                                                                                                 \
+        runMGATHER_##NAME<<<1, nullptr, stream>>>(reinterpret_cast<T *>(out), reinterpret_cast<T *>(table), indices); \
+    }
+
+#define DEFINE_ELEM(NAME, THOST, T, TIDX, N, TS, OOB)                                                                 \
+    extern "C" __global__ AICORE void runMGATHER_##NAME(__gm__ T *out, __gm__ T *table, __gm__ TIDX *indices)         \
+    {                                                                                                                 \
+        runElem<pto::GatherOOB::OOB, T, TIDX, N, TS>(out, table, indices);                                            \
+    }                                                                                                                 \
+    void Launch_##NAME(THOST *out, THOST *table, TIDX *indices, void *stream)                                         \
+    {                                                                                                                 \
+        runMGATHER_##NAME<<<1, nullptr, stream>>>(reinterpret_cast<T *>(out), reinterpret_cast<T *>(table), indices); \
+    }
+
+#define DEFINE_ELEM2D(NAME, THOST, T, TIDX, R, C, TS, OOB)                                                            \
+    extern "C" __global__ AICORE void runMGATHER_##NAME(__gm__ T *out, __gm__ T *table, __gm__ TIDX *indices)         \
+    {                                                                                                                 \
+        runElem2D<pto::GatherOOB::OOB, T, TIDX, R, C, TS>(out, table, indices);                                       \
+    }                                                                                                                 \
+    void Launch_##NAME(THOST *out, THOST *table, TIDX *indices, void *stream)                                         \
+    {                                                                                                                 \
+        runMGATHER_##NAME<<<1, nullptr, stream>>>(reinterpret_cast<T *>(out), reinterpret_cast<T *>(table), indices); \
+    }
+
+#define DEFINE_ELEM2D_PAD(NAME, THOST, T, TIDX, VR, VC, PR, PC, TS, OOB)                                              \
+    extern "C" __global__ AICORE void runMGATHER_##NAME(__gm__ T *out, __gm__ T *table, __gm__ TIDX *indices)         \
+    {                                                                                                                 \
+        runElem2DPadded<pto::GatherOOB::OOB, T, TIDX, VR, VC, PR, PC, TS>(out, table, indices);                       \
+    }                                                                                                                 \
+    void Launch_##NAME(THOST *out, THOST *table, TIDX *indices, void *stream)                                         \
+    {                                                                                                                 \
+        runMGATHER_##NAME<<<1, nullptr, stream>>>(reinterpret_cast<T *>(out), reinterpret_cast<T *>(table), indices); \
+    }
+
+DEFINE_ROW(row_float_8x32_64rows, float, float, int32_t, 8, 32, 64, Undefined)
+DEFINE_ROW(row_half_16x64_64rows, aclFloat16, half, int32_t, 16, 64, 64, Undefined)
+DEFINE_ROW(row_int32_8x16_32rows, int32_t, int32_t, int32_t, 8, 16, 32, Undefined)
+DEFINE_ROW(row_uint8_8x32_32rows, uint8_t, uint8_t, int32_t, 8, 32, 32, Undefined)
+DEFINE_ROW(row_int16_8x16_32rows, int16_t, int16_t, int32_t, 8, 16, 32, Undefined)
+DEFINE_ROW(row_float_clamp_8x32_8rows, float, float, int32_t, 8, 32, 8, Clamp)
+DEFINE_ROW(row_int32_wrap_8x16_8rows, int32_t, int32_t, int32_t, 8, 16, 8, Wrap)
+DEFINE_ROW(row_half_zero_8x32_8rows, aclFloat16, half, int32_t, 8, 32, 8, Zero)
+
+DEFINE_ROW_COLIDX(row_colidx_float_8x32_64rows, float, float, int32_t, 8, 32, 64, Undefined)
+DEFINE_ROW_COLIDX(row_colidx_int32_clamp_8x16_8rows, int32_t, int32_t, int32_t, 8, 16, 8, Clamp)
+DEFINE_ROW_COLIDX(row_colidx_half_16x64_64rows, aclFloat16, half, int32_t, 16, 64, 64, Undefined)
+
+DEFINE_ELEM(elem_float_64_128size, float, float, int32_t, 64, 128, Undefined)
+DEFINE_ELEM(elem_half_64_128size, aclFloat16, half, int32_t, 64, 128, Undefined)
+DEFINE_ELEM(elem_int32_32_64size, int32_t, int32_t, int32_t, 32, 64, Undefined)
+DEFINE_ELEM(elem_uint8_64_128size, uint8_t, uint8_t, int32_t, 64, 128, Undefined)
+DEFINE_ELEM(elem_int16_32_64size, int16_t, int16_t, int32_t, 32, 64, Undefined)
+DEFINE_ELEM(elem_float_clamp_32_16size, float, float, int32_t, 32, 16, Clamp)
+DEFINE_ELEM(elem_int32_wrap_32_16size, int32_t, int32_t, int32_t, 32, 16, Wrap)
+DEFINE_ELEM(elem_half_zero_32_16size, aclFloat16, half, int32_t, 32, 16, Zero)
+
+DEFINE_ELEM2D(elem2d_float_8x32_256size, float, float, int32_t, 8, 32, 256, Undefined)
+DEFINE_ELEM2D(elem2d_int32_8x16_256size, int32_t, int32_t, int32_t, 8, 16, 256, Undefined)
+DEFINE_ELEM2D(elem2d_half_4x32_256size, aclFloat16, half, int32_t, 4, 32, 256, Undefined)
+DEFINE_ELEM2D(elem2d_int32_unaligned_3x8_64size, int32_t, int32_t, int32_t, 3, 8, 64, Undefined)
+DEFINE_ELEM2D(elem2d_uint8_unaligned_3x32_256size, uint8_t, uint8_t, int32_t, 3, 32, 256, Undefined)
+DEFINE_ELEM2D_PAD(elem2d_int32_unaligned_3x3_in_3x8_64size, int32_t, int32_t, int32_t, 3, 3, 3, 8, 64, Undefined)
+DEFINE_ELEM2D_PAD(elem2d_int32_unaligned_9x9_in_9x16_256size, int32_t, int32_t, int32_t, 9, 9, 9, 16, 256, Undefined)
+DEFINE_ELEM2D_PAD(elem2d_int32_scalar_1x1_in_1x8_8size, int32_t, int32_t, int32_t, 1, 1, 1, 8, 8, Undefined)
+DEFINE_ROW_PAD(row_int32_unaligned_3x8_8rows, int32_t, int32_t, int32_t, 3, 8, 8, 8, Undefined)
+DEFINE_ROW_PAD(row_int32_unaligned_9x16_16rows, int32_t, int32_t, int32_t, 9, 16, 16, 16, Undefined)
