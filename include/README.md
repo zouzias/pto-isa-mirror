@@ -108,6 +108,8 @@ This table tracks per-instruction backend availability:
 | [`TOR`](../docs/isa/TOR.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TORS`](../docs/isa/TORS.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TPARTADD`](../docs/isa/TPARTADD.md) | Yes | TODO | Yes | Yes | Yes | Yes |
+| [`TPARTARGMAX`](../docs/isa/TPARTARGMAX.md) | TODO | TODO | TODO | TODO | Yes | TODO |
+| [`TPARTARGMIN`](../docs/isa/TPARTARGMIN.md) | TODO | TODO | TODO | TODO | Yes | TODO |
 | [`TPARTMAX`](../docs/isa/TPARTMAX.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TPARTMIN`](../docs/isa/TPARTMIN.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TPARTMUL`](../docs/isa/TPARTMUL.md) | No | TODO | Yes | Yes | Yes | Yes |
