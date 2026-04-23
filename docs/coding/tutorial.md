@@ -80,8 +80,8 @@ PTO-Auto (high level):
 
 PTO-Manual (expert mode):
 
-- You bind explicit tile buffer addresses with `TASSIGN`.
-- You express ordering explicitly (events or low-level flags).
+- You can explicitly bind tile buffer addresses with `TASSIGN`.
+- You can express ordering explicitly (events or low-level flags).
 - You can build double-buffer pipelines and overlap load/compute/store.
 
 ## 3. Your first kernel: vector add (PTO-Auto style)
