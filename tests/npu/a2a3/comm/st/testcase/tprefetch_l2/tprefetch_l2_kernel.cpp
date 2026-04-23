@@ -50,8 +50,8 @@ using KernelScratchTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, pto::comm::s
 //                             returning after Waiting on the last event.
 // ============================================================================
 
-PTO_INTERNAL AICORE bool BuildKernelSession(pto::comm::AsyncSession &session, __gm__ uint8_t *sdmaWorkspace,
-                                            uint32_t sdmaSyncId)
+PTO_INTERNAL bool BuildKernelSession(pto::comm::AsyncSession &session, __gm__ uint8_t *sdmaWorkspace,
+                                     uint32_t sdmaSyncId)
 {
     KernelScratchTile scratchTile;
     TASSIGN(scratchTile, 0x0);
@@ -59,9 +59,8 @@ PTO_INTERNAL AICORE bool BuildKernelSession(pto::comm::AsyncSession &session, __
 }
 
 template <typename T>
-PTO_INTERNAL AICORE pto::comm::AsyncEvent PrefetchRealOrTrash(__gm__ T *realBuf, __gm__ uint8_t *trashBuf,
-                                                              int elem_count, int enablePrefetch,
-                                                              pto::comm::AsyncSession &session)
+PTO_INTERNAL pto::comm::AsyncEvent PrefetchRealOrTrash(__gm__ T *realBuf, __gm__ uint8_t *trashBuf, int elem_count,
+                                                       int enablePrefetch, pto::comm::AsyncSession &session)
 {
     uint64_t totalBytes = static_cast<uint64_t>(elem_count) * sizeof(T);
     __gm__ void *target =
@@ -70,9 +69,9 @@ PTO_INTERNAL AICORE pto::comm::AsyncEvent PrefetchRealOrTrash(__gm__ T *realBuf,
 }
 
 template <typename T>
-PTO_INTERNAL AICORE void BroadcastViaTputAsync(KernelGlobal<T> &sendG, __gm__ T *recvBuf, const KernelShapeDyn &shape,
-                                               const KernelStrideDyn &stride, int nranks, int self_rank,
-                                               __gm__ HcclDeviceContext *hcclCtx, pto::comm::AsyncSession &session)
+PTO_INTERNAL void BroadcastViaTputAsync(KernelGlobal<T> &sendG, __gm__ T *recvBuf, const KernelShapeDyn &shape,
+                                        const KernelStrideDyn &stride, int nranks, int self_rank,
+                                        __gm__ HcclDeviceContext *hcclCtx, pto::comm::AsyncSession &session)
 {
     pto::comm::AsyncEvent lastEvent;
     for (int target = 0; target < nranks; ++target) {
@@ -90,7 +89,7 @@ PTO_INTERNAL AICORE void BroadcastViaTputAsync(KernelGlobal<T> &sendG, __gm__ T 
 // `count` template parameter. On failure, emits the closing pipe_barrier and
 // returns false so the kernel can early-return in one line instead of four.
 template <size_t count>
-PTO_INTERNAL AICORE bool BoundsOkOrFinalize(int elem_count)
+PTO_INTERNAL bool BoundsOkOrFinalize(int elem_count)
 {
     if (elem_count <= 0 || elem_count > static_cast<int>(count)) {
         pipe_barrier(PIPE_ALL);
@@ -119,9 +118,9 @@ struct RootBroadcastSetup {
 // can `return` immediately. On success, `s` is fully populated and the caller
 // is guaranteed to be on the root rank.
 template <typename T, size_t count>
-PTO_INTERNAL AICORE bool EnterRootBroadcastOrReturn(__gm__ T *commBuf, __gm__ HcclDeviceContext *hcclCtx, int root_rank,
-                                                    int elem_count, __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId,
-                                                    RootBroadcastSetup<T, count> &s)
+PTO_INTERNAL bool EnterRootBroadcastOrReturn(__gm__ T *commBuf, __gm__ HcclDeviceContext *hcclCtx, int root_rank,
+                                             int elem_count, __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId,
+                                             RootBroadcastSetup<T, count> &s)
 {
     if (!BoundsOkOrFinalize<count>(elem_count)) {
         return false;
@@ -165,8 +164,8 @@ struct PerfKernelSetup {
 };
 
 template <typename T, size_t count>
-PTO_INTERNAL AICORE bool SetupPerfKernelOrReturn(__gm__ T *commBuf, int elem_count, __gm__ HcclDeviceContext *hcclCtx,
-                                                 PerfKernelSetup<T, count> &s)
+PTO_INTERNAL bool SetupPerfKernelOrReturn(__gm__ T *commBuf, int elem_count, __gm__ HcclDeviceContext *hcclCtx,
+                                          PerfKernelSetup<T, count> &s)
 {
     if (!BoundsOkOrFinalize<count>(elem_count)) {
         return false;
