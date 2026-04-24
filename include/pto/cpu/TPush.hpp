@@ -417,7 +417,7 @@ PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, TileProd &tile)
         auto *addr = reinterpret_cast<__gm__ T *>(reinterpret_cast<std::uintptr_t>(pipe.fifo.GM_SLOT_BUFFER) +
                                                   entryBase + subOffset);
         GlobalData globalData(addr);
-        TSTORE_IMPL(globalData, tile);
+        TSTORE(globalData, tile);
     } else if constexpr (Pipe::is_c2v) {
         TPush_c2v<Pipe, TileProd, Split>(pipe, tile, entryBase, slotIndex);
     } else if constexpr (Pipe::is_v2c) {
