@@ -348,10 +348,10 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling(__ubuf__ T *maxPtr, __ubuf__ uint8
     constexpr int16_t exp_mask_val = is_bf16 ? 0x7F80 : 0x7C00;
     constexpr int16_t nan_check = is_bf16 ? 0xFF : 0x1F;
     // FP16 constants pre-shifted by -112 to fold E8M0 rebias (see function header).
-    constexpr int16_t exp_max_val = is_bf16 ? 0xFE : 0x8E;
-    constexpr int16_t b8_emax_val = is_bf16 ? 8 : -104;
     constexpr int16_t subnorm_val = is_bf16 ? 0x7F80 : 0x7C00;
     constexpr int16_t clamp_val = is_bf16 ? -127 : -15;
+    constexpr int16_t exp_max_val = is_bf16 ? 0xFE : 0x8E;
+    constexpr int16_t b8_emax_val = is_bf16 ? 8 : -104;
     RegTensor<T> vb16_max;
     vector_s16 vb16_exponent, vb16_shared_exp, vb16_scaling, vb16_nan, vb16_subnorm;
     vector_s16 vb16_b8_shared_exp, vb16_b8_nan, vb16_b8_emax, vb16_exp_mask, vb16_exp_max;
@@ -370,22 +370,58 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling(__ubuf__ T *maxPtr, __ubuf__ uint8
         // biased exponent
         vand((vector_s16 &)vb16_exponent, (vector_s16 &)vb16_max, vb16_exp_mask, preg_b16, MODE_ZEROING);
         vshrs((vector_s16 &)vb16_exponent, (vector_s16 &)vb16_exponent, shr, preg_b16, MODE_ZEROING);
-        vsub((vector_s16 &)vb16_shared_exp, (vector_s16 &)vb16_exponent, (vector_s16 &)vb16_b8_emax, preg_b16);
+        vsub((vector_s16 &)vb16_shared_exp_1, (vector_s16 &)vb16_exponent, (vector_s16 &)vb16_b8_emax, preg_b16);
         // scaling = 1 / shared_exponent
         vsub((vector_s16 &)vb16_scaling, (vector_s16 &)vb16_exp_max, (vector_s16 &)vb16_shared_exp, preg_b16);
         vshls((vector_s16 &)vb16_scaling, (vector_s16 &)vb16_scaling, shr, preg_b16, MODE_ZEROING);
         // NaN / Inf / subnormal clamping
         vcmps_ne(preg_inf, (vector_s16 &)vb16_exponent, nan_check, preg_b16);
         vsel(vb16_scaling, vb16_scaling, vb16_b8_nan, preg_inf);
-        vsel(vb16_shared_exp, vb16_shared_exp, vb16_b8_nan, preg_inf);
+        vsel(vb16_shared_exp_1, vb16_shared_exp_1, vb16_b8_nan, preg_inf);
         vcmps_ge(preg_inf, (vector_s16 &)vb16_scaling, clamp_val, preg_b16);
         vsel(vb16_scaling, vb16_scaling, vb16_subnorm, preg_inf);
-        vsel(vb16_shared_exp, vb16_shared_exp, vb16_subnorm, preg_inf);
+        vsel(vb16_shared_exp_1, vb16_shared_exp_1, vb16_subnorm, preg_inf);
 
-        vsts((vector_s16 &)vb16_shared_exp, ((__ubuf__ int16_t *)expPtr), i * elementsPerVL / sizeof(T), PK_B16,
+        vsts((vector_s16 &)vb16_shared_exp_1, ((__ubuf__ int16_t *)expPtr), i * elementsPerVL / sizeof(T), PK_B16,
              preg_b16);
         vsts((vector_s16 &)vb16_scaling, ((__ubuf__ int16_t *)scalingPtr), i * elementsPerVL, distValue, preg_b16);
     }
+}
+
+// Per-VL body shared by the 2D ExtractB8ExponentAndScaling variant: loads one VL of
+// group-maxes from (maxPtr + off), computes shared exponent and scaling with NaN/subnormal
+// clamping, and stores into (expPtr + off) / (scalingPtr + off).
+template <typename T>
+PTO_INTERNAL void ExtractB8ExponentAndScalingVL(__ubuf__ T *maxPtr, __ubuf__ uint8_t *expPtr, __ubuf__ T *scalingPtr,
+                                                uint32_t off, uint32_t rem, vector_s16 &vb16_exp_mask,
+                                                vector_s16 &vb16_b8_emax, vector_s16 &vb16_exp_max,
+                                                vector_s16 &vb16_b8_nan, vector_s16 &vb16_subnorm)
+{
+    static constexpr auto distValue =
+        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+    constexpr bool is_bf16 = std::is_same<T, bfloat16_t>::value;
+    constexpr int shr = is_bf16 ? 7 : 10;
+    constexpr int16_t nan_check = is_bf16 ? 0xFF : 0x1F;
+    constexpr int16_t clamp_val = is_bf16 ? -127 : -15;
+
+    RegTensor<T> vb16_max;
+    vector_s16 vb16_exponent, vb16_shared_exp, vb16_scaling;
+    vector_bool preg_inf;
+    vector_bool preg_b16 = CreatePredicate<T>(rem);
+    vlds(vb16_max, maxPtr, off, NORM);
+    vand((vector_s16 &)vb16_exponent, (vector_s16 &)vb16_max, vb16_exp_mask, preg_b16, MODE_ZEROING);
+    vshrs((vector_s16 &)vb16_exponent, (vector_s16 &)vb16_exponent, shr, preg_b16, MODE_ZEROING);
+    vsub((vector_s16 &)vb16_shared_exp, (vector_s16 &)vb16_exponent, (vector_s16 &)vb16_b8_emax, preg_b16);
+    vsub((vector_s16 &)vb16_scaling, (vector_s16 &)vb16_exp_max, (vector_s16 &)vb16_shared_exp, preg_b16);
+    vshls((vector_s16 &)vb16_scaling, (vector_s16 &)vb16_scaling, shr, preg_b16, MODE_ZEROING);
+    vcmps_ne(preg_inf, (vector_s16 &)vb16_exponent, nan_check, preg_b16);
+    vsel(vb16_scaling, vb16_scaling, vb16_b8_nan, preg_inf);
+    vsel(vb16_shared_exp, vb16_shared_exp, vb16_b8_nan, preg_inf);
+    vcmps_ge(preg_inf, (vector_s16 &)vb16_scaling, clamp_val, preg_b16);
+    vsel(vb16_scaling, vb16_scaling, vb16_subnorm, preg_inf);
+    vsel(vb16_shared_exp, vb16_shared_exp, vb16_subnorm, preg_inf);
+    vsts((vector_s16 &)vb16_shared_exp, (__ubuf__ int16_t *)expPtr, off / sizeof(T), PK_B16, preg_b16);
+    vsts((vector_s16 &)vb16_scaling, (__ubuf__ int16_t *)scalingPtr, off, distValue, preg_b16);
 }
 
 // 2D variant of ExtractB8ExponentAndScaling for the padded (validCols != srcCols) path.
@@ -400,31 +436,22 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling_2D(__ubuf__ T *maxPtr, __ubuf__ ui
 {
     static_assert(std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
                   "ExtractB8ExponentAndScaling_2D: T must be bfloat16_t or half");
-    static constexpr auto distValue =
-        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
     constexpr bool is_bf16 = std::is_same<T, bfloat16_t>::value;
-    constexpr int shr = is_bf16 ? 7 : 10;
     constexpr int16_t exp_mask_val = is_bf16 ? 0x7F80 : 0x7C00;
-    constexpr int16_t nan_check = is_bf16 ? 0xFF : 0x1F;
     // FP16 constants pre-shifted by -112 to fold E8M0 rebias (matches flat variant).
     constexpr int16_t exp_max_val = is_bf16 ? 0xFE : 0x8E;
     constexpr int16_t b8_emax_val = is_bf16 ? 8 : -104;
     constexpr int16_t subnorm_val = is_bf16 ? 0x7F80 : 0x7C00;
-    constexpr int16_t clamp_val = is_bf16 ? -127 : -15;
+    constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T); // 128 group-maxes per VL
 
-    RegTensor<T> vb16_max;
-    vector_s16 vb16_exponent, vb16_shared_exp, vb16_scaling;
     vector_s16 vb16_b8_nan, vb16_subnorm, vb16_b8_emax, vb16_exp_mask, vb16_exp_max;
     vbr(vb16_exp_mask, exp_mask_val);
     vbr(vb16_b8_nan, 0xFF);
     vbr(vb16_subnorm, subnorm_val);
     vbr(vb16_exp_max, exp_max_val);
-    vbr(vb16_exponent, exp_mask_val);
     vbr(vb16_b8_emax, b8_emax_val);
-    vector_bool preg_inf;
 
-    constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T); // 128 group-maxes per VL
-    uint32_t groupsPerRow = srcCols / 32;                       // srcCols is 32-aligned
+    uint32_t groupsPerRow = srcCols / 32; // srcCols is 32-aligned
     uint32_t validGroupsPerRow = CeilDivision((uint32_t)validCols, 32u);
     uint16_t loopsPerRow = CeilDivision(validGroupsPerRow, elementsPerVL);
     for (uint16_t row = 0; row < (uint16_t)validRows; ++row) {
@@ -434,23 +461,8 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling_2D(__ubuf__ T *maxPtr, __ubuf__ ui
             uint32_t rem = (validGroupsPerRow > off) ? (validGroupsPerRow - off) : 0;
             if (rem > elementsPerVL)
                 rem = elementsPerVL;
-            vector_bool preg_b16 = CreatePredicate<T>(rem);
-            vlds(vb16_max, maxPtr + rowOff, off, NORM);
-            vand((vector_s16 &)vb16_exponent, (vector_s16 &)vb16_max, vb16_exp_mask, preg_b16, MODE_ZEROING);
-            vshrs((vector_s16 &)vb16_exponent, (vector_s16 &)vb16_exponent, shr, preg_b16, MODE_ZEROING);
-            vsub((vector_s16 &)vb16_shared_exp, (vector_s16 &)vb16_exponent, (vector_s16 &)vb16_b8_emax, preg_b16);
-            vsub((vector_s16 &)vb16_scaling, (vector_s16 &)vb16_exp_max, (vector_s16 &)vb16_shared_exp, preg_b16);
-            vshls((vector_s16 &)vb16_scaling, (vector_s16 &)vb16_scaling, shr, preg_b16, MODE_ZEROING);
-            vcmps_ne(preg_inf, (vector_s16 &)vb16_exponent, nan_check, preg_b16);
-            vsel(vb16_scaling, vb16_scaling, vb16_b8_nan, preg_inf);
-            vsel(vb16_shared_exp, vb16_shared_exp, vb16_b8_nan, preg_inf);
-            vcmps_ge(preg_inf, (vector_s16 &)vb16_scaling, clamp_val, preg_b16);
-            vsel(vb16_scaling, vb16_scaling, vb16_subnorm, preg_inf);
-            vsel(vb16_shared_exp, vb16_shared_exp, vb16_subnorm, preg_inf);
-            vsts((vector_s16 &)vb16_shared_exp, ((__ubuf__ int16_t *)(expPtr + rowOff)), i * elementsPerVL / sizeof(T),
-                 PK_B16, preg_b16);
-            vsts((vector_s16 &)vb16_scaling, ((__ubuf__ int16_t *)(scalingPtr + rowOff)), i * elementsPerVL, distValue,
-                 preg_b16);
+            ExtractB8ExponentAndScalingVL<T>(maxPtr + rowOff, expPtr + rowOff, scalingPtr + rowOff, off, rem,
+                                             vb16_exp_mask, vb16_b8_emax, vb16_exp_max, vb16_b8_nan, vb16_subnorm);
         }
     }
 }
@@ -510,7 +522,7 @@ PTO_INTERNAL void CalcQuantizedFP8Values_B16_Window(__ubuf__ T *srcPtr, __ubuf__
 {
     constexpr uint32_t elementsPerVL_b8 = REPEAT_BYTE / sizeof(uint8_t);
     RegTensor<T> vb16_scaling, vb16_in_1, vb16_in_2, vb16_out_1, vb16_out_2;
-    vector_f32 vb32_cvt_1, vb32_cvt_2, vb32_cvt_3, vb32_cvt_4;
+    vector_f32 vb32_cvt_1_1, vb32_cvt_2_1, vb32_cvt_3_1, vb32_cvt_4_1;
     vector_f8e4m3 vb8_or1, vb8_or2, vb8_out, vb8_p0, vb8_p1, vb8_p2, vb8_p3;
     uint32_t even_count = (remaining + 1) / 2;
     uint32_t odd_count = remaining / 2;
@@ -523,15 +535,15 @@ PTO_INTERNAL void CalcQuantizedFP8Values_B16_Window(__ubuf__ T *srcPtr, __ubuf__
     vmul(vb16_out_1, vb16_in_1, vb16_scaling, preg_b16_1, MODE_ZEROING);
     vmul(vb16_out_2, vb16_in_2, vb16_scaling, preg_b16_2, MODE_ZEROING);
     // b16->fp32 EVEN/ODD splits each 128-lane reg into 2x64 fp32 (mod-4: 0,2,1,3).
-    vcvt(vb32_cvt_1, vb16_out_1, preg_b16_1, PART_EVEN);
-    vcvt(vb32_cvt_2, vb16_out_1, preg_b16_1, PART_ODD);
-    vcvt(vb32_cvt_3, vb16_out_2, preg_b16_2, PART_EVEN);
-    vcvt(vb32_cvt_4, vb16_out_2, preg_b16_2, PART_ODD);
+    vcvt(vb32_cvt_1_1, vb16_out_1, preg_b16_1, PART_EVEN);
+    vcvt(vb32_cvt_2_1, vb16_out_1, preg_b16_1, PART_ODD);
+    vcvt(vb32_cvt_3_1, vb16_out_2, preg_b16_2, PART_EVEN);
+    vcvt(vb32_cvt_4_1, vb16_out_2, preg_b16_2, PART_ODD);
     // fp32->fp8 P0..P3 writes to bytes 0..3 of each 32-bit slot; pair with mod-4 index.
-    vcvt(vb8_p0, vb32_cvt_1, preg_b16_1, ROUND_R, RS_ENABLE, PART_P0);
-    vcvt(vb8_p1, vb32_cvt_3, preg_b16_2, ROUND_R, RS_ENABLE, PART_P1);
-    vcvt(vb8_p2, vb32_cvt_2, preg_b16_1, ROUND_R, RS_ENABLE, PART_P2);
-    vcvt(vb8_p3, vb32_cvt_4, preg_b16_2, ROUND_R, RS_ENABLE, PART_P3);
+    vcvt(vb8_p0, vb32_cvt_1_1, preg_b16_1, ROUND_R, RS_ENABLE, PART_P0);
+    vcvt(vb8_p1, vb32_cvt_3_1, preg_b16_2, ROUND_R, RS_ENABLE, PART_P1);
+    vcvt(vb8_p2, vb32_cvt_2_1, preg_b16_1, ROUND_R, RS_ENABLE, PART_P2);
+    vcvt(vb8_p3, vb32_cvt_4_1, preg_b16_2, ROUND_R, RS_ENABLE, PART_P3);
     vor(vb8_or1, vb8_p0, vb8_p1, preg_b8);
     vor(vb8_or2, vb8_p2, vb8_p3, preg_b8);
     vor(vb8_out, vb8_or1, vb8_or2, preg_b8);
