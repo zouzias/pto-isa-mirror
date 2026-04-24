@@ -130,12 +130,25 @@ struct Event {
 
     PTO_INTERNAL Event &operator=(RecordEvent)
     {
-#ifndef __PTO_AUTO__
-        PTO_STATIC_ASSERT(!IsCrossCore,
-                          "Fix: The cross-core event must be manually initialized and specify the cross-core ID.");
-#endif
         return Init();
     }
+
+    PTO_INTERNAL Event() = default;
+    PTO_INTERNAL Event(RecordEvent)
+    {
+        Init();
+    }
 };
+
+template <typename T>
+struct is_event : std::false_type {
+};
+
+template <Op SrcOp, Op DstOp, bool AutoToken, event_t EventID>
+struct is_event<Event<SrcOp, DstOp, AutoToken, EventID>> : std::true_type {
+};
+
+template <typename... Ts>
+inline constexpr bool all_events_v = (is_event<Ts>::value && ...);
 } // namespace pto
 #endif

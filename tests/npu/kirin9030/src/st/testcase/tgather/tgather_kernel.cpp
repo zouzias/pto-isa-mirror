@@ -21,8 +21,7 @@ using namespace pto;
 template <int rows, int cols>
 using StrideDim2 = pto::Stride<rows * cols, rows * cols, rows * cols, cols, 1>;
 #endif
-template <typename Tsrc0, typename Tsrc1, int kGRows0_, int kGCols0_, int kGRows1_, int kGCols1_, int kTRows_,
-          int kTCols_>
+template <typename Tsrc0, typename Tsrc1, int kGRows0_, int kGCols0_, int kGRows1_, int kGCols1_>
 inline AICORE void runTGather(__gm__ Tsrc0 *out, __gm__ Tsrc0 *src0, __gm__ Tsrc1 *src1)
 {
     using DynShapeDim5_src0 = pto::Shape<1, 1, 1, kGRows0_, kGCols0_>;
@@ -50,10 +49,11 @@ inline AICORE void runTGather(__gm__ Tsrc0 *out, __gm__ Tsrc0 *src0, __gm__ Tsrc
     TileData_dst dstTile(dst_row, dst_col);
     TileData_dst tmpTile(dst_row, dst_col);
 
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x20000);
-    TASSIGN(dstTile, 0x28000);
-    TASSIGN(tmpTile, 0x28000);
+    TASSIGN<0x0>(src0Tile);
+    TASSIGN<TileData_src0::Numel * sizeof(Tsrc0)>(src1Tile);
+    TASSIGN<TileData_src0::Numel * sizeof(Tsrc0) + TileData_src1::Numel * sizeof(Tsrc1)>(dstTile);
+    TASSIGN<(TileData_src0::Numel + TileData_dst::Numel) * sizeof(Tsrc0) + TileData_src1::Numel * sizeof(Tsrc1)>(
+        tmpTile);
 
     GlobalData_src0 src0Global(src0);
     GlobalData_src1 src1Global(src1);
@@ -72,22 +72,22 @@ inline AICORE void runTGather(__gm__ Tsrc0 *out, __gm__ Tsrc0 *src0, __gm__ Tsrc
 
 extern "C" __global__ AICORE void test_tgather_float(__gm__ float *out, __gm__ float *src0, __gm__ int32_t *src1)
 {
-    runTGather<float, int32_t, 32, 1024, 16, 64, 32, 1024>(out, src0, src1);
+    runTGather<float, int32_t, 32, 864, 16, 64>(out, src0, src1);
 }
 
 extern "C" __global__ AICORE void test_tgather_int32(__gm__ int32_t *out, __gm__ int32_t *src0, __gm__ int32_t *src1)
 {
-    runTGather<int32_t, int32_t, 32, 512, 16, 256, 32, 512>(out, src0, src1);
+    runTGather<int32_t, int32_t, 32, 512, 16, 256>(out, src0, src1);
 }
 
 extern "C" __global__ AICORE void test_tgather_half(__gm__ int16_t *out, __gm__ int16_t *src0, __gm__ int16_t *src1)
 {
-    runTGather<int16_t, int16_t, 16, 1024, 16, 128, 16, 1024>(out, src0, src1);
+    runTGather<int16_t, int16_t, 16, 1024, 16, 128>(out, src0, src1);
 }
 
 extern "C" __global__ AICORE void test_tgather_int16(__gm__ int16_t *out, __gm__ int16_t *src0, __gm__ int16_t *src1)
 {
-    runTGather<int16_t, int16_t, 32, 256, 32, 64, 32, 256>(out, src0, src1);
+    runTGather<int16_t, int16_t, 32, 256, 32, 64>(out, src0, src1);
 }
 
 void launchTGATHER_demo_float(float *out, float *src0, int32_t *src1, aclrtStream stream)
@@ -122,15 +122,15 @@ template <typename srcT, typename dstT, int kGRows_, int kGCols_, int kTRows_, i
 __global__ AICORE void runTGATHER(__gm__ dstT *out, __gm__ srcT *src)
 {
     using DynShapeDim5 = pto::Shape<1, 1, 1, kGRows_, kGCols_>;
-    using DynStridDim5 = pto::Stride<1, 1, 1, kGCols_, 1>;
+    using DynStridDim5 = StrideDim2<kGRows_, kGCols_>;
     using SrcGlobalData = GlobalTensor<srcT, DynShapeDim5, DynStridDim5>;
     using DstGlobalData = GlobalTensor<dstT, DynShapeDim5, DynStridDim5>;
     using TileData = Tile<TileType::Vec, srcT, (kTRows_ + 5), (kTCols_ + 32), BLayout::RowMajor, -1, -1>;
     using DstTileData = Tile<TileType::Vec, dstT, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     TileData srcTile(kTRows_, kTCols_);
     DstTileData dstTile(kTRows_, kTCols_);
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x0 + (kTRows_ + 5) * (kTCols_ + 32) * sizeof(dstT));
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<TileData::Numel * sizeof(srcT)>(dstTile);
 
     SrcGlobalData srcGlobal(src);
     DstGlobalData dstGlobal(out);

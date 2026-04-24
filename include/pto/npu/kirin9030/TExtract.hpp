@@ -157,7 +157,8 @@ __tf__ AICORE void TExtractToB(typename DstTile::TileDType __out__ dst, typename
         constexpr uint8_t kStep = (dstRow * typeSize) >> SHIFT_BLOCK_BYTE;
         constexpr uint16_t srcStride = srcCol >> SHIFT_BLOCK_LEN;
         constexpr uint16_t dstStride = dstCol >> SHIFT_BLOCK_LEN;
-        load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 0);
+        pto_load_cbuf_to_cb<false>(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride,
+                                   dstStride);
     } else {
         static_assert((dstRow % (typeSize == 1 ? c0Size : FRACTAL_NZ_ROW)) == 0, "dstRow must be aligned");
         static_assert((dstCol % (typeSize == 1 ? c0Size : FRACTAL_NZ_ROW)) == 0, "dstCol must be aligned");
@@ -171,7 +172,7 @@ __tf__ AICORE void TExtractToB(typename DstTile::TileDType __out__ dst, typename
 
         uint16_t mStartPosition = indexRow >> SHIFT_BLOCK_LEN;
         uint16_t kStartPosition = (indexCol * typeSize) >> SHIFT_BLOCK_BYTE;
-        load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 1);
+        pto_load_cbuf_to_cb<true>(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride);
     }
 }
 
@@ -194,7 +195,7 @@ __tf__ AICORE void TExtractToBCompact(typename DstTile::TileDType __out__ dst, t
     uint8_t mStep = madNAlign >> SHIFT_BLOCK_LEN;
     uint8_t kStep = (madKAlign * typeSize) >> SHIFT_BLOCK_BYTE;
     uint16_t dstStride = madNAlign >> SHIFT_BLOCK_LEN;
-    load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 0);
+    pto_load_cbuf_to_cb<false>(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride);
 }
 
 template <typename DstTile, typename SrcTile>
@@ -223,12 +224,13 @@ __tf__ AICORE void TExtractToBTransCompact(typename DstTile::TileDType __out__ d
         uint16_t dstAddrStride = CeilDivision(madN, FRACTAL_NZ_ROW) * FRACTAL_NZ_ROW * BLOCK_BYTE_SIZE;
         mStep = M_STEP_MIN_VAL_B8;
         for (uint16_t i = 0; i < nLoop; ++i) {
-            load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 1);
+            pto_load_cbuf_to_cb<true>(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride,
+                                      dstStride);
             dstAddr += dstAddrStride;
             mStartPosition += M_STEP_MIN_VAL_B8;
         }
     } else { // b16/b32
-        load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 1);
+        pto_load_cbuf_to_cb<true>(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride);
     }
 }
 

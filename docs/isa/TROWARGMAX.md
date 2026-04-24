@@ -7,13 +7,15 @@
 
 ## Introduction
 
-Get the column index of the maximum element for each row.
+Get the column index of the maximum element, or both value and column index of the maximum element for each row.
 
 ## Math Interpretation
 
 Let `R = src.GetValidRow()` and `C = src.GetValidCol()`. For `0 <= i < R`:
 
-$$ \mathrm{dst}_{i,0} = \max_{0 \le j < C} j_{i} $$
+$$ \mathrm{dst}_{i,0} = \underset{0 \le j < C}{\operatorname{argmax}} \; \mathrm{src}_{i,j} $$
+
+$$ \mathrm{dstval}_{i,0} = \max_{0 \le j < C} \mathrm{src}_{i,j} $$
 
 ## Assembly Syntax
 
@@ -41,41 +43,64 @@ pto.trowargmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%ds
 
 Declared in `include/pto/common/pto_instr.hpp`:
 
+Output index only:
+
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
 PTO_INST RecordEvent TROWARGMAX(TileDataOut& dst, TileDataIn& src, TileDataTmp& tmp, WaitEvents&... events);
 ```
 
+Output both value and index:
+
+```cpp
+template <typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn, typename TileDataTmp,
+          typename... WaitEvents>
+PTO_INST RecordEvent TROWARGMAX(TileDataOutVal &dstVal, TileDataOutIdx &dstIdx, TileDataIn &src, TileDataTmp &tmp,
+                                WaitEvents &... events)
+```
+
 ## Constraints
 
-Implementation checks (NPU):
+### General constraints / checks
 
-- A2A3:
-  - Tile location: `dst` and `src` must be `TileType::Vec`.
-  - Tile layout of `src`: ND fractal (`isRowMajor` and `SLayout::NoneBox`).
-  - Tile layout of `dst`:
-    - **Compact Mode**: DN layout Tile of 1D, e.g., `Tile<TileType::Vec, T, ROWS, 1, BLayout::ColMajor, ValidRows, 1>`, ROWS must be 32b aligned.
-    - **Traditional Mode**: ND layout Tile of 2D, e.g., `Tile<TileType::Vec, T, ROWS, COLS, BLayout::RowMajor, ValidRows, 1>`.
-  - Source data types: `half` or `float`.
-  - Destination data types: `uint32_t` or `int32_t`.
-  - Runtime valid checks:
-    - `srcValidCol != 0` and `srcValidRow != 0`.
-- A5:
-  - Source data types: `half` or `float`.
-  - Destination data types: `uint32_t` or `int32_t`.
-  - No explicit runtime assertions on `validRow/validCol` in the implementation; the loops use `src.GetValidRow()` and `src.GetValidCol()`.
-  - `tmp` temporary tile is not used, only for compatibility use.
+- Supported source element types: `half`, `float`.
+- `src` must use standard ND layout: row-major and non-fractal (`BLayout::RowMajor`, `SLayout::NoneBox`).
+- When output index only:
+    - `dst` and `src` must be `TileType::Vec`.
+    - Supported destination element types: `uint32_t`, `int32_t`.
+    - Runtime checks follow the shared row-reduce check path:
+        - `src.GetValidRow() != 0`
+        - `src.GetValidCol() != 0`
+        - `src.GetValidRow() == dst.GetValidRow()`
+    - `dst` is checked through the shared row-reduce-index path and may use either of these non-fractal layouts:
+        - DN layout with one column (`BLayout::ColMajor`, `Cols == 1`), or
+        - ND layout whose valid column count is 1.
+- When output both value and index:
+    - `dstVal`, `dstIdx`, `src` must be `TileType::Vec`.
+    - Supported destination element types: `uint32_t`, `int32_t`.
+    - Runtime checks follow the shared row-reduce check path:
+        - `src.GetValidRow() != 0`
+        - `src.GetValidCol() != 0`
+        - `src.GetValidRow() == dstIdx.GetValidRow()`
+        - `src.GetValidRow() == dstVal.GetValidRow()`
+    - `dstVal`, `dstIdx` are checked through the shared row-reduce-index path and may use either of these non-fractal layouts:
+        - DN layout with one column (`BLayout::ColMajor`, `Cols == 1`), or
+        - ND layout whose valid column count is 1.
 
-### About temporary tile `tmp` for A3
+### About temporary tile `tmp`
 
-* Temporary tile is not used when `srcValidCol <= ElementPerRepeat`, used when `srcValidCol > ElementPerRepeat`.
-* `tmp` tile's rows is the same as `src`.
-* Simply set `tmp` tile size the same as `src` when `src` is small.
-* `tmp` tile's stride can be calculated out based on `src`'s `validCol` using the following formula:
+- Temporary tile is only used by A3, A5 accepts `tmp` tile but leave it unused.
+- When output index only, `tmp` tile is not used when `srcValidCol <= ElementPerRepeat`.
+- When output both value and index and `srcValidCol <= ElementPerRepeat`, `tmp` may use either of these non-fractal layouts:
+    - DN layout with one column (`BLayout::ColMajor`, `Cols == 1`), rows is twice of `src`.
+    - ND layout whose valid column count is 2, rows is the same as `src`.
+- When `srcValidCol > ElementPerRepeat`:
+    - Rows of `tmp` tile is equal to `src`.
+    - `tmp` tile's stride can be calculated out based on `src`'s `validCol` using the following formula:
 
 ```text
 repeats = ceil(validCol / elementPerRepeat)
-stride = ceil(repeats * 2 / elementPerBlock) * elementPerBlock + ceil(repeats / elementPerBlock) * elementPerBlock
+stride = (ceil(repeats * 2 / elementPerBlock) + ceil(repeats / elementPerBlock)) * elementPerBlock
 ```
 
 ## Examples
@@ -90,11 +115,14 @@ using namespace pto;
 void example_auto() {
   using SrcT = Tile<TileType::Vec, float, 16, 16>;
   using DstT = Tile<TileType::Vec, uint32_t, 16, 1, BLayout::ColMajor>;
+  using DstValT = Tile<TileType::Vec, float, 16, 1, BLayout::ColMajor>;
   using TmpT = Tile<TileType::Vec, float, 16, 16>;
   SrcT src;
   DstT dst;
+  DstValT dst;
   TmpT tmp;
   TROWARGMAX(dst, src, tmp);
+  TROWARGMAX(dstVal, dst, src, tmp);
 }
 ```
 
@@ -108,14 +136,18 @@ using namespace pto;
 void example_manual() {
   using SrcT = Tile<TileType::Vec, float, 16, 16>;
   using DstT = Tile<TileType::Vec, uint32_t, 16, 1, BLayout::ColMajor>;
+  using DstValT = Tile<TileType::Vec, float, 16, 1, BLayout::ColMajor>;
   using TmpT = Tile<TileType::Vec, float, 16, 16>;
   SrcT src;
   DstT dst;
+  DstValT dst;
   TmpT tmp;
   TASSIGN(src, 0x1000);
   TASSIGN(dst, 0x2000);
-  TASSIGN(tmp, 0x3000);
+  TASSIGN(dstVal, 0x3000);
+  TASSIGN(tmp, 0x4000);
   TROWARGMAX(dst, src, tmp);
+  TROWARGMAX(dstVal, dst, src, tmp);
 }
 ```
 

@@ -30,6 +30,7 @@ def gen_golden_data_tdequant(case_name, param):
         src_valid = np.random.randint(-32768, 32768, size=(m, n), dtype=np.int16)
     else:
         raise ValueError(f"Unsupported src dtype: {src_dtype}")
+
     src = np.zeros(src_tile_shape, dtype=src_dtype)
     src[:m, :n] = src_valid
     
@@ -76,6 +77,7 @@ class TDequantParams:
         self.para_rows = para_rows
         self.para_cols = para_cols
 
+
 if __name__ == "__main__":
     # Get the absolute path of the script
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -90,8 +92,11 @@ if __name__ == "__main__":
         TDequantParams("TDEQUANTTest.case2", np.float32, np.int16, 32, 32, 32, 32, 32, 32, 32, 32),
         TDequantParams("TDEQUANTTest.case3", np.float32, np.int8, 64, 64, 32, 64, 31, 31, 48, 32),
         TDequantParams("TDEQUANTTest.case4", np.float32, np.int16, 32, 32, 16, 32, 15, 15, 24, 16),
-        TDequantParams("TDEQUANTTest.case5", np.float32, np.int8, 5, 512, 4, 512, 4, 511, 4, 32),
+        TDequantParams("TDEQUANTTest.case5", np.float32, np.int8, 64, 128, 32, 128, 31, 62, 48, 32),
         TDequantParams("TDEQUANTTest.case6", np.float32, np.int16, 4, 256, 4, 256, 4, 255, 4, 16),
+        TDequantParams("TDEQUANTTest.case7", np.float32, np.int8, 2, 128, 2, 128, 2, 128, 2, 128),
+        TDequantParams("TDEQUANTTest.case8", np.float32, np.int8, 2, 128, 2, 128, 2, 127, 2, 128),
+        TDequantParams("TDEQUANTTest.case9", np.float32, np.int8, 2, 512, 2, 512, 2, 511, 2, 512),
     ]
 
     for param in case_params_list:

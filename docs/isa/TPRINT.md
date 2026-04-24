@@ -14,7 +14,7 @@ The `TPRINT` instruction outputs the logical view of data stored in a Tile or Gl
 > **Important**:
 > - This instruction is **for development and debugging ONLY**.
 > - It incurs **significant runtime overhead** and **must not be used in production kernels**.
-> - Output may be **truncated** if it exceeds the internal print buffer.
+> - Output may be **truncated** if it exceeds the internal print buffer. The print buffer can be modified by adding `-DCCEBlockMaxSize=16384` in compile options; default is 16KB.
 > - **Requires CCE compilation option `-D_DEBUG --cce-enable-print`** (see [Behavior](#behavior)).
 
 ## Assembly Syntax
@@ -39,12 +39,28 @@ pto.tprint ins(%src : !pto.tile_buf<...> | !pto.partition_tensor_view<MxNxdtype>
 ## C++ Intrinsic
 Declared in `include/pto/common/pto_instr.hpp`:
 ```cpp
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TPRINT(TileData &src, WaitEvents &... events);
+// For printing GlobalTensor or Vec-type Tile
+template <PrintFormat Format = PrintFormat::Width8_Precision4, typename TileData>
+PTO_INST void TPRINT(TileData &src);
+
+// For printing Acc-type Tile and Mat-type Tile (Mat printing only supported for A3, not yet for A5)
+template <PrintFormat Format = PrintFormat::Width8_Precision4, typename TileData, typename GlobalData>
+PTO_INTERNAL void TPRINT(TileData &src, GlobalData &tmp);
+```
+
+### PrintFormat Enumeration
+Declared in `include/pto/common/type.hpp`:
+```cpp
+enum class PrintFormat : uint8_t
+{
+    Width8_Precision4 = 0,  // Print width 8, precision 4
+    Width8_Precision2 = 1,  // Print width 8, precision 2
+    Width10_Precision6 = 2, // Print width 10, precision 6
+};
 ```
 
 ### Supported Types for T
-- **Tile**: Must be a vector tile (`TileType::Vec`) with supported element type.
+- **Tile**: TileType must be `Vec`, `Acc`, `Mat (A3 only)`, and have a supported element type.
 - **GlobalTensor**: Must use layout `ND`, `DN`, or `NZ`, and have a supported element type.
 
 ## Constraints
@@ -53,8 +69,10 @@ PTO_INST RecordEvent TPRINT(TileData &src, WaitEvents &... events);
     - Floating-point: `float`, `half`
     - Signed integers: `int8_t`, `int16_t`, `int32_t`
     - Unsigned integers: `uint8_t`, `uint16_t`, `uint32_t`
-- **For Tiles**: `TileData::Loc == TileType::Vec` (only vector tiles are printable).
 - **For GlobalTensor**: Layout must be one of `Layout::ND`, `Layout::DN`, or `Layout::NZ`.
+- **For temporary space**: Printing a Tile with `TileType` of `Mat` or `Acc` requires temporary space on GM. The temporary space must not be less than `TileData::Numel * sizeof(T)`.
+- A5 does not yet support printing Tiles with `TileType` of `Mat`.
+- **Echo information**: When `TileType` is `Mat`, the layout will be printed according to `Layout::ND`; other layouts may result in misaligned information.
 
 ## Behavior
 - **Mandatory Compilation Flag**:
@@ -71,8 +89,13 @@ PTO_INST RecordEvent TPRINT(TileData &src, WaitEvents &... events);
 
 - **Formatting**:
 
-    - Floating-point values: printed as `%6.2f`
-    - Integer values: printed as `%6d`
+    - Floating-point values: printed format depends on `PrintFormat` template parameter:
+      - `PrintFormat::Width8_Precision4`: `%8.4f` (default)
+      - `PrintFormat::Width8_Precision2`: `%8.2f`
+      - `PrintFormat::Width10_Precision6`: `%10.6f`
+    - Integer values: printed format depends on `PrintFormat` template parameter:
+      - `PrintFormat::Width8_Precision4` or `PrintFormat::Width8_Precision2`: `%8d`
+      - `PrintFormat::Width10_Precision6`: `%10d`
     - For `GlobalTensor`, due to data size and buffer limitations, only elements within its logical shape (defined by `Shape`) are printed.
     - For `Tile`, invalid regions (beyond `validRows`/`validCols`) are still printed but marked with a `|` separator when partial validity is specified.
 

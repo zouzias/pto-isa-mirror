@@ -191,8 +191,6 @@ PTO_INTERNAL void TRowReduceCheck(int validRow, int validCol, int dstValidRow)
 
     static_assert(idx || std::is_same_v<typename TileDataOut::DType, typename TileDataIn::DType>,
                   "Fix: TROWREDUCE input data type must be consistent with the output data type.");
-    static_assert(!idx || std::is_same_v<TDst, uint32_t> || std::is_same_v<TDst, int32_t>,
-                  "Fix: TROWARGREDUCE output data type must be uint32_t or int32_t.");
 
     PTO_ASSERT(validCol != 0 && validRow != 0, "Fix: TROWREDUCE input shape is invalid, validCol or validRow is 0.");
     PTO_ASSERT(validRow == dstValidRow, "Fix: TROWREDUCE input validRow must be consistent with the output validRow.");
@@ -286,8 +284,8 @@ PTO_INTERNAL void TRowReduceInstr(__ubuf__ T *dst, __ubuf__ T *src, __ubuf__ T *
             return;
         }
         // 将满足一次repeat部分copy到dst
-        copy_ubuf_to_ubuf(tmp, src, 0, validRow, BLOCK_MAX_PER_REPEAT, srcRptStride - BLOCK_MAX_PER_REPEAT,
-                          tmpRptStride - BLOCK_MAX_PER_REPEAT);
+        pto_copy_ubuf_to_ubuf(tmp, src, validRow, BLOCK_MAX_PER_REPEAT, srcRptStride - BLOCK_MAX_PER_REPEAT,
+                              tmpRptStride - BLOCK_MAX_PER_REPEAT);
         pipe_barrier(PIPE_V);
     }
 

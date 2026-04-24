@@ -12,7 +12,5 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TTRANS_HPP_KIRIN9030
 #include "common.hpp"
 #include "utils.hpp"
-#define bfloat16_t half
 #include "pto/npu/a5/TTrans.hpp"
-#undef bfloat16_t
 #endif

@@ -87,9 +87,11 @@ PTO_INTERNAL void Handle32BAlignedPad_Other(decltype(getCopyNullPtr<TileDataDst>
     uint64_t fillRow = srcValidRow;
     auto _dstPtr = dstPtr + (srcValidCol32B - elements_per_block);
     if constexpr (TileDataSrc::Rows > REPEAT_MAX) {
-        vector_dup(_dstPtr, padValue, REPEAT_MAX, 1, 1, dstRepeatStride, 0);
-        _dstPtr += REPEAT_MAX * TileDataDst::Cols;
-        fillRow -= REPEAT_MAX;
+        if (fillRow > REPEAT_MAX) {
+            vector_dup(_dstPtr, padValue, REPEAT_MAX, 1, 1, dstRepeatStride, 0);
+            _dstPtr += REPEAT_MAX * TileDataDst::Cols;
+            fillRow -= REPEAT_MAX;
+        }
     }
     if (fillRow) {
         vector_dup(_dstPtr, padValue, fillRow, 1, 1, dstRepeatStride, 0);
@@ -323,23 +325,39 @@ __tf__ PTO_INTERNAL void TFillPad(typename TileData::TileDType __out__ dst, uint
     uint32_t alignedValidCol = CeilAlignment(dstValidCol, elementsPerBlock);
 
 #if defined(__DAV_CUBE__)
-    uint16_t blockLen = TileData::Rows - dstValidRow; // unit is 32B
-    uint16_t repeat = alignedValidCol / elementsPerBlock;
-    uint16_t repeatGap = dstValidRow;
+    if constexpr (TileData::Compact == CompactMode::RowAlignedPadding) {
+        constexpr const uint32_t fractalNzRow = 16;
+        uint16_t alignedValidRow = CeilAlignment(dstValidRow, fractalNzRow); // unit is 16
+        uint16_t blockLen = alignedValidRow - dstValidRow;                   // unit is 32B
 
-    int64_t repeatConfig =
-        (static_cast<uint64_t>(blockLen) << 16) |  // [30:16] is the block number of each repeat
-        (static_cast<uint64_t>(repeatGap) << 32) | // [46:32] is the repeat gap between two consecutive repeats
-        static_cast<uint64_t>(repeat);             // [14:0] is the repeat times
-    if (blockLen != 0) {
-        create_cbuf_matrix((__cbuf__ uint16_t *)(dstPtr + dstValidRow * elementsPerBlock), repeatConfig, 0);
-    }
-    if (alignedValidCol <
-        TileData::Cols) { // if alignedValidCol is not equal to TileData::Cols, need to pad the left column
-        blockLen = TileData::Rows * (TileData::Cols - alignedValidCol) / elementsPerBlock; // unit is 32B
-        repeatConfig = (static_cast<uint64_t>(blockLen) << 16) | // [30:16] is the block number of each repeat
-                       (static_cast<uint64_t>(0) << 32) | 1;     // [46:32] is the repeat gap
-        create_cbuf_matrix((__cbuf__ uint16_t *)(dstPtr + TileData::Rows * alignedValidCol), repeatConfig, 0);
+        if (blockLen != 0) {
+            uint16_t repeat = alignedValidCol / elementsPerBlock;
+            uint16_t repeatGap = TileData::Rows - blockLen;
+            int64_t repeatConfig =
+                (static_cast<uint64_t>(blockLen) << 16) |  // [30:16] is the block number of each repeat
+                (static_cast<uint64_t>(repeatGap) << 32) | // [46:32] is the repeat gap between two consecutive repeats
+                static_cast<uint64_t>(repeat);             // [14:0] is the repeat times
+            create_cbuf_matrix((__cbuf__ uint16_t *)(dstPtr + dstValidRow * elementsPerBlock), repeatConfig, 0);
+        }
+    } else {
+        uint16_t blockLen = TileData::Rows - dstValidRow; // unit is 32B
+        uint16_t repeat = alignedValidCol / elementsPerBlock;
+        uint16_t repeatGap = dstValidRow;
+
+        int64_t repeatConfig =
+            (static_cast<uint64_t>(blockLen) << 16) |  // [30:16] is the block number of each repeat
+            (static_cast<uint64_t>(repeatGap) << 32) | // [46:32] is the repeat gap between two consecutive repeats
+            static_cast<uint64_t>(repeat);             // [14:0] is the repeat times
+        if (blockLen != 0) {
+            create_cbuf_matrix((__cbuf__ uint16_t *)(dstPtr + dstValidRow * elementsPerBlock), repeatConfig, 0);
+        }
+        if (alignedValidCol <
+            TileData::Cols) { // if alignedValidCol is not equal to TileData::Cols, need to pad the left column
+            blockLen = TileData::Rows * (TileData::Cols - alignedValidCol) / elementsPerBlock; // unit is 32B
+            repeatConfig = (static_cast<uint64_t>(blockLen) << 16) | // [30:16] is the block number of each repeat
+                           (static_cast<uint64_t>(0) << 32) | 1;     // [46:32] is the repeat gap
+            create_cbuf_matrix((__cbuf__ uint16_t *)(dstPtr + TileData::Rows * alignedValidCol), repeatConfig, 0);
+        }
     }
 #endif
 }

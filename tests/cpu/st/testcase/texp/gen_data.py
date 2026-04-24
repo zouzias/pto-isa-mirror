@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+from utils import NumExt
 np.random.seed(19)
 
 def gen_golden_data_texp(case_name, param):
@@ -21,21 +22,21 @@ def gen_golden_data_texp(case_name, param):
     h_valid, w_valid = [param.valid_row, param.valid_col]
 
     # Generate random input array
-    input1 = np.random.random(size=[row, col]).astype(dtype)
+    input1 = NumExt.astype(np.random.random(size=[row, col]), dtype)
 
     # Perform the addbtraction
-    golden = np.exp(input1)
+    golden = NumExt.astype(np.exp(input1), dtype)
 
     # Apply valid region constraints
-    output = np.zeros([row, col]).astype(dtype)
+    output = np.zeros([row, col], dtype=np.float32) if dtype == NumExt.bf16 else np.zeros([row, col]).astype(dtype)
     for h in range(row):
         for w in range(col):
             if h >= h_valid or w >= w_valid:
                 golden[h][w] = output[h][w]
 
     # Save the input and golden data to binary files
-    input1.tofile("input1.bin")
-    golden.tofile("golden.bin")
+    NumExt.write_array("input1.bin", input1, dtype)
+    NumExt.write_array("golden.bin", golden, dtype)
 
     return output, input1, golden
 
@@ -52,13 +53,7 @@ class TExpParams:
 
 
 def generate_case_name(param):
-    dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int8: 'int8',
-        np.int32: 'int32',
-        np.int16: 'int16'
-    }[param.dtype]
+    dtype_str = NumExt.get_short_type_name(param.dtype)
     
     def substring(a, b) -> str:
         return f"_{a}x{b}"
@@ -87,6 +82,11 @@ if __name__ == "__main__":
         TExpParams(np.float32, 32, 32, 32, 32, 32, 32),
         TExpParams(np.float32, 32, 16, 32, 16, 32, 16)
     ]
+    if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
+        case_params_list.extend([
+            TExpParams(NumExt.bf16, 64, 64, 64, 64, 64, 64),
+            TExpParams(NumExt.bf16, 32, 32, 32, 32, 32, 32),
+        ])
 
     for i, param in enumerate(case_params_list):
         case_name = generate_case_name(param)

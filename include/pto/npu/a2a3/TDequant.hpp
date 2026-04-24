@@ -28,7 +28,6 @@ PTO_INTERNAL void ConvertToDstDtype(__ubuf__ DstDType *dst, __ubuf__ SrcDType *s
     } else if constexpr (std::is_same<DstDType, half>::value && std::is_same<SrcDType, int8_t>::value) {
         vconv_s82f16(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
         pipe_barrier(PIPE_V);
-
     } else if constexpr (std::is_same<DstDType, float>::value && std::is_same<SrcDType, half>::value) {
         vconv_f162f32(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
         pipe_barrier(PIPE_V);
@@ -36,83 +35,24 @@ PTO_INTERNAL void ConvertToDstDtype(__ubuf__ DstDType *dst, __ubuf__ SrcDType *s
 }
 
 template <typename DstDType, typename SrcDType, unsigned dstRowStride, unsigned srcRowStride>
-PTO_INTERNAL void ConvertCompleteRepeats(__ubuf__ DstDType *dstPtr, __ubuf__ SrcDType *srcPtr, unsigned dstValidRows,
-                                         unsigned numRepeatPerLine, unsigned elementsPerRepeat,
-                                         unsigned dstRepeatStride, unsigned srcRepeatStride)
-{
-    if (numRepeatPerLine > 0) {
-        unsigned numLoop = numRepeatPerLine / REPEAT_MAX;
-        unsigned remainAfterLoop = numRepeatPerLine % REPEAT_MAX;
-        for (uint32_t i = 0; i < dstValidRows; i++) {
-            if (numLoop > 0) {
-                for (uint32_t j = 0; j < numLoop; j++) {
-                    ConvertToDstDtype<DstDType, SrcDType>(
-                        dstPtr + i * dstRowStride + j * elementsPerRepeat * REPEAT_MAX,
-                        srcPtr + i * srcRowStride + j * elementsPerRepeat * REPEAT_MAX, (uint8_t)REPEAT_MAX, 1, 1,
-                        (uint16_t)dstRepeatStride, (uint16_t)srcRepeatStride);
-                }
-            }
-            if (remainAfterLoop > 0) {
-                ConvertToDstDtype<DstDType, SrcDType>(
-                    dstPtr + i * dstRowStride + numLoop * elementsPerRepeat * REPEAT_MAX,
-                    srcPtr + i * srcRowStride + numLoop * elementsPerRepeat * REPEAT_MAX, (uint8_t)remainAfterLoop, 1,
-                    1, (uint16_t)dstRepeatStride, (uint16_t)srcRepeatStride);
-            }
-        }
-    }
-}
-
-template <typename DstDType, typename SrcDType, unsigned dstRowStride, unsigned srcRowStride>
-PTO_INTERNAL void ConvertRemainRegion(__ubuf__ DstDType *dstPtr, __ubuf__ SrcDType *srcPtr, unsigned dstValidRows,
-                                      unsigned numRemainPerLine, unsigned dstNElemPerBlock, unsigned srcNElemPerBlock)
-{
-    if (numRemainPerLine > 0) {
-        unsigned numLoop = dstValidRows / REPEAT_MAX;
-        unsigned remainAfterLoop = dstValidRows % REPEAT_MAX;
-        SetContinuousMask(numRemainPerLine);
-        if (numLoop > 0) {
-            for (uint32_t j = 0; j < numLoop; j++) {
-                ConvertToDstDtype<DstDType, SrcDType>(
-                    dstPtr + j * dstRowStride * REPEAT_MAX, srcPtr + j * srcRowStride * REPEAT_MAX, (uint8_t)REPEAT_MAX,
-                    1, 1, (uint16_t)dstRowStride / dstNElemPerBlock, (uint16_t)srcRowStride / srcNElemPerBlock);
-            }
-        }
-        if (remainAfterLoop > 0) {
-            ConvertToDstDtype<DstDType, SrcDType>(
-                dstPtr + numLoop * dstRowStride * REPEAT_MAX, srcPtr + numLoop * srcRowStride * REPEAT_MAX,
-                (uint8_t)remainAfterLoop, 1, 1, (uint16_t)dstRowStride / dstNElemPerBlock,
-                (uint16_t)srcRowStride / srcNElemPerBlock);
-        }
-        set_vector_mask(-1, -1);
-    }
-}
-
-template <typename DstDType, typename SrcDType, unsigned dstRowStride, unsigned srcRowStride>
 PTO_INTERNAL void ConvertForDequant(__ubuf__ DstDType *dstPtr, __ubuf__ SrcDType *srcPtr, unsigned dstValidRows,
                                     unsigned dstValidCols)
 {
-    uint64_t repeatWidth = static_cast<uint64_t>(max(sizeof(DstDType), sizeof(SrcDType)));
-    unsigned dstRepeatStride = repeatWidth == sizeof(DstDType) ?
-                                   BLOCK_MAX_PER_REPEAT :
-                                   (BLOCK_MAX_PER_REPEAT / sizeof(SrcDType) * sizeof(DstDType));
-    unsigned srcRepeatStride = repeatWidth == sizeof(SrcDType) ?
-                                   BLOCK_MAX_PER_REPEAT :
-                                   (BLOCK_MAX_PER_REPEAT / sizeof(DstDType) * sizeof(SrcDType));
-
-    unsigned elementsPerRepeat = REPEAT_BYTE / repeatWidth;
-    unsigned numRepeatPerLine = dstValidCols / elementsPerRepeat; // Complete repeats
-    unsigned numRemainPerLine = dstValidCols % elementsPerRepeat; // Remainder elements
-    constexpr unsigned dstNElemPerBlock = BLOCK_BYTE_SIZE / sizeof(DstDType);
-    constexpr unsigned srcNElemPerBlock = BLOCK_BYTE_SIZE / sizeof(SrcDType);
-
-    ConvertCompleteRepeats<DstDType, SrcDType, dstRowStride, srcRowStride>(
-        dstPtr, srcPtr, dstValidRows, numRepeatPerLine, elementsPerRepeat, dstRepeatStride, srcRepeatStride);
-
-    dstPtr += numRepeatPerLine * elementsPerRepeat;
-    srcPtr += numRepeatPerLine * elementsPerRepeat;
-
-    ConvertRemainRegion<DstDType, SrcDType, dstRowStride, srcRowStride>(dstPtr, srcPtr, dstValidRows, numRemainPerLine,
-                                                                        dstNElemPerBlock, srcNElemPerBlock);
+    constexpr unsigned repeatWidth = sizeof(DstDType) > sizeof(SrcDType) ? sizeof(DstDType) : sizeof(SrcDType);
+    constexpr unsigned dstRepeatStride = repeatWidth == sizeof(DstDType) ?
+                                             BLOCK_MAX_PER_REPEAT :
+                                             (BLOCK_MAX_PER_REPEAT / sizeof(SrcDType) * sizeof(DstDType));
+    constexpr unsigned srcRepeatStride = repeatWidth == sizeof(SrcDType) ?
+                                             BLOCK_MAX_PER_REPEAT :
+                                             (BLOCK_MAX_PER_REPEAT / sizeof(DstDType) * sizeof(SrcDType));
+    set_mask_count();
+    set_vector_mask(0, dstValidCols);
+    for (uint32_t i = 0; i < dstValidRows; i++) {
+        ConvertToDstDtype<DstDType, SrcDType>(dstPtr + i * dstRowStride, srcPtr + i * srcRowStride, 0, 1, 1,
+                                              dstRepeatStride, srcRepeatStride);
+    }
+    set_mask_norm();
+    set_vector_mask(-1, -1);
 }
 
 template <typename T, unsigned dstRowStride, unsigned scaleRowStride>
@@ -154,7 +94,7 @@ __tf__ PTO_INTERNAL void TDequant(typename TileDataDst::TileDType __out__ dst,
         ConvertForDequant<float, int16_t, dstRowStride, srcRowStride>(dstPtr, srcPtr, dstValidRows, dstValidCols);
     } else if constexpr (std::is_same_v<typename TileDataDst::DType, float> &&
                          std::is_same_v<typename TileDataSrc::DType, int8_t>) {
-        __ubuf__ half *tempDstHalfPtr = (__ubuf__ half *)(dstPtr) + dstRowStride;
+        __ubuf__ half *tempDstHalfPtr = (__ubuf__ half *)(dstPtr);
         ConvertForDequant<half, int8_t, dstRowStride * 2, srcRowStride>(tempDstHalfPtr, srcPtr, dstValidRows,
                                                                         dstValidCols);
         ConvertForDequant<float, half, dstRowStride, dstRowStride * 2>(dstPtr, tempDstHalfPtr, dstValidRows,
@@ -173,8 +113,6 @@ template <typename TileDataDst, typename TileDataSrc, typename TileDataPara>
 PTO_INTERNAL void TDequantCheck(const TileDataDst &dst, const TileDataSrc &src, const TileDataPara &scale,
                                 const TileDataPara &offset)
 {
-    static_assert(TileDataDst::RowStride == TileDataSrc::RowStride,
-                  "Fix: TDEQUANT src and dst tile must have the same rowStride.");
     static_assert(std::is_same<typename TileDataDst::DType, float>::value ||
                       std::is_same<typename TileDataDst::DType, float32_t>::value,
                   "Fix: TDEQUANT dst tile currently supports float data type.");

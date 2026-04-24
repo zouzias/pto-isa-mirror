@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #define EVENT_ID_MAX 8
 
+#include <type_traits>
 #include <pto/common/type.hpp>
 
 namespace pto {
@@ -49,6 +50,8 @@ enum class Op : uint16_t
     TPARTMUL,
     TPARTMAX,
     TPARTMIN,
+    TPOW,
+    TPOWS,
     TCMPS,
     TMRGSORT,
     TSORT32,
@@ -142,6 +145,8 @@ constexpr pipe_t opPipeList[] = {
     PIPE_V /* TPARTMUL */,
     PIPE_V /* TPARTMAX */,
     PIPE_V /* TPARTMIN */,
+    PIPE_V /* TPOW */,
+    PIPE_V /* TPOWS */,
     PIPE_V /* TCMPS */,
     PIPE_V /* TMRGSORT */,
     PIPE_V /* TSORT32 */,

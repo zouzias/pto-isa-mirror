@@ -187,6 +187,8 @@ set(ALL_TESTCASES
     tgatherb
     tpartmin
     tpartmax
+    tpartargmin
+    tpartargmax
     tmov_vect
     texpands
     tmov_acc2mat
@@ -224,12 +226,18 @@ set(ALL_TESTCASES
     mgather
     mscatter
     t_dhrystone
-    tpack
+    tpow
+    tpows
     tconcatidx
     tconcat
     thistogram
     tinsert
+    tinsert_acc2vec
     textract_nd_vec
+    textract_vec
+    tmov_zz
+    tmov_nd2nz
+    textract_acc2vec
     tsoftmax_fa
 )
 
@@ -239,7 +247,7 @@ if(NOT AUTO_MODE)
   # until rewritten to adapt to auto mode. texpands_mat currently has to
   # directly call CCE intrinsics in the kernel, which won't compile in auto
   # mode; besides the auto-sync won't work with raw CCE intrinsics
-  list(APPEND ALL_TESTCASES tpushpop_cv tpushpop_cv_nosplit tpushpop_vc tpushpop_vc_nosplit texpands_mat)
+  list(APPEND ALL_TESTCASES tpushpop_cv tpushpop_cv_nosplit tpushpop_vc tpushpop_vc_nosplit tpushpop_dir_both texpands_mat)
 endif()
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))

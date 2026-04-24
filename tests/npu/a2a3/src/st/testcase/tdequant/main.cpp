@@ -126,10 +126,25 @@ TEST_F(TDEQUANTTest, case4)
 
 TEST_F(TDEQUANTTest, case5)
 {
-    test_tdequant<float, int8_t, 5, 512, 4, 512, 4, 511, 4, 32>();
+    test_tdequant<float, int8_t, 64, 128, 32, 128, 31, 62, 48, 32>();
 }
 
 TEST_F(TDEQUANTTest, case6)
 {
     test_tdequant<float, int16_t, 4, 256, 4, 256, 4, 255, 4, 16>();
+}
+
+TEST_F(TDEQUANTTest, case7)
+{
+    test_tdequant<float, int8_t, 2, 128, 2, 128, 2, 128, 2, 128>();
+}
+
+TEST_F(TDEQUANTTest, case8)
+{
+    test_tdequant<float, int8_t, 2, 128, 2, 128, 2, 127, 2, 128>();
+}
+
+TEST_F(TDEQUANTTest, case9)
+{
+    test_tdequant<float, int8_t, 2, 512, 2, 512, 2, 511, 2, 512>();
 }

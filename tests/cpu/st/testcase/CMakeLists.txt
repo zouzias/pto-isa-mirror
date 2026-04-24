@@ -23,7 +23,7 @@ function(pto_cpu_sim_st NAME)
     )
 
     target_link_libraries(${NAME} PRIVATE
-        GTest::gtest_main
+        ${PTO_CPU_SIM_GTEST_MAIN_TARGET}
         Threads::Threads
     )
     if (UNIX)
@@ -57,7 +57,9 @@ tcolexpandop
 tcolmax
 tcolmin
 tcolsum
+tconcat
 tcvt
+tdequant
 tdiv
 tdivs
 texp
@@ -65,14 +67,22 @@ texpands
 textract
 tfillpad
 tflashattn
+tfmod
+tfmods
 tgather
 tgatherb
 tget
+tget_async
+tget_scale_addr
+thistogram
+timg2col
+tinsert
 tload
 tloadconv
 tlog
 tlrelu
 tmatmul
+tmatmul_layout
 tmax
 tmaxs
 tmin
@@ -93,11 +103,15 @@ tprefetch
 tprelu
 tpushpop
 tput
+tput_async
+tquant
+trandom
 trecip
 treduce
 trelu
 trem
 trems
+treshape
 trowexpand
 trowexpandop
 trowmax
@@ -108,7 +122,9 @@ tscatter
 tsel
 tsels
 tshl
+tshls
 tshr
+tshrs
 tsort32
 tsqrt
 tstore
@@ -116,6 +132,7 @@ tsub
 tsubc
 tsubs
 tsubsc
+tsubview
 ttest
 ttrans
 ttri

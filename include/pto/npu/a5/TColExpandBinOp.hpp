@@ -67,16 +67,17 @@ PTO_INTERNAL void TColExpandBinOps_PostUpdate(__ubuf__ typename TileData::DType 
         constexpr auto distValue =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
         for (uint16_t i = 0; i < (uint16_t)(kValidRows); ++i) {
+            uint32_t cols = (uint32_t)(kValidRows);
             src0Offset = src0Ptr + i * rowStride;
             dstOffset = dstPtr + i * rowStride;
             for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
-                uint32_t count = ((j + 1) * elementsPerRepeat >= kValidCols ? kValidCols - j * elementsPerRepeat :
-                                                                              elementsPerRepeat);
+                uint32_t count = (cols > elementsPerRepeat) ? elementsPerRepeat : cols;
                 preg = CreatePredicate<T>(count);
                 vlds(vreg1_PU, src1Ptr, j * elementsPerRepeat, NORM);
                 vlds(vreg0_PU, src0Offset, elementsPerRepeat, NORM, POST_UPDATE);
                 Op::ColExpandBinaryInstr(vreg2_PU, vreg0_PU, vreg1_PU, preg);
                 vsts(vreg2_PU, dstOffset, elementsPerRepeat, distValue, preg, POST_UPDATE);
+                cols -= elementsPerRepeat;
             }
         }
     }
@@ -116,7 +117,11 @@ template <typename Op, typename Op2, typename TileData, typename TileDataSrc0, t
 PTO_INTERNAL void TCOLEXPANDOP_IMPL(TileData &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
 {
     static_assert(
-        std::is_same<typename TileData::DType, float>::value || std::is_same<typename TileData::DType, half>::value,
+        std::is_same_v<typename TileData::DType, int32_t> || std::is_same_v<typename TileData::DType, uint32_t> ||
+            std::is_same_v<typename TileData::DType, float> || std::is_same_v<typename TileData::DType, int16_t> ||
+            std::is_same_v<typename TileData::DType, uint16_t> || std::is_same_v<typename TileData::DType, half> ||
+            std::is_same_v<typename TileData::DType, bfloat16_t> || std::is_same_v<typename TileData::DType, uint8_t> ||
+            std::is_same_v<typename TileData::DType, int8_t>,
         "Fix: TCOLEXPANDOP Invalid data type.");
     static_assert(TileData::isRowMajor, "Fix: TCOLEXPANDOP not supported Layout type");
     constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);

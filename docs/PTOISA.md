@@ -51,6 +51,7 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Elementwise (Tile-Tile) | [`TNEG`](isa/TNEG.md) | Elementwise negation of a tile. |
 | Elementwise (Tile-Tile) | [`TREM`](isa/TREM.md) | Elementwise remainder of two tiles. |
 | Elementwise (Tile-Tile) | [`TFMOD`](isa/TFMOD.md) | Elementwise fmod of two tiles. |
+| Elementwise (Tile-Tile) | [`TPOW`](isa/TPOW.md) | Elementwise power of two tiles. |
 | Tile-Scalar / Tile-Immediate | [`TEXPANDS`](isa/TEXPANDS.md) | Broadcast a scalar into a destination tile. |
 | Tile-Scalar / Tile-Immediate | [`TCMPS`](isa/TCMPS.md) | Compare a tile against a scalar and write per-element comparison results. |
 | Tile-Scalar / Tile-Immediate | [`TSELS`](isa/TSELS.md) | Select between source tile and scalar using a mask tile (per-element selection for source tile). |
@@ -70,6 +71,7 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Tile-Scalar / Tile-Immediate | [`TLRELU`](isa/TLRELU.md) | Leaky ReLU with a scalar slope. |
 | Tile-Scalar / Tile-Immediate | [`TADDSC`](isa/TADDSC.md) | Elementwise fused add with scalar and a second tile: `src0 + scalar + src1`. |
 | Tile-Scalar / Tile-Immediate | [`TSUBSC`](isa/TSUBSC.md) | Elementwise fused op: `src0 - scalar + src1`. |
+| Tile-Scalar / Tile-Immediate | [`TPOWS`](isa/TPOWS.md) | Elementwise power of a tile by a scalar. |
 | Axis Reduce / Expand | [`TROWSUM`](isa/TROWSUM.md) | Reduce each row by summing across columns. |
 | Axis Reduce / Expand | [`TROWPROD`](isa/TROWPROD.md) | Reduce each row by multiplying across columns. |
 | Axis Reduce / Expand | [`TCOLSUM`](isa/TCOLSUM.md) | Reduce each column by summing across rows. |
@@ -132,10 +134,13 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Complex | [`TGATHER`](isa/TGATHER.md) | Gather/select elements using either an index tile or a compile-time mask pattern. |
 | Complex | [`TCI`](isa/TCI.md) | Generate a contiguous integer sequence into a destination tile. |
 | Complex | [`TTRI`](isa/TTRI.md) | Generate a triangular (lower/upper) mask tile. |
+| Complex | [`TRANDOM`](isa/TRANDOM.md) | Generates random numbers in the destination tile using a counter-based cipher algorithm. |
 | Complex | [`TPARTADD`](isa/TPARTADD.md) | Partial elementwise add with implementation-defined handling of mismatched valid regions. |
 | Complex | [`TPARTMUL`](isa/TPARTMUL.md) | Partial elementwise multiply with implementation-defined handling of mismatched valid regions. |
 | Complex | [`TPARTMAX`](isa/TPARTMAX.md) | Partial elementwise max with implementation-defined handling of mismatched valid regions. |
 | Complex | [`TPARTMIN`](isa/TPARTMIN.md) | Partial elementwise min with implementation-defined handling of mismatched valid regions. |
+| Complex | [`TPARTARGMAX`](isa/TPARTARGMAX.md) | Partial elementwise max selection returning corresponding index (argmax), with implementation-defined handling of mismatched valid regions. |
+| Complex | [`TPARTARGMIN`](isa/TPARTARGMIN.md) | Partial elementwise min selection returning corresponding index (argmin), with implementation-defined handling of mismatched valid regions. |
 | Complex | [`TGATHERB`](isa/TGATHERB.md) | Gather elements using byte offsets. |
 | Complex | [`TSCATTER`](isa/TSCATTER.md) | Scatter rows of a source tile into a destination tile using per-element row indices. |
 | Complex | [`TQUANT`](isa/TQUANT.md) | Quantize a tile (e.g. FP32 to FP8) producing exponent/scaling/max outputs. |

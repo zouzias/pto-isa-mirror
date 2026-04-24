@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a5/utils.hpp>
 #include <pto/npu/a5/TBinOp.hpp>
 #include <pto/common/debug.h>
+#include "custom/TFmodRemHp.hpp"
 
 namespace pto {
 
@@ -26,13 +27,21 @@ struct RemOp {
                                       MaskReg &preg)
     {
         if constexpr (std::is_same<T, float>::value) {
+            MaskReg sign_diff_mask;
+            RegTensor<T> reg_tmp;
             vdiv(reg_dst, reg_src0, reg_src1, preg, MODE_ZEROING);
             vtrc(reg_dst, reg_dst, ROUND_F, preg);
             vmul(reg_dst, reg_dst, reg_src1, preg, MODE_ZEROING);
             vsub(reg_dst, reg_src0, reg_dst, preg, MODE_ZEROING);
+
+            vmul(reg_tmp, reg_src1, reg_dst, preg, MODE_ZEROING);
+            vcmps_lt(sign_diff_mask, reg_tmp, 0.0f, preg);
+            vadd(reg_tmp, reg_dst, reg_src1, sign_diff_mask, MODE_ZEROING);
+            vsel(reg_dst, reg_tmp, reg_dst, sign_diff_mask);
         } else if constexpr (std::is_same<T, half>::value) {
             RegTensor<float> reg_tmp_even0, reg_tmp_even1, reg_tmp_even2, reg_tmp_odd0, reg_tmp_odd1, reg_tmp_odd2;
-            RegTensor<T> reg_dst_even, reg_dst_odd;
+            RegTensor<T> reg_dst_even, reg_dst_odd, reg_tmp;
+            MaskReg sign_diff_mask;
             vcvt(reg_tmp_even0, reg_src0, preg, PART_EVEN);
             vcvt(reg_tmp_even1, reg_src1, preg, PART_EVEN);
             vcvt(reg_tmp_odd0, reg_src0, preg, PART_ODD);
@@ -54,6 +63,11 @@ struct RemOp {
             vcvt(reg_dst_odd, reg_tmp_odd2, preg, ROUND_Z, RS_ENABLE, PART_ODD);
 
             vor(reg_dst, reg_dst_even, reg_dst_odd, preg);
+
+            vmul(reg_tmp, reg_src1, reg_dst, preg, MODE_ZEROING);
+            vcmps_lt(sign_diff_mask, reg_tmp, 0.0f, preg);
+            vadd(reg_tmp, reg_dst, reg_src1, sign_diff_mask, MODE_ZEROING);
+            vsel(reg_dst, reg_tmp, reg_dst, sign_diff_mask);
         } else {
             vmod(reg_dst, reg_src0, reg_src1, preg, MODE_ZEROING);
         }
@@ -61,7 +75,7 @@ struct RemOp {
 };
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
-          unsigned ElementsPerRepeat, unsigned BlockSizeElem>
+          unsigned ElementsPerRepeat, unsigned BlockSizeElem, auto PrecisionType = RemAlgorithm::DEFAULT>
 __tf__ PTO_INTERNAL OP_NAME(TREM)
     OP_TYPE(element_wise) void TRem(typename TileDataDst::TileDType __out__ dst,
                                     typename TileDataSrc0::TileDType __in__ src0,
@@ -73,9 +87,23 @@ __tf__ PTO_INTERNAL OP_NAME(TREM)
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
-    // Note: tmp parameter is not used in a5 implementation (no sign correction needed)
-    BinaryInstr<RemOp<T>, TileDataDst, TileDataSrc0, TileDataSrc1, ElementsPerRepeat, BlockSizeElem>(
-        dstPtr, src0Ptr, src1Ptr, validRows, validCols, version);
+    if constexpr (PrecisionType == RemAlgorithm::HIGH_PRECISION && std::is_same_v<T, float>) {
+        constexpr uint32_t REM_INTERATION_NUM_MAX = 11;
+        constexpr unsigned dstRowStride = TileDataDst::RowStride;
+        constexpr unsigned src0RowStride = TileDataSrc0::RowStride;
+        constexpr unsigned src1RowStride = TileDataSrc1::RowStride;
+        uint32_t mainRepeatTimes = validCols / ElementsPerRepeat;
+        uint32_t tailCount = validCols - mainRepeatTimes * ElementsPerRepeat;
+        for (uint16_t i = 0; i < validRows; i++) {
+            ComputeIterationF32<REM_INTERATION_NUM_MAX>(dstPtr + i * dstRowStride, src0Ptr + i * src0RowStride,
+                                                        src1Ptr + i * src1RowStride, mainRepeatTimes, ElementsPerRepeat,
+                                                        tailCount, false);
+        }
+    } else {
+        // Note: tmp parameter is not used in a5 implementation (no sign correction needed)
+        BinaryInstr<RemOp<T>, TileDataDst, TileDataSrc0, TileDataSrc1, ElementsPerRepeat, BlockSizeElem>(
+            dstPtr, src0Ptr, src1Ptr, validRows, validCols, version);
+    }
     return;
 }
 
@@ -101,7 +129,8 @@ PTO_INTERNAL void TRemCheck(const TileDataDst &dst, const TileDataSrc0 &src0, co
                "Fix: TREM input tile src1 valid shape mismatch with output tile dst shape.");
 }
 
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp>
+template <auto PrecisionType = RemAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0,
+          typename TileDataSrc1, typename TileDataTmp>
 PTO_INTERNAL void TREM_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp)
 {
     using T = typename TileDataDst::DType;
@@ -109,7 +138,7 @@ PTO_INTERNAL void TREM_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &
     constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
 
-    TRem<TileDataDst, TileDataSrc0, TileDataSrc1, TileDataTmp, elementsPerRepeat, blockSizeElem>(
+    TRem<TileDataDst, TileDataSrc0, TileDataSrc1, TileDataTmp, elementsPerRepeat, blockSizeElem, PrecisionType>(
         dst.data(), src0.data(), src1.data(), tmp.data(), dst.GetValidRow(), dst.GetValidCol());
 }
 } // namespace pto

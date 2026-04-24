@@ -58,6 +58,13 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dst, GlobalSrcData &src, TileData &pi
     Copy_Data(dst, src);
 }
 
+template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData>
+PTO_INTERNAL AsyncEvent TGET_ASYNC_IMPL(GlobalDstData &dst, GlobalSrcData &src, const AsyncSession &session)
+{
+    Copy_Data(dst, src);
+    return AsyncEvent(0, engine);
+}
+
 } // namespace comm
 } // namespace pto
 #endif

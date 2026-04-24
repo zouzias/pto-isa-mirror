@@ -8,72 +8,47 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
 #include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
 
-using namespace std;
-using namespace PtoTestCommon;
+#include "cost_check.hpp"
 
-class TROWMAXTest : public testing::Test {
-protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
-};
+using namespace pto;
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void LaunchTRowMax(T *out, T *src, void *stream);
+namespace {
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void test_trowmax()
+template <typename T, int rows, int cols, float profiling, float accuracy>
+void runTRowMax()
 {
-    size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
+    using TileData = Tile<TileType::Vec, T, rows, cols, BLayout::RowMajor, -1, -1>;
+    TileData srcTile(rows, cols);
+    TileData tmpTile(rows, cols);
+    TileData dstTile(rows, cols);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(tmpTile, 0x4000);
+    TASSIGN(dstTile, 0x8000);
 
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
+    TROWMAX(dstTile, srcTile, tmpTile);
 
-    T *dstHost, *srcHost;
-    T *dstDevice, *srcDevice;
-
-    aclrtMallocHost((void **)(&dstHost), fileSize);
-    aclrtMallocHost((void **)(&srcHost), fileSize);
-
-    aclrtMalloc((void **)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    aclrtMemcpy(srcDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTRowMax<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(dstDevice, srcDevice, stream);
-
-    aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    aclrtFree(dstDevice);
-    aclrtFree(srcDevice);
-
-    aclrtFreeHost(dstHost);
-    aclrtFreeHost(srcHost);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-TEST_F(TROWMAXTest, case_float_64x64)
+} // namespace
+
+TEST(TRowMax, float_64x64)
 {
-    test_trowmax<float, 64, 64, 64, 64, 13.0f, 1.0f>();
+    runTRowMax<float, 64, 64, 480.0f, 0.022916f>();
 }
-TEST_F(TROWMAXTest, case_float_16x256)
+TEST(TRowMax, float_16x256)
 {
-    test_trowmax<float, 16, 256, 16, 256, 68.0f, 1.0f>();
+    runTRowMax<float, 16, 256, 32.0f, 0.0f>();
 }
-TEST_F(TROWMAXTest, case_half_64x128)
+TEST(TRowMax, half_64x128)
 {
-    test_trowmax<aclFloat16, 64, 128, 64, 128, 13.0f, 1.0f>();
+    runTRowMax<half, 64, 128, 481.0f, 0.022869f>();
 }
-TEST_F(TROWMAXTest, case_half_16x256)
+TEST(TRowMax, half_16x256)
 {
-    test_trowmax<aclFloat16, 16, 256, 16, 256, 32.0f, 1.0f>();
+    runTRowMax<half, 16, 256, 14.0f, 0.0f>();
 }

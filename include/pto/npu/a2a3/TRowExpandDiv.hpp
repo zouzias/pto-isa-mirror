@@ -42,22 +42,28 @@ struct RowExpandDivOp2 {
     }
 };
 
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
+template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0,
+          typename TileDataSrc1>
 PTO_INTERNAL void TROWEXPANDDIV_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
 {
     using T = typename TileDataDst::DType;
     static_assert(std::is_same_v<T, typename TileDataSrc0::DType> && std::is_same_v<T, typename TileDataSrc1::DType>,
                   "Fix: TROWEXPANDIV src and dst data type is different!");
-    static_assert(std::is_same_v<T, half> || std::is_same_v<T, float>, "Fix: TROWEXPANDIV Invalid data type.");
+    static_assert(std::is_same_v<T, half> || std::is_same_v<T, float16_t> || std::is_same_v<T, float> ||
+                      std::is_same_v<T, float32_t>,
+                  "Fix: TROWEXPANDIV Invalid data type.");
     static_assert(TileDataDst::isRowMajor, "Fix: TROWEXPANDIV Invalid tile shape.");
+    unsigned src0ValidRow = src0.GetValidRow();
     unsigned validRow = dst.GetValidRow();
     unsigned validCol = dst.GetValidCol();
-    unsigned src0ValidRow = src0.GetValidRow();
     unsigned src0ValidCol = src0.GetValidCol();
     unsigned src1ValidRow = src1.GetValidRow();
     unsigned src1ValidCol = src1.GetValidCol();
     bool src0eqdst = (validRow == src0ValidRow) && (validCol == src0ValidCol);
     bool src1eqdst = (validRow == src1ValidRow) && (validCol == src1ValidCol);
+    if (src0eqdst && src1eqdst) {
+        src0eqdst = (TileDataSrc0::RowStride >= TileDataSrc1::RowStride);
+    }
     PTO_ASSERT((src0eqdst && TileDataSrc0::isRowMajor) || (src1eqdst && TileDataSrc1::isRowMajor),
                "TROWEXPANDIV: the validShape of src0 or src1 should be equal to those of dst.");
     if (src0eqdst) {
@@ -77,13 +83,16 @@ PTO_INTERNAL void TROWEXPANDDIV_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileD
     }
 }
 
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp>
+template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0,
+          typename TileDataSrc1, typename TileDataTmp>
 PTO_INTERNAL void TROWEXPANDDIV_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp)
 {
     using T = typename TileDataDst::DType;
     static_assert(std::is_same_v<T, typename TileDataSrc0::DType> && std::is_same_v<T, typename TileDataSrc1::DType>,
                   "Fix: TROWEXPANDDIV src and dst data type is different!");
-    static_assert(std::is_same_v<T, half> || std::is_same_v<T, float>, "Fix: TROWEXPANDDIV Invalid data type.");
+    static_assert(std::is_same_v<T, half> || std::is_same_v<T, float16_t> || std::is_same_v<T, float> ||
+                      std::is_same_v<T, float32_t>,
+                  "Fix: TROWEXPANDDIV Invalid data type.");
     static_assert(TileDataDst::isRowMajor, "Fix: TROWEXPANDDIV Invalid tile shape.");
     unsigned validRow = dst.GetValidRow();
     unsigned validCol = dst.GetValidCol();

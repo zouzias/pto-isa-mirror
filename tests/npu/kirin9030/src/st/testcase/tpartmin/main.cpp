@@ -126,37 +126,37 @@ TEST_F(TPARTMINTest, case_fp32_95x95_95x95_95x95)
 {
     test_tpartmin<float, 95, 95, 95, 95, 95, 95>();
 }
-TEST_F(TPARTMINTest, case_fp32_122x123_104x123_122x110)
+TEST_F(TPARTMINTest, case_fp32_61x123_52x123_61x110)
 {
-    test_tpartmin<float, 122, 123, 104, 123, 122, 110>();
+    test_tpartmin<float, 61, 123, 52, 123, 61, 110>();
 }
-TEST_F(TPARTMINTest, case_s16_122x123_104x123_122x110)
+TEST_F(TPARTMINTest, case_s16_61x123_52x123_61x110)
 {
-    test_tpartmin<int16_t, 122, 123, 104, 123, 122, 110>();
+    test_tpartmin<int16_t, 61, 123, 52, 123, 61, 110>();
 }
-TEST_F(TPARTMINTest, case_s32_122x123_104x123_122x110)
+TEST_F(TPARTMINTest, case_s32_61x123_52x123_61x110)
 {
-    test_tpartmin<int32_t, 122, 123, 104, 123, 122, 110>();
+    test_tpartmin<int32_t, 61, 123, 52, 123, 61, 110>();
 }
-TEST_F(TPARTMINTest, case_u16_122x123_104x123_122x110)
+TEST_F(TPARTMINTest, case_u16_61x123_52x123_61x110)
 {
-    test_tpartmin<uint16_t, 122, 123, 104, 123, 122, 110>();
+    test_tpartmin<uint16_t, 61, 123, 52, 123, 61, 110>();
 }
-TEST_F(TPARTMINTest, case_u32_122x123_104x123_122x110)
+TEST_F(TPARTMINTest, case_u32_61x123_52x123_61x110)
 {
-    test_tpartmin<uint32_t, 122, 123, 104, 123, 122, 110>();
+    test_tpartmin<uint32_t, 61, 123, 52, 123, 61, 110>();
 }
-TEST_F(TPARTMINTest, case_u8_122x123_104x123_122x110)
+TEST_F(TPARTMINTest, case_u8_61x123_52x123_61x110)
 {
-    test_tpartmin<uint8_t, 122, 123, 104, 123, 122, 110>();
+    test_tpartmin<uint8_t, 61, 123, 52, 123, 61, 110>();
 }
-TEST_F(TPARTMINTest, case_s8_122x123_104x123_122x110)
+TEST_F(TPARTMINTest, case_s8_61x123_52x123_61x110)
 {
-    test_tpartmin<int8_t, 122, 123, 104, 123, 122, 110>();
+    test_tpartmin<int8_t, 61, 123, 52, 123, 61, 110>();
 }
-TEST_F(TPARTMINTest, case_fp16_122x123_104x123_122x110)
+TEST_F(TPARTMINTest, case_fp16_61x123_52x123_61x110)
 {
-    test_tpartmin<aclFloat16, 122, 123, 104, 123, 122, 110, true>();
+    test_tpartmin<aclFloat16, 61, 123, 52, 123, 61, 110, true>();
 }
 TEST_F(TPARTMINTest, case_fp16_5x33_5x33_5x33)
 {

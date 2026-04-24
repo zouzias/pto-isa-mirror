@@ -9,7 +9,5 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 #ifndef TMULS_HPP_KIRIN9030
 #define TMULS_HPP_KIRIN9030
-#define bfloat16_t half
 #include "pto/npu/a5/TMulS.hpp"
-#undef bfloat16_t
 #endif

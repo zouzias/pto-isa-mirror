@@ -85,18 +85,6 @@ __tf__ AICORE void TMovToFb(typename DstTileData::TileDType __out__ dst, typenam
     copy_cbuf_to_fbuf(dstAddrP, srcAddrP, burstNum, burstLen, srcGap, dstGap);
 }
 
-template <typename DstTileData, typename SrcTileData, AccToVecMode mode, QuantMode_t quantPre>
-PTO_INTERNAL constexpr uint8_t GetDualDstCtl()
-{
-    if constexpr (mode == AccToVecMode::DualModeSplitM || mode == AccToVecMode::DualModeSplitN) {
-        static_assert(quantPre == QuantMode_t::NoQuant, "Quant is not support in dual Dst Mode.");
-        static_assert((!(!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::NoneBox)),
-                      "Dual Dst Mode is not support in nz2dn.");
-        return ((mode == AccToVecMode::DualModeSplitM) ? 1 : 2);
-    }
-    return 0;
-}
-
 PTO_INTERNAL void SetLoop3Para()
 {
     constexpr uint16_t ndNum = 1;
@@ -245,6 +233,170 @@ PTO_INTERNAL constexpr void CommonCheckMX()
                   "TMov: Destination and Source tile data types must be the same.");
 }
 
+template <typename DstTileData, typename SrcTileData, typename TmpTileData>
+PTO_INTERNAL constexpr void CommonCheckZZ()
+{
+    using T = typename DstTileData::DType;
+    static_assert(std::is_same_v<T, uint8_t> || std::is_same_v<T, hifloat8_t> || std::is_same_v<T, float8_e8m0_t>,
+                  "TMov ND->ZZ: Data type must be uint8_t, hifloat8_t, or float8_e8m0_t.");
+    static_assert(std::is_same_v<T, typename SrcTileData::DType> && std::is_same_v<T, typename TmpTileData::DType>,
+                  "TMov ND->ZZ: Destination, source, and temporary tile data types must all be the same.");
+}
+
+// Zero source padding beyond validRows (up to paddedRows aligned to 16) so that
+// vgather2 reads zeros instead of stale UB residue on real NPU hardware.
+PTO_INTERNAL void ZeroSourcePaddingB16(__ubuf__ uint16_t *srcPtr_b16, uint16_t validB16, uint16_t totalB16)
+{
+    constexpr uint16_t vlElem = REPEAT_BYTE / sizeof(uint16_t); // 128
+    if (validB16 >= totalB16) {
+        return;
+    }
+    vector_u16 vb16_zero;
+    vbr(vb16_zero, 0);
+    const uint16_t skipVLs = validB16 / vlElem;
+    __ubuf__ uint16_t *zBase = srcPtr_b16 + skipVLs * vlElem;
+    const uint16_t localValid = validB16 - skipVLs * vlElem;
+    const uint16_t localTotal = totalB16 - skipVLs * vlElem;
+    if (localTotal <= vlElem) {
+        uint32_t totalCount = (uint32_t)localTotal;
+        uint32_t validCount = (uint32_t)localValid;
+        MaskReg preg_total = CreatePredicate<uint16_t>(totalCount);
+        MaskReg preg_valid = CreatePredicate<uint16_t>(validCount);
+        MaskReg preg_pad;
+        pnot(preg_pad, preg_valid, preg_total);
+        vsts(vb16_zero, zBase, 0, NORM_B16, preg_pad);
+    } else {
+        uint32_t firstTotal = (uint32_t)vlElem;
+        uint32_t firstValid = (uint32_t)localValid;
+        MaskReg preg_first_total = CreatePredicate<uint16_t>(firstTotal);
+        MaskReg preg_first_valid = CreatePredicate<uint16_t>(firstValid);
+        MaskReg preg_first_pad;
+        pnot(preg_first_pad, preg_first_valid, preg_first_total);
+        vsts(vb16_zero, zBase, vlElem, NORM_B16, preg_first_pad, POST_UPDATE);
+        uint16_t remaining = localTotal - vlElem;
+        const uint16_t fullItersZ = remaining / vlElem;
+        const uint16_t tailB16 = remaining % vlElem;
+        MaskReg preg_all = pset_b16(PAT_ALL);
+        for (uint16_t i = 0; i < fullItersZ; ++i) {
+            vsts(vb16_zero, zBase, vlElem, NORM_B16, preg_all, POST_UPDATE);
+        }
+        if (tailB16 > 0) {
+            uint32_t tailCount = (uint32_t)tailB16;
+            MaskReg preg_tail = CreatePredicate<uint16_t>(tailCount);
+            vsts(vb16_zero, zBase, 0, NORM_B16, preg_tail);
+        }
+    }
+    mem_bar(VST_VLD);
+}
+
+template <typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void GenerateB8IndicesZZToUB(__ubuf__ uint8_t *dst, __ubuf__ uint8_t *src, __ubuf__ uint8_t *tmp,
+                                          unsigned rows, unsigned groupedCols)
+{
+    const uint16_t P = groupedCols / 2;
+    const uint16_t rowBlockCount = (rows + 15) / 16; // ceil-divide to support non-16-aligned row counts
+    const uint16_t N_blk = rowBlockCount * P;
+    const uint16_t vlElem = REPEAT_BYTE / sizeof(uint16_t);     // 128
+    constexpr uint16_t blkElem = BLOCK_SIZE / sizeof(uint16_t); // 16
+    constexpr uint16_t blksPerVL = REPEAT_BYTE / BLOCK_SIZE;    // 8
+    __ubuf__ uint16_t *srcPtr_b16 = (__ubuf__ uint16_t *)src;
+    __ubuf__ uint16_t *dstPtr_b16 = (__ubuf__ uint16_t *)dst;
+    __ubuf__ uint16_t *basePtr = (__ubuf__ uint16_t *)tmp;
+    __ubuf__ uint16_t *offsetBuf = basePtr + blkElem;
+
+    vector_u16 vb16_base;
+    MaskReg preg_blk = pset_b16(PAT_VL16);
+    vci((vector_s16 &)vb16_base, 0, INC_ORDER);
+    vmuls(vb16_base, vb16_base, P, preg_blk, MODE_ZEROING);
+    vsts(vb16_base, basePtr, 0, NORM_B16, preg_blk);
+
+    __ubuf__ uint16_t *offWr = offsetBuf;
+    vector_u16 vb16_off;
+    vector_align ureg_align;
+    for (uint16_t rb = 0; rb < rowBlockCount; ++rb) {
+        vci((vector_s16 &)vb16_off, (int16_t)(rb * 16 * P), INC_ORDER);
+        vstus(ureg_align, (uint32_t)P, vb16_off, offWr, POST_UPDATE);
+    }
+    vstus(ureg_align, (uint32_t)blkElem, vb16_off, offWr, POST_UPDATE);
+    vstas(ureg_align, offWr, 0, POST_UPDATE);
+    mem_bar(VST_VLD);
+
+    // Zero source padding (rows beyond validRows up to paddedRows16) so vgather2
+    // reads zeros rather than stale UB residue on real NPU hardware.
+    ZeroSourcePaddingB16(srcPtr_b16, rows * P, rowBlockCount * 16 * P);
+
+    __ubuf__ uint16_t *offRd = offsetBuf;
+    const uint16_t fullIters = N_blk / blksPerVL;
+    const uint16_t tailBlks = N_blk % blksPerVL;
+    vector_u16 vb16_base_blk, vb16_blk_off, vb16_idx, vb16_gathered;
+    vlds(vb16_base_blk, basePtr, 0, BLK);
+    MaskReg preg_full = pset_b16(PAT_ALL);
+    for (uint16_t i = 0; i < fullIters; ++i) {
+        vlds(vb16_blk_off, offRd, blksPerVL, E2B_B16, POST_UPDATE);
+        vadd(vb16_idx, vb16_blk_off, vb16_base_blk, preg_full, MODE_ZEROING);
+        vgather2(vb16_gathered, srcPtr_b16, vb16_idx, preg_full);
+        vsts(vb16_gathered, dstPtr_b16, vlElem, NORM_B16, preg_full, POST_UPDATE);
+    }
+    if (tailBlks > 0) {
+        uint32_t tailCount = (uint32_t)tailBlks * blkElem;
+        MaskReg preg_tail = CreatePredicate<uint16_t>(tailCount);
+        vlds(vb16_blk_off, offRd, blksPerVL, E2B_B16, POST_UPDATE);
+        vadd(vb16_idx, vb16_blk_off, vb16_base_blk, preg_tail, MODE_ZEROING);
+        vgather2(vb16_gathered, srcPtr_b16, vb16_idx, preg_tail);
+        vsts(vb16_gathered, dstPtr_b16, vlElem, NORM_B16, preg_tail, POST_UPDATE);
+    }
+}
+
+template <typename DstTileData, typename SrcTileData, typename TmpTileData>
+__tf__ PTO_INTERNAL void TMovNdTo2Zz(typename DstTileData::TileDType __out__ dst,
+                                     typename SrcTileData::TileDType __in__ src,
+                                     typename TmpTileData::TileDType __in__ tmp, uint32_t validRow, uint32_t validCol)
+{
+    CommonCheckZZ<DstTileData, SrcTileData, TmpTileData>();
+    static_assert(SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::NoneBox),
+                  "TMov ND->ZZ: Source tile must be RowMajor with NoneBox layout.");
+    static_assert(DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor),
+                  "TMov ND->ZZ: Destination Mat tile must use ColMajor + RowMajor fractal layout.");
+
+    const uint32_t srcBytes = validRow * validCol * sizeof(uint8_t);
+    const uint32_t rowBlockCount = (validRow + 15) / 16; // ceil-divide to support non-16-aligned row counts
+    const uint32_t P = validCol / 2;
+    const uint32_t tmpBytes =
+        (BLOCK_SIZE / sizeof(uint16_t) + rowBlockCount * P + BLOCK_SIZE / sizeof(uint16_t)) * sizeof(uint16_t);
+
+    __ubuf__ uint8_t *srcPtr = (__ubuf__ uint8_t *)__cce_get_tile_ptr(src);
+    __ubuf__ uint8_t *dstPtr = (__ubuf__ uint8_t *)__cce_get_tile_ptr(dst);
+    __ubuf__ uint8_t *tmpPtr = (__ubuf__ uint8_t *)__cce_get_tile_ptr(tmp);
+
+    __VEC_SCOPE__
+    {
+        GenerateB8IndicesZZToUB<DstTileData, SrcTileData>(dstPtr, srcPtr, tmpPtr, validRow, validCol);
+    }
+}
+
+template <typename WorkT, typename SrcTileData>
+PTO_INTERNAL void TMovNd2NzLoop(__ubuf__ WorkT *srcPtr, __ubuf__ WorkT *dstPtr, uint16_t repeatTimes,
+                                uint16_t innerLoopNum, uint32_t validCol, uint32_t cfgVsstb, uint32_t cfgVsstbLast,
+                                uint32_t srcOffset)
+{
+    constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(WorkT);
+    RegTensor<WorkT> vreg;
+    MaskReg preg;
+    uint32_t cols = validCol;
+    for (uint16_t j = 0; j < repeatTimes; ++j) {
+        uint32_t count = cols > elementsPerRepeat ? elementsPerRepeat : cols;
+        preg = CreatePredicate<WorkT>(count);
+        for (uint16_t i = 0; i < innerLoopNum; ++i) {
+            vlds(vreg, srcPtr, SrcTileData::RowStride, NORM, POST_UPDATE);
+            vsstb(vreg, dstPtr, cfgVsstb, preg, POST_UPDATE);
+        }
+        vlds(vreg, srcPtr, elementsPerRepeat, NORM, POST_UPDATE);
+        vsstb(vreg, dstPtr, cfgVsstbLast, preg, POST_UPDATE);
+        srcPtr -= srcOffset;
+        cols -= elementsPerRepeat;
+    }
+}
+
 template <typename T, typename DstTileData, typename SrcTileData>
 __tf__ PTO_INTERNAL void TMovToVecNd2Nz(typename DstTileData::TileDType __out__ dst,
                                         typename SrcTileData::TileDType __in__ src, uint32_t validRow,
@@ -276,22 +428,19 @@ __tf__ PTO_INTERNAL void TMovToVecNd2Nz(typename DstTileData::TileDType __out__ 
     uint32_t repeatStrideLast = (REPEAT_BYTE * virtualRow - innerLoopNum * BLOCK_BYTE_SIZE) / BLOCK_BYTE_SIZE;
     uint32_t cfgVsstbLast = (blockStride << 16u) | (repeatStrideLast & 0xFFFFU);
     uint32_t srcOffset = innerLoopNum * SrcTileData::RowStride;
+    constexpr bool isByte = (sizeof(T) == 1);
     __VEC_SCOPE__
     {
-        RegTensor<T> vreg;
-        MaskReg preg;
-        for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
-            uint32_t cols = (uint32_t)(validCol);
-            uint32_t count = cols > elementsPerRepeat ? elementsPerRepeat : cols;
-            preg = CreatePredicate<T>(count);
-            for (uint16_t i = 0; i < (uint16_t)innerLoopNum; ++i) {
-                vlds(vreg, srcPtr, SrcTileData::RowStride, NORM, POST_UPDATE);
-                vsstb(vreg, dstPtr, cfgVsstb, preg, POST_UPDATE);
-                cols -= elementsPerRepeat;
-            }
-            vlds(vreg, srcPtr, elementsPerRepeat, NORM, POST_UPDATE);
-            vsstb(vreg, dstPtr, cfgVsstbLast, preg, POST_UPDATE);
-            srcPtr -= srcOffset;
+        if constexpr (isByte) {
+            // For 1-byte types (hifloat8_t, int8_t, float8_e4m3_t, etc.), cast to uint8_t
+            // since vlds/vsstb don't directly support these types.
+            __ubuf__ uint8_t *&srcU8 = (__ubuf__ uint8_t *&)srcPtr;
+            __ubuf__ uint8_t *&dstU8 = (__ubuf__ uint8_t *&)dstPtr;
+            TMovNd2NzLoop<uint8_t, SrcTileData>(srcU8, dstU8, repeatTimes, innerLoopNum, validCol, cfgVsstb,
+                                                cfgVsstbLast, srcOffset);
+        } else {
+            TMovNd2NzLoop<T, SrcTileData>(srcPtr, dstPtr, repeatTimes, innerLoopNum, validCol, cfgVsstb, cfgVsstbLast,
+                                          srcOffset);
         }
     } // end of VF
 }
@@ -458,6 +607,15 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
     }
 }
 
+template <typename DstTileData, typename SrcTileData, typename TmpTileData,
+          std::enable_if_t<(TmpTileData::Loc != TileType::Scaling), int> = 0>
+PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, TmpTileData &tmp)
+{
+    CommonCheckZZ<DstTileData, SrcTileData, TmpTileData>();
+    TMovNdTo2Zz<DstTileData, SrcTileData, TmpTileData>(dst.data(), src.data(), tmp.data(), dst.GetValidRow(),
+                                                       dst.GetValidCol());
+}
+
 template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 {
@@ -522,7 +680,8 @@ __tf__ PTO_INTERNAL void SetFPC(typename FpTileData::TileDType __in__ fp)
     set_fpc(deqTensorAddr);
 }
 
-template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          std::enable_if_t<(FpTileData::Loc == TileType::Scaling), int> = 0>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &fp)
 {
     CheckTMovAccValid<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, true>();

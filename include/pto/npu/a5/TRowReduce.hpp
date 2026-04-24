@@ -51,9 +51,9 @@ namespace pto {
  */
 template <typename T>
 struct ROWSUM {
-    static constexpr typename Padding<T>::Type InitVal = Padding<T>::Zero;
-    using TIN = T;  ///< 输入类型
-    using TOUT = T; ///< 输出类型（与输入相同）
+    using TIN = T;                                                           ///< 输入类型
+    using TOUT = std::conditional_t<std::is_same_v<T, int16_t>, int32_t, T>; ///< 中间计算类型（int32防止溢出）
+    static constexpr auto InitVal = Padding<TOUT>::Zero;
 
     /**
      * @brief 累加操作：dst = src0 + src1
@@ -68,32 +68,6 @@ struct ROWSUM {
      * @brief 归约操作：对向量元素求和
      * @note vcadd将向量内所有元素相加，输出单个标量值
      */
-    static PTO_INTERNAL void Reduce(RegTensor<TOUT> &dst, RegTensor<TIN> &src, MaskReg &pred)
-    {
-        vcadd(dst, src, pred, MODE_ZEROING);
-    }
-};
-
-/**
- * @brief ROWSUM的int16特化版本
- *
- * @note A5架构关键特性：vcadd对int16输入产生int32输出
- *   - 输入：int16向量
- *   - 输出：int32标量（防止累加溢出）
- *   - 最终结果需通过vcvt转换回int16
- */
-template <>
-struct ROWSUM<int16_t> {
-    static constexpr typename Padding<int32_t>::Type InitVal = Padding<int32_t>::Zero;
-    using TIN = int16_t;  ///< 输入类型
-    using TOUT = int32_t; ///< 中间计算类型（int32防止溢出）
-
-    static PTO_INTERNAL void Accumulate(RegTensor<TOUT> &dst, RegTensor<TOUT> &src0, RegTensor<TOUT> &src1,
-                                        MaskReg &pred)
-    {
-        vadd(dst, src0, src1, pred, MODE_ZEROING);
-    }
-
     static PTO_INTERNAL void Reduce(RegTensor<TOUT> &dst, RegTensor<TIN> &src, MaskReg &pred)
     {
         vcadd(dst, src, pred, MODE_ZEROING);
@@ -166,8 +140,6 @@ PTO_INTERNAL void TRowReduceCheck(uint32_t srcValidRows, uint32_t srcValidCols, 
     static_assert(idx || std::is_same_v<T, typename TileDataOut::DType>,
                   "Input and output tile data types must match. "
                   "Fix: Ensure TileDataOut uses the same DType as TileDataIn.");
-    static_assert(!idx || std::is_same_v<uint32_t, TDst> || std::is_same_v<int32_t, TDst>,
-                  "Output tile data type must be uint32_t or int32_t.");
     static_assert(TileDataOut::Loc == pto::TileType::Vec && TileDataIn::Loc == pto::TileType::Vec,
                   "Row reduction only works on vector tiles (TileType::Vec). "
                   "Fix: Instantiate TileDataIn and TileDataOut with Loc_ = TileType::Vec.");

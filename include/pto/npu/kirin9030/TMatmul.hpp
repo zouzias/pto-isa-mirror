@@ -89,11 +89,17 @@ PTO_INTERNAL void CheckMadValid()
         static_assert(sizeof(CType) == 0, "TMATMUL: Acc Type only supports int32_t or half.");
     }
 
+#if defined(PTO_NPU_ARCH_KIRIN9030)
     static_assert((TileLeft::Loc == TileType::Left) && (TileRight::Loc == TileType::Right) &&
                       (TileRes::Loc == TileType::Acc) && (!TileLeft::isRowMajor) && (TileRight::isRowMajor) &&
                       (!TileRes::isRowMajor) && (TileLeft::SFractal == SLayout::RowMajor) &&
                       (TileRight::SFractal == SLayout::ColMajor) && (TileRes::SFractal == SLayout::RowMajor),
                   "TMATMUL: Non-conforming matrix fractal.");
+#elif defined(PTO_NPU_ARCH_KIRINX90)
+    static_assert(TileLeft::Loc == TileType::Left, "TileLeft TileType must be set to TileType::Left.");
+    static_assert(TileRight::Loc == TileType::Right, "TileRight TileType must be set to TileType::Right.");
+    static_assert(TileRes::Loc == TileType::Acc, "TileRes TileType must be set to TileType::Acc.");
+#endif
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>

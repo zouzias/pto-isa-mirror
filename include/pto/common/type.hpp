@@ -10,7 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef _PTO_INCLUDE_NPU_TYPE_H_
 #define _PTO_INCLUDE_NPU_TYPE_H_
-#ifndef __CPU_SIM
+#if !defined(__CPU_SIM) && !defined(__COSTMODEL)
 #define AICORE [aicore]
 #else
 #define AICORE
@@ -22,7 +22,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // for pto internal implementation
 #define PTO_INTERNAL AICORE PTO_INLINE
 
-#ifdef __CPU_SIM
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
 #define OP_NAME(Name)
 #define OP_TYPE(TypeName)
 #else
@@ -108,7 +108,42 @@ struct int4b_t {
     }
 };
 
+#include <type_traits>
+
 namespace pto {
+enum class TileType
+{
+    Vec,
+    Mat,
+    Left,
+    Right,
+    Acc,
+    Bias,
+    Scaling,
+    ScaleLeft,
+    ScaleRight,
+    Ctrl,
+};
+
+enum class BLayout
+{
+    RowMajor = 0,
+    ColMajor = 1,
+};
+
+enum class SLayout
+{
+    NoneBox = 0,
+    RowMajor = 1,
+    ColMajor = 2,
+};
+
+enum class PrintFormat : uint8_t
+{
+    Width8_Precision4 = 0,
+    Width8_Precision2 = 1,
+    Width10_Precision6 = 2,
+};
 // 01-bits patterns are read from right to left.
 // Right bits are low bits, corresponding to low index positions of data.
 enum class MaskPattern : uint8_t
@@ -136,7 +171,9 @@ enum class Layout
     MX_B_DN,
     MX_B_NN,
     NC1HWC0,
+    GNC1HWC0,
     NCHW,
+    GNCHW,
     NHWC,
     NDC1HWC0,
     NCDHW,
@@ -247,8 +284,8 @@ enum class CompactMode
     Null,
     Normal,
     RowPlusOne,
+    RowAlignedPadding, // apply padding only to the part of ValidRow aligned upward to 16 in TFILLPAD.
 };
-
 enum class SetFmatrixMode
 {
     FMATRIX_A_AUTO,
@@ -265,6 +302,89 @@ enum class TileLayoutCustom : uint8_t
     ZN,
     ZZ,
     NONE,
+};
+
+// Enum identifying which byte of a multi-byte element is being histogrammed.
+// BYTE_0 = LSB (bits 7-0), BYTE_3 = MSB (bits 31-24).
+// Radix sort processes MSB-first: BYTE_3 → BYTE_2 → BYTE_1 → BYTE_0.
+enum class HistByte : uint8_t
+{
+    BYTE_0 = 0, // LSB (bits 7-0)
+    BYTE_1 = 1, // bits 15-8
+    BYTE_2 = 2, // bits 23-16
+    BYTE_3 = 3  // MSB (bits 31-24)
+};
+
+template <typename T>
+union FloatIntUnion {
+    using UIntegerType = std::conditional_t<sizeof(T) == sizeof(float), uint32_t, uint16_t>;
+    UIntegerType i;
+#ifdef __CCE_AICORE__
+    T f;
+    constexpr PTO_INTERNAL FloatIntUnion() : f(0.0f)
+    {}
+    constexpr PTO_INTERNAL FloatIntUnion(UIntegerType val) : i(val)
+    {}
+#endif
+};
+
+using FloatUnion = FloatIntUnion<float>;
+#ifdef __CCE_AICORE__
+using HalfUnion = FloatIntUnion<half>;
+#endif
+
+enum class PowAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class DivAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class SqrtAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class RsqrtAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class RecipAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class ExpAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class LogAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class FmodAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class RemAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
 };
 
 namespace GlobalTensorDim {
@@ -285,14 +405,25 @@ using TRandomCounter = uint32_t[PTO_RANDOM_COUNTER_SIZE];
 #if defined(__CPU_SIM) || defined(__COSTMODEL)
 typedef _Float16 half;
 typedef _Float16 aclFloat16;
+typedef half float16_t;
+typedef float float32_t;
 // Note: clang version should be >=15 and gcc version should be >=14
+// Use native BF16 automatically when the current toolchain already supports it.
+// PTO_CPU_SIM_ENABLE_BF16 remains useful as a strict request: if callers define
+// it on an unsupported toolchain, we fail loudly instead of silently falling back
+// to the placeholder _Float16 alias.
 #if defined(__has_include) && __has_include(<stdfloat>) && __cplusplus >= 202302L && defined(__STDCPP_BFLOAT16_T__)
 #include <stdfloat>
 typedef std::bfloat16_t bfloat16_t;
 #define CPU_SIM_BFLOAT_ENABLED
+#elif defined(PTO_CPU_SIM_ENABLE_BF16)
+#error "PTO_CPU_SIM_ENABLE_BF16 requires C++23 <stdfloat> with std::bfloat16_t support."
 #else
 // macOS libc++ (and some other toolchains) may not ship <stdfloat> yet.
 // For CPU simulation, a best-effort 16-bit float type is sufficient.
+// Default CPU simulator builds keep the existing compiler baseline.
+// bfloat16_t remains available as a placeholder type, but BF16 ST coverage and
+// bit-accurate custom-value paths are compiled only when CPU_SIM_BFLOAT_ENABLED is set.
 typedef _Float16 bfloat16_t;
 #endif
 #endif

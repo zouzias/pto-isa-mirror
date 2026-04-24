@@ -46,6 +46,7 @@
 | 逐元素（Tile-Tile） | [`TRSQRT`](isa/TRSQRT_zh.md) | 逐元素倒数平方根。 |
 | 逐元素（Tile-Tile） | [`TSQRT`](isa/TSQRT_zh.md) | 逐元素平方根。 |
 | 逐元素（Tile-Tile） | [`TEXP`](isa/TEXP_zh.md) | 逐元素指数运算。 |
+| 逐元素（Tile-Tile） | [`TPOW`](isa/TPOW_zh.md) | 逐元素幂运算。 |
 | 逐元素（Tile-Tile） | [`TNOT`](isa/TNOT_zh.md) | Tile 的逐元素按位取反。 |
 | 逐元素（Tile-Tile） | [`TRELU`](isa/TRELU_zh.md) | Tile 的逐元素 ReLU。 |
 | 逐元素（Tile-Tile） | [`TNEG`](isa/TNEG_zh.md) | Tile 的逐元素取负。 |
@@ -68,6 +69,7 @@
 | Tile-标量 / Tile-立即数 | [`TSHRS`](isa/TSHRS_zh.md) | Tile 按标量逐元素右移。 |
 | Tile-标量 / Tile-立即数 | [`TXORS`](isa/TXORS_zh.md) | Tile 与标量的逐元素按位异或。 |
 | Tile-标量 / Tile-立即数 | [`TLRELU`](isa/TLRELU_zh.md) | 带标量斜率的 Leaky ReLU。 |
+| Tile-标量 / Tile-立即数 | [`TPOWS`](isa/TPOWS_zh.md) | Tile 逐元素与标量幂运算。 |
 | Tile-标量 / Tile-立即数 | [`TADDSC`](isa/TADDSC_zh.md) | 与标量和第二个 Tile 的融合逐元素加法：`src0 + scalar + src1`。 |
 | Tile-标量 / Tile-立即数 | [`TSUBSC`](isa/TSUBSC_zh.md) | 融合逐元素运算：`src0 - scalar + src1`。 |
 | 轴归约 / 扩展 | [`TROWSUM`](isa/TROWSUM_zh.md) | 通过对列求和来归约每一行。 |
@@ -132,10 +134,13 @@
 | 复杂指令 | [`TGATHER`](isa/TGATHER_zh.md) | 使用索引 Tile 或编译时掩码模式来收集/选择元素。 |
 | 复杂指令 | [`TCI`](isa/TCI_zh.md) | 生成连续整数序列到目标 Tile 中。 |
 | 复杂指令 | [`TTRI`](isa/TTRI_zh.md) | 生成三角（下/上）掩码 Tile。 |
+| 复杂指令 | [`TRANDOM`](isa/TRANDOM_zh.md) | 使用基于计数器的密码算法在目标 Tile 中生成随机数。 |
 | 复杂指令 | [`TPARTADD`](isa/TPARTADD_zh.md) | 部分逐元素加法，对不匹配的有效区域具有实现定义的处理方式。 |
 | 复杂指令 | [`TPARTMUL`](isa/TPARTMUL_zh.md) | 部分逐元素乘法，对有效区域不一致的处理为实现定义。 |
 | 复杂指令 | [`TPARTMAX`](isa/TPARTMAX_zh.md) | 部分逐元素最大值，对不匹配的有效区域具有实现定义的处理方式。 |
 | 复杂指令 | [`TPARTMIN`](isa/TPARTMIN_zh.md) | 部分逐元素最小值，对不匹配的有效区域具有实现定义的处理方式。 |
+| 复杂指令 | [`TPARTARGMAX`](isa/TPARTARGMAX_zh.md) | 部分逐元素最大值选择并返回对应索引（argmax），对不匹配的有效区域具有实现定义的处理方式。 |
+| 复杂指令 | [`TPARTARGMIN`](isa/TPARTARGMIN_zh.md) | 部分逐元素最小值选择并返回对应索引（argmin），对不匹配的有效区域具有实现定义的处理方式。 |
 | 复杂指令 | [`TGATHERB`](isa/TGATHERB_zh.md) | 使用字节偏移量收集元素。 |
 | 复杂指令 | [`TSCATTER`](isa/TSCATTER_zh.md) | 使用逐元素行索引将源 Tile 的行散播到目标 Tile 中。 |
 | 复杂指令 | [`TQUANT`](isa/TQUANT_zh.md) | 量化 Tile（例如 FP32 到 FP8），生成指数/缩放/最大值输出。 |

@@ -44,6 +44,27 @@ namespace comm {
 //   - All destination tensors in the ParallelGroup are assumed to have the same shape/strides.
 // ============================================================================
 
+template <typename GlobalDataDst, typename GlobalDataSrc>
+void Scatter(typename GlobalDataDst::DType *dst, typename GlobalDataSrc::DType *src, long int dstShape[],
+             long int dstStride[], long int srcStride[], long int srcOffset)
+{
+    for (size_t i = 0; i < dstShape[0]; i++) {
+        for (size_t j = 0; j < dstShape[1]; j++) {
+            for (size_t k = 0; k < dstShape[2]; k++) {
+                for (size_t l = 0; l < dstShape[3]; l++) {
+                    for (size_t m = 0; m < dstShape[4]; m++) {
+                        int dstIndex = i * dstStride[0] + j * dstStride[1] + k * dstStride[2] + l * dstStride[3] +
+                                       m * dstStride[4];
+                        int srcIndex = i * srcStride[0] + j * srcStride[1] + k * srcStride[2] +
+                                       (l + srcOffset) * srcStride[3] + m * srcStride[4];
+                        dst[dstIndex] = src[srcIndex];
+                    }
+                }
+            }
+        }
+    }
+}
+
 template <typename ParallelGroupType, typename GlobalSrcData, typename TileData>
 PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
                                 TileData &stagingTileData)
@@ -62,7 +83,31 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
     PTO_ASSERT(nranks > 0, "ParallelGroup size must be greater than 0!");
     PTO_ASSERT(rootIdx >= 0 && rootIdx < nranks, "rootIdx must be in range [0, nranks)!");
 
-    // CPU Logic is not implemented yet
+    constexpr size_t numDims = 5;
+
+    long int srcStride[numDims] = {srcGlobalData.GetStride(0), srcGlobalData.GetStride(1), srcGlobalData.GetStride(2),
+                                   srcGlobalData.GetStride(3), srcGlobalData.GetStride(4)};
+
+    GlobalDstData &dstTensor = parallelGroup[0];
+    long int dstShape[numDims] = {dstTensor.GetShape(0), dstTensor.GetShape(1), dstTensor.GetShape(2),
+                                  dstTensor.GetShape(3), dstTensor.GetShape(4)};
+    long int dstStride[numDims] = {dstTensor.GetStride(0), dstTensor.GetStride(1), dstTensor.GetStride(2),
+                                   dstTensor.GetStride(3), dstTensor.GetStride(4)};
+    long int DST_DIM_3 = dstTensor.GetShape(3);
+
+    PTO_ASSERT(srcGlobalData.GetShape(0) == dstTensor.GetShape(0), "TSCATTER: src DIM0 must equal dst DIM0!");
+    PTO_ASSERT(srcGlobalData.GetShape(1) == dstTensor.GetShape(1), "TSCATTER: src DIM1 must equal dst DIM1!");
+    PTO_ASSERT(srcGlobalData.GetShape(2) == dstTensor.GetShape(2), "TSCATTER: src DIM2 must equal dst DIM2!");
+    PTO_ASSERT(srcGlobalData.GetShape(3) == dstTensor.GetShape(3) * nranks,
+               "TSCATTER: src DIM3 must equal dst DIM3 * nranks!");
+    PTO_ASSERT(srcGlobalData.GetShape(4) == dstTensor.GetShape(4), "TSCATTER: src DIM4 must equal dst DIM4!");
+
+    for (int r = 0; r < nranks; ++r) {
+        GlobalDstData &dstGlobalData = parallelGroup[r];
+        long int currentSrcOffset = r * DST_DIM_3;
+        Scatter<GlobalDstData, GlobalSrcData>(dstGlobalData.data(), srcGlobalData.data(), dstShape, dstStride,
+                                              srcStride, currentSrcOffset);
+    }
 }
 
 // ============================================================================
@@ -98,7 +143,7 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
     PTO_ASSERT(nranks > 0, "ParallelGroup size must be greater than 0!");
     PTO_ASSERT(rootIdx >= 0 && rootIdx < nranks, "rootIdx must be in range [0, nranks)!");
 
-    // CPU Logic is not implemented yet
+    pto::comm::TSCATTER_IMPL(parallelGroup, srcGlobalData, pingTile);
 }
 
 } // namespace comm

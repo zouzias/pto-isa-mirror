@@ -10,15 +10,15 @@
 |---|---:|
 | 同步 | 1 |
 | 手动 / 资源绑定 | 4 |
-| 逐元素（Tile-Tile） | 28 |
-| Tile-标量 / Tile-立即数 | 19 |
+| 逐元素（Tile-Tile） | 29 |
+| Tile-标量 / Tile-立即数 | 20 |
 | 轴归约 / 扩展 | 24 |
 | 内存（GM <-> Tile） | 6 |
 | 矩阵乘 | 8 |
 | 数据搬运 / 布局 | 12 |
-| 复杂指令 | 13 |
+| 复杂指令 | 15 |
 | 通信 | 11 |
-| 总计 | 126 |
+| 总计 | 128 |
 
 ## D.3 头文件同步状态
 
@@ -62,6 +62,7 @@
 | 逐元素（Tile-Tile） | [TNEG](/docs/isa/TNEG_zh.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TNEG_zh.md` |
 | 逐元素（Tile-Tile） | [TREM](/docs/isa/TREM_zh.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TREM_zh.md` |
 | 逐元素（Tile-Tile） | [TFMOD](/docs/isa/TFMOD_zh.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TFMOD_zh.md` |
+| 逐元素（Tile-Tile） | [TPOW](/docs/isa/TPOW_zh.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TPOW_zh.md` |
 | Tile-标量 / Tile-立即数 | [TEXPANDS](/docs/isa/TEXPANDS_zh.md) | `scalar` | `dst, src, scalar` | `docs/isa/TEXPANDS_zh.md` |
 | Tile-标量 / Tile-立即数 | [TCMPS](/docs/isa/TCMPS_zh.md) | `scalar` | `dst, src, scalar` | `docs/isa/TCMPS_zh.md` |
 | Tile-标量 / Tile-立即数 | [TSELS](/docs/isa/TSELS_zh.md) | `scalar` | `dst, src, scalar` | `docs/isa/TSELS_zh.md` |
@@ -81,6 +82,7 @@
 | Tile-标量 / Tile-立即数 | [TLRELU](/docs/isa/TLRELU_zh.md) | `scalar` | `dst, src, scalar` | `docs/isa/TLRELU_zh.md` |
 | Tile-标量 / Tile-立即数 | [TADDSC](/docs/isa/TADDSC_zh.md) | `scalar` | `dst, src, scalar` | `docs/isa/TADDSC_zh.md` |
 | Tile-标量 / Tile-立即数 | [TSUBSC](/docs/isa/TSUBSC_zh.md) | `scalar` | `dst, src, scalar` | `docs/isa/TSUBSC_zh.md` |
+| Tile-标量 / Tile-立即数 | [TPOWS](/docs/isa/TPOWS_zh.md) | `scalar` | `dst, src, scalar` | `docs/isa/TPOWS_zh.md` |
 | 轴归约 / 扩展 | [TROWSUM](/docs/isa/TROWSUM_zh.md) | `reduce_expand` | `dst, src` | `docs/isa/TROWSUM_zh.md` |
 | 轴归约 / 扩展 | [TROWPROD](/docs/isa/TROWPROD_zh.md) | `reduce_expand` | `dst, src` | `docs/isa/TROWPROD_zh.md` |
 | 轴归约 / 扩展 | [TCOLSUM](/docs/isa/TCOLSUM_zh.md) | `reduce_expand` | `dst, src` | `docs/isa/TCOLSUM_zh.md` |
@@ -145,6 +147,8 @@
 | 复杂指令 | [TPARTMUL](/docs/isa/TPARTMUL_zh.md) | `complex` | `dst, src0, src1` | `docs/isa/TPARTMUL_zh.md` |
 | 复杂指令 | [TPARTMAX](/docs/isa/TPARTMAX_zh.md) | `complex` | `dst, src0, src1` | `docs/isa/TPARTMAX_zh.md` |
 | 复杂指令 | [TPARTMIN](/docs/isa/TPARTMIN_zh.md) | `complex` | `dst, src0, src1` | `docs/isa/TPARTMIN_zh.md` |
+| 复杂指令 | [TPARTARGMAX](/docs/isa/TPARTARGMAX_zh.md) | `complex` | `dstVal, dstIdx, src0Val, src1Val, src0Idx, src1Idx` | `docs/isa/TPARTARGMAX_zh.md` |
+| 复杂指令 | [TPARTARGMIN](/docs/isa/TPARTARGMIN_zh.md) | `complex` | `dstVal, dstIdx, src0Val, src1Val, src0Idx, src1Idx` | `docs/isa/TPARTARGMIN_zh.md` |
 | 复杂指令 | [TGATHERB](/docs/isa/TGATHERB_zh.md) | `complex` | `dst, src0, src1` | `docs/isa/TGATHERB_zh.md` |
 | 复杂指令 | [TSCATTER](/docs/isa/TSCATTER_zh.md) | `complex` | `dst, src0, src1` | `docs/isa/TSCATTER_zh.md` |
 | 复杂指令 | [TQUANT](/docs/isa/TQUANT_zh.md) | `complex` | `dst, src0, src1` | `docs/isa/TQUANT_zh.md` |

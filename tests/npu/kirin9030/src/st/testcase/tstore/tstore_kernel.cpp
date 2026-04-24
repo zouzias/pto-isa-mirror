@@ -41,7 +41,7 @@ AICORE inline void RunTStoreRowMajor(__gm__ T *out, __gm__ T *src)
 
     TileData srcTile(validRow, validCol);
 
-    TASSIGN(srcTile, 0x0);
+    TASSIGN<0x0>(srcTile);
 
     int offset = 0;
     GlobalData srcGlobal(src);
@@ -75,7 +75,7 @@ AICORE inline void RunTStoreColMajor(__gm__ T *out, __gm__ T *src)
 
     TileData srcTile(validRow, validCol);
 
-    TASSIGN(srcTile, 0x0);
+    TASSIGN<0x0>(srcTile);
 
     int offset = 0;
     GlobalData srcGlobal(src);
@@ -108,7 +108,7 @@ AICORE inline void RunTStoreNZ(__gm__ T *out, __gm__ T *src)
 
     TileData srcTile(validRow, validCol);
 
-    TASSIGN(srcTile, 0x0);
+    TASSIGN<0x0>(srcTile);
     int offset = 0;
     GlobalData srcGlobal(src);
     GlobalData dstGlobal(out);

@@ -101,7 +101,6 @@ Auto模式编译器让程序员避免了这个麻烦。编译器会自动在需�
 
 更多PTO AUTO的详细文档如下：
 
-* [PTO_AUTO_kernel_developer_rules_and_limitations](kernel_developer_rules_and_limitations.md)
-* [PTO_AUTO_library_developer_rules_and_limitations](library_developer_rules_and_limitations.md)
-* [Compiling with AUTO Mode](PTO_AUTO_compilation_guide.md)
-* [PTO AUTO Code Examples](Examples.md)
+* [PTO_AUTO_kernel_developer_rules_and_limitations](Kernel_Developer_Rules_And_Limitations_zh.md)
+* [PTO_AUTO_library_developer_rules_and_limitations](Library_Developer_Rules_And_Limitations_zh.md)
+* [PTO AUTO Code Examples](Examples_zh.md)

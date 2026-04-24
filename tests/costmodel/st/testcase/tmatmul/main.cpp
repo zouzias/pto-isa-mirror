@@ -8,194 +8,91 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
 #include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
 
-using namespace std;
-using namespace PtoTestCommon;
+#include "cost_check.hpp"
 
-template <int32_t tilingKey>
-void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+using namespace pto;
 
-template <int32_t tilingKey>
-void LaunchTMATMULBIAS(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
+namespace {
 
-class TMATMULTest : public testing::Test {
-protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
-};
-
-template <typename T, typename U, typename S, int32_t key>
-void tmatmul_test(uint32_t M, uint32_t K, uint32_t N)
+template <typename T>
+constexpr T CeilAlign(T num_1, T num_2)
 {
-    size_t aFileSize = M * K * sizeof(U);
-    size_t bFileSize = K * N * sizeof(S);
-    size_t cFileSize = M * N * sizeof(T);
-
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-
-    uint8_t *dstHost, *src0Host, *src1Host;
-    uint8_t *dstDevice, *src0Device, *src1Device;
-
-    aclrtMallocHost((void **)(&dstHost), cFileSize);
-    aclrtMallocHost((void **)(&src0Host), aFileSize);
-    aclrtMallocHost((void **)(&src1Host), bFileSize);
-
-    aclrtMalloc((void **)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTMATMUL<key>(dstDevice, src0Device, src1Device, stream);
-
-    aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    aclrtFree(dstDevice);
-    aclrtFree(src0Device);
-    aclrtFree(src1Device);
-
-    aclrtFreeHost(dstHost);
-    aclrtFreeHost(src0Host);
-    aclrtFreeHost(src1Host);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
+    return num_2 == 0 ? 0 : (num_1 + num_2 - 1) / num_2 * num_2;
 }
 
-TEST_F(TMATMULTest, case1)
+template <typename outType, typename AType, typename BType, int validM, int validK, int validN, float profiling,
+          float accuracy>
+void runTMatmul()
 {
-    tmatmul_test<float, uint16_t, uint16_t, 1>(40, 50, 60);
+    constexpr int blockAlign = (sizeof(AType) == 1) ? 32 : 16;
+    constexpr int M = CeilAlign<int>(validM, blockAlign);
+    constexpr int N = CeilAlign<int>(validN, blockAlign);
+    constexpr int K = CeilAlign<int>(validK, blockAlign);
+
+    using LeftTile = TileLeft<AType, M, K, validM, validK>;
+    using RightTile = TileRight<BType, K, N, validK, validN>;
+    using AccTile = TileAcc<outType, M, N, validM, validN>;
+
+    LeftTile aTile;
+    RightTile bTile;
+    AccTile cTile;
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x10000);
+    TASSIGN(cTile, 0x20000);
+
+    TMATMUL(cTile, aTile, bTile);
+
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-TEST_F(TMATMULTest, case2)
+template <typename outType, typename AType, typename BType, int M, int K, int N, int numRepeats, float profiling,
+          float accuracy>
+void runTMatmulSplitK()
 {
-    tmatmul_test<int32_t, int8_t, int8_t, 2>(6, 7, 8);
+    using LeftTile = TileLeft<AType, M, K, M, K>;
+    using RightTile = TileRight<BType, K, N, K, N>;
+    using AccTile = TileAcc<outType, M, N, M, N>;
+
+    LeftTile aTile;
+    RightTile bTile;
+    AccTile cTile;
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x10000);
+    TASSIGN(cTile, 0x20000);
+
+    for (uint32_t i = 0; i < numRepeats; i++) {
+        if (i == 0) {
+            TMATMUL(cTile, aTile, bTile);
+        } else {
+            TMATMUL_ACC(cTile, cTile, aTile, bTile);
+        }
+    }
+
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-TEST_F(TMATMULTest, case3)
+} // namespace
+
+TEST(TMatmul, half_40x50x60)
 {
-    uint32_t M = 128;
-    uint32_t N = 64;
-    uint32_t K = 128;
-    uint32_t repeats = 5;
-
-    size_t aFileSize = repeats * M * K * sizeof(uint16_t); // uint16_t represent half
-    size_t bFileSize = repeats * K * N * sizeof(uint16_t); // uint16_t represent half
-    size_t cFileSize = M * N * sizeof(float);
-
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-
-    uint8_t *dstHost, *src0Host, *src1Host;
-    uint8_t *dstDevice, *src0Device, *src1Device;
-
-    aclrtMallocHost((void **)(&dstHost), cFileSize);
-    aclrtMallocHost((void **)(&src0Host), aFileSize);
-    aclrtMallocHost((void **)(&src1Host), bFileSize);
-
-    aclrtMalloc((void **)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTMATMUL<3>(dstDevice, src0Device, src1Device, stream);
-
-    aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    aclrtFree(dstDevice);
-    aclrtFree(src0Device);
-    aclrtFree(src1Device);
-
-    aclrtFreeHost(dstHost);
-    aclrtFreeHost(src0Host);
-    aclrtFreeHost(src1Host);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
+    runTMatmul<float, half, half, 40, 50, 60, 54.0f, 1.0f>();
 }
 
-TEST_F(TMATMULTest, case4)
+TEST(TMatmul, int8_6x7x8)
 {
-    tmatmul_test<float, float, float, 4>(120, 110, 50);
+    runTMatmul<int32_t, int8_t, int8_t, 6, 7, 8, 7.0f, 1.0f>();
 }
 
-template <typename T, typename U, typename S, typename B, int32_t key>
-void tmatmul_bias_test(uint32_t M, uint32_t K, uint32_t N)
+TEST(TMatmul, split_k_half_128x128x64_reps5)
 {
-    size_t aFileSize = M * K * sizeof(U);
-    size_t bFileSize = K * N * sizeof(S);
-    size_t cFileSize = M * N * sizeof(T);
-    size_t biasFileSize = 1 * N * sizeof(B);
-
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-
-    uint8_t *dstHost, *src0Host, *src1Host, *src2Host;
-    uint8_t *dstDevice, *src0Device, *src1Device, *src2Device;
-
-    aclrtMallocHost((void **)(&dstHost), cFileSize);
-    aclrtMallocHost((void **)(&src0Host), aFileSize);
-    aclrtMallocHost((void **)(&src1Host), bFileSize);
-    aclrtMallocHost((void **)(&src2Host), biasFileSize);
-
-    aclrtMalloc((void **)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src2Device, biasFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(src2Device, biasFileSize, src2Host, biasFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-
-    LaunchTMATMULBIAS<key>(dstDevice, src0Device, src1Device, src2Device, stream);
-
-    aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    aclrtFree(dstDevice);
-    aclrtFree(src0Device);
-    aclrtFree(src1Device);
-    aclrtFree(src2Device);
-
-    aclrtFreeHost(dstHost);
-    aclrtFreeHost(src0Host);
-    aclrtFreeHost(src1Host);
-    aclrtFreeHost(src2Host);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
+    runTMatmulSplitK<float, half, half, 128, 128, 64, 5, 262.0f, 1.0f>();
 }
 
-TEST_F(TMATMULTest, case_bias_1)
+TEST(TMatmul, float_120x110x50)
 {
-    tmatmul_bias_test<int32_t, int8_t, int8_t, int32_t, 1>(8, 7, 6);
-}
-
-TEST_F(TMATMULTest, case_bias_2)
-{
-    tmatmul_bias_test<float, uint16_t, uint16_t, float, 2>(16, 15, 16);
-}
-
-TEST_F(TMATMULTest, case_bias_5)
-{
-    uint32_t M = 127;
-    uint32_t N = 63;
-    uint32_t K = 128;
-
-    tmatmul_bias_test<float, float, float, float, 5>(M, K, N);
+    runTMatmul<float, float, float, 120, 110, 50, 902.0f, 1.0f>();
 }

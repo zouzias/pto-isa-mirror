@@ -20,7 +20,7 @@ PTO_INTERNAL void CheckValid()
     static_assert((std::is_same<typename TileData::DType, T>::value), "Fix: TCI expect src and dst same datatype");
     static_assert((sizeof(typename TileData::DType) == 4 || (sizeof(typename TileData::DType) == 2)),
                   "Fix: TCI expect datatype is b32 or b16");
-    static_assert((TileData::Cols != 1), "Fix: TCI expect tile row is 1");
+    static_assert((TileData::Rows == 1), "Fix: TCI expect tile row is 1");
 }
 
 template <typename TileData, typename T, int descending>
@@ -202,9 +202,9 @@ __tf__ AICORE void TCI_b16_normal(typename TileData::TileDType __out__ dst, type
     __ubuf__ float *tmp1 = (__ubuf__ typename TileDataTmp::DType *)__cce_get_tile_ptr(tmp);
     __ubuf__ float *tmp2 = (__ubuf__ typename TileDataTmp::DType *)__cce_get_tile_ptr(tmp + 128);
     __ubuf__ half *tmp3 =
-        reinterpret_cast<__ubuf__ half *>((__ubuf__ typename TileDataTmp::DType *)__cce_get_tile_ptr(tmp + 196));
+        reinterpret_cast<__ubuf__ half *>((__ubuf__ typename TileDataTmp::DType *)__cce_get_tile_ptr(tmp + 256));
     __ubuf__ half *tmp4 =
-        reinterpret_cast<__ubuf__ half *>((__ubuf__ typename TileDataTmp::DType *)__cce_get_tile_ptr(tmp + 260));
+        reinterpret_cast<__ubuf__ half *>((__ubuf__ typename TileDataTmp::DType *)__cce_get_tile_ptr(tmp + 384));
 
     set_mask_count();
     set_vector_mask(0, 8);
