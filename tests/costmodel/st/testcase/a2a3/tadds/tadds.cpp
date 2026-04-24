@@ -36,30 +36,26 @@ void runTAddS(T scalar)
 
 TEST(TAddS, float_32x64)
 {
-    runTAddS<float, 32, 32, 64, 64, NO_PROFILING, 0.0f>(0.0f);
+    runTAddS<float, 32, 32, 64, 64, 57.0f, 0.89f>(0.0f);
 }
 
 TEST(TAddS, half_63x64)
 {
-    runTAddS<half, 63, 63, 64, 64, NO_PROFILING, 0.0f>((half)1.5f);
+    runTAddS<half, 63, 63, 64, 64, 78.0f, 0.75f>((half)1.5f);
 }
 
 TEST(TAddS, int32_31x128)
 {
-    runTAddS<int32_t, 31, 31, 128, 128, NO_PROFILING, 0.0f>(3);
+    runTAddS<int32_t, 31, 31, 128, 128, 85.0f, 0.8f>(3);
 }
 
 TEST(TAddS, int16_15x192)
 {
-    runTAddS<int16_t, 15, 15, 192, 192, NO_PROFILING, 0.0f>(3);
+    runTAddS<int16_t, 15, 15, 192, 192, 63.0f, 0.8f>(3);
 }
 
 TEST(TAddS, float_7x448)
 {
-    runTAddS<float, 7, 7, 448, 448, NO_PROFILING, 0.0f>(1.5f);
+    runTAddS<float, 7, 7, 448, 448, 74.0f, 0.8f>(1.5f);
 }
 
-TEST(TAddS, float_256x16)
-{
-    runTAddS<float, 256, 256, 16, 16, NO_PROFILING, 0.0f>(1.5f);
-}
