@@ -677,3 +677,20 @@ if [ "$ENABLE_KIRIN9030" = "true" ]; then
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmuls
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsel
 fi
+
+if [ "$ENABLE_COMM" = "true" ]; then
+  if [ "$ENABLE_A3" = "true" ]; then
+  # A3 通信 ST 全量（同步类；不含 tput_async/tget_async，需单独跑 run_comm_test.sh -a）
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tput
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tget
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tnotify
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/twait
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/ttest
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tgather
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tscatter
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/treduce
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tbroadcast
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tput_async
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tget_async
+  fi
+fi
