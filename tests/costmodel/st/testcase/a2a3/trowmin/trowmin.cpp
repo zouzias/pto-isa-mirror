@@ -38,17 +38,17 @@ void runTRowMin()
 
 TEST(TRowMin, float_64x64)
 {
-    runTRowMin<float, 64, 64, NO_PROFILING, 0.0f>();
+    runTRowMin<float, 64, 64, 480.0f, 0.0f>();
 }
 TEST(TRowMin, float_16x256)
 {
-    runTRowMin<float, 16, 256, NO_PROFILING, 0.0f>();
+    runTRowMin<float, 16, 256, 293.0f, 0.0f>();
 }
 TEST(TRowMin, half_64x128)
 {
-    runTRowMin<half, 64, 128, NO_PROFILING, 0.0f>();
+    runTRowMin<half, 64, 128, 481.0f, 0.0f>();
 }
 TEST(TRowMin, half_16x256)
 {
-    runTRowMin<half, 16, 256, NO_PROFILING, 0.0f>();
+    runTRowMin<half, 16, 256, 190.0f, 0.0f>();
 }

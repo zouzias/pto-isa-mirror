@@ -36,21 +36,21 @@ void runTMins(T scalar)
 
 TEST(TMins, float_64x64)
 {
-    runTMins<float, 64, 64, NO_PROFILING, 0.0f>(0.0f);
+    runTMins<float, 64, 64, 87.0f, 0.0f>(0.0f);
 }
 TEST(TMins, int32_64x64)
 {
-    runTMins<int32_t, 64, 64, NO_PROFILING, 0.0f>(1);
+    runTMins<int32_t, 64, 64, 87.0f, 0.0f>(1);
 }
 TEST(TMins, int16_64x64)
 {
-    runTMins<int16_t, 64, 64, NO_PROFILING, 0.0f>(1);
+    runTMins<int16_t, 64, 64, 55.0f, 0.0f>(1);
 }
 TEST(TMins, half_64x64)
 {
-    runTMins<half, 64, 64, NO_PROFILING, 0.0f>(half{0.0f});
+    runTMins<half, 64, 64, 55.0f, 0.0f>(half{0.0f});
 }
 TEST(TMins, half_16x256)
 {
-    runTMins<half, 16, 256, NO_PROFILING, 0.0f>(half{1.0f});
+    runTMins<half, 16, 256, 55.0f, 0.0f>(half{1.0f});
 }

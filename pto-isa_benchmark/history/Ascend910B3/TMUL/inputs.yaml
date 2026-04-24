@@ -1,0 +1,72 @@
+- case_name: float_64x64
+  kernel_arch: dav-c220-vec
+  tile_groups:
+  - group_name: T
+    Loc: TileType::Vec
+    Element: float
+    Rows: 64
+    Cols: 64
+    variables:
+    - name: srcX
+      address: '0x00000000'
+    - name: srcY
+      address: '0x00004000'
+    - name: dst
+      address: '0x00008000'
+  op_name: TMUL
+  op_args: dst, srcX, srcY
+  id: 7de3d07bffe86f60ea51645d6547a08a
+- case_name: int32_64x64
+  kernel_arch: dav-c220-vec
+  tile_groups:
+  - group_name: T
+    Loc: TileType::Vec
+    Element: int32_t
+    Rows: 64
+    Cols: 64
+    variables:
+    - name: srcX
+      address: '0x00000000'
+    - name: srcY
+      address: '0x00004000'
+    - name: dst
+      address: '0x00008000'
+  op_name: TMUL
+  op_args: dst, srcX, srcY
+  id: 9fd3d2bd068445bb3256a90b4a879e22
+- case_name: half_16x256
+  kernel_arch: dav-c220-vec
+  tile_groups:
+  - group_name: T
+    Loc: TileType::Vec
+    Element: half
+    Rows: 16
+    Cols: 256
+    variables:
+    - name: srcX
+      address: '0x00000000'
+    - name: srcY
+      address: '0x00004000'
+    - name: dst
+      address: '0x00008000'
+  op_name: TMUL
+  op_args: dst, srcX, srcY
+  id: 54c9e0a5dc9f9a31e21906505a25f733
+- case_name: int16_64x64
+  kernel_arch: dav-c220-vec
+  tile_groups:
+  - group_name: T
+    Loc: TileType::Vec
+    Element: int16_t
+    Rows: 64
+    Cols: 64
+    variables:
+    - name: srcX
+      address: '0x00000000'
+    - name: srcY
+      address: '0x00004000'
+    - name: dst
+      address: '0x00008000'
+  op_name: TMUL
+  op_args: dst, srcX, srcY
+  id: 492abf10029f73395b010b0360c64518

@@ -1,0 +1,72 @@
+- case_name: float_64x64
+  kernel_arch: dav-c220-vec
+  tile_groups:
+  - group_name: T
+    Loc: TileType::Vec
+    Element: float
+    Rows: 64
+    Cols: 64
+    variables:
+    - name: srcA
+      address: '0x00000000'
+    - name: tmp
+      address: '0x00004000'
+    - name: dst
+      address: '0x00008000'
+  op_name: TROWMAX
+  op_args: dst, srcA, tmp
+  id: dbb278af81b751d806b8c5df8b033046
+- case_name: float_16x256
+  kernel_arch: dav-c220-vec
+  tile_groups:
+  - group_name: T
+    Loc: TileType::Vec
+    Element: float
+    Rows: 16
+    Cols: 256
+    variables:
+    - name: srcA
+      address: '0x00000000'
+    - name: tmp
+      address: '0x00004000'
+    - name: dst
+      address: '0x00008000'
+  op_name: TROWMAX
+  op_args: dst, srcA, tmp
+  id: 6da4740fc595dc3a197cc97aee6b6e16
+- case_name: half_64x128
+  kernel_arch: dav-c220-vec
+  tile_groups:
+  - group_name: T
+    Loc: TileType::Vec
+    Element: half
+    Rows: 64
+    Cols: 128
+    variables:
+    - name: srcA
+      address: '0x00000000'
+    - name: tmp
+      address: '0x00004000'
+    - name: dst
+      address: '0x00008000'
+  op_name: TROWMAX
+  op_args: dst, srcA, tmp
+  id: 4481d402d4818c35d021cdf3d3b82a05
+- case_name: half_16x256
+  kernel_arch: dav-c220-vec
+  tile_groups:
+  - group_name: T
+    Loc: TileType::Vec
+    Element: half
+    Rows: 16
+    Cols: 256
+    variables:
+    - name: srcA
+      address: '0x00000000'
+    - name: tmp
+      address: '0x00004000'
+    - name: dst
+      address: '0x00008000'
+  op_name: TROWMAX
+  op_args: dst, srcA, tmp
+  id: 6974232c8183c8031a7d797b8daca6b3

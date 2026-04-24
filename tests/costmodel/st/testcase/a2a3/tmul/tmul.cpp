@@ -38,20 +38,20 @@ void runTMul()
 
 TEST(TMul, float_64x64)
 {
-    runTMul<float, 64, 64, NO_PROFILING, 0.0f>();
+    runTMul<float, 64, 64, 168.0f, 0.0f>();
 }
 
 TEST(TMul, int32_64x64)
 {
-    runTMul<int32_t, 64, 64, NO_PROFILING, 0.0f>();
+    runTMul<int32_t, 64, 64, 152.0f, 0.0f>();
 }
 
 TEST(TMul, half_16x256)
 {
-    runTMul<half, 16, 256, NO_PROFILING, 0.0f>();
+    runTMul<half, 16, 256, 96.0f, 0.0f>();
 }
 
 TEST(TMul, int16_64x64)
 {
-    runTMul<int16_t, 64, 64, NO_PROFILING, 0.0f>();
+    runTMul<int16_t, 64, 64, 168.0f, 0.0f>();
 }
