@@ -123,7 +123,7 @@ PTO Tile Lib 支持显式事件模型，但其具体行为与后端有关：
 - 在 device build 下，使用类型化的 `Event<SrcOp, DstOp>` 对象表达依赖
 - 在 CPU 仿真下，同步行为会被简化，部分事件路径表现为 no-op
 
-Event 的详细模型说明请参考 `docs/coding/Event.md`。
+Event 的详细模型说明请参考 [Event 编程模型](Event_zh.md)。
 
 ### 5.3 Auto mode 与 Manual mode
 
@@ -136,9 +136,9 @@ Event 的详细模型说明请参考 `docs/coding/Event.md`。
 
 可参考：
 
-- `docs/coding/tutorial.md`
-- `docs/coding/Tile.md`
-- `docs/isa/TASSIGN.md`
+- [PTO ISA 快速上手](tutorial_zh.md)
+- [Tile 编程模型](Tile_zh.md)
+- [TASSIGN 指令](../isa/TASSIGN.md)
 
 ## 6. 推荐的兼容性检查流程
 

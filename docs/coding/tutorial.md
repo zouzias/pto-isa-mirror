@@ -2,7 +2,7 @@
 
 This quickstart is for operator/kernel developers who want to get a first PTO kernel running quickly and understand the core mental model.
 
-It is **not** a full instruction encyclopedia. For detailed instruction semantics and constraints, see `docs/isa/README.md`.
+It is **not** a full instruction encyclopedia. For detailed instruction semantics and constraints, see [ISA Overview](../isa/README.md).
 
 ## 0. What you will learn
 
@@ -31,8 +31,8 @@ Terminology:
 
 - `__gm__`: global memory pointer (GM).
 - `AICORE`: runs on a single “core” on the device backend (CPU simulation defines it as a normal function annotation).
-- `GlobalTensor`: a *view* of GM data with shape/stride/layout metadata (see `docs/coding/GlobalTensor.md`).
-- `Tile`: an on-chip tile object, conceptually a 2-D buffer in tile storage (see `docs/coding/Tile.md`).
+- `GlobalTensor`: a *view* of GM data with shape/stride/layout metadata (see [GlobalTensor Programming Model](GlobalTensor.md)).
+- `Tile`: an on-chip tile object, conceptually a 2-D buffer in tile storage (see [Tile Programming Model](Tile.md)).
 
 ## 2. One-page cheat sheet (core concepts)
 
@@ -76,7 +76,7 @@ PTO-Auto (high level):
 
 - You describe the dataflow: `TLOAD → compute → TSTORE`.
 - Tile buffer management and some synchronization can be handled by the compiler/runtime.
-- In the API model, `TASSIGN(tile, addr)` is a no-op when `__PTO_AUTO__` is enabled (see `docs/isa/TASSIGN.md`).
+- In the API model, `TASSIGN(tile, addr)` is a no-op when `__PTO_AUTO__` is enabled (see [TASSIGN Instruction](../isa/TASSIGN.md)).
 
 PTO-Manual (expert mode):
 

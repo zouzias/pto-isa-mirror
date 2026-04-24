@@ -14,7 +14,7 @@ PTO kernel 以 C++ 形式编写，并通过 `TLOAD`、`TADD`、`TMATMUL`、`TSYN
 #include <pto/pto-inst.hpp>
 ```
 
-intrinsic 层主要由 [`include/pto/`](../../include/pto/README.md) 下的头文件提供，其中最核心的是 [`include/pto/common/pto_instr.hpp`](../../include/pto/common/pto_instr.hpp)。
+intrinsic 层主要由 [PTO 公共头文件](../../include/pto/README.md) 下的头文件提供，其中最核心的是 `../../include/pto/common/pto_instr.hpp`。
 
 ## 2. 构建与编译特征
 
@@ -45,7 +45,7 @@ PTO C++ 源码
 
 ## 4. 公共 intrinsic 层与 backend 选择
 
-公共 intrinsic 入口位于 [`include/pto/common/pto_instr.hpp`](../../include/pto/common/pto_instr.hpp)。
+公共 intrinsic 入口位于 `../../include/pto/common/pto_instr.hpp`。
 
 该头文件暴露了以下一类接口：
 
@@ -125,7 +125,7 @@ NPU 路径面向 Ascend 硬件或 simulator 侧执行。
 当 PTO kernel 编译失败或行为不符合预期时，最可靠的检查路径是：
 
 1. **头文件级 API 用法**
-   - intrinsic 的使用方式是否符合 [`include/pto/common/pto_instr.hpp`](../../include/pto/common/pto_instr.hpp) 中的声明？
+   - intrinsic 的使用方式是否符合 `../../include/pto/common/pto_instr.hpp` 中的声明？
 
 2. **ISA 约束**
    - `docs/isa/` 中对应指令是否允许当前 tile 类型、布局和操作数组合？

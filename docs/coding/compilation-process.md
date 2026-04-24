@@ -14,7 +14,7 @@ The common public entry is:
 #include <pto/pto-inst.hpp>
 ```
 
-The intrinsic layer is implemented primarily through headers under [`include/pto/`](../../include/pto/README.md), especially [`include/pto/common/pto_instr.hpp`](../../include/pto/common/pto_instr.hpp).
+The intrinsic layer is implemented primarily through headers under [PTO Public Headers](../../include/pto/README.md), especially `../../include/pto/common/pto_instr.hpp`.
 
 ## 2. Build and compilation characteristics
 
@@ -45,7 +45,7 @@ This document does not define a complete proprietary compiler pipeline as a publ
 
 ## 4. Public intrinsic layer and backend selection
 
-The public intrinsic entry point is [`include/pto/common/pto_instr.hpp`](../../include/pto/common/pto_instr.hpp).
+The public intrinsic entry point is `../../include/pto/common/pto_instr.hpp`.
 
 That header exposes APIs such as:
 
@@ -125,7 +125,7 @@ Relevant references:
 When a PTO kernel does not compile or run as expected, the most reliable checks are:
 
 1. **Header-level API usage**
-   - Is the intrinsic used according to [`include/pto/common/pto_instr.hpp`](../../include/pto/common/pto_instr.hpp)?
+   - Is the intrinsic used according to `../../include/pto/common/pto_instr.hpp`?
 
 2. **ISA constraints**
    - Does the instruction documentation under `docs/isa/` allow the tile type, layout, and operand combination?

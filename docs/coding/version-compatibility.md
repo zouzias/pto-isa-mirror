@@ -123,7 +123,7 @@ PTO Tile Lib supports an explicit event model, but the exact behavior depends on
 - on device builds, typed `Event<SrcOp, DstOp>` objects are used to model dependencies
 - on CPU simulation, synchronization behavior is simplified and some event-related paths act as no-ops
 
-For the detailed event model, see `docs/coding/Event.md`.
+For the detailed event model, see [Event Programming Model](Event.md).
 
 ### 5.3 Auto mode vs manual mode
 
@@ -136,9 +136,9 @@ For example, `TASSIGN(tile, addr)` may be a no-op in auto mode depending on buil
 
 See:
 
-- `docs/coding/tutorial.md`
-- `docs/coding/Tile.md`
-- `docs/isa/TASSIGN.md`
+- [PTO ISA Quickstart](tutorial.md)
+- [Tile Programming Model](Tile.md)
+- [TASSIGN Instruction](../isa/TASSIGN.md)
 
 ## 6. Recommended compatibility workflow
 

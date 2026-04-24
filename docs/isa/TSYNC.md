@@ -1,4 +1,4 @@
-﻿# TSYNC
+# TSYNC
 
 
 ## Tile Operation Diagram
@@ -44,11 +44,11 @@ tsync.op #pto.op<TADD>
 
 ```text
 pto.record_event[src_op, dst_op, eventID]
-// 支持的op：TLOAD，TSTORE_ACC，TSTORE_VEC，TMOV_M2L，TMOV_M2S，TMOV_M2B，TMOV_M2V，TMOV_V2M，TMATMUL，TVEC
+// Supported ops: TLOAD, TSTORE_ACC, TSTORE_VEC, TMOV_M2L, TMOV_M2S, TMOV_M2B, TMOV_M2V, TMOV_V2M, TMATMUL, TVEC
 pto.wait_event[src_op, dst_op, eventID]
-// 支持的op：TLOAD，TSTORE_ACC，TSTORE_VEC，TMOV_M2L，TMOV_M2S，TMOV_M2B，TMOV_M2V，TMOV_V2M，TMATMUL，TVEC
+// Supported ops: TLOAD, TSTORE_ACC, TSTORE_VEC, TMOV_M2L, TMOV_M2S, TMOV_M2B, TMOV_M2V, TMOV_V2M, TMATMUL, TVEC
 pto.barrier(op)
-// 支持的op：TVEC,TMATMUL
+// Supported ops: TVEC, TMATMUL
 ```
 ## C++ Intrinsic
 
@@ -121,7 +121,7 @@ void example_manual() {
 ### Manual Mode
 
 ```text
-# Manual mode: bind resources explicitly before issuing the instruction.
+# Manual mode: resources must be bound explicitly before issuing the instruction.
 # Optional for tile operands:
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
