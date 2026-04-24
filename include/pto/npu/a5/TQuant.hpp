@@ -27,8 +27,6 @@ enum class QuantType
     INT8_ASYM
 };
 
-constexpr int TQUANT_B16_CAST_NON_SAT_BIT = 48; // CTRL[48]=1: non-saturation for f16/bf16 casts.
-
 // Helper alias: creates a 1D flat tile from a 2D tile's total element count.
 template <typename TileData>
 using FlatTile1D = Tile<TileType::Vec, typename TileData::DType, 1, TileData::Rows * TileData::Cols, BLayout::RowMajor,
@@ -133,6 +131,8 @@ PTO_INTERNAL void AbsReduceMax_b16_DintlvWindow(__ubuf__ T *srcPtr, uint32_t off
     static_assert(std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
                   "AbsReduceMax_b16_DintlvWindow: T must be bfloat16_t or half");
     constexpr uint16_t kBf16AbsMask = 0x7FFF;
+    constexpr uint16_t kFp16InfBits = 0x7C00;
+    constexpr uint16_t kBf16InfBits = 0x7F80;
     RegTensor<T> vb16_in_1, vb16_in_2;
     RegTensor<uint16_t> vu16_abs_1, vu16_abs_2, vu16_bf16_abs_mask;
     uint32_t even_count = (remaining + 1) / 2;
@@ -144,12 +144,20 @@ PTO_INTERNAL void AbsReduceMax_b16_DintlvWindow(__ubuf__ T *srcPtr, uint32_t off
     vbr(vu16_bf16_abs_mask, kBf16AbsMask);
     if constexpr (std::is_same<T, half>::value) {
         RegTensor<bfloat16_t> vb16_bf16_1, vb16_bf16_2;
+        RegTensor<uint16_t> vu16_fp16_abs_mask, vu16_bf16_inf;
+        vector_bool preg_inf_1, preg_inf_2;
 
-        // Match dynamic_mx_quant's non-saturating CAST_TRUNC for f16->bf16 before max extraction.
-        // TQuant_MXFP8_Impl sets CTRL[48]=1 for this 16-bit float cast mode.
-        // The conversion is expected to preserve Inf as Inf and NaN as NaN.
+        // Saturating f16->bf16 can map Inf to max finite. Patch Inf lanes back to BF16 Inf before abs/max.
+        vbr(vu16_fp16_abs_mask, kBf16AbsMask);
+        vbr(vu16_bf16_inf, kBf16InfBits);
+        vand(vu16_abs_1, (vector_u16 &)vb16_in_1, vu16_fp16_abs_mask, preg_vl0, MODE_ZEROING);
+        vand(vu16_abs_2, (vector_u16 &)vb16_in_2, vu16_fp16_abs_mask, preg_vl1, MODE_ZEROING);
+        vcmps_eq(preg_inf_1, vu16_abs_1, kFp16InfBits, preg_vl0);
+        vcmps_eq(preg_inf_2, vu16_abs_2, kFp16InfBits, preg_vl1);
         vcvt(vb16_bf16_1, vb16_in_1, preg_vl0, ROUND_Z);
         vcvt(vb16_bf16_2, vb16_in_2, preg_vl1, ROUND_Z);
+        vsel((vector_u16 &)vb16_bf16_1, vu16_bf16_inf, (vector_u16 &)vb16_bf16_1, preg_inf_1);
+        vsel((vector_u16 &)vb16_bf16_2, vu16_bf16_inf, (vector_u16 &)vb16_bf16_2, preg_inf_2);
         vand(vu16_abs_1, (vector_u16 &)vb16_bf16_1, vu16_bf16_abs_mask, preg_vl0, MODE_ZEROING);
         vand(vu16_abs_2, (vector_u16 &)vb16_bf16_2, vu16_bf16_abs_mask, preg_vl1, MODE_ZEROING);
     } else {
@@ -213,8 +221,10 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_largesizes(__ubuf__ T *srcPtr, __ubuf__ T 
     static_assert(std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
                   "AbsReduceMax_b16_ND_largesizes: T must be bfloat16_t or half");
     constexpr uint16_t kBf16AbsMask = 0x7FFF;
+    constexpr uint16_t kFp16InfBits = 0x7C00;
+    constexpr uint16_t kBf16InfBits = 0x7F80;
     RegTensor<T> vb16_in_1, vb16_in_2, vb16_max_1;
-    RegTensor<uint16_t> vu16_abs_1, vu16_abs_2, vu16_bf16_abs_mask;
+    RegTensor<uint16_t> vu16_abs_1, vu16_abs_2, vu16_bf16_abs_mask, vu16_fp16_abs_mask, vu16_bf16_inf;
     RegTensor<bfloat16_t> vb16_bf16_1, vb16_bf16_2;
     vector_align ureg_max;
     uint32_t total_count = total_elements_count;
@@ -229,6 +239,10 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_largesizes(__ubuf__ T *srcPtr, __ubuf__ T 
     static constexpr auto distValue =
         std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
     vbr(vu16_bf16_abs_mask, kBf16AbsMask);
+    if constexpr (std::is_same<T, half>::value) {
+        vbr(vu16_fp16_abs_mask, kBf16AbsMask);
+        vbr(vu16_bf16_inf, kBf16InfBits);
+    }
     for (uint16_t i = 0; i < (uint16_t)vl_count / num_vl_per_outer_loop; ++i) {        // 32 VLs per outer loop
         for (uint16_t j = 0; j < num_vl_per_outer_loop / num_vl_per_inner_loop; ++j) { // 2 VLs per inner loop
             MaskReg preg_vl0 = CreatePredicate<T>(total_count);
@@ -238,8 +252,15 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_largesizes(__ubuf__ T *srcPtr, __ubuf__ T 
             vlds(vb16_in_1, vb16_in_2, srcPtr, offset, DINTLV_B16); // loads 2 VLs (256 bf16 elements)
 
             if constexpr (std::is_same<T, half>::value) {
+                vector_bool preg_inf_1, preg_inf_2;
+                vand(vu16_abs_1, (vector_u16 &)vb16_in_1, vu16_fp16_abs_mask, preg_vl0, MODE_ZEROING);
+                vand(vu16_abs_2, (vector_u16 &)vb16_in_2, vu16_fp16_abs_mask, preg_vl1, MODE_ZEROING);
+                vcmps_eq(preg_inf_1, vu16_abs_1, kFp16InfBits, preg_vl0);
+                vcmps_eq(preg_inf_2, vu16_abs_2, kFp16InfBits, preg_vl1);
                 vcvt(vb16_bf16_1, vb16_in_1, preg_vl0, ROUND_Z);
                 vcvt(vb16_bf16_2, vb16_in_2, preg_vl1, ROUND_Z);
+                vsel((vector_u16 &)vb16_bf16_1, vu16_bf16_inf, (vector_u16 &)vb16_bf16_1, preg_inf_1);
+                vsel((vector_u16 &)vb16_bf16_2, vu16_bf16_inf, (vector_u16 &)vb16_bf16_2, preg_inf_2);
                 vand(vu16_abs_1, (vector_u16 &)vb16_bf16_1, vu16_bf16_abs_mask, preg_vl0, MODE_ZEROING);
                 vand(vu16_abs_2, (vector_u16 &)vb16_bf16_2, vu16_bf16_abs_mask, preg_vl1, MODE_ZEROING);
             } else {
@@ -809,11 +830,7 @@ __tf__ PTO_INTERNAL void TQuant_MXFP8_Impl(typename TileDataOut::TileDType __out
     __ubuf__ T *maxPtr = (__ubuf__ T *)__cce_get_tile_ptr(max);
     __ubuf__ T *scalingPtr = (__ubuf__ T *)__cce_get_tile_ptr(scaling);
 
-    uint64_t originalCtrl = get_ctrl();
-    bool originalCtrl48 = (originalCtrl & (1ULL << TQUANT_B16_CAST_NON_SAT_BIT)) != 0;
-    bool originalCtrl50 = (originalCtrl & (1ULL << 50)) != 0;
-    set_ctrl(sbitset1(get_ctrl(), 50));
-    set_ctrl(sbitset1(get_ctrl(), TQUANT_B16_CAST_NON_SAT_BIT));
+    set_ctrl(static_cast<uint64_t>(1) << 50);
     __VEC_SCOPE__
     {
         ZeroPadSourceTile<T, TileDataSrc::Cols>(srcPtr, validRows, validCols);
@@ -833,14 +850,6 @@ __tf__ PTO_INTERNAL void TQuant_MXFP8_Impl(typename TileDataOut::TileDType __out
                              vlCount, expLoopCount, numGroups, totalElems, validRows, validCols,
                              (unsigned)TileDataSrc::Cols);
     }
-    if (originalCtrl50)
-        set_ctrl(sbitset1(get_ctrl(), 50));
-    else
-        set_ctrl(sbitset0(get_ctrl(), 50));
-    if (originalCtrl48)
-        set_ctrl(sbitset1(get_ctrl(), TQUANT_B16_CAST_NON_SAT_BIT));
-    else
-        set_ctrl(sbitset0(get_ctrl(), TQUANT_B16_CAST_NON_SAT_BIT));
 }
 
 template <typename TileDataOut, typename TileDataSrc, typename TileDataPara>
