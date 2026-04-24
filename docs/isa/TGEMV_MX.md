@@ -1,4 +1,4 @@
-﻿# TGEMV_MX
+# TGEMV_MX
 
 
 ## Tile Operation Diagram
@@ -99,7 +99,7 @@ For practical usage patterns, see:
 ### Manual Mode
 
 ```text
-# Manual mode: bind resources explicitly before issuing the instruction.
+# Manual mode: resources must be bound explicitly before issuing the instruction.
 # Optional for tile operands:
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)

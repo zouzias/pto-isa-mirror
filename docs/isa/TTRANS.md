@@ -70,9 +70,9 @@ PTO_INST RecordEvent TTRANS(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp
 - **Temporary tile**:
     - The C++ API requires `tmp`, but some implementations may not use it.
 - **ConvTile**:
-    - Transpose of ConvTile for `TileType::Vec` is supported。 Element size must be `1`、`2` or `4` bytes. Supported element types are `uint32_t`、`int32_t`、`float`、`uint16_t`、`int16_t`、`half`、`bfloat16_t`、`uint8_t`、`int8_t`.
-    - Format transformation from `NCHW` to `NC1HWC0` is supported, while `C1 == (C + C0 - 1)/C0`，HW matches alignment constraint，which means `H*W*sizeof(T)==0`. C0 means `c0_size`, which `C0 * sizeof(T) == 32`。C0 can also be 4.
-    - Format transformation from `NC1HWC0` to `FRACTAL_Z` is supported， while `N1 == (N + N0 - 1)/N0`。N0 should be 16.
+    - Transpose of ConvTile for `TileType::Vec` is supported. Element size must be `1`, `2`, or `4` bytes. Supported element types are `uint32_t`, `int32_t`, `float`, `uint16_t`, `int16_t`, `half`, `bfloat16_t`, `uint8_t`, `int8_t`.
+    - Format transformation from `NCHW` to `NC1HWC0` is supported, where `C1 == (C + C0 - 1) / C0`, and `H * W` must satisfy the alignment constraint. `C0` denotes `c0_size`, and typically satisfies `C0 * sizeof(T) == 32`; `C0` may also be `4`.
+    - Format transformation from `NC1HWC0` to `FRACTAL_Z` is supported, where `N1 == (N + N0 - 1) / N0`, and `N0` should be `16`.
 
 ## Examples
 
@@ -127,7 +127,7 @@ void example_manual() {
 ### Manual Mode
 
 ```text
-# Manual mode: bind resources explicitly before issuing the instruction.
+# Manual mode: resources must be bound explicitly before issuing the instruction.
 # Optional for tile operands:
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
@@ -141,4 +141,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.ttrans ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-
