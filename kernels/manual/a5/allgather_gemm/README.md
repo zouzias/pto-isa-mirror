@@ -16,7 +16,7 @@ kernels/manual/a5/allgather_gemm/
 ├── allgather_gemm_comm_kernel.cpp     # AIV communication kernel: AllGather via TPUT
 ├── allgather_gemm_compute_kernel.cpp  # AIC compute kernel: streaming GEMM with tile-flag waiting
 ├── ready_queue.hpp                    # TileFlagMatrix / summary counter metadata
-├── run.sh                             # Generate data, build, and launch mpirun execution
+├── run.sh                             # Build & run script (env detection, multi-device launch, perf mode)
 ├── scripts/
 │   ├── gen_data.py                    # Input data generation (FP16 A slices + B)
 │   ├── test_shapes.csv                # Test shape configurations (M, K, N)
@@ -151,6 +151,13 @@ Shape constraints enforced by `run.sh`:
 - `G_K % G_BASE_N == 0`
 - `G_N % G_BASE_N == 0`
 
+The script also:
+
+- auto-detects and sources the latest CANN `set_env.sh` when `ASCEND_CANN_PATH` is not provided
+- searches common MPICH install paths and updates `PATH` / `LD_LIBRARY_PATH`
+- clears stale HCCL shared-memory state before each run
+- prints the selected shape, tile, and block configuration before build and launch
+
 
 ### Command-Line Options
 
@@ -167,8 +174,38 @@ Shape constraints enforced by `run.sh`:
 | `--compute-blocks` | Override the compute kernel block count |
 | `--comm-blocks` | Override the communication kernel block count |
 
+## Benchmark and Output
+
+The host program runs three benchmark views before the final functional verification:
+
+1. **Compute-only**: marks all tiles ready from the host side and measures pure compute latency
+2. **Sequential**: runs communication to completion first, then launches compute
+3. **Pipelined**: launches communication and compute on separate streams to measure overlap
+
+After benchmarking, it runs one final functional verification pass and compares the result with `golden.bin`.
+
+A successful run prints a summary similar to:
+
+```text
+[INFO] Running warmup...
+[INFO] Functional run completed. Verification PASSED.
+[SUCCESS] AllGather GEMM (HCCL)
+  Compute-only:   ...
+  Sequential:     ...
+  Pipelined:      ...
+  Speedup:        ...
+  Overlap eff:    ...
+```
+
+The generated output tensor for each rank is also written to:
+
+```text
+out/output_rank<rank_id>.bin
+```
+
 ## Changelog
 
 | Date       | Change |
 | ---------- | ------ |
 | 2025-07-01 | Initial implementation: AllGather+GEMM fusion with M-split streaming pipeline |
+| 2026-04-21 | Synced A5 run/doc conventions with the A2/A3 version: env-aware `run.sh`, clearer launch output, and benchmark/output documentation while keeping A5 tile semantics |

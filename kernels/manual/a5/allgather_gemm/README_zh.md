@@ -16,7 +16,7 @@ kernels/manual/a5/allgather_gemm/
 ├── allgather_gemm_comm_kernel.cpp     # AIV 通信 kernel: 通过 TPUT 执行 AllGather
 ├── allgather_gemm_compute_kernel.cpp  # AIC 计算 kernel: 基于 tile 就绪等待的流式 GEMM
 ├── ready_queue.hpp                    # TileFlagMatrix / summary counter 元数据
-├── run.sh                             # 数据生成、构建并启动 mpirun
+├── run.sh                             # 构建与运行脚本（环境探测、多卡启动、性能模式）
 ├── scripts/
 │   ├── gen_data.py                    # 输入数据生成（FP16 A 切片 + B）
 │   ├── test_shapes.csv                # 测试 shape 配置（M、K、N）
@@ -151,6 +151,13 @@ bash run.sh -r sim -v Ascend950PR_958b -n 2 --gm 2048 --gk 2048 --gn 1024
 - `G_K % G_BASE_N == 0`
 - `G_N % G_BASE_N == 0`
 
+脚本还会：
+
+- 在未提供 `ASCEND_CANN_PATH` 时自动探测并 `source` 最新的 CANN `set_env.sh`
+- 搜索常见 MPICH 安装路径，并补全 `PATH` / `LD_LIBRARY_PATH`
+- 在每次运行前清理残留的 HCCL 共享内存状态
+- 在构建和启动前打印本次使用的 shape、tile 和 block 配置
+
 ### 命令行参数
 
 | 参数 | 说明 |
@@ -166,8 +173,38 @@ bash run.sh -r sim -v Ascend950PR_958b -n 2 --gm 2048 --gk 2048 --gn 1024
 | `--compute-blocks` | 覆盖计算 kernel 的 block 数配置 |
 | `--comm-blocks` | 覆盖通信 kernel 的 block 数配置 |
 
+## Benchmark 与输出说明
+
+当前 host 程序会在最终功能校验前执行三类 benchmark：
+
+1. **Compute-only**：由 host 直接把所有 tile 标记为 ready，只测纯计算延迟
+2. **Sequential**：先让通信完整结束，再启动计算
+3. **Pipelined**：通信和计算在两个 stream 上并发启动，测量重叠效果
+
+benchmark 结束后，会再执行一次最终 functional verification，并与 `golden.bin` 做结果比对。
+
+成功运行时，输出类似：
+
+```text
+[INFO] Running warmup...
+[INFO] Functional run completed. Verification PASSED.
+[SUCCESS] AllGather GEMM (HCCL)
+  Compute-only:   ...
+  Sequential:     ...
+  Pipelined:      ...
+  Speedup:        ...
+  Overlap eff:    ...
+```
+
+每个 rank 的输出张量也会写到：
+
+```text
+out/output_rank<rank_id>.bin
+```
+
 ## 变更记录
 
 | 日期 | 变更 |
 | --- | --- |
 | 2025-07-01 | 初始实现：基于 M 维切分流式流水线的 AllGather + GEMM 融合版本 |
+| 2026-04-21 | 将 A5 的运行/文档规范与 A2/A3 版本对齐：补充环境感知 `run.sh`、更清晰的启动输出，以及 benchmark/输出说明，保持 A5 的 tile 语义不变 |
