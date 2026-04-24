@@ -370,19 +370,19 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling(__ubuf__ T *maxPtr, __ubuf__ uint8
         // biased exponent
         vand((vector_s16 &)vb16_exponent, (vector_s16 &)vb16_max, vb16_exp_mask, preg_b16, MODE_ZEROING);
         vshrs((vector_s16 &)vb16_exponent, (vector_s16 &)vb16_exponent, shr, preg_b16, MODE_ZEROING);
-        vsub((vector_s16 &)vb16_shared_exp_1, (vector_s16 &)vb16_exponent, (vector_s16 &)vb16_b8_emax, preg_b16);
+        vsub((vector_s16 &)vb16_shared_exp, (vector_s16 &)vb16_exponent, (vector_s16 &)vb16_b8_emax, preg_b16);
         // scaling = 1 / shared_exponent
         vsub((vector_s16 &)vb16_scaling, (vector_s16 &)vb16_exp_max, (vector_s16 &)vb16_shared_exp, preg_b16);
         vshls((vector_s16 &)vb16_scaling, (vector_s16 &)vb16_scaling, shr, preg_b16, MODE_ZEROING);
         // NaN / Inf / subnormal clamping
         vcmps_ne(preg_inf, (vector_s16 &)vb16_exponent, nan_check, preg_b16);
         vsel(vb16_scaling, vb16_scaling, vb16_b8_nan, preg_inf);
-        vsel(vb16_shared_exp_1, vb16_shared_exp_1, vb16_b8_nan, preg_inf);
+        vsel(vb16_shared_exp, vb16_shared_exp, vb16_b8_nan, preg_inf);
         vcmps_ge(preg_inf, (vector_s16 &)vb16_scaling, clamp_val, preg_b16);
         vsel(vb16_scaling, vb16_scaling, vb16_subnorm, preg_inf);
-        vsel(vb16_shared_exp_1, vb16_shared_exp_1, vb16_subnorm, preg_inf);
+        vsel(vb16_shared_exp, vb16_shared_exp, vb16_subnorm, preg_inf);
 
-        vsts((vector_s16 &)vb16_shared_exp_1, ((__ubuf__ int16_t *)expPtr), i * elementsPerVL / sizeof(T), PK_B16,
+        vsts((vector_s16 &)vb16_shared_exp, ((__ubuf__ int16_t *)expPtr), i * elementsPerVL / sizeof(T), PK_B16,
              preg_b16);
         vsts((vector_s16 &)vb16_scaling, ((__ubuf__ int16_t *)scalingPtr), i * elementsPerVL, distValue, preg_b16);
     }
