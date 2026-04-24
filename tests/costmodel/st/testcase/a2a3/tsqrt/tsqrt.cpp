@@ -36,17 +36,17 @@ void runTSqrt()
 
 TEST(TSqrt, float_64x64_inplace)
 {
-    runTSqrt<float, 64, 64, true, NO_PROFILING, 0.0f>();
+    runTSqrt<float, 64, 64, true, 159.0f, 0.0f>();
 }
 TEST(TSqrt, float_64x64)
 {
-    runTSqrt<float, 64, 64, false, NO_PROFILING, 0.0f>();
+    runTSqrt<float, 64, 64, false, 160.0f, 0.0f>();
 }
 TEST(TSqrt, half_64x64_inplace)
 {
-    runTSqrt<half, 64, 64, true, NO_PROFILING, 0.0f>();
+    runTSqrt<half, 64, 64, true, 159.0f, 0.0f>();
 }
 TEST(TSqrt, half_64x64)
 {
-    runTSqrt<half, 64, 64, false, NO_PROFILING, 0.0f>();
+    runTSqrt<half, 64, 64, false, 160.0f, 0.0f>();
 }

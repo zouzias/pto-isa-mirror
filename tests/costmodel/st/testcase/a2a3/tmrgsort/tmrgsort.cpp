@@ -98,7 +98,7 @@ TEST(TMrgsort, multi_half_256_3list_exh)
 // Single-src
 TEST(TMrgsort, single_float_256_bl64)
 {
-    runTMrgsortSingle<float, 256, 64, NO_PROFILING, 0.0f>();
+    runTMrgsortSingle<float, 256, 64, 98.0f, 0.0f>();
 }
 TEST(TMrgsort, single_float_512_bl64)
 {

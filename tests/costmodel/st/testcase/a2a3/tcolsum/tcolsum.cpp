@@ -42,13 +42,13 @@ void runTColSum()
 
 TEST(TColSum, float_64x64_binary)
 {
-    runTColSum<float, 64, 64, true, NO_PROFILING, 0.0f>();
+    runTColSum<float, 64, 64, true, 611.0f, 0.0f>();
 }
 TEST(TColSum, float_1x3072_binary)
 {
-    runTColSum<float, 1, 3072, true, NO_PROFILING, 0.0f>();
+    runTColSum<float, 1, 3072, true, 66.0f, 0.0f>();
 }
 TEST(TColSum, half_16x256)
 {
-    runTColSum<half, 16, 256, false, NO_PROFILING, 0.0f>();
+    runTColSum<half, 16, 256, false, 382.0f, 0.0f>();
 }

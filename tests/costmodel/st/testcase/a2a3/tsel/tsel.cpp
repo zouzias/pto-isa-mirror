@@ -47,13 +47,13 @@ void runTSel()
 
 TEST(TSel, half_4x128)
 {
-    runTSel<half, 4, 128, NO_PROFILING, 0.0f>();
+    runTSel<half, 4, 128, 200.0f, 0.0f>();
 }
 TEST(TSel, half_1x128)
 {
-    runTSel<half, 1, 128, NO_PROFILING, 0.0f>();
+    runTSel<half, 1, 128, 87.0f, 0.0f>();
 }
 TEST(TSel, float_4x64)
 {
-    runTSel<float, 4, 64, NO_PROFILING, 0.0f>();
+    runTSel<float, 4, 64, 200.0f, 0.0f>();
 }
