@@ -48,6 +48,7 @@ tadds
 taddsc
 tand
 tands
+targreduceop
 tbroadcast
 tci
 tcmp
@@ -72,6 +73,10 @@ tfmods
 tgather
 tgatherb
 tget
+tget_async
+tget_scale_addr
+thistogram
+timg2col
 tinsert
 tload
 tloadconv
@@ -99,11 +104,15 @@ tprefetch
 tprelu
 tpushpop
 tput
+tput_async
+tquant
+trandom
 trecip
 treduce
 trelu
 trem
 trems
+treshape
 trowexpand
 trowexpandop
 trowmax
@@ -124,20 +133,13 @@ tsub
 tsubc
 tsubs
 tsubsc
+tsubview
 ttest
 ttrans
 ttri
 twait
-treshape
-trandom
-thistogram
-timg2col
-tquant
 txor
 txors
-tget_async
-tput_async
-tsubview
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})

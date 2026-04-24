@@ -1,4 +1,4 @@
-﻿<p align="center">
+<p align="center">
   <img src="../figures/pto_logo.svg" alt="PTO Tile Lib" width="180" />
 </p>
 
@@ -14,9 +14,9 @@
 
 ## 手动 / 资源绑定
 - [TASSIGN](TASSIGN_zh.md) - 将 Tile 对象绑定到实现定义的片上地址（手动放置）。
-- [TSETFMATRIX](TSETFMATRIX_zh.md) - 为类 IMG2COL 操作设置 FMATRIX 寄存器。
-- [TSET_IMG2COL_RPT](TSET_IMG2COL_RPT_zh.md) - 从 IMG2COL 配置 Tile 设置 IMG2COL 重复次数元数据。
-- [TSET_IMG2COL_PADDING](TSET_IMG2COL_PADDING_zh.md) - 从 IMG2COL 配置 Tile 设置 IMG2COL 填充元数据。
+- [SETFMATRIX](SETFMATRIX_zh.md) - 为类 IMG2COL 操作设置 FMATRIX 寄存器。
+- [SET_IMG2COL_RPT](SET_IMG2COL_RPT_zh.md) - 从 IMG2COL 配置 Tile 设置 IMG2COL 重复次数元数据。
+- [SET_IMG2COL_PADDING](SET_IMG2COL_PADDING_zh.md) - 从 IMG2COL 配置 Tile 设置 IMG2COL 填充元数据。
 
 ## 逐元素（Tile-Tile）
 - [TADD](TADD_zh.md) - 两个 Tile 的逐元素加法。
@@ -47,6 +47,7 @@
 - [TNEG](TNEG_zh.md) - Tile 的逐元素取负。
 - [TREM](TREM_zh.md) - 两个 Tile 的逐元素余数，余数符号与除数相同。
 - [TFMOD](TFMOD_zh.md) - 两个 Tile 的逐元素余数，余数符号与被除数相同。
+- [TPOW](TPOW_zh.md) - 两个 Tile 的逐元素幂运算。
 
 ## Tile-标量 / Tile-立即数
 - [TEXPANDS](TEXPANDS_zh.md) - 将标量广播到目标 Tile 中。
@@ -68,6 +69,7 @@
 - [TLRELU](TLRELU_zh.md) - 带标量斜率的 Leaky ReLU。
 - [TADDSC](TADDSC_zh.md) - 与标量和第二个 Tile 的融合逐元素加法：`src0 + scalar + src1`。
 - [TSUBSC](TSUBSC_zh.md) - 融合逐元素运算：`src0 - scalar + src1`。
+- [TPOWS](TPOWS_zh.md) - Tile 逐元素与标量幂运算。
 
 ## 轴归约 / 扩展
 - [TROWSUM](TROWSUM_zh.md) - 通过对列求和来归约每一行。
@@ -145,6 +147,8 @@
 - [TPARTMUL](TPARTMUL_zh.md) - 部分逐元素乘法，对有效区域不一致的处理为实现定义。
 - [TPARTMAX](TPARTMAX_zh.md) - 部分逐元素最大值，对不匹配的有效区域具有实现定义的处理方式。
 - [TPARTMIN](TPARTMIN_zh.md) - 部分逐元素最小值，对不匹配的有效区域具有实现定义的处理方式。
+- [TPARTARGMAX](TPARTARGMAX_zh.md) - 部分逐元素最大值选择并返回对应索引（argmax），对不匹配的有效区域具有实现定义的处理方式。
+- [TPARTARGMIN](TPARTARGMIN_zh.md) - 部分逐元素最小值选择并返回对应索引（argmin），对不匹配的有效区域具有实现定义的处理方式。
 - [TGATHERB](TGATHERB_zh.md) - 使用字节偏移量收集元素。
 - [TSCATTER](TSCATTER_zh.md) - 使用逐元素行索引将源 Tile 的行散播到目标 Tile 中。
 - [TQUANT](TQUANT_zh.md) - 量化 Tile（例如 FP32 到 FP8），生成指数/缩放/最大值输出。

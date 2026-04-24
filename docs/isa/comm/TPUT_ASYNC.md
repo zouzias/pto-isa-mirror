@@ -38,7 +38,7 @@ code forward-compatible with future engines (CCU, etc.).
 
 ## AsyncSession Construction
 
-Use `BuildAsyncSession` from `include/pto/comm/async/async_event_impl.hpp`.
+Use `BuildAsyncSession` from `include/pto/comm/async_common/async_event_impl.hpp`.
 There are two overloads — one for SDMA and one for URMA — with different parameter lists.
 
 ### SDMA Construction (default)

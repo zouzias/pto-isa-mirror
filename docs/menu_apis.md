@@ -11,9 +11,9 @@
 
 - 手动/资源绑定
     - [TASSIGN](isa/TASSIGN_zh.md)
-    - [TSETFMATRIX](isa/TSETFMATRIX_zh.md)
-    - [TSET_IMG2COL_RPT](isa/TSET_IMG2COL_RPT_zh.md)
-    - [TSET_IMG2COL_PADDING](isa/TSET_IMG2COL_PADDING_zh.md)
+    - [SETFMATRIX](isa/SETFMATRIX_zh.md)
+    - [SET_IMG2COL_RPT](isa/SET_IMG2COL_RPT_zh.md)
+    - [SET_IMG2COL_PADDING](isa/SET_IMG2COL_PADDING_zh.md)
 
 - 逐元素（Tile-Tile）
     - [TADD](isa/TADD_zh.md)
@@ -44,6 +44,7 @@
     - [TNEG](isa/TNEG_zh.md)
     - [TREM](isa/TREM_zh.md)
     - [TFMOD](isa/TFMOD_zh.md)
+    - [TPOW](isa/TPOW_zh.md)
 
 - Tile-标量/Tile-立即数
     - [TEXPANDS](isa/TEXPANDS_zh.md)
@@ -65,6 +66,7 @@
     - [TLRELU](isa/TLRELU_zh.md)
     - [TADDSC](isa/TADDSC_zh.md)
     - [TSUBSC](isa/TSUBSC_zh.md)
+    - [TPOWS](isa/TPOWS_zh.md)
 
 - 轴归约/扩展
     - [TROWSUM](isa/TROWSUM_zh.md)
@@ -139,6 +141,8 @@
     - [TPARTMUL](isa/TPARTMUL_zh.md)
     - [TPARTMAX](isa/TPARTMAX_zh.md)
     - [TPARTMIN](isa/TPARTMIN_zh.md)
+    - [TPARTARGMAX](isa/TPARTARGMAX_zh.md)
+    - [TPARTARGMIN](isa/TPARTARGMIN_zh.md)
     - [TGATHERB](isa/TGATHERB_zh.md)
     - [TSCATTER](isa/TSCATTER_zh.md)
     - [TQUANT](isa/TQUANT_zh.md)
