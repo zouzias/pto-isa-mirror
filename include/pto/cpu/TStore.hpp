@@ -134,7 +134,7 @@ __tf__ PTO_INLINE void TStore(typename GlobalData::DType __out__ *dst, typename 
     }
 }
 
-template <typename TileData, typename GlobalData, AtomicType atomicType = AtomicType::AtomicNone>
+template <typename TileData, typename GlobalData, AtomicType atomicType>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData &dst, TileData &src)
 {
     static_assert(sizeof(typename TileData::DType) == sizeof(typename GlobalData::DType),
@@ -149,15 +149,46 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData &dst, TileData &src)
                                  dst.GetStride(pto::GlobalTensorDim::DIM_4), src.GetValidRow(), src.GetValidCol());
 }
 
-template <typename TileData, typename GlobalData, AtomicType atomicType = AtomicType::AtomicNone>
-__aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src, uint64_t preQuantScalar)
+template <typename TileData, typename GlobalData, AtomicType atomicType, STPhase Phase>
+__aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src)
 {
-    (void)preQuantScalar;
+    (void)Phase;
     TSTORE_IMPL<TileData, GlobalData, atomicType>(dst, src);
 }
 
-template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
-          ReluPreMode reluPreMode = ReluPreMode::NoRelu>
+template <typename TileData, typename GlobalData, AtomicType atomicType, ReluPreMode reluPreMode>
+__aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src)
+{
+    (void)reluPreMode;
+    TSTORE_IMPL<TileData, GlobalData, atomicType>(dst, src);
+}
+
+template <typename TileData, typename GlobalData, AtomicType atomicType, ReluPreMode reluPreMode, STPhase Phase>
+__aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src)
+{
+    (void)Phase;
+    (void)reluPreMode;
+    TSTORE_IMPL<TileData, GlobalData, atomicType>(dst, src);
+}
+
+template <typename TileData, typename GlobalData, AtomicType atomicType, ReluPreMode reluPreMode>
+__aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src, uint64_t preQuantScalar)
+{
+    (void)preQuantScalar;
+    (void)reluPreMode;
+    TSTORE_IMPL<TileData, GlobalData, atomicType>(dst, src);
+}
+
+template <typename TileData, typename GlobalData, AtomicType atomicType, ReluPreMode reluPreMode, STPhase Phase>
+__aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src, uint64_t preQuantScalar)
+{
+    (void)Phase;
+    (void)preQuantScalar;
+    (void)reluPreMode;
+    TSTORE_IMPL<TileData, GlobalData, atomicType>(dst, src);
+}
+
+template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType, ReluPreMode reluPreMode>
 __aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src, FpTileData &fp)
 {
     (void)fp;
