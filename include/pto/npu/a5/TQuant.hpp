@@ -261,24 +261,26 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling(__ubuf__ float *maxPtr, __ubuf__ u
     static constexpr auto distValue =
         std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<float, DistVST::DIST_NORM>())>();
     vector_f32 vb32_max;
-    vector_s32 vb32_exponent, vb32_shared_exp, vb32_scaling;
-    vector_s32 vb32_b8_nan, vb32_f32_nan, vb32_b8_emax, vb32_exp_mask, vb32_exp_max;
+    vector_s32 vb32_exponent, vb32_mantissa, vb32_shared_exp, vb32_scaling;
+    vector_s32 vb32_b8_nan, vb32_f32_nan, vb32_b8_emax, vb32_exp_mask, vb32_mantissa_mask, vb32_exp_max;
     vector_s32 vb32_recip_min_scale, vb32_zero;
     constexpr int shr = 23;
     vbr(vb32_exp_mask, 0x7F800000);
+    vbr(vb32_mantissa_mask, 0x007FFFFF);
     vbr(vb32_b8_nan, 0xFF);
     vbr(vb32_f32_nan, 0x7FC00000);
     vbr(vb32_exp_max, 0xFE);
     vbr(vb32_b8_emax, 8); // Max exponent for e4m3 is 8
     vbr(vb32_recip_min_scale, 0x7F000000);
     vbr(vb32_zero, 0);
-    vector_bool preg_special, preg_min_scale;
+    vector_bool preg_special, preg_nan, preg_min_scale;
     uint32_t total_count = total_elements_count;
     uint32_t scaling_elem_count = total_elements_count * 2;
     for (uint16_t i = 0; i < (uint16_t)exp_max_loop_count; ++i) {
         vector_bool preg_b32 = CreatePredicate<float>(total_count);
         vlds((vector_s32 &)vb32_max, (__ubuf__ int32_t *)maxPtr, i * elementsPerRepeat, NORM);
         vand((vector_s32 &)vb32_exponent, (vector_s32 &)vb32_max, vb32_exp_mask, preg_b32, MODE_ZEROING);
+        vand((vector_s32 &)vb32_mantissa, (vector_s32 &)vb32_max, vb32_mantissa_mask, preg_b32, MODE_ZEROING);
         vshrs((vector_s32 &)vb32_exponent, (vector_s32 &)vb32_exponent, shr, preg_b32, MODE_ZEROING);
         vsub((vector_u32 &)vb32_shared_exp, (vector_u32 &)vb32_exponent, (vector_u32 &)vb32_b8_emax, preg_b32);
         vsub((vector_s32 &)vb32_scaling, (vector_s32 &)vb32_exp_max, (vector_s32 &)vb32_shared_exp, preg_b32);
@@ -289,8 +291,9 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling(__ubuf__ float *maxPtr, __ubuf__ u
         vsel(vb32_shared_exp, vb32_zero, vb32_shared_exp, preg_min_scale);
 
         vcmps_eq(preg_special, (vector_s32 &)vb32_exponent, 0xFF, preg_b32);
-        vsel(vb32_scaling, vb32_f32_nan, vb32_scaling, preg_special);
-        vsel(vb32_shared_exp, vb32_b8_nan, vb32_shared_exp, preg_special);
+        vcmps_ne(preg_nan, (vector_s32 &)vb32_mantissa, 0, preg_special);
+        vsel(vb32_scaling, vb32_f32_nan, vb32_scaling, preg_nan);
+        vsel(vb32_shared_exp, vb32_b8_nan, vb32_shared_exp, preg_nan);
         vsts((vector_s32 &)vb32_shared_exp, ((__ubuf__ int32_t *)expPtr), i * elementsPerRepeat / 4, PK4_B32, preg_b32);
         if constexpr (unroll) {
             vector_s32 vb32_scaling_0, vb32_scaling_1;
@@ -323,26 +326,22 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling(__ubuf__ T *maxPtr, __ubuf__ uint8
     constexpr uint16_t kFp8E4M3MaxExp = 0x0400;
     constexpr uint16_t kBf16ExpBias = 0x7F00;
     constexpr uint16_t kFp8Nan = 0x00FF;
-    constexpr uint16_t kFp8Max = 0x00FE;
     constexpr uint16_t kNanCustomization = 0x7F81;
-    constexpr uint16_t kBf16RecipMaxScale = 0x0040; // BF16 2^-127, reciprocal for E8M0 scale 2^127.
 
     __ubuf__ uint16_t *maxPtr_u16 = (__ubuf__ uint16_t *)maxPtr;
     __ubuf__ uint16_t *scalingPtr_u16 = (__ubuf__ uint16_t *)scalingPtr;
     RegTensor<uint16_t> vu16_max_abs, vu16_max_exp, vu16_mantissa;
     RegTensor<uint16_t> vu16_shared_exp, vu16_scale_value, vu16_recip_scale;
-    RegTensor<uint16_t> vu16_max_exp_value, vu16_scale_bias, vu16_fp8_nan, vu16_fp8_max;
-    RegTensor<uint16_t> vu16_nan, vu16_recip_max_scale, vu16_exp_mask, vu16_mantissa_mask;
+    RegTensor<uint16_t> vu16_max_exp_value, vu16_scale_bias, vu16_fp8_nan;
+    RegTensor<uint16_t> vu16_nan, vu16_exp_mask, vu16_mantissa_mask;
     vbr(vu16_max_exp_value, kFp8E4M3MaxExp);
     vbr(vu16_scale_bias, kBf16ExpBias);
     vbr(vu16_fp8_nan, kFp8Nan);
-    vbr(vu16_fp8_max, kFp8Max);
     vbr(vu16_nan, kNanCustomization);
-    vbr(vu16_recip_max_scale, kBf16RecipMaxScale);
     vbr(vu16_exp_mask, kBf16ExpMask);
     vbr(vu16_mantissa_mask, kBf16MantissaMask);
 
-    vector_bool preg_clamp, preg_special, preg_inf, preg_nan;
+    vector_bool preg_clamp, preg_special, preg_nan;
     constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T);
     uint32_t total_count = total_elements_count;
     for (uint16_t i = 0; i < (uint16_t)exp_max_loop_count; ++i) {
@@ -351,20 +350,17 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling(__ubuf__ T *maxPtr, __ubuf__ uint8
         vand(vu16_max_exp, vu16_max_abs, vu16_exp_mask, preg_b16, MODE_ZEROING);
         vand(vu16_mantissa, vu16_max_abs, vu16_mantissa_mask, preg_b16, MODE_ZEROING);
         vcmps_eq(preg_special, vu16_max_exp, kBf16ExpMask, preg_b16);
-        vcmps_eq(preg_inf, vu16_mantissa, 0, preg_special);
         vcmps_ne(preg_nan, vu16_mantissa, 0, preg_special);
         vcmps_le(preg_clamp, vu16_max_exp, kFp8E4M3MaxExp, preg_b16);
         vsel(vu16_max_exp, vu16_max_exp_value, vu16_max_exp, preg_clamp);
 
         vsub(vu16_shared_exp, vu16_max_exp, vu16_max_exp_value, preg_b16, MODE_ZEROING);
         vshrs(vu16_scale_value, vu16_shared_exp, 7, preg_b16, MODE_ZEROING);
-        vsel(vu16_scale_value, vu16_fp8_max, vu16_scale_value, preg_inf);
         vsel(vu16_scale_value, vu16_fp8_nan, vu16_scale_value, preg_nan);
         vsts(vu16_scale_value, (__ubuf__ uint16_t *)expPtr, i * elementsPerVL / sizeof(T), PK_B16, preg_b16);
 
         // reciprocal_scale = 2^(127 - e8m0_biased_exp), stored as BF16 bits.
         vsub(vu16_recip_scale, vu16_scale_bias, vu16_shared_exp, preg_b16, MODE_ZEROING);
-        vsel(vu16_recip_scale, vu16_recip_max_scale, vu16_recip_scale, preg_inf);
         vsel(vu16_recip_scale, vu16_nan, vu16_recip_scale, preg_nan);
         vsts(vu16_recip_scale, scalingPtr_u16, i * elementsPerVL, NORM_B16, preg_b16);
     }

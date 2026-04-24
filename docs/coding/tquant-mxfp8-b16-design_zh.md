@@ -271,14 +271,16 @@ exp all ones, mantissa == 0 -> Inf
 exp all ones, mantissa != 0 -> NaN
 ```
 
-当前设计已经让 `maxPtr` 保留 BF16 abs raw bits，所以可以区分：
+当前设计已经让 `maxPtr` 保留 BF16 abs raw bits，所以可以区分。为了和 TorchAO
+`ScaleCalculationMode.FLOOR` 对齐，只对 NaN 做特殊处理；Inf 不单独 override，而是
+继续走 exponent 公式：
 
 ```text
 Inf:
   exp bits = 0x7F80
   mantissa = 0
-  E8M0 encoded exp = 0xFE
-  reciprocal scale = BF16 2^-127 = 0x0040
+  e8m0_biased = 255 - 8 = 247 = 0xF7
+  reciprocal scale = 2^(127 - 247) = 2^-120
 
 NaN:
   exp bits = 0x7F80
@@ -286,6 +288,10 @@ NaN:
   E8M0 encoded exp = 0xFF
   reciprocal scale = BF16 NaN customization, 当前为 0x7F81
 ```
+
+注意：E8M0 的最大有限编码仍然是 `0xFE`，`0xFF` 仍然是 NaN。`Inf -> 0xF7`
+不是说 E8M0 有 Inf 编码，而是 TorchAO FLOOR 路径把 IEEE all-one exponent 按
+普通 exponent 公式处理后的结果。
 
 这和 NN 仓
 `/home/bynshard/ops-nn/quant/dynamic_mx_quant/op_kernel/arch35/dynamic_mx_quant_tail_axis_fp8.h`
@@ -296,8 +302,9 @@ NaN:
 maxExp = 0x7F80
 ```
 
-因此 NN 仓无法区分 `Inf` 和 `NaN`。本实现为了正确处理 `Inf`，有意把最大值阶段从
-“保存 exponent bits”改为“保存 BF16 abs raw bits”。
+因此 NN 仓无法区分 `Inf` 和 `NaN`。本实现为了能区分 special value，有意把最大值阶段从
+“保存 exponent bits”改为“保存 BF16 abs raw bits”；之后按 TorchAO FLOOR 语义让
+Inf 走常规公式、NaN 走 `0xFF`。
 
 ## 旧设计问题总结
 
