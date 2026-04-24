@@ -139,6 +139,8 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tor -g TORTest.case2
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartadd -g TPARTADDTest.case_float_64x64_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartmul -g TPARTMULTest.case_float_64x64_64x64_64x64
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartargmax -g TPARTARGMAXTest.case_float_uint32_tile_diff_32k_small_0
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartargmin -g TPARTARGMINTest.case_float_uint32_tile_diff_32k_small_0
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tpow -g TPOWTest.case11
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tpows -g TPOWSTest.case11
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsel -g TSELTest.case1
@@ -288,6 +290,8 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tpow
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tpows
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartmul
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartargmax
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartargmin
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsel
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tload_gm2mat
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tload
