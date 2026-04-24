@@ -131,8 +131,11 @@ PTO_INTERNAL void AbsReduceMax_b16_DintlvWindow(__ubuf__ T *srcPtr, uint32_t off
     static_assert(std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
                   "AbsReduceMax_b16_DintlvWindow: T must be bfloat16_t or half");
     constexpr uint16_t kBf16AbsMask = 0x7FFF;
+    constexpr uint16_t kFp16ExpMask = 0x7C00;
+    constexpr uint16_t kFp16MantissaMask = 0x03FF;
     constexpr uint16_t kFp16InfBits = 0x7C00;
     constexpr uint16_t kBf16InfBits = 0x7F80;
+    constexpr uint16_t kBf16NanBits = 0x7FC0;
     RegTensor<T> vb16_in_1, vb16_in_2;
     RegTensor<uint16_t> vu16_abs_1, vu16_abs_2, vu16_bf16_abs_mask;
     uint32_t even_count = (remaining + 1) / 2;
@@ -144,20 +147,35 @@ PTO_INTERNAL void AbsReduceMax_b16_DintlvWindow(__ubuf__ T *srcPtr, uint32_t off
     vbr(vu16_bf16_abs_mask, kBf16AbsMask);
     if constexpr (std::is_same<T, half>::value) {
         RegTensor<bfloat16_t> vb16_bf16_1, vb16_bf16_2;
-        RegTensor<uint16_t> vu16_fp16_abs_mask, vu16_bf16_inf;
-        vector_bool preg_inf_1, preg_inf_2;
+        RegTensor<uint16_t> vu16_fp16_abs_mask, vu16_fp16_exp_mask, vu16_fp16_mantissa_mask;
+        RegTensor<uint16_t> vu16_fp16_exp_1, vu16_fp16_exp_2;
+        RegTensor<uint16_t> vu16_fp16_mantissa_1, vu16_fp16_mantissa_2, vu16_bf16_inf, vu16_bf16_nan;
+        vector_bool preg_special_1, preg_special_2, preg_nan_1, preg_nan_2, preg_inf_1, preg_inf_2;
 
-        // Saturating f16->bf16 can map Inf to max finite. Patch Inf lanes back to BF16 Inf before abs/max.
+        // Saturating f16->bf16 can collapse special lanes. Preserve fp16 Inf/NaN before abs/max.
         vbr(vu16_fp16_abs_mask, kBf16AbsMask);
+        vbr(vu16_fp16_exp_mask, kFp16ExpMask);
+        vbr(vu16_fp16_mantissa_mask, kFp16MantissaMask);
         vbr(vu16_bf16_inf, kBf16InfBits);
+        vbr(vu16_bf16_nan, kBf16NanBits);
         vand(vu16_abs_1, (vector_u16 &)vb16_in_1, vu16_fp16_abs_mask, preg_vl0, MODE_ZEROING);
         vand(vu16_abs_2, (vector_u16 &)vb16_in_2, vu16_fp16_abs_mask, preg_vl1, MODE_ZEROING);
+        vand(vu16_fp16_exp_1, vu16_abs_1, vu16_fp16_exp_mask, preg_vl0, MODE_ZEROING);
+        vand(vu16_fp16_exp_2, vu16_abs_2, vu16_fp16_exp_mask, preg_vl1, MODE_ZEROING);
+        vand(vu16_fp16_mantissa_1, vu16_abs_1, vu16_fp16_mantissa_mask, preg_vl0, MODE_ZEROING);
+        vand(vu16_fp16_mantissa_2, vu16_abs_2, vu16_fp16_mantissa_mask, preg_vl1, MODE_ZEROING);
+        vcmps_eq(preg_special_1, vu16_fp16_exp_1, kFp16ExpMask, preg_vl0);
+        vcmps_eq(preg_special_2, vu16_fp16_exp_2, kFp16ExpMask, preg_vl1);
+        vcmps_ne(preg_nan_1, vu16_fp16_mantissa_1, 0, preg_special_1);
+        vcmps_ne(preg_nan_2, vu16_fp16_mantissa_2, 0, preg_special_2);
         vcmps_eq(preg_inf_1, vu16_abs_1, kFp16InfBits, preg_vl0);
         vcmps_eq(preg_inf_2, vu16_abs_2, kFp16InfBits, preg_vl1);
         vcvt(vb16_bf16_1, vb16_in_1, preg_vl0, ROUND_Z);
         vcvt(vb16_bf16_2, vb16_in_2, preg_vl1, ROUND_Z);
         vsel((vector_u16 &)vb16_bf16_1, vu16_bf16_inf, (vector_u16 &)vb16_bf16_1, preg_inf_1);
         vsel((vector_u16 &)vb16_bf16_2, vu16_bf16_inf, (vector_u16 &)vb16_bf16_2, preg_inf_2);
+        vsel((vector_u16 &)vb16_bf16_1, vu16_bf16_nan, (vector_u16 &)vb16_bf16_1, preg_nan_1);
+        vsel((vector_u16 &)vb16_bf16_2, vu16_bf16_nan, (vector_u16 &)vb16_bf16_2, preg_nan_2);
         vand(vu16_abs_1, (vector_u16 &)vb16_bf16_1, vu16_bf16_abs_mask, preg_vl0, MODE_ZEROING);
         vand(vu16_abs_2, (vector_u16 &)vb16_bf16_2, vu16_bf16_abs_mask, preg_vl1, MODE_ZEROING);
     } else {
@@ -221,10 +239,16 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_largesizes(__ubuf__ T *srcPtr, __ubuf__ T 
     static_assert(std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
                   "AbsReduceMax_b16_ND_largesizes: T must be bfloat16_t or half");
     constexpr uint16_t kBf16AbsMask = 0x7FFF;
+    constexpr uint16_t kFp16ExpMask = 0x7C00;
+    constexpr uint16_t kFp16MantissaMask = 0x03FF;
     constexpr uint16_t kFp16InfBits = 0x7C00;
     constexpr uint16_t kBf16InfBits = 0x7F80;
+    constexpr uint16_t kBf16NanBits = 0x7FC0;
     RegTensor<T> vb16_in_1, vb16_in_2, vb16_max_1;
     RegTensor<uint16_t> vu16_abs_1, vu16_abs_2, vu16_bf16_abs_mask, vu16_fp16_abs_mask, vu16_bf16_inf;
+    RegTensor<uint16_t> vu16_fp16_exp_mask, vu16_fp16_mantissa_mask;
+    RegTensor<uint16_t> vu16_fp16_exp_1, vu16_fp16_exp_2, vu16_fp16_mantissa_1, vu16_fp16_mantissa_2;
+    RegTensor<uint16_t> vu16_bf16_nan;
     RegTensor<bfloat16_t> vb16_bf16_1, vb16_bf16_2;
     vector_align ureg_max;
     uint32_t total_count = total_elements_count;
@@ -241,7 +265,10 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_largesizes(__ubuf__ T *srcPtr, __ubuf__ T 
     vbr(vu16_bf16_abs_mask, kBf16AbsMask);
     if constexpr (std::is_same<T, half>::value) {
         vbr(vu16_fp16_abs_mask, kBf16AbsMask);
+        vbr(vu16_fp16_exp_mask, kFp16ExpMask);
+        vbr(vu16_fp16_mantissa_mask, kFp16MantissaMask);
         vbr(vu16_bf16_inf, kBf16InfBits);
+        vbr(vu16_bf16_nan, kBf16NanBits);
     }
     for (uint16_t i = 0; i < (uint16_t)vl_count / num_vl_per_outer_loop; ++i) {        // 32 VLs per outer loop
         for (uint16_t j = 0; j < num_vl_per_outer_loop / num_vl_per_inner_loop; ++j) { // 2 VLs per inner loop
@@ -252,15 +279,25 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_largesizes(__ubuf__ T *srcPtr, __ubuf__ T 
             vlds(vb16_in_1, vb16_in_2, srcPtr, offset, DINTLV_B16); // loads 2 VLs (256 bf16 elements)
 
             if constexpr (std::is_same<T, half>::value) {
-                vector_bool preg_inf_1, preg_inf_2;
+                vector_bool preg_special_1, preg_special_2, preg_nan_1, preg_nan_2, preg_inf_1, preg_inf_2;
                 vand(vu16_abs_1, (vector_u16 &)vb16_in_1, vu16_fp16_abs_mask, preg_vl0, MODE_ZEROING);
                 vand(vu16_abs_2, (vector_u16 &)vb16_in_2, vu16_fp16_abs_mask, preg_vl1, MODE_ZEROING);
+                vand(vu16_fp16_exp_1, vu16_abs_1, vu16_fp16_exp_mask, preg_vl0, MODE_ZEROING);
+                vand(vu16_fp16_exp_2, vu16_abs_2, vu16_fp16_exp_mask, preg_vl1, MODE_ZEROING);
+                vand(vu16_fp16_mantissa_1, vu16_abs_1, vu16_fp16_mantissa_mask, preg_vl0, MODE_ZEROING);
+                vand(vu16_fp16_mantissa_2, vu16_abs_2, vu16_fp16_mantissa_mask, preg_vl1, MODE_ZEROING);
+                vcmps_eq(preg_special_1, vu16_fp16_exp_1, kFp16ExpMask, preg_vl0);
+                vcmps_eq(preg_special_2, vu16_fp16_exp_2, kFp16ExpMask, preg_vl1);
+                vcmps_ne(preg_nan_1, vu16_fp16_mantissa_1, 0, preg_special_1);
+                vcmps_ne(preg_nan_2, vu16_fp16_mantissa_2, 0, preg_special_2);
                 vcmps_eq(preg_inf_1, vu16_abs_1, kFp16InfBits, preg_vl0);
                 vcmps_eq(preg_inf_2, vu16_abs_2, kFp16InfBits, preg_vl1);
                 vcvt(vb16_bf16_1, vb16_in_1, preg_vl0, ROUND_Z);
                 vcvt(vb16_bf16_2, vb16_in_2, preg_vl1, ROUND_Z);
                 vsel((vector_u16 &)vb16_bf16_1, vu16_bf16_inf, (vector_u16 &)vb16_bf16_1, preg_inf_1);
                 vsel((vector_u16 &)vb16_bf16_2, vu16_bf16_inf, (vector_u16 &)vb16_bf16_2, preg_inf_2);
+                vsel((vector_u16 &)vb16_bf16_1, vu16_bf16_nan, (vector_u16 &)vb16_bf16_1, preg_nan_1);
+                vsel((vector_u16 &)vb16_bf16_2, vu16_bf16_nan, (vector_u16 &)vb16_bf16_2, preg_nan_2);
                 vand(vu16_abs_1, (vector_u16 &)vb16_bf16_1, vu16_bf16_abs_mask, preg_vl0, MODE_ZEROING);
                 vand(vu16_abs_2, (vector_u16 &)vb16_bf16_2, vu16_bf16_abs_mask, preg_vl1, MODE_ZEROING);
             } else {
