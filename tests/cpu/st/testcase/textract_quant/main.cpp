@@ -118,11 +118,11 @@ void runTEXTRACT_Vector(typename Conf::DT *dst, typename Conf::ST *src, uint64_t
     GlobalDataFp fpGlobal(quant);
 
     using SrcTile = Tile<TileType::Mat, ST, Conf::srcRows, Conf::srcCols, BLayout::RowMajor, Conf::srcValidRows,
-                         Conf::srcValidCols, SLayout::NoneBox, 512>;
+                         Conf::srcValidCols, SLayout::RowMajor, 512>;
     using DstTile = Tile<TileType::Mat, DT, Conf::dstRows, Conf::dstCols, BLayout::RowMajor, Conf::dstValidRows,
-                         Conf::dstValidCols, SLayout::NoneBox, 512>;
+                         Conf::dstValidCols, SLayout::RowMajor, 512>;
     using FbTile = Tile<TileType::Mat, uint64_t, 1, Conf::dstValidCols, BLayout::RowMajor, 1, Conf::dstValidCols,
-                        SLayout::NoneBox, 512>;
+                        SLayout::RowMajor, 512>;
     SrcTile srcTile;
     DstTile dstTile;
     FbTile fpTileLocal;
