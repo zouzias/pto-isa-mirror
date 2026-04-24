@@ -78,6 +78,12 @@ set(CMAKE_CCE_COMPILE_OPTIONS
     "SHELL:-mllvm -cce-aicore-addr-transform"
     "SHELL:-mllvm -cce-aicore-dcci-insert-for-scalar=false"
     #"SHELL:--cce-simd-vf-fusion=false"
+    #"SHELL: -Rpass=tile-fusion"
+    #"SHELL: -Rpass-missed=tile-fusion"
+    #"SHELL: -Rpass-analysis=tile-fusion"
+    #"SHELL:--enable-pto-tile-fusion"
+    #"SHELL:-mllvm -tile-fusion-skip-reduceop-fusion=true"
+    #"SHELL:-mllvm -tile-fusion-skip-legality-check=false"
 )
 
 if(DEBUG_MODE)
