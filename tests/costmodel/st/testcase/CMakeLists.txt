@@ -8,73 +8,9 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 
-function(pto_costmodel_sim_st NAME)
-    add_executable(${NAME} main.cpp)
-    target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS} -std=c++23)
-    target_include_directories(${NAME} PRIVATE
-        ${PROJECT_SOURCE_DIR}/../../../include/
-        ${PROJECT_SOURCE_DIR}/../../../include/common
-        ${PROJECT_SOURCE_DIR}/common
-    )
-
-    target_link_libraries(${NAME} PRIVATE
-        GTest::gtest_main
-        Threads::Threads
-    )
-    if (UNIX)
-        target_link_libraries(${NAME} PRIVATE m)
-    endif()
-    if (UNIX AND NOT APPLE)
-        target_link_libraries(${NAME} PRIVATE dl)
-    endif()
-endfunction()
-
 find_package(Threads REQUIRED)
 
-set(ALL_TESTCASES
-    tabs
-    tadd
-    tadds
-    tcmp
-    tcolmax
-    tcolmin
-    tcolsum
-    tcvt
-    tdiv
-    tdivs
-    texp
-    textract
-    tgather
-    tload
-    tloadconv
-    tmatmul
-    tmax
-    tmaxs
-    tmin
-    tmins
-    tmov
-    tmrgsort
-    tmul
-    tmuls
-    tneg
-    trecip
-    trowexpand
-    trowmax
-    trowmin
-    trowsum
-    trsqrt
-    tscatter
-    tsel
-    tsels
-    tsort32
-    tsqrt
-    tsub
-    tsubs
-    ttrans
-)
-
-foreach(TESTCASE ${ALL_TESTCASES})
-    if(NOT DEFINED TEST_CASE OR TEST_CASE STREQUAL "${TESTCASE}")
-        add_subdirectory(${TESTCASE})
-    endif()
-endforeach()
+# Costmodel ST testcases live in per-backend subdirectories. Each op has a
+# single self-contained file `<backend>/<op>/<op>.cpp` that exercises the PTO
+# instruction and checks cycles via `cost_check.hpp`.
+add_subdirectory(a2a3)

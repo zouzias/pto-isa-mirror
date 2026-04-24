@@ -1,0 +1,44 @@
+- case_name: f32_to_f16_4x64
+  kernel_arch: dav-c220-vec
+  tile_groups:
+  - group_name: Src
+    Loc: TileType::Vec
+    Element: float
+    Rows: 4
+    Cols: 64
+    variables:
+    - name: srcA
+      address: '0x00000000'
+  - group_name: Dst
+    Loc: TileType::Vec
+    Element: half
+    Rows: 4
+    Cols: 64
+    variables:
+    - name: dst
+      address: '0x00008000'
+  op_name: TCVT
+  op_args: dst, srcA, RoundMode::CAST_NONE
+  id: 76a7222d94ce528c5d5110dca05c249c
+- case_name: f16_to_f32_4x64
+  kernel_arch: dav-c220-vec
+  tile_groups:
+  - group_name: Src
+    Loc: TileType::Vec
+    Element: half
+    Rows: 4
+    Cols: 64
+    variables:
+    - name: srcA
+      address: '0x00000000'
+  - group_name: Dst
+    Loc: TileType::Vec
+    Element: float
+    Rows: 4
+    Cols: 64
+    variables:
+    - name: dst
+      address: '0x00008000'
+  op_name: TCVT
+  op_args: dst, srcA, RoundMode::CAST_NONE
+  id: 7e12e956f4afaf17380d35affc7a9132

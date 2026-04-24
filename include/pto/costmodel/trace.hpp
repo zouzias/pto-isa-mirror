@@ -148,7 +148,12 @@ inline void FlushPendingTail(evaluator::PipeKey pipe)
 
     auto &pipe_trace = GetPipeTrace(trace, pipe);
     if (pipe_trace.has_pending_tail) {
-        trace.executed_pto[trace.active_pto_stack.back()].total_cycles += pipe_trace.last_cce_tail;
+        auto &pto = trace.executed_pto[trace.active_pto_stack.back()];
+        pto.total_cycles += pipe_trace.last_cce_tail;
+        if (!pipe_trace.queue.empty()) {
+            auto &last_call = pto.cce_calls[pipe_trace.queue.back()];
+            last_call.cycles += pipe_trace.last_cce_tail;
+        }
         pipe_trace.last_cce_tail = 0;
         pipe_trace.has_pending_tail = false;
     }
