@@ -47,26 +47,51 @@ template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, uint32_t idxRow,
                                 uint32_t idxCol)
 {
-    TEXTRACT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, idxRow, idxCol);
+    using D = typename DstTileData::DType;
+    using S = typename SrcTileData::DType;
+    constexpr QuantModeCPU_t quantPre = GetScalarPreQuantMode<S, D>();
+    constexpr bool apply_relu = reluMode == ReluPreMode::NormalRelu;
+
+    for (size_t rDst = 0; rDst < dst.GetValidRow(); ++rDst) {
+        for (size_t cDst = 0; cDst < dst.GetValidCol(); ++cDst) {
+            const size_t srcTileIdx = GetTileElementOffset<SrcTileData>(rDst + idxRow, cDst + idxCol);
+            const size_t dstTileIdx = GetTileElementOffset<DstTileData>(rDst, cDst);
+            dst.data()[dstTileIdx] =
+                quantize_element<D, S, quantPre, apply_relu>(src.data()[srcTileIdx], preQuantScalar);
+        }
+    }
 }
 
 template <typename DstTileData, typename SrcTileData, AccToVecMode mode, ReluPreMode reluMode>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, uint32_t idxRow,
                                 uint32_t idxCol)
 {
-    TEXTRACT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, idxRow, idxCol);
+    TEXTRACT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, idxRow, idxCol);
 }
 
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint32_t idxRow, uint32_t idxCol)
 {
-    TEXTRACT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, idxRow, idxCol);
+    using D = typename DstTileData::DType;
+    using S = typename SrcTileData::DType;
+    constexpr QuantModeCPU_t quantPre = GetVectorPreQuantMode<S, D>();
+    constexpr bool apply_relu = reluMode == ReluPreMode::NormalRelu;
+
+    for (size_t rDst = 0; rDst < dst.GetValidRow(); ++rDst) {
+        for (size_t cDst = 0; cDst < dst.GetValidCol(); ++cDst) {
+            const size_t srcTileIdx = GetTileElementOffset<SrcTileData>(rDst + idxRow, cDst + idxCol);
+            const size_t dstTileIdx = GetTileElementOffset<DstTileData>(rDst, cDst);
+            const size_t quantTileIdx = GetTileElementOffset<FpTileData>(0, cDst);
+            uint64_t quantScalar = static_cast<uint64_t>(fp.data()[quantTileIdx]);
+            dst.data()[dstTileIdx] = quantize_element<D, S, quantPre, apply_relu>(src.data()[srcTileIdx], quantScalar);
+        }
+    }
 }
 
 template <typename DstTileData, typename SrcTileData, typename FpTileData, AccToVecMode mode, ReluPreMode reluMode>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint32_t idxRow, uint32_t idxCol)
 {
-    TEXTRACT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, idxRow, idxCol);
+    TEXTRACT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, idxRow, idxCol);
 }
 
 } // namespace pto
