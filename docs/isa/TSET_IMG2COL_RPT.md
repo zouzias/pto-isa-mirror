@@ -1,4 +1,4 @@
-﻿# TSET_IMG2COL_RPT
+# TSET_IMG2COL_RPT
 
 ## Tile Operation Diagram
 
@@ -79,7 +79,7 @@ pto.tset_img2col_rpt %cfg : !pto.fmatrix_config -> ()
 ### Manual Mode
 
 ```text
-# Manual mode: bind resources explicitly before issuing the instruction.
+# Manual mode: resources must be bound explicitly before issuing the instruction.
 # Optional for tile operands:
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
