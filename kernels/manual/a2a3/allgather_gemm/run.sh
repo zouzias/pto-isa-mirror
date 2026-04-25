@@ -38,7 +38,7 @@ for d in ${MPI_SEARCH_DIRS}; do
 done
 
 SHORT=r:,v:,n:,m:,k:,
-LONG=run-mode:,soc-version:,n-ranks:,gm:,gk:,gn:,
+LONG=run-mode:,soc-version:,n-ranks:,gm:,gk:,gn:,base-m:,base-n:,compute-blocks:,comm-blocks:,
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 
@@ -63,6 +63,18 @@ do
         (--gn )
             G_N="$2"
             shift 2;;
+        (--base-m )
+            G_BASE_M="$2"
+            shift 2;;
+        (--base-n )
+            G_BASE_N="$2"
+            shift 2;;
+        (--compute-blocks )
+            COMPUTE_BLOCKS="$2"
+            shift 2;;
+        (--comm-blocks )
+            COMM_BLOCKS="$2"
+            shift 2;;
         (--)
             shift;
             break;;
@@ -78,6 +90,8 @@ done
 : "${G_M:=2048}"
 : "${G_K:=2048}"
 : "${G_N:=1024}"
+: "${G_BASE_M:=128}"
+: "${G_BASE_N:=256}"
 
 if [[ ! "${SOC_VERSION}" =~ ^Ascend ]]; then
     echo "[ERROR] Unsupported SocVersion: ${SOC_VERSION}"
@@ -89,6 +103,15 @@ if [[ "${SOC_VERSION}" =~ ^Ascend910B4-1 ]] && [ "${RUN_MODE}" == "sim" ]; then
     exit 1
 fi
 
+if [ $((G_BASE_N % 4)) -ne 0 ]; then
+    echo "[ERROR] --base-n (${G_BASE_N}) must be divisible by 4 (K pack step); BASE_K is derived as BASE_N/4."
+    exit 1
+fi
+if [ $((G_M % G_BASE_M)) -ne 0 ] || [ $((G_K % G_BASE_N)) -ne 0 ] || [ $((G_N % G_BASE_N)) -ne 0 ]; then
+    echo "[ERROR] Require G_M%G_BASE_M==0, G_K%G_BASE_N==0, G_N%G_BASE_N==0 (got M=${G_M} K=${G_K} N=${G_N} BASE_M=${G_BASE_M} BASE_N=${G_BASE_N})."
+    exit 1
+fi
+
 # Clean stale HCCL shared-memory state from any previous crashed run
 rm -rf /dev/shm/sem.hccl* 2>/dev/null
 ipcrm -a 2>/dev/null
@@ -96,6 +119,7 @@ ipcrm -a 2>/dev/null
 echo "=== AllGather GEMM Demo (HCCL) ==="
 echo "  RUN_MODE: ${RUN_MODE}  SOC_VERSION: ${SOC_VERSION}"
 echo "  N_RANKS: ${N_RANKS}  G_M: ${G_M}  G_K: ${G_K}  G_N: ${G_N}"
+echo "  G_BASE_M: ${G_BASE_M}  G_BASE_N: ${G_BASE_N}  COMPUTE_BLOCKS: ${COMPUTE_BLOCKS:-default}  COMM_BLOCKS: ${COMM_BLOCKS:-default}"
 echo "==========================="
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
@@ -110,8 +134,18 @@ cd build
 export LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib:${LD_LIBRARY_PATH:-}
 set -euo pipefail
 
+BLOCK_OPTS=""
+if [ -n "${COMPUTE_BLOCKS:-}" ]; then
+    BLOCK_OPTS="$BLOCK_OPTS -DCOMPUTE_BLOCKS=${COMPUTE_BLOCKS}"
+fi
+if [ -n "${COMM_BLOCKS:-}" ]; then
+    BLOCK_OPTS="$BLOCK_OPTS -DCOMM_BLOCKS=${COMM_BLOCKS}"
+fi
+
 cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} \
-      -DG_M=${G_M} -DG_K=${G_K} -DG_N=${G_N} ..
+      -DG_M=${G_M} -DG_K=${G_K} -DG_N=${G_N} \
+      -DG_BASE_M=${G_BASE_M} -DG_BASE_N=${G_BASE_N} \
+      ${BLOCK_OPTS} ..
 make -j16
 
 echo ""

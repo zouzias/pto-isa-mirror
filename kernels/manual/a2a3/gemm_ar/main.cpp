@@ -755,8 +755,8 @@ static void RunSequentialBenchmark(ResetFn &resetState, LaunchCompFn &launchComp
     }
 }
 
-template <typename ResetFn, typename LaunchCompFn, typename LaunchCommFn, typename SyncFn>
-static void RunPipelinedBenchmark(ResetFn &resetState, LaunchCompFn &launchComp, LaunchCommFn &launchComm,
+template <typename ResetFn, typename LaunchCompFn, typename LaunchCommAsyncFn, typename SyncFn>
+static void RunPipelinedBenchmark(ResetFn &resetState, LaunchCompFn &launchComp, LaunchCommAsyncFn &launchCommAsync,
                                   SyncFn &syncAll, aclrtStream computeStream, aclrtStream commStream,
                                   std::vector<double> &pipe_us, std::vector<double> &pipe_comp_us,
                                   std::vector<double> &pipe_comm_us)
@@ -772,8 +772,12 @@ static void RunPipelinedBenchmark(ResetFn &resetState, LaunchCompFn &launchComp,
         aclrtRecordEvent(evStart, computeStream);
         launchComp(computeStream);
         aclrtRecordEvent(evEnd, computeStream);
-        launchComm(commStream);
+        launchCommAsync(commStream);
+        // launchCommAsync does not block the host; we wait for both streams
+        // only at the end to measure the true pipeline wall-clock
+        // (= max(compute_end, comm_end) - t0).
         aclrtSynchronizeStream(computeStream);
+        aclrtSynchronizeStream(commStream);
         auto t1 = std::chrono::high_resolution_clock::now();
 
         float compute_ms = 0.0f;
@@ -809,7 +813,7 @@ static bool AllocDeviceBuffers(DeviceBuffers &buf, const GemmHcclContext &hctx, 
                                size_t a_bytes, const uint16_t *b_data, size_t b_bytes, aclrtStream commStream)
 {
     buf.outputSize = static_cast<size_t>(G_M) * G_N * sizeof(uint16_t);
-    buf.signalMatrixSize = ((static_cast<size_t>(MAX_RANKS + 2) * sizeof(int32_t) + 63) / 64) * 64;
+    buf.signalMatrixSize = ((static_cast<size_t>(G_SIGNAL_TOTAL_SLOTS) * sizeof(int32_t) + 63) / 64) * 64;
 
     buf.gemm_output = nullptr;
     aclrtMalloc(&buf.gemm_output, buf.outputSize, ACL_MEM_MALLOC_HUGE_FIRST);
@@ -856,6 +860,7 @@ static bool AllocDeviceBuffers(DeviceBuffers &buf, const GemmHcclContext &hctx, 
 
     buf.queueSet_reset_host = nullptr;
     aclrtMallocHost(reinterpret_cast<void **>(&buf.queueSet_reset_host), buf.queueSetSize);
+
     return true;
 }
 
@@ -871,10 +876,11 @@ static void FreeDeviceBuffers(DeviceBuffers &buf)
 // ============================================================================
 // Per-rank execution logic
 // ============================================================================
-template <typename ResetFn, typename LaunchCompFn, typename LaunchCommFn, typename SyncFn>
+template <typename ResetFn, typename LaunchCompFn, typename LaunchCommFn, typename LaunchCommAsyncFn, typename SyncFn>
 static bool RunBenchmarkAndVerify(int rank_id, int n_ranks, ResetFn &resetState, LaunchCompFn &launchComp,
-                                  LaunchCommFn &launchComm, SyncFn &syncAll, aclrtStream computeStream,
-                                  aclrtStream commStream, HcclComm comm, const DeviceBuffers &buf, const float *golden)
+                                  LaunchCommFn &launchComm, LaunchCommAsyncFn &launchCommAsync, SyncFn &syncAll,
+                                  aclrtStream computeStream, aclrtStream commStream, HcclComm comm,
+                                  const DeviceBuffers &buf, const float *golden)
 {
     for (int i = 0; i < WARMUP_ITERS; ++i) {
         resetState();
@@ -884,13 +890,25 @@ static bool RunBenchmarkAndVerify(int rank_id, int n_ranks, ResetFn &resetState,
         syncAll();
     }
 
-    std::vector<double> compute_us, seq_us, seq_comp_us, seq_comm_us, pipe_us, pipe_comp_us, pipe_comm_us;
+    // Pipelined-path warmup: exercise two-stream concurrent launch so that
+    // first-touch costs of concurrent kernel dispatch / HCCL shm ping-pong
+    // are paid before MEASURE_ITERS starts. Without this, run 1 (cross-
+    // process cold start) may still pay these costs inside measure iters.
+    for (int i = 0; i < WARMUP_ITERS; ++i) {
+        resetState();
+        syncAll();
+        launchComp(computeStream);
+        launchCommAsync(commStream);
+        aclrtSynchronizeStream(computeStream);
+        aclrtSynchronizeStream(commStream);
+    }
 
+    std::vector<double> compute_us, seq_us, seq_comp_us, seq_comm_us, pipe_us, pipe_comp_us, pipe_comm_us;
     RunComputeOnlyBenchmark(resetState, launchComp, syncAll, computeStream, commStream, comm, compute_us);
     RunSequentialBenchmark(resetState, launchComp, launchComm, syncAll, computeStream, commStream, comm, seq_us,
                            seq_comp_us, seq_comm_us);
-    RunPipelinedBenchmark(resetState, launchComp, launchComm, syncAll, computeStream, commStream, pipe_us, pipe_comp_us,
-                          pipe_comm_us);
+    RunPipelinedBenchmark(resetState, launchComp, launchCommAsync, syncAll, computeStream, commStream, pipe_us,
+                          pipe_comp_us, pipe_comm_us);
 
     resetState();
     syncAll();
@@ -928,12 +946,15 @@ static void LaunchCompute(const DeviceBuffers &buf, int rank_id, aclrtStream s)
                       s, COMPUTE_BLOCK_NUM, G_K);
 }
 
-static void LaunchComm(const DeviceBuffers &buf, uint8_t *hcclCtxPtr, int rank_id, int n_ranks, aclrtStream s)
+static void LaunchComm(const DeviceBuffers &buf, uint8_t *hcclCtxPtr, int rank_id, int n_ranks, aclrtStream s,
+                       bool sync = true)
 {
     launchGemmCommAll(reinterpret_cast<uint8_t *>(buf.gemm_output), reinterpret_cast<uint8_t *>(buf.reduced_output),
                       reinterpret_cast<uint8_t *>(buf.signal_matrix), reinterpret_cast<uint8_t *>(buf.queueSet_dev),
                       hcclCtxPtr, rank_id, n_ranks, s, COMPUTE_BLOCK_NUM);
-    aclrtSynchronizeStream(s);
+    if (sync) {
+        aclrtSynchronizeStream(s);
+    }
 }
 
 static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id, const uint16_t *a_data, size_t a_bytes,
@@ -963,14 +984,16 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id, con
     auto resetState = [&]() { ResetDeviceState(buf); };
     auto launchComp = [&](aclrtStream s) { LaunchCompute(buf, rank_id, s); };
     auto launchComm = [&](aclrtStream s) { LaunchComm(buf, hcclCtxPtr, rank_id, n_ranks, s); };
+    // Pipelined path: launch without blocking the host; caller syncs both streams at end.
+    auto launchCommAsync = [&](aclrtStream s) { LaunchComm(buf, hcclCtxPtr, rank_id, n_ranks, s, /*sync=*/false); };
     auto syncAll = [&]() {
         aclrtSynchronizeStream(computeStream);
         aclrtSynchronizeStream(commStream);
         HcclHostBarrier(hctx.comm, commStream);
     };
 
-    bool is_ok = RunBenchmarkAndVerify(rank_id, n_ranks, resetState, launchComp, launchComm, syncAll, computeStream,
-                                       commStream, hctx.comm, buf, golden);
+    bool is_ok = RunBenchmarkAndVerify(rank_id, n_ranks, resetState, launchComp, launchComm, launchCommAsync, syncAll,
+                                       computeStream, commStream, hctx.comm, buf, golden);
 
     FreeDeviceBuffers(buf);
     hctx.Finalize();

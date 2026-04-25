@@ -1,34 +1,35 @@
-# High-Performance GEMM AllReduce Fusion Operator Example
+# High-Performance GEMM + AllReduce Fusion Example
 
 ## Overview
 
-This example demonstrates how to implement a multi-device GEMM + AllReduce fusion operator using PTO. It adopts a dual-stream (Compute Stream + Comm Stream) compute-communication overlap design, performing AllReduce via PTO communication ISA over HCCL RDMA windows.
+This example shows how to implement a multi-rank GEMM + AllReduce fused operator with PTO on A2/A3-class chips. It uses a dual-stream design for communication-compute overlap: a Compute Stream runs the GEMM kernel, and a Comm Stream runs the communication kernel. PTO communication instructions operate directly on the HCCL RDMA window to complete the AllReduce.
 
 ## Supported AI Processors
 
 - A2/A3
 
-## Directory Structure
+## Directory Layout
 
-```
+```text
 kernels/manual/a2a3/gemm_ar/
-├── CMakeLists.txt              # Build config (3 targets: cube kernel, vec kernel, host exe)
-├── run.sh                      # One-click build+run script (auto HCCL_BUFFSIZE, MPI discovery)
-├── gemm_ar_config.h            # Global parameter config (matrix dims, tile sizes, block counts)
-├── main.cpp                    # Entry: MPI init, data gen, HCCL init, window alloc, perf measurement, validation
-├── gemm_compute_kernel.cpp     # GEMM compute kernel (Cube arch, L0C FP32→GM FP16 auto cast)
-├── comm_kernel.cpp             # Comm kernel (Vector arch, single-kernel two-phase AllReduce)
-├── common.hpp                  # HcclRemotePtr device-side wrapper (RDMA window address translation)
-├── hccl_context.h              # HcclDeviceContext struct (per-rank RDMA window addresses)
-├── ready_queue.hpp             # Multi-block lock-free tile queue (compute→comm signaling)
-└── comm_mpi.h                  # MPI dynamic loading wrapper (dlopen/dlsym, no hard-link dependency)
+├── CMakeLists.txt              # Build configuration (3 targets: cube kernel, vec kernel, host executable)
+├── run.sh                      # One-click build + run script (auto-computes HCCL_BUFFSIZE and locates MPI)
+├── gemm_ar_config.h            # Global configuration (matrix shape, tile sizes, block counts)
+├── main.cpp                    # Entry: MPI init, data generation, HCCL init, window allocation, perf measurement, verification
+├── gemm_compute_kernel.cpp     # GEMM compute kernel (Cube side, L0C FP32 -> GM FP16 auto cast)
+├── comm_kernel.cpp             # Communication kernel (Vector side, overlapped RS/AG AllReduce in one kernel)
+├── kernel_launchers.h          # Host-side kernel launcher declarations
+├── common.hpp                  # Device-side HcclRemotePtr wrapper (RDMA window address translation)
+├── hccl_context.h              # HcclDeviceContext structure (RDMA window addresses for each rank)
+├── ready_queue.hpp             # Multi-block lock-free tile queue (compute -> comm signaling)
+└── comm_mpi.h                  # MPI dynamic loading wrapper (dlopen/dlsym, no hard link dependency)
 ```
 
 ## Operator Description
 
-### Computation
+### Functionality
 
-This example implements multi-device GEMM + AllReduce:
+This example implements multi-rank GEMM + AllReduce:
 
 $$
 C_{final} = \sum_{i=0}^{nranks-1} A_i \times B
@@ -36,42 +37,43 @@ $$
 
 Where:
 
-- `A_i` is `M×K` (independent per rank)
-- `B` is `K×N` (shared across all ranks)
-- `C_i` is `M×N` (local GEMM result per rank)
-- `C_final` is `M×N` (final output after AllReduce)
+- `A_i` is `M x K` and is private to each rank
+- `B` is `K x N` and is shared by all ranks
+- `C_i` is the local GEMM result of shape `M x N`
+- `C_final` is the final `M x N` output after AllReduce
 
-The default reference configuration in `gemm_ar_config.h` is `M=5416, K=6144, N=1408`, running on 8 devices.
+The default matrix configuration in `gemm_ar_config.h` is `M=5416`, `K=6144`, `N=1408`. The performance section below uses 8-card Ascend 910B as the reference platform.
 
-### Specifications
+### Specification
 
 | Item | Value |
 | --- | --- |
 | OpType | `GEMM + AllReduce` |
-| Input | `A_i`: `M×K`, `float16`, `ND` (independent per rank); `B`: `K×N`, `float16`, `DN` (shared) |
-| Output | `C_final`: `M×N`, `float16`, `ND` (AllReduce result) |
-| Compute Kernel Name | `GemmComputeKernel` (Cube arch, `dav-c220-cube`) |
-| Comm Kernel Name | `GemmCommAllKernel` (Vector arch, `dav-c220-vec`) |
+| Input | `A_i`: `M x K`, `float16`, `ND` (private to each rank); `B`: `K x N`, `float16`, `DN` (shared) |
+| Output | `C_final`: `M x N`, `float16`, `ND` (AllReduce result) |
+| Compute kernel name | `GemmComputeKernel` (Cube architecture, `dav-c220-cube`) |
+| Comm kernel name | `GemmCommAllKernel` (Vector architecture, `dav-c220-vec`) |
 
-## Optimization Details
+## Optimization Notes
 
-This example uses the 8-device Ascend 910B (A2/A3) platform for performance validation. The 910B adopts a disaggregated architecture: 24 AICs (Cube Cores) handle matrix computation, 24 AIVs (Vector Cores) handle communication transfers. AICs and AIVs are physically independent and can run fully in parallel.
+This example uses 8-card Ascend 910B as the main performance-validation target. On this platform, the reference setup uses 24 AIC blocks for compute and 24 AIV blocks for communication.
 
-- **Dual-stream compute-communication overlap**: The compute kernel runs on the Compute Stream (24 AICs), the comm kernel runs on the Comm Stream (24 AIVs), achieving compute-communication parallelism through per-tile signaling.
-- **ReduceScatter + AllGather two-phase communication**: The RS phase uses `TPUT<AtomicAdd>` to accumulate directly into the owner rank's `reduced_output`; hardware atomic adds perform the reduction on the target side, eliminating a separate Reduce phase. The AG phase broadcasts the reduced result from the owner rank to all other ranks.
-- **Block Swizzle**: The compute kernel uses a zigzag tile traversal order (odd rows reversed), improving L1 cache reuse of the B matrix across adjacent tiles.
-- **Two-level double-buffered pipeline**: L1 cache (stepK=4 batched TLOAD) + L0 double buffer (ping/pong), overlapping DMA transfers with Cube computation as much as possible.
-- **Lock-free Ready Queue**: Each AIC has an independent queue (single-producer single-consumer). AIVs poll non-blockingly via the `TTEST` hardware instruction; when no data is ready, `TWAIT` hardware wait avoids busy-spinning.
-- **RS double-buffered pipeline**: The RS phase of the comm kernel uses ping/pong tiles to double-buffer `TLOAD` and `TSTORE<AtomicAdd>`, overlapping the current tile's TLOAD with the previous tile's TSTORE.
-- **AG row-level flattened decomposition**: The AG phase flattens all work into row granularity (`my_tile_count × (nranks-1) × G_BASE_M` rows), distributing evenly across all AIVs, eliminating ±1 load imbalance from tile-level assignment.
+- **Dual-stream overlap**: the compute kernel runs on the Compute Stream and the communication kernel runs on the Comm Stream. Tile-level signaling allows communication and computation to run concurrently.
+- **Logical RS + AG in one mixed loop**: RS reduces into the owner rank and AG broadcasts owner-local results, with both roles executing inside one subtile-driven loop and handing off through ready counters.
+- **Block Swizzle**: the compute kernel uses a zigzag tile traversal order (odd rows reversed) to improve L1 reuse of neighboring `B` matrix tiles.
+- **Two-level double-buffer pipeline**: L1 cache (`stepK=4` batched `TLOAD`) plus L0 ping/pong buffering lets DMA movement overlap with Cube compute as much as possible.
+- **Lock-free Ready Queue**: each AIC writes one queue, and each communication block drains the queue subset `{block_idx, block_idx + num_comm_blocks, ...}`. AIV first probes with `TTEST` and only blocks with `TWAIT` when needed.
+- **RS double buffering**: the RS producer path uses ping/pong tiles so the `TLOAD` of the current subtile overlaps with the `TSTORE<AtomicAdd>` of the previous subtile.
+- **Owner-local subtile executor**: each owner-local tile is split into fixed-height subtiles (`G_COMM_SUB_M`, default `64` rows). AG blocks claim reversed-stripe subsets of those subtiles to smooth combined RS + AG load.
+- **Publish / consume fences**: RS publishes `subtile-ready` and `ag-summary` doorbells only after `pipe_barrier(PIPE_ALL) + dsb(DSB_DDR)`, and AG performs one acquire fence before consuming a batch of ready subtiles.
 
 ## Tiling Parameters
 
 | Parameter | Value |
 | --- | --- |
-| `M` (original) | 5416 |
+| `M` (raw) | 5416 |
 | `K` | 6144 |
-| `N` (original) | 1408 |
+| `N` (raw) | 1408 |
 | `M` (padded) | 5504 |
 | `N` (padded) | 1536 |
 | `baseM` | 128 |
@@ -79,101 +81,115 @@ This example uses the 8-device Ascend 910B (A2/A3) platform for performance vali
 | `baseN` | 256 |
 | `stepKa` | 4 |
 | `stepKb` | 4 |
-| Tile count | 258 (43×6) |
+| `commSubM` | 64 |
+| `subtilesPerTile` | 2 |
+| Number of tiles | 258 (`43 x 6`) |
 | `COMPUTE_BLOCK_NUM` | 24 |
 | `COMM_BLOCK_NUM` | 24 |
 
 ## Overall Architecture
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  Compute Stream (24 AIC)                Comm Stream (24 AIV)                │
 │                                                                              │
 │  GemmComputeKernel:                     GemmCommAllKernel:                   │
 │  ┌─────────────────────────┐            ┌──────────────────────────────┐     │
-│  │ for each tile:          │            │ Phase 1: ReduceScatter       │     │
-│  │   K-loop (L1→L0→Cube)  │            │   Poll Ready Queue           │     │
-│  │   TSTORE → gemm_output │──Ready──→  │   TLOAD tile from gemm_output│     │
-│  │   pipe_barrier(ALL)     │  Queue     │   TSTORE<AtomicAdd> → owner  │     │
-│  │   Enqueue tile_idx      │            │       (ping/pong dbl-buffer) │     │
-│  └─────────────────────────┘            │         ↓                    │     │
-│                                          │   DeviceBarrier (cross-rank) │     │
-│                                          │         ↓                    │     │
-│                                          │ Phase 2: AllGather           │     │
-│                                          │   Row-level flat assignment  │     │
-│                                          │   TLOAD → TSTORE to remotes │     │
+│  │ for each tile:          │            │ RS/AG overlap loop           │     │
+│  │   K-loop (L1 -> L0 -> Cube)          │   poll Ready Queue           │     │
+│  │   TSTORE -> gemm_output │──Ready──→ │   TLOAD tile from gemm_output│     │
+│  │   pipe_barrier(ALL)     │  Queue    │   TSTORE<AtomicAdd> -> owner │     │
+│  │   Enqueue tile_idx      │            │   subtile-ready / summary++  │     │
+│  └─────────────────────────┘            │   drain ready subtiles for AG│     │
+│                                          │   TLOAD -> TSTORE to remote │     │
+│                                          │   ready-driven AG handoff    │     │
+│                                          │   subtile-level overlap      │     │
+│                                          │                              │     │
 │                                          └──────────────────────────────┘     │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Compute Kernel Details
 
-```
-Time →
+```text
+Time ->
 L1 (MTE2):  [TLOAD A0,B0]                [TLOAD A1,B1]              ...
 L0 (MTE1):       [TEXTRACT k0] [k1] [k2] [k3] [TEXTRACT k0'] ...
 Cube (M):             [TMATMUL k0] [ACC k1] [ACC k2] [ACC k3] [TMATMUL k0'] ...
-                      ↑ Three-stage pipeline, fully parallel ↑
+                      ^ full three-stage overlap ^
 ```
 
-Each AIC handles a set of tiles (assigned by `block_idx × tiles_per_block`). For each tile:
+Each AIC is responsible for a subset of tiles assigned by `block_idx x tiles_per_block`. For each tile:
 
-1. **Block Swizzle mapping**: Remaps linear tile indices to zigzag traversal order (odd rows reversed), so consecutive tiles share B matrix columns, improving L1 reuse.
-2. **K-loop**: Every `stepKa=4` iterations, one TLOAD is issued (L1 cache optimization); each iteration uses TEXTRACT to extract a single K-slice to L0, then TMATMUL/TMATMUL_ACC accumulates.
-3. **TSTORE**: L0C FP32 is auto-cast to FP16 via FixPipe, then written to `gemm_output`.
-4. **pipe_barrier(PIPE_ALL)**: Ensures GM writes are complete.
-5. **MultiBlockEnqueueFast**: Enqueues `tile_idx` to notify the comm kernel.
+1. **Block Swizzle mapping**: remap the linear tile index into a zigzag traversal order, reversing odd rows so adjacent tiles reuse columns of matrix `B` in L1.
+2. **K-loop**: every `stepKa=4` iterations, perform one batched `TLOAD` into L1. Each iteration then uses `TEXTRACT` to pull one K-slice into L0, followed by `TMATMUL` / `TMATMUL_ACC` accumulation.
+3. **TSTORE**: FP32 values in L0C are automatically cast to FP16 by the FixPipe and stored to `gemm_output`.
+4. **`pipe_barrier(PIPE_ALL)`**: guarantees that the GM write is complete.
+5. **`MultiBlockEnqueueFast`**: enqueue `tile_idx` to notify the communication kernel.
 
-## Comm Kernel Details
+## Communication Kernel Details
 
-### Phase 1: ReduceScatter
+The launched communication kernel follows the mixed subtile pipeline implemented in `GemmCommAllImpl()`: RS production and AG consumption are interleaved inside one loop, and the synchronization point is a per-subtile counter rather than a device-wide barrier.
 
-Each AIV is 1:1 bound to an AIC's Ready Queue. The AIV polls the queue non-blockingly via the `TTEST` hardware instruction. Upon receiving a ready tile:
+### RS Producer Path
 
-1. **TLOAD** from `gemm_output` into UB (ping/pong double buffer)
-2. **TSTORE\<AtomicAdd\>** to the owner rank's `reduced_output` (local or remote via RDMA)
+Each communication block owns the queue subset:
 
-The double-buffered pipeline overlaps the current tile's TLOAD with the previous tile's TSTORE. When the queue has no data, the AIV uses `TWAIT` hardware wait to avoid busy-spinning.
-
-Tile ownership is determined by `tile_idx % nranks`—this ensures each rank's tiles are evenly distributed across all ranks.
-
-### DeviceBarrier: Two-Level Device-Side Synchronization
-
-```
-DeviceBarrier(phase):
-  pipe_barrier(PIPE_ALL)                    // Ensure this block's pipeline is flushed
-
-  if block_idx == 0:                        // Only block 0 performs cross-rank signaling
-    for each remote rank r:
-      TNOTIFY(remote signal_matrix[phase][my_rank], 1, AtomicAdd)   // Write to remote
-    for each remote rank r:
-      TWAIT(local signal_matrix[phase][r], 1, GE)                   // Wait for remote
-    TNOTIFY(local_broadcast_flag[phase], 1, Set)                    // Notify other blocks on this rank
-  else:
-    TWAIT(local_broadcast_flag[phase], 1, GE)                       // Wait for block 0's broadcast
-
-  pipe_barrier(PIPE_ALL)
+```text
+queues(block b) = { b, b + num_comm_blocks, b + 2*num_comm_blocks, ... }
 ```
 
-### Phase 2: AllGather
+With the default `COMPUTE_BLOCK_NUM = COMM_BLOCK_NUM = 24`, this degenerates to 1:1. When fewer communication blocks are used, one block drains multiple compute queues round-robin via `RsPollQueues()` / `RsWaitOnQueue()`.
 
-All AG work is flattened into row granularity:
+For every dequeued tile:
 
+1. The tile is split along `M` into `G_COMM_SUBTILES_PER_TILE = G_BASE_M / G_COMM_SUB_M` fixed-height subtiles.
+2. `RsPipelineStep()` uses ping/pong UB tiles so the current subtile `TLOAD` overlaps with the previous subtile `TSTORE<AtomicAdd>`.
+3. The RS destination is the owner rank `owner = tile_idx % nranks`, so reduction is completed directly in that rank's `reduced_output`.
+
+### RS/AG Overlap Synchronization
+
+The overlap protocol uses two counters in the owner rank's `signal_matrix`:
+
+1. `subtile-ready[local_subtile_id]`: counts how many ranks have completed RS for that owner-local subtile.
+2. `ag-summary[summary_block]`: a coarser wakeup doorbell for the AG block responsible for that subtile.
+
+Publishing follows `RsPublishSubtileReady()`:
+
+1. `pipe_barrier(PIPE_ALL)` flushes the local pipeline.
+2. `dsb(DSB_DDR)` makes the `reduced_output` store globally visible.
+3. `RsNotifySubtileReady()` increments the owner-local ready counter.
+4. `RsNotifyAgSummary()` increments the AG wakeup counter selected by `AgSummaryBlockForSubtile()`.
+
+Consumption follows `AgDrainReadyAssignedSubtiles()`:
+
+1. Probe assigned `subtile-ready` counters with `TTEST(..., nranks, GE)`.
+2. On the first hit of a drain pass, execute one acquire fence (`pipe_barrier + dsb`) for all ready subtiles consumed in that pass.
+3. Transfer each ready subtile to all remote ranks.
+4. If no progress is possible, `AgWaitAssignedSummary()` blocks on `summary_ack_count + 1` and waits for the next assigned wakeup.
+
+`AgSummaryBlockForSubtile()` uses a reversed-stripe mapping so AG-heavy blocks land on RS-light blocks, which flattens the combined `rs_work + ag_work` load.
+
+### AG Executor Path
+
+AG work is assigned in owner-local subtile space:
+
+```text
+total_local_subtiles = my_tile_count * G_COMM_SUBTILES_PER_TILE
+assigned_ids(block b) = { num_comm_blocks - 1 - b + k*num_comm_blocks }
 ```
-total_rows = my_tile_count × (nranks - 1) × G_BASE_M
-rows_per_block = ceil(total_rows / num_comm_blocks)
-```
 
-Each AIV handles rows in the range `[row_start, row_end)`. For each contiguous row segment, the original `(tile_owner_idx, remote_rank, row_in_tile)` is recovered, then:
+For each ready assigned subtile:
 
-1. **TLOAD** from local `reduced_output` into UB
-2. **TSTORE** to the remote rank's `reduced_output` (via RDMA)
+1. `AgDecodeLocalSubtile()` maps the owner-local subtile id back to a global row offset in `reduced_output`.
+2. `AgTransferSubtileToAll()` broadcasts exactly `G_COMM_SUB_M` rows to every remote rank.
+3. The first remote peer is rotated by `local_subtile_id % (nranks - 1)` so not every block hammers the same destination first.
 
-Row-level assignment ensures all AIVs transfer strictly equal amounts of data, eliminating load imbalance that occurs with tile-level assignment when the tile count is not divisible by the number of AIVs.
+This design lets AG start as soon as a specific owner-local subtile is fully reduced across all ranks.
 
 ## Ready Queue Mechanism
 
-```
+```text
 ┌─────────────┐         ┌─────────────┐
 │  AIC 0      │         │  AIV 0      │
 │  (Compute)  │──Queue──│  (Comm)     │
@@ -192,140 +208,166 @@ Row-level assignment ensures all AIVs transfer strictly equal amounts of data, e
 └─────────────┘         └─────────────┘
 ```
 
-- Each queue is a 64-byte aligned `PerBlockQueue` struct containing `count` (producer-incremented) and `data[]` (tile index array).
-- **Producer** (AIC): `PerBlockQueueEnqueueFast` writes to `data[slot]` and increments `count`, using `dcci` to flush cache for AIV visibility.
-- **Consumer** (AIV): `PerBlockQueueTryDequeue` uses the `TTEST` hardware instruction to check `count >= head+1`; returns -1 when no data is available. Uses `TWAIT` hardware wait for prolonged idle periods.
-- Single-producer single-consumer design; no atomic operations required.
+- Each queue is a 64-byte-aligned `PerBlockQueue` structure containing `count` (producer-side monotonically increasing counter) and `data[]` (tile index array). Queue slots are addressed through the `GetQueueSlot()` helper instead of relying on implicit `data[idx]` layout assumptions.
+- **Producer** (AIC): `PerBlockQueueEnqueueFast` writes the target slot through `GetQueueSlot()`, then increments `count`, and uses `dcci` to flush cache state so the entry becomes visible to AIV.
+- **Consumer** (AIV): `PerBlockQueueTryDequeue` uses hardware `TTEST` to check whether `count >= head+1`, refreshes the target slot through `GetQueueSlot()`, and returns the tile id. If no tile is ready, it returns `-1`; after a prolonged idle period it falls back to hardware `TWAIT`.
+- When `COMM_BLOCK_NUM < COMPUTE_BLOCK_NUM`, one communication block drains multiple queues in round-robin order. The queue assignment is static, so no cross-block atomic arbitration is required.
+- The design is single-producer single-consumer, so no atomic operation is required inside the queue.
 
 ## Memory Layout and HCCL Window
 
-Only buffers written by remote TPUT/TNOTIFY need to reside in the HCCL RDMA window; buffers with local-only read/write use standard `aclrtMalloc`.
+Only buffers written by remote `TPUT` or `TNOTIFY` need to live in the HCCL RDMA window. Buffers used only for local read/write can be allocated with plain `aclrtMalloc`.
 
-| Buffer | Size | Location | Reason |
+| Buffer | Size | Location | Why |
 | --- | --- | --- | --- |
-| `reduced_output` | M × N × 2B | **HCCL window** | RS AtomicAdd + AG remote TPUT writes (FP16) |
-| `signal_matrix` | (MAX_RANKS+1) × 4B, aligned 64B | **HCCL window** | DeviceBarrier cross-rank TNOTIFY writes |
-| `gemm_output` | M × N × 2B | **aclrtMalloc** | Local read/write only (FP16) |
-| `src0_dev`, `src1_dev` | Input matrices (FP16) | **aclrtMalloc** | Local read/write only |
+| `reduced_output` | `M x N x 2B` | **HCCL window** | RS `AtomicAdd` and AG remote `TPUT` writes (`FP16`) |
+| `signal_matrix` | `G_SIGNAL_TOTAL_SLOTS x 4B`, aligned to 64B | **HCCL window** | Subtile-ready and AG-summary counters (plus reserved legacy barrier slots) |
+| `gemm_output` | `M x N x 2B` | **aclrtMalloc** | Local read/write only (`FP16`) |
+| `src0_dev`, `src1_dev` | input matrices (`FP16`) | **aclrtMalloc** | Local read/write only |
 
-Window size is controlled by the `HCCL_BUFFSIZE` environment variable. `run.sh` computes it automatically: `M × N × 2 / 1MB + 64MB`.
+Window size is controlled by the `HCCL_BUFFSIZE` environment variable. `run.sh` sizes it from the padded `reduced_output` footprint and adds a large safety margin:
+
+```text
+pad(M, G_BASE_M) x pad(N, G_BASE_N) x 2 / 1MB + 64MB
+```
+
+`signal_matrix` lives in the same window but is tiny compared with the added `64MB` margin.
 
 ## Measured Performance (Reference)
 
-The following data was measured on 8 Ascend 910B devices with parameters M=5416, K=6144, N=1408 (padded 5504×1536), 258 tiles (43×6). Each rank computes the full GEMM C_i = A_i × B, and AllReduce sums the 8 C_i results.
+The following numbers were collected from the current `subtile-ready / AG-summary overlap` implementation on 8-card Ascend 910B with `M=5416`, `K=6144`, `N=1408` (padded to `5504 x 1536`), `258 tiles (43 x 6)`, `compute_blocks=24`, and `comm_blocks=24`. Each rank computes a full GEMM `C_i = A_i x B`, and AllReduce sums the eight `C_i` tensors.
 
 | Metric | Value |
 | --- | --- |
-| Compute-only | 365 us (257 TFLOPS, 98%) |
-| Sequential | 743 us (compute 368 us + comm 375 us @ 74 GB/s) |
-| Pipelined | **631 us** (speedup 1.18x, overlap 31%) |
-| Throughput | 1189 TFLOPS (total) |
+| Compute-only | `368.1 us` (`254546 GFLOPS`) |
+| Sequential | `808.9 us` (compute `371.6 us` + comm `437.3 us @ 63.6 GB/s`) |
+| Pipelined | **`560.6 us`** (compute done `367.2 us`, comm done `560.6 us @ 49.7 GB/s`) |
+| Speedup | `1.443x` |
+| Time saved | `248.4 us` (`30.7%`) |
+| Overlap eff | `66.8%` |
+| Throughput | `1337307 GFLOPS` (total) |
 
 ### What These Numbers Mean
 
-- **Compute-only**: Pure GEMM time (no communication), reflecting the upper bound of single-device Cube utilization. 257 TFLOPS at 98% of theoretical peak indicates the compute kernel is highly optimized.
-- **Sequential**: Compute→communication executed serially with no overlap. Total time = compute time + communication time.
-- **Pipelined**: Compute and communication running in dual-stream parallel. 631 us vs. Sequential 743 us yields 1.18× speedup with 31% overlap efficiency.
-- **Speedup**: Sequential / Pipelined; higher values indicate more effective compute-communication overlap.
-- **Overlap eff**: Percentage of the shorter phase's time saved by overlapping. 31% means roughly one-third of the communication time is successfully hidden behind computation.
+- **Compute-only**: pure GEMM execution time with no communication. It reflects the upper bound of single-card Cube utilization. The current pure-compute result is `368.1 us`, or `254546 GFLOPS`.
+- **Sequential**: compute followed by communication with no overlap. The current sequential path takes `808.9 us`, split into `371.6 us` of compute and `437.3 us` of communication.
+- **Pipelined**: compute and communication run concurrently on two streams. The current `Pipelined = 560.6 us`; versus `Sequential = 808.9 us`, that is a `1.443x` speedup with `66.8%` overlap efficiency.
+- **Speedup**: `Sequential / Pipelined`. A larger value means communication-compute overlap is more effective.
+- **Time saved**: total wall-clock time saved relative to the sequential path. The current run saves `248.4 us`, or `30.7%`.
+- **Overlap efficiency**: the fraction of the shorter phase that is hidden by overlap. `66.8%` means roughly two thirds of the shorter phase is now hidden by overlap.
 
 ### Optimization History
 
+> The rows below are historical optimization checkpoints; the last row is the latest end-to-end result from the current `subtile-ready / AG-summary overlap` path. Treat the older rows as context, not as a literal decomposition of the live path.
+
 | Optimization | Pipelined (us) | Gain | Conclusion |
 | --- | --- | --- | --- |
-| Baseline | 808 | — | — |
-| Block Swizzle | 793 | -1.8% | **Kept** |
-| RS AtomicAdd eliminating Reduce phase | 736 | -6.6% | **Kept** |
-| AG row-level flattened decomposition | 623 | -15.4% | **Kept** |
-| 48 AIV (RS skip + AG participation) | 639 | RS 24 AIVs only, AG 48 AIVs | **Reverted** (AIC interference) |
-| 48 AIV dual-queue (1 AIC : 2 AIV) | 667 | RS/AG both 48 AIVs | **Reverted** (AIC interference) |
+| Baseline | 808 | - | - |
+| Block Swizzle | 793 | `-1.8%` | **Kept** |
+| RS `AtomicAdd` removes the separate Reduce stage | 736 | `-6.6%` | **Kept** |
+| AG row-level flattened scheduling | 623 | `-15.4%` | Historical checkpoint |
+| 48 AIV (`RS` skip + `AG` participate) | 639 | RS only on 24 AIV, AG on 48 AIV | **Reverted** (`AIC` interference) |
+| 48 AIV dual-queue (`1 AIC : 2 AIV`) | 667 | both RS and AG on 48 AIV | **Reverted** (`AIC` interference) |
+| Current `subtile-ready / AG-summary overlap` path | **560.6** | about `-10.0%` versus the `623 us` historical checkpoint | **Current result** |
 
-## Performance Tuning Guide (How to Tune This Kernel)
+## Performance Tuning Guide
 
-### 1) Start with Multi-Core Partitioning
+### 1. Prioritize Multi-Core Partitioning
 
-Each AIC is assigned a tile subset via `block_idx × tiles_per_block`; blocks do not interfere with each other.
+Each AIC receives a tile subset according to `block_idx x tiles_per_block`, and blocks do not interfere with one another.
 
 Checklist:
 
-- Adjust `COMPUTE_BLOCK_NUM` so each block handles a roughly equal number of tiles.
-- For different matrix shapes, recalculate the total tile count: `G_NUM_TILES = (M_padded/128) × (N_padded/256)`.
+- Tune `COMPUTE_BLOCK_NUM` so each block gets a similar number of tiles.
+- For different matrix shapes, recompute the total tile count as `G_NUM_TILES = (M_padded/128) x (N_padded/256)`.
 
-### 2) Choose Appropriate Base Tile Sizes
+### 2. Choose a Proper Base Tile
 
-L0A and L0B use double buffering (ping/pong), with each buffer capped at 32 KiB.
+L0A and L0B use ping/pong double buffering, and each buffer is limited to 32 KiB.
 
-For FP16 input (2 bytes/elem):
+For FP16 input (`2 bytes/elem`):
 
-- L0A tile bytes ≈ `baseM × baseK × 2` = `128 × 64 × 2 = 16 KiB`
-- L0B tile bytes ≈ `baseK × baseN × 2` = `64 × 256 × 2 = 32 KiB`
+- L0A tile bytes ~= `baseM x baseK x 2` = `128 x 64 x 2 = 16 KiB`
+- L0B tile bytes ~= `baseK x baseN x 2` = `64 x 256 x 2 = 32 KiB`
 
-Communication tile size is `baseM × baseN × sizeof(FP16) = 128 × 256 × 2 = 64 KB`.
+The communication tile size is:
 
-### 3) Use L1 "stepK" Caching to Improve Reuse
+```text
+baseM x baseN x sizeof(FP16) = 128 x 256 x 2 = 64 KB
+```
 
-`stepKa=stepKb=4`: One TLOAD fetches 4 K-slices into L1; subsequent TEXTRACT calls extract them one by one to L0.
+### 3. Use L1 `stepK` Caching to Increase Reuse
 
-L1 usage: `2×64KB(A) + 2×128KB(B) = 384KB ≤ 1024KB` (total L1 capacity).
+With `stepKa=stepKb=4`, one `TLOAD` brings 4 K-slices into L1, and subsequent `TEXTRACT` operations pull them into L0 one by one.
 
-Increasing `stepK` reduces DMA launch overhead, but ensure it does not exceed L1 capacity.
+L1 usage:
 
-### 4) Maintain Pipeline Overlap
+```text
+2 x 64KB (A) + 2 x 128KB (B) = 384KB <= 1024KB
+```
 
-The double buffering inside the compute kernel (L1/L0A/L0B) plus the dual-stream overlap between compute and communication is the core of performance.
+Increasing `stepK` can reduce DMA launch overhead, but the total must still fit in L1.
+
+### 4. Preserve Pipeline Overlap
+
+The key to performance is the combination of:
+
+- double buffering inside the compute kernel (`L1` / `L0A` / `L0B`)
+- dual-stream overlap between compute and communication
 
 When you observe:
 
-- **Communication time >> compute time** → The compute side is well-optimized; focus on improving communication efficiency or increasing overlap.
-- **Compute time >> communication time** → Communication is fully hidden; focus on optimizing the compute side.
+- **communication time >> compute time**: the compute side is already efficient, so focus on improving communication or increasing overlap.
+- **compute time >> communication time**: communication is fully hidden, so focus on the compute side.
 
-### 5) Adjust Communication Block Count
+### 5. Tune the Number of Communication Blocks
 
-`COMM_BLOCK_NUM` controls the AIV parallelism of the comm kernel. Adjust via the `--comm-blocks` argument.
+`COMM_BLOCK_NUM` controls AIV parallelism in the communication kernel and can be adjusted via `--comm-blocks`.
 
-Note: On the 910B, benchmarks show that increasing `COMM_BLOCK_NUM` from 24 to 48 (using all AIVs) causes a significant increase in AIC compute time (+24%) due to HBM bandwidth contention and TSCH scheduling overhead. The current optimal configuration is 24 AIVs.
+On **Ascend910B**, measurements showed that increasing `COMM_BLOCK_NUM` from 24 to 48 caused a significant increase in AIC compute time (about `+24%`) because of HBM bandwidth contention and TSCH scheduling overhead. A more stable default was therefore 24.
 
-### 6) Constraints
+### 6. Constraints
 
-- K must be divisible by `G_BASE_K × G_STEP_KA` (default 64×4=256).
-- M is automatically padded to 128 alignment; N is automatically padded to 256 alignment.
-- All in-window buffers must be allocated at the same offset on every rank.
-- `signal_matrix` is zeroed via `aclrtMemset` at the beginning of each iteration.
+- `K` must be divisible by `G_BASE_K x G_STEP_KA` (default `64 x 4 = 256`).
+- `M` is padded automatically to a multiple of 128, and `N` is padded automatically to a multiple of 256.
+- All HCCL-window buffers must be allocated at the same offset on every rank.
+- `signal_matrix` must be reset with `aclrtMemset` before each iteration.
 
 ## Build and Run
 
-1. Set up the Ascend CANN environment:
+1. Configure the Ascend CANN environment:
 
 ```bash
-source ${ASCEND_INSTALL_PATH}/bin/setenv.bash
+export ASCEND_CANN_PATH=/usr/local/Ascend/cann-<version>/set_env.sh
+source "${ASCEND_CANN_PATH}"
 ```
 
-2. Activate conda environment (requires Python + NumPy):
+2. Activate a conda environment that provides Python and NumPy:
 
 ```bash
 conda activate <your-conda-env>
 ```
 
-3. Run the example (8 devices):
+3. Run the example with 8 ranks:
 
 ```bash
 cd ${git_clone_path}/kernels/manual/a2a3/gemm_ar
 ./run.sh --nranks 8 --soc-version Ascend910B1
 ```
 
-4. Specify starting device ID:
+4. Specify the starting device index:
 
 ```bash
 FIRST_DEVICE=0 ./run.sh --nranks 8 --soc-version Ascend910B1
 ```
 
-5. Customize block allocation:
+5. Use custom compute/communication block counts:
 
 ```bash
 ./run.sh --nranks 8 --compute-blocks 20 --comm-blocks 4
 ```
 
-On success, the output will be:
+When successful, the program prints:
 
 ```text
 GEMM AllReduce demo completed successfully.
@@ -333,51 +375,52 @@ GEMM AllReduce demo completed successfully.
 
 ### Environment Variables
 
-| Variable | Purpose | Default Behavior |
+| Environment Variable | Purpose | Default Behavior |
 | --- | --- | --- |
-| `ASCEND_CANN_PATH` | Full path to CANN `set_env.sh` | Auto-globs `/usr/local/Ascend/cann-*/set_env.sh` and picks the latest |
-| `MPI_SEARCH_DIRS` | MPI `bin/` search paths (space-separated) | Searches `/usr/local/mpich/bin`, `/home/mpich/bin`, and other common paths |
-| `ASCEND_DRIVER_PATH` | Ascend driver path (used by CMake) | Defaults to `/usr/local/Ascend/driver` |
-| `MPI_LIB_PATH` | Absolute path to `libmpi.so` (runtime dynamic loading) | Auto-set by `run.sh` based on discovered MPI |
-| `HCCL_BUFFSIZE` | HCCL RDMA window size (MB) | Auto-computed by `run.sh` based on M/N |
-| `FIRST_DEVICE` | Starting NPU device ID | Defaults to 0 |
+| `ASCEND_CANN_PATH` | Full path to the CANN `set_env.sh` script | Auto-globs `/usr/local/Ascend/cann-*/set_env.sh` and picks the latest one |
+| `MPI_SEARCH_DIRS` | Search paths for MPI `bin/` directories (space-separated) | Searches common locations such as `/usr/local/mpich/bin` and `/home/mpich/bin` |
+| `ASCEND_DRIVER_PATH` | Ascend driver path used by CMake | Defaults to `/usr/local/Ascend/driver` |
+| `MPI_LIB_PATH` | Absolute path to `libmpi.so` for runtime dynamic loading | Auto-set by `run.sh` according to the discovered MPI installation |
+| `HCCL_BUFFSIZE` | HCCL RDMA window size in MB | Auto-computed by `run.sh` from the padded `M` / `N` footprint |
+| `FIRST_DEVICE` | Starting NPU device index | Defaults to `0` |
 
 ## Changing Matrix Dimensions
 
-Modify `CONFIG_G_M`, `CONFIG_G_K`, and `CONFIG_G_N` in `gemm_ar_config.h`—all source files share the configuration via include. You can also pass them as CMake arguments:
+Update `CONFIG_G_M`, `CONFIG_G_K`, and `CONFIG_G_N` in `gemm_ar_config.h`. All source files share the configuration through includes. You can also pass them from CMake:
 
 ```bash
 cmake -DCONFIG_G_M=8192 -DCONFIG_G_K=8192 -DCONFIG_G_N=2048 ..
 ```
 
-Constraint: K must be divisible by `G_BASE_K × G_STEP_KA` (default 64×4=256). `HCCL_BUFFSIZE` is auto-computed by `run.sh`.
+Constraint: `K` must be divisible by `G_BASE_K x G_STEP_KA` (default `64 x 4 = 256`). `HCCL_BUFFSIZE` is computed automatically by `run.sh`.
 
 ## FAQ
 
-| Issue | Cause & Solution |
+| Problem | Cause and Fix |
 | --- | --- |
-| `HCCL window too small` | Window is too small. Check `HCCL_BUFFSIZE`; formula: `M × N × 2 bytes + margin` |
-| `HcclGetRootInfo failed: 7` | Stale state from a previous run. Run `rm -rf /dev/shm/sem.hccl*; ipcrm -a` or wait ~30s and retry |
-| Hangs after HCCL initialization | Rank synchronization issue; verify all ranks reach `CommMpiBarrier` |
-| Segfault in comm kernel | Usually an invalid window address; verify `windowsIn[]` values are non-zero |
-| DeviceBarrier deadlock | signal_matrix not zeroed between iterations; check that `resetState` memsets signal_matrix |
-| Validation failure with large max_diff | FP16 has limited precision; validation tolerance is atol=1.0, rtol=0.01. If diff is abnormally large, check DeviceBarrier synchronization logic |
-| `aclInit repeat init` (100002) | Harmless; code guards against this by calling `aclInit` only once per process |
-| `--allow-run-as-root` failure | This project uses MPICH; that flag is OpenMPI-specific |
+| `HCCL window too small` | The window must cover the padded `reduced_output` footprint plus `signal_matrix`. Check whether `HCCL_BUFFSIZE` was manually overridden; `run.sh` auto-raises it from `pad(M) x pad(N) x 2 / 1MB + 64MB` |
+| `HcclGetRootInfo failed: 7` | Leftover dirty state from a previous run. Execute `rm -rf /dev/shm/sem.hccl*; ipcrm -a` or wait about 30 seconds and retry |
+| Hangs after HCCL initialization | Usually a rank synchronization problem. Check that all ranks reached `CommMpiBarrier` |
+| Segmentation fault in the communication kernel | Usually caused by an invalid window address. Verify that `windowsIn[]` entries are non-zero |
+| Signal-wait deadlock or AG stall | `signal_matrix` was not cleared between iterations, or the subtile-ready / AG-summary ownership mapping is wrong. Check whether `resetState` calls `memset` on `signal_matrix` |
+| Verification fails with large `max_diff` | FP16 precision is limited. The validation tolerance is `atol=1.0, rtol=0.01`. If the diff is abnormally large, check subtile-ready / AG-summary synchronization and owner mapping |
+| `aclInit repeat init` (`100002`) | Harmless. The code already guards against repeated `aclInit` in one process |
+| `--allow-run-as-root` fails | This project uses MPICH. That option is specific to OpenMPI |
 
 ## Build System
 
-- **Compiler**: bisheng (CANN built-in clang 15.0.5)
-- **Cube kernel**: `--cce-aicore-arch=dav-c220-cube -DMEMORY_BASE`
-- **Vec kernel**: `--cce-aicore-arch=dav-c220-vec -DMEMORY_BASE`
-- **Host executable**: `-xc++` standard compilation
-- **Link libraries**: `runtime`, `ascendcl`, `hcomm`, `tiling_api`
-- The pto-comm-isa include path **must come first** to override CANN's built-in `pto_tile.hpp`
+- **Compiler**: `bisheng` (CANN-bundled clang 15.0.5)
+- **Cube kernel flags**: `--cce-aicore-arch=dav-c220-cube -DMEMORY_BASE`
+- **Vector kernel flags**: `--cce-aicore-arch=dav-c220-vec -DMEMORY_BASE`
+- **Host executable**: standard `-xc++` compilation
+- **Linked libraries**: `runtime`, `ascendcl`, `hcomm`, `tiling_api`
+- The include path for `pto-comm-isa` **must come first** so it overrides the `pto_tile.hpp` bundled with CANN
 
 ## Changelog
 
 | Date | Change |
 | --- | --- |
-| 2025-12-15 | Initial version: GEMM + AllReduce dual-stream fusion operator |
-| 2026-04-01 | CANN 9.0.0 compatibility (removed deprecated hccl/hccl.h dependency) |
-| 2026-04-02 | RS AtomicAdd eliminating Reduce phase; AG row-level flattened decomposition for load balancing; architecture doc update |
+| 2025-12-15 | Initial version with dual-stream GEMM + AllReduce fusion |
+| 2026-04-01 | Adapted to CANN 9.0.0 (removed the deprecated `hccl/hccl.h` dependency) |
+| 2026-04-02 | RS `AtomicAdd` removed the standalone Reduce stage; AG flattening improved load balance |
+| 2026-04-21 | Communication mode changed from `RS -> DeviceBarrier -> AG` to `subtile-ready / AG-summary overlap` |
