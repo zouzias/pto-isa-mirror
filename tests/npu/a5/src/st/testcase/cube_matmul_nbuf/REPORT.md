@@ -39,13 +39,16 @@ B-load + TMOV + TMATMUL_ACC loop, achieving an effective K-group of
 | buf8_ktile16_8KB  | 8 | 16 | 64 | 2 KB  | 8 KB  | 80 KB | 1 KB  | 8 KB  | 32 KB | 104 KB | 17 |
 | buf2_ktile32_16KB | 2 | 32 | 32 | 4 KB  | 16 KB | 40 KB | 2 KB  | 16 KB | 32 KB | 68 KB  | 5  |
 | buf4_ktile32_16KB | 4 | 32 | 32 | 4 KB  | 16 KB | 80 KB | 2 KB  | 16 KB | 32 KB | 104 KB | 9  |
+| **buf4_alarge_K128** | **4** | **32** | **32** | **4 KB** | **16 KB** | **80 KB** | **2 KB** | **16 KB** | **32 KB** | **104 KB** | **9** |
+| **buf8_alarge_K128** | **8** | **16** | **64** | **2 KB** | **8 KB** | **80 KB** | **1 KB** | **8 KB** | **32 KB** | **104 KB** | **17** |
 
 Notes:
 - L1 A slot: NZ format, stride = 0x800 B (K=16) / 0x1000 B (K=32)
 - L1 B slot: contiguous fp16, K × N × 2 bytes
 - L0C: single accumulator [M=32, N=256] fp32 = 32 KB, not ping-ponged
-- Buffer ID allocation: L1 A = 0…N-1, L1 B = N…2N-1, L0A = 2N…3N-1, L0B = 3N…4N-1, C = 4N
-- Hardware limit: 32 IDs; all configs within budget (max 17 for 8-buf)
+- **Standard configs** (buf2/4/8_ktile*): Buffer ID allocation: L1 A = 0…N-1, L1 B = N…2N-1, L0A = 2N…3N-1, L0B = 3N…4N-1, C = 4N
+- **alarge_K128 configs** (RunCubeMatmulBurstA): A and B **share the same MTE2 buffer IDs** (B reuses A IDs after the A burst completes). Allocation: A_L1 = 0…N-1, B_L1 = 0…N-1 (reused), L0 = N…2N-1, C = 2N. This halves the MTE2 ID budget vs naive allocation — buf4_alarge uses 9 IDs (same as buf4_ktile32), buf8_alarge uses 17 IDs (same as buf8_ktile16).
+- Hardware limit: 32 IDs; all configs within budget (max 17 for 8-buf / 8-buf alarge)
 
 ---
 
