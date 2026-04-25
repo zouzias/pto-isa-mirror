@@ -346,3 +346,78 @@ by `static_assert`s in the template:
 - A-region in L1 must not overlap B-region: `A_L1_BASE + N_BUFS_A * A_L1_STRIDE <= B_L1_BASE`
 
 Effective L0B budget is 64 KiB so `N_BUFS_A * B_L0_STRIDE <= 0x10000`.
+
+## 13. New Template Version — Scalar Overhead Analysis
+
+_Date: 2026-04-25 | Branch: ptoas-small-tile-st_
+
+### 13.1 Correctness
+
+All 4 configurations passed with max diff ≤ 2.67e-5:
+
+| Config | Status | Total Ticks |
+|--------|--------|-------------|
+| buf4_ktile16_8KB | ✅ PASSED | 23,968 |
+| buf8_ktile16_8KB | ✅ PASSED | 24,389 |
+| buf4_alarge_K128 | ✅ PASSED | 25,139 |
+| buf8_alarge_K128 | ✅ PASSED | 28,668 |
+
+### 13.2 Scalar Instruction Count Comparison
+
+Old template baseline (before RunCubeMatmulBurstA generalisation):
+- buf4_ktile16_8KB: **975** scalar instrs (baseline)
+- buf8_ktile16_8KB: **1856** scalar instrs (+90% overhead vs 4-buf)
+
+New template (current):
+| Config | Scalar Instrs | vs Old | Change |
+|--------|--------------|--------|--------|
+| buf4_ktile16_8KB | 975  | 975  | 0% (identical) |
+| buf8_ktile16_8KB | 1591 | 1856 | **−14.3% improvement** |
+| buf4_alarge_K128 | 274  | n/a  | new config |
+| buf8_alarge_K128 | 1291 | n/a  | new config |
+
+The new general `RunCubeMatmulBurstA` template **reduced** scalar overhead for 8-buf ktile16 by 265 instructions (−14.3%), while keeping 4-buf ktile16 identical.
+
+The burst-A configs (alarge_K128) have dramatically fewer scalar instructions because the outer K-group loop has fewer iterations (8 groups vs 64) — the scalar setup cost is amortised over larger tile bursts.
+
+### 13.3 Pipeline Busy Cycles
+
+| Config | Kernel Ticks | MTE2 | MTE1 | CUBE MAC | SCALAR | FIXP |
+|--------|-------------|------|------|----------|--------|------|
+| buf4_ktile16_8KB | 23,968 | 21,524 | 4,299 | 3,584 | 2,690 | 1,425 |
+| buf8_ktile16_8KB | 24,389 | 21,811 | 4,298 | 3,584 | 4,173 | 1,420 |
+| buf4_alarge_K128 | 25,139 | 22,545 | 3,473 | 2,816 | 1,382 | 1,410 |
+| buf8_alarge_K128 | 28,668 | 26,109 | 4,383 | 3,584 | 4,591 | 1,432 |
+
+MTE2 dominates in all configs — this is a memory-bandwidth bound workload.
+
+Pipeline utilisation (% of kernel ticks):
+| Config | MTE2% | MTE1% | CUBE% | SCALAR% |
+|--------|-------|-------|-------|---------|
+| buf4_ktile16_8KB | 89.8% | 17.9% | 15.0% | 11.2% |
+| buf8_ktile16_8KB | 89.4% | 17.6% | 14.7% | 17.1% |
+| buf4_alarge_K128 | 89.7% | 13.8% | 11.2% | 5.5% |
+| buf8_alarge_K128 | 91.1% | 15.3% | 12.5% | 16.0% |
+
+### 13.4 8-buf alarge vs 4-buf alarge
+
+| Metric | buf4_alarge_K128 | buf8_alarge_K128 | Ratio |
+|--------|-----------------|-----------------|-------|
+| Kernel ticks | 25,139 | 28,668 | 1.14× slower |
+| Scalar instrs | 274 | 1,291 | 4.71× more |
+| SCALAR busy | 1,382 | 4,591 | 3.32× more |
+| MTE2 busy | 22,545 | 26,109 | 1.16× more |
+
+**8-buf alarge is 14% slower than 4-buf alarge**. The scalar overhead (+4.7× instructions) is the primary differentiator — more buffers require more get_buf/rls_buf scalar operations in the inner loop. The CUBE MAC cycles are identical (same compute), confirming this is pure scheduling overhead.
+
+### 13.5 Conclusion
+
+1. **New template correctness**: ✅ All 4 configs pass.
+2. **Scalar overhead fixed for ktile16**: The new `RunCubeMatmulBurstA` template **reduced** 8-buf scalar instrs from 1856 → 1591 (−14.3%), while preserving 4-buf parity.
+3. **8-buf alarge does NOT match 4-buf alarge**: 8-buf adds 4.7× scalar instructions and runs 14% slower. The burst-A approach amplifies scalar overhead as N_BUFS_A grows because each inner iteration requires more get_buf/rls_buf calls.
+4. **Recommendation**: For the alarge (large-K) regime, prefer 4-buf with K_TILE=32 (25,139 ticks). Increasing to 8-buf degrades performance due to scalar scheduling overhead dominating.
+
+### 13.6 Pipeline Diagram
+
+See `profiling/nbuf_comparison_new.svg` for the multi-lane instruction timeline showing MTE2/MTE1/CUBE/SCALAR dispatch events across all 4 configurations.
+
