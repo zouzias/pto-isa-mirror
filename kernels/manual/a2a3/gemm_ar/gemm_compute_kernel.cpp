@@ -197,9 +197,10 @@ AICORE inline void ComputeAndStoreTile(__gm__ half *gemm_output, __gm__ half *sr
 // Each block handles a subset of tiles (no contention — sole producer per queue).
 // ============================================================================
 AICORE inline void GemmComputeImpl(__gm__ half *gemm_output, __gm__ half *src0, __gm__ half *src1,
-                                   __gm__ MultiBlockQueueSet *queue_set, int rank, int block_num, uint32_t k_per_rank)
+                                   __gm__ MultiBlockQueueSet *queue_set, int rank, int launch_block_count,
+                                   uint32_t k_per_rank)
 {
-    const int block_idx = get_block_idx();
+    const int core_idx = get_block_idx();
 
     TileMatAData aMatTile[2];
     TileMatBData bMatTile[2];
@@ -220,12 +221,11 @@ AICORE inline void GemmComputeImpl(__gm__ half *gemm_output, __gm__ half *src0, 
     TASSIGN(cTile, 0x0);
 
     const int total_tiles = G_NUM_TILES;
-    const int tiles_per_block = (total_tiles + block_num - 1) / block_num;
-    const int my_start_tile = block_idx * tiles_per_block;
-    const int my_end_tile = (block_idx + 1) * tiles_per_block;
+    const int my_start_tile = GEMM_AR_BLOCK_START_TILE(core_idx, total_tiles, launch_block_count);
+    const int my_end_tile = my_start_tile + GEMM_AR_BLOCK_TILE_COUNT(core_idx, total_tiles, launch_block_count);
 
     volatile __gm__ PerBlockQueue *my_queue =
-        GetMyBlockQueue((volatile __gm__ MultiBlockQueueSet *)queue_set, block_idx);
+        GetMyBlockQueue((volatile __gm__ MultiBlockQueueSet *)queue_set, core_idx);
     int32_t enqueue_slot = 0;
 
     for (int linear_idx = my_start_tile; linear_idx < my_end_tile && linear_idx < total_tiles; linear_idx++) {
@@ -240,15 +240,17 @@ AICORE inline void GemmComputeImpl(__gm__ half *gemm_output, __gm__ half *src0, 
 // Kernel entry point and host-side launcher
 // ============================================================================
 __global__ AICORE void GemmComputeKernel(__gm__ uint8_t *gemm_output, __gm__ uint8_t *src0, __gm__ uint8_t *src1,
-                                         __gm__ uint8_t *queue_set, int rank, int block_num, uint32_t k_per_rank)
+                                         __gm__ uint8_t *queue_set, int rank, int launch_block_count,
+                                         uint32_t k_per_rank)
 {
     GemmComputeImpl(reinterpret_cast<__gm__ half *>(gemm_output), reinterpret_cast<__gm__ half *>(src0),
                     reinterpret_cast<__gm__ half *>(src1), reinterpret_cast<__gm__ MultiBlockQueueSet *>(queue_set),
-                    rank, block_num, k_per_rank);
+                    rank, launch_block_count, k_per_rank);
 }
 
 void launchGemmCompute(uint8_t *gemm_output, uint8_t *src0, uint8_t *src1, uint8_t *queue_set, int rank, void *stream,
-                       int block_num, uint32_t k_per_rank)
+                       int launch_block_count, uint32_t k_per_rank)
 {
-    GemmComputeKernel<<<block_num, nullptr, stream>>>(gemm_output, src0, src1, queue_set, rank, block_num, k_per_rank);
+    GemmComputeKernel<<<launch_block_count, nullptr, stream>>>(gemm_output, src0, src1, queue_set, rank,
+                                                               launch_block_count, k_per_rank);
 }

@@ -50,6 +50,18 @@ endif()
 if(NOT DEFINED G_N)
     set(G_N 1024)
 endif()
+if(NOT DEFINED G_BASE_M)
+    set(G_BASE_M 128)
+endif()
+if(NOT DEFINED G_BASE_N)
+    set(G_BASE_N 256)
+endif()
+if(DEFINED COMPUTE_BLOCKS AND NOT DEFINED COMPUTE_BLOCK_NUM)
+    set(COMPUTE_BLOCK_NUM ${COMPUTE_BLOCKS})
+endif()
+if(DEFINED COMM_BLOCKS AND NOT DEFINED COMM_BLOCK_NUM)
+    set(COMM_BLOCK_NUM ${COMM_BLOCKS})
+endif()
 if(NOT DEFINED COMPUTE_BLOCK_NUM)
     if(DEFINED SOC_VERSION AND (SOC_VERSION MATCHES "Ascend910B[34]" OR SOC_VERSION MATCHES "Ascend910_93[67]"))
         set(COMPUTE_BLOCK_NUM 20)
@@ -75,6 +87,7 @@ if(NOT DEFINED ORIG_N)
     set(ORIG_N ${G_N})
 endif()
 message(STATUS "GEMM Size: M=${G_M}, K=${G_K}, N=${G_N} (orig: ${ORIG_M}x${ORIG_K}x${ORIG_N})")
+message(STATUS "GEMM Tile: BASE_M=${G_BASE_M}, BASE_N=${G_BASE_N} (BASE_K derived as BASE_N/4 in gemm_config.hpp)")
 message(STATUS "Block Configuration: COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM}, COMM_BLOCK_NUM=${COMM_BLOCK_NUM}")
 
 add_compile_options(
@@ -123,6 +136,7 @@ target_compile_options(allgather_gemm_compute_kernel PRIVATE
     --cce-aicore-arch=dav-c220-cube
     -DMEMORY_BASE -std=c++17
     -DCONFIG_G_M=${G_M} -DCONFIG_G_K=${G_K} -DCONFIG_G_N=${G_N}
+    -DCONFIG_G_BASE_M=${G_BASE_M} -DCONFIG_G_BASE_N=${G_BASE_N}
     -DCONFIG_COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM}
 )
 target_include_directories(allgather_gemm_compute_kernel PRIVATE
@@ -140,6 +154,7 @@ target_compile_options(allgather_gemm_comm_kernel PRIVATE
     --cce-aicore-arch=dav-c220-vec
     -DMEMORY_BASE -std=c++17
     -DCONFIG_G_M=${G_M} -DCONFIG_G_K=${G_K} -DCONFIG_G_N=${G_N}
+    -DCONFIG_G_BASE_M=${G_BASE_M} -DCONFIG_G_BASE_N=${G_BASE_N}
     -DCONFIG_COMM_BLOCK_NUM=${COMM_BLOCK_NUM}
 )
 target_include_directories(allgather_gemm_comm_kernel PRIVATE
@@ -174,6 +189,7 @@ target_include_directories(allgather_gemm PRIVATE
 )
 target_compile_definitions(allgather_gemm PRIVATE
     CONFIG_G_M=${G_M} CONFIG_G_K=${G_K} CONFIG_G_N=${G_N}
+    CONFIG_G_BASE_M=${G_BASE_M} CONFIG_G_BASE_N=${G_BASE_N}
     CONFIG_ORIG_M=${ORIG_M} CONFIG_ORIG_K=${ORIG_K} CONFIG_ORIG_N=${ORIG_N}
     CONFIG_COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM}
     CONFIG_COMM_BLOCK_NUM=${COMM_BLOCK_NUM}
