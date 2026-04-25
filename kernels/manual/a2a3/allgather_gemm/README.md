@@ -15,12 +15,12 @@ kernels/manual/a2a3/allgather_gemm/
 ├── main.cpp                           # Host entry: HCCL init, dual-stream dispatch, warmup, verification, perf stats
 ├── allgather_gemm_comm_kernel.cpp     # AIV communication kernel: AllGather via TPUT
 ├── allgather_gemm_compute_kernel.cpp  # AIC compute kernel: streaming GEMM with chunk-flag waiting
+├── kernel_launch.hpp                  # Host-side kernel launcher declarations
 ├── ready_queue.hpp                    # ChunkFlagMatrix / summary counter metadata
-├── run.sh                             # Build & run script (multi-device, CSV batch, perf mode)
+├── run.sh                             # Build & run script (env detection, shape/block overrides, multi-rank launch)
 ├── scripts/
-│   ├── gen_data.py                    # Input data generation (FP16 A slices + B)
-│   ├── test_shapes.csv                # Test shape configurations (M, K, N)
-│   └── verify_result.py               # Golden comparison (FP32, rtol/atol=0.001)
+│   └── gen_data.py                    # Input data generation (FP16 A slices + B + golden.bin)
+├── prof_analysis/                     # Optional profiling notes and overlap parsing helpers
 └── CMakeLists.txt                     # Build configuration
 ```
 
@@ -102,7 +102,7 @@ The compute kernel operates in two phases:
 
 ## Measured Performance (Reference)
 
-The following measurements were collected on Ascend A3 (910B1) with fp16 inputs → fp32 output, using `aclrtEvent` timing (3 warmup + 10 timed iterations, average reported). TFLOPS is computed as `2 × M × K × N / time`.
+The following measurements were collected on Ascend A3 (910B1) with fp16 inputs → fp32 output, using `aclrtEvent` timing (5 warmup + 10 timed iterations, average reported). TFLOPS is computed as `2 × M × K × N / time`.
 
 ### 2-rank
 
@@ -135,21 +135,102 @@ The following measurements were collected on Ascend A3 (910B1) with fp16 inputs 
 
 ## Build and Run
 
-1. Configure your Ascend CANN environment:
+The current `run.sh` script does three things in one command:
+
+1. Generates input data and golden output into `./out`
+2. Recreates `build/` and rebuilds `allgather_gemm`
+3. Launches `mpirun -n <n_ranks> ./allgather_gemm`
+
+Before running it, configure your Ascend CANN environment so `ASCEND_HOME_PATH` is available:
 
 ```bash
-source ${ASCEND_INSTALL_PATH}/bin/setenv.bash
+source <cann-install>/set_env.sh
 ```
 
-2. Run the example:
+Then enter the example directory:
 
 ```bash
 cd ${git_clone_path}/kernels/manual/a2a3/allgather_gemm
+```
+
+Run the default 2-rank example on A3:
+
+```bash
 bash run.sh -r npu -v Ascend910B1 -n 2
 ```
 
-If the run succeeds, the output prints:
+Run with a custom rank count and GEMM shape:
+
+```bash
+bash run.sh -r npu -v Ascend910B1 -n 4 --gm 4096 --gk 2048 --gn 1536
+```
+
+Run with custom chunk tile and block settings:
+
+```bash
+bash run.sh -r npu -v Ascend910B1 -n 2 --gm 2048 --gk 2048 --gn 1024 --base-m 128 --base-n 256 --compute-blocks 32 --comm-blocks 24
+```
+
+Run in simulator mode:
+
+```bash
+bash run.sh -r sim -v Ascend910B1 -n 2 --gm 2048 --gk 2048 --gn 1024
+```
+
+Shape constraints enforced by `run.sh`:
+
+- `--base-n` must be divisible by 4
+- `G_M % G_BASE_M == 0`
+- `G_K % G_BASE_N == 0`
+- `G_N % G_BASE_N == 0`
+
+### Command-Line Options
+
+| Option | Description |
+| ------ | ----------- |
+| `-r/--run-mode` | Run mode: `npu` or `sim` |
+| `-v/--soc-version` | SoC version string, for example `Ascend910B1` |
+| `-n/--n-ranks` | Number of MPI ranks passed to `mpirun` |
+| `--gm` | Global M dimension used for data generation and build-time configuration |
+| `--gk` | Global K dimension used for data generation and build-time configuration |
+| `--gn` | Global N dimension used for data generation and build-time configuration |
+| `--base-m` | Chunk tile size on the M dimension |
+| `--base-n` | Chunk tile size on the N dimension (`--base-n` must be divisible by 4) |
+| `--compute-blocks` | Override the compute kernel block count |
+| `--comm-blocks` | Override the communication kernel block count |
+
+## Benchmark and Output
+
+The host program now runs three benchmark views before the final functional verification:
+
+1. **Compute-only**: marks all chunks ready from host side and measures pure compute latency
+2. **Sequential**: runs communication to completion first, then launches compute
+3. **Pipelined**: launches communication and compute on separate streams to measure overlap
+
+After benchmarking, it runs one final functional verification pass and compares the result with `golden.bin`.
+
+A successful run prints a summary similar to:
 
 ```text
-test success
+[INFO] Running warmup...
+[INFO] Functional run completed. Verification PASSED.
+[SUCCESS] AllGather GEMM (HCCL)
+  Compute-only:   ...
+  Sequential:     ...
+  Pipelined:      ...
+  Speedup:        ...
+  Overlap eff:    ...
 ```
+
+The generated output tensor for each rank is also written to:
+
+```text
+out/output_rank<rank_id>.bin
+```
+
+## Changelog
+
+| Date       | Change |
+| ---------- | ------ |
+| 2025-07-01 | Initial implementation: AllGather+GEMM fusion with M-split chunk streaming pipeline |
+| 2026-04-21 | Restored host-side benchmark/profiling flow and run.sh/CMake parameter passthrough for shape, base tile, and block overrides |
