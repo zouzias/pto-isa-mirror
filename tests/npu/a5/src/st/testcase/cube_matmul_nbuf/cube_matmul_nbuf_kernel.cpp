@@ -685,3 +685,13 @@ void LaunchCubeMatmul8BufALarge(uint8_t *out, uint8_t *src0, uint8_t *src1, void
             reinterpret_cast<half*>(src0),
             reinterpret_cast<half*>(src1));
 }
+
+void LaunchCubeMatmul4BufALargeK64(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+    // 4 A buffers × K_TILE=16 → K_A_GROUP=64, 16 outer × 4 inner over K=1024.
+    // Same B-tile [16,256] as LaunchCubeMatmul8BufALarge — fair N_BUFS_A comparison.
+    RunCubeMatmulBurstA<float, half, /*N_BUFS_A=*/4, /*M_TILE=*/GM_M, /*K_TILE=*/16, /*N_TILE=*/GM_N>
+        <<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out),
+            reinterpret_cast<half*>(src0),
+            reinterpret_cast<half*>(src1));
+}

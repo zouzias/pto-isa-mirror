@@ -35,6 +35,7 @@ extern void LaunchCubeMatmul2Buf16K(uint8_t *out, uint8_t *src0, uint8_t *src1, 
 extern void LaunchCubeMatmul4Buf16K(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 extern void LaunchCubeMatmul4BufALarge(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 extern void LaunchCubeMatmul8BufALarge(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmul4BufALargeK64(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -141,3 +142,4 @@ TEST(CubeMatmulNBufTest, buf2_ktile32_16KB) { RunNBufTest(LaunchCubeMatmul2Buf16
 TEST(CubeMatmulNBufTest, buf4_ktile32_16KB) { RunNBufTest(LaunchCubeMatmul4Buf16K, "out_4buf_16k.bin"); }
 TEST(CubeMatmulNBufTest, buf4_alarge_K128)  { RunNBufTest(LaunchCubeMatmul4BufALarge, "out_4buf_alarge.bin"); }
 TEST(CubeMatmulNBufTest, buf8_alarge_K128)  { RunNBufTest(LaunchCubeMatmul8BufALarge, "out_8buf_alarge.bin"); }
+TEST(CubeMatmulNBufTest, buf4_alarge_K64)   { RunNBufTest(LaunchCubeMatmul4BufALargeK64, "out_4buf_alarge_k64.bin"); }

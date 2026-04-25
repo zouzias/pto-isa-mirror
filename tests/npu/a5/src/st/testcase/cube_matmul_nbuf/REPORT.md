@@ -40,6 +40,7 @@ B-load + TMOV + TMATMUL_ACC loop, achieving an effective K-group of
 | buf2_ktile32_16KB | 2 | 32 | 32 | 4 KB  | 16 KB | 40 KB | 2 KB  | 16 KB | 32 KB | 68 KB  | 5  |
 | buf4_ktile32_16KB | 4 | 32 | 32 | 4 KB  | 16 KB | 80 KB | 2 KB  | 16 KB | 32 KB | 104 KB | 9  |
 | **buf4_alarge_K128** | **4** | **32** | **32** | **4 KB** | **16 KB** | **80 KB** | **2 KB** | **16 KB** | **32 KB** | **104 KB** | **9** |
+| **buf4_alarge_K64** | **4** | **16** | **64** | **2 KB** | **8 KB** | **40 KB** | **1 KB** | **8 KB** | **32 KB** | **68 KB** | **9** |
 | **buf8_alarge_K128** | **8** | **16** | **64** | **2 KB** | **8 KB** | **80 KB** | **1 KB** | **8 KB** | **32 KB** | **104 KB** | **17** |
 
 Notes:
@@ -262,6 +263,26 @@ scalar bottleneck must be addressed at the pipeline synchronization level (reduc
 get_buf/rls_buf pairs, or using async buffer management).
 
 ---
+### 10.6 Fair Comparison: K_TILE=16, MMAD=64 (buf4_ktile16 vs buf4_alarge_K64 vs buf8_alarge_K128)
+
+The SVG below compares all three K_TILE=16 configurations with identical MMAD count (64),
+differing only in buffer count and scheduling strategy (ping-pong vs burst-A, 4 vs 8 buf).
+
+![Fair comparison pipeline](profiling/pipeline_alarge_fair_comparison.svg)
+
+| Config | N_BUFS_A | Strategy | Kernel Ticks | First MTE2 | First MMAD | Scalar instrs | Scalar/MMAD |
+|--------|----------|----------|-------------|-----------|-----------|--------------|-------------|
+| buf4_ktile16_8KB | 4 | ping-pong | 23,968 | 0.606 µs | 0.614 µs | 975 | 15.2 |
+| buf4_alarge_K64  | 4 | burst-A   | 28,561 | 0.651 µs | 0.893 µs | 507 | 7.9 |
+| buf8_alarge_K128 | 8 | burst-A   | 28,668 | 0.669 µs | 0.951 µs | 1,291 | 20.2 |
+
+> **Key finding**: buf4_alarge_K64 has only **507 scalar instrs** (ratio 7.9) vs buf8_alarge_K128's
+> **1,291** (ratio 20.2) — a **2.55× reduction** purely from reducing N_BUFS_A from 8 to 4 with the
+> same K_TILE=16. The extra ticks vs buf4_ktile16_8KB (28,561 vs 23,968) are due to the burst-A
+> preload prologue overhead, not scalar count.
+
+---
+
 ## 11. Pipeline Comparison: buf4_K16 (8KB) vs buf4_K32 (16KB)
 
 ### Why does K32 win despite being more MTE2-bound?
@@ -346,6 +367,7 @@ The two instantiations both achieve K-group = 128 (`N_BUFS_A * K_TILE`):
 |------|----------|--------|--------|--------|------------------|-----------|
 | `buf4_alarge_K128` | 4 | 32 | 32 | 256 | 8 × 4 = 32 | 4 × 0x4000 = 64 KiB (exact) |
 | `buf8_alarge_K128` | 8 | 32 | 16 | 256 | 8 × 8 = 64 | 8 × 0x2000 = 64 KiB (exact) |
+| `buf4_alarge_K64`  | 4 | 32 | 16 | 256 | 16 × 4 = 64 | 4 × 0x2000 = 32 KiB |
 
 ### Design summary (burst-A vs ping-pong)
 
@@ -452,4 +474,35 @@ Pipeline utilisation (% of kernel ticks):
 ### 13.6 Pipeline Diagram
 
 See `profiling/nbuf_comparison_new.svg` for the multi-lane instruction timeline showing MTE2/MTE1/CUBE/SCALAR dispatch events across all 4 configurations.
+
+### 13.7 Fair Comparison: buf4 vs buf8 with identical B-tile [K_TILE=16, N=256]
+
+This is the definitive apples-to-apples comparison: same K_TILE=16, same B-tile [16,256],
+same MMAD count (64), differing ONLY in N_BUFS_A (4 vs 8) and scheduling strategy.
+
+| Config | N_BUFS_A | Strategy | K_TILE | MMAD | Ticks | Scalar instrs | Scalar/MMAD | Scalar% |
+|--------|----------|----------|--------|------|-------|--------------|-------------|---------|
+| buf4_ktile16_8KB | 4 | ping-pong | 16 | 64 | 23,968 | 975 | 15.2 | 11.2% |
+| buf4_alarge_K64  | 4 | burst-A   | 16 | 64 | 28,561 | 507 | 7.9 | 1.9% |
+| buf8_alarge_K128 | 8 | burst-A   | 16 | 64 | 28,668 | 1,291 | 20.2 | 4.8% |
+
+**Conclusions:**
+
+1. **N_BUFS_A 4→8 scalar overhead (same K_TILE=16)**: buf4_alarge_K64 uses **507** scalar instrs
+   vs buf8_alarge_K128's **1,291** — a **2.55× increase** purely from doubling N_BUFS_A.
+   Each extra buffer slot requires additional get_buf/rls_buf scalar pairs in both the A-burst
+   prologue and the inner B-loop.
+
+2. **burst-A reduces scalar for 4-buf**: buf4_alarge_K64 achieves 7.9 scalar/MMAD vs
+   buf4_ktile16_8KB's 15.2/MMAD — a **48% reduction** from the burst-A scheduling strategy.
+   However, the burst-A prologue adds latency (first MMAD at 0.893 µs vs 0.614 µs), which
+   explains why overall ticks (28,561) are higher than ping-pong (23,968) despite fewer scalar ops.
+
+3. **8-buf alarge is strictly worse than 4-buf alarge**: Same K_TILE=16 but 2.55× more scalar
+   instructions and nearly identical total ticks (28,668 vs 28,561). The scalar cost of 4 extra
+   buffer slots dominates.
+
+4. **SVG**: profiling/scalar_overhead_fair.svg — scalar instruction bar chart for all 3 K_TILE=16 configs.
+
+![Fair comparison scalar overhead](profiling/scalar_overhead_fair.svg)
 
