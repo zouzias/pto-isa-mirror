@@ -519,6 +519,199 @@ void LaunchCubeMatmul4Buf16K(uint8_t *out, uint8_t *src0, uint8_t *src1, void *s
 
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Config 7: B-tile N-buffering with FIXED LARGE A tile.
+//
+//   Goal: study how N-buffering of the *B* tile in L1 hides MTE2 latency,
+//   while A is held as a single large [M_TILE, A_K_TILE] tile in L1
+//   (ping-pong, 2 slots only) and consumed by L1-view sub-tiles of shape
+//   [M_TILE, B_K_TILE] at compile-time-fixed K-offsets.
+//
+//   Outer loop (K_GROUPS = K_TOTAL / A_K_TILE):
+//     - 1 big TLOAD of A[outer] into A ping/pong slot s_a = outer % 2
+//   Inner loop (INNER = A_K_TILE / B_K_TILE):
+//     - TLOAD B[outer*INNER + i] into B slot s_b = i % N_BUFS_B
+//     - TMOV  A_view[s_a][i]  -> L0A[s_a]
+//     - TMOV  B_slot[s_b]     -> L0B[s_b]
+//     - TMATMUL_ACC  cTile += L0A[s_a] * L0B[s_b]
+//
+//   Compile-time plan (all constexpr):
+//     K_GROUPS       = GM_K / A_K_TILE
+//     INNER          = A_K_TILE / B_K_TILE
+//     A_BIG_BYTES    = M_TILE * A_K_TILE * 2     (NZ-packed)
+//     A_VIEW_STRIDE  = M_TILE * B_K_TILE * 2     (per K-step within a slot)
+//     B_SLOT_BYTES   = B_K_TILE * N_TILE * 2
+//     L0A_STRIDE     = M_TILE * B_K_TILE * 2
+//     L0B_STRIDE     = B_K_TILE * N_TILE * 2
+//
+//   Buffer-id allocation (flat ID space):
+//     A_L1 ping-pong : 0, 1                          (PIPE_MTE2)
+//     B_L1 N-buf     : 2 .. 2 + N_BUFS_B - 1          (PIPE_MTE2)
+//     L0A ping-pong  : 2 + N_BUFS_B, 3 + N_BUFS_B     (PIPE_MTE1 / PIPE_M)
+//     L0B N-buf      : 4 + N_BUFS_B .. 4 + 2*N_BUFS_B - 1
+//     C              : 4 + 2*N_BUFS_B
+//
+//   Memory budget checks (static_assert):
+//     A L1 region  : 2 * A_BIG_BYTES    must fit before B_L1_BASE = 0x10000
+//     L0B region   : N_BUFS_B * L0B_STRIDE  <= 64 KiB
+//     L0A region   : 2 * L0A_STRIDE         <= 64 KiB
+// ═══════════════════════════════════════════════════════════════════════════
+template <typename outType, typename inType,
+          int N_BUFS_B_, int A_K_TILE_, int B_K_TILE_, int M_TILE_, int N_TILE_>
+__global__ AICORE void RunCubeMatmulBNBuf(__gm__ outType *out, __gm__ inType *src0, __gm__ inType *src1)
+{
+    // ── Compile-time problem shape ───────────────────────────────────────
+    constexpr int N_BUFS_B  = N_BUFS_B_;
+    constexpr int A_K_TILE  = A_K_TILE_;
+    constexpr int B_K_TILE  = B_K_TILE_;
+    constexpr int M_TILE    = M_TILE_;
+    constexpr int N_TILE    = N_TILE_;
+    constexpr int K_GROUPS  = GM_K / A_K_TILE;
+    constexpr int INNER     = A_K_TILE / B_K_TILE;
+    static_assert(K_GROUPS * A_K_TILE == GM_K, "GM_K must be a multiple of A_K_TILE");
+    static_assert(INNER * B_K_TILE == A_K_TILE, "A_K_TILE must be a multiple of B_K_TILE");
+    static_assert(B_K_TILE % 16 == 0, "B_K_TILE must be a multiple of 16 (NZ K0 group)");
+
+    // ── Address plan (bytes) ─────────────────────────────────────────────
+    constexpr int A_BIG_BYTES   = M_TILE * A_K_TILE * 2;       // [M, A_K] fp16 NZ
+    constexpr int A_VIEW_STRIDE = M_TILE * B_K_TILE * 2;       // K1-stride within a slot
+    constexpr int A_L1_BASE     = 0x00000;
+    constexpr int B_L1_BASE     = 0x10000;
+    constexpr int B_SLOT_BYTES  = B_K_TILE * N_TILE * 2;
+    constexpr int L0A_STRIDE    = M_TILE * B_K_TILE * 2;
+    constexpr int L0B_STRIDE    = B_K_TILE * N_TILE * 2;
+    static_assert(A_L1_BASE + 2 * A_BIG_BYTES <= B_L1_BASE,    "A L1 region overlaps B L1 region");
+    static_assert(N_BUFS_B * B_SLOT_BYTES <= 0x40000,          "B L1 region exceeds 256 KiB budget");
+    static_assert(2 * L0A_STRIDE  <= 0x10000, "L0A overflow (>64 KiB)");
+    static_assert(N_BUFS_B * L0B_STRIDE <= 0x10000, "L0B overflow (>64 KiB)");
+
+    // ── Buffer-id allocation ─────────────────────────────────────────────
+    constexpr int A_ID_BASE   = 0;
+    constexpr int B_ID_BASE   = 2;
+    constexpr int L0A_ID_BASE = 2 + N_BUFS_B;
+    constexpr int L0B_ID_BASE = 4 + N_BUFS_B;
+    constexpr int C_BUF_ID    = 4 + 2 * N_BUFS_B;
+
+    using GlobalDataSrc0 = GlobalTensor<inType,  pto::Shape<1,1,1,M_TILE,A_K_TILE>, pto::Stride<GM_M*GM_K,GM_M*GM_K,GM_M*GM_K,GM_K,1>>;
+    using GlobalDataSrc1 = GlobalTensor<inType,  pto::Shape<1,1,1,B_K_TILE,N_TILE>, pto::Stride<GM_K*GM_N,GM_K*GM_N,GM_K*GM_N,GM_N,1>>;
+    using GlobalDataOut  = GlobalTensor<outType, pto::Shape<1,1,1,GM_M,GM_N>,       pto::Stride<GM_M*GM_N,GM_M*GM_N,GM_M*GM_N,GM_N,1>>;
+    // Big A tile in L1 (one full [M, A_K_TILE]) — used only as TLOAD destination.
+    using TileMatABig  = Tile<TileType::Mat, inType, M_TILE, A_K_TILE, BLayout::ColMajor, M_TILE, A_K_TILE, SLayout::RowMajor, 512>;
+    // L1 sub-view of A, [M, B_K_TILE] — same NZ format, just a smaller K window.
+    using TileMatAView = Tile<TileType::Mat, inType, M_TILE, B_K_TILE, BLayout::ColMajor, M_TILE, B_K_TILE, SLayout::RowMajor, 512>;
+    using TileMatB     = Tile<TileType::Mat, inType, B_K_TILE, N_TILE, BLayout::ColMajor, B_K_TILE, N_TILE, SLayout::RowMajor, 512>;
+    using LeftTile     = TileLeft< inType,  M_TILE, B_K_TILE, M_TILE, B_K_TILE>;
+    using RightTile    = TileRight<inType,  B_K_TILE, N_TILE, B_K_TILE, N_TILE>;
+    using AccTile      = TileAcc<  outType, GM_M, GM_N, GM_M, GM_N>;
+
+    GlobalDataOut dstGlobal(out);
+
+    TileMatABig  aBig[2];                  // 2 ping-pong slots, each [M, A_K_TILE]
+    TileMatAView aView[2][INNER];          // pre-positioned L1 views for each (slot, inner)
+    TileMatB     bM[N_BUFS_B];             // N B slots in L1
+    LeftTile     aL[2];                    // L0A ping-pong
+    RightTile    bL[N_BUFS_B];             // L0B N-buf
+    AccTile      cTile;
+
+    // L1 A: 2 big slots, one TASSIGN per slot
+    TASSIGN(aBig[0], A_L1_BASE);
+    TASSIGN(aBig[1], A_L1_BASE + A_BIG_BYTES);
+    // L1 A views: 2 * INNER static views at compile-time-fixed offsets
+    for (int p = 0; p < 2; p++) {
+        for (int i = 0; i < INNER; i++) {
+            TASSIGN(aView[p][i], A_L1_BASE + p * A_BIG_BYTES + i * A_VIEW_STRIDE);
+        }
+    }
+    // L1 B: N_BUFS_B slots
+    for (int i = 0; i < N_BUFS_B; i++) {
+        TASSIGN(bM[i], B_L1_BASE + i * B_SLOT_BYTES);
+    }
+    // L0A ping-pong
+    TASSIGN(aL[0], 0x0);
+    TASSIGN(aL[1], L0A_STRIDE);
+    // L0B N-buf
+    for (int i = 0; i < N_BUFS_B; i++) {
+        TASSIGN(bL[i], i * L0B_STRIDE);
+    }
+    TASSIGN(cTile, 0x0);
+
+    // ── Outer loop: ping-pong A in L1 ────────────────────────────────────
+    for (uint32_t outer = 0; outer < K_GROUPS; outer++) {
+        int s_a    = outer % 2;
+        int a_id   = A_ID_BASE + s_a;
+        int la_id  = L0A_ID_BASE + s_a;
+
+        // Big A TLOAD into ping-pong slot
+#ifndef __PTO_AUTO__
+        get_buffer<PIPE_MTE2>(a_id);
+#endif
+        {
+            GlobalDataSrc0 g(src0 + outer * A_K_TILE);
+            TLOAD(aBig[s_a], g);
+        }
+#ifndef __PTO_AUTO__
+        rls_buffer<PIPE_MTE2>(a_id);
+#endif
+
+        // ── Inner loop: B N-buf + per-K-step view TMOV + matmul ──────────
+        for (int i = 0; i < INNER; i++) {
+            int s_b   = i % N_BUFS_B;
+            int b_id  = B_ID_BASE + s_b;
+            int lb_id = L0B_ID_BASE + s_b;
+            uint32_t k_global = outer * INNER + i;
+
+            // B TLOAD into N-buf slot
+            GlobalDataSrc1 src1Global(src1 + k_global * B_K_TILE * GM_N);
+#ifndef __PTO_AUTO__
+            get_buffer<PIPE_MTE2>(b_id);
+#endif
+            TLOAD(bM[s_b], src1Global);
+#ifndef __PTO_AUTO__
+            rls_buffer<PIPE_MTE2>(b_id);
+
+            // L1->L0: A view (must wait for big-A MTE2 a_id) + B slot
+            get_buffer<PIPE_MTE1>(a_id);
+            get_buffer<PIPE_MTE1>(b_id);
+            get_buffer<PIPE_MTE1>(la_id);
+            get_buffer<PIPE_MTE1>(lb_id);
+#endif
+            TMOV(aL[s_a], aView[s_a][i]);
+            TMOV(bL[s_b], bM[s_b]);
+#ifndef __PTO_AUTO__
+            rls_buffer<PIPE_MTE1>(a_id);
+            rls_buffer<PIPE_MTE1>(b_id);
+            rls_buffer<PIPE_MTE1>(la_id);
+            rls_buffer<PIPE_MTE1>(lb_id);
+
+            // Cube
+            get_buffer<PIPE_M>(la_id);
+            get_buffer<PIPE_M>(lb_id);
+            get_buffer<PIPE_M>(C_BUF_ID);
+#endif
+            if (k_global == 0) {
+                TMATMUL(cTile, aL[s_a], bL[s_b]);
+            } else {
+                TMATMUL_ACC(cTile, cTile, aL[s_a], bL[s_b]);
+            }
+#ifndef __PTO_AUTO__
+            rls_buffer<PIPE_M>(la_id);
+            rls_buffer<PIPE_M>(lb_id);
+            rls_buffer<PIPE_M>(C_BUF_ID);
+#endif
+        }
+    }
+
+#ifndef __PTO_AUTO__
+    get_buffer<PIPE_FIX>(C_BUF_ID);
+#endif
+    TSTORE(dstGlobal, cTile);
+#ifndef __PTO_AUTO__
+    rls_buffer<PIPE_FIX>(C_BUF_ID);
+#endif
+    out = dstGlobal.data();
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Config 6: A-burst preload, templated.
 //
 //   Outer loop runs K_GROUPS = K_ITERS / N_BUFS_A iterations. Each outer iter
@@ -690,6 +883,56 @@ void LaunchCubeMatmul4BufALargeK64(uint8_t *out, uint8_t *src0, uint8_t *src1, v
     // 4 A buffers × K_TILE=16 → K_A_GROUP=64, 16 outer × 4 inner over K=1024.
     // Same B-tile [16,256] as LaunchCubeMatmul8BufALarge — fair N_BUFS_A comparison.
     RunCubeMatmulBurstA<float, half, /*N_BUFS_A=*/4, /*M_TILE=*/GM_M, /*K_TILE=*/16, /*N_TILE=*/GM_N>
+        <<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out),
+            reinterpret_cast<half*>(src0),
+            reinterpret_cast<half*>(src1));
+}
+
+
+// ── B-tile N-buffering launchers (Config 7: RunCubeMatmulBNBuf) ─────────────
+// All variants: A fixed at [32, 128] big tile (ping-pong, 2 L1 slots);
+// B varies in N-buffer count and K_TILE size. INNER = 128 / B_K_TILE.
+
+void LaunchCubeMatmulBNBuf2_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+    // B: 2 buf × [16,256] = 16 KiB L1, 16 KiB L0B. INNER=8.
+    RunCubeMatmulBNBuf<float, half, /*N_BUFS_B=*/2, /*A_K=*/128, /*B_K=*/16, /*M=*/GM_M, /*N=*/GM_N>
+        <<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out),
+            reinterpret_cast<half*>(src0),
+            reinterpret_cast<half*>(src1));
+}
+
+void LaunchCubeMatmulBNBuf4_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+    // B: 4 buf × [16,256] = 32 KiB L1, 32 KiB L0B. INNER=8.
+    RunCubeMatmulBNBuf<float, half, /*N_BUFS_B=*/4, /*A_K=*/128, /*B_K=*/16, /*M=*/GM_M, /*N=*/GM_N>
+        <<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out),
+            reinterpret_cast<half*>(src0),
+            reinterpret_cast<half*>(src1));
+}
+
+void LaunchCubeMatmulBNBuf8_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+    // B: 8 buf × [16,256] = 64 KiB L1, 64 KiB L0B (exact fit). INNER=8.
+    RunCubeMatmulBNBuf<float, half, /*N_BUFS_B=*/8, /*A_K=*/128, /*B_K=*/16, /*M=*/GM_M, /*N=*/GM_N>
+        <<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out),
+            reinterpret_cast<half*>(src0),
+            reinterpret_cast<half*>(src1));
+}
+
+void LaunchCubeMatmulBNBuf2_K32(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+    // B: 2 buf × [32,256] = 32 KiB L1, 32 KiB L0B. INNER=4.
+    RunCubeMatmulBNBuf<float, half, /*N_BUFS_B=*/2, /*A_K=*/128, /*B_K=*/32, /*M=*/GM_M, /*N=*/GM_N>
+        <<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out),
+            reinterpret_cast<half*>(src0),
+            reinterpret_cast<half*>(src1));
+}
+
+void LaunchCubeMatmulBNBuf4_K32(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+    // B: 4 buf × [32,256] = 64 KiB L1, 64 KiB L0B (exact fit). INNER=4.
+    RunCubeMatmulBNBuf<float, half, /*N_BUFS_B=*/4, /*A_K=*/128, /*B_K=*/32, /*M=*/GM_M, /*N=*/GM_N>
         <<<1, nullptr, stream>>>(
             reinterpret_cast<float*>(out),
             reinterpret_cast<half*>(src0),

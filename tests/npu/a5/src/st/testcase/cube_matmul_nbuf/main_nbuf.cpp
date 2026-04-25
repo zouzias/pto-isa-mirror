@@ -36,6 +36,11 @@ extern void LaunchCubeMatmul4Buf16K(uint8_t *out, uint8_t *src0, uint8_t *src1, 
 extern void LaunchCubeMatmul4BufALarge(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 extern void LaunchCubeMatmul8BufALarge(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 extern void LaunchCubeMatmul4BufALargeK64(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBNBuf2_K16  (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBNBuf4_K16  (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBNBuf8_K16  (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBNBuf2_K32  (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBNBuf4_K32  (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -143,3 +148,10 @@ TEST(CubeMatmulNBufTest, buf4_ktile32_16KB) { RunNBufTest(LaunchCubeMatmul4Buf16
 TEST(CubeMatmulNBufTest, buf4_alarge_K128)  { RunNBufTest(LaunchCubeMatmul4BufALarge, "out_4buf_alarge.bin"); }
 TEST(CubeMatmulNBufTest, buf8_alarge_K128)  { RunNBufTest(LaunchCubeMatmul8BufALarge, "out_8buf_alarge.bin"); }
 TEST(CubeMatmulNBufTest, buf4_alarge_K64)   { RunNBufTest(LaunchCubeMatmul4BufALargeK64, "out_4buf_alarge_k64.bin"); }
+
+// B-tile N-buffering with fixed [32,128] big A tile (A ping-pong only).
+TEST(CubeMatmulNBufTest, bnbuf4_K16_8KB)    { RunNBufTest(LaunchCubeMatmulBNBuf4_K16, "out_bnbuf4_k16.bin");  }
+TEST(CubeMatmulNBufTest, bnbuf2_K16_8KB)    { RunNBufTest(LaunchCubeMatmulBNBuf2_K16, "out_bnbuf2_k16.bin");  }
+TEST(CubeMatmulNBufTest, bnbuf8_K16_8KB)    { RunNBufTest(LaunchCubeMatmulBNBuf8_K16, "out_bnbuf8_k16.bin");  }
+TEST(CubeMatmulNBufTest, bnbuf2_K32_16KB)   { RunNBufTest(LaunchCubeMatmulBNBuf2_K32, "out_bnbuf2_k32.bin");  }
+TEST(CubeMatmulNBufTest, bnbuf4_K32_16KB)   { RunNBufTest(LaunchCubeMatmulBNBuf4_K32, "out_bnbuf4_k32.bin");  }
