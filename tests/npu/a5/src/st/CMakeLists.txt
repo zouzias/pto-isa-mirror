@@ -72,6 +72,7 @@ add_link_options(
 set(CMAKE_CCE_COMPILE_OPTIONS
     -xcce
     -Xhost-start -Xhost-end
+    -fno-jump-tables
     "SHELL:-mllvm -cce-aicore-stack-size=0x8000"
     "SHELL:-mllvm -cce-aicore-function-stack-size=0x8000"
     "SHELL:-mllvm -cce-aicore-record-overflow=true"

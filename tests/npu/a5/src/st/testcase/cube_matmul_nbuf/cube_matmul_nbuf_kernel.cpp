@@ -516,3 +516,171 @@ void LaunchCubeMatmul4Buf16K(uint8_t *out, uint8_t *src0, uint8_t *src1, void *s
     RunCubeMatmul4Buf16K<float,half><<<1,nullptr,stream>>>(
         reinterpret_cast<float*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Config 6: A-burst preload, K_A_GROUP=128 (8 K-blocks per outer iter)
+//
+//   Outer loop runs 8 ka iterations.  Each outer iter pre-loads 8 A tiles
+//   (one [32,16] per K-block) into 8 dedicated L1 A slots before issuing the
+//   8 inner B-load / TMOV / TMATMUL steps.  This expresses Lok's "single
+//   large A TLOAD" semantically as a burst of 8 separately-synchronised
+//   TLOADs — equivalent and uses only primitives proven by the K=16 reference
+//   kernels above.
+//
+//   Buffer ids: A=0..7 (MTE2 per A-slot), B=0..7 (reused after A burst,
+//   MTE2/MTE1), L0=8..15, C=16.  L1: A 8×0x800, B 8×0x2000.  L0A 8×0x400,
+//   L0B 8×0x2000.
+// ═══════════════════════════════════════════════════════════════════════════
+template <typename outType, typename inType>
+__global__ AICORE void RunCubeMatmul4BufALarge(__gm__ outType *out, __gm__ inType *src0, __gm__ inType *src1)
+{
+    constexpr int K = 16, K_ITERS = 64, NUM_BUFS = 8, L0_OFF = 8, C_BUF_ID = 16;
+
+    using GlobalDataSrc0 = GlobalTensor<inType,  pto::Shape<1,1,1,GM_M,K>,    pto::Stride<GM_M*GM_K,GM_M*GM_K,GM_M*GM_K,GM_K,1>>;
+    using GlobalDataSrc1 = GlobalTensor<inType,  pto::Shape<1,1,1,K,GM_N>,    pto::Stride<GM_K*GM_N,GM_K*GM_N,GM_K*GM_N,GM_N,1>>;
+    using GlobalDataOut  = GlobalTensor<outType, pto::Shape<1,1,1,GM_M,GM_N>, pto::Stride<GM_M*GM_N,GM_M*GM_N,GM_M*GM_N,GM_N,1>>;
+    using TileMatA = Tile<TileType::Mat, inType,  GM_M,K,    BLayout::ColMajor, GM_M,K,    SLayout::RowMajor, 512>;
+    using TileMatB = Tile<TileType::Mat, inType,  K,   GM_N, BLayout::ColMajor, K,   GM_N, SLayout::RowMajor, 512>;
+    using LeftTile = TileLeft< inType,  GM_M,K,    GM_M,K>;
+    using RightTile= TileRight<inType,  K,   GM_N, K,   GM_N>;
+    using AccTile  = TileAcc<  outType, GM_M,GM_N, GM_M,GM_N>;
+
+    GlobalDataOut dstGlobal(out);
+
+    TileMatA aM0,aM1,aM2,aM3,aM4,aM5,aM6,aM7;
+    TASSIGN(aM0,0x0);    TASSIGN(aM1,0x800);  TASSIGN(aM2,0x1000); TASSIGN(aM3,0x1800);
+    TASSIGN(aM4,0x2000); TASSIGN(aM5,0x2800); TASSIGN(aM6,0x3000); TASSIGN(aM7,0x3800);
+    TileMatB bM0,bM1,bM2,bM3,bM4,bM5,bM6,bM7;
+    TASSIGN(bM0,0x10000); TASSIGN(bM1,0x12000); TASSIGN(bM2,0x14000); TASSIGN(bM3,0x16000);
+    TASSIGN(bM4,0x18000); TASSIGN(bM5,0x1A000); TASSIGN(bM6,0x1C000); TASSIGN(bM7,0x1E000);
+    LeftTile aL0,aL1,aL2,aL3,aL4,aL5,aL6,aL7;
+    TASSIGN(aL0,0x0);    TASSIGN(aL1,0x400);  TASSIGN(aL2,0x800);  TASSIGN(aL3,0xC00);
+    TASSIGN(aL4,0x1000); TASSIGN(aL5,0x1400); TASSIGN(aL6,0x1800); TASSIGN(aL7,0x1C00);
+    RightTile bL0,bL1,bL2,bL3,bL4,bL5,bL6,bL7;
+    TASSIGN(bL0,0x0);    TASSIGN(bL1,0x2000); TASSIGN(bL2,0x4000); TASSIGN(bL3,0x6000);
+    TASSIGN(bL4,0x8000); TASSIGN(bL5,0xA000); TASSIGN(bL6,0xC000); TASSIGN(bL7,0xE000);
+    AccTile cTile;
+    TASSIGN(cTile, 0x0);
+
+    for (uint32_t outer = 0; outer < 8; outer++) {
+
+        // Burst-preload 8 A tiles into 8 distinct slots (sA = kk % 8)
+#ifndef __PTO_AUTO__
+        get_buffer<PIPE_MTE2>(0);
+#endif
+        { GlobalDataSrc0 g(src0 + (outer * 8u + 0) * K); TLOAD(aM0, g); }
+#ifndef __PTO_AUTO__
+        rls_buffer<PIPE_MTE2>(0);
+        get_buffer<PIPE_MTE2>(1);
+#endif
+        { GlobalDataSrc0 g(src0 + (outer * 8u + 1) * K); TLOAD(aM1, g); }
+#ifndef __PTO_AUTO__
+        rls_buffer<PIPE_MTE2>(1);
+        get_buffer<PIPE_MTE2>(2);
+#endif
+        { GlobalDataSrc0 g(src0 + (outer * 8u + 2) * K); TLOAD(aM2, g); }
+#ifndef __PTO_AUTO__
+        rls_buffer<PIPE_MTE2>(2);
+        get_buffer<PIPE_MTE2>(3);
+#endif
+        { GlobalDataSrc0 g(src0 + (outer * 8u + 3) * K); TLOAD(aM3, g); }
+#ifndef __PTO_AUTO__
+        rls_buffer<PIPE_MTE2>(3);
+        get_buffer<PIPE_MTE2>(4);
+#endif
+        { GlobalDataSrc0 g(src0 + (outer * 8u + 4) * K); TLOAD(aM4, g); }
+#ifndef __PTO_AUTO__
+        rls_buffer<PIPE_MTE2>(4);
+        get_buffer<PIPE_MTE2>(5);
+#endif
+        { GlobalDataSrc0 g(src0 + (outer * 8u + 5) * K); TLOAD(aM5, g); }
+#ifndef __PTO_AUTO__
+        rls_buffer<PIPE_MTE2>(5);
+        get_buffer<PIPE_MTE2>(6);
+#endif
+        { GlobalDataSrc0 g(src0 + (outer * 8u + 6) * K); TLOAD(aM6, g); }
+#ifndef __PTO_AUTO__
+        rls_buffer<PIPE_MTE2>(6);
+        get_buffer<PIPE_MTE2>(7);
+#endif
+        { GlobalDataSrc0 g(src0 + (outer * 8u + 7) * K); TLOAD(aM7, g); }
+#ifndef __PTO_AUTO__
+        rls_buffer<PIPE_MTE2>(7);
+#endif
+
+    for (uint32_t kk = 0; kk < 8; kk++) {
+        uint32_t k = outer * 8u + kk;
+        int s = kk;        // each kk uses its own A slot
+        int id_l0 = s + L0_OFF;
+        GlobalDataSrc1 src1Global(src1 + k * K * GM_N);
+#ifndef __PTO_AUTO__
+        get_buffer<PIPE_MTE2>(s);
+#endif
+        switch(s) {
+            case 0: TLOAD(bM0,src1Global); break;
+            case 1: TLOAD(bM1,src1Global); break;
+            case 2: TLOAD(bM2,src1Global); break;
+            case 3: TLOAD(bM3,src1Global); break;
+            case 4: TLOAD(bM4,src1Global); break;
+            case 5: TLOAD(bM5,src1Global); break;
+            case 6: TLOAD(bM6,src1Global); break;
+            default:TLOAD(bM7,src1Global); break;
+        }
+#ifndef __PTO_AUTO__
+        rls_buffer<PIPE_MTE2>(s);
+        get_buffer<PIPE_MTE1>(s);
+        get_buffer<PIPE_MTE1>(id_l0);
+#endif
+        switch(s) {
+            case 0: TMOV(aL0,aM0); TMOV(bL0,bM0); break;
+            case 1: TMOV(aL1,aM1); TMOV(bL1,bM1); break;
+            case 2: TMOV(aL2,aM2); TMOV(bL2,bM2); break;
+            case 3: TMOV(aL3,aM3); TMOV(bL3,bM3); break;
+            case 4: TMOV(aL4,aM4); TMOV(bL4,bM4); break;
+            case 5: TMOV(aL5,aM5); TMOV(bL5,bM5); break;
+            case 6: TMOV(aL6,aM6); TMOV(bL6,bM6); break;
+            default:TMOV(aL7,aM7); TMOV(bL7,bM7); break;
+        }
+#ifndef __PTO_AUTO__
+        rls_buffer<PIPE_MTE1>(s);
+        rls_buffer<PIPE_MTE1>(id_l0);
+        get_buffer<PIPE_M>(id_l0);
+        get_buffer<PIPE_M>(C_BUF_ID);
+#endif
+        if (k == 0) {
+            switch(s) {
+                case 0: TMATMUL(cTile,aL0,bL0); break; case 1: TMATMUL(cTile,aL1,bL1); break;
+                case 2: TMATMUL(cTile,aL2,bL2); break; case 3: TMATMUL(cTile,aL3,bL3); break;
+                case 4: TMATMUL(cTile,aL4,bL4); break; case 5: TMATMUL(cTile,aL5,bL5); break;
+                case 6: TMATMUL(cTile,aL6,bL6); break; default:TMATMUL(cTile,aL7,bL7); break;
+            }
+        } else {
+            switch(s) {
+                case 0: TMATMUL_ACC(cTile,cTile,aL0,bL0); break; case 1: TMATMUL_ACC(cTile,cTile,aL1,bL1); break;
+                case 2: TMATMUL_ACC(cTile,cTile,aL2,bL2); break; case 3: TMATMUL_ACC(cTile,cTile,aL3,bL3); break;
+                case 4: TMATMUL_ACC(cTile,cTile,aL4,bL4); break; case 5: TMATMUL_ACC(cTile,cTile,aL5,bL5); break;
+                case 6: TMATMUL_ACC(cTile,cTile,aL6,bL6); break; default:TMATMUL_ACC(cTile,cTile,aL7,bL7); break;
+            }
+        }
+#ifndef __PTO_AUTO__
+        rls_buffer<PIPE_M>(id_l0);
+        rls_buffer<PIPE_M>(C_BUF_ID);
+#endif
+    }
+    }
+#ifndef __PTO_AUTO__
+    get_buffer<PIPE_FIX>(C_BUF_ID);
+#endif
+    TSTORE(dstGlobal, cTile);
+#ifndef __PTO_AUTO__
+    rls_buffer<PIPE_FIX>(C_BUF_ID);
+#endif
+    out = dstGlobal.data();
+}
+
+
+void LaunchCubeMatmul4BufALarge(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+    RunCubeMatmul4BufALarge<float,half><<<1,nullptr,stream>>>(
+        reinterpret_cast<float*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
+}
