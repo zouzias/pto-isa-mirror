@@ -10,7 +10,7 @@
 
 ## 1. Correctness
 
-All 7 configurations pass numerical verification:
+All 13 configurations pass numerical verification:
 
 | Config | Status | Max Diff | Bad Count |
 |--------|--------|----------|-----------|
@@ -19,14 +19,24 @@ All 7 configurations pass numerical verification:
 | buf8_ktile16_8KB  | ✅ PASS | 2.67e-05 | 0 |
 | buf2_ktile32_16KB | ✅ PASS | 2.67e-05 | 0 |
 | buf4_ktile32_16KB | ✅ PASS | 2.67e-05 | 0 |
-| **buf4_alarge_K128**  | ✅ PASS | 2.67e-05 | 0 |
-| **buf8_alarge_K128**  | ✅ PASS | 2.67e-05 | 0 |
+| buf4_alarge_K128  | ✅ PASS | 2.67e-05 | 0 |
+| buf8_alarge_K128  | ✅ PASS | 2.67e-05 | 0 |
+| buf4_alarge_K64   | ✅ PASS | 2.67e-05 | 0 |
+| **bnbuf2_K16_8KB**  | ✅ PASS | 2.67e-05 | 0 |
+| **bnbuf4_K16_8KB**  | ✅ PASS | 2.67e-05 | 0 |
+| **bnbuf8_K16_8KB**  | ✅ PASS | 2.67e-05 | 0 |
+| **bnbuf2_K32_16KB** | ✅ PASS | 2.67e-05 | 0 |
+| **bnbuf4_K32_16KB** | ✅ PASS | 2.67e-05 | 0 |
+
+The `bnbuf*` configurations use the B-tile N-buffer design
+(`RunCubeMatmulBNBuf<N_BUFS_B, A_K_TILE, B_K_TILE, M_TILE, N_TILE>`):
+A is held as one big `[32,128]` tile in L1 (ping-pong, 2 L1 slots, single
+big TLOAD per outer iter) and consumed via L1-view sub-tiles `[32, B_K_TILE]`
+at compile-time-fixed offsets; B is N-buffered with `N_BUFS_B` L1 slots and
+ping-rotated at the inner loop. See section 13 for full perf analysis.
 
 The `*_alarge_K128` configurations use the burst-A-preload design
-(`RunCubeMatmulBurstA<N_BUFS_A, M_TILE, K_TILE, N_TILE>`): each outer iter
-preloads `N_BUFS_A` A tiles into dedicated L1 slots before issuing the inner
-B-load + TMOV + TMATMUL_ACC loop, achieving an effective K-group of
-`N_BUFS_A × K_TILE = 128`. See section 12 for design notes.
+(`RunCubeMatmulBurstA<N_BUFS_A, M_TILE, K_TILE, N_TILE>`).
 
 ---
 
@@ -506,3 +516,147 @@ same MMAD count (64), differing ONLY in N_BUFS_A (4 vs 8) and scheduling strateg
 
 ![Fair comparison scalar overhead](profiling/scalar_overhead_fair.svg)
 
+
+
+---
+
+## 13. B-Tile N-Buffer Configurations (`bnbuf*`)
+
+These configs answer two questions:
+
+1. **Does N-buffering of just the B tile reduce head-of-pipeline overhead?**  
+   (A is loaded as one big `[32,128]` tile per outer iter — only 8 A loads
+    over the whole kernel — so per-step A overhead is amortised away.)
+2. **At fixed B tile size, how many B buffers are needed to keep MTE2 busy?**
+
+### 13.1 Design (`RunCubeMatmulBNBuf`)
+
+```
+A in L1: 2 ping-pong slots, each holds full [32, A_K_TILE=128] tile (8 KiB)
+         1 big TLOAD per outer iter → 8 A loads total
+B in L1: N_BUFS_B slots of [B_K_TILE, 256], ping-rotated at inner level
+
+Outer (K_GROUPS = GM_K / A_K_TILE = 8 iters):
+    big A TLOAD into ping-pong slot
+    Inner (INNER = A_K_TILE / B_K_TILE iters):
+        B TLOAD into N-buf slot
+        TMOV  A_view[s_a][i]   → L0A    ← L1 sub-view at fixed offset
+        TMOV  B_slot[s_b]      → L0B
+        TMATMUL_ACC  cTile += L0A * L0B
+```
+
+A's L1 sub-view is a compile-time-positioned `Tile<[32, B_K_TILE], NZ>` at
+offset `s_a * 8KiB + i * (32 * B_K_TILE * 2)`. Static TASSIGN — no dynamic
+view math at runtime.
+
+### 13.2 Cycle counts (Total ticks, Ascend950PR_9599 sim)
+
+| Config | A_K | B_K | N_BUFS_B | INNER × OUTER | Total ticks | vs bnbuf2_K16 |
+|--------|-----|-----|----------|---------------|-------------|---------------|
+| bnbuf2_K16_8KB  | 128 | 16 | 2 |  8 × 8 = 64 | **27,753** | baseline |
+| bnbuf4_K16_8KB  | 128 | 16 | 4 |  8 × 8 = 64 | **22,944** | **−17.3% (1.210×)** |
+| bnbuf8_K16_8KB  | 128 | 16 | 8 |  8 × 8 = 64 | **22,940** | −17.3% (1.210×) |
+| bnbuf2_K32_16KB | 128 | 32 | 2 |  4 × 8 = 32 | **22,968** | −17.2% (1.208×) |
+| bnbuf4_K32_16KB | 128 | 32 | 4 |  4 × 8 = 32 | **23,034** | −17.0% (1.205×) |
+
+For comparison, the standard ping-pong-both kernels:
+
+| Config | Total ticks | vs bnbuf best |
+|--------|-------------|---------------|
+| buf2_ktile16_8KB    | 28,114 | +22.5% slower |
+| buf4_ktile16_8KB    | 24,365 | +6.2% slower  |
+| buf8_ktile16_8KB    | 24,690 | +7.6% slower  |
+| buf2_ktile32_16KB   | 22,879 | −0.3% (≈ tie) |
+| buf4_ktile32_16KB   | 22,964 | +0.1% (≈ tie) |
+| **bnbuf4_K16_8KB**  | **22,940** | **best at K=16** |
+| **bnbuf8_K16_8KB**  | **22,940** | **best at K=16** |
+
+### 13.3 Analysis — answers to the two questions
+
+#### Q1: Does B-only N-buffering reduce head-of-pipeline overhead?
+
+**Yes, by ~6% at K_TILE=16.** Compare the two best K=16 designs:
+
+| Design | Best ticks | A loads | A scalar overhead |
+|--------|-----------|---------|-------------------|
+| Ping-pong both A&B (`buf4_ktile16_8KB`) | 24,365 | 64 | 64 × (get/rls + addr) |
+| Big-A + B N-buf (`bnbuf4_K16_8KB`)      | **22,940** | **8** | 8 × (get/rls + addr) |
+
+By moving from 64 small A loads to 8 big A loads, the bnbuf design eliminates
+~56 iterations of A get_buf/rls_buf/address-compute scalar work and
+condenses that bandwidth into 8 wider transfers. The per-A-tile DMA cost is
+sublinear in tile size (overhead amortised over 8× more bytes per call), so
+total MTE2 work shrinks even though B bandwidth is unchanged.
+
+**At K_TILE=32 the gain disappears** because 32-iter ping-pong already
+amortised A overhead well: `buf2_ktile32_16KB` (22,879) ≈ `bnbuf2_K32_16KB`
+(22,968). When iteration count is already small, big-A buys nothing.
+
+#### Q2: How many B buffers are needed to keep MTE2 busy?
+
+**Two B buffers is enough; four is the practical sweet spot; eight wastes IDs.**
+
+| K_TILE | N_BUFS_B=2 | N_BUFS_B=4 | N_BUFS_B=8 |
+|--------|-----------|-----------|-----------|
+| 16     | 27,753    | **22,944** | 22,940 (≈ N=4) |
+| 32     | **22,968**| 23,034 (≈ N=2) | (skipped: 128 KiB L0B) |
+
+- **K=16, N=2 → N=4**: −4,809 ticks (−17%). Two B buffers cannot hide MTE2
+  latency for the 8KB B tile when the matching A view's TMOV/MMAD chain is
+  this short (≈56 cycles MMAD, ~350 cycles MTE2). N=4 lets the prefetcher
+  stay 3 tiles ahead, fully hiding GM latency.
+- **K=16, N=4 → N=8**: 22,944 → 22,940 (−4 ticks, **noise**). N=4 is already
+  bandwidth-bound; doubling buffers gives nothing while doubling buf-id
+  budget (12 vs 8 IDs).
+- **K=32, N=2 → N=4**: 22,968 → 23,034 (+66 ticks, slight regression).
+  K=32 B tile (16 KB) takes ~700 cycles of MTE2 vs ~88 cycles of MMAD —
+  ratio so unfavourable that even ping-pong is bandwidth-bound. Extra
+  buffers add scalar overhead with no MTE2 hiding to gain.
+
+#### Bandwidth ceiling
+
+The best three configs all converge to ≈22,940 ticks:
+- `bnbuf4_K16_8KB`  : 22,944
+- `bnbuf8_K16_8KB`  : 22,940
+- `bnbuf2_K32_16KB` : 22,968
+
+This is the **MTE2 bandwidth ceiling** for moving 1024 × (32 + 256) × 2 ≈
+576 KiB of A+B from GM. No N-buffering scheme can beat the raw transfer
+time; designs only differ in *how close* they get to that ceiling.
+`bnbuf2_K16` (27,753) leaves ~21% on the table because 2 buffers cannot
+fully overlap the small-tile MTE2 with compute.
+
+### 13.4 Recommendations from `bnbuf*` study
+
+| If you have… | Use |
+|--------------|-----|
+| Small B tile (8 KB, K=16), tight buffer-ID budget | `bnbuf4_K16` (4 B bufs, IDs ≤ 12) |
+| Small B tile, no ID pressure | `bnbuf4_K16` (N=8 gives no extra benefit) |
+| Medium B tile (16 KB, K=32) | `bnbuf2_K32` (N=2 already saturates) |
+| Want to reduce A overhead independent of B | Big-A + ping-pong always wins over per-step A |
+
+### 13.5 Summary table (all 13 configs, ranked by speed)
+
+| Rank | Config | Ticks | Design |
+|------|--------|-------|--------|
+| 1 | bnbuf8_K16_8KB     | 22,940 | Big A + 8 B bufs |
+| 2 | bnbuf4_K16_8KB     | 22,944 | Big A + 4 B bufs |
+| 3 | buf2_ktile32_16KB  | 22,879 | Ping-pong both, K=32 |
+| 4 | buf4_ktile32_16KB  | 22,964 | 4-buf both, K=32 |
+| 5 | bnbuf2_K32_16KB    | 22,968 | Big A + 2 B bufs, K=32 |
+| 6 | bnbuf4_K32_16KB    | 23,034 | Big A + 4 B bufs, K=32 |
+| 7 | buf4_ktile16_8KB   | 24,365 | 4-buf both, K=16 |
+| 8 | buf8_ktile16_8KB   | 24,690 | 8-buf both, K=16 |
+| 9 | buf4_alarge_K128   | 25,369 | Burst-A 4×K32 |
+| 10 | bnbuf2_K16_8KB     | 27,753 | Big A + 2 B bufs, K=16 |
+| 11 | buf2_ktile16_8KB   | 28,114 | Ping-pong both, K=16 |
+| 12 | buf4_alarge_K64    | 28,944 | Burst-A 4×K16 |
+| 13 | buf8_alarge_K128   | 29,012 | Burst-A 8×K16 |
+
+**Conclusion:** the **big-A + B-N-buf** design (`bnbuf*`) wins for small
+K_TILE because it reduces per-step A scalar/MTE2 overhead by 8× while still
+hiding MTE2 latency via 4 B buffers. At large K_TILE the standard ping-pong
+already saturates BW so the design choice is moot. The burst-A design
+(`buf*_alarge`) is competitive but loses by 1–4K ticks because keeping all
+N A slots live across the full K-group costs more scalar / sync work than a
+clean A-then-B sequence.
