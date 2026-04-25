@@ -206,8 +206,8 @@ Key directories are listed below:
 - [Release Notes](ReleaseNote.md): version updates and release history
 - [License](LICENSE): CANN Open Software License Agreement Version 2.0
 - [PyPTO](https://gitcode.com/cann/pypto/): an upper-layer programming framework in the PTO ecosystem
-- [PTOAS](https://gitcode.com/cann/PTOAS/): PTO assembler and compiler backend for PTO workflows
-- [pto-dsl](https://gitcode.com/cann/pto-dsl/): Pythonic frontend and JIT workflow exploration for PTO
+- [PTOAS](https://github.com/PTO-ISA/PTOAS/): PTO assembler and compiler backend for PTO workflows
+- [pto-dsl](https://github.com/PTO-ISA/pto-dsl/): Pythonic frontend and JIT workflow exploration for PTO
 
 ## 📬 Contact Us
 
