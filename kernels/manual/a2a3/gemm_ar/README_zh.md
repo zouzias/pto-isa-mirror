@@ -17,7 +17,8 @@ kernels/manual/a2a3/gemm_ar/
 ├── gemm_ar_config.h            # 全局参数配置（矩阵维度、tile 大小、block 数量）
 ├── main.cpp                    # 入口：MPI 初始化、数据生成、HCCL 初始化、窗口分配、性能测量、验证
 ├── gemm_compute_kernel.cpp     # GEMM 计算内核（Cube 架构，L0C FP32→GM FP16 自动 cast）
-├── comm_kernel.cpp             # 通信内核（Vector 架构，单 kernel 两阶段 AllReduce）
+├── comm_kernel.cpp             # 通信内核（Vector 架构，单 kernel 的 RS/AG overlap AllReduce）
+├── kernel_launchers.h          # Host 侧 kernel launcher 声明
 ├── common.hpp                  # HcclRemotePtr 设备端包装（RDMA 窗口地址转换）
 ├── hccl_context.h              # HcclDeviceContext 结构体（每 rank 的 RDMA 窗口地址）
 ├── ready_queue.hpp             # 多 block 无锁 tile 队列（compute→comm 信号机制）
@@ -41,47 +42,54 @@ $$
 - `C_i` 为 `M×N`（每 rank 本地 GEMM 结果）
 - `C_final` 为 `M×N`（AllReduce 归约后的最终输出）
 
-`gemm_ar_config.h` 中默认的参考配置为 `M=5416, K=6144, N=1408`，8 卡运行。
+`gemm_ar_config.h` 中默认的参考矩阵配置为 `M=5416, K=6144, N=1408`。下文性能数据使用 8 卡 Ascend 910B 作为参考平台。
 
 ### 规格
 
-| 项目 | 值 |
-| --- | --- |
-| OpType | `GEMM + AllReduce` |
-| 输入 | `A_i`: `M×K`, `float16`, `ND`（每 rank 独立）; `B`: `K×N`, `float16`, `DN`（共享） |
-| 输出 | `C_final`: `M×N`, `float16`, `ND`（AllReduce 归约结果） |
-| 计算 Kernel 名称 | `GemmComputeKernel`（Cube 架构，`dav-c220-cube`） |
-| 通信 Kernel 名称 | `GemmCommAllKernel`（Vector 架构，`dav-c220-vec`） |
+
+| 项目           | 值                                                                         |
+| ------------ | ------------------------------------------------------------------------- |
+| OpType       | `GEMM + AllReduce`                                                        |
+| 输入           | `A_i`: `M×K`, `float16`, `ND`（每 rank 独立）; `B`: `K×N`, `float16`, `DN`（共享） |
+| 输出           | `C_final`: `M×N`, `float16`, `ND`（AllReduce 归约结果）                         |
+| 计算 Kernel 名称 | `GemmComputeKernel`（Cube 架构，`dav-c220-cube`）                              |
+| 通信 Kernel 名称 | `GemmCommAllKernel`（Vector 架构，`dav-c220-vec`）                             |
+
 
 ## 优化说明
 
 本示例以 8 卡 Ascend 910B（A2/A3）平台作为性能验证平台。910B 采用分离模式架构：24 个 AIC（Cube Core）负责矩阵计算，24 个 AIV（Vector Core）负责通信传输，AIC 与 AIV 物理独立、可完全并行。
 
 - **双流计算通信重叠**：计算 kernel 运行在 Compute Stream（24 AIC），通信 kernel 运行在 Comm Stream（24 AIV），通过逐 tile 信号机制实现计算与通信并行。
-- **ReduceScatter + AllGather 两阶段通信**：RS 阶段用 `TPUT<AtomicAdd>` 直接累加到 owner rank 的 `reduced_output`，硬件原子加在目标侧完成归约，无需独立 Reduce 阶段；AG 阶段由 owner rank 将归约结果广播到所有其他 rank。
+- **逻辑上仍是 RS + AG，执行上改成单循环 overlap**：RS 负责把数据归约到 owner rank，AG 负责把 owner-local 结果广播到其它 rank，两者通过 ready counter 在一个 subtile 粒度的混合循环里衔接。
 - **Block Swizzle**：计算 kernel 采用 zigzag tile 遍历顺序（奇数行反向），改善相邻 tile 间 B 矩阵的 L1 缓存复用。
 - **两级双缓冲流水线**：L1 缓存（stepK=4 批量 TLOAD）+ L0 双缓冲（ping/pong），让 DMA 搬运与 Cube 计算尽可能重叠。
-- **无锁 Ready Queue**：每个 AIC 一个独立队列（单生产者单消费者），AIV 通过 `TTEST` 硬件指令非阻塞轮询，无就绪数据时用 `TWAIT` 硬件等待，避免空转。
-- **RS 双缓冲流水线**：通信 kernel 的 RS 阶段使用 ping/pong tile 对 `TLOAD` 与 `TSTORE<AtomicAdd>` 做双缓冲，当前 tile TLOAD 与上一个 tile 的 TSTORE 重叠执行。
-- **AG 行级展平分解**：AG 阶段将全部工作展平为行粒度（`my_tile_count × (nranks-1) × G_BASE_M` 行），均匀分配给所有 AIV，消除 tile 级分配的 ±1 负载不均衡。
+- **无锁 Ready Queue**：每个 AIC 负责一条队列，AIV block 静态接管队列子集 `{block_idx, block_idx + num_comm_blocks, ...}`。无数据时先 `TTEST` 轮询，必要时再 `TWAIT`，避免空转。
+- **RS 双缓冲流水线**：RS 生产路径按 subtile 粒度用 ping/pong tile 重叠当前 subtile 的 `TLOAD` 与上一个 subtile 的 `TSTORE<AtomicAdd>`。
+- **owner-local subtile 执行器**：每个 owner-local tile 会沿 M 维切成固定高度的 subtile（默认 `G_COMM_SUB_M=64` 行），AG block 以 reversed-stripe 方式分配 subtile，尽量把 RS 重块和 AG 重块错开。
+- **publish / consume fence**：RS 只有在 `pipe_barrier(PIPE_ALL) + dsb(DSB_DDR)` 之后才发布 `subtile-ready` / `ag-summary` 门铃；AG 在一次 drain pass 的第一次命中时做 acquire fence，然后批量消费 ready subtile。
 
 ## Tiling 参数
 
-| 参数 | 值 |
-| --- | --- |
-| `M`（原始） | 5416 |
-| `K` | 6144 |
-| `N`（原始） | 1408 |
-| `M`（对齐后） | 5504 |
-| `N`（对齐后） | 1536 |
-| `baseM` | 128 |
-| `baseK` | 64 |
-| `baseN` | 256 |
-| `stepKa` | 4 |
-| `stepKb` | 4 |
-| `tile 数` | 258（43×6） |
-| `COMPUTE_BLOCK_NUM` | 24 |
-| `COMM_BLOCK_NUM` | 24 |
+
+| 参数                  | 值         |
+| ------------------- | --------- |
+| `M`（原始）             | 5416      |
+| `K`                 | 6144      |
+| `N`（原始）             | 1408      |
+| `M`（对齐后）            | 5504      |
+| `N`（对齐后）            | 1536      |
+| `baseM`             | 128       |
+| `baseK`             | 64        |
+| `baseN`             | 256       |
+| `stepKa`            | 4         |
+| `stepKb`            | 4         |
+| `commSubM`          | 64        |
+| `subtilesPerTile`   | 2         |
+| `tile 数`            | 258（43×6） |
+| `COMPUTE_BLOCK_NUM` | 24        |
+| `COMM_BLOCK_NUM`    | 24        |
+
 
 ## 整体架构
 
@@ -91,17 +99,16 @@ $$
 │                                                                              │
 │  GemmComputeKernel:                     GemmCommAllKernel:                   │
 │  ┌─────────────────────────┐            ┌──────────────────────────────┐     │
-│  │ for each tile:          │            │ Phase 1: ReduceScatter       │     │
+│  │ for each tile:          │            │ RS/AG overlap loop           │     │
 │  │   K-loop (L1→L0→Cube)  │            │   轮询 Ready Queue            │     │
 │  │   TSTORE → gemm_output │──Ready──→ │   TLOAD tile from gemm_output│     │
 │  │   pipe_barrier(ALL)     │  Queue    │   TSTORE<AtomicAdd> → owner  │     │
-│  │   Enqueue tile_idx      │            │       (ping/pong 双缓冲)      │     │
-│  └─────────────────────────┘            │         ↓                    │     │
-│                                          │   DeviceBarrier (跨 rank)    │     │
-│                                          │         ↓                    │     │
-│                                          │ Phase 2: AllGather           │     │
-│                                          │   行级展平分配                 │     │
+│  │   Enqueue tile_idx      │            │   subtile-ready / summary++  │     │
+│  └─────────────────────────┘            │   消费 ready subtile 做 AG   │     │
 │                                          │   TLOAD → TSTORE 到远端 rank │     │
+│                                          │   ready 驱动的 AG 衔接        │     │
+│                                          │   subtile 粒度 overlap        │     │
+│                                          │                              │     │
 │                                          └──────────────────────────────┘     │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -126,50 +133,63 @@ Cube (M):             [TMATMUL k0] [ACC k1] [ACC k2] [ACC k3] [TMATMUL k0'] ...
 
 ## 通信内核详解
 
-### Phase 1: ReduceScatter
+当前真正被 launch 的通信路径是 `GemmCommAllImpl()` 里的 mixed subtile pipeline：RS 生产和 AG 消费在一个循环里交错执行，同步点是每个 subtile 的 ready counter，而不是整机级 barrier。
 
-每个 AIV 与一个 AIC 的 Ready Queue 1:1 绑定。AIV 通过 `TTEST` 硬件指令非阻塞轮询队列，取到就绪 tile 后：
+### RS 生产路径
 
-1. **TLOAD** 从 `gemm_output` 搬入 UB（ping/pong 双缓冲）
-2. **TSTORE\<AtomicAdd\>** 到 owner rank 的 `reduced_output`（本地或远端 RDMA）
-
-双缓冲流水线使当前 tile 的 TLOAD 与上一个 tile 的 TSTORE 重叠执行。当队列无数据时，AIV 通过 `TWAIT` 硬件等待，避免空转。
-
-tile 的 owner 由 `tile_idx % nranks` 决定——这确保每个 rank 的 tile 在所有 rank 间均匀分布。
-
-### DeviceBarrier：两级设备端同步
+每个通信 block 接管如下队列子集：
 
 ```
-DeviceBarrier(phase):
-  pipe_barrier(PIPE_ALL)                    // 确保本 block 流水线刷完
-
-  if block_idx == 0:                        // 只有 block 0 做跨 rank 信号
-    for each remote rank r:
-      TNOTIFY(remote signal_matrix[phase][my_rank], 1, AtomicAdd)   // 写远端
-    for each remote rank r:
-      TWAIT(local signal_matrix[phase][r], 1, GE)                   // 等远端
-    TNOTIFY(local_broadcast_flag[phase], 1, Set)                    // 通知本 rank 其他 block
-  else:
-    TWAIT(local_broadcast_flag[phase], 1, GE)                       // 等 block 0 广播
-
-  pipe_barrier(PIPE_ALL)
+queues(block b) = { b, b + num_comm_blocks, b + 2*num_comm_blocks, ... }
 ```
 
-### Phase 2: AllGather
+当默认 `COMPUTE_BLOCK_NUM = COMM_BLOCK_NUM = 24` 时，会退化成最熟悉的 1:1；如果通信 block 更少，一个 block 会通过 `RsPollQueues()` / `RsWaitOnQueue()` 轮询多条队列。
 
-将全部 AG 工作展平为行粒度：
+对于每个出队 tile：
+
+1. 先沿 `M` 维切成 `G_COMM_SUBTILES_PER_TILE = G_BASE_M / G_COMM_SUB_M` 个固定高度 subtile。
+2. `RsPipelineStep()` 用 ping/pong UB tile 重叠当前 subtile 的 `TLOAD` 和上一个 subtile 的 `TSTORE<AtomicAdd>`。
+3. RS 目标是 `owner = tile_idx % nranks` 对应 rank 的 `reduced_output`，归约直接在 owner rank 完成。
+
+### RS/AG 重叠同步
+
+当前协议在 owner rank 的 `signal_matrix` 上维护两类计数器：
+
+1. `subtile-ready[local_subtile_id]`：记录这个 owner-local subtile 已经被多少个 rank 完成 RS。
+2. `ag-summary[summary_block]`：给负责该 subtile 的 AG block 提供较粗粒度的唤醒门铃。
+
+发布路径由 `RsPublishSubtileReady()` 完成：
+
+1. 先执行 `pipe_barrier(PIPE_ALL)` 刷本地流水。
+2. 再执行 `dsb(DSB_DDR)`，确保 `reduced_output` 中的数据对其它 block / rank 可见。
+3. `RsNotifySubtileReady()` 递增 subtile-ready counter。
+4. `RsNotifyAgSummary()` 递增 `AgSummaryBlockForSubtile()` 选中的 summary counter。
+
+消费路径由 `AgDrainReadyAssignedSubtiles()` 完成：
+
+1. 先用 `TTEST(..., nranks, GE)` 轮询自己负责的 `subtile-ready` counter。
+2. 一次 drain pass 第一次命中时，执行一组 acquire fence（`pipe_barrier + dsb`），后续本轮 ready subtile 共享这次 acquire。
+3. 对每个 ready subtile 执行广播。
+4. 如果本轮没有任何进展，则由 `AgWaitAssignedSummary()` 在 `summary_ack_count + 1` 上阻塞，等待下一次属于本 block 的唤醒。
+
+`AgSummaryBlockForSubtile()` 使用 reversed-stripe 映射，把 AG 更重的 block 尽量落在 RS 更轻的 block 上，从而拉平总工作量。
+
+### AG 执行路径
+
+AG 的分工是在 owner-local subtile 空间里完成的：
 
 ```
-total_rows = my_tile_count × (nranks - 1) × G_BASE_M
-rows_per_block = ceil(total_rows / num_comm_blocks)
+total_local_subtiles = my_tile_count * G_COMM_SUBTILES_PER_TILE
+assigned_ids(block b) = { num_comm_blocks - 1 - b + k*num_comm_blocks }
 ```
 
-每个 AIV 处理 `[row_start, row_end)` 范围内的行。对于每一段连续行，恢复出 `(tile_owner_idx, remote_rank, row_in_tile)`，然后：
+对每个已 ready 的 assigned subtile：
 
-1. **TLOAD** 从本地 `reduced_output` 搬入 UB
-2. **TSTORE** 到远端 rank 的 `reduced_output`（通过 RDMA）
+1. `AgDecodeLocalSubtile()` 把 owner-local subtile id 还原成 `reduced_output` 中的全局行偏移。
+2. `AgTransferSubtileToAll()` 把固定 `G_COMM_SUB_M` 行广播给所有远端 rank。
+3. 第一个远端 peer 会按 `local_subtile_id % (nranks - 1)` 做轮转，避免所有 block 先打同一个目标 rank。
 
-行级分配确保所有 AIV 传输的数据量严格相等，消除 tile 级分配在 tile 数不能被 AIV 数整除时的负载不均。
+现在 AG 只要看到某个 owner-local subtile 已被所有 rank 完成 RS，就可以立刻启动这一段广播。
 
 ## Ready Queue 机制
 
@@ -192,53 +212,73 @@ rows_per_block = ceil(total_rows / num_comm_blocks)
 └─────────────┘         └─────────────┘
 ```
 
-- 每个队列为 64 字节对齐的 `PerBlockQueue` 结构体，包含 `count`（生产者递增）、`data[]`（tile 索引数组）。
-- **生产者**（AIC）：`PerBlockQueueEnqueueFast` 写入 `data[slot]` 并递增 `count`，通过 `dcci` 刷新缓存确保 AIV 可见。
-- **消费者**（AIV）：`PerBlockQueueTryDequeue` 用 `TTEST` 硬件指令检测 `count >= head+1`，无数据时返回 -1；长时间无数据时用 `TWAIT` 硬件等待。
+- 每个队列为 64 字节对齐的 `PerBlockQueue` 结构体，包含 `count`（生产者递增）和 `data[]`（tile 索引数组）。当前实现通过 `GetQueueSlot()` 对 slot 做显式寻址，不再依赖隐含的 `data[idx]` 布局假设。
+- **生产者**（AIC）：`PerBlockQueueEnqueueFast` 通过 `GetQueueSlot()` 写目标 slot，再递增 `count`，并用 `dcci` 刷新缓存保证 AIV 可见。
+- **消费者**（AIV）：`PerBlockQueueTryDequeue` 用 `TTEST` 检查 `count >= head+1`，随后通过 `GetQueueSlot()` 刷新并读取目标 slot；无数据时返回 -1，长时间无数据时用 `TWAIT` 硬件等待。
+- 当 `COMM_BLOCK_NUM < COMPUTE_BLOCK_NUM` 时，一个通信 block 会按固定 round-robin 次序接管多条队列，因此无需跨 block 原子争抢。
 - 单生产者单消费者设计，无需原子操作。
 
 ## 内存布局与 HCCL 窗口
 
 只有被远端 TPUT/TNOTIFY 写入的 buffer 需要放在 HCCL RDMA 窗口中，本地读写的 buffer 使用普通 `aclrtMalloc`。
 
-| 缓冲区 | 大小 | 位置 | 原因 |
-| --- | --- | --- | --- |
-| `reduced_output` | M × N × 2B | **HCCL 窗口** | RS AtomicAdd + AG 远端 TPUT 写入（FP16） |
-| `signal_matrix` | (MAX_RANKS+1) × 4B，对齐 64B | **HCCL 窗口** | DeviceBarrier 跨 rank TNOTIFY 写入 |
-| `gemm_output` | M × N × 2B | **aclrtMalloc** | 仅本地读写（FP16） |
-| `src0_dev`, `src1_dev` | 输入矩阵（FP16） | **aclrtMalloc** | 仅本地读写 |
 
-窗口大小由 `HCCL_BUFFSIZE` 环境变量控制，`run.sh` 自动计算：`M × N × 2 / 1MB + 64MB`。
+| 缓冲区                    | 大小                                 | 位置              | 原因                                                    |
+| ---------------------- | ---------------------------------- | --------------- | ----------------------------------------------------- |
+| `reduced_output`       | M × N × 2B                         | **HCCL 窗口**     | RS AtomicAdd + AG 远端 TPUT 写入（FP16）                    |
+| `signal_matrix`        | `G_SIGNAL_TOTAL_SLOTS` × 4B，对齐 64B | **HCCL 窗口**     | subtile-ready / AG summary 计数器（含保留 legacy barrier 槽位） |
+| `gemm_output`          | M × N × 2B                         | **aclrtMalloc** | 仅本地读写（FP16）                                           |
+| `src0_dev`, `src1_dev` | 输入矩阵（FP16）                         | **aclrtMalloc** | 仅本地读写                                                 |
+
+
+窗口大小由 `HCCL_BUFFSIZE` 环境变量控制。`run.sh` 会基于 pad 后的 `reduced_output` 大小估算窗口需求，并额外预留较大的安全边界：
+
+```text
+pad(M, G_BASE_M) × pad(N, G_BASE_N) × 2 / 1MB + 64MB
+```
+
+`signal_matrix` 也在同一个窗口里，但相对这 64MB margin 很小。
 
 ## 实测性能（参考）
 
-以下数据在 8 卡 Ascend 910B 上测得，参数 M=5416, K=6144, N=1408（padded 5504×1536），258 tiles (43×6)。每 rank 计算完整 GEMM C_i = A_i × B，AllReduce 对 8 个 C_i 求和。
+以下数据基于当前 `subtile-ready / AG-summary overlap` 实现，在 `8` 卡 Ascend 910B 上测得，参数 `M=5416, K=6144, N=1408`（padded `5504×1536`），`258 tiles (43×6)`，`compute_blocks=24`，`comm_blocks=24`。每 rank 计算完整 GEMM `C_i = A_i × B`，AllReduce 对 `8` 个 `C_i` 求和。
+
 
 | 指标 | 值 |
 | --- | --- |
-| Compute-only | 365 us (257 TFLOPS, 98%) |
-| Sequential | 743 us (compute 368 us + comm 375 us @ 74 GB/s) |
-| Pipelined | **631 us** (speedup 1.18x, overlap 31%) |
-| Throughput | 1189 TFLOPS (total) |
+| Compute-only | `368.1 us`（`254546 GFLOPS`） |
+| Sequential | `808.9 us`（compute `371.6 us` + comm `437.3 us @ 63.6 GB/s`） |
+| Pipelined | **`560.6 us`**（compute done `367.2 us`，comm done `560.6 us @ 49.7 GB/s`） |
+| Speedup | `1.443x` |
+| Time saved | `248.4 us`（`30.7%`） |
+| Overlap eff | `66.8%` |
+| Throughput | `1337307 GFLOPS`（total） |
+
 
 ### 这些数字意味着什么
 
-- **Compute-only**：纯 GEMM 时间（无通信），反映单卡 Cube 利用率上限。257 TFLOPS 占理论峰值 98%，说明计算 kernel 已高度优化。
-- **Sequential**：计算→通信串行执行，无重叠。总时间 = 计算时间 + 通信时间。
-- **Pipelined**：计算与通信双流并行。631 us 相比 Sequential 743 us 加速 1.18×，重叠效率 31%。
+- **Compute-only**：纯 GEMM 时间（无通信），反映单卡 Cube 利用率上限。当前纯算时间为 `368.1 us`，对应 `254546 GFLOPS`。
+- **Sequential**：计算→通信串行执行，无重叠。当前串行总时间为 `808.9 us`，其中 compute `371.6 us`、comm `437.3 us`。
+- **Pipelined**：计算与通信双流并行。当前 `Pipelined = 560.6 us`，相比 `Sequential = 808.9 us` 加速 `1.443x`；`compute done = 367.2 us`，基本与纯算持平。
 - **Speedup**：Sequential / Pipelined，越高说明计算通信重叠越有效。
-- **Overlap eff**：重叠带来的时间节省占较短阶段时间的百分比。31% 表明通信时间的约三分之一被成功隐藏在计算中。
+- **Time saved**：相对串行路径节省的总时长。当前节省 `248.4 us`，约占 `30.7%`。
+- **Overlap eff**：重叠带来的时间节省占较短阶段时间的百分比。`66.8%` 表明当前大约三分之二的较短阶段时间已被成功隐藏。
 
 ### 优化历程
+
+> 下表前几行是历史优化检查点；最后一行是当前 `subtile-ready / AG-summary overlap` 实现的最新端到端结果。不要把这些历史检查点误解成当前 live path 的逐项开关。
+
 
 | 优化 | Pipelined (us) | 增益 | 结论 |
 | --- | --- | --- | --- |
 | 基线 | 808 | — | — |
 | Block Swizzle | 793 | -1.8% | **保留** |
 | RS AtomicAdd 消除 Reduce 阶段 | 736 | -6.6% | **保留** |
-| AG 行级展平分解 | 623 | -15.4% | **保留** |
+| AG 行级展平分解 | 623 | -15.4% | 历史检查点 |
 | 48 AIV（RS skip + AG 参与） | 639 | RS 仅 24 AIV、AG 48 AIV | **回退**（AIC 干扰） |
 | 48 AIV 双队列（1 AIC : 2 AIV） | 667 | RS/AG 均 48 AIV | **回退**（AIC 干扰） |
+| 当前 subtile-ready / AG-summary overlap | **560.6** | 相比 `623 us` 历史检查点再降约 `10.0%` | **当前结果** |
+
 
 ## 性能优化指南（如何调这个 kernel）
 
@@ -297,29 +337,30 @@ L1 使用量：`2×64KB(A) + 2×128KB(B) = 384KB ≤ 1024KB`（L1 总容量）�
 1. 配置 Ascend CANN 环境：
 
 ```bash
-source ${ASCEND_INSTALL_PATH}/bin/setenv.bash
+export ASCEND_CANN_PATH=/usr/local/Ascend/cann-<version>/set_env.sh
+source "${ASCEND_CANN_PATH}"
 ```
 
-2. 激活 conda 环境（需含 Python + NumPy）：
+1. 激活 conda 环境（需含 Python + NumPy）：
 
 ```bash
 conda activate <your-conda-env>
 ```
 
-3. 运行示例（8 卡）：
+1. 运行示例（8 卡）：
 
 ```bash
 cd ${git_clone_path}/kernels/manual/a2a3/gemm_ar
 ./run.sh --nranks 8 --soc-version Ascend910B1
 ```
 
-4. 指定起始设备编号：
+1. 指定起始设备编号：
 
 ```bash
 FIRST_DEVICE=0 ./run.sh --nranks 8 --soc-version Ascend910B1
 ```
 
-5. 自定义 block 分配：
+1. 自定义 block 分配：
 
 ```bash
 ./run.sh --nranks 8 --compute-blocks 20 --comm-blocks 4
@@ -333,14 +374,16 @@ GEMM AllReduce demo completed successfully.
 
 ### 环境变量说明
 
-| 环境变量 | 用途 | 默认行为 |
-| --- | --- | --- |
-| `ASCEND_CANN_PATH` | CANN `set_env.sh` 的完整路径 | 自动 glob `/usr/local/Ascend/cann-*/set_env.sh` 取最新版 |
-| `MPI_SEARCH_DIRS` | MPI `bin/` 目录搜索路径（空格分隔） | 搜索 `/usr/local/mpich/bin`、`/home/mpich/bin` 等常见路径 |
-| `ASCEND_DRIVER_PATH` | Ascend driver 路径（CMake 使用） | 默认 `/usr/local/Ascend/driver` |
-| `MPI_LIB_PATH` | `libmpi.so` 绝对路径（运行时动态加载） | 由 `run.sh` 根据找到的 MPI 自动设置 |
-| `HCCL_BUFFSIZE` | HCCL RDMA 窗口大小（MB） | 由 `run.sh` 根据 M/N 自动计算 |
-| `FIRST_DEVICE` | 起始 NPU 设备编号 | 默认 0 |
+
+| 环境变量                 | 用途                         | 默认行为                                               |
+| -------------------- | -------------------------- | -------------------------------------------------- |
+| `ASCEND_CANN_PATH`   | CANN `set_env.sh` 的完整路径    | 自动 glob `/usr/local/Ascend/cann-*/set_env.sh` 取最新版 |
+| `MPI_SEARCH_DIRS`    | MPI `bin/` 目录搜索路径（空格分隔）    | 搜索 `/usr/local/mpich/bin`、`/home/mpich/bin` 等常见路径  |
+| `ASCEND_DRIVER_PATH` | Ascend driver 路径（CMake 使用） | 默认 `/usr/local/Ascend/driver`                      |
+| `MPI_LIB_PATH`       | `libmpi.so` 绝对路径（运行时动态加载）  | 由 `run.sh` 根据找到的 MPI 自动设置                          |
+| `HCCL_BUFFSIZE`      | HCCL RDMA 窗口大小（MB）         | 由 `run.sh` 根据 M/N 自动计算                             |
+| `FIRST_DEVICE`       | 起始 NPU 设备编号                | 默认 0                                               |
+
 
 ## 修改矩阵维度
 
@@ -354,16 +397,18 @@ cmake -DCONFIG_G_M=8192 -DCONFIG_G_K=8192 -DCONFIG_G_N=2048 ..
 
 ## 常见问题
 
-| 问题 | 原因与解决 |
-| --- | --- |
-| `HCCL window too small` | 窗口不够大。检查 `HCCL_BUFFSIZE`，公式：`M × N × 2 bytes + margin` |
-| `HcclGetRootInfo failed: 7` | 上次运行残留脏状态。执行 `rm -rf /dev/shm/sem.hccl*; ipcrm -a` 或等待 ~30s 重试 |
-| HCCL 初始化后挂死 | rank 同步问题，检查所有 rank 是否到达 `CommMpiBarrier` |
-| 通信 kernel 段错误 | 通常是窗口地址无效，验证 `windowsIn[]` 值非零 |
-| DeviceBarrier 死锁 | signal_matrix 未在迭代间清零，检查 `resetState` 是否 memset 了 signal_matrix |
-| 验证失败 max_diff 较大 | FP16 精度有限，验证容差为 atol=1.0, rtol=0.01；若 diff 异常大，检查 DeviceBarrier 同步逻辑 |
-| `aclInit repeat init` (100002) | 无害，代码已做保护，同一进程只调用一次 `aclInit` |
-| `--allow-run-as-root` 失败 | 本项目使用 MPICH，此选项是 OpenMPI 专用 |
+
+| 问题                             | 原因与解决                                                                                                                             |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `HCCL window too small`        | 窗口需要覆盖 pad 后的 `reduced_output` 和 `signal_matrix`。先检查是否手工覆盖了 `HCCL_BUFFSIZE`；`run.sh` 默认会按 `pad(M) × pad(N) × 2 / 1MB + 64MB` 自动抬高 |
+| `HcclGetRootInfo failed: 7`    | 上次运行残留脏状态。执行 `rm -rf /dev/shm/sem.hccl*; ipcrm -a` 或等待 ~30s 重试                                                                    |
+| HCCL 初始化后挂死                    | rank 同步问题，检查所有 rank 是否到达 `CommMpiBarrier`                                                                                         |
+| 通信 kernel 段错误                  | 通常是窗口地址无效，验证 `windowsIn[]` 值非零                                                                                                    |
+| signal wait 卡死                 | signal_matrix 未在迭代间清零，或 subtile-ready / AG summary 计数映射有误；先检查 `resetState` 是否 memset 了 signal_matrix                              |
+| 验证失败 max_diff 较大               | FP16 精度有限，验证容差为 atol=1.0, rtol=0.01；若 diff 异常大，检查 subtile-ready / AG summary 同步与 owner 映射                                         |
+| `aclInit repeat init` (100002) | 无害，代码已做保护，同一进程只调用一次 `aclInit`                                                                                                     |
+| `--allow-run-as-root` 失败       | 本项目使用 MPICH，此选项是 OpenMPI 专用                                                                                                       |
+
 
 ## 构建系统
 
@@ -376,8 +421,12 @@ cmake -DCONFIG_G_M=8192 -DCONFIG_G_K=8192 -DCONFIG_G_N=2048 ..
 
 ## 变更记录
 
-| 日期 | 变更 |
-| --- | --- |
-| 2025-12-15 | 初始版本，实现 GEMM + AllReduce 双流融合算子 |
-| 2026-04-01 | 兼容 CANN 9.0.0（移除已废弃的 hccl/hccl.h 依赖） |
-| 2026-04-02 | RS AtomicAdd 消除 Reduce 阶段；AG 行级展平分解优化负载均衡；更新架构文档 |
+
+| 日期         | 变更                                                                         |
+| ---------- | -------------------------------------------------------------------------- |
+| 2025-12-15 | 初始版本，实现 GEMM + AllReduce 双流融合算子                                            |
+| 2026-04-01 | 兼容 CANN 9.0.0（移除已废弃的 hccl/hccl.h 依赖）                                       |
+| 2026-04-02 | RS AtomicAdd 消除 Reduce 阶段；AG 行级展平分解优化负载均衡；更新架构文档                           |
+| 2026-04-21 | `RS -> DeviceBarrier -> AG` 通信模式改成 `subtile-ready / AG-summary overlap` 模式 |
+
+
