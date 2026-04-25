@@ -15,12 +15,12 @@ kernels/manual/a2a3/allgather_gemm/
 ├── main.cpp                           # Host 入口：HCCL 初始化、双流调度、warmup、验证、性能统计
 ├── allgather_gemm_comm_kernel.cpp     # AIV 通信 kernel：通过 TPUT 实现 AllGather
 ├── allgather_gemm_compute_kernel.cpp  # AIC 计算 kernel：流式 GEMM，等待 chunk 就绪
+├── kernel_launch.hpp                  # Host 侧 kernel launcher 声明
 ├── ready_queue.hpp                    # ChunkFlagMatrix / summary counter 元数据
-├── run.sh                             # 构建与运行脚本（多卡、CSV 批量、性能模式）
+├── run.sh                             # 构建与运行脚本（环境探测、shape/block override、多 rank 启动）
 ├── scripts/
-│   ├── gen_data.py                    # 输入数据生成（FP16 A 分片 + B）
-│   ├── test_shapes.csv                # 测试形状配置（M, K, N）
-│   └── verify_result.py               # Golden 对比（FP32, rtol/atol=0.001）
+│   └── gen_data.py                    # 输入数据生成（FP16 A 分片 + B + golden.bin）
+├── prof_analysis/                     # 可选 profiling 知识与 overlap 解析脚本
 └── CMakeLists.txt                     # 构建配置
 ```
 
@@ -102,7 +102,7 @@ Host 依次下发两个 kernel 后等待二者完成。
 
 ## 实测性能（参考）
 
-以下数据在 Ascend A3（910B1）上测得，fp16 输入 → fp32 输出，使用 `aclrtEvent` 计时（3 次 warmup + 10 次计时取平均）。TFLOPS 计算公式：`2 × M × K × N / time`。
+以下数据在 Ascend A3（910B1）上测得，fp16 输入 → fp32 输出，使用 `aclrtEvent` 计时（5 次 warmup + 10 次计时取平均）。TFLOPS 计算公式：`2 × M × K × N / time`。
 
 ### 2 卡
 
@@ -135,21 +135,102 @@ Host 依次下发两个 kernel 后等待二者完成。
 
 ## 构建与运行
 
-1. 配置 Ascend CANN 环境：
+当前的 `run.sh` 会一次完成三件事：
+
+1. 生成输入数据和 golden 输出到 `./out`
+2. 重新创建 `build/` 并重编 `allgather_gemm`
+3. 启动 `mpirun -n <n_ranks> ./allgather_gemm`
+
+运行前，请先配置 Ascend CANN 环境，确保 `ASCEND_HOME_PATH` 可用：
 
 ```bash
-source ${ASCEND_INSTALL_PATH}/bin/setenv.bash
+source <cann-install>/set_env.sh
 ```
 
-2. 运行示例：
+然后进入示例目录：
 
 ```bash
 cd ${git_clone_path}/kernels/manual/a2a3/allgather_gemm
+```
+
+运行默认 2 卡 A3 示例：
+
+```bash
 bash run.sh -r npu -v Ascend910B1 -n 2
 ```
 
-成功时输出：
+指定 rank 数和 GEMM shape：
+
+```bash
+bash run.sh -r npu -v Ascend910B1 -n 4 --gm 4096 --gk 2048 --gn 1536
+```
+
+指定 chunk tile 和 block 配置：
+
+```bash
+bash run.sh -r npu -v Ascend910B1 -n 2 --gm 2048 --gk 2048 --gn 1024 --base-m 128 --base-n 256 --compute-blocks 32 --comm-blocks 24
+```
+
+在模拟器模式下运行：
+
+```bash
+bash run.sh -r sim -v Ascend910B1 -n 2 --gm 2048 --gk 2048 --gn 1024
+```
+
+`run.sh` 会检查以下 shape 约束：
+
+- `--base-n` 必须能被 4 整除
+- `G_M % G_BASE_M == 0`
+- `G_K % G_BASE_N == 0`
+- `G_N % G_BASE_N == 0`
+
+### 命令行参数
+
+| 参数 | 说明 |
+| --- | --- |
+| `-r/--run-mode` | 运行模式：`npu` 或 `sim` |
+| `-v/--soc-version` | SoC 版本字符串，例如 `Ascend910B1` |
+| `-n/--n-ranks` | 传给 `mpirun` 的 MPI rank 数 |
+| `--gm` | 数据生成和编译期配置使用的全局 M 维 |
+| `--gk` | 数据生成和编译期配置使用的全局 K 维 |
+| `--gn` | 数据生成和编译期配置使用的全局 N 维 |
+| `--base-m` | chunk tile 的 M 维大小 |
+| `--base-n` | chunk tile 的 N 维大小（要求能被 4 整除） |
+| `--compute-blocks` | 覆盖计算 kernel 的 block 数配置 |
+| `--comm-blocks` | 覆盖通信 kernel 的 block 数配置 |
+
+## Benchmark 与输出说明
+
+当前 host 程序会在最终功能校验前执行三类 benchmark：
+
+1. **Compute-only**：由 host 直接把所有 chunk 标记为 ready，只测纯计算延迟
+2. **Sequential**：先让通信完整结束，再启动计算
+3. **Pipelined**：通信和计算在两个 stream 上并发启动，测量重叠效果
+
+benchmark 结束后，会再执行一次最终 functional verification，并与 `golden.bin` 做结果比对。
+
+成功运行时，输出类似：
 
 ```text
-test success
+[INFO] Running warmup...
+[INFO] Functional run completed. Verification PASSED.
+[SUCCESS] AllGather GEMM (HCCL)
+  Compute-only:   ...
+  Sequential:     ...
+  Pipelined:      ...
+  Speedup:        ...
+  Overlap eff:    ...
 ```
+
+每个 rank 的输出张量也会写到：
+
+```text
+out/output_rank<rank_id>.bin
+```
+
+## 变更记录
+
+| 日期 | 变更 |
+| --- | --- |
+| 2025-07-01 | 初始实现：基于 M 维切分和 chunk 流式流水线的 AllGather + GEMM 融合版本 |
+| 2026-04-21 | 恢复 host 侧 benchmark/profiling 流程，以及 run.sh/CMake 中对 shape、base tile、block override 的参数透传 |

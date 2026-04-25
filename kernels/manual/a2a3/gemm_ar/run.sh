@@ -91,14 +91,22 @@ if [[ "${SOC_VERSION}" =~ ^Ascend910B4-1 ]] && [ "${RUN_MODE}" == "sim" ]; then
     exit 1
 fi
 
-: "${G_M:=16384}"
-: "${G_N:=4096}"
+: "${G_M:=5416}"
+  : "${G_K:=6144}"
+: "${G_N:=1408}"
+: "${G_BASE_M:=}"
+: "${G_BASE_N:=}"
 
-# Pad M/N up to tile alignment (BASE_M=128, BASE_N=256) — must match gemm_ar_config.h
-PAD_M=$(( ((G_M + 127) / 128) * 128 ))
-PAD_N=$(( ((G_N + 255) / 256) * 256 ))
 
-# HCCL window = reduced_output (M*N*2) + signal_matrix (64B) + margin
+# Pad M/N to G_BASE_M / G_BASE_N (defaults 128 / 256 match gemm_ar_config.h). G_BASE_K is fixed at 64 in kernel.
+BM=${G_BASE_M:-128}
+BN=${G_BASE_N:-256}
+PAD_M=$(( ((G_M + BM - 1) / BM) * BM ))
+PAD_N=$(( ((G_N + BN - 1) / BN) * BN ))
+
+# HCCL window is dominated by padded reduced_output plus a small signal_matrix
+# footprint; keep a large fixed margin so window-side metadata changes do not
+# require retuning HCCL_BUFFSIZE for every protocol tweak.
 NEEDED_MB=$(( PAD_M * PAD_N * 2 / 1024 / 1024 + 64 ))
 CURRENT_BUFFSIZE="${HCCL_BUFFSIZE:-200}"
 if [ "${CURRENT_BUFFSIZE}" -lt "${NEEDED_MB}" ]; then
@@ -133,7 +141,13 @@ if [ -n "${COMM_BLOCKS:-}" ]; then
     BLOCK_OPTS="$BLOCK_OPTS -DCOMM_BLOCKS=${COMM_BLOCKS}"
 fi
 
-cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} ${BLOCK_OPTS} ..
+TILE_OPTS=""
+[ -n "${G_BASE_M}" ] && TILE_OPTS="$TILE_OPTS -DCONFIG_G_BASE_M=${G_BASE_M}"
+[ -n "${G_BASE_N}" ] && TILE_OPTS="$TILE_OPTS -DCONFIG_G_BASE_N=${G_BASE_N}"
+
+cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} \
+      -DCONFIG_G_M=${G_M} -DCONFIG_G_K=${G_K} -DCONFIG_G_N=${G_N} \
+      ${BLOCK_OPTS} ${TILE_OPTS} ..
 make -j16
 
 echo ""
