@@ -200,39 +200,68 @@ Ref: standalone 4buf_K16     24,100           89.7%    14.9%    10.8%       945 
 
 ---
 
-## 10. Pipeline Timing Diagram (from msprof trace.json)
+## 10. Pipeline Timing Diagram (from raw simulator dump parsing)
 
-Profiling data generated with .
-Files:  and .
-Open  in Chrome () or MindStudio Insight for interactive view.
+> **Note**: `msprof` is not available in this environment. All profiling data is parsed directly
+> from the A5 simulator dump files (`cube_issque.dump`, `mte{1,2}_issque.dump`, `scalar_issque.dump`)
+> using script `/tmp/parse_dumps.py` (archived to profiling/).
 
-### Combined pipeline diagram — 0 to 6.5 µs startup window
+### 10.1 buf4_ktile16 vs buf8_ktile16 — pipeline comparison (0–6.5 µs)
 
-The SVG below shows the first ~8 K-iterations for both configurations.  
-Colour key: GET_BUF (blue) · MTE2 ND2NZ GM→L1 (orange) · MTE1 LOAD L1→L0 (green) · MMAD cube (red)
+The SVG below shows the first ~8 K-iterations for the original ktile16 configurations.  
+Colour key: GET_BUF (blue) · MTE2 ND2NZ GM→L1 (orange) · MTE1 LOAD L1→L0 (green) · MMAD cube (red) · SCALAR (grey)
 
 ![Pipeline comparison](profiling/pipeline_comparison.svg)
 
-### Key observations from trace
+### 10.2 buf4_alarge_K128 vs buf8_alarge_K128 — pipeline comparison (0–10 µs)
 
-| Event | buf4 | buf8 |
-|-------|------|------|
-| First MTE2 load fired | **0.649 µs** | 0.893 µs (+0.24 µs) |
-| First MMAD issued | **1.092 µs** | 1.311 µs (+0.22 µs) |
-| MMAD k=0→k=1 gap | **0.169 µs** | 0.347 µs (+2.05×) |
-| Scalar prologue ticks | ~230 | ~450 (+96%) |
-| Pipeline full from k= | 0–5 fast | 2–7 fast |
-| Scalar cycles (instr_exe) | 5,145 | **9,107 (+77%)** |
-| MTE2 cycles (instr_exe) | 227,791 | 227,901 (~identical) |
+The SVG below compares all 4 configurations side-by-side, showing whether the `alarge` template
+(general A-matrix, K=128) reduces scalar overhead compared to the hand-specialized ktile16 variant.
 
-**Bottom line**: the 8-buf scalar prologue (address computation for 8 slots) blocks MTE2 from  
-firing for an extra ~450 ticks at startup. MTE2 total bandwidth is identical — buf8 is not doing  
-more or less GM work. The regression is purely scheduling overhead from doubling the buffer  
-management code.
+![alarge pipeline comparison](profiling/pipeline_alarge_comparison.svg)
 
+**Trace files** (open in Chrome chrome://tracing or Perfetto https://ui.perfetto.dev/):
+- `profiling/buf4_alarge_K128/trace.json`
+- `profiling/buf8_alarge_K128/trace.json`
+
+### 10.3 Scalar overhead bar chart — all 4 configs
+
+![Scalar overhead comparison](profiling/scalar_overhead_comparison.svg)
+
+### 10.4 Timing summary table
+
+| Config | First MTE2 | First MMAD | MMAD k0→k1 gap | Scalar prologue ticks | Scalar count | K-iters | Scalar/iter | Scalar% |
+|--------|-----------|-----------|---------------|----------------------|-------------|---------|------------|---------|
+| buf4_ktile16 | **0.606 µs** | **0.614 µs** | 0.074 µs (134 ticks) | 64 ticks | 975 | 16 | **60.9** | 4.4% |
+| buf8_ktile16 | 0.683 µs | 0.987 µs | 0.036 µs (65 ticks) | 71 ticks | 1591 | 16 | **99.4** | 7.1% |
+| buf4_alarge_K128 | 0.661 µs | 0.944 µs | 0.014 µs (25 ticks) | 67 ticks | 274 | 8 | **34.3** | 1.2% |
+| buf8_alarge_K128 | 0.669 µs | 0.951 µs | 0.028 µs (50 ticks) | 165 ticks | 1291 | 8 | **161.4** | 4.8% |
+
+> **Key observations**:
+> - buf4_ktile16 has the earliest MTE2 fire time (0.606 µs) due to simpler prologue
+> - buf8_ktile16 scalar prologue is 71 ticks but total scalar count is +63% vs buf4 (99.4 vs 60.9/iter)
+> - buf4_alarge_K128 has the lowest scalar/iter (34.3) — alarge template is code-efficient for 4 bufs
+> - buf8_alarge_K128 scalar/iter (161.4) is higher than buf8_ktile16 (99.4) — longer K=128 loop amplifies buf-management overhead
+
+### 10.5 Does the alarge template fix scalar overhead for 8-buf?
+
+**Answer: No — and in fact 8-buf alarge scalar/iter (161.4) is *worse* than 8-buf ktile16 (99.4).**
+
+The alarge template runs K=128 K-iterations (8 K-tiles of 16), so each K-tile iteration involves
+more buffer management round-trips. While the alarge template simplifies buffer ID indexing (no
+explicit bufId arrays), the longer loop body and extra loop-counter arithmetic more than offset
+any savings. The fundamental scaling issue remains: **get_buf/rls_buf overhead scales with
+N_BUFS x N_K_TILES**, and 8-buf alarge amplifies this.
+
+For 4-buf configurations, the alarge template is beneficial: buf4_alarge achieves 34.3 scalar/iter
+vs buf4_ktile16's 60.9/iter — a **44% reduction**. The alarge design pays off for small buffer
+counts by reducing address-computation code size.
+
+**Conclusion**: If optimising 8-buf performance, the alarge template is not the solution. The
+scalar bottleneck must be addressed at the pipeline synchronization level (reducing lock-step
+get_buf/rls_buf pairs, or using async buffer management).
 
 ---
-
 ## 11. Pipeline Comparison: buf4_K16 (8KB) vs buf4_K32 (16KB)
 
 ### Why does K32 win despite being more MTE2-bound?

@@ -1,0 +1,17 @@
+{
+  "first_mte2_tick": 1189,
+  "first_mte2_us": 0.6605555555555556,
+  "first_mmad_tick": 1700,
+  "first_mmad_us": 0.9444444444444444,
+  "mmad_gap_ticks": 25,
+  "mmad_gap_us": 0.013888888888888888,
+  "scalar_prologue_ticks": 67,
+  "total_scalar_ticks": 274,
+  "total_ticks": 23253,
+  "scalar_pct": 1.1783425794521136,
+  "mmad_count": 32,
+  "mte2_count": 64,
+  "scalar_count": 274,
+  "tick_min": 680,
+  "tick_max": 23933
+}
