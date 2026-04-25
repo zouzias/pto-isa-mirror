@@ -564,15 +564,19 @@ __global__ AICORE void RunCubeMatmulBurstA(__gm__ outType *out, __gm__ inType *s
     constexpr int L0_ID_BASE = N_BUFS_A;
     constexpr int C_BUF_ID   = 2 * N_BUFS_A;
 
-    // ── L1/L0 address plan (NZ-aligned, K_TILE=16/fp16 baseline) ─────────
+    // ── L1/L0 address plan (NZ-aligned, fp16; strides scale with K_TILE) ─
+    constexpr int K_SCALE     = K_TILE / 16;     // baseline = K_TILE 16
     constexpr int A_L1_BASE   = 0x00000;
-    constexpr int A_L1_STRIDE = 0x00800;
+    constexpr int A_L1_STRIDE = 0x00800 * K_SCALE;
     constexpr int B_L1_BASE   = 0x10000;
-    constexpr int B_L1_STRIDE = 0x02000;
+    constexpr int B_L1_STRIDE = 0x02000 * K_SCALE;
     constexpr int A_L0_BASE   = 0x00000;
-    constexpr int A_L0_STRIDE = 0x00400;
+    constexpr int A_L0_STRIDE = 0x00400 * K_SCALE;
     constexpr int B_L0_BASE   = 0x00000;
-    constexpr int B_L0_STRIDE = 0x02000;
+    constexpr int B_L0_STRIDE = 0x02000 * K_SCALE;
+    static_assert(K_TILE % 16 == 0, "K_TILE must be a multiple of 16");
+    static_assert(A_L1_BASE + N_BUFS_A * A_L1_STRIDE <= B_L1_BASE,
+                  "A L1 region overlaps B L1 region");
 
     using GlobalDataSrc0 = GlobalTensor<inType,  pto::Shape<1,1,1,M_TILE,K_TILE>, pto::Stride<GM_M*GM_K,GM_M*GM_K,GM_M*GM_K,GM_K,1>>;
     using GlobalDataSrc1 = GlobalTensor<inType,  pto::Shape<1,1,1,K_TILE,N_TILE>, pto::Stride<GM_K*GM_N,GM_K*GM_N,GM_K*GM_N,GM_N,1>>;
@@ -663,7 +667,18 @@ __global__ AICORE void RunCubeMatmulBurstA(__gm__ outType *out, __gm__ inType *s
 
 
 void LaunchCubeMatmul4BufALarge(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
-    // N_BUFS_A=8, A tile [32,16], B tile [16,256] → 8 outer × 8 inner over K=1024.
+    // 4 A buffers × K_TILE=32 → K_A_GROUP=128, 8 outer × 4 inner over K=1024.
+    // L0B: 4×0x4000 = 0x10000 (= 64KiB, exact fit).
+    RunCubeMatmulBurstA<float, half, /*N_BUFS_A=*/4, /*M_TILE=*/GM_M, /*K_TILE=*/32, /*N_TILE=*/GM_N>
+        <<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out),
+            reinterpret_cast<half*>(src0),
+            reinterpret_cast<half*>(src1));
+}
+
+void LaunchCubeMatmul8BufALarge(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+    // 8 A buffers × K_TILE=16 → K_A_GROUP=128, 8 outer × 8 inner over K=1024.
+    // L0B: 8×0x2000 = 0x10000 (= 64KiB, exact fit).
     RunCubeMatmulBurstA<float, half, /*N_BUFS_A=*/8, /*M_TILE=*/GM_M, /*K_TILE=*/16, /*N_TILE=*/GM_N>
         <<<1, nullptr, stream>>>(
             reinterpret_cast<float*>(out),
