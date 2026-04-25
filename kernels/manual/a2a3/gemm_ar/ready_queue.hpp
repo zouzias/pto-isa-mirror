@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #ifndef __CCE_KT_TEST__
@@ -34,6 +35,18 @@ struct alignas(64) PerBlockQueue {
     int32_t padding[4];
     int32_t data[1];
 };
+
+inline int32_t *GetQueueSlot(PerBlockQueue *queue, int idx)
+{
+    uint8_t *base = reinterpret_cast<uint8_t *>(queue) + offsetof(PerBlockQueue, data);
+    return reinterpret_cast<int32_t *>(base + static_cast<size_t>(idx) * sizeof(int32_t));
+}
+
+inline const int32_t *GetQueueSlot(const PerBlockQueue *queue, int idx)
+{
+    const uint8_t *base = reinterpret_cast<const uint8_t *>(queue) + offsetof(PerBlockQueue, data);
+    return reinterpret_cast<const int32_t *>(base + static_cast<size_t>(idx) * sizeof(int32_t));
+}
 
 struct alignas(64) MultiBlockQueueSet {
     int32_t num_blocks;
@@ -74,7 +87,7 @@ inline void PerBlockQueueInit(PerBlockQueue *queue, int capacity, int block_id)
     for (int i = 0; i < 4; i++)
         queue->padding[i] = 0;
     for (int i = 0; i < capacity; i++)
-        queue->data[i] = -1;
+        *GetQueueSlot(queue, i) = -1;
 }
 
 inline void MultiBlockQueueSetInit(MultiBlockQueueSet *qset, int num_blocks, int total_tiles)
@@ -107,21 +120,28 @@ inline void MultiBlockQueueSetInit(MultiBlockQueueSet *qset, int num_blocks, int
 
 #ifndef __CCE_KT_TEST__
 
-AICORE inline volatile __gm__ PerBlockQueue *GetMyBlockQueue(volatile __gm__ MultiBlockQueueSet *qset, int block_idx)
+AICORE inline volatile __gm__ PerBlockQueue *GetMyBlockQueue(volatile __gm__ MultiBlockQueueSet *qset, int queue_idx)
 {
-    dcci((__gm__ void *)&qset->queue_offsets[block_idx], SINGLE_CACHE_LINE);
+    dcci((__gm__ void *)&qset->queue_offsets[queue_idx], SINGLE_CACHE_LINE);
     __asm__ __volatile__("");
-    int32_t offset = qset->queue_offsets[block_idx];
+    int32_t offset = qset->queue_offsets[queue_idx];
     return reinterpret_cast<volatile __gm__ PerBlockQueue *>(reinterpret_cast<volatile __gm__ uint8_t *>(qset) +
                                                              offset);
+}
+
+AICORE inline volatile __gm__ int32_t *GetQueueSlot(volatile __gm__ PerBlockQueue *queue, int idx)
+{
+    volatile __gm__ uint8_t *base = reinterpret_cast<volatile __gm__ uint8_t *>(queue) + offsetof(PerBlockQueue, data);
+    return reinterpret_cast<volatile __gm__ int32_t *>(base + static_cast<uint64_t>(idx) * sizeof(int32_t));
 }
 
 // Enqueue: caller tracks slot position, reducing 5 dcci → 2 dcci.
 // Consumer only reads count (via TTEST) and data[head], never tail.
 AICORE inline void PerBlockQueueEnqueueFast(volatile __gm__ PerBlockQueue *queue, int32_t tile_idx, int32_t local_slot)
 {
-    queue->data[local_slot] = tile_idx;
-    dcci((__gm__ void *)&queue->data[local_slot], SINGLE_CACHE_LINE);
+    volatile __gm__ int32_t *slot = GetQueueSlot(queue, local_slot);
+    *slot = tile_idx;
+    dcci((__gm__ void *)slot, SINGLE_CACHE_LINE);
     __asm__ __volatile__("");
 
     queue->tail = local_slot + 1;
@@ -144,9 +164,10 @@ AICORE inline int32_t PerBlockQueueTryDequeue(volatile __gm__ PerBlockQueue *que
     if (!pto::comm::TTEST(sig, local_head + 1, pto::comm::WaitCmp::GE)) {
         return -1;
     }
-    dcci((__gm__ void *)&queue->data[local_head], SINGLE_CACHE_LINE);
+    volatile __gm__ int32_t *slot = GetQueueSlot(queue, local_head);
+    dcci((__gm__ void *)slot, SINGLE_CACHE_LINE);
     __asm__ __volatile__("");
-    return queue->data[local_head];
+    return *slot;
 }
 
 #endif // __CCE_KT_TEST__
