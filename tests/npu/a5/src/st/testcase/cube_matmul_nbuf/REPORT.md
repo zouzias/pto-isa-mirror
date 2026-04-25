@@ -10,7 +10,7 @@
 
 ## 1. Correctness
 
-All 5 configurations pass numerical verification:
+All 7 configurations pass numerical verification:
 
 | Config | Status | Max Diff | Bad Count |
 |--------|--------|----------|-----------|
@@ -19,6 +19,14 @@ All 5 configurations pass numerical verification:
 | buf8_ktile16_8KB  | ✅ PASS | 2.67e-05 | 0 |
 | buf2_ktile32_16KB | ✅ PASS | 2.67e-05 | 0 |
 | buf4_ktile32_16KB | ✅ PASS | 2.67e-05 | 0 |
+| **buf4_alarge_K128**  | ✅ PASS | 2.67e-05 | 0 |
+| **buf8_alarge_K128**  | ✅ PASS | 2.67e-05 | 0 |
+
+The `*_alarge_K128` configurations use the burst-A-preload design
+(`RunCubeMatmulBurstA<N_BUFS_A, M_TILE, K_TILE, N_TILE>`): each outer iter
+preloads `N_BUFS_A` A tiles into dedicated L1 slots before issuing the inner
+B-load + TMOV + TMATMUL_ACC loop, achieving an effective K-group of
+`N_BUFS_A × K_TILE = 128`. See section 12 for design notes.
 
 ---
 
@@ -180,8 +188,8 @@ Ref: standalone 4buf_K16     24,100           89.7%    14.9%    10.8%       945 
 
 | File | Description |
 |------|-------------|
-| `cube_matmul_nbuf_kernel.cpp` | Kernel — 5 configs (2/4/8-buf × K16/K32) |
-| `main_nbuf.cpp` | GTest harness |
+| `cube_matmul_nbuf_kernel.cpp` | Kernel — 5 reference configs + templated `RunCubeMatmulBurstA` (2 instantiations) |
+| `main_nbuf.cpp` | GTest harness (7 tests) |
 | `gen_data.py` | Data generator — `[M,K]×[K,N]` row-major layout |
 | `README.md` | Layout documentation and build instructions |
 | `REPORT.md` | This performance report |
@@ -279,3 +287,62 @@ MTE2 bandwidth — you cannot pipeline your way out of a bandwidth wall. K32 win
 
 K16 shows dense short MTE2 bars (64 x ~0.54us each, frequent gaps between).
 K32 shows wider MTE2 bars (32 x ~0.98us each, more continuous BW usage).
+
+
+---
+
+## 12. Burst-A Preload Configurations (`*_alarge_K128`)
+
+These two configs are produced by a **single templated kernel**
+`RunCubeMatmulBurstA<outType, inType, N_BUFS_A, M_TILE, K_TILE, N_TILE>`
+(see [cube_matmul_nbuf_kernel.cpp](cube_matmul_nbuf_kernel.cpp)). All loop
+counts, L1/L0 base+stride addresses and buffer-id bases are `constexpr`
+derived from the four shape template params:
+
+```
+K_ITERS    = GM_K / K_TILE
+K_GROUPS   = K_ITERS / N_BUFS_A          (outer loop trips)
+INNER      = N_BUFS_A                    (inner loop trips)
+A_ID_BASE  = 0,  B_ID_BASE = 0,  L0_ID_BASE = N_BUFS_A,  C_BUF_ID = 2 * N_BUFS_A
+A_L1_STRIDE = 0x800 * (K_TILE/16),  B_L1_STRIDE = 0x2000 * (K_TILE/16)
+A_L0_STRIDE = 0x400 * (K_TILE/16),  B_L0_STRIDE = 0x2000 * (K_TILE/16)
+```
+
+The two instantiations both achieve K-group = 128 (`N_BUFS_A * K_TILE`):
+
+| Test | N_BUFS_A | M_TILE | K_TILE | N_TILE | K_GROUPS × INNER | L0B usage |
+|------|----------|--------|--------|--------|------------------|-----------|
+| `buf4_alarge_K128` | 4 | 32 | 32 | 256 | 8 × 4 = 32 | 4 × 0x4000 = 64 KiB (exact) |
+| `buf8_alarge_K128` | 8 | 32 | 16 | 256 | 8 × 8 = 64 | 8 × 0x2000 = 64 KiB (exact) |
+
+### Design summary (burst-A vs ping-pong)
+
+The standard `2/4/8-buf` configs above ping-pong both A and B per K-step.
+The burst-A design instead **frontloads** all `N_BUFS_A` A tiles for the
+current K-group at the top of the outer iteration (each TLOAD on its **own
+MTE2 buf id**), then drives the inner loop reading those preloaded A slots
+while still ping-ponging B. This expresses Lok's "single large A TLOAD"
+semantically as a burst of `N_BUFS_A` separately-synchronised TLOADs —
+equivalent and uses only primitives proven by the K=16 reference kernels.
+
+### Why one MTE2 buf id per A slot is required
+
+Earlier variants that shared a single MTE2 buf id across the burst (or used
+a single large `[M, N_BUFS_A * K_TILE]` `TLOAD` + dynamic sub-view
+`TASSIGN`) all produced byte-identical garbage on this sim
+(`bad=8189/8192, max diff ~57.0`). The fix — and the rule the template now
+encodes — is one MTE2 buf id per concurrent A TLOAD. The full
+debugging methodology is recorded in
+[agents/skills/cube-matmul-nbuffer-debug/SKILL.md](../../../../../../../agents/skills/cube-matmul-nbuffer-debug/SKILL.md).
+
+### Adding a new burst-A config
+
+Add one launcher (template instantiation) in `cube_matmul_nbuf_kernel.cpp`
+and one `TEST(...)` line in `main_nbuf.cpp`. Constraints currently enforced
+by `static_assert`s in the template:
+
+- `K_TILE % 16 == 0`
+- `K_ITERS % N_BUFS_A == 0`
+- A-region in L1 must not overlap B-region: `A_L1_BASE + N_BUFS_A * A_L1_STRIDE <= B_L1_BASE`
+
+Effective L0B budget is 64 KiB so `N_BUFS_A * B_L0_STRIDE <= 0x10000`.
