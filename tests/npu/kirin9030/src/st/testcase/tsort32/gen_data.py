@@ -26,7 +26,7 @@ def write_output_to_bin(sorted_pairs, test_type):
             elif test_type == np.float16:
                 packed_data = struct.pack('e xxI', value, ctypes.c_uint32(index).value)
                 f.write(packed_data)
-                
+
 def gen_golden_data_cols_less_than_32(rows, cols, test_type):
     input = np.arange(1 * cols).astype(test_type)
     idx = np.arange(1 * cols).astype(np.uint32)
@@ -39,13 +39,13 @@ def gen_golden_data_cols_less_than_32(rows, cols, test_type):
     idx_arr = np.array(idx_list).astype(np.uint32)
     idx_arr.tofile("input_idx.bin")
     input_arr.tofile("input_arr.bin")
-    
+
     output = sorted(input, reverse=True)
     output_tmp = np.array(output).astype(test_type)
     output_list = []
     for i in range(rows):
         output_list.append(output_tmp)
-    output_arr = np.array(output_list).astype(test_type)    
+    output_arr = np.array(output_list).astype(test_type)
     flat_output = output_arr.flatten().astype(test_type)
     flat_idx   = idx_arr.flatten()
     sorted_pairs = zip(flat_output, flat_idx)
@@ -57,7 +57,7 @@ def gen_golden_data(param):
     cols = param.cols
     tmp = np.zeros((1, cols)).astype(test_type)
     tmp.tofile("input_tmp.bin")
-    
+
     if cols < 32:
         gen_golden_data_cols_less_than_32(rows, cols, test_type)
         return

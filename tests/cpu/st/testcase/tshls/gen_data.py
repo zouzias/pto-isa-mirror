@@ -59,15 +59,15 @@ def generate_case_name(param):
         np.int32: 'int32',
         np.int16: 'int16'
     }[param.dtype]
-    
+
     def substring(a, b) -> str:
         return f"_{a}x{b}"
-        
-    name = f"TSHLSTest.case_{dtype_str}" 
+
+    name = f"TSHLSTest.case_{dtype_str}"
     name += substring(param.dst_row, param.dst_col)
     name += substring(param.src_row, param.src_col)
     name += substring(param.valid_row, param.valid_col)
-    
+
     return name
 
 

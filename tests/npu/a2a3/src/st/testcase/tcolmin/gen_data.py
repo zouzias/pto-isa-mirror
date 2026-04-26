@@ -40,7 +40,7 @@ class TColMin:
         self.src_valid_row = src_valid_row
 
 if __name__ == "__main__":
-    
+
     case_name_list = [
         "TCOLMINTest.case1",
         "TCOLMINTest.case2",
@@ -56,7 +56,7 @@ if __name__ == "__main__":
         "TCOLMINTest.case12",
         "TCOLMINTest.case13",
     ]
-    
+
     case_params_list = [
         TColMin(np.int16, 16, 16, 8),
         TColMin(np.int32, 16, 16, 8),

@@ -31,7 +31,7 @@ def gen_golden_data(param):
         dtype_info = np.finfo(dtype)
         input_arr = np.random.uniform(low=dtype_info.min, high=dtype_info.max, size=[rows, cols]).astype(dtype)
         divider = np.random.uniform(low=dtype_info.min, high=dtype_info.max, size=[1, 1]).astype(dtype)
-    
+
     output_arr = np.zeros((dst_tile_row, dst_tile_col), dtype=dtype)
     output_arr[0:rows, 0:cols] = input_arr[0:rows, 0:cols] / divider[0, 0]
 

@@ -1,6 +1,6 @@
-# TROWARGMAX
+# pto.trowargmax
 
-## 指令示意图
+旧路径兼容入口。规范页见 [pto.trowargmax](./tile/ops/reduce-and-expand/trowargmax_zh.md)。
 
 ![TROWARGMAX tile operation](../figures/isa/TROWARGMAX.svg)
 
@@ -18,7 +18,7 @@ $$ \mathrm{dstval}_{i,0} = \max_{0 \le j < C} \mathrm{src}_{i,j} $$
 
 ## 汇编语法
 
-PTO-AS 形式：参见 `docs/grammar/PTO-AS.md`.
+PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
 
 同步形式：
 
@@ -182,3 +182,4 @@ void example_manual() {
 pto.trowargmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
+新的 PTO ISA 文档应直接链接到分组后的指令集路径。

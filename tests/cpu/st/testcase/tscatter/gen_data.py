@@ -36,4 +36,3 @@ def gen_case(case_dir: str, rows: int, cols: int):
 
 if __name__ == "__main__":
     gen_case("TSCATTERTest.case_float_16x16_16x16_16x16", 16, 16)
-

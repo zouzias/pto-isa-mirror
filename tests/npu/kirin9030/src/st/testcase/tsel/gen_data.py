@@ -49,7 +49,7 @@ def gen_golden_data_tsel(param):
             else:
                 golden[idx] = input1[idx]
         j += 1
-    
+
     input0.tofile("input0.bin")
     input1.tofile("input1.bin")
     mask.tofile("mask.bin")

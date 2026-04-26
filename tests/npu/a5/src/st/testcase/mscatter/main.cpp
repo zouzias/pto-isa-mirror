@@ -24,7 +24,7 @@ protected:
     {}
 };
 
-//#define DEBUG_PRINT
+// #define DEBUG_PRINT
 
 #ifdef DEBUG_PRINT
 template <typename T>

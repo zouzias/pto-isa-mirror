@@ -40,7 +40,7 @@ class TColMax:
         self.src_valid_row = src_valid_row
 
 if __name__ == "__main__":
-    
+
     case_name_list = [
         "TCOLMAXTest.case1",
         "TCOLMAXTest.case2",
@@ -56,7 +56,7 @@ if __name__ == "__main__":
         "TCOLMAXTest.case12",
         "TCOLMAXTest.case13",
     ]
-    
+
     case_params_list = [
         TColMax(np.int16, 16, 16, 8),
         TColMax(np.int32, 16, 16, 8),

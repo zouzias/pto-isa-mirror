@@ -50,12 +50,12 @@ def generate_case_name(param, i):
         np.int32: 'int32',
         np.int16: 'int16'
     }[param.dtype]
-    
+
     def substring(a, b) -> str:
         return f"_{a}x{b}"
-        
+
     name = f"TNOTTest.case_{i}"
-    
+
     return name
 
 

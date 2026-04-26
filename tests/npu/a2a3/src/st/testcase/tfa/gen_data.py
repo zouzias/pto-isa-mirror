@@ -33,8 +33,8 @@ def gen_case(path, s0, s1, head_size=HEAD_SIZE):
     # write FP16 inputs and FP32 golden
     q.tofile(os.path.join(path, 'q.bin'))
     k.tofile(os.path.join(path, 'k.bin'))
-    kt = k.T.astype(np.float16)    
-    kt.tofile(os.path.join(path, 'kt.bin'))       
+    kt = k.T.astype(np.float16)
+    kt.tofile(os.path.join(path, 'kt.bin'))
     golden.tofile(os.path.join(path, 'golden.bin'))
     # also produce softmax x_exp (per-row) saved as FP16 and tmp_float_exp saved as FP32
     # compute softmax in tiled fashion by Cube_S1 tiles (tile size 128)
@@ -59,7 +59,7 @@ def gen_case(path, s0, s1, head_size=HEAD_SIZE):
         # local max per row for this tile
         local_max = np.max(tile, axis=1, keepdims=True).astype(np.float32)
         if global_max is not None:
-            local_max = np.maximum(local_max, global_max).astype(np.float32) 
+            local_max = np.maximum(local_max, global_max).astype(np.float32)
         if ti == 0:
             new_global_max = local_max
             tmp_float = (tile - new_global_max) * scale
@@ -108,8 +108,8 @@ def gen_case(path, s0, s1, head_size=HEAD_SIZE):
         pv += pv_part
 
     v.tofile(os.path.join(path, 'v.bin'))
-    vt = v.T.astype(np.float16)    
-    vt.tofile(os.path.join(path, 'vt.bin'))       
+    vt = v.T.astype(np.float16)
+    vt.tofile(os.path.join(path, 'vt.bin'))
     pv.tofile(os.path.join(path, 'pv.bin'))
     # write per-tile partials as pv_part0.bin, pv_part1.bin
     for idx, part in enumerate(pv_parts):

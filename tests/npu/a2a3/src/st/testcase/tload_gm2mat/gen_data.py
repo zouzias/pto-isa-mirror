@@ -125,7 +125,7 @@ if __name__ == "__main__":
         "TLoadGM2L1Test.NC1HWC02NC1HWC0_bfloat16_10_16_16_2_16_256_16_100_16_16", # cut N C1 W
         "TLoadGM2L1Test.NC1HWC02NC1HWC0_bfloat16_1_1_1_8192_16_8_16_16_8192_16", # cut N C1 H
         "TLoadGM2L1Test.NC1HWC02NC1HWC0_float_1_1_112_112_8_2_3_224_224_8", # cut N C1 H W
-        
+
         "TLoadGM2L1Test.FZ2FZ_bfloat16_1_7_7_20_16_3_7_7_100_16", # cut N C1
         "TLoadGM2L1Test.FZ2FZ_bfloat16_128_7_7_2_16_256_7_7_16_16", # cut N C1
         "TLoadGM2L1Test.FZ2FZ_bfloat16_192_3_3_8_16_256_3_3_8_16", # cut C1

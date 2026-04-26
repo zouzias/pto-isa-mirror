@@ -1488,7 +1488,6 @@ AICORE void runTInsertNZSplitCustom(__gm__ T *out, __gm__ T *src)
     constexpr uint32_t dstUbOffset = ((tmpOffset + (DstRows + 1) * Cols * sizeof(T) + 0xFF) / 0x100) * 0x100;
 
     TASSIGN(dstTile, dstUbOffset);
-
     __cbuf__ T *matAddr = matTile.data();
     __ubuf__ T *dstUbAddr = dstTile.data();
 
@@ -1526,7 +1525,6 @@ AICORE void runTInsertNZSplitCustom(__gm__ T *out, __gm__ T *src)
 
     // Convert ND source to NZ format in tmpTile (writes only ValidRow rows, rest stays zero)
     pto::TMovToVecNd2Nz<T, TmpVecTile, SrcVecTile>(tmpTile.data(), srcTile.data(), ValidRow, Cols, ValidRow);
-
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
@@ -1618,7 +1616,6 @@ AICORE void runTInsertNZTwoInputSplit(__gm__ T *out, __gm__ T *src)
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     copy_ubuf_to_cbuf((__cbuf__ void *)matAddr, (__ubuf__ void *)ubAddr, 0, burstNum, burstLen, 0, 0);
-
     // Barrier: ensure L1 zero-fill (MTE3) finishes before MTE2 writes to same UB
     pipe_barrier(PIPE_ALL);
 
@@ -1792,7 +1789,6 @@ AICORE void runTInsertNZDoubleInput(__gm__ T *out, __gm__ T *src)
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     copy_ubuf_to_cbuf((__cbuf__ void *)matAddr, (__ubuf__ void *)ubAddr1, 0, burstNum, burstLen, 0, 0);
-
     // Barrier: ensure L1 zero-fill (MTE3) finishes before MTE2 writes to same UB
     pipe_barrier(PIPE_ALL);
 

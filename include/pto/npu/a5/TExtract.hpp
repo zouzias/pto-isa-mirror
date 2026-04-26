@@ -21,8 +21,8 @@ constexpr const int SHIFT_M_STEP_B8 = 1;   // 2^1 = 2
 constexpr const int M_STEP_MIN_VAL_B4 = 4; // m_step per loop for fp4
 constexpr const int SHIFT_M_STEP_B4 = 2;   // 2^2 = 4
 
-constexpr const int SHIFT_MX_COL = 1; // 2^1 = 2
-constexpr const int SHIFT_MX_ROW = 4; // 2^4 = 16
+constexpr const int SHIFT_MX_COL = 1;      // 2^1 = 2
+constexpr const int SHIFT_MX_ROW = 4;      // 2^4 = 16
 constexpr const int CO_SIZE_SCALE = 2;
 constexpr const int SCALE_CUBE_BLOCK_SIZE = 32;
 

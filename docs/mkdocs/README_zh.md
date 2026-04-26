@@ -1,6 +1,6 @@
 # docs/mkdocs 文档构建说明
 
-本目录用于构建 PTO Tile Lib 的在线文档与本地静态文档站点，基于 MkDocs（Material 主题）。
+本目录用于构建 PTO Tile Lib 的在线文档与本地静态文档站点，基于 MkDocs。
 
 ## 文档内容
 
@@ -12,7 +12,14 @@
 - 快速开始与使用指南
 - kernel 示例与目录说明
 
-文档源文件主要位于 `docs/mkdocs/src/` 下。
+文档的**作者维护源**主要位于主仓库文档树中：
+
+- `docs/isa/`：PTO 指令集架构手册与分组指令参考
+- `docs/assembly/`：PTO-AS 语法与规范
+- `docs/PTO-Virtual-ISA-Manual*.md` 等顶层手册入口页
+
+`docs/mkdocs/src/` 只保存 MkDocs 自己维护的着陆页、站点资源以及构建期生成的虚拟页面。其中
+`docs/mkdocs/src/docs/**` 应视为 `gen_pages.py` 的生成结果，而不是手工维护的源树。
 
 ## 推荐方式
 
@@ -48,7 +55,7 @@ python -m mkdocs serve -f docs/mkdocs/mkdocs.yml
 python -m mkdocs build -f docs/mkdocs/mkdocs.yml
 ```
 
-构建输出位于 `docs/mkdocs/site/`。
+构建输出位于仓库根级的 `site/` 目录。
 
 ## 方式二：通过 CMake 构建
 
@@ -82,7 +89,7 @@ cmake --build build/docs --target pto_docs
 
 - `mkdocs.yml`：MkDocs 配置文件
 - `requirements.txt`：文档构建依赖
-- `src/`：文档源文件目录
+- `src/`：MkDocs 自身维护的着陆页与站点资源
 - `gen_pages.py`：文档页面生成脚本
 - `check_mkdocs.py`：文档构建检查脚本
 
