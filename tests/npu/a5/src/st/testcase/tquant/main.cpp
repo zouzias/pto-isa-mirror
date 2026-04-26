@@ -421,6 +421,14 @@ TEST_F(TQUANTTEST, case_mxfp8_bf16_128x128_nd)
 {
     test_tquant_mxfp8_bf16<128, 128, 0>();
 }
+TEST_F(TQUANTTEST, case_mxfp8_bf16_14x16_nd)
+{
+    test_tquant_mxfp8_bf16<14, 16, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_bf16_7x48_nd)
+{
+    test_tquant_mxfp8_bf16<7, 48, 0>();
+}
 
 // Removing previous failing cases and Diagnostic comments...
 TEST_F(TQUANTTEST, case_mxfp8_bf16_1x32_nd)

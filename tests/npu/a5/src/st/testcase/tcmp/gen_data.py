@@ -33,15 +33,15 @@ def gen_golden_data_tcmp(case_name, param):
     if param.mode == "CmpMode::EQ":
         golden = (abs(input1 - input2) < 10e-9)
     if param.mode == "CmpMode::NE":
-        golden = (abs(input1 - input2) > 10e-9) 
+        golden = (abs(input1 - input2) > 10e-9)
     if param.mode == "CmpMode::LT":
-        golden = (input1 < input2) 
+        golden = (input1 < input2)
     if param.mode == "CmpMode::GT":
-        golden = (input1 > input2) 
+        golden = (input1 > input2)
     if param.mode == "CmpMode::GE":
-        golden = (input1 >= input2) 
+        golden = (input1 >= input2)
     if param.mode == "CmpMode::LE":
-        golden = (input1 <= input2) 
+        golden = (input1 <= input2)
 
     # Apply valid region constraints
     output = np.zeros([H, W]).astype(dtype)
