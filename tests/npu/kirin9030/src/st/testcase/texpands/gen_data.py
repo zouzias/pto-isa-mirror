@@ -47,7 +47,7 @@ def gen_golden_data(case_name, param):
         for w in range(width):
             if h >= h_valid or w >= w_valid:
                 golden[h][w] = output[h][w]
-    
+
     # Save the golden data to binary files
     golden.tofile("golden.bin")
 
@@ -56,14 +56,14 @@ def gen_golden_data(case_name, param):
 
 class TestParams:
     def __init__(
-        self, 
-        dtype, 
-        global_row, 
-        global_col, 
-        tile_row, 
-        tile_col, 
-        valid_row, 
-        valid_col, 
+        self,
+        dtype,
+        global_row,
+        global_col,
+        tile_row,
+        tile_col,
+        valid_row,
+        valid_col,
         pad_value_type=PAD_VALUE_NULL
     ):
         self.dtype = dtype

@@ -17,8 +17,7 @@ using namespace PtoTestCommon;
 template <int kRows, int kCols, int kValidRows1, int kValidCols1>
 void LaunchTPARTADD(float *out, float *src0, float *src1, void *stream);
 
-class TPARTADD_Test : public testing::Test {
-};
+class TPARTADD_Test : public testing::Test {};
 
 namespace {
 

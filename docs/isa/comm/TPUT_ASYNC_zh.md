@@ -222,4 +222,3 @@ __global__ AICORE void SimplePutUrma(__gm__ T *remoteDst, __gm__ T *localSrc,
     (void)event.Wait(session);
 }
 ```
-

@@ -49,7 +49,7 @@ def gen_golden_data(case_name, param):
                 golden[h][w] = output[h][w]
                 input1[h][w] = output[h][w]
                 input2[h][w] = output[h][w]
-    
+
     # Save the input and golden data to binary files
     input1.tofile("input1.bin")
     input2.tofile("input2.bin")
@@ -60,14 +60,14 @@ def gen_golden_data(case_name, param):
 
 class TestParams:
     def __init__(
-        self, 
-        dtype, 
-        global_row, 
-        global_col, 
-        tile_row, 
-        tile_col, 
-        valid_row, 
-        valid_col, 
+        self,
+        dtype,
+        global_row,
+        global_col,
+        tile_row,
+        tile_col,
+        valid_row,
+        valid_col,
         pad_value_type=PAD_VALUE_NULL
     ):
         self.dtype = dtype

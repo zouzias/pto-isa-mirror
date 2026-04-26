@@ -25,7 +25,7 @@ def find_and_zero(arr, tar):
         raise ValueError("The input must be a list of numbers.")
     if not isinstance(tar, (np.floating)):
         return -1
-    
+
     n = len(arr)
     for i in range(n - 1, -1, -1):
         if arr[i] == tar:
@@ -39,7 +39,7 @@ def zero_after_index(arr, i):
     # Check if the index is valid
     if i < 0 or i >= len(arr):
         return
-    
+
     # Set the elements after position i to 0
     for j in range(i + 1, len(arr)):
         arr[j] = 0
@@ -64,7 +64,7 @@ def gen_golden_data(param):
         param.src2_col // 2,
         param.src3_col // 2
     ]
-    
+
     # reshape to 32 cols (every sorted list)
     if input_num == 1:
         list_col = block_len
@@ -86,7 +86,7 @@ def gen_golden_data(param):
         zeros_index = np.zeros(input_num * cols - topk, dtype=np.uint32)
         topk_sorted_output_global = np.concatenate((sorted_output_global[:topk], zeros_output))
         topk_sorted_idx_global = np.concatenate((sorted_idx_global[:topk], zeros_index))
-        
+
         if case_name.startswith("TMRGSORTTest.case_exhausted"):
             handle_exhausted_list(input_num, topk_sorted_output_global, topk_sorted_idx_global, last_data)
         sorted_pairs_global = zip(topk_sorted_output_global, topk_sorted_idx_global)
@@ -140,7 +140,7 @@ def gen_input_data(input_num, cols, src_type, list_col, src_cols):
     else:
         for i in range(input_num):
             col_i = src_cols[i]
-            flat_input_i = sorted_input[i, :cols].flatten()    
+            flat_input_i = sorted_input[i, :cols].flatten()
             flat_idx_i = sorted_idx[i, :cols].flatten()
 
             # Create data and index pair

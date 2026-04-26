@@ -1,0 +1,94 @@
+# pto.vbr
+
+`pto.vbr` is part of the [Predicate And Materialization](../../predicate-and-materialization.md) instruction set.
+
+## Summary
+
+Broadcast scalar to all vector lanes.
+
+## Mechanism
+
+`pto.vbr` materializes scalar or selected-lane state into a vector register. The architectural result is a new vector-register value, so the operation stays in the `pto.v*` instruction set even when its input is scalar.
+
+## Syntax
+
+### PTO Assembly Form
+
+```text
+vbr %result, %value
+```
+
+### AS Level 1 (SSA)
+
+```mlir
+%result = pto.vbr %value : T -> !pto.vreg<NxT>
+```
+
+## Inputs
+
+`%value` is the scalar source.
+
+## Expected Outputs
+
+`%result` is a vector whose active lanes all carry `%value`.
+
+## Side Effects
+
+This operation has no architectural side effect beyond producing its SSA results. It does not implicitly reserve buffers, signal events, or establish memory fences unless the form says so.
+
+## Constraints
+
+Supported forms are `b8`, `b16`, and `b32`. For `b8`, only the low 8 bits of
+  the scalar source are consumed.
+
+## Exceptions
+
+- The verifier rejects illegal operand shapes, unsupported element types, and attribute combinations that are not valid for the selected instruction set or target profile.
+- Any additional illegality stated in the constraints section is also part of the contract.
+
+## Target-Profile Restrictions
+
+- A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
+- Code that depends on an instruction-set-specific type list, distribution mode, or fused form should treat that dependency as target-profile-specific unless the PTO manual states cross-target portability explicitly.
+
+## Performance
+
+### Timing Disclosure
+
+The current public VPTO timing material for PTO micro instructions remains limited.
+For `pto.vbr`, those public sources describe the instruction semantics, operand legality, and pipeline placement, but they do **not** publish a numeric latency or steady-state throughput.
+
+| Metric | Status | Source Basis |
+|--------|--------|--------------|
+| A5 latency | Not publicly published | Current public VPTO timing material |
+| Steady-state throughput | Not publicly published | Current public VPTO timing material |
+
+If software scheduling or performance modeling depends on the exact cost of `pto.vbr`, treat that cost as target-profile-specific and measure it on the concrete backend rather than inferring a manual constant.
+
+## Examples
+
+```c
+for (int i = 0; i < N; i++)
+    dst[i] = value;
+```
+
+```mlir
+%one = pto.vbr %c1_f32 : f32 -> !pto.vreg<64xf32>
+```
+
+## Detailed Notes
+
+```c
+for (int i = 0; i < N; i++)
+    dst[i] = value;
+```
+
+**Example:**
+```mlir
+%one = pto.vbr %c1_f32 : f32 -> !pto.vreg<64xf32>
+```
+
+## Related Ops / Instruction Set Links
+
+- Instruction set overview: [Predicate And Materialization](../../predicate-and-materialization.md)
+- Next op in instruction set: [pto.vdup](./vdup.md)

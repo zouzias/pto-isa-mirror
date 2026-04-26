@@ -1,6 +1,6 @@
-﻿# TMOV
+# pto.tmov
 
-## 指令示意图
+旧路径兼容入口。规范页见 [pto.tmov](./tile/ops/layout-and-rearrangement/tmov_zh.md)。
 
 ![TMOV tile operation](../figures/isa/TMOV.svg)
 
@@ -206,3 +206,4 @@ void example_manual() {
 pto.tmov ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
+新的 PTO ISA 文档应直接链接到分组后的指令集路径。

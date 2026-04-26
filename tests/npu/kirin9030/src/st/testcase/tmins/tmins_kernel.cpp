@@ -18,8 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <typename T, int dstRow, int dstCol, int srcRow, int srcCol, int kVRows_, int kVCols_, int kPadValue_>
-struct GenericDataSelector {
-};
+struct GenericDataSelector {};
 
 template <typename T, int dstRow, int dstCol, int srcRow, int srcCol, int kVRows_, int kVCols_>
 struct GenericDataSelector<T, dstRow, dstCol, srcRow, srcCol, kVRows_, kVCols_, PAD_VALUE_NULL> {

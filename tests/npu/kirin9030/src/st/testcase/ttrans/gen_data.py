@@ -42,7 +42,7 @@ def gen_golden_data(param):
 
 class TTRANSParams:
     def __init__(self, dtype, dst_row, dst_col, src_row, src_col, valid_row, valid_col):
-        self.dtype = dtype 
+        self.dtype = dtype
         self.dst_row = dst_row
         self.dst_col = dst_col
         self.src_row = src_row

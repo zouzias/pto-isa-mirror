@@ -63,7 +63,7 @@ class GlobalTensorInfo:
         self.gWholeShape2 = gWholeShape2
         self.gWholeShape3 = gWholeShape3
         self.gWholeShape4 = gWholeShape4
-        
+
 
 if __name__ == "__main__":
     # 用例名称

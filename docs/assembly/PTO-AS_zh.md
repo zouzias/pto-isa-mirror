@@ -74,4 +74,3 @@ PTO-AS 支持一小组非指令 directive，用于声明外部输入与常量。
 规范性的语法定义位于：
 
 - `docs/assembly/PTO-AS.bnf`
-

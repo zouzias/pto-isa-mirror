@@ -33,7 +33,7 @@ def gen_golden_data_tsub(case_name, param):
         for w in range(width):
             if h >= h_valid or w >= w_valid:
                 golden[h][w] = output[h][w]
-    
+
     # Save the input and golden data to binary files
     input1.tofile("input1.bin")
     input2.tofile("input2.bin")
@@ -79,7 +79,7 @@ if __name__ == "__main__":
         TSubParams(np.float16, 64, 64, 64, 64, 64, 64),
         TSubParams(np.int16, 64, 64, 64, 64, 64, 64),
     ]
-    
+
     for i, param in enumerate(case_params_list):
         case_name = generate_case_name(param)
         if not os.path.exists(case_name):

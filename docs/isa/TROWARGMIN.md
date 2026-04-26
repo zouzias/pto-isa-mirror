@@ -1,11 +1,13 @@
-# TROWARGMIN
+# pto.trowargmin
 
+Canonical tile-instruction reference: [pto.trowargmin](./tile/ops/reduce-and-expand/trowargmin.md).
 
-## Tile Operation Diagram
+The PTO ISA manual now treats tile, vector, and scalar/control operations consistently: the canonical per-op pages live under `docs/isa/tile/ops/`, `docs/isa/vector/ops/`, and `docs/isa/scalar/ops/`.
 
 ![TROWARGMIN tile operation](../figures/isa/TROWARGMIN.svg)
 
-## Introduction
+- Instruction set overview: [Reduce And Expand](./tile/reduce-and-expand.md)
+- Canonical per-op page: [pto.trowargmin](./tile/ops/reduce-and-expand/trowargmin.md)
 
 Get the column index of the minimum element, or both value and column index of the minimum element for each row.
 
@@ -162,7 +164,7 @@ void example_manual() {
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
+# Manual mode: bind resources explicitly before issuing the instruction.
 # Optional for tile operands:
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
@@ -177,3 +179,4 @@ void example_manual() {
 pto.trowargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
+Old links into the root-level tile pages continue to resolve through this wrapper, but new PTO ISA documentation should link to the grouped tile instruction path.

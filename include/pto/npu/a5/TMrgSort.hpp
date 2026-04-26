@@ -42,7 +42,7 @@ PTO_INTERNAL uint64_t InitConfig()
     } else {
         config |= (uint64_t(0b0) << 12); // Xt[12]: 0-disable input list exhausted suspension
     }
-    config |= uint64_t(1); // Xt[7:0]: repeat time
+    config |= uint64_t(1);               // Xt[7:0]: repeat time
     return config;
 }
 

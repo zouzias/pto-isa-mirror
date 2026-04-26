@@ -1000,22 +1000,22 @@ __tf__ PTO_INTERNAL void TLoadNHWC(typename TileData::TileDType __out__ dst, typ
     PTO_ASSERT(srcShape4 <= dstShape1 * c0ElemCount,
                "Fix: src layout is [1,N,H,W,C],dst layout [N,C1,H,W,C0], srcC should <= dstC1 * dstC0!");
 
-    uint16_t ndNum = srcShape2;  // srcH is ndNum
-    uint16_t nValue = srcShape3; // srcW is nValue
-    uint32_t dValue = srcShape4; // srcC is dValue
+    uint16_t ndNum = srcShape2;                                                // srcH is ndNum
+    uint16_t nValue = srcShape3;                                               // srcW is nValue
+    uint32_t dValue = srcShape4;                                               // srcC is dValue
 
     uint64_t loop1SrcStride = GetByteSize<typename TileData::DType>(gStride3); // unit Byte
     uint64_t loop4SrcStride = GetByteSize<typename TileData::DType>(gStride2); // unit Byte
     constexpr uint16_t loop2DstStride = 1;
-    uint16_t loop3DstStride = dstShape2 * dstShape3;                   // unit is 32B
-    uint16_t loop4DstStride = dstShape3;                               // dstW
-    uint64_t mte2NzPara = static_cast<uint64_t>(loop4DstStride) << 48; // MTE2_NZ_PARA[63:48]
-    mte2NzPara |= static_cast<uint64_t>(loop3DstStride) << 32;         // MTE2_NZ_PARA[47:32]
-    mte2NzPara |= static_cast<uint64_t>(loop2DstStride) << 16;         // MTE2_NZ_PARA[31:16]
-    mte2NzPara |= static_cast<uint64_t>(ndNum);                        // MTE2_NZ_PARA[15:0]
-    set_mte2_nz_para(mte2NzPara);                                      // only set once
+    uint16_t loop3DstStride = dstShape2 * dstShape3;                           // unit is 32B
+    uint16_t loop4DstStride = dstShape3;                                       // dstW
+    uint64_t mte2NzPara = static_cast<uint64_t>(loop4DstStride) << 48;         // MTE2_NZ_PARA[63:48]
+    mte2NzPara |= static_cast<uint64_t>(loop3DstStride) << 32;                 // MTE2_NZ_PARA[47:32]
+    mte2NzPara |= static_cast<uint64_t>(loop2DstStride) << 16;                 // MTE2_NZ_PARA[31:16]
+    mte2NzPara |= static_cast<uint64_t>(ndNum);                                // MTE2_NZ_PARA[15:0]
+    set_mte2_nz_para(mte2NzPara);                                              // only set once
 
-    for (uint32_t i = 0; i < dstShape0; i++) { // use nd2nz
+    for (uint32_t i = 0; i < dstShape0; i++) {                                 // use nd2nz
         srcAddrP = src + i * gStride1;
         dstAddrP = dstAddrO + i * dstShape1 * dstShape2 * dstShape3 * c0ElemCount;
         TLoadCubeInstr<TileData, GlobalData>(dstAddrP, srcAddrP, loop1SrcStride, nValue, dValue, loop4SrcStride);
@@ -1046,18 +1046,18 @@ __tf__ PTO_INTERNAL void TLoadNCHW(typename TileData::TileDType __out__ dst, typ
                "Fix: src layout is [1,N,C,H,W],dst layout [N,C1,H,W,C0], srcC should <= dstC1 * dstC0!");
 
     constexpr uint16_t dnNum = 1;
-    uint16_t nValue = srcShape4; // srcW is nValue
-    uint32_t dValue = srcShape2; // srcC is dValue
+    uint16_t nValue = srcShape4;                                               // srcW is nValue
+    uint32_t dValue = srcShape2;                                               // srcC is dValue
 
     uint64_t loop1SrcStride = GetByteSize<typename TileData::DType>(gStride2); // unit Byte
     constexpr uint16_t loop2DstStride = 1;
-    uint16_t loop3DstStride = dstShape2 * dstShape3;                   // unit is 32B
-    uint16_t loop4DstStride = dstShape3;                               // dstW
-    uint64_t mte2NzPara = static_cast<uint64_t>(loop4DstStride) << 48; // MTE2_NZ_PARA[63:48]
-    mte2NzPara |= static_cast<uint64_t>(loop3DstStride) << 32;         // MTE2_NZ_PARA[47:32]
-    mte2NzPara |= static_cast<uint64_t>(loop2DstStride) << 16;         // MTE2_NZ_PARA[31:16]
-    mte2NzPara |= static_cast<uint64_t>(dnNum);                        // MTE2_NZ_PARA[15:0]
-    set_mte2_nz_para(mte2NzPara);                                      // only set once
+    uint16_t loop3DstStride = dstShape2 * dstShape3;                           // unit is 32B
+    uint16_t loop4DstStride = dstShape3;                                       // dstW
+    uint64_t mte2NzPara = static_cast<uint64_t>(loop4DstStride) << 48;         // MTE2_NZ_PARA[63:48]
+    mte2NzPara |= static_cast<uint64_t>(loop3DstStride) << 32;                 // MTE2_NZ_PARA[47:32]
+    mte2NzPara |= static_cast<uint64_t>(loop2DstStride) << 16;                 // MTE2_NZ_PARA[31:16]
+    mte2NzPara |= static_cast<uint64_t>(dnNum);                                // MTE2_NZ_PARA[15:0]
+    set_mte2_nz_para(mte2NzPara);                                              // only set once
     if (dstShape3 == gStride3) {
         nValue = srcShape4 * srcShape3;
         for (uint32_t i = 0; i < dstShape0; i++) {
@@ -1111,7 +1111,7 @@ __tf__ PTO_INTERNAL void TLoadNCHW2FractalZ(typename TileData::TileDType __out__
     uint64_t loop1SrcStride = GetByteSize<typename TileData::DType>(gStride2); // global H*W, unit Byte
     uint64_t loop4SrcStride = GetByteSize<typename TileData::DType>(gStride1); // global C*H*W, unit Byte
     uint16_t loop2DstStride = dstShape1 * dstShape2;
-    uint16_t loop3DstStride = loop2DstStride * dstHW;                  // unit is 32B
+    uint16_t loop3DstStride = loop2DstStride * dstHW;                          // unit is 32B
     constexpr uint16_t loop4DstStride = 1;                             // each c0 of contiguous dNnum save continously
     uint64_t mte2NzPara = static_cast<uint64_t>(loop4DstStride) << 48; // MTE2_NZ_PARA[63:48]
     mte2NzPara |= static_cast<uint64_t>(loop3DstStride) << 32;         // MTE2_NZ_PARA[47:32]
@@ -1148,18 +1148,18 @@ __tf__ PTO_INTERNAL void TLoadNCDHW2NDC1HWC0(typename TileData::TileDType __out_
                "Fix: src layout is [N,C,D,H,W],dst layout [N,D,C1,H,W,C0], srcShape dstShape should be same!");
     // W all load
     constexpr uint16_t dnNum = 1;
-    uint16_t nValue = srcShape3 * srcShape4; // srcH*srcW is nValue
-    uint32_t dValue = srcShape1;             // srcC is dValue
+    uint16_t nValue = srcShape3 * srcShape4;                                   // srcH*srcW is nValue
+    uint32_t dValue = srcShape1;                                               // srcC is dValue
 
     uint64_t loop1SrcStride = GetByteSize<typename TileData::DType>(gStride1); // unit Byte
     constexpr uint16_t loop2DstStride = 1;
-    uint16_t loop3DstStride = dstShape3 * dstShape4;                   // unit is 32B
-    uint16_t loop4DstStride = dstShape4;                               // dstW
-    uint64_t mte2NzPara = static_cast<uint64_t>(loop4DstStride) << 48; // MTE2_NZ_PARA[63:48]
-    mte2NzPara |= static_cast<uint64_t>(loop3DstStride) << 32;         // MTE2_NZ_PARA[47:32]
-    mte2NzPara |= static_cast<uint64_t>(loop2DstStride) << 16;         // MTE2_NZ_PARA[31:16]
-    mte2NzPara |= static_cast<uint64_t>(dnNum);                        // MTE2_NZ_PARA[15:0]
-    set_mte2_nz_para(mte2NzPara);                                      // only set once
+    uint16_t loop3DstStride = dstShape3 * dstShape4;                           // unit is 32B
+    uint16_t loop4DstStride = dstShape4;                                       // dstW
+    uint64_t mte2NzPara = static_cast<uint64_t>(loop4DstStride) << 48;         // MTE2_NZ_PARA[63:48]
+    mte2NzPara |= static_cast<uint64_t>(loop3DstStride) << 32;                 // MTE2_NZ_PARA[47:32]
+    mte2NzPara |= static_cast<uint64_t>(loop2DstStride) << 16;                 // MTE2_NZ_PARA[31:16]
+    mte2NzPara |= static_cast<uint64_t>(dnNum);                                // MTE2_NZ_PARA[15:0]
+    set_mte2_nz_para(mte2NzPara);                                              // only set once
     for (uint32_t i = 0; i < dstShape0; i++) {
         srcAddr = src + i * gStride0;
         dstAddr = dstAddrO + i * dstShape1 * dstShape2 * dstShape3 * dstShape4 * c0ElemCount;
@@ -1213,12 +1213,12 @@ __tf__ PTO_INTERNAL void TLoadNCDHW2FractalZ3D(typename TileData::TileDType __ou
     uint64_t loop1SrcStride = GetByteSize<typename TileData::DType>(gStride1); // global D*H*W, unit Byte
     uint64_t loop4SrcStride = GetByteSize<typename TileData::DType>(gStride0); // global C*D*H*W, unit Byte
     uint16_t loop2DstStride = dstShape1 * dstShape2;
-    uint16_t loop3DstStride = loop2DstStride * dstDHW;               // unit is 32B
-    uint64_t mte2Para = static_cast<uint64_t>(loop4DstStride) << 48; // MTE2_NZ_PARA[63:48]
-    mte2Para |= static_cast<uint64_t>(loop3DstStride) << 32;         // MTE2_NZ_PARA[47:32]
-    mte2Para |= static_cast<uint64_t>(loop2DstStride) << 16;         // MTE2_NZ_PARA[31:16]
-    mte2Para |= static_cast<uint64_t>(dnNum);                        // MTE2_NZ_PARA[15:0]
-    set_mte2_nz_para(mte2Para);                                      // only set once
+    uint16_t loop3DstStride = loop2DstStride * dstDHW;                         // unit is 32B
+    uint64_t mte2Para = static_cast<uint64_t>(loop4DstStride) << 48;           // MTE2_NZ_PARA[63:48]
+    mte2Para |= static_cast<uint64_t>(loop3DstStride) << 32;                   // MTE2_NZ_PARA[47:32]
+    mte2Para |= static_cast<uint64_t>(loop2DstStride) << 16;                   // MTE2_NZ_PARA[31:16]
+    mte2Para |= static_cast<uint64_t>(dnNum);                                  // MTE2_NZ_PARA[15:0]
+    set_mte2_nz_para(mte2Para);                                                // only set once
 
     TLoadCubeInstr<TileData, GlobalData, pto::Layout::DN>(dstAddrP, srcAddrP, loop1SrcStride, nValue, dValue,
                                                           loop4SrcStride);

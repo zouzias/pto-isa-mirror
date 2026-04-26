@@ -22,38 +22,38 @@ np.random.seed(19)
 def float32_to_hf32(x, round_mode="roundTiesToEven"):
     """
     Convert float32 to HF32 format (E8M11)
-    
+
     HF32 format: 1 sign bit + 8 exponent bits + 11 mantissa bits (20 bits total)
     """
     # Convert float32 to binary representation
     packed = struct.pack('f', x)
     bits = struct.unpack('I', packed)[0]
-    
+
     # Extract sign, exponent, and mantissa
     sign = (bits >> 31) & 0x1
     exponent = (bits >> 23) & 0xFF
     mantissa = bits & 0x7FFFFF  # 23-bit mantissa
-    
+
     # Handle special values (NaN/Inf)
     if exponent == 0xFF:
         if mantissa != 0:
             return float('nan')
         return float('inf') * (-1 if sign else 1)
-    
+
     # Handle subnormal numbers and zero
     if exponent == 0:
         if mantissa == 0:  # Zero value
             return 0.0 if sign == 0 else -0.0
         # For subnormal numbers, treat them as 0 (HF32 doesn't support subnormals)
         return 0.0 if sign == 0 else -0.0
-    
+
     # Convert 23-bit mantissa to 11-bit mantissa
     mantissa_23bit = mantissa
     mantissa_11bit = mantissa_23bit >> 12  # Discard lower 12 bits
-    
+
     # Apply rounding mode
     lost_bits = mantissa_23bit & 0xFFF  # Lower 12 bits that were discarded
-    
+
     if round_mode == "CAST_RINT":
         # roundTiesToEven: round to nearest, ties to even
         if lost_bits > 0x800:  # Greater than half (0x800 = 2048)
@@ -69,22 +69,22 @@ def float32_to_hf32(x, round_mode="roundTiesToEven"):
             mantissa_11bit += 1
     else:
         raise ValueError(f"Unsupported round mode: {round_mode}")
-    
+
     # Check for mantissa overflow (carry to exponent)
     # Maximum value for 11-bit mantissa is 0x7FF (2047)
     if mantissa_11bit >= 0x800:  # 0x800 = 2048, need to carry
         mantissa_11bit = mantissa_11bit >> 1
         exponent += 1
-    
+
     # Check for exponent overflow
     if exponent >= 0xFF:
         return float('inf') if sign == 0 else -float('inf')
-    
+
     # Reconstruct HF32 float (stored as float32 but with HF32 precision)
     # Note: HF32 mantissa has only 11 significant bits, so lower 12 bits are 0
     hf32_mantissa = mantissa_11bit << 12
     hf32_bits = (sign << 31) | (exponent << 23) | hf32_mantissa
-    
+
     # Convert back to float32
     return struct.unpack('f', struct.pack('I', hf32_bits))[0]
 
@@ -112,7 +112,7 @@ def gen_golden_data(case_name, param):
     if param.is_hf32:
         round_mode = param.hf32_trans
         hf32_func = np.vectorize(lambda x: float32_to_hf32(x, round_mode))
-        
+
         x1_gm = hf32_func(x1_gm.astype(np.float32))
         x2_gm = hf32_func(x2_gm.astype(np.float32))
 
@@ -133,7 +133,7 @@ class tmatmulParams:
         self.ctype = ctype
         self.m = m
         self.k = k
-        self.n = n 
+        self.n = n
         self.is_bias = is_bias
         if (bias_type):
             self.bias_type = bias_type

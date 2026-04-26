@@ -585,7 +585,7 @@ inline AICORE void castS64to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t va
     const uint32_t ELE_CNT_B64 = ELE_CNT_B32 / 2;
 
     FOR_ROWS
-    uint32_t len64 = sreg * 2; // As we operate with 64bit blocks using 32bit operations
+    uint32_t len64 = sreg * 2;    // As we operate with 64bit blocks using 32bit operations
     MaskReg preg_b64 = CreatePredicate<float>(len64);
     uint32_t len_even = sreg * 2; // As only the even part is taken
 
