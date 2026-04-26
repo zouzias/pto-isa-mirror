@@ -229,7 +229,7 @@ PTO_INTERNAL void AbsReduceMax_b16_ND(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr, un
     vstas(ureg_max, maxPtr + loop_num * grps_per_dintlv, 0);
 }
 
-// Assumption: input total size is a multiple of 2K elements
+// Assumption: input total size is a multiple of 32 VLs.
 // Uses 2 VLs per inner iteration (1 DINTLV + 1 vcgmax + 1 vstus) to avoid
 // WAW hazard on the vstus auto-increment scalar register when using 2 vstus per iteration.
 template <typename T>
@@ -728,17 +728,21 @@ PTO_INTERNAL void TQuant_MXFP8_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *expPtr,
     __ubuf__ T *maxPtr_backup = maxPtr;
     if (validCols == srcCols) {
         // 1D fast path: source is contiguous; pick the best flat reducer by size.
-        // constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T);
-        // constexpr uint32_t elementsPerLargeLoop = 32 * elementsPerVL;
-        if (total_elements_count % 2048 == 0)
+        constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T);
+        constexpr uint32_t elementsPerLargeLoop = 32 * elementsPerVL;
+        if (total_elements_count % elementsPerLargeLoop == 0)
             AbsReduceMax_b16_ND_largesizes(srcPtr, maxPtr, vl_count, total_elements_count);
         else
             AbsReduceMax_b16_ND(srcPtr, maxPtr, vl_count, total_elements_count);
         // Board: add VST_VST alongside VST_VLD/VV_ALL. Sim orders stores implicitly,
         // board does not — missing VST_VST lets Phase-3 E2B_B16 read stale scaling.
         mem_bar(VST_VLD);
+        mem_bar(VST_VST);
+        mem_bar(VST_VLD);
         maxPtr = maxPtr_backup;
         ExtractB8ExponentAndScaling(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups);
+        mem_bar(VST_VLD);
+        mem_bar(VST_VST);
         mem_bar(VST_VLD);
         CalcQuantizedFP8Values(srcPtr, scalingPtr, dstPtr, total_elements_count);
     } else {
