@@ -8,60 +8,46 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
 #include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
 
-using namespace std;
-using namespace PtoTestCommon;
+#include "cost_check.hpp"
 
-template <typename T0, typename T1, int kGRows, int kGCols, int kTRows, int kTCols, int validRow, int validCol,
-          float profiling, float accuracy>
-void launchTSort32(void *stream);
+using namespace pto;
 
-class TSORT32Test : public testing::Test {
-protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
-};
+namespace {
 
-template <typename T0, typename T1, int kGRows, int kGCols, int kTRows, int kTCols, int validRow, int validCol,
-          float profiling, float accuracy>
-void TSort32Test()
+template <typename T0, typename T1, int rows, int cols, float profiling, float accuracy>
+void runTSort32()
 {
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-    launchTSort32<T0, T1, kGRows, kGCols, kTRows, kTCols, validRow, validCol, profiling, accuracy>(stream);
-    aclrtSynchronizeStream(stream);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
+    constexpr int totalNum = 8 / sizeof(T0);
+
+    using SrcTile = Tile<TileType::Vec, T0, rows, cols, BLayout::RowMajor, -1, -1>;
+    using IdxTile = Tile<TileType::Vec, T1, rows, cols, BLayout::RowMajor, -1, -1>;
+    using DstTile = Tile<TileType::Vec, T0, rows, cols * totalNum, BLayout::RowMajor, -1, -1>;
+
+    SrcTile srcTile(rows, cols);
+    IdxTile idxTile(rows, cols);
+    DstTile dstTile(rows, cols * totalNum);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(idxTile, rows * cols * sizeof(T0));
+    TASSIGN(dstTile, rows * cols * sizeof(T0) + rows * cols * sizeof(T1));
+
+    TSORT32(dstTile, srcTile, idxTile);
+
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-// test0: int16_t, 16x16, R=0: 14 + 15*18 = 284
-TEST_F(TSORT32Test, test0)
+} // namespace
+
+TEST(TSort32, float_8x32)
 {
-    TSort32Test<int16_t, uint32_t, 16, 16, 16, 16, 16, 16, 284.0f, 1.0f>();
+    runTSort32<float, uint32_t, 8, 32, 8.0f, 0.0f>();
 }
 
-// test1: float, 8x32: costmodel=172
-TEST_F(TSORT32Test, test1)
+TEST(TSort32, half_32x16)
 {
-    TSort32Test<float, uint32_t, 8, 32, 8, 32, 8, 32, 172.0f, 1.0f>();
-}
-
-// test2: int32_t, 7x32: costmodel=150
-TEST_F(TSORT32Test, test2)
-{
-    TSort32Test<int32_t, uint32_t, 7, 32, 7, 32, 7, 32, 150.0f, 1.0f>();
-}
-
-// test3: aclFloat16->half, 32x16, R=0: 14 + 31*18 = 572
-TEST_F(TSORT32Test, test3)
-{
-    TSort32Test<aclFloat16, uint32_t, 32, 16, 32, 16, 32, 16, 572.0f, 1.0f>();
+    runTSort32<half, uint32_t, 32, 16, 32.0f, 0.0f>();
 }

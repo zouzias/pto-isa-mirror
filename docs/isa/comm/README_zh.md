@@ -81,8 +81,8 @@ comm::TTEST(signal, 1, comm::WaitCmp::GE);
 
 | 值 | 说明 |
 |-------|-------------|
-| `DmaEngine::SDMA` | SDMA 引擎（支持二维传输）|
-| `DmaEngine::URMA` | URMA 引擎（支持一维传输，仅 Ascend950 / NPU_ARCH 3510）|
+| `DmaEngine::SDMA` | SDMA 引擎（支持一维传输，Ascend950 上仅支持TGET|
+| `DmaEngine::URMA` | URMA 引擎（支持一维传输，仅Ascend950 / NPU_ARCH 3510）支持|
 
 ### AsyncEvent
 
@@ -108,7 +108,7 @@ comm::AsyncSession session;
 comm::BuildAsyncSession<comm::DmaEngine::SDMA>(scratchTile, workspace, session);
 ```
 
-定义于 `include/pto/comm/async/async_types.hpp`。构建参数详见 [TPUT_ASYNC](TPUT_ASYNC_zh.md)。
+定义于 `include/pto/comm/async_common/async_types.hpp`。构建参数详见 [TPUT_ASYNC](TPUT_ASYNC_zh.md)。
 
 ### ParallelGroup
 

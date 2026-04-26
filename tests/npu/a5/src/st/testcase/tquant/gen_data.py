@@ -132,10 +132,12 @@ def fp16_to_fp8_element(data_abs_max_fp16, emax):
     if exponent_fp16 == 0x1F:  # NaN/Inf
         return 0xFF, np.float16(np.inf)
 
+    # CCE: shared_exp = biased_fp16_exp - emax_e8m0 where emax_e8m0 = 8 - 112 = -104 for FP16
+    # => shared_exp = biased_fp16_exp + 104, stored to memory as PK_B16 (low byte).
     shared_exp = exponent_fp16 - emax
 
-    # Scaling: hardware computes (30 - shared_exp) << 10
-    scaling_exp_biased = 30 - shared_exp  # = 30 - exponent_fp16 + emax
+    # Scaling is computed INDEPENDENTLY of emax_e8m0 in CCE:
+    scaling_exp_biased = 38 - exponent_fp16
 
     scaling_int = np.int16(np.uint16(scaling_exp_biased << 10))
     if scaling_int < -15:
@@ -223,8 +225,10 @@ def quant_fp16_to_e4m3(src, mode="nd"):
     data_grouped = data_abs.reshape(-1, 32)
     group_max_fp16 = np.max(data_grouped, axis=1)
 
-    # Extract E8M0 exponents and fp16 scaling factors using FP16-specific logic
-    e8m0, scaling_fp16 = fp16_maxes_to_fp8(group_max_fp16, emax=8)
+    # Extract E8M0 exponents and fp16 scaling factors using FP16-specific HW emulation.
+    # The CCE kernel path matches the OCP MX spec 100%, so this bit-level emulation is
+    # used as the golden reference (it avoids a torch/torchao runtime dependency).
+    e8m0, scaling_fp16 = fp16_maxes_to_fp8(group_max_fp16, emax=-104)
 
     if mode == "nz":
         tile_m = src.shape[0]
@@ -239,7 +243,7 @@ def quant_fp16_to_e4m3(src, mode="nd"):
     # Save scaling as fp32 for debugging (same as bf16 path)
     scaling_fp16.astype(np.float32).tofile("scaling_e4m3.bin")
     data_fp8.tofile("golden_fp8.bin")
-    return e8m0, scaling_fp16, data_fp8, group_max_fp16
+    return e8m0, scaling_fp16, data_fp8
 
 
 def fp16_to_mxfp8(valid_rows, valid_cols, mode):
@@ -253,12 +257,17 @@ def fp16_to_mxfp8(valid_rows, valid_cols, mode):
     src_fp16 = src_fp32.astype(np.float16)
     src_fp16.tofile("input.bin")
 
-    pad_value = np.float16(float("-inf"))
+    pad_value = np.float16(0.0)  # match kernel PadValue::Zero / ZeroPadSourceTile
     padded_src = np.full((valid_rows, padded_cols), pad_value, dtype=np.float16)
     padded_src[:, :valid_cols] = src_fp16
 
     # fp16 quantization, golden is saved in quant function
-    e8m0, scaling, data_fp8, group_max = quant_fp16_to_e4m3(padded_src, mode=mode)
+    _, _, data_fp8 = quant_fp16_to_e4m3(padded_src, mode=mode)
+
+    # Trim FP8 golden to valid dimensions (kernel TSTORE only outputs valid columns)
+    if padded_cols != valid_cols and mode == "nd":
+        data_fp8_valid = data_fp8.reshape(valid_rows, padded_cols)[:, :valid_cols].copy()
+        data_fp8_valid.tofile("golden_fp8.bin")
     return
 
 
@@ -273,12 +282,17 @@ def bf16_to_mxfp8(valid_rows, valid_cols, mode):
     src_bf16 = src_fp32.astype(bfloat16)
     src_bf16.tofile("input.bin")
 
-    pad_value = bfloat16(float("-inf"))
+    pad_value = bfloat16(0.0)  # match kernel PadValue::Zero
     padded_src = np.full((valid_rows, padded_cols), pad_value, dtype=bfloat16)
     padded_src[:, :valid_cols] = src_bf16
 
     # bf16 quantization, golden is saved in quant function
     e8m0, scaling, data_fp8, group_max = quant_bf16_to_e4m3(padded_src, mode=mode)
+
+    # Trim FP8 golden to valid dimensions (kernel TSTORE only outputs valid columns)
+    if padded_cols != valid_cols and mode == "nd":
+        data_fp8_valid = data_fp8.reshape(valid_rows, padded_cols)[:, :valid_cols].copy()
+        data_fp8_valid.tofile("golden_fp8.bin")
     return
 
 
@@ -390,6 +404,9 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 32, 64, mode="nd"),
         TQuantParams("mxfp8", 64, 128, mode="nd"),
         TQuantParams("mxfp8", 128, 128, mode="nd"),
+        TQuantParams("mxfp8", 15, 32, mode="nd"),
+        TQuantParams("mxfp8", 7, 64, mode="nd"),
+        TQuantParams("mxfp8", 33, 64, mode="nd"),
         TQuantParams("mxfp8", 32, 64, mode="nz"),
         TQuantParams("mxfp8", 64, 128, mode="nz"),
         TQuantParams("mxfp8", 64, 256, mode="nz"),
@@ -401,15 +418,35 @@ if __name__ == "__main__":
         TQuantParams("u8", 64, 128, mode="nd"),
         TQuantParams("u8", 128, 128, mode="nd"),
         TQuantParams("u8", 256, 128, mode="nd"),
+        TQuantParams("u8", 32, 72, mode="nd"),
         TQuantParams("mxfp8", 32, 128, mode="nd", dtype=bfloat16),
         TQuantParams("mxfp8", 64, 128, mode="nd", dtype=bfloat16),
         TQuantParams("mxfp8", 128, 128, mode="nd", dtype=bfloat16),
+        TQuantParams("mxfp8", 14, 16, mode="nd", dtype=bfloat16),
+        TQuantParams("mxfp8", 7, 48, mode="nd", dtype=bfloat16),
+        TQuantParams("mxfp8", 18, 136, mode="nd", dtype=bfloat16),
+        # Diagnostic cases for board failure analysis
+        TQuantParams("mxfp8", 1, 32, mode="nd", dtype=bfloat16),
+        TQuantParams("mxfp8", 2, 16, mode="nd", dtype=bfloat16),
+        TQuantParams("mxfp8", 4, 16, mode="nd", dtype=bfloat16),
+        TQuantParams("mxfp8", 8, 16, mode="nd", dtype=bfloat16),
+        TQuantParams("mxfp8", 16, 16, mode="nd", dtype=bfloat16),
+        TQuantParams("mxfp8", 3, 32, mode="nd", dtype=bfloat16),
+        TQuantParams("mxfp8", 5, 96, mode="nd", dtype=bfloat16),
+        TQuantParams("mxfp8", 1, 16, mode="nd", dtype=bfloat16),
+        # Multi-flush vstas coverage: loop_num odd >= 3 leaves 16B pending in st_align.
+        TQuantParams("mxfp8", 3, 256, mode="nd", dtype=bfloat16),  # padded 768 -> loop_num=3
+        TQuantParams("mxfp8", 5, 256, mode="nd", dtype=bfloat16),  # padded 1280 -> loop_num=5
+        TQuantParams("mxfp8", 18, 138, mode="nd", dtype=bfloat16),  # padded 18x160 = 2880 -> loop_num=12
+        TQuantParams("mxfp8", 1, 192, mode="nd", dtype=bfloat16),  # no pad, 192 elems -> loop_num=1
+        TQuantParams("mxfp8", 1, 198, mode="nd", dtype=bfloat16),  # padded 1x224 = 224 -> loop_num=1
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=bfloat16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=bfloat16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=bfloat16),
         TQuantParams("mxfp8", 32, 128, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 64, 128, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 128, 128, mode="nd", dtype=np.float16),
+        TQuantParams("mxfp8", 4, 256, mode="nd", dtype=np.float16),  # 1024 elems -> AbsReduceMax_b16_ND_opt
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=np.float16),

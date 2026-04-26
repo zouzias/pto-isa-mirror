@@ -102,6 +102,7 @@ if __name__ == "__main__":
         TQuantParams("u8", 64, 128, mode="nd"),
         TQuantParams("u8", 128, 128, mode="nd"),
         TQuantParams("u8", 256, 128, mode="nd"),
+        TQuantParams("u8", 32, 72, mode="nd"),
     ]
 
     for param in case_params_list:

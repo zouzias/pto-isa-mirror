@@ -20,9 +20,9 @@
 |---|---|---|
 | 同步 | [`TSYNC`](isa/TSYNC_zh.md) | 同步 PTO 执行（等待事件或插入每操作流水线屏障）。 |
 | 手动 / 资源绑定 | [`TASSIGN`](isa/TASSIGN_zh.md) | 将 Tile 对象绑定到实现定义的片上地址（手动放置）。 |
-| 手动 / 资源绑定 | [`TSETFMATRIX`](isa/TSETFMATRIX_zh.md) | 为类 IMG2COL 操作设置 FMATRIX 寄存器。 |
-| 手动 / 资源绑定 | [`TSET_IMG2COL_RPT`](isa/TSET_IMG2COL_RPT_zh.md) | 从 IMG2COL 配置 Tile 设置 IMG2COL 重复次数元数据。 |
-| 手动 / 资源绑定 | [`TSET_IMG2COL_PADDING`](isa/TSET_IMG2COL_PADDING_zh.md) | 从 IMG2COL 配置 Tile 设置 IMG2COL 填充元数据。 |
+| 手动 / 资源绑定 | [`SETFMATRIX`](isa/SETFMATRIX_zh.md) | 为类 IMG2COL 操作设置 FMATRIX 寄存器。 |
+| 手动 / 资源绑定 | [`SET_IMG2COL_RPT`](isa/SET_IMG2COL_RPT_zh.md) | 从 IMG2COL 配置 Tile 设置 IMG2COL 重复次数元数据。 |
+| 手动 / 资源绑定 | [`SET_IMG2COL_PADDING`](isa/SET_IMG2COL_PADDING_zh.md) | 从 IMG2COL 配置 Tile 设置 IMG2COL 填充元数据。 |
 | 逐元素（Tile-Tile） | [`TADD`](isa/TADD_zh.md) | 两个 Tile 的逐元素加法。 |
 | 逐元素（Tile-Tile） | [`TABS`](isa/TABS_zh.md) | Tile 的逐元素绝对值。 |
 | 逐元素（Tile-Tile） | [`TAND`](isa/TAND_zh.md) | 两个 Tile 的逐元素按位与。 |
@@ -46,6 +46,7 @@
 | 逐元素（Tile-Tile） | [`TRSQRT`](isa/TRSQRT_zh.md) | 逐元素倒数平方根。 |
 | 逐元素（Tile-Tile） | [`TSQRT`](isa/TSQRT_zh.md) | 逐元素平方根。 |
 | 逐元素（Tile-Tile） | [`TEXP`](isa/TEXP_zh.md) | 逐元素指数运算。 |
+| 逐元素（Tile-Tile） | [`TPOW`](isa/TPOW_zh.md) | 逐元素幂运算。 |
 | 逐元素（Tile-Tile） | [`TNOT`](isa/TNOT_zh.md) | Tile 的逐元素按位取反。 |
 | 逐元素（Tile-Tile） | [`TRELU`](isa/TRELU_zh.md) | Tile 的逐元素 ReLU。 |
 | 逐元素（Tile-Tile） | [`TNEG`](isa/TNEG_zh.md) | Tile 的逐元素取负。 |
@@ -68,6 +69,7 @@
 | Tile-标量 / Tile-立即数 | [`TSHRS`](isa/TSHRS_zh.md) | Tile 按标量逐元素右移。 |
 | Tile-标量 / Tile-立即数 | [`TXORS`](isa/TXORS_zh.md) | Tile 与标量的逐元素按位异或。 |
 | Tile-标量 / Tile-立即数 | [`TLRELU`](isa/TLRELU_zh.md) | 带标量斜率的 Leaky ReLU。 |
+| Tile-标量 / Tile-立即数 | [`TPOWS`](isa/TPOWS_zh.md) | Tile 逐元素与标量幂运算。 |
 | Tile-标量 / Tile-立即数 | [`TADDSC`](isa/TADDSC_zh.md) | 与标量和第二个 Tile 的融合逐元素加法：`src0 + scalar + src1`。 |
 | Tile-标量 / Tile-立即数 | [`TSUBSC`](isa/TSUBSC_zh.md) | 融合逐元素运算：`src0 - scalar + src1`。 |
 | 轴归约 / 扩展 | [`TROWSUM`](isa/TROWSUM_zh.md) | 通过对列求和来归约每一行。 |
@@ -137,6 +139,8 @@
 | 复杂指令 | [`TPARTMUL`](isa/TPARTMUL_zh.md) | 部分逐元素乘法，对有效区域不一致的处理为实现定义。 |
 | 复杂指令 | [`TPARTMAX`](isa/TPARTMAX_zh.md) | 部分逐元素最大值，对不匹配的有效区域具有实现定义的处理方式。 |
 | 复杂指令 | [`TPARTMIN`](isa/TPARTMIN_zh.md) | 部分逐元素最小值，对不匹配的有效区域具有实现定义的处理方式。 |
+| 复杂指令 | [`TPARTARGMAX`](isa/TPARTARGMAX_zh.md) | 部分逐元素最大值选择并返回对应索引（argmax），对不匹配的有效区域具有实现定义的处理方式。 |
+| 复杂指令 | [`TPARTARGMIN`](isa/TPARTARGMIN_zh.md) | 部分逐元素最小值选择并返回对应索引（argmin），对不匹配的有效区域具有实现定义的处理方式。 |
 | 复杂指令 | [`TGATHERB`](isa/TGATHERB_zh.md) | 使用字节偏移量收集元素。 |
 | 复杂指令 | [`TSCATTER`](isa/TSCATTER_zh.md) | 使用逐元素行索引将源 Tile 的行散播到目标 Tile 中。 |
 | 复杂指令 | [`TQUANT`](isa/TQUANT_zh.md) | 量化 Tile（例如 FP32 到 FP8），生成指数/缩放/最大值输出。 |

@@ -10,7 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef _PTO_INCLUDE_NPU_TYPE_H_
 #define _PTO_INCLUDE_NPU_TYPE_H_
-#ifndef __CPU_SIM
+#if !defined(__CPU_SIM) && !defined(__COSTMODEL)
 #define AICORE [aicore]
 #else
 #define AICORE
@@ -22,7 +22,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // for pto internal implementation
 #define PTO_INTERNAL AICORE PTO_INLINE
 
-#ifdef __CPU_SIM
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
 #define OP_NAME(Name)
 #define OP_TYPE(TypeName)
 #else
@@ -108,6 +108,8 @@ struct int4b_t {
     }
 };
 
+#include <type_traits>
+
 namespace pto {
 enum class TileType
 {
@@ -169,7 +171,9 @@ enum class Layout
     MX_B_DN,
     MX_B_NN,
     NC1HWC0,
+    GNC1HWC0,
     NCHW,
+    GNCHW,
     NHWC,
     NDC1HWC0,
     NCDHW,
@@ -311,18 +315,28 @@ enum class HistByte : uint8_t
     BYTE_3 = 3  // MSB (bits 31-24)
 };
 
-union NotNumUnion {
-    float f;
-    uint32_t i;
+template <typename T>
+union FloatIntUnion {
+    using UIntegerType = std::conditional_t<sizeof(T) == sizeof(float), uint32_t, uint16_t>;
+    UIntegerType i;
+#ifdef __CCE_AICORE__
+    T f;
+    constexpr PTO_INTERNAL FloatIntUnion() : f(0.0f)
+    {}
+    constexpr PTO_INTERNAL FloatIntUnion(UIntegerType val) : i(val)
+    {}
+#endif
 };
 
-union HalfUnion {
+using FloatUnion = FloatIntUnion<float>;
 #ifdef __CCE_AICORE__
-    half f;
-#else
-    uint16_t f;
+using HalfUnion = FloatIntUnion<half>;
 #endif
-    uint16_t i;
+
+enum class PowAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
 };
 
 enum class DivAlgorithm : uint8_t
@@ -361,6 +375,18 @@ enum class LogAlgorithm : uint8_t
     HIGH_PRECISION
 };
 
+enum class FmodAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class RemAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
 namespace GlobalTensorDim {
 constexpr int DIM_0 = 0;
 constexpr int DIM_1 = 1;
@@ -379,6 +405,8 @@ using TRandomCounter = uint32_t[PTO_RANDOM_COUNTER_SIZE];
 #if defined(__CPU_SIM) || defined(__COSTMODEL)
 typedef _Float16 half;
 typedef _Float16 aclFloat16;
+typedef half float16_t;
+typedef float float32_t;
 // Note: clang version should be >=15 and gcc version should be >=14
 // Use native BF16 automatically when the current toolchain already supports it.
 // PTO_CPU_SIM_ENABLE_BF16 remains useful as a strict request: if callers define

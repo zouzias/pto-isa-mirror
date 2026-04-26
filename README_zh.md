@@ -27,6 +27,10 @@ PTO ISA 基于昇腾底层硬件与软件抽象，定义 90+ 条标准 tile 指�
 - **面向框架、算子与工具链**：可作为上层框架、算子实现和编译工具链的共同接口。
 - **支持持续扩展**：当前已定义 90+ 条标准操作，并持续补充实现与生态集成。
 
+除计算与数据搬运指令外，PTO ISA 还提供了面向 NPU 间数据传输与同步的**通信扩展指令集**，覆盖点对点通信、信号同步和集合通信三类能力。
+
+这些通信原语延续了与计算指令一致的 tile 级抽象和跨平台设计，并可驱动昇腾上的多种数据搬移硬件引擎，帮助用户构建计算与通信深度融合的 kernel。通信 ISA 入口见 [docs/isa/comm/README_zh.md](docs/isa/comm/README_zh.md)。
+
 目前，PTO 指令已集成到以下框架中：
 
 - [PyPTO](https://gitcode.com/cann/pypto/)
@@ -133,6 +137,20 @@ python3 tests/script/run_st.py -r sim -v a3 -t tadd -g TADDTest.case_float_64x64
 
 ![Flash Attention 归一化 TFLOPS（A2/A3）](docs/figures/performance/fa_normalized_tflops_a2a3.svg)
 
+### 通信指令带宽
+
+- 参考实现：`kernels/manual/a2a3/tget_bandwidth/`
+- 详细分析与构建运行说明：[TGET / TGET_ASYNC 带宽对比示例](kernels/manual/a2a3/tget_bandwidth/README_zh.md)
+
+该示例在 Ascend A2/A3 上测量点对点远程读带宽，对比 `TGET`（同步，经 UB 中转）与 `TGET_ASYNC`（异步，经 DMA 引擎直接传输）的表现。
+
+### GEMM AllReduce 通算融合
+
+- 参考实现：`kernels/manual/a2a3/gemm_ar/`
+- 详细分析与调参说明：[高性能 GEMM AllReduce 融合算子示例](kernels/manual/a2a3/gemm_ar/README_zh.md)
+
+该示例展示了如何在同一个算子流水线中融合 PTO 通信原语与计算 kernel，实现 GEMM 与 AllReduce 的重叠执行。
+
 ## 🖥️ 平台支持
 
 - Ascend A2（Ascend 910B）
@@ -188,8 +206,8 @@ python3 tests/script/run_st.py -r sim -v a3 -t tadd -g TADDTest.case_float_64x64
 - [版本说明](ReleaseNote_zh.md)：版本更新与发布记录
 - [许可证](LICENSE)：CANN Open Software License Agreement Version 2.0
 - [PyPTO](https://gitcode.com/cann/pypto/)：PTO 生态中的上层编程框架
-- [PTOAS](https://gitcode.com/cann/PTOAS/)：面向 PTO 工作流的汇编器与编译后端
-- [pto-dsl](https://gitcode.com/cann/pto-dsl/)：面向 PTO 的 Python 前端与 JIT 工作流探索
+- [PTOAS](https://github.com/PTO-ISA/PTOAS/)：面向 PTO 工作流的汇编器与编译后端
+- [pto-dsl](https://github.com/PTO-ISA/pto-dsl/)：面向 PTO 的 Python 前端与 JIT 工作流探索
 
 ## 📬 联系我们
 

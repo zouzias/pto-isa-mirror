@@ -27,6 +27,18 @@ template <>
 struct TypeGet<float8_e4m3_t> {
     using T = vector_f8e4m3;
 };
+template <>
+struct TypeGet<hifloat8_t> {
+    using T = vector_hif8;
+};
+template <>
+struct TypeGet<float8_e8m0_t> {
+    using T = vector_f8e8m0;
+};
+template <>
+struct TypeGet<float4_e1m2x2_t> {
+    using T = vector_f4e1m2x2;
+};
 #endif
 template <>
 struct TypeGet<uint64_t> {
@@ -114,6 +126,18 @@ struct TypeGet<vector_s8> {
 template <>
 struct TypeGet<vector_bf16> {
     using T = vector_bf16;
+};
+template <>
+struct TypeGet<vector_hif8> {
+    using T = vector_hif8;
+};
+template <>
+struct TypeGet<vector_f8e8m0> {
+    using T = vector_f8e8m0;
+};
+template <>
+struct TypeGet<vector_f4e1m2x2> {
+    using T = vector_f4e1m2x2;
 };
 #endif
 } // namespace pto

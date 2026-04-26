@@ -1176,6 +1176,11 @@ public:
         cycle = cycle_;
     }
 
+    AICORE void SetLastCycle(const float cycle_)
+    {
+        cycle = cycle_;
+    }
+
     AICORE float GetCycle()
     {
         return cycle;
@@ -1452,8 +1457,8 @@ public:
 
     // constructor for both dimensions are runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
-    AICORE Tile(std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, size_t> VR,
-                std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, size_t> VC)
+    AICORE Tile(std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, unsigned> VR,
+                std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, unsigned> VC)
     {
 #if defined(__PTO_AUTO__) && !defined(__CPU_SIM)
         data_ = __cce_tinit(data_);
@@ -1464,7 +1469,7 @@ public:
 
     // constructor for row dimension is runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
-    AICORE Tile(std::enable_if_t<(RowMask == DYNAMIC) && (ColMask > 0), size_t> VR)
+    AICORE Tile(std::enable_if_t<(RowMask == DYNAMIC) && (ColMask > 0), unsigned> VR)
     {
 #ifdef __PTO_AUTO__
         data_ = __cce_tinit(data_);
@@ -1474,7 +1479,7 @@ public:
 
     // constructor for col dimension is runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
-    AICORE Tile(std::enable_if_t<(RowMask > 0) && (ColMask == DYNAMIC), size_t> VC)
+    AICORE Tile(std::enable_if_t<(RowMask > 0) && (ColMask == DYNAMIC), unsigned> VC)
     {
 #ifdef __PTO_AUTO__
         data_ = __cce_tinit(data_);
@@ -1562,41 +1567,46 @@ public:
         cycle = cycle_;
     }
 
+    AICORE void SetLastCycle(const float cycle_)
+    {
+        cycle = cycle_;
+    }
+
     AICORE float GetCycle()
     {
         return cycle;
     }
 #endif
 
-    int RowMaskInternal;
-    int ColMaskInternal;
+    unsigned RowMaskInternal;
+    unsigned ColMaskInternal;
 
     template <int RowMask = ValidRow>
-    AICORE static constexpr std::enable_if_t<(RowMask > 0), int> GetValidRow()
+    AICORE static constexpr std::enable_if_t<(RowMask > 0), unsigned> GetValidRow()
     {
         return RowMask;
     }
 
     template <int RowMask = ValidRow>
-    AICORE std::enable_if_t<RowMask == DYNAMIC, int> GetValidRow() const
+    AICORE std::enable_if_t<RowMask == DYNAMIC, unsigned> GetValidRow() const
     {
         return RowMaskInternal;
     }
 
     template <int ColMask = ValidCol>
-    AICORE static constexpr std::enable_if_t<(ColMask > 0), int> GetValidCol()
+    AICORE static constexpr std::enable_if_t<(ColMask > 0), unsigned> GetValidCol()
     {
         return ColMask;
     }
 
     template <int ColMask = ValidCol>
-    AICORE std::enable_if_t<ColMask == DYNAMIC, int> GetValidCol() const
+    AICORE std::enable_if_t<ColMask == DYNAMIC, unsigned> GetValidCol() const
     {
         return ColMaskInternal;
     }
 
     // Call this function need PIPE_S wait
-    PTO_INTERNAL void SetValidRow(int rowMask)
+    PTO_INTERNAL void SetValidRow(unsigned rowMask)
     {
         static_assert(ValidRow == DYNAMIC, "Only Dynamic Valid Row Support Set Value.");
         PTO_ASSERT(rowMask <= Rows, "rowMask must less than Rows.");
@@ -1604,7 +1614,7 @@ public:
     }
 
     // Call this function need PIPE_S wait
-    PTO_INTERNAL void SetValidCol(int colMask)
+    PTO_INTERNAL void SetValidCol(unsigned colMask)
     {
         static_assert(ValidCol == DYNAMIC, "Only Dynamic Valid Col Support Set Value.");
         PTO_ASSERT(colMask <= Cols, "colMask must less than Cols.");
@@ -1612,7 +1622,7 @@ public:
     }
 
     // Call this function need PIPE_S wait
-    PTO_INTERNAL void SetValidShape(int rowMask, int colMask)
+    PTO_INTERNAL void SetValidShape(unsigned rowMask, unsigned colMask)
     {
         static_assert(ValidCol == DYNAMIC && ValidRow == DYNAMIC, "Only Dynamic Valid Shape Support Set Value.");
         PTO_ASSERT(rowMask <= Rows && colMask <= Cols, "colMask must less than Cols.");
@@ -1678,7 +1688,7 @@ using TileLeftCompact = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::Ro
                              SLayout::RowMajor, TileConfig::fractalABSize, PadValue::Null, CompactMode::Normal>;
 #endif
 
-#if (!defined(PTO_NPU_ARCH_A2A3) && !defined(PTO_NPU_ARCH_KIRINX90)) || defined(__CPU_SIM) || defined(__COSTMODEL)
+#if (!defined(PTO_NPU_ARCH_A2A3) && !defined(PTO_NPU_ARCH_KIRINX90)) || defined(__CPU_SIM)
 template <typename Element_, const int Rows_, const int Cols_, const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileLeft = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::ColMajor, RowValid_, ColValid_,
                       SLayout::RowMajor, TileConfig::fractalABSize>;

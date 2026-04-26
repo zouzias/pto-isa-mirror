@@ -48,7 +48,11 @@ __global__ AICORE void runTCOLSUM(__gm__ T __out__ *out, __gm__ T __in__ *src)
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    TCOLSUM(dstTile, srcTile, tmpTile, IsBinary);
+    if constexpr (IsBinary) {
+        TCOLSUM(dstTile, srcTile, tmpTile, IsBinary);
+    } else {
+        TCOLSUM(dstTile, srcTile);
+    }
 
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);

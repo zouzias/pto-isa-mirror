@@ -29,6 +29,13 @@ PTO_INTERNAL void TPRINT_IMPL(T &src)
         std::cout << '\n';
     }
 }
+
+template <typename TileData, typename GlobalData>
+PTO_INTERNAL void TPRINT_IMPL(TileData &src, GlobalData &tmp)
+{
+    TPRINT_IMPL(src);
+}
+
 } // namespace pto
 
 #endif

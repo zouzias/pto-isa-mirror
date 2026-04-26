@@ -395,6 +395,19 @@ TEST_F(TQUANTTEST, case_mxfp8_fp32_64x512_nz)
     test_tquant_mxfp8<64, 512, 1>();
 }
 
+TEST_F(TQUANTTEST, case_mxfp8_fp32_15x32_nd)
+{
+    test_tquant_mxfp8<15, 32, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_fp32_7x64_nd)
+{
+    test_tquant_mxfp8<7, 64, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_fp32_33x64_nd)
+{
+    test_tquant_mxfp8<33, 64, 0>();
+}
+
 // MXFP8 BF16
 TEST_F(TQUANTTEST, case_mxfp8_bf16_32x128_nd)
 {
@@ -407,6 +420,48 @@ TEST_F(TQUANTTEST, case_mxfp8_bf16_64x128_nd)
 TEST_F(TQUANTTEST, case_mxfp8_bf16_128x128_nd)
 {
     test_tquant_mxfp8_bf16<128, 128, 0>();
+}
+
+// Removing previous failing cases and Diagnostic comments...
+TEST_F(TQUANTTEST, case_mxfp8_bf16_1x32_nd)
+{
+    test_tquant_mxfp8_bf16<1, 32, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_bf16_2x16_nd)
+{
+    test_tquant_mxfp8_bf16<2, 16, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_bf16_3x32_nd)
+{
+    test_tquant_mxfp8_bf16<3, 32, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_bf16_5x96_nd)
+{
+    test_tquant_mxfp8_bf16<5, 96, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_bf16_1x16_nd)
+{
+    test_tquant_mxfp8_bf16<1, 16, 0>();
+}
+// Multi-flush vstas coverage: loop_num odd >= 3 => 16B pending in st_align at final vstas.
+// 3x256 => padded 768 elements => loop_num = ceil(768/256) = 3 (odd).
+TEST_F(TQUANTTEST, case_mxfp8_bf16_3x256_nd)
+{
+    test_tquant_mxfp8_bf16<3, 256, 0>();
+}
+// 5x256 => padded 1280 elements => loop_num = 5 (odd), exercises more vstus iterations.
+TEST_F(TQUANTTEST, case_mxfp8_bf16_5x256_nd)
+{
+    test_tquant_mxfp8_bf16<5, 256, 0>();
+}
+// Additional padding coverage (non-multiple-of-32 cols / large padding).
+TEST_F(TQUANTTEST, case_mxfp8_bf16_1x192_nd)
+{
+    test_tquant_mxfp8_bf16<1, 192, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_bf16_1x198_nd)
+{
+    test_tquant_mxfp8_bf16<1, 198, 0>();
 }
 
 TEST_F(TQUANTTEST, case_mxfp8_bf16_32x128_nz)
@@ -476,5 +531,4 @@ TEST_F(TQUANTTEST, case_int8_asym_fp32_256x128_nd)
 {
     test_tquant_int8_asym<256, 128, 0>();
 }
-
 } // namespace TQuantTest

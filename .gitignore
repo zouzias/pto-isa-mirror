@@ -1,8 +1,11 @@
 .git
 .idea
 .vscode
+.cursor
 .trae
 .DS_Store
+.opencode
+.claude
 build
 build_tests
 demos/**/build/

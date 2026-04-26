@@ -139,6 +139,10 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tor -g TORTest.case2
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartadd -g TPARTADDTest.case_float_64x64_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartmul -g TPARTMULTest.case_float_64x64_64x64_64x64
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartargmax -g TPARTARGMAXTest.case_float_uint32_tile_diff_32k_small_0
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartargmin -g TPARTARGMINTest.case_float_uint32_tile_diff_32k_small_0
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpow -g TPOWTest.case11
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpows -g TPOWSTest.case11
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsel -g TSELTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tfillpad -g TFILLPADTest.case_float_GT_128_127_VT_128_128_BLK1_PADMAX_PADMAX
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tmins
@@ -183,6 +187,51 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t trowargmin -g TROWARGMINTest.case_uint32_float_16x1_13x16_13x13
     python3 tests/script/run_st.py $ARGS -w -v a3 -t trowargmin -g TROWARGMINTest.case_uint32_float_8x1_3x4096_3x4095
     python3 tests/script/run_st.py $ARGS -w -v a3 -t trowargmin -g TROWARGMINTest.case_uint32_float_8x1_2x16384_2x16381
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nd_aligned_1
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nd_aligned_4_bf16
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nd_partial_validrow
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nd_unaligned_validcol_full_row
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nd_aligned_int8_strided
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nd_nonpow2_half
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nd_nonpow2_partial_float_unaligned_idxrow
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nd_unalignedvalid_int16
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nd_unalignedvalid_float_smallthan32B
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nd_unalignedvalid_uint16_taillarge
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nd_scalar_4_int8
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nd_scalar_nonpow2_float
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nz_1
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nz_multi_fractal_dst
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nz_half_large
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nz_nonpow2_float
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nz_partial_bf16
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nz_partial_float_unaligned_idxcol
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nz_unalignedvalid_validrow_half
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nz_scalar_5_int32
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nz_scalar_nonpow2_int8
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nd_aligned_1
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nd_aligned_4_bf16
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nd_partial_validrow
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nd_full_row_strided
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nd_aligned_uint16
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nd_partial_validboth_float
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nd_nonpow2_int8
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nd_nonpow2_int32
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nd_unalignedvalid_half
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nd_unalignedvalid_uint16_strided
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nd_unalignedvalid_float_smallthan32B
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nd_scalar_3_bf16
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nd_scalar_2_half
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nz_2
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nz_int32_partial
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nz_partial_float_unaligned_idxcol
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nz_nonpow2_partial_int8
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nz_unalignedvalid_int16
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nz_unalignedvalid_both_float
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nz_unalignedvalid_both_with_idx_bf16
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nz_scalar_5_int32
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nz_scalar_9_uint8_edge
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nz_scalar_nonpow2_int8
+
     if [ "$IS_AUTO_MODE" = "false" ]; then
       # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
       # besides, auto-sync doesn't work with CCE intrisics      
@@ -238,7 +287,11 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_conv
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsort32
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartadd
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpow
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpows
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartmul
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartargmax
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartargmin
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsel
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tload_gm2mat
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tload
@@ -277,6 +330,8 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tconcat
     python3 tests/script/run_st.py $ARGS -w -v a3 -t trowargmax
     python3 tests/script/run_st.py $ARGS -w -v a3 -t trowargmin
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec
     if [ "$IS_AUTO_MODE" = "false" ]; then
       # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
       # besides, auto-sync doesn't work with CCE intrisics
@@ -292,6 +347,8 @@ fi
 if [ "$ENABLE_A5" = "true" ]; then
   if [ "$ENABLE_SIMPLE" = "true" ]; then           # 单个用例
     python3 tests/script/build_st.py $ARGS -v a5 -t all
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartargmax -g TPARTARGMAXTest.case_fp32_64x64_64x64_64x64
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartargmin -g TPARTARGMINTest.case_fp32_64x64_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tconcatidx -g TCONCATTest.case_int16_16x32_16x16_16x16_8x16_8x16
     python3 tests/script/run_st.py $ARGS -w -v a5 -t taxpy -g TAXPYTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tdequant -g TDEQUANTTest.case1
@@ -369,6 +426,8 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartmul -g TPARTMULTest.case_float_64x64_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartmax -g TPARTMAXTest.case_fp32_64x64_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartmin -g TPARTMINTest.case_fp32_64x64_64x64_64x64
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tpow -g TPOWTest.case1
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tpows -g TPOWSTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tprelu -g TPRELUTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trem -g TREMTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowexpand -g TROWEXPANDTest.case5_float_16_8_16_127
@@ -417,9 +476,6 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tquant -g TQUANTTEST.case_int8_asym_fp32_128x128_nd
     python3 tests/script/run_st.py $ARGS -w -v a5 -t ttri -g TTRITest.case_float_128x128_lower_diag_n3
     python3 tests/script/run_st.py $ARGS -w -v a5 -t ttri -g TTRITest.case_float_128x128_upper_diag_0
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tpack -g TPACKTEST.case_fp32_fp16_128x128
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tpack -g TPACKTEST.case_fp32_fp8_128x128
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tpack -g TPACKTEST.case_fp16_fp8_128x128
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tconcat -g TCONCATTest.case_half_16x128_16x64_16x64_16x63_16x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram -g THISTOGRAMTest.case_8x128_b1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram -g THISTOGRAMTest.case_u32_6x912_b1_k64 
@@ -439,10 +495,27 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_dblinput_fp4e2m1_1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_twoinput_fp4e2m1_1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_dblinput_fp8e4_2
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nd_aligned_6
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nd_unaligned_validcol_2
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nd_unaligned_indexcol_2
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nd_unaligned_validcol_3
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nd_aligned_hif8
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nd_aligned_fp4_e2m1
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nd_scalar_2
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nz_2
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nz_6
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nz_indexcol_nonzero
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nz_multi_fractal_dst
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nz_hif8
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nz_scalar_1
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nz_scalar_fp4_e2m1
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nz_scalar_fp4_e1m2
 
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
     python3 tests/script/build_st.py $ARGS -v a5 -t all
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartargmax
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartargmin
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tconcatidx
     python3 tests/script/run_st.py $ARGS -w -v a5 -t taxpy
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tdequant
@@ -514,6 +587,8 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartadd
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartmul
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartmax
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tpow
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tpows
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartmin
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tprelu
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trem
@@ -558,16 +633,18 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tquant
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tdequant
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tconcat
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tpack
     python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert_acc2vec
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_zz
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec
   fi
 fi
 
 if [ "$ENABLE_KIRIN9030" = "true" ]; then
   python3 tests/script/build_st.py $ARGS -v kirin9030 -t all
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t textract
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tfillpad
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmov
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tadd
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcolsum
@@ -599,4 +676,20 @@ if [ "$ENABLE_KIRIN9030" = "true" ]; then
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmov_vect
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmuls
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsel
+fi
+
+if [ "$ENABLE_COMM" = "true" ]; then
+  if [ "$ENABLE_A3" = "true" ]; then
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tput
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tget
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tnotify
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/twait
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/ttest
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tgather
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tscatter
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/treduce
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tbroadcast
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tput_async
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tget_async
+  fi
 fi

@@ -81,7 +81,7 @@ DMA backend selection for `TPUT_ASYNC` and `TGET_ASYNC`:
 
 | Value | Description |
 |-------|-------------|
-| `DmaEngine::SDMA` | SDMA engine (supports 2D transfer) |
+| `DmaEngine::SDMA` | SDMA engine (supports 1D transfer) |
 | `DmaEngine::URMA` | URMA engine (supports 1D transfer, Ascend950 / NPU_ARCH 3510 only) |
 
 ### AsyncEvent
@@ -108,7 +108,7 @@ comm::AsyncSession session;
 comm::BuildAsyncSession<comm::DmaEngine::SDMA>(scratchTile, workspace, session);
 ```
 
-Defined in `include/pto/comm/async/async_types.hpp`. See [TPUT_ASYNC](TPUT_ASYNC.md) for construction details and parameters.
+Defined in `include/pto/comm/async_common/async_types.hpp`. See [TPUT_ASYNC](TPUT_ASYNC.md) for construction details and parameters.
 
 ### ParallelGroup
 
