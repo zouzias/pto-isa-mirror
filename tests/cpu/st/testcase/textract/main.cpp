@@ -8,6 +8,7 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 #include <pto/pto-inst.hpp>
+#include "cpu_tile_test_utils.h"
 #include "test_common.h"
 #include <gtest/gtest.h>
 #include <pto/common/constants.hpp>
@@ -262,3 +263,28 @@ TEST_F(TEXTRACTTest, case_bfloat16_t_bfloat16_t_32_32_31_31_IDX_8_16_L_0_0)
     textract_test<bfloat16_t, bfloat16_t, 32, 32, 31, 31, 8, 16, 0, 0>();
 }
 #endif
+
+TEST_F(TEXTRACTTest, FpVariantSlicesSourceTile)
+{
+    using SrcTile = Tile<TileType::Vec, float, 4, 8>;
+    using DstTile = Tile<TileType::Vec, float, 3, 8, BLayout::RowMajor, 3, 6>;
+    using FpTile = Tile<TileType::Vec, float, 1, 8>;
+
+    SrcTile src;
+    DstTile dst;
+    FpTile fp;
+    size_t addr = 0;
+    CpuTileTestUtils::AssignTileStorage(addr, src, dst, fp);
+
+    CpuTileTestUtils::FillLinear(src, 1.0f);
+    CpuTileTestUtils::FillAll(fp, 1.0f);
+
+    TEXTRACT_FP(dst, src, fp, 1, 2);
+
+    for (int r = 0; r < dst.GetValidRow(); ++r) {
+        for (int c = 0; c < dst.GetValidCol(); ++c) {
+            CpuTileTestUtils::ExpectValueEquals(CpuTileTestUtils::GetValue(dst, r, c),
+                                                CpuTileTestUtils::GetValue(src, r + 1, c + 2));
+        }
+    }
+}

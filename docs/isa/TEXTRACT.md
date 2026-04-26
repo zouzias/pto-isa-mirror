@@ -1,11 +1,13 @@
-﻿# TEXTRACT
+# pto.textract
 
+Canonical tile-instruction reference: [pto.textract](./tile/ops/layout-and-rearrangement/textract.md).
 
-## Tile Operation Diagram
+The PTO ISA manual now treats tile, vector, and scalar/control operations consistently: the canonical per-op pages live under `docs/isa/tile/ops/`, `docs/isa/vector/ops/`, and `docs/isa/scalar/ops/`.
 
-![TEXTRACT tile operation](../figures/isa/TEXTRACT.svg)
+## Canonical Location
 
-## Introduction
+- Instruction set overview: [Layout And Rearrangement](./tile/layout-and-rearrangement.md)
+- Canonical per-op page: [pto.textract](./tile/ops/layout-and-rearrangement/textract.md)
 
 Extract a smaller sub-tile from a larger source tile.
 
@@ -135,7 +137,7 @@ void example_manual() {
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
+# Manual mode: bind resources explicitly before issuing the instruction.
 # Optional for tile operands:
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
@@ -150,3 +152,4 @@ void example_manual() {
 pto.textract ins(%src, %idxrow, %idxcol : !pto.tile_buf<...>, dtype, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 
+Old links into the root-level tile pages continue to resolve through this wrapper, but new PTO ISA documentation should link to the grouped tile instruction path.

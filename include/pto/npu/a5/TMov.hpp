@@ -294,7 +294,7 @@ PTO_INTERNAL void GenerateB8IndicesZZToUB(__ubuf__ uint8_t *dst, __ubuf__ uint8_
                                           unsigned rows, unsigned groupedCols)
 {
     const uint16_t P = groupedCols / 2;
-    const uint16_t rowBlockCount = (rows + 15) / 16; // ceil-divide to support non-16-aligned row counts
+    const uint16_t rowBlockCount = (rows + 15) / 16;            // ceil-divide to support non-16-aligned row counts
     const uint16_t N_blk = rowBlockCount * P;
     const uint16_t vlElem = REPEAT_BYTE / sizeof(uint16_t);     // 128
     constexpr uint16_t blkElem = BLOCK_SIZE / sizeof(uint16_t); // 16

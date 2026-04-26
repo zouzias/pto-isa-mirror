@@ -52,6 +52,15 @@ def parse_arguments() -> argparse.Namespace:
         default=30,
         help="Per-test timeout in seconds.",
     )
+    parser.add_argument(
+        "--build-folder",
+        required=False,
+        help=(
+            "Optional build root used to isolate generated build artifacts. "
+            "When set, each CPU test suite builds under this directory using "
+            "its default leaf name."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -130,15 +139,31 @@ TEST_SOURCES = [
 ]
 
 
+def resolve_build_dir(repo_root: Path, build_rel: str, args: argparse.Namespace) -> Path:
+    if not args.build_folder:
+        return repo_root / build_rel
+
+    base = Path(args.build_folder)
+    if not base.is_absolute():
+        base = repo_root / base
+    return base / Path(build_rel).name
+
+
 def build_all_cpu_tests(repo_root: Path, args: argparse.Namespace) -> None:
     for src_rel, build_rel in TEST_SOURCES:
         tests_path = repo_root / src_rel
-        this_build_dir = repo_root / build_rel
+        this_build_dir = resolve_build_dir(repo_root, build_rel, args)
         if not tests_path.exists():
             print(f"Skipping non-existent source: {tests_path}")
             continue
         print(f"Building {src_rel} -> {build_rel}")
         build_single_test(repo_root, tests_path, this_build_dir, args)
+
+
+def build_gen_data_env(repo_root: Path, src_rel: str, base_env: dict[str, str]) -> dict[str, str]:
+    env = base_env.copy()
+    env["PYTHONPATH"] = str(repo_root / src_rel) + os.pathsep + str(repo_root) + os.pathsep + env.get("PYTHONPATH", "")
+    return env
 
 
 def generate_test_data(repo_root: Path, args: argparse.Namespace) -> None:
@@ -150,12 +175,10 @@ def generate_test_data(repo_root: Path, args: argparse.Namespace) -> None:
         testcase_src_root = repo_root / src_rel / "testcase"
         if not testcase_src_root.exists():
             continue
-        testcase_build_root = repo_root / build_rel / "testcase"
+        testcase_build_root = resolve_build_dir(repo_root, build_rel, args) / "testcase"
         testcase_build_root.mkdir(parents=True, exist_ok=True)
 
-        env = gen_env.copy()
-        env["PYTHONPATH"] = str(repo_root / src_rel) + os.pathsep + str(repo_root) + \
-            os.pathsep + env.get("PYTHONPATH", "")
+        env = build_gen_data_env(repo_root, src_rel, gen_env)
 
         with multiprocessing.Pool(processes=args.jobs) as pool:
             run_args = [[sys.executable, str(script)] for script in sorted(testcase_src_root.glob("*/gen_data.py"))]
@@ -170,7 +193,7 @@ def run_binaries(repo_root: Path, args: argparse.Namespace) -> int:
     for src_rel, build_rel in TEST_SOURCES:
         name = src_rel.split("/")[-2].upper()
         print("=" * 60 + f" {name} " + "=" * 60)
-        build_dir = repo_root / build_rel
+        build_dir = resolve_build_dir(repo_root, build_rel, args)
         bin_dir = build_dir / "bin"
         if not bin_dir.exists():
             continue
@@ -218,13 +241,16 @@ def run_binaries(repo_root: Path, args: argparse.Namespace) -> int:
     return 0 if failed == 0 else 1
 
 
+def prepare_build_dirs(repo_root: Path, args: argparse.Namespace) -> None:
+    for _, build_rel in TEST_SOURCES:
+        resolve_build_dir(repo_root, build_rel, args).mkdir(parents=True, exist_ok=True)
+
+
 def main() -> int:
     args = parse_arguments()
     repo_root = Path(__file__).resolve().parents[2]
 
-    for src_rel, build_rel in TEST_SOURCES:
-        build_dir = repo_root / build_rel
-        build_dir.mkdir(parents=True, exist_ok=True)
+    prepare_build_dirs(repo_root, args)
 
     build_all_cpu_tests(repo_root, args)
     generate_test_data(repo_root, args)
