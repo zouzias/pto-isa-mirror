@@ -202,7 +202,7 @@ class TMovParams:
         self.index_cols = index_cols
         self.is_insert = is_insert
         self.dst_row = dst_row
-        self.dst_col = dst_col        
+        self.dst_col = dst_col
 
 
 if __name__ == "__main__":

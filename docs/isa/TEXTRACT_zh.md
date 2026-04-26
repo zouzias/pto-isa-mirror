@@ -1,6 +1,6 @@
-﻿# TEXTRACT
+# pto.textract
 
-## 指令示意图
+旧路径兼容入口。规范页见 [pto.textract](./tile/ops/layout-and-rearrangement/textract_zh.md)。
 
 ![TEXTRACT tile operation](../figures/isa/TEXTRACT.svg)
 
@@ -150,3 +150,4 @@ void example_manual() {
 pto.textract ins(%src, %idxrow, %idxcol : !pto.tile_buf<...>, dtype, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 
+新的 PTO ISA 文档应直接链接到分组后的指令集路径。

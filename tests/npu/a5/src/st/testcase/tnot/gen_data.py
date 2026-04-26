@@ -27,7 +27,7 @@ def gen_golden_data(case_name, param):
         input1 = np.random.randint(-100, 100, size=[height, width]).astype(dtype)
     elif dtype == np.int16 or dtype == np.uint16:
         input1 = np.random.randint(-30_000, 30_000, size=[height, width]).astype(dtype)
-    elif dtype == np.int32 or dtype == np.uint32: 
+    elif dtype == np.int32 or dtype == np.uint32:
         input1 = np.random.randint(-1_000_000, 1_000_000, size=[height, width]).astype(dtype)
 
     golden = ~input1
@@ -38,13 +38,13 @@ def gen_golden_data(case_name, param):
 
 class TestParams:
     def __init__(
-        self, 
-        dtype, 
-        global_row, 
-        global_col, 
-        tile_row, 
-        tile_col, 
-        valid_row, 
+        self,
+        dtype,
+        global_row,
+        global_col,
+        tile_row,
+        tile_col,
+        valid_row,
         valid_col
     ):
         self.dtype = dtype

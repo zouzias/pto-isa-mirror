@@ -10,7 +10,7 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 import os
-import numpy as np 
+import numpy as np
 
 np.random.seed(0)
 
@@ -19,7 +19,7 @@ def get_golden_data(case_name, param):
     data_type = param.data_type
     rows = param.src_valid_row
     cols = param.src_valid_col
-    input_arr = np.random.uniform(0, 20, size=(rows, cols)).astype(data_type) 
+    input_arr = np.random.uniform(0, 20, size=(rows, cols)).astype(data_type)
     input_arr.tofile("input_arr.bin")
     golden = input_arr.copy()
     golden.tofile(f"golden.bin")
@@ -33,7 +33,7 @@ class TMoveParams:
         self.dst_valid_row = dst_valid_row
         self.dst_valid_col = dst_valid_col
 
-    
+
 if __name__ == "__main__":
     case_name_list = [f"TMOVTest.vect_copy_case{i}" for i in range(1, 16)]
 
@@ -49,7 +49,7 @@ if __name__ == "__main__":
         TMoveParams(np.float16, 128, 128, 128, 128),
         TMoveParams(np.float16, 128, 32, 128, 32),
         TMoveParams(np.float16, 128, 64, 128, 64),
-        
+
         TMoveParams(np.uint8, 64, 64, 64, 64),
         TMoveParams(np.uint8, 32, 32, 32, 32),
         TMoveParams(np.uint8, 128, 128, 128, 128),
@@ -67,4 +67,3 @@ if __name__ == "__main__":
         get_golden_data(case_name, case_params_list[i])
 
         os.chdir(original_dir)
-    

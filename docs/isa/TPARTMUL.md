@@ -1,11 +1,13 @@
-﻿# TPARTMUL
+# pto.tpartmul
 
+Canonical tile-instruction reference: [pto.tpartmul](./tile/ops/irregular-and-complex/tpartmul.md).
 
-## Tile Operation Diagram
+The PTO ISA manual now treats tile, vector, and scalar/control operations consistently: the canonical per-op pages live under `docs/isa/tile/ops/`, `docs/isa/vector/ops/`, and `docs/isa/scalar/ops/`.
 
-![TPARTMUL tile operation](../figures/isa/TPARTMUL.svg)
+## Canonical Location
 
-## Introduction
+- Instruction set overview: [Irregular And Complex](./tile/irregular-and-complex.md)
+- Canonical per-op page: [pto.tpartmul](./tile/ops/irregular-and-complex/tpartmul.md)
 
 Performs elementwise multiplication over the destination valid region. When both `src0` and `src1` are valid at an element, the result is their product; when only one input is valid there, the result copies that input value. Handling of other mismatched-validity cases is implementation-defined.
 
@@ -117,7 +119,7 @@ void example_manual() {
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
+# Manual mode: bind resources explicitly before issuing the instruction.
 # Optional for tile operands:
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
@@ -132,3 +134,4 @@ void example_manual() {
 pto.tpartmul ins(%src0, %src1 : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
+Old links into the root-level tile pages continue to resolve through this wrapper, but new PTO ISA documentation should link to the grouped tile instruction path.

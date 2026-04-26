@@ -23,7 +23,6 @@ import platform
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-
 def _format_cmd(command: List[str]) -> str:
     return " ".join(map(str, command))
 
@@ -346,8 +345,15 @@ def run_binary(binary: Path, build_type: str, cwd: Optional[Path] = None) -> Non
     run_command([str(binary)], cwd=run_cwd)
 
 
-def build_and_run_demo(demo_name: str, repo_root: Path, build_type: str, cxx: Optional[str], cc: Optional[str], *,
-	                   verbose: bool) -> None:
+def build_and_run_demo(
+    demo_name: str,
+    repo_root: Path,
+    build_type: str,
+    cxx: Optional[str],
+    cc: Optional[str],
+    *,
+    verbose: bool,
+) -> None:
     demos_root = repo_root / ".." / "demos" / "cpu"
     demo_map: dict[str, tuple[Path, str]] = {
         "gemm": (demos_root / "gemm_demo", "gemm_demo"),

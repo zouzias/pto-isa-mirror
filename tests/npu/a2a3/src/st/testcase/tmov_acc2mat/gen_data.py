@@ -178,7 +178,7 @@ def gen_golden_data(case_name, param):
     block_cols = 16
     if (dst_type == np.int8 or dst_type == np.uint8):
         block_cols = 32
-    
+
     if (param.is_insert):
         dst_data = np.zeros((param.dst_row, param.dst_col), dtype=dst_type)
         dst_data.astype(dst_type).tofile("./dst.bin")
@@ -269,7 +269,7 @@ if __name__ == "__main__":
         "TMOVTest.case_nz2nz_fb_quant_extract",
         ##tinsert
         "TMOVTest.case_nz2nz_insert",
-        "TMOVTest.case_nz2nz_sc_quant_insert", 
+        "TMOVTest.case_nz2nz_sc_quant_insert",
         "TMOVTest.case_nz2nz_fb_quant_insert",
     ]
 
@@ -313,7 +313,7 @@ if __name__ == "__main__":
         ##int32->int16
         TmovParams(np.int8, np.int8, np.int16, 12, 32, 31, 16, 32, 32, False, True, True, None, 2),
         TmovParams(np.int8, np.int8, np.int16, 76, 128, 61, 80, 128, 64, True, False, True, np.uint64),
-        
+
         TmovParams(np.float16, np.float16, np.float16, 64, 64, 64, 64, 64, 64, False, False, False, None, 1, 16, 16),
         TmovParams(np.int8, np.int8, np.float16, 96, 128, 64, 96, 128, 64, False, True, False, None, 2, 48, 48),
         TmovParams(np.float16, np.float16, np.int8, 128, 64, 128, 128, 64, 128, True, False, False, np.uint64,
@@ -324,7 +324,7 @@ if __name__ == "__main__":
         TmovParams(np.int8, np.int8, np.float16, 96, 128, 64, 96, 128, 64, False, True, False, None, 2, 48, 48,
             True, 256, 256),
         TmovParams(np.float16, np.float16, np.int8, 128, 64, 128, 128, 64, 128, True, False, False, np.uint64,
-            1, 32, 32, True, 256, 256), 
+            1, 32, 32, True, 256, 256),
     ]
 
     for i, case_name in enumerate(case_name_list):

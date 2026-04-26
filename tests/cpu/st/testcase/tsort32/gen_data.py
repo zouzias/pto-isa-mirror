@@ -25,7 +25,7 @@ def gen_golden_data(param):
         stride = 4
     else:
         stride = 2
-    
+
     # 生成随机数据
     total_elements = row * col
     input_arr = np.random.rand(row, col) * 10

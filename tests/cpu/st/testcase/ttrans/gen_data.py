@@ -51,5 +51,3 @@ if __name__ == "__main__":
         gen_golden(case_name, case_params_list[i])
 
         os.chdir(original_dir)
-
-

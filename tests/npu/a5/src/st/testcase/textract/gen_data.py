@@ -128,10 +128,10 @@ def data_processing_b4(valid_m, valid_k, valid_n, x1_gm, x2_gm, x1_slice, x2_sli
     c0_size = 2
     x2_mx_gm = x2_mx_gm.transpose()
 
-    x1_mx_gm = x1_mx_gm.reshape((int(x1_mx_gm.shape[0] // 16), 16, 
+    x1_mx_gm = x1_mx_gm.reshape((int(x1_mx_gm.shape[0] // 16), 16,
                                 int(x1_mx_gm.shape[1] // c0_size), c0_size)).transpose(2, 0, 1, 3)
     x1_mx_gm = x1_mx_gm.reshape(x1_mx_gm.shape[0] * x1_mx_gm.shape[1], x1_mx_gm.shape[2] * x1_mx_gm.shape[3])
-    x2_mx_gm = x2_mx_gm.reshape((int(x2_mx_gm.shape[0] // 16), 16, 
+    x2_mx_gm = x2_mx_gm.reshape((int(x2_mx_gm.shape[0] // 16), 16,
                                 int(x2_mx_gm.shape[1] // c0_size), c0_size)).transpose(2, 0, 1, 3)
     x2_mx_gm = x2_mx_gm.reshape(x2_mx_gm.shape[0] * x2_mx_gm.shape[1], x2_mx_gm.shape[2] * x2_mx_gm.shape[3])
 
@@ -302,11 +302,11 @@ if __name__ == "__main__":
         textractParams(np.float16, np.float16, np.float32, 32, 96, 64, 0, 0, 0, 0, 0),
         textractParams(np.float32, np.float32, np.float32, 128, 48, 64, 0, 0, 0, 0, 0),
         textractParams(np.int8, np.int8, np.int32, 128, 128, 64, 0, 0, 0, 0, 0),
-        # startIdx 
+        # startIdx
         textractParams(np.float16, np.float16, np.float32, 64, 96, 64, 32, 16, 16, 0, 0),
         textractParams(np.float32, np.float32, np.float32, 64, 128, 64, 32, 32, 16, 0, 0),
         textractParams(np.int8, np.int8, np.int32, 128, 128, 64, 32, 64, 32, 0, 0),
-        # transpose，startIdx 
+        # transpose，startIdx
         textractParams(np.float16, np.float16, np.float32, 64, 128, 64, 0, 64, 0, 1, 1),
         textractParams(np.float32, np.float32, np.float32, 64, 64, 128, 0, 0, 32, 1, 1),
         textractParams(np.int8, np.int8, np.int32, 128, 64, 128, 32, 0, 0, 1, 1),
@@ -338,7 +338,7 @@ if __name__ == "__main__":
         # dynamic shape
         textractParams(np.int8, np.int8, np.int32, 64, 96, 64, 0, 0, 0, 1, 1),
         textractParams(np.float16, np.float16, np.float32, 64, 128, 64, 0, 0, 0, 1, 0),
-        textractParams(np.float32, np.float32, np.float32, 64, 128, 64, 0, 0, 0, 0, 1), 
+        textractParams(np.float32, np.float32, np.float32, 64, 128, 64, 0, 0, 0, 0, 1),
         # unaligned, transpose
         textractParams(np.int8, np.int8, np.int32, 65, 40, 66, 0, 0, 0, 1, 1, 96, 64, 96),
         textractParams(np.float16, np.float16, np.float32, 65, 40, 66, 0, 0, 0, 1, 1, 80, 48, 80),

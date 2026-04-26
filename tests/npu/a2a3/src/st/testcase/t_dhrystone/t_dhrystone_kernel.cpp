@@ -231,7 +231,7 @@ AICORE bool func_2(Str_30 str_1_par_ref, Str_30 str_2_par_ref)
             return true;
         } else /* executed */
             return false;
-    } /* if ch_loc */
+    }          /* if ch_loc */
 } /* func_2 */
 
 AICORE bool func_3(Enumeration enum_par_val)

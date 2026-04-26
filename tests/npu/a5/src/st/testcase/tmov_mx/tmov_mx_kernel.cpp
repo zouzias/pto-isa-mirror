@@ -135,7 +135,7 @@ __global__ AICORE void RunTMOVMX(__gm__ OutType *out, __gm__ AType *src0, __gm__
     if constexpr ((kAlign - validK) * sizeof(AType) >= C0_SIZE_BYTE) {
         TFILLPAD(aMatTile, aMatTile); // TLOAD can only pad to 32B，mmad_mx needs to be aligned to 64 in k direction
     }
-    TFILLPAD(bMatTile, bMatTile); // B input is nk,  TLOAD does not pad zeros in k direction
+    TFILLPAD(bMatTile, bMatTile);     // B input is nk,  TLOAD does not pad zeros in k direction
 
     TLOAD<TileScaleAData, GlobalDataSrc2>(aScaleMatTile, src2Global);
     TLOAD<TileScaleBData, GlobalDataSrc3>(bScaleMatTile, src3Global);

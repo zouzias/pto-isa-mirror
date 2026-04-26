@@ -307,12 +307,12 @@ def gen_golden_data(case_name, param):
     elif param.load_type == DataFormat['NCDHW2NDC1HWC0'].value:
         # 参数说明:
         # shape0: 输出的N维度
-        # shape1: 输出的D维度  
+        # shape1: 输出的D维度
         # shape2: 输出的C1维度
         # shape3: 输出的H维度
         # shape4: 输出的W维度
         # c0_size: C0大小由数据类型决定
-        
+
         # whole_shape0: 输入x1_gm的N维度
         # whole_shape1: 输入x1_gm的C维度
         # whole_shape2: 输入x1_gm的D维度
@@ -337,7 +337,7 @@ def gen_golden_data(case_name, param):
         src_d = shape2
         src_h = shape3
         src_w = shape4
-        
+
         n = whole_shape0
         c = whole_shape1
         d = whole_shape2
@@ -348,7 +348,7 @@ def gen_golden_data(case_name, param):
         n_16 = param.basek
         # Generate random input data
         x1_gm = np.random.randint(1, 5, size=(n, c, d, h, w)).astype(src_type)
-        
+
         # Create golden NCDHW tensor from the input
         golden_nchw = np.zeros(shape=(n_16 * 16, c1_d_h_w * c0_size // (src_h * src_w), src_h, src_w), dtype=src_type)
         golden_ncdhw = x1_gm[0:src_n, 0:src_c, 0:src_d, 0:src_h, 0:src_w]

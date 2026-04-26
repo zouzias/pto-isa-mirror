@@ -51,14 +51,14 @@ def gen_golden_data(param):
 
 class TestParams:
     def __init__(
-        self, 
-        dtype, 
-        global_row, 
-        global_col, 
-        tile_row, 
-        tile_col, 
-        valid_row, 
-        valid_col, 
+        self,
+        dtype,
+        global_row,
+        global_col,
+        tile_row,
+        tile_col,
+        valid_row,
+        valid_col,
         pad_value_type=PAD_VALUE_NULL
     ):
         self.dtype = dtype

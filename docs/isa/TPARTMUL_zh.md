@@ -1,8 +1,9 @@
-﻿# TPARTMUL
+# pto.tpartmul
 
-## 指令示意图
+旧路径兼容入口。规范页见 [pto.tpartmul](./tile/ops/irregular-and-complex/tpartmul_zh.md)。
 
-![TPARTMUL tile operation](../figures/isa/TPARTMUL.svg)
+- 指令集：[不规则与复杂指令集](./tile/irregular-and-complex_zh.md)
+- 规范页：[pto.tpartmul](./tile/ops/irregular-and-complex/tpartmul_zh.md)
 
 ## 简介
 

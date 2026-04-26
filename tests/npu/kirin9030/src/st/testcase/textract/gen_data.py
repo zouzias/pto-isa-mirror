@@ -181,10 +181,10 @@ if __name__ == "__main__":
         # normal
         textractParams(np.float16, np.float16, np.float16, 32, 96, 64, 0, 0, 0, 0, 0),
         textractParams(np.int8, np.int8, np.int32, 128, 128, 64, 0, 0, 0, 0, 0),
-        # startIdx 
+        # startIdx
         textractParams(np.float16, np.float16, np.float16, 64, 96, 64, 32, 16, 16, 0, 0),
         textractParams(np.int8, np.int8, np.int32, 128, 128, 64, 32, 64, 32, 0, 0),
-        # transpose，startIdx 
+        # transpose，startIdx
         textractParams(np.float16, np.float16, np.float16, 64, 128, 64, 0, 64, 0, 1, 1),
         textractParams(np.int8, np.int8, np.int32, 128, 64, 128, 32, 0, 0, 1, 1),
         # dynamic shape

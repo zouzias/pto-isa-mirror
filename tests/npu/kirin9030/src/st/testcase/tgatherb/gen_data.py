@@ -90,7 +90,7 @@ if __name__ == "__main__":
     # Ensure the testcases directory exists
     if not os.path.exists(testcases_dir):
         os.makedirs(testcases_dir)
-    
+
     case_params_list = [
         TGatherBParam(np.float32, 2, 128, 2, 16, 2, 128),
         TGatherBParam(np.int32, 2, 128, 2, 16, 2, 128),
