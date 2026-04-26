@@ -31,7 +31,7 @@ Indices are interpreted as linear element offsets into the source.
 
 ## Assembly Syntax
 
-PTO-AS form: see [docs/assembly/PTO-AS.md](/docs/assembly/PTO-AS.md).
+PTO-AS form: see [PTO-AS Specification](../../../../../../../docs/assembly/PTO-AS.md).
 
 Row-indexed gather:
 
@@ -117,18 +117,18 @@ void example_embedding_lookup(__gm__ T* table, __gm__ int32_t* indices) {
     using TableShape = Shape<1, 1, 1, TableRows, RowWidth>;
     using TableStride = Stride<1, 1, 1, RowWidth, 1>;
     using TableTensor = GlobalTensor<T, TableShape, TableStride, Layout::ND>;
-    
+
     TableTensor tableGM(table);
     IdxTile idx;
     DstTile dst;
-    
+
     TASSIGN(idx, 0x0);
     TASSIGN(dst, 0x1000);
-    
+
     // Load indices from global memory
     GlobalTensor<int32_t, Shape<1,1,1,1,NumRows>, Stride<1,1,1,1,1>> idxGlobal(indices);
     TLOAD(idx, idxGlobal);
-    
+
     // Perform gather with wrap mode for hash tables
     MGATHER<GatherOOB::Wrap>(dst, tableGM, idx);
 }
@@ -147,14 +147,14 @@ void example_sparse_gather(__gm__ float* data, __gm__ int32_t* sparseIndices) {
     using DataShape = Shape<1, 1, 1, 1024, 64>;
     using DataStride = Stride<1, 1, 1, 64, 1>;
     using DataTensor = GlobalTensor<float, DataShape, DataStride, Layout::ND>;
-    
+
     DataTensor dataGM(data);
     IdxTile idx;
     DstTile dst;
-    
+
     TASSIGN(idx, 0x0);
     TASSIGN(dst, 0x2000);
-    
+
     // Gather with zero-fill for OOB indices
     MGATHER<GatherOOB::Zero>(dst, dataGM, idx);
 }
@@ -173,16 +173,16 @@ void example_manual() {
     using TableShape = Shape<1, 1, 1, 65536, 64>;
     using TableStride = Stride<1, 1, 1, 64, 1>;
     using TableTensor = GlobalTensor<half, TableShape, TableStride, Layout::ND>;
-    
+
     __gm__ half* tablePtr = /* ... */;
     TableTensor tableGM(tablePtr);
-    
+
     IdxTile idx;
     DstTile dst;
-    
+
     TASSIGN(idx, 0x0);
     TASSIGN(dst, 0x1000);
-    
+
     MGATHER<GatherOOB::Clamp>(dst, tableGM, idx);
 }
 ```
@@ -199,8 +199,8 @@ void example_manual() {
 
 ## Related Instructions
 
-- [`TLOAD`](/docs/isa/TLOAD.md): Contiguous block transfer from GM to Tile
-- [`TGATHER`](/docs/isa/TGATHER.md): Index-based gather within tiles (UB-to-UB)
+- [`TLOAD`](../../../../../../../docs/isa/TLOAD.md): Contiguous block transfer from GM to Tile
+- [`TGATHER`](../../../../../../../docs/isa/TGATHER.md): Index-based gather within tiles (UB-to-UB)
 - [`MSCATTER`](../mscatter/MSCATTER.md): Indexed scatter from Tile to GM (inverse operation)
 
 ## Test Cases

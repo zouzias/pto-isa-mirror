@@ -48,8 +48,6 @@ def rand_nonzero(dtype, shape):
     if dtype in (np.uint16, np.int16):
         return np.random.randint(1, 65536, size=shape, dtype=np.uint16)
     return np.random.uniform(1, 10, size=shape).astype(dtype)
-
-
 def run_case(name, gen_fn, *args):
     os.makedirs(name, exist_ok=True)
     orig = os.getcwd()

@@ -1,29 +1,22 @@
 ﻿# TWAIT
 
-## Introduction
+`TWAIT` is part of the [Non-ISA Supporting Ops](../non-isa-supporting-ops.md) instruction set.
 
-Blocking wait until signal(s) meet comparison condition. Used in conjunction with `TNOTIFY` for flag-based synchronization.
+## Summary
 
-Supports single signal or multi-dimensional signal tensor (up to 5-D, shape derived from GlobalTensor).
+Blocking wait until a signal (or all elements of a signal tensor) satisfies a comparison condition against a constant. Used with `TNOTIFY` for inter-NPU flag-based synchronization.
 
+## Mechanism
 
-## Math Interpretation
+`TWAIT` spins on a signal location until the comparison condition is satisfied. The operation halts the current NPU's scalar unit until the condition becomes true.
 
-Wait (spin) until the following condition is satisfied:
+Single signal: the NPU waits until the scalar at the signal address satisfies `signal cmp cmpValue`.
 
-Single signal:
+Signal tensor: the NPU waits until **all** elements in the tensor satisfy the condition simultaneously.
 
-$$ \mathrm{signal} \;\mathtt{cmp}\; \mathrm{cmpValue} $$
-
-Signal tensor (all elements must satisfy):
-
-$$ \forall d_0, d_1, d_2, d_3, d_4: \mathrm{signal}_{d_0, d_1, d_2, d_3, d_4} \;\mathtt{cmp}\; \mathrm{cmpValue} $$
-
-where `cmp` ∈ {`EQ`, `NE`, `GT`, `GE`, `LT`, `LE`}
+The signal address must point to local (on-chip) memory on the current NPU.
 
 ## Assembly Syntax
-
-PTO-AS form: see [PTO-AS Specification](../../assembly/PTO-AS.md).
 
 ```text
 twait %signal, %cmp_value {cmp = #pto.cmp<EQ>} : (!pto.memref<i32>, i32)
@@ -39,24 +32,44 @@ template <typename GlobalSignalData, typename... WaitEvents>
 PTO_INST void TWAIT(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp, WaitEvents&... events);
 ```
 
+## Inputs
+
+| Operand | Description |
+|---------|-------------|
+| `signalData` | Signal or signal tensor. Must be on local NPU memory. |
+| `cmpValue` | Constant comparison value. |
+| `cmp` | Comparison operator. |
+
+### Comparison Operators
+
+| Value | Condition |
+|-------|-----------|
+| `EQ` | `signal == cmpValue` |
+| `NE` | `signal != cmpValue` |
+| `GT` | `signal > cmpValue` |
+| `GE` | `signal >= cmpValue` |
+| `LT` | `signal < cmpValue` |
+| `LE` | `signal <= cmpValue` |
+
+## Expected Outputs
+
+None. The operation blocks until the condition is satisfied.
+
+## Side Effects
+
+Halts the scalar unit. Does not affect other NPUs.
+
 ## Constraints
 
-- **Type constraints**:
-    - `GlobalSignalData::DType` must be `int32_t` (32-bit signal).
-- **Memory constraints**:
-    - `signalData` must point to local address (on current NPU).
-- **Shape semantics**:
-    - For single signal: Shape is `<1,1,1,1,1>`.
-    - For signal tensor: Shape determines the multi-dimensional region (up to 5-D) to wait on. All signals in the tensor must satisfy the condition.
-- **Comparison operators** (WaitCmp):
-  | Value | Condition |
-  |-------|-----------|
-  | `EQ` | `signal == cmpValue` |
-  | `NE` | `signal != cmpValue` |
-  | `GT` | `signal > cmpValue` |
-  | `GE` | `signal >= cmpValue` |
-  | `LT` | `signal < cmpValue` |
-  | `LE` | `signal <= cmpValue` |
+- `GlobalSignalData::DType` must be `int32_t`.
+- `signalData` must point to local address on the current NPU.
+- For signal tensors: all elements must satisfy the condition simultaneously.
+- Up to 5-D tensor shapes are supported.
+
+## Exceptions
+
+- Using a non-local signal address is undefined behavior.
+- The signal address must be accessible throughout the wait duration.
 
 ## Examples
 
@@ -64,68 +77,40 @@ PTO_INST void TWAIT(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp,
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
-
 using namespace pto;
 
-void wait_for_ready(__gm__ int32_t* local_signal) {
-    comm::Signal sig(local_signal);
-
-    // Wait until signal == 1
-    comm::TWAIT(sig, 1, comm::WaitCmp::EQ);
+void wait_ready(__gm__ int32_t* local_signal) {
+  comm::Signal sig(local_signal);
+  comm::TWAIT(sig, 1, comm::WaitCmp::EQ);
 }
 ```
 
 ### Wait for Signal Matrix
 
 ```cpp
-#include <pto/comm/pto_comm_inst.hpp>
-
-using namespace pto;
-
-// Wait for signals from a 4x8 dense grid of workers
 void wait_worker_grid(__gm__ int32_t* signal_matrix) {
-    comm::Signal2D<4, 8> grid(signal_matrix);
-
-    // Wait until all 32 signals == 1
-    comm::TWAIT(grid, 1, comm::WaitCmp::EQ);
-}
-```
-
-### Wait for Counter Threshold
-
-```cpp
-#include <pto/comm/pto_comm_inst.hpp>
-
-using namespace pto;
-
-void wait_for_count(__gm__ int32_t* local_counter, int expected_count) {
-    comm::Signal counter(local_counter);
-
-    // Wait until counter >= expected_count
-    comm::TWAIT(counter, expected_count, comm::WaitCmp::GE);
+  comm::Signal2D<4, 8> grid(signal_matrix);
+  comm::TWAIT(grid, 1, comm::WaitCmp::EQ);  // waits until all 32 signals == 1
 }
 ```
 
 ### Producer-Consumer Pattern
 
 ```cpp
-#include <pto/comm/pto_comm_inst.hpp>
-
-using namespace pto;
-
-// Producer: notify when data is ready
+// Producer
 void producer(__gm__ int32_t* remote_flag) {
-    // ... produce data ...
-
-    comm::Signal flag(remote_flag);
-    comm::TNOTIFY(flag, 1, comm::NotifyOp::Set);
+  comm::Signal flag(remote_flag);
+  comm::TNOTIFY(flag, 1, comm::NotifyOp::Set);
 }
 
-// Consumer: wait for data
+// Consumer
 void consumer(__gm__ int32_t* local_flag) {
-    comm::Signal flag(local_flag);
-    comm::TWAIT(flag, 1, comm::WaitCmp::EQ);
-
-    // ... consume data ...
+  comm::Signal flag(local_flag);
+  comm::TWAIT(flag, 1, comm::WaitCmp::EQ);
 }
 ```
+
+## See Also
+
+- [Collective Communication](../collective-communication.md) for related operations
+- `TNOTIFY` for the signaling half of this protocol

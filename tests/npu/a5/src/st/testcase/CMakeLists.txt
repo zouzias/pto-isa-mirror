@@ -16,7 +16,7 @@ function(pto_vec_st NAME)
         add_compile_definitions(STRAIGHT_INTRINSICS_IMPL)
     endif()
 
-    target_include_directories(${NAME}_kernel PRIVATE 
+    target_include_directories(${NAME}_kernel PRIVATE
         ${ASCEND_HOME_PATH}/pkg_inc/
         ${ASCEND_HOME_PATH}/pkg_inc/profiling/
         ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
@@ -28,7 +28,7 @@ function(pto_vec_st NAME)
     target_include_directories(${NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../common
     )
-    
+
     target_link_directories(${NAME} PUBLIC
         ${ASCEND_HOME_PATH}/lib64
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib

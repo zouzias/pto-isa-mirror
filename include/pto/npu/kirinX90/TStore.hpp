@@ -326,9 +326,9 @@ PTO_INTERNAL void TStoreAccNz2nd(typename GlobalData::DType *dstAddr, __cc__ typ
                      ((static_cast<uint64_t>(reluPreMode) & 0x7) << 39) |     //  Xt[41:39] relu pre mode
                      (static_cast<uint64_t>(nz2ndEn & 0x1) << 43);            // Xt[43] nz2nd control bit
     uint64_t ndParaSPR = 0;
-    ndParaSPR = ndNum |                                               // ND_PARA[15:0] the number of source nd
-                (static_cast<uint64_t>(srcNdStride & 0xffff) << 16) | // ND_PARA[31:16] the stride of source nd
-                (static_cast<uint64_t>(dstNdStride & 0xffff) << 32);  // ND_PARA[47:32] the stride of destination nd
+    ndParaSPR = ndNum |                                                       // ND_PARA[15:0] the number of source nd
+                (static_cast<uint64_t>(srcNdStride & 0xffff) << 16) |         // ND_PARA[31:16] the stride of source nd
+                (static_cast<uint64_t>(dstNdStride & 0xffff) << 32); // ND_PARA[47:32] the stride of destination nd
     set_nd_para(ndParaSPR);
     copy_matrix_cc_to_gm(dstAddr, srcAddr, xmReg, xtReg);
 }
@@ -383,7 +383,7 @@ PTO_INTERNAL void TStoreAccNz2nz(typename GlobalData::DType *dstAddr, __cc__ typ
         (static_cast<uint64_t>(mSize & 0xffff) << 16) |        // Xm[31:16] mSize
         (static_cast<uint64_t>(dstStride & 0xffffffff) << 32); // Xm[63:32] destination stride between the start addr
 
-    uint64_t xtReg = srcStride | // Xt[15:0] the source stride between the start addr
+    uint64_t xtReg = srcStride |                               // Xt[15:0] the source stride between the start addr
                      (static_cast<uint64_t>(unitFlagCtrl & 0x3) << 32) |      // Xt[33:32] unit flag control bit
                      (static_cast<uint64_t>(quantizationMode & 0x1f) << 34) | // Xt[38:34] pre-stage quantization mode
                      ((static_cast<uint64_t>(reluPreMode) & 0x7) << 39) |     //  Xt[41:39] relu pre mode

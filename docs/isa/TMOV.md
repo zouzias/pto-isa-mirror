@@ -1,11 +1,13 @@
-﻿# TMOV
+# pto.tmov
 
+Canonical tile-instruction reference: [pto.tmov](./tile/ops/layout-and-rearrangement/tmov.md).
 
-## Tile Operation Diagram
+The PTO ISA manual now treats tile, vector, and scalar/control operations consistently: the canonical per-op pages live under `docs/isa/tile/ops/`, `docs/isa/vector/ops/`, and `docs/isa/scalar/ops/`.
 
-![TMOV tile operation](../figures/isa/TMOV.svg)
+## Canonical Location
 
-## Introduction
+- Instruction set overview: [Layout And Rearrangement](./tile/layout-and-rearrangement.md)
+- Canonical per-op page: [pto.tmov](./tile/ops/layout-and-rearrangement/tmov.md)
 
 Move/copy between tiles, optionally applying implementation-defined conversion modes selected by template parameters and overloads.
 
@@ -191,7 +193,7 @@ void example_manual() {
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
+# Manual mode: bind resources explicitly before issuing the instruction.
 # Optional for tile operands:
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
@@ -206,3 +208,4 @@ void example_manual() {
 pto.tmov ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
+Old links into the root-level tile pages continue to resolve through this wrapper, but new PTO ISA documentation should link to the grouped tile instruction path.
