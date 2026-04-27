@@ -56,6 +56,7 @@ main() {
     sudo apt-get update && sudo apt-get install clang -y
     clang --version
     clang++ --version
+    pip -q install en_dtypes==0.0.4
 
     # Only run UT tests on the master branch
     if [[ "${TARGET_BRANCH}" != "master" ]]; then

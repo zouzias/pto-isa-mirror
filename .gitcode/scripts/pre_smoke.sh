@@ -30,6 +30,7 @@ source /usr/local/Ascend/cann/set_env.sh
 echo "bash build.sh --comm --a3 --npu"
 
 bash build.sh --comm --a3 --npu 2>&1 | tee -a ./run_test.log
+pip -q install en_dtypes==0.0.4
 
 # Package slog
 mkdir -p /root/ascend
