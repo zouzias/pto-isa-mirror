@@ -53,4 +53,7 @@ set -euo pipefail
 cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} ..
 make -j16
 
-./topk
+cd ../
+chmod 750 build
+cd ./build
+msprof op simulator ./topk
