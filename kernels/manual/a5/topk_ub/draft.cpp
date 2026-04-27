@@ -341,8 +341,6 @@ AICORE inline void Phase4_WinnerLsbRemainKAndPackedThresholdTor(HistTile &chistL
     TSHLS(hiU, msbU, kShift8);
     TCVT(lsbU, lsbWinnerBin, RoundMode::CAST_TRUNC);
     TOR(outU, hiU, lsbU);
-    set_flag(PIPE_V, PIPE_S, EVENT_ID1);
-    wait_flag(PIPE_V, PIPE_S, EVENT_ID1);
 }
 
 template <int TopK>
