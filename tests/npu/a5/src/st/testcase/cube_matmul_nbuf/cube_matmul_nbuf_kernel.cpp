@@ -63,10 +63,44 @@ static constexpr int GM_M = 32;
 static constexpr int GM_N = 256;
 static constexpr int GM_K = 1024;  // total K dimension
 
-template <int pipe>
-AICORE void get_buffer(int id) { get_buf(pipe, id, 0); return; }
-template <int pipe>
-AICORE void rls_buffer(int id) { rls_buf(pipe, id, 0); return; }
+#define BUFFER_ID_OFFSET 32
+// Inline-asm get_buf/rls_buf wrappers, one branch per pipe.
+// These bypass the intrinsic's compile-time buf-id checks so we can probe
+// id values >= 32 (intrinsic enforces a 5-bit id range). The asm form
+// `GET_BUF.<pipe> reg, #mode` / `RLS_BUF.<pipe> reg, #mode` accepts a
+// 64-bit register operand for buf_ID, giving us the full HW id space.
+// Pipe suffix is the lowercase pipe_t name without the PIPE_ prefix:
+//   PIPE_MTE2 -> mte2,  PIPE_MTE1 -> mte1,  PIPE_M -> m,  PIPE_FIX -> fix.
+template <pipe_t pipe>
+AICORE void get_buffer(int id) {
+    if constexpr (pipe == PIPE_MTE2) {
+        asm volatile("GET_BUF.mte2 %0, #0\n\t" :: "l"(id + BUFFER_ID_OFFSET) :);
+    } else if constexpr (pipe == PIPE_MTE1) {
+        asm volatile("GET_BUF.mte1 %0, #0\n\t" :: "l"(id + BUFFER_ID_OFFSET) :);
+    } else if constexpr (pipe == PIPE_M) {
+        asm volatile("GET_BUF.m %0, #0\n\t"    :: "l"(id + BUFFER_ID_OFFSET) :);
+    } else if constexpr (pipe == PIPE_FIX) {
+        asm volatile("GET_BUF.f %0, #0\n\t" :: "l"(id + BUFFER_ID_OFFSET) :);
+    } else {
+        get_buf(pipe, id, 0);
+    }
+    return;
+}
+template <pipe_t pipe>
+AICORE void rls_buffer(int id) {
+    if constexpr (pipe == PIPE_MTE2) {
+        asm volatile("RLS_BUF.mte2 %0, #0\n\t" :: "l"(id + BUFFER_ID_OFFSET) :);
+    } else if constexpr (pipe == PIPE_MTE1) {
+        asm volatile("RLS_BUF.mte1 %0, #0\n\t" :: "l"(id + BUFFER_ID_OFFSET) :);
+    } else if constexpr (pipe == PIPE_M) {
+        asm volatile("RLS_BUF.m %0, #0\n\t"    :: "l"(id + BUFFER_ID_OFFSET) :);
+    } else if constexpr (pipe == PIPE_FIX) {
+        asm volatile("RLS_BUF.f %0, #0\n\t" :: "l"(id + BUFFER_ID_OFFSET) :);
+    } else {
+        rls_buf(pipe, id, 0);
+    }
+    return;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Config 1: 2-buffer ping-pong, K_tile=16, 8KB B tile
