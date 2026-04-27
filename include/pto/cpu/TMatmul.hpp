@@ -60,7 +60,7 @@ void TMatmulNzZn(TileAcc& dst, TileAcc* acc, TileLeft& src0, TileRight& src1)
         for (uint16_t j = 0; j < N; j++) {
             typename TileAcc::DType mul_acc = 0;
 
-            // PTO_CPU_VECTORIZE_LOOP
+            PTO_CPU_VECTORIZE_LOOP
             for (uint16_t k = 0; k < K; k++) {
                 auto a = static_cast<typename TileAcc::DType>(src0.GetElement(i, k));
                 auto b = static_cast<typename TileAcc::DType>(src1.GetElement(k, j));

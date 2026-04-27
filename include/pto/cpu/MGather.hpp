@@ -44,21 +44,21 @@ PTO_INTERNAL void MGATHER_IMPL(TileDst& dst, GlobalData& src, TileInd& indexes)
     auto* base = src.data();
     const auto srcRowStride = src.GetStride(3);
     const auto srcColStride = src.GetStride(4);
-    cpu::parallel_for_rows(validRow, validCol, [&](std::size_t i) {
+    // This procedure should not be parallelized, as it will break down rule "last of the values with same index should stay"
+    for (std::size_t i=0; i<validRow; i++) {
         size_t idx = 0;
         if constexpr (CMode == Coalesce::Elem) {
             for (std::size_t j = 0; j < validCol; ++j) {
-                const size_t dstOff = GetTileElementOffset<TileDst>(i, j);
                 const size_t idx = static_cast<size_t>(indexes.data()[GetDataElementOffset(indexes, i, j)]);
 
                 if constexpr (Mode == GatherOOB::Clamp) {
-                    dst.data()[dstOff] = base[std::clamp(idx, static_cast<size_t>(0), capacity - 1)];
+                    dst.SetElement(i, j, base[std::clamp(idx, static_cast<size_t>(0), capacity - 1)]);
                 } else if constexpr (Mode == GatherOOB::Wrap) {
-                    dst.data()[dstOff] = base[idx % capacity];
+                    dst.SetElement(i, j, base[idx % capacity]);
                 } else if constexpr (Mode == GatherOOB::Zero) {
-                    dst.data()[dstOff] = idx < capacity && idx >= 0 ? base[idx] : 0;
+                    dst.SetElement(i, j, idx < capacity && idx >= 0 ? base[idx] : 0);
                 } else {
-                    dst.data()[dstOff] = base[idx];
+                    dst.SetElement(i, j, base[idx]);
                 }
             }
 
@@ -78,7 +78,7 @@ PTO_INTERNAL void MGATHER_IMPL(TileDst& dst, GlobalData& src, TileInd& indexes)
             } else if constexpr (Mode == GatherOOB::Zero) {
                 if (rowIdx >= capacity || rowIdx < 0) {
                     for (std::size_t j = 0; j < validCol; ++j) {
-                        dst.data()[GetTileElementOffset<TileDst>(i, j)] = 0;
+                        dst.SetElement(i, j, 0);
                     }
                     shouldCopy = false;
                 }
@@ -86,14 +86,12 @@ PTO_INTERNAL void MGATHER_IMPL(TileDst& dst, GlobalData& src, TileInd& indexes)
 
             if (shouldCopy) {
                 for (std::size_t j = 0; j < validCol; ++j) {
-                    const size_t dstOff = GetTileElementOffset<TileDst>(i, j);
-
                     idx = static_cast<size_t>(rowIdx * srcRowStride + j * srcColStride);
-                    dst.data()[dstOff] = base[idx];
+                    dst.SetElement(i, j, base[idx]);
                 }
             }
         }
-    });
+    };
 }
 
 template <Coalesce CMode, typename TileDst, typename GlobalData, typename TileInd>
