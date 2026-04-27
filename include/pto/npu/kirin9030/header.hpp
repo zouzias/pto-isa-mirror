@@ -112,6 +112,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TScatter.hpp"
 // MGather to be evaluated
 // MScatter to be evaluated
+#include "pto/npu/a5/TColMax.hpp"
+#include "pto/npu/a5/TColMin.hpp"
 #include "pto/npu/a5/TColExpandDiv.hpp"
 #include "pto/npu/a5/TColExpandMul.hpp"
 #include "pto/npu/a5/TColExpandSub.hpp"
