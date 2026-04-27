@@ -1,0 +1,18 @@
+----------------------------- AiCore Summary Log -----------------------------
+
+==============================================================================
+kernal total ticks : 22677
+system total ticks : 22951
+==============================================================================
+Trace_Name                                    | Total_Num 
+==============================================================================
+fixp_cubecore0_busy_cycle                   | 1420
+mte3_cubecore0_su_busy_cycle                | 0
+mte2_cubecore0_su_busy_cycle                | 20056
+mte1_cubecore0_su_busy_cycle                | 4375
+cube.cube_cubecore0_busy_cycle              | 3648
+cube.cube_cubecore0_mac_busy_cycle          | 3584
+CCU.scalar_cubecore0_su_busy_cycle          | 4487
+++++++++++++++++++++++core: 0, subcore: 0, start: 274, tick: 22951, kernelId: 0, blkID: 0, blkDim: 1, rtsqId: 1, streamId: 0, taskId: 0, subtaskId: 0, threadId: 0, done++++++++++++++++++++++.
+
+
