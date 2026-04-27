@@ -97,6 +97,15 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 // Signed 4-bit integer type (packed: 2 elements per byte using uint8_t storage).
 // Compatible with AscendC int4b_t. The vconv intrinsics use void* for the packed side.
+//
+// Defined inside `namespace pto` to avoid conflicting with AscendC's own
+// global `int4b_t` type alias (e.g. `using int4b_t = IntegerSubType<...>;`)
+// which is exposed by some AscendC internal headers in global scope.
+// Inside `namespace pto`, unqualified `int4b_t` resolves to `pto::int4b_t`.
+
+#include <type_traits>
+
+namespace pto {
 struct int4b_t {
     uint8_t storage;
     int4b_t() = default;
@@ -107,8 +116,7 @@ struct int4b_t {
         return (storage & 0x08) ? static_cast<int8_t>(storage | 0xF0) : static_cast<int8_t>(storage & 0x0F);
     }
 };
-
-#include <type_traits>
+} // namespace pto
 
 namespace pto {
 enum class TileType
