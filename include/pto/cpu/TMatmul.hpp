@@ -24,7 +24,7 @@ void TMatmulNzZn(typename TileAcc::TileDType dst, typename TileAcc::TileDType ac
         for (uint16_t j = 0; j < N; j++) {
             typename TileAcc::DType mul_acc = 0;
 
-            // PTO_CPU_VECTORIZE_LOOP
+            PTO_CPU_VECTORIZE_LOOP
             for (uint16_t k = 0; k < K; k++) {
                 size_t src0Idx = GetTileElementOffset<TileLeft>(i, k);
                 size_t src1Idx = GetTileElementOffset<TileRight>(k, j);
