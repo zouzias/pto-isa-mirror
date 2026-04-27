@@ -97,6 +97,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 // Signed 4-bit integer type (packed: 2 elements per byte using uint8_t storage).
 // Compatible with AscendC int4b_t. The vconv intrinsics use void* for the packed side.
+//
+// On AICORE builds (__CCE_AICORE__), AscendC already provides `int4b_t` as a
+// type alias (e.g. `using int4b_t = IntegerSubType<INT4_BIT_NUM, true>;`).
+// Defining our own struct in that case causes a "definition conflicts with type
+// alias of the same name" error. Only define the fallback struct for CPU
+// simulator / cost-model builds where AscendC headers are not available.
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
 struct int4b_t {
     uint8_t storage;
     int4b_t() = default;
@@ -107,6 +114,7 @@ struct int4b_t {
         return (storage & 0x08) ? static_cast<int8_t>(storage | 0xF0) : static_cast<int8_t>(storage & 0x0F);
     }
 };
+#endif
 
 #include <type_traits>
 
