@@ -206,8 +206,8 @@ python3 tests/script/run_st.py -r sim -v a3 -t tadd -g TADDTest.case_float_64x64
 - [版本说明](ReleaseNote_zh.md)：版本更新与发布记录
 - [许可证](LICENSE)：CANN Open Software License Agreement Version 2.0
 - [PyPTO](https://gitcode.com/cann/pypto/)：PTO 生态中的上层编程框架
-- [PTOAS](https://gitcode.com/cann/PTOAS/)：面向 PTO 工作流的汇编器与编译后端
-- [pto-dsl](https://gitcode.com/cann/pto-dsl/)：面向 PTO 的 Python 前端与 JIT 工作流探索
+- [PTOAS](https://github.com/PTO-ISA/PTOAS/)：面向 PTO 工作流的汇编器与编译后端
+- [pto-dsl](https://github.com/PTO-ISA/pto-dsl/)：面向 PTO 的 Python 前端与 JIT 工作流探索
 
 ## 📬 联系我们
 

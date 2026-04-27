@@ -329,9 +329,9 @@ AICORE inline void AllocateComputeTiles(TileMatAData aMatTile[BUFFER_NUM], TileM
 //   Phase 2: 远程 rank row-group streaming 等待后计算
 // ---------------------------------------------------------------------------
 AICORE inline void AllGatherGemmComputeStreamingImpl(__gm__ float *output, __gm__ half *shmem_input, __gm__ half *src1,
-                                                     __gm__ ChunkFlagMatrix *chunk_flags, int block_num)
+                                                     __gm__ ChunkFlagMatrix *chunk_flags, int launch_block_count)
 {
-    const int block_idx = get_block_idx();
+    const int core_idx = get_block_idx();
 
     volatile __gm__ ChunkFlagMatrix *flags = reinterpret_cast<volatile __gm__ ChunkFlagMatrix *>(chunk_flags);
 
@@ -355,12 +355,12 @@ AICORE inline void AllGatherGemmComputeStreamingImpl(__gm__ float *output, __gm_
     if (my_rank >= 0 && my_rank < n_ranks) {
         int local_mi_start = my_rank * m_tiles_per_rank;
         int local_mi_end = local_mi_start + m_tiles_per_rank;
-        for (int mi = local_mi_start + block_idx; mi < local_mi_end; mi += block_num) {
+        for (int mi = local_mi_start + core_idx; mi < local_mi_end; mi += launch_block_count) {
             ComputeRowGroupDirect(output, shmem_input, src1, mi, k_tiles, aMatTile, bMatTile, aTile, bTile, cTile);
         }
     }
 
-    for (int mi = block_idx; mi < m_tiles; mi += block_num) {
+    for (int mi = core_idx; mi < m_tiles; mi += launch_block_count) {
         int src_rank = mi / m_tiles_per_rank;
         if (src_rank == my_rank)
             continue;
@@ -373,18 +373,19 @@ AICORE inline void AllGatherGemmComputeStreamingImpl(__gm__ float *output, __gm_
 
 __global__ AICORE void AllGatherGemmComputeStreamingKernel(__gm__ uint8_t *output, __gm__ uint8_t *shmem_input,
                                                            __gm__ uint8_t *src1, __gm__ uint8_t *chunk_flags,
-                                                           int block_num)
+                                                           int launch_block_count)
 {
 #ifdef __CCE_AICORE__
-    AllGatherGemmComputeStreamingImpl(
-        reinterpret_cast<__gm__ float *>(output), reinterpret_cast<__gm__ half *>(shmem_input),
-        reinterpret_cast<__gm__ half *>(src1), reinterpret_cast<__gm__ ChunkFlagMatrix *>(chunk_flags), block_num);
+    AllGatherGemmComputeStreamingImpl(reinterpret_cast<__gm__ float *>(output),
+                                      reinterpret_cast<__gm__ half *>(shmem_input),
+                                      reinterpret_cast<__gm__ half *>(src1),
+                                      reinterpret_cast<__gm__ ChunkFlagMatrix *>(chunk_flags), launch_block_count);
 #endif
 }
 
 void launchAllGatherGemmComputeStreaming(uint8_t *output, uint8_t *shmem_input, uint8_t *src1, uint8_t *chunk_flags,
-                                         void *stream, int block_num = COMPUTE_BLOCK_NUM)
+                                         void *stream, int launch_block_count = COMPUTE_BLOCK_NUM)
 {
-    AllGatherGemmComputeStreamingKernel<<<block_num, nullptr, stream>>>(output, shmem_input, src1, chunk_flags,
-                                                                        block_num);
+    AllGatherGemmComputeStreamingKernel<<<launch_block_count, nullptr, stream>>>(output, shmem_input, src1, chunk_flags,
+                                                                                 launch_block_count);
 }

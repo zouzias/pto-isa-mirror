@@ -287,8 +287,7 @@ PTO_INTERNAL void TAXPY_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDa
             const size_t dstIdx = GetTileElementOffset<TileDataDst>(r, c);
             const size_t srcIdx = GetTileElementOffset<TileDataSrc>(r, c);
             dst.data()[dstIdx] = static_cast<typename TileDataDst::DType>(
-                dst.data()[dstIdx] + static_cast<typename TileDataDst::DType>(src.data()[srcIdx]) *
-                                         static_cast<typename TileDataDst::DType>(scalar));
+                dst.data()[dstIdx] + static_cast<typename TileDataDst::DType>(src.data()[srcIdx] * scalar));
         }
     }
 }

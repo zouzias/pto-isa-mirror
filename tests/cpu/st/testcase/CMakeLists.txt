@@ -49,6 +49,7 @@ taddsc
 tand
 tands
 targreduceop
+taxpy
 tbroadcast
 tci
 tcmp
@@ -84,6 +85,7 @@ tlog
 tlrelu
 tmatmul
 tmatmul_layout
+#tmatmul_mx
 tmax
 tmaxs
 tmin
@@ -118,6 +120,7 @@ trowexpandop
 trowmax
 trowmin
 trowsum
+trowprod
 trsqrt
 tscatter
 tsel
