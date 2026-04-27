@@ -341,8 +341,15 @@ AICORE inline uint16_t Phase4_WinnerLsbRemainKAndPackedThresholdTor(HistTile &ch
 }
 
 template <int TopK>
-AICORE inline void Phase5_TgatherGtEqTconcatAndStore(uint16_t packedThreshold, __gm__ uint32_t *outIdx)
+AICORE inline void Phase5_TgatherGtEqTconcatAndStore([[maybe_unused]] uint16_t packedThreshold,
+                                                    __gm__ uint32_t *outIdx)
 {
+    // Same packed uint16 as Phase4 (TOR) — TGATHER compare k must be a u16 tile per TGather_cmp / TGATHER_IMPL.
+    PackedU16Tile packedThrU(1, 32);
+    TASSIGN(packedThrU, kRemainUbOut);
+    packedThrU.SetValidRow(1);
+    packedThrU.SetValidCol(1);
+
     constexpr uint64_t kFullGatherGtDst = 0x30000;
     constexpr uint64_t kFullGatherEqDst = 0x38000;
     constexpr uint64_t kChunkConcatGt = 0x28000;
@@ -376,20 +383,28 @@ AICORE inline void Phase5_TgatherGtEqTconcatAndStore(uint16_t packedThreshold, _
     GatherSrcI16<kN> srcGt(1, kN);
     TmpGatherTile tmpGt(1, cmpVCol);
     TASSIGN(tmpGt, kGatherUbTmp);
+    srcGt.SetValidRow(1);
     srcGt.SetValidCol(kN);
     TASSIGN(srcGt, kUbFullKeys);
-    int16_t kBitsGt = *reinterpret_cast<const int16_t *>(&packedThreshold);
-    TGATHER<DstTile, GatherSrcI16<kN>, GatherConcatCountTile, TmpGatherTile, CmpMode::GT, 0u>(gtChunk, srcGt, kBitsGt,
-                                                                                              idxGtCnt, tmpGt);
+    gtChunk.SetValidRow(1);
+    gtChunk.SetValidCol(kN);
+    tmpGt.SetValidRow(1);
+    tmpGt.SetValidCol(cmpVCol);
+    TGATHER<DstTile, GatherSrcI16<kN>, PackedU16Tile, GatherConcatCountTile, TmpGatherTile, CmpMode::GT>(
+        gtChunk, srcGt, packedThrU, idxGtCnt, tmpGt, 0);
 
     GatherSrcI16<kN> srcEq(1, kN);
     TmpGatherTile tmpEq(1, cmpVCol);
     TASSIGN(tmpEq, kGatherUbTmp);
+    srcEq.SetValidRow(1);
     srcEq.SetValidCol(kN);
     TASSIGN(srcEq, kUbFullKeys);
-    int16_t kBitsEq = *reinterpret_cast<const int16_t *>(&packedThreshold);
-    TGATHER<DstTile, GatherSrcI16<kN>, GatherConcatCountTile, TmpGatherTile, CmpMode::EQ, 0u>(eqChunk, srcEq, kBitsEq,
-                                                                                              idxEqCnt, tmpEq);
+    eqChunk.SetValidRow(1);
+    eqChunk.SetValidCol(kN);
+    tmpEq.SetValidRow(1);
+    tmpEq.SetValidCol(cmpVCol);
+    TGATHER<DstTile, GatherSrcI16<kN>, PackedU16Tile, GatherConcatCountTile, TmpGatherTile, CmpMode::EQ>(
+        eqChunk, srcEq, packedThrU, idxEqCnt, tmpEq, 0);
 
     TCONCAT_IMPL(mergedIdx, gtChunk, eqChunk, idxGtCnt, idxEqCnt);
 
