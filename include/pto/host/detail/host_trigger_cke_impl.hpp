@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <vector>
 
 #include <dlfcn.h>
 
@@ -95,19 +96,57 @@ private:
     LibHccp() = default;
 
     void Load() {
+        // RaCustomChannel is provided by HCCP. The library it lives in has been
+        // renamed across CANN/driver versions, so we try a fixed list of known
+        // names (newest first) before giving up. The user can override the list
+        // entirely via PTO_HCCP_LIBNAME (single name; `:` separated for multiple).
+        //
+        //   - libra.so   : CANN ≥ 9.0.0 (driver 7.0.t9.0.B806 verified 2026-04-27)
+        //   - libhccp.so : legacy alias used in older driver packages
+        //
         // RTLD_GLOBAL so that downstream loads of libraries that themselves
-        // depend on libhccp (rare here, but defensive) resolve cleanly.
-        handle_ = dlopen("libhccp.so", RTLD_LAZY | RTLD_GLOBAL);
-        if (handle_ == nullptr) {
+        // depend on libra/libhccp (rare here, but defensive) resolve cleanly.
+        std::vector<std::string> candidates;
+        const char *override_env = std::getenv("PTO_HCCP_LIBNAME");
+        if (override_env != nullptr && override_env[0] != '\0') {
+            std::string spec = override_env;
+            std::size_t start = 0;
+            for (;;) {
+                std::size_t end = spec.find(':', start);
+                if (end == std::string::npos) {
+                    candidates.emplace_back(spec.substr(start));
+                    break;
+                }
+                candidates.emplace_back(spec.substr(start, end - start));
+                start = end + 1;
+            }
+        } else {
+            candidates = {"libra.so", "libhccp.so"};
+        }
+
+        std::string accumulated_error;
+        for (const std::string &name : candidates) {
+            handle_ = dlopen(name.c_str(), RTLD_LAZY | RTLD_GLOBAL);
+            if (handle_ != nullptr) {
+                tried_name_ = name;
+                break;
+            }
             const char *err = dlerror();
-            error_ = err == nullptr ? "dlopen libhccp.so failed (no detail)" : err;
+            accumulated_error += "dlopen " + name + " failed: " +
+                (err == nullptr ? "(no detail)" : err) + "; ";
+        }
+        if (handle_ == nullptr) {
+            error_ = accumulated_error.empty()
+                ? "dlopen failed for all candidates (no candidates configured)"
+                : accumulated_error;
             return;
         }
 
         void *sym = dlsym(handle_, "RaCustomChannel");
         if (sym == nullptr) {
             const char *err = dlerror();
-            error_ = err == nullptr ? "dlsym RaCustomChannel failed (no detail)" : err;
+            error_ = "dlsym RaCustomChannel failed in " + tried_name_ + ": " +
+                     (err == nullptr ? "(no detail)" : err);
             return;
         }
         ra_custom_channel_ = reinterpret_cast<RaCustomChannelFn>(sym);
@@ -118,6 +157,7 @@ private:
     void *handle_ = nullptr;
     RaCustomChannelFn ra_custom_channel_ = nullptr;
     std::string error_;
+    std::string tried_name_;
     bool ok_ = false;
 };
 
@@ -143,14 +183,20 @@ private:
 // `hcomm/src/legacy/.../ccu_component.cpp:789`: it sets `dataArraySize = N`,
 // `dataLen = 8*N`, and writes nothing else (relying on the zero-init).
 //
-// Mask layout inside the 8-byte slot is the open question — the chip exposes
-// CKE entries as 16-bit fields ([15:0]). Until the hardware team confirms the
-// authoritative byte position, we ship four candidates selectable via env:
+// Mask layout inside the 8-byte slot — empirically determined on Ascend 950 with
+// CANN 9.0.0 + driver 7.0.t9.0.B806 (2026-04-27, hccl reduce_scatter Mesh1D gate
+// run). The four candidates were each driven through pto::host::HostTriggerCke
+// against a real reduce_scatter kernel parked at WaitCKE; layout B was the only
+// one that woke the kernel up. Default switched A → B accordingly.
 //
-//   PTO_CKE_LAYOUT=A  (default) raw[0..1] = uint16 LE       <- most common guess
-//   PTO_CKE_LAYOUT=B            raw[6..7] = uint16 LE       <- BE-style at slot tail
-//   PTO_CKE_LAYOUT=C            raw[0..3] = uint32 LE       <- treat as 32-bit reg, low 16 bits
-//   PTO_CKE_LAYOUT=D            raw[0..1] = uint16 BE       <- big-endian byte order
+//   PTO_CKE_LAYOUT=A            raw[0..1] = uint16 LE       <- doesn't release CKE on 950
+//   PTO_CKE_LAYOUT=B  (default) raw[6..7] = uint16 LE       <- VERIFIED on 950
+//   PTO_CKE_LAYOUT=C            raw[0..3] = uint32 LE       <- doesn't release CKE on 950
+//   PTO_CKE_LAYOUT=D            raw[0..1] = uint16 BE       <- doesn't release CKE on 950
+//
+// The other three layouts are kept around as escape hatches for future chip
+// revisions / driver ABI bumps; if a new SoC turns out to need a different byte
+// position, switching `PTO_CKE_LAYOUT` lets us re-pin without a code change.
 //
 // All four overwrite only the first 8 bytes of the slot; the remaining 56 are
 // kept zero from `memset`, so wrong guesses are harmless on the wire (driver
@@ -165,14 +211,14 @@ enum class CkeLayout : int {
 
 inline CkeLayout ResolveCkeLayout() {
     const char *env = std::getenv("PTO_CKE_LAYOUT");
-    if (env == nullptr) return CkeLayout::kALowLE;
-    if (env[0] == '\0' || env[1] != '\0') return CkeLayout::kALowLE;
+    if (env == nullptr) return CkeLayout::kBHighLE;
+    if (env[0] == '\0' || env[1] != '\0') return CkeLayout::kBHighLE;
     switch (env[0]) {
         case 'A': case 'a': return CkeLayout::kALowLE;
         case 'B': case 'b': return CkeLayout::kBHighLE;
         case 'C': case 'c': return CkeLayout::kCWideLE;
         case 'D': case 'd': return CkeLayout::kDLowBE;
-        default: return CkeLayout::kALowLE;
+        default: return CkeLayout::kBHighLE;
     }
 }
 
