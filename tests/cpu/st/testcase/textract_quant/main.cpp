@@ -34,6 +34,19 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
+std::pair<int, int> get_closest_factor(int c) {
+    if (c <= 0) return {0, 0};
+    int a = static_cast<int>(std::sqrt(c));
+    while(a > 0) {
+        if (c % a == 0) {
+            int b = c / a;
+            return {a, b};
+        }
+        a--;
+    }
+    return {1, c};
+}
+
 template <typename SrcT, typename DstT, size_t src_rows, size_t src_cols, size_t src_validRows, size_t src_validCols,
           size_t dst_rows, size_t dst_cols, size_t dst_validRows, size_t dst_validCols, size_t idx_row, size_t idx_col,
           bool is_v_quant, bool apply_relu>
@@ -118,9 +131,9 @@ void runTEXTRACT_Vector(typename Conf::DT *dst, typename Conf::ST *src, uint64_t
     GlobalDataFp fpGlobal(quant);
 
     using SrcTile = Tile<TileType::Mat, ST, Conf::srcRows, Conf::srcCols, BLayout::RowMajor, Conf::srcValidRows,
-                         Conf::srcValidCols, SLayout::RowMajor, 512>;
+                         Conf::srcValidCols, SLayout::NoneBox, 512>;
     using DstTile = Tile<TileType::Mat, DT, Conf::dstRows, Conf::dstCols, BLayout::RowMajor, Conf::dstValidRows,
-                         Conf::dstValidCols, SLayout::RowMajor, 512>;
+                         Conf::dstValidCols, SLayout::NoneBox, 512>;
     using FbTile = Tile<TileType::Mat, uint64_t, 1, Conf::dstValidCols, BLayout::RowMajor, 1, Conf::dstValidCols,
                         SLayout::NoneBox, 512>;
     SrcTile srcTile;

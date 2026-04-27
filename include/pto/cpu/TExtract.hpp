@@ -65,6 +65,15 @@ PTO_INTERNAL void TExtract_Impl(DstTileData &dst, SrcTileData &src, uint32_t idx
     }
 }
 
+inline int get_index(int validRow, int validCol, int idxR, int idxC, int dtypeSize) {
+    int R = idxR / 16;
+    int i = idxR % 16;
+    int C = idxC / 16;
+    int j = idxC % 16;
+    int index = R * 16 * validCol + C * 512 / dtypeSize + i * (32 / dtypeSize) + j;
+    return index;
+}
+
 template <typename DstTileData, typename SrcTileData, typename FpTileData, QuantModeCPU_t quantMode, bool applyRelu>
 PTO_INTERNAL void TExtract_Impl(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint32_t idxRow, uint32_t idxCol)
 {
@@ -102,6 +111,10 @@ PTO_INTERNAL void TExtract_Impl(DstTileData &dst, SrcTileData &src, FpTileData &
                 const size_t innerR = rSrc % SrcTileData::InnerRows;
                 srcTileIdx = GetTileElementOffsetSubfractals<SrcTileData>(subTileR, innerR, subTileSrcC, innerSrcC);
             }
+
+            srcTileIdx = get_index(src.GetValidRow(), src.GetValidCol(), r + idxRow, c + idxCol, sizeof(S));
+            dstTileIdx = get_index(dst.GetValidRow(), dst.GetValidCol(), r, c, sizeof(D));
+
             if constexpr (quantMode != QuantModeCPU_t::NoQuant) {
                 dst.data()[dstTileIdx] = quantize_element<D, S, quantMode, applyRelu>(src.data()[srcTileIdx], quantScalar);
             } else {
