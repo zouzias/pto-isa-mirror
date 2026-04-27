@@ -232,3 +232,133 @@ operator fusion or batching to amortise the fixed GM bandwidth cost across more 
 
 The A big-tile design (single `TLOAD` per outer iteration, sub-tile `TASSIGN` in inner loop)
 is confirmed efficient: MTE1 (L1→L0) accounts for only 15–19% of ticks, well below MTE2.
+
+---
+
+## Section 14 — 4 KB B-tile via N-Split (bnbufnsplit configs)
+
+### 14.1 Motivation
+
+Previous sections used 8 KB B-tiles (shape [16, 256], K=16, N=256).  At N_BUFS_B=16 the L0C
+buffer-ID formula `C_BUF_ID = 4 + 2*N_BUFS_B` would yield 36, exceeding the hardware limit of 31.
+The limit is reached at N_BUFS_B=14 (C_BUF_ID=32).
+
+To explore deeper double-buffering with 4 KB B-tiles ([16, 128]) while staying within the ID
+budget, the N-split design splits the N=256 accumulation into two N=128 sub-steps, each using an
+independent L0C accumulator.  This halves the B-tile footprint per buffer and allows up to
+N_BUFS_B=13 before overflow (C_BUF_ID = 4+26=30 for the first accumulator,
+5+26=31 for the second — both ≤ 31).
+
+bnbufnsplit16 is **skipped**: C_BUF_ID would be 4+32=36 > 31.
+
+---
+
+### 14.2 Kernel Design — `RunCubeMatmulBNBufNSplit`
+
+| Parameter | Value |
+|-----------|-------|
+| M | 256 |
+| K | 16 |
+| N | 256 → 2 × 128 (N-split) |
+| B-tile shape | [16, 128] (4 KB @ float16) |
+| L0C accumulators | 2 (one per N-half) |
+| A-tile shape | [256, 16] (unchanged) |
+| Pipeline | MTE2 loads B[n][k] interleaved with CUBE MACs; scalar store after both halves |
+
+The outer loop iterates over K-chunks; for each K-chunk the two N-halves are processed
+back-to-back using separate L0C buffer IDs.  An MTE1 A-tile load feeds both halves from
+the same L0B buffer.
+
+---
+
+### 14.3 Buffer-ID Layout
+
+| Buffer | Formula | Example (N_BUFS_B=4) | Example (N_BUFS_B=8) |
+|--------|---------|----------------------|----------------------|
+| L0B (B-tile) | 2 + buf_idx | 2–5 | 2–9 |
+| L0C half-0 | 4 + 2*N_BUFS_B | 12 | 20 |
+| L0C half-1 | 5 + 2*N_BUFS_B | 13 | 21 |
+| Max safe N_BUFS_B | C_BUF_ID ≤ 31 | — | N_BUFS_B = 13 |
+
+---
+
+### 14.4 Configs Tested — Correctness
+
+| Config | N_BUFS_B | gtest result |
+|--------|----------|-------------|
+| bnbufnsplit2_K16_4KB | 2 | **PASSED** |
+| bnbufnsplit4_K16_4KB | 4 | **PASSED** |
+| bnbufnsplit8_K16_4KB | 8 | **PASSED** |
+
+---
+
+### 14.5 Cycle Analysis
+
+| Config | Total ticks | MTE2 ticks | MTE2 % | MTE1 ticks | MTE1 % | Cube MAC | Cube % | Scalar | Scalar % |
+|--------|------------|-----------|--------|-----------|--------|----------|--------|--------|---------|
+| bnbufnsplit2_K16_4KB | 43 077 | 40 753 | 94.6% | 6 257 | 14.5% | 5 120 | 11.9% | 6 652 | 15.4% |
+| bnbufnsplit4_K16_4KB | 24 664 | 22 301 | 90.4% | 6 266 | 25.4% | 5 120 | 20.8% | 9 412 | 38.2% |
+| bnbufnsplit8_K16_4KB | 23 349 | 20 798 | 89.1% | 6 232 | 26.7% | 5 120 | 21.9% | 9 453 | 40.5% |
+| **bnbuf4_K16_8KB** *(Sec 13 ref)* | **22 655** | **20 056** | **88.5%** | — | — | 5 120 | — | 4 710 | **20.8%** |
+
+**Key observations:**
+
+1. **N-split overhead is non-trivial.** The N-split kernel adds ~700–2 000 extra ticks vs the
+   8 KB reference (bnbuf4_K16_8KB = 22 655), primarily due to **doubled scalar bookkeeping**
+   (9 400 ticks vs 4 710 ticks).  Each N-half requires its own `get_buffer`/`rls_buffer`/`fixpipe`
+   sequence on the L0C accumulator, doubling the scalar instruction count.
+
+2. **MTE2 bandwidth is similar.** bnbufnsplit8 reaches 20 798 MTE2 ticks (89.1%), close to the
+   8 KB reference at 20 056 (88.5%).  The 4 KB tile loads the same total B-element count over
+   twice as many smaller DMA transfers, which keeps MTE2 utilisation high.
+
+3. **Deep buffering helps diminishingly.** Going from 2→4 buffers saves ~18 400 ticks; 4→8 buffers
+   saves only ~1 300 ticks.  The 2-buffer config is severely MTE2-stalled (94.6%), while 4/8
+   buffers are close to the bandwidth ceiling.
+
+---
+
+### 14.6 Pipeline SVG Links
+
+| Config | Pipeline SVG |
+|--------|-------------|
+| bnbufnsplit2_K16_4KB | [pipeline.svg](profiling/bnbufnsplit2_K16_4KB/pipeline.svg) |
+| bnbufnsplit4_K16_4KB | [pipeline.svg](profiling/bnbufnsplit4_K16_4KB/pipeline.svg) |
+| bnbufnsplit8_K16_4KB | [pipeline.svg](profiling/bnbufnsplit8_K16_4KB/pipeline.svg) |
+
+---
+
+### 14.7 Is 4 KB N-Split on Par with 8 KB B-tile?
+
+**Short answer: nearly, but not quite.**
+
+| Metric | bnbufnsplit8_K16_4KB | bnbuf4_K16_8KB | Delta |
+|--------|----------------------|----------------|-------|
+| Total ticks | 23 349 | 22 655 | +694 (+3.1%) |
+| MTE2 % | 89.1% | 88.5% | ≈ same |
+| Scalar ticks | 9 453 | 4 710 | +4 743 (+101%) |
+
+The 4 KB N-split design is **3% slower** at its best (N_BUFS_B=8), with the gap caused entirely
+by doubled scalar overhead from the two-accumulator bookkeeping.  The MTE2 bandwidth profile is
+indistinguishable — both designs are GM→L1 bandwidth-bound.
+
+**Implication:** If buffer-ID constraints force the use of 4 KB tiles (e.g., when sharing the
+L0C ID space with other operators), the N-split approach recovers ~97% of the 8 KB tile
+performance.  The 3% penalty is acceptable in resource-constrained scenarios, but 8 KB tiles
+should be preferred when available.
+
+---
+
+### 14.8 Summary
+
+| Metric | Best N-split config | Value |
+|--------|---------------------|-------|
+| Lowest total ticks | bnbufnsplit8_K16_4KB | 23 349 |
+| Highest MTE2 util | bnbufnsplit8_K16_4KB | 89.1% |
+| Closest to 8 KB ref | bnbufnsplit8_K16_4KB | +3.1% overhead |
+| Max safe N_BUFS_B | — | 13 (C_BUF_ID ≤ 31) |
+
+The N-split technique successfully keeps buffer IDs within hardware limits while using 4 KB
+B-tiles.  With 8 buffers it approaches within 3% of the best 8 KB configuration.  The primary
+cost is doubled scalar overhead from managing two L0C accumulators.  For designs where 8 KB tiles
+are infeasible, N-split with N_BUFS_B=8 is the recommended fallback.
