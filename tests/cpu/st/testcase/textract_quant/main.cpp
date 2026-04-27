@@ -122,7 +122,7 @@ void runTEXTRACT_Vector(typename Conf::DT *dst, typename Conf::ST *src, uint64_t
     using DstTile = Tile<TileType::Mat, DT, Conf::dstRows, Conf::dstCols, BLayout::RowMajor, Conf::dstValidRows,
                          Conf::dstValidCols, SLayout::RowMajor, 512>;
     using FbTile = Tile<TileType::Mat, uint64_t, 1, Conf::dstValidCols, BLayout::RowMajor, 1, Conf::dstValidCols,
-                        SLayout::RowMajor, 512>;
+                        SLayout::NoneBox, 512>;
     SrcTile srcTile;
     DstTile dstTile;
     FbTile fpTileLocal;
@@ -130,7 +130,7 @@ void runTEXTRACT_Vector(typename Conf::DT *dst, typename Conf::ST *src, uint64_t
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
 
-    TASSIGN(fpTileLocal, 0x30000);
+    TASSIGN(fpTileLocal, 0x20000);
 
     TLOAD(srcTile, srcGlobal);
     TLOAD(fpTileLocal, fpGlobal);
