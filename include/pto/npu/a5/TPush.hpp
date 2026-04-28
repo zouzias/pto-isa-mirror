@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TPUSH_HPP
 #define TPUSH_HPP
 
+#include <type_traits>
 #include <pto/common/fifo.hpp>
 #include <pto/npu/a5/TStore.hpp>
 #include <pto/npu/a5/TLoad.hpp>
@@ -599,7 +600,8 @@ struct TPipe {
  * 3. [Commit]  Signal Consumer (Cross-Core)
  */
 
-template <typename Pipe, typename TileProd, TileSplitAxis Split>
+template <typename Pipe, typename TileProd, TileSplitAxis Split,
+          std::enable_if_t<is_tile_data_v<TileProd>, int> = 0>
 PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, TileProd &tile)
 {
     // 1. Cross-Core: Wait for space
@@ -617,6 +619,50 @@ PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, TileProd &tile)
     if (isRecord) {
         pipe.prod.template record<Split>();
     }
+}
+
+// interfaces when push data from GM FIFO
+template <typename Pipe, typename GlobalData, TileSplitAxis Split>
+PTO_INTERNAL void TALLOC_IMPL(Pipe &pipe, GlobalData &gmTensor)
+{
+    static_assert(Pipe::is_c2v_gm || Pipe::is_v2c_gm || Pipe::is_both_gm,
+                  "TALLOC with GlobalTensor is only supported by GM FIFO directions on A5.");
+    pipe.prod.template allocate<Split>();
+
+    uint64_t entryBase = (uint64_t)pipe.fifo.GM_SLOT_BUFFER;
+    entryBase += (pipe.prod.tileIndex % Pipe::RingFiFo::SLOT_NUM) * Pipe::RingFiFo::SLOT_SIZE;
+
+    if constexpr (Pipe::is_v2c_gm) {
+        constexpr int ProdM = GlobalData::staticShape[pto::GlobalTensorDim::DIM_3];
+        constexpr int ProdN = GlobalData::staticShape[pto::GlobalTensorDim::DIM_4];
+        if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
+            entryBase += get_subblockid() * ProdM * ProdN * sizeof(typename GlobalData::RawDType);
+        } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) {
+            entryBase += get_subblockid() * ProdN * sizeof(typename GlobalData::RawDType);
+        }
+    } else if constexpr (Pipe::is_both_gm) {
+#ifdef __DAV_VEC__
+        constexpr int ProdM = GlobalData::staticShape[pto::GlobalTensorDim::DIM_3];
+        constexpr int ProdN = GlobalData::staticShape[pto::GlobalTensorDim::DIM_4];
+        if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
+            entryBase += get_subblockid() * ProdM * ProdN * sizeof(typename GlobalData::RawDType);
+        } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) {
+            entryBase += get_subblockid() * ProdN * sizeof(typename GlobalData::RawDType);
+        }
+#endif
+    }
+
+    pipe.prod.tileIndex++;
+    TASSIGN(gmTensor, reinterpret_cast<typename GlobalData::DType *>(entryBase));
+}
+
+template <typename Pipe, typename GlobalData, TileSplitAxis Split>
+PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, GlobalData &gmTensor)
+{
+    (void)gmTensor;
+    static_assert(Pipe::is_c2v_gm || Pipe::is_v2c_gm || Pipe::is_both_gm,
+                  "TPUSH with GlobalTensor is only supported by GM FIFO directions on A5.");
+    pipe.prod.template record<Split>();
 }
 
 //------------------------multiple pipe------------------------

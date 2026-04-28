@@ -23,7 +23,8 @@ namespace pto {
  * 2. [Load]    Load data from GM
  * 3. [Free]    Release GM space (Cross-Core)
  */
-template <typename Pipe, typename TileCons, TileSplitAxis Split>
+template <typename Pipe, typename TileCons, TileSplitAxis Split,
+          std::enable_if_t<is_tile_data_v<TileCons>, int> = 0>
 PTO_INTERNAL void TPOP_IMPL(Pipe &pipe, TileCons &tile)
 {
     // 1. Cross-Core: Wait for Data
@@ -37,7 +38,7 @@ PTO_INTERNAL void TPOP_IMPL(Pipe &pipe, TileCons &tile)
     pipe.cons.tileIndex++;
 
     // 3. Cross-Core: Free Space
-    bool isFree = pipe.cons.getFreeStatus();
+    bool isFree = pipe.cons.getFreeStatus() && Pipe::shouldNotifyFree(static_cast<uint32_t>(pipe.cons.tileIndex - 1));
     if (isFree) {
         pipe.cons.free();
     }
@@ -46,6 +47,43 @@ PTO_INTERNAL void TPOP_IMPL(Pipe &pipe, TileCons &tile)
 template <typename Pipe, TileSplitAxis Split>
 PTO_INTERNAL void TFREE_IMPL(Pipe &pipe)
 {
+    return;
+}
+
+// pop tensor from global memory
+template <typename Pipe, typename GlobalData, TileSplitAxis Split,
+          std::enable_if_t<is_global_data_v<GlobalData>, int> = 0>
+PTO_INTERNAL void TPOP_IMPL(Pipe &pipe, GlobalData &gmTensor)
+{
+    pipe.cons.wait();
+    uint64_t entryBase = (uint64_t)pipe.fifo.GM_SLOT_BUFFER;
+    if constexpr (Pipe::is_c2v) {
+        constexpr int ConsM = GlobalData::staticShape[pto::GlobalTensorDim::DIM_3];
+        constexpr int ConsN = GlobalData::staticShape[pto::GlobalTensorDim::DIM_4];
+        uint64_t subAIVOffset = 0;
+        if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
+            subAIVOffset = 0; 
+        } else if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {            
+            subAIVOffset = get_subblockid() * ConsM * ConsN * sizeof(typename GlobalData::RawDType);
+        } else { // TILE_LEFT_RIGHT            
+            subAIVOffset = get_subblockid() * ConsN * sizeof(typename GlobalData::RawDType);
+        }
+        entryBase += (pipe.cons.tileIndex % Pipe::RingFiFo::SLOT_NUM) * Pipe::RingFiFo::SLOT_SIZE + subAIVOffset;
+    } else if constexpr (Pipe::is_v2c) {
+        entryBase += (pipe.cons.tileIndex % Pipe::RingFiFo::SLOT_NUM) * Pipe::RingFiFo::SLOT_SIZE;
+    }
+    pipe.cons.tileIndex++;
+    TASSIGN(gmTensor, reinterpret_cast<typename GlobalData::DType *>(entryBase));
+}
+
+template <typename Pipe, typename GlobalData, TileSplitAxis Split>
+PTO_INTERNAL void TFREE_IMPL(Pipe &pipe, GlobalData &gmTensor)
+{
+    (void)gmTensor;
+    bool isFree = pipe.cons.getFreeStatus();
+    if (isFree) {
+        pipe.cons.free();
+    }
     return;
 }
 
