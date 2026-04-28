@@ -481,7 +481,11 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling(__ubuf__ T *maxPtr, __ubuf__ uint8
     constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T);
 
     for (uint16_t i = 0; i < (uint16_t)exp_max_loop_count; ++i) {
-        ExtractB8ExponentAndScalingVL<T>(maxPtr, expPtr, scalingPtr, i * elementsPerVL, total_elements_count);
+        uint32_t off = i * elementsPerVL;
+        uint32_t rem = (total_elements_count > off) ? (total_elements_count - off) : 0;
+        if (rem > elementsPerVL)
+            rem = elementsPerVL;
+        ExtractB8ExponentAndScalingVL<T>(maxPtr, expPtr, scalingPtr, off, rem);
     }
 }
 
@@ -576,6 +580,10 @@ PTO_INTERNAL void CalcQuantizedFP8Values_B16_Window(__ubuf__ T *srcPtr, __ubuf__
     uint32_t b8_count = remaining;
     MaskReg preg_b16_1 = CreatePredicate<T>(even_count);
     MaskReg preg_b16_2 = CreatePredicate<T>(odd_count);
+    MaskReg preg_f32_1_even = CreatePredicate<float>((even_count + 1) / 2);
+    MaskReg preg_f32_1_odd = CreatePredicate<float>(even_count / 2);
+    MaskReg preg_f32_2_even = CreatePredicate<float>((odd_count + 1) / 2);
+    MaskReg preg_f32_2_odd = CreatePredicate<float>(odd_count / 2);
     MaskReg preg_b8 = CreatePredicate<uint8_t>(b8_count);
     vlds(vb16_in_1, vb16_in_2, srcPtr, offset_b16, DINTLV_B16);
     if constexpr (std::is_same<T, half>::value) {
@@ -589,10 +597,10 @@ PTO_INTERNAL void CalcQuantizedFP8Values_B16_Window(__ubuf__ T *srcPtr, __ubuf__
         vcvt(vb32_cvt_2, vb16_in_1, preg_b16_1, PART_ODD);
         vcvt(vb32_cvt_3, vb16_in_2, preg_b16_2, PART_EVEN);
         vcvt(vb32_cvt_4, vb16_in_2, preg_b16_2, PART_ODD);
-        vmul(vb32_cvt_1, vb32_cvt_1, vb32_scaling, preg_b16_1, MODE_ZEROING);
-        vmul(vb32_cvt_2, vb32_cvt_2, vb32_scaling, preg_b16_1, MODE_ZEROING);
-        vmul(vb32_cvt_3, vb32_cvt_3, vb32_scaling, preg_b16_2, MODE_ZEROING);
-        vmul(vb32_cvt_4, vb32_cvt_4, vb32_scaling, preg_b16_2, MODE_ZEROING);
+        vmul(vb32_cvt_1, vb32_cvt_1, vb32_scaling, preg_f32_1_even, MODE_ZEROING);
+        vmul(vb32_cvt_2, vb32_cvt_2, vb32_scaling, preg_f32_1_odd, MODE_ZEROING);
+        vmul(vb32_cvt_3, vb32_cvt_3, vb32_scaling, preg_f32_2_even, MODE_ZEROING);
+        vmul(vb32_cvt_4, vb32_cvt_4, vb32_scaling, preg_f32_2_odd, MODE_ZEROING);
     } else {
         vlds((vector_u16 &)vb16_scaling, (__ubuf__ uint16_t *)scalingPtr, 8 * i, E2B_B16);
         vmul(vb16_out_1, vb16_in_1, vb16_scaling, preg_b16_1, MODE_ZEROING);
@@ -604,10 +612,10 @@ PTO_INTERNAL void CalcQuantizedFP8Values_B16_Window(__ubuf__ T *srcPtr, __ubuf__
         vcvt(vb32_cvt_4, vb16_out_2, preg_b16_2, PART_ODD);
     }
     // fp32->fp8 P0..P3 writes to bytes 0..3 of each 32-bit slot; pair with mod-4 index.
-    vcvt(vb8_p0, vb32_cvt_1, preg_b16_1, ROUND_R, RS_ENABLE, PART_P0);
-    vcvt(vb8_p1, vb32_cvt_3, preg_b16_2, ROUND_R, RS_ENABLE, PART_P1);
-    vcvt(vb8_p2, vb32_cvt_2, preg_b16_1, ROUND_R, RS_ENABLE, PART_P2);
-    vcvt(vb8_p3, vb32_cvt_4, preg_b16_2, ROUND_R, RS_ENABLE, PART_P3);
+    vcvt(vb8_p0, vb32_cvt_1, preg_f32_1_even, ROUND_R, RS_ENABLE, PART_P0);
+    vcvt(vb8_p1, vb32_cvt_3, preg_f32_2_even, ROUND_R, RS_ENABLE, PART_P1);
+    vcvt(vb8_p2, vb32_cvt_2, preg_f32_1_odd, ROUND_R, RS_ENABLE, PART_P2);
+    vcvt(vb8_p3, vb32_cvt_4, preg_f32_2_odd, ROUND_R, RS_ENABLE, PART_P3);
     vor(vb8_or1, vb8_p0, vb8_p1, preg_b8);
     vor(vb8_or2, vb8_p2, vb8_p3, preg_b8);
     vor(vb8_out, vb8_or1, vb8_or2, preg_b8);
