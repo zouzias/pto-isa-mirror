@@ -51,7 +51,7 @@ do
     esac
 done
 
-pattern="^Ascend910B|^Ascend910_9599"
+pattern="^Ascend910B|^Ascend950PR_9599"
 if [[ ! "$SOC_VERSION" =~ $pattern ]]; then
     echo "[ERROR] Unsupported SocVersion: ${SOC_VERSION}, this folder only support A2/A3/A5."
     exit 1
@@ -59,7 +59,7 @@ fi
 
 pattern="^Ascend910B4-1"
 if [[ "$SOC_VERSION" =~ $pattern ]] && [ "${RUN_MODE}" == "sim" ]; then
-    echo "[ERROR] SocVersion: ${SOC_VERSION} can not support sim mode, please use Ascend910B4 or Ascend910_9599."
+    echo "[ERROR] SocVersion: ${SOC_VERSION} can not support sim mode, please use Ascend910B4 or Ascend950PR_9599."
     exit 1
 fi
 
