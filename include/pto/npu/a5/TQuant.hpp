@@ -702,14 +702,22 @@ PTO_INTERNAL void TQuant_MXFP8_F32(__ubuf__ float *srcPtr, __ubuf__ uint8_t *exp
     }
     mem_bar(VST_VLD);
     maxPtr = maxPtr_backup;
-    constexpr bool unroll = (StaticRows * StaticCols > 1024) && (StaticRows * StaticCols % 256 == 0);
-    ExtractB8ExponentAndScaling<unroll>(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups, elementsPerRepeat);
+    constexpr bool canUnroll = (StaticRows * StaticCols > 1024) && (StaticRows * StaticCols % 256 == 0);
+    if constexpr (canUnroll) {
+        if (total_elements_count % 256 == 0) {
+            ExtractB8ExponentAndScaling<true>(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups, elementsPerRepeat);
+            mem_bar(VST_VST);
+            mem_bar(VST_VLD);
+            CalcQuantizedFP8Values_Unroll2(srcPtr, scalingPtr, dstPtr, vl_count, elementsPerRepeat,
+                                           total_elements_count);
+            return;
+        }
+    }
+    ExtractB8ExponentAndScaling<false>(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups, elementsPerRepeat);
+    mem_bar(VST_VST);
     mem_bar(VST_VLD);
-    if constexpr (unroll)
-        CalcQuantizedFP8Values_Unroll2(srcPtr, scalingPtr, dstPtr, vl_count, elementsPerRepeat, total_elements_count);
-    else
-        CalcQuantizedFP8Values(srcPtr, scalingPtr, dstPtr, vl_count, elementsPerRepeat, total_elements_count,
-                               preg_lower32, preg_upper32);
+    CalcQuantizedFP8Values(srcPtr, scalingPtr, dstPtr, vl_count, elementsPerRepeat, total_elements_count, preg_lower32,
+                           preg_upper32);
 }
 
 // B16 (BF16/FP16) -> MXFP8 quantization: AbsReduceMax + ExponentScaling + FP8 conversion.
