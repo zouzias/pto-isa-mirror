@@ -222,4 +222,3 @@ __global__ AICORE void SimpleGetUrma(__gm__ T *localDst, __gm__ T *remoteSrc,
     (void)event.Wait(session);
 }
 ```
-

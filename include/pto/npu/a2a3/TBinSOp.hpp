@@ -44,14 +44,12 @@ PTO_INTERNAL void BinS1LNormMode(__ubuf__ T *dst, __ubuf__ T *src0, T src1, unsi
     unsigned headRepeats = numElements / elementsPerRepeat;
     unsigned tailElements = numElements % elementsPerRepeat;
     Op::BinSInstr(dst, src0, src1, headRepeats);
-    if (tailElements)
-        [[unlikely]]
-        {
-            unsigned offset = headRepeats * elementsPerRepeat;
-            SetContMaskByDType<T>(tailElements);
-            Op::BinSInstr(dst + offset, src0 + offset, src1, 1);
-            SetFullVecMaskByDType<T>();
-        }
+    if (tailElements) [[unlikely]] {
+        unsigned offset = headRepeats * elementsPerRepeat;
+        SetContMaskByDType<T>(tailElements);
+        Op::BinSInstr(dst + offset, src0 + offset, src1, 1);
+        SetFullVecMaskByDType<T>();
+    }
 }
 template <typename Op, typename T, unsigned elementsPerRepeat, unsigned dstStride, unsigned srcStride>
 PTO_INTERNAL void BinS2LNormModeColVLAlign(__ubuf__ T *dst, __ubuf__ T *src0, T src1, unsigned validRow,
@@ -73,15 +71,13 @@ PTO_INTERNAL void BinS2LNormModeHead(__ubuf__ T *dst, __ubuf__ T *src0, T src1, 
         unsigned numLoop = numRepeatPerLine / REPEAT_MAX;
         unsigned remainAfterLoop = numRepeatPerLine % REPEAT_MAX;
         for (int i = 0; i < validRow; i++) {
-            if (numLoop)
-                [[unlikely]]
-                {
-                    for (int j = 0; j < numLoop; j++) {
-                        unsigned dstOffset = i * dstStride + j * elementsPerRepeat * REPEAT_MAX;
-                        unsigned srcOffset = i * srcStride + j * elementsPerRepeat * REPEAT_MAX;
-                        Op::BinSInstr(dst + dstOffset, src0 + srcOffset, src1, REPEAT_MAX);
-                    }
+            if (numLoop) [[unlikely]] {
+                for (int j = 0; j < numLoop; j++) {
+                    unsigned dstOffset = i * dstStride + j * elementsPerRepeat * REPEAT_MAX;
+                    unsigned srcOffset = i * srcStride + j * elementsPerRepeat * REPEAT_MAX;
+                    Op::BinSInstr(dst + dstOffset, src0 + srcOffset, src1, REPEAT_MAX);
                 }
+            }
             if (remainAfterLoop) {
                 unsigned dstOffset = i * dstStride + numLoop * elementsPerRepeat * REPEAT_MAX;
                 unsigned srcOffset = i * srcStride + numLoop * elementsPerRepeat * REPEAT_MAX;
@@ -201,23 +197,17 @@ PTO_INTERNAL void TBinSInstr(__ubuf__ typename TileDataDst::DType __out__ *dst,
                                                                                        validCol);
         }
     } else {
-        if (tileDataContinue)
-            [[likely]]
-            {
-                unsigned totalRepeats = (validRow * validCol + elementsPerRepeat - 1) / elementsPerRepeat;
-                bool nonVLAligned = ((validCol > elementsPerRepeat) && ((validCol % elementsPerRepeat) != 0));
-                bool enbleCountMode = nonVLAligned || (totalRepeats > pto::REPEAT_MAX);
-                if (enbleCountMode)
-                    [[unlikely]]
-                    {
-                        BinS1LCountMode<Op, T>(dst, src0, src1, validRow, validCol);
-                    }
-                else {
-                    BinS1LNormMode<Op, T, elementsPerRepeat, blockSizeElem, TileDataDst::Cols>(dst, src0, src1,
-                                                                                               validRow, validCol);
-                }
+        if (tileDataContinue) [[likely]] {
+            unsigned totalRepeats = (validRow * validCol + elementsPerRepeat - 1) / elementsPerRepeat;
+            bool nonVLAligned = ((validCol > elementsPerRepeat) && ((validCol % elementsPerRepeat) != 0));
+            bool enbleCountMode = nonVLAligned || (totalRepeats > pto::REPEAT_MAX);
+            if (enbleCountMode) [[unlikely]] {
+                BinS1LCountMode<Op, T>(dst, src0, src1, validRow, validCol);
+            } else {
+                BinS1LNormMode<Op, T, elementsPerRepeat, blockSizeElem, TileDataDst::Cols>(dst, src0, src1, validRow,
+                                                                                           validCol);
             }
-        else {
+        } else {
             constexpr unsigned normColRepeat = TileDataDst::Cols / elementsPerRepeat;
             constexpr bool countMode = (normColRepeat > 1) && ((TileDataDst::Rows * normColRepeat) < SMALL_RPT) &&
                                        ((TileDataSrc::Rows * normColRepeat) < SMALL_RPT);

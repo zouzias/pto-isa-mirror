@@ -1,6 +1,6 @@
 # docs/mkdocs Documentation Build Guide
 
-This directory is used to build the online documentation and local static documentation site for PTO Tile Lib, based on MkDocs (Material theme).
+This directory is used to build the online documentation and local static documentation site for PTO Tile Lib, based on MkDocs.
 
 ## Documentation Content
 
@@ -12,7 +12,16 @@ The generated documentation covers:
 - Getting started and usage guides
 - Kernel examples and directory guides
 
-The documentation source files are mainly located under `docs/mkdocs/src/`.
+The authored documentation sources are mainly located in the main repo trees:
+
+- `docs/isa/` for the PTO ISA manual and grouped instruction reference
+- `docs/assembly/` for PTO-AS syntax/spec material
+- top-level manual entry pages such as `docs/PTO-Virtual-ISA-Manual.md`
+
+`docs/mkdocs/src/` only contains MkDocs-owned landing pages, theme assets, and
+build-time generated virtual pages. In particular, `docs/mkdocs/src/docs/**`
+should be treated as generated output from `gen_pages.py`, not as a hand-edited
+source tree.
 
 ## Recommended Usage
 
@@ -48,7 +57,7 @@ After startup, the documentation is available at `http://127.0.0.1:8000`, and lo
 python -m mkdocs build -f docs/mkdocs/mkdocs.yml
 ```
 
-The output is generated in `docs/mkdocs/site/`.
+The output is generated in the repo-level `site/` directory.
 
 ## Option 2: Build via CMake
 
@@ -82,7 +91,7 @@ The build output is located in `build/docs/site/`.
 
 - `mkdocs.yml`: MkDocs configuration file
 - `requirements.txt`: documentation build dependencies
-- `src/`: documentation source directory
+- `src/`: MkDocs-owned landing pages and assets
 - `gen_pages.py`: documentation page generation script
 - `check_mkdocs.py`: documentation build check script
 

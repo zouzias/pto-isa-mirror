@@ -1,0 +1,77 @@
+# pto.vshrs
+
+`pto.vshrs` 属于[向量-标量操作](../../vec-scalar-ops_zh.md)指令集。
+
+## 概述
+
+`pto.vshrs` 对一个向量寄存器做逐 lane 右移，位移量来自同一个广播标量。
+
+## 机制
+
+对每个活跃 lane `i`，执行 `dst[i] = src[i] >> scalar`。标量位移量统一应用到所有活跃 lane。非活跃 lane 不参与运算。
+
+## 语法
+
+### PTO 汇编形式
+
+```text
+vshrs %dst, %src, %shift, %mask : !pto.vreg<NxT>, T
+```
+
+### AS Level 1（SSA）
+
+```mlir
+%result = pto.vshrs %input, %scalar, %mask : !pto.vreg<NxT>, T, !pto.mask -> !pto.vreg<NxT>
+```
+
+## 输入
+
+| 操作数 | 类型 | 说明 |
+|--------|------|------|
+| `%input` | `!pto.vreg<NxT>` | 源向量寄存器 |
+| `%scalar` | `T` | 广播到每个活跃 lane 的统一位移量 |
+| `%mask` | `!pto.mask` | 谓词掩码；只有掩码位为 1 的 lane 参与运算 |
+
+## 预期输出
+
+| 结果 | 类型 | 说明 |
+|------|------|------|
+| `%result` | `!pto.vreg<NxT>` | 活跃 lane 上得到逐 lane 右移结果 |
+
+## 副作用
+
+这条指令除了产生目标值，没有其他架构副作用。
+
+## 约束
+
+- 位移形式只对整数元素类型定义。
+- 符号扩展或逻辑补零行为遵循元素类型和目标 profile。
+- `%input` 与 `%result` 必须具有相同的向量宽度 `N` 和相同的元素类型 `T`。
+
+## 异常与非法情形
+
+- verifier 会拒绝非法的操作数形状、不支持的元素类型以及不合法的属性组合。
+- 约束部分列出的额外非法情形，同样属于 `pto.vshrs` 的契约。
+
+## 目标 Profile 限制
+
+- 只支持整数元素类型。
+- A5 是当前手册里最细的具体 profile；CPU 模拟器和 A2/A3 类目标可以在保留可见 PTO 契约的前提下做等效模拟。
+
+## 示例
+
+```c
+for (int i = 0; i < N; i++)
+    if (mask[i])
+        dst[i] = src[i] >> scalar;
+```
+
+```mlir
+%result = pto.vshrs %values, %shift, %mask : !pto.vreg<64xi32>, i32, !pto.mask -> !pto.vreg<64xi32>
+```
+
+## 相关页面
+
+- 指令集总览：[向量-标量操作](../../vec-scalar-ops_zh.md)
+- 上一条指令：[pto.vshls](./vshls_zh.md)
+- 下一条指令：[pto.vlrelu](./vlrelu_zh.md)

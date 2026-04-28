@@ -8,25 +8,24 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include <gtest/gtest.h>
+#ifndef TLOAD_HPP
+#define TLOAD_HPP
 
-#include <pto/costmodel/lightweight_costmodel.hpp>
+#include "pto/costmodel/pto_isa_costmodel.hpp"
 
-#include "cost_check.hpp"
+namespace pto {
 
-using namespace pto;
+struct MrgSortExecutedNumList {
+    uint16_t mrgSortList0;
+    uint16_t mrgSortList1;
+    uint16_t mrgSortList2;
+    uint16_t mrgSortList3;
+};
 
-TEST(TExpFit, float_32x64)
+template <typename TileData, typename GlobalData>
+PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src)
 {
-    constexpr double kExpectedCycles = 94.0;
-
-    ::pto::mocker::lightweight::CostModelInput input{
-        .op = ::pto::mocker::lightweight::PtoOpcode::TEXP,
-        .dtype = ::pto::mocker::lightweight::DType::Float,
-        .rows = 32,
-        .cols = 64,
-    };
-    ::pto::mocker::lightweight::CostModelResult result{};
-    ASSERT_TRUE(::pto::mocker::lightweight::EstimateCycles(input, result));
-    EXPECT_DOUBLE_EQ(result.cycles, kExpectedCycles);
+    pto::CostModel::GetInstance().LoadOpPredictCycle<TileData, GlobalData>("TCVT", dst, src);
 }
+} // namespace pto
+#endif // TLOAD_HPP

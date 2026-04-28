@@ -61,14 +61,12 @@ PTO_INTERNAL void Bin1LNormMode(__ubuf__ T *dstPtr, __ubuf__ T *src0Ptr, __ubuf_
     unsigned headRepeats = numElements / elementsPerRepeat;
     unsigned tailElements = numElements % elementsPerRepeat;
     Op::BinInstr(dstPtr, src0Ptr, src1Ptr, headRepeats); // headRepeats can be zero
-    if (tailElements)
-        [[unlikely]]
-        {
-            unsigned offset = headRepeats * elementsPerRepeat;
-            SetContMaskByDType<T>(tailElements);
-            Op::BinInstr(dstPtr + offset, src0Ptr + offset, src1Ptr + offset, 1);
-            SetFullVecMaskByDType<T>();
-        }
+    if (tailElements) [[unlikely]] {
+        unsigned offset = headRepeats * elementsPerRepeat;
+        SetContMaskByDType<T>(tailElements);
+        Op::BinInstr(dstPtr + offset, src0Ptr + offset, src1Ptr + offset, 1);
+        SetFullVecMaskByDType<T>();
+    }
 }
 
 template <typename Op, typename T, unsigned elementsPerRepeat, unsigned rowStride>
@@ -90,14 +88,12 @@ PTO_INTERNAL void Bin2LNormModeHead(__ubuf__ T *dstPtr, __ubuf__ T *src0Ptr, __u
         unsigned numLoop = numRepeatPerLine / REPEAT_MAX;
         unsigned remainAfterLoop = numRepeatPerLine % REPEAT_MAX;
         for (int i = 0; i < validRow; i++) {
-            if (numLoop)
-                [[unlikely]]
-                {
-                    for (int j = 0; j < numLoop; j++) {
-                        unsigned offset = i * stride + j * elementsPerRepeat * REPEAT_MAX;
-                        Op::BinInstr(dstPtr + offset, src0Ptr + offset, src1Ptr + offset, REPEAT_MAX);
-                    }
+            if (numLoop) [[unlikely]] {
+                for (int j = 0; j < numLoop; j++) {
+                    unsigned offset = i * stride + j * elementsPerRepeat * REPEAT_MAX;
+                    Op::BinInstr(dstPtr + offset, src0Ptr + offset, src1Ptr + offset, REPEAT_MAX);
                 }
+            }
             if (remainAfterLoop) {
                 unsigned offset = i * stride + numLoop * elementsPerRepeat * REPEAT_MAX;
                 Op::BinInstr(dstPtr + offset, src0Ptr + offset, src1Ptr + offset, remainAfterLoop);
@@ -210,22 +206,16 @@ PTO_INTERNAL void BinaryInstrGeneralPath(__ubuf__ T *dstPtr, __ubuf__ T *src0Ptr
                                          unsigned validRow, unsigned validCol)
 {
     // Continuous check in runtime(merge axis)
-    if ((TileData::Cols == validCol) || (validRow == 1))
-        [[likely]]
-        {
-            unsigned totalRepeats = (validRow * validCol + elementsPerRepeat - 1) / elementsPerRepeat;
-            bool nonVLAligned = ((validCol > elementsPerRepeat) && ((validCol % elementsPerRepeat) != 0));
-            if (nonVLAligned || (totalRepeats > pto::REPEAT_MAX))
-                [[unlikely]]
-                {
-                    Bin1LCountMode<Op, T>(dstPtr, src0Ptr, src1Ptr, validRow, validCol);
-                }
-            else {
-                Bin1LNormMode<Op, T, elementsPerRepeat, blockSizeElem, rowStride, TileData::Cols>(
-                    dstPtr, src0Ptr, src1Ptr, validRow, validCol);
-            }
+    if ((TileData::Cols == validCol) || (validRow == 1)) [[likely]] {
+        unsigned totalRepeats = (validRow * validCol + elementsPerRepeat - 1) / elementsPerRepeat;
+        bool nonVLAligned = ((validCol > elementsPerRepeat) && ((validCol % elementsPerRepeat) != 0));
+        if (nonVLAligned || (totalRepeats > pto::REPEAT_MAX)) [[unlikely]] {
+            Bin1LCountMode<Op, T>(dstPtr, src0Ptr, src1Ptr, validRow, validCol);
+        } else {
+            Bin1LNormMode<Op, T, elementsPerRepeat, blockSizeElem, rowStride, TileData::Cols>(dstPtr, src0Ptr, src1Ptr,
+                                                                                              validRow, validCol);
         }
-    else { // Non continuous
+    } else { // Non continuous
         constexpr unsigned normColRepeat = TileData::Cols / elementsPerRepeat;
         if constexpr ((normColRepeat > 1) && ((TileData::Rows * normColRepeat) < SMALL_RPT_BINOP)) {
             Bin2LCountMode<Op, T, rowStride>(dstPtr, src0Ptr, src1Ptr, validRow, validCol);
@@ -275,16 +265,14 @@ PTO_INTERNAL void Bin2LNormModeHead(__ubuf__ T *dst, __ubuf__ T *src0, __ubuf__ 
         unsigned numLoop = rptPerLine / REPEAT_MAX;
         unsigned remainAfterLoop = rptPerLine % REPEAT_MAX;
         for (int i = 0; i < validRow; i++) {
-            if (numLoop)
-                [[unlikely]]
-                {
-                    for (int j = 0; j < numLoop; j++) {
-                        unsigned dstOffset = i * dstStride + j * elemPerRpt * REPEAT_MAX;
-                        unsigned src0Offset = i * src0Stride + j * elemPerRpt * REPEAT_MAX;
-                        unsigned src1Offset = i * src1Stride + j * elemPerRpt * REPEAT_MAX;
-                        Op::BinInstr(dst + dstOffset, src0 + src0Offset, src1 + src1Offset, REPEAT_MAX);
-                    }
+            if (numLoop) [[unlikely]] {
+                for (int j = 0; j < numLoop; j++) {
+                    unsigned dstOffset = i * dstStride + j * elemPerRpt * REPEAT_MAX;
+                    unsigned src0Offset = i * src0Stride + j * elemPerRpt * REPEAT_MAX;
+                    unsigned src1Offset = i * src1Stride + j * elemPerRpt * REPEAT_MAX;
+                    Op::BinInstr(dst + dstOffset, src0 + src0Offset, src1 + src1Offset, REPEAT_MAX);
                 }
+            }
             if (remainAfterLoop) {
                 unsigned offset = i * dstStride + numLoop * elemPerRpt * REPEAT_MAX;
                 unsigned src0Offset = i * src0Stride + numLoop * elemPerRpt * REPEAT_MAX;
