@@ -747,25 +747,18 @@ PTO_INTERNAL void TQuant_MXFP8_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *expPtr,
         AbsReduceMax_b16_ND_2D(srcPtr, maxPtr, validRows, validCols, srcCols);
         mem_bar(VST_VLD);
         maxPtr = maxPtr_backup;
-        // Downstream 2D Extract/Calc need per-row addresses to meet alignment.
-        // The tightest constraint is the PK_B16 store of `expPtr` (uint8_t* with
-        // 1-byte-per-group stride) inside ExtractB8ExponentAndScalingVL: the
-        // hardware requires the per-row start to be 32 B-aligned. That means
-        // groupsPerRow * sizeof(uint8_t) % 32 == 0, i.e. srcCols % 1024 == 0.
-        // (Simulator is more permissive at 32 B/row, but the board faults with
-        // an unaligned UB access for 16 B-aligned PK_B16 stores.) When the
-        // condition does not hold, fall back to flat 1D over the padded buffer
-        // (pad lanes are zero so the result is exact — TSTORE trims pad cols
-        // via the GM shape).
-        if (srcCols % 1024 == 0) {
-            ExtractB8ExponentAndScaling_2D<T>(maxPtr, expPtr, scalingPtr, validRows, validCols, srcCols);
-            mem_bar(VST_VLD);
-            CalcQuantizedFP8Values_2D<T>(srcPtr, scalingPtr, dstPtr, validRows, validCols, srcCols);
-        } else {
-            ExtractB8ExponentAndScaling(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups);
-            mem_bar(VST_VLD);
-            CalcQuantizedFP8Values(srcPtr, scalingPtr, dstPtr, total_elements_count);
-        }
+        // The downstream 2D Extract/Calc helpers issue sub-VL NORM_B16 / PK_B16
+        // stores at per-row offsets that are smaller than a full VL. The simulator
+        // tolerates this, but on the board these unaligned partial-VL stores
+        // produce wrong values (and at coarser alignments — full UB-access
+        // exceptions). AbsReduceMax_b16_ND_2D already produces the group-max
+        // buffer in the same packed-per-row layout that the flat 1D Extract/Calc
+        // pass consumes, so feeding the flat helpers over the padded buffer is
+        // both safe and equivalent (pad lanes are zero, and TSTORE trims pad
+        // cols via the GM shape).
+        ExtractB8ExponentAndScaling(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups);
+        mem_bar(VST_VLD);
+        CalcQuantizedFP8Values(srcPtr, scalingPtr, dstPtr, total_elements_count);
     }
 }
 
