@@ -122,14 +122,14 @@ __tf__ PTO_INTERNAL void TColReduceIdx8(typename TileDataOut::TileDType __out__ 
             vcvt(outputIndexEven, vregIndexOutput0, preg, PART_EVEN);
             vcvt(outputIndexOdd, vregIndexOutput0, preg, PART_ODD);
             vintlv(outputIndex0, outputIndex1, outputIndexEven, outputIndexOdd);
-            vsts(outputIndex0, dst, j * elementsPerRepeat, NORM_B32, preg0);
-            vsts(outputIndex1, dst, j * elementsPerRepeat + ELE_CNT_B32, NORM_B32, preg1);
+            vsts(outputIndex0, dstPtr, j * elementsPerRepeat, NORM_B32, preg0);
+            vsts(outputIndex1, dstPtr, j * elementsPerRepeat + ELE_CNT_B32, NORM_B32, preg1);
 
             vcvt(outputIndexEven, vregIndexOutput1, preg, PART_EVEN);
             vcvt(outputIndexOdd, vregIndexOutput1, preg, PART_ODD);
             vintlv(outputIndex0, outputIndex1, outputIndexEven, outputIndexOdd);
-            vsts(outputIndex0, dst, j * elementsPerRepeat + 2 * ELE_CNT_B32, NORM_B32, preg2);
-            vsts(outputIndex1, dst, j * elementsPerRepeat + 3 * ELE_CNT_B32, NORM_B32, preg3);
+            vsts(outputIndex0, dstPtr, j * elementsPerRepeat + 2 * ELE_CNT_B32, NORM_B32, preg2);
+            vsts(outputIndex1, dstPtr, j * elementsPerRepeat + 3 * ELE_CNT_B32, NORM_B32, preg3);
         }
     }
 }
@@ -144,7 +144,7 @@ __tf__ PTO_INTERNAL void TColReduceIdx16(typename TileDataOut::TileDType __out__
     constexpr unsigned srcRowStride = TileDataIn::Cols;
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(TIN);
     uint16_t repeatTimes = CeilDivision(srcValidCol, elementsPerRepeat);
-    __ubuf__ TOUT *dstPtr = (__ubuf__ TOUT *)__cce_get_tile_ptr(dst);
+    __ubuf__ TOUT *dstPtr = (__ubuf__ TOUT *)__cce_get_tile_ptr(dstPtr);
     __ubuf__ TIN *srcPtr = (__ubuf__ TIN *)__cce_get_tile_ptr(src);
 
     __VEC_SCOPE__
@@ -185,8 +185,8 @@ __tf__ PTO_INTERNAL void TColReduceIdx16(typename TileDataOut::TileDType __out__
             vcvt(outputIndexEven, vregIndexOld, preg, PART_EVEN);
             vcvt(outputIndexOdd, vregIndexOld, preg, PART_ODD);
             vintlv(outputIndex0, outputIndex1, outputIndexEven, outputIndexOdd);
-            vsts(outputIndex0, dst, j * elementsPerRepeat, NORM_B32, preg0);
-            vsts(outputIndex1, dst, j * elementsPerRepeat + ELE_CNT_B32, NORM_B32, preg1);
+            vsts(outputIndex0, dstPtr, j * elementsPerRepeat, NORM_B32, preg0);
+            vsts(outputIndex1, dstPtr, j * elementsPerRepeat + ELE_CNT_B32, NORM_B32, preg1);
         }
     }
 }
