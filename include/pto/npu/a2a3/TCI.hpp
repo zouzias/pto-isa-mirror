@@ -87,8 +87,8 @@ __tf__ AICORE void TCI_b32_repeat(typename TileData::TileDType __out__ dst, type
     if (numRemainPerLine) {
         set_mask_norm();
         SetContinuousMask(numRemainPerLine);
-        vadds((__ubuf__ int32_t *)(dstPtr + 64 * numRepeatPerLine), (__ubuf__ int32_t *)tmp1, S + 64 * numRepeatPerLine, 1,
-              1, 1, 8, 8);
+        vadds((__ubuf__ int32_t *)(dstPtr + 64 * numRepeatPerLine), (__ubuf__ int32_t *)tmp1, S + 64 * numRepeatPerLine,
+              1, 1, 1, 8, 8);
     }
     pipe_barrier(PIPE_V);
     if (descending) {
@@ -188,8 +188,8 @@ __tf__ AICORE void TCI_b16_repeat(typename TileData::TileDType __out__ dst, type
     pipe_barrier(PIPE_V);
     if (numRemainPerLine) {
         SetContinuousMask(numRemainPerLine);
-        vadds((__ubuf__ int16_t *)(dstPtr + 128 * numRepeatPerLine), (__ubuf__ int16_t *)tmp3, S + 128 * numRepeatPerLine,
-              1, 1, 1, 8, 8);
+        vadds((__ubuf__ int16_t *)(dstPtr + 128 * numRepeatPerLine), (__ubuf__ int16_t *)tmp3,
+              S + 128 * numRepeatPerLine, 1, 1, 1, 8, 8);
     }
 }
 

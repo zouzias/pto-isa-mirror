@@ -39,8 +39,7 @@ __global__ AICORE void runTTRANSConv1(__gm__ T __out__ *out, __gm__ T __in__ *sr
     using SrcTileData = Tile<TileType::Vec, T, 1, elemNum, BLayout::RowMajor, 1, elemNum>;
     SrcTileData src0Tile;
     TASSIGN(src0Tile, 0x0);
-    using TileData =
-        ConvTile<TileType::Vec, T, elemNum, Layout::NCHW, ConvTileShape<dstN, dstC0 * dstC1, dstH, dstW>>;
+    using TileData = ConvTile<TileType::Vec, T, elemNum, Layout::NCHW, ConvTileShape<dstN, dstC0 * dstC1, dstH, dstW>>;
     TileData srcTile;
     static_assert(srcTile.totalDimCount == 4);
     TASSIGN(srcTile, 0x0);
@@ -116,8 +115,8 @@ __global__ AICORE void runTTRANSConv2(__gm__ T __out__ *out, __gm__ T __in__ *sr
     TRESHAPE(src0Tile, srcTile);
 #endif
 
-    using DstTileData = ConvTile<TileType::Vec, T, elemNum, Layout::FRACTAL_Z,
-                                 ConvTileShape<dstC1 * dstH * dstW, dstN1, dstN0, dstC0>>;
+    using DstTileData =
+        ConvTile<TileType::Vec, T, elemNum, Layout::FRACTAL_Z, ConvTileShape<dstC1 * dstH * dstW, dstN1, dstN0, dstC0>>;
     using TmpTileData = Tile<TileType::Vec, T, 16, 32, BLayout::RowMajor, 16, 32>;
     DstTileData dstTile;
     static_assert(dstTile.totalDimCount == 4);
