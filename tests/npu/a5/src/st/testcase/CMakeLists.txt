@@ -238,6 +238,11 @@ set(ALL_TESTCASES
     tmov_zz
     tmov_nd2nz
     textract_acc2vec
+    engram_fused_weight
+    engram_gate_fwd
+    engram_gate_bwd
+    engram_grad_w_reduce
+    engram_hash
 )
 
 if(NOT AUTO_MODE)
