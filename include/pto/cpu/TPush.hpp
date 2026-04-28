@@ -363,37 +363,69 @@ PTO_INTERNAL void TPush_c2v(Pipe &pipe, TileProd &tile, size_t entryBase, size_t
     constexpr int consCols =
         (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? (TileProd::Cols / 2) : static_cast<int>(TileProd::Cols);
 
-    if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
+    // If GM is available, we use the Consumer Buffer address
+    if (pipe.fifo.GM_SLOT_BUFFER != nullptr) {
         using SlotTile = Tile<TileType::Vec, T, consRows, consCols, BLayout::RowMajor, consRows, consCols>;
         SlotTile slotTile;
         TASSIGN(slotTile, static_cast<uint64_t>(pipe.fifo.C2V_CONSUMER_BUF + entryBase));
-        cpu_pipe::CopyTileWindow(slotTile, tile, 0, 0);
-    } else {
-        auto &slotStorage = Pipe::GetSharedState().local_slot_storage[slotIndex];
-        for (uint32_t splitIndex = 0; splitIndex < cpu_pipe::GetSplitCount<Split>(); ++splitIndex) {
-            auto *slotPtr = reinterpret_cast<T *>(slotStorage.data() + splitIndex * Pipe::RingFiFo::SLOT_SIZE +
-                                                  pipe.prod.entryOffset);
+        
+        if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
+            cpu_pipe::CopyTileWindow(slotTile, tile, 0, 0);
+        } else {
+            // Note: In GM mode, split logic depends on subblock IDs
+            cpu_pipe::CopyTileWindow(slotTile, tile, 
+                                     cpu_pipe::GetSplitRowOffset<Split, TileProd>(), 
+                                     cpu_pipe::GetSplitColOffset<Split, TileProd>());
+        }
+    } 
+    // A5 ONE-HOP PATH: Use internal Pipe storage
+    else {
+        auto &shared_state = Pipe::GetSharedState();
+        auto &slotStorage = shared_state.local_slot_storage[slotIndex];
+        
+        uint32_t splitCount = cpu_pipe::GetSplitCount<Split>();
+        for (uint32_t splitIndex = 0; splitIndex < splitCount; ++splitIndex) {
+            auto *slotPtr = reinterpret_cast<T *>(slotStorage.data() + 
+                                                 splitIndex * Pipe::RingFiFo::SLOT_SIZE +
+                                                 pipe.prod.entryOffset);
+            
             const uint32_t rowOffset = (Split == TileSplitAxis::TILE_UP_DOWN) ? splitIndex * consRows : 0;
             const uint32_t colOffset = (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? splitIndex * consCols : 0;
+            
             cpu_pipe::CopyTileWindowToLinear(slotPtr, consCols, tile, consRows, rowOffset, colOffset);
         }
     }
 }
 
 template <typename Pipe, typename TileProd, TileSplitAxis Split>
-PTO_INTERNAL void TPush_v2c(Pipe &pipe, TileProd &tile, size_t entryBase)
+PTO_INTERNAL void TPush_v2c(Pipe &pipe, TileProd &tile, size_t entryBase, size_t slotIndex)
 {
     using T = typename TileProd::DType;
     constexpr int consRows =
         (Split == TileSplitAxis::TILE_UP_DOWN) ? (TileProd::Rows * 2) : static_cast<int>(TileProd::Rows);
     constexpr int consCols =
         (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? (TileProd::Cols * 2) : static_cast<int>(TileProd::Cols);
-    using SlotTile = Tile<TileType::Mat, T, consRows, consCols, BLayout::RowMajor, consRows, consCols>;
-    SlotTile slotTile;
-    TASSIGN(slotTile, static_cast<uint64_t>(pipe.fifo.V2C_CONSUMER_BUF + entryBase));
-    cpu_pipe::FillTile(slotTile, static_cast<T>(0));
-    cpu_pipe::InsertTileWindow(slotTile, tile, cpu_pipe::GetSplitRowOffset<Split, SlotTile>(),
-                               cpu_pipe::GetSplitColOffset<Split, SlotTile>());
+
+    if (pipe.fifo.GM_SLOT_BUFFER != nullptr) {
+        using SlotTile = Tile<TileType::Mat, T, consRows, consCols, BLayout::RowMajor, consRows, consCols>;
+        SlotTile slotTile;
+        TASSIGN(slotTile, static_cast<uint64_t>(pipe.fifo.V2C_CONSUMER_BUF + entryBase));
+        cpu_pipe::FillTile(slotTile, static_cast<T>(0));
+        cpu_pipe::InsertTileWindow(slotTile, tile, 
+                                   cpu_pipe::GetSplitRowOffset<Split, SlotTile>(),
+                                   cpu_pipe::GetSplitColOffset<Split, SlotTile>());
+    }
+    // A5 ONE-HOP PATH: Use internal Pipe storage
+    else {
+        auto &shared_state = Pipe::GetSharedState();
+        auto &slotStorage = shared_state.local_slot_storage[slotIndex];
+        auto *slotPtr = reinterpret_cast<T *>(slotStorage.data() + pipe.prod.entryOffset);
+
+        // For v2c, we don't usually 'split' into multiple sub-slots in the pipe, 
+        // but we do need to place the tile window correctly in the 'large' destination view.
+        cpu_pipe::CopyTileWindowToLinear(slotPtr, consCols, tile, TileProd::Rows, 
+                                         0, 0); // Logic adapted for linear rendezvous
+    }
 }
 
 template <typename Pipe, typename TileProd, TileSplitAxis Split>
@@ -421,7 +453,7 @@ PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, TileProd &tile)
     } else if constexpr (Pipe::is_c2v) {
         TPush_c2v<Pipe, TileProd, Split>(pipe, tile, entryBase, slotIndex);
     } else if constexpr (Pipe::is_v2c) {
-        TPush_v2c<Pipe, TileProd, Split>(pipe, tile, entryBase);
+        TPush_v2c<Pipe, TileProd, Split>(pipe, tile, entryBase, slotIndex);
     }
     if (pipe.prod.getRecordStatus()) {
         pipe.prod.template record<Split>();
