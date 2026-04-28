@@ -56,8 +56,8 @@ PTO_INTERNAL void Handle32BAlignedPad_Byte(decltype(getCopyNullPtr<TileDataDst>(
 #ifndef __PTO_AUTO__
     PtoSetWaitFlag<PIPE_V, PIPE_S>();
 #else
-    set_flag(PIPE_V, PIPE_S);
-    wait_flag(PIPE_V, PIPE_S);
+    set_flag(PIPE_V, PIPE_S, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
 #endif
     using TP = decltype(padValue);
     for (uint64_t r = 0; r < srcValidRow; r++) {
