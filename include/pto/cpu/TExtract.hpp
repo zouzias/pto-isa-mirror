@@ -66,17 +66,22 @@ PTO_INTERNAL void TExtract_Impl(DstTileData &dst, SrcTileData &src, uint32_t idx
 }
 
 inline int get_index(int validRow, int validCol, int idxR, int idxC, int dtypeSize) {
+    int block_width = 32 / dtypeSize;
     int R = idxR / 16;
     int i = idxR % 16;
-    int C = idxC / 16;
-    int j = idxC % 16;
-    int index = R * 16 * validCol + C * 512 / dtypeSize + i * (32 / dtypeSize) + j;
+    int C = idxC / block_width;
+    int j = idxC % block_width;
+    int index = R * 16 * validCol + C * 16 * block_width + i * block_width + j;
     return index;
 }
 
+
+
 template <typename DstTileData, typename SrcTileData, typename FpTileData, QuantModeCPU_t quantMode, bool applyRelu>
 PTO_INTERNAL void TExtract_Impl(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint32_t idxRow, uint32_t idxCol)
-{
+{   
+    if constexpr (std::is_same_v<typename SrcTileData::DType, int32_t>)
+        get(src.data());
     assert(dst.GetValidRow() + idxRow <= src.GetValidRow() && dst.GetValidCol() + idxCol <= src.GetValidCol());
 
     using D = typename DstTileData::DType;

@@ -115,6 +115,16 @@ inline float extract_m1_from_quant(uint64_t quant)
     return sign_val * mantissa_val * exponent_val;
 }
 
+inline void get(int32_t *src){
+    for (size_t i = 0; i < 128*64; i++)
+    {
+        if(src[i]==-3582)
+        {
+            std::cout<< i <<" ";
+        } 
+    }
+}
+
 template <typename DstType, typename SrcType, QuantModeCPU_t mode, bool use_relu>
 DstType quantize_element(SrcType src_val, uint64_t scalar)
 {
