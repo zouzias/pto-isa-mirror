@@ -342,7 +342,7 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_2D(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr,
     // Requires groupsPerRow % grps_per_dintlv == 0 (i.e. srcCols % 256 == 0)
     // so per-row tiling matches a global linear index. Caller already gates on
     // srcCols % 1024 == 0 which is stricter.
-    uint16_t iter = 0;
+    uint32_t total_iters = (uint32_t)validRows * loop_num_per_row;
     for (uint16_t row = 0; row < (uint16_t)validRows; ++row) {
         uint32_t src_row_off = row * srcCols;
         for (uint16_t i = 0; i < loop_num_per_row; ++i) {
@@ -351,11 +351,11 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_2D(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr,
             if (remaining > elements_per_dintlv)
                 remaining = elements_per_dintlv;
             AbsReduceMax_b16_DintlvWindow(srcPtr, src_row_off + col_offset, remaining, vb16_max_1);
-            vstus(ureg_max, blks_per_vl, vb16_max_1, maxPtr + iter * grps_per_dintlv);
-            ++iter;
+            uint32_t flat_iter = (uint32_t)row * loop_num_per_row + i;
+            vstus(ureg_max, blks_per_vl, vb16_max_1, maxPtr + flat_iter * grps_per_dintlv);
         }
     }
-    vstas(ureg_max, maxPtr + iter * grps_per_dintlv, 0);
+    vstas(ureg_max, maxPtr + total_iters * grps_per_dintlv, 0);
     (void)validCols; // padded source makes validCols implicit; retained for API symmetry
 }
 
