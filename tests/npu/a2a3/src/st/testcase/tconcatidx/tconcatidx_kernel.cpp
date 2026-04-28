@@ -57,9 +57,7 @@ __global__ AICORE void runTConcat(__gm__ dataType __out__ *out, __gm__ dataType 
 
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
-#ifndef __PTO_AUTO__
     TLOAD(dstTile, dstGlobal);
-#endif
     TLOAD(src0IdxTile, src0IdxGlobal);
     TLOAD(src1IdxTile, src1IdxGlobal);
 #ifndef __PTO_AUTO__
