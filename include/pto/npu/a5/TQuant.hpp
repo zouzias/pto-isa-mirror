@@ -652,18 +652,25 @@ PTO_INTERNAL void CalcQuantizedFP8Values_2D(__ubuf__ T *srcPtr, __ubuf__ T *scal
     constexpr uint32_t elementsPerVL_b16 = REPEAT_BYTE / sizeof(T); // 128
     constexpr uint32_t elementsPerDintlv = 2 * elementsPerVL_b16;   // 256
     uint32_t groupsPerRow = srcCols / 32;
-    uint16_t loopsPerRow = CeilDivision((uint32_t)validCols, elementsPerDintlv);
+    // Process FULL DINTLV windows that fit within srcCols (caller gates on
+    // srcCols % 1024 == 0, so srcCols is a multiple of elementsPerDintlv=256).
+    // Pad cols [validCols, srcCols) of the source were zeroed by ZeroPadSourceTile,
+    // so quantizing them yields fp8=0 in the dst pad cols. TSTORE later trims dst
+    // pad cols via the GM shape (stride = validCols), so the extra writes are
+    // harmless. Avoiding sub-VL predicates on the last per-row window dodges a
+    // board-side issue where an NORM_B8 vsts with rem=255 immediately followed by
+    // another NORM_B8 store at the next VL-aligned address corrupts the next
+    // store's first byte (observed: idx 0x1023 in dst = row 1 col 0 reads as 0).
+    uint16_t loopsPerRow = (uint16_t)(srcCols / elementsPerDintlv);
+    (void)validCols;
     for (uint16_t row = 0; row < (uint16_t)validRows; ++row) {
         uint32_t srcRowOff = row * srcCols;        // T-indexed
         uint32_t dstRowOff = row * srcCols;        // uint8_t-indexed (1 byte per elem)
         uint32_t scaleRowOff = row * groupsPerRow; // T-indexed, packed scaling layout
         for (uint16_t i = 0; i < loopsPerRow; ++i) {
             uint32_t colOff = i * elementsPerDintlv;
-            uint32_t remaining = (validCols > colOff) ? (validCols - colOff) : 0;
-            if (remaining > elementsPerDintlv)
-                remaining = elementsPerDintlv;
             CalcQuantizedFP8Values_B16_Window<T>(srcPtr + srcRowOff, scalingPtr + scaleRowOff, dstPtr + dstRowOff, i,
-                                                 colOff, remaining);
+                                                 colOff, elementsPerDintlv);
         }
     }
 }
