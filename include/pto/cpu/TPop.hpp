@@ -41,14 +41,12 @@ PTO_INTERNAL void TPOP_IMPL(Pipe &pipe, TileCons &tile)
         GlobalData globalData(addr);
         TLOAD_IMPL(tile, globalData);
     } 
-    // --- PATH 2: INTERNAL SLOTS (A5 ONE-HOP) ---
     else {
         using T = typename TileCons::DType;
         auto &shared_state = Pipe::GetSharedState();
         const auto &slotStorage = shared_state.local_slot_storage[slotIndex];
 
         if constexpr (Pipe::is_c2v) {
-            // Determine which "slice" of the slot this specific core should grab
             uint32_t splitCount = cpu_pipe::GetSplitCount<Split>();
             uint32_t splitIndex = 0;
             
@@ -59,11 +57,9 @@ PTO_INTERNAL void TPOP_IMPL(Pipe &pipe, TileCons &tile)
             const auto *slotPtr = reinterpret_cast<const T *>(
                 slotStorage.data() + splitIndex * Pipe::RingFiFo::SLOT_SIZE + pipe.cons.entryOffset);
             
-            // Extract from linear pipe storage back into the 2D Tile
             cpu_pipe::CopyLinearToTile(tile, slotPtr, static_cast<uint32_t>(tile.GetValidCol()));
         } 
         else if constexpr (Pipe::is_v2c) {
-            // Vector-to-Cube: Grab the data from the slot
             const auto *slotPtr = reinterpret_cast<const T *>(
                 slotStorage.data() + pipe.cons.entryOffset);
             

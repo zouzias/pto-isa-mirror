@@ -363,7 +363,6 @@ PTO_INTERNAL void TPush_c2v(Pipe &pipe, TileProd &tile, size_t entryBase, size_t
     constexpr int consCols =
         (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? (TileProd::Cols / 2) : static_cast<int>(TileProd::Cols);
 
-    // If GM is available, we use the Consumer Buffer address
     if (pipe.fifo.GM_SLOT_BUFFER != nullptr) {
         using SlotTile = Tile<TileType::Vec, T, consRows, consCols, BLayout::RowMajor, consRows, consCols>;
         SlotTile slotTile;
@@ -372,13 +371,11 @@ PTO_INTERNAL void TPush_c2v(Pipe &pipe, TileProd &tile, size_t entryBase, size_t
         if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
             cpu_pipe::CopyTileWindow(slotTile, tile, 0, 0);
         } else {
-            // Note: In GM mode, split logic depends on subblock IDs
             cpu_pipe::CopyTileWindow(slotTile, tile, 
                                      cpu_pipe::GetSplitRowOffset<Split, TileProd>(), 
                                      cpu_pipe::GetSplitColOffset<Split, TileProd>());
         }
     } 
-    // A5 ONE-HOP PATH: Use internal Pipe storage
     else {
         auto &shared_state = Pipe::GetSharedState();
         auto &slotStorage = shared_state.local_slot_storage[slotIndex];
@@ -415,16 +412,13 @@ PTO_INTERNAL void TPush_v2c(Pipe &pipe, TileProd &tile, size_t entryBase, size_t
                                    cpu_pipe::GetSplitRowOffset<Split, SlotTile>(),
                                    cpu_pipe::GetSplitColOffset<Split, SlotTile>());
     }
-    // A5 ONE-HOP PATH: Use internal Pipe storage
     else {
         auto &shared_state = Pipe::GetSharedState();
         auto &slotStorage = shared_state.local_slot_storage[slotIndex];
         auto *slotPtr = reinterpret_cast<T *>(slotStorage.data() + pipe.prod.entryOffset);
 
-        // For v2c, we don't usually 'split' into multiple sub-slots in the pipe, 
-        // but we do need to place the tile window correctly in the 'large' destination view.
         cpu_pipe::CopyTileWindowToLinear(slotPtr, consCols, tile, TileProd::Rows, 
-                                         0, 0); // Logic adapted for linear rendezvous
+                                         0, 0); 
     }
 }
 
