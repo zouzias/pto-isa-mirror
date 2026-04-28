@@ -718,53 +718,31 @@ PTO_INTERNAL void TQuant_MXFP8_F32(__ubuf__ float *srcPtr, __ubuf__ uint8_t *exp
 }
 
 // B16 (BF16/FP16) -> MXFP8 quantization: AbsReduceMax + ExponentScaling + FP8 conversion.
-// When validCols == srcCols (static == dynamic width), the source tile is contiguous in UB
-// so the flat 1D reducer applies. Otherwise rows are padded to srcCols (ZeroPadSourceTile)
-// and we dispatch the 2D per-row reducer that honors the row stride. The 2D Extract/Calc
-// passes are only used when srcCols % 512 == 0 (NORM 32 B / E2B_B16 16 B alignment), else
-// we fall back to the flat Extract/Calc over the zero-padded buffer (pad lanes are zero
-// so the result is exact; TSTORE trims pad cols via the GM shape).
+// Single 1D-flat pipeline over a (zero-padded) row-major buffer of validRows * srcCols
+// elements. When validCols < srcCols the caller (TQuant_MXFP8_Impl) has already invoked
+// ZeroPadSourceTile so pad lanes contain 0; per-group maxes therefore come out correct
+// (zero pad lanes don't change the absolute max), and TSTORE trims pad cols via the GM
+// shape on the way out. Collapsing the 1D-fast and 2D paths into one removes a class of
+// sub-VL / per-row store-alignment bugs observed on the board.
 template <typename T>
 PTO_INTERNAL void TQuant_MXFP8_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *expPtr, __ubuf__ uint8_t *dstPtr,
                                    __ubuf__ T *maxPtr, __ubuf__ T *scalingPtr, uint16_t vl_count,
                                    unsigned exp_loop_count, uint32_t numGroups, uint32_t total_elements_count,
                                    unsigned validRows, unsigned validCols, unsigned srcCols)
 {
-    __ubuf__ T *maxPtr_backup = maxPtr;
-    if (validCols == srcCols) {
-        // 1D fast path: source is contiguous; pick the best flat reducer by size.znme
-        constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T);
-        constexpr uint32_t elementsPerLargeLoop = 32 * elementsPerVL;
-        if (total_elements_count % elementsPerLargeLoop == 0)
-            AbsReduceMax_b16_ND_largesizes(srcPtr, maxPtr, vl_count, total_elements_count);
-        else
-            AbsReduceMax_b16_ND(srcPtr, maxPtr, vl_count, total_elements_count);
-        // Board: add VST_VST alongside VST_VLD/VV_ALL. Sim orders stores implicitly,
-        // board does not — missing VST_VST lets Phase-3 E2B_B16 read stale scaling.
-        mem_bar(VST_VLD);
-        maxPtr = maxPtr_backup;
-        ExtractB8ExponentAndScaling(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups);
-        mem_bar(VST_VLD);
-        CalcQuantizedFP8Values(srcPtr, scalingPtr, dstPtr, total_elements_count);
-    } else {
-        // 2D path: iterate per row with srcCols stride. ZeroPadSourceTile has zeroed
-        // pad lanes so per-row max is correct.
-        AbsReduceMax_b16_ND_2D(srcPtr, maxPtr, validRows, validCols, srcCols);
-        mem_bar(VST_VLD);
-        maxPtr = maxPtr_backup;
-        // The downstream 2D Extract/Calc helpers issue sub-VL NORM_B16 / PK_B16
-        // stores at per-row offsets that are smaller than a full VL. The simulator
-        // tolerates this, but on the board these unaligned partial-VL stores
-        // produce wrong values (and at coarser alignments — full UB-access
-        // exceptions). AbsReduceMax_b16_ND_2D already produces the group-max
-        // buffer in the same packed-per-row layout that the flat 1D Extract/Calc
-        // pass consumes, so feeding the flat helpers over the padded buffer is
-        // both safe and equivalent (pad lanes are zero, and TSTORE trims pad
-        // cols via the GM shape).
-        ExtractB8ExponentAndScaling(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups);
-        mem_bar(VST_VLD);
-        CalcQuantizedFP8Values(srcPtr, scalingPtr, dstPtr, total_elements_count);
-    }
+    (void)validRows;
+    (void)validCols;
+    (void)srcCols;
+    constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T);
+    constexpr uint32_t elementsPerLargeLoop = 32 * elementsPerVL;
+    if (total_elements_count % elementsPerLargeLoop == 0)
+        AbsReduceMax_b16_ND_largesizes(srcPtr, maxPtr, vl_count, total_elements_count);
+    else
+        AbsReduceMax_b16_ND(srcPtr, maxPtr, vl_count, total_elements_count);
+    mem_bar(VST_VLD);
+    ExtractB8ExponentAndScaling(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups);
+    mem_bar(VST_VLD);
+    CalcQuantizedFP8Values(srcPtr, scalingPtr, dstPtr, total_elements_count);
 }
 
 // Zero-pad columns [validCols, StaticCols) of a 16-bit source tile at VL-aligned
