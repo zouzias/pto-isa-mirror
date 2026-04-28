@@ -1832,7 +1832,8 @@ PTO_INST RecordEvent TFMOD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &s
     return {};
 }
 
-template <typename Pipe, typename TileProd, TileSplitAxis Split, typename... WaitEvents>
+template <typename Pipe, typename TileProd, TileSplitAxis Split,
+          std::enable_if_t<is_tile_data_v<TileProd>, int> = 0, typename... WaitEvents>
 PTO_INST RecordEvent TPUSH(Pipe &pipe, TileProd &tile, WaitEvents &... events)
 {
     TSYNC(events...);
@@ -1848,7 +1849,8 @@ PTO_INST RecordEvent TPUSH(TileData &tile, Pipe &pipe, WaitEvents &... events)
     return {};
 }
 
-template <typename Pipe, typename TileCons, TileSplitAxis Split, typename... WaitEvents>
+template <typename Pipe, typename TileCons, TileSplitAxis Split,
+          std::enable_if_t<is_tile_data_v<TileCons>, int> = 0, typename... WaitEvents>
 PTO_INST RecordEvent TPOP(Pipe &pipe, TileCons &tile, WaitEvents &... events)
 {
     TSYNC(events...);
@@ -1872,11 +1874,39 @@ PTO_INST RecordEvent TFREE(Pipe &pipe, WaitEvents &... events)
     return {};
 }
 
-template <typename Pipe, typename... WaitEvents>
-PTO_INST RecordEvent TFREE(Pipe &pipe, WaitEvents &... events)
+template <typename Pipe, typename GlobalData, TileSplitAxis Split,
+          std::enable_if_t<is_global_data_v<GlobalData>, int> = 0, typename... WaitEvents>
+PTO_INST RecordEvent TALLOC(Pipe &pipe, GlobalData &gmTensor, WaitEvents &... events)
 {
     TSYNC(events...);
-    TFREE_IMPL<Pipe>(pipe);
+    TALLOC_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
+    return {};
+}
+
+template <typename Pipe, typename GlobalData, TileSplitAxis Split,
+          std::enable_if_t<is_global_data_v<GlobalData>, int> = 0, typename... WaitEvents>
+PTO_INST RecordEvent TPUSH(Pipe &pipe, GlobalData &gmTensor, WaitEvents &... events)
+{
+    TSYNC(events...);
+    TPUSH_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
+    return {};
+}
+
+template <typename Pipe, typename GlobalData, TileSplitAxis Split,
+          std::enable_if_t<is_global_data_v<GlobalData>, int> = 0, typename... WaitEvents>
+PTO_INST RecordEvent TPOP(Pipe &pipe, GlobalData &gmTensor, WaitEvents &... events)
+{
+    TSYNC(events...);
+    TPOP_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
+    return {};
+}
+
+template <typename Pipe, typename GlobalData, TileSplitAxis Split,
+          std::enable_if_t<is_global_data_v<GlobalData>, int> = 0, typename... WaitEvents>
+PTO_INST RecordEvent TFREE(Pipe &pipe, GlobalData &gmTensor, WaitEvents &... events)
+{
+    TSYNC(events...);
+    TFREE_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
     return {};
 }
 
