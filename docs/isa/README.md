@@ -155,4 +155,9 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 
 ## Communication
 
+- [TALLOC](TALLOC.md) - Allocate a TPipe FIFO slot as a GlobalTensor view.
+- [TPUSH](TPUSH.md) - Push a producer tile into a TPipe FIFO for Cube-Vector communication.
+- [TPOP](TPOP.md) - Pop a consumer tile from a TPipe FIFO for Cube-Vector communication.
+- [TFREE](TFREE.md) - Release FIFO space for a TPipe entry; no-op for TileData TPOP flow.
+
 See [comm/README.md](comm/README.md) for the full per-instruction communication ISA reference (point-to-point, async, synchronization, and collective operations).
