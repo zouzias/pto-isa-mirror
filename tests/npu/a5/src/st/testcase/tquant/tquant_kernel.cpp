@@ -566,6 +566,11 @@ template void TQuantTest::LaunchTQuantMXFP8_BF16<1, 192, 0>(uint8_t *dst, uint16
                                                             void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_BF16<1, 198, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                             void *stream);
+// 2D-optimized path: validCols != srcCols AND srcCols % 512 == 0.
+template void TQuantTest::LaunchTQuantMXFP8_BF16<4, 500, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
+                                                            void *stream);
+template void TQuantTest::LaunchTQuantMXFP8_BF16<2, 1000, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
+                                                             void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_BF16<32, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                              void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_BF16<64, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
@@ -580,6 +585,9 @@ template void TQuantTest::LaunchTQuantMXFP8_FP16<64, 128, 0>(uint8_t *dst, uint1
 template void TQuantTest::LaunchTQuantMXFP8_FP16<128, 128, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                               void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_FP16<4, 256, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
+                                                            void *stream);
+// 2D-optimized path: validCols=500 -> paddedCols=512 (srcCols%512==0).
+template void TQuantTest::LaunchTQuantMXFP8_FP16<4, 500, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                             void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_FP16<32, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                              void *stream);

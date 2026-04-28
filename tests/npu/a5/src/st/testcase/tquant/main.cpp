@@ -475,6 +475,18 @@ TEST_F(TQUANTTEST, case_mxfp8_bf16_1x198_nd)
 {
     test_tquant_mxfp8_bf16<1, 198, 0>();
 }
+// 2D path with optimized Extract/Calc: validCols != srcCols AND srcCols % 512 == 0.
+// validCols=500 -> paddedCols=512 (srcCols=512, srcCols%512==0), so the kernel
+// dispatches AbsReduceMax_b16_ND_2D + ExtractB8ExponentAndScaling_2D + CalcQuantizedFP8Values_2D.
+TEST_F(TQUANTTEST, case_mxfp8_bf16_4x500_nd)
+{
+    test_tquant_mxfp8_bf16<4, 500, 0>();
+}
+// Larger 2D-optimized case: validCols=1000 -> paddedCols=1024 (srcCols%512==0).
+TEST_F(TQUANTTEST, case_mxfp8_bf16_2x1000_nd)
+{
+    test_tquant_mxfp8_bf16<2, 1000, 0>();
+}
 
 TEST_F(TQUANTTEST, case_mxfp8_bf16_32x128_nz)
 {
@@ -507,6 +519,11 @@ TEST_F(TQUANTTEST, case_mxfp8_fp16_128x128_nd)
 TEST_F(TQUANTTEST, case_mxfp8_fp16_4x256_nd)
 {
     test_tquant_mxfp8_fp16<4, 256, 0>();
+}
+// 2D-optimized FP16 path: validCols=500 -> paddedCols=512 (srcCols%512==0).
+TEST_F(TQUANTTEST, case_mxfp8_fp16_4x500_nd)
+{
+    test_tquant_mxfp8_fp16<4, 500, 0>();
 }
 
 TEST_F(TQUANTTEST, case_mxfp8_fp16_32x128_nz)
