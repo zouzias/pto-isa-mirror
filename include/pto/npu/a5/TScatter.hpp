@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 
 namespace pto {
+<<<<<<< HEAD
 template <uint32_t numel, typename T>
 PTO_INTERNAL void InitUBBuffer(__ubuf__ T *dst)
 {
@@ -32,6 +33,29 @@ PTO_INTERNAL void InitUBBuffer(__ubuf__ T *dst)
     for (uint16_t i = 0; i < nRepeat; ++i) {
         preg = CreatePredicate<T>(num);
         vsts(v_zeros, dst, i * nElemPerVL, distValue, preg);
+=======
+template <typename TileDataD>
+__tf__ AICORE void InitUBBuffer(typename TileDataD::TileDType dstData)
+{
+    using TD = typename TileDataD::DType;
+    __ubuf__ TD *dstPtr = (__ubuf__ TD *)__cce_get_tile_ptr(dstData);
+    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(TD);
+    unsigned numRepeatPerRow = CeilDivision(TileDataD::Cols, elementsPerRepeat);
+    __VEC_SCOPE__
+    {
+        constexpr auto distValue =
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<TD, DistVST::DIST_NORM>())>();
+        RegTensor<TD> v_zeros;
+        vbr(v_zeros, (TD)0);
+        for (uint16_t i = 0; i < (uint16_t)TileDataD::Rows; ++i) {
+            uint32_t num_elements = TileDataD::Cols;
+            for (uint16_t j = 0; j < (uint16_t)numRepeatPerRow; ++j) {
+                vector_bool preg_st = CreatePredicate<TD>(num_elements);
+                vsts(v_zeros, dstPtr, i * TileDataD::Cols + j * elementsPerRepeat, distValue, preg_st);
+            }
+        }
+        mem_bar(VST_VLD);
+>>>>>>> fdd61acf ([a5] fix tile pointer handling for A5 instructions)
     }
     mem_bar(VST_VLD);
     mem_bar(VST_VST);
@@ -103,6 +127,7 @@ PTO_INTERNAL void TSCATTER_IMPL(DstTile &dst, SrcTile &src, IdxTile &idx)
     TScatterImpl<DstTile, SrcTile, IdxTile>(dst.data(), src.data(), idx.data(), idx.GetValidRow(), idx.GetValidCol());
 }
 
+<<<<<<< HEAD
 constexpr uint16_t PTO_TSCATTER_TIME_1 = 1;
 constexpr uint16_t PTO_TSCATTER_TIME_2 = 2;
 constexpr uint16_t PTO_TSCATTER_TIME_4 = 4;
@@ -120,6 +145,10 @@ PTO_INTERNAL constexpr int GetTimesByMask()
             return PTO_TSCATTER_TIME_4;
     }
 }
+=======
+    // Initialize dst UB buffer
+    InitUBBuffer<TileDataD>(dst.data());
+>>>>>>> fdd61acf ([a5] fix tile pointer handling for A5 instructions)
 
 template <MaskPattern mask, uint16_t SrcRowStride, uint16_t DstRowStride, uint16_t Times, typename T>
 PTO_INTERNAL void ScatterMask(__ubuf__ T *src, __ubuf__ T *dstPtr, RegTensor<T> &zeros, uint16_t i, uint16_t j,
