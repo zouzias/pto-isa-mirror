@@ -747,12 +747,17 @@ PTO_INTERNAL void TQuant_MXFP8_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *expPtr,
         AbsReduceMax_b16_ND_2D(srcPtr, maxPtr, validRows, validCols, srcCols);
         mem_bar(VST_VLD);
         maxPtr = maxPtr_backup;
-        // Downstream 2D Extract/Calc need per-row addresses to meet NORM/E2B_B16
-        // alignment. NORM B16 requires 32 B → groupsPerRow*sizeof(T) % 32 == 0,
-        // i.e. srcCols % 512 == 0. When that holds we skip the pad-col work;
-        // otherwise fall back to flat 1D over the padded buffer (pad lanes are zero
-        // so the result is exact — TSTORE trims pad cols via the GM shape).
-        if (srcCols % 512 == 0) {
+        // Downstream 2D Extract/Calc need per-row addresses to meet alignment.
+        // The tightest constraint is the PK_B16 store of `expPtr` (uint8_t* with
+        // 1-byte-per-group stride) inside ExtractB8ExponentAndScalingVL: the
+        // hardware requires the per-row start to be 32 B-aligned. That means
+        // groupsPerRow * sizeof(uint8_t) % 32 == 0, i.e. srcCols % 1024 == 0.
+        // (Simulator is more permissive at 32 B/row, but the board faults with
+        // an unaligned UB access for 16 B-aligned PK_B16 stores.) When the
+        // condition does not hold, fall back to flat 1D over the padded buffer
+        // (pad lanes are zero so the result is exact — TSTORE trims pad cols
+        // via the GM shape).
+        if (srcCols % 1024 == 0) {
             ExtractB8ExponentAndScaling_2D<T>(maxPtr, expPtr, scalingPtr, validRows, validCols, srcCols);
             mem_bar(VST_VLD);
             CalcQuantizedFP8Values_2D<T>(srcPtr, scalingPtr, dstPtr, validRows, validCols, srcCols);

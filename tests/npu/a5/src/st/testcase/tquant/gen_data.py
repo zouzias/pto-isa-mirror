@@ -442,10 +442,11 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 18, 138, mode="nd", dtype=bfloat16),  # padded 18x160 = 2880 -> loop_num=12
         TQuantParams("mxfp8", 1, 192, mode="nd", dtype=bfloat16),  # no pad, 192 elems -> loop_num=1
         TQuantParams("mxfp8", 1, 198, mode="nd", dtype=bfloat16),  # padded 1x224 = 224 -> loop_num=1
-        # 2D-optimized path: validCols != srcCols AND srcCols % 512 == 0
-        # 4x500 -> paddedCols=512, dispatches AbsReduceMax_b16_ND_2D + Extract/Calc 2D.
-        TQuantParams("mxfp8", 4, 500, mode="nd", dtype=bfloat16),
+        # 2D-optimized path: validCols != srcCols AND srcCols % 1024 == 0
+        # (PK_B16 stores per-row expPtr need 32 B alignment on the board).
         TQuantParams("mxfp8", 2, 1000, mode="nd", dtype=bfloat16),  # paddedCols=1024
+        TQuantParams("mxfp8", 3, 1023, mode="nd", dtype=bfloat16),  # paddedCols=1024, max pad in tile
+        TQuantParams("mxfp8", 4, 2040, mode="nd", dtype=bfloat16),  # paddedCols=2048
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=bfloat16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=bfloat16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=bfloat16),
@@ -453,8 +454,8 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 64, 128, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 128, 128, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 4, 256, mode="nd", dtype=np.float16),  # 1024 elems -> AbsReduceMax_b16_ND_opt
-        # 2D-optimized FP16 path: paddedCols=512.
-        TQuantParams("mxfp8", 4, 500, mode="nd", dtype=np.float16),
+        # 2D-optimized FP16 path: paddedCols=1024.
+        TQuantParams("mxfp8", 2, 1023, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=np.float16),

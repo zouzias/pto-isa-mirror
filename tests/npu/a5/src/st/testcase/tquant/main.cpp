@@ -475,17 +475,23 @@ TEST_F(TQUANTTEST, case_mxfp8_bf16_1x198_nd)
 {
     test_tquant_mxfp8_bf16<1, 198, 0>();
 }
-// 2D path with optimized Extract/Calc: validCols != srcCols AND srcCols % 512 == 0.
-// validCols=500 -> paddedCols=512 (srcCols=512, srcCols%512==0), so the kernel
-// dispatches AbsReduceMax_b16_ND_2D + ExtractB8ExponentAndScaling_2D + CalcQuantizedFP8Values_2D.
-TEST_F(TQUANTTEST, case_mxfp8_bf16_4x500_nd)
-{
-    test_tquant_mxfp8_bf16<4, 500, 0>();
-}
-// Larger 2D-optimized case: validCols=1000 -> paddedCols=1024 (srcCols%512==0).
+// 2D path with optimized Extract/Calc: validCols != srcCols AND srcCols % 1024 == 0
+// (PK_B16 stores per-row expPtr need 32 B alignment on the board; sim is permissive
+// down to 16 B). 2x1000 -> paddedCols=1024 dispatches AbsReduceMax_b16_ND_2D +
+// ExtractB8ExponentAndScaling_2D + CalcQuantizedFP8Values_2D.
 TEST_F(TQUANTTEST, case_mxfp8_bf16_2x1000_nd)
 {
     test_tquant_mxfp8_bf16<2, 1000, 0>();
+}
+// Maximum padding within a 1024-aligned tile: validCols=1023 -> paddedCols=1024.
+TEST_F(TQUANTTEST, case_mxfp8_bf16_3x1023_nd)
+{
+    test_tquant_mxfp8_bf16<3, 1023, 0>();
+}
+// 2D path with srcCols=2048 (2x1024): validCols=2040 -> paddedCols=2048, multi-row sweep.
+TEST_F(TQUANTTEST, case_mxfp8_bf16_4x2040_nd)
+{
+    test_tquant_mxfp8_bf16<4, 2040, 0>();
 }
 
 TEST_F(TQUANTTEST, case_mxfp8_bf16_32x128_nz)
@@ -520,10 +526,10 @@ TEST_F(TQUANTTEST, case_mxfp8_fp16_4x256_nd)
 {
     test_tquant_mxfp8_fp16<4, 256, 0>();
 }
-// 2D-optimized FP16 path: validCols=500 -> paddedCols=512 (srcCols%512==0).
-TEST_F(TQUANTTEST, case_mxfp8_fp16_4x500_nd)
+// 2D-optimized FP16 path: validCols=1023 -> paddedCols=1024 (srcCols%1024==0).
+TEST_F(TQUANTTEST, case_mxfp8_fp16_2x1023_nd)
 {
-    test_tquant_mxfp8_fp16<4, 500, 0>();
+    test_tquant_mxfp8_fp16<2, 1023, 0>();
 }
 
 TEST_F(TQUANTTEST, case_mxfp8_fp16_32x128_nz)
