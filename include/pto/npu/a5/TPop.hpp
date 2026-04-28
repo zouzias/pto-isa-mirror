@@ -25,7 +25,7 @@ namespace pto {
  * 3. [Free]    Release GM space (Cross-Core)
  */
 template <typename Pipe, typename TileCons, TileSplitAxis Split>
-PTO_INTERNAL void TPOP_IMPL(Pipe &pipe, TileCons &tile)
+PTO_INTERNAL std::enable_if_t<is_tile_data_v<TileCons>, void> TPOP_IMPL(Pipe &pipe, TileCons &tile)
 {
     // // 1. Cross-Core: Wait for Data
     bool isWait = pipe.cons.getWaitStatus();
@@ -51,6 +51,50 @@ PTO_INTERNAL void TFREE_IMPL(Pipe &pipe)
     if (isFree) {
         pipe.cons.template free<Split>();
     }
+}
+
+// pop tensor from global memory
+template <typename Pipe, typename GlobalData, TileSplitAxis Split>
+PTO_INTERNAL std::enable_if_t<is_global_data_v<GlobalData>, void> TPOP_IMPL(Pipe &pipe, GlobalData &gmTensor)
+{
+    static_assert(Pipe::is_c2v_gm || Pipe::is_v2c_gm || Pipe::is_both_gm,
+                  "TPOP with GlobalTensor is only supported by GM FIFO directions on A5.");
+
+    pipe.cons.template wait<Split>();
+    uint64_t entryBase = (uint64_t)pipe.fifo.GM_SLOT_BUFFER;
+    entryBase += (pipe.cons.tileIndex % Pipe::RingFiFo::SLOT_NUM) * Pipe::RingFiFo::SLOT_SIZE;
+
+    if constexpr (Pipe::is_c2v_gm) {
+        constexpr int ConsM = GlobalData::staticShape[pto::GlobalTensorDim::DIM_3];
+        constexpr int ConsN = GlobalData::staticShape[pto::GlobalTensorDim::DIM_4];
+        if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
+            entryBase += get_subblockid() * ConsM * ConsN * sizeof(typename GlobalData::RawDType);
+        } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) {
+            entryBase += get_subblockid() * ConsN * sizeof(typename GlobalData::RawDType);
+        }
+    } else if constexpr (Pipe::is_both_gm) {
+#ifdef __DAV_VEC__
+        constexpr int ConsM = GlobalData::staticShape[pto::GlobalTensorDim::DIM_3];
+        constexpr int ConsN = GlobalData::staticShape[pto::GlobalTensorDim::DIM_4];
+        if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
+            entryBase += get_subblockid() * ConsM * ConsN * sizeof(typename GlobalData::RawDType);
+        } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) {
+            entryBase += get_subblockid() * ConsN * sizeof(typename GlobalData::RawDType);
+        }
+#endif
+    }
+
+    pipe.cons.tileIndex++;
+    TASSIGN(gmTensor, reinterpret_cast<typename GlobalData::DType *>(entryBase));
+}
+
+template <typename Pipe, typename GlobalData, TileSplitAxis Split>
+PTO_INTERNAL void TFREE_IMPL(Pipe &pipe, GlobalData &gmTensor)
+{
+    (void)gmTensor;
+    static_assert(Pipe::is_c2v_gm || Pipe::is_v2c_gm || Pipe::is_both_gm,
+                  "TFREE with GlobalTensor is only supported by GM FIFO directions on A5.");
+    pipe.cons.template free<Split>();
 }
 
 //------------------------------------------------
