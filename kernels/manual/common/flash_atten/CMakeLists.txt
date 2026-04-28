@@ -62,7 +62,7 @@ endif()
 
 if(${SOC_VERSION} STREQUAL "Ascend910B1")
     set(CCE_AICORE_ARCH "dav-c220")
-elseif(${SOC_VERSION} STREQUAL "Ascend910_9599")
+elseif(${SOC_VERSION} STREQUAL "Ascend950PR_9599")
     set(CCE_AICORE_ARCH "dav-c310")
 else()
     message(FATAL_ERROR "Unsupported SOC_VERSION: ${SOC_VERSION}")
