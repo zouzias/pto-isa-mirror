@@ -649,14 +649,14 @@ PTO_INTERNAL void CalcQuantizedFP8Values(__ubuf__ T *srcPtr, __ubuf__ T *scaling
         CalcQuantizedFP8Values_B16_Window<T>(srcPtr, scalingPtr, dstPtr, i, offset_b16, remaining);
         // Board: serialize consecutive NORM_B8 stores. Without this, BF16 cases
         // with validRows >= 2 AND validCols < srcCols lose the first
-        // (srcCols - validCols) bytes at each row-transition window (idx 1000
-        // for 2x1000, idx 1023/2046 for 3x1023, idx 2040 for 4x2040). The
+        // (srcCols - validCols) bytes at each row-transition window. The
         // failure mode matches Section 14 of npu_skills/tquant-mxfp8.md
         // (subsequent groups produce zeros, non-deterministic per row).
-        // Sim is permissive and tolerates the parallel store schedule; board
-        // requires explicit VST_VST between adjacent NORM_B8 writes.
+        // VV_ALL is a superset of VST_VST + VST_VLD; needed because the next
+        // iter's vlds(DINTLV_B16) reads forward 512 B in src UB and otherwise
+        // races with this iter's NORM_B8 store at dst UB.
         if (i + 1 < quant_iters)
-            mem_bar(VST_VST);
+            mem_bar(VV_ALL);
     }
 }
 
