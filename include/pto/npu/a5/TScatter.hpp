@@ -18,10 +18,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 template <typename TileDataD>
-__tf__ AICORE void InitUBBuffer(TileDataD &dst)
+__tf__ AICORE void InitUBBuffer(typename TileDataD::TileDType dstData)
 {
     using TD = typename TileDataD::DType;
-    __ubuf__ TD *dstPtr = dst.data();
+    __ubuf__ TD *dstPtr = (__ubuf__ TD *)__cce_get_tile_ptr(dstData);
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(TD);
     unsigned numRepeatPerRow = CeilDivision(TileDataD::Cols, elementsPerRepeat);
     __VEC_SCOPE__
@@ -164,7 +164,7 @@ PTO_INTERNAL void TSCATTER_IMPL(TileDataD &dst, TileDataS &src, TileDataI &idx)
     unsigned validCol = idx.GetValidCol();
 
     // Initialize dst UB buffer
-    InitUBBuffer(dst);
+    InitUBBuffer<TileDataD>(dst.data());
 
     if constexpr (sizeof(TD) == 4) {
         TScatter_b32<TileDataD, TileDataS, TileDataI>(dst.data(), src.data(), idx.data(), validRow, validCol);
