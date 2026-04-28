@@ -332,32 +332,30 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_2D(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr,
     constexpr uint32_t elements_per_vl = REPEAT_BYTE / sizeof(T);        // 128
     constexpr uint32_t elements_per_dintlv = 2 * elements_per_vl;        // 256
     constexpr uint32_t grps_per_dintlv = elements_per_dintlv / grp_size; // 8 group maxes per DINTLV
-    uint32_t groupsPerRow = srcCols / grp_size;                          // srcCols is always 32-aligned
+    constexpr uint32_t blks_per_vl = REPEAT_BYTE / BLOCK_SIZE;           // 8 blocks per VL
     uint16_t loop_num_per_row = CeilDivision(srcCols, elements_per_dintlv);
-    // Max buffer is packed contiguously across rows (row N's maxes sit right after row N-1's).
-    // Stream the stores through a single alignment register with POST_UPDATE so the hardware
-    // tracks its own position; a single vstas at the end drains the residual.
-    __ubuf__ T *writePtr = maxPtr;
+    // Mirror the 1D AbsReduceMax_b16_ND store pattern: stream each DINTLV's 8
+    // group maxes through the alignment register with an EXPLICIT destination
+    // address (no POST_UPDATE) and drain the residue with a final vstas at the
+    // post-increment address. POST_UPDATE on vstus/vstas is observed to
+    // produce wrong group-max values on the board (sim is permissive).
+    // Requires groupsPerRow % grps_per_dintlv == 0 (i.e. srcCols % 256 == 0)
+    // so per-row tiling matches a global linear index. Caller already gates on
+    // srcCols % 1024 == 0 which is stricter.
+    uint16_t iter = 0;
     for (uint16_t row = 0; row < (uint16_t)validRows; ++row) {
         uint32_t src_row_off = row * srcCols;
         for (uint16_t i = 0; i < loop_num_per_row; ++i) {
-            // Predicates reflect per-DINTLV-register valid element count, computed
-            // against the padded srcCols (source pad lanes are zero → safe for max).
             uint32_t col_offset = i * elements_per_dintlv;
             uint32_t remaining = (srcCols > col_offset) ? (srcCols - col_offset) : 0;
             if (remaining > elements_per_dintlv)
                 remaining = elements_per_dintlv;
             AbsReduceMax_b16_DintlvWindow(srcPtr, src_row_off + col_offset, remaining, vb16_max_1);
-            // Clamp store width to the groups actually present in this row; writing a
-            // full grps_per_dintlv (=8) would overshoot into the next row's max slots
-            // when groupsPerRow < 8 (e.g. srcCols=32 → 1 group/row).
-            uint32_t grps_written_in_row = (uint32_t)i * grps_per_dintlv;
-            uint32_t grps_remaining = (groupsPerRow > grps_written_in_row) ? (groupsPerRow - grps_written_in_row) : 0;
-            uint32_t grps_this_iter = (grps_remaining > grps_per_dintlv) ? grps_per_dintlv : grps_remaining;
-            vstus(ureg_max, grps_this_iter, vb16_max_1, writePtr, POST_UPDATE);
+            vstus(ureg_max, blks_per_vl, vb16_max_1, maxPtr + iter * grps_per_dintlv);
+            ++iter;
         }
     }
-    vstas(ureg_max, writePtr, 0, POST_UPDATE);
+    vstas(ureg_max, maxPtr + iter * grps_per_dintlv, 0);
     (void)validCols; // padded source makes validCols implicit; retained for API symmetry
 }
 
