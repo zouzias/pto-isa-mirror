@@ -407,6 +407,7 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 15, 32, mode="nd"),
         TQuantParams("mxfp8", 7, 64, mode="nd"),
         TQuantParams("mxfp8", 33, 64, mode="nd"),
+        TQuantParams("mxfp8", 13, 192, mode="nd"),
         TQuantParams("mxfp8", 32, 64, mode="nz"),
         TQuantParams("mxfp8", 64, 128, mode="nz"),
         TQuantParams("mxfp8", 64, 256, mode="nz"),

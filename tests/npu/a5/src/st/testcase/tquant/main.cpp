@@ -407,6 +407,10 @@ TEST_F(TQUANTTEST, case_mxfp8_fp32_33x64_nd)
 {
     test_tquant_mxfp8<33, 64, 0>();
 }
+TEST_F(TQUANTTEST, case_mxfp8_fp32_13x192_nd)
+{
+    test_tquant_mxfp8<13, 192, 0>();
+}
 
 // MXFP8 BF16
 TEST_F(TQUANTTEST, case_mxfp8_bf16_32x128_nd)
