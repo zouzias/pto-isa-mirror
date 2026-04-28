@@ -26,14 +26,18 @@ enum TSyncCVMode : uint8_t
 };
 
 template <uint8_t FlagID, uint8_t DirType, uint32_t SlotSize, uint32_t SlotNum, uint32_t LocalSlotNum = 2,
-          bool IsNoSplit = false, bool EN_UNIT_FLAG = false>
+          bool IsNoSplit = false, bool EN_UNIT_FLAG = false,
+          uint32_t SyncPeriod_ = (SlotNum == 1) ? 1 : SlotNum / 2>
 struct TPipe {
     static constexpr uint8_t DIR_MASK = 0x7;
     static constexpr uint8_t DIR_TYPE = DIR_MASK & DirType;
+    static constexpr uint32_t SyncPeriod = SyncPeriod_;
     static constexpr bool is_c2v = (DIR_TYPE == Direction::DIR_C2V);           // 1
     static constexpr bool is_v2c = (DIR_TYPE == Direction::DIR_V2C);           // 2
     static constexpr bool is_both = (DIR_TYPE == Direction::DIR_BOTH);         // 3
     static constexpr bool is_v2c_ctrl = (DIR_TYPE == Direction::DIR_V2C_CTRL); // 4
+    static_assert(SlotNum >= 1, "Fix: TPipe requires SlotNum >= 1.");
+    static_assert(SyncPeriod >= 1, "Fix: TPipe requires SyncPeriod >= 1.");
     static_assert(is_c2v || is_v2c || is_both || is_v2c_ctrl,
                   "Fix: TPipe only supports C2V or V2C or Both or V2C_CTRL communication on A2A3.");
 
@@ -45,6 +49,19 @@ struct TPipe {
         constexpr uint16_t FFTS_FLAG_ID_BIT_START = 8;
         return ((base_const & 0xf) + ((mode & 0x3) << FFTS_MODE_BIT_START) +
                 ((flagID & 0xf) << FFTS_FLAG_ID_BIT_START));
+    }
+
+    PTO_INTERNAL static bool shouldWaitFree(uint32_t tileIndex)
+    {
+        if (tileIndex < SlotNum) {
+            return false;
+        }
+        return (tileIndex % SyncPeriod) == 0;
+    }
+
+    PTO_INTERNAL static bool shouldNotifyFree(uint32_t tileIndex)
+    {
+        return ((tileIndex + 1) % SyncPeriod) == 0;
     }
 
     struct Producer {
@@ -429,11 +446,12 @@ struct TPipe {
  * 2. [Store]   Write data to GM
  * 3. [Commit]  Signal Consumer (Cross-Core)
  */
-template <typename Pipe, typename TileProd, TileSplitAxis Split>
+template <typename Pipe, typename TileProd, TileSplitAxis Split,
+          std::enable_if_t<is_tile_data_v<TileProd>, int> = 0>
 PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, TileProd &tile)
 {
     // 1. Cross-Core: Wait for space
-    bool isAllocate = pipe.prod.getAllocateStatus();
+    bool isAllocate = pipe.prod.getAllocateStatus() && Pipe::shouldWaitFree(pipe.prod.tileIndex);
     if (isAllocate) {
         pipe.prod.allocate();
     }
@@ -448,6 +466,43 @@ PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, TileProd &tile)
         pipe.prod.record();
     }
 }
+
+// interfaces when push and pop data from GM FIFO
+template <typename Pipe, typename GlobalData, TileSplitAxis Split>
+PTO_INTERNAL void TALLOC_IMPL(Pipe &pipe, GlobalData &gmTensor)
+{
+    bool isAllocate = pipe.prod.getAllocateStatus();
+    if (isAllocate) {
+        pipe.prod.allocate();  // wait for space
+    }
+    uint64_t entryBase = (uint64_t)pipe.fifo.GM_SLOT_BUFFER;
+    if constexpr (Pipe::is_c2v) {
+        entryBase += (pipe.prod.tileIndex % Pipe::RingFiFo::SLOT_NUM) * Pipe::RingFiFo::SLOT_SIZE;
+    } else if constexpr (Pipe::is_v2c) {
+        constexpr int ProdM = GlobalData::staticShape[pto::GlobalTensorDim::DIM_3];
+        constexpr int ProdN = GlobalData::staticShape[pto::GlobalTensorDim::DIM_4];
+        size_t subAIVOffset = 0;
+        if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
+            subAIVOffset = 0;
+        } else if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
+            subAIVOffset = get_subblockid() * ProdM * ProdN * sizeof(typename GlobalData::RawDType);
+        } else { // TILE_LEFT_RIGHT            
+            subAIVOffset = get_subblockid() * ProdN * sizeof(typename GlobalData::RawDType);
+        }
+        entryBase += (pipe.prod.tileIndex % Pipe::RingFiFo::SLOT_NUM) * Pipe::RingFiFo::SLOT_SIZE + subAIVOffset;
+    }
+    pipe.prod.tileIndex++;
+    TASSIGN(gmTensor, reinterpret_cast<typename GlobalData::DType *>(entryBase));
+}
+
+template <typename Pipe, typename GlobalData, TileSplitAxis Split,
+          std::enable_if_t<is_global_data_v<GlobalData>, int> = 0>
+PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, GlobalData &gmTensor)
+{
+    (void)gmTensor;
+    pipe.prod.record();
+}
+
 
 //---------------------multiple pipe----------------------
 template <uint8_t FlagID, FIFOType FiFoType, uint8_t FiFoDepth, uint8_t FiFoSyncT, typename TileDataProd,
