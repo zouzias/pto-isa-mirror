@@ -1238,3 +1238,224 @@ void LaunchCubeMatmulBNBufNSplit16_K16(uint8_t *out, uint8_t *src0, uint8_t *src
             reinterpret_cast<half*>(src0),
             reinterpret_cast<half*>(src1));
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Config 8b: 4 KiB B-tile half-N split with rearranged buffer-id allocation
+//            and id-pool capping for hardware that limits buffer-ids to 32.
+//
+// Buffer-id layout (flat, all pipes share one id space):
+//   A_L1 (PIPE_MTE2)               : 0, 1                       (2 ids)
+//   L0C  (PIPE_M / PIPE_FIX)       : 2, 3                       (2 ids, one/half)
+//   L0A  (PIPE_MTE1 / PIPE_M)      : 4, 5                       (2 ids, ping-pong)
+//   B_L1 (PIPE_MTE2 / PIPE_MTE1)   : 6 .. 6 + P - 1             (P ids)
+//   L0B  (PIPE_MTE1 / PIPE_M)      : 6+P .. 6 + 2*P - 1         (P ids)
+//
+//   With PTO_BUFID_HW_GT32 *undefined* (default, 32-id HW):
+//       P = min(N_BUFS_B, 13)   ⇒  6 + 2*13 = 32 ids fit.
+//   With PTO_BUFID_HW_GT32 *defined* (>32-id HW):
+//       P = N_BUFS_B            ⇒  no cap, no barrier needed.
+//
+// When P < N_BUFS_B we still allocate N_BUFS_B distinct L1/L0B *slots*;
+// only the buf-ids cycle modulo P.  At the wrap point (`flat == P`) we
+// insert `pipe_barrier(PIPE_ALL)` so that any in-flight op on the recycled
+// id has finished before the new use re-acquires it.
+// ═══════════════════════════════════════════════════════════════════════════
+template <typename outType, typename inType,
+          int N_BUFS_B_, int A_K_TILE_, int B_K_TILE_, int M_TILE_, int N_TILE_>
+__global__ AICORE void RunCubeMatmulBNBufNSplitR(__gm__ outType *out, __gm__ inType *src0, __gm__ inType *src1)
+{
+    constexpr int N_BUFS_B   = N_BUFS_B_;
+    constexpr int A_K_TILE   = A_K_TILE_;
+    constexpr int B_K_TILE   = B_K_TILE_;
+    constexpr int M_TILE     = M_TILE_;
+    constexpr int N_TILE     = N_TILE_;
+    constexpr int N_HALVES   = 2;
+    constexpr int N_HALF     = N_TILE / N_HALVES;
+    constexpr int K_GROUPS   = GM_K / A_K_TILE;
+    constexpr int INNER_K    = A_K_TILE / B_K_TILE;
+    constexpr int INNER_FLAT = INNER_K * N_HALVES;
+    static_assert(K_GROUPS * A_K_TILE == GM_K, "GM_K must be a multiple of A_K_TILE");
+    static_assert(INNER_K * B_K_TILE == A_K_TILE, "A_K_TILE must be a multiple of B_K_TILE");
+    static_assert(N_HALVES * N_HALF == N_TILE, "N_TILE must split evenly into 2 halves");
+    static_assert(B_K_TILE % 16 == 0, "B_K_TILE must be a multiple of 16");
+    static_assert(N_HALF % 16 == 0,  "N_HALF must be a multiple of 16");
+
+    // ── Address plan (bytes) ─────────────────────────────────────────────
+    constexpr int A_BIG_BYTES   = M_TILE * A_K_TILE * 2;
+    constexpr int A_VIEW_STRIDE = M_TILE * B_K_TILE * 2;
+    constexpr int A_L1_BASE     = 0x00000;
+    constexpr int B_L1_BASE     = 0x10000;
+    constexpr int B_SLOT_BYTES  = B_K_TILE * N_HALF * 2;
+    constexpr int L0A_STRIDE    = M_TILE * B_K_TILE * 2;
+    constexpr int L0B_STRIDE    = B_K_TILE * N_HALF * 2;
+    constexpr int L0C_STRIDE    = M_TILE * N_HALF * (int)sizeof(outType);
+    static_assert(A_L1_BASE + 2 * A_BIG_BYTES <= B_L1_BASE,                   "A L1 region overlap");
+    static_assert(N_BUFS_B * B_SLOT_BYTES <= 0x40000,                          "B L1 > 256 KiB");
+    static_assert(2 * L0A_STRIDE  <= 0x10000,                                  "L0A > 64 KiB");
+    static_assert(N_BUFS_B * L0B_STRIDE <= 0x10000,                            "L0B > 64 KiB");
+    static_assert(N_HALVES * L0C_STRIDE <= 0x40000,                            "L0C > 256 KiB");
+
+    // ── Rearranged buffer-id allocation ──────────────────────────────────
+    constexpr int A_ID_BASE   = 0;
+    constexpr int C_ID_BASE   = 2;
+    constexpr int L0A_ID_BASE = 4;
+#ifdef PTO_BUFID_HW_GT32
+    constexpr int BID_POOL_SIZE = N_BUFS_B;
+    static_assert(6 + 2 * BID_POOL_SIZE <= 64, "exceeds 64 buf-ids");
+#else
+    constexpr int BID_POOL_SIZE = (N_BUFS_B < 13) ? N_BUFS_B : 13;
+    static_assert(6 + 2 * BID_POOL_SIZE <= 32, "exceeds 32 buf-ids");
+#endif
+    constexpr int B_ID_BASE      = 6;
+    constexpr int L0B_ID_BASE    = 6 + BID_POOL_SIZE;
+    constexpr bool NEEDS_BARRIER = (BID_POOL_SIZE < N_BUFS_B);
+
+    using GlobalDataSrc0    = GlobalTensor<inType,  pto::Shape<1,1,1,M_TILE,A_K_TILE>, pto::Stride<GM_M*GM_K,GM_M*GM_K,GM_M*GM_K,GM_K,1>>;
+    using GlobalDataSrc1    = GlobalTensor<inType,  pto::Shape<1,1,1,B_K_TILE,N_HALF>, pto::Stride<GM_K*GM_N,GM_K*GM_N,GM_K*GM_N,GM_N,1>>;
+    using GlobalDataOutHalf = GlobalTensor<outType, pto::Shape<1,1,1,GM_M,N_HALF>,     pto::Stride<GM_M*GM_N,GM_M*GM_N,GM_M*GM_N,GM_N,1>>;
+    using TileMatABig  = Tile<TileType::Mat, inType, M_TILE, A_K_TILE, BLayout::ColMajor, M_TILE, A_K_TILE, SLayout::RowMajor, 512>;
+    using TileMatAView = Tile<TileType::Mat, inType, M_TILE, B_K_TILE, BLayout::ColMajor, M_TILE, B_K_TILE, SLayout::RowMajor, 512>;
+    using TileMatB     = Tile<TileType::Mat, inType, B_K_TILE, N_HALF, BLayout::ColMajor, B_K_TILE, N_HALF, SLayout::RowMajor, 512>;
+    using LeftTile     = TileLeft< inType,  M_TILE, B_K_TILE, M_TILE, B_K_TILE>;
+    using RightTile    = TileRight<inType,  B_K_TILE, N_HALF,  B_K_TILE, N_HALF>;
+    using AccTileHalf  = TileAcc<  outType, M_TILE,  N_HALF,   M_TILE,  N_HALF>;
+
+    GlobalDataOutHalf dstGlobal0(out);
+    GlobalDataOutHalf dstGlobal1(out + N_HALF);
+
+    TileMatABig  aBig[2];
+    TileMatAView aView[2][INNER_K];
+    TileMatB     bM[N_BUFS_B];
+    LeftTile     aL[2];
+    RightTile    bL[N_BUFS_B];
+    AccTileHalf  cTile[N_HALVES];
+
+    TASSIGN(aBig[0], A_L1_BASE);
+    TASSIGN(aBig[1], A_L1_BASE + A_BIG_BYTES);
+    for (int p = 0; p < 2; p++) {
+        for (int i = 0; i < INNER_K; i++) {
+            TASSIGN(aView[p][i], A_L1_BASE + p * A_BIG_BYTES + i * A_VIEW_STRIDE);
+        }
+    }
+    for (int i = 0; i < N_BUFS_B; i++) {
+        TASSIGN(bM[i], B_L1_BASE + i * B_SLOT_BYTES);
+    }
+    TASSIGN(aL[0], 0x0);
+    TASSIGN(aL[1], L0A_STRIDE);
+    for (int i = 0; i < N_BUFS_B; i++) {
+        TASSIGN(bL[i], i * L0B_STRIDE);
+    }
+    TASSIGN(cTile[0], 0x0);
+    TASSIGN(cTile[1], L0C_STRIDE);
+
+    // ── Outer loop ───────────────────────────────────────────────────────
+    for (uint32_t outer = 0; outer < K_GROUPS; outer++) {
+        int s_a  = outer % 2;
+        int a_id = A_ID_BASE + s_a;
+
+#ifndef __PTO_AUTO__
+        get_buffer<PIPE_MTE2>(a_id);
+#endif
+        {
+            GlobalDataSrc0 g(src0 + outer * A_K_TILE);
+            TLOAD(aBig[s_a], g);
+        }
+#ifndef __PTO_AUTO__
+        rls_buffer<PIPE_MTE2>(a_id);
+#endif
+
+        for (int i = 0; i < INNER_K; i++) {
+            int la_id = L0A_ID_BASE + (i % 2);
+
+#ifndef __PTO_AUTO__
+            get_buffer<PIPE_MTE1>(a_id);
+            get_buffer<PIPE_MTE1>(la_id);
+#endif
+            TMOV(aL[i % 2], aView[s_a][i]);
+#ifndef __PTO_AUTO__
+            rls_buffer<PIPE_MTE1>(a_id);
+            rls_buffer<PIPE_MTE1>(la_id);
+#endif
+
+            for (int h = 0; h < N_HALVES; h++) {
+                int flat  = i * N_HALVES + h;
+                int s_b   = flat % N_BUFS_B;
+                int b_id  = B_ID_BASE   + (flat % BID_POOL_SIZE);
+                int lb_id = L0B_ID_BASE + (flat % BID_POOL_SIZE);
+                int c_id  = C_ID_BASE   + h;
+                uint32_t k_global = outer * INNER_K + i;
+
+#ifndef __PTO_AUTO__
+                // Buffer-id wrap barrier: ensure all in-flight ops on the
+                // about-to-be-reused id have drained before re-acquiring it.
+                if constexpr (NEEDS_BARRIER) {
+                    if (flat == BID_POOL_SIZE) {
+                        pipe_barrier(PIPE_ALL);
+                    }
+                }
+#endif
+
+                GlobalDataSrc1 src1Global(src1 + k_global * B_K_TILE * GM_N + h * N_HALF);
+#ifndef __PTO_AUTO__
+                get_buffer<PIPE_MTE2>(b_id);
+#endif
+                TLOAD(bM[s_b], src1Global);
+#ifndef __PTO_AUTO__
+                rls_buffer<PIPE_MTE2>(b_id);
+
+                get_buffer<PIPE_MTE1>(b_id);
+                get_buffer<PIPE_MTE1>(lb_id);
+#endif
+                TMOV(bL[s_b], bM[s_b]);
+#ifndef __PTO_AUTO__
+                rls_buffer<PIPE_MTE1>(b_id);
+                rls_buffer<PIPE_MTE1>(lb_id);
+
+                get_buffer<PIPE_M>(la_id);
+                get_buffer<PIPE_M>(lb_id);
+                get_buffer<PIPE_M>(c_id);
+#endif
+                if (k_global == 0) {
+                    TMATMUL(cTile[h], aL[i % 2], bL[s_b]);
+                } else {
+                    TMATMUL_ACC(cTile[h], cTile[h], aL[i % 2], bL[s_b]);
+                }
+#ifndef __PTO_AUTO__
+                rls_buffer<PIPE_M>(la_id);
+                rls_buffer<PIPE_M>(lb_id);
+                rls_buffer<PIPE_M>(c_id);
+#endif
+            }
+        }
+    }
+
+#ifndef __PTO_AUTO__
+    get_buffer<PIPE_FIX>(C_ID_BASE + 0);
+#endif
+    TSTORE(dstGlobal0, cTile[0]);
+#ifndef __PTO_AUTO__
+    rls_buffer<PIPE_FIX>(C_ID_BASE + 0);
+    get_buffer<PIPE_FIX>(C_ID_BASE + 1);
+#endif
+    TSTORE(dstGlobal1, cTile[1]);
+#ifndef __PTO_AUTO__
+    rls_buffer<PIPE_FIX>(C_ID_BASE + 1);
+#endif
+    out = dstGlobal0.data();
+}
+
+
+// ── Rearranged-id NSplit launchers (Config 8b) ──────────────────────────────
+// 16-buffer variant: needs the rearranged scheme to fit in 32 buf-ids
+// (or set -DPTO_BUFID_HW_GT32 for hardware that supports >32 ids).
+
+void LaunchCubeMatmulBNBufNSplitR16_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+    // B: 16 buf × [16,128] = 64 KiB L1, 64 KiB L0B (exact L0B fit).
+    // INNER_K=8, INNER_FLAT=16; with HW32 cap pool=13 ⇒ wrap at flat=13.
+    RunCubeMatmulBNBufNSplitR<float, half, /*N_BUFS_B=*/16, /*A_K=*/128, /*B_K=*/16, /*M=*/GM_M, /*N=*/GM_N>
+        <<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out),
+            reinterpret_cast<half*>(src0),
+            reinterpret_cast<half*>(src1));
+}
