@@ -38,6 +38,7 @@ PTO_INTERNAL void runTColCMax(__gm__ uint32_t __out__ *out, __gm__ T __in__ *src
 
     // 搬运数据
     TLOAD(srcTile, srcGlobal);
+    TLOAD(dstTile, dstGlobal);
 
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
