@@ -512,6 +512,10 @@ TEST_F(TQUANTTEST, case_mxfp8_fp16_4x256_nd)
 {
     test_tquant_mxfp8_fp16<4, 256, 0>();
 }
+TEST_F(TQUANTTEST, case_mxfp8_fp16_11x640_nd)
+{
+    test_tquant_mxfp8_fp16<11, 640, 0>();
+}
 
 TEST_F(TQUANTTEST, case_mxfp8_fp16_32x128_nz)
 {
