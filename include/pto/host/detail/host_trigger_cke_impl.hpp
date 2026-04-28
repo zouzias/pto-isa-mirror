@@ -281,6 +281,63 @@ inline void BuildCkePayload(DriverCustomChanInfoIn *in, uint32_t dieId, uint32_t
     }
 }
 
+// Diag opcode: same custom-channel ABI, but request CCU resource base info instead
+// of writing a CKE. The driver returns a `ccu_u_info`-shaped struct in `out.data`,
+// whose `resourceAddr` field carries the CCU resource MMIO mapping VA we need for
+// Step 3 AIV-trigger prototyping. Triggered once per (devPhyId, dieId) on first
+// HostTriggerCke call.
+constexpr uint32_t kDriverOpGetBasicInfo = 11;  // CCU_U_OP_GET_BASIC_INFO
+
+// Mirror of struct ccu_u_info from hcomm/src/platform/hccp/external_depends/ccu/ccu_u_comm.h.
+// Only the prefix up to resourceAddr matters; we cast the returned data buffer to this.
+struct DiagCcuUInfo {
+    unsigned int uent_num;
+    unsigned int ccu_flag;
+    unsigned int eid;
+    unsigned int ms_id;
+    unsigned int missionKey;
+    void *resourceAddr;   // ← CCU resource VA
+    // remaining fields (caps, version) intentionally elided
+};
+
+inline void DiagPrintCcuResourceAddrOnce(uint32_t devPhyId, uint32_t dieId,
+                                          RaCustomChannelFn ra_fn) {
+    static std::mutex diag_mu;
+    static std::vector<std::pair<uint32_t, uint32_t>> already_dumped;
+    std::lock_guard<std::mutex> lk(diag_mu);
+    for (auto &kv : already_dumped) {
+        if (kv.first == devPhyId && kv.second == dieId) return;
+    }
+    already_dumped.emplace_back(devPhyId, dieId);
+
+    DriverRaInfo info{kDriverNetworkOffline, devPhyId};
+    DriverCustomChanInfoIn in{};
+    DriverCustomChanInfoOut out{};
+
+    in.op = kDriverOpGetBasicInfo;
+    in.offsetStart = 0;
+    // ccu_data layout: [0..3]=udie_idx, [4..7]=dataLen, [8..11]=dataArraySize
+    auto write_u32 = [&](std::size_t off, uint32_t v) {
+        std::memcpy(in.data + off, &v, sizeof(v));
+    };
+    write_u32(kCcuDataUdieIdxOffset, dieId);
+    write_u32(kCcuDataLenOffset, static_cast<uint32_t>(sizeof(DiagCcuUInfo)));
+    write_u32(kCcuDataSizeOffset, 1u);
+
+    int rc = ra_fn(info, &in, &out);
+    std::fprintf(stderr,
+        "[DIAG/ccu_baseinfo] dev=%u die=%u: RaCustomChannel(op=GET_BASIC_INFO=11) rc=%d opRet=%d\n",
+        devPhyId, dieId, rc, out.opRet);
+    if (rc == 0 && out.opRet == 0) {
+        DiagCcuUInfo *u = reinterpret_cast<DiagCcuUInfo*>(out.data);
+        std::fprintf(stderr,
+            "[DIAG/ccu_baseinfo] dev=%u die=%u: uent_num=%u ccu_flag=%u eid=%u ms_id=%u missionKey=%u\n"
+            "[DIAG/ccu_baseinfo] dev=%u die=%u: resourceAddr=%p  ← CCU resource VA (Step 3 candidate)\n",
+            devPhyId, dieId, u->uent_num, u->ccu_flag, u->eid, u->ms_id, u->missionKey,
+            devPhyId, dieId, u->resourceAddr);
+    }
+}
+
 inline int32_t HostTriggerCkeImpl(uint32_t devPhyId, const PtoGateDescriptor &desc) {
     // Sanity check: kernels that haven't been Translate()'d yet leave dieId in
     // an out-of-range state; reject early to give a clean error instead of a
@@ -295,6 +352,13 @@ inline int32_t HostTriggerCkeImpl(uint32_t devPhyId, const PtoGateDescriptor &de
     }
 
     static const CkeLayout kLayout = ResolveCkeLayout();
+
+    // Step 3 prototyping diag: dump CCU resourceAddr once per (devPhyId, dieId).
+    // This piggybacks on the already-initialized HDC session that's about to do
+    // the SET_CKE — RaCustomChannel will succeed without separate ACL/HCCL setup.
+    if (std::getenv("PTO_DIAG_CCU_RESOURCE_ADDR") != nullptr) {
+        DiagPrintCcuResourceAddrOnce(devPhyId, desc.dieId, lib.RaCustomChannel());
+    }
 
     DriverRaInfo info{kDriverNetworkOffline, devPhyId};
     DriverCustomChanInfoIn in{};
