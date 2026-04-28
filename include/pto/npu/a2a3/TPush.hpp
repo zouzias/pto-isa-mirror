@@ -429,7 +429,8 @@ struct TPipe {
  * 2. [Store]   Write data to GM
  * 3. [Commit]  Signal Consumer (Cross-Core)
  */
-template <typename Pipe, typename TileProd, TileSplitAxis Split>
+template <typename Pipe, typename TileProd, TileSplitAxis Split,
+          std::enable_if_t<is_tile_data_v<TileProd>, int> = 0>
 PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, TileProd &tile)
 {
     // 1. Cross-Core: Wait for space
@@ -448,6 +449,40 @@ PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, TileProd &tile)
         pipe.prod.record();
     }
 }
+
+// interfaces when push and pop data from GM FIFO
+template <typename Pipe, typename GlobalData, TileSplitAxis Split>
+PTO_INTERNAL void TALLOC_IMPL(Pipe &pipe, GlobalData &gmTensor)
+{
+    pipe.prod.allocate();  // wait for space
+    uint64_t entryBase = (uint64_t)pipe.fifo.GM_SLOT_BUFFER;
+    if constexpr (Pipe::is_c2v) {
+        entryBase += (pipe.prod.tileIndex % Pipe::RingFiFo::SLOT_NUM) * Pipe::RingFiFo::SLOT_SIZE;
+    } else if constexpr (Pipe::is_v2c) {
+        constexpr int ProdM = GlobalData::staticShape[pto::GlobalTensorDim::DIM_3];
+        constexpr int ProdN = GlobalData::staticShape[pto::GlobalTensorDim::DIM_4];
+        size_t subAIVOffset = 0;
+        if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
+            subAIVOffset = 0;
+        } else if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
+            subAIVOffset = get_subblockid() * ProdM * ProdN * sizeof(typename GlobalData::RawDType);
+        } else { // TILE_LEFT_RIGHT            
+            subAIVOffset = get_subblockid() * ProdN * sizeof(typename GlobalData::RawDType);
+        }
+        entryBase += (pipe.prod.tileIndex % Pipe::RingFiFo::SLOT_NUM) * Pipe::RingFiFo::SLOT_SIZE + subAIVOffset;
+    }
+    pipe.prod.tileIndex++;
+    TASSIGN(gmTensor, reinterpret_cast<typename GlobalData::DType *>(entryBase));
+}
+
+template <typename Pipe, typename GlobalData, TileSplitAxis Split,
+          std::enable_if_t<is_global_data_v<GlobalData>, int> = 0>
+PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, GlobalData &gmTensor)
+{
+    (void)gmTensor;
+    pipe.prod.record();
+}
+
 
 //---------------------multiple pipe----------------------
 template <uint8_t FlagID, FIFOType FiFoType, uint8_t FiFoDepth, uint8_t FiFoSyncT, typename TileDataProd,
