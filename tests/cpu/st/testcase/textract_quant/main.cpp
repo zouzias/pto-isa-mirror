@@ -34,10 +34,12 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-std::pair<int, int> get_closest_factor(int c) {
-    if (c <= 0) return {0, 0};
+std::pair<int, int> get_closest_factor(int c)
+{
+    if (c <= 0)
+        return {0, 0};
     int a = static_cast<int>(std::sqrt(c));
-    while(a > 0) {
+    while (a > 0) {
         if (c % a == 0) {
             int b = c / a;
             return {a, b};
