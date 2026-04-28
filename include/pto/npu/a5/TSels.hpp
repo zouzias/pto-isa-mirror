@@ -36,7 +36,8 @@ __tf__ PTO_INTERNAL void TSels_b32(typename TileDataDst::TileDType __out__ dst,
         uint32_t sregDup = elementsPerRepeat;
         pReg = CreatePredicate<T>(sregDup);
         vdup(vregScalar, scalar, pReg, MODE_ZEROING);
-        unsigned sReg, colOffset0, colOffset1;
+        unsigned colOffset0, colOffset1;
+        unsigned sReg = validCol;
         constexpr auto distValue =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
         for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
@@ -57,8 +58,8 @@ __tf__ PTO_INTERNAL void TSels_b32(typename TileDataDst::TileDType __out__ dst,
             }
         }
 
-        uint32_t remain = validCol - loopTimes * elementsPerRepeat * 2;
-        if (remain > 0) {
+        if (sReg > 0) {
+            uint32_t remain = sReg;
             for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
                 sReg = remain;
                 colOffset0 = 2 * loopTimes * elementsPerRepeat;
