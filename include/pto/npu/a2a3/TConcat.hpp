@@ -163,8 +163,8 @@ __tf__ PTO_INTERNAL void TConcatIdx(typename DstTile::TileDType __out__ dst, typ
 #ifndef __PTO_AUTO__
             PtoSetWaitFlag<PIPE_V, PIPE_S>();
 #else
-        set_flag(PIPE_V, PIPE_S, EVENT_ID0);
-        wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
+            set_flag(PIPE_V, PIPE_S, EVENT_ID0);
+            wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
 #endif
             for (unsigned j = 0; j < src1Num; j++) {
                 dstPtr[i * dstStride + src0Num + j] = src1Ptr[i * src1Stride + j];
@@ -173,10 +173,10 @@ __tf__ PTO_INTERNAL void TConcatIdx(typename DstTile::TileDType __out__ dst, typ
             PtoSetWaitFlag<PIPE_S, PIPE_V>();
             PtoSetWaitFlag<PIPE_S, PIPE_MTE3>();
 #else
-        set_flag(PIPE_S, PIPE_V, EVENT_ID0);
-        wait_flag(PIPE_S, PIPE_V, EVENT_ID0);
-        set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
+            set_flag(PIPE_S, PIPE_V, EVENT_ID0);
+            wait_flag(PIPE_S, PIPE_V, EVENT_ID0);
+            set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
+            wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
 #endif
         }
     }
