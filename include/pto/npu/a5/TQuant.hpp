@@ -569,12 +569,28 @@ PTO_INTERNAL void CalcQuantizedFP8Values_B16_Window(__ubuf__ T *srcPtr, __ubuf__
     RegTensor<T> vb16_scaling, vb16_in_1, vb16_in_2, vb16_out_1, vb16_out_2;
     vector_f32 vb32_cvt_1, vb32_cvt_2, vb32_cvt_3, vb32_cvt_4;
     vector_f8e4m3 vb8_or1, vb8_or2, vb8_out, vb8_p0, vb8_p1, vb8_p2, vb8_p3;
+    constexpr uint32_t elementsPerVL_b16 = REPEAT_BYTE / sizeof(T);
+    constexpr uint32_t elementsPerDintlv = 2 * elementsPerVL_b16;
     uint32_t even_count = (remaining + 1) / 2;
     uint32_t odd_count = remaining / 2;
     uint32_t b8_count = remaining;
-    MaskReg preg_b16_1 = CreatePredicate<T>(even_count);
-    MaskReg preg_b16_2 = CreatePredicate<T>(odd_count);
-    MaskReg preg_b8 = CreatePredicate<uint8_t>(b8_count);
+    // Board: prefer pset(PAT_ALL) over plt_b*(N) when the window is full. plt_b*
+    // with POST_UPDATE produces correct predicates on sim for any N ≤ VL, but a
+    // sequence of plt_b8(256) / plt_b16(128) calls feeding adjacent NORM_B8 stores
+    // has been observed to drop the first byte of the next store on board (idx
+    // 0x1023 in dst[0] for 2x1023 fp16, idx 0x2040 for 4x2040 bf16). Using
+    // pset(PAT_ALL) for full-VL windows keeps the predicate generation
+    // POST_UPDATE-free.
+    MaskReg preg_b16_1, preg_b16_2, preg_b8;
+    if (remaining == elementsPerDintlv) {
+        preg_b16_1 = PSetTyped<T>(PAT_ALL);
+        preg_b16_2 = PSetTyped<T>(PAT_ALL);
+        preg_b8 = pset_b8(PAT_ALL);
+    } else {
+        preg_b16_1 = CreatePredicate<T>(even_count);
+        preg_b16_2 = CreatePredicate<T>(odd_count);
+        preg_b8 = CreatePredicate<uint8_t>(b8_count);
+    }
     vlds(vb16_in_1, vb16_in_2, srcPtr, offset_b16, DINTLV_B16);
     if constexpr (std::is_same<T, half>::value) {
         vector_bf16 vb16_scaling_bf16;
