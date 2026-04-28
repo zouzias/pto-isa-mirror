@@ -76,6 +76,36 @@ static_assert(sizeof(DriverCustomChanInfoOut) == kDriverChanDataMax + 8,
 // Note: the first arg is passed by value, not by pointer.
 using RaCustomChannelFn = int (*)(DriverRaInfo, DriverCustomChanInfoIn *, DriverCustomChanInfoOut *);
 
+// RaTlvInit / RaTlvRequest / RaTlvDeinit — TLV (Type-Length-Value) protocol
+// for richer device queries that don't fit the CustomChannel ABI. Used by
+// hccp_test.so's test_ra_get_mem_info to query CCU mem regions with non-null
+// `mem_va`. Signatures inferred from libra.so disassembly + hccp_test.so call sites.
+//
+// RaTlvRequest argument layout (from `objdump -d libra.so` at +0x247a7..):
+//   rdi: void *tlv_handle  (returned by RaTlvInit)
+//   esi: uint32_t type     (request type; test_ra_get_mem_info uses 1)
+//   rdx: void *in_data     (per-request input struct)
+//   rcx: void *out_data    (per-request output struct)
+using RaTlvInitFn    = int (*)(void **out_handle);
+using RaTlvRequestFn = int (*)(void *handle, uint32_t type, void *in_data, void *out_data);
+using RaTlvDeinitFn  = int (*)(void *handle);
+
+// ccu_mem_info / ccu_mem_rsp from hcomm/.../ccu_u_comm.h:282
+//   struct ccu_mem_info { uint64_t mem_va; uint32_t mem_size; uint32_t resv[1]; }; // 16B
+//   struct ccu_mem_rsp  { uint32_t die_id; uint32_t num; ccu_mem_info list[64]; }; // 8 + 64*16 = 1032B
+struct DiagCcuMemInfo {
+    uint64_t mem_va;       // ← THE region VA we want
+    uint32_t mem_size;
+    uint32_t resv[1];
+};
+struct DiagCcuMemRsp {
+    uint32_t die_id;
+    uint32_t num;
+    DiagCcuMemInfo list[64];
+};
+static_assert(sizeof(DiagCcuMemInfo) == 16, "ccu_mem_info ABI size mismatch");
+static_assert(sizeof(DiagCcuMemRsp)  == 8 + 64 * 16, "ccu_mem_rsp ABI size mismatch (= 0x408)");
+
 // =============================================================================
 // libhccp.so lazy loader
 // =============================================================================
@@ -91,6 +121,27 @@ public:
     bool Ok() const { return ok_; }
     const std::string &ErrorMessage() const { return error_; }
     RaCustomChannelFn RaCustomChannel() const { return ra_custom_channel_; }
+    // Lazy lookup of the TLV trio — only resolved if the diag path actually
+    // touches them. Failure is non-fatal; nullptr just means the diag print
+    // skips the TLV branch.
+    RaTlvInitFn RaTlvInit() const {
+        if (handle_ != nullptr && ra_tlv_init_ == nullptr) {
+            ra_tlv_init_ = (RaTlvInitFn)dlsym(handle_, "RaTlvInit");
+        }
+        return ra_tlv_init_;
+    }
+    RaTlvRequestFn RaTlvRequest() const {
+        if (handle_ != nullptr && ra_tlv_request_ == nullptr) {
+            ra_tlv_request_ = (RaTlvRequestFn)dlsym(handle_, "RaTlvRequest");
+        }
+        return ra_tlv_request_;
+    }
+    RaTlvDeinitFn RaTlvDeinit() const {
+        if (handle_ != nullptr && ra_tlv_deinit_ == nullptr) {
+            ra_tlv_deinit_ = (RaTlvDeinitFn)dlsym(handle_, "RaTlvDeinit");
+        }
+        return ra_tlv_deinit_;
+    }
 
 private:
     LibHccp() = default;
@@ -156,6 +207,9 @@ private:
     std::once_flag init_flag_;
     void *handle_ = nullptr;
     RaCustomChannelFn ra_custom_channel_ = nullptr;
+    mutable RaTlvInitFn    ra_tlv_init_    = nullptr;
+    mutable RaTlvRequestFn ra_tlv_request_ = nullptr;
+    mutable RaTlvDeinitFn  ra_tlv_deinit_  = nullptr;
     std::string error_;
     std::string tried_name_;
     bool ok_ = false;
@@ -338,6 +392,78 @@ inline void DiagPrintCcuResourceAddrOnce(uint32_t devPhyId, uint32_t dieId,
     }
 }
 
+// Step 3 R&D diag #2: try the TLV path that hccp_test.so's test_ra_get_mem_info
+// uses (RaTlvInit + RaTlvRequest(type=1) + RaTlvDeinit). The driver returns a
+// `ccu_mem_rsp` populated with `ccu_mem_info[]`, where each entry has a
+// non-null `mem_va` — the actual mmap'd CCU resource VAs we need for the AIV
+// trigger path. Like the GET_BASIC_INFO diag above, only fires once per
+// (devPhyId, dieId), and only when PTO_DIAG_CCU_RESOURCE_ADDR is set.
+inline void DiagPrintCcuMemInfoOnce(uint32_t devPhyId, uint32_t dieId, LibHccp &lib) {
+    static std::mutex tlv_diag_mu;
+    static std::vector<std::pair<uint32_t, uint32_t>> tlv_already_dumped;
+    std::lock_guard<std::mutex> lk(tlv_diag_mu);
+    for (auto &kv : tlv_already_dumped) {
+        if (kv.first == devPhyId && kv.second == dieId) return;
+    }
+    tlv_already_dumped.emplace_back(devPhyId, dieId);
+
+    auto init_fn    = lib.RaTlvInit();
+    auto request_fn = lib.RaTlvRequest();
+    auto deinit_fn  = lib.RaTlvDeinit();
+    if (init_fn == nullptr || request_fn == nullptr || deinit_fn == nullptr) {
+        std::fprintf(stderr,
+            "[DIAG/ccu_mem_info] dev=%u die=%u: TLV symbols missing (init=%p req=%p deinit=%p)\n",
+            devPhyId, dieId, (void*)init_fn, (void*)request_fn, (void*)deinit_fn);
+        return;
+    }
+
+    void *tlv_handle = nullptr;
+    int rc_init = init_fn(&tlv_handle);
+    std::fprintf(stderr,
+        "[DIAG/ccu_mem_info] dev=%u die=%u: RaTlvInit rc=%d handle=%p\n",
+        devPhyId, dieId, rc_init, tlv_handle);
+    if (rc_init != 0 || tlv_handle == nullptr) {
+        return;
+    }
+
+    // ccu_mem_rsp output buffer (1032 bytes). Driver fills die_id, num, list[].
+    DiagCcuMemRsp *rsp = (DiagCcuMemRsp *)std::malloc(sizeof(DiagCcuMemRsp));
+    std::memset(rsp, 0, sizeof(*rsp));
+
+    // Input struct from test_ra_get_mem_info disassembly: 16 bytes,
+    //   offset 0: uint32_t (mem_type / die_id?)
+    //   offset 8: void*    (out buffer pointer)
+    struct DiagTlvInData {
+        uint32_t arg0;  // we'll put dieId here
+        uint32_t pad;
+        void    *out_ptr;
+    };
+    DiagTlvInData *in_data = (DiagTlvInData *)std::malloc(sizeof(DiagTlvInData));
+    in_data->arg0    = dieId;
+    in_data->pad     = 0;
+    in_data->out_ptr = rsp;
+
+    // type=1 matches what test_ra_get_mem_info passes
+    int rc_req = request_fn(tlv_handle, /*type=*/1, in_data, /*out=*/nullptr);
+    std::fprintf(stderr,
+        "[DIAG/ccu_mem_info] dev=%u die=%u: RaTlvRequest(type=1) rc=%d, rsp.die_id=%u rsp.num=%u\n",
+        devPhyId, dieId, rc_req, rsp->die_id, rsp->num);
+
+    if (rc_req == 0 && rsp->num > 0 && rsp->num <= 64) {
+        for (uint32_t i = 0; i < rsp->num; ++i) {
+            std::fprintf(stderr,
+                "[DIAG/ccu_mem_info]   list[%u]: mem_va=0x%016llx mem_size=%u\n",
+                i,
+                (unsigned long long)rsp->list[i].mem_va,
+                rsp->list[i].mem_size);
+        }
+    }
+
+    std::free(in_data);
+    std::free(rsp);
+    deinit_fn(tlv_handle);
+}
+
 inline int32_t HostTriggerCkeImpl(uint32_t devPhyId, const PtoGateDescriptor &desc) {
     // Sanity check: kernels that haven't been Translate()'d yet leave dieId in
     // an out-of-range state; reject early to give a clean error instead of a
@@ -358,6 +484,8 @@ inline int32_t HostTriggerCkeImpl(uint32_t devPhyId, const PtoGateDescriptor &de
     // the SET_CKE — RaCustomChannel will succeed without separate ACL/HCCL setup.
     if (std::getenv("PTO_DIAG_CCU_RESOURCE_ADDR") != nullptr) {
         DiagPrintCcuResourceAddrOnce(devPhyId, desc.dieId, lib.RaCustomChannel());
+        // Try the TLV path too — likely returns non-null mem_va that we need.
+        DiagPrintCcuMemInfoOnce(devPhyId, desc.dieId, lib);
     }
 
     DriverRaInfo info{kDriverNetworkOffline, devPhyId};
