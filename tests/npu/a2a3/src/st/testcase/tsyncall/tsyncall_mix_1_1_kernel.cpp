@@ -10,34 +10,42 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "tsyncall_mix_common.hpp"
 
+#if defined(TSYNCALL_MIX_BUILD_AIC) && !defined(TSYNCALL_MIX_REGISTER_BUILD)
+#include "runtime/rt.h"
+
+#include <cstdlib>
+#include <cstdio>
+#include <dlfcn.h>
+#include <fstream>
+#include <vector>
+#endif
+
 constexpr int32_t kMix11HardParticipants = 48;
 constexpr int32_t kMix11SoftParticipants = 48;
+constexpr uint64_t kMix11HardTilingKey = 1101;
 
-#if defined(TSYNCALL_MIX_BUILD_AIC)
-extern "C" __global__ AICORE void RunTSyncAllMix11_mix_aiv(__gm__ uint64_t __in__ *fftsAddr,
-                                                           __gm__ int32_t __out__ *out,
-                                                           __gm__ int32_t __out__ *flags);
-extern "C" __global__ AICORE void RunSoftTSyncAllMix11_mix_aiv(__gm__ uint64_t __in__ *fftsAddr,
-                                                               __gm__ int32_t __out__ *out,
-                                                               __gm__ int32_t __out__ *flags,
-                                                               __gm__ int32_t __out__ *syncWorkspace);
+#if defined(TSYNCALL_MIX_BUILD_AIC) && !defined(TSYNCALL_MIX_REGISTER_BUILD)
+extern "C" __global__ AICORE void RunSoftTSyncAllMix11_1102_mix_aiv(__gm__ uint64_t __in__ *fftsAddr,
+                                                                    __gm__ int32_t __out__ *out,
+                                                                    __gm__ int32_t __out__ *flags,
+                                                                    __gm__ int32_t __out__ *syncWorkspace);
 #endif
 
 #if defined(TSYNCALL_MIX_BUILD_AIC)
-PTO_A2A3_TSYNCALL_MIX_AIC_KERNEL_META(RunTSyncAllMix11_mix_aic, 1, 1);
-PTO_A2A3_TSYNCALL_MIX_AIC_KERNEL_META(RunSoftTSyncAllMix11_mix_aic, 1, 1);
+PTO_A2A3_TSYNCALL_MIX_AIC_KERNEL_META(RunTSyncAllMix11_1101_mix_aic, 1, 1);
+PTO_A2A3_TSYNCALL_MIX_AIC_KERNEL_META(RunSoftTSyncAllMix11_1102_mix_aic, 1, 1);
 
-extern "C" __global__ AICORE void RunTSyncAllMix11_mix_aic(__gm__ uint64_t __in__ *fftsAddr,
-                                                           __gm__ int32_t __out__ *out,
-                                                           __gm__ int32_t __out__ *flags)
+extern "C" __global__ AICORE void RunTSyncAllMix11_1101_mix_aic(__gm__ uint64_t __in__ *fftsAddr,
+                                                                __gm__ int32_t __out__ *out,
+                                                                __gm__ int32_t __out__ *flags)
 {
     RunMixSyncAllBody<kMix11HardParticipants, false>(fftsAddr, out, flags, nullptr);
 }
 
-extern "C" __global__ AICORE void RunSoftTSyncAllMix11_mix_aic(__gm__ uint64_t __in__ *fftsAddr,
-                                                               __gm__ int32_t __out__ *out,
-                                                               __gm__ int32_t __out__ *flags,
-                                                               __gm__ int32_t __out__ *syncWorkspace)
+extern "C" __global__ AICORE void RunSoftTSyncAllMix11_1102_mix_aic(__gm__ uint64_t __in__ *fftsAddr,
+                                                                    __gm__ int32_t __out__ *out,
+                                                                    __gm__ int32_t __out__ *flags,
+                                                                    __gm__ int32_t __out__ *syncWorkspace)
 {
     RunMixSyncAllBody<kMix11SoftParticipants, true>(fftsAddr, out, flags, syncWorkspace);
 }
@@ -45,40 +53,110 @@ extern "C" __global__ AICORE void RunSoftTSyncAllMix11_mix_aic(__gm__ uint64_t _
 #endif
 
 #if defined(TSYNCALL_MIX_BUILD_AIV)
-PTO_A2A3_TSYNCALL_MIX_AIC_KERNEL_META(RunTSyncAllMix11_mix_aiv, 1, 1);
-PTO_A2A3_TSYNCALL_MIX_AIC_KERNEL_META(RunSoftTSyncAllMix11_mix_aiv, 1, 1);
+PTO_A2A3_TSYNCALL_MIX_AIC_KERNEL_META(RunTSyncAllMix11_1101_mix_aiv, 1, 1);
+PTO_A2A3_TSYNCALL_MIX_AIC_KERNEL_META(RunSoftTSyncAllMix11_1102_mix_aiv, 1, 1);
 
-extern "C" __global__ AICORE void RunTSyncAllMix11_mix_aiv(__gm__ uint64_t __in__ *fftsAddr,
-                                                           __gm__ int32_t __out__ *out,
-                                                           __gm__ int32_t __out__ *flags)
+extern "C" __global__ AICORE void RunTSyncAllMix11_1101_mix_aiv(__gm__ uint64_t __in__ *fftsAddr,
+                                                                __gm__ int32_t __out__ *out,
+                                                                __gm__ int32_t __out__ *flags)
 {
     RunMixSyncAllBody<kMix11HardParticipants, false>(fftsAddr, out, flags, nullptr);
 }
 
-extern "C" __global__ AICORE void RunSoftTSyncAllMix11_mix_aiv(__gm__ uint64_t __in__ *fftsAddr,
-                                                               __gm__ int32_t __out__ *out,
-                                                               __gm__ int32_t __out__ *flags,
-                                                               __gm__ int32_t __out__ *syncWorkspace)
+extern "C" __global__ AICORE void RunSoftTSyncAllMix11_1102_mix_aiv(__gm__ uint64_t __in__ *fftsAddr,
+                                                                    __gm__ int32_t __out__ *out,
+                                                                    __gm__ int32_t __out__ *flags,
+                                                                    __gm__ int32_t __out__ *syncWorkspace)
 {
     RunMixSyncAllBody<kMix11SoftParticipants, true>(fftsAddr, out, flags, syncWorkspace);
 }
 
 #endif
 
-#if defined(TSYNCALL_MIX_BUILD_AIC)
+#if defined(TSYNCALL_MIX_BUILD_AIC) && !defined(TSYNCALL_MIX_REGISTER_BUILD)
+namespace {
+const char *GetCurrentSharedObjectPath(const void *anchor)
+{
+#if defined(TSYNCALL_MIX_REGISTER_OBJECT_PATH)
+    (void)anchor;
+    return TSYNCALL_MIX_REGISTER_OBJECT_PATH;
+#else
+    Dl_info info{};
+    if (dladdr(anchor, &info) == 0 || info.dli_fname == nullptr) {
+        std::fprintf(stderr, "dladdr failed for TSYNCALL mix 1:1 kernel\n");
+        std::abort();
+    }
+    return info.dli_fname;
+#endif
+}
+
+std::vector<char> ReadCurrentSharedObject(const char *path)
+{
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        std::fprintf(stderr, "failed to open TSYNCALL mix 1:1 kernel binary: %s\n", path);
+        std::abort();
+    }
+
+    const std::streamsize size = file.tellg();
+    if (size <= 0) {
+        std::fprintf(stderr, "invalid TSYNCALL mix 1:1 kernel binary size: %s\n", path);
+        std::abort();
+    }
+
+    std::vector<char> data(static_cast<size_t>(size));
+    file.seekg(0, std::ios::beg);
+    if (!file.read(data.data(), size)) {
+        std::fprintf(stderr, "failed to read TSYNCALL mix 1:1 kernel binary: %s\n", path);
+        std::abort();
+    }
+    return data;
+}
+
+void LaunchHardMixKernel(const void *anchor, uint64_t tilingKey, uint8_t *ffts, int32_t *out, int32_t *flags,
+                         void *stream)
+{
+    const char *path = GetCurrentSharedObjectPath(anchor);
+    static const std::vector<char> kernelBinary = ReadCurrentSharedObject(path);
+    rtDevBinary_t binary{RT_DEV_BINARY_MAGIC_ELF, 0, kernelBinary.data(), kernelBinary.size()};
+    void *handle = nullptr;
+    rtError_t ret = rtRegisterAllKernel(&binary, &handle);
+    if (ret != RT_ERROR_NONE || handle == nullptr) {
+        ret = rtBinaryLoadWithoutTilingKey(kernelBinary.data(), kernelBinary.size(), &handle);
+        if (ret != RT_ERROR_NONE || handle == nullptr) {
+            std::fprintf(stderr, "register TSYNCALL mix 1:1 kernel failed, path=%s, size=%zu, ret=%d\n", path,
+                         kernelBinary.size(), ret);
+            std::abort();
+        }
+    }
+
+    void *args[] = {reinterpret_cast<uint64_t *>(ffts), out, flags};
+    rtArgsEx_t argsInfo{};
+    argsInfo.args = args;
+    argsInfo.argsSize = sizeof(args);
+    rtTaskCfgInfo_t cfgInfo{};
+    ret = rtKernelLaunchWithHandleV2(handle, tilingKey, 24, &argsInfo, nullptr, stream, &cfgInfo);
+    if (ret != RT_ERROR_NONE) {
+        std::fprintf(stderr, "rtKernelLaunchWithHandleV2 failed for TSYNCALL mix 1:1, ret=%d\n", ret);
+        std::abort();
+    }
+}
+} // namespace
+
 void LaunchTSyncAllMix11(uint8_t *ffts, int32_t *out, int32_t *flags, void *stream)
 {
-    RunTSyncAllMix11_mix_aic<<<24, nullptr, stream>>>(reinterpret_cast<uint64_t *>(ffts), out, flags);
+    LaunchHardMixKernel(reinterpret_cast<const void *>(&LaunchTSyncAllMix11), kMix11HardTilingKey, ffts, out, flags,
+                        stream);
 }
 
 void LaunchSoftTSyncAllMix11(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t *syncWorkspace, void *stream)
 {
     aclrtStream aivStream;
     (void)aclrtCreateStream(&aivStream);
-    RunSoftTSyncAllMix11_mix_aic<<<24, nullptr, stream>>>(reinterpret_cast<uint64_t *>(ffts), out, flags,
-                                                          syncWorkspace);
-    RunSoftTSyncAllMix11_mix_aiv<<<24, nullptr, aivStream>>>(reinterpret_cast<uint64_t *>(ffts), out, flags,
-                                                             syncWorkspace);
+    RunSoftTSyncAllMix11_1102_mix_aic<<<24, nullptr, stream>>>(reinterpret_cast<uint64_t *>(ffts), out, flags,
+                                                               syncWorkspace);
+    RunSoftTSyncAllMix11_1102_mix_aiv<<<24, nullptr, aivStream>>>(reinterpret_cast<uint64_t *>(ffts), out, flags,
+                                                                  syncWorkspace);
     (void)aclrtSynchronizeStream(aivStream);
     (void)aclrtDestroyStream(aivStream);
 }

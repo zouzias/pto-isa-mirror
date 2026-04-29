@@ -49,6 +49,8 @@ PTO_INTERNAL void StoreMixInt32Line(__gm__ int32_t *dst, int32_t value, uint64_t
     pipe_barrier(PIPE_ALL);
     copy_ubuf_to_gm(static_cast<__gm__ void *>(dst), static_cast<__ubuf__ void *>(ub), 0, 1, 1, 0, 0);
     pipe_barrier(PIPE_ALL);
+    dcci(static_cast<__gm__ void *>(dst), SINGLE_CACHE_LINE);
+    dsb(DSB_DDR);
 #elif defined(__DAV_CUBE__)
     (void)ubAddr;
     __cbuf__ int32_t *l1 = reinterpret_cast<__cbuf__ int32_t *>(l1Addr);

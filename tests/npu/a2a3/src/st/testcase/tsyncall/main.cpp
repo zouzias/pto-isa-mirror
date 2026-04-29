@@ -270,12 +270,12 @@ TEST_F(TSYNCALLTest, case_soft_aiv_only_all_blocks)
     EXPECT_ACL_OK(aclFinalize());
 }
 
-TEST_F(TSYNCALLTest, DISABLED_case_mix_1_1_all_blocks)
+TEST_F(TSYNCALLTest, case_mix_1_1_all_blocks)
 {
     RunMixCase<48, false>(LaunchTSyncAllMix11, "mix_1_1");
 }
 
-TEST_F(TSYNCALLTest, DISABLED_case_mix_1_2_all_blocks)
+TEST_F(TSYNCALLTest, case_mix_1_2_all_blocks)
 {
     RunMixCase<72, false>(LaunchTSyncAllMix12, "mix_1_2");
 }
