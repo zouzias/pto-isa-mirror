@@ -44,30 +44,27 @@ template <int PadColsSrc, typename TileDataCvtF16, typename TileDataCvtS32>
 __tf__ PTO_INTERNAL void TQuantCvtS32ToFp16(typename TileDataCvtF16::TileDType __out__ src_f16,
                                             typename TileDataCvtS32::TileDType __in__ src_s32, uint32_t validRow)
 {
-    if (TQuantBuffersOverlap(src_f16, src_s32)) {
-        // Row-by-row s32→fp16 conversion for in-place aliased buffers with a tail.
-        // Processes each row's head + tail atomically to avoid cross-row data corruption.
-        constexpr int kCols = TileDataCvtS32::Cols;
-        constexpr int kS32ElemsPerRepeat = static_cast<int>(REPEAT_BYTE / sizeof(int32_t)); // 64
-        constexpr int kHeadRepeats = kCols / kS32ElemsPerRepeat;
-        constexpr int kTailElems = kCols % kS32ElemsPerRepeat;
+    // Row-by-row s32→fp16 conversion for in-place aliased buffers with a tail.
+    // Processes each row's head + tail atomically to avoid cross-row data corruption.
+    constexpr int kCols = TileDataCvtS32::Cols;
+    constexpr int kS32ElemsPerRepeat = static_cast<int>(REPEAT_BYTE / sizeof(int32_t)); // 64
+    constexpr int kHeadRepeats = kCols / kS32ElemsPerRepeat;
+    constexpr int kTailElems = kCols % kS32ElemsPerRepeat;
 
-        __ubuf__ half *fp16Ptr = (__ubuf__ half *)__cce_get_tile_ptr(src_f16);
-        __ubuf__ int32_t *s32Ptr = (__ubuf__ int32_t *)__cce_get_tile_ptr(src_s32);
+    __ubuf__ half *fp16Ptr = (__ubuf__ half *)__cce_get_tile_ptr(src_f16);
+    __ubuf__ int32_t *s32Ptr = (__ubuf__ int32_t *)__cce_get_tile_ptr(src_s32);
 
-        set_deqscale(static_cast<half>(1.0));
-        pipe_barrier(PIPE_V);
-        for (uint32_t i = 0; i < validRow; i++) {
-            if constexpr (kHeadRepeats > 0) {
-                vconv_deq(fp16Ptr + i * PadColsSrc, s32Ptr + i * kCols, kHeadRepeats, 1, 1, kS32ElemsPerRepeat / 8,
-                          kS32ElemsPerRepeat / 4);
-            }
-            SetContinuousMask(kTailElems);
-            vconv_deq(fp16Ptr + i * PadColsSrc + kHeadRepeats * kS32ElemsPerRepeat,
-                      s32Ptr + i * kCols + kHeadRepeats * kS32ElemsPerRepeat, 1, 1, 1, 1, 1);
-            set_vector_mask(-1, -1);
+    set_deqscale(static_cast<half>(1.0));
+    pipe_barrier(PIPE_V);
+    for (uint32_t i = 0; i < validRow; i++) {
+        if constexpr (kHeadRepeats > 0) {
+            vconv_deq(fp16Ptr + i * PadColsSrc, s32Ptr + i * kCols, kHeadRepeats, 1, 1, kS32ElemsPerRepeat / 8,
+                      kS32ElemsPerRepeat / 4);
         }
-        return;
+        SetContinuousMask(kTailElems);
+        vconv_deq(fp16Ptr + i * PadColsSrc + kHeadRepeats * kS32ElemsPerRepeat,
+                  s32Ptr + i * kCols + kHeadRepeats * kS32ElemsPerRepeat, 1, 1, 1, 1, 1);
+        set_vector_mask(-1, -1);
     }
 }
 
