@@ -76,6 +76,25 @@ PTO_INST void TSYNCALL(__gm__ int32_t *gmWorkspace, __ubuf__ int32_t *ubWorkspac
 #endif
 }
 
+template <TSyncAllMode Mode, bool IsAIVOnly = false>
+PTO_INST void TSYNCALL(__gm__ int32_t *gmWorkspace, __ubuf__ int32_t *ubWorkspace, __cbuf__ int32_t *l1Workspace,
+                       int32_t usedCores = 0)
+{
+#if defined(PTO_NPU_ARCH_A2A3) || defined(__CPU_SIM)
+    if constexpr (Mode == TSyncAllMode::Hard) {
+        (void)gmWorkspace;
+        (void)ubWorkspace;
+        (void)l1Workspace;
+        (void)usedCores;
+        TSYNCALL_IMPL<IsAIVOnly>();
+    } else {
+        TSYNCALL_SOFT_MIX_IMPL<IsAIVOnly>(gmWorkspace, ubWorkspace, l1Workspace, usedCores);
+    }
+#else
+    PTO_STATIC_ASSERT(Mode != Mode, "TSYNCALL currently only supports the A2/A3 backend.");
+#endif
+}
+
 template <typename... WaitEvents>
 PTO_INST void TSYNC(WaitEvents &... events)
 {

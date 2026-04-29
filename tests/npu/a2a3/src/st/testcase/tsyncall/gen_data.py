@@ -15,10 +15,17 @@ import numpy as np
 
 
 if __name__ == "__main__":
-    golden = np.ones(48, dtype=np.int32)
     for case_name in (
         "TSYNCALLTest.case_aiv_only_all_blocks",
         "TSYNCALLTest.case_soft_aiv_only_all_blocks",
+        "TSYNCALLTest.case_soft_mix_1_1_all_blocks",
     ):
+        golden = np.ones(48, dtype=np.int32)
+        os.makedirs(case_name, exist_ok=True)
+        golden.tofile(os.path.join(case_name, "golden.bin"))
+    for case_name in (
+        "TSYNCALLTest.case_soft_mix_1_2_all_blocks",
+    ):
+        golden = np.ones(72, dtype=np.int32)
         os.makedirs(case_name, exist_ok=True)
         golden.tofile(os.path.join(case_name, "golden.bin"))

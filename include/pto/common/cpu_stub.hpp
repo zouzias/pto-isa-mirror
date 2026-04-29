@@ -255,6 +255,17 @@ inline void TSYNCALL_SOFT_IMPL(int32_t *gmWorkspace, int32_t *ubWorkspace, int32
     (void)ubWorkspace;
     (void)usedCores;
 }
+
+template <bool IsAIVOnly = true>
+inline void TSYNCALL_SOFT_MIX_IMPL(int32_t *gmWorkspace, int32_t *ubWorkspace, int32_t *l1Workspace,
+                                   int32_t usedCores)
+{
+    (void)IsAIVOnly;
+    (void)gmWorkspace;
+    (void)ubWorkspace;
+    (void)l1Workspace;
+    (void)usedCores;
+}
 } // namespace pto
 
 #endif
