@@ -115,11 +115,11 @@ __simt_callee__ AICORE PTO_INLINE void scatter_apply(__gm__ T *ptr, T val)
     if constexpr (Atomic == ScatterAtomicOp::None) {
         *ptr = val;
     } else if constexpr (Atomic == ScatterAtomicOp::Add) {
-        bisheng::cce::simt::atomicAdd(ptr, val);
+        atomicAdd(ptr, val);
     } else if constexpr (Atomic == ScatterAtomicOp::Max) {
-        bisheng::cce::simt::atomicMax(ptr, val);
+        atomicMax(ptr, val);
     } else {
-        bisheng::cce::simt::atomicMin(ptr, val);
+        atomicMin(ptr, val);
     }
 }
 
