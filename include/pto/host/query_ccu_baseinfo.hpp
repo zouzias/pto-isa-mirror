@@ -44,6 +44,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 #include "pto/host/detail/host_trigger_cke_impl.hpp"
 
@@ -101,6 +102,47 @@ inline CcuBaseInfoProbe QueryCcuBaseInfo(uint32_t devPhyId, uint32_t dieId) {
     return probe;
 }
 
+// IsResourceAddrHostMapped: scan /proc/self/maps to determine whether the
+// `resourceAddr` returned by GET_BASIC_INFO is a userspace virtual address
+// mapped into the calling process (i.e. driver mmap'd a PCIe BAR window into
+// us) or a device-only IO VA (mapped on the SoC, not visible to host).
+//
+// Step 3 path-selection hinges on this:
+//   - host-mapped → host can `*(volatile T*)addr = mask` directly; AIV would
+//     need a separate device-side aperture (this VA is useless to AIV).
+//   - device-only → AIV may be able to use this VA directly; host can't.
+//
+// Lightweight: only reads /proc/self/maps, no actual memory access of
+// resourceAddr (so no segfault risk).
+inline bool IsResourceAddrHostMapped(const void *resourceAddr,
+                                     std::string *matched_line_out = nullptr) {
+    auto target = reinterpret_cast<uint64_t>(resourceAddr);
+    if (target == 0) return false;
+
+    std::FILE *f = std::fopen("/proc/self/maps", "r");
+    if (f == nullptr) return false;
+    char line[1024];
+    bool found = false;
+    while (std::fgets(line, sizeof(line), f) != nullptr) {
+        // Each line starts with `lo-hi perms ...`. We only need lo / hi.
+        unsigned long lo = 0, hi = 0;
+        if (std::sscanf(line, "%lx-%lx", &lo, &hi) != 2) continue;
+        if (lo <= target && target < hi) {
+            found = true;
+            if (matched_line_out != nullptr) {
+                *matched_line_out = line;
+                if (!matched_line_out->empty() &&
+                    matched_line_out->back() == '\n') {
+                    matched_line_out->pop_back();
+                }
+            }
+            break;
+        }
+    }
+    std::fclose(f);
+    return found;
+}
+
 // Convenience: dump the probe to stderr in a human-readable form. Format is
 // ad-hoc — only intended for one-shot debug logs, not for grep-driven
 // pipelines.
@@ -124,6 +166,20 @@ inline void DumpCcuBaseInfoProbe(uint32_t devPhyId, uint32_t dieId,
     std::fprintf(stderr,
                  "[DIAG/ccu_baseinfo]   resourceAddr@+0x28 = %p   <-- Step 3 candidate\n",
                  probe.resourceAddr);
+    {
+        std::string maps_line;
+        bool host_mapped = IsResourceAddrHostMapped(probe.resourceAddr, &maps_line);
+        if (host_mapped) {
+            std::fprintf(stderr,
+                         "[DIAG/ccu_baseinfo]   resourceAddr is HOST-MAPPED  <-- host raw store path viable\n");
+            std::fprintf(stderr,
+                         "[DIAG/ccu_baseinfo]   /proc/self/maps line: %s\n",
+                         maps_line.c_str());
+        } else {
+            std::fprintf(stderr,
+                         "[DIAG/ccu_baseinfo]   resourceAddr is NOT host-mapped <-- device-only IO VA, AIV-side path needed\n");
+        }
+    }
     std::fprintf(stderr, "[DIAG/ccu_baseinfo]   out.data[0..64]:\n");
     for (std::size_t row = 0; row < sizeof(probe.firstBytes); row += 16) {
         std::fprintf(stderr, "[DIAG/ccu_baseinfo]     +0x%02zx:", row);
