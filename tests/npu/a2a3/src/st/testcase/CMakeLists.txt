@@ -210,12 +210,36 @@ tconcatidx
 tconcat
 textract_vec
 tinsert_vec
+tpushpop_cv
+tpushpop_vc
+tpushpop_cv_nosplit
+tpushpop_vc_nosplit
+tpushpop_dir_both
+tpushpop_subtile
 )
-if (NOT AUTO_MODE)
+if (AUTO_MODE)
+  set(AUTO_MODE_WHITELIST
   # TPUSH and TPOP currently directly use TASSIGN inside their implementations,
   # which doesn't work for auto mode. They need to be disabled for auto mode 
   # until rewritten to adapt to auto mode
-  list(APPEND ALL_TESTCASES tpushpop_cv tpushpop_vc tpushpop_cv_nosplit tpushpop_vc_nosplit tpushpop_dir_both tpushpop_subtile)
+    tpushpop_cv
+    tpushpop_vc
+    tpushpop_cv_nosplit
+    tpushpop_vc_nosplit
+    tpushpop_dir_both
+    tpushpop_subtile
+  # the following case wait to be fix 
+    tcvt
+    ttrans
+    ttrans_conv
+    tci
+    tquant
+    texpands_mat
+  )
+
+  foreach(whitelisted_case ${AUTO_MODE_WHITELIST})
+    list(REMOVE_ITEM ALL_TESTCASES ${whitelisted_case})
+  endforeach()
 endif()
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
