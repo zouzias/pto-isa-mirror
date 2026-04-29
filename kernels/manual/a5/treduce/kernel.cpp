@@ -71,10 +71,17 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace AscendC;
 
 // AIV kernel — runs on AIV (vec arch). 1 block, 1 thread.
+//
+// `marker` is declared as `__gm__ uint8_t *` (not `__gm__ uint64_t *`) because
+// bisheng forbids the `void* → __gm__ T*` reinterpret_cast in the host-side
+// launcher (different address spaces — host doesn't know about __gm__). The
+// gemm_ar kernel uses the same convention: launcher takes `uint8_t*`, kernel
+// receives `__gm__ uint8_t*`, then re-casts to typed `__gm__ T*` inside the
+// kernel body (same address space → OK).
 __global__ __aicore__ void pto_aiv_treduce_kernel(
     uint64_t mmioAddr, uint32_t ckeId, uint32_t mask,
     uint64_t stride, uint64_t byte_off,
-    __gm__ uint64_t *marker)
+    __gm__ uint8_t *marker)
 {
     // Defensive: ensure only block 0 stores, even if launcher is ever changed
     // to launch >1 blocks. With `<<<1, ...>>>` this is always true.
@@ -83,20 +90,24 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     // Target byte address inside the CCU CKE register file.
     const uint64_t target = mmioAddr + static_cast<uint64_t>(ckeId) * stride + byte_off;
 
+    // Re-cast `__gm__ uint8_t*` to `__gm__ uint64_t*` so we can index 8 slots.
+    // Same address space (__gm__ → __gm__) — bisheng accepts this cast.
+    __gm__ uint64_t *m64 = reinterpret_cast<__gm__ uint64_t *>(marker);
+
     // ── Diagnostic marker (8 × u64 = 64B, cacheline-aligned) ──────────────
     // Pure GM store/load — independent of AscendC::printf / DebugTunnel.
     // See file header for full layout & host-side triage table.
-    if (marker != nullptr) {
+    if (m64 != nullptr) {
         // [0] entry sentinel — first thing kernel does, proves we ran
-        marker[0] = 0xC0DECAFEDEADBEEFULL;
+        m64[0] = 0xC0DECAFEDEADBEEFULL;
         // [1] pre-store readback (no fence yet — raw observation)
-        marker[1] = *reinterpret_cast<__gm__ uint64_t *>(target);
+        m64[1] = *reinterpret_cast<__gm__ uint64_t *>(target);
         // [2] mask echo — confirms host→kernel ABI marshalling correct
-        marker[2] = static_cast<uint64_t>(mask) & 0xFFFFULL;
+        m64[2] = static_cast<uint64_t>(mask) & 0xFFFFULL;
         // [4] target address self-check — host computes same and compares
-        marker[4] = target;
+        m64[4] = target;
         // [5] which block ran — should be 0
-        marker[5] = static_cast<uint64_t>(get_block_idx());
+        m64[5] = static_cast<uint64_t>(get_block_idx());
         pipe_barrier(PIPE_ALL);
     }
 
@@ -112,18 +123,18 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     // (non-cacheable, ordered) on Ascend 950, so a regular store + barrier is sufficient.
     *reinterpret_cast<__gm__ uint16_t *>(target) = static_cast<uint16_t>(mask & 0xffff);
 
-    if (marker != nullptr) {
+    if (m64 != nullptr) {
         // [6] post-store, PRE-barrier readback — does barrier matter at all?
-        marker[6] = *reinterpret_cast<__gm__ uint64_t *>(target);
+        m64[6] = *reinterpret_cast<__gm__ uint64_t *>(target);
     }
 
     pipe_barrier(PIPE_ALL);
 
-    if (marker != nullptr) {
+    if (m64 != nullptr) {
         // [3] post-store, POST-barrier readback — authoritative observation
-        marker[3] = *reinterpret_cast<__gm__ uint64_t *>(target);
+        m64[3] = *reinterpret_cast<__gm__ uint64_t *>(target);
         // [7] tail sentinel — proves kernel ran ALL the way through
-        marker[7] = 0xFEEDFACECAFEBABEULL;
+        m64[7] = 0xFEEDFACECAFEBABEULL;
         pipe_barrier(PIPE_ALL);
     }
 
@@ -144,15 +155,21 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
 // `marker` is a host-supplied device pointer to a 64B (8×u64) zero-initialized
 // buffer. May be nullptr to disable the diagnostic readout. See kernel header
 // for the marker[] layout.
+//
+// Type is `uint8_t *` (not `void *`) because bisheng's `<<<>>>` dispatch
+// marshals untyped device pointers via `uint8_t*` → `__gm__ uint8_t*` (the
+// cast is implicit in the launch thunk). `void* → __gm__ T*` is rejected.
+// Callers passing `void*` (e.g. from `aclrtMalloc`) must `static_cast` it
+// before this entry point — handled by the inline `pto::aiv::launch_treduce`
+// wrapper in `<pto/aiv/detail/treduce_launcher.hpp>`.
 extern "C" __attribute__((visibility("default"))) int
 pto_aiv_treduce_launch(void *stream,
                        uint64_t mmioAddr, uint32_t /*dieId*/,
                        uint32_t ckeId, uint32_t mask,
                        uint64_t stride, uint64_t byte_off,
-                       void *marker)
+                       uint8_t *marker)
 {
     pto_aiv_treduce_kernel<<<1, nullptr, stream>>>(
-        mmioAddr, ckeId, mask, stride, byte_off,
-        reinterpret_cast<__gm__ uint64_t *>(marker));
+        mmioAddr, ckeId, mask, stride, byte_off, marker);
     return 0;
 }

@@ -48,14 +48,20 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // C ABI symbol exported from libpto_aiv_treduce.so (kernels/manual/a5/treduce/kernel.cpp).
 // MUST be link-time linked, NOT dlopen'd — see comment block above.
 //
-// `marker` is an optional 32B device buffer (4×u64). If non-null, the kernel
+// `marker` is an optional 64B device buffer (8×u64). If non-null, the kernel
 // stores diagnostic readouts there (see treduce.hpp for layout). Pass nullptr
 // to disable.
+//
+// Type `uint8_t *` (not `void *`) is required by bisheng: `<<<>>>` dispatch
+// marshals untyped device pointers as `uint8_t* → __gm__ uint8_t*` (the cast
+// is implicit in the launch thunk). `void* → __gm__ T*` is rejected by the
+// CCE compiler. Callers holding `void *` (e.g. from `aclrtMalloc`) must
+// `static_cast` it — the inline `launch_treduce` wrapper below does this.
 extern "C" int pto_aiv_treduce_launch(void *stream,
                                        uint64_t mmioAddr, uint32_t dieId,
                                        uint32_t ckeId, uint32_t mask,
                                        uint64_t stride, uint64_t byte_off,
-                                       void *marker);
+                                       uint8_t *marker);
 
 namespace pto {
 namespace aiv {
@@ -115,8 +121,12 @@ inline int32_t launch_treduce(void *stream, const host::PtoGateDescriptor &desc,
         static_cast<unsigned long>(desc.mmioAddr + desc.ckeId * stride + byte_off),
         marker);
 
+    // Convert caller's `void *` (e.g. from aclrtMalloc) to `uint8_t *` here —
+    // the bisheng-built C ABI entry point cannot accept `void *` (would force
+    // the kernel-launch dispatch to do `void* → __gm__ T*`, which CCE rejects).
     int rc = pto_aiv_treduce_launch(stream, desc.mmioAddr, desc.dieId, desc.ckeId,
-                                     desc.mask, stride, byte_off, marker);
+                                     desc.mask, stride, byte_off,
+                                     static_cast<uint8_t *>(marker));
     if (rc != 0) {
         std::fprintf(stderr,
             "[PTO_AIV_TREDUCE] pto_aiv_treduce_launch returned %d\n", rc);
