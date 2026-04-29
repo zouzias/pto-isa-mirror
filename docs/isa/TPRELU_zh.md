@@ -51,6 +51,7 @@ PTO_INST RecordEvent TPRELU(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &
 - 该操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
 - A3 计算需要临时空间，而 A5 不使用。
 - 对于 A3，2 个源 Tile、目标 Tile、临时空间必须在不同的内存范围内且不重叠。
+- 对于 A3，临时空间的`ValidRow`必须大于等于`dst.GetValidCol() + 1`。
 
 ## 示例
 
