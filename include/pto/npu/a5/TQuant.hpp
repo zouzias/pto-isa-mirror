@@ -625,7 +625,18 @@ PTO_INTERNAL void CalcQuantizedFP8Values_B16_Window(__ubuf__ T *srcPtr, __ubuf__
     vor(vb8_or1, vb8_p0, vb8_p1, preg_b8);
     vor(vb8_or2, vb8_p2, vb8_p3, preg_b8);
     vor(vb8_out, vb8_or1, vb8_or2, preg_b8);
-    vsts((vector_u8 &)vb8_out, (__ubuf__ uint8_t *)dstPtr, i * elementsPerVL_b8, NORM_B8, preg_b8);
+    // Board: full-VL window prefers NORM_B32 over NORM_B8 to avoid the
+    // documented "first byte dropped at row-boundary" race observed with
+    // back-to-back NORM_B8 stores in the BF16 path. NORM_B32 stores the same
+    // 256 bytes as 64 u32 lanes (8-lane × 32 B blocks). Partial trailing
+    // windows still use NORM_B8 because b8_count may not be divisible by 4.
+    if (remaining == elementsPerDintlv) {
+        constexpr uint32_t elementsPerVL_b32 = REPEAT_BYTE / sizeof(uint32_t);
+        MaskReg preg_b32_all = pset_b32(PAT_ALL);
+        vsts((vector_u32 &)vb8_out, (__ubuf__ uint32_t *)dstPtr, i * elementsPerVL_b32, NORM_B32, preg_b32_all);
+    } else {
+        vsts((vector_u8 &)vb8_out, (__ubuf__ uint8_t *)dstPtr, i * elementsPerVL_b8, NORM_B8, preg_b8);
+    }
 }
 
 // B16 (BF16/FP16) -> FP8. 2 VLs per iter (one DINTLV_B16 load). Ceil-div on
