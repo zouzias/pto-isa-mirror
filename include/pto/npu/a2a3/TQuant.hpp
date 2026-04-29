@@ -41,8 +41,8 @@ PTO_INTERNAL bool TQuantBuffersOverlap(TileA &a, TileB &b)
 
 // s32→fp16 dispatch: uses row-by-row when buffers overlap and there's a tail.
 template <int PadColsSrc, typename TileDataCvtF16, typename TileDataCvtS32>
-__tf__ PTO_INTERNAL void TQuantCvtS32ToFp16(typename TileDataCvtF16::DType __out__ src_f16,
-                                            typename TileDataCvtS32::DType __in__ src_s32, uint32_t validRow)
+__tf__ PTO_INTERNAL void TQuantCvtS32ToFp16(typename TileDataCvtF16::TileDType __out__ src_f16,
+                                            typename TileDataCvtS32::TileDType __in__ src_s32, uint32_t validRow)
 {
     if (TQuantBuffersOverlap(src_f16, src_s32)) {
         // Row-by-row s32→fp16 conversion for in-place aliased buffers with a tail.
