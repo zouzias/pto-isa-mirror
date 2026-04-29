@@ -65,9 +65,34 @@ enum LaunchTReduceStatus : int32_t {
 //           kernel is enqueued on the SAME stream so ordering is implicit.
 //   desc    Fully populated descriptor. `mmioAddr` MUST be non-zero; caller
 //           is expected to have filled it via QueryCcuBaseInfo or equivalent.
+//   marker  Optional device pointer to a 64-byte (8×u64, cacheline-aligned)
+//           zero-initialized buffer. If non-null, the AIV kernel writes 8
+//           diagnostic words (one host hex-dump line):
+//             [0] = 0xC0DECAFEDEADBEEF            (entry sentinel — kernel ran)
+//             [1] = 8B value at target BEFORE store (no fence)
+//             [2] = mask the kernel actually saw   (ABI marshalling check)
+//             [3] = 8B value at target AFTER store + AFTER pipe_barrier
+//                                                   (authoritative readback)
+//             [4] = target address kernel computed (mmioAddr + ckeId*stride
+//                                                   + byte_off — host check)
+//             [5] = get_block_idx()                (which block ran; expect 0)
+//             [6] = 8B value at target AFTER store but BEFORE pipe_barrier
+//                                                   (does barrier matter?)
+//             [7] = 0xFEEDFACECAFEBABE            (tail sentinel — full path)
+//           Caller is expected to memcpy this back after stream sync and
+//           triage with this decision tree:
+//             marker[0] != head sentinel → AIV kernel never ran (H10)
+//             marker[7] != tail sentinel → kernel trapped mid-store
+//             marker[5] != 0             → wrong block ran (impossible with <<<1>>>)
+//             marker[4] != host expected → ckeId/stride/byte_off ABI bug
+//             marker[1] == marker[3]     → store had no effect on register
+//             marker[2] != desc.mask     → mask got mangled in marshalling
+//             else                       → store landed; inspect marker[3]
+//           Pass nullptr to disable the diagnostic readout (production path).
 //
 // Returns: `kLaunchTReduceOk` (= 0) on success, or one of LaunchTReduceStatus.
-inline int32_t launch_treduce(void *stream, const host::PtoGateDescriptor &desc);
+inline int32_t launch_treduce(void *stream, const host::PtoGateDescriptor &desc,
+                              void *marker = nullptr);
 
 } // namespace aiv
 } // namespace pto

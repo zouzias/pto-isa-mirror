@@ -47,10 +47,15 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 // C ABI symbol exported from libpto_aiv_treduce.so (kernels/manual/a5/treduce/kernel.cpp).
 // MUST be link-time linked, NOT dlopen'd — see comment block above.
+//
+// `marker` is an optional 32B device buffer (4×u64). If non-null, the kernel
+// stores diagnostic readouts there (see treduce.hpp for layout). Pass nullptr
+// to disable.
 extern "C" int pto_aiv_treduce_launch(void *stream,
                                        uint64_t mmioAddr, uint32_t dieId,
                                        uint32_t ckeId, uint32_t mask,
-                                       uint64_t stride, uint64_t byte_off);
+                                       uint64_t stride, uint64_t byte_off,
+                                       void *marker);
 
 namespace pto {
 namespace aiv {
@@ -82,7 +87,8 @@ inline uint64_t ResolveByteOff() {
 
 } // namespace detail
 
-inline int32_t launch_treduce(void *stream, const host::PtoGateDescriptor &desc) {
+inline int32_t launch_treduce(void *stream, const host::PtoGateDescriptor &desc,
+                              void *marker) {
     if (stream == nullptr || desc.mask == 0 || desc.ckeId > 4096) {
         std::fprintf(stderr,
             "[PTO_AIV_TREDUCE] BadArg stream=%p mask=0x%x ckeId=%u\n",
@@ -101,15 +107,16 @@ inline int32_t launch_treduce(void *stream, const host::PtoGateDescriptor &desc)
 
     std::fprintf(stderr,
         "[PTO_AIV_TREDUCE] launching: mmioAddr=0x%lx dieId=%u ckeId=%u "
-        "mask=0x%x stride=0x%lx byte_off=%lu (target=0x%lx)\n",
+        "mask=0x%x stride=0x%lx byte_off=%lu (target=0x%lx) marker=%p\n",
         static_cast<unsigned long>(desc.mmioAddr),
         desc.dieId, desc.ckeId, desc.mask,
         static_cast<unsigned long>(stride),
         static_cast<unsigned long>(byte_off),
-        static_cast<unsigned long>(desc.mmioAddr + desc.ckeId * stride + byte_off));
+        static_cast<unsigned long>(desc.mmioAddr + desc.ckeId * stride + byte_off),
+        marker);
 
     int rc = pto_aiv_treduce_launch(stream, desc.mmioAddr, desc.dieId, desc.ckeId,
-                                     desc.mask, stride, byte_off);
+                                     desc.mask, stride, byte_off, marker);
     if (rc != 0) {
         std::fprintf(stderr,
             "[PTO_AIV_TREDUCE] pto_aiv_treduce_launch returned %d\n", rc);
