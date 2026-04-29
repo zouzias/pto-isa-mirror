@@ -112,9 +112,10 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataPara &
     constexpr int kS32ElemsPerRepeat = static_cast<int>(REPEAT_BYTE / sizeof(int32_t));
     constexpr bool kHasTail = (TileDataCvtS32::Cols % kS32ElemsPerRepeat != 0);
     if constexpr (kHasTail) {
-        TQuantCvtS32ToFp16<PadColsSrc, TileDataCvtF16, TileDataCvtS32>(src_f16.data(), src_s32.data(),
-                                                                       src.GetValidRow()); // s32->fp16
-
+        if (TQuantBuffersOverlap(src_f16, src_s32)) {
+            TQuantCvtS32ToFp16<PadColsSrc, TileDataCvtF16, TileDataCvtS32>(src_f16.data(), src_s32.data(),
+                                                                           src.GetValidRow()); // s32->fp16
+        }
     } else {
         TCVT_IMPL(src_f16, src_s32, RoundMode::CAST_RINT);
     }
