@@ -67,7 +67,7 @@ struct RowLaunch {
 } // namespace mgather_cfg
 
 template <GatherOOB Oob>
-__simt_callee__ AICORE PTO_INLINE uint32_t gather_remap(uint32_t idx, uint32_t cap, uint32_t &doRead)
+AICORE PTO_INLINE uint32_t gather_remap(uint32_t idx, uint32_t cap, uint32_t &doRead)
 {
     if constexpr (Oob == GatherOOB::Undefined) {
         doRead = 1u;

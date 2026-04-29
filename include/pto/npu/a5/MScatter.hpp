@@ -92,7 +92,7 @@ struct RowLaunch {
 } // namespace mscatter_cfg
 
 template <ScatterOOB Oob>
-__simt_callee__ AICORE PTO_INLINE uint32_t scatter_remap(uint32_t idx, uint32_t cap, uint32_t &doWrite)
+AICORE PTO_INLINE uint32_t scatter_remap(uint32_t idx, uint32_t cap, uint32_t &doWrite)
 {
     if constexpr (Oob == ScatterOOB::Undefined) {
         doWrite = 1u;
@@ -110,7 +110,7 @@ __simt_callee__ AICORE PTO_INLINE uint32_t scatter_remap(uint32_t idx, uint32_t 
 }
 
 template <ScatterAtomicOp Atomic, typename T>
-__simt_callee__ AICORE PTO_INLINE void scatter_apply(__gm__ T *ptr, T val)
+AICORE PTO_INLINE void scatter_apply(__gm__ T *ptr, T val)
 {
     if constexpr (Atomic == ScatterAtomicOp::None) {
         *ptr = val;
