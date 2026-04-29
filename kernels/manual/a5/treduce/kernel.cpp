@@ -52,30 +52,40 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     // Target byte address inside the CCU CKE register file.
     const uint64_t target = mmioAddr + static_cast<uint64_t>(ckeId) * stride + byte_off;
 
-    // ── DIAGNOSTIC #1: prove the kernel actually executed ────────────────
-    // If we never see this print on stderr, the kernel was queued by
-    // `<<<>>>` but never executed (most likely cause: dlopen-loaded .so's
-    // bisheng launch thunk failed to register with the AscendC runtime
-    // because aclInit had already happened in the host process before our
-    // .so was loaded). Compiled in only when `--cce-enable-print` is set
-    // in CCE_OPTS (see CMakeLists.txt).
-    AscendC::printf("[AIV/treduce] kernel ran: target=0x%lx mask=0x%x\n",
-                    (unsigned long)target, (unsigned int)(mask & 0xffff));
+    // ── HYPOTHESIS H5 TEST (printf disabled) — 2026-04-29 ─────────────────
+    // Both AscendC::printf calls below are temporarily commented out to test
+    // whether device-side printf (via cce::internal::DebugTunnel) is the
+    // hang root cause. With print disabled here AND `--cce-enable-print`
+    // disabled in CMakeLists.txt, bisheng emits the launch thunk WITHOUT
+    // the `cce::internal::DebugTunnelData*` parameter, so no host-side
+    // payload buffer init is required — kernel should run end-to-end and
+    // store the mask into the CCU CKE register.
+    //
+    // Validation criteria: if D2_AIV_SWEEP (run_gate_tests_rs.sh) gets any
+    // rc=0 row after rebuilding the .so, H5 is CONFIRMED → drop print
+    // permanently or wire up DebugTunnel host init properly. If still
+    // rc=124 across all rows, H5 is rejected → root cause is deeper
+    // (register-side; needs hardware team).
+    //
+    // To re-enable for diagnostics: uncomment both blocks below AND
+    // uncomment `--cce-enable-print` in CMakeLists.txt CCE_OPTS.
+
+    // AscendC::printf("[AIV/treduce] kernel ran: target=0x%lx mask=0x%x\n",
+    //                 (unsigned long)target, (unsigned int)(mask & 0xffff));
 
     // Raw 16-bit store into device MMIO.
     // The CCU CKE register window is mapped device-side as Device-nGnRE-equivalent
     // (non-cacheable, ordered) on Ascend 950, so a regular store + barrier is sufficient.
     *reinterpret_cast<__gm__ uint16_t *>(target) = static_cast<uint16_t>(mask & 0xffff);
 
-    // ── DIAGNOSTIC #2: read back what we just wrote ──────────────────────
-    // If readback != mask, the AIV's MMU translation of `target` doesn't
-    // reach a writable register that mirrors the CCU CKE entry — write
-    // either silently dropped or landed in DDR mapped at the same VA.
     pipe_barrier(PIPE_ALL);
-    uint16_t readback = *reinterpret_cast<__gm__ uint16_t *>(target);
-    AscendC::printf("[AIV/treduce] readback @0x%lx = 0x%x (expected 0x%x)\n",
-                    (unsigned long)target, (unsigned int)readback,
-                    (unsigned int)(mask & 0xffff));
+    // Readback diagnostic also disabled under H5 test (was previously the
+    // second AscendC::printf). The mask write above is still here — without
+    // the printf it should propagate through to the CCU CKE register.
+    // [[maybe_unused]] uint16_t readback = *reinterpret_cast<__gm__ uint16_t *>(target);
+    // AscendC::printf("[AIV/treduce] readback @0x%lx = 0x%x (expected 0x%x)\n",
+    //                 (unsigned long)target, (unsigned int)readback,
+    //                 (unsigned int)(mask & 0xffff));
 
     // Memory barrier: make the store visible to the CCU before the kernel
     // returns, so when the host stream-sync unblocks, the gated CCU kernel

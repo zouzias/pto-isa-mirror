@@ -74,7 +74,21 @@ set(CCE_OPTS
     "SHELL:-mllvm -cce-aicore-record-overflow=true"
     "SHELL:-mllvm -cce-aicore-addr-transform"
     "SHELL:-mllvm -cce-aicore-dcci-insert-for-scalar=false"
-    --cce-enable-print  # 打开 device-side printf，diagnostic only — see kernel.cpp
+    # ── HYPOTHESIS H5 (DebugTunnel printf deadlock) — 2026-04-29 ────────────
+    # `--cce-enable-print` makes bisheng emit the launch thunk with an extra
+    # `cce::internal::DebugTunnelData*` parameter, and the device-side printf
+    # implementation expects host runtime to manage a print payload buffer
+    # via `cce::internal::PrintPayload::OnHostInitialize/OnHostFinish`. Our
+    # hand-rolled `extern "C" pto_aiv_treduce_launch` does NOT do that init,
+    # so the device kernel may park on the first `AscendC::printf` waiting
+    # for a payload buffer that never materializes — symptom matches Step 3
+    # observation: host sees `[PTO_GATE] AIV released` (launch returned 0),
+    # device-side `[AIV/treduce] kernel ran:` never fires, CCU stream hangs
+    # at WaitCKE, rc=124 timeout. To validate, comment this out AND comment
+    # out the two `AscendC::printf` calls in kernel.cpp, rebuild, rerun
+    # run_gate_tests_rs.sh. If D2_AIV_SWEEP gets any rc=0 row, H5 is
+    # confirmed and we drop print permanently (or wire DebugTunnel init).
+    # --cce-enable-print  # disabled — see hypothesis block above
 )
 
 # ============================================================================
