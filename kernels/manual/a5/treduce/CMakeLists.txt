@@ -47,12 +47,18 @@ endif()
 set(KERNEL_INCLUDE_DIRS
     ${PROJECT_SOURCE_DIR}/../../../../include
     ${PROJECT_SOURCE_DIR}
+    ${ASCEND_HOME_PATH}/include
+    ${ASCEND_HOME_PATH}/include/hccl
     ${ASCEND_KERNEL_PLATFORM_ROOT}/asc
     ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/include
-    ${ASCEND_KERNEL_PLATFORM_ROOT}/ascendc/include/basic_api
-    ${ASCEND_KERNEL_PLATFORM_ROOT}/include/ascendc/basic_api
+    ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/include/interface
+    ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/include/utils
+    ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/impl
     ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/impl/basic_api
+    ${ASCEND_KERNEL_PLATFORM_ROOT}/ascendc/include/basic_api
     ${ASCEND_KERNEL_PLATFORM_ROOT}/ascendc/include/basic_api/impl
+    ${ASCEND_KERNEL_PLATFORM_ROOT}/ascendc/include/highlevel_api
+    ${ASCEND_KERNEL_PLATFORM_ROOT}/include/ascendc/basic_api
 )
 
 set(CCE_OPTS
