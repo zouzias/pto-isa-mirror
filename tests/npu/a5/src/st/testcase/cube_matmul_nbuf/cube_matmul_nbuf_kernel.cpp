@@ -1459,3 +1459,233 @@ void LaunchCubeMatmulBNBufNSplitR16_K16(uint8_t *out, uint8_t *src0, uint8_t *sr
             reinterpret_cast<half*>(src0),
             reinterpret_cast<half*>(src1));
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Config 9: 8 KiB full-N B-tile (B_K=16, N=256) with L0B-bounded N-buffering.
+//
+//   Goal: reduce scalar-bound overhead seen in Config 8 (4 KiB tile) by
+//         doubling B granularity back to full N=256.  L0B at 64 KiB caps
+//         distinct L0B slots at 8 (8 × 8 KiB), but L1 (256 KiB) can hold
+//         up to 32 B slots — exercising id reuse on the L1 pool.
+//
+//   Buf-id layout:
+//     A_L1  (PIPE_MTE2)               : 0, 1                        (2 ids)
+//     C_L0C (PIPE_M / PIPE_FIX)       : 2                           (1 id, single AccTile)
+//     L0A   (PIPE_MTE1 / PIPE_M)      : 3, 4                        (2 ids)
+//     L0B   (PIPE_MTE1 / PIPE_M)      : 5 .. 5+N_BUFS_L0B-1         (≤ 8 ids, no reuse)
+//     B_L1  (PIPE_MTE2 / PIPE_MTE1)   : 13 .. 13+L1_POOL-1
+//
+//   PTO_BUFID_HW_GT32 *undefined* (32-id HW):
+//       L1_POOL  = min(N_BUFS_B_L1, 16)   ⇒  13 + 16 = 29 ids fit.
+//       L1 b_id reuses every 16 iterations (`flat % 16`); pipe_barrier at wrap.
+//   PTO_BUFID_HW_GT32 *defined* (>32-id HW):
+//       L1_POOL  = N_BUFS_B_L1            ⇒  no cap, no barrier.
+//
+//   Memory layout:
+//     A L1   : 2 × M*A_K_TILE*2 = 16 KiB  at 0x00000
+//     B L1   : N_BUFS_B_L1 × B_K*N*2      at 0x10000 (= up to 256 KiB at 32 buf)
+//     L0A    : 2 × M*B_K*2 ≈ 2 KiB
+//     L0B    : N_BUFS_L0B × B_K*N*2 ≤ 64 KiB
+//     L0C    : 1 × M*N*sizeof(out) = 32 KiB
+// ═══════════════════════════════════════════════════════════════════════════
+template <typename outType, typename inType,
+          int N_BUFS_B_L1_, int N_BUFS_L0B_, int A_K_TILE_, int B_K_TILE_, int M_TILE_, int N_TILE_>
+__global__ AICORE void RunCubeMatmulBL1Reuse(__gm__ outType *out, __gm__ inType *src0, __gm__ inType *src1)
+{
+    constexpr int N_BUFS_B_L1 = N_BUFS_B_L1_;
+    constexpr int N_BUFS_L0B  = N_BUFS_L0B_;
+    constexpr int A_K_TILE    = A_K_TILE_;
+    constexpr int B_K_TILE    = B_K_TILE_;
+    constexpr int M_TILE      = M_TILE_;
+    constexpr int N_TILE      = N_TILE_;
+    constexpr int K_GROUPS    = GM_K / A_K_TILE;
+    constexpr int INNER_K     = A_K_TILE / B_K_TILE;
+    constexpr int TOTAL_ITERS = K_GROUPS * INNER_K;
+    static_assert(K_GROUPS * A_K_TILE == GM_K, "GM_K must be a multiple of A_K_TILE");
+    static_assert(INNER_K * B_K_TILE == A_K_TILE, "A_K_TILE must be a multiple of B_K_TILE");
+    static_assert(N_BUFS_L0B <= N_BUFS_B_L1, "L0B slot count must not exceed L1");
+    static_assert(B_K_TILE % 16 == 0, "B_K_TILE must be a multiple of 16");
+    static_assert(N_TILE  % 16 == 0, "N_TILE must be a multiple of 16");
+
+    constexpr int A_BIG_BYTES   = M_TILE * A_K_TILE * 2;
+    constexpr int A_VIEW_STRIDE = M_TILE * B_K_TILE * 2;
+    constexpr int A_L1_BASE     = 0x00000;
+    constexpr int B_L1_BASE     = 0x10000;
+    constexpr int B_SLOT_BYTES  = B_K_TILE * N_TILE * 2;
+    constexpr int L0A_STRIDE    = M_TILE * B_K_TILE * 2;
+    constexpr int L0B_STRIDE    = B_K_TILE * N_TILE * 2;
+    constexpr int L0C_BYTES     = M_TILE * N_TILE * (int)sizeof(outType);
+    static_assert(A_L1_BASE + 2 * A_BIG_BYTES <= B_L1_BASE,           "A L1 region overlap");
+    static_assert(N_BUFS_B_L1 * B_SLOT_BYTES <= 0x80000,               "B L1 > 512 KiB");
+    static_assert(2 * L0A_STRIDE <= 0x10000,                           "L0A > 64 KiB");
+    static_assert(N_BUFS_L0B * L0B_STRIDE <= 0x10000,                  "L0B > 64 KiB");
+    static_assert(L0C_BYTES <= 0x40000,                                "L0C > 256 KiB");
+
+    constexpr int A_ID_BASE   = 0;
+    constexpr int C_ID        = 2;
+    constexpr int L0A_ID_BASE = 3;
+    constexpr int L0B_ID_BASE = 5;
+#ifdef PTO_BUFID_HW_GT32
+    constexpr int L1_POOL = N_BUFS_B_L1;
+    static_assert(13 + L1_POOL <= 64, "exceeds 64 buf-ids");
+#else
+    // Cap L1 id pool at 16 → reuse every 16 iters; total ids = 13 + 16 = 29 ≤ 32.
+    constexpr int L1_POOL = (N_BUFS_B_L1 < 16) ? N_BUFS_B_L1 : 16;
+    static_assert(13 + L1_POOL <= 32, "exceeds 32 buf-ids");
+#endif
+    constexpr int B_ID_BASE         = 13;
+    constexpr bool NEEDS_L1_BARRIER = (L1_POOL < N_BUFS_B_L1);
+
+    using GlobalDataSrc0 = GlobalTensor<inType,  pto::Shape<1,1,1,M_TILE,A_K_TILE>, pto::Stride<GM_M*GM_K,GM_M*GM_K,GM_M*GM_K,GM_K,1>>;
+    using GlobalDataSrc1 = GlobalTensor<inType,  pto::Shape<1,1,1,B_K_TILE,N_TILE>, pto::Stride<GM_K*GM_N,GM_K*GM_N,GM_K*GM_N,GM_N,1>>;
+    using GlobalDataOut  = GlobalTensor<outType, pto::Shape<1,1,1,GM_M,N_TILE>,     pto::Stride<GM_M*GM_N,GM_M*GM_N,GM_M*GM_N,GM_N,1>>;
+    using TileMatABig  = Tile<TileType::Mat, inType, M_TILE, A_K_TILE, BLayout::ColMajor, M_TILE, A_K_TILE, SLayout::RowMajor, 512>;
+    using TileMatAView = Tile<TileType::Mat, inType, M_TILE, B_K_TILE, BLayout::ColMajor, M_TILE, B_K_TILE, SLayout::RowMajor, 512>;
+    using TileMatB     = Tile<TileType::Mat, inType, B_K_TILE, N_TILE, BLayout::ColMajor, B_K_TILE, N_TILE, SLayout::RowMajor, 512>;
+    using LeftTile     = TileLeft< inType,  M_TILE, B_K_TILE, M_TILE, B_K_TILE>;
+    using RightTile    = TileRight<inType,  B_K_TILE, N_TILE,  B_K_TILE, N_TILE>;
+    using AccTile      = TileAcc<  outType, M_TILE,  N_TILE,   M_TILE,  N_TILE>;
+
+    GlobalDataOut dstGlobal(out);
+
+    TileMatABig  aBig[2];
+    TileMatAView aView[2][INNER_K];
+    TileMatB     bM[N_BUFS_B_L1];
+    LeftTile     aL[2];
+    RightTile    bL[N_BUFS_L0B];
+    AccTile      cTile;
+
+    TASSIGN(aBig[0], A_L1_BASE);
+    TASSIGN(aBig[1], A_L1_BASE + A_BIG_BYTES);
+    for (int p = 0; p < 2; p++) {
+        for (int i = 0; i < INNER_K; i++) {
+            TASSIGN(aView[p][i], A_L1_BASE + p * A_BIG_BYTES + i * A_VIEW_STRIDE);
+        }
+    }
+    for (int i = 0; i < N_BUFS_B_L1; i++) {
+        TASSIGN(bM[i], B_L1_BASE + i * B_SLOT_BYTES);
+    }
+    TASSIGN(aL[0], 0x0);
+    TASSIGN(aL[1], L0A_STRIDE);
+    for (int i = 0; i < N_BUFS_L0B; i++) {
+        TASSIGN(bL[i], i * L0B_STRIDE);
+    }
+    TASSIGN(cTile, 0x0);
+
+    for (uint32_t outer = 0; outer < K_GROUPS; outer++) {
+        int s_a  = outer % 2;
+        int a_id = A_ID_BASE + s_a;
+
+#ifndef __PTO_AUTO__
+        get_buffer<PIPE_MTE2>(a_id);
+#endif
+        {
+            GlobalDataSrc0 g(src0 + outer * A_K_TILE);
+            TLOAD(aBig[s_a], g);
+        }
+#ifndef __PTO_AUTO__
+        rls_buffer<PIPE_MTE2>(a_id);
+#endif
+
+        for (int i = 0; i < INNER_K; i++) {
+            uint32_t flat     = outer * INNER_K + i;
+            int      s_b      = flat % N_BUFS_B_L1;          // L1 slot (distinct memory)
+            int      b_id     = B_ID_BASE  + (flat % L1_POOL); // L1 id (may reuse)
+            int      s_lb     = i % N_BUFS_L0B;              // L0B slot
+            int      lb_id    = L0B_ID_BASE + s_lb;          // L0B id (no reuse needed)
+            int      la_id    = L0A_ID_BASE + (i % 2);
+            uint32_t k_global = flat;
+
+#ifndef __PTO_AUTO__
+            // L1 b_id wrap barrier (only when L1_POOL < N_BUFS_B_L1).
+            // Drains in-flight ops on the recycled id before re-acquiring.
+            if constexpr (NEEDS_L1_BARRIER) {
+                if (flat > 0 && (flat % L1_POOL) == 0) {
+                    pipe_barrier(PIPE_ALL);
+                }
+            }
+#endif
+
+            // A view -> L0A
+#ifndef __PTO_AUTO__
+            get_buffer<PIPE_MTE1>(a_id);
+            get_buffer<PIPE_MTE1>(la_id);
+#endif
+            TMOV(aL[i % 2], aView[s_a][i]);
+#ifndef __PTO_AUTO__
+            rls_buffer<PIPE_MTE1>(a_id);
+            rls_buffer<PIPE_MTE1>(la_id);
+#endif
+
+            // B GM -> L1
+            GlobalDataSrc1 src1Global(src1 + k_global * B_K_TILE * GM_N);
+#ifndef __PTO_AUTO__
+            get_buffer<PIPE_MTE2>(b_id);
+#endif
+            TLOAD(bM[s_b], src1Global);
+#ifndef __PTO_AUTO__
+            rls_buffer<PIPE_MTE2>(b_id);
+
+            // B L1 -> L0B
+            get_buffer<PIPE_MTE1>(b_id);
+            get_buffer<PIPE_MTE1>(lb_id);
+#endif
+            TMOV(bL[s_lb], bM[s_b]);
+#ifndef __PTO_AUTO__
+            rls_buffer<PIPE_MTE1>(b_id);
+            rls_buffer<PIPE_MTE1>(lb_id);
+
+            // Cube
+            get_buffer<PIPE_M>(la_id);
+            get_buffer<PIPE_M>(lb_id);
+            get_buffer<PIPE_M>(C_ID);
+#endif
+            if (k_global == 0) {
+                TMATMUL(cTile, aL[i % 2], bL[s_lb]);
+            } else {
+                TMATMUL_ACC(cTile, cTile, aL[i % 2], bL[s_lb]);
+            }
+#ifndef __PTO_AUTO__
+            rls_buffer<PIPE_M>(la_id);
+            rls_buffer<PIPE_M>(lb_id);
+            rls_buffer<PIPE_M>(C_ID);
+#endif
+        }
+    }
+
+#ifndef __PTO_AUTO__
+    get_buffer<PIPE_FIX>(C_ID);
+#endif
+    TSTORE(dstGlobal, cTile);
+#ifndef __PTO_AUTO__
+    rls_buffer<PIPE_FIX>(C_ID);
+#endif
+    out = dstGlobal.data();
+}
+
+
+// ── L1-reuse 8 KiB B-tile launchers (Config 9) ──────────────────────────────
+
+void LaunchCubeMatmulBL1Reuse32_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+    // L1 B: 32 × [16,256] = 256 KiB.  L0B: 8 × [16,256] = 64 KiB.
+    // Total inner iters = 8 outer × 8 INNER_K = 64.
+    // HW32: L1 pool capped at 16 ⇒ 4 wrap barriers per kernel.
+    RunCubeMatmulBL1Reuse<float, half, /*N_BUFS_B_L1=*/32, /*N_BUFS_L0B=*/8,
+                          /*A_K=*/128, /*B_K=*/16, /*M=*/GM_M, /*N=*/GM_N>
+        <<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out),
+            reinterpret_cast<half*>(src0),
+            reinterpret_cast<half*>(src1));
+}
+
+void LaunchCubeMatmulBL1Reuse16_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+    // L1 B: 16 × [16,256] = 128 KiB. L0B: 8 × [16,256] = 64 KiB.
+    // HW32: L1 pool exactly 16 ⇒ no reuse, no barrier (still uses extended id 13..28).
+    RunCubeMatmulBL1Reuse<float, half, /*N_BUFS_B_L1=*/16, /*N_BUFS_L0B=*/8,
+                          /*A_K=*/128, /*B_K=*/16, /*M=*/GM_M, /*N=*/GM_N>
+        <<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out),
+            reinterpret_cast<half*>(src0),
+            reinterpret_cast<half*>(src1));
+}

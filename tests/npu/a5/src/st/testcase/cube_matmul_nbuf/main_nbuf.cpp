@@ -46,6 +46,8 @@ extern void LaunchCubeMatmulBNBufNSplit4_K16 (uint8_t *out, uint8_t *src0, uint8
 extern void LaunchCubeMatmulBNBufNSplit8_K16 (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 extern void LaunchCubeMatmulBNBufNSplit16_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 extern void LaunchCubeMatmulBNBufNSplitR16_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBL1Reuse16_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBL1Reuse32_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -169,3 +171,7 @@ TEST(CubeMatmulNBufTest, bnbufnsplit16_K16_4KB) { RunNBufTest(LaunchCubeMatmulBN
 
 // Rearranged buf-id allocation, fits in 32 buf-ids (HW32) by capping pool at 13.
 TEST(CubeMatmulNBufTest, bnbufnsplitR16_K16_4KB) { RunNBufTest(LaunchCubeMatmulBNBufNSplitR16_K16, "out_bnbufnsplitr16_k16.bin"); }
+
+// 8 KiB full-N B-tile with L1 id-reuse (Config 9): exercises >32 L1 slots via id-pool wrap.
+TEST(CubeMatmulNBufTest, bl1reuse16_K16_8KB) { RunNBufTest(LaunchCubeMatmulBL1Reuse16_K16, "out_bl1reuse16_k16.bin"); }
+TEST(CubeMatmulNBufTest, bl1reuse32_K16_8KB) { RunNBufTest(LaunchCubeMatmulBL1Reuse32_K16, "out_bl1reuse32_k16.bin"); }
