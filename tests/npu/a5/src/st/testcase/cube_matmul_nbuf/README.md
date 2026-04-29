@@ -301,3 +301,29 @@ The 8 KiB tile (Config 9) wins overall by amortising scalar / get_buf-rls_buf
 overhead; L1 id-reuse adds essentially zero overhead (<1%) versus the 16-buf
 no-reuse baseline because the 4 wrap barriers are cheap relative to the
 64 inner iterations.
+
+### Config 9b — `RunCubeMatmulBL1Reuse<..., L1_POOL_CAP_=19>` (max-pool variant)
+
+Same kernel as Config 9 but with the `L1_POOL_CAP_` template parameter raised
+from 16 (default) to 19 — the maximum that fits the HW32 budget given the 13
+fixed ids (`A=2 + C=1 + L0A=2 + L0B=8 = 13`). This uses **all 32 buf-ids**
+(ids 0..31) and reuses the L1 b_id every 19 inner iterations.
+
+| Test                          | N_BUFS_B_L1 | L0B | L1 pool | wraps (of 64 iters) | Model time |
+|-------------------------------|-------------|-----|---------|---------------------|------------|
+| `bl1reuse32_K16_8KB`          | 32          | 8   | 16      | 4 (at 16/32/48)     | **66.9 ms** |
+| `bl1reuse32_K16_8KB_P19`      | 32          | 8   | 19      | 3 (at 19/38/57)     | 267.8 ms   |
+
+**Empirical finding:** raising the L1 pool from 16 → 19 *regresses* perf ~4×
+even though it has fewer wrap barriers (3 vs 4) and more distinct in-flight
+ids. Cause: with `INNER_K=8` and `K_GROUPS=8`, pool=16 happens to align
+exactly with `2 × INNER_K` so each barrier lands on an outer-loop boundary
+where the cube has naturally drained the previous outer's ops. Pool=19
+straddles outer boundaries (wraps mid-outer at flat=19, 38, 57) where active
+A-tile ping-pong, L0A loads, and cube ops all overlap with the recycled
+B-id, forcing the `pipe_barrier(PIPE_ALL)` to drain a much deeper pipeline.
+
+This is a useful illustration of the **alignment principle** for buf-id reuse:
+the optimal pool size is not "max ids you can spend" but "the largest divisor
+of the inner iteration count that aligns wrap points with natural pipeline
+drain boundaries".

@@ -48,6 +48,7 @@ extern void LaunchCubeMatmulBNBufNSplit16_K16(uint8_t *out, uint8_t *src0, uint8
 extern void LaunchCubeMatmulBNBufNSplitR16_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 extern void LaunchCubeMatmulBL1Reuse16_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 extern void LaunchCubeMatmulBL1Reuse32_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBL1Reuse32_K16_P19(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -175,3 +176,4 @@ TEST(CubeMatmulNBufTest, bnbufnsplitR16_K16_4KB) { RunNBufTest(LaunchCubeMatmulB
 // 8 KiB full-N B-tile with L1 id-reuse (Config 9): exercises >32 L1 slots via id-pool wrap.
 TEST(CubeMatmulNBufTest, bl1reuse16_K16_8KB) { RunNBufTest(LaunchCubeMatmulBL1Reuse16_K16, "out_bl1reuse16_k16.bin"); }
 TEST(CubeMatmulNBufTest, bl1reuse32_K16_8KB) { RunNBufTest(LaunchCubeMatmulBL1Reuse32_K16, "out_bl1reuse32_k16.bin"); }
+TEST(CubeMatmulNBufTest, bl1reuse32_K16_8KB_P19) { RunNBufTest(LaunchCubeMatmulBL1Reuse32_K16_P19, "out_bl1reuse32_k16_p19.bin"); }

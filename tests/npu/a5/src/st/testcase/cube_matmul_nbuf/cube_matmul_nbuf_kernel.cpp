@@ -1490,7 +1490,8 @@ void LaunchCubeMatmulBNBufNSplitR16_K16(uint8_t *out, uint8_t *src0, uint8_t *sr
 //     L0C    : 1 × M*N*sizeof(out) = 32 KiB
 // ═══════════════════════════════════════════════════════════════════════════
 template <typename outType, typename inType,
-          int N_BUFS_B_L1_, int N_BUFS_L0B_, int A_K_TILE_, int B_K_TILE_, int M_TILE_, int N_TILE_>
+          int N_BUFS_B_L1_, int N_BUFS_L0B_, int A_K_TILE_, int B_K_TILE_, int M_TILE_, int N_TILE_,
+          int L1_POOL_CAP_ = 16>
 __global__ AICORE void RunCubeMatmulBL1Reuse(__gm__ outType *out, __gm__ inType *src0, __gm__ inType *src1)
 {
     constexpr int N_BUFS_B_L1 = N_BUFS_B_L1_;
@@ -1530,8 +1531,10 @@ __global__ AICORE void RunCubeMatmulBL1Reuse(__gm__ outType *out, __gm__ inType 
     constexpr int L1_POOL = N_BUFS_B_L1;
     static_assert(13 + L1_POOL <= 64, "exceeds 64 buf-ids");
 #else
-    // Cap L1 id pool at 16 → reuse every 16 iters; total ids = 13 + 16 = 29 ≤ 32.
-    constexpr int L1_POOL = (N_BUFS_B_L1 < 16) ? N_BUFS_B_L1 : 16;
+    // HW32 cap: pool min(N_BUFS_B_L1, L1_POOL_CAP_).  L1_POOL_CAP_ defaults to 16;
+    // max usable under HW32 budget is 19 (since 13 fixed ids leave 32-13=19).
+    static_assert(13 + L1_POOL_CAP_ <= 32, "L1_POOL_CAP_ exceeds 32-id budget");
+    constexpr int L1_POOL = (N_BUFS_B_L1 < L1_POOL_CAP_) ? N_BUFS_B_L1 : L1_POOL_CAP_;
     static_assert(13 + L1_POOL <= 32, "exceeds 32 buf-ids");
 #endif
     constexpr int B_ID_BASE         = 13;
@@ -1684,6 +1687,19 @@ void LaunchCubeMatmulBL1Reuse16_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, 
     // HW32: L1 pool exactly 16 ⇒ no reuse, no barrier (still uses extended id 13..28).
     RunCubeMatmulBL1Reuse<float, half, /*N_BUFS_B_L1=*/16, /*N_BUFS_L0B=*/8,
                           /*A_K=*/128, /*B_K=*/16, /*M=*/GM_M, /*N=*/GM_N>
+        <<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out),
+            reinterpret_cast<half*>(src0),
+            reinterpret_cast<half*>(src1));
+}
+
+void LaunchCubeMatmulBL1Reuse32_K16_P19(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+    // L1 B: 32 × [16,256] = 256 KiB. L0B: 8 × [16,256] = 64 KiB.
+    // HW32: max usable L1 pool = 32-13 = 19 distinct ids ⇒ reuse every 19 iters.
+    // Total inner iters = 64 ⇒ wraps at 19, 38, 57 ⇒ 3 pipe_barrier(PIPE_ALL) per kernel.
+    RunCubeMatmulBL1Reuse<float, half, /*N_BUFS_B_L1=*/32, /*N_BUFS_L0B=*/8,
+                          /*A_K=*/128, /*B_K=*/16, /*M=*/GM_M, /*N=*/GM_N,
+                          /*L1_POOL_CAP_=*/19>
         <<<1, nullptr, stream>>>(
             reinterpret_cast<float*>(out),
             reinterpret_cast<half*>(src0),
