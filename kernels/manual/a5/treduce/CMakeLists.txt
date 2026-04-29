@@ -15,6 +15,13 @@
 # (CCE compiler, ASCEND_HOME_PATH set, dav-c310-vec for vec arch).
 
 cmake_minimum_required(VERSION 3.16)
+
+# CCE compiler (bisheng) MUST be set before project() so CMake doesn't
+# probe gcc/clang first. Mirrors kernels/manual/a5/gemm_ar/CMakeLists.txt:22-24.
+set(CMAKE_COMPILER bisheng)
+set(CMAKE_C_COMPILER ${CMAKE_COMPILER})
+set(CMAKE_CXX_COMPILER ${CMAKE_COMPILER})
+
 project(pto_aiv_treduce LANGUAGES CXX)
 
 if(NOT DEFINED ASCEND_HOME_PATH)
