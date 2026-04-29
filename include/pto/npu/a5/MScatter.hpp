@@ -92,7 +92,7 @@ struct RowLaunch {
 } // namespace mscatter_cfg
 
 template <ScatterOOB Oob>
-AICORE PTO_INLINE uint32_t scatter_remap(uint32_t idx, uint32_t cap, uint32_t &doWrite)
+__simt_callee__ AICORE PTO_INLINE uint32_t scatter_remap(uint32_t idx, uint32_t cap, uint32_t &doWrite)
 {
     if constexpr (Oob == ScatterOOB::Undefined) {
         doWrite = 1u;
@@ -110,7 +110,7 @@ AICORE PTO_INLINE uint32_t scatter_remap(uint32_t idx, uint32_t cap, uint32_t &d
 }
 
 template <ScatterAtomicOp Atomic, typename T>
-AICORE PTO_INLINE void scatter_apply(__gm__ T *ptr, T val)
+__simt_callee__ AICORE PTO_INLINE void scatter_apply(__gm__ T *ptr, T val)
 {
     if constexpr (Atomic == ScatterAtomicOp::None) {
         *ptr = val;
@@ -301,9 +301,30 @@ __tf__ AICORE void MScatterScalarImpl(__gm__ T *__restrict__ tablePtr, typename 
     wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
     const uint32_t rawIdx = static_cast<uint32_t>(idxPtr[0]);
     uint32_t doWrite;
-    const uint32_t safeIdx = scatter_remap<Oob>(rawIdx, TableSize, doWrite);
+    uint32_t safeIdx;
+    if constexpr (Oob == ScatterOOB::Undefined) {
+        doWrite = 1u;
+        safeIdx = rawIdx;
+    } else if constexpr (Oob == ScatterOOB::Skip) {
+        doWrite = (rawIdx < TableSize) ? 1u : 0u;
+        safeIdx = rawIdx;
+    } else if constexpr (Oob == ScatterOOB::Clamp) {
+        doWrite = 1u;
+        safeIdx = (rawIdx >= TableSize) ? (TableSize - 1u) : rawIdx;
+    } else {
+        doWrite = 1u;
+        safeIdx = rawIdx % TableSize;
+    }
     if (doWrite) {
-        scatter_apply<Atomic>(&tablePtr[safeIdx], srcPtr[0]);
+        if constexpr (Atomic == ScatterAtomicOp::None) {
+            tablePtr[safeIdx] = srcPtr[0];
+        } else if constexpr (Atomic == ScatterAtomicOp::Add) {
+            atomicAdd(&tablePtr[safeIdx], srcPtr[0]);
+        } else if constexpr (Atomic == ScatterAtomicOp::Max) {
+            atomicMax(&tablePtr[safeIdx], srcPtr[0]);
+        } else {
+            atomicMin(&tablePtr[safeIdx], srcPtr[0]);
+        }
     }
     set_flag(PIPE_S, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_S, PIPE_V, EVENT_ID0);

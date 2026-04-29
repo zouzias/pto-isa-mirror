@@ -67,7 +67,7 @@ struct RowLaunch {
 } // namespace mgather_cfg
 
 template <GatherOOB Oob>
-AICORE PTO_INLINE uint32_t gather_remap(uint32_t idx, uint32_t cap, uint32_t &doRead)
+__simt_callee__ AICORE PTO_INLINE uint32_t gather_remap(uint32_t idx, uint32_t cap, uint32_t &doRead)
 {
     if constexpr (Oob == GatherOOB::Undefined) {
         doRead = 1u;
@@ -190,7 +190,20 @@ __tf__ AICORE void MGatherScalarImpl(typename DstTileData::TileDType __out__ dst
     wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
     const uint32_t rawIdx = static_cast<uint32_t>(idxPtr[0]);
     uint32_t doRead;
-    const uint32_t safeIdx = gather_remap<Oob>(rawIdx, TableSize, doRead);
+    uint32_t safeIdx;
+    if constexpr (Oob == GatherOOB::Undefined) {
+        doRead = 1u;
+        safeIdx = rawIdx;
+    } else if constexpr (Oob == GatherOOB::Clamp) {
+        doRead = 1u;
+        safeIdx = (rawIdx >= TableSize) ? (TableSize - 1u) : rawIdx;
+    } else if constexpr (Oob == GatherOOB::Wrap) {
+        doRead = 1u;
+        safeIdx = rawIdx % TableSize;
+    } else {
+        doRead = (rawIdx < TableSize) ? 1u : 0u;
+        safeIdx = rawIdx;
+    }
     dstPtr[0] = doRead ? tablePtr[safeIdx] : static_cast<T>(0);
     set_flag(PIPE_S, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_S, PIPE_V, EVENT_ID0);
