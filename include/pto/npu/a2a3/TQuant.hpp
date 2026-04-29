@@ -67,7 +67,6 @@ __tf__ PTO_INTERNAL void TQuantCvtS32ToFp16(typename TileDataCvtF16::TileDType _
                       s32Ptr + i * kCols + kHeadRepeats * kS32ElemsPerRepeat, 1, 1, 1, 1, 1);
             set_vector_mask(-1, -1);
         }
-        TQuantCvtS32ToFp16RowByRow<TileDataCvtF16, TileDataCvtS32, PadColsSrc>(src_f16, src_s32, validRow);
         return;
     }
 }
