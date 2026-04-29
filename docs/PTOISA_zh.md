@@ -18,7 +18,7 @@
 
 | 分类 | 指令 | 描述 |
 |---|---|---|
-| 同步 | [`TSYNC`](isa/TSYNC_zh.md) | 同步 PTO 执行（等待事件或插入每操作流水线屏障）。 |
+| 同步 | [`TSYNC`](isa/TSYNC_zh.md), [`TSYNCALL`](isa/TSYNCALL_zh.md) | 同步 PTO 执行（等待事件、插入流水线屏障或跨核同步屏障）。 |
 | 手动 / 资源绑定 | [`TASSIGN`](isa/TASSIGN_zh.md) | 将 Tile 对象绑定到实现定义的片上地址（手动放置）。 |
 | 手动 / 资源绑定 | [`SETFMATRIX`](isa/SETFMATRIX_zh.md) | 为类 IMG2COL 操作设置 FMATRIX 寄存器。 |
 | 手动 / 资源绑定 | [`SET_IMG2COL_RPT`](isa/SET_IMG2COL_RPT_zh.md) | 从 IMG2COL 配置 Tile 设置 IMG2COL 重复次数元数据。 |

@@ -211,6 +211,13 @@ tconcat
 textract_vec
 tinsert_vec
 )
+
+# TSYNCALL is a hardware cross-core barrier that may block in simulator
+# configurations that do not support the no-argument SyncAll FFTS path.
+set(MANUAL_TESTCASES
+tsyncall
+)
+
 if (NOT AUTO_MODE)
   # TPUSH and TPOP currently directly use TASSIGN inside their implementations,
   # which doesn't work for auto mode. They need to be disabled for auto mode 
@@ -218,15 +225,18 @@ if (NOT AUTO_MODE)
   list(APPEND ALL_TESTCASES tpushpop_cv tpushpop_vc tpushpop_cv_nosplit tpushpop_vc_nosplit tpushpop_dir_both)
 endif()
 
-if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
+set(SUPPORTED_TESTCASES ${ALL_TESTCASES} ${MANUAL_TESTCASES})
+
+if((TEST_CASE IN_LIST SUPPORTED_TESTCASES) OR (TEST_CASE STREQUAL "all"))
 message(STATUS "run : ${TEST_CASE}")
 else()
-message(FATAL_ERROR "not found TEST_CASE: ${TEST_CASE}, support case is : ${ALL_TESTCASES}")
+message(FATAL_ERROR "not found TEST_CASE: ${TEST_CASE}, support case is : ${SUPPORTED_TESTCASES}")
 endif()
 
 
-foreach(TESTCASE ${ALL_TESTCASES})
-if((DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE) OR (NOT DEFINED TEST_CASE) OR (TEST_CASE STREQUAL "all"))
+foreach(TESTCASE ${SUPPORTED_TESTCASES})
+if((DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE) OR (NOT DEFINED TEST_CASE) OR
+    ((TEST_CASE STREQUAL "all") AND (TESTCASE IN_LIST ALL_TESTCASES)))
     add_subdirectory(${TESTCASE})
 endif()
 endforeach()

@@ -244,6 +244,12 @@ enum class TCopyMode : uint8_t
     DEEP_COPY = 1,
 };
 
+enum class TSyncAllMode : uint8_t
+{
+    Hard = 0,
+    Soft = 1,
+};
+
 enum class AccToVecMode : uint8_t
 {
     SingleModeVec0 = 0,
