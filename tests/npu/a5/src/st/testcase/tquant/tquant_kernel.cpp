@@ -573,12 +573,22 @@ template void TQuantTest::LaunchTQuantMXFP8_BF16<3, 1023, 0>(uint8_t *dst, uint1
                                                              void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_BF16<4, 2040, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                              void *stream);
+// Holistic BF16 ND coverage.
+template void TQuantTest::LaunchTQuantMXFP8_BF16<2, 511, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
+                                                            void *stream);
+template void TQuantTest::LaunchTQuantMXFP8_BF16<8, 1024, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
+                                                             void *stream);
+template void TQuantTest::LaunchTQuantMXFP8_BF16<2, 2047, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
+                                                             void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_BF16<32, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                              void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_BF16<64, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                              void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_BF16<128, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                               void *stream);
+// Holistic BF16 NZ coverage.
+template void TQuantTest::LaunchTQuantMXFP8_BF16<32, 256, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
+                                                             void *stream);
 // MXFP8 FP16 cases
 template void TQuantTest::LaunchTQuantMXFP8_FP16<32, 128, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                              void *stream);
@@ -591,9 +601,19 @@ template void TQuantTest::LaunchTQuantMXFP8_FP16<4, 256, 0>(uint8_t *dst, uint16
 // 2D-optimized FP16 path: validCols=1023 -> paddedCols=1024 (srcCols%1024==0).
 template void TQuantTest::LaunchTQuantMXFP8_FP16<2, 1023, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                              void *stream);
+// Holistic FP16 ND mirrors of BF16 board-failure cases.
+template void TQuantTest::LaunchTQuantMXFP8_FP16<2, 1000, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
+                                                             void *stream);
+template void TQuantTest::LaunchTQuantMXFP8_FP16<3, 1023, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
+                                                             void *stream);
+template void TQuantTest::LaunchTQuantMXFP8_FP16<4, 2040, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
+                                                             void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_FP16<32, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                              void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_FP16<64, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                              void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_FP16<128, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                               void *stream);
+// Holistic FP16 NZ coverage.
+template void TQuantTest::LaunchTQuantMXFP8_FP16<32, 256, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
+                                                             void *stream);

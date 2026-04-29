@@ -447,18 +447,28 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 2, 1000, mode="nd", dtype=bfloat16),  # paddedCols=1024
         TQuantParams("mxfp8", 3, 1023, mode="nd", dtype=bfloat16),  # paddedCols=1024, max pad in tile
         TQuantParams("mxfp8", 4, 2040, mode="nd", dtype=bfloat16),  # paddedCols=2048
+        # Holistic BF16 ND coverage.
+        TQuantParams("mxfp8", 2, 511, mode="nd", dtype=bfloat16),   # paddedCols=512, multi-VL pad
+        TQuantParams("mxfp8", 8, 1024, mode="nd", dtype=bfloat16),  # exact, no pad, multi-row
+        TQuantParams("mxfp8", 2, 2047, mode="nd", dtype=bfloat16),  # paddedCols=2048, 1-elem-valid last group
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=bfloat16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=bfloat16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=bfloat16),
+        TQuantParams("mxfp8", 32, 256, mode="nz", dtype=bfloat16),  # NZ with non-128 cols (rows 16-aligned)
         TQuantParams("mxfp8", 32, 128, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 64, 128, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 128, 128, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 4, 256, mode="nd", dtype=np.float16),  # 1024 elems -> AbsReduceMax_b16_ND_opt
         # 2D-optimized FP16 path: paddedCols=1024.
         TQuantParams("mxfp8", 2, 1023, mode="nd", dtype=np.float16),
+        # Holistic FP16 ND mirrors of BF16 board-failure cases.
+        TQuantParams("mxfp8", 2, 1000, mode="nd", dtype=np.float16),
+        TQuantParams("mxfp8", 3, 1023, mode="nd", dtype=np.float16),
+        TQuantParams("mxfp8", 4, 2040, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=np.float16),
+        TQuantParams("mxfp8", 32, 256, mode="nz", dtype=np.float16),  # NZ with non-128 cols (rows 16-aligned)
     ]
 
     for param in case_params_list:

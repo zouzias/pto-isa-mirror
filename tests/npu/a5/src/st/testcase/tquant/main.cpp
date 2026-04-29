@@ -493,6 +493,21 @@ TEST_F(TQUANTTEST, case_mxfp8_bf16_4x2040_nd)
 {
     test_tquant_mxfp8_bf16<4, 2040, 0>();
 }
+// Holistic coverage: paddedCols=512 multi-VL pad arm (512 % 128 == 0, 4 VLs/row).
+TEST_F(TQUANTTEST, case_mxfp8_bf16_2x511_nd)
+{
+    test_tquant_mxfp8_bf16<2, 511, 0>();
+}
+// Holistic coverage: large no-pad multi-row sweep at paddedCols=1024 exact.
+TEST_F(TQUANTTEST, case_mxfp8_bf16_8x1024_nd)
+{
+    test_tquant_mxfp8_bf16<8, 1024, 0>();
+}
+// Holistic coverage: paddedCols=2048 with single-byte pad (worst-case 1-elem-valid in last group).
+TEST_F(TQUANTTEST, case_mxfp8_bf16_2x2047_nd)
+{
+    test_tquant_mxfp8_bf16<2, 2047, 0>();
+}
 
 TEST_F(TQUANTTEST, case_mxfp8_bf16_32x128_nz)
 {
@@ -505,6 +520,11 @@ TEST_F(TQUANTTEST, case_mxfp8_bf16_64x128_nz)
 TEST_F(TQUANTTEST, case_mxfp8_bf16_128x128_nz)
 {
     test_tquant_mxfp8_bf16<128, 128, 1>();
+}
+// Holistic coverage: BF16 NZ with non-128 cols (rows must be 16-aligned for NZ).
+TEST_F(TQUANTTEST, case_mxfp8_bf16_32x256_nz)
+{
+    test_tquant_mxfp8_bf16<32, 256, 1>();
 }
 
 // MXFP8 FP16
@@ -531,6 +551,19 @@ TEST_F(TQUANTTEST, case_mxfp8_fp16_2x1023_nd)
 {
     test_tquant_mxfp8_fp16<2, 1023, 0>();
 }
+// Holistic FP16 mirrors of BF16 board-failure cases.
+TEST_F(TQUANTTEST, case_mxfp8_fp16_2x1000_nd)
+{
+    test_tquant_mxfp8_fp16<2, 1000, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_fp16_3x1023_nd)
+{
+    test_tquant_mxfp8_fp16<3, 1023, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_fp16_4x2040_nd)
+{
+    test_tquant_mxfp8_fp16<4, 2040, 0>();
+}
 
 TEST_F(TQUANTTEST, case_mxfp8_fp16_32x128_nz)
 {
@@ -543,6 +576,11 @@ TEST_F(TQUANTTEST, case_mxfp8_fp16_64x128_nz)
 TEST_F(TQUANTTEST, case_mxfp8_fp16_128x128_nz)
 {
     test_tquant_mxfp8_fp16<128, 128, 1>();
+}
+// Holistic coverage: FP16 NZ with non-128 cols.
+TEST_F(TQUANTTEST, case_mxfp8_fp16_32x256_nz)
+{
+    test_tquant_mxfp8_fp16<32, 256, 1>();
 }
 
 // // INT8 - Sym cases
