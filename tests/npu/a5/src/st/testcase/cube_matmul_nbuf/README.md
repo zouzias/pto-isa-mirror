@@ -241,6 +241,22 @@ L0B  :  6+P .. 6+2P-1               (PIPE_MTE1 / PIPE_M)
 |------|----------|-----------|----------------|
 | `BNBuf_K16_N128_BL1_16_BL0_16_4KB_split2_pool13` | 16 | 13 | 1 (at flat=13)  |
 
+> **Note — `-DPTO_BUFID_HW_GT32` deadlocks `split2_pool13` with `N_BUFS_B=16`.**
+> With the macro defined the kernel allocates 38 distinct host buf-ids
+> (A 0-1, C 2-3, L0A 4-5, B 6-21, L0B 22-37). The `get_buffer`/`rls_buffer`
+> wrappers add `+32` to the asm operand, but instr-log evidence
+> (`bufId:0x13` in default-mode runs for host id 19, even with the +32
+> addend) shows the HW `GET_BUF`/`RLS_BUF` operand field is effectively
+> **5 bits** on this `dav-c310-cube` simulator. The `+32` is masked off,
+> and host L0B ids 32-37 wrap to asm ids 0-5, colliding with
+> A[0-1]/C[0-1]/L0A[0-1]. Producer/consumer counters fight on the same
+> physical id and the AIC deadlocks: in a confirmed run the popped log
+> stalled at cycle 4670 (852 entries) while the issue side stalled at
+> cycle 4730 (1047 entries) and the test never returned. Until the asm
+> field is widened to 6 bits (or the wrappers are reworked), do **not**
+> compile this kernel with `-DPTO_BUFID_HW_GT32`; keep the default
+> `BID_POOL_SIZE = min(N_BUFS_B, 13)` HW32 mode.
+
 ### Config 9 — `RunCubeMatmulBL1Reuse` (8 KiB full-N B tile, L1 id reuse)
 
 Reverts to a full-N B tile `[B_K=16, N=256] = 8 KiB` (single L0C accumulator)
