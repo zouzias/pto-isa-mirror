@@ -52,10 +52,30 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     // Target byte address inside the CCU CKE register file.
     const uint64_t target = mmioAddr + static_cast<uint64_t>(ckeId) * stride + byte_off;
 
+    // ── DIAGNOSTIC #1: prove the kernel actually executed ────────────────
+    // If we never see this print on stderr, the kernel was queued by
+    // `<<<>>>` but never executed (most likely cause: dlopen-loaded .so's
+    // bisheng launch thunk failed to register with the AscendC runtime
+    // because aclInit had already happened in the host process before our
+    // .so was loaded). Compiled in only when `--cce-enable-print` is set
+    // in CCE_OPTS (see CMakeLists.txt).
+    AscendC::printf("[AIV/treduce] kernel ran: target=0x%lx mask=0x%x\n",
+                    (unsigned long)target, (unsigned int)(mask & 0xffff));
+
     // Raw 16-bit store into device MMIO.
     // The CCU CKE register window is mapped device-side as Device-nGnRE-equivalent
     // (non-cacheable, ordered) on Ascend 950, so a regular store + barrier is sufficient.
     *reinterpret_cast<__gm__ uint16_t *>(target) = static_cast<uint16_t>(mask & 0xffff);
+
+    // ── DIAGNOSTIC #2: read back what we just wrote ──────────────────────
+    // If readback != mask, the AIV's MMU translation of `target` doesn't
+    // reach a writable register that mirrors the CCU CKE entry — write
+    // either silently dropped or landed in DDR mapped at the same VA.
+    pipe_barrier(PIPE_ALL);
+    uint16_t readback = *reinterpret_cast<__gm__ uint16_t *>(target);
+    AscendC::printf("[AIV/treduce] readback @0x%lx = 0x%x (expected 0x%x)\n",
+                    (unsigned long)target, (unsigned int)readback,
+                    (unsigned int)(mask & 0xffff));
 
     // Memory barrier: make the store visible to the CCU before the kernel
     // returns, so when the host stream-sync unblocks, the gated CCU kernel

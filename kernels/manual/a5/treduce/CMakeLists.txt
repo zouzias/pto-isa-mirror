@@ -74,6 +74,7 @@ set(CCE_OPTS
     "SHELL:-mllvm -cce-aicore-record-overflow=true"
     "SHELL:-mllvm -cce-aicore-addr-transform"
     "SHELL:-mllvm -cce-aicore-dcci-insert-for-scalar=false"
+    --cce-enable-print  # 打开 device-side printf，diagnostic only — see kernel.cpp
 )
 
 # ============================================================================
