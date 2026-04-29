@@ -625,18 +625,7 @@ PTO_INTERNAL void CalcQuantizedFP8Values_B16_Window(__ubuf__ T *srcPtr, __ubuf__
     vor(vb8_or1, vb8_p0, vb8_p1, preg_b8);
     vor(vb8_or2, vb8_p2, vb8_p3, preg_b8);
     vor(vb8_out, vb8_or1, vb8_or2, preg_b8);
-    // Board: full-VL window prefers NORM_B32 over NORM_B8 to avoid the
-    // documented "first byte dropped at row-boundary" race observed with
-    // back-to-back NORM_B8 stores in the BF16 path. NORM_B32 stores the same
-    // 256 bytes as 64 u32 lanes (8-lane × 32 B blocks). Partial trailing
-    // windows still use NORM_B8 because b8_count may not be divisible by 4.
-    if (remaining == elementsPerDintlv) {
-        constexpr uint32_t elementsPerVL_b32 = REPEAT_BYTE / sizeof(uint32_t);
-        MaskReg preg_b32_all = pset_b32(PAT_ALL);
-        vsts((vector_u32 &)vb8_out, (__ubuf__ uint32_t *)dstPtr, i * elementsPerVL_b32, NORM_B32, preg_b32_all);
-    } else {
-        vsts((vector_u8 &)vb8_out, (__ubuf__ uint8_t *)dstPtr, i * elementsPerVL_b8, NORM_B8, preg_b8);
-    }
+    vsts((vector_u8 &)vb8_out, (__ubuf__ uint8_t *)dstPtr, i * elementsPerVL_b8, NORM_B8, preg_b8);
 }
 
 // B16 (BF16/FP16) -> FP8. 2 VLs per iter (one DINTLV_B16 load). Ceil-div on
@@ -857,10 +846,43 @@ PTO_INTERNAL void ZeroPadSourceTile(__ubuf__ T *srcPtr, unsigned validRows, unsi
     if constexpr (!std::is_same<T, float>::value) {
         if (validCols < StaticCols) {
             constexpr unsigned elemPerVL = REPEAT_BYTE / sizeof(T);
-            if constexpr (elemPerVL % StaticCols == 0)
+            if constexpr (elemPerVL % StaticCols == 0) {
                 ZeroPadColumns_VLAligned<T, StaticCols>(srcPtr, validRows, validCols);
-            else
+            } else if constexpr (StaticCols % elemPerVL == 0) {
+                // Multi-VL-per-row case (e.g. paddedCols=1024 with bf16 VL=128).
+                // Each row spans an integer number of full VLs. The pad cols
+                // [validCols, StaticCols) lie inside the trailing VLs of each
+                // row. Use plain vsts with an absolute byte offset (no
+                // POST_UPDATE) and a per-VL predicate that zeros only the
+                // pad-col positions. POST_UPDATE-based writes (vstus/vstas)
+                // are unreliable on board (Section 14 of npu_skills/tquant-mxfp8).
+                constexpr unsigned vlsPerRow = StaticCols / elemPerVL;
+                MaskReg pg_all = PSetTyped<T>(PAT_ALL);
+                RegTensor<T> vreg_zero;
+                vdup(vreg_zero, (T)0, pg_all, MODE_ZEROING);
+                for (uint16_t r = 0; r < (uint16_t)validRows; ++r) {
+                    for (uint16_t v = 0; v < (uint16_t)vlsPerRow; ++v) {
+                        uint32_t vlStart = (uint32_t)v * elemPerVL;          // col start of this VL within row
+                        uint32_t vlEnd = vlStart + elemPerVL;                // col end (exclusive)
+                        if (vlEnd <= (uint32_t)validCols)
+                            continue;                                        // entirely valid, nothing to zero
+                        // Pad positions inside this VL: lanes whose col index
+                        // is >= validCols. Build via NOT(predicate < validCols within VL).
+                        MaskReg preg_pad;
+                        if (vlStart >= (uint32_t)validCols) {
+                            preg_pad = pg_all; // entire VL is pad
+                        } else {
+                            uint32_t validInVL = (uint32_t)validCols - vlStart;
+                            MaskReg preg_valid = CreatePredicate<T>(validInVL);
+                            pxor(preg_pad, pg_all, preg_valid, pg_all);
+                        }
+                        uint32_t elemOffset = (uint32_t)r * StaticCols + vlStart;
+                        vsts(vreg_zero, srcPtr, elemOffset, NORM_B16, preg_pad);
+                    }
+                }
+            } else {
                 ZeroPadColumns_Unaligned<T, StaticCols>(srcPtr, validRows, validCols);
+            }
         }
     }
 }
