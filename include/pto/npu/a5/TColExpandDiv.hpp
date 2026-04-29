@@ -49,10 +49,25 @@ struct ColExpandDivOp2 {
     }
 };
 
+template <typename TileData, typename TileDataSrc0, typename TileDataSrc1>
+PTO_INTERNAL void TColExpandDivCheck(const TileData &dst, const TileDataSrc0 &src0, const TileDataSrc1 &src1)
+{
+    using T = typename TileData::DType;
+    static_assert(std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> || std::is_same_v<T, float> ||
+                      std::is_same_v<T, int16_t> || std::is_same_v<T, uint16_t> || std::is_same_v<T, half> ||
+                      std::is_same_v<T, bfloat16_t> || std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>,
+                  "Fix: TCOLEXPANDDIV has invalid data type.");
+    static_assert(TileData::isRowMajor && TileDataSrc0::isRowMajor && TileDataSrc1::isRowMajor,
+                  "Fix: TCOLEXPANDDIV only support row major layout.");
+    static_assert(std::is_same_v<T, typename TileDataSrc0::DType> && std::is_same_v<T, typename TileDataSrc1::DType>,
+                  "Fix: TCOLEXPANDDIV input tile src0, src1 and dst tile data type mismatch.");
+}
+
 template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileData, typename TileDataSrc0, typename TileDataSrc1>
 PTO_INTERNAL void TCOLEXPANDDIV_IMPL(TileData &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
 {
     using T = typename TileData::DType;
+    TColExpandDivCheck<TileData, TileDataSrc0, TileDataSrc1>(dst, src0, src1);
     TCOLEXPANDOP_IMPL<ColExpandDivOp<PrecisionType, T>, ColExpandDivOp2<PrecisionType, T>, TileData, TileDataSrc0,
                       TileDataSrc1>(dst, src0, src1);
 }
