@@ -88,20 +88,18 @@ target_link_options(pto_aiv_treduce_kernel PRIVATE --cce-fatobj-link)
 # ============================================================================
 # Host Launcher Library — exports pto_aiv_treduce_launch via C ABI
 # ============================================================================
+# Phase 1 STUB: launcher.cpp does not actually launch the AIV kernel; it just
+# dumps arguments to stderr and returns a sentinel error so callers fall back
+# to host trigger. This lets us test the main.cc → dlopen → call chain and
+# the target-address computation without committing to a CANN-version-specific
+# kernel launch syntax. Once the launch syntax is sorted out, swap launcher.cpp
+# for a real implementation and re-add `pto_aiv_treduce_kernel`/`ascendcl`/
+# `runtime` to target_link_libraries.
 add_library(pto_aiv_treduce SHARED launcher.cpp)
 target_compile_options(pto_aiv_treduce PRIVATE
     -std=c++17 -fPIC -Wall
 )
-target_include_directories(pto_aiv_treduce PRIVATE
-    ${PROJECT_SOURCE_DIR}/../../../../include
-    ${ASCEND_HOME_PATH}/include
-    ${ASCEND_HOME_PATH}/include/acl
-)
-target_link_directories(pto_aiv_treduce PRIVATE ${ASCEND_HOME_PATH}/lib64)
-target_link_libraries(pto_aiv_treduce PRIVATE
-    pto_aiv_treduce_kernel    # for the kernel-launch thunk symbol
-    ascendcl runtime
-)
+# No extra include / link dirs needed for the stub; only stdio + cstdint.
 
 # ----------------------------------------------------------------------------
 # Helper: copy both .so to a known dist/ dir so users can LD_LIBRARY_PATH it

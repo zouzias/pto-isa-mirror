@@ -8,45 +8,24 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-// Host-side launcher for pto_aiv_treduce_kernel.
+// pto_aiv_treduce_launch — host-side stub launcher (Phase 1 of Step 3).
 //
-// Compiled into `libpto_aiv_treduce.so`, exports a single C entry point
-// `pto_aiv_treduce_launch` that the inline header `treduce_launcher.hpp`
-// dlopens + dlsyms.
+// THIS IS A STUB. It does NOT actually launch the AIV kernel. It dumps the
+// arguments and returns a sentinel error code so the caller (main.cc) falls
+// back to the host trigger path.
 //
-// Responsibilities:
-//   - Allocate a small GM staging buffer (one per call; cheap)
-//   - Memcpy the host-side struct into it
-//   - aclrtLaunchKernel the AIV kernel on the user's stream (1 block, async)
-//   - Free the staging buffer after launch (kernel reads it once)
+// Why a stub: launching an AscendC `__global__ __aicore__` kernel from plain
+// C++ requires the CCE toolchain's `ACLRT_LAUNCH_KERNEL` / `<<<>>>` syntax,
+// whose ABI varies across CANN versions and isn't portable across plain g++
+// and bisheng. The stub keeps the host link chain (main.cc → dlopen → call
+// → target-address compute) testable while we figure out the right launch
+// syntax for this CANN/driver combo.
 //
-// Caller invariants (asserted in the inline header before we get here):
-//   - stream != nullptr, mask != 0, mmioAddr != 0, ckeId in range
-//
-// Returns the rc from aclrtLaunchKernel (0 = success).
+// Once the kernel-side launch is wired up, replace this implementation with
+// the real launch sequence (alloc GM ctx → memcpy → ACLRT_LAUNCH_KERNEL).
 
 #include <cstdint>
 #include <cstdio>
-#include <cstring>
-
-#include <acl/acl.h>
-#include <acl/acl_rt.h>
-
-namespace {
-
-struct DeviceCtx {
-    uint64_t mmioAddr;   // +0x00
-    uint32_t dieId;      // +0x08
-    uint32_t ckeId;      // +0x0c
-    uint32_t mask;       // +0x10
-    uint32_t pad;        // +0x14
-    uint64_t stride;     // +0x18
-    uint64_t byte_off;   // +0x20
-};
-static_assert(sizeof(DeviceCtx) == 0x28,
-              "DeviceCtx layout must match kernel.cpp ctx layout");
-
-} // namespace
 
 extern "C" __attribute__((visibility("default"))) int
 pto_aiv_treduce_launch(void *stream,
@@ -54,67 +33,21 @@ pto_aiv_treduce_launch(void *stream,
                        uint32_t ckeId, uint32_t mask,
                        uint64_t stride, uint64_t byte_off)
 {
-    if (stream == nullptr) {
-        std::fprintf(stderr, "[pto_aiv_treduce_launch] stream is null\n");
-        return -1;
-    }
+    (void)stream;
+    (void)dieId;
 
-    // 1. Build host-side ctx
-    DeviceCtx host_ctx{};
-    host_ctx.mmioAddr = mmioAddr;
-    host_ctx.dieId    = dieId;
-    host_ctx.ckeId    = ckeId;
-    host_ctx.mask     = mask;
-    host_ctx.stride   = stride;
-    host_ctx.byte_off = byte_off;
+    // Compute the target address that a real AIV store would hit.
+    const uint64_t target = mmioAddr + (uint64_t)ckeId * stride + byte_off;
 
-    // 2. Allocate device staging buffer
-    void *dev_ctx = nullptr;
-    aclError rc = aclrtMalloc(&dev_ctx, sizeof(host_ctx), ACL_MEM_MALLOC_HUGE_FIRST);
-    if (rc != ACL_SUCCESS || dev_ctx == nullptr) {
-        std::fprintf(stderr,
-            "[pto_aiv_treduce_launch] aclrtMalloc(%zu) failed rc=%d\n",
-            sizeof(host_ctx), rc);
-        return rc != 0 ? rc : -2;
-    }
+    std::fprintf(stderr,
+        "[STUB pto_aiv_treduce_launch] would AIV-store mask=0x%x to target=0x%lx\n"
+        "    (mmioAddr=0x%lx + ckeId=%u * stride=0x%lx + byte_off=%lu)\n"
+        "    NOT actually launching AIV kernel — caller will fall back to host trigger\n",
+        mask, (unsigned long)target,
+        (unsigned long)mmioAddr, ckeId,
+        (unsigned long)stride, (unsigned long)byte_off);
 
-    // 3. Copy host_ctx → device staging
-    rc = aclrtMemcpyAsync(dev_ctx, sizeof(host_ctx),
-                          &host_ctx, sizeof(host_ctx),
-                          ACL_MEMCPY_HOST_TO_DEVICE, stream);
-    if (rc != ACL_SUCCESS) {
-        std::fprintf(stderr,
-            "[pto_aiv_treduce_launch] aclrtMemcpyAsync H2D failed rc=%d\n", rc);
-        aclrtFree(dev_ctx);
-        return rc;
-    }
-
-    // 4. Launch the kernel — 1 block, blockDim per CCE convention
-    //    NOTE: aclrtLaunchKernel signature varies across CANN versions; this
-    //    matches CANN ≥ 9.x. If you see an "undefined reference" link error
-    //    here, swap in the older `rtKernelLaunch` signature instead.
-    extern void pto_aiv_treduce_kernel(uint64_t blockDim, void *ctxArg, void *stream_, void *args);
-    // Above declaration is a placeholder — the real entry point is generated
-    // by the CCE toolchain from kernel.cpp's __global__ __aicore__ symbol.
-    // Use the toolchain's launch macro:
-    //
-    //     ACLRT_LAUNCH_KERNEL(pto_aiv_treduce_kernel)(1, nullptr, stream, dev_ctx);
-    //
-    // We can't call the macro from C++ without the AscendC toolchain header,
-    // so we forward to a thin C wrapper exported by kernel.cpp at build time
-    // (see CMakeLists.txt: target_compile_options ... -DBUILD_LAUNCH_THUNK).
-    extern int pto_aiv_treduce_kernel_thunk(void *stream_, void *ctxArg);
-    rc = static_cast<aclError>(pto_aiv_treduce_kernel_thunk(stream, dev_ctx));
-    if (rc != 0) {
-        std::fprintf(stderr,
-            "[pto_aiv_treduce_launch] kernel launch thunk returned %d\n", rc);
-    }
-
-    // 5. Free staging buffer (kernel reads it before returning, but free is
-    //    deferred via the stream so it's safe to free now in user-mode if
-    //    the runtime tracks pending DMAs; otherwise switch to aclrtFree-on-
-    //    stream-sync. For the empirical step this simple path is fine.)
-    aclrtFree(dev_ctx);
-
-    return static_cast<int>(rc);
+    // Return non-zero so the caller knows we didn't actually trigger anything.
+    // -99 is arbitrary; pto::aiv::launch_treduce maps it to kLaunchTReduceLaunchFailed.
+    return -99;
 }
