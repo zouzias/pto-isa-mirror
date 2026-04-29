@@ -240,4 +240,32 @@ struct is_event : std::false_type {
 template <typename... Ts>
 inline constexpr bool all_events_v = (is_event<Ts>::value && ...);
 
+namespace pto {
+template <bool IsAIVOnly = true>
+inline void TSYNCALL_IMPL()
+{
+    (void)IsAIVOnly;
+}
+
+template <bool IsAIVOnly = true>
+inline void TSYNCALL_SOFT_IMPL(int32_t *gmWorkspace, int32_t *ubWorkspace, int32_t usedCores)
+{
+    (void)IsAIVOnly;
+    (void)gmWorkspace;
+    (void)ubWorkspace;
+    (void)usedCores;
+}
+
+template <bool IsAIVOnly = true>
+inline void TSYNCALL_SOFT_MIX_IMPL(int32_t *gmWorkspace, int32_t *ubWorkspace, int32_t *l1Workspace,
+                                   int32_t usedCores)
+{
+    (void)IsAIVOnly;
+    (void)gmWorkspace;
+    (void)ubWorkspace;
+    (void)l1Workspace;
+    (void)usedCores;
+}
+} // namespace pto
+
 #endif
