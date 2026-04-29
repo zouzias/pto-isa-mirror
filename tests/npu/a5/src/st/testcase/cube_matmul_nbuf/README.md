@@ -195,11 +195,11 @@ independently of A. `INNER = 128 / B_K_TILE`.
 
 | Test | N_BUFS_B | B_K | B L1 / L0B |
 |------|----------|-----|------------|
-| `bnbuf2_K16_8KB`   | 2 | 16 | 16 KiB |
-| `bnbuf4_K16_8KB`   | 4 | 16 | 32 KiB |
-| `bnbuf8_K16_8KB`   | 8 | 16 | 64 KiB (exact L0B fit) |
-| `bnbuf2_K32_16KB`  | 2 | 32 | 32 KiB |
-| `bnbuf4_K32_16KB`  | 4 | 32 | 64 KiB (exact L0B fit) |
+| `BNBuf_K16_N256_BL1_2_BL0_2_8KB`   | 2 | 16 | 16 KiB |
+| `BNBuf_K16_N256_BL1_4_BL0_4_8KB`   | 4 | 16 | 32 KiB |
+| `BNBuf_K16_N256_BL1_8_BL0_8_8KB`   | 8 | 16 | 64 KiB (exact L0B fit) |
+| `BNBuf_K32_N256_BL1_2_BL0_2_16KB`  | 2 | 32 | 32 KiB |
+| `BNBuf_K32_N256_BL1_4_BL0_4_16KB`  | 4 | 32 | 64 KiB (exact L0B fit) |
 
 ### Config 8 — `RunCubeMatmulBNBufNSplit` (4 KiB half-N B tile)
 
@@ -213,10 +213,10 @@ Buffer-id layout: A `0..1`, B `2..2+N-1`, L0A `next 2`, L0B `next N`, L0C
 
 | Test | N_BUFS_B | B L1 / L0B | Notes |
 |------|----------|------------|-------|
-| `bnbufnsplit2_K16_4KB`  | 2  | 8 KiB / 8 KiB   | too few B slots |
-| `bnbufnsplit4_K16_4KB`  | 4  | 16 KiB / 16 KiB | sweet spot      |
-| `bnbufnsplit8_K16_4KB`  | 8  | 32 KiB / 32 KiB | extra buf, same MTE2 |
-| `bnbufnsplit16_K16_4KB` | 16 | 64 KiB / 64 KiB | uses ids ≥ 32   |
+| `BNBuf_K16_N128_BL1_2_BL0_2_4KB_split2`  | 2  | 8 KiB / 8 KiB   | too few B slots |
+| `BNBuf_K16_N128_BL1_4_BL0_4_4KB_split2`  | 4  | 16 KiB / 16 KiB | sweet spot      |
+| `BNBuf_K16_N128_BL1_8_BL0_8_4KB_split2`  | 8  | 32 KiB / 32 KiB | extra buf, same MTE2 |
+| `BNBuf_K16_N128_BL1_16_BL0_16_4KB_split2` | 16 | 64 KiB / 64 KiB | uses ids ≥ 32   |
 
 ### Config 8b — `RunCubeMatmulBNBufNSplitR` (rearranged buf-id pool)
 
@@ -239,7 +239,7 @@ L0B  :  6+P .. 6+2P-1               (PIPE_MTE1 / PIPE_M)
 
 | Test | N_BUFS_B | HW32 pool | barriers/outer |
 |------|----------|-----------|----------------|
-| `bnbufnsplitR16_K16_4KB` | 16 | 13 | 1 (at flat=13)  |
+| `BNBuf_K16_N128_BL1_16_BL0_16_4KB_split2_pool13` | 16 | 13 | 1 (at flat=13)  |
 
 ### Config 9 — `RunCubeMatmulBL1Reuse` (8 KiB full-N B tile, L1 id reuse)
 
@@ -266,8 +266,8 @@ B_L1 :  13..13+L1_POOL-1
 
 | Test | N_BUFS_B_L1 | N_BUFS_L0B | L1 id pool (HW32) | wrap barriers |
 |------|-------------|------------|-------------------|----------------|
-| `bl1reuse16_K16_8KB` | 16 | 8 | 16 (no reuse) | 0 |
-| `bl1reuse32_K16_8KB` | 32 | 8 | 16 (reuse)    | 4 (every 16 of 64 inner iters) |
+| `BNBuf_K16_N256_BL1_16_BL0_8_8KB` | 16 | 8 | 16 (no reuse) | 0 |
+| `BNBuf_K16_N256_BL1_32_BL0_8_8KB_pool16` | 32 | 8 | 16 (reuse)    | 4 (every 16 of 64 inner iters) |
 
 ### Buffer-id semantics notes
 
@@ -289,13 +289,13 @@ removes them. Real failure modes for reuse are limited to:
 
 | Test | Model time (ms) |
 |------|-----------------|
-| `bnbufnsplit2_K16_4KB`   | 108.4 |
-| `bnbufnsplit4_K16_4KB`   |  67.9 |
-| `bnbufnsplit8_K16_4KB`   |  70.9 |
-| `bnbufnsplit16_K16_4KB`  |  98.5 |
-| `bnbufnsplitR16_K16_4KB` |  80.3 |
-| `bl1reuse16_K16_8KB`     |  66.5 |
-| `bl1reuse32_K16_8KB`     |  66.9 |
+| `BNBuf_K16_N128_BL1_2_BL0_2_4KB_split2`   | 108.4 |
+| `BNBuf_K16_N128_BL1_4_BL0_4_4KB_split2`   |  67.9 |
+| `BNBuf_K16_N128_BL1_8_BL0_8_4KB_split2`   |  70.9 |
+| `BNBuf_K16_N128_BL1_16_BL0_16_4KB_split2`  |  98.5 |
+| `BNBuf_K16_N128_BL1_16_BL0_16_4KB_split2_pool13` |  80.3 |
+| `BNBuf_K16_N256_BL1_16_BL0_8_8KB`     |  66.5 |
+| `BNBuf_K16_N256_BL1_32_BL0_8_8KB_pool16`     |  66.9 |
 
 The 8 KiB tile (Config 9) wins overall by amortising scalar / get_buf-rls_buf
 overhead; L1 id-reuse adds essentially zero overhead (<1%) versus the 16-buf
@@ -311,8 +311,8 @@ fixed ids (`A=2 + C=1 + L0A=2 + L0B=8 = 13`). This uses **all 32 buf-ids**
 
 | Test                          | N_BUFS_B_L1 | L0B | L1 pool | wraps (of 64 iters) | Model time |
 |-------------------------------|-------------|-----|---------|---------------------|------------|
-| `bl1reuse32_K16_8KB`          | 32          | 8   | 16      | 4 (at 16/32/48)     | **66.9 ms** |
-| `bl1reuse32_K16_8KB_P19`      | 32          | 8   | 19      | 3 (at 19/38/57)     | 267.8 ms   |
+| `BNBuf_K16_N256_BL1_32_BL0_8_8KB_pool16`          | 32          | 8   | 16      | 4 (at 16/32/48)     | **66.9 ms** |
+| `BNBuf_K16_N256_BL1_32_BL0_8_8KB_pool19`      | 32          | 8   | 19      | 3 (at 19/38/57)     | 267.8 ms   |
 
 **Empirical finding:** raising the L1 pool from 16 → 19 *regresses* perf ~4×
 even though it has fewer wrap barriers (3 vs 4) and more distinct in-flight
@@ -327,3 +327,62 @@ This is a useful illustration of the **alignment principle** for buf-id reuse:
 the optimal pool size is not "max ids you can spend" but "the largest divisor
 of the inner iteration count that aligns wrap points with natural pipeline
 drain boundaries".
+
+---
+
+## Unified Test-Name Schema (Configs 7–9b)
+
+All B-side N-buffering test cases (Configs 7, 8, 8b, 9, 9b) follow a single
+descriptive naming scheme that encodes every meaningful axis of the variant:
+
+```
+BNBuf_K{B_K}_N{N_TILE}_BL1_{N_BUFS_L1}_BL0_{N_BUFS_L0B}_{TILE_KB}KB[_split{H}][_pool{P}]
+```
+
+| Token | Meaning |
+|-------|---------|
+| `K{B_K}`        | B tile K-dim per slot (`K16` or `K32`) |
+| `N{N_TILE}`     | B tile N-dim per slot (`N256` = full N, `N128` = half-N split) |
+| `BL1_{n}`       | Number of distinct B slots in L1 |
+| `BL0_{n}`       | Number of distinct B slots in L0B |
+| `{kb}KB`        | Bytes per L1 B slot (`B_K * N * 2`) |
+| `_split{H}`     | Optional. N-axis split into H halves (each with its own L0C accumulator) |
+| `_pool{P}`      | Optional. HW32-cap on L1 b_id pool (cycle every P inner iters via `flat % P`); inserts `pipe_barrier(PIPE_ALL)` at each wrap |
+
+Absent suffix conventions:
+- No `_split{H}` → single full-N L0C accumulator (`N=256`).
+- No `_pool{P}` → L1 b_id pool == `BL1_{n}` (no reuse, no wrap barrier; uses extended ids on HW32 only when `BL1 + ... ≤ 32`).
+
+### Test-case mapping table
+
+| Test name (`CubeMatmulNBufTest.<...>`) | Kernel template | B_K | N | BL1 | BL0 | KiB | split | L1 pool (HW32) | wraps | Model time |
+|----------------------------------------|-----------------|-----|---|-----|-----|-----|-------|----------------|-------|------------|
+| `BNBuf_K16_N256_BL1_2_BL0_2_8KB`               | `RunCubeMatmulBNBuf`         | 16 | 256 | 2  | 2  | 8  | – | 2  | 0 | – |
+| `BNBuf_K16_N256_BL1_4_BL0_4_8KB`               | `RunCubeMatmulBNBuf`         | 16 | 256 | 4  | 4  | 8  | – | 4  | 0 | – |
+| `BNBuf_K16_N256_BL1_8_BL0_8_8KB`               | `RunCubeMatmulBNBuf`         | 16 | 256 | 8  | 8  | 8  | – | 8  | 0 | – |
+| `BNBuf_K32_N256_BL1_2_BL0_2_16KB`              | `RunCubeMatmulBNBuf`         | 32 | 256 | 2  | 2  | 16 | – | 2  | 0 | – |
+| `BNBuf_K32_N256_BL1_4_BL0_4_16KB`              | `RunCubeMatmulBNBuf`         | 32 | 256 | 4  | 4  | 16 | – | 4  | 0 | – |
+| `BNBuf_K16_N128_BL1_2_BL0_2_4KB_split2`        | `RunCubeMatmulBNBufNSplit`   | 16 | 128 | 2  | 2  | 4  | 2 | 2  | 0 | 108.4 ms |
+| `BNBuf_K16_N128_BL1_4_BL0_4_4KB_split2`        | `RunCubeMatmulBNBufNSplit`   | 16 | 128 | 4  | 4  | 4  | 2 | 4  | 0 | 67.9 ms |
+| `BNBuf_K16_N128_BL1_8_BL0_8_4KB_split2`        | `RunCubeMatmulBNBufNSplit`   | 16 | 128 | 8  | 8  | 4  | 2 | 8  | 0 | 70.9 ms |
+| `BNBuf_K16_N128_BL1_16_BL0_16_4KB_split2`      | `RunCubeMatmulBNBufNSplit`   | 16 | 128 | 16 | 16 | 4  | 2 | 16 (uses ids ≥32 — fails HW32) | 0 | 98.5 ms |
+| `BNBuf_K16_N128_BL1_16_BL0_16_4KB_split2_pool13`| `RunCubeMatmulBNBufNSplitR` | 16 | 128 | 16 | 16 | 4  | 2 | 13 | 1/outer | 80.3 ms |
+| `BNBuf_K16_N256_BL1_16_BL0_8_8KB`              | `RunCubeMatmulBL1Reuse`      | 16 | 256 | 16 | 8  | 8  | – | 16 (no reuse) | 0 | 66.5 ms |
+| `BNBuf_K16_N256_BL1_32_BL0_8_8KB_pool16`       | `RunCubeMatmulBL1Reuse`      | 16 | 256 | 32 | 8  | 8  | – | 16 (reuse, aligned with `2×INNER_K`) | 4 | **66.9 ms** |
+| `BNBuf_K16_N256_BL1_32_BL0_8_8KB_pool19`       | `RunCubeMatmulBL1Reuse`      | 16 | 256 | 32 | 8  | 8  | – | 19 (reuse, misaligned) | 3 | 267.8 ms |
+
+Notes:
+- All kernels share A in L1 as a fixed `[32, A_K_TILE=128]` ping-pong (`A_L1` ids 0..1).
+- "Wraps" counts how many times `pipe_barrier(PIPE_ALL)` fires per kernel (only on HW32 path with id reuse).
+- Model time is sim-only and noisy across runs; correctness is `bad count: 0`, `max diff ≈ 2.67e-05` for all.
+- With `-DPTO_BUFID_HW_GT32`, `_pool*` suffix variants ignore the cap, allocate ids linearly, and skip the wrap barrier (e.g. `_pool16` and `_pool19` then both allocate ids 13..44 with zero wraps).
+
+### Original 5 baselines (Configs 1–5)
+
+The five original ping-pong baseline tests retain their pre-existing names
+(`buf{N}_ktile{K}_{KB}KB`) for backward compatibility with REPORT.md:
+
+```
+buf2_ktile16_8KB · buf4_ktile16_8KB · buf8_ktile16_8KB
+buf2_ktile32_16KB · buf4_ktile32_16KB
+```

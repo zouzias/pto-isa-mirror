@@ -928,7 +928,7 @@ void LaunchCubeMatmul4BufALargeK64(uint8_t *out, uint8_t *src0, uint8_t *src1, v
 // All variants: A fixed at [32, 128] big tile (ping-pong, 2 L1 slots);
 // B varies in N-buffer count and K_TILE size. INNER = 128 / B_K_TILE.
 
-void LaunchCubeMatmulBNBuf2_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+void LaunchCubeMatmulBNBuf_K16_N256_BL1_2_BL0_2_8KB(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
     // B: 2 buf × [16,256] = 16 KiB L1, 16 KiB L0B. INNER=8.
     RunCubeMatmulBNBuf<float, half, /*N_BUFS_B=*/2, /*A_K=*/128, /*B_K=*/16, /*M=*/GM_M, /*N=*/GM_N>
         <<<1, nullptr, stream>>>(
@@ -937,7 +937,7 @@ void LaunchCubeMatmulBNBuf2_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void
             reinterpret_cast<half*>(src1));
 }
 
-void LaunchCubeMatmulBNBuf4_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+void LaunchCubeMatmulBNBuf_K16_N256_BL1_4_BL0_4_8KB(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
     // B: 4 buf × [16,256] = 32 KiB L1, 32 KiB L0B. INNER=8.
     RunCubeMatmulBNBuf<float, half, /*N_BUFS_B=*/4, /*A_K=*/128, /*B_K=*/16, /*M=*/GM_M, /*N=*/GM_N>
         <<<1, nullptr, stream>>>(
@@ -946,7 +946,7 @@ void LaunchCubeMatmulBNBuf4_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void
             reinterpret_cast<half*>(src1));
 }
 
-void LaunchCubeMatmulBNBuf8_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+void LaunchCubeMatmulBNBuf_K16_N256_BL1_8_BL0_8_8KB(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
     // B: 8 buf × [16,256] = 64 KiB L1, 64 KiB L0B (exact fit). INNER=8.
     RunCubeMatmulBNBuf<float, half, /*N_BUFS_B=*/8, /*A_K=*/128, /*B_K=*/16, /*M=*/GM_M, /*N=*/GM_N>
         <<<1, nullptr, stream>>>(
@@ -955,7 +955,7 @@ void LaunchCubeMatmulBNBuf8_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void
             reinterpret_cast<half*>(src1));
 }
 
-void LaunchCubeMatmulBNBuf2_K32(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+void LaunchCubeMatmulBNBuf_K32_N256_BL1_2_BL0_2_16KB(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
     // B: 2 buf × [32,256] = 32 KiB L1, 32 KiB L0B. INNER=4.
     RunCubeMatmulBNBuf<float, half, /*N_BUFS_B=*/2, /*A_K=*/128, /*B_K=*/32, /*M=*/GM_M, /*N=*/GM_N>
         <<<1, nullptr, stream>>>(
@@ -964,7 +964,7 @@ void LaunchCubeMatmulBNBuf2_K32(uint8_t *out, uint8_t *src0, uint8_t *src1, void
             reinterpret_cast<half*>(src1));
 }
 
-void LaunchCubeMatmulBNBuf4_K32(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+void LaunchCubeMatmulBNBuf_K32_N256_BL1_4_BL0_4_16KB(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
     // B: 4 buf × [32,256] = 64 KiB L1, 64 KiB L0B (exact fit). INNER=4.
     RunCubeMatmulBNBuf<float, half, /*N_BUFS_B=*/4, /*A_K=*/128, /*B_K=*/32, /*M=*/GM_M, /*N=*/GM_N>
         <<<1, nullptr, stream>>>(
@@ -1203,7 +1203,7 @@ __global__ AICORE void RunCubeMatmulBNBufNSplit(__gm__ outType *out, __gm__ inTy
 // All variants: A fixed at [32,128] big tile (ping-pong, 2 L1 slots);
 // B is half-N: [B_K, 128] = 4 KiB at B_K=16 fp16. 2 L0C accumulators.
 
-void LaunchCubeMatmulBNBufNSplit2_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+void LaunchCubeMatmulBNBuf_K16_N128_BL1_2_BL0_2_4KB_split2(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
     // B: 2 buf × [16,128] = 8 KiB L1, 8 KiB L0B. INNER_K=8, INNER_FLAT=16.
     RunCubeMatmulBNBufNSplit<float, half, /*N_BUFS_B=*/2, /*A_K=*/128, /*B_K=*/16, /*M=*/GM_M, /*N=*/GM_N>
         <<<1, nullptr, stream>>>(
@@ -1212,7 +1212,7 @@ void LaunchCubeMatmulBNBufNSplit2_K16(uint8_t *out, uint8_t *src0, uint8_t *src1
             reinterpret_cast<half*>(src1));
 }
 
-void LaunchCubeMatmulBNBufNSplit4_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+void LaunchCubeMatmulBNBuf_K16_N128_BL1_4_BL0_4_4KB_split2(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
     // B: 4 buf × [16,128] = 16 KiB L1, 16 KiB L0B. INNER_K=8, INNER_FLAT=16.
     RunCubeMatmulBNBufNSplit<float, half, /*N_BUFS_B=*/4, /*A_K=*/128, /*B_K=*/16, /*M=*/GM_M, /*N=*/GM_N>
         <<<1, nullptr, stream>>>(
@@ -1221,7 +1221,7 @@ void LaunchCubeMatmulBNBufNSplit4_K16(uint8_t *out, uint8_t *src0, uint8_t *src1
             reinterpret_cast<half*>(src1));
 }
 
-void LaunchCubeMatmulBNBufNSplit8_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+void LaunchCubeMatmulBNBuf_K16_N128_BL1_8_BL0_8_4KB_split2(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
     // B: 8 buf × [16,128] = 32 KiB L1, 32 KiB L0B. INNER_K=8, INNER_FLAT=16.
     RunCubeMatmulBNBufNSplit<float, half, /*N_BUFS_B=*/8, /*A_K=*/128, /*B_K=*/16, /*M=*/GM_M, /*N=*/GM_N>
         <<<1, nullptr, stream>>>(
@@ -1230,7 +1230,7 @@ void LaunchCubeMatmulBNBufNSplit8_K16(uint8_t *out, uint8_t *src0, uint8_t *src1
             reinterpret_cast<half*>(src1));
 }
 
-void LaunchCubeMatmulBNBufNSplit16_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+void LaunchCubeMatmulBNBuf_K16_N128_BL1_16_BL0_16_4KB_split2(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
     // B: 16 buf × [16,128] = 64 KiB L1, 64 KiB L0B (exact L0B fit). INNER_K=8, INNER_FLAT=16 (matches buf count).
     RunCubeMatmulBNBufNSplit<float, half, /*N_BUFS_B=*/16, /*A_K=*/128, /*B_K=*/16, /*M=*/GM_M, /*N=*/GM_N>
         <<<1, nullptr, stream>>>(
@@ -1450,7 +1450,7 @@ __global__ AICORE void RunCubeMatmulBNBufNSplitR(__gm__ outType *out, __gm__ inT
 // 16-buffer variant: needs the rearranged scheme to fit in 32 buf-ids
 // (or set -DPTO_BUFID_HW_GT32 for hardware that supports >32 ids).
 
-void LaunchCubeMatmulBNBufNSplitR16_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+void LaunchCubeMatmulBNBuf_K16_N128_BL1_16_BL0_16_4KB_split2_pool13(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
     // B: 16 buf × [16,128] = 64 KiB L1, 64 KiB L0B (exact L0B fit).
     // INNER_K=8, INNER_FLAT=16; with HW32 cap pool=13 ⇒ wrap at flat=13.
     RunCubeMatmulBNBufNSplitR<float, half, /*N_BUFS_B=*/16, /*A_K=*/128, /*B_K=*/16, /*M=*/GM_M, /*N=*/GM_N>
@@ -1670,7 +1670,7 @@ __global__ AICORE void RunCubeMatmulBL1Reuse(__gm__ outType *out, __gm__ inType 
 
 // ── L1-reuse 8 KiB B-tile launchers (Config 9) ──────────────────────────────
 
-void LaunchCubeMatmulBL1Reuse32_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+void LaunchCubeMatmulBNBuf_K16_N256_BL1_32_BL0_8_8KB_pool16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
     // L1 B: 32 × [16,256] = 256 KiB.  L0B: 8 × [16,256] = 64 KiB.
     // Total inner iters = 8 outer × 8 INNER_K = 64.
     // HW32: L1 pool capped at 16 ⇒ 4 wrap barriers per kernel.
@@ -1682,7 +1682,7 @@ void LaunchCubeMatmulBL1Reuse32_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, 
             reinterpret_cast<half*>(src1));
 }
 
-void LaunchCubeMatmulBL1Reuse16_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+void LaunchCubeMatmulBNBuf_K16_N256_BL1_16_BL0_8_8KB(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
     // L1 B: 16 × [16,256] = 128 KiB. L0B: 8 × [16,256] = 64 KiB.
     // HW32: L1 pool exactly 16 ⇒ no reuse, no barrier (still uses extended id 13..28).
     RunCubeMatmulBL1Reuse<float, half, /*N_BUFS_B_L1=*/16, /*N_BUFS_L0B=*/8,
@@ -1693,7 +1693,7 @@ void LaunchCubeMatmulBL1Reuse16_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, 
             reinterpret_cast<half*>(src1));
 }
 
-void LaunchCubeMatmulBL1Reuse32_K16_P19(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
+void LaunchCubeMatmulBNBuf_K16_N256_BL1_32_BL0_8_8KB_pool19(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream) {
     // L1 B: 32 × [16,256] = 256 KiB. L0B: 8 × [16,256] = 64 KiB.
     // HW32: max usable L1 pool = 32-13 = 19 distinct ids ⇒ reuse every 19 iters.
     // Total inner iters = 64 ⇒ wraps at 19, 38, 57 ⇒ 3 pipe_barrier(PIPE_ALL) per kernel.

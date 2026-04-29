@@ -36,19 +36,19 @@ extern void LaunchCubeMatmul4Buf16K(uint8_t *out, uint8_t *src0, uint8_t *src1, 
 extern void LaunchCubeMatmul4BufALarge(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 extern void LaunchCubeMatmul8BufALarge(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 extern void LaunchCubeMatmul4BufALargeK64(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-extern void LaunchCubeMatmulBNBuf2_K16  (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-extern void LaunchCubeMatmulBNBuf4_K16  (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-extern void LaunchCubeMatmulBNBuf8_K16  (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-extern void LaunchCubeMatmulBNBuf2_K32  (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-extern void LaunchCubeMatmulBNBuf4_K32  (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-extern void LaunchCubeMatmulBNBufNSplit2_K16 (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-extern void LaunchCubeMatmulBNBufNSplit4_K16 (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-extern void LaunchCubeMatmulBNBufNSplit8_K16 (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-extern void LaunchCubeMatmulBNBufNSplit16_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-extern void LaunchCubeMatmulBNBufNSplitR16_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-extern void LaunchCubeMatmulBL1Reuse16_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-extern void LaunchCubeMatmulBL1Reuse32_K16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-extern void LaunchCubeMatmulBL1Reuse32_K16_P19(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBNBuf_K16_N256_BL1_2_BL0_2_8KB  (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBNBuf_K16_N256_BL1_4_BL0_4_8KB  (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBNBuf_K16_N256_BL1_8_BL0_8_8KB  (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBNBuf_K32_N256_BL1_2_BL0_2_16KB  (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBNBuf_K32_N256_BL1_4_BL0_4_16KB  (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBNBuf_K16_N128_BL1_2_BL0_2_4KB_split2 (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBNBuf_K16_N128_BL1_4_BL0_4_4KB_split2 (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBNBuf_K16_N128_BL1_8_BL0_8_4KB_split2 (uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBNBuf_K16_N128_BL1_16_BL0_16_4KB_split2(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBNBuf_K16_N128_BL1_16_BL0_16_4KB_split2_pool13(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBNBuf_K16_N256_BL1_16_BL0_8_8KB(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBNBuf_K16_N256_BL1_32_BL0_8_8KB_pool16(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+extern void LaunchCubeMatmulBNBuf_K16_N256_BL1_32_BL0_8_8KB_pool19(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -158,22 +158,22 @@ TEST(CubeMatmulNBufTest, buf8_alarge_K128)  { RunNBufTest(LaunchCubeMatmul8BufAL
 TEST(CubeMatmulNBufTest, buf4_alarge_K64)   { RunNBufTest(LaunchCubeMatmul4BufALargeK64, "out_4buf_alarge_k64.bin"); }
 
 // B-tile N-buffering with fixed [32,128] big A tile (A ping-pong only).
-TEST(CubeMatmulNBufTest, bnbuf4_K16_8KB)    { RunNBufTest(LaunchCubeMatmulBNBuf4_K16, "out_bnbuf4_k16.bin");  }
-TEST(CubeMatmulNBufTest, bnbuf2_K16_8KB)    { RunNBufTest(LaunchCubeMatmulBNBuf2_K16, "out_bnbuf2_k16.bin");  }
-TEST(CubeMatmulNBufTest, bnbuf8_K16_8KB)    { RunNBufTest(LaunchCubeMatmulBNBuf8_K16, "out_bnbuf8_k16.bin");  }
-TEST(CubeMatmulNBufTest, bnbuf2_K32_16KB)   { RunNBufTest(LaunchCubeMatmulBNBuf2_K32, "out_bnbuf2_k32.bin");  }
-TEST(CubeMatmulNBufTest, bnbuf4_K32_16KB)   { RunNBufTest(LaunchCubeMatmulBNBuf4_K32, "out_bnbuf4_k32.bin");  }
+TEST(CubeMatmulNBufTest, BNBuf_K16_N256_BL1_4_BL0_4_8KB)    { RunNBufTest(LaunchCubeMatmulBNBuf_K16_N256_BL1_4_BL0_4_8KB, "out_bnbuf4_k16.bin");  }
+TEST(CubeMatmulNBufTest, BNBuf_K16_N256_BL1_2_BL0_2_8KB)    { RunNBufTest(LaunchCubeMatmulBNBuf_K16_N256_BL1_2_BL0_2_8KB, "out_bnbuf2_k16.bin");  }
+TEST(CubeMatmulNBufTest, BNBuf_K16_N256_BL1_8_BL0_8_8KB)    { RunNBufTest(LaunchCubeMatmulBNBuf_K16_N256_BL1_8_BL0_8_8KB, "out_bnbuf8_k16.bin");  }
+TEST(CubeMatmulNBufTest, BNBuf_K32_N256_BL1_2_BL0_2_16KB)   { RunNBufTest(LaunchCubeMatmulBNBuf_K32_N256_BL1_2_BL0_2_16KB, "out_bnbuf2_k32.bin");  }
+TEST(CubeMatmulNBufTest, BNBuf_K32_N256_BL1_4_BL0_4_16KB)   { RunNBufTest(LaunchCubeMatmulBNBuf_K32_N256_BL1_4_BL0_4_16KB, "out_bnbuf4_k32.bin");  }
 
 // 4 KiB B-tile half-N split with 2 L0C accumulators (Config 8: BNBufNSplit).
-TEST(CubeMatmulNBufTest, bnbufnsplit2_K16_4KB)  { RunNBufTest(LaunchCubeMatmulBNBufNSplit2_K16,  "out_bnbufnsplit2_k16.bin");  }
-TEST(CubeMatmulNBufTest, bnbufnsplit4_K16_4KB)  { RunNBufTest(LaunchCubeMatmulBNBufNSplit4_K16,  "out_bnbufnsplit4_k16.bin");  }
-TEST(CubeMatmulNBufTest, bnbufnsplit8_K16_4KB)  { RunNBufTest(LaunchCubeMatmulBNBufNSplit8_K16,  "out_bnbufnsplit8_k16.bin");  }
-TEST(CubeMatmulNBufTest, bnbufnsplit16_K16_4KB) { RunNBufTest(LaunchCubeMatmulBNBufNSplit16_K16, "out_bnbufnsplit16_k16.bin"); }
+TEST(CubeMatmulNBufTest, BNBuf_K16_N128_BL1_2_BL0_2_4KB_split2)  { RunNBufTest(LaunchCubeMatmulBNBuf_K16_N128_BL1_2_BL0_2_4KB_split2,  "out_bnbufnsplit2_k16.bin");  }
+TEST(CubeMatmulNBufTest, BNBuf_K16_N128_BL1_4_BL0_4_4KB_split2)  { RunNBufTest(LaunchCubeMatmulBNBuf_K16_N128_BL1_4_BL0_4_4KB_split2,  "out_bnbufnsplit4_k16.bin");  }
+TEST(CubeMatmulNBufTest, BNBuf_K16_N128_BL1_8_BL0_8_4KB_split2)  { RunNBufTest(LaunchCubeMatmulBNBuf_K16_N128_BL1_8_BL0_8_4KB_split2,  "out_bnbufnsplit8_k16.bin");  }
+TEST(CubeMatmulNBufTest, BNBuf_K16_N128_BL1_16_BL0_16_4KB_split2) { RunNBufTest(LaunchCubeMatmulBNBuf_K16_N128_BL1_16_BL0_16_4KB_split2, "out_bnbufnsplit16_k16.bin"); }
 
 // Rearranged buf-id allocation, fits in 32 buf-ids (HW32) by capping pool at 13.
-TEST(CubeMatmulNBufTest, bnbufnsplitR16_K16_4KB) { RunNBufTest(LaunchCubeMatmulBNBufNSplitR16_K16, "out_bnbufnsplitr16_k16.bin"); }
+TEST(CubeMatmulNBufTest, BNBuf_K16_N128_BL1_16_BL0_16_4KB_split2_pool13) { RunNBufTest(LaunchCubeMatmulBNBuf_K16_N128_BL1_16_BL0_16_4KB_split2_pool13, "out_bnbufnsplitr16_k16.bin"); }
 
 // 8 KiB full-N B-tile with L1 id-reuse (Config 9): exercises >32 L1 slots via id-pool wrap.
-TEST(CubeMatmulNBufTest, bl1reuse16_K16_8KB) { RunNBufTest(LaunchCubeMatmulBL1Reuse16_K16, "out_bl1reuse16_k16.bin"); }
-TEST(CubeMatmulNBufTest, bl1reuse32_K16_8KB) { RunNBufTest(LaunchCubeMatmulBL1Reuse32_K16, "out_bl1reuse32_k16.bin"); }
-TEST(CubeMatmulNBufTest, bl1reuse32_K16_8KB_P19) { RunNBufTest(LaunchCubeMatmulBL1Reuse32_K16_P19, "out_bl1reuse32_k16_p19.bin"); }
+TEST(CubeMatmulNBufTest, BNBuf_K16_N256_BL1_16_BL0_8_8KB) { RunNBufTest(LaunchCubeMatmulBNBuf_K16_N256_BL1_16_BL0_8_8KB, "out_bl1reuse16_k16.bin"); }
+TEST(CubeMatmulNBufTest, BNBuf_K16_N256_BL1_32_BL0_8_8KB_pool16) { RunNBufTest(LaunchCubeMatmulBNBuf_K16_N256_BL1_32_BL0_8_8KB_pool16, "out_bl1reuse32_k16.bin"); }
+TEST(CubeMatmulNBufTest, BNBuf_K16_N256_BL1_32_BL0_8_8KB_pool19) { RunNBufTest(LaunchCubeMatmulBNBuf_K16_N256_BL1_32_BL0_8_8KB_pool19, "out_bl1reuse32_k16_p19.bin"); }
