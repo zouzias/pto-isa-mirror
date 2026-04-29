@@ -6,13 +6,18 @@
 #
 # pto_aiv_treduce — AIV-side trigger for the PTO gated-reduce CKE (Step 3).
 #
-# Two output libraries:
-#   - libpto_aiv_treduce_kernel.so   (vec arch; the actual AIV kernel)
-#   - libpto_aiv_treduce.so          (host-side launcher exporting C entry point;
-#                                     dlopen'd by pto/aiv/detail/treduce_launcher.hpp)
+# One output library:
+#   - libpto_aiv_treduce.so   (vec arch; contains BOTH the AIV kernel
+#                              `pto_aiv_treduce_kernel` and the host-side
+#                              `extern "C" pto_aiv_treduce_launch` launcher
+#                              that dispatches via `KernelName<<<...>>>(args)`.)
 #
-# Build expectations: same toolchain conventions as kernels/manual/a5/gemm_ar
-# (CCE compiler, ASCEND_HOME_PATH set, dav-c310-vec for vec arch).
+# This is the same one-translation-unit pattern as kernels/manual/a5/gemm_ar
+# (`comm_kernel.cpp` holds both kernel + `launchGemmCommAll`). On this CANN /
+# bisheng combo, the `<<<...>>>` triple-bracket dispatch can ONLY be emitted
+# inside a bisheng-compiled CCE TU, so we cannot keep the launcher in a plain
+# C++ TU compiled by g++. Earlier attempt to do so (separate launcher.cpp +
+# `pto_aiv_treduce_kernel_thunk`) failed at link time.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -72,46 +77,35 @@ set(CCE_OPTS
 )
 
 # ============================================================================
-# AIV Kernel Library — vec arch
+# AIV Kernel + Host Launcher Library — single TU, vec arch
 # ============================================================================
-add_library(pto_aiv_treduce_kernel SHARED kernel.cpp)
-target_compile_options(pto_aiv_treduce_kernel PRIVATE
+# Both `__global__ __aicore__ pto_aiv_treduce_kernel` and the host-exported
+# `extern "C" pto_aiv_treduce_launch` live in kernel.cpp. Bisheng splits them
+# automatically based on the `__global__ __aicore__` annotation; the host
+# launcher emits the bisheng-internal launch thunk, which is what the example
+# resolves through dlopen + dlsym.
+add_library(pto_aiv_treduce SHARED kernel.cpp)
+target_compile_options(pto_aiv_treduce PRIVATE
     ${CCE_OPTS}
     --cce-aicore-arch=dav-c310-vec
     -DMEMORY_BASE -std=c++17
 )
-target_include_directories(pto_aiv_treduce_kernel PRIVATE ${KERNEL_INCLUDE_DIRS})
-target_link_directories(pto_aiv_treduce_kernel PRIVATE ${ASCEND_HOME_PATH}/lib64)
-target_link_libraries(pto_aiv_treduce_kernel PRIVATE runtime)
-target_link_options(pto_aiv_treduce_kernel PRIVATE --cce-fatobj-link)
-
-# ============================================================================
-# Host Launcher Library — exports pto_aiv_treduce_launch via C ABI
-# ============================================================================
-# Phase 1 STUB: launcher.cpp does not actually launch the AIV kernel; it just
-# dumps arguments to stderr and returns a sentinel error so callers fall back
-# to host trigger. This lets us test the main.cc → dlopen → call chain and
-# the target-address computation without committing to a CANN-version-specific
-# kernel launch syntax. Once the launch syntax is sorted out, swap launcher.cpp
-# for a real implementation and re-add `pto_aiv_treduce_kernel`/`ascendcl`/
-# `runtime` to target_link_libraries.
-add_library(pto_aiv_treduce SHARED launcher.cpp)
-target_compile_options(pto_aiv_treduce PRIVATE
-    -std=c++17 -fPIC -Wall
-)
-# No extra include / link dirs needed for the stub; only stdio + cstdint.
+target_include_directories(pto_aiv_treduce PRIVATE ${KERNEL_INCLUDE_DIRS})
+target_link_directories(pto_aiv_treduce PRIVATE ${ASCEND_HOME_PATH}/lib64)
+target_link_libraries(pto_aiv_treduce PRIVATE runtime)
+target_link_options(pto_aiv_treduce PRIVATE --cce-fatobj-link)
 
 # ----------------------------------------------------------------------------
-# Helper: copy both .so to a known dist/ dir so users can LD_LIBRARY_PATH it
-# without chasing CMake's binary tree.
+# Helper: copy the .so to a known dist/ dir so users can LD_LIBRARY_PATH it
+# (or set PTO_AIV_TREDUCE_LIB to the absolute path) without chasing CMake's
+# binary tree.
 # ----------------------------------------------------------------------------
 set(TREDUCE_DIST_DIR ${CMAKE_BINARY_DIR}/dist)
 add_custom_command(TARGET pto_aiv_treduce POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory ${TREDUCE_DIST_DIR}
     COMMAND ${CMAKE_COMMAND} -E copy
-        $<TARGET_FILE:pto_aiv_treduce_kernel>
         $<TARGET_FILE:pto_aiv_treduce>
         ${TREDUCE_DIST_DIR}/
 )
 
-message(STATUS "pto_aiv_treduce: built libpto_aiv_treduce_kernel.so + libpto_aiv_treduce.so → ${TREDUCE_DIST_DIR}")
+message(STATUS "pto_aiv_treduce: built libpto_aiv_treduce.so (kernel + launcher) → ${TREDUCE_DIST_DIR}")

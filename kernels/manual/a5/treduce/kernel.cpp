@@ -14,60 +14,70 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // (SET_CKE) with an AIV raw store directly into the CCU CKE register file.
 // Runs on Vec arch (`dav-c310-vec`); 1 block, 1 thread.
 //
-// Args (passed by the host launcher in this exact order):
+// File layout (mirrors `kernels/manual/a5/gemm_ar/comm_kernel.cpp`):
+//   - The `__global__ __aicore__` kernel below is the AIV side.
+//   - The `extern "C"` launcher at the bottom is the host side; both compile
+//     together in the same bisheng translation unit, which is the only way
+//     the `KernelName<<<...>>>(args)` triple-bracket dispatch resolves
+//     correctly on this CANN/bisheng combo. Earlier attempt with a separate
+//     plain-C++ launcher.cpp could not link because the launch-symbol thunk
+//     is bisheng-internal.
+//
+// Args (passed by value, marshalled implicitly by `<<<>>>`):
 //   mmioAddr — CCU resource base VA on this die (from QueryCcuBaseInfo +0x28)
-//   dieId    — informational; AIV resolves its own die so we don't actually need it
-//              for the store, but keep it in the signature for symmetry with host
-//              trigger and for future per-die handling
 //   ckeId    — target CKE entry index
 //   mask     — 16-bit mask to set (low 16 bits used; rest must be 0)
-//   stride   — bytes between adjacent CKE entries (initial empirical guess: 0x40)
-//   byte_off — byte position of the mask u16 within the CKE slot
-//              (initial empirical guess: 6, matching host PTO_CKE_LAYOUT=B)
+//   stride   — bytes between adjacent CKE entries (sweep candidate)
+//   byte_off — byte position of the mask u16 within the CKE slot (sweep candidate)
 //
 // Target address: `mmioAddr + ckeId * stride + byte_off`, written as u16 = mask.
 //
-// Exit semantics:
-//   - On success, returns immediately. The gated CCU kernel (parked at WaitEvent)
-//     observes the mask within at most a CCU sync-loop latency.
-//   - On a bad mmioAddr, AIV will trap with a device exception. The driver kills
-//     the process; recovery requires NPU reset (see Step 2.4 cleanup notes).
+// Risk notes (see README):
+//   - Wrong mmioAddr → AIV traps → driver kills process → NPU reset required.
+//   - Wrong (stride, byte_off) but writable → store goes to a benign register;
+//     gated kernel keeps WaitEvent-ing → host stream sync timeout (recoverable).
 
 #include "kernel_operator.h"
 using namespace AscendC;
 
-extern "C" __global__ __aicore__ void pto_aiv_treduce_kernel(
-    GM_ADDR ctx)
+// AIV kernel — runs on AIV (vec arch). 1 block, 1 thread.
+__global__ __aicore__ void pto_aiv_treduce_kernel(
+    uint64_t mmioAddr, uint32_t ckeId, uint32_t mask,
+    uint64_t stride, uint64_t byte_off)
 {
-    // ctx is a small GM staging buffer the host launcher fills before launch.
-    // Layout (must match host launcher):
-    //   +0x00 (8B) mmioAddr
-    //   +0x08 (4B) dieId
-    //   +0x0c (4B) ckeId
-    //   +0x10 (4B) mask
-    //   +0x14 (4B) padding
-    //   +0x18 (8B) stride
-    //   +0x20 (8B) byte_off
-    __gm__ uint64_t *ctx64 = reinterpret_cast<__gm__ uint64_t *>(ctx);
-    __gm__ uint32_t *ctx32 = reinterpret_cast<__gm__ uint32_t *>(ctx);
+    // Defensive: ensure only block 0 stores, even if launcher is ever changed
+    // to launch >1 blocks. With `<<<1, ...>>>` this is always true.
+    if (get_block_idx() != 0) return;
 
-    uint64_t mmioAddr = ctx64[0];
-    uint32_t ckeId    = ctx32[3];   // [+0x0c]
-    uint32_t mask     = ctx32[4];   // [+0x10]
-    uint64_t stride   = ctx64[3];   // [+0x18]
-    uint64_t byteOff  = ctx64[4];   // [+0x20]
-
-    // Compute target byte address inside the CKE register file.
-    uint64_t target = mmioAddr + (uint64_t)ckeId * stride + byteOff;
+    // Target byte address inside the CCU CKE register file.
+    const uint64_t target = mmioAddr + static_cast<uint64_t>(ckeId) * stride + byte_off;
 
     // Raw 16-bit store into device MMIO.
-    // We don't know the mapping attribute of the resource VA, but on Ascend 950
-    // the CCU register window is mapped device-side as `Device-nGnRE`-equivalent
-    // (non-cacheable, ordered). A regular store + barrier should be enough.
+    // The CCU CKE register window is mapped device-side as Device-nGnRE-equivalent
+    // (non-cacheable, ordered) on Ascend 950, so a regular store + barrier is sufficient.
     *reinterpret_cast<__gm__ uint16_t *>(target) = static_cast<uint16_t>(mask & 0xffff);
 
-    // Memory barrier: ensure the store is visible to the CCU before the kernel
-    // returns. Without this, the store may sit in the AIV write buffer when the
-    // host stream sync returns, and the gated CCU kernel keeps waiting.
+    // Memory barrier: make the store visible to the CCU before the kernel
+    // returns, so when the host stream-sync unblocks, the gated CCU kernel
+    // has already observed the mask. Without this, the store may sit in the
+    // AIV write buffer and the gated kernel keeps waiting.
     pipe_barrier(PIPE_ALL);
+}
+
+// ============================================================================
+// Host-side launcher — exported via C ABI for dlopen
+// ============================================================================
+//
+// `dieId` is unused on the AIV side (each AIV resolves its own die), but the
+// signature includes it for symmetry with the host trigger path and for any
+// future per-die handling.
+extern "C" __attribute__((visibility("default"))) int
+pto_aiv_treduce_launch(void *stream,
+                       uint64_t mmioAddr, uint32_t /*dieId*/,
+                       uint32_t ckeId, uint32_t mask,
+                       uint64_t stride, uint64_t byte_off)
+{
+    pto_aiv_treduce_kernel<<<1, nullptr, stream>>>(
+        mmioAddr, ckeId, mask, stride, byte_off);
+    return 0;
 }
