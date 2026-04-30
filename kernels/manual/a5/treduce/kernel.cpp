@@ -118,10 +118,30 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     // AscendC::printf("[AIV/treduce] kernel ran: target=0x%lx mask=0x%x\n",
     //                 (unsigned long)target, (unsigned int)(mask & 0xffff));
 
-    // Raw 16-bit store into device MMIO.
-    // The CCU CKE register window is mapped device-side as Device-nGnRE-equivalent
-    // (non-cacheable, ordered) on Ascend 950, so a regular store + barrier is sufficient.
-    *reinterpret_cast<__gm__ uint16_t *>(target) = static_cast<uint16_t>(mask & 0xffff);
+    // ── Raw 64-bit store into device CCU CKE MMIO ────────────────────────
+    // Why 64-bit (not 16-bit as before):
+    //   - rtGetDevResAddress(CCU_CKE, ckeId=N) returns len=8 → per-CKE slot
+    //     is 8B wide.
+    //   - With prior 16-bit store, rank=1 marker showed pre=0 → postBar=1
+    //     (the write physically landed somewhere — driver's shadow buffer
+    //     since readback sees the change), but CCU microcode `ClearCKEInstr`
+    //     never consumed it (hccl stream stayed parked at WaitEvent →
+    //     timeout). Strong evidence the 16-bit store updated only a shadow
+    //     byte, not the hardware "set" signal path the microcode polls.
+    //   - Hypothesis: CCU CKE register file fires the set detection signal
+    //     only on a natural-width (8B) store covering the entire slot. This
+    //     pattern is common in NPU set-on-write register files where the
+    //     "set" wire is gated on `slot_addr_decoded && slot_byte_strobe ==
+    //     0xFF`. Driver shadow happens to be byte-addressable so 16-bit
+    //     stores still update its memcpy buffer (explains readback delta)
+    //     but never trip the hardware "set" → microcode never released.
+    //
+    // Mask is placed in the LOW bytes of the slot (Layout A in host trigger
+    // sweep; matches `ClearCKEInstr` reading `waitCKEMask` as uint16_t).
+    // If 64-bit doesn't release either, drop to 32-bit and re-test by
+    // changing `uint64_t` to `uint32_t` on the next two lines.
+    *reinterpret_cast<__gm__ uint64_t *>(target) =
+        static_cast<uint64_t>(mask) & 0xFFFFULL;
 
     if (m64 != nullptr) {
         // [6] post-store, PRE-barrier readback — does barrier matter at all?
