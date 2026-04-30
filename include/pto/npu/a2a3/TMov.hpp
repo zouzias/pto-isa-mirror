@@ -12,7 +12,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TMOV_HPP
 #include "common.hpp"
 #include "TExtract.hpp"
-#include "TCopy.hpp"
 
 namespace pto {
 template <typename DstTileData, typename SrcTileData>
@@ -71,6 +70,40 @@ __tf__ AICORE void TMovToFb(typename DstTileData::TileDType __out__ dst, typenam
     copy_cbuf_to_fbuf(dstAddrP, srcAddrP, (uint16_t)1, burstLen, (uint16_t)0, (uint16_t)0);
 }
 
+template <typename TileDataDst, typename TileDataSrc, unsigned blockSizeElem, unsigned srcStride, unsigned dstStride>
+__tf__ PTO_INTERNAL void TMovToVecImpl(typename TileDataDst::TileDType __out__ dst,
+                                       typename TileDataSrc::TileDType __in__ src, uint64_t validRow, uint64_t validCol)
+{
+    using T = typename TileDataSrc::DType;
+    using U = typename TileDataDst::DType;
+    __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
+    __ubuf__ U *dstPtr = (__ubuf__ U *)__cce_get_tile_ptr(dst);
+
+    static_assert(sizeof(T) == sizeof(U), "TMOV: src and dst data type is different!");
+    if constexpr (TileDataDst::Cols == TileDataSrc::Cols || TileDataDst::Rows == 1) {
+        unsigned blockLen = (TileDataDst::Cols * validRow * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
+        if constexpr (TileDataDst::Cols == TileDataDst::ValidCol) {
+            pto_copy_ubuf_to_ubuf(dstPtr, srcPtr, 1, blockLen, 1, 1);
+        } else {
+            if (TileDataDst::Cols == validCol) {
+                pto_copy_ubuf_to_ubuf(dstPtr, srcPtr, 1, blockLen, 1, 1);
+            } else {
+                blockLen = (validCol * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
+                for (int i = 0; i < validRow; i++) {
+                    pto_copy_ubuf_to_ubuf(dstPtr + i * dstStride, srcPtr + i * srcStride, 1, blockLen, 1, 1);
+                }
+            }
+        }
+    } else {
+        unsigned blockLen = (validCol * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
+        unsigned srcGap = (TileDataSrc::Cols * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE - blockLen;
+        unsigned dstGap = (TileDataDst::Cols * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE - blockLen;
+        for (int i = 0; i < validRow; i++) {
+            pto_copy_ubuf_to_ubuf(dstPtr + i * dstStride, srcPtr + i * srcStride, 1, blockLen, srcGap, dstGap);
+        }
+    }
+}
+
 template <typename DstTileData, typename SrcTileData>
 AICORE void TMovToVec(DstTileData &dst, SrcTileData &src)
 {
@@ -83,7 +116,13 @@ AICORE void TMovToVec(DstTileData &dst, SrcTileData &src)
     uint64_t validDstCol = dst.GetValidCol();
     uint64_t validRow = (validSrcRow < validDstRow) ? validSrcRow : validDstRow;
     uint64_t validCol = (validSrcCol < validDstCol) ? validSrcCol : validDstCol;
-    TCopy<DstTileData, SrcTileData, blockSizeElem, srcStride, dstStride>(dst.data(), src.data(), validRow, validCol);
+    PTO_ASSERT(validRow > 0, "Fix: TMov to vec validRow is 0");
+    PTO_ASSERT(validCol > 0, "Fix: TMov to vec validCol is 0");
+    if (validRow == 0 || validCol == 0) {
+        return;
+    }
+    TMovToVecImpl<DstTileData, SrcTileData, blockSizeElem, srcStride, dstStride>(dst.data(), src.data(), validRow,
+                                                                                 validCol);
 }
 
 template <typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode>

@@ -12,7 +12,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TMOV_HPP
 
 #include "pto/npu/a2a3/TExtract.hpp"
-#include "pto/npu/a2a3/TCopy.hpp"
 
 namespace pto {
 template <typename DstTileData, typename SrcTileData>
@@ -76,7 +75,7 @@ AICORE void TMovToVec(DstTileData &dst, SrcTileData &src)
     uint64_t validDstCol = dst.GetValidCol();
     uint64_t validRow = (validSrcRow < validDstRow) ? validSrcRow : validDstRow;
     uint64_t validCol = (validSrcCol < validDstCol) ? validSrcCol : validDstCol;
-    TCopy<DstTileData, SrcTileData, blockSizeElem, srcStride, dstStride>(dst.data(), src.data(), validRow, validCol);
+    // TCopy<DstTileData, SrcTileData, blockSizeElem, srcStride, dstStride>(dst.data(), src.data(), validRow, validCol);
 }
 
 template <typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode>
