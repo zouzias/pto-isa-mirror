@@ -230,7 +230,15 @@ AICORE inline void ComputeNZBlockParams(uint32_t validRow, uint32_t validCol, ui
     uint32_t colBlockOffset = (byteIndexCol / c0Size) * dstRow * c0Size;
     uint32_t rowOffset = indexRow * c0Size + (byteIndexCol % c0Size);
     dstOffset = colBlockOffset + rowOffset;
-    srcGap = static_cast<uint16_t>(SrcTileData::Rows - validRow);
+    uint32_t srcStrideRows;
+    if constexpr (SrcTileData::Compact == CompactMode::Null) {
+        srcStrideRows = SrcTileData::Rows;
+    } else if constexpr (SrcTileData::Compact == CompactMode::RowPlusOne) {
+        srcStrideRows = CeilDivision(validRow, static_cast<uint32_t>(FRACTAL_NZ_ROW)) * FRACTAL_NZ_ROW + 1;
+    } else {
+        srcStrideRows = CeilDivision(validRow, static_cast<uint32_t>(FRACTAL_NZ_ROW)) * FRACTAL_NZ_ROW;
+    }
+    srcGap = static_cast<uint16_t>(srcStrideRows - validRow);
     dstGap = static_cast<uint16_t>(dstRow - validRow);
 }
 
@@ -269,7 +277,15 @@ __tf__ AICORE void TInsertSplitImpl(typename DstTileData::TileDType __out__ dst,
     uint16_t burstLen = (alignedRow * c0Size * typeSize) / BLOCK_BYTE_SIZE;
     uint16_t partBurstNum = totalBurstNum / SplitCount;
     uint16_t lastBurstNum = totalBurstNum - partBurstNum * (SplitCount - 1);
-    uint16_t srcGap = static_cast<uint16_t>(SrcTileData::Rows - alignedRow);
+    uint32_t srcStrideRows;
+    if constexpr (SrcTileData::Compact == CompactMode::Null) {
+        srcStrideRows = SrcTileData::Rows;
+    } else if constexpr (SrcTileData::Compact == CompactMode::RowPlusOne) {
+        srcStrideRows = alignedRow + 1;
+    } else {
+        srcStrideRows = alignedRow;
+    }
+    uint16_t srcGap = static_cast<uint16_t>(srcStrideRows - alignedRow);
     uint16_t dstGap = static_cast<uint16_t>(DstTileData::Rows - alignedRow);
     uint32_t srcBlockSize = (burstLen + srcGap) * BLOCK_BYTE_SIZE / typeSize;
     uint32_t dstBlockSize = DstTileData::Rows * c0Size;
@@ -538,8 +554,8 @@ PTO_INTERNAL void TInsertVecToMatImpl(DstTileData &dst, SrcTileData &src, uint16
         TInsertNDImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, dstCols, indexRow,
                                                    indexCol);
     } else if constexpr (!SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::RowMajor)) {
-        uint16_t dstRow = static_cast<uint16_t>(dst.GetValidRow());
-        PTO_ASSERT(indexRow + validRow <= dstRow, "TINSERT NZ : indexRow + validRow exceeds destination valid rows!");
+        constexpr uint16_t dstRow = static_cast<uint16_t>(DstTileData::Rows);
+        PTO_ASSERT(indexRow + validRow <= dstRow, "TINSERT NZ : indexRow + validRow exceeds destination rows!");
         TInsertImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, dstRow, indexRow,
                                                  indexCol);
     }
