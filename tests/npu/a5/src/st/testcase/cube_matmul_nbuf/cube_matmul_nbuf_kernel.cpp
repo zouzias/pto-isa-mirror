@@ -102,6 +102,64 @@ AICORE void rls_buffer(int id) {
     return;
 }
 
+// ── Multi-id GET_BUF / RLS_BUF helpers ────────────────────────────────────
+// `get_multiple<pipe>(a, b, c)` / `rls_multiple<pipe>(a, b, c)` issue a
+// consecutive run of GET_BUF / RLS_BUF on the same pipe for up to three
+// buffer ids.
+//
+// PTO_BUFID_DEDUP (default: enabled) controls whether duplicate ids are
+// filtered before issuing:
+//   * Enabled  → ids that collide on the effective 5-bit asm field
+//                (`id & 31`) are issued only once. This is required when
+//                host ids may exceed 31 (e.g. when -DPTO_BUFID_HW_GT32 is
+//                set), because back-to-back same-pipe get/rls on the same
+//                physical counter doubles the producer/consumer count and
+//                deadlocks the pipeline.
+//   * Disabled → every id is issued verbatim (legacy behaviour). Useful
+//                for sim experiments that want the raw instruction stream.
+//
+// Toggle from the build:  -DPTO_BUFID_DEDUP=0  to disable.
+#ifndef PTO_BUFID_DEDUP
+#define PTO_BUFID_DEDUP 1
+#endif
+
+static constexpr int BUFID_HW_MASK = 31;
+AICORE inline bool bufid_collide(int a, int b) {
+#if PTO_BUFID_DEDUP
+    return ((a ^ b) & BUFID_HW_MASK) == 0;
+#else
+    (void)a; (void)b;
+    return false;
+#endif
+}
+
+template <pipe_t pipe>
+AICORE inline void get_multiple(int a) { get_buffer<pipe>(a); }
+template <pipe_t pipe>
+AICORE inline void get_multiple(int a, int b) {
+    get_buffer<pipe>(a);
+    if (!bufid_collide(b, a)) get_buffer<pipe>(b);
+}
+template <pipe_t pipe>
+AICORE inline void get_multiple(int a, int b, int c) {
+    get_buffer<pipe>(a);
+    if (!bufid_collide(b, a)) get_buffer<pipe>(b);
+    if (!bufid_collide(c, a) && !bufid_collide(c, b)) get_buffer<pipe>(c);
+}
+template <pipe_t pipe>
+AICORE inline void rls_multiple(int a) { rls_buffer<pipe>(a); }
+template <pipe_t pipe>
+AICORE inline void rls_multiple(int a, int b) {
+    rls_buffer<pipe>(a);
+    if (!bufid_collide(b, a)) rls_buffer<pipe>(b);
+}
+template <pipe_t pipe>
+AICORE inline void rls_multiple(int a, int b, int c) {
+    rls_buffer<pipe>(a);
+    if (!bufid_collide(b, a)) rls_buffer<pipe>(b);
+    if (!bufid_collide(c, a) && !bufid_collide(c, b)) rls_buffer<pipe>(c);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Config 1: 2-buffer ping-pong, K_tile=16, 8KB B tile
 //   L1 IDs: 0-1 | L0 IDs: 2-3 | C_BUF_ID: 4
@@ -1369,13 +1427,11 @@ __global__ AICORE void RunCubeMatmulBNBufNSplitR(__gm__ outType *out, __gm__ inT
             int la_id = L0A_ID_BASE + (i % 2);
 
 #ifndef __PTO_AUTO__
-            get_buffer<PIPE_MTE1>(a_id);
-            get_buffer<PIPE_MTE1>(la_id);
+            get_multiple<PIPE_MTE1>(a_id, la_id);
 #endif
             TMOV(aL[i % 2], aView[s_a][i]);
 #ifndef __PTO_AUTO__
-            rls_buffer<PIPE_MTE1>(a_id);
-            rls_buffer<PIPE_MTE1>(la_id);
+            rls_multiple<PIPE_MTE1>(a_id, la_id);
 #endif
 
             for (int h = 0; h < N_HALVES; h++) {
@@ -1404,17 +1460,13 @@ __global__ AICORE void RunCubeMatmulBNBufNSplitR(__gm__ outType *out, __gm__ inT
 #ifndef __PTO_AUTO__
                 rls_buffer<PIPE_MTE2>(b_id);
 
-                get_buffer<PIPE_MTE1>(b_id);
-                get_buffer<PIPE_MTE1>(lb_id);
+                get_multiple<PIPE_MTE1>(b_id, lb_id);
 #endif
                 TMOV(bL[s_b], bM[s_b]);
 #ifndef __PTO_AUTO__
-                rls_buffer<PIPE_MTE1>(b_id);
-                rls_buffer<PIPE_MTE1>(lb_id);
+                rls_multiple<PIPE_MTE1>(b_id, lb_id);
 
-                get_buffer<PIPE_M>(la_id);
-                get_buffer<PIPE_M>(lb_id);
-                get_buffer<PIPE_M>(c_id);
+                get_multiple<PIPE_M>(la_id, lb_id, c_id);
 #endif
                 if (k_global == 0) {
                     TMATMUL(cTile[h], aL[i % 2], bL[s_b]);
@@ -1422,9 +1474,7 @@ __global__ AICORE void RunCubeMatmulBNBufNSplitR(__gm__ outType *out, __gm__ inT
                     TMATMUL_ACC(cTile[h], cTile[h], aL[i % 2], bL[s_b]);
                 }
 #ifndef __PTO_AUTO__
-                rls_buffer<PIPE_M>(la_id);
-                rls_buffer<PIPE_M>(lb_id);
-                rls_buffer<PIPE_M>(c_id);
+                rls_multiple<PIPE_M>(la_id, lb_id, c_id);
 #endif
             }
         }

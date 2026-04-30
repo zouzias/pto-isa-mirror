@@ -241,21 +241,36 @@ L0B  :  6+P .. 6+2P-1               (PIPE_MTE1 / PIPE_M)
 |------|----------|-----------|----------------|
 | `BNBuf_K16_N128_BL1_16_BL0_16_4KB_split2_pool13` | 16 | 13 | 1 (at flat=13)  |
 
-> **Note — `-DPTO_BUFID_HW_GT32` deadlocks `split2_pool13` with `N_BUFS_B=16`.**
+> **Note — `-DPTO_BUFID_HW_GT32` deadlocks `split2_pool13` with `N_BUFS_B=16`
+> *unless the dedup helpers below are used* (now the default).**
+>
 > With the macro defined the kernel allocates 38 distinct host buf-ids
 > (A 0-1, C 2-3, L0A 4-5, B 6-21, L0B 22-37). The `get_buffer`/`rls_buffer`
 > wrappers add `+32` to the asm operand, but instr-log evidence
 > (`bufId:0x13` in default-mode runs for host id 19, even with the +32
 > addend) shows the HW `GET_BUF`/`RLS_BUF` operand field is effectively
 > **5 bits** on this `dav-c310-cube` simulator. The `+32` is masked off,
-> and host L0B ids 32-37 wrap to asm ids 0-5, colliding with
-> A[0-1]/C[0-1]/L0A[0-1]. Producer/consumer counters fight on the same
-> physical id and the AIC deadlocks: in a confirmed run the popped log
-> stalled at cycle 4670 (852 entries) while the issue side stalled at
-> cycle 4730 (1047 entries) and the test never returned. Until the asm
-> field is widened to 6 bits (or the wrappers are reworked), do **not**
-> compile this kernel with `-DPTO_BUFID_HW_GT32`; keep the default
-> `BID_POOL_SIZE = min(N_BUFS_B, 13)` HW32 mode.
+> and host L0B ids 32-37 wrap to asm ids 0-5, aliasing A[0-1]/C[0-1]/L0A[0-1].
+> The actual deadlock trigger is **not** counter wrap but a *consecutive
+> same-pipe `get_buffer`/`rls_buffer` block on aliased ids*: e.g.
+> `get_buffer<PIPE_M>(la_id); get_buffer<PIPE_M>(lb_id); get_buffer<PIPE_M>(c_id);`
+> at `flat ∈ {12,13,15}` issues two GETs on the same physical counter,
+> doubling the consumer count on one id. Producer (RLS) and consumer (GET)
+> counts diverge across loop iterations and the CUBE pipe stalls — popped
+> log freezes at cycle 4670 (852 entries), issue side at cycle 4730
+> (1047 entries), test never returns.
+>
+> **Fix (default behaviour):** the `get_multiple<pipe>(...)` /
+> `rls_multiple<pipe>(...)` wrappers in the kernel skip any id that
+> collides on `id & 31` with an earlier id in the same call. Toggle with
+> `-DPTO_BUFID_DEDUP=0` to disable (legacy raw-issue mode, will hang
+> under GT32). Verified results:
+>
+> | Build flags | Result | Sim time |
+> |---|---|---|
+> | default (DEDUP=1, HW32) | PASSED | 76.6 ms |
+> | `-DPTO_BUFID_HW_GT32` (DEDUP=1) | PASSED | 69.0 ms |
+> | `-DPTO_BUFID_HW_GT32 -DPTO_BUFID_DEDUP=0` | hang at cycle 4670 | – |
 
 ### Config 9 — `RunCubeMatmulBL1Reuse` (8 KiB full-N B tile, L1 id reuse)
 
