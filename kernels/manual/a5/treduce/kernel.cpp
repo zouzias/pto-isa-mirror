@@ -136,12 +136,22 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     //     stores still update its memcpy buffer (explains readback delta)
     //     but never trip the hardware "set" → microcode never released.
     //
-    // Mask is placed in the LOW bytes of the slot (Layout A in host trigger
-    // sweep; matches `ClearCKEInstr` reading `waitCKEMask` as uint16_t).
-    // If 64-bit doesn't release either, drop to 32-bit and re-test by
-    // changing `uint64_t` to `uint32_t` on the next two lines.
-    *reinterpret_cast<__gm__ uint64_t *>(target) =
-        static_cast<uint64_t>(mask) & 0xFFFFULL;
+    // Mask is placed in the LOW 16 bits (Layout A in host trigger sweep;
+    // matches `ClearCKEInstr` reading `waitCKEMask` as uint16_t). The HIGH
+    // 32 bits carry a **diagnostic magic** so marker[3] readback can prove
+    // whether the 64-bit store actually landed (vs being silently truncated
+    // to a 16-bit store by some intermediate layer):
+    //   - 64-bit store really landed → marker[3] = 0xC0DECAFE_xxxxXXXX
+    //                                    (high magic visible in readback)
+    //   - 16-bit store path ran instead → marker[3] = 0x00000000_xxxxXXXX
+    //                                       (high bytes stay 0)
+    // If the CCU CKE register file rejects writes with non-zero "reserved"
+    // bits we'll see undefined behaviour or driver complaint — but the
+    // driver advertises len=8 so all 8 bytes are user-addressable, this
+    // should be safe.
+    const uint64_t kStoreMagic = 0xC0DECAFE00000000ULL;
+    const uint64_t storeValue = kStoreMagic | (static_cast<uint64_t>(mask) & 0xFFFFULL);
+    *reinterpret_cast<__gm__ uint64_t *>(target) = storeValue;
 
     if (m64 != nullptr) {
         // [6] post-store, PRE-barrier readback — does barrier matter at all?

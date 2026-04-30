@@ -74,6 +74,24 @@ set(CCE_OPTS
     "SHELL:-mllvm -cce-aicore-record-overflow=true"
     "SHELL:-mllvm -cce-aicore-addr-transform"
     "SHELL:-mllvm -cce-aicore-dcci-insert-for-scalar=false"
+    # ── DIAGNOSTIC F2 (64-bit store truncation investigation) — 2026-04-30 ─
+    # Marker dump from CP1 procType run shows marker[3] = 0x0001 with the
+    # high 32 bits = 0 (not 0xC0DECAFE). i.e. our 64-bit store of the form
+    #   *(__gm__ uint64_t *)target = 0xC0DECAFE_00000001ULL;
+    # left only the low 16 bits in readback. Two non-exclusive causes:
+    #   (a) bisheng/CCE codegen narrows the store to st.h (16-bit) because
+    #       it sees the target is a CCU MMIO slot and applies some
+    #       conservative width policy.
+    #   (b) the host-shared driver mmap backing this VA only honours the
+    #       low 16 bits and silently drops high 48 (matches the CP1 view
+    #       being a host shared mmap, not a per-die MMIO reg).
+    # `-save-temps=obj` makes bisheng emit `kernel.s` and `kernel.ll`
+    # alongside `kernel.cpp.o` so we can grep for the actual store
+    # instruction width emitted by codegen and discriminate (a) vs (b).
+    # If we see `st.d` (64-bit) → codegen is fine, truncation is in mmap →
+    # path is wrong, must change procType / API. If we see `st.h` (16-bit)
+    # → codegen narrowed it, need an inline-asm escape hatch to force 8B.
+    -save-temps=obj
     # ── HYPOTHESIS H5 (DebugTunnel printf deadlock) — 2026-04-29 ────────────
     # `--cce-enable-print` makes bisheng emit the launch thunk with an extra
     # `cce::internal::DebugTunnelData*` parameter, and the device-side printf
