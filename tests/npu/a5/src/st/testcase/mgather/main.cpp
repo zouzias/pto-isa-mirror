@@ -10,6 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "test_common.h"
 #include <gtest/gtest.h>
+#include <functional>
 #include "acl/acl.h"
 #include "mgather_common.h"
 
@@ -24,54 +25,18 @@ protected:
     {}
 };
 
-//#define DEBUG_PRINT
-
-#ifdef DEBUG_PRINT
-template <typename T>
-void PrintFirst20(const char *name, const T *data, size_t count)
-{
-    size_t n = std::min(count, static_cast<size_t>(20));
-    std::cout << "\n=== " << name << " (first " << n << " values) ===" << std::endl;
-    for (size_t i = 0; i < n; ++i) {
-        if constexpr (std::is_same_v<T, aclFloat16>) {
-            std::cout << std::setw(10) << aclFloat16ToFloat(data[i]);
-        } else {
-            std::cout << std::setw(10) << static_cast<float>(data[i]);
-        }
-        if ((i + 1) % 10 == 0)
-            std::cout << std::endl;
-    }
-    std::cout << std::endl;
-}
-#endif
-
-std::string GetGoldenDir()
+static std::string GetGoldenDir()
 {
     const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
-    const std::string caseName = testInfo->name();
-    std::string suiteName = testInfo->test_suite_name();
-    std::string fullPath = "../" + suiteName + "." + caseName;
-    return fullPath;
+    return std::string("../") + testInfo->test_suite_name() + "." + testInfo->name();
 }
 
-template <typename T, typename TIdx, int kTableRows, int kTableCols, int kOutRows, int kOutCols>
-void LaunchMGATHER(T *out, T *table, TIdx *indices, void *stream);
-
-template <int kTableRows, int kTableCols, int kOutRows, int kOutCols>
-void LaunchMGATHERHalf(aclFloat16 *out, aclFloat16 *table, int32_t *indices, void *stream);
-
-template <GatherOOB Mode, typename T, typename TIdx, int kTableRows, int kTableCols, int kOutRows, int kOutCols>
-void LaunchMGATHER_mode(T *out, T *table, TIdx *indices, void *stream);
-
-template <GatherOOB Mode, int kTableRows, int kTableCols, int kOutRows, int kOutCols>
-void LaunchMGATHERHalf_mode(aclFloat16 *out, aclFloat16 *table, int32_t *indices, void *stream);
-
-template <typename T, typename TIdx, int kTableRows, int kTableCols, int kOutRows, int kOutCols>
-void test_mgather()
+template <typename T, typename TIdx, typename Launcher>
+void run_mgather_test(size_t tableCount, size_t idxCount, size_t outCount, Launcher launcher)
 {
-    size_t tableByteSize = kTableRows * kTableCols * sizeof(T);
-    size_t outByteSize = kOutRows * kOutCols * sizeof(T);
-    size_t idxByteSize = kOutRows * kOutCols * sizeof(TIdx);
+    size_t tableByteSize = tableCount * sizeof(T);
+    size_t idxByteSize = idxCount * sizeof(TIdx);
+    size_t outByteSize = outCount * sizeof(T);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -97,11 +62,9 @@ void test_mgather()
     aclrtMemcpy(tableDevice, tableByteSize, tableHost, tableByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(idxDevice, idxByteSize, idxHost, idxByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    if constexpr (std::is_same<T, aclFloat16>::value) {
-        LaunchMGATHERHalf<kTableRows, kTableCols, kOutRows, kOutCols>(outDevice, tableDevice, idxDevice, stream);
-    } else {
-        LaunchMGATHER<T, TIdx, kTableRows, kTableCols, kOutRows, kOutCols>(outDevice, tableDevice, idxDevice, stream);
-    }
+    aclrtMemset(outDevice, outByteSize, 0, outByteSize);
+
+    launcher(outDevice, tableDevice, idxDevice, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(outHost, outByteSize, outDevice, outByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -119,165 +82,97 @@ void test_mgather()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(kOutRows * kOutCols);
-    std::vector<T> devFinal(kOutRows * kOutCols);
+    std::vector<T> golden(outCount);
+    std::vector<T> devFinal(outCount);
     ReadFile(GetGoldenDir() + "/golden.bin", outByteSize, golden.data(), outByteSize);
     ReadFile(GetGoldenDir() + "/output.bin", outByteSize, devFinal.data(), outByteSize);
 
-#ifdef DEBUG_PRINT
-    PrintFirst20("GOLDEN", golden.data(), golden.size());
-    PrintFirst20("OUTPUT", devFinal.data(), devFinal.size());
-#endif
-
-    bool ret = ResultCmp<T>(golden, devFinal, 0.001f);
+    bool ret = ResultCmp<T>(golden, devFinal, 0.0f);
     EXPECT_TRUE(ret);
 }
 
-TEST_F(MGATHERTest, case_half_16x64_8x32)
-{
-    test_mgather<aclFloat16, int32_t, 16, 64, 8, 32>();
-}
+#define DECLARE_LAUNCH(NAME, THOST, TIDX) void Launch_##NAME(THOST *out, THOST *table, TIDX *indices, void *stream);
 
-TEST_F(MGATHERTest, case_half_16x128_8x64)
-{
-    test_mgather<aclFloat16, int32_t, 16, 128, 8, 64>();
-}
+DECLARE_LAUNCH(row_float_8x32_64rows, float, int32_t)
+DECLARE_LAUNCH(row_half_16x64_64rows, aclFloat16, int32_t)
+DECLARE_LAUNCH(row_int32_8x16_32rows, int32_t, int32_t)
+DECLARE_LAUNCH(row_uint8_8x32_32rows, uint8_t, int32_t)
+DECLARE_LAUNCH(row_int16_8x16_32rows, int16_t, int32_t)
+DECLARE_LAUNCH(row_float_clamp_8x32_8rows, float, int32_t)
+DECLARE_LAUNCH(row_int32_wrap_8x16_8rows, int32_t, int32_t)
+DECLARE_LAUNCH(row_half_zero_8x32_8rows, aclFloat16, int32_t)
 
-TEST_F(MGATHERTest, case_half_32x128_16x64)
-{
-    test_mgather<aclFloat16, int32_t, 32, 128, 16, 64>();
-}
+DECLARE_LAUNCH(row_colidx_float_8x32_64rows, float, int32_t)
+DECLARE_LAUNCH(row_colidx_int32_clamp_8x16_8rows, int32_t, int32_t)
+DECLARE_LAUNCH(row_colidx_half_16x64_64rows, aclFloat16, int32_t)
 
-TEST_F(MGATHERTest, case_half_16x256_8x128)
-{
-    test_mgather<aclFloat16, int32_t, 16, 256, 8, 128>();
-}
+DECLARE_LAUNCH(elem_float_64_128size, float, int32_t)
+DECLARE_LAUNCH(elem_half_64_128size, aclFloat16, int32_t)
+DECLARE_LAUNCH(elem_int32_32_64size, int32_t, int32_t)
+DECLARE_LAUNCH(elem_uint8_64_128size, uint8_t, int32_t)
+DECLARE_LAUNCH(elem_int16_32_64size, int16_t, int32_t)
+DECLARE_LAUNCH(elem_float_clamp_32_16size, float, int32_t)
+DECLARE_LAUNCH(elem_int32_wrap_32_16size, int32_t, int32_t)
+DECLARE_LAUNCH(elem_half_zero_32_16size, aclFloat16, int32_t)
 
-TEST_F(MGATHERTest, case_half_64x64_32x32)
-{
-    test_mgather<aclFloat16, int32_t, 64, 64, 32, 32>();
-}
+DECLARE_LAUNCH(elem2d_float_8x32_256size, float, int32_t)
+DECLARE_LAUNCH(elem2d_int32_8x16_256size, int32_t, int32_t)
+DECLARE_LAUNCH(elem2d_half_4x32_256size, aclFloat16, int32_t)
+DECLARE_LAUNCH(elem2d_int32_unaligned_3x8_64size, int32_t, int32_t)
+DECLARE_LAUNCH(elem2d_uint8_unaligned_3x32_256size, uint8_t, int32_t)
+DECLARE_LAUNCH(elem2d_int32_unaligned_3x3_in_3x8_64size, int32_t, int32_t)
+DECLARE_LAUNCH(elem2d_int32_unaligned_9x9_in_9x16_256size, int32_t, int32_t)
+DECLARE_LAUNCH(elem2d_int32_scalar_1x1_in_1x8_8size, int32_t, int32_t)
+DECLARE_LAUNCH(row_int32_unaligned_3x8_8rows, int32_t, int32_t)
+DECLARE_LAUNCH(row_int32_unaligned_9x16_16rows, int32_t, int32_t)
 
-TEST_F(MGATHERTest, case_float_8x64_4x32)
-{
-    test_mgather<float, int32_t, 8, 64, 4, 32>();
-}
-
-TEST_F(MGATHERTest, case_float_16x64_8x32)
-{
-    test_mgather<float, int32_t, 16, 64, 8, 32>();
-}
-
-TEST_F(MGATHERTest, case_float_32x64_16x32)
-{
-    test_mgather<float, int32_t, 32, 64, 16, 32>();
-}
-
-TEST_F(MGATHERTest, case_float_16x16_8x8)
-{
-    test_mgather<float, int32_t, 16, 16, 8, 8>();
-}
-
-TEST_F(MGATHERTest, case_int32_8x32_4x16)
-{
-    test_mgather<int32_t, int32_t, 8, 32, 4, 16>();
-}
-
-TEST_F(MGATHERTest, case_int32_16x64_8x32)
-{
-    test_mgather<int32_t, int32_t, 16, 64, 8, 32>();
-}
-
-TEST_F(MGATHERTest, case_int32_32x32_16x16)
-{
-    test_mgather<int32_t, int32_t, 32, 32, 16, 16>();
-}
-
-TEST_F(MGATHERTest, case_uint8_16x64_8x32)
-{
-    test_mgather<uint8_t, int32_t, 16, 64, 8, 32>();
-}
-
-TEST_F(MGATHERTest, case_uint8_32x64_16x32)
-{
-    test_mgather<uint8_t, int32_t, 32, 64, 16, 32>();
-}
-
-template <GatherOOB Mode, typename T, typename TIdx, int kTableRows, int kTableCols, int kOutRows, int kOutCols>
-void test_mgather_mode()
-{
-    size_t tableByteSize = kTableRows * kTableCols * sizeof(T);
-    size_t outByteSize = kOutRows * kOutCols * sizeof(T);
-    size_t idxByteSize = kOutRows * kOutCols * sizeof(TIdx);
-
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-
-    T *tableHost, *outHost;
-    TIdx *idxHost;
-    T *tableDevice, *outDevice;
-    TIdx *idxDevice;
-
-    aclrtMallocHost((void **)(&tableHost), tableByteSize);
-    aclrtMallocHost((void **)(&idxHost), idxByteSize);
-    aclrtMallocHost((void **)(&outHost), outByteSize);
-
-    aclrtMalloc((void **)&tableDevice, tableByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&idxDevice, idxByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&outDevice, outByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    ReadFile(GetGoldenDir() + "/table.bin", tableByteSize, tableHost, tableByteSize);
-    ReadFile(GetGoldenDir() + "/indices.bin", idxByteSize, idxHost, idxByteSize);
-
-    aclrtMemcpy(tableDevice, tableByteSize, tableHost, tableByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(idxDevice, idxByteSize, idxHost, idxByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
-
-    if constexpr (std::is_same<T, aclFloat16>::value) {
-        LaunchMGATHERHalf_mode<Mode, kTableRows, kTableCols, kOutRows, kOutCols>(outDevice, tableDevice, idxDevice,
-                                                                                 stream);
-    } else {
-        LaunchMGATHER_mode<Mode, T, TIdx, kTableRows, kTableCols, kOutRows, kOutCols>(outDevice, tableDevice, idxDevice,
-                                                                                      stream);
+#define ROW_TEST(NAME, THOST, TIDX, R, C, TR)                                                   \
+    TEST_F(MGATHERTest, case_##NAME)                                                            \
+    {                                                                                           \
+        run_mgather_test<THOST, TIDX>((size_t)TR * C, (size_t)R, (size_t)R * C, Launch_##NAME); \
     }
 
-    aclrtSynchronizeStream(stream);
-    aclrtMemcpy(outHost, outByteSize, outDevice, outByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
+#define ELEM_TEST(NAME, THOST, TIDX, N, TS)                                             \
+    TEST_F(MGATHERTest, case_##NAME)                                                    \
+    {                                                                                   \
+        run_mgather_test<THOST, TIDX>((size_t)TS, (size_t)N, (size_t)N, Launch_##NAME); \
+    }
 
-    WriteFile(GetGoldenDir() + "/output.bin", outHost, outByteSize);
+#define ELEM2D_TEST(NAME, THOST, TIDX, R, C, TS)                                                \
+    TEST_F(MGATHERTest, case_##NAME)                                                            \
+    {                                                                                           \
+        run_mgather_test<THOST, TIDX>((size_t)TS, (size_t)R * C, (size_t)R * C, Launch_##NAME); \
+    }
 
-    aclrtFree(tableDevice);
-    aclrtFree(idxDevice);
-    aclrtFree(outDevice);
+ROW_TEST(row_float_8x32_64rows, float, int32_t, 8, 32, 64)
+ROW_TEST(row_half_16x64_64rows, aclFloat16, int32_t, 16, 64, 64)
+ROW_TEST(row_int32_8x16_32rows, int32_t, int32_t, 8, 16, 32)
+ROW_TEST(row_uint8_8x32_32rows, uint8_t, int32_t, 8, 32, 32)
+ROW_TEST(row_int16_8x16_32rows, int16_t, int32_t, 8, 16, 32)
+ROW_TEST(row_float_clamp_8x32_8rows, float, int32_t, 8, 32, 8)
+ROW_TEST(row_int32_wrap_8x16_8rows, int32_t, int32_t, 8, 16, 8)
+ROW_TEST(row_half_zero_8x32_8rows, aclFloat16, int32_t, 8, 32, 8)
 
-    aclrtFreeHost(tableHost);
-    aclrtFreeHost(idxHost);
-    aclrtFreeHost(outHost);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
+ROW_TEST(row_colidx_float_8x32_64rows, float, int32_t, 8, 32, 64)
+ROW_TEST(row_colidx_int32_clamp_8x16_8rows, int32_t, int32_t, 8, 16, 8)
+ROW_TEST(row_colidx_half_16x64_64rows, aclFloat16, int32_t, 16, 64, 64)
 
-    std::vector<T> golden(kOutRows * kOutCols);
-    std::vector<T> devFinal(kOutRows * kOutCols);
-    ReadFile(GetGoldenDir() + "/golden.bin", outByteSize, golden.data(), outByteSize);
-    ReadFile(GetGoldenDir() + "/output.bin", outByteSize, devFinal.data(), outByteSize);
+ELEM_TEST(elem_float_64_128size, float, int32_t, 64, 128)
+ELEM_TEST(elem_half_64_128size, aclFloat16, int32_t, 64, 128)
+ELEM_TEST(elem_int32_32_64size, int32_t, int32_t, 32, 64)
+ELEM_TEST(elem_uint8_64_128size, uint8_t, int32_t, 64, 128)
+ELEM_TEST(elem_int16_32_64size, int16_t, int32_t, 32, 64)
+ELEM_TEST(elem_float_clamp_32_16size, float, int32_t, 32, 16)
+ELEM_TEST(elem_int32_wrap_32_16size, int32_t, int32_t, 32, 16)
+ELEM_TEST(elem_half_zero_32_16size, aclFloat16, int32_t, 32, 16)
 
-    bool ret = ResultCmp<T>(golden, devFinal, 0.001f);
-    EXPECT_TRUE(ret);
-}
-
-TEST_F(MGATHERTest, case_float_clamp_16x64_8x32)
-{
-    test_mgather_mode<GatherOOB::Clamp, float, int32_t, 16, 64, 8, 32>();
-}
-
-TEST_F(MGATHERTest, case_int32_wrap_16x64_8x32)
-{
-    test_mgather_mode<GatherOOB::Wrap, int32_t, int32_t, 16, 64, 8, 32>();
-}
-
-TEST_F(MGATHERTest, case_half_zero_16x64_8x32)
-{
-    test_mgather_mode<GatherOOB::Zero, aclFloat16, int32_t, 16, 64, 8, 32>();
-}
+ELEM2D_TEST(elem2d_float_8x32_256size, float, int32_t, 8, 32, 256)
+ELEM2D_TEST(elem2d_int32_8x16_256size, int32_t, int32_t, 8, 16, 256)
+ELEM2D_TEST(elem2d_half_4x32_256size, aclFloat16, int32_t, 4, 32, 256)
+ELEM2D_TEST(elem2d_int32_unaligned_3x8_64size, int32_t, int32_t, 3, 8, 64)
+ELEM2D_TEST(elem2d_uint8_unaligned_3x32_256size, uint8_t, int32_t, 3, 32, 256)
+ELEM2D_TEST(elem2d_int32_unaligned_3x3_in_3x8_64size, int32_t, int32_t, 3, 3, 64)
+ELEM2D_TEST(elem2d_int32_unaligned_9x9_in_9x16_256size, int32_t, int32_t, 9, 9, 256)
+ELEM2D_TEST(elem2d_int32_scalar_1x1_in_1x8_8size, int32_t, int32_t, 1, 1, 8)
+ROW_TEST(row_int32_unaligned_3x8_8rows, int32_t, int32_t, 3, 8, 8)
+ROW_TEST(row_int32_unaligned_9x16_16rows, int32_t, int32_t, 9, 16, 16)
