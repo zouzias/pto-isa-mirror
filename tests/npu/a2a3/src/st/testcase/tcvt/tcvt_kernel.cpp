@@ -50,7 +50,6 @@ __global__ AICORE void runTCVT(__gm__ T *out, __gm__ S *src)
         TRESHAPE(srcTile, srcTileFull);
         TRESHAPE(dstTile, dstTileFull);
 
-
         TLOAD(srcTileFull, srcGlobal);
 
 #ifndef __PTO_AUTO__
@@ -194,7 +193,6 @@ __global__ AICORE void runTCVT_fp16_to_s4(__gm__ uint8_t *out, __gm__ half *src)
     TASSIGN(dstBytesTile, 0x20000); // alias to same UB address as dstS4Tile
     TRESHAPE(dstBytesTile, dstS4Tile);
 
-
     TLOAD(srcTile, srcGlobal);
 
 #ifndef __PTO_AUTO__
@@ -219,7 +217,7 @@ void launchTCVT_fp16_to_s4(uint8_t *dst, aclFloat16 *src, void *stream)
 }
 
 #define INSTANTIATE_TCVT_FP16_TO_S4(gR, gC, tR, tC) \
-    template void launchTCVT_fp16_to_s4<gR, gC, tR, tC>(uint8_t * dst, aclFloat16 * src, void *stream);
+    template void launchTCVT_fp16_to_s4<gR, gC, tR, tC>(uint8_t *dst, aclFloat16 *src, void *stream);
 
 INSTANTIATE_TCVT_FP16_TO_S4(1, 64, 1, 64)
 INSTANTIATE_TCVT_FP16_TO_S4(1, 128, 1, 128)
@@ -283,7 +281,7 @@ void launchTCVT_s4_to_fp16(aclFloat16 *dst, uint8_t *src, void *stream)
 }
 
 #define INSTANTIATE_TCVT_S4_TO_FP16(gR, gC, tR, tC) \
-    template void launchTCVT_s4_to_fp16<gR, gC, tR, tC>(aclFloat16 * dst, uint8_t * src, void *stream);
+    template void launchTCVT_s4_to_fp16<gR, gC, tR, tC>(aclFloat16 * dst, uint8_t *src, void *stream);
 
 INSTANTIATE_TCVT_S4_TO_FP16(1, 64, 1, 64)
 INSTANTIATE_TCVT_S4_TO_FP16(1, 128, 1, 128)
