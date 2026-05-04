@@ -1,105 +1,179 @@
-# Indexer（MXFP8 GEMM → ReLU → scale → reduce → TopK）規格
+# Indexer 开发与定位记录（MXFP8 GEMM -> ReLU -> scale -> reduce -> TopK）
 
-依先前共識整理：**單核優先**；GEMM 對齊 **`kernels/manual/a5/matmul_mxfp8_performance`** 的 **`TMATMUL_MX`** 與資料/scale 佈局。
-
----
-
-## 1. 端到端資料流
-
-| 步驟 | 運算 | 備註 |
-|------|------|------|
-| 1 | **MXFP8 `TMATMUL_MX`** | 輸出 **bf16** `C`，與 demo 一致 |
-| 2 | **ReLU** | 對 `C` elementwise（Vec） |
-| 3 | **× scale** | `scale` 形狀 **`[2, 64, 1]`**，廣播到 `L` |
-| 4 | **Reduce sum** | 對 **head 維（dim=1）** 求和 → `[2, L]` |
-| 5 | **TopK** | `k=2048`，沿 `L` → **indices `[2, 2048]`** |
-
-其中 **`L = 131072`**，`Q` 為 **`[2, 64, 128]`**，`K` 為 **`[131072, 128]`**。
+本文档记录 `kernels/manual/a5/indexer` 从需求对齐到当前可运行状态的完整过程，重点覆盖：
+- 目标算子定义
+- 代码结构演进
+- 关键编译/运行问题与修复
+- TopK 定位结论与当前状态
 
 ---
 
-## 2. GEMM 與 demo 維度對齊（`C = A×B`，MX 版）
+## 1) 目标与规格
 
-與 **`matmul_mxfp8_performance/README_zh.md`** 一致：
+目标实现「真实 Lighting Indexer」流程：
 
-- 數學：**`C = (scaleA ⊗ A) × (scaleB ⊗ B)`**（`⊗` 為按 MX 規則的塊縮放，**`k` 維每 32 列一組 scale**）。
-- **Data**
-  - **`A`**：`m×k`，FP8 **ND**（e5m2 等，以實際為準）。
-  - **`B`**：儲存為 **`n×k`** **ND**（與「數學上的 `k×n`」對應同一組元素，**demo 與 `main.cpp` 中 `bFileSize = k*n`** 一致；實作時以 **`mxmatmul_performance_kernel.cpp`** 與 **`gen_data.py`** 為準）。
-- **Scale**
-  - **`scaleA`**：`m × (k/32)`（kernel 內 **`SCALE_FACTOR = 32`**）。
-  - **`scaleB`**：`(k/32) × n`（README 表為 **`n×scaleK`**，`scaleK = k/32`）。
+1. `Q[2,64,128] x K[131072,128]`（MXFP8 GEMM）
+2. `ReLU`
+3. 乘 `post_scale[2,64]`（按 head 广播）
+4. 沿 head 维 `reduce_sum`，得到 `score[2,131072]`
+5. TopK（`K=2048`，仅输出 index，`uint32`）
 
-本 Indexer 取 **`k = 128`** → **`scaleK = 128/32 = 4`**。
-
----
-
-## 3. 把 `Q`、`K` 映到 `m, k, n`
-
-數學上要算的是（單個 batch）：
-
-\[
-\text{scores}[h, \ell] = \sum_{d=0}^{127} Q[h,d]\, K[\ell,d]
-\quad\Rightarrow\quad
-C = Q \times K^\top
-\]
-
-即 **`A = Q`** 為 **`m×k = 64×128`**，**`B = K`** 在矩乘裡充當 **`k×n`** 時，**`n = 131072`**。
-
-因此：
-
-| 角色 | 形狀 | 說明 |
-|------|------|------|
-| **A（左側）** | **64 × 128** | 單個 batch 的 `Q[b]` |
-| **B（右側）** | **128 × 131072** | `K` 的語義（`K` GM 可為 `[131072,128]` 行主序，與 **`k×n`** 一致） |
-| **C** | **64 × 131072** | 單 batch 的 bf16 分數 |
-
-**`batch = 2`** 的兩種實作選型（建議先簡單後優化）：
-
-1. **兩次 launch（易對 golden）**  
-   - `b=0`：`A = Q[0]`，`C₀` 為 `[64, 131072]`。  
-   - `b=1`：`A = Q[1]`，`C₁` 同形。  
-   - 拼成 **`[2, 64, 131072]`** 再送 Vec。
-
-2. **一次 launch（m 維合併）**  
-   - **`A`**：**`128 × 128`**，上塊 64 行為 `Q[0]`，下塊 64 行為 `Q[1]`。  
-   - **`scaleA`**：**`128 × 4`**（`m=128`）。  
-   - **`C`**：**`128 × 131072`**，再切成兩個 **`64 × 131072`**。
-
-**Scale 張量形狀（與 demo 一致）**
-
-- **`scaleA`**：`m × 4`（例如 **`64×4`** 或 **`128×4`**）。  
-- **`scaleB`**：**`4 × 131072`**（`(k/32)×n`）。
+补充约束：
+- `post_scale` 允许负值
+- TopK 允许非稳定 tie-break（算法层面）
+- host 侧最初使用 deterministic 规则做黄金对比（`key desc, idx asc`）
 
 ---
 
-## 4. MXFP8 與「後處理 scale `[2,64,1]`」的分工
+## 2) 代码落地总览
 
-- **MXFP8 的 `scaleA` / `scaleB`**：塊指數/縮放，**在 `TMATMUL_MX` 內**與 FP8 資料一起參與乘加，輸出 **bf16**。  
-- **使用者給的 `scale [2,64,1]`**：作用在 **bf16 分數上**（ReLU 之後），語意獨立；**不要**與 MX 的 `scaleA/B` 混成同一個張量，除非你做過嚴格數學等價證明。
+核心文件：
+- `kernels/manual/a5/indexer/indexer_mxfp8_kernel.cpp`
+- `kernels/manual/a5/indexer/main.cpp`
+- `kernels/manual/a5/indexer/scripts/gen_data.py`
+- `kernels/manual/a5/indexer/scripts/radix_topk_golden_stats_bf16.py`
+
+功能拆分：
+- `LaunchIndexerMatmul`：GEMM 阶段
+- `LaunchIndexerPostProcess`：ReLU + scale + reduce_sum（AIV）
+- `LaunchIndexerTopK`：TopK 阶段
+- `LaunchIndexerMxfp8`：全流程串接
+
+`main.cpp` 支持按阶段运行：
+- `./indexer_mxfp8 1`：matmul
+- `./indexer_mxfp8 2`：postprocess
+- `./indexer_mxfp8 3`：topk
+- `./indexer_mxfp8`：all
 
 ---
 
-## 5. 實作順序建議
+## 3) 开发演进（按问题驱动）
 
-1. 跑通 **`matmul_mxfp8_performance`**（`scripts/gen_data.py` + `run.sh`），對齊本機 **GM bin 佈局**與 **`TMATMUL_MX`**。  
-2. 把 **`gen_data.py`** 的維度改成 **`m∈{64,128}, k=128, n=131072`**，生成 **`scaleA` / `scaleB`** 與 golden（或先用 PyTorch/CPU 參考）。  
-3. Kernel 輸出 bf16 **`C`** 後，在 **Vec** 上接：**ReLU → × `[2,64,1]` → sum over head → TopK(2048)**（可重用 **`topk_ub`** 類思路，鍵類型需按 bf16 分數重選）。
+### 3.1 基础打通阶段
 
-### 5.1 本地跑 A5 sim（實測備註）
+- 先完成 MXFP8 matmul 基础路径，参考 `matmul_mxfp8_performance`。
+- 将后处理从 host 搬到 device（AIV），并输出 `score` 与 `score_bf16`。
+- 将 TopK 接入到 device kernel，输出 `output_idx.bin`。
 
-| 步驟 | 結果（本倉庫一次實跑） |
-|------|-------------------------|
-| `python3 scripts/gen_data.py`（在 `matmul_mxfp8_performance/`） | **需依賴 `ml_dtypes`**；可用倉庫根目錄 `python3 -m venv .venv` + `pip install ml_dtypes numpy` 後再執行。 |
-| `bash run.sh -r sim -v Ascend910_9599` | **編譯失敗**：`bisheng` 編譯 **`*_kernel.cpp`** 時，`pto/npu/a5/TRowReduce.hpp` → `<cmath>` → 系統 **`math-vector.h`**，在 **aarch64 主機**上出現 **`__neon_vector_type__` is not supported on targets missing 'neon'**（同類錯誤見 **`tests/script/run_st.py -r sim -v a5 -t tmatmul`**）。 |
-| 替代 | 在 **x86_64** 或官方推薦的 **CANN 交叉編譯 / 仿真環境** 跑 A5 sim；或先跑 **`python3 tests/run_cpu.py --clean`** 驗證 **CPU 模擬器**（覆蓋通用 `tmatmul`/`tquant` 等，**非** AICore `TMATMUL_MX` 真路徑）。 |
+### 3.2 关键正确性问题与修复
+
+1. **输入/输出尺寸不一致**
+   - 现象：`file size larger than buffer size`
+   - 修复：统一 `M/N/TopK` 配置，重生数据，修正 host 端 file size 计算。
+
+2. **TLOAD/TSTORE 与向量计算同步问题**
+   - 现象：中间结果全 0 或明显错误
+   - 修复：在关键点补 `set_flag/wait_flag` 反向依赖与管线同步。
+
+3. **TopK scalar 版本卡死/行为异常**
+   - 修复：重构成 5-phase PTO 风格实现，参考 `topk_ub`。
+
+4. **`TCVT` 编译失败（`TypeGet<__bf16>` / `vlds`）**
+   - 触发点：在当前 mixed 编译配置里直接走 `TCVT.hpp`
+   - 处理：
+     - `TopKFromScoreKernel` 和 `TCvt.hpp` 相关路径改为 `__DAV_VEC__` 下编译
+     - 非 vec 路径提供 stub，避免链接/符号缺失
+   - 结论：该问题本质是编译路径与 `TCVT` 类型支持不匹配，不是 TopK 算法逻辑错误。
+
+5. **大 N 下 UB 越界**
+   - 现象：`ub_addr_overflow`，例如访问到 `0x40000` 以上
+   - 根因：TopK kernel 使用了 `1 x kLength` 的大 tile UB 映射，小 N 思路直接套到 `N=131072`
+   - 处理：调回小 N smoke（`N=1024, TopK=512`）继续定位算法正确性。
+
+### 3.3 TopK 关键重构点
+
+- 输入改为 `bf16` key 路线（`score_bf16`）
+- 增加 ordered-key 映射：
+  - 负数：`~bits`
+  - 非负：`bits ^ 0x8000`
+  - 指令：`TNOT + TXORS + TCMPS + TSEL`
+- 5-phase 流程：
+  1. `THISTOGRAM(BYTE_1)`（MSB）
+  2. 选 MSB winner + remainK
+  3. `THISTOGRAM(BYTE_0)`（在 winner-MSB 条件下）
+  4. 选 LSB winner，拼阈值（`TSHLS + TOR`）
+  5. `TGATHER(GT/EQ) + TCONCAT + TSTORE`
 
 ---
 
-## 6. 相關路徑
+## 4) 定位方法与证据链
 
-| 路徑 | 內容 |
-|------|------|
-| `kernels/manual/a5/matmul_mxfp8_performance/` | MXFP8 GEMM 參考實作 |
-| `include/pto/npu/a5/TQuant.hpp` | `TQUANT` MXFP8 |
-| `kernels/manual/a5/topk_ub/` | TopK 手動範例（維度與本規格不同，僅供思路） |
+主要日志：
+- `build/core0.biu.bwif.wr_log.dump`
+- `build/core0.veccore0.ub.wr_log.dump`
+- `build/core0.veccore0.ub.rd_log.dump`
+- `build/core0.veccore0.rvec_pv.dump`
+- `build/core0.veccore0.instr_log.dump`
+
+辅助脚本：
+- `scripts/radix_topk_golden_stats_bf16.py`
+  - 用 `golden_score.bin` 推导 BF16 ordered key
+  - 输出 MSB/LSB winner、remainK、packed_threshold、GT/EQ 索引集合
+
+关键定位结论：
+- `bwif.wr_log` 与 `radix_topk_golden_stats_bf16.py` 对齐，说明前半段 radix 决策链条正确。
+- `topk multiset` 通过而 `topk idx` 失败，说明问题集中在 index 输出顺序（而非阈值/样本集合错误）。
+
+---
+
+## 5) Host 对比逻辑演进
+
+文件：`main.cpp`
+
+现状：
+1. 先做原始 `idx` 逐元素比较（deterministic）
+2. 若失败，再按 batch 内排序后比较集合
+
+新增输出语义：
+- `topk idx order differs, but sorted idx set matches`
+
+这用于区分：
+- 算法集合正确但顺序不同（目前状态）
+- 真正选错索引集合
+
+---
+
+## 6) 当前状态（最新）
+
+当前 smoke 配置：
+- `INDEXER_TEST_N=1024`
+- `INDEXER_TOPK=512`
+- `batch=2`
+
+运行 `process 3` 结果：
+- `topk multiset test success`
+- `topk idx order differs, but sorted idx set matches`
+
+结论：
+- TopK 样本集合与 golden 一致
+- 顺序与 deterministic golden 不一致（属于 tie/order 规则差异）
+
+---
+
+## 7) 后续建议
+
+1. 若业务允许 non-deterministic tie-break：
+   - 保留“集合一致”为通过标准
+2. 若必须与 deterministic golden 完全一致：
+   - 在 kernel 末段对 `GT/EQ` 合并后的索引做稳定排序规则对齐（`key desc, idx asc`）
+3. 若要回到大 N（131072）：
+   - TopK 必须改为 chunk/stream UB 方案，不能继续使用 `1 x kLength` 大 tile 直铺 UB
+
+---
+
+## 8) 常用命令
+
+在 `kernels/manual/a5/indexer`：
+
+```bash
+# 生成小 N 数据
+INDEXER_TEST_N=1024 INDEXER_TOPK=512 ../../../../.venv-indexer-sim/bin/python scripts/gen_data.py
+
+# 运行 topk-only
+source /usr/local/Ascend/cann_9b2/cann/set_env.sh
+export LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/Ascend910_9599/lib:$LD_LIBRARY_PATH
+./build/indexer_mxfp8 3
+
+# 打印 BF16 radix 黄金统计
+INDEXER_TEST_N=1024 INDEXER_TOPK=512 python3 scripts/radix_topk_golden_stats_bf16.py
+```

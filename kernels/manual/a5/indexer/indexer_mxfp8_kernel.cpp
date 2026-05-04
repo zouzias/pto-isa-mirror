@@ -9,10 +9,27 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 #include <pto/common/constants.hpp>
+#include <pto/common/debug.h>
 #include <pto/common/fifo.hpp>
+#include <pto/npu/a5/TCmps.hpp>
+#include <pto/npu/a5/TConcat.hpp>
+#ifdef __DAV_VEC__
+#include <pto/npu/a5/TCvt.hpp>
+#endif
+#include <pto/npu/a5/TGather.hpp>
+#include <pto/npu/a5/THistogram.hpp>
+#include <pto/npu/a5/Tci.hpp>
+#include <pto/npu/a5/TSels.hpp>
 #include <pto/pto-inst.hpp>
 
 using namespace pto;
+
+#ifndef INDEXER_TEST_N
+#define INDEXER_TEST_N 1024
+#endif
+#ifndef INDEXER_TOPK
+#define INDEXER_TOPK 512
+#endif
 
 // FA-style AIC / AIV split (see kernels/manual/a5/flash_atten/fa_performance_kernel.cpp); enabled when built with
 // dav-c310 + REGISTER_BASE as in tests/npu/a5 pto_mix_st and this directory's CMakeLists.
@@ -242,10 +259,10 @@ AICORE inline void IndexerAic_StoreTpushToCvFifo(ResTile &cTile, CvOutPipeT &cvP
     }
 }
 
-// AIV: wait / TPOP to Vec UB, scale, GM store, release FIFO. Matches FA vector-side TPOP from qkPipe / softmax output.
+// AIV: wait / TPOP to Vec UB, GM store, release FIFO. Matches FA vector-side TPOP from qkPipe / softmax output.
 template <int m, int n, uint32_t baseM, uint32_t baseN, typename VecF, typename CvOutPipeT>
-AICORE inline void IndexerAiv_StoreTpopMulsTstore(__gm__ float *currentDst, uint32_t i, uint32_t j, VecF &vecForStore,
-                                                   CvOutPipeT &cvPipe)
+AICORE inline void IndexerAiv_StoreTpopTstore(__gm__ float *currentDst, uint32_t i, uint32_t j, VecF &vecForStore,
+                                               CvOutPipeT &cvPipe)
 {
     if constexpr (DAV_VEC) {
         // V1C1_VEC0 mode: vec1 should only participate in FIFO handshake.
@@ -267,8 +284,6 @@ AICORE inline void IndexerAiv_StoreTpopMulsTstore(__gm__ float *currentDst, uint
         cvPipe.cons.setFreeStatus(false);
         cvPipe.cons.setEntryOffset(0);
         TPOP(vecForStore, cvPipe);
-        constexpr float kHalf = 0.5f;
-        TMULS(vecForStore, vecForStore, kHalf);
         // Ensure MTE3 GM store consumes vec buffer before FIFO free/next TPUSH overwrite.
         set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
         wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -293,7 +308,7 @@ AICORE inline void StoreResultWithCvPipe(ResTile &cTile, __gm__ float *currentDs
         IndexerAic_StoreTpushToCvFifo(cTile, cvPipe);
     }
     if constexpr (DAV_VEC) {
-        IndexerAiv_StoreTpopMulsTstore<m, n, baseM, baseN>(currentDst, i, j, vecForStore, cvPipe);
+        IndexerAiv_StoreTpopTstore<m, n, baseM, baseN>(currentDst, i, j, vecForStore, cvPipe);
     }
 
     if constexpr (DAV_CUBE) {
@@ -469,8 +484,12 @@ template <uint32_t blockDim, uint32_t m, uint32_t k, uint32_t n, uint32_t single
           uint32_t singleCoreN, uint32_t baseM, uint32_t baseK, uint32_t baseN, uint32_t stepM, uint32_t stepKa,
           uint32_t stepKb, uint32_t stepN>
 __global__ AICORE void MxMatmulPerformance(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1,
-                                           __gm__ uint8_t *src2, __gm__ uint8_t *src3)
+                                           __gm__ uint8_t *src2, __gm__ uint8_t *src3, __gm__ float *postScale,
+                                           __gm__ float *scoreOut, __gm__ uint32_t *outIdx)
 {
+    (void)postScale;
+    (void)scoreOut;
+    (void)outIdx;
     RunMxMatmul<float, float8_e5m2_t, float8_e8m0_t, blockDim, m, k, n, singleCoreM, singleCoreK, singleCoreN, baseM,
                 baseK, baseN, stepM, stepKa, stepKb, stepN>(reinterpret_cast<__gm__ float *>(out),
                                                             reinterpret_cast<__gm__ float8_e5m2_t *>(src0),
@@ -479,16 +498,486 @@ __global__ AICORE void MxMatmulPerformance(__gm__ uint8_t *out, __gm__ uint8_t *
                                                             reinterpret_cast<__gm__ float8_e8m0_t *>(src3));
 }
 
-void LaunchIndexerMxfp8(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, uint8_t *src3, void *stream)
+template <uint32_t kBatch, uint32_t kHeads, uint32_t kLength>
+__global__ AICORE void PostProcessScoreKernel(__gm__ float *matmulOut, __gm__ float *postScale, __gm__ float *scoreOut,
+                                              __gm__ uint16_t *scoreOutBf16)
 {
-    // A: [512,1024], B (layout as demo DN k×n): [1024,512] → C: [512,512]; single core, f32 out = 0.5 * MX matmul.
+    if constexpr (!DAV_VEC) {
+        return;
+    }
+    if (get_subblockid() != 0 || get_block_idx() != 0) {
+        return;
+    }
+
+    constexpr uint32_t kChunkCols = 128;
+    constexpr uint32_t kReduceTmpRows = (kHeads + 1) / 2;
+    constexpr uint64_t kUbMat = 0x20000;
+    constexpr uint64_t kUbScale = kUbMat + static_cast<uint64_t>(kHeads) * kChunkCols * sizeof(float);
+    constexpr uint64_t kUbWeighted = kUbScale + static_cast<uint64_t>(kHeads) * sizeof(float);
+    constexpr uint64_t kUbReduceTmp = kUbWeighted + static_cast<uint64_t>(kHeads) * kChunkCols * sizeof(float);
+    constexpr uint64_t kUbScore = kUbReduceTmp + static_cast<uint64_t>(kReduceTmpRows) * kChunkCols * sizeof(float);
+    constexpr uint64_t kUbScoreBf16 = kUbScore + static_cast<uint64_t>(kChunkCols) * sizeof(float);
+
+    using MatTile = Tile<TileType::Vec, float, kHeads, kChunkCols, BLayout::RowMajor, -1, -1>;
+    using ScaleTile = Tile<TileType::Vec, float, kHeads, 1, BLayout::ColMajor, -1, -1>;
+    using WeightedTile = Tile<TileType::Vec, float, kHeads, kChunkCols, BLayout::RowMajor, -1, -1>;
+    using ReduceTmpTile = Tile<TileType::Vec, float, kReduceTmpRows, kChunkCols, BLayout::RowMajor, -1, -1>;
+    using ScoreTile = Tile<TileType::Vec, float, 1, kChunkCols, BLayout::RowMajor, -1, -1>;
+    using ScoreBf16Tile = Tile<TileType::Vec, uint16_t, 1, kChunkCols, BLayout::RowMajor, -1, -1>;
+    using MatGlobal =
+        GlobalTensor<float, pto::Shape<1, 1, 1, kHeads, kChunkCols>, pto::Stride<kLength, kLength, kLength, kLength, 1>>;
+    using ScaleGlobal =
+        GlobalTensor<float, pto::Shape<1, 1, 1, kHeads, 1>, pto::Stride<1, 1, 1, 1, 1>, pto::Layout::DN>;
+    using ScoreGlobal =
+        GlobalTensor<float, pto::Shape<1, 1, 1, 1, kChunkCols>, pto::Stride<kLength, kLength, kLength, kLength, 1>>;
+    using ScoreBf16Global = GlobalTensor<uint16_t, pto::Shape<1, 1, 1, 1, kChunkCols>,
+                                         pto::Stride<kLength, kLength, kLength, kLength, 1>>;
+
+    MatTile matTile(kHeads, kChunkCols);
+    ScaleTile scaleTile(kHeads, 1);
+    WeightedTile weightedTile(kHeads, kChunkCols);
+    ReduceTmpTile reduceTmpTile(kReduceTmpRows, kChunkCols);
+    ScoreTile scoreTile(1, kChunkCols);
+    ScoreBf16Tile scoreBf16Tile(1, kChunkCols);
+    TASSIGN(matTile, kUbMat);
+    TASSIGN(scaleTile, kUbScale);
+    TASSIGN(weightedTile, kUbWeighted);
+    TASSIGN(reduceTmpTile, kUbReduceTmp);
+    TASSIGN(scoreTile, kUbScore);
+    TASSIGN(scoreBf16Tile, kUbScoreBf16);
+#ifndef __PTO_AUTO__
+    // Reverse dependency: MTE2 must wait until vector finishes consuming mat/scale buffers.
+    set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+#endif
+
+    for (uint32_t b = 0; b < kBatch; ++b) {
+        for (uint32_t n0 = 0; n0 < kLength; n0 += kChunkCols) {
+            uint32_t validCols = (n0 + kChunkCols <= kLength) ? kChunkCols : (kLength - n0);
+            matTile.SetValidRow(kHeads);
+            matTile.SetValidCol(validCols);
+            scaleTile.SetValidRow(kHeads);
+            scaleTile.SetValidCol(1);
+            weightedTile.SetValidRow(kHeads);
+            weightedTile.SetValidCol(validCols);
+            reduceTmpTile.SetValidRow((kHeads + 1) / 2);
+            reduceTmpTile.SetValidCol(validCols);
+            scoreTile.SetValidRow(1);
+            scoreTile.SetValidCol(validCols);
+            scoreBf16Tile.SetValidRow(1);
+            scoreBf16Tile.SetValidCol(validCols);
+
+            MatGlobal matGlobal(matmulOut + static_cast<uint64_t>(b) * kHeads * kLength + n0);
+            ScaleGlobal scaleGlobal(postScale + static_cast<uint64_t>(b) * kHeads);
+#ifndef __PTO_AUTO__
+            wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+#endif
+            TLOAD(matTile, matGlobal);
+            TLOAD(scaleTile, scaleGlobal);
+#ifndef __PTO_AUTO__
+            set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+            wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+            TRELU(matTile, matTile);
+            TROWEXPANDMUL(weightedTile, matTile, scaleTile);
+            TCOLSUM(scoreTile, weightedTile, reduceTmpTile, true);
+            {
+                auto *scorePtr = reinterpret_cast<__ubuf__ float *>(scoreTile.data());
+                auto *bf16Ptr = reinterpret_cast<__ubuf__ uint16_t *>(scoreBf16Tile.data());
+                for (uint32_t c = 0; c < validCols; ++c) {
+                    uint32_t bits = __builtin_bit_cast(uint32_t, scorePtr[c]);
+                    bf16Ptr[c] = static_cast<uint16_t>(bits >> 16);
+                }
+            }
+#ifndef __PTO_AUTO__
+            set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+#endif
+
+            ScoreGlobal dstGlobal(scoreOut + static_cast<uint64_t>(b) * kLength + n0);
+            ScoreBf16Global dstBf16Global(scoreOutBf16 + static_cast<uint64_t>(b) * kLength + n0);
+#ifndef __PTO_AUTO__
+            set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
+            wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
+#endif
+            TSTORE(dstGlobal, scoreTile);
+            TSTORE(dstBf16Global, scoreBf16Tile);
+        }
+    }
+}
+
+template <uint32_t kLength, uint32_t K>
+__global__ AICORE void TopKFromScoreKernel(__gm__ uint16_t *scoreOutBf16, __gm__ uint32_t *outIdx)
+{
+    #ifdef __DAV_VEC__
+    if constexpr (!DAV_VEC) {
+        return;
+    }
+    if (get_subblockid() != 0 || get_block_idx() != 0) {
+        return;
+    }
+    static_assert(K <= kLength, "TopK must be <= score length.");
+    constexpr uint32_t kBatch = 2;
+    constexpr uint32_t kBinNum = 256;
+    constexpr uint64_t kUbFullKeys = 0x00000;
+    constexpr uint64_t kUbTileHist = 0x20000;
+    constexpr uint64_t kUbChistMSB = 0x21000;
+    constexpr uint64_t kUbChistLSB = 0x22000;
+    constexpr uint64_t kUbIdxFilter = 0x23000;
+    constexpr uint64_t kWinnerUbMask = 0x24000;
+    constexpr uint64_t kWinnerUbIdx = 0x24400;
+    constexpr uint64_t kWinnerUbGather = 0x24800;
+    constexpr uint64_t kWinnerUbTmp = 0x24C00;
+    constexpr uint64_t kWinnerUbRowMinDst = 0x25000;
+    constexpr uint64_t kWinnerUbRowMinTmp = 0x25400;
+    constexpr uint64_t kWinnerUbSelMask = 0x25800;
+    constexpr uint64_t kWinnerUbSelZero = 0x25840;
+    constexpr uint64_t kWinnerUbU32One = 0x25880;
+    constexpr uint64_t kWinnerUbSelOut = 0x25900;
+    constexpr uint64_t kWinnerUbTselTmp = 0x25A00;
+    constexpr uint64_t kRemainUbTopk = 0x25E00;
+    constexpr uint64_t kRemainUbCw = 0x25F00;
+    constexpr uint64_t kRemainUbOut = 0x26000;
+    constexpr uint64_t kMsbWinnerSavedUb = 0x25D80;
+    constexpr uint64_t kFullGatherGtDst = 0x30000;
+    constexpr uint64_t kFullGatherEqDst = 0x38000;
+    constexpr uint64_t kChunkConcatGt = 0x28000;
+    constexpr uint64_t kChunkConcatEq = 0x28040;
+    constexpr uint64_t kGatherUbTmp = 0x29000;
+    constexpr uint64_t kUbNegKeys = 0x26800;
+    constexpr uint64_t kUbPosKeys = 0x27000;
+    constexpr uint64_t kUbSignMask = 0x27800;
+    constexpr uint64_t kUbSignTmp = 0x27C00;
+    constexpr uint64_t kUbMerged = 0x00000;
+
+    constexpr uint16_t kIdxAlignedRows = ((sizeof(uint8_t) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE) * BLOCK_BYTE_SIZE;
+    constexpr int kGatherConcatRows = (1 * static_cast<int>(sizeof(uint32_t)) < 32) ? (32 / static_cast<int>(sizeof(uint32_t)))
+                                                                                     : 1;
+    constexpr int cmpVCol = (kLength + 7) / 8;
+    constexpr int cmpCol = (cmpVCol + 31) / 32 * 32;
+
+    using InTileU16 = Tile<TileType::Vec, uint16_t, 1, kLength, BLayout::RowMajor, -1, -1>;
+    using HistTile = Tile<TileType::Vec, uint32_t, 1, kBinNum, BLayout::RowMajor, -1, -1>;
+    using WinnerLaneTile = Tile<TileType::Vec, uint32_t, 1, kBinNum, BLayout::RowMajor, -1, -1>;
+    using WinnerBinTile = Tile<TileType::Vec, uint32_t, 1, 32, BLayout::RowMajor, -1, -1>;
+    using MaskCmpTile = Tile<TileType::Vec, uint8_t, 1, kBinNum, BLayout::RowMajor, -1, -1>;
+    using IdxU32Tile = Tile<TileType::Vec, uint32_t, 1, kBinNum, BLayout::RowMajor, -1, -1>;
+    using TmpSelsTile = Tile<TileType::Vec, uint8_t, 1, 32, BLayout::RowMajor, -1, -1>;
+    using RowMinDstTile = Tile<TileType::Vec, uint32_t, 1, 16, BLayout::RowMajor, -1, -1>;
+    using RowMinTmpTile = Tile<TileType::Vec, uint32_t, 1, kBinNum, BLayout::RowMajor, -1, -1>;
+    using SelMaskRowTile = Tile<TileType::Vec, uint8_t, 1, 32, BLayout::RowMajor, -1, -1>;
+    using GatherIdxU32Tile = Tile<TileType::Vec, uint32_t, 1, 32, BLayout::RowMajor, -1, -1>;
+    using RemainKTile = Tile<TileType::Vec, uint32_t, 1, 32, BLayout::RowMajor, -1, -1>;
+    using PackedU16Tile = Tile<TileType::Vec, uint16_t, 1, 32, BLayout::RowMajor, -1, -1>;
+    using IdxFilterTile = Tile<TileType::Vec, uint8_t, kIdxAlignedRows, 1, BLayout::ColMajor, -1, -1>;
+    using KeySignMaskTile = Tile<TileType::Vec, uint8_t, 1, kLength, BLayout::RowMajor, -1, -1>;
+    using KeySelTmpTile = Tile<TileType::Vec, uint8_t, 1, 32, BLayout::RowMajor, -1, -1>;
+    using GatherSrcI16 = Tile<TileType::Vec, int16_t, 1, kLength, BLayout::RowMajor, -1, -1>;
+    using GatherFullU32 = Tile<TileType::Vec, uint32_t, 1, kLength, BLayout::RowMajor, -1, -1>;
+    using GatherConcatCountTile = Tile<TileType::Vec, uint32_t, kGatherConcatRows, 1, BLayout::ColMajor, -1, -1>;
+    using TmpGatherTile = Tile<TileType::Vec, uint8_t, 1, cmpCol, BLayout::RowMajor, -1, -1>;
+    using MergedIdxTile = Tile<TileType::Vec, uint32_t, 1, 2 * K, BLayout::RowMajor, -1, -1>;
+
+    for (uint32_t b = 0; b < kBatch; ++b) {
+        pipe_barrier(PIPE_ALL); // Temp 
+        InTileU16 fullInTile(1, kLength);
+        HistTile tileHist(1, kBinNum);
+        HistTile chistMSB(1, kBinNum);
+        HistTile chistLSB(1, kBinNum);
+        IdxFilterTile idxFilter(1, 1);
+        WinnerBinTile msbWinnerBin(1, 32);
+        WinnerBinTile msbWinnerSaved(1, 32);
+        WinnerBinTile lsbWinnerBin(1, 32);
+        RemainKTile remainKTile(1, 32);
+        PackedU16Tile packedThrU(1, 32);
+
+        // Phase1: TLOAD + Histogram(MSB)
+        TASSIGN(fullInTile, kUbFullKeys);
+        TASSIGN(tileHist, kUbTileHist);
+        TASSIGN(chistMSB, kUbChistMSB);
+        TASSIGN(chistLSB, kUbChistLSB);
+        TASSIGN(idxFilter, kUbIdxFilter);
+        using SrcGlobal = GlobalTensor<uint16_t, pto::Shape<1, 1, 1, 1, kLength>,
+                                       pto::Stride<kLength, kLength, kLength, kLength, 1>>;
+        SrcGlobal srcGlobal(scoreOutBf16 + static_cast<uint64_t>(b) * kLength);
+        fullInTile.SetValidCol(kLength);
+        TLOAD(fullInTile, srcGlobal);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+        // Convert bf16 bits to ordered uint16 keys:
+        // sign=1 -> ~bits, sign=0 -> bits ^ 0x8000
+        InTileU16 negKeyTile(1, kLength);
+        InTileU16 posKeyTile(1, kLength);
+        KeySignMaskTile signMaskTile(1, kLength);
+        KeySelTmpTile signTmpTile(1, 32);
+        TASSIGN(negKeyTile, kUbNegKeys);
+        TASSIGN(posKeyTile, kUbPosKeys);
+        TASSIGN(signMaskTile, kUbSignMask);
+        TASSIGN(signTmpTile, kUbSignTmp);
+        negKeyTile.SetValidRow(1);
+        negKeyTile.SetValidCol(kLength);
+        posKeyTile.SetValidRow(1);
+        posKeyTile.SetValidCol(kLength);
+        signMaskTile.SetValidRow(1);
+        signMaskTile.SetValidCol(kLength);
+        signTmpTile.SetValidRow(1);
+        signTmpTile.SetValidCol(32);
+        TNOT(negKeyTile, fullInTile);
+        TXORS(posKeyTile, fullInTile, static_cast<uint16_t>(0x8000u), posKeyTile);
+        TCMPS(signMaskTile, fullInTile, static_cast<uint16_t>(0x8000u), CmpMode::GE);
+        TSEL(fullInTile, signMaskTile, negKeyTile, posKeyTile, signTmpTile);
+
+        chistMSB.SetValidRow(1);
+        chistMSB.SetValidCol(kBinNum);
+        TEXPANDS(chistMSB, 0u);
+        THISTOGRAM<pto::HistByte::BYTE_1>(tileHist, fullInTile, idxFilter);
+        TMOV(chistMSB, tileHist);
+
+        // Phase2: Winner(MSB) + remainK
+        {
+            constexpr uint32_t kThrMsb = static_cast<uint32_t>(kLength - K);
+            constexpr uint32_t kSelsFalse = 0xffffffffu;
+            WinnerLaneTile msbWinnerLanes(1, kBinNum);
+            MaskCmpTile maskTile(1, kBinNum);
+            IdxU32Tile indexTile(1, kBinNum);
+            TmpSelsTile tmpSelsTile(1, 32);
+            TASSIGN(maskTile, kWinnerUbMask);
+            TASSIGN(indexTile, kWinnerUbIdx);
+            TASSIGN(msbWinnerLanes, kWinnerUbGather);
+            TASSIGN(tmpSelsTile, kWinnerUbTmp);
+            maskTile.SetValidCol(kBinNum);
+            indexTile.SetValidCol(kBinNum);
+            msbWinnerLanes.SetValidCol(kBinNum);
+            tmpSelsTile.SetValidCol(32);
+            chistMSB.SetValidCol(kBinNum);
+            TCMPS(maskTile, chistMSB, kThrMsb, CmpMode::GE);
+            TCI<IdxU32Tile, IdxU32Tile, uint32_t, 0>(indexTile, static_cast<uint32_t>(0), indexTile);
+            TSELS(msbWinnerLanes, maskTile, indexTile, tmpSelsTile, kSelsFalse);
+
+            TASSIGN(msbWinnerSaved, kMsbWinnerSavedUb);
+            msbWinnerSaved.SetValidRow(1);
+            msbWinnerSaved.SetValidCol(32);
+            RowMinDstTile rowMinDst(1, 16);
+            RowMinTmpTile rowMinTmp(1, kBinNum);
+            TASSIGN(rowMinDst, kWinnerUbRowMinDst);
+            TASSIGN(rowMinTmp, kWinnerUbRowMinTmp);
+            rowMinDst.SetValidRow(1);
+            rowMinDst.SetValidCol(1);
+            rowMinTmp.SetValidRow(1);
+            rowMinTmp.SetValidCol(kBinNum);
+            TROWMIN(rowMinDst, msbWinnerLanes, rowMinTmp);
+            GatherIdxU32Tile gatherIdx(1, 32);
+            TmpSelsTile gatherTmp(1, 32);
+            TASSIGN(gatherIdx, kWinnerUbRowMinTmp);
+            TASSIGN(gatherTmp, kWinnerUbTselTmp);
+            gatherIdx.SetValidRow(1);
+            gatherIdx.SetValidCol(32);
+            gatherTmp.SetValidCol(32);
+            TEXPANDS(gatherIdx, 0u);
+            TGATHER(msbWinnerSaved, rowMinDst, gatherIdx, gatherTmp);
+
+            RowMinDstTile zeroTile(1, 16);
+            RowMinDstTile selOut(1, 16);
+            SelMaskRowTile selMask(1, 32);
+            TmpSelsTile tselTmp(1, 32);
+            TASSIGN(zeroTile, kWinnerUbSelZero);
+            TASSIGN(selOut, kWinnerUbSelOut);
+            TASSIGN(selMask, kWinnerUbSelMask);
+            TASSIGN(tselTmp, kWinnerUbTselTmp);
+            zeroTile.SetValidRow(1);
+            zeroTile.SetValidCol(1);
+            selOut.SetValidRow(1);
+            selOut.SetValidCol(1);
+            selMask.SetValidRow(1);
+            selMask.SetValidCol(1);
+            tselTmp.SetValidCol(32);
+            TROWMIN(rowMinDst, msbWinnerLanes, rowMinTmp);
+            RowMinDstTile uOne(1, 16);
+            TASSIGN(uOne, kWinnerUbU32One);
+            uOne.SetValidRow(1);
+            uOne.SetValidCol(1);
+            TEXPANDS(uOne, 1u);
+            TSUB(rowMinDst, rowMinDst, uOne);
+            constexpr uint32_t kCmp256 = 256u;
+            TCMPS(selMask, rowMinDst, kCmp256, CmpMode::GT);
+            TSEL(selOut, selMask, zeroTile, rowMinDst, tselTmp);
+            TASSIGN(msbWinnerBin, kWinnerUbTmp);
+            msbWinnerBin.SetValidRow(1);
+            msbWinnerBin.SetValidCol(32);
+            TEXPANDS(gatherIdx, 0u);
+            TGATHER(msbWinnerBin, selOut, gatherIdx, gatherTmp);
+
+            using U32x32 = Tile<TileType::Vec, uint32_t, 1, 32, BLayout::RowMajor, -1, -1>;
+            U32x32 thrMsbT(1, 32);
+            U32x32 cwT(1, 32);
+            TASSIGN(thrMsbT, kRemainUbTopk);
+            TASSIGN(cwT, kRemainUbCw);
+            TASSIGN(remainKTile, kRemainUbOut);
+            TASSIGN(gatherTmp, kWinnerUbRowMinTmp);
+            thrMsbT.SetValidRow(1);
+            thrMsbT.SetValidCol(32);
+            cwT.SetValidRow(1);
+            cwT.SetValidCol(32);
+            remainKTile.SetValidRow(1);
+            remainKTile.SetValidCol(32);
+            gatherTmp.SetValidCol(32);
+            constexpr uint32_t kThrMsbU = static_cast<uint32_t>(kLength - K);
+            TEXPANDS(thrMsbT, kThrMsbU);
+            TGATHER(cwT, chistMSB, msbWinnerBin, gatherTmp);
+            TSUB(remainKTile, thrMsbT, cwT);
+        }
+
+        // Phase3: Histogram(LSB) with winner-MSB filter (topk_ub style)
+        idxFilter.SetValidRow(1);
+        idxFilter.SetValidCol(1);
+        msbWinnerSaved.SetValidRow(1);
+        msbWinnerSaved.SetValidCol(1);
+        TCVT(idxFilter, msbWinnerSaved, RoundMode::CAST_TRUNC);
+        chistLSB.SetValidRow(1);
+        chistLSB.SetValidCol(kBinNum);
+        TEXPANDS(chistLSB, 0u);
+        THISTOGRAM<pto::HistByte::BYTE_0>(tileHist, fullInTile, idxFilter);
+        TMOV(chistLSB, tileHist);
+
+        // Phase4: Winner(LSB) + packed threshold
+        {
+            constexpr uint32_t kSelsFalse = 0xffffffffu;
+            WinnerLaneTile lsbWinnerLanes(1, kBinNum);
+            MaskCmpTile maskTile(1, kBinNum);
+            IdxU32Tile indexTile(1, kBinNum);
+            TmpSelsTile tmpSelsTile(1, 32);
+            TASSIGN(maskTile, kWinnerUbMask);
+            TASSIGN(indexTile, kWinnerUbIdx);
+            TASSIGN(lsbWinnerLanes, kWinnerUbGather);
+            TASSIGN(tmpSelsTile, kWinnerUbTmp);
+            maskTile.SetValidCol(kBinNum);
+            indexTile.SetValidCol(kBinNum);
+            lsbWinnerLanes.SetValidCol(kBinNum);
+            tmpSelsTile.SetValidCol(32);
+            chistLSB.SetValidCol(kBinNum);
+            remainKTile.SetValidRow(1);
+            remainKTile.SetValidCol(32);
+            TCMPS(maskTile, chistLSB, remainKTile, CmpMode::GT);
+            TCI<IdxU32Tile, IdxU32Tile, uint32_t, 0>(indexTile, static_cast<uint32_t>(0), indexTile);
+            TSELS(lsbWinnerLanes, maskTile, indexTile, tmpSelsTile, kSelsFalse);
+
+            TASSIGN(lsbWinnerBin, kWinnerUbTmp);
+            lsbWinnerBin.SetValidRow(1);
+            lsbWinnerBin.SetValidCol(32);
+            RowMinDstTile rowMinDst(1, 16);
+            RowMinTmpTile rowMinTmp(1, kBinNum);
+            TASSIGN(rowMinDst, kWinnerUbRowMinDst);
+            TASSIGN(rowMinTmp, kWinnerUbRowMinTmp);
+            rowMinDst.SetValidRow(1);
+            rowMinDst.SetValidCol(1);
+            rowMinTmp.SetValidRow(1);
+            rowMinTmp.SetValidCol(kBinNum);
+            TROWMIN(rowMinDst, lsbWinnerLanes, rowMinTmp);
+            GatherIdxU32Tile gatherIdx(1, 32);
+            TmpSelsTile gatherTmp(1, 32);
+            TASSIGN(gatherIdx, kWinnerUbRowMinTmp);
+            TASSIGN(gatherTmp, kWinnerUbTselTmp);
+            gatherIdx.SetValidRow(1);
+            gatherIdx.SetValidCol(32);
+            gatherTmp.SetValidCol(32);
+            TEXPANDS(gatherIdx, 0u);
+            TGATHER(lsbWinnerBin, rowMinDst, gatherIdx, gatherTmp);
+        }
+        TASSIGN(packedThrU, kRemainUbOut);
+        packedThrU.SetValidRow(1);
+        packedThrU.SetValidCol(1);
+        {
+            PackedU16Tile msbU(1, 32);
+            PackedU16Tile hiU(1, 32);
+            PackedU16Tile lsbU(1, 32);
+            TASSIGN(msbU, kRemainUbTopk);
+            TASSIGN(hiU, kRemainUbCw);
+            TASSIGN(lsbU, kRemainUbOut);
+            msbU.SetValidRow(1);
+            msbU.SetValidCol(1);
+            hiU.SetValidRow(1);
+            hiU.SetValidCol(1);
+            lsbU.SetValidRow(1);
+            lsbU.SetValidCol(1);
+            msbWinnerSaved.SetValidRow(1);
+            msbWinnerSaved.SetValidCol(1);
+            lsbWinnerBin.SetValidRow(1);
+            lsbWinnerBin.SetValidCol(1);
+            TCVT(msbU, msbWinnerSaved, RoundMode::CAST_TRUNC);
+            TCVT(lsbU, lsbWinnerBin, RoundMode::CAST_TRUNC);
+            constexpr uint16_t kShift8 = 8u;
+            TSHLS(hiU, msbU, kShift8);
+            TOR(packedThrU, hiU, lsbU);
+        }
+
+        // Phase5: TGATHER(GT/EQ) + TCONCAT + TSTORE
+        GatherFullU32 gtChunk(1, kLength);
+        GatherFullU32 eqChunk(1, kLength);
+        GatherConcatCountTile idxGtCnt(1, 1);
+        GatherConcatCountTile idxEqCnt(1, 1);
+        TmpGatherTile tmpGt(1, cmpVCol);
+        TmpGatherTile tmpEq(1, cmpVCol);
+        TASSIGN(gtChunk, kFullGatherGtDst);
+        TASSIGN(eqChunk, kFullGatherEqDst);
+        TASSIGN(idxGtCnt, kChunkConcatGt);
+        TASSIGN(idxEqCnt, kChunkConcatEq);
+        TASSIGN(tmpGt, kGatherUbTmp);
+        TASSIGN(tmpEq, kGatherUbTmp);
+        GatherSrcI16 srcGt(1, kLength);
+        GatherSrcI16 srcEq(1, kLength);
+        TASSIGN(srcGt, kUbFullKeys);
+        TASSIGN(srcEq, kUbFullKeys);
+        srcGt.SetValidRow(1);
+        srcGt.SetValidCol(kLength);
+        srcEq.SetValidRow(1);
+        srcEq.SetValidCol(kLength);
+        gtChunk.SetValidRow(1);
+        gtChunk.SetValidCol(kLength);
+        eqChunk.SetValidRow(1);
+        eqChunk.SetValidCol(kLength);
+        idxGtCnt.SetValidRow(1);
+        idxGtCnt.SetValidCol(1);
+        idxEqCnt.SetValidRow(1);
+        idxEqCnt.SetValidCol(1);
+        tmpGt.SetValidRow(1);
+        tmpGt.SetValidCol(cmpVCol);
+        tmpEq.SetValidRow(1);
+        tmpEq.SetValidCol(cmpVCol);
+        TGATHER<GatherFullU32, GatherSrcI16, PackedU16Tile, GatherConcatCountTile, TmpGatherTile, CmpMode::GT>(
+            gtChunk, srcGt, packedThrU, idxGtCnt, tmpGt, 0);
+        TGATHER<GatherFullU32, GatherSrcI16, PackedU16Tile, GatherConcatCountTile, TmpGatherTile, CmpMode::EQ>(
+            eqChunk, srcEq, packedThrU, idxEqCnt, tmpEq, 0);
+
+        MergedIdxTile mergedIdx(1, 2 * K);
+        TASSIGN(mergedIdx, kUbMerged);
+        mergedIdx.SetValidRow(1);
+        mergedIdx.SetValidCol(2 * K);
+        TCONCAT_IMPL(mergedIdx, gtChunk, eqChunk, idxGtCnt, idxEqCnt);
+        mergedIdx.SetValidCol(K);
+        using OutShape = pto::Shape<1, 1, 1, 1, K>;
+        using OutStride = pto::Stride<K, K, K, K, 1>;
+        GlobalTensor<uint32_t, OutShape, OutStride> outGlobal(outIdx + b * K);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
+#endif
+        TSTORE(outGlobal, mergedIdx);
+    }
+#endif
+}
+
+
+void LaunchIndexerMatmul(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, uint8_t *src3, float *postScale,
+                         float *scoreOut, uint16_t *scoreOutBf16, uint32_t *outIdx, void *stream)
+{
+    (void)scoreOutBf16;
     constexpr uint32_t blockDim = 1;
-    constexpr uint32_t m = 512;
+    constexpr uint32_t m = 128;
     constexpr uint32_t k = 1024;
-    constexpr uint32_t n = 512;
-    constexpr uint32_t singleCoreM = 512;
+    constexpr uint32_t n = INDEXER_TEST_N;
+    constexpr uint32_t singleCoreM = 128;
     constexpr uint32_t singleCoreK = 1024;
-    constexpr uint32_t singleCoreN = 512;
+    constexpr uint32_t singleCoreN = n;
     constexpr uint32_t baseM = 128;
     constexpr uint32_t baseK = 128;
     constexpr uint32_t baseN = 128;
@@ -497,5 +986,32 @@ void LaunchIndexerMxfp8(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src
     constexpr uint32_t stepKb = 1;
     constexpr uint32_t stepN = 1;
     MxMatmulPerformance<blockDim, m, k, n, singleCoreM, singleCoreK, singleCoreN, baseM, baseK, baseN, stepM, stepKa,
-                        stepKb, stepN><<<blockDim, nullptr, stream>>>(out, src0, src1, src2, src3);
+                        stepKb, stepN><<<blockDim, nullptr, stream>>>(out, src0, src1, src2, src3, postScale, scoreOut,
+                                                                      outIdx);
+}
+
+void LaunchIndexerPostProcess(float *matmulOut, float *postScale, float *scoreOut, uint16_t *scoreOutBf16, void *stream)
+{
+    constexpr uint32_t m = 128;
+    constexpr uint32_t n = INDEXER_TEST_N;
+    constexpr uint32_t kBatch = 2;
+    constexpr uint32_t kHeads = m / 2;
+    constexpr uint32_t kLength = n;
+    PostProcessScoreKernel<kBatch, kHeads, kLength><<<1, nullptr, stream>>>(matmulOut, postScale, scoreOut, scoreOutBf16);
+}
+
+void LaunchIndexerTopK(uint16_t *scoreOutBf16, uint32_t *outIdx, void *stream)
+{
+    constexpr uint32_t n = INDEXER_TEST_N;
+    constexpr uint32_t kLength = n;
+    constexpr uint32_t kTopK = INDEXER_TOPK;
+    TopKFromScoreKernel<kLength, kTopK><<<1, nullptr, stream>>>(scoreOutBf16, outIdx);
+}
+
+void LaunchIndexerMxfp8(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, uint8_t *src3, float *postScale,
+                        float *scoreOut, uint16_t *scoreOutBf16, uint32_t *outIdx, void *stream)
+{
+    LaunchIndexerMatmul(out, src0, src1, src2, src3, postScale, scoreOut, scoreOutBf16, outIdx, stream);
+    LaunchIndexerPostProcess(reinterpret_cast<float *>(out), postScale, scoreOut, scoreOutBf16, stream);
+    LaunchIndexerTopK(scoreOutBf16, outIdx, stream);
 }

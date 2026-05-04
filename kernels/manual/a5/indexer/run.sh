@@ -44,11 +44,17 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
-if ! python3 -c "import ml_dtypes" 2>/dev/null; then
-    echo "[ERROR] Install Python dependency: pip install ml_dtypes numpy"
+INDEXER_TEST_N="${INDEXER_TEST_N:-131072}"
+INDEXER_TOPK="${INDEXER_TOPK:-2048}"
+PYTHON_BIN="python3"
+if [[ -x "${SCRIPT_DIR}/../../../../.venv-indexer-sim/bin/python" ]]; then
+    PYTHON_BIN="${SCRIPT_DIR}/../../../../.venv-indexer-sim/bin/python"
+fi
+if ! "${PYTHON_BIN}" -c "import ml_dtypes" 2>/dev/null; then
+    echo "[ERROR] Install Python dependency in selected python (${PYTHON_BIN}): pip install ml_dtypes numpy"
     exit 1
 fi
-python3 scripts/gen_data.py
+INDEXER_TEST_N="${INDEXER_TEST_N}" INDEXER_TOPK="${INDEXER_TOPK}" "${PYTHON_BIN}" scripts/gen_data.py
 
 rm -rf build
 mkdir build
@@ -57,7 +63,7 @@ cd build
 export LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib:$LD_LIBRARY_PATH
 set -euo pipefail
 
-cmake  -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} ..
+cmake  -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} -DINDEXER_TEST_N=${INDEXER_TEST_N} -DINDEXER_TOPK=${INDEXER_TOPK} ..
 make -j16
 
 ./indexer_mxfp8
