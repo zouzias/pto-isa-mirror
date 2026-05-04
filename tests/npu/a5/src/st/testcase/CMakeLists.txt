@@ -120,6 +120,7 @@ set(ALL_TESTCASES
     tstore
     textract
     textract_compact
+    textract_quant
     trowsum
     trowprod
     trowmax
