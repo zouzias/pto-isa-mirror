@@ -407,6 +407,7 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 15, 32, mode="nd"),
         TQuantParams("mxfp8", 7, 64, mode="nd"),
         TQuantParams("mxfp8", 33, 64, mode="nd"),
+        TQuantParams("mxfp8", 13, 192, mode="nd"),
         TQuantParams("mxfp8", 32, 64, mode="nz"),
         TQuantParams("mxfp8", 64, 128, mode="nz"),
         TQuantParams("mxfp8", 64, 256, mode="nz"),
@@ -435,6 +436,8 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 5, 96, mode="nd", dtype=bfloat16),
         TQuantParams("mxfp8", 1, 16, mode="nd", dtype=bfloat16),
         # Multi-flush vstas coverage: loop_num odd >= 3 leaves 16B pending in st_align.
+        TQuantParams("mxfp8", 4, 256, mode="nd", dtype=bfloat16),  # 1024 elems -> 4 row-aligned 256-elem windows
+        TQuantParams("mxfp8", 4, 512, mode="nd", dtype=bfloat16),  # 2048 elems -> generic ND, not 32-VL large path
         TQuantParams("mxfp8", 3, 256, mode="nd", dtype=bfloat16),  # padded 768 -> loop_num=3
         TQuantParams("mxfp8", 5, 256, mode="nd", dtype=bfloat16),  # padded 1280 -> loop_num=5
         TQuantParams("mxfp8", 18, 138, mode="nd", dtype=bfloat16),  # padded 18x160 = 2880 -> loop_num=12
@@ -447,6 +450,7 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 64, 128, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 128, 128, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 4, 256, mode="nd", dtype=np.float16),  # 1024 elems -> AbsReduceMax_b16_ND_opt
+        TQuantParams("mxfp8", 11, 640, mode="nd", dtype=np.float16),  # 7040 elems -> 220 scale groups
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=np.float16),

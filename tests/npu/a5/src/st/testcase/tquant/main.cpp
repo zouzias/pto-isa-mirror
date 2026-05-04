@@ -407,6 +407,10 @@ TEST_F(TQUANTTEST, case_mxfp8_fp32_33x64_nd)
 {
     test_tquant_mxfp8<33, 64, 0>();
 }
+TEST_F(TQUANTTEST, case_mxfp8_fp32_13x192_nd)
+{
+    test_tquant_mxfp8<13, 192, 0>();
+}
 
 // MXFP8 BF16
 TEST_F(TQUANTTEST, case_mxfp8_bf16_32x128_nd)
@@ -442,6 +446,18 @@ TEST_F(TQUANTTEST, case_mxfp8_bf16_5x96_nd)
 TEST_F(TQUANTTEST, case_mxfp8_bf16_1x16_nd)
 {
     test_tquant_mxfp8_bf16<1, 16, 0>();
+}
+// 4x256 => 1024 elems => vlCount=8, loop_num=4. Each 256-elem DINTLV window maps to one row,
+// which makes this case a direct check that max/exp/scaling and quant windows stay row-aligned.
+TEST_F(TQUANTTEST, case_mxfp8_bf16_4x256_nd)
+{
+    test_tquant_mxfp8_bf16<4, 256, 0>();
+}
+// 4x512 => 2048 elems. This must not dispatch to the 32-VL large reducer
+// because bf16 vlCount is only 16; the generic ND path covers it.
+TEST_F(TQUANTTEST, case_mxfp8_bf16_4x512_nd)
+{
+    test_tquant_mxfp8_bf16<4, 512, 0>();
 }
 // Multi-flush vstas coverage: loop_num odd >= 3 => 16B pending in st_align at final vstas.
 // 3x256 => padded 768 elements => loop_num = ceil(768/256) = 3 (odd).
@@ -489,6 +505,16 @@ TEST_F(TQUANTTEST, case_mxfp8_fp16_64x128_nd)
 TEST_F(TQUANTTEST, case_mxfp8_fp16_128x128_nd)
 {
     test_tquant_mxfp8_fp16<128, 128, 0>();
+}
+// 4x256 => 1024 elems => vlCount=8, loop_num=4. Mirrors the BF16 regression case
+// on the FP16 path so board-only stage-order issues show up on both B16 variants.
+TEST_F(TQUANTTEST, case_mxfp8_fp16_4x256_nd)
+{
+    test_tquant_mxfp8_fp16<4, 256, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_fp16_11x640_nd)
+{
+    test_tquant_mxfp8_fp16<11, 640, 0>();
 }
 
 TEST_F(TQUANTTEST, case_mxfp8_fp16_32x128_nz)
