@@ -47,6 +47,9 @@ constexpr uint32_t BUFFER_NUM = 2;
 constexpr uint32_t SCALE_FACTOR = 32;
 constexpr uint32_t L0_PINGPONG_BYTES = 32 * 1024; // L0A/L0B ping-pong split (32 KiB per buffer)
 constexpr uint32_t mxScalePara = 8;
+constexpr bool INDEXER_SIMPLE_EXPERIMENT = true; // debug mode: one 128x128 tile, one batch, no topk
+constexpr uint32_t INDEXER_SIMPLE_TILE_N = 8;     // debug mode: number of N-tiles to execute
+constexpr bool INDEXER_SIMPLE_FULL_BATCH = true;  // debug mode: when true, compute/store both batches
 // Same split as fa_performance_kernel: constexpr DAV_CUBE / DAV_VEC from __DAV_*__, then
 //   if constexpr (DAV_CUBE) { /* AIC: MTE, TEXTRACT, TMATMUL_MX, TPUSH */ }
 //   if constexpr (DAV_VEC)  { /* AIV: TPOP, vector TMULS, TSTORE, TFREE */ }
@@ -260,20 +263,21 @@ AICORE inline void IndexerAic_StoreTpushToCvFifo(ResTile &cTile, CvOutPipeT &cvP
 }
 
 // AIV: wait / TPOP to Vec UB, GM store, release FIFO. Matches FA vector-side TPOP from qkPipe / softmax output.
-template <int m, int n, uint32_t baseM, uint32_t baseN, typename VecF, typename CvOutPipeT>
+template <int m, int n, uint32_t baseM, uint32_t baseN, bool kFusePostProcess, typename VecF, typename CvOutPipeT>
 AICORE inline void IndexerAiv_StoreTpopTstore(__gm__ float *currentDst, uint32_t i, uint32_t j, VecF &vecForStore,
-                                               CvOutPipeT &cvPipe)
+                                               CvOutPipeT &cvPipe, __gm__ float *postScale, __gm__ float *scoreOut,
+                                               __gm__ uint16_t *scoreOutBf16)
 {
-    if constexpr (DAV_VEC) {
-        // V1C1_VEC0 mode: vec1 should only participate in FIFO handshake.
-        // Keep single UB address, but avoid vec1 touching data path (TPOP/TMULS/TSTORE).
-        if (get_subblockid() != 0) {
-            cvPipe.cons.setWaitStatus(true);
-            cvPipe.cons.setFreeStatus(true);
-            cvPipe.cons.wait();
-            cvPipe.cons.free();
-            return;
-        }
+#ifdef __DAV_VEC__
+    // V1C1_VEC0 mode: vec1 should only participate in FIFO handshake.
+    // Keep single UB address, but avoid vec1 touching data path (TPOP/TMULS/TSTORE).
+    if (get_subblockid() != 0) {
+        cvPipe.cons.setWaitStatus(true);
+        cvPipe.cons.setFreeStatus(true);
+        cvPipe.cons.wait();
+        cvPipe.cons.free();
+        return;
+    }
 
         using NDValidShapeC = TileShape2D<float, baseM, baseN, Layout::ND>;
         using NDWholeShapeC = BaseShape2D<float, m, n, Layout::ND>;
@@ -290,14 +294,134 @@ AICORE inline void IndexerAiv_StoreTpopTstore(__gm__ float *currentDst, uint32_t
         TSTORE(dstGlobal, vecForStore);
         set_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
         wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
-        cvPipe.cons.setFreeStatus(true);
-        TFREE(cvPipe);
-    }
+        if constexpr (kFusePostProcess) {
+            static_assert(baseM % 2 == 0, "Fused postprocess requires even baseM.");
+            if (postScale != nullptr && scoreOut != nullptr && scoreOutBf16 != nullptr) {
+                constexpr uint32_t kHeads = baseM / 2;
+                constexpr uint64_t kUbVecBase = 0x30000;
+                constexpr uint64_t kUbMat1 = kUbVecBase + static_cast<uint64_t>(kHeads) * baseN * sizeof(float);
+                constexpr uint64_t kUbReduce0 = 0x20000;
+                constexpr uint64_t kUbReduce1 = kUbReduce0 + static_cast<uint64_t>(32) * baseN * sizeof(float);
+                constexpr uint64_t kUbScore0 = kUbReduce1 + static_cast<uint64_t>(32) * baseN * sizeof(float);
+                constexpr uint64_t kUbScore1 = kUbScore0 + static_cast<uint64_t>(baseN) * sizeof(float);
+                constexpr uint64_t kUbScale0 = kUbScore1 + static_cast<uint64_t>(baseN) * sizeof(float);
+                constexpr uint64_t kUbScale1 = kUbScale0 + static_cast<uint64_t>(kHeads) * sizeof(float);
+                constexpr uint64_t kUbScoreBf160 = kUbScale1 + static_cast<uint64_t>(kHeads) * sizeof(float);
+                constexpr uint64_t kUbScoreBf161 = kUbScoreBf160 + static_cast<uint64_t>(baseN) * sizeof(uint16_t);
+
+                using HalfMatTile = Tile<TileType::Vec, float, kHeads, baseN, BLayout::RowMajor, -1, -1>;
+                using ScaleTile = Tile<TileType::Vec, float, kHeads, 1, BLayout::ColMajor, -1, -1>;
+                using ReduceTmpTile = Tile<TileType::Vec, float, 32, baseN, BLayout::RowMajor, -1, -1>;
+                using ScoreTile = Tile<TileType::Vec, float, 1, baseN, BLayout::RowMajor, -1, -1>;
+                using ScoreBf16Tile = Tile<TileType::Vec, bfloat16_t, 1, baseN, BLayout::RowMajor, -1, -1>;
+                using ScaleGlobal =
+                    GlobalTensor<float, pto::Shape<1, 1, 1, kHeads, 1>, pto::Stride<1, 1, 1, 1, 1>, pto::Layout::DN>;
+                using ScoreGlobal = GlobalTensor<float, pto::Shape<1, 1, 1, 1, baseN>, pto::Stride<n, n, n, n, 1>>;
+                using ScoreBf16Global =
+                    GlobalTensor<bfloat16_t, pto::Shape<1, 1, 1, 1, baseN>, pto::Stride<n, n, n, n, 1>>;
+
+                HalfMatTile mat0(kHeads, baseN);
+                HalfMatTile mat1(kHeads, baseN);
+                ScaleTile scale0(kHeads, 1);
+                ScaleTile scale1(kHeads, 1);
+                ReduceTmpTile reduce0(32, baseN);
+                ReduceTmpTile reduce1(32, baseN);
+                ScoreTile score0(1, baseN);
+                ScoreTile score1(1, baseN);
+                ScoreBf16Tile scoreBf160(1, baseN);
+                ScoreBf16Tile scoreBf161(1, baseN);
+
+                TASSIGN(mat0, kUbVecBase);
+                TASSIGN(mat1, kUbMat1);
+                TASSIGN(scale0, kUbScale0);
+                TASSIGN(scale1, kUbScale1);
+                TASSIGN(reduce0, kUbReduce0);
+                TASSIGN(reduce1, kUbReduce1);
+                TASSIGN(score0, kUbScore0);
+                TASSIGN(score1, kUbScore1);
+                TASSIGN(scoreBf160, kUbScoreBf160);
+                TASSIGN(scoreBf161, kUbScoreBf161);
+
+                mat0.SetValidRow(kHeads);
+                mat0.SetValidCol(baseN);
+                mat1.SetValidRow(kHeads);
+                mat1.SetValidCol(baseN);
+                scale0.SetValidRow(kHeads);
+                scale0.SetValidCol(1);
+                scale1.SetValidRow(kHeads);
+                scale1.SetValidCol(1);
+                reduce0.SetValidRow(32);
+                reduce0.SetValidCol(baseN);
+                reduce1.SetValidRow(32);
+                reduce1.SetValidCol(baseN);
+                score0.SetValidRow(1);
+                score0.SetValidCol(baseN);
+                score1.SetValidRow(1);
+                score1.SetValidCol(baseN);
+                scoreBf160.SetValidRow(1);
+                scoreBf160.SetValidCol(baseN);
+                scoreBf161.SetValidRow(1);
+                scoreBf161.SetValidCol(baseN);
+
+                ScaleGlobal scaleGlobal0(postScale);
+                ScaleGlobal scaleGlobal1(postScale + kHeads);
+                TLOAD(scale0, scaleGlobal0);
+                TLOAD(scale1, scaleGlobal1);
+
+                TRELU(mat0, mat0);
+                TRELU(mat1, mat1);
+                TROWEXPANDMUL(mat0, mat0, scale0);
+                TROWEXPANDMUL(mat1, mat1, scale1);
+                TCOLSUM(score0, mat0, reduce0, true);
+                if constexpr (!INDEXER_SIMPLE_EXPERIMENT || INDEXER_SIMPLE_FULL_BATCH) {
+                    TCOLSUM(score1, mat1, reduce1, true);
+                }
+
+                TCVT(scoreBf160, score0, RoundMode::CAST_TRUNC);
+                if constexpr (!INDEXER_SIMPLE_EXPERIMENT || INDEXER_SIMPLE_FULL_BATCH) {
+                    TCVT(scoreBf161, score1, RoundMode::CAST_TRUNC);
+                }
+
+                const uint32_t colBase = j * baseN;
+                ScoreGlobal scoreOutGlobal0(scoreOut + colBase);
+                ScoreGlobal scoreOutGlobal1(scoreOut + n + colBase);
+                ScoreBf16Global scoreBf16Global0(reinterpret_cast<__gm__ bfloat16_t *>(scoreOutBf16 + colBase));
+                ScoreBf16Global scoreBf16Global1(reinterpret_cast<__gm__ bfloat16_t *>(scoreOutBf16 + n + colBase));
+#ifndef __PTO_AUTO__
+                set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
+                wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
+#endif
+                TSTORE(scoreOutGlobal0, score0);
+                TSTORE(scoreBf16Global0, scoreBf160);
+                if constexpr (!INDEXER_SIMPLE_EXPERIMENT || INDEXER_SIMPLE_FULL_BATCH) {
+                    TSTORE(scoreOutGlobal1, score1);
+                    TSTORE(scoreBf16Global1, scoreBf161);
+                }
+#ifndef __PTO_AUTO__
+                set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+                wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+#endif
+            }
+        }
+    cvPipe.cons.setFreeStatus(true);
+    TFREE(cvPipe);
+#else
+    (void)currentDst;
+    (void)i;
+    (void)j;
+    (void)vecForStore;
+    (void)cvPipe;
+    (void)postScale;
+    (void)scoreOut;
+    (void)scoreOutBf16;
+#endif
 }
 
-template <int m, int n, uint32_t baseM, uint32_t baseN, typename ResTile, typename VecF, typename CvOutPipeT>
+template <int m, int n, uint32_t baseM, uint32_t baseN, bool kFusePostProcess, typename ResTile, typename VecF,
+          typename CvOutPipeT>
 AICORE inline void StoreResultWithCvPipe(ResTile &cTile, __gm__ float *currentDst, uint32_t i, uint32_t j,
-                                         VecF &vecForStore, CvOutPipeT &cvPipe)
+                                         VecF &vecForStore, CvOutPipeT &cvPipe, __gm__ float *postScale,
+                                         __gm__ float *scoreOut, __gm__ uint16_t *scoreOutBf16)
 {
     if constexpr (DAV_CUBE) {
         SetFlag<PIPE_M, PIPE_FIX>(0);
@@ -308,7 +432,8 @@ AICORE inline void StoreResultWithCvPipe(ResTile &cTile, __gm__ float *currentDs
         IndexerAic_StoreTpushToCvFifo(cTile, cvPipe);
     }
     if constexpr (DAV_VEC) {
-        IndexerAiv_StoreTpopTstore<m, n, baseM, baseN>(currentDst, i, j, vecForStore, cvPipe);
+        IndexerAiv_StoreTpopTstore<m, n, baseM, baseN, kFusePostProcess>(
+            currentDst, i, j, vecForStore, cvPipe, postScale, scoreOut, scoreOutBf16);
     }
 
     if constexpr (DAV_CUBE) {
@@ -343,12 +468,13 @@ template <typename T, typename U, typename X, int m, int k, int n, uint32_t sing
           uint32_t singleCoreN, uint32_t baseM, uint32_t baseK, uint32_t baseN, uint32_t baseScaleK, uint32_t stepKa,
           uint32_t stepKb, uint32_t stepKscaleA, uint32_t stepKscaleB, typename TileMatA, typename TileMatB,
           typename TileScaleA, typename TileScaleB, typename LeftTile, typename RightTile, typename LeftScaleTile,
-          typename RightScaleTile, typename ResTile>
+          typename RightScaleTile, typename ResTile, bool kFusePostProcess>
 AICORE inline void Compute(__gm__ U *currentSrc0, __gm__ U *currentSrc1, __gm__ X *currentSrc2, __gm__ X *currentSrc3,
                            __gm__ T *&currentDst, TileMatA aMatTile[BUFFER_NUM], TileMatB bMatTile[BUFFER_NUM],
                            TileScaleA aScaleMatTile[BUFFER_NUM], TileScaleB bScaleMatTile[BUFFER_NUM],
                            LeftTile aTile[BUFFER_NUM], RightTile bTile[BUFFER_NUM],
-                           LeftScaleTile aScaleTile[BUFFER_NUM], RightScaleTile bScaleTile[BUFFER_NUM], ResTile &cTile)
+                           LeftScaleTile aScaleTile[BUFFER_NUM], RightScaleTile bScaleTile[BUFFER_NUM], ResTile &cTile,
+                           __gm__ float *postScale, __gm__ float *scoreOut, __gm__ uint16_t *scoreOutBf16)
 {
     uint8_t mte2DBFlag = 0, mte2mxDBFlag = 0, mte1DBFlag = 0;
     if constexpr (DAV_CUBE || DAV_VEC) {
@@ -363,8 +489,13 @@ AICORE inline void Compute(__gm__ U *currentSrc0, __gm__ U *currentSrc1, __gm__ 
         TASSIGN(vecForStore, kUbVecForTp);
         CvOutPipe cvPipe(static_cast<uint32_t>(kUbVecForTp));
 
-        for (uint32_t i = 0; i < singleCoreM / baseM; i++) {
-            for (uint32_t j = 0; j < singleCoreN / baseN; j++) {
+        constexpr uint32_t kIterM = singleCoreM / baseM;
+        constexpr uint32_t kTotalIterN = singleCoreN / baseN;
+        constexpr uint32_t kIterN = INDEXER_SIMPLE_EXPERIMENT
+                                        ? ((INDEXER_SIMPLE_TILE_N < kTotalIterN) ? INDEXER_SIMPLE_TILE_N : kTotalIterN)
+                                        : kTotalIterN;
+        for (uint32_t i = 0; i < kIterM; i++) {
+            for (uint32_t j = 0; j < kIterN; j++) {
                 for (uint32_t kIter = 0; kIter < singleCoreK / baseK; kIter++) {
                     if constexpr (DAV_CUBE) {
                         ProcessKIteration<T, U, X, m, k, n, singleCoreK, baseM, baseK, baseN, baseScaleK, stepKa, stepKb,
@@ -375,8 +506,8 @@ AICORE inline void Compute(__gm__ U *currentSrc0, __gm__ U *currentSrc1, __gm__ 
                             mte2mxDBFlag, mte1DBFlag);
                     }
                 }
-                StoreResultWithCvPipe<m, n, baseM, baseN, ResTile, VecF, CvOutPipe>(cTile, currentDst, i, j, vecForStore,
-                                                                                      cvPipe);
+                StoreResultWithCvPipe<m, n, baseM, baseN, kFusePostProcess, ResTile, VecF, CvOutPipe>(
+                    cTile, currentDst, i, j, vecForStore, cvPipe, postScale, scoreOut, scoreOutBf16);
             }
         }
     } else {
@@ -422,8 +553,10 @@ AICORE inline void WaitSyncFlags()
 
 template <typename T, typename U, typename X, uint32_t blockDim, int m, int k, int n, uint32_t singleCoreM,
           uint32_t singleCoreK, uint32_t singleCoreN, uint32_t baseM, uint32_t baseK, uint32_t baseN, uint32_t stepM,
-          uint32_t stepKa, uint32_t stepKb, uint32_t stepN>
-AICORE inline void RunMxMatmul(__gm__ T *out, __gm__ U *src0, __gm__ U *src1, __gm__ X *src2, __gm__ X *src3)
+          uint32_t stepKa, uint32_t stepKb, uint32_t stepN, bool kFusePostProcess = false>
+AICORE inline void RunMxMatmul(__gm__ T *out, __gm__ U *src0, __gm__ U *src1, __gm__ X *src2, __gm__ X *src3,
+                               __gm__ float *postScale = nullptr, __gm__ float *scoreOut = nullptr,
+                               __gm__ uint16_t *scoreOutBf16 = nullptr)
 {
     __gm__ U *currentSrc0 = nullptr;
     __gm__ U *currentSrc1 = nullptr;
@@ -472,8 +605,9 @@ AICORE inline void RunMxMatmul(__gm__ T *out, __gm__ U *src0, __gm__ U *src1, __
 
     Compute<T, U, X, m, k, n, singleCoreM, singleCoreK, singleCoreN, baseM, baseK, baseN, baseScaleK, stepKa, stepKb,
             stepKscaleA, stepKscaleB, TileMatA, TileMatB, TileScaleA, TileScaleB, LeftTile, RightTile, LeftScaleTile,
-            RightScaleTile, ResTile>(currentSrc0, currentSrc1, currentSrc2, currentSrc3, currentDst, aMatTile, bMatTile,
-                                     aScaleMatTile, bScaleMatTile, aTile, bTile, aScaleTile, bScaleTile, cTile);
+            RightScaleTile, ResTile, kFusePostProcess>(currentSrc0, currentSrc1, currentSrc2, currentSrc3, currentDst,
+                                                       aMatTile, bMatTile, aScaleMatTile, bScaleMatTile, aTile, bTile,
+                                                       aScaleTile, bScaleTile, cTile, postScale, scoreOut, scoreOutBf16);
 
     if constexpr (DAV_CUBE) {
         WaitSyncFlags();
@@ -499,12 +633,10 @@ __global__ AICORE void MxMatmulPerformance(__gm__ uint8_t *out, __gm__ uint8_t *
 }
 
 template <uint32_t kBatch, uint32_t kHeads, uint32_t kLength>
-__global__ AICORE void PostProcessScoreKernel(__gm__ float *matmulOut, __gm__ float *postScale, __gm__ float *scoreOut,
-                                              __gm__ uint16_t *scoreOutBf16)
+AICORE inline void PostProcessScoreImpl(__gm__ float *matmulOut, __gm__ float *postScale, __gm__ float *scoreOut,
+                                        __gm__ uint16_t *scoreOutBf16)
 {
-    if constexpr (!DAV_VEC) {
-        return;
-    }
+#ifdef __DAV_VEC__
     if (get_subblockid() != 0 || get_block_idx() != 0) {
         return;
     }
@@ -521,22 +653,21 @@ __global__ AICORE void PostProcessScoreKernel(__gm__ float *matmulOut, __gm__ fl
     using MatTile = Tile<TileType::Vec, float, kHeads, kChunkCols, BLayout::RowMajor, -1, -1>;
     using ScaleTile = Tile<TileType::Vec, float, kHeads, 1, BLayout::ColMajor, -1, -1>;
     using WeightedTile = Tile<TileType::Vec, float, kHeads, kChunkCols, BLayout::RowMajor, -1, -1>;
-    using ReduceTmpTile = Tile<TileType::Vec, float, kReduceTmpRows, kChunkCols, BLayout::RowMajor, -1, -1>;
+    using ReduceTmpTile = Tile<TileType::Vec, float, 32, kChunkCols, BLayout::RowMajor, -1, -1>;
     using ScoreTile = Tile<TileType::Vec, float, 1, kChunkCols, BLayout::RowMajor, -1, -1>;
-    using ScoreBf16Tile = Tile<TileType::Vec, uint16_t, 1, kChunkCols, BLayout::RowMajor, -1, -1>;
+    using ScoreBf16Tile = Tile<TileType::Vec, bfloat16_t, 1, kChunkCols, BLayout::RowMajor, -1, -1>;
     using MatGlobal =
         GlobalTensor<float, pto::Shape<1, 1, 1, kHeads, kChunkCols>, pto::Stride<kLength, kLength, kLength, kLength, 1>>;
     using ScaleGlobal =
         GlobalTensor<float, pto::Shape<1, 1, 1, kHeads, 1>, pto::Stride<1, 1, 1, 1, 1>, pto::Layout::DN>;
-    using ScoreGlobal =
-        GlobalTensor<float, pto::Shape<1, 1, 1, 1, kChunkCols>, pto::Stride<kLength, kLength, kLength, kLength, 1>>;
-    using ScoreBf16Global = GlobalTensor<uint16_t, pto::Shape<1, 1, 1, 1, kChunkCols>,
-                                         pto::Stride<kLength, kLength, kLength, kLength, 1>>;
+    using ScoreGlobal = GlobalTensor<float, pto::Shape<1, 1, 1, 1, kChunkCols>, pto::Stride<kLength, kLength, kLength, kLength, 1>>;
+    using ScoreBf16Global =
+        GlobalTensor<bfloat16_t, pto::Shape<1, 1, 1, 1, kChunkCols>, pto::Stride<kLength, kLength, kLength, kLength, 1>>;
 
     MatTile matTile(kHeads, kChunkCols);
     ScaleTile scaleTile(kHeads, 1);
     WeightedTile weightedTile(kHeads, kChunkCols);
-    ReduceTmpTile reduceTmpTile(kReduceTmpRows, kChunkCols);
+    ReduceTmpTile reduceTmpTile(32, kChunkCols);
     ScoreTile scoreTile(1, kChunkCols);
     ScoreBf16Tile scoreBf16Tile(1, kChunkCols);
     TASSIGN(matTile, kUbMat);
@@ -559,7 +690,7 @@ __global__ AICORE void PostProcessScoreKernel(__gm__ float *matmulOut, __gm__ fl
             scaleTile.SetValidCol(1);
             weightedTile.SetValidRow(kHeads);
             weightedTile.SetValidCol(validCols);
-            reduceTmpTile.SetValidRow((kHeads + 1) / 2);
+            reduceTmpTile.SetValidRow(kReduceTmpRows);
             reduceTmpTile.SetValidCol(validCols);
             scoreTile.SetValidRow(1);
             scoreTile.SetValidCol(validCols);
@@ -580,20 +711,14 @@ __global__ AICORE void PostProcessScoreKernel(__gm__ float *matmulOut, __gm__ fl
             TRELU(matTile, matTile);
             TROWEXPANDMUL(weightedTile, matTile, scaleTile);
             TCOLSUM(scoreTile, weightedTile, reduceTmpTile, true);
-            {
-                auto *scorePtr = reinterpret_cast<__ubuf__ float *>(scoreTile.data());
-                auto *bf16Ptr = reinterpret_cast<__ubuf__ uint16_t *>(scoreBf16Tile.data());
-                for (uint32_t c = 0; c < validCols; ++c) {
-                    uint32_t bits = __builtin_bit_cast(uint32_t, scorePtr[c]);
-                    bf16Ptr[c] = static_cast<uint16_t>(bits >> 16);
-                }
-            }
+            TCVT(scoreBf16Tile, scoreTile, RoundMode::CAST_TRUNC);
 #ifndef __PTO_AUTO__
             set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
 #endif
 
             ScoreGlobal dstGlobal(scoreOut + static_cast<uint64_t>(b) * kLength + n0);
-            ScoreBf16Global dstBf16Global(scoreOutBf16 + static_cast<uint64_t>(b) * kLength + n0);
+            ScoreBf16Global dstBf16Global(
+                reinterpret_cast<__gm__ bfloat16_t *>(scoreOutBf16 + static_cast<uint64_t>(b) * kLength + n0));
 #ifndef __PTO_AUTO__
             set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
             wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
@@ -602,10 +727,16 @@ __global__ AICORE void PostProcessScoreKernel(__gm__ float *matmulOut, __gm__ fl
             TSTORE(dstBf16Global, scoreBf16Tile);
         }
     }
+#else
+    (void)matmulOut;
+    (void)postScale;
+    (void)scoreOut;
+    (void)scoreOutBf16;
+#endif
 }
 
 template <uint32_t kLength, uint32_t K>
-__global__ AICORE void TopKFromScoreKernel(__gm__ uint16_t *scoreOutBf16, __gm__ uint32_t *outIdx)
+AICORE inline void TopKFromScoreImpl(__gm__ uint16_t *scoreOutBf16, __gm__ uint32_t *outIdx)
 {
     #ifdef __DAV_VEC__
     if constexpr (!DAV_VEC) {
@@ -966,6 +1097,40 @@ __global__ AICORE void TopKFromScoreKernel(__gm__ uint16_t *scoreOutBf16, __gm__
 #endif
 }
 
+template <uint32_t kBatch, uint32_t kHeads, uint32_t kLength>
+__global__ AICORE void PostProcessScoreKernel(__gm__ float *matmulOut, __gm__ float *postScale, __gm__ float *scoreOut,
+                                              __gm__ uint16_t *scoreOutBf16)
+{
+    PostProcessScoreImpl<kBatch, kHeads, kLength>(matmulOut, postScale, scoreOut, scoreOutBf16);
+}
+
+template <uint32_t kLength, uint32_t K>
+__global__ AICORE void TopKFromScoreKernel(__gm__ uint16_t *scoreOutBf16, __gm__ uint32_t *outIdx)
+{
+    TopKFromScoreImpl<kLength, K>(scoreOutBf16, outIdx);
+}
+
+template <uint32_t blockDim, uint32_t m, uint32_t k, uint32_t n, uint32_t singleCoreM, uint32_t singleCoreK,
+          uint32_t singleCoreN, uint32_t baseM, uint32_t baseK, uint32_t baseN, uint32_t stepM, uint32_t stepKa,
+          uint32_t stepKb, uint32_t stepN, uint32_t kBatch, uint32_t kHeads, uint32_t kTopK>
+__global__ AICORE void IndexerMergedPipelineKernel(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1,
+                                                   __gm__ uint8_t *src2, __gm__ uint8_t *src3, __gm__ float *postScale,
+                                                   __gm__ float *scoreOut, __gm__ uint16_t *scoreOutBf16,
+                                                   __gm__ uint32_t *outIdx)
+{
+    RunMxMatmul<float, float8_e5m2_t, float8_e8m0_t, blockDim, m, k, n, singleCoreM, singleCoreK, singleCoreN, baseM,
+                baseK, baseN, stepM, stepKa, stepKb, stepN, true>(
+        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float8_e5m2_t *>(src0),
+        reinterpret_cast<__gm__ float8_e5m2_t *>(src1), reinterpret_cast<__gm__ float8_e8m0_t *>(src2),
+        reinterpret_cast<__gm__ float8_e8m0_t *>(src3), postScale, scoreOut, scoreOutBf16);
+    pipe_barrier(PIPE_ALL);
+    if constexpr (DAV_VEC) {
+        if (get_subblockid() == 0 && get_block_idx() == 0) {
+            TopKFromScoreImpl<n, kTopK>(scoreOutBf16, outIdx);
+        }
+    }
+}
+
 
 void LaunchIndexerMatmul(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, uint8_t *src3, float *postScale,
                          float *scoreOut, uint16_t *scoreOutBf16, uint32_t *outIdx, void *stream)
@@ -1011,7 +1176,24 @@ void LaunchIndexerTopK(uint16_t *scoreOutBf16, uint32_t *outIdx, void *stream)
 void LaunchIndexerMxfp8(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, uint8_t *src3, float *postScale,
                         float *scoreOut, uint16_t *scoreOutBf16, uint32_t *outIdx, void *stream)
 {
-    LaunchIndexerMatmul(out, src0, src1, src2, src3, postScale, scoreOut, scoreOutBf16, outIdx, stream);
-    LaunchIndexerPostProcess(reinterpret_cast<float *>(out), postScale, scoreOut, scoreOutBf16, stream);
-    LaunchIndexerTopK(scoreOutBf16, outIdx, stream);
+    constexpr uint32_t blockDim = 1;
+    constexpr uint32_t m = 128;
+    constexpr uint32_t k = 1024;
+    constexpr uint32_t n = INDEXER_TEST_N;
+    constexpr uint32_t singleCoreM = 128;
+    constexpr uint32_t singleCoreK = 1024;
+    constexpr uint32_t singleCoreN = n;
+    constexpr uint32_t baseM = 128;
+    constexpr uint32_t baseK = 128;
+    constexpr uint32_t baseN = 128;
+    constexpr uint32_t stepM = 1;
+    constexpr uint32_t stepKa = 1;
+    constexpr uint32_t stepKb = 1;
+    constexpr uint32_t stepN = 1;
+    constexpr uint32_t kBatch = 2;
+    constexpr uint32_t kHeads = 64;
+    constexpr uint32_t kTopK = INDEXER_TOPK;
+    IndexerMergedPipelineKernel<blockDim, m, k, n, singleCoreM, singleCoreK, singleCoreN, baseM, baseK, baseN, stepM,
+                                stepKa, stepKb, stepN, kBatch, kHeads, kTopK>
+        <<<blockDim, nullptr, stream>>>(out, src0, src1, src2, src3, postScale, scoreOut, scoreOutBf16, outIdx);
 }

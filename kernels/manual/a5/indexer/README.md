@@ -1,31 +1,30 @@
 # Indexer 开发与定位记录（MXFP8 GEMM -> ReLU -> scale -> reduce -> TopK）
 
-本文档记录 `kernels/manual/a5/indexer` 从需求对齐到当前可运行状态的完整过程，重点覆盖：
-- 目标算子定义
-- 代码结构演进
-- 关键编译/运行问题与修复
-- TopK 定位结论与当前状态
+本文档记录 `kernels/manual/a5/indexer` 的实现与定位经验，重点沉淀：
+- 目标算子与约束
+- TopK 关键实现（PTO-ISA 5-phase）
+- 真实踩坑与根因
+- 当前可复现的验证基线
 
 ---
 
 ## 1) 目标与规格
 
-目标实现「真实 Lighting Indexer」流程：
-
-1. `Q[2,64,128] x K[131072,128]`（MXFP8 GEMM）
+目标流程（Lighting Indexer）：
+1. `Q[2,64,128] x K[N,128]`（MXFP8 GEMM）
 2. `ReLU`
-3. 乘 `post_scale[2,64]`（按 head 广播）
-4. 沿 head 维 `reduce_sum`，得到 `score[2,131072]`
-5. TopK（`K=2048`，仅输出 index，`uint32`）
+3. 乘 `post_scale[2,64]`（head 维广播）
+4. 沿 head 维 `reduce_sum`，得到 `score[2,N]`
+5. `TopK`（当前 smoke 用 `N=1024, K=512`；最终目标 `N=131072, K=2048`）
 
-补充约束：
-- `post_scale` 允许负值
-- TopK 允许非稳定 tie-break（算法层面）
-- host 侧最初使用 deterministic 规则做黄金对比（`key desc, idx asc`）
+约束：
+- `post_scale` 可为负数
+- 输出 index 为 `uint32`
+- TopK tie-break 允许非稳定（不要求严格保序）
 
 ---
 
-## 2) 代码落地总览
+## 2) 代码结构
 
 核心文件：
 - `kernels/manual/a5/indexer/indexer_mxfp8_kernel.cpp`
@@ -33,131 +32,134 @@
 - `kernels/manual/a5/indexer/scripts/gen_data.py`
 - `kernels/manual/a5/indexer/scripts/radix_topk_golden_stats_bf16.py`
 
-功能拆分：
-- `LaunchIndexerMatmul`：GEMM 阶段
-- `LaunchIndexerPostProcess`：ReLU + scale + reduce_sum（AIV）
-- `LaunchIndexerTopK`：TopK 阶段
-- `LaunchIndexerMxfp8`：全流程串接
+按阶段入口：
+- `LaunchIndexerMatmul`
+- `LaunchIndexerPostProcess`
+- `LaunchIndexerTopK`
+- `LaunchIndexerMxfp8`（all-in-one）
 
-`main.cpp` 支持按阶段运行：
+`main.cpp` 运行方式：
 - `./indexer_mxfp8 1`：matmul
 - `./indexer_mxfp8 2`：postprocess
 - `./indexer_mxfp8 3`：topk
-- `./indexer_mxfp8`：all
+- `./indexer_mxfp8 all`（或不传参数）
 
 ---
 
-## 3) 开发演进（按问题驱动）
+## 3) TopK 实现要点（当前版本）
 
-### 3.1 基础打通阶段
+TopK 输入是 `score_bf16`（`uint16` bit pattern），先做 ordered-key 映射：
+- 负数：`~bits`
+- 非负：`bits ^ 0x8000`
+- 指令组合：`TNOT + TXORS + TCMPS + TSEL`
 
-- 先完成 MXFP8 matmul 基础路径，参考 `matmul_mxfp8_performance`。
-- 将后处理从 host 搬到 device（AIV），并输出 `score` 与 `score_bf16`。
-- 将 TopK 接入到 device kernel，输出 `output_idx.bin`。
-
-### 3.2 关键正确性问题与修复
-
-1. **输入/输出尺寸不一致**
-   - 现象：`file size larger than buffer size`
-   - 修复：统一 `M/N/TopK` 配置，重生数据，修正 host 端 file size 计算。
-
-2. **TLOAD/TSTORE 与向量计算同步问题**
-   - 现象：中间结果全 0 或明显错误
-   - 修复：在关键点补 `set_flag/wait_flag` 反向依赖与管线同步。
-
-3. **TopK scalar 版本卡死/行为异常**
-   - 修复：重构成 5-phase PTO 风格实现，参考 `topk_ub`。
-
-4. **`TCVT` 编译失败（`TypeGet<__bf16>` / `vlds`）**
-   - 触发点：在当前 mixed 编译配置里直接走 `TCVT.hpp`
-   - 处理：
-     - `TopKFromScoreKernel` 和 `TCvt.hpp` 相关路径改为 `__DAV_VEC__` 下编译
-     - 非 vec 路径提供 stub，避免链接/符号缺失
-   - 结论：该问题本质是编译路径与 `TCVT` 类型支持不匹配，不是 TopK 算法逻辑错误。
-
-5. **大 N 下 UB 越界**
-   - 现象：`ub_addr_overflow`，例如访问到 `0x40000` 以上
-   - 根因：TopK kernel 使用了 `1 x kLength` 的大 tile UB 映射，小 N 思路直接套到 `N=131072`
-   - 处理：调回小 N smoke（`N=1024, TopK=512`）继续定位算法正确性。
-
-### 3.3 TopK 关键重构点
-
-- 输入改为 `bf16` key 路线（`score_bf16`）
-- 增加 ordered-key 映射：
-  - 负数：`~bits`
-  - 非负：`bits ^ 0x8000`
-  - 指令：`TNOT + TXORS + TCMPS + TSEL`
-- 5-phase 流程：
-  1. `THISTOGRAM(BYTE_1)`（MSB）
-  2. 选 MSB winner + remainK
-  3. `THISTOGRAM(BYTE_0)`（在 winner-MSB 条件下）
-  4. 选 LSB winner，拼阈值（`TSHLS + TOR`）
-  5. `TGATHER(GT/EQ) + TCONCAT + TSTORE`
+5-phase（参考 `topk_ub`）：
+1. `THISTOGRAM(BYTE_1)` 得到 MSB 统计
+2. 选 MSB winner，并计算 `remainK`
+3. 以 winner-MSB 过滤后做 `THISTOGRAM(BYTE_0)`
+4. 选 LSB winner，`TSHLS + TOR` 拼 16-bit 阈值
+5. `TGATHER(GT/EQ) + TCONCAT + TSTORE` 输出 index
 
 ---
 
-## 4) 定位方法与证据链
+## 4) 关键问题与最终定位结论
 
-主要日志：
-- `build/core0.biu.bwif.wr_log.dump`
-- `build/core0.veccore0.ub.wr_log.dump`
-- `build/core0.veccore0.ub.rd_log.dump`
-- `build/core0.veccore0.rvec_pv.dump`
-- `build/core0.veccore0.instr_log.dump`
+### 4.1 同步问题（已修复）
 
-辅助脚本：
-- `scripts/radix_topk_golden_stats_bf16.py`
-  - 用 `golden_score.bin` 推导 BF16 ordered key
-  - 输出 MSB/LSB winner、remainK、packed_threshold、GT/EQ 索引集合
+现象：
+- `score` 阶段出现大量 `act->0` 或明显异常
 
-关键定位结论：
-- `bwif.wr_log` 与 `radix_topk_golden_stats_bf16.py` 对齐，说明前半段 radix 决策链条正确。
-- `topk multiset` 通过而 `topk idx` 失败，说明问题集中在 index 输出顺序（而非阈值/样本集合错误）。
+根因：
+- `TLOAD/TSTORE` 与向量计算之间缺少反向依赖/同步
+
+修复：
+- 在关键路径补 `set_flag/wait_flag`
+- 特别是 `score` 输出前后增加 `PIPE_V <-> PIPE_MTE3` 同步
 
 ---
 
-## 5) Host 对比逻辑演进
+### 4.2 TopK 输入异常：`VNOT` 前出现大量 0（已定位并修复）
 
-文件：`main.cpp`
+现象：
+- `CHISTV2` 输入出现大量 `0x8080`
+- `VNOT` 输入有很多 `0x0000`
+- 与 `score_bf16` 文件不一致
 
-现状：
-1. 先做原始 `idx` 逐元素比较（deterministic）
-2. 若失败，再按 batch 内排序后比较集合
+证据链：
+- 在 `veccore0.instr_log.dump` 定位 `MOV_SRC_TO_DST_ALIGNv2`（TopK `TLOAD`）
+- 在 `veccore0.ub.wr_log.dump` 看到写入范围是 `0x0 ~ 0x7fc`（2048 B，正好 1024 个 bf16）
+- 但后续 `RV_VLDI` 序列会读到 `0x800` 段，出现读写窗口错位
 
-新增输出语义：
+结论：
+- 问题不是 TopK 逻辑本身，而是输入窗口/读写对齐错误导致读到未覆盖 UB 区域
+
+---
+
+### 4.3 `float -> bf16` 语义问题（已修复）
+
+现象：
+- 使用 `TCVT(..., RoundMode::CAST_RINT)` 后，`topk` 大面积偏差（值级别严重漂移）
+
+根因：
+- `CAST_RINT` 是数值四舍六入五成双，不等价原先用于 key 的截断语义
+
+修复策略：
+- 统一改为 PTO-ISA `TCVT(..., RoundMode::CAST_TRUNC)`
+- 替换所有 scalar `__builtin_bit_cast(... ) >> 16` 路径
+- `ScoreBf16Tile`/`ScoreBf16Global` 使用 `bfloat16_t` tile/global，保持向量转换和存储一致
+
+备注：
+- 这里的目标是保持 TopK key 语义稳定，而不是追求数值 round-to-nearest
+
+---
+
+## 5) Host 校验策略（当前）
+
+`main.cpp` 的 TopK 校验分两层：
+1. 先做逐元素顺序比较（deterministic）
+2. 若失败，再做排序后集合比较（multiset）
+
+因此会出现状态：
+- `topk multiset test success`
 - `topk idx order differs, but sorted idx set matches`
 
-这用于区分：
-- 算法集合正确但顺序不同（目前状态）
-- 真正选错索引集合
+这表示：
+- 选中的样本集合正确
+- 顺序与 deterministic 规则不一致（可接受，前提是业务允许 non-stable tie-break）
 
 ---
 
-## 6) 当前状态（最新）
+## 6) 当前可复现状态（2026-05-05）
 
-当前 smoke 配置：
+配置：
 - `INDEXER_TEST_N=1024`
 - `INDEXER_TOPK=512`
 - `batch=2`
 
-运行 `process 3` 结果：
+`./indexer_mxfp8 all` 结果：
+- `matmul test success`
+- `score test success`
 - `topk multiset test success`
 - `topk idx order differs, but sorted idx set matches`
 
 结论：
-- TopK 样本集合与 golden 一致
-- 顺序与 deterministic golden 不一致（属于 tie/order 规则差异）
+- 全流程（matmul + postprocess + topk）已跑通
+- TopK 集合正确，顺序差异符合 non-deterministic tie-break 预期
 
 ---
 
-## 7) 后续建议
+## 7) 回归与定位建议
 
-1. 若业务允许 non-deterministic tie-break：
-   - 保留“集合一致”为通过标准
-2. 若必须与 deterministic golden 完全一致：
-   - 在 kernel 末段对 `GT/EQ` 合并后的索引做稳定排序规则对齐（`key desc, idx asc`）
-3. 若要回到大 N（131072）：
-   - TopK 必须改为 chunk/stream UB 方案，不能继续使用 `1 x kLength` 大 tile 直铺 UB
+1. 先看 `process 1/2/3` 分阶段结果，再跑 `all`
+2. 出现 TopK 异常时，优先核对：
+   - `TLOAD` 写入窗口 vs 后续 `VLD` 读取窗口
+   - `float->bf16` 转换模式是否仍为 `CAST_TRUNC`
+3. 保留并使用以下日志做证据链：
+   - `build/core0.veccore0.instr_log.dump`
+   - `build/core0.veccore0.ub.wr_log.dump`
+   - `build/core0.veccore0.ub.rd_log.dump`
+   - `build/core0.veccore0.rvec_pv.dump`
+   - `build/core0.biu.bwif.wr_log.dump`
 
 ---
 
@@ -166,14 +168,21 @@
 在 `kernels/manual/a5/indexer`：
 
 ```bash
-# 生成小 N 数据
+# 生成 smoke 数据
 INDEXER_TEST_N=1024 INDEXER_TOPK=512 ../../../../.venv-indexer-sim/bin/python scripts/gen_data.py
 
-# 运行 topk-only
+# 运行环境
 source /usr/local/Ascend/cann_9b2/cann/set_env.sh
 export LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/Ascend910_9599/lib:$LD_LIBRARY_PATH
+
+# 分阶段
+./build/indexer_mxfp8 1
+./build/indexer_mxfp8 2
 ./build/indexer_mxfp8 3
 
-# 打印 BF16 radix 黄金统计
+# 全流程
+./build/indexer_mxfp8 all
+
+# BF16 radix 统计
 INDEXER_TEST_N=1024 INDEXER_TOPK=512 python3 scripts/radix_topk_golden_stats_bf16.py
 ```
