@@ -300,6 +300,32 @@ B_L1 :  13..13+L1_POOL-1
 | `BNBuf_K16_N256_BL1_16_BL0_8_8KB` | 16 | 8 | 16 (no reuse) | 0 |
 | `BNBuf_K16_N256_BL1_32_BL0_8_8KB_pool16` | 32 | 8 | 16 (reuse)    | 4 (every 16 of 64 inner iters) |
 
+> **Note — `-DPTO_BUFID_HW_GT32` deadlocks Config 9 (`_pool16`, `_pool19`)
+> *unless the dedup helpers are used* (now the default).**
+>
+> With the macro defined and `N_BUFS_B_L1 = 32`, the L1 `b_id` host range
+> expands to `13..44`. The `+32` offset added by the `get_buffer` /
+> `rls_buffer` wrappers is masked off by the simulator's effective 5-bit
+> `GET_BUF`/`RLS_BUF` operand, so host ids `37..44` alias back to asm
+> bufIds `5..12` — exactly the L0B id range (`L0B_ID_BASE = 5`,
+> 8 slots). At `flat ∈ {24..31}` the inner-loop sequence
+> `get_buffer<PIPE_MTE1>(b_id); get_buffer<PIPE_MTE1>(lb_id);` issues two
+> consecutive same-pipe GETs on the same physical counter, doubling the
+> consumer count and stalling the MTE1 pipe (same failure mode as
+> Config 8b). Replacing the paired raw calls with
+> `get_multiple<PIPE_MTE1>(b_id, lb_id)` /
+> `rls_multiple<PIPE_MTE1>(b_id, lb_id)` (and similarly for the A→L0A
+> and Cube blocks) collapses the colliding pair into a single
+> `get_buf`/`rls_buf` and resolves the hang.
+>
+> Verified results (Config 9, all four launchers):
+>
+> | Test | default (HW32) | `-DPTO_BUFID_HW_GT32` (DEDUP=1) |
+> |---|---|---|
+> | `BNBuf_K16_N256_BL1_16_BL0_8_8KB`        | PASSED | PASSED (74.6 ms) |
+> | `BNBuf_K16_N256_BL1_32_BL0_8_8KB_pool16` | PASSED | PASSED (86.2 ms) |
+> | `BNBuf_K16_N256_BL1_32_BL0_8_8KB_pool19` | PASSED | PASSED (79.5 ms) |
+
 ### Buffer-id semantics notes
 
 The HW maintains a per-`(pipe, id)` event FIFO of bounded depth. Reuse of an

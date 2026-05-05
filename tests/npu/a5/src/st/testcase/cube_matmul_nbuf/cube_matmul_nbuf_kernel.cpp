@@ -1662,13 +1662,11 @@ __global__ AICORE void RunCubeMatmulBL1Reuse(__gm__ outType *out, __gm__ inType 
 
             // A view -> L0A
 #ifndef __PTO_AUTO__
-            get_buffer<PIPE_MTE1>(a_id);
-            get_buffer<PIPE_MTE1>(la_id);
+            get_multiple<PIPE_MTE1>(a_id, la_id);
 #endif
             TMOV(aL[i % 2], aView[s_a][i]);
 #ifndef __PTO_AUTO__
-            rls_buffer<PIPE_MTE1>(a_id);
-            rls_buffer<PIPE_MTE1>(la_id);
+            rls_multiple<PIPE_MTE1>(a_id, la_id);
 #endif
 
             // B GM -> L1
@@ -1681,18 +1679,20 @@ __global__ AICORE void RunCubeMatmulBL1Reuse(__gm__ outType *out, __gm__ inType 
             rls_buffer<PIPE_MTE2>(b_id);
 
             // B L1 -> L0B
-            get_buffer<PIPE_MTE1>(b_id);
-            get_buffer<PIPE_MTE1>(lb_id);
+            // Under PTO_BUFID_HW_GT32, the L1 b_id range (13..13+L1_POOL-1)
+            // can alias the L0B id range (5..12) after the 5-bit HW mask
+            // (e.g. host 37..44 -> asm 5..12).  Use get_multiple/rls_multiple
+            // so the dedup helper collapses the same-pipe collision into a
+            // single get/rls (consecutive same-pipe get/rls on identical
+            // bufIds otherwise hang the cube core).
+            get_multiple<PIPE_MTE1>(b_id, lb_id);
 #endif
             TMOV(bL[s_lb], bM[s_b]);
 #ifndef __PTO_AUTO__
-            rls_buffer<PIPE_MTE1>(b_id);
-            rls_buffer<PIPE_MTE1>(lb_id);
+            rls_multiple<PIPE_MTE1>(b_id, lb_id);
 
             // Cube
-            get_buffer<PIPE_M>(la_id);
-            get_buffer<PIPE_M>(lb_id);
-            get_buffer<PIPE_M>(C_ID);
+            get_multiple<PIPE_M>(la_id, lb_id, C_ID);
 #endif
             if (k_global == 0) {
                 TMATMUL(cTile, aL[i % 2], bL[s_lb]);
@@ -1700,9 +1700,7 @@ __global__ AICORE void RunCubeMatmulBL1Reuse(__gm__ outType *out, __gm__ inType 
                 TMATMUL_ACC(cTile, cTile, aL[i % 2], bL[s_lb]);
             }
 #ifndef __PTO_AUTO__
-            rls_buffer<PIPE_M>(la_id);
-            rls_buffer<PIPE_M>(lb_id);
-            rls_buffer<PIPE_M>(C_ID);
+            rls_multiple<PIPE_M>(la_id, lb_id, C_ID);
 #endif
         }
     }
