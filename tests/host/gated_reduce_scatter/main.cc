@@ -167,20 +167,47 @@ int main(int /*argc*/, char ** /*argv*/)
     std::fprintf(stderr, "[GATED_RS_ST] HcclComm init OK (single rank)\n");
 
     // -------------------------------------------------------------------------
-    // 3. Acquire CCU thread.
+    // 3. Acquire CCU thread — MUST use the *WithStream variant.
     //
-    // notifyNumPerThread is a hint for how many notify slots the CCU thread
-    // pre-allocates. The placeholder kernel uses none (no NotifyRecord/Wait
-    // in our minimal Algorithm()), so 1 is sufficient. Bump if the kernel
-    // grows real channel sync logic.
+    // `HcclThreadAcquire(comm, engine, threadNum, notifyNumPerThread, ...)`
+    // and `HcclThreadAcquireWithStream(comm, engine, stream, notifyNum, ...)`
+    // are NOT interchangeable for the CCU host path:
+    //   - The plain `HcclThreadAcquire` allocates a fresh thread that is NOT
+    //     bound to any aclrtStream. hcomm uses it for CPU/AICPU thread pools
+    //     that don't carry user-stream context.
+    //   - `HcclThreadAcquireWithStream` wraps an EXISTING aclrtStream into a
+    //     ThreadHandle so subsequent `HcclCcuKernelRegister`/`Launch` calls
+    //     know which user stream the resulting CCU microcode goes onto.
+    //
+    // hccl's own CCU host path uses the *WithStream variant
+    // (`op_common.cc:881-885`):
+    //     CHK_RET(HcclThreadAcquireWithStream(comm, param.engine,
+    //                                         param.stream,
+    //                                         resRequest.notifyNumOnMainThread,
+    //                                         &thread));
+    // where `param.engine == COMM_ENGINE_CCU` and `param.stream` is the user
+    // stream. CCU is "host mode" in hccl's classification.
+    //
+    // Symptom of using the wrong variant (observed 2026-05-06):
+    //   `HcclCcuKernelRegister` returns `HCCL_E_PTR (=2)`. Internal hcomm
+    //   `Translate()` tries to look up "the stream bound to this CCU thread"
+    //   to figure out where to emit microcode, finds NULL because no stream
+    //   was bound, and bails out with E_PTR. Symptom is the same as a NULL
+    //   creator/arg pointer, hence the misleading error code.
+    //
+    // notifyNum: number of notify slots pre-allocated for this thread. The
+    // placeholder kernel only uses CompletedEvents (gate/done/copy), no
+    // explicit NotifyRecord/Wait, so 1 is sufficient. If the kernel grows
+    // real channel sync (multi-rank phase 3), bump this.
     // -------------------------------------------------------------------------
-    constexpr uint32_t kThreadNum            = 1;
-    constexpr uint32_t kNotifyNumPerThread   = 1;
+    constexpr uint32_t kNotifyNum = 1;
     ThreadHandle threadHandle = 0;
-    HCCL_OK(HcclThreadAcquire(comm, COMM_ENGINE_CCU, kThreadNum,
-                              kNotifyNumPerThread, &threadHandle));
-    std::fprintf(stderr, "[GATED_RS_ST] HcclThreadAcquire OK threadHandle=0x%llx\n",
-                 static_cast<unsigned long long>(threadHandle));
+    HCCL_OK(HcclThreadAcquireWithStream(comm, COMM_ENGINE_CCU, stream,
+                                         kNotifyNum, &threadHandle));
+    std::fprintf(stderr,
+        "[GATED_RS_ST] HcclThreadAcquireWithStream OK threadHandle=0x%llx "
+        "(bound to user stream)\n",
+        static_cast<unsigned long long>(threadHandle));
 
     // -------------------------------------------------------------------------
     // 4. Allocate device input/output + diagnostic AIV marker buffer.
