@@ -45,6 +45,10 @@ checkopts() {
         ENABLE_KIRINX90=true
         shift
         ;;
+      --310p3)
+        ENABLE_310p3=true
+        shift
+        ;;
       --sim)
         ARGS+=" -r sim "
         shift
@@ -722,6 +726,11 @@ if [ "$ENABLE_KIRIN9030" = "true" ]; then
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmov_vect
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmuls
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsel
+fi
+
+if [ "$ENABLE_310p3" = "true" ]; then
+  python3 tests/script/build_st.py $ARGS  -v 310p3 -t all
+  python3 tests/script/run_st.py $ARGS -w -v 310p3 -t tadd
 fi
 
 if [ "$ENABLE_COMM" = "true" ]; then

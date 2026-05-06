@@ -30,6 +30,7 @@ PTO Tile Lib 的测试与示例，覆盖 CPU 仿真与 NPU（`sim` 和板上 `np
   - `a5/src/st/`：A5 计算 ST
   - `a5/src/common/`：A5 共享测试资源
   - `a5/comm/st/`：A5 通信 ST
+  - `a1/src/st/`：A1 计算 ST
   - `kirin9030/src/st/`：Kirin9030 计算 ST
   - `kirin9030/src/common/`：Kirin9030 共享测试资源
 - `costmodel/`：代价模型测试
