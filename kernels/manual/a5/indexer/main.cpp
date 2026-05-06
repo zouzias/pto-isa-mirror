@@ -20,7 +20,7 @@ using namespace std;
 using namespace PtoTestCommon;
 
 #ifndef INDEXER_TEST_N
-#define INDEXER_TEST_N 1024
+#define INDEXER_TEST_N 2048
 #endif
 #ifndef INDEXER_TOPK
 #define INDEXER_TOPK 512

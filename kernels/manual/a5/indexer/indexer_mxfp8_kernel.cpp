@@ -25,7 +25,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 #ifndef INDEXER_TEST_N
-#define INDEXER_TEST_N 1024
+#define INDEXER_TEST_N 2048
 #endif
 #ifndef INDEXER_TOPK
 #define INDEXER_TOPK 512
@@ -47,7 +47,7 @@ constexpr uint32_t BUFFER_NUM = 2;
 constexpr uint32_t SCALE_FACTOR = 32;
 constexpr uint32_t L0_PINGPONG_BYTES = 32 * 1024; // L0A/L0B ping-pong split (32 KiB per buffer)
 constexpr uint32_t mxScalePara = 8;
-constexpr bool INDEXER_SIMPLE_EXPERIMENT = true; // debug mode: one 128x128 tile, one batch, no topk
+constexpr bool INDEXER_SIMPLE_EXPERIMENT = false; // debug mode: one 128x128 tile, one batch, no topk
 constexpr uint32_t INDEXER_SIMPLE_TILE_N = 8;     // debug mode: number of N-tiles to execute
 constexpr bool INDEXER_SIMPLE_FULL_BATCH = true;  // debug mode: when true, compute/store both batches
 // Same split as fa_performance_kernel: constexpr DAV_CUBE / DAV_VEC from __DAV_*__, then
@@ -773,10 +773,14 @@ AICORE inline void TopKFromScoreImpl(__gm__ uint16_t *scoreOutBf16, __gm__ uint3
     constexpr uint64_t kChunkConcatGt = 0x28000;
     constexpr uint64_t kChunkConcatEq = 0x28040;
     constexpr uint64_t kGatherUbTmp = 0x29000;
-    constexpr uint64_t kUbNegKeys = 0x26800;
-    constexpr uint64_t kUbPosKeys = 0x27000;
-    constexpr uint64_t kUbSignMask = 0x27800;
-    constexpr uint64_t kUbSignTmp = 0x27C00;
+    // Keep ordered-key temporary buffers in high UB region to avoid aliasing with
+    // phase2/phase5 buffers when kLength expands to 2048.
+    constexpr uint64_t kUbNegKeys = 0x3A000;
+    constexpr uint64_t kUbPosKeys = kUbNegKeys + static_cast<uint64_t>(kLength) * sizeof(uint16_t);
+    constexpr uint64_t kUbSignMask = kUbPosKeys + static_cast<uint64_t>(kLength) * sizeof(uint16_t);
+    constexpr uint64_t kUbSignTmp = kUbSignMask + static_cast<uint64_t>(kLength) * sizeof(uint8_t);
+    constexpr uint64_t kUbVecLimit = 0x40000;
+    static_assert(kUbSignTmp + 32 <= kUbVecLimit, "TopK UB layout exceeds vector UB limit.");
     constexpr uint64_t kUbMerged = 0x00000;
 
     constexpr uint16_t kIdxAlignedRows = ((sizeof(uint8_t) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE) * BLOCK_BYTE_SIZE;
