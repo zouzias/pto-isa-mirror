@@ -405,65 +405,6 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTile &dst, SrcTile &src, uint16_t indexRow, u
     }
 }
 
-template <typename DstTileData, typename SrcTileData>
-PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0)
-{
-    if constexpr (DstTileData::Loc == TileType::Vec && SrcTileData::Loc == TileType::Vec) {
-        using T = typename DstTileData::DType;
-        static_assert(std::is_same<typename DstTileData::DType, typename SrcTileData::DType>::value,
-                      "TEXTRACT Vec→Vec : Source and destination data types must match");
-        static_assert((std::is_same<T, half>::value) || (std::is_same<T, bfloat16_t>::value) ||
-                          (std::is_same<T, float>::value) || (std::is_same<T, int32_t>::value) ||
-                          (std::is_same<T, int8_t>::value) || (std::is_same<T, hifloat8_t>::value) ||
-                          (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
-                          (std::is_same<T, float8_e8m0_t>::value) || (std::is_same<T, float4_e2m1x2_t>::value) ||
-                          (std::is_same<T, float4_e1m2x2_t>::value),
-                      "TEXTRACT Vec→Vec : Unsupported data type.");
-        if constexpr (DstTileData::isRowMajor && SrcTileData::isRowMajor) {
-            static_assert(DstTileData::Rows <= SrcTileData::Rows,
-                          "TEXTRACT ND Vec→Vec : Destination rows must not exceed source rows");
-            static_assert(DstTileData::Cols <= SrcTileData::Cols,
-                          "TEXTRACT ND Vec→Vec : Destination cols must not exceed source cols");
-            uint32_t idxRow = static_cast<uint32_t>(indexRow);
-            uint32_t idxCol = static_cast<uint32_t>(indexCol);
-            if constexpr (DstTileData::ValidRow == 1 && DstTileData::ValidCol == 1) {
-                PTO_ASSERT(idxRow < SrcTileData::Rows, "TEXTRACT ND Vec→Vec : indexRow exceeds srcRows!");
-                PTO_ASSERT(idxCol < SrcTileData::Cols, "TEXTRACT ND Vec→Vec : indexCol exceeds srcCols!");
-                TExtractVecToVecNDScalarImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), idxRow, idxCol);
-            } else {
-                TExtractVecToVecNDDispatch<T, DstTileData, SrcTileData>(dst, src, idxRow, idxCol);
-            }
-        } else if constexpr (!DstTileData::isRowMajor && !SrcTileData::isRowMajor &&
-                             DstTileData::SFractal == SLayout::RowMajor && SrcTileData::SFractal == SLayout::RowMajor) {
-            static_assert(DstTileData::Cols <= SrcTileData::Cols,
-                          "TEXTRACT NZ Vec→Vec : Destination cols must not exceed source cols");
-            if constexpr (DstTileData::ValidRow == 1 && DstTileData::ValidCol == 1) {
-                PTO_ASSERT(indexRow < SrcTileData::Rows, "TEXTRACT NZ Vec→Vec : indexRow exceeds srcRows!");
-                PTO_ASSERT(indexCol < SrcTileData::Cols, "TEXTRACT NZ Vec→Vec : indexCol exceeds srcCols!");
-                TExtractVecToVecNZScalarImpl<T, DstTileData, SrcTileData>(
-                    dst.data(), src.data(), static_cast<uint32_t>(indexRow), static_cast<uint32_t>(indexCol));
-            } else {
-                uint16_t validRow = static_cast<uint16_t>(dst.GetValidRow());
-                uint16_t validCol = static_cast<uint16_t>(dst.GetValidCol());
-                PTO_ASSERT(indexRow + validRow <= SrcTileData::Rows,
-                           "TEXTRACT NZ Vec→Vec : indexRow + validRow exceeds source rows!");
-                PTO_ASSERT(indexCol + validCol <= SrcTileData::Cols,
-                           "TEXTRACT NZ Vec→Vec : indexCol + validCol exceeds source cols!");
-                TExtractVecToVecNZImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol,
-                                                                    static_cast<uint16_t>(SrcTileData::Rows), indexRow,
-                                                                    indexCol);
-            }
-        } else {
-            static_assert(DstTileData::isRowMajor == SrcTileData::isRowMajor,
-                          "TEXTRACT Vec→Vec : Source and destination layout must match (both ND or both NZ)");
-        }
-    } else if constexpr (is_conv_tile_v<SrcTileData>) {
-        TEXTRACT_CONVTILE_IMPL(dst, src, indexRow, indexCol);
-    } else {
-        TEXTRACT_TILE_IMPL(dst, src, indexRow, indexCol);
-    }
-}
-
 // vector quant
 template <typename FpTile>
 __tf__ PTO_INTERNAL void SetFPC(typename FpTile::TileDType __in__ fp, uint16_t indexCol)
@@ -477,7 +418,7 @@ __tf__ PTO_INTERNAL void SetFPC(typename FpTile::TileDType __in__ fp, uint16_t i
 template <typename DstTile, typename SrcTile, ReluPreMode reluMode>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTile &dst, SrcTile &src, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
-    static_assert((DstTile::Loc == TileType::Mat || DstTile::Loc == TileType::Vec),
+    static_assert((DstTileData::Loc == TileType::Mat || DstTileData::Loc == TileType::Vec),
                   "Destination TileType only support Mat and Vec.");
     CheckTExtractAccValid<DstTile, SrcTile, typename DstTile::DType, typename SrcTile::DType>();
     constexpr QuantMode_t quantPre = GetCastPreQuantMode<typename SrcTile::DType, typename DstTile::DType>();

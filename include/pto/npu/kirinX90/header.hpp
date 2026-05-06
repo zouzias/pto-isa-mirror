@@ -19,8 +19,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define float4_e1m2x2_t int64_t
 #include "pto/common/utils.hpp"
 #include "pto/common/constants.hpp"
-#include "pto/npu/kirinX90/datatype.hpp"
 #include "pto/npu/kirinX90/common.hpp"
+#include "pto/npu/kirin9030/utils.hpp"
+#include "pto/npu/kirinX90/datatype.hpp"
+#include "pto/npu/a2a3/TSubView.hpp"
 #include "pto/npu/kirinX90/TLoad.hpp"
 #include "pto/npu/kirinX90/TStore.hpp"
 #include "pto/npu/kirinX90/TMov.hpp"
@@ -29,7 +31,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 #include "pto/npu/a2a3/TAssign.hpp"
 #include "pto/npu/a2a3/TExtract.hpp"
-#include "pto/npu/kirin9030/utils.hpp"
 #include "pto/npu/kirin9030/TSync.hpp"
 #include "pto/npu/kirin9030/TAdd.hpp"
 #include "pto/npu/kirin9030/TAddS.hpp"
@@ -53,7 +54,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/kirin9030/TPartAdd.hpp"
 #include "pto/npu/kirin9030/TPartMax.hpp"
 #include "pto/npu/kirin9030/TPartMin.hpp"
-#include "pto/npu/kirin9030/TInsert.hpp"
+// #include "pto/npu/kirin9030/TInsert.hpp"
 #include "pto/npu/kirin9030/TGather.hpp"
 #include "pto/npu/kirin9030/TRsqrt.hpp"
 #include "pto/npu/kirin9030/TUnaryOp.hpp"

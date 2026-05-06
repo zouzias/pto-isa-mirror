@@ -166,6 +166,9 @@ set(ALL_TESTCASES
     tmov_vect
     tmuls
     tsel
+    textract_compact
+    textract_nd_vec
+    textract_vec
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))

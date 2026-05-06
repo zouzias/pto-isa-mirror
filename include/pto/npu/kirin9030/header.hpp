@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define float4_e2m1x2_t int64_t
 #define float4_e1m2x2_t int64_t
 #include "pto/npu/a2a3/TAssign.hpp"
+#include "pto/npu/a2a3/TSubView.hpp"
 #include "pto/npu/kirin9030/TSync.hpp"
 #include "pto/npu/kirin9030/TAdd.hpp"
 #include "pto/npu/kirin9030/TAddS.hpp"
