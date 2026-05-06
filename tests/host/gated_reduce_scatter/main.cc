@@ -209,29 +209,34 @@ int main(int /*argc*/, char ** /*argv*/)
     ACL_OK(aclrtMalloc(&aivMarkerDev, kAivMarkerBytes, ACL_MEM_MALLOC_HUGE_ONLY));
     ACL_OK(aclrtMemset(aivMarkerDev,  kAivMarkerBytes, 0, kAivMarkerBytes));
 
-    // Token covers BOTH input + output regions. `GetTokenInfo` returns a
-    // 64-bit handle the CCU IR uses to address GM through the kernel's
-    // LocalAddr(addr, token) plumbing. We span both buffers with one token
-    // by passing the lower address as `va` and total bytes as `size`.
     const uint64_t inputVa  = reinterpret_cast<uint64_t>(inputDev);
     const uint64_t outputVa = reinterpret_cast<uint64_t>(outputDev);
-    const uint64_t spanBase = (inputVa < outputVa) ? inputVa : outputVa;
-    const uint64_t spanEnd  = (inputVa < outputVa)
-                              ? (outputVa + kPayloadSize)
-                              : (inputVa  + kPayloadSize);
-    const uint64_t spanSize = spanEnd - spanBase;
-    const uint64_t token    = hcomm::CcuRep::GetTokenInfo(spanBase, spanSize);
-    std::fprintf(stderr,
-        "[GATED_RS_ST] tokens: inputVa=0x%llx outputVa=0x%llx spanBase=0x%llx "
-        "spanSize=%llu token=0x%llx\n",
-        static_cast<unsigned long long>(inputVa),
-        static_cast<unsigned long long>(outputVa),
-        static_cast<unsigned long long>(spanBase),
-        static_cast<unsigned long long>(spanSize),
-        static_cast<unsigned long long>(token));
 
     // -------------------------------------------------------------------------
     // 5. Register + translate the gated kernel.
+    //
+    // ORDERING INVARIANT (learned 2026-05-06):
+    //   `hcomm::CcuRep::GetTokenInfo(va, size)` MUST be called AFTER
+    //   `HcclCcuKernelRegisterFinish` returns. Calling it earlier throws
+    //   `Hccl::CcuApiException: failed to query tokenInfo` because the CCU
+    //   translation context that maps GM VA → CCU token is only built up
+    //   during `RegisterFinish` (when hcomm runs `Translate()` on each
+    //   registered kernel and stages the microcode + mem aperture).
+    //
+    //   This matches hccl's own internal ordering — see
+    //   `hccl/src/ops/op_common/op_common.cc:1201-1206` (Register/Finish)
+    //   then `op_common.cc:474-496` (Orchestrate → KernelRun) then
+    //   `hccl/src/ops/reduce_scatter/template/ccu/ccu_temp_reduce_scatter_mesh_1D.cc:99-138`
+    //   where `GetToken(buffInfo_, token)` is called inside `KernelRun`,
+    //   strictly after the resource path has run `RegisterFinish`. hccl never
+    //   exposes this ordering as a public contract — it's enforced
+    //   structurally by the framework. Standalone CCU users (us) have to
+    //   replicate it manually.
+    //
+    //   Since `token` is a task-level (per-launch) parameter, not a
+    //   kernel-level (per-register) parameter, deferring its query until
+    //   after RegisterFinish is fine — `PtoGatedTaskArg` carries it into
+    //   `GeneArgs()` which runs during `HcclCcuKernelLaunch`.
     // -------------------------------------------------------------------------
     pto::ccu::PtoGatedKernelArg karg{
         /*rankId=*/   0,
@@ -258,7 +263,32 @@ int main(int /*argc*/, char ** /*argv*/)
         "[GATED_RS_ST] HcclCcuKernelRegisterFinish OK — microcode translated\n");
 
     // -------------------------------------------------------------------------
-    // 6. Launch the gated kernel.
+    // 6. Query CCU token AFTER translate.
+    //
+    // Token covers BOTH input + output regions. `GetTokenInfo` returns a
+    // 64-bit handle the CCU IR uses to address GM through the kernel's
+    // `LocalAddr{addr=Var, token=Var}` plumbing. We span both buffers with a
+    // single token by passing the lower address as `va` and the contiguous
+    // total bytes as `size` — same trick hccl mesh1d uses for RS
+    // (`ccu_temp_reduce_scatter_mesh_1D.cc:120-126`).
+    // -------------------------------------------------------------------------
+    const uint64_t spanBase = (inputVa < outputVa) ? inputVa : outputVa;
+    const uint64_t spanEnd  = (inputVa < outputVa)
+                              ? (outputVa + kPayloadSize)
+                              : (inputVa  + kPayloadSize);
+    const uint64_t spanSize = spanEnd - spanBase;
+    const uint64_t token    = hcomm::CcuRep::GetTokenInfo(spanBase, spanSize);
+    std::fprintf(stderr,
+        "[GATED_RS_ST] tokens: inputVa=0x%llx outputVa=0x%llx spanBase=0x%llx "
+        "spanSize=%llu token=0x%llx\n",
+        static_cast<unsigned long long>(inputVa),
+        static_cast<unsigned long long>(outputVa),
+        static_cast<unsigned long long>(spanBase),
+        static_cast<unsigned long long>(spanSize),
+        static_cast<unsigned long long>(token));
+
+    // -------------------------------------------------------------------------
+    // 7. Launch the gated kernel.
     //
     // CCU stream is now pushed and parks at `WaitEvent(gateEvent_)`. The
     // kernel's `GeneArgs()` ran during launch and published the gate
@@ -275,7 +305,7 @@ int main(int /*argc*/, char ** /*argv*/)
         "[GATED_RS_ST] HcclCcuKernelLaunch OK — CCU stream parked at gate\n");
 
     // -------------------------------------------------------------------------
-    // 7. Read back the published gate descriptor.
+    // 8. Read back the published gate descriptor.
     // -------------------------------------------------------------------------
     pto::host::PtoGateDescriptor desc{};
     if (!pto::ccu::TryGet(/*rankId=*/0, desc)) {
@@ -293,7 +323,7 @@ int main(int /*argc*/, char ** /*argv*/)
         desc.dieId, desc.ckeId, desc.mask);
 
     // -------------------------------------------------------------------------
-    // 8. Resolve CCU MMIO base address.
+    // 9. Resolve CCU MMIO base address.
     //
     // QueryCcuBaseInfo returns a struct with `resourceAddr` = base of the CKE
     // chunk for the given die. The AIV trigger computes the per-CKE offset
@@ -319,7 +349,7 @@ int main(int /*argc*/, char ** /*argv*/)
         static_cast<unsigned long long>(desc.mmioAddr));
 
     // -------------------------------------------------------------------------
-    // 9. AIV trigger — release the gate.
+    // 10. AIV trigger — release the gate.
     // -------------------------------------------------------------------------
     int32_t trigRc = pto::aiv::launch_treduce(aivStream, desc, aivMarkerDev);
     if (trigRc != 0) {
@@ -333,7 +363,7 @@ int main(int /*argc*/, char ** /*argv*/)
     std::fprintf(stderr, "[GATED_RS_ST] AIV launch_treduce OK\n");
 
     // -------------------------------------------------------------------------
-    // 10. Sync streams. Order matters: AIV must drain first so the gate
+    // 11. Sync streams. Order matters: AIV must drain first so the gate
     //     write is in flight before we try to wait for CCU completion.
     // -------------------------------------------------------------------------
     ACL_OK(aclrtSynchronizeStream(aivStream));
@@ -358,7 +388,7 @@ int main(int /*argc*/, char ** /*argv*/)
     std::fprintf(stderr, "[GATED_RS_ST] ccu stream synced — gate released\n");
 
     // -------------------------------------------------------------------------
-    // 11. Verify output == input (placeholder identity copy).
+    // 12. Verify output == input (placeholder identity copy).
     // -------------------------------------------------------------------------
     std::vector<uint8_t> outputBack(kPayloadSize);
     ACL_OK(aclrtMemcpy(outputBack.data(), kPayloadSize, outputDev, kPayloadSize,
@@ -388,7 +418,7 @@ int main(int /*argc*/, char ** /*argv*/)
                  kPayloadSize);
 
     // -------------------------------------------------------------------------
-    // 12. Cleanup. Best-effort — exit code already set by check above.
+    // 13. Cleanup. Best-effort — exit code already set by check above.
     // -------------------------------------------------------------------------
     aclrtFree(aivMarkerDev);
     aclrtFree(outputDev);
