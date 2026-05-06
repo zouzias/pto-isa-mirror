@@ -163,6 +163,39 @@ enum class ScatterConflict : uint8_t {
 - For `Coalesce::Elem`: `TileIdx::ValidRow / ValidCol == TileSrc::ValidRow / ValidCol`. **No layout-pairing constraint** — `TileSrc` and `TileIdx` may independently be `RowMajor` or `ColMajor`; the kernel walks both via per-tile `tile_offset_2d`. Table size is the product of all five `Shape` dimensions.
 - The `[R, 1]` index variant uses `BLayout::ColMajor` paired with a `Layout::DN` `GlobalTensor` for the upstream `TLOAD`; the `[1, R]` variant uses `BLayout::RowMajor` with the default `Layout::ND` `GlobalTensor`. Either way, the **upstream `Tile` itself must satisfy the 32-byte-burst alignment of its physical (padded) dim** — not the logical valid dim — so odd `R` index tiles are expressed as a padded shape with a smaller `ValidCol`/`ValidRow` (see [Minimum Tile Shape](#minimum-tile-shape) below).
 
+### Dynamic Runtime Shapes
+
+`MSCATTER` supports both compile-time fixed shapes and **runtime-dynamic** shapes for the destination `GlobalTensor` and the source / index `Tile`s. Any dimension declared as `DYNAMIC` (`-1`) at template-instantiation time is resolved at runtime through the standard PTO accessors:
+
+- `Tile<…, RowMask, ColMask>` with `RowMask == -1` and/or `ColMask == -1` stores the runtime valid extents in the tile object; `MSCATTER_IMPL` reads them via `src.GetValidRow()` / `src.GetValidCol()` and forwards them to the SIMT kernel as `validRows` / `validCols` arguments.
+- `Shape<S0, S1, S2, S3, S4>` / `Stride<…>` with one or more `-1` entries are constructed with the runtime sizes; `MSCATTER_IMPL` reads them via `table.GetShape(GlobalTensorDim::DIM_X)` and folds them into `tableRows` (Row mode) or `tableSize = ∏ shape[0..4]` (Elem mode).
+
+Static-asserts in `MScatterCheck` are gated on `if constexpr (DIM > 0)` so they fire only for compile-time-known dimensions; mixed static/dynamic combinations check exactly the static dims and defer the dynamic ones to runtime arithmetic. Padded `Tile::Rows` / `Tile::Cols` are always compile-time (they govern the UB DMA-burst alignment); only the **valid** sub-region and the GM table extents may be dynamic.
+
+Example (mirrors `case_elem2d_dyn_user_float_1x9_in_1x16_3x10`):
+
+```cpp
+constexpr auto kPadCols = 16;
+using SrcTileT = Tile<TileType::Vec, float,    1, kPadCols, BLayout::RowMajor, -1, -1>;
+using IdxTileT = Tile<TileType::Vec, int32_t,  1, kPadCols, BLayout::RowMajor, -1, -1>;
+using TableShape  = Shape<1, 1, 1, -1, -1>;
+using TableStride = Stride<1, 1, 1, -1, -1>;
+
+int64_t idxShape4 = 9, d3 = 3, d4 = 10, dstStride3 = 10;
+TableShape  tableShape(d3, d4);
+TableStride tableStride(dstStride3, (int64_t)1);
+GlobalTensor<float, TableShape, TableStride> tableGM(dstGm, tableShape, tableStride);
+
+SrcTileT srcTile(1, idxShape4);
+IdxTileT idxTile(1, idxShape4);
+TASSIGN(srcTile, srcUbOffsetBytes);
+TASSIGN(idxTile, idxUbOffsetBytes);
+
+MSCATTER<Coalesce::Elem, ScatterAtomicOp::None, ScatterOOB::Skip>(tableGM, srcTile, idxTile);
+```
+
+At dispatch time `MSCATTER_IMPL` resolves `validRows = 1`, `validCols = 9`, and `tableSize = 1·1·1·3·10 = 30`; the SIMT launch sizes itself by `ceil(validRows*validCols / WARP_SIZE) = 1` warp. The padded UB `Tile::Cols = 16` is purely a `TLOAD` burst-alignment artifact — the SIMT body only walks the valid 9 elements.
+
 ### Layout Support
 
 The SIMT kernel itself is **layout-agnostic** for every UB tile it touches: every UB read/write goes through `tile_offset_2d<TileX>(r, c)`, which dispatches the index arithmetic from the tile type's `BLayout`. The caller is responsible for getting the data into UB with whatever `TLOAD` / `TMOV` / `TINSERT` configuration matches their upstream layout (ND, DN, NZ, RowMajor, ColMajor, etc.).
@@ -350,9 +383,9 @@ AICORE void example_last_deterministic(__gm__ half* tablePtr)
 
 ## Performance Considerations
 
-1. **Shape-adaptive launch (compile-time).** `mscatter_cfg::RowLaunch<NumRows, RowWidth>` and `mscatter_cfg::ElemLaunch<TotalElems>` derive the launch `dim3{32, kLaunchWarps}` at compile time so small tiles do not pay the cost of launching 1024 idle threads.
-   - **Row.** `kRowWarps = min(NumRows, 32)` own rows; `kWarpsPerRow = min(32 / kRowWarps, ceil(RowWidth / 32))` cooperate on each row's column chunks. `kLaunchWarps = kRowWarps * kWarpsPerRow`. Lane writes form 128-byte coalesced stores; `kColStride = kWarpsPerRow * 32`.
-   - **Elem.** `kLaunchWarps = min(ceil(TotalElems / 32), 32)`. Threads with `tid >= TotalElems` skip the loop body (no garbage access). For `TotalElems > 1024` the strided loop walks `kLaunchThreads` at a time.
+1. **Shape-adaptive launch.** `MScatterRowImpl` / `MScatterElemImpl` size the SIMT grid as `dim3{WARP_SIZE, kLaunchWarps}` from the resolved `validRows` / `validCols` (compile-time constants for static tiles, runtime values for dynamic tiles). Small tiles do not pay the cost of launching 1024 idle threads.
+   - **Row.** `kRowWarps = min(validRows, 32)` own rows; `kWarpsPerRow = min(32 / kRowWarps, ceil(validCols / 32))` cooperate on each row's column chunks. `kLaunchWarps = kRowWarps * kWarpsPerRow`. Lane writes form 128-byte coalesced stores; `kColStride = kWarpsPerRow * 32`.
+   - **Elem.** `kLaunchWarps = min(ceil(validRows*validCols / 32), 32)`. Threads with `tid >= totalElems` skip the loop body (no garbage access). For `totalElems > 1024` the strided loop walks `launchThreads` at a time.
 
 2. **Linear thread mapping (Elem).** Each thread handles one element via stride-`kLaunchThreads` iteration over the flat `[0, R*C)` range. Lanes 0..31 of each warp read/write 32 consecutive UB / GM addresses per iteration (UB reads are bank-conflict-free; GM writes are scatter-stride-driven by the `idx` values).
 
@@ -485,3 +518,16 @@ For `Coalesce::Row` with odd `R`, the index tile must also be expressed as valid
 | case_elem2d_int32_scalar_1x1_in_1x8_8size           | Elem (scalar) | int32 | 1×1 | 1×8 | 1×1 → 1×8 | 8 elems | None | Undefined | Last |
 | case_row_int32_unaligned_3x8_8rows                  | Row | int32 | 3×8 | 3×8 | 1×3 → 1×8 | 8 rows × 8 | None | Undefined | Last |
 | case_row_int32_unaligned_9x16_16rows                | Row | int32 | 9×16 | 9×16 | 1×9 → 1×16 | 16 rows × 16 | None | Undefined | Last |
+
+### Dynamic Runtime Shapes
+
+`Tile<…, -1, -1>` (runtime valid extents) paired with `GlobalTensor<…, Shape<1,1,1,-1,-1>, Stride<1,1,1,-1,-1>>` (runtime table shape/stride). The SIMT kernel sizes itself from `Tile::GetValidRow/Col()` and `GlobalTensor::GetShape(DIM_X)` at dispatch time; padded `Tile::Rows / Cols` remain compile-time so the UB layout / DMA bursts stay statically known.
+
+| Case | Mode | Data Type | Runtime Valid Src | Padded Src | Runtime Table | OOB Mode |
+|------|------|-----------|-------------------|------------|----------------|----------|
+| case_elem2d_dyn_user_float_1x9_in_1x16_3x10 | Elem | float | 1×9 | 1×16 | 3×10 | Skip |
+| case_elem2d_dyn_int32_4x8_in_4x8_64size     | Elem | int32 | 4×8 | 4×8  | 8×8  (linear 64) | Undefined |
+| case_elem2d_dyn_float_3x3_in_3x8_64size     | Elem | float | 3×3 | 3×8  | 8×8  (linear 64) | Undefined |
+| case_elem2d_dyn_half_8x16_in_8x16_4x32      | Elem | half  | 8×16| 8×16 | 4×32 (linear 128)| Undefined |
+| case_row_dyn_int32_3x16_8rows               | Row  | int32 | 3×16| 3×16 | 8 rows × 16      | Undefined |
+| case_row_dyn_half_4x32_16rows               | Row  | half  | 4×32| 4×32 | 16 rows × 32     | Undefined |
