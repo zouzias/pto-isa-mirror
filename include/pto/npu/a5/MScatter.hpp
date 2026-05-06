@@ -73,22 +73,6 @@ namespace mscatter_cfg {
 constexpr uint32_t WARP_SIZE = 32u;
 constexpr uint32_t MAX_WARPS = 32u;
 constexpr uint32_t MAX_THREADS = WARP_SIZE * MAX_WARPS;
-
-template <uint32_t TotalElems>
-struct ElemLaunch {
-    static constexpr uint32_t kWarpsNeeded = (TotalElems + WARP_SIZE - 1u) / WARP_SIZE;
-    static constexpr uint32_t kLaunchWarps =
-        (kWarpsNeeded == 0u) ? 1u : ((kWarpsNeeded < MAX_WARPS) ? kWarpsNeeded : MAX_WARPS);
-};
-
-template <uint32_t NumRows, uint32_t RowWidth>
-struct RowLaunch {
-    static constexpr uint32_t kRowWarps = (NumRows < MAX_WARPS) ? ((NumRows == 0u) ? 1u : NumRows) : MAX_WARPS;
-    static constexpr uint32_t kFreeWarps = MAX_WARPS / kRowWarps;
-    static constexpr uint32_t kColChunks = (RowWidth + WARP_SIZE - 1u) / WARP_SIZE;
-    static constexpr uint32_t kWarpsPerRow = (kFreeWarps < kColChunks) ? kFreeWarps : kColChunks;
-    static constexpr uint32_t kLaunchWarps = kRowWarps * ((kWarpsPerRow == 0u) ? 1u : kWarpsPerRow);
-};
 } // namespace mscatter_cfg
 
 template <ScatterOOB Oob>
@@ -136,17 +120,18 @@ __simt_callee__ AICORE PTO_INLINE uint32_t tile_offset_2d(uint32_t r, uint32_t c
 }
 #endif
 
-template <ScatterOOB Oob, typename T, typename TIdx, typename TileSrc, typename TileIdx, uint32_t ValidRows,
-          uint32_t ValidCols>
+template <ScatterOOB Oob, typename T, typename TIdx, typename TileSrc, typename TileIdx>
 __simt_callee__ AICORE PTO_INLINE T last_winner_value_elem(__ubuf__ const TIdx *__restrict__ indices,
                                                            __ubuf__ const T *__restrict__ src, uint32_t selfSafeIdx,
-                                                           uint32_t cap, T fallback)
+                                                           uint32_t cap, T fallback, uint32_t validRows,
+                                                           uint32_t validCols)
 {
     T result = fallback;
+    const uint32_t totalElems = validRows * validCols;
 #pragma unroll(1)
-    for (uint32_t j = 0; j < ValidRows * ValidCols; ++j) {
-        const uint32_t r = (ValidCols == 1u) ? j : (j / ValidCols);
-        const uint32_t c = (ValidCols == 1u) ? 0u : (j - r * ValidCols);
+    for (uint32_t j = 0; j < totalElems; ++j) {
+        const uint32_t r = (validCols == 1u) ? j : (j / validCols);
+        const uint32_t c = (validCols == 1u) ? 0u : (j - r * validCols);
         uint32_t doW;
         const uint32_t s = scatter_remap<Oob>(static_cast<uint32_t>(indices[tile_offset_2d<TileIdx>(r, c)]), cap, doW);
         if (doW && s == selfSafeIdx) {
@@ -156,14 +141,14 @@ __simt_callee__ AICORE PTO_INLINE T last_winner_value_elem(__ubuf__ const TIdx *
     return result;
 }
 
-template <ScatterOOB Oob, typename T, typename TIdx, typename TileSrc, uint32_t NumRows>
+template <ScatterOOB Oob, typename T, typename TIdx, typename TileSrc>
 __simt_callee__ AICORE PTO_INLINE T last_winner_value_row(__ubuf__ const TIdx *__restrict__ indices,
                                                           __ubuf__ const T *__restrict__ src, uint32_t selfSafeIdx,
-                                                          uint32_t col, uint32_t cap, T fallback)
+                                                          uint32_t col, uint32_t cap, T fallback, uint32_t numRows)
 {
     T result = fallback;
 #pragma unroll(1)
-    for (uint32_t row = 0; row < NumRows; ++row) {
+    for (uint32_t row = 0; row < numRows; ++row) {
         uint32_t doW;
         const uint32_t s = scatter_remap<Oob>(static_cast<uint32_t>(indices[row]), cap, doW);
         if (doW && s == selfSafeIdx) {
@@ -174,17 +159,28 @@ __simt_callee__ AICORE PTO_INLINE T last_winner_value_row(__ubuf__ const TIdx *_
 }
 
 template <typename T, typename TIdx, typename TileSrc, ScatterAtomicOp Atomic, ScatterOOB Oob, ScatterConflict Conflict,
-          uint32_t ValidRows, uint32_t ValidCols, uint32_t TableRows>
+          uint32_t ValidRowsT, uint32_t ValidColsT, uint32_t TableRowsT>
 AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
     void simt_mscatter_row_kernel(__gm__ T *__restrict__ table, __ubuf__ const T *__restrict__ src,
-                                  __ubuf__ const TIdx *__restrict__ indices)
+                                  __ubuf__ const TIdx *__restrict__ indices, uint32_t validRowsRT, uint32_t validColsRT,
+                                  uint32_t tableRowsRT)
 {
     constexpr bool kIsAtomic = (Atomic != ScatterAtomicOp::None);
     constexpr bool kIsLast = !kIsAtomic && (Conflict == ScatterConflict::Last);
-    using Launch = mscatter_cfg::RowLaunch<ValidRows, ValidCols>;
-    constexpr uint32_t kRowWarps = Launch::kRowWarps;
-    constexpr uint32_t kWarpsPerRow = (Launch::kWarpsPerRow == 0u) ? 1u : Launch::kWarpsPerRow;
-    constexpr uint32_t kColStride = kWarpsPerRow * mscatter_cfg::WARP_SIZE;
+    constexpr bool kStaticR = (ValidRowsT > 0u);
+    constexpr bool kStaticC = (ValidColsT > 0u);
+    constexpr bool kStaticTR = (TableRowsT > 0u);
+    const uint32_t validRows = kStaticR ? ValidRowsT : validRowsRT;
+    const uint32_t validCols = kStaticC ? ValidColsT : validColsRT;
+    const uint32_t tableRows = kStaticTR ? TableRowsT : tableRowsRT;
+
+    const uint32_t kRowWarps =
+        (validRows == 0u) ? 1u : ((validRows < mscatter_cfg::MAX_WARPS) ? validRows : mscatter_cfg::MAX_WARPS);
+    const uint32_t kFreeWarps = mscatter_cfg::MAX_WARPS / kRowWarps;
+    const uint32_t kColChunks = (validCols + mscatter_cfg::WARP_SIZE - 1u) / mscatter_cfg::WARP_SIZE;
+    const uint32_t kWarpsPerRowRaw = (kFreeWarps < kColChunks) ? kFreeWarps : kColChunks;
+    const uint32_t kWarpsPerRow = (kWarpsPerRowRaw == 0u) ? 1u : kWarpsPerRowRaw;
+    const uint32_t kColStride = kWarpsPerRow * mscatter_cfg::WARP_SIZE;
 
     const uint32_t tx = threadIdx.x;
     const uint32_t ty = threadIdx.y;
@@ -192,26 +188,26 @@ AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
     const uint32_t colSeg = ty / kRowWarps;
 
 #pragma unroll(1)
-    for (uint32_t row = rowWarp; row < ValidRows; row += kRowWarps) {
+    for (uint32_t row = rowWarp; row < validRows; row += kRowWarps) {
         const uint32_t rawIdx = static_cast<uint32_t>(indices[row]);
         uint32_t doWrite;
-        const uint32_t safeIdx = scatter_remap<Oob>(rawIdx, TableRows, doWrite);
-        __gm__ T *dstRow = table + safeIdx * ValidCols;
+        const uint32_t safeIdx = scatter_remap<Oob>(rawIdx, tableRows, doWrite);
+        __gm__ T *dstRow = table + safeIdx * validCols;
         if constexpr (kIsAtomic) {
             if (doWrite) {
 #pragma unroll(4)
-                for (uint32_t col = colSeg * mscatter_cfg::WARP_SIZE + tx; col < ValidCols; col += kColStride) {
+                for (uint32_t col = colSeg * mscatter_cfg::WARP_SIZE + tx; col < validCols; col += kColStride) {
                     scatter_apply<Atomic>(&dstRow[col], src[tile_offset_2d<TileSrc>(row, col)]);
                 }
             }
         } else {
-            const uint32_t loadRow = (rawIdx < TableRows) ? rawIdx : 0u;
-            __gm__ T *loadDst = table + loadRow * ValidCols;
+            const uint32_t loadRow = (rawIdx < tableRows) ? rawIdx : 0u;
+            __gm__ T *loadDst = table + loadRow * validCols;
 #pragma unroll(4)
-            for (uint32_t col = colSeg * mscatter_cfg::WARP_SIZE + tx; col < ValidCols; col += kColStride) {
+            for (uint32_t col = colSeg * mscatter_cfg::WARP_SIZE + tx; col < validCols; col += kColStride) {
                 const T cur = loadDst[col];
-                const T newval = kIsLast ? last_winner_value_row<Oob, T, TIdx, TileSrc, ValidRows>(
-                                               indices, src, safeIdx, col, TableRows, cur) :
+                const T newval = kIsLast ? last_winner_value_row<Oob, T, TIdx, TileSrc>(indices, src, safeIdx, col,
+                                                                                        tableRows, cur, validRows) :
                                            src[tile_offset_2d<TileSrc>(row, col)];
                 if (doWrite && newval != cur) {
                     dstRow[col] = newval;
@@ -222,38 +218,49 @@ AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
 }
 
 template <typename T, typename TIdx, typename TileSrc, typename TileIdx, ScatterAtomicOp Atomic, ScatterOOB Oob,
-          ScatterConflict Conflict, uint32_t ValidRows, uint32_t ValidCols, uint32_t TableSize>
+          ScatterConflict Conflict, uint32_t ValidRowsT, uint32_t ValidColsT, uint32_t TableSizeT>
 AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
     void simt_mscatter_elem_kernel(__gm__ T *__restrict__ table, __ubuf__ const T *__restrict__ src,
-                                   __ubuf__ const TIdx *__restrict__ indices)
+                                   __ubuf__ const TIdx *__restrict__ indices, uint32_t validRowsRT,
+                                   uint32_t validColsRT, uint32_t tableSizeRT)
 {
     constexpr bool kIsAtomic = (Atomic != ScatterAtomicOp::None);
     constexpr bool kIsLast = !kIsAtomic && (Conflict == ScatterConflict::Last);
-    constexpr uint32_t kTotalElems = ValidRows * ValidCols;
-    constexpr uint32_t kLaunchThreads = mscatter_cfg::ElemLaunch<kTotalElems>::kLaunchWarps * mscatter_cfg::WARP_SIZE;
+    constexpr bool kStaticR = (ValidRowsT > 0u);
+    constexpr bool kStaticC = (ValidColsT > 0u);
+    constexpr bool kStaticTS = (TableSizeT > 0u);
+    const uint32_t validRows = kStaticR ? ValidRowsT : validRowsRT;
+    const uint32_t validCols = kStaticC ? ValidColsT : validColsRT;
+    const uint32_t tableSize = kStaticTS ? TableSizeT : tableSizeRT;
+
+    const uint32_t totalElems = validRows * validCols;
+    const uint32_t kNeededWarps = (totalElems + mscatter_cfg::WARP_SIZE - 1u) / mscatter_cfg::WARP_SIZE;
+    const uint32_t kLaunchWarps =
+        (kNeededWarps == 0u) ? 1u : ((kNeededWarps < mscatter_cfg::MAX_WARPS) ? kNeededWarps : mscatter_cfg::MAX_WARPS);
+    const uint32_t kLaunchThreads = kLaunchWarps * mscatter_cfg::WARP_SIZE;
 
     const uint32_t tx = threadIdx.x;
     const uint32_t ty = threadIdx.y;
     const uint32_t tid = ty * mscatter_cfg::WARP_SIZE + tx;
 
 #pragma unroll(1)
-    for (uint32_t i = tid; i < kTotalElems; i += kLaunchThreads) {
-        const uint32_t r = (ValidCols == 1u) ? i : (i / ValidCols);
-        const uint32_t c = (ValidCols == 1u) ? 0u : (i - r * ValidCols);
+    for (uint32_t i = tid; i < totalElems; i += kLaunchThreads) {
+        const uint32_t r = (validCols == 1u) ? i : (i / validCols);
+        const uint32_t c = (validCols == 1u) ? 0u : (i - r * validCols);
         const uint32_t srcOff = tile_offset_2d<TileSrc>(r, c);
         const uint32_t idxOff = tile_offset_2d<TileIdx>(r, c);
         const uint32_t rawIdx = static_cast<uint32_t>(indices[idxOff]);
         uint32_t doWrite;
-        const uint32_t safeIdx = scatter_remap<Oob>(rawIdx, TableSize, doWrite);
+        const uint32_t safeIdx = scatter_remap<Oob>(rawIdx, tableSize, doWrite);
         if constexpr (kIsAtomic) {
             if (doWrite) {
                 scatter_apply<Atomic>(&table[safeIdx], src[srcOff]);
             }
         } else {
-            const uint32_t loadIdx = (rawIdx < TableSize) ? rawIdx : 0u;
+            const uint32_t loadIdx = (rawIdx < tableSize) ? rawIdx : 0u;
             const T cur = table[loadIdx];
-            const T newval = kIsLast ? last_winner_value_elem<Oob, T, TIdx, TileSrc, TileIdx, ValidRows, ValidCols>(
-                                           indices, src, safeIdx, TableSize, cur) :
+            const T newval = kIsLast ? last_winner_value_elem<Oob, T, TIdx, TileSrc, TileIdx>(
+                                           indices, src, safeIdx, tableSize, cur, validRows, validCols) :
                                        src[srcOff];
             if (doWrite && newval != cur) {
                 table[safeIdx] = newval;
@@ -263,37 +270,48 @@ AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
 }
 
 template <typename T, typename TIdx, ScatterAtomicOp Atomic, ScatterOOB Oob, ScatterConflict Conflict,
-          typename SrcTileData, typename IdxTileData, uint32_t ValidRows, uint32_t ValidCols, uint32_t TableRows>
+          uint32_t ValidRowsT, uint32_t ValidColsT, uint32_t TableRowsT, typename SrcTileData, typename IdxTileData>
 __tf__ AICORE void MScatterRowImpl(__gm__ T *__restrict__ tablePtr, typename SrcTileData::TileDType __in__ src,
-                                   typename IdxTileData::TileDType __in__ indices)
+                                   typename IdxTileData::TileDType __in__ indices, uint32_t validRows,
+                                   uint32_t validCols, uint32_t tableRows)
 {
     __ubuf__ const T *srcPtr = (__ubuf__ const T *)__cce_get_tile_ptr(src);
     __ubuf__ const TIdx *idxPtr = (__ubuf__ const TIdx *)__cce_get_tile_ptr(indices);
 
-    constexpr uint32_t kLaunchWarps = mscatter_cfg::RowLaunch<ValidRows, ValidCols>::kLaunchWarps;
+    const uint32_t rowWarps =
+        (validRows == 0u) ? 1u : ((validRows < mscatter_cfg::MAX_WARPS) ? validRows : mscatter_cfg::MAX_WARPS);
+    const uint32_t freeWarps = mscatter_cfg::MAX_WARPS / rowWarps;
+    const uint32_t colChunks = (validCols + mscatter_cfg::WARP_SIZE - 1u) / mscatter_cfg::WARP_SIZE;
+    const uint32_t warpsPerRowRaw = (freeWarps < colChunks) ? freeWarps : colChunks;
+    const uint32_t warpsPerRow = (warpsPerRowRaw == 0u) ? 1u : warpsPerRowRaw;
+    const uint32_t launchWarps = rowWarps * warpsPerRow;
+
     cce::async_invoke<
-        simt_mscatter_row_kernel<T, TIdx, SrcTileData, Atomic, Oob, Conflict, ValidRows, ValidCols, TableRows>>(
-        cce::dim3{mscatter_cfg::WARP_SIZE, kLaunchWarps}, tablePtr, srcPtr, idxPtr);
+        simt_mscatter_row_kernel<T, TIdx, SrcTileData, Atomic, Oob, Conflict, ValidRowsT, ValidColsT, TableRowsT>>(
+        cce::dim3{mscatter_cfg::WARP_SIZE, launchWarps}, tablePtr, srcPtr, idxPtr, validRows, validCols, tableRows);
 }
 
 template <typename T, typename TIdx, ScatterAtomicOp Atomic, ScatterOOB Oob, ScatterConflict Conflict,
-          typename SrcTileData, typename IdxTileData, uint32_t ValidRows, uint32_t ValidCols, uint32_t TableSize>
+          uint32_t ValidRowsT, uint32_t ValidColsT, uint32_t TableSizeT, typename SrcTileData, typename IdxTileData>
 __tf__ AICORE void MScatterElemImpl(__gm__ T *__restrict__ tablePtr, typename SrcTileData::TileDType __in__ src,
-                                    typename IdxTileData::TileDType __in__ indices)
+                                    typename IdxTileData::TileDType __in__ indices, uint32_t validRows,
+                                    uint32_t validCols, uint32_t tableSize)
 {
     __ubuf__ const T *srcPtr = (__ubuf__ const T *)__cce_get_tile_ptr(src);
     __ubuf__ const TIdx *idxPtr = (__ubuf__ const TIdx *)__cce_get_tile_ptr(indices);
 
-    constexpr uint32_t kLaunchWarps = mscatter_cfg::ElemLaunch<ValidRows * ValidCols>::kLaunchWarps;
-    cce::async_invoke<simt_mscatter_elem_kernel<T, TIdx, SrcTileData, IdxTileData, Atomic, Oob, Conflict, ValidRows,
-                                                ValidCols, TableSize>>(cce::dim3{mscatter_cfg::WARP_SIZE, kLaunchWarps},
-                                                                       tablePtr, srcPtr, idxPtr);
+    const uint32_t totalElems = validRows * validCols;
+    const uint32_t needed = (totalElems + mscatter_cfg::WARP_SIZE - 1u) / mscatter_cfg::WARP_SIZE;
+    const uint32_t launchWarps =
+        (needed == 0u) ? 1u : ((needed < mscatter_cfg::MAX_WARPS) ? needed : mscatter_cfg::MAX_WARPS);
+    cce::async_invoke<simt_mscatter_elem_kernel<T, TIdx, SrcTileData, IdxTileData, Atomic, Oob, Conflict, ValidRowsT,
+                                                ValidColsT, TableSizeT>>(
+        cce::dim3{mscatter_cfg::WARP_SIZE, launchWarps}, tablePtr, srcPtr, idxPtr, validRows, validCols, tableSize);
 }
 
-template <typename T, typename TIdx, ScatterAtomicOp Atomic, ScatterOOB Oob, typename SrcTileData, typename IdxTileData,
-          uint32_t TableSize>
+template <typename T, typename TIdx, ScatterAtomicOp Atomic, ScatterOOB Oob, typename SrcTileData, typename IdxTileData>
 __tf__ AICORE void MScatterScalarImpl(__gm__ T *__restrict__ tablePtr, typename SrcTileData::TileDType __in__ src,
-                                      typename IdxTileData::TileDType __in__ indices)
+                                      typename IdxTileData::TileDType __in__ indices, uint32_t tableSize)
 {
     __ubuf__ const T *srcPtr = (__ubuf__ const T *)__cce_get_tile_ptr(src);
     __ubuf__ const TIdx *idxPtr = (__ubuf__ const TIdx *)__cce_get_tile_ptr(indices);
@@ -306,14 +324,14 @@ __tf__ AICORE void MScatterScalarImpl(__gm__ T *__restrict__ tablePtr, typename 
         doWrite = 1u;
         safeIdx = rawIdx;
     } else if constexpr (Oob == ScatterOOB::Skip) {
-        doWrite = (rawIdx < TableSize) ? 1u : 0u;
+        doWrite = (rawIdx < tableSize) ? 1u : 0u;
         safeIdx = rawIdx;
     } else if constexpr (Oob == ScatterOOB::Clamp) {
         doWrite = 1u;
-        safeIdx = (rawIdx >= TableSize) ? (TableSize - 1u) : rawIdx;
+        safeIdx = (rawIdx >= tableSize) ? (tableSize - 1u) : rawIdx;
     } else {
         doWrite = 1u;
-        safeIdx = rawIdx % TableSize;
+        safeIdx = rawIdx % tableSize;
     }
     if (doWrite) {
         if constexpr (Atomic == ScatterAtomicOp::None) {
@@ -337,8 +355,8 @@ PTO_INTERNAL void MScatterCheck(const GlobalTable &table, const TileSrc &src, co
     using TIdx = typename TileIdx::DType;
 
     static_assert(IsValidScatterDType<T>::value,
-                  "MSCATTER data type must be int8/uint8/int16/uint16/int32/uint32/half/bfloat16/float "
-                  "(and on AICORE: hifloat8/float8_e4m3/float8_e5m2).");
+                  "MSCATTER data type must be int8/uint8/int16/uint16/int32/uint32/half/bfloat16/float/"
+                  "hifloat8/float8_e4m3/float8_e5m2.");
 
     static_assert(std::is_same_v<TIdx, int32_t> || std::is_same_v<TIdx, uint32_t>,
                   "MSCATTER index type must be int32_t or uint32_t.");
@@ -353,29 +371,45 @@ PTO_INTERNAL void MScatterCheck(const GlobalTable &table, const TileSrc &src, co
                   "MSCATTER atomic operation: Add requires int32/uint32/float/half/bfloat16; "
                   "Max/Min requires int32/uint32/float.");
 
-    constexpr uint32_t kSrcValidR = static_cast<uint32_t>(TileSrc::ValidRow);
-    constexpr uint32_t kSrcValidC = static_cast<uint32_t>(TileSrc::ValidCol);
-    constexpr uint32_t kIdxValidR = static_cast<uint32_t>(TileIdx::ValidRow);
-    constexpr uint32_t kIdxValidC = static_cast<uint32_t>(TileIdx::ValidCol);
+    constexpr int kSrcValidR = TileSrc::ValidRow;
+    constexpr int kSrcValidC = TileSrc::ValidCol;
+    constexpr int kIdxValidR = TileIdx::ValidRow;
+    constexpr int kIdxValidC = TileIdx::ValidCol;
 
     using ShapeType = typename GlobalTable::Shape;
-    constexpr uint32_t kTableRows = static_cast<uint32_t>(ShapeType::staticShape[3]);
-    constexpr uint32_t kTableCols = static_cast<uint32_t>(ShapeType::staticShape[4]);
+    constexpr int64_t kTableRows = ShapeType::staticShape[3];
+    constexpr int64_t kTableCols = ShapeType::staticShape[4];
 
     if constexpr (Mode == Coalesce::Row) {
-        static_assert(kSrcValidR >= 1u && kSrcValidC >= 1u,
-                      "MSCATTER Coalesce::Row requires non-empty valid source shape [R, C].");
-        static_assert(
-            (kIdxValidR == 1u && kIdxValidC == kSrcValidR) || (kIdxValidR == kSrcValidR && kIdxValidC == 1u),
-            "MSCATTER Coalesce::Row requires index tile valid shape [1, R] or [R, 1] matching TileSrc::ValidRow.");
-        static_assert(kTableCols == kSrcValidC,
-                      "MSCATTER Coalesce::Row requires GlobalTensor inner dim (Shape[4]) == TileSrc::ValidCol.");
-        static_assert(kTableRows >= 1u, "MSCATTER Coalesce::Row requires GlobalTensor TableRows (Shape[3]) >= 1.");
+        if constexpr (kSrcValidR > 0 && kSrcValidC > 0) {
+            static_assert(kSrcValidR >= 1 && kSrcValidC >= 1,
+                          "MSCATTER Coalesce::Row requires non-empty valid source shape [R, C].");
+        }
+        if constexpr (kSrcValidR > 0 && kIdxValidR > 0 && kIdxValidC > 0) {
+            static_assert(
+                (kIdxValidR == 1 && kIdxValidC == kSrcValidR) || (kIdxValidR == kSrcValidR && kIdxValidC == 1),
+                "MSCATTER Coalesce::Row requires index tile valid shape [1, R] or [R, 1] matching TileSrc::ValidRow.");
+        }
+        if constexpr (kSrcValidC > 0 && kTableCols > 0) {
+            static_assert(kTableCols == kSrcValidC,
+                          "MSCATTER Coalesce::Row requires GlobalTensor inner dim (Shape[4]) == TileSrc::ValidCol.");
+        }
+        if constexpr (kTableRows > 0) {
+            static_assert(kTableRows >= 1, "MSCATTER Coalesce::Row requires GlobalTensor TableRows (Shape[3]) >= 1.");
+        }
     } else {
-        static_assert(kIdxValidR == kSrcValidR && kIdxValidC == kSrcValidC,
-                      "MSCATTER Coalesce::Elem requires index tile valid shape == source tile valid shape.");
-        static_assert(kSrcValidR >= 1u && kSrcValidC >= 1u,
-                      "MSCATTER Coalesce::Elem requires non-empty valid source shape.");
+        if constexpr (kSrcValidR > 0 && kIdxValidR > 0) {
+            static_assert(kIdxValidR == kSrcValidR,
+                          "MSCATTER Coalesce::Elem requires index tile ValidRow == source tile ValidRow.");
+        }
+        if constexpr (kSrcValidC > 0 && kIdxValidC > 0) {
+            static_assert(kIdxValidC == kSrcValidC,
+                          "MSCATTER Coalesce::Elem requires index tile ValidCol == source tile ValidCol.");
+        }
+        if constexpr (kSrcValidR > 0 && kSrcValidC > 0) {
+            static_assert(kSrcValidR >= 1 && kSrcValidC >= 1,
+                          "MSCATTER Coalesce::Elem requires non-empty valid source shape.");
+        }
     }
 }
 
@@ -386,29 +420,44 @@ PTO_INTERNAL void MSCATTER_IMPL(GlobalTable &table, TileSrc &src, TileIdx &indic
 {
     using T = typename TileSrc::DType;
     using TIdx = typename TileIdx::DType;
-    using ShapeType = typename GlobalTable::Shape;
 
     MScatterCheck<Mode, Atomic>(table, src, indices);
 
     __gm__ T *tablePtr = reinterpret_cast<__gm__ T *>(table.data());
 
-    constexpr uint32_t kValidRows = static_cast<uint32_t>(TileSrc::ValidRow);
-    constexpr uint32_t kValidCols = static_cast<uint32_t>(TileSrc::ValidCol);
+    constexpr int kSrcValidRowS = TileSrc::ValidRow;
+    constexpr int kSrcValidColS = TileSrc::ValidCol;
+    constexpr uint32_t kValidRowsT = (kSrcValidRowS > 0) ? static_cast<uint32_t>(kSrcValidRowS) : 0u;
+    constexpr uint32_t kValidColsT = (kSrcValidColS > 0) ? static_cast<uint32_t>(kSrcValidColS) : 0u;
+
+    const uint32_t validRows = src.GetValidRow();
+    const uint32_t validCols = src.GetValidCol();
 
     if constexpr (Mode == Coalesce::Row) {
-        constexpr uint32_t TableRows = static_cast<uint32_t>(ShapeType::staticShape[3]);
-        MScatterRowImpl<T, TIdx, Atomic, Oob, Conflict, TileSrc, TileIdx, kValidRows, kValidCols, TableRows>(
-            tablePtr, src.data(), indices.data());
+        using TableShape = typename GlobalTable::Shape;
+        constexpr int64_t kTableRowsS = TableShape::staticShape[3];
+        constexpr uint32_t kTableRowsT = (kTableRowsS > 0) ? static_cast<uint32_t>(kTableRowsS) : 0u;
+        const uint32_t tableRows = static_cast<uint32_t>(table.GetShape(GlobalTensorDim::DIM_3));
+        MScatterRowImpl<T, TIdx, Atomic, Oob, Conflict, kValidRowsT, kValidColsT, kTableRowsT, TileSrc, TileIdx>(
+            tablePtr, src.data(), indices.data(), validRows, validCols, tableRows);
     } else {
-        constexpr uint32_t TableSize =
-            static_cast<uint32_t>(ShapeType::staticShape[0]) * static_cast<uint32_t>(ShapeType::staticShape[1]) *
-            static_cast<uint32_t>(ShapeType::staticShape[2]) * static_cast<uint32_t>(ShapeType::staticShape[3]) *
-            static_cast<uint32_t>(ShapeType::staticShape[4]);
-        if constexpr (kValidRows == 1u && kValidCols == 1u) {
-            MScatterScalarImpl<T, TIdx, Atomic, Oob, TileSrc, TileIdx, TableSize>(tablePtr, src.data(), indices.data());
+        using TableShape = typename GlobalTable::Shape;
+        constexpr int64_t kTS0 = TableShape::staticShape[0];
+        constexpr int64_t kTS1 = TableShape::staticShape[1];
+        constexpr int64_t kTS2 = TableShape::staticShape[2];
+        constexpr int64_t kTS3 = TableShape::staticShape[3];
+        constexpr int64_t kTS4 = TableShape::staticShape[4];
+        constexpr bool kAllStatic = (kTS0 > 0) && (kTS1 > 0) && (kTS2 > 0) && (kTS3 > 0) && (kTS4 > 0);
+        constexpr uint32_t kTableSizeT = kAllStatic ? static_cast<uint32_t>(kTS0 * kTS1 * kTS2 * kTS3 * kTS4) : 0u;
+        const uint32_t tableSize =
+            static_cast<uint32_t>(table.GetShape(GlobalTensorDim::DIM_0) * table.GetShape(GlobalTensorDim::DIM_1) *
+                                  table.GetShape(GlobalTensorDim::DIM_2) * table.GetShape(GlobalTensorDim::DIM_3) *
+                                  table.GetShape(GlobalTensorDim::DIM_4));
+        if constexpr (TileSrc::ValidRow == 1 && TileSrc::ValidCol == 1) {
+            MScatterScalarImpl<T, TIdx, Atomic, Oob, TileSrc, TileIdx>(tablePtr, src.data(), indices.data(), tableSize);
         } else {
-            MScatterElemImpl<T, TIdx, Atomic, Oob, Conflict, TileSrc, TileIdx, kValidRows, kValidCols, TableSize>(
-                tablePtr, src.data(), indices.data());
+            MScatterElemImpl<T, TIdx, Atomic, Oob, Conflict, kValidRowsT, kValidColsT, kTableSizeT, TileSrc, TileIdx>(
+                tablePtr, src.data(), indices.data(), validRows, validCols, tableSize);
         }
     }
 }
