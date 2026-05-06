@@ -172,6 +172,11 @@ target_include_directories(gated_rs_st PRIVATE
     ${PTO_LIB_PATH}/include
     ${HCOMM_PKG_INC_DIR}
     ${HCOMM_INTERNAL_INC_DIRS}
+    # comm_mpi.h shim (dlopen-based MPI loader) — sibling pto-isa testcase
+    # dir; we don't copy the file to keep a single source of truth. Required
+    # by main.cc for multi-rank bootstrap (HcclCcuKernelRegister needs
+    # nRanks >= 2 — see main.cc header).
+    ${PTO_LIB_PATH}/tests/npu/a5/comm/st/testcase
 )
 if(DEFINED CANN_INCLUDE_DIR)
     target_include_directories(gated_rs_st PRIVATE ${CANN_INCLUDE_DIR})
