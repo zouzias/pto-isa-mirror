@@ -88,6 +88,27 @@ if(NOT DEFINED CANN_INCLUDE_DIR AND IS_DIRECTORY "${ASCEND_HOME_PATH}/include")
     set(CANN_INCLUDE_DIR "${ASCEND_HOME_PATH}/include")
 endif()
 
+# `hcomm_primitives.h` — see kernel CMakeLists for rationale.
+find_path(HCOMM_PRIMITIVES_DIR
+    NAMES hcomm_primitives.h
+    PATHS
+        ${HCOMM_PKG_INC_DIR}
+        ${HCOMM_PKG_INC_DIR}/hcomm
+        ${CANN_INCLUDE_DIR}
+        ${PTO_LIB_PATH}/../../hcomm/include
+        $ENV{HOME}/hcomm/include
+        ${ASCEND_HOME_PATH}/include/hcomm
+        ${ASCEND_HOME_PATH}/pkg_inc/hcomm
+    NO_DEFAULT_PATH
+)
+if(NOT HCOMM_PRIMITIVES_DIR)
+    message(FATAL_ERROR
+        "gated_rs_st: cannot locate hcomm_primitives.h. "
+        "Run `find $ASCEND_HOME_PATH ~/hcomm -name hcomm_primitives.h 2>/dev/null` "
+        "and set -DHCOMM_PRIMITIVES_DIR=<abs dir>.")
+endif()
+message(STATUS "gated_rs_st: HCOMM_PRIMITIVES_DIR = ${HCOMM_PRIMITIVES_DIR}")
+
 if(NOT DEFINED HCOMM_LIB_DIR)
     set(HCOMM_LIB_DIR "${ASCEND_HOME_PATH}/lib64")
 endif()
@@ -116,6 +137,7 @@ target_compile_options(gated_rs_st PRIVATE
 target_include_directories(gated_rs_st PRIVATE
     ${PTO_LIB_PATH}/include
     ${HCOMM_PKG_INC_DIR}
+    ${HCOMM_PRIMITIVES_DIR}
 )
 if(DEFINED CANN_INCLUDE_DIR)
     target_include_directories(gated_rs_st PRIVATE ${CANN_INCLUDE_DIR})

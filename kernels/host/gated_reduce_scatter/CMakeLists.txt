@@ -108,16 +108,56 @@ endif()
 message(STATUS "pto_gated_reduce_scatter: HCOMM_PKG_INC_DIR = ${HCOMM_PKG_INC_DIR}")
 
 # ACL headers (`acl/acl.h` + friends) live under ${ASCEND_HOME_PATH}/include
-# on canonical CANN installs. We don't link against ACL here (the ST does),
-# but `hcomm/ccu/ccu_kernel.h` transitively includes `hccl_types.h` etc which
-# reference ACL types in some configurations — safer to add the include path
-# even for the kernel lib build.
+# on canonical CANN installs.
 if(NOT DEFINED CANN_INCLUDE_DIR)
     if(IS_DIRECTORY "${ASCEND_HOME_PATH}/include")
         set(CANN_INCLUDE_DIR "${ASCEND_HOME_PATH}/include")
     endif()
 endif()
 message(STATUS "pto_gated_reduce_scatter: CANN_INCLUDE_DIR = ${CANN_INCLUDE_DIR}")
+
+# ────────────────────────────────────────────────────────────────────────────
+# Locate `hcomm_primitives.h`.
+#
+# `pkg_inc/hcomm/ccu/ccu_kernel_arg.h:13` does `#include "hcomm_primitives.h"`
+# (no `hcomm/` prefix). On some CANN installs this header is flat under
+# `pkg_inc/`; on others under `include/`; on dev rigs it lives in the hcomm
+# source tree at `hcomm/include/hcomm_primitives.h`. Probe all of them.
+#
+# `hccl_types.h` (referenced by other pkg_inc headers) lives under
+# `hcomm/include/hccl/hccl_types.h` in source; CANN flattens it to
+# `${ASCEND_HOME_PATH}/include/hccl/hccl_types.h`. So we add the same probe
+# locations as include path — this also pulls in `hcomm_res_defs.h` etc.
+# ────────────────────────────────────────────────────────────────────────────
+find_path(HCOMM_PRIMITIVES_DIR
+    NAMES hcomm_primitives.h
+    PATHS
+        ${HCOMM_PKG_INC_DIR}
+        ${HCOMM_PKG_INC_DIR}/hcomm
+        ${CANN_INCLUDE_DIR}
+        ${PTO_LIB_PATH}/../../hcomm/include
+        $ENV{HOME}/hcomm/include
+        ${ASCEND_HOME_PATH}/include/hcomm
+        ${ASCEND_HOME_PATH}/pkg_inc/hcomm
+    NO_DEFAULT_PATH
+)
+if(NOT HCOMM_PRIMITIVES_DIR)
+    message(FATAL_ERROR
+        "pto_gated_reduce_scatter: cannot locate hcomm_primitives.h. "
+        "Searched:\n"
+        "  ${HCOMM_PKG_INC_DIR}\n"
+        "  ${HCOMM_PKG_INC_DIR}/hcomm\n"
+        "  ${CANN_INCLUDE_DIR}\n"
+        "  ${PTO_LIB_PATH}/../../hcomm/include\n"
+        "  $ENV{HOME}/hcomm/include\n"
+        "  ${ASCEND_HOME_PATH}/include/hcomm\n"
+        "  ${ASCEND_HOME_PATH}/pkg_inc/hcomm\n"
+        "Run `find $ASCEND_HOME_PATH ~/hcomm -name hcomm_primitives.h 2>/dev/null` "
+        "to locate it, then either set -DHCOMM_PRIMITIVES_DIR=<abs dir> or copy "
+        "the file alongside hcomm/ccu/ccu_kernel_arg.h.")
+endif()
+message(STATUS
+    "pto_gated_reduce_scatter: HCOMM_PRIMITIVES_DIR = ${HCOMM_PRIMITIVES_DIR}")
 
 if(NOT DEFINED HCOMM_LIB_DIR)
     set(HCOMM_LIB_DIR "${ASCEND_HOME_PATH}/lib64")
@@ -157,6 +197,7 @@ target_compile_options(pto_gated_reduce_scatter PRIVATE
 target_include_directories(pto_gated_reduce_scatter PUBLIC
     ${PTO_LIB_PATH}/include
     ${HCOMM_PKG_INC_DIR}
+    ${HCOMM_PRIMITIVES_DIR}
 )
 if(DEFINED CANN_INCLUDE_DIR)
     target_include_directories(pto_gated_reduce_scatter PUBLIC ${CANN_INCLUDE_DIR})
