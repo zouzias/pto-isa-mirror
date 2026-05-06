@@ -389,7 +389,19 @@ enum class FmodAlgorithm : uint8_t
     HIGH_PRECISION
 };
 
+enum class FmodSAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
 enum class RemAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class RemSAlgorithm : uint8_t
 {
     DEFAULT,
     HIGH_PRECISION
