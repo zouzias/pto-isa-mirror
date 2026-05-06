@@ -1,288 +1,64 @@
 # PTO-ISA Auto-Mode Kernel Development Instructions
 
-We are working on PTO-ISA kernel development, especially auto-mode kernels for A3 and A5.
-
-Auto mode is underdeveloped, especially for larger kernels such as GEMM, Flash Attention, and sparse attention. Because of that, do not assume manual-mode kernels can be copied directly into auto mode.
+We are working on PTO-ISA kernel development for **A3 and A5 only**. This file is an index and workflow guide; technical detail lives in `docs_for_ai/`. Read the relevant doc before generating or modifying code; do not duplicate its content here.
 
 ## Hard constraints
 
-- You do not have compiler access.
-- You cannot run tests.
-- You must work statically from repository files, provided documentation, and user-provided compiler logs.
-- Do not claim that code compiles unless the user explicitly provides compiler output proving it.
-- Do not invent APIs, types, intrinsics, qualifiers, macros, or file paths.
-- Every important claim must be grounded in:
-  - an existing repo file path,
-  - a provided document,
-  - a PR/MR/issue link or text provided by the user,
-  - or explicitly marked as an assumption.
-- Mark uncertainty clearly using:
-  - `Known`
-  - `Inferred`
-  - `Assumption`
-  - `Unknown`
-- Prefer small, reviewable patches.
-- Preserve existing manual-mode behavior unless explicitly asked otherwise.
-- For large kernels such as GEMM, Flash Attention, or sparse attention, produce a design/skeleton first, not a full optimized implementation.
+- No compiler access; no test execution.
+- Do not claim code compiles or runs unless the user provides output proving it.
+- Do not invent APIs, types, intrinsics, qualifiers, macros, or file paths. Every nontrivial claim must be grounded in a repo file path, a provided document, or user-provided PR/MR/issue text — or explicitly marked `Assumption`.
+- Mark uncertainty as `Known` / `Inferred` / `Assumption` / `Unknown`.
+- Prefer small, reviewable patches. Preserve manual-mode behavior unless explicitly asked otherwise.
+- For large kernels (GEMM, Flash Attention, sparse attention), produce a design / skeleton first, not a full optimized implementation.
 
 ## Target platform scope
 
-The target platforms for this work are **A3 and A5 only**.
+**A3** (`PTO_NPU_ARCH_A2A3`, `__NPU_ARCH__ == 2201`) and **A5** (`PTO_NPU_ARCH_A5`, `__NPU_ARCH__ == 3101 || 3510`) only.
 
-CPU-sim, cost-model, Kirin, and other non-A3/A5 paths may be used only as secondary references when they clarify source structure, fallback macros, or functional intent. They should not drive kernel-generation decisions.
-
-Rules:
-
-- Prioritize `include/pto/npu/a2a3/`, `include/pto/npu/a5/`, `tests/npu/a2a3/`, `tests/npu/a5/`, and `kernels/manual/a2a3/` / `kernels/manual/a5/`.
-- Do not use CPU-sim behavior as evidence that an A3/A5 auto-mode pattern is valid.
-- Do not copy CPU-sim-only macros, stubs, or fallback definitions into A3/A5 code.
-- If CPU-sim/cost-model/Kirin files define a token as empty, do not conclude it is empty on A3/A5. Check A3/A5 usage and compiler-provided semantics.
-- When referencing CPU-sim, cost-model, Kirin, or other non-target files, explicitly label them as `non-target reference`.
-- If a pattern exists only in CPU-sim/Kirin/cost-model and not in A3/A5 source or docs, mark it as `Unknown for A3/A5`.
-- For generated docs and patches, optimize for A3/A5 correctness, not CPU-sim compatibility, unless the user explicitly asks otherwise.
+CPU-sim, cost-model, Kirin, and other non-A3/A5 paths are **secondary references only**. They explain `#define`-as-empty fallbacks and arch-macro logic but do not drive A3/A5 conclusions. When citing them, label as `non-target reference`. If a token is empty in CPU-sim / Kirin / cost-model, do not conclude it is empty on A3/A5.
 
 ## Testcase caution
 
-Some testcases and kernels may have originally been written for manual mode or for broad instruction coverage, even if they appear in the A3/A5 test tree or are listed in `ALL_TESTCASES`.
+Inclusion in `ALL_TESTCASES` is build-coverage evidence, not clean-style or correctness evidence. A testcase may build in auto mode and still carry manual-mode idioms (`TASSIGN` aliasing, raw `set_flag`/`wait_flag`, `TPipe`/`TPUSH`/`TPOP`, raw CCE intrinsics, `Tile::data()` from kernel code, `*_IMPL` from kernel code, double buffering, `pipe_barrier`).
 
-Do not assume that a testcase is a clean auto-mode reference just because it is present in the repo or included in a test list.
+Before treating a testcase as a clean reference, cross-check `docs_for_ai/auto_mode_bad_patterns.md` and `docs_for_ai/known_good_kernel_examples.md`. Prefer files explicitly listed there as clean.
 
-Rules:
+## docs_for_ai source map
 
-- Treat inclusion in `ALL_TESTCASES` as evidence that the testcase is expected to build in that configuration, not proof that every pattern inside is good auto-mode style.
-- Some testcases may build in auto mode but still contain patterns that are risky, misleading, or only accidentally tolerated.
-- Always check testcases for manual-mode idioms:
-  - `TASSIGN` address arithmetic,
-  - same-address `TASSIGN` aliasing,
-  - `set_flag` / `wait_flag`,
-  - `Event<>` ordering assumptions,
-  - `pipe_barrier`,
-  - `TPUSH` / `TPOP` / `TPipe`,
-  - double buffering,
-  - raw CCE intrinsics,
-  - direct `Tile::data()` usage,
-  - `*_IMPL` calls from kernel code.
-- If these idioms are guarded with `#ifndef __PTO_AUTO__`, they may still be useful dual-mode examples.
-- If these idioms are unguarded, mark the testcase as `mixed`, `risky`, or `manual-mode-curated`, not as a clean auto-mode example.
-- Auto-mode testcase failures may be rare, but they are possible. Be conservative.
-- Prefer `demos/auto_mode/`, `docs/auto_mode/`, and A3/A5 testcases with clearly guarded manual-only code as clean references.
+Always read the relevant file(s) before generating or modifying code:
 
-## Main goal
+- `docs_for_ai/repo_kernel_map.md` — which kernels exist, where, and which build mode they target.
+- `docs_for_ai/known_good_kernel_examples.md` — clean references to copy syntax from.
+- `docs_for_ai/auto_mode_bad_patterns.md` — anti-pattern catalog (memory/aliasing, sync, kernel-vs-library, arch hazards, template hazards, auto-sync).
+- `docs_for_ai/qualifier_reference.md` — `__tf__`, `__in__` / `__out__`, `__cce_get_tile_ptr`, memory-space qualifiers.
+- `docs_for_ai/tile_type_reference.md` — `Tile` / `ConvTile` / `GlobalTensor`, `TileDType` shape per mode, `TileConfig` constants.
+- `docs_for_ai/a3_a5_differences.md` — for any cross-arch question (`TileLeft` BLayout split, `BiasTile` divergence, `TMATMUL_MX` / `MGATHER` / `MSCATTER` / `*_Custom`/`Hp` A5-only, etc.).
+- `docs_for_ai/assumptions_to_verify.md` — open questions; check before assuming.
+- `docs_for_ai/compile_error_logbook.md` — structured log of compiler errors with likely causes and fix patterns.
+- `docs_for_ai/external_context/pr_852_notes.md` — PR-852 notes (NOT merged into this branch).
 
-First, help create a source-grounded knowledge base under:
+When updating these files: include exact file paths for source-grounded claims; keep `Known` / `Inferred` / `Assumption` / `Unknown` labels; remove duplicated or stale notes; do not summarize the whole repo.
 
-```text
-docs_for_ai/
-```
-
-Do not start by generating kernels. First read the source code and create focused documentation that will later help generate, review, and debug auto-mode A3/A5 kernels.
-
-Useful files may include:
-
-```text
-docs_for_ai/repo_kernel_map.md
-docs_for_ai/known_good_kernel_examples.md
-docs_for_ai/auto_mode_bad_patterns.md
-docs_for_ai/qualifier_reference.md
-docs_for_ai/tile_type_reference.md
-docs_for_ai/a3_a5_differences.md
-docs_for_ai/assumptions_to_verify.md
-docs_for_ai/compile_error_logbook.md
-docs_for_ai/external_context/pr_index.md
-docs_for_ai/external_context/pr_pattern_notes.md
-docs_for_ai/external_context/pr_852_notes.md
-```
-
-## Knowledge base rules
-
-When creating or updating files in `docs_for_ai/`:
-
-- Do not summarize every file in the repo.
-- Include only information useful for generating, reviewing, or debugging auto-mode A3/A5 kernels.
-- Prefer concrete implementation patterns over generic explanations.
-- Include exact file paths for all source-grounded claims.
-- Include small code snippets only when they clarify a reusable pattern.
-- Clearly label whether each point is `Known`, `Inferred`, `Assumption`, or `Unknown`.
-- Keep assumptions separate from confirmed facts.
-- If using PRs/MRs/issues, treat them as supporting context, not as the main source of truth.
-- Prefer current source code over old PR/MR discussion if they conflict.
-- If a PR/MR is not merged into the current branch, treat it as supporting context or planned fix pattern, not as current source truth.
-- Remove duplicated, outdated, or irrelevant notes when updating docs.
-
-## Source hierarchy
-
-Use this priority order:
+## Source priority
 
 1. Current repo source code.
-2. Current repo docs/tests.
-3. Provided official/internal docs.
-4. Relevant PR/MR/issue discussions.
+2. Current repo docs / tests.
+3. Provided official / internal docs.
+4. Relevant PR / MR / issue discussions.
 5. Inference from similar code.
 6. Assumptions.
 
-If source code and PR/MR discussion conflict, trust the current source code unless the user says otherwise.
+If source code and PR/MR discussion conflict, trust the source unless the user says otherwise.
 
-## Code generation rules
+## PR-852 handling
 
-Before generating or modifying code, always produce:
+PR-852 is **not merged** into this branch (verified at the source lines it modifies — see `external_context/pr_852_notes.md` "Branch state"). Treat its recipes as supporting context and forward-looking guidance. The current source still has the bugs. Cite `external_context/pr_852_notes.md`; do not claim a PR-852 fix is in tree.
 
-1. files inspected,
-2. relevant patterns found,
-3. current behavior,
-4. proposed design,
-5. assumptions needing confirmation,
-6. risks,
-7. minimal patch plan.
+## Workflow before generating or modifying code
 
-When producing code:
+Use this format for implementation tasks:
 
-- Prefer unified diffs.
-- Keep changes minimal.
-- Do not refactor unrelated code.
-- Do not silently change manual-mode behavior.
-- Copy syntax from existing files where possible.
-- For every nontrivial API/type/macro/qualifier used, cite where the same syntax appears in the repo or docs.
-- If no source exists for an API/type/macro, do not use it.
-- Do not mark the task complete just because code was written.
-- Do not claim compilation or runtime success.
-
-After producing code, always provide a manual checklist:
-
-1. files changed,
-2. commands the user should run manually if known,
-3. expected compile/test target if known,
-4. assumptions to verify,
-5. likely first failure points.
-
-## Auto-mode risk checklist
-
-Before proposing auto-mode code, check for:
-
-- manual-mode-only pointer access,
-- missing `__tf__` on helper functions that need to be tile functions,
-- missing or incorrect `AICORE` usage,
-- unsafe `__gm__` / `__ubuf__` / `__cbuf__` / `__ca__` / `__cb__` / `__cc__` / `__fbuf__` usage,
-- helpers that incorrectly return false for auto mode,
-- A5-only assumptions accidentally used for A3,
-- A3/A2-shared assumptions accidentally used for A5,
-- unsupported template/type patterns,
-- memory movement assumptions,
-- tile shape/layout assumptions,
-- intrinsics that may not be supported in auto mode,
-- assumptions copied from manual-mode kernels without auto-mode evidence.
-
-## Large kernel workflow
-
-For GEMM, Flash Attention, sparse attention, or other large kernels:
-
-Do not start with a full implementation.
-
-First produce:
-
-1. operation semantics,
-2. expected tensor shapes,
-3. data movement plan,
-4. tiling strategy,
-5. loop structure,
-6. required primitives,
-7. nearest existing repo examples,
-8. missing information,
-9. assumptions needing confirmation,
-10. smallest compileable skeleton plan.
-
-Recommended progression:
-
-```text
-small helper/qualifier fix
-↓
-simple elementwise or copy kernel
-↓
-simple tile/repeat-loop kernel
-↓
-reduction-like kernel
-↓
-GEMM skeleton
-↓
-GEMM simple implementation
-↓
-softmax/reduction pieces
-↓
-Flash Attention decomposition
-↓
-Flash Attention pieces
-↓
-sparse attention
 ```
-
-## PR/MR and issue usage
-
-PRs/MRs/issues can be used to extract historical design decisions and pitfalls, but do not read a large number blindly.
-
-When asked to use PRs/MRs/issues:
-
-1. First create an index of relevant PRs/MRs/issues.
-2. Prioritize items related to:
-   - auto mode,
-   - A3,
-   - A5,
-   - kernels,
-   - tile types,
-   - `__tf__`,
-   - `AICORE`,
-   - GEMM,
-   - matmul,
-   - attention,
-   - sparse attention,
-   - TQuant,
-   - TPOW,
-   - compiler restrictions,
-   - manual mode vs auto mode.
-3. Read only high-relevance items in detail.
-4. Extract only information useful for auto-mode A3/A5 kernel generation.
-5. Link each extracted point to its PR/MR/issue source.
-6. Mark each point as `Known from PR/MR`, `Inferred from PR/MR`, or `Assumption`.
-7. If a PR/MR is not merged into the current branch, treat it as supporting context or planned fix pattern, not as current source truth.
-
-## Compiler error workflow
-
-When the user provides compiler errors:
-
-- Focus on the first meaningful error first.
-- Explain the likely cause.
-- Identify whether the issue was already listed as an assumption or bad pattern.
-- Produce the smallest possible fix.
-- Update or propose an entry for `docs_for_ai/compile_error_logbook.md`.
-
-A compile error log entry should include:
-
-```md
-## Error: short descriptive name
-
-Symptom:
-...
-
-Likely cause:
-...
-
-Fix pattern:
-...
-
-Example file/path:
-...
-
-Confidence:
-High / Medium / Low
-```
-
-## Output style
-
-Be direct and practical.
-
-When uncertain, say so. Do not make confident claims without repo/docs evidence.
-
-Prefer this format for implementation tasks:
-
-```text
 Files inspected:
 - ...
 
@@ -300,9 +76,42 @@ Risks:
 
 Patch plan:
 1. ...
-2. ...
 
 Manual checklist:
-1. ...
-2. ...
+1. files changed
+2. commands the user should run manually if known
+3. expected compile / test target if known
+4. assumptions to verify
+5. likely first failure points
 ```
+
+When producing code:
+
+- Prefer unified diffs and minimal changes; do not refactor unrelated code.
+- Do not silently change manual-mode behavior.
+- For every nontrivial API / type / macro / qualifier used, cite the existing repo or doc location of the same syntax. If no source exists, do not use it.
+- Writing code does not mean the task is complete; do not claim compile or runtime success.
+
+For risk auditing (memory/aliasing, sync, qualifier, A3-vs-A5, template hazards, auto-sync), defer to `docs_for_ai/auto_mode_bad_patterns.md` and `docs_for_ai/a3_a5_differences.md` rather than restating the checklist here.
+
+For large kernels, defer the staged progression and design-first checklist to a future `docs_for_ai/kernel_generation_playbook.md`. Until then: design / skeleton before implementation, smallest compileable unit first.
+
+## Compiler error workflow
+
+When the user provides compiler output:
+
+1. Focus on the **first meaningful error** first.
+2. Search `docs_for_ai/compile_error_logbook.md` for an existing entry that matches the symptom. If matched, add an Occurrence; update Status / Confidence as warranted.
+3. If unmatched, create a new entry per the field set in that file (§3).
+4. If the error contradicts `auto_mode_bad_patterns.md`, `qualifier_reference.md`, `tile_type_reference.md`, or `a3_a5_differences.md`, leave a `> Refines:` note in the new logbook entry pointing at the doc/section that needs updating.
+5. Produce the smallest possible fix, grounded in repo evidence.
+
+## Context management
+
+- Do **not** run `/compact` unless the user explicitly asks.
+- Do not summarize prior turns to "save space"; the system handles compression.
+- When unsure about prior context, ask before acting.
+
+## Output style
+
+Be direct and practical. State uncertainty clearly. Cite repo paths for nontrivial claims. Avoid restating `docs_for_ai/` content in chat — link to the specific section instead.
