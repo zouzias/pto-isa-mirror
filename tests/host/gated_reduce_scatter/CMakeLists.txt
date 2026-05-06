@@ -59,9 +59,35 @@ if(NOT DEFINED ASCEND_HOME_PATH)
 endif()
 message(STATUS "gated_rs_st: ASCEND_HOME_PATH = ${ASCEND_HOME_PATH}")
 
-if(NOT DEFINED HCOMM_PKG_INC_DIR)
-    set(HCOMM_PKG_INC_DIR "${ASCEND_HOME_PATH}/include")
+if(NOT DEFINED HCOMM_PKG_INC_DIR AND DEFINED ENV{HCOMM_PKG_INC_DIR})
+    set(HCOMM_PKG_INC_DIR $ENV{HCOMM_PKG_INC_DIR})
 endif()
+
+if(NOT DEFINED HCOMM_PKG_INC_DIR)
+    find_path(_HCOMM_PROBE
+        NAMES hcomm/ccu/ccu_kernel.h
+        PATHS
+            ${ASCEND_HOME_PATH}/pkg_inc
+            ${ASCEND_HOME_PATH}/include
+            ${PTO_LIB_PATH}/../../hcomm/pkg_inc
+            $ENV{HOME}/hcomm/pkg_inc
+        NO_DEFAULT_PATH
+    )
+    if(NOT _HCOMM_PROBE)
+        message(FATAL_ERROR
+            "gated_rs_st: cannot locate hcomm/ccu/ccu_kernel.h. "
+            "Set -DHCOMM_PKG_INC_DIR=<abs path> and re-run cmake.")
+    endif()
+    set(HCOMM_PKG_INC_DIR ${_HCOMM_PROBE})
+endif()
+message(STATUS "gated_rs_st: HCOMM_PKG_INC_DIR = ${HCOMM_PKG_INC_DIR}")
+
+# ACL / hccl headers — same dual-root convention as
+# `kernels/host/gated_reduce_scatter/CMakeLists.txt`.
+if(NOT DEFINED CANN_INCLUDE_DIR AND IS_DIRECTORY "${ASCEND_HOME_PATH}/include")
+    set(CANN_INCLUDE_DIR "${ASCEND_HOME_PATH}/include")
+endif()
+
 if(NOT DEFINED HCOMM_LIB_DIR)
     set(HCOMM_LIB_DIR "${ASCEND_HOME_PATH}/lib64")
 endif()
@@ -91,6 +117,9 @@ target_include_directories(gated_rs_st PRIVATE
     ${PTO_LIB_PATH}/include
     ${HCOMM_PKG_INC_DIR}
 )
+if(DEFINED CANN_INCLUDE_DIR)
+    target_include_directories(gated_rs_st PRIVATE ${CANN_INCLUDE_DIR})
+endif()
 
 # Link directories — one entry per shared lib supplier we depend on.
 target_link_directories(gated_rs_st PRIVATE

@@ -55,24 +55,69 @@ message(STATUS "pto_gated_reduce_scatter: PTO_LIB_PATH = ${PTO_LIB_PATH}")
 # ────────────────────────────────────────────────────────────────────────────
 # CANN toolkit / hcomm pkg_inc resolution.
 #
-# Priority:
-#   1. Explicit `-DHCOMM_PKG_INC_DIR=...` (dev override against in-source
-#      hcomm checkout).
-#   2. `$ASCEND_HOME_PATH/include` (CANN install, default on dev rigs).
+# CANN install layout (per `tests/npu/a5/comm/st/testcase/CMakeLists.txt`):
+#   ${ASCEND_HOME_PATH}/pkg_inc/hcomm/ccu/...   ← hcomm + hccl public headers
+#   ${ASCEND_HOME_PATH}/pkg_inc/hccl/...
+#   ${ASCEND_HOME_PATH}/include/acl/...          ← ACL runtime
+#   ${ASCEND_HOME_PATH}/lib64/libhcomm.so        ← runtime libs
+#
+# Override priority for HCOMM_PKG_INC_DIR (where `hcomm/ccu/ccu_kernel.h`
+# lives, with `hcomm/` as the immediate child of the include root):
+#   1. -DHCOMM_PKG_INC_DIR=<abs> at cmake configure time.
+#   2. $ENV{HCOMM_PKG_INC_DIR}.
+#   3. ${ASCEND_HOME_PATH}/pkg_inc          (CANN install default).
+#   4. ${ASCEND_HOME_PATH}/include          (some older CANN layouts).
+#   5. <repo>/hcomm/pkg_inc                 (in-source hcomm checkout, dev).
+#
+# We probe with find_path so configure fails early with a clear error if
+# none of the candidates contain the header.
 # ────────────────────────────────────────────────────────────────────────────
 if(NOT DEFINED ASCEND_HOME_PATH)
     if(DEFINED ENV{ASCEND_HOME_PATH})
         set(ASCEND_HOME_PATH $ENV{ASCEND_HOME_PATH})
-    else()
-        message(WARNING "pto_gated_reduce_scatter: ASCEND_HOME_PATH not set; "
-                "build will fail unless -DHCOMM_PKG_INC_DIR is supplied.")
     endif()
 endif()
 
+if(NOT DEFINED HCOMM_PKG_INC_DIR AND DEFINED ENV{HCOMM_PKG_INC_DIR})
+    set(HCOMM_PKG_INC_DIR $ENV{HCOMM_PKG_INC_DIR})
+endif()
+
 if(NOT DEFINED HCOMM_PKG_INC_DIR)
-    set(HCOMM_PKG_INC_DIR "${ASCEND_HOME_PATH}/include")
+    find_path(_HCOMM_PROBE
+        NAMES hcomm/ccu/ccu_kernel.h
+        PATHS
+            ${ASCEND_HOME_PATH}/pkg_inc
+            ${ASCEND_HOME_PATH}/include
+            ${PTO_LIB_PATH}/../../hcomm/pkg_inc       # sibling hcomm checkout
+            $ENV{HOME}/hcomm/pkg_inc
+        NO_DEFAULT_PATH
+    )
+    if(NOT _HCOMM_PROBE)
+        message(FATAL_ERROR
+            "pto_gated_reduce_scatter: cannot locate hcomm/ccu/ccu_kernel.h. "
+            "Searched:\n"
+            "  ${ASCEND_HOME_PATH}/pkg_inc\n"
+            "  ${ASCEND_HOME_PATH}/include\n"
+            "  ${PTO_LIB_PATH}/../../hcomm/pkg_inc\n"
+            "  $ENV{HOME}/hcomm/pkg_inc\n"
+            "Set -DHCOMM_PKG_INC_DIR=<abs path> (the dir whose immediate child "
+            "is `hcomm/`) and re-run cmake.")
+    endif()
+    set(HCOMM_PKG_INC_DIR ${_HCOMM_PROBE})
 endif()
 message(STATUS "pto_gated_reduce_scatter: HCOMM_PKG_INC_DIR = ${HCOMM_PKG_INC_DIR}")
+
+# ACL headers (`acl/acl.h` + friends) live under ${ASCEND_HOME_PATH}/include
+# on canonical CANN installs. We don't link against ACL here (the ST does),
+# but `hcomm/ccu/ccu_kernel.h` transitively includes `hccl_types.h` etc which
+# reference ACL types in some configurations — safer to add the include path
+# even for the kernel lib build.
+if(NOT DEFINED CANN_INCLUDE_DIR)
+    if(IS_DIRECTORY "${ASCEND_HOME_PATH}/include")
+        set(CANN_INCLUDE_DIR "${ASCEND_HOME_PATH}/include")
+    endif()
+endif()
+message(STATUS "pto_gated_reduce_scatter: CANN_INCLUDE_DIR = ${CANN_INCLUDE_DIR}")
 
 if(NOT DEFINED HCOMM_LIB_DIR)
     set(HCOMM_LIB_DIR "${ASCEND_HOME_PATH}/lib64")
@@ -112,9 +157,10 @@ target_compile_options(pto_gated_reduce_scatter PRIVATE
 target_include_directories(pto_gated_reduce_scatter PUBLIC
     ${PTO_LIB_PATH}/include
     ${HCOMM_PKG_INC_DIR}
-    ${HCOMM_PKG_INC_DIR}/hcomm
-    ${HCOMM_PKG_INC_DIR}/hccl
 )
+if(DEFINED CANN_INCLUDE_DIR)
+    target_include_directories(pto_gated_reduce_scatter PUBLIC ${CANN_INCLUDE_DIR})
+endif()
 
 target_link_directories(pto_gated_reduce_scatter PUBLIC
     ${HCOMM_LIB_DIR}
