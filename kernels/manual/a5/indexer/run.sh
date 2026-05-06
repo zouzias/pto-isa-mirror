@@ -44,8 +44,19 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
-INDEXER_TEST_N="${INDEXER_TEST_N:-131072}"
-INDEXER_TOPK="${INDEXER_TOPK:-2048}"
+INDEXER_TEST_N="${INDEXER_TEST_N:-2048}"
+INDEXER_TOPK="${INDEXER_TOPK:-512}"
+if (( INDEXER_TOPK > INDEXER_TEST_N )); then
+    echo "[ERROR] INDEXER_TOPK (${INDEXER_TOPK}) must be <= INDEXER_TEST_N (${INDEXER_TEST_N})"
+    exit 1
+fi
+# Current TopK UB implementation is single-pass and tuned for small/medium N.
+# Large-N (e.g. 131072) requires chunked/multi-pass TopK design.
+if (( INDEXER_TEST_N > 2048 )); then
+    echo "[ERROR] INDEXER_TEST_N=${INDEXER_TEST_N} is not supported by current single-pass TopK UB layout."
+    echo "        Please use INDEXER_TEST_N<=2048 (e.g. 2048) or implement chunked TopK for large N."
+    exit 1
+fi
 PYTHON_BIN="python3"
 if [[ -x "${SCRIPT_DIR}/../../../../.venv-indexer-sim/bin/python" ]]; then
     PYTHON_BIN="${SCRIPT_DIR}/../../../../.venv-indexer-sim/bin/python"
@@ -66,4 +77,7 @@ set -euo pipefail
 cmake  -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} -DINDEXER_TEST_N=${INDEXER_TEST_N} -DINDEXER_TOPK=${INDEXER_TOPK} ..
 make -j16
 
-./indexer_mxfp8
+cd ../
+chmod 750 build
+cd ./build
+msprof op simulator ./indexer_mxfp8

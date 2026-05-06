@@ -113,6 +113,47 @@ TopK 输入是 `score_bf16`（`uint16` bit pattern），先做 ordered-key 映�
 
 ---
 
+### 4.4 `N=2048` 时 TopK UB 临时缓冲重叠（已修复）
+
+现象：
+- `N=1024` 正常，`N=2048` 时 TopK 阶段出现异常写回（例如 `0x800` 段被错误值覆盖）
+- `rvec_pv` 中可见 `VSEL -> VST` 后目标段数据混入非预期值
+
+根因：
+- `kUbNegKeys/kUbPosKeys/kUbSignMask/kUbSignTmp` 的地址间距按 `N=1024` 假设设置
+- 当 `kLength=2048` 时，`u16[2048]` 需要 `0x1000` bytes，导致这些 buffer 之间发生重叠覆盖
+
+修复：
+- 将 ordered-key 临时 buffer 迁移到高地址 UB 区域，并按 `kLength` 动态计算偏移：
+  - `kUbNegKeys = 0x3A000`
+  - `kUbPosKeys = kUbNegKeys + kLength * sizeof(uint16_t)`
+  - `kUbSignMask = kUbPosKeys + kLength * sizeof(uint16_t)`
+  - `kUbSignTmp = kUbSignMask + kLength * sizeof(uint8_t)`
+- 增加 `static_assert` 检查 UB 上界，防止后续改动再次越界/重叠
+
+结果：
+- `process 3`：`topk multiset test success`，仅剩 `topk idx test failed`
+- `all`：`matmul/score` 均成功，TopK 进入“集合正确、索引顺序差异”阶段
+
+---
+
+### 4.5 threshold 对比口径不一致（已定位）
+
+现象：
+- Python 脚本算出的 `packed_threshold` 与 `rvec_pv` 中 `VOR` 一度不一致
+
+根因：
+- `radix_topk_golden_stats_bf16.py` 默认读取 `output/score_bf16.bin`
+- 该文件在某些流程下只有单 batch（2048 个值），而 `rvec_pv` 中观测的是两 batch 路径
+
+修复/建议：
+- 对比 `VOR` 时使用与设备同源的数据（例如 `output/score_bf16_from_vnot_n2048.bin`）
+- 以两 batch 输入复算时，`packed_threshold` 与 `VOR` 对齐：
+  - batch0: `0xC61D`
+  - batch1: `0x3A9C`
+
+---
+
 ## 5) Host 校验策略（当前）
 
 `main.cpp` 的 TopK 校验分两层：
@@ -129,10 +170,10 @@ TopK 输入是 `score_bf16`（`uint16` bit pattern），先做 ordered-key 映�
 
 ---
 
-## 6) 当前可复现状态（2026-05-05）
+## 6) 当前可复现状态（2026-05-06）
 
 配置：
-- `INDEXER_TEST_N=1024`
+- `INDEXER_TEST_N=2048`
 - `INDEXER_TOPK=512`
 - `batch=2`
 
@@ -140,11 +181,11 @@ TopK 输入是 `score_bf16`（`uint16` bit pattern），先做 ordered-key 映�
 - `matmul test success`
 - `score test success`
 - `topk multiset test success`
-- `topk idx order differs, but sorted idx set matches`
+- `topk idx test failed`
 
 结论：
-- 全流程（matmul + postprocess + topk）已跑通
-- TopK 集合正确，顺序差异符合 non-deterministic tie-break 预期
+- 全流程（matmul + postprocess + topk）在 `N=2048` 下可稳定运行
+- TopK 数值与集合层面已正确，当前剩余问题集中在 idx 路径（顺序/拼接/截断策略）
 
 ---
 
@@ -154,7 +195,9 @@ TopK 输入是 `score_bf16`（`uint16` bit pattern），先做 ordered-key 映�
 2. 出现 TopK 异常时，优先核对：
    - `TLOAD` 写入窗口 vs 后续 `VLD` 读取窗口
    - `float->bf16` 转换模式是否仍为 `CAST_TRUNC`
-3. 保留并使用以下日志做证据链：
+   - `N` 变化后 UB 地址布局是否仍无重叠（尤其 ordered-key 临时 buffer）
+3. 对比 threshold 时保持输入源一致（脚本输入与设备观测同源）
+4. 保留并使用以下日志做证据链：
    - `build/core0.veccore0.instr_log.dump`
    - `build/core0.veccore0.ub.wr_log.dump`
    - `build/core0.veccore0.ub.rd_log.dump`
@@ -169,7 +212,7 @@ TopK 输入是 `score_bf16`（`uint16` bit pattern），先做 ordered-key 映�
 
 ```bash
 # 生成 smoke 数据
-INDEXER_TEST_N=1024 INDEXER_TOPK=512 ../../../../.venv-indexer-sim/bin/python scripts/gen_data.py
+INDEXER_TEST_N=2048 INDEXER_TOPK=512 ../../../../.venv-indexer-sim/bin/python scripts/gen_data.py
 
 # 运行环境
 source /usr/local/Ascend/cann_9b2/cann/set_env.sh
@@ -184,5 +227,13 @@ export LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/Ascend910_9599/lib:$L
 ./build/indexer_mxfp8 all
 
 # BF16 radix 统计
-INDEXER_TEST_N=1024 INDEXER_TOPK=512 python3 scripts/radix_topk_golden_stats_bf16.py
+INDEXER_TEST_N=2048 INDEXER_TOPK=512 python3 scripts/radix_topk_golden_stats_bf16.py
+
+# 若需与 rvec_pv 的 VOR 对齐，使用同源输入（示例）
+python3 - <<'PY'
+import numpy as np
+from pathlib import Path
+p = Path("output/score_bf16_from_vnot_n2048.bin")
+print("exists:", p.exists(), "len(u16):", np.fromfile(p, dtype="<u2").size if p.exists() else 0)
+PY
 ```

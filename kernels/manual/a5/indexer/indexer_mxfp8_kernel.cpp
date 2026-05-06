@@ -926,7 +926,6 @@ AICORE inline void TopKFromScoreImpl(__gm__ uint16_t *scoreOutBf16, __gm__ uint3
             selMask.SetValidRow(1);
             selMask.SetValidCol(1);
             tselTmp.SetValidCol(32);
-            TROWMIN(rowMinDst, msbWinnerLanes, rowMinTmp);
             RowMinDstTile uOne(1, 16);
             TASSIGN(uOne, kWinnerUbU32One);
             uOne.SetValidRow(1);
@@ -939,7 +938,6 @@ AICORE inline void TopKFromScoreImpl(__gm__ uint16_t *scoreOutBf16, __gm__ uint3
             TASSIGN(msbWinnerBin, kWinnerUbTmp);
             msbWinnerBin.SetValidRow(1);
             msbWinnerBin.SetValidCol(32);
-            TEXPANDS(gatherIdx, 0u);
             TGATHER(msbWinnerBin, selOut, gatherIdx, gatherTmp);
 
             using U32x32 = Tile<TileType::Vec, uint32_t, 1, 32, BLayout::RowMajor, -1, -1>;
@@ -1018,16 +1016,16 @@ AICORE inline void TopKFromScoreImpl(__gm__ uint16_t *scoreOutBf16, __gm__ uint3
             TEXPANDS(gatherIdx, 0u);
             TGATHER(lsbWinnerBin, rowMinDst, gatherIdx, gatherTmp);
         }
-        TASSIGN(packedThrU, kRemainUbOut);
-        packedThrU.SetValidRow(1);
-        packedThrU.SetValidCol(1);
         {
             PackedU16Tile msbU(1, 32);
             PackedU16Tile hiU(1, 32);
             PackedU16Tile lsbU(1, 32);
+            TASSIGN(packedThrU, kRemainUbOut);
             TASSIGN(msbU, kRemainUbTopk);
             TASSIGN(hiU, kRemainUbCw);
             TASSIGN(lsbU, kRemainUbOut);
+            packedThrU.SetValidRow(1);
+            packedThrU.SetValidCol(1);
             msbU.SetValidRow(1);
             msbU.SetValidCol(1);
             hiU.SetValidRow(1);

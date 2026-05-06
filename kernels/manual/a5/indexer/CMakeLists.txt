@@ -18,6 +18,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
+set(INDEXER_TEST_N "2048" CACHE STRING "Indexer test N length")
+set(INDEXER_TOPK "512" CACHE STRING "Indexer TopK value")
+
 if(NOT DEFINED ENV{ASCEND_HOME_PATH})
     message(FATAL_ERROR "Cannot find ASCEND_HOME_PATH, please run set_env.sh.")
 else()
@@ -79,6 +82,10 @@ include_directories(
 # and FA pto_example_mixed. Without REGISTER_BASE / pkg_inc paths, bisheng may reject TLOAD/TPOP paths on sim.
 function(pto_example_mixed NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
+    target_compile_definitions(${NAME}_kernel PRIVATE
+        INDEXER_TEST_N=${INDEXER_TEST_N}
+        INDEXER_TOPK=${INDEXER_TOPK}
+    )
     target_compile_options(${NAME}_kernel PRIVATE
         ${CMAKE_CCE_COMPILE_OPTIONS}
         --cce-aicore-arch=dav-c310
@@ -96,6 +103,10 @@ function(pto_example_mixed NAME)
     target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
 
     add_executable(${NAME} main.cpp)
+    target_compile_definitions(${NAME} PRIVATE
+        INDEXER_TEST_N=${INDEXER_TEST_N}
+        INDEXER_TOPK=${INDEXER_TOPK}
+    )
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
     target_include_directories(${NAME} BEFORE PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../include/
