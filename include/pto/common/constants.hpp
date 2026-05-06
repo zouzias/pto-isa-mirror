@@ -52,6 +52,7 @@ constexpr uint16_t PTO_IDX_0 = 0;
 constexpr uint16_t PTO_IDX_1 = 1;
 constexpr uint16_t PTO_IDX_2 = 2;
 constexpr uint16_t PTO_IDX_3 = 3;
+constexpr int CACHE_LINE_SIZE = 64;
 
 // ============================================================================
 // Custom pad value helpers for uint64_t-based PadValue enum
@@ -315,7 +316,7 @@ struct PadValueMap<uint32_t, PadValue::Max> {
     static constexpr auto value = uint32_t(0xffffffffUL);
 };
 
-#if (!defined(__CPU_SIM)) && (!defined(__COSTMODEL)) && (!defined(PTO_NPU_ARCH_KIRIN9030))
+#if (!defined(__CPU_SIM)) && (!defined(__COSTMODEL)) && (!defined(PTO_NPU_ARCH_KIRIN9030)) && !defined(PTO_NPU_ARCH_A1)
 template <>
 struct PadValueMap<bfloat16_t, PadValue::Null> {
     static constexpr auto value = uint16_t(0);
