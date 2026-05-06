@@ -220,6 +220,102 @@ inline AICORE void runElem2DPadded(__gm__ T __out__ *out, __gm__ T __in__ *src, 
 }
 
 template <pto::ScatterAtomicOp Atomic, pto::ScatterOOB Oob, pto::ScatterConflict Conflict, typename T, typename TIdx,
+          int kPadRows, int kPadCols, int64_t kRtValidRows, int64_t kRtValidCols, int64_t kRtTableR, int64_t kRtTableC>
+inline AICORE void runElem2DDyn(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ TIdx __in__ *indices)
+{
+    using SrcShape = pto::Shape<1, 1, 1, -1, -1>;
+    using SrcStride = pto::Stride<1, 1, 1, -1, -1>;
+    using IdxShape = pto::Shape<1, 1, 1, -1, -1>;
+    using IdxStride = pto::Stride<1, 1, 1, -1, -1>;
+    using OutShape = pto::Shape<1, 1, 1, -1, -1>;
+    using OutStride = pto::Stride<1, 1, 1, -1, -1>;
+
+    SrcShape srcShape(kRtValidRows, kRtValidCols);
+    SrcStride srcStride(kRtValidCols, (int64_t)1);
+    IdxShape idxShape(kRtValidRows, kRtValidCols);
+    IdxStride idxStride(kRtValidCols, (int64_t)1);
+    OutShape outShape(kRtTableR, kRtTableC);
+    OutStride outStride(kRtTableC, (int64_t)1);
+
+    GlobalTensor<T, SrcShape, SrcStride> srcGlobal(src, srcShape, srcStride);
+    GlobalTensor<TIdx, IdxShape, IdxStride> idxGlobal(indices, idxShape, idxStride);
+    GlobalTensor<T, OutShape, OutStride> outGlobal(out, outShape, outStride);
+
+    using SrcTile = Tile<TileType::Vec, T, kPadRows, kPadCols, BLayout::RowMajor, -1, -1>;
+    using IdxTile = Tile<TileType::Vec, TIdx, kPadRows, kPadCols, BLayout::RowMajor, -1, -1>;
+
+    SrcTile srcTile(static_cast<unsigned>(kRtValidRows), static_cast<unsigned>(kRtValidCols));
+    IdxTile idxTile(static_cast<unsigned>(kRtValidRows), static_cast<unsigned>(kRtValidCols));
+
+    constexpr int idxBytes = ((kPadRows * kPadCols * (int)sizeof(TIdx) + 31) / 32) * 32;
+    constexpr int srcBytes = ((kPadRows * kPadCols * (int)sizeof(T) + 31) / 32) * 32;
+    TASSIGN(idxTile, 0x0);
+    TASSIGN(srcTile, idxBytes);
+
+    TLOAD(idxTile, idxGlobal);
+    TLOAD(srcTile, srcGlobal);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+    MSCATTER<Coalesce::Elem, Atomic, Oob, Conflict>(outGlobal, srcTile, idxTile);
+#ifndef __PTO_AUTO__
+    pipe_barrier(PIPE_ALL);
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
+    (void)srcBytes;
+}
+
+template <pto::ScatterAtomicOp Atomic, pto::ScatterOOB Oob, pto::ScatterConflict Conflict, typename T, typename TIdx,
+          int kPadRows, int kPadCols, int kPadIdxCols, int64_t kRtValidRows, int64_t kRtValidCols, int64_t kRtTableR>
+inline AICORE void runRowDyn(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ TIdx __in__ *indices)
+{
+    using SrcShape = pto::Shape<1, 1, 1, -1, -1>;
+    using SrcStride = pto::Stride<1, 1, 1, -1, -1>;
+    using IdxShape = pto::Shape<1, 1, 1, 1, -1>;
+    using IdxStride = pto::Stride<1, 1, 1, -1, -1>;
+    using OutShape = pto::Shape<1, 1, 1, -1, -1>;
+    using OutStride = pto::Stride<1, 1, 1, -1, -1>;
+
+    SrcShape srcShape(kRtValidRows, kRtValidCols);
+    SrcStride srcStride(kRtValidCols, (int64_t)1);
+    IdxShape idxShape(kRtValidRows);
+    IdxStride idxStride(kRtValidRows, (int64_t)1);
+    OutShape outShape(kRtTableR, kRtValidCols);
+    OutStride outStride(kRtValidCols, (int64_t)1);
+
+    GlobalTensor<T, SrcShape, SrcStride> srcGlobal(src, srcShape, srcStride);
+    GlobalTensor<TIdx, IdxShape, IdxStride> idxGlobal(indices, idxShape, idxStride);
+    GlobalTensor<T, OutShape, OutStride> outGlobal(out, outShape, outStride);
+
+    using SrcTile = Tile<TileType::Vec, T, kPadRows, kPadCols, BLayout::RowMajor, -1, -1>;
+    using IdxTile = Tile<TileType::Vec, TIdx, 1, kPadIdxCols, BLayout::RowMajor, 1, -1>;
+
+    SrcTile srcTile(static_cast<unsigned>(kRtValidRows), static_cast<unsigned>(kRtValidCols));
+    IdxTile idxTile(static_cast<unsigned>(kRtValidRows));
+
+    constexpr int idxBytes = ((1 * kPadIdxCols * (int)sizeof(TIdx) + 31) / 32) * 32;
+    constexpr int srcBytes = ((kPadRows * kPadCols * (int)sizeof(T) + 31) / 32) * 32;
+    TASSIGN(idxTile, 0x0);
+    TASSIGN(srcTile, idxBytes);
+
+    TLOAD(idxTile, idxGlobal);
+    TLOAD(srcTile, srcGlobal);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+    MSCATTER<Coalesce::Row, Atomic, Oob, Conflict>(outGlobal, srcTile, idxTile);
+#ifndef __PTO_AUTO__
+    pipe_barrier(PIPE_ALL);
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
+    (void)srcBytes;
+}
+
+template <pto::ScatterAtomicOp Atomic, pto::ScatterOOB Oob, pto::ScatterConflict Conflict, typename T, typename TIdx,
           int kSrcRows, int kSrcCols, int kTableSize>
 inline AICORE void runElem2D(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ TIdx __in__ *indices)
 {
@@ -325,6 +421,28 @@ inline AICORE void runElem2D(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__
         runMSCATTER_##NAME<<<1, nullptr, stream>>>(reinterpret_cast<T *>(out), reinterpret_cast<T *>(src), indices); \
     }
 
+#define DEFINE_ELEM2D_DYN(NAME, THOST, T, TIDX, PR, PC, RVR, RVC, RTR, RTC, ATOMIC, OOB, CONFLICT)                    \
+    extern "C" __global__ AICORE void runMSCATTER_##NAME(__gm__ T *out, __gm__ T *src, __gm__ TIDX *indices)          \
+    {                                                                                                                 \
+        runElem2DDyn<pto::ScatterAtomicOp::ATOMIC, pto::ScatterOOB::OOB, pto::ScatterConflict::CONFLICT, T, TIDX, PR, \
+                     PC, (int64_t)RVR, (int64_t)RVC, (int64_t)RTR, (int64_t)RTC>(out, src, indices);                  \
+    }                                                                                                                 \
+    void Launch_##NAME(THOST *out, THOST *src, TIDX *indices, void *stream)                                           \
+    {                                                                                                                 \
+        runMSCATTER_##NAME<<<1, nullptr, stream>>>(reinterpret_cast<T *>(out), reinterpret_cast<T *>(src), indices);  \
+    }
+
+#define DEFINE_ROW_DYN(NAME, THOST, T, TIDX, PR, PC, PIC, RVR, RVC, RTR, ATOMIC, OOB, CONFLICT)                        \
+    extern "C" __global__ AICORE void runMSCATTER_##NAME(__gm__ T *out, __gm__ T *src, __gm__ TIDX *indices)           \
+    {                                                                                                                  \
+        runRowDyn<pto::ScatterAtomicOp::ATOMIC, pto::ScatterOOB::OOB, pto::ScatterConflict::CONFLICT, T, TIDX, PR, PC, \
+                  PIC, (int64_t)RVR, (int64_t)RVC, (int64_t)RTR>(out, src, indices);                                   \
+    }                                                                                                                  \
+    void Launch_##NAME(THOST *out, THOST *src, TIDX *indices, void *stream)                                            \
+    {                                                                                                                  \
+        runMSCATTER_##NAME<<<1, nullptr, stream>>>(reinterpret_cast<T *>(out), reinterpret_cast<T *>(src), indices);   \
+    }
+
 DEFINE_ROW(row_float_random_8x32_64rows, float, float, int32_t, 8, 32, 64, None, Undefined, Last)
 DEFINE_ROW(row_float_same_8x32_16rows, float, float, int32_t, 8, 32, 16, None, Undefined, Last)
 DEFINE_ROW(row_half_random_16x64_64rows, aclFloat16, half, int32_t, 16, 64, 64, None, Undefined, Last)
@@ -374,3 +492,12 @@ DEFINE_ELEM2D_PAD(elem2d_int32_unaligned_9x9_in_9x16_256size, int32_t, int32_t, 
 DEFINE_ELEM2D_PAD(elem2d_int32_scalar_1x1_in_1x8_8size, int32_t, int32_t, int32_t, 1, 1, 1, 8, 8, None, Undefined, Last)
 DEFINE_ROW_PAD(row_int32_unaligned_3x8_8rows, int32_t, int32_t, int32_t, 3, 8, 8, 8, None, Undefined, Last)
 DEFINE_ROW_PAD(row_int32_unaligned_9x16_16rows, int32_t, int32_t, int32_t, 9, 16, 16, 16, None, Undefined, Last)
+
+DEFINE_ELEM2D_DYN(elem2d_dyn_user_float_1x9_in_1x16_3x10, float, float, int32_t, 1, 16, 1, 9, 3, 10, None, Skip, Last)
+DEFINE_ELEM2D_DYN(elem2d_dyn_int32_4x8_in_4x8_64size, int32_t, int32_t, int32_t, 4, 8, 4, 8, 8, 8, None, Undefined,
+                  Last)
+DEFINE_ELEM2D_DYN(elem2d_dyn_float_3x3_in_3x8_64size, float, float, int32_t, 3, 8, 3, 3, 8, 8, None, Undefined, Last)
+DEFINE_ELEM2D_DYN(elem2d_dyn_half_8x16_in_8x16_4x32, aclFloat16, half, int32_t, 8, 16, 8, 16, 4, 32, None, Undefined,
+                  Last)
+DEFINE_ROW_DYN(row_dyn_int32_3x16_8rows, int32_t, int32_t, int32_t, 3, 16, 8, 3, 16, 8, None, Undefined, Last)
+DEFINE_ROW_DYN(row_dyn_half_4x32_16rows, aclFloat16, half, int32_t, 4, 32, 8, 4, 32, 16, None, Undefined, Last)
