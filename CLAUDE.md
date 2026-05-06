@@ -25,6 +25,48 @@ Auto mode is underdeveloped, especially for larger kernels such as GEMM, Flash A
 - Preserve existing manual-mode behavior unless explicitly asked otherwise.
 - For large kernels such as GEMM, Flash Attention, or sparse attention, produce a design/skeleton first, not a full optimized implementation.
 
+## Target platform scope
+
+The target platforms for this work are **A3 and A5 only**.
+
+CPU-sim, cost-model, Kirin, and other non-A3/A5 paths may be used only as secondary references when they clarify source structure, fallback macros, or functional intent. They should not drive kernel-generation decisions.
+
+Rules:
+
+- Prioritize `include/pto/npu/a2a3/`, `include/pto/npu/a5/`, `tests/npu/a2a3/`, `tests/npu/a5/`, and `kernels/manual/a2a3/` / `kernels/manual/a5/`.
+- Do not use CPU-sim behavior as evidence that an A3/A5 auto-mode pattern is valid.
+- Do not copy CPU-sim-only macros, stubs, or fallback definitions into A3/A5 code.
+- If CPU-sim/cost-model/Kirin files define a token as empty, do not conclude it is empty on A3/A5. Check A3/A5 usage and compiler-provided semantics.
+- When referencing CPU-sim, cost-model, Kirin, or other non-target files, explicitly label them as `non-target reference`.
+- If a pattern exists only in CPU-sim/Kirin/cost-model and not in A3/A5 source or docs, mark it as `Unknown for A3/A5`.
+- For generated docs and patches, optimize for A3/A5 correctness, not CPU-sim compatibility, unless the user explicitly asks otherwise.
+
+## Testcase caution
+
+Some testcases and kernels may have originally been written for manual mode or for broad instruction coverage, even if they appear in the A3/A5 test tree or are listed in `ALL_TESTCASES`.
+
+Do not assume that a testcase is a clean auto-mode reference just because it is present in the repo or included in a test list.
+
+Rules:
+
+- Treat inclusion in `ALL_TESTCASES` as evidence that the testcase is expected to build in that configuration, not proof that every pattern inside is good auto-mode style.
+- Some testcases may build in auto mode but still contain patterns that are risky, misleading, or only accidentally tolerated.
+- Always check testcases for manual-mode idioms:
+  - `TASSIGN` address arithmetic,
+  - same-address `TASSIGN` aliasing,
+  - `set_flag` / `wait_flag`,
+  - `Event<>` ordering assumptions,
+  - `pipe_barrier`,
+  - `TPUSH` / `TPOP` / `TPipe`,
+  - double buffering,
+  - raw CCE intrinsics,
+  - direct `Tile::data()` usage,
+  - `*_IMPL` calls from kernel code.
+- If these idioms are guarded with `#ifndef __PTO_AUTO__`, they may still be useful dual-mode examples.
+- If these idioms are unguarded, mark the testcase as `mixed`, `risky`, or `manual-mode-curated`, not as a clean auto-mode example.
+- Auto-mode testcase failures may be rare, but they are possible. Be conservative.
+- Prefer `demos/auto_mode/`, `docs/auto_mode/`, and A3/A5 testcases with clearly guarded manual-only code as clean references.
+
 ## Main goal
 
 First, help create a source-grounded knowledge base under:
@@ -48,6 +90,7 @@ docs_for_ai/assumptions_to_verify.md
 docs_for_ai/compile_error_logbook.md
 docs_for_ai/external_context/pr_index.md
 docs_for_ai/external_context/pr_pattern_notes.md
+docs_for_ai/external_context/pr_852_notes.md
 ```
 
 ## Knowledge base rules
@@ -63,6 +106,7 @@ When creating or updating files in `docs_for_ai/`:
 - Keep assumptions separate from confirmed facts.
 - If using PRs/MRs/issues, treat them as supporting context, not as the main source of truth.
 - Prefer current source code over old PR/MR discussion if they conflict.
+- If a PR/MR is not merged into the current branch, treat it as supporting context or planned fix pattern, not as current source truth.
 - Remove duplicated, outdated, or irrelevant notes when updating docs.
 
 ## Source hierarchy
@@ -115,11 +159,12 @@ After producing code, always provide a manual checklist:
 Before proposing auto-mode code, check for:
 
 - manual-mode-only pointer access,
-- missing `__tf__` on helper functions,
+- missing `__tf__` on helper functions that need to be tile functions,
 - missing or incorrect `AICORE` usage,
-- unsafe `__gm__` / `__ubuf__` usage,
+- unsafe `__gm__` / `__ubuf__` / `__cbuf__` / `__ca__` / `__cb__` / `__cc__` / `__fbuf__` usage,
 - helpers that incorrectly return false for auto mode,
 - A5-only assumptions accidentally used for A3,
+- A3/A2-shared assumptions accidentally used for A5,
 - unsupported template/type patterns,
 - memory movement assumptions,
 - tile shape/layout assumptions,
@@ -196,6 +241,7 @@ When asked to use PRs/MRs/issues:
 4. Extract only information useful for auto-mode A3/A5 kernel generation.
 5. Link each extracted point to its PR/MR/issue source.
 6. Mark each point as `Known from PR/MR`, `Inferred from PR/MR`, or `Assumption`.
+7. If a PR/MR is not merged into the current branch, treat it as supporting context or planned fix pattern, not as current source truth.
 
 ## Compiler error workflow
 
