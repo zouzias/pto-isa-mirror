@@ -19,17 +19,20 @@ Conventions used below:
 - "Auto-mode rules" = [docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md](../docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md) and [docs/auto_mode/Library_Developer_Rules_And_Limitations.md](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md).
 - "Auto mode" = compiled with `--cce-enable-pto-passes -O2` and `__PTO_AUTO__` defined.
 
+Several entries below are clarified or scheduled for fix by **PR-852** (A3 ST testcase fixes; **not yet merged into this branch**). Cross-references point to [external_context/pr_852_notes.md](external_context/pr_852_notes.md). Treat the PR's recipes as forward-looking guidance until merge — current source still has the bugs.
+
 ---
 
 ## Important corrections to earlier docs
 
 The following entries in [repo_kernel_map.md](repo_kernel_map.md) and
 [known_good_kernel_examples.md](known_good_kernel_examples.md) under
-"Cross-cutting risks" had the polarity wrong. Trust this section over those:
+"Cross-cutting risks" had the polarity wrong. Both have been updated.
+See [qualifier_reference.md](qualifier_reference.md) for the full reconciliation.
 
-- **`__tf__` IS meaningful on A3/A5** (Known). It is heavily used in A3 library headers (e.g., [include/pto/npu/a2a3/TAddS.hpp:32](../include/pto/npu/a2a3/TAddS.hpp#L32), [include/pto/npu/a2a3/TSort32.hpp:70,103](../include/pto/npu/a2a3/TSort32.hpp#L70), [include/pto/npu/a2a3/TPrint.hpp:108,231,264](../include/pto/npu/a2a3/TPrint.hpp#L108), [include/pto/npu/a5/MGather.hpp:164,185](../include/pto/npu/a5/MGather.hpp#L164), [include/pto/npu/a5/MScatter.hpp:274,296,313](../include/pto/npu/a5/MScatter.hpp#L274) — there are ~80 hits across `include/pto/npu/{a2a3,a5}/`). [include/pto/common/arch_macro.hpp:29-34](../include/pto/common/arch_macro.hpp#L29-L34) defines `__tf__` as **empty** only for `KIRIN9030`/`KIRINX90`; on A3/A5 it is the bisheng-CCE keyword that marks a function as a tile function (Inferred). `__tf__` is REQUIRED on any A3/A5 helper that contains raw CCE intrinsics ([docs/auto_mode/Auto_Mode_Overview.md](../docs/auto_mode/Auto_Mode_Overview.md): "the tile function is a complete black-box to PTO compiler").
-- **`__in__` / `__out__` ARE meaningful on A3/A5** (Inferred). Same reasoning — the arch macros are empty only on kirin. Treat them as "respect when copying existing helpers; do not add or remove without cause" rather than as decorative.
-- **`__cce_get_tile_ptr(...)` IS a real CCE call on A3/A5** (Inferred). Same arch-macro pattern. Used inside `__tf__` helpers to extract a raw pointer from a tile reference.
+- **`__tf__` IS meaningful on A3/A5** (Inferred — strong). It is used pervasively in A3/A5 library headers: ~71 files in [include/pto/npu/a2a3/](../include/pto/npu/a2a3/) (e.g., [TAddS.hpp:32](../include/pto/npu/a2a3/TAddS.hpp#L32), [TSort32.hpp:70,103](../include/pto/npu/a2a3/TSort32.hpp#L70), [TPrint.hpp:108,231,264](../include/pto/npu/a2a3/TPrint.hpp#L108)) and ~80 files in [include/pto/npu/a5/](../include/pto/npu/a5/) (e.g., [MGather.hpp:164,185](../include/pto/npu/a5/MGather.hpp#L164), [MScatter.hpp:274,296,313](../include/pto/npu/a5/MScatter.hpp#L274)). The repo `#define`s `__tf__` **as empty** in three places only: [include/pto/common/arch_macro.hpp:30](../include/pto/common/arch_macro.hpp#L30) (kirin), [include/pto/common/cpu_stub.hpp:34](../include/pto/common/cpu_stub.hpp#L34) (CPU sim), and [include/pto/costmodel/common/qualifiers.hpp:27](../include/pto/costmodel/common/qualifiers.hpp#L27) (cost model). It is **never** `#define`d for A3/A5 device builds. The only consistent reading is that `__tf__` is a bisheng-CCE compiler keyword/builtin on A3/A5; the repo defines-it-empty fallbacks let the same source compile elsewhere. `__tf__` is REQUIRED on any A3/A5 helper that contains raw CCE intrinsics ([docs/auto_mode/Auto_Mode_Overview.md](../docs/auto_mode/Auto_Mode_Overview.md): "the tile function is a complete black-box to PTO compiler").
+- **`__in__` / `__out__` ARE meaningful on A3/A5** (Inferred — strong). Same `#define`-as-empty pattern in the same three files. Required on `TileDType` parameters of tile functions per [docs/auto_mode/Library_Developer_Rules_And_Limitations.md §6](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md): *"Ensure `__in__` or `__out__` attributes are properly attached to these `typename <...>::TileDType` parameters"*.
+- **`__cce_get_tile_ptr(...)` IS a real CCE call on A3/A5** (Inferred — strong). The repo macro forms are: `#define __cce_get_tile_ptr` (kirin, [arch_macro.hpp:33](../include/pto/common/arch_macro.hpp#L33) — object-like, makes `__cce_get_tile_ptr(x)` expand to `(x)`); `#define __cce_get_tile_ptr(x) x` (CPU-sim and cost-model). On A3/A5 device it is the actual CCE intrinsic that extracts a raw buffer pointer from a `TileDType` ([docs/auto_mode/Library_Developer_Rules_And_Limitations.md §6](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md): *"Always call `__cce_get_tile_ptr` on these `typename <...>::TileDType` arguments to get a tile's underlying buffer pointer"*).
 
 ---
 
@@ -42,7 +45,10 @@ The following entries in [repo_kernel_map.md](repo_kernel_map.md) and
 3. **Where**
    - [tests/npu/a2a3/src/st/testcase/tquant/tquant_kernel.cpp:45-47](../tests/npu/a2a3/src/st/testcase/tquant/tquant_kernel.cpp#L45-L47): `TASSIGN(srcTile, 0x0); TASSIGN(dstS8Tile, 0x0); TASSIGN(scaleTile, 0x20100);` — `srcTile` and `dstS8Tile` collide at `0x0`.
    - General pattern noted in [docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md §2.3, §2.4](../docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md).
-4. **Fix** — If aliasing is intentional, replace with `TRESHAPE(b, a)` (auto-mode hint that `b` and `a` share a base) or `TSUBVIEW(b, a, rowOffset, colOffset)` (offset view). Compare with the in-tree auto branch [include/pto/npu/a2a3/TQuant.hpp:108-114](../include/pto/npu/a2a3/TQuant.hpp#L108-L114) which uses `TRESHAPE_IMPL` under `__PTO_AUTO__`.
+4. **Fix** — Two viable shapes:
+   - **Auto-mode-only kernel**: drop the `TASSIGN`s entirely; use `TRESHAPE(b, a)` (auto-mode hint that `b` and `a` share a base) or `TSUBVIEW(b, a, rowOffset, colOffset)` (offset view).
+   - **Dual-mode kernel** (must compile correctly under both `--cce-enable-pto-passes` and manual): keep both `TASSIGN(a, X); TASSIGN(b, X);` AND add `TRESHAPE(b, a);` immediately after. Manual mode honors the `TASSIGN` aliasing; auto mode honors the `TRESHAPE` hint (and no-ops the `TASSIGN`s). PR-852 introduces this recipe in [tests/npu/a2a3/src/st/testcase/tcvt/tcvt_kernel.cpp](../tests/npu/a2a3/src/st/testcase/tcvt/tcvt_kernel.cpp) (post-merge); see [external_context/pr_852_notes.md §T3](external_context/pr_852_notes.md) and [known_good_kernel_examples.md §A10](known_good_kernel_examples.md).
+   - For the library-internal analogue, compare with the in-tree auto branch [include/pto/npu/a2a3/TQuant.hpp:108-114](../include/pto/npu/a2a3/TQuant.hpp#L108-L114) which uses `TRESHAPE_IMPL` under `__PTO_AUTO__`.
 5. **Confidence** — High.
 6. **Status** — Known.
 
@@ -145,6 +151,30 @@ The following entries in [repo_kernel_map.md](repo_kernel_map.md) and
 5. **Confidence** — Medium.
 6. **Status** — Inferred.
 
+### 2.7 `PtoSetWaitFlag` inside a `__tf__` body silently drops sync in auto mode
+
+1. **Pattern** — A library helper is `__tf__ PTO_INTERNAL` (a tile function) and uses `PtoSetWaitFlag<PIPE_X, PIPE_Y>()` for sync between PTO operations *inside* its body, with no `__PTO_AUTO__` guard.
+2. **Why risky** — `PtoSetWaitFlag` is intentionally a no-op in auto mode (it exists so kernel-level code can be written once and let the auto-sync compiler insert real sync). But the auto-sync compiler **does not look inside tile functions** ([docs/auto_mode/Auto_Mode_Overview.md](../docs/auto_mode/Auto_Mode_Overview.md): *"the tile function is a complete black-box to PTO compiler"*). So inside a `__tf__` body, `PtoSetWaitFlag` becomes a no-op AND the compiler does not insert sync to compensate — the function ships with no sync at all. This is **exactly opposite** to the §3.3 kernel-level rule that prefers `PtoSetWaitFlag` over raw `set_flag`/`wait_flag`. The library spec ([docs/auto_mode/Library_Developer_Rules_And_Limitations.md §3](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md)) says it directly: *"Use `set_flag`, `wait_flag` or `pipe_barrier` explicitly in tile functions and all of their callees. Use `PtoSetWaitFlag` or `TSYNC` anywhere else."*
+3. **Where** (current source — to be fixed by PR-852)
+   - [include/pto/npu/a2a3/TConcat.hpp:124,137,153,157,158](../include/pto/npu/a2a3/TConcat.hpp#L124) — five `PtoSetWaitFlag<...>()` calls inside `__tf__ PTO_INTERNAL TConcatIdx`.
+   - [include/pto/npu/a2a3/TFillPad.hpp:56](../include/pto/npu/a2a3/TFillPad.hpp#L56) — inside `Handle32BAlignedPad_Byte`.
+   - [include/pto/npu/a2a3/TRowReduceIdxOps.hpp](../include/pto/npu/a2a3/TRowReduceIdxOps.hpp) — six places inside `ProcReduceIdxStage1`, `ProcReduceIdxStage2`, `ExtractValIdxFromTmp`.
+   - [include/pto/npu/a2a3/TTrans.hpp](../include/pto/npu/a2a3/TTrans.hpp) — `TransTailTiles`, `TTransConvNC1HWC02C1HWNC0`.
+4. **Fix** — Wrap each call:
+   ```cpp
+   #ifndef __PTO_AUTO__
+       PtoSetWaitFlag<PIPE_V, PIPE_S>();
+   #else
+       set_flag(PIPE_V, PIPE_S, EVENT_ID0);
+       wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
+   #endif
+   ```
+   Manual mode keeps the `PtoSetWaitFlag` shape (which expands to real `set_flag`/`wait_flag`); auto mode uses the raw CCE intrinsics directly. Either form is allowed inside a `__tf__` body. PR-852 applies this exact wrap across the four headers above. See [external_context/pr_852_notes.md §L2-L3, L6, L7b](external_context/pr_852_notes.md).
+5. **Confidence** — High.
+6. **Status** — Known anti-pattern; resolved-by-PR-852 (not yet merged).
+
+> Cross-cutting note (refines §2.1): the kernel rule "prefer `PtoSetWaitFlag`/`TSYNC` over `set_flag`/`wait_flag`" applies **only at kernel level**. Inside a `__tf__` body the polarity is reversed: real `set_flag`/`wait_flag`/`pipe_barrier` are required, and `PtoSetWaitFlag` is wrong.
+
 ---
 
 ## Group 3 — Calls into CCE / library internals from kernel code
@@ -172,6 +202,24 @@ The following entries in [repo_kernel_map.md](repo_kernel_map.md) and
 5. **Confidence** — High for `texpands_mat`; Medium for `tload_gm2mat` / `tload_shape2d` (build-list inclusion conflicts with rules doc).
 6. **Status** — Known + Unknown.
 
+### 3.2.1 Pointer arithmetic on the `TileDType` argument BEFORE `__cce_get_tile_ptr`
+
+1. **Pattern** — Inside a `__tf__` helper, computing an offset on the `TileDType` parameter and then passing the result to `__cce_get_tile_ptr`:
+   ```cpp
+   __ubuf__ float *tmp1 = (__ubuf__ T *)__cce_get_tile_ptr(tmp + 128); // BAD
+   ```
+   instead of:
+   ```cpp
+   __ubuf__ float *tmp1 = (__ubuf__ T *)__cce_get_tile_ptr(tmp) + 128; // GOOD
+   ```
+2. **Why risky** — `tmp` here is the tile's `TileDType` parameter, which in auto mode is a vector type (per [include/pto/common/memory.hpp:29-44](../include/pto/common/memory.hpp#L29-L44)). Doing `tmp + 128` first applies arithmetic to a vector value; the libexpand compiler pass then crashes during RAUW (reported in PR-852). Doing `__cce_get_tile_ptr(tmp) + 128` first lowers `tmp` to a typed `__ubuf__ T *` and then advances that pointer — pointer arithmetic on a real pointer.
+3. **Where** (current source — to be fixed by PR-852)
+   - [include/pto/npu/a2a3/TCI.hpp:59,108,147,149,151,203](../include/pto/npu/a2a3/TCI.hpp#L59) — eight occurrences across `TCI_b32_repeat`, `TCI_b32_normal`, `TCI_b16_repeat`, `TCI_b16_normal`. Offsets `+128`, `+256`, `+384`.
+   - A5 spot-check — [include/pto/npu/a5/Tci.hpp](../include/pto/npu/a5/Tci.hpp) does NOT contain this pattern. **Inferred A3-only.**
+4. **Fix** — Always extract first, then offset: `__cce_get_tile_ptr(tmp) + N`. Equivalent corrections for all `(__ubuf__ TmpT *)__cce_get_tile_ptr(tmp + N)` shapes. PR-852 applies this rewrite to all eight TCI sites; in the same diff several `vadds`/`vmuls`/`vconv_*` calls are also corrected to use `dstPtr` (the extracted pointer) rather than the `dst` `TileDType` directly. See [external_context/pr_852_notes.md §L1](external_context/pr_852_notes.md).
+5. **Confidence** — High.
+6. **Status** — Known anti-pattern; resolved-by-PR-852 (not yet merged).
+
 ### 3.3 Calling `Tile::data()` directly from kernel code
 
 1. **Pattern** — `auto &a = aTile.data();` or `cTile.data()` in kernel code.
@@ -179,7 +227,7 @@ The following entries in [repo_kernel_map.md](repo_kernel_map.md) and
 3. **Where**
    - [tests/npu/a5/src/st/testcase/textract/textract_kernel.cpp:281-283, 788](../tests/npu/a5/src/st/testcase/textract/textract_kernel.cpp#L281): `auto &a = aTile.data(); auto &b = bTile.data(); auto &c = cTile.data();` — return-by-reference (matches Library §5 form, but used in **kernel** code which Kernel §3.2 forbids).
    - [tests/npu/a5/src/st/testcase/tmov_ub2l1/tmov_ub2l1_kernel.cpp:96-97](../tests/npu/a5/src/st/testcase/tmov_ub2l1/tmov_ub2l1_kernel.cpp#L96-L97), [tests/npu/a5/src/st/testcase/tload_mx_gmtensor/tload_mx_gmtensor_kernel.cpp:78-129](../tests/npu/a5/src/st/testcase/tload_mx_gmtensor/tload_mx_gmtensor_kernel.cpp#L78) — `tile.data()` passed into `tf_copy_cbuf_to_ubuf<...>(srcTile.data(), aMatTile.data(), ...)`. The helper IS `__tf__`, but the kernel-side `.data()` call is what auto mode disallows.
-4. **Fix** — Pass tile *references* into helpers; let helpers (which can be `__tf__`) call `.data()` internally. The helpers must accept `Tile` by reference, then call `.data()` and pass to CCE intrinsics inside the `__tf__` body.
+4. **Fix** — Make the helper a `__tf__` that takes `typename Tile::TileDType` **by value** (not `Tile&`), with `__in__`/`__out__` direction attributes. The caller writes `helper(tile.data(), ...)` — the `.data()` call lives at the kernel/library boundary, not inside the helper. Inside the helper body, use `__cce_get_tile_ptr(param)` directly. **Important**: the older "pass `Tile&` and let the helper call `.data()` internally" shape is itself broken in auto mode and is what PR-852 fixes in `texpands_mat`. See [external_context/pr_852_notes.md §T4a](external_context/pr_852_notes.md) and [qualifier_reference.md §4 item 4](qualifier_reference.md).
 5. **Confidence** — High for the rule violation; Medium for "this is the source of compile errors in auto mode" (Unknown until tested).
 6. **Status** — Known anti-pattern; Inferred risk.
 
@@ -295,6 +343,33 @@ The following entries in [repo_kernel_map.md](repo_kernel_map.md) and
 4. **Fix** — Always specialize the device kernel on `half` (or `bfloat16_t`) and reinterpret-cast at the launcher boundary.
 5. **Confidence** — High.
 6. **Status** — Known.
+
+### 5.5 Single template parameter shared across tile-function arguments of different `TileType`s
+
+1. **Pattern** — A `__tf__` helper takes a single `TileData` template parameter and uses it for all of `dst`, `src`, and `tmp` arguments — even though those tiles have different `TileType` (e.g., `Mat` vs `Vec`, or `ConvTile` vs plain `Tile`) or different element types.
+2. **Why risky** — Instantiating one template parameter forces all three roles to share the same type. When dst is a `ConvTile<Mat>`, src is a `ConvTile<Mat>`, and tmp is a `Tile<Vec>` (the actual `ttrans_conv` shape per PR-852), there is no type that satisfies all three. Caller-side instantiation produces either a compile error or silently picks the wrong storage class. Auto mode amplifies the risk because `TileDType` (vector vs pointer) depends on `TileType`, so getting the wrong tile type mis-types the `__cce_get_tile_ptr` extractions.
+3. **Where** (current source — to be fixed by PR-852)
+   - [include/pto/npu/a2a3/TTrans.hpp](../include/pto/npu/a2a3/TTrans.hpp) — `TTransConvNCHW2NC1HWC0`, `TTransConvNC1HWC02C1HWNC0`, `TTransConvGNCHW2GNC1HWC0`, `TTransConvGNC1HWC02GC1HWNC0`. Each takes one `TileData` template; PR-852 splits into `TileDataDst`, `TileDataSrc`, `TileDataTmp`.
+4. **Fix** — Decouple the template parameters per role: `template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, ...>`. Inside, derive `using Tdst = typename TileDataDst::DType; using Tsrc = typename TileDataSrc::DType; using Ttmp = typename TileDataTmp::DType;`. Use the per-role type for all pointer extractions and casts. Update callers to pass three template arguments. See PR-852 [external_context/pr_852_notes.md §L7a](external_context/pr_852_notes.md).
+5. **Confidence** — High.
+6. **Status** — Known anti-pattern; resolved-by-PR-852 (not yet merged).
+
+### 5.6 `ConvTile<Loc, T, BufferSize_, Layout, Shape>` — `BufferSize_` is element count, not bytes
+
+1. **Pattern** — Treating the `BufferSize_` template parameter of `ConvTile` as a byte size:
+   ```cpp
+   constexpr int elementSize = N * C1 * H * W * C0;
+   constexpr int bufferSizeA = elementSize * sizeof(T); // BAD: this is bytes
+   using TileData = ConvTile<TileType::Mat, T, bufferSizeA, Layout::NC1HWC0, ...>;
+   ```
+   despite the parameter being named "BufferSize", `ConvTile` interprets it as **element count** (Inferred from PR-852 description and from the `static constexpr int bufferSize = BufferSize_;` member visible in the PR-quoted struct definition).
+2. **Why risky** — Passing `elementSize * sizeof(T)` allocates `sizeof(T)`× the intended UB region. PR-852 description: *"Allocated tiles were bigger than the UB. ... Fix: Used the correct variable, numElems, for ConvTile Construction. Long-term Fix (TODO): Modify the template variable's name, which is misleading."*
+3. **Where** (current source — to be fixed by PR-852)
+   - [tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp:58, 63](../tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp#L58): `bufferSizeA = elementSize * sizeof(T); ConvTile<TileType::Mat, T, bufferSizeA, ...>`.
+   - The current `ConvTile` definition is referenced by PR-852 (template signature: `template <TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, typename Shape_> struct ConvTile { ...; static constexpr int bufferSize = BufferSize_; };`). Exact source location of `ConvTile` in this branch — Unknown, would need to grep `include/pto/common/`.
+4. **Fix** — Pass element count: `ConvTile<TileType::Mat, T, elementSize, Layout::NC1HWC0, ...>`. Long-term: rename the template parameter to `NumElems_` (TODO from PR-852). See [external_context/pr_852_notes.md §T4b](external_context/pr_852_notes.md).
+5. **Confidence** — High.
+6. **Status** — Known anti-pattern; resolved-by-PR-852 (not yet merged).
 
 ---
 
