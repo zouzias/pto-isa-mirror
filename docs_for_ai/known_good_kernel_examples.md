@@ -118,6 +118,25 @@ harness (Known: enumerated in `ALL_TESTCASES` of
 6. **Do not copy** — Manual-mode side of the diff (the `TASSIGN(...)` calls and `Event<...> e0; e0 = TLOAD(...)` chains).
 7. **Confidence** — High.
 
+### A10. Dual-mode aliasing recipe — `TASSIGN(...) + TRESHAPE(other, base)` (PR-852, NOT yet merged)
+
+1. **File** — [tests/npu/a2a3/src/st/testcase/tcvt/tcvt_kernel.cpp](../tests/npu/a2a3/src/st/testcase/tcvt/tcvt_kernel.cpp) **after PR-852 lands**. The current source still has the bug pattern; see [external_context/pr_852_notes.md §T3](external_context/pr_852_notes.md) for the full diff.
+2. **Why** — Canonical answer to [auto_mode_bad_patterns.md §1.1](auto_mode_bad_patterns.md): how to write a kernel that aliases two tiles correctly in **both** modes. Manual mode honors the `TASSIGN(a, X); TASSIGN(b, X);` pair; auto mode no-ops both `TASSIGN`s but honors the explicit `TRESHAPE(b, a)` hint.
+3. **Pattern** —
+   ```cpp
+   TASSIGN(srcTileFull, 0x0  + 0x400 * block_idx);
+   TASSIGN(dstTileFull, 0x20000 + 0x400 * block_idx);
+   TASSIGN(srcTile,     0x0  + 0x400 * block_idx);  // aliases srcTileFull in manual
+   TASSIGN(dstTile,     0x20000 + 0x400 * block_idx); // aliases dstTileFull in manual
+   TRESHAPE(srcTile, srcTileFull);                  // aliases in auto mode
+   TRESHAPE(dstTile, dstTileFull);                  // aliases in auto mode
+   ```
+   Place the `TRESHAPE` calls **immediately after** the `TASSIGN` block (per kernel rules §2.4: a tile cannot be the destination of multiple `TRESHAPE`/`TSUBVIEW`, so do it once at declaration).
+4. **Auto-mode compatibility** — Yes (post-merge). The same shape lands in five `runTCVT*` kernels in PR-852 across `runTCVT`, `runTCVT_fp16_to_s4`, `runTCVT_s4_to_fp16`, `runTCVTNonSatTorch`.
+5. **Copy** — The `TASSIGN(...) + TRESHAPE(...)` pair pattern; the order (TASSIGN block first, then TRESHAPE block); use for any layout-swap aliasing (e.g., `srcS4Tile` aliased onto `srcBytesTile` for in-place type re-views).
+6. **Do not copy** — Do not omit either side. Auto-only kernels can drop the `TASSIGN`s; cross-mode kernels need both. Do not move `TRESHAPE` into a loop — see kernel rules §2.4.
+7. **Confidence** — High (the recipe is consistent with the existing `TQuant.hpp` library pattern at lines 108-114). Low for "this is in the current branch" (it is not; PR-852 not merged).
+
 ---
 
 ## Group B — Pattern references (use semantics, not source as-is)
@@ -149,7 +168,7 @@ harness (Known: enumerated in `ALL_TESTCASES` of
 3. **Pattern** — `TROWMAX → TROWEXPANDSUB_IMPL → TMULS(scale) → TEXP → TCVT → TROWSUM → TADD/TMUL` with a numerically-stable max/sum recurrence. Uses `TRESHAPE` to alias 1-D and 2-D views of the same tile (auto-friendly).
 4. **Auto-mode compatibility** — Manual-only when used as-is (Known). It calls `pipe_barrier(PIPE_V)` directly and `*_IMPL` variants — both are library-developer-only per [docs/auto_mode/Library_Developer_Rules_And_Limitations.md §3, §5](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md). Also relies on the FA driver kernel that is **not** in `ALL_TESTCASES` (Known: missing from [tests/npu/a2a3/src/st/testcase/CMakeLists.txt](../tests/npu/a2a3/src/st/testcase/CMakeLists.txt)).
 5. **Copy** — The math/operation sequence; the `TRESHAPE` view-aliasing for column-vs-1D access; the FA-2.0 init vs non-init split.
-6. **Do not copy** — `pipe_barrier(PIPE_V)` calls, `TROWEXPANDSUB_IMPL` (use the user-facing `TROWEXPAND + TSUB` instead per [docs/coding/tutorials/row-softmax.md](../docs/coding/tutorials/row-softmax.md)), `__in__`/`__out__` qualifiers (defined only for kirin per [include/pto/common/arch_macro.hpp:30-32](../include/pto/common/arch_macro.hpp#L30-L32) — Inferred no-op on A3/A5 but unverified).
+6. **Do not copy** — `pipe_barrier(PIPE_V)` calls and `TROWEXPANDSUB_IMPL` from this file. Use the user-facing `TROWEXPAND + TSUB` instead per [docs/coding/tutorials/row-softmax.md](../docs/coding/tutorials/row-softmax.md). Note: `__in__`/`__out__` qualifiers ARE meaningful on A3/A5 (compiler-provided keywords; only `#define`d as empty for kirin, CPU-sim, and cost-model — see [qualifier_reference.md](qualifier_reference.md)); keep them on tile-function parameter declarations.
 7. **Confidence** — Medium for math; Low for direct code reuse in auto mode.
 
 ### B4. CPU FA demo (host-runnable functional reference)
@@ -282,17 +301,20 @@ harness (Known: enumerated in `ALL_TESTCASES` of
 | Softmax | (none in-tree fully auto) | B1 row-softmax, B3 fa_softmax math | — |
 | Attention | (none in-tree fully auto) | B3 fa_softmax, B4 cpu FA | C2 common FA, C3 A5 FA, C4 tfa ST |
 | Quant / Dequant | D2 TQuant library auto branch | — | D3 tquant ST aliasing trick, D4 tdequant TLOAD-on-dst |
+| Aliasing recipes | A10 dual-mode `TASSIGN`+`TRESHAPE` (PR-852, not yet merged) | — | — |
 
 ---
 
 ## Cross-cutting risks observed (link back when reviewing)
 
-- **`__tf__` is kirin-only** in source. Do not attach it to A3/A5 helper functions even if a CLAUDE.md-style risk checklist mentions it. (Known: [include/pto/common/arch_macro.hpp:29-34](../include/pto/common/arch_macro.hpp#L29-L34).)
-- **`__in__`/`__out__` are also kirin-only macros** in arch_macro.hpp. They appear on A3/A5 kernels in [tests/npu/a2a3/src/st/testcase/tadd/tadd_kernel.cpp:18](../tests/npu/a2a3/src/st/testcase/tadd/tadd_kernel.cpp#L18) etc., so they evidently expand to nothing on A3/A5 — but treat them as decorative until confirmed by the user. (Inferred.)
+- **`__tf__` IS meaningful on A3/A5** (Known). The repo `#define`s `__tf__` as empty only for kirin ([include/pto/common/arch_macro.hpp:29-34](../include/pto/common/arch_macro.hpp#L29-L34)), CPU-sim ([include/pto/common/cpu_stub.hpp:34](../include/pto/common/cpu_stub.hpp#L34)), and cost-model ([include/pto/costmodel/common/qualifiers.hpp:27](../include/pto/costmodel/common/qualifiers.hpp#L27)). On A3/A5 it is a bisheng-CCE keyword, used pervasively in [include/pto/npu/a2a3/](../include/pto/npu/a2a3/) and [include/pto/npu/a5/](../include/pto/npu/a5/). Add `__tf__` on helpers that contain raw CCE intrinsics; do not add it to user-facing kernel entries. See [qualifier_reference.md](qualifier_reference.md).
+- **`__in__`/`__out__` ARE meaningful on A3/A5** (Inferred). Same `#define`-as-empty pattern in arch_macro.hpp / cpu_stub.hpp / qualifiers.hpp. The library spec ([docs/auto_mode/Library_Developer_Rules_And_Limitations.md §6](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md)) requires them on `TileDType` parameters of tile functions. Preserve when copying helper signatures.
 - **`TPUSH` / `TPOP` are not safe in auto mode** ([tests/npu/a2a3/src/st/testcase/CMakeLists.txt:213-220](../tests/npu/a2a3/src/st/testcase/CMakeLists.txt#L213-L220), [docs/auto_mode/Library_Developer_Rules_And_Limitations.md §4](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md)). Avoid in any auto-mode kernel.
 - **Double buffering is not supported for kernel devs today** ([docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md §1.4](../docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md)). Do not transplant ping-pong buffer logic from C1/C2/C3.
 - **`set_flag` / `wait_flag` / `Event<>` from manual kernels** must be either dropped or wrapped in `#ifndef __PTO_AUTO__` (canonical guard pattern: A4, A6, A7, D3).
-- **Aliasing**: in auto mode, `TASSIGN(a, addr)` followed by `TASSIGN(b, addr)` does NOT alias `a` and `b`. Use `TRESHAPE(b, a)` (same base) or `TSUBVIEW(b, a, row, col)` (offset). Examples: A4 (`TRESHAPE`), D2 (auto branch).
+- **Aliasing**: in auto mode, `TASSIGN(a, addr)` followed by `TASSIGN(b, addr)` does NOT alias `a` and `b`. Use `TRESHAPE(b, a)` (same base) or `TSUBVIEW(b, a, row, col)` (offset). Examples: A4 (`TRESHAPE`), D2 (auto branch), A10 (dual-mode recipe from PR-852, not yet merged).
+- **Inside `__tf__` bodies, sync rules invert** — use raw `set_flag`/`wait_flag`/`pipe_barrier` (or guard `PtoSetWaitFlag` with `#ifndef __PTO_AUTO__` and emit raw flags in the `#else`). Auto-sync does NOT walk into tile functions, so `PtoSetWaitFlag` becoming a no-op silently drops sync. See [auto_mode_bad_patterns.md §2.7](auto_mode_bad_patterns.md) and [external_context/pr_852_notes.md](external_context/pr_852_notes.md).
+- **Several existing-source bug patterns are scheduled for fix in PR-852** (not yet merged). See [external_context/pr_852_notes.md](external_context/pr_852_notes.md) for the per-file mapping. Until then, the current source still has the bugs and the entries in [auto_mode_bad_patterns.md](auto_mode_bad_patterns.md) still apply.
 
 ---
 
@@ -300,5 +322,5 @@ harness (Known: enumerated in `ALL_TESTCASES` of
 
 - Verify that `tquant_kernel.cpp` and `tdequant_kernel.cpp` compute correctly under `AUTO_MODE=ON`. Both rely on patterns the auto-mode rules warn against; "passes the build" is not "produces correct output". (Unknown.)
 - Verify that A5 `tmatmul_mx` does not depend on manual-mode-only L0 layout tricks. (Unknown — file not yet read end-to-end.)
-- Confirm whether `__in__`/`__out__` are silently no-ops on A3/A5 or are defined elsewhere (e.g., a SoC-specific header outside `arch_macro.hpp`). (Unknown.)
+- ~~Confirm whether `__in__`/`__out__` are silently no-ops on A3/A5~~ — Resolved. They are bisheng-CCE keywords on A3/A5 and `#define`d empty only for kirin / CPU-sim / cost-model. See [qualifier_reference.md](qualifier_reference.md).
 - Confirm whether the orphaned `tests/npu/a2a3/src/st/testcase/tfa/` will be re-listed in `ALL_TESTCASES` for either mode. (Unknown.)
