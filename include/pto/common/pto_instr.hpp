@@ -1570,21 +1570,23 @@ PTO_INST RecordEvent TDIVS(TileDataDst &dst, typename TileDataDst::DType scalar,
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <auto PrecisionType = FmodSAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
+          typename... WaitEvents>
 PTO_INST RecordEvent TFMODS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar,
                             WaitEvents &...events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TFMODS, dst, src, scalar);
+    TFMODS_IMPL<PrecisionType>(dst, src, scalar);
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
+template <auto PrecisionType = RemSAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename TileDataTmp,
+          typename... WaitEvents>
 PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar, TileDataTmp &tmp,
                            WaitEvents &...events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TREMS, dst, src, scalar, tmp);
+    TREMS_IMPL<PrecisionType>(dst, src, scalar, tmp);
     return {};
 }
 
