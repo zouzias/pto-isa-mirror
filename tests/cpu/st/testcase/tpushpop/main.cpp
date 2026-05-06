@@ -450,6 +450,18 @@ TEST_F(TPushPopTest, cpu_stub_prefers_injected_hooks_for_subblock_and_pipe_state
     EXPECT_NE(g_pipe_hook_last_key, 0u);
 }
 
+void expectSplitRowsMatch(const VecTile &topHalf, const VecTile &bottomHalf, const MatTile &dst)
+{
+    for (int r = 0; r < topHalf.GetValidRow(); ++r) {
+        for (int c = 0; c < topHalf.GetValidCol(); ++c) {
+            EXPECT_EQ(dst.data()[GetTileElementOffset<MatTile>(r, c)],
+                      topHalf.data()[GetTileElementOffset<VecTile>(r, c)]);
+            EXPECT_EQ(dst.data()[GetTileElementOffset<MatTile>(r + topHalf.GetValidRow(), c)],
+                      bottomHalf.data()[GetTileElementOffset<VecTile>(r, c)]);
+        }
+    }
+}
+
 TEST_F(TPushPopTest, v2c_split_with_injected_pipe_hook_waits_for_both_lanes_before_publish)
 {
     using VecTile = Tile<TileType::Vec, float, 8, 16, BLayout::RowMajor, 8, 16>;
@@ -504,14 +516,7 @@ TEST_F(TPushPopTest, v2c_split_with_injected_pipe_hook_waits_for_both_lanes_befo
         TFREE<HookedV2CPipe, TileSplitAxis::TILE_UP_DOWN>(consumer);
     }
 
-    for (int r = 0; r < topHalf.GetValidRow(); ++r) {
-        for (int c = 0; c < topHalf.GetValidCol(); ++c) {
-            EXPECT_EQ(dst.data()[GetTileElementOffset<MatTile>(r, c)],
-                      topHalf.data()[GetTileElementOffset<VecTile>(r, c)]);
-            EXPECT_EQ(dst.data()[GetTileElementOffset<MatTile>(r + topHalf.GetValidRow(), c)],
-                      bottomHalf.data()[GetTileElementOffset<VecTile>(r, c)]);
-        }
-    }
+    expectSplitRowsMatch(topHalf, bottomHalf, dst);
 
     EXPECT_GT(g_pipe_hook_call_count.load(std::memory_order_relaxed), 0u);
     EXPECT_EQ(g_pipe_hook_size, sizeof(HookedV2CPipe::SharedStateStorage));

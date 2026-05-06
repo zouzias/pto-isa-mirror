@@ -12,3 +12,5 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TGET_HPP
 
 #include "pto/cpu/comm/TGet.hpp"
+
+#endif

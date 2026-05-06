@@ -12,3 +12,5 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_TREDUCE_HPP
 
 #include "pto/cpu/comm/TReduce.hpp"
+
+#endif

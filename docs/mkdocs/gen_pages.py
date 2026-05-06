@@ -198,7 +198,9 @@ def _rewrite_links_for_build(text: str, virtual_path: str) -> str:
 
     Two kinds of links are rewritten:
 
-    1. Root-absolute links like /docs/isa/tile/ops/elementwise-tile-tile/tadd.md  ->  ../docs/isa/tile/ops/elementwise-tile-tile/tadd.md
+    1. Root-absolute links like
+       /docs/isa/tile/ops/elementwise-tile-tile/tadd.md  ->
+       ../docs/isa/tile/ops/elementwise-tile-tile/tadd.md
        These are written with a leading '/' so they work when browsing the
        repo on GitHub/Gitee; at build time they need to be relative.
 
@@ -871,12 +873,7 @@ def _zh_context_links_for(rel: str) -> list[tuple[str, str]]:
     elif rel.startswith("docs/isa/instruction-surfaces/") or rel.startswith("docs/isa/instruction-families/"):
         links.append(("中文 ISA 指令参考入口", "docs/isa/README_zh.md"))
         links.append(("中文章节手册指令集概述", "manual/07-instructions_zh.md"))
-    elif (
-        rel.startswith("docs/isa/tile/")
-        or rel.startswith("docs/isa/vector/")
-        or rel.startswith("docs/isa/scalar/")
-        or rel.startswith("docs/isa/other/")
-    ):
+    elif _is_isa_reference_path(rel):
         links.append(("中文 ISA 指令参考入口", "docs/isa/README_zh.md"))
     return links
 
