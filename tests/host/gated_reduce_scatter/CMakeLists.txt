@@ -88,26 +88,60 @@ if(NOT DEFINED CANN_INCLUDE_DIR AND IS_DIRECTORY "${ASCEND_HOME_PATH}/include")
     set(CANN_INCLUDE_DIR "${ASCEND_HOME_PATH}/include")
 endif()
 
-# `hcomm_primitives.h` — see kernel CMakeLists for rationale.
-find_path(HCOMM_PRIMITIVES_DIR
-    NAMES hcomm_primitives.h
-    PATHS
-        ${HCOMM_PKG_INC_DIR}
-        ${HCOMM_PKG_INC_DIR}/hcomm
-        ${CANN_INCLUDE_DIR}
-        ${PTO_LIB_PATH}/../../hcomm/include
-        $ENV{HOME}/hcomm/include
-        ${ASCEND_HOME_PATH}/include/hcomm
-        ${ASCEND_HOME_PATH}/pkg_inc/hcomm
-    NO_DEFAULT_PATH
+# Locate hcomm internal headers (`hcomm_primitives.h`, `hccl_types.h`,
+# `hcomm_res_defs.h`) that pkg_inc transitively includes WITHOUT a prefix.
+# See `kernels/host/gated_reduce_scatter/CMakeLists.txt` for the full
+# rationale and probe-root rationale.
+set(_st_internal_hdrs
+    hcomm_primitives.h
+    hccl_types.h
+    hcomm_res_defs.h
 )
-if(NOT HCOMM_PRIMITIVES_DIR)
+set(_st_probe_roots
+    ${HCOMM_PKG_INC_DIR}
+    ${HCOMM_PKG_INC_DIR}/hcomm
+    ${HCOMM_PKG_INC_DIR}/hccl
+    ${CANN_INCLUDE_DIR}
+    ${CANN_INCLUDE_DIR}/hcomm
+    ${CANN_INCLUDE_DIR}/hccl
+    ${ASCEND_HOME_PATH}/x86_64-linux/include
+    ${ASCEND_HOME_PATH}/x86_64-linux/include/hcomm
+    ${ASCEND_HOME_PATH}/x86_64-linux/include/hccl
+    ${ASCEND_HOME_PATH}/aarch64-linux/include
+    ${ASCEND_HOME_PATH}/aarch64-linux/include/hcomm
+    ${ASCEND_HOME_PATH}/aarch64-linux/include/hccl
+    ${PTO_LIB_PATH}/../../hcomm/include
+    ${PTO_LIB_PATH}/../../hcomm/include/hcomm
+    ${PTO_LIB_PATH}/../../hcomm/include/hccl
+    $ENV{HOME}/hcomm/include
+    $ENV{HOME}/hcomm/include/hcomm
+    $ENV{HOME}/hcomm/include/hccl
+)
+
+set(HCOMM_INTERNAL_INC_DIRS "")
+set(_missing_st_hdrs "")
+foreach(_hdr ${_st_internal_hdrs})
+    string(MAKE_C_IDENTIFIER "_ST_PROBE_${_hdr}" _probe_var)
+    find_path(${_probe_var}
+        NAMES ${_hdr}
+        PATHS ${_st_probe_roots}
+        NO_DEFAULT_PATH
+    )
+    if(${_probe_var})
+        message(STATUS "gated_rs_st:   ${_hdr} -> ${${_probe_var}}")
+        list(APPEND HCOMM_INTERNAL_INC_DIRS ${${_probe_var}})
+    else()
+        list(APPEND _missing_st_hdrs ${_hdr})
+    endif()
+endforeach()
+if(_missing_st_hdrs)
     message(FATAL_ERROR
-        "gated_rs_st: cannot locate hcomm_primitives.h. "
-        "Run `find $ASCEND_HOME_PATH ~/hcomm -name hcomm_primitives.h 2>/dev/null` "
-        "and set -DHCOMM_PRIMITIVES_DIR=<abs dir>.")
+        "gated_rs_st: cannot locate hcomm internal header(s): "
+        "${_missing_st_hdrs}\nSearched: ${_st_probe_roots}")
 endif()
-message(STATUS "gated_rs_st: HCOMM_PRIMITIVES_DIR = ${HCOMM_PRIMITIVES_DIR}")
+list(REMOVE_DUPLICATES HCOMM_INTERNAL_INC_DIRS)
+message(STATUS
+    "gated_rs_st: HCOMM_INTERNAL_INC_DIRS = ${HCOMM_INTERNAL_INC_DIRS}")
 
 if(NOT DEFINED HCOMM_LIB_DIR)
     set(HCOMM_LIB_DIR "${ASCEND_HOME_PATH}/lib64")
@@ -137,7 +171,7 @@ target_compile_options(gated_rs_st PRIVATE
 target_include_directories(gated_rs_st PRIVATE
     ${PTO_LIB_PATH}/include
     ${HCOMM_PKG_INC_DIR}
-    ${HCOMM_PRIMITIVES_DIR}
+    ${HCOMM_INTERNAL_INC_DIRS}
 )
 if(DEFINED CANN_INCLUDE_DIR)
     target_include_directories(gated_rs_st PRIVATE ${CANN_INCLUDE_DIR})

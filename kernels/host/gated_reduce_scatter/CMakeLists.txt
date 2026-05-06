@@ -117,47 +117,91 @@ endif()
 message(STATUS "pto_gated_reduce_scatter: CANN_INCLUDE_DIR = ${CANN_INCLUDE_DIR}")
 
 # ────────────────────────────────────────────────────────────────────────────
-# Locate `hcomm_primitives.h`.
+# Locate hcomm internal headers that pkg_inc transitively includes WITHOUT
+# any directory prefix (e.g. `#include "hcomm_primitives.h"` instead of
+# `#include "hcomm/hcomm_primitives.h"`).
 #
-# `pkg_inc/hcomm/ccu/ccu_kernel_arg.h:13` does `#include "hcomm_primitives.h"`
-# (no `hcomm/` prefix). On some CANN installs this header is flat under
-# `pkg_inc/`; on others under `include/`; on dev rigs it lives in the hcomm
-# source tree at `hcomm/include/hcomm_primitives.h`. Probe all of them.
+# Why this matters: `pkg_inc/hcomm/ccu/ccu_kernel.h` -> `ccu_kernel_arg.h`
+# -> `hcomm_primitives.h`, and `ccu_kernel.h` itself -> `hccl_types.h`,
+# `hccl_res.h` -> `hcomm_res_defs.h`. None of those internal headers carry
+# a directory prefix in the include directive, so the include search list
+# must contain whatever directory each of them lives in.
 #
-# `hccl_types.h` (referenced by other pkg_inc headers) lives under
-# `hcomm/include/hccl/hccl_types.h` in source; CANN flattens it to
-# `${ASCEND_HOME_PATH}/include/hccl/hccl_types.h`. So we add the same probe
-# locations as include path — this also pulls in `hcomm_res_defs.h` etc.
+# CANN install conventions vary by version:
+#   - Some put `hcomm_primitives.h` under `${ASCEND}/include/hcomm/`
+#   - Some put `hccl_types.h`        under `${ASCEND}/include/hccl/`
+#   - Some put both alternates also under `${ASCEND}/x86_64-linux/include/...`
+#     (multi-arch install — observed on user rig 2026-05-06)
+#   - Dev rigs use the in-source layout `<repo>/hcomm/include/{hcomm,hccl}/`
+#
+# Strategy: enumerate a list of representative internal headers, find_path
+# each one across all known candidate roots, collect every distinct
+# directory into HCOMM_INTERNAL_INC_DIRS. This way one cmake configure run
+# discovers every needed include root no matter how the layout splits.
 # ────────────────────────────────────────────────────────────────────────────
-find_path(HCOMM_PRIMITIVES_DIR
-    NAMES hcomm_primitives.h
-    PATHS
-        ${HCOMM_PKG_INC_DIR}
-        ${HCOMM_PKG_INC_DIR}/hcomm
-        ${CANN_INCLUDE_DIR}
-        ${PTO_LIB_PATH}/../../hcomm/include
-        $ENV{HOME}/hcomm/include
-        ${ASCEND_HOME_PATH}/include/hcomm
-        ${ASCEND_HOME_PATH}/pkg_inc/hcomm
-    NO_DEFAULT_PATH
+set(_pto_gated_internal_hdrs
+    hcomm_primitives.h
+    hccl_types.h
+    hcomm_res_defs.h
 )
-if(NOT HCOMM_PRIMITIVES_DIR)
+
+set(_pto_gated_probe_roots
+    # Pkg-inc rooted (rare for these flat headers, but cheap to probe).
+    ${HCOMM_PKG_INC_DIR}
+    ${HCOMM_PKG_INC_DIR}/hcomm
+    ${HCOMM_PKG_INC_DIR}/hccl
+    # ${ASCEND_HOME_PATH}/include/{hcomm,hccl}
+    ${CANN_INCLUDE_DIR}
+    ${CANN_INCLUDE_DIR}/hcomm
+    ${CANN_INCLUDE_DIR}/hccl
+    # Multi-arch CANN installs (e.g. cann-9.0.0/x86_64-linux/include/...).
+    ${ASCEND_HOME_PATH}/x86_64-linux/include
+    ${ASCEND_HOME_PATH}/x86_64-linux/include/hcomm
+    ${ASCEND_HOME_PATH}/x86_64-linux/include/hccl
+    ${ASCEND_HOME_PATH}/aarch64-linux/include
+    ${ASCEND_HOME_PATH}/aarch64-linux/include/hcomm
+    ${ASCEND_HOME_PATH}/aarch64-linux/include/hccl
+    # Dev rig — sibling hcomm source checkout next to pto-isa.
+    ${PTO_LIB_PATH}/../../hcomm/include
+    ${PTO_LIB_PATH}/../../hcomm/include/hcomm
+    ${PTO_LIB_PATH}/../../hcomm/include/hccl
+    $ENV{HOME}/hcomm/include
+    $ENV{HOME}/hcomm/include/hcomm
+    $ENV{HOME}/hcomm/include/hccl
+)
+
+set(HCOMM_INTERNAL_INC_DIRS "")
+set(_missing_internal_hdrs "")
+foreach(_hdr ${_pto_gated_internal_hdrs})
+    string(MAKE_C_IDENTIFIER "_PROBE_${_hdr}" _probe_var)
+    find_path(${_probe_var}
+        NAMES ${_hdr}
+        PATHS ${_pto_gated_probe_roots}
+        NO_DEFAULT_PATH
+    )
+    if(${_probe_var})
+        message(STATUS
+            "pto_gated_reduce_scatter:   ${_hdr} -> ${${_probe_var}}")
+        list(APPEND HCOMM_INTERNAL_INC_DIRS ${${_probe_var}})
+    else()
+        list(APPEND _missing_internal_hdrs ${_hdr})
+    endif()
+endforeach()
+
+if(_missing_internal_hdrs)
     message(FATAL_ERROR
-        "pto_gated_reduce_scatter: cannot locate hcomm_primitives.h. "
-        "Searched:\n"
-        "  ${HCOMM_PKG_INC_DIR}\n"
-        "  ${HCOMM_PKG_INC_DIR}/hcomm\n"
-        "  ${CANN_INCLUDE_DIR}\n"
-        "  ${PTO_LIB_PATH}/../../hcomm/include\n"
-        "  $ENV{HOME}/hcomm/include\n"
-        "  ${ASCEND_HOME_PATH}/include/hcomm\n"
-        "  ${ASCEND_HOME_PATH}/pkg_inc/hcomm\n"
-        "Run `find $ASCEND_HOME_PATH ~/hcomm -name hcomm_primitives.h 2>/dev/null` "
-        "to locate it, then either set -DHCOMM_PRIMITIVES_DIR=<abs dir> or copy "
-        "the file alongside hcomm/ccu/ccu_kernel_arg.h.")
+        "pto_gated_reduce_scatter: cannot locate the following hcomm "
+        "internal header(s): ${_missing_internal_hdrs}\n"
+        "Searched roots:\n  ${_pto_gated_probe_roots}\n"
+        "Run e.g. `find $ASCEND_HOME_PATH ~/hcomm -name <hdr> 2>/dev/null` "
+        "to locate them, then add the parent dir(s) via "
+        "-DHCOMM_PKG_INC_DIR / -DCANN_INCLUDE_DIR or extend the probe list.")
 endif()
+
+list(REMOVE_DUPLICATES HCOMM_INTERNAL_INC_DIRS)
 message(STATUS
-    "pto_gated_reduce_scatter: HCOMM_PRIMITIVES_DIR = ${HCOMM_PRIMITIVES_DIR}")
+    "pto_gated_reduce_scatter: HCOMM_INTERNAL_INC_DIRS = "
+    "${HCOMM_INTERNAL_INC_DIRS}")
 
 if(NOT DEFINED HCOMM_LIB_DIR)
     set(HCOMM_LIB_DIR "${ASCEND_HOME_PATH}/lib64")
@@ -197,7 +241,7 @@ target_compile_options(pto_gated_reduce_scatter PRIVATE
 target_include_directories(pto_gated_reduce_scatter PUBLIC
     ${PTO_LIB_PATH}/include
     ${HCOMM_PKG_INC_DIR}
-    ${HCOMM_PRIMITIVES_DIR}
+    ${HCOMM_INTERNAL_INC_DIRS}
 )
 if(DEFINED CANN_INCLUDE_DIR)
     target_include_directories(pto_gated_reduce_scatter PUBLIC ${CANN_INCLUDE_DIR})
