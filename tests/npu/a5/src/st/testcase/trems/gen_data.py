@@ -54,6 +54,7 @@ class TestParams:
         self.row = row
         self.col = col
 
+
 if __name__ == "__main__":
     case_params_list = [
         TestParams("TREMSTest.case1", np.float32, 32, 128, 32, 128, 32, 64),
