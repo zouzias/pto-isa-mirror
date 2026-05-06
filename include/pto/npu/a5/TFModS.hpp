@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "common.hpp"
 #include "utils.hpp"
 #include "TBinSOp.hpp"
+#include "custom/TFmodRemHp.hpp"
 
 namespace pto {
 
@@ -57,7 +58,8 @@ template <typename T> struct FModSOp {
     }
 };
 
-template <typename TileDataDst, typename TileDataSrc, unsigned dstRowStride, unsigned srcRowStride>
+template <auto PrecisionType = FmodSAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
+    unsigned dstRowStride, unsigned srcRowStride>
 __tf__ PTO_INTERNAL OP_NAME(TFMODS) OP_TYPE(element_wise)
 void TFModS(typename TileDataDst::TileDType __out__ dst, 
            typename TileDataSrc::TileDType __in__ src, 
@@ -70,8 +72,20 @@ void TFModS(typename TileDataDst::TileDType __out__ dst,
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
     constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
-    BinaryInstr<FModSOp<T>, TileDataDst, TileDataSrc, T, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>
-        (dstPtr, srcPtr, scalar, kValidRows, kValidCols, version);
+    
+    if constexpr (PrecisionType == FmodSAlgorithm::HIGH_PRECISION && std::is_same_v<T, float>) {
+        constexpr uint32_t REM_INTERATION_NUM_MAX = 11;
+        uint32_t mainRepeatTimes = kValidCols / elementsPerRepeat;
+        uint32_t tailCount = kValidCols - mainRepeatTimes * elementsPerRepeat;
+        for (uint16_t i = 0; i < kValidRows; i++) {
+            ComputeIterationF32<REM_INTERATION_NUM_MAX>(dstPtr + i * dstRowStride, srcPtr + i * srcRowStride,
+                                                        scalar, mainRepeatTimes, elementsPerRepeat,
+                                                        tailCount, true);
+        }
+    } else {
+        BinaryInstr<FModSOp<T>, TileDataDst, TileDataSrc, T, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>
+            (dstPtr, srcPtr, scalar, kValidRows, kValidCols, version);
+    }
 }
 
 template <typename TileDataDst, typename TileDataSrc>
@@ -87,7 +101,7 @@ PTO_INTERNAL void TFModSCheck(unsigned srcValidRow, unsigned srcValidCol, unsign
                   "Number of valid columns and rows must not be greater than number of tile columns and rows.");
 }
 
-template <typename TileDataDst, typename TileDataSrc>
+template <auto PrecisionType = FmodSAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc>
 PTO_INTERNAL void TFMODS_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar)
 {
     using T = typename TileDataDst::DType;
@@ -100,7 +114,7 @@ PTO_INTERNAL void TFMODS_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileD
                 "Number of validColumns and validRows of src and dst must be the same.");
 
     TFModSCheck<TileDataDst, TileDataSrc>(src.GetValidRow(), src.GetValidCol(), validRow, validCol);
-    TFModS<TileDataDst, TileDataSrc, dstRowStride, srcRowStride>(dst.data(), src.data(), scalar, validRow, validCol);
+    TFModS<PrecisionType, TileDataDst, TileDataSrc, dstRowStride, srcRowStride>(dst.data(), src.data(), scalar, validRow, validCol);
 }
 }  // namespace pto
 #endif

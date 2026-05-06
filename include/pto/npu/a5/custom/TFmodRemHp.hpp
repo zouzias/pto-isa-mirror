@@ -106,13 +106,18 @@ PTO_INTERNAL void SolveScaleIter(RegTensor<float> &dstReg, RegTensor<float> &src
     }
 }
 
-template <int32_t iterationNum>
-PTO_INTERNAL void SolveScale(__ubuf__ float *dst, __ubuf__ float *src, const uint16_t unitRepTimes, const float scale1,
+template <int32_t iterationNum, typename TSrc>
+PTO_INTERNAL void SolveScale(__ubuf__ float *dst, TSrc src, const uint16_t unitRepTimes, const float scale1,
                              const float scale2, MaskReg &mask, uint32_t elementsPerRepeat, bool isFmod)
 {
     RegTensor<float> dstReg, srcReg, srcOriginReg;
     for (uint16_t i = 0; i < unitRepTimes; i++) {
-        vlds(srcOriginReg, src, i * elementsPerRepeat, NORM);
+        if constexpr (std::is_same_v<__ubuf__ float *, TSrc>) {
+            vlds(srcOriginReg, src, i * elementsPerRepeat, NORM);
+        } else {
+            vdup(srcOriginReg, src, mask, MODE_ZEROING);
+        }
+
         vlds(dstReg, dst, i * elementsPerRepeat, NORM);
         vabs(srcReg, srcOriginReg, mask, MODE_ZEROING);
         SolveScale<iterationNum>(dstReg, srcReg, scale1, scale2, mask, isFmod);
@@ -122,15 +127,23 @@ PTO_INTERNAL void SolveScale(__ubuf__ float *dst, __ubuf__ float *src, const uin
     }
 }
 
-template <int32_t iterationNum>
-PTO_INTERNAL void SolveScaleInit(__ubuf__ float *dst, __ubuf__ float *src0, __ubuf__ float *src1,
+template <int32_t iterationNum, typename TSrc0, typename TSrc1>
+PTO_INTERNAL void SolveScaleInit(__ubuf__ float *dst, TSrc0 src0, TSrc1 src1,
                                  const uint16_t unitRepTimes, const float scale1, const float scale2, MaskReg &mask,
                                  uint32_t elementsPerRepeat, bool isFmod)
 {
     RegTensor<float> dstReg, srcReg, src0OriginReg, src1OriginReg;
     for (uint16_t i = 0; i < unitRepTimes; i++) {
-        vlds(src0OriginReg, src0, i * elementsPerRepeat, NORM);
-        vlds(src1OriginReg, src1, i * elementsPerRepeat, NORM);
+        if constexpr (std::is_same_v<__ubuf__ float *, TSrc0>) {
+            vlds(src0OriginReg, src0, i * elementsPerRepeat, NORM);
+        } else {
+            vdup(src0OriginReg, src0, mask, MODE_ZEROING);
+        }
+        if constexpr (std::is_same_v<__ubuf__ float *, TSrc1>) {
+            vlds(src1OriginReg, src1, i * elementsPerRepeat, NORM);
+        } else {
+            vdup(src1OriginReg, src1, mask, MODE_ZEROING);
+        }
         vabs(dstReg, src0OriginReg, mask, MODE_ZEROING);
         vabs(srcReg, src1OriginReg, mask, MODE_ZEROING);
         SolveScale<iterationNum>(dstReg, srcReg, scale1, scale2, mask, isFmod);
@@ -140,8 +153,8 @@ PTO_INTERNAL void SolveScaleInit(__ubuf__ float *dst, __ubuf__ float *src0, __ub
     }
 }
 
-template <int32_t iterationNum, int32_t totalIterationNum>
-PTO_INTERNAL void SolveScaleIterImpl(__ubuf__ float *dst, __ubuf__ float *src0, __ubuf__ float *src1,
+template <int32_t iterationNum, int32_t totalIterationNum, typename TSrc0, typename TSrc1>
+PTO_INTERNAL void SolveScaleIterImpl(__ubuf__ float *dst, TSrc0 src0, TSrc1 src1,
                                      const uint16_t unitRepTimes, MaskReg &mask, uint32_t elementsPerRepeat,
                                      bool isFmod)
 {
@@ -160,8 +173,8 @@ PTO_INTERNAL void SolveScaleIterImpl(__ubuf__ float *dst, __ubuf__ float *src0, 
     }
 }
 
-template <int32_t iterationNum>
-PTO_INTERNAL void SolveScaleIter(__ubuf__ float *dst, __ubuf__ float *src0, __ubuf__ float *src1,
+template <int32_t iterationNum, typename TSrc0, typename TSrc1>
+PTO_INTERNAL void SolveScaleIter(__ubuf__ float *dst, TSrc0 src0, TSrc1 src1,
                                  const uint16_t unitRepTimes, MaskReg &mask, uint32_t elementsPerRepeat, bool isFmod)
 {
     SolveScaleIterImpl<iterationNum, iterationNum>(dst, src0, src1, unitRepTimes, mask, elementsPerRepeat, isFmod);
@@ -200,8 +213,8 @@ PTO_INTERNAL void SolveExceptionScenarios(RegTensor<float> &dstReg, RegTensor<fl
     vsel(dstReg, src0Reg, dstReg, src0Is0CmpReg);
 }
 
-template <int32_t iterationNum>
-PTO_INTERNAL void ComputeIterationF32(__ubuf__ float *dstTensor, __ubuf__ float *src0Tensor, __ubuf__ float *src1Tensor,
+template <int32_t iterationNum, typename TSrc0, typename TSrc1>
+PTO_INTERNAL void ComputeIterationF32(__ubuf__ float * dstTensor, TSrc0 src0Tensor, TSrc1 src1Tensor,
                                       const uint16_t mainRepeatTimes, uint32_t elementsPerRepeat, uint32_t tailCount,
                                       bool isFmod = true)
 {
@@ -228,8 +241,16 @@ PTO_INTERNAL void ComputeIterationF32(__ubuf__ float *dstTensor, __ubuf__ float 
         mem_bar(VST_VLD);
 
         for (uint16_t i = 0; i < mainRepeatTimes; i++) {
-            vlds(src0OriginReg, src0Tensor, i * elementsPerRepeat, NORM);
-            vlds(src1OriginReg, src1Tensor, i * elementsPerRepeat, NORM);
+            if constexpr (std::is_same_v<__ubuf__ float *, TSrc0>) {
+                vlds(src0OriginReg, src0Tensor, i * elementsPerRepeat, NORM);
+            } else {
+                vdup(src0OriginReg, src0Tensor, maskFull, MODE_ZEROING);
+            }
+            if constexpr (std::is_same_v<__ubuf__ float *, TSrc1>) {
+                vlds(src1OriginReg, src1Tensor, i * elementsPerRepeat, NORM);
+            } else {
+                vdup(src1OriginReg, src1Tensor, maskFull, MODE_ZEROING);
+            }
             vabs(srcReg, src1OriginReg, maskFull, MODE_ZEROING);
             vlds(dstReg, dstTensor, i * elementsPerRepeat, NORM);
 
@@ -261,8 +282,16 @@ PTO_INTERNAL void ComputeIterationF32(__ubuf__ float *dstTensor, __ubuf__ float 
 
         if (tailCount > 0) {
             maskReg = CreatePredicate<float>(tailCount);
-            vlds(src0OriginReg, src0Tensor, mainRepeatTimes * elementsPerRepeat, NORM);
-            vlds(src1OriginReg, src1Tensor, mainRepeatTimes * elementsPerRepeat, NORM);
+            if constexpr (std::is_same_v<__ubuf__ float *, TSrc0>) {
+                vlds(src0OriginReg, src0Tensor, mainRepeatTimes * elementsPerRepeat, NORM);
+            } else {
+                vdup(src0OriginReg, src0Tensor, maskReg, MODE_ZEROING);
+            }
+            if constexpr (std::is_same_v<__ubuf__ float *, TSrc1>) {
+                vlds(src1OriginReg, src1Tensor, mainRepeatTimes * elementsPerRepeat, NORM);
+            } else {
+                vdup(src1OriginReg, src1Tensor, maskReg, MODE_ZEROING);
+            }
 
             vabs(dstReg, src0OriginReg, maskReg, MODE_ZEROING);
             vabs(srcReg, src1OriginReg, maskReg, MODE_ZEROING);
