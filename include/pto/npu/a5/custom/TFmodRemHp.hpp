@@ -106,13 +106,18 @@ PTO_INTERNAL void SolveScaleIter(RegTensor<float> &dstReg, RegTensor<float> &src
     }
 }
 
-template <int32_t iterationNum>
-PTO_INTERNAL void SolveScale(__ubuf__ float *dst, __ubuf__ float *src, const uint16_t unitRepTimes, const float scale1,
+template <int32_t iterationNum, typename TSrc>
+PTO_INTERNAL void SolveScale(__ubuf__ float *dst, TSrc src, const uint16_t unitRepTimes, const float scale1,
                              const float scale2, MaskReg &mask, uint32_t elementsPerRepeat, bool isFmod)
 {
     RegTensor<float> dstReg, srcReg, srcOriginReg;
     for (uint16_t i = 0; i < unitRepTimes; i++) {
-        vlds(srcOriginReg, src, i * elementsPerRepeat, NORM);
+        if constexpr (std::is_same_v<__ubuf__ float *, TSrc>) {
+            vlds(srcOriginReg, src, i * elementsPerRepeat, NORM);
+        } else {
+            vdup(srcOriginReg, src, mask, MODE_ZEROING);
+        }
+
         vlds(dstReg, dst, i * elementsPerRepeat, NORM);
         vabs(srcReg, srcOriginReg, mask, MODE_ZEROING);
         SolveScale<iterationNum>(dstReg, srcReg, scale1, scale2, mask, isFmod);
@@ -122,15 +127,23 @@ PTO_INTERNAL void SolveScale(__ubuf__ float *dst, __ubuf__ float *src, const uin
     }
 }
 
-template <int32_t iterationNum>
-PTO_INTERNAL void SolveScaleInit(__ubuf__ float *dst, __ubuf__ float *src0, __ubuf__ float *src1,
-                                 const uint16_t unitRepTimes, const float scale1, const float scale2, MaskReg &mask,
-                                 uint32_t elementsPerRepeat, bool isFmod)
+template <int32_t iterationNum, typename TSrc0, typename TSrc1>
+PTO_INTERNAL void SolveScaleInit(__ubuf__ float *dst, TSrc0 src0, TSrc1 src1, const uint16_t unitRepTimes,
+                                 const float scale1, const float scale2, MaskReg &mask, uint32_t elementsPerRepeat,
+                                 bool isFmod)
 {
     RegTensor<float> dstReg, srcReg, src0OriginReg, src1OriginReg;
     for (uint16_t i = 0; i < unitRepTimes; i++) {
-        vlds(src0OriginReg, src0, i * elementsPerRepeat, NORM);
-        vlds(src1OriginReg, src1, i * elementsPerRepeat, NORM);
+        if constexpr (std::is_same_v<__ubuf__ float *, TSrc0>) {
+            vlds(src0OriginReg, src0, i * elementsPerRepeat, NORM);
+        } else {
+            vdup(src0OriginReg, src0, mask, MODE_ZEROING);
+        }
+        if constexpr (std::is_same_v<__ubuf__ float *, TSrc1>) {
+            vlds(src1OriginReg, src1, i * elementsPerRepeat, NORM);
+        } else {
+            vdup(src1OriginReg, src1, mask, MODE_ZEROING);
+        }
         vabs(dstReg, src0OriginReg, mask, MODE_ZEROING);
         vabs(srcReg, src1OriginReg, mask, MODE_ZEROING);
         SolveScale<iterationNum>(dstReg, srcReg, scale1, scale2, mask, isFmod);
@@ -140,10 +153,9 @@ PTO_INTERNAL void SolveScaleInit(__ubuf__ float *dst, __ubuf__ float *src0, __ub
     }
 }
 
-template <int32_t iterationNum, int32_t totalIterationNum>
-PTO_INTERNAL void SolveScaleIterImpl(__ubuf__ float *dst, __ubuf__ float *src0, __ubuf__ float *src1,
-                                     const uint16_t unitRepTimes, MaskReg &mask, uint32_t elementsPerRepeat,
-                                     bool isFmod)
+template <int32_t iterationNum, int32_t totalIterationNum, typename TSrc0, typename TSrc1>
+PTO_INTERNAL void SolveScaleIterImpl(__ubuf__ float *dst, TSrc0 src0, TSrc1 src1, const uint16_t unitRepTimes,
+                                     MaskReg &mask, uint32_t elementsPerRepeat, bool isFmod)
 {
     if (iterationNum == totalIterationNum) { // first iteration, initialization
         SolveScaleInit<iterationNum>(dst, src0, src1, unitRepTimes, scaleList1[iterationNum - 1].f,
@@ -160,9 +172,9 @@ PTO_INTERNAL void SolveScaleIterImpl(__ubuf__ float *dst, __ubuf__ float *src0, 
     }
 }
 
-template <int32_t iterationNum>
-PTO_INTERNAL void SolveScaleIter(__ubuf__ float *dst, __ubuf__ float *src0, __ubuf__ float *src1,
-                                 const uint16_t unitRepTimes, MaskReg &mask, uint32_t elementsPerRepeat, bool isFmod)
+template <int32_t iterationNum, typename TSrc0, typename TSrc1>
+PTO_INTERNAL void SolveScaleIter(__ubuf__ float *dst, TSrc0 src0, TSrc1 src1, const uint16_t unitRepTimes,
+                                 MaskReg &mask, uint32_t elementsPerRepeat, bool isFmod)
 {
     SolveScaleIterImpl<iterationNum, iterationNum>(dst, src0, src1, unitRepTimes, mask, elementsPerRepeat, isFmod);
 }
@@ -200,25 +212,73 @@ PTO_INTERNAL void SolveExceptionScenarios(RegTensor<float> &dstReg, RegTensor<fl
     vsel(dstReg, src0Reg, dstReg, src0Is0CmpReg);
 }
 
-template <int32_t iterationNum>
-PTO_INTERNAL void ComputeIterationF32(__ubuf__ float *dstTensor, __ubuf__ float *src0Tensor, __ubuf__ float *src1Tensor,
+template <bool isTail, int32_t iterationNum, typename TSrc0, typename TSrc1>
+PTO_INTERNAL void ComputeIterationF32Proc(__ubuf__ float *dstTensor, TSrc0 src0Tensor, TSrc1 src1Tensor,
+                                          uint32_t offset, uint32_t elementsPerRepeat, RegTensor<float> &nanReg,
+                                          RegTensor<float> &n2Reg, RegTensor<float> &oneReg, MaskReg &mask, bool isFmod)
+{
+    constexpr FloatUnion scale1(0x4b800000); // 2**24
+    constexpr FloatUnion scale2(0x33800000); // 2**-24
+    constexpr float subNormal = 1.1754944e-38;
+    RegTensor<float> src0OriginReg, src1OriginReg, srcReg, dstReg;
+    RegTensor<float> src0SignBitReg, src0SignBitTmpReg;
+    RegTensor<float> bTmpReg, tmpReg;
+    MaskReg subNormalMask, signDiffMask;
+    if constexpr (std::is_same_v<__ubuf__ float *, TSrc0>) {
+        vlds(src0OriginReg, src0Tensor, offset * elementsPerRepeat, NORM);
+    } else {
+        vdup(src0OriginReg, src0Tensor, mask, MODE_ZEROING);
+    }
+    if constexpr (std::is_same_v<__ubuf__ float *, TSrc1>) {
+        vlds(src1OriginReg, src1Tensor, offset * elementsPerRepeat, NORM);
+    } else {
+        vdup(src1OriginReg, src1Tensor, mask, MODE_ZEROING);
+    }
+    vabs(srcReg, src1OriginReg, mask, MODE_ZEROING);
+    if constexpr (isTail) {
+        vabs(dstReg, src0OriginReg, mask, MODE_ZEROING);
+        SolveScaleIter<iterationNum>(dstReg, srcReg, mask, isFmod);
+    } else {
+        vlds(dstReg, dstTensor, offset * elementsPerRepeat, NORM);
+    }
+
+    GetSignBit(src0SignBitReg, src0OriginReg, mask);
+    vmul(src0SignBitTmpReg, src0SignBitReg, n2Reg, mask, MODE_ZEROING);
+    vadd(src0SignBitTmpReg, src0SignBitTmpReg, oneReg, mask, MODE_ZEROING);
+    vmul(dstReg, dstReg, src0SignBitTmpReg, mask, MODE_ZEROING);
+
+    vcmps_le(subNormalMask, srcReg, subNormal, mask);
+    vmuls(tmpReg, srcReg, scale1.f, subNormalMask, MODE_ZEROING);
+    vsel(bTmpReg, tmpReg, srcReg, subNormalMask);
+
+    vmuls(tmpReg, dstReg, scale2.f, subNormalMask, MODE_ZEROING);
+    vsel(dstReg, tmpReg, dstReg, subNormalMask);
+
+    SolveExceptionScenarios(dstReg, src0OriginReg, src1OriginReg, nanReg, mask);
+
+    if (!isFmod) {
+        vmul(tmpReg, src1OriginReg, dstReg, mask, MODE_ZEROING);
+        vcmps_lt(signDiffMask, tmpReg, 0.0f, mask);
+        vadd(tmpReg, dstReg, src1OriginReg, signDiffMask, MODE_ZEROING);
+        vsel(dstReg, tmpReg, dstReg, signDiffMask);
+    }
+
+    constexpr auto distValue =
+        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<float, DistVST::DIST_NORM>())>();
+    vsts(dstReg, dstTensor, offset * elementsPerRepeat, distValue, mask);
+}
+
+template <int32_t iterationNum, typename TSrc0, typename TSrc1>
+PTO_INTERNAL void ComputeIterationF32(__ubuf__ float *dstTensor, TSrc0 src0Tensor, TSrc1 src1Tensor,
                                       const uint16_t mainRepeatTimes, uint32_t elementsPerRepeat, uint32_t tailCount,
                                       bool isFmod = true)
 {
     __VEC_SCOPE__
     {
-        constexpr FloatUnion scale1(0x4b800000); // 2**24
-        constexpr FloatUnion scale2(0x33800000); // 2**-24
-        constexpr float subNormal = 1.1754944e-38;
-        RegTensor<float> src0OriginReg, src1OriginReg, srcReg, dstReg;
-        RegTensor<float> nanReg, zeroReg, n2Reg, oneReg;
-        RegTensor<float> src0SignBitReg, src0SignBitTmpReg, dstSignBitReg;
-        RegTensor<float> bTmpReg, tmpReg;
-        MaskReg maskReg, subNormalMask, signDiffMask;
-        MaskReg maskFull = pset_b32(PAT_ALL);
+        RegTensor<float> nanReg, n2Reg, oneReg;
+        MaskReg maskReg, maskFull = pset_b32(PAT_ALL);
 
         vdup(nanReg, nan.f, maskFull, MODE_ZEROING);
-        vdup(zeroReg, static_cast<float>(0.0), maskFull, MODE_ZEROING);
         vdup(n2Reg, static_cast<float>(-2.0), maskFull, MODE_ZEROING);
         vdup(oneReg, static_cast<float>(1), maskFull, MODE_ZEROING);
 
@@ -228,69 +288,14 @@ PTO_INTERNAL void ComputeIterationF32(__ubuf__ float *dstTensor, __ubuf__ float 
         mem_bar(VST_VLD);
 
         for (uint16_t i = 0; i < mainRepeatTimes; i++) {
-            vlds(src0OriginReg, src0Tensor, i * elementsPerRepeat, NORM);
-            vlds(src1OriginReg, src1Tensor, i * elementsPerRepeat, NORM);
-            vabs(srcReg, src1OriginReg, maskFull, MODE_ZEROING);
-            vlds(dstReg, dstTensor, i * elementsPerRepeat, NORM);
-
-            GetSignBit(src0SignBitReg, src0OriginReg, maskFull);
-            vmul(src0SignBitTmpReg, src0SignBitReg, n2Reg, maskFull, MODE_ZEROING);
-            vadd(src0SignBitTmpReg, src0SignBitTmpReg, oneReg, maskFull, MODE_ZEROING);
-            vmul(dstReg, dstReg, src0SignBitTmpReg, maskFull, MODE_ZEROING);
-
-            vcmps_le(subNormalMask, srcReg, subNormal, maskFull);
-            vmuls(tmpReg, srcReg, scale1.f, subNormalMask, MODE_ZEROING);
-            vsel(bTmpReg, tmpReg, srcReg, subNormalMask);
-
-            vmuls(tmpReg, dstReg, scale2.f, subNormalMask, MODE_ZEROING);
-            vsel(dstReg, tmpReg, dstReg, subNormalMask);
-
-            SolveExceptionScenarios(dstReg, src0OriginReg, src1OriginReg, nanReg, maskFull);
-
-            if (!isFmod) {
-                vmul(tmpReg, src1OriginReg, dstReg, maskFull, MODE_ZEROING);
-                vcmps_lt(signDiffMask, tmpReg, 0.0f, maskFull);
-                vadd(tmpReg, dstReg, src1OriginReg, signDiffMask, MODE_ZEROING);
-                vsel(dstReg, tmpReg, dstReg, signDiffMask);
-            }
-
-            constexpr auto distValue =
-                std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<float, DistVST::DIST_NORM>())>();
-            vsts(dstReg, dstTensor, i * elementsPerRepeat, distValue, maskFull);
+            ComputeIterationF32Proc<false, iterationNum>(dstTensor, src0Tensor, src1Tensor, i, elementsPerRepeat,
+                                                         nanReg, n2Reg, oneReg, maskFull, isFmod);
         }
 
         if (tailCount > 0) {
             maskReg = CreatePredicate<float>(tailCount);
-            vlds(src0OriginReg, src0Tensor, mainRepeatTimes * elementsPerRepeat, NORM);
-            vlds(src1OriginReg, src1Tensor, mainRepeatTimes * elementsPerRepeat, NORM);
-
-            vabs(dstReg, src0OriginReg, maskReg, MODE_ZEROING);
-            vabs(srcReg, src1OriginReg, maskReg, MODE_ZEROING);
-            SolveScaleIter<iterationNum>(dstReg, srcReg, maskReg, isFmod);
-
-            GetSignBit(src0SignBitReg, src0OriginReg, maskReg);
-            vmul(src0SignBitTmpReg, src0SignBitReg, n2Reg, maskReg, MODE_ZEROING);
-            vadd(src0SignBitTmpReg, src0SignBitTmpReg, oneReg, maskReg, MODE_ZEROING);
-            vmul(dstReg, dstReg, src0SignBitTmpReg, maskReg, MODE_ZEROING);
-
-            vcmps_le(subNormalMask, srcReg, subNormal, maskReg);
-            vmuls(tmpReg, srcReg, scale1.f, subNormalMask, MODE_ZEROING);
-            vsel(bTmpReg, tmpReg, srcReg, subNormalMask);
-            vmuls(tmpReg, dstReg, scale2.f, subNormalMask, MODE_ZEROING);
-            vsel(dstReg, tmpReg, dstReg, subNormalMask);
-
-            SolveExceptionScenarios(dstReg, src0OriginReg, src1OriginReg, nanReg, maskReg);
-
-            if (!isFmod) {
-                vmul(tmpReg, src1OriginReg, dstReg, maskReg, MODE_ZEROING);
-                vcmps_lt(signDiffMask, tmpReg, 0.0f, maskReg);
-                vadd(tmpReg, dstReg, src1OriginReg, signDiffMask, MODE_ZEROING);
-                vsel(dstReg, tmpReg, dstReg, signDiffMask);
-            }
-
-            constexpr auto distValue =
-                std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<float, DistVST::DIST_NORM>())>();
-            vsts(dstReg, dstTensor, mainRepeatTimes * elementsPerRepeat, distValue, maskReg);
+            ComputeIterationF32Proc<true, iterationNum>(dstTensor, src0Tensor, src1Tensor, mainRepeatTimes,
+                                                        elementsPerRepeat, nanReg, n2Reg, oneReg, maskReg, isFmod);
         }
     }
 }
