@@ -50,7 +50,18 @@ add_library(pto_ccu_host SHARED pto_gate_registry.cc)
 
 target_compile_options(pto_ccu_host PRIVATE
     -fPIC
-    -fvisibility=hidden  # the bridge symbol is __attribute__((default))-tagged
+    # NOTE (phase 2 update, 2026-05-06): originally `-fvisibility=hidden` was
+    # set here because phase 1 only consumed this lib via dlsym on the
+    # `extern "C"` bridge symbols (`PtoCcuPublish_C` /
+    # `PtoCcuTryGetLastReduceScatterGateDescriptor`). Phase 2 (gated kernel
+    # migration) now also *links* against this lib for the C++ API
+    # `pto::ccu::Publish` / `pto::ccu::TryGet` — both from the gated kernel
+    # lib (`libpto_gated_reduce_scatter.so`) and from the standalone ST
+    # (`gated_rs_st`). Hidden visibility here would demote those C++ symbols
+    # to STV_HIDDEN and break the link
+    # (`undefined reference to pto::ccu::TryGet(...)`, observed 2026-05-06).
+    # If we ever need a stricter ABI surface, introduce a unified `PTO_API`
+    # macro and re-enable hidden.
     -Wall -Wextra
     -O2
 )

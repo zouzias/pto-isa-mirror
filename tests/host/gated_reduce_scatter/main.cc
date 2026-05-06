@@ -47,23 +47,23 @@
 //   cmake -S kernels/host/pto_ccu_host -B build/pto_ccu_host
 //   cmake --build build/pto_ccu_host -j
 //
-//   cmake -S kernels/host/gated_reduce_scatter \
-//         -B build/pto_gated_reduce_scatter \
+//   cmake -S kernels/host/gated_reduce_scatter
+//         -B build/pto_gated_reduce_scatter
 //         -DPTO_CCU_HOST_LIB=$PWD/build/pto_ccu_host/dist/libpto_ccu_host.so
 //   cmake --build build/pto_gated_reduce_scatter -j
 //
 //   # 2. build this ST
-//   cmake -S tests/host/gated_reduce_scatter \
-//         -B build/gated_rs_st \
-//         -DPTO_GATED_RS_LIB_DIR=$PWD/build/pto_gated_reduce_scatter/dist \
+//   cmake -S tests/host/gated_reduce_scatter
+//         -B build/gated_rs_st
+//         -DPTO_GATED_RS_LIB_DIR=$PWD/build/pto_gated_reduce_scatter/dist
 //         -DPTO_CCU_HOST_LIB_DIR=$PWD/build/pto_ccu_host/dist
 //   cmake --build build/gated_rs_st -j
 //
 //   # 3. run (1-rank smoke)
 //   export ASCEND_HOME_PATH=/usr/local/Ascend/ascend-toolkit/latest
-//   export LD_LIBRARY_PATH=$ASCEND_HOME_PATH/lib64:\
-//     $PWD/build/pto_ccu_host/dist:\
-//     $PWD/build/pto_gated_reduce_scatter/dist:\
+//   export LD_LIBRARY_PATH=$ASCEND_HOME_PATH/lib64:
+//     $PWD/build/pto_ccu_host/dist:
+//     $PWD/build/pto_gated_reduce_scatter/dist:
 //     <libpto_aiv_treduce.so dir>:$LD_LIBRARY_PATH
 //   timeout 60 ./build/gated_rs_st/gated_rs_st
 //

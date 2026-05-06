@@ -230,10 +230,16 @@ add_library(pto_gated_reduce_scatter SHARED
 
 target_compile_options(pto_gated_reduce_scatter PRIVATE
     -fPIC
-    -fvisibility=hidden  # default-hide, factory `MakeGatedKernelCreator` uses
-                         # __attribute__((visibility("default"))) explicitly
-                         # via export macro below if extern "C" lookup is
-                         # ever needed (currently linked, not dlopen'd).
+    # NOTE: deliberately NOT setting `-fvisibility=hidden`. The pilot ST
+    # (`tests/host/gated_reduce_scatter/main.cc`) is *linked* against this lib
+    # (not dlopen'd), so it needs the C++ symbol
+    # `pto::ccu::MakeGatedKernelCreator()` plus the kernel class' vtable
+    # exported as STV_DEFAULT. Adding `-fvisibility=hidden` would silently
+    # demote them to STV_HIDDEN at codegen time and the ST link would fail
+    # with `undefined reference to pto::ccu::MakeGatedKernelCreator()`
+    # (observed 2026-05-06). If we ever want a stricter ABI surface, add a
+    # `PTO_API` macro under `include/pto/api.hpp` that conditionally expands
+    # to `__attribute__((visibility("default")))` and re-enable hidden here.
     -Wall -Wextra
     -O2
 )
