@@ -60,7 +60,7 @@ struct RemSOp {
     }
 };
 
-template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, unsigned dstRowStride,
+template <auto PrecisionType = RemSAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename TileDataTmp, unsigned dstRowStride,
           unsigned srcRowStride>
 __tf__ PTO_INTERNAL OP_NAME(TREMS)
     OP_TYPE(element_wise) void TRemS(typename TileDataDst::TileDType __out__ dst,
@@ -73,8 +73,18 @@ __tf__ PTO_INTERNAL OP_NAME(TREMS)
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
     constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
-    BinaryInstr<RemSOp<T>, TileDataDst, TileDataSrc, T, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
-        dstPtr, srcPtr, scalar, kValidRows, kValidCols, version);
+    if constexpr (PrecisionType == RemSAlgorithm::HIGH_PRECISION && std::is_same_v<T, float>) {
+        uint32_t mainRepeatTimes = validCols / ElementsPerRepeat;
+        uint32_t tailCount = validCols - mainRepeatTimes * ElementsPerRepeat;
+        for (uint16_t i = 0; i < validRows; i++) {
+            ComputeIterationF32<REM_INTERATION_NUM_MAX>(dstPtr + i * dstRowStride, srcPtr + i * srcRowStride,
+                                                        scalar, mainRepeatTimes, elementsPerRepeat,
+                                                        tailCount, false);
+        }
+    } else {
+        BinaryInstr<RemSOp<T>, TileDataDst, TileDataSrc, T, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
+            dstPtr, srcPtr, scalar, kValidRows, kValidCols, version);
+    }
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
@@ -91,7 +101,7 @@ PTO_INTERNAL void TRemSCheck(unsigned srcValidRow, unsigned srcValidCol, unsigne
                   "Number of valid columns and rows must not be greater than number of tile columns and rows.");
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
+template <auto PrecisionType = RemSAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
 PTO_INTERNAL void TREMS_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar, TileDataTmp &tmp)
 {
     using T = typename TileDataDst::DType;
@@ -105,7 +115,7 @@ PTO_INTERNAL void TREMS_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDa
 
     TRemSCheck<TileDataDst, TileDataSrc, TileDataTmp>(src.GetValidRow(), src.GetValidCol(), validRow, validCol,
                                                       tmp.GetValidRow(), tmp.GetValidCol());
-    TRemS<TileDataDst, TileDataSrc, TileDataTmp, dstRowStride, srcRowStride>(dst.data(), src.data(), scalar, tmp.data(),
+    TRemS<PrecisionType, TileDataDst, TileDataSrc, TileDataTmp, dstRowStride, srcRowStride>(dst.data(), src.data(), scalar, tmp.data(),
                                                                              validRow, validCol);
 }
 } // namespace pto
