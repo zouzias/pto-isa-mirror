@@ -33,7 +33,19 @@ inline void TracePrintf(const char *tag, uint32_t rankId, const char *body)
 PtoGatedReduceScatterMesh1D::PtoGatedReduceScatterMesh1D(const CcuKernelArg &arg)
     : CcuKernel(arg)
 {
+    // Step-by-step trace so a SEGV in the body localises to a single line.
+    // setvbuf(stderr, _IONBF) in the ST main forces these to flush even if
+    // the process aborts before normal exit.
+    std::fprintf(stderr,
+        "[PTO_GATE/kernel/gated_rs_mesh1d] CTOR T0 — base CcuKernel(arg) "
+        "returned; entering derived ctor body. arg=%p\n",
+        static_cast<const void *>(&arg));
+
     const auto *kArg = dynamic_cast<const PtoGatedKernelArg *>(&arg);
+    std::fprintf(stderr,
+        "[PTO_GATE/kernel/gated_rs_mesh1d] CTOR T1 — dynamic_cast result kArg=%p\n",
+        static_cast<const void *>(kArg));
+
     if (kArg != nullptr) {
         rankId_       = kArg->rankId;
         rankSize_     = kArg->rankSize;
@@ -41,23 +53,15 @@ PtoGatedReduceScatterMesh1D::PtoGatedReduceScatterMesh1D(const CcuKernelArg &arg
         doneMask_     = kArg->doneMask;
         payloadBytes_ = kArg->payloadBytes;
     } else {
-        // Defensive — hccl/hcomm should never feed us a non-PtoGatedKernelArg
-        // because the `KernelCreator` we hand back from
-        // `MakeGatedKernelCreator()` only constructs us. Log loudly so the
-        // server-side run flags this as an ABI bug rather than silently
-        // running with default zero-init values.
         std::fprintf(stderr,
             "[PTO_GATE/kernel/gated_rs_mesh1d] CTOR FAILED dynamic_cast — got "
-            "non-PtoGatedKernelArg, falling back to defaults (rankId=0, "
-            "rankSize=1, payloadBytes=0). This kernel will translate but "
-            "cannot meaningfully run.\n");
+            "non-PtoGatedKernelArg, falling back to defaults.\n");
     }
     std::fprintf(stderr,
-        "[PTO_GATE/kernel/gated_rs_mesh1d] CTOR rank=%u rankSize=%u "
-        "gateMask=0x%x doneMask=0x%x payloadBytes=%llu\n",
+        "[PTO_GATE/kernel/gated_rs_mesh1d] CTOR T2 — fields captured: rank=%u "
+        "rankSize=%u gateMask=0x%x doneMask=0x%x payloadBytes=%llu\n",
         rankId_, rankSize_, gateMask_, doneMask_,
         static_cast<unsigned long long>(payloadBytes_));
-    std::fflush(stderr);
 }
 
 HcclResult PtoGatedReduceScatterMesh1D::Algorithm()

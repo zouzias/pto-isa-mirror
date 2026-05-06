@@ -463,6 +463,10 @@ bool RunOneRank(int rankId, int nRanks, int firstDeviceId,
 // =============================================================================
 int main(int argc, char **argv)
 {
+    // Force stderr unbuffered. mpirun's tee/output-collection layer can otherwise
+    // swallow our prints if the process aborts (SEGV) before flush.
+    setvbuf(stderr, nullptr, _IONBF, 0);
+
     const bool mpiLaunched = IsLaunchedByMpi();
 
     int rankId        = 0;
