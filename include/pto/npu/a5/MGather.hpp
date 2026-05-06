@@ -81,12 +81,20 @@ __simt_callee__ AICORE PTO_INLINE uint32_t tile_offset_2d(uint32_t r, uint32_t c
 }
 #endif
 
-template <typename T, typename TIdx, typename TileDst, GatherOOB Oob>
+template <typename T, typename TIdx, typename TileDst, GatherOOB Oob, uint32_t ValidRowsT, uint32_t ValidColsT,
+          uint32_t TableRowsT>
 AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
     void simt_mgather_row_kernel(__ubuf__ T *__restrict__ dst, __gm__ const T *__restrict__ table,
-                                 __ubuf__ const TIdx *__restrict__ indices, uint32_t validRows, uint32_t validCols,
-                                 uint32_t tableRows)
+                                 __ubuf__ const TIdx *__restrict__ indices, uint32_t validRowsRT, uint32_t validColsRT,
+                                 uint32_t tableRowsRT)
 {
+    constexpr bool kStaticR = (ValidRowsT > 0u);
+    constexpr bool kStaticC = (ValidColsT > 0u);
+    constexpr bool kStaticTR = (TableRowsT > 0u);
+    const uint32_t validRows = kStaticR ? ValidRowsT : validRowsRT;
+    const uint32_t validCols = kStaticC ? ValidColsT : validColsRT;
+    const uint32_t tableRows = kStaticTR ? TableRowsT : tableRowsRT;
+
     const uint32_t kRowWarps =
         (validRows == 0u) ? 1u : ((validRows < mgather_cfg::MAX_WARPS) ? validRows : mgather_cfg::MAX_WARPS);
     const uint32_t kFreeWarps = mgather_cfg::MAX_WARPS / kRowWarps;
@@ -114,20 +122,32 @@ AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
     }
 }
 
-template <typename T, typename TIdx, typename TileDst, typename TileIdx, GatherOOB Oob>
+template <typename T, typename TIdx, typename TileDst, typename TileIdx, GatherOOB Oob, uint32_t ValidRowsT,
+          uint32_t ValidColsT, uint32_t TableSizeT>
 AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
     void simt_mgather_elem_kernel(__ubuf__ T *__restrict__ dst, __gm__ const T *__restrict__ table,
-                                  __ubuf__ const TIdx *__restrict__ indices, uint32_t validRows, uint32_t validCols,
-                                  uint32_t tableSize, uint32_t launchThreads)
+                                  __ubuf__ const TIdx *__restrict__ indices, uint32_t validRowsRT, uint32_t validColsRT,
+                                  uint32_t tableSizeRT)
 {
+    constexpr bool kStaticR = (ValidRowsT > 0u);
+    constexpr bool kStaticC = (ValidColsT > 0u);
+    constexpr bool kStaticTS = (TableSizeT > 0u);
+    const uint32_t validRows = kStaticR ? ValidRowsT : validRowsRT;
+    const uint32_t validCols = kStaticC ? ValidColsT : validColsRT;
+    const uint32_t tableSize = kStaticTS ? TableSizeT : tableSizeRT;
+
     const uint32_t totalElems = validRows * validCols;
+    const uint32_t kNeededWarps = (totalElems + mgather_cfg::WARP_SIZE - 1u) / mgather_cfg::WARP_SIZE;
+    const uint32_t kLaunchWarps =
+        (kNeededWarps == 0u) ? 1u : ((kNeededWarps < mgather_cfg::MAX_WARPS) ? kNeededWarps : mgather_cfg::MAX_WARPS);
+    const uint32_t kLaunchThreads = kLaunchWarps * mgather_cfg::WARP_SIZE;
 
     const uint32_t tx = threadIdx.x;
     const uint32_t ty = threadIdx.y;
     const uint32_t tid = ty * mgather_cfg::WARP_SIZE + tx;
 
 #pragma unroll(1)
-    for (uint32_t i = tid; i < totalElems; i += launchThreads) {
+    for (uint32_t i = tid; i < totalElems; i += kLaunchThreads) {
         const uint32_t r = (validCols == 1u) ? i : (i / validCols);
         const uint32_t c = (validCols == 1u) ? 0u : (i - r * validCols);
         const uint32_t dstOff = tile_offset_2d<TileDst>(r, c);
@@ -139,7 +159,8 @@ AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
     }
 }
 
-template <typename T, typename TIdx, GatherOOB Oob, typename DstTileData, typename IdxTileData>
+template <typename T, typename TIdx, GatherOOB Oob, uint32_t ValidRowsT, uint32_t ValidColsT, uint32_t TableRowsT,
+          typename DstTileData, typename IdxTileData>
 __tf__ AICORE void MGatherRowImpl(typename DstTileData::TileDType __out__ dst, __gm__ const T *__restrict__ tablePtr,
                                   typename IdxTileData::TileDType __in__ indices, uint32_t validRows,
                                   uint32_t validCols, uint32_t tableRows)
@@ -155,11 +176,12 @@ __tf__ AICORE void MGatherRowImpl(typename DstTileData::TileDType __out__ dst, _
     const uint32_t warpsPerRow = (warpsPerRowRaw == 0u) ? 1u : warpsPerRowRaw;
     const uint32_t launchWarps = rowWarps * warpsPerRow;
 
-    cce::async_invoke<simt_mgather_row_kernel<T, TIdx, DstTileData, Oob>>(
+    cce::async_invoke<simt_mgather_row_kernel<T, TIdx, DstTileData, Oob, ValidRowsT, ValidColsT, TableRowsT>>(
         cce::dim3{mgather_cfg::WARP_SIZE, launchWarps}, dstPtr, tablePtr, idxPtr, validRows, validCols, tableRows);
 }
 
-template <typename T, typename TIdx, GatherOOB Oob, typename DstTileData, typename IdxTileData>
+template <typename T, typename TIdx, GatherOOB Oob, uint32_t ValidRowsT, uint32_t ValidColsT, uint32_t TableSizeT,
+          typename DstTileData, typename IdxTileData>
 __tf__ AICORE void MGatherElemImpl(typename DstTileData::TileDType __out__ dst, __gm__ const T *__restrict__ tablePtr,
                                    typename IdxTileData::TileDType __in__ indices, uint32_t validRows,
                                    uint32_t validCols, uint32_t tableSize)
@@ -171,10 +193,9 @@ __tf__ AICORE void MGatherElemImpl(typename DstTileData::TileDType __out__ dst, 
     const uint32_t needed = (totalElems + mgather_cfg::WARP_SIZE - 1u) / mgather_cfg::WARP_SIZE;
     const uint32_t launchWarps =
         (needed == 0u) ? 1u : ((needed < mgather_cfg::MAX_WARPS) ? needed : mgather_cfg::MAX_WARPS);
-    const uint32_t launchThreads = launchWarps * mgather_cfg::WARP_SIZE;
-    cce::async_invoke<simt_mgather_elem_kernel<T, TIdx, DstTileData, IdxTileData, Oob>>(
-        cce::dim3{mgather_cfg::WARP_SIZE, launchWarps}, dstPtr, tablePtr, idxPtr, validRows, validCols, tableSize,
-        launchThreads);
+    cce::async_invoke<
+        simt_mgather_elem_kernel<T, TIdx, DstTileData, IdxTileData, Oob, ValidRowsT, ValidColsT, TableSizeT>>(
+        cce::dim3{mgather_cfg::WARP_SIZE, launchWarps}, dstPtr, tablePtr, idxPtr, validRows, validCols, tableSize);
 }
 
 template <typename T, typename TIdx, GatherOOB Oob, typename DstTileData, typename IdxTileData>
@@ -274,14 +295,30 @@ PTO_INTERNAL void MGATHER_IMPL(TileDst &dst, GlobalTable &table, TileIdx &indice
 
     __gm__ const T *tablePtr = reinterpret_cast<__gm__ const T *>(table.data());
 
+    constexpr int kDstValidRowS = TileDst::ValidRow;
+    constexpr int kDstValidColS = TileDst::ValidCol;
+    constexpr uint32_t kValidRowsT = (kDstValidRowS > 0) ? static_cast<uint32_t>(kDstValidRowS) : 0u;
+    constexpr uint32_t kValidColsT = (kDstValidColS > 0) ? static_cast<uint32_t>(kDstValidColS) : 0u;
+
     const uint32_t validRows = dst.GetValidRow();
     const uint32_t validCols = dst.GetValidCol();
 
     if constexpr (Mode == Coalesce::Row) {
+        using TableShape = typename GlobalTable::Shape;
+        constexpr int64_t kTableRowsS = TableShape::staticShape[3];
+        constexpr uint32_t kTableRowsT = (kTableRowsS > 0) ? static_cast<uint32_t>(kTableRowsS) : 0u;
         const uint32_t tableRows = static_cast<uint32_t>(table.GetShape(GlobalTensorDim::DIM_3));
-        MGatherRowImpl<T, TIdx, Oob, TileDst, TileIdx>(dst.data(), tablePtr, indices.data(), validRows, validCols,
-                                                       tableRows);
+        MGatherRowImpl<T, TIdx, Oob, kValidRowsT, kValidColsT, kTableRowsT, TileDst, TileIdx>(
+            dst.data(), tablePtr, indices.data(), validRows, validCols, tableRows);
     } else {
+        using TableShape = typename GlobalTable::Shape;
+        constexpr int64_t kTS0 = TableShape::staticShape[0];
+        constexpr int64_t kTS1 = TableShape::staticShape[1];
+        constexpr int64_t kTS2 = TableShape::staticShape[2];
+        constexpr int64_t kTS3 = TableShape::staticShape[3];
+        constexpr int64_t kTS4 = TableShape::staticShape[4];
+        constexpr bool kAllStatic = (kTS0 > 0) && (kTS1 > 0) && (kTS2 > 0) && (kTS3 > 0) && (kTS4 > 0);
+        constexpr uint32_t kTableSizeT = kAllStatic ? static_cast<uint32_t>(kTS0 * kTS1 * kTS2 * kTS3 * kTS4) : 0u;
         const uint32_t tableSize =
             static_cast<uint32_t>(table.GetShape(GlobalTensorDim::DIM_0) * table.GetShape(GlobalTensorDim::DIM_1) *
                                   table.GetShape(GlobalTensorDim::DIM_2) * table.GetShape(GlobalTensorDim::DIM_3) *
@@ -289,8 +326,8 @@ PTO_INTERNAL void MGATHER_IMPL(TileDst &dst, GlobalTable &table, TileIdx &indice
         if constexpr (TileDst::ValidRow == 1 && TileDst::ValidCol == 1) {
             MGatherScalarImpl<T, TIdx, Oob, TileDst, TileIdx>(dst.data(), tablePtr, indices.data(), tableSize);
         } else {
-            MGatherElemImpl<T, TIdx, Oob, TileDst, TileIdx>(dst.data(), tablePtr, indices.data(), validRows, validCols,
-                                                            tableSize);
+            MGatherElemImpl<T, TIdx, Oob, kValidRowsT, kValidColsT, kTableSizeT, TileDst, TileIdx>(
+                dst.data(), tablePtr, indices.data(), validRows, validCols, tableSize);
         }
     }
 }
