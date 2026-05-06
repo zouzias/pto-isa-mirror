@@ -50,6 +50,7 @@
         <path value="$(TARGET_ENV)/include/pto/npu"/>
         <path value="$(TARGET_ENV)/include/pto/npu/a2a3"/>
         <path value="$(TARGET_ENV)/include/pto/npu/a5"/>
+        <path value="$(TARGET_ENV)/include/pto/npu/310p3"/>
         <path value="$(TARGET_ENV)/include/pto/cpu"/>
     </dir_info>
 </config>

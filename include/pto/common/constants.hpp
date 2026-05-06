@@ -45,6 +45,7 @@ constexpr const int MAD_ROUND_MODE_BIT = 47;
 constexpr const int TROW_PROD_LOOP_B16 = 7;
 constexpr const int TROW_PROD_LOOP_B32 = 6;
 constexpr const int PAD_SHIFT_LENGTH = 32;
+constexpr const int CACHE_LINE_SIZE = 64;
 
 // ============================================================================
 // Custom pad value helpers for uint64_t-based PadValue enum
@@ -308,7 +309,7 @@ struct PadValueMap<uint32_t, PadValue::Max> {
     static constexpr auto value = uint32_t(0xffffffffUL);
 };
 
-#if (!defined(__CPU_SIM)) && (!defined(__COSTMODEL)) && (!defined(PTO_NPU_ARCH_KIRIN9030))
+#if (!defined(__CPU_SIM)) && (!defined(__COSTMODEL)) && (!defined(PTO_NPU_ARCH_KIRIN9030)) && !defined(PTO_NPU_ARCH_A1)
 template <>
 struct PadValueMap<bfloat16_t, PadValue::Null> {
     static constexpr auto value = uint16_t(0);

@@ -176,15 +176,27 @@ constexpr pipe_t opPipeList[] = {
     PIPE_V /* TLRELU */,
     PIPE_V /* TPRELU */,
     PIPE_V /* TMOV_V2V */,
+#if !defined(PTO_NPU_ARCH_310P3)
     PIPE_FIX /* TMOV_V2M */,
     PIPE_FIX /* TEXTRACT_V2M */,
+#else
+    PIPE_V /* TMOV_V2M */,
+    PIPE_V /* TEXTRACT_V2M */,
+#endif
     PIPE_MTE1 /* TMOV_M2B */,
     PIPE_MTE1 /* TMOV_M2L */,
     PIPE_MTE1 /* TMOV_M2R */,
+#if !defined(PTO_NPU_ARCH_310P3)
     PIPE_FIX /* TMOV_M2S */,
     PIPE_FIX /* TMOV_A2V */,
     PIPE_FIX /* TMOV_A2M */,
     PIPE_FIX /* TSTORE_ACC */,
+#else
+    PIPE_V /* TMOV_M2S */,
+    PIPE_V /* TMOV_A2V */,
+    PIPE_V /* TMOV_A2M */,
+    PIPE_V /* TSTORE_ACC */,
+#endif
     PIPE_MTE3 /* TSTORE_MAT */,
     PIPE_M /* TMATMUL */,
     PIPE_M /* TGEMV */,
@@ -196,8 +208,13 @@ constexpr pipe_t opPipeList[] = {
     PIPE_V /* TSHRS */,
     PIPE_V /* TXOR */,
     PIPE_V /* TXORS */,
+#if !defined(PTO_NPU_ARCH_310P3)
     PIPE_FIX /* TEXTRACT_A2M */,
     PIPE_FIX /* TINSERT_A2M */,
+#else
+    PIPE_V /* TEXTRACT_A2M */,
+    PIPE_V /* TINSERT_A2M */,
+#endif
     PIPE_MTE1 /* TIMG2COL */,
     PIPE_S /* SETFMATRIX */,
     PIPE_S /* SET_IMG2COL_RPT */,
