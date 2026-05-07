@@ -206,8 +206,7 @@ constexpr pipe_t opPipeList[] = {
     PIPE_ALL /* OP_COUNT */,
 };
 
-struct RecordEvent {
-};
+struct RecordEvent {};
 
 template <pipe_t SrcPipe, pipe_t DstPipe>
 class EventIdCounter {
@@ -236,7 +235,7 @@ private:
 };
 
 template <typename... WaitEvents>
-PTO_INTERNAL void WaitAllEvents(WaitEvents &... events)
+PTO_INTERNAL void WaitAllEvents(WaitEvents &...events)
 {
     (events.Wait(), ...);
 }

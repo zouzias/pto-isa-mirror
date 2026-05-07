@@ -122,7 +122,7 @@ PTO_INTERNAL void TransB8FullSubTiles(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, un
             set_va_reg_sb(VA7, &tmpUb1[HALF_ADDR_NUM]);
             if (numSubTileY == 1) { // [32, 32]
                 Op::TransB8Instr(1, 0, 0);
-            } else { // larger then [32, 32], e.g, [32, 64]
+            } else {                // larger then [32, 32], e.g, [32, 64]
                 Op::TransB8Instr(numSubTileY, 1, vconvSrcStride);
             }
         } // end of numSubTileX
@@ -333,7 +333,7 @@ PTO_INTERNAL void TransRepeatXB8FullSubTiles(__ubuf__ T *dstPtr, __ubuf__ T *src
             set_va_reg_sb(VA1, &tmpUb[HALF_ADDR_NUM]);
             if (numSubTileX == 1) { // [32, 32]
                 Op::TransB8Instr(1, 0, 0);
-            } else { // larger than [32, 32], e.g, [32, 64]
+            } else {                // larger than [32, 32], e.g, [32, 64]
                 Op::TransB8Instr(numSubTileX, vconvDstStride, 1);
             }
         } // end of numSubTileY

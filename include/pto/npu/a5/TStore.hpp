@@ -226,9 +226,9 @@ PTO_INTERNAL void TStoreAccND(typename GlobalData::DType *dstGlobalAddr, __cc__ 
                      ((static_cast<uint64_t>(reluPreMode) & 0x7) << 39) | //  Xt[41:39] relu pre mode
                      (static_cast<uint64_t>(nz2ndEn & 0x1) << 43);        //  Xt[43] nz2nd control bit
     uint64_t config =
-        ndNum |                                               // ND_PARA[15:0] the number of source nd
-        (static_cast<uint64_t>(srcNdStride & 0xffff) << 16) | // ND_PARA[31:16] the stride of source nd
-        (static_cast<uint64_t>(dstNdStride & 0xffff) << 32);  // ND_PARA[47:32] the stride of destination nd
+        ndNum |                                                           // ND_PARA[15:0] the number of source nd
+        (static_cast<uint64_t>(srcNdStride & 0xffff) << 16) |             // ND_PARA[31:16] the stride of source nd
+        (static_cast<uint64_t>(dstNdStride & 0xffff) << 32);              // ND_PARA[47:32] the stride of destination nd
     set_loop3_para(config);
     copy_matrix_cc_to_gm(dstGlobalAddr, srcTileAddr, xmReg, xtReg);
 }
@@ -284,7 +284,7 @@ PTO_INTERNAL void TStoreAccNZ(typename GlobalData::DType *dstAddr, __cc__ typena
                      ((static_cast<uint64_t>(reluPreMode) & 0x7) << 39) | //  Xt[41:39] relu pre mode
                      (static_cast<uint64_t>(channelSplitEn & 0x1) << 42); // Xt[42] channel split control bit
     uint64_t xmReg =
-        ((static_cast<uint64_t>(nSize & 0xfff) << 4) |           // Xm[15:4] the n-direction size of the matrix
+        ((static_cast<uint64_t>(nSize & 0xfff) << 4) |                    // Xm[15:4] the n-direction size of the matrix
          (static_cast<uint64_t>(mSize & 0xffff) << 16) |         // Xm[31:16] the m-direction size of the matrix
          (static_cast<uint64_t>(dstStride & 0xffffffff) << 32)); // Xm[63:32] destination stride between the start addr
 
@@ -330,7 +330,7 @@ PTO_INTERNAL void TStoreAccNHWC(typename GlobalData::DType *dstAddr, __cc__ type
                            (static_cast<uint64_t>(loop3SrcStirde & 0xffff)
                             << 16) | // LOOP3_PARA[31:16] the source stride of loop3 in uint of C0_SIZE
                            (static_cast<uint64_t>(loop3DstStirde & 0xffffffff)
-                            << 32); // LOOP3_PARA[63:32] the dst stride of loop3 in uint of element
+                            << 32);  // LOOP3_PARA[63:32] the dst stride of loop3 in uint of element
     set_loop3_para(loop3Config);
 
     copy_matrix_cc_to_gm(dstAddr, srcAddr, xmReg, xtReg);
@@ -380,11 +380,11 @@ PTO_INTERNAL void TStoreAccNCHW(typename GlobalData::DType *dstAddr, __cc__ type
                            (static_cast<uint64_t>(loop3SrcStirde & 0xffff)
                             << 16) | // LOOP3_PARA[31:16] the source stride of loop3 in uint of C0_SIZE
                            (static_cast<uint64_t>(loop3DstStirde & 0xffffffff)
-                            << 32); // LOOP3_PARA[63:32] the dst stride of loop3 in uint of element
+                            << 32);  // LOOP3_PARA[63:32] the dst stride of loop3 in uint of element
     set_loop3_para(loop3Config);
-    uint16_t loop0SrcStirde = 1; // loop0SrcStirde is 1 when src layout is NZ
+    uint16_t loop0SrcStirde = 1;     // loop0SrcStirde is 1 when src layout is NZ
     uint64_t channelConfig = static_cast<uint64_t>(loop0SrcStirde & 0xffff)
-                             << 48; // CHANNEL_PARA[63:48] source stride of loop0 in unit of C0_SIZE
+                             << 48;  // CHANNEL_PARA[63:48] source stride of loop0 in unit of C0_SIZE
     set_channel_para(channelConfig);
     copy_matrix_cc_to_gm(dstAddr, srcAddr, xmReg, xtReg);
 }

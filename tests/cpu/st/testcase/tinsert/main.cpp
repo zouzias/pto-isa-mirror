@@ -8,6 +8,7 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 #include <pto/pto-inst.hpp>
+#include "cpu_tile_test_utils.h"
 #include "test_common.h"
 #include <gtest/gtest.h>
 #include <pto/common/constants.hpp>
@@ -294,4 +295,30 @@ TEST_F(TINSERTTest, case_int32_t_float_Vec_Vec_128_96_8_16_DST_8_16_L_0_0)
 TEST_F(TINSERTTest, case_int8_t_int32_t_Vec_Vec_128_64_8_16_DST_8_16_L_0_0)
 {
     tinsert_test<int8_t, int32_t, TileType::Vec, TileType::Vec, 128, 64, 8, 16, 128, 64, 0, 0>();
+}
+
+TEST_F(TINSERTTest, FpVariantInsertsSourceTile)
+{
+    using DstTile = Tile<TileType::Vec, float, 4, 8>;
+    using SrcTile = Tile<TileType::Vec, float, 2, 8, BLayout::RowMajor, 2, 4>;
+    using FpTile = Tile<TileType::Vec, float, 1, 8>;
+
+    DstTile dst;
+    SrcTile src;
+    FpTile fp;
+    size_t addr = 0;
+    CpuTileTestUtils::AssignTileStorage(addr, dst, src, fp);
+
+    CpuTileTestUtils::FillAll(dst, 0.0f);
+    CpuTileTestUtils::FillLinear(src, 1.0f);
+    CpuTileTestUtils::FillAll(fp, 2.0f);
+
+    TINSERT_FP<DstTile, SrcTile, FpTile>(dst, src, fp, 1, 3);
+
+    for (int r = 0; r < src.GetValidRow(); ++r) {
+        for (int c = 0; c < src.GetValidCol(); ++c) {
+            CpuTileTestUtils::ExpectValueEquals(CpuTileTestUtils::GetValue(dst, r + 1, c + 3),
+                                                CpuTileTestUtils::GetValue(src, r, c));
+        }
+    }
 }

@@ -166,9 +166,9 @@ PTO_INTERNAL void TStoreAccND(typename DstGlobal::DType *dstGlobalAddr, __cc__ t
                      ((static_cast<uint64_t>(reluPreMode) & 0x7) << 39) | //  Xt[41:39] relu pre mode
                      (static_cast<uint64_t>(nz2ndEn & 0x1) << 43);        //  Xt[43] nz2nd control bit
     uint64_t xmReg =
-        ((nSize & 0xfff) << 4) |                          // Xm[15:4] the n-direction size of the matrix
-        (static_cast<uint64_t>(mSize & 0xffff) << 16) |   // Xm[31:16] the m-direction size of the matrix
-        (static_cast<uint64_t>(dstD & 0xffffffff) << 32); // Xm[63:32] destination stride between the start addr
+        ((nSize & 0xfff) << 4) |                                          // Xm[15:4] the n-direction size of the matrix
+        (static_cast<uint64_t>(mSize & 0xffff) << 16) |       // Xm[31:16] the m-direction size of the matrix
+        (static_cast<uint64_t>(dstD & 0xffffffff) << 32);     // Xm[63:32] destination stride between the start addr
     uint64_t config =
         ndNum |                                               // ND_PARA[15:0] the number of source nd
         (static_cast<uint64_t>(srcNdStride & 0xffff) << 16) | // ND_PARA[31:16] the stride of source nd

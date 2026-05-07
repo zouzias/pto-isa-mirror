@@ -37,4 +37,3 @@ target_compile_options(mla_attention_demo PRIVATE
     -Wno-macro-redefined -Wno-ignored-attributes
     -fstack-protector-strong
 )
-

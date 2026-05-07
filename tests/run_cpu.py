@@ -23,7 +23,6 @@ import platform
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-
 def _format_cmd(command: List[str]) -> str:
     return " ".join(map(str, command))
 

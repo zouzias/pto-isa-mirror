@@ -125,7 +125,7 @@ macro(install_package)
         foreach(i RANGE 1 ${directory_count})
             install(DIRECTORY ${DIRECTORY_${i}} DESTINATION ${DIRECTORY_DESTINATION_${i}}
                 COMPONENT opensdk EXCLUDE_FROM_ALL
-                FILES_MATCHING 
+                FILES_MATCHING
                 PATTERN "*.h"
                 PATTERN "*.cppm")
         endforeach()
