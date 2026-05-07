@@ -10,47 +10,60 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
+#include <gtest/gtest.h>
+#include <cmath>
 
 using namespace pto;
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-AICORE inline void runTROWPROD(__gm__ T __out__ *out, __gm__ T __in__ *src)
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
+AICORE void runTRowSum(__gm__ T __out__ *out, __gm__ T __in__ *src)
 {
     using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
-    using DynStridDim5 = Stride<kGCols_, kGCols_, kGCols_, kGCols_, 1>;
+    using DynStridDim5 = Stride<1, 1, 1, kGCols_, 1>;
     using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
-    GlobalData srcGlobal(src);
-    GlobalData dstGlobal(out);
-
     using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
+
+    constexpr uint64_t kSrcAddr = 0x0;
+    constexpr uint64_t kTmpAddr = 0x4000;
+    constexpr uint64_t kDstAddr = 0x8000;
+
     TileData srcTile(kTRows_, kTCols_);
     TileData tmpTile(kTRows_, kTCols_);
     TileData dstTile(kTRows_, kTCols_);
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(tmpTile, 0x4000);
-    TASSIGN(dstTile, 0x8000);
+    TASSIGN(srcTile, kSrcAddr);
+    TASSIGN(tmpTile, kTmpAddr);
+    TASSIGN(dstTile, kDstAddr);
 
-    std::fill(dstTile.data(), dstTile.data() + kTRows_ * kTCols_, 0);
+    GlobalData srcGlobal(src);
+    GlobalData dstGlobal(out);
 
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TROWPROD(dstTile, srcTile, tmpTile);
+    TROWSUM(dstTile, srcTile, tmpTile);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstTile);
+
     out = dstGlobal.data();
+
+    // accuracy compare
+    float costResult = dstTile.GetCycle();
+    float precision = 1 - fabs(profiling - costResult) / profiling;
+    bool ret = precision >= accuracy;
+    EXPECT_TRUE(ret);
 }
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-void LaunchTROWPROD(T *out, T *src, void *stream)
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
+void LaunchTRowSum(T *out, T *src, void *stream)
 {
-    if constexpr (std::is_same_v<T, aclFloat16>) {
-        runTROWPROD<half, kGRows_, kGCols_, kTRows_, kTCols_>((half *)(out), (half *)src);
-    } else {
-        runTROWPROD<T, kGRows_, kGCols_, kTRows_, kTCols_>(out, src);
-    }
+    if constexpr (std::is_same_v<T, aclFloat16>)
+        runTRowSum<half, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>((half *)(out), (half *)(src));
+    else
+        runTRowSum<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(out, src);
 }
 
-template void LaunchTROWPROD<float, 64, 64, 64, 64>(float *out, float *src, void *stream);
-template void LaunchTROWPROD<aclFloat16, 16, 256, 16, 256>(aclFloat16 *out, aclFloat16 *src, void *stream);
+template void LaunchTRowSum<float, 64, 64, 64, 64, 13.0f, 1.0f>(float *out, float *src, void *stream);
+template void LaunchTRowSum<float, 16, 256, 16, 256, 68.0f, 1.0f>(float *out, float *src, void *stream);
+template void LaunchTRowSum<aclFloat16, 64, 128, 64, 128, 13.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
+template void LaunchTRowSum<aclFloat16, 16, 256, 16, 256, 32.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);

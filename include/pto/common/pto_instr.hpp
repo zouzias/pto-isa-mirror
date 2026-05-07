@@ -1701,20 +1701,11 @@ PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, Wa
 }
 
 #ifdef PTO_NPU_ARCH_A5
-template <Coalesce CMode, typename TileDst, typename GlobalData, typename TileInd, typename... WaitEvents>
+template <GatherOOB Mode, typename TileDst, typename GlobalData, typename TileInd, typename... WaitEvents>
 PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, WaitEvents &...events)
 {
     TSYNC(events...);
-    MGATHER_IMPL<CMode>(dst, src, indexes);
-    return {};
-}
-
-template <Coalesce CMode, GatherOOB Mode, typename TileDst, typename GlobalData, typename TileInd,
-          typename... WaitEvents>
-PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, WaitEvents &...events)
-{
-    TSYNC(events...);
-    MGATHER_IMPL<CMode, Mode>(dst, src, indexes);
+    MGATHER_IMPL<Mode>(dst, src, indexes);
     return {};
 }
 #endif
@@ -1728,38 +1719,20 @@ PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, W
 }
 
 #ifdef PTO_NPU_ARCH_A5
-template <Coalesce Mode, typename GlobalData, typename TileSrc, typename TileInd, typename... WaitEvents>
+template <ScatterAtomicOp Atomic, typename GlobalData, typename TileSrc, typename TileInd, typename... WaitEvents>
 PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, WaitEvents &...events)
 {
     TSYNC(events...);
-    MSCATTER_IMPL<Mode>(dst, src, indexes);
+    MSCATTER_IMPL<Atomic>(dst, src, indexes);
     return {};
 }
 
-template <Coalesce Mode, ScatterAtomicOp Atomic, typename GlobalData, typename TileSrc, typename TileInd,
+template <ScatterAtomicOp Atomic, ScatterOOB Mode, typename GlobalData, typename TileSrc, typename TileInd,
           typename... WaitEvents>
 PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, WaitEvents &...events)
 {
     TSYNC(events...);
-    MSCATTER_IMPL<Mode, Atomic>(dst, src, indexes);
-    return {};
-}
-
-template <Coalesce Mode, ScatterAtomicOp Atomic, ScatterOOB Oob, typename GlobalData, typename TileSrc,
-          typename TileInd, typename... WaitEvents>
-PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, WaitEvents &...events)
-{
-    TSYNC(events...);
-    MSCATTER_IMPL<Mode, Atomic, Oob>(dst, src, indexes);
-    return {};
-}
-
-template <Coalesce Mode, ScatterAtomicOp Atomic, ScatterOOB Oob, ScatterConflict Conflict, typename GlobalData,
-          typename TileSrc, typename TileInd, typename... WaitEvents>
-PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, WaitEvents &...events)
-{
-    TSYNC(events...);
-    MSCATTER_IMPL<Mode, Atomic, Oob, Conflict>(dst, src, indexes);
+    MSCATTER_IMPL<Atomic, Mode>(dst, src, indexes);
     return {};
 }
 #endif
@@ -1857,8 +1830,7 @@ PTO_INST RecordEvent TFMOD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &s
     return {};
 }
 
-template <typename Pipe, typename TileProd, TileSplitAxis Split, std::enable_if_t<is_tile_data_v<TileProd>, int> = 0,
-          typename... WaitEvents>
+template <typename Pipe, typename TileProd, TileSplitAxis Split, typename... WaitEvents>
 PTO_INST RecordEvent TPUSH(Pipe &pipe, TileProd &tile, WaitEvents &...events)
 {
     TSYNC(events...);
@@ -1874,8 +1846,7 @@ PTO_INST RecordEvent TPUSH(TileData &tile, Pipe &pipe, WaitEvents &...events)
     return {};
 }
 
-template <typename Pipe, typename TileCons, TileSplitAxis Split, std::enable_if_t<is_tile_data_v<TileCons>, int> = 0,
-          typename... WaitEvents>
+template <typename Pipe, typename TileCons, TileSplitAxis Split, typename... WaitEvents>
 PTO_INST RecordEvent TPOP(Pipe &pipe, TileCons &tile, WaitEvents &...events)
 {
     TSYNC(events...);
@@ -1896,42 +1867,6 @@ PTO_INST RecordEvent TFREE(Pipe &pipe, WaitEvents &...events)
 {
     TSYNC(events...);
     TFREE_IMPL<Pipe, Split>(pipe);
-    return {};
-}
-
-template <typename Pipe, typename GlobalData, TileSplitAxis Split,
-          std::enable_if_t<is_global_data_v<GlobalData>, int> = 0, typename... WaitEvents>
-PTO_INST RecordEvent TALLOC(Pipe &pipe, GlobalData &gmTensor, WaitEvents &...events)
-{
-    TSYNC(events...);
-    TALLOC_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
-    return {};
-}
-
-template <typename Pipe, typename GlobalData, TileSplitAxis Split,
-          std::enable_if_t<is_global_data_v<GlobalData>, int> = 0, typename... WaitEvents>
-PTO_INST RecordEvent TPUSH(Pipe &pipe, GlobalData &gmTensor, WaitEvents &...events)
-{
-    TSYNC(events...);
-    TPUSH_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
-    return {};
-}
-
-template <typename Pipe, typename GlobalData, TileSplitAxis Split,
-          std::enable_if_t<is_global_data_v<GlobalData>, int> = 0, typename... WaitEvents>
-PTO_INST RecordEvent TPOP(Pipe &pipe, GlobalData &gmTensor, WaitEvents &...events)
-{
-    TSYNC(events...);
-    TPOP_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
-    return {};
-}
-
-template <typename Pipe, typename GlobalData, TileSplitAxis Split,
-          std::enable_if_t<is_global_data_v<GlobalData>, int> = 0, typename... WaitEvents>
-PTO_INST RecordEvent TFREE(Pipe &pipe, GlobalData &gmTensor, WaitEvents &...events)
-{
-    TSYNC(events...);
-    TFREE_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
     return {};
 }
 

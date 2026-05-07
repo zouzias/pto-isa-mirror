@@ -19,6 +19,8 @@ template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
 PTO_INTERNAL void TColReduceIdxCheck(unsigned srcValidRow, unsigned srcValidCol, unsigned dstValidRow,
                                      unsigned dstValidCol)
 {
+    static_assert(TileDataIn::ValidCol == 1 || TileDataIn::ValidCol == -1,
+                  "Fix: TCOLARGMAX Src ValidCol must be 1 or -1");
     static_assert(
         std::is_same_v<typename TileDataIn::DType, uint32_t> || std::is_same_v<typename TileDataIn::DType, uint16_t> ||
             std::is_same_v<typename TileDataIn::DType, half> || std::is_same_v<typename TileDataIn::DType, float>,
@@ -227,10 +229,10 @@ PTO_INTERNAL void TCOLARG_DISPATCH(TileDataOut &dst, TileDataIn &src, TileDataTm
     TColReduceIdxCheck<TileDataOut, TileDataIn, TileDataTmp>(srcValidRow, srcValidCol, dst.GetValidRow(),
                                                              dst.GetValidCol());
 
-    if (sizeof(typename TileDataIn::DType) == 2) {
+    if constexpr (sizeof(typename TileDataIn::DType) == 2) {
         TColReduceIdx16<TileDataOut, TileDataIn, TileDataTmp, IsArgMax>(dst.data(), src.data(), tmp.data(), srcValidRow,
                                                                         srcValidCol);
-    } else if (sizeof(typename TileDataIn::DType) == 4) {
+    } else if constexpr (sizeof(typename TileDataIn::DType) == 4) {
         TColReduceIdx32<TileDataOut, TileDataIn, TileDataTmp, IsArgMax>(dst.data(), src.data(), tmp.data(), srcValidRow,
                                                                         srcValidCol);
     }

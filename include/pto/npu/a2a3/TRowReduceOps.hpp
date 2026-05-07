@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define T_ROW_REDUCE_OPS_HPP
 #include <pto/common/utils.hpp>
 #include <pto/common/type.hpp>
+#include <pto/common/TRowReduceTraits.hpp>
 
 #ifndef B16_REPEAT_MAX
 #define B16_REPEAT_MAX 65535
@@ -224,36 +225,28 @@ PTO_INTERNAL void OneRepeatProc(__ubuf__ T *dst, __ubuf__ T *src, int validCol, 
 template <typename InstrOp, typename T, typename TileOut, typename TileIn>
 PTO_INTERNAL bool TryOptimizeFP32Reduce(__ubuf__ T *dst, __ubuf__ T *src, __ubuf__ T *tmp)
 {
-    if constexpr (!TileOut::isBoxedLayout && !TileOut::isRowMajor && TileOut::ValidCol == 1) {
-        if constexpr (std::is_same_v<T, float>) {
-            constexpr bool ShapeOf64x128 =
-                TileIn::Rows == 64 && TileIn::ValidRow == 64 && TileIn::Cols == 128 && TileIn::ValidCol == 128;
-            constexpr bool ShapeOf32x256 =
-                TileIn::Rows == 32 && TileIn::ValidRow == 32 && TileIn::Cols == 256 && TileIn::ValidCol == 256;
-            constexpr bool ShapeOf16x512 =
-                TileIn::Rows == 16 && TileIn::ValidRow == 16 && TileIn::Cols == 512 && TileIn::ValidCol == 512;
-            constexpr bool ShapeOf8x1024 =
-                TileIn::Rows == 8 && TileIn::ValidRow == 8 && TileIn::Cols == 1024 && TileIn::ValidCol == 1024;
-            if constexpr (ShapeOf64x128) {
-                InstrOp::template ReduceOptFP32_64x128<TileIn::Rows, TileIn::ValidRow, TileIn::Cols, TileIn::ValidCol>(
-                    dst, src, tmp);
-                return true;
-            } else if constexpr (ShapeOf32x256) {
-                InstrOp::template ReduceOptFP32_32x256<TileIn::Rows, TileIn::ValidRow, TileIn::Cols, TileIn::ValidCol>(
-                    dst, src, tmp);
-                return true;
-            } else if constexpr (ShapeOf16x512) {
-                InstrOp::template ReduceOptFP32_16x512<TileIn::Rows, TileIn::ValidRow, TileIn::Cols, TileIn::ValidCol>(
-                    dst, src, tmp);
-                return true;
-            } else if constexpr (ShapeOf8x1024) {
-                InstrOp::template ReduceOptFP32_8x1024<TileIn::Rows, TileIn::ValidRow, TileIn::Cols, TileIn::ValidCol>(
-                    dst, src, tmp);
-                return true;
-            }
+    using Traits = TRowReduceFP32OptTraits<T, TileOut, TileIn>;
+    if constexpr (Traits::CanOptimize) {
+        if constexpr (Traits::ShapeOf64x128) {
+            InstrOp::template ReduceOptFP32_64x128<TileIn::Rows, TileIn::ValidRow, TileIn::Cols, TileIn::ValidCol>(
+                dst, src, tmp);
+            return true;
+        } else if constexpr (ShapeOf32x256) {
+            InstrOp::template ReduceOptFP32_32x256<TileIn::Rows, TileIn::ValidRow, TileIn::Cols, TileIn::ValidCol>(
+                dst, src, tmp);
+            return true;
+        } else if constexpr (ShapeOf16x512) {
+            InstrOp::template ReduceOptFP32_16x512<TileIn::Rows, TileIn::ValidRow, TileIn::Cols, TileIn::ValidCol>(
+                dst, src, tmp);
+            return true;
+        } else if constexpr (ShapeOf8x1024) {
+            InstrOp::template ReduceOptFP32_8x1024<TileIn::Rows, TileIn::ValidRow, TileIn::Cols, TileIn::ValidCol>(
+                dst, src, tmp);
+            return true;
         }
     }
-    return false;
+}
+return false;
 }
 
 template <typename InstrOp, typename T, typename TileDataOut, typename TileDataIn, typename TileDataTmp>

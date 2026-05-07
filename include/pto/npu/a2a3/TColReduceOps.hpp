@@ -12,6 +12,7 @@
 #define T_COL_REDUCE_OPS_HPP
 
 #include <pto/common/utils.hpp>
+#include <pto/common/TColReduceLayout.hpp>
 #include <pto/common/type.hpp>
 
 namespace pto {
@@ -50,7 +51,8 @@ template <typename InstrOp, typename T, typename TileDataOut, typename TileDataI
 PTO_INTERNAL void ColReduceInstr(__ubuf__ T *dst, __ubuf__ T *src, int validRow, int validCol)
 {
     using ReduceOp = TColReduceOp<T, InstrOp>;
-    constexpr int DTypeSize = sizeof(T);
+    using CRLayout = ColReduceLayout<T, srcstride>;
+    constexpr int DTypeSize = CRLayout::DTypeSize;
     int lenBurst = (validCol * DTypeSize + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
 
     pto_copy_ubuf_to_ubuf(dst, src, 1, lenBurst, 0, 0);
@@ -59,10 +61,8 @@ PTO_INTERNAL void ColReduceInstr(__ubuf__ T *dst, __ubuf__ T *src, int validRow,
         return;
     }
 
-    constexpr int blockSizeElem = BLOCK_BYTE_SIZE / DTypeSize;
-    constexpr int numBlockPerLine = (srcstride * DTypeSize + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
-    constexpr int dupSrcStride = numBlockPerLine * blockSizeElem;
-    constexpr int elementsPerRepeat = REPEAT_BYTE / DTypeSize;
+    constexpr int dupSrcStride = CRLayout::dupSrcStride;
+    constexpr int elementsPerRepeat = CRLayout::elementsPerRepeat;
     int numRepeatPerLine = validCol / elementsPerRepeat;
     int numRemainPerLine = validCol % elementsPerRepeat;
     int elementsPerLine = numRepeatPerLine * elementsPerRepeat;

@@ -21,6 +21,8 @@ template <typename TileDataOut, typename TileDataIn>
 PTO_INTERNAL void TColReduceIdxCheck(unsigned srcValidRow, unsigned srcValidCol, unsigned dstValidRow,
                                      unsigned dstValidCol)
 {
+    static_assert(TileDataIn::ValidCol == 1 || TileDataIn::ValidCol == -1,
+                  "Fix: TCOLREDUCEIDX Src ValidCol must be 1 or -1");
     static_assert((sizeof(typename TileDataIn::DType) == 1) || (sizeof(typename TileDataIn::DType) == 2) ||
                       (sizeof(typename TileDataIn::DType) == 4),
                   "Fix: TCOLREDUCEIDX data type must be b8/b16/b32");
@@ -34,8 +36,8 @@ PTO_INTERNAL void TColReduceIdxCheck(unsigned srcValidRow, unsigned srcValidCol,
         "Fix: TCOLREDUCEIDX output data type must be s32 or u32.");
     PTO_ASSERT(srcValidRow != 0 && srcValidCol != 0,
                "Fix: TCOLREDUCEIDX input shape is invalid, validCol or validRow is 0.");
-    PTO_ASSERT(dstValidRow != 1, "Fix: TCOLREDUCEIDX output validRow must be 1");
-    PTO_ASSERT(srcValidCol != dstValidCol,
+    PTO_ASSERT(dstValidRow == 1, "Fix: TCOLREDUCEIDX output validRow must be 1");
+    PTO_ASSERT(srcValidCol == dstValidCol,
                "Fix: TCOLREDUCEIDX input validCol must be consistent with the output validCol");
 }
 template <typename TileDataOut, typename TileDataIn, bool IsArgMax>

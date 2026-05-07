@@ -7,26 +7,20 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
+#ifndef TADD_HPP
+#define TADD_HPP
 
-#include <gtest/gtest.h>
+#include "pto/costmodel/pto_isa_costmodel.hpp"
 
-#include <pto/costmodel/lightweight_costmodel.hpp>
+namespace pto {
 
-#include "cost_check.hpp"
-
-using namespace pto;
-
-TEST(TAddsFit, float_32x64)
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
+PTO_INTERNAL void TADD_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
 {
-    constexpr double kExpectedCycles = 57.0;
-
-    ::pto::mocker::lightweight::CostModelInput input{
-        .op = ::pto::mocker::lightweight::PtoOpcode::TADDS,
-        .dtype = ::pto::mocker::lightweight::DType::Float,
-        .rows = 32,
-        .cols = 64,
-    };
-    ::pto::mocker::lightweight::CostModelResult result{};
-    ASSERT_TRUE(::pto::mocker::lightweight::EstimateCycles(input, result));
-    EXPECT_DOUBLE_EQ(result.cycles, kExpectedCycles);
+    pto::CostModel::GetInstance().BinOpPredictCycle<AddOp, TileDataDst, TileDataSrc0, TileDataSrc1>("TADD", dst, src0,
+                                                                                                    src1);
 }
+
+} // namespace pto
+
+#endif
