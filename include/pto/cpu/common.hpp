@@ -8,21 +8,14 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef COMMON_HPP
-#define COMMON_HPP
-
-#include <pto/common/type.hpp>
+#ifndef TTILE_ASSIGN
+#define TTILE_ASSIGN
 
 namespace pto {
-
-template <typename T>
-inline T ReLU(T val)
+template <typename T, typename AddrType>
+PTO_INTERNAL void TASSIGN_IMPL(T &obj, AddrType addr)
 {
-    if (val < 0)
-        return 0;
-    return val;
+    return;
 }
-
 } // namespace pto
-
 #endif
