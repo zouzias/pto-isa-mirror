@@ -71,44 +71,27 @@ HcclResult PtoGatedReduceScatterMesh1D::Algorithm()
     TracePrintf("gated_rs_mesh1d", rankId_, "Algorithm() entry");
 
     // -------------------------------------------------------------------------
-    // Step 0: pin this kernel onto the physically-enabled CCU die.
+    // Step 0: dieId pinning.
     //
-    // hcomm `CcuKernel::Init()` chains `GetDieIdByChannels(channels_, dieId)`
-    // first — when `channels_` is empty (which is true for the standalone
-    // pto-isa pilot path; we don't go through hccl operator's
-    // `CalcChannelRequestMesh1D`) it falls back to `dieId=0`. Then `Init()`
-    // calls `SetDieId(0)` and finally `Algorithm()`.
+    // §3.13.K — when `channels_` is non-empty (acquired via
+    // `HcclChannelAcquire(comm, COMM_ENGINE_CCU, ...)` in the ST main.cc
+    // step 4.5 BEFORE `HcclCcuKernelRegister`), hcomm's `CcuKernel::Init()`
+    // resolves the kernel's dieId from `channels_[0]` via
+    // `GetDieIdByChannel` — automatically pinning to the physically-enabled
+    // die without a manual `SetDieId(1)` override.
     //
-    // But on this NPU only `dieId=1` is physically enabled
-    // (`CcuGetDieEnableInfo(devLogicId, 0, ...)` returns enabled=false,
-    // `dieId=1` returns true), so `CcuKernelMgr::Init` only calls
-    // `InstantiationTranslator(1)` and the CcuResPack provisions all
-    // resources under `dieId=1`. With `dieId=0` baked into the kernel by
-    // `Init()`, every `CreateCompletedEvent()` / `CreateVariable()` would go
-    // into `res_.completedEvent[0]` / `res_.variable[0]`, and
-    // `GetResourceRequest()` would emit `req.ckeReq[0] = 3, xnReq[0] = 6,
-    // missionReq[0] = 1`. These fail the `CheckResIfAvailable` step inside
-    // `CcuKernelMgr::AllocRes` because `leftRes.ckeReq[0]==0` (all resources
-    // are on `dieId=1`), surfacing as `HCCL_E_UNAVAIL=7` from
-    // `HcclCcuKernelRegister`.
+    // §3.13.H fallback — if `channels_` is empty (standalone caller skipped
+    // the channel acquire step, or no peers in the comm), Init()'s
+    // `GetDieIdByChannels(empty)` falls back to `dieId=0`, which mismatches
+    // the physically-enabled die (typically 1) and leads to AllocRes
+    // returning HCCL_E_UNAVAIL=7. Override here BEFORE any
+    // CreateCompletedEvent/CreateVariable.
     //
-    // The fix: re-pin the kernel onto the physically-enabled die *before*
-    // any `CreateCompletedEvent()` / `CreateVariable()` calls. `SetDieId()`
-    // is `CcuRepContext::SetDieId(uint32_t)` (public), inherited via
-    // `CcuKernel : public CcuRepContext`. Subsequent `GetDieId()` reads
-    // (used by `CreateResAssist` to choose the per-die queue) will now
-    // return our forced value.
-    //
-    // Override hierarchy:
+    // Override hierarchy (only fires when channels_ is empty):
     //   1. `HCCL_PTO_GATE_DIE_ID` env (decimal, e.g. "1") for runtime tuning.
-    //   2. Hardcoded default `1` — matches every Atlas A5 / 800 chassis
-    //      we've seen in the lab where `dieId=1` is the user-facing die.
-    //
-    // TODO(@wenquan): once hcomm exposes a public
-    // `CcuGetDieEnableInfo`-equivalent API, query the enabled die instead of
-    // env+default. See plan §3.13.H for the long-term decision tree.
+    //   2. Hardcoded default `1` — Atlas A5 / 800 chassis convention.
     // -------------------------------------------------------------------------
-    {
+    if (channels_.empty()) {
         uint32_t pinDieId = 1U;
         const char *envDieId = std::getenv("HCCL_PTO_GATE_DIE_ID");
         if (envDieId != nullptr && *envDieId != '\0') {
@@ -120,35 +103,86 @@ HcclResult PtoGatedReduceScatterMesh1D::Algorithm()
         }
         SetDieId(pinDieId);
         std::fprintf(stderr,
-            "[PTO_GATE/kernel/gated_rs_mesh1d] rank=%u — SetDieId(%u) (override: "
-            "HCCL_PTO_GATE_DIE_ID=%s)\n",
+            "[PTO_GATE/kernel/gated_rs_mesh1d] rank=%u — channels_ EMPTY, "
+            "fallback SetDieId(%u) (override: HCCL_PTO_GATE_DIE_ID=%s). "
+            "WARNING: empty channels_ also means hcomm ResPack will reserve "
+            "spare-slot CKE registers (driver shadow, not AIV-writable). "
+            "AIV trigger WILL trap with RT 507035. See plan §3.13.K.\n",
             rankId_, pinDieId, envDieId == nullptr ? "<unset>" : envDieId);
-        std::fflush(stderr);
+    } else {
+        std::fprintf(stderr,
+            "[PTO_GATE/kernel/gated_rs_mesh1d] rank=%u — channels_size=%zu, "
+            "die auto-pinned by hcomm Init()::GetDieIdByChannel(channels_[0])\n",
+            rankId_, channels_.size());
     }
+    std::fflush(stderr);
 
     // -------------------------------------------------------------------------
-    // Step 1: allocate CCU IR resources.
+    // Step 1: per-rank Variable build (mirrors hccl mesh1d:48-69).
     //
-    // `CreateVariable()` returns an unbound CCU IR variable that microcode
-    // sees as a uint64 slot — `Load()` calls below bind these slots to the
-    // GeneArgs() return positions. Order matters; GeneArgs() must return
-    // values in the same order Load() is called here.
+    // For local rank: plain `CreateVariable()`. For remote ranks: bind to
+    // channel slots via `CreateVariable(channels_[idx], xnId, &var)` so the
+    // IR references channel-acquired XN slots.
+    //
+    // §3.13.K — referencing channels_ in the IR is what makes hcomm ResPack
+    // reserve real AIV-writable CKE register pool for `gateEvent_`. Without
+    // this (placeholder identity-copy IR + no channel references), ResPack
+    // gives `gateEvent_.Id()` a spare-slot ckeId whose physical register
+    // is in driver shadow → AIV write traps.
+    //
+    // Convention matches hccl mesh1d (`ccu_kernel_reduce_scatter_mesh1d.cc:
+    // 19-22`):
+    //   INPUT_XN_ID  = 0  // input buffer slot on each peer channel
+    //   TOKEN_XN_ID  = 1  // memory token slot
+    //   POST_SYNC_ID = 2  // post-sync notify slot
+    //   CKE_IDX_0    = 0
     // -------------------------------------------------------------------------
-    inputVar_  = CreateVariable();
+    constexpr uint32_t INPUT_XN_ID  = 0;
+    constexpr uint32_t TOKEN_XN_ID  = 1;
+    constexpr uint32_t POST_SYNC_ID = 2;
+    constexpr uint32_t CKE_IDX_0    = 0;
+
+    std::vector<CcuRep::Variable> inputs;
+    std::vector<CcuRep::Variable> tokens;
+    inputs.reserve(rankSize_);
+    tokens.reserve(rankSize_);
+
+    uint32_t channelIdx = 0;
+    for (uint32_t peerId = 0; peerId < rankSize_; ++peerId) {
+        if (peerId == rankId_) {
+            inputs.push_back(CreateVariable());
+            tokens.push_back(CreateVariable());
+        } else if (channelIdx < channels_.size()) {
+            CcuRep::Variable inputVar;
+            CcuRep::Variable tokenVar;
+            (void)CreateVariable(channels_[channelIdx], INPUT_XN_ID, &inputVar);
+            (void)CreateVariable(channels_[channelIdx], TOKEN_XN_ID, &tokenVar);
+            inputs.push_back(inputVar);
+            tokens.push_back(tokenVar);
+            ++channelIdx;
+        } else {
+            // Insufficient channels (degenerate fallback, e.g. user passed
+            // channels_.size() < rankSize_-1). Push local Variables — won't
+            // help with peer comm but keeps the loop well-formed.
+            inputs.push_back(CreateVariable());
+            tokens.push_back(CreateVariable());
+        }
+    }
+
+    inputVar_  = inputs[rankId_];
     outputVar_ = CreateVariable();
-    tokenVar_  = CreateVariable();
+    tokenVar_  = tokens[rankId_];
     lengthVar_ = CreateVariable();
 
     // -------------------------------------------------------------------------
-    // Step 2: arm the gate event.
+    // Step 2: arm the gate / done / per-step events.
     //
-    // `gateEvent_` is the CompletedEvent the kernel will WaitEvent on. Its
-    // `(dieId, ckeId)` are resolved by hcomm's `Translate()` step inside
-    // `HcclCcuKernelRegisterFinish` and become readable on this object after
-    // that returns. `SetMask(gateMask_)` records which signal bits of the
-    // CKE register the kernel cares about — the AIV trigger writes these
-    // same bits, and the kernel resumes when the AND of (event.mask &
-    // bits-set-on-CKE) matches the mask.
+    // `gateEvent_.Id()` (= ckeId) is resolved by hcomm `Translate()` inside
+    // `HcclCcuKernelRegisterFinish`. With non-empty channels_ above, the
+    // assigned ckeId comes from the channel-acquired CKE register pool —
+    // physically reachable from AIV core via MMIO. With empty channels_,
+    // the assigned ckeId comes from the spare-slot pool (driver shadow,
+    // unreachable from AIV) and the trigger will trap.
     // -------------------------------------------------------------------------
     gateEvent_ = CreateCompletedEvent();
     gateEvent_.SetMask(gateMask_);
@@ -156,8 +190,6 @@ HcclResult PtoGatedReduceScatterMesh1D::Algorithm()
     doneEvent_ = CreateCompletedEvent();
     doneEvent_.SetMask(doneMask_);
 
-    // Per-step event for the placeholder LocalCopyNb. Independent from
-    // gate/done so reordering across the gate boundary is well-defined.
     copyEvent_ = CreateCompletedEvent();
     copyEvent_.SetMask(1u << 0);
 
@@ -166,25 +198,17 @@ HcclResult PtoGatedReduceScatterMesh1D::Algorithm()
     // -------------------------------------------------------------------------
     // Step 3: bind runtime args.
     //
-    // Each `Load()` reserves one slot in the GeneArgs() vector and tells the
-    // microcode "this Variable's value comes from the Nth uint64 the launcher
-    // passes in via taskArgs". The order [input, output, token, length] is
-    // the contract `GeneArgs()` must follow exactly.
+    // 4-slot order: [0] inputAddr, [1] outputAddr, [2] token, [3] length.
+    // GeneArgs() must return values in this exact order.
     // -------------------------------------------------------------------------
-    Load(inputVar_);   // [0] inputAddr
-    Load(outputVar_);  // [1] outputAddr
-    Load(tokenVar_);   // [2] token
-    Load(lengthVar_);  // [3] length
+    Load(inputVar_);
+    Load(outputVar_);
+    Load(tokenVar_);
+    Load(lengthVar_);
 
     // -------------------------------------------------------------------------
-    // Step 4: stall on the gate.
-    //
-    // After this point the CCU stream is parked at WaitEvent(gateEvent_)
-    // until something writes the right mask bits to (gateEvent_.dieId,
-    // gateEvent_.ckeId, gateEvent_.mask). For the pilot, that "something"
-    // is `pto::aiv::launch_treduce` issued from the host on a parallel AIV
-    // stream, which executes an MMIO store to the CKE register. See the
-    // ST main.cc for the full release sequence.
+    // Step 4: stall on the gate. CCU stream parks here until AIV trigger
+    // fires the gateEvent_'s CKE.
     // -------------------------------------------------------------------------
     TracePrintf("gated_rs_mesh1d", rankId_, "about to WaitEvent(gateEvent_)");
     WaitEvent(gateEvent_);
@@ -192,23 +216,40 @@ HcclResult PtoGatedReduceScatterMesh1D::Algorithm()
                 "past WaitEvent(gateEvent_) — gate released");
 
     // -------------------------------------------------------------------------
-    // Step 5: placeholder identity copy (input → output).
+    // Step 5: pre-reduce channel-bound sync IR (mirrors hccl
+    // mesh1d:100-108).
     //
-    // For nranks=1 a reduce-scatter degenerates to identity copy, which is
-    // what hccl mesh1d emits when subCommRanks_.size()==1 too. For nranks>1
-    // this is a stand-in — we skip the cross-die GroupReduce path because it
-    // depends on hccl-internal `CcuKernelAlgBase` (~1500 lines of utility
-    // code outside hcomm pkg_inc). The pilot's primary deliverable is the
-    // gate path, not the reduce semantics — see `pto/ccu/pto_gated_kernel.hpp`
-    // for the full rationale.
-    //
-    // The `LocalCopyNb(LocalAddr, LocalAddr, ...)` overload comes straight
-    // from hcomm pkg_inc (`ccu_kernel.h:152`), and its semantics on the CCU
-    // engine are "scheduled async copy between two local addresses, signal
-    // event when done". We `WaitEvent(copyEvent_)` immediately after to keep
-    // the kernel sequential and easy to reason about.
+    // §3.13.K — even without a real GroupReduce data path (phase 3),
+    // referencing channels_ in NotifyRecord/Wait is what makes hcomm
+    // ResPack provision the AIV-writable CKE register pool. Skipping these
+    // would let ResPack treat the kernel as channel-less and pick spare-
+    // slot registers for gateEvent_.
     // -------------------------------------------------------------------------
-    CcuRep::LocalAddr inputAddr  = CreateLocalAddr();
+    if (!channels_.empty()) {
+        for (auto ch : channels_) {
+            (void)NotifyRecord(ch, CKE_IDX_0, INPUT_XN_ID, inputs[rankId_],
+                               1u << INPUT_XN_ID);
+            (void)NotifyRecord(ch, CKE_IDX_0, TOKEN_XN_ID, tokens[rankId_],
+                               1u << TOKEN_XN_ID);
+        }
+        const uint32_t allBit = (1u << INPUT_XN_ID) | (1u << TOKEN_XN_ID);
+        for (auto ch : channels_) {
+            (void)NotifyWait(ch, CKE_IDX_0, allBit);
+        }
+        TracePrintf("gated_rs_mesh1d", rankId_,
+                    "pre-reduce sync IR emitted (NotifyRecord/Wait per channel)");
+    }
+
+    // -------------------------------------------------------------------------
+    // Step 6: placeholder identity copy (input → output, rank-local).
+    //
+    // For nranks=1 this is a correct identity reduce-scatter (degenerate
+    // case). For nranks>1 we skip the cross-die GroupReduce data path —
+    // that requires hccl-internal `CcuKernelAlgBase` (~1500 lines of
+    // utility code outside hcomm pkg_inc). The pilot's deliverable is the
+    // gate path; full reduce semantics is phase 3 (see plan §3.13.K).
+    // -------------------------------------------------------------------------
+    CcuRep::LocalAddr inputAddr = CreateLocalAddr();
     inputAddr.addr  = inputVar_;
     inputAddr.token = tokenVar_;
 
@@ -220,11 +261,23 @@ HcclResult PtoGatedReduceScatterMesh1D::Algorithm()
     WaitEvent(copyEvent_);
 
     // -------------------------------------------------------------------------
-    // Step 6: signal completion.
-    //
-    // Currently no consumer waits on doneEvent_ — the ST relies on
-    // `aclrtSynchronizeStream(stream)` for completion ordering. Kept for
-    // future async consumers and for parity with hccl mesh1d's gated path.
+    // Step 7: post-reduce sync (mirrors hccl mesh1d:135-140). Same purpose
+    // as step 5 — keep channels_ referenced in the post-section IR too.
+    // -------------------------------------------------------------------------
+    if (!channels_.empty()) {
+        for (auto ch : channels_) {
+            (void)NotifyRecord(ch, CKE_IDX_0, 1u << POST_SYNC_ID);
+        }
+        for (auto ch : channels_) {
+            (void)NotifyWait(ch, CKE_IDX_0, 1u << POST_SYNC_ID);
+        }
+        TracePrintf("gated_rs_mesh1d", rankId_, "post-sync IR emitted");
+    }
+
+    // -------------------------------------------------------------------------
+    // Step 8: signal completion via doneEvent_. Currently no consumer waits
+    // on it — ST relies on aclrtSynchronizeStream(stream). Kept for parity
+    // with hccl mesh1d's gated path and for future async consumers.
     // -------------------------------------------------------------------------
     RecordEvent(doneEvent_);
     TracePrintf("gated_rs_mesh1d", rankId_,

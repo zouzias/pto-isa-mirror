@@ -106,6 +106,7 @@
 #include "hccl/hccl.h"
 #include "hccl/hccl_types.h"
 #include "hccl/hccl_res.h"
+#include "hccl/hccl_rank_graph.h"
 #include "hcomm/ccu/hccl_ccu_res.h"
 #include "hcomm/ccu/ccu_assist_pub.h"
 
@@ -188,6 +189,84 @@ bool IsLaunchedByMpi()
            std::getenv("PMI_RANK")             != nullptr ||
            std::getenv("MV2_COMM_WORLD_RANK")  != nullptr ||
            std::getenv("SLURM_PROCID")         != nullptr;
+}
+
+// SetupChannelsForCcu — user-mode channel acquire mirroring hccl's internal
+// `op_common.cc::HcclGetChannelForCcu` (the step the framework runs between
+// `CalcChannelRequestMesh1D` and `HcclCcuKernelRegister`). Without this step,
+// `kernelArg->channels` is empty, hcomm `ResPack` reserves spare-slot CKE
+// registers (driver shadow, not AIV-writable), and the AIV-side store traps
+// with RT 507035 (vector core exception). See plan §3.13.K for the full
+// invariant chain.
+//
+// Mesh1D topology — N-1 channels per rank, one to each peer. Pick the first
+// `COMM_PROTOCOL_UBC_CTP` link from the `HcclRankGraphGetLinks` returned list
+// (mirrors hccl `examples/04_custom_ops_p2p/op_host/utils.cc:60-86` and
+// `examples/05_custom_ops_allgather/op_host/all_gather.cc:47-92` user-mode
+// templates). `notifyNum=3` matches mesh1d's `INPUT_XN_ID(0) + TOKEN_XN_ID(1)
+// + POST_SYNC_ID(2)` slot count.
+bool SetupChannelsForCcu(HcclComm comm, int rankId, int nRanks,
+                         std::vector<ChannelHandle> &channels)
+{
+    std::vector<HcclChannelDesc> requests;
+    for (int peerRank = 0; peerRank < nRanks; ++peerRank) {
+        if (peerRank == rankId) continue;
+        uint32_t netLayer = 0;
+        uint32_t listSize = 0;
+        CommLink *linkList = nullptr;
+        HcclResult rc = HcclRankGraphGetLinks(
+            comm, netLayer,
+            static_cast<uint32_t>(rankId),
+            static_cast<uint32_t>(peerRank),
+            &linkList, &listSize);
+        if (rc != HCCL_SUCCESS) {
+            std::fprintf(stderr,
+                "[GATED_RS_ST] rank=%d HcclRankGraphGetLinks(peer=%d) rc=%d\n",
+                rankId, peerRank, static_cast<int>(rc));
+            return false;
+        }
+        bool found = false;
+        for (uint32_t idx = 0; idx < listSize; ++idx) {
+            const CommLink &link = linkList[idx];
+            if (link.linkAttr.linkProtocol != COMM_PROTOCOL_UBC_CTP) continue;
+            HcclChannelDesc desc;
+            HcclChannelDescInit(&desc, 1);
+            desc.remoteRank      = static_cast<uint32_t>(peerRank);
+            desc.notifyNum       = 3;  // INPUT_XN(0) + TOKEN_XN(1) + POST_SYNC(2)
+            desc.channelProtocol = link.linkAttr.linkProtocol;
+            desc.localEndpoint   = link.srcEndpointDesc;
+            desc.remoteEndpoint  = link.dstEndpointDesc;
+            requests.push_back(desc);
+            found = true;
+            break;
+        }
+        if (!found) {
+            std::fprintf(stderr,
+                "[GATED_RS_ST] rank=%d FAIL: no COMM_PROTOCOL_UBC_CTP link to "
+                "peer=%d (listSize=%u)\n",
+                rankId, peerRank, listSize);
+            return false;
+        }
+    }
+    channels.resize(requests.size());
+    if (!requests.empty()) {
+        HcclResult rc = HcclChannelAcquire(
+            comm, COMM_ENGINE_CCU,
+            requests.data(),
+            static_cast<uint32_t>(requests.size()),
+            channels.data());
+        if (rc != HCCL_SUCCESS) {
+            std::fprintf(stderr,
+                "[GATED_RS_ST] rank=%d HcclChannelAcquire(CCU, n=%zu) rc=%d\n",
+                rankId, requests.size(), static_cast<int>(rc));
+            return false;
+        }
+    }
+    std::fprintf(stderr,
+        "[GATED_RS_ST] rank=%d SetupChannelsForCcu — acquired %zu peer "
+        "channel(s)\n",
+        rankId, channels.size());
+    return true;
 }
 
 bool RunOneRank(int rankId, int nRanks, int firstDeviceId,
@@ -332,6 +411,25 @@ bool RunOneRank(int rankId, int nRanks, int firstDeviceId,
         /*gateMask=*/ 1u << 0,
         /*doneMask=*/ 1u << 0,
     };
+
+    // -------------------------------------------------------------------------
+    // 4.5. Acquire peer CCU channels — REQUIRED to make hcomm ResPack reserve
+    //      AIV-writable CKE registers (§3.13.K).
+    //
+    // hccl operator path runs `CalcChannelRequestMesh1D` →
+    // `HcclGetChannelForCcu` (op_common.cc:1154) → assigns channelHandles to
+    // `kernelArg->channels` BEFORE register. We mirror that user-mode here.
+    //
+    // Without this step: `kernelArg->channels` stays empty, hcomm picks
+    // spare-slot CKE registers for `gateEvent_ = CreateCompletedEvent()`
+    // (driver shadow, not AIV-writable), and the AIV `*(uint64*)target = ...`
+    // store traps with RT 507035. See plan §3.13.K for the disassembly chain.
+    // -------------------------------------------------------------------------
+    std::vector<ChannelHandle> ccuChannels;
+    if (!SetupChannelsForCcu(comm, rankId, nRanks, ccuChannels)) {
+        return false;
+    }
+    karg.channels = ccuChannels;  // base hcomm::CcuKernelArg::channels field
 
     hcomm::KernelCreator creator = pto::ccu::MakeGatedKernelCreator();
     CcuKernelHandle      kHandle = 0;
