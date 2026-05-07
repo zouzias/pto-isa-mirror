@@ -233,6 +233,16 @@ endif()
 #                                HcclThreadAcquire, GetTokenInfo,
 #                                QueryCcuBaseInfo (transitive: libhccp.so)
 #   - ascendcl                 : ACL runtime (aclrtMalloc, aclInit, ...)
+#   - runtime                  : libruntime.so — direct runtime-layer device API
+#                                (rtSetDevice). REQUIRED in addition to ascendcl
+#                                because hcomm's CCU subsystem caches device id
+#                                from the runtime layer, which `aclrtSetDevice`
+#                                does NOT synchronise. Without rtSetDevice on
+#                                rank 0 before HcclCommInitRootInfo, the CCU
+#                                ResPack falls back to backup-device path
+#                                (devLogicId=65) and any subsequent
+#                                HcclCcuKernelRegister returns HCCL_E_UNAVAIL=7.
+#                                See `main.cc` header / plan §3.13.G.
 #   - dl, pthread              : transitive (registry mutex, pto::host probes)
 target_link_libraries(gated_rs_st PRIVATE
     pto_gated_reduce_scatter
@@ -241,6 +251,7 @@ target_link_libraries(gated_rs_st PRIVATE
     hccl
     hcomm
     ascendcl
+    runtime
     dl
     pthread
 )
