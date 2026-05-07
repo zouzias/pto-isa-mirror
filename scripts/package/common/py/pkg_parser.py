@@ -1063,7 +1063,7 @@ def read_version_info(delivery_dir: str, package_attr: PackageAttr) -> Tuple[str
     m = re.match(r'[.a-zA-Z0-9]+$', version) or re.match(r'[-a-zA-Z.0-9]+$', version)
     if not m:
         raise VersionFormatNotMatch()
-    
+
     return version, version_dir
 
 

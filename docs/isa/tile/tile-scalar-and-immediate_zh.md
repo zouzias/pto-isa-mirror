@@ -1,0 +1,104 @@
+# Tile-标量与立即数指令集
+
+
+Tile-标量类操作把一个 tile 与一个标量或立即数结合。标量在语义上会广播到 tile 的有效区域。多数操作产生数值 tile，比较类变体产生谓词或可作为选择条件使用的结果。
+
+## 指令一览
+
+
+| 操作 | 说明 |
+| --- | --- |
+| `pto.tadds` / `tsubs` / `tmuls` / `tpows` / `tdivs` | 与标量做逐元素算术 |
+| `pto.taxpy` | 用标量系数做 AXPY 风格融合 tile 更新 |
+| `pto.tfmods` / `trems` | 与标量做模 / 余数 |
+| `pto.tmins` / `tmaxs` | 与标量做逐元素 min / max |
+| `pto.tands` / `tors` / `txors` | 与标量做逐元素按位逻辑 |
+| `pto.tshls` / `tshrs` | 用标量做逐元素位移 |
+| `pto.tlrelu` | 标量斜率的 Leaky ReLU |
+| `pto.taddsc` / `tsubsc` | 结合标量和第二个 tile 的融合逐元素运算 |
+| `pto.texpands` | 用标量填充整个目标 tile |
+| `pto.tcmps` | tile 与标量比较 |
+| `pto.tsels` | 用 mask / 标量参与逐元素选择 |
+
+## 机制
+
+
+对目标 tile 的 valid region 中每个元素 `(r, c)`：
+
+$$ \mathrm{dst}_{r,c} = f(\mathrm{src}_{r,c}, \mathrm{scalar}) $$
+
+这里的 `scalar` 可以是：
+
+- 标量寄存器值
+- 编译期立即数
+- 运行时传入的普通标量
+
+PTO 不允许在 tile-标量操作里依赖隐式类型提升。标量如何广播、比较结果如何编码、饱和与否怎样处理，都属于具体操作自己的架构语义。
+
+`TAXPY` 属于本家族，因为它的核心合同是使用标量系数更新 tile payload：
+
+$$ \mathrm{dst}_{r,c} = \mathrm{src0}_{r,c} \times \mathrm{scalar} + \mathrm{src1}_{r,c} $$
+
+## 目标 Profile 支持
+
+
+| 元素类型 | CPU | A2/A3 | A5 |
+| --- | :---: | :---: | :---: |
+| `f32 / f16 / bf16` | Yes | Yes | Yes |
+| `i8/u8, i16/u16, i32/u32, i64/u64` | Yes | Yes | Yes |
+
+实际每条指令支持的子集，以各自 per-op 页面为准。
+
+## 约束
+
+
+!!! warning "约束"
+    - 标量类型必须与 tile 元素类型兼容。
+    - `TSHLS` / `TSHRS` 将标量解释为无符号 shift count。
+    - `TCMPS` 的结果不应被当成普通数值 tile 使用，除非对应 target/profile 明确约定其编码。
+    - 需要保持 valid region 语义的操作，迭代域都以 `dst` 的 valid row / col 为准。
+
+## 不允许的情形
+
+
+!!! danger "不允许的情形"
+    - 使用与 tile 元素类型不兼容的标量。
+    - 依赖隐式类型提升。
+    - 对位移类操作传入超出元素位宽的移位量。
+    - 把不同 target profile 的实现细节当成跨目标保证。
+
+## 相关页面
+
+
+- [Tile 指令族](../instruction-families/tile-families_zh.md)
+- [Tile 指令面](../instruction-families/tile-families_zh.md)
+
+# Tile-Scalar And Immediate Instruction Set
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Operations
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+## Scalar Operand
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Saturating Variants
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Type Support by Target Profile
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Cases That Are Not Allowed
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## See Also
+本节给出上下游指令与相关章节链接。

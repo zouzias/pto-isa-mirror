@@ -7,8 +7,10 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#ifndef TCOLREDUCEIDX_CPU_HPP
-#define TCOLREDUCEIDX_CPU_HPP
+#ifndef TREDUCEIDX_CPU_HPP
+#define TREDUCEIDX_CPU_HPP
+
+#include <type_traits>
 
 #include <pto/common/pto_tile.hpp>
 #include "pto/cpu/tile_offsets.hpp"
@@ -24,7 +26,7 @@ template <typename DType, ElementCmp op>
 struct ElementCmpCal {
     static bool apply(const DType &a, const DType &b)
     {
-        static_assert(false, "Unsupport element cmp.");
+        static_assert(op != op, "Unsupported element comparison.");
         return false;
     }
 };
@@ -50,12 +52,12 @@ PTO_INTERNAL void CheckArgTiles()
 {
     using T = typename TileSrc::DType;
     using TIdx = typename TileDst::DType;
-    static_assert(std::is_same_v<T, float> || std::is_same_v<T, half>,
-                  "TColArgMin(Max) TRowArgMin(Max): The data type of src must be one of: `half`, `float`");
+    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, half>,
+                  "TColArgMin(Max) TRowArgMin(Max): The data type of src must be arithmetic.");
     static_assert(std::is_same_v<TIdx, int32_t> || std::is_same_v<TIdx, uint32_t>,
                   "TColArgMin(Max) TRowArgMin(Max): The data type of dstIdx must be one of: `int32_t`, `uint32_t`");
 
-    static_assert(TileDst::Loc == TileType::Vec && TileDst::Loc == TileType::Vec,
+    static_assert(TileDst::Loc == TileType::Vec && TileSrc::Loc == TileType::Vec,
                   "TColArgMin(Max) TRowArgMin(Max): TileType of src and dst tiles must be `TileType::Vec`.");
 }
 

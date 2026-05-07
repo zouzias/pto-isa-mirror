@@ -81,4 +81,3 @@ target_include_directories(${_OPPLUGIN_PYBIND_NAME} PRIVATE
   ${TORCH_PATH}/include
   ${TORCH_PATH}/include/torch/csrc/api/include
 )
-

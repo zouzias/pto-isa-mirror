@@ -1,0 +1,41 @@
+# 引言
+
+
+本章回答三个根本问题：PTO 是什么、为何存在、以及 PTO ISA 的当前范围与规范边界。
+
+## 本章内容
+
+
+- [什么是 PTO 虚拟 ISA](what-is-pto-visa_zh.md) — PTO 的定位、tile-first 设计理念与层级抽象
+- [PTO 的设计目标](goals-of-pto_zh.md) — PTO 追求的设计目标
+- [当前 PTO ISA 范围](current-isa-scope_zh.md) — 当前范围 基线的关键决策
+- [范围与边界](design-goals-and-boundaries_zh.md) — PTO ISA 的范围、与 PTO-AS 和 PTOBC 的边界划分
+- [文档结构](document-structure_zh.md) — 章节地图与阅读顺序
+
+## 阅读建议
+
+
+建议按以下顺序阅读：
+
+1. 先读[什么是 PTO 虚拟 ISA](what-is-pto-visa_zh.md)，理解 PTO 的定位
+2. 再读[PTO 的设计目标](goals-of-pto_zh.md)，理解设计意图
+3. 然后读[文档结构](document-structure_zh.md)，了解整个手册的章节划分
+4. 最后读[范围与边界](design-goals-and-boundaries_zh.md)和[当前 PTO ISA 范围](current-isa-scope_zh.md)，了解当前范围和规范边界
+
+## 章节定位
+
+
+本章属于手册的第 1 章，建立 PTO 的概念基础，为后续章节的阅读做好准备。
+
+
+# Introduction
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## In This Chapter
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Recommended Reading Order
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Chapter Placement
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。

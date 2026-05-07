@@ -9,6 +9,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 #include <pto/pto-inst.hpp>
+#include "cpu_tile_test_utils.h"
 #include "test_common.h"
 #include <gtest/gtest.h>
 #include <functional>
@@ -83,3 +84,28 @@ TMOV_TEST(float, 64, 128, 63, 125, Vec, RowMajor, NoneBox, Vec, ColMajor, RowMaj
 TMOV_TEST(float, 64, 128, 63, 125, Vec, ColMajor, RowMajor, Vec, RowMajor, NoneBox)
 TMOV_TEST(float, 64, 128, 63, 125, Vec, ColMajor, NoneBox, Vec, ColMajor, RowMajor)
 TMOV_TEST(float, 64, 128, 63, 125, Vec, ColMajor, RowMajor, Vec, ColMajor, NoneBox)
+
+TEST_F(TMOVTest, FpVariantCopiesSourceTile)
+{
+    using TileData = Tile<TileType::Vec, float, 2, 8>;
+    using FpTile = Tile<TileType::Vec, float, 1, 8>;
+
+    TileData src;
+    TileData dst;
+    FpTile fp;
+    size_t addr = 0;
+    CpuTileTestUtils::AssignTileStorage(addr, src, dst, fp);
+
+    CpuTileTestUtils::FillLinear(src, 3.0f);
+    CpuTileTestUtils::FillAll(dst, 0.0f);
+    CpuTileTestUtils::FillAll(fp, 1.0f);
+
+    TMOV_FP(dst, src, fp);
+
+    for (int r = 0; r < src.GetValidRow(); ++r) {
+        for (int c = 0; c < src.GetValidCol(); ++c) {
+            CpuTileTestUtils::ExpectValueEquals(CpuTileTestUtils::GetValue(dst, r, c),
+                                                CpuTileTestUtils::GetValue(src, r, c));
+        }
+    }
+}

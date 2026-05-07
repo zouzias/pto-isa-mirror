@@ -113,11 +113,11 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataPara &
     TRESHAPE_IMPL(src_s32, src);
 #endif
 
-    TCVT_IMPL(src_s32, src, RoundMode::CAST_RINT); // fp32->s32
+    TCVT_IMPL(src_s32, src, RoundMode::CAST_RINT);                       // fp32->s32
     pipe_barrier(PIPE_V);
     TQuantCvtS32ToFp16<PadColsSrc>(src_f16, src_s32, src.GetValidRow()); // s32->fp16
     pipe_barrier(PIPE_V);
-    TCVT_IMPL(dst, src_f16, RoundMode::CAST_RINT, SaturationMode::ON); // fp16->int8
+    TCVT_IMPL(dst, src_f16, RoundMode::CAST_RINT, SaturationMode::ON);   // fp16->int8
     pipe_barrier(PIPE_V);
 }
 } // namespace pto
