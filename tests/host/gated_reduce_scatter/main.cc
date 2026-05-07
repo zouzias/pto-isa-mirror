@@ -118,6 +118,33 @@
 // directory to the include path so we can pick it up here without copying.
 #include "comm_mpi.h"
 
+// Low-level CANN runtime device-set API (from libruntime.so). Required IN
+// ADDITION to `aclrtSetDevice` because hcomm's CCU subsystem caches
+// `g_deviceLogicId` keyed off the **runtime layer** state, which `aclrtSetDevice`
+// (ACL wrap layer) does NOT synchronise. Without this call, when the consumer
+// is launched as a separate process (mpirun) instead of a same-process thread
+// (e.g. hccl example which spawns ranks via std::thread), some hcomm-internal
+// worker thread spawned during `HcclCommInitRootInfo` reads
+// `g_deviceLogicId == INVALID_INT`, propagates that into
+// `CcuKernelMgr::GetInstance(devLogicId=invalid)`, hits the backup-device path
+// (devLogicId=MAX_MODULE_DEVICE_NUM=65), and the entire CcuResPack is
+// allocated against the minimal-fallback budget. Symptom: subsequent
+// `HcclCcuKernelRegister` returns HCCL_E_UNAVAIL (=7) with an
+// `[CcuKernelMgr][CheckResIfAvailable] dieId[0] not enough, ckeReq[3] gsaReq[2]
+// xnReq[6] missionReq[1]` ERROR log right after the kernel ctor traces.
+//
+// Cure: rank 0 must call `rtSetDevice` *between* `aclInit` and the first
+// `aclrtSetDevice`, mirroring what pto-isa's
+// `tests/npu/a5/comm/st/testcase/common.hpp:344-347 ForkAndRunWithHcclRootInfo`
+// does. Empirically only rank 0 needs to call it (the runtime cache is keyed
+// per-process, not per-thread, on the side that matters for the
+// HcclCommInitRootInfo bootstrap path).
+//
+// Refer to plan §3.13.G for the full diagnosis chain (hcomm
+// `adapter_rts.cc::__hrtGetDevice` → cached `g_deviceLogicId` → `op_base.cc::
+// HcclGetThreadDeviceId` → `coll_comm_res_c_adpt.cc:319 HcclCcuKernelRegister`).
+extern "C" int32_t rtSetDevice(int32_t deviceId);
+
 namespace {
 
 constexpr size_t kPayloadSize    = 4096;
@@ -508,6 +535,19 @@ int main(int argc, char **argv)
     // Rank 0 generates root info; broadcast to peers.
     HcclRootInfo rootInfo{};
     if (rankId == 0) {
+        // CRITICAL: rtSetDevice must precede aclrtSetDevice on the root rank
+        // (mirrors common.hpp:344-347 ForkAndRunWithHcclRootInfo). aclrtSetDevice
+        // alone is NOT enough — hcomm's CCU subsystem caches `g_deviceLogicId`
+        // off the runtime-layer state, so a missing rtSetDevice here will let
+        // `HcclCommInitRootInfo` walk through `CcuKernelMgr::GetInstance` with an
+        // INVALID device id, fall through to the backup-device path
+        // (`devLogicId=MAX_MODULE_DEVICE_NUM=65`), and provision a minimal-budget
+        // CcuResPack — which then makes any later `HcclCcuKernelRegister` for a
+        // 3-cke / 6-xn / 2-gsa kernel return HCCL_E_UNAVAIL (=7). See plan §3.13.G.
+        int32_t rtRet = rtSetDevice(firstDeviceId);
+        std::fprintf(stderr,
+            "[GATED_RS_ST] rank=0 rtSetDevice(%d) -> %d\n",
+            firstDeviceId, static_cast<int>(rtRet));
         // aclrtSetDevice is required before HcclGetRootInfo on the root rank
         // — same convention as ForkAndRunWithHcclRootInfo.
         aclrtSetDevice(firstDeviceId);
