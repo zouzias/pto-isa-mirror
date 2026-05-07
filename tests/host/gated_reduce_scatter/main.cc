@@ -440,8 +440,32 @@ bool RunOneRank(int rankId, int nRanks, int firstDeviceId,
     // -------------------------------------------------------------------------
     // 11. Sync streams. Order matters: AIV must drain first so the gate
     //     write is in flight before we wait for CCU completion.
+    //
+    // Inline aivStream sync error handling: if the AIV kernel traps (RT
+    // 507035 = ACL_ERROR_RT_VECTOR_CORE_EXCEPTION), dump aivMarker before
+    // returning so we can triage which decision-tree branch fired (markers
+    // documented in `examples/02_collectives/04_reduce_scatter/main.cc:228-244`).
     // -------------------------------------------------------------------------
-    ACL_OK(aclrtSynchronizeStream(aivStream));
+    aclError aivSync = aclrtSynchronizeStream(aivStream);
+    if (aivSync != ACL_SUCCESS) {
+        std::fprintf(stderr,
+            "[GATED_RS_ST] rank=%d FAIL: aivStream sync rc=%d (likely AIV "
+            "trap — descriptor: dieId=%u ckeId=%u mask=0x%x mmioAddr=0x%llx, "
+            "trigger target=0x%llx). AIV marker dump:\n",
+            rankId, static_cast<int>(aivSync),
+            desc.dieId, desc.ckeId, desc.mask,
+            static_cast<unsigned long long>(desc.mmioAddr),
+            static_cast<unsigned long long>(desc.mmioAddr + desc.ckeId * 0x40ULL + 6ULL));
+        uint64_t marker[8] = {};
+        aclrtMemcpy(marker, sizeof(marker), aivMarkerDev, sizeof(marker),
+                    ACL_MEMCPY_DEVICE_TO_HOST);
+        for (int i = 0; i < 8; ++i) {
+            std::fprintf(stderr,
+                "[GATED_RS_ST] rank=%d aivMarker[%d] = 0x%016llx\n",
+                rankId, i, static_cast<unsigned long long>(marker[i]));
+        }
+        return false;
+    }
     std::fprintf(stderr,
         "[GATED_RS_ST] rank=%d aivStream synced\n", rankId);
 
