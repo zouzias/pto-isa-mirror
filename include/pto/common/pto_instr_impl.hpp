@@ -67,7 +67,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/310p3/TPartMax.hpp"
 // #include "pto/npu/310p3/TPartMin.hpp"
 #include "pto/npu/310p3/TImg2col.hpp"
-#include "pto/npu/310p3/TSetFmatrix.hpp"
+#include "pto/npu/310p3/SetFmatrix.hpp"
 // #include "pto/npu/310p3/TSetImg2colRpt.hpp"
 // #include "pto/npu/310p3/TSetImg2colPadding.hpp"
 // #ifdef _DEBUG
