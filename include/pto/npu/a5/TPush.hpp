@@ -45,17 +45,25 @@ struct TPipe {
     PTO_INTERNAL static bool shouldWaitFree(uint32_t tileIndex)
     {
         // Startup protection: Don't check flags when buffer is empty
-        if (tileIndex < SlotNum) {
-            return false;
+        if constexpr (SlotNum == 1) {
+            return true;
+        } else {
+            if (tileIndex < SlotNum) {
+                return false;
+            }
+            // Sparse sync: Only check flags periodically to reduce overhead
+            return (tileIndex % SyncPeriod) == 0;
         }
-        // Sparse sync: Only check flags periodically to reduce overhead
-        return (tileIndex % SyncPeriod) == 0;
     }
 
     PTO_INTERNAL static bool shouldNotifyFree(uint32_t tileIndex)
     {
         // Notify consumer to free buffer when producer is one slot ahead of consumer
-        return ((tileIndex + 1) % SyncPeriod) == 0;
+        if constexpr (SlotNum == 1) {
+            return true;
+        } else {
+            return ((tileIndex + 1) % SyncPeriod) == 0;
+        }
     }
 
     // -------------------------------------------------------------------------

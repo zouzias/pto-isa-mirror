@@ -28,13 +28,13 @@ PTO_INTERNAL void TPOP_IMPL(Pipe &pipe, TileCons &tile)
 
     // 2. Address Calculation & Load
     pipe.cons.template pop<TileCons, Split>(pipe.fifo, tile);
-    pipe.cons.tileIndex++;
 
     // 3. Cross-Core: Free Space
-    bool isFree = pipe.cons.getFreeStatus();
+    bool isFree = pipe.cons.getFreeStatus() && Pipe::shouldNotifyFree(pipe.cons.tileIndex);
     if (isFree) {
         pipe.cons.free();
     }
+    pipe.cons.tileIndex++;
 }
 
 // get sub-block offset for global data
