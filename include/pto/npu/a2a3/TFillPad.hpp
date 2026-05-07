@@ -53,7 +53,12 @@ PTO_INTERNAL void Handle32BAlignedPad_Byte(decltype(getCopyNullPtr<TileDataDst>(
 {
     using T = typename TileDataSrc::DType;
     uint64_t pad_32B = 32 / sizeof(T) - srcValidCol;
+#ifndef __PTO_AUTO__
     PtoSetWaitFlag<PIPE_V, PIPE_S>();
+#else
+    set_flag(PIPE_V, PIPE_S, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
+#endif
     using TP = decltype(padValue);
     for (uint64_t r = 0; r < srcValidRow; r++) {
         __ubuf__ TP *dstPadPtr = &((__ubuf__ TP *)dstPtr)[r * TileDataDst::Cols + srcValidCol];

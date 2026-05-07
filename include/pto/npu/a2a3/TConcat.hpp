@@ -121,7 +121,12 @@ __tf__ PTO_INTERNAL void TConcatIdx(typename DstTile::TileDType __out__ dst, typ
     constexpr unsigned idx1Stride = Src1IdxTile::RowStride;
 
     for (uint16_t i = 0; i < validRow; i++) {
+#ifndef __PTO_AUTO__
         PtoSetWaitFlag<PIPE_MTE2, PIPE_S>();
+#else
+        set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+#endif
         unsigned idx0Num = *(idx0Ptr + i * idx0Stride) / sizeof(idxType);
         unsigned idx1Num = *(idx1Ptr + i * idx1Stride) / sizeof(idxType);
         unsigned src0Num = idx0Num < dstValidCol ? idx0Num : dstValidCol;
@@ -134,7 +139,12 @@ __tf__ PTO_INTERNAL void TConcatIdx(typename DstTile::TileDType __out__ dst, typ
         unsigned src0MaskNum = src0Num % elementsPerRepeat;
         unsigned src1MaskNum = src1Num % elementsPerRepeat;
         bool isAligned = (src0Num % elementsPerBlock) == 0;
+#ifndef __PTO_AUTO__
         PtoSetWaitFlag<PIPE_S, PIPE_V>();
+#else
+        set_flag(PIPE_S, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_S, PIPE_V, EVENT_ID0);
+#endif
 
         vcopy((copyType)(dstPtr + i * dstStride), (copyType)(src0Ptr + i * src0Stride), src0RepeatTime - 1, 1, 1, 8, 8);
         SetContinuousMask(src0MaskNum);
@@ -150,12 +160,24 @@ __tf__ PTO_INTERNAL void TConcatIdx(typename DstTile::TileDType __out__ dst, typ
                   (copyType)(src1Ptr + src1RepeatOffset + i * src1Stride), 1, 1, 1, 8, 8);
             set_vector_mask(-1, -1);
         } else {
+#ifndef __PTO_AUTO__
             PtoSetWaitFlag<PIPE_V, PIPE_S>();
+#else
+            set_flag(PIPE_V, PIPE_S, EVENT_ID0);
+            wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
+#endif
             for (unsigned j = 0; j < src1Num; j++) {
                 dstPtr[i * dstStride + src0Num + j] = src1Ptr[i * src1Stride + j];
             }
+#ifndef __PTO_AUTO__
             PtoSetWaitFlag<PIPE_S, PIPE_V>();
             PtoSetWaitFlag<PIPE_S, PIPE_MTE3>();
+#else
+            set_flag(PIPE_S, PIPE_V, EVENT_ID0);
+            wait_flag(PIPE_S, PIPE_V, EVENT_ID0);
+            set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
+            wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
+#endif
         }
     }
 }
