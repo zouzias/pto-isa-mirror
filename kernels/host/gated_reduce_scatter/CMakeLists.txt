@@ -46,6 +46,45 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # ────────────────────────────────────────────────────────────────────────────
+# C++ ABI flag (libstdc++ dual-ABI selector).
+#
+# CANN 9.0.0's libhcomm.so / libhccl.so on the target dev rig (verified
+# 2026-05-07 via `nm -D | grep __cxx11` returning 0) are built with the
+# **legacy** ABI (`_GLIBCXX_USE_CXX11_ABI=0`, COW std::string + 24-byte
+# basic_string). GCC 13.3 defaults to the new ABI (`=1`, SSO + 32 bytes),
+# so consumer .so / executable inherit the new ABI by default and end up
+# with mismatched layout for any `std::string` / `std::list` / `std::ios*`
+# field that crosses the boundary into libhcomm.so. Symptom on this pilot:
+# segfault during default-construction of derived-class members of type
+# `hcomm::CcuRep::Variable` / `CompletedEvent` (whose ctors live inside
+# libhcomm.so), right after `CcuKernel(arg)` base ctor returns and before
+# the derived ctor body emits its first trace line.
+#
+# Force `=0` on every TU we compile so we match libhcomm.so's ABI. This
+# value is propagated PUBLIC so anything linking against
+# `libpto_gated_reduce_scatter.so` (e.g. `gated_rs_st`) inherits it
+# automatically.
+#
+# To verify the choice: after build, run
+#   nm -D --defined-only build/pto_gated_reduce_scatter/dist/libpto_gated_reduce_scatter.so | grep -c __cxx11
+# Expected: 0 (no __cxx11 symbols → matches libhcomm.so).
+#
+# If the target CANN ever switches to new ABI (CANN's `nm` output gains
+# `__cxx11` symbols), flip this back to `=1` (or just remove the flag).
+# ────────────────────────────────────────────────────────────────────────────
+if(NOT DEFINED PTO_CXX11_ABI)
+    if(DEFINED ENV{PTO_CXX11_ABI})
+        set(PTO_CXX11_ABI $ENV{PTO_CXX11_ABI})
+    else()
+        set(PTO_CXX11_ABI 0)
+    endif()
+endif()
+add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=${PTO_CXX11_ABI})
+message(STATUS
+    "pto_gated_reduce_scatter: _GLIBCXX_USE_CXX11_ABI = ${PTO_CXX11_ABI} "
+    "(0=legacy/COW, 1=C++11/SSO; must match libhcomm.so)")
+
+# ────────────────────────────────────────────────────────────────────────────
 # pto-isa repo root (`pto-isa_main/`) — used for resolving public include
 # paths like `<pto/ccu/pto_gated_kernel.hpp>` and the registry hpp.
 # ────────────────────────────────────────────────────────────────────────────

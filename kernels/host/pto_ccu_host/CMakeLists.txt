@@ -41,6 +41,20 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# C++ ABI: must match libhcomm.so (legacy `_GLIBCXX_USE_CXX11_ABI=0` on the
+# target CANN 9.0.0). See `kernels/host/gated_reduce_scatter/CMakeLists.txt`
+# for the full rationale; this lib is linked into the same process as the
+# gated kernel + ST so it must use the same ABI.
+if(NOT DEFINED PTO_CXX11_ABI)
+    if(DEFINED ENV{PTO_CXX11_ABI})
+        set(PTO_CXX11_ABI $ENV{PTO_CXX11_ABI})
+    else()
+        set(PTO_CXX11_ABI 0)
+    endif()
+endif()
+add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=${PTO_CXX11_ABI})
+message(STATUS "pto_ccu_host: _GLIBCXX_USE_CXX11_ABI = ${PTO_CXX11_ABI}")
+
 # Where the public pto headers live. `${CMAKE_CURRENT_LIST_DIR}/../../..`
 # resolves to the pto-isa repo root.
 get_filename_component(PTO_LIB_PATH "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)

@@ -42,6 +42,21 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# C++ ABI: must match libhcomm.so / libhccl.so. Default to legacy (=0) on the
+# target CANN 9.0.0 — verify with `nm -D | grep __cxx11 | wc -l` on the lib;
+# 0 ⇒ legacy. Override with -DPTO_CXX11_ABI=1 (or env PTO_CXX11_ABI=1) if the
+# target CANN ever rebuilds with new ABI. See
+# `kernels/host/gated_reduce_scatter/CMakeLists.txt` for full rationale.
+if(NOT DEFINED PTO_CXX11_ABI)
+    if(DEFINED ENV{PTO_CXX11_ABI})
+        set(PTO_CXX11_ABI $ENV{PTO_CXX11_ABI})
+    else()
+        set(PTO_CXX11_ABI 0)
+    endif()
+endif()
+add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=${PTO_CXX11_ABI})
+message(STATUS "gated_rs_st: _GLIBCXX_USE_CXX11_ABI = ${PTO_CXX11_ABI}")
+
 # ────────────────────────────────────────────────────────────────────────────
 # pto-isa repo root for `<pto/...>` includes.
 # ────────────────────────────────────────────────────────────────────────────
