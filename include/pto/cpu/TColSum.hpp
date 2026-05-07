@@ -34,9 +34,9 @@ PTO_INTERNAL void CheckCSValid()
     using SrcNonDuplicateType = typename TileSrc::DType;
     using DstNonDuplicateType = typename TileDst::DType;
     static_assert(
-        (std::is_same_v<SrcNonDuplicateType, half> && std::is_same_v<DstNonDuplicateType, half>) || // f162f16
+        (std::is_same_v<SrcNonDuplicateType, half> && std::is_same_v<DstNonDuplicateType, half>) ||      // f162f16
             (std::is_same_v<SrcNonDuplicateType, bfloat16_t> &&
-             std::is_same_v<DstNonDuplicateType, bfloat16_t>) || // bf162bf16
+             std::is_same_v<DstNonDuplicateType, bfloat16_t>) ||                                         // bf162bf16
             (std::is_same_v<SrcNonDuplicateType, bfloat16_t> &&
              std::is_same_v<DstNonDuplicateType, float>) ||                                              // bf162f32
             (std::is_same_v<SrcNonDuplicateType, half> && std::is_same_v<DstNonDuplicateType, float>) || // f162f32
@@ -44,7 +44,6 @@ PTO_INTERNAL void CheckCSValid()
         ,
         "Not supported data type");
     static_assert((TileSrc::Cols == TileDst::Cols), "Assert: Inconsistent number of cols");
-    static_assert((TileDst::Rows == 1), "Assert: Inconsistent number of dst tile rows");
 }
 
 template <typename TileDst, typename TileSrc>
