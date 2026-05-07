@@ -60,13 +60,15 @@ PTO_INST RecordEvent TMAX(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 
 ## 约束
 
-- A2A3 与 A5 当前都要求行主序向量 tile。
-- 静态 valid 边界必须合法。
-- 运行时通常要求 `src0`、`src1` 与 `dst` 的 `validRow/validCol` 一致。
+!!! warning "约束"
+    - A2A3 与 A5 当前都要求行主序向量 tile。
+    - 静态 valid 边界必须合法。
+    - 运行时通常要求 `src0`、`src1` 与 `dst` 的 `validRow/validCol` 一致。
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## Target-Profile 限制
 

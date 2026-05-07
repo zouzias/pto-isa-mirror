@@ -7,20 +7,16 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-
-#ifndef TCVTOP_HPP
-#define TCVTOP_HPP
-
-#include <algorithm>
-#include "common.hpp"
+#ifndef SETFMATRIX_CPU_HPP
+#define SETFMATRIX_CPU_HPP
 
 namespace pto {
-
-template <typename TileDataD, typename TileDataS>
-PTO_INTERNAL void runTCvtOp(std::vector<CostModelStats> &stats, TileDataD &dst, TileDataS &src, RoundMode mode,
-                            SaturationMode satMode)
+template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL>
+PTO_INTERNAL void SETFMATRIX_IMPL(ConvTileData &src)
 {
-    stats = {};
+    (void)FmatrixMode;
+    PTO_CPU_ASSERT(src.GetFmapH() > 0 && src.GetFmapW() > 0, "Fix: SETFMATRIX requires non-zero fmap size.");
 }
 } // namespace pto
+
 #endif

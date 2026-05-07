@@ -42,7 +42,7 @@ For `pto.t*` programs, the common pattern is:
                   │ RecordEvent or implicit TSYNC
                   ▼
 ┌─────────────────────────────────────────────────────┐
-│  Tile Compute (TADD, TMATMUL, etc.)                │
+│  Tile Compute (TADD, TMATMUL, etc.)                 │
 │  (consumes tile state; produces tile state)         │
 └─────────────────┬───────────────────────────────────┘
                   │ RecordEvent or explicit TSYNC
@@ -100,31 +100,31 @@ For `pto.v*` programs, the ordering chain involves explicit DMA synchronization:
                  │ (implicit on vlds)
                  ▼
 ┌──────────────────────────────────────────────────────────┐
-│  vlds %vreg, %ub[...] {dist = "NORM"}                   │
+│  vlds %vreg, %ub[...] {dist = "NORM"}                  │
 │  (UB → Vector Register)                                  │
 └────────────────┬─────────────────────────────────────────┘
                  │
                  ▼
 ┌──────────────────────────────────────────────────────────┐
-│  vadd %result, %vreg, %vreg                             │
+│  vadd %result, %vreg, %vreg                            │
 │  (Vector Compute on Vector Register)                     │
 └────────────────┬─────────────────────────────────────────┘
                  │
                  ▼
 ┌──────────────────────────────────────────────────────────┐
-│  vsts %result, %ub[...]                                 │
+│  vsts %result, %ub[...]                                │
 │  (Vector Register → UB)                                   │
 └────────────────┬─────────────────────────────────────────┘
                  │ set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1)
                  ▼
 ┌──────────────────────────────────────────────────────────┐
 │  wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1)                 │
-│  (Vector result now staged for DMA)                      │
+│  (Vector result now staged for DMA)                     │
 └────────────────┬─────────────────────────────────────────┘
                  │
                  ▼
 ┌──────────────────────────────────────────────────────────┐
-│  copy_ubuf_to_gm(%gm, %ub, ...)                         │
+│  copy_ubuf_to_gm(%gm, %ub, ...)                          │
 │  (DMA: UB → GM)                                          │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -167,23 +167,25 @@ wait_flag(PIPE_MTE2, PIPE_V, ID);
 
 ## Constraints
 
-- A consumer may only rely on visibility after the required producer-consumer edge is established.
-- The exact synchronization mechanism may vary by instruction set or target profile.
-- Instruction Set docs and per-op pages must state the relevant ordering expectations explicitly.
-- An operation's `RecordEvent` return value is only valid for chaining to operations that execute AFTER the current operation in program order.
+!!! warning "Constraints"
+    - A consumer may only rely on visibility after the required producer-consumer edge is established.
+    - The exact synchronization mechanism may vary by instruction set or target profile.
+    - Instruction Set docs and per-op pages must state the relevant ordering expectations explicitly.
+    - An operation's `RecordEvent` return value is only valid for chaining to operations that execute AFTER the current operation in program order.
 
 ## Cases That Are Not Allowed
 
-- Describing a consumer as legal without saying how producer visibility is established.
-- Assuming a target's convenient scheduling behavior is the architecture contract.
-- Leaving cross-instruction set handoff rules implicit.
-- Issuing `vlds` before `copy_gm_to_ubuf` completes without an intervening `wait_flag`.
-- Issuing `copy_ubuf_to_gm` before `vsts` completes without an intervening `wait_flag`.
-- Passing a `RecordEvent` from a later operation to an earlier operation (wrong direction) — this is illegal and produces a verification error.
+!!! danger "Cases That Are Not Allowed"
+    - Describing a consumer as legal without saying how producer visibility is established.
+    - Assuming a target's convenient scheduling behavior is the architecture contract.
+    - Leaving cross-instruction set handoff rules implicit.
+    - Issuing `vlds` before `copy_gm_to_ubuf` completes without an intervening `wait_flag`.
+    - Issuing `copy_ubuf_to_gm` before `vsts` completes without an intervening `wait_flag`.
+    - Passing a `RecordEvent` from a later operation to an earlier operation (wrong direction) — this is illegal and produces a verification error.
 
 ## See Also
 
 - [Consistency Baseline](./consistency-baseline.md)
 - [Ordering And Synchronization](../machine-model/ordering-and-synchronization.md)
-- [Tile Instruction Set](../instruction-surfaces/tile-instructions.md)
-- [Vector Instruction Set](../instruction-surfaces/vector-instructions.md)
+- [Tile Instruction Set](../instruction-families/tile-families.md)
+- [Vector Instruction Set](../instruction-families/vector-families.md)

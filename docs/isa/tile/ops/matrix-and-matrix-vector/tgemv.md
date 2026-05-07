@@ -34,7 +34,7 @@ For `0 <= j < N` (adds bias term to matrix product):
 
 $$ \mathrm{C}_{0,j} = \mathrm{Bias}_{0,j} + \sum_{k=0}^{K-1} \mathrm{A}_{0,k} \cdot \mathrm{B}_{k,j} $$
 
-**Note:** Exact accumulator behavior and datatype promotion are target/implementation-defined.
+Accumulator behavior and datatype promotion are concrete per target. On A2/A3: accumulation uses the accumulator tile's native datatype (int32_t or float), with int8 accumulation performed in 32-bit and fp accumulation using standard IEEE round-to-nearest-even. On A5: accumulation is always in the accumulator tile's native type, and fp accumulation follows the accumulator's native rounding mode. On CPU simulator: follows A5 semantics.
 
 ## Syntax
 
@@ -97,59 +97,62 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-### Common shape and location constraints
+!!! warning "Constraints"
+    ### Common shape and location constraints
 
-These constraints apply to `TGEMV`, `TGEMV_ACC`, and `TGEMV_BIAS` unless otherwise noted.
+    These constraints apply to `TGEMV`, `TGEMV_ACC`, and `TGEMV_BIAS` unless otherwise noted.
 
-- Static shape constraints:
-    - `TileLeft::Rows == TileRes::Rows`
-    - `TileLeft::Cols == TileRight::Rows`
-    - `TileRight::Cols == TileRes::Cols`
+    - Static shape constraints:
+        - `TileLeft::Rows == TileRes::Rows`
+        - `TileLeft::Cols == TileRight::Rows`
+        - `TileRight::Cols == TileRes::Cols`
 
-- Tile locations:
-    - `TileLeft::Loc == Left`
-    - `TileRight::Loc == Right`
-    - `TileRes::Loc == Acc`
+    - Tile locations:
+        - `TileLeft::Loc == Left`
+        - `TileRight::Loc == Right`
+        - `TileRes::Loc == Acc`
 
-- Runtime valid-size constraints:
-    - `m` must be `1`
-    - `k` and `n` (taken from `bMatrix.GetValidRow()` and `bMatrix.GetValidCol()`) must be in `[1, 4095]`
+    - Runtime valid-size constraints:
+        - `m` must be `1`
+        - `k` and `n` (taken from `bMatrix.GetValidRow()` and `bMatrix.GetValidCol()`) must be in `[1, 4095]`
 
-### TGEMV / TGEMV_ACC datatype constraints
+    ### TGEMV / TGEMV_ACC datatype constraints
 
-- Bias tile datatype must exactly match `TileRes::DType`.
+    - Bias tile datatype must exactly match `TileRes::DType`.
 
-- Bias tile must be configured as a single row.
+    - Bias tile must be configured as a single row.
 
-- Bias tile location must be `TileType::Bias`.
+    - Bias tile location must be `TileType::Bias`.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Implementation checks (A2A3)**:
-    - Supported `(CType, AType, BType)` triples:
-        - `(int32_t, int8_t, int8_t)`
-        - `(float, half, half)`
-        - `(float, float, float)`
-        - `(float, bfloat16_t, bfloat16_t)`
+??? info "Target-Profile Restrictions"
+    - **Implementation checks (A2A3)**:
+        - Supported `(CType, AType, BType)` triples:
+            - `(int32_t, int8_t, int8_t)`
+            - `(float, half, half)`
+            - `(float, float, float)`
+            - `(float, bfloat16_t, bfloat16_t)`
 
-- **Implementation checks (A5)**:
-    - Accumulator type must be `int32_t` or `float`.
-    - If `int32_t`: `AType == int8_t` and `BType == int8_t`.
-    - If `float`: supports `half`, `bfloat16_t`, `float`, and selected fp8 pairs (target-defined).
-    - Fractal/layout constraints are enforced:
-        - Left: `Loc == Left`, `!isRowMajor`, `SFractal == RowMajor`
-        - Right: `Loc == Right`, `isRowMajor`, `SFractal == ColMajor`
-        - Acc: `Loc == Acc`, `!isRowMajor`, `SFractal == RowMajor`
+    - **Implementation checks (A5)**:
+        - Accumulator type must be `int32_t` or `float`.
+        - If `int32_t`: `AType == int8_t` and `BType == int8_t`.
+        - If `float`: supports `half`, `bfloat16_t`, `float`, and selected fp8 pairs (target-defined).
+        - Fractal/layout constraints are enforced:
+            - Left: `Loc == Left`, `!isRowMajor`, `SFractal == RowMajor`
+            - Right: `Loc == Right`, `isRowMajor`, `SFractal == ColMajor`
+            - Acc: `Loc == Acc`, `!isRowMajor`, `SFractal == RowMajor`
 
-### TGEMV_BIAS additional constraints
+    ### TGEMV_BIAS additional constraints
 
-- **Additional A5 note**:
-    - No separate explicit `m/k/n` runtime assertions are enforced in the underlying A5 matmul implementation beyond the GEMV contract described above.
+    - **Additional A5 note**:
+        - No separate explicit `m/k/n` runtime assertions are enforced in the underlying A5 matmul implementation beyond the GEMV contract described above.
 
 ## Examples
 

@@ -55,21 +55,24 @@ This operation mutates `%dest` in UB memory. It does not reserve buffers, signal
 
 ## Constraints
 
-- `%dest`, `%src`, and `%indices` MUST all refer to UB-backed storage.
-- The hardware operation processes 32-element groups; `%repeat_times` scales that fixed group size.
-- The page-level contract assumes descending score order.
-- Buffer alignment and layout MUST satisfy the target-profile backend contract for the selected form.
+!!! warning "Constraints"
+    - `%dest`, `%src`, and `%indices` MUST all refer to UB-backed storage.
+    - The hardware operation processes 32-element groups; `%repeat_times` scales that fixed group size.
+    - The page-level contract assumes descending score order.
+    - Buffer alignment and layout MUST satisfy the target-profile backend contract for the selected form.
 
 ## Exceptions
 
-- The verifier rejects illegal pointer spaces or unsupported element types.
-- Illegal repeat counts or malformed buffer contracts are target-profile-specific errors.
+!!! danger "Exceptions"
+    - The verifier rejects illegal pointer spaces or unsupported element types.
+    - Illegal repeat counts or malformed buffer contracts are target-profile-specific errors.
 
 ## Target-Profile Restrictions
 
-- This operation is documented as A5-oriented sort acceleration.
-- CPU simulation may preserve the visible PTO contract with a software fallback.
-- Availability on narrower profiles is target-specific and should not be assumed without profile documentation.
+??? info "Target-Profile Restrictions"
+    - This operation is documented as A5-oriented sort acceleration.
+    - CPU simulation may preserve the visible PTO contract with a software fallback.
+    - Availability on narrower profiles is target-specific and should not be assumed without profile documentation.
 
 ## Performance
 

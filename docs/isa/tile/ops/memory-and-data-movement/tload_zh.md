@@ -57,9 +57,10 @@ PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... event
 
 ## 约束
 
-- `sizeof(TileData::DType)` 必须与 `sizeof(GlobalData::DType)` 一致
-- 搬运范围由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定
-- `src.GetShape(dim)` 与 `dst.GetValidRow()/GetValidCol()` 在运行时都必须大于 0
+!!! warning "约束"
+    - `sizeof(TileData::DType)` 必须与 `sizeof(GlobalData::DType)` 一致
+    - 搬运范围由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定
+    - `src.GetShape(dim)` 与 `dst.GetValidRow()/GetValidCol()` 在运行时都必须大于 0
 
 ## Target-Profile 限制
 
@@ -87,7 +88,8 @@ PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... event
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## 性能
 

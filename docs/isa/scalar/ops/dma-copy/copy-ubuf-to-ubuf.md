@@ -48,19 +48,22 @@ Reads UB-visible storage, writes UB-visible storage, and consumes the active UB 
 
 ## Constraints
 
-- Source and destination regions MUST both satisfy the UB alignment rules of the selected target profile.
-- `%len_burst` MUST fit within both the source and destination row stride.
-- If source and destination alias, portable code MUST provide ordering that avoids implementation-defined overlap behavior.
+!!! warning "Constraints"
+    - Source and destination regions MUST both satisfy the UB alignment rules of the selected target profile.
+    - `%len_burst` MUST fit within both the source and destination row stride.
+    - If source and destination regions alias, portable code MUST provide ordering that avoids undefined behavior. On A2/A3 and A5: if source and destination regions alias, the copy may proceed in either forward or backward direction and the exact order is not guaranteed; the programmer must ensure the copy is sequenced to avoid data hazard. On CPU simulator: aliasing is resolved by copying to a temporary buffer first.
 
 ## Exceptions
 
-- The verifier rejects illegal operand shapes, unsupported pipe or event identifiers, and attribute combinations that are not valid for the selected instruction set or target profile.
-- Any additional illegality stated in the constraints section is also part of the contract.
+!!! danger "Exceptions"
+    - The verifier rejects illegal operand shapes, unsupported pipe or event identifiers, and attribute combinations that are not valid for the selected instruction set or target profile.
+    - Any additional illegality stated in the constraints section is also part of the contract.
 
 ## Target-Profile Restrictions
 
-- CPU simulation preserves the visible copy contract but may not expose all DMA overlap hazards.
-- A2/A3 and A5 may narrow supported element sizes, row widths, or overlap behavior.
+??? info "Target-Profile Restrictions"
+    - CPU simulation preserves the visible copy contract but may not expose all DMA overlap hazards.
+    - A2/A3 and A5 may narrow supported element sizes, row widths, or overlap behavior.
 
 ## Examples
 

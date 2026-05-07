@@ -4,13 +4,13 @@
 
 ## Summary
 
-Merge sort for multiple sorted lists (implementation-defined element format and layout).
+Merge sort for multiple sorted lists. On A2/A3 and A5, elements are stored in row-major order with a single row (Rows == 1); on the CPU simulator, elements are stored in the natural tile row-major order.
 
 ## Mechanism
 
-Merge sort for multiple sorted lists (implementation-defined element format and layout). It belongs to the tile instructions and carries architecture-visible behavior that is not reducible to a plain elementwise compute pattern.
+Merge sort for multiple sorted lists. On A2/A3 and A5, elements are stored in row-major order with a single row (Rows == 1); on the CPU simulator, elements are stored in the natural tile row-major order. It belongs to the tile instructions and carries architecture-visible behavior that is not reducible to a plain elementwise compute pattern.
 
-Merges sorted input lists into `dst`. Ordering, element format (e.g., value/index pairs), and the meaning of executed counts depend on the implementation.
+Merges sorted input lists into `dst`. On A2/A3 and A5, the merge produces a single sorted list in row-major order; the CPU simulator follows the natural tile row-major ordering.
 
 $$ \mathrm{dst} = \mathrm{merge}(\mathrm{src}_0, \mathrm{src}_1, \ldots) $$
 
@@ -96,25 +96,28 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- **Single-list variant (`TMRGSORT(dst, src, blockLen)`)**:
-    - `blockLen` must be a multiple of 64 (as checked by the implementation).
-    - `src.GetValidCol()` must be an integer multiple of `blockLen * 4`.
-    - `repeatTimes = src.GetValidCol() / (blockLen * 4)` must be in `[1, 255]`.
+!!! warning "Constraints"
+    - **Single-list variant (`TMRGSORT(dst, src, blockLen)`)**:
+        - `blockLen` must be a multiple of 64 (as checked by the implementation).
+        - `src.GetValidCol()` must be an integer multiple of `blockLen * 4`.
+        - `repeatTimes = src.GetValidCol() / (blockLen * 4)` must be in `[1, 255]`.
 
-- **Multi-list variants**:
-    - `tmp` is required and `executedNumList` is written by the implementation; supported list counts and exact semantics are target-defined.
+    - **Multi-list variants**:
+        - `tmp` is required and `executedNumList` is written by the implementation; supported list counts and exact semantics are target-defined.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Implementation checks (A2A3/A5)**:
-    - Element type must be `half` or `float` and must match across `dst/tmp/src*` tiles.
-    - All tiles must be `TileType::Vec`, row-major, and have `Rows == 1` (list stored in a single row).
-    - UB memory usage is checked (compile-time and runtime) against target limits (single `Cols` across inputs plus `tmp`/`dst`).
+??? info "Target-Profile Restrictions"
+    - **Implementation checks (A2A3/A5)**:
+        - Element type must be `half` or `float` and must match across `dst/tmp/src*` tiles.
+        - All tiles must be `TileType::Vec`, row-major, and have `Rows == 1` (list stored in a single row).
+        - UB memory usage is checked (compile-time and runtime) against target limits (single `Cols` across inputs plus `tmp`/`dst`).
 
 ## Examples
 

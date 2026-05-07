@@ -64,17 +64,20 @@ None.
 
 ## Constraints
 
-- **Operand widths**: All predicate operands MUST have the same width.
+!!! warning "Constraints"
+    - **Operand widths**: All predicate operands MUST have the same width.
 
 ## Exceptions
 
-- Illegal if predicate operand widths are not consistent.
+!!! danger "Exceptions"
+    - Illegal if predicate operand widths are not consistent.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| Bitwise XOR | Simulated | Supported | Supported |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | Bitwise XOR | Simulated | Supported | Supported |
 
 ## Examples
 

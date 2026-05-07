@@ -64,18 +64,20 @@ PTO_INTERNAL RecordEvent TPOWS(DstTile &dst, BaseTile &base, typename DstTile::D
 
 ## 约束
 
-- `dst` 与 `base` 的元素类型必须一致。
-- `dst` 与 `base` 的 valid row / valid col 必须一致。
-- 当前具体实现要求两者都是 row-major 的 `TileType::Vec`。
-- 标量指数的类型为 `typename DstTile::DType`。
-- `PowAlgorithm::DEFAULT` 支持 `float`、`half`、`int32_t`、`uint32_t`、`int16_t`、`uint16_t`、`int8_t`、`uint8_t`。
-- `PowAlgorithm::HIGH_PRECISION` 支持 `float`、`half`、`bfloat16_t`。
+!!! warning "约束"
+    - `dst` 与 `base` 的元素类型必须一致。
+    - `dst` 与 `base` 的 valid row / valid col 必须一致。
+    - 当前具体实现要求两者都是 row-major 的 `TileType::Vec`。
+    - 标量指数的类型为 `typename DstTile::DType`。
+    - `PowAlgorithm::DEFAULT` 支持 `float`、`half`、`int32_t`、`uint32_t`、`int16_t`、`uint16_t`、`int8_t`、`uint8_t`。
+    - `PowAlgorithm::HIGH_PRECISION` 支持 `float`、`half`、`bfloat16_t`。
 
 ## 不允许的情形
 
-- 使用不支持的类型 / layout 组合。
-- 在 valid region 不一致时依赖结果语义。
-- 仅凭公共模板声明就假设 CPU 或 A2/A3 一定支持这条指令。
+!!! danger "不允许的情形"
+    - 使用不支持的类型 / layout 组合。
+    - 在 valid region 不一致时依赖结果语义。
+    - 仅凭公共模板声明就假设 CPU 或 A2/A3 一定支持这条指令。
 
 ## Target-Profile 限制
 
@@ -105,4 +107,4 @@ void example() {
 
 - 指令集总览：[Tile-标量与立即数](../../tile-scalar-and-immediate_zh.md)
 - 上一条指令：[pto.tmuls](./tmuls_zh.md)
-- 下一条指令：[pto.tdivs](./tdivs_zh.md)
+- 下一条指令：[pto.tfmods](./tfmods_zh.md)

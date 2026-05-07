@@ -49,22 +49,25 @@ This operation has no architectural side effect beyond producing its destination
 
 ## Constraints
 
-- **Type match**: All four registers MUST have identical element types.
-- **Width match**: All four registers MUST have the same vector width `N`.
-- **Mask width**: `%mask` MUST have width equal to `N`.
-- **Active lanes**: Only lanes where the mask bit is 1 (true) participate in the computation.
-- **Fused semantics**: `pto.vmull` is a fused multiply-subtract operation and is not always interchangeable with separate `vmul` plus `vsub`. The fused form provides better numerical precision and performance.
+!!! warning "Constraints"
+    - **Type match**: All four registers MUST have identical element types.
+    - **Width match**: All four registers MUST have the same vector width `N`.
+    - **Mask width**: `%mask` MUST have width equal to `N`.
+    - **Active lanes**: Only lanes where the mask bit is 1 (true) participate in the computation.
+    - **Fused semantics**: `pto.vmull` is a fused multiply-subtract operation and is not always interchangeable with separate `vmul` plus `vsub`. The fused form provides better numerical precision and performance.
 
 ## Exceptions
 
-- The verifier rejects illegal operand shapes, unsupported element types, and attribute combinations that are not valid for the selected instruction set or target profile.
-- Any additional illegality stated in the constraints section is also part of the contract.
+!!! danger "Exceptions"
+    - The verifier rejects illegal operand shapes, unsupported element types, and attribute combinations that are not valid for the selected instruction set or target profile.
+    - Any additional illegality stated in the constraints section is also part of the contract.
 
 ## Target-Profile Restrictions
 
-- Documented A5 coverage: `i32/u32 (native 32×32→64 widening multiply)`.
-- A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
-- Code that depends on an instruction-set-specific type list, distribution mode, or fused form should treat that dependency as target-profile-specific unless the PTO manual states cross-target portability explicitly.
+??? info "Target-Profile Restrictions"
+    - Documented A5 coverage: `i32/u32 (native 32×32→64 widening multiply)`.
+    - A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
+    - Code that depends on an instruction-set-specific type list, distribution mode, or fused form should treat that dependency as target-profile-specific unless the PTO manual states cross-target portability explicitly.
 
 ## Performance
 

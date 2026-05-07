@@ -67,27 +67,30 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
+!!! warning "Constraints"
+    - The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Implementation checks (A5)**:
-    - `dst`, `src0`, and `src1` element types must match.
-    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, and `int32_t`.
-    - `dst`, `src0`, and `src1` must be row-major.
-    - `src0.GetValidRow()/GetValidCol()` and `src1.GetValidRow()/GetValidCol()` must match `dst`.
+??? info "Target-Profile Restrictions"
+    - **Implementation checks (A5)**:
+        - `dst`, `src0`, and `src1` element types must match.
+        - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, and `int32_t`.
+        - `dst`, `src0`, and `src1` must be row-major.
+        - `src0.GetValidRow()/GetValidCol()` and `src1.GetValidRow()/GetValidCol()` must match `dst`.
 
-- **Implementation checks (A2A3)**:
-    - `dst`, `src0`, `src1`, and `tmp` element types must match.
-    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, and `int16_t`.
-    - `dst`, `src0`, `src1`, and `tmp` must be row-major.
-    - `src0`, `src1`, and `tmp` valid shapes must match `dst`.
-    - In manual mode, `dst`, `src0`, `src1`, and `tmp` must not overlap in memory.
+    - **Implementation checks (A2A3)**:
+        - `dst`, `src0`, `src1`, and `tmp` element types must match.
+        - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, and `int16_t`.
+        - `dst`, `src0`, `src1`, and `tmp` must be row-major.
+        - `src0`, `src1`, and `tmp` valid shapes must match `dst`.
+        - In manual mode, `dst`, `src0`, `src1`, and `tmp` must not overlap in memory.
 
 ## Performance
 

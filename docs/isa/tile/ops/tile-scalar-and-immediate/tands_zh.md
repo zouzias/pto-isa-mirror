@@ -58,13 +58,15 @@ PTO_INST RecordEvent TANDS(TileDataDst &dst, TileDataSrc &src, typename TileData
 
 ## 约束
 
-- 操作迭代域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
-- 这条指令面向整数元素类型，不适用于浮点 tile。
+!!! warning "约束"
+    - 操作迭代域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
+    - 这条指令面向整数元素类型，不适用于浮点 tile。
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
-- 程序不能依赖文档合法域之外的行为。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+    - 程序不能依赖文档合法域之外的行为。
 
 ## Target-Profile 限制
 

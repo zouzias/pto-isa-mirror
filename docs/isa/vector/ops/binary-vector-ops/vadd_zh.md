@@ -69,26 +69,29 @@ PTO_INST RecordEvent VADD(VecDst& dst, const VecLhs& lhs, const VecRhs& rhs,
 
 ## 约束
 
-- `%lhs`、`%rhs` 和 `%dst` 的元素类型必须完全一致。
-- 三个寄存器必须具有相同的向量宽度 `N`。
-- `%mask` 的宽度必须等于 `N`。
-- 只有谓词位为 1 的 lane 参与加法。
-- 非活跃 lane 对应的目标元素保持不变。
+!!! warning "约束"
+    - `%lhs`、`%rhs` 和 `%dst` 的元素类型必须完全一致。
+    - 三个寄存器必须具有相同的向量宽度 `N`。
+    - `%mask` 的宽度必须等于 `N`。
+    - 只有谓词位为 1 的 lane 参与加法。
+    - 非活跃 lane 对应的目标元素保持不变。
 
 ## 异常与非法情形
 
-- verifier 会拒绝非法的元素类型不匹配、向量宽度不匹配或掩码宽度不匹配。
-- [二元向量操作](../../binary-vector-ops_zh.md)页面声明的额外非法情形，同样属于 `pto.vadd` 的契约。
+!!! danger "异常与非法情形"
+    - verifier 会拒绝非法的元素类型不匹配、向量宽度不匹配或掩码宽度不匹配。
+    - [二元向量操作](../../binary-vector-ops_zh.md)页面声明的额外非法情形，同样属于 `pto.vadd` 的契约。
 
 ## 目标 Profile 限制
 
-| 元素类型 | CPU Simulator | A2/A3 | A5 |
-|-----------|:-------------:|:-----:|:--:|
-| `f32` | 模拟 | 模拟 | 支持 |
-| `f16` / `bf16` | 模拟 | 模拟 | 支持 |
-| `i8`–`i64`、`u8`–`u64` | 模拟 | 模拟 | 支持 |
+??? info "目标 Profile 限制"
+    | 元素类型 | CPU Simulator | A2/A3 | A5 |
+    |-----------|:-------------:|:-----:|:--:|
+    | `f32` | 模拟 | 模拟 | 支持 |
+    | `f16` / `bf16` | 模拟 | 模拟 | 支持 |
+    | `i8`–`i64`、`u8`–`u64` | 模拟 | 模拟 | 支持 |
 
-A5 是当前文档中最具体的向量实现 profile。CPU 模拟器和 A2/A3 类目标通过标量循环或等效路径模拟 `pto.v*`，但仍需保留可见的 PTO 语义。任何依赖具体时延或吞吐的代码，都应把这类依赖视为 profile 相关行为。
+    A5 是当前文档中最具体的向量实现 profile。CPU 模拟器和 A2/A3 类目标通过标量循环或等效路径模拟 `pto.v*`，但仍需保留可见的 PTO 语义。任何依赖具体时延或吞吐的代码，都应把这类依赖视为 profile 相关行为。
 
 ## 性能
 
@@ -166,5 +169,5 @@ void vector_add(Ptr<ub_space_t, ub_t> ub_a, Ptr<ub_space_t, ub_t> ub_b,
 
 - 指令集总览：[二元向量操作](../../binary-vector-ops_zh.md)
 - 下一条指令：[pto.vsub](./vsub_zh.md)
-- 向量指令总览：[向量指令面](../../../instruction-surfaces/vector-instructions_zh.md)
+- 向量指令总览：[向量指令面](../../README_zh.md)
 - 类型系统：[类型系统](../../../state-and-types/type-system_zh.md)

@@ -42,22 +42,23 @@ PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData 
 
 ## 约束
 
-### 类型约束
+!!! warning "约束"
+    ### 类型约束
 
-- `ParallelGroup::value_type::RawDType` 必须等于 `GlobalSrcData::RawDType`
-- `TileData::DType` 必须等于 `GlobalSrcData::RawDType`
+    - `ParallelGroup::value_type::RawDType` 必须等于 `GlobalSrcData::RawDType`
+    - `TileData::DType` 必须等于 `GlobalSrcData::RawDType`
 
-### 内存与并行组约束
+    ### 内存与并行组约束
 
-- `srcGlobalData` 必须指向根节点本地内存
-- `stagingTileData`、`pingTile`、`pongTile` 必须预先在 UB 中分配
-- `parallelGroup.tensors[k]` 必须指向 rank `k` 的目标缓冲区
-- `parallelGroup.GetRootIdx()` 必须标识当前调用方是广播根节点
+    - `srcGlobalData` 必须指向根节点本地内存
+    - `stagingTileData`、`pingTile`、`pongTile` 必须预先在 UB 中分配
+    - `parallelGroup.tensors[k]` 必须指向 rank `k` 的目标缓冲区
+    - `parallelGroup.GetRootIdx()` 必须标识当前调用方是广播根节点
 
-### 分块约束
+    ### 分块约束
 
-- 静态 `ValidRow` / `ValidCol` 场景下，对应维度必须能整除
-- 若要支持不足整行或整列的边界情况，应使用动态 valid region 的 Tile
+    - 静态 `ValidRow` / `ValidCol` 场景下，对应维度必须能整除
+    - 若要支持不足整行或整列的边界情况，应使用动态 valid region 的 Tile
 
 ## 示例
 
@@ -93,6 +94,6 @@ comm::TBROADCAST(group, srcG, pingTile, pongTile);
 
 ## 相关页面
 
-- [通信与运行时](../other/communication-and-runtime_zh.md)
+- [通信与运行时](communication-runtime_zh.md)
 - [TGATHER](./TGATHER_zh.md)
 - [TSCATTER](./TSCATTER_zh.md)

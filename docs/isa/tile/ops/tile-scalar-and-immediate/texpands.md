@@ -62,39 +62,42 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- **Valid region**:
-    - For `TileType::Vec` :
-    - The op fills `dst` over `dst.GetValidRow()` / `dst.GetValidCol()`.
-    - For  `TileType::Mat` :
-    - For Tile : The op fills `dst` over `TileData::Rows` / `TileData::Cols`.
-    - For ConvTile : The op fills `dst` over `ConvTileData`'s shape.
+!!! warning "Constraints"
+    - **Valid region**:
+        - For `TileType::Vec` :
+        - The op fills `dst` over `dst.GetValidRow()` / `dst.GetValidCol()`.
+        - For  `TileType::Mat` :
+        - For Tile : The op fills `dst` over `TileData::Rows` / `TileData::Cols`.
+        - For ConvTile : The op fills `dst` over `ConvTileData`'s shape.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Implementation checks (A2A3)**:
-    - For `TileType::Vec` :
-      - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `bfloat16_t`, `float`.
-      - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-    - For  `TileType::Mat` :
-      - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `bfloat16_t`, `float`.
-      - Static valid bounds: `The range of  TileData::Rows * TileData::Cols * sizeof(T) / 32 is [1, 32767]`.
+??? info "Target-Profile Restrictions"
+    - **Implementation checks (A2A3)**:
+        - For `TileType::Vec` :
+          - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `bfloat16_t`, `float`.
+          - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+        - For  `TileType::Mat` :
+          - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `bfloat16_t`, `float`.
+          - Static valid bounds: `The range of  TileData::Rows * TileData::Cols * sizeof(T) / 32 is [1, 32767]`.
 
-- **Implementation checks (A5)**:
-    - For `TileType::Vec` :
-      - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
-      - Tile layout must be row-major (`TileData::isRowMajor`).
-      - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-    - For  `TileType::Mat` :
-      - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
-      - For`TileDataDst::layout == pto::Layout::NC1HWC0 || TileDataDst::layout == pto::Layout::FRACTAL_Z`:
-        - `The range of convtile's (shape0 * shape1 * shape2 * shape3) is [1, 32767]`.
-      - For`TileDataDst::layout == pto::Layout::NDC1HWC0 || TileDataDst::layout == pto::Layout::FRACTAL_Z_3D`:
-        - `The range of convtile's (shape0 * shape1 * shape2 * shape3 * shape4) is [1, 32767]`.
+    - **Implementation checks (A5)**:
+        - For `TileType::Vec` :
+          - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
+          - Tile layout must be row-major (`TileData::isRowMajor`).
+          - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+        - For  `TileType::Mat` :
+          - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
+          - For`TileDataDst::layout == pto::Layout::NC1HWC0 || TileDataDst::layout == pto::Layout::FRACTAL_Z`:
+            - `The range of convtile's (shape0 * shape1 * shape2 * shape3) is [1, 32767]`.
+          - For`TileDataDst::layout == pto::Layout::NDC1HWC0 || TileDataDst::layout == pto::Layout::FRACTAL_Z_3D`:
+            - `The range of convtile's (shape0 * shape1 * shape2 * shape3 * shape4) is [1, 32767]`.
 
 ## Examples
 

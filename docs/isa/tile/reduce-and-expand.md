@@ -101,17 +101,19 @@ $$ \mathrm{dst}_{r,c} = \mathrm{src0}_{r,c} \;\oplus\; \mathrm{src1}_r \quad \te
 
 ## Constraints
 
-- The source tile's valid region determines the reduction domain.
-- Arg variants (`*_argmax`, `*_argmin`) produce an **integer index tile**, not a numeric value tile.
-- The destination tile for reduce operations has extent `1` along the reduced axis.
-- Expand variants require a second source tile with shape `(R)` or `(C)` matching the expand axis.
-- Exp-diff variants compute: `dst = exp(src0 - src1)` — used for softmax-style reductions.
+!!! warning "Constraints"
+    - The source tile's valid region determines the reduction domain.
+    - Arg variants (`*_argmax`, `*_argmin`) produce an **integer index tile**, not a numeric value tile.
+    - The destination tile for reduce operations has extent `1` along the reduced axis.
+    - Expand variants require a second source tile with shape `(R)` or `(C)` matching the expand axis.
+    - Exp-diff variants compute: `dst = exp(src0 - src1)` — used for softmax-style reductions.
 
 ## Cases That Are Not Allowed
 
-- **MUST NOT** reduce along an axis with zero extent.
-- **MUST NOT** use arg variants with non-numeric element types.
-- **MUST NOT** use expand variants with mismatched expand-axis lengths.
+!!! danger "Cases That Are Not Allowed"
+    - **MUST NOT** reduce along an axis with zero extent.
+    - **MUST NOT** use arg variants with non-numeric element types.
+    - **MUST NOT** use expand variants with mismatched expand-axis lengths.
 
 ## C++ Intrinsic
 
@@ -271,4 +273,4 @@ Tests are in `tests/costmodel/trowsum_kernel.cpp`, `tcolsum_kernel.cpp`, etc. Va
 ## See Also
 
 - [Tile instruction set](../instruction-families/tile-families.md) — Instruction set overview
-- [Tile instruction set](../instruction-surfaces/tile-instructions.md) — Instruction Set description
+- [Tile instruction set](../instruction-families/tile-families.md) — Instruction Set description

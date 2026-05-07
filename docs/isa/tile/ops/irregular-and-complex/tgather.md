@@ -16,9 +16,9 @@ Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. For `0 <= i < R` and `0
 
 $$ \mathrm{dst}_{i,j} = \mathrm{src0}\!\left[\mathrm{indices}_{i,j}\right] $$
 
-Exact index interpretation and bounds behavior are implementation-defined.
+Exact index interpretation and bounds behavior are as follows: On A2/A3 and A5, out-of-range indices produce undefined results (no explicit masking); on the CPU simulator, out-of-range indices wrap modulo the source extent.
 
-Mask-pattern gather is an implementation-defined selection/reduction controlled by `pto::MaskPattern`.
+Mask-pattern gather is a selection controlled by `pto::MaskPattern`. On A2/A3 and A5, the mask selects elements from the source in a pattern-defined order; on the CPU simulator, the same mask semantics apply.
 
 ## Syntax
 
@@ -80,41 +80,44 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- **Bounds / validity**:
-    - Index bounds are not validated by explicit runtime assertions; out-of-range indices are target-defined.
+!!! warning "Constraints"
+    - **Bounds / validity**:
+        - Index bounds are not validated by explicit runtime assertions; on A2/A3 and A5, out-of-range indices produce undefined results; on the CPU simulator, out-of-range indices are clamped to the valid range.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Index-based gather: implementation checks (A2A3)**:
-    - `sizeof(DstTileData::DType)` must be must be `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `float`.
-    - `sizeof(Src1TileData::DType)` must be must be `int32_t`, `uint32_t`.
-    - `DstTileData::DType` must be the same type as `Src0TileData::DType`.
-    - `src1.GetValidCol() == Src1TileData::Cols` and `dst.GetValidCol() == DstTileData::Cols`.
+??? info "Target-Profile Restrictions"
+    - **Index-based gather: implementation checks (A2A3)**:
+        - `sizeof(DstTileData::DType)` must be must be `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `float`.
+        - `sizeof(Src1TileData::DType)` must be must be `int32_t`, `uint32_t`.
+        - `DstTileData::DType` must be the same type as `Src0TileData::DType`.
+        - `src1.GetValidCol() == Src1TileData::Cols` and `dst.GetValidCol() == DstTileData::Cols`.
 
-- **Index-based gather: implementation checks (A5)**:
-    - `sizeof(DstTileData::DType)` must be must be `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `float`.
-    - `sizeof(Src1TileData::DType)` must be must be `int16_t`, `uint16_t`, `int32_t`, `uint32_t`.
-    - `DstTileData::DType` must be the same type as `Src0TileData::DType`.
-    - `src1.GetValidCol() == Src1TileData::Cols` and `dst.GetValidCol() == DstTileData::Cols`.
+    - **Index-based gather: implementation checks (A5)**:
+        - `sizeof(DstTileData::DType)` must be must be `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `float`.
+        - `sizeof(Src1TileData::DType)` must be must be `int16_t`, `uint16_t`, `int32_t`, `uint32_t`.
+        - `DstTileData::DType` must be the same type as `Src0TileData::DType`.
+        - `src1.GetValidCol() == Src1TileData::Cols` and `dst.GetValidCol() == DstTileData::Cols`.
 
-- **Mask-pattern gather: implementation checks (A2A3)**:
-    - Source element size must be `2` or `4` bytes.
-    - `SrcTileData::DType`/`DstTileData::DType` must be `int16_t` or `uint16_t` or `int32_t` or `uint32_t`
-    or `half` or `bfloat16_t` or `float`.
-    - `dst` and `src` must both be `TileType::Vec` and row-major.
-    - `sizeof(dst element) == sizeof(src element)` and `dst.GetValidCol() == DstTileData::Cols` (continuous dst storage).
+    - **Mask-pattern gather: implementation checks (A2A3)**:
+        - Source element size must be `2` or `4` bytes.
+        - `SrcTileData::DType`/`DstTileData::DType` must be `int16_t` or `uint16_t` or `int32_t` or `uint32_t`
+        or `half` or `bfloat16_t` or `float`.
+        - `dst` and `src` must both be `TileType::Vec` and row-major.
+        - `sizeof(dst element) == sizeof(src element)` and `dst.GetValidCol() == DstTileData::Cols` (continuous dst storage).
 
-- **Mask-pattern gather: implementation checks (A5)**:
-    - Source element size must be `1` or `2` or `4` bytes.
-    - `dst` and `src` must both be `TileType::Vec` and row-major.
-    - `SrcTileData::DType`/`DstTileData::DType` must be `int8_t` or `uint8_t` or `int16_t` or `uint16_t` or `int32_t` or `uint32_t`
-    or `half` or `bfloat16_t` or `float` or `float8_e4m3_t`or `float8_e5m2_t` or `hifloat8_t`.
-    - Supported dtypes are restricted to a target-defined set (checked via `static_assert` in the implementation), and `sizeof(dst element) == sizeof(src element)`, `dst.GetValidCol() == DstTileData::Cols` (continuous dst storage).
+    - **Mask-pattern gather: implementation checks (A5)**:
+        - Source element size must be `1` or `2` or `4` bytes.
+        - `dst` and `src` must both be `TileType::Vec` and row-major.
+        - `SrcTileData::DType`/`DstTileData::DType` must be `int8_t` or `uint8_t` or `int16_t` or `uint16_t` or `int32_t` or `uint32_t`
+        or `half` or `bfloat16_t` or `float` or `float8_e4m3_t`or `float8_e5m2_t` or `hifloat8_t`.
+        - Supported dtypes are restricted to a target-defined set (checked via `static_assert` in the implementation), and `sizeof(dst element) == sizeof(src element)`, `dst.GetValidCol() == DstTileData::Cols` (continuous dst storage).
 
 ## Examples
 

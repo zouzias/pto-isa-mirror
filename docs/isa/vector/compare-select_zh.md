@@ -47,18 +47,20 @@ vselr / vselrv2: 选择语义由具体变体定义
 
 ## 约束
 
-- 参与比较的向量宽度和类型必须兼容
-- `%seed` 或 `%mask` 的宽度必须匹配目标向量宽度
-- `vsel` 的两个源向量与结果向量必须共享相同 shape 和 dtype
-- `vselr` / `vselrv2` 的变体语义必须由 lowering 精确保留
+!!! warning "约束"
+    - 参与比较的向量宽度和类型必须兼容
+    - `%seed` 或 `%mask` 的宽度必须匹配目标向量宽度
+    - `vsel` 的两个源向量与结果向量必须共享相同 shape 和 dtype
+    - `vselr` / `vselrv2` 的变体语义必须由 lowering 精确保留
 
 ## 不允许的情形
 
-- 用不匹配的 mask 宽度驱动比较或选择
-- 把某个 backend 的隐式谓词来源写成通用 PTO 语义
-- 省略 compare mode 对结果的影响
+!!! danger "不允许的情形"
+    - 用不匹配的 mask 宽度驱动比较或选择
+    - 把某个 backend 的隐式谓词来源写成通用 PTO 语义
+    - 省略 compare mode 对结果的影响
 
 ## 相关页面
 
 - [谓词与物化](./predicate-and-materialization_zh.md)
-- [向量指令族](./vector-families_zh.md)
+- [向量指令族](README_zh.md)

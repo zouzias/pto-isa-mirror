@@ -15,7 +15,7 @@ np.random.seed(19)
 
 def gen_golden_data(case_name, param):
     dtype = param.dtype
-    row, col = [param.tile_row, param.tile_col] 
+    row, col = [param.tile_row, param.tile_col]
     row_valid, col_valid = [param.valid_row, param.valid_col]
 
     #Generate random input arrays
@@ -28,29 +28,29 @@ def gen_golden_data(case_name, param):
 
 class TPutParams:
     def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
-        self.dtype = dtype 
-        self.global_row = global_row 
-        self.global_col = global_col 
-        self.tile_row = tile_row 
-        self.tile_col = tile_col 
-        self.valid_row = valid_row 
+        self.dtype = dtype
+        self.global_row = global_row
+        self.global_col = global_col
+        self.tile_row = tile_row
+        self.tile_col = tile_col
+        self.valid_row = valid_row
         self.valid_col = valid_col
 
 def generate_case_name(param):
     dtype_str = NumExt.get_short_type_name(param.dtype)
 
-    def substring(a, b) -> str: 
+    def substring(a, b) -> str:
         return f"_{a}x{b}"
 
-    name = f"TPUTTest.case_{dtype_str}" 
-    name += substring(param.global_row, param.global_col) 
-    name += substring(param.tile_row, param.tile_col) 
+    name = f"TPUTTest.case_{dtype_str}"
+    name += substring(param.global_row, param.global_col)
+    name += substring(param.tile_row, param.tile_col)
     name += substring(param.valid_row, param.valid_col)
     return name
 
 if __name__ == "__main__":
     #Get the absolute path of the script
-    script_dir = os.path.dirname(os.path.abspath(__file__)) 
+    script_dir = os.path.dirname(os.path.abspath(__file__))
     testcases_dir = os.path.join(script_dir, "testcases")
 
     #Ensure the testcases directory exists
@@ -58,9 +58,9 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TPutParams(np.float32, 64, 64, 64, 64, 64, 64), 
-        TPutParams(np.int32, 64, 64, 64, 64, 64, 64), 
-        TPutParams(np.int16, 64, 64, 64, 64, 64, 64), 
+        TPutParams(np.float32, 64, 64, 64, 64, 64, 64),
+        TPutParams(np.int32, 64, 64, 64, 64, 64, 64),
+        TPutParams(np.int16, 64, 64, 64, 64, 64, 64),
         TPutParams(np.float16, 16, 256, 16, 256, 16, 256)
     ]
     if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":

@@ -66,17 +66,19 @@ PTO_INST RecordEvent TSEL(TileData &dst, MaskTile &selMask, TileData &src0,
 
 ## 约束
 
-- `sizeof(TileData::DType)` 必须是 2 或 4 字节。
-- `dst`、`src0`、`src1` 必须使用相同元素类型。
-- `dst`、`src0`、`src1` 必须是行主序。
-- 选择域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
-- `tmp` 必须有足够容量承载谓词展开过程。
+!!! warning "约束"
+    - `sizeof(TileData::DType)` 必须是 2 或 4 字节。
+    - `dst`、`src0`、`src1` 必须使用相同元素类型。
+    - `dst`、`src0`、`src1` 必须是行主序。
+    - 选择域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
+    - `tmp` 必须有足够容量承载谓词展开过程。
 
 ## 不允许的情形
 
-- `dst`、`src0`、`src1` 使用不同 shape。
-- 使用非行主序 tile。
-- 假设掩码 tile 的具体位打包格式是跨目标固定的。
+!!! danger "不允许的情形"
+    - `dst`、`src0`、`src1` 使用不同 shape。
+    - 使用非行主序 tile。
+    - 假设掩码 tile 的具体位打包格式是跨目标固定的。
 
 ## Target-Profile 限制
 

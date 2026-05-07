@@ -56,21 +56,24 @@ None.
 
 ## Constraints
 
-- The installed public CCE API accepts documented `Pat*` marker types only; there is no public runtime-scalar overload for `pge_b32` in the shipped 3510 header.
-- Programs must use a pattern token that is valid for the selected target profile.
-- This operation materializes a predicate register only; it does not update any scalar input in place.
+!!! warning "Constraints"
+    - The installed public CCE API accepts documented `Pat*` marker types only; there is no public runtime-scalar overload for `pge_b32` in the shipped 3510 header.
+    - Programs must use a pattern token that is valid for the selected target profile.
+    - This operation materializes a predicate register only; it does not update any scalar input in place.
 
 ## Exceptions
 
-- Illegal if the pattern token is not supported by the selected target profile.
-- Illegal if the result is consumed in a predicate-width context that the selected backend does not support.
+!!! danger "Exceptions"
+    - Illegal if the pattern token is not supported by the selected target profile.
+    - Illegal if the result is consumed in a predicate-width context that the selected backend does not support.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| Pattern-token predicate generation | Simulated | Supported | Supported |
-| Public CCE surface | Emulated | Supported | Supported |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | Pattern-token predicate generation | Simulated | Supported | Supported |
+    | Public CCE surface | Emulated | Supported | Supported |
 
 ## Examples
 

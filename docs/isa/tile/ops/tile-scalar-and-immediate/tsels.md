@@ -82,32 +82,35 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+!!! warning "Constraints"
+    - **Valid region**:
+        - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 
-- **Mask encoding**:
-    - The mask tile is interpreted as packed predicate bits in a target-defined layout.
+    - **Mask encoding**:
+        - The mask tile is interpreted as packed predicate bits in a target-defined layout.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Implementation checks (A2A3)**:
-    - `sizeof(TileDataDst::DType)` must be `2` or `4` bytes.
-    - Supported data types are `half`, `float16_t`, `float`, and `float32_t`.
-    - `dst` and `src` must use the same element type.
-    - `dst` and `src` must be row-major.
-    - Runtime: `src.GetValidRow()/GetValidCol()` must match `dst.GetValidRow()/GetValidCol()`.
+??? info "Target-Profile Restrictions"
+    - **Implementation checks (A2A3)**:
+        - `sizeof(TileDataDst::DType)` must be `2` or `4` bytes.
+        - Supported data types are `half`, `float16_t`, `float`, and `float32_t`.
+        - `dst` and `src` must use the same element type.
+        - `dst` and `src` must be row-major.
+        - Runtime: `src.GetValidRow()/GetValidCol()` must match `dst.GetValidRow()/GetValidCol()`.
 
-- **Implementation checks (A5)**:
-    - `sizeof(TileDataDst::DType)` may be `1`, `2`, or `4` bytes.
-    - Supported data types are `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, and `float`.
-    - `dst` and `src` must use the same element type.
-    - `dst`, `mask`, and `src` must be row-major.
-    - Runtime: `src.GetValidRow()/GetValidCol()` must match `dst.GetValidRow()/GetValidCol()`.
+    - **Implementation checks (A5)**:
+        - `sizeof(TileDataDst::DType)` may be `1`, `2`, or `4` bytes.
+        - Supported data types are `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, and `float`.
+        - `dst` and `src` must use the same element type.
+        - `dst`, `mask`, and `src` must be row-major.
+        - Runtime: `src.GetValidRow()/GetValidCol()` must match `dst.GetValidRow()/GetValidCol()`.
 
 ## Examples
 

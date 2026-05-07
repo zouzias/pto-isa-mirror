@@ -43,19 +43,22 @@ vtrc %dst, %src, "ROUND_MODE"
 
 ## 约束
 
-- `pto.vtrc` 会保持源向量的宽度和元素类型不变。
-- 所选 `ROUND_MODE` 必须是目标 profile 支持的模式。
-- lowering 必须精确保留逐 lane 的舍入语义。
+!!! warning "约束"
+    - `pto.vtrc` 会保持源向量的宽度和元素类型不变。
+    - 所选 `ROUND_MODE` 必须是目标 profile 支持的模式。
+    - lowering 必须精确保留逐 lane 的舍入语义。
 
 ## 异常与非法情形
 
-- verifier 会拒绝非法的操作数形状、不支持的元素类型以及不支持的舍入模式属性。
-- 约束部分列出的额外非法情形，同样属于 `pto.vtrc` 的契约。
+!!! danger "异常与非法情形"
+    - verifier 会拒绝非法的操作数形状、不支持的元素类型以及不支持的舍入模式属性。
+    - 约束部分列出的额外非法情形，同样属于 `pto.vtrc` 的契约。
 
 ## 目标 Profile 限制
 
-- A5 是当前手册里最细的具体 profile；CPU 模拟器和 A2/A3 类目标可以在保留可见 PTO 契约的前提下做等效模拟。
-- 如果代码依赖某个特定舍入模式，应把这种依赖视为 profile 相关。
+??? info "目标 Profile 限制"
+    - A5 是当前手册里最细的具体 profile；CPU 模拟器和 A2/A3 类目标可以在保留可见 PTO 契约的前提下做等效模拟。
+    - 如果代码依赖某个特定舍入模式，应把这种依赖视为 profile 相关。
 
 ## 示例
 

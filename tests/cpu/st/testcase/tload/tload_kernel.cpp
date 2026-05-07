@@ -271,30 +271,6 @@ void launchTLOAD(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream)
     }
 }
 
-template <typename T, PadValue PadVal_>
-T getPadOrValue(bool withinValidRange, T value)
-{
-    if (withinValidRange) {
-        return value;
-    }
-    if (std::numeric_limits<T>::has_infinity) {
-        if (PadVal_ == PadValue::Max) {
-            return std::numeric_limits<T>::infinity();
-        }
-        if (PadVal_ == PadValue::Min) {
-            return -std::numeric_limits<T>::infinity();
-        }
-        return 0;
-    }
-    if (PadVal_ == PadValue::Max) {
-        return std::numeric_limits<T>::max();
-    }
-    if (PadVal_ == PadValue::Min) {
-        return std::numeric_limits<T>::min();
-    }
-    return 0;
-}
-
 template <typename T, int Shape0, int Shape1, int Shape2, int Shape3, int Shape4, int kTRows_, int kTCols_,
           PadValue PadVal_ = PadValue::Null>
 int get_input_golden_case(uint8_t *input, uint8_t *golden)

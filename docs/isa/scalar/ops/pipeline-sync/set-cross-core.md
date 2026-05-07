@@ -59,27 +59,30 @@ None. This form is defined by its side effect on inter-core synchronization stat
 
 ## Constraints
 
-- **A2A3 only**: `set_cross_core` is only available on the A2A3 profile. Programs that use this operation MUST provide a fallback path for other profiles.
-- **Semaphore pool**: The pool has 16 physical semaphore IDs per cluster. The hardware implements a 4-bit counter (0–15). `set_cross_core` increments the counter; `wait_flag_dev` decrements it. If the counter would overflow past 15, the behavior is **implementation-defined**.
-- **Broadcast vs. per-subblock**: The broadcast behavior is specific to mode2. Other modes (if supported) may have different semantics.
-- **core_id meaning**: `core_id = 0` targets AIV0 subblock; `core_id = 1` targets AIV1 subblock. Other values are **illegal**.
+!!! warning "Constraints"
+    - **A2A3 only**: `set_cross_core` is only available on the A2A3 profile. Programs that use this operation MUST provide a fallback path for other profiles.
+    - **Semaphore pool**: The pool has 16 physical semaphore IDs per cluster. The hardware implements a 4-bit counter (0–15). `set_cross_core` increments the counter; `wait_flag_dev` decrements it. On A2/A3: if the counter would overflow past 15, the hardware wraps the counter and signals an overflow error. On CPU simulator: not applicable.
+    - **Broadcast vs. per-subblock**: The broadcast behavior is specific to mode2. Other modes (if supported) may have different semantics.
+    - **core_id meaning**: `core_id = 0` targets AIV0 subblock; `core_id = 1` targets AIV1 subblock. Other values are **illegal**.
 
 ## Exceptions
 
-- Illegal on non-A2A3 profiles.
-- Illegal if `%event_id` is outside the valid range (0–15).
-- Illegal if the hardware counter would overflow.
+!!! danger "Exceptions"
+    - Illegal on non-A2A3 profiles.
+    - Illegal if `%event_id` is outside the valid range (0–15).
+    - Illegal if the hardware counter would overflow.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| `set_cross_core` | Not available | Supported (mode2) | Use `set_intra_block` |
-| Mode2 broadcast semantics | Not applicable | Supported | Not applicable |
-| Semaphore pool size | Not applicable | 16 IDs | Not applicable |
-| Per-subblock signaling | Not applicable | 1 set reaches both | 1 set per subblock |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | `set_cross_core` | Not available | Supported (mode2) | Use `set_intra_block` |
+    | Mode2 broadcast semantics | Not applicable | Supported | Not applicable |
+    | Semaphore pool size | Not applicable | 16 IDs | Not applicable |
+    | Per-subblock signaling | Not applicable | 1 set reaches both | 1 set per subblock |
 
-CPU simulator does not implement `set_cross_core`. Portable programs MUST guard this operation with profile checks or provide CPU-sim fallback.
+    CPU simulator does not implement `set_cross_core`. Portable programs MUST guard this operation with profile checks or provide CPU-sim fallback.
 
 ## Examples
 

@@ -8,56 +8,43 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef PTO_COMM_TGET_ASYNC_HPP
-#define PTO_COMM_TGET_ASYNC_HPP
+#ifndef PTO_COMM_TGET_ASYNC_COMMON_DETAIL_HPP
+#define PTO_COMM_TGET_ASYNC_COMMON_DETAIL_HPP
 
 #include "pto/common/constants.hpp"
 #include "pto/common/type.hpp"
 #include "pto/common/debug.h"
 #include "pto/comm/comm_types.hpp"
-#include "pto/comm/async/async_types.hpp"
+#include "pto/comm/async_common/async_types.hpp"
 #include "pto/npu/comm/async/sdma/sdma_async_intrin.hpp"
-#ifdef PTO_URMA_SUPPORTED
-#include "pto/npu/comm/async/urma/urma_async_intrin.hpp"
-#endif
 
 namespace pto {
 namespace comm {
-
-// ============================================================================
-// TGET_ASYNC_IMPL: Asynchronous remote read operation implementation
-//
-// Directly transfers data from remote NPU's GM to local GM without UB staging.
-// Returns AsyncEvent for synchronization with TSYNC.
-//
-// Data flow: srcGlobalData (remote GM) -> DMA Engine -> dstGlobalData (local GM)
-// ============================================================================
-
 namespace detail {
 
 template <typename GlobalData>
-PTO_INTERNAL bool TCommAsyncIsFlatContiguous1D(GlobalData &globalData)
+PTO_INTERNAL bool TGetAsyncIsFlatContiguous1D(GlobalData &globalData)
 {
-    const int dim0 = globalData.GetShape(GlobalTensorDim::DIM_0);
-    const int dim1 = globalData.GetShape(GlobalTensorDim::DIM_1);
-    const int dim2 = globalData.GetShape(GlobalTensorDim::DIM_2);
-    const int dim3 = globalData.GetShape(GlobalTensorDim::DIM_3);
-    const int dim4 = globalData.GetShape(GlobalTensorDim::DIM_4);
+    const int shp0 = globalData.GetShape(GlobalTensorDim::DIM_0);
+    const int shp1 = globalData.GetShape(GlobalTensorDim::DIM_1);
+    const int shp2 = globalData.GetShape(GlobalTensorDim::DIM_2);
+    const int shp3 = globalData.GetShape(GlobalTensorDim::DIM_3);
+    const int shp4 = globalData.GetShape(GlobalTensorDim::DIM_4);
 
-    const int pitch0 = globalData.GetStride(GlobalTensorDim::DIM_0);
-    const int pitch1 = globalData.GetStride(GlobalTensorDim::DIM_1);
-    const int pitch2 = globalData.GetStride(GlobalTensorDim::DIM_2);
-    const int pitch3 = globalData.GetStride(GlobalTensorDim::DIM_3);
-    const int pitch4 = globalData.GetStride(GlobalTensorDim::DIM_4);
+    const int step0 = globalData.GetStride(GlobalTensorDim::DIM_0);
+    const int step1 = globalData.GetStride(GlobalTensorDim::DIM_1);
+    const int step2 = globalData.GetStride(GlobalTensorDim::DIM_2);
+    const int step3 = globalData.GetStride(GlobalTensorDim::DIM_3);
+    const int step4 = globalData.GetStride(GlobalTensorDim::DIM_4);
 
-    const bool hasPackedLayout = (pitch4 == 1) && (pitch3 == dim4) && (pitch2 == dim3 * pitch3) &&
-                                 (pitch1 == dim2 * pitch2) && (pitch0 == dim1 * pitch1);
-    const bool isSingleLine = (dim0 == 1 && dim1 == 1 && dim2 == 1 && dim3 == 1);
-    return hasPackedLayout && isSingleLine;
+    const bool packedLayout = (step4 == 1) && (step3 == shp4) && (step2 == shp3 * step3) && (step1 == shp2 * step2) &&
+                              (step0 == shp1 * step1);
+    const bool oneDimLogical = (shp0 == 1 && shp1 == 1 && shp2 == 1 && shp3 == 1);
+    return packedLayout && oneDimLogical;
 }
 
 template <typename GlobalData>
-PTO_INTERNAL uint32_t TCommAsyncGetTotalElemCount(GlobalData &globalData)
+PTO_INTERNAL uint32_t TGetAsyncGetTotalElemCount(GlobalData &globalData)
 {
     const uint32_t d0 = static_cast<uint32_t>(globalData.GetShape(GlobalTensorDim::DIM_0));
     const uint32_t d1 = static_cast<uint32_t>(globalData.GetShape(GlobalTensorDim::DIM_1));
@@ -68,12 +55,12 @@ PTO_INTERNAL uint32_t TCommAsyncGetTotalElemCount(GlobalData &globalData)
 }
 
 template <typename GlobalDstData, typename GlobalSrcData>
-PTO_INTERNAL bool TCommAsyncCheckTensorCompatibility(const char *opName)
+PTO_INTERNAL bool TGetAsyncCheckTensorCompatibility()
 {
     using SrcElem = typename GlobalSrcData::RawDType;
-    static_assert(std::is_same_v<SrcElem, typename GlobalDstData::RawDType>, "T*_ASYNC: src/dst element type mismatch");
-    static_assert(GlobalSrcData::layout == GlobalDstData::layout, "T*_ASYNC: src/dst layout mismatch");
-    (void)opName;
+    static_assert(std::is_same_v<SrcElem, typename GlobalDstData::RawDType>,
+                  "TGET_ASYNC: src/dst element type mismatch");
+    static_assert(GlobalSrcData::layout == GlobalDstData::layout, "TGET_ASYNC: src/dst layout mismatch");
     return true;
 }
 
@@ -81,20 +68,20 @@ template <typename GlobalDstData, typename GlobalSrcData>
 PTO_INTERNAL AsyncEvent TGET_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
                                              const sdma::SdmaExecContext &execCtx)
 {
-    (void)TCommAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>("TGET_ASYNC");
+    (void)TGetAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
 
     PTO_ASSERT(dstGlobalData.data() != nullptr && srcGlobalData.data() != nullptr,
                "TGET_ASYNC: src and dst tensor pointers must not be null.");
 
-    PTO_ASSERT(TCommAsyncIsFlatContiguous1D(srcGlobalData),
+    PTO_ASSERT(TGetAsyncIsFlatContiguous1D(srcGlobalData),
                "TGET_ASYNC: src tensor must be flat contiguous 1D (packed layout, single logical line). "
                "Multi-dimensional or non-contiguous tensors are not supported by SDMA async path.");
-    PTO_ASSERT(TCommAsyncIsFlatContiguous1D(dstGlobalData),
+    PTO_ASSERT(TGetAsyncIsFlatContiguous1D(dstGlobalData),
                "TGET_ASYNC: dst tensor must be flat contiguous 1D (packed layout, single logical line). "
                "Multi-dimensional or non-contiguous tensors are not supported by SDMA async path.");
 
-    const uint32_t srcElems = TCommAsyncGetTotalElemCount(srcGlobalData);
-    const uint32_t dstElems = TCommAsyncGetTotalElemCount(dstGlobalData);
+    const uint32_t srcElems = TGetAsyncGetTotalElemCount(srcGlobalData);
+    const uint32_t dstElems = TGetAsyncGetTotalElemCount(dstGlobalData);
     PTO_ASSERT(dstElems >= srcElems, "TGET_ASYNC SDMA: dst buffer too small for src data.");
 
     using T = typename GlobalSrcData::RawDType;
@@ -103,61 +90,8 @@ PTO_INTERNAL AsyncEvent TGET_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, Globa
     return AsyncEvent(eventHandle, DmaEngine::SDMA);
 }
 
-#ifdef PTO_URMA_SUPPORTED
-template <typename GlobalDstData, typename GlobalSrcData>
-PTO_INTERNAL AsyncEvent TGET_ASYNC_URMA_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                                             const urma::UrmaExecContext &execCtx)
-{
-    (void)TCommAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>("TGET_ASYNC");
-
-    PTO_ASSERT(TCommAsyncIsFlatContiguous1D(srcGlobalData),
-               "TGET_ASYNC URMA: src tensor must be flat contiguous 1D (packed layout, single logical line). "
-               "Multi-dimensional or non-contiguous tensors are not supported by URMA async path.");
-    PTO_ASSERT(TCommAsyncIsFlatContiguous1D(dstGlobalData),
-               "TGET_ASYNC URMA: dst tensor must be flat contiguous 1D (packed layout, single logical line). "
-               "Multi-dimensional or non-contiguous tensors are not supported by URMA async path.");
-
-    const uint32_t srcElems = TCommAsyncGetTotalElemCount(srcGlobalData);
-    const uint32_t dstElems = TCommAsyncGetTotalElemCount(dstGlobalData);
-    PTO_ASSERT(dstElems >= srcElems, "TGET_ASYNC URMA: dst buffer too small for src data");
-
-    using T = typename GlobalSrcData::RawDType;
-    const uint64_t transferSize = static_cast<uint64_t>(srcElems) * sizeof(T);
-    PTO_ASSERT(transferSize <= UINT32_MAX, "TGET_ASYNC URMA: transfer size exceeds SGE length limit (4GB)");
-
-    const uint64_t eventHandle =
-        urma::__urma_get_async(reinterpret_cast<__gm__ uint8_t *>(dstGlobalData.data()),
-                               reinterpret_cast<__gm__ uint8_t *>(srcGlobalData.data()), transferSize, execCtx);
-    return AsyncEvent(eventHandle, DmaEngine::URMA);
-}
-#endif
-
 } // namespace detail
-
-// ============================================================================
-// Main TGET_ASYNC_IMPL with DmaEngine template parameter
-// ============================================================================
-
-template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData>
-PTO_INTERNAL AsyncEvent TGET_ASYNC_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                                        const AsyncSession &session)
-{
-    if constexpr (engine == DmaEngine::SDMA) {
-        return detail::TGET_ASYNC_SDMA_IMPL(dstGlobalData, srcGlobalData, session.sdmaSession.execCtx);
-    } else if constexpr (engine == DmaEngine::URMA) {
-#ifdef PTO_URMA_SUPPORTED
-        return detail::TGET_ASYNC_URMA_IMPL(dstGlobalData, srcGlobalData, session.urmaSession.execCtx);
-#else
-        static_assert(engine != DmaEngine::URMA, "TGET_ASYNC: URMA engine requires NPU_ARCH 3510");
-        return AsyncEvent(0, engine);
-#endif
-    } else {
-        PTO_ASSERT(false, "TGET_ASYNC: unsupported engine");
-        return AsyncEvent(0, engine);
-    }
-}
-
 } // namespace comm
 } // namespace pto
 
-#endif // PTO_COMM_TGET_ASYNC_HPP
+#endif // PTO_COMM_TGET_ASYNC_COMMON_DETAIL_HPP

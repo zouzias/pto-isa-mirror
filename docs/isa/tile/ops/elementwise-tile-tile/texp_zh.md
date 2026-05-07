@@ -62,14 +62,16 @@ PTO_INST RecordEvent TEXP(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 
 ## 约束
 
-- 支持类型当前是 `float` / `half`
-- tile 必须是行主序向量 tile
-- 操作迭代域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定
-- 高精度算法只在 A5 有效
+!!! warning "约束"
+    - 支持类型当前是 `float` / `half`
+    - tile 必须是行主序向量 tile
+    - 操作迭代域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定
+    - 高精度算法只在 A5 有效
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## Target-Profile 限制
 

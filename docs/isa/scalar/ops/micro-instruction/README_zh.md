@@ -2,7 +2,8 @@
 
 本节记录 PTO 微指令表面，主要对应 A5（Ascend 950）profile。这里的指令直接暴露向量流水线层面的状态：DMA 配置、向量寄存器、mask、同步，以及 `__VEC_SCOPE__` 边界。
 
-> **说明**：这一层与 Tile ISA 不同。Tile 指令（`pto.t*`）围绕 tile、layout 和 valid region 建模；微指令则围绕向量寄存器（`vreg`）、mask 和标量状态建模。
+!!! note "说明"
+    ：这一层与 Tile ISA 不同。Tile 指令（`pto.t*`）围绕 tile、layout 和 valid region 建模；微指令则围绕向量寄存器（`vreg`）、mask 和标量状态建模。
 
 ## 指令分组
 
@@ -36,9 +37,10 @@ PTO 微指令源程序并不只包含 `pto` 方言操作。在实践中，它还
 
 ## 约束
 
-- PTO 微指令表面是 profile 相关的；当前文档记录的是面向 A5 的可见表面。
-- 微指令代码仍然会和标量 `arith` / `scf` 共同出现。
-- 不应把微指令表面与 Tile ISA 混为一谈：两者的操作数模型、调度模型和状态载体不同。
+!!! warning "约束"
+    - PTO 微指令表面是 profile 相关的；当前文档记录的是面向 A5 的可见表面。
+    - 微指令代码仍然会和标量 `arith` / `scf` 共同出现。
+    - 不应把微指令表面与 Tile ISA 混为一谈：两者的操作数模型、调度模型和状态载体不同。
 
 ## 与 PTO Tile ISA 的关系
 

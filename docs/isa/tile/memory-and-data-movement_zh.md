@@ -82,19 +82,21 @@ scatter: dst[index[i]] = src[i]
 
 ## 约束
 
-- 源与目标 dtype 的字节大小必须兼容：`sizeof(tile.dtype) == sizeof(gtensor.dtype)`
-- 布局兼容性依赖 target profile
-- gather/scatter 的索引 tile 必须满足形状和类型约束
-- `TSTORE` 的 `AtomicType` 是否可用由 profile 决定
-- `TSTORE_FP` 当前只对 `TileType::Acc` 的 fix-pipe 路径合法
+!!! warning "约束"
+    - 源与目标 dtype 的字节大小必须兼容：`sizeof(tile.dtype) == sizeof(gtensor.dtype)`
+    - 布局兼容性依赖 target profile
+    - gather/scatter 的索引 tile 必须满足形状和类型约束
+    - `TSTORE` 的 `AtomicType` 是否可用由 profile 决定
+    - `TSTORE_FP` 当前只对 `TileType::Acc` 的 fix-pipe 路径合法
 
 ## 不允许的情形
 
-- 使用未初始化的 tile 参与搬运
-- GlobalTensor 的 stride 与搬运模式不兼容
-- 访问超出张量声明 shape 的 GM 地址
-- 对非 `TileType::Acc` 使用 `TSTORE_FP`
-- 在 CPU 模拟器上假设原子写回具备 NPU 上的所有语义
+!!! danger "不允许的情形"
+    - 使用未初始化的 tile 参与搬运
+    - GlobalTensor 的 stride 与搬运模式不兼容
+    - 访问超出张量声明 shape 的 GM 地址
+    - 对非 `TileType::Acc` 使用 `TSTORE_FP`
+    - 在 CPU 模拟器上假设原子写回具备 NPU 上的所有语义
 
 ## 相关页面
 

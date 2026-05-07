@@ -63,54 +63,57 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-### General constraints / checks
+!!! warning "Constraints"
+    ### General constraints / checks
 
-- `dst` and `src` must be `TileType::Vec`.
+    - `dst` and `src` must be `TileType::Vec`.
 
-- Supported source element types: `half`, `float`.
+    - Supported source element types: `half`, `float`.
 
-- Supported destination element types: `uint32_t`, `int32_t`.
+    - Supported destination element types: `uint32_t`, `int32_t`.
 
-- `src` must use standard ND layout: row-major and non-fractal (`BLayout::RowMajor`, `SLayout::NoneBox`).
+    - `src` must use standard ND layout: row-major and non-fractal (`BLayout::RowMajor`, `SLayout::NoneBox`).
 
-- `dst` and `src` must satisfy the shared row-reduce-index check path used by `TRowArgMin`.
+    - `dst` and `src` must satisfy the shared row-reduce-index check path used by `TRowArgMin`.
 
-- Temporary tile is not used when `srcValidCol <= ElementPerRepeat`, used when `srcValidCol > ElementPerRepeat`.
+    - Temporary tile is not used when `srcValidCol <= ElementPerRepeat`, used when `srcValidCol > ElementPerRepeat`.
 
-- `tmp` tile's rows is the same as `src`.
+    - `tmp` tile's rows is the same as `src`.
 
-- Simply set `tmp` tile size the same as `src` when `src` is small.
+    - Simply set `tmp` tile size the same as `src` when `src` is small.
 
-- `tmp` tile's stride can be calculated out based on `src`'s `validCol` using the following formula:
+    - `tmp` tile's stride can be calculated out based on `src`'s `validCol` using the following formula:
 
-```text
-repeats = ceil(validCol / elementPerRepeat)
-stride = ceil(repeats * 2 / elementPerBlock) * elementPerBlock + ceil(repeats / elementPerBlock) * elementPerBlock
-```
+    ```text
+    repeats = ceil(validCol / elementPerRepeat)
+    stride = ceil(repeats * 2 / elementPerBlock) * elementPerBlock + ceil(repeats / elementPerBlock) * elementPerBlock
+    ```
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- Runtime checks follow the shared row-reduce check path:
-  - `src.GetValidRow() != 0`
-  - `src.GetValidCol() != 0`
-  - `src.GetValidRow() == dst.GetValidRow()`
+??? info "Target-Profile Restrictions"
+    - Runtime checks follow the shared row-reduce check path:
+      - `src.GetValidRow() != 0`
+      - `src.GetValidCol() != 0`
+      - `src.GetValidRow() == dst.GetValidRow()`
 
-### A2A3 implementation checks
+    ### A2A3 implementation checks
 
-- `dst` is checked through the shared row-reduce-index path and may use either of these non-fractal layouts:
-  - DN layout with one column (`BLayout::ColMajor`, `Cols == 1`), or
-  - ND layout whose valid column count is 1.
+    - `dst` is checked through the shared row-reduce-index path and may use either of these non-fractal layouts:
+      - DN layout with one column (`BLayout::ColMajor`, `Cols == 1`), or
+      - ND layout whose valid column count is 1.
 
-### A5 implementation checks
+    ### A5 implementation checks
 
-- In the checked A5 implementation path, `tmp` is accepted by the interface but not used by `TROWARGMIN_IMPL`.
+    - In the checked A5 implementation path, `tmp` is accepted by the interface but not used by `TROWARGMIN_IMPL`.
 
-### About temporary tile `tmp` for A3
+    ### About temporary tile `tmp` for A3
 
 ## Examples
 

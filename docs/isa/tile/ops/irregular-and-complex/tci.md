@@ -20,7 +20,7 @@ For a linearized index `k` over the valid elements:
 
   $$ \mathrm{dst}_{k} = S - k $$
 
-The linearization order depends on the tile layout (implementation-defined).
+The linearization order depends on the tile layout. On A2/A3 and A5, the linearization order follows row-major order: elements are visited left-to-right within each row, then top-to-bottom across rows.
 
 ## Syntax
 
@@ -81,20 +81,23 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- **Valid region**:
-    - The implementation uses `dst.GetValidCol()` as the sequence length and does not consult `dst.GetValidRow()`.
+!!! warning "Constraints"
+    - **Valid region**:
+        - The implementation uses `dst.GetValidCol()` as the sequence length and does not consult `dst.GetValidRow()`.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Implementation checks (A2A3/A5)**:
-    - `TileData::DType` must be exactly the same type as the scalar template parameter `T`.
-    - `dst/scalar` element types must be identical, and must be one of: `int32_t`, `uint32_t`, `int16_t`, `uint16_t`.
-    - `TileData::Cols != 1` (this is the condition enforced by the implementation).
+??? info "Target-Profile Restrictions"
+    - **Implementation checks (A2A3/A5)**:
+        - `TileData::DType` must be exactly the same type as the scalar template parameter `T`.
+        - `dst/scalar` element types must be identical, and must be one of: `int32_t`, `uint32_t`, `int16_t`, `uint16_t`.
+        - `TileData::Cols != 1` (this is the condition enforced by the implementation).
 
 ## Examples
 

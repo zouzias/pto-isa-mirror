@@ -67,28 +67,31 @@ None. This form is defined by its side effect on UB memory.
 
 ## Constraints
 
-- **UB address space**: `%ub_ptr` MUST have address space `ub`.
-- **Offset alignment**: The effective address MUST be 64-bit aligned. That is, `imm * 8` MUST be a multiple of 8. Misaligned effective addresses are **illegal**.
-- **Immediate range**: The offset immediate MUST fit in the instruction encoding.具体的立即数范围由目标 Profile 定义；超出范围的值为 **illegal**。
-- **Distribution mode**: The `dist` attribute MUST be `"NORM"` or `"PK"`.
-- **Predicate width**: The store transfers exactly 64 bits, which MUST match the active element type context.
-- **Write atomicity**: The 64-bit predicate word is written atomically.
+!!! warning "Constraints"
+    - **UB address space**: `%ub_ptr` MUST have address space `ub`.
+    - **Offset alignment**: The effective address MUST be 64-bit aligned. That is, `imm * 8` MUST be a multiple of 8. Misaligned effective addresses are **illegal**.
+    - **Immediate range**: The offset immediate MUST fit in the instruction encoding.具体的立即数范围由目标 Profile 定义；超出范围的值为 **illegal**。
+    - **Distribution mode**: The `dist` attribute MUST be `"NORM"` or `"PK"`.
+    - **Predicate width**: The store transfers exactly 64 bits, which MUST match the active element type context.
+    - **Write atomicity**: The 64-bit predicate word is written atomically.
 
 ## Exceptions
 
-- Illegal if `%ub_ptr` is not a UB-space pointer.
-- Illegal if the effective address is not 64-bit aligned.
-- Illegal if the immediate offset is out of range for the target profile.
-- Illegal if `dist` attribute is not `"NORM"` or `"PK"`.
+!!! danger "Exceptions"
+    - Illegal if `%ub_ptr` is not a UB-space pointer.
+    - Illegal if the effective address is not 64-bit aligned.
+    - Illegal if the immediate offset is out of range for the target profile.
+    - Illegal if `dist` attribute is not `"NORM"` or `"PK"`.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| Immediate-offset predicate store | Simulated | Supported | Supported |
-| `"NORM"` distribution mode | Supported | Supported | Supported |
-| `"PK"` (packed) distribution mode | Not supported | Supported | Supported |
-| Immediate offset range | Implementation-defined | 0–255 (8-byte units) | 0–1023 (8-byte units) |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | Immediate-offset predicate store | Simulated | Supported | Supported |
+    | `"NORM"` distribution mode | Supported | Supported | Supported |
+    | `"PK"` (packed) distribution mode | Not supported | Supported | Supported |
+    | Immediate offset range | Implementation-defined | 0–255 (8-byte units) | 0–1023 (8-byte units) |
 
 ## Examples
 

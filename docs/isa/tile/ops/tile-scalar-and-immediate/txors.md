@@ -62,25 +62,28 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+!!! warning "Constraints"
+    - **Valid region**:
+        - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Implementation checks (A2A3)**:
-    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, and `int16_t`.
-    - `dst`, `src`, and `tmp` must use the same element type.
-    - In manual mode, source, destination, and temporary storage must not overlap in memory.
+??? info "Target-Profile Restrictions"
+    - **Implementation checks (A2A3)**:
+        - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, and `int16_t`.
+        - `dst`, `src`, and `tmp` must use the same element type.
+        - In manual mode, source, destination, and temporary storage must not overlap in memory.
 
-- **Implementation checks (A5)**:
-    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, and `int32_t`.
-    - `dst` and `src` element types must match.
-    - `src.GetValidRow()/GetValidCol()` must match `dst`.
+    - **Implementation checks (A5)**:
+        - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, and `int32_t`.
+        - `dst` and `src` element types must match.
+        - `src.GetValidRow()/GetValidCol()` must match `dst`.
 
 ## Examples
 

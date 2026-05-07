@@ -27,8 +27,25 @@ constexpr uint32_t G_M = CONFIG_G_M;
 constexpr uint32_t G_K = CONFIG_G_K;
 constexpr uint32_t G_N = CONFIG_G_N;
 
-constexpr uint32_t G_BASE_M = 128;
-constexpr uint32_t G_BASE_K = 64;
-constexpr uint32_t G_BASE_N = 256;
+#ifndef CONFIG_G_BASE_M
+#define CONFIG_G_BASE_M 128
+#endif
+#ifndef CONFIG_G_BASE_N
+#define CONFIG_G_BASE_N 256
+#endif
+
+// Must match G_STEP_KA in allgather_gemm_compute_kernel.cpp
+// (comm K-tile = G_BASE_K * G_STEP_KA).
+constexpr uint32_t G_STEP_KA_PACK = 4;
+static_assert(CONFIG_G_BASE_N % G_STEP_KA_PACK == 0,
+              "CONFIG_G_BASE_N must be divisible by G_STEP_KA_PACK (see allgather_gemm_compute_kernel G_STEP_KA)");
+
+constexpr uint32_t G_BASE_M = CONFIG_G_BASE_M;
+constexpr uint32_t G_BASE_N = CONFIG_G_BASE_N;
+constexpr uint32_t G_BASE_K = CONFIG_G_BASE_N / G_STEP_KA_PACK;
+
+static_assert(CONFIG_G_M % CONFIG_G_BASE_M == 0, "G_M must be divisible by CONFIG_G_BASE_M");
+static_assert(CONFIG_G_K % CONFIG_G_BASE_N == 0, "G_K must be divisible by CONFIG_G_BASE_N");
+static_assert(CONFIG_G_N % CONFIG_G_BASE_N == 0, "G_N must be divisible by CONFIG_G_BASE_N");
 
 #endif // GEMM_CONFIG_H_

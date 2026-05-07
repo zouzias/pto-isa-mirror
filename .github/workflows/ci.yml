@@ -54,25 +54,12 @@ jobs:
           echo "to_ref=HEAD" >> "$GITHUB_OUTPUT"
 
       - name: Run pre-commit
-        shell: bash
         run: |
-          set -euo pipefail
-          tmp_file="$(mktemp)"
-          trap 'rm -f "$tmp_file"' EXIT
-
-          git diff --name-only -z "${{ steps.diff.outputs.from_ref }}" "${{ steps.diff.outputs.to_ref }}" \
-            | python -c "import pathlib, sys; files = sorted({pathlib.Path(p.decode('utf-8', 'surrogateescape')).as_posix() for p in sys.stdin.buffer.read().split(b'\0') if p}); print('\\n'.join(files))" \
-            > "$tmp_file"
-
-          if [ ! -s "$tmp_file" ]; then
-            echo "No changed files to check."
-            exit 0
-          fi
-
-          xargs -d '\n' -a "$tmp_file" -r -n 100 pre-commit run \
+          pre-commit run \
             --show-diff-on-failure \
             --color=always \
-            --files
+            --from-ref "${{ steps.diff.outputs.from_ref }}" \
+            --to-ref "${{ steps.diff.outputs.to_ref }}"
 
   docs-build:
     name: Docs build
@@ -125,7 +112,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install numpy
+          python -m pip install numpy ml-dtypes en-dtypes
 
       - name: Run CPU SIM smoke testcase
         run: |
@@ -160,7 +147,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install numpy
+          python -m pip install numpy ml-dtypes en-dtypes
 
       - name: Run CPU SIM ST suite
         run: |

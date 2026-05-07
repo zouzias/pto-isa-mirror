@@ -24,7 +24,7 @@ CPU 模拟器会按每条结构的第一个元素作为排序键，并优先选�
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 示意形式：
 
@@ -66,38 +66,39 @@ PTO_INST RecordEvent TMRGSORT(DstTileData &dst, SrcTileData &src, uint32_t block
 
 ## 约束
 
-### 通用约束
+!!! warning "约束"
+    ### 通用约束
 
-- 所有参与 Tile 都必须是：
-  - `TileType::Vec`
-  - `Rows == 1`
-  - `BLayout::RowMajor`
-- 支持的数据类型是 `half` 或 `float`，并且 `dst/tmp/src*` 的元素类型必须一致。
+    - 所有参与 Tile 都必须是：
+      - `TileType::Vec`
+      - `Rows == 1`
+      - `BLayout::RowMajor`
+    - 支持的数据类型是 `half` 或 `float`，并且 `dst/tmp/src*` 的元素类型必须一致。
 
-### 多列表归并
+    ### 多列表归并
 
-- 2 路 / 3 路 / 4 路版本都要求显式传入 `tmp`。
-- `executedNumList` 会返回每个输入列表实际消费了多少条记录。
-- 模板参数 `exhausted` 决定当某一路输入先耗尽时，是否提前挂起/停止归并：
-  - CPU 会按这个布尔值决定是否在任一路耗尽时提前退出
-  - NPU 会把它映射到底层 `vmrgsort4` 的 exhausted 配置位
-- UB 使用量必须满足各 backend 的限制；源码中对 `src* + tmp (+ dst)` 总体积都有检查。
+    - 2 路 / 3 路 / 4 路版本都要求显式传入 `tmp`。
+    - `executedNumList` 会返回每个输入列表实际消费了多少条记录。
+    - 模板参数 `exhausted` 决定当某一路输入先耗尽时，是否提前挂起/停止归并：
+      - CPU 会按这个布尔值决定是否在任一路耗尽时提前退出
+      - NPU 会把它映射到底层 `vmrgsort4` 的 exhausted 配置位
+    - UB 使用量必须满足各 backend 的限制；源码中对 `src* + tmp (+ dst)` 总体积都有检查。
 
-### 单列表块归并
+    ### 单列表块归并
 
-- 这条接口假设 `src` 中顺序摆放了 4 个已排序块。
-- `blockLen` 表示每个块的长度，并且它本身包含记录值和索引/负载。
-- A2/A3 源码明确要求：
-  - `blockLen` 必须是 `64` 的倍数
-  - `src.GetValidCol()` 必须是 `blockLen * 4` 的整数倍
-  - `repeatTimes = src.GetValidCol() / (blockLen * 4)` 必须在 `[1, 255]`
-- A5 / Kirin9030 走的是同一类硬件归并路径，但这些约束在文档层仍然可以视为安全使用域。
+    - 这条接口假设 `src` 中顺序摆放了 4 个已排序块。
+    - `blockLen` 表示每个块的长度，并且它本身包含记录值和索引/负载。
+    - A2/A3 源码明确要求：
+      - `blockLen` 必须是 `64` 的倍数
+      - `src.GetValidCol()` 必须是 `blockLen * 4` 的整数倍
+      - `repeatTimes = src.GetValidCol() / (blockLen * 4)` 必须在 `[1, 255]`
+    - A5 / Kirin9030 走的是同一类硬件归并路径，但这些约束在文档层仍然可以视为安全使用域。
 
-### 目标说明
+    ### 目标说明
 
-- CPU 使用显式归并逻辑。
-- A2/A3 与 A5 使用 `vmrgsort4`。
-- Kirin9030 复用 A5 的 `TMRGSORT` 路径，只在末尾 UB->UB 搬运上用了一层适配。
+    - CPU 使用显式归并逻辑。
+    - A2/A3 与 A5 使用 `vmrgsort4`。
+    - Kirin9030 复用 A5 的 `TMRGSORT` 路径，只在末尾 UB->UB 搬运上用了一层适配。
 
 ## 示例
 

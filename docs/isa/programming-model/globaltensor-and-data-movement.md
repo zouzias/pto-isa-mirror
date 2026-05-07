@@ -170,18 +170,20 @@ MTE1, MTE2, and MTE3 can operate in parallel with the Vector Pipeline and Matrix
 
 ## Constraints
 
-- Movement legality depends on source instruction set, destination instruction set, layout, and target profile.
-- Movement ops do not erase valid-region rules; they carry or define them.
-- Vector-instruction set loads and stores obey their own buffer/register rules and are NOT interchangeable with tile movement.
-- DMA copy operations require explicit synchronization before their data is consumed by vector compute.
-- `TLOAD`/`TSTORE` carry valid-region information implicitly; the transfer size is determined by the destination/source tile's valid region.
+!!! warning "Constraints"
+    - Movement legality depends on source instruction set, destination instruction set, layout, and target profile.
+    - Movement ops do not erase valid-region rules; they carry or define them.
+    - Vector-instruction set loads and stores obey their own buffer/register rules and are NOT interchangeable with tile movement.
+    - DMA copy operations require explicit synchronization before their data is consumed by vector compute.
+    - `TLOAD`/`TSTORE` carry valid-region information implicitly; the transfer size is determined by the destination/source tile's valid region.
 
 ## Cases That Are Not Allowed
 
-- Documenting data movement as though it were implicit when the ISA requires an explicit move.
-- Assuming vector-buffer traffic and tile-buffer traffic share the same legality contract.
-- Silently relying on target-specific movement shortcuts as if they were architecture-wide.
-- Issuing a `vlds` before the corresponding `copy_gm_to_ubuf` has completed without an intervening `set_flag`/`wait_flag`.
+!!! danger "Cases That Are Not Allowed"
+    - Documenting data movement as though it were implicit when the ISA requires an explicit move.
+    - Assuming vector-buffer traffic and tile-buffer traffic share the same legality contract.
+    - Silently relying on target-specific movement shortcuts as if they were architecture-wide.
+    - Issuing a `vlds` before the corresponding `copy_gm_to_ubuf` has completed without an intervening `set_flag`/`wait_flag`.
 
 ## Examples
 
@@ -227,7 +229,7 @@ copy_ubuf_to_gm(%ub_out, %gm_out, %sid, %n_burst, %len_burst, %reserved, %stride
 ## See Also
 
 - [Tiles And Valid Regions](./tiles-and-valid-regions.md)
-- [Vector Instruction Set](../instruction-surfaces/vector-instructions.md)
+- [Vector Instruction Set](../instruction-families/vector-families.md)
 - [Tile Memory And Data Movement Instruction Sets](../tile/memory-and-data-movement.md)
 - [Vector Load/Store Reference](../vector/vector-load-store.md)
 - [Scalar DMA Copy Reference](../scalar/dma-copy.md)

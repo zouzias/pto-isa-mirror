@@ -67,9 +67,12 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
+!!! warning "Constraints"
+    - The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
 
-- For A3, 2 source Tile, destination Tile, temporary space must in different memory range without overlapping.
+    - For A3, 2 source Tile, destination Tile, temporary space must in different memory range without overlapping.
+
+    - For A3, `tmp.GetValidRow()` must be greater than or equal to `dst.GetValidCol() + 1`.
 
 ## Performance
 
@@ -88,12 +91,14 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- Temporary space is required by A3 for calculation, while not used by A5.
+??? info "Target-Profile Restrictions"
+    - Temporary space is required by A3 for calculation, while not used by A5.
 
 ## Examples
 

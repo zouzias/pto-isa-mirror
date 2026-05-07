@@ -33,7 +33,7 @@ $$
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 ### AS Level 1（SSA）
 
@@ -58,18 +58,19 @@ PTO_INST RecordEvent TFILLPAD_EXPAND(DstTileData &dst, SrcTileData &src, WaitEve
 
 ## 约束
 
-### 通用约束
+!!! warning "约束"
+    ### 通用约束
 
-- `dst.Rows >= src.Rows`
-- `dst.Cols >= src.Cols`
-- `TileDataDst::PadVal != PadValue::Null`
-- `src` 和 `dst` 的元素大小必须一致，并且当前实现只接受 `1`、`2` 或 `4` 字节元素
-- 如果 `dst.GetValidRow() == 0` 或 `dst.GetValidCol() == 0`，backend 会直接返回
+    - `dst.Rows >= src.Rows`
+    - `dst.Cols >= src.Cols`
+    - `TileDataDst::PadVal != PadValue::Null`
+    - `src` 和 `dst` 的元素大小必须一致，并且当前实现只接受 `1`、`2` 或 `4` 字节元素
+    - 如果 `dst.GetValidRow() == 0` 或 `dst.GetValidCol() == 0`，backend 会直接返回
 
-### Backend 说明
+    ### Backend 说明
 
-- A2/A3、A5 和 CPU 模拟器都把它实现成“复制源有效区域，然后对目标剩余区域补 pad 值”的语义。
-- 这条指令本身不引入新的 pad 规则；`PadValue` 的解释与 `TFILLPAD` 保持一致。
+    - A2/A3、A5 和 CPU 模拟器都把它实现成“复制源有效区域，然后对目标剩余区域补 pad 值”的语义。
+    - 这条指令本身不引入新的 pad 规则；`PadValue` 的解释与 `TFILLPAD` 保持一致。
 
 ## 示例
 

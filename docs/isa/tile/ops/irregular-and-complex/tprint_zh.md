@@ -24,7 +24,7 @@
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 ```text
 tprint %src : !pto.tile<...> | !pto.global<...>
@@ -61,14 +61,15 @@ PTO_INTERNAL void TPRINT(TileData &src, GlobalData &tmp);
 
 ## 约束
 
-- **支持的元素类型**:
-    - 浮点数：`float`、`half`
-    - 有符号整数：`int8_t`、`int16_t`、`int32_t`
-    - 无符号整数：`uint8_t`、`uint16_t`、`uint32_t`
-- **对于 GlobalTensor**：布局必须是 `Layout::ND`、`Layout::DN` 或 `Layout::NZ` 之一。
-- **对于 临时空间**：打印`TileType`为`Mat`或`Acc`的Tile时需要传入gm上的临时空间，临时空间不得小于`TileData::Numel * sizeof(T)`。
-- A5暂不支持`TileType`为`Mat`的Tile打印。
-- **回显信息**: `TileType`为`Mat`时，布局将按照`Layout::ND`进行打印，其他布局可能会导致信息错位。
+!!! warning "约束"
+    - **支持的元素类型**:
+        - 浮点数：`float`、`half`
+        - 有符号整数：`int8_t`、`int16_t`、`int32_t`
+        - 无符号整数：`uint8_t`、`uint16_t`、`uint32_t`
+    - **对于 GlobalTensor**：布局必须是 `Layout::ND`、`Layout::DN` 或 `Layout::NZ` 之一。
+    - **对于 临时空间**：打印`TileType`为`Mat`或`Acc`的Tile时需要传入gm上的临时空间，临时空间不得小于`TileData::Numel * sizeof(T)`。
+    - A5暂不支持`TileType`为`Mat`的Tile打印。
+    - **回显信息**: `TileType`为`Mat`时，布局将按照`Layout::ND`进行打印，其他布局可能会导致信息错位。
 
 ## 示例
 

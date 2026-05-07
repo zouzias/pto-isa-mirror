@@ -1,6 +1,6 @@
 # pto.tpow
 
-`pto.tpow` is part of the [Elementwise Tile-Tile](../../elementwise-tile-tile.md) instruction set.
+`pto.tpow` is part of the [Elementwise Tile Tile](../../elementwise-tile-tile.md) instruction set.
 
 ## Summary
 
@@ -36,7 +36,7 @@ pto.tpow ins(%base, %exp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !
 
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp` (signature shown verbatim from the current header):
+Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <auto PrecisionType = PowAlgorithm::DEFAULT, typename DstTile, typename BaseTile, typename ExpTile,
@@ -68,22 +68,25 @@ No architectural side effects beyond producing the destination tile. The `tmp` t
 
 ## Constraints
 
-- `dst`, `base`, and `exp` must use the same element type.
-- `dst`, `base`, and `exp` must have matching valid-row and valid-column extents.
-- In the current concrete implementation, all three tiles must be row-major `TileType::Vec`.
-- `PowAlgorithm::DEFAULT` accepts `float`, `half`, `int32_t`, `uint32_t`, `int16_t`, `uint16_t`, `int8_t`, and `uint8_t`.
-- `PowAlgorithm::HIGH_PRECISION` accepts `float`, `half`, and `bfloat16_t`.
+!!! warning "Constraints"
+    - `dst`, `base`, and `exp` must use the same element type.
+    - `dst`, `base`, and `exp` must have matching valid-row and valid-column extents.
+    - In the current concrete implementation, all three tiles must be row-major `TileType::Vec`.
+    - `PowAlgorithm::DEFAULT` accepts `float`, `half`, `int32_t`, `uint32_t`, `int16_t`, `uint16_t`, `int8_t`, and `uint8_t`.
+    - `PowAlgorithm::HIGH_PRECISION` accepts `float`, `half`, and `bfloat16_t`.
 
 ## Exceptions
 
-- Unsupported type/layout combinations and mismatched valid regions are rejected by backend legality checks.
-- Programs must not assume CPU-simulator or A2/A3 support from the presence of the public template alone.
+!!! danger "Exceptions"
+    - Unsupported type/layout combinations and mismatched valid regions are rejected by backend legality checks.
+    - Programs must not assume CPU-simulator or A2/A3 support from the presence of the public template alone.
 
 ## Target-Profile Restrictions
 
-The current authored tree documents concrete `tpow` implementation behavior for A5. This checkout exposes the public intrinsic template in `pto_instr.hpp`, but does not provide a stable documented CPU-simulator or A2/A3 implementation contract for `tpow`.
+??? info "Target-Profile Restrictions"
+    The current authored tree documents concrete `tpow` implementation behavior for A5. This checkout exposes the public intrinsic template in `pto_instr.hpp`, but does not provide a stable documented CPU-simulator or A2/A3 implementation contract for `tpow`.
 
-Portable code should treat `pto.tpow` as A5-specific unless a target-profile page explicitly widens that guarantee.
+    Portable code should treat `pto.tpow` as A5-specific unless a target-profile page explicitly widens that guarantee.
 
 ## Examples
 
@@ -106,6 +109,6 @@ void example() {
 
 ## Related Ops / Instruction Set Links
 
-- Instruction set overview: [Elementwise Tile-Tile](../../elementwise-tile-tile.md)
+- Instruction set overview: [Elementwise Tile Tile](../../elementwise-tile-tile.md)
 - Previous op in instruction set: [pto.texp](./texp.md)
 - Next op in instruction set: [pto.tnot](./tnot.md)

@@ -7,18 +7,12 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
+#ifndef PTO_MOCKER_RUNTIME_STUB_HPP
+#define PTO_MOCKER_RUNTIME_STUB_HPP
 
-#ifndef TROW_EXPAND_OP_HPP
-#define TROW_EXPAND_OP_HPP
+#include <pto/costmodel/common/qualifiers.hpp>
+#include <pto/costmodel/common/aclrt_stub.hpp>
+#include <pto/costmodel/common/runtime_util.hpp>
+#include <pto/costmodel/common/arch_select.hpp>
 
-#include "pto/costmodel/pto_isa_costmodel.hpp"
-
-namespace pto {
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TROWEXPAND_IMPL(TileDataDst &dst, TileDataSrc &src)
-{
-    pto::CostModel::GetInstance().RowExpandPredictCycle<TileDataDst, TileDataSrc>("TROWEXPAND", dst, src);
-}
-
-} // namespace pto
 #endif

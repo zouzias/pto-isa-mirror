@@ -160,12 +160,6 @@ def build_all_cpu_tests(repo_root: Path, args: argparse.Namespace) -> None:
         build_single_test(repo_root, tests_path, this_build_dir, args)
 
 
-def build_gen_data_env(repo_root: Path, src_rel: str, base_env: dict[str, str]) -> dict[str, str]:
-    env = base_env.copy()
-    env["PYTHONPATH"] = str(repo_root / src_rel) + os.pathsep + str(repo_root) + os.pathsep + env.get("PYTHONPATH", "")
-    return env
-
-
 def generate_test_data(repo_root: Path, args: argparse.Namespace) -> None:
     gen_env = os.environ.copy()
     if args.enable_bf16:
@@ -178,7 +172,9 @@ def generate_test_data(repo_root: Path, args: argparse.Namespace) -> None:
         testcase_build_root = resolve_build_dir(repo_root, build_rel, args) / "testcase"
         testcase_build_root.mkdir(parents=True, exist_ok=True)
 
-        env = build_gen_data_env(repo_root, src_rel, gen_env)
+        env = gen_env.copy()
+        env["PYTHONPATH"] = str(repo_root / src_rel) + os.pathsep + str(repo_root) + \
+            os.pathsep + env.get("PYTHONPATH", "")
 
         with multiprocessing.Pool(processes=args.jobs) as pool:
             run_args = [[sys.executable, str(script)] for script in sorted(testcase_src_root.glob("*/gen_data.py"))]
@@ -241,16 +237,13 @@ def run_binaries(repo_root: Path, args: argparse.Namespace) -> int:
     return 0 if failed == 0 else 1
 
 
-def prepare_build_dirs(repo_root: Path, args: argparse.Namespace) -> None:
-    for _, build_rel in TEST_SOURCES:
-        resolve_build_dir(repo_root, build_rel, args).mkdir(parents=True, exist_ok=True)
-
-
 def main() -> int:
     args = parse_arguments()
     repo_root = Path(__file__).resolve().parents[2]
 
-    prepare_build_dirs(repo_root, args)
+    for src_rel, build_rel in TEST_SOURCES:
+        build_dir = repo_root / build_rel
+        build_dir.mkdir(parents=True, exist_ok=True)
 
     build_all_cpu_tests(repo_root, args)
     generate_test_data(repo_root, args)

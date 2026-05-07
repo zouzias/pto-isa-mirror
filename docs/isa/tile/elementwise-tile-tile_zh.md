@@ -70,18 +70,20 @@ $$ \mathrm{dst}_{r,c} = (\mathrm{cmp}_{r,c} \neq 0) ? \mathrm{src0}_{r,c} : \mat
 
 ## 约束
 
-- layout、shape 和 valid-region 状态都会影响合法性。
-- 源与目标 tile 的物理 shape 必须兼容。
-- `TCMP` 产生的是谓词 tile，不是普通数值 tile。
-- `TCVT` 允许源和目标 dtype 不同，但必须落在文档化转换组内。
-- 位移类要求第二操作数小于元素位宽。
+!!! warning "约束"
+    - layout、shape 和 valid-region 状态都会影响合法性。
+    - 源与目标 tile 的物理 shape 必须兼容。
+    - `TCMP` 产生的是谓词 tile，不是普通数值 tile。
+    - `TCVT` 允许源和目标 dtype 不同，但必须落在文档化转换组内。
+    - 位移类要求第二操作数小于元素位宽。
 
 ## 不允许的情形
 
-- 假设存在隐式广播、隐式 reshape 或 valid-region 自动修复。
-- 依赖源 tile 域外 lane 的确定值。
-- 把 `_c` 后缀机械理解成“饱和变体”。
-- 使用超出元素位宽的 shift count。
+!!! danger "不允许的情形"
+    - 假设存在隐式广播、隐式 reshape 或 valid-region 自动修复。
+    - 依赖源 tile 域外 lane 的确定值。
+    - 把 `_c` 后缀机械理解成“饱和变体”。
+    - 使用超出元素位宽的 shift count。
 
 ## A2/A3 吞吐与时延
 
@@ -144,4 +146,4 @@ total_cycles = startup + completion + repeats × per_repeat + (repeats - 1) × i
 ## 相关页面
 
 - [Tile 指令族](../instruction-families/tile-families_zh.md)
-- [Tile 指令面](../instruction-surfaces/tile-instructions_zh.md)
+- [Tile 指令面](../instruction-families/tile-families_zh.md)

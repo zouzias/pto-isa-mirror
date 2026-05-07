@@ -64,22 +64,25 @@ This operation has no architectural side effect beyond producing its destination
 
 ## Constraints
 
-- **Type**: Integer element types only. This is a carry-chain integer addition instruction set.
-- **Signedness**: On A5, treat as unsigned integer operation.
-- **Type match**: `%lhs`, `%rhs`, and `%result` MUST have identical element types.
-- **Width match**: All registers MUST have the same vector width `N`.
-- **Mask width**: `%mask` MUST have width equal to `N`.
-- **Active lanes**: Only lanes where the mask bit is 1 participate.
-- **Inactive lanes**: Destination and carry elements at inactive lanes are unmodified.
+!!! warning "Constraints"
+    - **Type**: Integer element types only. This is a carry-chain integer addition instruction set.
+    - **Signedness**: On A5, treat as unsigned integer operation.
+    - **Type match**: `%lhs`, `%rhs`, and `%result` MUST have identical element types.
+    - **Width match**: All registers MUST have the same vector width `N`.
+    - **Mask width**: `%mask` MUST have width equal to `N`.
+    - **Active lanes**: Only lanes where the mask bit is 1 participate.
+    - **Inactive lanes**: Destination and carry elements at inactive lanes are unmodified.
 
 ## Exceptions
 
-- The verifier rejects non-integer element types, type mismatches, width mismatches, or mask width mismatches.
-- Any additional illegality stated in the [Binary Vector Instructions](../../binary-vector-ops.md) instruction set page is also part of the contract.
+!!! danger "Exceptions"
+    - The verifier rejects non-integer element types, type mismatches, width mismatches, or mask width mismatches.
+    - Any additional illegality stated in the [Binary Vector Instructions](../../binary-vector-ops.md) instruction set page is also part of the contract.
 
 ## Target-Profile Restrictions
 
-A5 is the primary concrete profile for the vector instructions. CPU simulation and A2/A3-class targets emulate this operation while preserving the visible PTO contract.
+??? info "Target-Profile Restrictions"
+    A5 is the primary concrete profile for the vector instructions. CPU simulation and A2/A3-class targets emulate this operation while preserving the visible PTO contract.
 
 ## Performance
 

@@ -31,7 +31,7 @@ $$
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 ### AS Level 1（SSA）
 
@@ -56,18 +56,19 @@ PTO_INST RecordEvent TFILLPAD_INPLACE(DstTileData &dst, SrcTileData &src, WaitEv
 
 ## 约束
 
-### 通用约束
+!!! warning "约束"
+    ### 通用约束
 
-- `dst.Rows == src.Rows`
-- `dst.Cols == src.Cols`
-- `TileDataDst::PadVal != PadValue::Null`
-- `src` 和 `dst` 的元素大小必须一致，并且当前实现只接受 `1`、`2` 或 `4` 字节元素
-- 如果 `dst.GetValidRow() == 0` 或 `dst.GetValidCol() == 0`，backend 会直接返回
+    - `dst.Rows == src.Rows`
+    - `dst.Cols == src.Cols`
+    - `TileDataDst::PadVal != PadValue::Null`
+    - `src` 和 `dst` 的元素大小必须一致，并且当前实现只接受 `1`、`2` 或 `4` 字节元素
+    - 如果 `dst.GetValidRow() == 0` 或 `dst.GetValidCol() == 0`，backend 会直接返回
 
-### Backend 说明
+    ### Backend 说明
 
-- A2/A3、A5 和 CPU 模拟器都把这条指令实现成与同尺寸 `TFILLPAD` 等价的结果语义。
-- “原位”更多是接口和实现路径上的语义，而不是另一套数学定义。
+    - A2/A3、A5 和 CPU 模拟器都把这条指令实现成与同尺寸 `TFILLPAD` 等价的结果语义。
+    - “原位”更多是接口和实现路径上的语义，而不是另一套数学定义。
 
 ## 示例
 

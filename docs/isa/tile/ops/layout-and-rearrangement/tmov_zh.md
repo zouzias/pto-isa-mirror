@@ -30,7 +30,7 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} $$
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 PTO-AS 设计上通常会把不同子路径拆成更明确的 spelling，例如：
 
@@ -93,70 +93,71 @@ PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantS
 
 ## 约束
 
-### 通用约束
+!!! warning "约束"
+    ### 通用约束
 
-- 这是一组重载，不同路径的合法性差异很大。阅读 `TMOV` 时，先看“源位置 -> 目标位置”是哪一种。
-- `reluMode` 取值为 `ReluPreMode::{NoRelu, NormalRelu}`。
-- `mode` 取值为 `AccToVecMode::{SingleModeVec0, SingleModeVec1, DualModeSplitM, DualModeSplitN}`。
-- 对纯 `Vec -> Vec` 复制，backend 复制的是双方 valid region 的交集，而不是强制把物理 Tile 全部搬满。
+    - 这是一组重载，不同路径的合法性差异很大。阅读 `TMOV` 时，先看“源位置 -> 目标位置”是哪一种。
+    - `reluMode` 取值为 `ReluPreMode::{NoRelu, NormalRelu}`。
+    - `mode` 取值为 `AccToVecMode::{SingleModeVec0, SingleModeVec1, DualModeSplitM, DualModeSplitN}`。
+    - 对纯 `Vec -> Vec` 复制，backend 复制的是双方 valid region 的交集，而不是强制把物理 Tile 全部搬满。
 
-### A2/A3 实现检查
+    ### A2/A3 实现检查
 
-- A2/A3 支持的主要路径是：
-  - `Mat -> Left/Right/Bias/Scaling`
-  - `Vec -> Vec`
-  - `Acc -> Mat`
-- 这些路径都要求源和目标的静态 `Rows/Cols` 相同。
-- `Mat -> Bias`：
-  - 仅支持 `int32_t -> int32_t`、`float -> float`、`half -> float`
-  - 源行数必须为 `1`
-  - `Cols * sizeof(srcType)` 必须按 `64` 字节对齐
-- `Mat -> Scaling`：
-  - 目标类型必须与源类型一致，且必须是 `uint64_t`
-  - 源行数必须为 `1`
-  - `Cols * sizeof(srcType)` 必须按 `128` 字节对齐
-- `Acc -> Mat` 普通 / ReLU 形式并不是通用 cast：
-  - 源必须是 `Acc`
-  - 目标必须是 `Mat`
-  - 目标 fractal size 固定为 `512`
-  - 目标列宽字节数必须是 `32` 的倍数
-  - 普通 / ReLU 形式只覆盖 `float Acc -> half/bfloat16 Mat`
-- `Acc -> Mat` 标量量化 / 向量量化路径的支持集更窄：
-  - `float Acc -> int8_t Mat`
-  - `int32_t Acc -> int8_t / uint8_t / half / int16_t Mat`
-- A2/A3 没有 `Acc -> Vec` 的 `TMOV` 路径；这点和 A5 不同。
+    - A2/A3 支持的主要路径是：
+      - `Mat -> Left/Right/Bias/Scaling`
+      - `Vec -> Vec`
+      - `Acc -> Mat`
+    - 这些路径都要求源和目标的静态 `Rows/Cols` 相同。
+    - `Mat -> Bias`：
+      - 仅支持 `int32_t -> int32_t`、`float -> float`、`half -> float`
+      - 源行数必须为 `1`
+      - `Cols * sizeof(srcType)` 必须按 `64` 字节对齐
+    - `Mat -> Scaling`：
+      - 目标类型必须与源类型一致，且必须是 `uint64_t`
+      - 源行数必须为 `1`
+      - `Cols * sizeof(srcType)` 必须按 `128` 字节对齐
+    - `Acc -> Mat` 普通 / ReLU 形式并不是通用 cast：
+      - 源必须是 `Acc`
+      - 目标必须是 `Mat`
+      - 目标 fractal size 固定为 `512`
+      - 目标列宽字节数必须是 `32` 的倍数
+      - 普通 / ReLU 形式只覆盖 `float Acc -> half/bfloat16 Mat`
+    - `Acc -> Mat` 标量量化 / 向量量化路径的支持集更窄：
+      - `float Acc -> int8_t Mat`
+      - `int32_t Acc -> int8_t / uint8_t / half / int16_t Mat`
+    - A2/A3 没有 `Acc -> Vec` 的 `TMOV` 路径；这点和 A5 不同。
 
-### A5 实现检查
+    ### A5 实现检查
 
-- A5 支持的路径更宽，主要包括：
-  - `Mat -> Left/Right/Bias/Scaling/ScaleLeft/ScaleRight`
-  - `Vec -> Vec/Mat`
-  - `Acc -> Vec/Mat`
-- 对普通 `Mat` / `Vec` 路径，源和目标通常要求同 dtype。支持的常见元素类型包括：
-  `int8_t`、`hifloat8_t`、`float8_e5m2_t`、`float8_e4m3_t`、`half`、`bfloat16_t`、`float`、
-  `float4_e2m1x2_t`、`float4_e1m2x2_t`。
-- MX scale 路径额外覆盖 `float8_e8m0_t`。
-- `Mat -> Bias`：
-  - 支持 `int32_t -> int32_t`、`float -> float`、`half -> float`、`bfloat16_t -> float`
-  - 源行数必须为 `1`
-  - 目标字节数必须按 `64` 字节对齐，且总占用不超过 `4096` 字节
-- `Mat -> Scaling`：
-  - 源行数必须为 `1`
-  - 目标字节数必须按 `128` 字节对齐，且总占用不超过 `4096` 字节
-- `Acc -> Vec/Mat`：
-  - 源必须是 `float` 或 `int32_t` 的 `Acc`
-  - 目标布局只允许 `nz2nz`、`nz2nd`、`nz2dn`
-  - 目标 stride 必须非零，且对应字节数必须是 `32` 的倍数
-- A5 的非量化 `Acc -> Vec/Mat` 支持：
-  - `float -> half / bfloat16 / float`
-  - `int32_t -> int32_t`
-- A5 的量化路径支持：
-  - `float -> int8_t / uint8_t / hifloat8_t / half / bfloat16_t / float8_e4m3_t / float`
-  - `int32_t -> int8_t / uint8_t / half / bfloat16_t`
-- `DualModeSplitM` / `DualModeSplitN` 仅适用于 `Acc -> Vec`，并且：
-  - 不能与量化同时使用
-  - 不支持 `nz2dn` 输出路径
-- A5 还提供一个带 `tmp` 的特化重载，用于 `uint8_t` 数据的 ND->ZZ 打包路径；它不是通用三操作数 `TMOV`，而是一个窄 backend 特化。
+    - A5 支持的路径更宽，主要包括：
+      - `Mat -> Left/Right/Bias/Scaling/ScaleLeft/ScaleRight`
+      - `Vec -> Vec/Mat`
+      - `Acc -> Vec/Mat`
+    - 对普通 `Mat` / `Vec` 路径，源和目标通常要求同 dtype。支持的常见元素类型包括：
+      `int8_t`、`hifloat8_t`、`float8_e5m2_t`、`float8_e4m3_t`、`half`、`bfloat16_t`、`float`、
+      `float4_e2m1x2_t`、`float4_e1m2x2_t`。
+    - MX scale 路径额外覆盖 `float8_e8m0_t`。
+    - `Mat -> Bias`：
+      - 支持 `int32_t -> int32_t`、`float -> float`、`half -> float`、`bfloat16_t -> float`
+      - 源行数必须为 `1`
+      - 目标字节数必须按 `64` 字节对齐，且总占用不超过 `4096` 字节
+    - `Mat -> Scaling`：
+      - 源行数必须为 `1`
+      - 目标字节数必须按 `128` 字节对齐，且总占用不超过 `4096` 字节
+    - `Acc -> Vec/Mat`：
+      - 源必须是 `float` 或 `int32_t` 的 `Acc`
+      - 目标布局只允许 `nz2nz`、`nz2nd`、`nz2dn`
+      - 目标 stride 必须非零，且对应字节数必须是 `32` 的倍数
+    - A5 的非量化 `Acc -> Vec/Mat` 支持：
+      - `float -> half / bfloat16 / float`
+      - `int32_t -> int32_t`
+    - A5 的量化路径支持：
+      - `float -> int8_t / uint8_t / hifloat8_t / half / bfloat16_t / float8_e4m3_t / float`
+      - `int32_t -> int8_t / uint8_t / half / bfloat16_t`
+    - `DualModeSplitM` / `DualModeSplitN` 仅适用于 `Acc -> Vec`，并且：
+      - 不能与量化同时使用
+      - 不支持 `nz2dn` 输出路径
+    - A5 还提供一个带 `tmp` 的特化重载，用于 `uint8_t` 数据的 ND->ZZ 打包路径；它不是通用三操作数 `TMOV`，而是一个窄 backend 特化。
 
 ## 示例
 

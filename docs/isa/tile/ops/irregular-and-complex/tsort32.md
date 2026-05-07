@@ -83,27 +83,30 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- `TSORT32` does not take `WaitEvents&...` and does not call `TSYNC(...)` internally; synchronize explicitly if needed.
+!!! warning "Constraints"
+    - `TSORT32` does not take `WaitEvents&...` and does not call `TSYNC(...)` internally; synchronize explicitly if needed.
 
-- `idx` is a required input operand in both overloads; it provides the indices that are permuted together with `src`.
+    - `idx` is a required input operand in both overloads; it provides the indices that are permuted together with `src`.
 
-- **Valid region**:
-    - The implementation uses `dst.GetValidRow()` as the row count.
-    - The implementation uses `src.GetValidCol()` to determine how many elements participate in sorting in each row.
-    - Sorting is performed independently per 32-element block; the 4-argument overload additionally supports non-32-aligned tails with `tmp`.
+    - **Valid region**:
+        - The implementation uses `dst.GetValidRow()` as the row count.
+        - The implementation uses `src.GetValidCol()` to determine how many elements participate in sorting in each row.
+        - Sorting is performed independently per 32-element block; the 4-argument overload additionally supports non-32-aligned tails with `tmp`.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Implementation checks (A2A3/A5)**:
-    - `DstTileData::DType` must be `half` or `float`.
-    - `SrcTileData::DType` must match `DstTileData::DType`.
-    - `IdxTileData::DType` must be `uint32_t`.
-    - `dst/src/idx` tile location must be `TileType::Vec`, and all must be row-major (`isRowMajor`).
+??? info "Target-Profile Restrictions"
+    - **Implementation checks (A2A3/A5)**:
+        - `DstTileData::DType` must be `half` or `float`.
+        - `SrcTileData::DType` must match `DstTileData::DType`.
+        - `IdxTileData::DType` must be `uint32_t`.
+        - `dst/src/idx` tile location must be `TileType::Vec`, and all must be row-major (`isRowMajor`).
 
 ## Examples
 

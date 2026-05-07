@@ -43,19 +43,22 @@ This operation has no architectural side effect beyond producing its destination
 
 ## Constraints
 
-- `pto.vtrc` preserves the vector width and element type of the source.
-- The selected `ROUND_MODE` MUST be supported by the chosen target profile.
-- Lowering MUST preserve the lane-wise rounding semantics documented by the selected form.
+!!! warning "Constraints"
+    - `pto.vtrc` preserves the vector width and element type of the source.
+    - The selected `ROUND_MODE` MUST be supported by the chosen target profile.
+    - Lowering MUST preserve the lane-wise rounding semantics documented by the selected form.
 
 ## Exceptions
 
-- The verifier rejects illegal operand shapes, unsupported element types, and unsupported rounding-mode attributes.
-- Any additional illegality stated in the constraints section is also part of the contract.
+!!! danger "Exceptions"
+    - The verifier rejects illegal operand shapes, unsupported element types, and unsupported rounding-mode attributes.
+    - Any additional illegality stated in the constraints section is also part of the contract.
 
 ## Target-Profile Restrictions
 
-- A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
-- Code that depends on a specific rounding mode should treat that dependency as target-profile-specific unless the manual states cross-target portability explicitly.
+??? info "Target-Profile Restrictions"
+    - A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
+    - Code that depends on a specific rounding mode should treat that dependency as target-profile-specific unless the manual states cross-target portability explicitly.
 
 ## Examples
 

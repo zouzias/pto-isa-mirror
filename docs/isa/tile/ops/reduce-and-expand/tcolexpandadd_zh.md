@@ -57,14 +57,16 @@ PTO_INST RecordEvent TCOLEXPANDADD(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 
 ## 约束
 
-- `TileDataDst::DType`、`TileDataSrc1::DType` 当前实现只支持 `half`、`float`
-- `dst` 必须是 row-major
-- `src1` 应覆盖每一列的广播标量
-- 具体布局 / 分形约束由 backend 决定
+!!! warning "约束"
+    - `TileDataDst::DType`、`TileDataSrc1::DType` 当前实现只支持 `half`、`float`
+    - `dst` 必须是 row-major
+    - `src1` 应覆盖每一列的广播标量
+    - 具体布局 / 分形约束由 backend 决定
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## 性能
 

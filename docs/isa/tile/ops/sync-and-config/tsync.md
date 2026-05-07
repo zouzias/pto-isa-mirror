@@ -83,20 +83,23 @@ Does not affect unrelated tile traffic or other operation classes (barrier form 
 
 ## Constraints
 
-- `TSYNC(events...)`: If no events are supplied, the call is a no-op.
-- `TSYNC<Op>()`: Only valid for vector-pipeline operations. Attempting to use it for tile, matrix, or scalar operations is undefined.
-- All events must be produced by operations that precede the `TSYNC` in program order.
+!!! warning "Constraints"
+    - `TSYNC(events...)`: If no events are supplied, the call is a no-op.
+    - `TSYNC<Op>()`: Only valid for vector-pipeline operations. Attempting to use it for tile, matrix, or scalar operations is undefined.
+    - All events must be produced by operations that precede the `TSYNC` in program order.
 
 ## Exceptions
 
-- Supplying events that are not produced by any preceding operation causes undefined behavior.
-- Using `TSYNC<Op>()` with an unsupported operation class is rejected by the verifier.
+!!! danger "Exceptions"
+    - Supplying events that are not produced by any preceding operation causes undefined behavior.
+    - Using `TSYNC<Op>()` with an unsupported operation class is rejected by the verifier.
 
 ## Target-Profile Restrictions
 
-- CPU simulation: `TSYNC` emulates the ordering semantics but may not reflect hardware pipeline latency.
-- A2/A3: `TSYNC<Op>()` only supports vector-pipeline ops.
-- A5: same as A2/A3.
+??? info "Target-Profile Restrictions"
+    - CPU simulation: `TSYNC` emulates the ordering semantics but may not reflect hardware pipeline latency.
+    - A2/A3: `TSYNC<Op>()` only supports vector-pipeline ops.
+    - A5: same as A2/A3.
 
 ## Examples
 
@@ -137,5 +140,5 @@ void example() {
 ## See Also
 
 - Instruction set overview: [Sync And Config](../../sync-and-config.md)
-- Next op in instruction set: [pto.tassign](./tassign.md)
+- Next op in instruction set: [pto.sethf32mode](./sethf32mode.md)
 - [Ordering and Synchronization](../../../machine-model/ordering-and-synchronization.md) for the full event model

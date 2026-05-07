@@ -2,7 +2,8 @@
 
 This section documents the PTO micro-instruction surface for the A5 (Ascend 950) profile. These instructions operate at the vector-pipeline level, making DMA setup, vector registers, masks, synchronization, and `__VEC_SCOPE__` boundaries explicit.
 
-> **Note:** This section is distinct from the Tile-level ISA. Tile instructions (`pto.t*`) operate on tiles with layout and valid-region metadata, while micro-instructions operate on vector registers (`vreg`), masks, and scalar state.
+!!! note "Note:"
+    This section is distinct from the Tile-level ISA. Tile instructions (`pto.t*`) operate on tiles with layout and valid-region metadata, while micro-instructions operate on vector registers (`vreg`), masks, and scalar state.
 
 ## Instruction Groups
 
@@ -36,9 +37,10 @@ This page defines the micro-instruction documentation map and the architectural 
 
 ## Constraints
 
-- The PTO micro-instruction surface is profile-specific; this reference documents the A5-oriented surface used by the current manual.
-- Micro-instruction code still shares scalar `arith` and `scf` constructs with the broader PTO source surface.
-- Readers should not treat the micro-instruction surface as interchangeable with the tile instruction surface: the operand model, scheduling model, and state carriers are different.
+!!! warning "Constraints"
+    - The PTO micro-instruction surface is profile-specific; this reference documents the A5-oriented surface used by the current manual.
+    - Micro-instruction code still shares scalar `arith` and `scf` constructs with the broader PTO source surface.
+    - Readers should not treat the micro-instruction surface as interchangeable with the tile instruction surface: the operand model, scheduling model, and state carriers are different.
 
 ## Relationship to PTO Tile ISA
 

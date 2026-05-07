@@ -40,19 +40,22 @@ vgatherb %result, %source, %offsets, %active_lanes
 
 ## 约束
 
-- 这是 block gather，不是 byte-per-lane gather。
-- `%source` 必须 32 字节对齐。
-- 每个参与的 offset 都必须描述一个 32 字节对齐块。
-- inactive block 会在结果中写零。
+!!! warning "约束"
+    - 这是 block gather，不是 byte-per-lane gather。
+    - `%source` 必须 32 字节对齐。
+    - 每个参与的 offset 都必须描述一个 32 字节对齐块。
+    - inactive block 会在结果中写零。
 
 ## 异常与非法情形
 
-- 使用超出 UB 可见空间的地址，或违反所选形式的地址 / 对齐契约，都是非法的。
-- 约束部分列出的额外非法情形，同样属于 `pto.vgatherb` 的契约。
+!!! danger "异常与非法情形"
+    - 使用超出 UB 可见空间的地址，或违反所选形式的地址 / 对齐契约，都是非法的。
+    - 约束部分列出的额外非法情形，同样属于 `pto.vgatherb` 的契约。
 
 ## 目标 Profile 限制
 
-- A5 是当前手册里最细的具体 profile；CPU 模拟器和 A2/A3 类目标可以在保留可见 PTO 契约的前提下做等效模拟。
+??? info "目标 Profile 限制"
+    - A5 是当前手册里最细的具体 profile；CPU 模拟器和 A2/A3 类目标可以在保留可见 PTO 契约的前提下做等效模拟。
 
 ## 示例
 

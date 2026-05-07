@@ -64,20 +64,22 @@ PTO_INST RecordEvent TROWEXPANDEXPDIF(TileDataDst &dst, TileDataSrc0 &src0, Tile
 
 ## 约束
 
-- `dst/src0/src1` 的元素类型必须一致，当前实现只支持 `half` 或 `float`
-- `dst` 必须是 row-major
-- `src1` 需要表达“每行一个标量”这一角色
+!!! warning "约束"
+    - `dst/src0/src1` 的元素类型必须一致，当前实现只支持 `half` 或 `float`
+    - `dst` 必须是 row-major
+    - `src1` 需要表达“每行一个标量”这一角色
 
-### backend 路径
+    ### backend 路径
 
-- A2A3 的实现可以理解成：
-  1. 先执行 `TROWEXPANDSUB`
-  2. 再对 `dst` 执行 `TEXP`
-- A5 则有更贴近 `vexpdif` 的实现路径
+    - A2A3 的实现可以理解成：
+      1. 先执行 `TROWEXPANDSUB`
+      2. 再对 `dst` 执行 `TEXP`
+    - A5 则有更贴近 `vexpdif` 的实现路径
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## 性能
 
@@ -102,4 +104,4 @@ void example() {
 
 - 指令集总览：[归约与扩展](../../reduce-and-expand_zh.md)
 - 上一条指令：[pto.trowexpandmin](./trowexpandmin_zh.md)
-- [pto.texp](../../../TEXP_zh.md)
+- [pto.texp](../elementwise-tile-tile/texp_zh.md)

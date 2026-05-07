@@ -42,23 +42,6 @@ def gen_golden_data_tdiv(case_name, param):
 
     return output, input1, input2, golden
 
-
-def ensure_directory(path: str) -> None:
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-
-def generate_case(param: "tdivParams") -> None:
-    case_name = generate_case_name(param)
-    ensure_directory(case_name)
-    original_dir = os.getcwd()
-    try:
-        os.chdir(case_name)
-        gen_golden_data_tdiv(case_name, param)
-    finally:
-        os.chdir(original_dir)
-
-
 class tdivParams:
     def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
         self.dtype = dtype

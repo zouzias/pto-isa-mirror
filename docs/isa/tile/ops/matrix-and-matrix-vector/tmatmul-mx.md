@@ -130,23 +130,26 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- Source and destination shapes, layouts, and element types MUST satisfy the legality rules documented by the instruction set and target profile.
+!!! warning "Constraints"
+    - Source and destination shapes, layouts, and element types MUST satisfy the legality rules documented by the instruction set and target profile.
 
-- Programs must not assume implicit broadcasting, reshaping, or valid-region repair unless the operation documents it.
+    - Programs must not assume implicit broadcasting, reshaping, or valid-region repair unless the operation documents it.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Implementation checks (A5)**:
-    - `m/k/n` are taken from `aMatrix.GetValidRow()`, `aMatrix.GetValidCol()`, `bMatrix.GetValidCol()`.
-    - Static legality checks are enforced via `CheckMadMxValid<...>()` (types, shapes, fractals, and scaling tile legality).
+??? info "Target-Profile Restrictions"
+    - **Implementation checks (A5)**:
+        - `m/k/n` are taken from `aMatrix.GetValidRow()`, `aMatrix.GetValidCol()`, `bMatrix.GetValidCol()`.
+        - Static legality checks are enforced via `CheckMadMxValid<...>()` (types, shapes, fractals, and scaling tile legality).
 
-- **Bias form**:
-    - `TileBias::DType` must be `float` and `TileBias::Loc == TileType::Bias` with `TileBias::Rows == 1` (A5 checks via `static_assert`).
+    - **Bias form**:
+        - `TileBias::DType` must be `float` and `TileBias::Loc == TileType::Bias` with `TileBias::Rows == 1` (A5 checks via `static_assert`).
 
 ## Examples
 

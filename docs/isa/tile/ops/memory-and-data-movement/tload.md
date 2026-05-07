@@ -71,10 +71,11 @@ Reads from global memory and writes to the tile buffer. Does not implicitly fenc
 
 ## Constraints
 
-- **Valid region**: The transfer size is `dst.GetValidRow()` × `dst.GetValidCol()`.
-- **Element size match**: `sizeof(tile.dtype) == sizeof(gtensor.dtype)`.
-- **Layout compatibility**: Source (GlobalTensor) layout and destination (tile) layout must be a supported combination. See the layout compatibility table in [Memory And Data Movement](../../memory-and-data-movement.md).
-- **Shape positivity**: `src.GetShape(dim) > 0` and `dst.GetValidRow() > 0` and `dst.GetValidCol() > 0` at runtime.
+!!! warning "Constraints"
+    - **Valid region**: The transfer size is `dst.GetValidRow()` × `dst.GetValidCol()`.
+    - **Element size match**: `sizeof(tile.dtype) == sizeof(gtensor.dtype)`.
+    - **Layout compatibility**: Source (GlobalTensor) layout and destination (tile) layout must be a supported combination. See the layout compatibility table in [Memory And Data Movement](../../memory-and-data-movement.md).
+    - **Shape positivity**: `src.GetShape(dim) > 0` and `dst.GetValidRow() > 0` and `dst.GetValidCol() > 0` at runtime.
 
 ## Layout Compatibility
 
@@ -90,27 +91,29 @@ Additional constraints (A5):
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation.
 
 ## Target-Profile Restrictions
 
-**A2/A3**:
-- `TileData::DType` must be one of: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `half`, `bfloat16_t`, `float`.
-- Destination tile location must be `TileType::Vec` or `TileType::Mat`.
-- `sizeof(TileData::DType) == sizeof(GlobalData::DType)`.
-- `Vec` loads: layouts must match (ND→ND, DN→DN, NZ→NZ).
-- `Mat` loads: supports all combinations including ND→NZ and DN→ZN.
-- For ND→NZ or DN→ZN: `GlobalData::staticShape[0..2] == 1` and `TileData::SFractalSize == 512`.
-- `int64_t/uint64_t`: only ND→ND or DN→DN.
+??? info "Target-Profile Restrictions"
+    **A2/A3**:
+    - `TileData::DType` must be one of: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `half`, `bfloat16_t`, `float`.
+    - Destination tile location must be `TileType::Vec` or `TileType::Mat`.
+    - `sizeof(TileData::DType) == sizeof(GlobalData::DType)`.
+    - `Vec` loads: layouts must match (ND→ND, DN→DN, NZ→NZ).
+    - `Mat` loads: supports all combinations including ND→NZ and DN→ZN.
+    - For ND→NZ or DN→ZN: `GlobalData::staticShape[0..2] == 1` and `TileData::SFractalSize == 512`.
+    - `int64_t/uint64_t`: only ND→ND or DN→DN.
 
-**A5**:
-- `sizeof(TileData::DType)` must be 1, 2, 4, or 8 bytes, and must match `sizeof(GlobalData::DType)`.
-- `Vec` loads: row-major ND→ND, col-major DN→DN, or row-major NZ→NZ only.
-- `Mat` loads: constrained by `TLoadCubeCheck` (specific ND/DN/NZ conversions and L1-size limits).
-- `Mat` loads also handle `mx` format loads including `MX_A_ZZ/MX_A_ND/MX_A_DN` to ZZ for scalarA and `MX_B_NN/MX_B_ND/MX_B_DN` to NN for scalarB.
-- For `MX_A_ZZ/MX_B_NN`: `GlobalData::staticShape[3] == 16` and `GlobalData::staticShape[4] == 2`.
-- For `MX_A_ND/MX_ADN/MX_B_ND/MX_B_DN`: `GlobalData::staticShape[0] == 1` and `GlobalData::staticShape[1] == 1` and `GlobalData::staticShape[4] == 2`.
+    **A5**:
+    - `sizeof(TileData::DType)` must be 1, 2, 4, or 8 bytes, and must match `sizeof(GlobalData::DType)`.
+    - `Vec` loads: row-major ND→ND, col-major DN→DN, or row-major NZ→NZ only.
+    - `Mat` loads: constrained by `TLoadCubeCheck` (specific ND/DN/NZ conversions and L1-size limits).
+    - `Mat` loads also handle `mx` format loads including `MX_A_ZZ/MX_A_ND/MX_A_DN` to ZZ for scalarA and `MX_B_NN/MX_B_ND/MX_B_DN` to NN for scalarB.
+    - For `MX_A_ZZ/MX_B_NN`: `GlobalData::staticShape[3] == 16` and `GlobalData::staticShape[4] == 2`.
+    - For `MX_A_ND/MX_ADN/MX_B_ND/MX_B_DN`: `GlobalData::staticShape[0] == 1` and `GlobalData::staticShape[1] == 1` and `GlobalData::staticShape[4] == 2`.
 
 ## Examples
 

@@ -18,7 +18,7 @@ Exact bounds behavior is implementation-defined.
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS Specification](../../../../assembly/PTO-AS_zh.md).
+PTO-AS 形式：参见 [Assembly Spelling And Operands](../../../syntax-and-operands/assembly-model_zh.md).
 
 同步形式：
 
@@ -49,16 +49,17 @@ PTO_INST RecordEvent TGATHERB(TileDataDst &dst, TileDataSrc &src, TileDataOffset
 
 ## 约束
 
-- **实现检查 (A2A3)**:
-    - Destination layout must be row-major (`TileDataDst::isRowMajor`).
-    - Destination element size must be `1`, `2`, or `4` bytes (enforced via `static_assert` in the helper).
-    - `SrcTileData::DType`/`DstTileData::DType` must be `int8_t` or `uint8_t` or `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
-- **实现检查 (A5)**:
-    - Destination element size must be `1`, `2`, or `4` bytes.
-    - `SrcTileData::DType`/`DstTileData::DType` must be `int8_t` or `uint8_t` or `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
-- **Offset interpretation**:
-    - Offsets are interpreted as `uint32_t` values (byte offsets) by the implementation.
-    - Offset bounds are not validated by explicit runtime assertions; out-of-range offsets are target-defined.
+!!! warning "约束"
+    - **实现检查 (A2A3)**:
+        - Destination layout must be row-major (`TileDataDst::isRowMajor`).
+        - Destination element size must be `1`, `2`, or `4` bytes (enforced via `static_assert` in the helper).
+        - `SrcTileData::DType`/`DstTileData::DType` must be `int8_t` or `uint8_t` or `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
+    - **实现检查 (A5)**:
+        - Destination element size must be `1`, `2`, or `4` bytes.
+        - `SrcTileData::DType`/`DstTileData::DType` must be `int8_t` or `uint8_t` or `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
+    - **Offset interpretation**:
+        - Offsets are interpreted as `uint32_t` values (byte offsets) by the implementation.
+        - Offset bounds are not validated by explicit runtime assertions; out-of-range offsets are target-defined.
 
 ## 示例
 

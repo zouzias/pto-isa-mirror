@@ -310,9 +310,218 @@ article .toctree-expand,
 }
 
 .rst-content img,
-.rst-content svg,
-.rst-content table {
+.rst-content svg {
     max-width: 100%;
+}
+
+.rst-content table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+/* PTO manual callouts, details panels, and target tabs ------------------- */
+
+.rst-content .admonition,
+.rst-content details {
+    background: #fff;
+    border: 1px solid #d8dee4;
+    border-left: 6px solid #57606a;
+    border-radius: 8px;
+    box-shadow: 0 8px 20px rgba(31, 35, 40, 0.06);
+    color: #24292f;
+    margin: 18px 0;
+    overflow: hidden;
+    padding: 0 16px 14px;
+}
+
+.rst-content .admonition p.admonition-title,
+.rst-content details > summary {
+    background: #f6f8fa;
+    color: #24292f;
+    cursor: default;
+    display: block;
+    font-weight: 700;
+    line-height: 1.45;
+    margin: 0 -16px 12px;
+    padding: 10px 16px;
+}
+
+.rst-content details > summary {
+    cursor: pointer;
+}
+
+.rst-content details > summary::marker {
+    color: #57606a;
+}
+
+.rst-content .admonition > :last-child,
+.rst-content details > :last-child {
+    margin-bottom: 0;
+}
+
+.rst-content .admonition.note {
+    border-left-color: #0969da;
+}
+
+.rst-content .admonition.note p.admonition-title {
+    background: #ddf4ff;
+    color: #0550ae;
+}
+
+.rst-content .admonition.warning,
+.rst-content details.warning {
+    border-left-color: #9a6700;
+}
+
+.rst-content .admonition.warning p.admonition-title,
+.rst-content details.warning > summary {
+    background: #fff8c5;
+    color: #7d4e00;
+}
+
+.rst-content .admonition.danger,
+.rst-content details.danger {
+    border-left-color: #cf222e;
+}
+
+.rst-content .admonition.danger p.admonition-title,
+.rst-content details.danger > summary {
+    background: #ffebe9;
+    color: #a40e26;
+}
+
+.rst-content .admonition.failure,
+.rst-content details.failure {
+    border-left-color: #8250df;
+}
+
+.rst-content .admonition.failure p.admonition-title,
+.rst-content details.failure > summary {
+    background: #fbefff;
+    color: #6639ba;
+}
+
+.rst-content .admonition.info,
+.rst-content details.info {
+    border-left-color: #1a7f37;
+}
+
+.rst-content .admonition.info p.admonition-title,
+.rst-content details.info > summary {
+    background: #dafbe1;
+    color: #116329;
+}
+
+.rst-content details.info > summary::after {
+    color: #57606a;
+    content: "target profile";
+    float: right;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.rst-content .tabbed-set {
+    border: 1px solid #d8dee4;
+    border-radius: 8px;
+    margin: 18px 0;
+    overflow: hidden;
+}
+
+.rst-content .tabbed-set > input {
+    opacity: 0;
+    position: absolute;
+}
+
+.rst-content .tabbed-labels {
+    align-items: stretch;
+    background: #f6f8fa;
+    border-bottom: 1px solid #d8dee4;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+}
+
+.rst-content .tabbed-labels > label {
+    border-right: 1px solid #d8dee4;
+    color: #57606a;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.3;
+    margin: 0;
+    min-width: 82px;
+    padding: 10px 14px;
+    text-align: center;
+}
+
+.rst-content .tabbed-labels > label:hover {
+    background: #eef4ff;
+    color: #0969da;
+}
+
+.rst-content .tabbed-content {
+    background: #fff;
+    padding: 14px 16px;
+}
+
+.rst-content .tabbed-content > .tabbed-block {
+    display: block;
+    margin: 0;
+}
+
+.rst-content .tabbed-content > .tabbed-block:not(:last-child) {
+    border-bottom: 1px solid #d8dee4;
+    margin-bottom: 14px;
+    padding-bottom: 14px;
+}
+
+@supports selector(.tabbed-set:has(> input:checked)) {
+    .rst-content .tabbed-content > .tabbed-block {
+        display: none;
+    }
+
+    .rst-content .tabbed-content > .tabbed-block:not(:last-child) {
+        border-bottom: 0;
+        margin-bottom: 0;
+        padding-bottom: 0;
+    }
+
+    .rst-content .tabbed-set:has(> input:nth-of-type(1):checked) > .tabbed-labels > label:nth-of-type(1),
+    .rst-content .tabbed-set:has(> input:nth-of-type(2):checked) > .tabbed-labels > label:nth-of-type(2),
+    .rst-content .tabbed-set:has(> input:nth-of-type(3):checked) > .tabbed-labels > label:nth-of-type(3),
+    .rst-content .tabbed-set:has(> input:nth-of-type(4):checked) > .tabbed-labels > label:nth-of-type(4),
+    .rst-content .tabbed-set:has(> input:nth-of-type(5):checked) > .tabbed-labels > label:nth-of-type(5),
+    .rst-content .tabbed-set:has(> input:nth-of-type(6):checked) > .tabbed-labels > label:nth-of-type(6),
+    .rst-content .tabbed-set:has(> input:nth-of-type(7):checked) > .tabbed-labels > label:nth-of-type(7),
+    .rst-content .tabbed-set:has(> input:nth-of-type(8):checked) > .tabbed-labels > label:nth-of-type(8) {
+        background: #fff;
+        box-shadow: inset 0 -3px 0 var(--pto-red-500);
+        color: #24292f;
+    }
+
+    .rst-content .tabbed-set:has(> input:nth-of-type(1):checked) > .tabbed-content > .tabbed-block:nth-of-type(1),
+    .rst-content .tabbed-set:has(> input:nth-of-type(2):checked) > .tabbed-content > .tabbed-block:nth-of-type(2),
+    .rst-content .tabbed-set:has(> input:nth-of-type(3):checked) > .tabbed-content > .tabbed-block:nth-of-type(3),
+    .rst-content .tabbed-set:has(> input:nth-of-type(4):checked) > .tabbed-content > .tabbed-block:nth-of-type(4),
+    .rst-content .tabbed-set:has(> input:nth-of-type(5):checked) > .tabbed-content > .tabbed-block:nth-of-type(5),
+    .rst-content .tabbed-set:has(> input:nth-of-type(6):checked) > .tabbed-content > .tabbed-block:nth-of-type(6),
+    .rst-content .tabbed-set:has(> input:nth-of-type(7):checked) > .tabbed-content > .tabbed-block:nth-of-type(7),
+    .rst-content .tabbed-set:has(> input:nth-of-type(8):checked) > .tabbed-content > .tabbed-block:nth-of-type(8) {
+        display: block;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .rst-content details.info > summary::after {
+        content: "";
+    }
+
+    .rst-content .tabbed-labels > label {
+        flex: 1 1 100%;
+        text-align: left;
+    }
 }
 
 .language-switcher {
@@ -569,7 +778,7 @@ article .toctree-expand,
     }
 
     .wy-nav-side {
-        width: min(88vw, 360px);
+        width: 300px;
     }
 
     .wy-side-scroll {

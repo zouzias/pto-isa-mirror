@@ -20,7 +20,7 @@ For `0 <= i < M` and `0 <= j < N`:
 
 $$ \mathrm{C}_{i,j} = \sum_{k=0}^{K-1} \mathrm{A}_{i,k} \cdot \mathrm{B}_{k,j} + \mathrm{Bias}_{0,j} $$
 
-Bias broadcasting behavior is implementation-defined.
+Bias broadcasting extends across the M dimension. On A2/A3: bias must have exactly 1 row and N columns, broadcast along M=1 rows; no other broadcasting configurations are supported. On A5: bias must have exactly 1 row and N columns with row-major layout, broadcast along M=1 rows; no other broadcasting configurations are supported. On CPU simulator: follows A5 semantics.
 
 ## Syntax
 
@@ -86,22 +86,25 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- All constraints from `TMATMUL` apply to the `(cMatrix, aMatrix, bMatrix)` triple.
+!!! warning "Constraints"
+    - All constraints from `TMATMUL` apply to the `(cMatrix, aMatrix, bMatrix)` triple.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Bias constraints (A2A3)**:
-    - `TileBias::DType` must match `TileRes::DType`.
-    - `TileBias::Loc == TileType::Bias` and `TileBias::Rows == 1`.
+??? info "Target-Profile Restrictions"
+    - **Bias constraints (A2A3)**:
+        - `TileBias::DType` must match `TileRes::DType`.
+        - `TileBias::Loc == TileType::Bias` and `TileBias::Rows == 1`.
 
-- **Bias constraints (A5)**:
-    - `TileBias::DType` must match `TileRes::DType`.
-    - `TileBias::Loc == TileType::Bias`, `TileBias::Rows == 1`, and `TileBias::isRowMajor`.
+    - **Bias constraints (A5)**:
+        - `TileBias::DType` must match `TileRes::DType`.
+        - `TileBias::Loc == TileType::Bias`, `TileBias::Rows == 1`, and `TileBias::isRowMajor`.
 
 ## Examples
 

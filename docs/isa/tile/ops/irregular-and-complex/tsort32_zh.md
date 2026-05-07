@@ -34,7 +34,7 @@ $$
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 同步形式：
 
@@ -68,17 +68,18 @@ PTO_INST RecordEvent TSORT32(DstTileData &dst, SrcTileData &src, IdxTileData &id
 
 ## 约束
 
-- `TSORT32` 不接受 `WaitEvents&...` 参数，也不在内部调用 `TSYNC(...)`；如有需要请显式同步。
-- `idx` 在两个重载中都是必需的输入操作数；它提供与 `src` 一起参与重排的索引。
-- **实现检查 (A2A3/A5)**:
-    - `DstTileData::DType` 必须是 `half` 或 `float`。
-    - `SrcTileData::DType` 必须与 `DstTileData::DType` 匹配。
-    - `IdxTileData::DType` 必须是 `uint32_t`。
-    - `dst`/`src`/`idx` Tile 位置必须是 `TileType::Vec`，且都必须是行主序（`isRowMajor`）。
-- **有效区域**:
-    - 实现使用 `dst.GetValidRow()` 作为行数。
-    - 实现使用 `src.GetValidCol()` 确定每行参与排序的元素数量。
-    - 排序按独立的 32 元素块进行；4 参数重载额外通过 `tmp` 支持非 32 对齐尾块。
+!!! warning "约束"
+    - `TSORT32` 不接受 `WaitEvents&...` 参数，也不在内部调用 `TSYNC(...)`；如有需要请显式同步。
+    - `idx` 在两个重载中都是必需的输入操作数；它提供与 `src` 一起参与重排的索引。
+    - **实现检查 (A2A3/A5)**:
+        - `DstTileData::DType` 必须是 `half` 或 `float`。
+        - `SrcTileData::DType` 必须与 `DstTileData::DType` 匹配。
+        - `IdxTileData::DType` 必须是 `uint32_t`。
+        - `dst`/`src`/`idx` Tile 位置必须是 `TileType::Vec`，且都必须是行主序（`isRowMajor`）。
+    - **有效区域**:
+        - 实现使用 `dst.GetValidRow()` 作为行数。
+        - 实现使用 `src.GetValidCol()` 确定每行参与排序的元素数量。
+        - 排序按独立的 32 元素块进行；4 参数重载额外通过 `tmp` 支持非 32 对齐尾块。
 
 ## 示例
 

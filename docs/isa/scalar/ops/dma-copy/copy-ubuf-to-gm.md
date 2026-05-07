@@ -49,19 +49,22 @@ Reads UB-visible storage, writes GM-visible storage, and consumes the active UBâ
 
 ## Constraints
 
-- `%ub_src` MUST satisfy the UB alignment requirements of the selected target profile.
-- `%len_burst` MUST fit within the configured row stride and DMA limits of the selected target profile.
-- Only the requested burst bytes are copied from each UB row; padded tail bytes remain local to UB.
+!!! warning "Constraints"
+    - `%ub_src` MUST satisfy the UB alignment requirements of the selected target profile.
+    - `%len_burst` MUST fit within the configured row stride and DMA limits of the selected target profile.
+    - Only the requested burst bytes are copied from each UB row; padded tail bytes remain local to UB.
 
 ## Exceptions
 
-- The verifier rejects illegal operand shapes, unsupported pipe or event identifiers, and attribute combinations that are not valid for the selected instruction set or target profile.
-- Any additional illegality stated in the constraints section is also part of the contract.
+!!! danger "Exceptions"
+    - The verifier rejects illegal operand shapes, unsupported pipe or event identifiers, and attribute combinations that are not valid for the selected instruction set or target profile.
+    - Any additional illegality stated in the constraints section is also part of the contract.
 
 ## Target-Profile Restrictions
 
-- CPU simulation preserves the visible copy contract but may not expose all DMA overlap hazards.
-- A2/A3 and A5 may narrow supported element sizes, row widths, or cache-control semantics.
+??? info "Target-Profile Restrictions"
+    - CPU simulation preserves the visible copy contract but may not expose all DMA overlap hazards.
+    - A2/A3 and A5 may narrow supported element sizes, row widths, or cache-control semantics.
 
 ## Examples
 

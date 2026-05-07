@@ -60,24 +60,27 @@ None. This form is defined by its side effect on buffer state and synchronizatio
 
 ## Constraints
 
-- **Must match prior acquire**: The calling pipeline MUST have previously acquired the named buffer ID via `get_buf`. Releasing a buffer that was never acquired is **illegal**.
-- **Release-after-produce order**: `rls_buf` MUST be issued only after the producer has completed all work on the buffer. Releasing before the data is ready produces **implementation-defined** results.
-- **One release per acquire**: Each `get_buf` MUST be matched by exactly one `rls_buf` before the next `get_buf` on the same pipeline and buffer ID. Extra releases or missing releases are **illegal**.
-- **Producer-consumer pairing**: The pipeline named in `rls_buf` is the producer pipeline (the one that wrote to the buffer). The matching `get_buf` names the consumer pipeline.
+!!! warning "Constraints"
+    - **Must match prior acquire**: The calling pipeline MUST have previously acquired the named buffer ID via `get_buf`. Releasing a buffer that was never acquired is **illegal**.
+    - **Release-after-produce order**: `rls_buf` MUST be issued only after the producer has completed all work on the buffer. On A2/A3 and A5: releasing before the data is ready causes the consumer pipeline to read stale or incorrect data; the error may not manifest until later in the pipeline. On CPU simulator: releasing early produces unpredictable data in the consumer.
+    - **One release per acquire**: Each `get_buf` MUST be matched by exactly one `rls_buf` before the next `get_buf` on the same pipeline and buffer ID. Extra releases or missing releases are **illegal**.
+    - **Producer-consumer pairing**: The pipeline named in `rls_buf` is the producer pipeline (the one that wrote to the buffer). The matching `get_buf` names the consumer pipeline.
 
 ## Exceptions
 
-- Illegal if `%buf_id` was not previously acquired by the calling pipeline.
-- Illegal if an extra `rls_buf` is issued without a matching prior `get_buf`.
-- Illegal if `rls_buf` is issued before the producer has finished writing to the buffer (data hazard).
+!!! danger "Exceptions"
+    - Illegal if `%buf_id` was not previously acquired by the calling pipeline.
+    - Illegal if an extra `rls_buf` is issued without a matching prior `get_buf`.
+    - Illegal if `rls_buf` is issued before the producer has finished writing to the buffer (data hazard).
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| Buffer release | Simulated | Supported | Supported |
-| Implicit set_flag | Simulated | Supported | Supported |
-| Maximum buffer IDs | Implementation-defined | 32 (global pool) | 32 (global pool) |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | Buffer release | Simulated | Supported | Supported |
+    | Implicit set_flag | Simulated | Supported | Supported |
+    | Maximum buffer IDs | Simulated | 32 (global pool) | 32 (global pool) |
 
 ## Examples
 

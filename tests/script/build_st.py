@@ -32,18 +32,14 @@ def run_command(command, cwd=None, check=True):
         raise
 
 
-def _prepare_build_dir(build_dir: str) -> None:
-    if os.path.exists(build_dir):
-        print(f"clean build: {build_dir}")
-        shutil.rmtree(build_dir)
-    os.makedirs(build_dir, exist_ok=True)
-
-
 def build_project(run_mode, soc_version, auto_enable=False, testcase="all"):
     original_dir = os.getcwd()
     # 清理并创建build目录
     build_dir = "build"
-    _prepare_build_dir(build_dir)
+    if os.path.exists(build_dir):
+        print(f"clean build: {build_dir}")
+        shutil.rmtree(build_dir)
+    os.makedirs(build_dir, exist_ok=True)
 
     try:
         cmake_cmd = [
@@ -97,27 +93,6 @@ def build_project(run_mode, soc_version, auto_enable=False, testcase="all"):
     finally:
         os.chdir(original_dir)
 
-
-def _resolve_soc_version(soc_version: str) -> str:
-    if soc_version == "a5":
-        return "Ascend950PR_9599"
-    if soc_version == "kirinX90":
-        return "KirinX90"
-    if soc_version == "kirin9030":
-        return "Kirin9030"
-    return "Ascend910B1"
-
-
-def _resolve_target_dir(soc_version: str) -> str:
-    script_path = os.path.abspath(__file__)
-    base_dir = os.path.dirname(os.path.dirname(script_path))
-    if soc_version == "a3":
-        return base_dir + "/npu/a2a3/src/st"
-    if soc_version in {"kirinX90", "kirin9030"}:
-        return base_dir + "/npu/kirin9030/src/st"
-    return base_dir + "/npu/a5/src/st"
-
-
 def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description="执行st脚本")
@@ -128,14 +103,29 @@ def main():
     parser.add_argument("-a", "--auto-mode-enable", action='store_true', help="开启auto模式")
 
     args = parser.parse_args()
-    default_soc_version = _resolve_soc_version(args.soc_version)
+    default_soc_version = "Ascend910B1"
+    if args.soc_version == "a5":
+        default_soc_version = "Ascend950PR_9599"
+    elif args.soc_version == "kirinX90":
+        default_soc_version = "KirinX90"
+    elif args.soc_version == "kirin9030":
+        default_soc_version = "Kirin9030"
     default_cases = "all"
-    if args.gtest_filter is not None:
+    if args.gtest_filter != None:
         default_cases = args.gtest_filter
 
     original_dir = os.getcwd()
     try:
-        target_dir = _resolve_target_dir(args.soc_version)
+        # 获取当前脚本（run_st.py）的绝对路径
+        script_path = os.path.abspath(__file__)
+        target_dir = os.path.dirname(os.path.dirname(script_path))
+
+        if args.soc_version == "a3":
+            target_dir = target_dir + "/npu/a2a3/src/st"
+        elif args.soc_version == "kirinX90" or args.soc_version == "kirin9030": # kirin9030 与 kirinX90 共享代码
+            target_dir = target_dir + "/npu/kirin9030/src/st"
+        else : # a5
+            target_dir = target_dir + "/npu/a5/src/st"
 
         print(f"target_dir: {target_dir}")
         os.chdir(target_dir)

@@ -69,10 +69,10 @@ __tf__ PTO_INLINE void LoadPlainMatrix(typename GlobalData::DType __out__ *dst, 
 }
 
 template <typename GlobalData, typename TileData>
-__tf__ PTO_INLINE void LoadPlainMajor(typename GlobalData::DType __out__ *dst, typename TileData::TileDType __in__ src,
-                                      int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
-                                      int gStride1, int gStride2, int gStride3, int gStride4, int validRow,
-                                      int validCol)
+__tf__ PTO_INLINE void LoadPlainDnClassic(typename GlobalData::DType __out__ *dst,
+                                          typename TileData::TileDType __in__ src, int gShape0, int gShape1,
+                                          int gShape2, int gShape3, int gShape4, int gStride0, int gStride1,
+                                          int gStride2, int gStride3, int gStride4, int validRow, int validCol)
 {
     int64_t dstStride1 = gShape2;
     int64_t dstStride0 = gShape1 * dstStride1;
@@ -93,22 +93,6 @@ __tf__ PTO_INLINE void LoadPlainMajor(typename GlobalData::DType __out__ *dst, t
 }
 
 template <typename GlobalData, typename TileData>
-__tf__ PTO_INLINE void LoadPlainDnFlattenRowsChunk(typename GlobalData::DType __out__ *dst,
-                                                   typename TileData::TileDType __in__ src, std::size_t srcBase,
-                                                   std::size_t dstRowBase, int gShape3, int gShape4, int gStride3,
-                                                   int gStride4)
-{
-    for (std::size_t c = 0; c < static_cast<std::size_t>(gShape4); c++) {
-        const std::size_t dstBase = c * static_cast<std::size_t>(TileData::Rows) + dstRowBase;
-        const std::size_t colSrcBase = srcBase + c * static_cast<std::size_t>(gStride4);
-        PTO_CPU_VECTORIZE_LOOP
-        for (std::size_t r = 0; r < static_cast<std::size_t>(gShape3); r++) {
-            dst[dstBase + r] = src[colSrcBase + r * static_cast<std::size_t>(gStride3)];
-        }
-    }
-}
-
-template <typename GlobalData, typename TileData>
 __tf__ PTO_INLINE void LoadPlainDnFlattenRows(typename GlobalData::DType __out__ *dst,
                                               typename TileData::TileDType __in__ src, int gShape0, int gShape1,
                                               int gShape2, int gShape3, int gShape4, int gStride0, int gStride1,
@@ -124,22 +108,19 @@ __tf__ PTO_INLINE void LoadPlainDnFlattenRows(typename GlobalData::DType __out__
             const std::size_t srcAddr1 = static_cast<std::size_t>(j) * static_cast<std::size_t>(gStride1);
             const std::size_t dstAddr1 = static_cast<std::size_t>(j) * static_cast<std::size_t>(gShape2) * gShape3;
             for (uint32_t k = 0; k < static_cast<uint32_t>(gShape2); k++) {
-                const std::size_t srcBase = srcAddr0 + srcAddr1 + srcAddr2;
-                LoadPlainDnFlattenRowsChunk<GlobalData, TileData>(dst, src, srcBase, dstRowBase, gShape3, gShape4,
-                                                                  gStride3, gStride4);
+                const std::size_t srcAddr2 = static_cast<std::size_t>(k) * static_cast<std::size_t>(gStride2);
+                const std::size_t dstRowBase = dstAddr0 + dstAddr1 + static_cast<std::size_t>(k) * gShape3;
+                for (std::size_t c = 0; c < static_cast<std::size_t>(gShape4); c++) {
+                    const std::size_t dstBase = c * static_cast<std::size_t>(TileData::Rows) + dstRowBase;
+                    const std::size_t srcBase = srcAddr0 + srcAddr1 + srcAddr2 + c * static_cast<std::size_t>(gStride4);
+                    PTO_CPU_VECTORIZE_LOOP
+                    for (std::size_t r = 0; r < static_cast<std::size_t>(gShape3); r++) {
+                        dst[dstBase + r] = src[srcBase + r * static_cast<std::size_t>(gStride3)];
+                    }
+                }
             }
         }
     }
-}
-
-template <typename GlobalData, typename TileData>
-__tf__ PTO_INLINE void LoadPlainRowMajor(typename GlobalData::DType __out__ *dst,
-                                         typename TileData::TileDType __in__ src, int gShape0, int gShape1, int gShape2,
-                                         int gShape3, int gShape4, int gStride0, int gStride1, int gStride2,
-                                         int gStride3, int gStride4, int validRow, int validCol)
-{
-    LoadPlainMajor<GlobalData, TileData>(dst, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1,
-                                         gStride2, gStride3, gStride4, validRow, validCol);
 }
 
 template <typename GlobalData, typename TileData>
@@ -155,13 +136,27 @@ __tf__ PTO_INLINE void LoadPlain(typename GlobalData::DType __out__ *dst, typena
                                                          validCol);
             return;
         }
-        LoadPlainMajor<GlobalData, TileData>(dst, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1,
-                                             gStride2, gStride3, gStride4, validRow, validCol);
+        LoadPlainDnClassic<GlobalData, TileData>(dst, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
+                                                 gStride1, gStride2, gStride3, gStride4, validRow, validCol);
         return;
     }
 
-    LoadPlainRowMajor<GlobalData, TileData>(dst, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1,
-                                            gStride2, gStride3, gStride4, validRow, validCol);
+    int64_t dstStride1 = gShape2;
+    int64_t dstStride0 = gShape1 * dstStride1;
+
+    for (uint32_t i = 0; i < static_cast<uint32_t>(gShape0); i++) {
+        int64_t dstAddr0 = static_cast<int64_t>(i) * dstStride0;
+        int64_t srcAddr0 = static_cast<int64_t>(i) * gStride0;
+        for (uint32_t j = 0; j < static_cast<uint32_t>(gShape1); j++) {
+            int64_t dstAddr1 = static_cast<int64_t>(j) * dstStride1;
+            int64_t srcAddr1 = static_cast<int64_t>(j) * gStride1;
+            for (uint32_t k = 0; k < static_cast<uint32_t>(gShape2); k++) {
+                size_t offsetSrcBase = srcAddr0 + srcAddr1 + static_cast<int64_t>(k) * gStride2;
+                LoadPlainMatrix<GlobalData, TileData>(dst, src + offsetSrcBase, gShape3, gShape4, gStride3, gStride4,
+                                                      validRow, validCol, dstAddr0 + dstAddr1 + k);
+            }
+        }
+    }
 }
 
 template <typename GlobalData, typename TileData>

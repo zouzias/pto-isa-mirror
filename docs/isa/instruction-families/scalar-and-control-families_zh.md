@@ -36,11 +36,12 @@
 
 ## 不允许的情形
 
-- 等待未建立事件
-- 使用目标不支持的 pipe / event
-- 在缺少同步的情况下跨越 producer-consumer 边
+!!! danger "不允许的情形"
+    - 等待未建立事件
+    - 使用目标不支持的 pipe / event
+    - 在缺少同步的情况下跨越 producer-consumer 边
 
 ## 相关页面
 
-- [标量与控制指令集](../instruction-surfaces/scalar-and-control-instructions_zh.md)
+- [标量与控制指令集](scalar-and-control-families_zh.md)
 - [标量参考入口](../scalar/README_zh.md)

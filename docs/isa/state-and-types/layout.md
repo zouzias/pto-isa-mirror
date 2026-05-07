@@ -84,7 +84,8 @@ The zigzag index maps 2D coordinates to a 1D Z-order sequence. The mapping is ha
 | `FR` | `RowMajor` | `ColMajor` | Row-fractal (fixed-stride variant) | CUBE-specific pattern |
 | `RN` | `ColMajor` | `RowMajor` | Row-N-fractal | CUBE-specific pattern |
 
-> **Note for A5/A2/A3:** The exact fractal block dimensions are `FRACTAL_NZ_ROW = 16` (elements per fractal row) and `CUBE_BLOCK_SIZE = 512` (bytes per fractal block). These affect address generation in hardware but are not part of the ISA contract for authors.
+!!! note "Note for A5/A2/A3:"
+    The exact fractal block dimensions are `FRACTAL_NZ_ROW = 16` (elements per fractal row) and `CUBE_BLOCK_SIZE = 512` (bytes per fractal block). These affect address generation in hardware but are not part of the ISA contract for authors.
 
 ## Compact Mode
 
@@ -202,4 +203,4 @@ TINSERT(dstVec, srcLeft, InsertMode::NZ2ND);
 - [Tile Buffer SSA Type](./type-system.md#tile-buffer-types) — `!pto.tile<...>` vs `!pto.tile_buf<...>`
 - [TEXTRACT](../tile/ops/layout-and-rearrangement/textract.md) — Layout conversion with compact mode
 - [TINSERT](../tile/ops/layout-and-rearrangement/tinsert.md) — Layout conversion with compact mode
-- [Tile Instruction Set](../instruction-surfaces/tile-instructions.md) — How layouts interact with tile operations
+- [Tile Instruction Set](../instruction-families/tile-families.md) — How layouts interact with tile operations

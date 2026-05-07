@@ -52,10 +52,11 @@ Signals the named event. After this operation completes, any `wait_flag` with th
 
 ## Constraints
 
-- The selected pipe identifiers must be valid for the target profile.
-- The event identifier must be within the supported range for the target profile.
-- The event protocol is directional; using the wrong pipe role is undefined behavior.
-- Portable code must pair each `set_flag` with a corresponding `wait_flag` in the intended dependency chain.
+!!! warning "Constraints"
+    - The selected pipe identifiers must be valid for the target profile.
+    - The event identifier must be within the supported range for the target profile.
+    - The event protocol is directional; using the wrong pipe role is undefined behavior.
+    - Portable code must pair each `set_flag` with a corresponding `wait_flag` in the intended dependency chain.
 
 ## Common Patterns
 
@@ -95,19 +96,21 @@ pto.set_flag["PIPE_MTE2", "PIPE_V", "EVT_IN_FWD_1"]
 
 ## Exceptions
 
-- Using invalid pipe identifiers or out-of-range event identifiers is rejected by the verifier.
-- Signaling an event before the producing operation has started produces undefined results.
-- Consuming an event that has not been signaled causes the consumer pipeline to wait indefinitely.
+!!! danger "Exceptions"
+    - Using invalid pipe identifiers or out-of-range event identifiers is rejected by the verifier.
+    - Signaling an event before the producing operation has started produces undefined results.
+    - Consuming an event that has not been signaled causes the consumer pipeline to wait indefinitely.
 
 ## Target-Profile Restrictions
 
-| Profile | Pipe Support | Event ID Range |
-|---------|-------------|----------------|
-| CPU Simulator | All pipes emulated | Unlimited |
-| A2/A3 | `PIPE_MTE2`, `PIPE_V`, `PIPE_MTE3` | Profile-defined |
-| A5 | `PIPE_MTE2`, `PIPE_V`, `PIPE_MTE3` | Profile-defined |
+??? info "Target-Profile Restrictions"
+    | Profile | Pipe Support | Event ID Range |
+    |---------|-------------|----------------|
+    | CPU Simulator | All pipes emulated | Unlimited |
+    | A2/A3 | `PIPE_MTE2`, `PIPE_V`, `PIPE_MTE3` | Profile-defined |
+    | A5 | `PIPE_MTE2`, `PIPE_V`, `PIPE_MTE3` | Profile-defined |
 
-CPU simulation preserves the event protocol semantics but may not expose all low-level hazards that motivate it on hardware.
+    CPU simulation preserves the event protocol semantics but may not expose all low-level hazards that motivate it on hardware.
 
 ## See Also
 

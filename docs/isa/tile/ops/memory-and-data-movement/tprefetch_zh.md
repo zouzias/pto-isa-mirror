@@ -58,8 +58,9 @@ PTO_INST RecordEvent TPREFETCH(TileData &dst, GlobalData &src);
 
 ## 约束
 
-- 可移植代码应把它用于“提前搬运即将访问的数据”，而不要把它当 `TLOAD` 的语义等价替代品。
-- 在当前仓库实现里，预取范围仍然受 `dst` 大小和 `src` 切片大小影响。
+!!! warning "约束"
+    - 可移植代码应把它用于“提前搬运即将访问的数据”，而不要把它当 `TLOAD` 的语义等价替代品。
+    - 在当前仓库实现里，预取范围仍然受 `dst` 大小和 `src` 切片大小影响。
 
 ## Target-Profile 限制
 
@@ -74,7 +75,8 @@ PTO_INST RecordEvent TPREFETCH(TileData &dst, GlobalData &src);
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## 性能
 

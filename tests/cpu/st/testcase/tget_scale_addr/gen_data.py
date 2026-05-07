@@ -29,22 +29,6 @@ def gen_golden_data_tget_scale_addr(case_name, param):
     NumExt.write_array("golden.bin", out_data, dtype)
 
 
-def ensure_directory(path: str) -> None:
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-
-def generate_case(param: "TGetScaleAddrParams") -> None:
-    case_name = generate_case_name(param)
-    ensure_directory(case_name)
-    original_dir = os.getcwd()
-    try:
-        os.chdir(case_name)
-        gen_golden_data_tget_scale_addr(case_name, param)
-    finally:
-        os.chdir(original_dir)
-
-
 class TGetScaleAddrParams:
     def __init__(self, dtype, src_row, src_col, dst_row, dst_col):
         self.dtype = dtype
@@ -71,7 +55,8 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
     testcases_dir = os.path.join(script_dir, "testcases")
 
-    ensure_directory(testcases_dir)
+    if not os.path.exists(testcases_dir):
+        os.makedirs(testcases_dir)
 
     case_params_list = [
         TGetScaleAddrParams(np.float32, 64, 64, 64, 64),

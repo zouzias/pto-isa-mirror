@@ -60,15 +60,17 @@ PTO_INST RecordEvent TRSQRT(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp
 
 ## 约束
 
-- 支持类型当前是 `float` / `half`
-- tile 必须是行主序向量 tile
-- 迭代域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定
-- 对 `src == 0` 或负输入这类情况，行为由目标 profile 定义
-- 当 `tmp` 提供时，NPU 路径要求它至少有 32 字节，以触发高精度实现
+!!! warning "约束"
+    - 支持类型当前是 `float` / `half`
+    - tile 必须是行主序向量 tile
+    - 迭代域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定
+    - 对 `src == 0` 或负输入这类情况，行为由目标 profile 定义
+    - 当 `tmp` 提供时，NPU 路径要求它至少有 32 字节，以触发高精度实现
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## Target-Profile 限制
 

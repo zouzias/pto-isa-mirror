@@ -59,21 +59,24 @@ vector_bool mask = plt_b16(scalar, __cce_simd::POST_UPDATE);
 
 ## Constraints
 
-- The installed public CCE surface for `plt_b16` uses a `uint32_t &` scalar plus `__cce_simd::POST_UPDATE`.
-- Programs that chain multiple `plt_b16` calls must thread the updated scalar value forward explicitly.
-- The returned predicate width is fixed by the `_b16` suffix.
+!!! warning "Constraints"
+    - The installed public CCE surface for `plt_b16` uses a `uint32_t &` scalar plus `__cce_simd::POST_UPDATE`.
+    - Programs that chain multiple `plt_b16` calls must thread the updated scalar value forward explicitly.
+    - The returned predicate width is fixed by the `_b16` suffix.
 
 ## Exceptions
 
-- Illegal if the selected target profile does not support the requested predicate width.
-- Illegal if the post-update scalar state is consumed in a way that breaks the required chaining discipline.
+!!! danger "Exceptions"
+    - Illegal if the selected target profile does not support the requested predicate width.
+    - Illegal if the post-update scalar state is consumed in a way that breaks the required chaining discipline.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| Tail-predicate helper | Simulated | Supported | Supported |
-| Public post-update scalar form | Emulated | Supported | Supported |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | Tail-predicate helper | Simulated | Supported | Supported |
+    | Public post-update scalar form | Emulated | Supported | Supported |
 
 ## Examples
 

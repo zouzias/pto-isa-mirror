@@ -61,22 +61,25 @@ None.
 
 ## Constraints
 
-- **Partition token**: MUST be `"LOWER"` or `"HIGHER"`. Other tokens are **illegal**.
-- **Source width**: The source predicate MUST be 2N bits. Programs MUST ensure the source context provides a 2N-bit predicate.
-- **Destination width**: The destination predicate is always N bits. Programs that need a 2N-bit result after extraction MUST use `ppack` to reconstruct it.
-- **Zero-fill behavior**: The non-selected half of the source is ignored (zero-filled); the destination does NOT contain a concatenation or merge of both halves.
+!!! warning "Constraints"
+    - **Partition token**: MUST be `"LOWER"` or `"HIGHER"`. Other tokens are **illegal**.
+    - **Source width**: The source predicate MUST be 2N bits. Programs MUST ensure the source context provides a 2N-bit predicate.
+    - **Destination width**: The destination predicate is always N bits. Programs that need a 2N-bit result after extraction MUST use `ppack` to reconstruct it.
+    - **Zero-fill behavior**: The non-selected half of the source is ignored (zero-filled); the destination does NOT contain a concatenation or merge of both halves.
 
 ## Exceptions
 
-- Illegal if the partition token is not `"LOWER"` or `"HIGHER"`.
-- Illegal if source and destination predicate widths are not in a 2:1 ratio.
+!!! danger "Exceptions"
+    - Illegal if the partition token is not `"LOWER"` or `"HIGHER"`.
+    - Illegal if source and destination predicate widths are not in a 2:1 ratio.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| Unpack operation | Simulated | Supported | Supported |
-| `LOWER` / `HIGHER` tokens | Supported | Supported | Supported |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | Unpack operation | Simulated | Supported | Supported |
+    | `LOWER` / `HIGHER` tokens | Supported | Supported | Supported |
 
 ## Examples
 

@@ -62,28 +62,31 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+!!! warning "Constraints"
+    - **Valid region**:
+        - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Implementation checks (A2A3)**:
-    - Intended for integral element types.
-    - `dst` and `src` must use the same element type.
-    - `dst` and `src` must be vector tiles.
-    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`.
-    - In manual mode, setting the source tile and destination tile to the same memory is unsupported.
+??? info "Target-Profile Restrictions"
+    - **Implementation checks (A2A3)**:
+        - Intended for integral element types.
+        - `dst` and `src` must use the same element type.
+        - `dst` and `src` must be vector tiles.
+        - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`.
+        - In manual mode, setting the source tile and destination tile to the same memory is unsupported.
 
-- **Implementation checks (A5)**:
-    - Intended for integral element types supported by `TEXPANDS` and `TOR`.
-    - `dst` and `src` must use the same element type.
-    - `dst` and `src` must be vector tiles.
-    - In manual mode, setting the source tile and destination tile to the same memory is unsupported.
+    - **Implementation checks (A5)**:
+        - Intended for integral element types supported by `TEXPANDS` and `TOR`.
+        - `dst` and `src` must use the same element type.
+        - `dst` and `src` must be vector tiles.
+        - In manual mode, setting the source tile and destination tile to the same memory is unsupported.
 
 ## Examples
 

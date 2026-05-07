@@ -9,7 +9,7 @@ Memory operations transfer data between global memory (GM) and tile buffers. The
 | [pto.tload](./ops/memory-and-data-movement/tload.md) | Load from GM into tile | GM → local tile buffer | `TLOAD(dst, gtensor)` |
 | [pto.tprefetch](./ops/memory-and-data-movement/tprefetch.md) | Prefetch from GM into tile (non-blocking) | GM → local tile buffer | `TPREFETCH(dst, gtensor)` |
 | [pto.tstore](./ops/memory-and-data-movement/tstore.md) | Store from tile to GM | local tile buffer → GM | `TSTORE(gtensor, src)` |
-| [pto.tstore_fp](./ops/memory-and-data-movement/tstore-fp.md) | Store through the fix-pipe path | Tile → local tile buffer → GM | `TSTORE_FP(gtensor, src, fp)` |
+| [pto.tstore_fp](./ops/memory-and-data-movement/tstore.md) | Store through the fix-pipe path | Tile → local tile buffer → GM | `TSTORE_FP(gtensor, src, fp)` |
 | [pto.mgather](./ops/memory-and-data-movement/mgather.md) | Gather scattered elements from GM | GM → local tile buffer | `MGATHER(dst, gtensor, indices)` |
 | [pto.mscatter](./ops/memory-and-data-movement/mscatter.md) | Scatter tile elements to GM | local tile buffer → GM | `MSCATTER(gtensor, indices, src)` |
 
@@ -74,20 +74,22 @@ See [Producer Consumer Ordering](../memory-model/producer-consumer-ordering.md) 
 
 ## Constraints
 
-- Source and destination element types MUST have the same size: `sizeof(tile.dtype) == sizeof(gtensor.dtype)`.
-- Transfer size is determined by the destination tile's valid region for `TLOAD`, or source tile's valid region for `TSTORE`.
-- Layout compatibility between GM layout and tile layout is profile-dependent (see layout compatibility table above).
-- Gather/scatter index tiles must have compatible shapes.
-- `TSTORE` with `TileType::Acc` supports `AtomicType`: `AtomicNone`, `AtomicAdd`, `AtomicMax`, `AtomicMin` (A5 only).
-- `TSTORE_FP` is only legal for `TileType::Acc` on A2A3 and A5 and uses the fix-pipe sideband state carried by the auxiliary `fp` tile argument.
+!!! warning "Constraints"
+    - Source and destination element types MUST have the same size: `sizeof(tile.dtype) == sizeof(gtensor.dtype)`.
+    - Transfer size is determined by the destination tile's valid region for `TLOAD`, or source tile's valid region for `TSTORE`.
+    - Layout compatibility between GM layout and tile layout is profile-dependent (see layout compatibility table above).
+    - Gather/scatter index tiles must have compatible shapes.
+    - `TSTORE` with `TileType::Acc` supports `AtomicType`: `AtomicNone`, `AtomicAdd`, `AtomicMax`, `AtomicMin` (A5 only).
+    - `TSTORE_FP` is only legal for `TileType::Acc` on A2A3 and A5 and uses the fix-pipe sideband state carried by the auxiliary `fp` tile argument.
 
 ## Cases That Are Not Allowed
 
-- Transferring to or from an uninitialized tile register.
-- Using a GlobalTensor with strides incompatible with the transfer pattern.
-- Accessing GM addresses outside the tensor's declared shape.
-- Using `TSTORE_FP` with a non-Acc tile type.
-- Using atomic store variants on CPU simulator.
+!!! danger "Cases That Are Not Allowed"
+    - Transferring to or from an uninitialized tile register.
+    - Using a GlobalTensor with strides incompatible with the transfer pattern.
+    - Accessing GM addresses outside the tensor's declared shape.
+    - Using `TSTORE_FP` with a non-Acc tile type.
+    - Using atomic store variants on CPU simulator.
 
 ## C++ Intrinsic
 
@@ -127,4 +129,4 @@ PTO_INST RecordEvent MSCATTER(GlobalData& dst, IndexData& indices, TileData& src
 - [Memory model](../memory-model/consistency-baseline.md) — GM ordering and consistency
 - [Producer consumer ordering](../memory-model/producer-consumer-ordering.md) — Sync rules
 - [Tile instruction set](../instruction-families/tile-families.md) — Instruction set overview
-- [Tile instruction set](../instruction-surfaces/tile-instructions.md) — Instruction Set description
+- [Tile instruction set](../instruction-families/tile-families.md) — Instruction Set description

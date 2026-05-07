@@ -7,19 +7,16 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#ifndef TMINS_HPP
-#define TMINS_HPP
-
-#include "pto/costmodel/pto_isa_costmodel.hpp"
+#ifndef SET_IMG2COL_RPT_CPU_HPP
+#define SET_IMG2COL_RPT_CPU_HPP
 
 namespace pto {
-
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TMINS_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar)
+template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL>
+PTO_INTERNAL void SET_IMG2COL_RPT_IMPL(ConvTileData &src)
 {
-    pto::CostModel::GetInstance().BinSOpPredictCycle<MinSOp, TileDataDst, TileDataSrc>("TMINS", dst, src);
+    (void)FmatrixMode;
+    PTO_CPU_ASSERT(src.GetRepeatTime() >= 0, "Fix: SET_IMG2COL_RPT metadata must be initialized.");
 }
-
 } // namespace pto
 
 #endif

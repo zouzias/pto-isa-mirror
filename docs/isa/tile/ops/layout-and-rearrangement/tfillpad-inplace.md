@@ -8,9 +8,9 @@ In-place fill/pad variant.
 
 ## Mechanism
 
-In-place fill/pad variant of TFILLPAD (implementation-defined). It belongs to the tile instructions and carries architecture-visible behavior that is not reducible to a plain elementwise compute pattern.
+In-place fill/pad variant of TFILLPAD — dst and src must have the same shape, and valid region elements from src are copied to dst while the padding region of dst is filled with PadVal. On A2/A3: the operation iterates over the destination's valid region (via GetValidRow/GetValidCol), copying from the corresponding source position and filling all other destination positions with PadVal; because src and dst share the same shape, every source position maps to exactly one destination position. On A5: behavior is identical, but the hardware enforces 32-byte alignment constraints on the major dimension which may affect the effective valid region boundaries for certain tile shapes. On the CPU simulator: the operation is emulated by iterating over the tile shape and performing elementwise copy or fill based on whether the current position is within the valid region.
 
-Unless otherwise specified, semantics are defined over the valid region and target-dependent behavior is marked as implementation-defined.
+Unless otherwise specified, semantics are defined over the valid region. On A2/A3 and A5 the in-place fill writes directly into the tile buffer; on the CPU simulator it writes element-by-element. The pad value must be representable in the destination element type.
 
 ## Syntax
 
@@ -65,18 +65,21 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-Type/layout/location/shape legality is backend-dependent; treat implementation-specific notes as normative for that backend.
+!!! warning "Constraints"
+    Type/layout/location/shape legality is backend-dependent; treat implementation-specific notes as normative for that backend.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- `pto.tfillpad_inplace` preserves PTO-visible semantics across CPU simulation, A2/A3-class targets, and A5-class targets, but concrete support subsets may differ by profile.
+??? info "Target-Profile Restrictions"
+    - `pto.tfillpad_inplace` preserves PTO-visible semantics across CPU simulation, A2/A3-class targets, and A5-class targets, but concrete support subsets may differ by profile.
 
-- Portable code must rely only on the documented type, layout, shape, and mode combinations that the selected target profile guarantees.
+    - Portable code must rely only on the documented type, layout, shape, and mode combinations that the selected target profile guarantees.
 
 ## Examples
 

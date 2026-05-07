@@ -50,16 +50,6 @@ def gen_vec_op(kind: str):
     golden.tofile("golden.bin")
 
 
-def run_case(case_name: str, generator) -> None:
-    original_dir = os.getcwd()
-    os.makedirs(case_name, exist_ok=True)
-    try:
-        os.chdir(case_name)
-        generator()
-    finally:
-        os.chdir(original_dir)
-
-
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.makedirs(os.path.join(script_dir, "testcases"), exist_ok=True)
@@ -68,5 +58,9 @@ if __name__ == "__main__":
         ("TROWEXPAND_Test.case_expand_float_64x64", gen_expand),
     ]
 
+    cwd = os.getcwd()
     for name, fn in cases:
-        run_case(name, fn)
+        os.makedirs(name, exist_ok=True)
+        os.chdir(name)
+        fn()
+        os.chdir(cwd)

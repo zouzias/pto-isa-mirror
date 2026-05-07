@@ -35,7 +35,7 @@ $$ \mathrm{C}_{\text{out}, i,j} = \mathrm{C}_{\text{in}, i,j} + \sum_{k=0}^{K-1}
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 同步形式：
 
@@ -86,22 +86,24 @@ PTO_INST RecordEvent TMATMUL_ACC(TileRes &cMatrix, TileLeft &aMatrix, TileRight 
 
 ## 约束
 
-### 通用约束
+!!! warning "约束"
+    ### 通用约束
 
-- `TMATMUL` 的 shape、角色、dtype 和 target-profile 约束在这里全部成立；
-- `m`、`k`、`n` 仍取自 `aMatrix.GetValidRow()`、`aMatrix.GetValidCol()` 和 `bMatrix.GetValidCol()`；
-- 若追求跨 CPU / NPU 的稳妥可移植性，应优先使用共享累加器重载。
+    - `TMATMUL` 的 shape、角色、dtype 和 target-profile 约束在这里全部成立；
+    - `m`、`k`、`n` 仍取自 `aMatrix.GetValidRow()`、`aMatrix.GetValidCol()` 和 `bMatrix.GetValidCol()`；
+    - 若追求跨 CPU / NPU 的稳妥可移植性，应优先使用共享累加器重载。
 
-### A2A3 与 A5 说明
+    ### A2A3 与 A5 说明
 
-- A2A3 与 A5 的 dtype、布局和角色限制，与 `TMATMUL` 相同；
-- 当前 A2A3 / A5 后端的实现路径不会先把 `cInMatrix` 复制到 `cOutMatrix`，而是直接把 `cOutMatrix` 交给底层累加路径。
+    - A2A3 与 A5 的 dtype、布局和角色限制，与 `TMATMUL` 相同；
+    - 当前 A2A3 / A5 后端的实现路径不会先把 `cInMatrix` 复制到 `cOutMatrix`，而是直接把 `cOutMatrix` 交给底层累加路径。
 
 ## 不允许的情形
 
-- 违反 `TMATMUL` 的任一合法性约束；
-- 依赖“不同 `cInMatrix` / `cOutMatrix` 在所有后端上都严格等价”的假设；
-- 把实现现状误写成更强的架构合同。
+!!! danger "不允许的情形"
+    - 违反 `TMATMUL` 的任一合法性约束；
+    - 依赖“不同 `cInMatrix` / `cOutMatrix` 在所有后端上都严格等价”的假设；
+    - 把实现现状误写成更强的架构合同。
 
 ## 性能与吞吐
 

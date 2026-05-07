@@ -95,11 +95,12 @@ align = init_align();
 
 ## 约束
 
-- `pto.vldas` 必须是非对齐 load 流的起始操作。
-- `pto.vldus` 必须接在同一条对齐状态链上的 `pto.vldas` 之后。
-- `pto.vstus` 必须以 `pto.init_align` 启动新的 store 对齐流。
-- 对齐状态必须在线性流中传递，不能随意分叉。
-- 对于 `pto.vstus`，`%offset` 控制每次 store 在流中的步进。
+!!! warning "约束"
+    - `pto.vldas` 必须是非对齐 load 流的起始操作。
+    - `pto.vldus` 必须接在同一条对齐状态链上的 `pto.vldas` 之后。
+    - `pto.vstus` 必须以 `pto.init_align` 启动新的 store 对齐流。
+    - 对齐状态必须在线性流中传递，不能随意分叉。
+    - 对于 `pto.vstus`，`%offset` 控制每次 store 在流中的步进。
 
 ## 为什么要显式化对齐状态
 

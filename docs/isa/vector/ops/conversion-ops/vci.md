@@ -66,20 +66,23 @@ This operation has no architectural side effect beyond producing its SSA results
 
 ## Constraints
 
-- `%result` uses an integer element type (`i32` in the common form).
-- The scalar `%index` type matches the result element type.
-- The `order` attribute is required when using sorted index generation.
-- For the standard form, `N` (lane count) is derived from the result type.
+!!! warning "Constraints"
+    - `%result` uses an integer element type (`i32` in the common form).
+    - The scalar `%index` type matches the result element type.
+    - The `order` attribute is required when using sorted index generation.
+    - For the standard form, `N` (lane count) is derived from the result type.
 
 ## Exceptions
 
-- The verifier rejects illegal operand shapes, unsupported element types, and attribute combinations that are not valid for the selected instruction set or target profile.
-- Illegal `order` values are rejected by the verifier.
+!!! danger "Exceptions"
+    - The verifier rejects illegal operand shapes, unsupported element types, and attribute combinations that are not valid for the selected instruction set or target profile.
+    - Illegal `order` values are rejected by the verifier.
 
 ## Target-Profile Restrictions
 
-- A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
-- Under the current documented A5 profile contract, `pto.vci` maps to hardware trace with no vector `RV_*` in sampled `veccore0` trace.
+??? info "Target-Profile Restrictions"
+    - A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
+    - Under the current documented A5 profile contract, `pto.vci` maps to hardware trace with no vector `RV_*` in sampled `veccore0` trace.
 
 ## Performance
 

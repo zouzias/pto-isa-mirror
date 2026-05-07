@@ -7,18 +7,21 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#ifndef TCOLMAX_HPP
-#define TCOLMAX_HPP
 
-#include "pto/costmodel/pto_isa_costmodel.hpp"
+#include <cstdio>
 
-namespace pto {
+#include "tget_bandwidth_kernel.h"
+#include "comm_mpi.h"
 
-template <typename TileDataOut, typename TileDataIn>
-PTO_INTERNAL void TCOLMAX_IMPL(TileDataOut &dst, TileDataIn &src)
+int main(int argc, char **argv)
 {
-    pto::CostModel::GetInstance().ColReduceOpPredictCycle<COLMAXOp, TileDataOut, TileDataIn>("TCOLMAX", dst, src);
+    CommMpiInit(&argc, &argv);
+    bool ok = RunTGetBandwidthSweep(2, 2, 0, 0);
+    CommMpiFinalize();
+    if (ok) {
+        printf("test success\n");
+    } else {
+        printf("test failed\n");
+    }
+    return ok ? 0 : 1;
 }
-
-} // namespace pto
-#endif

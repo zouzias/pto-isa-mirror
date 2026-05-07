@@ -66,25 +66,28 @@ None. This form is defined by its side effect on UB memory.
 
 ## Constraints
 
-- **UB address space**: `%ub_ptr` MUST have address space `ub`.
-- **Offset alignment**: The effective address MUST be 64-bit aligned. Misaligned effective addresses are **illegal**.
-- **Distribution mode**: The `dist` attribute MUST be `"NORM"` or `"PK"`. The `"PK"` mode packs two 32-bit predicate segments into one 64-bit word for stores.
-- **Predicate width**: The store transfers exactly 64 bits, which MUST match the active element type context.
-- **Write atomicity**: The 64-bit predicate word is written atomically.
+!!! warning "Constraints"
+    - **UB address space**: `%ub_ptr` MUST have address space `ub`.
+    - **Offset alignment**: The effective address MUST be 64-bit aligned. Misaligned effective addresses are **illegal**.
+    - **Distribution mode**: The `dist` attribute MUST be `"NORM"` or `"PK"`. The `"PK"` mode packs two 32-bit predicate segments into one 64-bit word for stores.
+    - **Predicate width**: The store transfers exactly 64 bits, which MUST match the active element type context.
+    - **Write atomicity**: The 64-bit predicate word is written atomically.
 
 ## Exceptions
 
-- Illegal if `%ub_ptr` is not a UB-space pointer.
-- Illegal if the effective address is not 64-bit aligned.
-- Illegal if `dist` attribute is not `"NORM"` or `"PK"`.
+!!! danger "Exceptions"
+    - Illegal if `%ub_ptr` is not a UB-space pointer.
+    - Illegal if the effective address is not 64-bit aligned.
+    - Illegal if `dist` attribute is not `"NORM"` or `"PK"`.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| Register-offset predicate store | Simulated | Supported | Supported |
-| `"NORM"` distribution mode | Supported | Supported | Supported |
-| `"PK"` (packed) distribution mode | Not supported | Supported | Supported |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | Register-offset predicate store | Simulated | Supported | Supported |
+    | `"NORM"` distribution mode | Supported | Supported | Supported |
+    | `"PK"` (packed) distribution mode | Not supported | Supported | Supported |
 
 ## Examples
 

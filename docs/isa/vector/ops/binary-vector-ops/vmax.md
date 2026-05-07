@@ -59,27 +59,30 @@ This operation has no architectural side effect beyond producing its destination
 
 ## Constraints
 
-- **Type match**: `%lhs`, `%rhs`, and `%result` MUST have identical element types.
-- **Width match**: All three registers MUST have the same vector width `N`.
-- **Mask width**: `%mask` MUST have width equal to `N`.
-- **Active lanes**: Only lanes where the mask bit is 1 participate in the comparison.
-- **Inactive lanes**: Destination elements at inactive lanes are unmodified.
-- **NaN behavior**: If either operand is NaN (floating-point), the result is NaN.
+!!! warning "Constraints"
+    - **Type match**: `%lhs`, `%rhs`, and `%result` MUST have identical element types.
+    - **Width match**: All three registers MUST have the same vector width `N`.
+    - **Mask width**: `%mask` MUST have width equal to `N`.
+    - **Active lanes**: Only lanes where the mask bit is 1 participate in the comparison.
+    - **Inactive lanes**: Destination elements at inactive lanes are unmodified.
+    - **NaN behavior**: If either operand is NaN (floating-point), the result is NaN.
 
 ## Exceptions
 
-- The verifier rejects illegal operand type mismatches, width mismatches, or mask width mismatches.
-- Any additional illegality stated in the [Binary Vector Instructions](../../binary-vector-ops.md) instruction set page is also part of the contract.
+!!! danger "Exceptions"
+    - The verifier rejects illegal operand type mismatches, width mismatches, or mask width mismatches.
+    - Any additional illegality stated in the [Binary Vector Instructions](../../binary-vector-ops.md) instruction set page is also part of the contract.
 
 ## Target-Profile Restrictions
 
-|| Element Type | CPU Simulator | A2/A3 | A5 |
-||------------|:-------------:|:------:|:--:|
-|| `f32` | Simulated | Simulated | Supported |
-|| `f16` / `bf16` | Simulated | Simulated | Supported |
-|| `i8`–`i32` | Simulated | Simulated | Supported |
+??? info "Target-Profile Restrictions"
+    || Element Type | CPU Simulator | A2/A3 | A5 |
+    ||------------|:-------------:|:------:|:--:|
+    || `f32` | Simulated | Simulated | Supported |
+    || `f16` / `bf16` | Simulated | Simulated | Supported |
+    || `i8`–`i32` | Simulated | Simulated | Supported |
 
-A5 is the primary concrete profile for the vector instructions.
+    A5 is the primary concrete profile for the vector instructions.
 
 ## Performance
 

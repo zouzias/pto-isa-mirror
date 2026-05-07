@@ -75,16 +75,18 @@ PTO_INST RecordEvent TADD(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& sr
 
 ## 约束
 
-- `src0`、`src1` 和 `dst` 必须有相同元素类型。
-- 布局必须彼此兼容，见[Tile 与 Valid Region](../../../programming-model/tiles-and-valid-regions_zh.md)。
-- 迭代域总是 `dst.GetValidRow() × dst.GetValidCol()`。
-- 目标 tile 的 TileType 决定这条指令落在哪类 pipeline 上执行。
+!!! warning "约束"
+    - `src0`、`src1` 和 `dst` 必须有相同元素类型。
+    - 布局必须彼此兼容，见[Tile 与 Valid Region](../../../programming-model/tiles-and-valid-regions_zh.md)。
+    - 迭代域总是 `dst.GetValidRow() × dst.GetValidCol()`。
+    - 目标 tile 的 TileType 决定这条指令落在哪类 pipeline 上执行。
 
 ## 异常与非法情形
 
-- verifier 会拒绝源 / 目标类型不匹配。
-- 后端会拒绝所选 target profile 不支持的元素类型、布局或 shape。
-- 程序不能依赖 `dst` valid region 之外的值。
+!!! danger "异常与非法情形"
+    - verifier 会拒绝源 / 目标类型不匹配。
+    - 后端会拒绝所选 target profile 不支持的元素类型、布局或 shape。
+    - 程序不能依赖 `dst` valid region 之外的值。
 
 ## Target-Profile 限制
 

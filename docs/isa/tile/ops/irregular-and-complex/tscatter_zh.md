@@ -31,7 +31,7 @@ $$ \mathrm{dst\_flat}_{\mathrm{indexes}_{i,j}} = \mathrm{src}_{i,j} $$
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 同步形式：
 
@@ -62,36 +62,37 @@ PTO_INST RecordEvent TSCATTER(TileDataD &dst, TileDataS &src, TileDataI &indexes
 
 ## 约束
 
-### 通用约束
+!!! warning "约束"
+    ### 通用约束
 
-- `dst`、`src`、`indexes` 都必须是 `TileType::Vec`。
-- `dst` 与 `src` 的元素类型必须完全一致。
-- `indexes` 必须是整型 Tile，且索引元素宽度必须和数据元素宽度匹配：
-  - 数据为 4 字节时，索引也必须是 4 字节；
-  - 数据为 2 字节时，索引也必须是 2 字节；
-  - 数据为 1 字节时，索引必须是 2 字节。
-- 实现按 `indexes.GetValidRow()` / `indexes.GetValidCol()` 遍历。可移植代码应保证 `src` 在同一坐标域内可读。
-- 当前 backend 不会对索引做越界检查。超出目标 Tile 线性范围的索引不属于合法使用域。
-- 编译期 valid bounds 必须满足：
-  - `TileDataD::ValidRow <= TileDataD::Rows`
-  - `TileDataD::ValidCol <= TileDataD::Cols`
-  - `TileDataS::ValidRow <= TileDataS::Rows`
-  - `TileDataS::ValidCol <= TileDataS::Cols`
-  - `TileDataI::ValidRow <= TileDataI::Rows`
-  - `TileDataI::ValidCol <= TileDataI::Cols`
+    - `dst`、`src`、`indexes` 都必须是 `TileType::Vec`。
+    - `dst` 与 `src` 的元素类型必须完全一致。
+    - `indexes` 必须是整型 Tile，且索引元素宽度必须和数据元素宽度匹配：
+      - 数据为 4 字节时，索引也必须是 4 字节；
+      - 数据为 2 字节时，索引也必须是 2 字节；
+      - 数据为 1 字节时，索引必须是 2 字节。
+    - 实现按 `indexes.GetValidRow()` / `indexes.GetValidCol()` 遍历。可移植代码应保证 `src` 在同一坐标域内可读。
+    - 当前 backend 不会对索引做越界检查。超出目标 Tile 线性范围的索引不属于合法使用域。
+    - 编译期 valid bounds 必须满足：
+      - `TileDataD::ValidRow <= TileDataD::Rows`
+      - `TileDataD::ValidCol <= TileDataD::Cols`
+      - `TileDataS::ValidRow <= TileDataS::Rows`
+      - `TileDataS::ValidCol <= TileDataS::Cols`
+      - `TileDataI::ValidRow <= TileDataI::Rows`
+      - `TileDataI::ValidCol <= TileDataI::Cols`
 
-### A2/A3 实现检查
+    ### A2/A3 实现检查
 
-- `dst/src` 的元素类型必须属于：
-  `int32_t`、`int16_t`、`int8_t`、`uint32_t`、`uint16_t`、`uint8_t`、`half`、`float32_t`、`bfloat16_t`。
-- `indexes` 的元素类型必须属于：
-  `int16_t`、`int32_t`、`uint16_t`、`uint32_t`。
+    - `dst/src` 的元素类型必须属于：
+      `int32_t`、`int16_t`、`int8_t`、`uint32_t`、`uint16_t`、`uint8_t`、`half`、`float32_t`、`bfloat16_t`。
+    - `indexes` 的元素类型必须属于：
+      `int16_t`、`int32_t`、`uint16_t`、`uint32_t`。
 
-### A5 实现检查
+    ### A5 实现检查
 
-- A5 上的类型限制与 A2/A3 相同：
-  - `dst/src` 支持 `int32_t`、`int16_t`、`int8_t`、`uint32_t`、`uint16_t`、`uint8_t`、`half`、`float32_t`、`bfloat16_t`
-  - `indexes` 支持 `int16_t`、`int32_t`、`uint16_t`、`uint32_t`
+    - A5 上的类型限制与 A2/A3 相同：
+      - `dst/src` 支持 `int32_t`、`int16_t`、`int8_t`、`uint32_t`、`uint16_t`、`uint8_t`、`half`、`float32_t`、`bfloat16_t`
+      - `indexes` 支持 `int16_t`、`int32_t`、`uint16_t`、`uint32_t`
 
 ## 示例
 

@@ -65,7 +65,8 @@ pto.vecscope {
 | `pto.vcls` | — | — | — | — | (per-lane) | (per-lane) | (per-lane) |
 | `pto.vmov` | `RV_VLD` (proxy) | 9 | 9 | — | 9 | 9 | 9 |
 
-> **Note on reciprocals:** `vrec` and `vrsqrt` are synthesized from `vdiv` and `vsqrt` respectively; their latency matches the corresponding divide instruction throughput.
+!!! note "Note on reciprocals:"
+    `vrec` and `vrsqrt` are synthesized from `vdiv` and `vsqrt` respectively; their latency matches the corresponding divide instruction throughput.
 
 ### A2/A3 Latency and Throughput
 

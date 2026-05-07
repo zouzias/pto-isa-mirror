@@ -69,8 +69,9 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, W
 
 ## 约束
 
-- 写回范围由 `src.GetValidRow()` / `src.GetValidCol()` 决定
-- 目标 `GlobalTensor` 的 shape / stride 必须允许这次写回
+!!! warning "约束"
+    - 写回范围由 `src.GetValidRow()` / `src.GetValidCol()` 决定
+    - 目标 `GlobalTensor` 的 shape / stride 必须允许这次写回
 
 ## Target-Profile 限制
 
@@ -99,7 +100,8 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, W
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## 性能
 

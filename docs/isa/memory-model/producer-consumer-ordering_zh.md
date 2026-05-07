@@ -84,21 +84,23 @@ Tile Buffer -> TSTORE / GM -> copy_gm_to_ubuf -> UB -> vlds
 
 ## 约束
 
-- 消费者只能在建立了 producer-consumer 边后依赖可见性
-- 同一操作的 `RecordEvent` 只能被后续操作消费，不能逆向使用
-- 指令集页面和 per-op 页面必须显式说明各自需要的顺序机制
+!!! warning "约束"
+    - 消费者只能在建立了 producer-consumer 边后依赖可见性
+    - 同一操作的 `RecordEvent` 只能被后续操作消费，不能逆向使用
+    - 指令集页面和 per-op 页面必须显式说明各自需要的顺序机制
 
 ## 不允许的情形
 
-- 只写“消费者可见”，却不说明生产者如何建立可见性
-- 把某个目标偶然更强的顺序当作架构契约
-- 省略跨指令集 handoff 的搬运和同步
-- 在 `copy_gm_to_ubuf` 完成前直接 `vlds`
-- 在 `vsts` 完成前直接 `copy_ubuf_to_gm`
+!!! danger "不允许的情形"
+    - 只写“消费者可见”，却不说明生产者如何建立可见性
+    - 把某个目标偶然更强的顺序当作架构契约
+    - 省略跨指令集 handoff 的搬运和同步
+    - 在 `copy_gm_to_ubuf` 完成前直接 `vlds`
+    - 在 `vsts` 完成前直接 `copy_ubuf_to_gm`
 
 ## 相关页面
 
 - [一致性基线](./consistency-baseline_zh.md)
 - [顺序与同步](../machine-model/ordering-and-synchronization_zh.md)
-- [Tile 指令集](../instruction-surfaces/tile-instructions_zh.md)
-- [向量指令集](../instruction-surfaces/vector-instructions_zh.md)
+- [Tile 指令集](../instruction-families/tile-families_zh.md)
+- [向量指令集](../vector/README_zh.md)

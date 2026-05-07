@@ -62,28 +62,30 @@ PTO_INST RecordEvent TCOLARGMIN(TileDataOut& dst, TileDataIn& src, TileDataTmp& 
 
 ## 约束
 
-- `dst` 与 `src` 必须为 `TileType::Vec`
-- 源元素类型支持：`half`、`float`、`uint16_t`、`uint32_t`
-- 目标元素类型支持：`uint32_t`、`int32_t`
-- 运行时要求：
-  - `src.GetValidRow() != 0`
-  - `src.GetValidCol() != 0`
-  - `dst.GetValidRow() == 1`
-  - `dst.GetValidCol() == src.GetValidCol()`
+!!! warning "约束"
+    - `dst` 与 `src` 必须为 `TileType::Vec`
+    - 源元素类型支持：`half`、`float`、`uint16_t`、`uint32_t`
+    - 目标元素类型支持：`uint32_t`、`int32_t`
+    - 运行时要求：
+      - `src.GetValidRow() != 0`
+      - `src.GetValidCol() != 0`
+      - `dst.GetValidRow() == 1`
+      - `dst.GetValidCol() == src.GetValidCol()`
 
-### A2A3
+    ### A2A3
 
-- `src` 必须是非分形布局
-- `tmp` 的元素类型必须和 `src` 一致
-- `tmp` 会被用于保存当前最小值及中间索引
+    - `src` 必须是非分形布局
+    - `tmp` 的元素类型必须和 `src` 一致
+    - `tmp` 会被用于保存当前最小值及中间索引
 
-### A5
+    ### A5
 
-- A5 路径接口仍保留 `tmp`，但当前实现里不实际使用它
+    - A5 路径接口仍保留 `tmp`，但当前实现里不实际使用它
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## 性能
 

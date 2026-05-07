@@ -19,7 +19,7 @@ $$ \mathrm{C}_{i,j} = \sum_{k=0}^{K-1} \mathrm{A}_{i,k} \cdot \mathrm{B}_{k,j} $
 
 The operation consumes three tiles with specific roles: `aMatrix` (left input, `TileType::Left`), `bMatrix` (right input, `TileType::Right`), and `cMatrix` (accumulator, `TileType::Acc`). The accumulator tile may start with existing values (accumulation semantics) or may be zero-initialized first.
 
-Exact accumulator behavior and datatype promotion are target/implementation-defined. Consult the target profile for precision and rounding details.
+Accumulator behavior and datatype promotion are concrete per target. On A2/A3: accumulation uses the accumulator tile's native datatype (int32_t or float), with zero-initialization performed implicitly before the first phase; subsequent phases accumulate in-place. On A5: accumulation is always in the accumulator tile's native type, and multi-phase accumulation follows a fixed sequence with no implicit zero-initialization between phases. On CPU simulator: accumulation follows A5 semantics by default but may be configurable.
 
 ## Syntax
 
@@ -82,37 +82,40 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- **Shape constraints**:
-  - `aMatrix.GetValidRow()` = `cMatrix.GetValidRow()` = `M`
-  - `aMatrix.GetValidCol()` = `bMatrix.GetValidRow()` = `K`
-  - `bMatrix.GetValidCol()` = `cMatrix.GetValidCol()` = `N`
-  - Runtime `m/k/n` must be in `[1, 4095]`
-- **Tile roles**: `aMatrix.Loc == Left`, `bMatrix.Loc == Right`, `cMatrix.Loc == Acc`.
-- Programs must not assume implicit broadcasting, reshaping, or valid-region repair.
+!!! warning "Constraints"
+    - **Shape constraints**:
+      - `aMatrix.GetValidRow()` = `cMatrix.GetValidRow()` = `M`
+      - `aMatrix.GetValidCol()` = `bMatrix.GetValidRow()` = `K`
+      - `bMatrix.GetValidCol()` = `cMatrix.GetValidCol()` = `N`
+      - Runtime `m/k/n` must be in `[1, 4095]`
+    - **Tile roles**: `aMatrix.Loc == Left`, `bMatrix.Loc == Right`, `cMatrix.Loc == Acc`.
+    - Programs must not assume implicit broadcasting, reshaping, or valid-region repair.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier.
-- Programs must not rely on behavior outside the documented legal domain.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier.
+    - Programs must not rely on behavior outside the documented legal domain.
 
 ## Target-Profile Restrictions
 
-**A2/A3**:
-- Supported `(CType, AType, BType)` triples:
-  - `(int32_t, int8_t, int8_t)`
-  - `(float, half, half)`
-  - `(float, float, float)`
-  - `(float, bfloat16_t, bfloat16_t)`
-- Static shape: `TileLeft::Rows == TileRes::Rows`, `TileLeft::Cols == TileRight::Rows`, `TileRight::Cols == TileRes::Cols`.
+??? info "Target-Profile Restrictions"
+    **A2/A3**:
+    - Supported `(CType, AType, BType)` triples:
+      - `(int32_t, int8_t, int8_t)`
+      - `(float, half, half)`
+      - `(float, float, float)`
+      - `(float, bfloat16_t, bfloat16_t)`
+    - Static shape: `TileLeft::Rows == TileRes::Rows`, `TileLeft::Cols == TileRight::Rows`, `TileRight::Cols == TileRes::Cols`.
 
-**A5**:
-- Accumulator type: `int32_t` or `float`.
-- If `int32_t`: `AType == int8_t` and `BType == int8_t`.
-- If `float`: supports `half/bfloat16_t/float` and selected fp8 pairs.
-- Fractal/layout constraints:
-  - Left: `Loc == Left`, `!isRowMajor`, `SFractal == RowMajor`
-  - Right: `Loc == Right`, `isRowMajor`, `SFractal == ColMajor`
-  - Acc: `Loc == Acc`, `!isRowMajor`, `SFractal == RowMajor`
+    **A5**:
+    - Accumulator type: `int32_t` or `float`.
+    - If `int32_t`: `AType == int8_t` and `BType == int8_t`.
+    - If `float`: supports `half/bfloat16_t/float` and selected fp8 pairs.
+    - Fractal/layout constraints:
+      - Left: `Loc == Left`, `!isRowMajor`, `SFractal == RowMajor`
+      - Right: `Loc == Right`, `isRowMajor`, `SFractal == ColMajor`
+      - Acc: `Loc == Acc`, `!isRowMajor`, `SFractal == RowMajor`
 
 ## Examples
 

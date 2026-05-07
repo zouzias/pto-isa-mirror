@@ -60,33 +60,36 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-### General constraints / checks
+!!! warning "Constraints"
+    ### General constraints / checks
 
-- `dst` and `src` must be `TileType::Vec`.
+    - `dst` and `src` must be `TileType::Vec`.
 
-- `dst` and `src` must use standard ND layout: row-major and non-fractal (`BLayout::RowMajor`, `SLayout::NoneBox`).
+    - `dst` and `src` must use standard ND layout: row-major and non-fractal (`BLayout::RowMajor`, `SLayout::NoneBox`).
 
-- `dst` and `src` must use the same element type.
+    - `dst` and `src` must use the same element type.
 
-- Runtime checks:
-  - `src.GetValidCol() == dst.GetValidCol()`
+    - Runtime checks:
+      - `src.GetValidCol() == dst.GetValidCol()`
 
-- Supported element types: `half`, `float`, `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `bfloat16_t`.
+    - Supported element types: `half`, `float`, `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `bfloat16_t`.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- If `src.GetValidRow() == 0` or `src.GetValidCol() == 0`, the implementation returns early.
+??? info "Target-Profile Restrictions"
+    - If `src.GetValidRow() == 0` or `src.GetValidCol() == 0`, the implementation returns early.
 
-### A2A3 implementation checks
+    === "A2/A3"
+        - Supported element types: `half`, `float`, `int16_t`, `int32_t`.
 
-- Supported element types: `half`, `float`, `int16_t`, `int32_t`.
-
-### A5 implementation checks
+    === "A5"
+        No additional restriction is documented for this target.
 
 ## Examples
 

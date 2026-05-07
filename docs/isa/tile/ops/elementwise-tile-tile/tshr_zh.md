@@ -57,14 +57,16 @@ PTO_INST RecordEvent TSHR(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 
 ## 约束
 
-- 只对整数元素类型有意义。
-- `dst`、`src0`、`src1` 必须使用相同元素类型。
-- 三者都必须是行主序。
-- 运行时要求：`src0`、`src1` 的 valid shape 与 `dst` 一致。
+!!! warning "约束"
+    - 只对整数元素类型有意义。
+    - `dst`、`src0`、`src1` 必须使用相同元素类型。
+    - 三者都必须是行主序。
+    - 运行时要求：`src0`、`src1` 的 valid shape 与 `dst` 一致。
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## Target-Profile 限制
 

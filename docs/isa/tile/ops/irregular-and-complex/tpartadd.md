@@ -4,11 +4,11 @@
 
 ## Summary
 
-Partial elementwise add with implementation-defined handling of mismatched valid regions.
+Partial elementwise add with handling of mismatched valid regions. On A2/A3 and A5, when only one input is valid at an element, the result copies that input value; on the CPU simulator, the same behavior applies.
 
 ## Mechanism
 
-Performs elementwise addition over the destination valid region. When both `src0` and `src1` are valid at an element, the result is their sum; when only one input is valid there, the result copies that input value. Handling of other mismatched-validity cases is implementation-defined. It belongs to the tile instructions and carries architecture-visible behavior that is not reducible to a plain elementwise compute pattern.
+Performs elementwise addition over the destination valid region. When both `src0` and `src1` are valid at an element, the result is their sum; when only one input is valid there, the result copies that input value. On A2/A3 and A5, when neither input is valid at an element, the result is undefined; on the CPU simulator, the same behavior applies. It belongs to the tile instructions and carries architecture-visible behavior that is not reducible to a plain elementwise compute pattern.
 
 For each element `(i, j)` in the destination valid region:
 
@@ -68,38 +68,41 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-### General constraints / checks
+!!! warning "Constraints"
+    ### General constraints / checks
 
-- `dst`, `src0`, and `src1` must use the same element type.
+    - `dst`, `src0`, and `src1` must use the same element type.
 
-- The destination valid region defines the result domain.
+    - The destination valid region defines the result domain.
 
-- For each element in the destination valid region:
-  - if both inputs are valid, the instruction applies its elementwise operator;
-  - if only one input is valid, the result copies that input value.
+    - For each element in the destination valid region:
+      - if both inputs are valid, the instruction applies its elementwise operator;
+      - if only one input is valid, the result copies that input value.
 
-- If `dst` has a zero valid region, the instruction returns early.
+    - If `dst` has a zero valid region, the instruction returns early.
 
-- Supported partial-validity patterns require at least one source tile to have a valid region exactly equal to `dst`, while the other source tile's valid region must not exceed `dst` in either dimension.
+    - Supported partial-validity patterns require at least one source tile to have a valid region exactly equal to `dst`, while the other source tile's valid region must not exceed `dst` in either dimension.
 
-- Supported element types: `int32_t`, `int16_t`, `half`, `float`.
+    - Supported element types: `int32_t`, `int16_t`, `half`, `float`.
 
-- Supported element types: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`, `bfloat16_t`.
+    - Supported element types: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`, `bfloat16_t`.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- Handling of any validity pattern not explicitly listed above is implementation-defined.
+??? info "Target-Profile Restrictions"
+    - On A2/A3 and A5, handling of validity patterns not explicitly listed above results in undefined behavior; on the CPU simulator, the same behavior applies.
 
-### A2A3 implementation checks
+    === "A2/A3"
+        - `dst`, `src0`, and `src1` must all be row-major (`isRowMajor`).
 
-- `dst`, `src0`, and `src1` must all be row-major (`isRowMajor`).
-
-### A5 implementation checks
+    === "A5"
+        No additional restriction is documented for this target.
 
 ## Examples
 

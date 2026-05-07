@@ -44,18 +44,21 @@ This operation has no architectural side effect beyond producing its destination
 
 ## Constraints
 
-- The `PART` selector determines which half of the paired deinterleave result is returned.
-- `%lhs`, `%rhs`, and `%result` MUST have the same element type and vector width.
+!!! warning "Constraints"
+    - The `PART` selector determines which half of the paired deinterleave result is returned.
+    - `%lhs`, `%rhs`, and `%result` MUST have the same element type and vector width.
 
 ## Exceptions
 
-- The verifier rejects illegal operand shapes, unsupported element types, and attribute combinations that are not valid for the selected instruction set or target profile.
-- Any additional illegality stated in the constraints section is also part of the contract.
+!!! danger "Exceptions"
+    - The verifier rejects illegal operand shapes, unsupported element types, and attribute combinations that are not valid for the selected instruction set or target profile.
+    - Any additional illegality stated in the constraints section is also part of the contract.
 
 ## Target-Profile Restrictions
 
-- A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
-- Code that depends on an instruction-set-specific packing, selector, or permutation mode should treat that dependency as target-profile-specific unless the manual states cross-target portability explicitly.
+??? info "Target-Profile Restrictions"
+    - A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
+    - Code that depends on an instruction-set-specific packing, selector, or permutation mode should treat that dependency as target-profile-specific unless the manual states cross-target portability explicitly.
 
 ## Examples
 

@@ -66,23 +66,26 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- Source and destination shapes, layouts, and element types MUST satisfy the legality rules documented by the instruction set and target profile.
+!!! warning "Constraints"
+    - Source and destination shapes, layouts, and element types MUST satisfy the legality rules documented by the instruction set and target profile.
 
-- Programs must not assume implicit broadcasting, reshaping, or valid-region repair unless the operation documents it.
+    - Programs must not assume implicit broadcasting, reshaping, or valid-region repair unless the operation documents it.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Implementation checks**:
-    - `TileDataDst::DType == TileDataSrc0::DType == TileDataSrc1::DType` (compile-time).
-    - `TileDataDst::DType`, `TileDataSrc0::DType`, `TileDataSrc1::DType` must be one of: `half`, `float`.
-    - Tile shape/layout constraint (compile-time): `TileDataDst::isRowMajor`.
-    - Mode 1: `src1` is expected to provide **one scalar per row** (i.e., its valid shape must cover `R` values).
-    - Mode 2: `src1` is expected to provide **32 bytes data per row**.
+??? info "Target-Profile Restrictions"
+    - **Implementation checks**:
+        - `TileDataDst::DType == TileDataSrc0::DType == TileDataSrc1::DType` (compile-time).
+        - `TileDataDst::DType`, `TileDataSrc0::DType`, `TileDataSrc1::DType` must be one of: `half`, `float`.
+        - Tile shape/layout constraint (compile-time): `TileDataDst::isRowMajor`.
+        - Mode 1: `src1` is expected to provide **one scalar per row** (i.e., its valid shape must cover `R` values).
+        - Mode 2: `src1` is expected to provide **32 bytes data per row**.
 
 ## Examples
 

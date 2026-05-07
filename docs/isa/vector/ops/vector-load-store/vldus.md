@@ -41,20 +41,23 @@ This operation reads UB-visible storage and returns SSA results. It does not by 
 
 ## Constraints
 
-A matching `pto.vldas` MUST appear before the first dependent `pto.vldus`
-  stream in the same vector loop. Both the alignment state and the base address
-  advance across the stream, and the PTO ISA vector instructions representation exposes those updates as SSA results.
+!!! warning "Constraints"
+    A matching `pto.vldas` MUST appear before the first dependent `pto.vldus`
+      stream in the same vector loop. Both the alignment state and the base address
+      advance across the stream, and the PTO ISA vector instructions representation exposes those updates as SSA results.
 
 ## Exceptions
 
-- It is illegal to use addresses outside the required UB-visible space or to violate the alignment/distribution contract of the selected form.
-- Masked-off lanes or inactive blocks do not make an otherwise-illegal address valid unless the operation text explicitly says so.
-- Any additional illegality stated in the constraints section is also part of the contract.
+!!! danger "Exceptions"
+    - It is illegal to use addresses outside the required UB-visible space or to violate the alignment/distribution contract of the selected form.
+    - Masked-off lanes or inactive blocks do not make an otherwise-illegal address valid unless the operation text explicitly says so.
+    - Any additional illegality stated in the constraints section is also part of the contract.
 
 ## Target-Profile Restrictions
 
-- A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
-- Code that depends on an instruction-set-specific type list, distribution mode, or fused form should treat that dependency as target-profile-specific unless the PTO manual states cross-target portability explicitly.
+??? info "Target-Profile Restrictions"
+    - A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
+    - Code that depends on an instruction-set-specific type list, distribution mode, or fused form should treat that dependency as target-profile-specific unless the PTO manual states cross-target portability explicitly.
 
 ## Performance
 

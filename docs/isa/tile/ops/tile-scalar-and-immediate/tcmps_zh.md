@@ -59,14 +59,16 @@ PTO_INST RecordEvent TCMPS(TileDataDst& dst, TileDataSrc0& src0, T src1, CmpMode
 
 ## 约束
 
-- tile 位置必须是向量 tile。
-- 静态 valid 边界必须合法。
-- 运行时要求：`src0` 与 `dst` 的 valid row / valid col 一致。
-- 支持的比较模式包括 `EQ`、`NE`、`LT`、`GT`、`LE`、`GE`。
+!!! warning "约束"
+    - tile 位置必须是向量 tile。
+    - 静态 valid 边界必须合法。
+    - 运行时要求：`src0` 与 `dst` 的 valid row / valid col 一致。
+    - 支持的比较模式包括 `EQ`、`NE`、`LT`、`GT`、`LE`、`GE`。
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## Target-Profile 限制
 

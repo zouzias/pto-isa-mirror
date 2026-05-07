@@ -68,17 +68,19 @@ PTO_INTERNAL RecordEvent TPOW(DstTile &dst, BaseTile &base, ExpTile &exp, TmpTil
 
 ## 约束
 
-- `dst`、`base`、`exp` 的元素类型必须一致。
-- `dst`、`base`、`exp` 的 valid row / valid col 必须一致。
-- 当前具体实现要求三者都是 row-major 的 `TileType::Vec`。
-- `PowAlgorithm::DEFAULT` 支持 `float`、`half`、`int32_t`、`uint32_t`、`int16_t`、`uint16_t`、`int8_t`、`uint8_t`。
-- `PowAlgorithm::HIGH_PRECISION` 支持 `float`、`half`、`bfloat16_t`。
+!!! warning "约束"
+    - `dst`、`base`、`exp` 的元素类型必须一致。
+    - `dst`、`base`、`exp` 的 valid row / valid col 必须一致。
+    - 当前具体实现要求三者都是 row-major 的 `TileType::Vec`。
+    - `PowAlgorithm::DEFAULT` 支持 `float`、`half`、`int32_t`、`uint32_t`、`int16_t`、`uint16_t`、`int8_t`、`uint8_t`。
+    - `PowAlgorithm::HIGH_PRECISION` 支持 `float`、`half`、`bfloat16_t`。
 
 ## 不允许的情形
 
-- 使用不支持的类型 / layout 组合。
-- 在 valid region 不一致时依赖结果语义。
-- 仅凭公共模板声明就假设 CPU 或 A2/A3 一定支持这条指令。
+!!! danger "不允许的情形"
+    - 使用不支持的类型 / layout 组合。
+    - 在 valid region 不一致时依赖结果语义。
+    - 仅凭公共模板声明就假设 CPU 或 A2/A3 一定支持这条指令。
 
 ## Target-Profile 限制
 

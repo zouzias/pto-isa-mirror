@@ -43,19 +43,22 @@ Programs the loop-count state consumed by subsequent GM→UB DMA copies. The con
 
 ## Constraints
 
-- Both counts MUST be non-negative and within the width supported by the target profile.
-- When multi-level looping is not needed, both counts SHOULD be set to 1.
-- The configured counts apply only to later GM→UB DMA operations and do not retroactively affect already-issued copies.
+!!! warning "Constraints"
+    - Both counts MUST be non-negative and within the width supported by the target profile.
+    - When multi-level looping is not needed, both counts SHOULD be set to 1.
+    - The configured counts apply only to later GM→UB DMA operations and do not retroactively affect already-issued copies.
 
 ## Exceptions
 
-- The verifier rejects illegal operand shapes, unsupported pipe or event identifiers, and attribute combinations that are not valid for the selected instruction set or target profile.
-- Any additional illegality stated in the constraints section is also part of the contract.
+!!! danger "Exceptions"
+    - The verifier rejects illegal operand shapes, unsupported pipe or event identifiers, and attribute combinations that are not valid for the selected instruction set or target profile.
+    - Any additional illegality stated in the constraints section is also part of the contract.
 
 ## Target-Profile Restrictions
 
-- CPU simulation preserves the visible configuration contract but may not expose all hardware loop hazards.
-- A2/A3 and A5 may use different concrete register widths or reset behavior; portable code must follow the documented PTO contract plus the selected target profile.
+??? info "Target-Profile Restrictions"
+    - CPU simulation preserves the visible configuration contract but may not expose all hardware loop hazards.
+    - A2/A3 and A5 may use different concrete register widths or reset behavior; portable code must follow the documented PTO contract plus the selected target profile.
 
 ## Examples
 

@@ -91,52 +91,42 @@ void expectVecMatchesAccSplit(const auto &vec, const auto &acc, uint32_t laneId)
 }
 
 template <TileSplitAxis SplitAxis, uint8_t FlagId>
-struct DirBothPipeTestContext {
+void testDirBothConsumerWaitsForMatchingDirection()
+{
     using VecTile = DirBothVecTile<SplitAxis>;
     using MatTile = Tile<TileType::Mat, float, 16, 16, BLayout::RowMajor, 16, 16>;
     using AccTile = TileAcc<float, 16, 16>;
     using Pipe = TPipe<FlagId, Direction::DIR_BOTH, sizeof(float) * MatTile::Numel, 2>;
 
-    Pipe vecProducer0{(__gm__ void *)nullptr, 0x0, 0x10000};
-    Pipe vecProducer1{(__gm__ void *)nullptr, 0x0, 0x10000};
-    Pipe cubePipe{(__gm__ void *)nullptr, 0x0, 0x10000};
-    Pipe vecConsumer0{(__gm__ void *)nullptr, 0x0, 0x10000};
-    Pipe vecConsumer1{(__gm__ void *)nullptr, 0x0, 0x10000};
+    Pipe::reset_for_cpu_sim();
+    Pipe vecProducer0((__gm__ void *)nullptr, 0x0, 0x10000);
+    Pipe vecProducer1((__gm__ void *)nullptr, 0x0, 0x10000);
+    Pipe cubePipe((__gm__ void *)nullptr, 0x0, 0x10000);
+    Pipe vecConsumer0((__gm__ void *)nullptr, 0x0, 0x10000);
+    Pipe vecConsumer1((__gm__ void *)nullptr, 0x0, 0x10000);
+
     VecTile src0;
     VecTile src1;
     MatTile poppedMat;
     AccTile accSrc;
     VecTile dst0;
     VecTile dst1;
-};
 
-template <typename Context>
-void initializeDirBothPipeTestContext(Context &ctx)
-{
-    using VecTile = typename Context::VecTile;
-    using MatTile = typename Context::MatTile;
-    using AccTile = typename Context::AccTile;
+    TASSIGN(src0, 0x0);
+    TASSIGN(src1, VecTile::Numel * sizeof(float));
+    TASSIGN(poppedMat, 2 * VecTile::Numel * sizeof(float));
+    TASSIGN(accSrc, 2 * VecTile::Numel * sizeof(float) + MatTile::Numel * sizeof(float));
+    TASSIGN(dst0, 2 * VecTile::Numel * sizeof(float) + MatTile::Numel * sizeof(float) + AccTile::Numel * sizeof(float));
+    TASSIGN(dst1, 2 * VecTile::Numel * sizeof(float) + MatTile::Numel * sizeof(float) + AccTile::Numel * sizeof(float) +
+                      VecTile::Numel * sizeof(float));
 
-    TASSIGN(ctx.src0, 0x0);
-    TASSIGN(ctx.src1, VecTile::Numel * sizeof(float));
-    TASSIGN(ctx.poppedMat, 2 * VecTile::Numel * sizeof(float));
-    TASSIGN(ctx.accSrc, 2 * VecTile::Numel * sizeof(float) + MatTile::Numel * sizeof(float));
-    TASSIGN(ctx.dst0,
-            2 * VecTile::Numel * sizeof(float) + MatTile::Numel * sizeof(float) + AccTile::Numel * sizeof(float));
-    TASSIGN(ctx.dst1, 2 * VecTile::Numel * sizeof(float) + MatTile::Numel * sizeof(float) +
-                          AccTile::Numel * sizeof(float) + VecTile::Numel * sizeof(float));
+    fillTileSequence(src0, 1.0f);
+    fillTileSequence(src1, 1001.0f);
+    fillTileSequence(accSrc, 2001.0f);
+    std::fill(poppedMat.data(), poppedMat.data() + poppedMat.Numel, 0.0f);
+    std::fill(dst0.data(), dst0.data() + dst0.Numel, 0.0f);
+    std::fill(dst1.data(), dst1.data() + dst1.Numel, 0.0f);
 
-    fillTileSequence(ctx.src0, 1.0f);
-    fillTileSequence(ctx.src1, 1001.0f);
-    fillTileSequence(ctx.accSrc, 2001.0f);
-    std::fill(ctx.poppedMat.data(), ctx.poppedMat.data() + ctx.poppedMat.Numel, 0.0f);
-    std::fill(ctx.dst0.data(), ctx.dst0.data() + ctx.dst0.Numel, 0.0f);
-    std::fill(ctx.dst1.data(), ctx.dst1.data() + ctx.dst1.Numel, 0.0f);
-}
-
-template <TileSplitAxis SplitAxis, typename Pipe, typename VecTile>
-void pushDirBothSources(Pipe &vecProducer0, Pipe &vecProducer1, VecTile &src0, VecTile &src1)
-{
     {
         cpu_sim::ScopedExecutionContext ctx(0, 0, 2);
         TPUSH<Pipe, VecTile, SplitAxis>(vecProducer0, src0);
@@ -145,45 +135,17 @@ void pushDirBothSources(Pipe &vecProducer0, Pipe &vecProducer1, VecTile &src0, V
         cpu_sim::ScopedExecutionContext ctx(0, 1, 2);
         TPUSH<Pipe, VecTile, SplitAxis>(vecProducer1, src1);
     }
-}
-
-template <TileSplitAxis SplitAxis, typename Pipe, typename VecTile>
-void freeDirBothConsumers(Pipe &vecConsumer0, Pipe &vecConsumer1)
-{
-    {
-        cpu_sim::ScopedExecutionContext ctx(0, 0, 2);
-        TFREE<Pipe, SplitAxis>(vecConsumer0);
-    }
-    {
-        cpu_sim::ScopedExecutionContext ctx(0, 1, 2);
-        TFREE<Pipe, SplitAxis>(vecConsumer1);
-    }
-}
-
-template <TileSplitAxis SplitAxis, uint8_t FlagId>
-void testDirBothConsumerWaitsForMatchingDirection()
-{
-    using Context = DirBothPipeTestContext<SplitAxis, FlagId>;
-    using Pipe = typename Context::Pipe;
-    using VecTile = typename Context::VecTile;
-    using MatTile = typename Context::MatTile;
-    using AccTile = typename Context::AccTile;
-
-    Pipe::reset_for_cpu_sim();
-    Context ctx;
-    initializeDirBothPipeTestContext(ctx);
-    pushDirBothSources<SplitAxis>(ctx.vecProducer0, ctx.vecProducer1, ctx.src0, ctx.src1);
 
     std::atomic<bool> vec0Done{false};
     std::atomic<bool> vec1Done{false};
     std::thread consumerThread0([&]() {
-        cpu_sim::ScopedExecutionContext execCtx(0, 0, 2);
-        TPOP<Pipe, VecTile, SplitAxis>(ctx.vecConsumer0, ctx.dst0);
+        cpu_sim::ScopedExecutionContext ctx(0, 0, 2);
+        TPOP<Pipe, VecTile, SplitAxis>(vecConsumer0, dst0);
         vec0Done.store(true, std::memory_order_release);
     });
     std::thread consumerThread1([&]() {
-        cpu_sim::ScopedExecutionContext execCtx(0, 1, 2);
-        TPOP<Pipe, VecTile, SplitAxis>(ctx.vecConsumer1, ctx.dst1);
+        cpu_sim::ScopedExecutionContext ctx(0, 1, 2);
+        TPOP<Pipe, VecTile, SplitAxis>(vecConsumer1, dst1);
         vec1Done.store(true, std::memory_order_release);
     });
 
@@ -192,22 +154,30 @@ void testDirBothConsumerWaitsForMatchingDirection()
     EXPECT_FALSE(vec1Done.load(std::memory_order_acquire));
 
     {
-        cpu_sim::ScopedExecutionContext execCtx(0, 0, 1);
-        TPOP<Pipe, MatTile, SplitAxis>(ctx.cubePipe, ctx.poppedMat);
-        TFREE<Pipe, SplitAxis>(ctx.cubePipe);
+        cpu_sim::ScopedExecutionContext ctx(0, 0, 1);
+        TPOP<Pipe, MatTile, SplitAxis>(cubePipe, poppedMat);
+        TFREE<Pipe, SplitAxis>(cubePipe);
     }
 
     {
-        cpu_sim::ScopedExecutionContext execCtx(0, 0, 1);
-        TPUSH<Pipe, AccTile, SplitAxis>(ctx.cubePipe, ctx.accSrc);
+        cpu_sim::ScopedExecutionContext ctx(0, 0, 1);
+        TPUSH<Pipe, AccTile, SplitAxis>(cubePipe, accSrc);
     }
 
     consumerThread0.join();
     consumerThread1.join();
 
-    expectVecMatchesAccSplit<SplitAxis>(ctx.dst0, ctx.accSrc, 0);
-    expectVecMatchesAccSplit<SplitAxis>(ctx.dst1, ctx.accSrc, 1);
-    freeDirBothConsumers<SplitAxis>(ctx.vecConsumer0, ctx.vecConsumer1);
+    expectVecMatchesAccSplit<SplitAxis>(dst0, accSrc, 0);
+    expectVecMatchesAccSplit<SplitAxis>(dst1, accSrc, 1);
+
+    {
+        cpu_sim::ScopedExecutionContext ctx(0, 0, 2);
+        TFREE<Pipe, SplitAxis>(vecConsumer0);
+    }
+    {
+        cpu_sim::ScopedExecutionContext ctx(0, 1, 2);
+        TFREE<Pipe, SplitAxis>(vecConsumer1);
+    }
 }
 } // namespace
 
@@ -450,18 +420,6 @@ TEST_F(TPushPopTest, cpu_stub_prefers_injected_hooks_for_subblock_and_pipe_state
     EXPECT_NE(g_pipe_hook_last_key, 0u);
 }
 
-void expectSplitRowsMatch(const VecTile &topHalf, const VecTile &bottomHalf, const MatTile &dst)
-{
-    for (int r = 0; r < topHalf.GetValidRow(); ++r) {
-        for (int c = 0; c < topHalf.GetValidCol(); ++c) {
-            EXPECT_EQ(dst.data()[GetTileElementOffset<MatTile>(r, c)],
-                      topHalf.data()[GetTileElementOffset<VecTile>(r, c)]);
-            EXPECT_EQ(dst.data()[GetTileElementOffset<MatTile>(r + topHalf.GetValidRow(), c)],
-                      bottomHalf.data()[GetTileElementOffset<VecTile>(r, c)]);
-        }
-    }
-}
-
 TEST_F(TPushPopTest, v2c_split_with_injected_pipe_hook_waits_for_both_lanes_before_publish)
 {
     using VecTile = Tile<TileType::Vec, float, 8, 16, BLayout::RowMajor, 8, 16>;
@@ -516,7 +474,14 @@ TEST_F(TPushPopTest, v2c_split_with_injected_pipe_hook_waits_for_both_lanes_befo
         TFREE<HookedV2CPipe, TileSplitAxis::TILE_UP_DOWN>(consumer);
     }
 
-    expectSplitRowsMatch(topHalf, bottomHalf, dst);
+    for (int r = 0; r < topHalf.GetValidRow(); ++r) {
+        for (int c = 0; c < topHalf.GetValidCol(); ++c) {
+            EXPECT_EQ(dst.data()[GetTileElementOffset<MatTile>(r, c)],
+                      topHalf.data()[GetTileElementOffset<VecTile>(r, c)]);
+            EXPECT_EQ(dst.data()[GetTileElementOffset<MatTile>(r + topHalf.GetValidRow(), c)],
+                      bottomHalf.data()[GetTileElementOffset<VecTile>(r, c)]);
+        }
+    }
 
     EXPECT_GT(g_pipe_hook_call_count.load(std::memory_order_relaxed), 0u);
     EXPECT_EQ(g_pipe_hook_size, sizeof(HookedV2CPipe::SharedStateStorage));

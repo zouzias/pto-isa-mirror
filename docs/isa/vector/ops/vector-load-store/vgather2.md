@@ -39,20 +39,23 @@ This operation reads UB-visible storage and returns SSA results. It does not by 
 
 ## Constraints
 
-Only the first `%active_lanes` indices participate. The index element width
-  and interpretation MUST match the selected gather form, and each effective
-  address must satisfy that form's alignment rules.
+!!! warning "Constraints"
+    Only the first `%active_lanes` indices participate. The index element width
+      and interpretation MUST match the selected gather form, and each effective
+      address must satisfy that form's alignment rules.
 
 ## Exceptions
 
-- It is illegal to use addresses outside the required UB-visible space or to violate the alignment/distribution contract of the selected form.
-- Masked-off lanes or inactive blocks do not make an otherwise-illegal address valid unless the operation text explicitly says so.
-- Any additional illegality stated in the constraints section is also part of the contract.
+!!! danger "Exceptions"
+    - It is illegal to use addresses outside the required UB-visible space or to violate the alignment/distribution contract of the selected form.
+    - Masked-off lanes or inactive blocks do not make an otherwise-illegal address valid unless the operation text explicitly says so.
+    - Any additional illegality stated in the constraints section is also part of the contract.
 
 ## Target-Profile Restrictions
 
-- A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
-- Code that depends on an instruction-set-specific type list, distribution mode, or fused form should treat that dependency as target-profile-specific unless the PTO manual states cross-target portability explicitly.
+??? info "Target-Profile Restrictions"
+    - A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
+    - Code that depends on an instruction-set-specific type list, distribution mode, or fused form should treat that dependency as target-profile-specific unless the PTO manual states cross-target portability explicitly.
 
 ## Performance
 

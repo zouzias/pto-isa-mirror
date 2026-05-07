@@ -34,11 +34,12 @@ PTO_INST void TNOTIFY(GlobalSignalData &dstSignalData, int32_t value, NotifyOp o
 
 ## 约束
 
-- `GlobalSignalData::DType` 必须为 `int32_t`
-- `dstSignalData` 必须指向远端地址
-- `dstSignalData` 建议满足 4 字节对齐
-- `NotifyOp::Set` 表示直接写入
-- `NotifyOp::AtomicAdd` 表示原子加
+!!! warning "约束"
+    - `GlobalSignalData::DType` 必须为 `int32_t`
+    - `dstSignalData` 必须指向远端地址
+    - `dstSignalData` 建议满足 4 字节对齐
+    - `NotifyOp::Set` 表示直接写入
+    - `NotifyOp::AtomicAdd` 表示原子加
 
 ## 示例
 

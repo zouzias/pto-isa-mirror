@@ -57,12 +57,14 @@ PTO_INST RecordEvent TADDC(TileData &dst, TileData &src0, TileData &src1, TileDa
 
 ## 约束
 
-- 迭代域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
-- 三个源 tile 与目标 tile 应在 shape、layout 和 valid region 上兼容。
+!!! warning "约束"
+    - 迭代域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
+    - 三个源 tile 与目标 tile 应在 shape、layout 和 valid region 上兼容。
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## Target-Profile 限制
 
