@@ -456,9 +456,19 @@ bool RunOneRank(int rankId, int nRanks, int firstDeviceId,
             desc.dieId, desc.ckeId, desc.mask,
             static_cast<unsigned long long>(desc.mmioAddr),
             static_cast<unsigned long long>(desc.mmioAddr + desc.ckeId * 0x40ULL + 6ULL));
-        uint64_t marker[8] = {};
-        aclrtMemcpy(marker, sizeof(marker), aivMarkerDev, sizeof(marker),
-                    ACL_MEMCPY_DEVICE_TO_HOST);
+        // Pre-poison the host marker buffer so we can distinguish two
+        // failure modes:
+        //   - host buffer == 0xDEAD... → memcpy DEVICE→HOST failed silently
+        //     (device fault left the stream / buffer in unreadable state)
+        //   - host buffer == 0          → memcpy succeeded, kernel really
+        //     never wrote marker[0] (entry trap before first GM store)
+        uint64_t marker[8];
+        for (int i = 0; i < 8; ++i) marker[i] = 0xDEADBEEF00000000ULL | static_cast<uint64_t>(i);
+        aclError mcpyRc = aclrtMemcpy(marker, sizeof(marker), aivMarkerDev,
+                                       sizeof(marker), ACL_MEMCPY_DEVICE_TO_HOST);
+        std::fprintf(stderr,
+            "[GATED_RS_ST] rank=%d aivMarker memcpy rc=%d (0=ok)\n",
+            rankId, static_cast<int>(mcpyRc));
         for (int i = 0; i < 8; ++i) {
             std::fprintf(stderr,
                 "[GATED_RS_ST] rank=%d aivMarker[%d] = 0x%016llx\n",
