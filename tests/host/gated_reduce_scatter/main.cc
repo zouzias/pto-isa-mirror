@@ -255,37 +255,36 @@ bool RunOneRank(int rankId, int nRanks, int firstDeviceId,
     void *outputDev = nullptr;
     // ─────────────────────────────────────────────────────────────────────────
     // CRITICAL — must use `aclrtMallocWithCfg` + `ACL_MEM_TYPE_HIGH_BAND_WIDTH`
-    // (NOT plain `aclrtMalloc(HUGE_ONLY)`).
+    // and the cfg MUST have a non-empty `attrs` array (driver rejects
+    // `numAttrs=0` with errno 107000 invalid value — verified empirically
+    // 2026-05-07).
     //
-    // Rationale (verified against mpi9 driver-level log diff, not猜测):
-    //   1. `aclrtMalloc(HUGE_ONLY)` does not specify a mem type → driver
-    //      allocates plain DDR/device memory, NOT registered into the
-    //      driver-side UB token table.
-    //   2. `hcomm::CcuRep::GetTokenInfo(va, size)` (called below in step 6)
-    //      maps to `rtUbDevQueryInfo(QUERY_PROCESS_TOKEN, ...)` →
-    //      `halMemGetInfo` `type=10` which queries the UB token table —
-    //      a buffer not in this table fails with driver `Va is not alloced`
-    //      (errno 3, RT 107000) → `Hccl::CcuApiException: failed to query
-    //      tokenInfo`.
-    //   3. hcomm itself uses `aclrtMallocWithCfg(... ACL_MEM_TYPE_HIGH_BAND_WIDTH)`
-    //      whenever it needs UB-mappable HBM (see `dev_buffer.cc:30`,
-    //      `adapter_rts.cc:570-593` `HrtDevMalloc`). The 400 MB
-    //      `selfOwned=1 DevBuffer[addr=0x12004ca00000]` seen in mpi9 log
-    //      (line 3293) was allocated via this path — it is in the UB
-    //      table and `GetTokenInfo` succeeds for any VA inside it.
-    //   4. `aclrtMallocConfig{nullptr, 0}` is a legal "no extra attributes"
-    //      cfg — `acl/acl_rt.h` defines `aclrtMallocConfig` as
-    //      `{ aclrtMallocAttribute *attrs; size_t numAttrs; }`. hcomm passes
-    //      a `moduleId=HCCL` attribute for tagging, but that is only a
-    //      diagnostic label and is optional for ub-mappability.
+    // Rationale (verified against mpi9/mpi10 log diffs, not猜测):
+    //   1. `aclrtMalloc(HUGE_ONLY)` (mpi9) → driver alloc普通 device mem,
+    //      NOT entered into driver UB token table → `GetTokenInfo` throws
+    //      `Va is not alloced` (errno 3, RT 107000).
+    //   2. `aclrtMallocWithCfg(... HIGH_BAND_WIDTH, cfg{nullptr,0})` (first
+    //      mpi10 attempt) → driver also fails 107000 — empty cfg attrs
+    //      rejected.
+    //   3. hcomm self-allocs via `aclrtMallocWithCfg(... HIGH_BAND_WIDTH,
+    //      cfg{&attr,1})` with one `ACL_RT_MEM_ATTR_MODULE_ID` attribute
+    //      (`adapter_rts.cc:570-593` `HrtDevMalloc`, `tester.cc:414-419`).
+    //      The 400 MB `selfOwned=1 DevBuffer[addr=0x12004ca00000]` seen in
+    //      mpi9 log (line 3293) came from this path — UB-tagged, in driver
+    //      UB table, `GetTokenInfo` succeeds.
+    //   4. `moduleId` field is `uint16_t` (acl/acl_rt.h:166); slog
+    //      `log_types.h:52` defines `HCCL = 3` and we use that literal here
+    //      to mirror hcomm exactly — value is a diagnostic label only,
+    //      `aclrtMallocWithCfg` only requires `numAttrs >= 1` to succeed.
     // ─────────────────────────────────────────────────────────────────────────
-    aclrtMallocConfig kCfg{nullptr, 0};
+    aclrtMallocAttrValue kModuleIdValue{};
+    kModuleIdValue.moduleId = 3;  // HCCL slog module id (mirrors hcomm internal alloc path)
+    aclrtMallocAttribute kAttrs{ACL_RT_MEM_ATTR_MODULE_ID, kModuleIdValue};
+    aclrtMallocConfig kCfg{&kAttrs, 1};
     ACL_OK(aclrtMallocWithCfg(&inputDev,  kPayloadSize,
-        static_cast<aclrtMemMallocPolicy>(ACL_MEM_TYPE_HIGH_BAND_WIDTH | ACL_MEM_MALLOC_HUGE_FIRST),
-        &kCfg));
+        ACL_MEM_TYPE_HIGH_BAND_WIDTH, &kCfg));
     ACL_OK(aclrtMallocWithCfg(&outputDev, kPayloadSize,
-        static_cast<aclrtMemMallocPolicy>(ACL_MEM_TYPE_HIGH_BAND_WIDTH | ACL_MEM_MALLOC_HUGE_FIRST),
-        &kCfg));
+        ACL_MEM_TYPE_HIGH_BAND_WIDTH, &kCfg));
 
     // Initialise input with a per-rank deterministic byte pattern; output
     // to known-bad. Rank-tagging the input lets us spot accidental cross-rank
