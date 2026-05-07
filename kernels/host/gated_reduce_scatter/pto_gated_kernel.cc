@@ -169,9 +169,20 @@ HcclResult PtoGatedReduceScatterMesh1D::Algorithm()
         }
     }
 
-    inputVar_  = inputs[rankId_];
+    // §3.13.K — Variable::operator=(const Variable&) (lvalue overload) emits a
+    // CcuRepAssign IR via AppendToContext(this->context, ...). Member fields
+    // `inputVar_/tokenVar_` are default-constructed → context==nullptr, so the
+    // lvalue assign throws "context is nullptr, AppendToContext assit[7]"
+    // (CcuRepType::ASSIGN). Force the move overload `operator=(Variable&&)`
+    // (line 75-79 of ccu_datatype.cc) instead — it just copies phyRes/context
+    // without emitting any IR. shared_ptr assignment in move overload is
+    // non-destructive: `inputs[rankId_]` remains valid for step 5 references.
+    //
+    // `outputVar_/lengthVar_` already use rvalue (CreateVariable returns by
+    // value) so they bind to the move overload directly — keep as-is.
+    inputVar_  = std::move(inputs[rankId_]);
     outputVar_ = CreateVariable();
-    tokenVar_  = tokens[rankId_];
+    tokenVar_  = std::move(tokens[rankId_]);
     lengthVar_ = CreateVariable();
 
     // -------------------------------------------------------------------------
