@@ -115,3 +115,22 @@ When the user provides compiler output:
 ## Output style
 
 Be direct and practical. State uncertainty clearly. Cite repo paths for nontrivial claims. Avoid restating `docs_for_ai/` content in chat — link to the specific section instead.
+
+
+## Prototype project requirements
+
+When creating a new prototype kernel project under `kernels/automode/`:
+
+- Include a minimal test or run path whenever possible.
+- Include a Python reference script for expected output when the kernel computes a numerical result.
+- Include clear input/output shape assumptions.
+- Include a README with:
+  - what the kernel does,
+  - target platform,
+  - auto-mode constraints,
+  - how to build,
+  - how to run,
+  - how to compare against the Python reference,
+  - known limitations.
+- Do not claim the project builds or passes tests unless the user provides compiler/runtime output.
+- If the repo’s test harness pattern is unclear, create a conservative local `run.sh` and Python reference script, and document what the user should adapt on the compiler server.
