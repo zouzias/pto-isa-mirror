@@ -253,8 +253,39 @@ bool RunOneRank(int rankId, int nRanks, int firstDeviceId,
     // -------------------------------------------------------------------------
     void *inputDev  = nullptr;
     void *outputDev = nullptr;
-    ACL_OK(aclrtMalloc(&inputDev,  kPayloadSize, ACL_MEM_MALLOC_HUGE_ONLY));
-    ACL_OK(aclrtMalloc(&outputDev, kPayloadSize, ACL_MEM_MALLOC_HUGE_ONLY));
+    // ─────────────────────────────────────────────────────────────────────────
+    // CRITICAL — must use `aclrtMallocWithCfg` + `ACL_MEM_TYPE_HIGH_BAND_WIDTH`
+    // (NOT plain `aclrtMalloc(HUGE_ONLY)`).
+    //
+    // Rationale (verified against mpi9 driver-level log diff, not猜测):
+    //   1. `aclrtMalloc(HUGE_ONLY)` does not specify a mem type → driver
+    //      allocates plain DDR/device memory, NOT registered into the
+    //      driver-side UB token table.
+    //   2. `hcomm::CcuRep::GetTokenInfo(va, size)` (called below in step 6)
+    //      maps to `rtUbDevQueryInfo(QUERY_PROCESS_TOKEN, ...)` →
+    //      `halMemGetInfo` `type=10` which queries the UB token table —
+    //      a buffer not in this table fails with driver `Va is not alloced`
+    //      (errno 3, RT 107000) → `Hccl::CcuApiException: failed to query
+    //      tokenInfo`.
+    //   3. hcomm itself uses `aclrtMallocWithCfg(... ACL_MEM_TYPE_HIGH_BAND_WIDTH)`
+    //      whenever it needs UB-mappable HBM (see `dev_buffer.cc:30`,
+    //      `adapter_rts.cc:570-593` `HrtDevMalloc`). The 400 MB
+    //      `selfOwned=1 DevBuffer[addr=0x12004ca00000]` seen in mpi9 log
+    //      (line 3293) was allocated via this path — it is in the UB
+    //      table and `GetTokenInfo` succeeds for any VA inside it.
+    //   4. `aclrtMallocConfig{nullptr, 0}` is a legal "no extra attributes"
+    //      cfg — `acl/acl_rt.h` defines `aclrtMallocConfig` as
+    //      `{ aclrtMallocAttribute *attrs; size_t numAttrs; }`. hcomm passes
+    //      a `moduleId=HCCL` attribute for tagging, but that is only a
+    //      diagnostic label and is optional for ub-mappability.
+    // ─────────────────────────────────────────────────────────────────────────
+    aclrtMallocConfig kCfg{nullptr, 0};
+    ACL_OK(aclrtMallocWithCfg(&inputDev,  kPayloadSize,
+        static_cast<aclrtMemMallocPolicy>(ACL_MEM_TYPE_HIGH_BAND_WIDTH | ACL_MEM_MALLOC_HUGE_FIRST),
+        &kCfg));
+    ACL_OK(aclrtMallocWithCfg(&outputDev, kPayloadSize,
+        static_cast<aclrtMemMallocPolicy>(ACL_MEM_TYPE_HIGH_BAND_WIDTH | ACL_MEM_MALLOC_HUGE_FIRST),
+        &kCfg));
 
     // Initialise input with a per-rank deterministic byte pattern; output
     // to known-bad. Rank-tagging the input lets us spot accidental cross-rank
