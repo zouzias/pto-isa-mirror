@@ -177,7 +177,8 @@ template <typename T, typename TIdx, typename TileSrc, ScatterAtomicOp Atomic, S
           uint32_t ValidRows, uint32_t ValidCols, uint32_t TableRows>
 AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
     void simt_mscatter_row_kernel(__gm__ T *__restrict__ table, __ubuf__ const T *__restrict__ src,
-                                  __ubuf__ const TIdx *__restrict__ indices)
+                                  __ubuf__ const TIdx *__restrict__ indices, uint32_t validRowsRT, uint32_t validColsRT,
+                                  uint32_t tableRowsRT)
 {
     constexpr bool kIsAtomic = (Atomic != ScatterAtomicOp::None);
     constexpr bool kIsLast = !kIsAtomic && (Conflict == ScatterConflict::Last);
@@ -225,7 +226,8 @@ template <typename T, typename TIdx, typename TileSrc, typename TileIdx, Scatter
           ScatterConflict Conflict, uint32_t ValidRows, uint32_t ValidCols, uint32_t TableSize>
 AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
     void simt_mscatter_elem_kernel(__gm__ T *__restrict__ table, __ubuf__ const T *__restrict__ src,
-                                   __ubuf__ const TIdx *__restrict__ indices)
+                                   __ubuf__ const TIdx *__restrict__ indices, uint32_t validRowsRT,
+                                   uint32_t validColsRT, uint32_t tableSizeRT)
 {
     constexpr bool kIsAtomic = (Atomic != ScatterAtomicOp::None);
     constexpr bool kIsLast = !kIsAtomic && (Conflict == ScatterConflict::Last);
@@ -265,7 +267,8 @@ AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
 template <typename T, typename TIdx, ScatterAtomicOp Atomic, ScatterOOB Oob, ScatterConflict Conflict,
           typename SrcTileData, typename IdxTileData, uint32_t ValidRows, uint32_t ValidCols, uint32_t TableRows>
 __tf__ AICORE void MScatterRowImpl(__gm__ T *__restrict__ tablePtr, typename SrcTileData::TileDType __in__ src,
-                                   typename IdxTileData::TileDType __in__ indices)
+                                   typename IdxTileData::TileDType __in__ indices, uint32_t validRows,
+                                   uint32_t validCols, uint32_t tableRows)
 {
     __ubuf__ const T *srcPtr = (__ubuf__ const T *)__cce_get_tile_ptr(src);
     __ubuf__ const TIdx *idxPtr = (__ubuf__ const TIdx *)__cce_get_tile_ptr(indices);
@@ -279,7 +282,8 @@ __tf__ AICORE void MScatterRowImpl(__gm__ T *__restrict__ tablePtr, typename Src
 template <typename T, typename TIdx, ScatterAtomicOp Atomic, ScatterOOB Oob, ScatterConflict Conflict,
           typename SrcTileData, typename IdxTileData, uint32_t ValidRows, uint32_t ValidCols, uint32_t TableSize>
 __tf__ AICORE void MScatterElemImpl(__gm__ T *__restrict__ tablePtr, typename SrcTileData::TileDType __in__ src,
-                                    typename IdxTileData::TileDType __in__ indices)
+                                    typename IdxTileData::TileDType __in__ indices, uint32_t validRows,
+                                    uint32_t validCols, uint32_t tableSize)
 {
     __ubuf__ const T *srcPtr = (__ubuf__ const T *)__cce_get_tile_ptr(src);
     __ubuf__ const TIdx *idxPtr = (__ubuf__ const TIdx *)__cce_get_tile_ptr(indices);
@@ -386,7 +390,6 @@ PTO_INTERNAL void MSCATTER_IMPL(GlobalTable &table, TileSrc &src, TileIdx &indic
 {
     using T = typename TileSrc::DType;
     using TIdx = typename TileIdx::DType;
-    using ShapeType = typename GlobalTable::Shape;
 
     MScatterCheck<Mode, Atomic>(table, src, indices);
 

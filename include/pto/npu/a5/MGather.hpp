@@ -101,7 +101,8 @@ template <typename T, typename TIdx, typename TileDst, GatherOOB Oob, uint32_t V
           uint32_t TableRows>
 AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
     void simt_mgather_row_kernel(__ubuf__ T *__restrict__ dst, __gm__ const T *__restrict__ table,
-                                 __ubuf__ const TIdx *__restrict__ indices)
+                                 __ubuf__ const TIdx *__restrict__ indices, uint32_t validRowsRT, uint32_t validColsRT,
+                                 uint32_t tableRowsRT)
 {
     using Launch = mgather_cfg::RowLaunch<ValidRows, ValidCols>;
     constexpr uint32_t kRowWarps = Launch::kRowWarps;
@@ -131,7 +132,8 @@ template <typename T, typename TIdx, typename TileDst, typename TileIdx, GatherO
           uint32_t ValidCols, uint32_t TableSize>
 AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
     void simt_mgather_elem_kernel(__ubuf__ T *__restrict__ dst, __gm__ const T *__restrict__ table,
-                                  __ubuf__ const TIdx *__restrict__ indices)
+                                  __ubuf__ const TIdx *__restrict__ indices, uint32_t validRowsRT, uint32_t validColsRT,
+                                  uint32_t tableSizeRT)
 {
     constexpr uint32_t kTotalElems = ValidRows * ValidCols;
     constexpr uint32_t kLaunchThreads = mgather_cfg::ElemLaunch<kTotalElems>::kLaunchWarps * mgather_cfg::WARP_SIZE;
@@ -156,7 +158,8 @@ AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
 template <typename T, typename TIdx, GatherOOB Oob, typename DstTileData, typename IdxTileData, uint32_t ValidRows,
           uint32_t ValidCols, uint32_t TableRows>
 __tf__ AICORE void MGatherRowImpl(typename DstTileData::TileDType __out__ dst, __gm__ const T *__restrict__ tablePtr,
-                                  typename IdxTileData::TileDType __in__ indices)
+                                  typename IdxTileData::TileDType __in__ indices, uint32_t validRows,
+                                  uint32_t validCols, uint32_t tableRows)
 {
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ const TIdx *idxPtr = (__ubuf__ const TIdx *)__cce_get_tile_ptr(indices);
@@ -169,7 +172,8 @@ __tf__ AICORE void MGatherRowImpl(typename DstTileData::TileDType __out__ dst, _
 template <typename T, typename TIdx, GatherOOB Oob, typename DstTileData, typename IdxTileData, uint32_t ValidRows,
           uint32_t ValidCols, uint32_t TableSize>
 __tf__ AICORE void MGatherElemImpl(typename DstTileData::TileDType __out__ dst, __gm__ const T *__restrict__ tablePtr,
-                                   typename IdxTileData::TileDType __in__ indices)
+                                   typename IdxTileData::TileDType __in__ indices, uint32_t validRows,
+                                   uint32_t validCols, uint32_t tableSize)
 {
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ const TIdx *idxPtr = (__ubuf__ const TIdx *)__cce_get_tile_ptr(indices);
@@ -258,7 +262,6 @@ PTO_INTERNAL void MGATHER_IMPL(TileDst &dst, GlobalTable &table, TileIdx &indice
 {
     using T = typename TileDst::DType;
     using TIdx = typename TileIdx::DType;
-    using ShapeType = typename GlobalTable::Shape;
 
     MGatherCheck<Mode>(dst, table, indices);
 

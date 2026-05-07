@@ -241,6 +241,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_cv_nosplit -g TPushPopCvNoSplitTest.case1_half_single_tile
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_vc_nosplit -g TPushPopVcNoSplitTest.case1_int8_single_k_tile
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_dir_both -g TPushPopDirBothTest.case1_float_dir_both
+      python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_subtile -g TPushTpopSubtileTest.case1_half_128x512
     fi
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
@@ -341,6 +342,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_cv_nosplit
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_vc_nosplit
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_dir_both
+      python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_subtile
     fi
   fi
 fi
