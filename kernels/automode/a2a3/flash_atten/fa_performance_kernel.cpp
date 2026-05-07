@@ -319,7 +319,6 @@ AICORE inline void compute_p(QKPipe &qkPipe, PPipe &pPipe, int tile_id, int row_
         pPipe.prod.setEntryOffset(row_offset * Cube_S1 * sizeof(half));
         TPUSH(x_expT, pPipe);
 
-        set_flag(PIPE_MTE3, PIPE_V, pTileEventId);
         if constexpr (INTERMEDIATE_CHECK) {
             // On the final row_slice, emit the exp_max for this subblock only (Cube_S0 / VEC_CORES rows)
             if (row_slice == static_cast<int>(kTileFactor) - 1) {
@@ -372,14 +371,6 @@ AICORE inline void compute_gu(PVPipe &pvPipe, int tile_id, int num_tiles, __gm__
             } else {
                 pto_macro_fa_gu_last<ReduceTileF_T, TileOutT>(runningOTile, pvVecTile, l1_exp_max_ififo, l2_global_sum);
             }
-        }
-
-
-        if constexpr (GU_Phase == Phase::Epilogue) {
-            using GlobalOutT =
-                GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
-            GlobalOutT outGlobal((__gm__ float *)(o_out + subblock_base_rows * HEAD_SIZE));
-            TSTORE(outGlobal, runningOTile);
         }
     }
 }
@@ -555,7 +546,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
             inner.loop([&](auto ctxInner){
                 int sub_tile = ctxInner.iter;
                 TileMatKData kMatTile;
-                qk.prod.setTileId(tile_id, sub_tile);
+                qkPipe.prod.setTileId(tile_id, sub_tile);
                 compute_qk<QKPipe, S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, INTERMEDIATE_CHECK, CAUSAL_MASK>(
                     qkPipe, tile_id, sub_tile, q_block, k, qMatTile, kMatTile, qkAccTile, block_idx
                 );
@@ -571,7 +562,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
             for (int sub_tile = 0; sub_tile < kTileFactor; ++sub_tile){
                 qk_pv_stages.run(
                     [&]() {
-                        qk.prod.setTileId(tile_id + qkPreLoadNum, sub_tile);
+                        qkPipe.prod.setTileId(tile_id + qkPreLoadNum, sub_tile);
                         compute_qk<QKPipe, S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, INTERMEDIATE_CHECK, CAUSAL_MASK>(
                             qkPipe, tile_id + qkPreloadNum, sub_tile, q_block, k, qMatTile, kMatTile, qkAccTile, block_idx
                         );
@@ -618,7 +609,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                 compute_p<QKPipe, PPipe, S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, INTERMEDIATE_CHECK, CAUSAL_MASK>(
                     qkPipe, pPipe, tile_id, row_slice, exp_max_ififo_block, global_sum_block, exp_max_block, qkVecTile, 
                     x_expT, input_reduce_tmp, m1_local_max, l1_local_sum, m2_global_max, l2_global_sum,
-                    l1_exp_max_ififo[preload_tile % qkp_tile_fifo_size], triu, block_idx);
+                    l1_exp_max_ififo[tile_id % qkp_tile_fifo_size], triu, block_idx);
             });
         });
 
@@ -634,24 +625,30 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                 compute_p<QKPipe, PPipe, S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, INTERMEDIATE_CHECK, CAUSAL_MASK>(
                     qkPipe, pPipe, tile_id + qkPreloadNum, ctx.iter, exp_max_ififo_block, global_sum_block, exp_max_block, qkVecTile, 
                     x_expT, input_reduce_tmp, m1_local_max, l1_local_sum, m2_global_max, l2_global_sum,
-                    l1_exp_max_ififo[preload_tile % qkp_tile_fifo_size], triu, block_idx);
+                    l1_exp_max_ififo[tile_id % qkp_tile_fifo_size], triu, block_idx);
             });
 
-            pvPipe.cons.setTileID(tile_id, -1);
+            pvPipe.cons.setTileId(tile_id, -1);
             compute_gu<PVPipe, S0, HEAD_SIZE, S1, CUBE_S0, Tile_S1, pv_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD,
                        INTERMEDIATE_CHECK, CAUSAL_MASK, Phase::Main>(
                 pvPipe, tile_id, num_tiles_s1, o_out_block, o_parts_block, runningOTile, pvVecTile, 
-                l1_exp_max_ififo[tile_id % qkp_tile_fifo_size], l2_global_sum);
+                l1_exp_max_ififo[(tile_id + qkPreloadNum) % qkp_tile_fifo_size], l2_global_sum);
          }
 
-        mb.loop<Range<qkPreloadNum>, 0, 2>([&](auto ctx){
+        mb.loop<Range<qkPreloadNum>>([&](auto ctx){
             TileOutGuT pvVecTile;
-            pvPipe.cons.setTileID(ctx.iter + num_tiles_s1 - qkPreloadNum, -1);
+            pvPipe.cons.setTileId(ctx.iter + num_tiles_s1 - qkPreloadNum, -1);
             compute_gu<PVPipe, S0, HEAD_SIZE, S1, CUBE_S0, Tile_S1, pv_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD,
-                       INTERMEDIATE_CHECK, CAUSAL_MASK, ctx.Phase>(
+                       INTERMEDIATE_CHECK, CAUSAL_MASK, ctx.phase>(
                 pvPipe, ctx.iter + num_tiles_s1 - qkPreloadNum, num_tiles_s1, o_out_block, o_parts_block, runningOTile, pvVecTile, 
                 l1_exp_max_ififo[(ctx.iter + num_tiles_s1 - qkPreloadNum) % qkp_tile_fifo_size], l2_global_sum);
         });
+
+        const size_t subblock_base_rows = static_cast<size_t>(CUBE_S0 / VEC_CORES) * static_cast<size_t>(get_subblockid());
+        using GlobalOutT =
+                GlobalTensor<float, pto::Shape<1, 1, 1, CUBE_S0 / VEC_CORES, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
+            GlobalOutT outGlobal((__gm__ float *)(o_out + subblock_base_rows * HEAD_SIZE));
+            TSTORE(outGlobal, runningOTile);
     }
 
     const int pending_qk_sm_consumed =

@@ -155,19 +155,19 @@ AICORE inline void pto_macro_matmul(TileDataA &aMatTile, TileDataB &bMatTile, Ti
         MatmulCallConfig cfg = resolve_acc_mode(accMode, k == 0, isLast);
         if (cfg.useAcc) {
             if (cfg.phase == AccPhase::Final) {
-                TMATMUL_ACC<AccPhase::Final>(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong]);
+                TMATMUL_ACC<AccPhase::Final>(cAccTile, al0Tiles, bl0Tiles);
             } else if (cfg.phase == AccPhase::Partial) {
-                TMATMUL_ACC<AccPhase::Partial>(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong]);
+                TMATMUL_ACC<AccPhase::Partial>(cAccTile, al0Tiles, bl0Tiles);
             } else {
-                TMATMUL_ACC(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong]);
+                TMATMUL_ACC(cAccTile, al0Tiles, bl0Tiles);
             }
         } else {
             if (cfg.phase == AccPhase::Final) {
-                TMATMUL<AccPhase::Final>(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong]);
+                TMATMUL<AccPhase::Final>(cAccTile, al0Tiles, bl0Tiles);
             } else if (cfg.phase == AccPhase::Partial) {
-                TMATMUL<AccPhase::Partial>(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong]);
+                TMATMUL<AccPhase::Partial>(cAccTile, al0Tiles, bl0Tiles);
             } else {
-                TMATMUL(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong]);
+                TMATMUL(cAccTile, al0Tiles, bl0Tiles);
             }
         }
     }

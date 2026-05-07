@@ -51,7 +51,7 @@ struct Range {
         return 1 + sizeof...(Dims);
     }
 
-    static constexpr hasChildDimGTOne() {
+    static constexpr bool hasChildDimGTOne() {
         if constexpr (sizeof...(Dims) == 0){
             return false;
         } else {
@@ -75,7 +75,7 @@ using PopFront_t = typename PopFront<T>::type;
 enum class Phase{
     Prologue, 
     Main, 
-    Epilouge
+    Epilogue
 };
 
 // MultiBuffered Loop utility.
@@ -87,7 +87,7 @@ public:
     // Context object passed to the body - bundles all loop parameters
     template <Phase P, int BufferId> 
     struct Context {
-        static constexpr Phase phase = p;
+        static constexpr Phase phase = P;
         static constexpr int bufferId = BufferId;
         int iter;
     };
@@ -119,6 +119,7 @@ public:
 
         if constexpr (Range::numDims() == 1){
             constexpr bool ShouldUnroll = NumIters != 1;
+            loop<NumIters, ShouldUnroll, FirstK, LastK>(body);
         } else {
             constexpr bool ShouldUnroll = Range::getDim(0) > 1 && !Range::hasChildDimGTOne();
 
@@ -134,7 +135,7 @@ public:
     template <int NumIters, bool ShouldUnroll, int FirstK = 0, int LastK = 0, class Body> 
     AICORE void loop(Body &&body){
         constexpr int MBFirstK = FirstK; 
-        constexpr MBLastK = LastK; 
+        constexpr int MBLastK = LastK; 
         constexpr int MainK = NumIters - MBFirstK - MBLastK;
 
         // executing the body in 3 different phases, phases do not overlap.
@@ -148,7 +149,7 @@ public:
         }
         if constexpr (LastK > 0){
             // epilogue phase: from numIters - lastK to numIters
-            runWIthPhase<MBLastK, NumIters - MBLastK, ShouldUnroll, Phase::Epilouge>(body);
+            runWIthPhase<MBLastK, NumIters - MBLastK, ShouldUnroll, Phase::Epiloge>(body);
         }
     }
 private: 
@@ -165,7 +166,7 @@ private:
             #pragma pto v_loop_barrier
             f(i * NumBuffs + buffIndex, std::integral_constant<int, buffIndex>{});
         } else {
-            f(i * NumBuffs + buffIndex, std::integral_constant<int, buffIndex>{})
+            f(i * NumBuffs + buffIndex, std::integral_constant<int, buffIndex>{});
         }
     }
 
@@ -213,7 +214,7 @@ private:
 
     template <int K, class BufferId, typename F>
     AICORE auto every(int i, BufferId buffer_id, F &&f){
-        constexpr int bi decltype(buffer_id)::value;
+        constexpr int bi = decltype(buffer_id)::value;
         if constexpr (K == NumBuffs){
             if constexpr (bi == 0){
                 f();
