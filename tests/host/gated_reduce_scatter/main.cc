@@ -100,6 +100,8 @@
 #include <cstring>
 #include <vector>
 
+#include <dlfcn.h>
+
 #include "acl/acl.h"
 #include "hccl/hccl.h"
 #include "hccl/hccl_types.h"
@@ -403,50 +405,102 @@ bool RunOneRank(int rankId, int nRanks, int firstDeviceId,
     // -------------------------------------------------------------------------
     // 9. Resolve CCU MMIO base for the AIV trigger.
     //
-    // Defaults match the empirically validated layout (Exp3, 2026-05-06):
-    // stride=0x40, byte_off=6.
+    // CRITICAL — must use `rtGetDevResAddress(CP1, CCU_CKE, ckeId)` (per-CKE
+    // chunk base), NOT `pto::host::QueryCcuBaseInfo` (die-level base). They
+    // are *different* address mappings — verified empirically in mpi13/14
+    // (2026-05-07): die-level base + ckeId*0x40 + 6 lands in unreachable
+    // region → AIV vector core trap (RT 507035 = ACL_ERROR_RT_VECTOR_CORE_
+    // EXCEPTION, retCode=0x31).
+    //
+    // Reference: hccl `examples/02_collectives/04_reduce_scatter/main.cc:660-732`
+    // (Exp3 verified path, 2026-05-06). Plan §3.10 line 723-724 also annotates
+    // "rtGetDevResAddress 给的是 CKE chunk base, 不是 per-CKE VA. 真实 trigger
+    // 地址 = base + ckeId*0x40 + 6".
+    //
+    // QueryCcuBaseInfo path (the previously-tried die-level base) is hccl's
+    // own "Kept for A/B comparison only. Default disabled" fallback (hccl
+    // reference main.cc:779-781). We mistakenly used that fallback in the
+    // standalone ST until mpi14 marker=nullptr fork test confirmed mmio store
+    // is the trap site (kernel.cpp:154 *(__gm__ uint64_t*)target = ...).
+    //
+    // Defaults: stride=0x40, byte_off=6 (launcher applies them on top of the
+    // chunk base). Override via env if needed.
     // -------------------------------------------------------------------------
     setenv("PTO_AIV_TRIGGER_STRIDE",   "0x40", /*overwrite=*/0);
     setenv("PTO_AIV_TRIGGER_BYTE_OFF", "6",    /*overwrite=*/0);
 
-    auto probe = pto::host::QueryCcuBaseInfo(deviceId, desc.dieId);
-    if (probe.rc != 0 || probe.resourceAddr == nullptr) {
+    {
+        constexpr int kRT_PROCESS_CP1      = 0;
+        constexpr int kRT_RES_TYPE_CCU_CKE = 3;
+        struct rtDevResInfo_t {
+            uint32_t dieId; int procType; int resType;
+            uint32_t resId; uint32_t flag;
+        };
+        struct rtDevResAddrInfo_t {
+            uint64_t *resAddress; uint32_t *len;
+        };
+        using rtGetFn = int(*)(rtDevResInfo_t *, rtDevResAddrInfo_t *);
+
+        void *rt = dlopen("libruntime.so", RTLD_NOW | RTLD_GLOBAL);
+        if (rt == nullptr) {
+            std::fprintf(stderr,
+                "[GATED_RS_ST] rank=%d FAIL: dlopen libruntime.so failed: %s\n",
+                rankId, dlerror());
+            return false;
+        }
+        auto rtGet = reinterpret_cast<rtGetFn>(
+            dlsym(rt, "rtGetDevResAddress"));
+        if (rtGet == nullptr) {
+            std::fprintf(stderr,
+                "[GATED_RS_ST] rank=%d FAIL: dlsym rtGetDevResAddress failed: "
+                "%s\n",
+                rankId, dlerror());
+            dlclose(rt);
+            return false;
+        }
+        rtDevResInfo_t in{};
+        // ABI quirk inherited from hccl reference (main.cc:686): `dieId`
+        // field is filled with `device` (deviceId), not desc.dieId — comment
+        // there says "ABI: for ccu res need set devId".
+        in.dieId    = static_cast<uint32_t>(deviceId);
+        in.procType = kRT_PROCESS_CP1;
+        in.resType  = kRT_RES_TYPE_CCU_CKE;
+        in.resId    = desc.ckeId;
+        in.flag     = 0;
+        uint64_t addr = 0;
+        uint32_t len  = 0;
+        rtDevResAddrInfo_t out{ &addr, &len };
+        int qrc = rtGet(&in, &out);
+        if (qrc != 0 || addr == 0) {
+            std::fprintf(stderr,
+                "[GATED_RS_ST] rank=%d FAIL: rtGetDevResAddress rc=%d addr=0x%lx "
+                "(deviceId=%d, dieId=%u, ckeId=%u)\n",
+                rankId, qrc, static_cast<unsigned long>(addr),
+                deviceId, desc.dieId, desc.ckeId);
+            // Don't dlclose rt — keep mapping for any retry / ongoing AIV launch.
+            return false;
+        }
+        // NB: don't dlclose rt — keep it loaded so the chunk-base mapping
+        // remains valid for the AIV launch and stream sync. Hccl reference
+        // does the same (line 771 "Don't dlclose rt — keep mapping alive").
+        desc.mmioAddr = addr;
         std::fprintf(stderr,
-            "[GATED_RS_ST] rank=%d FAIL: QueryCcuBaseInfo rc=%d "
-            "resourceAddr=%p\n",
-            rankId, probe.rc, probe.resourceAddr);
-        return false;
+            "[GATED_RS_ST] rank=%d mmioAddr=0x%llx len=%u (from "
+            "rtGetDevResAddress, ckeId=%u — Exp3 verified path)\n",
+            rankId, static_cast<unsigned long long>(desc.mmioAddr), len,
+            desc.ckeId);
     }
-    desc.mmioAddr = reinterpret_cast<uint64_t>(probe.resourceAddr);
-    std::fprintf(stderr,
-        "[GATED_RS_ST] rank=%d mmioAddr=0x%llx (from QueryCcuBaseInfo)\n",
-        rankId, static_cast<unsigned long long>(desc.mmioAddr));
 
     // -------------------------------------------------------------------------
     // 10. AIV trigger — release this rank's gate.
     // -------------------------------------------------------------------------
-    // ─── DIAGNOSTIC EXP4 (2026-05-07) — marker=nullptr fork test ────────────
-    // Symptom seen in mpi12: AIV kernel dispatches (RT confirms task_type=66
-    // KERNEL_AIVEC, drvRet=0) but traps with `retCode=0x31` (vector core
-    // exception) before writing marker[0]=head sentinel. Two competing
-    // hypotheses:
-    //   A. marker buffer write is the trap point — `aclrtMalloc(HUGE_ONLY)`
-    //      buffer is GM but not reachable from this AIV core in the new
-    //      SetDieId(1) topology.
-    //   B. mmio store/read at `target=mmioAddr+ckeId*0x40+6` is the trap
-    //      point — byte_off=6 stride=0x40 was empirically validated under
-    //      Exp3 dieId=0 layout (2026-05-06); dieId=1 layout may differ.
-    //
-    // Discriminator: pass marker=nullptr. kernel.cpp:100 guards every marker
-    // write with `if (m64 != nullptr)`, so when nullptr, the kernel only
-    // does the mmio store (line 154) + pipe_barriers. Outcome:
-    //   marker=nullptr → sync OK   ⇒ A (marker GM unreachable)
-    //   marker=nullptr → sync trap ⇒ B (mmio target wrong on dieId=1)
-    //
-    // Switch back to `aivMarkerDev` after the discriminator pinpoints the
-    // failing layer.
-    int32_t trigRc = pto::aiv::launch_treduce(aivStream, desc, /*marker=*/nullptr);
-    (void)aivMarkerDev;  // suppress unused warning during EXP4
+    // EXP4 (mpi14, 2026-05-07) result: marker=nullptr → sync still trapped
+    // (rc=507035 vector core exception) → discriminator confirmed mmio target
+    // is the trap site, NOT marker buffer. Subsequent investigation found the
+    // real cause was the wrong mmioAddr source (QueryCcuBaseInfo die-level
+    // base instead of rtGetDevResAddress per-CKE chunk base) — fixed in step
+    // 9 above. Marker readout is restored here for downstream diagnostics.
+    int32_t trigRc = pto::aiv::launch_treduce(aivStream, desc, aivMarkerDev);
     if (trigRc != 0) {
         std::fprintf(stderr,
             "[GATED_RS_ST] rank=%d FAIL: pto::aiv::launch_treduce rc=%d "
