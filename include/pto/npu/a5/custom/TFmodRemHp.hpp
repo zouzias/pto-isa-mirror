@@ -299,5 +299,44 @@ PTO_INTERNAL void ComputeIterationF32(__ubuf__ float *dstTensor, TSrc0 src0Tenso
         }
     }
 }
+
+template <bool isFmod>
+PTO_INTERNAL void TFmodRemHP(RegTensor<float> &dstReg, RegTensor<float> &src0Reg, RegTensor<float> &src1Reg, MaskReg &mask,
+    RegTensor<float> &nanReg, RegTensor<float> &n2Reg, RegTensor<float> oneReg)
+{
+    constexpr FloatUnion scale1(0x4b800000); // 2**24
+    constexpr FloatUnion scale2(0x33800000); // 2**-24
+    constexpr float subNormal = 1.1754944e-38;
+    RegTensor<float> srcReg;
+    RegTensor<float> src0SignBitReg, src0SignBitTmpReg;
+    RegTensor<float> bTmpReg, tmpReg;
+    MaskReg subNormalMask, signDiffMask;
+    
+    vabs(dstReg, src0Reg, mask, MODE_ZEROING);
+    vabs(srcReg, src1Reg, mask, MODE_ZEROING);
+    SolveScaleIter<FMOD_ITERATION_NUM_MAX>(dstReg, srcReg, mask, isFmod);
+
+    GetSignBit(src0SignBitReg, src0Reg, mask);
+    vmul(src0SignBitTmpReg, src0SignBitReg, n2Reg, mask, MODE_ZEROING);
+    vadd(src0SignBitTmpReg, src0SignBitTmpReg, oneReg, mask, MODE_ZEROING);
+    vmul(dstReg, dstReg, src0SignBitTmpReg, mask, MODE_ZEROING);
+
+    vcmps_le(subNormalMask, srcReg, subNormal, mask);
+    vmuls(tmpReg, srcReg, scale1.f, subNormalMask, MODE_ZEROING);
+    vsel(bTmpReg, tmpReg, srcReg, subNormalMask);
+
+    vmuls(tmpReg, dstReg, scale2.f, subNormalMask, MODE_ZEROING);
+    vsel(dstReg, tmpReg, dstReg, subNormalMask);
+
+    SolveExceptionScenarios(dstReg, src0Reg, src1Reg, nanReg, mask);
+
+    if constexpr (!isFmod) {
+        vmul(tmpReg, src1Reg, dstReg, mask, MODE_ZEROING);
+        vcmps_lt(signDiffMask, tmpReg, 0.0f, mask);
+        vadd(tmpReg, dstReg, src1Reg, signDiffMask, MODE_ZEROING);
+        vsel(dstReg, tmpReg, dstReg, signDiffMask);
+    }
+}
+
 } // namespace pto
 #endif // TINSERT_CUSTOM_HPP
