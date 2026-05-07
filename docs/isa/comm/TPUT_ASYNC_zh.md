@@ -1,6 +1,8 @@
 # TPUT_ASYNC
 
+
 ## 简介
+
 
 `TPUT_ASYNC` 是异步远程写原语。它启动一次从本地 GM 到远端 GM 的传输，并立即返回 `AsyncEvent`。
 
@@ -10,15 +12,17 @@
 
 ## 模板参数
 
+
 - `engine`：
     - `DmaEngine::SDMA`（默认）
     - `DmaEngine::URMA`（Ascend950，仅 NPU_ARCH 3510）
 
-> **注意（SDMA 路径）**
-> `TPUT_ASYNC` 配合 `DmaEngine::SDMA` 目前**仅支持扁平连续的逻辑一维 tensor**。
-> 当前 SDMA 异步实现不支持非一维或非连续布局。
+!!! note "注意（SDMA 路径）"
+    `TPUT_ASYNC` 配合 `DmaEngine::SDMA` 目前**仅支持扁平连续的逻辑一维 tensor**。
+    当前 SDMA 异步实现不支持非一维或非连续布局。
 
 ## C++ 内建接口
+
 
 声明于 `include/pto/comm/pto_comm_inst.hpp`：
 
@@ -33,10 +37,12 @@ PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcG
 
 ## AsyncSession 构建
 
+
 使用 `include/pto/comm/async_common/async_event_impl.hpp` 中的 `BuildAsyncSession`。
 该函数有两个重载——分别用于 SDMA 和 URMA，参数列表不同。
 
 ### SDMA 构建（默认）
+
 
 ```cpp
 template <DmaEngine engine = DmaEngine::SDMA, typename ScratchTile>
@@ -59,6 +65,7 @@ PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile,
 
 ### URMA 构建（仅 NPU_ARCH 3510）
 
+
 > URMA（User-level RDMA Memory Access）是 Ascend950（NPU_ARCH 3510）上的硬件加速 RDMA 传输引擎。
 
 ```cpp
@@ -80,17 +87,20 @@ URMA 不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直
 
 ## 约束
 
-- `GlobalSrcData::RawDType == GlobalDstData::RawDType`
-- `GlobalSrcData::layout == GlobalDstData::layout`
-- SDMA 和 URMA 路径均要求源 tensor 为**扁平连续的逻辑一维**
-- SDMA workspace 必须是由主机侧 `SdmaWorkspaceManager` 分配的有效 GM 指针
-- URMA workspace 必须是由主机侧 `UrmaWorkspaceManager` 分配的有效 GM 指针
-- URMA 仅在 NPU_ARCH 3510（Ascend950）上可用
-- 传给 `UrmaWorkspaceManager::Init()` 的对称数据缓冲区必须由大页内存支撑（使用 `ACL_MEM_MALLOC_HUGE_ONLY` 分配）。底层 MR 注册要求大页背景；`ACL_MEM_MALLOC_HUGE_FIRST` 在小尺寸分配时可能静默回退到 4KB 小页，导致注册失败
 
-若不满足一维连续要求，当前实现返回无效 async event（`handle == 0`）。
+!!! warning "约束"
+    - `GlobalSrcData::RawDType == GlobalDstData::RawDType`
+    - `GlobalSrcData::layout == GlobalDstData::layout`
+    - SDMA 和 URMA 路径均要求源 tensor 为**扁平连续的逻辑一维**
+    - SDMA workspace 必须是由主机侧 `SdmaWorkspaceManager` 分配的有效 GM 指针
+    - URMA workspace 必须是由主机侧 `UrmaWorkspaceManager` 分配的有效 GM 指针
+    - URMA 仅在 NPU_ARCH 3510（Ascend950）上可用
+    - 传给 `UrmaWorkspaceManager::Init()` 的对称数据缓冲区必须由大页内存支撑（使用 `ACL_MEM_MALLOC_HUGE_ONLY` 分配）。底层 MR 注册要求大页背景；`ACL_MEM_MALLOC_HUGE_FIRST` 在小尺寸分配时可能静默回退到 4KB 小页，导致注册失败
+
+    若不满足一维连续要求，当前实现返回无效 async event（`handle == 0`）。
 
 ## scratchTile 的作用
+
 
 `scratchTile` **不是**用于存放用户数据负载的暂存缓冲区。
 它被转换为 `TmpBuffer`，用作临时 UB 工作区，用于：
@@ -103,6 +113,7 @@ URMA 不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直
 
 ## scratchTile 类型与大小约束
 
+
 - 必须是 `pto::Tile` 类型
 - 必须是 UB/Vec tile（`ScratchTile::Loc == TileType::Vec`）
 - 可用字节数至少为 `sizeof(uint64_t)`（8 字节）
@@ -110,6 +121,7 @@ URMA 不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直
 推荐使用：`Tile<TileType::Vec, uint8_t, 1, comm::sdma::UB_ALIGN_SIZE>`（256B）。
 
 ## 完成语义（Quiet 语义）
+
 
 不同引擎的底层完成机制不同，但用户侧的 quiet 语义行为一致：
 
@@ -124,7 +136,9 @@ wait 成功后，所有已发出的 `dstGlobalData` 写入均已全部完成。
 
 ## 示例
 
+
 ### 单次传输
+
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -161,6 +175,7 @@ __global__ AICORE void SimplePut(__gm__ T *remoteDst, __gm__ T *localSrc,
 
 ### 批量传输（Quiet 语义）
 
+
 ```cpp
 template <typename T>
 __global__ AICORE void BatchPut(__gm__ T *remoteDstBase, __gm__ T *localSrc,
@@ -194,6 +209,7 @@ __global__ AICORE void BatchPut(__gm__ T *remoteDstBase, __gm__ T *localSrc,
 
 ### URMA 示例（NPU_ARCH 3510）
 
+
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
 #include <pto/common/pto_tile.hpp>
@@ -223,3 +239,47 @@ __global__ AICORE void SimplePutUrma(__gm__ T *remoteDst, __gm__ T *localSrc,
 }
 ```
 
+# pto.tput_async
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Introduction
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Template Parameter
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## AsyncSession Construction
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### SDMA Construction (default)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### URMA Construction (NPU_ARCH 3510 only)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## scratchTile Role
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## scratchTile Type and Size Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Completion Semantics (Quiet Semantics)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Example
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Single Transfer
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Batch Transfer (Quiet Semantics)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### URMA Example (NPU_ARCH 3510)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。

@@ -1,6 +1,8 @@
 # TREDUCE
 
+
 ## 简介
+
 
 Reduce 操作：从多个远端 NPU 收集数据并在本地执行逐元素归约。
 
@@ -10,6 +12,7 @@ Reduce 操作：从多个远端 NPU 收集数据并在本地执行逐元素归�
 
 ## 数学语义
 
+
 对有效区域内每个元素 `(i, j)`：
 
 $$\mathrm{dst}^{\mathrm{local}}_{i,j} = \bigoplus_{r=0}^{N-1} \mathrm{src}^{(r)}_{i,j}$$
@@ -18,7 +21,8 @@ $$\mathrm{dst}^{\mathrm{local}}_{i,j} = \bigoplus_{r=0}^{N-1} \mathrm{src}^{(r)}
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../assembly/PTO-AS_zh.md)。
+
+PTO-AS 形式：参见 [PTO ISA 语法与操作数](../syntax-and-operands/assembly-model_zh.md)。
 
 同步形式：
 
@@ -30,6 +34,7 @@ treduce %group, %dst {op = #pto.reduce_op<Max>} : (!pto.group<...>, !pto.memref<
 降级时会为 reduce 流水线引入内部累加 Tile 和接收 Tile；C++ 内建接口需要显式传入 `accTileData`、`recvTileData`（或 `accTileData`、`pingTileData`、`pongTileData`）操作数。
 
 ## C++ 内建接口
+
 
 声明于 `include/pto/comm/pto_comm_inst.hpp`：
 
@@ -48,23 +53,27 @@ PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &ds
 
 ## 约束
 
-- **类型约束**：
-    - `ParallelGroup::value_type::RawDType` 必须等于 `GlobalDstData::RawDType`。
-    - `TileData::DType` 必须等于 `GlobalDstData::RawDType`。
-- **内存约束**：
-    - `dstGlobalData` 必须指向本地内存（当前 NPU）。
-    - `accTileData`、`recvTileData`（或 `accTileData`、`pingTileData`、`pongTileData`）必须为预先分配的 UB Tile。
-- **ParallelGroup 约束**：
-    - `parallelGroup.tensors[r]` 必须指向 rank `r` 的源缓冲区（从根节点视角看到的远端 GM）。
-    - `parallelGroup.GetRootIdx()` 标识调用方 NPU 为 reduce 根节点。
-    - 所有源 tensor 假定具有相同的形状和步幅。
-- **分块模式约束**（数据超出单个 UB Tile 时）：
-    - 若 `TileData` 具有静态 `ValidRow`，则 `GetShape(DIM_3)` 必须能被 `ValidRow` 整除。如需支持不足一行的情况，请使用 `DYNAMIC` ValidRow 的 Tile。
-    - 若 `TileData` 具有静态 `ValidCol`，则 `GetShape(DIM_4)` 必须能被 `ValidCol` 整除。如需支持不足一列的情况，请使用 `DYNAMIC` ValidCol 的 Tile。
+
+!!! warning "约束"
+    - **类型约束**：
+        - `ParallelGroup::value_type::RawDType` 必须等于 `GlobalDstData::RawDType`。
+        - `TileData::DType` 必须等于 `GlobalDstData::RawDType`。
+    - **内存约束**：
+        - `dstGlobalData` 必须指向本地内存（当前 NPU）。
+        - `accTileData`、`recvTileData`（或 `accTileData`、`pingTileData`、`pongTileData`）必须为预先分配的 UB Tile。
+    - **ParallelGroup 约束**：
+        - `parallelGroup.tensors[r]` 必须指向 rank `r` 的源缓冲区（从根节点视角看到的远端 GM）。
+        - `parallelGroup.GetRootIdx()` 标识调用方 NPU 为 reduce 根节点。
+        - 所有源 tensor 假定具有相同的形状和步幅。
+    - **分块模式约束**（数据超出单个 UB Tile 时）：
+        - 若 `TileData` 具有静态 `ValidRow`，则 `GetShape(DIM_3)` 必须能被 `ValidRow` 整除。如需支持不足一行的情况，请使用 `DYNAMIC` ValidRow 的 Tile。
+        - 若 `TileData` 具有静态 `ValidCol`，则 `GetShape(DIM_4)` 必须能被 `ValidCol` 整除。如需支持不足一列的情况，请使用 `DYNAMIC` ValidCol 的 Tile。
 
 ## 示例
 
+
 ### 基础求和归约
+
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -89,6 +98,7 @@ void reduce_sum(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_rank) {
 
 ### 最大值归约
 
+
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
 
@@ -110,3 +120,29 @@ void reduce_max(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_rank) {
 }
 ```
 
+# pto.treduce
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Introduction
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Math Interpretation
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Assembly Syntax
+本节列出语法形态（SSA / DPS / Assembly），用于与英文页逐项对照。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Examples
+本节提供 Auto/Manual 及 AS 形式示例，便于中英文对照复现。
+
+### Basic Reduce Sum
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Max Reduce
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
