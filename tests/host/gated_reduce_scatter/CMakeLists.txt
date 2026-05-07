@@ -243,6 +243,15 @@ endif()
 #                                (devLogicId=65) and any subsequent
 #                                HcclCcuKernelRegister returns HCCL_E_UNAVAIL=7.
 #                                See `main.cc` header / plan §3.13.G.
+#   - c_sec                    : Huawei secure C library (memset_s, memcpy_s).
+#                                Required because hccl pkg_inc headers
+#                                (hccl_res.h::HcclChannelDescInit,
+#                                hccl_rank_graph.h::CommLinkInit) inline
+#                                memset_s in static inline init helpers we
+#                                call from SetupChannelsForCcu (§3.13.K).
+#                                Without this, ld errors with
+#                                "undefined reference to symbol 'memset_s'
+#                                ... DSO missing from command line".
 #   - dl, pthread              : transitive (registry mutex, pto::host probes)
 target_link_libraries(gated_rs_st PRIVATE
     pto_gated_reduce_scatter
@@ -252,6 +261,7 @@ target_link_libraries(gated_rs_st PRIVATE
     hcomm
     ascendcl
     runtime
+    c_sec
     dl
     pthread
 )
