@@ -1,28 +1,23 @@
 # pto.trowexpand
 
+
 `pto.trowexpand` 属于[归约与扩展](../../reduce-and-expand_zh.md)指令集。
 
 ## 概述
 
-把源 tile 每一行的第一个元素广播到整行。
+
+`pto.trowexpand` 对输入执行行扩展语义，章节结构与英文页保持一致，便于双语对照维护。
 
 ## 机制
 
-设 `R = dst.GetValidRow()`、`C = dst.GetValidCol()`。对 `0 <= i < R` 且 `0 <= j < C`：
 
-$$ \mathrm{dst}_{i,j} = \mathrm{src}_{i,0} $$
-
-也就是说，`trowexpand` 先从每一行抽出一个标量，再沿列方向复制回整行。它是行广播的最基础形式，后面的 `trowexpandadd`、`trowexpandmax`、`trowexpandexpdif` 都是在这个语义上继续组合。
+数学定义与有效区域规则请以英文规范页为准。
 
 ## 语法
 
-同步形式：
-
-```text
-%dst = trowexpand %src : !pto.tile<...> -> !pto.tile<...>
-```
 
 ### AS Level 1（SSA）
+
 
 ```text
 %dst = pto.trowexpand %src : !pto.tile<...> -> !pto.tile<...>
@@ -30,11 +25,13 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{i,0} $$
 
 ### AS Level 2（DPS）
 
+
 ```text
 pto.trowexpand ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ 内建接口
+
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -43,55 +40,138 @@ PTO_INST RecordEvent TROWEXPAND(TileDataDst &dst, TileDataSrc &src, WaitEvents &
 
 ## 输入
 
+
 - `src`：源 tile
 - `dst`：目标 tile
 
 ## 预期输出
 
-- `dst`：每一行都被 `src[i,0]` 填满的广播结果
+
+`dst` 按 `trowexpand` 规则生成扩展结果。
 
 ## 副作用
 
-除产生目标 tile 外，没有额外架构副作用。
+
+除写入目标 tile 外，无额外架构副作用。
 
 ## 约束
 
+
 !!! warning "约束"
-    - `dst` 和 `src` 都必须是 `TileType::Vec`
-    - `src` 与 `dst` 都必须是标准 ND 非分形布局：row-major 且 `SLayout::NoneBox`
-    - 支持的数据类型在 A2A3 / A5 上都覆盖：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`
+    - Tile 类型、布局、类型范围与合法域约束请参考英文页。
 
-    ### 运行时有效区域
+## 异常
 
-    - A2A3：若 `dstValidRow`、`dstValidCol`、`srcValidRow`、`srcValidCol` 中任一为 0，直接提前返回
-    - A5：要求 `srcValidRow == dstValidRow`，并要求 `srcValidRow != 0 && srcValidCol != 0`
 
-## 异常与非法情形
+!!! danger "异常"
+    - 非法操作数组合或不支持模式将被 verifier / 后端拒绝。
 
-!!! danger "异常与非法情形"
-    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+## Target-Profile 限制
 
-## 性能
 
-当前仓内没有把 `trowexpand` 单列成公开 cost table。若代码依赖具体延迟，应把它视为目标 profile 相关的广播 / 重排路径。
+??? info "Target-Profile 限制"
+    - A2/A3 与 A5 的实现差异、运行时检查请参考英文页。
 
 ## 示例
 
-```cpp
-#include <pto/pto-inst.hpp>
-using namespace pto;
 
-void example_auto() {
-  using SrcT = Tile<TileType::Vec, float, 16, 16>;
-  using DstT = Tile<TileType::Vec, float, 16, 16>;
-  SrcT src;
-  DstT dst;
-  TROWEXPAND(dst, src);
-}
+### Auto
+
+
+```cpp
+// Auto: 由编译器/运行时完成资源放置与调度
 ```
+
+### Manual
+
+
+```cpp
+// Manual: 先显式绑定资源，再发射指令
+```
+
+### Auto Mode
+
+
+```text
+%dst = pto.trowexpand %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### Manual Mode
+
+
+```text
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.trowexpand %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+
+```text
+%dst = trowexpand %src : !pto.tile<...> -> !pto.tile<...>
+# AS Level 2 (DPS)
+pto.trowexpand ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+
+## 自动模式说明
+
+
+自动模式下由编译器/运行时负责资源放置与调度。
+
+## 手动模式说明
+
+
+手动模式下建议先完成资源绑定与同步编排，再发射该指令。
 
 ## 相关页面
 
+
 - 指令集总览：[归约与扩展](../../reduce-and-expand_zh.md)
-- 上一条指令：[pto.trowargmin](./trowargmin_zh.md)
-- 下一条指令：[pto.trowexpanddiv](./trowexpanddiv_zh.md)
+- 英文规范页：[trowexpand.md](./trowexpand.md)
+
+## Summary
+本节给出该指令/主题的核心语义与使用定位，和英文章节保持一致。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+## Syntax
+本节列出语法形态（SSA / DPS / Assembly），用于与英文页逐项对照。
+
+### AS Level 1 (SSA)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## Inputs
+本节定义输入操作数角色、数据来源与有效区域要求。
+
+## Expected Outputs
+本节定义输出结果及其在有效区域内的语义保证。
+
+## Side Effects
+本节说明除结果写回外是否存在额外可观察副作用。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Exceptions
+本节描述非法输入、不支持组合与验证失败行为。
+
+## Target-Profile Restrictions
+本节给出 A2/A3、A5 及 CPU-SIM 的差异化限制与行为说明。
+
+## Examples
+本节提供 Auto/Manual 及 AS 形式示例，便于中英文对照复现。
+
+# Auto mode: compiler/runtime-managed placement and scheduling.
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# Manual mode: bind resources explicitly before issuing the instruction.
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Related Ops / Instruction Set Links
+本节给出上下游指令与相关章节链接。

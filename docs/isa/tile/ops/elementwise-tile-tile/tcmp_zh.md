@@ -1,12 +1,15 @@
 # pto.tcmp
 
+
 `pto.tcmp` 属于[逐元素 Tile-Tile](../../elementwise-tile-tile_zh.md)指令集。
 
 ## 概述
 
+
 比较两个 tile，并把结果写成打包谓词 tile。
 
 ## 机制
+
 
 从语义上看，对目标 tile 的 valid region 中每个 `(i, j)`，先定义一个谓词：
 
@@ -16,7 +19,9 @@ $$ p_{i,j} = \left(\mathrm{src0}_{i,j}\ \mathrm{cmpMode}\ \mathrm{src1}_{i,j}\ri
 
 ## 语法
 
+
 ### PTO-AS
+
 
 ```text
 %dst = tcmp %src0, %src1 {cmpMode = #pto.cmp<EQ>} : !pto.tile<...>
@@ -24,17 +29,20 @@ $$ p_{i,j} = \left(\mathrm{src0}_{i,j}\ \mathrm{cmpMode}\ \mathrm{src1}_{i,j}\ri
 
 ### AS Level 1（SSA）
 
+
 ```text
 %dst = pto.tcmp %src0, %src1 {cmpMode = #pto.cmp<EQ>} : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### AS Level 2（DPS）
 
+
 ```text
 pto.tcmp ins(%src0, %src1 {cmpMode = #pto.cmp<EQ>}: !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ 内建接口
+
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -43,6 +51,7 @@ PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc &src0, TileDataSrc &src1
 ```
 
 ### 比较模式
+
 
 | 模式 | 含义 |
 | --- | --- |
@@ -55,6 +64,7 @@ PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc &src0, TileDataSrc &src1
 
 ## 输入
 
+
 | 操作数 | 角色 | 说明 |
 | --- | --- | --- |
 | `%src0` | 左 tile | 在 `dst` valid region 上逐坐标参与比较 |
@@ -64,15 +74,18 @@ PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc &src0, TileDataSrc &src1
 
 ## 预期输出
 
+
 | 结果 | 类型 | 说明 |
 | --- | --- | --- |
 | `%dst` | `!pto.tile<...>` | 打包后的谓词结果 tile |
 
 ## 副作用
 
+
 除产生谓词 tile 外，没有额外架构副作用。
 
 ## 约束
+
 
 !!! warning "约束"
     - 迭代域是 `dst.GetValidRow() × dst.GetValidCol()`。
@@ -82,11 +95,13 @@ PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc &src0, TileDataSrc &src1
 
 ## 不允许的情形
 
+
 !!! danger "不允许的情形"
     - 假设谓词 tile 是“一位一元素”的普通展开布尔 tile。
     - 对 `dst` 使用不符合目标定义的谓词输出 dtype。
 
 ## Target-Profile 限制
+
 
 | 检查项 | A2A3 | A5 |
 | --- | :---: | :---: |
@@ -101,9 +116,11 @@ PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc &src0, TileDataSrc &src1
 
 ## 性能
 
+
 当前仓内没有把 `tcmp` 单独落成公开 cost bucket。若代码依赖具体延迟，应把它视为目标 profile 相关的 tile 比较路径。
 
 ## 示例
+
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -120,6 +137,58 @@ void example_auto() {
 
 ## 相关页面
 
+
 - 指令集总览：[逐元素 Tile-Tile](../../elementwise-tile-tile_zh.md)
 - 上一条指令：[pto.tmax](./tmax_zh.md)
 - 下一条指令：[pto.tdiv](./tdiv_zh.md)
+
+## Summary
+本节给出该指令/主题的核心语义与使用定位，和英文章节保持一致。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+## Syntax
+本节列出语法形态（SSA / DPS / Assembly），用于与英文页逐项对照。
+
+### AS Level 1 (SSA)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### AS Level 2 (DPS)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## Inputs
+本节定义输入操作数角色、数据来源与有效区域要求。
+
+## Expected Outputs
+本节定义输出结果及其在有效区域内的语义保证。
+
+## Side Effects
+本节说明除结果写回外是否存在额外可观察副作用。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Cases That Are Not Allowed
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Target-Profile Restrictions
+本节给出 A2/A3、A5 及 CPU-SIM 的差异化限制与行为说明。
+
+## Examples
+本节提供 Auto/Manual 及 AS 形式示例，便于中英文对照复现。
+
+### Auto
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Manual
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### PTO Assembly Form
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Related Ops / Instruction Set Links
+本节给出上下游指令与相关章节链接。

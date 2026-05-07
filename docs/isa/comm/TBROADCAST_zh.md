@@ -1,6 +1,8 @@
 # TBROADCAST
 
+
 ## 简介
+
 
 `TBROADCAST` 把当前 NPU 作为根节点的数据广播到并行组中的所有 rank。
 
@@ -10,6 +12,7 @@
 
 ## 数学语义
 
+
 广播完成后：
 
 $$ \mathrm{dst}^{(k)}_{i,j} = \mathrm{src}^{(\text{root})}_{i,j} \quad \forall k \in [0, N) $$
@@ -17,6 +20,7 @@ $$ \mathrm{dst}^{(k)}_{i,j} = \mathrm{src}^{(\text{root})}_{i,j} \quad \forall k
 其中 `N` 为 rank 总数。
 
 ## 汇编语法
+
 
 PTO-AS 形式：
 
@@ -27,6 +31,7 @@ tbroadcast %group, %src : (!pto.group<...>, !pto.memref<...>)
 lowering 会引入 UB 暂存 Tile，因此 C++ 接口要求显式传入 `stagingTileData`，或在双缓冲模式下传入 `pingTile` / `pongTile`。
 
 ## C++ 内建接口
+
 
 声明于 `include/pto/comm/pto_comm_inst.hpp`：
 
@@ -41,6 +46,7 @@ PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData 
 ```
 
 ## 约束
+
 
 !!! warning "约束"
     ### 类型约束
@@ -62,7 +68,9 @@ PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData 
 
 ## 示例
 
+
 ### 基础广播
+
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -88,12 +96,53 @@ void broadcast(__gm__ T* group_addrs[NRANKS], __gm__ T* my_data, int my_rank) {
 
 ### 乒乓双缓冲
 
+
 ```cpp
 comm::TBROADCAST(group, srcG, pingTile, pongTile);
 ```
 
 ## 相关页面
 
+
 - [通信与运行时](communication-runtime_zh.md)
 - [TGATHER](./TGATHER_zh.md)
 - [TSCATTER](./TSCATTER_zh.md)
+
+## Summary
+本节给出该指令/主题的核心语义与使用定位，和英文章节保持一致。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+## Assembly Syntax
+本节列出语法形态（SSA / DPS / Assembly），用于与英文页逐项对照。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## Inputs
+本节定义输入操作数角色、数据来源与有效区域要求。
+
+## Expected Outputs
+本节定义输出结果及其在有效区域内的语义保证。
+
+## Side Effects
+本节说明除结果写回外是否存在额外可观察副作用。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Exceptions
+本节描述非法输入、不支持组合与验证失败行为。
+
+## Examples
+本节提供 Auto/Manual 及 AS 形式示例，便于中英文对照复现。
+
+### Basic Broadcast
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Ping-Pong Broadcast (Double Buffering)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## See Also
+本节给出上下游指令与相关章节链接。

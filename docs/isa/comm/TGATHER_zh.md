@@ -1,6 +1,8 @@
 # TGATHER
 
+
 ## 简介
+
 
 Gather 操作：调用方 NPU（根节点）从并行组中所有 rank 收集数据，并沿 **DIM_3**（行维度）拼接到本地输出缓冲区。
 
@@ -10,6 +12,7 @@ Gather 操作：调用方 NPU（根节点）从并行组中所有 rank 收集数
 
 ## 数学语义
 
+
 每个 rank $r$ 的源数据形状为 $(D_0, D_1, D_2, H, W)$。gather 沿 DIM_3 拼接所有 $N$ 个 rank 的数据：
 
 $$\mathrm{dst}_{d_0, d_1, d_2,\; r \cdot H + i,\; j} = \mathrm{src}^{(r)}_{d_0, d_1, d_2,\; i,\; j} \quad \forall\, r \in [0, N),\; i \in [0, H),\; j \in [0, W)$$
@@ -17,6 +20,7 @@ $$\mathrm{dst}_{d_0, d_1, d_2,\; r \cdot H + i,\; j} = \mathrm{src}^{(r)}_{d_0, 
 目标 tensor 的形状为 $(D_0, D_1, D_2, N \times H, W)$。
 
 ## 汇编语法
+
 
 PTO-AS 形式：参见 [PTO ISA 语法与操作数](../syntax-and-operands/assembly-model_zh.md)。
 
@@ -29,6 +33,7 @@ tgather %group, %dst : (!pto.group<...>, !pto.memref<...>)
 降级时会为 GM→UB→GM 数据路径引入 UB 暂存 Tile；C++ 内建接口需要显式传入 `stagingTileData`（或 `pingTile` / `pongTile`）操作数。
 
 ## C++ 内建接口
+
 
 声明于 `include/pto/comm/pto_comm_inst.hpp`：
 
@@ -45,6 +50,7 @@ PTO_INST RecordEvent TGATHER(ParallelGroupType &parallelGroup, GlobalDstData &ds
 ```
 
 ## 约束
+
 
 !!! warning "约束"
     - **类型约束**：
@@ -64,7 +70,9 @@ PTO_INST RecordEvent TGATHER(ParallelGroupType &parallelGroup, GlobalDstData &ds
 
 ## 示例
 
+
 ### 基础 Gather（单暂存 Tile）
+
 
 每个 rank 提供 `ROWS × COLS` 的数据，根节点将其收集到 `NRANKS * ROWS` 行中。
 Tile 大小（`TILE_ROWS × TILE_COLS`）可小于每 rank 的数据——此时实现会自动沿 DIM_3 和 DIM_4 通过二维滑动进行分块传输。
@@ -94,6 +102,7 @@ void gather(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_rank) {
 
 ### 乒乓 Gather（双缓冲）
 
+
 使用两个 UB Tile，将下一块的 TLOAD（MTE2）与当前块的 TSTORE（MTE3）重叠执行。
 
 ```cpp
@@ -120,3 +129,30 @@ void gather_pingpong(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_ran
     comm::TGATHER(group, dstG, pingTile, pongTile);
 }
 ```
+
+# pto.tgather
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Introduction
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Math Interpretation
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Assembly Syntax
+本节列出语法形态（SSA / DPS / Assembly），用于与英文页逐项对照。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Examples
+本节提供 Auto/Manual 及 AS 形式示例，便于中英文对照复现。
+
+### Basic Gather (Single Staging Tile)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Ping-Pong Gather (Double Buffering)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。

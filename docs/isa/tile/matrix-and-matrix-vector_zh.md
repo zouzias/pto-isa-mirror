@@ -1,10 +1,12 @@
 # 矩阵与矩阵-向量指令集
 
+
 这一组指令覆盖 PTO tile 路径里的 cube 计算指令。基础型负责生成新的累加器结果，`_acc` 型负责在已有累加器上继续累加，`_bias` 型负责把偏置并入矩阵乘积，`*_mx` 型则在此基础上再引入 MX block-scale 所需的左右 scale tile。
 
 这不是普通逐元素 tile 运算的变体。它的合法性取决于专门的矩阵角色：`Left`、`Right`、`Acc`、`Bias`、`ScaleLeft`、`ScaleRight`，还取决于 A2A3 与 A5 各自的布局和数据类型约束。
 
 ## 操作
+
 
 | 操作 | 作用 | C++ 内建接口 | 说明 |
 | --- | --- | --- | --- |
@@ -19,6 +21,7 @@
 
 ## 这组指令为什么单列出来
 
+
 PTO 没把矩阵乘积类操作混进普通 tile 算术里，原因很直接：cube 路径有自己的一套角色、布局、合法性和 target 限制。读者通常需要先弄清四件事：
 
 - 左右输入和累加器分别是谁；
@@ -30,7 +33,9 @@ PTO 没把矩阵乘积类操作混进普通 tile 算术里，原因很直接：c
 
 ## 机制
 
+
 ### TMATMUL
+
 
 设 `M = a.GetValidRow()`、`K = a.GetValidCol()`、`N = b.GetValidCol()`，则：
 
@@ -40,11 +45,13 @@ $$ \mathrm{C}_{i,j} = \sum_{k=0}^{K-1} \mathrm{A}_{i,k} \cdot \mathrm{B}_{k,j} $
 
 ### TMATMUL_ACC
 
+
 $$ \mathrm{C1}_{i,j} = \mathrm{C0}_{i,j} + \sum_{k=0}^{K-1} \mathrm{A}_{i,k} \cdot \mathrm{B}_{k,j} $$
 
 这类指令存在的原因，是块化 GEMM 在 K 维循环中往往需要反复把部分乘积叠加到同一个累加器上。把“新结果”与“继续累加”拆成两条指令，可以把调度和资源语义说清楚。
 
 ### TMATMUL_BIAS
+
 
 $$ \mathrm{C}_{i,j} = \sum_{k=0}^{K-1} \mathrm{A}_{i,k} \cdot \mathrm{B}_{k,j} + \mathrm{Bias}_{0,j} $$
 
@@ -52,9 +59,11 @@ Bias tile 只有一行，因此它按输出列广播。`Bias[0, j]` 会加到结
 
 ### TGEMV
 
+
 GEMV 可以理解为 `m = 1` 的 cube 合同。PTO 没有把它硬塞进普通 matmul 页脚里，而是单列出来，因为它在接口、用法和约束表达上都更接近“矩阵乘一条向量”，而不是任意二维块的对乘。
 
 ### MX 变体
+
 
 `*_mx` 不是“多一个 scale 参数”这么简单。对 MXFP4、MXMP8 这类 block-scale 格式，PTO 把 scale 也建模成 tile：
 
@@ -68,6 +77,7 @@ GEMV 可以理解为 `m = 1` 的 cube 合同。PTO 没有把它硬塞进普通 m
 
 ## Tile 角色与缓冲区语义
 
+
 从架构视角看，tile 角色是对目标缓冲区的抽象：
 
 - `Left` 表示左操作数 tile，对应 L0A 路径。
@@ -79,6 +89,7 @@ GEMV 可以理解为 `m = 1` 的 cube 合同。PTO 没有把它硬塞进普通 m
 这里最容易写错的是 `Right`。虽然 A2A3 和 A5 都有 `Right` 角色，但不能把它们理解成“同一套可移植物理布局”。对右操作数的具体布局要求，A2A3 与 A5 并不相同，必须以各自的 target profile 和 leaf 页约束为准。
 
 ## 目标 Profile
+
 
 本手册里：
 
@@ -96,6 +107,7 @@ GEMV 可以理解为 `m = 1` 的 cube 合同。PTO 没有把它硬塞进普通 m
 
 ### 通用合法性
 
+
 - matmul 的形状必须满足 `(M, K) x (K, N) -> (M, N)`。
 - GEMV 使用同一套 cube 合同，只是 `m = 1`。
 - `Left`、`Right`、`Acc`、`Bias`、`ScaleLeft`、`ScaleRight` 必须与所发射的具体指令匹配。
@@ -103,17 +115,20 @@ GEMV 可以理解为 `m = 1` 的 cube 合同。PTO 没有把它硬塞进普通 m
 
 ### A2A3 说明
 
+
 - 基础 cube 路径支持仓内文档已列出的组合，例如 `(int32, int8, int8)`、`(float, half, half)`、`(float, bfloat16_t, bfloat16_t)`。
 - 动态 `m`、`k`、`n` 范围受限于 `[1, 4095]`。
 - backend 会显式检查 `Left` / `Right` / `Acc` 的角色组合是否合法。
 
 ### A5 说明
 
+
 - 基础 cube 路径允许 `int32` 累加器配 int8 输入对，也允许 `float` 累加器配 fp16、bf16、fp32 和部分 fp8 输入对。
 - `Right` 角色在 A5 上有自己的一套布局 / fractal 约束，不能照搬 A2A3 的理解。
 - MX 变体是 A5 专属路径，且要求同时提供 `ScaleLeft` 与 `ScaleRight`。
 
 ## 性能与吞吐
+
 
 仓内当前公开的性能证据主要来自 A2A3 costmodel。`TMATMUL`、`TMATMUL_ACC`、`TMATMUL_BIAS`、`TGEMV`、`TGEMV_ACC`、`TGEMV_BIAS` 最终都落到共享的 `mad/mmad` cube 指令模型。
 
@@ -143,7 +158,44 @@ cycles = 14 + repeat_count * repeat_cost
 
 ## 相关页面
 
+
 - [Tile 指令族](../instruction-families/tile-families_zh.md)
 - [Tile 指令表面](../instruction-families/tile-families_zh.md)
 - [位置意图与合法性](../state-and-types/location-intent-and-legality_zh.md)
 - [布局](../state-and-types/layout_zh.md)
+
+# Matrix And Matrix-Vector Instruction Set
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Operations
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Why This Family Exists
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+### MX Variants
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Tile Roles And Buffer Mapping
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Target Profiles
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Common Legality
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### A2A3 Notes
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### A5 Notes
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Performance And Throughput
+本节说明性能路径、吞吐估算与形状/布局敏感因素。
+
+## See Also
+本节给出上下游指令与相关章节链接。

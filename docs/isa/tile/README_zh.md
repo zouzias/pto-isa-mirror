@@ -1,10 +1,12 @@
 # Tile 指令参考
 
+
 `pto.t*` 是 PTO 指令集架构里以 tile 为中心的主干执行面。它覆盖 tile 数据的装载、逐元素计算、归约与扩展、布局重排、矩阵乘、显式同步，以及少量不规则专用操作。
 
 这组文档按“先看家族页，再看单指令页”的方式组织。家族页负责解释共享机制、角色、约束和 profile 边界；`tile/ops/` 下的 leaf 页负责给出逐条指令的合同。
 
 ## 指令族
+
 
 | 指令族 | 说明 | 典型指令 |
 | --- | --- | --- |
@@ -19,6 +21,7 @@
 
 ## 常见 tile 角色
 
+
 PTO 手册里的 tile 角色是架构抽象，不应和某个后端的单一物理实现混为一谈。读 tile 指令时，先分清角色，再看 dtype、shape、layout 和 valid region。
 
 | 角色 | 含义 | 典型用途 |
@@ -32,6 +35,7 @@ PTO 手册里的 tile 角色是架构抽象，不应和某个后端的单一物�
 
 ## 阅读顺序
 
+
 如果你刚开始查 PTO tile 指令，建议按这个顺序读：
 
 1. 先看 [Tile 指令表面](../instruction-families/tile-families_zh.md)，明确 tile 路径和标量 / 向量路径的边界。
@@ -41,6 +45,7 @@ PTO 手册里的 tile 角色是架构抽象，不应和某个后端的单一物�
 
 ## 共享约束
 
+
 - tile 的 `dtype`、`shape`、`layout`、`role` 和 `valid region` 都可能进入合法性判断。
 - 大多数逐元素与重排操作以目标 tile 的 valid region 作为迭代域。
 - 矩阵乘类操作额外受 `Left` / `Right` / `Acc` / `Bias` / scale tile 角色约束。
@@ -48,6 +53,28 @@ PTO 手册里的 tile 角色是架构抽象，不应和某个后端的单一物�
 
 ## 相关页面
 
+
 - [Tile 指令表面](../instruction-families/tile-families_zh.md)
 - [Tile 指令族](../instruction-families/tile-families_zh.md)
 - [指令描述格式](../reference/format-of-instruction-descriptions_zh.md)
+
+# Tile ISA Reference
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Instruction Sets
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Quick Reference
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Common Tile Types
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Memory Capacities (A5)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Navigation
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## See Also
+本节给出上下游指令与相关章节链接。

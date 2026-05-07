@@ -1,10 +1,12 @@
 # 布局与重排指令集
 
+
 布局与重排类操作负责改变 tile 数据的组织方式、访问窗口和布局解释。它们大多数不改变有效元素的算术值，但会改变这些元素如何被排列、提取、插入、转置或送入后续算子。
 
 这组操作的关键不在“是不是搬运”，而在“搬运后数据以什么布局被后续指令看见”。
 
 ## 操作
+
 
 | 操作 | 作用 | 类别 |
 | --- | --- | --- |
@@ -27,11 +29,14 @@
 
 ## 机制
 
+
 ### 搬运
+
 
 `TMOV` 与 `TMOV_FP` 负责把一个 tile 的数据复制到另一个 tile。两者的差别不是“一个是浮点，一个不是”，而是是否走 fix pipe 及其附带的填充 / 边界处理合同。
 
 ### 形状与布局重解释
+
 
 - `TRESHAPE` 在不改变元素总数的前提下改变 shape 解释；
 - `TTRANS` 把行列对调；
@@ -41,19 +46,23 @@
 
 ### 抽取与插入
 
+
 - `TEXTRACT` 从源 tile 中抽出一个窗口；
 - `TINSERT` 把子 tile 插回目标 tile 的指定位置；
 - 对应的 `*_fp` 变体在 fix pipe 上完成相同类型的边界与填充合同。
 
 ### Padding 填充
 
+
 `TFILLPAD`、`TFILLPAD_INPLACE` 与 `TFILLPAD_EXPAND` 处理 valid region 之外的 padding 区域。它们看起来像“写入默认值”，但本质上是在为后续布局敏感或边界敏感的算子准备更稳定的输入形态。
 
 ## 为什么这组指令要单列
 
+
 如果不把布局重排单独拿出来，很多 tile 算术页就会被迫重复解释“输入到底是原样、转置后，还是某个子窗口”。把这组指令集中到一个家族里，能把“数据如何被重新组织”这层语义单独讲清楚。
 
 ## 目标 Profile 支持
+
 
 | 元素类型 | CPU | A2A3 | A5 |
 | --- | :---: | :---: | :---: |
@@ -62,6 +71,7 @@
 | f8e4m3 / f8e5m2 | No | No | Yes |
 
 ## 约束
+
 
 !!! warning "约束"
     - `TRESHAPE` 要求总元素数保持不变。
@@ -72,6 +82,7 @@
 
 ## 不允许的情形
 
+
 !!! danger "不允许的情形"
     - reshape 到不同总元素数的形状；
     - 用越界 offset 做 extract / insert；
@@ -79,6 +90,43 @@
 
 ## 相关页面
 
+
 - [Tile 指令族](../instruction-families/tile-families_zh.md)
 - [Tile 指令表面](../instruction-families/tile-families_zh.md)
 - [布局](../state-and-types/layout_zh.md)
+
+# Layout And Rearrangement Instruction Set
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Operations
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+### Copy (TMOV, TMOV_FP)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Transform (TRESHAPE, TTRANS, TIMG2COL)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Extract/Insert (TEXTRACT, TINSERT, TEXTRACT_FP, TINSERT_FP)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Fill (TFILLPAD, TFILLPAD_INPLACE, TFILLPAD_EXPAND)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Type Support by Target Profile
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Cases That Are Not Allowed
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## See Also
+本节给出上下游指令与相关章节链接。

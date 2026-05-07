@@ -1,6 +1,8 @@
 # TGET_ASYNC
 
+
 ## 简介
+
 
 `TGET_ASYNC` 是异步远程读原语。它启动一次从远端 GM 到本地 GM 的传输，并立即返回 `AsyncEvent`。
 
@@ -9,6 +11,7 @@
 `srcGlobalData（远端 GM）` → DMA 引擎 → `dstGlobalData（本地 GM）`
 
 ## 模板参数
+
 
 - `engine`：
     - `DmaEngine::SDMA`（默认）
@@ -19,6 +22,7 @@
     当前 SDMA 异步实现不支持非一维或非连续布局。
 
 ## C++ 内建接口
+
 
 声明于 `include/pto/comm/pto_comm_inst.hpp`：
 
@@ -33,10 +37,12 @@ PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcG
 
 ## AsyncSession 构建
 
+
 使用 `include/pto/comm/async_common/async_event_impl.hpp` 中的 `BuildAsyncSession`。
 该函数有两个重载——分别用于 SDMA 和 URMA，参数列表不同。
 
 ### SDMA 构建（默认）
+
 
 ```cpp
 template <DmaEngine engine = DmaEngine::SDMA, typename ScratchTile>
@@ -59,6 +65,7 @@ PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile,
 
 ### URMA 构建（仅 NPU_ARCH 3510）
 
+
 > URMA（User-level RDMA Memory Access）是 Ascend950（NPU_ARCH 3510）上的硬件加速 RDMA 传输引擎。
 
 ```cpp
@@ -80,6 +87,7 @@ URMA 不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直
 
 ## 约束
 
+
 !!! warning "约束"
     - `GlobalSrcData::RawDType == GlobalDstData::RawDType`
     - `GlobalSrcData::layout == GlobalDstData::layout`
@@ -93,6 +101,7 @@ URMA 不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直
 
 ## scratchTile 的作用
 
+
 `scratchTile` **不是**用于传输数据负载的暂存缓冲区。
 它被转换为 `TmpBuffer`，用作临时 UB 工作区，用于：
 
@@ -104,6 +113,7 @@ URMA 不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直
 
 ## scratchTile 类型与大小约束
 
+
 - 必须是 `pto::Tile` 类型
 - 必须是 UB/Vec tile（`ScratchTile::Loc == TileType::Vec`）
 - 可用字节数至少为 `sizeof(uint64_t)`（8 字节）
@@ -111,6 +121,7 @@ URMA 不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直
 推荐使用：`Tile<TileType::Vec, uint8_t, 1, comm::sdma::UB_ALIGN_SIZE>`（256B）。
 
 ## 完成语义（Quiet 语义）
+
 
 不同引擎的底层完成机制不同，但用户侧的 quiet 语义行为一致：
 
@@ -125,7 +136,9 @@ wait 成功后，所有已发出的 `dstGlobalData` 读入数据均已全部就�
 
 ## 示例
 
+
 ### 单次传输
+
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -162,6 +175,7 @@ __global__ AICORE void SimpleGet(__gm__ T *localDst, __gm__ T *remoteSrc,
 
 ### 批量传输（Quiet 语义）
 
+
 ```cpp
 template <typename T>
 __global__ AICORE void BatchGet(__gm__ T *localDstBase, __gm__ T *remoteSrcBase,
@@ -195,6 +209,7 @@ __global__ AICORE void BatchGet(__gm__ T *localDstBase, __gm__ T *remoteSrcBase,
 
 ### URMA 示例（NPU_ARCH 3510）
 
+
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
 #include <pto/common/pto_tile.hpp>
@@ -223,3 +238,48 @@ __global__ AICORE void SimpleGetUrma(__gm__ T *localDst, __gm__ T *remoteSrc,
     (void)event.Wait(session);
 }
 ```
+
+# pto.tget_async
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Introduction
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Template Parameter
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## AsyncSession Construction
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### SDMA Construction (default)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### URMA Construction (NPU_ARCH 3510 only)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## scratchTile Role
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## scratchTile Type and Size Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Completion Semantics (Quiet Semantics)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Example
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Single Transfer
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Batch Transfer (Quiet Semantics)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### URMA Example (NPU_ARCH 3510)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。

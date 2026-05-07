@@ -1,12 +1,15 @@
 # 顺序与同步
 
+
 PTO 不假设所有执行资源都隐式串行。只要数据或状态跨越指令集、流水线或共享资源流动，机器模型就必须把顺序显式写出来。同步原语、事件模型和 producer-consumer 顺序契约如下。
 
 ## 同步原语
 
+
 PTO 按指令集划分四类同步原语：
 
 ### Tile 指令集原语
+
 
 | 原语 | 语法 | 说明 |
 | --- | --- | --- |
@@ -18,12 +21,14 @@ PTO 按指令集划分四类同步原语：
 
 ### 向量指令集原语
 
+
 | 原语 | 语法 | 说明 |
 | --- | --- | --- |
 | `set_flag` / `wait_flag` | `pto.set_flag[...]` / `pto.wait_flag[...]` | DMA 与向量计算之间的事件交接 |
 | `mem_bar` | `pto.mem_bar` | GM↔UB 相关的内存栅栏 |
 
 ### DMA 原语
+
 
 | 原语 | 语法 | 说明 |
 | --- | --- | --- |
@@ -35,6 +40,7 @@ DMA 与计算之间不存在隐式同步。
 
 ### 通信指令集原语
 
+
 | 原语 | 说明 |
 | --- | --- |
 | `TBROADCAST` | 广播 |
@@ -43,6 +49,7 @@ DMA 与计算之间不存在隐式同步。
 | `TNOTIFY` / `TREDUCE` | 通知与归约 |
 
 ## 事件模型
+
 
 PTO 使用事件驱动的同步模型。事件由三元组 `(src_pipe, dst_pipe, event_id)` 标识：
 
@@ -54,6 +61,7 @@ PTO 使用事件驱动的同步模型。事件由三元组 `(src_pipe, dst_pipe,
 
 ### 事件生命周期
 
+
 ```text
 Producer -> set_flag -> event available -> wait_flag -> Consumer
 ```
@@ -61,6 +69,7 @@ Producer -> set_flag -> event available -> wait_flag -> Consumer
 事件一旦被设置，就对后续在同一三元组上等待的消费者可见。
 
 ### RecordEvent
+
 
 Tile 操作的 C++ intrinsic 通常返回 `RecordEvent`，可作为后续操作的 `WaitEvents...`：
 
@@ -74,6 +83,7 @@ TMATMUL(c, a, b, e0, e1);
 
 ## 流水依赖图
 
+
 AI Core 内的多个执行单元可以并行工作，但共享数据的地方必须显式建立顺序边：
 
 ```text
@@ -84,7 +94,9 @@ TLOAD -> RecordEvent / TSYNC -> Tile compute -> RecordEvent / TSYNC -> TSTORE
 
 ## 顺序规则
 
+
 ### Tile 指令顺序
+
 
 1. 同一 tile buffer 内按程序顺序执行
 2. 跨 tile buffer 或跨 pipeline 依赖通过事件建立
@@ -92,11 +104,13 @@ TLOAD -> RecordEvent / TSYNC -> Tile compute -> RecordEvent / TSYNC -> TSTORE
 
 ### 向量指令顺序
 
+
 1. `copy_gm_to_ubuf` 完成后，向量加载才能读取对应 UB 数据
 2. 向量计算在同一 `SimdVecScopeOp` 内按程序顺序执行
 3. 向量 store 完成后，`copy_ubuf_to_gm` 才能把结果搬回 GM
 
 ### GM 可见性
+
 
 通过 `TSTORE` 或 `copy_ubuf_to_gm` 写入 GM 的数据，只在满足以下条件后对其他 block 可见：
 
@@ -106,6 +120,7 @@ TLOAD -> RecordEvent / TSYNC -> Tile compute -> RecordEvent / TSYNC -> TSTORE
 
 ## 约束
 
+
 !!! warning "约束"
     - 只要架构未自动保证顺序，就必须显式同步
     - 某目标可以更强，但文档不能依赖未声明的更强顺序
@@ -113,6 +128,7 @@ TLOAD -> RecordEvent / TSYNC -> Tile compute -> RecordEvent / TSYNC -> TSTORE
     - `TSYNC` 作用于 tile-buffer 范围，不跨 tile buffer
 
 ## 不允许的情形
+
 
 !!! danger "不允许的情形"
     - 把必须同步的路径写成“可省略”
@@ -122,8 +138,64 @@ TLOAD -> RecordEvent / TSYNC -> Tile compute -> RecordEvent / TSYNC -> TSTORE
 
 ## 相关页面
 
+
 - [一致性基线](../memory-model/consistency-baseline_zh.md)
 - [生产者-消费者排序](../memory-model/producer-consumer-ordering_zh.md)
 - [Tile 同步与配置](../tile/sync-and-config_zh.md)
 - [向量流水同步](../vector/pipeline-sync_zh.md)
 - [标量流水同步](../scalar/pipeline-sync_zh.md)
+
+
+# Ordering And Synchronization
+本节描述顺序与一致性约束，明确可见性与同步语义。
+
+## Synchronization Primitives
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Tile Instructions Primitives
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Vector Instructions Primitives
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### DMA Primitives
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Communication Instructions Primitives
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Event Model
+本节说明抽象模型与关键对象关系，用于统一术语与行为理解。
+
+### Event Lifecycle
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Events and RecordEvent
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Pipeline Dependency Graph
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Dependency Types
+本节定义类型/布局/格式规则与合法性要求。
+
+## Ordering Rules
+本节描述顺序与一致性约束，明确可见性与同步语义。
+
+### Tile Instructions Ordering
+本节描述顺序与一致性约束，明确可见性与同步语义。
+
+### Vector Instructions Ordering
+本节描述顺序与一致性约束，明确可见性与同步语义。
+
+### GM Visibility
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Constraints
+本节列出关键约束与不允许组合，确保使用方式可验证。
+
+## Cases That Are Not Allowed
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## See Also
+本节给出相关章节和上下游链接。

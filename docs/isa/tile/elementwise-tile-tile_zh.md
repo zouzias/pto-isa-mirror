@@ -1,8 +1,10 @@
 # 逐元素 Tile-Tile 指令集
 
+
 逐元素 Tile-Tile 操作用两个或一个 tile 作为输入，在目标 tile 的 valid region 上逐元素执行运算。它们是 PTO tile 计算路径里最常见、也最基础的一类指令。
 
 ## 指令一览
+
 
 | 操作 | 说明 | 类别 |
 | --- | --- | --- |
@@ -28,6 +30,7 @@
 
 ## 机制
 
+
 这组指令的共同点不是“都长得像算术”，而是**都以目标 tile 的 valid region 为迭代域**。无论源 tile 自己的 valid region 怎么声明，真正被遍历的坐标集合都由目标 tile 决定。
 
 对目标 tile 中每个 `(r, c)`：
@@ -40,6 +43,7 @@ $$ \mathrm{dst}_{r,c} = (\mathrm{cmp}_{r,c} \neq 0) ? \mathrm{src0}_{r,c} : \mat
 
 ## Valid Region 兼容性
 
+
 所有逐元素 Tile-Tile 操作都遵循同一条规则：
 
 - 迭代域总是目标 tile 的 valid region。
@@ -51,6 +55,7 @@ $$ \mathrm{dst}_{r,c} = (\mathrm{cmp}_{r,c} \neq 0) ? \mathrm{src0}_{r,c} : \mat
 
 ## `_c` 变体
 
+
 当前这组指令里的 `_c` 变体并不是“饱和算术”的统一命名约定。以当前 canonical 叶子页和实现签名为准：
 
 - `TADDC` 表达的是三输入逐元素加法：`src0 + src1 + src2`
@@ -59,6 +64,7 @@ $$ \mathrm{dst}_{r,c} = (\mathrm{cmp}_{r,c} \neq 0) ? \mathrm{src0}_{r,c} : \mat
 因此，不能把 `_c` 后缀一概理解成 saturating / carry 变体。具体语义必须看各自 per-op 页面。
 
 ## 目标 Profile 支持
+
 
 | 元素类型 | CPU | A2/A3 | A5 |
 | --- | :---: | :---: | :---: |
@@ -70,6 +76,7 @@ $$ \mathrm{dst}_{r,c} = (\mathrm{cmp}_{r,c} \neq 0) ? \mathrm{src0}_{r,c} : \mat
 
 ## 约束
 
+
 !!! warning "约束"
     - layout、shape 和 valid-region 状态都会影响合法性。
     - 源与目标 tile 的物理 shape 必须兼容。
@@ -79,6 +86,7 @@ $$ \mathrm{dst}_{r,c} = (\mathrm{cmp}_{r,c} \neq 0) ? \mathrm{src0}_{r,c} : \mat
 
 ## 不允许的情形
 
+
 !!! danger "不允许的情形"
     - 假设存在隐式广播、隐式 reshape 或 valid-region 自动修复。
     - 依赖源 tile 域外 lane 的确定值。
@@ -87,9 +95,11 @@ $$ \mathrm{dst}_{r,c} = (\mathrm{cmp}_{r,c} \neq 0) ? \mathrm{src0}_{r,c} : \mat
 
 ## A2/A3 吞吐与时延
 
+
 逐元素 tile-tile 操作在 A2/A3 上会落到 CCE 向量指令，由 `include/pto/costmodel/a2a3/` 下的模型负责估算。
 
 ### 周期模型
+
 
 ```text
 total_cycles = startup + completion + repeats × per_repeat + (repeats - 1) × interval
@@ -98,6 +108,7 @@ total_cycles = startup + completion + repeats × per_repeat + (repeats - 1) × i
 其中 `repeats` 由 tile 布局、stride 和 valid region 共同决定。
 
 ### 常见常量
+
 
 | 指标 | 常量 | 周期 | 适用范围 |
 | --- | --- | --- | --- |
@@ -116,6 +127,7 @@ total_cycles = startup + completion + repeats × per_repeat + (repeats - 1) × i
 
 ### repeat 的影响
 
+
 `TBinOp.hpp` / `TBinSOp.hpp` / `TUnaryOp.hpp` 会根据 tile 的 geometry 计算 `repeats`：
 
 - 连续 fast path：`repeats = validRow × validCol / elementsPerRepeat`
@@ -124,6 +136,7 @@ total_cycles = startup + completion + repeats × per_repeat + (repeats - 1) × i
 
 ### layout 的影响
 
+
 | 布局 | stride 特征 | 成本影响 |
 | --- | --- | --- |
 | `RowMajor` | 源 / 目标 stride 连续 | 最容易走 fast path |
@@ -131,6 +144,7 @@ total_cycles = startup + completion + repeats × per_repeat + (repeats - 1) × i
 | 混合布局 / 特殊布局 | 非线性 stride | 只能走 general path |
 
 ### 搬运带宽模型
+
 
 | 路径 | 带宽（B/cycle） | 常量 |
 | --- | --- | --- |
@@ -145,5 +159,57 @@ total_cycles = startup + completion + repeats × per_repeat + (repeats - 1) × i
 
 ## 相关页面
 
+
 - [Tile 指令族](../instruction-families/tile-families_zh.md)
 - [Tile 指令面](../instruction-families/tile-families_zh.md)
+
+# Elementwise Tile-Tile Instruction Set
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Operations
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+## Valid Region Compatibility
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## `_c` Variants
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Type Support by Target Profile
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Cases That Are Not Allowed
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## Throughput and Latency (A2/A3)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Cycle Model Formula
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### CCE Instruction Parameters
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Instruction Repeat Calculation
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Layout and Shape Impact
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Bandwidth Model for Tile Movements
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Accuracy and Testing
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## See Also
+本节给出上下游指令与相关章节链接。

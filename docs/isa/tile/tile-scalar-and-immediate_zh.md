@@ -1,8 +1,10 @@
 # Tile-标量与立即数指令集
 
+
 Tile-标量类操作把一个 tile 与一个标量或立即数结合。标量在语义上会广播到 tile 的有效区域。多数操作产生数值 tile，比较类变体产生谓词或可作为选择条件使用的结果。
 
 ## 指令一览
+
 
 | 操作 | 说明 |
 | --- | --- |
@@ -19,6 +21,7 @@ Tile-标量类操作把一个 tile 与一个标量或立即数结合。标量在
 | `pto.tsels` | 用 mask / 标量参与逐元素选择 |
 
 ## 机制
+
 
 对目标 tile 的 valid region 中每个元素 `(r, c)`：
 
@@ -38,6 +41,7 @@ $$ \mathrm{dst}_{r,c} = \mathrm{src0}_{r,c} \times \mathrm{scalar} + \mathrm{src
 
 ## 目标 Profile 支持
 
+
 | 元素类型 | CPU | A2/A3 | A5 |
 | --- | :---: | :---: | :---: |
 | `f32 / f16 / bf16` | Yes | Yes | Yes |
@@ -47,6 +51,7 @@ $$ \mathrm{dst}_{r,c} = \mathrm{src0}_{r,c} \times \mathrm{scalar} + \mathrm{src
 
 ## 约束
 
+
 !!! warning "约束"
     - 标量类型必须与 tile 元素类型兼容。
     - `TSHLS` / `TSHRS` 将标量解释为无符号 shift count。
@@ -54,6 +59,7 @@ $$ \mathrm{dst}_{r,c} = \mathrm{src0}_{r,c} \times \mathrm{scalar} + \mathrm{src
     - 需要保持 valid region 语义的操作，迭代域都以 `dst` 的 valid row / col 为准。
 
 ## 不允许的情形
+
 
 !!! danger "不允许的情形"
     - 使用与 tile 元素类型不兼容的标量。
@@ -63,5 +69,36 @@ $$ \mathrm{dst}_{r,c} = \mathrm{src0}_{r,c} \times \mathrm{scalar} + \mathrm{src
 
 ## 相关页面
 
+
 - [Tile 指令族](../instruction-families/tile-families_zh.md)
 - [Tile 指令面](../instruction-families/tile-families_zh.md)
+
+# Tile-Scalar And Immediate Instruction Set
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Operations
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+## Scalar Operand
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Saturating Variants
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Type Support by Target Profile
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Cases That Are Not Allowed
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## See Also
+本节给出上下游指令与相关章节链接。

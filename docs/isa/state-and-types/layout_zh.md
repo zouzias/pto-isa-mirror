@@ -1,8 +1,10 @@
 # 布局参考
 
+
 **BLayout**、**SLayout**、**Fractal Layout**、**GlobalTensor Layout** 和 **Compact Mode** 构成 PTO 的标准布局参考。编程模型背景和 valid-region 语义见 [Tile 与有效区域](../programming-model/tiles-and-valid-regions_zh.md)。
 
 ## 两层布局维度
+
 
 PTO 的布局分两层：
 
@@ -15,6 +17,7 @@ PTO 的布局分两层：
 
 ## GlobalTensor Layout（GM 视图）
 
+
 `GlobalTensor` 是对 GM 的视图，其 layout 参数决定 GM 中的 stride 模式：
 
 | Layout | Stride Pattern | 说明 | 用途 |
@@ -26,6 +29,7 @@ PTO 的布局分两层：
 GM 布局必须与 tile 的内部布局兼容，具体规则见 [TLOAD](../tile/ops/memory-and-data-movement/tload_zh.md) 和 [TSTORE](../tile/ops/memory-and-data-movement/tstore_zh.md)。
 
 ## Block Layout（BLayout）
+
 
 `BLayout` 描述 tile buffer 在行列方向上的存储顺序。
 
@@ -44,6 +48,7 @@ $$ \mathrm{offset}(r, c) = (c \times R + r) \times \mathrm{sizeof(DType)} $$
 
 ## Stripe Layout（SLayout）
 
+
 `SLayout` 决定 tile 子元素是均匀矩形布局还是分形/跨步布局：
 
 | SLayout | 说明 | 需要 |
@@ -53,6 +58,7 @@ $$ \mathrm{offset}(r, c) = (c \times R + r) \times \mathrm{sizeof(DType)} $$
 | `ColMajor` | 列方向分形/跨步布局 | `Fractal ∈ {ZN, RN}` |
 
 ## Fractal Layout
+
 
 当 `SLayout != NoneBox` 时，`Fractal` 指定精确的分形或跨步模式。
 
@@ -64,6 +70,7 @@ zigzag 索引把二维坐标映射到一维 Z-order 顺序。它是硬件定义�
 
 ### Fractal 取值
 
+
 | Fractal | SLayout | BLayout | 模式 | 常见用途 |
 | --- | --- | --- | --- | --- |
 | `None` | `NoneBox` | 任意 | 标准矩形布局 | 逐元素和常规计算 |
@@ -74,9 +81,11 @@ zigzag 索引把二维坐标映射到一维 Z-order 顺序。它是硬件定义�
 
 ## Compact Mode
 
+
 Compact mode 处理物理 tile 维度大于 valid region 的情况，尤其常见于边界 matmul 和 `TEXTRACT` / `TINSERT`。
 
 ### 为什么重要
+
 
 当矩阵维度不是 tile 尺寸的整数倍时，最后一块 tile 会包含 padding。Compact mode 决定：
 
@@ -85,6 +94,7 @@ Compact mode 处理物理 tile 维度大于 valid region 的情况，尤其常�
 3. `TEXTRACT` / `TINSERT` 如何处理 partial tile
 
 ### TEXTRACT 中的模式
+
 
 | Mode | 说明 | 行为 |
 | --- | --- | --- |
@@ -95,9 +105,11 @@ Compact mode 处理物理 tile 维度大于 valid region 的情况，尤其常�
 
 ### TMATMUL_MX 中的 compact 行为
 
+
 对 MX 格式 matmul，Left tile 使用带 compact addressing 的 NZ 分形布局。当矩阵在边界处不足完整 tile 尺寸时，地址生成只覆盖有效行，padding 行不会进入 CUBE 处理。
 
 ## TileType–Layout 兼容矩阵
+
 
 并非所有 `TileType + BLayout + SLayout + Fractal` 组合都合法。
 
@@ -114,6 +126,7 @@ Compact mode 处理物理 tile 维度大于 valid region 的情况，尤其常�
 
 ## Padding
 
+
 `Pad` 参数控制 valid region 之外元素的填充值：
 
 | Pad | 含义 |
@@ -124,7 +137,9 @@ Compact mode 处理物理 tile 维度大于 valid region 的情况，尤其常�
 
 ## 布局转换模式
 
+
 ### Normal → Fractal
+
 
 ```cpp
 using SrcTile = Tile<TileType::Vec, int8_t, 16, 16, RowMajor, NoneBox, None, Null>;
@@ -134,6 +149,7 @@ TEXTRACT(dstLeft, srcVec, ExtractMode::ND2NZ);
 
 ### Fractal → Normal
 
+
 ```cpp
 using SrcTile = Tile<TileType::Left, int8_t, 16, 16, RowMajor, RowMajor, NZ, Null>;
 using DstTile = Tile<TileType::Vec, int8_t, 16, 16, RowMajor, NoneBox, None, Null>;
@@ -141,6 +157,7 @@ TINSERT(dstVec, srcLeft, InsertMode::NZ2ND);
 ```
 
 ## 常量参考
+
 
 | 常量 | 值 | 单位 | 用途 |
 | --- | --- | --- | --- |
@@ -154,8 +171,73 @@ TINSERT(dstVec, srcLeft, InsertMode::NZ2ND);
 
 ## 相关页面
 
+
 - [Tile 与有效区域](../programming-model/tiles-and-valid-regions_zh.md)
 - [类型系统](./type-system_zh.md)
 - [TEXTRACT](../tile/ops/layout-and-rearrangement/textract_zh.md)
 - [TINSERT](../tile/ops/layout-and-rearrangement/tinsert_zh.md)
 - [Tile 指令集](../instruction-families/tile-families_zh.md)
+
+
+# Layout Reference
+本节定义类型/布局/格式规则与合法性要求。
+
+## Two Layout Dimensions
+本节定义类型/布局/格式规则与合法性要求。
+
+## GlobalTensor Layout (GM View)
+本节定义类型/布局/格式规则与合法性要求。
+
+## Block Layout (BLayout)
+本节定义类型/布局/格式规则与合法性要求。
+
+### Values
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Usage
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Stripe Layout (SLayout)
+本节定义类型/布局/格式规则与合法性要求。
+
+### Values
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Fractal Address Formula
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Fractal Layout Values
+本节定义类型/布局/格式规则与合法性要求。
+
+### Why Compact Mode Matters
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Compact Mode in TEXTRACT
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Compact Mode in TMATMUL_MX
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Compact Addressing in A5 TMov
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### When to Use Compact Mode
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## TileType–Layout Compatibility Matrix
+本节定义类型/布局/格式规则与合法性要求。
+
+## Layout Conversion Patterns
+本节定义类型/布局/格式规则与合法性要求。
+
+### Normal → Fractal (TEXTRACT with ND2NZ)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Fractal → Normal (TINSERT with NZ2ND)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Constants Reference
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## See Also
+本节给出相关章节和上下游链接。

@@ -1,12 +1,15 @@
 # 位置意图与合法性
 
+
 PTO 的合法性不只取决于元素类型和 shape。许多操作还依赖值打算处于哪里、承担什么角色。位置意图分类和合法性检查流水如下。
 
 ## 位置意图分类
 
+
 每个 tile 操作数都带有 **location intent**。它决定该 tile 由哪个执行流水处理，以及哪些操作对它是合法的。位置意图编码在 tile 类型中的 `loc=` 字段里。
 
 ### 位置意图取值
+
 
 | 位置意图 | Pipeline | 说明 | 常见用途 |
 | --- | --- | --- | --- |
@@ -18,6 +21,7 @@ PTO 的合法性不只取决于元素类型和 shape。许多操作还依赖值�
 | `loc=scalar` | Scalar Unit | 标量 tile | 标量型 tile 操作 |
 
 ### 在类型中的写法
+
 
 ```text
 !pto.tile<loc=vec, f32, 16, 16, RowMajor, NoneBox, None, Zero>
@@ -35,6 +39,7 @@ using LeftTile = Tile<TileType::Left, int8_t, 16, 16, RowMajor, RowMajor, NZ, Nu
 
 ## 合法性检查流水
 
+
 PTO 的合法性按四个阶段依次检查。程序只有通过四个阶段才算合法：
 
 ```text
@@ -45,6 +50,7 @@ Stage 4: TARGET PROFILE CHECK
 ```
 
 ### Stage 1: Type Check
+
 
 元素类型必须与操作要求兼容。
 
@@ -58,6 +64,7 @@ dtype(src0) == dtype(src1) == dtype(dst)
 
 ### Stage 2: Shape Check
 
+
 物理 shape 和 valid region 必须在该指令和目标 profile 允许的范围内：
 
 ```text
@@ -69,6 +76,7 @@ dtype(src0) == dtype(src1) == dtype(dst)
 
 ### Stage 3: Layout Check
 
+
 `BLayout + SLayout + Fractal` 组合必须对当前 `TileType` 和当前指令合法。
 
 示例：
@@ -79,6 +87,7 @@ dtype(src0) == dtype(src1) == dtype(dst)
 
 ### Stage 4: Target Profile Check
 
+
 操作数的 `TileType`、元素类型和布局还必须被所选 target profile 支持。
 
 示例：
@@ -88,13 +97,16 @@ dtype(src0) == dtype(src1) == dtype(dst)
 
 ## 按指令集的合法性要求
 
+
 ### 逐元素 Tile-Tile
+
 
 - 所有操作数必须为 `loc=vec`
 - 布局组合必须与 `Vec` 兼容
 - `dtype` 必须在该指令集支持列表内
 
 ### Matmul
+
 
 - 左输入：`TileType::Left` 或 `TileType::Mat`
 - 右输入：`TileType::Right` 或 `TileType::Mat`
@@ -103,11 +115,13 @@ dtype(src0) == dtype(src1) == dtype(dst)
 
 ### 向量计算
 
+
 - 操作数必须为 `!pto.vreg<NxDTYPE>`
 - mask 宽度必须匹配向量宽度
 - `dtype` 必须在目标 profile 支持列表内
 
 ## GM 侧操作数
+
 
 GlobalTensor 操作数遵循单独的合法性路径：
 
@@ -120,6 +134,7 @@ GlobalTensor 操作数遵循单独的合法性路径：
 
 ## 不允许的情形
 
+
 !!! danger "不允许的情形"
     - 在 tile 指令上偷用 vector-buffer 假设而没有显式桥接
     - 把 location-sensitive 指令集写成“所有本地存储角色都等价”
@@ -128,8 +143,46 @@ GlobalTensor 操作数遵循单独的合法性路径：
 
 ## 相关页面
 
+
 - [类型系统](./type-system_zh.md)
 - [Tile 与有效区域](../programming-model/tiles-and-valid-regions_zh.md)
 - [Tile 指令集](../instruction-families/tile-families_zh.md)
 - [向量指令集](../vector/README_zh.md)
 - [可移植性与目标 Profile](../reference/portability-and-target-profiles_zh.md)
+
+
+# Location Intent And Legality
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Location Intent Taxonomy
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Location Intent Values
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Location Intent in Tile Type
+本节定义类型/布局/格式规则与合法性要求。
+
+## Legality Checking Pipeline
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Legality by Instruction Set
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Elementwise Tile-Tile (TADD, TMUL, etc.)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Matmul (TMATMUL, TGEMV, etc.)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Vector Compute (vadd, vmul, etc.)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## GM-Facing Operands (GlobalTensor)
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+## Cases That Are Not Allowed
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## See Also
+本节给出相关章节和上下游链接。

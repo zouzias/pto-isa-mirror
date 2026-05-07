@@ -1,12 +1,15 @@
 # pto.trowsum
 
+
 `pto.trowsum` 属于[归约与扩展](../../reduce-and-expand_zh.md)指令集。
 
 ## 概述
 
+
 对每一行按列求和。
 
 ## 机制
+
 
 设：
 
@@ -21,6 +24,7 @@ $$ \mathrm{dst}_{i,0} = \sum_{j=0}^{C-1} \mathrm{src}_{i,j} $$
 
 ## 语法
 
+
 同步形式：
 
 ```text
@@ -29,17 +33,20 @@ $$ \mathrm{dst}_{i,0} = \sum_{j=0}^{C-1} \mathrm{src}_{i,j} $$
 
 ### AS Level 1（SSA）
 
+
 ```text
 %dst = pto.trowsum %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### AS Level 2（DPS）
 
+
 ```text
 pto.trowsum ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ 内建接口
+
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
@@ -48,19 +55,23 @@ PTO_INST RecordEvent TROWSUM(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
 
 ## 输入
 
+
 - `src`：源 tile
 - `tmp`：归约过程中的临时 tile
 - `dst`：目标 tile
 
 ## 预期输出
 
+
 - `dst[i,0]`：第 `i` 行所有列元素的和
 
 ## 副作用
 
+
 除产生目标 tile 外，没有额外架构副作用。
 
 ## 约束
+
 
 !!! warning "约束"
     - `dst` 与 `src` 都必须是 `TileType::Vec`
@@ -79,12 +90,15 @@ PTO_INST RecordEvent TROWSUM(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
 
 ## 异常与非法情形
 
+
 !!! danger "异常与非法情形"
     - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## 性能
 
+
 ### A2A3
+
 
 `TROWSUM` 在 A2/A3 上通常会 lowering 成多阶段向量归约序列。英文页给出的要点是：
 
@@ -102,9 +116,11 @@ PTO_INST RecordEvent TROWSUM(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
 
 ### A5
 
+
 当前手册未单列 `trowsum` 的独立周期表，应视为目标 profile 相关。
 
 ## 示例
+
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -123,5 +139,63 @@ void example_auto() {
 
 ## 相关页面
 
+
 - 指令集总览：[归约与扩展](../../reduce-and-expand_zh.md)
 - 下一条指令：[pto.tcolsum](./tcolsum_zh.md)
+
+## Summary
+本节给出该指令/主题的核心语义与使用定位，和英文章节保持一致。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+## Syntax
+本节列出语法形态（SSA / DPS / Assembly），用于与英文页逐项对照。
+
+### PTO Assembly Form
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### AS Level 1 (SSA)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### AS Level 2 (DPS)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## Inputs
+本节定义输入操作数角色、数据来源与有效区域要求。
+
+## Expected Outputs
+本节定义输出结果及其在有效区域内的语义保证。
+
+## Side Effects
+本节说明除结果写回外是否存在额外可观察副作用。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Performance
+本节说明性能路径、吞吐估算与形状/布局敏感因素。
+
+### A2/A3 Cycle Count
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Instruction Sequence by Shape (FP32)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### General Shape Algorithm
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Layout and Shape Impact
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Exceptions
+本节描述非法输入、不支持组合与验证失败行为。
+
+## Examples
+本节提供 Auto/Manual 及 AS 形式示例，便于中英文对照复现。
+
+## See Also
+本节给出上下游指令与相关章节链接。

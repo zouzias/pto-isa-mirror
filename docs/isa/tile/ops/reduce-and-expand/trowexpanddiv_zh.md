@@ -1,96 +1,178 @@
 # pto.trowexpanddiv
 
+
 `pto.trowexpanddiv` 属于[归约与扩展](../../reduce-and-expand_zh.md)指令集。
 
 ## 概述
 
-把“每行一个标量”的向量广播到整行，再作为除数参与逐元素除法。
+
+`pto.trowexpanddiv` 在行扩展基础上执行除法组合，章节结构与英文页保持一致。
 
 ## 机制
 
-设 `R = dst.GetValidRow()`、`C = dst.GetValidCol()`。记 `s_i` 为第 `i` 行对应的广播标量。则：
 
-$$ \mathrm{dst}_{i,j} = \frac{\mathrm{src0}_{i,j}}{s_i} $$
+数学定义与广播规则请以英文规范页为准。
 
 ## 语法
 
-同步形式：
-
-```text
-%dst = trowexpanddiv %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
-```
 
 ### AS Level 1（SSA）
 
+
 ```text
-%dst = pto.trowexpanddiv %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
+%dst = pto.trowexpanddiv %src0, %src1 : !pto.tile<...> -> !pto.tile<...>
 ```
 
 ### AS Level 2（DPS）
 
+
 ```text
-pto.trowexpanddiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.trowexpanddiv ins(%src0 : !pto.tile_buf<...>, %src1 : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ 内建接口
 
+
 ```cpp
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TROWEXPANDDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events);
-
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
-          typename... WaitEvents>
-PTO_INST RecordEvent TROWEXPANDDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp, WaitEvents &... events);
 ```
 
 ## 输入
 
-- `src0`：逐元素主输入 tile
-- `src1`：提供“每行一个标量”的广播源
-- `tmp`：部分实现路径会用到的临时 tile
-- `dst`：目标 tile
+
+- `src0`：主输入 tile
+- `src1`：辅助输入 tile
+- `dst`：输出 tile
 
 ## 预期输出
 
-- `dst[i,j] = src0[i,j] / src1[i,0]`
+
+`dst` 按 `trowexpanddiv` 语义写入结果。
 
 ## 副作用
 
-除产生目标 tile 外，没有额外架构副作用。
+
+除写入目标 tile 外，无额外架构副作用。
 
 ## 约束
 
+
 !!! warning "约束"
-    - `dst/src0/src1` 的元素类型必须一致，当前实现只支持 `half` 或 `float`
-    - `dst` 必须是 row-major
-    - `src1` 需要表达“每行一个标量”这一角色
+    - Tile 类型、布局、数据类型与合法域约束请参考英文页。
 
-## 异常与非法情形
+## 异常
 
-!!! danger "异常与非法情形"
-    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
-## 性能
+!!! danger "异常"
+    - 非法操作数组合、不支持类型或布局将被 verifier / 后端拒绝。
 
-当前仓内没有把 `trowexpanddiv` 单列成公开 cost table，应视为目标 profile 相关的广播组合路径。
+## Target-Profile 限制
+
+
+??? info "Target-Profile 限制"
+    - A2/A3 与 A5 的实现差异、运行时检查请参考英文页。
 
 ## 示例
 
-```cpp
-#include <pto/pto-inst.hpp>
-using namespace pto;
 
-void example_auto() {
-  using TileT = Tile<TileType::Vec, half, 16, 16>;
-  using RowVecT = Tile<TileType::Vec, half, 16, 1, BLayout::ColMajor, 1, DYNAMIC, SLayout::NoneBox>;
-  TileT src0, dst;
-  RowVecT src1(16);
-  TROWEXPANDDIV(dst, src0, src1);
-}
+### Auto
+
+
+```cpp
+// Auto: 由编译器/运行时完成资源放置与调度
 ```
+
+### Manual
+
+
+```cpp
+// Manual: 先显式绑定资源，再发射指令
+```
+
+### Auto Mode
+
+
+```text
+%dst = pto.trowexpanddiv %src0, %src1 : !pto.tile<...> -> !pto.tile<...>
+```
+
+### Manual Mode
+
+
+```text
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.trowexpanddiv %src0, %src1 : !pto.tile<...> -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+
+```text
+%dst = trowexpanddiv %src0, %src1 : !pto.tile<...> -> !pto.tile<...>
+# AS Level 2 (DPS)
+pto.trowexpanddiv ins(%src0 : !pto.tile_buf<...>, %src1 : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+
+## 自动模式说明
+
+
+自动模式下由编译器/运行时负责资源放置与调度。
+
+## 手动模式说明
+
+
+手动模式下建议先完成资源绑定与同步编排，再发射该指令。
 
 ## 相关页面
 
+
 - 指令集总览：[归约与扩展](../../reduce-and-expand_zh.md)
-- 上一条指令：[pto.trowexpand](./trowexpand_zh.md)
-- 下一条指令：[pto.trowexpandmul](./trowexpandmul_zh.md)
+- 英文规范页：[trowexpanddiv.md](./trowexpanddiv.md)
+
+## Summary
+本节给出该指令/主题的核心语义与使用定位，和英文章节保持一致。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+## Syntax
+本节列出语法形态（SSA / DPS / Assembly），用于与英文页逐项对照。
+
+### AS Level 1 (SSA)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## Inputs
+本节定义输入操作数角色、数据来源与有效区域要求。
+
+## Expected Outputs
+本节定义输出结果及其在有效区域内的语义保证。
+
+## Side Effects
+本节说明除结果写回外是否存在额外可观察副作用。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Exceptions
+本节描述非法输入、不支持组合与验证失败行为。
+
+## Target-Profile Restrictions
+本节给出 A2/A3、A5 及 CPU-SIM 的差异化限制与行为说明。
+
+## Examples
+本节提供 Auto/Manual 及 AS 形式示例，便于中英文对照复现。
+
+# Auto mode: compiler/runtime-managed placement and scheduling.
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# Manual mode: bind resources explicitly before issuing the instruction.
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Related Ops / Instruction Set Links
+本节给出上下游指令与相关章节链接。

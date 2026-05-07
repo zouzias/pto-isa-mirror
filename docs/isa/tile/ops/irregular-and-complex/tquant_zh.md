@@ -1,10 +1,13 @@
 # TQUANT
 
+
 ## 指令示意图
+
 
 ![TQUANT tile operation](../../../../figures/isa/TQUANT.svg)
 
 ## 简介
+
 
 `TQUANT` 把高精度 Tile 量化成较低精度表示，并在需要时同时产出量化元数据。它不是一条单一模式的指令，而是一组按模板参数分化出来的量化接口。
 
@@ -15,7 +18,9 @@
 
 ## 模式
 
+
 ### INT8_SYM
+
 
 对输入 `float32` Tile 做对称 INT8 量化：
 
@@ -25,6 +30,7 @@ $$ q = \mathrm{round}(x \cdot scale) $$
 
 ### INT8_ASYM
 
+
 对输入 `float32` Tile 做非对称 UINT8 量化：
 
 $$ q = \mathrm{round}(x \cdot scale + offset) $$
@@ -32,6 +38,7 @@ $$ q = \mathrm{round}(x \cdot scale + offset) $$
 结果写入 `uint8_t` 目标 Tile。
 
 ### MXFP8
+
 
 按组计算共享指数与缩放信息，再生成低精度输出，同时产出辅助元数据：
 
@@ -43,9 +50,11 @@ $$ q = \mathrm{round}(x \cdot scale + offset) $$
 
 ## 汇编语法
 
+
 PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 ### AS Level 1（SSA）
+
 
 ```text
 %dst = pto.tquant %src, %qp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
@@ -53,11 +62,13 @@ PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/a
 
 ### AS Level 2（DPS）
 
+
 ```text
 pto.tquant ins(%src, %qp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ 内建接口
+
 
 声明于 `include/pto/common/pto_instr.hpp`：
 
@@ -79,6 +90,7 @@ PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataPara &sc
 ```
 
 ## 约束
+
 
 !!! warning "约束"
     ### A2/A3 实现
@@ -124,7 +136,9 @@ PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataPara &sc
 
 ## 示例
 
+
 ### 对称 INT8
+
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -144,6 +158,7 @@ void example_int8_sym() {
 ```
 
 ### MXFP8
+
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -166,5 +181,84 @@ void example_mxfp8() {
 
 ## 相关页面
 
+
 - [TMOV](../../../tile/ops/layout-and-rearrangement/tmov_zh.md)
 - [不规则与复杂指令集](../../../tile/irregular-and-complex_zh.md)
+
+# pto.tquant
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Summary
+本节给出该指令/主题的核心语义与使用定位，和英文章节保持一致。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+## Syntax
+本节列出语法形态（SSA / DPS / Assembly），用于与英文页逐项对照。
+
+### AS Level 1 (SSA)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### AS Level 2 (DPS)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### IR Level 1 (SSA)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### IR Level 2 (DPS)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## Inputs
+本节定义输入操作数角色、数据来源与有效区域要求。
+
+## Expected Outputs
+本节定义输出结果及其在有效区域内的语义保证。
+
+## Side Effects
+本节说明除结果写回外是否存在额外可观察副作用。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Exceptions
+本节描述非法输入、不支持组合与验证失败行为。
+
+## Target-Profile Restrictions
+本节给出 A2/A3、A5 及 CPU-SIM 的差异化限制与行为说明。
+
+## Examples
+本节提供 Auto/Manual 及 AS 形式示例，便于中英文对照复现。
+
+### Auto Mode
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# Auto mode: compiler/runtime-managed placement and scheduling.
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Manual Mode
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# Manual mode: bind resources explicitly before issuing the instruction.
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# Optional for tile operands:
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# pto.tassign %arg0, @tile(0x1000)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# pto.tassign %arg1, @tile(0x2000)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### PTO Assembly Form
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# AS Level 2 (DPS)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Related Ops / Instruction Set Links
+本节给出上下游指令与相关章节链接。

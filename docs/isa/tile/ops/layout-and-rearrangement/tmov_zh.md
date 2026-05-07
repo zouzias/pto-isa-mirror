@@ -1,16 +1,20 @@
 # TMOV
 
+
 ## 指令示意图
+
 
 ![TMOV tile operation](../../../../figures/isa/TMOV.svg)
 
 ## 简介
+
 
 `TMOV` 是 PTO tile 空间里的“位置变换与局部搬运”总入口。它不在 GM 和 Tile 之间传输数据，而是在不同 Tile 位置、不同布局或不同后端缓冲语义之间移动数据。
 
 这条指令存在的理由很直接：`TLOAD` / `TSTORE` 负责进出 `GlobalTensor`，但很多后端计算单元还要求更具体的本地表示。例如 cube 路径要用 `Left` / `Right` / `Acc`，偏置和量化又要用 `Bias` / `Scaling` / `ScaleLeft` / `ScaleRight`。`TMOV` 正是这些本地表示之间的桥。
 
 ## 机制
+
 
 `TMOV` 不是单一的数据通路，而是一组同名重载。实际语义由源 Tile、目标 Tile 以及所选重载共同决定。
 
@@ -30,6 +34,7 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} $$
 
 ## 汇编语法
 
+
 PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 PTO-AS 设计上通常会把不同子路径拆成更明确的 spelling，例如：
@@ -45,17 +50,20 @@ PTO-AS 设计上通常会把不同子路径拆成更明确的 spelling，例如�
 
 ### AS Level 1（SSA）
 
+
 ```text
 %dst = pto.tmov.s2d %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
 ### AS Level 2（DPS）
 
+
 ```text
 pto.tmov ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ 内建接口
+
 
 声明于 `include/pto/common/pto_instr.hpp`：
 
@@ -92,6 +100,7 @@ PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantS
 ```
 
 ## 约束
+
 
 !!! warning "约束"
     ### 通用约束
@@ -161,7 +170,9 @@ PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantS
 
 ## 示例
 
+
 ### 自动（Auto）
+
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -176,6 +187,7 @@ void example_auto() {
 ```
 
 ### 手动（Manual）
+
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -195,6 +207,91 @@ void example_manual() {
 
 ## 相关页面
 
+
 - [布局与重排指令集](../../layout-and-rearrangement_zh.md)
 - [TMATMUL](../matrix-and-matrix-vector/tmatmul_zh.md)
 - [布局参考](../../../state-and-types/layout_zh.md)
+
+# pto.tmov
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Summary
+本节给出该指令/主题的核心语义与使用定位，和英文章节保持一致。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+## Variants
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Variant 1: Standard Move
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Variant 2: ReLU Move
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Variant 3: Accumulator-to-Vector
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Variant 4: Vector-Quant Move
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Variant 5: Scalar-Quant Move
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Variant 6: Fix-Pipe Move (`TMOV_FP`)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## AccToVecMode Reference
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Supported Tile-Type Pairs
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### A2/A3
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### A5
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Syntax
+本节列出语法形态（SSA / DPS / Assembly），用于与英文页逐项对照。
+
+### PTO Assembly Form
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### AS Level 1 (SSA)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### AS Level 2 (DPS)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Common Patterns
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Pattern 1: Vec-to-Vec Tile Copy
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Pattern 2: MX Block Extraction (GEMM Setup)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Pattern 3: Accumulator-to-Vector Conversion (Single Mode)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Pattern 4: Dual-Mode Accumulator-to-Vector (GEMM with 2 Vectors)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Pattern 5: Fix-Pipe Quantized Move (Production Inference)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Pattern 6: Bias Tile Extraction
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## See Also
+本节给出上下游指令与相关章节链接。

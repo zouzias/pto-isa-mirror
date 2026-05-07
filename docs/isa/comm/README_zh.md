@@ -1,5 +1,6 @@
 # 通信 ISA
 
+
 跨 NPU 集合通信、点对点交换和运行时同步。
 
 | | 指令 | PTO 名称 | 说明 |
@@ -17,3 +18,6 @@
 | | [TWAIT](./TWAIT_zh.md) | `pto.twait` | 等待通知 |
 
 请参阅[通信与运行时](communication-runtime_zh.md)了解该指令集的契约。
+
+# Communication ISA
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。

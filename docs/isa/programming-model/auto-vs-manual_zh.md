@@ -1,8 +1,10 @@
 # Auto 与 Manual
 
+
 PTO 同时支持 Auto 和 Manual 两种编程方式，因为它们解决的是不同问题。ISA manual 记录的是共享的架构契约；两种方式在作者与工具链之间分配职责的方式如下。
 
 ## 选择路径
+
 
 ```text
 Compiler / toolchain developer
@@ -16,9 +18,11 @@ Kernel author
 
 ## Auto 模式
 
+
 在 Auto 模式下，编译器或运行时自动插入 `TASSIGN`、`TSYNC` 和必要的数据移动操作。源码主要描述计算有效载荷。
 
 ### 源码中写什么
+
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -38,6 +42,7 @@ void vec_add(Tile<float, 16, 16>& c,
 
 ### 工具链补什么
 
+
 ```text
 TASSIGN(a, @tile(slot))
 TSYNC()
@@ -56,15 +61,18 @@ Auto 模式不会改变 PTO ISA 语义。插入的仍然是标准 PTO 操作。
 
 ### 约束
 
+
 - 工具链插入的操作必须满足与显式操作相同的合法性规则
 - Auto 模式假设 tile shape 和 valid region 已能在编译时确定
 - 自动插入同步只能覆盖默认数据依赖，不代表替代所有手工流水线结构
 
 ## Manual 模式
 
+
 在 Manual 模式下，作者显式绑定 tile 资源并管理同步。这提供了 tile 放置、双缓冲和流水重叠的精确控制。
 
 ### 源码中写什么
+
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -88,6 +96,7 @@ void vec_add_manual(Tile<float, 16, 16>& c,
 
 ### 双缓冲示例
 
+
 ```cpp
 TASSIGN(tile[0], 0x1000);
 TASSIGN(tile[1], 0x2000);
@@ -101,6 +110,7 @@ TSYNC();
 ```
 
 ## 共享契约
+
 
 两种模式共享相同的 ISA 契约：
 
@@ -116,6 +126,7 @@ TSYNC();
 
 ## 不允许的情形
 
+
 !!! danger "不允许的情形"
     - 把 Auto 模式写成能让非法程序“自动合法化”
     - 把 Manual 细节误写成所有 PTO 程序的默认保证
@@ -124,7 +135,45 @@ TSYNC();
 
 ## 相关页面
 
+
 - [执行代理与目标 Profile](../machine-model/execution-agents_zh.md)
 - [顺序与同步](../machine-model/ordering-and-synchronization_zh.md)
 - [可移植性与目标 Profile](../reference/portability-and-target-profiles_zh.md)
 - [GlobalTensor 与数据搬运](./globaltensor-and-data-movement_zh.md)
+
+
+# Auto Vs Manual
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Audience Decision Tree
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Auto Mode
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### What the Author Writes
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### What the Compiler/Runtime Inserts
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Constraints
+本节列出关键约束与不允许组合，确保使用方式可验证。
+
+## Manual Mode
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### What the Author Writes
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Double-Buffering Example
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Shared Contract
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Cases That Are Not Allowed
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## See Also
+本节给出相关章节和上下游链接。

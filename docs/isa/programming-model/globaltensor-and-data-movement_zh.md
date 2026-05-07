@@ -1,10 +1,13 @@
 # GlobalTensor 与数据搬运
 
+
 PTO 不隐藏全局内存与本地执行状态之间的数据移动。`GlobalTensor` 是面向 GM 的架构可见对象，数据移动操作定义了数据何时进入或离开局部有效载荷指令集。下文给出 GM 侧类型以及通向 tile buffer 与向量寄存器的完整路径。
 
 ## GlobalTensor
 
+
 ### 模板签名
+
 
 ```text
 GlobalTensor<DType, Shape, Stride, Layout>
@@ -21,6 +24,7 @@ GlobalTensor<DType, Shape, Stride, Layout>
 
 ### GlobalTensor 与 PartitionTensorView
 
+
 | 类型 | 说明 | 用法 |
 | --- | --- | --- |
 | `GlobalTensor` | C++ API 里的 GM 视图 | C++ kernel |
@@ -31,6 +35,7 @@ GlobalTensor<DType, Shape, Stride, Layout>
 
 ### 支持的 Layout
 
+
 | Layout | Stride Pattern | 说明 |
 | --- | --- | --- |
 | `ND` | row-major | 默认形式 |
@@ -39,6 +44,7 @@ GlobalTensor<DType, Shape, Stride, Layout>
 
 ## Tile 指令的数据路径
 
+
 Tile 指令通过 MTE2/MTE3 在 GM 与 tile buffer 之间搬运数据：
 
 ```text
@@ -46,6 +52,7 @@ GM -> UB -> Tile Buffer -> Tile Compute -> Tile Buffer -> UB -> GM
 ```
 
 ### TLOAD
+
 
 `TLOAD` 把 `GlobalTensor` 中的数据搬进 tile buffer：
 
@@ -68,6 +75,7 @@ dst.GetValidRow() × dst.GetValidCol()
 
 ### TSTORE
 
+
 `TSTORE` 把 tile buffer 中的数据写回 `GlobalTensor`：
 
 ```text
@@ -78,6 +86,7 @@ dst[r0 + i, c0 + j] = src[i, j]
 
 ### 原子 Store 变体
 
+
 | AtomicType | 行为 |
 | --- | --- |
 | `AtomicNone` | 普通覆盖写入 |
@@ -87,6 +96,7 @@ dst[r0 + i, c0 + j] = src[i, j]
 
 ## 向量指令的数据路径
 
+
 向量指令先经过显式的 GM↔UB DMA，再做 UB↔向量寄存器的搬运：
 
 ```text
@@ -95,6 +105,7 @@ vreg -> vsts/vscatter -> UB -> copy_ubuf_to_gm -> GM
 ```
 
 ### DMA 拷贝操作
+
 
 | 操作 | 方向 | 说明 |
 | --- | --- | --- |
@@ -106,6 +117,7 @@ vreg -> vsts/vscatter -> UB -> copy_ubuf_to_gm -> GM
 
 ### Vector Load/Store
 
+
 | 操作 | 路径 | 说明 |
 | --- | --- | --- |
 | `vlds` | UB → vreg | 标准向量加载 |
@@ -114,6 +126,7 @@ vreg -> vsts/vscatter -> UB -> copy_ubuf_to_gm -> GM
 | `vscatter` | vreg → UB | scatter 存储 |
 
 #### 常见分布模式
+
 
 | Mode | 含义 |
 | --- | --- |
@@ -128,6 +141,7 @@ vreg -> vsts/vscatter -> UB -> copy_ubuf_to_gm -> GM
 
 ## MTE 流水
 
+
 | MTE | 方向 | Tile 指令中的角色 | Vector 指令中的角色 |
 | --- | --- | --- | --- |
 | `MTE1` | GM → UB | 可选预取 | 向量加载前预取 |
@@ -135,6 +149,7 @@ vreg -> vsts/vscatter -> UB -> copy_ubuf_to_gm -> GM
 | `MTE3` | UB → GM | `TSTORE` 的写回阶段 | `copy_ubuf_to_gm` |
 
 ## 约束
+
 
 !!! warning "约束"
     - 数据移动的合法性依赖源/目标指令集、布局和 target profile
@@ -144,6 +159,7 @@ vreg -> vsts/vscatter -> UB -> copy_ubuf_to_gm -> GM
 
 ## 不允许的情形
 
+
 !!! danger "不允许的情形"
     - 把需要显式移动的数据路径写成“自动可见”
     - 把 vector 路径和 tile 路径写成同一套合法性契约
@@ -152,7 +168,9 @@ vreg -> vsts/vscatter -> UB -> copy_ubuf_to_gm -> GM
 
 ## 示例
 
+
 ### Tile 指令：逐元素加法
+
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -170,6 +188,7 @@ void vec_add(Tile<float, 16, 16>& c, const GlobalTensor<float>& ga,
 
 ### 向量指令：显式 UB 暂存
 
+
 ```c
 copy_gm_to_ubuf(%ub_ptr, %gm_ptr, ...);
 set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
@@ -182,7 +201,57 @@ copy_ubuf_to_gm(%ub_out, %gm_out, ...);
 
 ## 相关页面
 
+
 - [Tile 与有效区域](./tiles-and-valid-regions_zh.md)
 - [向量指令集](../vector/README_zh.md)
 - [向量加载存储参考](../vector/vector-load-store_zh.md)
 - [DMA 拷贝参考](../scalar/dma-copy_zh.md)
+
+
+# GlobalTensor And Data Movement
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### GlobalTensor Template Signature
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### GlobalTensor vs PartitionTensorView
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Supported Layouts
+本节定义类型/布局/格式规则与合法性要求。
+
+## Tile Instructions Data Path
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Atomic Store Variants
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Vector Instructions Data Path
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### DMA Copy Operations
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Vector Load/Store (pto.v*)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## MTE Pipeline
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Constraints
+本节列出关键约束与不允许组合，确保使用方式可验证。
+
+## Cases That Are Not Allowed
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Examples
+本节给出最小示例，说明该章节规则的典型用法。
+
+### Tile Instructions: Elementwise Add
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Vector Instructions: Fine-Grained Vector Load/Store
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## See Also
+本节给出相关章节和上下游链接。

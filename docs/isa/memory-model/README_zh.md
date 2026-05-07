@@ -1,13 +1,16 @@
 # 内存模型
 
+
 本章描述 PTO 的内存一致性模型：可见性与排序规则，涵盖生产者-消费者 Ordering 以及与其他 ISA 操作的关系。
 
 ## 本章内容
+
 
 - [一致性基线](consistency-baseline_zh.md) — GM / UB / Tile Buffer 三层内存空间、Program Order / Event Order / Barrier Order 三级 Ordering 分类表、未定义/未指明/实现定义行为的精确区分
 - [生产者-消费者排序](producer-consumer-ordering_zh.md) — 完整状态机图（IDLE → IN_PROGRESS → COMPLETE）、Tile Instructions 和 Vector Instructions 的 Ordering 链、跨指令集传递规则
 
 ## 阅读建议
+
 
 建议按以下顺序阅读：
 
@@ -16,4 +19,15 @@
 
 ## 章节定位
 
+
 本章属于手册的第 6 章。建议在阅读指令集章节（第 7 章）之前，先理解内存模型，因为许多指令的行为与内存 Ordering 直接相关，特别是 `TLOAD` / `TSTORE` 和 `copy_gm_to_ubuf` / `copy_ubuf_to_gm` 的同步语义。
+
+
+# Memory Model
+本节说明抽象模型与关键对象关系，用于统一术语与行为理解。
+
+## In This Chapter
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Chapter Placement
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。

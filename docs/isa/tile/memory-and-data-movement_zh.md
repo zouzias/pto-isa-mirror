@@ -1,8 +1,10 @@
 # 内存与数据搬运指令集
 
+
 这一组指令负责在 GM 与 tile 本地缓冲之间搬运数据，也是 tile 路径里唯一直接跨越“GM 可见状态”和“tile 可见状态”的指令面。无论是连续搬运，还是带索引的 gather/scatter，都属于这一类。
 
 ## 指令一览
+
 
 | 操作 | 说明 |
 | --- | --- |
@@ -15,7 +17,9 @@
 
 ## 机制
 
+
 ### 连续搬运：TLOAD / TSTORE
+
 
 二维视角下可以理解为：
 
@@ -31,9 +35,11 @@ TSTORE: dst[r0 + i, c0 + j] = src[i, j]
 
 ### 预取：TPREFETCH
 
+
 `TPREFETCH` 会提前把后续可能要用到的 GM 数据搬进 tile 可见的本地路径。它的意义不在于改变数据布局，而在于把“稍后会访问的数据”尽早拉近。
 
 ### 索引搬运：MGATHER / MSCATTER
+
 
 索引类搬运允许非连续地址访问：
 
@@ -44,9 +50,11 @@ scatter: dst[index[i]] = src[i]
 
 ### `_fp` 变体
 
+
 `TSTORE_FP` 里的 `_fp` 指的是 **fix-pipe** 路径，不是 floating-point store 的缩写。它通过 fix-pipe sideband state 配合写回。
 
 ## 布局兼容性
+
 
 | TileType | ND→ND | DN→DN | NZ→NZ | ND→NZ | DN→ZN | 说明 |
 | --- | :---: | :---: | :---: | :---: | :---: | --- |
@@ -56,10 +64,12 @@ scatter: dst[index[i]] = src[i]
 
 ### A5 额外限制
 
+
 - `TileType::Vec` 若做 `ND→NZ` 或 `DN→ZN`，要求 `GlobalData::staticShape[0..2] == 1` 且 `TileData::SFractalSize == 512`
 - `int64_t/uint64_t` 的 Vec 路径只支持 `ND→ND` 或 `DN→DN`
 
 ## 目标 Profile 支持
+
 
 | 元素类型 | CPU Simulator | A2/A3 | A5 |
 | --- | :---: | :---: | :---: |
@@ -73,6 +83,7 @@ scatter: dst[index[i]] = src[i]
 
 ## 排序与同步
 
+
 内存与数据搬运指令必须遵守 PTO 的生产者-消费者排序规则。程序不能假设“搬完了自然可见”，而是应显式使用：
 
 - `TSYNC`
@@ -81,6 +92,7 @@ scatter: dst[index[i]] = src[i]
 来保证后续计算看到的是已经到位的数据。
 
 ## 约束
+
 
 !!! warning "约束"
     - 源与目标 dtype 的字节大小必须兼容：`sizeof(tile.dtype) == sizeof(gtensor.dtype)`
@@ -91,6 +103,7 @@ scatter: dst[index[i]] = src[i]
 
 ## 不允许的情形
 
+
 !!! danger "不允许的情形"
     - 使用未初始化的 tile 参与搬运
     - GlobalTensor 的 stride 与搬运模式不兼容
@@ -100,6 +113,49 @@ scatter: dst[index[i]] = src[i]
 
 ## 相关页面
 
+
 - [一致性基线](../memory-model/consistency-baseline_zh.md)
 - [生产者-消费者排序](../memory-model/producer-consumer-ordering_zh.md)
 - [Tile 指令族](../instruction-families/tile-families_zh.md)
+
+# Memory And Data Movement Instruction Set
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Operations
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+### Contiguous Transfer (TLOAD, TSTORE)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Prefetch (TPREFETCH)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Gather/Scatter (MGATHER, MSCATTER)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Fix-Pipe Variants (TSTORE_FP)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Layout Compatibility
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Type Support by Target Profile
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Ordering
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Cases That Are Not Allowed
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## See Also
+本节给出上下游指令与相关章节链接。

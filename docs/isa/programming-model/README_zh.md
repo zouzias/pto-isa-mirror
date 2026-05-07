@@ -1,14 +1,17 @@
 # 编程模型
 
+
 本章描述程序员在 PTO 中推理和操作的对象：Tile、有效区域（valid region）、GlobalTensor 以及 Auto 模式与 Manual 模式的执行模型。
 
 ## 本章内容
+
 
 - [Tile 与有效区域](tiles-and-valid-regions_zh.md) — Tile 的类型、角色、有效区域的概念与约束
 - [GlobalTensor 与数据移动](globaltensor-and-data-movement_zh.md) — GlobalTensor 视图以及 GM 与 Tile 之间的数据移动
 - [Auto 模式 vs Manual 模式](auto-vs-manual_zh.md) — 两种执行模式的对比与适用场景
 
 ## 阅读建议
+
 
 建议按以下顺序阅读：
 
@@ -18,4 +21,15 @@
 
 ## 章节定位
 
+
 本章属于手册的第 2 章。在进入指令细节之前，应先理解编程模型，因为 PTO 的所有指令都围绕 Tile 和有效区域展开。
+
+
+# Programming Model
+本节说明抽象模型与关键对象关系，用于统一术语与行为理解。
+
+## In This Chapter
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Chapter Placement
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。

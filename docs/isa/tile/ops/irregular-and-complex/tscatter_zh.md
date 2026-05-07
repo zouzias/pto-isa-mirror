@@ -1,16 +1,20 @@
 # TSCATTER
 
+
 ## 指令示意图
+
 
 ![TSCATTER tile operation](../../../../figures/isa/TSCATTER.svg)
 
 ## 简介
+
 
 `TSCATTER` 按索引 Tile 给出的目标偏移，把源 Tile 中的元素分散写入目标 Tile。它适合表达“不规则写回到本地 Tile”这类模式：数据仍然留在 tile 空间里，但目的位置不再由规则的行列映射决定。
 
 和规则搬运不同，`TSCATTER` 的关键输入不是另一个 shape，而是 `indexes`。每个索引元素都表示目标 Tile 在线性存储视角下的一个元素偏移。
 
 ## 数学语义
+
 
 设：
 
@@ -31,6 +35,7 @@ $$ \mathrm{dst\_flat}_{\mathrm{indexes}_{i,j}} = \mathrm{src}_{i,j} $$
 
 ## 汇编语法
 
+
 PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 同步形式：
@@ -41,17 +46,20 @@ PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/a
 
 ### AS Level 1（SSA）
 
+
 ```text
 %dst = pto.tscatter %src, %idx : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### AS Level 2（DPS）
 
+
 ```text
 pto.tscatter ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ 内建接口
+
 
 声明于 `include/pto/common/pto_instr.hpp`：
 
@@ -61,6 +69,7 @@ PTO_INST RecordEvent TSCATTER(TileDataD &dst, TileDataS &src, TileDataI &indexes
 ```
 
 ## 约束
+
 
 !!! warning "约束"
     ### 通用约束
@@ -96,7 +105,9 @@ PTO_INST RecordEvent TSCATTER(TileDataD &dst, TileDataS &src, TileDataI &indexes
 
 ## 示例
 
+
 ### 自动（Auto）
+
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -113,6 +124,7 @@ void example_auto() {
 ```
 
 ### 手动（Manual）
+
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -133,6 +145,85 @@ void example_manual() {
 
 ## 相关页面
 
+
 - [不规则与复杂指令集](../../irregular-and-complex_zh.md)
 - [布局参考](../../../state-and-types/layout_zh.md)
 - [数据格式](../../../state-and-types/data-format_zh.md)
+
+# pto.tscatter
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Summary
+本节给出该指令/主题的核心语义与使用定位，和英文章节保持一致。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+## Syntax
+本节列出语法形态（SSA / DPS / Assembly），用于与英文页逐项对照。
+
+### IR Level 1 (SSA)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### IR Level 2 (DPS)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## Inputs
+本节定义输入操作数角色、数据来源与有效区域要求。
+
+## Expected Outputs
+本节定义输出结果及其在有效区域内的语义保证。
+
+## Side Effects
+本节说明除结果写回外是否存在额外可观察副作用。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Exceptions
+本节描述非法输入、不支持组合与验证失败行为。
+
+## Target-Profile Restrictions
+本节给出 A2/A3、A5 及 CPU-SIM 的差异化限制与行为说明。
+
+## Examples
+本节提供 Auto/Manual 及 AS 形式示例，便于中英文对照复现。
+
+### Auto
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Manual
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Auto Mode
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# Auto mode: compiler/runtime-managed placement and scheduling.
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Manual Mode
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# Manual mode: bind resources explicitly before issuing the instruction.
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# Optional for tile operands:
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# pto.tassign %arg0, @tile(0x1000)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# pto.tassign %arg1, @tile(0x2000)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### PTO Assembly Form
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# IR Level 2 (DPS)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Related Ops / Instruction Set Links
+本节给出上下游指令与相关章节链接。

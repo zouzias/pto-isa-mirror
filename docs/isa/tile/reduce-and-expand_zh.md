@@ -1,10 +1,13 @@
 # 归约与扩展指令集
 
+
 归约操作沿某个轴把二维 tile 折叠成一维结果，扩展操作则把一维 tile 沿某个轴广播回二维 tile。它们经常出现在 softmax、归一化、池化、广播算术和索引类后处理里。
 
 ## 指令一览
 
+
 ### 按行归约
+
 
 | 操作 | 说明 |
 | --- | --- |
@@ -17,6 +20,7 @@
 
 ### 按列归约
 
+
 | 操作 | 说明 |
 | --- | --- |
 | `pto.tcolsum` | 对每一列按行求和 |
@@ -27,6 +31,7 @@
 | `pto.tcolargmin` | 求每一列最小值所在行索引 |
 
 ### 按行扩展
+
 
 | 操作 | 说明 |
 | --- | --- |
@@ -41,6 +46,7 @@
 
 ### 按列扩展
 
+
 | 操作 | 说明 |
 | --- | --- |
 | `pto.tcolexpand` | 把 `(1,C)` 扩成 `(R,C)` |
@@ -54,7 +60,9 @@
 
 ## 机制
 
+
 ### 归约
+
 
 按行归约的基本形式：
 
@@ -68,6 +76,7 @@ $$ \mathrm{dst}_{c} = \bigoplus_{r=0}^{R-1} \mathrm{src}_{r,c} $$
 
 ### 扩展
 
+
 按行扩展的基本形式：
 
 $$ \mathrm{dst}_{r,c} = \mathrm{src}_{r} $$
@@ -80,6 +89,7 @@ $$ \mathrm{dst}_{r,c} = \mathrm{src}_{c} $$
 
 ## 输出形状
 
+
 | 操作 | 输入形状 | 输出形状 |
 | --- | --- | --- |
 | 行归约 | `(R, C)` | `(R, 1)` |
@@ -88,6 +98,7 @@ $$ \mathrm{dst}_{r,c} = \mathrm{src}_{c} $$
 | 列扩展 | `(1, C)` | `(R, C)` |
 
 ## 约束
+
 
 !!! warning "约束"
     - 源 tile 的 valid region 决定归约域。
@@ -98,6 +109,7 @@ $$ \mathrm{dst}_{r,c} = \mathrm{src}_{c} $$
 
 ## 不允许的情形
 
+
 !!! danger "不允许的情形"
     - 在长度为 0 的轴上归约。
     - 对不支持的元素类型使用 `arg` 类变体。
@@ -106,5 +118,66 @@ $$ \mathrm{dst}_{r,c} = \mathrm{src}_{c} $$
 
 ## 相关页面
 
+
 - [Tile 指令族](../instruction-families/tile-families_zh.md)
 - [Tile 指令面](../instruction-families/tile-families_zh.md)
+
+# Reduce And Expand Instruction Set
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Operations
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Reduce (Row)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Reduce (Column)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Expand (Row)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Expand (Column)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+### Reduce
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Expand
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Output Shape
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Type Support by Target Profile
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Cases That Are Not Allowed
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## Throughput and Latency (A2/A3)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Row Reduction Throughput and Latency (TROWSUM / TROWMAX / TROWMIN)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Column Reduction Throughput and Latency (TCOLSUM / TCOLMAX)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Row Expand Throughput and Latency (TROWEXPAND)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Throughput and Latency Testing
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## See Also
+本节给出上下游指令与相关章节链接。

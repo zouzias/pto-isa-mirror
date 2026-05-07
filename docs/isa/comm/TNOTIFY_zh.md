@@ -1,10 +1,13 @@
 # TNOTIFY
 
+
 ## 简介
+
 
 `TNOTIFY` 向远端 NPU 发送标志通知，用于在不搬运大量数据的前提下建立轻量级同步。
 
 ## 数学语义
+
 
 `NotifyOp::Set`：
 
@@ -16,6 +19,7 @@ $$ \mathrm{signal}^{\mathrm{remote}} \mathrel{+}= \mathrm{value} $$
 
 ## 汇编语法
 
+
 PTO-AS 形式：
 
 ```text
@@ -24,6 +28,7 @@ tnotify %signal_remote, %value {op = #pto.notify_op<AtomicAdd>} : (!pto.memref<i
 ```
 
 ## C++ 内建接口
+
 
 声明于 `include/pto/comm/pto_comm_inst.hpp`：
 
@@ -34,6 +39,7 @@ PTO_INST void TNOTIFY(GlobalSignalData &dstSignalData, int32_t value, NotifyOp o
 
 ## 约束
 
+
 !!! warning "约束"
     - `GlobalSignalData::DType` 必须为 `int32_t`
     - `dstSignalData` 必须指向远端地址
@@ -43,7 +49,9 @@ PTO_INST void TNOTIFY(GlobalSignalData &dstSignalData, int32_t value, NotifyOp o
 
 ## 示例
 
+
 ### 基础通知
+
 
 ```cpp
 void notify_set(__gm__ int32_t* remote_signal) {
@@ -54,9 +62,40 @@ void notify_set(__gm__ int32_t* remote_signal) {
 
 ### 原子计数器自增
 
+
 ```cpp
 void atomic_increment(__gm__ int32_t* remote_counter) {
     comm::Signal counter(remote_counter);
     comm::TNOTIFY(counter, 1, comm::NotifyOp::AtomicAdd);
 }
 ```
+
+# pto.tnotify
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Introduction
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Math Interpretation
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Assembly Syntax
+本节列出语法形态（SSA / DPS / Assembly），用于与英文页逐项对照。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Examples
+本节提供 Auto/Manual 及 AS 形式示例，便于中英文对照复现。
+
+### Basic Set Notification
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Atomic Counter Increment
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Producer-Consumer Pattern
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。

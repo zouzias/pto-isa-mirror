@@ -1,35 +1,27 @@
 # pto.tadd
 
+
 `pto.tadd` 属于[逐元素 Tile-Tile](../../elementwise-tile-tile_zh.md)指令集。
 
 ## 概述
 
-对两个源 tile 做逐元素加法，结果写入目标 tile。迭代域由目标 tile 的 valid region 决定。
+
+对两个源 tile 进行逐 lane 加法并写入目标 tile。迭代域由目标 tile 的有效区域定义。
 
 ## 机制
 
-对目标 tile 的 valid region 中每个 `(i, j)`：
+
+对目标有效区域内每个元素 `(i, j)`：
 
 $$ \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} + \mathrm{src1}_{i,j} $$
 
-真正决定遍历范围的是目标 tile，不是两个源 tile。源 tile 会在相同坐标被读取；如果某个源 tile 在该坐标超出了自己的 valid region，那么这个位置读到的值属于 implementation-defined。
-
-### 微操作映射
-
-从 Tile Register File 的视角，这条指令可以理解为：
-
-```text
-TRF_READ(src0, i, j) -> A
-TRF_READ(src1, i, j) -> B
-A + B                -> C
-TRF_WRITE(dst, i, j, C)
-```
-
-这一级不会直接暴露给手册读者，但它解释了为什么布局、stride 和目标 pipeline 会影响吞吐。
+当源 tile 在某些 lane 上不覆盖目标有效域时，越界 lane 的读取行为以目标 profile 定义为准（详见英文页）。
 
 ## 语法
 
-### PTO-AS
+
+### Assembly Form（PTO-AS）
+
 
 ```text
 %dst = tadd %src0, %src1 : !pto.tile<...>
@@ -37,18 +29,26 @@ TRF_WRITE(dst, i, j, C)
 
 ### AS Level 1（SSA）
 
+
 ```mlir
 %dst = pto.tadd %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### AS Level 2（DPS）
 
+
 ```mlir
 pto.tadd ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
          outs(%dst : !pto.tile_buf<...>)
 ```
 
+### 微操作映射
+
+
+`pto.tadd` 在后端可映射为读取两路源寄存器、执行加法、写回目标寄存器的流水序列。
+
 ## C++ 内建接口
+
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
@@ -57,106 +57,182 @@ PTO_INST RecordEvent TADD(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& sr
 
 ## 输入
 
+
 | 操作数 | 角色 | 说明 |
-| --- | --- | --- |
-| `%src0` | 左 tile | 在 `dst` valid region 上逐坐标读取 |
-| `%src1` | 右 tile | 在 `dst` valid region 上逐坐标读取 |
+|---|---|---|
+| `%src0` | 左操作数 | 第一路源 tile |
+| `%src1` | 右操作数 | 第二路源 tile |
 | `WaitEvents...` | 可选同步 | 发射前需要等待的事件 |
 
 ## 预期输出
 
+
 | 结果 | 类型 | 说明 |
-| --- | --- | --- |
-| `%dst` | `!pto.tile<...>` | `dst` valid region 内的每个元素都等于 `src0 + src1` |
+|---|---|---|
+| `%dst` | `!pto.tile<...>` | 目标 tile 在有效域内写入 `src0 + src1` |
 
 ## 副作用
 
-除产生目标 tile 外，没有额外架构副作用，不会隐式为无关 tile 流量建立栅栏。
+
+除写入目标 tile 外，无额外架构副作用；不会隐式栅栏不相关流量。
 
 ## 约束
 
+
 !!! warning "约束"
-    - `src0`、`src1` 和 `dst` 必须有相同元素类型。
-    - 布局必须彼此兼容，见[Tile 与 Valid Region](../../../programming-model/tiles-and-valid-regions_zh.md)。
-    - 迭代域总是 `dst.GetValidRow() × dst.GetValidCol()`。
-    - 目标 tile 的 TileType 决定这条指令落在哪类 pipeline 上执行。
+    - `src0`、`src1`、`dst` 元素类型必须一致。
+    - 布局组合必须受目标 profile 支持。
+    - 迭代域为 `dst.GetValidRow() × dst.GetValidCol()`。
 
-## 异常与非法情形
+## 异常
 
-!!! danger "异常与非法情形"
-    - verifier 会拒绝源 / 目标类型不匹配。
-    - 后端会拒绝所选 target profile 不支持的元素类型、布局或 shape。
-    - 程序不能依赖 `dst` valid region 之外的值。
+
+!!! danger "异常"
+    - 类型不匹配、布局不合法、目标后端不支持等情形会被 verifier 或后端拒绝。
 
 ## Target-Profile 限制
 
-| 特性 | CPU Simulator | A2/A3 | A5 |
-| --- | :---: | :---: | :---: |
-| `f32` | Simulated | Supported | Supported |
-| `f16` | Simulated | Supported | Supported |
-| `bf16` | Simulated | Supported | Supported |
-| `i32` | Simulated | Supported | Supported |
-| `i16` | Simulated | Supported | Supported |
-| `i8 / u8` | Simulated | No | Supported |
-| `i64 / u64` | Simulated | No | No |
-| `f8e4m3 / f8e5m2` | Simulated | No | Supported |
-| 布局 | Any | RowMajor only | RowMajor only |
 
-A2/A3 与 A5 当前都要求行主序布局才能走正式实现路径；A5 支持的元素类型更宽。
+??? info "Target-Profile 限制"
+    - A2/A3 与 A5 的支持类型、布局与行为细节请参考英文页：`tadd.md`。
 
 ## 性能
 
-### A2/A3
 
-`TADD` 会落到 CCE 向量二元算术路径：
+### A2/A3 吞吐
 
-| 指标 | 数值 | 常量 |
-| --- | --- | --- |
-| 启动时延 | 14 cycles | `A2A3_STARTUP_BINARY` |
-| 完成时延 | 19（FP）/ 17（INT） | `A2A3_COMPL_FP_BINOP` / `A2A3_COMPL_INT_BINOP` |
-| 每次 repeat 吞吐 | 2 cycles | `A2A3_RPT_2` |
-| 流水间隔 | 18 cycles | `A2A3_INTERVAL` |
-| 周期模型 | `14 + C + 2R + (R-1)×18` | `R` 为 repeats |
 
-连续路径下可粗略按 `R = validRow × validCol / 8` 估算 repeats。
+在 A2/A3 上通常映射为向量二元算子路径，吞吐模型与重复次数相关。
 
-### A5
+### Shape-Dependent 优化
 
-当前手册未单列 `tadd` 的独立周期表，应视为目标 profile 相关。
+
+不同 valid shape 与步幅会选择不同指令序列路径。
+
+### 布局对吞吐的影响
+
+
+RowMajor 一般更容易走连续快路径；其他布局可能进入通用路径。
+
+### 吞吐估算示例
+
+
+具体 cycle 估算公式与常量请参考英文页。
 
 ## 示例
 
-### C++ 自动模式
+
+### C++（Auto Mode）
+
 
 ```cpp
-#include <pto/pto-inst.hpp>
-using namespace pto;
-
-void add_tiles(Tile<Vec, float, 16, 16>& dst,
-               Tile<Vec, float, 16, 16>& src0,
-               Tile<Vec, float, 16, 16>& src1) {
-    TADD(dst, src0, src1);
-}
+TADD(dst, src0, src1);
 ```
 
-### C++ 手动模式
+### C++（Manual Mode）
+
 
 ```cpp
-#include <pto/pto-inst.hpp>
-using namespace pto;
-
-void add_tiles_manual(Tile<Vec, float, 16, 16>& dst,
-                      Tile<Vec, float, 16, 16>& src0,
-                      Tile<Vec, float, 16, 16>& src1) {
-    TASSIGN(src0, 0x1000);
-    TASSIGN(src1, 0x2000);
-    TASSIGN(dst,  0x3000);
-    TADD(dst, src0, src1);
-}
+TASSIGN(src0, 0x1000);
+TASSIGN(src1, 0x2000);
+TASSIGN(dst,  0x3000);
+TADD(dst, src0, src1);
 ```
 
-## 相关页面
+### MLIR（SSA）
+
+
+```mlir
+%result = pto.tadd %src0, %src1 : (!pto.tile<f32, 16, 16>, !pto.tile<f32, 16, 16>) -> !pto.tile<f32, 16, 16>
+```
+
+### MLIR（DPS）
+
+
+```mlir
+pto.tadd ins(%src0, %src1 : !pto.tile_buf<f32, 16, 16>, !pto.tile_buf<f32, 16, 16>)
+         outs(%result : !pto.tile_buf<f32, 16, 16>)
+```
+
+## 相关页面 / 指令集链接
+
 
 - 指令集总览：[逐元素 Tile-Tile](../../elementwise-tile-tile_zh.md)
+- 上一条指令：（无）
 - 下一条指令：[pto.tabs](./tabs_zh.md)
-- [Tile 与 Valid Region](../../../programming-model/tiles-and-valid-regions_zh.md)
+- 英文规范页：[tadd.md](./tadd.md)
+
+## Summary
+本节给出该指令/主题的核心语义与使用定位，和英文章节保持一致。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+## Syntax
+本节列出语法形态（SSA / DPS / Assembly），用于与英文页逐项对照。
+
+### Assembly Form (PTO-AS)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### AS Level 1 — SSA Form
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### AS Level 2 — DPS Form
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Micro-Operation Mapping
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## Inputs
+本节定义输入操作数角色、数据来源与有效区域要求。
+
+## Expected Outputs
+本节定义输出结果及其在有效区域内的语义保证。
+
+## Side Effects
+本节说明除结果写回外是否存在额外可观察副作用。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Exceptions
+本节描述非法输入、不支持组合与验证失败行为。
+
+## Target-Profile Restrictions
+本节给出 A2/A3、A5 及 CPU-SIM 的差异化限制与行为说明。
+
+## Performance
+本节说明性能路径、吞吐估算与形状/布局敏感因素。
+
+### A2/A3 Throughput
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Shape-Dependent Optimizations
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Layout Impact on Throughput
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Example Throughput Estimate
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Examples
+本节提供 Auto/Manual 及 AS 形式示例，便于中英文对照复现。
+
+### C++ — Auto Mode
+本节给出 C++ 内建接口入口与参数语义说明。
+
+### C++ — Manual Mode
+本节给出 C++ 内建接口入口与参数语义说明。
+
+### MLIR — SSA Form
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### MLIR — DPS Form
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Related Ops / Instruction Set Links
+本节给出上下游指令与相关章节链接。

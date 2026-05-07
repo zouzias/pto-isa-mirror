@@ -1,8 +1,10 @@
 # 汇编拼写与操作数
 
+
 PTO ISA 包含一套文本汇编拼写形式，即 PTO-AS，但架构契约本身仍定义在 PTO ISA manual 中。下文给出三种文本层级的 BNF 语法、操作数修饰规则和属性语法；具体指令的特殊拼写由各自的 per-op 页面补充。
 
 ## 三层语法系统
+
 
 PTO 定义三种文本语法层级，它们保留同一套 ISA 契约：
 
@@ -16,7 +18,9 @@ PTO 定义三种文本语法层级，它们保留同一套 ISA 契约：
 
 ## BNF 语法
 
+
 ### Assembly Form（PTO-AS）
+
 
 ```text
 assembly-program  ::= assembly-stmt*
@@ -37,6 +41,7 @@ type-key          ::= "tile" | "tile_buf" | "vreg" | "ptr" | "partition_tensor_v
 
 ### SSA Form（AS Level 1）
 
+
 ```text
 ssa-program       ::= ssa-stmt*
 ssa-stmt          ::= ssa-result "=" op-name operands ":" ssa-type -> ssa-type
@@ -50,6 +55,7 @@ ssa-type-key      ::= "tile" | "tile_buf" | "vreg" | "ptr" | "partition_tensor_v
 
 ### DPS Form（AS Level 2）
 
+
 ```text
 dps-program       ::= dps-stmt*
 dps-stmt          ::= op-name "ins(" dps-ins ")" "outs(" dps-outs ")"
@@ -61,7 +67,9 @@ dps-out-item      ::= ssa-result ":" ssa-type
 
 ## 操作数修饰规则
 
+
 ### Tile 操作数
+
 
 PTO-AS 中的 tile 操作数可以带修饰：
 
@@ -80,6 +88,7 @@ PTO-AS 中的 tile 操作数可以带修饰：
 
 ### GlobalTensor 操作数
 
+
 在 PTO-AS 中，`GlobalTensor` 一般表现为 `memref` 或 `partition_tensor_view`：
 
 ```text
@@ -89,6 +98,7 @@ PTO-AS 中的 tile 操作数可以带修饰：
 ```
 
 ### 谓词操作数
+
 
 ```text
 %mask : !pto.mask
@@ -102,12 +112,14 @@ PTO-AS 中的 tile 操作数可以带修饰：
 
 ### 立即数操作数
 
+
 ```text
 tadds %dst, %src, 0x3F800000
 tshrs %dst, %src, 16
 ```
 
 ## 指令后缀
+
 
 | 后缀 | 含义 | 例子 |
 | --- | --- | --- |
@@ -121,6 +133,7 @@ tshrs %dst, %src, 16
 | `_mx` | MX format 变体 | `tgemv_mx` |
 
 ## 属性语法
+
 
 在 PTO-AS 中，属性写在 `#` 后面：
 
@@ -138,7 +151,9 @@ tmatmul %c, %a, %b #phase=relu
 
 ## 完整示例
 
+
 ### Tile 逐元素加法
+
 
 **Assembly Form**:
 
@@ -161,11 +176,13 @@ pto.tadd ins(%src0, %src1 : !pto.tile_buf<f32, 16, 16>, !pto.tile_buf<f32, 16, 1
 
 ### Tile 加载
 
+
 ```text
 tload %tile, %tensor[%r, %c] : (!pto.tile<f32,16,16>, !pto.memref<f32,5>) -> !pto.tile<f32,16,16>
 ```
 
 ### 向量加法
+
 
 ```text
 %result = pto.vadd %src0, %src1, %mask : (!pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask) -> !pto.vreg<64xf32>
@@ -173,11 +190,13 @@ tload %tile, %tensor[%r, %c] : (!pto.tile<f32,16,16>, !pto.memref<f32,5>) -> !pt
 
 ### 谓词生成
 
+
 ```text
 %pred = pto.pge_b32 %src0, %src1 : (!pto.vreg<64xi32>, !pto.vreg<64xi32>) -> !pto.mask
 ```
 
 ## 文本拼写不能替代的内容
+
 
 文本拼写不能替代：
 
@@ -188,14 +207,80 @@ tload %tile, %tensor[%r, %c] : (!pto.tile<f32,16,16>, !pto.memref<f32,5>) -> !pt
 
 ## 契约说明
 
+
 - 文本汇编形式必须与对应 intrinsic 形式保持同一可见语义
 - 汇编语法规则必须留在 PTO ISA 的语法与操作数页面中，而不是落入 backend 私有注释
 - 会改变语义的语法变体必须被明确文档化
 
 ## 相关页面
 
+
 - [操作数与属性](./operands-and-attributes_zh.md)
 - [类型系统](../state-and-types/type-system_zh.md)
 - [什么是 PTO 虚拟 ISA](../introduction/what-is-pto-visa_zh.md)
 - [指令族总览](../instruction-families/README_zh.md)
 - [通用约定](../conventions_zh.md)
+
+
+# Assembly Spelling And Operands
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+## Three-Level Syntax System
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+## BNF Grammar
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Assembly Form (PTO-AS)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### SSA Form (AS Level 1)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### DPS Form (AS Level 2)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Operand Modifier Rules
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+### Tile Operands
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+### GlobalTensor Operands
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+### Predicate Operands
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+### Immediate Operands
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+## Instruction Suffixes
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Attribute Syntax
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+## Complete Examples
+本节给出最小示例，说明该章节规则的典型用法。
+
+### Tile Compute: Elementwise Addition
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Tile Load: From GlobalTensor
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Vector Compute: Vector Addition with Mask
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Scalar Compare: Predicate Generation
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## What Textual Spelling Does Not Replace
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Contract Notes
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## See Also
+本节给出相关章节和上下游链接。

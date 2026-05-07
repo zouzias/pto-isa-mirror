@@ -1,6 +1,8 @@
 # TREDUCE
 
+
 ## 简介
+
 
 Reduce 操作：从多个远端 NPU 收集数据并在本地执行逐元素归约。
 
@@ -10,6 +12,7 @@ Reduce 操作：从多个远端 NPU 收集数据并在本地执行逐元素归�
 
 ## 数学语义
 
+
 对有效区域内每个元素 `(i, j)`：
 
 $$\mathrm{dst}^{\mathrm{local}}_{i,j} = \bigoplus_{r=0}^{N-1} \mathrm{src}^{(r)}_{i,j}$$
@@ -17,6 +20,7 @@ $$\mathrm{dst}^{\mathrm{local}}_{i,j} = \bigoplus_{r=0}^{N-1} \mathrm{src}^{(r)}
 其中 $N$ 为 rank 总数，$\oplus$ 为归约运算（求和、取最大值、取最小值等）。
 
 ## 汇编语法
+
 
 PTO-AS 形式：参见 [PTO ISA 语法与操作数](../syntax-and-operands/assembly-model_zh.md)。
 
@@ -30,6 +34,7 @@ treduce %group, %dst {op = #pto.reduce_op<Max>} : (!pto.group<...>, !pto.memref<
 降级时会为 reduce 流水线引入内部累加 Tile 和接收 Tile；C++ 内建接口需要显式传入 `accTileData`、`recvTileData`（或 `accTileData`、`pingTileData`、`pongTileData`）操作数。
 
 ## C++ 内建接口
+
 
 声明于 `include/pto/comm/pto_comm_inst.hpp`：
 
@@ -48,6 +53,7 @@ PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &ds
 
 ## 约束
 
+
 !!! warning "约束"
     - **类型约束**：
         - `ParallelGroup::value_type::RawDType` 必须等于 `GlobalDstData::RawDType`。
@@ -65,7 +71,9 @@ PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &ds
 
 ## 示例
 
+
 ### 基础求和归约
+
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -90,6 +98,7 @@ void reduce_sum(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_rank) {
 
 ### 最大值归约
 
+
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
 
@@ -110,3 +119,30 @@ void reduce_max(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_rank) {
     comm::TREDUCE(group, dstG, accTile, recvTile, comm::ReduceOp::Max);
 }
 ```
+
+# pto.treduce
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Introduction
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Math Interpretation
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Assembly Syntax
+本节列出语法形态（SSA / DPS / Assembly），用于与英文页逐项对照。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Examples
+本节提供 Auto/Manual 及 AS 形式示例，便于中英文对照复现。
+
+### Basic Reduce Sum
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Max Reduce
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。

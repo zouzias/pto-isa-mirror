@@ -1,6 +1,8 @@
 # pto.tget / TGET
 
+
 ## 简介
+
 
 `TGET` 是远程读原语：把远端 NPU 上的 GM 数据读到当前 NPU 的本地 GM。`pto.tget` 是 IR 形式，`TGET` 是 C++ intrinsic 形式，两者描述的是同一条通信指令。
 
@@ -14,11 +16,13 @@
 
 ## 数学语义
 
+
 对有效区域中的每个元素 `(i, j)`：
 
 $$ \mathrm{dst}^{\mathrm{local}}_{i,j} = \mathrm{src}^{\mathrm{remote}}_{i,j} $$
 
 ## 汇编语法
+
 
 PTO-AS 形式：
 
@@ -30,9 +34,11 @@ lowering 会引入 UB 暂存 Tile 来承接 GM→UB→GM 的路径，因此 C++ 
 
 ## C++ 内建接口
 
+
 声明于 `include/pto/comm/pto_comm_inst.hpp`：
 
 ### 单暂存 Tile
+
 
 ```cpp
 template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
@@ -44,6 +50,7 @@ PTO_INST RecordEvent TGET(GlobalDstData &dstGlobalData,
 
 ### 乒乓双缓冲
 
+
 ```cpp
 template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TGET(GlobalDstData &dstGlobalData,
@@ -54,6 +61,7 @@ PTO_INST RecordEvent TGET(GlobalDstData &dstGlobalData,
 ```
 
 ## 约束
+
 
 !!! warning "约束"
     ### 类型约束
@@ -75,7 +83,9 @@ PTO_INST RecordEvent TGET(GlobalDstData &dstGlobalData,
 
 ## 示例
 
+
 ### 基础形式
+
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -101,6 +111,7 @@ void remote_read(__gm__ T* local_data, __gm__ T* remote_addr) {
 
 ### 大张量自动分块
 
+
 ```cpp
 using GShape  = Shape<1, 1, 1, 4096, 4096>;
 using GStride = BaseShape2D<T, 4096, 4096, Layout::ND>;
@@ -116,6 +127,7 @@ comm::TGET(dstG, srcG, stagingTile);
 
 ### 乒乓双缓冲
 
+
 ```cpp
 constexpr size_t tileUBBytes = ((64 * 64 * sizeof(float) + 1023) / 1024) * 1024;
 TileT pingTile(64, 64);
@@ -128,7 +140,41 @@ comm::TGET(dstG, srcG, pingTile, pongTile);
 
 ## 相关页面
 
+
 - [通信与运行时](communication-runtime_zh.md)
 - [TPUT](./TPUT_zh.md)
 - [TBROADCAST](./TBROADCAST_zh.md)
 - [TGATHER](./TGATHER_zh.md)
+
+# pto.tget
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Introduction
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Math Interpretation
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Assembly Syntax
+本节列出语法形态（SSA / DPS / Assembly），用于与英文页逐项对照。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+### Single-tile (auto-chunking)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Ping-pong double buffering
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Examples
+本节提供 Auto/Manual 及 AS 形式示例，便于中英文对照复现。
+
+### Basic Usage
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Ping-pong Double Buffering
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。

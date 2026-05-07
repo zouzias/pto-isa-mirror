@@ -1,8 +1,10 @@
 # 生产者-消费者排序
 
+
 生产者-消费者排序是解释 PTO 可见性规则最直接的方式。只有当消费者通过当前指令集允许的同步与搬运机制，看见生产者必须公开的写入或状态变化时，程序才是合法的。
 
 ## 生产者-消费者状态机
+
 
 每个数据移动或计算操作都参与一条 producer-consumer 链：
 
@@ -17,6 +19,7 @@ IDLE -> IN_PROGRESS -> COMPLETE -> consumed by next op
 
 ## Tile 指令排序
 
+
 对 `pto.t*` 程序，常见顺序链如下：
 
 ```text
@@ -24,6 +27,7 @@ TLOAD -> Tile Compute -> TSTORE
 ```
 
 ### RecordEvent 链接
+
 
 ```cpp
 RecordEvent e0 = TLOAD(a, ga);
@@ -37,6 +41,7 @@ TSTORE(gc, c, e2);
 
 ### TSYNC
 
+
 当不需要细粒度事件链时，可以使用 `TSYNC`：
 
 ```cpp
@@ -49,6 +54,7 @@ TSTORE(gc, c);
 ```
 
 ## 向量指令排序
+
 
 对 `pto.v*` 程序，排序链一般包含显式 DMA：
 
@@ -66,6 +72,7 @@ copy_gm_to_ubuf
 
 ### Tile 指令与向量指令的差异
 
+
 | 方面 | Tile 指令 | 向量指令 |
 | --- | --- | --- |
 | 同步机制 | `RecordEvent`, `TSYNC` | `set_flag` / `wait_flag` |
@@ -73,6 +80,7 @@ copy_gm_to_ubuf
 | 隐式顺序 | 同一 tile buffer 内有程序顺序 | DMA 与计算之间没有隐式顺序 |
 
 ## 跨指令集交接
+
 
 当 tile 指令的结果要给向量指令消费，或反过来时，交接必须经过 UB 或 GM：
 
@@ -84,12 +92,14 @@ Tile Buffer -> TSTORE / GM -> copy_gm_to_ubuf -> UB -> vlds
 
 ## 约束
 
+
 !!! warning "约束"
     - 消费者只能在建立了 producer-consumer 边后依赖可见性
     - 同一操作的 `RecordEvent` 只能被后续操作消费，不能逆向使用
     - 指令集页面和 per-op 页面必须显式说明各自需要的顺序机制
 
 ## 不允许的情形
+
 
 !!! danger "不允许的情形"
     - 只写“消费者可见”，却不说明生产者如何建立可见性
@@ -100,7 +110,39 @@ Tile Buffer -> TSTORE / GM -> copy_gm_to_ubuf -> UB -> vlds
 
 ## 相关页面
 
+
 - [一致性基线](./consistency-baseline_zh.md)
 - [顺序与同步](../machine-model/ordering-and-synchronization_zh.md)
 - [Tile 指令集](../instruction-families/tile-families_zh.md)
 - [向量指令集](../vector/README_zh.md)
+
+
+# Producer-Consumer Ordering
+本节描述顺序与一致性约束，明确可见性与同步语义。
+
+## Producer-Consumer State Machine
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Tile Instructions Ordering
+本节描述顺序与一致性约束，明确可见性与同步语义。
+
+### RecordEvent Chaining
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Vector Instructions Ordering
+本节描述顺序与一致性约束，明确可见性与同步语义。
+
+### Vector Instructions vs Tile Instructions Ordering
+本节描述顺序与一致性约束，明确可见性与同步语义。
+
+## Cross-Instruction Set Handoff
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Constraints
+本节列出关键约束与不允许组合，确保使用方式可验证。
+
+## Cases That Are Not Allowed
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## See Also
+本节给出相关章节和上下游链接。

@@ -1,10 +1,12 @@
 # 不规则与复杂指令集
 
+
 这一组操作容纳那些不适合放进“标准逐元素”“标准归约”“标准内存搬运”这三大框架里的 tile 指令。它们通常要么有专门的数据访问方式，要么有专门的算法语义，要么受 target profile 缩窄得更明显。
 
 把这些操作单独归组，不是因为它们“不重要”，而是因为它们共享的不是算术骨架，而是“非标准合同”。
 
 ## 操作
+
 
 | 操作 | 作用 | 类别 | Profile |
 | --- | --- | --- | :---: |
@@ -27,7 +29,9 @@
 
 ## 机制
 
+
 ### 排序
+
 
 - `TSORT32` 面向 32-bit 元素排序；
 - `TMRGSORT` 更强调对 tile 行的 merge sort 语义。
@@ -35,6 +39,7 @@
 这类指令不只是“比较若干元素再交换位置”，而是把排序本身作为一条 tile 级合同暴露出来。
 
 ### Gather / Scatter
+
 
 这组操作根据索引 tile 做非连续访问：
 
@@ -46,17 +51,21 @@ $$ \mathrm{dst}_{\mathrm{index}_i} = \mathrm{src}_i \quad \text{(scatter)} $$
 
 ### Partial Reduction
 
+
 `TPART*` 系列不是完整的行 / 列归约，而是先做一段局部规约，得到后续还要继续合并的中间 tile。它们的价值在于分阶段地表达更大规模的 reduction。
 
 ### 量化
+
 
 `TQUANT` 把浮点 tile 数据转换为量化表示。`TDEQUANT` 使用按行广播的 scale 和 offset tile，把整数量化 tile 转回浮点值。二者都是 tile payload 变换，因此属于本 tile 指令族，而不是系统调度。
 
 ### 生成状态与统计状态
 
+
 `TRANDOM` 和 `THISTOGRAM` 会产生 tile 可见的 payload 状态。它们的结果是 tile 数据，而不是调度效果，因此归入不规则 tile 操作。
 
 ## 目标 Profile 支持
+
 
 | 元素类型 | CPU | A2/A3 | A5 |
 | --- | :---: | :---: | :---: |
@@ -66,6 +75,7 @@ $$ \mathrm{dst}_{\mathrm{index}_i} = \mathrm{src}_i \quad \text{(scatter)} $$
 
 ## 约束
 
+
 !!! warning "约束"
     - 排序操作要求元素类型与具体排序变体兼容。
     - 量化要求 scale 非零，且 zero-point 落在合法范围内。
@@ -74,6 +84,7 @@ $$ \mathrm{dst}_{\mathrm{index}_i} = \mathrm{src}_i \quad \text{(scatter)} $$
 
 ## 不允许的情形
 
+
 !!! danger "不允许的情形"
     - 使用非法 scale 或越界 zero-point 做量化；
     - scatter 到目标 tile 形状之外；
@@ -81,5 +92,48 @@ $$ \mathrm{dst}_{\mathrm{index}_i} = \mathrm{src}_i \quad \text{(scatter)} $$
 
 ## 相关页面
 
+
 - [Tile 指令族](../instruction-families/tile-families_zh.md)
 - [Tile 指令表面](../instruction-families/tile-families_zh.md)
+
+# Irregular And Complex Instruction Set
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Operations
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+### Sort (TMREGSORT, TSORT32)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Gather/Scatter (TGATHER, TGATHERB, TSCATTER)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Partial Reductions (TPARTADD, TPARTMUL, TPARTMAX, TPARTMIN)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Quantization (TQUANT, TDEQUANT)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Generated and Statistical State
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Type Support by Target Profile
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Cases That Are Not Allowed
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Performance Notes
+本节说明性能路径、吞吐估算与形状/布局敏感因素。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## See Also
+本节给出上下游指令与相关章节链接。

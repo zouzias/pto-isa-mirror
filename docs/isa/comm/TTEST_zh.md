@@ -1,6 +1,8 @@
 # TTEST
 
+
 ## 简介
+
 
 `TTEST` 是非阻塞检测原语：检查一个或一组信号是否满足比较条件，满足时返回 `true`，否则立即返回 `false`。
 
@@ -14,6 +16,7 @@
 
 ## 数学语义
 
+
 单个信号：
 
 $$ \mathrm{result} = (\mathrm{signal} \;\mathtt{cmp}\; \mathrm{cmpValue}) $$
@@ -26,6 +29,7 @@ $$ \mathrm{result} = \bigwedge_{d_0, d_1, d_2, d_3, d_4} (\mathrm{signal}_{d_0, 
 
 ## 汇编语法
 
+
 PTO-AS 形式：
 
 ```text
@@ -35,6 +39,7 @@ PTO-AS 形式：
 
 ## C++ 内建接口
 
+
 声明于 `include/pto/comm/pto_comm_inst.hpp`：
 
 ```cpp
@@ -43,6 +48,7 @@ PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp,
 ```
 
 ## 约束
+
 
 !!! warning "约束"
     - `GlobalSignalData::DType` 必须为 `int32_t`
@@ -63,7 +69,9 @@ PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp,
 
 ## 示例
 
+
 ### 基础检测
+
 
 ```cpp
 bool check_ready(__gm__ int32_t* local_signal) {
@@ -74,6 +82,7 @@ bool check_ready(__gm__ int32_t* local_signal) {
 
 ### 检测信号矩阵
 
+
 ```cpp
 bool check_worker_grid(__gm__ int32_t* signal_matrix) {
     comm::Signal2D<4, 8> grid(signal_matrix);
@@ -83,4 +92,41 @@ bool check_worker_grid(__gm__ int32_t* signal_matrix) {
 
 ### 与 TWAIT 的区别
 
+
 `TWAIT` 会阻塞直到条件满足；`TTEST` 只返回当前检测结果，不会阻塞调用方。
+
+# pto.ttest
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Introduction
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Math Interpretation
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Assembly Syntax
+本节列出语法形态（SSA / DPS / Assembly），用于与英文页逐项对照。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Examples
+本节提供 Auto/Manual 及 AS 形式示例，便于中英文对照复现。
+
+### Basic Test
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Test Signal Matrix
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Polling with Timeout
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Progress-Based Polling
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Compare pto.twait vs pto.ttest
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。

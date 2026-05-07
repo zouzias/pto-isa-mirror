@@ -1,8 +1,10 @@
 # 操作数与属性
 
+
 PTO VISA 操作围绕少量操作数类别展开：tile、全局内存视图、标量、谓词和同步值。属性与修饰符会细化操作行为，但不会取代操作数本身的合法性规则。
 
 ## 操作数类别
+
 
 PTO 定义七种操作数类别：
 
@@ -18,7 +20,9 @@ PTO 定义七种操作数类别：
 
 ## 各类操作数
 
+
 ### Tile
+
 
 Tile 是 `pto.t*` 的主要有效载荷类型。
 
@@ -28,6 +32,7 @@ Tile 是 `pto.t*` 的主要有效载荷类型。
 
 ### GlobalTensor
 
+
 `GlobalTensor` 描述 GM 存储视图：
 
 ```text
@@ -35,6 +40,7 @@ Tile 是 `pto.t*` 的主要有效载荷类型。
 ```
 
 ### Scalar
+
 
 标量可以是立即数或运行时值，出现在：
 
@@ -44,9 +50,11 @@ Tile 是 `pto.t*` 的主要有效载荷类型。
 
 ### Predicate
 
+
 谓词 `!pto.mask` 控制向量操作中哪些 lane 参与。
 
 ### UB Pointer
+
 
 `!pto.ptr<T, ub>` 用于：
 
@@ -55,6 +63,7 @@ Tile 是 `pto.t*` 的主要有效载荷类型。
 
 ### GM Pointer
 
+
 `!pto.ptr<T, gm>` 或 `__gm__ T*` 用于：
 
 - 标量 load/store
@@ -62,9 +71,11 @@ Tile 是 `pto.t*` 的主要有效载荷类型。
 
 ## 属性
 
+
 属性会改变操作行为，但不会改变操作数类别。
 
 ### Compare 属性
+
 
 | 属性 | 取值 | 说明 |
 | --- | --- | --- |
@@ -73,11 +84,13 @@ Tile 是 `pto.t*` 的主要有效载荷类型。
 
 ### 舍入模式
 
+
 | 属性 | 取值 | 说明 |
 | --- | --- | --- |
 | `rnd` | `"rne"`, `"rz"`, `"rp"`, `"rm"` | nearest-even / toward-zero / toward +inf / toward -inf |
 
 ### Atomic 模式
+
 
 | 属性 | 取值 | 说明 |
 | --- | --- | --- |
@@ -85,11 +98,13 @@ Tile 是 `pto.t*` 的主要有效载荷类型。
 
 ### Transform 模式
 
+
 | 属性 | 取值 | 说明 |
 | --- | --- | --- |
 | `mode` | `"hw"`, `"wh"`, `"cubic"` 等 | 由具体操作决定取值域 |
 
 ### Matmul Phase
+
 
 | 属性 | 取值 | 说明 |
 | --- | --- | --- |
@@ -97,11 +112,13 @@ Tile 是 `pto.t*` 的主要有效载荷类型。
 
 ### Distribution Mode
 
+
 | 属性 | 取值 | 说明 |
 | --- | --- | --- |
 | `dist` | `"NORM"`, `"BRC_B8/B16/B32"`, `"US_B8/B16"`, `"DS_B8/B16"`, `"UNPK_B8/B16/B32"`, `"DINTLV_B32"`, `"SPLT2CHN_B8/B16"`, `"SPLT4CHN_B8"` | `vlds` / `vsts` 的分布模式 |
 
 ### Mask 相关属性
+
 
 | 属性 | 取值 | 说明 |
 | --- | --- | --- |
@@ -109,7 +126,9 @@ Tile 是 `pto.t*` 的主要有效载荷类型。
 
 ## 操作数约束规则
 
+
 ### Tile 操作数约束
+
 
 对二元 tile 操作 `optile(dst, src0, src1)`：
 
@@ -120,6 +139,7 @@ Tile 是 `pto.t*` 的主要有效载荷类型。
 
 ### GlobalTensor 约束
 
+
 对 `TLOAD(tile, tensor)`：
 
 1. `sizeof(tile.dtype) == sizeof(tensor.dtype)`
@@ -128,6 +148,7 @@ Tile 是 `pto.t*` 的主要有效载荷类型。
 
 ### 谓词约束
 
+
 对带 mask 的向量操作：
 
 1. 谓词宽度必须匹配目标向量宽度
@@ -135,11 +156,13 @@ Tile 是 `pto.t*` 的主要有效载荷类型。
 
 ### 立即数 / 标量约束
 
+
 1. 立即数必须在其类型的可表示范围内
 2. shift amount 必须非负且小于元素位宽
 3. 广播必须由显式支持该行为的操作承担，例如 `tadds`
 
 ## 规则示例
+
 
 当某条指令接受 tile 加一个标量属性时，合法性仍然同时取决于：
 
@@ -150,6 +173,7 @@ Tile 是 `pto.t*` 的主要有效载荷类型。
 
 ## 契约说明
 
+
 - 每个必需属性都必须定义允许的取值域
 - 非法属性值必须产生确定性诊断
 - 操作数角色与属性语义必须在 intrinsic、PTO-AS 和 per-op 页面之间保持一致
@@ -158,8 +182,85 @@ Tile 是 `pto.t*` 的主要有效载荷类型。
 
 ## 相关页面
 
+
 - [汇编拼写与操作数](./assembly-model_zh.md)
 - [类型系统](../state-and-types/type-system_zh.md)
 - [Tile 与有效区域](../programming-model/tiles-and-valid-regions_zh.md)
 - [GlobalTensor 与数据搬运](../programming-model/globaltensor-and-data-movement_zh.md)
 - [指令描述格式](../reference/format-of-instruction-descriptions_zh.md)
+
+
+# Operands And Attributes
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+## Operand Kinds
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+## Operand Kind Details
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+### Tile Operands
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+### GlobalTensor Operands
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+### Scalar Operands
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+### Predicate Operands
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+### UB Pointer Operands
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+### GM Pointer Operands
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+## Attributes
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Compare Attributes
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Rounding Mode Attributes
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Atomic Mode Attributes
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Transform Mode Attributes
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Matmul Phase Attributes
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Distribution Mode Attributes
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Mask Attributes
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Operand Constraint Rules
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+### Tile Operand Constraints
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+### GlobalTensor Operand Constraints
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+### Predicate Operand Constraints
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+### Immediate/Scalar Constraints
+本节列出关键约束与不允许组合，确保使用方式可验证。
+
+## Rule Example
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Contract Notes
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## See Also
+本节给出相关章节和上下游链接。

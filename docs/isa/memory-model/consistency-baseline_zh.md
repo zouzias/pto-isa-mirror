@@ -1,8 +1,10 @@
 # 一致性基线
 
+
 PTO 的内存模型建立在 **显式数据移动** 和 **显式顺序** 之上。基线保证刻意窄于“所有东西天然全局有序”。程序或所选指令集必须明确表达数据何时在不同阶段、不同指令集和不同 block 之间变得可见。
 
 ## 内存空间
+
 
 PTO 定义三类架构上不同的内存空间：
 
@@ -16,6 +18,7 @@ PTO 定义三类架构上不同的内存空间：
 
 ## 顺序层级
 
+
 PTO 定义三层顺序保证：
 
 | 层级 | 含义 | 范围 | 如何建立 |
@@ -26,9 +29,11 @@ PTO 定义三层顺序保证：
 
 ### Program Order
 
+
 同一 tile buffer 或同一向量寄存器中的操作按程序顺序排列，不需要额外同步。
 
 ### Event Order
+
 
 不同 buffer 或不同 pipeline 之间的数据依赖必须通过事件建立：
 
@@ -40,6 +45,7 @@ TMATMUL(c, a, b, e0, e1);
 
 ### Barrier Order
 
+
 多 block 之间的同步需要 grid 范围的 barrier 或 collective：
 
 ```mlir
@@ -48,6 +54,7 @@ pto.twait
 ```
 
 ## PTO 不自动保证的内容
+
 
 PTO **不会**自动保证：
 
@@ -61,6 +68,7 @@ PTO **不会**自动保证：
 
 ## GM 可见性
 
+
 经由 `TSTORE` 或 `copy_ubuf_to_gm` 写入 GM 的数据，在以下条件满足后才对其他 block 的 GM 读取可见：
 
 1. 本 block 中之前的 store 已完成
@@ -71,6 +79,7 @@ PTO **不会**自动保证：
 
 ## UB 可见性
 
+
 UB 是 core-local 的，其他 core 无法直接看见。
 
 在同一 core 内：
@@ -80,6 +89,7 @@ UB 是 core-local 的，其他 core 无法直接看见。
 
 ## Undefined / Unspecified / Implementation-defined
 
+
 | 术语 | 含义 | 例子 |
 | --- | --- | --- |
 | **Undefined** | 行为故意不定义，任何结果都可能 | 读取 tile 域外元素 |
@@ -87,6 +97,7 @@ UB 是 core-local 的，其他 core 无法直接看见。
 | **Implementation-defined** | 由实现定义并应文档化 | A5 上 denormal 的 FTZ 行为 |
 
 ## Target Refinement
+
 
 CPU、A2/A3 和 A5 可以在实现细节和支持子集上不同，但基线文档必须明确哪些顺序事实是可移植的：
 
@@ -101,6 +112,7 @@ CPU、A2/A3 和 A5 可以在实现细节和支持子集上不同，但基线文�
 
 ## 不允许的情形
 
+
 !!! danger "不允许的情形"
     - 把实现细节写成可移植内存模型
     - 用“通常有序”这种模糊语句替代明确顺序边
@@ -109,6 +121,35 @@ CPU、A2/A3 和 A5 可以在实现细节和支持子集上不同，但基线文�
 
 ## 相关页面
 
+
 - [生产者-消费者排序](./producer-consumer-ordering_zh.md)
 - [顺序与同步](../machine-model/ordering-and-synchronization_zh.md)
 - [可移植性与目标 Profile](../reference/portability-and-target-profiles_zh.md)
+
+
+# Consistency Baseline
+本节描述顺序与一致性约束，明确可见性与同步语义。
+
+## Memory Spaces
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Ordering Levels
+本节描述顺序与一致性约束，明确可见性与同步语义。
+
+## What PTO Does NOT Guarantee Automatically
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## GM Visibility
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## UB Visibility
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Undefined, Unspecified, and Implementation-Defined
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Cases That Are Not Allowed
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## See Also
+本节给出相关章节和上下游链接。

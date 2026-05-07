@@ -1,8 +1,10 @@
 # 什么是 PTO 虚拟 ISA
 
+
 PTO ISA（Parallel Tile Operation Instruction Set Architecture）为华为 Ascend NPU 软件定义了一套与具体机器代际无关的虚拟 ISA。它不是任何单一 Ascend 实现的原生二进制指令集，而是位于前端、代码生成器、验证器、模拟器和目标 backend 之间的公共低层契约。
 
 ## 为什么是 Tile-First
+
 
 大多数 Ascend kernel 的实际编写单位是 **tile**，而不是匿名 lane 或不透明 buffer。只用 generic SIMD / SIMT 抽象最终也能描述硬件，但会把真正关键的问题下沉到 backend 私有传说里：
 
@@ -15,9 +17,11 @@ PTO 把这些问题直接提升进 ISA，让程序、verifier 和 backend 共享
 
 ## 两条编译路径
 
+
 PTO 程序可以通过两条受支持路径进入硬件，两条路径共享同一套 PTO 指令语义。
 
 ### Flow A: `ptoas -> C++ -> bisheng -> binary`
+
 
 高层前端生成 `.pto` 文本，`ptoas` 解析、验证并把它 lowering 成调用 `pto-isa` C++ intrinsic 的代码，再由 `bisheng` 或其他 C++ backend 编译成目标二进制。
 
@@ -32,6 +36,7 @@ High-level Frontend
 
 ### Flow B: `ptoas -> binary`
 
+
 `.pto` 文本也可以直接经由 `ptoas --target=...` 组装为目标二进制，绕过 C++ 中间层。
 
 ```text
@@ -42,6 +47,7 @@ High-level Frontend
 ```
 
 ## 一个最小例子
+
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -62,6 +68,7 @@ void vec_add(Tile<float, 16, 16>& c,
 
 ## 关键术语
 
+
 | 术语 | 含义 |
 | --- | --- |
 | **PTO** | 围绕 tile、显式数据移动、显式同步和机器可见执行结构建立的编程/指令模型 |
@@ -78,6 +85,7 @@ void vec_add(Tile<float, 16, 16>& c,
 
 ## 软件栈位置
 
+
 ```text
 Source Languages / DSLs
         |
@@ -92,6 +100,7 @@ Source Languages / DSLs
 这个结构让软件栈在硬件代际变化时仍然共享同一套版本化指令语言。
 
 ## 分层指令集结构
+
 
 PTO ISA 按五类指令集组织：
 
@@ -110,6 +119,98 @@ Tile 指令集是主要的编程层；向量指令集提供更细粒度的向量
 
 ## 相关页面
 
+
 - [PTO 的设计目标](./goals-of-pto_zh.md)
 - [范围与边界](./design-goals-and-boundaries_zh.md)
 - [Tile 与有效区域](../programming-model/tiles-and-valid-regions_zh.md)
+
+
+# Parallel Tile Operation ISA
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Overview
+本节提供该主题的总览说明与阅读入口，与英文章节语义保持一致。
+
+## Why Tile-First
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Two Compilation Flows
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Flow A: High-Level Compile (ptoas → C++ → bisheng → binary)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Flow B: Direct Assemble (ptoas → binary)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Which Flow to Use
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## A Minimal Example
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Key Terms
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Position In The Software Stack
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Hierarchical Abstractions
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Machine Model
+本节说明抽象模型与关键对象关系，用于统一术语与行为理解。
+
+### Execution Hierarchy
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Target Profiles
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Instruction Syntax Overview
+本节提供该主题的总览说明与阅读入口，与英文章节语义保持一致。
+
+### Assembly Form (PTO-AS)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+# Scalar operand suffix: immediate added to each tile element
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+# Saturating carry variant
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+# Tile with explicit memory operand: load from GlobalTensor view
+本节给出语法与操作数约定，便于与英文规范逐项对照。
+
+### SSA Form (AS Level 1)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### DPS Form (AS Level 2)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Tile Instructions And Vector Instructions
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Tile Instructions (pto.t*)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Vector Instructions (pto.v*)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### When To Use Which Instruction Set
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Audience: Who Reads This Manual
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Compiler Backend Developers
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Kernel Writers
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Scope Of This Manual
+本节定义规范范围与边界条件，避免把实现细节误当成架构语义。
+
+## See Also
+本节给出相关章节和上下游链接。

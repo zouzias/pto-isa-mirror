@@ -1,8 +1,10 @@
 # 数据格式参考
 
+
 **物理数据格式** 定义了 tile、vector 和 scalar 在内存及硬件寄存器中的表示方式。它涵盖 memory space、元素打包、地址对齐、VLane 架构，以及 PTO 逻辑视图与底层存储之间的关系。
 
 ## 内存空间
+
 
 PTO 区分三类架构可见内存空间：
 
@@ -16,9 +18,11 @@ GM 与 UB 之间通过 DMA 引擎搬运；UB 与 TRF 之间通过 `TLOAD` / `TST
 
 ## Tile Buffer 格式
 
+
 Tile 在 UB 或 TRF 中占据一段连续区域。其逻辑形状 `(Rows, Cols)` 与物理存储格式分离。
 
 ### UB 中的格式
+
 
 在 UB 中，tile 按 `BLayout` 存储：
 
@@ -32,9 +36,11 @@ $$ \mathrm{addr}(r, c) = (c \times R + r) \times \mathrm{sizeof(DType)} $$
 
 ### TRF 中的格式
 
+
 TRF 保存 tile 的原生 `BLayout` 形式。TRF 不是字节可寻址空间，只能通过 `TLOAD` / `TSTORE` 与外部交互。
 
 ### 地址对齐
+
 
 | 访问类型 | 对齐要求 |
 | --- | --- |
@@ -44,7 +50,9 @@ TRF 保存 tile 的原生 `BLayout` 形式。TRF 不是字节可寻址空间，�
 
 ## 元素类型编码
 
+
 ### 标准类型
+
 
 | 类型 | C++ 类型 | SSA 名称 | 字节数 | 寄存器宽度 |
 | --- | --- | --- | :---: | :---: |
@@ -60,6 +68,7 @@ TRF 保存 tile 的原生 `BLayout` 形式。TRF 不是字节可寻址空间，�
 
 ### A5 专属类型
 
+
 | 类型 | C++ 类型 | SSA 名称 | 字节数 | 说明 |
 | --- | --- | --- | :---: | --- |
 | FP8 E4M3 | `float8_e4m3_t` | `f8e4m3` | 1 | 256 lanes |
@@ -69,6 +78,7 @@ TRF 保存 tile 的原生 `BLayout` 形式。TRF 不是字节可寻址空间，�
 | Float4 E2M1x2 | `float4_e2m1x2_t` | `float4_e2m1x2` | 1 | 2x2 packed |
 
 ## 向量寄存器格式（VLane）
+
 
 在 A5 上，向量寄存器由 **8 个 VLane** 组成，每个 VLane 为 32 字节。这一结构是架构可见的，尤其体现在 group reduction 操作中。
 
@@ -91,9 +101,11 @@ Group reduction（如 `vcgadd`、`vcgmax`、`vcgmin`）会按 VLane 独立归约
 
 ## Pad Value 编码
 
+
 `Pad` 参数指定 valid region 外元素的填充值。
 
 ### 标准 Pad 值
+
 
 | Pad | 含义 | `float` 编码 | `half`/`bf16` 编码 | `i8`/`u8` 编码 |
 | --- | --- | --- | --- | --- |
@@ -104,9 +116,11 @@ Group reduction（如 `vcgadd`、`vcgmax`、`vcgmin`）会按 VLane 独立归约
 
 ### 自定义 Pad（A5）
 
+
 `PadValueCustom(value)` 允许在编译期指定 pad 的浮点值，例如 softmax mask 常用的 `-1.0f`。
 
 ## 分形布局编码
+
 
 `TileLayoutCustom` 枚举描述运行时实际使用的布局：
 
@@ -119,6 +133,7 @@ Group reduction（如 `vcgadd`、`vcgmax`、`vcgmin`）会按 VLane 独立归约
 | `ZZ` | RowMajor | RowMajor | ZZ | 512 B | CUBE 专用 |
 
 ## 常量参考
+
 
 | 常量 | 值 | 单位 | 用途 |
 | --- | --- | --- | --- |
@@ -138,7 +153,63 @@ Group reduction（如 `vcgadd`、`vcgmax`、`vcgmin`）会按 VLane 独立归约
 
 ## 相关页面
 
+
 - [类型系统](./type-system_zh.md)
 - [布局参考](./layout_zh.md)
 - [Tile 与有效区域](../programming-model/tiles-and-valid-regions_zh.md)
 - [内存模型](../memory-model/consistency-baseline_zh.md)
+
+
+# Data Format Reference
+本节定义类型/布局/格式规则与合法性要求。
+
+## Memory Spaces
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Tile Buffer Format
+本节定义类型/布局/格式规则与合法性要求。
+
+### In-Memory Format
+本节定义类型/布局/格式规则与合法性要求。
+
+### Tile-Register View
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Address Alignment
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Element Type Encoding
+本节定义类型/布局/格式规则与合法性要求。
+
+### Standard Types
+本节定义类型/布局/格式规则与合法性要求。
+
+### A5-Only Types
+本节定义类型/布局/格式规则与合法性要求。
+
+## Vector Register Format (VLane Architecture)
+本节定义类型/布局/格式规则与合法性要求。
+
+### Group Reduction and VLanes
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Pad Value Encoding
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Standard Pad Values
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Custom Pad Values (A5)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## MX Block-Scale Formats
+本节定义类型/布局/格式规则与合法性要求。
+
+## Fractal Layout Encoding
+本节定义类型/布局/格式规则与合法性要求。
+
+## Constants Reference
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## See Also
+本节给出相关章节和上下游链接。

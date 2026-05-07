@@ -1,6 +1,8 @@
 # TPUT
 
+
 ## 简介
+
 
 `TPUT` 是远程写原语：把当前 NPU 本地 GM 中的数据写到远端 NPU 的 GM。它通过 UB 中的暂存 Tile 完成 GM→UB→GM 路径。
 
@@ -8,11 +10,13 @@
 
 ## 数学语义
 
+
 对有效区域内每个元素 `(i, j)`：
 
 $$ \mathrm{dst}^{\mathrm{remote}}_{i,j} = \mathrm{src}^{\mathrm{local}}_{i,j} $$
 
 ## 汇编语法
+
 
 PTO-AS 形式：
 
@@ -24,9 +28,11 @@ lowering 会为 GM→UB→GM 路径引入 UB 暂存 Tile，因此 C++ 接口要�
 
 ## C++ 内建接口
 
+
 声明于 `include/pto/comm/pto_comm_inst.hpp`：
 
 ### 单暂存 Tile
+
 
 ```cpp
 template <AtomicType atomicType = AtomicType::AtomicNone,
@@ -37,6 +43,7 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
 
 ### 乒乓双缓冲
 
+
 ```cpp
 template <AtomicType atomicType = AtomicType::AtomicNone,
           typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
@@ -46,6 +53,7 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
 
 ### 运行时原子模式
 
+
 ```cpp
 template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
@@ -53,6 +61,7 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
 ```
 
 ## 约束
+
 
 !!! warning "约束"
     ### 类型约束
@@ -75,7 +84,9 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
 
 ## 示例
 
+
 ### 基础形式
+
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -102,6 +113,7 @@ void example_tput(__gm__ T* local_data, __gm__ T* remote_addr) {
 
 ### 乒乓双缓冲
 
+
 ```cpp
 constexpr size_t tileUBBytes = ((64 * 64 * sizeof(float) + 1023) / 1024) * 1024;
 TileT pingTile(64, 64);
@@ -114,12 +126,53 @@ comm::TPUT(dstG, srcG, pingTile, pongTile);
 
 ### 运行时指定原子模式
 
+
 ```cpp
 comm::TPUT(dstG, srcG, stagingTile, AtomicType::AtomicAdd);
 ```
 
 ## 相关页面
 
+
 - [通信与运行时](communication-runtime_zh.md)
 - [TGET](./TGET_zh.md)
 - [TSCATTER](./TSCATTER_zh.md)
+
+# pto.tput
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Introduction
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Math Interpretation
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Assembly Syntax
+本节列出语法形态（SSA / DPS / Assembly），用于与英文页逐项对照。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+### Single-tile (auto-chunking)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Ping-pong double buffering
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Runtime atomic type
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Examples
+本节提供 Auto/Manual 及 AS 形式示例，便于中英文对照复现。
+
+### Basic Usage
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Ping-pong Double Buffering
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Runtime Atomic Type
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。

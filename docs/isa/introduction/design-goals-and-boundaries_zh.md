@@ -1,8 +1,10 @@
 # 范围与边界
 
+
 PTO ISA 规范的覆盖范围，以及它与相邻层之间的边界如下。
 
 ## PTO ISA 定义什么
+
 
 PTO ISA 定义合法 PTO 程序的架构可见含义，包括：
 
@@ -14,6 +16,7 @@ PTO ISA 定义合法 PTO 程序的架构可见含义，包括：
 如果两个受支持目标都接受同一个合法 PTO 程序，该程序的架构可见意义必须来自 PTO ISA，而不能由目标私自重定义。
 
 ## Target Profile 可以缩窄什么
+
 
 PTO ISA 是稳定的，但不是无限制的。目标 profile 可以缩窄某个实现真正接受或高效支持的子集，例如：
 
@@ -27,6 +30,7 @@ PTO ISA 是稳定的，但不是无限制的。目标 profile 可以缩窄某个
 
 ## PTO-AS 增加什么
 
+
 PTO-AS 是 PTO ISA 的文本语法形式。它补充了：
 
 - 指令名拼写
@@ -38,11 +42,13 @@ PTO-AS 是 PTO ISA 的文本语法形式。它补充了：
 
 ## PTOBC 增加什么
 
+
 PTOBC 是 PTO 程序的分发和传输形式，用于缓存、打包、跨工具传递 PTO 程序，而不是立刻坍缩成某一代硬件的专用二进制。
 
 PTOBC 不重定义 ISA，它只是序列化承载 PTO 程序。
 
 ## PTO ISA 不冻结什么
+
 
 本手册不会把所有编译器内部阶段或 backend lowering 细节冻结成公开契约。PTO ISA 不冻结：
 
@@ -56,6 +62,7 @@ PTOBC 不重定义 ISA，它只是序列化承载 PTO 程序。
 
 ## 规范来源顺序
 
+
 当边界不清楚时，按以下顺序裁决：
 
 1. PTO ISA manual 与 per-op ISA 页面
@@ -67,6 +74,29 @@ PTOBC 不重定义 ISA，它只是序列化承载 PTO 程序。
 
 ## 相关页面
 
+
 - [什么是 PTO 虚拟 ISA](./what-is-pto-visa_zh.md)
 - [规范来源](../reference/source-of-truth_zh.md)
 - [可移植性与目标 Profile](../reference/portability-and-target-profiles_zh.md)
+
+
+# PTO: Scope And Boundaries
+本节定义规范范围与边界条件，避免把实现细节误当成架构语义。
+
+## What PTO ISA Defines
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## What Target Profiles May Narrow
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## What PTO-AS Adds
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## What PTOBC Adds
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## What PTO ISA Does Not Freeze
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Source Of Truth Order
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。

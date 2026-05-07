@@ -1,12 +1,15 @@
 # 类型系统
 
+
 PTO 使用一套紧凑但架构可见的类型系统。合法性不会在原始类型名处结束。类型类别先说明当前操作数属于哪一类架构对象；layout、location、valid region 和目标 profile 等其他维度再决定该用法是否真的合法。
 
 ## 元素类型
 
+
 PTO 支持浮点、整数和若干专用数值类型。
 
 ### 浮点类型
+
 
 | 类型 | SSA 名称 | 位宽 | 说明 | A2/A3 | A5 |
 | --- | --- | --- | --- | :---: | :---: |
@@ -21,6 +24,7 @@ PTO 支持浮点、整数和若干专用数值类型。
 
 ### 整数类型
 
+
 | 类型 | SSA 名称 | 位宽 | 有符号性 | A2/A3 | A5 |
 | --- | --- | --- | --- | :---: | :---: |
 | int8 | `i8` | 8 | Signed | Yes | Yes |
@@ -33,6 +37,7 @@ PTO 支持浮点、整数和若干专用数值类型。
 | uint64 | `u64` | 64 | Unsigned | Yes | Yes |
 
 ## 向量宽度
+
 
 向量寄存器宽度 `N` 由元素类型和目标 profile 决定：
 
@@ -48,6 +53,7 @@ PTO 支持浮点、整数和若干专用数值类型。
 
 ## 向量寄存器类型
 
+
 向量寄存器的 SSA 类型：
 
 ```text
@@ -62,6 +68,7 @@ PTO 支持浮点、整数和若干专用数值类型。
 
 ## Tile Buffer 类型
 
+
 Tile buffer 的 SSA 类型如下，完整参数见 [Tile 与有效区域](../programming-model/tiles-and-valid-regions_zh.md)：
 
 ```text
@@ -71,6 +78,7 @@ Tile buffer 的 SSA 类型如下，完整参数见 [Tile 与有效区域](../pro
 ```
 
 ## NaN 与 Inf 行为
+
 
 对浮点类型，PTO 以 IEEE 754 语义为基础，并保留以下 implementation-defined 变化点：
 
@@ -86,7 +94,9 @@ FTZ 行为是 implementation-defined。`rnd` 属性控制那些会改变指数�
 
 ## 类型转换规则
 
+
 ### 浮点到浮点
+
 
 | 源 | 目标 | 行为 |
 | --- | --- | --- |
@@ -99,6 +109,7 @@ FTZ 行为是 implementation-defined。`rnd` 属性控制那些会改变指数�
 
 ### 整数到整数
 
+
 | 源 | 目标 | 行为 |
 | --- | --- | --- |
 | 扩宽（如 i8 → i16） | Zero/sign extend | 无符号零扩展；有符号符号扩展 |
@@ -108,6 +119,7 @@ FTZ 行为是 implementation-defined。`rnd` 属性控制那些会改变指数�
 
 ### 浮点与整数之间
 
+
 | 源 | 目标 | 行为 |
 | --- | --- | --- |
 | f32 → i8/u8/i16/u16 | Narrowing | 截断；可能溢出 |
@@ -115,6 +127,7 @@ FTZ 行为是 implementation-defined。`rnd` 属性控制那些会改变指数�
 | i8/u8 → f32 | Promotion | 小范围精确；更大值可能丢精度 |
 
 ### 转换操作
+
 
 | 操作 | 指令集 | 说明 |
 | --- | --- | --- |
@@ -125,6 +138,7 @@ FTZ 行为是 implementation-defined。`rnd` 属性控制那些会改变指数�
 
 ## 约束
 
+
 !!! warning "约束"
     - 指令集页面必须明确列出允许的操作数/结果类别。
     - 类型错误必须与更深层的合法性错误区分开来，例如 shape、layout、location intent 或 target profile。
@@ -134,6 +148,7 @@ FTZ 行为是 implementation-defined。`rnd` 属性控制那些会改变指数�
 
 ## 不允许的情形
 
+
 !!! danger "不允许的情形"
     - 把类型类别检查误当成完整的 backend 合法性检查
     - 混淆标量状态与 tile / vector 有效载荷状态
@@ -142,7 +157,57 @@ FTZ 行为是 implementation-defined。`rnd` 属性控制那些会改变指数�
 
 ## 相关页面
 
+
 - [位置意图与合法性](./location-intent-and-legality_zh.md)
 - [指令族总览](../instruction-families/README_zh.md)
 - [规范来源](../reference/source-of-truth_zh.md)
 - [Tile 与有效区域](../programming-model/tiles-and-valid-regions_zh.md)
+
+
+# Type System
+本节定义类型/布局/格式规则与合法性要求。
+
+## Element Types
+本节定义类型/布局/格式规则与合法性要求。
+
+### Floating-Point Types
+本节定义类型/布局/格式规则与合法性要求。
+
+### Integer Types
+本节定义类型/布局/格式规则与合法性要求。
+
+## Vector Width
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Vector Register Types
+本节定义类型/布局/格式规则与合法性要求。
+
+## Tile Buffer Types
+本节定义类型/布局/格式规则与合法性要求。
+
+## NaN and Inf Behavior
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Type Conversion Rules
+本节定义类型/布局/格式规则与合法性要求。
+
+### Between Floating-Point Types
+本节定义类型/布局/格式规则与合法性要求。
+
+### Between Integer Types
+本节定义类型/布局/格式规则与合法性要求。
+
+### Between Float and Integer
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Type Conversion Operations
+本节定义类型/布局/格式规则与合法性要求。
+
+## Constraints
+本节列出关键约束与不允许组合，确保使用方式可验证。
+
+## Cases That Are Not Allowed
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## See Also
+本节给出相关章节和上下游链接。

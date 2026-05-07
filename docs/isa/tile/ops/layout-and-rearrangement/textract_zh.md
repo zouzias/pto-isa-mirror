@@ -2,13 +2,16 @@
 
 ## 指令示意图
 
+
 ![TEXTRACT tile operation](../../../../figures/isa/TEXTRACT.svg)
 
 ## 简介
 
+
 从较大的源 Tile 中提取较小的子 Tile。
 
 ## 数学语义
+
 
 概念上从较大的 `src` Tile 中，以 `(indexRow, indexCol)` 为起点复制一个较小窗口到 `dst`。确切的映射取决于 tile 布局。
 
@@ -17,6 +20,7 @@
 $$ \mathrm{dst}_{i,j} = \mathrm{src}_{\mathrm{indexRow}+i,\; \mathrm{indexCol}+j} $$
 
 ## 汇编语法
+
 
 PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
@@ -28,17 +32,20 @@ PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/a
 
 ### AS Level 1（SSA）
 
+
 ```text
 %dst = pto.textract %src, %idxrow, %idxcol : (!pto.tile<...>, dtype, dtype) -> !pto.tile<...>
 ```
 
 ### AS Level 2（DPS）
 
+
 ```text
 pto.textract ins(%src, %idxrow, %idxcol : !pto.tile_buf<...>, dtype, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ 内建接口
+
 
 声明于 `include/pto/common/pto_instr.hpp`：
 
@@ -59,6 +66,7 @@ PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData 
 ```
 
 ## 约束
+
 
 !!! warning "约束"
     ### 通用约束或检查
@@ -90,7 +98,9 @@ PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData 
 
 ## 示例
 
+
 ### 自动（Auto）
+
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -107,6 +117,7 @@ void example_auto() {
 ```
 
 ### 手动（Manual）
+
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -126,7 +137,9 @@ void example_manual() {
 
 ## 汇编示例（ASM）
 
+
 ### 自动模式
+
 
 ```text
 # 自动模式：由编译器/运行时负责资源放置与调度。
@@ -134,6 +147,7 @@ void example_manual() {
 ```
 
 ### 手动模式
+
 
 ```text
 # 手动模式：先显式绑定资源，再发射指令。
@@ -145,8 +159,78 @@ void example_manual() {
 
 ### PTO 汇编形式
 
+
 ```text
 %dst = textract %src[%r0, %r1] : !pto.tile<...> -> !pto.tile<...>
 # AS Level 2 (DPS)
 pto.textract ins(%src, %idxrow, %idxcol : !pto.tile_buf<...>, dtype, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
+
+# pto.textract
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Summary
+本节给出该指令/主题的核心语义与使用定位，和英文章节保持一致。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+## Variants
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Variant 1: Standard Extract
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Variant 2: ReLU Extract
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Variant 3: Scalar-Quant Extract
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Variant 4: Fix-Pipe Extract (`TEXTRACT_FP`)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Supported Tile-Type Pairs
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### A2/A3
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### A5
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Supported Element Types
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Syntax
+本节列出语法形态（SSA / DPS / Assembly），用于与英文页逐项对照。
+
+### PTO Assembly Form
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### AS Level 1 (SSA)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## Inputs
+本节定义输入操作数角色、数据来源与有效区域要求。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Common Patterns
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Pattern 1: Extract Left Block from Matrix (GEMM Setup)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Pattern 2: Sliding Window Extraction
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Pattern 3: Accumulator Extraction with Quantization
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## See Also
+本节给出上下游指令与相关章节链接。

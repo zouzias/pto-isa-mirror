@@ -1,8 +1,10 @@
 # 执行代理与目标 Profile
 
+
 PTO 使用一套架构可见的三级执行层次：host、device 和 core。这不是硬件方框图的原样复刻，而是把工作准备、派发和执行发生的位置显式写出来，同时把 target profile 的能力差异放到明确层次上。
 
 ## 执行层次
+
 
 ```text
 HOST
@@ -15,6 +17,7 @@ CORE / AI CORE
 
 ## Host
 
+
 Host 负责：
 
 - 准备 kernel 参数和内存描述符
@@ -26,6 +29,7 @@ Host 本身不执行 PTO 指令。
 
 ## Device
 
+
 Device 是架构可见的调度层，负责：
 
 - 把合法 PTO 工作派发给 AI Core block
@@ -34,6 +38,7 @@ Device 是架构可见的调度层，负责：
 - 管理设备侧内存分配
 
 ## Core（AI Core）
+
 
 Core 是 PTO 指令真正执行的位置。它包含：
 
@@ -47,6 +52,7 @@ Core 是 PTO 指令真正执行的位置。它包含：
 | DMA 引擎（MTE1/2/3） | GM 与 UB 之间搬运 | `copy_*`, `TLOAD`, `TSTORE` |
 
 ## 向量寄存器架构（VLane）
+
 
 在 A5 上，向量寄存器由 **8 个 VLane** 组成，每个 VLane 32 字节：
 
@@ -68,6 +74,7 @@ VLane 是架构可见的：`vcgadd`、`vcgmax`、`vcgmin` 这类 group reduction
 
 ## MTE 流水细节
 
+
 | MTE | 方向 | Tile 指令中的角色 | 向量指令中的角色 |
 | --- | --- | --- | --- |
 | `MTE1` | GM → UB | 可选预取 | 向量加载前预取 |
@@ -75,6 +82,7 @@ VLane 是架构可见的：`vcgadd`、`vcgmax`、`vcgmin` 这类 group reduction
 | `MTE3` | UB → GM | `TSTORE` 的写回阶段 | `copy_ubuf_to_gm` |
 
 ## 系统查询操作
+
 
 | 操作 | 返回 | 说明 |
 | --- | --- | --- |
@@ -87,9 +95,11 @@ VLane 是架构可见的：`vcgadd`、`vcgmax`、`vcgmin` 这类 group reduction
 
 ## 目标 Profile
 
+
 Target profile 只会缩窄 PTO ISA，不会引入新的 ISA 语义。
 
 ### CPU Simulator
+
 
 - `pto.t*` 通过软件模拟
 - `pto.v*` 用标量循环模拟
@@ -98,6 +108,7 @@ Target profile 只会缩窄 PTO ISA，不会引入新的 ISA 语义。
 - UB 由堆内存分配
 
 ### A2A3 Profile
+
 
 - 对应 Ascend 910B 与 Ascend 910C
 - `pto.t*` 在硬件上执行
@@ -108,6 +119,7 @@ Target profile 只会缩窄 PTO ISA，不会引入新的 ISA 语义。
 
 ### A5 Profile
 
+
 - 对应 Ascend 950 PR 与 Ascend 950 DT
 - `pto.t*` 和 `pto.v*` 都原生执行
 - 支持 MX block-scale matmul
@@ -116,6 +128,7 @@ Target profile 只会缩窄 PTO ISA，不会引入新的 ISA 语义。
 - 支持 FP8、向量非对齐 store、alignment state 和 block 级通信
 
 ### Profile 对比
+
 
 | 特性 | CPU | A2/A3 | A5 |
 | --- | :---: | :---: | :---: |
@@ -129,12 +142,14 @@ Target profile 只会缩窄 PTO ISA，不会引入新的 ISA 语义。
 
 ## 约束
 
+
 !!! warning "约束"
     - 架构可见的依赖顺序必须在目标调度后保留
     - target profile 可以缩窄支持集合，但不能重定义合法 PTO 语义
     - profile 专属特性不能写成通用 PTO 保证
 
 ## 不允许的情形
+
 
 !!! danger "不允许的情形"
     - 把 A5 专属特性写成 PTO 普遍保证
@@ -143,7 +158,42 @@ Target profile 只会缩窄 PTO ISA，不会引入新的 ISA 语义。
 
 ## 相关页面
 
+
 - [顺序与同步](./ordering-and-synchronization_zh.md)
 - [向量指令集](../vector/README_zh.md)
 - [Tile 指令集](../instruction-families/tile-families_zh.md)
 - [可移植性与目标 Profile](../reference/portability-and-target-profiles_zh.md)
+
+
+# Execution Agents And Target Profiles
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Execution Hierarchy
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Core (AI Core)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Vector Register Architecture (VLane)
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## MTE Pipeline Detail
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## System Query Operations
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Target Profiles
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+### Target Profile Comparison
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## Constraints
+本节列出关键约束与不允许组合，确保使用方式可验证。
+
+## Cases That Are Not Allowed
+本节为与英文同名章节的中文说明位，后续可继续补充更细节内容。
+
+## See Also
+本节给出相关章节和上下游链接。

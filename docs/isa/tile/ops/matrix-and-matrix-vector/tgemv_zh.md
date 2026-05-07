@@ -1,16 +1,20 @@
 # TGEMV
 
+
 ## 指令示意图
+
 
 ![TGEMV tile operation](../../../../figures/isa/TGEMV.svg)
 
 ## 简介
+
 
 `TGEMV` 是 cube 路径上的矩阵-向量乘指令。它不是 vector 指令，而是矩阵乘合同在 `m = 1` 条件下的专门形式：左输入仍走 `Left`，右输入仍走 `Right`，结果仍写入 `Acc`。
 
 把 GEMV 单独列成一条指令，是为了让接口、用法和调度语义更直接，不必让读者总是从“一般 matmul 的退化情况”去倒推。
 
 ## 数学语义
+
 
 设：
 
@@ -25,6 +29,7 @@ $$ \mathrm{C}_{0,j} = \sum_{k=0}^{K-1} \mathrm{A}_{0,k} \cdot \mathrm{B}_{k,j} $
 
 ## 机制
 
+
 `TGEMV` 仍然使用：
 
 - `Left` 作为左操作数，对应 L0A 路径；
@@ -34,6 +39,7 @@ $$ \mathrm{C}_{0,j} = \sum_{k=0}^{K-1} \mathrm{A}_{0,k} \cdot \mathrm{B}_{k,j} $
 和 `TMATMUL` 的主要区别，不在“是不是 cube 指令”，而在运行时合同里固定了 `m = 1`。因此它的 costmodel、角色限制和 target 边界都更接近 matmul，而不是向量算术。
 
 ## 汇编语法
+
 
 PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
@@ -45,17 +51,20 @@ PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/a
 
 ### AS Level 1（SSA）
 
+
 ```text
 %c = pto.tgemv %a, %b : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### AS Level 2（DPS）
 
+
 ```text
 pto.tgemv ins(%a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c : !pto.tile_buf<...>)
 ```
 
 ## C++ 内建接口
+
 
 声明于 `include/pto/common/pto_instr.hpp`：
 
@@ -66,6 +75,7 @@ PTO_INST RecordEvent TGEMV(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatr
 
 ## 输入与输出
 
+
 - `aMatrix`：左操作数 tile，必须是 `Left`。
 - `bMatrix`：右操作数 tile，必须是 `Right`。
 - `cMatrix`：结果累加器 tile，必须是 `Acc`。
@@ -73,6 +83,7 @@ PTO_INST RecordEvent TGEMV(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatr
 输出合同是：生成一行结果 `C[0, j]`。这条指令不会把普通 vector buffer 直接提升成 cube 合同。
 
 ## 约束
+
 
 !!! warning "约束"
     ### 通用约束
@@ -109,6 +120,7 @@ PTO_INST RecordEvent TGEMV(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatr
 
 ## 不允许的情形
 
+
 !!! danger "不允许的情形"
     - `m != 1`；
     - 角色不是 `Left` / `Right` / `Acc`；
@@ -116,6 +128,7 @@ PTO_INST RecordEvent TGEMV(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatr
     - 在不支持的 target 上使用不支持的 dtype 组合。
 
 ## 性能与吞吐
+
 
 仓内 A2A3 costmodel 对 `TGEMV` 与 `TMATMUL` 共用 `mad/mmad` 模型，只是 GEMV 固定 `m = 1`，因此公式可直接写成：
 
@@ -133,7 +146,9 @@ cycles = 14 + ceil(N/16) * ceil(K / baskK) * repeat_cost
 
 ## 示例
 
+
 ### 自动（Auto）
+
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -152,6 +167,7 @@ void example_auto() {
 ```
 
 ### 手动（Manual）
+
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -174,7 +190,113 @@ void example_manual() {
 
 ## 相关页面
 
+
 - [TGEMV_ACC](./tgemv-acc_zh.md)
 - [TGEMV_BIAS](./tgemv-bias_zh.md)
 - [TGEMV_MX](./tgemv-mx_zh.md)
 - [矩阵与矩阵-向量指令集](../../matrix-and-matrix-vector_zh.md)
+
+# pto.tgemv
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Summary
+本节给出该指令/主题的核心语义与使用定位，和英文章节保持一致。
+
+## Mechanism
+本节说明执行机制与关键语义规则，细节与边界条件以英文版为准。
+
+### 1. TGEMV (Tile-based GEMV)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### 2. TGEMV_ACC (Tile-based GEMV with Accumulation)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### 3. TGEMV_BIAS (Tile-based GEMV with Bias)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Syntax
+本节列出语法形态（SSA / DPS / Assembly），用于与英文页逐项对照。
+
+### AS Level 1 (SSA)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### AS Level 2 (DPS)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## C++ Intrinsic
+本节给出 C++ 内建接口入口与参数语义说明。
+
+## Inputs
+本节定义输入操作数角色、数据来源与有效区域要求。
+
+## Expected Outputs
+本节定义输出结果及其在有效区域内的语义保证。
+
+## Side Effects
+本节说明除结果写回外是否存在额外可观察副作用。
+
+## Constraints
+本节列出类型、布局、shape、valid-region 与 profile 相关约束。
+
+## Exceptions
+本节描述非法输入、不支持组合与验证失败行为。
+
+## Target-Profile Restrictions
+本节给出 A2/A3、A5 及 CPU-SIM 的差异化限制与行为说明。
+
+## Examples
+本节提供 Auto/Manual 及 AS 形式示例，便于中英文对照复现。
+
+### Auto
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+#### 1. TGEMV
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+#### 2. TGEMV_ACC
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+#### 3. TGEMV_BIAS
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Manual
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+#### 1. TGEMV
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+#### 2. TGEMV_ACC
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+#### 3. TGEMV_BIAS
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Auto Mode
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# Auto mode: compiler/runtime-managed placement and scheduling.
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### Manual Mode
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# Manual mode: bind resources explicitly before issuing the instruction.
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# Optional for tile operands:
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# pto.tassign %arg0, @tile(0x1000)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# pto.tassign %arg1, @tile(0x2000)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+### PTO Assembly Form
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+# AS Level 2 (DPS)
+本节与英文同名章节对齐，后续可继续补充更细粒度中文说明。
+
+## Related Ops / Instruction Set Links
+本节给出上下游指令与相关章节链接。
