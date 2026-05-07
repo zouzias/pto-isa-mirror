@@ -149,7 +149,7 @@ PTO_INTERNAL void TROWEXPANDDIV_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileD
         PTO_ASSERT((!TileDataSrc0::isRowMajor && src0ValidCol == 1) && src0ValidRow == validRow,
                    "TROWEXPANDDIV: invalid src0 shape.");
         TRowExpandBin<RowExpandDivOp2<T>, TileDataDst, TileDataSrc1, TileDataSrc0, TileDataTmp>(
-            dst.data(), src1.data(), src0.data(), tmp.data(), validRow, validCol);
+            dst.data(),
     }
     #endif
 }
