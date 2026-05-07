@@ -463,7 +463,24 @@ bool RunOneRank(int rankId, int nRanks, int firstDeviceId,
         // field is filled with `device` (deviceId), not desc.dieId — comment
         // there says "ABI: for ccu res need set devId".
         in.dieId    = static_cast<uint32_t>(deviceId);
+        // procType sweep (HCCL_PTO_PROC_TYPE env, mirrors hccl reference
+        // main.cc:702-708). Hccl reference comment line 687-700 explicitly
+        // notes CP1 (default) returns a "driver shadow" VA, not the real
+        // CCU poll register. Sweep enum:
+        //   0 CP1 (aicpu_scheduler)  ← default, but driver shadow per hccl
+        //   1 CP2 (custom_process)
+        //   2 DEV_ONLY (TDT)
+        //   3 QS (queue_scheduler)
+        //   4 HCCP (hccp server)
+        //   5 USER (user proc)
+        // Once we find the one that lets aivStream sync succeed, hardcode it.
         in.procType = kRT_PROCESS_CP1;
+        if (const char *e = std::getenv("HCCL_PTO_PROC_TYPE")) {
+            in.procType = std::atoi(e);
+            std::fprintf(stderr,
+                "[GATED_RS_ST] rank=%d HCCL_PTO_PROC_TYPE=%d (override default CP1=0)\n",
+                rankId, in.procType);
+        }
         in.resType  = kRT_RES_TYPE_CCU_CKE;
         in.resId    = desc.ckeId;
         in.flag     = 0;
@@ -486,9 +503,9 @@ bool RunOneRank(int rankId, int nRanks, int firstDeviceId,
         desc.mmioAddr = addr;
         std::fprintf(stderr,
             "[GATED_RS_ST] rank=%d mmioAddr=0x%llx len=%u (from "
-            "rtGetDevResAddress, ckeId=%u — Exp3 verified path)\n",
+            "rtGetDevResAddress procType=%d, ckeId=%u)\n",
             rankId, static_cast<unsigned long long>(desc.mmioAddr), len,
-            desc.ckeId);
+            in.procType, desc.ckeId);
     }
 
     // -------------------------------------------------------------------------
