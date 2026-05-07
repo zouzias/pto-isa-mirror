@@ -2,16 +2,6 @@
 
 This document provides PTO development-related references, academic papers, online resources, and further reading to help developers deepen their understanding of PTO programming.
 
-## Contents
-
-- [Official Documentation](#official-documentation)
-- [Example Code](#example-code)
-- [Academic Papers](#academic-papers)
-- [Online Resources](#online-resources)
-- [Related Projects](#related-projects)
-- [Tools and Libraries](#tools-and-libraries)
-- [Recommended Books](#recommended-books)
-
 ---
 
 ## Official Documentation

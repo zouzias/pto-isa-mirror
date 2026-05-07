@@ -2,14 +2,6 @@
 
 This document summarizes performance tuning best practices for PTO operators, providing systematic optimization methods and experience.
 
-## Contents
-
-- [1. Optimization Workflow](#1-optimization-workflow)
-- [2. Performance Analysis Methods](#2-performance-analysis-methods)
-- [3. Common Performance Issues](#3-common-performance-issues)
-- [4. Optimization Techniques Checklist](#4-optimization-techniques-checklist)
-- [5. Platform-Specific Optimization](#5-platform-specific-optimization)
-
 ---
 
 ## 1. Optimization Workflow

@@ -31,3 +31,4 @@ window.MathJax = {
     processHtmlClass: "arithmatex",
   },
 };
+

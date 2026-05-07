@@ -54,6 +54,128 @@ If the run succeeds, the output prints:
 test success
 ```
 
+## Cost Model
+
+The script [scripts/fa_cost_model.py](scripts/fa_cost_model.py) estimates cycles for this manual Flash Attention
+kernel and searches tiling candidates. It is not intended to be a universal FA model. It is a local model for the
+A2/A3 `dav-c220` implementation in this directory.
+
+### Model Concept
+
+The kernel is modeled at logical `TILE_S1` granularity:
+
+```text
+compute_qk (cube) -> compute_p (vector) -> compute_pv (cube) -> compute_gu (vector)
+```
+
+For one `CUBE_S0` block, the model computes:
+
+- `tiles = S1 / TILE_S1`
+- `tile_factor = TILE_S1 / CUBE_S1`, the number of cube subtiles inside one logical S1 tile
+- `blocks = S0 / CUBE_S0`
+- `waves = ceil(blocks / cube_core_count)`
+
+The base stage cycles are calibrated at the reference shape `HEAD=128`, `CUBE_S0=128`, `TILE_S1=256`,
+`CUBE_S1=128`, then scaled by work size:
+
+- QK/PV cube work scales with `CUBE_S0 * HEAD * TILE_S1`.
+- P softmax vector work scales with `CUBE_S0 * TILE_S1`.
+- GU vector work scales with `CUBE_S0 * HEAD`.
+- GM-sensitive parts are scaled by `gm_scale`. `Ascend910B4` defaults to `gm_scale=2.0` to approximate half GM
+  bandwidth versus the B1/B2/B3 setting.
+
+The script then simulates a simple two-resource pipeline with separate cube and vector availability times.
+`qk_preload` controls how many QK/P tiles are started before the steady PV/GU loop. The total block time is the
+maximum of the cube and vector timelines, plus an MTE3 tail.
+When `qk_preload` is larger than the number of logical S1 tiles, the pipeline model uses
+`effective_qk_preload = min(qk_preload, tiles)`, matching the kernel warm-up loop.
+
+The full estimate is:
+
+```text
+cycles = launch_overhead
+       + waves * block_pipeline_cycles
+       + preload_bubble
+       + correction_terms
+```
+
+### Correction Terms
+
+The correction terms are intentionally structural:
+
+- `logical_tile_sync`: cost proportional to logical S1 tiles. Real NPU runs show larger tiles can reduce sync
+  overhead because fewer logical tiles are processed.
+- `extra_cube_s1_subtile`: cost for using more CUBE_S1 subtiles than the `CUBE_S1=128` reference:
+  `max(0, S1/CUBE_S1 - S1/128)`. This captures why `CUBE_S1=64` can be slower without hard-coding that setting as
+  a special penalty.
+- `long_extra_cube_s1_subtile`: NPU-only long-sequence extension of the same subtile term. It lets short H64/H96/H128
+  cases still prefer `CUBE_S1=64` when onboard data supports it, while long sequences move toward `CUBE_S1=128`.
+- `narrow_vec_s0`: cost for small vector row slices:
+  `max(0, 16/Vec_S0 - 1)`, where `Vec_S0 = CUBE_S0 / (2 * tile_factor)`. Simulator traces showed narrow slices can
+  hurt, but the default NPU value is currently zero because the onboard B3 data still likes `Vec_S0=8` for several
+  H128 cases.
+- `gm_large_tile` and `gm_short_high_preload`: GM-scaled NPU terms for larger tiles and high preload on slower GM.
+- H64 and `CUBE_S0=256` terms: ranking corrections fitted from the onboard B3/B4 sweeps. These are still empirical,
+  but they are tied to shape regions rather than one exact tile tuple.
+
+### Legality Checks
+
+The search rejects candidates that the current kernel template cannot instantiate:
+
+- `S0` must be divisible by `CUBE_S0`.
+- `S1` must be divisible by `TILE_S1`.
+- `TILE_S1` must be divisible by `CUBE_S1`.
+- `CUBE_S0` must divide cleanly across the two vector subcores and `tile_factor`.
+- FP32 reduce slices must be 32-byte aligned. In practice, `Vec_S0 * sizeof(float)` must be a multiple of 32.
+- L1 and vector UB allocation must fit the kernel limits.
+
+This is why a tuple such as `HEAD=64,S0=256,S1=4096,CUBE_S0=256,CUBE_S1=64,TILE_S1=2048` is treated as invalid:
+`Vec_S0 = 256 / (2 * 2048/64) = 4`, which fails the FP32 vector tile alignment.
+
+### Usage
+
+Estimate one shape:
+
+```bash
+python3 scripts/fa_cost_model.py \
+  --mode npu --soc Ascend910B3 \
+  --head 128 --s0 4096 --s1 4096 \
+  --cube-s0 128 --cube-s1 128 --tile-s1 1024 --qk-preload 4
+```
+
+Search the best tiling for all SoC presets:
+
+```bash
+python3 scripts/fa_cost_model.py \
+  --mode npu --all-socs --search --head 128 \
+  --seq-list 1024,2048,4096,8192,16384,32768 \
+  --cube-s0-list 64,128,256 \
+  --cube-s1-list 64,128 \
+  --tile-s1-list 128,256,512,1024,2048 \
+  --qk-preload-list 2,4,6
+```
+
+Compare against simulator sweep data:
+
+```bash
+python3 scripts/fa_cost_model.py \
+  --mode sim --soc Ascend910B1 \
+  --check-calibration profiling_results/sim_pattern_sweep/summary.csv
+```
+
+Useful override knobs for sensitivity checks:
+
+```bash
+--gm-scale 2.0
+--logical-tile-sync-cycles <cycles>
+--extra-cube-s1-subtile-cycles <cycles>
+--long-extra-cube-s1-subtile-cycles <cycles>
+--narrow-vec-s0-cycles <cycles>
+```
+
+The search output reports predicted cycles and time. Use the ranking more than the absolute time when exploring
+tiling options; onboard calibration is still needed before locking final settings.
+
 ## Performance
 
 This section records reference performance numbers for the manual Flash Attention kernel in this directory.
@@ -62,9 +184,24 @@ Definitions:
 - `S0`: query sequence length (rows of Q/O).
 - `S1`: key/value sequence length (rows of K/V).
 - `Total task time (us)`: end-to-end kernel time per task (microseconds).
-- `GOps`: total operations counted for the task.
-- `TFLOPS`: `GOps / time`.
+- `MOps`: total operations counted for the task, in millions of operations.
+- `TFLOPS`: `MOps / time_us`, since millions of operations per microsecond equals trillions of operations per second.
 - `Normalized TFLOPS`: `TFLOPS × (24 / cores_used)` to estimate full-device throughput on a 24-core A3.
+
+### 910B2 Multi-Core Comparison
+
+The following full-sequence data were measured on Ascend 910B2 (A2/A3 generation), using `torch_npu` as the baseline. `Sequence length` is shared by Q/K/V, and the host benchmark counts `MOps` as `S0 * S1 * HEAD_SIZE * 4 / 1e6`, with `S0 = S1 = Sequence length` and `HEAD_SIZE = 128`.
+
+| Sequence length | PTO time (us) | torch_npu time (us) | MOps | PTO TFLOPS | torch_npu TFLOPS | PTO utilization | torch_npu utilization | PTO speedup |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1024 | 20.960 | 58.461 | 536.87 | 25.61 | 9.18 | 7.24% | 2.59% | 2.79x |
+| 2048 | 32.461 | 70.801 | 2147.48 | 66.16 | 30.33 | 18.69% | 8.57% | 2.18x |
+| 4096 | 88.902 | 118.302 | 8589.93 | 96.62 | 72.61 | 27.30% | 20.52% | 1.33x |
+| 8192 | 292.626 | 353.147 | 34359.74 | 117.42 | 97.30 | 33.18% | 27.49% | 1.21x |
+| 16384 | 909.058 | 1118.462 | 137438.95 | 151.19 | 122.88 | 42.72% | 34.72% | 1.23x |
+| 32768 | 3262.645 | 3646.173 | 549755.81 | 168.50 | 150.78 | 47.61% | 42.60% | 1.12x |
+
+![Flash Attention 910B2 PTO vs torch_npu](../../../../docs/figures/performance/fa_910b2_pto_vs_torch_npu.png)
 
 ### Summary
 
@@ -93,7 +230,7 @@ Total task time (us, lower is better):
 | 4 | 512 | 41.721 | 55.441 | 46.621 | 86.322 |
 | 8 | 1024 | 63.72 | 85.882 | 64.461 | 107.342 |
 
-GOps:
+MOps:
 
 | Cores | S0 | S1=1024 | S1=2048 | S1=4096 | S1=8192 |
 | --- | --- | --- | --- | --- | --- |

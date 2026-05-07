@@ -96,15 +96,15 @@ TLOAD(tile[0], ...);  // Preload first
 for (int i = 0; i < N; i++) {
   int curr = i % 2;
   int next = (i + 1) % 2;
-
+  
   // Compute current iteration
   TCOMPUTE(result[curr], tile[curr]);
-
+  
   // Load next iteration simultaneously
   if (i + 1 < N) {
     TLOAD(tile[next], ...);
   }
-
+  
   // Store previous result
   if (i > 0) {
     TSTORE(..., result[1 - curr]);
@@ -132,16 +132,16 @@ for (int i = 0; i < N; i++) {
   int curr = i % 3;
   int next = (i + 1) % 3;
   int prev = (i + 2) % 3;
-
+  
   // Load next
   if (i + 2 < N) {
     TLOAD(tile[next], ..., load_event[next]);
   }
-
+  
   // Compute current
   WAIT(load_event[curr]);
   TCOMPUTE(result, tile[curr], compute_event[curr]);
-
+  
   // Store previous
   if (i > 0) {
     WAIT(compute_event[prev]);
@@ -180,11 +180,11 @@ TSTORE(..., result, compute_event);
 __global__ __aicore__ void ParallelKernel(...) {
   int block_idx = get_block_idx();
   int block_num = get_block_num();
-
+  
   // Each core processes different data
   int start = block_idx * elements_per_core;
   int end = min(start + elements_per_core, total_elements);
-
+  
   for (int i = start; i < end; i++) {
     process(i);
   }
@@ -233,7 +233,7 @@ for (int i = 0; i < N; i++) {
   if (i + 1 < N) {
     TLOAD(tile[(i+1)%2], data[i+1]);
   }
-
+  
   TCOMPUTE(result, tile[i%2]);
   TSTORE(output[i], result);
 }
@@ -267,7 +267,7 @@ Idle:     30%
 for (int k = 0; k < K; k += TILE_K) {
   TLOAD(tileA, ...);  // Load once
   TLOAD(tileB, ...);
-
+  
   // Reuse multiple times
   for (int sub_k = 0; sub_k < TILE_K; sub_k++) {
     TMATMUL(acc, tileA[sub_k], tileB[sub_k]);
@@ -293,7 +293,7 @@ for (int i = 0; i < N; i += BATCH_SIZE) {
   for (int j = 0; j < BATCH_SIZE; j++) {
     events[j] = TLOAD(tiles[j], ...);
   }
-
+  
   // Process batch
   for (int j = 0; j < BATCH_SIZE; j++) {
     WAIT(events[j]);
@@ -332,3 +332,4 @@ TCOMPUTE(current_data);
 - [Performance Best Practices](performance-best-practices.md)
 - [Memory Optimization](memory-optimization.md)
 - [GEMM Optimization Case](../../kernels/manual/a2a3/gemm_performance/README.md)
+

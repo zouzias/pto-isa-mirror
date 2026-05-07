@@ -107,3 +107,4 @@ void example(__gm__ float* in, __gm__ float* out) {
   TSTORE(gout, t);
 }
 ```
+

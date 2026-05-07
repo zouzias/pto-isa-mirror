@@ -75,19 +75,19 @@ __global__ __aicore__ void VecAddKernel(__gm__ float* out,
   // Get current core ID
   int block_idx = get_block_idx();
   int block_num = get_block_num();
-
+  
   // Calculate data range for current core
   int elements_per_block = (totalLength + block_num - 1) / block_num;
   int start = block_idx * elements_per_block;
   int end = min(start + elements_per_block, totalLength);
-
+  
   // Process current block
   for (int i = start; i < end; i += TILE_SIZE) {
     int size = min(TILE_SIZE, end - i);
-
+    
     using TileT = Tile<TileType::Vec, float, 8, 256>;
     TileT a, b, c;
-
+    
     TLOAD(a, GlobalTensor(in0 + i));
     TLOAD(b, GlobalTensor(in1 + i));
     TADD(c, a, b);
@@ -106,36 +106,36 @@ __global__ __aicore__ void MatMulKernel(__gm__ float* C,
                                         int M, int K, int N) {
   // Get core ID
   int block_idx = get_block_idx();
-
+  
   // 2D partitioning: M and N dimensions
   int blocks_m = (M + TILE_M - 1) / TILE_M;
   int blocks_n = (N + TILE_N - 1) / TILE_N;
-
+  
   int block_m = block_idx / blocks_n;
   int block_n = block_idx % blocks_n;
-
+  
   // Calculate matrix block for current core
   int m_start = block_m * TILE_M;
   int n_start = block_n * TILE_N;
-
+  
   // Ensure no out-of-bounds
   if (m_start >= M || n_start >= N) return;
-
+  
   int m_size = min(TILE_M, M - m_start);
   int n_size = min(TILE_N, N - n_start);
-
+  
   // Execute matrix multiplication
   TileAcc acc;
   TFILL(acc, 0);
-
+  
   for (int k = 0; k < K; k += TILE_K) {
     int k_size = min(TILE_K, K - k);
-
+    
     TLOAD(tileA, A[m_start:m_start+m_size, k:k+k_size]);
     TLOAD(tileB, B[k:k+k_size, n_start:n_start+n_size]);
     TMATMUL_ACC(acc, tileA, tileB);
   }
-
+  
   TSTORE(C[m_start:m_start+m_size, n_start:n_start+n_size], acc);
 }
 ```
@@ -188,7 +188,7 @@ __global__ __aicore__ void PipelineKernel(__gm__ float* out,
         signal_stage2();
       }
       break;
-
+      
     case 1:  // Stage 2: Compute
       for (int i = 0; i < N; i++) {
         wait_stage1();
@@ -196,7 +196,7 @@ __global__ __aicore__ void PipelineKernel(__gm__ float* out,
         signal_stage3();
       }
       break;
-
+      
     case 2:  // Stage 3: Store
       for (int i = 0; i < N; i++) {
         wait_stage2();
@@ -218,7 +218,7 @@ __global__ __aicore__ void PipelineKernel(__gm__ float* out,
 // Method 1: Simple division
 int elements_per_block = totalLength / block_num;
 int start = block_idx * elements_per_block;
-int end = (block_idx == block_num - 1) ?
+int end = (block_idx == block_num - 1) ? 
           totalLength : start + elements_per_block;
 
 // Method 2: Ceiling division
@@ -234,23 +234,23 @@ int end = min(start + elements_per_block, totalLength);
 // Record execution time for each core
 #ifdef PROFILE
   auto start = GetTime();
-
+  
   // Execute task
   process_block(block_idx);
-
+  
   auto end = GetTime();
   execution_times[block_idx] = end - start;
 #endif
 
 // Analyze load balance
-float max_time = *max_element(execution_times.begin(),
+float max_time = *max_element(execution_times.begin(), 
                               execution_times.end());
-float min_time = *min_element(execution_times.begin(),
+float min_time = *min_element(execution_times.begin(), 
                               execution_times.end());
 float imbalance = (max_time - min_time) / max_time;
 
 if (imbalance > 0.2) {
-  printf("Warning: Load imbalance detected: %.2f%%\n",
+  printf("Warning: Load imbalance detected: %.2f%%\n", 
          imbalance * 100);
 }
 ```
@@ -295,14 +295,14 @@ __gm__ atomic<int> counter = 0;
 __global__ __aicore__ void SyncKernel(...) {
   // Each core increments counter after completing work
   process_local_work();
-
+  
   counter.fetch_add(1);
-
+  
   // Wait for all cores to complete
   while (counter.load() < block_num) {
     // Spin wait
   }
-
+  
   // Continue to next stage
   next_stage_work();
 }
@@ -334,7 +334,7 @@ for (int i = 0; i < N; i += BATCH_SIZE) {
 // Make each core complete work independently
 __global__ __aicore__ void LocalizedKernel(...) {
   int block_idx = get_block_idx();
-
+  
   // Each core processes complete subproblem
   // No need to communicate with other cores
   process_independent_subproblem(block_idx);
@@ -392,3 +392,4 @@ __global__ __aicore__ void GoodKernel(...) {
 - [Pipeline and Parallel Execution](pipeline-parallel.md)
 - [Performance Best Practices](performance-best-practices.md)
 - [GEMM Optimization Case](../../kernels/manual/a2a3/gemm_performance/README.md)
+

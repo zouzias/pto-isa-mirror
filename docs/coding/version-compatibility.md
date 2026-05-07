@@ -2,14 +2,6 @@
 
 This document details PTO-ISA's version compatibility strategy, differences between versions, platform support, and migration guides.
 
-## Contents
-
-- [1. Version Strategy](#1-version-strategy)
-- [2. Platform Compatibility](#2-platform-compatibility)
-- [3. API Compatibility](#3-api-compatibility)
-- [4. Version History](#4-version-history)
-- [5. Migration Guide](#5-migration-guide)
-
 ______________________________________________________________________
 
 ## 1. Version Strategy

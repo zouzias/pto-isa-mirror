@@ -2,16 +2,6 @@
 
 This document explains the PTO operator compilation process, helping developers understand the complete workflow from source code to executable files.
 
-## Contents
-
-- [1. Compilation Overview](#1-compilation-overview)
-- [2. Build System Configuration](#2-build-system-configuration)
-- [3. Compilation Steps](#3-compilation-steps)
-- [4. Compilation Options](#4-compilation-options)
-- [5. Cross Compilation](#5-cross-compilation)
-- [6. Compilation Optimization](#6-compilation-optimization)
-- [7. Troubleshooting](#7-troubleshooting)
-
 ______________________________________________________________________
 
 ## 1. Compilation Overview

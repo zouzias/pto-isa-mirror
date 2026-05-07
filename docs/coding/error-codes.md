@@ -2,16 +2,6 @@
 
 This document lists common error codes, error messages, and solutions encountered in PTO development.
 
-## Contents
-
-- [1. Compilation Errors (E001-E099)](#1-compilation-errors-e001-e099)
-- [2. Linking Errors (L001-L099)](#2-linking-errors-l001-l099)
-- [3. Runtime Errors (R001-R099)](#3-runtime-errors-r001-r099)
-- [4. Memory Errors (M001-M099)](#4-memory-errors-m001-m099)
-- [5. Numerical Errors (N001-N099)](#5-numerical-errors-n001-n099)
-- [6. Performance Issues (P001-P099)](#6-performance-issues-p001-p099)
-- [7. Framework Integration Errors (F001-F099)](#7-framework-integration-errors-f001-f099)
-
 ______________________________________________________________________
 
 ## 1. Compilation Errors (E001-E099)

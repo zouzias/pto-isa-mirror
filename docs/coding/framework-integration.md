@@ -52,13 +52,13 @@ Hardware Layer (NPU/GPU/CPU)
 TORCH_LIBRARY_FRAGMENT(npu, m) {
   // Basic operator
   m.def("my_add(Tensor x, Tensor y) -> Tensor");
-
+  
   // With scalar parameter
   m.def("my_mul(Tensor x, Scalar alpha) -> Tensor");
-
+  
   // Multiple outputs
   m.def("my_split(Tensor x, int dim) -> (Tensor, Tensor)");
-
+  
   // Inplace operator
   m.def("my_relu_(Tensor(a!) self) -> Tensor(a!)");
 }
@@ -75,19 +75,19 @@ __global__ __aicore__ void MyAddKernel(
     __gm__ const float* x,
     __gm__ const float* y,
     uint32_t length) {
-
+  
   int block_idx = get_block_idx();
   int block_num = get_block_num();
-
+  
   int elements_per_block = (length + block_num - 1) / block_num;
   int start = block_idx * elements_per_block;
   int end = min(start + elements_per_block, length);
-
+  
   using TileT = Tile<TileType::Vec, float, 16, 256>;
-
+  
   for (int i = start; i < end; i += 16 * 256) {
     TileT tile_x, tile_y, tile_out;
-
+    
     TLOAD(tile_x, GlobalTensor(x + i));
     TLOAD(tile_y, GlobalTensor(y + i));
     TADD(tile_out, tile_x, tile_y);
@@ -100,20 +100,20 @@ at::Tensor my_add_impl(const at::Tensor& x, const at::Tensor& y) {
   // Check inputs
   TORCH_CHECK(x.device() == y.device(), "Inputs must be on same device");
   TORCH_CHECK(x.sizes() == y.sizes(), "Inputs must have same shape");
-
+  
   // Allocate output
   at::Tensor out = at::empty_like(x);
-
+  
   // Get data pointers
   float* out_ptr = out.data_ptr<float>();
   const float* x_ptr = x.data_ptr<float>();
   const float* y_ptr = y.data_ptr<float>();
   uint32_t length = x.numel();
-
+  
   // Launch kernel
   int block_num = 24;  // A3 core count
   EXEC_KERNEL_CMD(MyAddKernel, block_num, out_ptr, x_ptr, y_ptr, length);
-
+  
   return out;
 }
 ```
@@ -227,21 +227,21 @@ class MyAddOp : public tensorflow::OpKernel {
     // Get inputs
     const tensorflow::Tensor& x = context->input(0);
     const tensorflow::Tensor& y = context->input(1);
-
+    
     // Check shapes
     OP_REQUIRES(context, x.shape() == y.shape(),
                 tensorflow::errors::InvalidArgument("Inputs must have same shape"));
-
+    
     // Allocate output
     tensorflow::Tensor* z = nullptr;
     OP_REQUIRES_OK(context, context->allocate_output(0, x.shape(), &z));
-
+    
     // Call PTO kernel
     const float* x_ptr = x.flat<float>().data();
     const float* y_ptr = y.flat<float>().data();
     float* z_ptr = z->flat<float>().data();
     uint32_t length = x.NumElements();
-
+    
     EXEC_KERNEL_CMD(MyAddKernel, 24, z_ptr, x_ptr, y_ptr, length);
   }
 };
@@ -303,18 +303,18 @@ class MyAddKernel : public onnxruntime::OpKernel {
     // Get inputs
     const onnxruntime::Tensor* X = context->Input<onnxruntime::Tensor>(0);
     const onnxruntime::Tensor* Y = context->Input<onnxruntime::Tensor>(1);
-
+    
     // Allocate output
     onnxruntime::Tensor* Z = context->Output(0, X->Shape());
-
+    
     // Call PTO kernel
     const float* x_data = X->Data<float>();
     const float* y_data = Y->Data<float>();
     float* z_data = Z->MutableData<float>();
     size_t length = X->Shape().Size();
-
+    
     EXEC_KERNEL_CMD(MyAddKernel, 24, z_data, x_data, y_data, length);
-
+    
     return onnxruntime::Status::OK();
   }
 };
@@ -376,9 +376,9 @@ at::Tensor& my_add_inplace(at::Tensor& x, const at::Tensor& y) {
   float* x_ptr = x.data_ptr<float>();
   const float* y_ptr = y.data_ptr<float>();
   uint32_t length = x.numel();
-
+  
   EXEC_KERNEL_CMD(MyAddInplaceKernel, 24, x_ptr, y_ptr, length);
-
+  
   return x;
 }
 ```
@@ -389,17 +389,17 @@ at::Tensor& my_add_inplace(at::Tensor& x, const at::Tensor& y) {
 // Use CUDA Stream (or NPU Stream)
 at::Tensor my_add_async(const at::Tensor& x, const at::Tensor& y) {
   at::Tensor out = at::empty_like(x);
-
+  
   // Get current stream
   auto stream = at::cuda::getCurrentCUDAStream();
-
+  
   // Launch kernel asynchronously
-  EXEC_KERNEL_ASYNC(MyAddKernel, 24, stream,
+  EXEC_KERNEL_ASYNC(MyAddKernel, 24, stream, 
                     out.data_ptr<float>(),
                     x.data_ptr<float>(),
                     y.data_ptr<float>(),
                     x.numel());
-
+  
   return out;
 }
 ```
@@ -414,3 +414,4 @@ at::Tensor my_add_async(const at::Tensor& x, const at::Tensor& y) {
 - [Add Operator Example](../../demos/baseline/add/README.md)
 - [Debugging Guide](debug.md)
 - [Performance Optimization](opt.md)
+

@@ -55,3 +55,4 @@ To make this into a real GEMM kernel you usually add:
 - Synchronization for overlap:
   - events to order memory and compute pipelines,
   - ping-pong buffers to reuse tile storage safely.
+

@@ -37,7 +37,6 @@ pto::ConvTile<
 - `TileType::Vec`: vector tile storage (UB / vector pipeline).
 - `TileType::Mat`: general matrix tile storage (Matrix L1).
 
-
 Instruction pages in `docs/isa/` specify which locations are legal for each instruction.
 
 ### Capacity (`BufferSize_`)
@@ -48,7 +47,6 @@ Instruction pages in `docs/isa/` specify which locations are legal for each inst
 
 `ConvTile` includes a layout enum (`NCHW`, `NHWC`, `NC1HWC0`, `FRACTAL_Z`,  `FRACTAL_Z_S16S8`...).
 
-
 ### Shape (`pto::Shape`)
 
 `pto::ConvTileShape<...Shapes>` support 1-6 integers. it is a template parameter list, each template parameter can be a compile-time constant or `pto::DYNAMIC` (`-1`).
@@ -57,7 +55,6 @@ Instruction pages in `docs/isa/` specify which locations are legal for each inst
 - Dynamic dimensions are stored in the runtime `ConvTileShape::shape[dim]` and are populated by the `ConvTileShape(...)` constructors.
 
 The constructors enforce “number of runtime parameters equals number of dynamic dimensions” via `static_assert`, so mismatched construction fails at compile time.
-
 
 ## Address binding (`TASSIGN`)
 

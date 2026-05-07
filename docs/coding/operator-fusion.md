@@ -113,27 +113,27 @@ __global__ __aicore__ void FusedAddReLUMul(
     float bias,
     float scale,
     uint32_t length) {
-
+  
   int block_idx = get_block_idx();
   int block_num = get_block_num();
-
+  
   int elements_per_block = (length + block_num - 1) / block_num;
   int start = block_idx * elements_per_block;
   int end = min(start + elements_per_block, length);
-
+  
   using TileT = Tile<TileType::Vec, float, 16, 256>;
-
+  
   for (int i = start; i < end; i += 16 * 256) {
     TileT tile;
-
+    
     // Load data
     TLOAD(tile, GlobalTensor(in + i));
-
+    
     // Fused computation: Add + ReLU + Mul
     TADDS(tile, tile, bias);    // Add
     TRELU(tile, tile);          // ReLU
     TMULS(tile, tile, scale);   // Mul
-
+    
     // Store result
     TSTORE(GlobalTensor(out + i), tile);
   }
@@ -186,39 +186,39 @@ __global__ __aicore__ void FusedSoftmax(
     __gm__ const float* in,
     int rows,
     int cols) {
-
+  
   int block_idx = get_block_idx();
-
+  
   // Each core processes one row
   if (block_idx >= rows) return;
-
+  
   using TileVec = Tile<TileType::Vec, float, 1, 256>;
   using TileScalar = Tile<TileType::Vec, float, 1, 1>;
-
+  
   TileVec input, shifted, exp_vals, output;
   TileScalar max_val, sum_val;
-
+  
   for (int col = 0; col < cols; col += 256) {
     int size = min(256, cols - col);
-
+    
     // Load input
     TLOAD(input, in[block_idx * cols + col : size]);
-
+    
     // Step 1: Compute max
     TROWMAX(max_val, input);
-
+    
     // Step 2: Subtract max (numerical stability)
     TROWEXPANDSUB(shifted, input, max_val);
-
+    
     // Step 3: Compute exponential
     TEXP(exp_vals, shifted);
-
+    
     // Step 4: Compute sum
     TROWSUM(sum_val, exp_vals);
-
+    
     // Step 5: Normalize
     TROWEXPANDDIV(output, exp_vals, sum_val);
-
+    
     // Store result
     TSTORE(out[block_idx * cols + col : size], output);
   }
@@ -255,45 +255,45 @@ __global__ __aicore__ void FusedGEMMBiasReLU(
     __gm__ const float* B,
     __gm__ const float* bias,
     int M, int K, int N) {
-
+  
   int block_idx = get_block_idx();
-
+  
   // 2D partitioning
   int blocks_n = (N + TILE_N - 1) / TILE_N;
   int block_m = block_idx / blocks_n;
   int block_n = block_idx % blocks_n;
-
+  
   int m_start = block_m * TILE_M;
   int n_start = block_n * TILE_N;
-
+  
   if (m_start >= M || n_start >= N) return;
-
+  
   using TileLeft = TileLeft<half, 128, 64>;
   using TileRight = TileRight<half, 64, 256>;
   using TileAcc = TileAcc<float, 128, 256>;
   using TileBias = Tile<TileType::Vec, float, 1, 256>;
-
+  
   TileAcc acc;
   TFILL(acc, 0);
-
+  
   // Matrix multiplication
   for (int k = 0; k < K; k += 64) {
     TileLeft tileA;
     TileRight tileB;
-
+    
     TLOAD(tileA, A[m_start:128, k:64]);
     TLOAD(tileB, B[k:64, n_start:256]);
     TMATMUL_ACC(acc, tileA, tileB);
   }
-
+  
   // Fuse Bias
   TileBias bias_tile;
   TLOAD(bias_tile, bias[n_start:256]);
   TROWEXPANDADD(acc, acc, bias_tile);
-
+  
   // Fuse ReLU
   TRELU(acc, acc);
-
+  
   // Store result
   TSTORE(C[m_start:128, n_start:256], acc);
 }
@@ -310,14 +310,14 @@ __global__ __aicore__ void FusedGEMMBiasReLU(
 # Analyze computation graph
 def analyze_fusion_opportunities(graph):
     candidates = []
-
+    
     for node in graph.nodes:
         # Find consecutive element-wise operations
         if is_elementwise(node):
             chain = find_elementwise_chain(node)
             if len(chain) >= 2:
                 candidates.append(chain)
-
+    
     return candidates
 ```
 
@@ -327,17 +327,17 @@ def analyze_fusion_opportunities(graph):
 bool can_fuse(Op op1, Op op2) {
   // 1. Check data dependencies
   if (op2.input != op1.output) return false;
-
+  
   // 2. Check if intermediate result is used by other operators
   if (op1.output.num_users > 1) return false;
-
+  
   // 3. Check on-chip memory capacity
   size_t required_memory = op1.memory + op2.memory;
   if (required_memory > L1_CAPACITY) return false;
-
+  
   // 4. Check data type compatibility
   if (op1.output_type != op2.input_type) return false;
-
+  
   return true;
 }
 ```
@@ -350,17 +350,17 @@ __global__ __aicore__ void FusedKernel(
     __gm__ float* out,
     __gm__ const float* in,
     Op1 op1, Op2 op2, Op3 op3) {
-
+  
   using TileT = Tile<TileType::Vec, float, 16, 256>;
   TileT tile;
-
+  
   TLOAD(tile, in);
-
+  
   // Execute fused operations sequentially
   op1(tile, tile);
   op2(tile, tile);
   op3(tile, tile);
-
+  
   TSTORE(out, tile);
 }
 ```
@@ -445,3 +445,4 @@ Speedup: 0.21 / 0.09 = 2.3×
 - [Memory Optimization](memory-optimization.md)
 - [Performance Best Practices](performance-best-practices.md)
 - [Pipeline and Parallel Execution](pipeline-parallel.md)
+
