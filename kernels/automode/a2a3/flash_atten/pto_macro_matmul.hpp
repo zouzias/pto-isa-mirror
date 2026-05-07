@@ -45,24 +45,8 @@ enum class AccMode
     AccFinalSum,    // explicitly final, all slices accumulate
 };
 
-#define L0A_BUF0 ((__ca__ half *)(__ca__ char *)0x0)
-#define L0A_BUF1 ((__ca__ half *)(__ca__ char *)0x8000)
-#define L0B_BUF0 ((__ca__ half *)(__ca__ char *)0x0)
-#define L0B_BUF1 ((__ca__ half *)(__ca__ char *)0x8000)
-#define L0C_BUF0 ((__ca__ half *)(__ca__ char *)0x0)
-#define L0C_BUF1 ((__ca__ half *)(__ca__ char *)0x20000)
-
 #define LAST_LOOP(x, n) ((x) == ((n)-1))
 #define UNIT_FLAG_ENABLE(i, n) (LAST_LOOP(i, n) ? 3 : 2)
-
-AICORE inline uint64_t getPingPong(uint32_t flip)
-{
-    static uint64_t pingpong = 0;
-    if (flip) {
-        pingpong = 1 - pingpong;
-    }
-    return pingpong;
-}
 
 // Memory constraints (L0 ping-pong is 32 KiB per buffer in this implementation).
 // Tuning knob: if you change L0 layout or buffer addresses, re-check these constraints.
@@ -154,35 +138,18 @@ AICORE inline void pto_macro_matmul(TileDataA &aMatTile, TileDataB &bMatTile, Ti
     }
 
     // Ping-pong is used to overlap TEXTRACT (L1->L0) with TMATMUL on alternating buffers.
-    uint64_t pingpong = getPingPong(0);
     const uint64_t Cube_K =
         calculateFittingCubeK(Cube_M, Cube_N) > Tile_K ? Tile_K : calculateFittingCubeK(Cube_M, Cube_N);
     const uint64_t kSegments = (uint64_t)(Tile_K / Cube_K);
     for (uint64_t k = 0; k < kSegments; k++) {
         using LeftTile = TileLeft<half, Cube_M, Cube_K, Cube_M, Cube_K>;
-        LeftTile al0Tiles[2] = {LeftTile(), LeftTile()};
+        LeftTile al0Tiles;
         using RightTile = TileRight<half, Cube_K, Cube_N, Cube_K, Cube_N>;
-        RightTile bl0Tiles[2] = {RightTile(), RightTile()};
-
-        TASSIGN(al0Tiles[0], (uint64_t)L0A_BUF0);
-        TASSIGN(al0Tiles[1], (uint64_t)L0A_BUF1);
-        TASSIGN(bl0Tiles[0], (uint64_t)L0B_BUF0);
-        TASSIGN(bl0Tiles[1], (uint64_t)L0B_BUF1);
-
-        // Wait until previous TMATMUL finishes using this L0 buffer before overwriting it via TEXTRACT.
-        wait_flag(PIPE_M, PIPE_MTE1, pingpong);
-
-        if (layout == layout_t::NT) {
-            TASSIGN(aMatTile, (uint64_t)aMatTile.data() + k * Cube_K * Cube_M * sizeof(typename TileDataA::DType));
-            TASSIGN(bMatTile, (uint64_t)bMatTile.data() + k * Cube_K * Cube_N * sizeof(typename TileDataB::DType));
-        }
+        RightTile bl0Tiles;
 
         // TEXTRACT slices the current Cube_K panel into L0A/L0B.
-        TEXTRACT(al0Tiles[pingpong], aMatTile, 0, 0);
-        TEXTRACT(bl0Tiles[pingpong], bMatTile, 0, 0);
-
-        set_flag(PIPE_MTE1, PIPE_M, pingpong);
-        wait_flag(PIPE_MTE1, PIPE_M, pingpong);
+        TEXTRACT(al0Tiles, aMatTile, 0, k * Cube_K);
+        TEXTRACT(bl0Tiles, bMatTile, k * Cube_K, 0);
 
         const bool isLast = (k + 1 == kSegments);
         MatmulCallConfig cfg = resolve_acc_mode(accMode, k == 0, isLast);
@@ -203,8 +170,6 @@ AICORE inline void pto_macro_matmul(TileDataA &aMatTile, TileDataB &bMatTile, Ti
                 TMATMUL(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong]);
             }
         }
-        set_flag(PIPE_M, PIPE_MTE1, pingpong);
-        pingpong = getPingPong(1);
     }
 }
 } // namespace pto
