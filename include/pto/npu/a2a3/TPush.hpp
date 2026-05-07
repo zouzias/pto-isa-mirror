@@ -52,15 +52,23 @@ struct TPipe {
 
     PTO_INTERNAL static bool shouldWaitFree(uint32_t tileIndex)
     {
-        if (tileIndex < SlotNum) {
-            return false;
+        if constexpr (SlotNum == 1) {
+            return true; // With only 1 slot, producer must always wait for consumer to free
+        } else {
+            if (tileIndex < SlotNum) {
+                return false;
+            }
+            return (tileIndex % SyncPeriod) == 0;
         }
-        return (tileIndex % SyncPeriod) == 0;
     }
 
     PTO_INTERNAL static bool shouldNotifyFree(uint32_t tileIndex)
     {
-        return ((tileIndex + 1) % SyncPeriod) == 0;
+        if constexpr (SlotNum == 1) {
+            return true; // With only 1 slot, producer must always notify consumer to free
+        } else {
+            return ((tileIndex + 1) % SyncPeriod) == 0;
+        }
     }
 
     struct Producer {
@@ -453,7 +461,7 @@ template <typename Pipe, typename TileProd, TileSplitAxis Split, std::enable_if_
 PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, TileProd &tile)
 {
     // 1. Cross-Core: Wait for space
-    bool isAllocate = pipe.prod.getAllocateStatus();
+    bool isAllocate = pipe.prod.getAllocateStatus() && Pipe::shouldWaitFree(pipe.prod.tileIndex);
     if (isAllocate) {
         pipe.prod.allocate();
     }
