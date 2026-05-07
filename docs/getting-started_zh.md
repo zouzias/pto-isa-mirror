@@ -29,7 +29,7 @@ CPU 模拟器是最简单的入门方式。它可以在 macOS、Linux 和 Window
   - Windows: Visual Studio 2022 Build Tools (MSVC)
 - Python 包：`numpy >= 1.22.0`
 
-`tests/run_cpu.py` 可以自动安装 `numpy`（除非您传递 `--no-install` 参数）。
+`tests/run_cpu.py` 可以自动安装 `numpy >= 1.22.0`（除非您传递 `--no-install` 参数）。
 
 **可选项（用于加速构建）：**
 - Ninja (CMake 生成器)

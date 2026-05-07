@@ -34,9 +34,6 @@ struct TPipe {
     static constexpr bool is_v2c = (DIR_TYPE == Direction::DIR_V2C);           // 2
     static constexpr bool is_both = (DIR_TYPE == Direction::DIR_BOTH);         // 3
     static constexpr bool is_v2c_ctrl = (DIR_TYPE == Direction::DIR_V2C_CTRL); // 4
-    static constexpr uint32_t SyncPeriod = (SlotNum <= 2) ? SlotNum : SlotNum / 2;
-    static_assert(SlotNum >= 1, "Fix: TPipe requires SlotNum >= 1.");
-    static_assert(SyncPeriod >= 1, "Fix: TPipe requires SyncPeriod >= 1.");
     static_assert(is_c2v || is_v2c || is_both || is_v2c_ctrl,
                   "Fix: TPipe only supports C2V or V2C or Both or V2C_CTRL communication on A2A3.");
 
@@ -48,27 +45,6 @@ struct TPipe {
         constexpr uint16_t FFTS_FLAG_ID_BIT_START = 8;
         return ((base_const & 0xf) + ((mode & 0x3) << FFTS_MODE_BIT_START) +
                 ((flagID & 0xf) << FFTS_FLAG_ID_BIT_START));
-    }
-
-    PTO_INTERNAL static bool shouldWaitFree(uint32_t tileIndex)
-    {
-        if constexpr (SlotNum == 1) {
-            return true; // With only 1 slot, producer must always wait for consumer to free
-        } else {
-            if (tileIndex < SlotNum) {
-                return false;
-            }
-            return (tileIndex % SyncPeriod) == 0;
-        }
-    }
-
-    PTO_INTERNAL static bool shouldNotifyFree(uint32_t tileIndex)
-    {
-        if constexpr (SlotNum == 1) {
-            return true; // With only 1 slot, producer must always notify consumer to free
-        } else {
-            return ((tileIndex + 1) % SyncPeriod) == 0;
-        }
     }
 
     struct Producer {
@@ -436,17 +412,13 @@ struct TPipe {
     PTO_INTERNAL explicit TPipe(__gm__ void *GM_SLOT_BUFFER, uint32_t C2V_CONSUMER_BUF, uint32_t V2C_CONSUMER_BUF)
         : fifo(GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF), prod(), cons()
     {
-        for (uint32_t i = 0; i < SyncPeriod; ++i) {
-            cons.free();
-        }
+        cons.free();
     }
 
     // Destructor for TPipe
     PTO_INTERNAL ~TPipe()
     {
-        for (uint32_t i = 0; i < SyncPeriod; ++i) {
-            prod.allocate();
-        }
+        prod.allocate();
     }
 };
 
@@ -457,11 +429,11 @@ struct TPipe {
  * 2. [Store]   Write data to GM
  * 3. [Commit]  Signal Consumer (Cross-Core)
  */
-template <typename Pipe, typename TileProd, TileSplitAxis Split, std::enable_if_t<is_tile_data_v<TileProd>, int> = 0>
+template <typename Pipe, typename TileProd, TileSplitAxis Split>
 PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, TileProd &tile)
 {
     // 1. Cross-Core: Wait for space
-    bool isAllocate = pipe.prod.getAllocateStatus() && Pipe::shouldWaitFree(pipe.prod.tileIndex);
+    bool isAllocate = pipe.prod.getAllocateStatus();
     if (isAllocate) {
         pipe.prod.allocate();
     }
@@ -475,15 +447,6 @@ PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, TileProd &tile)
     if (isRecord) {
         pipe.prod.record();
     }
-}
-
-// interfaces when push and pop data from GM FIFO
-template <typename Pipe, typename GlobalData, TileSplitAxis Split,
-          std::enable_if_t<is_global_data_v<GlobalData>, int> = 0>
-PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, GlobalData &gmTensor)
-{
-    (void)gmTensor;
-    pipe.prod.record();
 }
 
 //---------------------multiple pipe----------------------
@@ -664,7 +627,7 @@ struct TMPipe {
                 }
             }
         } // end of store
-    }; // end of Producer
+    };    // end of Producer
 
     struct Consumer {
         int tile_id = 0;

@@ -126,4 +126,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.tcolmax ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

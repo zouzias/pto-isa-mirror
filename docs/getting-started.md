@@ -29,7 +29,7 @@ The CPU simulator is the easiest way to get started. It works on macOS, Linux, a
   - Windows: Visual Studio 2022 Build Tools (MSVC)
 - Python package: `numpy >= 1.22.0`
 
-`tests/run_cpu.py` can install `numpy` automatically (unless you pass `--no-install`).
+`tests/run_cpu.py` can install `numpy >= 1.22.0` automatically (unless you pass `--no-install`).
 
 **Optional (for faster builds):**
 - Ninja (CMake generator)
