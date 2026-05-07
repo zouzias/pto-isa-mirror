@@ -87,7 +87,7 @@ AICORE inline void softmax_opt_fa_not_init_impl(TileDataD2 __out__ &x_exp, TileD
                                                 ReduceTileD1 __out__ &new_global_max,
                                                 ReduceTileD1 __out__ &new_global_sum, ReduceTileD1 __out__ &exp_max,
                                                 TileDataS1 __out__ &tmp_float, TileDataS1 __out__ &p_tile_f32,
-                                                TileDataS1 triu, int s0_index, int s1_index)
+                                                TileDataS1 &triu, int s0_index, int s1_index)
 {
     constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
 
@@ -145,7 +145,7 @@ AICORE inline void pto_macro_fa_softmax(TileDataD2 __out__ &x_exp, TileDataS1 __
                                         ReduceTileD1 __out__ &local_max, ReduceTileD1 __out__ &local_sum,
                                         ReduceTileD1 __in__ &new_global_max, ReduceTileD1 __out__ &new_global_sum,
                                         ReduceTileD1 __out__ &exp_max, TileDataS1 __out__ &input_reduce_tmp,
-                                        TileDataS1 __out__ &p_tile_fp32, TileDataS1 triu, int s0_index, int s1_index)
+                                        TileDataS1 __out__ &p_tile_fp32, TileDataS1 &triu, int s0_index, int s1_index)
 {
     if (s1_index <= s0_index || !CAUSAL_MASK) {
         if constexpr (init) {
