@@ -104,6 +104,7 @@
 #include "hccl/hccl.h"
 #include "hccl/hccl_types.h"
 #include "hccl/hccl_res.h"
+#include "hccl/hccl_ex.h"  // HcclRegisterMemory / HcclUnregisterMemory (§3.13.I)
 #include "hcomm/ccu/hccl_ccu_res.h"
 #include "hcomm/ccu/ccu_assist_pub.h"
 
@@ -275,6 +276,33 @@ bool RunOneRank(int rankId, int nRanks, int firstDeviceId,
 
     const uint64_t inputVa  = reinterpret_cast<uint64_t>(inputDev);
     const uint64_t outputVa = reinterpret_cast<uint64_t>(outputDev);
+
+    // -------------------------------------------------------------------------
+    // 4.5 Register input/output buffers as UB-mappable memory.
+    //
+    // ORDERING INVARIANT (plan §3.13.I): `hcomm::CcuRep::GetTokenInfo(va, size)`
+    // (called below in step 6) requires `va` to live in hcomm's UB
+    // (User Buffer) registration table. Plain `aclrtMalloc(... HUGE_ONLY)`
+    // returns SVM HBM that is *not* automatically UB-registered — the
+    // standard hccl operator path (e.g. `HcclReduceScatter`) does this
+    // implicitly when it walks `op.inputMem` / `op.outputMem` and registers
+    // each one inside `CcuKernelAlgBase`. Standalone CCU users (us — we
+    // bypass the operator) must call `HcclRegisterMemory` manually here,
+    // otherwise `GetTokenInfo` throws `Hccl::CcuApiException: failed to
+    // query tokenInfo` because the underlying `rtUbDevQueryInfo` reports
+    // `Va is not alloced` from the driver.
+    //
+    // Register both `inputDev` and `outputDev`; both are referenced by
+    // `LocalCopyNb` in `Algorithm()` and need a token resolution path.
+    // -------------------------------------------------------------------------
+    HCCL_OK(HcclRegisterMemory(comm, inputDev,  kPayloadSize));
+    HCCL_OK(HcclRegisterMemory(comm, outputDev, kPayloadSize));
+    std::fprintf(stderr,
+        "[GATED_RS_ST] rank=%d HcclRegisterMemory OK inputVa=0x%llx outputVa=0x%llx size=%zu\n",
+        rankId,
+        static_cast<unsigned long long>(inputVa),
+        static_cast<unsigned long long>(outputVa),
+        kPayloadSize);
 
     // -------------------------------------------------------------------------
     // 5. Register + translate the gated kernel.
@@ -468,7 +496,14 @@ bool RunOneRank(int rankId, int nRanks, int firstDeviceId,
 
     // -------------------------------------------------------------------------
     // 13. Cleanup.
+    //
+    // Order matters: unregister UB memory BEFORE `aclrtFree` (otherwise hcomm
+    // holds a stale UB token referring to a freed VA region, and a future
+    // `HcclCommDestroy` may trip an assert in the MR manager).
     // -------------------------------------------------------------------------
+    (void)HcclUnregisterMemory(comm, outputDev);
+    (void)HcclUnregisterMemory(comm, inputDev);
+
     aclrtFree(aivMarkerDev);
     aclrtFree(outputDev);
     aclrtFree(inputDev);
