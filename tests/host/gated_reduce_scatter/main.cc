@@ -425,7 +425,28 @@ bool RunOneRank(int rankId, int nRanks, int firstDeviceId,
     // -------------------------------------------------------------------------
     // 10. AIV trigger — release this rank's gate.
     // -------------------------------------------------------------------------
-    int32_t trigRc = pto::aiv::launch_treduce(aivStream, desc, aivMarkerDev);
+    // ─── DIAGNOSTIC EXP4 (2026-05-07) — marker=nullptr fork test ────────────
+    // Symptom seen in mpi12: AIV kernel dispatches (RT confirms task_type=66
+    // KERNEL_AIVEC, drvRet=0) but traps with `retCode=0x31` (vector core
+    // exception) before writing marker[0]=head sentinel. Two competing
+    // hypotheses:
+    //   A. marker buffer write is the trap point — `aclrtMalloc(HUGE_ONLY)`
+    //      buffer is GM but not reachable from this AIV core in the new
+    //      SetDieId(1) topology.
+    //   B. mmio store/read at `target=mmioAddr+ckeId*0x40+6` is the trap
+    //      point — byte_off=6 stride=0x40 was empirically validated under
+    //      Exp3 dieId=0 layout (2026-05-06); dieId=1 layout may differ.
+    //
+    // Discriminator: pass marker=nullptr. kernel.cpp:100 guards every marker
+    // write with `if (m64 != nullptr)`, so when nullptr, the kernel only
+    // does the mmio store (line 154) + pipe_barriers. Outcome:
+    //   marker=nullptr → sync OK   ⇒ A (marker GM unreachable)
+    //   marker=nullptr → sync trap ⇒ B (mmio target wrong on dieId=1)
+    //
+    // Switch back to `aivMarkerDev` after the discriminator pinpoints the
+    // failing layer.
+    int32_t trigRc = pto::aiv::launch_treduce(aivStream, desc, /*marker=*/nullptr);
+    (void)aivMarkerDev;  // suppress unused warning during EXP4
     if (trigRc != 0) {
         std::fprintf(stderr,
             "[GATED_RS_ST] rank=%d FAIL: pto::aiv::launch_treduce rc=%d "
