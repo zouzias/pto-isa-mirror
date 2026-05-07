@@ -61,23 +61,26 @@ None.
 
 ## Constraints
 
-- **Partition token**: MUST be `"LOWER"` or `"HIGHER"`. Other tokens are **illegal**.
-- **Destination width**: The destination predicate is always 2N bits. Programs MUST ensure the destination context expects a 2N-bit predicate. Attempting to use a 2N-bit result in an N-bit context without explicit extraction via `punpack` is **illegal**.
-- **Source width**: The source predicate MUST be N bits (half the destination width). Mismatched widths are **illegal**.
-- **Zero-fill behavior**: The non-selected half of the destination is always zero-filled, not sign-extended or replicated.
+!!! warning "Constraints"
+    - **Partition token**: MUST be `"LOWER"` or `"HIGHER"`. Other tokens are **illegal**.
+    - **Destination width**: The destination predicate is always 2N bits. Programs MUST ensure the destination context expects a 2N-bit predicate. Attempting to use a 2N-bit result in an N-bit context without explicit extraction via `punpack` is **illegal**.
+    - **Source width**: The source predicate MUST be N bits (half the destination width). Mismatched widths are **illegal**.
+    - **Zero-fill behavior**: The non-selected half of the destination is always zero-filled, not sign-extended or replicated.
 
 ## Exceptions
 
-- Illegal if the partition token is not `"LOWER"` or `"HIGHER"`.
-- Illegal if source and destination predicate widths are not in a 1:2 ratio.
-- Illegal if the operation is used in a context that does not expect a 2N-bit result.
+!!! danger "Exceptions"
+    - Illegal if the partition token is not `"LOWER"` or `"HIGHER"`.
+    - Illegal if source and destination predicate widths are not in a 1:2 ratio.
+    - Illegal if the operation is used in a context that does not expect a 2N-bit result.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| Pack operation | Simulated | Supported | Supported |
-| `LOWER` / `HIGHER` tokens | Supported | Supported | Supported |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | Pack operation | Simulated | Supported | Supported |
+    | `LOWER` / `HIGHER` tokens | Supported | Supported | Supported |
 
 ## Examples
 

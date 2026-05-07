@@ -50,9 +50,10 @@ Reads from UB-visible storage. Does not allocate buffers, signal events, or esta
 
 ## Constraints
 
-The effective address must satisfy the alignment requirement of the selected distribution mode. Each mode has specific alignment constraints documented below.
+!!! warning "Constraints"
+    The effective address must satisfy the alignment requirement of the selected distribution mode. Each mode has specific alignment constraints documented below.
 
-Inactive lanes (masked-off blocks) do not issue memory requests unless the operation explicitly documents otherwise.
+    Inactive lanes (masked-off blocks) do not issue memory requests unless the operation explicitly documents otherwise.
 
 ## Distribution Modes
 
@@ -77,15 +78,17 @@ Inactive lanes (masked-off blocks) do not issue memory requests unless the opera
 
 ## Exceptions
 
-- Using an address outside UB-visible space is illegal.
-- Violating the alignment or distribution contract of the selected form is illegal.
-- Masked-off lanes do not validate the address; an illegal address is still illegal even if no active lane touches it.
+!!! danger "Exceptions"
+    - Using an address outside UB-visible space is illegal.
+    - Violating the alignment or distribution contract of the selected form is illegal.
+    - Masked-off lanes do not validate the address; an illegal address is still illegal even if no active lane touches it.
 
 ## Target-Profile Restrictions
 
-A5 is the primary concrete profile for vector instructions. CPU simulation and A2/A3-class targets emulate the behavior while preserving the PTO contract, but may support narrower subsets.
+??? info "Target-Profile Restrictions"
+    A5 is the primary concrete profile for vector instructions. CPU simulation and A2/A3-class targets emulate the behavior while preserving the PTO contract, but may support narrower subsets.
 
-Code that depends on a specific distribution mode list or timing should treat that dependency as target-profile-specific.
+    Code that depends on a specific distribution mode list or timing should treat that dependency as target-profile-specific.
 
 ## Performance
 

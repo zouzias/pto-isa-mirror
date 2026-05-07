@@ -63,13 +63,15 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+!!! warning "Constraints"
+    - **Valid region**:
+        - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Performance
 
@@ -88,19 +90,20 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Target-Profile Restrictions
 
-- **Implementation checks (CPU sim)**:
-    - `TileData::DType` must be one of: `int32_t`, `int`, `int16_t`, `half`, `float`.
-    - The implementation iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
+??? info "Target-Profile Restrictions"
+    - **Implementation checks (CPU sim)**:
+        - `TileData::DType` must be one of: `int32_t`, `int`, `int16_t`, `half`, `float`.
+        - The implementation iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
 
-- **Implementation checks (Costmodel)**:
-    - `TileData::DType` must be one of: `int32_t`、`int16_t`、`int8_t`、`uint8_t`、`half`、`float`.
+    - **Implementation checks (Costmodel)**:
+        - `TileData::DType` must be one of: `int32_t`、`int16_t`、`int8_t`、`uint8_t`、`half`、`float`.
 
-- **Implementation checks (NPU)**:
-    - `TileData::DType` must be one of: `float` or `half`;
-    - Tile location must be vector (`TileData::Loc == TileType::Vec`);
-    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`;
-    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`;
-    - Tile layout must be row-major (`TileData::isRowMajor`).
+    - **Implementation checks (NPU)**:
+        - `TileData::DType` must be one of: `float` or `half`;
+        - Tile location must be vector (`TileData::Loc == TileType::Vec`);
+        - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`;
+        - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`;
+        - Tile layout must be row-major (`TileData::isRowMajor`).
 
 ## Examples
 

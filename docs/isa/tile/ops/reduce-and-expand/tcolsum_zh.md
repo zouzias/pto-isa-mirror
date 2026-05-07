@@ -68,27 +68,29 @@ PTO_INST RecordEvent TCOLSUM(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
 
 ## 约束
 
-- `dst` 与 `src` 必须为 `TileType::Vec`
-- 二者都必须使用标准 ND 布局：行主且非分形
-- `dst` 与 `src` 元素类型必须一致
-- 运行时要求：
-  - `src.GetValidCol() == dst.GetValidCol()`
-  - `src.GetValidRow() != 0`
-  - `src.GetValidCol() != 0`
+!!! warning "约束"
+    - `dst` 与 `src` 必须为 `TileType::Vec`
+    - 二者都必须使用标准 ND 布局：行主且非分形
+    - `dst` 与 `src` 元素类型必须一致
+    - 运行时要求：
+      - `src.GetValidCol() == dst.GetValidCol()`
+      - `src.GetValidRow() != 0`
+      - `src.GetValidCol() != 0`
 
-### A2A3
+    ### A2A3
 
-- 支持类型：`half`、`float`、`int16_t`、`int32_t`
-- `tmp` 必须是 `TileType::Vec`，使用标准 ND 布局，且元素类型与 `src`、`dst` 一致
+    - 支持类型：`half`、`float`、`int16_t`、`int32_t`
+    - `tmp` 必须是 `TileType::Vec`，使用标准 ND 布局，且元素类型与 `src`、`dst` 一致
 
-### A5
+    ### A5
 
-- A5 共享列归约检查允许：`half`、`float`、`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`bfloat16_t`
-- 已检查到的 A5 `TCOLSUM` 路径中，`tmp` 主要用于二叉累加路径
+    - A5 共享列归约检查允许：`half`、`float`、`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`bfloat16_t`
+    - 已检查到的 A5 `TCOLSUM` 路径中，`tmp` 主要用于二叉累加路径
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## 性能
 

@@ -58,20 +58,22 @@ PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, Wa
 
 ## 约束
 
-- `dst/src` 元素类型必须属于：
-  `uint8_t`、`int8_t`、`uint16_t`、`int16_t`、`uint32_t`、`int32_t`、`half`、`bfloat16_t`、`float`
-- AICore 目标上还支持 `float8_e4m3_t` 和 `float8_e5m2_t`
-- `indexes` 的元素类型必须是 `int32_t` 或 `uint32_t`
-- `dst` 和 `indexes` 必须是 row-major 的 `TileType::Vec`
-- `src` 必须是 GM 上的 `GlobalTensor`，且布局为 ND
-- `dst.Rows == indexes.Rows`
-- `indexes` 可以是 `[N,1]` 或 `[N,M]`
-- `dst` 的行宽必须满足 32B 对齐
+!!! warning "约束"
+    - `dst/src` 元素类型必须属于：
+      `uint8_t`、`int8_t`、`uint16_t`、`int16_t`、`uint32_t`、`int32_t`、`half`、`bfloat16_t`、`float`
+    - AICore 目标上还支持 `float8_e4m3_t` 和 `float8_e5m2_t`
+    - `indexes` 的元素类型必须是 `int32_t` 或 `uint32_t`
+    - `dst` 和 `indexes` 必须是 row-major 的 `TileType::Vec`
+    - `src` 必须是 GM 上的 `GlobalTensor`，且布局为 ND
+    - `dst.Rows == indexes.Rows`
+    - `indexes` 可以是 `[N,1]` 或 `[N,M]`
+    - `dst` 的行宽必须满足 32B 对齐
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
-- CPU 模拟器不会对 `indexes` 做强制越界检查。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+    - CPU 模拟器不会对 `indexes` 做强制越界检查。
 
 ## Target-Profile 限制
 

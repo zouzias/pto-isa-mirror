@@ -7,6 +7,7 @@ Tile-标量类操作把一个 tile 与一个标量或立即数结合。标量在
 | 操作 | 说明 |
 | --- | --- |
 | `pto.tadds` / `tsubs` / `tmuls` / `tpows` / `tdivs` | 与标量做逐元素算术 |
+| `pto.taxpy` | 用标量系数做 AXPY 风格融合 tile 更新 |
 | `pto.tfmods` / `trems` | 与标量做模 / 余数 |
 | `pto.tmins` / `tmaxs` | 与标量做逐元素 min / max |
 | `pto.tands` / `tors` / `txors` | 与标量做逐元素按位逻辑 |
@@ -31,6 +32,10 @@ $$ \mathrm{dst}_{r,c} = f(\mathrm{src}_{r,c}, \mathrm{scalar}) $$
 
 PTO 不允许在 tile-标量操作里依赖隐式类型提升。标量如何广播、比较结果如何编码、饱和与否怎样处理，都属于具体操作自己的架构语义。
 
+`TAXPY` 属于本家族，因为它的核心合同是使用标量系数更新 tile payload：
+
+$$ \mathrm{dst}_{r,c} = \mathrm{src0}_{r,c} \times \mathrm{scalar} + \mathrm{src1}_{r,c} $$
+
 ## 目标 Profile 支持
 
 | 元素类型 | CPU | A2/A3 | A5 |
@@ -42,19 +47,21 @@ PTO 不允许在 tile-标量操作里依赖隐式类型提升。标量如何广�
 
 ## 约束
 
-- 标量类型必须与 tile 元素类型兼容。
-- `TSHLS` / `TSHRS` 将标量解释为无符号 shift count。
-- `TCMPS` 的结果不应被当成普通数值 tile 使用，除非对应 target/profile 明确约定其编码。
-- 需要保持 valid region 语义的操作，迭代域都以 `dst` 的 valid row / col 为准。
+!!! warning "约束"
+    - 标量类型必须与 tile 元素类型兼容。
+    - `TSHLS` / `TSHRS` 将标量解释为无符号 shift count。
+    - `TCMPS` 的结果不应被当成普通数值 tile 使用，除非对应 target/profile 明确约定其编码。
+    - 需要保持 valid region 语义的操作，迭代域都以 `dst` 的 valid row / col 为准。
 
 ## 不允许的情形
 
-- 使用与 tile 元素类型不兼容的标量。
-- 依赖隐式类型提升。
-- 对位移类操作传入超出元素位宽的移位量。
-- 把不同 target profile 的实现细节当成跨目标保证。
+!!! danger "不允许的情形"
+    - 使用与 tile 元素类型不兼容的标量。
+    - 依赖隐式类型提升。
+    - 对位移类操作传入超出元素位宽的移位量。
+    - 把不同 target profile 的实现细节当成跨目标保证。
 
 ## 相关页面
 
 - [Tile 指令族](../instruction-families/tile-families_zh.md)
-- [Tile 指令面](../instruction-surfaces/tile-instructions_zh.md)
+- [Tile 指令面](../instruction-families/tile-families_zh.md)

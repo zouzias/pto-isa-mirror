@@ -70,27 +70,30 @@ pstu(alignData, src, base);
 
 ## Constraints
 
-- **Alignment state**: `%align_in` MUST be the alignment state from the previous `pstu` call, or from a `pld`-instruction set operation. Using an uninitialized alignment state is **illegal**.
-- **Alignment state chaining**: Programs MUST pass `%align_out` from one `pstu` to the `%align_in` of the next. Breaking the chain without re-initializing the alignment state is **illegal**.
-- **Write atomicity**: Unlike `psts`, the 64-bit predicate word is NOT guaranteed to be atomically written. Programs that require exact predicate state restoration MUST use `psts`, not `pstu`.
-- **UB address space**: `%base_in` MUST have address space `ub`.
+!!! warning "Constraints"
+    - **Alignment state**: `%align_in` MUST be the alignment state from the previous `pstu` call, or from a `pld`-instruction set operation. Using an uninitialized alignment state is **illegal**.
+    - **Alignment state chaining**: Programs MUST pass `%align_out` from one `pstu` to the `%align_in` of the next. Breaking the chain without re-initializing the alignment state is **illegal**.
+    - **Write atomicity**: Unlike `psts`, the 64-bit predicate word is NOT guaranteed to be atomically written. Programs that require exact predicate state restoration MUST use `psts`, not `pstu`.
+    - **UB address space**: `%base_in` MUST have address space `ub`.
 
 ## Exceptions
 
-- Illegal if `%align_in` is not initialized from a prior `pstu` or `pld` operation.
-- Illegal if alignment state chain is broken.
-- Illegal if `%base_in` is not a UB-space pointer.
-- `pstu` MUST NOT be used when exact predicate save/restore is required.
+!!! danger "Exceptions"
+    - Illegal if `%align_in` is not initialized from a prior `pstu` or `pld` operation.
+    - Illegal if alignment state chain is broken.
+    - Illegal if `%base_in` is not a UB-space pointer.
+    - `pstu` MUST NOT be used when exact predicate save/restore is required.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| Stream predicate store | Not supported | Supported | Supported |
-| Alignment state tracking | Not applicable | Supported | Supported |
-| Write atomicity guarantee | Not applicable | Not guaranteed | Not guaranteed |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | Stream predicate store | Not supported | Supported | Supported |
+    | Alignment state tracking | Not applicable | Supported | Supported |
+    | Write atomicity guarantee | Not applicable | Not guaranteed | Not guaranteed |
 
-CPU simulator does not implement `pstu`. Portable programs MUST use `psts` for exact predicate persistence or provide a CPU-sim fallback.
+    CPU simulator does not implement `pstu`. Portable programs MUST use `psts` for exact predicate persistence or provide a CPU-sim fallback.
 
 ## Examples
 
@@ -124,7 +127,8 @@ void stream_masks(Ptr<ub_space_t, ub_t> dst_base,
 %align2, %base2 = pto.pstu %align1, %mask1, %base1 : !pto.align, !pto.mask, !pto.ptr<i64, ub> -> !pto.align, !pto.ptr<i64, ub>
 ```
 
-> **Note**: For exact predicate save/restore across kernel boundaries, use `psts` instead. `pstu` is intended for high-throughput streaming scenarios where some loss of per-word atomicity is acceptable.
+!!! note "Note"
+    For exact predicate save/restore across kernel boundaries, use `psts` instead. `pstu` is intended for high-throughput streaming scenarios where some loss of per-word atomicity is acceptable.
 
 ## Related Ops / Instruction Set Links
 

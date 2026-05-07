@@ -58,13 +58,15 @@ PTO_INST RecordEvent TMAXS(TileDataDst& dst, TileDataSrc& src, typename TileData
 
 ## 约束
 
-- tile 位置必须是向量 tile
-- 标量类型必须与 tile 数据类型匹配
-- 操作迭代域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定
+!!! warning "约束"
+    - tile 位置必须是向量 tile
+    - 标量类型必须与 tile 数据类型匹配
+    - 操作迭代域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## Target-Profile 限制
 

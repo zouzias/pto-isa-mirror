@@ -43,19 +43,22 @@ This operation has no architectural side effect beyond producing its destination
 
 ## Constraints
 
-- The exact value/index packing MUST follow the selected target profile.
-- If all predicate bits are zero, the result follows the instruction family zero-fill convention.
-- The mask width MUST match `N`.
+!!! warning "Constraints"
+    - The exact value/index packing MUST follow the selected target profile.
+    - If all predicate bits are zero, the result follows the instruction family zero-fill convention.
+    - The mask width MUST match `N`.
 
 ## Exceptions
 
-- The verifier rejects illegal operand shapes, unsupported element types, and attribute combinations that are not valid for the selected instruction set or target profile.
-- Any additional illegality stated in the constraints section is also part of the contract.
+!!! danger "Exceptions"
+    - The verifier rejects illegal operand shapes, unsupported element types, and attribute combinations that are not valid for the selected instruction set or target profile.
+    - Any additional illegality stated in the constraints section is also part of the contract.
 
 ## Target-Profile Restrictions
 
-- Documented A5 coverage: `i16-i32`, `f16`, `f32`.
-- A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
+??? info "Target-Profile Restrictions"
+    - Documented A5 coverage: `i16-i32`, `f16`, `f32`.
+    - A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
 
 ## Examples
 

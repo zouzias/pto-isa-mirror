@@ -66,25 +66,28 @@ None.
 
 ## Constraints
 
-- **UB address space**: `%ub_ptr` MUST have address space `ub`.
-- **Offset alignment**: The offset register MUST be set such that `base + areg * 8` is 64-bit aligned. Misaligned effective addresses are **illegal**.
-- **Distribution mode**: The `dist` attribute MUST be one of `"NORM"`, `"US"`, or `"DS"`. Other modes are **illegal** for this form.
-- **Predicate width**: The load transfers exactly 64 bits, which MUST match the active element type context.
-- **Single active predicate**: Loading a new predicate does not implicitly save a prior predicate. Programs that need to preserve predicate state MUST save it first.
+!!! warning "Constraints"
+    - **UB address space**: `%ub_ptr` MUST have address space `ub`.
+    - **Offset alignment**: The offset register MUST be set such that `base + areg * 8` is 64-bit aligned. Misaligned effective addresses are **illegal**.
+    - **Distribution mode**: The `dist` attribute MUST be one of `"NORM"`, `"US"`, or `"DS"`. Other modes are **illegal** for this form.
+    - **Predicate width**: The load transfers exactly 64 bits, which MUST match the active element type context.
+    - **Single active predicate**: Loading a new predicate does not implicitly save a prior predicate. Programs that need to preserve predicate state MUST save it first.
 
 ## Exceptions
 
-- Illegal if `%ub_ptr` is not a UB-space pointer.
-- Illegal if the effective address (base + areg * 8) is not 64-bit aligned.
-- Illegal if `dist` attribute is not a supported distribution mode.
+!!! danger "Exceptions"
+    - Illegal if `%ub_ptr` is not a UB-space pointer.
+    - Illegal if the effective address (base + areg * 8) is not 64-bit aligned.
+    - Illegal if `dist` attribute is not a supported distribution mode.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| Register-offset predicate load | Simulated | Supported | Supported |
-| `"NORM"` distribution mode | Supported | Supported | Supported |
-| `"US"` / `"DS"` distribution modes | Simulated | Supported | Supported |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | Register-offset predicate load | Simulated | Supported | Supported |
+    | `"NORM"` distribution mode | Supported | Supported | Supported |
+    | `"US"` / `"DS"` distribution modes | Simulated | Supported | Supported |
 
 ## Examples
 

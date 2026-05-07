@@ -14,7 +14,7 @@ For each element in the valid region:
 
 $$ \mathrm{dst}_{i,j} = *\left(\mathrm{srcBase} + \mathrm{offset}_{i,j}\right) $$
 
-Exact bounds behavior is implementation-defined.
+On A2/A3 and A5, out-of-range offsets produce undefined results; on the CPU simulator, out-of-range offsets are clamped to the source tile boundary.
 
 ## Syntax
 
@@ -75,25 +75,28 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- **Offset interpretation**:
-    - Offsets are interpreted as `uint32_t` values (byte offsets) by the implementation.
-    - Offset bounds are not validated by explicit runtime assertions; out-of-range offsets are target-defined.
+!!! warning "Constraints"
+    - **Offset interpretation**:
+        - Offsets are interpreted as `uint32_t` values (byte offsets) by the implementation.
+        - Offset bounds are not validated by explicit runtime assertions; on A2/A3 and A5, out-of-range offsets produce undefined results; on the CPU simulator, out-of-range offsets are clamped to the source tile boundary.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Implementation checks (A2A3)**:
-    - Destination layout must be row-major (`TileDataDst::isRowMajor`).
-    - Destination element size must be `1`, `2`, or `4` bytes (enforced via `static_assert` in the helper).
-    - `SrcTileData::DType`/`DstTileData::DType` must be `int8_t` or `uint8_t` or `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
+??? info "Target-Profile Restrictions"
+    - **Implementation checks (A2A3)**:
+        - Destination layout must be row-major (`TileDataDst::isRowMajor`).
+        - Destination element size must be `1`, `2`, or `4` bytes (enforced via `static_assert` in the helper).
+        - `SrcTileData::DType`/`DstTileData::DType` must be `int8_t` or `uint8_t` or `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
 
-- **Implementation checks (A5)**:
-    - Destination element size must be `1`, `2`, or `4` bytes.
-    - `SrcTileData::DType`/`DstTileData::DType` must be `int8_t` or `uint8_t` or `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
+    - **Implementation checks (A5)**:
+        - Destination element size must be `1`, `2`, or `4` bytes.
+        - `SrcTileData::DType`/`DstTileData::DType` must be `int8_t` or `uint8_t` or `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
 
 ## Examples
 

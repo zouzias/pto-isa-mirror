@@ -4,7 +4,7 @@
 
 ## Summary
 
-Debug/print elements from a tile (implementation-defined).
+Debug/print elements from a tile. On A2/A3/A5, output is emitted via `cce::printf` to the device-to-host debug channel; on the CPU simulator, output is printed to stdout.
 
 ## Mechanism
 
@@ -18,7 +18,7 @@ The `TPRINT` instruction outputs the logical view of data stored in a Tile or Gl
 > - Output may be **truncated** if it exceeds the internal print buffer. The print buffer can be adjusted with `-DCCEBlockMaxSize=16384`; the default is 16 KiB.
 > - **Requires CCE compilation option `-D_DEBUG --cce-enable-print`**. It belongs to the tile instructions and carries architecture-visible behavior that is not reducible to a plain elementwise compute pattern.
 
-Unless otherwise specified, semantics are defined over the valid region and target-dependent behavior is marked as implementation-defined.
+Unless otherwise specified, semantics are defined over the valid region. On A2/A3 and A5, output is emitted via `cce::printf` to the device-to-host debug channel; on the CPU simulator, output is printed to stdout.
 
 - **Mandatory Compilation Flag**:
 
@@ -102,25 +102,28 @@ This operation emits debug output via `cce::printf`. It synchronizes by insertin
 
 ## Constraints
 
-- **Supported element type**:
-    - Floating-point: `float`, `half`
-    - Signed integers: `int8_t`, `int16_t`, `int32_t`
-    - Unsigned integers: `uint8_t`, `uint16_t`, `uint32_t`
+!!! warning "Constraints"
+    - **Supported element type**:
+        - Floating-point: `float`, `half`
+        - Signed integers: `int8_t`, `int16_t`, `int32_t`
+        - Unsigned integers: `uint8_t`, `uint16_t`, `uint32_t`
 
-- **For GlobalTensor**: Layout must be one of `Layout::ND`, `Layout::DN`, or `Layout::NZ`.
+    - **For GlobalTensor**: Layout must be one of `Layout::ND`, `Layout::DN`, or `Layout::NZ`.
 
-- **For temporary space**: Printing a `Tile` with `TileType::Mat` or `TileType::Acc` requires GM temporary space. The temporary buffer must be at least `TileData::Numel * sizeof(T)`.
+    - **For temporary space**: Printing a `Tile` with `TileType::Mat` or `TileType::Acc` requires GM temporary space. The temporary buffer must be at least `TileData::Numel * sizeof(T)`.
 
-- When `TileType` is `Mat`, the output is formatted according to `Layout::ND`; other layouts may appear misaligned.
+    - When `TileType` is `Mat`, the output is formatted according to `Layout::ND`; other layouts may appear misaligned.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- A5 does not yet support printing `TileType::Mat`.
+??? info "Target-Profile Restrictions"
+    - A5 does not yet support printing `TileType::Mat`.
 
 ## Examples
 

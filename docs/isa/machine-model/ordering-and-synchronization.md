@@ -16,7 +16,8 @@ PTO defines four categories of synchronization primitives, one per instruction s
 
 `TSYNC` is the primary tile-instruction set synchronization. The event-wait form `TSYNC(events...)` establishes a **happens-before** edge on each `RecordEvent` token, ensuring all prior tile operations that produced those events are complete. The barrier form `TSYNC<Op>()` inserts a pipeline barrier for all operations of class `Op`.
 
-> **Note:** `pipe_barrier` (`pto.pipe_barrier`) is a scalar and control instructions primitive, not a tile instructions primitive. It appears in the [Scalar Pipeline Sync](../scalar/pipeline-sync.md) instruction set.
+!!! note "Note:"
+    `pipe_barrier` (`pto.pipe_barrier`) is a scalar and control instructions primitive, not a tile instructions primitive. It appears in the [Scalar Pipeline Sync](../scalar/pipeline-sync.md) instruction set.
 
 ### Vector Instructions Primitives
 
@@ -94,44 +95,23 @@ The `RecordEvent` return value is the **ISA-visible mechanism** for chaining til
 The AI Core contains multiple execution units that operate concurrently. The following diagram shows the dependency relationships:
 
 ```
-         ┌──────────────────────────────────────────────────────┐
-         │                   AI CORE                            │
-         │                                                      │
-  GM ────│─── MTE1 ──► UB ──┬─────────────────────────────┐    │
-         │                  │                             │    │
-         │                  │  MTE2 ──► UB ──┐            │    │
-         │                  │                  │            │    │
-         │    ┌─────────────┴──────────────────┴─────────┐  │    │
-         │    │                                       │  │    │
-         │    │   ┌───────────────────────────────────┘  │    │
-         │    │   │                                      │  │    │
-         │    │   │   Tile Register File                 │  │    │
-         │    │   │   ┌───────┐  ┌───────┐  ┌───────┐  │  │    │
-         │    │   │   │ Vec   │  │ Mat   │  │ Acc   │  │  │    │
-         │    │   │   └───────┘  └───────┘  └───────┘  │  │    │
-         │    │   │      │          │          │       │  │    │
-         │    │   │      ▼          ▼          ▼       │  │    │
-         │    │   │   ┌─────────────────────────┐      │  │    │
-         │    │   │   │     Vector Pipeline     │      │  │    │
-         │    │   │   │   (pto.v* ops)          │      │  │    │
-         │    │   │   └─────────────────────────┘      │  │    │
-         │    │   │            │                       │  │    │
-         │    │   │            │  ┌───────────────────┘  │    │
-         │    │   │            ▼  ▼                      │    │
-         │    │   │   ┌─────────────────────┐            │    │
-         │    │   │   │  Matrix Multiply (M)│            │    │
-         │    │   │   │  (pto.tmatmul*)     │            │    │
-         │    │   │   └─────────────────────┘            │    │
-         │    │   │              │                     │    │
-         │    │   └──────────────┼─────────────────────┘    │
-         │    │                  │                          │
-         │    │    ┌─────────────┴────────────┐             │
-         │    │    │                           │             │
-         │    │    ▼                           ▼             │
-         │    │ MTE3 ──► UB ────────────────────────────────┼───► GM
-         │    └──────────────────────────────────────────────┘
-         │
-         └── Scalar Unit (control flow, address gen, system queries)
+               ┌──────────────────────────────────────────────┐
+GM ──► MTE2 ──►│ Unified Buffer / Tile Buffer                 │──► MTE3 ──► GM
+               │                                              │
+               │  ┌───────────────┐     ┌──────────────────┐  │
+GM ──► MTE1 ──►│  │ Tile Register │────►│ Vector Pipeline  │  │
+               │  │ File          │     │ (pto.v* ops)     │  │
+               │  │ Vec / Mat /   │     └────────┬─────────┘  │
+               │  │ Acc locations │              │            │
+               │  └───────┬───────┘              │            │
+               │          │                      ▼            │
+               │          │             ┌──────────────────┐  │
+               │          └────────────►│ Matrix Pipeline  │  │
+               │                        │ (pto.tmatmul*)   │  │
+               │                        └────────┬─────────┘  │
+               └─────────────────────────────────┼────────────┘
+                                                 │
+              Scalar Unit: control flow, address generation, system queries
 ```
 
 ### Dependency Types
@@ -173,19 +153,21 @@ Data written to GM by `TSTORE` or `copy_ubuf_to_gm` is guaranteed visible to sub
 
 ## Constraints
 
-- Synchronization is required wherever the architecture does not already guarantee ordering.
-- A target may add stronger internal ordering, but the manual must not rely on undocumented strength.
-- Vector-pipe synchronization rules must be documented separately from tile-instruction set synchronization rules when the mechanisms differ.
-- Events are fire-and-forget; the ISA does not provide a "test-and-clear" event flag.
-- `TSYNC` is tile-buffer-scoped; it does not synchronize across tile buffers.
+!!! warning "Constraints"
+    - Synchronization is required wherever the architecture does not already guarantee ordering.
+    - A target may add stronger internal ordering, but the manual must not rely on undocumented strength.
+    - Vector-pipe synchronization rules must be documented separately from tile-instruction set synchronization rules when the mechanisms differ.
+    - Events are fire-and-forget; the ISA does not provide a "test-and-clear" event flag.
+    - `TSYNC` is tile-buffer-scoped; it does not synchronize across tile buffers.
 
 ## Cases That Are Not Allowed
 
-- Writing the manual as if synchronization were optional when the architecture requires it.
-- Assuming vector-pipe hazards are covered by tile-instruction set rules without saying so.
-- Documenting target-specific barriers as architecture-wide unless the PTO instruction set guarantees them.
-- Issuing `vlds` before `copy_gm_to_ubuf` completes without an intervening `wait_flag`.
-- Issuing `copy_ubuf_to_gm` before `vsts` completes without an intervening `wait_flag`.
+!!! danger "Cases That Are Not Allowed"
+    - Writing the manual as if synchronization were optional when the architecture requires it.
+    - Assuming vector-pipe hazards are covered by tile-instruction set rules without saying so.
+    - Documenting target-specific barriers as architecture-wide unless the PTO instruction set guarantees them.
+    - Issuing `vlds` before `copy_gm_to_ubuf` completes without an intervening `wait_flag`.
+    - Issuing `copy_ubuf_to_gm` before `vsts` completes without an intervening `wait_flag`.
 
 ## See Also
 

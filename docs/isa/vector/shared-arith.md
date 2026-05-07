@@ -32,15 +32,17 @@ The canonical scalar-side explanation lives in [Scalar And Control Instruction S
 
 ## Constraints
 
-- `arith` MUST remain scalar; vector payload math belongs to `pto.v*`.
-- Width changes, `index` conversions, and scalar comparisons that affect vector legality SHOULD be spelled explicitly.
-- This shared instruction set MUST be documented as supporting source syntax, not as hidden compiler-only machinery.
+!!! warning "Constraints"
+    - `arith` MUST remain scalar; vector payload math belongs to `pto.v*`.
+    - Width changes, `index` conversions, and scalar comparisons that affect vector legality SHOULD be spelled explicitly.
+    - This shared instruction set MUST be documented as supporting source syntax, not as hidden compiler-only machinery.
 
 ## Cases That Are Not Allowed
 
-- documenting scalar setup as if it were a vector ALU instruction set
-- using `arith` to stand in for vector-register semantics
-- leaving scalar-to-vector boundary assumptions implicit
+!!! danger "Cases That Are Not Allowed"
+    - documenting scalar setup as if it were a vector ALU instruction set
+    - using `arith` to stand in for vector-register semantics
+    - leaving scalar-to-vector boundary assumptions implicit
 
 ## Related Ops And Instruction Set Links
 

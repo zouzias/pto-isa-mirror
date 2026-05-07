@@ -74,15 +74,17 @@ PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc &src0, TileDataSrc &src1
 
 ## 约束
 
-- 迭代域是 `dst.GetValidRow() × dst.GetValidCol()`。
-- `src0` 的 validRow / validCol 必须与 `dst` 一致。
-- `src1` 的 shape / valid 在某些实现里不会做完整运行时校验，因此域外读值属于 implementation-defined。
-- 程序不能假设谓词 tile 的具体编码。
+!!! warning "约束"
+    - 迭代域是 `dst.GetValidRow() × dst.GetValidCol()`。
+    - `src0` 的 validRow / validCol 必须与 `dst` 一致。
+    - `src1` 的 shape / valid 在某些实现里不会做完整运行时校验，因此域外读值属于 implementation-defined。
+    - 程序不能假设谓词 tile 的具体编码。
 
 ## 不允许的情形
 
-- 假设谓词 tile 是“一位一元素”的普通展开布尔 tile。
-- 对 `dst` 使用不符合目标定义的谓词输出 dtype。
+!!! danger "不允许的情形"
+    - 假设谓词 tile 是“一位一元素”的普通展开布尔 tile。
+    - 对 `dst` 使用不符合目标定义的谓词输出 dtype。
 
 ## Target-Profile 限制
 

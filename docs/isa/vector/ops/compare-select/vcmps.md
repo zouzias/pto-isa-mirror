@@ -45,20 +45,23 @@ This operation has no architectural side effect beyond producing its destination
 
 ## Constraints
 
-- The seed mask width MUST match `N`.
-- The scalar source MUST satisfy any backend-specific scalar-source legality rule for this instruction family.
-- Floating-point and integer comparisons follow the element-type-specific comparison rules of the selected target profile.
-Supported compare modes are `eq`, `ne`, `lt`, `le`, `gt`, and `ge`.
+!!! warning "Constraints"
+    - The seed mask width MUST match `N`.
+    - The scalar source MUST satisfy any backend-specific scalar-source legality rule for this instruction family.
+    - Floating-point and integer comparisons follow the element-type-specific comparison rules of the selected target profile.
+    Supported compare modes are `eq`, `ne`, `lt`, `le`, `gt`, and `ge`.
 
 ## Exceptions
 
-- The verifier rejects illegal operand shapes, unsupported element types, and attribute combinations that are not valid for the selected instruction set or target profile.
-- Any additional illegality stated in the constraints section is also part of the contract.
+!!! danger "Exceptions"
+    - The verifier rejects illegal operand shapes, unsupported element types, and attribute combinations that are not valid for the selected instruction set or target profile.
+    - Any additional illegality stated in the constraints section is also part of the contract.
 
 ## Target-Profile Restrictions
 
-- A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
-- Code that depends on an implicit predicate source or a target-specific encoding variant should treat that dependency as target-profile-specific unless the manual states cross-target portability explicitly.
+??? info "Target-Profile Restrictions"
+    - A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
+    - Code that depends on an implicit predicate source or a target-specific encoding variant should treat that dependency as target-profile-specific unless the manual states cross-target portability explicitly.
 
 ## Examples
 

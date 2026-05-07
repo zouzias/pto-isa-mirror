@@ -14,9 +14,9 @@
     - `DmaEngine::SDMA`（默认）
     - `DmaEngine::URMA`（Ascend950，仅 NPU_ARCH 3510）
 
-> **注意（SDMA 路径）**
-> `TGET_ASYNC` 配合 `DmaEngine::SDMA` 目前**仅支持扁平连续的逻辑一维 tensor**。
-> 当前 SDMA 异步实现不支持非一维或非连续布局。
+!!! note "注意（SDMA 路径）"
+    `TGET_ASYNC` 配合 `DmaEngine::SDMA` 目前**仅支持扁平连续的逻辑一维 tensor**。
+    当前 SDMA 异步实现不支持非一维或非连续布局。
 
 ## C++ 内建接口
 
@@ -80,15 +80,16 @@ URMA 不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直
 
 ## 约束
 
-- `GlobalSrcData::RawDType == GlobalDstData::RawDType`
-- `GlobalSrcData::layout == GlobalDstData::layout`
-- SDMA 和 URMA 路径均要求源 tensor 为**扁平连续的逻辑一维**
-- SDMA workspace 必须是由主机侧 `SdmaWorkspaceManager` 分配的有效 GM 指针
-- URMA workspace 必须是由主机侧 `UrmaWorkspaceManager` 分配的有效 GM 指针
-- URMA 仅在 NPU_ARCH 3510（Ascend950）上可用
-- 传给 `UrmaWorkspaceManager::Init()` 的对称数据缓冲区必须由大页内存支撑（使用 `ACL_MEM_MALLOC_HUGE_ONLY` 分配）。底层 MR 注册要求大页背景；`ACL_MEM_MALLOC_HUGE_FIRST` 在小尺寸分配时可能静默回退到 4KB 小页，导致注册失败
+!!! warning "约束"
+    - `GlobalSrcData::RawDType == GlobalDstData::RawDType`
+    - `GlobalSrcData::layout == GlobalDstData::layout`
+    - SDMA 和 URMA 路径均要求源 tensor 为**扁平连续的逻辑一维**
+    - SDMA workspace 必须是由主机侧 `SdmaWorkspaceManager` 分配的有效 GM 指针
+    - URMA workspace 必须是由主机侧 `UrmaWorkspaceManager` 分配的有效 GM 指针
+    - URMA 仅在 NPU_ARCH 3510（Ascend950）上可用
+    - 传给 `UrmaWorkspaceManager::Init()` 的对称数据缓冲区必须由大页内存支撑（使用 `ACL_MEM_MALLOC_HUGE_ONLY` 分配）。底层 MR 注册要求大页背景；`ACL_MEM_MALLOC_HUGE_FIRST` 在小尺寸分配时可能静默回退到 4KB 小页，导致注册失败
 
-若不满足一维连续要求，当前实现返回无效 async event（`handle == 0`）。
+    若不满足一维连续要求，当前实现返回无效 async event（`handle == 0`）。
 
 ## scratchTile 的作用
 

@@ -60,18 +60,21 @@ None.
 
 ## Constraints
 
-- **Operand widths**: Both predicates MUST have the same width.
-- **No implicit extension**: `pnot` operates on the full predicate width. For predicates of mixed widths, explicit pack/unpack must be used.
+!!! warning "Constraints"
+    - **Operand widths**: Both predicates MUST have the same width.
+    - **No implicit extension**: `pnot` operates on the full predicate width. For predicates of mixed widths, explicit pack/unpack must be used.
 
 ## Exceptions
 
-- Illegal if predicate operand widths are not consistent.
+!!! danger "Exceptions"
+    - Illegal if predicate operand widths are not consistent.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| Bitwise NOT | Simulated | Supported | Supported |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | Bitwise NOT | Simulated | Supported | Supported |
 
 ## Examples
 

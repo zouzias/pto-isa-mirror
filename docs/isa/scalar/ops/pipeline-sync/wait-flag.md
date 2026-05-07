@@ -44,19 +44,22 @@ Stalls the destination pipeline until the matching event is signaled. Other pipe
 
 ## Constraints
 
-- The selected pipe identifiers and event identifier MUST be valid for the selected target profile.
-- Waiting on an event that is never signaled is an illegal PTO program.
-- Portable code MUST pair each wait with the intended producer-side `pto.set_flag`.
+!!! warning "Constraints"
+    - The selected pipe identifiers and event identifier MUST be valid for the selected target profile.
+    - Waiting on an event that is never signaled is an illegal PTO program.
+    - Portable code MUST pair each wait with the intended producer-side `pto.set_flag`.
 
 ## Exceptions
 
-- The verifier rejects illegal operand shapes, unsupported pipe or event identifiers, and attribute combinations that are not valid for the selected instruction set or target profile.
-- Any additional illegality stated in the constraints section is also part of the contract.
+!!! danger "Exceptions"
+    - The verifier rejects illegal operand shapes, unsupported pipe or event identifiers, and attribute combinations that are not valid for the selected instruction set or target profile.
+    - Any additional illegality stated in the constraints section is also part of the contract.
 
 ## Target-Profile Restrictions
 
-- CPU simulation preserves the visible event protocol but may not expose all low-level hazards that motivate it on hardware.
-- A2/A3 and A5 may use different concrete pipe and event spaces; portable code must rely on the documented PTO contract plus the selected target profile.
+??? info "Target-Profile Restrictions"
+    - CPU simulation preserves the visible event protocol but may not expose all low-level hazards that motivate it on hardware.
+    - A2/A3 and A5 may use different concrete pipe and event spaces; portable code must rely on the documented PTO contract plus the selected target profile.
 
 ## Examples
 

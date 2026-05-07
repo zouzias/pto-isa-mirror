@@ -39,17 +39,20 @@ vdup %result, %input {position = "POSITION"}
 
 ## 约束
 
-- `position` 决定复制哪个源元素。
-- 当前 PTO 向量表示把 `position` 建模为属性，而不是单独的 SSA 操作数。
+!!! warning "约束"
+    - `position` 决定复制哪个源元素。
+    - 当前 PTO 向量表示把 `position` 建模为属性，而不是单独的 SSA 操作数。
 
 ## 异常与非法情形
 
-- verifier 会拒绝非法的操作数形状、不支持的元素类型以及不合法的属性组合。
-- 约束部分列出的额外非法情形，同样属于 `pto.vdup` 的契约。
+!!! danger "异常与非法情形"
+    - verifier 会拒绝非法的操作数形状、不支持的元素类型以及不合法的属性组合。
+    - 约束部分列出的额外非法情形，同样属于 `pto.vdup` 的契约。
 
 ## 目标 Profile 限制
 
-- A5 是当前手册里最细的具体 profile；CPU 模拟器和 A2/A3 类目标可以在保留可见 PTO 契约的前提下做等效模拟。
+??? info "目标 Profile 限制"
+    - A5 是当前手册里最细的具体 profile；CPU 模拟器和 A2/A3 类目标可以在保留可见 PTO 契约的前提下做等效模拟。
 
 ## 性能
 

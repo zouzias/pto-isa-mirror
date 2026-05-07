@@ -41,21 +41,24 @@ It produces scalar SSA values that are later consumed by:
 
 ## Constraints
 
-- Shared scalar arithmetic **MUST** remain scalar. It does not define vector-register or tile-payload behavior.
-- PTO pages **MUST** document `arith` as part of the supported source instruction set when a kernel author needs scalar setup around PTO regions.
-- Type conversions or comparisons that affect later PTO legality **MUST** be stated explicitly rather than implied.
+!!! warning "Constraints"
+    - Shared scalar arithmetic **MUST** remain scalar. It does not define vector-register or tile-payload behavior.
+    - PTO pages **MUST** document `arith` as part of the supported source instruction set when a kernel author needs scalar setup around PTO regions.
+    - Type conversions or comparisons that affect later PTO legality **MUST** be stated explicitly rather than implied.
 
 ## Exceptions
 
-The following are **ILLEGAL**:
+!!! danger "Exceptions"
+    The following are **ILLEGAL**:
 
-- using `arith` to stand in for payload vector math
-- leaving signedness, width change, or `index` conversion behavior implicit at a PTO boundary
-- assuming backend-specific scalar widths beyond what the program spells explicitly
+    - using `arith` to stand in for payload vector math
+    - leaving signedness, width change, or `index` conversion behavior implicit at a PTO boundary
+    - assuming backend-specific scalar widths beyond what the program spells explicitly
 
 ## Target-Profile Restrictions
 
-The `arith` contract is largely target-neutral. Backend restrictions appear only when an `arith` result is later consumed by a target-restricted PTO instruction or by a target-specific lowering path.
+??? info "Target-Profile Restrictions"
+    The `arith` contract is largely target-neutral. Backend restrictions appear only when an `arith` result is later consumed by a target-restricted PTO instruction or by a target-specific lowering path.
 
 ## Examples
 

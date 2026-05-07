@@ -89,20 +89,22 @@ $$ \mathrm{dst}_{r,c} = \mathrm{src}_{c} $$
 
 ## 约束
 
-- 源 tile 的 valid region 决定归约域。
-- `argmax / argmin` 变体输出的是索引 tile，不是数值 tile。
-- 归约目标 tile 在被归约轴上的 extent 必须为 1。
-- 扩展变体要求第二输入在被扩展轴长度上匹配。
-- `expdif` 类变体依赖特殊的指数差语义，不能把它当普通广播算术处理。
+!!! warning "约束"
+    - 源 tile 的 valid region 决定归约域。
+    - `argmax / argmin` 变体输出的是索引 tile，不是数值 tile。
+    - 归约目标 tile 在被归约轴上的 extent 必须为 1。
+    - 扩展变体要求第二输入在被扩展轴长度上匹配。
+    - `expdif` 类变体依赖特殊的指数差语义，不能把它当普通广播算术处理。
 
 ## 不允许的情形
 
-- 在长度为 0 的轴上归约。
-- 对不支持的元素类型使用 `arg` 类变体。
-- 用不匹配的轴长度去做 expand 变体。
-- 假设归约会自动修复布局或 valid region。
+!!! danger "不允许的情形"
+    - 在长度为 0 的轴上归约。
+    - 对不支持的元素类型使用 `arg` 类变体。
+    - 用不匹配的轴长度去做 expand 变体。
+    - 假设归约会自动修复布局或 valid region。
 
 ## 相关页面
 
 - [Tile 指令族](../instruction-families/tile-families_zh.md)
-- [Tile 指令面](../instruction-surfaces/tile-instructions_zh.md)
+- [Tile 指令面](../instruction-families/tile-families_zh.md)

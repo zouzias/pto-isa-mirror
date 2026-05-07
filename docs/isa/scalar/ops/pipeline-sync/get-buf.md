@@ -61,26 +61,29 @@ None. This form is defined by its side effect on buffer state and synchronizatio
 
 ## Constraints
 
-- **Buffer ID uniqueness per pipeline**: Each pipeline may hold at most one slot per buffer ID at a time. Acquiring the same buffer ID twice on the same pipeline without an intervening `rls_buf` is **illegal**.
-- **Producer must release**: The producer pipeline must have issued `rls_buf` on the same buffer ID before this acquire can succeed. Acquiring a buffer that was never released (first iteration) succeeds immediately since all slots start free.
-- **No explicit event IDs**: Unlike `set_flag`/`wait_flag`, buffer ID management requires no explicit event naming. The hardware maps buffer IDs to internal event IDs.
-- **Buffer ID range**: Buffer IDs MUST be in the range `[0, B)` where `B` is the profile-defined maximum. Out-of-range IDs are **illegal**.
+!!! warning "Constraints"
+    - **Buffer ID uniqueness per pipeline**: Each pipeline may hold at most one slot per buffer ID at a time. Acquiring the same buffer ID twice on the same pipeline without an intervening `rls_buf` is **illegal**.
+    - **Producer must release**: The producer pipeline must have issued `rls_buf` on the same buffer ID before this acquire can succeed. Acquiring a buffer that was never released (first iteration) succeeds immediately since all slots start free.
+    - **No explicit event IDs**: Unlike `set_flag`/`wait_flag`, buffer ID management requires no explicit event naming. The hardware maps buffer IDs to internal event IDs.
+    - **Buffer ID range**: Buffer IDs MUST be in the range `[0, B)` where `B` is the profile-defined maximum. Out-of-range IDs are **illegal**.
 
 ## Exceptions
 
-- Illegal if `%buf_id` is not in the valid range for the target profile.
-- Illegal if the same pipeline acquires the same buffer ID twice without an intervening `rls_buf`.
-- Illegal if the buffer ID was never released and the producer has not yet issued `rls_buf` (the acquire will block indefinitely, which is treated as a protocol error).
-- Illegal on CPU simulator if buffer state is inconsistent.
+!!! danger "Exceptions"
+    - Illegal if `%buf_id` is not in the valid range for the target profile.
+    - Illegal if the same pipeline acquires the same buffer ID twice without an intervening `rls_buf`.
+    - Illegal if the buffer ID was never released and the producer has not yet issued `rls_buf` (the acquire will block indefinitely, which is treated as a protocol error).
+    - Illegal on CPU simulator if buffer state is inconsistent.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| Buffer acquire | Simulated | Supported | Supported |
-| Implicit set_flag | Simulated | Supported | Supported |
-| Blocking on unavailable slot | Simulated | Supported | Supported |
-| Maximum buffer IDs | Implementation-defined | 32 (global pool) | 32 (global pool) |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | Buffer acquire | Simulated | Supported | Supported |
+    | Implicit set_flag | Simulated | Supported | Supported |
+    | Blocking on unavailable slot | Simulated | Supported | Supported |
+    | Maximum buffer IDs | Implementation-defined | 32 (global pool) | 32 (global pool) |
 
 ## Examples
 

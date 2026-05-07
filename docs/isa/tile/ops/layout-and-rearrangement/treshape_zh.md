@@ -21,7 +21,7 @@
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 ```text
 %dst = treshape %src : !pto.tile<...>
@@ -50,26 +50,27 @@ PTO_INST RecordEvent TRESHAPE(TileDataOut &dst, TileDataIn &src, WaitEvents &...
 
 ## 约束
 
-### 所有 backend 都共享的硬约束
+!!! warning "约束"
+    ### 所有 backend 都共享的硬约束
 
-- `TileDataIn::Loc == TileDataOut::Loc`
-- `sizeof(InElem) * InNumel == sizeof(OutElem) * OutNumel`
-- 不能在 boxed layout 和 non-boxed layout 之间重解释
+    - `TileDataIn::Loc == TileDataOut::Loc`
+    - `sizeof(InElem) * InNumel == sizeof(OutElem) * OutNumel`
+    - 不能在 boxed layout 和 non-boxed layout 之间重解释
 
-### CPU 模拟器
+    ### CPU 模拟器
 
-- CPU 还会额外检查元素类型兼容性：
-  - 同类型，或
-  - 都是浮点，或
-  - 都是整数
+    - CPU 还会额外检查元素类型兼容性：
+      - 同类型，或
+      - 都是浮点，或
+      - 都是整数
 
-### A2/A3 / A5 / Kirin9030
+    ### A2/A3 / A5 / Kirin9030
 
-- NPU 路径没有 CPU 那么强的“元素类别兼容”检查。
-- A2/A3 在非自动路径下会把 `dst` 直接别名到 `src` 的地址；自动路径用 `__cce_alias`。
-- A5 和 Kirin9030 复用 A2/A3 的 `TRESHAPE` 实现。
+    - NPU 路径没有 CPU 那么强的“元素类别兼容”检查。
+    - A2/A3 在非自动路径下会把 `dst` 直接别名到 `src` 的地址；自动路径用 `__cce_alias`。
+    - A5 和 Kirin9030 复用 A2/A3 的 `TRESHAPE` 实现。
 
-这意味着 `TRESHAPE` 在 NPU 上更接近“受约束的别名/重解释”，而不是一次真实复制。
+    这意味着 `TRESHAPE` 在 NPU 上更接近“受约束的别名/重解释”，而不是一次真实复制。
 
 ## 示例
 
@@ -91,6 +92,6 @@ void example() {
 
 ## 相关页面
 
-- [TALIAS](../../../TALIAS_zh.md)
+- [TALIAS](../sync-and-config/talias.md)
 - [TMOV](./tmov_zh.md)
 - [布局与重排指令集](../../layout-and-rearrangement_zh.md)

@@ -44,9 +44,34 @@ Each `pto.*` operation page should make the following easy to find. Section titl
 
 Use **MUST**, **SHOULD**, and **MAY** only for rules that a test, verifier, or review can check. Prefer plain language for explanation.
 
+## Visual Structure
+
+Use MkDocs callouts to make legality and portability rules easy to scan without changing their normative meaning.
+
+- Keep the `## Constraints` heading, then put the rules in `!!! warning "Constraints"`.
+- Keep the `## Target-Profile Restrictions` heading, then put portability narrowing in `??? info "Target-Profile Restrictions"` so readers can expand it when they need a target-specific answer.
+- Use `!!! danger` for illegal cases and verifier-rejected combinations.
+- Use `!!! failure` for diagnostics, `static_assert`, `PTO_STATIC_ASSERT`, and assertion-style messages.
+- Use `!!! note` for explanatory notes that do not narrow legality.
+
+When target-specific material is already separable, group it with PyMdown tabs named exactly by target profile:
+
+```markdown
+??? info "Target-Profile Restrictions"
+    === "CPU_SIM"
+        State simulator-only behavior or emulation boundaries here.
+
+    === "A2/A3"
+        State A2/A3 support, shape limits, and implementation checks here.
+
+    === "A5"
+        State A5-only dtypes, modes, or relaxed limits here.
+```
+
+Do not use a visual callout to weaken a rule. If a statement is architecture-visible, keep the same normative wording inside the callout.
+
 ## See Also
 
-- [Instruction sets](../instruction-families/README.md)
 - [Instruction sets](../instruction-families/README.md)
 - [Diagnostics and illegal cases](./diagnostics-and-illegal-cases.md)
 - [Document structure](../introduction/document-structure.md)

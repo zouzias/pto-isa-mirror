@@ -66,12 +66,14 @@ PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &sr
 
 ## 约束
 
-- 操作迭代域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
-- `mask` tile 采用目标定义的 packed predicate 编码。
+!!! warning "约束"
+    - 操作迭代域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
+    - `mask` tile 采用目标定义的 packed predicate 编码。
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## Target-Profile 限制
 

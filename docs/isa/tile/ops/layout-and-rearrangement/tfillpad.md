@@ -89,26 +89,29 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- `TileDataDst::PadVal != PadValue::Null`.
+!!! warning "Constraints"
+    - `TileDataDst::PadVal != PadValue::Null`.
 
-- `sizeof(TileDataDst::DType) == sizeof(TileDataSrc::DType)` and element size must be `1`, `2`, or `4` bytes.
+    - `sizeof(TileDataDst::DType) == sizeof(TileDataSrc::DType)` and element size must be `1`, `2`, or `4` bytes.
 
-- `TFILLPAD`: `TileDataDst::Rows/Cols` must match `TileDataSrc::Rows/Cols`.
+    - `TFILLPAD`: `TileDataDst::Rows/Cols` must match `TileDataSrc::Rows/Cols`.
 
-- `TFILLPAD_EXPAND`: `TileDataDst::Rows >= TileDataSrc::Rows` and `TileDataDst::Cols >= TileDataSrc::Cols`.
+    - `TFILLPAD_EXPAND`: `TileDataDst::Rows >= TileDataSrc::Rows` and `TileDataDst::Cols >= TileDataSrc::Cols`.
 
-- `TFILLPAD(TileData &dst, TileData &src)`:`if TileData::TileType is Mat, layout only support (!TileData::isRowMajor && TileData::Slayout::RowMajor), and PadVal only support PadValue::Zero`
+    - `TFILLPAD(TileData &dst, TileData &src)`:`if TileData::TileType is Mat, layout only support (!TileData::isRowMajor && TileData::Slayout::RowMajor), and PadVal only support PadValue::Zero`
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- `pto.tfillpad` preserves PTO-visible semantics across CPU simulation, A2/A3-class targets, and A5-class targets, but concrete support subsets may differ by profile.
+??? info "Target-Profile Restrictions"
+    - `pto.tfillpad` preserves PTO-visible semantics across CPU simulation, A2/A3-class targets, and A5-class targets, but concrete support subsets may differ by profile.
 
-- Portable code must rely only on the documented type, layout, shape, and mode combinations that the selected target profile guarantees.
+    - Portable code must rely only on the documented type, layout, shape, and mode combinations that the selected target profile guarantees.
 
 ## Examples
 
@@ -162,5 +165,5 @@ pto.tfillpad ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ## Related Ops / Instruction Set Links
 
 - Instruction set overview: [Layout And Rearrangement](../../layout-and-rearrangement.md)
-- Previous op in instruction set: [pto.tinsert_fp](./tinsert-fp.md)
+- Previous op in instruction set: [pto.tinsert_fp](./tinsert.md)
 - Next op in instruction set: [pto.tfillpad_inplace](./tfillpad-inplace.md)

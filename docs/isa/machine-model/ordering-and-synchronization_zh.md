@@ -106,17 +106,19 @@ TLOAD -> RecordEvent / TSYNC -> Tile compute -> RecordEvent / TSYNC -> TSTORE
 
 ## 约束
 
-- 只要架构未自动保证顺序，就必须显式同步
-- 某目标可以更强，但文档不能依赖未声明的更强顺序
-- 向量流水同步规则与 tile 同步规则应分开陈述
-- `TSYNC` 作用于 tile-buffer 范围，不跨 tile buffer
+!!! warning "约束"
+    - 只要架构未自动保证顺序，就必须显式同步
+    - 某目标可以更强，但文档不能依赖未声明的更强顺序
+    - 向量流水同步规则与 tile 同步规则应分开陈述
+    - `TSYNC` 作用于 tile-buffer 范围，不跨 tile buffer
 
 ## 不允许的情形
 
-- 把必须同步的路径写成“可省略”
-- 默认向量流水 hazard 会被 tile 规则自动覆盖
-- 把目标专属 barrier 写成架构普遍保证
-- 在 `copy_gm_to_ubuf` 完成前直接 `vlds`
+!!! danger "不允许的情形"
+    - 把必须同步的路径写成“可省略”
+    - 默认向量流水 hazard 会被 tile 规则自动覆盖
+    - 把目标专属 barrier 写成架构普遍保证
+    - 在 `copy_gm_to_ubuf` 完成前直接 `vlds`
 
 ## 相关页面
 

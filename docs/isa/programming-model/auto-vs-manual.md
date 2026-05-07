@@ -125,10 +125,11 @@ Both modes still share the same ISA contract:
 
 ## Cases That Are Not Allowed
 
-- Documenting Auto mode as if it made illegal programs legal
-- Treating Manual mode details as global guarantees for every PTO program
-- Collapsing Auto and Manual into separate ISAs instead of two ways to author PTO programs
-- Relying on auto-inserted synchronization in code that requires precise pipeline ordering (use Manual instead)
+!!! danger "Cases That Are Not Allowed"
+    - Documenting Auto mode as if it made illegal programs legal
+    - Treating Manual mode details as global guarantees for every PTO program
+    - Collapsing Auto and Manual into separate ISAs instead of two ways to author PTO programs
+    - Relying on auto-inserted synchronization in code that requires precise pipeline ordering (use Manual instead)
 
 ## See Also
 

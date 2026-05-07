@@ -70,46 +70,47 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-### General constraints / checks
+!!! warning "Constraints"
+    ### General constraints / checks
 
-- `dst` and `src` must be `TileType::Vec`.
+    - `dst` and `src` must be `TileType::Vec`.
 
-- `dst` and `src` must use standard ND layout: row-major and non-fractal (`BLayout::RowMajor`, `SLayout::NoneBox`).
+    - `dst` and `src` must use standard ND layout: row-major and non-fractal (`BLayout::RowMajor`, `SLayout::NoneBox`).
 
-- `dst` and `src` must use the same element type.
+    - `dst` and `src` must use the same element type.
 
-- Runtime checks:
-  - `src.GetValidCol() == dst.GetValidCol()`
-  - `src.GetValidRow() != 0`
-  - `src.GetValidCol() != 0`
-  - `src.GetValidCol() <= tmp` row stride measured in `src` elements
+    - Runtime checks:
+      - `src.GetValidCol() == dst.GetValidCol()`
+      - `src.GetValidRow() != 0`
+      - `src.GetValidCol() != 0`
+      - `src.GetValidCol() <= tmp` row stride measured in `src` elements
 
-- Supported element types: `half`, `float`, `int16_t`, `int32_t`.
+    - Supported element types: `half`, `float`, `int16_t`, `int32_t`.
 
-- `tmp` must be `TileType::Vec` and use standard ND layout: row-major and non-fractal (`BLayout::RowMajor`, `SLayout::NoneBox`).
+    - `tmp` must be `TileType::Vec` and use standard ND layout: row-major and non-fractal (`BLayout::RowMajor`, `SLayout::NoneBox`).
 
-- `tmp` must use the same element type as `src` and `dst`.
+    - `tmp` must use the same element type as `src` and `dst`.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- `isBinary` selects the checked backend path:
-  - `true`: binary-tree accumulation using `tmp`
-  - `false`: sequential accumulation into `dst`
+??? info "Target-Profile Restrictions"
+    - `isBinary` selects the checked backend path:
+      - `true`: binary-tree accumulation using `tmp`
+      - `false`: sequential accumulation into `dst`
 
-### A2A3 implementation checks
+    === "A2/A3"
+        - If `src.GetValidRow() == 0` or `src.GetValidCol() == 0`, the implementation returns early.
 
-- If `src.GetValidRow() == 0` or `src.GetValidCol() == 0`, the implementation returns early.
+    === "A5"
+        - Shared A5 column-reduce checks allow `half`, `float`, `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `bfloat16_t`.
 
-### A5 implementation checks
-
-- Shared A5 column-reduce checks allow `half`, `float`, `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `bfloat16_t`.
-
-- The checked A5 `TCOLSUM` path still takes `tmp` only for the binary accumulation path; no extra compile-time `tmp` type/layout assertions are explicitly enforced in `TCOLSUM_IMPL`.
+        - The checked A5 `TCOLSUM` path still takes `tmp` only for the binary accumulation path; no extra compile-time `tmp` type/layout assertions are explicitly enforced in `TCOLSUM_IMPL`.
 
 ## Examples
 

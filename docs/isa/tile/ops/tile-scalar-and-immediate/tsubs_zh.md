@@ -58,13 +58,15 @@ PTO_INST RecordEvent TSUBS(TileDataDst &dst, TileDataSrc &src0, typename TileDat
 
 ## 约束
 
-- `dst` 和 `src0` 必须使用相同元素类型。
-- 标量类型必须匹配 `TileDataSrc::DType`。
-- 操作迭代域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
+!!! warning "约束"
+    - `dst` 和 `src0` 必须使用相同元素类型。
+    - 标量类型必须匹配 `TileDataSrc::DType`。
+    - 操作迭代域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## Target-Profile 限制
 

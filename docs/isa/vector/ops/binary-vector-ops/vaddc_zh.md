@@ -63,21 +63,24 @@ pto.vaddc ins(%lhs, %rhs, %mask : !pto.vreg<NxT>, !pto.vreg<NxT>, !pto.mask)
 
 ## 约束
 
-- 只支持整数元素类型。这是一条 carry-chain 整数加法指令。
-- 在 A5 上，应把它视作无符号整数运算。
-- `%lhs`、`%rhs` 和 `%result` 的元素类型必须一致。
-- 所有寄存器的向量宽度必须一致。
-- `%mask` 的宽度必须与 `N` 一致。
-- 非活跃 lane 上，结果与 carry 都保持原值。
+!!! warning "约束"
+    - 只支持整数元素类型。这是一条 carry-chain 整数加法指令。
+    - 在 A5 上，应把它视作无符号整数运算。
+    - `%lhs`、`%rhs` 和 `%result` 的元素类型必须一致。
+    - 所有寄存器的向量宽度必须一致。
+    - `%mask` 的宽度必须与 `N` 一致。
+    - 非活跃 lane 上，结果与 carry 都保持原值。
 
 ## 异常与非法情形
 
-- verifier 会拒绝非整数元素类型、类型不匹配、宽度不匹配或掩码宽度不匹配。
-- [二元向量操作](../../binary-vector-ops_zh.md)页面列出的额外非法情形，同样适用于 `pto.vaddc`。
+!!! danger "异常与非法情形"
+    - verifier 会拒绝非整数元素类型、类型不匹配、宽度不匹配或掩码宽度不匹配。
+    - [二元向量操作](../../binary-vector-ops_zh.md)页面列出的额外非法情形，同样适用于 `pto.vaddc`。
 
 ## 目标 Profile 限制
 
-A5 是当前文档里最具体的向量 profile。CPU 模拟器和 A2/A3 类目标会在保留可见 PTO 契约的前提下模拟这条指令。
+??? info "目标 Profile 限制"
+    A5 是当前文档里最具体的向量 profile。CPU 模拟器和 A2/A3 类目标会在保留可见 PTO 契约的前提下模拟这条指令。
 
 ## 性能
 

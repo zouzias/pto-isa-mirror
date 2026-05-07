@@ -60,26 +60,29 @@ None. This form is defined by its side effect (blocking) on the named pipeline.
 
 ## Constraints
 
-- **A5 only**: `wait_intra_core` is only available on the A5 profile.
-- **Per-pipeline blocking**: Only the named pipeline is blocked. All other pipelines continue. This differs fundamentally from A2A3's SU-level blocking.
-- **Semaphore ID mapping**: IDs 0–15 target AIV0; IDs 16–31 target AIV1.
-- **Event must be set**: Waiting on an event that was never set is **illegal**.
-- **Semaphore pool**: 16 physical IDs, 32-ID address space. IDs outside 0–31 are **illegal**.
+!!! warning "Constraints"
+    - **A5 only**: `wait_intra_core` is only available on the A5 profile.
+    - **Per-pipeline blocking**: Only the named pipeline is blocked. All other pipelines continue. This differs fundamentally from A2A3's SU-level blocking.
+    - **Semaphore ID mapping**: IDs 0–15 target AIV0; IDs 16–31 target AIV1.
+    - **Event must be set**: Waiting on an event that was never set is **illegal**.
+    - **Semaphore pool**: 16 physical IDs, 32-ID address space. IDs outside 0–31 are **illegal**.
 
 ## Exceptions
 
-- Illegal on non-A5 profiles.
-- Illegal if `%sem_id` is outside the range 0–31.
-- Illegal if the event was never set by a remote subblock.
+!!! danger "Exceptions"
+    - Illegal on non-A5 profiles.
+    - Illegal if `%sem_id` is outside the range 0–31.
+    - Illegal if the event was never set by a remote subblock.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| `wait_intra_core` | Not available | Use `wait_flag_dev` | Supported |
-| Blocking scope | Not applicable | Entire SU blocked | Only named pipe blocked |
-| Other pipes during wait | Not applicable | All stalled | Continue executing |
-| Semaphore pool | Not applicable | 16 IDs | 16 IDs, 32-ID address space |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | `wait_intra_core` | Not available | Use `wait_flag_dev` | Supported |
+    | Blocking scope | Not applicable | Entire SU blocked | Only named pipe blocked |
+    | Other pipes during wait | Not applicable | All stalled | Continue executing |
+    | Semaphore pool | Not applicable | 16 IDs | 16 IDs, 32-ID address space |
 
 ## Examples
 

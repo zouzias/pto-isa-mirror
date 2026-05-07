@@ -42,19 +42,22 @@ Orders the selected classes of UB memory traffic so later aliased accesses obser
 
 ## Constraints
 
-- `pto.mem_bar` is meaningful only for UB aliasing hazards inside a vector-visible execution scope.
-- The selected barrier type MUST be valid for the chosen target profile.
-- This barrier does not replace cross-pipeline event ordering when data moves between MTE and vector pipelines.
+!!! warning "Constraints"
+    - `pto.mem_bar` is meaningful only for UB aliasing hazards inside a vector-visible execution scope.
+    - The selected barrier type MUST be valid for the chosen target profile.
+    - This barrier does not replace cross-pipeline event ordering when data moves between MTE and vector pipelines.
 
 ## Exceptions
 
-- The verifier rejects illegal operand shapes, unsupported pipe or event identifiers, and attribute combinations that are not valid for the selected instruction set or target profile.
-- Any additional illegality stated in the constraints section is also part of the contract.
+!!! danger "Exceptions"
+    - The verifier rejects illegal operand shapes, unsupported pipe or event identifiers, and attribute combinations that are not valid for the selected instruction set or target profile.
+    - Any additional illegality stated in the constraints section is also part of the contract.
 
 ## Target-Profile Restrictions
 
-- CPU simulation preserves the visible ordering contract but may not expose every hardware hazard that motivates the barrier.
-- A2/A3 and A5 may support different barrier classes or stronger/weaker default ordering.
+??? info "Target-Profile Restrictions"
+    - CPU simulation preserves the visible ordering contract but may not expose every hardware hazard that motivates the barrier.
+    - A2/A3 and A5 may support different barrier classes or stronger/weaker default ordering.
 
 ## Examples
 

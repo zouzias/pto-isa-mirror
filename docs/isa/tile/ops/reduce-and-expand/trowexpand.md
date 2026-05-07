@@ -60,24 +60,27 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- Tile Type: `dst` and `src` must be `TileType::Vec`.
+!!! warning "Constraints"
+    - Tile Type: `dst` and `src` must be `TileType::Vec`.
 
-- Tile layout: ND fractal (`isRowMajor` and `SLayout::NoneBox`) for both `src` and `dst`.
+    - Tile layout: ND fractal (`isRowMajor` and `SLayout::NoneBox`) for both `src` and `dst`.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-### Implementation Checks (NPU)
+??? info "Target-Profile Restrictions"
+    ### Implementation Checks (NPU)
 
-- **Data type**: A2A3/A5 element types must be one of: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, or `float`.
+    - **Data type**: A2A3/A5 element types must be one of: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, or `float`.
 
-- **Runtime valid-region checks**:
-    - A2A3: returns early if any of `dstValidRow`, `dstValidCol`, `srcValidRow`, `srcValidCol` is zero.
-    - A5: asserts `srcValidRow == dstValidRow` and asserts `srcValidRow != 0 && srcValidCol != 0`.
+    - **Runtime valid-region checks**:
+        - A2A3: returns early if any of `dstValidRow`, `dstValidCol`, `srcValidRow`, `srcValidCol` is zero.
+        - A5: asserts `srcValidRow == dstValidRow` and asserts `srcValidRow != 0 && srcValidCol != 0`.
 
 ## Examples
 

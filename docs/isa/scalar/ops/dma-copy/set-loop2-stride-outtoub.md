@@ -43,19 +43,22 @@ Programs the loop2 stride state consumed by subsequent GM→UB DMA copies. The c
 
 ## Constraints
 
-- GM stride values MUST be representable in the source-stride field width of the selected target profile.
-- UB stride values MUST obey the destination-stride field width and alignment rules of the selected target profile.
-- The configured strides apply only to later GM→UB DMA operations.
+!!! warning "Constraints"
+    - GM stride values MUST be representable in the source-stride field width of the selected target profile.
+    - UB stride values MUST obey the destination-stride field width and alignment rules of the selected target profile.
+    - The configured strides apply only to later GM→UB DMA operations.
 
 ## Exceptions
 
-- The verifier rejects illegal operand shapes, unsupported pipe or event identifiers, and attribute combinations that are not valid for the selected instruction set or target profile.
-- Any additional illegality stated in the constraints section is also part of the contract.
+!!! danger "Exceptions"
+    - The verifier rejects illegal operand shapes, unsupported pipe or event identifiers, and attribute combinations that are not valid for the selected instruction set or target profile.
+    - Any additional illegality stated in the constraints section is also part of the contract.
 
 ## Target-Profile Restrictions
 
-- CPU simulation preserves the visible configuration contract but may not expose all hardware loop hazards.
-- A2/A3 and A5 may use different concrete register widths or reset behavior; portable code must follow the documented PTO contract plus the selected target profile.
+??? info "Target-Profile Restrictions"
+    - CPU simulation preserves the visible configuration contract but may not expose all hardware loop hazards.
+    - A2/A3 and A5 may use different concrete register widths or reset behavior; portable code must follow the documented PTO contract plus the selected target profile.
 
 ## Examples
 

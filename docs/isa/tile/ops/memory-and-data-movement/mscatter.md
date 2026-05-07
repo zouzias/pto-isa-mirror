@@ -14,7 +14,7 @@ For each element `(i, j)` in the source valid region:
 
 $$ \mathrm{mem}[\mathrm{idx}_{i,j}] = \mathrm{src}_{i,j} $$
 
-If multiple elements map to the same destination location, the final value is implementation-defined (CPU simulator: last writer wins in row-major iteration order).
+If multiple elements map to the same destination location, the final value is **undefined on A2/A3 and A5** (MSCATTER aliases are illegal and must not occur in correct programs); on the CPU simulator, the last writer in row-major iteration order wins.
 
 ## Syntax
 
@@ -59,47 +59,50 @@ Elements from `src` are scattered to positions in `dst` specified by `indexes`.
 
 ## Side Effects
 
-This operation writes to global memory. Concurrent writes to the same location produce implementation-defined results.
+This operation writes to global memory. Concurrent writes to the same location produce undefined behavior on A2/A3 and A5 (MSCATTER concurrent aliases are illegal and must not occur in correct programs); on the CPU simulator, the last writer wins.
 
 ## Constraints
 
-- **Supported data types**:
-    - `src`/`dst` element type must be one of: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float`.
-    - On AICore targets, `float8_e4m3_t` and `float8_e5m2_t` are also supported.
-    - `indexes` element type must be `int32_t` or `uint32_t`.
+!!! warning "Constraints"
+    - **Supported data types**:
+        - `src`/`dst` element type must be one of: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float`.
+        - On AICore targets, `float8_e4m3_t` and `float8_e5m2_t` are also supported.
+        - `indexes` element type must be `int32_t` or `uint32_t`.
 
-- **Tile and memory types**:
-    - `src` must be a vector tile (`TileType::Vec`).
-    - `indexes` must be a vector tile (`TileType::Vec`).
-    - `src` and `indexes` must use row-major layout.
-    - `dst` must be a `GlobalTensor` in GM memory.
-    - `dst` must use `ND` layout.
+    - **Tile and memory types**:
+        - `src` must be a vector tile (`TileType::Vec`).
+        - `indexes` must be a vector tile (`TileType::Vec`).
+        - `src` and `indexes` must use row-major layout.
+        - `dst` must be a `GlobalTensor` in GM memory.
+        - `dst` must use `ND` layout.
 
-- **Atomic operation constraints**:
-    - Non-atomic scatter is supported for all supported element types.
-    - `Add` atomic mode requires `int32_t`, `uint32_t`, `float`, or `half`.
-    - `Max`/`Min` atomic mode requires `int32_t` or `float`.
+    - **Atomic operation constraints**:
+        - Non-atomic scatter is supported for all supported element types.
+        - `Add` atomic mode requires `int32_t`, `uint32_t`, `float`, or `half`.
+        - `Max`/`Min` atomic mode requires `int32_t` or `float`.
 
-- **Shape constraints**:
-    - `src.Rows == indexes.Rows`.
-    - `indexes` must be shaped as `[N, 1]` for row-indexed scatter or `[N, M]` for element-indexed scatter.
-    - `src` row width must be 32-byte aligned, that is, `src.Cols * sizeof(DType)` must be a multiple of 32.
-    - `dst` static shape must satisfy `Shape<1, 1, 1, TableRows, RowWidth>`.
+    - **Shape constraints**:
+        - `src.Rows == indexes.Rows`.
+        - `indexes` must be shaped as `[N, 1]` for row-indexed scatter or `[N, M]` for element-indexed scatter.
+        - `src` row width must be 32-byte aligned, that is, `src.Cols * sizeof(DType)` must be a multiple of 32.
+        - `dst` static shape must satisfy `Shape<1, 1, 1, TableRows, RowWidth>`.
 
-- **Index interpretation**:
-    - Index interpretation is target-defined. The CPU simulator treats indices as linear element indices into `dst.data()`.
-    - The CPU simulator does not enforce bounds checks on `indexes`.
+    - **Index interpretation**:
+        - Index interpretation is target-defined. The CPU simulator treats indices as linear element indices into `dst.data()`.
+        - The CPU simulator does not enforce bounds checks on `indexes`.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- `pto.mscatter` preserves PTO-visible semantics across CPU simulation, A2/A3-class targets, and A5-class targets, but concrete support subsets may differ by profile.
+??? info "Target-Profile Restrictions"
+    - `pto.mscatter` preserves PTO-visible semantics across CPU simulation, A2/A3-class targets, and A5-class targets, but concrete support subsets may differ by profile.
 
-- Portable code must rely only on the documented type, layout, shape, and mode combinations that the selected target profile guarantees.
+    - Portable code must rely only on the documented type, layout, shape, and mode combinations that the selected target profile guarantees.
 
 ## Examples
 

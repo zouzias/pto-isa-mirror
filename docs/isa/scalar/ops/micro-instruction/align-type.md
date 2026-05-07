@@ -98,11 +98,12 @@ The following example shows the complete unaligned load/store stream lifecycle:
 
 ## Constraints
 
-- `pto.vldas` must be the leading operation of an unaligned load stream.
-- `pto.vldus` must follow `pto.vldas` using the same alignment state.
-- `pto.vstus` must be preceded by `pto.init_align` to start a new store alignment stream.
-- The alignment state must be threaded through all operations in the stream without branching.
-- For `pto.vstus`, the `%offset` parameter controls the per-operation stride within the stream.
+!!! warning "Constraints"
+    - `pto.vldas` must be the leading operation of an unaligned load stream.
+    - `pto.vldus` must follow `pto.vldas` using the same alignment state.
+    - `pto.vstus` must be preceded by `pto.init_align` to start a new store alignment stream.
+    - The alignment state must be threaded through all operations in the stream without branching.
+    - For `pto.vstus`, the `%offset` parameter controls the per-operation stride within the stream.
 
 ## Why Explicit Alignment State?
 

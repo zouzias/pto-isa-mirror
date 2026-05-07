@@ -35,7 +35,7 @@ $$ \mathrm{C}_{0,j} = \sum_{k=0}^{K-1} \mathrm{A}_{0,k} \cdot \mathrm{B}_{k,j} $
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 同步形式：
 
@@ -74,44 +74,46 @@ PTO_INST RecordEvent TGEMV(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatr
 
 ## 约束
 
-### 通用约束
+!!! warning "约束"
+    ### 通用约束
 
-- 静态 shape 必须满足：
-  - `TileLeft::Rows == TileRes::Rows`
-  - `TileLeft::Cols == TileRight::Rows`
-  - `TileRight::Cols == TileRes::Cols`
-- tile 角色必须满足：
-  - `TileLeft::Loc == Left`
-  - `TileRight::Loc == Right`
-  - `TileRes::Loc == Acc`
-- 运行时要求：
-  - `m = 1`
-  - `k`、`n` 位于 `[1, 4095]`
+    - 静态 shape 必须满足：
+      - `TileLeft::Rows == TileRes::Rows`
+      - `TileLeft::Cols == TileRight::Rows`
+      - `TileRight::Cols == TileRes::Cols`
+    - tile 角色必须满足：
+      - `TileLeft::Loc == Left`
+      - `TileRight::Loc == Right`
+      - `TileRes::Loc == Acc`
+    - 运行时要求：
+      - `m = 1`
+      - `k`、`n` 位于 `[1, 4095]`
 
-### A2A3 约束
+    ### A2A3 约束
 
-`A2A3` 指 Ascend 910B 与 Ascend 910C。当前仓内实现公开支持的 `(CType, AType, BType)` 组合包括：
+    `A2A3` 指 Ascend 910B 与 Ascend 910C。当前仓内实现公开支持的 `(CType, AType, BType)` 组合包括：
 
-- `(int32_t, int8_t, int8_t)`
-- `(float, half, half)`
-- `(float, float, float)`
-- `(float, bfloat16_t, bfloat16_t)`
+    - `(int32_t, int8_t, int8_t)`
+    - `(float, half, half)`
+    - `(float, float, float)`
+    - `(float, bfloat16_t, bfloat16_t)`
 
-### A5 约束
+    ### A5 约束
 
-`A5` 指 Ascend 950 PR 与 Ascend 950 DT。当前实现要求：
+    `A5` 指 Ascend 950 PR 与 Ascend 950 DT。当前实现要求：
 
-- 累加器类型必须是 `int32_t` 或 `float`；
-- 若累加器为 `int32_t`，左右输入都必须是 `int8_t`；
-- 若累加器为 `float`，当前实现支持 `half`、`bfloat16_t`、`float` 和部分 fp8 输入对；
-- A5 的 `Right` 角色有独立布局 / fractal 约束，不能拿 A2A3 的右操作数布局直接套用。
+    - 累加器类型必须是 `int32_t` 或 `float`；
+    - 若累加器为 `int32_t`，左右输入都必须是 `int8_t`；
+    - 若累加器为 `float`，当前实现支持 `half`、`bfloat16_t`、`float` 和部分 fp8 输入对；
+    - A5 的 `Right` 角色有独立布局 / fractal 约束，不能拿 A2A3 的右操作数布局直接套用。
 
 ## 不允许的情形
 
-- `m != 1`；
-- 角色不是 `Left` / `Right` / `Acc`；
-- 形状不满足 GEMV 兼容关系；
-- 在不支持的 target 上使用不支持的 dtype 组合。
+!!! danger "不允许的情形"
+    - `m != 1`；
+    - 角色不是 `Left` / `Right` / `Acc`；
+    - 形状不满足 GEMV 兼容关系；
+    - 在不支持的 target 上使用不支持的 dtype 组合。
 
 ## 性能与吞吐
 

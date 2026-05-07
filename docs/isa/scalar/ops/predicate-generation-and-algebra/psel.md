@@ -65,18 +65,21 @@ None.
 
 ## Constraints
 
-- **Operand widths**: All four predicate operands MUST have the same width.
-- **Select semantic**: `sel_i = 1` → select `src0_i`; `sel_i = 0` → select `src1_i`.
+!!! warning "Constraints"
+    - **Operand widths**: All four predicate operands MUST have the same width.
+    - **Select semantic**: `sel_i = 1` → select `src0_i`; `sel_i = 0` → select `src1_i`.
 
 ## Exceptions
 
-- Illegal if predicate operand widths are not consistent.
+!!! danger "Exceptions"
+    - Illegal if predicate operand widths are not consistent.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| Predicate select | Simulated | Supported | Supported |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | Predicate select | Simulated | Supported | Supported |
 
 ## Examples
 

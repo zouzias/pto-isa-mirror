@@ -51,20 +51,23 @@ This operation has no architectural side effect beyond producing its SSA results
 
 ## Constraints
 
-- **Narrow integer widening**: Some narrow integer forms (e.g., `i8`, `i16`) may use an internal wider accumulator; the final result is still returned in the declared result type.
-- **All lanes inactive**: If all predicate bits are zero, `dst[0]` is zero and all other lanes are zero.
-- **Mask granularity**: The mask has one bit per lane; partial-masking at sub-lane granularity is not supported.
+!!! warning "Constraints"
+    - **Narrow integer widening**: Some narrow integer forms (e.g., `i8`, `i16`) may use an internal wider accumulator; the final result is still returned in the declared result type.
+    - **All lanes inactive**: If all predicate bits are zero, `dst[0]` is zero and all other lanes are zero.
+    - **Mask granularity**: The mask has one bit per lane; partial-masking at sub-lane granularity is not supported.
 
 ## Exceptions
 
-- The verifier rejects illegal operand shapes, unsupported element types, and attribute combinations that are not valid for the selected instruction set or target profile.
-- Any additional illegality stated in the constraints section is also part of the contract.
+!!! danger "Exceptions"
+    - The verifier rejects illegal operand shapes, unsupported element types, and attribute combinations that are not valid for the selected instruction set or target profile.
+    - Any additional illegality stated in the constraints section is also part of the contract.
 
 ## Target-Profile Restrictions
 
-- Documented A5 coverage: `i16-i64`, `f16`, `f32`.
-- A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
-- Code that depends on an instruction-set-specific type list, distribution mode, or fused form should treat that dependency as target-profile-specific unless the PTO manual states cross-target portability explicitly.
+??? info "Target-Profile Restrictions"
+    - Documented A5 coverage: `i16-i64`, `f16`, `f32`.
+    - A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
+    - Code that depends on an instruction-set-specific type list, distribution mode, or fused form should treat that dependency as target-profile-specific unless the PTO manual states cross-target portability explicitly.
 
 ## Performance
 

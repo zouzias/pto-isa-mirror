@@ -106,22 +106,25 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- Uses backend-specific mx legality checks for data types, tile locations, fractal/layout combinations, and scaling formats.
+!!! warning "Constraints"
+    - Uses backend-specific mx legality checks for data types, tile locations, fractal/layout combinations, and scaling formats.
 
-- Scale tile compatibility and accumulator promotion are implementation-defined by target backend.
+    - Scale tile compatibility and accumulator promotion are concrete per target. On A2/A3: scale tiles must match the input element type (e.g., float8 scales for float8 inputs) and the accumulator must be float32; no other type combinations are supported. On A5: scale tiles follow MX format block scaling rules where each scale tile encodes per-block scaling factors for both A and B operands, and the accumulator must be float32; fp8 scale tile types follow the selected fp8 variant. On CPU simulator: follows A5 semantics.
 
-- For portability, validate the exact `(A, B, scaleA, scaleB, C)` type tuple and tile layout against target implementation constraints.
+    - For portability, validate the exact `(A, B, scaleA, scaleB, C)` type tuple and tile layout against target implementation constraints.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- `pto.tgemv_mx` preserves PTO-visible semantics across CPU simulation, A2/A3-class targets, and A5-class targets, but concrete support subsets may differ by profile.
+??? info "Target-Profile Restrictions"
+    - `pto.tgemv_mx` preserves PTO-visible semantics across CPU simulation, A2/A3-class targets, and A5-class targets, but concrete support subsets may differ by profile.
 
-- Portable code must rely only on the documented type, layout, shape, and mode combinations that the selected target profile guarantees.
+    - Portable code must rely only on the documented type, layout, shape, and mode combinations that the selected target profile guarantees.
 
 ## Examples
 

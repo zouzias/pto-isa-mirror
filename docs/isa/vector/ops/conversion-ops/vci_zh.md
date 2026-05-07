@@ -64,19 +64,22 @@ pto.vci ins(%index : i32) outs(%indices : !pto.vreg<64xi32>) {order = "ASC"}
 
 ## 约束
 
-- `%result` 使用整数元素类型，常见形式是 `i32`。
-- 标量 `%index` 的类型应与结果元素类型匹配。
-- 使用排序型索引生成时，`order` 属性是必须的。
-- 标准形式中，lane 数 `N` 由结果类型推导。
+!!! warning "约束"
+    - `%result` 使用整数元素类型，常见形式是 `i32`。
+    - 标量 `%index` 的类型应与结果元素类型匹配。
+    - 使用排序型索引生成时，`order` 属性是必须的。
+    - 标准形式中，lane 数 `N` 由结果类型推导。
 
 ## 异常与非法情形
 
-- verifier 会拒绝非法的操作数形状、不支持的元素类型以及不合法的 `order` 属性。
+!!! danger "异常与非法情形"
+    - verifier 会拒绝非法的操作数形状、不支持的元素类型以及不合法的 `order` 属性。
 
 ## 目标 Profile 限制
 
-- A5 是当前手册里最细的具体 profile；CPU 模拟器和 A2/A3 类目标可以在保留可见 PTO 契约的前提下做等效模拟。
-- 当前文档化的 A5 profile 下，`pto.vci` 在 sampled `veccore0` trace 中不表现为标准 `RV_*` 向量算术指令，而更接近谓词 / 物化层实现。
+??? info "目标 Profile 限制"
+    - A5 是当前手册里最细的具体 profile；CPU 模拟器和 A2/A3 类目标可以在保留可见 PTO 契约的前提下做等效模拟。
+    - 当前文档化的 A5 profile 下，`pto.vci` 在 sampled `veccore0` trace 中不表现为标准 `RV_*` 向量算术指令，而更接近谓词 / 物化层实现。
 
 ## 性能
 

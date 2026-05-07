@@ -24,13 +24,15 @@ PTO 源程序使用共享的 MLIR `arith` 指令集，在 tile 和 vector 区域
 
 ## 约束
 
-- 共享标量算术必须保持标量语义
-- 影响后续 PTO 合法性的比较、转换或宽度变化必须显式写出
+!!! warning "约束"
+    - 共享标量算术必须保持标量语义
+    - 影响后续 PTO 合法性的比较、转换或宽度变化必须显式写出
 
 ## 不允许的情形
 
-- 用 `arith` 冒充向量或 tile payload 算术
-- 在 PTO 边界隐含 signedness、width change 或 `index` 转换
+!!! danger "不允许的情形"
+    - 用 `arith` 冒充向量或 tile payload 算术
+    - 在 PTO 边界隐含 signedness、width change 或 `index` 转换
 
 ## 相关页面
 

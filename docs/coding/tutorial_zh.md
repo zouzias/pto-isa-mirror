@@ -76,7 +76,7 @@ PTO-Auto（高层）：
 
 - 你描述数据流：`TLOAD → compute → TSTORE`。
 - Tile buffer 管理与部分同步可由编译器/运行时处理。
-- 在 API 模型中，当启用 `__PTO_AUTO__` 时，`TASSIGN(tile, addr)` 可能是 no-op（参见 `docs/isa/TASSIGN_zh.md`）。
+- 在 API 模型中，当启用 `__PTO_AUTO__` 时，`TASSIGN(tile, addr)` 可能是 no-op（参见 [TASSIGN](../isa/tile/ops/sync-and-config/tassign_zh.md)）。
 
 PTO-Manual（专家）：
 
@@ -275,7 +275,7 @@ __global__ AICORE void GemmAutoOneTile(__gm__ A* a, __gm__ B* b, __gm__ Acc* c) 
 
 PTO-Auto 包含两部分：
 
-1. **库侧 Auto 语义**：用 `-D__PTO_AUTO__` 编译，使 Tile 使用编译器管理的存储，同时 `TASSIGN(tile, addr)` 变为 no-op（参见 `docs/isa/TASSIGN_zh.md`）。
+1. **库侧 Auto 语义**：用 `-D__PTO_AUTO__` 编译，使 Tile 使用编译器管理的存储，同时 `TASSIGN(tile, addr)` 变为 no-op（参见 [TASSIGN](../isa/tile/ops/sync-and-config/tassign_zh.md)）。
 2. **编译器 pipeline**：在 Bisheng CCE 工具链中启用 PTO lowering/bufferization passes。
 
 ### 如何找到正确的“启用 PTO passes”编译选项

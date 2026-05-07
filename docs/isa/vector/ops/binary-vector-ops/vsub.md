@@ -59,26 +59,29 @@ This operation has no architectural side effect beyond producing its destination
 
 ## Constraints
 
-- **Type match**: `%lhs`, `%rhs`, and `%result` MUST have identical element types.
-- **Width match**: All three registers MUST have the same vector width `N`.
-- **Mask width**: `%mask` MUST have width equal to `N`.
-- **Active lanes**: Only lanes where the mask bit is 1 (true) participate in the subtraction.
-- **Inactive lanes**: Destination elements at inactive lanes are unmodified.
+!!! warning "Constraints"
+    - **Type match**: `%lhs`, `%rhs`, and `%result` MUST have identical element types.
+    - **Width match**: All three registers MUST have the same vector width `N`.
+    - **Mask width**: `%mask` MUST have width equal to `N`.
+    - **Active lanes**: Only lanes where the mask bit is 1 (true) participate in the subtraction.
+    - **Inactive lanes**: Destination elements at inactive lanes are unmodified.
 
 ## Exceptions
 
-- The verifier rejects illegal operand type mismatches, width mismatches, or mask width mismatches.
-- Any additional illegality stated in the [Binary Vector Instructions](../../binary-vector-ops.md) instruction set page is also part of the contract.
+!!! danger "Exceptions"
+    - The verifier rejects illegal operand type mismatches, width mismatches, or mask width mismatches.
+    - Any additional illegality stated in the [Binary Vector Instructions](../../binary-vector-ops.md) instruction set page is also part of the contract.
 
 ## Target-Profile Restrictions
 
-|| Element Type | CPU Simulator | A2/A3 | A5 |
-||------------|:-------------:|:------:|:--:|
-|| `f32` | Simulated | Simulated | Supported |
-|| `f16` / `bf16` | Simulated | Simulated | Supported |
-|| `i8`–`i64`, `u8`–`u64` | Simulated | Simulated | Supported |
+??? info "Target-Profile Restrictions"
+    || Element Type | CPU Simulator | A2/A3 | A5 |
+    ||------------|:-------------:|:------:|:--:|
+    || `f32` | Simulated | Simulated | Supported |
+    || `f16` / `bf16` | Simulated | Simulated | Supported |
+    || `i8`–`i64`, `u8`–`u64` | Simulated | Simulated | Supported |
 
-A5 is the primary concrete profile for the vector instructions. CPU simulation and A2/A3-class targets emulate `pto.v*` operations using scalar loops while preserving the visible PTO contract.
+    A5 is the primary concrete profile for the vector instructions. CPU simulation and A2/A3-class targets emulate `pto.v*` operations using scalar loops while preserving the visible PTO contract.
 
 ## Performance
 

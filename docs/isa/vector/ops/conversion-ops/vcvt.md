@@ -83,33 +83,36 @@ PTO.vcvt  v0, v1, vmask, R, SAT, NONE
 
 ## Constraints
 
-### Type Constraints
+!!! warning "Constraints"
+    ### Type Constraints
 
-- Only the source/destination type pairs listed in the [Supported Type Matrix](#supported-type-matrix) are legal.
-- The source and destination element types must be distinct unless the conversion is explicitly documented as identity (no-op) for that type pair.
-- Width-changing conversions automatically adjust the lane count: `M * bitwidth(T1) = N * bitwidth(T0) = 2048`.
+    - Only the source/destination type pairs listed in the [Supported Type Matrix](#supported-type-matrix) are legal.
+    - The source and destination element types must be distinct unless the conversion is explicitly documented as identity (no-op) for that type pair.
+    - Width-changing conversions automatically adjust the lane count: `M * bitwidth(T1) = N * bitwidth(T0) = 2048`.
 
-### Mask Constraints
+    ### Mask Constraints
 
-- The execution mask must use the typed-mask granularity that matches the source vector family.
-- There is no `!pto.mask<b64>` form in VPTO.
+    - The execution mask must use the typed-mask granularity that matches the source vector family.
+    - There is no `!pto.mask<b64>` form in VPTO.
 
-### Attribute Constraints
+    ### Attribute Constraints
 
-- `rnd`: Only the rounding modes listed in the [Rounding Modes](#rounding-modes) table are valid. Default is `"R"` (round to nearest, ties to even) when omitted.
-- `sat`: Use `"SAT"` to enable saturation on overflow; `"NOSAT"` (default) wraps or produces undefined results on overflow.
-- `part`: Only valid for width-changing conversions. Use `"EVEN"` to write to even-indexed lanes of each lane group, `"ODD"` for odd-indexed lanes.
+    - `rnd`: Only the rounding modes listed in the [Rounding Modes](#rounding-modes) table are valid. Default is `"R"` (round to nearest, ties to even) when omitted.
+    - `sat`: Use `"SAT"` to enable saturation on overflow; `"NOSAT"` (default) wraps or produces undefined results on overflow.
+    - `part`: Only valid for width-changing conversions. Use `"EVEN"` to write to even-indexed lanes of each lane group, `"ODD"` for odd-indexed lanes.
 
 ## Exceptions
 
-- The verifier rejects illegal operand shapes, unsupported element type pairs, mismatched mask granularity, and invalid attribute combinations.
-- Conversions that overflow the destination range and have `sat = "NOSAT"` produce target-defined results (may wrap or be undefined).
+!!! danger "Exceptions"
+    - The verifier rejects illegal operand shapes, unsupported element type pairs, mismatched mask granularity, and invalid attribute combinations.
+    - Conversions that overflow the destination range and have `sat = "NOSAT"` produce target-defined results (may wrap or be undefined).
 
 ## Target-Profile Restrictions
 
-- **A5**: Full `pto.vcvt` surface is supported on Ascend 950. See the [Supported Type Matrix](#supported-type-matrix) and [Latency and Throughput](#latency-and-throughput-a5) sections.
-- **CPU simulation**: Behavior is preserved with floating-point semantics matching IEEE 754 where applicable. Latency values are target-defined.
-- **A2/A3**: Subset support only; the specific type pairs and attribute combinations available on A2/A3-class targets are target-defined. Code that depends on a specific conversion pair should treat it as target-profile-specific.
+??? info "Target-Profile Restrictions"
+    - **A5**: Full `pto.vcvt` surface is supported on Ascend 950. See the [Supported Type Matrix](#supported-type-matrix) and [Latency and Throughput](#latency-and-throughput-a5) sections.
+    - **CPU simulation**: Behavior is preserved with floating-point semantics matching IEEE 754 where applicable. Latency values are target-defined.
+    - **A2/A3**: Subset support only; the specific type pairs and attribute combinations available on A2/A3-class targets are target-defined. Code that depends on a specific conversion pair should treat it as target-profile-specific.
 
 ## Rounding Modes
 
@@ -232,7 +235,8 @@ For conversions that change lane width (e.g., f32 → f16), use even/odd parts a
 | `pto.vcvt` | `RV_VCVT_F2F` | f32 → f16 | **7** cycles |
 | `pto.vcvt` | — | Other conversion pairs | Target-defined |
 
-> **Note:** Only representative traces are listed. Other `pto.vcvt` conversion pairs depend on the RV lowering in the trace. CPU simulation and A2/A3 throughput data is target-defined.
+!!! note "Note:"
+    Only representative traces are listed. Other `pto.vcvt` conversion pairs depend on the RV lowering in the trace. CPU simulation and A2/A3 throughput data is target-defined.
 
 ## Examples
 

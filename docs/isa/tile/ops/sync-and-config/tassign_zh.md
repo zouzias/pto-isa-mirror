@@ -22,7 +22,7 @@
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 同步形式：
 
@@ -64,26 +64,27 @@ PTO_INST std::enable_if_t<is_tile_data_v<T> || is_conv_tile_v<T>> TASSIGN(T& obj
 
 ## 约束
 
-### Tile / ConvTile
+!!! warning "约束"
+    ### Tile / ConvTile
 
-- 运行时地址形式要求 `addr` 是整型地址。
-- 在 NPU manual 模式下，这个地址会被直接解释成 tile 存储地址。
-- 在 `__PTO_AUTO__` 打开的自动模式下，NPU backend 中的 `TASSIGN(tile, addr)` 当前是 no-op。
-- CPU 模拟器不会直接把整型当裸地址使用，而是通过 `NPUMemoryModel` 把它解析到对应架构的模拟缓冲区。
+    - 运行时地址形式要求 `addr` 是整型地址。
+    - 在 NPU manual 模式下，这个地址会被直接解释成 tile 存储地址。
+    - 在 `__PTO_AUTO__` 打开的自动模式下，NPU backend 中的 `TASSIGN(tile, addr)` 当前是 no-op。
+    - CPU 模拟器不会直接把整型当裸地址使用，而是通过 `NPUMemoryModel` 把它解析到对应架构的模拟缓冲区。
 
-### GlobalTensor
+    ### GlobalTensor
 
-- `addr` 必须是指针类型。
-- 指针指向的元素类型必须和 `GlobalTensor::DType` 一致。
+    - `addr` 必须是指针类型。
+    - 指针指向的元素类型必须和 `GlobalTensor::DType` 一致。
 
-### 编译期地址检查
+    ### 编译期地址检查
 
-`TASSIGN<Addr>(tile)` 会根据 Tile 的 `Loc` 自动推导对应内存空间，并检查：
+    `TASSIGN<Addr>(tile)` 会根据 Tile 的 `Loc` 自动推导对应内存空间，并检查：
 
-- 该内存空间在当前架构上是否存在
-- Tile 是否能放得下
-- `Addr + tile_size` 是否越界
-- 地址是否满足对齐要求
+    - 该内存空间在当前架构上是否存在
+    - Tile 是否能放得下
+    - `Addr + tile_size` 是否越界
+    - 地址是否满足对齐要求
 
 ## 示例
 
@@ -124,6 +125,6 @@ void example_checked() {
 
 ## 相关页面
 
-- [TSUBVIEW](./tsubview_zh.md)
-- [TALIAS](../../../TALIAS_zh.md)
+- [SUBVIEW](./subview.md)
+- [TALIAS](./talias.md)
 - [同步与配置指令集](../../sync-and-config_zh.md)

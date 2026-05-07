@@ -62,38 +62,41 @@ This operation reads from global memory. Index bounds are target-defined.
 
 ## Constraints
 
-- **Supported data types**:
-    - `dst`/`src` element type must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `bfloat16_t`, `float`.
-    - On AICore targets, `float8_e4m3_t` and `float8_e5m2_t` are also supported.
-    - `indexes` element type must be `int32_t` or `uint32_t`.
+!!! warning "Constraints"
+    - **Supported data types**:
+        - `dst`/`src` element type must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `bfloat16_t`, `float`.
+        - On AICore targets, `float8_e4m3_t` and `float8_e5m2_t` are also supported.
+        - `indexes` element type must be `int32_t` or `uint32_t`.
 
-- **Tile and memory types**:
-    - `dst` must be a vector tile (`TileType::Vec`).
-    - `indexes` must be a vector tile (`TileType::Vec`).
-    - `dst` and `indexes` must use row-major layout.
-    - `src` must be a `GlobalTensor` in GM memory.
-    - `src` must use `ND` layout.
+    - **Tile and memory types**:
+        - `dst` must be a vector tile (`TileType::Vec`).
+        - `indexes` must be a vector tile (`TileType::Vec`).
+        - `dst` and `indexes` must use row-major layout.
+        - `src` must be a `GlobalTensor` in GM memory.
+        - `src` must use `ND` layout.
 
-- **Shape constraints**:
-    - `dst.Rows == indexes.Rows`.
-    - `indexes` must be shaped as `[N, 1]` for row-indexed gather or `[N, M]` for element-indexed gather.
-    - `dst` row width must be 32-byte aligned, that is, `dst.Cols * sizeof(DType)` must be a multiple of 32.
-    - `src` static shape must satisfy `Shape<1, 1, 1, TableRows, RowWidth>`.
+    - **Shape constraints**:
+        - `dst.Rows == indexes.Rows`.
+        - `indexes` must be shaped as `[N, 1]` for row-indexed gather or `[N, M]` for element-indexed gather.
+        - `dst` row width must be 32-byte aligned, that is, `dst.Cols * sizeof(DType)` must be a multiple of 32.
+        - `src` static shape must satisfy `Shape<1, 1, 1, TableRows, RowWidth>`.
 
-- **Index interpretation**:
-    - Index interpretation is target-defined. The CPU simulator treats indices as linear element indices into `src.data()`.
-    - The CPU simulator does not enforce bounds checks on `indexes`.
+    - **Index interpretation**:
+        - Index interpretation is target-defined. The CPU simulator treats indices as linear element indices into `src.data()`.
+        - The CPU simulator does not enforce bounds checks on `indexes`.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- `pto.mgather` preserves PTO-visible semantics across CPU simulation, A2/A3-class targets, and A5-class targets, but concrete support subsets may differ by profile.
+??? info "Target-Profile Restrictions"
+    - `pto.mgather` preserves PTO-visible semantics across CPU simulation, A2/A3-class targets, and A5-class targets, but concrete support subsets may differ by profile.
 
-- Portable code must rely only on the documented type, layout, shape, and mode combinations that the selected target profile guarantees.
+    - Portable code must rely only on the documented type, layout, shape, and mode combinations that the selected target profile guarantees.
 
 ## Examples
 
@@ -127,5 +130,5 @@ pto.mgather ins(%mem, %idx : !pto.partition_tensor_view<MxNxdtype>, !pto.tile_bu
 ## Related Ops / Instruction Set Links
 
 - Instruction set overview: [Memory And Data Movement](../../memory-and-data-movement.md)
-- Previous op in instruction set: [pto.tstore_fp](./tstore-fp.md)
+- Previous op in instruction set: [pto.tstore_fp](./tstore.md)
 - Next op in instruction set: [pto.mscatter](./mscatter.md)

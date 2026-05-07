@@ -62,24 +62,26 @@ PTO_INST RecordEvent TROWMIN(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
 
 ## 约束
 
-- `dst` 与 `src` 必须都为 `TileType::Vec`
-- `src` 必须使用标准 ND 布局：行主且非分形
-- `dst` 可以是 ND，或 `Cols == 1` 的 DN 布局
-- `dst` 与 `src` 元素类型必须一致
-- 运行时要求：
-  - `src.GetValidRow() != 0`
-  - `src.GetValidCol() != 0`
-  - `src.GetValidRow() == dst.GetValidRow()`
+!!! warning "约束"
+    - `dst` 与 `src` 必须都为 `TileType::Vec`
+    - `src` 必须使用标准 ND 布局：行主且非分形
+    - `dst` 可以是 ND，或 `Cols == 1` 的 DN 布局
+    - `dst` 与 `src` 元素类型必须一致
+    - 运行时要求：
+      - `src.GetValidRow() != 0`
+      - `src.GetValidCol() != 0`
+      - `src.GetValidRow() == dst.GetValidRow()`
 
-### A2A3
+    ### A2A3
 
-- 支持类型：`half`、`float`、`int32_t`、`int16_t`
-- 实现同时接受 ND 输出和 `Cols == 1` 的 DN 输出
-- 当前实现路径会把 `tmp` 传入后端调用，但文档不额外引入 checked implementation 没声明的 `tmp` 限制
+    - 支持类型：`half`、`float`、`int32_t`、`int16_t`
+    - 实现同时接受 ND 输出和 `Cols == 1` 的 DN 输出
+    - 当前实现路径会把 `tmp` 传入后端调用，但文档不额外引入 checked implementation 没声明的 `tmp` 限制
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## 性能
 

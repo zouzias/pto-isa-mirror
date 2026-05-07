@@ -44,21 +44,22 @@ PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp,
 
 ## 约束
 
-- `GlobalSignalData::DType` 必须为 `int32_t`
-- `signalData` 必须指向本地地址（当前 NPU）
-- 单个信号的形状为 `<1,1,1,1,1>`
-- tensor 形式由其 shape 决定检测区域，并要求所有元素都满足条件
+!!! warning "约束"
+    - `GlobalSignalData::DType` 必须为 `int32_t`
+    - `signalData` 必须指向本地地址（当前 NPU）
+    - 单个信号的形状为 `<1,1,1,1,1>`
+    - tensor 形式由其 shape 决定检测区域，并要求所有元素都满足条件
 
-### 比较运算符
+    ### 比较运算符
 
-| 值 | 条件 |
-| --- | --- |
-| `EQ` | `signal == cmpValue` |
-| `NE` | `signal != cmpValue` |
-| `GT` | `signal > cmpValue` |
-| `GE` | `signal >= cmpValue` |
-| `LT` | `signal < cmpValue` |
-| `LE` | `signal <= cmpValue` |
+    | 值 | 条件 |
+    | --- | --- |
+    | `EQ` | `signal == cmpValue` |
+    | `NE` | `signal != cmpValue` |
+    | `GT` | `signal > cmpValue` |
+    | `GE` | `signal >= cmpValue` |
+    | `LT` | `signal < cmpValue` |
+    | `LE` | `signal <= cmpValue` |
 
 ## 示例
 

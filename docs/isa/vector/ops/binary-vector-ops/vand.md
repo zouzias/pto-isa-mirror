@@ -59,25 +59,28 @@ This operation has no architectural side effect beyond producing its destination
 
 ## Constraints
 
-- **Type**: Integer element types only (no floating-point).
-- **Type match**: `%lhs`, `%rhs`, and `%result` MUST have identical element types.
-- **Width match**: All three registers MUST have the same vector width `N`.
-- **Mask width**: `%mask` MUST have width equal to `N`.
-- **Active lanes**: Only lanes where the mask bit is 1 participate.
-- **Inactive lanes**: Destination elements at inactive lanes are unmodified.
+!!! warning "Constraints"
+    - **Type**: Integer element types only (no floating-point).
+    - **Type match**: `%lhs`, `%rhs`, and `%result` MUST have identical element types.
+    - **Width match**: All three registers MUST have the same vector width `N`.
+    - **Mask width**: `%mask` MUST have width equal to `N`.
+    - **Active lanes**: Only lanes where the mask bit is 1 participate.
+    - **Inactive lanes**: Destination elements at inactive lanes are unmodified.
 
 ## Exceptions
 
-- The verifier rejects non-integer element types, type mismatches, width mismatches, or mask width mismatches.
-- Any additional illegality stated in the [Binary Vector Instructions](../../binary-vector-ops.md) instruction set page is also part of the contract.
+!!! danger "Exceptions"
+    - The verifier rejects non-integer element types, type mismatches, width mismatches, or mask width mismatches.
+    - Any additional illegality stated in the [Binary Vector Instructions](../../binary-vector-ops.md) instruction set page is also part of the contract.
 
 ## Target-Profile Restrictions
 
-|| Element Type | CPU Simulator | A2/A3 | A5 |
-||------------|:-------------:|:------:|:--:|
-|| Integer types | Simulated | Simulated | Supported |
+??? info "Target-Profile Restrictions"
+    || Element Type | CPU Simulator | A2/A3 | A5 |
+    ||------------|:-------------:|:------:|:--:|
+    || Integer types | Simulated | Simulated | Supported |
 
-A5 is the primary concrete profile for the vector instructions.
+    A5 is the primary concrete profile for the vector instructions.
 
 ## Performance
 

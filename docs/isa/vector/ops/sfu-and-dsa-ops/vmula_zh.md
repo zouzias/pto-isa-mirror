@@ -51,18 +51,21 @@ vmula %dst, %add, %lhs, %rhs, %mask : !pto.vreg<NxT>
 
 ## 约束
 
-- `%add`、`%lhs`、`%rhs` 与 `%result` 必须有相同的元素类型和相同的向量宽度 `N`。
-- `%mask` 的宽度必须与 `N` 一致。
-- `vmula` 是融合乘加，不总能与 `vmul + vadd` 完全互换。
+!!! warning "约束"
+    - `%add`、`%lhs`、`%rhs` 与 `%result` 必须有相同的元素类型和相同的向量宽度 `N`。
+    - `%mask` 的宽度必须与 `N` 一致。
+    - `vmula` 是融合乘加，不总能与 `vmul + vadd` 完全互换。
 
 ## 异常与非法情形
 
-- verifier 会拒绝非法的操作数形状、不支持的元素类型以及不合法的属性组合。
-- 约束部分列出的额外非法情形，同样属于 `pto.vmula` 的契约。
+!!! danger "异常与非法情形"
+    - verifier 会拒绝非法的操作数形状、不支持的元素类型以及不合法的属性组合。
+    - 约束部分列出的额外非法情形，同样属于 `pto.vmula` 的契约。
 
 ## 目标 Profile 限制
 
-- A5 是当前手册里最细的具体 profile；CPU 模拟器和 A2/A3 类目标可以在保留可见 PTO 契约的前提下做等效模拟。
+??? info "目标 Profile 限制"
+    - A5 是当前手册里最细的具体 profile；CPU 模拟器和 A2/A3 类目标可以在保留可见 PTO 契约的前提下做等效模拟。
 
 ## 性能
 

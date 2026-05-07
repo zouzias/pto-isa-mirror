@@ -67,27 +67,28 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-### Tile Types
+!!! warning "Constraints"
+    ### Tile Types
 
-- `src` and `dst` must both be `TileType::Vec`.
+    - `src` and `dst` must both be `TileType::Vec`.
 
-### Layout
+    ### Layout
 
-- `src` must use standard ND layout: `BLayout::RowMajor`, `SLayout::NoneBox`.
-- `dst` must use one of:
-  - ND layout: `BLayout::RowMajor`, `SLayout::NoneBox`, `Cols == 1`, or
-  - DN layout: `BLayout::ColMajor`, `SLayout::NoneBox`, `Cols == 1`.
-- `src` and `dst` must have the same element type.
+    - `src` must use standard ND layout: `BLayout::RowMajor`, `SLayout::NoneBox`.
+    - `dst` must use one of:
+      - ND layout: `BLayout::RowMajor`, `SLayout::NoneBox`, `Cols == 1`, or
+      - DN layout: `BLayout::ColMajor`, `SLayout::NoneBox`, `Cols == 1`.
+    - `src` and `dst` must have the same element type.
 
-### Valid Region
+    ### Valid Region
 
-- `src.GetValidRow() > 0`
-- `src.GetValidCol() > 0`
-- `dst.GetValidRow() == src.GetValidRow()`
+    - `src.GetValidRow() > 0`
+    - `src.GetValidCol() > 0`
+    - `dst.GetValidRow() == src.GetValidRow()`
 
-### Element Types
+    ### Element Types
 
-Supported: `half`, `float`, `int32_t`, `int16_t`.
+    Supported: `half`, `float`, `int32_t`, `int16_t`.
 
 ## Performance
 
@@ -115,8 +116,8 @@ total = startup + Σ(completion_i) + Σ(repeats_i × per_repeat_i) + Σ((repeats
 For non-special shapes or non-FP32 types:
 
 1. **Fill phase**: `copy_ubuf_to_ubuf` to initialize tmp (if `validCol >= 2 × 8`)
-2. **Loop-fill**: For each row, apply `vadd` with per-row repeats
-3. **Merge phase**: `vadd` per row again
+2. **Loop-fill**: For each row, apply `vadd`/`vmax`/`vmin` with per-row repeats
+3. **Merge phase**: `vadd`/`vmax`/`vmin` per row again
 4. **Final reduction**: `vcadd`/`vcmax`/`vcmin` with `PIPE_V` barrier
 
 ### Layout and Shape Impact
@@ -128,12 +129,13 @@ For non-special shapes or non-FP32 types:
 | `ColMajor` | any | General path |
 | `Zigzag` | any | General path |
 
-Integer types (int16_t/int32_t): Use simplified path with direct `vadd` per block — no tree reduction.
+Integer types (int16_t/int32_t): Use simplified path with direct `vadd`/`vmax`/`vmin` per block — no tree reduction.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain.
 
 ## Examples
 

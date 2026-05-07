@@ -71,29 +71,32 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+!!! warning "Constraints"
+    - **Valid region**:
+        - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 
-- **Domain / NaN**:
-    - Division-by-zero behavior is target-defined; the CPU simulator asserts in debug builds.
+    - **Domain / NaN**:
+        - Division-by-zero behavior is target-defined; the CPU simulator asserts in debug builds.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Implementation checks (NPU)**:
-    - `TileData::DType` must be one of: `float` or `half`;
-    - Tile location must be vector (`TileData::Loc == TileType::Vec`);
-    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`;
-    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`;
-    - Tile layout must be row-major (`TileData::isRowMajor`).
-    - A3's TRECIP instruction does not support setting the source Tile and destination Tile to the same memory.
+??? info "Target-Profile Restrictions"
+    - **Implementation checks (NPU)**:
+        - `TileData::DType` must be one of: `float` or `half`;
+        - Tile location must be vector (`TileData::Loc == TileType::Vec`);
+        - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`;
+        - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`;
+        - Tile layout must be row-major (`TileData::isRowMajor`).
+        - A3's TRECIP instruction does not support setting the source Tile and destination Tile to the same memory.
 
-- **High Precision Algorithm**
-    - Only available on A5, `PrecisionType` option is ignored on A3.
+    - **High Precision Algorithm**
+        - Only available on A5, `PrecisionType` option is ignored on A3.
 
 ## Performance
 

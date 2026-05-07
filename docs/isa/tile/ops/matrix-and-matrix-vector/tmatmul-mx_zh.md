@@ -26,7 +26,7 @@ $$ \mathrm{C}_{i,j} = \sum_{k=0}^{K-1} \mathrm{A}_{i,k} \cdot \mathrm{B}_{k,j} $
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 示意形式：
 
@@ -77,47 +77,48 @@ PTO_INST RecordEvent TMATMUL_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftSca
 
 ## 约束
 
-### A5 真正支持的 MX 语义
+!!! warning "约束"
+    ### A5 真正支持的 MX 语义
 
-- 当前仓库里，只有 A5 backend 真正实现了 MX 语义。
-- A5 的 `CheckMadMxValid(...)` 要求：
-  - 结果累加器类型必须是 `float`
-  - 输入必须是受支持的 fp4 或 fp8 组合
-  - `TileLeft::Cols` 必须是 `64` 的倍数
-  - 若走 fp4 路径，`TileLeft::Cols` 还必须是偶数
-  - Left / Right / Acc 的位置与 fractal 方向必须符合 cube 路径要求
+    - 当前仓库里，只有 A5 backend 真正实现了 MX 语义。
+    - A5 的 `CheckMadMxValid(...)` 要求：
+      - 结果累加器类型必须是 `float`
+      - 输入必须是受支持的 fp4 或 fp8 组合
+      - `TileLeft::Cols` 必须是 `64` 的倍数
+      - 若走 fp4 路径，`TileLeft::Cols` 还必须是偶数
+      - Left / Right / Acc 的位置与 fractal 方向必须符合 cube 路径要求
 
-支持的输入组合包括：
+    支持的输入组合包括：
 
-- fp4：
-  - `float4_e1m2x2_t` / `float4_e1m2x2_t`
-  - `float4_e1m2x2_t` / `float4_e2m1x2_t`
-  - `float4_e2m1x2_t` / `float4_e2m1x2_t`
-  - `float4_e2m1x2_t` / `float4_e1m2x2_t`
-- fp8：
-  - `float8_e4m3_t` / `float8_e4m3_t`
-  - `float8_e4m3_t` / `float8_e5m2_t`
-  - `float8_e5m2_t` / `float8_e4m3_t`
-  - `float8_e5m2_t` / `float8_e5m2_t`
+    - fp4：
+      - `float4_e1m2x2_t` / `float4_e1m2x2_t`
+      - `float4_e1m2x2_t` / `float4_e2m1x2_t`
+      - `float4_e2m1x2_t` / `float4_e2m1x2_t`
+      - `float4_e2m1x2_t` / `float4_e1m2x2_t`
+    - fp8：
+      - `float8_e4m3_t` / `float8_e4m3_t`
+      - `float8_e4m3_t` / `float8_e5m2_t`
+      - `float8_e5m2_t` / `float8_e4m3_t`
+      - `float8_e5m2_t` / `float8_e5m2_t`
 
-Bias 变体还要求：
+    Bias 变体还要求：
 
-- `biasData` 的元素类型必须是 `float`
-- `biasData` 必须是单行 `TileType::Bias`
+    - `biasData` 的元素类型必须是 `float`
+    - `biasData` 必须是单行 `TileType::Bias`
 
-### 运行时范围
+    ### 运行时范围
 
-- A5 的 `m/k/n` 均必须落在 `[1, 4095]`。
+    - A5 的 `m/k/n` 均必须落在 `[1, 4095]`。
 
-### 其他目标的现状
+    ### 其他目标的现状
 
-- CPU 模拟器会接受 `TMATMUL_MX` 接口，但当前实现会忽略 `aScaleMatrix` / `bScaleMatrix`，直接退化为普通 `TMATMUL` / `TMATMUL_ACC` / `TMATMUL_BIAS`。
-- Kirin9030 当前明确不支持 `TMATMUL_MX`，对应实现直接 `static_assert` 失败。
+    - CPU 模拟器会接受 `TMATMUL_MX` 接口，但当前实现会忽略 `aScaleMatrix` / `bScaleMatrix`，直接退化为普通 `TMATMUL` / `TMATMUL_ACC` / `TMATMUL_BIAS`。
+    - Kirin9030 当前明确不支持 `TMATMUL_MX`，对应实现直接 `static_assert` 失败。
 
-这意味着：
+    这意味着：
 
-- 如果你要验证真正的 MX 语义，应以 A5 为准。
-- CPU 只能用来跑接口形态或近似流程，不适合作为 MX 数值语义的最终依据。
+    - 如果你要验证真正的 MX 语义，应以 A5 为准。
+    - CPU 只能用来跑接口形态或近似流程，不适合作为 MX 数值语义的最终依据。
 
 ## 示例
 

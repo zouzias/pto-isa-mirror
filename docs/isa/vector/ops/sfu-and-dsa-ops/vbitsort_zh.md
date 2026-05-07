@@ -63,22 +63,25 @@ pto.vbitsort %dest, %src, %indices, %repeat_times
 
 ## 约束
 
-- 排序方向固定为降序。
-- 相同 score 的 tie 是稳定的。
-- `%dest`、`%src`、`%indices` 都必须是 UB 指针。
-- 对齐应满足 A5 `VBS32` 指令要求，否则结果可能落到软件回退路径。
-- 每次基本调用处理 32 组 score/index 对，`%repeat_times` 把它扩展为 `32 × repeat_times`。
+!!! warning "约束"
+    - 排序方向固定为降序。
+    - 相同 score 的 tie 是稳定的。
+    - `%dest`、`%src`、`%indices` 都必须是 UB 指针。
+    - 对齐应满足 A5 `VBS32` 指令要求，否则结果可能落到软件回退路径。
+    - 每次基本调用处理 32 组 score/index 对，`%repeat_times` 把它扩展为 `32 × repeat_times`。
 
 ## 异常与非法情形
 
-- 任一指针不是 UB 指针都属于非法。
-- `%repeat_times` 若为 0 或负值则非法。
+!!! danger "异常与非法情形"
+    - 任一指针不是 UB 指针都属于非法。
+    - `%repeat_times` 若为 0 或负值则非法。
 
 ## 目标 Profile 限制
 
-- 这是 A5 特有的排序加速能力（`VBS32`）。
-- CPU 模拟器可能提供保留可见 PTO 语义的软件回退。
-- 不适用于 A2/A3 profile。
+??? info "目标 Profile 限制"
+    - 这是 A5 特有的排序加速能力（`VBS32`）。
+    - CPU 模拟器可能提供保留可见 PTO 语义的软件回退。
+    - 不适用于 A2/A3 profile。
 
 ## 性能
 

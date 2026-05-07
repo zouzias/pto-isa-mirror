@@ -40,21 +40,24 @@ It produces:
 
 ## Constraints
 
-- PTO control flow **SHOULD** stay in structured `scf` form unless a more specific architecture-visible mechanism is required.
-- Region-carried values and branch results **MUST** be explicit through `scf.yield`.
-- Predicate construction for `scf` control **SHOULD** come from the shared scalar instructions, not from undocumented control side channels.
+!!! warning "Constraints"
+    - PTO control flow **SHOULD** stay in structured `scf` form unless a more specific architecture-visible mechanism is required.
+    - Region-carried values and branch results **MUST** be explicit through `scf.yield`.
+    - Predicate construction for `scf` control **SHOULD** come from the shared scalar instructions, not from undocumented control side channels.
 
 ## Exceptions
 
-The following are **ILLEGAL**:
+!!! danger "Exceptions"
+    The following are **ILLEGAL**:
 
-- pretending `scf` is a PTO mnemonic instruction set
-- hiding loop-carried state that later affects PTO legality
-- collapsing structured control into vague prose instead of documenting the carried values and branch conditions
+    - pretending `scf` is a PTO mnemonic instruction set
+    - hiding loop-carried state that later affects PTO legality
+    - collapsing structured control into vague prose instead of documenting the carried values and branch conditions
 
 ## Target-Profile Restrictions
 
-The `scf` instruction set is largely target-neutral. Restrictions appear when a region contains target-profile-specific PTO instructions or when a backend imposes extra structure on a vector-execution scope.
+??? info "Target-Profile Restrictions"
+    The `scf` instruction set is largely target-neutral. Restrictions appear when a region contains target-profile-specific PTO instructions or when a backend imposes extra structure on a vector-execution scope.
 
 ## Examples
 

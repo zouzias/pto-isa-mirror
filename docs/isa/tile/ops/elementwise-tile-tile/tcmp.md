@@ -81,28 +81,31 @@ No architectural side effects beyond producing the predicate tile. Does not impl
 
 ## Constraints
 
-- The iteration domain is `dst.GetValidRow()` × `dst.GetValidCol()`.
-- `src0.GetValidRow()` and `src0.GetValidCol()` MUST match `dst`'s valid region.
-- `src1`'s shape/validity is not verified by runtime assertions; out-of-region lanes read **implementation-defined values**.
-- The output predicate tile uses a **packed encoding** (not one boolean per lane). Use `TSEL` with the predicate tile to apply it.
+!!! warning "Constraints"
+    - The iteration domain is `dst.GetValidRow()` × `dst.GetValidCol()`.
+    - `src0.GetValidRow()` and `src0.GetValidCol()` MUST match `dst`'s valid region.
+    - `src1`'s shape/validity is not verified by runtime assertions; out-of-region lanes read all-one-bits (0xFF) on A2/A3 and all-one-bits (0xFF) on A5 for source lanes outside their valid region.
+    - The output predicate tile uses a **packed encoding** (not one boolean per lane). Use `TSEL` with the predicate tile to apply it.
 
 ## Cases That Are Not Allowed
 
-- **MUST NOT** assume any particular encoding of the predicate tile.
-- **MUST NOT** use `dst` with a dtype other than the target-defined predicate dtype.
+!!! danger "Cases That Are Not Allowed"
+    - **MUST NOT** assume any particular encoding of the predicate tile.
+    - **MUST NOT** use `dst` with a dtype other than the target-defined predicate dtype.
 
 ## Target-Profile Restrictions
 
-| Check | A2/A3 | A5 |
-|-------|:-----:|:--:|
-| Supported input types | `int32_t`, `half`, `float` | `uint32_t`, `int32_t`, `uint16_t`, `int16_t`, `uint8_t`, `int8_t`, `float`, `half` |
-| Output predicate dtype | `uint8_t` | `uint32_t` |
-| Tile location | `TileType::Vec` | `TileType::Vec` |
-| Layout | Row-major | Row-major |
-| Static valid bounds | Required | Required |
-| `src0` valid == `dst` valid | Required | Required |
-| `src1` validity | Not verified | Not verified |
-| `int32_t` with non-EQ mode | Ignores `cmpMode`, uses EQ | Full support |
+??? info "Target-Profile Restrictions"
+    | Check | A2/A3 | A5 |
+    |-------|:-----:|:--:|
+    | Supported input types | `int32_t`, `half`, `float` | `uint32_t`, `int32_t`, `uint16_t`, `int16_t`, `uint8_t`, `int8_t`, `float`, `half` |
+    | Output predicate dtype | `uint8_t` | `uint32_t` |
+    | Tile location | `TileType::Vec` | `TileType::Vec` |
+    | Layout | Row-major | Row-major |
+    | Static valid bounds | Required | Required |
+    | `src0` valid == `dst` valid | Required | Required |
+    | `src1` validity | Not verified | Not verified |
+    | `int32_t` with non-EQ mode | Ignores `cmpMode`, uses EQ | Full support |
 
 ## Examples
 

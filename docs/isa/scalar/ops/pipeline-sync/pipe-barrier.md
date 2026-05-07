@@ -42,19 +42,22 @@ Stalls the named pipeline until its previously issued operations retire. Later o
 
 ## Constraints
 
-- The selected pipe identifier MUST be valid for the selected target profile.
-- This barrier orders work within one pipeline; cross-pipeline producer-consumer edges still require the appropriate event or buffer protocol.
-- Portable code SHOULD use the narrowest ordering primitive that matches the hazard.
+!!! warning "Constraints"
+    - The selected pipe identifier MUST be valid for the selected target profile.
+    - This barrier orders work within one pipeline; cross-pipeline producer-consumer edges still require the appropriate event or buffer protocol.
+    - Portable code SHOULD use the narrowest ordering primitive that matches the hazard.
 
 ## Exceptions
 
-- The verifier rejects illegal operand shapes, unsupported pipe or event identifiers, and attribute combinations that are not valid for the selected instruction set or target profile.
-- Any additional illegality stated in the constraints section is also part of the contract.
+!!! danger "Exceptions"
+    - The verifier rejects illegal operand shapes, unsupported pipe or event identifiers, and attribute combinations that are not valid for the selected instruction set or target profile.
+    - Any additional illegality stated in the constraints section is also part of the contract.
 
 ## Target-Profile Restrictions
 
-- CPU simulation preserves the visible ordering contract but may not expose every pipeline hazard that motivates the barrier on hardware.
-- A2/A3 and A5 may differ in the exact pipe set that can be named.
+??? info "Target-Profile Restrictions"
+    - CPU simulation preserves the visible ordering contract but may not expose every pipeline hazard that motivates the barrier on hardware.
+    - A2/A3 and A5 may differ in the exact pipe set that can be named.
 
 ## Examples
 

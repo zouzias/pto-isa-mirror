@@ -89,7 +89,9 @@ dtype(src) and dtype(dst) must be in the same conversion group (see Type System 
 sizeof(dtype(src)) may != sizeof(dtype(dst)) for converting ops
 ```
 
-**Diagnostic**: `type mismatch: expected f32 but found f16 in operand 1`
+!!! failure "Diagnostic"
+    `type mismatch: expected f32 but found f16 in operand 1`
+
 
 ### Stage 2: Shape Check
 
@@ -102,7 +104,9 @@ sizeof(dtype(src)) may != sizeof(dtype(dst)) for converting ops
 0 <= Cv <= Cols
 ```
 
-**Diagnostic**: `shape out of range: Cols=8192 exceeds maximum of 4095 for TDIV on A2/A3`
+!!! failure "Diagnostic"
+    `shape out of range: Cols=8192 exceeds maximum of 4095 for TDIV on A2/A3`
+
 
 ### Stage 3: Layout Check
 
@@ -117,7 +121,9 @@ Left tile with ColMajor layout:   ILLEGAL (Left tiles must be RowMajor)
 Mat tile with ColMajor NZ fractal: ILLEGAL (Mat tiles must use standard layouts)
 ```
 
-**Diagnostic**: `layout mismatch: Vec tile with fractal layout not supported by TADD`
+!!! failure "Diagnostic"
+    `layout mismatch: Vec tile with fractal layout not supported by TADD`
+
 
 ### Stage 4: Target Profile Check
 
@@ -130,7 +136,9 @@ vstu (unaligned vector store):    ILLEGAL on CPU and A2/A3 (A5 only)
 Left/Right MX format tiles:       ILLEGAL on CPU and A2/A3 (A5 only)
 ```
 
-**Diagnostic**: `profile restriction: FP8 types require A5 profile`
+!!! failure "Diagnostic"
+    `profile restriction: FP8 types require A5 profile`
+
 
 ## Legality by Instruction Set
 
@@ -168,15 +176,16 @@ GlobalTensor operands follow a separate legality path:
 
 ## Cases That Are Not Allowed
 
-- Using vector-buffer assumptions on a tile-instruction set operand without an explicit bridge.
-- Documenting location-sensitive instruction sets as though any local storage role were equivalent.
-- Hiding target-profile narrowing inside generic "implementation-defined" wording.
-- Relying on the CPU simulator's permissive legality checking as evidence of A5 legality.
+!!! danger "Cases That Are Not Allowed"
+    - Using vector-buffer assumptions on a tile-instruction set operand without an explicit bridge.
+    - Documenting location-sensitive instruction sets as though any local storage role were equivalent.
+    - Hiding target-profile narrowing inside generic "hardware-specific" wording.
+    - Relying on the CPU simulator's permissive legality checking as evidence of A5 legality.
 
 ## See Also
 
 - [Type System](./type-system.md)
 - [Tiles And Valid Regions](../programming-model/tiles-and-valid-regions.md)
-- [Tile Instruction Set](../instruction-surfaces/tile-instructions.md)
-- [Vector Instruction Set](../instruction-surfaces/vector-instructions.md)
+- [Tile Instruction Set](../instruction-families/tile-families.md)
+- [Vector Instruction Set](../instruction-families/vector-families.md)
 - [Portability And Target Profiles](../reference/portability-and-target-profiles.md)

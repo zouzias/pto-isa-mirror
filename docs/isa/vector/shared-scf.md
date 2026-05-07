@@ -32,15 +32,17 @@ The canonical scalar-side explanation lives in [Scalar And Control Instruction S
 
 ## Constraints
 
-- Vector-side control MUST keep carried values and branch results explicit through `scf.yield`.
-- Structured control SHOULD remain in `scf` form unless a truly architecture-visible PTO synchronization mechanism is required.
-- The manual MUST distinguish between vector payload effects and the shared control shell that surrounds them.
+!!! warning "Constraints"
+    - Vector-side control MUST keep carried values and branch results explicit through `scf.yield`.
+    - Structured control SHOULD remain in `scf` form unless a truly architecture-visible PTO synchronization mechanism is required.
+    - The manual MUST distinguish between vector payload effects and the shared control shell that surrounds them.
 
 ## Cases That Are Not Allowed
 
-- treating structured control as backend-only hidden behavior
-- collapsing vector loop state into vague prose instead of explicit carried SSA values
-- documenting `scf` as though it were a `pto.v*` opcode instruction set
+!!! danger "Cases That Are Not Allowed"
+    - treating structured control as backend-only hidden behavior
+    - collapsing vector loop state into vague prose instead of explicit carried SSA values
+    - documenting `scf` as though it were a `pto.v*` opcode instruction set
 
 ## Related Ops And Instruction Set Links
 

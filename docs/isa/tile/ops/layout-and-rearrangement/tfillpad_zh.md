@@ -38,7 +38,7 @@ $$
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 同步形式：
 
@@ -77,25 +77,26 @@ PTO_INST RecordEvent TFILLPAD(DstTileData &dst, SrcTileData &src, WaitEvents &..
 
 ## 约束
 
-### 通用约束
+!!! warning "约束"
+    ### 通用约束
 
-- Vec Tile 版本要求 `TileDataDst::PadVal != PadValue::Null`。
-- `src` 和 `dst` 的元素大小必须一致，并且当前实现只接受 `1`、`2` 或 `4` 字节元素。
-- 如果 `dst.GetValidRow() == 0` 或 `dst.GetValidCol() == 0`，当前 backend 会直接返回，不执行填充。
+    - Vec Tile 版本要求 `TileDataDst::PadVal != PadValue::Null`。
+    - `src` 和 `dst` 的元素大小必须一致，并且当前实现只接受 `1`、`2` 或 `4` 字节元素。
+    - 如果 `dst.GetValidRow() == 0` 或 `dst.GetValidCol() == 0`，当前 backend 会直接返回，不执行填充。
 
-### 形状约束
+    ### 形状约束
 
-- `TFILLPAD(dst, src)`：`dst.Rows/Cols` 必须与 `src.Rows/Cols` 相同。
-- `TFILLPAD_INPLACE(dst, src)`：`dst.Rows/Cols` 也必须与 `src.Rows/Cols` 相同。
-- `TFILLPAD_EXPAND(dst, src)`：`dst.Rows >= src.Rows` 且 `dst.Cols >= src.Cols`。
+    - `TFILLPAD(dst, src)`：`dst.Rows/Cols` 必须与 `src.Rows/Cols` 相同。
+    - `TFILLPAD_INPLACE(dst, src)`：`dst.Rows/Cols` 也必须与 `src.Rows/Cols` 相同。
+    - `TFILLPAD_EXPAND(dst, src)`：`dst.Rows >= src.Rows` 且 `dst.Cols >= src.Cols`。
 
-### Mat Tile 特化
+    ### Mat Tile 特化
 
-- 单类型重载 `TFILLPAD(TileData &dst, TileData &src)` 还支持一条 Mat Tile 特化路径。
-- 这条路径当前只支持：
-  - NZ 形态的 Mat Tile（非 row-major，`SLayout::RowMajor`）
-  - `TileData::PadVal` 为 `PadValue::Zero` 或 `PadValue::Null`
-- 这条 Mat 特化更像“把矩阵 Tile 的未覆盖区域置成可接受的默认值”，而不是通用的 Vec copy+pad。
+    - 单类型重载 `TFILLPAD(TileData &dst, TileData &src)` 还支持一条 Mat Tile 特化路径。
+    - 这条路径当前只支持：
+      - NZ 形态的 Mat Tile（非 row-major，`SLayout::RowMajor`）
+      - `TileData::PadVal` 为 `PadValue::Zero` 或 `PadValue::Null`
+    - 这条 Mat 特化更像“把矩阵 Tile 的未覆盖区域置成可接受的默认值”，而不是通用的 Vec copy+pad。
 
 ## 示例
 

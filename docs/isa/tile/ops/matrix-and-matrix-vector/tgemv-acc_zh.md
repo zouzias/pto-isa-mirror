@@ -30,7 +30,7 @@ $$ \mathrm{C}_{\text{out}, 0,j} = \mathrm{C}_{\text{in}, 0,j} + \sum_{k=0}^{K-1}
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 同步形式：
 
@@ -73,21 +73,23 @@ PTO_INST RecordEvent TGEMV_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft
 
 ## 约束
 
-### 通用约束
+!!! warning "约束"
+    ### 通用约束
 
-- `TGEMV` 的角色、shape、dtype 和 target-profile 约束在这里全部成立；
-- 运行时固定 `m = 1`；
-- 对于跨后端的稳妥可移植写法，优先使用共享累加器。
+    - `TGEMV` 的角色、shape、dtype 和 target-profile 约束在这里全部成立；
+    - 运行时固定 `m = 1`；
+    - 对于跨后端的稳妥可移植写法，优先使用共享累加器。
 
-### A2A3 与 A5 说明
+    ### A2A3 与 A5 说明
 
-- A2A3 与 A5 的 dtype、布局和角色限制，与 `TGEMV` 相同；
-- 当前 A2A3 / A5 实现不会先把 `cInMatrix` 搬到 `cOutMatrix`，而是直接对 `cOutMatrix` 所指向的累加器继续叠加。
+    - A2A3 与 A5 的 dtype、布局和角色限制，与 `TGEMV` 相同；
+    - 当前 A2A3 / A5 实现不会先把 `cInMatrix` 搬到 `cOutMatrix`，而是直接对 `cOutMatrix` 所指向的累加器继续叠加。
 
 ## 不允许的情形
 
-- 违反 `TGEMV` 的任一合法性约束；
-- 依赖“不同 `cInMatrix` / `cOutMatrix` 在所有后端上都严格等价”的假设。
+!!! danger "不允许的情形"
+    - 违反 `TGEMV` 的任一合法性约束；
+    - 依赖“不同 `cInMatrix` / `cOutMatrix` 在所有后端上都严格等价”的假设。
 
 ## 性能与吞吐
 

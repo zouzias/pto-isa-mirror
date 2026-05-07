@@ -58,25 +58,28 @@ None. This form is defined by its side effect on intra-block synchronization sta
 
 ## Constraints
 
-- **A5 only**: `set_intra_block` is only available on the A5 profile.
-- **Semaphore ID mapping**: IDs 0–15 target AIV0; IDs 16–31 target AIV1. Programs MUST use the correct ID for the target subblock.
-- **No broadcast**: Unlike A2A3's `set_cross_core`, one `set_intra_block` does NOT reach both subblocks. Separate calls are required for each subblock.
-- **Semaphore pool**: 16 physical IDs with a 32-ID address space. IDs outside 0–31 are **illegal**.
+!!! warning "Constraints"
+    - **A5 only**: `set_intra_block` is only available on the A5 profile.
+    - **Semaphore ID mapping**: IDs 0–15 target AIV0; IDs 16–31 target AIV1. Programs MUST use the correct ID for the target subblock.
+    - **No broadcast**: Unlike A2A3's `set_cross_core`, one `set_intra_block` does NOT reach both subblocks. Separate calls are required for each subblock.
+    - **Semaphore pool**: 16 physical IDs with a 32-ID address space. IDs outside 0–31 are **illegal**.
 
 ## Exceptions
 
-- Illegal on non-A5 profiles.
-- Illegal if `%sem_id` is outside the range 0–31.
-- Illegal if the target subblock is not reachable (invalid core ID encoding in sem_id).
+!!! danger "Exceptions"
+    - Illegal on non-A5 profiles.
+    - Illegal if `%sem_id` is outside the range 0–31.
+    - Illegal if the target subblock is not reachable (invalid core ID encoding in sem_id).
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| `set_intra_block` | Not available | Use `set_cross_core` | Supported |
-| Broadcast semantics | Not applicable | One set → both subblocks | One set → one subblock |
-| Per-subblock control | Not applicable | Not available | Supported |
-| Semaphore pool | Not applicable | 16 IDs, 4-bit counter | 16 IDs, 32-ID address space |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | `set_intra_block` | Not available | Use `set_cross_core` | Supported |
+    | Broadcast semantics | Not applicable | One set → both subblocks | One set → one subblock |
+    | Per-subblock control | Not applicable | Not available | Supported |
+    | Semaphore pool | Not applicable | 16 IDs, 4-bit counter | 16 IDs, 32-ID address space |
 
 ## Examples
 

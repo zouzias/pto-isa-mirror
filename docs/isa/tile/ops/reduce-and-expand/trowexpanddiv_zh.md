@@ -60,13 +60,15 @@ PTO_INST RecordEvent TROWEXPANDDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 
 ## 约束
 
-- `dst/src0/src1` 的元素类型必须一致，当前实现只支持 `half` 或 `float`
-- `dst` 必须是 row-major
-- `src1` 需要表达“每行一个标量”这一角色
+!!! warning "约束"
+    - `dst/src0/src1` 的元素类型必须一致，当前实现只支持 `half` 或 `float`
+    - `dst` 必须是 row-major
+    - `src1` 需要表达“每行一个标量”这一角色
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## 性能
 

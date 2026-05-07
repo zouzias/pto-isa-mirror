@@ -56,18 +56,20 @@ PTO_INST RecordEvent TROWEXPAND(TileDataDst &dst, TileDataSrc &src, WaitEvents &
 
 ## 约束
 
-- `dst` 和 `src` 都必须是 `TileType::Vec`
-- `src` 与 `dst` 都必须是标准 ND 非分形布局：row-major 且 `SLayout::NoneBox`
-- 支持的数据类型在 A2A3 / A5 上都覆盖：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`
+!!! warning "约束"
+    - `dst` 和 `src` 都必须是 `TileType::Vec`
+    - `src` 与 `dst` 都必须是标准 ND 非分形布局：row-major 且 `SLayout::NoneBox`
+    - 支持的数据类型在 A2A3 / A5 上都覆盖：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`
 
-### 运行时有效区域
+    ### 运行时有效区域
 
-- A2A3：若 `dstValidRow`、`dstValidCol`、`srcValidRow`、`srcValidCol` 中任一为 0，直接提前返回
-- A5：要求 `srcValidRow == dstValidRow`，并要求 `srcValidRow != 0 && srcValidCol != 0`
+    - A2A3：若 `dstValidRow`、`dstValidCol`、`srcValidRow`、`srcValidCol` 中任一为 0，直接提前返回
+    - A5：要求 `srcValidRow == dstValidRow`，并要求 `srcValidRow != 0 && srcValidCol != 0`
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## 性能
 

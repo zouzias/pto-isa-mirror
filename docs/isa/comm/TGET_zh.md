@@ -55,22 +55,23 @@ PTO_INST RecordEvent TGET(GlobalDstData &dstGlobalData,
 
 ## 约束
 
-### 类型约束
+!!! warning "约束"
+    ### 类型约束
 
-- `GlobalSrcData::RawDType` 必须等于 `GlobalDstData::RawDType`
-- `TileData::DType` 必须等于 `GlobalSrcData::RawDType`
-- `GlobalSrcData::layout` 必须等于 `GlobalDstData::layout`
+    - `GlobalSrcData::RawDType` 必须等于 `GlobalDstData::RawDType`
+    - `TileData::DType` 必须等于 `GlobalSrcData::RawDType`
+    - `GlobalSrcData::layout` 必须等于 `GlobalDstData::layout`
 
-### 内存约束
+    ### 内存约束
 
-- `srcGlobalData` 必须指向远端地址（源 NPU）
-- `dstGlobalData` 必须指向本地地址（当前 NPU）
-- `stagingTileData`、`pingTile`、`pongTile` 必须预先在 UB 中分配
+    - `srcGlobalData` 必须指向远端地址（源 NPU）
+    - `dstGlobalData` 必须指向本地地址（当前 NPU）
+    - `stagingTileData`、`pingTile`、`pongTile` 必须预先在 UB 中分配
 
-### 乒乓约束
+    ### 乒乓约束
 
-- `pingTile` 与 `pongTile` 的类型和维度必须一致
-- 两者必须位于不重叠的 UB 偏移
+    - `pingTile` 与 `pongTile` 的类型和维度必须一致
+    - 两者必须位于不重叠的 UB 偏移
 
 ## 示例
 
@@ -127,7 +128,7 @@ comm::TGET(dstG, srcG, pingTile, pongTile);
 
 ## 相关页面
 
-- [通信与运行时](../other/communication-and-runtime_zh.md)
+- [通信与运行时](communication-runtime_zh.md)
 - [TPUT](./TPUT_zh.md)
 - [TBROADCAST](./TBROADCAST_zh.md)
 - [TGATHER](./TGATHER_zh.md)

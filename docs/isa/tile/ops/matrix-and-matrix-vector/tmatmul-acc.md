@@ -87,18 +87,21 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- All constraints from `TMATMUL` apply to the `(cOutMatrix, aMatrix, bMatrix)` triple.
+!!! warning "Constraints"
+    - All constraints from `TMATMUL` apply to the `(cOutMatrix, aMatrix, bMatrix)` triple.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Implementation notes (A2A3/A5)**:
-    - `TMATMUL_ACC_IMPL` uses `aMatrix.GetValidRow()`, `aMatrix.GetValidCol()`, and `bMatrix.GetValidCol()` for `m/k/n`.
-    - `cInMatrix` is not validated by explicit assertions in the current implementations (target-defined behavior).
+??? info "Target-Profile Restrictions"
+    - **Implementation notes (A2A3/A5)**:
+        - `TMATMUL_ACC_IMPL` uses `aMatrix.GetValidRow()`, `aMatrix.GetValidCol()`, and `bMatrix.GetValidCol()` for `m/k/n`.
+        - `cInMatrix` is not validated by explicit assertions in the current implementations (target-defined behavior).
 
 ## Examples
 

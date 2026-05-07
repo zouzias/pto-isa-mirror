@@ -84,27 +84,30 @@ None. This operation has no architectural side effects beyond producing its dest
 
 ## Constraints
 
-- **Type match**: Source and destination registers MUST have identical element types.
-- **Width match**: Source and destination registers MUST have the same vector width `N`.
-- **Mask width**: Mask width MUST equal `N` (logical lane count).
-- **Active lanes**: Only lanes where `mask[i] == 1` participate in the computation.
-- **Inactive lanes**: Destination elements at inactive lanes are **unmodified** — do not assume they are zeroed.
-- **Domain**: Input values follow the floating-point exception rules of the target profile for overflow, underflow, and NaN.
+!!! warning "Constraints"
+    - **Type match**: Source and destination registers MUST have identical element types.
+    - **Width match**: Source and destination registers MUST have the same vector width `N`.
+    - **Mask width**: Mask width MUST equal `N` (logical lane count).
+    - **Active lanes**: Only lanes where `mask[i] == 1` participate in the computation.
+    - **Inactive lanes**: Destination elements at inactive lanes are **unmodified** — do not assume they are zeroed.
+    - **Domain**: Input values follow the floating-point exception rules of the target profile for overflow, underflow, and NaN.
 
 ## Exceptions
 
-- The verifier rejects illegal operand type mismatches, width mismatches, or mask width mismatches.
-- Overflow and NaN behavior is target-defined; code MUST NOT rely on specific exceptional values unless explicitly documented.
-- Any additional illegality stated in the [Unary Vector Instructions](../../unary-vector-ops.md) instruction set overview page is part of the contract.
+!!! danger "Exceptions"
+    - The verifier rejects illegal operand type mismatches, width mismatches, or mask width mismatches.
+    - Overflow and NaN behavior is target-defined; code MUST NOT rely on specific exceptional values unless explicitly documented.
+    - Any additional illegality stated in the [Unary Vector Instructions](../../unary-vector-ops.md) instruction set overview page is part of the contract.
 
 ## Target-Profile Restrictions
 
-| Element Type | CPU Simulator | A2/A3 | A5 |
-|------------|:-------------:|:------:|:--:|
-| `f32` | Simulated | Simulated | Supported |
-| `f16` | Simulated | Simulated | Supported |
+??? info "Target-Profile Restrictions"
+    | Element Type | CPU Simulator | A2/A3 | A5 |
+    |------------|:-------------:|:------:|:--:|
+    | `f32` | Simulated | Simulated | Supported |
+    | `f16` | Simulated | Simulated | Supported |
 
-A5 is the primary concrete profile for vector transcendental operations. CPU simulation and A2/A3-class targets emulate `pto.v*` transcendental operations using scalar loops while preserving the visible PTO contract.
+    A5 is the primary concrete profile for vector transcendental operations. CPU simulation and A2/A3-class targets emulate `pto.v*` transcendental operations using scalar loops while preserving the visible PTO contract.
 
 ## Performance
 
@@ -174,5 +177,5 @@ For numerically stable softmax, prefer computing `exp(x - max(x))` rather than `
 - Instruction set overview: [Unary Vector Instructions](../../unary-vector-ops.md)
 - Previous op in instruction set: [pto.vneg](./vneg.md)
 - Next op in instruction set: [pto.vln](./vln.md)
-- Vector instruction overview: [Vector Instructions](../../../instruction-surfaces/vector-instructions.md)
+- Vector instruction overview: [Vector Instructions](../../../instruction-families/vector-families.md)
 - Type system: [Type System](../../../state-and-types/type-system.md)

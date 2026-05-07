@@ -71,21 +71,24 @@ None. This operation does not modify architectural state other than the destinat
 
 ## Constraints
 
-- **Pattern token validity**: The pattern token MUST be valid for an 8-bit predicate width. Using a `PAT_VL*` token with N > 8 is **illegal**.
-- **Predicate context**: This operation produces a fixed-width predicate. Programs that use it in a wider predicate context MUST ensure width compatibility or use pack/unpack operations to adapt.
-- **No dynamic component**: There are no runtime operands; the result is fully determined by the pattern token.
+!!! warning "Constraints"
+    - **Pattern token validity**: The pattern token MUST be valid for an 8-bit predicate width. Using a `PAT_VL*` token with N > 8 is **illegal**.
+    - **Predicate context**: This operation produces a fixed-width predicate. Programs that use it in a wider predicate context MUST ensure width compatibility or use pack/unpack operations to adapt.
+    - **No dynamic component**: There are no runtime operands; the result is fully determined by the pattern token.
 
 ## Exceptions
 
-- Illegal if the pattern token is not valid for the `_b8` (8-bit) variant.
-- Illegal if the pattern token is not supported by the target profile.
+!!! danger "Exceptions"
+    - Illegal if the pattern token is not valid for the `_b8` (8-bit) variant.
+    - Illegal if the pattern token is not supported by the target profile.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| All pattern tokens | Simulated | Supported | Supported |
-| 8-bit predicate width | Supported | Supported | Supported |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | All pattern tokens | Simulated | Supported | Supported |
+    | 8-bit predicate width | Supported | Supported | Supported |
 
 ## Examples
 

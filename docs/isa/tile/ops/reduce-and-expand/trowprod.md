@@ -63,37 +63,40 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-### General constraints / checks
+!!! warning "Constraints"
+    ### General constraints / checks
 
-- `dst` and `src` must both be `TileType::Vec`.
+    - `dst` and `src` must both be `TileType::Vec`.
 
-- `src` must use standard ND layout: row-major and non-fractal (`BLayout::RowMajor`, `SLayout::NoneBox`).
+    - `src` must use standard ND layout: row-major and non-fractal (`BLayout::RowMajor`, `SLayout::NoneBox`).
 
-- `dst` must use one of the following non-fractal layouts:
-  - ND layout (`BLayout::RowMajor`, `SLayout::NoneBox`), or
-  - DN layout with exactly one column (`BLayout::ColMajor`, `SLayout::NoneBox`, `Cols == 1`).
+    - `dst` must use one of the following non-fractal layouts:
+      - ND layout (`BLayout::RowMajor`, `SLayout::NoneBox`), or
+      - DN layout with exactly one column (`BLayout::ColMajor`, `SLayout::NoneBox`, `Cols == 1`).
 
-- `dst` and `src` must use the same element type.
+    - `dst` and `src` must use the same element type.
 
-- Runtime valid-region checks:
-  - `src.GetValidRow() != 0`
-  - `src.GetValidCol() != 0`
-  - `src.GetValidRow() == dst.GetValidRow()`
+    - Runtime valid-region checks:
+      - `src.GetValidRow() != 0`
+      - `src.GetValidCol() != 0`
+      - `src.GetValidRow() == dst.GetValidRow()`
 
-- Supported element types: `half`, `float`, `int32_t`, `int16_t`.
+    - Supported element types: `half`, `float`, `int32_t`, `int16_t`.
 
-- The implementation accepts both ND output and DN output with `Cols == 1`; it is not limited to DN output.
+    - The implementation accepts both ND output and DN output with `Cols == 1`; it is not limited to DN output.
 
-- The current implementation path passes `tmp` into the backend call, but this document does not add extra `tmp` shape/layout constraints beyond what is explicitly enforced by the checked implementation.
+    - The current implementation path passes `tmp` into the backend call, but this document does not add extra `tmp` shape/layout constraints beyond what is explicitly enforced by the checked implementation.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- The intrinsic signature requires an explicit `tmp` operand.
+??? info "Target-Profile Restrictions"
+    - The intrinsic signature requires an explicit `tmp` operand.
 
 ## Examples
 

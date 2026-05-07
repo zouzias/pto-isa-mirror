@@ -65,13 +65,15 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+!!! warning "Constraints"
+    - **Valid region**:
+        - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Performance
 
@@ -90,17 +92,18 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Target-Profile Restrictions
 
-- **Implementation checks (A2A3)**:
-    - Supported element types are 1-byte or 2-byte integral types.
-    - `dst`, `src0`, and `src1` must use the same element type.
-    - `dst`, `src0`, and `src1` must be row-major.
-    - Runtime: `src0.GetValidRow()/GetValidCol()` and `src1.GetValidRow()/GetValidCol()` must match `dst`.
+??? info "Target-Profile Restrictions"
+    - **Implementation checks (A2A3)**:
+        - Supported element types are 1-byte or 2-byte integral types.
+        - `dst`, `src0`, and `src1` must use the same element type.
+        - `dst`, `src0`, and `src1` must be row-major.
+        - Runtime: `src0.GetValidRow()/GetValidCol()` and `src1.GetValidRow()/GetValidCol()` must match `dst`.
 
-- **Implementation checks (A5)**:
-    - Supported element types are 1-byte, 2-byte, or 4-byte integral types.
-    - `dst`, `src0`, and `src1` must use the same element type.
-    - `dst`, `src0`, and `src1` must be row-major.
-    - Runtime: `src0.GetValidRow()/GetValidCol()` and `src1.GetValidRow()/GetValidCol()` must match `dst`.
+    - **Implementation checks (A5)**:
+        - Supported element types are 1-byte, 2-byte, or 4-byte integral types.
+        - `dst`, `src0`, and `src1` must use the same element type.
+        - `dst`, `src0`, and `src1` must be row-major.
+        - Runtime: `src0.GetValidRow()/GetValidCol()` and `src1.GetValidRow()/GetValidCol()` must match `dst`.
 
 ## Examples
 

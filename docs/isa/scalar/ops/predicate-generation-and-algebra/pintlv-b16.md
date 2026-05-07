@@ -64,19 +64,22 @@ None.
 
 ## Constraints
 
-- The installed public CCE helper for `pintlv_b16` returns two predicate results, not a single concatenated predicate value.
-- Source and destination predicate widths must match the `_b16` variant selected by the instruction.
+!!! warning "Constraints"
+    - The installed public CCE helper for `pintlv_b16` returns two predicate results, not a single concatenated predicate value.
+    - Source and destination predicate widths must match the `_b16` variant selected by the instruction.
 
 ## Exceptions
 
-- Illegal if the selected target profile does not support the requested predicate-interleave form.
+!!! danger "Exceptions"
+    - Illegal if the selected target profile does not support the requested predicate-interleave form.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| Predicate interleave helper | Simulated | Supported | Supported |
-| Public two-result CCE surface | Emulated | Supported | Supported |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | Predicate interleave helper | Simulated | Supported | Supported |
+    | Public two-result CCE surface | Emulated | Supported | Supported |
 
 ## Examples
 

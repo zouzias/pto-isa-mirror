@@ -58,12 +58,14 @@ PTO_INST RecordEvent TFMODS(TileDataDst &dst, TileDataSrc &src, typename TileDat
 
 ## 约束
 
-- 除零行为由目标平台定义；CPU 模拟器在调试构建下会断言。
-- 操作迭代域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
+!!! warning "约束"
+    - 除零行为由目标平台定义；CPU 模拟器在调试构建下会断言。
+    - 操作迭代域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## Target-Profile 限制
 

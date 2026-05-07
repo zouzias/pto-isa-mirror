@@ -14,7 +14,7 @@ For predicate width `Pw` and UB address `base`:
 
 $$ \mathrm{WRITE\_UB}_{64}(base, mask) $$
 
-The predicate register is read atomically. Only bits within the current element-type predicate width are transferred; bits outside are **implementation-defined**.
+The predicate register is read atomically. On A2/A3 and A5 only the low N bits of the predicate register (matching the current element type) are written to UB; bits outside are discarded. On CPU simulator all 64 bits are written.
 
 ## Syntax
 
@@ -64,24 +64,27 @@ None. This form is defined by its side effect on UB memory.
 
 ## Constraints
 
-- **UB address space**: `%ub_ptr` MUST have address space `ub`. Pointers to other spaces are illegal.
-- **Alignment**: The effective address MUST be 64-bit aligned. Misaligned addresses are **illegal**.
-- **Predicate width**: The store transfers exactly 64 bits. The caller MUST ensure this matches the active element type context.
-- **Write atomicity**: The 64-bit predicate word is written atomically.
+!!! warning "Constraints"
+    - **UB address space**: `%ub_ptr` MUST have address space `ub`. Pointers to other spaces are illegal.
+    - **Alignment**: The effective address MUST be 64-bit aligned. Misaligned addresses are **illegal**.
+    - **Predicate width**: The store transfers exactly 64 bits. The caller MUST ensure this matches the active element type context.
+    - **Write atomicity**: The 64-bit predicate word is written atomically.
 
 ## Exceptions
 
-- Illegal if `%ub_ptr` is not a UB-space pointer.
-- Illegal if the effective address is not 64-bit aligned.
-- Illegal if predicate width does not match the active element type context.
+!!! danger "Exceptions"
+    - Illegal if `%ub_ptr` is not a UB-space pointer.
+    - Illegal if the effective address is not 64-bit aligned.
+    - Illegal if predicate width does not match the active element type context.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| Contiguous store | Simulated | Supported | Supported |
-| 64-bit alignment requirement | Enforced | Enforced | Enforced |
-| Predicate width (f32 / f16,bf16 / i8) | N=64/128/256 | N=64/128/256 | N=64/128/256 |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | Contiguous store | Simulated | Supported | Supported |
+    | 64-bit alignment requirement | Enforced | Enforced | Enforced |
+    | Predicate width (f32 / f16,bf16 / i8) | N=64/128/256 | N=64/128/256 | N=64/128/256 |
 
 ## Examples
 

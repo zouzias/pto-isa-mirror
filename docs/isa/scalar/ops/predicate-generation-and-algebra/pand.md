@@ -64,18 +64,21 @@ None.
 
 ## Constraints
 
-- **Operand widths**: All predicate operands MUST have the same width. Mixing predicates of different widths without explicit pack/unpack is **illegal**.
-- **No implicit masking**: The `mask` operand is for scalar and control instructions use; it does not affect the boolean AND operation itself.
+!!! warning "Constraints"
+    - **Operand widths**: All predicate operands MUST have the same width. Mixing predicates of different widths without explicit pack/unpack is **illegal**.
+    - **No implicit masking**: The `mask` operand is for scalar and control instructions use; it does not affect the boolean AND operation itself.
 
 ## Exceptions
 
-- Illegal if predicate operand widths are not consistent.
+!!! danger "Exceptions"
+    - Illegal if predicate operand widths are not consistent.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| Bitwise AND | Simulated | Supported | Supported |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | Bitwise AND | Simulated | Supported | Supported |
 
 ## Examples
 

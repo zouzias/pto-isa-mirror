@@ -60,14 +60,16 @@ PTO_INST RecordEvent TADDSC(TileData& dst, TileData& src0, typename TileData::DT
 
 ## 约束
 
-- tile 位置必须是向量 tile。
-- 静态 valid 边界必须合法。
-- 运行时要求：`dst`、`src0`、`src1` 的 valid row / valid col 一致。
-- 标量类型必须匹配 tile 数据类型。
+!!! warning "约束"
+    - tile 位置必须是向量 tile。
+    - 静态 valid 边界必须合法。
+    - 运行时要求：`dst`、`src0`、`src1` 的 valid row / valid col 一致。
+    - 标量类型必须匹配 tile 数据类型。
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## Target-Profile 限制
 

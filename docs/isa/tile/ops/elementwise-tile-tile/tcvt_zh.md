@@ -98,17 +98,19 @@ PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, WaitEv
 
 ## 约束
 
-- `src` 与 `dst` 必须在 shape 和 valid region 上兼容。
-- 源 / 目标类型对必须属于目标 profile 支持的集合。
-- 给定类型对必须支持所选 rounding mode。
-- 对于需要显式 scratch 的路径，调用方必须使用 `tmp` 版本。
-- 关闭饱和可能改变某些低精度整数转换路径的溢出语义。
+!!! warning "约束"
+    - `src` 与 `dst` 必须在 shape 和 valid region 上兼容。
+    - 源 / 目标类型对必须属于目标 profile 支持的集合。
+    - 给定类型对必须支持所选 rounding mode。
+    - 对于需要显式 scratch 的路径，调用方必须使用 `tmp` 版本。
+    - 关闭饱和可能改变某些低精度整数转换路径的溢出语义。
 
 ## 不允许的情形
 
-- 使用目标 profile 不支持的类型对。
-- 使用该类型对不支持的 rounding mode。
-- 在关闭饱和时仍假设溢出会被 clamp。
+!!! danger "不允许的情形"
+    - 使用目标 profile 不支持的类型对。
+    - 使用该类型对不支持的 rounding mode。
+    - 在关闭饱和时仍假设溢出会被 clamp。
 
 ## Target-Profile 限制
 

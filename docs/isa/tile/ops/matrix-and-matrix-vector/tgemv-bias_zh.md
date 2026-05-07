@@ -27,7 +27,7 @@ $$ \mathrm{C}_{0,j} = \mathrm{Bias}_{0,j} + \sum_{k=0}^{K-1} \mathrm{A}_{0,k} \c
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 同步形式：
 
@@ -71,32 +71,34 @@ PTO_INST RecordEvent TGEMV_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &
 
 ## 约束
 
-### 通用约束
+!!! warning "约束"
+    ### 通用约束
 
-- `TGEMV` 的角色、shape、dtype 和 target-profile 约束在这里全部成立；
-- bias 的数据类型必须与结果累加器 `TileRes::DType` 一致；
-- bias 必须是单行 Bias tile。
+    - `TGEMV` 的角色、shape、dtype 和 target-profile 约束在这里全部成立；
+    - bias 的数据类型必须与结果累加器 `TileRes::DType` 一致；
+    - bias 必须是单行 Bias tile。
 
-### A2A3 约束
+    ### A2A3 约束
 
-`A2A3` 指 Ascend 910B 与 Ascend 910C。当前实现要求：
+    `A2A3` 指 Ascend 910B 与 Ascend 910C。当前实现要求：
 
-- `TileBias::Loc == TileType::Bias`
-- `TileBias::Rows == 1`
+    - `TileBias::Loc == TileType::Bias`
+    - `TileBias::Rows == 1`
 
-### A5 约束
+    ### A5 约束
 
-`A5` 指 Ascend 950 PR 与 Ascend 950 DT。当前实现要求：
+    `A5` 指 Ascend 950 PR 与 Ascend 950 DT。当前实现要求：
 
-- `TileBias::Loc == TileType::Bias`
-- `TileBias::Rows == 1`
-- `TileBias::isRowMajor == true`
+    - `TileBias::Loc == TileType::Bias`
+    - `TileBias::Rows == 1`
+    - `TileBias::isRowMajor == true`
 
 ## 不允许的情形
 
-- bias 不是单行；
-- bias 的角色或 dtype 不合法；
-- 违反 `TGEMV` 的任一合法性约束。
+!!! danger "不允许的情形"
+    - bias 不是单行；
+    - bias 的角色或 dtype 不合法；
+    - 违反 `TGEMV` 的任一合法性约束。
 
 ## 性能与吞吐
 

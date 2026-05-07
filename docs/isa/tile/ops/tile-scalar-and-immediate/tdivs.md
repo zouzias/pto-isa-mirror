@@ -88,35 +88,38 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+!!! warning "Constraints"
+    - **Valid region**:
+        - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Implementation checks (A2A3)** (both overloads):
-    - `TileData::DType` must be one of: `int32_t`, `int`, `int16_t`, `half`, `float16_t`, `float`, `float32_t`.
-    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-    - Runtime: `src0.GetValidRow() == dst.GetValidRow()` and `src0.GetValidCol() == dst.GetValidCol()`.
-    - Tile layout must be row-major (`TileData::isRowMajor`).
+??? info "Target-Profile Restrictions"
+    - **Implementation checks (A2A3)** (both overloads):
+        - `TileData::DType` must be one of: `int32_t`, `int`, `int16_t`, `half`, `float16_t`, `float`, `float32_t`.
+        - Tile location must be vector (`TileData::Loc == TileType::Vec`).
+        - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+        - Runtime: `src0.GetValidRow() == dst.GetValidRow()` and `src0.GetValidCol() == dst.GetValidCol()`.
+        - Tile layout must be row-major (`TileData::isRowMajor`).
 
-- **Implementation checks (A5)** (both overloads):
-    - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
-    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-    - Runtime: `src0.GetValidRow() == dst.GetValidRow()` and `src0.GetValidCol() == dst.GetValidCol()`.
-    - Tile layout must be row-major (`TileData::isRowMajor`).
+    - **Implementation checks (A5)** (both overloads):
+        - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
+        - Tile location must be vector (`TileData::Loc == TileType::Vec`).
+        - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+        - Runtime: `src0.GetValidRow() == dst.GetValidRow()` and `src0.GetValidCol() == dst.GetValidCol()`.
+        - Tile layout must be row-major (`TileData::isRowMajor`).
 
-- **Division-by-zero**:
-    - Behavior is target-defined; on A5 the tile/scalar form maps to multiply-by-reciprocal and uses `1/0 -> +inf` for `scalar == 0`.
+    - **Division-by-zero**:
+        - Behavior is target-defined; on A5 the tile/scalar form maps to multiply-by-reciprocal and uses `1/0 -> +inf` for `scalar == 0`.
 
-- **High Precision Algorithm**
-    - Only available on A5, `PrecisionType` option is ignored on A3.
+    - **High Precision Algorithm**
+        - Only available on A5, `PrecisionType` option is ignored on A3.
 
 ## Examples
 

@@ -56,12 +56,14 @@ PTO_INST RecordEvent TCOLEXPAND(TileDataDst &dst, TileDataSrc &src, WaitEvents &
 
 ## 约束
 
-- 迭代域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
-- 这条指令要求源和目标在 shape / layout 上满足列广播的合法条件。
+!!! warning "约束"
+    - 迭代域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
+    - 这条指令要求源和目标在 shape / layout 上满足列广播的合法条件。
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## Target-Profile 限制
 

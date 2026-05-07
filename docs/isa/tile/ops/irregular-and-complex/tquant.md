@@ -1,6 +1,6 @@
 # pto.tquant
 
-`pto.tquant` is part of the [Irregular And Complex](../../irregular-and-complex.md) instruction set.
+`pto.tquant` is part of the [Irregular and Complex](../../irregular-and-complex.md) tile instruction family.
 
 ## Summary
 
@@ -10,7 +10,7 @@ Quantize a tile (e.g. FP32 to FP8) producing exponent/scaling/max outputs.
 
 Quantize an FP32 tile into a lower-precision format (e.g. FP8), producing auxiliary exponent/scaling/max tiles. The quantization mode is a compile-time template parameter (`mode`). It belongs to the tile instructions and carries architecture-visible behavior that is not reducible to a plain elementwise compute pattern.
 
-Unless otherwise specified, semantics are defined over the valid region and target-dependent behavior is marked as implementation-defined.
+Unless otherwise specified, semantics are defined over the valid region. On A2/A3 and A5, the quantizer operates on the full valid region with target-specific quantization modes; the CPU simulator emulates the nearest available mode.
 
 ## Syntax
 
@@ -76,20 +76,23 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- This instruction is currently implemented for specific targets (see `include/pto/npu/*/TQuant.hpp`).
+!!! warning "Constraints"
+    - This instruction is currently implemented for specific targets (see `include/pto/npu/*/TQuant.hpp`).
 
-- Input type requirements and output tile types are mode/target-dependent.
+    - Input type requirements and output tile types are mode/target-dependent.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- `pto.tquant` preserves PTO-visible semantics across CPU simulation, A2/A3-class targets, and A5-class targets, but concrete support subsets may differ by profile.
+??? info "Target-Profile Restrictions"
+    - `pto.tquant` preserves PTO-visible semantics across CPU simulation, A2/A3-class targets, and A5-class targets, but concrete support subsets may differ by profile.
 
-- Portable code must rely only on the documented type, layout, shape, and mode combinations that the selected target profile guarantees.
+    - Portable code must rely only on the documented type, layout, shape, and mode combinations that the selected target profile guarantees.
 
 ## Examples
 
@@ -122,5 +125,4 @@ pto.tquant ins(%src, %qp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !
 
 ## Related Ops / Instruction Set Links
 
-- Instruction set overview: [Irregular And Complex](../../irregular-and-complex.md)
-- Previous op in instruction set: [pto.tscatter](./tscatter.md)
+- Instruction set overview: [Irregular And Complex](../../../tile/irregular-and-complex.md)

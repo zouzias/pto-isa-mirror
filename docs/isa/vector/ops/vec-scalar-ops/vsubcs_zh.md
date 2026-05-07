@@ -54,19 +54,22 @@ vsubcs %dst, %borrow_out, %lhs, %rhs, %borrow_in, %mask : !pto.vreg<NxT>, !pto.m
 
 ## 约束
 
-- borrow 链形式只对整数元素类型定义。
-- `%lhs`、`%rhs` 与 `%result` 必须具有相同的向量宽度 `N` 和相同的元素类型 `T`。
-- `%borrow_in`、`%borrow` 与 `%mask` 的宽度都必须为 `N`。
+!!! warning "约束"
+    - borrow 链形式只对整数元素类型定义。
+    - `%lhs`、`%rhs` 与 `%result` 必须具有相同的向量宽度 `N` 和相同的元素类型 `T`。
+    - `%borrow_in`、`%borrow` 与 `%mask` 的宽度都必须为 `N`。
 
 ## 异常与非法情形
 
-- verifier 会拒绝非法的操作数形状、不支持的元素类型以及不合法的属性组合。
-- 约束部分列出的额外非法情形，同样属于 `pto.vsubcs` 的契约。
+!!! danger "异常与非法情形"
+    - verifier 会拒绝非法的操作数形状、不支持的元素类型以及不合法的属性组合。
+    - 约束部分列出的额外非法情形，同样属于 `pto.vsubcs` 的契约。
 
 ## 目标 Profile 限制
 
-- 除非某个目标 profile 明确扩大合法域，否则应把这条形式视为无符号整数 borrow-chain。
-- A5 是当前手册里最细的具体 profile；CPU 模拟器和 A2/A3 类目标可以在保留可见 PTO 契约的前提下做等效模拟。
+??? info "目标 Profile 限制"
+    - 除非某个目标 profile 明确扩大合法域，否则应把这条形式视为无符号整数 borrow-chain。
+    - A5 是当前手册里最细的具体 profile；CPU 模拟器和 A2/A3 类目标可以在保留可见 PTO 契约的前提下做等效模拟。
 
 ## 示例
 

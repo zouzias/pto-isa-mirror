@@ -64,19 +64,22 @@ None.
 
 ## Constraints
 
-- The installed public CCE helper for `pdintlv_b8` returns two predicate results, not a single input-to-two-output split from one predicate operand.
-- Source and destination predicate widths must match the `_b8` variant selected by the instruction.
+!!! warning "Constraints"
+    - The installed public CCE helper for `pdintlv_b8` returns two predicate results, not a single input-to-two-output split from one predicate operand.
+    - Source and destination predicate widths must match the `_b8` variant selected by the instruction.
 
 ## Exceptions
 
-- Illegal if the selected target profile does not support the requested predicate-deinterleave form.
+!!! danger "Exceptions"
+    - Illegal if the selected target profile does not support the requested predicate-deinterleave form.
 
 ## Target-Profile Restrictions
 
-| Aspect | CPU Sim | A2/A3 | A5 |
-|--------|:-------:|:------:|:--:|
-| Predicate deinterleave helper | Simulated | Supported | Supported |
-| Public two-result CCE surface | Emulated | Supported | Supported |
+??? info "Target-Profile Restrictions"
+    | Aspect | CPU Sim | A2/A3 | A5 |
+    |--------|:-------:|:------:|:--:|
+    | Predicate deinterleave helper | Simulated | Supported | Supported |
+    | Public two-result CCE surface | Emulated | Supported | Supported |
 
 ## Examples
 

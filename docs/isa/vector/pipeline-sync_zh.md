@@ -239,7 +239,8 @@ scf.for %i = %c0 to %N step %c1 {
 
 ## 核间同步
 
-> **说明：** 核间同步只在混合 Cube + Vector 的任务里才重要。如果任务纯粹是 `pto.v*` 向量路径，可以跳过这一节。
+!!! note "说明："
+    核间同步只在混合 Cube + Vector 的任务里才重要。如果任务纯粹是 `pto.v*` 向量路径，可以跳过这一节。
 
 一个 core cluster 通常由 1 个 Cube block 和 2 个 Vector subblock 组成，三者都有各自的 SU（Sequencer Unit），也都有相对独立的流水线。因此 Cube 与 Vector 之间的数据交接，不能靠核内事件直接覆盖。
 

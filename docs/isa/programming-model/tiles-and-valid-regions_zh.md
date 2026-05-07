@@ -133,16 +133,18 @@ for i in [0, dst.Rv):
 
 ## 约束
 
-- 语义只在 valid region 内成立，除非指令页另有定义
-- 多输入 tile 操作默认按目标 valid region 迭代
-- 单独一个合法的 `TileType` 还不够；shape、layout、location intent 和 target profile 都会参与判断
-- `TileType + BLayout + SLayout + Fractal` 组合必须落在文档化支持集合内
+!!! warning "约束"
+    - 语义只在 valid region 内成立，除非指令页另有定义
+    - 多输入 tile 操作默认按目标 valid region 迭代
+    - 单独一个合法的 `TileType` 还不够；shape、layout、location intent 和 target profile 都会参与判断
+    - `TileType + BLayout + SLayout + Fractal` 组合必须落在文档化支持集合内
 
 ## 不允许的情形
 
-- 把域外元素当作稳定语义数据使用
-- 假设 backend 会自动修补不兼容的 valid-region 用法
-- 使用当前指令集或 target profile 不允许的 tile role / layout
+!!! danger "不允许的情形"
+    - 把域外元素当作稳定语义数据使用
+    - 假设 backend 会自动修补不兼容的 valid-region 用法
+    - 使用当前指令集或 target profile 不允许的 tile role / layout
 
 ## 示例
 
@@ -178,4 +180,4 @@ TADD(dst, src0, src1);
 - [GlobalTensor 与数据搬运](./globaltensor-and-data-movement_zh.md)
 - [类型系统](../state-and-types/type-system_zh.md)
 - [布局参考](../state-and-types/layout_zh.md)
-- [Tile 指令集](../instruction-surfaces/tile-instructions_zh.md)
+- [Tile 指令集](../instruction-families/tile-families_zh.md)

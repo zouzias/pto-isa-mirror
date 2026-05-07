@@ -88,7 +88,7 @@ The `tmp`-tile overloads exist for conversion paths that need explicit scratch s
 | `mode` | Rounding mode | One of `CAST_RINT`, `CAST_ROUND`, `CAST_FLOOR`, `CAST_CEIL`, `CAST_TRUNC` |
 | `satMode` | Saturation mode (optional) | `ON` or `OFF` |
 | `tmp` | Temporary tile (optional) | Scratch tile for conversion paths that require explicit temporary storage |
-| `WaitEvents...` | Optional synchronization | `RecordEvent` tokens to wait on before issuing the operation |
+| `WaitEvents...` | Optional synchronisation | `RecordEvent` tokens to wait on before issuing the operation |
 
 ## Expected Outputs
 
@@ -102,23 +102,26 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- `src` and `dst` MUST have compatible shapes (declared shape and valid region).
-- The source/destination type pair MUST be supported by the selected target profile.
-- The rounding mode MUST be supported for the given type pair.
-- When a conversion path requires explicit scratch storage, callers MUST use one of the `tmp`-tile overloads.
-- Disabling saturation may change overflow behavior for some backend/type paths, especially low-precision integer conversions.
+!!! warning "Constraints"
+    - `src` and `dst` MUST have compatible shapes (declared shape and valid region).
+    - The source/destination type pair MUST be supported by the selected target profile.
+    - The rounding mode MUST be supported for the given type pair.
+    - When a conversion path requires explicit scratch storage, callers MUST use one of the `tmp`-tile overloads.
+    - Disabling saturation may change overflow behavior for some backend/type paths, especially low-precision integer conversions.
 
 ## Cases That Are Not Allowed
 
-- **MUST NOT** use a type pair not supported by the target profile.
-- **MUST NOT** use a rounding mode not supported for the given type pair.
-- **MUST NOT** assume that disabling saturation still clamps overflow to the destination range.
+!!! danger "Cases That Are Not Allowed"
+    - **MUST NOT** use a type pair not supported by the target profile.
+    - **MUST NOT** use a rounding mode not supported for the given type pair.
+    - **MUST NOT** assume that disabling saturation still clamps overflow to the destination range.
 
 ## Target-Profile Restrictions
 
-`pto.tcvt` preserves PTO-visible semantics across CPU simulation, A2/A3-class targets, and A5-class targets, but the exact set of supported type pairs, scratch requirements, and saturation behavior is backend-specific.
+??? info "Target-Profile Restrictions"
+    `pto.tcvt` preserves PTO-visible semantics across CPU simulation, A2/A3-class targets, and A5-class targets, but the exact set of supported type pairs, scratch requirements, and saturation behavior is backend-specific.
 
-In this checkout, the fp16 → int8 non-saturating path is explicitly implemented through helper logic that may require temporary storage and row-aware sub-chunking.
+    In this checkout, the fp16 → int8 non-saturating path is explicitly implemented through helper logic that may require temporary storage and row-aware sub-chunking.
 
 ## Examples
 

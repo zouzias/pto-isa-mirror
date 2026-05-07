@@ -58,22 +58,25 @@ This operation has no architectural side effect beyond producing its SSA results
 
 ## Constraints
 
-- **Pre-sorted inputs**: ALL four input segments MUST be pre-sorted in the order specified by `%config`. Feeding unsorted data produces undefined output.
-- **Same sort order**: All four input segments MUST use the same sort order and comparison mode as encoded in `%config`.
-- **Same element type**: All inputs and the destination MUST use the same element type `T`.
-- **UB address space**: All pointers MUST have address space `ub`.
-- **Single active predicate**: Loading a new predicate does not implicitly save a prior predicate. Programs that need to preserve predicate state MUST save it first.
+!!! warning "Constraints"
+    - **Pre-sorted inputs**: ALL four input segments MUST be pre-sorted in the order specified by `%config`. Feeding unsorted data produces undefined output.
+    - **Same sort order**: All four input segments MUST use the same sort order and comparison mode as encoded in `%config`.
+    - **Same element type**: All inputs and the destination MUST use the same element type `T`.
+    - **UB address space**: All pointers MUST have address space `ub`.
+    - **Single active predicate**: Loading a new predicate does not implicitly save a prior predicate. Programs that need to preserve predicate state MUST save it first.
 
 ## Exceptions
 
-- Illegal if any input pointer is not a UB-space pointer.
-- Illegal if the effective address (base + areg * 8) is not 64-bit aligned.
-- Illegal if the `dist` attribute value is not in the allowed set for this form.
+!!! danger "Exceptions"
+    - Illegal if any input pointer is not a UB-space pointer.
+    - Illegal if the effective address (base + areg * 8) is not 64-bit aligned.
+    - Illegal if the `dist` attribute value is not in the allowed set for this form.
 
 ## Target-Profile Restrictions
 
-- A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
-- The `config` word layout and supported element types are profile-specific.
+??? info "Target-Profile Restrictions"
+    - A5 is the most detailed concrete profile in the current manual; CPU simulation and A2/A3-class targets may support narrower subsets or emulate the behavior while preserving the visible PTO contract.
+    - The `config` word layout and supported element types are profile-specific.
 
 ## Examples
 

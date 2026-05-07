@@ -76,7 +76,7 @@ PTO-Auto (high level):
 
 - You describe the dataflow: `TLOAD → compute → TSTORE`.
 - Tile buffer management and some synchronization can be handled by the compiler/runtime.
-- In the API model, `TASSIGN(tile, addr)` is a no-op when `__PTO_AUTO__` is enabled (see `docs/isa/TASSIGN.md`).
+- In the API model, `TASSIGN(tile, addr)` is a no-op when `__PTO_AUTO__` is enabled (see [TASSIGN](../isa/tile/ops/sync-and-config/tassign.md)).
 
 PTO-Manual (expert mode):
 
@@ -277,7 +277,7 @@ To build real GEMM/attention kernels you add:
 
 PTO-Auto has two parts:
 
-1. **Library-level auto semantics**: compile with `-D__PTO_AUTO__` so Tiles use compiler-managed storage and `TASSIGN(tile, addr)` becomes a no-op (see `docs/isa/TASSIGN.md`).
+1. **Library-level auto semantics**: compile with `-D__PTO_AUTO__` so Tiles use compiler-managed storage and `TASSIGN(tile, addr)` becomes a no-op (see [TASSIGN](../isa/tile/ops/sync-and-config/tassign.md)).
 2. **Compiler pipeline**: enable the PTO lowering/bufferization passes in the Bisheng CCE toolchain.
 
 ### Finding the correct “enable PTO passes” flag (CANN toolchain)

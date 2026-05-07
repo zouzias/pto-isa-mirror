@@ -62,29 +62,31 @@ PTO_INST RecordEvent TROWARGMIN(TileDataOut& dst, TileDataIn& src, TileDataTmp& 
 
 ## 约束
 
-- `dst` 与 `src` 必须为 `TileType::Vec`
-- 源元素类型支持：`half`、`float`
-- 目标元素类型支持：`uint32_t`、`int32_t`
-- 运行时要求：
-  - `src.GetValidRow() != 0`
-  - `src.GetValidCol() != 0`
-  - `src.GetValidRow() == dst.GetValidRow()`
+!!! warning "约束"
+    - `dst` 与 `src` 必须为 `TileType::Vec`
+    - 源元素类型支持：`half`、`float`
+    - 目标元素类型支持：`uint32_t`、`int32_t`
+    - 运行时要求：
+      - `src.GetValidRow() != 0`
+      - `src.GetValidCol() != 0`
+      - `src.GetValidRow() == dst.GetValidRow()`
 
-### A2A3
+    ### A2A3
 
-- `src` 必须是标准 ND 布局：行主且非分形
-- `dst` 可为单列 DN，或 validCol 为 1 的 ND
-- 当 `srcValidCol <= elementPerRepeat` 时，`tmp` 可能不参与运算
-- 当 `srcValidCol > elementPerRepeat` 时，`tmp` 会用于分阶段归约
-- `tmp` 的行数应与 `src` 一致
+    - `src` 必须是标准 ND 布局：行主且非分形
+    - `dst` 可为单列 DN，或 validCol 为 1 的 ND
+    - 当 `srcValidCol <= elementPerRepeat` 时，`tmp` 可能不参与运算
+    - 当 `srcValidCol > elementPerRepeat` 时，`tmp` 会用于分阶段归约
+    - `tmp` 的行数应与 `src` 一致
 
-### A5
+    ### A5
 
-- A5 路径接口仍接收 `tmp`，但当前 checked implementation 中并不实际使用它
+    - A5 路径接口仍接收 `tmp`，但当前 checked implementation 中并不实际使用它
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## 性能
 

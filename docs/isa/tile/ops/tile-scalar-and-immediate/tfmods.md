@@ -62,32 +62,35 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- **Division-by-zero**:
-    - Behavior is target-defined; the CPU simulator asserts in debug builds.
+!!! warning "Constraints"
+    - **Division-by-zero**:
+        - Behavior is target-defined; the CPU simulator asserts in debug builds.
 
-- **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+    - **Valid region**:
+        - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Implementation checks (A2A3)**:
-    - `dst` and `src` must use the same element type.
-    - Supported element types are `float` and `float32_t`.
-    - `dst` and `src` must be vector tiles.
-    - `dst` and `src` must be row-major.
-    - Runtime: `dst.GetValidRow() == src.GetValidRow() > 0` and `dst.GetValidCol() == src.GetValidCol() > 0`.
+??? info "Target-Profile Restrictions"
+    - **Implementation checks (A2A3)**:
+        - `dst` and `src` must use the same element type.
+        - Supported element types are `float` and `float32_t`.
+        - `dst` and `src` must be vector tiles.
+        - `dst` and `src` must be row-major.
+        - Runtime: `dst.GetValidRow() == src.GetValidRow() > 0` and `dst.GetValidCol() == src.GetValidCol() > 0`.
 
-- **Implementation checks (A5)**:
-    - `dst` and `src` must use the same element type.
-    - Supported element types are 2-byte or 4-byte types supported by the target implementation (including `half` and `float`).
-    - `dst` and `src` must be vector tiles.
-    - Static valid bounds must satisfy `ValidRow <= Rows` and `ValidCol <= Cols` for both tiles.
-    - Runtime: `dst.GetValidRow() == src.GetValidRow()` and `dst.GetValidCol() == src.GetValidCol()`.
+    - **Implementation checks (A5)**:
+        - `dst` and `src` must use the same element type.
+        - Supported element types are 2-byte or 4-byte types supported by the target implementation (including `half` and `float`).
+        - `dst` and `src` must be vector tiles.
+        - Static valid bounds must satisfy `ValidRow <= Rows` and `ValidCol <= Cols` for both tiles.
+        - Runtime: `dst.GetValidRow() == src.GetValidRow()` and `dst.GetValidCol() == src.GetValidCol()`.
 
 ## Examples
 

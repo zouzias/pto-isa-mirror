@@ -16,7 +16,7 @@ $$ \mathrm{dst}_{i,j} = (\mathrm{src}_{i,j} > 0) ? \mathrm{src}_{i,j} : (\mathrm
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 同步形式：
 
@@ -47,19 +47,20 @@ PTO_INST RecordEvent TLRELU(TileDataDst& dst, TileDataSrc& src, typename TileDat
 
 ## 约束
 
-- **实现检查 (A2A3)**:
-    - `TileData::DType` 必须是以下之一：`half`、`float16_t`、`float`、`float32_t`（仅浮点类型）。
-    - Tile 布局必须是行主序（`TileData::isRowMajor`）。
-- **实现检查 (A5)**:
-    - `TileData::DType` 必须是以下之一：`half`、`float`（仅浮点类型）。
-    - Tile 布局必须是行主序（`TileData::isRowMajor`）。
-- **通用约束**:
-    - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
-    - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
-    - 运行时：`dst` 和 `src` 的有效行列数必须相同。
-    - 斜率标量类型必须与 Tile 数据类型一致。
-- **有效区域**:
-    - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
+!!! warning "约束"
+    - **实现检查 (A2A3)**:
+        - `TileData::DType` 必须是以下之一：`half`、`float16_t`、`float`、`float32_t`（仅浮点类型）。
+        - Tile 布局必须是行主序（`TileData::isRowMajor`）。
+    - **实现检查 (A5)**:
+        - `TileData::DType` 必须是以下之一：`half`、`float`（仅浮点类型）。
+        - Tile 布局必须是行主序（`TileData::isRowMajor`）。
+    - **通用约束**:
+        - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
+        - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
+        - 运行时：`dst` 和 `src` 的有效行列数必须相同。
+        - 斜率标量类型必须与 Tile 数据类型一致。
+    - **有效区域**:
+        - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
 
 ## 示例
 

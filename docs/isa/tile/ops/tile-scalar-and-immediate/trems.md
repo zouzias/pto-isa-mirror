@@ -63,39 +63,42 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- **Division by Zero**:
-    - Behavior is target-defined; the CPU simulator asserts in debug builds.
+!!! warning "Constraints"
+    - **Division by Zero**:
+        - Behavior is target-defined; the CPU simulator asserts in debug builds.
 
-- **Valid Region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+    - **Valid Region**:
+        - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- **Implementation Checks (A2A3)**:
-    - `dst` and `src` must use the same element type.
-    - Supported element types: `float` and `int32_t`.
-    - `dst` and `src` must be vector tiles.
-    - `dst` and `src` must be row-major.
-    - Runtime: `dst.GetValidRow() == src.GetValidRow() > 0` and `dst.GetValidCol() == src.GetValidCol() > 0`.
-    - **tmp Buffer Requirements**:
-      - `tmp.GetValidCol() >= dst.GetValidCol()` (at least as many columns as dst)
-      - `tmp.GetValidRow() >= 1` (at least 1 row)
-      - Data type must match `TileDataDst::DType`.
+??? info "Target-Profile Restrictions"
+    - **Implementation Checks (A2A3)**:
+        - `dst` and `src` must use the same element type.
+        - Supported element types: `float` and `int32_t`.
+        - `dst` and `src` must be vector tiles.
+        - `dst` and `src` must be row-major.
+        - Runtime: `dst.GetValidRow() == src.GetValidRow() > 0` and `dst.GetValidCol() == src.GetValidCol() > 0`.
+        - **tmp Buffer Requirements**:
+          - `tmp.GetValidCol() >= dst.GetValidCol()` (at least as many columns as dst)
+          - `tmp.GetValidRow() >= 1` (at least 1 row)
+          - Data type must match `TileDataDst::DType`.
 
-- **Implementation Checks (A5)**:
-    - `dst` and `src` must use the same element type.
-    - Supported element types: `float`, `int32_t`, `uint32_t`, `half`, `int16_t`, and `uint16_t`.
-    - `dst` and `src` must be vector tiles.
-    - Static valid bounds: `ValidRow <= Rows` and `ValidCol <= Cols` for both tiles.
-    - Runtime: `dst.GetValidRow() == src.GetValidRow()` and `dst.GetValidCol() == src.GetValidCol()`.
-    - Note: tmp parameter is accepted but not validated or used on A5.
+    - **Implementation Checks (A5)**:
+        - `dst` and `src` must use the same element type.
+        - Supported element types: `float`, `int32_t`, `uint32_t`, `half`, `int16_t`, and `uint16_t`.
+        - `dst` and `src` must be vector tiles.
+        - Static valid bounds: `ValidRow <= Rows` and `ValidCol <= Cols` for both tiles.
+        - Runtime: `dst.GetValidRow() == src.GetValidRow()` and `dst.GetValidCol() == src.GetValidCol()`.
+        - Note: tmp parameter is accepted but not validated or used on A5.
 
-- **For `int32_t` Inputs (A2A3 Only)**: Both `src` elements and `scalar` must be in the range `[-2^24, 2^24]` (i.e., `[-16777216, 16777216]`) to ensure exact conversion to float32 during computation.
+    - **For `int32_t` Inputs (A2A3 Only)**: Both `src` elements and `scalar` must be in the range `[-2^24, 2^24]` (i.e., `[-16777216, 16777216]`) to ensure exact conversion to float32 during computation.
 
 ## Examples
 

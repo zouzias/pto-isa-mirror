@@ -82,28 +82,31 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- `sizeof(TileData::DType)` MUST be `2` or `4` bytes.
-- `dst`, `src0`, and `src1` MUST use the **same element type**.
-- `dst`, `src0`, and `src1` MUST be row-major layout.
-- `dst`, `src0`, and `src1` MUST have the same declared shape.
-- `selMask` layout MUST be compatible with the target's predicate unpacking format.
-- The iteration domain is `dst.GetValidRow()` × `dst.GetValidCol()`.
-- `tmp` MUST have sufficient capacity to hold intermediate predicate bits; its exact requirements are target-defined.
+!!! warning "Constraints"
+    - `sizeof(TileData::DType)` MUST be `2` or `4` bytes.
+    - `dst`, `src0`, and `src1` MUST use the **same element type**.
+    - `dst`, `src0`, and `src1` MUST be row-major layout.
+    - `dst`, `src0`, and `src1` MUST have the same declared shape.
+    - `selMask` layout MUST be compatible with the target's predicate unpacking format.
+    - The iteration domain is `dst.GetValidRow()` × `dst.GetValidCol()`.
+    - `tmp` MUST have sufficient capacity to hold intermediate predicate bits; its exact requirements are target-defined.
 
 ## Cases That Are Not Allowed
 
-- **MUST NOT** use non-row-major `dst`/`src0`/`src1` tiles.
-- **MUST NOT** use `dst`/`src0`/`src1` with different declared shapes.
+!!! danger "Cases That Are Not Allowed"
+    - **MUST NOT** use non-row-major `dst`/`src0`/`src1` tiles.
+    - **MUST NOT** use `dst`/`src0`/`src1` with different declared shapes.
 
 ## Target-Profile Restrictions
 
-| Check | A2/A3 | A5 |
-|-------|:-----:|:--:|
-| Supported dtypes | `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float` | Same |
-| sizeof(dtype) | 2 or 4 bytes | Same |
-| Row-major layout | Required | Required |
-| Same shape (dst/src0/src1) | Required | Required |
-| `tmp` tile required | Yes | Yes |
+??? info "Target-Profile Restrictions"
+    | Check | A2/A3 | A5 |
+    |-------|:-----:|:--:|
+    | Supported dtypes | `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float` | Same |
+    | sizeof(dtype) | 2 or 4 bytes | Same |
+    | Row-major layout | Required | Required |
+    | Same shape (dst/src0/src1) | Required | Required |
+    | `tmp` tile required | Yes | Yes |
 
 ## Performance
 

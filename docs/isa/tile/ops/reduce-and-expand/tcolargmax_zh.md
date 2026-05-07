@@ -62,27 +62,29 @@ PTO_INST RecordEvent TCOLARGMAX(TileDataOut& dst, TileDataIn& src, TileDataTmp& 
 
 ## 约束
 
-- `dst` 与 `src` 必须为 `TileType::Vec`
-- 源元素类型支持：`half`、`float`、`int32_t`、`int16_t`
-- 目标元素类型支持：`uint32_t`、`int32_t`
-- 运行时要求：
-  - `src.GetValidRow() != 0`
-  - `src.GetValidCol() != 0`
-  - `src.GetValidCol() == dst.GetValidCol()`
+!!! warning "约束"
+    - `dst` 与 `src` 必须为 `TileType::Vec`
+    - 源元素类型支持：`half`、`float`、`int32_t`、`int16_t`
+    - 目标元素类型支持：`uint32_t`、`int32_t`
+    - 运行时要求：
+      - `src.GetValidRow() != 0`
+      - `src.GetValidCol() != 0`
+      - `src.GetValidCol() == dst.GetValidCol()`
 
-### A2A3
+    ### A2A3
 
-- `src` 必须是标准 ND 布局：row-major 且非分形
-- `dst` 可为单行 ND，或 `Rows == 1` 的等价非分形形式
-- 当 `srcValidRow > elementPerRepeat` 时，`tmp` 会被用于中间索引与比较值保存
+    - `src` 必须是标准 ND 布局：row-major 且非分形
+    - `dst` 可为单行 ND，或 `Rows == 1` 的等价非分形形式
+    - 当 `srcValidRow > elementPerRepeat` 时，`tmp` 会被用于中间索引与比较值保存
 
-### A5
+    ### A5
 
-- A5 路径接口仍保留 `tmp`，但当前实现里不实际使用它
+    - A5 路径接口仍保留 `tmp`，但当前实现里不实际使用它
 
 ## 异常与非法情形
 
-- 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
 
 ## 性能
 

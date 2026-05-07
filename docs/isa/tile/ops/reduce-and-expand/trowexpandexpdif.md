@@ -70,28 +70,31 @@ No architectural side effects beyond producing the destination tile. Does not im
 
 ## Constraints
 
-- `TileDataDst::DType == TileDataSrc0::DType == TileDataSrc1::DType`
+!!! warning "Constraints"
+    - `TileDataDst::DType == TileDataSrc0::DType == TileDataSrc1::DType`
 
-- `TileDataDst::DType`, `TileDataSrc0::DType`, `TileDataSrc1::DType` must be one of: `half`, `float`.
+    - `TileDataDst::DType`, `TileDataSrc0::DType`, `TileDataSrc1::DType` must be one of: `half`, `float`.
 
-- Tile shape/layout constraint (compile-time): `TileDataDst::isRowMajor`.
+    - Tile shape/layout constraint (compile-time): `TileDataDst::isRowMajor`.
 
-- Mode 1: `src1` is expected to provide **one scalar per row** (i.e., its valid shape must cover `R` values).
+    - Mode 1: `src1` is expected to provide **one scalar per row** (i.e., its valid shape must cover `R` values).
 
-- Mode 2: `src1` is expected to provide **32 bytes data per row**.
+    - Mode 2: `src1` is expected to provide **32 bytes data per row**.
 
-- Exact layout/fractal constraints are target-specific; see backend headers under `include/pto/npu/*/TRowExpand*.hpp`.
+    - Exact layout/fractal constraints are target-specific; see backend headers under `include/pto/npu/*/TRowExpand*.hpp`.
 
 ## Exceptions
 
-- Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-- Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
 
 ## Target-Profile Restrictions
 
-- `pto.trowexpandexpdif` preserves PTO-visible semantics across CPU simulation, A2/A3-class targets, and A5-class targets, but concrete support subsets may differ by profile.
+??? info "Target-Profile Restrictions"
+    - `pto.trowexpandexpdif` preserves PTO-visible semantics across CPU simulation, A2/A3-class targets, and A5-class targets, but concrete support subsets may differ by profile.
 
-- Portable code must rely only on the documented type, layout, shape, and mode combinations that the selected target profile guarantees.
+    - Portable code must rely only on the documented type, layout, shape, and mode combinations that the selected target profile guarantees.
 
 ## Examples
 

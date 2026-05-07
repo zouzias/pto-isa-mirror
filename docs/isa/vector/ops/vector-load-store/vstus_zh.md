@@ -42,18 +42,21 @@ vstus %align_out, %base_out, %align_in, %offset, %value, %base, "MODE"
 
 ## 约束
 
-- 它是非对齐存储流的标量 offset 形式。
-- 标量 offset 的位宽和 update mode 必须与所选形式匹配。
-- 之后仍需要 flush 指令把缓冲尾部字节真正提交。
+!!! warning "约束"
+    - 它是非对齐存储流的标量 offset 形式。
+    - 标量 offset 的位宽和 update mode 必须与所选形式匹配。
+    - 之后仍需要 flush 指令把缓冲尾部字节真正提交。
 
 ## 异常与非法情形
 
-- 使用超出 UB 可见空间的地址，或违反所选形式的地址 / 对齐契约，都是非法的。
-- 约束部分列出的额外非法情形，同样属于 `pto.vstus` 的契约。
+!!! danger "异常与非法情形"
+    - 使用超出 UB 可见空间的地址，或违反所选形式的地址 / 对齐契约，都是非法的。
+    - 约束部分列出的额外非法情形，同样属于 `pto.vstus` 的契约。
 
 ## 目标 Profile 限制
 
-- A5 是当前手册里最细的具体 profile；CPU 模拟器和 A2/A3 类目标可以在保留可见 PTO 契约的前提下做等效模拟。
+??? info "目标 Profile 限制"
+    - A5 是当前手册里最细的具体 profile；CPU 模拟器和 A2/A3 类目标可以在保留可见 PTO 契约的前提下做等效模拟。
 
 ## 示例
 

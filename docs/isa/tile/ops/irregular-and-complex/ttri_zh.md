@@ -38,7 +38,7 @@ $$
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [汇编写法与操作数](../../../syntax-and-operands/assembly-model_zh.md)。
 
 ### AS Level 1（SSA）
 
@@ -63,13 +63,14 @@ PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents &... events);
 
 ## 约束
 
-- `isUpperOrLower` 只能是：
-  - `0`：下三角
-  - `1`：上三角
-- `dst` 必须是 row-major Tile。
-- 支持的数据类型随目标略有差异：
-  - CPU / A2A3：`int32_t`、`int16_t`、`uint32_t`、`uint16_t`、`half`、`float` 等
-  - A5：额外覆盖 `int8_t`、`uint8_t`、`bfloat16_t`
+!!! warning "约束"
+    - `isUpperOrLower` 只能是：
+      - `0`：下三角
+      - `1`：上三角
+    - `dst` 必须是 row-major Tile。
+    - 支持的数据类型随目标略有差异：
+      - CPU / A2A3：`int32_t`、`int16_t`、`uint32_t`、`uint16_t`、`half`、`float` 等
+      - A5：额外覆盖 `int8_t`、`uint8_t`、`bfloat16_t`
 
 ## 示例
 
@@ -87,5 +88,5 @@ void example() {
 
 ## 相关页面
 
-- [TCMP](../../../TCMP_zh.md)
+- [TCMP](../elementwise-tile-tile/tcmp_zh.md)
 - [不规则与复杂指令集](../../irregular-and-complex_zh.md)
