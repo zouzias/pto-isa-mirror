@@ -7,6 +7,8 @@
 #include "pto_gated_kernel.h"
 
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <memory>
 
 #include "pto/ccu/pto_gate_registry.hpp"
@@ -67,6 +69,62 @@ PtoGatedReduceScatterMesh1D::PtoGatedReduceScatterMesh1D(const CcuKernelArg &arg
 HcclResult PtoGatedReduceScatterMesh1D::Algorithm()
 {
     TracePrintf("gated_rs_mesh1d", rankId_, "Algorithm() entry");
+
+    // -------------------------------------------------------------------------
+    // Step 0: pin this kernel onto the physically-enabled CCU die.
+    //
+    // hcomm `CcuKernel::Init()` chains `GetDieIdByChannels(channels_, dieId)`
+    // first — when `channels_` is empty (which is true for the standalone
+    // pto-isa pilot path; we don't go through hccl operator's
+    // `CalcChannelRequestMesh1D`) it falls back to `dieId=0`. Then `Init()`
+    // calls `SetDieId(0)` and finally `Algorithm()`.
+    //
+    // But on this NPU only `dieId=1` is physically enabled
+    // (`CcuGetDieEnableInfo(devLogicId, 0, ...)` returns enabled=false,
+    // `dieId=1` returns true), so `CcuKernelMgr::Init` only calls
+    // `InstantiationTranslator(1)` and the CcuResPack provisions all
+    // resources under `dieId=1`. With `dieId=0` baked into the kernel by
+    // `Init()`, every `CreateCompletedEvent()` / `CreateVariable()` would go
+    // into `res_.completedEvent[0]` / `res_.variable[0]`, and
+    // `GetResourceRequest()` would emit `req.ckeReq[0] = 3, xnReq[0] = 6,
+    // missionReq[0] = 1`. These fail the `CheckResIfAvailable` step inside
+    // `CcuKernelMgr::AllocRes` because `leftRes.ckeReq[0]==0` (all resources
+    // are on `dieId=1`), surfacing as `HCCL_E_UNAVAIL=7` from
+    // `HcclCcuKernelRegister`.
+    //
+    // The fix: re-pin the kernel onto the physically-enabled die *before*
+    // any `CreateCompletedEvent()` / `CreateVariable()` calls. `SetDieId()`
+    // is `CcuRepContext::SetDieId(uint32_t)` (public), inherited via
+    // `CcuKernel : public CcuRepContext`. Subsequent `GetDieId()` reads
+    // (used by `CreateResAssist` to choose the per-die queue) will now
+    // return our forced value.
+    //
+    // Override hierarchy:
+    //   1. `HCCL_PTO_GATE_DIE_ID` env (decimal, e.g. "1") for runtime tuning.
+    //   2. Hardcoded default `1` — matches every Atlas A5 / 800 chassis
+    //      we've seen in the lab where `dieId=1` is the user-facing die.
+    //
+    // TODO(@wenquan): once hcomm exposes a public
+    // `CcuGetDieEnableInfo`-equivalent API, query the enabled die instead of
+    // env+default. See plan §3.13.H for the long-term decision tree.
+    // -------------------------------------------------------------------------
+    {
+        uint32_t pinDieId = 1U;
+        const char *envDieId = std::getenv("HCCL_PTO_GATE_DIE_ID");
+        if (envDieId != nullptr && *envDieId != '\0') {
+            char *end = nullptr;
+            unsigned long parsed = std::strtoul(envDieId, &end, 10);
+            if (end != envDieId && parsed < 64U) {
+                pinDieId = static_cast<uint32_t>(parsed);
+            }
+        }
+        SetDieId(pinDieId);
+        std::fprintf(stderr,
+            "[PTO_GATE/kernel/gated_rs_mesh1d] rank=%u — SetDieId(%u) (override: "
+            "HCCL_PTO_GATE_DIE_ID=%s)\n",
+            rankId_, pinDieId, envDieId == nullptr ? "<unset>" : envDieId);
+        std::fflush(stderr);
+    }
 
     // -------------------------------------------------------------------------
     // Step 1: allocate CCU IR resources.
