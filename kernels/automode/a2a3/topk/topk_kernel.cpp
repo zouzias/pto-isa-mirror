@@ -52,8 +52,9 @@ template <typename GlobalData, typename DstGlobalData, typename DstTileData, typ
           typename T, int kTCols_, int topk>
 PTO_INTERNAL void SortTailBlock(DstGlobalData &dstGlobal, DstTileData &dstTile, TileData &srcTile, int blockLen)
 {
+    // tmp1Tile is independent scratch for TMRGSORT. No TASSIGN: this file is
+    // auto-mode-only and the auto allocator owns placement.
     TmpTileData tmp1Tile(1, kTCols_);
-    TASSIGN(tmp1Tile, 0x0 + kTCols_ * 2 * sizeof(T));
 
     int32_t mrgArray[15] = {0};
     int32_t arrayCount = FillMrgArray<kTCols_>(mrgArray, blockLen);
@@ -72,19 +73,35 @@ PTO_INTERNAL void SortTailBlock(DstGlobalData &dstGlobal, DstTileData &dstTile, 
 
         TileData src0Tile(1, tmpMrgSortedLen);
         TileData src1Tile(1, tmpMrgArray);
+        // Semantic aliasing: src0Tile is the (tmpMrgSortedLen)-wide prefix view
+        // of srcTile (the already-merged region from RunTopk's main loop);
+        // src1Tile is the (tmpMrgArray)-wide TSUBVIEW at offset mrgSortedLen
+        // (the next tail run). srcTile owns the data on loop entry.
         TRESHAPE(src0Tile, srcTile);
         TSUBVIEW(src1Tile, srcTile, 0, mrgSortedLen);
-        TMRGSORT<DstTileData, TmpTileData, TileData, TileData, 0>(dstTile, executedNumList, tmp1Tile, src0Tile,
-                                                                  src1Tile);
+
+        // Semantic aliasing (NOT memory reuse): curDstTile is the
+        // (tmpMrgSortedLen + tmpMrgArray)-wide prefix view of srcTile's
+        // storage. TMRGSORT must produce a full (tmpMrgSortedLen+tmpMrgArray)-
+        // wide merge; with dstTile (valid topK only) as the destination the
+        // tail run was being clipped (observed wrong-answer symptom: the
+        // expected max came from the tail block but never reached the result).
+        // After this TMRGSORT, srcTile[0..len-1] holds the merged run; the
+        // topK prefix is exposed via the outer dstTile = TRESHAPE(srcTile)
+        // view set up in RunTopk, and TSTORE(dstGlobal, dstTile) writes only
+        // those topK elements. Lifetimes: TMRGSORT consumes src0Tile/src1Tile
+        // and writes through curDstTile within a single sanctioned in-place
+        // call; tmp1Tile is the scratch.
+        TileData curDstTile(1, tmpMrgSortedLen + tmpMrgArray);
+        TRESHAPE(curDstTile, srcTile);
+        TMRGSORT<TileData, TmpTileData, TileData, TileData, 0>(curDstTile, executedNumList, tmp1Tile, src0Tile,
+                                                                src1Tile);
 #ifndef __PTO_AUTO__
         pipe_barrier(PIPE_V);
 #endif
-        TileData srcMovTile(1, topk);
-        TRESHAPE(srcMovTile, srcTile);
-        TMOV(srcMovTile, dstTile);
-#ifndef __PTO_AUTO__
-        pipe_barrier(PIPE_V);
-#endif
+        // No copyback needed: curDstTile wrote directly into srcTile via the
+        // alias, so the next iteration's src0Tile = TRESHAPE(srcTile) sees the
+        // merged result, and the final TSTORE sees srcTile's topK prefix.
     }
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -109,11 +126,16 @@ __global__ AICORE void RunTopk(__gm__ uint8_t *out_raw, __gm__ uint8_t *src_raw)
     using DstTileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     using TmpTileData = Tile<TileType::Vec, T, 1, kTCols_, BLayout::RowMajor, -1, -1>;
 
+    // srcTile and tmpTile are independent storage; the auto allocator owns
+    // placement. No TASSIGN here — this file is auto-mode-only.
     TileData srcTile(1, kTCols_);
     DstTileData dstTile(1, topk);
     TmpTileData tmpTile(1, kTCols_);
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(tmpTile, 0x0 + kTCols_ * sizeof(T));
+    // Semantic aliasing: dstTile is the (topK)-wide prefix view of srcTile.
+    // After in-place merge sort, srcTile[0..topK-1] is the descending top-K;
+    // dstTile is the tile shape that matches the GM output stride for TSTORE.
+    // NOT memory reuse — srcTile owns the data; dstTile is a smaller-valid
+    // view of the same buffer.
     TRESHAPE(dstTile, srcTile);
 
     GlobalData srcGlobal(src);

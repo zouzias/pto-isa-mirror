@@ -539,6 +539,7 @@ Compact list. Detailed entries in [auto_mode_bad_patterns.md](auto_mode_bad_patt
 11. **`Tile&` parameters into `__tf__` helpers** — pass `TileDType` by value with `__in__`/`__out__` instead. (§3.3 fix; PR-852 [§T4a](external_context/pr_852_notes.md))
 12. **`ConvTile` with dynamic dims in auto mode** — `GetShape` returns `staticShape` only; runtime values are ignored ([pto_tile.hpp:1124-1129](../include/pto/common/pto_tile.hpp#L1124-L1129)). Use static dims.
 13. **`Bias` falling back to `uint64_t`** when the build does not define `__DAV_C220_CUBE__` ([memory.hpp:81-82](../include/pto/common/memory.hpp#L81-L82)). Only use Bias on a cube target.
+14. **`TRESHAPE(a, b)` used as memory reuse rather than semantic aliasing.** `TRESHAPE` is an aliasing/view hint (e.g., `dstTile` is the prefix view of `srcTile` before `TSTORE`, or a different-layout view of the same data). Aliasing two tiles that both hold independent live values is a correctness bug, not a memory-saving optimization — the auto allocator already coalesces non-overlapping liveness. Add a short comment at every `TRESHAPE` call naming (a) which tile owns the data, (b) prefix / base / different-layout view, (c) why lifetimes do not conflict. For offset views prefer `TSUBVIEW` over chaining `TRESHAPE`.
 
 ---
 
