@@ -137,6 +137,27 @@ harness (Known: enumerated in `ALL_TESTCASES` of
 6. **Do not copy** — Do not omit either side. Auto-only kernels can drop the `TASSIGN`s; cross-mode kernels need both. Do not move `TRESHAPE` into a loop — see kernel rules §2.4.
 7. **Confidence** — High (the recipe is consistent with the existing `TQuant.hpp` library pattern at lines 108-114). Low for "this is in the current branch" (it is not; PR-852 not merged).
 
+### A11. add_tile_array — first confirmed-built auto-mode kernel with an in-kernel serial loop (A3)
+
+1. **File** — [kernels/automode/a2a3/add_tile_array/add_tile_array_kernel.cpp](../kernels/automode/a2a3/add_tile_array/add_tile_array_kernel.cpp)
+2. **Why** — first in-tree auto-mode kernel project that **(a) uses a serial in-kernel `for` loop over chunk indices**, and **(b) has been confirmed to build and produce numerically-correct output** by the user under `bash run.sh -r npu -v Ascend910B1` on A3. The closest references (A1, A2) only do a single tile per AICORE; this entry validates that the same auto-mode patterns extend to a serial chunk loop. Status: **Known** (user-confirmed). Inputs: integer-valued floats in `[1, 10]` cast to FP32, expected `max_abs_error == 0`; the user reported `test data success` / `test success`.
+3. **Pattern** — single AICORE (`<<<1, nullptr, stream>>>`); `for (i = 0; i < NUM_TILES; ++i) { GlobalData<...>(base + offset); TLOAD; TLOAD; TADD; TSTORE; }` with `TileData a, b, c` declared **once outside the loop** and reused; static valid region `Tile<TileType::Vec, T, R, C, BLayout::RowMajor, R, C>` (no `DYNAMIC = -1`); GM access via `GlobalTensor<T, Shape<1,1,1,R,C>, Stride<1,1,1,C,1>>` reconstructed per iteration with the `offset` baked into the GM pointer. **Build harness mirrors topk** ([kernels/manual/a2a3/topk/CMakeLists.txt](../kernels/manual/a2a3/topk/CMakeLists.txt)): bisheng-direct compiler, the topk `pto_example_vec` function plus `--cce-enable-pto-passes` on the kernel target. `-O2` carries from the global `add_compile_options(...)`.
+4. **Auto-mode compatibility** — Yes (Known, user-confirmed). Demonstrates several patterns that were Inferred-only before this build:
+   - Static valid region in auto mode for a Vec tile of `(64, 64)` `float` ([tile_type_reference.md §6](tile_type_reference.md)).
+   - In-kernel serial loop reusing the same Tile across iterations ([auto_mode_bad_patterns.md §1.2 corollary](auto_mode_bad_patterns.md): tile addresses pinned by the auto allocator do not require fresh declarations per iteration).
+   - `GlobalTensor` reconstruction per iteration with `base + offset`.
+   - `TLOAD → TADD → TSTORE` with **no manual sync** (no `set_flag` / `wait_flag` / `pipe_barrier` / `Event<>`) producing exact output.
+   - Auto mode enabled by adding **only** `--cce-enable-pto-passes` to the kernel target's compile options (no separate `-D__PTO_AUTO__`; `-O2` from the project-global options is sufficient).
+   - **No** kernel-arch guard `#if __CCE_AICORE__ == 220 && defined(__DAV_C220_VEC__)` is needed when the CMake target sets `--cce-aicore-arch=dav-c220-vec` directly (matches topk's pattern).
+5. **Copy** — the entire project layout for any new auto-mode prototype:
+   - `<name>_kernel.cpp` with includes `<pto/common/constants.hpp>` and `<pto/pto-inst.hpp>` only (NOT `kernel_operator.h` — see [compile_error_logbook.md §E8](compile_error_logbook.md));
+   - the topk-style `pto_example_vec_auto(NAME)` function in CMakeLists.txt (one-line delta from topk: add `--cce-enable-pto-passes` to the kernel target's `target_compile_options`);
+   - run.sh that takes `-r npu|sim -v Ascend910B*`;
+   - `scripts/gen_data.py` writing to `./input/` and `./output/`;
+   - main.cpp using `tests/common/test_common.h` `ReadFile` / `WriteFile` / `ResultCmp`. **Important**: declare the file-size local as plain `size_t`, not `const size_t` (see [compile_error_logbook.md §E9](compile_error_logbook.md)).
+6. **Do not copy** — single-AICORE launch is a v1 simplification; production-quality kernels should partition work across `BLOCK_DIM` cores via `block_idx` ([demos/auto_mode/baseline/add/csrc/kernel/add_custom.cpp:39-42](../demos/auto_mode/baseline/add/csrc/kernel/add_custom.cpp#L39-L42)). Tail handling is absent in v1 — total length must be a multiple of `TILE_ROWS * TILE_COLS`. No double / multi-buffering; no `block_idx`-based work split. These are deliberate v1 simplifications; future iterations will introduce optimization techniques.
+7. **Confidence** — High (user-confirmed build and `test data success` on Ascend910B1).
+
 ---
 
 ## Group B — Pattern references (use semantics, not source as-is)

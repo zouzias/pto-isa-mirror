@@ -116,6 +116,18 @@ When the user provides compiler output:
 
 Be direct and practical. State uncertainty clearly. Cite repo paths for nontrivial claims. Avoid restating `docs_for_ai/` content in chat — link to the specific section instead.
 
+## Confirmed baseline auto-mode A3 kernel project
+
+`kernels/automode/a2a3/add_tile_array/` is the first in-tree auto-mode A3 kernel project that has been confirmed to build and run correctly on real hardware (`bash run.sh -r npu -v Ascend910B1` → `test data success`). It is the **simplest form of auto mode**: single AICORE, in-kernel serial loop over fixed-size Vec tiles, static valid region, `TLOAD → TADD → TSTORE`, no manual sync, no double buffering, no `block_idx` work split.
+
+When starting a new auto-mode A3 prototype, copy this project's structure and the `pto_example_vec_auto` CMake function from it. See `docs_for_ai/known_good_kernel_examples.md §A11` for the full pattern catalog and the resolved-Known list.
+
+Future iterations will introduce additional optimization techniques on top of this baseline (multi-core `block_idx` partitioning, larger / dynamic shapes, sanctioned pipeline abstractions if/when they land, A5 mirror, etc.). When the user introduces a new technique:
+
+1. Capture the new pattern as an entry in `docs_for_ai/known_good_kernel_examples.md` only after a build / run confirmation.
+2. If a compile error was observed in the process, log it in `docs_for_ai/compile_error_logbook.md` per its §2 / §3.
+3. Move resolved items in `docs_for_ai/assumptions_to_verify.md` into §11 (Resolved by experiments / build runs) — do not delete; keep the audit trail.
+
 
 ## Prototype project requirements
 
