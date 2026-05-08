@@ -99,12 +99,12 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     if (m64 != nullptr) {
         // [0] entry sentinel — first thing kernel does, proves we ran
         m64[0] = 0xC0DECAFEDEADBEEFULL;
-        // [1] pre-store readback (no fence yet — raw observation)
+        // [1] pre-store readback at aligned base (raw observation)
         m64[1] = *reinterpret_cast<__gm__ uint64_t *>(alignedTarget);
         // [2] mask echo — confirms host→kernel ABI marshalling correct
         m64[2] = static_cast<uint64_t>(mask) & 0xFFFFULL;
-        // [4] target address self-check — host computes same and compares
-        m64[4] = alignedTarget;
+        // [4] target address (byte 6 within slot)
+        m64[4] = mmioAddr + static_cast<uint64_t>(ckeId) * stride + byte_off;
         // [5] which block ran — should be 0
         m64[5] = static_cast<uint64_t>(get_block_idx());
         pipe_barrier(PIPE_ALL);
@@ -117,22 +117,17 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     // AscendC::printf("[AIV/treduce] kernel ran: target=0x%lx mask=0x%x\n",
     //                 (unsigned long)target, (unsigned int)(mask & 0xffff));
 
-    // ── Raw 64-bit store into device CCU CKE MMIO ────────────────────────
-    // The store MUST be 8-byte aligned. `target` includes byte_off (=6),
-    // making it misaligned (target % 8 = 6) → AIV core traps on unaligned
-    // 64-bit access to device MMIO.
+    // ── Store mask into device CCU CKE MMIO at byte_off ──────────────────
+    // Hardware CKE set-detection fires on write-strobe to the specific byte
+    // address (byte 6 within the slot). Writing to the aligned slot base
+    // with shifted data does NOT trigger it (verified: store lands but
+    // microcode doesn't consume). Must target byte 6 directly.
     //
-    // Fix: write to the 8-byte-aligned slot base address, placing the mask
-    // at the correct byte position via bit-shift. In little-endian, byte N
-    // of a uint64_t corresponds to bits [N*8 .. N*8+7], so mask at byte 6
-    // means shift left by 48 bits.
-    //
-    // Why 64-bit (not 16-bit): a 16-bit store at byte 6 "lands" (readback
-    // shows change) but CCU microcode ClearCKEInstr never consumes it —
-    // the hardware set-detection signal requires a natural-width (8B) store
-    // covering the full slot. See prior comments in git history for details.
-    const uint64_t storeValue = static_cast<uint64_t>(mask & 0xFFFF) << (byte_off * 8);
-    *reinterpret_cast<__gm__ uint64_t *>(alignedTarget) = storeValue;
+    // Use uint16_t store: naturally aligned at byte 6 (6 % 2 = 0), won't
+    // trap. A 64-bit store to byte 6 would be misaligned (6 % 8 != 0) and
+    // traps on AIV MMIO.
+    const uint64_t target = mmioAddr + static_cast<uint64_t>(ckeId) * stride + byte_off;
+    *reinterpret_cast<__gm__ uint16_t *>(target) = static_cast<uint16_t>(mask & 0xFFFF);
 
     if (m64 != nullptr) {
         // [6] post-store, PRE-barrier readback — does barrier matter at all?
