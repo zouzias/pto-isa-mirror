@@ -94,8 +94,15 @@ PTO_INTERNAL void SortTailBlock(DstGlobalData &dstGlobal, DstTileData &dstTile, 
 }
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int topk>
-__global__ AICORE void RunTopk(__gm__ T *out, __gm__ T *src)
+__global__ AICORE void RunTopk(__gm__ uint8_t *out_raw, __gm__ uint8_t *src_raw)
 {
+    // Host launchers cannot apply the __gm__ qualifier via reinterpret_cast,
+    // so the kernel entry takes raw __gm__ uint8_t* and casts inside the
+    // kernel body where __gm__ is a valid type qualifier
+    // (see docs_for_ai/compile_error_logbook.md §E11).
+    __gm__ T *out = reinterpret_cast<__gm__ T *>(out_raw);
+    __gm__ T *src = reinterpret_cast<__gm__ T *>(src_raw);
+
     using GlobalData = GlobalTensor<T, Shape<1, 1, 1, kTRows_, kTCols_>, pto::Stride<1, 1, 1, kGCols_, 1>>;
     using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     using DstGlobalData = GlobalTensor<T, Shape<1, 1, 1, kTRows_, topk>, pto::Stride<1, 1, 1, kGCols_, 1>>;
@@ -162,8 +169,10 @@ void launchTopk(uint8_t *out, uint8_t *src, void *stream)
     constexpr int kTRows_ = 1;
     constexpr int kTCols_ = 1280;
     constexpr int topk    = 512;
+    // Pass raw uint8_t* directly. The kernel applies __gm__ + reinterpret
+    // internally; host-side casts to __gm__ pointers are rejected by bisheng.
     RunTopk<T, kGRows_, kGCols_, kTRows_, kTCols_, topk>
-        <<<1, nullptr, stream>>>(reinterpret_cast<__gm__ T *>(out), reinterpret_cast<__gm__ T *>(src));
+        <<<1, nullptr, stream>>>(out, src);
 }
 
 template void launchTopk<float>(uint8_t *out, uint8_t *src, void *stream);

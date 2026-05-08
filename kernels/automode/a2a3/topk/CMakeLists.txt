@@ -79,6 +79,7 @@ function(pto_example_vec_auto NAME)
         ${CMAKE_CCE_COMPILE_OPTIONS}
         --cce-aicore-arch=dav-c220-vec
         --cce-enable-pto-passes
+        -fenable-matrix
         -std=c++17
     )
     target_include_directories(${NAME}_kernel PRIVATE
