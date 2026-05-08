@@ -371,6 +371,29 @@ See [qualifier_reference.md](qualifier_reference.md) for the full reconciliation
 5. **Confidence** — High.
 6. **Status** — Known anti-pattern; resolved-by-PR-852 (not yet merged).
 
+### 5.7 Using source-element widths for post-TSORT32 merge logic (packed-width mismatch)
+
+1. **Pattern** — After `TSORT32(packed, src, idx, scratch)`, the destination tile holds (val, idx) packed pairs of width `srcWidth * 2 * TYPE_COEF`. Bug: continuing to use the **source-element** width for any of the subsequent merge / extract steps:
+   - the main `TMRGSORT` 4-way self-merge loop bound (`blockLen * 4 <= srcWidth` instead of `<= packedWidth`),
+   - the `cols = srcWidth / (blockLen * 4) * (blockLen * 4)` width that drives prefix views,
+   - the tail-block guard (`blockLen < srcWidth`),
+   - `FillMrgArray<srcWidth>(...)` template arg,
+   - the `tmpMrgSortedLen / tmpMrgArray` clip cap (`> topK ? topK` instead of `> packedTopK ? packedTopK`),
+   - the TMRGSORT scratch-tile width (one source row vs. one packed row),
+   - the final `TGATHER` prefix-view width.
+2. **Why risky** — The merge sort then operates only on the first `srcWidth` packed elements (= first half of the TSORT32 output for `TYPE_COEF=1`); the remaining packed run is never seen by the merge. Output is silently truncated — half the source data is dropped before reaching `TGATHER`. The `tmp1Tile` width / template-arg mismatch also makes `TMRGSORT`'s `TmpTile` template arg disagree with `Dst`/`Src` — undefined behavior at best.
+3. **Where** — Pattern observation, not a single source path. Caught during the [kernels/automode/a2a3/topk/](../kernels/automode/a2a3/topk/) bring-up. The manual TopK avoids the trap by introducing `dstCols = validCol * 2 * TYPE_COEF` ([kernels/manual/a2a3/topk/topk_kernel.cpp:286-287](../kernels/manual/a2a3/topk/topk_kernel.cpp#L286-L287)) and threading it as the `valid_col` template arg into `MrgsortSingleRow` ([call site:201](../kernels/manual/a2a3/topk/topk_kernel.cpp#L201)) and as `Cols` into `SortTailBlock` ([call site:105](../kernels/manual/a2a3/topk/topk_kernel.cpp#L105)).
+4. **Fix** — Define both source-width and packed-width constants in the kernel and use the packed forms throughout the post-TSORT32 path:
+   ```cpp
+   constexpr int kPackedCols = kCols * 2 * TYPE_COEF;   // ↔ manual `dstCols`
+   constexpr int kPackedTopK = kTopK * 2 * TYPE_COEF;   // ↔ manual `dtopk`
+   ```
+   - Use `kPackedCols` for: main merge loop bound, `cols` width in the loop, tail-block guard, `FillMrgArray<>`, scratch tile width and tile type, post-TSORT32 tile-type capacity.
+   - Use `kPackedTopK` for: tail-merge `tmpMrgSortedLen`/`tmpMrgArray` clip cap, final `TGATHER` source prefix view width.
+   - All four `TMRGSORT` template roles (`Dst, Tmp, Src0, Src1`) should resolve to the **packed** tile type so the scratch matches the merge format.
+5. **Confidence** — High (caught and fixed during the topk bring-up; user-confirmed PASS after fix).
+6. **Status** — Known anti-pattern. Resolved-by-experiment in [kernels/automode/a2a3/topk/](../kernels/automode/a2a3/topk/); see [known_good_kernel_examples.md §A12](known_good_kernel_examples.md) and [tile_type_reference.md §11 item 15](tile_type_reference.md).
+
 ---
 
 ## Group 6 — Misleading / "builds but suspect" patterns

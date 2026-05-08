@@ -530,6 +530,31 @@ Two real errors recorded as Occurrences in [compile_error_logbook.md](compile_er
 - **E8** — `kernel_operator.h` not on the bisheng-direct include path (was inherited from the `demos/auto_mode/baseline/add` pattern which uses a different `ascendc.cmake` harness). Fix: drop the include; use only `<pto/common/constants.hpp>` and `<pto/pto-inst.hpp>`.
 - **E9** — `tests/common/test_common.h::ReadFile` second parameter is `size_t &`; cannot bind to `const size_t`. Fix: drop `const` on the `fileSize` local. Not auto-mode-specific.
 
+### 11.3 Full auto-mode TopK with TSORT32 + TMRGSORT + TGATHER works on A3
+
+- **Resolved**: 2026-05-08 · A3 vec · user-reported `bash run.sh -r npu -v Ascend910B1` on
+  [kernels/automode/a2a3/topk/](../kernels/automode/a2a3/topk/) produced
+  `test value success` / `test index success` / `test success`.
+- **What this confirms (now Known)**:
+  - `TSORT32`, `TMRGSORT` (4-way self-merge AND 2-list explicit forms with `MrgSortExecutedNumList`), and `TGATHER` (template form `<DstTile, SrcTile, MaskPattern>(dst, src)`) are all auto-callable from kernel code on A3.
+  - `TGATHER` masks `P0101` (extract values from float-typed packed (val, idx) buffer) and `P1010` (extract indices from a uint32 type-pun view of the same buffer) work as documented in the manual TopK.
+  - `TRESHAPE` between tiles of **different element types** (`Tile<Vec, float, ...>` ↔ `Tile<Vec, uint32, ...>`) is auto-mode-safe at the kernel-level wrapper — sanctioned cross-element-type alias for type-pun, mirroring the [TQuant.hpp:108-114](../include/pto/npu/a2a3/TQuant.hpp#L108-L114) auto branch.
+  - `TSORT32`'s `tmp` parameter is pure scratch — content is irrelevant; an uninitialized independent tile suffices (no `TLOAD` of tmp from GM). Resolves the Inferred caveat in [§1 item 1.x earlier](#1-compiler--auto-mode-support).
+  - `SortTailBlock` writing to an **independent** destination tile (`mrgScratchTile`) and `TMOV`-back to the source-prefix is correct for a multi-iter tail (3 iterations in our `kCols=1280` shape's tail).
+  - Packed-width arithmetic — `kPackedCols = kCols * 2 * TYPE_COEF`, `kPackedTopK = kTopK * 2 * TYPE_COEF` — correctly drives the post-TSORT32 phases. Using raw source widths is a silent-data-loss bug (now captured as [auto_mode_bad_patterns.md §5.7](auto_mode_bad_patterns.md)).
+  - Two more compile errors recorded as Occurrences in the logbook:
+    - **E11** — host-side `reinterpret_cast<__gm__ T *>` rejected. Fix: kernel takes `__gm__ uint8_t *` and casts inside the body; host wrapper passes raw `uint8_t *`.
+    - **E12** — `Topk` naming collision (function and integer constant share the name). Fix: `k`-prefix on integer constants (`kCols`, `kTopK`); function renamed to `TopkKernel`.
+- **What is also Known after this experiment** (negative findings):
+  - The earlier "values-only TopK shortcut" (which assumed Python pre-sorted 64-element blocks and removed `TSORT32` / `idxTile` / `TGATHER`) is **not** equivalent to TopK and is **not** known-good — it produced wrong answers (interleaved output, dropped tail blocks). [known_good_kernel_examples.md §A12](known_good_kernel_examples.md) "Do not copy" makes this explicit.
+  - The transient `__cce_tinit` / `__cce_alias` / `matrix-types-extension` errors observed during local builds were caused by a misconfigured local bisheng-CCE toolchain — **not** a project-side bug. See [compile_error_logbook.md §E10 (WITHDRAWN)](compile_error_logbook.md). Do not add `-fenable-matrix` or fake `__cce_*` shims to project CMake on the basis of those errors.
+- **Reference entry**: [known_good_kernel_examples.md §A12](known_good_kernel_examples.md).
+- **Still Unknown for TopK** (out of scope for this v1):
+  - Half (`TYPE_COEF=2`) — mask patterns differ; not exercised.
+  - Multi-row, multi-AICORE (`block_idx`), and double-buffered variants.
+  - Other `kCols` / `kTopK` shapes — only `1280 / 512` was tested.
+  - Whether the manual's **in-place** TMRGSORT (curDstTile aliased onto srcTile.data()) would also be correct in auto mode; v1 sidesteps this with the independent `mrgScratchTile` + `TMOV`-back pattern.
+
 ---
 
 ## Cross-references
