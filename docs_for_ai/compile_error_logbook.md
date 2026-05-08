@@ -620,6 +620,158 @@ occurrence has somewhere to land.
 
 ---
 
+### E10. `matrix types extension is disabled; pass -fenable-matrix to enable it`
+
+- **Class** — `cmake-build`, `tile-shape`.
+- **Likely symptom** — bisheng-CCE compiler error
+  *"matrix types extension is disabled; pass -fenable-matrix to enable it"*
+  on the kernel `.cpp`. Source location points to a `tile_size(N)` /
+  `matrixtype(1, N)` annotation that arose from a `Tile<...>` /
+  `ConvTile<...>` `TileDType` lowering or from inside a `_IMPL` body
+  (e.g., `TMRGSORT_IMPL`, `TSORT32_IMPL`, ...).
+- **Likely cause** — `tile_size(N)` and `matrixtype(M, N)` are bisheng-CCE
+  matrix-types extensions. They are gated behind the `-fenable-matrix`
+  flag. Several auto-mode primitives' IMPLs (notably the sort/merge-sort
+  family — `TSORT32`, `TMRGSORT` — and any helper that uses
+  `MrgSortExecutedNumList`) emit `matrixtype(...)`-annotated locals
+  internally; without the flag the CCE frontend rejects them. Simple
+  pipelines that only touch `tile_size(N)` through `Tile<TileType::Vec, ...>`
+  + `TLOAD` / `TADD` / `TSTORE` (e.g., add_tile_array) build fine without
+  the flag, so the error tends to surface only when sort / merge-sort
+  / index-related primitives enter the picture.
+- **Affected platform** — A3 (first observed) and likely both. The flag is
+  a bisheng-CCE compiler frontend option, not arch-specific.
+- **Source evidence** — observed on first build of
+  [kernels/automode/a2a3/topk/topk_kernel.cpp](../kernels/automode/a2a3/topk/topk_kernel.cpp)
+  whose body adapts
+  [tests/npu/a2a3/src/st/testcase/tmrgsort/tmrgsort_kernel.cpp::RunTMrgsortTopk](../tests/npu/a2a3/src/st/testcase/tmrgsort/tmrgsort_kernel.cpp).
+  The in-tree `tmrgsort` ST builds successfully under `ALL_TESTCASES`,
+  which (Inferred) means the CMake harness used by the ST suite supplies
+  this flag automatically — the bisheng-direct project CMake we use under
+  `kernels/automode/` does not, hence the explicit add.
+- **Fix pattern** — add `-fenable-matrix` to the **kernel target's**
+  compile options (next to `--cce-enable-pto-passes` and the CCE arch
+  flag). Do NOT add it to ordinary host compilation.
+  ```cmake
+  target_compile_options(${NAME}_kernel PRIVATE
+      ${CMAKE_CCE_COMPILE_OPTIONS}
+      --cce-aicore-arch=dav-c220-vec
+      --cce-enable-pto-passes
+      -fenable-matrix
+      -std=c++17
+  )
+  ```
+- **Status** — `Known`.
+- **Confidence** — High.
+- **Related docs** —
+  [tile_type_reference.md §1.1, §12](tile_type_reference.md)
+  (`tile_size(N)` is an Inferred bisheng-CCE keyword;
+  this entry refines that note: matrix-types extension flag is required
+  to accept matrix-type annotations such as `matrixtype(1, N)`),
+  [known_good_kernel_examples.md §A11](known_good_kernel_examples.md)
+  (add_tile_array baseline didn't need the flag — useful contrast).
+- **Notes for future verification** — when starting a new auto-mode
+  prototype that uses any of `TSORT32`, `TMRGSORT`, `MrgSortExecutedNumList`,
+  index-tracked primitives, or `ConvTile`, add `-fenable-matrix` to the
+  kernel target up front; you will save a build cycle. Plain Vec-tile
+  pipelines (TLOAD/TADD/TSTORE/TMOV) appear to build without it. A
+  systematic per-primitive audit of which IMPLs emit `matrixtype(...)` is
+  not done; if a future build fails with this error on a primitive not
+  listed here, expand the list.
+- **Occurrences** —
+  - 2026-05-08 · A3 vec build (`bash run.sh -r npu -v Ascend910B1`) ·
+    [kernels/automode/a2a3/topk/topk_kernel.cpp](../kernels/automode/a2a3/topk/topk_kernel.cpp)
+    on first build attempt. Resolved by adding `-fenable-matrix` to
+    `pto_example_vec_auto`'s `target_compile_options` for the kernel
+    target. add_tile_array's CMakeLists was deliberately not modified
+    (it builds and runs without the flag — the simpler primitive set
+    doesn't trigger the matrix-types path).
+
+---
+
+### E11. `reinterpret_cast from uint8_t* to __gm__ float* is not allowed` in host launcher
+
+- **Class** — `qualifier`, `cmake-build` (host vs. kernel boundary).
+- **Likely symptom** — bisheng-CCE host-side error
+  *"reinterpret_cast from 'uint8_t *' to '__gm__ float *' is not allowed"*
+  (or analogous: any host-side cast that introduces the `__gm__` address-
+  space qualifier on the result type). Triggered at the call site of a
+  host wrapper that does
+  `MyKernel<<<...>>>(reinterpret_cast<__gm__ T *>(host_ptr), ...);`.
+- **Likely cause** — `__gm__` is a device-side address-space qualifier
+  (see [qualifier_reference.md](qualifier_reference.md)). The bisheng
+  frontend rejects host-side casts that synthesize a `__gm__`-qualified
+  pointer because the resulting type is not meaningful in host code; the
+  conversion is performed implicitly by the `<<<...>>>` launch syntax,
+  which knows the launch is crossing into device code.
+- **Affected platform** — both. First observed on A3.
+- **Source evidence** — observed on
+  [kernels/automode/a2a3/topk/topk_kernel.cpp](../kernels/automode/a2a3/topk/topk_kernel.cpp)
+  on first build attempt (the host-side `launchTopk` wrapper called
+  `RunTopk<T, ...><<<...>>>(reinterpret_cast<__gm__ T *>(out), ...)`).
+  The in-tree manual reference at
+  [kernels/manual/a2a3/topk/topk_kernel.cpp:336-352](../kernels/manual/a2a3/topk/topk_kernel.cpp#L336-L352)
+  shows the canonical fix shape: the `__global__` kernel takes
+  `__gm__ uint8_t *` and reinterprets to typed `__gm__ T *` **inside**
+  the kernel body. The host wrapper passes the raw `uint8_t *` straight
+  through to `<<<...>>>`.
+- **Fix pattern** —
+  1. Change the `__global__ AICORE` entry to take `__gm__ uint8_t *` for
+     each opaque GM buffer.
+  2. Inside the kernel body, write
+     `__gm__ T *out = reinterpret_cast<__gm__ T *>(out_raw);` (and the
+     same for src, etc.). Inside the kernel, `__gm__` is a valid
+     qualifier and the cast is accepted.
+  3. In the host wrapper, pass `out` and `src` directly — no host-side
+     `reinterpret_cast` to `__gm__ T *`.
+  ```cpp
+  // BEFORE (host wrapper)
+  RunTopk<T, ...><<<...>>>(reinterpret_cast<__gm__ T *>(out),
+                           reinterpret_cast<__gm__ T *>(src));
+  // AFTER
+  RunTopk<T, ...><<<...>>>(out, src);
+
+  // BEFORE (kernel)
+  __global__ AICORE void RunTopk(__gm__ T *out, __gm__ T *src) { ... }
+  // AFTER
+  __global__ AICORE void RunTopk(__gm__ uint8_t *out_raw,
+                                  __gm__ uint8_t *src_raw)
+  {
+      __gm__ T *out = reinterpret_cast<__gm__ T *>(out_raw);
+      __gm__ T *src = reinterpret_cast<__gm__ T *>(src_raw);
+      // ... rest unchanged ...
+  }
+  ```
+- **Status** — `Known`.
+- **Confidence** — High.
+- **Related docs** —
+  [qualifier_reference.md](qualifier_reference.md)
+  (`__gm__` is a memory-space qualifier; this entry refines the
+  host/kernel-boundary rule),
+  [auto_mode_bad_patterns.md §3.1](auto_mode_bad_patterns.md)
+  (separately, do not introduce raw CCE intrinsics in kernel code; this
+  entry is about the launch boundary, not the intrinsic surface).
+- **Notes for future verification** — the `__gm__ uint8_t *` ↔
+  `__gm__ T *` boundary pattern is the in-tree convention (manual topk,
+  manual gemm_performance, etc.). Treat any future kernel template that
+  takes typed `__gm__ T *` parameters at the `__global__` entry as a
+  refactor target: when the host wrapper is added, the cast belongs
+  inside the kernel body, not at the call site. The
+  add_tile_array kernel uses typed `__gm__ T *` at the entry but its
+  host main.cpp passes typed `float *` (not `uint8_t *`) directly; that
+  works because the device-side conversion from host `float *` to
+  `__gm__ float *` is implicit at the `<<<...>>>` boundary. The error
+  fires only when the host wrapper itself synthesizes the `__gm__`
+  qualifier via a `reinterpret_cast`.
+- **Occurrences** —
+  - 2026-05-08 · A3 vec build (`bash run.sh -r npu -v Ascend910B1`) ·
+    [kernels/automode/a2a3/topk/topk_kernel.cpp](../kernels/automode/a2a3/topk/topk_kernel.cpp)
+    on first build attempt. Resolved by changing `RunTopk` to take
+    `__gm__ uint8_t *`, casting inside the body, and dropping the
+    host-side casts in `launchTopk`.
+
+---
+
 ## 9. Reserved for new entries
 
 Append new entries below using the §3 field set. Keep entries focused on
