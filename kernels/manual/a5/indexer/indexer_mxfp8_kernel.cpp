@@ -30,6 +30,12 @@ using namespace pto;
 #ifndef INDEXER_TOPK
 #define INDEXER_TOPK 512
 #endif
+#ifndef INDEXER_MERGED_SKIP_SCORE_STORE
+#define INDEXER_MERGED_SKIP_SCORE_STORE 1
+#endif
+#ifndef INDEXER_MERGED_SKIP_MATMUL_STORE
+#define INDEXER_MERGED_SKIP_MATMUL_STORE 1
+#endif
 
 // FA-style AIC / AIV split (see kernels/manual/a5/flash_atten/fa_performance_kernel.cpp); enabled when built with
 // dav-c310 + REGISTER_BASE as in tests/npu/a5 pto_mix_st and this directory's CMakeLists.
@@ -269,34 +275,37 @@ AICORE inline void IndexerAiv_StoreTpopTstore(__gm__ float *currentDst, uint32_t
                                                __gm__ uint16_t *scoreOutBf16)
 {
 #ifdef __DAV_VEC__
-    // V1C1_VEC0 mode: vec1 should only participate in FIFO handshake.
-    // Keep single UB address, but avoid vec1 touching data path (TPOP/TMULS/TSTORE).
-    if (get_subblockid() != 0) {
-        cvPipe.cons.setWaitStatus(true);
-        cvPipe.cons.setFreeStatus(true);
-        cvPipe.cons.wait();
-        cvPipe.cons.free();
-        return;
-    }
+        // V1C1_VEC0 mode: vec1 should only participate in FIFO handshake.
+        // Keep single UB address, but avoid vec1 touching data path (TPOP/TMULS/TSTORE).
+        if (get_subblockid() != 0) {
+            cvPipe.cons.setWaitStatus(true);
+            cvPipe.cons.setFreeStatus(true);
+            cvPipe.cons.wait();
+            cvPipe.cons.free();
+            return;
+        }
 
-        using NDValidShapeC = TileShape2D<float, baseM, baseN, Layout::ND>;
-        using NDWholeShapeC = BaseShape2D<float, m, n, Layout::ND>;
-        using GlobalDataOut = GlobalTensor<float, NDValidShapeC, NDWholeShapeC, Layout::ND>;
-        GlobalDataOut dstGlobal(currentDst + i * static_cast<uint64_t>(baseM) * n + j * baseN);
         cvPipe.cons.setTileId(0, 0);
         cvPipe.cons.setWaitStatus(true);
         cvPipe.cons.setFreeStatus(false);
         cvPipe.cons.setEntryOffset(0);
         TPOP(vecForStore, cvPipe);
-        // Ensure MTE3 GM store consumes vec buffer before FIFO free/next TPUSH overwrite.
-        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-        TSTORE(dstGlobal, vecForStore);
-        set_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
-        wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
+        constexpr bool kNeedMatmulStore = !kFusePostProcess || (INDEXER_MERGED_SKIP_MATMUL_STORE == 0);
+        if constexpr (kNeedMatmulStore) {
+            using NDValidShapeC = TileShape2D<float, baseM, baseN, Layout::ND>;
+            using NDWholeShapeC = BaseShape2D<float, m, n, Layout::ND>;
+            using GlobalDataOut = GlobalTensor<float, NDValidShapeC, NDWholeShapeC, Layout::ND>;
+            GlobalDataOut dstGlobal(currentDst + i * static_cast<uint64_t>(baseM) * n + j * baseN);
+            // Ensure MTE3 GM store consumes vec buffer before FIFO free/next TPUSH overwrite.
+            set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+            wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+            TSTORE(dstGlobal, vecForStore);
+            set_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
+            wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
+        }
         if constexpr (kFusePostProcess) {
             static_assert(baseM % 2 == 0, "Fused postprocess requires even baseM.");
-            if (postScale != nullptr && scoreOut != nullptr && scoreOutBf16 != nullptr) {
+            if (postScale != nullptr && scoreOutBf16 != nullptr) {
                 constexpr uint32_t kHeads = baseM / 2;
                 constexpr uint64_t kUbVecBase = 0x30000;
                 constexpr uint64_t kUbMat1 = kUbVecBase + static_cast<uint64_t>(kHeads) * baseN * sizeof(float);
@@ -316,7 +325,6 @@ AICORE inline void IndexerAiv_StoreTpopTstore(__gm__ float *currentDst, uint32_t
                 using ScoreBf16Tile = Tile<TileType::Vec, bfloat16_t, 1, baseN, BLayout::RowMajor, -1, -1>;
                 using ScaleGlobal =
                     GlobalTensor<float, pto::Shape<1, 1, 1, kHeads, 1>, pto::Stride<1, 1, 1, 1, 1>, pto::Layout::DN>;
-                using ScoreGlobal = GlobalTensor<float, pto::Shape<1, 1, 1, 1, baseN>, pto::Stride<n, n, n, n, 1>>;
                 using ScoreBf16Global =
                     GlobalTensor<bfloat16_t, pto::Shape<1, 1, 1, 1, baseN>, pto::Stride<n, n, n, n, 1>>;
 
@@ -383,18 +391,24 @@ AICORE inline void IndexerAiv_StoreTpopTstore(__gm__ float *currentDst, uint32_t
                 }
 
                 const uint32_t colBase = j * baseN;
-                ScoreGlobal scoreOutGlobal0(scoreOut + colBase);
-                ScoreGlobal scoreOutGlobal1(scoreOut + n + colBase);
                 ScoreBf16Global scoreBf16Global0(reinterpret_cast<__gm__ bfloat16_t *>(scoreOutBf16 + colBase));
                 ScoreBf16Global scoreBf16Global1(reinterpret_cast<__gm__ bfloat16_t *>(scoreOutBf16 + n + colBase));
+                if (scoreOut != nullptr) {
+                    using ScoreGlobal =
+                        GlobalTensor<float, pto::Shape<1, 1, 1, 1, baseN>, pto::Stride<n, n, n, n, 1>>;
+                    ScoreGlobal scoreOutGlobal0(scoreOut + colBase);
+                    ScoreGlobal scoreOutGlobal1(scoreOut + n + colBase);
+                    TSTORE(scoreOutGlobal0, score0);
+                    if constexpr (!INDEXER_SIMPLE_EXPERIMENT || INDEXER_SIMPLE_FULL_BATCH) {
+                        TSTORE(scoreOutGlobal1, score1);
+                    }
+                }
 #ifndef __PTO_AUTO__
                 set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
                 wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
 #endif
-                TSTORE(scoreOutGlobal0, score0);
                 TSTORE(scoreBf16Global0, scoreBf160);
                 if constexpr (!INDEXER_SIMPLE_EXPERIMENT || INDEXER_SIMPLE_FULL_BATCH) {
-                    TSTORE(scoreOutGlobal1, score1);
                     TSTORE(scoreBf16Global1, scoreBf161);
                 }
 #ifndef __PTO_AUTO__
@@ -403,8 +417,8 @@ AICORE inline void IndexerAiv_StoreTpopTstore(__gm__ float *currentDst, uint32_t
 #endif
             }
         }
-    cvPipe.cons.setFreeStatus(true);
-    TFREE(cvPipe);
+        cvPipe.cons.setFreeStatus(true);
+        TFREE(cvPipe);
 #else
     (void)currentDst;
     (void)i;
@@ -682,12 +696,22 @@ AICORE inline void PostProcessScoreImpl(__gm__ float *matmulOut, __gm__ float *p
 #endif
 
     for (uint32_t b = 0; b < kBatch; ++b) {
+        scaleTile.SetValidRow(kHeads);
+        scaleTile.SetValidCol(1);
+        ScaleGlobal scaleGlobal(postScale + static_cast<uint64_t>(b) * kHeads);
+#ifndef __PTO_AUTO__
+        wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+#endif
+        TLOAD(scaleTile, scaleGlobal);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+#endif
         for (uint32_t n0 = 0; n0 < kLength; n0 += kChunkCols) {
             uint32_t validCols = (n0 + kChunkCols <= kLength) ? kChunkCols : (kLength - n0);
             matTile.SetValidRow(kHeads);
             matTile.SetValidCol(validCols);
-            scaleTile.SetValidRow(kHeads);
-            scaleTile.SetValidCol(1);
             weightedTile.SetValidRow(kHeads);
             weightedTile.SetValidCol(validCols);
             reduceTmpTile.SetValidRow(kReduceTmpRows);
@@ -698,12 +722,10 @@ AICORE inline void PostProcessScoreImpl(__gm__ float *matmulOut, __gm__ float *p
             scoreBf16Tile.SetValidCol(validCols);
 
             MatGlobal matGlobal(matmulOut + static_cast<uint64_t>(b) * kHeads * kLength + n0);
-            ScaleGlobal scaleGlobal(postScale + static_cast<uint64_t>(b) * kHeads);
 #ifndef __PTO_AUTO__
             wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
 #endif
             TLOAD(matTile, matGlobal);
-            TLOAD(scaleTile, scaleGlobal);
 #ifndef __PTO_AUTO__
             set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
@@ -811,8 +833,12 @@ AICORE inline void TopKFromScoreImpl(__gm__ uint16_t *scoreOutBf16, __gm__ uint3
     using TmpGatherTile = Tile<TileType::Vec, uint8_t, 1, cmpCol, BLayout::RowMajor, -1, -1>;
     using MergedIdxTile = Tile<TileType::Vec, uint32_t, 1, 2 * K, BLayout::RowMajor, -1, -1>;
 
+#ifndef __PTO_AUTO__
+    // Reverse dependency seed: allow the first TLOAD to proceed.
+    // MTE2 side waits on MTE3 completion of previous-batch TSTORE.
+    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+#endif
     for (uint32_t b = 0; b < kBatch; ++b) {
-        pipe_barrier(PIPE_ALL); // Temp 
         InTileU16 fullInTile(1, kLength);
         HistTile tileHist(1, kBinNum);
         HistTile chistMSB(1, kBinNum);
@@ -834,6 +860,10 @@ AICORE inline void TopKFromScoreImpl(__gm__ uint16_t *scoreOutBf16, __gm__ uint3
                                        pto::Stride<kLength, kLength, kLength, kLength, 1>>;
         SrcGlobal srcGlobal(scoreOutBf16 + static_cast<uint64_t>(b) * kLength);
         fullInTile.SetValidCol(kLength);
+#ifndef __PTO_AUTO__
+        // Reverse dependency: MTE2 waits until previous batch TSTORE(MTE3) finishes.
+        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+#endif
         TLOAD(fullInTile, srcGlobal);
 #ifndef __PTO_AUTO__
         set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
@@ -1095,6 +1125,10 @@ AICORE inline void TopKFromScoreImpl(__gm__ uint16_t *scoreOutBf16, __gm__ uint3
         wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
 #endif
         TSTORE(outGlobal, mergedIdx);
+#ifndef __PTO_AUTO__
+        // Release reverse dependency for next batch TLOAD.
+        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+#endif
     }
 #endif
 }
@@ -1125,7 +1159,6 @@ __global__ AICORE void IndexerMergedPipelineKernel(__gm__ uint8_t *out, __gm__ u
         reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float8_e5m2_t *>(src0),
         reinterpret_cast<__gm__ float8_e5m2_t *>(src1), reinterpret_cast<__gm__ float8_e8m0_t *>(src2),
         reinterpret_cast<__gm__ float8_e8m0_t *>(src3), postScale, scoreOut, scoreOutBf16);
-    pipe_barrier(PIPE_ALL);
     if constexpr (DAV_VEC) {
         if (get_subblockid() == 0 && get_block_idx() == 0) {
             TopKFromScoreImpl<n, kTopK>(scoreOutBf16, outIdx);
@@ -1195,7 +1228,11 @@ void LaunchIndexerMxfp8(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src
     constexpr uint32_t kBatch = 2;
     constexpr uint32_t kHeads = 64;
     constexpr uint32_t kTopK = INDEXER_TOPK;
+    float *mergedScoreOut = scoreOut;
+#if INDEXER_MERGED_SKIP_SCORE_STORE
+    mergedScoreOut = nullptr;
+#endif
     IndexerMergedPipelineKernel<blockDim, m, k, n, singleCoreM, singleCoreK, singleCoreN, baseM, baseK, baseN, stepM,
                                 stepKa, stepKb, stepN, kBatch, kHeads, kTopK>
-        <<<blockDim, nullptr, stream>>>(out, src0, src1, src2, src3, postScale, scoreOut, scoreOutBf16, outIdx);
+        <<<blockDim, nullptr, stream>>>(out, src0, src1, src2, src3, postScale, mergedScoreOut, scoreOutBf16, outIdx);
 }

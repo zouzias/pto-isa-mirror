@@ -25,6 +25,12 @@ using namespace PtoTestCommon;
 #ifndef INDEXER_TOPK
 #define INDEXER_TOPK 512
 #endif
+#ifndef INDEXER_MERGED_SKIP_SCORE_STORE
+#define INDEXER_MERGED_SKIP_SCORE_STORE 1
+#endif
+#ifndef INDEXER_MERGED_SKIP_MATMUL_STORE
+#define INDEXER_MERGED_SKIP_MATMUL_STORE 1
+#endif
 
 void LaunchIndexerMxfp8(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, uint8_t *src3, float *postScale,
                         float *scoreOut, uint16_t *scoreOutBf16, uint32_t *outIdx, void *stream);
@@ -78,6 +84,11 @@ void VerifyMatmul(size_t matmulFileSize)
     }
 }
 
+void ReportMatmulSkippedForFusedAll()
+{
+    printf("matmul test skipped (INDEXER_MERGED_SKIP_MATMUL_STORE=1 in merged all path)\n");
+}
+
 template <typename T>
 void VerifyScore(size_t scoreFileSize)
 {
@@ -113,6 +124,16 @@ uint16_t FloatToBf16Bits(T v)
     uint32_t bits = 0;
     std::memcpy(&bits, &v, sizeof(bits));
     return static_cast<uint16_t>(bits >> 16);
+}
+
+template <typename T>
+T Bf16BitsToFloat(uint16_t bits)
+{
+    static_assert(sizeof(T) == sizeof(uint32_t), "Bf16BitsToFloat expects 32-bit float-like type.");
+    uint32_t raw = static_cast<uint32_t>(bits) << 16;
+    T out{};
+    std::memcpy(&out, &raw, sizeof(out));
+    return out;
 }
 
 template <typename T>
@@ -333,9 +354,23 @@ void MxMatmul(RunProcess runProcess)
     }
 
     aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    constexpr bool kSkipMatmulOutInMergedAll = (INDEXER_MERGED_SKIP_MATMUL_STORE != 0);
+    const bool needMatmulOutHost =
+        (runProcess == RunProcess::kMatmul) || (runProcess == RunProcess::kPostProcess) ||
+        (runProcess == RunProcess::kAll && !kSkipMatmulOutInMergedAll);
+    if (needMatmulOutHost) {
+        aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    }
     if (runProcess != RunProcess::kTopK) {
         aclrtMemcpy(scoreHost.data(), scoreFileSize, scoreDevice, scoreFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    }
+    if (runProcess == RunProcess::kAll) {
+        aclrtMemcpy(scoreBf16Host.data(), scoreBf16FileSize, scoreBf16Device, scoreBf16FileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+#if INDEXER_MERGED_SKIP_SCORE_STORE
+        for (size_t i = 0; i < scoreHost.size(); ++i) {
+            scoreHost[i] = Bf16BitsToFloat<T>(scoreBf16Host[i]);
+        }
+#endif
     }
     aclrtMemcpy(outIdxHost.data(), outIdxFileSize, outIdxDevice, outIdxFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
     if (runProcess == RunProcess::kAll || runProcess == RunProcess::kPostProcess || runProcess == RunProcess::kTopK) {
@@ -354,7 +389,7 @@ void MxMatmul(RunProcess runProcess)
         }
     }
 
-    if (runProcess == RunProcess::kAll || runProcess == RunProcess::kMatmul) {
+    if (runProcess == RunProcess::kMatmul || (runProcess == RunProcess::kAll && !kSkipMatmulOutInMergedAll)) {
         WriteFile("../output/output_z.bin", dstHost, cFileSize);
     }
     if (runProcess == RunProcess::kAll || runProcess == RunProcess::kPostProcess || runProcess == RunProcess::kTopK) {
@@ -387,7 +422,11 @@ void MxMatmul(RunProcess runProcess)
     aclFinalize();
 
     if (runProcess == RunProcess::kAll) {
-        VerifyMatmul<T>(cFileSize);
+        if (kSkipMatmulOutInMergedAll) {
+            ReportMatmulSkippedForFusedAll();
+        } else {
+            VerifyMatmul<T>(cFileSize);
+        }
         VerifyScore<T>(scoreFileSize);
         VerifyTopkMultiset<T>(topkMultisetFileSize);
         VerifyTopkIndex(outIdxFileSize);
