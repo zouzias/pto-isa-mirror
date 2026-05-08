@@ -149,7 +149,7 @@ public:
         }
         if constexpr (LastK > 0){
             // epilogue phase: from numIters - lastK to numIters
-            runWIthPhase<MBLastK, NumIters - MBLastK, ShouldUnroll, Phase::Epiloge>(body);
+            runWIthPhase<MBLastK, NumIters - MBLastK, ShouldUnroll, Phase::Epilogue>(body);
         }
     }
 private: 
