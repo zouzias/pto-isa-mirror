@@ -562,7 +562,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
             for (int sub_tile = 0; sub_tile < kTileFactor; ++sub_tile){
                 qk_pv_stages.run(
                     [&]() {
-                        qkPipe.prod.setTileId(tile_id + qkPreLoadNum, sub_tile);
+                        qkPipe.prod.setTileId(tile_id + qkPreloadNum, sub_tile);
                         compute_qk<QKPipe, S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, INTERMEDIATE_CHECK, CAUSAL_MASK>(
                             qkPipe, tile_id + qkPreloadNum, sub_tile, q_block, k, qMatTile, kMatTile, qkAccTile, block_idx
                         );
