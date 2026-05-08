@@ -87,25 +87,24 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     // to launch >1 blocks. With `<<<1, ...>>>` this is always true.
     if (get_block_idx() != 0) return;
 
-    // Target byte address inside the CCU CKE register file.
-    const uint64_t target = mmioAddr + static_cast<uint64_t>(ckeId) * stride + byte_off;
-
     // Re-cast `__gm__ uint8_t*` to `__gm__ uint64_t*` so we can index 8 slots.
     // Same address space (__gm__ → __gm__) — bisheng accepts this cast.
     __gm__ uint64_t *m64 = reinterpret_cast<__gm__ uint64_t *>(marker);
 
-    // ── Diagnostic marker (8 × u64 = 64B, cacheline-aligned) ──────────────
-    // Pure GM store/load — independent of AscendC::printf / DebugTunnel.
-    // See file header for full layout & host-side triage table.
+    // 8-byte-aligned slot base for all reads/writes to the CKE register.
+    // byte_off is applied via bit-shift in the store value, NOT in the address,
+    // to avoid unaligned 64-bit access (which traps on AIV core MMIO).
+    const uint64_t alignedTarget = mmioAddr + static_cast<uint64_t>(ckeId) * stride;
+
     if (m64 != nullptr) {
         // [0] entry sentinel — first thing kernel does, proves we ran
         m64[0] = 0xC0DECAFEDEADBEEFULL;
         // [1] pre-store readback (no fence yet — raw observation)
-        m64[1] = *reinterpret_cast<__gm__ uint64_t *>(target);
+        m64[1] = *reinterpret_cast<__gm__ uint64_t *>(alignedTarget);
         // [2] mask echo — confirms host→kernel ABI marshalling correct
         m64[2] = static_cast<uint64_t>(mask) & 0xFFFFULL;
         // [4] target address self-check — host computes same and compares
-        m64[4] = target;
+        m64[4] = alignedTarget;
         // [5] which block ran — should be 0
         m64[5] = static_cast<uint64_t>(get_block_idx());
         pipe_barrier(PIPE_ALL);
@@ -119,50 +118,32 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     //                 (unsigned long)target, (unsigned int)(mask & 0xffff));
 
     // ── Raw 64-bit store into device CCU CKE MMIO ────────────────────────
-    // Why 64-bit (not 16-bit as before):
-    //   - rtGetDevResAddress(CCU_CKE, ckeId=N) returns len=8 → per-CKE slot
-    //     is 8B wide.
-    //   - With prior 16-bit store, rank=1 marker showed pre=0 → postBar=1
-    //     (the write physically landed somewhere — driver's shadow buffer
-    //     since readback sees the change), but CCU microcode `ClearCKEInstr`
-    //     never consumed it (hccl stream stayed parked at WaitEvent →
-    //     timeout). Strong evidence the 16-bit store updated only a shadow
-    //     byte, not the hardware "set" signal path the microcode polls.
-    //   - Hypothesis: CCU CKE register file fires the set detection signal
-    //     only on a natural-width (8B) store covering the entire slot. This
-    //     pattern is common in NPU set-on-write register files where the
-    //     "set" wire is gated on `slot_addr_decoded && slot_byte_strobe ==
-    //     0xFF`. Driver shadow happens to be byte-addressable so 16-bit
-    //     stores still update its memcpy buffer (explains readback delta)
-    //     but never trip the hardware "set" → microcode never released.
+    // The store MUST be 8-byte aligned. `target` includes byte_off (=6),
+    // making it misaligned (target % 8 = 6) → AIV core traps on unaligned
+    // 64-bit access to device MMIO.
     //
-    // Mask is placed in the LOW 16 bits (Layout A in host trigger sweep;
-    // matches `ClearCKEInstr` reading `waitCKEMask` as uint16_t). The HIGH
-    // 32 bits carry a **diagnostic magic** so marker[3] readback can prove
-    // whether the 64-bit store actually landed (vs being silently truncated
-    // to a 16-bit store by some intermediate layer):
-    //   - 64-bit store really landed → marker[3] = 0xC0DECAFE_xxxxXXXX
-    //                                    (high magic visible in readback)
-    //   - 16-bit store path ran instead → marker[3] = 0x00000000_xxxxXXXX
-    //                                       (high bytes stay 0)
-    // If the CCU CKE register file rejects writes with non-zero "reserved"
-    // bits we'll see undefined behaviour or driver complaint — but the
-    // driver advertises len=8 so all 8 bytes are user-addressable, this
-    // should be safe.
-    const uint64_t kStoreMagic = 0xC0DECAFE00000000ULL;
-    const uint64_t storeValue = kStoreMagic | (static_cast<uint64_t>(mask) & 0xFFFFULL);
-    *reinterpret_cast<__gm__ uint64_t *>(target) = storeValue;
+    // Fix: write to the 8-byte-aligned slot base address, placing the mask
+    // at the correct byte position via bit-shift. In little-endian, byte N
+    // of a uint64_t corresponds to bits [N*8 .. N*8+7], so mask at byte 6
+    // means shift left by 48 bits.
+    //
+    // Why 64-bit (not 16-bit): a 16-bit store at byte 6 "lands" (readback
+    // shows change) but CCU microcode ClearCKEInstr never consumes it —
+    // the hardware set-detection signal requires a natural-width (8B) store
+    // covering the full slot. See prior comments in git history for details.
+    const uint64_t storeValue = static_cast<uint64_t>(mask & 0xFFFF) << (byte_off * 8);
+    *reinterpret_cast<__gm__ uint64_t *>(alignedTarget) = storeValue;
 
     if (m64 != nullptr) {
         // [6] post-store, PRE-barrier readback — does barrier matter at all?
-        m64[6] = *reinterpret_cast<__gm__ uint64_t *>(target);
+        m64[6] = *reinterpret_cast<__gm__ uint64_t *>(alignedTarget);
     }
 
     pipe_barrier(PIPE_ALL);
 
     if (m64 != nullptr) {
         // [3] post-store, POST-barrier readback — authoritative observation
-        m64[3] = *reinterpret_cast<__gm__ uint64_t *>(target);
+        m64[3] = *reinterpret_cast<__gm__ uint64_t *>(alignedTarget);
         // [7] tail sentinel — proves kernel ran ALL the way through
         m64[7] = 0xFEEDFACECAFEBABEULL;
         pipe_barrier(PIPE_ALL);
