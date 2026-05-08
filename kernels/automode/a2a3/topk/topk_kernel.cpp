@@ -80,28 +80,38 @@ PTO_INTERNAL void SortTailBlock(DstGlobalData &dstGlobal, DstTileData &dstTile, 
         TRESHAPE(src0Tile, srcTile);
         TSUBVIEW(src1Tile, srcTile, 0, mrgSortedLen);
 
-        // Semantic aliasing (NOT memory reuse): curDstTile is the
-        // (tmpMrgSortedLen + tmpMrgArray)-wide prefix view of srcTile's
-        // storage. TMRGSORT must produce a full (tmpMrgSortedLen+tmpMrgArray)-
-        // wide merge; with dstTile (valid topK only) as the destination the
-        // tail run was being clipped (observed wrong-answer symptom: the
-        // expected max came from the tail block but never reached the result).
-        // After this TMRGSORT, srcTile[0..len-1] holds the merged run; the
-        // topK prefix is exposed via the outer dstTile = TRESHAPE(srcTile)
-        // view set up in RunTopk, and TSTORE(dstGlobal, dstTile) writes only
-        // those topK elements. Lifetimes: TMRGSORT consumes src0Tile/src1Tile
-        // and writes through curDstTile within a single sanctioned in-place
-        // call; tmp1Tile is the scratch.
-        TileData curDstTile(1, tmpMrgSortedLen + tmpMrgArray);
-        TRESHAPE(curDstTile, srcTile);
-        TMRGSORT<TileData, TmpTileData, TileData, TileData, 0>(curDstTile, executedNumList, tmp1Tile, src0Tile,
+        // Independent destination — NOT aliased to srcTile.
+        // The previous attempt aliased the merge destination back onto
+        // srcTile (via TRESHAPE(curDstTile, srcTile)) so TMRGSORT would
+        // write in place. That produced an interleaved output (top values
+        // at even positions, lower values at odd positions): a likely
+        // read/write aliasing hazard between TMRGSORT's reads of src0Tile /
+        // src1Tile (both views of srcTile) and its writes to a destination
+        // that is also a view of srcTile with overlapping range.
+        // Using independent storage for the merge destination avoids the
+        // overlap; we then promote the topK prefix back via TMOV.
+        // tailDstTile owns the merged data after TMRGSORT returns.
+        TileData tailDstTile(1, tmpMrgSortedLen + tmpMrgArray);
+        TMRGSORT<TileData, TmpTileData, TileData, TileData, 0>(tailDstTile, executedNumList, tmp1Tile, src0Tile,
                                                                 src1Tile);
 #ifndef __PTO_AUTO__
         pipe_barrier(PIPE_V);
 #endif
-        // No copyback needed: curDstTile wrote directly into srcTile via the
-        // alias, so the next iteration's src0Tile = TRESHAPE(srcTile) sees the
-        // merged result, and the final TSTORE sees srcTile's topK prefix.
+        // Semantic aliasing: tailTopKTile is the (topK)-wide prefix view of
+        // tailDstTile (which holds the merged descending run). tailDstTile
+        // owns the data; tailTopKTile is a smaller-valid view used only as
+        // the source of the TMOV below — no lifetime conflict.
+        TileData tailTopKTile(1, topk);
+        TRESHAPE(tailTopKTile, tailDstTile);
+        // Promote the topK prefix into dstTile. dstTile aliases srcTile's
+        // prefix (via the outer TRESHAPE in RunTopk), so this TMOV also
+        // updates srcTile[0..topK-1] for any subsequent loop iterations
+        // that re-derive src0Tile from srcTile. The final TSTORE after the
+        // loop reads dstTile's topK and writes it to dstGlobal.
+        TMOV(dstTile, tailTopKTile);
+#ifndef __PTO_AUTO__
+        pipe_barrier(PIPE_V);
+#endif
     }
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
