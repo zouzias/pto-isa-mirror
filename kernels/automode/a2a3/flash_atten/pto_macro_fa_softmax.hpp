@@ -91,7 +91,7 @@ AICORE inline void softmax_opt_fa_not_init_impl(TileDataD2 __out__ &x_exp, TileD
 {
     constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
 
-    using ReduceTileD2 = Tile<TileType::Vec, float, 1, ReduceTileD1::Rows, BLayout::RowMajor, 1, ReduceTileD1::Rows>;
+    using ReduceTileD2 = Tile<TileType::Vec, float, 1, ReduceTileD1::Rows, BLayout::RowMajor, 1, ReduceTileD1::ValidRow>;
     using Tile1D_fp32 = Tile<TileType::Vec, float, 1, TileDataS1::Rows * TileDataS1::Cols, BLayout::RowMajor, 1,
                              TileDataS1::Rows * TileDataS1::Cols>;
     using Tile1D_out = Tile<TileType::Vec, typename TileDataD2::DType, 1, TileDataS1::Rows * TileDataS1::Cols,
