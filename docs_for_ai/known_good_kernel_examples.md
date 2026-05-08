@@ -158,6 +158,33 @@ harness (Known: enumerated in `ALL_TESTCASES` of
 6. **Do not copy** — single-AICORE launch is a v1 simplification; production-quality kernels should partition work across `BLOCK_DIM` cores via `block_idx` ([demos/auto_mode/baseline/add/csrc/kernel/add_custom.cpp:39-42](../demos/auto_mode/baseline/add/csrc/kernel/add_custom.cpp#L39-L42)). Tail handling is absent in v1 — total length must be a multiple of `TILE_ROWS * TILE_COLS`. No double / multi-buffering; no `block_idx`-based work split. These are deliberate v1 simplifications; future iterations will introduce optimization techniques.
 7. **Confidence** — High (user-confirmed build and `test data success` on Ascend910B1).
 
+### A12. topk (auto-mode A3, full TopK with values + indices) — confirmed-built single-row prototype
+
+1. **File** — [kernels/automode/a2a3/topk/topk_kernel.cpp](../kernels/automode/a2a3/topk/topk_kernel.cpp)
+2. **Why** — second in-tree confirmed-built auto-mode A3 kernel. First end-to-end auto-mode kernel that uses the full **TSORT32 + TMRGSORT + TGATHER** pipeline (vector-style; no cube/matmul) and produces both top-K values and matching original indices from a fully-random unsorted input. User-confirmed PASS on Ascend910B1 (`test value success` / `test index success` / `test success`). Status: **Known** (user-confirmed, fixed shape).
+3. **Pattern** — Single AICORE (`<<<1, nullptr, stream>>>`); single row; `kCols=1280`, `kTopK=512`, `T=float`. Pipeline:
+   - `TLOAD` `srcTile` (1×kCols float) and `idxTile` (1×kCols uint32 identity)
+   - `TSORT32(packed, src, idx, scratch)` per 32-block, output (val, idx) packed
+   - main `TMRGSORT` 4-way self-merge loop with **independent** ping-pong tile (`mrgScratchTile`) + `TMOV`-back to `sort32DstTile` prefix; loop bound and widths in **packed-element units**
+   - `SortTailBlock` for non-power-of-4 residuals — `FillMrgArray<kPackedCols>(...)` schedules 2-list merges, each writing into `mrgScratchTile` (independent dst) and `TMOV`-back to `sort32DstTile`
+   - `TGATHER<…, MaskPattern::P0101>` extracts values; `TGATHER<…, MaskPattern::P1010>` extracts indices via a **type-pun** view (TRESHAPE between `Tile<Vec, float, ...>` and `Tile<Vec, uint32, ...>`, mirroring [TQuant.hpp:108-114](../include/pto/npu/a2a3/TQuant.hpp#L108-L114)'s auto branch)
+   - `TSTORE` two outputs (values + indices)
+4. **Auto-mode compatibility** — Yes (Known, user-confirmed). Confirms several Inferred items:
+   - `TSORT32`, `TMRGSORT` (4-way self-merge AND 2-list explicit forms with `MrgSortExecutedNumList`), and `TGATHER` (template form `<DstTile, SrcTile, MaskPattern>(dst, src)`) are all auto-callable from kernel code on A3.
+   - `TGATHER` masks `P0101` (values from float-typed packed buffer) and `P1010` (indices from uint32 type-pun view) work as documented in the manual TopK.
+   - `TRESHAPE` between tiles of **different element types** (float ↔ uint32) is auto-mode-safe at the kernel-level wrapper.
+   - `TSORT32`'s `tmp` parameter is pure scratch — content is irrelevant; an uninitialized independent tile suffices (no `TLOAD` of tmp from GM).
+   - Multi-iter `SortTailBlock` (3 iters in our `kCols=1280` shape) with `TMOV`-back is correct: each iteration's prefix-view `src0View` reads the previous iteration's merged result from `sort32DstTile`.
+   - Auto-allocator places ~45 KB of independent UB tiles (srcTile, idxTile, sort32TmpTile, sort32DstTile, mrgScratchTile, tmp1Tile, outValTile, outIdxTile) without overlap.
+5. **Copy** — the entire project layout (`pto_example_vec_auto`, `bash run.sh -r npu -v Ascend910B*` CLI, `scripts/gen_data.py` writing `input/` + `output/`); the packed-width discipline (`kPackedCols`/`kPackedTopK` derived from `TYPE_COEF`); the `TRESHAPE`-only-for-semantic-aliasing rule; the **independent destination + TMOV-back** pattern for `SortTailBlock` (sidesteps the in-place TMRGSORT-with-dst-aliased-to-src risk that surfaced in the abandoned shortcut). Use as the auto-mode A3 baseline for any sort/argsort/select-k variant.
+6. **Do not copy** —
+   - The fixed shape (`kCols=1280`, `kTopK=512`, `float`) is what was tested; other shapes have not been exercised. Half (`TYPE_COEF=2`) was deferred (mask patterns differ).
+   - Single AICORE only; no `block_idx` work split.
+   - The kernel build observed **two real compile errors during development** that are now in the logbook ([§E11 host-side `__gm__` cast](compile_error_logbook.md), [§E12 `Topk` naming collision](compile_error_logbook.md)). Subsequent ports should mirror the resolved patterns.
+   - The `__cce_tinit` / `__cce_alias` / `matrix-types-extension` errors that appeared transiently during development were caused by a misconfigured local bisheng-CCE toolchain, **not** a project bug; see [§E10 (WITHDRAWN)](compile_error_logbook.md). Do not add `-fenable-matrix` or fake `__cce_*` macros to any auto-mode project on the basis of those errors.
+   - An earlier values-only shortcut (which assumed Python pre-sorted 64-element blocks and skipped `TSORT32` / `idxTile` / `TGATHER`) was abandoned. **Do not treat that variant as known-good TopK.** It produced wrong answers (interleaved output, dropped tail blocks) for reasons the full pipeline above does not share.
+7. **Confidence** — High for the fixed shape; behavior at other `kCols`/`kTopK` or other dtypes is **Unknown**.
+
 ---
 
 ## Group B — Pattern references (use semantics, not source as-is)
