@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 #ifndef TQUANT_CPU_HPP
 #define TQUANT_CPU_HPP
@@ -18,6 +20,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <limits>
 #include <type_traits>
 #include <vector>
+
 #include "pto/cpu/tile_offsets.hpp"
 
 namespace pto {
@@ -25,6 +28,7 @@ namespace pto {
 enum class QuantType
 {
     MXFP8,
+    MXFP4_E2M1,
     INT8_SYM,
     INT8_ASYM
 };
@@ -111,6 +115,29 @@ inline uint8_t EncodeE4M3Fn(float value)
     return bestCode;
 }
 
+inline uint8_t EncodeE2M1Magic(float value)
+{
+    if (std::isnan(value)) {
+        return 0x7u;
+    }
+    const uint32_t valueBits = FloatToBits(value);
+    const uint8_t sign = static_cast<uint8_t>((valueBits >> 28) & 0x8u);
+    const float absValue = std::fabs(value);
+    if (std::isinf(absValue)) {
+        return static_cast<uint8_t>(sign | 0x7u);
+    }
+
+    const uint32_t absBits = FloatToBits(absValue);
+    uint32_t biasedExp = (absBits & 0x7F800000u) >> 23;
+    biasedExp = std::clamp<uint32_t>(biasedExp, 127u, 129u);
+
+    const uint32_t magicBits = (biasedExp + 22u) << 23;
+    const uint32_t q = FloatToBits(absValue + BitsToFloat(magicBits)) - magicBits;
+    const uint32_t baseCode = (biasedExp - 127u) << 1;
+    const uint32_t magCode = std::min<uint32_t>(q + baseCode, 7u);
+    return static_cast<uint8_t>(sign | magCode);
+}
+
 inline uint8_t ComputeSharedExponent(float maxAbsValue)
 {
     const uint32_t bits = FloatToBits(maxAbsValue);
@@ -119,6 +146,32 @@ inline uint8_t ComputeSharedExponent(float maxAbsValue)
         return 0xFFu;
     }
     return static_cast<uint8_t>(exponent - 8u);
+}
+
+inline uint8_t ComputeE2M1SharedExponent(float maxAbsValue)
+{
+    const uint32_t bits = FloatToBits(maxAbsValue);
+    uint32_t exponent = (bits & 0x7F800000u) >> 23;
+    if (exponent == 0xFFu) {
+        return 0xFFu;
+    }
+    if (exponent <= 2u) {
+        return 0u;
+    }
+    return static_cast<uint8_t>(exponent - 2u);
+}
+
+inline float ComputeE2M1ScalingFromExponent(uint8_t e8m0)
+{
+    if (e8m0 == 0xFFu) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+    const uint32_t scaleExp = 254u - static_cast<uint32_t>(e8m0);
+    float scaling = BitsToFloat(scaleExp << 23);
+    if (scaling == 0.0f) {
+        scaling = std::ldexp(1.0f, -127);
+    }
+    return scaling;
 }
 
 inline float ComputeScalingFromExponent(uint8_t e8m0)
@@ -136,9 +189,9 @@ inline float ComputeScalingFromExponent(uint8_t e8m0)
 
 inline std::vector<uint8_t> ReorderExponentZZ(const std::vector<uint8_t> &exp, int rows, int groupCols)
 {
-    PTO_CPU_ASSERT(
-        rows % 16 == 0 && groupCols % 2 == 0,
-        "Fix: MXFP8 NZ exponent reorder currently requires rows multiple of 16 and group cols multiple of 2.");
+    PTO_CPU_ASSERT(rows % 16 == 0 && groupCols % 2 == 0,
+                   "Fix: MXFP8 NZ exponent reorder currently requires rows "
+                   "multiple of 16 and group cols multiple of 2.");
     const int rowBlocks = rows / 16;
     const int groupBlocks = groupCols / 2;
     std::vector<uint8_t> reordered;
@@ -189,18 +242,26 @@ template <QuantType quant_type, typename TileDataOut, typename TileDataSrc, type
 PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *exp, TileDataMax *max,
                               TileDataScaling *scaling)
 {
-    static_assert(quant_type == QuantType::MXFP8, "Fix: MX overload is reserved for MXFP8.");
+    static_assert(quant_type == QuantType::MXFP8 || quant_type == QuantType::MXFP4_E2M1,
+                  "Fix: MX overload is reserved for MXFP8/MXFP4_E2M1.");
     using SrcT = typename TileDataSrc::DType;
-    static_assert(std::is_same_v<SrcT, float>, "Fix: Input has to be float 32");
-    static_assert(std::is_same_v<typename TileDataOut::DType, int8_t>, "Fix: MXFP8 output must be int8 bytes.");
+    if constexpr (quant_type == QuantType::MXFP8) {
+        static_assert(std::is_same_v<SrcT, float>, "Fix: MXFP8 input has to be float 32");
+        static_assert(std::is_same_v<typename TileDataOut::DType, int8_t>, "Fix: MXFP8 output must be int8 bytes.");
+    } else {
+        static_assert(std::is_same_v<SrcT, float> || std::is_same_v<SrcT, half> || std::is_same_v<SrcT, aclFloat16>,
+                      "Fix: MXFP4_E2M1 CPU sim supports float/float16 source.");
+        static_assert(std::is_same_v<typename TileDataOut::DType, float4_e2m1x2_t>,
+                      "Fix: MXFP4_E2M1 output must be float4_e2m1x2_t.");
+    }
     static_assert(std::is_same_v<typename TileDataExp::DType, uint8_t>, "Fix: MXFP8 exponent must be uint8 bytes.");
 
     PTO_CPU_ASSERT(exp != nullptr && max != nullptr && scaling != nullptr,
-                   "Fix: MXFP8 requires exp/max/scaling tiles.");
+                   "Fix: MX quant requires exp/max/scaling tiles.");
 
     const int rows = src.GetValidRow();
     const int cols = src.GetValidCol();
-    PTO_CPU_ASSERT(cols % 32 == 0, "Fix: MXFP8 CPU sim currently requires valid cols to be a multiple of 32.");
+    PTO_CPU_ASSERT(cols % 32 == 0, "Fix: MX CPU sim currently requires valid cols to be a multiple of 32.");
     const int groupCols = cols / 32;
 
     // Flatten exp, max, scaling to 1D for internal processing
@@ -219,6 +280,10 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
         Tile<TileType::Vec, typename TileDataScaling::DType, 1, scalingNumel, BLayout::RowMajor, -1, -1>;
     FlatScalingTile flatScaling(1, scalingNumel);
     TRESHAPE_IMPL(flatScaling, *scaling);
+    if constexpr (quant_type == QuantType::MXFP4_E2M1) {
+        std::fill(reinterpret_cast<uint8_t *>(dst.data()),
+                  reinterpret_cast<uint8_t *>(dst.data()) + TileDataOut::Rows * TileDataOut::Cols, 0);
+    }
 
     for (int row = 0; row < rows; ++row) {
         for (int group = 0; group < groupCols; ++group) {
@@ -227,17 +292,34 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
                 const float value = src.data()[GetTileElementOffset<TileDataSrc>(row, group * 32 + inner)];
                 maxAbsValue = std::max(maxAbsValue, std::fabs(value));
             }
-            const uint8_t e8m0 = cpu_quant::ComputeSharedExponent(maxAbsValue);
-            const float groupScaling = cpu_quant::ComputeScalingFromExponent(e8m0);
+            const uint8_t e8m0 = quant_type == QuantType::MXFP8 ? cpu_quant::ComputeSharedExponent(maxAbsValue) :
+                                                                  cpu_quant::ComputeE2M1SharedExponent(maxAbsValue);
+            const float groupScaling = quant_type == QuantType::MXFP8 ? cpu_quant::ComputeScalingFromExponent(e8m0) :
+                                                                        cpu_quant::ComputeE2M1ScalingFromExponent(e8m0);
             const int flatGroupIdx = row * groupCols + group;
             flatMax.data()[flatGroupIdx] = maxAbsValue;
             flatExp.data()[flatGroupIdx] = e8m0;
             for (int inner = 0; inner < 32; ++inner) {
                 const int col = group * 32 + inner;
-                flatScaling.data()[row * cols + col] = groupScaling;
+                if constexpr (quant_type == QuantType::MXFP8) {
+                    flatScaling.data()[row * cols + col] = groupScaling;
+                } else {
+                    flatScaling.data()[flatGroupIdx] = groupScaling;
+                }
                 const float value = src.data()[GetTileElementOffset<TileDataSrc>(row, col)];
-                const uint8_t encoded = cpu_quant::EncodeE4M3Fn(value * groupScaling);
-                dst.data()[GetTileElementOffset<TileDataOut>(row, col)] = static_cast<int8_t>(encoded);
+                if constexpr (quant_type == QuantType::MXFP8) {
+                    const uint8_t encoded = cpu_quant::EncodeE4M3Fn(value * groupScaling);
+                    dst.data()[GetTileElementOffset<TileDataOut>(row, col)] = static_cast<int8_t>(encoded);
+                } else {
+                    const uint8_t encoded = cpu_quant::EncodeE2M1Magic(value * groupScaling);
+                    auto *dstBytes = reinterpret_cast<uint8_t *>(dst.data());
+                    const int byteOffset = row * TileDataOut::Cols + col / 2;
+                    if ((col & 1) == 0) {
+                        dstBytes[byteOffset] = static_cast<uint8_t>((dstBytes[byteOffset] & 0xF0u) | encoded);
+                    } else {
+                        dstBytes[byteOffset] = static_cast<uint8_t>((dstBytes[byteOffset] & 0x0Fu) | (encoded << 4));
+                    }
+                }
             }
         }
     }

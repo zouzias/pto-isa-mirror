@@ -207,6 +207,63 @@ TEST(TQuantCpuSimTest, MxFp8NdMatchesExactBytes)
     }
 }
 
+TEST(TQuantCpuSimTest, MxFp4E2M1Fp16NdMatchesMagicReference)
+{
+    using SrcTile = Tile<TileType::Vec, aclFloat16, 4, 32>;
+    using DstTile = Tile<TileType::Vec, float4_e2m1x2_t, 4, 32>;
+    using ExpTile = Tile<TileType::Vec, uint8_t, 1, 32>;
+    using MaxTile = Tile<TileType::Vec, float, 1, 8>;
+    SrcTile src;
+    DstTile dst;
+    ExpTile exp;
+    MaxTile max;
+    MaxTile scaling;
+    size_t addr = 0;
+    TASSIGN(src, addr);
+    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    TASSIGN(dst, addr);
+    addr += DstTile::Numel * sizeof(typename DstTile::DType);
+    TASSIGN(exp, addr);
+    addr += ExpTile::Numel * sizeof(typename ExpTile::DType);
+    TASSIGN(max, addr);
+    addr += MaxTile::Numel * sizeof(typename MaxTile::DType);
+    TASSIGN(scaling, addr);
+
+    const float values[8] = {-0.0f, 0.0f, 0.25f, 0.75f, 1.25f, 1.75f, 2.5f, 7.5f};
+    for (int r = 0; r < src.GetValidRow(); ++r) {
+        for (int c = 0; c < src.GetValidCol(); ++c) {
+            const float sign = ((r + c) & 1) ? -1.0f : 1.0f;
+            src.data()[GetTileElementOffset<SrcTile>(r, c)] =
+                static_cast<aclFloat16>(sign * values[(r * 3 + c) % 8] * static_cast<float>(1 << r));
+        }
+    }
+
+    TQUANT<QuantType::MXFP4_E2M1>(dst, src, &exp, &max, &scaling);
+
+    const auto *dstBytes = reinterpret_cast<const uint8_t *>(dst.data());
+    for (int row = 0; row < 4; ++row) {
+        float maxAbs = 0.0f;
+        for (int col = 0; col < 32; ++col) {
+            maxAbs =
+                std::max(maxAbs, std::fabs(static_cast<float>(src.data()[GetTileElementOffset<SrcTile>(row, col)])));
+        }
+        const uint8_t expectedExp = cpu_quant::ComputeE2M1SharedExponent(maxAbs);
+        const float expectedScaling = cpu_quant::ComputeE2M1ScalingFromExponent(expectedExp);
+        EXPECT_EQ(exp.data()[row], expectedExp);
+        EXPECT_FLOAT_EQ(max.data()[row], maxAbs);
+        EXPECT_FLOAT_EQ(scaling.data()[row], expectedScaling);
+        for (int byte = 0; byte < 16; ++byte) {
+            const int col0 = byte * 2;
+            const int col1 = col0 + 1;
+            const uint8_t lo = cpu_quant::EncodeE2M1Magic(
+                static_cast<float>(src.data()[GetTileElementOffset<SrcTile>(row, col0)]) * expectedScaling);
+            const uint8_t hi = cpu_quant::EncodeE2M1Magic(
+                static_cast<float>(src.data()[GetTileElementOffset<SrcTile>(row, col1)]) * expectedScaling);
+            EXPECT_EQ(dstBytes[row * DstTile::Cols + byte], static_cast<uint8_t>(lo | (hi << 4)));
+        }
+    }
+}
+
 TEST(TQuantCpuSimTest, MxFp8NzReordersExponentsExactly)
 {
     using SrcTile = Tile<TileType::Vec, float, 16, 64>;

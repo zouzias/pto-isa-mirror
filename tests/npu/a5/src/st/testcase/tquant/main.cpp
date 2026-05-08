@@ -1,18 +1,22 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 #include <gtest/gtest.h>
+
 #include <type_traits>
+
 #include "acl/acl.h"
 #include "test_common.h"
 
-#define DIV_ROUNDUP(a, b) (((a) + (b)-1) / (b))
+#define DIV_ROUNDUP(a, b) (((a) + (b) - 1) / (b))
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -21,6 +25,7 @@ namespace pto {
 enum class QuantType
 {
     MXFP8,
+    MXFP4_E2M1,
     INT8_SYM,
     INT8_ASYM
 };
@@ -40,6 +45,9 @@ void LaunchTQuantMXFP8_BF16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void 
 
 template <int validRows, int validCols, int mode>
 void LaunchTQuantMXFP8_FP16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
+
+template <int validRows, int validCols>
+void LaunchTQuantMXFP4_E2M1_FP16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
 
 class TQUANTTEST : public testing::Test {
 protected:
@@ -256,6 +264,69 @@ void test_tquant_mxfp8_fp16()
     EXPECT_TRUE(ret_fp8);
 }
 
+template <int validRows, int validCols>
+void test_tquant_mxfp4_e2m1_fp16()
+{
+    constexpr int paddedCols = ((validCols + 31) / 32) * 32;
+    size_t srcFileSize = validRows * validCols * sizeof(uint16_t);
+    size_t dstExpFileSize = DIV_ROUNDUP(validRows * paddedCols, 32) * sizeof(uint8_t);
+    size_t dstFileSize = validRows * DIV_ROUNDUP(validCols, 2) * sizeof(uint8_t);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    uint8_t *dstHost, *dstDevice, *dstExpHost, *dstExpDevice;
+    uint16_t *srcHost, *srcDevice;
+
+    aclrtMallocHost((void **)(&dstHost), dstFileSize);
+    aclrtMallocHost((void **)(&dstExpHost), dstExpFileSize);
+    aclrtMallocHost((void **)(&srcHost), srcFileSize);
+
+    aclrtMalloc((void **)&dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&dstExpDevice, dstExpFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&srcDevice, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/input.bin", srcFileSize, srcHost, srcFileSize);
+    aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    LaunchTQuantMXFP4_E2M1_FP16<validRows, validCols>(dstDevice, srcDevice, dstExpDevice, stream);
+
+    aclError syncRet = aclrtSynchronizeStream(stream);
+    ASSERT_EQ(syncRet, ACL_SUCCESS) << "aclrtSynchronizeStream failed (ret=" << syncRet
+                                    << "): " << aclGetRecentErrMsg();
+    aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(dstExpHost, dstExpFileSize, dstExpDevice, dstExpFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output_e2m1.bin", dstHost, dstFileSize);
+    WriteFile(GetGoldenDir() + "/output_e8m0.bin", dstExpHost, dstExpFileSize);
+
+    aclrtFree((void *)dstDevice);
+    aclrtFree((void *)dstExpDevice);
+    aclrtFree((void *)srcDevice);
+
+    aclrtFreeHost((void *)dstHost);
+    aclrtFreeHost((void *)dstExpHost);
+    aclrtFreeHost((void *)srcHost);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<uint8_t> golden_fp4(dstFileSize);
+    std::vector<uint8_t> dev_fp4(dstFileSize);
+    std::vector<uint8_t> golden_e8m0(dstExpFileSize);
+    std::vector<uint8_t> dev_e8m0(dstExpFileSize);
+
+    ReadFile(GetGoldenDir() + "/golden_fp4.bin", dstFileSize, golden_fp4.data(), dstFileSize);
+    ReadFile(GetGoldenDir() + "/golden_e8m0.bin", dstExpFileSize, golden_e8m0.data(), dstExpFileSize);
+    ReadFile(GetGoldenDir() + "/output_e2m1.bin", dstFileSize, dev_fp4.data(), dstFileSize);
+    ReadFile(GetGoldenDir() + "/output_e8m0.bin", dstExpFileSize, dev_e8m0.data(), dstExpFileSize);
+
+    EXPECT_TRUE(ResultCmp<uint8_t>(golden_e8m0, dev_e8m0, 0.0f));
+    EXPECT_TRUE(ResultCmp<uint8_t>(golden_fp4, dev_fp4, 0.0f));
+}
+
 template <int validRows, int validCols, int mode>
 void test_tquant_int8_sym()
 {
@@ -447,8 +518,9 @@ TEST_F(TQUANTTEST, case_mxfp8_bf16_1x16_nd)
 {
     test_tquant_mxfp8_bf16<1, 16, 0>();
 }
-// 4x256 => 1024 elems => vlCount=8, loop_num=4. Each 256-elem DINTLV window maps to one row,
-// which makes this case a direct check that max/exp/scaling and quant windows stay row-aligned.
+// 4x256 => 1024 elems => vlCount=8, loop_num=4. Each 256-elem DINTLV window
+// maps to one row, which makes this case a direct check that max/exp/scaling
+// and quant windows stay row-aligned.
 TEST_F(TQUANTTEST, case_mxfp8_bf16_4x256_nd)
 {
     test_tquant_mxfp8_bf16<4, 256, 0>();
@@ -459,13 +531,15 @@ TEST_F(TQUANTTEST, case_mxfp8_bf16_4x512_nd)
 {
     test_tquant_mxfp8_bf16<4, 512, 0>();
 }
-// Multi-flush vstas coverage: loop_num odd >= 3 => 16B pending in st_align at final vstas.
-// 3x256 => padded 768 elements => loop_num = ceil(768/256) = 3 (odd).
+// Multi-flush vstas coverage: loop_num odd >= 3 => 16B pending in st_align at
+// final vstas. 3x256 => padded 768 elements => loop_num = ceil(768/256) = 3
+// (odd).
 TEST_F(TQUANTTEST, case_mxfp8_bf16_3x256_nd)
 {
     test_tquant_mxfp8_bf16<3, 256, 0>();
 }
-// 5x256 => padded 1280 elements => loop_num = 5 (odd), exercises more vstus iterations.
+// 5x256 => padded 1280 elements => loop_num = 5 (odd), exercises more vstus
+// iterations.
 TEST_F(TQUANTTEST, case_mxfp8_bf16_5x256_nd)
 {
     test_tquant_mxfp8_bf16<5, 256, 0>();
@@ -506,8 +580,9 @@ TEST_F(TQUANTTEST, case_mxfp8_fp16_128x128_nd)
 {
     test_tquant_mxfp8_fp16<128, 128, 0>();
 }
-// 4x256 => 1024 elems => vlCount=8, loop_num=4. Mirrors the BF16 regression case
-// on the FP16 path so board-only stage-order issues show up on both B16 variants.
+// 4x256 => 1024 elems => vlCount=8, loop_num=4. Mirrors the BF16 regression
+// case on the FP16 path so board-only stage-order issues show up on both B16
+// variants.
 TEST_F(TQUANTTEST, case_mxfp8_fp16_4x256_nd)
 {
     test_tquant_mxfp8_fp16<4, 256, 0>();
@@ -515,6 +590,12 @@ TEST_F(TQUANTTEST, case_mxfp8_fp16_4x256_nd)
 TEST_F(TQUANTTEST, case_mxfp8_fp16_11x640_nd)
 {
     test_tquant_mxfp8_fp16<11, 640, 0>();
+}
+
+// MXFP4 E2M1 FP16 ND
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_2x128_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<2, 128>();
 }
 
 TEST_F(TQUANTTEST, case_mxfp8_fp16_32x128_nz)

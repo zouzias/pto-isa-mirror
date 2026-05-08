@@ -23,6 +23,7 @@ namespace pto {
 enum class QuantType
 {
     MXFP8,
+    MXFP4_E2M1,
     INT8_SYM,
     INT8_ASYM
 };
@@ -31,6 +32,18 @@ enum class QuantType
 template <typename TileData>
 using FlatTile1D = Tile<TileType::Vec, typename TileData::DType, 1, TileData::Rows * TileData::Cols, BLayout::RowMajor,
                         -1, -1, SLayout::NoneBox, 512, PadValue::Zero>;
+
+template <typename T, typename U>
+PTO_INTERNAL MaskReg TQuantPSetTyped(U dist)
+{
+    if constexpr (sizeof(T) == sizeof(float)) {
+        return pset_b32(dist);
+    } else if constexpr (sizeof(T) == sizeof(half)) {
+        return pset_b16(dist);
+    } else {
+        return pset_b8(dist);
+    }
+}
 
 PTO_INTERNAL void AbsReduceMax_Naive(__ubuf__ float *srcPtr, __ubuf__ float *maxPtr, unsigned total_elements_count,
                                      unsigned vl_count, unsigned elementsPerRepeat, MaskReg &preg_lower32,
@@ -489,6 +502,69 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling(__ubuf__ T *maxPtr, __ubuf__ uint8
     }
 }
 
+template <typename T>
+PTO_INTERNAL void ExtractE2M1ExponentAndScalingVL(__ubuf__ T *maxPtr, __ubuf__ uint8_t *expPtr,
+                                                  __ubuf__ T *scalingPtr, uint32_t off, uint32_t rem)
+{
+    static_assert(std::is_same<T, half>::value, "ExtractE2M1ExponentAndScalingVL: T must be half");
+    constexpr uint16_t kBf16ExpMask = 0x7F80;
+    constexpr uint16_t kBf16MantissaMask = 0x007F;
+    constexpr uint16_t kFp4E2M1MaxExp = 0x0100;
+    constexpr uint16_t kBf16ExpBias = 0x7F00;
+    constexpr uint16_t kFp4Nan = 0x00FF;
+    constexpr uint16_t kBf16Nan = 0x7FC0;
+
+    __ubuf__ uint16_t *maxPtr_u16 = (__ubuf__ uint16_t *)maxPtr;
+    __ubuf__ uint16_t *scalingPtr_u16 = (__ubuf__ uint16_t *)scalingPtr;
+    RegTensor<uint16_t> vu16_max_abs, vu16_max_exp, vu16_mantissa;
+    RegTensor<uint16_t> vu16_shared_exp, vu16_scale_value, vu16_recip_scale;
+    RegTensor<uint16_t> vu16_max_exp_value, vu16_scale_bias, vu16_fp4_nan;
+    RegTensor<uint16_t> vu16_nan, vu16_exp_mask, vu16_mantissa_mask;
+    vector_bool preg_clamp, preg_special, preg_nan;
+    vector_bool preg_b16 = CreatePredicate<T>(rem);
+
+    vbr(vu16_max_exp_value, kFp4E2M1MaxExp);
+    vbr(vu16_scale_bias, kBf16ExpBias);
+    vbr(vu16_fp4_nan, kFp4Nan);
+    vbr(vu16_nan, kBf16Nan);
+    vbr(vu16_exp_mask, kBf16ExpMask);
+    vbr(vu16_mantissa_mask, kBf16MantissaMask);
+
+    vlds(vu16_max_abs, maxPtr_u16, off, NORM);
+    vand(vu16_max_exp, vu16_max_abs, vu16_exp_mask, preg_b16, MODE_ZEROING);
+    vand(vu16_mantissa, vu16_max_abs, vu16_mantissa_mask, preg_b16, MODE_ZEROING);
+    vcmps_eq(preg_special, vu16_max_exp, kBf16ExpMask, preg_b16);
+    vcmps_ne(preg_nan, vu16_mantissa, 0, preg_special);
+    vcmps_le(preg_clamp, vu16_max_exp, kFp4E2M1MaxExp, preg_b16);
+    vsel(vu16_max_exp, vu16_max_exp_value, vu16_max_exp, preg_clamp);
+
+    vsub(vu16_shared_exp, vu16_max_exp, vu16_max_exp_value, preg_b16, MODE_ZEROING);
+    vshrs(vu16_scale_value, vu16_shared_exp, 7, preg_b16, MODE_ZEROING);
+    vsel(vu16_scale_value, vu16_fp4_nan, vu16_scale_value, preg_nan);
+    vsts(vu16_scale_value, (__ubuf__ uint16_t *)expPtr, off / sizeof(T), PK_B16, preg_b16);
+
+    vsub(vu16_recip_scale, vu16_scale_bias, vu16_shared_exp, preg_b16, MODE_ZEROING);
+    vsel(vu16_recip_scale, vu16_nan, vu16_recip_scale, preg_nan);
+    vsts(vu16_recip_scale, scalingPtr_u16, off, NORM_B16, preg_b16);
+}
+
+template <typename T>
+PTO_INTERNAL void ExtractE2M1ExponentAndScaling(__ubuf__ T *maxPtr, __ubuf__ uint8_t *expPtr,
+                                                __ubuf__ T *scalingPtr, unsigned exp_max_loop_count,
+                                                unsigned total_elements_count)
+{
+    static_assert(std::is_same<T, half>::value, "ExtractE2M1ExponentAndScaling: T must be half");
+    constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T);
+
+    for (uint16_t i = 0; i < (uint16_t)exp_max_loop_count; ++i) {
+        uint32_t off = i * elementsPerVL;
+        uint32_t rem = (total_elements_count > off) ? (total_elements_count - off) : 0;
+        if (rem > elementsPerVL)
+            rem = elementsPerVL;
+        ExtractE2M1ExponentAndScalingVL<T>(maxPtr, expPtr, scalingPtr, off, rem);
+    }
+}
+
 // 2D variant of ExtractB8ExponentAndScaling for the padded (validCols != srcCols) path.
 // Iterates per row, processing only the groups backing valid columns. Max, exp and
 // scaling buffers share a packed per-row layout (row r's first group at row * groupsPerRow).
@@ -684,6 +760,37 @@ PTO_INTERNAL void CalcQuantizedFP8Values_2D(__ubuf__ T *srcPtr, __ubuf__ T *scal
     }
 }
 
+PTO_INTERNAL void CalcQuantizedFP4E2M1Values_Half(__ubuf__ half *srcPtr, __ubuf__ half *scalingPtr,
+                                                  __ubuf__ uint8_t *dstPtr, uint32_t totalGroups)
+{
+    constexpr uint32_t kGroupSize = 32;
+    constexpr uint32_t kPackedBytesPerGroup = kGroupSize / 2;
+    uint32_t groupSize = kGroupSize;
+    uint32_t packedBytesPerGroup = kPackedBytesPerGroup;
+    MaskReg preg_b16 = CreatePredicate<half>(groupSize);
+    MaskReg preg_b8 = CreatePredicate<uint8_t>(packedBytesPerGroup);
+    MaskReg preg_idx = pset_b8(PAT_ALL);
+
+    vector_f4e2m1x2 v_idx;
+    vci((RegTensor<int8_t> &)v_idx, (int8_t)0, INC_ORDER);
+    vmuls((RegTensor<int16_t> &)v_idx, (RegTensor<int16_t> &)v_idx, (int16_t)4, preg_idx);
+
+    for (uint16_t group = 0; group < (uint16_t)totalGroups; ++group) {
+        RegTensor<half> v_input;
+        vector_bf16 v_input_bf16, v_scaling, v_scaled;
+        vector_f4e2m1x2 v_output_p0, v_output;
+
+        vlds(v_input, srcPtr, group * kGroupSize, NORM);
+        vcvt(v_input_bf16, v_input, preg_b16, ROUND_Z);
+        vlds((vector_u16 &)v_scaling, (__ubuf__ uint16_t *)scalingPtr, group, BRC_B16);
+        vmul(v_scaled, v_input_bf16, v_scaling, preg_b16, MODE_ZEROING);
+        vcvt(v_output_p0, v_scaled, preg_b16, ROUND_R, PART_P0);
+        vselr((RegTensor<uint8_t> &)v_output, (RegTensor<uint8_t> &)v_output_p0, (RegTensor<uint8_t> &)v_idx);
+        mem_bar(VST_VST);
+        vsts((RegTensor<uint8_t> &)v_output, dstPtr, group * kPackedBytesPerGroup, NORM_B8, preg_b8);
+    }
+}
+
 // FP32 -> MXFP8 quantization: AbsReduceMax + ExponentScaling + FP8 conversion.
 template <unsigned StaticRows, unsigned StaticCols>
 PTO_INTERNAL void TQuant_MXFP8_F32(__ubuf__ float *srcPtr, __ubuf__ uint8_t *expPtr, __ubuf__ uint8_t *dstPtr,
@@ -784,6 +891,30 @@ PTO_INTERNAL void TQuant_MXFP8_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *expPtr,
     }
 }
 
+PTO_INTERNAL void TQuant_MXFP4_E2M1_Half(__ubuf__ half *srcPtr, __ubuf__ uint8_t *expPtr, __ubuf__ uint8_t *dstPtr,
+                                         __ubuf__ half *maxPtr, __ubuf__ half *scalingPtr, uint16_t vl_count,
+                                         unsigned exp_loop_count, uint32_t numGroups, uint32_t total_elements_count,
+                                         unsigned validCols, unsigned srcCols)
+{
+    __ubuf__ half *maxPtr_backup = maxPtr;
+    if (validCols == srcCols) {
+        // 1D fast path: source is contiguous; keep the reducer selection aligned with MXFP8 FP16.
+        constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(half);
+        constexpr uint32_t elementsPerLargeLoop = 32 * elementsPerVL;
+        if (total_elements_count % elementsPerLargeLoop == 0)
+            AbsReduceMax_b16_ND_largesizes(srcPtr, maxPtr, vl_count, total_elements_count);
+        else
+            AbsReduceMax_b16_ND(srcPtr, maxPtr, vl_count, total_elements_count);
+    } else {
+        AbsReduceMax_b16_ND(srcPtr, maxPtr, vl_count, total_elements_count);
+    }
+    mem_bar(VST_VLD);
+    maxPtr = maxPtr_backup;
+    ExtractE2M1ExponentAndScaling(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups);
+    mem_bar(VST_VLD);
+    CalcQuantizedFP4E2M1Values_Half(srcPtr, scalingPtr, dstPtr, numGroups);
+}
+
 // Zero-pad columns [validCols, StaticCols) of a 16-bit source tile at VL-aligned
 // offsets (full-VL vlds -> vsel -> vsts). Sub-VL stores at non-VL-aligned offsets
 // are unreliable on some hardware revisions. Requires StaticCols | elemPerVL.
@@ -795,7 +926,7 @@ PTO_INTERNAL void ZeroPadColumns_VLAligned(__ubuf__ T *srcPtr, unsigned validRow
     static_assert(elemPerVL % StaticCols == 0, "StaticCols must evenly divide elements-per-VL for VL-aligned padding");
     constexpr unsigned rowsPerVL = elemPerVL / StaticCols;
 
-    MaskReg pg_all = PSetTyped<T>(PAT_ALL);
+    MaskReg pg_all = TQuantPSetTyped<T>(PAT_ALL);
 
     // Build a periodic predicate: bit p is set iff (p % StaticCols) < validCols.
     // Row 0 contributes positions [0, validCols).
@@ -837,7 +968,7 @@ PTO_INTERNAL void ZeroPadColumns_Unaligned(__ubuf__ T *srcPtr, unsigned validRow
     uint16_t padRepeatTimes = CeilDivision(padCols, padElemPerRepeat);
     RegTensor<T> vreg_zero;
     UnalignReg ureg_pad;
-    MaskReg pg_all = PSetTyped<T>(PAT_ALL);
+    MaskReg pg_all = TQuantPSetTyped<T>(PAT_ALL);
     vdup(vreg_zero, (T)0, pg_all, MODE_ZEROING);
     for (uint16_t i = 0; i < (uint16_t)(validRows); ++i) {
         uint32_t cols = (uint32_t)(padCols);
@@ -906,6 +1037,42 @@ __tf__ PTO_INTERNAL void TQuant_MXFP8_Impl(typename TileDataOut::TileDType __out
             TQuant_MXFP8_B16(srcPtr, (__ubuf__ uint8_t *)expPtr, (__ubuf__ uint8_t *)dstPtr, maxPtr, scalingPtr,
                              vlCount, expLoopCount, numGroups, totalElems, validRows, validCols,
                              (unsigned)TileDataSrc::Cols);
+    }
+}
+
+template <typename TileDataOut, typename TileDataSrc, typename TileDataExp, typename TileDataMax,
+          typename TileDataScaling>
+__tf__ PTO_INTERNAL void TQuant_MXFP4_E2M1_Impl(typename TileDataOut::TileDType __out__ dst,
+                                                typename TileDataExp::TileDType __out__ exp,
+                                                typename TileDataMax::TileDType __out__ max,
+                                                typename TileDataScaling::TileDType __out__ scaling,
+                                                typename TileDataSrc::TileDType __in__ src, unsigned validRows,
+                                                unsigned validCols)
+{
+    using T = typename TileDataSrc::DType;
+    using ExpT = typename TileDataExp::DType;
+    using OutT = typename TileDataOut::DType;
+    static_assert(std::is_same<T, half>::value, "Fix: MXFP4_E2M1 currently supports fp16 source only.");
+    static_assert(std::is_same<OutT, float4_e2m1x2_t>::value, "Fix: MXFP4_E2M1 output must be float4_e2m1x2_t.");
+    __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
+    __ubuf__ ExpT *expPtr = (__ubuf__ ExpT *)__cce_get_tile_ptr(exp);
+    __ubuf__ OutT *dstPtr = (__ubuf__ OutT *)__cce_get_tile_ptr(dst);
+    __ubuf__ T *maxPtr = (__ubuf__ T *)__cce_get_tile_ptr(max);
+    __ubuf__ T *scalingPtr = (__ubuf__ T *)__cce_get_tile_ptr(scaling);
+
+    set_ctrl(static_cast<uint64_t>(1) << 50);
+    __VEC_SCOPE__
+    {
+        ZeroPadSourceTile<T, TileDataSrc::Cols>(srcPtr, validRows, validCols);
+        mem_bar(VST_VLD);
+
+        constexpr unsigned elemPerVL = REPEAT_BYTE / sizeof(T);
+        uint32_t totalElems = validRows * (unsigned)TileDataSrc::Cols;
+        uint16_t vlCount = CeilDivision(totalElems, elemPerVL);
+        uint32_t numGroups = totalElems / 32;
+        unsigned expLoopCount = CeilDivision(numGroups, elemPerVL);
+        TQuant_MXFP4_E2M1_Half(srcPtr, (__ubuf__ uint8_t *)expPtr, (__ubuf__ uint8_t *)dstPtr, maxPtr, scalingPtr,
+                               vlCount, expLoopCount, numGroups, totalElems, validCols, (unsigned)TileDataSrc::Cols);
     }
 }
 
@@ -1016,9 +1183,17 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
                               TileDataScaling *scaling)
 {
     using T = typename TileDataSrc::DType;
-    static_assert(
-        std::is_same<T, float32_t>::value || std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
-        "Fix: Input has to be float32, bfloat16, or float16 (half)");
+    static_assert(quant_type == QuantType::MXFP8 || quant_type == QuantType::MXFP4_E2M1,
+                  "Fix: MX quant overload supports MXFP8/MXFP4_E2M1.");
+    if constexpr (quant_type == QuantType::MXFP8) {
+        static_assert(
+            std::is_same<T, float32_t>::value || std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
+            "Fix: MXFP8 input has to be float32, bfloat16, or float16 (half)");
+    } else {
+        static_assert(std::is_same<T, half>::value, "Fix: MXFP4_E2M1 input has to be float16 (half)");
+        static_assert(std::is_same<typename TileDataOut::DType, float4_e2m1x2_t>::value,
+                      "Fix: MXFP4_E2M1 output has to be float4_e2m1x2_t");
+    }
     // Create 1D flat views — TQuant operates on flattened buffers internally.
     constexpr int expN = TileDataExp::Rows * TileDataExp::Cols;
     FlatTile1D<TileDataExp> flatExp(1, expN);
@@ -1029,9 +1204,16 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
     constexpr int scalN = TileDataScaling::Rows * TileDataScaling::Cols;
     FlatTile1D<TileDataScaling> flatScaling(1, scalN);
     TRESHAPE_IMPL(flatScaling, *scaling);
-    TQuant_MXFP8_Impl<TileDataOut, TileDataSrc, FlatTile1D<TileDataExp>, FlatTile1D<TileDataMax>,
-                      FlatTile1D<TileDataScaling>>(dst.data(), flatExp.data(), flatMax.data(), flatScaling.data(),
-                                                   src.data(), src.GetValidRow(), src.GetValidCol());
+    if constexpr (quant_type == QuantType::MXFP8) {
+        TQuant_MXFP8_Impl<TileDataOut, TileDataSrc, FlatTile1D<TileDataExp>, FlatTile1D<TileDataMax>,
+                          FlatTile1D<TileDataScaling>>(dst.data(), flatExp.data(), flatMax.data(), flatScaling.data(),
+                                                       src.data(), src.GetValidRow(), src.GetValidCol());
+    } else {
+        TQuant_MXFP4_E2M1_Impl<TileDataOut, TileDataSrc, FlatTile1D<TileDataExp>, FlatTile1D<TileDataMax>,
+                               FlatTile1D<TileDataScaling>>(dst.data(), flatExp.data(), flatMax.data(),
+                                                            flatScaling.data(), src.data(), src.GetValidRow(),
+                                                            src.GetValidCol());
+    }
     // Reshape exp back to user's original tile shape. Max and scaling are scratch buffers.
     TRESHAPE_IMPL(*exp, flatExp);
 }

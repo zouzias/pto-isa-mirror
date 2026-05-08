@@ -169,6 +169,92 @@ def fp16_maxes_to_fp8(data_abs_max, emax=8):
     return e8m0s, scalings
 
 
+def float32_to_bf16_trunc(data):
+    data_fp32 = np.asarray(data, dtype=np.float32)
+    bits = data_fp32.view(np.uint32) & np.uint32(0xFFFF0000)
+    return bits.view(np.float32)
+
+
+def bf16_bits_to_float32(bits):
+    return np.uint32(np.uint16(bits).astype(np.uint32) << np.uint32(16)).view(np.float32)
+
+
+def fp16_to_e2m1_element(data_abs_max_bf16):
+    data_u16 = np.uint16(np.frombuffer(np.float32(data_abs_max_bf16).tobytes(), dtype=np.uint32)[0] >> 16)
+    exponent_bf16 = int(data_u16 & 0x7F80)
+    mantissa_bf16 = int(data_u16 & 0x007F)
+    if exponent_bf16 == 0x7F80:
+        return 0xFF, np.uint16(0x7FC0)
+
+    exponent_bf16 = max(exponent_bf16, 0x0100)
+    shared_exp_bits = exponent_bf16 - 0x0100
+    e8m0 = (shared_exp_bits >> 7) & 0xFF
+    if mantissa_bf16 != 0 and int(data_u16 & 0x7F80) == 0x7F80:
+        return 0xFF, np.uint16(0x7FC0)
+    scale_bits = np.uint16(0x7F00 - shared_exp_bits)
+    return e8m0, scale_bits
+
+
+def fp16_maxes_to_e2m1(data_abs_max):
+    e8m0s = []
+    scaling_bits = []
+    for itm in data_abs_max.reshape(-1).tolist():
+        e8m0, scaling = fp16_to_e2m1_element(itm)
+        e8m0s.append(e8m0)
+        scaling_bits.append(scaling)
+    scaling_bf16 = bf16_bits_to_float32(np.array(scaling_bits, dtype=np.uint16)).reshape(-1, 1)
+    return np.array(e8m0s).astype(np.uint8), scaling_bf16.astype(np.float32)
+
+
+def encode_e2m1_magic_scalar(value):
+    value = np.float32(value)
+    bits = np.frombuffer(value.tobytes(), dtype=np.uint32)[0]
+    sign = np.uint8((bits >> 28) & 0x8)
+    abs_value = np.float32(abs(value))
+    if np.isnan(abs_value):
+        return np.uint8(0x7)
+    if np.isinf(abs_value):
+        return np.uint8(sign | 0x7)
+    abs_bits = np.frombuffer(abs_value.tobytes(), dtype=np.uint32)[0]
+    biased_exp = int((abs_bits & np.uint32(0x7F800000)) >> 23)
+    biased_exp = min(max(biased_exp, 127), 129)
+    magic_bits = np.uint32((biased_exp + 22) << 23)
+    magic = magic_bits.view(np.float32)
+    q = np.frombuffer(np.float32(abs_value + magic).tobytes(), dtype=np.uint32)[0] - magic_bits
+    mag_code = min(int(q) + ((biased_exp - 127) << 1), 7)
+    return np.uint8(sign | mag_code)
+
+
+def pack_fp4_e2m1(codes, rows, cols):
+    packed_cols = (cols + 1) // 2
+    packed = np.zeros((rows, packed_cols), dtype=np.uint8)
+    codes = codes.reshape(rows, cols)
+    for r in range(rows):
+        for c in range(cols):
+            if c % 2 == 0:
+                packed[r, c // 2] = (packed[r, c // 2] & 0xF0) | codes[r, c]
+            else:
+                packed[r, c // 2] = (packed[r, c // 2] & 0x0F) | (codes[r, c] << 4)
+    return packed
+
+
+def quant_fp16_to_e2m1(src):
+    src_bf16 = float32_to_bf16_trunc(src.astype(np.float32))
+    data_abs = np.abs(src_bf16).astype(np.float32)
+    data_grouped = data_abs.reshape(-1, 32)
+    group_max_bf16 = np.max(data_grouped, axis=1)
+    e8m0, scaling_bf16 = fp16_maxes_to_e2m1(group_max_bf16)
+
+    scaled = float32_to_bf16_trunc(src_bf16.reshape(-1, 32) * scaling_bf16).reshape(src.shape)
+    codes = np.vectorize(encode_e2m1_magic_scalar, otypes=[np.uint8])(scaled)
+    packed = pack_fp4_e2m1(codes, src.shape[0], src.shape[1])
+
+    e8m0.tofile("golden_e8m0.bin")
+    scaling_bf16.astype(np.float32).tofile("scaling_e2m1.bin")
+    packed.tofile("golden_fp4.bin")
+    return e8m0, scaling_bf16, packed
+
+
 def quant_fp32_to_e4m3(src, mode="nd"):
     # get group max
     group_max = get_group_max_last_dim(src, group_size=32)
@@ -271,6 +357,24 @@ def fp16_to_mxfp8(valid_rows, valid_cols, mode):
     return
 
 
+def fp16_to_mxfp4_e2m1(valid_rows, valid_cols, mode):
+    padded_cols = ((valid_cols + 31) // 32) * 32
+
+    mags = np.random.lognormal(mean=0.0, sigma=2.0, size=(valid_rows, valid_cols))
+    signs = np.where(np.random.rand(valid_rows, valid_cols) < 0.5, -1.0, 1.0)
+    src_fp32 = np.clip((mags * signs).astype(np.float32), -6e4, 6e4)
+    src_fp16 = src_fp32.astype(np.float16)
+    src_fp16.tofile("input.bin")
+
+    padded_src = np.zeros((valid_rows, padded_cols), dtype=np.float16)
+    padded_src[:, :valid_cols] = src_fp16
+    _, _, packed = quant_fp16_to_e2m1(padded_src)
+
+    if padded_cols != valid_cols and mode == "nd":
+        packed[:, : ((valid_cols + 1) // 2)].copy().tofile("golden_fp4.bin")
+    return
+
+
 def bf16_to_mxfp8(valid_rows, valid_cols, mode):
     padded_cols = ((valid_cols + 31) // 32) * 32
 
@@ -365,6 +469,8 @@ def gen_golden_data_tquant(case_name, param):
         fp32_to_int8_sym(valid_rows, valid_cols, mode)
     elif out_dtype_str == "int8_asym":
         fp32_to_int8_asym(valid_rows, valid_cols, mode)
+    elif out_dtype_str == "mxfp4_e2m1":
+        fp16_to_mxfp4_e2m1(valid_rows, valid_cols, mode)
     elif dtype == bfloat16:
         bf16_to_mxfp8(valid_rows, valid_cols, mode)
     elif dtype == np.float16:
@@ -380,7 +486,12 @@ class TQuantParams:
         self.valid_cols = valid_cols
         self.dtype = dtype
         self.mode = mode
-        self.out_dtype_str = {"s8": "int8_sym", "mxfp8": "mxfp8", "u8": "int8_asym"}[out_dtype_str]
+        self.out_dtype_str = {
+            "s8": "int8_sym",
+            "mxfp8": "mxfp8",
+            "mxfp4_e2m1": "mxfp4_e2m1",
+            "u8": "int8_asym",
+        }[out_dtype_str]
 
         ## convert dtype to string for case name to match that in main.cpp
         self.dtype_str = {np.float32: "fp32", bfloat16: "bf16", np.float16: "fp16"}[self.dtype]
@@ -451,6 +562,7 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 128, 128, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 4, 256, mode="nd", dtype=np.float16),  # 1024 elems -> AbsReduceMax_b16_ND_opt
         TQuantParams("mxfp8", 11, 640, mode="nd", dtype=np.float16),  # 7040 elems -> 220 scale groups
+        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=np.float16),
