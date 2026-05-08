@@ -1,17 +1,16 @@
 /**
- * main.cpp - host driver for topk (auto-mode A3 prototype, v1 values-only).
+ * main.cpp - host driver for topk (auto-mode A3 prototype, full TopK).
  *
- * Pattern source: kernels/automode/a2a3/add_tile_array/main.cpp (which
- * itself mirrors kernels/manual/a2a3/topk/main.cpp). Reads ../input/*.bin
- * and writes ../output/*.bin relative to the build/ directory; uses
- * `tests/common/test_common.h` `ReadFile` / `WriteFile` / `ResultCmp`.
+ * Pattern source: kernels/manual/a2a3/topk/main.cpp (4 GM tensors:
+ * out_val, out_idx, src, idx; ResultCmp on both values and indices).
  *
  * I/O contract (all little-endian, contiguous, no header):
- *   ../input/input_src.bin    1 row * 1280 float32 (pre-sorted in 64-blocks descending)
- *   ../output/golden_val.bin  1 row * 512  float32 top-K (descending)
- *   ../output/output_val.bin  1 row * 512  float32 top-K from kernel
- *
- * The pre-sort precondition is enforced by scripts/gen_data.py.
+ *   ../input/input_src.bin     1 * kCols  float32   (raw random unsorted)
+ *   ../input/input_idx.bin     1 * kCols  uint32_t  ([0..kCols-1])
+ *   ../output/golden_val.bin   1 * kTopK  float32   (top-K values, descending)
+ *   ../output/golden_idx.bin   1 * kTopK  uint32_t  (matching indices)
+ *   ../output/output_val.bin   1 * kTopK  float32   (kernel value output)
+ *   ../output/output_idx.bin   1 * kTopK  uint32_t  (kernel index output)
  */
 
 #include "test_common.h"
@@ -25,22 +24,39 @@ using namespace std;
 using namespace PtoTestCommon;
 
 template <typename T>
-void launchTopk(uint8_t *out, uint8_t *src, void *stream);
+void launchTopk(uint8_t *outVal, uint8_t *outIdx, uint8_t *src, uint8_t *idx, void *stream);
 
 template <typename T>
-inline bool ValidateValueResults(size_t outFileSize)
+inline bool ValidateValueResults(size_t outValSize)
 {
-    std::vector<T> golden(outFileSize / sizeof(T));
-    std::vector<T> devFinal(outFileSize / sizeof(T));
+    std::vector<T> golden(outValSize / sizeof(T));
+    std::vector<T> devFinal(outValSize / sizeof(T));
 
-    ReadFile("../output/golden_val.bin", outFileSize, golden.data(), outFileSize);
-    ReadFile("../output/output_val.bin", outFileSize, devFinal.data(), outFileSize);
+    ReadFile("../output/golden_val.bin", outValSize, golden.data(), outValSize);
+    ReadFile("../output/output_val.bin", outValSize, devFinal.data(), outValSize);
 
     bool ret = ResultCmp(golden, devFinal, 0.001f);
     if (ret) {
-        printf("test data success\n");
+        printf("test value success\n");
     } else {
-        printf("test data failed\n");
+        printf("test value failed\n");
+    }
+    return ret;
+}
+
+inline bool ValidateIndexResults(size_t outIdxSize)
+{
+    std::vector<uint32_t> golden(outIdxSize / sizeof(uint32_t));
+    std::vector<uint32_t> devFinal(outIdxSize / sizeof(uint32_t));
+
+    ReadFile("../output/golden_idx.bin", outIdxSize, golden.data(), outIdxSize);
+    ReadFile("../output/output_idx.bin", outIdxSize, devFinal.data(), outIdxSize);
+
+    bool ret = ResultCmp(golden, devFinal, 0.001f);
+    if (ret) {
+        printf("test index success\n");
+    } else {
+        printf("test index failed\n");
     }
     return ret;
 }
@@ -48,43 +64,60 @@ inline bool ValidateValueResults(size_t outFileSize)
 template <typename T, int kCols, int kTopK>
 void TopkKernel()
 {
-    size_t inFileSize = static_cast<size_t>(kCols) * sizeof(T);
-    size_t outFileSize = static_cast<size_t>(kTopK) * sizeof(T);
+    using indexT = uint32_t;
+    size_t srcSize    = static_cast<size_t>(kCols) * sizeof(T);
+    size_t idxSize    = static_cast<size_t>(kCols) * sizeof(indexT);
+    size_t outValSize = static_cast<size_t>(kTopK) * sizeof(T);
+    size_t outIdxSize = static_cast<size_t>(kTopK) * sizeof(indexT);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
-    uint8_t *srcHost = nullptr, *dstHost = nullptr;
-    uint8_t *srcDevice = nullptr, *dstDevice = nullptr;
+    uint8_t *srcHost = nullptr, *idxHost = nullptr, *outValHost = nullptr, *outIdxHost = nullptr;
+    uint8_t *srcDev  = nullptr, *idxDev  = nullptr, *outValDev  = nullptr, *outIdxDev  = nullptr;
 
-    aclrtMallocHost((void **)(&srcHost), inFileSize);
-    aclrtMallocHost((void **)(&dstHost), outFileSize);
+    aclrtMallocHost((void **)(&srcHost),    srcSize);
+    aclrtMallocHost((void **)(&idxHost),    idxSize);
+    aclrtMallocHost((void **)(&outValHost), outValSize);
+    aclrtMallocHost((void **)(&outIdxHost), outIdxSize);
 
-    aclrtMalloc((void **)&srcDevice, inFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&dstDevice, outFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&srcDev,    srcSize,    ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&idxDev,    idxSize,    ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&outValDev, outValSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&outIdxDev, outIdxSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    ReadFile("../input/input_src.bin", inFileSize, srcHost, inFileSize);
-    aclrtMemcpy(srcDevice, inFileSize, srcHost, inFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    ReadFile("../input/input_src.bin", srcSize, srcHost, srcSize);
+    ReadFile("../input/input_idx.bin", idxSize, idxHost, idxSize);
 
-    launchTopk<T>(dstDevice, srcDevice, stream);
+    aclrtMemcpy(srcDev, srcSize, srcHost, srcSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(idxDev, idxSize, idxHost, idxSize, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    launchTopk<T>(outValDev, outIdxDev, srcDev, idxDev, stream);
 
     aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, outFileSize, dstDevice, outFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(outValHost, outValSize, outValDev, outValSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(outIdxHost, outIdxSize, outIdxDev, outIdxSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
-    WriteFile("../output/output_val.bin", dstHost, outFileSize);
+    WriteFile("../output/output_val.bin", outValHost, outValSize);
+    WriteFile("../output/output_idx.bin", outIdxHost, outIdxSize);
 
-    aclrtFree(dstDevice);
-    aclrtFree(srcDevice);
-    aclrtFreeHost(dstHost);
+    aclrtFree(outIdxDev);
+    aclrtFree(outValDev);
+    aclrtFree(idxDev);
+    aclrtFree(srcDev);
+    aclrtFreeHost(outIdxHost);
+    aclrtFreeHost(outValHost);
+    aclrtFreeHost(idxHost);
     aclrtFreeHost(srcHost);
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);
     aclFinalize();
 
-    bool dataSuccess = ValidateValueResults<T>(outFileSize);
-    if (dataSuccess) {
+    bool valOk = ValidateValueResults<T>(outValSize);
+    bool idxOk = ValidateIndexResults(outIdxSize);
+    if (valOk && idxOk) {
         printf("test success\n");
     } else {
         printf("test failed\n");
