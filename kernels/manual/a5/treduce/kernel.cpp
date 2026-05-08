@@ -103,8 +103,8 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
         m64[1] = *reinterpret_cast<__gm__ uint64_t *>(alignedTarget);
         // [2] mask echo — confirms host→kernel ABI marshalling correct
         m64[2] = static_cast<uint64_t>(mask) & 0xFFFFULL;
-        // [4] actual store address (offset 4 within slot, 4B-aligned)
-        m64[4] = mmioAddr + static_cast<uint64_t>(ckeId) * stride + 4;
+        // [4] actual store address (aligned base of the 8B slot)
+        m64[4] = alignedTarget;
         // [5] which block ran — should be 0
         m64[5] = static_cast<uint64_t>(get_block_idx());
         pipe_barrier(PIPE_ALL);
@@ -118,16 +118,24 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     //                 (unsigned long)target, (unsigned int)(mask & 0xffff));
 
     // ── Store mask into device CCU CKE MMIO ──────────────────────────────
-    // Experiments show:
-    //   - 64-bit store to byte 6: TRAP (misaligned for 8B on MMIO)
-    //   - 64-bit store to byte 0 (aligned, mask shifted): lands but NO trigger
-    //   - 16-bit store to byte 6: lands but NO trigger
-    // Hypothesis: hardware set-detection requires a 32-bit write-strobe
-    // covering byte 6. Use uint32_t store at offset 4 (4-byte aligned),
-    // placing mask at bytes 6-7 within that 4-byte word.
-    const uint64_t target32 = mmioAddr + static_cast<uint64_t>(ckeId) * stride + 4;
-    const uint32_t val32 = static_cast<uint32_t>(mask & 0xFFFF) << ((byte_off - 4) * 8);
-    *reinterpret_cast<__gm__ uint32_t *>(target32) = val32;
+    // Experiments A-D all "landed" (readback confirms value at correct byte
+    // position) but NONE triggered CCU microcode WaitEvent consumption.
+    //
+    // New hypothesis: hardware set-detection requires a 0→non-zero
+    // TRANSITION (edge-triggered, not level). host_trigger_cke_impl.hpp:303
+    // documents: "SET_CKE requires a prior write of zeros". HostTriggerCke
+    // explicitly pre-clears; our AIV path never did.
+    //
+    // Strategy: pre-clear (write 0 to full 8B slot) → barrier → write mask
+    // using 64-bit aligned store with mask at bytes 6-7 (scheme B layout,
+    // which is the only readback-verified correct value placement).
+    //
+    // Pre-clear: 64-bit zero to aligned base
+    *reinterpret_cast<__gm__ uint64_t *>(alignedTarget) = 0ULL;
+    pipe_barrier(PIPE_ALL);
+    // Trigger store: 64-bit with mask shifted to bytes 6-7
+    const uint64_t storeValue = static_cast<uint64_t>(mask & 0xFFFF) << (byte_off * 8);
+    *reinterpret_cast<__gm__ uint64_t *>(alignedTarget) = storeValue;
 
     if (m64 != nullptr) {
         // [6] post-store, PRE-barrier readback — does barrier matter at all?
