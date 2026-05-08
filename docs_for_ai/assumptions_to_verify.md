@@ -502,9 +502,41 @@ See 3.2.
 
 ---
 
+## 11. Resolved by experiments / build runs
+
+Items here have been promoted from `Inferred` / `Assumption` to `Known` by a
+verified build or run. Append (date · platform · evidence). Do not delete;
+the audit trail is useful when something later regresses.
+
+### 11.1 Topk-style bisheng-direct CMake harness + `--cce-enable-pto-passes` builds and runs an auto-mode A3 kernel
+
+- **Resolved**: 2026-05-07 · A3 vec · user-reported `bash run.sh -r npu -v Ascend910B1` on
+  [kernels/automode/a2a3/add_tile_array/](../kernels/automode/a2a3/add_tile_array/)
+  produced `test data success` / `test success`.
+- **What this confirms (now Known)**:
+  - Static valid region `Tile<TileType::Vec, float, 64, 64, BLayout::RowMajor, 64, 64>` compiles and runs in auto mode on A3 (no `DYNAMIC = -1` / constructor required).
+  - An in-kernel serial `for` loop reusing the same Tile across iterations is auto-safe; the auto allocator's pinned-address rule does not break reuse.
+  - Reconstructing `GlobalTensor` per iteration with `base + offset` works.
+  - `TLOAD → TADD → TSTORE` with no manual sync produces exact output for integer-valued FP32 inputs.
+  - Auto mode enabled by **only** adding `--cce-enable-pto-passes` to the kernel target's compile options (no separate `-D__PTO_AUTO__` macro definition needed; `-O2` from the global `add_compile_options(...)` block carries through).
+  - The kernel-arch guard `#if __CCE_AICORE__ == 220 && defined(__DAV_C220_VEC__)` is **not required** when the CMake target sets `--cce-aicore-arch=dav-c220-vec` directly (matches the topk pattern).
+- **Reference entry**: [known_good_kernel_examples.md §A11](known_good_kernel_examples.md).
+- **What is still Unknown**: A5 mirror of the same pattern (the project is A3-only); larger / multi-core variants; behavior under `-r sim` (not yet exercised).
+
+### 11.2 Compile errors first observed on this build
+
+Two real errors recorded as Occurrences in [compile_error_logbook.md](compile_error_logbook.md):
+
+- **E8** — `kernel_operator.h` not on the bisheng-direct include path (was inherited from the `demos/auto_mode/baseline/add` pattern which uses a different `ascendc.cmake` harness). Fix: drop the include; use only `<pto/common/constants.hpp>` and `<pto/pto-inst.hpp>`.
+- **E9** — `tests/common/test_common.h::ReadFile` second parameter is `size_t &`; cannot bind to `const size_t`. Fix: drop `const` on the `fileSize` local. Not auto-mode-specific.
+
+---
+
 ## Cross-references
 
 - [auto_mode_bad_patterns.md](auto_mode_bad_patterns.md) — bad-pattern catalog and the source of most "is this silently broken" entries here.
 - [tile_type_reference.md](tile_type_reference.md) — `Tile`/`ConvTile`/`TileDType` open items (§12).
 - [a3_a5_differences.md](a3_a5_differences.md) — the §12 "Open assumptions and items to verify" list is the source for Group 2 here.
 - [external_context/pr_852_notes.md](external_context/pr_852_notes.md) — the source for Group 9 and several "post-merge" entries.
+- [known_good_kernel_examples.md §A11](known_good_kernel_examples.md) — the in-tree confirmed-built reference produced by §11.1.
+- [compile_error_logbook.md §E8, §E9](compile_error_logbook.md) — the two real compile-error occurrences from §11.2.

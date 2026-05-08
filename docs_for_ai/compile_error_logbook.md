@@ -528,6 +528,98 @@ occurrence has somewhere to land.
 
 ---
 
+### E8. `kernel_operator.h: No such file or directory` (bisheng-direct build)
+
+- **Class** — `cmake-build`.
+- **Likely symptom** — Compiler error: *fatal error: 'kernel_operator.h' file
+  not found* on the kernel `.cpp` during the bisheng-CCE compile step.
+- **Likely cause** — `kernel_operator.h` lives under the AscendC kernel
+  framework include tree (`${ASCEND_HOME_PATH}/.../tikcpp/...`). It is on
+  the include path when the project uses the `ascendc.cmake` macros
+  (`ascendc_library` / `ascendc_compile_options`, see
+  [demos/auto_mode/baseline/add/CMakeLists.txt](../demos/auto_mode/baseline/add/CMakeLists.txt)).
+  It is **not** on the include path when the project uses the bisheng-
+  direct toolchain pattern from
+  [kernels/manual/a2a3/topk/CMakeLists.txt](../kernels/manual/a2a3/topk/CMakeLists.txt)
+  (which only adds `${ASCEND_HOME_PATH}/include` plus
+  `${ASCEND_DRIVER_PATH}/kernel/inc` plus `${PROJECT_SOURCE_DIR}/.../include/`).
+- **Affected platform** — both at the contract level; first observed on A3.
+- **Source evidence** — observed in
+  [kernels/automode/a2a3/add_tile_array/](../kernels/automode/a2a3/add_tile_array/)
+  on first build attempt. The kernel was originally adapted from
+  [demos/auto_mode/baseline/add/csrc/kernel/add_custom.cpp:13](../demos/auto_mode/baseline/add/csrc/kernel/add_custom.cpp#L13)
+  which `#include "kernel_operator.h"`. The reference patterns under the
+  bisheng-direct path —
+  [kernels/manual/a2a3/topk/topk_kernel.cpp](../kernels/manual/a2a3/topk/topk_kernel.cpp)
+  and
+  [tests/npu/a2a3/src/st/testcase/tadd/tadd_kernel.cpp](../tests/npu/a2a3/src/st/testcase/tadd/tadd_kernel.cpp)
+  — do **not** include it.
+- **Fix pattern** — drop the include. Use only:
+  ```cpp
+  #include <pto/common/constants.hpp>
+  #include <pto/pto-inst.hpp>
+  ```
+  `__global__` and `AICORE` are bisheng-CCE compiler-provided keywords; no
+  framework header is needed for them. If a kernel genuinely needs `Ascend`
+  C framework helpers (queue/pipe/buffer abstractions), switch the project
+  to the `ascendc.cmake` build harness instead, but be aware that the
+  topk-style auto-mode flow does not use them.
+- **Status** — `Known`.
+- **Confidence** — High.
+- **Related docs** —
+  [known_good_kernel_examples.md §A11](known_good_kernel_examples.md)
+  (the project that produced this error and the canonical fix),
+  [auto_mode_bad_patterns.md §3.1](auto_mode_bad_patterns.md)
+  (note about `set_mask_norm()` etc. in the demo, which travels with
+  `kernel_operator.h`).
+- **Notes for future verification** — when starting any new auto-mode
+  kernel under `kernels/automode/`, copy the include block from
+  [kernels/manual/a2a3/topk/topk_kernel.cpp:11-13](../kernels/manual/a2a3/topk/topk_kernel.cpp#L11-L13),
+  not from the auto-mode add demo.
+- **Occurrences** —
+  - 2026-05-07 · A3 vec build (`bash run.sh -r npu -v Ascend910B1`) ·
+    [kernels/automode/a2a3/add_tile_array/add_tile_array_kernel.cpp](../kernels/automode/a2a3/add_tile_array/add_tile_array_kernel.cpp)
+    on first build attempt. Resolved by the fix pattern above.
+
+---
+
+### E9. `no matching function for call to 'ReadFile'`
+
+- **Class** — `cmake-build` (host-side; not auto-mode-specific).
+- **Likely symptom** — C++ compiler error from `main.cpp`: *no matching
+  function for call to 'ReadFile(...)'* with the candidate signature
+  `bool ReadFile(const std::string &filePath, size_t &fileSize, void *buffer, size_t bufferSize)`.
+- **Likely cause** — the second parameter is a **non-const lvalue
+  reference** (`size_t &fileSize`). Passing a `const size_t` (or any
+  rvalue) to it cannot bind. The function writes the actual on-disk size
+  back through the reference (`tests/common/test_common.h:98`:
+  `fileSize = size;`).
+- **Affected platform** — both at the contract level; first observed on A3.
+- **Source evidence** —
+  [tests/common/test_common.h:64-101](../tests/common/test_common.h#L64-L101).
+  All in-tree examples use a non-const local
+  (e.g.,
+  [kernels/manual/a2a3/topk/main.cpp:63-64](../kernels/manual/a2a3/topk/main.cpp#L63-L64):
+  `size_t inFileSize = rows * cols * sizeof(T);`).
+- **Fix pattern** — declare the size variable as `size_t` (not `const
+  size_t`). It is fine to reuse the same variable across multiple
+  `ReadFile` calls when both files are the same size — `ReadFile`
+  overwrites it with the actual size each time, but with identical sizes
+  the second call sees the correct value.
+- **Status** — `Known`.
+- **Confidence** — High.
+- **Related docs** —
+  [known_good_kernel_examples.md §A11](known_good_kernel_examples.md).
+- **Notes for future verification** — none; this is a `test_common.h`
+  API quirk, not an auto-mode-specific gotcha.
+- **Occurrences** —
+  - 2026-05-07 · A3 vec build (`bash run.sh -r npu -v Ascend910B1`) ·
+    [kernels/automode/a2a3/add_tile_array/main.cpp](../kernels/automode/a2a3/add_tile_array/main.cpp)
+    on second build attempt (after E8 was fixed). Resolved by removing
+    the `const` qualifier on the `fileSize` local.
+
+---
+
 ## 9. Reserved for new entries
 
 Append new entries below using the §3 field set. Keep entries focused on
