@@ -1,50 +1,43 @@
 #!/usr/bin/python3
 # coding=utf-8
 # --------------------------------------------------------------------------------
-# topk (auto-mode A3 prototype) - gen_data.py
+# topk (auto-mode A3 prototype, full TopK) - gen_data.py
 #
-# v1 limitations:
-#   - Single row only.
-#   - Values-only top-K (no indices). v2 will add TSORT32 + TGATHER for indices.
-#   - The kernel's merge sort assumes input is **pre-sorted in 64-element
-#     blocks (descending)**. In the manual mode kernel, this pre-sort is
-#     provided by an in-kernel TSORT32 step. For v1 we do that pre-sort here
-#     in NumPy. v2 will move the pre-sort back into the kernel.
+# Generates random unsorted inputs + identity index array, computes the true
+# top-K values and indices via NumPy. Replaces the previous values-only
+# pre-sort recipe.
 #
-# Output files (raw little-endian float32, contiguous, no header):
-#   ./input/input_src.bin    1 * COLS = 1280  floats, 64-block-descending
-#   ./output/golden_val.bin  1 * TOPK = 512   floats, fully descending top-K
+# Output files (raw little-endian, contiguous, no header):
+#   ./input/input_src.bin     1 * kCols  float32   (raw random unsorted)
+#   ./input/input_idx.bin     1 * kCols  uint32_t  ([0..kCols-1])
+#   ./output/golden_val.bin   1 * kTopK  float32   (top-K values, descending)
+#   ./output/golden_idx.bin   1 * kTopK  uint32_t  (matching original-position indices)
 # --------------------------------------------------------------------------------
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
-COLS = 1280
-TOPK = 512
-BLOCK = 64
-DTYPE = np.float32
+kCols = 1280
+kTopK = 512
 
 
 def gen_golden_data():
-    assert COLS % BLOCK == 0, "COLS must be a multiple of BLOCK"
+    src = np.random.uniform(-1000.0, 1000.0, size=(kCols,)).astype(np.float32)
+    idx = np.arange(kCols, dtype=np.uint32)
 
-    # Random row.
-    raw = np.random.uniform(-1000.0, 1000.0, size=(COLS,)).astype(DTYPE)
-
-    # In-block descending pre-sort (TSORT32 surrogate for 64-element blocks).
-    presorted = raw.copy().reshape(COLS // BLOCK, BLOCK)
-    presorted = -np.sort(-presorted, axis=1)   # descending per block
-    presorted = presorted.reshape(-1)
-
-    # Golden top-K = fully sorted descending, then prefix.
-    full_sorted = -np.sort(-raw)
-    golden = full_sorted[:TOPK].astype(DTYPE)
+    # Descending sort by value, stable on original order for ties.
+    order = np.argsort(-src, kind='stable')
+    topk_idx = order[:kTopK].astype(np.uint32)
+    topk_val = src[topk_idx].astype(np.float32)
 
     os.makedirs("input", exist_ok=True)
     os.makedirs("output", exist_ok=True)
-    presorted.astype(DTYPE).tofile("./input/input_src.bin")
-    golden.tofile("./output/golden_val.bin")
+    src.tofile("./input/input_src.bin")
+    idx.tofile("./input/input_idx.bin")
+    topk_val.tofile("./output/golden_val.bin")
+    topk_idx.tofile("./output/golden_idx.bin")
 
 
 if __name__ == "__main__":
