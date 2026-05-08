@@ -53,7 +53,7 @@ void AddTileArray()
     constexpr int totalRows = NUM_TILES_ * TILE_ROWS_;
     constexpr int cols      = TILE_COLS_;
     constexpr size_t totalElements = static_cast<size_t>(totalRows) * cols;
-    const size_t fileSize = totalElements * sizeof(T);
+    size_t fileSize = totalElements * sizeof(T);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
