@@ -23,7 +23,7 @@
  *     enforced by the constexpr layout. Non-aligned shapes are a follow-up.
  */
 
-#include "kernel_operator.h"
+#include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
 
 using namespace pto;
