@@ -620,72 +620,60 @@ occurrence has somewhere to land.
 
 ---
 
-### E10. `matrix types extension is disabled; pass -fenable-matrix to enable it`
+### E10. ~~`matrix types extension is disabled; pass -fenable-matrix to enable it`~~ — **WITHDRAWN (not a project bug)**
 
-- **Class** — `cmake-build`, `tile-shape`.
-- **Likely symptom** — bisheng-CCE compiler error
+> **Withdrawn 2026-05-08.** The original observation was caused by a
+> misconfigured local bisheng-CCE compiler installation on the user's
+> machine, **not** by a project-side issue. The project does **not** need
+> `-fenable-matrix`, no fake definitions for `__cce_tinit` /
+> `__cce_alias` / `tile_size`, and no CMake change for this symptom.
+> The "fix" originally suggested in this entry was reverted from
+> `kernels/automode/a2a3/topk/CMakeLists.txt`. The entry is left in place
+> as audit trail; if the same error recurs in the future, **first** check
+> the local toolchain before changing the project.
+>
+> Diagnostic checklist when this error re-appears:
+> 1. Confirm `bisheng --version` matches the toolchain expected by the
+>    in-tree `tmrgsort` ST (which builds under `ALL_TESTCASES` without
+>    `-fenable-matrix`, so a working setup does not need the flag).
+> 2. Confirm `set_env.sh` was sourced from the same CANN install that
+>    provides bisheng — mismatched CANN vs. bisheng installs can produce
+>    spurious matrix-types errors.
+> 3. Re-source the env and rebuild from a clean `build/`.
+>
+> The original symptom / cause / fix-pattern text below is preserved
+> for searchability only; do not apply.
+
+- **Class** — ~~`cmake-build`, `tile-shape`~~ environmental (local toolchain).
+- **Original symptom** — bisheng-CCE compiler error
   *"matrix types extension is disabled; pass -fenable-matrix to enable it"*
-  on the kernel `.cpp`. Source location points to a `tile_size(N)` /
-  `matrixtype(1, N)` annotation that arose from a `Tile<...>` /
-  `ConvTile<...>` `TileDType` lowering or from inside a `_IMPL` body
-  (e.g., `TMRGSORT_IMPL`, `TSORT32_IMPL`, ...).
-- **Likely cause** — `tile_size(N)` and `matrixtype(M, N)` are bisheng-CCE
-  matrix-types extensions. They are gated behind the `-fenable-matrix`
-  flag. Several auto-mode primitives' IMPLs (notably the sort/merge-sort
-  family — `TSORT32`, `TMRGSORT` — and any helper that uses
-  `MrgSortExecutedNumList`) emit `matrixtype(...)`-annotated locals
-  internally; without the flag the CCE frontend rejects them. Simple
-  pipelines that only touch `tile_size(N)` through `Tile<TileType::Vec, ...>`
-  + `TLOAD` / `TADD` / `TSTORE` (e.g., add_tile_array) build fine without
-  the flag, so the error tends to surface only when sort / merge-sort
-  / index-related primitives enter the picture.
-- **Affected platform** — A3 (first observed) and likely both. The flag is
-  a bisheng-CCE compiler frontend option, not arch-specific.
-- **Source evidence** — observed on first build of
-  [kernels/automode/a2a3/topk/topk_kernel.cpp](../kernels/automode/a2a3/topk/topk_kernel.cpp)
-  whose body adapts
-  [tests/npu/a2a3/src/st/testcase/tmrgsort/tmrgsort_kernel.cpp::RunTMrgsortTopk](../tests/npu/a2a3/src/st/testcase/tmrgsort/tmrgsort_kernel.cpp).
-  The in-tree `tmrgsort` ST builds successfully under `ALL_TESTCASES`,
-  which (Inferred) means the CMake harness used by the ST suite supplies
-  this flag automatically — the bisheng-direct project CMake we use under
-  `kernels/automode/` does not, hence the explicit add.
-- **Fix pattern** — add `-fenable-matrix` to the **kernel target's**
-  compile options (next to `--cce-enable-pto-passes` and the CCE arch
-  flag). Do NOT add it to ordinary host compilation.
-  ```cmake
-  target_compile_options(${NAME}_kernel PRIVATE
-      ${CMAKE_CCE_COMPILE_OPTIONS}
-      --cce-aicore-arch=dav-c220-vec
-      --cce-enable-pto-passes
-      -fenable-matrix
-      -std=c++17
-  )
-  ```
-- **Status** — `Known`.
-- **Confidence** — High.
+  on the kernel `.cpp`, source pointing at `tile_size(N)` /
+  `matrixtype(1, N)`. ~~Inferred to come from a `Tile<...>` `TileDType`
+  lowering inside a `_IMPL` body (e.g., `TMRGSORT_IMPL`).~~
+- **Original (withdrawn) fix pattern** — ~~add `-fenable-matrix` to the
+  kernel target's compile options.~~ Do **not** apply. Fix the local
+  bisheng-CCE installation instead.
+- **Status** — `Withdrawn` (was `Known`; downgraded to environmental).
+- **Confidence** — High that this is environmental, not a project bug
+  (user-confirmed: the in-tree `tmrgsort` ST builds without
+  `-fenable-matrix`, and a corrected local toolchain reproduces that
+  build success on this project).
 - **Related docs** —
   [tile_type_reference.md §1.1, §12](tile_type_reference.md)
-  (`tile_size(N)` is an Inferred bisheng-CCE keyword;
-  this entry refines that note: matrix-types extension flag is required
-  to accept matrix-type annotations such as `matrixtype(1, N)`),
+  (`tile_size(N)` semantics — these notes are NOT contradicted by E10's
+  withdrawal),
   [known_good_kernel_examples.md §A11](known_good_kernel_examples.md)
-  (add_tile_array baseline didn't need the flag — useful contrast).
-- **Notes for future verification** — when starting a new auto-mode
-  prototype that uses any of `TSORT32`, `TMRGSORT`, `MrgSortExecutedNumList`,
-  index-tracked primitives, or `ConvTile`, add `-fenable-matrix` to the
-  kernel target up front; you will save a build cycle. Plain Vec-tile
-  pipelines (TLOAD/TADD/TSTORE/TMOV) appear to build without it. A
-  systematic per-primitive audit of which IMPLs emit `matrixtype(...)` is
-  not done; if a future build fails with this error on a primitive not
-  listed here, expand the list.
+  (add_tile_array baseline does not need the flag).
+- **Notes for future verification** — if this error reappears, check
+  toolchain version / `set_env.sh` sourcing / CANN-bisheng install
+  consistency before touching project CMake. Reach for the project-side
+  fix only if you have positively reproduced the error against the
+  same CANN/bisheng setup that builds the in-tree `tmrgsort` ST.
 - **Occurrences** —
   - 2026-05-08 · A3 vec build (`bash run.sh -r npu -v Ascend910B1`) ·
     [kernels/automode/a2a3/topk/topk_kernel.cpp](../kernels/automode/a2a3/topk/topk_kernel.cpp)
-    on first build attempt. Resolved by adding `-fenable-matrix` to
-    `pto_example_vec_auto`'s `target_compile_options` for the kernel
-    target. add_tile_array's CMakeLists was deliberately not modified
-    (it builds and runs without the flag — the simpler primitive set
-    doesn't trigger the matrix-types path).
+    · root cause: misconfigured local bisheng-CCE toolchain. Resolved by
+    fixing the local environment, not by changing the project.
 
 ---
 
@@ -769,6 +757,76 @@ occurrence has somewhere to land.
     on first build attempt. Resolved by changing `RunTopk` to take
     `__gm__ uint8_t *`, casting inside the body, and dropping the
     host-side casts in `launchTopk`.
+
+---
+
+### E12. `Topk` naming collision — function name reused as integer constant
+
+- **Class** — `template` (host-side; not auto-mode-specific).
+- **Likely symptom** — one or both of:
+  - *"address of overloaded function `Topk` cannot be `static_cast` to
+    type `size_t`"*
+  - *"`Topk` does not name a template but is followed by template
+    arguments"*
+  Both arise from a host-side host driver where the same identifier
+  (`Topk`) is used for a function template **and** for a `constexpr int`
+  (the top-K constant) in the same scope. Inside an expression like
+  `Topk<float, Cols, Topk>()`, the trailing `Topk` is unresolved between
+  the function-template name (which makes the surrounding `<...>` a
+  template-arg list) and the local integer constant.
+- **Likely cause** — naming clash between the test-driver function
+  template and one of its non-type template parameters (the top-K
+  constant). The compiler's name-lookup for `Topk` inside a brace
+  initializer or call expression cannot disambiguate.
+- **Affected platform** — both at the source level; observed on A3.
+- **Source evidence** —
+  [kernels/automode/a2a3/topk/main.cpp](../kernels/automode/a2a3/topk/main.cpp)
+  on first build attempt:
+  ```cpp
+  template <typename T, int Cols, int Topk>
+  void Topk()
+  {
+      size_t outFileSize = static_cast<size_t>(Topk) * sizeof(T);  // 'Topk' here = template arg, but compiler also sees fn name
+      ...
+  }
+  int main() {
+      constexpr int Topk = 512;          // local int with the same name
+      Topk<float, Cols, Topk>();         // collision in the call
+  }
+  ```
+- **Fix pattern** — rename the integer constants to avoid the clash; use
+  a `k`-prefix (`kCols`, `kTopK`) or `_` suffix. Keep the function name
+  as `TopkKernel` / `RunTopk` / `launchTopk` / similar — pick a name
+  that is clearly a function and never used as a value.
+  ```cpp
+  template <typename T, int kCols, int kTopK>
+  void TopkKernel()
+  {
+      size_t outFileSize = static_cast<size_t>(kTopK) * sizeof(T);
+      ...
+  }
+  int main() {
+      constexpr int kCols = 1280;
+      constexpr int kTopK = 512;
+      TopkKernel<float, kCols, kTopK>();
+  }
+  ```
+- **Status** — `Known`.
+- **Confidence** — High.
+- **Related docs** — none specific; this is a generic C++ name-lookup
+  hazard that surfaces because PTO drivers tend to template the
+  test-runner function on the same numeric constants the algorithm uses
+  (rows / cols / topk / etc.). When porting between projects, watch for
+  the case where a constant name and a function name converge.
+- **Notes for future verification** — if a similar collision shows up
+  on another constant name (e.g., `Cols`, `Rows`), apply the same
+  `k`-prefix rule. Avoid using value-like names (`Cols`, `Topk`,
+  `Rows`) for both functions and integer constants in the same scope.
+- **Occurrences** —
+  - 2026-05-08 · A3 vec build (`bash run.sh -r npu -v Ascend910B1`) ·
+    [kernels/automode/a2a3/topk/main.cpp](../kernels/automode/a2a3/topk/main.cpp)
+    on first build attempt. Resolved by renaming function `Topk` →
+    `TopkKernel` and integer constants `Cols`/`Topk` → `kCols`/`kTopK`.
 
 ---
 

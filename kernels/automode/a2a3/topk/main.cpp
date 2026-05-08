@@ -45,11 +45,11 @@ inline bool ValidateValueResults(size_t outFileSize)
     return ret;
 }
 
-template <typename T, int Cols, int Topk>
-void Topk()
+template <typename T, int kCols, int kTopK>
+void TopkKernel()
 {
-    size_t inFileSize = static_cast<size_t>(Cols) * sizeof(T);
-    size_t outFileSize = static_cast<size_t>(Topk) * sizeof(T);
+    size_t inFileSize = static_cast<size_t>(kCols) * sizeof(T);
+    size_t outFileSize = static_cast<size_t>(kTopK) * sizeof(T);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -93,8 +93,8 @@ void Topk()
 
 int main()
 {
-    constexpr int Cols = 1280;
-    constexpr int Topk = 512;
-    Topk<float, Cols, Topk>();
+    constexpr int kCols = 1280;
+    constexpr int kTopK = 512;
+    TopkKernel<float, kCols, kTopK>();
     return 0;
 }
