@@ -103,8 +103,8 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
         m64[1] = *reinterpret_cast<__gm__ uint64_t *>(alignedTarget);
         // [2] mask echo — confirms host→kernel ABI marshalling correct
         m64[2] = static_cast<uint64_t>(mask) & 0xFFFFULL;
-        // [4] target address (byte 6 within slot)
-        m64[4] = mmioAddr + static_cast<uint64_t>(ckeId) * stride + byte_off;
+        // [4] actual store address (offset 4 within slot, 4B-aligned)
+        m64[4] = mmioAddr + static_cast<uint64_t>(ckeId) * stride + 4;
         // [5] which block ran — should be 0
         m64[5] = static_cast<uint64_t>(get_block_idx());
         pipe_barrier(PIPE_ALL);
@@ -117,17 +117,17 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     // AscendC::printf("[AIV/treduce] kernel ran: target=0x%lx mask=0x%x\n",
     //                 (unsigned long)target, (unsigned int)(mask & 0xffff));
 
-    // ── Store mask into device CCU CKE MMIO at byte_off ──────────────────
-    // Hardware CKE set-detection fires on write-strobe to the specific byte
-    // address (byte 6 within the slot). Writing to the aligned slot base
-    // with shifted data does NOT trigger it (verified: store lands but
-    // microcode doesn't consume). Must target byte 6 directly.
-    //
-    // Use uint16_t store: naturally aligned at byte 6 (6 % 2 = 0), won't
-    // trap. A 64-bit store to byte 6 would be misaligned (6 % 8 != 0) and
-    // traps on AIV MMIO.
-    const uint64_t target = mmioAddr + static_cast<uint64_t>(ckeId) * stride + byte_off;
-    *reinterpret_cast<__gm__ uint16_t *>(target) = static_cast<uint16_t>(mask & 0xFFFF);
+    // ── Store mask into device CCU CKE MMIO ──────────────────────────────
+    // Experiments show:
+    //   - 64-bit store to byte 6: TRAP (misaligned for 8B on MMIO)
+    //   - 64-bit store to byte 0 (aligned, mask shifted): lands but NO trigger
+    //   - 16-bit store to byte 6: lands but NO trigger
+    // Hypothesis: hardware set-detection requires a 32-bit write-strobe
+    // covering byte 6. Use uint32_t store at offset 4 (4-byte aligned),
+    // placing mask at bytes 6-7 within that 4-byte word.
+    const uint64_t target32 = mmioAddr + static_cast<uint64_t>(ckeId) * stride + 4;
+    const uint32_t val32 = static_cast<uint32_t>(mask & 0xFFFF) << ((byte_off - 4) * 8);
+    *reinterpret_cast<__gm__ uint32_t *>(target32) = val32;
 
     if (m64 != nullptr) {
         // [6] post-store, PRE-barrier readback — does barrier matter at all?
