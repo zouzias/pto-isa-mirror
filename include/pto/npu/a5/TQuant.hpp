@@ -209,7 +209,7 @@ PTO_INTERNAL void AbsReduceMax_b16_ND(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr, un
 {
     constexpr uint32_t elements_per_dintlv = 2 * REPEAT_BYTE / sizeof(T); // 256 b16 per DINTLV
     constexpr uint32_t grps_per_dintlv = elements_per_dintlv / 32;        // 8 BF16 abs maxima per iter
-    constexpr uint32_t blks_per_vl = REPEAT_BYTE / BLOCK_SIZE;
+    constexpr uint32_t blks_per_vl = REPEAT_BYTE / BLOCK_BYTE_SIZE;
     static constexpr auto distValue =
         std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
     uint16_t loop_num = CeilDivision(vl_count, 2);
@@ -272,7 +272,7 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_largesizes(__ubuf__ T *srcPtr, __ubuf__ T 
     constexpr uint32_t num_vl_per_outer_loop = 32;
     constexpr uint32_t grps_per_inner_loop = num_vl_per_inner_loop * grps_per_vl; // 2 * 4 = 8 grps per inner loop
     constexpr uint32_t grps_per_outer_loop = num_vl_per_outer_loop * grps_per_vl; // 32 * 4 = 128
-    constexpr uint32_t blks_per_vl = REPEAT_BYTE / BLOCK_SIZE;                    // 8 blocks per VL
+    constexpr uint32_t blks_per_vl = REPEAT_BYTE / BLOCK_BYTE_SIZE;               // 8 blocks per VL
     static constexpr auto distValue =
         std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
     vbr(vu16_bf16_abs_mask, kBf16AbsMask);
@@ -503,8 +503,8 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling(__ubuf__ T *maxPtr, __ubuf__ uint8
 }
 
 template <typename T>
-PTO_INTERNAL void ExtractE2M1ExponentAndScalingVL(__ubuf__ T *maxPtr, __ubuf__ uint8_t *expPtr,
-                                                  __ubuf__ T *scalingPtr, uint32_t off, uint32_t rem)
+PTO_INTERNAL void ExtractE2M1ExponentAndScalingVL(__ubuf__ T *maxPtr, __ubuf__ uint8_t *expPtr, __ubuf__ T *scalingPtr,
+                                                  uint32_t off, uint32_t rem)
 {
     static_assert(std::is_same<T, half>::value, "ExtractE2M1ExponentAndScalingVL: T must be half");
     constexpr uint16_t kBf16ExpMask = 0x7F80;
@@ -549,9 +549,8 @@ PTO_INTERNAL void ExtractE2M1ExponentAndScalingVL(__ubuf__ T *maxPtr, __ubuf__ u
 }
 
 template <typename T>
-PTO_INTERNAL void ExtractE2M1ExponentAndScaling(__ubuf__ T *maxPtr, __ubuf__ uint8_t *expPtr,
-                                                __ubuf__ T *scalingPtr, unsigned exp_max_loop_count,
-                                                unsigned total_elements_count)
+PTO_INTERNAL void ExtractE2M1ExponentAndScaling(__ubuf__ T *maxPtr, __ubuf__ uint8_t *expPtr, __ubuf__ T *scalingPtr,
+                                                unsigned exp_max_loop_count, unsigned total_elements_count)
 {
     static_assert(std::is_same<T, half>::value, "ExtractE2M1ExponentAndScaling: T must be half");
     constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T);
@@ -768,13 +767,14 @@ PTO_INTERNAL void CalcQuantizedFP4E2M1Values_Half(__ubuf__ half *srcPtr, __ubuf_
     uint32_t groupSize = kGroupSize;
     uint32_t packedBytesPerGroup = kPackedBytesPerGroup;
     MaskReg preg_b16 = CreatePredicate<half>(groupSize);
-    MaskReg preg_b8 = CreatePredicate<uint8_t>(packedBytesPerGroup);
     MaskReg preg_idx = pset_b8(PAT_ALL);
 
     vector_f4e2m1x2 v_idx;
     vci((RegTensor<int8_t> &)v_idx, (int8_t)0, INC_ORDER);
     vmuls((RegTensor<int16_t> &)v_idx, (RegTensor<int16_t> &)v_idx, (int16_t)4, preg_idx);
 
+    UnalignReg ureg_out;
+    __ubuf__ uint8_t *dstWritePtr = dstPtr;
     for (uint16_t group = 0; group < (uint16_t)totalGroups; ++group) {
         RegTensor<half> v_input;
         vector_bf16 v_input_bf16, v_scaling, v_scaled;
@@ -787,8 +787,9 @@ PTO_INTERNAL void CalcQuantizedFP4E2M1Values_Half(__ubuf__ half *srcPtr, __ubuf_
         vcvt(v_output_p0, v_scaled, preg_b16, ROUND_R, PART_P0);
         vselr((RegTensor<uint8_t> &)v_output, (RegTensor<uint8_t> &)v_output_p0, (RegTensor<uint8_t> &)v_idx);
         mem_bar(VST_VST);
-        vsts((RegTensor<uint8_t> &)v_output, dstPtr, group * kPackedBytesPerGroup, NORM_B8, preg_b8);
+        vstus(ureg_out, packedBytesPerGroup, (RegTensor<uint8_t> &)v_output, dstWritePtr, POST_UPDATE);
     }
+    vstas(ureg_out, dstWritePtr, 0, POST_UPDATE);
 }
 
 // FP32 -> MXFP8 quantization: AbsReduceMax + ExponentScaling + FP8 conversion.
