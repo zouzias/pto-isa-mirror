@@ -51,6 +51,21 @@ inline uint32_t FloatToBits(float value)
     return std::bit_cast<uint32_t>(value);
 }
 
+inline uint16_t FloatToBf16BitsTrunc(float value)
+{
+    return static_cast<uint16_t>(FloatToBits(value) >> 16);
+}
+
+inline float Bf16BitsToFloat(uint16_t bits)
+{
+    return BitsToFloat(static_cast<uint32_t>(bits) << 16);
+}
+
+inline uint16_t AbsBf16BitsFromFloat(float value)
+{
+    return static_cast<uint16_t>(FloatToBf16BitsTrunc(value) & 0x7FFFu);
+}
+
 template <typename TileDataPara>
 inline typename TileDataPara::DType GetParamValue(const TileDataPara &tile, int row, int col)
 {
@@ -288,9 +303,17 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
     for (int row = 0; row < rows; ++row) {
         for (int group = 0; group < groupCols; ++group) {
             float maxAbsValue = 0.0f;
+            uint16_t maxAbsBf16Bits = 0;
             for (int inner = 0; inner < 32; ++inner) {
                 const float value = src.data()[GetTileElementOffset<TileDataSrc>(row, group * 32 + inner)];
-                maxAbsValue = std::max(maxAbsValue, std::fabs(value));
+                if constexpr (quant_type == QuantType::MXFP8) {
+                    maxAbsValue = std::max(maxAbsValue, std::fabs(value));
+                } else {
+                    maxAbsBf16Bits = std::max(maxAbsBf16Bits, cpu_quant::AbsBf16BitsFromFloat(value));
+                }
+            }
+            if constexpr (quant_type == QuantType::MXFP4_E2M1) {
+                maxAbsValue = cpu_quant::Bf16BitsToFloat(maxAbsBf16Bits);
             }
             const uint8_t e8m0 = quant_type == QuantType::MXFP8 ? cpu_quant::ComputeSharedExponent(maxAbsValue) :
                                                                   cpu_quant::ComputeE2M1SharedExponent(maxAbsValue);

@@ -239,13 +239,14 @@ def pack_fp4_e2m1(codes, rows, cols):
 
 
 def quant_fp16_to_e2m1(src):
-    src_bf16 = float32_to_bf16_trunc(src.astype(np.float32))
-    data_abs = np.abs(src_bf16).astype(np.float32)
+    src_fp32 = src.astype(np.float32)
+    src_bf16_for_max = float32_to_bf16_trunc(src_fp32)
+    data_abs = np.abs(src_bf16_for_max).astype(np.float32)
     data_grouped = data_abs.reshape(-1, 32)
     group_max_bf16 = np.max(data_grouped, axis=1)
     e8m0, scaling_bf16 = fp16_maxes_to_e2m1(group_max_bf16)
 
-    scaled = float32_to_bf16_trunc(src_bf16.reshape(-1, 32) * scaling_bf16).reshape(src.shape)
+    scaled = (src_fp32.reshape(-1, 32) * scaling_bf16.astype(np.float32)).reshape(src.shape).astype(np.float32)
     codes = np.vectorize(encode_e2m1_magic_scalar, otypes=[np.uint8])(scaled)
     packed = pack_fp4_e2m1(codes, src.shape[0], src.shape[1])
 
@@ -357,13 +358,134 @@ def fp16_to_mxfp8(valid_rows, valid_cols, mode):
     return
 
 
-def fp16_to_mxfp4_e2m1(valid_rows, valid_cols, mode):
+def make_mxfp4_exp_random_values(total, seed):
+    rng = np.random.default_rng(seed)
+    exponents = rng.integers(-24, 16, size=total, dtype=np.int32)
+    mantissas = rng.uniform(1.0, 2.0, size=total).astype(np.float32)
+    signs = np.where(rng.random(total) < 0.5, -1.0, 1.0).astype(np.float32)
+    values = np.ldexp(mantissas, exponents).astype(np.float32) * signs
+    values = np.clip(values, -65504.0, 65504.0)
+    zero_count = max(1, total // 32)
+    values[rng.choice(total, size=zero_count, replace=False)] = np.float32(0.0)
+    return values.astype(np.float16)
+
+
+def make_mxfp4_e2m1_fp16_data(valid_rows, valid_cols, case_suffix):
+    total = valid_rows * valid_cols
+    special_values = np.array(
+        [
+            0.0,
+            -0.0,
+            np.inf,
+            -np.inf,
+            np.nan,
+            65504.0,
+            -65504.0,
+            6.0,
+            -6.0,
+            4.0,
+            -4.0,
+            1.5,
+            -1.5,
+            0.5,
+            -0.5,
+            0.25,
+        ],
+        dtype=np.float16,
+    )
+    subnormal_bits = np.array(
+        [
+            0x0001,
+            0x8001,
+            0x0002,
+            0x8002,
+            0x0003,
+            0x8003,
+            0x0010,
+            0x8010,
+            0x0100,
+            0x8100,
+            0x0200,
+            0x8200,
+            0x03FF,
+            0x83FF,
+            0x0400,
+            0x8400,
+        ],
+        dtype=np.uint16,
+    )
+    subnormal_values = subnormal_bits.view(np.float16)
+    rounding_values = np.array(
+        [
+            4.0,
+            -4.0,
+            3.75,
+            -3.75,
+            3.5,
+            -3.5,
+            3.0,
+            -3.0,
+            2.5,
+            -2.5,
+            2.25,
+            -2.25,
+            2.0,
+            -2.0,
+            1.75,
+            -1.75,
+            1.5,
+            -1.5,
+            1.25,
+            -1.25,
+            1.0,
+            -1.0,
+            0.75,
+            -0.75,
+            0.5,
+            -0.5,
+            0.375,
+            -0.375,
+            0.25,
+            -0.25,
+            0.125,
+            -0.125,
+        ],
+        dtype=np.float16,
+    )
+
+    if case_suffix == "special":
+        values = np.resize(special_values, total)
+    elif case_suffix == "subnormal":
+        values = np.resize(subnormal_values, total)
+    elif case_suffix == "rounding":
+        values = np.resize(rounding_values, total)
+    elif case_suffix == "exp_random_a":
+        values = make_mxfp4_exp_random_values(total, seed=20260508)
+    elif case_suffix == "exp_random_b":
+        values = make_mxfp4_exp_random_values(total, seed=20260509)
+    elif case_suffix == "mixed":
+        values = np.zeros(total, dtype=np.float16)
+        group_patterns = [
+            special_values,
+            subnormal_values,
+            rounding_values,
+            make_mxfp4_exp_random_values(32, seed=20260510),
+        ]
+        for group in range((total + 31) // 32):
+            begin = group * 32
+            end = min(begin + 32, total)
+            pattern = group_patterns[group % len(group_patterns)]
+            values[begin:end] = np.resize(pattern, end - begin)
+    else:
+        values = make_mxfp4_exp_random_values(total, seed=20260511)
+
+    return values.reshape(valid_rows, valid_cols).astype(np.float16)
+
+
+def fp16_to_mxfp4_e2m1(valid_rows, valid_cols, mode, case_suffix=None):
     padded_cols = ((valid_cols + 31) // 32) * 32
 
-    mags = np.random.lognormal(mean=0.0, sigma=2.0, size=(valid_rows, valid_cols))
-    signs = np.where(np.random.rand(valid_rows, valid_cols) < 0.5, -1.0, 1.0)
-    src_fp32 = np.clip((mags * signs).astype(np.float32), -6e4, 6e4)
-    src_fp16 = src_fp32.astype(np.float16)
+    src_fp16 = make_mxfp4_e2m1_fp16_data(valid_rows, valid_cols, case_suffix)
     src_fp16.tofile("input.bin")
 
     padded_src = np.zeros((valid_rows, padded_cols), dtype=np.float16)
@@ -470,7 +592,7 @@ def gen_golden_data_tquant(case_name, param):
     elif out_dtype_str == "int8_asym":
         fp32_to_int8_asym(valid_rows, valid_cols, mode)
     elif out_dtype_str == "mxfp4_e2m1":
-        fp16_to_mxfp4_e2m1(valid_rows, valid_cols, mode)
+        fp16_to_mxfp4_e2m1(valid_rows, valid_cols, mode, case_suffix=param.case_suffix)
     elif dtype == bfloat16:
         bf16_to_mxfp8(valid_rows, valid_cols, mode)
     elif dtype == np.float16:
@@ -481,11 +603,12 @@ def gen_golden_data_tquant(case_name, param):
 
 
 class TQuantParams:
-    def __init__(self, out_dtype_str, valid_rows, valid_cols, mode="nd", dtype=np.float32):
+    def __init__(self, out_dtype_str, valid_rows, valid_cols, mode="nd", dtype=np.float32, case_suffix=None):
         self.valid_rows = valid_rows
         self.valid_cols = valid_cols
         self.dtype = dtype
         self.mode = mode
+        self.case_suffix = case_suffix
         self.out_dtype_str = {
             "s8": "int8_sym",
             "mxfp8": "mxfp8",
@@ -498,7 +621,8 @@ class TQuantParams:
 
 
 def generate_case_name(param):
-    return f"TQUANTTEST.case_{param.out_dtype_str}_{param.dtype_str}_{param.valid_rows}x{param.valid_cols}_{param.mode}"
+    suffix = f"_{param.case_suffix}" if param.case_suffix is not None else ""
+    return f"TQUANTTEST.case_{param.out_dtype_str}_{param.dtype_str}_{param.valid_rows}x{param.valid_cols}{suffix}_{param.mode}"
 
 
 if __name__ == "__main__":
@@ -562,7 +686,12 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 128, 128, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 4, 256, mode="nd", dtype=np.float16),  # 1024 elems -> AbsReduceMax_b16_ND_opt
         TQuantParams("mxfp8", 11, 640, mode="nd", dtype=np.float16),  # 7040 elems -> 220 scale groups
-        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16),
+        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="special"),
+        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="subnormal"),
+        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="rounding"),
+        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="exp_random_a"),
+        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="exp_random_b"),
+        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="mixed"),
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=np.float16),

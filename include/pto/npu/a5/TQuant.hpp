@@ -759,6 +759,97 @@ PTO_INTERNAL void CalcQuantizedFP8Values_2D(__ubuf__ T *srcPtr, __ubuf__ T *scal
     }
 }
 
+PTO_INTERNAL void CalcE2M1SignedCodeI32(vector_s32 &signedCode, vector_f32 scaled, MaskReg &preg_f32)
+{
+    constexpr uint32_t kInfBits = 0x7F800000;
+    vector_u32 vu32_abs_bits, vu32_exp, vu32_tmp;
+    vector_bool preg_sign, preg_nan;
+
+    vshrs(vu32_tmp, (vector_u32 &)scaled, (int16_t)31, preg_f32, MODE_ZEROING);
+    vcmps_ne(preg_sign, vu32_tmp, (uint32_t)0, preg_f32);
+    vshls(vu32_abs_bits, (vector_u32 &)scaled, (int16_t)1, preg_f32, MODE_ZEROING);
+    vshrs(vu32_abs_bits, vu32_abs_bits, (int16_t)1, preg_f32, MODE_ZEROING);
+    vcmps_gt(preg_nan, vu32_abs_bits, kInfBits, preg_f32);
+
+    vshrs(vu32_exp, vu32_abs_bits, (int16_t)23, preg_f32, MODE_ZEROING);
+    vmaxs(vu32_exp, vu32_exp, (uint32_t)127, preg_f32, MODE_ZEROING);
+    vmins(vu32_exp, vu32_exp, (uint32_t)129, preg_f32, MODE_ZEROING);
+
+    vadds((vector_s32 &)vu32_tmp, (vector_s32 &)vu32_exp, (int32_t)22, preg_f32, MODE_ZEROING);
+    vshls(vu32_tmp, vu32_tmp, (int16_t)23, preg_f32, MODE_ZEROING);
+    vadd(scaled, (vector_f32 &)vu32_abs_bits, (vector_f32 &)vu32_tmp, preg_f32, MODE_ZEROING);
+    vsub(vu32_abs_bits, (vector_u32 &)scaled, vu32_tmp, preg_f32);
+
+    vadds((vector_s32 &)vu32_exp, (vector_s32 &)vu32_exp, (int32_t)-127, preg_f32, MODE_ZEROING);
+    vshls(vu32_exp, vu32_exp, (int16_t)1, preg_f32, MODE_ZEROING);
+    vadd(vu32_abs_bits, vu32_abs_bits, vu32_exp, preg_f32, MODE_ZEROING);
+    vmins(vu32_abs_bits, vu32_abs_bits, (uint32_t)7, preg_f32, MODE_ZEROING);
+
+    vadds(signedCode, (vector_s32 &)vu32_abs_bits, (int32_t)-8, preg_f32, MODE_ZEROING);
+    vsel(signedCode, signedCode, (vector_s32 &)vu32_abs_bits, preg_sign);
+
+    vsel(signedCode, (vector_s32 &)vu32_abs_bits, signedCode, preg_nan);
+}
+
+PTO_INTERNAL void PackE2M1SignedCodeBytes(vector_u8 &packedBytes, vector_s32 evenCode, vector_s32 oddCode,
+                                          vector_u8 &packIndex, MaskReg &preg_f32)
+{
+    vector_u32 vu32_even, vu32_odd;
+
+    vshls(vu32_even, (vector_u32 &)evenCode, (int16_t)28, preg_f32, MODE_ZEROING);
+    vshrs(vu32_even, vu32_even, (int16_t)28, preg_f32, MODE_ZEROING);
+    vshls(vu32_odd, (vector_u32 &)oddCode, (int16_t)28, preg_f32, MODE_ZEROING);
+    vshrs(vu32_odd, vu32_odd, (int16_t)24, preg_f32, MODE_ZEROING);
+    vor(vu32_even, vu32_even, vu32_odd, preg_f32, MODE_ZEROING);
+    vselr(packedBytes, (vector_u8 &)vu32_even, packIndex);
+}
+
+PTO_INTERNAL void CalcQuantizedFP4E2M1Values_Half_Window(__ubuf__ half *srcPtr, __ubuf__ half *scalingPtr,
+                                                         __ubuf__ uint8_t *dstPtr, uint16_t window,
+                                                         vector_u8 &packIndex)
+{
+    constexpr uint32_t kElementsPerWindow = 256;
+    constexpr uint32_t kPackedBytesPerWindow = kElementsPerWindow / 2;
+    constexpr uint32_t kB16LanesPerReg = REPEAT_BYTE / sizeof(half);
+    constexpr uint32_t kF32LanesPerReg = REPEAT_BYTE / sizeof(float);
+    uint32_t b16LanesPerReg = kB16LanesPerReg;
+    uint32_t f32LanesPerReg = kF32LanesPerReg;
+    uint32_t packedBytesPerWindow = kPackedBytesPerWindow;
+    MaskReg preg_b16 = CreatePredicate<half>(b16LanesPerReg);
+    MaskReg preg_f32 = CreatePredicate<float>(f32LanesPerReg);
+    MaskReg preg_b8 = CreatePredicate<uint8_t>(packedBytesPerWindow);
+    MaskReg preg_all_b16 = pset_b16(PAT_ALL);
+    RegTensor<half> v_input_0, v_input_1;
+    vector_bf16 v_scaling_bf16;
+    vector_f32 v_scaling_f32, v_mod_even, v_mod_odd;
+    vector_s32 v_even_code, v_odd_code;
+    vector_u8 v_pair01, v_pair23, v_output, v_scratch;
+
+    vlds(v_input_0, v_input_1, srcPtr, window * kElementsPerWindow, DINTLV_B16);
+    vlds((vector_u16 &)v_scaling_bf16, (__ubuf__ uint16_t *)scalingPtr, 8 * window, E2B_B16);
+    vcvt(v_scaling_f32, v_scaling_bf16, preg_all_b16, PART_EVEN);
+
+    vcvt(v_mod_even, v_input_0, preg_b16, PART_EVEN);
+    vcvt(v_mod_odd, v_input_1, preg_b16, PART_EVEN);
+    vmul(v_mod_even, v_mod_even, v_scaling_f32, preg_f32, MODE_ZEROING);
+    vmul(v_mod_odd, v_mod_odd, v_scaling_f32, preg_f32, MODE_ZEROING);
+    CalcE2M1SignedCodeI32(v_even_code, v_mod_even, preg_f32);
+    CalcE2M1SignedCodeI32(v_odd_code, v_mod_odd, preg_f32);
+    PackE2M1SignedCodeBytes(v_pair01, v_even_code, v_odd_code, packIndex, preg_f32);
+
+    vcvt(v_mod_even, v_input_0, preg_b16, PART_ODD);
+    vcvt(v_mod_odd, v_input_1, preg_b16, PART_ODD);
+    vmul(v_mod_even, v_mod_even, v_scaling_f32, preg_f32, MODE_ZEROING);
+    vmul(v_mod_odd, v_mod_odd, v_scaling_f32, preg_f32, MODE_ZEROING);
+    CalcE2M1SignedCodeI32(v_even_code, v_mod_even, preg_f32);
+    CalcE2M1SignedCodeI32(v_odd_code, v_mod_odd, preg_f32);
+    PackE2M1SignedCodeBytes(v_pair23, v_even_code, v_odd_code, packIndex, preg_f32);
+
+    vintlv((RegTensor<uint8_t> &)v_output, (RegTensor<uint8_t> &)v_scratch, (RegTensor<uint8_t> &)v_pair01,
+           (RegTensor<uint8_t> &)v_pair23);
+    vsts((RegTensor<uint8_t> &)v_output, (__ubuf__ uint8_t *)dstPtr, window * kPackedBytesPerWindow, NORM_B8, preg_b8);
+}
+
 PTO_INTERNAL void CalcQuantizedFP4E2M1Values_Half(__ubuf__ half *srcPtr, __ubuf__ half *scalingPtr,
                                                   __ubuf__ uint8_t *dstPtr, uint32_t totalGroups)
 {
@@ -767,25 +858,45 @@ PTO_INTERNAL void CalcQuantizedFP4E2M1Values_Half(__ubuf__ half *srcPtr, __ubuf_
     uint32_t groupSize = kGroupSize;
     uint32_t packedBytesPerGroup = kPackedBytesPerGroup;
     MaskReg preg_b16 = CreatePredicate<half>(groupSize);
+    MaskReg preg_f32 = CreatePredicate<float>(packedBytesPerGroup);
+    MaskReg preg_all_b16 = pset_b16(PAT_ALL);
     MaskReg preg_idx = pset_b8(PAT_ALL);
 
-    vector_f4e2m1x2 v_idx;
+    vector_u8 v_idx;
     vci((RegTensor<int8_t> &)v_idx, (int8_t)0, INC_ORDER);
     vmuls((RegTensor<int16_t> &)v_idx, (RegTensor<int16_t> &)v_idx, (int16_t)4, preg_idx);
 
-    UnalignReg ureg_out;
-    __ubuf__ uint8_t *dstWritePtr = dstPtr;
-    for (uint16_t group = 0; group < (uint16_t)totalGroups; ++group) {
-        RegTensor<half> v_input;
-        vector_bf16 v_input_bf16, v_scaling, v_scaled;
-        vector_f4e2m1x2 v_output_p0, v_output;
+    uint32_t windowCount = totalGroups / 8;
+    for (uint16_t window = 0; window < (uint16_t)windowCount; ++window) {
+        CalcQuantizedFP4E2M1Values_Half_Window(srcPtr, scalingPtr, dstPtr, window, v_idx);
+    }
 
-        vlds(v_input, srcPtr, group * kGroupSize, NORM);
-        vcvt(v_input_bf16, v_input, preg_b16, ROUND_Z);
-        vlds((vector_u16 &)v_scaling, (__ubuf__ uint16_t *)scalingPtr, group, BRC_B16);
-        vmul(v_scaled, v_input_bf16, v_scaling, preg_b16, MODE_ZEROING);
-        vcvt(v_output_p0, v_scaled, preg_b16, ROUND_R, PART_P0);
-        vselr((RegTensor<uint8_t> &)v_output, (RegTensor<uint8_t> &)v_output_p0, (RegTensor<uint8_t> &)v_idx);
+    uint32_t tailGroups = totalGroups - windowCount * 8;
+    if (tailGroups == 0) {
+        return;
+    }
+
+    UnalignReg ureg_out;
+    __ubuf__ half *srcTailPtr = srcPtr + windowCount * 256;
+    __ubuf__ half *scalingTailPtr = scalingPtr + windowCount * 8;
+    __ubuf__ uint8_t *dstWritePtr = dstPtr + windowCount * 128;
+    for (uint16_t group = 0; group < (uint16_t)tailGroups; ++group) {
+        RegTensor<half> v_input;
+        vector_bf16 v_scaling_bf16;
+        vector_f32 v_scaling_f32, v_even, v_odd;
+        vector_s32 v_even_code, v_odd_code;
+        vector_u8 v_output;
+
+        vlds(v_input, srcTailPtr, group * kGroupSize, NORM);
+        vcvt(v_even, v_input, preg_b16, PART_EVEN);
+        vcvt(v_odd, v_input, preg_b16, PART_ODD);
+        vlds((vector_u16 &)v_scaling_bf16, (__ubuf__ uint16_t *)scalingTailPtr, group, BRC_B16);
+        vcvt(v_scaling_f32, v_scaling_bf16, preg_all_b16, PART_EVEN);
+        vmul(v_even, v_even, v_scaling_f32, preg_f32, MODE_ZEROING);
+        vmul(v_odd, v_odd, v_scaling_f32, preg_f32, MODE_ZEROING);
+        CalcE2M1SignedCodeI32(v_even_code, v_even, preg_f32);
+        CalcE2M1SignedCodeI32(v_odd_code, v_odd, preg_f32);
+        PackE2M1SignedCodeBytes(v_output, v_even_code, v_odd_code, v_idx, preg_f32);
         mem_bar(VST_VST);
         vstus(ureg_out, packedBytesPerGroup, (RegTensor<uint8_t> &)v_output, dstWritePtr, POST_UPDATE);
     }
