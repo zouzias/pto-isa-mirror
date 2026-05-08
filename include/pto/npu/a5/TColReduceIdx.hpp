@@ -246,9 +246,9 @@ PTO_INTERNAL void TCOLARG_DISPATCH(TileDataOut &dst, TileDataIn &src)
 
     if constexpr (sizeof(typename TileDataIn::DType) == 1) {
         TColReduceIdx8<TileDataOut, TileDataIn, IsArgMax>(dst.data(), src.data(), srcValidRow, srcValidCol);
-    } else if (sizeof(typename TileDataIn::DType) == 2) {
+    } else if constexpr (sizeof(typename TileDataIn::DType) == 2) {
         TColReduceIdx16<TileDataOut, TileDataIn, IsArgMax>(dst.data(), src.data(), srcValidRow, srcValidCol);
-    } else if (sizeof(typename TileDataIn::DType) == 4) {
+    } else if constexpr (sizeof(typename TileDataIn::DType) == 4) {
         TColReduceIdx32<TileDataOut, TileDataIn, IsArgMax>(dst.data(), src.data(), srcValidRow, srcValidCol);
     }
 }

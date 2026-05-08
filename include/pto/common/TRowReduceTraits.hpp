@@ -32,6 +32,15 @@ struct TRowReduceFP32OptTraits {
     static constexpr bool CanOptimize = IsTargetLayout && IsFP32;
 };
 
+template <typename T, typename TileDataOut, typename TileDataIn, typename TileDataTmp>
+struct TRowReduceLoopTraits {
+    static constexpr uint8_t ElemPerBlock = BLOCK_BYTE_SIZE / sizeof(T);
+    static constexpr uint8_t ElemPerRpt = REPEAT_BYTE / sizeof(T);
+    static constexpr uint32_t DstRptStride = TileDataOut::Cols;
+    static constexpr uint32_t SrcRptStride = TileDataIn::Cols / ElemPerBlock;
+    static constexpr uint32_t TmpRptStride = TileDataTmp::Cols / ElemPerBlock;
+};
+
 } // namespace pto
 
 #endif // PTO_TROW_REDUCE_TRAITS_HPP

@@ -905,6 +905,23 @@ std::vector<float> collectBiasValues(const BiasTile &bias)
     return biasValues;
 }
 
+template <typename LeftTile, typename RightTile, typename BiasTile, typename AccTile>
+void initializeGemvMxTiles(LeftTile &lhs, RightTile &rhs, BiasTile &bias, AccTile &accIn)
+{
+    FillAll(lhs, 0.0f);
+    FillAll(rhs, 0.0f);
+    FillAll(accIn, 1.0f);
+    for (int r = 0; r < lhs.GetValidRow(); ++r) {
+        for (int c = 0; c < lhs.GetValidCol(); ++c) {
+            SetValue(lhs, r, c, static_cast<float>(r + c + 1));
+            SetValue(rhs, r, c, static_cast<float>((r == c) ? 2 : 1));
+        }
+    }
+    for (int c = 0; c < bias.GetValidCol(); ++c) {
+        SetValue(bias, 0, c, static_cast<float>(c));
+    }
+}
+
 TEST_F(IsaCoverageTest, TgemvAndMxVariantsMatchCpuMatmulSemantics)
 {
     using LeftTile = TileLeft<float, 16, 16>;
@@ -927,20 +944,9 @@ TEST_F(IsaCoverageTest, TgemvAndMxVariantsMatchCpuMatmulSemantics)
     size_t addr = 0;
     AssignTileStorage(addr, lhs, rhs, gemv, gemvAcc, gemvMx, matmulMx, accIn, bias, lhsScale, rhsScale);
 
-    FillAll(lhs, 0.0f);
-    FillAll(rhs, 0.0f);
-    FillAll(accIn, 1.0f);
+    initializeGemvMxTiles(lhs, rhs, bias, accIn);
     FillAll(lhsScale, 2.0f);
     FillAll(rhsScale, 3.0f);
-    for (int r = 0; r < lhs.GetValidRow(); ++r) {
-        for (int c = 0; c < lhs.GetValidCol(); ++c) {
-            SetValue(lhs, r, c, static_cast<float>(r + c + 1));
-            SetValue(rhs, r, c, static_cast<float>((r == c) ? 2 : 1));
-        }
-    }
-    for (int c = 0; c < bias.GetValidCol(); ++c) {
-        SetValue(bias, 0, c, static_cast<float>(c));
-    }
 
     TGEMV(gemv, lhs, rhs);
     TGEMV_ACC(gemvAcc, accIn, lhs, rhs);

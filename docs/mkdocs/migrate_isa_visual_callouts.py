@@ -102,7 +102,7 @@ def convert_target_h3_to_tabs(body: list[str]) -> tuple[list[str], bool]:
     output = body[: h3_indices[0]]
     for pos, start in enumerate(h3_indices):
         end = h3_indices[pos + 1] if pos + 1 < len(h3_indices) else len(body)
-        content = strip_blank_edges(body[start + 1 : end])
+        content = strip_blank_edges(body[start + 1:end])
         output.append(f'=== "{labels[pos]}"')
         output.extend(indent_for_admonition(content or ["No additional restriction is documented for this target."]))
         output.append("")
@@ -126,7 +126,7 @@ def wrap_sections(lines: list[str], stats: Stats) -> list[str]:
         while end < len(lines) and not re.match(r"^## [^#]", lines[end]):
             end += 1
 
-        body = lines[index + 1 : end]
+        body = lines[index + 1:end]
         if is_already_wrapped(body, marker):
             output.extend(lines[index:end])
             index = end

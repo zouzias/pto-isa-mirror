@@ -109,7 +109,6 @@ AICORE void runTLOADND(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, i
     TileData vecTile(kTRows_, gCols);
 
     constexpr int kGTRows = kTRows_ / shape0 / shape1 / shape2; // Dst Tile Rows, merged all shape0*shape1*shape2 row
-    constexpr int shape4_aligned = align_to_32B(shape4, T);
     auto srcGlobal =
         getGlobalTensor<T, shape0, shape1, shape2, kGTRows, shape4, kGTRows, shape4, BLayout::RowMajor, dyn_>(
             src, gShape0, gShape1, gShape2, kGTRows, shape4);

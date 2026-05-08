@@ -108,7 +108,6 @@ AICORE void runTLOADND(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, i
     TileData vecTile(kTRows_, gCols);
 
     constexpr int kGTRows = kTRows_ / shape0 / shape1 / shape2; // Dst Tile Rows, merged all shape0*shape1*shape2 row
-    constexpr int shape4_aligned = align_to_32B(shape4, T);
     auto srcGlobal =
         getGlobalTensor<T, shape0, shape1, shape2, kGTRows, shape4, kGTRows, shape4, BLayout::RowMajor, dyn_>(
             src, gShape0, gShape1, gShape2, kGTRows, shape4);
@@ -368,20 +367,28 @@ int get_input_golden_case_DN(uint8_t *input, uint8_t *golden)
     return sizeof(gold_arr);
 }
 
+template <typename T, int Shape3, int Shape4>
+void fillDNFlatRowsPlane(T (*plane)[Shape4], T *gold_arr, int shapeBase, int kTRows_gold)
+{
+    for (int i = 0; i < Shape3; i++) {
+        for (int j = 0; j < Shape4; j++) {
+            const T value = shapeBase + i * Shape4 + j;
+            const int flatRow = shapeBase / Shape4 + i;
+            plane[i][j] = value;
+            gold_arr[j * kTRows_gold + flatRow] = value;
+        }
+    }
+}
+
 template <typename T, int Shape0, int Shape1, int Shape2, int Shape3, int Shape4>
 void fillDNFlatRowsData(T (&in_arr)[Shape0][Shape1][Shape2][Shape3][Shape4], T *gold_arr, int kTRows_gold)
 {
     for (int x0 = 0; x0 < Shape0; x0++)
         for (int x1 = 0; x1 < Shape1; x1++)
-            for (int x2 = 0; x2 < Shape2; x2++)
-                for (int i = 0; i < Shape3; i++)
-                    for (int j = 0; j < Shape4; j++) {
-                        const T value = x0 * Shape1 * Shape2 * Shape3 * Shape4 + x1 * Shape2 * Shape3 * Shape4 +
-                                        x2 * Shape3 * Shape4 + i * Shape4 + j;
-                        const int flatRow = ((x0 * Shape1 + x1) * Shape2 + x2) * Shape3 + i;
-                        in_arr[x0][x1][x2][i][j] = value;
-                        gold_arr[j * kTRows_gold + flatRow] = value;
-                    }
+            for (int x2 = 0; x2 < Shape2; x2++) {
+                const int shapeBase = ((x0 * Shape1 + x1) * Shape2 + x2) * Shape3 * Shape4;
+                fillDNFlatRowsPlane<T, Shape3, Shape4>(in_arr[x0][x1][x2], gold_arr, shapeBase, kTRows_gold);
+            }
 }
 
 template <typename T, int Shape0, int Shape1, int Shape2, int Shape3, int Shape4, int kTRows_, int kTCols_>

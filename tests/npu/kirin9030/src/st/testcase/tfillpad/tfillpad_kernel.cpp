@@ -102,6 +102,7 @@ constexpr int kTFillpadAlignBytes = 32;
 template <typename T>
 constexpr int type32Aligned()
 {
+    static_assert(sizeof(T) > 0, "type32Aligned requires non-zero type size");
     return kTFillpadAlignBytes / sizeof(T);
 }
 
@@ -111,9 +112,6 @@ constexpr int alignTo32B(int x)
     constexpr int align = type32Aligned<T>();
     return ((x + align - 1) / align) * align;
 }
-
-#define type_32_aligned(T) (32 / sizeof(T))
-#define align_to_32B(x, T) ((((x) + type_32_aligned(T) - 1) / type_32_aligned(T)) * (type_32_aligned(T)));
 
 template <typename T, int shape0, int shape1, int shape2, int shape3, int shape4, int kTRows_, int kTCols_, int dyn_,
           PadValue LoadPadVal_ = PadValue::Null, PadValue FillPadVal_ = PadValue::Null, bool inplace = false,
@@ -454,30 +452,36 @@ int get_input_golden(uint8_t *input, uint8_t *golden)
     return 0;
 }
 
-template void launchTFILLPAD<1>(uint8_t *out, uint8_t *src, void *stream);  // 实例化 Key=0 的版本
-template void launchTFILLPAD<2>(uint8_t *out, uint8_t *src, void *stream);  // 实例化 Key=0 的版本
-template void launchTFILLPAD<3>(uint8_t *out, uint8_t *src, void *stream);  // 实例化 Key=0 的版本
-template void launchTFILLPAD<4>(uint8_t *out, uint8_t *src, void *stream);  // 实例化 Key=0 的版本
-template void launchTFILLPAD<5>(uint8_t *out, uint8_t *src, void *stream);  // 实例化 Key=0 的版本
-template void launchTFILLPAD<6>(uint8_t *out, uint8_t *src, void *stream);  // 实例化 Key=0 的版本
-template void launchTFILLPAD<7>(uint8_t *out, uint8_t *src, void *stream);  // 实例化 Key=0 的版本
-template void launchTFILLPAD<8>(uint8_t *out, uint8_t *src, void *stream);  // 实例化 Key=0 的版本
-template void launchTFILLPAD<9>(uint8_t *out, uint8_t *src, void *stream);  // 实例化 Key=0 的版本
-template void launchTFILLPAD<10>(uint8_t *out, uint8_t *src, void *stream); // 实例化 Key=0 的版本
-template void launchTFILLPAD<11>(uint8_t *out, uint8_t *src, void *stream);
-template void launchTFILLPAD<12>(uint8_t *out, uint8_t *src, void *stream); // 实例化 Key=0 的版本
-template void launchTFILLPAD<13>(uint8_t *out, uint8_t *src, void *stream);
+#define INSTANTIATE_TFILLPAD(Key) template void launchTFILLPAD<Key>(uint8_t * out, uint8_t * src, void *stream)
+#define INSTANTIATE_TFILLPAD_GOLDEN(Key) template int get_input_golden<Key>(uint8_t * input, uint8_t * golden)
 
-template int get_input_golden<1>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<2>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<3>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<4>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<5>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<6>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<7>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<8>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<9>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<10>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<11>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<12>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<13>(uint8_t *input, uint8_t *golden);
+INSTANTIATE_TFILLPAD(1);
+INSTANTIATE_TFILLPAD(2);
+INSTANTIATE_TFILLPAD(3);
+INSTANTIATE_TFILLPAD(4);
+INSTANTIATE_TFILLPAD(5);
+INSTANTIATE_TFILLPAD(6);
+INSTANTIATE_TFILLPAD(7);
+INSTANTIATE_TFILLPAD(8);
+INSTANTIATE_TFILLPAD(9);
+INSTANTIATE_TFILLPAD(10);
+INSTANTIATE_TFILLPAD(11);
+INSTANTIATE_TFILLPAD(12);
+INSTANTIATE_TFILLPAD(13);
+
+INSTANTIATE_TFILLPAD_GOLDEN(1);
+INSTANTIATE_TFILLPAD_GOLDEN(2);
+INSTANTIATE_TFILLPAD_GOLDEN(3);
+INSTANTIATE_TFILLPAD_GOLDEN(4);
+INSTANTIATE_TFILLPAD_GOLDEN(5);
+INSTANTIATE_TFILLPAD_GOLDEN(6);
+INSTANTIATE_TFILLPAD_GOLDEN(7);
+INSTANTIATE_TFILLPAD_GOLDEN(8);
+INSTANTIATE_TFILLPAD_GOLDEN(9);
+INSTANTIATE_TFILLPAD_GOLDEN(10);
+INSTANTIATE_TFILLPAD_GOLDEN(11);
+INSTANTIATE_TFILLPAD_GOLDEN(12);
+INSTANTIATE_TFILLPAD_GOLDEN(13);
+
+#undef INSTANTIATE_TFILLPAD_GOLDEN
+#undef INSTANTIATE_TFILLPAD

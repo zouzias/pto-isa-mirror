@@ -98,6 +98,7 @@ def build_project(run_mode, soc_version, auto_enable=False, testcase="all"):
     finally:
         os.chdir(original_dir)
 
+
 def _resolve_soc_version(soc_version: str) -> str:
     if soc_version == "a5":
         return "Ascend950PR_9599"

@@ -1,4 +1,4 @@
-﻿# TFMODS
+# TFMODS
 
 ## 指令示意图
 
@@ -41,9 +41,16 @@ pto.tfmods ins(%src, %scalar : !pto.tile_buf<...>, f32) outs(%dst : !pto.tile_bu
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TFMODS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar, WaitEvents &... events);
+template <auto PrecisionType = FmodSAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
+          typename... WaitEvents>
+PTO_INST RecordEvent TFMODS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar,
+                            WaitEvents &...events);
 ```
+
+`PrecisionType` 可指定以下值：
+
+- `FmodSAlgorithm::DEFAULT`：普通算法，速度快但精度较低。
+- `FmodSAlgorithm::HIGH_PRECISION`：高精度算法，速度较慢，仅支持 `float` 类型。
 
 ## 约束
 
@@ -64,6 +71,8 @@ PTO_INST RecordEvent TFMODS(TileDataDst &dst, TileDataSrc &src, typename TileDat
         - 行为由目标定义；CPU 模拟器在调试构建中会断言。
     - **有效区域**:
         - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
+    - **高精度算法**:
+        - 仅在 A5 上有效，`PrecisionType` 选项在 A3 上会被忽略。
 
 ## 示例
 

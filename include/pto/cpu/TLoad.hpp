@@ -103,6 +103,22 @@ __tf__ PTO_INLINE void LoadPlainDnClassic(typename GlobalData::DType __out__ *ds
 }
 
 template <typename GlobalData, typename TileData>
+__tf__ PTO_INLINE void LoadPlainDnFlattenRowsInner(typename GlobalData::DType __out__ *dst,
+                                                   typename TileData::TileDType __in__ src, int gShape3, int gShape4,
+                                                   int gStride3, int gStride4, std::size_t dstRowBase,
+                                                   std::size_t srcBase)
+{
+    for (std::size_t c = 0; c < static_cast<std::size_t>(gShape4); c++) {
+        const std::size_t dstBase = c * static_cast<std::size_t>(TileData::Rows) + dstRowBase;
+        const std::size_t srcColBase = srcBase + c * static_cast<std::size_t>(gStride4);
+        PTO_CPU_VECTORIZE_LOOP
+        for (std::size_t r = 0; r < static_cast<std::size_t>(gShape3); r++) {
+            dst[dstBase + r] = src[srcColBase + r * static_cast<std::size_t>(gStride3)];
+        }
+    }
+}
+
+template <typename GlobalData, typename TileData>
 __tf__ PTO_INLINE void LoadPlainDnFlattenRows(typename GlobalData::DType __out__ *dst,
                                               typename TileData::TileDType __in__ src, int gShape0, int gShape1,
                                               int gShape2, int gShape3, int gShape4, int gStride0, int gStride1,
@@ -120,14 +136,9 @@ __tf__ PTO_INLINE void LoadPlainDnFlattenRows(typename GlobalData::DType __out__
             for (uint32_t k = 0; k < static_cast<uint32_t>(gShape2); k++) {
                 const std::size_t srcAddr2 = static_cast<std::size_t>(k) * static_cast<std::size_t>(gStride2);
                 const std::size_t dstRowBase = dstAddr0 + dstAddr1 + static_cast<std::size_t>(k) * gShape3;
-                for (std::size_t c = 0; c < static_cast<std::size_t>(gShape4); c++) {
-                    const std::size_t dstBase = c * static_cast<std::size_t>(TileData::Rows) + dstRowBase;
-                    const std::size_t srcBase = srcAddr0 + srcAddr1 + srcAddr2 + c * static_cast<std::size_t>(gStride4);
-                    PTO_CPU_VECTORIZE_LOOP
-                    for (std::size_t r = 0; r < static_cast<std::size_t>(gShape3); r++) {
-                        dst[dstBase + r] = src[srcBase + r * static_cast<std::size_t>(gStride3)];
-                    }
-                }
+                const std::size_t srcBase = srcAddr0 + srcAddr1 + srcAddr2;
+                LoadPlainDnFlattenRowsInner<GlobalData, TileData>(dst, src, gShape3, gShape4, gStride3, gStride4,
+                                                                  dstRowBase, srcBase);
             }
         }
     }

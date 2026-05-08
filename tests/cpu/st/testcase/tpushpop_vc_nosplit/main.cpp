@@ -68,6 +68,15 @@ void runVectorToCubeNoSplitSingleTile()
 }
 
 template <typename T, int rows, int cols>
+void verifyWraparoundResults(const std::vector<std::vector<T>> &actual, int iterations)
+{
+    for (int iter = 0; iter < iterations; ++iter) {
+        const auto expected = makeExpected<T, rows, cols>(iter);
+        EXPECT_TRUE(ResultCmp(expected, actual[iter], 0));
+    }
+}
+
+template <typename T, int rows, int cols>
 void runVectorToCubeNoSplitWraparound()
 {
     constexpr int kFifoDepth = 2;
@@ -110,10 +119,7 @@ void runVectorToCubeNoSplitWraparound()
         }
     }
 
-    for (int iter = 0; iter < kIterations; ++iter) {
-        const auto expected = makeExpected<T, rows, cols>(iter);
-        EXPECT_TRUE(ResultCmp(expected, actual[iter], 0));
-    }
+    verifyWraparoundResults<T, rows, cols>(actual, kIterations);
 }
 
 template <typename T, int rows, int cols>

@@ -141,10 +141,16 @@ def check_ptoas_single_location(errors: list[str]) -> None:
                 if needle in text:
                     errors.append(
                         "PTO-AS manual links must point to "
-            "docs/isa/syntax-and-operands/assembly-model*.md: "
-            f"{path.relative_to(REPO_ROOT)}"
+                        "docs/isa/syntax-and-operands/assembly-model*.md: "
+                        f"{path.relative_to(REPO_ROOT)}"
                     )
                     break
+
+
+def _is_allowed_mkdocs_src(rel: str) -> bool:
+    if rel in ALLOWED_MKDOCS_SRC_EXACT:
+        return True
+    return any(rel.startswith(prefix) for prefix in ALLOWED_MKDOCS_SRC_PREFIXES)
 
 
 def check_mkdocs_source_hygiene(errors: list[str]) -> None:
@@ -153,13 +159,7 @@ def check_mkdocs_source_hygiene(errors: list[str]) -> None:
         cwd=REPO_ROOT,
         text=True,
     ).splitlines()
-    leaked = [
-        rel
-        for rel in tracked
-        if (REPO_ROOT / rel).exists()
-        and rel not in ALLOWED_MKDOCS_SRC_EXACT
-        and not any(rel.startswith(prefix) for prefix in ALLOWED_MKDOCS_SRC_PREFIXES)
-    ]
+    leaked = [rel for rel in tracked if (REPO_ROOT / rel).exists() and not _is_allowed_mkdocs_src(rel)]
     if leaked:
         errors.append(
             "tracked generated or mirrored MkDocs source files remain:\n"

@@ -231,22 +231,21 @@ PTO_INTERNAL bool TryOptimizeFP32Reduce(__ubuf__ T *dst, __ubuf__ T *src, __ubuf
             InstrOp::template ReduceOptFP32_64x128<TileIn::Rows, TileIn::ValidRow, TileIn::Cols, TileIn::ValidCol>(
                 dst, src, tmp);
             return true;
-        } else if constexpr (ShapeOf32x256) {
+        } else if constexpr (Traits::ShapeOf32x256) {
             InstrOp::template ReduceOptFP32_32x256<TileIn::Rows, TileIn::ValidRow, TileIn::Cols, TileIn::ValidCol>(
                 dst, src, tmp);
             return true;
-        } else if constexpr (ShapeOf16x512) {
+        } else if constexpr (Traits::ShapeOf16x512) {
             InstrOp::template ReduceOptFP32_16x512<TileIn::Rows, TileIn::ValidRow, TileIn::Cols, TileIn::ValidCol>(
                 dst, src, tmp);
             return true;
-        } else if constexpr (ShapeOf8x1024) {
+        } else if constexpr (Traits::ShapeOf8x1024) {
             InstrOp::template ReduceOptFP32_8x1024<TileIn::Rows, TileIn::ValidRow, TileIn::Cols, TileIn::ValidCol>(
                 dst, src, tmp);
             return true;
         }
     }
-}
-return false;
+    return false;
 }
 
 template <typename InstrOp, typename T, typename TileDataOut, typename TileDataIn, typename TileDataTmp>
@@ -255,11 +254,12 @@ PTO_INTERNAL void TRowReduceInstr(__ubuf__ T *dst, __ubuf__ T *src, __ubuf__ T *
     if (TryOptimizeFP32Reduce<InstrOp, T, TileDataOut, TileDataIn>(dst, src, tmp)) {
         return;
     }
-    constexpr uint8_t elemPerBlock = BLOCK_BYTE_SIZE / sizeof(T);
-    constexpr uint8_t elemPerRpt = REPEAT_BYTE / sizeof(T);
-    constexpr uint32_t dstRptStride = TileDataOut::Cols;
-    constexpr uint32_t srcRptStride = TileDataIn::Cols / elemPerBlock;
-    constexpr uint32_t tmpRptStride = TileDataTmp::Cols / elemPerBlock;
+    using LoopTraits = TRowReduceLoopTraits<T, TileDataOut, TileDataIn, TileDataTmp>;
+    constexpr uint8_t elemPerBlock = LoopTraits::ElemPerBlock;
+    constexpr uint8_t elemPerRpt = LoopTraits::ElemPerRpt;
+    constexpr uint32_t dstRptStride = LoopTraits::DstRptStride;
+    constexpr uint32_t srcRptStride = LoopTraits::SrcRptStride;
+    constexpr uint32_t tmpRptStride = LoopTraits::TmpRptStride;
     int srcRptPerRow = validCol / elemPerRpt;
     int remain = validCol % elemPerRpt;
     int rowRptTimes = validRow / REPEAT_MAX; // 需要处理的行若超过uint8_max, 则拆分为多次进行循环
