@@ -317,9 +317,9 @@ AICORE inline void allocate_vec_tile_buffers(TileDataF_T (&srcTiles)[SrcBuffers]
     TASSIGN(m2_global_max, offset);
     offset += static_cast<uint32_t>(reduce_tile_bytes);
 
-    uint32_t tmp_float_offset = offset;
-    TASSIGN(input_reduce_tmp, tmp_float_offset);
-    offset += static_cast<uint32_t>(float_tile_bytes);
+    // uint32_t tmp_float_offset = offset;
+    // TASSIGN(input_reduce_tmp, tmp_float_offset);
+    // offset += static_cast<uint32_t>(float_tile_bytes);
 
     TASSIGN(l1_local_sum, offset);
     offset += static_cast<uint32_t>(reduce_tile_bytes);
