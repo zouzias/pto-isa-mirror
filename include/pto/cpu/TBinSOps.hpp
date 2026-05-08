@@ -184,18 +184,18 @@ PTO_INTERNAL void TMINS_IMPL(TileDst &dst, TileSrc &src, typename TileSrc::DType
     UnaryTileScalarOpImpl<TileDst, TileSrc, ElementOp::OP_MINS>(dst, src, scalar);
 }
 
-template <typename TileDst, typename TileSrc>
+template <auto PrecisionType = RemSAlgorithm::DEFAULT, typename TileDst, typename TileSrc>
 PTO_INTERNAL void TREMS_IMPL(TileDst &dst, TileSrc &src, typename TileSrc::DType scalar)
 {
     UnaryTileScalarOpImpl<TileDst, TileSrc, ElementOp::OP_REMS>(dst, src, scalar);
 }
 
-template <typename TileDst, typename TileSrc>
+template <auto PrecisionType = RemSAlgorithm::DEFAULT, typename TileDst, typename TileSrc>
 PTO_INTERNAL void TREMS_IMPL(TileDst &dst, TileSrc &src, typename TileSrc::DType scalar, TileDst &tmp)
 {
     (void)tmp;
     if (scalar != static_cast<TileSrc::DType>(0)) {
-        TREMS_IMPL(dst, src, scalar);
+        TREMS_IMPL<PrecisionType>(dst, src, scalar);
     } else {
         PTO_ASSERT(false, "illegal src is zero");
     }
@@ -238,7 +238,7 @@ PTO_INTERNAL void TLRELU_IMPL(TileDst &dst, TileSrc &src, typename TileSrc::DTyp
     UnaryTileScalarOpImpl<TileDst, TileSrc, ElementOp::OP_LRELU>(dst, src, scalar);
 }
 
-template <typename TileDst, typename TileSrc>
+template <auto PrecisionType = FmodSAlgorithm::DEFAULT, typename TileDst, typename TileSrc>
 PTO_INTERNAL void TFMODS_IMPL(TileDst &dst, TileSrc &src, typename TileSrc::DType scalar)
 {
     if (scalar != static_cast<TileSrc::DType>(0)) {
