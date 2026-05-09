@@ -119,41 +119,53 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     //                 (unsigned long)target, (unsigned int)(mask & 0xffff));
 
     // ── Store mask into device CCU CKE MMIO ──────────────────────────────
-    // Design spec: CKE = 1024 × 16-bit registers. Hardware io-map decoder
-    // may only respond to native 16-bit store transactions (not 64-bit stores
-    // with mask embedded at a byte offset). Previous 64-bit stores all
-    // "landed" (readback confirmed) but NONE triggered CCU WaitEvent.
     //
-    // Strategy (2026-05-09): native 16-bit store.
-    //   - Pre-clear via 16-bit zero → barrier → 16-bit mask store
-    //   - Target: alignedTarget + byte_off (must be 2-byte aligned for u16)
-    //   - This generates a 2-byte bus transaction instead of an 8-byte one
+    // Strategy (2026-05-09):
+    //   Mode A (mask != 0xFFFF): native 16-bit store at alignedTarget + byte_off
+    //   Mode B (mask == 0xFFFF, "saturation"): write 0xFFFFFFFFFFFFFFFF (64-bit
+    //     all-ones) to EVERY 8B slot in the 4KB page. This tests whether ANY
+    //     byte in the entire mapped region triggers CKE hardware.
     //
-    // Pre-clear: 16-bit zero
-    __gm__ uint16_t *target16 = reinterpret_cast<__gm__ uint16_t *>(alignedTarget + byte_off);
-    *target16 = static_cast<uint16_t>(0);
-    pipe_barrier(PIPE_ALL);
-    // Trigger store: native 16-bit
-    *target16 = static_cast<uint16_t>(mask & 0xFFFF);
+    const bool saturation = (mask == 0xFFFF);
+
+    if (saturation) {
+        // Saturation mode: fill entire 4KB page (512 × 8B) with all-ones.
+        // alignedTarget = base + ckeId*stride. With stride=0, base = mmioAddr.
+        // Page base = mmioAddr aligned down to 4KB (should already be page-aligned).
+        const uint64_t pageBase = alignedTarget & ~0xFFFULL;
+        for (uint32_t slot = 0; slot < 512; ++slot) {
+            *reinterpret_cast<__gm__ uint64_t *>(pageBase + slot * 8) = 0xFFFFFFFFFFFFFFFFULL;
+        }
+        pipe_barrier(PIPE_ALL);
+        // Also do 16-bit stores at every 2B offset (2048 writes) for bus-width coverage
+        for (uint32_t off = 0; off < 4096; off += 2) {
+            *reinterpret_cast<__gm__ uint16_t *>(pageBase + off) = 0xFFFF;
+        }
+    } else {
+        // Normal mode: single 16-bit store
+        __gm__ uint16_t *target16 = reinterpret_cast<__gm__ uint16_t *>(alignedTarget + byte_off);
+        *target16 = static_cast<uint16_t>(0);
+        pipe_barrier(PIPE_ALL);
+        *target16 = static_cast<uint16_t>(mask & 0xFFFF);
+    }
 
     if (m64 != nullptr) {
-        // [6] post-store, PRE-barrier readback (16-bit → zero-extended to u64)
-        m64[6] = static_cast<uint64_t>(*target16);
+        // [6] post-store readback at original target
+        __gm__ uint16_t *t16 = reinterpret_cast<__gm__ uint16_t *>(alignedTarget + byte_off);
+        m64[6] = static_cast<uint64_t>(*t16);
     }
 
     pipe_barrier(PIPE_ALL);
 
     if (m64 != nullptr) {
-        // [3] post-store, POST-barrier readback (16-bit → zero-extended to u64)
-        m64[3] = static_cast<uint64_t>(*target16);
-        // [7] tail sentinel — proves kernel ran ALL the way through
+        __gm__ uint16_t *t16 = reinterpret_cast<__gm__ uint16_t *>(alignedTarget + byte_off);
+        // [3] post-barrier readback
+        m64[3] = static_cast<uint64_t>(*t16);
+        // [7] tail sentinel
         m64[7] = 0xFEEDFACECAFEBABEULL;
         pipe_barrier(PIPE_ALL);
     }
 
-    // Memory barrier: make the store visible to the CCU before the kernel
-    // returns, so when the host stream-sync unblocks, the gated CCU kernel
-    // has already observed the mask.
     pipe_barrier(PIPE_ALL);
 }
 
