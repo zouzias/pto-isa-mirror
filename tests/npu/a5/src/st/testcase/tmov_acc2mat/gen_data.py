@@ -207,7 +207,7 @@ class TMovParams:
         self.index_cols = index_cols
         self.is_insert = is_insert
         self.dst_row = dst_row
-        self.dst_col = dst_col        
+        self.dst_col = dst_col
 
 
 if __name__ == "__main__":
@@ -312,7 +312,7 @@ if __name__ == "__main__":
         TMovParams(np.float16, np.float16, np.int8, 96, 128, 60, 0, 0, 0, 'DN', 512, False, True, True, None, 3),
         TMovParams(np.int8, np.int8, np.float16, 128, 128, 64, 0, 0, 0, 'DN', 512, False, True, False, None, 5),
         TMovParams(np.int8, np.int8, np.int8, 64, 64, 90, 0, 0, 0, 'DN', 512, False, True, False, None, 2),
-        
+
         TMovParams(np.float16, np.float16, np.float16, 64, 64, 64, 64, 64, 64, 'NZ', 512, False, False, False, None, 1,
             16, 16),
         TMovParams(np.int8, np.int8, np.float16, 96, 128, 64, 96, 128, 64, 'NZ', 512, False, True, False, None, 2,

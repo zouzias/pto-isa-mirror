@@ -1,52 +1,36 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
 
+#include "kernels/manual/common/mx_matmul_pipeline_common.h"
+
 using namespace pto;
+using namespace pto::manual::common;
 constexpr uint32_t BUFFER_NUM = 2;
 constexpr uint32_t SCALE_FACTOR = 32;
 constexpr uint32_t L0_PINGPONG_BYTES = 32 * 1024; // L0A/L0B ping-pong split (32 KiB per buffer)
 constexpr uint32_t mxScalePara = 8;
 // Pipeline mental model (instruction-level):
 // - TLOAD     (GM -> L1):   fill aMatTile/bMatTile
-// - TEXTRACT  (L1 -> L0):   slice aMatTile/bMatTile into aTile/bTile for the current baseK
+// - TEXTRACT  (L1 -> L0):   slice aMatTile/bMatTile into aTile/bTile for the
+// current baseK
 // - TMATMUL_MX   (Cube):       cTile = A*B (accumulated over K)
 // - TSTORE    (L0C -> GM):  write cTile back to GM
 //
-// The code still uses PIPE_MTE* events for synchronization because those are the underlying hardware pipes;
-// comments refer to the high-level PTO instructions to make tuning easier.
-
-template <typename OutTile, typename LeftTile, typename RightTile, typename LeftScaleTile, typename RightScaleTile>
-AICORE inline void MatmulAcc(OutTile cTile, LeftTile aTile, RightTile bTile, LeftScaleTile aScaleTile,
-                             RightScaleTile bScaleTile, uint32_t k)
-{
-    if (k == 0) {
-        TMATMUL_MX(cTile, aTile, aScaleTile, bTile, bScaleTile);
-    } else {
-        TMATMUL_MX(cTile, cTile, aTile, aScaleTile, bTile, bScaleTile);
-    }
-}
-
-template <pipe_t srcPipe, pipe_t dstPipe>
-AICORE inline void SetFlag(uint32_t id)
-{
-    set_flag(srcPipe, dstPipe, static_cast<event_t>(id));
-}
-template <pipe_t srcPipe, pipe_t dstPipe>
-
-AICORE inline void WaitFlag(uint32_t id)
-{
-    wait_flag(srcPipe, dstPipe, static_cast<event_t>(id));
-}
+// The code still uses PIPE_MTE* events for synchronization because those are
+// the underlying hardware pipes; comments refer to the high-level PTO
+// instructions to make tuning easier.
 
 template <typename T, typename U, typename X, int m, int k, int n, uint32_t singleCoreM, uint32_t singleCoreK,
           uint32_t singleCoreN>
@@ -56,7 +40,8 @@ AICORE inline void InitGMOffsets(__gm__ U *&currentSrc0, __gm__ U *&currentSrc1,
 {
     // Work partition (SPMD-style):
     // - Each core owns a contiguous C tile of shape [singleCoreM, singleCoreN].
-    // - It reads the corresponding A panel [singleCoreM, K] and B panel [K, singleCoreN].
+    // - It reads the corresponding A panel [singleCoreM, K] and B panel [K,
+    // singleCoreN].
     constexpr uint32_t mIter = m / singleCoreM;
     uint32_t mIterIdx = get_block_idx() % mIter; // get current launch core idx
     uint32_t nIterIdx = get_block_idx() / mIter;
@@ -82,32 +67,10 @@ AICORE inline void InitBuffers(TileMatA aMatTile[BUFFER_NUM], TileMatB bMatTile[
                                LeftScaleTile aScaleTile[BUFFER_NUM], RightScaleTile bScaleTile[BUFFER_NUM],
                                ResTile &cTile)
 {
-    // L1 staging buffers (aMatTile/bMatTile) are double-buffered for TLOAD overlap.
-    TASSIGN(aMatTile[0], 0x0);
-    TASSIGN(aMatTile[1], 0x0 + baseM * baseK * stepKa * sizeof(U));
-    TASSIGN(bMatTile[0], 0x0 + baseM * baseK * stepKa * BUFFER_NUM * sizeof(U));
-    TASSIGN(bMatTile[1], 0x0 + baseM * baseK * stepKa * BUFFER_NUM * sizeof(U) + baseK * baseN * stepKb * sizeof(U));
-
-    constexpr uint32_t baseAddr =
-        baseM * baseK * stepKa * BUFFER_NUM * sizeof(U) + baseK * baseN * stepKb * sizeof(U) * BUFFER_NUM;
-    TASSIGN(aScaleMatTile[0], baseAddr);
-    TASSIGN(aScaleMatTile[1], baseAddr + baseM * baseScaleK * stepKscaleA * sizeof(X));
-    TASSIGN(bScaleMatTile[0], baseAddr + baseM * baseScaleK * stepKscaleA * BUFFER_NUM * sizeof(X));
-    TASSIGN(bScaleMatTile[1], baseAddr + baseM * baseScaleK * stepKscaleA * BUFFER_NUM * sizeof(X) +
-                                  baseScaleK * baseN * stepKscaleB * sizeof(X));
-
-    // L0A/L0B ping-pong buffers (TEXTRACT destination).
-    // Keep each per-buffer footprint <= 32 KiB to fit in a ping/pang slot.
-    TASSIGN(aTile[0], 0x0);                     // L0A ping
-    TASSIGN(aTile[1], 0x0 + L0_PINGPONG_BYTES); // L0A pong
-    TASSIGN(bTile[0], 0x0);                     // L0B ping
-    TASSIGN(bTile[1], 0x0 + L0_PINGPONG_BYTES); // L0B pong
-    TASSIGN(cTile, 0x0);
-
-    TASSIGN(aScaleTile[0], GetScaleAddr(aTile[0].data()));
-    TASSIGN(aScaleTile[1], GetScaleAddr(aTile[1].data()));
-    TASSIGN(bScaleTile[0], GetScaleAddr(bTile[0].data()));
-    TASSIGN(bScaleTile[1], GetScaleAddr(bTile[1].data()));
+    InitMxBuffers<T, U, X, baseM, baseK, baseN, baseScaleK, stepKa, stepKb, stepKscaleA, stepKscaleB, TileMatA,
+                  TileMatB, TileScaleA, TileScaleB, LeftTile, RightTile, LeftScaleTile, RightScaleTile, ResTile,
+                  BUFFER_NUM, L0_PINGPONG_BYTES, 1>(aMatTile, bMatTile, aScaleMatTile, bScaleMatTile, aTile, bTile,
+                                                    aScaleTile, bScaleTile, cTile);
 }
 
 template <uint32_t baseK, uint32_t baseScaleK, uint32_t stepKa, uint32_t stepKb, uint32_t stepKscaleA,
@@ -121,10 +84,12 @@ AICORE inline void MacroMatmul(uint32_t kIter, uint8_t currMte2Idx, uint8_t curr
                                ResTile &cTile)
 {
     const uint32_t kModstepKa = kIter % stepKa;
-    // Wait until TMATMUL is done with the current L0A/L0B buffer before overwriting it via TEXTRACT.
+    // Wait until TMATMUL is done with the current L0A/L0B buffer before
+    // overwriting it via TEXTRACT.
     WaitFlag<PIPE_M, PIPE_MTE1>(mte1DBFlag);
 
-    // TEXTRACT stage: slice the loaded L1 panel into the baseK chunk we need this iteration.
+    // TEXTRACT stage: slice the loaded L1 panel into the baseK chunk we need this
+    // iteration.
     if (kModstepKa == 0)
         WaitFlag<PIPE_MTE2, PIPE_MTE1>(0);
     TEXTRACT(aTile[mte1DBFlag], aMatTile[currMte2Idx], 0, kModstepKa * baseK);
@@ -144,7 +109,8 @@ AICORE inline void MacroMatmul(uint32_t kIter, uint8_t currMte2Idx, uint8_t curr
     SetFlag<PIPE_MTE1, PIPE_M>(mte1DBFlag);
     WaitFlag<PIPE_MTE1, PIPE_M>(mte1DBFlag);
     MatmulAcc(cTile, aTile[mte1DBFlag], bTile[mte1DBFlag], aScaleTile[mte1DBFlag], bScaleTile[mte1DBFlag], kIter);
-    // Signal that TMATMUL is done, so the next iteration may TEXTRACT into the other ping-pong slot.
+    // Signal that TMATMUL is done, so the next iteration may TEXTRACT into the
+    // other ping-pong slot.
     SetFlag<PIPE_M, PIPE_MTE1>(mte1DBFlag);
 }
 
@@ -173,7 +139,8 @@ AICORE inline void ProcessKIteration(uint32_t kIter, uint32_t i, uint32_t j, __g
     const uint32_t kModstepKscaleA = kIter % stepKscaleA;
 
     // TLOAD stage:
-    // - Every stepKa iterations, load a larger [baseM, baseK * stepKa] panel into L1 and then slice it with TEXTRACT.
+    // - Every stepKa iterations, load a larger [baseM, baseK * stepKa] panel into
+    // L1 and then slice it with TEXTRACT.
     // - Double buffering is driven by mte2DBFlag.
 
     if (kModstepKa == 0) {
@@ -201,11 +168,11 @@ AICORE inline void ProcessKIteration(uint32_t kIter, uint32_t i, uint32_t j, __g
         mte2DBFlag = (mte2DBFlag == 0) ? 1 : 0;
     }
 
-    const uint32_t currMte2Idx = (mte2DBFlag == 0) ? 1 : 0;     // mte2DBFlag reversed
-    const uint32_t currMte2mxIdx = (mte2mxDBFlag == 0) ? 1 : 0; // mte2mxDBFlag reversed
+    const uint32_t currMte2Idx = (mte2DBFlag == 0) ? 1 : 0;
+    const uint32_t currMte2mxIdx = (mte2mxDBFlag == 0) ? 1 : 0;
 
-    MacroMatmul<baseK, baseScaleK, stepKa, stepKb, stepKscaleA, stepKscaleB, TileMatA, TileMatB, TileScaleA, TileScaleB,
-                LeftTile, RightTile, LeftScaleTile, RightScaleTile, ResTile>(
+    MacroMxMatmul<baseK, baseScaleK, stepKa, stepKb, stepKscaleA, stepKscaleB, TileMatA, TileMatB, TileScaleA,
+                  TileScaleB, LeftTile, RightTile, LeftScaleTile, RightScaleTile, ResTile, BUFFER_NUM>(
         kIter, currMte2Idx, currMte2mxIdx, mte1DBFlag, aMatTile, bMatTile, aScaleMatTile, bScaleMatTile, aTile, bTile,
         aScaleTile, bScaleTile, cTile);
     mte1DBFlag = (mte1DBFlag == 0) ? 1 : 0;
@@ -215,8 +182,8 @@ template <typename T, typename U, int m, int n, uint32_t baseM, uint32_t baseN, 
 AICORE inline void StoreResult(ResTile &cTile, __gm__ T *currentDst, uint32_t i, uint32_t j)
 {
     // TSTORE stage: write the finished C tile [baseM, baseN] back to GM.
-    SetFlag<PIPE_M, PIPE_FIX>(0);
-    WaitFlag<PIPE_M, PIPE_FIX>(0);
+    SetPipeFlag<PIPE_M, PIPE_FIX>(0);
+    WaitPipeFlag<PIPE_M, PIPE_FIX>(0);
 
     // the data size read from L0C after single k loop is [baseM, baseN]
     using NDValidShapeC = TileShape2D<T, baseM, baseN, Layout::ND>;
@@ -226,8 +193,8 @@ AICORE inline void StoreResult(ResTile &cTile, __gm__ T *currentDst, uint32_t i,
     GlobalDataOut dstGlobal(currentDst + i * baseM * n + j * baseN);
     TSTORE(dstGlobal, cTile);
 
-    SetFlag<PIPE_FIX, PIPE_M>(0);
-    WaitFlag<PIPE_FIX, PIPE_M>(0);
+    SetPipeFlag<PIPE_FIX, PIPE_M>(0);
+    WaitPipeFlag<PIPE_FIX, PIPE_M>(0);
 }
 
 template <typename T, typename U, typename X, int m, int k, int n, uint32_t singleCoreM, uint32_t singleCoreK,
@@ -259,19 +226,19 @@ AICORE inline void Compute(__gm__ U *currentSrc0, __gm__ U *currentSrc1, __gm__ 
 AICORE inline void InitSyncFlags()
 {
     // supplement first sync instr for reverse sync in ProcessKIteration
-    SetFlag<PIPE_MTE1, PIPE_MTE2>(0);
-    SetFlag<PIPE_MTE1, PIPE_MTE2>(1);
-    SetFlag<PIPE_M, PIPE_MTE1>(0);
-    SetFlag<PIPE_M, PIPE_MTE1>(1);
+    SetPipeFlag<PIPE_MTE1, PIPE_MTE2>(0);
+    SetPipeFlag<PIPE_MTE1, PIPE_MTE2>(1);
+    SetPipeFlag<PIPE_M, PIPE_MTE1>(0);
+    SetPipeFlag<PIPE_M, PIPE_MTE1>(1);
 }
 
 AICORE inline void WaitSyncFlags()
 {
     // supplement last sync instr for reverse sync in ProcessKIteration
-    WaitFlag<PIPE_M, PIPE_MTE1>(0);
-    WaitFlag<PIPE_M, PIPE_MTE1>(1);
-    WaitFlag<PIPE_MTE1, PIPE_MTE2>(0);
-    WaitFlag<PIPE_MTE1, PIPE_MTE2>(1);
+    WaitPipeFlag<PIPE_M, PIPE_MTE1>(0);
+    WaitPipeFlag<PIPE_M, PIPE_MTE1>(1);
+    WaitPipeFlag<PIPE_MTE1, PIPE_MTE2>(0);
+    WaitPipeFlag<PIPE_MTE1, PIPE_MTE2>(1);
 }
 
 template <typename T, typename U, typename X, uint32_t blockDim, int m, int k, int n, uint32_t singleCoreM,

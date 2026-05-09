@@ -20,12 +20,12 @@ def gen_golden_data_ttril(case_name, param):
     valid_row, valid_col = [param.valid_rows, param.valid_cols]
     upper_or_lower = param.upper_or_lower
     diagonal = param.diagonal
-    
+
     if (upper_or_lower==0):  # lower triangular
         golden = np.tril(np.ones((valid_row, valid_col)).astype(dtype), k=diagonal)
     else:                    # upper triangular
         golden = np.triu(np.ones((valid_row, valid_col)).astype(dtype), k=diagonal)
-        
+
     output = np.zeros([valid_row * valid_col]).astype(dtype)
     golden.tofile("golden.bin")
     return output, golden
@@ -38,7 +38,7 @@ class TTRIParams:
         self.valid_cols = valid_cols
         self.upper_or_lower = upper_or_lower
         self.diagonal = diagonal
-        
+
 def generate_case_name(param):
     dtype_str = {
         np.float32: 'float',
