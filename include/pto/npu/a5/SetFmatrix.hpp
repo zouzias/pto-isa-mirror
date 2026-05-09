@@ -8,12 +8,12 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef SETFMATRIX_HPP
-#define SETFMATRIX_HPP
+#ifndef TSETFMATRIX_HPP
+#define TSETFMATRIX_HPP
 
 namespace pto {
 template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL>
-PTO_INTERNAL void SETFMATRIX_IMPL(ConvTileData &src)
+PTO_INTERNAL void TSETFMATRIX_IMPL(ConvTileData &src)
 {
     if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_A_MANUAL || FmatrixMode == SetFmatrixMode::FMATRIX_B_MANUAL) {
         uint64_t regFmatrix = 0;
@@ -36,4 +36,4 @@ PTO_INTERNAL void SETFMATRIX_IMPL(ConvTileData &src)
     }
 }
 } // namespace pto
-#endif // SETFMATRIX_HPP
+#endif // TSETFMATRIX_HPP

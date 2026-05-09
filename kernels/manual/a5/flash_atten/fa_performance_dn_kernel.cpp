@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 
 #include "fa_performance_kernel.h"
+#include "kernels/manual/common/flash_atten/fa_qk_tile_traits.h"
 #include <pto/npu/kernels/Pto_prefetch.hpp>
 #include <pto/npu/a5/custom/TSyncCVID.hpp>
 #include <pto/npu/a5/custom/TSync_Custom.hpp>
@@ -361,13 +362,12 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm
                               int accTileEvtID, TSyncQK2SM &qk2smSync, TSyncUBBuf &ubBufSync, int blk_idx)
 {
     if constexpr (DAV_CUBE) {
-        constexpr uint32_t Cube_S0 = CUBE_S0;
-        constexpr uint32_t Cube_S1 = CUBE_S1;
-        constexpr uint32_t Tile_S1 = TILE_S1;
-        constexpr uint32_t kTileFactor = Tile_S1 / Cube_S1;
-        constexpr uint32_t Cube_HEAD = HEAD_SIZE;
-        static_assert(QKP_CV_FIFO >= 1, "QKP_CV_FIFO must be >= 1");
-        static_assert(Tile_S1 % Cube_S1 == 0, "TILE_S1 must be divisible by CUBE_S1");
+        using QkTraits = QkTileTraits<CUBE_S0, CUBE_S1, TILE_S1, QKP_CV_FIFO, CV_FIFO_CONS_SYNC_PERIOD, HEAD_SIZE>;
+        constexpr uint32_t Cube_S0 = QkTraits::CubeS0;
+        constexpr uint32_t Cube_S1 = QkTraits::CubeS1;
+        constexpr uint32_t Tile_S1 = QkTraits::TileS1;
+        constexpr uint32_t kTileFactor = QkTraits::kTileFactor;
+        constexpr uint32_t Cube_HEAD = QkTraits::CubeHead;
 
         const int s0_index = blk_idx * CUBE_S0;
         const int s1_index = tile_id * static_cast<int>(Tile_S1) + sub_tile_id * static_cast<int>(Cube_S1);
@@ -378,7 +378,7 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm
                 if (sub_tile_id == 0 && should_wait_consume)
                     qk2smSync.allocate(); // wait for SM consume data
                 if (sub_tile_id == static_cast<int>(kTileFactor) - 1)
-                    qk2smSync.record(); // notify for QK produce data
+                    qk2smSync.record();   // notify for QK produce data
                 return;
             }
         }
@@ -924,8 +924,8 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     // S0 (rows total), Cube_S0 (per-block rows), S1 (cols), HEAD_SIZE (inner)
     constexpr uint32_t Cube_S0 = CUBE_S0;
     constexpr uint32_t block_rows = S0 / CUBE_S0;
-    constexpr uint32_t Cube_S1 = CUBE_S1; // per-tile S1 chunk
-    constexpr uint32_t Tile_S1 = TILE_S1; // logical tile along S1
+    constexpr uint32_t Cube_S1 = CUBE_S1;               // per-tile S1 chunk
+    constexpr uint32_t Tile_S1 = TILE_S1;               // logical tile along S1
     static_assert(Tile_S1 % Cube_S1 == 0, "TILE_S1 must be divisible by CUBE_S1");
     constexpr uint32_t kTileFactor = Tile_S1 / Cube_S1; // sub-tiles per TILE_S1
     constexpr uint32_t Cube_HEAD = HEAD_SIZE;
