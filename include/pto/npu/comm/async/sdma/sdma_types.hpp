@@ -158,7 +158,7 @@ struct BatchWriteItem {
     uint16_t dstOffsetHigh;
 };
 
-#else // A2/A3
+#else  // A2/A3
 
 struct BatchWriteItem {
     uint8_t type : 6;
