@@ -514,9 +514,9 @@ void LaunchTQuantMXFP8_FP16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void 
     runTQuantFP16<validRows, validCols, mode><<<1, nullptr, stream>>>(dst_exp, dst, (half *)src);
 }
 
-template <int validRows, int validCols>
-__global__ AICORE void runTQuantMXFP4E2M1FP16(__gm__ uint8_t __out__ *out_e8m0, __gm__ uint8_t __out__ *out_fp4,
-                                              __gm__ half __in__ *src)
+template <typename SrcT, int validRows, int validCols>
+__global__ AICORE void runTQuantMXFP4E2M1B16(__gm__ uint8_t __out__ *out_e8m0, __gm__ uint8_t __out__ *out_fp4,
+                                             __gm__ SrcT __in__ *src)
 {
     constexpr int paddedCols = PTO_CEIL(validCols, 32);
     constexpr int packedCols = paddedCols / 2;
@@ -526,13 +526,13 @@ __global__ AICORE void runTQuantMXFP4E2M1FP16(__gm__ uint8_t __out__ *out_e8m0, 
     constexpr int groupedCols_e8_static = PTO_CEIL(groupedCols_valid, 32);
     constexpr int groupedCols_b16_static = PTO_CEIL(groupedCols_valid, 16);
     constexpr int groupedCols_flat_aligned = PTO_CEIL(groupedCols_flattened, 32);
-    using SrcGlobal = GlobalTensor<half, Shape<1, 1, 1, validRows, validCols>, pto::Stride<1, 1, 1, validCols, 1>>;
+    using SrcGlobal = GlobalTensor<SrcT, Shape<1, 1, 1, validRows, validCols>, pto::Stride<1, 1, 1, validCols, 1>>;
     using DstE8Global =
         GlobalTensor<uint8_t, Shape<1, 1, 1, 1, groupedCols_flattened>, pto::Stride<1, 1, 1, validCols, 1>>;
     using DstFP4Global =
         GlobalTensor<uint8_t, Shape<1, 1, 1, validRows, validPackedCols>, pto::Stride<1, 1, 1, validPackedCols, 1>>;
 
-    using SrcTile = Tile<TileType::Vec, half, validRows, paddedCols, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512,
+    using SrcTile = Tile<TileType::Vec, SrcT, validRows, paddedCols, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512,
                          PadValue::Zero>;
     using DstE8Tile = Tile<TileType::Vec, uint8_t, validRows, groupedCols_e8_static, BLayout::RowMajor, -1, -1,
                            SLayout::NoneBox, 512, PadValue::Zero>;
@@ -540,8 +540,8 @@ __global__ AICORE void runTQuantMXFP4E2M1FP16(__gm__ uint8_t __out__ *out_e8m0, 
                             SLayout::NoneBox, 512, PadValue::Zero>;
     using DstBytesTile = Tile<TileType::Vec, uint8_t, validRows, packedCols, BLayout::RowMajor, -1, -1,
                               SLayout::NoneBox, 512, PadValue::Zero>;
-    using MaxTile = Tile<TileType::Vec, half, validRows, groupedCols_b16_static, BLayout::RowMajor, -1, -1>;
-    using ScalingTile = Tile<TileType::Vec, half, validRows, groupedCols_b16_static, BLayout::RowMajor, -1, -1>;
+    using MaxTile = Tile<TileType::Vec, SrcT, validRows, groupedCols_b16_static, BLayout::RowMajor, -1, -1>;
+    using ScalingTile = Tile<TileType::Vec, SrcT, validRows, groupedCols_b16_static, BLayout::RowMajor, -1, -1>;
 
     SrcTile srcTile(validRows, validCols);
     DstFP4Tile fp4Tile;
@@ -587,7 +587,13 @@ __global__ AICORE void runTQuantMXFP4E2M1FP16(__gm__ uint8_t __out__ *out_e8m0, 
 template <int validRows, int validCols>
 void LaunchTQuantMXFP4_E2M1_FP16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream)
 {
-    runTQuantMXFP4E2M1FP16<validRows, validCols><<<1, nullptr, stream>>>(dst_exp, dst, (half *)src);
+    runTQuantMXFP4E2M1B16<half, validRows, validCols><<<1, nullptr, stream>>>(dst_exp, dst, (half *)src);
+}
+
+template <int validRows, int validCols>
+void LaunchTQuantMXFP4_E2M1_BF16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream)
+{
+    runTQuantMXFP4E2M1B16<bfloat16_t, validRows, validCols><<<1, nullptr, stream>>>(dst_exp, dst, (bfloat16_t *)src);
 }
 
 } // namespace TQuantTest
@@ -678,6 +684,8 @@ template void TQuantTest::LaunchTQuantMXFP8_FP16<4, 256, 0>(uint8_t *dst, uint16
 template void TQuantTest::LaunchTQuantMXFP8_FP16<11, 640, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                              void *stream);
 template void TQuantTest::LaunchTQuantMXFP4_E2M1_FP16<2, 128>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
+                                                              void *stream);
+template void TQuantTest::LaunchTQuantMXFP4_E2M1_BF16<2, 128>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                               void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_FP16<32, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                              void *stream);

@@ -264,8 +264,9 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
         static_assert(std::is_same_v<SrcT, float>, "Fix: MXFP8 input has to be float 32");
         static_assert(std::is_same_v<typename TileDataOut::DType, int8_t>, "Fix: MXFP8 output must be int8 bytes.");
     } else {
-        static_assert(std::is_same_v<SrcT, float> || std::is_same_v<SrcT, half> || std::is_same_v<SrcT, aclFloat16>,
-                      "Fix: MXFP4_E2M1 CPU sim supports float/float16 source.");
+        static_assert(std::is_same_v<SrcT, float> || std::is_same_v<SrcT, half> || std::is_same_v<SrcT, aclFloat16> ||
+                          std::is_same_v<SrcT, bfloat16_t>,
+                      "Fix: MXFP4_E2M1 CPU sim supports float/float16/bfloat16 source.");
         static_assert(std::is_same_v<typename TileDataOut::DType, float4_e2m1x2_t>,
                       "Fix: MXFP4_E2M1 output must be float4_e2m1x2_t.");
     }

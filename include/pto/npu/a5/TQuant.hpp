@@ -506,7 +506,8 @@ template <typename T>
 PTO_INTERNAL void ExtractE2M1ExponentAndScalingVL(__ubuf__ T *maxPtr, __ubuf__ uint8_t *expPtr, __ubuf__ T *scalingPtr,
                                                   uint32_t off, uint32_t rem)
 {
-    static_assert(std::is_same<T, half>::value, "ExtractE2M1ExponentAndScalingVL: T must be half");
+    static_assert(std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
+                  "ExtractE2M1ExponentAndScalingVL: T must be bfloat16_t or half");
     constexpr uint16_t kBf16ExpMask = 0x7F80;
     constexpr uint16_t kBf16MantissaMask = 0x007F;
     constexpr uint16_t kFp4E2M1MaxExp = 0x0100;
@@ -552,7 +553,8 @@ template <typename T>
 PTO_INTERNAL void ExtractE2M1ExponentAndScaling(__ubuf__ T *maxPtr, __ubuf__ uint8_t *expPtr, __ubuf__ T *scalingPtr,
                                                 unsigned exp_max_loop_count, unsigned total_elements_count)
 {
-    static_assert(std::is_same<T, half>::value, "ExtractE2M1ExponentAndScaling: T must be half");
+    static_assert(std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
+                  "ExtractE2M1ExponentAndScaling: T must be bfloat16_t or half");
     constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T);
 
     for (uint16_t i = 0; i < (uint16_t)exp_max_loop_count; ++i) {
@@ -903,6 +905,70 @@ PTO_INTERNAL void CalcQuantizedFP4E2M1Values_Half(__ubuf__ half *srcPtr, __ubuf_
     vstas(ureg_out, dstWritePtr, 0, POST_UPDATE);
 }
 
+PTO_INTERNAL void CalcQuantizedFP4E2M1Values_Bf16(__ubuf__ bfloat16_t *srcPtr, __ubuf__ bfloat16_t *scalingPtr,
+                                                  __ubuf__ uint8_t *dstPtr, uint32_t totalGroups)
+{
+    constexpr uint32_t kGroupSize = 32;
+    constexpr uint32_t kPackedBytesPerGroup = kGroupSize / 2;
+    constexpr uint32_t kGroupsPerWindow = 8;
+    constexpr uint32_t kElementsPerWindow = kGroupSize * kGroupsPerWindow;
+    constexpr uint32_t kPackedBytesPerWindow = kElementsPerWindow / 2;
+    constexpr uint32_t kPackedBytesPerHalfWindow = kPackedBytesPerWindow / 2;
+    uint32_t groupSize = kGroupSize;
+    uint32_t packedBytesPerGroup = kPackedBytesPerGroup;
+    MaskReg preg_b16 = CreatePredicate<bfloat16_t>(groupSize);
+    MaskReg preg_idx = pset_b8(PAT_ALL);
+
+    vector_u8 v_idx;
+    vci((RegTensor<int8_t> &)v_idx, (int8_t)0, INC_ORDER);
+    vmuls((RegTensor<int16_t> &)v_idx, (RegTensor<int16_t> &)v_idx, (int16_t)4, preg_idx);
+
+    uint32_t windowCount = totalGroups / kGroupsPerWindow;
+    for (uint32_t window = 0; window < windowCount; ++window) {
+        RegTensor<bfloat16_t> v_input_0, v_input_1;
+        RegTensor<bfloat16_t> v_intlv_0, v_intlv_1;
+        RegTensor<bfloat16_t> v_scale;
+        vector_f4e2m1x2 v_output_0, v_output_1;
+
+        vlds(v_input_0, v_input_1, srcPtr, window * kElementsPerWindow, DINTLV_B16);
+        vlds((vector_u16 &)v_scale, (__ubuf__ uint16_t *)scalingPtr, window * kGroupsPerWindow, E2B_B16);
+        vmul(v_input_0, v_input_0, v_scale, preg_b16, MODE_ZEROING);
+        vmul(v_input_1, v_input_1, v_scale, preg_b16, MODE_ZEROING);
+        vintlv(v_intlv_0, v_intlv_1, v_input_0, v_input_1);
+        vcvt(v_output_0, v_intlv_0, preg_b16, ROUND_R, PART_P0);
+        vcvt(v_output_1, v_intlv_1, preg_b16, ROUND_R, PART_P0);
+        vsts((
+          <uint8_t> &)v_output_0, dstPtr, window * kPackedBytesPerWindow, PK4_B32, preg_b16);
+        vsts((RegTensor<uint8_t> &)v_output_1, dstPtr, window * kPackedBytesPerWindow + kPackedBytesPerHalfWindow,
+             PK4_B32, preg_b16);
+    }
+
+    uint32_t tailGroups = totalGroups - windowCount * kGroupsPerWindow;
+    if (tailGroups == 0) {
+        return;
+    }
+
+    UnalignReg ureg_out;
+    __ubuf__ bfloat16_t *srcTailPtr = srcPtr + windowCount * kElementsPerWindow;
+    __ubuf__ bfloat16_t *scalingTailPtr = scalingPtr + windowCount * kGroupsPerWindow;
+    __ubuf__ uint8_t *dstWritePtr = dstPtr + windowCount * kPackedBytesPerWindow;
+    for (uint32_t group = 0; group < tailGroups; ++group) {
+        RegTensor<bfloat16_t> v_input;
+        RegTensor<bfloat16_t> v_scale;
+        RegTensor<bfloat16_t> v_scaled;
+        vector_f4e2m1x2 v_output_p0, v_output;
+
+        vlds(v_input, srcTailPtr, group * kGroupSize, NORM);
+        vlds(v_scale, scalingTailPtr, group, BRC_B16);
+        vmul(v_scaled, v_input, v_scale, preg_b16, MODE_ZEROING);
+        vcvt(v_output_p0, v_scaled, preg_b16, ROUND_R, PART_P0);
+        vselr((RegTensor<uint8_t> &)v_output, (RegTensor<uint8_t> &)v_output_p0, (RegTensor<uint8_t> &)v_idx);
+        mem_bar(VST_VST);
+        vstus(ureg_out, packedBytesPerGroup, (RegTensor<uint8_t> &)v_output, dstWritePtr, POST_UPDATE);
+    }
+    vstas(ureg_out, dstWritePtr, 0, POST_UPDATE);
+}
+
 // FP32 -> MXFP8 quantization: AbsReduceMax + ExponentScaling + FP8 conversion.
 template <unsigned StaticRows, unsigned StaticCols>
 PTO_INTERNAL void TQuant_MXFP8_F32(__ubuf__ float *srcPtr, __ubuf__ uint8_t *expPtr, __ubuf__ uint8_t *dstPtr,
@@ -1003,15 +1069,18 @@ PTO_INTERNAL void TQuant_MXFP8_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *expPtr,
     }
 }
 
-PTO_INTERNAL void TQuant_MXFP4_E2M1_Half(__ubuf__ half *srcPtr, __ubuf__ uint8_t *expPtr, __ubuf__ uint8_t *dstPtr,
-                                         __ubuf__ half *maxPtr, __ubuf__ half *scalingPtr, uint16_t vl_count,
-                                         unsigned exp_loop_count, uint32_t numGroups, uint32_t total_elements_count,
-                                         unsigned validCols, unsigned srcCols)
+template <typename T>
+PTO_INTERNAL void TQuant_MXFP4_E2M1_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *expPtr, __ubuf__ uint8_t *dstPtr,
+                                        __ubuf__ T *maxPtr, __ubuf__ T *scalingPtr, uint16_t vl_count,
+                                        unsigned exp_loop_count, uint32_t numGroups, uint32_t total_elements_count,
+                                        unsigned validCols, unsigned srcCols)
 {
-    __ubuf__ half *maxPtr_backup = maxPtr;
+    static_assert(std::is_same<T, half>::value || std::is_same<T, bfloat16_t>::value,
+                  "TQuant_MXFP4_E2M1_B16: T must be half or bfloat16_t");
+    __ubuf__ T *maxPtr_backup = maxPtr;
     if (validCols == srcCols) {
         // 1D fast path: source is contiguous; keep the reducer selection aligned with MXFP8 FP16.
-        constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(half);
+        constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T);
         constexpr uint32_t elementsPerLargeLoop = 32 * elementsPerVL;
         if (total_elements_count % elementsPerLargeLoop == 0)
             AbsReduceMax_b16_ND_largesizes(srcPtr, maxPtr, vl_count, total_elements_count);
@@ -1024,7 +1093,10 @@ PTO_INTERNAL void TQuant_MXFP4_E2M1_Half(__ubuf__ half *srcPtr, __ubuf__ uint8_t
     maxPtr = maxPtr_backup;
     ExtractE2M1ExponentAndScaling(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups);
     mem_bar(VST_VLD);
-    CalcQuantizedFP4E2M1Values_Half(srcPtr, scalingPtr, dstPtr, numGroups);
+    if constexpr (std::is_same<T, half>::value)
+        CalcQuantizedFP4E2M1Values_Half(srcPtr, scalingPtr, dstPtr, numGroups);
+    else
+        CalcQuantizedFP4E2M1Values_Bf16(srcPtr, scalingPtr, dstPtr, numGroups);
 }
 
 // Zero-pad columns [validCols, StaticCols) of a 16-bit source tile at VL-aligned
@@ -1164,7 +1236,8 @@ __tf__ PTO_INTERNAL void TQuant_MXFP4_E2M1_Impl(typename TileDataOut::TileDType 
     using T = typename TileDataSrc::DType;
     using ExpT = typename TileDataExp::DType;
     using OutT = typename TileDataOut::DType;
-    static_assert(std::is_same<T, half>::value, "Fix: MXFP4_E2M1 currently supports fp16 source only.");
+    static_assert(std::is_same<T, half>::value || std::is_same<T, bfloat16_t>::value,
+                  "Fix: MXFP4_E2M1 currently supports fp16/bfloat16 source only.");
     static_assert(std::is_same<OutT, float4_e2m1x2_t>::value, "Fix: MXFP4_E2M1 output must be float4_e2m1x2_t.");
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
     __ubuf__ ExpT *expPtr = (__ubuf__ ExpT *)__cce_get_tile_ptr(exp);
@@ -1183,8 +1256,8 @@ __tf__ PTO_INTERNAL void TQuant_MXFP4_E2M1_Impl(typename TileDataOut::TileDType 
         uint16_t vlCount = CeilDivision(totalElems, elemPerVL);
         uint32_t numGroups = totalElems / 32;
         unsigned expLoopCount = CeilDivision(numGroups, elemPerVL);
-        TQuant_MXFP4_E2M1_Half(srcPtr, (__ubuf__ uint8_t *)expPtr, (__ubuf__ uint8_t *)dstPtr, maxPtr, scalingPtr,
-                               vlCount, expLoopCount, numGroups, totalElems, validCols, (unsigned)TileDataSrc::Cols);
+        TQuant_MXFP4_E2M1_B16(srcPtr, (__ubuf__ uint8_t *)expPtr, (__ubuf__ uint8_t *)dstPtr, maxPtr, scalingPtr,
+                              vlCount, expLoopCount, numGroups, totalElems, validCols, (unsigned)TileDataSrc::Cols);
     }
 }
 
@@ -1302,7 +1375,8 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
             std::is_same<T, float32_t>::value || std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
             "Fix: MXFP8 input has to be float32, bfloat16, or float16 (half)");
     } else {
-        static_assert(std::is_same<T, half>::value, "Fix: MXFP4_E2M1 input has to be float16 (half)");
+        static_assert(std::is_same<T, half>::value || std::is_same<T, bfloat16_t>::value,
+                      "Fix: MXFP4_E2M1 input has to be float16 (half) or bfloat16");
         static_assert(std::is_same<typename TileDataOut::DType, float4_e2m1x2_t>::value,
                       "Fix: MXFP4_E2M1 output has to be float4_e2m1x2_t");
     }

@@ -275,9 +275,10 @@ void ExpectFloatEqOrNan(float actual, float expected)
     }
 }
 
-void RunMxFp4E2M1Fp16NdCase(MxFp4Case caseId)
+template <typename SrcT>
+void RunMxFp4E2M1NdCase(MxFp4Case caseId)
 {
-    using SrcTile = Tile<TileType::Vec, aclFloat16, 2, 128>;
+    using SrcTile = Tile<TileType::Vec, SrcT, 2, 128>;
     using DstTile = Tile<TileType::Vec, float4_e2m1x2_t, 2, 64>;
     using ExpTile = Tile<TileType::Vec, uint8_t, 1, 32>;
     using MaxTile = Tile<TileType::Vec, float, 1, 8>;
@@ -300,7 +301,7 @@ void RunMxFp4E2M1Fp16NdCase(MxFp4Case caseId)
     for (int r = 0; r < src.GetValidRow(); ++r) {
         for (int c = 0; c < src.GetValidCol(); ++c) {
             src.data()[GetTileElementOffset<SrcTile>(r, c)] =
-                static_cast<aclFloat16>(MakeMxFp4CaseValue(caseId, r * SrcTile::Cols + c));
+                static_cast<SrcT>(MakeMxFp4CaseValue(caseId, r * SrcTile::Cols + c));
         }
     }
 
@@ -335,6 +336,18 @@ void RunMxFp4E2M1Fp16NdCase(MxFp4Case caseId)
     }
 }
 
+void RunMxFp4E2M1Fp16NdCase(MxFp4Case caseId)
+{
+    RunMxFp4E2M1NdCase<aclFloat16>(caseId);
+}
+
+#if defined(PTO_CPU_SIM_ENABLE_BF16)
+void RunMxFp4E2M1Bf16NdCase(MxFp4Case caseId)
+{
+    RunMxFp4E2M1NdCase<bfloat16_t>(caseId);
+}
+#endif
+
 TEST(TQuantCpuSimTest, MxFp4E2M1Fp16NdSpecial)
 {
     RunMxFp4E2M1Fp16NdCase(MxFp4Case::Special);
@@ -364,6 +377,38 @@ TEST(TQuantCpuSimTest, MxFp4E2M1Fp16NdMixed)
 {
     RunMxFp4E2M1Fp16NdCase(MxFp4Case::Mixed);
 }
+
+#if defined(PTO_CPU_SIM_ENABLE_BF16)
+TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdSpecial)
+{
+    RunMxFp4E2M1Bf16NdCase(MxFp4Case::Special);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdSubnormal)
+{
+    RunMxFp4E2M1Bf16NdCase(MxFp4Case::Subnormal);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdRounding)
+{
+    RunMxFp4E2M1Bf16NdCase(MxFp4Case::Rounding);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdExpRandomA)
+{
+    RunMxFp4E2M1Bf16NdCase(MxFp4Case::ExpRandomA);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdExpRandomB)
+{
+    RunMxFp4E2M1Bf16NdCase(MxFp4Case::ExpRandomB);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdMixed)
+{
+    RunMxFp4E2M1Bf16NdCase(MxFp4Case::Mixed);
+}
+#endif
 
 TEST(TQuantCpuSimTest, MxFp8NzReordersExponentsExactly)
 {
