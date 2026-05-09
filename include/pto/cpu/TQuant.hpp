@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 #ifndef TQUANT_CPU_HPP
 #define TQUANT_CPU_HPP
@@ -16,8 +18,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <tuple>
 #include <type_traits>
 #include <vector>
+
 #include "pto/cpu/tile_offsets.hpp"
 
 namespace pto {
@@ -136,9 +140,9 @@ inline float ComputeScalingFromExponent(uint8_t e8m0)
 
 inline std::vector<uint8_t> ReorderExponentZZ(const std::vector<uint8_t> &exp, int rows, int groupCols)
 {
-    PTO_CPU_ASSERT(
-        rows % 16 == 0 && groupCols % 2 == 0,
-        "Fix: MXFP8 NZ exponent reorder currently requires rows multiple of 16 and group cols multiple of 2.");
+    PTO_CPU_ASSERT(rows % 16 == 0 && groupCols % 2 == 0,
+                   "Fix: MXFP8 NZ exponent reorder currently requires rows "
+                   "multiple of 16 and group cols multiple of 2.");
     const int rowBlocks = rows / 16;
     const int groupBlocks = groupCols / 2;
     std::vector<uint8_t> reordered;
@@ -155,6 +159,25 @@ inline std::vector<uint8_t> ReorderExponentZZ(const std::vector<uint8_t> &exp, i
         }
     }
     return reordered;
+}
+template <typename FlatTile, typename TileData>
+inline FlatTile MakeFlatTile(TileData &tile)
+{
+    FlatTile flat(1, FlatTile::Cols);
+    TRESHAPE_IMPL(flat, tile);
+    return flat;
+}
+
+inline void FillMxfp8Group(float *dstData, int dstBaseIdx, float groupScaling)
+{
+    for (int inner = 0; inner < 32; ++inner) {
+        dstData[dstBaseIdx + inner] = groupScaling;
+    }
+}
+
+inline uint8_t ComputeMxfp8Group(const float *srcData, int rowBaseIdx, int inner)
+{
+    return cpu_quant::EncodeE4M3Fn(srcData[rowBaseIdx + inner]);
 }
 } // namespace cpu_quant
 
@@ -200,25 +223,24 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
 
     const int rows = src.GetValidRow();
     const int cols = src.GetValidCol();
-    PTO_CPU_ASSERT(cols % 32 == 0, "Fix: MXFP8 CPU sim currently requires valid cols to be a multiple of 32.");
+    PTO_CPU_ASSERT(cols % 32 == 0,
+                   "Fix: MXFP8 CPU sim currently requires valid cols to be a "
+                   "multiple of 32.");
     const int groupCols = cols / 32;
 
     // Flatten exp, max, scaling to 1D for internal processing
     constexpr int expNumel = TileDataExp::Rows * TileDataExp::Cols;
     using FlatExpTile = Tile<TileType::Vec, typename TileDataExp::DType, 1, expNumel, BLayout::RowMajor, -1, -1>;
-    FlatExpTile flatExp(1, expNumel);
-    TRESHAPE_IMPL(flatExp, *exp);
+    auto flatExp = cpu_quant::MakeFlatTile<FlatExpTile>(*exp);
 
     constexpr int maxNumel = TileDataMax::Rows * TileDataMax::Cols;
     using FlatMaxTile = Tile<TileType::Vec, typename TileDataMax::DType, 1, maxNumel, BLayout::RowMajor, -1, -1>;
-    FlatMaxTile flatMax(1, maxNumel);
-    TRESHAPE_IMPL(flatMax, *max);
+    auto flatMax = cpu_quant::MakeFlatTile<FlatMaxTile>(*max);
 
     constexpr int scalingNumel = TileDataScaling::Rows * TileDataScaling::Cols;
     using FlatScalingTile =
         Tile<TileType::Vec, typename TileDataScaling::DType, 1, scalingNumel, BLayout::RowMajor, -1, -1>;
-    FlatScalingTile flatScaling(1, scalingNumel);
-    TRESHAPE_IMPL(flatScaling, *scaling);
+    auto flatScaling = cpu_quant::MakeFlatTile<FlatScalingTile>(*scaling);
 
     for (int row = 0; row < rows; ++row) {
         for (int group = 0; group < groupCols; ++group) {
@@ -232,12 +254,11 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
             const int flatGroupIdx = row * groupCols + group;
             flatMax.data()[flatGroupIdx] = maxAbsValue;
             flatExp.data()[flatGroupIdx] = e8m0;
+            const int rowBaseIdx = row * cols + group * 32;
+            cpu_quant::FillMxfp8Group(flatScaling.data(), rowBaseIdx, groupScaling);
             for (int inner = 0; inner < 32; ++inner) {
-                const int col = group * 32 + inner;
-                flatScaling.data()[row * cols + col] = groupScaling;
-                const float value = src.data()[GetTileElementOffset<TileDataSrc>(row, col)];
-                const uint8_t encoded = cpu_quant::EncodeE4M3Fn(value * groupScaling);
-                dst.data()[GetTileElementOffset<TileDataOut>(row, col)] = static_cast<int8_t>(encoded);
+                const uint8_t encoded = cpu_quant::ComputeMxfp8Group(src.data(), rowBaseIdx, inner);
+                dst.data()[rowBaseIdx + inner] = static_cast<int8_t>(encoded);
             }
         }
     }
