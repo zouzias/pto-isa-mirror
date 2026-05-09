@@ -25,22 +25,22 @@ def convert_x1_scale_format(x1_mx_gm, block_size=16, c0_size_mx=2):
     m, k = x1_mx_gm.shape
     pad_m = (block_size - m % block_size) % block_size
     pad_k = (c0_size_mx - k % c0_size_mx) % c0_size_mx
-    
+
     if pad_m > 0 or pad_k > 0:
-        padded = np.pad(x1_mx_gm, 
-                       ((0, pad_m), (0, pad_k)), 
+        padded = np.pad(x1_mx_gm,
+                       ((0, pad_m), (0, pad_k)),
                        mode='constant',
                        constant_values=0)
     else:
         padded = x1_mx_gm
-    
+
     m_padded = m + pad_m
     k_padded = k + pad_k
 
-    x1_scale_gm = padded.reshape((int(m_padded / block_size), block_size, 
+    x1_scale_gm = padded.reshape((int(m_padded / block_size), block_size,
                                  int(k_padded / c0_size_mx), c0_size_mx))
     x1_scale_gm = x1_scale_gm.transpose(0, 2, 1, 3)
-    x1_scale_gm = x1_scale_gm.reshape(x1_scale_gm.shape[0] * x1_scale_gm.shape[1], 
+    x1_scale_gm = x1_scale_gm.reshape(x1_scale_gm.shape[0] * x1_scale_gm.shape[1],
                                      x1_scale_gm.shape[2] * x1_scale_gm.shape[3])
 
     return x1_scale_gm
@@ -50,19 +50,19 @@ def convert_x2_scale_format(x2_mx_gm, block_size=16, c0_size_mx=2):
     k, n = x2_mx_gm.shape
     pad_n = (block_size - n % block_size) % block_size
     pad_k = (c0_size_mx - k % c0_size_mx) % c0_size_mx
-    
+
     if pad_n > 0 or pad_k > 0:
-        padded = np.pad(x2_mx_gm, 
+        padded = np.pad(x2_mx_gm,
                        ((0, pad_k), (0, pad_n)),
                        mode='constant',
                        constant_values=0)
     else:
         padded = x2_mx_gm
-    
+
     k_padded, n_padded = padded.shape
-    
+
     x2_scale_gm = padded.reshape((int(k_padded / c0_size_mx), c0_size_mx, int(n_padded / 16), 16)).transpose(2, 0, 3, 1)
-    x2_scale_gm = x2_scale_gm.reshape(x2_scale_gm.shape[1] * x2_scale_gm.shape[3], 
+    x2_scale_gm = x2_scale_gm.reshape(x2_scale_gm.shape[1] * x2_scale_gm.shape[3],
                                       x2_scale_gm.shape[0] * x2_scale_gm.shape[2])
 
     return x2_scale_gm
@@ -107,7 +107,7 @@ def gen_golden_data(case_name, param):
 
     k_aligned = align_to_multiple(k, 64)
     #compact cases
-    if base_m != 0: 
+    if base_m != 0:
         x1_pad = np.random.randint(0, 2, [base_m, base_k]).astype(a_type)
         x1_pad[:m, :k_aligned] = 0
         x1_pad[:m, :k] = x1_gm
@@ -146,7 +146,7 @@ def gen_golden_data(case_name, param):
 
     x1_chunk = x1[start_m:, start_k:]
     x2_chunk = x2[start_k:, start_n:]
-    
+
     golden = np.matmul(x1_chunk.astype(np.float64), x2_chunk.astype(np.float64)).astype(dst_type)
     golden.tofile("./golden.bin")
 
@@ -171,13 +171,13 @@ def gen_golden_data(case_name, param):
         x1_scale_gm = x1_mx_gm
         # x2_scale_gm, convert to nd format
         x2_scale_gm = x2_mx_gm.reshape((x2_mx_gm.shape[0] // 2, 2, x2_mx_gm.shape[1])).transpose(0, 2, 1)
-        
+
     x1_scale_gm.tofile("./x1_mx_gm.bin")
     x2_scale_gm.tofile("./x2_mx_gm.bin")
 
 
 class TMovmxParams:
-    def __init__(self, atype, btype, ctype, m, k, n, src_format='zznn', start_m=0, start_k=0, start_n=0, 
+    def __init__(self, atype, btype, ctype, m, k, n, src_format='zznn', start_m=0, start_k=0, start_n=0,
         base_m=0, base_k=0, base_n=0):
         self.atype = atype
         self.btype = btype
