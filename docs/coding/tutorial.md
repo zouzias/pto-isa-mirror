@@ -2,7 +2,7 @@
 
 This quickstart is for operator/kernel developers who want to get a first PTO kernel running quickly and understand the core mental model.
 
-It is **not** a full instruction encyclopedia. For detailed instruction semantics and constraints, see [ISA Overview](../isa/README.md).
+It is **not** a full instruction encyclopedia. For detailed instruction semantics and constraints, see `docs/isa/README.md`.
 
 ## 0. What you will learn
 
@@ -31,8 +31,8 @@ Terminology:
 
 - `__gm__`: global memory pointer (GM).
 - `AICORE`: runs on a single “core” on the device backend (CPU simulation defines it as a normal function annotation).
-- `GlobalTensor`: a *view* of GM data with shape/stride/layout metadata (see [GlobalTensor Programming Model](GlobalTensor.md)).
-- `Tile`: an on-chip tile object, conceptually a 2-D buffer in tile storage (see [Tile Programming Model](Tile.md)).
+- `GlobalTensor`: a *view* of GM data with shape/stride/layout metadata (see `docs/coding/GlobalTensor.md`).
+- `Tile`: an on-chip tile object, conceptually a 2-D buffer in tile storage (see `docs/coding/Tile.md`).
 
 ## 2. One-page cheat sheet (core concepts)
 
@@ -76,12 +76,12 @@ PTO-Auto (high level):
 
 - You describe the dataflow: `TLOAD → compute → TSTORE`.
 - Tile buffer management and some synchronization can be handled by the compiler/runtime.
-- In the API model, `TASSIGN(tile, addr)` is a no-op when `__PTO_AUTO__` is enabled (see [TASSIGN Instruction](../isa/TASSIGN.md)).
+- In the API model, `TASSIGN(tile, addr)` is a no-op when `__PTO_AUTO__` is enabled (see [TASSIGN](../isa/tile/ops/sync-and-config/tassign.md)).
 
 PTO-Manual (expert mode):
 
-- You can explicitly bind tile buffer addresses with `TASSIGN`.
-- You can express ordering explicitly (events or low-level flags).
+- You bind explicit tile buffer addresses with `TASSIGN`.
+- You express ordering explicitly (events or low-level flags).
 - You can build double-buffer pipelines and overlap load/compute/store.
 
 ## 3. Your first kernel: vector add (PTO-Auto style)
@@ -277,7 +277,7 @@ To build real GEMM/attention kernels you add:
 
 PTO-Auto has two parts:
 
-1. **Library-level auto semantics**: compile with `-D__PTO_AUTO__` so Tiles use compiler-managed storage and `TASSIGN(tile, addr)` becomes a no-op (see `docs/isa/TASSIGN.md`).
+1. **Library-level auto semantics**: compile with `-D__PTO_AUTO__` so Tiles use compiler-managed storage and `TASSIGN(tile, addr)` becomes a no-op (see [TASSIGN](../isa/tile/ops/sync-and-config/tassign.md)).
 2. **Compiler pipeline**: enable the PTO lowering/bufferization passes in the Bisheng CCE toolchain.
 
 ### Finding the correct “enable PTO passes” flag (CANN toolchain)
@@ -300,7 +300,7 @@ This compiles a single CCE kernel source into an object file. Adjust:
 - the “enable PTO passes” flag spelling based on your Bisheng help output.
 
 ```bash
-source /usr/local/Ascend/ascend-toolkit/latest/bin/setenv.bash
+source /usr/local/Ascend/cann/set_env.sh
 
 bisheng -c -xcce -O2 --cce-aicore-only \
   --cce-aicore-arch=dav-c310-vec \
