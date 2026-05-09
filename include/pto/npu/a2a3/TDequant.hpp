@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TDEQUANT_HPP
@@ -13,8 +15,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include <pto/npu/a2a3/TBinSOp.hpp>
-#include <pto/npu/a2a3/TSubS.hpp>
 #include <pto/npu/a2a3/TMulS.hpp>
+#include <pto/npu/a2a3/TSubS.hpp>
 namespace pto {
 
 template <typename DstDType, typename SrcDType>
@@ -118,16 +120,19 @@ PTO_INTERNAL void TDequantCheck(const TileDataDst &dst, const TileDataSrc &src, 
                   "Fix: TDEQUANT dst tile currently supports float data type.");
     static_assert(std::is_same<typename TileDataPara::DType, float>::value ||
                       std::is_same<typename TileDataPara::DType, float32_t>::value,
-                  "Fix: TDEQUANT parameter tile scale and offset currently support float data type.");
+                  "Fix: TDEQUANT parameter tile scale and offset currently support float "
+                  "data type.");
     static_assert(std::is_same<typename TileDataSrc::DType, int8_t>::value ||
                       std::is_same<typename TileDataSrc::DType, int16_t>::value,
-                  "Fix: TDEQUANT source tile currently supports int8_t and int16_t data types.");
+                  "Fix: TDEQUANT source tile currently supports int8_t and "
+                  "int16_t data types.");
     static_assert(TileDataDst::isRowMajor && TileDataSrc::isRowMajor,
                   "Fix: TDEQUANT src and dst tile only support row major layout.");
     unsigned dstValidRows = dst.GetValidRow();
     unsigned dstValidCols = dst.GetValidCol();
     PTO_ASSERT(src.GetValidRow() == dstValidRows && src.GetValidCol() == dstValidCols,
-               "Fix: TDEQUANT source tile valid shape mismatch with dst tile valid shape.");
+               "Fix: TDEQUANT source tile valid shape mismatch with dst tile valid "
+               "shape.");
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename TileDataPara>

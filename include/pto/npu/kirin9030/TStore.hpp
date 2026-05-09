@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifdef PTO_NPU_ARCH_KIRINX90
@@ -97,7 +99,8 @@ PTO_INTERNAL void CheckStaticAcc()
                               std::is_same<typename DstGlobal::DType, __gm__ uint8_t>::value ||
                               std::is_same<typename DstGlobal::DType, __gm__ half>::value ||
                               std::is_same<typename DstGlobal::DType, __gm__ float>::value,
-                          "The output data type must be restricted to int8_t/uint8_t/half/float.");
+                          "The output data type must be restricted to "
+                          "int8_t/uint8_t/half/float.");
         } else if constexpr (std::is_same_v<typename SrcTile::DType, __gm__ int32_t>) {
             static_assert(std::is_same<typename DstGlobal::DType, __gm__ int8_t>::value ||
                               std::is_same<typename DstGlobal::DType, __gm__ uint8_t>::value ||
@@ -118,7 +121,9 @@ PTO_INTERNAL void CheckStaticVec()
             std::is_same_v<typename SrcTile::DType, int32_t> || std::is_same_v<typename SrcTile::DType, uint32_t> ||
             std::is_same_v<typename SrcTile::DType, int64_t> || std::is_same_v<typename SrcTile::DType, uint64_t> ||
             std::is_same_v<typename SrcTile::DType, half> || std::is_same_v<typename SrcTile::DType, float>,
-        "Data type must be int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/int64_t/uint64_t/half/float!");
+        "Data type must be "
+        "int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/int64_t/"
+        "uint64_t/half/float!");
     static_assert(
         ((DstGlobal::layout == pto::Layout::ND) && (SrcTile::isRowMajor && (SrcTile::SFractal == SLayout::NoneBox))) ||
             ((DstGlobal::layout == pto::Layout::DN) &&
@@ -126,7 +131,8 @@ PTO_INTERNAL void CheckStaticVec()
             ((DstGlobal::layout == pto::Layout::NZ) &&
              (!SrcTile::isRowMajor && (SrcTile::SFractal == SLayout::RowMajor))) ||
             (SrcTile::Rows == 1) || (SrcTile::Cols == 1),
-        "Src and dst layout must be same, only support ND/DN/NZ or the special case of one row/one column!");
+        "Src and dst layout must be same, only support ND/DN/NZ or the special "
+        "case of one row/one column!");
     static_assert(
         ((DstGlobal::layout == pto::Layout::ND) && (SrcTile::Cols * sizeof(typename SrcTile::DType) % 32 == 0)) ||
         ((DstGlobal::layout == pto::Layout::DN) && (SrcTile::Rows * sizeof(typename SrcTile::DType) % 32 == 0)) ||
@@ -166,9 +172,9 @@ PTO_INTERNAL void TStoreAccND(typename DstGlobal::DType *dstGlobalAddr, __cc__ t
                      ((static_cast<uint64_t>(reluPreMode) & 0x7) << 39) | //  Xt[41:39] relu pre mode
                      (static_cast<uint64_t>(nz2ndEn & 0x1) << 43);        //  Xt[43] nz2nd control bit
     uint64_t xmReg =
-        ((nSize & 0xfff) << 4) |                          // Xm[15:4] the n-direction size of the matrix
-        (static_cast<uint64_t>(mSize & 0xffff) << 16) |   // Xm[31:16] the m-direction size of the matrix
-        (static_cast<uint64_t>(dstD & 0xffffffff) << 32); // Xm[63:32] destination stride between the start addr
+        ((nSize & 0xfff) << 4) |                                          // Xm[15:4] the n-direction size of the matrix
+        (static_cast<uint64_t>(mSize & 0xffff) << 16) |       // Xm[31:16] the m-direction size of the matrix
+        (static_cast<uint64_t>(dstD & 0xffffffff) << 32);     // Xm[63:32] destination stride between the start addr
     uint64_t config =
         ndNum |                                               // ND_PARA[15:0] the number of source nd
         (static_cast<uint64_t>(srcNdStride & 0xffff) << 16) | // ND_PARA[31:16] the stride of source nd
@@ -186,16 +192,20 @@ PTO_INTERNAL void TStoreAccNZ(typename DstGlobal::DType *dstAddr, __cc__ typenam
 {
     PTO_ASSERT(validRow == gShape2 * gShape3, "The validRow of SrcTile must be equal to Shape2 * Shape3 of NZ shape!");
     PTO_ASSERT(validCol == gShape0 * gShape1 * gShape4,
-               "The validCol of SrcTile must be equal to Shape0 * Shape1 * Shape4 of NZ shape!");
+               "The validCol of SrcTile must be equal to Shape0 * Shape1 * "
+               "Shape4 of NZ shape!");
     static_assert(DstGlobal::staticShape[3] == FRACTAL_NZ_ROW,
                   "When DstGlobal is NZ format, the second-to-last dimension shall be 16.");
     static_assert((std::is_same_v<typename DstGlobal::DType, __gm__ int32_t> && DstGlobal::staticShape[4] == 16) ||
                       (DstGlobal::staticShape[4] == BLOCK_BYTE_SIZE / sizeof(typename DstGlobal::DType)) ||
                       (std::is_same_v<typename DstGlobal::DType, __gm__ float> &&
                        (DstGlobal::staticShape[4] == 8 || DstGlobal::staticShape[4] == 16)),
-                  "When DstGlobal is in NZ format: if DstType is float, the last dimension must be either 8 or 16, "
-                  "and the dimension value is 8 if and only if Channel Split is enabled; if DstType is int32_t, the "
-                  "last dimension must be exactly 16. In addition, the last dimension must be static and satisfy 32 / "
+                  "When DstGlobal is in NZ format: if DstType is float, the last dimension "
+                  "must be either 8 or 16, "
+                  "and the dimension value is 8 if and only if Channel Split is enabled; "
+                  "if DstType is int32_t, the "
+                  "last dimension must be exactly 16. In addition, the last dimension must "
+                  "be static and satisfy 32 / "
                   "sizeof(DstType).");
 
     uint16_t mSize = validRow;
@@ -355,20 +365,23 @@ PTO_INTERNAL void TStoreVecNZ(typename DstGlobal::DType *dstAddr, __ubuf__ typen
                               int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
                               int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
 {
-    static_assert(
-        (std::is_same_v<typename DstGlobal::DType, __gm__ int32_t> && DstGlobal::staticShape[4] == 16) ||
-            (DstGlobal::staticShape[4] == BLOCK_BYTE_SIZE / sizeof(typename DstGlobal::DType)) ||
-            (std::is_same_v<typename DstGlobal::DType, __gm__ float> &&
-             (DstGlobal::staticShape[4] == 8 || DstGlobal::staticShape[4] == 16)),
-        "When DstGlobal is in NZ format: if DstType is float, the last dimension must be either 8 or 16, \n"
-        "and the dimension value is 8 if and only if Channel Split is enabled; if DstType is int32_t, the \n"
-        "last dimension must be exactly 16. In addition, the last dimension must be static and satisfy 32 / \n"
-        "sizeof(DstType).");
+    static_assert((std::is_same_v<typename DstGlobal::DType, __gm__ int32_t> && DstGlobal::staticShape[4] == 16) ||
+                      (DstGlobal::staticShape[4] == BLOCK_BYTE_SIZE / sizeof(typename DstGlobal::DType)) ||
+                      (std::is_same_v<typename DstGlobal::DType, __gm__ float> &&
+                       (DstGlobal::staticShape[4] == 8 || DstGlobal::staticShape[4] == 16)),
+                  "When DstGlobal is in NZ format: if DstType is float, the last dimension "
+                  "must be either 8 or 16, \n"
+                  "and the dimension value is 8 if and only if Channel Split is enabled; "
+                  "if DstType is int32_t, the \n"
+                  "last dimension must be exactly 16. In addition, the last dimension must "
+                  "be static and satisfy 32 / \n"
+                  "sizeof(DstType).");
     static_assert(DstGlobal::staticShape[3] == FRACTAL_NZ_ROW,
                   "When DstGlobal is NZ format, the second-to-last dimension shall be 16.");
     PTO_ASSERT(validRow == gShape2 * gShape3, "The validRow of SrcTile must be equal to Shape2 * Shape3 of NZ shape!");
     PTO_ASSERT(validCol == gShape0 * gShape1 * gShape4,
-               "The validCol of SrcTile must be equal to Shape0 * Shape1 * Shape4 of NZ shape!");
+               "The validCol of SrcTile must be equal to Shape0 * Shape1 * "
+               "Shape4 of NZ shape!");
     typename DstGlobal::DType *dstGlobalAddr = dstAddr;
     __ubuf__ typename SrcTile::DType *srcTileAddr = srcAddr;
     uint32_t nBurst = gShape1;

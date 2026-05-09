@@ -168,7 +168,7 @@ def gen_golden_data(case_name, param):
 
 
 class TMovParams:
-    def __init__(self, atype, btype, dst_type, m, k, n, base_m=0, base_k=0, base_n=0, 
+    def __init__(self, atype, btype, dst_type, m, k, n, base_m=0, base_k=0, base_n=0,
                  dst_format='ND', s_fractal_size=512, is_v_quant=False,
                  is_s_quant=False, is_relu=False, quant_type=None, scalar=1):
         self.atype = atype
@@ -287,11 +287,11 @@ if __name__ == "__main__":
         TMovParams(np.int8, np.int8, np.int8, 125, 64, 124, 128, 64, 128, 'NZ', 512, False, True, False, None, 5),
         TMovParams(np.float32, np.float32, np.int8, 61, 80, 93, 64, 80, 96, 'NZ', 512, False, True, False, None, 7),
 
-        TMovParams(np.int8, np.int8, np.int8, 30, 48, 64, 0, 0, 0, 'ND', 512, True, False, False, np.uint64),     
-        TMovParams(np.int8, np.int8, np.float16, 60, 128, 32, 0, 0, 0, 'ND', 512, True, False, False, np.uint64),    
+        TMovParams(np.int8, np.int8, np.int8, 30, 48, 64, 0, 0, 0, 'ND', 512, True, False, False, np.uint64),
+        TMovParams(np.int8, np.int8, np.float16, 60, 128, 32, 0, 0, 0, 'ND', 512, True, False, False, np.uint64),
         TMovParams(np.int8, np.int8, bfloat16, 128, 64, 96, 0, 0, 0, 'ND', 512, True, False, False, np.uint64),
-        TMovParams(np.float32, np.float32, np.int8, 60, 128, 64, 0, 0, 0, 'ND', 512, True, False, True, np.uint64),     
-        TMovParams(np.float32, np.float32, np.float16, 31, 128, 128, 0, 0, 0, 'ND', 512, True, False, True, np.uint64),  
+        TMovParams(np.float32, np.float32, np.int8, 60, 128, 64, 0, 0, 0, 'ND', 512, True, False, True, np.uint64),
+        TMovParams(np.float32, np.float32, np.float16, 31, 128, 128, 0, 0, 0, 'ND', 512, True, False, True, np.uint64),
 
         TMovParams(np.float32, np.float32, np.float16, 128, 48, 96, 0, 0, 0, 'ND', 512, False, True, True, None, 2),
         TMovParams(np.float32, np.float32, np.int8, 60, 128, 64, 0, 0, 0, 'ND', 512, False, True, True, None, 5),

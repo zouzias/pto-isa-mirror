@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TCMPS_HPP
@@ -13,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
+
 #include "common.hpp"
 #include "utils.hpp"
 
@@ -46,66 +49,57 @@ AICORE void GenCmpCall(MaskReg &dst, RegTensor<T> &src0, T src1, CmpMode cmpMode
     }
 }
 
-template <typename T, uint32_t SrcStride, uint32_t DstStride>
-PTO_INTERNAL void TCmps_8B_16B(__ubuf__ uint32_t *dst, __ubuf__ T *src0, T src1, CmpMode mode, unsigned validRow,
+template <typename TOUT, typename TIN>
+PTO_INTERNAL void TCmps_8B_16B(__ubuf__ TOUT *dst, __ubuf__ TIN *src0, TIN src1, CmpMode mode, unsigned validRow,
                                unsigned validCol)
 {
-    constexpr uint32_t repeatElm = CCE_VL / sizeof(T);
+    constexpr uint32_t repeatElm = CCE_VL / sizeof(TIN);
     constexpr uint16_t dstOffset = repeatElm / RESULT_NUM_PER_INT32;
     __VEC_SCOPE__
     {
-        RegTensor<T> srcReg;
+        RegTensor<TIN> srcReg;
         MaskReg pReg;
         MaskReg dstReg;
 
-        using DistType = std::conditional_t<sizeof(T) == 2, decltype(PK), decltype(NORM)>;
-        constexpr DistType distValue{};
-        uint32_t sReg;
-        uint16_t repeatTimes = CeilDivision(validCol, repeatElm);
-
-        for (uint16_t i = 0; i < (uint16_t)(validRow); ++i) {
-            sReg = validCol;
-            for (uint16_t j = 0; j < (uint16_t)(repeatTimes); ++j) {
-                pReg = CreatePredicate<T>(sReg);
-                vlds(srcReg, src0, i * SrcStride + j * repeatElm, NORM);
-                GenCmpCall<T>(dstReg, srcReg, src1, mode, pReg);
-                psts(dstReg, dst + i * DstStride + j * dstOffset, 0, distValue);
-            }
+        uint32_t sReg = validCol * validRow;
+        uint16_t repeatTimes = CeilDivision(validCol * validRow, repeatElm);
+        for (uint16_t i = 0; i < (uint16_t)(repeatTimes); ++i) {
+            pReg = CreatePredicate<TIN>(sReg);
+            vlds(srcReg, src0, i * repeatElm, NORM);
+            GenCmpCall<TIN>(dstReg, srcReg, src1, mode, pReg);
+            psts(dstReg, ((__ubuf__ uint32_t *)dst + i * dstOffset), 0, PK);
         }
     }
 }
 
-template <typename T, uint32_t SrcStride, uint32_t DstStride>
-PTO_INTERNAL void TCmps_32B(__ubuf__ uint32_t *dst, __ubuf__ T *src0, T src1, CmpMode mode, unsigned validRow,
+template <typename TOUT, typename TIN>
+PTO_INTERNAL void TCmps_32B(__ubuf__ TOUT *dst, __ubuf__ TIN *src0, TIN src1, CmpMode mode, unsigned validRow,
                             unsigned validCol)
 {
-    constexpr uint32_t repeatElm = CCE_VL / sizeof(T);
+    constexpr uint32_t repeatElm = CCE_VL / sizeof(TIN);
     constexpr uint16_t dstOffset = 2 * repeatElm / RESULT_NUM_PER_INT32;
     __VEC_SCOPE__
     {
-        RegTensor<T> srcReg0;
-        RegTensor<T> srcReg1;
-        uint32_t sReg;
+        RegTensor<TIN> srcReg0;
+        RegTensor<TIN> srcReg1;
+        uint32_t sReg = validCol * validRow;
         MaskReg pReg;
         MaskReg tmpReg0;
         MaskReg tmpReg1;
         MaskReg tmpReg2;
         MaskReg dstReg;
 
-        for (uint16_t i = 0; i < (uint16_t)(validRow); ++i) {
-            sReg = validCol;
-            // for odd repeat number, add 1 to include remainder
-            uint16_t repeatTimes = CeilDivision(validCol, repeatElm) + 1;
-            for (uint16_t j = 0; j < (uint16_t)(repeatTimes / 2); ++j) {
-                vlds(srcReg0, src0, i * SrcStride + j * 2 * repeatElm, NORM);
-                vlds(srcReg1, src0, i * SrcStride + (j * 2 + 1) * repeatElm, NORM);
-                pReg = CreatePredicate<T>(sReg);
-                GenCmpCall<T>(tmpReg0, srcReg0, src1, mode, pReg);
-                pReg = CreatePredicate<T>(sReg);
-                GenCmpCall<T>(tmpReg1, srcReg1, src1, mode, pReg);
-                pdintlv_b8(dstReg, tmpReg2, tmpReg0, tmpReg1);
-                psts(dstReg, dst + i * DstStride + j * dstOffset, 0, PK);
-            }
+        // for odd repeat number, add 1 to include remainder
+        uint16_t repeatTimes = CeilDivision(validCol * validRow, repeatElm) + 1;
+        for (uint16_t i = 0; i < (uint16_t)(repeatTimes / 2); ++i) {
+            vlds(srcReg0, src0, i * 2 * repeatElm, NORM);
+            vlds(srcReg1, src0, (i * 2 + 1) * repeatElm, NORM);
+            pReg = CreatePredicate<TIN>(sReg);
+            GenCmpCall<TIN>(tmpReg0, srcReg0, src1, mode, pReg);
+            pReg = CreatePredicate<TIN>(sReg);
+            GenCmpCall<TIN>(tmpReg1, srcReg1, src1, mode, pReg);
+            pdintlv_b8(dstReg, tmpReg2, tmpReg0, tmpReg1);
+            psts(dstReg, ((__ubuf__ uint32_t *)dst + i * dstOffset), 0, PK);
         }
     }
 }
@@ -117,16 +111,13 @@ __tf__ PTO_INTERNAL OP_NAME(TCMPS)
                                             unsigned validRow, unsigned validCol,
                                             unsigned version = VFImplKind::VFIMPL_DEFAULT)
 {
+    using TOUT = typename TileDataDst::DType;
+    __ubuf__ TOUT *dst = (__ubuf__ TOUT *)__cce_get_tile_ptr(dstData);
     __ubuf__ T *src0 = (__ubuf__ T *)__cce_get_tile_ptr(src0Data);
-    __ubuf__ uint32_t *dst = (__ubuf__ uint32_t *)__cce_get_tile_ptr(dstData);
-
-    constexpr uint32_t srcStride = TileDataSrc::RowStride;
-    constexpr uint32_t dstStride = TileDataDst::RowStride * sizeof(typename TileDataDst::DType) / sizeof(uint32_t);
-
     if constexpr (sizeof(T) == 4) {
-        TCmps_32B<T, srcStride, dstStride>(dst, src0, src1, mode, validRow, validCol);
+        TCmps_32B<TOUT, T>(dst, src0, src1, mode, validRow, validCol);
     } else {
-        TCmps_8B_16B<T, srcStride, dstStride>(dst, src0, src1, mode, validRow, validCol);
+        TCmps_8B_16B<TOUT, T>(dst, src0, src1, mode, validRow, validCol);
     }
 }
 
@@ -138,45 +129,47 @@ __tf__ PTO_INTERNAL OP_NAME(TCMPS)
                                           unsigned validRow, unsigned validCol,
                                           unsigned version = VFImplKind::VFIMPL_DEFAULT)
 {
-    using T = typename TileDataSrc0::DType;
-    __ubuf__ T *src0 = (__ubuf__ T *)__cce_get_tile_ptr(src0Data);
-    __ubuf__ T *src1 = (__ubuf__ T *)__cce_get_tile_ptr(src1Data);
-    __ubuf__ uint32_t *dst = (__ubuf__ uint32_t *)__cce_get_tile_ptr(dstData);
-
-    constexpr uint32_t srcStride = TileDataSrc0::RowStride;
-    constexpr uint32_t dstStride = TileDataDst::RowStride * sizeof(typename TileDataDst::DType) / sizeof(uint32_t);
-
+    using TOUT = typename TileDataDst::DType;
+    using TIN = typename TileDataSrc0::DType;
+    __ubuf__ TOUT *dst = (__ubuf__ TOUT *)__cce_get_tile_ptr(dstData);
+    __ubuf__ TIN *src0 = (__ubuf__ TIN *)__cce_get_tile_ptr(src0Data);
+    __ubuf__ TIN *src1 = (__ubuf__ TIN *)__cce_get_tile_ptr(src1Data);
     set_flag(PIPE_V, PIPE_S, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
     set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-    T src1Value = *src1;
-    if constexpr (sizeof(T) == 4) {
-        TCmps_32B<T, srcStride, dstStride>(dst, src0, src1Value, mode, validRow, validCol);
+    TIN src1Value = *src1;
+    if constexpr (sizeof(TIN) == 4) {
+        TCmps_32B<TOUT, TIN>(dst, src0, src1Value, mode, validRow, validCol);
     } else {
-        TCmps_8B_16B<T, srcStride, dstStride>(dst, src0, src1Value, mode, validRow, validCol);
+        TCmps_8B_16B<TOUT, TIN>(dst, src0, src1Value, mode, validRow, validCol);
     }
 }
 
 template <typename TileDataDst, typename TileDataSrc>
 PTO_INTERNAL void TcmpsCheck()
 {
-    using T = typename TileDataSrc::DType;
-    static_assert(std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> || std::is_same_v<T, float> ||
-                      std::is_same_v<T, int16_t> || std::is_same_v<T, uint16_t> || std::is_same_v<T, half> ||
-                      std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>,
+    using TOUT = typename TileDataDst::DType;
+    using TIN = typename TileDataSrc::DType;
+    static_assert(std::is_same_v<TIN, int32_t> || std::is_same_v<TIN, uint32_t> || std::is_same_v<TIN, float> ||
+                      std::is_same_v<TIN, int16_t> || std::is_same_v<TIN, uint16_t> || std::is_same_v<TIN, half> ||
+                      std::is_same_v<TIN, uint8_t> || std::is_same_v<TIN, int8_t>,
                   "TCMPS: Invalid data type.");
     static_assert(TileDataDst::isRowMajor, "TCMPS: not supported Layout type");
     static_assert(TileDataDst::Loc == TileType::Vec, "TileType of dst tile must be TileType::Vec.");
     static_assert(TileDataDst::ValidCol <= TileDataDst::Cols,
-                  "Number of valid columns for dst must not be greater than number of tile columns.");
+                  "Number of valid columns for dst must not be greater than "
+                  "number of tile columns.");
     static_assert(TileDataDst::ValidRow <= TileDataDst::Rows,
-                  "Number of valid rows for dst must not be greater than number of tile rows.");
+                  "Number of valid rows for dst must not be greater than number "
+                  "of tile rows.");
     static_assert(TileDataSrc::Loc == TileType::Vec, "TileType of src tile must be TileType::Vec.");
     static_assert(TileDataSrc::ValidCol <= TileDataSrc::Cols,
-                  "Number of valid columns for scr must not be greater than number of tile columns.");
+                  "Number of valid columns for scr must not be greater than "
+                  "number of tile columns.");
     static_assert(TileDataSrc::ValidRow <= TileDataSrc::Rows,
-                  "Number of valid rows for src must not be greater than number of tile rows.");
+                  "Number of valid rows for src must not be greater than number "
+                  "of tile rows.");
 }
 
 template <typename TileDataDst, typename TileDataSrc>
@@ -196,7 +189,8 @@ PTO_INTERNAL void TCMPS_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 
 {
     TcmpsCheck<TileDataDst, TileDataSrc0>();
     static_assert(std::is_same_v<typename TileDataSrc0::DType, typename TileDataSrc1::DType>,
-                  "TCMPS: The input data type must be consistent with the scalar data type.");
+                  "TCMPS: The input data type must be consistent with the scalar "
+                  "data type.");
     PTO_ASSERT(src0.GetValidRow() == dst.GetValidRow(), "Number of rows of src and dst must be the same.");
     unsigned validRow = src0.GetValidRow();
     unsigned validCol = src0.GetValidCol();

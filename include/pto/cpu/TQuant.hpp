@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 #ifndef TQUANT_CPU_HPP
 #define TQUANT_CPU_HPP
@@ -18,6 +20,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <limits>
 #include <type_traits>
 #include <vector>
+
 #include "pto/cpu/tile_offsets.hpp"
 
 namespace pto {
@@ -136,9 +139,9 @@ inline float ComputeScalingFromExponent(uint8_t e8m0)
 
 inline std::vector<uint8_t> ReorderExponentZZ(const std::vector<uint8_t> &exp, int rows, int groupCols)
 {
-    PTO_CPU_ASSERT(
-        rows % 16 == 0 && groupCols % 2 == 0,
-        "Fix: MXFP8 NZ exponent reorder currently requires rows multiple of 16 and group cols multiple of 2.");
+    PTO_CPU_ASSERT(rows % 16 == 0 && groupCols % 2 == 0,
+                   "Fix: MXFP8 NZ exponent reorder currently requires rows "
+                   "multiple of 16 and group cols multiple of 2.");
     const int rowBlocks = rows / 16;
     const int groupBlocks = groupCols / 2;
     std::vector<uint8_t> reordered;
@@ -200,7 +203,9 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
 
     const int rows = src.GetValidRow();
     const int cols = src.GetValidCol();
-    PTO_CPU_ASSERT(cols % 32 == 0, "Fix: MXFP8 CPU sim currently requires valid cols to be a multiple of 32.");
+    PTO_CPU_ASSERT(cols % 32 == 0,
+                   "Fix: MXFP8 CPU sim currently requires valid cols to be a "
+                   "multiple of 32.");
     const int groupCols = cols / 32;
 
     // Flatten exp, max, scaling to 1D for internal processing
