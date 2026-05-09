@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TMATMUL_HPP
@@ -81,10 +83,12 @@ PTO_INTERNAL void CheckMadValid()
     using CType = typename TileRes::DType;
     if constexpr (std::is_same_v<CType, half>) {
         static_assert(std::is_same_v<AType, half> && std::is_same_v<BType, half>,
-                      "TMATMUL: Left Type and Rigth Type must be half when Acc Type is half.");
+                      "TMATMUL: Left Type and Rigth Type must be half when Acc "
+                      "Type is half.");
     } else if constexpr (std::is_same_v<CType, int32_t>) {
         static_assert(std::is_same_v<AType, int8_t> && std::is_same_v<BType, int8_t>,
-                      "TMATMUL: Left Type and Rigth Type must be int8_t when Acc Type is int32_t.");
+                      "TMATMUL: Left Type and Rigth Type must be int8_t when Acc Type is "
+                      "int32_t.");
     } else {
         static_assert(sizeof(CType) == 0, "TMATMUL: Acc Type only supports int32_t or half.");
     }
@@ -105,7 +109,8 @@ PTO_INTERNAL void CheckMadValid()
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TMATMUL_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix)
 {
-    // cmatrixInitVal Indicates the initial matrix, 1: the number in C matrix is 0, 0：use the real number in C matrix
+    // cmatrixInitVal Indicates the initial matrix, 1: the number in C matrix is
+    // 0, 0：use the real number in C matrix
     CheckMadValid<TileRes, TileLeft, TileRight>();
 
     uint16_t m = aMatrix.GetValidRow();
@@ -119,7 +124,8 @@ PTO_INTERNAL void TMATMUL_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &b
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TMATMUL_ACC_IMPL(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix)
 {
-    // cmatrixInitVal Indicates the initial matrix, 1: the number in C matrix is 0, 0：use the real number in C matrix
+    // cmatrixInitVal Indicates the initial matrix, 1: the number in C matrix is
+    // 0, 0：use the real number in C matrix
     CheckMadValid<TileRes, TileLeft, TileRight>();
 
     uint16_t m = aMatrix.GetValidRow();
@@ -142,8 +148,9 @@ template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename Til
           typename TileBias>
 PTO_INTERNAL void TMATMUL_BIAS_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData)
 {
-    // cmatrixSource control matrix source, 0: C matrix is in L0C, 1: C matrix is in C2
-    // cmatrixInitVal Indicates the initial matrix, 1: the number in C matrix is 0, 0：use the real number in C matrix
+    // cmatrixSource control matrix source, 0: C matrix is in L0C, 1: C matrix is
+    // in C2 cmatrixInitVal Indicates the initial matrix, 1: the number in C
+    // matrix is 0, 0：use the real number in C matrix
     CheckMadValid<TileRes, TileLeft, TileRight>();
     static_assert(std::is_same_v<typename TileRes::DType, typename TileBias::DType>, "No supported bias data type.");
     static_assert((TileBias::Loc == TileType::Bias) && (TileBias::Rows == 1) && (TileBias::isRowMajor),

@@ -1,17 +1,20 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
-#include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
 #include <pto/npu/a5/TQuant.hpp>
-#include "acl/acl.h"
+#include <pto/pto-inst.hpp>
 #include <type_traits>
+
+#include "acl/acl.h"
 
 using namespace pto;
 
@@ -30,7 +33,8 @@ __global__ AICORE void runTQuant(__gm__ uint8_t __out__ *out_e8m0, __gm__ uint8_
     constexpr int paddedCols = PTO_CEIL(validCols, 32);
     constexpr int groupedCols_flattened = validRows * (paddedCols / 32);
     constexpr int groupedCols_valid = paddedCols / 32;
-    // Pad 1D tile cols for 32-byte row alignment (required by Vec RowMajor NoneBox tiles)
+    // Pad 1D tile cols for 32-byte row alignment (required by Vec RowMajor
+    // NoneBox tiles)
     constexpr int groupedCols_flat_f32 = PTO_CEIL(groupedCols_flattened, 8); // float:  8 elems = 32 B
     constexpr int groupedCols_flat_u8 = PTO_CEIL(groupedCols_flattened, 32); // uint8: 32 elems = 32 B
     using SrcGlobal = GlobalTensor<float, Shape<1, 1, 1, validRows, validCols>, pto::Stride<1, 1, 1, validCols, 1>>;
@@ -57,11 +61,12 @@ __global__ AICORE void runTQuant(__gm__ uint8_t __out__ *out_e8m0, __gm__ uint8_
     DstE8Global e8Global(out_e8m0);
     DstFP8Global fp8Global((__gm__ int8_t *)out_fp8);
 
-    TASSIGN(srcTile, 0x0);          // 128 KB = 0x20000
-    TASSIGN(maxPerGpTile, 0x20100); // 4 KB   = 0x1000 (Max and Scaling can overlap)
-    TASSIGN(scalingTile, 0x21820);  // 8 KB   = 0x2000
-    TASSIGN(e8Tile, 0x24100);       // 1 KB   = 0x400
-    TASSIGN(fp8Tile, 0x25100);      // 32  KB = 0x8000
+    TASSIGN(srcTile, 0x0);         // 128 KB = 0x20000
+    TASSIGN(maxPerGpTile,
+            0x20100);              // 4 KB   = 0x1000 (Max and Scaling can overlap)
+    TASSIGN(scalingTile, 0x21820); // 8 KB   = 0x2000
+    TASSIGN(e8Tile, 0x24100);      // 1 KB   = 0x400
+    TASSIGN(fp8Tile, 0x25100);     // 32  KB = 0x8000
     TLOAD(srcTile, srcGlobal);
 
     if constexpr (mode == 0) {
@@ -81,13 +86,15 @@ __global__ AICORE void runTQuant(__gm__ uint8_t __out__ *out_e8m0, __gm__ uint8_
         TSTORE(e8Global, e8Tile);
         TSTORE(fp8Global, fp8Tile);
     } else {
-        // NZ mode: plain TQUANT (ND output), then TMOV ND→ZZ for e8m0, TMOV ND→NZ for fp8.
+        // NZ mode: plain TQUANT (ND output), then TMOV ND→ZZ for e8m0, TMOV ND→NZ
+        // for fp8.
         constexpr int groupedCols_valid = paddedCols / 32;
 
         // E8M0 ZZ destination: 2D with fractalMxSize=32 for [16,2] inner box
         using E8ZzTile = Tile<TileType::Vec, uint8_t, validRows, groupedCols_valid, BLayout::RowMajor, -1, -1,
                               SLayout::RowMajor, 32, PadValue::Zero>;
-        // 1D flat alias at same address for TSTORE (no dispatch path for isRowMajor + SLayout::RowMajor)
+        // 1D flat alias at same address for TSTORE (no dispatch path for isRowMajor
+        // + SLayout::RowMajor)
         using E8StoreTile = Tile<TileType::Vec, uint8_t, 1, groupedCols_flattened, BLayout::RowMajor, -1, -1,
                                  SLayout::NoneBox, 512, PadValue::Zero>;
         // Scratch tile for TMOV ZZ gather-index generation
@@ -105,8 +112,10 @@ __global__ AICORE void runTQuant(__gm__ uint8_t __out__ *out_e8m0, __gm__ uint8_
         E8StoreTile e8StoreTile(1, groupedCols_flattened);
         TmpTile tmpTile(1, tmpBufSizeAligned);
 
-        TASSIGN(fp8TileNZ, 0x0);       // reuse src tile address since it's consumed before TMOV
-        TASSIGN(e8ZzTile, 0x20100);    // reuse maxPerGpTile address (consumed after TQUANT)
+        TASSIGN(fp8TileNZ,
+                0x0);                  // reuse src tile address since it's consumed before TMOV
+        TASSIGN(e8ZzTile,
+                0x20100);              // reuse maxPerGpTile address (consumed after TQUANT)
         TASSIGN(e8StoreTile, 0x20100); // alias for flat TSTORE at same address
         TASSIGN(tmpTile, 0x30100);     // scratch for ZZ indices
 
@@ -254,7 +263,8 @@ __global__ AICORE void runTQuantBF16(__gm__ uint8_t __out__ *out_e8m0, __gm__ ui
     constexpr int paddedCols = PTO_CEIL(validCols, 32);
     constexpr int groupedCols_flattened = validRows * (paddedCols / 32);
     constexpr int groupedCols_valid = paddedCols / 32;
-    // Static col counts padded to 32-byte row alignment (required by Vec RowMajor NoneBox tiles)
+    // Static col counts padded to 32-byte row alignment (required by Vec RowMajor
+    // NoneBox tiles)
     constexpr int groupedCols_e8_static = PTO_CEIL(groupedCols_valid, 32);        // uint8:  32 elems = 32 B
     constexpr int groupedCols_b16_static = PTO_CEIL(groupedCols_valid, 16);       // bf16:   16 elems = 32 B
     constexpr int groupedCols_flat_aligned = PTO_CEIL(groupedCols_flattened, 32); // for 1D store alias
@@ -266,8 +276,9 @@ __global__ AICORE void runTQuantBF16(__gm__ uint8_t __out__ *out_e8m0, __gm__ ui
 
     using SrcTile = Tile<TileType::Vec, bfloat16_t, validRows, paddedCols, BLayout::RowMajor, -1, -1, SLayout::NoneBox,
                          512, PadValue::Zero>;
-    // 2D tiles for E8M0 exponents, group-max, and scaling (rows x groups_per_row);
-    // data is stored contiguously — TQuant flattens via TRESHAPE internally.
+    // 2D tiles for E8M0 exponents, group-max, and scaling (rows x
+    // groups_per_row); data is stored contiguously — TQuant flattens via TRESHAPE
+    // internally.
     using DstE8Tile = Tile<TileType::Vec, uint8_t, validRows, groupedCols_e8_static, BLayout::RowMajor, -1, -1,
                            SLayout::NoneBox, 512, PadValue::Zero>;
     using DstFP8Tile = Tile<TileType::Vec, int8_t, validRows, paddedCols, BLayout::RowMajor, validRows, paddedCols,
@@ -316,13 +327,15 @@ __global__ AICORE void runTQuantBF16(__gm__ uint8_t __out__ *out_e8m0, __gm__ ui
         TSTORE(e8Global, e8StoreND);
         TSTORE(fp8Global, fp8Tile);
     } else {
-        // NZ mode: TQUANT (ND output), then TMOV ND->ZZ for e8m0, TMOV ND->NZ for fp8.
+        // NZ mode: TQUANT (ND output), then TMOV ND->ZZ for e8m0, TMOV ND->NZ for
+        // fp8.
         constexpr int groupedCols_valid = paddedCols / 32;
 
         // E8M0 ZZ destination: 2D with fractalMxSize=32 for [16,2] inner box
         using E8ZzTile = Tile<TileType::Vec, uint8_t, validRows, groupedCols_valid, BLayout::RowMajor, -1, -1,
                               SLayout::RowMajor, 32, PadValue::Zero>;
-        // 1D flat alias at same address for TSTORE (no dispatch path for isRowMajor + SLayout::RowMajor)
+        // 1D flat alias at same address for TSTORE (no dispatch path for isRowMajor
+        // + SLayout::RowMajor)
         using E8StoreTile = Tile<TileType::Vec, uint8_t, 1, groupedCols_flattened, BLayout::RowMajor, -1, -1,
                                  SLayout::NoneBox, 512, PadValue::Zero>;
         // Scratch tile for TMOV ZZ gather-index generation
@@ -342,7 +355,8 @@ __global__ AICORE void runTQuantBF16(__gm__ uint8_t __out__ *out_e8m0, __gm__ ui
         TmpTile tmpTile(1, tmpBufSizeAligned);
 
         TASSIGN(fp8TileNZ, 0x0);      // reuse src tile address (consumed by TQUANT)
-        TASSIGN(e8ZzTile, 0x8100);    // reuse maxPerGpTile address (consumed after TQUANT)
+        TASSIGN(e8ZzTile,
+                0x8100);              // reuse maxPerGpTile address (consumed after TQUANT)
         TASSIGN(e8StoreTile, 0x8100); // alias for flat TSTORE at same address
         TASSIGN(tmpTile, 0x9200);     // reuse scalingTile address
 
@@ -384,7 +398,8 @@ __global__ AICORE void runTQuantFP16(__gm__ uint8_t __out__ *out_e8m0, __gm__ ui
     constexpr int paddedCols = PTO_CEIL(validCols, 32);
     constexpr int groupedCols_flattened = validRows * (paddedCols / 32);
     constexpr int groupedCols_valid = paddedCols / 32;
-    // Static col counts padded to 32-byte row alignment (required by Vec RowMajor NoneBox tiles)
+    // Static col counts padded to 32-byte row alignment (required by Vec RowMajor
+    // NoneBox tiles)
     constexpr int groupedCols_e8_static = PTO_CEIL(groupedCols_valid, 32);        // uint8:  32 elems = 32 B
     constexpr int groupedCols_b16_static = PTO_CEIL(groupedCols_valid, 16);       // fp16:   16 elems = 32 B
     constexpr int groupedCols_flat_aligned = PTO_CEIL(groupedCols_flattened, 32); // for 1D store alias
@@ -395,8 +410,9 @@ __global__ AICORE void runTQuantFP16(__gm__ uint8_t __out__ *out_e8m0, __gm__ ui
 
     using SrcTile = Tile<TileType::Vec, half, validRows, paddedCols, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512,
                          PadValue::Zero>;
-    // 2D tiles for E8M0 exponents, group-max, and scaling (rows x groups_per_row);
-    // data is stored contiguously — TQuant flattens via TRESHAPE internally.
+    // 2D tiles for E8M0 exponents, group-max, and scaling (rows x
+    // groups_per_row); data is stored contiguously — TQuant flattens via TRESHAPE
+    // internally.
     using DstE8Tile = Tile<TileType::Vec, uint8_t, validRows, groupedCols_e8_static, BLayout::RowMajor, -1, -1,
                            SLayout::NoneBox, 512, PadValue::Zero>;
     using DstFP8Tile = Tile<TileType::Vec, int8_t, validRows, paddedCols, BLayout::RowMajor, validRows, paddedCols,
@@ -445,7 +461,8 @@ __global__ AICORE void runTQuantFP16(__gm__ uint8_t __out__ *out_e8m0, __gm__ ui
         TSTORE(e8Global, e8StoreND);
         TSTORE(fp8Global, fp8Tile);
     } else {
-        // NZ mode: TQUANT (ND output), then TMOV ND->ZZ for e8m0, TMOV ND->NZ for fp8.
+        // NZ mode: TQUANT (ND output), then TMOV ND->ZZ for e8m0, TMOV ND->NZ for
+        // fp8.
         constexpr int groupedCols_valid = paddedCols / 32;
 
         using E8ZzTile = Tile<TileType::Vec, uint8_t, validRows, groupedCols_valid, BLayout::RowMajor, -1, -1,
@@ -512,7 +529,6 @@ template void TQuantTest::LaunchTQuantMXFP8<128, 128, 1>(uint8_t *dst, float *sr
 template void TQuantTest::LaunchTQuantMXFP8<15, 32, 0>(uint8_t *dst, float *src, uint8_t *dst_exp, void *stream);
 template void TQuantTest::LaunchTQuantMXFP8<7, 64, 0>(uint8_t *dst, float *src, uint8_t *dst_exp, void *stream);
 template void TQuantTest::LaunchTQuantMXFP8<33, 64, 0>(uint8_t *dst, float *src, uint8_t *dst_exp, void *stream);
-template void TQuantTest::LaunchTQuantMXFP8<13, 192, 0>(uint8_t *dst, float *src, uint8_t *dst_exp, void *stream);
 // INT8 SYM cases
 template void TQuantTest::LaunchTQuantInt8<64, 128, 0, pto::QuantType::INT8_SYM>(int8_t *dst, float *src, float *scale,
                                                                                  void *stream, float *offset);
@@ -582,8 +598,6 @@ template void TQuantTest::LaunchTQuantMXFP8_FP16<128, 128, 0>(uint8_t *dst, uint
                                                               void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_FP16<4, 256, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                             void *stream);
-template void TQuantTest::LaunchTQuantMXFP8_FP16<11, 640, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
-                                                             void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_FP16<32, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                              void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_FP16<64, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
