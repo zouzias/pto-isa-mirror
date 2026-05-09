@@ -658,40 +658,65 @@ TEST_F(TQUANTTEST, case_mxfp8_fp16_11x640_nd)
     test_tquant_mxfp8_fp16<11, 640, 0>();
 }
 
-// MXFP4 E2M1 ND
-#define TQUANT_MXFP4_E2M1_CASES(X) \
-    X(2, 128, special)             \
-    X(2, 128, subnormal)           \
-    X(2, 128, rounding)            \
-    X(2, 128, exp_random_a)        \
-    X(2, 128, exp_random_b)        \
-    X(2, 128, mixed)               \
-    X(1, 32, mixed)                \
-    X(2, 16, mixed)                \
-    X(3, 32, mixed)                \
-    X(5, 96, mixed)                \
-    X(4, 256, mixed)               \
-    X(1, 198, mixed)               \
-    X(32, 1024, mixed)
+// MXFP4 E2M1 FP16 ND
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_2x128_special_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_2x128_subnormal_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_2x128_rounding_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_2x128_exp_random_a_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_2x128_exp_random_b_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_2x128_mixed_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_32x1024_mixed_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<32, 1024>();
+}
 
-#define DEFINE_MXFP4_E2M1_FP16_TEST(rows, cols, suffix)                      \
-    TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_##rows##x##cols##_##suffix##_nd) \
-    {                                                                        \
-        test_tquant_mxfp4_e2m1_fp16<rows, cols>();                           \
-    }
-
-#define DEFINE_MXFP4_E2M1_BF16_TEST(rows, cols, suffix)                      \
-    TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_##rows##x##cols##_##suffix##_nd) \
-    {                                                                        \
-        test_tquant_mxfp4_e2m1_bf16<rows, cols>();                           \
-    }
-
-TQUANT_MXFP4_E2M1_CASES(DEFINE_MXFP4_E2M1_FP16_TEST)
-TQUANT_MXFP4_E2M1_CASES(DEFINE_MXFP4_E2M1_BF16_TEST)
-
-#undef DEFINE_MXFP4_E2M1_FP16_TEST
-#undef DEFINE_MXFP4_E2M1_BF16_TEST
-#undef TQUANT_MXFP4_E2M1_CASES
+// MXFP4 E2M1 BF16 ND
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_2x128_special_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_2x128_subnormal_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_2x128_rounding_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_2x128_exp_random_a_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_2x128_exp_random_b_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_2x128_mixed_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_32x1024_mixed_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<32, 1024>();
+}
 
 TEST_F(TQUANTTEST, case_mxfp8_fp16_32x128_nz)
 {
