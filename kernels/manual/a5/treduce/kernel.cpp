@@ -83,85 +83,73 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     uint64_t stride, uint64_t byte_off,
     __gm__ uint8_t *marker)
 {
-    // Defensive: ensure only block 0 stores, even if launcher is ever changed
-    // to launch >1 blocks. With `<<<1, ...>>>` this is always true.
     if (get_block_idx() != 0) return;
 
-    // Re-cast `__gm__ uint8_t*` to `__gm__ uint64_t*` so we can index 8 slots.
-    // Same address space (__gm__ → __gm__) — bisheng accepts this cast.
     __gm__ uint64_t *m64 = reinterpret_cast<__gm__ uint64_t *>(marker);
 
-    // 8-byte-aligned slot base for all reads/writes to the CKE register.
-    // byte_off is applied via bit-shift in the store value, NOT in the address,
-    // to avoid unaligned 64-bit access (which traps on AIV core MMIO).
     const uint64_t alignedTarget = mmioAddr + static_cast<uint64_t>(ckeId) * stride;
 
     if (m64 != nullptr) {
-        // [0] entry sentinel — first thing kernel does, proves we ran
         m64[0] = 0xC0DECAFEDEADBEEFULL;
-        // [1] pre-store readback at target16 address (16-bit → zero-extended)
         m64[1] = static_cast<uint64_t>(
             *reinterpret_cast<__gm__ uint16_t *>(alignedTarget + byte_off));
-        // [2] mask echo — confirms host→kernel ABI marshalling correct
         m64[2] = static_cast<uint64_t>(mask) & 0xFFFFULL;
-        // [4] actual store address (alignedTarget + byte_off)
         m64[4] = alignedTarget + byte_off;
-        // [5] which block ran — should be 0
         m64[5] = static_cast<uint64_t>(get_block_idx());
         pipe_barrier(PIPE_ALL);
     }
 
-    // ── HYPOTHESIS H5 TEST (printf disabled) — 2026-04-29 ─────────────────
-    // Kept commented to preserve the printf-disabled build mode that we
-    // currently ship; marker[] gives the same evidence without dragging in
-    // DebugTunnel.
-    // AscendC::printf("[AIV/treduce] kernel ran: target=0x%lx mask=0x%x\n",
-    //                 (unsigned long)target, (unsigned int)(mask & 0xffff));
-
-    // ── Store mask into device CCU CKE MMIO ──────────────────────────────
+    // ── MTE STORE PATH (2026-05-09, per HW team guidance) ────────────────
     //
-    // Strategy (2026-05-09):
-    //   Mode A (mask != 0xFFFF): native 16-bit store at alignedTarget + byte_off
-    //   Mode B (mask == 0xFFFF, "saturation"): write 0xFFFFFFFFFFFFFFFF (64-bit
-    //     all-ones) to EVERY 8B slot in the 4KB page. This tests whether ANY
-    //     byte in the entire mapped region triggers CKE hardware.
+    // HW team confirmed: AIV must use MTE (DataCopy UB→GM, i.e. PIPE_MTE3)
+    // to write CKE VA, NOT scalar store (*ptr = val). Scalar stores go
+    // through a different bus path that doesn't trigger the CKE io-map.
     //
-    const bool saturation = (mask == 0xFFFF);
+    // Strategy:
+    //   1. Allocate 32B UB buffer (minimum 1 DataBlock for MTE3)
+    //   2. Fill UB with mask pattern (16 × uint16_t = 32B)
+    //   3. DataCopy(gmCke, ubBuf, 16) → MTE3 store to CKE VA
+    //   4. pipe_barrier(PIPE_MTE3)
+    //
+    // 32B covers 16 uint16_t elements = bytes [0..31] starting at target.
+    // For a single CKE (16-bit), the hardware should pick up the relevant
+    // 2 bytes from the MTE3 transaction.
 
-    if (saturation) {
-        // Saturation mode: fill entire 4KB page (512 × 8B) with all-ones.
-        // alignedTarget = base + ckeId*stride. With stride=0, base = mmioAddr.
-        // Page base = mmioAddr aligned down to 4KB (should already be page-aligned).
-        const uint64_t pageBase = alignedTarget & ~0xFFFULL;
-        for (uint32_t slot = 0; slot < 512; ++slot) {
-            *reinterpret_cast<__gm__ uint64_t *>(pageBase + slot * 8) = 0xFFFFFFFFFFFFFFFFULL;
-        }
-        pipe_barrier(PIPE_ALL);
-        // Also do 16-bit stores at every 2B offset (2048 writes) for bus-width coverage
-        for (uint32_t off = 0; off < 4096; off += 2) {
-            *reinterpret_cast<__gm__ uint16_t *>(pageBase + off) = 0xFFFF;
-        }
-    } else {
-        // Normal mode: single 16-bit store
-        __gm__ uint16_t *target16 = reinterpret_cast<__gm__ uint16_t *>(alignedTarget + byte_off);
-        *target16 = static_cast<uint16_t>(0);
-        pipe_barrier(PIPE_ALL);
-        *target16 = static_cast<uint16_t>(mask & 0xFFFF);
-    }
+    TPipe pipe;
+    TBuf<QuePosition::VECCALC> calcBuf;
+    pipe.InitBuffer(calcBuf, 1, 32);
+    LocalTensor<uint16_t> ubData = calcBuf.Get<uint16_t>();
+
+    uint16_t maskVal = static_cast<uint16_t>(mask & 0xFFFF);
+
+    // Pre-clear: fill UB with zeros, MTE store to CKE VA
+    Duplicate(ubData, static_cast<uint16_t>(0), 16);
+    pipe_barrier(PIPE_V);
+
+    GlobalTensor<uint16_t> gmCke;
+    gmCke.SetGlobalBuffer(reinterpret_cast<__gm__ uint16_t *>(alignedTarget), 16);
+    DataCopy(gmCke, ubData, 16);
+    pipe_barrier(PIPE_MTE3);
+
+    // Trigger: fill UB with mask, MTE store to CKE VA
+    Duplicate(ubData, maskVal, 16);
+    pipe_barrier(PIPE_V);
+
+    DataCopy(gmCke, ubData, 16);
+    pipe_barrier(PIPE_MTE3);
+
+    // Also try scalar store as fallback (in case MTE write triggers
+    // but readback needs scalar path)
+    __gm__ uint16_t *target16 = reinterpret_cast<__gm__ uint16_t *>(alignedTarget + byte_off);
 
     if (m64 != nullptr) {
-        // [6] post-store readback at original target
-        __gm__ uint16_t *t16 = reinterpret_cast<__gm__ uint16_t *>(alignedTarget + byte_off);
-        m64[6] = static_cast<uint64_t>(*t16);
+        m64[6] = static_cast<uint64_t>(*target16);
     }
 
     pipe_barrier(PIPE_ALL);
 
     if (m64 != nullptr) {
-        __gm__ uint16_t *t16 = reinterpret_cast<__gm__ uint16_t *>(alignedTarget + byte_off);
-        // [3] post-barrier readback
-        m64[3] = static_cast<uint64_t>(*t16);
-        // [7] tail sentinel
+        m64[3] = static_cast<uint64_t>(*target16);
         m64[7] = 0xFEEDFACECAFEBABEULL;
         pipe_barrier(PIPE_ALL);
     }
