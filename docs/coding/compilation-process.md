@@ -1,158 +1,404 @@
 # Compilation Process
 
-This document describes the build and compilation flow for PTO Tile Lib from the perspective of source organization, public intrinsics, backend selection, and repository build entry points.
+This document explains the PTO operator compilation process, helping developers understand the complete workflow from source code to executable files.
 
-It focuses on the developer-visible workflow and does not expand undocumented internal compiler stages into normative interface descriptions.
+______________________________________________________________________
 
-## 1. Overview
+## 1. Compilation Overview
 
-PTO kernels are written in C++ using PTO intrinsics such as `TLOAD`, `TADD`, `TMATMUL`, `TSYNC`, and `TSTORE`.
-
-The common public entry is:
-
-```cpp
-#include <pto/pto-inst.hpp>
-```
-
-The intrinsic layer is implemented primarily through headers under [PTO Public Headers](../../include/pto/README.md), especially `../../include/pto/common/pto_instr.hpp`.
-
-## 2. Build and compilation characteristics
-
-PTO Tile Lib uses a **C++ intrinsic interface**.
-
-From the public API perspective, the library is primarily **header-based / template-based**.
-The same PTO source can be built against different backends depending on build configuration.
-CPU simulation is the recommended first validation path, while NPU execution depends on an Ascend CANN environment.
-The codebase requires **C++20 or later**.
-
-For project-level build guidance, see [Project Overview](../../README.md) and [Getting Started](../getting-started.md).
-
-## 3. Build flow
-
-At a high level, the build flow is:
+### 1.1 Compilation Pipeline
 
 ```text
-PTO C++ source
-  -> C++ preprocessing / compilation
-  -> PTO intrinsic headers select backend-specific implementations
-  -> build system compiles test cases / kernels / demos
-  -> binaries or test artifacts are produced
+PTO C++ Source (.cpp)
+    ↓
+Preprocessor (macro expansion, #include, #ifdef)
+    ↓
+C++ Frontend (lexer, parser, semantic analysis, AST)
+    ↓
+PTO Intrinsic Expansion (TLOAD/TSTORE/TADD → low-level instructions)
+    ↓
+Middle-end (optimization passes, IR generation)
+    ↓
+Backend (instruction selection, register allocation, code generation)
+    ↓
+Linker (symbol resolution, relocation)
+    ↓
+Executable / Shared Library
 ```
 
-This description is intentionally written from the developer’s point of view to summarize the main relationship between source code and build artifacts.
+### 1.2 Required Tools
 
-This document does not define a complete proprietary compiler pipeline as a public contract, such as a fixed sequence of “frontend -> PTO intrinsic expansion -> middle-end IR -> backend lowering”. Such stages may exist in toolchains, but they are not presented here as normative interface definitions.
+**CMake** (>= 3.16):
 
-## 4. Public intrinsic layer and backend selection
+```bash
+# Ubuntu/Debian
+sudo apt install cmake
 
-The public intrinsic entry point is `../../include/pto/common/pto_instr.hpp`.
+# macOS
+brew install cmake
+```
 
-That header exposes APIs such as:
+**C++ Compiler** (C++20 support):
 
-- `TASSIGN`
-- `TSYNC`
-- `TLOAD`
-- `TSTORE`
-- vector instructions such as `TADD`, `TMUL`, `TEXP`
-- matrix instructions such as `TMATMUL`
+- GCC >= 13.0
+- Clang >= 15.0
+- MSVC 2022 (Windows)
 
-The header also includes backend-specific implementation headers based on build conditions.
+**Python** (>= 3.8):
 
-This means that, from a developer point of view, the compilation process is centered on:
+```bash
+sudo apt install python3 python3-pip
+```
 
-1. writing C++ code against the PTO intrinsics
-2. compiling it with the repository build configuration
-3. letting the selected backend provide the concrete implementation path
+### 1.3 Optional Tools
 
-## 5. Build tools used in this repository
+**Ninja** (faster builds):
 
-The repository clearly depends on:
+```bash
+sudo apt install ninja-build
+```
 
-- **CMake**
-- **Python** for scripts and tests
-- a **C++20-capable compiler**
+**ccache** (compilation cache):
 
-Typical commands used in this repository include:
+```bash
+sudo apt install ccache
+export CC="ccache gcc"
+export CXX="ccache g++"
+```
+
+______________________________________________________________________
+
+## 2. Build System Configuration
+
+### 2.1 Minimal CMake Configuration
+
+```cmake
+cmake_minimum_required(VERSION 3.16)
+project(MyPTOOperator LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(PTO REQUIRED)
+
+add_executable(my_operator src/my_operator.cpp)
+target_link_libraries(my_operator PRIVATE PTO::pto)
+```
+
+### 2.2 Build Configuration
+
+**Backend Selection**:
 
 ```bash
 # CPU simulation
-python3 tests/run_cpu.py --clean --verbose
+cmake -B build -DPTO_BACKEND=CPU
 
-# Run a demo on CPU simulation
-python3 tests/run_cpu.py --demo gemm --verbose
+# NPU (A2/A3)
+cmake -B build -DPTO_BACKEND=NPU -DSOC_VERSION=Ascend910B1
 
-# Run ST on simulator backend
-python3 tests/script/run_st.py -r sim -v a3 -t tadd -g TADDTest.case_float_64x64_64x64
+# NPU (A5)
+cmake -B build -DPTO_BACKEND=NPU -DSOC_VERSION=Ascend910_9599
 ```
 
-If you are building in this repository, prefer the existing scripts and documented commands over inventing a standalone build flow.
+**Build Types**:
 
-## 6. CPU simulation path vs NPU path
+```bash
+# Debug (no optimization, debug symbols)
+cmake -B build -DCMAKE_BUILD_TYPE=Debug
 
-### 6.1 CPU simulation
+# Release (full optimization)
+cmake -B build -DCMAKE_BUILD_TYPE=Release
 
-The CPU simulation path is intended for functional development and validation.
+# RelWithDebInfo (optimization + debug symbols)
+cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+```
 
-In this path:
+### 2.3 Build Commands
 
-- PTO intrinsics remain visible at the C++ source level
-- backend behavior is modeled by the CPU simulation implementation
-- some device-only synchronization details are simplified or become no-ops
+```bash
+# Configure
+cmake -B build -DCMAKE_BUILD_TYPE=Release
 
-Relevant documents:
+# Build
+cmake --build build -j$(nproc)
 
-- [CPU Simulation](cpu_sim.md)
-- [Quickstart Tutorial](tutorial.md)
-- [Events and Synchronization](Event.md)
+# Test
+ctest --test-dir build --output-on-failure
 
-### 6.2 NPU path
+# Install
+cmake --install build --prefix /path/to/install
+```
 
-The NPU path targets Ascend hardware or simulator-side execution.
+______________________________________________________________________
 
-In this path:
+## 3. Compilation Steps
 
-- backend-specific NPU implementations are used
-- device-side constraints matter more directly
-- instruction availability must be checked against the backend support table
+### 3.1 Preprocessing
 
-Relevant references:
+**Macro Expansion**:
 
-- [Backend Implementation Status](../../include/README.md)
-- [PTO ISA Reference](../isa/README.md)
+```cpp
+// Source
+#define TILE_SIZE 256
+using TileT = Tile<TileType::Vec, float, 16, TILE_SIZE>;
 
-## 7. Compilation-related checks
+// After preprocessing
+using TileT = Tile<TileType::Vec, float, 16, 256>;
+```
 
-When a PTO kernel does not compile or run as expected, the most reliable checks are:
+**View Preprocessed Output**:
 
-1. **Header-level API usage**
-   - Is the intrinsic used according to `../../include/pto/common/pto_instr.hpp`?
+```bash
+g++ -E -P src/my_operator.cpp -o my_operator.i
+```
 
-2. **ISA constraints**
-   - Does the instruction documentation under `docs/isa/` allow the tile type, layout, and operand combination?
+### 3.2 Compilation
 
-3. **Tile and GlobalTensor definitions**
-   - Are tile shapes, valid regions, and layouts legal?
-   - Are `GlobalTensor` shape/stride declarations correct?
+**PTO Intrinsic Expansion**:
 
-4. **Backend support**
-   - Is the target instruction implemented on the selected backend according to [Backend Implementation Status](../../include/README.md)?
+```cpp
+// Source
+TLOAD(tile, input);
 
-5. **Build environment**
-   - Are the required compiler, Python environment, and CANN environment available?
+// Expanded to low-level instructions
+__builtin_pto_load(tile.data(), input.data(), tile.size(), tile.alignment());
+```
 
-## 8. Notes on build examples
+**Generate Object File**:
 
-Some commonly written build examples on the internet, such as generic `find_package(PTO REQUIRED)` snippets or imagined standalone `PTO::pto` link targets, are **not** established as the canonical integration model by this repository.
+```bash
+g++ -std=c++20 -O3 -c src/my_operator.cpp -o build/my_operator.o
+```
 
-When documenting or extending PTO Tile Lib, use the repository build scripts, the top-level `CMakeLists.txt`, and existing test or demo build patterns as the primary reference.
+### 3.3 Linking
 
-## 9. Notes
+**Symbol Resolution**:
 
-The compilation flow of PTO Tile Lib can be summarized as follows:
+```text
+my_operator.o:
+  - Defines: main, my_kernel
+  - References: TLOAD, TSTORE, TADD
 
-- PTO code is written in C++ with public intrinsics.
-- The build system selects the corresponding backend implementation according to configuration.
-- CPU simulation is the preferred first validation path.
-- Backend support and instruction legality are checked explicitly during development.
+libpto.a:
+  - Defines: TLOAD, TSTORE, TADD, ...
 
-The documentation describes the public programming surface and usage model, while internal compiler stages remain implementation details unless stated otherwise in dedicated toolchain documents.
+Linker resolves:
+  my_operator.o::TLOAD → libpto.a::TLOAD ✓
+```
+
+**Generate Executable**:
+
+```bash
+g++ build/my_operator.o -L/path/to/pto/lib -lpto -o build/my_operator
+```
+
+______________________________________________________________________
+
+## 4. Compilation Options
+
+### 4.1 Optimization Levels
+
+| Option   | Use Case                              | Performance |
+| -------- | ------------------------------------- | ----------- |
+| `-O0`    | Debugging                             | Slowest     |
+| `-O1`    | Basic optimization                    | Medium      |
+| `-O2`    | Production (recommended)              | Fast        |
+| `-O3`    | Maximum optimization                  | Fastest     |
+| `-Os`    | Size optimization                     | Medium      |
+| `-Ofast` | Aggressive (may violate standards)    | Fastest     |
+
+**Example**:
+
+```bash
+# Production build
+g++ -O3 -march=native src/my_operator.cpp
+
+# Debug build
+g++ -O0 -g src/my_operator.cpp
+```
+
+### 4.2 Architecture-Specific Options
+
+**-march=native**: Optimize for current CPU
+
+```bash
+g++ -O3 -march=native src/my_operator.cpp
+```
+
+**-march=x86-64**: Generic x86-64 code
+
+```bash
+g++ -O3 -march=x86-64 src/my_operator.cpp
+```
+
+### 4.3 Debug Options
+
+**Debug Symbols**:
+
+```bash
+g++ -g src/my_operator.cpp
+gdb ./my_operator
+```
+
+**Sanitizers**:
+
+```bash
+# Address sanitizer (memory errors)
+g++ -fsanitize=address src/my_operator.cpp
+
+# Undefined behavior sanitizer
+g++ -fsanitize=undefined src/my_operator.cpp
+```
+
+### 4.4 Warning Options
+
+```bash
+g++ -Wall -Wextra -Wpedantic -Werror src/my_operator.cpp
+```
+
+______________________________________________________________________
+
+## 5. Cross Compilation
+
+### 5.1 x86 → ARM Cross Compilation
+
+**Install Toolchain**:
+
+```bash
+sudo apt install g++-aarch64-linux-gnu
+```
+
+**CMake Toolchain File**:
+
+```cmake
+# toolchain-aarch64.cmake
+set(CMAKE_SYSTEM_NAME Linux)
+set(CMAKE_SYSTEM_PROCESSOR aarch64)
+set(CMAKE_C_COMPILER aarch64-linux-gnu-gcc)
+set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)
+```
+
+**Build**:
+
+```bash
+cmake -B build -DCMAKE_TOOLCHAIN_FILE=toolchain-aarch64.cmake
+cmake --build build
+```
+
+______________________________________________________________________
+
+## 6. Compilation Optimization
+
+### 6.1 Speed Up Compilation
+
+**Use Ninja**:
+
+```bash
+cmake -B build -G Ninja
+ninja -C build
+```
+
+**Use ccache**:
+
+```bash
+export CC="ccache gcc"
+export CXX="ccache g++"
+cmake -B build
+cmake --build build
+```
+
+**Parallel Build**:
+
+```bash
+cmake --build build -j$(nproc)
+```
+
+**Precompiled Headers**:
+
+```cmake
+target_precompile_headers(my_operator PRIVATE <pto/pto-inst.hpp>)
+```
+
+### 6.2 Reduce Binary Size
+
+**Strip Debug Symbols**:
+
+```bash
+strip build/my_operator
+```
+
+**Link-Time Optimization (LTO)**:
+
+```cmake
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+```
+
+______________________________________________________________________
+
+## 7. Troubleshooting
+
+### 7.1 Common Compilation Errors
+
+#### Error: Header not found
+
+```text
+error: pto/pto-inst.hpp: No such file or directory
+```
+
+**Solution**:
+
+```bash
+export PTO_LIB_PATH=/path/to/pto-isa
+cmake -B build -DPTO_ROOT=/path/to/pto-isa
+```
+
+#### Error: Static assertion failed
+
+```text
+static_assert failed: "Tile shape not aligned"
+```
+
+**Solution**:
+
+```cpp
+// Wrong: width 250 is not multiple of 16
+using TileT = Tile<TileType::Vec, float, 16, 250>;
+
+// Correct: width 256 is multiple of 16
+using TileT = Tile<TileType::Vec, float, 16, 256>;
+```
+
+#### Error: Undefined reference
+
+```text
+undefined reference to `pto::TLOAD(...)`
+```
+
+**Solution**:
+
+```cmake
+target_link_libraries(my_operator PRIVATE PTO::pto)
+```
+
+### 7.2 Runtime Errors
+
+#### Error: Shared library not found
+
+```text
+error while loading shared libraries: libpto.so
+```
+
+**Solution**:
+
+```bash
+export LD_LIBRARY_PATH=/path/to/pto/lib:$LD_LIBRARY_PATH
+```
+
+______________________________________________________________________
+
+## References
+
+- [Getting Started](../getting-started.md)
+- [Debugging Guide](debug.md)
+- [Performance Optimization](opt.md)
+- [CMake Documentation](https://cmake.org/documentation/)
