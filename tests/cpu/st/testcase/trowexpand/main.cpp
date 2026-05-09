@@ -17,8 +17,7 @@ using namespace PtoTestCommon;
 template <int kRows, int kCols>
 void LaunchTROWEXPAND(float *out, float *src, void *stream);
 
-class TROWEXPAND_Test : public testing::Test {
-};
+class TROWEXPAND_Test : public testing::Test {};
 
 static std::string GetGoldenDir()
 {
