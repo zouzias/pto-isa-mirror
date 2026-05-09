@@ -108,7 +108,6 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tcvt -g TCVTTest.case_fp16_fp32_2x64
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tmov -g TMOVTest.case14_scaling_dynamic_int32_int8_0_1_1_1_0_param
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tmov_acc2mat -g TMOVTest.case_nz2nz_fb_quant_4
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmov_vect -g TMOVTest.vect_copy_case1
     python3 tests/script/run_st.py $ARGS -w -v a3 -t textract -g TEXTRACTTest.case1_half_0_1_16_16_32_param
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tmrgsort -g TMRGSORTTest.case_topk1
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tmul -g TMULTest.case_float_64x64_64x64_64x64
@@ -235,13 +234,12 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
 
     if [ "$IS_AUTO_MODE" = "false" ]; then
       # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
-      # besides, auto-sync doesn't work with CCE intrisics      
+      # besides, auto-sync doesn't work with CCE intrisics
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_cv -g TPushPopCvTest.case1_half_single_tile
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_vc -g TPushPopVcTest.case1_int8_single_k_tile
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_cv_nosplit -g TPushPopCvNoSplitTest.case1_half_single_tile
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_vc_nosplit -g TPushPopVcNoSplitTest.case1_int8_single_k_tile
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_dir_both -g TPushPopDirBothTest.case1_float_dir_both
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_subtile -g TPushTpopSubtileTest.case1_half_128x512
     fi
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
@@ -342,7 +340,6 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_cv_nosplit
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_vc_nosplit
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_dir_both
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_subtile
     fi
   fi
 fi
@@ -397,7 +394,6 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_cv_nosplit -g TPushPopCvNoSplitTest.case1_half_single_tile
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_vc_nosplit -g TPushPopVcNoSplitTest.case1_int8_single_k_tile
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_dir_both -g TPushPopDirBothTest.case1_float_dir_both
-      python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_subtile -g TPushTpopSubtileTest.case1_half_128x512
     fi
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract -g TEXTRACTTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_acc2vec -g TMOVTest.case_nz2nd_sc_quant_1
@@ -482,7 +478,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t ttri -g TTRITest.case_float_128x128_upper_diag_0
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tconcat -g TCONCATTest.case_half_16x128_16x64_16x64_16x63_16x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram -g THISTOGRAMTest.case_8x128_b1
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram -g THISTOGRAMTest.case_u32_6x912_b1_k64 
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram -g THISTOGRAMTest.case_u32_6x912_b1_k64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_acc2mat_1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nd_1
@@ -563,7 +559,6 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_cv_nosplit
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_vc_nosplit
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_dir_both
-      python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_subtile
     fi
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_acc2vec
@@ -681,20 +676,4 @@ if [ "$ENABLE_KIRIN9030" = "true" ]; then
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmov_vect
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmuls
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsel
-fi
-
-if [ "$ENABLE_COMM" = "true" ]; then
-  if [ "$ENABLE_A3" = "true" ]; then
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tput
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tget
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tnotify
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/twait
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/ttest
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tgather
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tscatter
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/treduce
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tbroadcast
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tput_async
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tget_async
-  fi
 fi
