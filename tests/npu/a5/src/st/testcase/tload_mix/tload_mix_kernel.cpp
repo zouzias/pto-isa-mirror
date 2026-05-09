@@ -1,16 +1,18 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_tile.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace pto;
 
@@ -51,8 +53,10 @@ AICORE inline void MovL1ToUbuf(DstTileData &dstTile, SrcTileData &srcTile)
     set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
 #endif
-    set_intra_block(PIPE_MTE1, syncID);      // veccore0 id0 correspond cubecore id is id0
-    set_intra_block(PIPE_MTE1, syncID + 16); // veccore1 id0 correspond cubecore id is 16
+    set_intra_block(PIPE_MTE1,
+                    syncID);      // veccore0 id0 correspond cubecore id is id0
+    set_intra_block(PIPE_MTE1,
+                    syncID + 16); // veccore1 id0 correspond cubecore id is 16
 #endif
 }
 
@@ -88,7 +92,8 @@ AICORE inline void runTLOAD_MIX_ND2NZ(__gm__ T *out, __gm__ T *src0, __gm__ T *s
 
 #if defined(__DAV_VEC__)
     wait_intra_block(PIPE_MTE3,
-                     syncID); // veccore0 id0 correspond cubecore id is id0,  veccore1 id0 correspond cubecore id is 16
+                     syncID);   // veccore0 id0 correspond cubecore id is id0,
+                                // veccore1 id0 correspond cubecore id is 16
     TSTORE(dstGlobal, srcTile); // UB -> GM : AIV
 #endif
     out = dstGlobal.data();
@@ -125,7 +130,8 @@ AICORE inline void runTLOAD_MIX_DN2NZ(__gm__ T *out, __gm__ T *src0, __gm__ T *s
 
 #if defined(__DAV_VEC__)
     wait_intra_block(PIPE_MTE3,
-                     syncID); // veccore0 id0 correspond cubecore id is id0,  veccore1 id0 correspond cubecore id is 16
+                     syncID);   // veccore0 id0 correspond cubecore id is id0,
+                                // veccore1 id0 correspond cubecore id is 16
     TSTORE(dstGlobal, srcTile); // UB -> GM : AIV
 #endif
     out = dstGlobal.data();
@@ -161,7 +167,8 @@ AICORE inline void runTLOAD_MIX_ND2ND(__gm__ T *out, __gm__ T *src0, __gm__ T *s
 
 #if defined(__DAV_VEC__)
     wait_intra_block(PIPE_MTE3,
-                     syncID); // veccore0 id0 correspond cubecore id is id0,  veccore1 id0 correspond cubecore id is 16
+                     syncID);   // veccore0 id0 correspond cubecore id is id0,
+                                // veccore1 id0 correspond cubecore id is 16
     TSTORE(dstGlobal, srcTile); // UB -> GM : AIV
 #endif
     out = dstGlobal.data();
@@ -183,7 +190,8 @@ AICORE inline void runTLOAD_MIX_DN2DN(__gm__ T *out, __gm__ T *src0, __gm__ T *s
     GlobalDataOut dstGlobal(out);
 
     using TileMatAData = Tile<TileType::Mat, T, baseM, baseK, BLayout::ColMajor, M, K, SLayout::NoneBox>; // 大N小Z
-    using TileUBData = Tile<TileType::Vec, T, baseK, baseM, BLayout::RowMajor, -1, -1>; // DN：baseM need 32Byte aligned
+    using TileUBData = Tile<TileType::Vec, T, baseK, baseM, BLayout::RowMajor, -1,
+                            -1>; // DN：baseM need 32Byte aligned
     TileUBData srcTile(baseK, baseM);
     TASSIGN(srcTile, 0x0);
 
@@ -197,7 +205,8 @@ AICORE inline void runTLOAD_MIX_DN2DN(__gm__ T *out, __gm__ T *src0, __gm__ T *s
 
 #if defined(__DAV_VEC__)
     wait_intra_block(PIPE_MTE3,
-                     syncID); // veccore0 id0 correspond cubecore id is id0,  veccore1 id0 correspond cubecore id is 16
+                     syncID);   // veccore0 id0 correspond cubecore id is id0,
+                                // veccore1 id0 correspond cubecore id is 16
     TSTORE(dstGlobal, srcTile); // UB -> GM : AIV
 #endif
     out = dstGlobal.data();
@@ -235,7 +244,8 @@ AICORE inline void runTLOAD_MIX_NZ2NZ(__gm__ T *out, __gm__ T *src0, __gm__ T *s
 
 #if defined(__DAV_VEC__)
     wait_intra_block(PIPE_MTE3,
-                     syncID); // veccore0 id0 correspond cubecore id is id0,  veccore1 id0 correspond cubecore id is 16
+                     syncID);   // veccore0 id0 correspond cubecore id is id0,
+                                // veccore1 id0 correspond cubecore id is 16
     TSTORE(dstGlobal, srcTile); // UB -> GM : AIV
 #endif
     out = dstGlobal.data();
@@ -282,7 +292,8 @@ AICORE inline void runTLOAD_MIX_DN2ZN(__gm__ T *out, __gm__ T *src0, __gm__ T *s
 
 #if defined(__DAV_VEC__)
     wait_intra_block(PIPE_MTE3,
-                     syncID); // veccore0 id0 correspond cubecore id is id0,  veccore1 id0 correspond cubecore id is 16
+                     syncID);   // veccore0 id0 correspond cubecore id is id0,
+                                // veccore1 id0 correspond cubecore id is 16
     TSTORE(dstGlobal, srcTile); // UB -> GM : AIV
 #endif
     out = dstGlobal.data();
@@ -563,7 +574,8 @@ AICORE inline void runTLOAD_MIX_NCDHW(__gm__ T __out__ *out, __gm__ T __in__ *sr
     out = dstGlobal.data();
 }
 
-// [N,C,D,H,W]->[C1DHW,N/16,16,C0] [srcN,srcC,srcD,srcH,srcW,N,C,D,H,W,C1DHW,N/16]
+// [N,C,D,H,W]->[C1DHW,N/16,16,C0]
+// [srcN,srcC,srcD,srcH,srcW,N,C,D,H,W,C1DHW,N/16]
 template <typename T, int srcN, int srcC, int srcD, int srcH, int srcW, int N, int C, int D, int H, int W, int dstC1DHW,
           int dstN16>
 AICORE inline void runTLOAD_MIX_NCDHW2FZ3D(__gm__ T __out__ *out, __gm__ T __in__ *src)
@@ -668,7 +680,8 @@ void launchTLOADMIX(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
         <<<1, nullptr, stream>>>(out, src0, src1);
 }
 
-/********************format 0:ND2NZ 1:DN2NZ 2:ND2ND 3:DN2DN 4 NZ2NZ*****************************/
+/********************format 0:ND2NZ 1:DN2NZ 2:ND2ND 3:DN2DN 4
+ * NZ2NZ*****************************/
 // 2:ND2ND
 template void launchTLOADMIX<int8_t, 2, 1, 2, 3, 33, 99, 1, 2, 3, 33, 99, 198, 128>(uint8_t *out, uint8_t *src0,
                                                                                     uint8_t *src1, void *stream);

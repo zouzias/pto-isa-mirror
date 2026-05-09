@@ -67,7 +67,7 @@ def gen_golden_data(case_name, param):
     m, n, k, start_m, start_n, start_k, is_atrans, is_btrans, base_m, base_n, base_k = \
     param.m, param.n, param.k, param.start_m, param.start_n, param.start_k, \
     param.is_atrans, param.is_btrans, param.base_m, param.base_n, param.base_k
-    
+
     x1_gm = np.random.randint(1, 5, [m, k]).astype(src_type)
     x2_gm = np.random.randint(1, 5, [k, n]).astype(src_type)
     x1_slice = x1_gm[start_m:, start_k:]  # (rowIdx1, colIdx1)
@@ -79,7 +79,7 @@ def gen_golden_data(case_name, param):
         base_n = base_n if base_n > 0 else n
         base_k = base_k if base_k > 0 else k
         padded_tensors_param = PaddedGenerator(
-            m, n, k, base_m, base_n, base_k, x1_gm, x2_gm, 
+            m, n, k, base_m, base_n, base_k, x1_gm, x2_gm,
             src_type, rand_range_right=(1, 5), rand_range_down=(1, 5), rand_range_corner=(1, 5))
         x1_gm, x2_gm = create_padded_tensors(padded_tensors_param)
     if is_atrans:
@@ -120,10 +120,10 @@ class PaddedGenerator:
 
 class TextractParams:
     def __init__(
-        self, 
-        atype, btype, ctype, 
-        m, n, k, start_m, start_n, start_k, 
-        is_atrans=0, is_btrans=0, 
+        self,
+        atype, btype, ctype,
+        m, n, k, start_m, start_n, start_k,
+        is_atrans=0, is_btrans=0,
         base_m=0, base_n=0, base_k=0):
         self.atype = atype
         self.btype = btype
@@ -143,7 +143,7 @@ class TextractParams:
 if __name__ == "__main__":
     # case name
     case_name_list = [
-        "TMOVTest.case1_half_0_1_param", 
+        "TMOVTest.case1_half_0_1_param",
         "TMOVTest.case2_int8_0_1_param",
         "TMOVTest.case3_float_0_1_param",
         "TMOVTest.case4_bfloat16_0_1_param",

@@ -93,7 +93,7 @@ def get_quant_golden(dst_data_type, m, n, quant_type, golden):
             temp_quant_tensor_api[i] = temp_quant_tensor_api[i] | np.uint64(0x400000000000)
         elif dst_data_type == np.uint8:
             temp_quant_tensor_api[i] = temp_quant_tensor_api[i] & np.uint64(0xFF)
-    
+
     quant_tensor = np.frombuffer(temp_quant_tensor_api, np.uint64)
     quant_tensor = quant_tensor.astype(quant_type)
     quant_tensor.tofile("./quant_vector_gm.bin")
@@ -150,7 +150,7 @@ def gen_golden_data(case_name, g_info):
     elif format == 3:
         c0_size = 8
         golden = golden.reshape(int(m / 16), 16, int(n / c0_size), c0_size).transpose(2, 0, 1, 3).astype(dst_data_type)
-    
+
     if relu_mode == 1:
         golden = np.maximum(golden, 0)
 
@@ -246,7 +246,7 @@ if __name__ == "__main__":
         TStoreAcc2gmParams(np.uint8, np.float32, 1, 16, 20, 25, 1, 1.5),
         TStoreAcc2gmParams(np.int8, np.float32, 2, 16, 64, 32, 1, 2.5),
         TStoreAcc2gmParams(np.uint8, bfloat16, 2, 32, 64, 16, 1, 2),
-        
+
 
         TStoreAcc2gmParams(np.float16, np.int8, 1, 55, 88, 32, 2, quant_type=np.uint64),
         TStoreAcc2gmParams(np.int8, np.int8, 1, 34, 85, 19, 2, quant_type=np.uint64),
@@ -258,7 +258,7 @@ if __name__ == "__main__":
         TStoreAcc2gmParams(np.uint8, np.int8, 2, 48, 64, 25, 2, quant_type=np.uint64),
         TStoreAcc2gmParams(np.uint8, np.int8, 2, 128, 96, 17, 2, quant_type=np.uint64),
 
-        # relu        
+        # relu
         TStoreAcc2gmParams(np.float32, np.float32, 1, 128, 96, 61, relu_mode=1),
         TStoreAcc2gmParams(np.float32, np.float16, 2, 256, 64, 33, relu_mode=1),
         TStoreAcc2gmParams(np.int8, np.float16, 1, 55, 27, 33, quant_mode=1, scalar=2, relu_mode=1),
