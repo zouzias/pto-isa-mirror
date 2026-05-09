@@ -1,31 +1,89 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_COMM_TPUT_ASYNC_HPP
 #define PTO_COMM_TPUT_ASYNC_HPP
 
-#include "pto/comm/async_common/TPutAsyncCommonDetail.hpp"
-#ifdef PTO_URMA_SUPPORTED
-#include "pto/npu/comm/async/urma/urma_async_intrin.hpp"
-#endif
+#include "pto/comm/async_common/TGetAsyncCommonDetail.hpp"
 
 namespace pto {
 namespace comm {
-namespace detail {
 
 // ============================================================================
-// TPUT_ASYNC_MTE_FALLBACK: Synchronous MTE fallback for A5 platforms where
-// SDMA does not support PUT direction.
+// TPUT_ASYNC_IMPL: Asynchronous remote write operation implementation
+//
+// Directly transfers data from local GM to remote NPU's GM without UB staging.
+// Returns AsyncEvent for synchronization with TSYNC.
+//
+// Data flow: srcGlobalData (local GM) -> DMA Engine -> dstGlobalData (remote
+// GM)
+// ============================================================================
+
+namespace detail {
+
+template <typename GlobalData>
+PTO_INTERNAL bool TPutAsyncIsFlatContiguous1D(GlobalData &globalData)
+{
+    return TGetAsyncIsFlatContiguous1D(globalData);
+}
+
+template <typename GlobalData>
+PTO_INTERNAL uint32_t TPutAsyncGetTotalElemCount(GlobalData &globalData)
+{
+    return TGetAsyncGetTotalElemCount(globalData);
+}
+
+template <typename GlobalDstData, typename GlobalSrcData>
+PTO_INTERNAL bool TPutAsyncCheckTensorCompatibility()
+{
+    return TGetAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
+}
+
+template <typename GlobalDstData, typename GlobalSrcData>
+PTO_INTERNAL AsyncEvent TPUT_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                                             const sdma::SdmaExecContext &execCtx)
+{
+    (void)TPutAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
+
+    PTO_ASSERT(srcGlobalData.data() != nullptr && dstGlobalData.data() != nullptr,
+               "TPUT_ASYNC: src and dst tensor pointers must not be null.");
+
+    PTO_ASSERT(TPutAsyncIsFlatContiguous1D(srcGlobalData),
+               "TPUT_ASYNC: src tensor must be flat contiguous 1D (packed "
+               "layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported by "
+               "SDMA async path.");
+    PTO_ASSERT(TPutAsyncIsFlatContiguous1D(dstGlobalData),
+               "TPUT_ASYNC: dst tensor must be flat contiguous 1D (packed "
+               "layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported by "
+               "SDMA async path.");
+
+    const uint32_t dstElems = TPutAsyncGetTotalElemCount(dstGlobalData);
+    const uint32_t srcElems = TPutAsyncGetTotalElemCount(srcGlobalData);
+    PTO_ASSERT(dstElems >= srcElems, "TPUT_ASYNC SDMA: dst buffer too small for src data.");
+
+    using T = typename GlobalSrcData::RawDType;
+    const uint64_t eventHandle =
+        sdma::__sdma_put_async(dstGlobalData.data(), srcGlobalData.data(), srcElems * sizeof(T), execCtx);
+    return AsyncEvent(eventHandle, DmaEngine::SDMA);
+}
+
+// ============================================================================
+// TPUT_ASYNC_MTE_FALLBACK: Synchronous MTE fallback for platforms where SDMA
+// does not support PUT direction (e.g. A5).
 //
 // Uses the session's UB scratch buffer (tmpBuf) as staging to perform a
-// chunked GM -> UB -> GM transfer via MTE2/MTE3 pipelines. The operation
+// chunked GM → UB → GM transfer via MTE2/MTE3 pipelines. The operation
 // completes synchronously; the returned AsyncEvent has handle=0 (already done).
 // ============================================================================
 
@@ -39,10 +97,12 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_MTE_FALLBACK(GlobalDstData &dstGlobalData, Gl
                "TPUT_ASYNC MTE fallback: src and dst tensor pointers must not be null.");
 
     PTO_ASSERT(TPutAsyncIsFlatContiguous1D(srcGlobalData),
-               "TPUT_ASYNC MTE fallback: src tensor must be flat contiguous 1D (packed layout, single logical line). "
+               "TPUT_ASYNC MTE fallback: src tensor must be flat contiguous 1D "
+               "(packed layout, single logical line). "
                "Multi-dimensional or non-contiguous tensors are not supported.");
     PTO_ASSERT(TPutAsyncIsFlatContiguous1D(dstGlobalData),
-               "TPUT_ASYNC MTE fallback: dst tensor must be flat contiguous 1D (packed layout, single logical line). "
+               "TPUT_ASYNC MTE fallback: dst tensor must be flat contiguous 1D "
+               "(packed layout, single logical line). "
                "Multi-dimensional or non-contiguous tensors are not supported.");
 
     const uint32_t srcElems = TPutAsyncGetTotalElemCount(srcGlobalData);
@@ -93,11 +153,15 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_URMA_IMPL(GlobalDstData &dstGlobalData, Globa
     (void)TPutAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
 
     PTO_ASSERT(TPutAsyncIsFlatContiguous1D(srcGlobalData),
-               "TPUT_ASYNC URMA: src tensor must be flat contiguous 1D (packed layout, single logical line). "
-               "Multi-dimensional or non-contiguous tensors are not supported by URMA async path.");
+               "TPUT_ASYNC URMA: src tensor must be flat contiguous 1D (packed "
+               "layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported by "
+               "URMA async path.");
     PTO_ASSERT(TPutAsyncIsFlatContiguous1D(dstGlobalData),
-               "TPUT_ASYNC URMA: dst tensor must be flat contiguous 1D (packed layout, single logical line). "
-               "Multi-dimensional or non-contiguous tensors are not supported by URMA async path.");
+               "TPUT_ASYNC URMA: dst tensor must be flat contiguous 1D (packed "
+               "layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported by "
+               "URMA async path.");
 
     const uint32_t srcElems = TPutAsyncGetTotalElemCount(srcGlobalData);
     const uint32_t dstElems = TPutAsyncGetTotalElemCount(dstGlobalData);
@@ -118,7 +182,6 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_URMA_IMPL(GlobalDstData &dstGlobalData, Globa
 
 // ============================================================================
 // Main TPUT_ASYNC_IMPL with DmaEngine template parameter
-// A5: SDMA uses MTE fallback for PUT direction; URMA is also supported
 // ============================================================================
 
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData>
@@ -126,7 +189,11 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_IMPL(GlobalDstData &dstGlobalData, GlobalSrcD
                                         const AsyncSession &session)
 {
     if constexpr (engine == DmaEngine::SDMA) {
+#ifdef PTO_NPU_ARCH_A5
         return detail::TPUT_ASYNC_MTE_FALLBACK(dstGlobalData, srcGlobalData, session.sdmaSession.execCtx);
+#else
+        return detail::TPUT_ASYNC_SDMA_IMPL(dstGlobalData, srcGlobalData, session.sdmaSession.execCtx);
+#endif
     } else if constexpr (engine == DmaEngine::URMA) {
 #ifdef PTO_URMA_SUPPORTED
         return detail::TPUT_ASYNC_URMA_IMPL(dstGlobalData, srcGlobalData, session.urmaSession.execCtx);

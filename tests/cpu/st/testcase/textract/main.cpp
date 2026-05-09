@@ -1,16 +1,21 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
-#include <pto/pto-inst.hpp>
-#include "test_common.h"
 #include <gtest/gtest.h>
+
 #include <pto/common/constants.hpp>
+#include <pto/pto-inst.hpp>
+
+#include "cpu_tile_test_utils.h"
+#include "test_common.h"
 
 using namespace std;
 using namespace pto;
@@ -53,7 +58,8 @@ AICORE inline void runTEXTRACT(__gm__ DT *out, __gm__ ST *src)
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 
-    /**********************************TMOV && TEXTRACT**********************************/
+    /**********************************TMOV &&
+     * TEXTRACT**********************************/
     TEXTRACT(dstTile, srcTile, idxRow, idxCol);
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
@@ -262,3 +268,28 @@ TEST_F(TEXTRACTTest, case_bfloat16_t_bfloat16_t_32_32_31_31_IDX_8_16_L_0_0)
     textract_test<bfloat16_t, bfloat16_t, 32, 32, 31, 31, 8, 16, 0, 0>();
 }
 #endif
+
+TEST_F(TEXTRACTTest, FpVariantSlicesSourceTile)
+{
+    using SrcTile = Tile<TileType::Vec, float, 4, 8>;
+    using DstTile = Tile<TileType::Vec, float, 3, 8, BLayout::RowMajor, 3, 6>;
+    using FpTile = Tile<TileType::Vec, float, 1, 8>;
+
+    SrcTile src;
+    DstTile dst;
+    FpTile fp;
+    size_t addr = 0;
+    CpuTileTestUtils::AssignTileStorage(addr, src, dst, fp);
+
+    CpuTileTestUtils::FillLinear(src, 1.0f);
+    CpuTileTestUtils::FillAll(fp, 1.0f);
+
+    TEXTRACT_FP(dst, src, fp, 1, 2);
+
+    for (int r = 0; r < dst.GetValidRow(); ++r) {
+        for (int c = 0; c < dst.GetValidCol(); ++c) {
+            CpuTileTestUtils::ExpectValueEquals(CpuTileTestUtils::GetValue(dst, r, c),
+                                                CpuTileTestUtils::GetValue(src, r + 1, c + 2));
+        }
+    }
+}

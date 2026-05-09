@@ -1,16 +1,18 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_tile.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace pto;
 constexpr uint16_t BLOCK_CUBE_M_N = 16;
@@ -505,8 +507,8 @@ void LaunchTMOV(GMT *out, AT *src0, BT *src1, BiasT *src2, ScalingT *src3, void 
     }
 }
 
-// atype, btype, l0ctype, biastype, gmtype, scalingtype, M, N, K, is_atrans, is_btrans, is_bias, is_quant, relu_mode,
-// isdynamic
+// atype, btype, l0ctype, biastype, gmtype, scalingtype, M, N, K, is_atrans,
+// is_btrans, is_bias, is_quant, relu_mode, isdynamic
 template void LaunchTMOV<uint16_t, uint16_t, float, float, float, uint64_t, 64, 32, 80, 0, 1, 1, 0, 0, 0>(
     float *out, uint16_t *src0, uint16_t *src1, float *src2, uint64_t *src3, void *stream);
 template void LaunchTMOV<int8_t, int8_t, int32_t, int32_t, int32_t, uint64_t, 128, 64, 128, 0, 1, 1, 0, 0, 0>(

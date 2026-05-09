@@ -462,7 +462,6 @@ PTO 使用三种常见的断言机制：
 - **PA-0063** TSQRT: Number of rows of src 和 dst must be the same. (位置： `在clude/p到/npu/a2a3/TUnaryOp.hpp:317`; 修复： `-`)
 - **PA-0064** When GlobalData is ND f或mat, the range of validRow is [1, 8192]. (位置： `在clude/p到/npu/a2a3/TSt或e.hpp:355`; 修复： `FIX-A05`)
 
-
 ### CPU 模拟器检查（`assert`）
 
 - **CA-0001** assert (src.GetValidRow() == dst.GetValidRow() && src.GetValidRow() == dst.GetValidRow()); (位置： `在clude/p到/cpu/TMov.hpp:23`)

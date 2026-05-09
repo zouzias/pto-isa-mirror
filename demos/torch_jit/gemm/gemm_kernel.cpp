@@ -1,14 +1,17 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-// Modified from kernels/manual/a2a3/gemm_performance/gemm_performance_kernel.cpp
+// Modified from
+// kernels/manual/a2a3/gemm_performance/gemm_performance_kernel.cpp
 
 #include <cstdint>
 #include <pto/pto-inst.hpp>
@@ -45,7 +48,8 @@ AICORE inline void InitGMOffsets(__gm__ U *&currentSrc0, __gm__ S *&currentSrc1,
 {
     // Work partition (SPMD-style):
     // - Each core owns a contiguous C tile of shape [singleCoreM, singleCoreN].
-    // - It reads the corresponding A panel [singleCoreM, K] and B panel [K, singleCoreN].
+    // - It reads the corresponding A panel [singleCoreM, K] and B panel [K,
+    // singleCoreN].
     constexpr uint32_t mIter = m / singleCoreM;
     uint32_t mIterIdx = get_block_idx() % mIter; // get current launch core idx
     uint32_t nIterIdx = get_block_idx() / mIter;
@@ -71,12 +75,14 @@ AICORE inline void ProcessKIteration(uint32_t kIter, uint32_t i, uint32_t j,
     constexpr uint32_t baseM = LeftTile::Rows;
     constexpr uint32_t baseK = LeftTile::Cols;
     constexpr uint32_t baseN = RightTile::Cols;
-    // A panel staged by each TLOAD (GM->L1) when kModstepKa == 0: [baseM, baseK * stepKa]
+    // A panel staged by each TLOAD (GM->L1) when kModstepKa == 0: [baseM, baseK *
+    // stepKa]
     using NDValidShapeA = TileShape2D<U, baseM, baseK * stepKa, Layout::ND>;
     using NDsingleCoreShapeA = BaseShape2D<U, m, k, Layout::ND>;
     using GlobalDataSrcA = GlobalTensor<U, NDValidShapeA, NDsingleCoreShapeA, Layout::ND>;
 
-    // B panel staged by each TLOAD (GM->L1) when kModstepKa == 0: [baseK * stepKb, baseN]
+    // B panel staged by each TLOAD (GM->L1) when kModstepKa == 0: [baseK *
+    // stepKb, baseN]
     using NDValidShapeB = TileShape2D<U, baseK * stepKb, baseN, Layout::DN>;
     using NDsingleCoreShapeB = BaseShape2D<U, k, n, Layout::DN>;
     using GlobalDataSrcB = GlobalTensor<U, NDValidShapeB, NDsingleCoreShapeB, Layout::DN>;
@@ -84,7 +90,8 @@ AICORE inline void ProcessKIteration(uint32_t kIter, uint32_t i, uint32_t j,
     const uint32_t kModstepKa = kIter % stepKa;
 
     // TLOAD stage:
-    // - Every stepKa iterations, load a larger [baseM, baseK * stepKa] panel into L1 and then slice it with TEXTRACT.
+    // - Every stepKa iterations, load a larger [baseM, baseK * stepKa] panel into
+    // L1 and then slice it with TEXTRACT.
     // - Double buffering is driven by mte2DBFlag.
     if (kModstepKa == 0) {
         GlobalDataSrcA gmA(currentSrc0 + i * singleCoreK * baseM + kIter * baseK);
@@ -100,10 +107,12 @@ AICORE inline void ProcessKIteration(uint32_t kIter, uint32_t i, uint32_t j,
     }
 
     const uint32_t currMte2Idx = (mte2DBFlag == 0) ? 1 : 0; // mte2DBFlag reversed
-    // Wait until TMATMUL is done with the current L0A/L0B buffer before overwriting it via TEXTRACT.
+    // Wait until TMATMUL is done with the current L0A/L0B buffer before
+    // overwriting it via TEXTRACT.
     WaitFlag<PIPE_M, PIPE_MTE1>(mte1DBFlag);
 
-    // TEXTRACT stage: slice the loaded L1 panel into the baseK chunk we need this iteration.
+    // TEXTRACT stage: slice the loaded L1 panel into the baseK chunk we need this
+    // iteration.
     if (kModstepKa == 0)
         WaitFlag<PIPE_MTE2, PIPE_MTE1>(0);
     TEXTRACT(aTile[mte1DBFlag], aMatTile[currMte2Idx], 0, kModstepKa * baseK);
@@ -121,7 +130,8 @@ AICORE inline void ProcessKIteration(uint32_t kIter, uint32_t i, uint32_t j,
     SetFlag<PIPE_MTE1, PIPE_M>(mte1DBFlag);
     WaitFlag<PIPE_MTE1, PIPE_M>(mte1DBFlag);
     MatmulAcc(cTile, aTile[mte1DBFlag], bTile[mte1DBFlag], kIter);
-    // Signal that TMATMUL is done, so the next iteration may TEXTRACT into the other ping-pong slot.
+    // Signal that TMATMUL is done, so the next iteration may TEXTRACT into the
+    // other ping-pong slot.
     SetFlag<PIPE_M, PIPE_MTE1>(mte1DBFlag);
     mte1DBFlag = (mte1DBFlag == 0) ? 1 : 0;
 }
@@ -194,7 +204,8 @@ AICORE inline void RunGemmE2E(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
     RightTile bTile[BUFFER_NUM];
     ResTile cTile;
 
-    // L1 staging buffers (aMatTile/bMatTile) are double-buffered for TLOAD overlap.
+    // L1 staging buffers (aMatTile/bMatTile) are double-buffered for TLOAD
+    // overlap.
     TASSIGN(aMatTile[0], 0x0);
     TASSIGN(aMatTile[1], 0x0 + baseM * baseK * stepKa * sizeof(U));
     TASSIGN(bMatTile[0], 0x0 + baseM * baseK * stepKa * BUFFER_NUM * sizeof(U));
