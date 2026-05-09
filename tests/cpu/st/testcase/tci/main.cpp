@@ -17,8 +17,7 @@ using namespace PtoTestCommon;
 template <int descending, int kCols>
 void LaunchTCI(int32_t *out, int32_t start, void *stream);
 
-class TCI_Test : public testing::Test {
-};
+class TCI_Test : public testing::Test {};
 
 namespace {
 
