@@ -56,6 +56,13 @@ inline uint16_t FloatToBf16BitsTrunc(float value)
     return static_cast<uint16_t>(FloatToBits(value) >> 16);
 }
 
+inline uint16_t FloatToBf16BitsRound(float value)
+{
+    const uint32_t bits = FloatToBits(value);
+    const uint32_t lsb = (bits >> 16) & 1u;
+    return static_cast<uint16_t>((bits + 0x7FFFu + lsb) >> 16);
+}
+
 inline float Bf16BitsToFloat(uint16_t bits)
 {
     return BitsToFloat(static_cast<uint32_t>(bits) << 16);
@@ -64,6 +71,16 @@ inline float Bf16BitsToFloat(uint16_t bits)
 inline uint16_t AbsBf16BitsFromFloat(float value)
 {
     return static_cast<uint16_t>(FloatToBf16BitsTrunc(value) & 0x7FFFu);
+}
+
+template <typename SrcT>
+inline float ApplyE2M1ScaleForSource(SrcT value, float scaling)
+{
+    const float scaled = static_cast<float>(value) * scaling;
+    if constexpr (std::is_same_v<SrcT, bfloat16_t> && !std::is_same_v<bfloat16_t, half>) {
+        return Bf16BitsToFloat(FloatToBf16BitsRound(scaled));
+    }
+    return scaled;
 }
 
 template <typename TileDataPara>
@@ -330,12 +347,14 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
                 } else {
                     flatScaling.data()[flatGroupIdx] = groupScaling;
                 }
-                const float value = src.data()[GetTileElementOffset<TileDataSrc>(row, col)];
+                const SrcT srcValue = src.data()[GetTileElementOffset<TileDataSrc>(row, col)];
+                const float value = static_cast<float>(srcValue);
                 if constexpr (quant_type == QuantType::MXFP8) {
                     const uint8_t encoded = cpu_quant::EncodeE4M3Fn(value * groupScaling);
                     dst.data()[GetTileElementOffset<TileDataOut>(row, col)] = static_cast<int8_t>(encoded);
                 } else {
-                    const uint8_t encoded = cpu_quant::EncodeE2M1Magic(value * groupScaling);
+                    const uint8_t encoded =
+                        cpu_quant::EncodeE2M1Magic(cpu_quant::ApplyE2M1ScaleForSource<SrcT>(srcValue, groupScaling));
                     auto *dstBytes = reinterpret_cast<uint8_t *>(dst.data());
                     const int byteOffset = row * TileDataOut::Cols + col / 2;
                     if ((col & 1) == 0) {

@@ -514,6 +514,29 @@ void LaunchTQuantMXFP8_FP16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void 
     runTQuantFP16<validRows, validCols, mode><<<1, nullptr, stream>>>(dst_exp, dst, (half *)src);
 }
 
+PTO_INTERNAL void CompactFp4PackedRows(__ubuf__ uint8_t *dstPtr, __ubuf__ uint8_t *srcPtr, uint32_t rows,
+                                       uint32_t validPackedCols, uint32_t srcStride, uint32_t dstStride)
+{
+    constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(uint8_t);
+    RegTensor<uint8_t> vreg;
+    UnalignReg ureg;
+    uint16_t repeatTimes = CeilDivision(validPackedCols, elementsPerRepeat);
+    for (uint16_t row = 0; row < (uint16_t)rows; ++row) {
+        uint32_t remaining = validPackedCols;
+        __ubuf__ uint8_t *srcRow = srcPtr + row * srcStride;
+        __ubuf__ uint8_t *dstRow = dstPtr + row * dstStride;
+        for (uint16_t repeat = 0; repeat < repeatTimes; ++repeat) {
+            uint32_t cols = remaining > elementsPerRepeat ? elementsPerRepeat : remaining;
+            MaskReg preg = CreatePredicate<uint8_t>(cols);
+            uint32_t offset = repeat * elementsPerRepeat;
+            vldas(ureg, srcRow + offset);
+            vldus(vreg, ureg, srcRow + offset);
+            vsts(vreg, dstRow, offset, NORM_B8, preg);
+            remaining -= cols;
+        }
+    }
+}
+
 template <typename SrcT, int validRows, int validCols>
 __global__ AICORE void runTQuantMXFP4E2M1B16(__gm__ uint8_t __out__ *out_e8m0, __gm__ uint8_t __out__ *out_fp4,
                                              __gm__ SrcT __in__ *src)
@@ -526,6 +549,22 @@ __global__ AICORE void runTQuantMXFP4E2M1B16(__gm__ uint8_t __out__ *out_e8m0, _
     constexpr int groupedCols_e8_static = PTO_CEIL(groupedCols_valid, 32);
     constexpr int groupedCols_b16_static = PTO_CEIL(groupedCols_valid, 16);
     constexpr int groupedCols_flat_aligned = PTO_CEIL(groupedCols_flattened, 32);
+    constexpr int fp4FlatAligned = PTO_CEIL(validRows * packedCols, 32);
+    constexpr int validPackedColsAligned = PTO_CEIL(validPackedCols, 32);
+    constexpr int ubAlign = static_cast<int>(PTO_UBUF_ALIGN_BYTES);
+    constexpr int srcBytes = validRows * paddedCols * sizeof(SrcT);
+    constexpr int maxBytes = validRows * groupedCols_b16_static * sizeof(SrcT);
+    constexpr int scalingBytes = maxBytes;
+    constexpr int e8Bytes = validRows * groupedCols_e8_static * sizeof(uint8_t);
+    constexpr int fp4Bytes = validRows * packedCols * sizeof(uint8_t);
+    constexpr int fp4StoreBytes = validRows * validPackedColsAligned * sizeof(uint8_t);
+    constexpr int maxOffset = PTO_CEIL(srcBytes, ubAlign);
+    constexpr int scalingOffset = PTO_CEIL(maxOffset + maxBytes, ubAlign);
+    constexpr int e8Offset = PTO_CEIL(scalingOffset + scalingBytes, ubAlign);
+    constexpr int fp4Offset = PTO_CEIL(e8Offset + e8Bytes, ubAlign);
+    constexpr int fp4StoreOffset = PTO_CEIL(fp4Offset + fp4Bytes, ubAlign);
+    static_assert(fp4StoreOffset + fp4StoreBytes <= static_cast<int>(PTO_UBUF_SIZE_BYTES),
+                  "MXFP4 E2M1 test kernel UB layout exceeds UB capacity.");
     using SrcGlobal = GlobalTensor<SrcT, Shape<1, 1, 1, validRows, validCols>, pto::Stride<1, 1, 1, validCols, 1>>;
     using DstE8Global =
         GlobalTensor<uint8_t, Shape<1, 1, 1, 1, groupedCols_flattened>, pto::Stride<1, 1, 1, validCols, 1>>;
@@ -536,15 +575,15 @@ __global__ AICORE void runTQuantMXFP4E2M1B16(__gm__ uint8_t __out__ *out_e8m0, _
                          PadValue::Zero>;
     using DstE8Tile = Tile<TileType::Vec, uint8_t, validRows, groupedCols_e8_static, BLayout::RowMajor, -1, -1,
                            SLayout::NoneBox, 512, PadValue::Zero>;
-    using DstFP4Tile = Tile<TileType::Vec, float4_e2m1x2_t, validRows, packedCols, BLayout::RowMajor, -1, -1,
+    using DstFP4Tile = Tile<TileType::Vec, float4_e2m1x2_t, 1, fp4FlatAligned, BLayout::RowMajor, -1, -1,
                             SLayout::NoneBox, 512, PadValue::Zero>;
-    using DstBytesTile = Tile<TileType::Vec, uint8_t, validRows, packedCols, BLayout::RowMajor, -1, -1,
+    using DstBytesTile = Tile<TileType::Vec, uint8_t, validRows, validPackedColsAligned, BLayout::RowMajor, -1, -1,
                               SLayout::NoneBox, 512, PadValue::Zero>;
     using MaxTile = Tile<TileType::Vec, SrcT, validRows, groupedCols_b16_static, BLayout::RowMajor, -1, -1>;
     using ScalingTile = Tile<TileType::Vec, SrcT, validRows, groupedCols_b16_static, BLayout::RowMajor, -1, -1>;
 
     SrcTile srcTile(validRows, validCols);
-    DstFP4Tile fp4Tile;
+    DstFP4Tile fp4Tile(1, fp4Bytes);
     DstBytesTile fp4BytesTile(validRows, validPackedCols);
     DstE8Tile e8Tile(validRows, groupedCols_valid);
     MaxTile maxPerGpTile(validRows, groupedCols_valid);
@@ -555,11 +594,11 @@ __global__ AICORE void runTQuantMXFP4E2M1B16(__gm__ uint8_t __out__ *out_e8m0, _
     DstFP4Global fp4Global(out_fp4);
 
     TASSIGN(srcTile, 0x0);
-    TASSIGN(maxPerGpTile, 0x10100);
-    TASSIGN(scalingTile, 0x10600);
-    TASSIGN(e8Tile, 0x20700);
-    TASSIGN(fp4Tile, 0x20C00);
-    TASSIGN(fp4BytesTile, 0x20C00);
+    TASSIGN(maxPerGpTile, maxOffset);
+    TASSIGN(scalingTile, scalingOffset);
+    TASSIGN(e8Tile, e8Offset);
+    TASSIGN(fp4Tile, fp4Offset);
+    TASSIGN(fp4BytesTile, fp4StoreOffset);
 
     TLOAD(srcTile, srcGlobal);
 
@@ -570,6 +609,13 @@ __global__ AICORE void runTQuantMXFP4E2M1B16(__gm__ uint8_t __out__ *out_e8m0, _
 
     TQUANT<pto::QuantType::MXFP4_E2M1, DstFP4Tile, SrcTile, DstE8Tile, MaxTile>(fp4Tile, srcTile, &e8Tile,
                                                                                 &maxPerGpTile, &scalingTile);
+    __VEC_SCOPE__
+    {
+        mem_bar(VST_VLD);
+        CompactFp4PackedRows((__ubuf__ uint8_t *)fp4BytesTile.data(), (__ubuf__ uint8_t *)fp4Tile.data(), validRows,
+                             validPackedCols, packedCols, validPackedColsAligned);
+        mem_bar(VST_VST);
+    }
 
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -579,7 +625,7 @@ __global__ AICORE void runTQuantMXFP4E2M1B16(__gm__ uint8_t __out__ *out_e8m0, _
     using E8StoreND = Tile<TileType::Vec, uint8_t, 1, groupedCols_flat_aligned, BLayout::RowMajor, -1, -1,
                            SLayout::NoneBox, 512, PadValue::Zero>;
     E8StoreND e8StoreND(1, groupedCols_flattened);
-    TASSIGN(e8StoreND, 0x20700);
+    TASSIGN(e8StoreND, e8Offset);
     TSTORE(e8Global, e8StoreND);
     TSTORE(fp4Global, fp4BytesTile);
 }
@@ -683,10 +729,30 @@ template void TQuantTest::LaunchTQuantMXFP8_FP16<4, 256, 0>(uint8_t *dst, uint16
                                                             void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_FP16<11, 640, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                              void *stream);
-template void TQuantTest::LaunchTQuantMXFP4_E2M1_FP16<2, 128>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
-                                                              void *stream);
-template void TQuantTest::LaunchTQuantMXFP4_E2M1_BF16<2, 128>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
-                                                              void *stream);
+#define TQUANT_MXFP4_E2M1_SHAPES(X) \
+    X(2, 128)                       \
+    X(1, 32)                        \
+    X(2, 16)                        \
+    X(3, 32)                        \
+    X(5, 96)                        \
+    X(4, 256)                       \
+    X(1, 198)                       \
+    X(32, 1024)
+
+#define INSTANTIATE_MXFP4_E2M1_FP16(rows, cols)                                                      \
+    template void TQuantTest::LaunchTQuantMXFP4_E2M1_FP16<rows, cols>(uint8_t *dst, uint16_t *src,   \
+                                                                      uint8_t *dst_exp, void *stream);
+
+#define INSTANTIATE_MXFP4_E2M1_BF16(rows, cols)                                                      \
+    template void TQuantTest::LaunchTQuantMXFP4_E2M1_BF16<rows, cols>(uint8_t *dst, uint16_t *src,   \
+                                                                      uint8_t *dst_exp, void *stream);
+
+TQUANT_MXFP4_E2M1_SHAPES(INSTANTIATE_MXFP4_E2M1_FP16)
+TQUANT_MXFP4_E2M1_SHAPES(INSTANTIATE_MXFP4_E2M1_BF16)
+
+#undef INSTANTIATE_MXFP4_E2M1_FP16
+#undef INSTANTIATE_MXFP4_E2M1_BF16
+#undef TQUANT_MXFP4_E2M1_SHAPES
 template void TQuantTest::LaunchTQuantMXFP8_FP16<32, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                              void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_FP16<64, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,

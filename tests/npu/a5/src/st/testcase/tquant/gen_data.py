@@ -783,6 +783,34 @@ def generate_case_name(param):
     return f"TQUANTTEST.case_{param.out_dtype_str}_{param.dtype_str}_{param.valid_rows}x{param.valid_cols}{suffix}_{param.mode}"
 
 
+MXFP4_E2M1_BASE_CASES = [
+    (2, 128, "special"),
+    (2, 128, "subnormal"),
+    (2, 128, "rounding"),
+    (2, 128, "exp_random_a"),
+    (2, 128, "exp_random_b"),
+    (2, 128, "mixed"),
+]
+
+MXFP4_E2M1_MIXED_SHAPES = [
+    (1, 32),
+    (2, 16),
+    (3, 32),
+    (5, 96),
+    (4, 256),
+    (1, 198),
+    (32, 1024),
+]
+
+
+def make_mxfp4_e2m1_cases(dtype):
+    shape_cases = MXFP4_E2M1_BASE_CASES + [(rows, cols, "mixed") for rows, cols in MXFP4_E2M1_MIXED_SHAPES]
+    return [
+        TQuantParams("mxfp4_e2m1", rows, cols, mode="nd", dtype=dtype, case_suffix=case_suffix)
+        for rows, cols, case_suffix in shape_cases
+    ]
+
+
 if __name__ == "__main__":
     # Get the absolute path of the script
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -844,18 +872,8 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 128, 128, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 4, 256, mode="nd", dtype=np.float16),  # 1024 elems -> AbsReduceMax_b16_ND_opt
         TQuantParams("mxfp8", 11, 640, mode="nd", dtype=np.float16),  # 7040 elems -> 220 scale groups
-        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="special"),
-        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="subnormal"),
-        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="rounding"),
-        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="exp_random_a"),
-        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="exp_random_b"),
-        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="mixed"),
-        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=bfloat16, case_suffix="special"),
-        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=bfloat16, case_suffix="subnormal"),
-        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=bfloat16, case_suffix="rounding"),
-        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=bfloat16, case_suffix="exp_random_a"),
-        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=bfloat16, case_suffix="exp_random_b"),
-        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=bfloat16, case_suffix="mixed"),
+        *make_mxfp4_e2m1_cases(np.float16),
+        *make_mxfp4_e2m1_cases(bfloat16),
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=np.float16),

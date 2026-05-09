@@ -275,13 +275,17 @@ void ExpectFloatEqOrNan(float actual, float expected)
     }
 }
 
-template <typename SrcT>
+template <typename SrcT, int validRows = 2, int validCols = 128>
 void RunMxFp4E2M1NdCase(MxFp4Case caseId)
 {
-    using SrcTile = Tile<TileType::Vec, SrcT, 2, 128>;
-    using DstTile = Tile<TileType::Vec, float4_e2m1x2_t, 2, 64>;
-    using ExpTile = Tile<TileType::Vec, uint8_t, 1, 32>;
-    using MaxTile = Tile<TileType::Vec, float, 1, 8>;
+    constexpr int groupCols = validCols / 32;
+    constexpr int totalGroups = validRows * groupCols;
+    constexpr int expCols = ((totalGroups + 31) / 32) * 32;
+    constexpr int maxCols = ((totalGroups + 7) / 8) * 8;
+    using SrcTile = Tile<TileType::Vec, SrcT, validRows, validCols>;
+    using DstTile = Tile<TileType::Vec, float4_e2m1x2_t, validRows, (validCols + 1) / 2>;
+    using ExpTile = Tile<TileType::Vec, uint8_t, 1, expCols>;
+    using MaxTile = Tile<TileType::Vec, float, 1, maxCols>;
     SrcTile src;
     DstTile dst;
     ExpTile exp;
@@ -308,8 +312,8 @@ void RunMxFp4E2M1NdCase(MxFp4Case caseId)
     TQUANT<QuantType::MXFP4_E2M1>(dst, src, &exp, &max, &scaling);
 
     const auto *dstBytes = reinterpret_cast<const uint8_t *>(dst.data());
-    for (int row = 0; row < 2; ++row) {
-        for (int group = 0; group < 4; ++group) {
+    for (int row = 0; row < validRows; ++row) {
+        for (int group = 0; group < groupCols; ++group) {
             uint16_t maxAbsBf16Bits = 0;
             for (int inner = 0; inner < 32; ++inner) {
                 const int col = group * 32 + inner;
@@ -319,17 +323,17 @@ void RunMxFp4E2M1NdCase(MxFp4Case caseId)
             const float expectedMax = cpu_quant::Bf16BitsToFloat(maxAbsBf16Bits);
             const uint8_t expectedExp = cpu_quant::ComputeE2M1SharedExponent(expectedMax);
             const float expectedScaling = cpu_quant::ComputeE2M1ScalingFromExponent(expectedExp);
-            const int flatGroupIdx = row * 4 + group;
+            const int flatGroupIdx = row * groupCols + group;
             EXPECT_EQ(exp.data()[flatGroupIdx], expectedExp);
             ExpectFloatEqOrNan(max.data()[flatGroupIdx], expectedMax);
             ExpectFloatEqOrNan(scaling.data()[flatGroupIdx], expectedScaling);
             for (int byte = 0; byte < 16; ++byte) {
                 const int col0 = group * 32 + byte * 2;
                 const int col1 = col0 + 1;
-                const uint8_t lo = cpu_quant::EncodeE2M1Magic(
-                    static_cast<float>(src.data()[GetTileElementOffset<SrcTile>(row, col0)]) * expectedScaling);
-                const uint8_t hi = cpu_quant::EncodeE2M1Magic(
-                    static_cast<float>(src.data()[GetTileElementOffset<SrcTile>(row, col1)]) * expectedScaling);
+                const uint8_t lo = cpu_quant::EncodeE2M1Magic(cpu_quant::ApplyE2M1ScaleForSource<SrcT>(
+                    src.data()[GetTileElementOffset<SrcTile>(row, col0)], expectedScaling));
+                const uint8_t hi = cpu_quant::EncodeE2M1Magic(cpu_quant::ApplyE2M1ScaleForSource<SrcT>(
+                    src.data()[GetTileElementOffset<SrcTile>(row, col1)], expectedScaling));
                 EXPECT_EQ(dstBytes[row * DstTile::Cols + col0 / 2], static_cast<uint8_t>(lo | (hi << 4)));
             }
         }
@@ -378,6 +382,11 @@ TEST(TQuantCpuSimTest, MxFp4E2M1Fp16NdMixed)
     RunMxFp4E2M1Fp16NdCase(MxFp4Case::Mixed);
 }
 
+TEST(TQuantCpuSimTest, MxFp4E2M1Fp16NdMixed32x1024)
+{
+    RunMxFp4E2M1NdCase<aclFloat16, 32, 1024>(MxFp4Case::Mixed);
+}
+
 #if defined(PTO_CPU_SIM_ENABLE_BF16)
 TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdSpecial)
 {
@@ -407,6 +416,11 @@ TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdExpRandomB)
 TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdMixed)
 {
     RunMxFp4E2M1Bf16NdCase(MxFp4Case::Mixed);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdMixed32x1024)
+{
+    RunMxFp4E2M1NdCase<bfloat16_t, 32, 1024>(MxFp4Case::Mixed);
 }
 #endif
 
