@@ -474,6 +474,9 @@ def make_mxfp4_e2m1_fp16_data(valid_rows, valid_cols, case_suffix):
         values = make_mxfp4_exp_random_values(total, seed=20260508)
     elif case_suffix == "exp_random_b":
         values = make_mxfp4_exp_random_values(total, seed=20260509)
+    elif case_suffix == "normal":
+        rng = np.random.default_rng(20260512)
+        values = rng.uniform(-6.0, 6.0, size=total).astype(np.float16)
     elif case_suffix == "mixed":
         values = np.zeros(total, dtype=np.float16)
         group_patterns = [
@@ -586,6 +589,9 @@ def make_mxfp4_e2m1_bf16_data(valid_rows, valid_cols, case_suffix):
         values = make_mxfp4_exp_random_values_bf16(total, seed=20260508)
     elif case_suffix == "exp_random_b":
         values = make_mxfp4_exp_random_values_bf16(total, seed=20260509)
+    elif case_suffix == "normal":
+        rng = np.random.default_rng(20260512)
+        values = rng.uniform(-6.0, 6.0, size=total).astype(bfloat16)
     elif case_suffix == "mixed":
         values = np.zeros(total, dtype=bfloat16)
         group_patterns = [
@@ -851,6 +857,7 @@ if __name__ == "__main__":
         TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="exp_random_b"),
         TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="mixed"),
         TQuantParams("mxfp4_e2m1", 32, 1024, mode="nd", dtype=np.float16, case_suffix="mixed"),
+        TQuantParams("mxfp4_e2m1", 32, 1024, mode="nd", dtype=np.float16, case_suffix="normal"),
         TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=bfloat16, case_suffix="special"),
         TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=bfloat16, case_suffix="subnormal"),
         TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=bfloat16, case_suffix="rounding"),
@@ -858,6 +865,7 @@ if __name__ == "__main__":
         TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=bfloat16, case_suffix="exp_random_b"),
         TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=bfloat16, case_suffix="mixed"),
         TQuantParams("mxfp4_e2m1", 32, 1024, mode="nd", dtype=bfloat16, case_suffix="mixed"),
+        TQuantParams("mxfp4_e2m1", 32, 1024, mode="nd", dtype=bfloat16, case_suffix="normal"),
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=np.float16),

@@ -806,6 +806,20 @@ PTO_INTERNAL void PackE2M1SignedCodeBytes(vector_u8 &packedBytes, vector_s32 eve
     vselr(packedBytes, (vector_u8 &)vu32_even, packIndex);
 }
 
+PTO_INTERNAL void SaturateBf16NaNToPosInf(RegTensor<bfloat16_t> &value, MaskReg &preg_b16)
+{
+    constexpr uint16_t kBf16AbsMask = 0x7FFF;
+    constexpr uint16_t kBf16Inf = 0x7F80;
+    RegTensor<uint16_t> v_abs, v_abs_mask, v_inf;
+    vector_bool preg_nan;
+
+    vbr(v_abs_mask, kBf16AbsMask);
+    vbr(v_inf, kBf16Inf);
+    vand(v_abs, (vector_u16 &)value, v_abs_mask, preg_b16, MODE_ZEROING);
+    vcmps_gt(preg_nan, v_abs, kBf16Inf, preg_b16);
+    vsel((vector_u16 &)value, v_inf, (vector_u16 &)value, preg_nan);
+}
+
 PTO_INTERNAL void CalcQuantizedFP4E2M1Values_Half_Window(__ubuf__ half *srcPtr, __ubuf__ half *scalingPtr,
                                                          __ubuf__ uint8_t *dstPtr, uint16_t window,
                                                          vector_u8 &packIndex)
@@ -935,6 +949,8 @@ PTO_INTERNAL void CalcQuantizedFP4E2M1Values_Bf16(__ubuf__ bfloat16_t *srcPtr, _
         vlds((vector_u16 &)v_scale, (__ubuf__ uint16_t *)scalingPtr, window * kGroupsPerWindow, E2B_B16);
         vmul(v_input_0, v_input_0, v_scale, preg_b16_window, MODE_ZEROING);
         vmul(v_input_1, v_input_1, v_scale, preg_b16_window, MODE_ZEROING);
+        SaturateBf16NaNToPosInf(v_input_0, preg_b16_window);
+        SaturateBf16NaNToPosInf(v_input_1, preg_b16_window);
         vintlv(v_intlv_0, v_intlv_1, v_input_0, v_input_1);
         vcvt(v_output_0, v_intlv_0, preg_b16_window, ROUND_R, PART_P0);
         vcvt(v_output_1, v_intlv_1, preg_b16_window, ROUND_R, PART_P0);
@@ -961,6 +977,7 @@ PTO_INTERNAL void CalcQuantizedFP4E2M1Values_Bf16(__ubuf__ bfloat16_t *srcPtr, _
         vlds(v_input, srcTailPtr, group * kGroupSize, NORM);
         vlds(v_scale, scalingTailPtr, group, BRC_B16);
         vmul(v_scaled, v_input, v_scale, preg_b16_group, MODE_ZEROING);
+        SaturateBf16NaNToPosInf(v_scaled, preg_b16_group);
         vcvt(v_output_p0, v_scaled, preg_b16_group, ROUND_R, PART_P0);
         vselr((RegTensor<uint8_t> &)v_output, (RegTensor<uint8_t> &)v_output_p0, (RegTensor<uint8_t> &)v_idx);
         mem_bar(VST_VST);

@@ -687,6 +687,10 @@ TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_32x1024_mixed_nd)
 {
     test_tquant_mxfp4_e2m1_fp16<32, 1024>();
 }
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_32x1024_normal_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<32, 1024>();
+}
 
 // MXFP4 E2M1 BF16 ND
 TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_2x128_special_nd)
@@ -714,6 +718,10 @@ TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_2x128_mixed_nd)
     test_tquant_mxfp4_e2m1_bf16<2, 128>();
 }
 TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_32x1024_mixed_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<32, 1024>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_32x1024_normal_nd)
 {
     test_tquant_mxfp4_e2m1_bf16<32, 1024>();
 }
