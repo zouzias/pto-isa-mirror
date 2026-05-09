@@ -114,28 +114,31 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     TPipe pipe;
     TQue<QuePosition::VECOUT, 1> outQue;
     pipe.InitBuffer(outQue, 1, 32);
-    LocalTensor<uint16_t> ubData = outQue.AllocTensor<uint16_t>();
+    LocalTensor<uint64_t> ubData = outQue.AllocTensor<uint64_t>();
 
-    uint16_t maskVal = static_cast<uint16_t>(mask & 0xFFFF);
+    // 8B slot layout: mask (16-bit) at byte offset 6-7 = bits 48-63
+    // For mask=0x0001: slot value = 0x0001000000000000
+    const uint64_t slotValue = static_cast<uint64_t>(mask & 0xFFFF) << 48;
 
-    // Pre-clear: fill UB with zeros via scalar SetValue
-    for (int i = 0; i < 16; i++) {
-        ubData.SetValue(i, static_cast<uint16_t>(0));
+    // Pre-clear: 4 × uint64_t = 32B, all zeros
+    for (int i = 0; i < 4; i++) {
+        ubData.SetValue(i, static_cast<uint64_t>(0));
     }
     pipe_barrier(PIPE_ALL);
 
-    GlobalTensor<uint16_t> gmCke;
-    gmCke.SetGlobalBuffer(reinterpret_cast<__gm__ uint16_t *>(alignedTarget), 16);
-    DataCopy(gmCke, ubData, 16);
+    GlobalTensor<uint64_t> gmCke;
+    gmCke.SetGlobalBuffer(reinterpret_cast<__gm__ uint64_t *>(alignedTarget), 4);
+    DataCopy(gmCke, ubData, 4);
     pipe_barrier(PIPE_MTE3);
 
-    // Trigger: fill UB with mask via scalar SetValue
-    for (int i = 0; i < 16; i++) {
-        ubData.SetValue(i, maskVal);
-    }
+    // Trigger: slot[0] = mask at byte 6-7, slot[1..3] = 0 (don't disturb neighbors)
+    ubData.SetValue(0, slotValue);
+    ubData.SetValue(1, static_cast<uint64_t>(0));
+    ubData.SetValue(2, static_cast<uint64_t>(0));
+    ubData.SetValue(3, static_cast<uint64_t>(0));
     pipe_barrier(PIPE_ALL);
 
-    DataCopy(gmCke, ubData, 16);
+    DataCopy(gmCke, ubData, 4);
     pipe_barrier(PIPE_MTE3);
 
     outQue.FreeTensor(ubData);
