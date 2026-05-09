@@ -116,9 +116,10 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     pipe.InitBuffer(outQue, 1, 32);
     LocalTensor<uint64_t> ubData = outQue.AllocTensor<uint64_t>();
 
-    // 8B slot layout: mask (16-bit) at byte offset 6-7 = bits 48-63
-    // For mask=0x0001: slot value = 0x0001000000000000
-    const uint64_t slotValue = static_cast<uint64_t>(mask & 0xFFFF) << 48;
+    // 8B slot layout: try mask (16-bit) at byte offset 0-1 = bits 0-15
+    // For mask=0x0001: slot value = 0x0000000000000001
+    // (If this doesn't work, try byte_off=6 via << 48)
+    const uint64_t slotValue = static_cast<uint64_t>(mask & 0xFFFF);
 
     // Pre-clear: 4 × uint64_t = 32B, all zeros
     for (int i = 0; i < 4; i++) {
