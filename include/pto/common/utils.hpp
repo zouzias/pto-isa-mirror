@@ -40,6 +40,10 @@ PTO_INTERNAL void SetContinuousMask(unsigned n)
 template <int index>
 PTO_INTERNAL void movemask(uint64_t mask)
 {
+#if defined(__COSTMODEL)
+    static_cast<void>(mask);
+    PTO_STATIC_ASSERT((index <= 1), "movemask: error mask index.");
+#else
     if constexpr (index == 0) {
         asm volatile("MOVEMASK 	MASK[0],  %0\n" ::"l"(mask));
     } else if constexpr (index == 1) {
@@ -47,6 +51,7 @@ PTO_INTERNAL void movemask(uint64_t mask)
     } else {
         PTO_STATIC_ASSERT((index <= 1), "movemask: error mask index.");
     }
+#endif
 }
 
 PTO_INTERNAL void SetVectorCount(uint64_t n)
@@ -80,6 +85,75 @@ PTO_INTERNAL uint32_t CeilAlignment(uint32_t num1, uint32_t num2)
         return 0;
     }
     return (num1 + num2 - 1) / num2 * num2;
+}
+
+template <typename TileData>
+struct TLoadUbCopyParams {
+    uint16_t nBurst;
+    uint32_t lenBurst;
+    uint32_t gmGap;
+    uint32_t dstGap;
+    uint32_t dstPad;
+};
+
+template <typename TileData>
+struct TLoadL1CopyParams {
+    uint16_t nBurst;
+    uint16_t lenBurst;
+    uint16_t gmGap;
+    uint16_t dstGap;
+};
+
+template <typename TileData>
+PTO_INTERNAL TLoadUbCopyParams<TileData> BuildTLoadUbNdParams(int gShape3, int gShape4, int gStride3, int validCol)
+{
+    constexpr uint32_t blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
+    const uint32_t dstGapElement = TileData::Cols - validCol;
+    TLoadUbCopyParams<TileData> params{};
+    params.nBurst = static_cast<uint16_t>(gShape3);
+    params.lenBurst = static_cast<uint32_t>(validCol * sizeof(typename TileData::DType));
+    params.gmGap = static_cast<uint32_t>((gStride3 - gShape4) * sizeof(typename TileData::DType));
+    params.dstGap = (dstGapElement * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE;
+    params.dstPad = TileData::PadVal != PadValue::Null ? (dstGapElement % blockSizeElem) : 0;
+    return params;
+}
+
+template <typename TileData>
+PTO_INTERNAL TLoadUbCopyParams<TileData> BuildTLoadUbDnParams(int gShape3, int gShape4, int gStride4, int validRow)
+{
+    constexpr uint32_t blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
+    const uint32_t dstGapElement = TileData::Rows - gShape3;
+    TLoadUbCopyParams<TileData> params{};
+    params.nBurst = static_cast<uint16_t>(gShape4);
+    params.lenBurst = static_cast<uint32_t>(validRow * sizeof(typename TileData::DType));
+    params.gmGap = static_cast<uint32_t>((gStride4 - gShape3) * sizeof(typename TileData::DType));
+    params.dstGap = (dstGapElement * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE;
+    params.dstPad = TileData::PadVal != PadValue::Null ? (dstGapElement % blockSizeElem) : 0;
+    return params;
+}
+
+template <typename TileData>
+PTO_INTERNAL TLoadL1CopyParams<TileData> BuildTLoadL1NdParams(int gShape3, int gShape4, int gStride3, int validCol)
+{
+    TLoadL1CopyParams<TileData> params{};
+    params.nBurst = static_cast<uint16_t>(gShape3);
+    params.lenBurst = static_cast<uint16_t>((validCol * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE);
+    params.gmGap = static_cast<uint16_t>(((gStride3 - gShape4) * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE);
+    params.dstGap =
+        static_cast<uint16_t>(((TileData::Cols - validCol) * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE);
+    return params;
+}
+
+template <typename TileData>
+PTO_INTERNAL TLoadL1CopyParams<TileData> BuildTLoadL1DnParams(int gShape3, int gShape4, int gStride4, int validRow)
+{
+    TLoadL1CopyParams<TileData> params{};
+    params.nBurst = static_cast<uint16_t>(gShape4);
+    params.lenBurst = static_cast<uint16_t>((validRow * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE);
+    params.gmGap = static_cast<uint16_t>(((gStride4 - gShape3) * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE);
+    params.dstGap =
+        static_cast<uint16_t>(((TileData::Rows - gShape3) * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE);
+    return params;
 }
 
 template <typename T>

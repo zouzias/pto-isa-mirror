@@ -13,6 +13,37 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
+namespace {
+
+template <typename TileData>
+AICORE inline void initTSqrtTiles(TileData &srcTile, TileData &dstTile)
+{
+    constexpr uint32_t kSrcTileAddr = 0x0;
+    constexpr uint32_t kDstTileAddr = 0x20000;
+    TASSIGN(srcTile, kSrcTileAddr);
+    TASSIGN(dstTile, kDstTileAddr);
+}
+
+template <typename TileData>
+AICORE inline void initTSqrtInplaceTiles(TileData &srcTile, TileData &dstTile)
+{
+    constexpr uint32_t kTileAddr = 0x0;
+    TASSIGN(srcTile, kTileAddr);
+    TASSIGN(dstTile, kTileAddr);
+}
+
+template <typename TileData>
+AICORE inline void runTSqrtCore(TileData &dstTile, TileData &srcTile)
+{
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    TSQRT(dstTile, srcTile);
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+}
+
+} // namespace
+
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool isInPlace = false>
 __global__ AICORE void runTSqrt(__gm__ T __out__ *out, __gm__ T __in__ *src)
 {
@@ -22,22 +53,17 @@ __global__ AICORE void runTSqrt(__gm__ T __out__ *out, __gm__ T __in__ *src)
     using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     TileData srcTile(kTRows_, kTCols_);
     TileData dstTile(kTRows_, kTCols_);
-    TASSIGN(srcTile, 0x0);
     if constexpr (isInPlace) {
-        TASSIGN(dstTile, 0x0);
+        initTSqrtInplaceTiles(srcTile, dstTile);
     } else {
-        TASSIGN(dstTile, 0x20000);
+        initTSqrtTiles(srcTile, dstTile);
     }
 
     GlobalData srcGlobal(src);
     GlobalData dstGlobal(out);
 
     TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TSQRT(dstTile, srcTile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    runTSqrtCore(dstTile, srcTile);
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
 }

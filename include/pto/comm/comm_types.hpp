@@ -36,7 +36,7 @@ template <typename GlobalData>
 struct ParallelGroup {
     using value_type = GlobalData; // Type alias for type traits
 
-    GlobalData *tensors{nullptr}; // Points to external array of GlobalData objects
+    GlobalData *tensors{nullptr};  // Points to external array of GlobalData objects
     int nranks{0};
     int rootIdx{-1};
 

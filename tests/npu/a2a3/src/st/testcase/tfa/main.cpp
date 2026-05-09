@@ -73,7 +73,7 @@ void run_tfa()
     aclFloat16 *xexpHost;
     float *tmpFloatExpHost;
     aclFloat16 *vHost;
-    T *outDevice; // qk_out
+    T *outDevice;           // qk_out
     aclFloat16 *xexpDevice;
     T *midDevice = nullptr; // not used by this test but kept for symmetry
     aclFloat16 *qDevice, *kDevice;
@@ -90,7 +90,7 @@ void run_tfa()
     aclrtMalloc((void **)&kDevice, kSize, ACL_MEM_MALLOC_HUGE_FIRST);
     size_t halfSize = S0 * S1 * sizeof(aclFloat16);
     size_t floatSize = S0 * S1 * sizeof(float);
-    aclrtMalloc((void **)&xexpDevice, halfSize, ACL_MEM_MALLOC_HUGE_FIRST); // p_out (half)
+    aclrtMalloc((void **)&xexpDevice, halfSize, ACL_MEM_MALLOC_HUGE_FIRST);      // p_out (half)
     void *pOutFp32Device = nullptr;
     aclrtMalloc((void **)&pOutFp32Device, floatSize, ACL_MEM_MALLOC_HUGE_FIRST); // p_out_fp32 (float)
     // allocate v and out2 buffers
