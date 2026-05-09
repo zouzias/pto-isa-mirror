@@ -99,12 +99,13 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     if (m64 != nullptr) {
         // [0] entry sentinel — first thing kernel does, proves we ran
         m64[0] = 0xC0DECAFEDEADBEEFULL;
-        // [1] pre-store readback at aligned base (raw observation)
-        m64[1] = *reinterpret_cast<__gm__ uint64_t *>(alignedTarget);
+        // [1] pre-store readback at target16 address (16-bit → zero-extended)
+        m64[1] = static_cast<uint64_t>(
+            *reinterpret_cast<__gm__ uint16_t *>(alignedTarget + byte_off));
         // [2] mask echo — confirms host→kernel ABI marshalling correct
         m64[2] = static_cast<uint64_t>(mask) & 0xFFFFULL;
-        // [4] actual store address (aligned base of the 8B slot)
-        m64[4] = alignedTarget;
+        // [4] actual store address (alignedTarget + byte_off)
+        m64[4] = alignedTarget + byte_off;
         // [5] which block ran — should be 0
         m64[5] = static_cast<uint64_t>(get_block_idx());
         pipe_barrier(PIPE_ALL);
@@ -118,35 +119,33 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     //                 (unsigned long)target, (unsigned int)(mask & 0xffff));
 
     // ── Store mask into device CCU CKE MMIO ──────────────────────────────
-    // Experiments A-D all "landed" (readback confirms value at correct byte
-    // position) but NONE triggered CCU microcode WaitEvent consumption.
+    // Design spec: CKE = 1024 × 16-bit registers. Hardware io-map decoder
+    // may only respond to native 16-bit store transactions (not 64-bit stores
+    // with mask embedded at a byte offset). Previous 64-bit stores all
+    // "landed" (readback confirmed) but NONE triggered CCU WaitEvent.
     //
-    // New hypothesis: hardware set-detection requires a 0→non-zero
-    // TRANSITION (edge-triggered, not level). host_trigger_cke_impl.hpp:303
-    // documents: "SET_CKE requires a prior write of zeros". HostTriggerCke
-    // explicitly pre-clears; our AIV path never did.
+    // Strategy (2026-05-09): native 16-bit store.
+    //   - Pre-clear via 16-bit zero → barrier → 16-bit mask store
+    //   - Target: alignedTarget + byte_off (must be 2-byte aligned for u16)
+    //   - This generates a 2-byte bus transaction instead of an 8-byte one
     //
-    // Strategy: pre-clear (write 0 to full 8B slot) → barrier → write mask
-    // using 64-bit aligned store with mask at bytes 6-7 (scheme B layout,
-    // which is the only readback-verified correct value placement).
-    //
-    // Pre-clear: 64-bit zero to aligned base
-    *reinterpret_cast<__gm__ uint64_t *>(alignedTarget) = 0ULL;
+    // Pre-clear: 16-bit zero
+    __gm__ uint16_t *target16 = reinterpret_cast<__gm__ uint16_t *>(alignedTarget + byte_off);
+    *target16 = static_cast<uint16_t>(0);
     pipe_barrier(PIPE_ALL);
-    // Trigger store: 64-bit with mask shifted to bytes 6-7
-    const uint64_t storeValue = static_cast<uint64_t>(mask & 0xFFFF) << (byte_off * 8);
-    *reinterpret_cast<__gm__ uint64_t *>(alignedTarget) = storeValue;
+    // Trigger store: native 16-bit
+    *target16 = static_cast<uint16_t>(mask & 0xFFFF);
 
     if (m64 != nullptr) {
-        // [6] post-store, PRE-barrier readback — does barrier matter at all?
-        m64[6] = *reinterpret_cast<__gm__ uint64_t *>(alignedTarget);
+        // [6] post-store, PRE-barrier readback (16-bit → zero-extended to u64)
+        m64[6] = static_cast<uint64_t>(*target16);
     }
 
     pipe_barrier(PIPE_ALL);
 
     if (m64 != nullptr) {
-        // [3] post-store, POST-barrier readback — authoritative observation
-        m64[3] = *reinterpret_cast<__gm__ uint64_t *>(alignedTarget);
+        // [3] post-store, POST-barrier readback (16-bit → zero-extended to u64)
+        m64[3] = static_cast<uint64_t>(*target16);
         // [7] tail sentinel — proves kernel ran ALL the way through
         m64[7] = 0xFEEDFACECAFEBABEULL;
         pipe_barrier(PIPE_ALL);
