@@ -106,37 +106,39 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     // through a different bus path that doesn't trigger the CKE io-map.
     //
     // Strategy:
-    //   1. Allocate 32B UB buffer (minimum 1 DataBlock for MTE3)
-    //   2. Fill UB with mask pattern (16 × uint16_t = 32B)
+    //   1. Allocate 32B UB buffer via TQue (minimum 1 DataBlock for MTE3)
+    //   2. Fill UB with mask pattern (16 × uint16_t = 32B) via SetValue
     //   3. DataCopy(gmCke, ubBuf, 16) → MTE3 store to CKE VA
     //   4. pipe_barrier(PIPE_MTE3)
-    //
-    // 32B covers 16 uint16_t elements = bytes [0..31] starting at target.
-    // For a single CKE (16-bit), the hardware should pick up the relevant
-    // 2 bytes from the MTE3 transaction.
 
     TPipe pipe;
-    TBuf<QuePosition::VECCALC> calcBuf;
-    pipe.InitBuffer(calcBuf, 1, 32);
-    LocalTensor<uint16_t> ubData = calcBuf.Get<uint16_t>();
+    TQue<QuePosition::VECOUT, 1> outQue;
+    pipe.InitBuffer(outQue, 1, 32);
+    LocalTensor<uint16_t> ubData = outQue.AllocTensor<uint16_t>();
 
     uint16_t maskVal = static_cast<uint16_t>(mask & 0xFFFF);
 
-    // Pre-clear: fill UB with zeros, MTE store to CKE VA
-    Duplicate(ubData, static_cast<uint16_t>(0), 16);
-    pipe_barrier(PIPE_V);
+    // Pre-clear: fill UB with zeros via scalar SetValue
+    for (int i = 0; i < 16; i++) {
+        ubData.SetValue(i, static_cast<uint16_t>(0));
+    }
+    pipe_barrier(PIPE_ALL);
 
     GlobalTensor<uint16_t> gmCke;
     gmCke.SetGlobalBuffer(reinterpret_cast<__gm__ uint16_t *>(alignedTarget), 16);
     DataCopy(gmCke, ubData, 16);
     pipe_barrier(PIPE_MTE3);
 
-    // Trigger: fill UB with mask, MTE store to CKE VA
-    Duplicate(ubData, maskVal, 16);
-    pipe_barrier(PIPE_V);
+    // Trigger: fill UB with mask via scalar SetValue
+    for (int i = 0; i < 16; i++) {
+        ubData.SetValue(i, maskVal);
+    }
+    pipe_barrier(PIPE_ALL);
 
     DataCopy(gmCke, ubData, 16);
     pipe_barrier(PIPE_MTE3);
+
+    outQue.FreeTensor(ubData);
 
     // Also try scalar store as fallback (in case MTE write triggers
     // but readback needs scalar path)
