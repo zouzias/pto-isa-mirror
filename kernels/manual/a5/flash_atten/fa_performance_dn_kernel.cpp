@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 
 #include "fa_performance_kernel.h"
+#include "kernels/manual/common/flash_atten/fa_qk_tile_traits.h"
 #include <pto/npu/kernels/Pto_prefetch.hpp>
 #include <pto/npu/a5/custom/TSyncCVID.hpp>
 #include <pto/npu/a5/custom/TSync_Custom.hpp>
@@ -351,6 +352,26 @@ AICORE inline int assign_running_acc_tile(AccTileT &accTile, int initial_id = -1
     return id;
 }
 
+template <int TileS1_, int CubeS0_, int CubeS1_, int QkpCvFifo_, int CvFifoConsSyncPeriod_, bool CausalMask_,
+          typename SyncType>
+AICORE inline bool HandleQkCausalMaskAndSync(int tile_id, int sub_tile_id, int blk_idx, int kTileFactor,
+                                             SyncType &qk2smSync)
+{
+    const int s0_index = blk_idx * CubeS0_;
+    const int s1_index = tile_id * TileS1_ + sub_tile_id * CubeS1_;
+    const bool should_wait_consume = should_wait_consumption<QkpCvFifo_, CvFifoConsSyncPeriod_>(tile_id);
+    if constexpr (CausalMask_) {
+        if (s1_index > s0_index) {
+            if (sub_tile_id == 0 && should_wait_consume)
+                qk2smSync.allocate();
+            if (sub_tile_id == kTileFactor - 1)
+                qk2smSync.record();
+            return true;
+        }
+    }
+    return should_wait_consume;
+}
+
 template <int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1, int QKP_CV_FIFO,
           int CV_FIFO_CONS_SYNC_PERIOD, bool INTERMEDIATE_CHECK, bool CAUSAL_MASK, int SRC_VEC_TN_BUFFERS,
           typename TileMatQData, typename TileMatKData, typename TileQKData, typename TileQKVecData,
@@ -361,27 +382,21 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm
                               int accTileEvtID, TSyncQK2SM &qk2smSync, TSyncUBBuf &ubBufSync, int blk_idx)
 {
     if constexpr (DAV_CUBE) {
-        constexpr uint32_t Cube_S0 = CUBE_S0;
-        constexpr uint32_t Cube_S1 = CUBE_S1;
-        constexpr uint32_t Tile_S1 = TILE_S1;
-        constexpr uint32_t kTileFactor = Tile_S1 / Cube_S1;
-        constexpr uint32_t Cube_HEAD = HEAD_SIZE;
-        static_assert(QKP_CV_FIFO >= 1, "QKP_CV_FIFO must be >= 1");
-        static_assert(Tile_S1 % Cube_S1 == 0, "TILE_S1 must be divisible by CUBE_S1");
+        using QkTraits = QkTileTraits<CUBE_S0, CUBE_S1, TILE_S1, QKP_CV_FIFO, CV_FIFO_CONS_SYNC_PERIOD, HEAD_SIZE>;
+        constexpr uint32_t Cube_S0 = QkTraits::CubeS0;
+        constexpr uint32_t Cube_S1 = QkTraits::CubeS1;
+        constexpr uint32_t Tile_S1 = QkTraits::TileS1;
+        constexpr uint32_t kTileFactor = QkTraits::kTileFactor;
+        constexpr uint32_t Cube_HEAD = QkTraits::CubeHead;
 
-        const int s0_index = blk_idx * CUBE_S0;
-        const int s1_index = tile_id * static_cast<int>(Tile_S1) + sub_tile_id * static_cast<int>(Cube_S1);
-        const int sync_iter = tile_id;
-        const bool should_wait_consume = should_wait_consumption<QKP_CV_FIFO, CV_FIFO_CONS_SYNC_PERIOD>(sync_iter);
-        if constexpr (CAUSAL_MASK) {
-            if (s1_index > s0_index) {
-                if (sub_tile_id == 0 && should_wait_consume)
-                    qk2smSync.allocate(); // wait for SM consume data
-                if (sub_tile_id == static_cast<int>(kTileFactor) - 1)
-                    qk2smSync.record(); // notify for QK produce data
-                return;
-            }
+        const bool skipQkTile =
+            HandleQkCausalMaskAndSync<static_cast<int>(Tile_S1), static_cast<int>(Cube_S0), static_cast<int>(Cube_S1),
+                                      QKP_CV_FIFO, CV_FIFO_CONS_SYNC_PERIOD, CAUSAL_MASK>(
+                tile_id, sub_tile_id, blk_idx, static_cast<int>(kTileFactor), qk2smSync);
+        if (skipQkTile) {
+            return;
         }
+        const int s1_index = tile_id * static_cast<int>(Tile_S1) + sub_tile_id * static_cast<int>(Cube_S1);
         using GlobalDataQ =
             GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, 1, HEAD_SIZE>, Layout::DN>;
         using GlobalDataK =
@@ -924,8 +939,8 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     // S0 (rows total), Cube_S0 (per-block rows), S1 (cols), HEAD_SIZE (inner)
     constexpr uint32_t Cube_S0 = CUBE_S0;
     constexpr uint32_t block_rows = S0 / CUBE_S0;
-    constexpr uint32_t Cube_S1 = CUBE_S1; // per-tile S1 chunk
-    constexpr uint32_t Tile_S1 = TILE_S1; // logical tile along S1
+    constexpr uint32_t Cube_S1 = CUBE_S1;               // per-tile S1 chunk
+    constexpr uint32_t Tile_S1 = TILE_S1;               // logical tile along S1
     static_assert(Tile_S1 % Cube_S1 == 0, "TILE_S1 must be divisible by CUBE_S1");
     constexpr uint32_t kTileFactor = Tile_S1 / Cube_S1; // sub-tiles per TILE_S1
     constexpr uint32_t Cube_HEAD = HEAD_SIZE;
