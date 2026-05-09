@@ -10,12 +10,31 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <type_traits>
 #include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
 #include "acl/acl.h"
 
 using namespace pto;
 
+namespace {
+
+template <typename TileData>
+AICORE inline void runTLogBody(TileData &dstTile, TileData &srcTile)
+{
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+    TLOG(dstTile, srcTile);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
+}
+
+} // namespace
+
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool isInPlace = false>
-__global__ AICORE void runTLog(__gm__ T *out, __gm__ T *src)
+__global__ AICORE void runTLog(__gm__ T __out__ *out, __gm__ T __in__ *src)
 {
     using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim5 = pto::Stride<1, 1, 1, kGCols_, 1>;
@@ -23,22 +42,18 @@ __global__ AICORE void runTLog(__gm__ T *out, __gm__ T *src)
     using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     TileData srcTile(kTRows_, kTCols_);
     TileData dstTile(kTRows_, kTCols_);
-    TASSIGN<0x0>(srcTile);
+    TASSIGN(srcTile, 0x0);
     if constexpr (isInPlace) {
-        TASSIGN<0x0>(dstTile);
+        TASSIGN(dstTile, 0x0);
     } else {
-        TASSIGN<0x20000>(dstTile);
+        TASSIGN(dstTile, 0x20000);
     }
 
     GlobalData srcGlobal(src);
     GlobalData dstGlobal(out);
 
     TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TLOG(dstTile, srcTile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    runTLogBody(dstTile, srcTile);
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
 }

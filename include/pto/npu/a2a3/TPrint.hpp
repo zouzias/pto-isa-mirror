@@ -95,7 +95,7 @@ PTO_INTERNAL void PrintHorizontalSeparator(int totalCols, int validCols)
         if constexpr (Format == PrintFormat::Width10_Precision6) {
             cce::printf("----------"); // 10 dashes to match %10 width
         } else {
-            cce::printf("--------"); // 8 dashes to match %8 width
+            cce::printf("--------");   // 8 dashes to match %8 width
         }
 
         if (j == validCols - 1 && validCols > 0 && validCols < totalCols) {
