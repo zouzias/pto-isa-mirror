@@ -593,6 +593,76 @@ Two real errors recorded as Occurrences in [compile_error_logbook.md](compile_er
   - `fp16` / `bfloat16` tokens, `uint8` / `int16` expert IDs, larger `T` / `H` / `num_experts`, non-power-of-2 `num_experts`.
   - Stack-array sizes beyond `kNumExperts = 4` (a moderately large `kNumExperts` may pressure stack/register allocation differently — Unknown).
 
+### 11.5 Top-1 MoE forward unpermute on A3 auto mode works at the tested shape
+
+- **Resolved**: 2026-05-08 · A3 vec · user-reported `bash run.sh -r npu -v Ascend910B1` on
+  [kernels/automode/a2a3/moe_top1_unpermute/](../kernels/automode/a2a3/moe_top1_unpermute/)
+  produced bit-exact `output` matching the Python golden.
+- **Scope of the resolution (narrow — do not generalize)**:
+  ```text
+  A3 auto mode
+  single AICORE
+  topK = 1
+  T = 256
+  H = 64
+  float32 data
+  int32 metadata
+  ```
+- **What this confirms (now Known at the above shape)** — beyond what §11.4 already established:
+  - **Scalar GM read from `token_to_packed[t]`** as the source-side index in a per-iteration row gather. Same shape as §11.4's `expert_id[t]` read; reconfirmed in the inverse direction.
+  - **Runtime scalar used as the source-side row offset multiplier**: `GlobalTensor srcGlobal(packed_output + size_t(packed_pos) * kH);`. §11.4 confirmed the *destination*-side use of a runtime scalar in `packed_tokens + size_t(packed_pos) * kH`; §11.5 closes the symmetric source-side case.
+  - **Runtime-offset row `TLOAD` from `packed_output`** and **row `TSTORE` to original token position** in the same loop iteration without manual sync.
+  - **Pure indexed-row-copy kernel** (no scalar GM writes, no device-local `int32_t arr[E]`, no histogram / prefix-sum / counter logic) is auto-mode-safe — confirms the §A14 pattern is a strict subset of the auto-mode capabilities already proven by §11.4.
+- **Reference entry**: [known_good_kernel_examples.md §A14](known_good_kernel_examples.md).
+- **What is NOT proven by this experiment (still Unknown — do not claim resolved)**:
+  - Multi-core (`block_idx`) dispatch.
+  - `topK > 1` weighted combine: `output[t, :] = sum_k prob[t, k] * packed_output[token_to_packed_topk[t, k], :]` is a different kernel (multiply + accumulate per slot) and is **not** validated.
+  - `fp16` / `bfloat16` data; `uint8` / `int16` metadata.
+  - Larger `T` / `H`; non-multiple-of-block `H`.
+  - Real expert FFN producing `packed_output` (this milestone fakes it as `packed_tokens + 1.0`).
+  - Backward pass.
+
+### 11.6 Per-expert segmented microtile loop with elementwise op (TADDS) works at the tested shape
+
+- **Resolved**: 2026-05-08 · A3 vec · user-reported `bash run.sh -r npu -v Ascend910B1` on
+  [kernels/automode/a2a3/moe_segmented_identity/](../kernels/automode/a2a3/moe_segmented_identity/)
+  produced `test data success` / `test success` after the in-place→separate-tile patch (see gotcha below).
+- **Scope of the resolution (narrow — do not generalize)**:
+  ```text
+  A3 auto mode
+  single AICORE
+  float32 data
+  int32 metadata
+  H        = 64
+  T        = 256 real tokens
+  kE       = 4 experts
+  kTileM   = 128
+  host-padded expert segments
+  expert_count / expert_start values delivered to the kernel are PADDED
+  T_PADDED = sum(padded expert counts)
+  two 128 x 64 float Vec tiles concurrently live (srcTile, dstTile, 64 KB UB total)
+  TADDS(dstTile, srcTile, 1.0f) with separate src/dst tiles
+  ```
+- **What this confirms (now Known at the above shape)** — beyond what §11.1 / §11.4 / §11.5 already established:
+  - **Nested expert/tile loop** with both bounds (`expert_count[e]` outer, `expert_start[e] + m0` inner) coming from scalar GM reads of `int32_t` metadata, inside the same auto-mode kernel.
+  - **Runtime row offset `row = expert_start[e] + m0`** used to construct a per-iter `GlobalTensor`. Generalizes §11.4's data-dependent offset to a **nested** loop carrier.
+  - **Static `Tile<TileType::Vec, float, 128, 64, BLayout::RowMajor, 128, 64>`** declared at function scope, two concurrently live: `srcTile` and `dstTile`. Auto allocator pins both UB addresses; 32 KB × 2 = 64 KB total resident footprint, 4× the [§11.1 add_tile_array](#111-topk-style-bisheng-direct-cmake-harness----cce-enable-pto-passes-builds-and-runs-an-auto-mode-a3-kernel) tile.
+  - **`TADDS(dstTile, srcTile, 1.0f)` with separate src/dst tiles** called from inside a nested loop with runtime-driven GM offsets — matches the [tests/npu/a2a3/src/st/testcase/tadds/tadds_kernel.cpp](../tests/npu/a2a3/src/st/testcase/tadds/tadds_kernel.cpp) shape and the public wrapper at [include/pto/common/pto_instr.hpp:1517-1524](../include/pto/common/pto_instr.hpp#L1517-L1524).
+  - **Host-padded expert segment layout** as a workable v1 tail policy — kernel never invokes `SetValidRow` / `SetValidShape` / partial-tile stores.
+- **Reference entry**: [known_good_kernel_examples.md §A15](known_good_kernel_examples.md).
+- **New open gotcha (NOT a generalization — keep narrow)**:
+  - **In-place `TADDS(tile, tile, scalar)` is NOT known-good.** The first revision of `moe_segmented_identity` used a single `segTile` for both src and dst (`TADDS(segTile, segTile, 1.0f)`) and produced a zero-filled mismatch region around flat indices ~`0x1088..0x1132` in the output. Replacing with two distinct tiles (`srcTile`, `dstTile`) fixed it.
+  - **Polarity**: avoid the in-place `TADDS` form in A3 auto-mode kernels unless a separate experiment confirms it. Use distinct src/dst tiles.
+  - **What this does NOT prove**: that every `T*` instruction with `dst == src` is broken. The repo's [TAXPY](../tests/npu/a2a3/src/st/testcase/taxpy/taxpy_kernel.cpp) deliberately does dst-side `TLOAD` and that is documented as a legitimate read-modify-write op. The observation here is specific to `TADDS` and to the segmented-loop context; do not generalize.
+  - **Tracked separately as an Unknown** for any future kernel that might want the single-tile shape.
+- **What is NOT proven by this experiment (still Unknown — do not claim resolved)**:
+  - Dynamic tail handling with `validM`; `SetValidRow` / `SetValidShape`; partial-tile stores.
+  - GEMM / cube path (`TMATMUL`, `TileLeft`, `TileRight`, `TileAcc`, `TMOV` L1→L0); a fortiori no FFN.
+  - Multi-core (`block_idx`) work split.
+  - `topK > 1`; weighted combine.
+  - `fp16` / `bfloat16` data; non-`H=64` widths; `kE > 4`.
+  - Larger `kTileM` (e.g., 256), or shapes where multiple inner-tile iterations per expert race against each other in the auto allocator (only one inner iter exposes the worst race; multi-iter case is the new thing here but still bounded to ≤ a few iters per expert in the tested distribution).
+
 ---
 
 ## Cross-references
@@ -601,5 +671,5 @@ Two real errors recorded as Occurrences in [compile_error_logbook.md](compile_er
 - [tile_type_reference.md](tile_type_reference.md) — `Tile`/`ConvTile`/`TileDType` open items (§12).
 - [a3_a5_differences.md](a3_a5_differences.md) — the §12 "Open assumptions and items to verify" list is the source for Group 2 here.
 - [external_context/pr_852_notes.md](external_context/pr_852_notes.md) — the source for Group 9 and several "post-merge" entries.
-- [known_good_kernel_examples.md §A11, §A12, §A13](known_good_kernel_examples.md) — the in-tree confirmed-built references produced by §11.1, §11.3, §11.4.
+- [known_good_kernel_examples.md §A11, §A12, §A13, §A14, §A15](known_good_kernel_examples.md) — the in-tree confirmed-built references produced by §11.1, §11.3, §11.4, §11.5, §11.6.
 - [compile_error_logbook.md §E8, §E9](compile_error_logbook.md) — the two real compile-error occurrences from §11.2.
