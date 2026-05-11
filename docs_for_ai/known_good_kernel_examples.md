@@ -216,6 +216,87 @@ harness (Known: enumerated in `ALL_TESTCASES` of
    - The kernel reads `expert_id[t]` **twice** (pass 1 histogram, pass 3 pack). Acceptable for `T = 256`; for large `T` an optimization could cache it in a UB tile. The current shape does NOT validate that optimization.
 7. **Confidence** — High for the fixed shape; behavior at other `T` / `H` / `E` / dtype / multi-core / `topK > 1` is **Unknown**.
 
+### A14. moe_top1_unpermute (auto-mode A3, reverse token movement after top-1 permute) — confirmed-built fixed-shape prototype
+
+> Companion to [§A13 moe_top1_permute](#a13-moe_top1_permute-auto-mode-a3-device-side-top-1-moe-forward-dispatch--confirmed-built-fixed-shape-prototype). Together the two kernels close the forward token-movement pair (`tokens` → packed → unpermute → `output`).
+
+1. **File** — [kernels/automode/a2a3/moe_top1_unpermute/moe_top1_unpermute_kernel.cpp](../kernels/automode/a2a3/moe_top1_unpermute/moe_top1_unpermute_kernel.cpp)
+2. **Why** — fourth in-tree confirmed-built auto-mode A3 kernel; completes the **inverse** of §A13's expert-grouped packing by restoring `packed_output` to original token order. Where §A13 reads `expert_id[t]` and computes the destination slot on-device, this kernel reads the precomputed `token_to_packed[t]` mapping and copies the matching packed row back to the token's original position. User-confirmed PASS on Ascend910B1 (`output` matches the Python golden bit-exact at the tested shape). Status: **Known** (user-confirmed, fixed shape).
+3. **Pattern** — Single AICORE (`<<<1, nullptr, stream>>>`); single static row tile `Tile<TileType::Vec, float, 1, kH, BLayout::RowMajor, 1, kH>` declared once and reused across all 256 token iterations. Single pass:
+   ```cpp
+   for (t = 0; t < T; ++t) {
+       int32_t packed_pos = token_to_packed[t];     // scalar GM read
+       size_t  src_off    = size_t(packed_pos) * H;
+       size_t  dst_off    = size_t(t)          * H;
+       TLOAD (rowTile, GlobalTensor<...>(packed_output + src_off));
+       TSTORE(GlobalTensor<...>(output    + dst_off), rowTile);
+   }
+   ```
+   No on-device histogram / prefix-sum logic (the mapping was already produced by §A13); no scalar GM writes; no device-local `int32_t arr[E]`.
+4. **Auto-mode compatibility** — Yes (Known, user-confirmed). Reconfirms patterns already resolved by [§A13 / §11.4](#a13-moe_top1_permute-auto-mode-a3-device-side-top-1-moe-forward-dispatch--confirmed-built-fixed-shape-prototype):
+   - Scalar GM read of `int32_t` (`token_to_packed[t]`) — same shape as `expert_id[t]` in §A13.
+   - Runtime scalar usable as the source-side row offset multiplier in `GlobalTensor srcGlobal(packed_output + size_t(packed_pos) * kH);` — symmetric to §A13's destination-side use of `packed_pos` for `packed_tokens`.
+   - Single static row tile reused across `T` runtime-offset iterations.
+   - `TLOAD` from runtime-offset GM, `TSTORE` to runtime-offset GM in the same iter, no manual sync.
+5. **Copy** — the entire project layout for any new auto-mode A3 prototype that needs **gather-from-runtime-index then write-sequential** (or, by argument swap, **read-sequential then scatter-to-runtime-index**):
+   - the [moe_top1_unpermute](../kernels/automode/a2a3/moe_top1_unpermute/) directory shape;
+   - the kernel skeleton (loop, scalar GM read, two `size_t` offsets, one row tile, `TLOAD` + `TSTORE`);
+   - the Python reference that **replays the forward permute internally** so the unpermute can be exercised standalone — the recipe (`np.argsort(expert_id, kind="stable")` + `token_to_packed[order[p]] = p`) matches the §A13 kernel's pass-3 packing rule byte-for-byte.
+   - the optional [scripts/compare_outputs.py](../kernels/automode/a2a3/moe_top1_unpermute/scripts/compare_outputs.py) standalone diff utility for post-mortem when ResultCmp reports failure.
+6. **Do not copy** —
+   - The fixed shape (`T = 256`, `H = 64`, `float32` data, `int32` metadata) is what was tested; other `T` / `H` / dtypes are Unknown.
+   - **Assumes the input `token_to_packed` is a valid permutation of `[0, T)`** — the contract §A13 provides. Garbage indices (out-of-range, duplicates) are undefined.
+   - Single AICORE only; no `block_idx` work split.
+   - The fake `packed_output = packed_tokens + 1.0` is a **test fixture**, not part of the production unpermute. Replace it with the actual per-expert FFN output in the real MoE pipeline.
+   - Does NOT validate `topK > 1` (which requires weighted combine: `output[t, :] = sum_k prob[t, k] * packed_output[token_to_packed_topk[t, k], :]` — a different kernel shape with a multiplication and an accumulation per slot).
+7. **Confidence** — High for the fixed shape; behavior at other `T` / `H` / dtype / multi-core / `topK > 1` (weighted combine) is **Unknown**.
+
+### A15. moe_segmented_identity (auto-mode A3, per-expert segmented microtile loop with elementwise op) — confirmed-built fixed-shape prototype
+
+> First in-tree A3 auto-mode kernel that walks **dynamic expert segments** (`expert_start[e]`, `expert_count[e]`) with a fixed `TILE_M = 128` microtile inside each segment. Mirrors the future expert-FFN outer schedule but uses a simple elementwise op (`TADDS`, `dst = src + 1.0f`) in place of GEMM — no cube path yet. Companion to [§A13 moe_top1_permute](#a13-moe_top1_permute-auto-mode-a3-device-side-top-1-moe-forward-dispatch--confirmed-built-fixed-shape-prototype) and [§A14 moe_top1_unpermute](#a14-moe_top1_unpermute-auto-mode-a3-reverse-token-movement-after-top-1-permute--confirmed-built-fixed-shape-prototype).
+
+1. **File** — [kernels/automode/a2a3/moe_segmented_identity/moe_segmented_identity_kernel.cpp](../kernels/automode/a2a3/moe_segmented_identity/moe_segmented_identity_kernel.cpp)
+2. **Why** — fifth in-tree confirmed-built auto-mode A3 kernel. First one that nests **two** runtime loops where both bounds come from scalar GM metadata (outer over experts, inner over microtiles within an expert's padded segment); first that holds **two concurrently-live** 32 KB Vec tiles in UB; first that calls `TADDS` from inside a nested loop with runtime-driven GM offsets. User-confirmed PASS on Ascend910B1 (after a one-revision fix described in the "gotcha" note below). Status: **Known** (user-confirmed, fixed shape).
+3. **Pattern** — Single AICORE (`<<<1, nullptr, stream>>>`); two static segment tiles declared once and reused across all inner iterations:
+   ```cpp
+   using SegTile = Tile<TileType::Vec, float, 128, 64,
+                         BLayout::RowMajor, 128, 64>;
+   SegTile srcTile;
+   SegTile dstTile;
+   for (e = 0; e < kNumExperts; ++e) {
+       int32_t start = expert_start[e];    // GM scalar read (PADDED)
+       int32_t count = expert_count[e];    // GM scalar read (PADDED, multiple of TILE_M)
+       for (m0 = 0; m0 < count; m0 += kTileM) {
+           size_t off = (size_t(start) + size_t(m0)) * kH;
+           SegGlobal srcGlobal(packed_tokens + off);
+           SegGlobal dstGlobal(packed_output + off);
+           TLOAD (srcTile, srcGlobal);
+           TADDS (dstTile, srcTile, 1.0f);
+           TSTORE(dstGlobal, dstTile);
+       }
+   }
+   ```
+   v1 tail policy: host pads every expert segment length up to a multiple of `TILE_M`; padded rows initialised to `0.0`; golden adds `1.0` to all rows (real or padded). Kernel never needs `SetValidRow` / partial-tile stores.
+4. **Auto-mode compatibility** — Yes (Known, user-confirmed). Confirms the following Inferred / Assumption items at the tested shape:
+   - **Nested loop with both bounds from GM scalar metadata** — outer 4 experts × inner up to `padded_count / kTileM` microtiles; `expert_start[e]` and `expert_count[e]` are re-read each outer iter.
+   - **Two `128 × 64` float Vec tiles concurrently live** (64 KB total UB allocation, 4× the [§A11 add_tile_array](#a11-add_tile_array--first-confirmed-built-auto-mode-kernel-with-an-in-kernel-serial-loop-a3) tile budget). Auto allocator pins both addresses; no manual `TASSIGN`.
+   - **`TADDS(dstTile, srcTile, 1.0f)` with distinct src/dst tiles** from inside a nested loop with runtime-driven `GlobalTensor` offsets. Matches the shape in [tests/npu/a2a3/src/st/testcase/tadds/tadds_kernel.cpp](../tests/npu/a2a3/src/st/testcase/tadds/tadds_kernel.cpp) (which is in `ALL_TESTCASES`).
+   - **Host-padded expert segment layout** as a workable v1 tail policy — kernel sees only padded `expert_count` / `expert_start`; padded rows are processed identically to real rows; `SetValidRow` / `SetValidShape` / partial stores remain unused (and still Unknown for auto mode — see [tile_type_reference.md §6 / §11 item 12](tile_type_reference.md)).
+5. **Copy** — the entire project layout for any auto-mode A3 prototype that needs **per-expert segmented compute on host-padded segments**:
+   - the [moe_segmented_identity](../kernels/automode/a2a3/moe_segmented_identity/) directory shape;
+   - the nested loop skeleton above (it transfers cleanly to a GEMM body once the elementwise call is swapped out);
+   - the Python reference shape (`np.bincount` for real counts, `ceil(count / TILE_M) * TILE_M` for padded counts, stable argsort for the packing order, zero-pad the tail of each expert's slot in `packed_tokens`);
+   - the v1 host-padded golden rule (`golden = packed_tokens + 1.0` for ALL rows including padded) — extends naturally to GEMM where padded zero-input rows produce zero output;
+   - the `compare_outputs.py` first-mismatch report that maps flat index → `{row, col, expert, padded_start, padded_count, real_count, offset_in_segment, tile_m0, tile_idx, is_padded_row}` — useful debugging surface for any segmented-loop bug.
+6. **Do not copy** —
+   - The fixed shape (`T = 256`, `H = 64`, `kE = 4`, `kTileM = 128`, `float32`) is what was tested.
+   - **In-place `TADDS(t, t, 1.0f)` failed and is NOT known-good.** The first revision of this kernel used a single `segTile` for both src and dst (`TADDS(segTile, segTile, 1.0f)`). It produced a zero-filled mismatch region around flat indices ~`0x1088..0x1132`. The passing revision uses distinct `srcTile` / `dstTile`. **Do not copy the in-place form as a known-good auto-mode pattern** — its safety is Unknown / suspicious until separately tested. This applies specifically to the observed `TADDS` case; do NOT generalize to every PTO instruction without evidence. The kernel sources keep a history comment recording the regression.
+   - Single AICORE only; no `block_idx` work split.
+   - `SetValidRow` / `SetValidShape` are NOT validated by this milestone — host padding sidesteps them.
+   - No cube path (no `TMATMUL` / `TileLeft` / `TileRight` / `TileAcc`); no second tile or fused op; no activation; no real FFN. Replaces the test-fixture `+1.0` with the real per-expert compute in `moe_segmented_gemm_one_layer` / `moe_segmented_ffn`.
+   - Larger `kNumExperts` may pressure register / stack allocation for the local `count[]`, `start[]`, `counter[]` arrays in the upstream permute kernel and the larger inner-loop bound here — Unknown.
+7. **Confidence** — High for the fixed shape; behavior at other `T_PADDED` / `H` / `kE` / `kTileM` / dtype / multi-core / dynamic-tail / GEMM is **Unknown**.
+
 ---
 
 ## Group B — Pattern references (use semantics, not source as-is)
