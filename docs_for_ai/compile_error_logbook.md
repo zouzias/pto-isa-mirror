@@ -828,6 +828,86 @@ occurrence has somewhere to land.
     on first build attempt. Resolved by renaming function `Topk` →
     `TopkKernel` and integer constants `Cols`/`Topk` → `kCols`/`kTopK`.
 
+### E13. `use of undeclared identifier 'half'` in host `main.cpp`
+
+- **Symptom** — Host driver fails to compile with:
+  ```text
+  main.cpp: error: use of undeclared identifier 'half'
+      launchMoeSegmentedGemmOneLayer<float, half, half>(
+                                            ^
+  ```
+  The host TU is compiled with plain `-xc++` (the
+  `${CMAKE_CPP_COMPILE_OPTIONS}` set in
+  [kernels/automode/a2a3/moe_segmented_gemm_one_layer/CMakeLists.txt](../kernels/automode/a2a3/moe_segmented_gemm_one_layer/CMakeLists.txt)),
+  not `-xcce`, and does not include `<pto/pto-inst.hpp>`. `half` is a
+  bisheng-CCE compiler-provided scalar type that is only visible inside
+  `-xcce` TUs that include the pto headers. Naming `half` directly in a
+  templated launcher call on the host fails name lookup before the linker
+  is reached.
+- **First occurrence** — 2026-05-08 · A3 cube build (`bash run.sh -r npu
+  -v Ascend910B1`) on
+  [kernels/automode/a2a3/moe_segmented_gemm_one_layer/main.cpp](../kernels/automode/a2a3/moe_segmented_gemm_one_layer/main.cpp)
+  on the first build attempt. The kernel TU compiled fine because it uses
+  `-xcce` + `--cce-aicore-arch=dav-c220-cube` and includes
+  `<pto/pto-inst.hpp>`; only the host TU choked.
+- **Likely cause** — Two-TU build where the kernel TU sees `half` as a
+  device scalar but the host TU does not. A templated launcher signature
+  with `half` as a template argument forces the host TU to spell `half`
+  to deduce / instantiate it, which is impossible without a host-visible
+  definition or typedef.
+- **Fix** — Hide all `half` mentions inside the kernel TU and expose a
+  **non-template** launcher wrapper at the kernel TU boundary; the host
+  calls only the non-template wrapper using `uint8_t*` byte-sized
+  buffers (mirrors the §A12 E11 pattern for `__gm__` casting).
+  ```cpp
+  // moe_segmented_gemm_one_layer_kernel.cpp  (-xcce TU; half is visible)
+  extern "C" void launchMoeSegmentedGemmOneLayerFp16(
+      uint8_t *packed_output, uint8_t *packed_tokens,
+      int32_t *expert_count, int32_t *expert_start,
+      uint8_t *expert_weight, void *stream)
+  {
+      launchMoeSegmentedGemmOneLayer<float, half, half>(
+          packed_output, packed_tokens,
+          expert_count, expert_start,
+          expert_weight, stream);
+  }
+  ```
+  ```cpp
+  // main.cpp  (-xc++ TU; never names half)
+  extern "C" void launchMoeSegmentedGemmOneLayerFp16(
+      uint8_t *packed_output, uint8_t *packed_tokens,
+      int32_t *expert_count, int32_t *expert_start,
+      uint8_t *expert_weight, void *stream);
+  ...
+  launchMoeSegmentedGemmOneLayerFp16(
+      outputDev, tokensDev, countDev, startDev, weightDev, stream);
+  ```
+- **Status** — `Known`.
+- **Confidence** — High (user-confirmed PASS after applying the fix on
+  `moe_segmented_gemm_one_layer`).
+- **Related docs** —
+  [known_good_kernel_examples.md §A16 "Do not copy"](known_good_kernel_examples.md)
+  records the rule narrowly:
+  *For host drivers using raw `uint8_t*` FP16 buffers, do not expose
+  `half` in `main.cpp` template arguments; hide device scalar types
+  behind a non-template launcher wrapper.* This is a host-boundary
+  rule — do not overgeneralize to other scenarios.
+- **Notes for future verification** — A symmetric problem will arise
+  for any other device scalar that is bisheng-CCE-only and not visible
+  to plain `-xc++`: `bfloat16_t` (same as `half`); the FP4 / FP8 MX
+  types on A5 (`float4_e1m2x2_t`, `float8_e5m2_t`, ...). When templating
+  a launcher on a device scalar, prefer the non-template wrapper
+  pattern at the kernel TU boundary. `aclFloat16` is the CANN runtime
+  host-side type that is ABI-compatible with `half` on the device side;
+  it can be used at the host boundary if you want a typed FP16 pointer,
+  but in this stack we standardized on the simpler `uint8_t*` boundary.
+- **Occurrences** —
+  - 2026-05-08 · A3 cube build (`bash run.sh -r npu -v Ascend910B1`) ·
+    [kernels/automode/a2a3/moe_segmented_gemm_one_layer/main.cpp](../kernels/automode/a2a3/moe_segmented_gemm_one_layer/main.cpp)
+    on first build attempt. Resolved by introducing
+    `launchMoeSegmentedGemmOneLayerFp16` non-template wrapper and
+    calling it from `main.cpp` with `uint8_t*` buffers.
+
 ---
 
 ## 9. Reserved for new entries
