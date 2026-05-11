@@ -707,6 +707,43 @@ Two real errors recorded as Occurrences in [compile_error_logbook.md](compile_er
   - `topK > 1`; weighted combine; router / argmax / top-K selection.
   - Backward pass; performance characterization.
 
+### 11.8 Fused ReLU via `TSTORE(..., ReluPreMode::NormalRelu)` in the per-expert segmented GEMM loop works at the tested shape
+
+- **Resolved**: 2026-05-08 · A3 cube · user-reported `bash run.sh -r npu -v Ascend910B1` on
+  [kernels/automode/a2a3/moe_segmented_gemm_relu/](../kernels/automode/a2a3/moe_segmented_gemm_relu/)
+  produced `test data success` / `test success`.
+- **Scope of the resolution (narrow — do not generalize)**:
+  ```text
+  A3 auto mode
+  single AICORE
+  --cce-aicore-arch=dav-c220-cube --cce-enable-pto-passes -O2
+  host-padded expert segments (topK = 1 upstream layout)
+  T = 256 real tokens
+  H = 64  (K dim)
+  O = 64  (N dim)
+  kE = 4
+  kTileM = 128  (M dim)
+  packed_tokens : float16
+  expert_weight : float16
+  packed_output : float32 (cube FP32 accumulator with FIX-pipe ReLU applied)
+  TMATMUL<float, half, half, float, M=128, K=64, N=64, false>
+  TSTORE<AccTile, GlobalDataC, AtomicType::AtomicNone, ReluPreMode::NormalRelu>
+  ```
+- **What this confirms (now Known at the above shape)** — beyond §11.7:
+  - **Fused ReLU in L0C → GM TSTORE** via the public PTO wrapper at
+    [include/pto/common/pto_instr.hpp:251-258](../include/pto/common/pto_instr.hpp#L251-L258).
+    Template form `TSTORE<TileData, GlobalData, AtomicType::AtomicNone, ReluPreMode::NormalRelu>(dst, src)`.
+  - **FIX-pipe activation fusion inside the per-expert segmented loop** is auto-mode-safe — generalizes the standalone single-tile `tstore_acc2gm` precedent to the per-expert nested-loop context.
+  - **`ReluPreMode::NormalRelu` template arg dispatch** through auto-mode TSTORE on cube arch.
+- **Reference entry**: [known_good_kernel_examples.md §A17](known_good_kernel_examples.md).
+- **What is NOT proven by this experiment (still Unknown — do not claim resolved)**:
+  - Activation other than `ReluPreMode::NormalRelu` (the enum only has `NoRelu`/`NormalRelu`; GELU / SiLU / LeakyReLU etc. are not options at this layer).
+  - The standalone `TRELU` / `TMAXS` wrappers operating on `TileType::Vec` tiles in an auto-mode kernel that mixes cube + vec — entirely unexercised by this milestone.
+  - The **combination** of `ReluPreMode::NormalRelu` AND `AccTile<float>` → GM `half` down-cast in the **same TSTORE call**. The two pieces are individually proven in `tstore_acc2gm` (`tilingKey=4` does FP32→FP16 without ReLU; `tilingKey=21` does ReLU with no dtype change) but their combination has no in-tree precedent. This is the gating Assumption for the §A18 / `moe_segmented_ffn_top1` FFN milestone.
+  - GEMM2 chained after GEMM1+ReLU; cube → cube handoff via GM scratch.
+  - Bias path; SplitK; TF32; INT8 / BF16 GEMM dtypes; non-`(128, 64, 64)` shapes.
+  - Multi-core, dynamic tail, `topK > 1`, weighted combine, backward, performance.
+
 ---
 
 ## Cross-references
@@ -715,5 +752,5 @@ Two real errors recorded as Occurrences in [compile_error_logbook.md](compile_er
 - [tile_type_reference.md](tile_type_reference.md) — `Tile`/`ConvTile`/`TileDType` open items (§12).
 - [a3_a5_differences.md](a3_a5_differences.md) — the §12 "Open assumptions and items to verify" list is the source for Group 2 here.
 - [external_context/pr_852_notes.md](external_context/pr_852_notes.md) — the source for Group 9 and several "post-merge" entries.
-- [known_good_kernel_examples.md §A11, §A12, §A13, §A14, §A15, §A16](known_good_kernel_examples.md) — the in-tree confirmed-built references produced by §11.1, §11.3, §11.4, §11.5, §11.6, §11.7.
+- [known_good_kernel_examples.md §A11, §A12, §A13, §A14, §A15, §A16, §A17](known_good_kernel_examples.md) — the in-tree confirmed-built references produced by §11.1, §11.3, §11.4, §11.5, §11.6, §11.7, §11.8.
 - [compile_error_logbook.md §E8, §E9, §E13](compile_error_logbook.md) — the real compile-error occurrences from §11.2 / §11.7.

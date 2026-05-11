@@ -349,6 +349,35 @@ harness (Known: enumerated in `ALL_TESTCASES` of
    - `SetValidRow` / `SetValidShape` / partial-tile stores still NOT validated — host padding sidesteps them.
 7. **Confidence** — High for the fixed shape; behavior at other shapes, dtypes, bias / activation paths, multi-core, dynamic-tail is **Unknown**.
 
+### A17. moe_segmented_gemm_relu (auto-mode A3, one cube GEMM + FIX-pipe ReLU per expert microtile) — confirmed-built fixed-shape prototype
+
+> Adds ReLU activation after the §A16 per-expert GEMM by **fusing it into the L0C → GM TSTORE** via the `ReluPreMode::NormalRelu` overload of the public `TSTORE` wrapper. No cube → vec handoff, no separate vector kernel, no mix-arch build, no UB intermediate.
+
+1. **File** — [kernels/automode/a2a3/moe_segmented_gemm_relu/moe_segmented_gemm_relu_kernel.cpp](../kernels/automode/a2a3/moe_segmented_gemm_relu/moe_segmented_gemm_relu_kernel.cpp)
+2. **Why** — seventh in-tree confirmed-built auto-mode A3 kernel. First MoE-stack kernel that wires an **activation** onto the cube GEMM output without any UB roundtrip. Validates the FIX-pipe activation fusion in the per-expert segmented loop. User-confirmed PASS on Ascend910B1. Status: **Known** (user-confirmed, fixed shape).
+3. **Pattern** — Single AICORE; cube arch (`--cce-aicore-arch=dav-c220-cube`) + `--cce-enable-pto-passes`. Kernel body is byte-for-byte the §A16 GEMM kernel except the final TSTORE adds two template args:
+   ```cpp
+   TSTORE<AccTile, GlobalDataC,
+          AtomicType::AtomicNone,
+          ReluPreMode::NormalRelu>(cGlobal, cTile);
+   ```
+   The pre-ReLU accumulator stays on L0C; the FIX pipe applies `max(x, 0)` while writing FP32 to GM. All five cube tiles (`Mat ×2`, `Left`, `Right`, `Acc`) declared once outside both loops and reused across iters; auto allocator pins all addresses; auto-sync inserts the MTE2 → MTE1 → M → FIX fences.
+4. **Auto-mode compatibility** — Yes (Known, user-confirmed). Confirms at the tested shape:
+   - **Fused ReLU in the L0C → GM TSTORE** via `TSTORE<TileData, GlobalData, AtomicType::AtomicNone, ReluPreMode::NormalRelu>(dst, src)` inside the per-expert segmented loop. Matches the shape of [tests/npu/a2a3/src/st/testcase/tstore_acc2gm/tstore_acc2gm_kernel.cpp:88-93](../tests/npu/a2a3/src/st/testcase/tstore_acc2gm/tstore_acc2gm_kernel.cpp#L88-L93) (`LaunchTStoreAcc2gmNz2nd<21>` / `LaunchTStoreAcc2gmNz2nz<21>`).
+   - **FIX-pipe activation fusion** is auto-mode-safe in the per-expert segmented context (not just for a single-tile TSTORE as in the standalone `tstore_acc2gm` test).
+   - **`ReluPreMode::NormalRelu`** template arg propagates correctly through the auto-mode `TSTORE` template dispatch in a kernel built with `--cce-aicore-arch=dav-c220-cube`.
+5. **Copy** — for any new auto-mode A3 prototype that needs **GEMM + ReLU as a single op** without leaving cube arch:
+   - the entire [moe_segmented_gemm_relu](../kernels/automode/a2a3/moe_segmented_gemm_relu/) project shape;
+   - the explicit-template-arg form (`<AccTile, GlobalDataC, AtomicType::AtomicNone, ReluPreMode::NormalRelu>`) — the `reluPreMode` parameter has no default in [include/pto/common/pto_instr.hpp:251-258](../include/pto/common/pto_instr.hpp#L251-L258), so it must be spelled explicitly along with the `atomicType` arg before it;
+   - the Python data recipe (inputs in `[-4, 4]` so the pre-ReLU GEMM output contains both negatives (clipped) and positives (passed through) — without negatives ReLU degenerates to identity and the test cannot distinguish "ReLU fired" from "ReLU was a no-op");
+   - the `compare_outputs.py` "failure-mode breakdown" (CLIPPED vs PASS-THROUGH counts) — distinguishes "device skipped ReLU" from "GEMM itself regressed".
+6. **Do not copy** —
+   - The fixed shape (`T = 256`, `H = K = 64`, `O = N = 64`, `kE = 4`, `kTileM = 128`, FP16 × FP16 → FP32) is what was tested.
+   - **Activation other than `ReluPreMode::NormalRelu`** is NOT validated. Only the two-value enum `{NoRelu, NormalRelu}` exists in [include/pto/common/type.hpp:255-259](../include/pto/common/type.hpp#L255-L259); GELU, SiLU, LeakyReLU, etc. are not options here. The standalone `TRELU` / `TMAXS` wrappers on Vec tiles are also unexercised by this milestone — the ReLU happens entirely in the FIX pipe.
+   - The **combination** of `ReluPreMode::NormalRelu` AND down-cast `AccTile<float>` → GM `half` in the same TSTORE is NOT validated. `tstore_acc2gm` shows the two features individually (`tilingKey=4` does FP32→FP16 without ReLU; `tilingKey=21` does ReLU with no dtype change) but not combined. Do not assume the combined form works without a separate experiment (this is the open assumption that gates §A18 / the FFN milestone — see `moe_segmented_ffn_top1`).
+   - Single AICORE only; no `block_idx`; no SetValidRow / partial stores; no second GEMM; no bias; no SplitK; no TF32; no INT8 / BF16.
+7. **Confidence** — High for the fixed shape; behavior at other shapes / dtypes / activation modes / combined Acc-down-cast-with-ReLU / multi-core / dynamic-tail is **Unknown**.
+
 ---
 
 ## Group B — Pattern references (use semantics, not source as-is)
