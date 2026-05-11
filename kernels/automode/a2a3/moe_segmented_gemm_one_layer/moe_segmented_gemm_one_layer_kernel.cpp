@@ -190,3 +190,21 @@ template void launchMoeSegmentedGemmOneLayer<float, half, half>(
     uint8_t *packed_output, uint8_t *packed_tokens,
     int32_t *expert_count, int32_t *expert_start,
     uint8_t *expert_weight, void *stream);
+
+// Non-template wrapper. Host main.cpp is compiled with plain `-xc++` and does
+// NOT see `half` (a bisheng-CCE compiler-provided type that is only visible
+// inside `-xcce` translation units that include <pto/pto-inst.hpp>). This
+// wrapper hides `half` from the host boundary by exposing only `uint8_t *`
+// for the typed buffers. The `half` mention here is fine because this file
+// is the kernel TU compiled with `-xcce`.
+extern "C" void launchMoeSegmentedGemmOneLayerFp16(uint8_t *packed_output,
+                                                    uint8_t *packed_tokens,
+                                                    int32_t *expert_count,
+                                                    int32_t *expert_start,
+                                                    uint8_t *expert_weight,
+                                                    void *stream)
+{
+    launchMoeSegmentedGemmOneLayer<float, half, half>(
+        packed_output, packed_tokens, expert_count, expert_start,
+        expert_weight, stream);
+}
