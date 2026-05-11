@@ -37,6 +37,9 @@ A3 auto mode, single AICORE.
 ## What the kernel does
 
 ```cpp
+SegTile srcTile;
+SegTile dstTile;
+
 for (e = 0; e < kNumExperts; ++e) {
     int32_t start = expert_start[e];     // GM scalar read (PADDED)
     int32_t count = expert_count[e];     // GM scalar read (PADDED)
@@ -46,9 +49,9 @@ for (e = 0; e < kNumExperts; ++e) {
         SegGlobal srcGlobal(packed_tokens + off);
         SegGlobal dstGlobal(packed_output + off);
 
-        TLOAD(segTile, srcGlobal);
-        TADDS(segTile, segTile, 1.0f);   // in-place
-        TSTORE(dstGlobal, segTile);
+        TLOAD(srcTile, srcGlobal);
+        TADDS(dstTile, srcTile, 1.0f);   // separate src/dst tiles
+        TSTORE(dstGlobal, dstTile);
     }
 }
 ```
@@ -56,8 +59,19 @@ for (e = 0; e < kNumExperts; ++e) {
 `TADDS` is the user-facing public wrapper at
 [include/pto/common/pto_instr.hpp:1517-1524](../../../../include/pto/common/pto_instr.hpp);
 [tests/npu/a2a3/src/st/testcase/tadds/tadds_kernel.cpp](../../../../tests/npu/a2a3/src/st/testcase/tadds/tadds_kernel.cpp)
-uses the same three-argument form and is in `ALL_TESTCASES` (auto-mode
-build list).
+uses the same three-argument-with-separate-src/dst-tiles form and is in
+`ALL_TESTCASES` (auto-mode build list).
+
+### History note: in-place form (`TADDS(t, t, 1.0f)`) — DO NOT REUSE
+
+An earlier revision of this kernel used a single `segTile` for both src and
+dst (`TADDS(segTile, segTile, 1.0f)`). On the first run that produced a
+zero-filled region near flat indices ~`0x1088..0x1132`, which `ResultCmp`
+flagged. The current revision uses **two separate tiles** (`srcTile`,
+`dstTile`) matching the confirmed-built `tadds_kernel.cpp` shape. Whether
+the in-place form is fundamentally unsafe in A3 auto mode or whether the
+failure was a tooling/codegen quirk is **Unknown** — do not reintroduce
+the in-place form without a separate confirmed experiment.
 
 ## Tail policy (v1)
 
@@ -104,14 +118,16 @@ the outer.
 ## Auto-mode constraints honored
 
 - Single AICORE (`<<<1, nullptr, stream>>>`); no `block_idx` work split.
-- Static segment tile
+- **Two** static segment tiles
   `Tile<TileType::Vec, float, kTileM, kH, BLayout::RowMajor, kTileM, kH>`
-  declared once and reused across all inner iterations; UB address pinned
-  by the auto allocator. Size: 128 × 64 × 4 B = 32 KB (2× the
-  [add_tile_array](../add_tile_array/) tile; comfortably below UB).
+  (`srcTile`, `dstTile`) declared once and reused across all inner
+  iterations; UB addresses pinned by the auto allocator. Size: 128 × 64 ×
+  4 B × 2 = 64 KB total (4× the [add_tile_array](../add_tile_array/) tile;
+  comfortably below A3's UB budget).
 - `GlobalTensor` reconstructed per inner iter with `base + runtime offset`.
-- `TADDS` used in-place (`dst == src`): one tile, one liveness range across
-  `TLOAD` → `TADDS` → `TSTORE`. No redundant `TLOAD` on dst.
+- `TADDS(dstTile, srcTile, 1.0f)` with **distinct** src and dst tiles
+  (separate liveness; no redundant `TLOAD` on dst). The earlier in-place
+  shape is documented above as a regression and is not reused.
 - No `TASSIGN` aliasing tricks; no `Tile::data()` in kernel; no `*_IMPL`
   calls; no raw CCE intrinsics; no `Event<>`; no manual sync; no `TPipe` /
   `TPUSH` / `TPOP`; no double buffering; no `SetValidRow` / `SetValidShape`;
@@ -135,11 +151,21 @@ If it passes, these become Resolved-by-experiment for the tested shape:
 - **Nested loop**: outer over experts (`kNumExperts = 4`), inner over
   microtiles within an expert's padded segment, with both bounds coming
   from scalar GM reads of `int32_t` metadata.
-- **`128 × 64` float static Vec tile** (32 KB UB allocation, vs
+- **`128 × 64` float static Vec tile, two of them concurrently live**
+  (64 KB UB allocation total — `srcTile` + `dstTile`, vs
   `add_tile_array`'s 16 KB and `moe_top1_permute`'s 256 B-per-tile).
-- **`TADDS` in-place form** (`dst == src`) from auto-mode kernel code.
+- **`TADDS(dstTile, srcTile, 1.0f)`** with separate src/dst tiles (in-line
+  with `tadds_kernel.cpp`'s shape) called from inside a nested loop.
 - **Per-expert padded segment processing** as a step toward the real
   expert FFN outer schedule.
+
+### Open question this revision leaves behind
+
+- The in-place form `TADDS(t, t, 1.0f)` produced wrong output on the first
+  run; whether that is a fundamental auto-mode constraint or a codegen
+  quirk is **Unknown** and not investigated here. Tracked informally in
+  the kernel-source history note; only revisit if a future kernel really
+  needs the single-tile shape.
 
 ## How to generate data
 

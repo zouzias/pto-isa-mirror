@@ -28,6 +28,10 @@
 #   ./input/input_expert_start.bin        (kE        int32)   PADDED starts
 #   ./output/golden_packed_output.bin     (T_PADDED * H float32)
 #   ./output/t_padded.txt                 (single int line; consumed by main.cpp)
+#   ./output/expert_count_real.bin        (kE        int32)   REAL counts
+#                                          (debug only; consumed by
+#                                           scripts/compare_outputs.py to
+#                                           label padded vs real rows)
 #
 # Distribution choice: we use a deliberately skewed expert_id so at least one
 # expert ends up with padded_count > TILE_M (i.e., the inner m0 loop runs
@@ -95,6 +99,9 @@ def gen_golden_data(kT, kH, kE, kTileM):
     # the seeded distribution and is not a compile-time constant).
     with open("./output/t_padded.txt", "w") as f:
         f.write(f"{T_padded}\n")
+    # Debug-only: compare_outputs.py uses this to label padded vs real rows
+    # in the first-mismatch report.
+    expert_count_real.tofile("./output/expert_count_real.bin")
 
     # ---- debug --------------------------------------------------------------
     print("[gen_data] kT          =", kT)

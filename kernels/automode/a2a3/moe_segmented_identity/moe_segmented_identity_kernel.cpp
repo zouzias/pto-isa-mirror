@@ -58,8 +58,14 @@
  *   - Nested loop: outer over experts (kNumExperts), inner over microtiles
  *     within an expert's padded segment, with both bounds coming from
  *     scalar GM reads of int32 metadata.
- *   - 128 x 64 float static Vec tile shape (32 KB UB, vs add_tile_array's 16 KB).
- *   - TADDS in-place form (dst and src are the same tile).
+ *   - Two 128 x 64 float static Vec tiles (srcTile, dstTile) — 64 KB total
+ *     UB allocation, well below A3's UB budget. Previously this kernel used
+ *     a single in-place tile (`TADDS(t, t, 1.0f)`); that form produced a
+ *     zero-filled region near flat indices ~0x1088..0x1132 on the first run
+ *     and has been replaced with the separate-tile form below. Whether the
+ *     in-place form is fundamentally unsafe in A3 auto mode or whether it
+ *     was a tooling/codegen quirk is **Unknown** — do not reintroduce it
+ *     without a separate confirmed experiment.
  */
 
 #include <pto/common/constants.hpp>
@@ -88,14 +94,17 @@ __global__ AICORE void runMoeSegmentedIdentity(__gm__ T       __out__ *packed_ou
     using SegStride = Stride<1, 1, 1, kH,     1>;
     using SegGlobal = GlobalTensor<T, SegShape, SegStride>;
 
-    // 128 x 64 float = 32 KB. add_tile_array proved 64 x 64 float (16 KB);
-    // tadds_kernel.cpp uses the same Vec shape family. Static valid region.
+    // 128 x 64 float = 32 KB per tile; two tiles = 64 KB UB total. The
+    // tadds ST kernel (tests/npu/a2a3/src/st/testcase/tadds/tadds_kernel.cpp)
+    // also uses separate src/dst tiles for TADDS — we mirror that confirmed
+    // shape here. Static valid region.
     using SegTile = Tile<TileType::Vec, T,
                          kTileM, kH,
                          BLayout::RowMajor,
                          kTileM, kH>;
 
-    SegTile segTile;
+    SegTile srcTile;
+    SegTile dstTile;
 
     for (unsigned e = 0; e < kNumExperts; ++e) {
         int32_t start = expert_start[e];      // GM scalar read (resolved §11.4)
@@ -108,14 +117,12 @@ __global__ AICORE void runMoeSegmentedIdentity(__gm__ T       __out__ *packed_ou
             SegGlobal srcGlobal(packed_tokens + off);
             SegGlobal dstGlobal(packed_output + off);
 
-            TLOAD (segTile, srcGlobal);
-            // In-place elementwise +1.0f. TADDS template:
-            //   TADDS<TileDataDst, TileDataSrc>(dst, src, scalar)
-            // dst and src may be the same tile (no redundant TLOAD concern —
-            // there is no second TLOAD on the dst tile; the auto allocator
-            // sees one tile, one live range across TLOAD/TADDS/TSTORE).
-            TADDS(segTile, segTile, static_cast<T>(1.0f));
-            TSTORE(dstGlobal, segTile);
+            TLOAD (srcTile, srcGlobal);
+            // TADDS<TileDataDst, TileDataSrc>(dst, src, scalar) — public PTO
+            // wrapper at include/pto/common/pto_instr.hpp:1517-1524. dst and
+            // src are distinct tiles (matches tadds_kernel.cpp's shape).
+            TADDS(dstTile, srcTile, static_cast<T>(1.0f));
+            TSTORE(dstGlobal, dstTile);
         }
     }
 }
