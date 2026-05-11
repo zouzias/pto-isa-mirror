@@ -555,6 +555,44 @@ Two real errors recorded as Occurrences in [compile_error_logbook.md](compile_er
   - Other `kCols` / `kTopK` shapes — only `1280 / 512` was tested.
   - Whether the manual's **in-place** TMRGSORT (curDstTile aliased onto srcTile.data()) would also be correct in auto mode; v1 sidesteps this with the independent `mrgScratchTile` + `TMOV`-back pattern.
 
+### 11.4 Device-side top-1 MoE forward permute on A3 auto mode works at the tested shape
+
+- **Resolved**: 2026-05-08 · A3 vec · user-reported `bash run.sh -r npu -v Ascend910B1` on
+  [kernels/automode/a2a3/moe_top1_permute/](../kernels/automode/a2a3/moe_top1_permute/)
+  produced matching `packed_tokens`, `expert_count`, `expert_start`, and `token_to_packed` against the Python golden.
+- **Scope of the resolution (narrow — do not generalize)**:
+  ```text
+  A3 auto mode
+  single AICORE
+  topK = 1
+  unlimited capacity
+  T = 256
+  H = 64
+  num_experts = 4
+  float32 tokens
+  int32 expert IDs / metadata
+  ```
+- **What this confirms (now Known at the above shape)**:
+  - **Scalar GM read of `int32_t` metadata from kernel code** (`int32_t e = expert_id[t];`). The auto-mode compiler accepts a plain GM-pointer dereference of a non-tile element.
+  - **Scalar GM write of `int32_t` metadata from kernel code** (`expert_count[e] = count[e]; expert_start[e] = start[e]; token_to_packed[t] = packed_pos;`). Auto-sync correctly orders these against the `TLOAD`/`TSTORE` on a different GM buffer in the same iteration.
+  - **Small device-local `int32_t arr[E]` indexed by a runtime scalar** (`count[e]`, `start[e]`, `counter[e]++`) with `E = 4` compile-time constant. Stack/register resident; coexists with the tile-shaped row buffer.
+  - **Runtime scalar used to compute GM row offset** for a per-iteration `GlobalTensor` (`GlobalTensor srcGlobal(tokens + size_t(t) * kH); GlobalTensor dstGlobal(packed_tokens + size_t(packed_pos) * kH);`). Confirms the data-dependent variant of the [§11.1 add_tile_array](#111-topk-style-bisheng-direct-cmake-harness----cce-enable-pto-passes-builds-and-runs-an-auto-mode-a3-kernel) runtime-offset pattern, where the offset there came from a compile-time loop induction variable.
+  - **Three sequential passes over the same `__gm__ int32_t *expert_id`** in one kernel (histogram pass, then pack pass) — re-reading the same GM scalar buffer twice is auto-mode-safe.
+  - **Multiple GM output buffers written in the same kernel** (`packed_tokens`, `expert_count`, `expert_start`, `token_to_packed`) with no manual sync between them.
+- **Sister directory clarification**: [kernels/automode/a2a3/moe_top1_gather_precomp/](../kernels/automode/a2a3/moe_top1_gather_precomp/) is a **reduced sanity/debug kernel only** (host-precomputes `packed_to_token` and the kernel does a pure indexed gather). It is NOT a confirmed implementation of the MoE permute milestone and must not be cited as such. The real milestone is `moe_top1_permute/` (this entry).
+- **Reference entry**: [known_good_kernel_examples.md §A13](known_good_kernel_examples.md).
+- **What is NOT proven by this experiment (still Unknown — do not claim resolved)**:
+  - Multi-core (`block_idx`) dispatch — would require a per-core histogram workspace and a cross-core prefix-sum / barrier; neither is implemented.
+  - `topK > 1` — changes the packing rule (each token contributes `topK` rows) and the metadata shape.
+  - Per-expert capacity / drop policy / fallback expert.
+  - Router argmax / topK (i.e., the kernel that *produces* `expert_id` from a router logits tensor) — not exercised.
+  - Weighted combine (`probs[t, k]` blending for `topK > 1`).
+  - Segmented compute (per-expert FFN microtile loop with `TILE_M = 128`) — separate downstream milestone.
+  - GEMM / FFN on packed segments.
+  - Backward pass.
+  - `fp16` / `bfloat16` tokens, `uint8` / `int16` expert IDs, larger `T` / `H` / `num_experts`, non-power-of-2 `num_experts`.
+  - Stack-array sizes beyond `kNumExperts = 4` (a moderately large `kNumExperts` may pressure stack/register allocation differently — Unknown).
+
 ---
 
 ## Cross-references
@@ -563,5 +601,5 @@ Two real errors recorded as Occurrences in [compile_error_logbook.md](compile_er
 - [tile_type_reference.md](tile_type_reference.md) — `Tile`/`ConvTile`/`TileDType` open items (§12).
 - [a3_a5_differences.md](a3_a5_differences.md) — the §12 "Open assumptions and items to verify" list is the source for Group 2 here.
 - [external_context/pr_852_notes.md](external_context/pr_852_notes.md) — the source for Group 9 and several "post-merge" entries.
-- [known_good_kernel_examples.md §A11](known_good_kernel_examples.md) — the in-tree confirmed-built reference produced by §11.1.
+- [known_good_kernel_examples.md §A11, §A12, §A13](known_good_kernel_examples.md) — the in-tree confirmed-built references produced by §11.1, §11.3, §11.4.
 - [compile_error_logbook.md §E8, §E9](compile_error_logbook.md) — the two real compile-error occurrences from §11.2.

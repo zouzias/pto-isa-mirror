@@ -185,6 +185,37 @@ harness (Known: enumerated in `ALL_TESTCASES` of
    - An earlier values-only shortcut (which assumed Python pre-sorted 64-element blocks and skipped `TSORT32` / `idxTile` / `TGATHER`) was abandoned. **Do not treat that variant as known-good TopK.** It produced wrong answers (interleaved output, dropped tail blocks) for reasons the full pipeline above does not share.
 7. **Confidence** — High for the fixed shape; behavior at other `kCols`/`kTopK` or other dtypes is **Unknown**.
 
+### A13. moe_top1_permute (auto-mode A3, device-side top-1 MoE forward dispatch) — confirmed-built fixed-shape prototype
+
+> **Do not confuse with** the sibling directory [kernels/automode/a2a3/moe_top1_gather_precomp/](../kernels/automode/a2a3/moe_top1_gather_precomp/). That folder contains a **reduced sanity/debug kernel only** — it consumes a host-precomputed `packed_to_token[T]` index array and executes a pure indexed gather. It validates runtime scalar GM index reads and runtime row-offset `TLOAD`/`TSTORE`, but it is **NOT** the real MoE dispatch kernel because the packing order is computed on the host, not on the device. Treat `moe_top1_gather_precomp/` as a fallback/debug reference; the real MoE permute milestone is `moe_top1_permute/` (this entry).
+
+1. **File** — [kernels/automode/a2a3/moe_top1_permute/moe_top1_permute_kernel.cpp](../kernels/automode/a2a3/moe_top1_permute/moe_top1_permute_kernel.cpp)
+2. **Why** — third in-tree confirmed-built auto-mode A3 kernel; first one that does **device-side data-dependent control flow on GM scalar metadata** rather than purely tile-shaped compute. Implements the forward MoE token movement (histogram → prefix-sum → pack) for `topK = 1`, unlimited capacity, single AICORE. User-confirmed PASS on Ascend910B1 (all four GM outputs — `packed_tokens`, `expert_count`, `expert_start`, `token_to_packed` — match the Python golden). Status: **Known** (user-confirmed, fixed shape).
+3. **Pattern** — Single AICORE (`<<<1, nullptr, stream>>>`); single static row tile `Tile<TileType::Vec, float, 1, kH, BLayout::RowMajor, 1, kH>` declared once and reused across all 256 token iterations. Three sequential passes:
+   - **Pass 1 — histogram**: `for (t = 0..T) count[expert_id[t]]++;` with `int32_t count[kNumExperts]` as a small device-local stack array; result written to GM via scalar stores.
+   - **Pass 2 — prefix sum**: `start[0] = 0; start[e] = start[e-1] + count[e-1];` on the same local stack array; result written to GM.
+   - **Pass 3 — pack**: re-reads `expert_id[t]`, advances `counter[e]++`, computes `packed_pos = start[e] + slot`, writes scalar `token_to_packed[t] = packed_pos` to GM, then `TLOAD/TSTORE` the row into `packed_tokens[packed_pos * kH ..]`.
+4. **Auto-mode compatibility** — Yes (Known, user-confirmed). Confirms the following Inferred / Assumption items together (all are auto-mode-safe at this shape):
+   - **Scalar GM read of `int32_t` from kernel code** (`int32_t e = expert_id[t];`).
+   - **Scalar GM write of `int32_t` from kernel code** (`expert_count[e] = count[e]; token_to_packed[t] = packed_pos;`) — auto-sync correctly orders these against the surrounding `TLOAD`/`TSTORE` on a different GM buffer in the same iteration.
+   - **Small device-local `int32_t arr[E]` indexed by a runtime scalar** with mutating updates (`arr[e]++`). `E = 4` was tested.
+   - **Runtime-scalar GM offset for `GlobalTensor`** — `GlobalTensor srcGlobal(tokens + size_t(t) * kH); GlobalTensor dstGlobal(packed_tokens + size_t(packed_pos) * kH);` reconstructed per iteration. The offset comes from a kernel-local `int32_t`, not a compile-time induction variable — different from the [add_tile_array §A11](#a11-add_tile_array--first-confirmed-built-auto-mode-kernel-with-an-in-kernel-serial-loop-a3) case where the offset was `i * stride`. Both work; A13 closes the data-dependent variant.
+   - **Single row tile reused across 256 sequential write destinations**, each at a runtime-different `packed_pos`, with no manual sync. Auto-allocator pins the UB address; auto-sync inserts the MTE2/MTE3 fences.
+   - **Multiple GM output buffers written in the same kernel** (`packed_tokens`, `expert_count`, `expert_start`, `token_to_packed`) without manual sync between them; auto-sync handles the buffer-level liveness.
+5. **Copy** — the entire project layout for any new auto-mode A3 prototype that needs **device-computed metadata + indexed row copy**:
+   - the [moe_top1_permute](../kernels/automode/a2a3/moe_top1_permute/) directory shape (`<name>_kernel.cpp`, `main.cpp`, `CMakeLists.txt`, `run.sh`, `scripts/gen_data.py`, `README.md`);
+   - the three-pass histogram → prefix-sum → pack shape — directly applicable to any "group tokens by key, emit per-group start/count, then permute rows" problem (e.g., bucket-sort dispatch, top-1 MoE, gathered embedding lookups, segment-by-id reductions);
+   - the `int32_t arr[E]` stack-array pattern for small per-group state — avoids any UB tile for what is fundamentally a small register working set;
+   - the `size_t off = static_cast<size_t>(scalar) * kH;` discipline for constructing per-iter GM offsets (avoids `int * unsigned` width pitfalls);
+   - the Python golden that mirrors the kernel exactly: `np.bincount(expert_id)` for `expert_count`, `np.cumsum(...)` for `expert_start`, `np.argsort(expert_id, kind="stable")` for the packing order — these match the kernel's pass-1/2/3 semantics byte-for-byte.
+6. **Do not copy** —
+   - The fixed shape (`T = 256`, `H = 64`, `E = 4`, `float32` tokens, `int32` metadata) is what was tested; **larger T**, **larger E**, **larger or non-multiple-of-block H**, **half tokens**, **uint8 expert IDs** have NOT been exercised. Especially: a runtime `E` (vs the compile-time `kNumExperts = 4` used here) is not validated — the `int32_t count[kNumExperts]` stack array depends on `kNumExperts` being a compile-time constant.
+   - **Single AICORE only**; no `block_idx` work split. Multi-core dispatch requires a per-core histogram workspace (`workspace[num_cores][num_experts]`) and a cross-core prefix-sum / barrier — neither is implemented. Do NOT generalize this entry to multi-core MoE without a separate confirmed build.
+   - **`topK = 1` only**; no router GEMM, no top-K selection, no weighted combine, no per-expert capacity / drop policy, no fallback expert. `topK > 1` changes the packing rule (each token contributes `topK` rows) and is out of scope for this entry.
+   - **Forward only**; no backward. The mapping `token_to_packed` is emitted to support a future unpermute, not a backward derivative.
+   - The kernel reads `expert_id[t]` **twice** (pass 1 histogram, pass 3 pack). Acceptable for `T = 256`; for large `T` an optimization could cache it in a UB tile. The current shape does NOT validate that optimization.
+7. **Confidence** — High for the fixed shape; behavior at other `T` / `H` / `E` / dtype / multi-core / `topK > 1` is **Unknown**.
+
 ---
 
 ## Group B — Pattern references (use semantics, not source as-is)
