@@ -10,7 +10,7 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 
-"""Generate [1, 65536] uint16 keys, golden Top-K indices, and optional value multiset (Top-512 largest)."""
+"""Generate uint16 keys, golden Top-K indices, and optional value multiset (Top-512 largest)."""
 
 import argparse
 import os
@@ -29,10 +29,26 @@ def main():
         default=None,
         help="RNG seed (default: random each run)",
     )
+    parser.add_argument(
+        "--min-key",
+        type=int,
+        default=0,
+        help="Inclusive lower bound of generated uint16 keys (default: 0)",
+    )
+    parser.add_argument(
+        "--max-key",
+        type=int,
+        default=65535,
+        help="Inclusive upper bound of generated uint16 keys (default: 65535)",
+    )
     args = parser.parse_args()
+    if not (0 <= args.min_key <= 65535 and 0 <= args.max_key <= 65535):
+        raise ValueError("min-key/max-key must be in [0, 65535]")
+    if args.min_key > args.max_key:
+        raise ValueError("min-key must be <= max-key")
     seed = args.seed if args.seed is not None else int.from_bytes(os.urandom(4), "little")
     np.random.seed(seed)
-    keys = np.random.randint(0, 65536, size=N, dtype=np.uint16)
+    keys = np.random.randint(args.min_key, args.max_key + 1, size=N, dtype=np.uint16)
     # Canonical Top-K indices: sort by key descending, stable tie-break (smaller index first among equals).
     order = np.argsort(-keys.astype(np.int64), kind="stable")
     topk_idx = order[:TOPK].astype(np.uint32)
@@ -48,7 +64,11 @@ def main():
         f"Wrote input/keys.bin ({N} x uint16), output/golden_topk_idx.bin ({TOPK} x uint32), "
         f"golden_topk_multiset.bin ({TOPK} x uint16)."
     )
-    print(f"seed = {seed}  (re-run with: python3 scripts/gen_data.py --seed {seed})")
+    print(f"key_range = [{args.min_key}, {args.max_key}]")
+    print(
+        "seed = "
+        f"{seed}  (re-run with: python3 scripts/gen_data.py --seed {seed} --min-key {args.min_key} --max-key {args.max_key})"
+    )
 
 
 if __name__ == "__main__":

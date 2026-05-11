@@ -234,22 +234,40 @@ AICORE inline void Phase2_WinnerMsbAndRemainK(HistTile &chistMSB, WinnerBinTile 
         using U32x32 = Tile<TileType::Vec, uint32_t, 1, 32, BLayout::RowMajor, -1, -1>;
         U32x32 thrMsbT(1, 32);
         U32x32 cwT(1, 32);
+        U32x32 cwFixT(1, 32);
         TmpSelsTile gatherTmp(1, 32);
+        SelMaskRowTile cwSelMask(1, 32);
+        TmpSelsTile cwSelTmp(1, 32);
         TASSIGN(thrMsbT, kRemainUbTopk);
         TASSIGN(cwT, kRemainUbCw);
+        TASSIGN(cwFixT, kRemainUbN);
         TASSIGN(remainKTile, kRemainUbOut);
         TASSIGN(gatherTmp, kWinnerUbRowMinTmp);
+        TASSIGN(cwSelMask, kWinnerUbSelMask);
+        TASSIGN(cwSelTmp, kWinnerUbTselTmp);
         thrMsbT.SetValidRow(1);
         thrMsbT.SetValidCol(32);
         cwT.SetValidRow(1);
         cwT.SetValidCol(32);
+        cwFixT.SetValidRow(1);
+        cwFixT.SetValidCol(32);
         remainKTile.SetValidRow(1);
         remainKTile.SetValidCol(32);
         gatherTmp.SetValidCol(32);
+        cwSelMask.SetValidRow(1);
+        cwSelMask.SetValidCol(32);
+        cwSelTmp.SetValidCol(32);
         constexpr uint32_t kThrMsbU = static_cast<uint32_t>(kN - TopK);
         TEXPANDS(thrMsbT, kThrMsbU);
         TGATHER(cwT, chistMSB, msbWinnerBin, gatherTmp);
-        TSUB(remainKTile, thrMsbT, cwT);
+        // Keep remain_k aligned with radix golden:
+        // remain_k = (N - TopK) - C[winner-1], and C[-1] is defined as 0.
+        // TGATHER with clamped winner-1 index still returns C[0] when winner==0,
+        // so force cw to 0 under (winner==0) before the subtraction.
+        TEXPANDS(remainKTile, 0u);
+        TCMPS(cwSelMask, msbWinnerSaved, static_cast<uint32_t>(0), CmpMode::EQ);
+        TSEL(cwFixT, cwSelMask, remainKTile, cwT, cwSelTmp);
+        TSUB(remainKTile, thrMsbT, cwFixT);
     }
 }
 
