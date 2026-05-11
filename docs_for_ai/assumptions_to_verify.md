@@ -663,6 +663,50 @@ Two real errors recorded as Occurrences in [compile_error_logbook.md](compile_er
   - `fp16` / `bfloat16` data; non-`H=64` widths; `kE > 4`.
   - Larger `kTileM` (e.g., 256), or shapes where multiple inner-tile iterations per expert race against each other in the auto allocator (only one inner iter exposes the worst race; multi-iter case is the new thing here but still bounded to ≤ a few iters per expert in the tested distribution).
 
+### 11.7 First cube GEMM inside the per-expert segmented loop works at the tested shape
+
+- **Resolved**: 2026-05-08 · A3 cube · user-reported `bash run.sh -r npu -v Ascend910B1` on
+  [kernels/automode/a2a3/moe_segmented_gemm_one_layer/](../kernels/automode/a2a3/moe_segmented_gemm_one_layer/)
+  produced `test data success` / `test success` after the host-side `half` visibility fix (see compile-error logbook entry E13).
+- **Scope of the resolution (narrow — do not generalize)**:
+  ```text
+  A3 auto mode
+  single AICORE
+  build target: --cce-aicore-arch=dav-c220-cube --cce-enable-pto-passes -O2
+  host-padded expert segments (topK = 1 upstream layout)
+  T = 256 real tokens
+  H = 64  (K dim)
+  O = 64  (N dim)
+  kE = 4
+  kTileM = 128  (M dim)
+  packed_tokens : float16
+  expert_weight : float16
+  packed_output : float32 (cube FP32 accumulator)
+  TMATMUL<float, half, half, float, M=128, K=64, N=64, false>  (canonical A3 combo, no bias)
+  one expert-specific GEMM per expert microtile
+  ```
+- **What this confirms (now Known at the above shape)** — beyond what §11.6 already established for the segmented elementwise loop:
+  - **Cube `TMATMUL` inside the segmented expert/microtile loop** — outer over `kNumExperts`, inner over `m0 += kTileM`, with both bounds from scalar GM reads of `int32_t` metadata. All five tile types (`Mat ×2`, `Left`, `Right`, `Acc`) declared once outside the loops and reused across iters; auto-sync inserts MTE2 → MTE1 → M → FIX fences.
+  - **FP16 × FP16 → FP32 cube combo** at `(M, K, N) = (128, 64, 64)` static shape; matches the `LaunchTMATMUL<1>` reference instantiation.
+  - **Expert-specific weight GM offset by runtime/loop expert ID** — `expert_weight + e * (kH * kO)` per outer iter, fresh `GlobalDataB` reconstructed each time. `bMatTile`/`bTile` reused across the inner iters of the same expert.
+  - **Runtime packed-token row offset feeding the A-matrix load** — `packed_tokens + (start + m0) * kH` per inner iter; `aMatTile`/`aTile` reused across inner iters with fresh `GlobalDataA`.
+  - **Reuse of Mat/Left/Right/Acc tiles across nested loop iterations** without manual sync.
+  - **Host-padded expert segment layout works for one-layer GEMM** — padded rows are zero, so their GEMM output is exactly zero with no bias.
+  - **Non-template host launcher wrapper avoids host-side `half` visibility issues** — host TU compiled with `-xc++` cannot see `half` (a bisheng-CCE compiler-provided type only visible inside `-xcce` TUs that include `<pto/pto-inst.hpp>`); a `launch…Fp16(uint8_t*, uint8_t*, int32_t*, int32_t*, uint8_t*, void*)` non-template wrapper at the kernel TU boundary cleanly hides it.
+- **Reference entry**: [known_good_kernel_examples.md §A16](known_good_kernel_examples.md).
+- **What is NOT proven by this experiment (still Unknown — do not claim resolved)**:
+  - Full FFN with two GEMMs.
+  - Activation between GEMMs (cube → vec handoff, or fused-via-`ReluPreMode` TSTORE — the latter is documented in `tstore_acc2gm` but not yet exercised in the MoE-segmented context).
+  - Bias path (`TMATMUL_BIAS`).
+  - SplitK / accumulation across K splits (`TMATMUL_ACC`).
+  - TF32 path / FP32 × FP32 GEMM.
+  - INT8 / BF16 inputs.
+  - Different `(M, K, N)` shapes; non-multiple-of-blockAlign `K` or `N`.
+  - Dynamic tail handling with `validM` / `SetValidRow` / `SetValidShape`; partial-tile stores.
+  - Multi-core (`block_idx`) work split.
+  - `topK > 1`; weighted combine; router / argmax / top-K selection.
+  - Backward pass; performance characterization.
+
 ---
 
 ## Cross-references
@@ -671,5 +715,5 @@ Two real errors recorded as Occurrences in [compile_error_logbook.md](compile_er
 - [tile_type_reference.md](tile_type_reference.md) — `Tile`/`ConvTile`/`TileDType` open items (§12).
 - [a3_a5_differences.md](a3_a5_differences.md) — the §12 "Open assumptions and items to verify" list is the source for Group 2 here.
 - [external_context/pr_852_notes.md](external_context/pr_852_notes.md) — the source for Group 9 and several "post-merge" entries.
-- [known_good_kernel_examples.md §A11, §A12, §A13, §A14, §A15](known_good_kernel_examples.md) — the in-tree confirmed-built references produced by §11.1, §11.3, §11.4, §11.5, §11.6.
-- [compile_error_logbook.md §E8, §E9](compile_error_logbook.md) — the two real compile-error occurrences from §11.2.
+- [known_good_kernel_examples.md §A11, §A12, §A13, §A14, §A15, §A16](known_good_kernel_examples.md) — the in-tree confirmed-built references produced by §11.1, §11.3, §11.4, §11.5, §11.6, §11.7.
+- [compile_error_logbook.md §E8, §E9, §E13](compile_error_logbook.md) — the real compile-error occurrences from §11.2 / §11.7.

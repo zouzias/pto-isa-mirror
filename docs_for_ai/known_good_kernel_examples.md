@@ -297,6 +297,58 @@ harness (Known: enumerated in `ALL_TESTCASES` of
    - Larger `kNumExperts` may pressure register / stack allocation for the local `count[]`, `start[]`, `counter[]` arrays in the upstream permute kernel and the larger inner-loop bound here — Unknown.
 7. **Confidence** — High for the fixed shape; behavior at other `T_PADDED` / `H` / `kE` / `kTileM` / dtype / multi-core / dynamic-tail / GEMM is **Unknown**.
 
+### A16. moe_segmented_gemm_one_layer (auto-mode A3, one cube GEMM per expert microtile) — confirmed-built fixed-shape prototype
+
+> First in-tree A3 auto-mode kernel that fires the **cube path** (`TMATMUL`) inside the working per-expert segmented loop. Replaces §A15's `TADDS` body with one expert-specific GEMM tile; everything outside the inner body (host-padded segments, nested loop, runtime GM offsets) is identical. FP16 × FP16 → FP32 (the canonical A3 auto-mode-eligible cube combo from §A6 `tmatmul`).
+
+1. **File** — [kernels/automode/a2a3/moe_segmented_gemm_one_layer/moe_segmented_gemm_one_layer_kernel.cpp](../kernels/automode/a2a3/moe_segmented_gemm_one_layer/moe_segmented_gemm_one_layer_kernel.cpp)
+2. **Why** — sixth in-tree confirmed-built auto-mode A3 kernel. First **cube** auto-mode kernel in this MoE stack; first to combine the §A15 nested expert/microtile loop with the §A6 `TMATMUL` skeleton. User-confirmed PASS on Ascend910B1 after a host-side compile-error fix described in the gotcha below. Status: **Known** (user-confirmed, fixed shape).
+3. **Pattern** — Single AICORE (`<<<1, nullptr, stream>>>`); build target uses `--cce-aicore-arch=dav-c220-cube` (not vec) plus `--cce-enable-pto-passes` for auto mode. Tile aliases lifted from `tests/npu/a2a3/src/st/testcase/tmatmul/tmatmul_kernel.cpp` `RunTMATMUL<float, half, half, float, validM, validK, validN, false>`:
+   ```cpp
+   using TileMatAData = Tile<TileType::Mat, half,  M, K, BLayout::ColMajor,
+                             kTileM, kH, SLayout::RowMajor, 512>;
+   using TileMatBData = Tile<TileType::Mat, half,  K, N, BLayout::ColMajor,
+                             kH,     kO, SLayout::RowMajor, 512>;
+   using LeftTile  = TileLeft <half,  M, K, kTileM, kH>;   // L0A
+   using RightTile = TileRight<half,  K, N, kH,     kO>;   // L0B
+   using AccTile   = TileAcc  <float, M, N, kTileM, kO>;   // L0C
+   ```
+   All five tiles declared once outside both loops; auto allocator pins all five addresses. Body per inner iter:
+   ```cpp
+   GlobalDataA aGlobal(packed_tokens + (start + m0) * kH);
+   GlobalDataC cGlobal(packed_output + (start + m0) * kO);
+   GlobalDataB bGlobal(expert_weight + e * (kH * kO));   // hoisted to outer iter
+   TLOAD (aMatTile, aGlobal);
+   TLOAD (bMatTile, bGlobal);
+   TMOV  (aTile, aMatTile);
+   TMOV  (bTile, bMatTile);
+   TMATMUL(cTile, aTile, bTile);
+   TSTORE(cGlobal, cTile);
+   ```
+   Host-padded expert segments (same recipe as §A15) make every inner iter a full `TILE_M`-row tile — no `SetValidRow`, no partial stores.
+4. **Auto-mode compatibility** — Yes (Known, user-confirmed). Confirms the following at the tested shape:
+   - **`TMATMUL` inside the segmented expert/microtile loop** with runtime-driven A and C offsets per inner iter and per-expert weight offset per outer iter.
+   - **FP16 × FP16 → FP32 cube combo** (`<float, half, half, float, M=128, K=64, N=64>`) — matches `LaunchTMATMUL<1>` reference instantiation. Cube FP32 accumulator over small-int FP16 inputs is bit-exact in the tested distribution.
+   - **Expert-specific weight selection** by GM-pointer arithmetic `expert_weight + e * (kH * kO)`; no UB copy of weights; `bMatTile` and `bTile` reused across inner iters within an expert but driven by a fresh `GlobalDataB` per outer iter.
+   - **Mat/Left/Right/Acc tiles reused across nested loop iterations** without manual sync — auto-sync inserts the MTE2 → MTE1 → M → FIX fences.
+   - **Host-padded expert segment layout** continues to work for the cube path; padded rows are zero, so their GEMM output is exactly zero with no bias.
+   - **Cube-arch + auto-mode compile recipe**: kernel target gets `--cce-aicore-arch=dav-c220-cube --cce-enable-pto-passes -O2`; the rest of the harness is unchanged from the vec-arch sibling projects.
+   - **Non-template host launcher wrapper hides `half` from `main.cpp`** — see the gotcha below.
+5. **Copy** — the entire project layout for any new auto-mode A3 prototype that needs **per-expert segmented cube GEMM**:
+   - the [moe_segmented_gemm_one_layer](../kernels/automode/a2a3/moe_segmented_gemm_one_layer/) directory shape;
+   - the `pto_example_cube_auto` CMake function (one-line delta from `pto_example_vec_auto`: swap `dav-c220-vec` for `dav-c220-cube`);
+   - the nested-loop + TMATMUL body above; it transfers cleanly to a GEMM1 + activation step (see §A17 / `moe_segmented_gemm_relu`) by changing the `TSTORE` template args;
+   - the `uint8_t*` host boundary for FP16 / FP32 typed buffers + bare `int32_t*` for metadata + non-template `…Fp16` wrapper at the kernel TU boundary;
+   - the Python golden recipe (per-expert `np.float32` GEMM over `np.float16` inputs; padded rows are zero so their golden output is zero).
+6. **Do not copy** —
+   - The fixed shape (`T = 256`, `H = K = 64`, `O = N = 64`, `kE = 4`, `kTileM = M = 128`, FP16 × FP16 → FP32) is what was tested. Other `M/K/N` combos, dtypes (int8, bf16, fp32 × fp32), bias path, TF32 path, SplitK loop, TGEMV — all Unknown for this MoE-segmented context until separately confirmed.
+   - **Do not expose `half` in `main.cpp` template arguments.** The host TU is compiled with plain `-xc++` and cannot see `half` (a bisheng-CCE compiler-provided type only visible in `-xcce` translation units that include `<pto/pto-inst.hpp>`). The first compile attempt — `launchMoeSegmentedGemmOneLayer<float, half, half>(...)` at the host call site — failed with `use of undeclared identifier 'half'`. The passing fix is to keep all `half` template parameters inside the kernel TU and expose a non-template launcher wrapper (`launchMoeSegmentedGemmOneLayerFp16(uint8_t*, uint8_t*, int32_t*, int32_t*, uint8_t*, void*)`) that the host calls. **Rule (narrowly scoped to this pattern)**: *For host drivers using raw `uint8_t*` FP16 buffers, do not expose `half` in `main.cpp` template arguments; hide device scalar types behind a non-template launcher wrapper.* Do not overgeneralize to other host-boundary patterns.
+   - Single AICORE only; no `block_idx` work split.
+   - No bias, no activation, no second GEMM, no fused L0C-side post-processing other than the plain `TSTORE`. Use §A17 once it lands for the GEMM + ReLU shape.
+   - The `TASSIGN` literal-address calls and `#ifndef __PTO_AUTO__` manual-sync / `TFILLPAD` blocks from the `tmatmul` reference are omitted here (auto-mode no-ops); do not reintroduce.
+   - `SetValidRow` / `SetValidShape` / partial-tile stores still NOT validated — host padding sidesteps them.
+7. **Confidence** — High for the fixed shape; behavior at other shapes, dtypes, bias / activation paths, multi-core, dynamic-tail is **Unknown**.
+
 ---
 
 ## Group B — Pattern references (use semantics, not source as-is)
