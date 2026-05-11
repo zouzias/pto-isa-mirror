@@ -24,31 +24,9 @@ full text of the License.
 namespace pto {
 namespace comm {
 
-// ============================================================================
-// TREDUCE_IMPL: Reduce operation - root gathers and reduces data from all ranks
-//
-// The calling NPU is the root and gathers data from all ranks, performing
-// element-wise reduction locally.
-//
-// When the GlobalTensor exceeds the UB tile capacity in rows and/or columns,
-// the transfer is automatically chunked via 2D sliding:
-//   - Outer dimensions (DIM_0, DIM_1, DIM_2) are iterated explicitly.
-//   - DIM_3 (rows) is split into tileValidRow-sized chunks.
-//   - DIM_4 (cols) is split into tileValidCol-sized chunks.
-//
-// For each chunk, the full reduce pipeline is executed:
-//   1. Load root's chunk into accTileData
-//   2. For each remote rank: TLOAD chunk into recvTileData, reduce into acc
-//   3. Store reduced chunk to dstGlobalData
-//
-// Constraints for chunked mode:
-//   - If TileData has static ValidRow, shape3 must be divisible by ValidRow.
-//     Use DYNAMIC ValidRow for partial row chunk support.
-//   - If TileData has static ValidCol, shape4 must be divisible by ValidCol.
-//     Use DYNAMIC ValidCol for partial column chunk support.
-//   - All ranks in the ParallelGroup are assumed to have the same
-//   shape/strides.
-// ============================================================================
+// CPU TREDUCE root-side implementation with optional chunked traversal.
+// The fast path handles tensors that fit in one tile; the fallback slides over
+// rows and columns while preserving the same per-rank reduce semantics.
 
 namespace detail {
 

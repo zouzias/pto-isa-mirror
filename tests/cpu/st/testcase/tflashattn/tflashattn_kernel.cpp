@@ -11,6 +11,7 @@ full text of the License.
 */
 
 #include <cmath>
+
 #include <pto/pto-inst.hpp>
 
 using namespace pto;
@@ -20,24 +21,9 @@ namespace {
 constexpr int kSeqLen = 64;
 constexpr int kHeadDim = 32;
 
-} // namespace
-
-__global__ AICORE void RunTFLASHATTN(__gm__ float *out, __gm__ float *q, __gm__ float *k, __gm__ float *v)
+template <typename GlobalQ, typename GlobalK, typename GlobalV, typename GlobalO>
+AICORE inline void RunFlashAttnCore(GlobalQ &qGlobal, GlobalK &kGlobal, GlobalV &vGlobal, GlobalO &oGlobal)
 {
-    using GlobalQ = GlobalTensor<float, Shape<1, 1, 1, kSeqLen, kHeadDim>,
-                                 Stride<kSeqLen * kHeadDim, kSeqLen * kHeadDim, kSeqLen * kHeadDim, kHeadDim, 1>>;
-    using GlobalK = GlobalTensor<float, Shape<1, 1, 1, kSeqLen, kHeadDim>,
-                                 Stride<kSeqLen * kHeadDim, kSeqLen * kHeadDim, kSeqLen * kHeadDim, kHeadDim, 1>>;
-    using GlobalV = GlobalTensor<float, Shape<1, 1, 1, kSeqLen, kHeadDim>,
-                                 Stride<kSeqLen * kHeadDim, kSeqLen * kHeadDim, kSeqLen * kHeadDim, kHeadDim, 1>>;
-    using GlobalO = GlobalTensor<float, Shape<1, 1, 1, kSeqLen, kHeadDim>,
-                                 Stride<kSeqLen * kHeadDim, kSeqLen * kHeadDim, kSeqLen * kHeadDim, kHeadDim, 1>>;
-
-    GlobalQ qGlobal(q);
-    GlobalK kGlobal(k);
-    GlobalV vGlobal(v);
-    GlobalO oGlobal(out);
-
     using QPlain =
         Tile<TileType::Vec, float, kSeqLen, kHeadDim, BLayout::RowMajor, kSeqLen, kHeadDim, SLayout::NoneBox>;
     using KPlain =
@@ -83,10 +69,6 @@ __global__ AICORE void RunTFLASHATTN(__gm__ float *out, __gm__ float *q, __gm__ 
     RightV vRight;
     AccOut outAcc;
 
-    // No direct Tile memory assignment is made (via TASSIGN)
-    // So, __PTO_AUTO__ macro should be enabled in compiler definitions for auto
-    // memory assignment
-
     TLOAD(qTile, qGlobal);
     TLOAD(kTile, kGlobal);
     TLOAD(vTile, vGlobal);
@@ -109,6 +91,30 @@ __global__ AICORE void RunTFLASHATTN(__gm__ float *out, __gm__ float *q, __gm__ 
     TMOV(vRight, vTile);
     TMATMUL(outAcc, pLeft, vRight);
     TSTORE(oGlobal, outAcc);
+}
+
+} // namespace
+
+__global__ AICORE void RunTFLASHATTN(__gm__ float *out, __gm__ float *q, __gm__ float *k, __gm__ float *v)
+{
+    using GlobalQ = GlobalTensor<float, Shape<1, 1, 1, kSeqLen, kHeadDim>,
+                                 Stride<kSeqLen * kHeadDim, kSeqLen * kHeadDim, kSeqLen * kHeadDim, kHeadDim, 1>>;
+    using GlobalK = GlobalTensor<float, Shape<1, 1, 1, kSeqLen, kHeadDim>,
+                                 Stride<kSeqLen * kHeadDim, kSeqLen * kHeadDim, kSeqLen * kHeadDim, kHeadDim, 1>>;
+    using GlobalV = GlobalTensor<float, Shape<1, 1, 1, kSeqLen, kHeadDim>,
+                                 Stride<kSeqLen * kHeadDim, kSeqLen * kHeadDim, kSeqLen * kHeadDim, kHeadDim, 1>>;
+    using GlobalO = GlobalTensor<float, Shape<1, 1, 1, kSeqLen, kHeadDim>,
+                                 Stride<kSeqLen * kHeadDim, kSeqLen * kHeadDim, kSeqLen * kHeadDim, kHeadDim, 1>>;
+
+    GlobalQ qGlobal(q);
+    GlobalK kGlobal(k);
+    GlobalV vGlobal(v);
+    GlobalO oGlobal(out);
+
+    // No direct Tile memory assignment is made (via TASSIGN)
+    // So, __PTO_AUTO__ macro should be enabled in compiler definitions for auto
+    // memory assignment
+    RunFlashAttnCore(qGlobal, kGlobal, vGlobal, oGlobal);
 
     out = oGlobal.data();
 }

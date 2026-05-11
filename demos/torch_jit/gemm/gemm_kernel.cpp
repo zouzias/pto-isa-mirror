@@ -15,7 +15,10 @@ full text of the License.
 
 #include <cstdint>
 #include <pto/pto-inst.hpp>
+
+#include "kernels/manual/common/gemm_pipeline_common.h"
 using namespace pto;
+using namespace pto::manual::common;
 
 constexpr uint32_t BUFFER_NUM = 2;
 constexpr uint32_t L0_PINGPONG_BYTES = 32 * 1024; // L0A/L0B ping-pong split (32 KiB per buffer)
