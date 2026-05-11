@@ -33,14 +33,18 @@
 using namespace std;
 using namespace PtoTestCommon;
 
-// Match the kernel's signature: uint8_t* for typed buffers, int32_t* for metadata.
-template <typename TOut, typename TIn, typename TWeight>
-void launchMoeSegmentedGemmOneLayer(uint8_t *packed_output,
-                                    uint8_t *packed_tokens,
-                                    int32_t *expert_count,
-                                    int32_t *expert_start,
-                                    uint8_t *expert_weight,
-                                    void *stream);
+// Non-template FP16 wrapper exposed by the kernel TU. main.cpp is compiled
+// with plain `-xc++` and cannot see `half` (a bisheng-CCE compiler-provided
+// type), so the host boundary only ever talks about uint8_t* / int32_t*.
+// The wrapper internally calls
+//   launchMoeSegmentedGemmOneLayer<float, half, half>(...)
+// which is defined in the `-xcce` kernel translation unit.
+extern "C" void launchMoeSegmentedGemmOneLayerFp16(uint8_t *packed_output,
+                                                    uint8_t *packed_tokens,
+                                                    int32_t *expert_count,
+                                                    int32_t *expert_start,
+                                                    uint8_t *expert_weight,
+                                                    void *stream);
 
 static int ReadTPadded()
 {
@@ -131,8 +135,9 @@ int main()
     aclrtMemcpy(countDev,  expertMetaBytes,   countHost,  expertMetaBytes,   ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(startDev,  expertMetaBytes,   startHost,  expertMetaBytes,   ACL_MEMCPY_HOST_TO_DEVICE);
 
-    // TOut=float, TIn=half, TWeight=half (the auto-mode-eligible A3 cube combo).
-    launchMoeSegmentedGemmOneLayer<float, half, half>(
+    // FP16 x FP16 -> FP32 (the auto-mode-eligible A3 cube combo). The host
+    // never names `half` directly; the wrapper in the kernel TU does.
+    launchMoeSegmentedGemmOneLayerFp16(
         outputDev, tokensDev, countDev, startDev, weightDev, stream);
 
     aclrtSynchronizeStream(stream);
