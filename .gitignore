@@ -21,6 +21,7 @@ __pycache__/
 bin/
 tests/npu/a2a3/src/st/build
 tests/npu/a5/src/st/build
+tests/npu/a5/src/st/build_a5_test
 .arts
 docs/mkdocs/src/CONTRIBUTING.md
 docs/mkdocs/src/README.md
@@ -41,4 +42,4 @@ docs/mkdocs/src/manual/isa-reference_zh.md
 docs/mkdocs/src/scripts/
 docs/mkdocs/src/tests/
 kernels/**/**/**/build/
-PROF*/
+PROF*/build_a5_test/

@@ -20,6 +20,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifdef __COSTMODEL
 #include "pto/npu/a2a3/TAssign.hpp"
 #include "pto/npu/a2a3/TSync.hpp"
+#include "pto/npu/a2a3/TSyncAll.hpp"
 #include "pto/npu/a2a3/TAdd.hpp"
 #include "pto/npu/a2a3/TAddS.hpp"
 #include "pto/npu/a2a3/TSub.hpp"
@@ -61,6 +62,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TAssign.hpp"
 #include "pto/npu/a2a3/TAlias.hpp"
 #include "pto/npu/a2a3/TSync.hpp"
+#include "pto/npu/a2a3/TSyncAll.hpp"
 #include "pto/npu/a2a3/TAdd.hpp"
 #include "pto/npu/a2a3/TAnd.hpp"
 #include "pto/npu/a2a3/TOr.hpp"
@@ -164,6 +166,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifdef PTO_NPU_ARCH_A5
 #include "pto/npu/a5/TAssign.hpp"
 #include "pto/npu/a5/TSync.hpp"
+#include "pto/npu/a5/TSyncAll.hpp"
 #include "pto/npu/a5/TAdd.hpp"
 #include "pto/npu/a5/TAnd.hpp"
 #include "pto/npu/a5/TAndS.hpp"

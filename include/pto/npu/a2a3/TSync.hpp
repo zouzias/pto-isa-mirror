@@ -21,6 +21,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define FFTS_EVENT_ID_WIDTH 0xf
 #define FFTS_EVENT_ID_OFFSET 8
 namespace pto {
+constexpr uint16_t SYNC_AIC_FLAG = 11;
+constexpr uint16_t SYNC_AIV_FLAG = 12;
+constexpr uint16_t SYNC_AIC_AIV_FLAG = 13;
+constexpr uint16_t SYNC_AIV_ONLY_ALL = 14;
+constexpr uint16_t SYNC_FLAG_ID_MAX = 16;
+
 template <Op OpCode>
 PTO_INTERNAL static constexpr pipe_t GetPipeByOp()
 {
@@ -98,6 +104,11 @@ struct Event {
 #else
             wait_flag((pipe_t)srcPipe, (pipe_t)dstPipe, token);
 #endif
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
+            if constexpr (AutoToken) {
+                EventIdCounter<srcPipe, dstPipe>::MarkFree(token);
+            }
+#endif
         }
 #endif
         return *this;
@@ -141,12 +152,10 @@ struct Event {
 };
 
 template <typename T>
-struct is_event : std::false_type {
-};
+struct is_event : std::false_type {};
 
 template <Op SrcOp, Op DstOp, bool AutoToken, event_t EventID>
-struct is_event<Event<SrcOp, DstOp, AutoToken, EventID>> : std::true_type {
-};
+struct is_event<Event<SrcOp, DstOp, AutoToken, EventID>> : std::true_type {};
 
 template <typename... Ts>
 inline constexpr bool all_events_v = (is_event<Ts>::value && ...);

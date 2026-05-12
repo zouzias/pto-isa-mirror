@@ -238,6 +238,7 @@ set(ALL_TESTCASES
     tmov_zz
     tmov_nd2nz
     textract_acc2vec
+    tsyncall
 )
 
 if(NOT AUTO_MODE)
