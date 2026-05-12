@@ -23,7 +23,34 @@ constexpr int kFaTileS1 = 256;
 constexpr int kFaQkPreload = 4;
 constexpr std::size_t kFaProfileBytesPerBlock = 1024 * 3; // cube + two vec subblocks
 constexpr std::size_t kFaCvCommSlotBytes = 512U;
-constexpr int VEC_CORES = 2; // Default to 2 vector cores per cube
+constexpr int VEC_CORES = 2;                              // Default to 2 vector cores per cube
+
+struct FaPipelineState {
+    int pGuSrcPingpongId = 0;
+    int kSrcPingpongId = 0;
+    int pvSrcPingpongId = 0;
+    int qkAccTileEvtID = 0;
+    int pvAccTileEvtID = 0;
+};
+
+template <bool DavCube, bool DavVec>
+AICORE inline void InitFaPipeFlags()
+{
+    if constexpr (DavCube) {
+        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
+        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID3);
+        set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+        set_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
+    }
+    if constexpr (DavVec) {
+        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
+        set_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
+        set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+    }
+}
 
 template <int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1 = kFaCubeS1, int TILE_S1 = kFaTileS1,
           int QK_PRELOAD = kFaQkPreload, int CV_FIFO_SIZE = kFaCvFifoSize, bool INTERMEDIATE_CHECK = false,

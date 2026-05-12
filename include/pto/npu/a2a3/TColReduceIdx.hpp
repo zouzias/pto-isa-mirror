@@ -1,24 +1,52 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TCOLREDUCEIDX_HPP
 #define TCOLREDUCEIDX_HPP
 
-#include <pto/common/utils.hpp>
 #include <pto/common/type.hpp>
+#include <pto/common/utils.hpp>
 
 namespace pto {
+template <typename TileDataIn>
+struct TColReduceIdxLoopParams {
+    static constexpr uint32_t SrcRowStride = TileDataIn::Cols;
+    static constexpr uint32_t ElemPerRpt = REPEAT_BYTE / sizeof(typename TileDataIn::DType);
+    static constexpr uint32_t ElemPerBlock = BLOCK_BYTE_SIZE / sizeof(typename TileDataIn::DType);
+
+    uint16_t numLoop;
+    uint16_t remainAfterLoop;
+    uint32_t tmpGapEles;
+};
+
+template <typename TileDataIn>
+PTO_INTERNAL inline TColReduceIdxLoopParams<TileDataIn> BuildTColReduceIdxLoopParams(unsigned srcValidCol)
+{
+    TColReduceIdxLoopParams<TileDataIn> params{};
+    params.numLoop = srcValidCol / TColReduceIdxLoopParams<TileDataIn>::ElemPerRpt;
+    params.remainAfterLoop = srcValidCol % TColReduceIdxLoopParams<TileDataIn>::ElemPerRpt;
+    params.tmpGapEles = params.numLoop > 0 ?
+                            TColReduceIdxLoopParams<TileDataIn>::ElemPerRpt :
+                            CeilDivision(srcValidCol, TColReduceIdxLoopParams<TileDataIn>::ElemPerBlock) *
+                                TColReduceIdxLoopParams<TileDataIn>::ElemPerBlock;
+    return params;
+}
+
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
 PTO_INTERNAL void TColReduceIdxCheck(unsigned srcValidRow, unsigned srcValidCol, unsigned dstValidRow,
                                      unsigned dstValidCol)
 {
+    static_assert(TileDataIn::ValidCol == 1 || TileDataIn::ValidCol == -1,
+                  "Fix: TCOLARGMAX Src ValidCol must be 1 or -1");
     static_assert(
         std::is_same_v<typename TileDataIn::DType, uint32_t> || std::is_same_v<typename TileDataIn::DType, uint16_t> ||
             std::is_same_v<typename TileDataIn::DType, half> || std::is_same_v<typename TileDataIn::DType, float>,
@@ -37,7 +65,8 @@ PTO_INTERNAL void TColReduceIdxCheck(unsigned srcValidRow, unsigned srcValidCol,
                "Fix: TCOLARGMAX input shape is invalid, validCol or validRow is 0.");
     PTO_ASSERT(dstValidRow == 1, "Fix: TCOLARGMAX output validRow must be 1");
     PTO_ASSERT(srcValidCol == dstValidCol,
-               "Fix: TCOLARGMAX input validCol must be consistent with the output validCol");
+               "Fix: TCOLARGMAX input validCol must be consistent with the "
+               "output validCol");
 }
 
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, bool IsArgMax>
@@ -48,22 +77,25 @@ __tf__ PTO_INTERNAL void TColReduceIdx16(typename TileDataOut::TileDType __out__
 {
     using TOUT = typename TileDataOut::DType;
     using T = typename TileDataIn::DType;
-    constexpr uint32_t srcRowStride = TileDataIn::Cols;
-    constexpr uint32_t elemPerRpt = REPEAT_BYTE / sizeof(T);
-    constexpr uint32_t elemPerBlock = BLOCK_BYTE_SIZE / sizeof(T);
+    using LoopParams = TColReduceIdxLoopParams<TileDataIn>;
+    constexpr uint32_t srcRowStride = LoopParams::SrcRowStride;
+    constexpr uint32_t elemPerRpt = LoopParams::ElemPerRpt;
     __ubuf__ TOUT *dstPtr = (__ubuf__ TOUT *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
     __ubuf__ T *tmpPtr = (__ubuf__ T *)__cce_get_tile_ptr(tmp);
 
-    uint16_t numLoop = srcValidCol / elemPerRpt;
-    uint16_t remainAfterLoop = srcValidCol % elemPerRpt;
-    uint32_t tmpGapEles = numLoop > 0 ? elemPerRpt : CeilDivision(srcValidCol, elemPerBlock) * elemPerBlock;
+    const auto params = BuildTColReduceIdxLoopParams<TileDataIn>(srcValidCol);
+    uint16_t numLoop = params.numLoop;
+    uint16_t remainAfterLoop = params.remainAfterLoop;
+    uint32_t tmpGapEles = params.tmpGapEles;
 
     for (uint16_t j = 0; j < numLoop; j++) {
         pipe_barrier(PIPE_V);
-        vector_dup((__ubuf__ int16_t *)tmpPtr, 0, 1, 1, 1, 0, 0);                        // cur index
-        vector_dup((__ubuf__ int16_t *)tmpPtr + 2 * tmpGapEles, 0, 1, 1, 1, 0, 0);       // argmin index
-        pto_copy_ubuf_to_ubuf(tmpPtr + tmpGapEles, srcPtr + j * elemPerRpt, 1, 8, 0, 0); // min elements
+        vector_dup((__ubuf__ int16_t *)tmpPtr, 0, 1, 1, 1, 0, 0); // cur index
+        vector_dup((__ubuf__ int16_t *)tmpPtr + 2 * tmpGapEles, 0, 1, 1, 1, 0,
+                   0);                                            // argmin index
+        pto_copy_ubuf_to_ubuf(tmpPtr + tmpGapEles, srcPtr + j * elemPerRpt, 1, 8, 0,
+                              0);                                 // min elements
         pipe_barrier(PIPE_V);
         for (uint16_t i = 1; i < srcValidRow; i++) {
             vadds((__ubuf__ int16_t *)tmpPtr, (__ubuf__ int16_t *)tmpPtr, 1, 1, 1, 1, 0, 0);
@@ -144,21 +176,23 @@ __tf__ PTO_INTERNAL void TColReduceIdx32(typename TileDataOut::TileDType __out__
 {
     using TOUT = typename TileDataOut::DType;
     using T = typename TileDataIn::DType;
+    using LoopParams = TColReduceIdxLoopParams<TileDataIn>;
     __ubuf__ TOUT *dstPtr = (__ubuf__ TOUT *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
     __ubuf__ T *tmpPtr = (__ubuf__ T *)__cce_get_tile_ptr(tmp);
 
-    constexpr uint32_t srcRowStride = TileDataIn::Cols;
-    constexpr uint32_t elemPerRpt = REPEAT_BYTE / sizeof(T);
-    constexpr uint32_t elemPerBlock = BLOCK_BYTE_SIZE / sizeof(T);
-    uint16_t numLoop = srcValidCol / elemPerRpt;
-    uint16_t remainAfterLoop = srcValidCol % elemPerRpt;
-    uint32_t tmpGapEles = numLoop > 0 ? elemPerRpt : CeilDivision(srcValidCol, elemPerBlock) * elemPerBlock;
+    constexpr uint32_t srcRowStride = LoopParams::SrcRowStride;
+    constexpr uint32_t elemPerRpt = LoopParams::ElemPerRpt;
+    const auto params = BuildTColReduceIdxLoopParams<TileDataIn>(srcValidCol);
+    uint16_t numLoop = params.numLoop;
+    uint16_t remainAfterLoop = params.remainAfterLoop;
+    uint32_t tmpGapEles = params.tmpGapEles;
 
     for (uint16_t j = 0; j < numLoop; j++) {
-        vector_dup(dstPtr + j * elemPerRpt, 0, 1, 1, 1, 0, 0);                           // argmin index
-        vector_dup(tmpPtr, 0, 1, 1, 1, 0, 0);                                            // cur index
-        pto_copy_ubuf_to_ubuf(tmpPtr + tmpGapEles, srcPtr + j * elemPerRpt, 1, 8, 0, 0); // min elements
+        vector_dup(dstPtr + j * elemPerRpt, 0, 1, 1, 1, 0, 0); // argmin index
+        vector_dup(tmpPtr, 0, 1, 1, 1, 0, 0);                  // cur index
+        pto_copy_ubuf_to_ubuf(tmpPtr + tmpGapEles, srcPtr + j * elemPerRpt, 1, 8, 0,
+                              0);                              // min elements
         pipe_barrier(PIPE_V);
         for (uint16_t i = 1; i < srcValidRow; i++) {
             vadds((__ubuf__ int32_t *)tmpPtr, (__ubuf__ int32_t *)tmpPtr, 1, 1, 1, 1, 0, 0);
@@ -227,10 +261,10 @@ PTO_INTERNAL void TCOLARG_DISPATCH(TileDataOut &dst, TileDataIn &src, TileDataTm
     TColReduceIdxCheck<TileDataOut, TileDataIn, TileDataTmp>(srcValidRow, srcValidCol, dst.GetValidRow(),
                                                              dst.GetValidCol());
 
-    if (sizeof(typename TileDataIn::DType) == 2) {
+    if constexpr (sizeof(typename TileDataIn::DType) == 2) {
         TColReduceIdx16<TileDataOut, TileDataIn, TileDataTmp, IsArgMax>(dst.data(), src.data(), tmp.data(), srcValidRow,
                                                                         srcValidCol);
-    } else if (sizeof(typename TileDataIn::DType) == 4) {
+    } else if constexpr (sizeof(typename TileDataIn::DType) == 4) {
         TColReduceIdx32<TileDataOut, TileDataIn, TileDataTmp, IsArgMax>(dst.data(), src.data(), tmp.data(), srcValidRow,
                                                                         srcValidCol);
     }
@@ -238,12 +272,14 @@ PTO_INTERNAL void TCOLARG_DISPATCH(TileDataOut &dst, TileDataIn &src, TileDataTm
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
 PTO_INTERNAL void TCOLARGMIN_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
 {
-    TCOLARG_DISPATCH<TileDataOut, TileDataIn, TileDataTmp, false>(dst, src, tmp); // Min
+    TCOLARG_DISPATCH<TileDataOut, TileDataIn, TileDataTmp, false>(dst, src,
+                                                                  tmp); // Min
 }
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
 PTO_INTERNAL void TCOLARGMAX_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
 {
-    TCOLARG_DISPATCH<TileDataOut, TileDataIn, TileDataTmp, true>(dst, src, tmp); // Max
+    TCOLARG_DISPATCH<TileDataOut, TileDataIn, TileDataTmp, true>(dst, src,
+                                                                 tmp); // Max
 }
 } // namespace pto
 #endif
