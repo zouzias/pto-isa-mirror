@@ -1,14 +1,17 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #include <acl/acl.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -18,10 +21,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <string>
 #include <type_traits>
 #include <vector>
-#include "securec.h"
 
-#include "test_common.h"
 #include "generated_cases.h"
+#include "securec.h"
+#include "test_common.h"
 
 using namespace PtoTestCommon;
 
@@ -71,7 +74,8 @@ static bool FullResultCmp(const std::vector<float> &expected, const std::vector<
     }
     int threshold = static_cast<int>(n * eps);
     printf(
-        "[FullResultCmp] elems=%zu, err_count=%d, threshold=%d, max_diff=%.6e at [%zu] (exp=%.6e act=%.6e) "
+        "[FullResultCmp] elems=%zu, err_count=%d, threshold=%d, max_diff=%.6e at "
+        "[%zu] (exp=%.6e act=%.6e) "
         "first_err=%zu\n",
         n, errCount, threshold, maxDiff, maxIdx, maxIdx < n ? expected[maxIdx] : 0.0f,
         maxIdx < n ? actual[maxIdx] : 0.0f, firstErrIdx);
