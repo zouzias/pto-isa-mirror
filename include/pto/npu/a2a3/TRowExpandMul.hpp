@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TROWEXPANDMUL_HPP
@@ -52,7 +54,8 @@ PTO_INTERNAL void TROWEXPANDMUL_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileD
         src0eqdst = (TileDataSrc0::RowStride >= TileDataSrc1::RowStride);
     }
     PTO_ASSERT((src0eqdst && TileDataSrc0::isRowMajor) || (src1eqdst && TileDataSrc1::isRowMajor),
-               "TROWEXPANMUL: the validShape of src0 or src1 should be equal to those of dst.");
+               "TROWEXPANMUL: the validShape of src0 or src1 should be equal to "
+               "those of dst.");
     if (src0eqdst) {
         PTO_ASSERT(((TileDataSrc1::isRowMajor && src1ValidCol == 32 / sizeof(T)) ||
                     (!TileDataSrc1::isRowMajor && src1ValidCol == 1)) &&
@@ -90,7 +93,8 @@ PTO_INTERNAL void TROWEXPANDMUL_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileD
     bool src0eqdst = (validRow == src0ValidRow) && (validCol == src0ValidCol);
     bool src1eqdst = (validRow == src1ValidRow) && (validCol == src1ValidCol);
     PTO_ASSERT((src0eqdst && TileDataSrc0::isRowMajor) || (src1eqdst && TileDataSrc1::isRowMajor),
-               "TROWEXPANDMUL: the validShape of src0 or src1 should be equal to those of dst.");
+               "TROWEXPANDMUL: the validShape of src0 or src1 should be equal to "
+               "those of dst.");
     if (src0eqdst) {
         PTO_ASSERT((!TileDataSrc1::isRowMajor && src1ValidCol == 1) && src1ValidRow == validRow,
                    "TROWEXPANDMUL: invalid src1 shape.");
