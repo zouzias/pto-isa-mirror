@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TSYNC_CUSTOM_HPP
@@ -23,10 +25,12 @@ enum class SyncOpType : uint8_t
 {
     TSTORE_C2GM,  // Store (Cube core operation via PIPE_FIX) - GM path
     TSTORE_V2GM,  // Store (Vector core operation via PIPE_MTE3) - GM path
-    TMOV_C2UB,    // TMOV from L0C to UB (Cube core operation via PIPE_FIX) - UB path
-    TINSERT_V2L1, // TINSERT from UB to L1 (Vector core operation via PIPE_MTE3) - UB path
-                  // TINSERT uses copy_ubuf_to_cbuf which goes through MTE3 pipe
-                  // Cube consumer waits on PIPE_MTE1 (L1 side receives via MTE1)
+    TMOV_C2UB,    // TMOV from L0C to UB (Cube core operation via PIPE_FIX) - UB
+                  // path
+    TINSERT_V2L1, // TINSERT from UB to L1 (Vector core operation via PIPE_MTE3)
+                  // - UB path TINSERT uses copy_ubuf_to_cbuf which goes through
+                  // MTE3 pipe Cube consumer waits on PIPE_MTE1 (L1 side receives
+                  // via MTE1)
     TLOAD         // Load operation (consumer operation)
 };
 
@@ -42,7 +46,8 @@ enum class SyncOpType : uint8_t
 // -----------------------------------------------------------------------------
 template <SyncOpType ProducerOp, SyncOpType ConsumerOp>
 struct SyncTraits {
-    // GM path: Cube produces via TSTORE_C2GM (PIPE_FIX) - consumer waits on PIPE_MTE2
+    // GM path: Cube produces via TSTORE_C2GM (PIPE_FIX) - consumer waits on
+    // PIPE_MTE2
     static constexpr bool is_cube_to_vec_gm = (ProducerOp == SyncOpType::TSTORE_C2GM);
     // UB path: Cube produces via TMOV_C2UB (PIPE_FIX) - consumer waits on PIPE_V
     static constexpr bool is_cube_to_vec_ub = (ProducerOp == SyncOpType::TMOV_C2UB);
@@ -50,14 +55,16 @@ struct SyncTraits {
     static constexpr bool is_cube_to_vec = is_cube_to_vec_gm || is_cube_to_vec_ub;
     // GM path: Vector produces via TSTORE_V2GM (PIPE_MTE3)
     static constexpr bool is_vec_to_cube_gm = (ProducerOp == SyncOpType::TSTORE_V2GM);
-    // UB path: Vector produces via TINSERT_V2L1 (PIPE_MTE3) - Cube waits on PIPE_MTE1
+    // UB path: Vector produces via TINSERT_V2L1 (PIPE_MTE3) - Cube waits on
+    // PIPE_MTE1
     static constexpr bool is_vec_to_cube_ub = (ProducerOp == SyncOpType::TINSERT_V2L1);
     // Unified Vec-to-Cube detection
     static constexpr bool is_vec_to_cube = is_vec_to_cube_gm || is_vec_to_cube_ub;
 
     static_assert(ConsumerOp == SyncOpType::TLOAD, "Consumer operation must be TLOAD");
     static_assert(is_cube_to_vec || is_vec_to_cube,
-                  "Producer must be TSTORE_C2GM, TMOV_C2UB (Cube) or TSTORE_V2GM, TINSERT_V2L1 (Vector)");
+                  "Producer must be TSTORE_C2GM, TMOV_C2UB (Cube) or "
+                  "TSTORE_V2GM, TINSERT_V2L1 (Vector)");
 };
 
 namespace detail {
@@ -73,9 +80,11 @@ constexpr int kNumUserFlags = kMaxFlagID - kUserFlagIDStart + 1; // 12 flags
 } // namespace detail
 
 // -----------------------------------------------------------------------------
-// TSync_Custom - Lightweight synchronization primitive for intra-core dependencies
+// TSync_Custom - Lightweight synchronization primitive for intra-core
+// dependencies
 //
-// Supports both GM path (TSTORE->TLOAD) and UB path (TMOV->TLOAD, TINSERT->TLOAD)
+// Supports both GM path (TSTORE->TLOAD) and UB path (TMOV->TLOAD,
+// TINSERT->TLOAD)
 //
 // PIPE MAPPINGS:
 //   1) GM -> L1: MTE2
@@ -121,8 +130,9 @@ struct TSync_Custom {
 
     // -----------------------------------------------------------------------------
     // record - Producer signals that data is ready
-    // Cube producers: set BOTH flag_id AND flag_id + 16 (one for each Vec subblock)
-    // Vec producers: set flag_id only (hardware maps to flag_id+16 for subblock 1)
+    // Cube producers: set BOTH flag_id AND flag_id + 16 (one for each Vec
+    // subblock) Vec producers: set flag_id only (hardware maps to flag_id+16 for
+    // subblock 1)
     // -----------------------------------------------------------------------------
     AICORE inline void record() const
     {
@@ -132,7 +142,8 @@ struct TSync_Custom {
             set_intra_block(PIPE_FIX, flag_id + VEC_CORE_ID_OFFSET);
         } else { // is_v2c (both gm and ub)
             // Vec -> Cube: Vec sets flag_id only on PIPE_MTE3
-            // Each Vec subblock executes this; hardware maps subblock 1's flag to flag_id+16
+            // Each Vec subblock executes this; hardware maps subblock 1's flag to
+            // flag_id+16
             set_intra_block(PIPE_MTE3, flag_id);
         }
     }
@@ -167,15 +178,16 @@ struct TSync_Custom {
 
     // -----------------------------------------------------------------------------
     // allocate - Producer waits for buffer space to be available
-    // Cube producers: wait on BOTH flag_id+1 AND flag_id+1+16 (Vec consumer signals)
-    // Vec producers: wait on flag_id+1 only (Cube consumer signals both)
+    // Cube producers: wait on BOTH flag_id+1 AND flag_id+1+16 (Vec consumer
+    // signals) Vec producers: wait on flag_id+1 only (Cube consumer signals both)
     // -----------------------------------------------------------------------------
     AICORE inline void allocate() const
     {
         if constexpr (is_c2v) {
             // Cube producer waits for Vec consumer to free buffer
             // Vec signals on flag_id+1 only, but Cube must wait on BOTH
-            // (because Vec0 signals flag_id+1, Vec1 signals flag_id+1+16 from Cube's view)
+            // (because Vec0 signals flag_id+1, Vec1 signals flag_id+1+16 from Cube's
+            // view)
             wait_intra_block(PIPE_FIX, flag_id + 1);
             wait_intra_block(PIPE_FIX, flag_id + 1 + VEC_CORE_ID_OFFSET);
         } else { // is_v2c (both gm and ub)
@@ -187,13 +199,14 @@ struct TSync_Custom {
 
     // -----------------------------------------------------------------------------
     // free - Consumer signals that buffer space is available
-    // Vec consumers: set flag_id+1 only (hardware maps to flag_id+1+16 for subblock 1)
-    // Cube consumers: set BOTH flag_id+1 AND flag_id+1+16
+    // Vec consumers: set flag_id+1 only (hardware maps to flag_id+1+16 for
+    // subblock 1) Cube consumers: set BOTH flag_id+1 AND flag_id+1+16
     // -----------------------------------------------------------------------------
     AICORE inline void free() const
     {
         if constexpr (is_c2v_gm) {
-            // Vec consumer frees buffer for Cube - signals on PIPE_MTE2, flag_id+1 only
+            // Vec consumer frees buffer for Cube - signals on PIPE_MTE2, flag_id+1
+            // only
             set_intra_block(PIPE_MTE2, flag_id + 1);
         } else if constexpr (is_c2v_ub) {
             // Vec consumer frees buffer for Cube - signals on PIPE_V, flag_id+1 only

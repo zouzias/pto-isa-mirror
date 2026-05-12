@@ -44,7 +44,7 @@ class TColExpand:
         self.dst_valid_col = dst_valid_col
 
 if __name__ == "__main__":
-    
+
     case_name_list = [
         "TCOLEXPANDTest.case1",
         "TCOLEXPANDTest.case2",
@@ -59,7 +59,7 @@ if __name__ == "__main__":
         "TCOLEXPANDTest.case11",
         "TCOLEXPANDTest.case12",
     ]
-    
+
     case_params_list = [
         TColExpand(np.int16, 32, 32, 16, 8),
         TColExpand(np.int32, 24, 16, 16, 8),
