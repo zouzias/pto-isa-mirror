@@ -1,18 +1,21 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TSORT32_HPP
 #define TSORT32_HPP
 
-#include <pto/common/constants.hpp>
 #include <limits>
+#include <pto/common/constants.hpp>
+
 #include "common.hpp"
 #define PTO_CEIL(x, y) ((((x) + (y)-1) / (y)) * (y))
 #define PTO_DIV_ROUNDUP(x, y) ((((x) + (y)-1) / (y)))
@@ -96,7 +99,8 @@ PTO_INTERNAL void LargeTmpBufferImpl(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, __u
                     // pad the last 32 elements
                     __ubuf__ T *tmpPtr_lastRepeatPerRow = tmpPtr + PTO_CEIL(srcTailPerRow, BLOCK_SIZE) - BLOCK_SIZE;
                     __ubuf__ T *tmpDstPtr = tmpPtr_lastRepeatPerRow;
-                    // only load and pad the last unaligned 32 elements per row, No need for post-update
+                    // only load and pad the last unaligned 32 elements per row, No need
+                    // for post-update
                     vlds(vreg_padded, tmpPtr_lastRepeatPerRow, 0, NORM);
                     vdup(vreg_padded, minVal, preg_tail, MODE_MERGING);
                     vsts((vector_f16 &)vreg_padded, (__ubuf__ half *&)tmpDstPtr, 0, NORM_B16, st_preg);
@@ -145,7 +149,8 @@ __tf__ AICORE void TSort32Impl(typename DstTileData::TileDType __out__ dst, type
                 __ubuf__ T *tmpPtr_lastRepeatPerRow =
                     tmpPtr + PTO_CEIL(validCol, BLOCK_SIZE) - BLOCK_SIZE; // pad the last 32 elements
                 __ubuf__ T *tmpDstPtr = tmpPtr_lastRepeatPerRow;
-                // only load and pad the last unaligned 32 elements per row, No need for post-update
+                // only load and pad the last unaligned 32 elements per row, No need for
+                // post-update
                 vlds(vreg_padded, tmpPtr_lastRepeatPerRow, 0, NORM);
                 vdup(vreg_padded, minVal, preg_tail, MODE_MERGING);
                 vsts((vector_f16 &)vreg_padded, (__ubuf__ half *&)tmpDstPtr, 0, NORM_B16, st_preg);

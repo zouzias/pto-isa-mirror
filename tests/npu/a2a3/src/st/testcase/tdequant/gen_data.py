@@ -32,7 +32,7 @@ def gen_golden_data_tdequant(case_name, param):
 
     src = np.zeros(src_tile_shape, dtype=src_dtype)
     src[:m, :n] = src_valid
-    
+
     scale_valid = np.random.uniform(0.001, 1.0, size=(m, 1)).astype(np.float32)
     scale = np.zeros(para_tile_shape, dtype=np.float32)
     scale[:m, :1] = scale_valid
@@ -62,7 +62,7 @@ def gen_golden_data_tdequant(case_name, param):
 
 
 class TDequantParams:
-    def __init__(self, name, dst_dtype, src_dtype, dst_rows, dst_cols, src_rows, src_cols, 
+    def __init__(self, name, dst_dtype, src_dtype, dst_rows, dst_cols, src_rows, src_cols,
                  dst_valid_rows, dst_valid_cols, para_rows, para_cols):
         self.name = name
         self.dst_dtype = dst_dtype

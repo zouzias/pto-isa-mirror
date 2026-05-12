@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef THISTOGRAM_HPP
@@ -111,7 +113,8 @@ PTO_INTERNAL void deintlv_u32_bytes(__ubuf__ uint32_t *srcPtr, unsigned elemOffs
     vdintlv(byte2, byte3, (vector_u8 &)hi0, (vector_u8 &)hi1);
 }
 
-// Load filter index values from the idx tile based on which byte is being processed.
+// Load filter index values from the idx tile based on which byte is being
+// processed.
 template <HistByte byte>
 PTO_INTERNAL void load_filter_indices(__ubuf__ uint8_t *idxPtr, unsigned idxCols, vector_u8 &idx0, vector_u8 &idx1,
                                       vector_u8 &idx2)
@@ -164,17 +167,19 @@ PTO_INTERNAL void filter_and_histogram_u32(vector_u8 &byte0, vector_u8 &byte1, v
 // uint32 input support: THistogramU32
 // ---------------------------------------------------------------------------
 // For uint32 data, the four bytes are:
-//   byte0 (bits 7-0, LSB), byte1 (bits 15-8), byte2 (bits 23-16), byte3 (bits 31-24, MSB)
+//   byte0 (bits 7-0, LSB), byte1 (bits 15-8), byte2 (bits 23-16), byte3 (bits
+//   31-24, MSB)
 //
 // Radix sort processes MSB-first:
 // HistByte::BYTE_3 → histogram of byte3 (MSB, first pass, no filtering)
 // HistByte::BYTE_2 → histogram of byte2, filtered by byte3 == idx row 0
-// HistByte::BYTE_1 → histogram of byte1, filtered by byte3 == idx row 0 AND byte2 == idx row 1
-// HistByte::BYTE_0 → histogram of byte0 (LSB), filtered by all three upper bytes
+// HistByte::BYTE_1 → histogram of byte1, filtered by byte3 == idx row 0 AND
+// byte2 == idx row 1 HistByte::BYTE_0 → histogram of byte0 (LSB), filtered by
+// all three upper bytes
 //
-// The idx tile has shape (3 - byteVal, validCols) with RowMajor layout and uint8_t type.
-// Each idx row stores one filter byte value broadcast across all columns.
-// Byte extraction: DINTLV_B16 + vdintlv on the uint32 source data.
+// The idx tile has shape (3 - byteVal, validCols) with RowMajor layout and
+// uint8_t type. Each idx row stores one filter byte value broadcast across all
+// columns. Byte extraction: DINTLV_B16 + vdintlv on the uint32 source data.
 
 template <HistByte byte, typename TileDst, typename TileSrc, typename TileIdx>
 __tf__ PTO_INTERNAL void THistogramU32(typename TileDst::TileDType __out__ bin_count,
@@ -236,11 +241,14 @@ PTO_INTERNAL void THISTOGRAM_IMPL(TileDst &dst, TileSrc &src, TileIdx &idx)
     static_assert(TileDst::isRowMajor, "Fix: THISTOGRAM destination should only follow row major layout.");
 
     if constexpr (std::is_same<SrcT, uint16_t>::value) {
-        // uint16 mode: only BYTE_0 (LSB, bits 7-0) and BYTE_1 (MSB, bits 15-8) are valid.
+        // uint16 mode: only BYTE_0 (LSB, bits 7-0) and BYTE_1 (MSB, bits 15-8) are
+        // valid.
         static_assert(byte == HistByte::BYTE_0 || byte == HistByte::BYTE_1,
-                      "Fix: THISTOGRAM with uint16 source only supports BYTE_0 (LSB) and BYTE_1 (MSB).");
+                      "Fix: THISTOGRAM with uint16 source only supports BYTE_0 "
+                      "(LSB) and BYTE_1 (MSB).");
         static_assert((!TileIdx::isBoxedLayout && !TileIdx::isRowMajor && TileIdx::Cols == 1),
-                      "Fix: THISTOGRAM (uint16) index should use DN layout with exactly one column: "
+                      "Fix: THISTOGRAM (uint16) index should use DN layout with exactly one "
+                      "column: "
                       "BLayout::ColMajor + SLayout::NoneBox + Cols=1.");
         constexpr bool isMSB = (byte == HistByte::BYTE_1);
         THistogram<TileDst, TileSrc, TileIdx, isMSB>(dst.data(), src.data(), idx.data(), src.GetValidRow(),
@@ -248,10 +256,10 @@ PTO_INTERNAL void THISTOGRAM_IMPL(TileDst &dst, TileSrc &src, TileIdx &idx)
     } else {
         // uint32 mode: all four bytes valid.
         // Validate idx tile shape based on byte being processed.
-        // For BYTE_3 (MSB, first pass): no index input expected (idx tile is unused).
-        // For BYTE_2: idx shape must be (1, N) where N == source cols.
-        // For BYTE_1: idx shape must be (2, N).
-        // For BYTE_0 (LSB, last pass): idx shape must be (3, N).
+        // For BYTE_3 (MSB, first pass): no index input expected (idx tile is
+        // unused). For BYTE_2: idx shape must be (1, N) where N == source cols. For
+        // BYTE_1: idx shape must be (2, N). For BYTE_0 (LSB, last pass): idx shape
+        // must be (3, N).
         if constexpr (byte == HistByte::BYTE_3) {
             // No index requirement for the first pass (MSB).
         } else if constexpr (byte == HistByte::BYTE_2) {

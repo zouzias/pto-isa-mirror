@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TSELS_HPP
@@ -13,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
+
 #include "utils.hpp"
 
 namespace pto {
@@ -33,10 +36,10 @@ __tf__ PTO_INTERNAL void TSels_b32(typename TileDataDst::TileDType __out__ dst,
         MaskReg pReg, selMask0, selMask1, selMask2, tmpMask;
         MaskReg tmpMask1 = pset_b16(PAT_ALL);
         RegTensor<T> vregScalar, vreg0, vreg2, vreg3, dreg0, dreg1;
-        uint32_t colOffset0, colOffset1;
-        uint32_t sReg = validCol;
-        pReg = CreatePredicate<T>(sReg);
+        uint32_t sregDup = elementsPerRepeat;
+        pReg = CreatePredicate<T>(sregDup);
         vdup(vregScalar, scalar, pReg, MODE_ZEROING);
+        unsigned sReg, colOffset0, colOffset1;
         constexpr auto distValue =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
         for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
@@ -57,11 +60,11 @@ __tf__ PTO_INTERNAL void TSels_b32(typename TileDataDst::TileDType __out__ dst,
             }
         }
 
-        if (sReg > 0) {
-            uint32_t remain = sReg;
-            colOffset0 = 2 * loopTimes * elementsPerRepeat;
+        uint32_t remain = validCol - loopTimes * elementsPerRepeat * 2;
+        if (remain > 0) {
             for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
                 sReg = remain;
+                colOffset0 = 2 * loopTimes * elementsPerRepeat;
                 plds(tmpMask, maskPtr, i * maskRowStride + 2 * 8 * loopTimes, US);
                 punpack(selMask0, tmpMask, LOWER);
                 vlds(vreg0, srcPtr, (int32_t)(i * TileDataSrc::RowStride + colOffset0), NORM);
