@@ -539,7 +539,17 @@ Compact list. Detailed entries in [auto_mode_bad_patterns.md](auto_mode_bad_patt
 11. **`Tile&` parameters into `__tf__` helpers** — pass `TileDType` by value with `__in__`/`__out__` instead. (§3.3 fix; PR-852 [§T4a](external_context/pr_852_notes.md))
 12. **`ConvTile` with dynamic dims in auto mode** — `GetShape` returns `staticShape` only; runtime values are ignored ([pto_tile.hpp:1124-1129](../include/pto/common/pto_tile.hpp#L1124-L1129)). Use static dims.
 13. **`Bias` falling back to `uint64_t`** when the build does not define `__DAV_C220_CUBE__` ([memory.hpp:81-82](../include/pto/common/memory.hpp#L81-L82)). Only use Bias on a cube target.
-14. **`TRESHAPE(a, b)` used as memory reuse rather than semantic aliasing.** `TRESHAPE` is an aliasing/view hint (e.g., `dstTile` is the prefix view of `srcTile` before `TSTORE`, or a different-layout view of the same data). Aliasing two tiles that both hold independent live values is a correctness bug, not a memory-saving optimization — the auto allocator already coalesces non-overlapping liveness. Add a short comment at every `TRESHAPE` call naming (a) which tile owns the data, (b) prefix / base / different-layout view, (c) why lifetimes do not conflict. For offset views prefer `TSUBVIEW` over chaining `TRESHAPE`.
+14. **`TRESHAPE(a, b)` used as memory reuse rather than semantic aliasing.** `TRESHAPE` is an aliasing/view hint (e.g., a different-layout or reinterpreted view of the same data). Aliasing two tiles that both hold independent live values is a correctness bug, not a memory-saving optimization — the auto allocator already coalesces non-overlapping liveness. Add a short comment at every view call naming (a) which tile owns the data, (b) prefix / offset / reinterpret intent, (c) why lifetimes do not conflict.
+
+   **Operator selection convention** (used by [topk_kernel.cpp](../kernels/automode/a2a3/topk/topk_kernel.cpp)):
+
+   | Intent | Form |
+   |---|---|
+   | Same-type prefix slice | `TSUBVIEW(view, tile, 0, 0)` |
+   | Same-type non-zero slice | `TSUBVIEW(view, tile, rowOffset, colOffset)` |
+   | Reshape / reinterpret / type-pun (element type, layout, or dimensionality changes) | `TRESHAPE(view, tile)` |
+
+   `TSUBVIEW(x, y, 0, 0)` may be effectively similar to `TRESHAPE(x, y)` for same-type prefix views in the current toolchain, but `TSUBVIEW` is semantically clearer because it explicitly means "take a slice/prefix" and is more robust against future optimization passes that may treat the two ops differently. Reserve `TRESHAPE` for true reshape / reinterpret cases — e.g., [topk_kernel.cpp Phase 5](../kernels/automode/a2a3/topk/topk_kernel.cpp) reinterprets the packed `(val, idx)` float buffer as `uint32` so `TGATHER P1010` can extract index slots.
 15. **Mixing source-element and packed-element widths after `TSORT32`.** `TSORT32`'s destination is `srcWidth * 2 * TYPE_COEF` wide (packed (val, idx) pairs). Subsequent `TMRGSORT` loop bounds, `FillMrgArray<>` schedules, tail-block clip caps, scratch-tile widths/types, and final `TGATHER` prefix views must use the **packed** widths, not the source widths. Define `kPackedCols = kCols * 2 * TYPE_COEF` and `kPackedTopK = kTopK * 2 * TYPE_COEF` and thread them through. Using raw source widths silently drops the second half of the TSORT32 output before it reaches the merge. (See [auto_mode_bad_patterns.md §5.7](auto_mode_bad_patterns.md), [known_good_kernel_examples.md §A12](known_good_kernel_examples.md).)
 
 ---

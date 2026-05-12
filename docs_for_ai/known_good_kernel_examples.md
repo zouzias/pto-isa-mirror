@@ -167,8 +167,21 @@ harness (Known: enumerated in `ALL_TESTCASES` of
    - `TSORT32(packed, src, idx, scratch)` per 32-block, output (val, idx) packed
    - main `TMRGSORT` 4-way self-merge loop with **independent** ping-pong tile (`mrgScratchTile`) + `TMOV`-back to `sort32DstTile` prefix; loop bound and widths in **packed-element units**
    - `SortTailBlock` for non-power-of-4 residuals — `FillMrgArray<kPackedCols>(...)` schedules 2-list merges, each writing into `mrgScratchTile` (independent dst) and `TMOV`-back to `sort32DstTile`
-   - `TGATHER<…, MaskPattern::P0101>` extracts values; `TGATHER<…, MaskPattern::P1010>` extracts indices via a **type-pun** view (TRESHAPE between `Tile<Vec, float, ...>` and `Tile<Vec, uint32, ...>`, mirroring [TQuant.hpp:108-114](../include/pto/npu/a2a3/TQuant.hpp#L108-L114)'s auto branch)
+   - `TGATHER<…, MaskPattern::P0101>` extracts values; `TGATHER<…, MaskPattern::P1010>` extracts indices via a **type-pun** view (`TRESHAPE` between `Tile<Vec, float, ...>` and `Tile<Vec, uint32, ...>`, mirroring [TQuant.hpp:108-114](../include/pto/npu/a2a3/TQuant.hpp#L108-L114)'s auto branch)
    - `TSTORE` two outputs (values + indices)
+
+   **Packed-buffer layout and TMRGSORT semantics** (after `TSORT32`):
+   - Each logical value becomes a packed `(value, index)` structure: `[val0, idx0, val1, idx1, ...]`.
+   - For `float` (`TYPE_COEF=1`), the first sorted run is 32 structures = **64 packed elements** wide. That is why `blockLen = 64 * TYPE_COEF` is the starting block length.
+   - `TMRGSORT(dst, src, blockLen)` is the **4-way merge** form. `blockLen` is in packed-element units; the implementation requires the merge width to be divisible by `blockLen * 4`, and each Phase-2 pass grows the sorted run length by **4×**. Hence the loop does `blockLen *= 4`.
+   - `TMRGSORT(curDst, executedNumList, tmp, src0, src1)` is the **explicit 2-source** form used by `SortTailBlock` to handle residual / tail runs that are not a power of 4 of `blockLen`.
+
+   **View-operator convention** ([§14 in tile_type_reference.md](tile_type_reference.md)):
+   - Same-type prefix slice → `TSUBVIEW(view, tile, 0, 0)`
+   - Same-type non-zero slice → `TSUBVIEW(view, tile, 0, offset)`
+   - Reshape / reinterpret / type-pun → `TRESHAPE(view, tile)`
+
+   Phases 2-4 of this kernel use `TSUBVIEW(..., 0, 0)` for same-type prefix views (`srcSortedView`, `tmpSortedView`, `src0View`, `curDstView`, `copyBackView`, `sortedTopKView`); Phase 5 retains `TRESHAPE` because it reinterprets float-typed storage as `uint32` for `TGATHER P1010`.
 4. **Auto-mode compatibility** — Yes (Known, user-confirmed). Confirms several Inferred items:
    - `TSORT32`, `TMRGSORT` (4-way self-merge AND 2-list explicit forms with `MrgSortExecutedNumList`), and `TGATHER` (template form `<DstTile, SrcTile, MaskPattern>(dst, src)`) are all auto-callable from kernel code on A3.
    - `TGATHER` masks `P0101` (values from float-typed packed buffer) and `P1010` (indices from uint32 type-pun view) work as documented in the manual TopK.
@@ -176,7 +189,7 @@ harness (Known: enumerated in `ALL_TESTCASES` of
    - `TSORT32`'s `tmp` parameter is pure scratch — content is irrelevant; an uninitialized independent tile suffices (no `TLOAD` of tmp from GM).
    - Multi-iter `SortTailBlock` (3 iters in our `kCols=1280` shape) with `TMOV`-back is correct: each iteration's prefix-view `src0View` reads the previous iteration's merged result from `sort32DstTile`.
    - Auto-allocator places ~45 KB of independent UB tiles (srcTile, idxTile, sort32TmpTile, sort32DstTile, mrgScratchTile, tmp1Tile, outValTile, outIdxTile) without overlap.
-5. **Copy** — the entire project layout (`pto_example_vec_auto`, `bash run.sh -r npu -v Ascend910B*` CLI, `scripts/gen_data.py` writing `input/` + `output/`); the packed-width discipline (`kPackedCols`/`kPackedTopK` derived from `TYPE_COEF`); the `TRESHAPE`-only-for-semantic-aliasing rule; the **independent destination + TMOV-back** pattern for `SortTailBlock` (sidesteps the in-place TMRGSORT-with-dst-aliased-to-src risk that surfaced in the abandoned shortcut). Use as the auto-mode A3 baseline for any sort/argsort/select-k variant.
+5. **Copy** — the entire project layout (`pto_example_vec_auto`, `bash run.sh -r npu -v Ascend910B*` CLI, `scripts/gen_data.py` writing `input/` + `output/`); the packed-width discipline (`kPackedCols`/`kPackedTopK` derived from `TYPE_COEF`); the `TSUBVIEW`-for-same-type-slices / `TRESHAPE`-only-for-reinterpret rule (see view convention above); the **independent destination + TMOV-back** pattern for `SortTailBlock` (sidesteps the in-place TMRGSORT-with-dst-aliased-to-src risk that surfaced in the abandoned shortcut). Use as the auto-mode A3 baseline for any sort/argsort/select-k variant.
 6. **Do not copy** —
    - The fixed shape (`kCols=1280`, `kTopK=512`, `float`) is what was tested; other shapes have not been exercised. Half (`TYPE_COEF=2`) was deferred (mask patterns differ).
    - Single AICORE only; no `block_idx` work split.
@@ -377,6 +390,41 @@ harness (Known: enumerated in `ALL_TESTCASES` of
    - The **combination** of `ReluPreMode::NormalRelu` AND down-cast `AccTile<float>` → GM `half` in the same TSTORE is NOT validated. `tstore_acc2gm` shows the two features individually (`tilingKey=4` does FP32→FP16 without ReLU; `tilingKey=21` does ReLU with no dtype change) but not combined. Do not assume the combined form works without a separate experiment (this is the open assumption that gates §A18 / the FFN milestone — see `moe_segmented_ffn_top1`).
    - Single AICORE only; no `block_idx`; no SetValidRow / partial stores; no second GEMM; no bias; no SplitK; no TF32; no INT8 / BF16.
 7. **Confidence** — High for the fixed shape; behavior at other shapes / dtypes / activation modes / combined Acc-down-cast-with-ReLU / multi-core / dynamic-tail is **Unknown**.
+
+### A18. moe_segmented_ffn_top1 (auto-mode A3, full top-1 segmented MoE FFN via two stream-serialised kernels) — confirmed-built fixed-shape prototype
+
+> First in-tree auto-mode A3 kernel that runs the **full FFN** (`GEMM1 → ReLU → scratch → GEMM2`) per expert microtile. Composes §A17 and §A16 verbatim through a host-level stream handoff; the scratch dtype is FP16, written by the §A17 fused-TSTORE pattern with the GM destination dtype changed from float to half. The previous-iteration assumption (FP32 Acc → FP16 GM + ReLU in **ND-layout** TSTORE) is now Resolved at this shape.
+
+1. **File** — [kernels/automode/a2a3/moe_segmented_ffn_top1/moe_segmented_ffn_top1_kernel.cpp](../kernels/automode/a2a3/moe_segmented_ffn_top1/moe_segmented_ffn_top1_kernel.cpp)
+2. **Why** — eighth in-tree confirmed-built auto-mode A3 kernel. First to chain two cube GEMMs with an FP16 scratch hand-off in a single device computation. User-confirmed PASS on Ascend910B1 (`test data success` / `test success`). Status: **Known** (user-confirmed, fixed shape).
+3. **Pattern** — Two `__global__ AICORE` template functions in the SAME TU:
+   - `runFfnStage1Gemm1Relu` — byte-for-byte the §A17 kernel, with the GM destination dtype changed from `float` to `half` (`AccTile` stays FP32; ReLU + FP32→FP16 downcast both happen inside the FIX-pipe TSTORE).
+   - `runFfnStage2Gemm2` — byte-for-byte the §A16 kernel, with the A buffer pointing at the scratch produced by stage 1.
+
+   Each kernel declares 5 cube tiles (Mat ×2, Left, Right, Acc) — identical budget to §A16 / §A17. The host wrapper fires both kernels on the **same stream**:
+   ```cpp
+   launchFfnStage1Gemm1Relu<half, half, half>(scratch, packed_tokens, count, start, w1, stream);
+   launchFfnStage2Gemm2<float, half, half>(packed_output, scratch, count, start, w2, stream);
+   ```
+   ACL stream-order semantics guarantee stage 2 only starts after stage 1's TSTORE-to-scratch has fully drained to GM. The cross-GEMM hand-off is an ACL stream dependency, NOT a PTO auto-sync dependency.
+4. **Auto-mode compatibility** — Yes (Known, user-confirmed). Confirms at the tested shape:
+   - **Fused FP32 Acc → FP16 GM + `ReluPreMode::NormalRelu` in a SINGLE ND-layout TSTORE** — this was §A17's "Do not copy" gating assumption; it is now Resolved for ND layout at this shape. The combo was already in `ALL_TESTCASES` for NZ layout via [tstore_acc2gm_kernel.cpp:627 `LaunchTStoreAcc2gmNz2nz<21>` `<0, float, float, half, ..., 1>`](../tests/npu/a2a3/src/st/testcase/tstore_acc2gm/tstore_acc2gm_kernel.cpp#L627). ND-layout variant of the same combo now also works.
+   - **Two cube kernels chained through an FP16 GM scratch buffer on the same stream**. Each kernel sees its own well-formed auto-sync graph; the cross-kernel ordering is provided by ACL, not PTO.
+   - **Host-managed temporary device buffer** (`scratchDev`) that no host code ever copies INTO — kernel writes it, kernel reads it back. Host only `aclrtMalloc`s the size, optionally poisons it, and `aclrtFree`s it.
+5. **Copy** — for any new auto-mode A3 prototype that needs **multi-stage cube compute with a GM hand-off**:
+   - the entire [moe_segmented_ffn_top1](../kernels/automode/a2a3/moe_segmented_ffn_top1/) project layout;
+   - the **split-kernel + same-stream** composition shape — one `__global__ AICORE` per stage in the same TU, with a single `extern "C"` host wrapper that calls them in order on the user's stream;
+   - the **single-isolated-new-assumption discipline** — only change ONE thing per milestone (here, the GM dest dtype of the §A17 TSTORE);
+   - the **stage-isolation host driver shape** — poison the scratch and output device buffers with distinct byte patterns before the launch; copy both back after sync; let `compare_outputs.py` distinguish "kernel never wrote" / "kernel wrote zeros" / "kernel wrote wrong values" per stage;
+   - the **Python golden recipe** — mirror the kernel's three computational steps (GEMM1 in FP32 acc → cast to FP16 with `np.maximum(., 0)` → GEMM2 in FP32 acc) so the golden scratch is bit-exact comparable.
+6. **Do not copy** —
+   - The fixed shape (`T = 256`, `H = K = 64`, `F = N = 64`, `kE = 4`, `kTileM = 128`, FP16 × FP16 → FP32 for both GEMMs, FP16 scratch). `kH == kF` is enforced by `static_assert` in the kernel; widening either independently is **Unknown** because the cube tile shapes for stage 1 and stage 2 would diverge.
+   - **The fused single-kernel form was attempted first and hung the device once**. It used either (a) two independent 5-tile cube sets concurrently (10 cube tiles total — produced wrong output, didn't hang) or (b) a single 5-tile cube set reused across both GEMMs in the same inner iteration (cTile drained to scratch GM then aMatTile reloaded from the same scratch GM — hung the device once during testing). Splitting into two kernels sidesteps both. **Root cause of the (b) hang is unverified** — it could be auto-sync producing an unmatched `wait_flag` for the cross-GEMM tile-reuse pattern, OR a transient hardware/driver issue unrelated to the kernel. The split-kernel form is the Known-good path either way; reproducing the hang to attribute root cause is a follow-up (see `assumptions_to_verify.md §11.9 "What is NOT proven"`).
+   - **Single AICORE per kernel only**; no `block_idx` work split.
+   - Activations other than `NormalRelu`; bias; SplitK; TF32; INT8 / BF16; non-`(128, 64, 64)` cube shapes; multi-F-tile / multi-K-tile; `topK > 1`; weighted combine; backward; performance.
+   - `SetValidRow` / `SetValidShape` / partial-tile stores — still NOT validated; host padding sidesteps them.
+   - The `kSkipStage2` host-wrapper toggle is a debug aid, not a production switch.
+7. **Confidence** — High for the fixed shape; behavior at other shapes / dtypes / `kH != kF` / multi-core / dynamic-tail / fused-single-kernel form / non-NormalRelu activations is **Unknown**.
 
 ---
 

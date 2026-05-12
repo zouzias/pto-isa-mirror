@@ -897,8 +897,11 @@ TSTORE bottleneck
 ### Step 3: local reuse
 
 - Keep stationary operands.
-- Use `TRESHAPE` for semantic prefix/layout views.
-- Use `TSUBVIEW` for offset views.
+- Pick the view operator by intent, not by what happens to compile:
+  - **Same-type prefix slice** → `TSUBVIEW(view, tile, 0, 0)` (zero-offset). Semantically clearer than `TRESHAPE` because it explicitly states "take a slice/prefix."
+  - **Same-type non-zero slice** → `TSUBVIEW(view, tile, rowOffset, colOffset)`.
+  - **Reshape / reinterpret / type-pun** → `TRESHAPE(view, tile)`. Reserve `TRESHAPE` for cases where the element type, layout, or dimensionality changes (e.g., float-packed buffer reinterpreted as `uint32` for `TGATHER P1010` index extraction).
+- `TSUBVIEW(x, y, 0, 0)` may be effectively similar to `TRESHAPE(x, y)` for same-type prefix views in the current toolchain, but using `TSUBVIEW` documents the intent and protects future optimization passes that might treat the two ops differently.
 - Avoid in-place aliasing unless proven.
 
 ### Step 4: local multi-buffer
