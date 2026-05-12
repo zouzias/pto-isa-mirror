@@ -130,6 +130,7 @@ set(ALL_TESTCASES
     tcolprod
     tcolmax
     tcolargmax
+    tcolargmax_val_idx
     tcolmin
     tcolargmin
     tsort32
@@ -269,6 +270,7 @@ if (AUTO_MODE)
     tscatter
     tcolargmin
     tcolargmax
+    tcolargmax_val_idx
     tmov
     tmatmul
     tmatmul_mx
