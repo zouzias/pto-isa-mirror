@@ -1,18 +1,21 @@
 /**
  * Copyright (c) 2025 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
  */
 
 #ifndef T_COL_REDUCE_OPS_HPP
 #define T_COL_REDUCE_OPS_HPP
 
-#include <pto/common/utils.hpp>
+#include <pto/common/TColReduceLayout.hpp>
 #include <pto/common/type.hpp>
+#include <pto/common/utils.hpp>
 
 namespace pto {
 template <typename T, typename InstrOp>
@@ -50,7 +53,8 @@ template <typename InstrOp, typename T, typename TileDataOut, typename TileDataI
 PTO_INTERNAL void ColReduceInstr(__ubuf__ T *dst, __ubuf__ T *src, int validRow, int validCol)
 {
     using ReduceOp = TColReduceOp<T, InstrOp>;
-    constexpr int DTypeSize = sizeof(T);
+    using CRLayout = ColReduceLayout<T, srcstride>;
+    constexpr int DTypeSize = CRLayout::DTypeSize;
     int lenBurst = (validCol * DTypeSize + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
 
     pto_copy_ubuf_to_ubuf(dst, src, 1, lenBurst, 0, 0);
@@ -59,10 +63,8 @@ PTO_INTERNAL void ColReduceInstr(__ubuf__ T *dst, __ubuf__ T *src, int validRow,
         return;
     }
 
-    constexpr int blockSizeElem = BLOCK_BYTE_SIZE / DTypeSize;
-    constexpr int numBlockPerLine = (srcstride * DTypeSize + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
-    constexpr int dupSrcStride = numBlockPerLine * blockSizeElem;
-    constexpr int elementsPerRepeat = REPEAT_BYTE / DTypeSize;
+    constexpr int dupSrcStride = CRLayout::dupSrcStride;
+    constexpr int elementsPerRepeat = CRLayout::elementsPerRepeat;
     int numRepeatPerLine = validCol / elementsPerRepeat;
     int numRemainPerLine = validCol % elementsPerRepeat;
     int elementsPerLine = numRepeatPerLine * elementsPerRepeat;
@@ -85,9 +87,11 @@ PTO_INTERNAL void TColReduceCheck(int SrcValidRow, int SrcValidCol, int DstValid
         std::is_same_v<T, half> || std::is_same_v<T, float> || std::is_same_v<T, int16_t> || std::is_same_v<T, int32_t>,
         "Fix: TCOLREDUCE input data type is not supported by this instruction.");
     static_assert(std::is_same_v<typename TileDataOut::DType, T>,
-                  "Fix: TCOLREDUCE input data type must be consistent with the output data type.");
+                  "Fix: TCOLREDUCE input data type must be consistent with the "
+                  "output data type.");
     PTO_ASSERT(SrcValidCol == DstValidCol,
-               "Fix: TCOLREDUCE input valid col must be consistent with the output valid row.");
+               "Fix: TCOLREDUCE input valid col must be consistent with the "
+               "output valid row.");
 }
 } // namespace pto
 #endif

@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_TTEST_HPP
@@ -53,21 +55,9 @@ PTO_INTERNAL bool TestPartSignal(volatile int32_t *basePtr, int32_t cmpValue, Wa
 template <typename GlobalSignalData>
 PTO_INTERNAL bool TTEST_IMPL(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp)
 {
-    static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
-                  "TTEST: signal type must be 32-bit (int32_t)");
-
-    // Get full 5-D shape and stride
-    const int s0 = signalData.GetShape(GlobalTensorDim::DIM_0);
-    const int s1 = signalData.GetShape(GlobalTensorDim::DIM_1);
-    const int s2 = signalData.GetShape(GlobalTensorDim::DIM_2);
-    const int s3 = signalData.GetShape(GlobalTensorDim::DIM_3);
-    const int s4 = signalData.GetShape(GlobalTensorDim::DIM_4);
-
-    const int st0 = signalData.GetStride(GlobalTensorDim::DIM_0);
-    const int st1 = signalData.GetStride(GlobalTensorDim::DIM_1);
-    const int st2 = signalData.GetStride(GlobalTensorDim::DIM_2);
-    const int st3 = signalData.GetStride(GlobalTensorDim::DIM_3);
-    const int st4 = signalData.GetStride(GlobalTensorDim::DIM_4);
+    const auto dims = GetTTestDims(signalData);
+    const int s0 = dims.s0, s1 = dims.s1, s2 = dims.s2, s3 = dims.s3, s4 = dims.s4;
+    const int st0 = dims.st0, st1 = dims.st1, st2 = dims.st2, st3 = dims.st3, st4 = dims.st4;
 
     volatile int32_t *basePtr = (volatile int32_t *)signalData.data();
 

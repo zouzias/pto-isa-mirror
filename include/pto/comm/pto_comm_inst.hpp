@@ -1,18 +1,20 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_COMM_INST_HPP
 #define PTO_COMM_INST_HPP
 
-#include "pto/comm/comm_types.hpp"
 #include "pto/comm/async_common/async_types.hpp"
+#include "pto/comm/comm_types.hpp"
 #include "pto/comm/pto_comm_instr_impl.hpp"
 #ifndef __CPU_SIM
 #include "pto/comm/async_common/async_event_impl.hpp"
@@ -24,8 +26,8 @@ namespace comm {
 
 // ============================================================================
 // TPUT: Remote write operation - write local data to remote NPU's memory
-// Data flow: srcGlobalData (local GM) → stagingTileData (UB) → dstGlobalData (remote GM)
-// Supports atomic operations: AtomicNone (default) or AtomicAdd
+// Data flow: srcGlobalData (local GM) → stagingTileData (UB) → dstGlobalData
+// (remote GM) Supports atomic operations: AtomicNone (default) or AtomicAdd
 // ============================================================================
 
 // TPUT with atomic operation support (compile-time specified)
@@ -71,7 +73,8 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
 
 // ============================================================================
 // TGET: Remote read operation - read remote NPU's data to local memory
-// Data flow: srcGlobalData (remote GM) → stagingTileData (UB) → dstGlobalData (local GM)
+// Data flow: srcGlobalData (remote GM) → stagingTileData (UB) → dstGlobalData
+// (local GM)
 // ============================================================================
 
 template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
@@ -111,7 +114,8 @@ PTO_INST void TNOTIFY(GlobalSignalData &dstSignalData, int32_t value, NotifyOp o
 // Used in conjunction with TNOTIFY for flag-based synchronization
 // Signal type must be int32_t
 //
-// For signal matrix: Shape determines the 2D region to wait on. All signals must satisfy.
+// For signal matrix: Shape determines the 2D region to wait on. All signals
+// must satisfy.
 // ============================================================================
 
 template <typename GlobalSignalData, typename... WaitEvents>
@@ -137,7 +141,8 @@ PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp,
 
 // ============================================================================
 // TGATHER: Gather operation - root collects data from all ranks
-// Only the root needs to execute. Non-root ranks ensure source buffers are ready.
+// Only the root needs to execute. Non-root ranks ensure source buffers are
+// ready.
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
@@ -151,8 +156,8 @@ PTO_INST RecordEvent TGATHER(ParallelGroupType &parallelGroup, GlobalDstData &ds
 
 // ============================================================================
 // TGATHER (ping-pong): Gather with double buffering
-// Uses two staging tiles to overlap TLOAD (next chunk) with TSTORE (current chunk).
-// Only the root needs to execute.
+// Uses two staging tiles to overlap TLOAD (next chunk) with TSTORE (current
+// chunk). Only the root needs to execute.
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
@@ -166,7 +171,8 @@ PTO_INST RecordEvent TGATHER(ParallelGroupType &parallelGroup, GlobalDstData &ds
 
 // ============================================================================
 // TSCATTER: Scatter operation - root distributes data to all ranks
-// Only the root needs to execute. Non-root ranks ensure destination buffers are allocated.
+// Only the root needs to execute. Non-root ranks ensure destination buffers are
+// allocated.
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
@@ -180,8 +186,8 @@ PTO_INST RecordEvent TSCATTER(ParallelGroupType &parallelGroup, GlobalSrcData &s
 
 // ============================================================================
 // TSCATTER (ping-pong): Scatter with double buffering
-// Uses two staging tiles to overlap TLOAD (next chunk) with TSTORE (current chunk).
-// Only the root needs to execute.
+// Uses two staging tiles to overlap TLOAD (next chunk) with TSTORE (current
+// chunk). Only the root needs to execute.
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
@@ -210,8 +216,8 @@ PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData 
 
 // ============================================================================
 // TBROADCAST (ping-pong): Broadcast with double buffering
-// Uses two staging tiles to overlap TLOAD (next chunk) with TSTORE (current chunk).
-// Only the root needs to execute.
+// Uses two staging tiles to overlap TLOAD (next chunk) with TSTORE (current
+// chunk). Only the root needs to execute.
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
@@ -225,7 +231,8 @@ PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData 
 
 // ============================================================================
 // TREDUCE: Reduce operation - root gathers and reduces data from all ranks
-// Only the root needs to execute. Non-root ranks ensure source buffers are ready.
+// Only the root needs to execute. Non-root ranks ensure source buffers are
+// ready.
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
@@ -239,7 +246,8 @@ PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &ds
 
 // ============================================================================
 // TREDUCE (ping-pong): Reduce operation with ping-pong double buffering
-// Only the root needs to execute. Non-root ranks ensure source buffers are ready.
+// Only the root needs to execute. Non-root ranks ensure source buffers are
+// ready.
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
