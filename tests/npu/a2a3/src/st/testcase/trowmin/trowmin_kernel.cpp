@@ -1,14 +1,17 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #include <acl/acl.h>
+
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
 
@@ -183,7 +186,8 @@ extern "C" __global__ AICORE void launchTROWMINCase23(__gm__ int32_t *out, __gm_
     runTRowMin<int32_t, 7, 7, 448, 447, 1>(out, src);
 }
 
-// int16 test cases - need 32-byte alignment for int16_t (2 bytes), so cols must be multiple of 16
+// int16 test cases - need 32-byte alignment for int16_t (2 bytes), so cols must
+// be multiple of 16
 extern "C" __global__ AICORE void launchTROWMINCase24(__gm__ int16_t *out, __gm__ int16_t *src)
 {
     runTRowMin<int16_t, 128, 128, 64, 64, 1>(out, src);

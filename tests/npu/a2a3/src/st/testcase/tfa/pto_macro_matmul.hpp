@@ -1,11 +1,13 @@
 /*
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_MACRO_MATMUL_HPP
@@ -17,8 +19,8 @@ namespace pto {
 
 /**
  * Layout type for matrix multiplication operations.
- * First letter represents the layout of matrix A, second letter represents matrix B.
- * N = Normal (Row-major), T = Transposed (Column-major)
+ * First letter represents the layout of matrix A, second letter represents
+ * matrix B. N = Normal (Row-major), T = Transposed (Column-major)
  */
 enum class layout_t
 {
@@ -56,8 +58,8 @@ constexpr uint32_t NUM_CANDIDATES = 4;
 
 /**
  * Calculate the largest Cube_K value that fits in the 64KB memory buffer.
- * Checks if both Cube_M * Cube_K (left matrix) and Cube_K * Cube_N (right matrix)
- * can fit within the 64KB buffer.
+ * Checks if both Cube_M * Cube_K (left matrix) and Cube_K * Cube_N (right
+ * matrix) can fit within the 64KB buffer.
  *
  * @param Cube_M - The tile dimension M
  * @param Cube_N - The tile dimension N
@@ -107,7 +109,8 @@ template <unsigned Cube_M, unsigned Tile_K, unsigned Cube_N, layout_t LAYOUT = l
     // Assert that template LAYOUT matches deduced layout if LAYOUT is not NONE
     if constexpr (LAYOUT != layout_t::NONE) {
         static_assert(LAYOUT == layout,
-                      "Layout mismatch: template LAYOUT does not match deduced layout from tile SLayouts. "
+                      "Layout mismatch: template LAYOUT does not match deduced "
+                      "layout from tile SLayouts. "
                       "Check SLayout of TileDataA and TileDataB.");
     }
 
@@ -139,11 +142,12 @@ template <unsigned Cube_M, unsigned Tile_K, unsigned Cube_N, layout_t LAYOUT = l
 
         if (k == 0) {
             TMATMUL(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong]);
-            // TMATMUL_UF(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong], UNIT_FLAG_ENABLE(k, (K / Cube_K)));
+            // TMATMUL_UF(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong],
+            // UNIT_FLAG_ENABLE(k, (K / Cube_K)));
         } else {
             TMATMUL_ACC(cAccTile, cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong]);
-            // TMATMUL_ACC_UF(cAccTile, cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong], UNIT_FLAG_ENABLE(k, (K /
-            // Cube_K)));
+            // TMATMUL_ACC_UF(cAccTile, cAccTile, al0Tiles[pingpong],
+            // bl0Tiles[pingpong], UNIT_FLAG_ENABLE(k, (K / Cube_K)));
         }
         set_flag(PIPE_M, PIPE_MTE1, pingpong);
         pingpong = getPingPong(1);
