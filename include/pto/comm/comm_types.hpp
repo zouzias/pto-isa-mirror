@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_COMM_COMM_TYPES_HPP
@@ -15,8 +17,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <type_traits>
 
 #include "pto/common/debug.h"
-#include "pto/common/type.hpp"
 #include "pto/common/pto_tile.hpp"
+#include "pto/common/type.hpp"
 
 namespace pto {
 namespace comm {
@@ -36,7 +38,7 @@ template <typename GlobalData>
 struct ParallelGroup {
     using value_type = GlobalData; // Type alias for type traits
 
-    GlobalData *tensors{nullptr}; // Points to external array of GlobalData objects
+    GlobalData *tensors{nullptr};  // Points to external array of GlobalData objects
     int nranks{0};
     int rootIdx{-1};
 
@@ -48,8 +50,8 @@ struct ParallelGroup {
     {}
 
     // Factory function (recommended).
-    // rootIdx: the index of the root rank in the group (not the caller's own rank).
-    // All ranks in the group must pass the same rootIdx value.
+    // rootIdx: the index of the root rank in the group (not the caller's own
+    // rank). All ranks in the group must pass the same rootIdx value.
     AICORE static constexpr ParallelGroup Create(GlobalData *tensorArray, int size, int rootIdx)
     {
         return ParallelGroup(tensorArray, size, rootIdx);

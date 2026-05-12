@@ -14,8 +14,9 @@ full text of the License.
 #define TRANDOM_HPP
 
 #include <pto/common/constants.hpp>
-#include <pto/common/utils.hpp>
 #include <pto/common/type.hpp>
+#include <pto/common/utils.hpp>
+
 #include "common.hpp"
 #include "utils.hpp"
 
