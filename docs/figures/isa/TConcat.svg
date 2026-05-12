@@ -1,0 +1,165 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-label="TConcat tile operation diagram">
+<defs>
+  <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#515151"/></marker>
+  <marker id="axisArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#64748b"/></marker>
+  <marker id="arrowBlue" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#2563eb"/></marker>
+  <marker id="arrowOrange" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#ea580c"/></marker>
+</defs>
+<style>
+svg { font-family: Arial, Helvetica, sans-serif; }
+.title { font-size: 30px; font-weight: 700; fill: #0f172a; }
+.subtitle { font-size: 14px; fill: #334155; }
+.meta { font-size: 12px; fill: #64748b; }
+.frame { fill: white; }
+.panel { fill: #F5F5F5; stroke: #e2e8f0; stroke-width: 1.5; rx: 14; }
+.tileLabel { font-size: 14px; font-weight: 700; fill: #0f172a; }
+.tileBorder { fill: none; stroke: #475569; stroke-width: 1.5; }
+.cell { fill: #ffffff; stroke: #94a3b8; stroke-width: 1; }
+.cellSrc0 { fill: #dbeafe; stroke: #94a3b8; stroke-width: 1; }
+.cellSrc1 { fill: #fed7aa; stroke: #94a3b8; stroke-width: 1; }
+.cellMasked { fill: #e2e8f0; }
+.cellHL0 { stroke-width: 2; stroke: #2563eb; }
+.cellHL1 { stroke-width: 2; stroke: #ea580c; }
+.cellText { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 10px; fill: #0f172a; }
+.arrow { stroke-width: 1.5; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.arrowBlue { stroke-width: 1.5; fill: none; stroke-linejoin: round; stroke-linecap: round; stroke: #2563eb; }
+.arrowOrange { stroke-width: 1.5; fill: none; stroke-linejoin: round; stroke-linecap: round; stroke: #ea580c; }
+.axisLine { stroke: #64748b; stroke-width: 1.5; fill: none; }
+.axisText { font-size: 10px; fill: #64748b; font-weight: 700; }
+.opCircle { fill: #ffffff; stroke-width: 2; }
+.opRect { fill: #ffffff; stroke-width: 2; }
+.opText { font-size: 10px; font-weight: 800; fill: #0f172a; }
+.procBox { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.5; rx: 12; }
+.procTitle { font-size: 14px; font-weight: 700; fill: #0f172a; }
+.procText { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px; fill: #0f172a; }
+.smallLabel { font-size: 12px; fill: #334155; }
+.validBox { fill: none; stroke-width: 2; stroke-dasharray: 6 4; }
+.concatLine { stroke: #475569; stroke-width: 2; stroke-dasharray: 4 2; }
+</style>
+<rect x="0" y="0" width="1200" height="720" class="frame" />
+<rect x="24" y="24" width="1152" height="672" class="panel" />
+<text x="40" y="46" class="title">TConcat</text>
+<text x="40" y="72" class="subtitle">Concatenate two tiles horizontally along the column dimension.</text>
+<text x="40" y="92" class="meta">Template: reshape_move</text>
+<text x="1160" y="92" class="meta" text-anchor="end">Legend: blue=src0 region; orange=src1 region; dashed=valid rows/cols; shaded=masked</text>
+<line x1="36" y1="104" x2="1164" y2="104" stroke="#e2e8f0" stroke-width="1.5" />
+<text x="600" y="140" class="subtitle" text-anchor="middle" fill="#515151">dst[r, 0:C0] = src0[r, :]; dst[r, C0:C0+C1] = src1[r, :]</text>
+
+<text x="240" y="168" class="tileLabel" text-anchor="middle">src0</text>
+<rect x="190" y="178" width="100" height="100" class="tileBorder" />
+<rect x="190" y="178" width="25" height="25" class="cellSrc0 cellHL0" />
+<rect x="215" y="178" width="25" height="25" class="cellSrc0" />
+<rect x="240" y="178" width="25" height="25" class="cellSrc0" />
+<rect x="265" y="178" width="25" height="25" class="cell cellMasked" />
+<rect x="190" y="203" width="25" height="25" class="cellSrc0" />
+<rect x="215" y="203" width="25" height="25" class="cellSrc0" />
+<rect x="240" y="203" width="25" height="25" class="cellSrc0" />
+<rect x="265" y="203" width="25" height="25" class="cell cellMasked" />
+<rect x="190" y="228" width="25" height="25" class="cellSrc0" />
+<rect x="215" y="228" width="25" height="25" class="cellSrc0" />
+<rect x="240" y="228" width="25" height="25" class="cellSrc0" />
+<rect x="265" y="228" width="25" height="25" class="cell cellMasked" />
+<rect x="190" y="253" width="25" height="25" class="cell cellMasked" />
+<rect x="215" y="253" width="25" height="25" class="cell cellMasked" />
+<rect x="240" y="253" width="25" height="25" class="cell cellMasked" />
+<rect x="265" y="253" width="25" height="25" class="cell cellMasked" />
+<rect x="190" y="178" width="75" height="75" class="validBox" stroke="#2563eb" />
+<text x="192" y="250" class="axisText" fill="#2563eb">Rv</text>
+<text x="262" y="186" class="axisText" text-anchor="end" fill="#2563eb">C0</text>
+<path d="M 200 188 L 260 188" class="axisLine" marker-end="url(#axisArrow)" />
+<path d="M 200 188 L 200 248" class="axisLine" marker-end="url(#axisArrow)" />
+<text x="264" y="192" class="axisText">c</text>
+<text x="198" y="252" class="axisText" text-anchor="end">r</text>
+
+<text x="830" y="168" class="tileLabel" text-anchor="middle">src1</text>
+<rect x="780" y="178" width="100" height="100" class="tileBorder" />
+<rect x="780" y="178" width="25" height="25" class="cellSrc1 cellHL1" />
+<rect x="805" y="178" width="25" height="25" class="cellSrc1" />
+<rect x="830" y="178" width="25" height="25" class="cellSrc1" />
+<rect x="855" y="178" width="25" height="25" class="cell cellMasked" />
+<rect x="780" y="203" width="25" height="25" class="cellSrc1" />
+<rect x="805" y="203" width="25" height="25" class="cellSrc1" />
+<rect x="830" y="203" width="25" height="25" class="cellSrc1" />
+<rect x="855" y="203" width="25" height="25" class="cell cellMasked" />
+<rect x="780" y="228" width="25" height="25" class="cellSrc1" />
+<rect x="805" y="228" width="25" height="25" class="cellSrc1" />
+<rect x="830" y="228" width="25" height="25" class="cellSrc1" />
+<rect x="855" y="228" width="25" height="25" class="cell cellMasked" />
+<rect x="780" y="253" width="25" height="25" class="cell cellMasked" />
+<rect x="805" y="253" width="25" height="25" class="cell cellMasked" />
+<rect x="830" y="253" width="25" height="25" class="cell cellMasked" />
+<rect x="855" y="253" width="25" height="25" class="cell cellMasked" />
+<rect x="780" y="178" width="75" height="75" class="validBox" stroke="#ea580c" />
+<text x="782" y="250" class="axisText" fill="#ea580c">Rv</text>
+<text x="852" y="186" class="axisText" text-anchor="end" fill="#ea580c">C1</text>
+<path d="M 790 188 L 850 188" class="axisLine" marker-end="url(#axisArrow)" />
+<path d="M 790 188 L 790 248" class="axisLine" marker-end="url(#axisArrow)" />
+<text x="854" y="192" class="axisText">c</text>
+<text x="788" y="252" class="axisText" text-anchor="end">r</text>
+
+<text x="530" y="350" class="tileLabel" text-anchor="middle">dst (out)</text>
+<rect x="430" y="360" width="200" height="100" class="tileBorder" />
+<rect x="430" y="360" width="25" height="25" class="cellSrc0 cellHL0" />
+<rect x="455" y="360" width="25" height="25" class="cellSrc0" />
+<rect x="480" y="360" width="25" height="25" class="cellSrc0" />
+<rect x="505" y="360" width="25" height="25" class="cellSrc1 cellHL1" />
+<rect x="530" y="360" width="25" height="25" class="cellSrc1" />
+<rect x="555" y="360" width="25" height="25" class="cellSrc1" />
+<rect x="580" y="360" width="25" height="25" class="cell cellMasked" />
+<rect x="605" y="360" width="25" height="25" class="cell cellMasked" />
+<rect x="430" y="385" width="25" height="25" class="cellSrc0" />
+<rect x="455" y="385" width="25" height="25" class="cellSrc0" />
+<rect x="480" y="385" width="25" height="25" class="cellSrc0" />
+<rect x="505" y="385" width="25" height="25" class="cellSrc1" />
+<rect x="530" y="385" width="25" height="25" class="cellSrc1" />
+<rect x="555" y="385" width="25" height="25" class="cellSrc1" />
+<rect x="580" y="385" width="25" height="25" class="cell cellMasked" />
+<rect x="605" y="385" width="25" height="25" class="cell cellMasked" />
+<rect x="430" y="410" width="25" height="25" class="cellSrc0" />
+<rect x="455" y="410" width="25" height="25" class="cellSrc0" />
+<rect x="480" y="410" width="25" height="25" class="cellSrc0" />
+<rect x="505" y="410" width="25" height="25" class="cellSrc1" />
+<rect x="530" y="410" width="25" height="25" class="cellSrc1" />
+<rect x="555" y="410" width="25" height="25" class="cellSrc1" />
+<rect x="580" y="410" width="25" height="25" class="cell cellMasked" />
+<rect x="605" y="410" width="25" height="25" class="cell cellMasked" />
+<rect x="430" y="435" width="25" height="25" class="cell cellMasked" />
+<rect x="455" y="435" width="25" height="25" class="cell cellMasked" />
+<rect x="480" y="435" width="25" height="25" class="cell cellMasked" />
+<rect x="505" y="435" width="25" height="25" class="cell cellMasked" />
+<rect x="530" y="435" width="25" height="25" class="cell cellMasked" />
+<rect x="555" y="435" width="25" height="25" class="cell cellMasked" />
+<rect x="580" y="435" width="25" height="25" class="cell cellMasked" />
+<rect x="605" y="435" width="25" height="25" class="cell cellMasked" />
+<rect x="430" y="360" width="150" height="75" class="validBox" stroke="#515151" />
+<line x1="505" y1="360" x2="505" y2="435" class="concatLine" />
+<text x="434" y="432" class="axisText">Rv</text>
+<text x="574" y="368" class="axisText" text-anchor="end">C0+C1</text>
+<text x="485" y="368" class="axisText" text-anchor="end" fill="#2563eb">C0</text>
+<text x="555" y="368" class="axisText" text-anchor="end" fill="#ea580c">C1</text>
+<path d="M 440 370 L 570 370" class="axisLine" marker-end="url(#axisArrow)" />
+<path d="M 440 370 L 440 425" class="axisLine" marker-end="url(#axisArrow)" />
+<text x="574" y="374" class="axisText">c</text>
+<text x="438" y="428" class="axisText" text-anchor="end">r</text>
+
+<circle cx="530" cy="320" r="22" class="opCircle" stroke="#515151" />
+<rect x="513" y="303" width="34" height="34" rx="6" class="opRect" stroke="#515151" />
+<text x="530" y="316" class="opText" font-size="9px" text-anchor="middle">TCON</text>
+<text x="530" y="328" class="opText" font-size="9px" text-anchor="middle">CAT</text>
+
+<path d="M 240 290 L 240 320 L 508 320" class="arrowBlue" marker-end="url(#arrowBlue)" />
+<path d="M 830 290 L 830 320 L 552 320" class="arrowOrange" marker-end="url(#arrowOrange)" />
+<path d="M 530 342 L 530 361" class="arrow" stroke="#515151" marker-end="url(#arrow)" />
+
+<rect x="40" y="502" width="1120" height="194" class="procBox" />
+<text x="56" y="528" class="procTitle">Procedure (conceptual)</text>
+<text x="56" y="554" class="procText" xml:space="preserve">
+  <tspan x="56" dy="0">for r in validRows:</tspan>
+  <tspan x="56" dy="16">  for c in range(validCols0):</tspan>
+  <tspan x="56" dy="16">    dst[r, c] = src0[r, c]</tspan>
+  <tspan x="56" dy="16">  for c in range(validCols1):</tspan>
+  <tspan x="56" dy="16">    dst[r, validCols0 + c] = src1[r, c]</tspan>
+  <tspan x="56" dy="16"># Result: dst.validCol == src0.validCol + src1.validCol</tspan>
+</text>
+<text x="56" y="680" class="meta">Note: TConcat horizontally concatenates two tiles; valid rows must match; valid cols of dst = sum of src0 and src1 valid cols.</text>
+</svg>
