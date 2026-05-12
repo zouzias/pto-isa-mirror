@@ -1,0 +1,89 @@
+/**
+Copyright (c) 2026 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
+*/
+
+#include <gtest/gtest.h>
+
+#include <cmath>
+#include <pto/common/constants.hpp>
+#include <pto/pto-inst.hpp>
+
+using namespace pto;
+
+namespace {
+
+template <typename TileData>
+AICORE inline void initTColMaxTiles(TileData &srcTile, TileData &dstTile)
+{
+    constexpr uint32_t kSrcTileAddr = 0x0;
+    constexpr uint32_t kDstTileAddr = 0x8000;
+    TASSIGN(srcTile, kSrcTileAddr);
+    TASSIGN(dstTile, kDstTileAddr);
+}
+
+template <typename TileData>
+AICORE inline void runTColMaxBody(TileData &dstTile, TileData &srcTile)
+{
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    TCOLMAX(dstTile, srcTile);
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+}
+
+template <typename TileData>
+void checkTColMaxProfiling(TileData &dstTile, float profiling, float accuracy)
+{
+    float costResult = dstTile.GetCycle();
+    float precision =
+        profiling == 0.0f ? static_cast<float>(costResult == 0.0f) : 1 - fabs(profiling - costResult) / profiling;
+    bool ret = precision >= accuracy;
+    EXPECT_TRUE(ret);
+}
+
+} // namespace
+
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
+AICORE void runTColMax(__gm__ T __out__ *out, __gm__ T __in__ *src)
+{
+    using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
+    using DynStridDim5 = Stride<1, 1, 1, kGCols_, 1>;
+    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
+    using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
+    TileData srcTile(kTRows_, kTCols_);
+    TileData dstTile(kTRows_, kTCols_);
+    initTColMaxTiles(srcTile, dstTile);
+
+    GlobalData srcGlobal(src);
+    GlobalData dstGlobal(out);
+
+    TLOAD(srcTile, srcGlobal);
+    runTColMaxBody(dstTile, srcTile);
+    TSTORE(dstGlobal, dstTile);
+
+    out = dstGlobal.data();
+    checkTColMaxProfiling(dstTile, profiling, accuracy);
+}
+
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
+void LaunchTColMax(T *out, T *src, void *stream)
+{
+    if constexpr (std::is_same_v<T, aclFloat16>)
+        runTColMax<half, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>((half *)(out), (half *)(src));
+    else
+        runTColMax<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(out, src);
+}
+
+template void LaunchTColMax<float, 64, 64, 64, 64, 1130.0f, 1.0f>(float *out, float *src, void *stream);
+template void LaunchTColMax<aclFloat16, 64, 64, 64, 64, 1256.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
+template void LaunchTColMax<int16_t, 64, 64, 64, 64, 1256.0f, 1.0f>(int16_t *out, int16_t *src, void *stream);
+template void LaunchTColMax<aclFloat16, 16, 256, 16, 256, 266.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
+template void LaunchTColMax<float, 1, 3072, 1, 3072, 14.0f, 1.0f>(float *out, float *src, void *stream);

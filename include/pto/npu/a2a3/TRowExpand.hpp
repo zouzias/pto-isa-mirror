@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TROWEXPAND_HPP
@@ -58,7 +60,8 @@ __tf__ PTO_INTERNAL void TRowExpandBrcb(typename TileDataDst::TileDType __out__ 
     constexpr int repeat = TileDataSrc::Numel / vbrcbElem;
     constexpr int elemPerRepeat = REPEAT_BYTE / sizeof(T);
 
-    // vbrcb requires src to be 32B aligned, and offset REPEAT_MAX * vbrcbElem is non-32B aligned
+    // vbrcb requires src to be 32B aligned, and offset REPEAT_MAX * vbrcbElem is
+    // non-32B aligned
     constexpr int loop = repeat / (REPEAT_MAX - 1);
     constexpr int remain = repeat % (REPEAT_MAX - 1);
     if constexpr (loop > 0) {
@@ -81,7 +84,8 @@ PTO_INTERNAL void TROWEXPAND_IMPL(TileDataDst &dst, TileDataSrc &src)
                       (sizeof(typename TileDataSrc::DType) == 4),
                   "Fix: TROWEXPAND Data type must be b8/b16/b32");
     static_assert(std::is_same_v<typename TileDataDst::DType, T>,
-                  "Fix: TROWEXPAND input data type must be consistent with the output data type");
+                  "Fix: TROWEXPAND input data type must be consistent with the "
+                  "output data type");
     static_assert(TileDataSrc::Loc == pto::TileType::Vec, "Fix: TROWEXPAND Src TileType must be Vec!");
     static_assert(TileDataDst::Loc == pto::TileType::Vec, "Fix: TROWEXPAND Dst TileType must be Vec!");
     static_assert(TileDataSrc::SFractal == SLayout::NoneBox, "Fix: TROWEXPAND Src layout must be ND or DN!");
@@ -92,9 +96,11 @@ PTO_INTERNAL void TROWEXPAND_IMPL(TileDataDst &dst, TileDataSrc &src)
     int dstValidRow = dst.GetValidRow();
     int dstValidCol = dst.GetValidCol();
     PTO_ASSERT(srcValidRow == dstValidRow,
-               "Fix: TROWEXPAND src tile's valid row must be consistent with dst tile's valid row!");
+               "Fix: TROWEXPAND src tile's valid row must be consistent with dst "
+               "tile's valid row!");
     PTO_ASSERT(srcValidRow != 0 && srcValidCol != 0 && dstValidRow != 0 && dstValidCol != 0,
-               "Fix: TROWEXPAND input/output shape is invalid, validCol or validRow is 0.");
+               "Fix: TROWEXPAND input/output shape is invalid, validCol or "
+               "validRow is 0.");
 
     constexpr bool isBroadcastSupportType = (sizeof(T) == 2 || sizeof(T) == 4);
 
@@ -114,13 +120,13 @@ PTO_INTERNAL void TROWEXPAND_IMPL(TileDataDst &dst, TileDataSrc &src)
           isBroadcastSupportType:
             Only b16 and b32 are supported.
           isStaticShape:
-            Broadcast is a special case where the src tile is a single row or column,
-            src and dst tile are static shapes to ensure that the tile data is saved continuously.
-          isBroadcast:
-            [1, M] -> [M, elemPerBlock], src is row major.
-            [M, 1] -> [M, elemPerBlock], src is column major.
-            The value of sizeof(T) x M is a multiple of 32Byte, it also means that M must be a multiple of 8,
-            this constraint is implemented by the Tile basic definition.
+            Broadcast is a special case where the src tile is a single row or
+          column, src and dst tile are static shapes to ensure that the tile data is
+          saved continuously. isBroadcast: [1, M] -> [M, elemPerBlock], src is row
+          major. [M, 1] -> [M, elemPerBlock], src is column major. The value of
+          sizeof(T) x M is a multiple of 32Byte, it also means that M must be a
+          multiple of 8, this constraint is implemented by the Tile basic
+          definition.
         */
         TRowExpandBrcb<T, TileDataDst, TileDataSrc>(dst.data(), src.data());
     } else {
