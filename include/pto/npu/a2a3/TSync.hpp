@@ -1,18 +1,20 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TSYNC_HPP
 #define TSYNC_HPP
 
-#include <pto/common/type.hpp>
 #include <pto/common/event.hpp>
+#include <pto/common/type.hpp>
 
 #define FFTS_BASE_COUNT_WIDTH 0xf
 #define FFTS_MODE_VAL 0x2
@@ -90,7 +92,8 @@ struct Event {
 #ifndef __PTO_AUTO__
         if constexpr (IsCrossCore) {
             PTO_STATIC_ASSERT(CrossCoreId != 0xff,
-                              "Fix: The cross-core id must be assigned by user when the event is a cross-core event.");
+                              "Fix: The cross-core id must be assigned by user when "
+                              "the event is a cross-core event.");
             wait_flag_dev(CrossCoreId);
         } else {
 #ifdef PTO_FLAG_TEST
@@ -109,7 +112,8 @@ struct Event {
 #ifndef __PTO_AUTO__
         if constexpr (IsCrossCore) {
             PTO_STATIC_ASSERT(CrossCoreId != 0xff,
-                              "Fix: The cross-core id must be assigned by user when the event is a cross-core event.");
+                              "Fix: The cross-core id must be assigned by user when "
+                              "the event is a cross-core event.");
             ffts_cross_core_sync(srcPipe, getFFTSMsg(FFTS_MODE_VAL, CrossCoreId));
         } else {
 #ifdef PTO_FLAG_TEST

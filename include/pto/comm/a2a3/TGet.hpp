@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_COMM_TGET_HPP
@@ -13,11 +15,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <type_traits>
 
-#include "pto/common/debug.h"
-#include "pto/common/constants.hpp"
-#include "pto/common/type.hpp"
-#include "pto/common/pto_instr.hpp"
 #include "pto/comm/comm_types.hpp"
+#include "pto/common/constants.hpp"
+#include "pto/common/debug.h"
+#include "pto/common/pto_instr.hpp"
+#include "pto/common/type.hpp"
 
 namespace pto {
 namespace comm {
@@ -104,7 +106,8 @@ PTO_INTERNAL void TgetChunkedSingle(GlobalDstData &dstGlobalData, GlobalSrcData 
 // ============================================================================
 // TGET_IMPL: Remote read operation implementation
 //
-// Data flow: srcGlobalData (remote GM) → stagingTileData (UB) → dstGlobalData (local GM)
+// Data flow: srcGlobalData (remote GM) → stagingTileData (UB) → dstGlobalData
+// (local GM)
 //
 // Chunked transfer follows the same 2D sliding strategy as TPUT_IMPL
 // (see TPut.hpp): outer dims iterated explicitly, DIM_3/DIM_4 split into
@@ -155,12 +158,14 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
 
     if constexpr (!isDynamicRow) {
         PTO_ASSERT(remoteDims[3] % singleTileRows == 0,
-                   "TGET chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
+                   "TGET chunked: shape3 must be divisible by tile ValidRow when ValidRow "
+                   "is static. "
                    "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
     }
     if constexpr (!isDynamicCol) {
         PTO_ASSERT(remoteDims[4] % singleTileCols == 0,
-                   "TGET chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
+                   "TGET chunked: shape4 must be divisible by tile ValidCol when ValidCol "
+                   "is static. "
                    "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
     }
 
@@ -169,7 +174,8 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
         remoteDims[4], singleTileRows, singleTileCols);
 }
 
-// Process one chunk in the ping-pong pipeline: overlap TSTORE of previous chunk with TLOAD of current chunk
+// Process one chunk in the ping-pong pipeline: overlap TSTORE of previous chunk
+// with TLOAD of current chunk
 template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename StrideT>
 PTO_INTERNAL void TgetPingPongProcessChunk(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
                                            TileData &pingTile, TileData &pongTile, TgetPingPongState &pp,
@@ -342,12 +348,14 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
 
     if constexpr (!isDynamicRow) {
         PTO_ASSERT(remoteDim3 % pingRows == 0,
-                   "TGET chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
+                   "TGET chunked: shape3 must be divisible by tile ValidRow when ValidRow "
+                   "is static. "
                    "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
     }
     if constexpr (!isDynamicCol) {
         PTO_ASSERT(remoteDim4 % pingCols == 0,
-                   "TGET chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
+                   "TGET chunked: shape4 must be divisible by tile ValidCol when ValidCol "
+                   "is static. "
                    "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
     }
 

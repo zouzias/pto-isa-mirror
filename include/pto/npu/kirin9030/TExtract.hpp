@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TEXTRACT_HPP
@@ -391,7 +393,8 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTile &dst, SrcTile &src, uint16_t indexRow, u
         TExtractToRight(dst, src, indexRow, indexCol);
     } else if constexpr (SrcTile::Loc == TileType::Vec && DstTile::Loc == TileType::Mat) {
         static_assert(is_textract_supported_type<typename DstTile::DType>,
-                      "TExtract: Unsupported data type! Supported types: int8_t, half, int32");
+                      "TExtract: Unsupported data type! Supported types: int8_t, "
+                      "half, int32");
         TExtractVecToMat<DstTile, SrcTile>(dst.data(), src.data(), indexRow, indexCol, src.GetValidRow(),
                                            src.GetValidCol(), dst.GetValidRow(), dst.GetValidCol());
     } else if constexpr (DstTile::Loc == TileType::ScaleLeft) {

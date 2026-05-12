@@ -1,11 +1,13 @@
 // --------------------------------------------------------------------------------
 // Copyright (c) 2026 Huawei Technologies Co., Ltd.
-// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-// CANN Open Software License Agreement Version 2.0 (the "License").
-// Please refer to the License for details. You may not use this file except in compliance with the License.
-// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-// See LICENSE in the root of the software repository for the full text of the License.
+// This program is free software, you can redistribute it and/or modify it under
+// the terms and conditions of CANN Open Software License Agreement Version 2.0
+// (the "License"). Please refer to the License for details. You may not use
+// this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+// AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+// FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+// for the full text of the License.
 // --------------------------------------------------------------------------------
 
 /**
@@ -28,11 +30,11 @@
 #ifndef PTO_NPU_MEMORY_MODEL_HPP
 #define PTO_NPU_MEMORY_MODEL_HPP
 
-#include <cstddef>
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
-#include <vector>
 #include <pto/common/pto_tile.hpp>
+#include <vector>
 
 namespace pto {
 
@@ -202,6 +204,29 @@ public:
         return initialized_;
     }
 
+    // Returns true when rawAddr already points into one of this thread's
+    // simulated on-chip memory buffers. This is needed for patterns like:
+    //   TASSIGN(alias_tile, reinterpret_cast<uintptr_t>(base_tile.data()));
+    // where the "address" is not an offset but an actual host pointer into
+    // UB/L1/L0.
+    bool ContainsAddress(std::uintptr_t rawAddr) const
+    {
+        if (!initialized_) {
+            return false;
+        }
+        for (const auto &buf : buffers_) {
+            if (buf.empty()) {
+                continue;
+            }
+            const auto begin = reinterpret_cast<std::uintptr_t>(buf.data());
+            const auto end = begin + buf.size();
+            if (rawAddr >= begin && rawAddr < end) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Clear all memory (zero-fill)
     void Clear()
     {
@@ -249,7 +274,8 @@ private:
     NPUMemoryModel(const NPUMemoryModel &) = delete;
     NPUMemoryModel(const NPUMemoryModel &&) = delete;
 
-    // Shared default architecture — set once, read by all threads during auto-init
+    // Shared default architecture — set once, read by all threads during
+    // auto-init
     static inline NPUArch defaultArch_ = NPUArch::A2A3;
 
     // Per-thread memory buffers (thread_local instance owns these)
