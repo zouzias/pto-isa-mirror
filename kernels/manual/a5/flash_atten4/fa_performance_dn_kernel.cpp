@@ -76,12 +76,7 @@ using namespace pto;
 #elif FIFO_MODE == 1 // ALL_UB_PATH
 #define USE_L0C_TO_DUAL_UB_PATH_QK 1
 #define USE_L0C_TO_UB_PV_PATH 1
-#if skip_rescale
-// Conditional rescale keeps the QK/PV UB paths, but uses the GM P FIFO to avoid aliasing the P tile consumed by PV.
-#define USE_UB_TO_L1_PATH 0
-#else
 #define USE_UB_TO_L1_PATH 1
-#endif
 #else // FIFO_MODE == 2 (QK_PV_UB_ONLY)
 #define USE_L0C_TO_DUAL_UB_PATH_QK 1
 #define USE_L0C_TO_UB_PV_PATH 1
@@ -968,6 +963,8 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
                 TRESHAPE(l1_exp_max_rowmajor, l1_exp_max_ififo);
                 TSTORE(pMaxGlobal, l1_exp_max_rowmajor);
             }
+            set_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
+            wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
         }
 
         if (row_slice == static_cast<int>(kTileFactor) - 1)
