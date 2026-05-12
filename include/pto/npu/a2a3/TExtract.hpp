@@ -1,15 +1,19 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TEXTRACT_HPP
 #define TEXTRACT_HPP
+#include <pto/common/TExtractConvTileChecks.hpp>
+
 #include "common.hpp"
 
 namespace pto {
@@ -425,20 +429,7 @@ __tf__ AICORE void TExtractToBConv(typename DstTileData::TileDType __out__ dst,
 template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TEXTRACT_CONVTILE_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol)
 {
-    static_assert(SrcTileData::Loc == pto::TileType::Mat, "Fix: Src TileType must be Mat!");
-    static_assert(DstTileData::Loc == pto::TileType::Right, "Fix: Dst TileType must be Right!");
-    static_assert(sizeof(typename DstTileData::DType) == sizeof(typename SrcTileData::DType),
-                  "Fix: Source dtype must be same with dst dtype!");
-
-    static_assert((SrcTileData::layout == Layout::FRACTAL_Z) || (SrcTileData::layout == Layout::FRACTAL_Z_3D),
-                  "TExtract: Source layout only support FRACTAL_Z or FRACTAL_Z_3D.");
-    static_assert(DstTileData::SFractal == SLayout::ColMajor && DstTileData::isRowMajor,
-                  "TExtract: Destination layout only support SLayout is ColMajor ang BLayout is RowMajor.");
-    static_assert(std::is_same<typename DstTileData::DType, int8_t>::value ||
-                      std::is_same<typename DstTileData::DType, half>::value ||
-                      std::is_same<typename DstTileData::DType, bfloat16_t>::value ||
-                      std::is_same<typename DstTileData::DType, float>::value,
-                  "TExtract: Invalid data type.");
+    static_assert(TExtractConvTileChecks<DstTileData, SrcTileData>::validated);
 
     constexpr uint32_t c0ElemCount = C0_SIZE_BYTE / sizeof(typename SrcTileData::DType);
     if constexpr (SrcTileData::totalDimCount == 4) { // ConvTile layout is [C1HW,N/16,16,C0]
@@ -742,12 +733,15 @@ PTO_INTERNAL void CheckTExtractVecToVecND()
     static_assert(DstTileData::Cols <= SrcTileData::Cols,
                   "TEXTRACT ND Vec->Vec : Destination Cols must not exceed source Cols.");
     static_assert(SrcTileData::RowStride * sizeof(T) % BLOCK_BYTE_SIZE == 0,
-                  "TEXTRACT ND Vec->Vec : SrcTile RowStride bytes must be 32-byte aligned.");
+                  "TEXTRACT ND Vec->Vec : SrcTile RowStride bytes must be "
+                  "32-byte aligned.");
     static_assert(DstTileData::RowStride * sizeof(T) % BLOCK_BYTE_SIZE == 0,
-                  "TEXTRACT ND Vec->Vec : DstTile RowStride bytes must be 32-byte aligned.");
+                  "TEXTRACT ND Vec->Vec : DstTile RowStride bytes must be "
+                  "32-byte aligned.");
     if constexpr (!(DstTileData::ValidRow == 1 && DstTileData::ValidCol == 1)) {
         static_assert((DstTileData::ValidCol * sizeof(T)) % sizeof(uint16_t) == 0,
-                      "TEXTRACT ND Vec->Vec : DstTile ValidCol bytes must be at least 2-byte aligned.");
+                      "TEXTRACT ND Vec->Vec : DstTile ValidCol bytes must be at "
+                      "least 2-byte aligned.");
     }
 }
 
@@ -766,7 +760,8 @@ PTO_INTERNAL void CheckTExtractVecToVecNZ()
     static_assert(DstTileData::Cols % kC0Size == 0, "TEXTRACT NZ Vec->Vec : DstTile Cols must be c0Size-aligned.");
     if constexpr (!(DstTileData::ValidRow == 1 && DstTileData::ValidCol == 1)) {
         static_assert((DstTileData::ValidCol * sizeof(T)) % sizeof(uint16_t) == 0,
-                      "TEXTRACT NZ Vec->Vec : DstTile ValidCol bytes must be at least 2-byte aligned.");
+                      "TEXTRACT NZ Vec->Vec : DstTile ValidCol bytes must be at "
+                      "least 2-byte aligned.");
     }
 }
 
@@ -783,7 +778,8 @@ PTO_INTERNAL void TExtractVecToVecNDDispatch(DstTileData &dst, SrcTileData &src,
         TExtractVecToVecNDScalar<T, DstTileData, SrcTileData>(dst.data(), src.data(), idxRow, idxCol);
     } else {
         PTO_ASSERT(idxCol * sizeof(T) % BLOCK_BYTE_SIZE == 0,
-                   "TEXTRACT ND Vec->Vec : indexCol bytes must be 32-byte aligned (A3 limitation).");
+                   "TEXTRACT ND Vec->Vec : indexCol bytes must be 32-byte aligned "
+                   "(A3 limitation).");
         PTO_ASSERT(idxRow + DstTileData::ValidRow <= SrcTileData::Rows,
                    "TEXTRACT ND Vec->Vec : indexRow + dstValidRow exceeds source rows!");
         PTO_ASSERT(idxCol + DstTileData::ValidCol <= SrcTileData::Cols,
@@ -814,7 +810,9 @@ PTO_INTERNAL void TExtractVecToVecNZDispatch(DstTileData &dst, SrcTileData &src,
         TExtractVecToVecNZScalar<T, DstTileData, SrcTileData>(dst.data(), src.data(), idxRow, idxCol);
     } else {
         PTO_ASSERT(idxRow % FRACTAL_NZ_ROW == 0, "TEXTRACT NZ Vec->Vec : indexRow must be 16-aligned (A3 limitation).");
-        PTO_ASSERT(idxCol % kC0Size == 0, "TEXTRACT NZ Vec->Vec : indexCol must be c0Size-aligned (A3 limitation).");
+        PTO_ASSERT(idxCol % kC0Size == 0,
+                   "TEXTRACT NZ Vec->Vec : indexCol must be c0Size-aligned (A3 "
+                   "limitation).");
         uint16_t validRow = static_cast<uint16_t>(dst.GetValidRow());
         uint16_t validCol = static_cast<uint16_t>(dst.GetValidCol());
         PTO_ASSERT(idxRow + validRow <= SrcTileData::Rows,
@@ -843,7 +841,8 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t ind
             TExtractVecToVecNZDispatch<DstTileData, SrcTileData>(dst, src, indexRow, indexCol);
         } else {
             static_assert(DstTileData::isRowMajor == SrcTileData::isRowMajor,
-                          "TEXTRACT Vec->Vec : Source and destination layout must match (both ND or both NZ).");
+                          "TEXTRACT Vec->Vec : Source and destination layout must "
+                          "match (both ND or both NZ).");
             static_assert(DstTileData::SFractal == SrcTileData::SFractal,
                           "TEXTRACT Vec->Vec : Source and destination SFractal must match.");
         }
