@@ -169,6 +169,63 @@ test data success
 test success
 ```
 
+## DEBUG mode (isolates Assumption A.combined)
+
+If the main FFN run fails (e.g., final output is all zero), build emits a
+**second** executable, `./moe_segmented_ffn_top1_debug`, that runs only
+GEMM1 + ReLU + FP32→FP16 down-cast and writes the post-ReLU hidden state
+to a full-size FP16 GM buffer the host reads back. This isolates whether
+the **combined-mode TSTORE** form
+`TSTORE<AccTile<float>, GlobalTensor<half, ...>, AtomicNone, NormalRelu>`
+(Assumption A.combined) writes the correct data — separately from the
+GEMM2 / tile-reuse question (Assumption A.reuse) in the main FFN kernel.
+
+Run order after a normal `bash run.sh` build:
+
+```bash
+cd build
+./moe_segmented_ffn_top1_debug                         # writes ./output/debug_hidden_fp16.bin
+python ../scripts/compare_hidden_debug.py              # compares vs ./output/golden_hidden_fp16.bin
+```
+
+Or all in one shot (the `run.sh` already runs `gen_data.py` and compiles
+both binaries — the debug binary is linked against the same kernel shared
+library):
+
+```bash
+bash run.sh -r npu -v Ascend910B1
+cd build
+./moe_segmented_ffn_top1_debug
+python ../scripts/compare_hidden_debug.py
+```
+
+Interpretation:
+
+- **`compare_hidden_debug.py` PASSes**: the combined-mode TSTORE writes the
+  correct FP16 hidden state. A.combined is OK at this shape. The main FFN
+  failure is on the **GEMM2 / tile-reuse** side (Assumption A.reuse) — next
+  step is to declare separate Mat/Left/Right/Acc tiles for GEMM2 in
+  `moe_segmented_ffn_top1_kernel.cpp` (the prepared Fallback F2 in the
+  failure protocol).
+- **`compare_hidden_debug.py` FAILs** (especially if the device hidden is
+  all zeros): A.combined is broken. Switch the main kernel to **Fallback
+  F1** (store FP32 hidden with ReLU using the proven §A17 form, then a
+  separate cast kernel) or **F2** (FP32→FP16 no-ReLU store + separate vec
+  ReLU). Both are documented in the kernel header and the failure-protocol
+  section below.
+
+The debug binary uses **exactly the same** GEMM1 body and TSTORE template
+arguments as the main FFN kernel — the only difference is that the TSTORE
+destination is a per-tile offset into a full-size FP16 buffer (so the host
+can read back all hidden values at once) instead of a fixed reused
+scratch. This means a PASS on the debug binary directly validates A.combined
+at the per-iter shape used by the main kernel.
+
+The standard `compare_outputs.py` (final-output diff) **also** picks up
+`debug_hidden_fp16.bin` if present and prints a one-line summary at the
+end so you can confirm both verdicts (hidden state OK / final output OK)
+from a single command.
+
 ## How to compare against the Python reference
 
 ```bash

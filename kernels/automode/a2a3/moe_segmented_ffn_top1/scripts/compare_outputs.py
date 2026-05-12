@@ -115,15 +115,25 @@ def main():
     print()
     print(f"[compare] FAIL  total mismatching rows: {n_mismatch}/{T_padded}")
     print(f"[compare] ---- first mismatch ----")
-    print(f"  flat_index        = {first_flat}  (0x{first_flat:x})")
-    print(f"  row               = {first_row}  (flat // kO={kO})")
-    print(f"  col               = {first_col}  (flat %  kO={kO})")
-    print(f"  golden (final)    = {float(gold[first_row, first_col])}")
-    print(f"  got    (device)   = {float(got [first_row, first_col])}")
-    print(f"  abs_diff          = {float(abs_diff[first_row, first_col])}")
+    print(f"  flat_index               = {first_flat}  (0x{first_flat:x})")
+    print(f"  row                      = {first_row}  (flat // kO={kO})")
+    print(f"  col                      = {first_col}  (flat %  kO={kO})")
+    print(f"  golden (final)           = {float(gold[first_row, first_col])}")
+    print(f"  got    (device)          = {float(got [first_row, first_col])}")
+    print(f"  abs_diff                 = {float(abs_diff[first_row, first_col])}")
+
+    # NEW: row-wise verdicts and a coarse failure classification.
+    row_gold_all_zero = bool(np.all(gold[first_row, :] == 0.0))
+    row_got_all_zero  = bool(np.all(got [first_row, :] == 0.0))
+    print(f"  golden row all zero?     = {row_gold_all_zero}")
+    print(f"  device row all zero?     = {row_got_all_zero}")
+    print(f"  final-output expected    = "
+          f"{'NONZERO (real token result)' if not row_gold_all_zero else 'ZERO (padded row or fully-clipped)'}")
+    print(f"  final-output got         = "
+          f"{'NONZERO' if not row_got_all_zero else 'ZERO'}")
 
     if e0 is None:
-        print(f"  segment           = OUT-OF-RANGE")
+        print(f"  segment                  = OUT-OF-RANGE")
     else:
         offset_in_seg = first_row - s0
         tile_m0       = (offset_in_seg // kTileM) * kTileM
@@ -131,16 +141,26 @@ def main():
         n_inner_iters = c0 // kTileM
         real_c        = int(expert_count_real[e0]) if have_real else None
         is_padded     = None if not have_real else (offset_in_seg >= real_c)
-        print(f"  expert            = {e0}")
-        print(f"  expert_start[e]   = {s0}  (PADDED)")
-        print(f"  expert_count[e]   = {c0}  (PADDED, multiple of {kTileM})")
+        print(f"  expert                   = {e0}")
+        print(f"  expert_start[e]          = {s0}  (PADDED)")
+        print(f"  expert_count[e]          = {c0}  (PADDED, multiple of {kTileM})")
         if have_real:
-            print(f"  expert_count_real = {real_c}  (REAL)")
-            print(f"  is_padded_row     = {is_padded}")
-        print(f"  offset_in_segment = {offset_in_seg}")
-        print(f"  tile_m0           = {tile_m0}")
-        print(f"  tile_idx          = {tile_idx}  (0-based inner-loop iter)")
-        print(f"  inner iters total = {n_inner_iters}")
+            print(f"  expert_count_real        = {real_c}  (REAL)")
+            print(f"  is_padded_row            = {is_padded}")
+        print(f"  offset_in_segment        = {offset_in_seg}")
+        print(f"  tile_m0                  = {tile_m0}")
+        print(f"  tile_idx                 = {tile_idx}  (0-based inner-loop iter)")
+        print(f"  inner iters total        = {n_inner_iters}")
+
+    # NEW: pull the post-ReLU FP32 hidden golden value at this (row, ...)
+    # and report a few representative cols so the user can compare against
+    # the debug device hidden if it is available.
+    if have_hidden:
+        col_show = [first_col, 0, 1, 2, 7, 31, 63]
+        col_show = [c for c in col_show if 0 <= c < kF]
+        print(f"  hidden_relu_fp32 (golden, post-ReLU) representative cols:")
+        for c in col_show:
+            print(f"    [{first_row}, {c}] = {float(hidden[first_row, c])}")
 
     if have_hidden:
         n_nonzero_hidden_row = int(np.count_nonzero(hidden[first_row, :]))
@@ -153,6 +173,37 @@ def main():
         if n_nonzero_hidden_row == 0:
             print(f"  NOTE: hidden_relu row is all zero -> final output should be all zero too.")
             print(f"         If got[row, :] != 0 here, the device left dirty data from a prior expert.")
+        else:
+            print(f"  NOTE: hidden_relu has nonzero values -> if device row is all zero,")
+            print(f"         GEMM2 did not run (or read all-zero from hidden_scratch).")
+
+    # NEW: optional cross-check with the debug-hidden output if it exists.
+    # Lets the user see in ONE script whether (a) device hidden matches golden
+    # hidden (A.combined OK) AND (b) device final matches golden final.
+    debug_hidden_path = "./output/debug_hidden_fp16.bin"
+    if os.path.exists(debug_hidden_path):
+        try:
+            dbg = np.fromfile(debug_hidden_path, dtype=np.float16).reshape(T_padded, kF)
+            gold_h16_path = "./output/golden_hidden_fp16.bin"
+            if os.path.exists(gold_h16_path):
+                gh16 = np.fromfile(gold_h16_path, dtype=np.float16).reshape(T_padded, kF)
+                dbg_diff = dbg.astype(np.float32) - gh16.astype(np.float32)
+                dbg_max = float(np.abs(dbg_diff).max())
+                dbg_match_rows = int(np.all(dbg_diff == 0, axis=1).sum())
+                dbg_n_zero = int((dbg == 0).sum())
+                print()
+                print(f"[compare] ---- ALSO loaded debug_hidden_fp16.bin (GEMM1-only debug binary) ----")
+                print(f"  debug hidden shape       = {dbg.shape}")
+                print(f"  debug hidden max abs diff vs golden_hidden_fp16 = {dbg_max:.6g}")
+                print(f"  debug hidden matching rows                       = {dbg_match_rows}/{T_padded}")
+                print(f"  debug hidden zero elements                       = {dbg_n_zero}/{int(dbg.size)}")
+                if dbg_n_zero == int(dbg.size):
+                    print(f"  >>> Debug hidden is ALL ZEROS -> Assumption A.combined LIKELY BROKEN.")
+                elif dbg_max == 0.0:
+                    print(f"  >>> Debug hidden matches golden -> Assumption A.combined OK.")
+                    print(f"      Main FFN failure is likely A.reuse (tile reuse across GEMM1/GEMM2).")
+        except Exception as ex:
+            print(f"[compare] note: could not parse debug_hidden_fp16.bin: {ex}")
 
     mismatch_idx_rows = np.where(~row_eq)[0]
     show = mismatch_idx_rows[: min(5, mismatch_idx_rows.size)]
