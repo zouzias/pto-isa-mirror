@@ -3,55 +3,57 @@
 # --------------------------------------------------------------------------------
 # moe_segmented_ffn_top1 - gen_data.py
 #
-# Full per-expert FFN: GEMM1 -> ReLU -> GEMM2. Reuses §A15/§A16/§A17 layout
-# (host-padded expert segments, stable argsort grouping) and adds a second
-# weight matrix w2 plus the final-layer golden.
+# Builds inputs and golden for the first full top-1 segmented FFN milestone:
 #
-# Pipeline (Python-only):
+#   per expert e:
+#     A1 = packed_tokens[start:start+padded_count, :H]      float16
+#     B1 = w1[e]                                           float16
+#     Acc1 = A1 @ B1                                       float32 (fp32 accumulator)
+#     scratch[start:start+padded_count, :F] = relu(Acc1)   float16  (fused TSTORE)
+#     A2 = scratch[start:start+padded_count, :F]           float16
+#     B2 = w2[e]                                           float16
+#     Acc2 = A2 @ B2                                       float32
+#     packed_output[start:start+padded_count, :H] = Acc2   float32
 #
-#   packed_tokens [T_PADDED, H]   FP16
-#   w1            [kE, H, F]      FP16
-#   w2            [kE, F, O]      FP16
-#     ↓ per expert e:
-#       hidden   = packed_tokens[s:s+c]   @ w1[e]    (FP32)
-#       hidden_r = max(hidden, 0)                    (FP32, post-ReLU)
-#       y        = hidden_r @ w2[e]                  (FP32)
-#       packed_output[s:s+c] = y
+# Datatype contract:
 #
-# Datatypes (canonical A3 auto-mode cube combo for both GEMMs):
-#   inputs/weights : float16
-#   accumulator    : float32
-#   final output   : float32
+#   packed_tokens   : float16
+#   w1, w2          : float16
+#   scratch         : float16  (post-ReLU; FP32 acc -> FP16 GM + ReLU in one TSTORE)
+#   packed_output   : float32  (cube FP32 accumulator on GEMM2)
+#   expert_count    : int32    (PADDED counts; multiples of kTileM)
+#   expert_start    : int32    (PADDED starts; prefix sum)
 #
-# Numerical correctness:
-#   Inputs in [-3, 4] (cast exact to FP16). One product fits in FP16 (max |3*3|=9
-#   < 65504), inner products of length K=64 fit in FP32 (max 64*9 = 576).
-#   ReLU(hidden) is FP32 -> FP16 cast: integer-valued FP32 in [-576, 576] cast
-#   to FP16 IS exact (FP16 covers integers up to 2^11 = 2048 exactly).
-#   Second GEMM products are |F=64 max-val FP16 * FP16 max-val| -> FP32 sum.
-#   With ReLU clipping, average effective F is ~F/2 = 32; max FP16 magnitude
-#   after layer 1 is ~576; product max |576 * 4| = 2304 (representable exactly
-#   in FP16, but the FP32 accumulator dominates). Sum over 64 such products
-#   is at most ~64 * 2304 = 147456 — within FP32 integer-exact range
-#   (2^24 = 16777216).
-#   So both GEMMs are bit-exact in this distribution.
+# Tail policy: identical to §A15 / §A16 / §A17 — host pads each expert
+# segment length to a multiple of kTileM. Padded rows are zero. The padded
+# rows produce zero GEMM1 output (zero in, zero out), which ReLU passes
+# through as zero, which GEMM2 then multiplies by w2 to produce zero
+# output. So padded rows trivially remain zero across the entire FFN.
+#
+# Numerical-stability note: with `tokens, w1, w2 ∈ {-4..4} ⊂ float16`, the
+# GEMM1 inner-product magnitude is bounded by 64 * 16 = 1024; that fits
+# exactly in float32 (and is exact when cast to float16, |1024| << 65504).
+# After ReLU + downcast, scratch values lie in [0, 1024]. GEMM2 then sums
+# 64 products, each bounded by 1024 * 4 = 4096, with sum bound 64 * 4096 =
+# 262144 — still within float32 range. The float16 representation of
+# intermediate scratch values is exact when they are integer-valued and
+# their absolute value is <= 2048 (the FP16 mantissa precision boundary).
+# To avoid FP16 rounding in scratch, gen_data widens the value range
+# *modestly* — the same [-4, 4] range used by §A17 is reused, which keeps
+# GEMM1 outputs comfortably inside the FP16-exact integer regime for this
+# tested shape (kH = 64). For larger kH this assumption may not hold.
 #
 # Output files (all raw little-endian, contiguous, no header):
-#   ./input/input_packed_tokens.bin       (T_PADDED * H float16)
-#   ./input/input_expert_count.bin        (kE        int32 )  PADDED counts
-#   ./input/input_expert_start.bin        (kE        int32 )  PADDED starts
-#   ./input/input_w1.bin                  (kE * H * F float16)
-#   ./input/input_w2.bin                  (kE * F * O float16)
-#   ./output/golden_packed_output.bin     (T_PADDED * O float32; final FFN out)
-#   ./output/golden_hidden_relu.bin       (T_PADDED * F float32; post-ReLU; debug)
-#   ./output/golden_hidden_fp16.bin       (T_PADDED * F float16; post-ReLU,
-#                                          cast to FP16 — what GEMM1's combined
-#                                          TSTORE<...,NormalRelu> store should
-#                                          produce. Consumed by the debug
-#                                          executable + compare_hidden_debug.py
-#                                          to isolate Assumption A.combined.)
+#   ./input/input_packed_tokens.bin       (T_PADDED * kH float16)
+#   ./input/input_expert_count.bin        (kE          int32 )  PADDED counts
+#   ./input/input_expert_start.bin        (kE          int32 )  PADDED starts
+#   ./input/input_w1.bin                  (kE * kH * kF float16)
+#   ./input/input_w2.bin                  (kE * kF * kH float16)
+#   ./output/golden_packed_output.bin     (T_PADDED * kH float32; full FFN)
+#   ./output/golden_scratch.bin           (T_PADDED * kF float16; post-ReLU; debug)
+#   ./output/golden_gemm1_output.bin      (T_PADDED * kF float32; PRE-ReLU GEMM1; debug)
 #   ./output/t_padded.txt                 (single int line; consumed by main.cpp)
-#   ./output/expert_count_real.bin        (kE        int32 )  debug only
+#   ./output/expert_count_real.bin        (kE          int32 )  debug only
 # --------------------------------------------------------------------------------
 
 import math
@@ -61,22 +63,27 @@ import numpy as np
 np.random.seed(19)
 
 
-def gen_golden_data(kT, kH, kF, kO, kE, kTileM):
-    # ---- Small symmetric integer inputs (cast to float16 is exact) ---------
-    tokens = np.random.randint(-3, 5, size=(kT, kH)).astype(np.float16)
+def gen_golden_data(kT, kH, kF, kE, kTileM):
+    # ---- Small symmetric integer inputs (cast to float16 is exact). --------
+    # [-4, 4] matches §A17 gemm_relu so both ReLU-clipped and pass-through
+    # values appear in scratch after GEMM1. With kH=64 the pre-ReLU GEMM1
+    # output stays inside |x| <= 1024 (= 64 * 4 * 4), well inside the FP16
+    # exact-integer regime (<= 2048). So scratch is bit-exact even though
+    # it is FP16. The same range bounds GEMM2's FP32 output safely.
+    tokens = np.random.randint(-4, 5, size=(kT, kH)).astype(np.float16)
     expert_id = np.random.choice(
         np.arange(kE, dtype=np.int32),
         size=kT,
         p=np.array([0.55, 0.20, 0.15, 0.10]),
     ).astype(np.int32)
-    w1 = np.random.randint(-3, 5, size=(kE, kH, kF)).astype(np.float16)
-    w2 = np.random.randint(-3, 5, size=(kE, kF, kO)).astype(np.float16)
+    w1 = np.random.randint(-4, 5, size=(kE, kH, kF)).astype(np.float16)
+    w2 = np.random.randint(-4, 5, size=(kE, kF, kH)).astype(np.float16)
 
-    # ---- Real (unpadded) histogram and stable grouping --------------------
+    # ---- real (unpadded) histogram and stable grouping ---------------------
     expert_count_real = np.bincount(expert_id, minlength=kE).astype(np.int32)
-    order = np.argsort(expert_id, kind="stable")
+    order = np.argsort(expert_id, kind="stable")            # [T] in expert order
 
-    # ---- Padded layout ----------------------------------------------------
+    # ---- padded layout -----------------------------------------------------
     expert_count_padded = np.array(
         [int(math.ceil(int(c) / kTileM) * kTileM) for c in expert_count_real],
         dtype=np.int32,
@@ -85,6 +92,7 @@ def gen_golden_data(kT, kH, kF, kO, kE, kTileM):
     expert_start_padded[1:] = np.cumsum(expert_count_padded[:-1])
     T_padded = int(expert_count_padded.sum())
 
+    # ---- packed_tokens layout with zero-padded tails per expert ------------
     packed_tokens = np.zeros((T_padded, kH), dtype=np.float16)
     cursor = 0
     for e in range(kE):
@@ -94,30 +102,34 @@ def gen_golden_data(kT, kH, kF, kO, kE, kTileM):
         packed_tokens[ps : ps + rc, :] = tokens[sel, :]
         cursor += rc
 
-    # ---- Per-expert FFN (FP32 accumulator over FP16 inputs) ---------------
-    hidden_relu      = np.zeros((T_padded, kF), dtype=np.float32)
-    hidden_relu_fp16 = np.zeros((T_padded, kF), dtype=np.float16)
-    golden_packed_output = np.zeros((T_padded, kO), dtype=np.float32)
+    # ---- Golden FFN: GEMM1 -> ReLU -> GEMM2 --------------------------------
+    # Mirrors the kernel exactly: FP32 accumulator over FP16 inputs, then
+    # FP16 cast for scratch, then FP32 accumulator over FP16 inputs again.
+    gemm1_output_fp32 = np.zeros((T_padded, kF), dtype=np.float32)
+    scratch_fp16      = np.zeros((T_padded, kF), dtype=np.float16)
+    golden_output     = np.zeros((T_padded, kH), dtype=np.float32)
+
     for e in range(kE):
         s = int(expert_start_padded[e])
         c = int(expert_count_padded[e])
-        A  = packed_tokens[s : s + c, :].astype(np.float32)       # [c, H]
-        W1 = w1[e, :, :].astype(np.float32)                       # [H, F]
-        H1 = A @ W1                                               # [c, F]
-        H1 = np.maximum(H1, 0.0)
-        # IMPORTANT — to match the device kernel's behaviour, the post-ReLU
-        # hidden state is DOWN-CAST to float16 on its way to GM (the
-        # `TSTORE<..., ReluPreMode::NormalRelu>` overload's accDataType=float,
-        # dstDataType=half lowering). Then GEMM2 loads it as FP16 inputs.
-        H1_fp16 = H1.astype(np.float16)
-        H1_back = H1_fp16.astype(np.float32)                      # [c, F]
-        W2 = w2[e, :, :].astype(np.float32)                       # [F, O]
-        Y  = H1_back @ W2                                         # [c, O]
-        hidden_relu     [s : s + c, :]       = H1_back
-        hidden_relu_fp16[s : s + c, :]       = H1_fp16
-        golden_packed_output[s : s + c, :]   = Y
+        A1 = packed_tokens[s : s + c, :].astype(np.float32)        # [c, H]
+        B1 = w1[e, :, :].astype(np.float32)                        # [H, F]
+        gemm1_output_fp32[s : s + c, :] = A1 @ B1                  # [c, F]
 
-    # ---- Save -------------------------------------------------------------
+        # Fused step in the kernel: ReLU + FP32 -> FP16 in a single TSTORE.
+        scratch_fp16[s : s + c, :] = np.maximum(
+            gemm1_output_fp32[s : s + c, :], 0.0
+        ).astype(np.float16)
+
+        # GEMM2: scratch (FP16) @ w2[e] (FP16) -> FP32 packed_output.
+        A2 = scratch_fp16[s : s + c, :].astype(np.float32)         # [c, F]
+        B2 = w2[e, :, :].astype(np.float32)                        # [F, H]
+        golden_output[s : s + c, :] = A2 @ B2                      # [c, H]
+
+    # Padded rows: zero tokens -> zero GEMM1 -> zero scratch -> zero output.
+    assert np.all(scratch_fp16 >= 0.0), "scratch must be nonnegative"
+
+    # ---- save --------------------------------------------------------------
     os.makedirs("input",  exist_ok=True)
     os.makedirs("output", exist_ok=True)
     packed_tokens.tofile("./input/input_packed_tokens.bin")
@@ -125,33 +137,25 @@ def gen_golden_data(kT, kH, kF, kO, kE, kTileM):
     expert_start_padded.tofile("./input/input_expert_start.bin")
     w1.tofile("./input/input_w1.bin")
     w2.tofile("./input/input_w2.bin")
-    golden_packed_output.tofile("./output/golden_packed_output.bin")
-    hidden_relu.tofile("./output/golden_hidden_relu.bin")
-    # Reference for the debug executable / compare_hidden_debug.py: the
-    # exact byte pattern the device kernel's combined-mode TSTORE
-    # (FP32 Acc -> FP16 GM + ReLU) should produce.
-    hidden_relu_fp16.tofile("./output/golden_hidden_fp16.bin")
+    golden_output.tofile("./output/golden_packed_output.bin")
+    scratch_fp16.tofile("./output/golden_scratch.bin")          # debug-only
+    gemm1_output_fp32.tofile("./output/golden_gemm1_output.bin")  # debug-only
     with open("./output/t_padded.txt", "w") as f:
         f.write(f"{T_padded}\n")
     expert_count_real.tofile("./output/expert_count_real.bin")
 
-    # ---- Debug ------------------------------------------------------------
-    n_total       = int(hidden_relu.size)
-    pre_relu_neg  = 0
-    for e in range(kE):
-        s = int(expert_start_padded[e]); c = int(expert_count_padded[e])
-        A = packed_tokens[s : s + c, :].astype(np.float32)
-        W1 = w1[e, :, :].astype(np.float32)
-        pre_relu_neg += int((A @ W1 < 0).sum())
+    # ---- debug -------------------------------------------------------------
+    n_total       = int(gemm1_output_fp32.size)
+    n_clipped     = int((gemm1_output_fp32 < 0.0).sum())
+    n_passthr     = int((gemm1_output_fp32 > 0.0).sum())
+    n_exact_zero  = int((gemm1_output_fp32 == 0.0).sum())
     print("[gen_data] dtype packed_tokens = float16")
-    print("[gen_data] dtype w1            = float16")
-    print("[gen_data] dtype w2            = float16")
-    print("[gen_data] dtype packed_output = float32 (final FFN output)")
-    print("[gen_data] dtype hidden_relu   = float32 (post-ReLU; on-device this is FP16 in scratch GM)")
+    print("[gen_data] dtype w1, w2        = float16")
+    print("[gen_data] dtype scratch       = float16 (post-ReLU, FP32 acc -> FP16 GM in one TSTORE)")
+    print("[gen_data] dtype packed_output = float32")
     print(f"[gen_data] kT       = {kT}")
     print(f"[gen_data] kH       = {kH}")
     print(f"[gen_data] kF       = {kF}")
-    print(f"[gen_data] kO       = {kO}")
     print(f"[gen_data] kE       = {kE}")
     print(f"[gen_data] kTileM   = {kTileM}")
     print(f"[gen_data] T_padded = {T_padded}")
@@ -160,19 +164,29 @@ def gen_golden_data(kT, kH, kF, kO, kE, kTileM):
     print("[gen_data] expert_start_padded =", expert_start_padded.tolist())
     inner_iters = (expert_count_padded // kTileM).tolist()
     print(f"[gen_data] inner m0 iters per expert = {inner_iters} "
-          f"(sum: {sum(inner_iters)} (GEMM1 + ReLU + GEMM2) tile-iters)")
-    print(f"[gen_data] PRE-ReLU hidden negatives (clipped to 0 by ReLU): "
-          f"{pre_relu_neg}/{n_total} ({100.0 * pre_relu_neg / n_total:.1f}%)")
-    print("[gen_data] golden_packed_output[0, :8]  =", golden_packed_output[0, :8].tolist())
-    print("[gen_data] hidden_relu[0, :8]           =", hidden_relu[0, :8].tolist())
-    print("[gen_data] golden_packed_output[T-1, :8] =", golden_packed_output[-1, :8].tolist())
+          f"(sum: {sum(inner_iters)} cube tiles per GEMM step)")
+    print(f"[gen_data] ReLU stats over PRE-ReLU GEMM1 output:")
+    print(f"           total elements                  = {n_total}")
+    print(f"           negative (will be clipped to 0) = {n_clipped} "
+          f"({100.0 * n_clipped / n_total:.1f}%)")
+    print(f"           positive (passes through)       = {n_passthr} "
+          f"({100.0 * n_passthr / n_total:.1f}%)")
+    print(f"           exactly zero (incl. padded)     = {n_exact_zero}")
+    g1_min = float(gemm1_output_fp32.min())
+    g1_max = float(gemm1_output_fp32.max())
+    print(f"[gen_data] PRE-ReLU GEMM1 range: [{g1_min:.1f}, {g1_max:.1f}] "
+          f"(must fit in FP16 exactly when nonnegative)")
+    g2_min = float(golden_output.min())
+    g2_max = float(golden_output.max())
+    print(f"[gen_data] golden_output  range: [{g2_min:.1f}, {g2_max:.1f}]")
+    print("[gen_data] scratch_fp16[0, :8]      =", scratch_fp16[0, :8].tolist())
+    print("[gen_data] golden_output[0, :8]     =", golden_output[0, :8].tolist())
 
 
 if __name__ == "__main__":
     kT     = 256
     kH     = 64
     kF     = 64
-    kO     = 64
     kE     = 4
     kTileM = 128
-    gen_golden_data(kT, kH, kF, kO, kE, kTileM)
+    gen_golden_data(kT, kH, kF, kE, kTileM)
