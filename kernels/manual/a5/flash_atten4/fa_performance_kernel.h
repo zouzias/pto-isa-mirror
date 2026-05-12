@@ -25,19 +25,45 @@ constexpr std::size_t kFaProfileBytesPerBlock = 1024 * 3; // cube + two vec subb
 constexpr std::size_t kFaCvCommSlotBytes = 512U;
 constexpr int VEC_CORES = 2;
 
+constexpr int SKIP_STATUS_FIFO_SIZE = kFaCvFifoSize;
+constexpr int SKIP_STATUS_SLOT_SIZE = 2;
+constexpr uint64_t SKIP_STATUS_SSBUF_BASE = 0x100;
+constexpr uint64_t SKIP_STATUS_SLOT_BYTES = SKIP_STATUS_SLOT_SIZE * sizeof(uint64_t);
+
+// -----------------------------------------------------------------------------
+// Buffer flag values for FFTS pipeline coordination
+// Each TSync object uses TWO consecutive flags (flag_id and flag_id+1)
+// for forward (record/wait) and backward (allocate/free) dependencies.
+// Therefore, flag IDs must be spaced by 2 to avoid collisions.
+// -----------------------------------------------------------------------------
+#ifndef FFTS_BUFFER_FLAG_ENUM
+#define FFTS_BUFFER_FLAG_ENUM
+enum FftsBufferFlag : uint32_t
+{
+    BUF0_QK_READY = 0,   // qk2smSync: uses flags 0, 1 (+ 16, 17 for dual core)
+    BUF1_SM_READY = 2,   // sm2pvSync: uses flags 2, 3 (+ 18, 19 for dual core)
+    UPDATE_READY = 4,    // pv2guSync: uses flags 4, 5 (+ 20, 21 for dual core)
+    UB_BUF_READY = 6,    // ubBufSync: uses flags 6, 7 (+ 22, 23 for dual core)
+    PV_UB_BUF_READY = 8, // pvUbBufSync: uses flags 8, 9 (+ 24, 25 for dual core)
+    CV_BLOCK_END = 10,   // CV comm slot block end (CV_COMM_CTRL reserved in TSyncCVID)
+    SS_BUF_READY = 12,
+};
+#endif
+
 template <int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1 = kFaCubeS1, int TILE_S1 = kFaTileS1,
           int QK_PRELOAD = kFaQkPreload, int CV_FIFO_SIZE = kFaCvFifoSize, bool INTERMEDIATE_CHECK = false,
           bool CAUSAL_MASK = false, int CV_FIFO_CONS_SYNC_PERIOD = kFaCvFifoConsSyncPeriod>
 void LaunchTFA(uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclFloat16 *p_tile_fifo,
                float *exp_max_ififo, float *global_sum_out, float *exp_max_out, float *o_out, float *o_parts_out,
-               float *qk_tile_fifo, float *pv_tile_fifo, uint8_t *profile_data, aclrtStream stream,
-               uint8_t *cv_comm_buf = nullptr);
+               float *qk_tile_fifo, float *pv_tile_fifo, float *pv_pend_tile_fifo, uint8_t *profile_data,
+               aclrtStream stream, uint8_t *cv_comm_buf = nullptr);
 
 // Overload without profiling buffer.
 template <int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1, int QK_PRELOAD, int CV_FIFO_SIZE,
           bool INTERMEDIATE_CHECK, bool CAUSAL_MASK, int CV_FIFO_CONS_SYNC_PERIOD>
 void LaunchTFA(uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclFloat16 *p_tile_fifo,
                float *exp_max_ififo, float *global_sum_out, float *exp_max_out, float *o_out, float *o_parts_out,
-               float *qk_tile_fifo, float *pv_tile_fifo, aclrtStream stream, uint8_t *cv_comm_buf = nullptr);
+               float *qk_tile_fifo, float *pv_tile_fifo, float *pv_pend_tile_fifo, aclrtStream stream,
+               uint8_t *cv_comm_buf = nullptr);
 
 #endif // FA_PERFORMANCE_KERNEL_H

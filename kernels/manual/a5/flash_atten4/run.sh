@@ -8,8 +8,8 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # ======================================================================================================================
 
-SHORT=r:,v:,n:,c:,a:,p:,m:,i,d,k
-LONG=run-mode:,soc-version:,npu:,case:,cases:,qk-preload:,mode:,intermediate,debug,mask,mode_dn
+SHORT=r:,v:,n:,c:,a:,p:,m:,i,d,k,s
+LONG=run-mode:,soc-version:,npu:,case:,cases:,qk-preload:,mode:,intermediate,debug,mask,skip-rescale
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 while :
@@ -45,6 +45,9 @@ do
         (-k | --mask )
             CAUSAL_MASK=1
             shift 1;;
+        (-s | --skip-rescale )
+            SKIP_RESCALE=ON
+            shift 1;;
         (--)
             shift;
             break;;
@@ -71,6 +74,13 @@ set -euo pipefail
 : "${NPU_ID:=0}"
 : "${QK_PRELOAD:=2}"
 : "${FIFO_MODE:=1}"  # 0=ALL_GM_PATH, 1=ALL_UB_PATH, 2=QK_PV_UB_ONLY
+: "${SKIP_RESCALE:=OFF}"
+
+if [[ "${SKIP_RESCALE}" == "ON" && "${FIFO_MODE}" != "1" ]]; then
+    echo "[WARN] Conditional rescale is only supported for FIFO_MODE=1 in this fp16 DN FA kernel."
+    echo "[ERROR] Refusing to build unsupported conditional-rescale configuration."
+    exit 1
+fi
 
 GEN_CASE_ARGS=()
 # Handle missing value after -c/--case (e.g. user passed -c and then --cases)
@@ -99,6 +109,7 @@ echo "[RUN.SH] GEN_CASE_ARGS=${GEN_CASE_ARGS[*]:-<none>}"
 echo "[RUN.SH] INTERMEDIATE=${INTERMEDIATE:-0}"
 echo "[RUN.SH] CAUSAL_MASK=${CAUSAL_MASK:-0}"
 echo "[RUN.SH] DEBUG=${DEBUG_BUILD:-0}"
+echo "[RUN.SH] SKIP_RESCALE=${SKIP_RESCALE}"
 
 python3 ../scripts/generate_cases.py --qk-preload "${QK_PRELOAD}" "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}"
 
@@ -107,8 +118,8 @@ if [[ -n "${DEBUG_BUILD:-}" ]]; then
     CMAKE_EXTRA+=(-DDEBUG_MODE=ON)
 fi
 
-#CMAKE_EXTRA+=(-DMODE_DN=ON)
 CMAKE_EXTRA+=(-DFIFO_MODE=${FIFO_MODE})
+CMAKE_EXTRA+=(-DSKIP_RESCALE=${SKIP_RESCALE})
 
 cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} "${CMAKE_EXTRA[@]}" ..
 make -j16
@@ -119,14 +130,18 @@ if [[ -n "${INTERMEDIATE:-}" ]]; then
 fi
 EXTRA_BIN_ARGS+=(--sys_cnt_multiple=1.0)
 
-if [[ -n "${CASE_FILTER:-}" ]]; then
-    python3 ../scripts/gen_data.py --case="${CASE_FILTER}" "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}"
-    time ./fa_performance_dn --npu="${NPU_ID}" --case="${CASE_FILTER}" "${EXTRA_BIN_ARGS[@]}"
-elif [[ -n "${CASES_RAW:-}" ]]; then
-    python3 ../scripts/gen_data.py "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}"
-    time ./fa_performance_dn --npu="${NPU_ID}" --cases="${CASES_RAW}" "${EXTRA_BIN_ARGS[@]}"
-else
-    python3 ../scripts/gen_data.py "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}"
-    time ./fa_performance_dn --npu="${NPU_ID}" "${EXTRA_BIN_ARGS[@]}"
+GEN_DATA_EXTRA_ARGS=()
+if [[ "${SKIP_RESCALE}" == "ON" ]]; then
+    GEN_DATA_EXTRA_ARGS+=(--enable-conditional-rescale)
 fi
 
+if [[ -n "${CASE_FILTER:-}" ]]; then
+    python3 ../scripts/gen_data.py --case="${CASE_FILTER}" "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}" "${GEN_DATA_EXTRA_ARGS[@]}"
+    time ./fa_performance_dn --npu="${NPU_ID}" --case="${CASE_FILTER}" "${EXTRA_BIN_ARGS[@]}"
+elif [[ -n "${CASES_RAW:-}" ]]; then
+    python3 ../scripts/gen_data.py "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}" "${GEN_DATA_EXTRA_ARGS[@]}"
+    time ./fa_performance_dn --npu="${NPU_ID}" --cases="${CASES_RAW}" "${EXTRA_BIN_ARGS[@]}"
+else
+    python3 ../scripts/gen_data.py "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}" "${GEN_DATA_EXTRA_ARGS[@]}"
+    time ./fa_performance_dn --npu="${NPU_ID}" "${EXTRA_BIN_ARGS[@]}"
+fi

@@ -30,14 +30,17 @@ namespace pto {
 // - exp_max and global_sum are per-row reduced tiles (shape [S0, 1]) that get broadcast over columns.
 // -----------------------------------------------------------------------------
 
-#define USE_MANUAL 1
+#define USE_MANUAL (!skip_rescale)
 
 template <typename reducedTileData, typename svTileData>
 __tf__ AICORE inline void pto_macro_fa_gu(svTileData __out__ prev_sv_tile, svTileData __in__ est_sv_tile,
-                                          reducedTileData __in__ exp_max)
+                                          reducedTileData __in__ exp_max, svTileData __in__ pv_pend_tile,
+                                          bool skip_cond)
 {
     if constexpr (reducedTileData::BFractal == BLayout::ColMajor) {
-        #if USE_MANUAL
+        #if USE_MANUAL && !skip_rescale
+            (void)pv_pend_tile;
+            (void)skip_cond;
             __ubuf__ typename svTileData::DType *prev_sv_tile_Ptr =
                 (__ubuf__ typename svTileData::DType *)__cce_get_tile_ptr(prev_sv_tile.data());
             __ubuf__ typename svTileData::DType *est_sv_tile_Ptr =
@@ -80,13 +83,24 @@ __tf__ AICORE inline void pto_macro_fa_gu(svTileData __out__ prev_sv_tile, svTil
         #else
             pto::TROWEXPANDMUL(prev_sv_tile, prev_sv_tile, exp_max);
             pto::TADD(prev_sv_tile, prev_sv_tile, est_sv_tile);
+            #if skip_rescale
+                if (skip_cond) {
+                    pto::TROWEXPANDMUL(pv_pend_tile, pv_pend_tile, exp_max);
+                    pto::TADD(prev_sv_tile, prev_sv_tile, pv_pend_tile);
+                }
+            #else
+                (void)pv_pend_tile;
+                (void)skip_cond;
+            #endif
         #endif
     } else {
         using reducedTileData_Col =
             Tile<TileType::Vec, float, reducedTileData::Cols, 1, BLayout::ColMajor, reducedTileData::Cols, 1>;
         reducedTileData_Col exp_max_col;
         TRESHAPE(exp_max_col, exp_max);
-        #if USE_MANUAL
+        #if USE_MANUAL && !skip_rescale
+            (void)pv_pend_tile;
+            (void)skip_cond;
             __ubuf__ typename svTileData::DType *prev_sv_tile_Ptr =
                 (__ubuf__ typename svTileData::DType *)__cce_get_tile_ptr(prev_sv_tile.data());
             __ubuf__ typename svTileData::DType *est_sv_tile_Ptr =
@@ -129,16 +143,28 @@ __tf__ AICORE inline void pto_macro_fa_gu(svTileData __out__ prev_sv_tile, svTil
         #else
             pto::TROWEXPANDMUL(prev_sv_tile, prev_sv_tile, exp_max_col);
             pto::TADD(prev_sv_tile, prev_sv_tile, est_sv_tile);
+            #if skip_rescale
+                if (skip_cond) {
+                    pto::TROWEXPANDMUL(pv_pend_tile, pv_pend_tile, exp_max_col);
+                    pto::TADD(prev_sv_tile, prev_sv_tile, pv_pend_tile);
+                }
+            #else
+                (void)pv_pend_tile;
+                (void)skip_cond;
+            #endif
         #endif
     }
 }
 
 template <typename reducedTileData, typename svTileData>
 __tf__ AICORE inline void pto_macro_fa_gu_last(svTileData __out__ prev_sv_tile, svTileData __in__ est_sv_tile,
-                                               reducedTileData __in__ exp_max, reducedTileData __in__ new_global_sum)
+                                               reducedTileData __in__ exp_max, reducedTileData __in__ new_global_sum,
+                                               svTileData __in__ pv_pend_tile, bool skip_cond)
 {
     if constexpr (reducedTileData::BFractal == BLayout::ColMajor) {
-        #if USE_MANUAL
+        #if USE_MANUAL && !skip_rescale
+            (void)pv_pend_tile;
+            (void)skip_cond;
             __ubuf__ typename svTileData::DType *prev_sv_tile_Ptr =
                 (__ubuf__ typename svTileData::DType *)__cce_get_tile_ptr(prev_sv_tile.data());
             __ubuf__ typename svTileData::DType *est_sv_tile_Ptr =
@@ -192,6 +218,15 @@ __tf__ AICORE inline void pto_macro_fa_gu_last(svTileData __out__ prev_sv_tile, 
         #else
             pto::TROWEXPANDMUL(prev_sv_tile, prev_sv_tile, exp_max);
             pto::TADD(prev_sv_tile, prev_sv_tile, est_sv_tile);
+            #if skip_rescale
+                if (skip_cond) {
+                    pto::TROWEXPANDMUL(pv_pend_tile, pv_pend_tile, exp_max);
+                    pto::TADD(prev_sv_tile, prev_sv_tile, pv_pend_tile);
+                }
+            #else
+                (void)pv_pend_tile;
+                (void)skip_cond;
+            #endif
             pto::TROWEXPANDDIV(prev_sv_tile, prev_sv_tile, new_global_sum);
             // pto::TCVT(prev_sv_nd_tile, prev_sv_tile, RoundMode::CAST_RINT);
         #endif
@@ -202,7 +237,9 @@ __tf__ AICORE inline void pto_macro_fa_gu_last(svTileData __out__ prev_sv_tile, 
         TRESHAPE(exp_max_col, exp_max);
         reducedTileData_Col new_global_sum_col;
         TRESHAPE(new_global_sum_col, new_global_sum);
-        #if USE_MANUAL
+        #if USE_MANUAL && !skip_rescale
+            (void)pv_pend_tile;
+            (void)skip_cond;
             __ubuf__ typename svTileData::DType *prev_sv_tile_Ptr =
                 (__ubuf__ typename svTileData::DType *)__cce_get_tile_ptr(prev_sv_tile.data());
             __ubuf__ typename svTileData::DType *est_sv_tile_Ptr =
@@ -256,6 +293,15 @@ __tf__ AICORE inline void pto_macro_fa_gu_last(svTileData __out__ prev_sv_tile, 
         #else
             pto::TROWEXPANDMUL(prev_sv_tile, prev_sv_tile, exp_max_col);
             pto::TADD(prev_sv_tile, prev_sv_tile, est_sv_tile);
+            #if skip_rescale
+                if (skip_cond) {
+                    pto::TROWEXPANDMUL(pv_pend_tile, pv_pend_tile, exp_max_col);
+                    pto::TADD(prev_sv_tile, prev_sv_tile, pv_pend_tile);
+                }
+            #else
+                (void)pv_pend_tile;
+                (void)skip_cond;
+            #endif
             pto::TROWEXPANDDIV(prev_sv_tile, prev_sv_tile, new_global_sum_col);
         #endif
     }

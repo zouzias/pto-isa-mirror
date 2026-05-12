@@ -29,7 +29,24 @@ S0_BASE = 64
 HEAD_SIZE = 128
 TILE_S1_DEFAULT = 128
 
-def gen_case(path, s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEFAULT, is_causal=False):
+RESCALE_THRESHOLD = 8.0
+ENABLE_CONDITIONAL_RESCALE = False
+WARP_SIZE = 128
+NUM_VEC_CORES = 2
+VEC_CORE_SIZE = WARP_SIZE // NUM_VEC_CORES
+
+
+def gen_case(
+    path,
+    s0,
+    s1,
+    head_size=HEAD_SIZE,
+    cube_s1=128,
+    tile_s1=TILE_S1_DEFAULT,
+    is_causal=False,
+    enable_conditional_rescale=ENABLE_CONDITIONAL_RESCALE,
+    rescale_threshold=RESCALE_THRESHOLD,
+):
     # generate inputs in FP16, compute golden in FP32
     q_fp32 = (np.random.randn(s0, head_size).astype(np.float16) * 1.5).astype(np.float32)
     k_fp32 = (np.random.randn(head_size, s1).astype(np.float16) * 1.5).astype(np.float32)
@@ -59,31 +76,56 @@ def gen_case(path, s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEF
     full_exp = np.zeros((s0, s1), dtype=np.float32)
     global_sums = []
     exp_max_parts = []
+    rescale_triggered = []
 
     # emulate TSOFTMAXFA recurrence across tiles to compute new_global_sum and exp_max per tile
     global_max = None
     global_sum = None
+    kernel_rescale_threshold = rescale_threshold / scale
 
     for ti in range(num_tiles):
         c0 = ti * tile_s1
         c1 = c0 + tile_s1
         tile = arr_f32[:, c0:c1]
         # local max per row for this tile
-        local_max = np.max(tile, axis=1, keepdims=True).astype(np.float32)
-        if global_max is not None:
-            local_max = np.maximum(local_max, global_max).astype(np.float32) 
+        tile_max = np.max(tile, axis=1, keepdims=True).astype(np.float32)
         if ti == 0:
-            new_global_max = local_max
+            new_global_max = tile_max
             tmp_float = (tile - new_global_max) * scale
             tmp_float_exp = np.exp(tmp_float).astype(np.float32)
             new_global_sum = (np.sum(tmp_float_exp, axis=1, keepdims=True).astype(np.float32))
             exp_max_tile = np.ones_like(new_global_max).astype(np.float32)
         else:
-            # exp_max = exp((global_max - local_max) * scale)
-            exp_max = (global_max - local_max).astype(np.float32)
-            exp_max = np.exp(exp_max * scale).astype(np.float32)
-            new_global_max = local_max
-            tmp_float = (tile - new_global_max) * scale
+            potential_new_max = np.maximum(tile_max, global_max).astype(np.float32)
+            delta_max = (potential_new_max - global_max).astype(np.float32)
+            if enable_conditional_rescale:
+                num_vec_cores_total = s0 // VEC_CORE_SIZE
+                needs_rescale_per_vec = []
+                for vec_idx in range(num_vec_cores_total):
+                    vec_start = vec_idx * VEC_CORE_SIZE
+                    vec_end = vec_start + VEC_CORE_SIZE
+                    vec_max_delta = np.max(delta_max[vec_start:vec_end])
+                    vec_needs_rescale = vec_max_delta >= kernel_rescale_threshold
+                    if ti == num_tiles - 1:
+                        vec_needs_rescale = True
+                    needs_rescale_per_vec.append(vec_needs_rescale)
+
+                needs_rescale_per_vec_array = np.array(needs_rescale_per_vec, dtype=bool)
+                rescale_triggered.append(needs_rescale_per_vec_array)
+
+                needs_rescale = np.zeros((s0, 1), dtype=bool)
+                for vec_idx, needs_rescale_vec in enumerate(needs_rescale_per_vec):
+                    vec_start = vec_idx * VEC_CORE_SIZE
+                    vec_end = vec_start + VEC_CORE_SIZE
+                    needs_rescale[vec_start:vec_end] = needs_rescale_vec
+                new_global_max = np.where(needs_rescale, potential_new_max, global_max).astype(np.float32)
+            else:
+                new_global_max = potential_new_max
+
+            # The kernel always computes the current tile and exp_max against potential_new_max, even when it
+            # conditionally keeps global_max unchanged for skipped rescale.
+            exp_max = np.exp((global_max - potential_new_max) * scale).astype(np.float32)
+            tmp_float = (tile - potential_new_max) * scale
             tmp_float_exp = np.exp(tmp_float).astype(np.float32)
             new_global_sum = exp_max * global_sum + (np.sum(tmp_float_exp, axis=1, keepdims=True).astype(np.float32) )
             exp_max_tile = exp_max
@@ -106,8 +148,6 @@ def gen_case(path, s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEF
     v = v_fp32.astype(np.float16)
     # soft (S0 x S1) as float32
     soft_f32 = soft.astype(np.float32)
-    # compute full pv by accumulating per-tile partials
-    pv = np.zeros((s0, head_size), dtype=np.float32)
     # compute per-tile partials based on TILE_S1
     num_tiles = s1 // tile_s1
     pv_tile_fifo_parts = []
@@ -117,7 +157,51 @@ def gen_case(path, s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEF
         v_tile = v[c0:c0+tile_s1, :].astype(np.float32)
         pv_tile_fifo = (soft_tile.dot(v_tile)).astype(np.float32)
         pv_tile_fifo_parts.append(pv_tile_fifo)
-        pv += pv_tile_fifo
+
+    pv_pend_tile_fifo_parts = []
+    if enable_conditional_rescale:
+        num_warps = s0 // WARP_SIZE
+        num_vec_cores_total = s0 // VEC_CORE_SIZE
+        pv_pend_accumulator_per_warp = np.zeros((num_warps, WARP_SIZE, head_size), dtype=np.float32)
+        prev_skip_per_warp = np.zeros(num_warps, dtype=bool)
+
+        for ti in range(num_tiles):
+            curr_skip_per_vec = np.zeros(num_vec_cores_total, dtype=bool)
+            if ti > 0:
+                curr_skip_per_vec = ~rescale_triggered[ti - 1]
+
+            curr_skip_per_warp = np.zeros(num_warps, dtype=bool)
+            for warp_id in range(num_warps):
+                vec0_skip = curr_skip_per_vec[warp_id * NUM_VEC_CORES]
+                vec1_skip = curr_skip_per_vec[warp_id * NUM_VEC_CORES + 1]
+                curr_skip_per_warp[warp_id] = vec0_skip and vec1_skip
+
+            pv_pend_output = np.zeros((s0, head_size), dtype=np.float32)
+            pv_current_output = np.zeros((s0, head_size), dtype=np.float32)
+
+            for warp_id in range(num_warps):
+                warp_start = warp_id * WARP_SIZE
+                warp_end = warp_start + WARP_SIZE
+                curr_skip = curr_skip_per_warp[warp_id]
+                prev_skip = prev_skip_per_warp[warp_id]
+
+                if curr_skip:
+                    pv_pend_accumulator_per_warp[warp_id] += pv_tile_fifo_parts[ti][warp_start:warp_end]
+                elif prev_skip:
+                    pv_pend_output[warp_start:warp_end] = pv_pend_accumulator_per_warp[warp_id].copy()
+                    pv_pend_accumulator_per_warp[warp_id] = 0
+                    pv_current_output[warp_start:warp_end] = pv_tile_fifo_parts[ti][warp_start:warp_end]
+                else:
+                    pv_current_output[warp_start:warp_end] = pv_tile_fifo_parts[ti][warp_start:warp_end]
+
+            pv_pend_tile_fifo_parts.append(pv_pend_output)
+            pv_tile_fifo_parts[ti] = pv_current_output
+            prev_skip_per_warp = curr_skip_per_warp.copy()
+    else:
+        for _ in range(num_tiles):
+            pv_pend_tile_fifo_parts.append(np.zeros((s0, head_size), dtype=np.float32))
+
+    pv = np.sum(pv_tile_fifo_parts, axis=0).astype(np.float32)
 
     v.tofile(os.path.join(path, 'v.bin'))
     vt = v.T.astype(np.float16)    
@@ -126,6 +210,8 @@ def gen_case(path, s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEF
     # write per-tile partials as pv_tile_fifo0.bin, pv_tile_fifo1.bin
     for idx, part in enumerate(pv_tile_fifo_parts):
         part.tofile(os.path.join(path, f'pv_tile_fifo{idx}.bin'))
+    for idx, part in enumerate(pv_pend_tile_fifo_parts):
+        part.astype(np.float32).tofile(os.path.join(path, f'pv_pend_tile_fifo{idx}.bin'))
     # write per-tile global_sum and exp_max parts
     for idx, g in enumerate(global_sums):
         g.astype(np.float32).tofile(os.path.join(path, f'global_sum_part{idx}.bin'))
@@ -134,12 +220,46 @@ def gen_case(path, s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEF
 
     # compute running output o: use exp_max per-tile for accumulation and divide by new_global_sum on last tile
     o_running = np.zeros((s0, head_size), dtype=np.float32)
+    if enable_conditional_rescale:
+        num_warps_gu = s0 // WARP_SIZE
     for ti, part in enumerate(pv_tile_fifo_parts):
         if ti == 0:
             o_running = part.copy()
         else:
             exp_max_tile = exp_max_parts[ti].reshape((s0, 1)).astype(np.float32)
-            o_running = exp_max_tile * o_running + part
+            if enable_conditional_rescale:
+                curr_skip_per_vec = ~rescale_triggered[ti - 1]
+                curr_skip_per_warp = np.zeros(num_warps_gu, dtype=bool)
+                for warp_id in range(num_warps_gu):
+                    vec0_skip = curr_skip_per_vec[warp_id * NUM_VEC_CORES]
+                    vec1_skip = curr_skip_per_vec[warp_id * NUM_VEC_CORES + 1]
+                    curr_skip_per_warp[warp_id] = vec0_skip and vec1_skip
+
+                if ti > 1:
+                    prev_skip_per_vec = ~rescale_triggered[ti - 2]
+                    prev_skip_per_warp = np.zeros(num_warps_gu, dtype=bool)
+                    for warp_id in range(num_warps_gu):
+                        vec0_prev_skip = prev_skip_per_vec[warp_id * NUM_VEC_CORES]
+                        vec1_prev_skip = prev_skip_per_vec[warp_id * NUM_VEC_CORES + 1]
+                        prev_skip_per_warp[warp_id] = vec0_prev_skip and vec1_prev_skip
+                else:
+                    prev_skip_per_warp = np.zeros(num_warps_gu, dtype=bool)
+
+                for warp_id in range(num_warps_gu):
+                    warp_start = warp_id * WARP_SIZE
+                    warp_end = warp_start + WARP_SIZE
+                    curr_skip = curr_skip_per_warp[warp_id]
+                    prev_skip = prev_skip_per_warp[warp_id]
+                    if not curr_skip:
+                        o_running[warp_start:warp_end] = (
+                            exp_max_tile[warp_start:warp_end] * o_running[warp_start:warp_end]
+                            + part[warp_start:warp_end]
+                        )
+                    if not curr_skip and prev_skip:
+                        pending_tile = pv_pend_tile_fifo_parts[ti][warp_start:warp_end]
+                        o_running[warp_start:warp_end] += exp_max_tile[warp_start:warp_end] * pending_tile
+            else:
+                o_running = exp_max_tile * o_running + part
             if ti == num_tiles - 1:
                 new_global_sum_tile = global_sums[ti].reshape((s0, 1)).astype(np.float32)
                 o_running = o_running / new_global_sum_tile
@@ -158,6 +278,10 @@ if __name__ == '__main__':
     parser.add_argument("--s0", type=int, help="S0 for a single on-demand case")
     parser.add_argument("--s1", type=int, help="S1 for a single on-demand case")
     parser.add_argument("--causal-mask", type=int, help="Enable causel mask")
+    parser.add_argument("--enable-conditional-rescale", action="store_true",
+                        help="Enable conditional softmax rescaling optimization")
+    parser.add_argument("--rescale-threshold", type=float, default=RESCALE_THRESHOLD,
+                        help=f"Threshold for conditional rescaling in scaled logits (default: {RESCALE_THRESHOLD})")
     args = parser.parse_args()
 
     script_root = Path(__file__).resolve().parents[1]
@@ -217,4 +341,14 @@ if __name__ == '__main__':
     for name, (s0, head_size, s1, cube_s1, tile_s1) in cases:
         case_dir = build_dir / name
         os.makedirs(case_dir, exist_ok=True)
-        gen_case(str(case_dir), s0, s1, head_size, cube_s1, tile_s1, bool(args.causal_mask))
+        gen_case(
+            str(case_dir),
+            s0,
+            s1,
+            head_size,
+            cube_s1,
+            tile_s1,
+            bool(args.causal_mask),
+            enable_conditional_rescale=args.enable_conditional_rescale,
+            rescale_threshold=args.rescale_threshold,
+        )

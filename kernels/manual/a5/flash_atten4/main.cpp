@@ -189,6 +189,8 @@ void run_tfa()
     size_t out2TotalSize = pv_fifo_bytes;
     aclrtMalloc((void **)&vDevice, vSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&out2Device, out2TotalSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    T *out2PendDevice = nullptr;
+    aclrtMalloc((void **)&out2PendDevice, out2TotalSize, ACL_MEM_MALLOC_HUGE_FIRST);
     // allocate global_sum buffer (per-tile S0 floats)
     size_t gsumTotalElems = static_cast<size_t>(S0) * static_cast<size_t>(num_tiles);
     size_t gsumSize = gsumTotalElems * sizeof(float);
@@ -220,6 +222,7 @@ void run_tfa()
         write_dev_entry(devToml, "v_device", reinterpret_cast<uint64_t>(vDevice), vSize);
         write_dev_entry(devToml, "qk_tile_fifo", reinterpret_cast<uint64_t>(outDevice), qk_fifo_bytes);
         write_dev_entry(devToml, "pv_tile_fifo", reinterpret_cast<uint64_t>(out2Device), out2TotalSize);
+        write_dev_entry(devToml, "pv_pend_tile_fifo", reinterpret_cast<uint64_t>(out2PendDevice), out2TotalSize);
         write_dev_entry(devToml, "p_tile_fifo", reinterpret_cast<uint64_t>(xexpDevice), p_fifo_bytes_half);
         write_dev_entry(devToml, "exp_max_ififo", reinterpret_cast<uint64_t>(expMaxIfifoDevice), p_fifo_bytes_float);
         write_dev_entry(devToml, "o_out", reinterpret_cast<uint64_t>(oDevice), oSize);
@@ -254,7 +257,7 @@ void run_tfa()
               kFaCvFifoConsSyncPeriod>(
         (uint16_t *)ffts, (aclFloat16 *)qDevice, (aclFloat16 *)kDevice, (aclFloat16 *)vDevice, (aclFloat16 *)xexpDevice,
         (float *)expMaxIfifoDevice, (float *)gSumDevice, (float *)expMaxDevice, (float *)oDevice, (float *)oPartsDevice,
-        (float *)outDevice, (float *)out2Device, profileDevice, stream, cvCommDevice);
+        (float *)outDevice, (float *)out2Device, (float *)out2PendDevice, profileDevice, stream, cvCommDevice);
 
     aclrtSynchronizeStream(stream);
 
@@ -267,6 +270,9 @@ void run_tfa()
     // copy second matmul partial outputs (FIFO layout)
     aclrtMallocHost((void **)(&out2Host), out2TotalSize);
     aclrtMemcpy(out2Host, out2TotalSize, out2Device, out2TotalSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    T *out2PendHost = nullptr;
+    aclrtMallocHost((void **)(&out2PendHost), out2TotalSize);
+    aclrtMemcpy(out2PendHost, out2TotalSize, out2PendDevice, out2TotalSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
     // copy profiling data back
     uint8_t *profileHost = nullptr;
@@ -322,6 +328,9 @@ void run_tfa()
                       p_max_fifo_stride * sizeof(float));
             WriteFile(GetGoldenDir() + "/block" + std::to_string(b) + "_pv_fifo.bin",
                       reinterpret_cast<uint8_t *>(out2Host) + pv_off * sizeof(float), pv_fifo_stride * sizeof(float));
+            WriteFile(GetGoldenDir() + "/block" + std::to_string(b) + "_pv_pend_fifo.bin",
+                      reinterpret_cast<uint8_t *>(out2PendHost) + pv_off * sizeof(float),
+                      pv_fifo_stride * sizeof(float));
         }
     }
     // write per-tile global_sum parts
@@ -377,6 +386,14 @@ void run_tfa()
             size_t pv_file_size = 0;
             ReadFile(fname, pv_file_size, golden_pv_tiles[ti].data(), golden_pv_tiles[ti].size() * sizeof(float));
         }
+        std::vector<std::vector<float>> golden_pv_pend_tiles(
+            num_tiles, std::vector<float>(static_cast<size_t>(S0) * HEAD_SIZE));
+        for (int ti = 0; ti < num_tiles; ++ti) {
+            std::string fname = GetGoldenDir() + "/pv_pend_tile_fifo" + std::to_string(ti) + ".bin";
+            size_t pv_pend_file_size = 0;
+            ReadFile(fname, pv_pend_file_size, golden_pv_pend_tiles[ti].data(),
+                     golden_pv_pend_tiles[ti].size() * sizeof(float));
+        }
 
         std::vector<std::vector<float>> golden_exp_max_tiles(num_tiles, std::vector<float>(static_cast<size_t>(S0)));
         for (int ti = 0; ti < num_tiles; ++ti) {
@@ -404,6 +421,7 @@ void run_tfa()
         std::set<int> fail_p_tiles;
         std::set<int> fail_p_max_tiles;
         std::set<int> fail_pv_tiles;
+        std::set<int> fail_pv_pend_tiles;
         bool all_ok = true;
         for (int b = 0; b < block_rows; ++b) {
             bool block_qk_ok = true;
@@ -415,6 +433,7 @@ void run_tfa()
             std::vector<float> exp_p(p_fifo_stride, 0.0f);
             std::vector<float> exp_p_max(p_max_fifo_stride, 0.0f);
             std::vector<float> exp_pv(pv_fifo_stride, 0.0f);
+            std::vector<float> exp_pv_pend(pv_fifo_stride, 0.0f);
 
             for (int ti = fifo_start_tile; ti < num_tiles; ++ti) {
                 const uint32_t buf_idx = static_cast<uint32_t>(ti % kFaCvFifoSize);
@@ -450,11 +469,15 @@ void run_tfa()
                 }
 
                 const std::vector<float> &pv_tile = golden_pv_tiles[ti];
+                const std::vector<float> &pv_pend_tile = golden_pv_pend_tiles[ti];
                 for (int r = 0; r < CUBE_S0; ++r) {
                     const int global_r = b * CUBE_S0 + r;
                     const float *src = &pv_tile[static_cast<size_t>(global_r) * HEAD_SIZE];
                     float *dst = &exp_pv[pv_off + static_cast<size_t>(r) * HEAD_SIZE];
                     std::copy_n(src, HEAD_SIZE, dst);
+                    const float *pend_src = &pv_pend_tile[static_cast<size_t>(global_r) * HEAD_SIZE];
+                    float *pend_dst = &exp_pv_pend[pv_off + static_cast<size_t>(r) * HEAD_SIZE];
+                    std::copy_n(pend_src, HEAD_SIZE, pend_dst);
                 }
             }
 
@@ -464,6 +487,7 @@ void run_tfa()
             std::vector<float> got_p(p_fifo_stride);
             std::vector<float> got_p_max(p_max_fifo_stride);
             std::vector<float> got_pv(pv_fifo_stride);
+            std::vector<float> got_pv_pend(pv_fifo_stride);
 
             size_t qk_block_file_size = 0;
             ReadFile(GetGoldenDir() + "/block" + std::to_string(b) + "_qk_fifo.bin", qk_block_file_size, got_qk.data(),
@@ -480,6 +504,9 @@ void run_tfa()
             size_t pv_block_file_size = 0;
             ReadFile(GetGoldenDir() + "/block" + std::to_string(b) + "_pv_fifo.bin", pv_block_file_size, got_pv.data(),
                      got_pv.size() * sizeof(float));
+            size_t pv_pend_block_file_size = 0;
+            ReadFile(GetGoldenDir() + "/block" + std::to_string(b) + "_pv_pend_fifo.bin", pv_pend_block_file_size,
+                     got_pv_pend.data(), got_pv_pend.size() * sizeof(float));
 
             for (int ti = fifo_start_tile; ti < num_tiles; ++ti) {
                 const uint32_t s0_index = b * CUBE_S0;
@@ -518,6 +545,13 @@ void run_tfa()
                 block_pv_ok = block_pv_ok && tile_pv_ok;
                 if (!tile_pv_ok)
                     fail_pv_tiles.insert(ti);
+                const bool tile_pv_pend_ok = skip_for_causal_mask ?
+                                                 true :
+                                                 cmp_buf(&exp_pv_pend[pv_off], &got_pv_pend[pv_off], pv_tile_elems,
+                                                         "pv_pend_fifo" + blk_tile);
+                block_pv_ok = block_pv_ok && tile_pv_pend_ok;
+                if (!tile_pv_pend_ok)
+                    fail_pv_pend_tiles.insert(ti);
                 // exp_max fifo is 1D per row; tile 0 is skipped
                 if (ti != 0) {
                     std::vector<float> exp_p_max_row(CUBE_S0);
@@ -562,6 +596,7 @@ void run_tfa()
         print_fail_summary("p_fifo", fail_p_tiles);
         print_fail_summary("p_max_fifo", fail_p_max_tiles);
         print_fail_summary("pv_fifo", fail_pv_tiles);
+        print_fail_summary("pv_pend_fifo", fail_pv_pend_tiles);
 
         auto set_to_string = [](const std::set<int> &s) {
             std::string out;
@@ -577,7 +612,7 @@ void run_tfa()
 
         g_fifo_summary = "[SUMMARY] fifo fails -> qk:" + set_to_string(fail_qk_tiles) +
                          " p:" + set_to_string(fail_p_tiles) + " p_max:" + set_to_string(fail_p_max_tiles) +
-                         " pv:" + set_to_string(fail_pv_tiles);
+                         " pv:" + set_to_string(fail_pv_tiles) + " pv_pend:" + set_to_string(fail_pv_pend_tiles);
 
         std::cout << (all_ok ? "[CHECK] FIFO intermediate ok" : "[CHECK] FIFO intermediate FAILED") << std::endl;
     } else {
@@ -593,6 +628,7 @@ void run_tfa()
     aclrtFree(expMaxIfifoDevice);
     aclrtFree(vDevice);
     aclrtFree(out2Device);
+    aclrtFree(out2PendDevice);
     aclrtFree(gSumDevice);
     aclrtFree(expMaxDevice);
     aclrtFree(profileDevice);

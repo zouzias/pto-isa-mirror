@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_MACRO_FA_SOFTMAX_DN_HPP
 
 #include <pto/pto-inst.hpp>
+#include "fa_performance_kernel.h"
 
 namespace pto {
 
@@ -44,15 +45,57 @@ constexpr AICORE inline float constexpr_inv_sqrt(float x)
     return 1.0f / constexpr_sqrt(x);
 }
 
+[aicore] static inline uint64_t get_skip_status_slot_base(int tile_id)
+{
+    int slot_idx = tile_id % SKIP_STATUS_FIFO_SIZE;
+    return SKIP_STATUS_SSBUF_BASE + static_cast<uint64_t>(slot_idx * SKIP_STATUS_SLOT_BYTES);
+}
+
+[aicore] static inline uint64_t get_skip_status_vec0_addr(int tile_id)
+{
+    return get_skip_status_slot_base(tile_id);
+}
+
+[aicore] static inline uint64_t get_skip_status_vec1_addr(int tile_id)
+{
+    return get_skip_status_slot_base(tile_id) + sizeof(uint64_t);
+}
+
+[aicore] static inline void write_skip_status_slot(int tile_id, bool is_vec1, uint32_t value)
+{
+    uint64_t addr = is_vec1 ? get_skip_status_vec1_addr(tile_id) : get_skip_status_vec0_addr(tile_id);
+    volatile __ssbuf__ uint64_t *ptr = (volatile __ssbuf__ uint64_t *)addr;
+    *ptr = static_cast<uint64_t>(value);
+}
+
+[aicore] static inline uint32_t read_skip_status_slot(int tile_id, bool is_vec1)
+{
+    uint64_t addr = is_vec1 ? get_skip_status_vec1_addr(tile_id) : get_skip_status_vec0_addr(tile_id);
+    volatile __ssbuf__ uint64_t *ptr = (volatile __ssbuf__ uint64_t *)addr;
+    return static_cast<uint32_t>(*ptr);
+}
+
+template <int FifoSize, int SyncPeriod>
+AICORE inline bool aiv_should_wait_consumption(int sync_iter)
+{
+    static_assert(FifoSize >= 1, "FIFO size must be >= 1");
+    constexpr int period = (SyncPeriod > 0) ? SyncPeriod : 1;
+    static_assert(period >= 1, "Sync period must be >= 1");
+    if (sync_iter < static_cast<int>(FifoSize))
+        return false;
+    return (sync_iter % period) == 0;
+}
+
 #define USE_MANUAL 1
 
 template <int HEAD_SIZE, bool CAUSAL_MASK, typename ReduceTileD1, typename TileDataD2, typename TileDataS1>
-__tf__ AICORE inline void softmax_opt_fa_dn_init_impl(TileDataD2 __out__ x_exp, TileDataS1 __in__ input_x,
+__tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter, TileDataD2 __out__ x_exp,
+                                                      TileDataS1 __in__ input_x,
                                                       ReduceTileD1 __out__ local_max, ReduceTileD1 __out__ local_sum,
                                                       ReduceTileD1 __out__ new_global_max,
                                                       ReduceTileD1 __out__ new_global_sum, ReduceTileD1 __out__ exp_max,
                                                       TileDataS1 __out__ tmp_float, TileDataS1 __out__ p_tile_f32,
-                                                      TileDataS1 triu, int s0_index, int s1_index)
+                                                      TileDataS1 triu, int s0_index, int s1_index, bool last_tile)
 {
 #if USE_MANUAL
     __ubuf__ typename TileDataD2::DType *x_exp_Ptr = (__ubuf__ typename TileDataD2::DType *)__cce_get_tile_ptr(x_exp.data());
@@ -64,6 +107,7 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(TileDataD2 __out__ x_exp, 
     __ubuf__ typename ReduceTileD1::DType *exp_max_Ptr = (__ubuf__ typename ReduceTileD1::DType *)__cce_get_tile_ptr(exp_max.data());
 
     constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
+    const bool is_vec1 = static_cast<size_t>(get_subblockid());
 
     unsigned ubM = TileDataD2::Cols;
     unsigned ubN = TileDataD2::Rows;
@@ -240,12 +284,28 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(TileDataD2 __out__ x_exp, 
         
         vsts(vreg_x_sum0, ((__ubuf__ float *&) new_global_sum_Ptr), 0, NORM_B32, preg_134);
     }
+#if skip_rescale
+    constexpr int SYNC_PERIOD = kFaCvFifoConsSyncPeriod;
+    const bool should_wait_consume = aiv_should_wait_consumption<SKIP_STATUS_FIFO_SIZE, SYNC_PERIOD>(sync_iter);
+    if (should_wait_consume) {
+        wait_intra_block(PIPE_S, FftsBufferFlag::SS_BUF_READY + 1);
+    }
+    write_skip_status_slot(tile_id, is_vec1, 0);
+    set_intra_block(PIPE_S, FftsBufferFlag::SS_BUF_READY);
+#else
+    (void)tile_id;
+    (void)sync_iter;
+    (void)is_vec1;
+#endif
+    (void)last_tile;
 #else
     (void)local_max;
     (void)exp_max;
     (void)local_sum;
+    (void)last_tile;
 
     constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
+    const bool is_vec1 = static_cast<size_t>(get_subblockid());
 
     if constexpr (CAUSAL_MASK) {
         if (s0_index / TileDataS1::Rows == s1_index / TileDataS1::Rows) {
@@ -262,14 +322,28 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(TileDataD2 __out__ x_exp, 
     TEXP(input_x, input_x);
     TCOLSUM(new_global_sum, input_x, tmp_float, false);
     TCVT(x_exp, input_x, RoundMode::CAST_ROUND);
+#if skip_rescale
+    constexpr int SYNC_PERIOD = kFaCvFifoConsSyncPeriod;
+    const bool should_wait_consume = aiv_should_wait_consumption<SKIP_STATUS_FIFO_SIZE, SYNC_PERIOD>(sync_iter);
+    if (should_wait_consume) {
+        wait_intra_block(PIPE_S, FftsBufferFlag::SS_BUF_READY + 1);
+    }
+    write_skip_status_slot(tile_id, is_vec1, 0);
+    set_intra_block(PIPE_S, FftsBufferFlag::SS_BUF_READY);
+#else
+    (void)tile_id;
+    (void)sync_iter;
+    (void)is_vec1;
+#endif
 #endif
 }
 
 template <int HEAD_SIZE, bool CAUSAL_MASK, typename ReduceTileD1, typename TileDataD2, typename TileDataS1>
 __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
-    TileDataD2 __out__ x_exp, TileDataS1 __in__ input_x, ReduceTileD1 __out__ local_max, ReduceTileD1 __out__ local_sum,
-    ReduceTileD1 __out__ new_global_max, ReduceTileD1 __out__ new_global_sum, ReduceTileD1 __out__ exp_max,
-    TileDataS1 __out__ tmp_float, TileDataS1 __out__ p_tile_f32, TileDataS1 triu, int s0_index, int s1_index)
+    int tile_id, int sync_iter, TileDataD2 __out__ x_exp, TileDataS1 __in__ input_x,
+    ReduceTileD1 __out__ local_max, ReduceTileD1 __out__ local_sum, ReduceTileD1 __out__ new_global_max,
+    ReduceTileD1 __out__ new_global_sum, ReduceTileD1 __out__ exp_max, TileDataS1 __out__ tmp_float,
+    TileDataS1 __out__ p_tile_f32, TileDataS1 triu, int s0_index, int s1_index, bool last_tile)
 {
 #if USE_MANUAL
     __ubuf__ typename TileDataD2::DType *x_exp_Ptr = (__ubuf__ typename TileDataD2::DType *)__cce_get_tile_ptr(x_exp.data());
@@ -281,6 +355,15 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
     __ubuf__ typename ReduceTileD1::DType *exp_max_Ptr = (__ubuf__ typename ReduceTileD1::DType *)__cce_get_tile_ptr(exp_max.data());
 
     constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
+    const bool is_vec1 = static_cast<size_t>(get_subblockid());
+#if skip_rescale
+    constexpr float threshold = 8.0f / scale;
+    ReduceTileD1 deltaMaxTile;
+    const uint64_t delta_max_offset = 254U * 1024U;
+    TASSIGN(deltaMaxTile, delta_max_offset);
+    __ubuf__ typename ReduceTileD1::DType *delta_max_Ptr =
+        (__ubuf__ typename ReduceTileD1::DType *)__cce_get_tile_ptr(deltaMaxTile.data());
+#endif
 
     unsigned ubM = TileDataD2::Cols;
     unsigned ubN = TileDataD2::Rows;
@@ -354,6 +437,9 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
         vector_f32 src_10b, src_11b, src_12b, src_13b;
         vector_f32 max_0a, max_1a, max_2a, max_3a;
         vector_f32 max_0b, max_1b, max_2b, max_3b;
+#if skip_rescale
+        vector_f32 vreg_delta_max;
+#endif
 
         __ubuf__ float *src0_ub = (__ubuf__ float *)input_x_Ptr;
         __ubuf__ half *x_exp_1 = (__ubuf__ half *)x_exp_Ptr + (ubN/2 *16 / 2);
@@ -411,7 +497,13 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
 
         vmax(max_0a, max_0a, vreg_x_max_f32_b, preg_108);
 
+#if skip_rescale
+        vsub(vreg_delta_max, max_0a, vreg_x_max_f32_b, preg_108);
+        vsts(vreg_delta_max, delta_max_Ptr, 0, NORM_B32, preg_108);
+        vsts(max_0a, local_max_Ptr, 0, NORM_B16, preg_108);
+#else
         vsts(max_0a, new_global_max_Ptr, 0, NORM_B16, preg_108);  //just copy
+#endif
 
         vmuls(max_0a, max_0a, scale, preg_108);
         vmuls(vreg_x_max_f32_b, vreg_x_max_f32_b, scale, preg_108);
@@ -478,8 +570,53 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
             vsts(vreg_l0, ((__ubuf__ float *) new_global_sum_Ptr+ ii*64), 0, NORM_B32, preg_134);
         }
     }
+#if skip_rescale
+    constexpr int SYNC_PERIOD = kFaCvFifoConsSyncPeriod;
+    const bool should_wait_consume = aiv_should_wait_consumption<SKIP_STATUS_FIFO_SIZE, SYNC_PERIOD>(sync_iter);
+
+    if (last_tile) {
+        if (should_wait_consume) {
+            wait_intra_block(PIPE_S, FftsBufferFlag::SS_BUF_READY + 1);
+        }
+        write_skip_status_slot(tile_id, is_vec1, 0);
+        set_intra_block(PIPE_S, FftsBufferFlag::SS_BUF_READY);
+        TMULS(new_global_max, local_max, 1.0f);
+    } else {
+        using TileDataScalar = Tile<TileType::Vec, float, 1, 64, BLayout::RowMajor, 1, 1>;
+        TileDataScalar ctrlTile;
+        const uint64_t ctrl_tile_offset = 255U * 1024U;
+        TASSIGN(ctrlTile, ctrl_tile_offset);
+        TROWMAX(ctrlTile, deltaMaxTile, local_sum);
+        const uint64_t ss_buf_pingpong = tile_id % 2;
+        set_flag(PIPE_V, PIPE_S, EVENT_ID7 + ss_buf_pingpong);
+        wait_flag(PIPE_V, PIPE_S, EVENT_ID7 + ss_buf_pingpong);
+
+        if (should_wait_consume) {
+            wait_intra_block(PIPE_S, FftsBufferFlag::SS_BUF_READY + 1);
+        }
+
+        if (*(ctrlTile.data()) < threshold) {
+            write_skip_status_slot(tile_id, is_vec1, 1);
+        } else {
+            write_skip_status_slot(tile_id, is_vec1, 0);
+        }
+
+        set_intra_block(PIPE_S, FftsBufferFlag::SS_BUF_READY);
+
+        if (*(ctrlTile.data()) > threshold) {
+            TMULS(new_global_max, local_max, 1.0f);
+        }
+    }
+#else
+    (void)tile_id;
+    (void)sync_iter;
+    (void)is_vec1;
+    (void)last_tile;
+#endif
 #else
     constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
+    const bool is_vec1 = static_cast<size_t>(get_subblockid());
+    constexpr float threshold = 8.0f / scale;
 
     if constexpr (CAUSAL_MASK) {
         if (s0_index / TileDataS1::Rows == s1_index / TileDataS1::Rows) {
@@ -495,7 +632,54 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
     TCOLMAX(local_max, input_x);
     TMAX(local_max, local_max, new_global_max);
     TSUB(exp_max, new_global_max, local_max);
+#if skip_rescale
+    constexpr int SYNC_PERIOD = kFaCvFifoConsSyncPeriod;
+    const bool should_wait_consume = aiv_should_wait_consumption<SKIP_STATUS_FIFO_SIZE, SYNC_PERIOD>(sync_iter);
+
+    if (last_tile) {
+        if (should_wait_consume) {
+            wait_intra_block(PIPE_S, FftsBufferFlag::SS_BUF_READY + 1);
+        }
+        write_skip_status_slot(tile_id, is_vec1, 0);
+        set_intra_block(PIPE_S, FftsBufferFlag::SS_BUF_READY);
+        TMULS(new_global_max, local_max, 1.0f);
+    } else {
+        using TileDataScalar = Tile<TileType::Vec, float, 1, 64, BLayout::RowMajor, 1, 1>;
+        TileDataScalar ctrlTile;
+        const uint64_t ctrl_tile_offset = 255U * 1024U;
+        TASSIGN(ctrlTile, ctrl_tile_offset);
+        const uint64_t delta_max_offset = 254U * 1024U;
+        ReduceTileD1 deltaMaxTile;
+        TASSIGN(deltaMaxTile, delta_max_offset);
+        TSUB(deltaMaxTile, local_max, new_global_max);
+        TROWMAX(ctrlTile, deltaMaxTile, local_sum);
+        const uint64_t ss_buf_pingpong = tile_id % 2;
+        set_flag(PIPE_V, PIPE_S, EVENT_ID7 + ss_buf_pingpong);
+        wait_flag(PIPE_V, PIPE_S, EVENT_ID7 + ss_buf_pingpong);
+
+        if (should_wait_consume) {
+            wait_intra_block(PIPE_S, FftsBufferFlag::SS_BUF_READY + 1);
+        }
+
+        if (*(ctrlTile.data()) < threshold) {
+            write_skip_status_slot(tile_id, is_vec1, 1);
+        } else {
+            write_skip_status_slot(tile_id, is_vec1, 0);
+        }
+
+        set_intra_block(PIPE_S, FftsBufferFlag::SS_BUF_READY);
+
+        if (*(ctrlTile.data()) > threshold) {
+            TMULS(new_global_max, local_max, 1.0f);
+        }
+    }
+#else
     TMULS(new_global_max, local_max, 1.0f); // just copy
+    (void)tile_id;
+    (void)sync_iter;
+    (void)is_vec1;
+    (void)last_tile;
+#endif
     TMULS(exp_max, exp_max, scale);
     TEXP(exp_max, exp_max);
     TCOLEXPANDSUB(input_x, input_x, local_max);
@@ -514,22 +698,27 @@ AICORE inline void pto_macro_fa_softmax_dn(TileDataD2 __out__ x_exp, TileDataS1 
                                            ReduceTileD1 __out__ local_max, ReduceTileD1 __out__ local_sum,
                                            ReduceTileD1 __in__ new_global_max, ReduceTileD1 __out__ new_global_sum,
                                            ReduceTileD1 __out__ exp_max, TileDataS1 __out__ input_reduce_tmp,
-                                           TileDataS1 __out__ p_tile_fp32, TileDataS1 triu, int s0_index, int s1_index)
+                                           TileDataS1 __out__ p_tile_fp32, TileDataS1 triu, int s0_index, int s1_index,
+                                           int tile_id, int sync_iter, bool last_tile)
 {
     if (s1_index <= s0_index || !CAUSAL_MASK) {
         if constexpr (init) {
             softmax_opt_fa_dn_init_impl<HEAD_SIZE, CAUSAL_MASK, ReduceTileD1, TileDataD2, TileDataS1>(
-                x_exp, input_x, local_max, local_sum, new_global_max, new_global_sum, exp_max, input_reduce_tmp,
-                p_tile_fp32, triu, s0_index, s1_index);
+                tile_id, sync_iter, x_exp, input_x, local_max, local_sum, new_global_max, new_global_sum, exp_max,
+                input_reduce_tmp, p_tile_fp32, triu, s0_index, s1_index, last_tile);
         } else {
             softmax_opt_fa_dn_not_init_impl<HEAD_SIZE, CAUSAL_MASK, ReduceTileD1, TileDataD2, TileDataS1>(
-                x_exp, input_x, local_max, local_sum, new_global_max, new_global_sum, exp_max, input_reduce_tmp,
-                p_tile_fp32, triu, s0_index, s1_index);
+                tile_id, sync_iter, x_exp, input_x, local_max, local_sum, new_global_max, new_global_sum, exp_max,
+                input_reduce_tmp, p_tile_fp32, triu, s0_index, s1_index, last_tile);
         }
     } else if constexpr (CAUSAL_MASK) {
         TMULS(x_exp, x_exp, 0.0);
         TMULS(exp_max, exp_max, 0.0);
         TADDS(exp_max, exp_max, 1.0);
+#if skip_rescale
+        write_skip_status_slot(tile_id, static_cast<size_t>(get_subblockid()), 0);
+        set_intra_block(PIPE_S, FftsBufferFlag::SS_BUF_READY);
+#endif
     }
 }
 
