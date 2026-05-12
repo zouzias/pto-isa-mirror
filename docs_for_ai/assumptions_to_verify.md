@@ -739,10 +739,47 @@ Two real errors recorded as Occurrences in [compile_error_logbook.md](compile_er
 - **What is NOT proven by this experiment (still Unknown — do not claim resolved)**:
   - Activation other than `ReluPreMode::NormalRelu` (the enum only has `NoRelu`/`NormalRelu`; GELU / SiLU / LeakyReLU etc. are not options at this layer).
   - The standalone `TRELU` / `TMAXS` wrappers operating on `TileType::Vec` tiles in an auto-mode kernel that mixes cube + vec — entirely unexercised by this milestone.
-  - The **combination** of `ReluPreMode::NormalRelu` AND `AccTile<float>` → GM `half` down-cast in the **same TSTORE call**. The two pieces are individually proven in `tstore_acc2gm` (`tilingKey=4` does FP32→FP16 without ReLU; `tilingKey=21` does ReLU with no dtype change) but their combination has no in-tree precedent. This is the gating Assumption for the §A18 / `moe_segmented_ffn_top1` FFN milestone.
-  - GEMM2 chained after GEMM1+ReLU; cube → cube handoff via GM scratch.
+  - ~~The **combination** of `ReluPreMode::NormalRelu` AND `AccTile<float>` → GM `half` down-cast in the **same TSTORE call**.~~ → Resolved by §11.9 below for ND layout at the FFN shape.
+  - GEMM2 chained after GEMM1+ReLU; cube → cube handoff via GM scratch. → Resolved by §11.9 below at the FFN shape.
   - Bias path; SplitK; TF32; INT8 / BF16 GEMM dtypes; non-`(128, 64, 64)` shapes.
   - Multi-core, dynamic tail, `topK > 1`, weighted combine, backward, performance.
+
+### 11.9 Full top-1 segmented MoE FFN (GEMM1 + ReLU + FP16 scratch + GEMM2) works on A3 auto mode at the tested shape
+
+- **Resolved**: 2026-05-12 · A3 cube · user-reported PASS of `bash run.sh -r npu -v Ascend910B1` on
+  [kernels/automode/a2a3/moe_segmented_ffn_top1/](../kernels/automode/a2a3/moe_segmented_ffn_top1/)
+  after splitting the FFN into two stream-serialised kernels (see §A18 in `known_good_kernel_examples.md`).
+- **Scope of the resolution (narrow — do not generalize)**:
+  ```text
+  A3 auto mode
+  single AICORE per kernel
+  --cce-aicore-arch=dav-c220-cube --cce-enable-pto-passes -O2
+  host-padded expert segments (topK = 1 upstream layout)
+  T = 256 real tokens
+  H = 64  (GEMM1 K, GEMM2 N)
+  F = 64  (GEMM1 N, GEMM2 K)   ; kH == kF enforced by static_assert
+  kE = 4
+  kTileM = 128
+  packed_tokens : float16
+  w1, w2        : float16
+  scratch       : float16  (post-ReLU; FP32 acc -> FP16 GM + ReLU in ONE TSTORE)
+  packed_output : float32  (cube FP32 accumulator from GEMM2)
+  Composition: two separate __global__ AICORE kernels (Stage1 / Stage2) in one TU,
+  fired back-to-back on the same ACL stream. Stream-order guarantees the scratch
+  hand-off; no within-kernel cross-GEMM auto-sync involved.
+  ```
+- **What this confirms (now Known at the above shape)** — beyond §11.7 and §11.8:
+  - **FP32 Acc → FP16 GM + `ReluPreMode::NormalRelu` in a SINGLE TSTORE in ND layout** works. The same dtype + ReLU combo was already in `ALL_TESTCASES` for NZ layout via [tstore_acc2gm_kernel.cpp:627](../tests/npu/a2a3/src/st/testcase/tstore_acc2gm/tstore_acc2gm_kernel.cpp#L627) (`LaunchTStoreAcc2gmNz2nz<21>` instantiating `<0, float, float, half, ..., 1>`); the ND-layout variant is now Resolved at the FFN shape. (Note: the §A17 `known_good_kernel_examples.md` entry slightly understated this — `tstore_acc2gm` Nz2nz tilingKey=21 actually DOES combine both pieces; the ND-layout Nz2nd variant was the genuinely-missing piece, now Resolved.)
+  - **Two cube kernels chained through an FP16 GM scratch buffer on the same ACL stream** is auto-mode-safe — each kernel's auto-sync graph is independent; the cross-kernel dependency is at the ACL stream level.
+  - **A host-allocated, kernel-managed temporary device buffer** can be used between two kernel launches without host-side copies into it.
+- **Reference entry**: [known_good_kernel_examples.md §A18](known_good_kernel_examples.md).
+- **What is NOT proven by this experiment (still Unknown — do not claim resolved)**:
+  - **Fusing both GEMMs into a single `__global__ AICORE` body.** Two within-kernel forms were attempted and abandoned: (a) declaring two independent 5-tile cube sets (10 cube tiles total) produced numerically wrong output; (b) reusing a single 5-tile cube set across both GEMMs in the same inner iteration (`cTile` drain to scratch GM, then `aMatTile` reload from the same scratch GM) hung the device on a single run. **The root cause of the (b) hang is unverified** — it could be auto-sync producing an unmatched `wait_flag` for the cross-GEMM tile-reuse pattern, OR a transient hardware / driver issue unrelated to the kernel. The split-kernel form is the Known-good path; the fused single-kernel form remains **Unknown** until either (i) the (b) hang is reproduced under instrumented conditions and attributed to a specific auto-sync emission, or (ii) a successful run of (b) is obtained. Do NOT claim the fused form is broken on the basis of one hang.
+  - `kH != kF` shapes (the kernel hard-asserts they match in this milestone).
+  - Multiple K tiles inside a single GEMM (`kH > 64` or `kF > 64`) — would require SplitK accumulation, not exercised here.
+  - Multiple N tiles inside GEMM1 — would require Split-N pattern with two TSTOREs per microtile, not exercised here.
+  - Multi-core `block_idx` partitioning; dynamic tail handling; `SetValidRow` / `SetValidShape` / partial-tile stores; `topK > 1` (weighted combine); backward; performance.
+  - Activations other than `NormalRelu`; bias path; non-FP16 FFN dtypes; the full router GEMM (this milestone uses a precomputed top-1 packed layout).
 
 ---
 

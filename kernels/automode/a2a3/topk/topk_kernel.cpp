@@ -126,8 +126,10 @@ __global__ AICORE void RunTopk(__gm__ uint8_t *outVal_raw, __gm__ uint8_t *outId
         //     overlapping with sort32DstTile's storage.
         PackedTile srcSortedView(1, cols);
         PackedTile tmpSortedView(1, cols);
-        TRESHAPE(srcSortedView, sort32DstTile);
-        TRESHAPE(tmpSortedView, mrgScratchTile);
+        // Same-type prefix slice — TSUBVIEW(..., 0, 0) is the canonical form.
+        // TRESHAPE is reserved for true reshape / type-pun cases (see Phase 5).
+        TSUBVIEW(srcSortedView, sort32DstTile, 0, 0);
+        TSUBVIEW(tmpSortedView, mrgScratchTile, 0, 0);
         TMRGSORT<PackedTile, PackedTile>(tmpSortedView, srcSortedView, blockLen);
         // Promote merged result back into sort32DstTile prefix so the next
         // iteration's srcSortedView reads the fresh merged data. Lifetime:
@@ -167,7 +169,10 @@ __global__ AICORE void RunTopk(__gm__ uint8_t *outVal_raw, __gm__ uint8_t *outId
             //              (the next tail run produced by the previous merge)
             PackedTile src0View(1, tmpMrgSortedLen);
             PackedTile src1View(1, tmpMrgArray);
-            TRESHAPE(src0View, sort32DstTile);
+            // src0View is a same-type prefix slice (offset 0); src1View is a
+            // same-type slice at column offset mrgSortedLen. Both expressed
+            // via TSUBVIEW for semantic clarity.
+            TSUBVIEW(src0View, sort32DstTile, 0, 0);
             TSUBVIEW(src1View, sort32DstTile, 0, mrgSortedLen);
 
             // Independent destination view: curDstView aliases mrgScratchTile
@@ -175,7 +180,8 @@ __global__ AICORE void RunTopk(__gm__ uint8_t *outVal_raw, __gm__ uint8_t *outId
             // sort32DstTile and writes the merged run into mrgScratchTile —
             // no read/write overlap on the same buffer.
             PackedTile curDstView(1, tmpMrgSortedLen + tmpMrgArray);
-            TRESHAPE(curDstView, mrgScratchTile);
+            // Same-type prefix slice of the independent destination buffer.
+            TSUBVIEW(curDstView, mrgScratchTile, 0, 0);
             // All four roles (Dst, Tmp, Src0, Src1) are PackedTile; matches the
             // manual SortTailBlock instantiation `<DstTileData, SrcTileData,
             // SrcTileData, ...>` where SrcTileData = RowTile (packed width).
@@ -186,7 +192,8 @@ __global__ AICORE void RunTopk(__gm__ uint8_t *outVal_raw, __gm__ uint8_t *outId
             // curDstView. After this TMOV, sort32DstTile[0..len-1] holds the
             // merged run, so the next loop iteration's src0View sees it.
             PackedTile copyBackView(1, tmpMrgSortedLen + tmpMrgArray);
-            TRESHAPE(copyBackView, sort32DstTile);
+            // Same-type prefix slice of sort32DstTile (TMOV destination).
+            TSUBVIEW(copyBackView, sort32DstTile, 0, 0);
             TMOV(copyBackView, curDstView);
         }
     }
@@ -201,7 +208,8 @@ __global__ AICORE void RunTopk(__gm__ uint8_t *outVal_raw, __gm__ uint8_t *outId
     // once by TGATHER. Mask P0101 picks val slots for float (TYPE_COEF=1);
     // P0001 for half (v2).
     PackedTile sortedTopKView(1, kPackedTopK);
-    TRESHAPE(sortedTopKView, sort32DstTile);
+    // Same-type prefix slice (kPackedTopK-wide prefix of sort32DstTile).
+    TSUBVIEW(sortedTopKView, sort32DstTile, 0, 0);
     if constexpr (std::is_same_v<T, half>) {
         TGATHER<OutValTile, PackedTile, MaskPattern::P0001>(outValTile, sortedTopKView);
     } else {
