@@ -1,22 +1,24 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 /*
  * gtest driver for TFA
  */
 
-#include <gtest/gtest.h>
 #include <acl/acl.h>
+#include <gtest/gtest.h>
 
-#include "test_common.h"
 #include "runtime/rt.h"
+#include "test_common.h"
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -90,9 +92,11 @@ void run_tfa()
     aclrtMalloc((void **)&kDevice, kSize, ACL_MEM_MALLOC_HUGE_FIRST);
     size_t halfSize = S0 * S1 * sizeof(aclFloat16);
     size_t floatSize = S0 * S1 * sizeof(float);
-    aclrtMalloc((void **)&xexpDevice, halfSize, ACL_MEM_MALLOC_HUGE_FIRST); // p_out (half)
+    aclrtMalloc((void **)&xexpDevice, halfSize,
+                ACL_MEM_MALLOC_HUGE_FIRST); // p_out (half)
     void *pOutFp32Device = nullptr;
-    aclrtMalloc((void **)&pOutFp32Device, floatSize, ACL_MEM_MALLOC_HUGE_FIRST); // p_out_fp32 (float)
+    aclrtMalloc((void **)&pOutFp32Device, floatSize,
+                ACL_MEM_MALLOC_HUGE_FIRST); // p_out_fp32 (float)
     // allocate v and out2 buffers
     size_t vSize = S1 * HEAD_SIZE * sizeof(aclFloat16);
     size_t pvPartSize = S0 * HEAD_SIZE * sizeof(T);
@@ -112,7 +116,8 @@ void run_tfa()
     T *oDevice = nullptr;
     size_t oSize = pvPartSize; // S0 * HEAD_SIZE * sizeof(T)
     aclrtMalloc((void **)&oDevice, oSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    // allocate per-iteration running output snapshots (num_tiles * S0 * HEAD_SIZE)
+    // allocate per-iteration running output snapshots (num_tiles * S0 *
+    // HEAD_SIZE)
     T *oPartsDevice = nullptr;
     size_t oPartsTotalSize = pvPartSize * num_tiles;
     aclrtMalloc((void **)&oPartsDevice, oPartsTotalSize, ACL_MEM_MALLOC_HUGE_FIRST);
@@ -140,7 +145,8 @@ void run_tfa()
         std::cout << "[INFO] Intermediate checking is disabled" << std::endl;
     }
 
-    // Launch kernel, pass ffts ctrl addr and device-side log buffer, and xexp/tmp_float_exp device ptrs
+    // Launch kernel, pass ffts ctrl addr and device-side log buffer, and
+    // xexp/tmp_float_exp device ptrs
     LaunchTFA<S0, HEAD_SIZE, S1, 128, INTERMEDIATE_CHECK>(
         (uint16_t *)ffts, (aclFloat16 *)qDevice, (aclFloat16 *)kDevice, (aclFloat16 *)vDevice, (aclFloat16 *)xexpDevice,
         (float *)pOutFp32Device, (float *)gSumDevice, (float *)expMaxDevice, (float *)oDevice, (float *)oPartsDevice,

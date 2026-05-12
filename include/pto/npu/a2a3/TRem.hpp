@@ -18,7 +18,8 @@ full text of the License.
 namespace pto {
 // Formula: remainder(a, b) = a - floor(a/b) * b
 // Note: For fp32, after computing remainder, we check if result * divider < 0.
-//       If signs differ, we add divider to result to ensure the result has the same sign as divider.
+//       If signs differ, we add divider to result to ensure the result has the
+//       same sign as divider.
 struct RemOp {
     PTO_INTERNAL static void RemF32Instr(__ubuf__ float *dst, __ubuf__ float *src0, __ubuf__ float *src1,
                                          __ubuf__ float *tmp)
@@ -129,9 +130,11 @@ PTO_INTERNAL void TRemCheck(const TileDataDst &dst, const TileDataSrc0 &src0, co
     unsigned validRows = dst.GetValidRow();
     unsigned validCols = dst.GetValidCol();
     PTO_ASSERT(src0.GetValidRow() == validRows && src0.GetValidCol() == validCols,
-               "Fix: TREM input tile src0 valid shape mismatch with output tile dst shape.");
+               "Fix: TREM input tile src0 valid shape mismatch with output tile "
+               "dst shape.");
     PTO_ASSERT(src1.GetValidRow() == validRows && src1.GetValidCol() == validCols,
-               "Fix: TREM input tile src1 valid shape mismatch with output tile dst shape.");
+               "Fix: TREM input tile src1 valid shape mismatch with output tile "
+               "dst shape.");
     // tmp buffer only needs space for one row (reused across iterations)
     PTO_ASSERT(tmp.GetValidCol() >= validCols, "Fix: TREM tmp tile must have at least validCols columns.");
     PTO_ASSERT(tmp.GetValidRow() >= 1, "Fix: TREM tmp tile must have at least 1 row.");

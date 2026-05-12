@@ -1,16 +1,19 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TBINS_HPP
 #define TBINS_HPP
 
+#include <pto/common/TBinSDispatchTraits.hpp>
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 namespace pto {
@@ -185,15 +188,10 @@ PTO_INTERNAL void TBinSInstr(__ubuf__ typename TileDataDst::DType __out__ *dst,
                              unsigned validRow, unsigned validCol)
 {
     using T = typename TileDataDst::DType;
-    constexpr bool tileDataContinue =
-        ((TileDataDst::Cols == TileDataDst::ValidCol) && (TileDataSrc::Cols == TileDataSrc::ValidCol)) ||
-        ((TileDataDst::Rows == 1) && (TileDataSrc::Rows == 1));
+    using DTraits = TBinSDispatchTraits<TileDataDst, TileDataSrc, elementsPerRepeat>;
+    constexpr bool tileDataContinue = DTraits::tileDataContinue;
     if constexpr (tileDataContinue) {
-        constexpr unsigned totalRepeats =
-            (TileDataDst::Rows * TileDataDst::Cols + elementsPerRepeat - 1) / elementsPerRepeat;
-        constexpr bool nonVLAligned =
-            (((TileDataDst::Cols % elementsPerRepeat) != 0) && (TileDataDst::Cols > elementsPerRepeat));
-        constexpr bool enbleCountMode = nonVLAligned || (totalRepeats > pto::REPEAT_MAX);
+        constexpr bool enbleCountMode = DTraits::enableCountMode;
         if constexpr (enbleCountMode) {
             BinS1LCountMode<Op, T>(dst, src0, src1, validRow, validCol);
         } else {

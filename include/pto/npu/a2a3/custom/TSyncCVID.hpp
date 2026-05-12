@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TSYNC_CVID_HPP
@@ -45,7 +47,8 @@ AICORE inline uint16_t _getFFTSMsg(CVSyncMode mode, uint16_t flag_id, uint16_t b
     return ((base_const & 0xf) + ((mode & 0x3) << FFTS_MODE_BIT_START) + ((flag_id & 0xf) << FFTS_FLAG_ID_BIT_START));
 }
 
-// Cross-core CV slot synchronization. Returns the CV comm slot for the current core/block.
+// Cross-core CV slot synchronization. Returns the CV comm slot for the current
+// core/block.
 // - block_idx: logical block index.
 // - cv_comm_buf: global buffer sized by CV_COMM_SLOT_BYTES * block_rows.
 // Template knobs allow overriding slot size and MAX_CORES if needed.
