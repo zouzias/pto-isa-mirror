@@ -1,76 +1,58 @@
 /**
  * moe_segmented_ffn_top1_kernel.cpp - auto-mode A3 prototype.
  *
- * Per-expert top-1 segmented FFN: GEMM1 -> ReLU -> GEMM2, all inside the
- * per-expert / per-microtile loop already validated by §A15 / §A16 / §A17.
+ * SPLIT INTO TWO KERNELS (revision 2). The first attempt fused both GEMMs
+ * into one __global__ body so they could share five cube tiles; that hung on
+ * device, presumably because auto-sync's flag-pairing for cross-GEMM tile
+ * reuse (cTile drain to scratch GM, then aMatTile reload from the same
+ * scratch GM in the same iteration) has no in-tree precedent and produced
+ * a wait_flag whose matching set_flag was never emitted.
  *
- *   for (e = 0; e < kNumExperts; ++e) {
- *       start = expert_start[e];     // PADDED
- *       count = expert_count[e];     // PADDED; multiple of kTileM
- *       for (m0 = 0; m0 < count; m0 += kTileM) {
- *           row = start + m0;
- *           // GEMM1: [kTileM, kH] x [kH, kF] -> [kTileM, kF]
- *           A1   = packed_tokens[row : row + kTileM, 0:kH]            // FP16
- *           B1   = w1[e, 0:kH, 0:kF]                                  // FP16
- *           Acc1 = A1 @ B1                                            // FP32 (cube)
- *           // ReLU + down-cast fused into the L0C -> GM TSTORE.
- *           scratch[row : row + kTileM, 0:kF] = max(Acc1, 0)          // FP16
+ * This revision splits the FFN into two `__global__ AICORE` functions, each
+ * a verbatim copy of an already-confirmed-built milestone:
  *
- *           // GEMM2: [kTileM, kF] x [kF, kH] -> [kTileM, kH]
- *           A2   = scratch[row : row + kTileM, 0:kF]                  // FP16
- *           B2   = w2[e, 0:kF, 0:kH]                                  // FP16
- *           Acc2 = A2 @ B2                                            // FP32 (cube)
- *           packed_output[row : row + kTileM, 0:kH] = Acc2            // FP32
- *       }
- *   }
+ *   Stage 1 — `runFfnStage1Gemm1Relu` : §A17 moe_segmented_gemm_relu
+ *             shape exactly. GEMM1 (FP16 × FP16 → FP32 acc) + fused ReLU +
+ *             FP32→FP16 downcast in the L0C → GM TSTORE. The only delta vs
+ *             §A17 is the GM destination dtype (half instead of float),
+ *             which the previous run already confirmed works.
  *
- * Inputs (GM, uint8_t* at the host boundary; cast inside):
- *   packed_tokens   [T_PADDED, kH]            float16
- *   w1              [kNumExperts, kH, kF]     float16
- *   w2              [kNumExperts, kF, kH]     float16
- *   expert_count    [kNumExperts]             int32   (PADDED counts; multiples of kTileM)
- *   expert_start    [kNumExperts]             int32   (PADDED starts; prefix sum)
- *   scratch         [T_PADDED, kF]            float16 (kernel-managed temporary; host allocates)
+ *   Stage 2 — `runFfnStage2Gemm2` : §A16 moe_segmented_gemm_one_layer shape
+ *             exactly. GEMM2 (FP16 × FP16 → FP32 acc) on the scratch from
+ *             stage 1 and w2[e], writing FP32 to packed_output.
  *
- * Outputs (GM):
- *   packed_output   [T_PADDED, kH]            float32
+ * The host launches the two kernels back-to-back on the SAME stream. ACL
+ * guarantees stream-order execution, so the second launch only starts after
+ * stage 1 has fully drained to GM. There is therefore NO within-kernel
+ * cross-GEMM auto-sync — each kernel only has to handle the §A16/§A17
+ * known-good sync pattern.
  *
- * Composition vs known-good milestones:
- *   GEMM1: byte-for-byte the §A17 moe_segmented_gemm_relu shape, except the
- *          TSTORE destination dtype changes from float (FP32 GM) to half
- *          (FP16 GM). The TileData (AccTile<float>), the TMATMUL, the
- *          ReluPreMode::NormalRelu template arg, and the cube tile aliases
- *          are unchanged.
- *   GEMM2: byte-for-byte the §A16 moe_segmented_gemm_one_layer shape. A
- *          comes from the GEMM1 FP16 scratch; B from w2[e]; C is FP32.
+ * Why this matters:
+ *   - Each kernel uses exactly 5 cube tiles (Mat A/B, Left, Right, Acc),
+ *     matching the §A16/§A17 budget byte-for-byte.
+ *   - Each TLOAD/TMOV/TMATMUL/TSTORE chain operates on independent GM
+ *     regions within its own kernel — no cross-tile GM dependency through
+ *     scratch.
+ *   - The "scratch handoff" between the two GEMMs becomes an ACL
+ *     stream-level dependency, not a PTO auto-sync dependency.
  *
- * NEW (single isolated assumption): fused FP32 Acc -> FP16 GM + ReLU in a
- * single TSTORE call, in ND layout. The same dtype combo + ReLU is validated
- * in NZ layout via tstore_acc2gm Nz2nz tilingKey=21
- *   `<0, float, float, half, ..., 1>` at
- *   tests/npu/a2a3/src/st/testcase/tstore_acc2gm/tstore_acc2gm_kernel.cpp:627.
- * ND-layout variant of this combo is the one new piece this milestone tests.
- * If it fails, the documented fallback (see README) is to split the kernel:
- * (1) §A17 gemm_relu writing FP32 scratch, (2) a separate FP32->FP16 cast
- * pass, (3) §A16 gemm_one_layer reading the FP16 scratch.
+ *   for each expert e, each microtile m0:
+ *     Stage 1 kernel:
+ *       scratch[row:row+kTileM, 0:kF] = max(packed_tokens[…] @ w1[e], 0)   (FP16)
+ *     Stage 2 kernel:
+ *       packed_output[row:row+kTileM, 0:kH] = scratch[…] @ w2[e]            (FP32)
  *
- * Auto-mode constraints honored (mirrors §A16 / §A17):
- *   - Single AICORE (<<<1, nullptr, stream>>>); no block_idx work split.
- *   - Static tile shapes inside the inner loop (no SetValidRow / partial
- *     stores). Host-padded counts make every inner iter a full kTileM tile.
- *   - Tile aliases lifted verbatim from RunTMATMUL<float, half, half, float>
- *     (the canonical A3 auto-mode-eligible FP16xFP16->FP32 cube combo).
- *   - All tiles declared once outside both loops; auto allocator pins each
- *     address; auto-sync inserts the MTE2 -> MTE1 -> M -> FIX fences between
- *     GEMM1 -> GEMM2 on the same scratch row.
- *   - No TASSIGN literal addresses, no #ifndef __PTO_AUTO__ manual-sync, no
- *     Tile::data() in kernel code, no *_IMPL calls, no raw CCE intrinsics,
- *     no Event<>, no TPipe / TPUSH / TPOP, no double buffering, no A5-only
- *     instructions, no GELU / SiLU / LeakyReLU (only NormalRelu is exercised
- *     by §A17).
+ * Auto-mode constraints honored (per stage; identical to §A16/§A17):
+ *   - Single AICORE per kernel; no block_idx work split.
+ *   - Static tile shapes; no SetValidRow / partial stores.
+ *   - All tiles declared once outside both loops; auto allocator pins each.
+ *   - No TASSIGN literal addresses, no `#ifndef __PTO_AUTO__` manual-sync,
+ *     no Tile::data() in kernel code, no *_IMPL calls, no raw CCE intrinsics,
+ *     no Event<>, no TPipe/TPUSH/TPOP, no double buffering, no A5-only ops.
+ *   - Only ReluPreMode::NormalRelu; no GELU/SiLU/LeakyReLU.
  *
- * Host boundary: uint8_t* for the typed FP16 / FP32 buffers and int32_t* for
- * metadata; non-template `...Fp16` wrapper hides `half` from main.cpp (see
+ * Host boundary: uint8_t* for the typed FP16/FP32 buffers and int32_t* for
+ * metadata; non-template `…Fp16` wrapper hides `half` from main.cpp (see
  * compile_error_logbook.md §E13 / known_good_kernel_examples.md §A16).
  */
 
@@ -87,82 +69,53 @@ constexpr unsigned kF          = 64;   // FFN intermediate dim (GEMM1 N = GEMM2 
 constexpr unsigned kTileM      = 128;  // M dim per cube tile
 constexpr unsigned kNumExperts = 4;    // experts (compile-time)
 
-// Debug toggle (stage isolation). When true, GEMM2 / TSTORE-to-output is
-// skipped — the kernel only runs GEMM1 + ReLU + TSTORE-to-FP16-scratch.
-// Use this together with main.cpp's poison-then-compare to confirm whether
-// the GEMM1 → scratch stage is the failing one. Default OFF.
-constexpr bool kStopAfterGemm1 = false;
-
 }  // namespace moe_segmented_ffn_top1_cfg
 
-template <typename TOut, typename TIn, typename TWeight, typename TScratch>
-__global__ AICORE void runMoeSegmentedFfnTop1(
-    __gm__ uint8_t *packed_output_raw,
+// ============================================================================
+// Stage 1 — GEMM1 + fused ReLU + FP32->FP16 in TSTORE.
+//   In  : packed_tokens [T_PADDED, kH] half, w1 [kE, kH, kF] half.
+//   Out : scratch       [T_PADDED, kF] half (post-ReLU; written by FIX pipe).
+// Shape source: byte-for-byte the §A17 moe_segmented_gemm_relu kernel, with
+// the GM dest dtype changed to half. That dtype change is the one new piece
+// this milestone needed; the previous run confirmed it works.
+// ============================================================================
+template <typename TIn, typename TWeight, typename TScratch>
+__global__ AICORE void runFfnStage1Gemm1Relu(
+    __gm__ uint8_t *scratch_raw,
     __gm__ uint8_t *packed_tokens_raw,
     __gm__ int32_t *expert_count,
     __gm__ int32_t *expert_start,
-    __gm__ uint8_t *w1_raw,
-    __gm__ uint8_t *w2_raw,
-    __gm__ uint8_t *scratch_raw)
+    __gm__ uint8_t *w1_raw)
 {
     using namespace moe_segmented_ffn_top1_cfg;
 
-    __gm__ TOut     *packed_output = reinterpret_cast<__gm__ TOut     *>(packed_output_raw);
     __gm__ TIn      *packed_tokens = reinterpret_cast<__gm__ TIn      *>(packed_tokens_raw);
     __gm__ TWeight  *w1            = reinterpret_cast<__gm__ TWeight  *>(w1_raw);
-    __gm__ TWeight  *w2            = reinterpret_cast<__gm__ TWeight  *>(w2_raw);
     __gm__ TScratch *scratch       = reinterpret_cast<__gm__ TScratch *>(scratch_raw);
 
-    // ---- Tile alignment (FP16 path, per §A16 / §A17) -----------------------
-    // For FP16 inputs: blockAlign = C0_SIZE_BYTE / sizeof(TIn) = 32 / 2 = 16.
-    // With kTileM=128 and kH==kF==64 every dim is already aligned and BOTH
-    // GEMMs have identical (M, K, N) = (128, 64, 64) and identical dtypes
-    // (half/half -> float). So one set of cube tiles is enough — same budget
-    // and same shapes as §A16 / §A17, just reloaded with different GM data
-    // in each GEMM body. The original two-tile-set version pushed concurrent
-    // L0A/L0B/L0C usage and cross-tile GM dependencies that have no in-tree
-    // confirmed reference; consolidating to one tile set keeps every piece
-    // of the kernel inside the §A16/§A17 known-good envelope.
     constexpr int blockAlign = C0_SIZE_BYTE / sizeof(TIn);
     constexpr int M = ((kTileM + 15) / 16) * 16;
     constexpr int K = ((kH      + blockAlign - 1) / blockAlign) * blockAlign;
     constexpr int N = ((kF      + blockAlign - 1) / blockAlign) * blockAlign;
-    static_assert(kH == kF,
-        "This milestone requires kH == kF; otherwise GEMM1 and GEMM2 cube "
-        "shapes diverge and the consolidated tile set no longer applies.");
 
-    // ---- GM tensor views ---------------------------------------------------
-    // Naming reflects ROLE, not dtype-symmetry. With kH == kF == 64 some of
-    // these typedefs are actually identical types (e.g. GlobalDataAHalf ==
-    // GlobalDataScratch) — kept separate for readability.
-    using GlobalDataAHalf =
+    using GlobalDataA =
         GlobalTensor<TIn,      Shape<1, 1, 1, kTileM, kH>,
                      Stride<1 * kTileM * kH, 1 * kTileM * kH, kTileM * kH, kH, 1>>;
-    using GlobalDataBHalf =
+    using GlobalDataB =
         GlobalTensor<TWeight,  Shape<1, 1, 1, kH,     kF>,
                      Stride<1 * kH * kF,     1 * kH * kF,     kH * kF,     kF, 1>>;
-    using GlobalDataScratch =
+    using GlobalDataC =
         GlobalTensor<TScratch, Shape<1, 1, 1, kTileM, kF>,
                      Stride<1 * kTileM * kF, 1 * kTileM * kF, kTileM * kF, kF, 1>>;
-    using GlobalDataCFloat =
-        GlobalTensor<TOut,     Shape<1, 1, 1, kTileM, kH>,
-                     Stride<1 * kTileM * kH, 1 * kTileM * kH, kTileM * kH, kH, 1>>;
 
-    // ---- Tile aliases (exact RunTMATMUL pattern; see §A16) ----------------
-    // Single set, reused by both GEMMs. Mat / Left / Right are half; Acc is
-    // float. Both GEMMs use these tiles in the same TLOAD -> TMOV -> TMATMUL
-    // -> TSTORE order, just with different GM sources / destinations.
     using TileMatAData = Tile<TileType::Mat, TIn,     M, K, BLayout::ColMajor,
                               kTileM, kH, SLayout::RowMajor, 512>;
     using TileMatBData = Tile<TileType::Mat, TWeight, K, N, BLayout::ColMajor,
                               kH,     kF, SLayout::RowMajor, 512>;
-    using LeftTile     = TileLeft <TIn,     M, K, kTileM, kH>;  // L0A
-    using RightTile    = TileRight<TWeight, K, N, kH,     kF>;  // L0B
-    using AccTile      = TileAcc  <TOut,    M, N, kTileM, kF>;  // L0C (FP32)
+    using LeftTile     = TileLeft <TIn,     M, K, kTileM, kH>;
+    using RightTile    = TileRight<TWeight, K, N, kH,     kF>;
+    using AccTile      = TileAcc  <float,   M, N, kTileM, kF>;  // FP32 acc
 
-    // Declare each tile once outside both loops. Auto allocator pins L1 / L0
-    // addresses; reused across BOTH GEMMs AND all inner iterations — the
-    // same pattern §A11 / §A16 / §A17 use for serial tile reuse.
     TileMatAData aMatTile;
     TileMatBData bMatTile;
     LeftTile     aTile;
@@ -170,86 +123,155 @@ __global__ AICORE void runMoeSegmentedFfnTop1(
     AccTile      cTile;
 
     for (unsigned e = 0; e < kNumExperts; ++e) {
-        int32_t start = expert_start[e];      // GM scalar read (§11.4 / §A13)
-        int32_t count = expert_count[e];      // GM scalar read (§11.4 / §A13)
+        int32_t start = expert_start[e];
+        int32_t count = expert_count[e];
 
-        // Per-expert weight pointers; hoisted out of the inner loop.
-        GlobalDataBHalf b1Global(w1 + static_cast<size_t>(e) * kH * kF);
-        GlobalDataBHalf b2Global(w2 + static_cast<size_t>(e) * kF * kH);
+        GlobalDataB bGlobal(w1 + static_cast<size_t>(e) * kH * kF);
 
         for (int32_t m0 = 0; m0 < count; m0 += static_cast<int32_t>(kTileM)) {
-            size_t row    = static_cast<size_t>(start) + static_cast<size_t>(m0);
-            size_t aOff   = row * kH;   // packed_tokens / packed_output stride
-            size_t sOff   = row * kF;   // scratch stride
+            size_t row  = static_cast<size_t>(start) + static_cast<size_t>(m0);
+            size_t aOff = row * kH;
+            size_t cOff = row * kF;
 
-            GlobalDataAHalf   a1Global(packed_tokens + aOff);
-            GlobalDataScratch c1Global(scratch       + sOff);
-            GlobalDataScratch a2Global(scratch       + sOff);
-            GlobalDataCFloat  c2Global(packed_output + aOff);
+            GlobalDataA aGlobal(packed_tokens + aOff);
+            GlobalDataC cGlobal(scratch       + cOff);
 
-            // ============================================================
-            // GEMM1: packed_tokens (FP16) @ w1[e] (FP16) -> Acc<float> -> ReLU -> scratch (FP16)
-            // ============================================================
-            TLOAD(aMatTile, a1Global);
-            TLOAD(bMatTile, b1Global);
+            TLOAD(aMatTile, aGlobal);
+            TLOAD(bMatTile, bGlobal);
             TMOV(aTile, aMatTile);
             TMOV(bTile, bMatTile);
             TMATMUL(cTile, aTile, bTile);
 
-            // L0C -> GM with ReLU AND FP32 -> FP16 downcast fused into the
-            // FIX-pipe store. Confirmed working in this milestone (the single
-            // new ND-layout assumption — see file header).
-            TSTORE<AccTile, GlobalDataScratch, AtomicType::AtomicNone,
-                   ReluPreMode::NormalRelu>(c1Global, cTile);
-
-            // ============================================================
-            // GEMM2: scratch (FP16) @ w2[e] (FP16) -> Acc<float> -> packed_output (FP32)
-            // ============================================================
-            // Reuses the same five cube tiles. Auto-sync orders this against
-            // the GEMM1 chain via tile reuse (cTile drain -> aMatTile reload,
-            // etc.), which is the §A16 / §A17 known-good ordering pattern.
-            if constexpr (!kStopAfterGemm1) {
-                TLOAD(aMatTile, a2Global);
-                TLOAD(bMatTile, b2Global);
-                TMOV(aTile, aMatTile);
-                TMOV(bTile, bMatTile);
-                TMATMUL(cTile, aTile, bTile);
-
-                // L0C -> GM, plain FP32 store (no ReLU on the FFN output).
-                TSTORE(c2Global, cTile);
-            }
-            // If kStopAfterGemm1 is true: packed_output remains at the
-            // host-poisoned pattern (0x5A bytes). compare_outputs.py will
-            // call that out so we can attribute the failure to GEMM1 vs GEMM2.
+            // L0C -> GM with ReLU + FP32->FP16 downcast fused into the FIX
+            // pipe. Confirmed working in the previous run.
+            TSTORE<AccTile, GlobalDataC, AtomicType::AtomicNone,
+                   ReluPreMode::NormalRelu>(cGlobal, cTile);
         }
     }
 }
 
-template <typename TOut, typename TIn, typename TWeight, typename TScratch>
-void launchMoeSegmentedFfnTop1(uint8_t *packed_output,
-                               uint8_t *packed_tokens,
-                               int32_t *expert_count,
-                               int32_t *expert_start,
-                               uint8_t *w1,
-                               uint8_t *w2,
-                               uint8_t *scratch,
-                               void    *stream)
+// ============================================================================
+// Stage 2 — GEMM2 only.
+//   In  : scratch [T_PADDED, kF] half (produced by stage 1), w2 [kE, kF, kH] half.
+//   Out : packed_output [T_PADDED, kH] float32.
+// Shape source: byte-for-byte the §A16 moe_segmented_gemm_one_layer kernel,
+// with the A buffer pointed at scratch instead of packed_tokens.
+// ============================================================================
+template <typename TOut, typename TScratch, typename TWeight>
+__global__ AICORE void runFfnStage2Gemm2(
+    __gm__ uint8_t *packed_output_raw,
+    __gm__ uint8_t *scratch_raw,
+    __gm__ int32_t *expert_count,
+    __gm__ int32_t *expert_start,
+    __gm__ uint8_t *w2_raw)
 {
-    runMoeSegmentedFfnTop1<TOut, TIn, TWeight, TScratch><<<1, nullptr, stream>>>(
-        packed_output, packed_tokens, expert_count, expert_start,
-        w1, w2, scratch);
+    using namespace moe_segmented_ffn_top1_cfg;
+
+    __gm__ TOut     *packed_output = reinterpret_cast<__gm__ TOut     *>(packed_output_raw);
+    __gm__ TScratch *scratch       = reinterpret_cast<__gm__ TScratch *>(scratch_raw);
+    __gm__ TWeight  *w2            = reinterpret_cast<__gm__ TWeight  *>(w2_raw);
+
+    constexpr int blockAlign = C0_SIZE_BYTE / sizeof(TScratch);
+    constexpr int M = ((kTileM + 15) / 16) * 16;
+    constexpr int K = ((kF      + blockAlign - 1) / blockAlign) * blockAlign;
+    constexpr int N = ((kH      + blockAlign - 1) / blockAlign) * blockAlign;
+
+    using GlobalDataA =
+        GlobalTensor<TScratch, Shape<1, 1, 1, kTileM, kF>,
+                     Stride<1 * kTileM * kF, 1 * kTileM * kF, kTileM * kF, kF, 1>>;
+    using GlobalDataB =
+        GlobalTensor<TWeight,  Shape<1, 1, 1, kF,     kH>,
+                     Stride<1 * kF * kH,     1 * kF * kH,     kF * kH,     kH, 1>>;
+    using GlobalDataC =
+        GlobalTensor<TOut,     Shape<1, 1, 1, kTileM, kH>,
+                     Stride<1 * kTileM * kH, 1 * kTileM * kH, kTileM * kH, kH, 1>>;
+
+    using TileMatAData = Tile<TileType::Mat, TScratch, M, K, BLayout::ColMajor,
+                              kTileM, kF, SLayout::RowMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, TWeight,  K, N, BLayout::ColMajor,
+                              kF,     kH, SLayout::RowMajor, 512>;
+    using LeftTile     = TileLeft <TScratch, M, K, kTileM, kF>;
+    using RightTile    = TileRight<TWeight,  K, N, kF,     kH>;
+    using AccTile      = TileAcc  <TOut,     M, N, kTileM, kH>;  // FP32 acc
+
+    TileMatAData aMatTile;
+    TileMatBData bMatTile;
+    LeftTile     aTile;
+    RightTile    bTile;
+    AccTile      cTile;
+
+    for (unsigned e = 0; e < kNumExperts; ++e) {
+        int32_t start = expert_start[e];
+        int32_t count = expert_count[e];
+
+        GlobalDataB bGlobal(w2 + static_cast<size_t>(e) * kF * kH);
+
+        for (int32_t m0 = 0; m0 < count; m0 += static_cast<int32_t>(kTileM)) {
+            size_t row  = static_cast<size_t>(start) + static_cast<size_t>(m0);
+            size_t aOff = row * kF;
+            size_t cOff = row * kH;
+
+            GlobalDataA aGlobal(scratch       + aOff);
+            GlobalDataC cGlobal(packed_output + cOff);
+
+            TLOAD(aMatTile, aGlobal);
+            TLOAD(bMatTile, bGlobal);
+            TMOV(aTile, aMatTile);
+            TMOV(bTile, bMatTile);
+            TMATMUL(cTile, aTile, bTile);
+
+            TSTORE(cGlobal, cTile);
+        }
+    }
 }
 
-// FP16 x FP16 -> FP32 (output) with FP16 intermediate scratch. Matches the
-// dtype contract documented in the file header and README.
-template void launchMoeSegmentedFfnTop1<float, half, half, half>(
-    uint8_t *packed_output, uint8_t *packed_tokens,
-    int32_t *expert_count, int32_t *expert_start,
-    uint8_t *w1, uint8_t *w2, uint8_t *scratch, void *stream);
+// ----------------------------------------------------------------------------
+// Templated host launchers. The non-template `…Fp16` wrapper at the bottom
+// hides `half` from main.cpp (compile_error_logbook.md §E13).
+// ----------------------------------------------------------------------------
 
-// Non-template host-boundary wrapper. main.cpp cannot see `half` (the host
-// TU is compiled with plain `-xc++`, which lacks bisheng-CCE built-ins);
-// see compile_error_logbook.md §E13 / known_good_kernel_examples.md §A16.
+template <typename TIn, typename TWeight, typename TScratch>
+void launchFfnStage1Gemm1Relu(uint8_t *scratch,
+                              uint8_t *packed_tokens,
+                              int32_t *expert_count,
+                              int32_t *expert_start,
+                              uint8_t *w1,
+                              void    *stream)
+{
+    runFfnStage1Gemm1Relu<TIn, TWeight, TScratch><<<1, nullptr, stream>>>(
+        scratch, packed_tokens, expert_count, expert_start, w1);
+}
+
+template <typename TOut, typename TScratch, typename TWeight>
+void launchFfnStage2Gemm2(uint8_t *packed_output,
+                          uint8_t *scratch,
+                          int32_t *expert_count,
+                          int32_t *expert_start,
+                          uint8_t *w2,
+                          void    *stream)
+{
+    runFfnStage2Gemm2<TOut, TScratch, TWeight><<<1, nullptr, stream>>>(
+        packed_output, scratch, expert_count, expert_start, w2);
+}
+
+template void launchFfnStage1Gemm1Relu<half, half, half>(
+    uint8_t *scratch, uint8_t *packed_tokens,
+    int32_t *expert_count, int32_t *expert_start,
+    uint8_t *w1, void *stream);
+
+template void launchFfnStage2Gemm2<float, half, half>(
+    uint8_t *packed_output, uint8_t *scratch,
+    int32_t *expert_count, int32_t *expert_start,
+    uint8_t *w2, void *stream);
+
+// Non-template host-boundary wrapper. Fires both stage kernels on the same
+// stream; ACL stream-order semantics guarantee stage 2 only starts after
+// stage 1's TSTORE-to-scratch is fully drained to GM. No within-kernel
+// cross-GEMM auto-sync is involved.
+//
+// If you need to debug only stage 1 (scratch path), set kSkipStage2 = true.
+// Stage 1 still runs; stage 2 launch is skipped, so packed_output keeps
+// whatever the host poisoned it with — compare_outputs.py will detect that.
 extern "C" void launchMoeSegmentedFfnTop1Fp16(uint8_t *packed_output,
                                               uint8_t *packed_tokens,
                                               int32_t *expert_count,
@@ -259,7 +281,15 @@ extern "C" void launchMoeSegmentedFfnTop1Fp16(uint8_t *packed_output,
                                               uint8_t *scratch,
                                               void    *stream)
 {
-    launchMoeSegmentedFfnTop1<float, half, half, half>(
-        packed_output, packed_tokens, expert_count, expert_start,
-        w1, w2, scratch, stream);
+    // Toggle this to true to narrow the milestone to "GEMM1 + ReLU + FP16
+    // scratch only" (skip stage 2 entirely from the host side).
+    constexpr bool kSkipStage2 = false;
+
+    launchFfnStage1Gemm1Relu<half, half, half>(
+        scratch, packed_tokens, expert_count, expert_start, w1, stream);
+
+    if constexpr (!kSkipStage2) {
+        launchFfnStage2Gemm2<float, half, half>(
+            packed_output, scratch, expert_count, expert_start, w2, stream);
+    }
 }
