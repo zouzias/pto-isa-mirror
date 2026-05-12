@@ -1,20 +1,21 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TPUSH_HPP
 #define TPUSH_HPP
 
-#include <type_traits>
 #include <pto/common/fifo.hpp>
-#include <pto/npu/a5/TStore.hpp>
 #include <pto/npu/a5/TLoad.hpp>
+#include <pto/npu/a5/TStore.hpp>
 
 namespace pto {
 
@@ -30,7 +31,6 @@ struct TPipe {
     static constexpr bool is_c2v_gm = (DIR_TYPE == Direction::DIR_C2V_GM);     // 5
     static constexpr bool is_v2c_gm = (DIR_TYPE == Direction::DIR_V2C_GM);     // 6
     static constexpr bool is_both_gm = (DIR_TYPE == Direction::DIR_BOTH_GM);   // 7
-    static constexpr uint32_t SyncPeriod = (SlotNum <= 2) ? SlotNum : SlotNum / 2;
     static constexpr bool is_c2v = is_c2v_gm || is_c2v_ub;
     static constexpr bool is_v2c = is_v2c_gm || is_v2c_mat || is_v2c_ctrl;
     static_assert(is_c2v || is_v2c || is_both || is_both_gm,
@@ -42,38 +42,14 @@ struct TPipe {
     // -------------------------------------------------------------------------
     using RingFiFo = RingFIFO<SlotSize, SlotNum, LocalSlotNum>;
 
-    PTO_INTERNAL static bool shouldWaitFree(uint32_t tileIndex)
-    {
-        // Startup protection: Don't check flags when buffer is empty
-        if constexpr (SlotNum == 1) {
-            return true;
-        } else {
-            if (tileIndex < SlotNum) {
-                return false;
-            }
-            // Sparse sync: Only check flags periodically to reduce overhead
-            return (tileIndex % SyncPeriod) == 0;
-        }
-    }
-
-    PTO_INTERNAL static bool shouldNotifyFree(uint32_t tileIndex)
-    {
-        // Notify consumer to free buffer when producer is one slot ahead of consumer
-        if constexpr (SlotNum == 1) {
-            return true;
-        } else {
-            return ((tileIndex + 1) % SyncPeriod) == 0;
-        }
-    }
-
     // -------------------------------------------------------------------------
     // Producer Interface
     // -------------------------------------------------------------------------
     struct Producer {
-        uint32_t subTileIndex = 0;
         uint32_t tileIndex = 0;
-        bool isRecord = true;
+        uint32_t subTileIndex = 0;
         bool isAllocate = true;
+        bool isRecord = true;
         int entryOffset = 0;
 
         PTO_INTERNAL Producer() = default;
@@ -139,7 +115,8 @@ struct TPipe {
 
         /**
          * alloc: Request space in FIFO
-         * 1. (iter >= Depth): Startup protection. Don't check flags when buffer is empty.
+         * 1. (iter >= Depth): Startup protection. Don't check flags when buffer is
+         * empty.
          * 2. (iter % Period == 0): Sparse sync. Only check flag periodically.
          */
         template <TileSplitAxis Split = TileSplitAxis::TILE_UP_DOWN>
@@ -177,7 +154,8 @@ struct TPipe {
         // Forward dependency: record (producer) and wait (consumer)
         /**
          * record - Producer signals that data is ready
-         * Called by the producer after completing the operation (TSTORE_C2GM or TSTORE_V2GM)
+         * Called by the producer after completing the operation (TSTORE_C2GM or
+         * TSTORE_V2GM)
          */
         template <TileSplitAxis Split = TileSplitAxis::TILE_UP_DOWN>
         PTO_INTERNAL void record() const
@@ -286,10 +264,12 @@ struct TPipe {
             constexpr int gmStrideR = ConsN;
             size_t subAIVOffset = 0;
             if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
-                // TILE_UP_DOWN  : Vec1 starts at the second row-block → offset = ProdM * ProdN * sizeof(T)
+                // TILE_UP_DOWN  : Vec1 starts at the second row-block → offset = ProdM
+                // * ProdN * sizeof(T)
                 subAIVOffset = get_subblockid() * ProdM * ProdN * sizeof(T);
             } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) { // TILE_LEFT_RIGHT
-                // TILE_LEFT_RIGHT: Vec1 starts at column ProdN within row 0 → offset = ProdN * sizeof(T)
+                // TILE_LEFT_RIGHT: Vec1 starts at column ProdN within row 0 → offset =
+                // ProdN * sizeof(T)
                 subAIVOffset = get_subblockid() * ProdN * sizeof(T);
             } else if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
                 // TILE_NO_SPLIT : single writer, no offset needed
@@ -520,10 +500,12 @@ struct TPipe {
             constexpr int gmStrideR = ProdN;
             size_t subAIVOffset = 0;
             if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
-                // TILE_UP_DOWN  : Vec1 starts at the second row-block → offset = VEC_M * ProdN * sizeof(T)
+                // TILE_UP_DOWN  : Vec1 starts at the second row-block → offset = VEC_M
+                // * ProdN * sizeof(T)
                 subAIVOffset = get_subblockid() * ConsM * ConsN * sizeof(T);
             } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) { // TILE_LEFT_RIGHT
-                // TILE_LEFT_RIGHT: Vec1 starts at column ConsN within row 0 → offset = ConsN * sizeof(T)
+                // TILE_LEFT_RIGHT: Vec1 starts at column ConsN within row 0 → offset =
+                // ConsN * sizeof(T)
                 subAIVOffset = get_subblockid() * ConsN * sizeof(T);
             } else if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
                 subAIVOffset = 0; // TILE_NO_SPLIT : single reader, no offset needed
@@ -599,24 +581,20 @@ struct TPipe {
     PTO_INTERNAL explicit TPipe(__gm__ void *GM_SLOT_BUFFER, uint32_t C2V_CONSUMER_BUF, uint32_t V2C_CONSUMER_BUF)
         : fifo(GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF), prod(), cons()
     {
-        for (uint32_t i = 0; i < SyncPeriod; ++i) {
-            if constexpr (IsNoSplit) {
-                cons.template free<TileSplitAxis::TILE_NO_SPLIT>();
-            } else {
-                cons.template free<TileSplitAxis::TILE_UP_DOWN>();
-            }
+        if constexpr (IsNoSplit) {
+            cons.template free<TileSplitAxis::TILE_NO_SPLIT>();
+        } else {
+            cons.template free<TileSplitAxis::TILE_UP_DOWN>();
         }
     }
 
     // Destructor for TPipe
     PTO_INTERNAL ~TPipe()
     {
-        for (uint32_t i = 0; i < SyncPeriod; ++i) {
-            if constexpr (IsNoSplit) {
-                prod.template allocate<TileSplitAxis::TILE_NO_SPLIT>();
-            } else {
-                prod.template allocate<TileSplitAxis::TILE_UP_DOWN>();
-            }
+        if constexpr (IsNoSplit) {
+            prod.template allocate<TileSplitAxis::TILE_NO_SPLIT>();
+        } else {
+            prod.template allocate<TileSplitAxis::TILE_UP_DOWN>();
         }
     }
 };
@@ -629,11 +607,11 @@ struct TPipe {
  * 3. [Commit]  Signal Consumer (Cross-Core)
  */
 
-template <typename Pipe, typename TileProd, TileSplitAxis Split, std::enable_if_t<is_tile_data_v<TileProd>, int> = 0>
+template <typename Pipe, typename TileProd, TileSplitAxis Split>
 PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, TileProd &tile)
 {
     // 1. Cross-Core: Wait for space
-    bool isAllocate = pipe.prod.getAllocateStatus() && Pipe::shouldWaitFree(pipe.prod.tileIndex);
+    bool isAllocate = pipe.prod.getAllocateStatus();
     if (isAllocate) {
         pipe.prod.template allocate<Split>();
     }
@@ -647,17 +625,6 @@ PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, TileProd &tile)
     if (isRecord) {
         pipe.prod.template record<Split>();
     }
-}
-
-// interfaces when push data from GM FIFO
-template <typename Pipe, typename GlobalData, TileSplitAxis Split,
-          std::enable_if_t<is_global_data_v<GlobalData>, int> = 0>
-PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, GlobalData &gmTensor)
-{
-    (void)gmTensor;
-    static_assert(Pipe::is_c2v_gm || Pipe::is_v2c_gm || Pipe::is_both_gm,
-                  "Fix: TPUSH with GlobalTensor is only supported by GM FIFO directions on A5.");
-    pipe.prod.template record<Split>();
 }
 
 //------------------------multiple pipe------------------------
@@ -677,9 +644,9 @@ struct TMPipe {
     static constexpr bool is_v2c_ctrl = (FiFoType == FIFOType::CTRL_FIFO) && (TileDataProd::Loc == TileType::Vec) &&
                                         (TileDataCons::Loc == TileType::Ctrl);
     static constexpr bool is_v2c = is_v2c_gm || is_v2c_mat || is_v2c_ctrl;
-    static_assert(
-        is_c2v || is_v2c,
-        "TPipe currently only supports Cube-to-Vec or Vec-to-Cube communication with specified tile and FIFO types.");
+    static_assert(is_c2v || is_v2c,
+                  "TPipe currently only supports Cube-to-Vec or Vec-to-Cube "
+                  "communication with specified tile and FIFO types.");
 
     static constexpr int VEC_CORE_ID_OFFSET = 16;
 
@@ -743,7 +710,8 @@ struct TMPipe {
 
         /**
          * alloc: Request space in FIFO
-         * 1. (iter >= Depth): Startup protection. Don't check flags when buffer is empty.
+         * 1. (iter >= Depth): Startup protection. Don't check flags when buffer is
+         * empty.
          * 2. (iter % Period == 0): Sparse sync. Only check flag periodically.
          */
         PTO_INTERNAL void allocate() const
@@ -751,7 +719,8 @@ struct TMPipe {
             if constexpr (is_c2v) {
                 // Cube producer waits for Vec consumer to free buffer
                 // Vec signals on flag_id+1 only, but Cube must wait on BOTH
-                // (because Vec0 signals flag_id+1, Vec1 signals flag_id+1+16 from Cube's view)
+                // (because Vec0 signals flag_id+1, Vec1 signals flag_id+1+16 from
+                // Cube's view)
 #ifdef __DAV_CUBE__
                 wait_intra_block(PIPE_FIX, FlagID + 1);
                 wait_intra_block(PIPE_FIX, FlagID + 1 + VEC_CORE_ID_OFFSET);
@@ -765,7 +734,8 @@ struct TMPipe {
 #endif
             } else if constexpr (is_v2c_ctrl) {
                 // is_v2c_ctrl
-                // Control signals from Vec to Cube: Vec signals on flag_id, Cube waits on flag_id only
+                // Control signals from Vec to Cube: Vec signals on flag_id, Cube waits
+                // on flag_id only
 #ifdef __DAV_VEC__
                 wait_intra_block(PIPE_S, FlagID + 1);
 #endif
@@ -775,7 +745,8 @@ struct TMPipe {
         // Forward dependency: record (producer) and wait (consumer)
         /**
          * record - Producer signals that data is ready
-         * Called by the producer after completing the operation (TSTORE_C2GM or TSTORE_V2GM)
+         * Called by the producer after completing the operation (TSTORE_C2GM or
+         * TSTORE_V2GM)
          */
         PTO_INTERNAL void record() const
         {
@@ -787,10 +758,12 @@ struct TMPipe {
 #endif
             } else if constexpr (is_v2c_gm || is_v2c_mat) { // is_v2c (both gm and mat)
                 // Vec -> Cube: Vec sets flag_id only on PIPE_MTE3
-                // Each Vec subblock executes this; hardware maps subblock 1's flag to flag_id+16
+                // Each Vec subblock executes this; hardware maps subblock 1's flag to
+                // flag_id+16
                 set_intra_block(PIPE_MTE3, FlagID);
             } else { // is_v2c_ctrl
-                // Control signals from Vec to Cube: Vec signals on flag_id, Cube waits on flag_id only
+                // Control signals from Vec to Cube: Vec signals on flag_id, Cube waits
+                // on flag_id only
                 set_intra_block(PIPE_S, FlagID);
             }
         }
@@ -886,24 +859,23 @@ struct TMPipe {
             if constexpr (isSplitM) {
                 // split M between vectors
                 constexpr uint32_t VecM = ConsM / VEC_CORES;
-                int subblock_base_rows = VecM * static_cast<size_t>(get_subblockid());
-                int row_offset = subblock_base_rows + entryOffset;
+                int row_offset = VecM * static_cast<size_t>(get_subblockid());
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * ConsM * ConsN * sizeof(T);
                 TileDataCons matTile;
-                TASSIGN_IMPL(matTile, fifo.fifoBase + entryBase);
+                TASSIGN_IMPL(matTile, fifo.fifoBase + entryBase + entryOffset);
                 TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(row_offset), static_cast<uint16_t>(0));
             } else if constexpr (isSplitN) {
                 // split N between vectors
-                int col_index = ProdN;
+                int col_index = ProdN * static_cast<size_t>(get_subblockid());
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * ConsM * ConsN * sizeof(T);
                 TileDataCons matTile;
-                TASSIGN_IMPL(matTile, fifo.fifoBase + entryBase);
+                TASSIGN_IMPL(matTile, fifo.fifoBase + entryBase + entryOffset);
                 TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(0), static_cast<uint16_t>(col_index));
             } else if constexpr (nonSplit) {
                 // single vector core
                 TileDataCons matTile;
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * ConsM * ConsN * sizeof(T);
-                TASSIGN_IMPL(matTile, fifo.fifoBase + entryBase);
+                TASSIGN_IMPL(matTile, fifo.fifoBase + entryBase + entryOffset);
                 TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
             } else {
                 static_assert(isSplitM || isSplitN || nonSplit,
@@ -1021,8 +993,9 @@ struct TMPipe {
                 // Cube -> Vec (GM path): Vec waits on PIPE_MTE2 (data loaded from GM)
                 wait_intra_block(PIPE_MTE2, FlagID);
             } else if constexpr (is_c2v_ub) {
-                // Cube -> Vec (UB path): Vec waits on PIPE_V before vector ops on UB data
-                // Cube sets PIPE_FIX, Vec waits PIPE_V (Vec does vector ops, not TLOAD)
+                // Cube -> Vec (UB path): Vec waits on PIPE_V before vector ops on UB
+                // data Cube sets PIPE_FIX, Vec waits PIPE_V (Vec does vector ops, not
+                // TLOAD)
 #ifdef __DAV_VEC__
                 wait_intra_block(PIPE_V, FlagID);
 #endif
@@ -1031,7 +1004,8 @@ struct TMPipe {
                 wait_intra_block(PIPE_MTE2, FlagID);
                 wait_intra_block(PIPE_MTE2, FlagID + VEC_CORE_ID_OFFSET);
             } else if constexpr (is_v2c_mat) { // is_v2c_mat
-                                               // Vec -> Cube (UB path - TINSERT): Cube waits on PIPE_MTE1, BOTH flags
+                                               // Vec -> Cube (UB path - TINSERT):
+                                               // Cube waits on PIPE_MTE1, BOTH flags
 #ifdef __DAV_CUBE__
                 wait_intra_block(PIPE_MTE1, FlagID);
                 wait_intra_block(PIPE_MTE1, FlagID + VEC_CORE_ID_OFFSET);
@@ -1051,14 +1025,15 @@ struct TMPipe {
         PTO_INTERNAL void free() const
         {
             if constexpr (is_c2v_gm) {
-                // Vec consumer frees buffer for Cube - signals on PIPE_MTE2, flag_id+1 only
+                // Vec consumer frees buffer for Cube - signals on PIPE_MTE2, flag_id+1
+                // only
 #ifdef __DAV_VEC__
                 uint8_t freeCubeID = FlagID + 1;
                 set_intra_block(PIPE_MTE2, freeCubeID);
 #endif
             } else if constexpr (is_c2v_ub) {
-                // Vec consumer frees buffer for Cube - signals on PIPE_V, flag_id+1 only
-                // Vec signals after vector ops complete (PIPE_V)
+                // Vec consumer frees buffer for Cube - signals on PIPE_V, flag_id+1
+                // only Vec signals after vector ops complete (PIPE_V)
 #ifdef __DAV_VEC__
                 uint8_t freeCubeID = FlagID + 1;
                 set_intra_block(PIPE_V, freeCubeID);
@@ -1072,7 +1047,8 @@ struct TMPipe {
                 set_intra_block(PIPE_MTE1, freeVec1ID);
 #endif
             } else { // is_v2c_ctrl
-                     // Control signals from Vec to Cube: Vec signals on flag_id, Cube waits on flag_id only
+                     // Control signals from Vec to Cube: Vec signals on flag_id,
+                     // Cube waits on flag_id only
 #ifdef __DAV_CUBE__
                 uint8_t freeVec0ID = FlagID + 1;
                 uint8_t freeVec1ID = FlagID + 1 + VEC_CORE_ID_OFFSET;
