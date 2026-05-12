@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_NPU_COMM_ASYNC_URMA_WORKSPACE_HELPERS_HPP
@@ -15,9 +17,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <iostream>
 
 #include "acl/acl.h"
-
-#include "pto/npu/comm/async/urma/urma_types.hpp"
 #include "pto/npu/comm/async/urma/urma_hccp_loader.hpp"
+#include "pto/npu/comm/async/urma/urma_types.hpp"
 
 namespace pto {
 namespace comm {
@@ -37,8 +38,9 @@ inline uint32_t Log2U32(uint32_t n)
     return (n <= 1) ? 0 : __builtin_ctz(n);
 }
 
-// Byte-swap and cross-swap the two 64-bit halves of an EID (network -> host byte order).
-// Uses __builtin_memcpy to avoid strict-aliasing UB when type-punning uint8_t[] <-> uint64_t.
+// Byte-swap and cross-swap the two 64-bit halves of an EID (network -> host
+// byte order). Uses __builtin_memcpy to avoid strict-aliasing UB when
+// type-punning uint8_t[] <-> uint64_t.
 inline void SwapEidByteOrder(hccp::HccpEid &eid)
 {
     static_assert(sizeof(hccp::HccpEid) == 16, "EID must be 16 bytes");

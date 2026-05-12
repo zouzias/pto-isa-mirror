@@ -73,9 +73,11 @@ PTO_INTERNAL void TFmodCheck(const TileDataDst &dst, const TileDataSrc0 &src0, c
     unsigned validRows = dst.GetValidRow();
     unsigned validCols = dst.GetValidCol();
     PTO_ASSERT(src1.GetValidRow() == validRows && src1.GetValidCol() == validCols,
-               "Fix: TFMOD input tile src1 valid shape mismatch with output tile dst shape.");
+               "Fix: TFMOD input tile src1 valid shape mismatch with output tile "
+               "dst shape.");
     PTO_ASSERT(src0.GetValidRow() == validRows && src0.GetValidCol() == validCols,
-               "Fix: TFMOD input tile src0 valid shape mismatch with output tile dst shape.");
+               "Fix: TFMOD input tile src0 valid shape mismatch with output tile "
+               "dst shape.");
 }
 
 template <auto PrecisionType = FmodAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0,

@@ -31,11 +31,13 @@ full text of the License.
 #ifndef __ROW_REDUCE__
 #define __ROW_REDUCE__
 
+#include <math.h>
+
+#include <type_traits>
+
+#include "TPartBinOps.hpp"
 #include "common.hpp"
 #include "pto/common/pto_tile.hpp"
-#include "TPartBinOps.hpp"
-#include <math.h>
-#include <type_traits>
 
 namespace pto {
 
@@ -51,8 +53,9 @@ namespace pto {
  */
 template <typename T>
 struct ROWSUM {
-    using TIN = T;                                                           ///< 输入类型
-    using TOUT = std::conditional_t<std::is_same_v<T, int16_t>, int32_t, T>; ///< 中间计算类型（int32防止溢出）
+    using TIN = T;                      ///< 输入类型
+    using TOUT = std::conditional_t<std::is_same_v<T, int16_t>, int32_t,
+                                    T>; ///< 中间计算类型（int32防止溢出）
     static constexpr auto InitVal = Padding<TOUT>::Zero;
 
     /**
@@ -135,7 +138,8 @@ PTO_INTERNAL void TRowReduceCheck(uint32_t srcValidRows, uint32_t srcValidCols, 
     using TDst = typename TileDataOut::DType;
     static_assert(
         std::is_same_v<T, half> || std::is_same_v<T, float> || std::is_same_v<T, int32_t> || std::is_same_v<T, int16_t>,
-        "Row reduction only supports 'half', 'float', 'int32', or 'int16' data types. "
+        "Row reduction only supports 'half', 'float', 'int32', or 'int16' data "
+        "types. "
         "Fix: Define TileDataIn with DType = half, float, int32, or int16.");
     static_assert(idx || std::is_same_v<T, typename TileDataOut::DType>,
                   "Input and output tile data types must match. "
@@ -157,7 +161,8 @@ PTO_INTERNAL void TRowReduceCheck(uint32_t srcValidRows, uint32_t srcValidCols, 
                   "SLayout::NoneBox + Cols=1.\n"
                   "Fix: Choose one of the following for TileDataOut:\n"
                   "     - Tile<..., ROWS, COLS, BLayout::RowMajor, ValidRows, 1>   // ND\n"
-                  "     - Tile<..., ROWS, 1, BLayout::ColMajor, ValidRows, 1>  // DN with Cols=1");
+                  "     - Tile<..., ROWS, 1, BLayout::ColMajor, ValidRows, 1>  // DN with "
+                  "Cols=1");
     // runtime checks
     PTO_ASSERT(srcValidRows != 0 && srcValidCols != 0,
                "Source valid rows or columns is zero — row reduction requires at "
