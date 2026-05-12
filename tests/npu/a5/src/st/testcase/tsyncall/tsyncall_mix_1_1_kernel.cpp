@@ -24,7 +24,7 @@ constexpr int32_t kMix11SoftParticipants = 36;
 constexpr uint64_t kMix11SoftTilingKey = 1101;
 
 #if defined(TSYNCALL_MIX_BUILD_AIC)
-PTO_A2A3_TSYNCALL_MIX_AIC_KERNEL_META(RunSoftTSyncAllMix11_1101_mix_aic, 1, 1);
+PTO_TSYNCALL_MIX_AIC_KERNEL_META(RunSoftTSyncAllMix11_1101_mix_aic, 1, 1);
 
 extern "C" __global__ AICORE void RunSoftTSyncAllMix11_1101_mix_aic(__gm__ int32_t __out__ *out,
                                                                     __gm__ int32_t __out__ *flags,
@@ -35,7 +35,7 @@ extern "C" __global__ AICORE void RunSoftTSyncAllMix11_1101_mix_aic(__gm__ int32
 #endif
 
 #if defined(TSYNCALL_MIX_BUILD_AIV)
-PTO_A2A3_TSYNCALL_MIX_AIC_KERNEL_META(RunSoftTSyncAllMix11_1101_mix_aiv, 1, 1);
+PTO_TSYNCALL_MIX_AIC_KERNEL_META(RunSoftTSyncAllMix11_1101_mix_aiv, 1, 1);
 
 extern "C" __global__ AICORE void RunSoftTSyncAllMix11_1101_mix_aiv(__gm__ int32_t __out__ *out,
                                                                     __gm__ int32_t __out__ *flags,

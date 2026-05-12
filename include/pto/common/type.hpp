@@ -250,6 +250,16 @@ enum class TSyncAllMode : uint8_t
     Soft = 1,
 };
 
+constexpr uint16_t SYNC_AIC_FLAG = 11;
+constexpr uint16_t SYNC_AIV_FLAG = 12;
+constexpr uint16_t SYNC_AIC_AIV_FLAG = 13;
+constexpr uint16_t SYNC_AIV_ONLY_ALL = 14;
+constexpr uint16_t SYNC_FLAG_ID_MAX = 16;
+
+constexpr int32_t SYNCALL_SOFT_SLOT_INT32 = 8;
+constexpr int32_t SYNCALL_SOFT_BACKOFF_THRESHOLD = 16;
+constexpr int32_t SYNCALL_SOFT_MAX_POLL_ITERATIONS = 1000000;
+
 enum class AccToVecMode : uint8_t
 {
     SingleModeVec0 = 0,

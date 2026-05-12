@@ -45,7 +45,7 @@ struct PtoMetaFunLevelMixCoreType {
 
 #define PTO_DETAIL_CONCAT_INNER(a, b) a##b
 #define PTO_DETAIL_CONCAT(a, b) PTO_DETAIL_CONCAT_INNER(a, b)
-#define PTO_A2A3_TSYNCALL_AIV_KERNEL_META(kernelName)                                                              \
+#define PTO_TSYNCALL_AIV_KERNEL_META(kernelName)                                                                    \
     static const ::pto::detail::PtoMetaFunLevelMixCoreType                                                          \
         PTO_DETAIL_CONCAT(g_pto_tsyncall_aiv_meta_, __COUNTER__)                                                    \
             __attribute__((used, section(".ascend.meta." #kernelName))) =                                           \
@@ -53,12 +53,16 @@ struct PtoMetaFunLevelMixCoreType {
                   ::pto::detail::PTO_META_K_TYPE_MIX_AIV_MAIN},                                                     \
                  {{::pto::detail::PTO_META_F_TYPE_MIX_TASK_RATION, sizeof(uint32_t)}, 0, 1}}
 
-#define PTO_A2A3_TSYNCALL_MIX_AIC_KERNEL_META(kernelName, aicRatio, aivRatio)                                      \
+#define PTO_TSYNCALL_MIX_AIC_KERNEL_META(kernelName, aicRatio, aivRatio)                                           \
     static const ::pto::detail::PtoMetaFunLevelMixCoreType                                                          \
         PTO_DETAIL_CONCAT(g_pto_tsyncall_mix_aic_meta_, __COUNTER__)                                                \
             __attribute__((used, section(".ascend.meta." #kernelName))) =                                           \
                 {{{::pto::detail::PTO_META_F_TYPE_KTYPE, sizeof(uint32_t)},                                         \
                   ::pto::detail::PTO_META_K_TYPE_MIX_AIC_MAIN},                                                     \
                  {{::pto::detail::PTO_META_F_TYPE_MIX_TASK_RATION, sizeof(uint32_t)}, aicRatio, aivRatio}}
+
+#define PTO_A2A3_TSYNCALL_AIV_KERNEL_META(kernelName) PTO_TSYNCALL_AIV_KERNEL_META(kernelName)
+#define PTO_A2A3_TSYNCALL_MIX_AIC_KERNEL_META(kernelName, aicRatio, aivRatio) \
+    PTO_TSYNCALL_MIX_AIC_KERNEL_META(kernelName, aicRatio, aivRatio)
 
 #endif

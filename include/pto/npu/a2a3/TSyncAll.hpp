@@ -14,9 +14,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a2a3/TSync.hpp>
 
 namespace pto {
-constexpr int32_t SYNCALL_SOFT_SLOT_INT32 = 8;
-constexpr int32_t SYNCALL_SOFT_BACKOFF_THRESHOLD = 16;
-constexpr int32_t SYNCALL_SOFT_MAX_POLL_ITERATIONS = 1000000;
 
 PTO_INTERNAL void TSYNCALL_SOFT_DCCI(__gm__ void *ptr)
 {
@@ -35,8 +32,8 @@ PTO_INTERNAL void TSYNCALL_SOFT_DCCI_RANGE(__gm__ int32_t *ptr, int32_t lines)
 
 PTO_INTERNAL int32_t TSYNCALL_GET_MIX_AIV_RATIO()
 {
-#if defined(__MIX_CORE_AIV_RATION__)
-    return static_cast<int32_t>(__MIX_CORE_AIV_RATION__);
+#if defined(__MIX_CORE_AIV_RATIO__)
+    return static_cast<int32_t>(__MIX_CORE_AIV_RATIO__);
 #elif defined(__DAV_VEC__)
     return static_cast<int32_t>(get_subblockdim());
 #else

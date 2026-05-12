@@ -15,15 +15,17 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-constexpr uint16_t SYNC_AIC_FLAG = 11;
-constexpr uint16_t SYNC_AIV_FLAG = 12;
-constexpr uint16_t SYNC_AIC_AIV_FLAG = 13;
-constexpr uint16_t SYNC_AIV_ONLY_ALL = 14;
-constexpr uint16_t SYNC_FLAG_ID_MAX = 16;
+#define FFTS_BASE_COUNT_WIDTH 0xf
+#define FFTS_MODE_WIDTH 0x3
+#define FFTS_MODE_OFFSET 4
+#define FFTS_EVENT_ID_WIDTH 0xf
+#define FFTS_EVENT_ID_OFFSET 8
 
-constexpr int32_t SYNCALL_SOFT_SLOT_INT32 = 8;
-constexpr int32_t SYNCALL_SOFT_BACKOFF_THRESHOLD = 16;
-constexpr int32_t SYNCALL_SOFT_MAX_POLL_ITERATIONS = 1000000;
+PTO_INTERNAL uint16_t getFFTSMsg(uint16_t mode, uint16_t eventId, uint16_t baseConst = 0x1)
+{
+    return ((baseConst & FFTS_BASE_COUNT_WIDTH) + ((mode & FFTS_MODE_WIDTH) << FFTS_MODE_OFFSET) +
+            ((eventId & FFTS_EVENT_ID_WIDTH) << FFTS_EVENT_ID_OFFSET));
+}
 
 PTO_INTERNAL void TSYNCALL_SOFT_DCCI(__gm__ void *ptr)
 {
@@ -42,8 +44,8 @@ PTO_INTERNAL void TSYNCALL_SOFT_DCCI_RANGE(__gm__ int32_t *ptr, int32_t lines)
 
 PTO_INTERNAL int32_t TSYNCALL_GET_MIX_AIV_RATIO()
 {
-#if defined(__MIX_CORE_AIV_RATION__)
-    return static_cast<int32_t>(__MIX_CORE_AIV_RATION__);
+#if defined(__MIX_CORE_AIV_RATIO__)
+    return static_cast<int32_t>(__MIX_CORE_AIV_RATIO__);
 #elif defined(__DAV_VEC__)
     return static_cast<int32_t>(get_subblockdim());
 #else
@@ -72,11 +74,6 @@ PTO_INTERNAL int32_t TSYNCALL_GET_MIX_PARTICIPANT_IDX()
 #else
     return static_cast<int32_t>(get_block_idx());
 #endif
-}
-
-PTO_INTERNAL uint16_t getFFTSMsg(uint16_t mode, uint16_t eventId, uint16_t baseConst = 0x1)
-{
-    return ((baseConst & 0xf) + ((mode & 0x3) << 4) + ((eventId & 0xf) << 8));
 }
 
 template <bool IsAIVOnly = true>
@@ -146,6 +143,7 @@ PTO_INTERNAL void TSYNCALL_SOFT_AIV_PROXY_WRITE(__gm__ int32_t *dst, __ubuf__ in
 }
 #endif
 
+#if defined(__DAV_VEC__)
 PTO_INTERNAL int32_t TSYNCALL_SOFT_AIV_WRITE_SLOT(__gm__ int32_t *localSyncGM, __ubuf__ int32_t *ubWorkspace)
 {
     TSYNCALL_SOFT_DCCI(static_cast<__gm__ void *>(localSyncGM));
@@ -202,6 +200,7 @@ PTO_INTERNAL void TSYNCALL_SOFT_AIV_BARRIER(__gm__ int32_t *gmWorkspace, __ubuf_
         }
     }
 }
+#endif
 
 template <bool IsAIVOnly = false>
 PTO_INTERNAL void TSYNCALL_SOFT_MIX_IMPL(__gm__ int32_t *gmWorkspace, __ubuf__ int32_t *ubWorkspace,

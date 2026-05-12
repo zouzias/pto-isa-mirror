@@ -256,7 +256,7 @@ inline void TSYNCALL_SOFT_IMPL(int32_t *gmWorkspace, int32_t *ubWorkspace, int32
     (void)usedCores;
 }
 
-template <bool IsAIVOnly = true>
+template <bool IsAIVOnly = false>
 inline void TSYNCALL_SOFT_MIX_IMPL(int32_t *gmWorkspace, int32_t *ubWorkspace, int32_t *l1Workspace,
                                    int32_t usedCores)
 {
