@@ -1,22 +1,22 @@
 /**
  * main.cpp - host driver for moe_segmented_ffn_top1.
  *
- * Pattern source: kernels/automode/a2a3/moe_segmented_gemm_relu/main.cpp.
- * Adds:
- *   - one extra GM input (w2),
- *   - one device-resident scratch GM buffer (hidden_scratch) of size
- *     kTileM * kF * sizeof(half), allocated once and reused by the kernel
- *     across all (expert, microtile) inner iters.
+ * Structure mirrors moe_segmented_gemm_relu/main.cpp. The kernel needs an
+ * extra FP16 weight buffer (w2) and an FP16 scratch buffer for the GEMM1 ->
+ * GEMM2 hand-off; everything else is the same. The host allocates scratch on
+ * device but does NOT copy any host-side bytes into it — the kernel writes
+ * before it reads.
  *
  * I/O contract (all little-endian, contiguous, no header):
  *   ../output/t_padded.txt                (single int line; written by gen_data.py)
- *   ../input/input_packed_tokens.bin      (T_PADDED * H float16)
- *   ../input/input_expert_count.bin       (kE        int32)
- *   ../input/input_expert_start.bin       (kE        int32)
- *   ../input/input_w1.bin                 (kE * H * F float16)
- *   ../input/input_w2.bin                 (kE * F * O float16)
- *   ../output/golden_packed_output.bin    (T_PADDED * O float32; final FFN out)
- *   ../output/output_packed_output.bin    (T_PADDED * O float32)  (this driver)
+ *   ../input/input_packed_tokens.bin      (T_PADDED * kH float16)
+ *   ../input/input_expert_count.bin       (kE         int32)
+ *   ../input/input_expert_start.bin       (kE         int32)
+ *   ../input/input_w1.bin                 (kE * kH * kF float16)
+ *   ../input/input_w2.bin                 (kE * kF * kH float16)
+ *   ../output/golden_packed_output.bin    (T_PADDED * kH float32; full FFN)
+ *   ../output/output_packed_output.bin    (T_PADDED * kH float32) (this driver)
+ *   ../output/golden_scratch.bin          (T_PADDED * kF float16; post-ReLU; debug)
  */
 
 #include "test_common.h"
@@ -26,19 +26,22 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <string>
 #include <vector>
 
 using namespace std;
 using namespace PtoTestCommon;
 
+// Non-template FP16 wrapper exposed by the kernel TU; host never names `half`.
+// See compile_error_logbook.md §E13.
 extern "C" void launchMoeSegmentedFfnTop1Fp16(uint8_t *packed_output,
-                                               uint8_t *hidden_scratch,
-                                               uint8_t *packed_tokens,
-                                               int32_t *expert_count,
-                                               int32_t *expert_start,
-                                               uint8_t *w1,
-                                               uint8_t *w2,
-                                               void *stream);
+                                              uint8_t *packed_tokens,
+                                              int32_t *expert_count,
+                                              int32_t *expert_start,
+                                              uint8_t *w1,
+                                              uint8_t *w2,
+                                              uint8_t *scratch,
+                                              void    *stream);
 
 static int ReadTPadded()
 {
@@ -65,13 +68,7 @@ inline bool ValidateDataResults(size_t outFileSize)
     ReadFile("../output/golden_packed_output.bin", outFileSize, golden.data(),   outFileSize);
     ReadFile("../output/output_packed_output.bin", outFileSize, devFinal.data(), outFileSize);
 
-    // Wider tolerance than §A17 because the FP32->FP16 cast of the hidden
-    // state can introduce one ULP of difference at the rounding boundary
-    // (golden mimics it exactly; if device differs from golden's cast,
-    // small residuals propagate through the second GEMM). For the
-    // integer-valued [-3, 4] input distribution the result should still be
-    // bit-exact, but 1e-2 is comfortably above any plausible drift.
-    bool ret = ResultCmp(golden, devFinal, 0.01f);
+    bool ret = ResultCmp(golden, devFinal, 0.001f);
     if (ret) {
         printf("test data success\n");
     } else {
@@ -82,29 +79,29 @@ inline bool ValidateDataResults(size_t outFileSize)
 
 int main()
 {
-    constexpr int kH      = 64;
-    constexpr int kF      = 64;
-    constexpr int kO      = 64;
-    constexpr int kE      = 4;
-    constexpr int kTileM  = 128;
+    constexpr int kH = 64;
+    constexpr int kF = 64;
+    constexpr int kE = 4;
     constexpr size_t halfBytes  = 2;
     constexpr size_t floatBytes = 4;
     constexpr size_t int32Bytes = 4;
 
     const int T_padded = ReadTPadded();
-    size_t packedTokensBytes = static_cast<size_t>(T_padded) * kH * halfBytes;
-    size_t packedOutputBytes = static_cast<size_t>(T_padded) * kO * floatBytes;
+    size_t packedTokensBytes = static_cast<size_t>(T_padded) * kH * halfBytes;   // FP16
+    size_t packedOutputBytes = static_cast<size_t>(T_padded) * kH * floatBytes;  // FP32
     size_t w1Bytes           = static_cast<size_t>(kE) * kH * kF * halfBytes;
-    size_t w2Bytes           = static_cast<size_t>(kE) * kF * kO * halfBytes;
+    size_t w2Bytes           = static_cast<size_t>(kE) * kF * kH * halfBytes;
+    size_t scratchBytes      = static_cast<size_t>(T_padded) * kF * halfBytes;   // FP16
     size_t expertMetaBytes   = static_cast<size_t>(kE) * int32Bytes;
-    size_t hiddenScratchBytes = static_cast<size_t>(kTileM) * kF * halfBytes;
 
-    printf("[main] T_padded=%d  H=%d  F=%d  O=%d  E=%d  TILE_M=%d\n"
+    printf("[main] T_padded=%d  kH=%d  kF=%d  kE=%d\n"
            "       packedTokensBytes=%zu  packedOutputBytes=%zu\n"
-           "       w1Bytes=%zu  w2Bytes=%zu  expertMetaBytes=%zu  hiddenScratchBytes=%zu\n",
-           T_padded, kH, kF, kO, kE, kTileM,
+           "       w1Bytes=%zu  w2Bytes=%zu  scratchBytes=%zu\n"
+           "       expertMetaBytes=%zu\n",
+           T_padded, kH, kF, kE,
            packedTokensBytes, packedOutputBytes,
-           w1Bytes, w2Bytes, expertMetaBytes, hiddenScratchBytes);
+           w1Bytes, w2Bytes, scratchBytes,
+           expertMetaBytes);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -116,9 +113,8 @@ int main()
     int32_t *countHost = nullptr, *startHost = nullptr;
 
     uint8_t *tokensDev = nullptr, *outputDev = nullptr;
-    uint8_t *w1Dev = nullptr, *w2Dev = nullptr;
+    uint8_t *w1Dev = nullptr, *w2Dev = nullptr, *scratchDev = nullptr;
     int32_t *countDev = nullptr, *startDev = nullptr;
-    uint8_t *hiddenScratchDev = nullptr;
 
     aclrtMallocHost((void **)(&tokensHost), packedTokensBytes);
     aclrtMallocHost((void **)(&outputHost), packedOutputBytes);
@@ -127,14 +123,13 @@ int main()
     aclrtMallocHost((void **)(&countHost),  expertMetaBytes);
     aclrtMallocHost((void **)(&startHost),  expertMetaBytes);
 
-    aclrtMalloc((void **)&tokensDev,        packedTokensBytes,   ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&outputDev,        packedOutputBytes,   ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&w1Dev,            w1Bytes,             ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&w2Dev,            w2Bytes,             ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&countDev,         expertMetaBytes,     ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&startDev,         expertMetaBytes,     ACL_MEM_MALLOC_HUGE_FIRST);
-    // hidden_scratch: device-only; no host counterpart needed.
-    aclrtMalloc((void **)&hiddenScratchDev, hiddenScratchBytes,  ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&tokensDev,  packedTokensBytes, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&outputDev,  packedOutputBytes, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&w1Dev,      w1Bytes,           ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&w2Dev,      w2Bytes,           ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&scratchDev, scratchBytes,      ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&countDev,   expertMetaBytes,   ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&startDev,   expertMetaBytes,   ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile("../input/input_packed_tokens.bin", packedTokensBytes, tokensHost, packedTokensBytes);
     ReadFile("../input/input_expert_count.bin",  expertMetaBytes,   countHost,  expertMetaBytes);
@@ -147,20 +142,21 @@ int main()
     aclrtMemcpy(w2Dev,     w2Bytes,           w2Host,     w2Bytes,           ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(countDev,  expertMetaBytes,   countHost,  expertMetaBytes,   ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(startDev,  expertMetaBytes,   startHost,  expertMetaBytes,   ACL_MEMCPY_HOST_TO_DEVICE);
-    // hidden_scratch contents are don't-care on entry; the kernel always
-    // writes a full TILE_M*F tile via TSTORE before reading it back via TLOAD.
 
-    launchMoeSegmentedFfnTop1Fp16(outputDev, hiddenScratchDev, tokensDev,
-                                   countDev, startDev, w1Dev, w2Dev, stream);
+    // scratchDev is kernel-managed; the kernel writes before it reads.
+
+    launchMoeSegmentedFfnTop1Fp16(
+        outputDev, tokensDev, countDev, startDev,
+        w1Dev, w2Dev, scratchDev, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(outputHost, packedOutputBytes, outputDev, packedOutputBytes, ACL_MEMCPY_DEVICE_TO_HOST);
 
     WriteFile("../output/output_packed_output.bin", outputHost, packedOutputBytes);
 
-    aclrtFree(hiddenScratchDev);
     aclrtFree(startDev);
     aclrtFree(countDev);
+    aclrtFree(scratchDev);
     aclrtFree(w2Dev);
     aclrtFree(w1Dev);
     aclrtFree(outputDev);
