@@ -28,10 +28,10 @@ PTO_INTERNAL void runTColCMax(__gm__ uint32_t __out__ *out, __gm__ T __in__ *src
 
     using SrcTileData = Tile<TileType::Vec, T, srcRow, col, BLayout::RowMajor, -1, -1>;
     using DstTileData = Tile<TileType::Vec, uint32_t, dstRow, dstCol, BLayout::RowMajor, -1, -1>;
-    using TmpTile = Tile<TileType::Vec, T, 1, 32, BLayout::RowMajor, -1, -1>;
+    using TmpTile = Tile<TileType::Vec, T, 1, 64, BLayout::RowMajor, -1, -1>;
     SrcTileData srcTile(srcValidRow, validCol);
     DstTileData dstTile(dstRow, validCol);
-    TmpTile tmpTile(1, 32);
+    TmpTile tmpTile(1, 64);
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, srcRow * col * sizeof(T));
     TASSIGN(tmpTile, srcRow * col * sizeof(T) + dstCol * sizeof(uint32_t));
@@ -39,11 +39,15 @@ PTO_INTERNAL void runTColCMax(__gm__ uint32_t __out__ *out, __gm__ T __in__ *src
     // 搬运数据
     TLOAD(srcTile, srcGlobal);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
     TCOLARGMAX(dstTile, srcTile, tmpTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
 }
