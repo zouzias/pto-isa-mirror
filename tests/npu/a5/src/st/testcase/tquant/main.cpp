@@ -12,7 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "acl/acl.h"
 #include "test_common.h"
 
-#define DIV_ROUNDUP(a, b) (((a) + (b)-1) / (b))
+#define DIV_ROUNDUP(a, b) (((a) + (b) - 1) / (b))
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -21,6 +21,7 @@ namespace pto {
 enum class QuantType
 {
     MXFP8,
+    MXFP4_E2M1,
     INT8_SYM,
     INT8_ASYM
 };
@@ -41,6 +42,12 @@ void LaunchTQuantMXFP8_BF16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void 
 template <int validRows, int validCols, int mode>
 void LaunchTQuantMXFP8_FP16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
 
+template <int validRows, int validCols>
+void LaunchTQuantMXFP4_E2M1_FP16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
+
+template <int validRows, int validCols>
+void LaunchTQuantMXFP4_E2M1_BF16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
+
 class TQUANTTEST : public testing::Test {
 protected:
     void SetUp() override
@@ -58,55 +65,74 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <int validRows, int validCols, int mode>
-void test_tquant_mxfp8()
-{
-    constexpr int paddedCols = ((validCols + 31) / 32) * 32;
-    size_t srcFileSize = validRows * validCols * sizeof(float);
-    size_t dstExpFileSize = DIV_ROUNDUP(validRows * paddedCols, 32) * sizeof(uint8_t);
-    size_t dstFileSize = validRows * validCols * sizeof(uint8_t);
+template <typename SrcT>
+struct MxQuantBuffers {
+    uint8_t *dstHost;
+    uint8_t *dstDevice;
+    uint8_t *dstExpHost;
+    uint8_t *dstExpDevice;
+    SrcT *srcHost;
+    SrcT *srcDevice;
+    aclrtStream stream;
+};
 
+template <typename SrcT>
+void InitMxQuantBuffers(MxQuantBuffers<SrcT> &buffers, size_t srcFileSize, size_t dstFileSize, size_t dstExpFileSize)
+{
     aclInit(nullptr);
     aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
+    aclrtCreateStream(&buffers.stream);
 
-    uint8_t *dstHost, *dstDevice, *dstExpHost, *dstExpDevice;
-    float *srcHost, *srcDevice;
+    aclrtMallocHost((void **)(&buffers.dstHost), dstFileSize);
+    aclrtMallocHost((void **)(&buffers.dstExpHost), dstExpFileSize);
+    aclrtMallocHost((void **)(&buffers.srcHost), srcFileSize);
 
-    aclrtMallocHost((void **)(&dstHost), dstFileSize);
-    aclrtMallocHost((void **)(&dstExpHost), dstExpFileSize);
-    aclrtMallocHost((void **)(&srcHost), srcFileSize);
+    aclrtMalloc((void **)&buffers.dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&buffers.dstExpDevice, dstExpFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&buffers.srcDevice, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+}
 
-    aclrtMalloc((void **)&dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&dstExpDevice, dstExpFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+template <typename SrcT>
+void LoadMxQuantInput(MxQuantBuffers<SrcT> &buffers, size_t srcFileSize)
+{
+    ReadFile(GetGoldenDir() + "/input.bin", srcFileSize, buffers.srcHost, srcFileSize);
+    aclrtMemcpy(buffers.srcDevice, srcFileSize, buffers.srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+}
 
-    ReadFile(GetGoldenDir() + "/input.bin", srcFileSize, srcHost, srcFileSize);
-    aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+template <typename SrcT>
+bool StoreMxQuantOutput(MxQuantBuffers<SrcT> &buffers, size_t dstFileSize, size_t dstExpFileSize,
+                        const std::string &dstFileName)
+{
+    aclError syncRet = aclrtSynchronizeStream(buffers.stream);
+    if (syncRet != ACL_SUCCESS) {
+        ADD_FAILURE() << "aclrtSynchronizeStream failed (ret=" << syncRet << "): " << aclGetRecentErrMsg();
+        return false;
+    }
+    aclrtMemcpy(buffers.dstHost, dstFileSize, buffers.dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(buffers.dstExpHost, dstExpFileSize, buffers.dstExpDevice, dstExpFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
-    LaunchTQuantMXFP8<validRows, validCols, mode>(dstDevice, srcDevice, dstExpDevice, stream);
+    WriteFile(GetGoldenDir() + "/" + dstFileName, buffers.dstHost, dstFileSize);
+    WriteFile(GetGoldenDir() + "/output_e8m0.bin", buffers.dstExpHost, dstExpFileSize);
+    return true;
+}
 
-    aclError syncRet = aclrtSynchronizeStream(stream);
-    ASSERT_EQ(syncRet, ACL_SUCCESS) << "aclrtSynchronizeStream failed (ret=" << syncRet
-                                    << "): " << aclGetRecentErrMsg();
-    aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
-    aclrtMemcpy(dstExpHost, dstExpFileSize, dstExpDevice, dstExpFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+template <typename SrcT>
+void ReleaseMxQuantBuffers(MxQuantBuffers<SrcT> &buffers)
+{
+    aclrtFree((void *)buffers.dstDevice);
+    aclrtFree((void *)buffers.dstExpDevice);
+    aclrtFree((void *)buffers.srcDevice);
 
-    WriteFile(GetGoldenDir() + "/output_e4m3.bin", dstHost, dstFileSize);
-    WriteFile(GetGoldenDir() + "/output_e8m0.bin", dstExpHost, dstExpFileSize);
-
-    aclrtFree((void *)dstDevice);
-    aclrtFree((void *)dstExpDevice);
-    aclrtFree((void *)srcDevice);
-
-    aclrtFreeHost((void *)dstHost);
-    aclrtFreeHost((void *)dstExpHost);
-    aclrtFreeHost((void *)srcHost);
-    aclrtDestroyStream(stream);
+    aclrtFreeHost((void *)buffers.dstHost);
+    aclrtFreeHost((void *)buffers.dstExpHost);
+    aclrtFreeHost((void *)buffers.srcHost);
+    aclrtDestroyStream(buffers.stream);
     aclrtResetDevice(0);
     aclFinalize();
+}
 
+void CompareMxFp8Outputs(size_t dstFileSize, size_t dstExpFileSize)
+{
     std::vector<uint8_t> golden_fp8(dstFileSize);
     std::vector<uint8_t> dev_fp8(dstFileSize);
     std::vector<uint8_t> golden_e8m0(dstExpFileSize);
@@ -122,138 +148,98 @@ void test_tquant_mxfp8()
 
     EXPECT_TRUE(ret_e8m0);
     EXPECT_TRUE(ret_fp8);
+}
+
+void CompareMxFp4Outputs(size_t dstFileSize, size_t dstExpFileSize)
+{
+    std::vector<uint8_t> golden_fp4(dstFileSize);
+    std::vector<uint8_t> dev_fp4(dstFileSize);
+    std::vector<uint8_t> golden_e8m0(dstExpFileSize);
+    std::vector<uint8_t> dev_e8m0(dstExpFileSize);
+
+    ReadFile(GetGoldenDir() + "/golden_fp4.bin", dstFileSize, golden_fp4.data(), dstFileSize);
+    ReadFile(GetGoldenDir() + "/golden_e8m0.bin", dstExpFileSize, golden_e8m0.data(), dstExpFileSize);
+    ReadFile(GetGoldenDir() + "/output_e2m1.bin", dstFileSize, dev_fp4.data(), dstFileSize);
+    ReadFile(GetGoldenDir() + "/output_e8m0.bin", dstExpFileSize, dev_e8m0.data(), dstExpFileSize);
+
+    EXPECT_TRUE(ResultCmp<uint8_t>(golden_e8m0, dev_e8m0, 0.0f));
+    EXPECT_TRUE(ResultCmp<uint8_t>(golden_fp4, dev_fp4, 0.0f));
+}
+
+template <int validRows, int validCols, int mode, typename SrcT, typename LaunchFunc>
+void RunMxFp8Case(LaunchFunc launch)
+{
+    constexpr int paddedCols = ((validCols + 31) / 32) * 32;
+    size_t srcFileSize = validRows * validCols * sizeof(SrcT);
+    size_t dstExpFileSize = DIV_ROUNDUP(validRows * paddedCols, 32) * sizeof(uint8_t);
+    size_t dstFileSize = validRows * validCols * sizeof(uint8_t);
+
+    MxQuantBuffers<SrcT> buffers;
+    InitMxQuantBuffers(buffers, srcFileSize, dstFileSize, dstExpFileSize);
+    LoadMxQuantInput(buffers, srcFileSize);
+    launch(buffers.dstDevice, buffers.srcDevice, buffers.dstExpDevice, buffers.stream);
+    const bool stored = StoreMxQuantOutput(buffers, dstFileSize, dstExpFileSize, "output_e4m3.bin");
+    ReleaseMxQuantBuffers(buffers);
+    ASSERT_TRUE(stored);
+    CompareMxFp8Outputs(dstFileSize, dstExpFileSize);
+}
+
+template <int validRows, int validCols, typename LaunchFunc>
+void RunMxFp4E2M1Case(LaunchFunc launch)
+{
+    constexpr int paddedCols = ((validCols + 31) / 32) * 32;
+    size_t srcFileSize = validRows * validCols * sizeof(uint16_t);
+    size_t dstExpFileSize = DIV_ROUNDUP(validRows * paddedCols, 32) * sizeof(uint8_t);
+    size_t dstFileSize = validRows * DIV_ROUNDUP(validCols, 2) * sizeof(uint8_t);
+
+    MxQuantBuffers<uint16_t> buffers;
+    InitMxQuantBuffers(buffers, srcFileSize, dstFileSize, dstExpFileSize);
+    LoadMxQuantInput(buffers, srcFileSize);
+    launch(buffers.dstDevice, buffers.srcDevice, buffers.dstExpDevice, buffers.stream);
+    const bool stored = StoreMxQuantOutput(buffers, dstFileSize, dstExpFileSize, "output_e2m1.bin");
+    ReleaseMxQuantBuffers(buffers);
+    ASSERT_TRUE(stored);
+    CompareMxFp4Outputs(dstFileSize, dstExpFileSize);
+}
+
+template <int validRows, int validCols, int mode>
+void test_tquant_mxfp8()
+{
+    RunMxFp8Case<validRows, validCols, mode, float>([](uint8_t *dst, float *src, uint8_t *dstExp, void *stream) {
+        LaunchTQuantMXFP8<validRows, validCols, mode>(dst, src, dstExp, stream);
+    });
 }
 
 template <int validRows, int validCols, int mode>
 void test_tquant_mxfp8_bf16()
 {
-    constexpr int paddedCols = ((validCols + 31) / 32) * 32;
-    size_t srcFileSize = validRows * validCols * sizeof(uint16_t); // bf16 = 2 bytes
-    size_t dstExpFileSize = DIV_ROUNDUP(validRows * paddedCols, 32) * sizeof(uint8_t);
-    size_t dstFileSize = validRows * validCols * sizeof(uint8_t);
-
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-
-    uint8_t *dstHost, *dstDevice, *dstExpHost, *dstExpDevice;
-    uint16_t *srcHost, *srcDevice;
-
-    aclrtMallocHost((void **)(&dstHost), dstFileSize);
-    aclrtMallocHost((void **)(&dstExpHost), dstExpFileSize);
-    aclrtMallocHost((void **)(&srcHost), srcFileSize);
-
-    aclrtMalloc((void **)&dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&dstExpDevice, dstExpFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    ReadFile(GetGoldenDir() + "/input.bin", srcFileSize, srcHost, srcFileSize);
-    aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-
-    LaunchTQuantMXFP8_BF16<validRows, validCols, mode>(dstDevice, srcDevice, dstExpDevice, stream);
-
-    aclError syncRet = aclrtSynchronizeStream(stream);
-    ASSERT_EQ(syncRet, ACL_SUCCESS) << "aclrtSynchronizeStream failed (ret=" << syncRet
-                                    << "): " << aclGetRecentErrMsg();
-    aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
-    aclrtMemcpy(dstExpHost, dstExpFileSize, dstExpDevice, dstExpFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    WriteFile(GetGoldenDir() + "/output_e4m3.bin", dstHost, dstFileSize);
-    WriteFile(GetGoldenDir() + "/output_e8m0.bin", dstExpHost, dstExpFileSize);
-
-    aclrtFree((void *)dstDevice);
-    aclrtFree((void *)dstExpDevice);
-    aclrtFree((void *)srcDevice);
-
-    aclrtFreeHost((void *)dstHost);
-    aclrtFreeHost((void *)dstExpHost);
-    aclrtFreeHost((void *)srcHost);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
-
-    std::vector<uint8_t> golden_fp8(dstFileSize);
-    std::vector<uint8_t> dev_fp8(dstFileSize);
-    std::vector<uint8_t> golden_e8m0(dstExpFileSize);
-    std::vector<uint8_t> dev_e8m0(dstExpFileSize);
-
-    ReadFile(GetGoldenDir() + "/golden_fp8.bin", dstFileSize, golden_fp8.data(), dstFileSize);
-    ReadFile(GetGoldenDir() + "/golden_e8m0.bin", dstExpFileSize, golden_e8m0.data(), dstExpFileSize);
-    ReadFile(GetGoldenDir() + "/output_e4m3.bin", dstFileSize, dev_fp8.data(), dstFileSize);
-    ReadFile(GetGoldenDir() + "/output_e8m0.bin", dstExpFileSize, dev_e8m0.data(), dstExpFileSize);
-
-    bool ret_fp8 = ResultCmp<uint8_t>(golden_fp8, dev_fp8, 0.0f);
-    bool ret_e8m0 = ResultCmp<uint8_t>(golden_e8m0, dev_e8m0, 0.0f);
-
-    EXPECT_TRUE(ret_e8m0);
-    EXPECT_TRUE(ret_fp8);
+    RunMxFp8Case<validRows, validCols, mode, uint16_t>([](uint8_t *dst, uint16_t *src, uint8_t *dstExp, void *stream) {
+        LaunchTQuantMXFP8_BF16<validRows, validCols, mode>(dst, src, dstExp, stream);
+    });
 }
 
 template <int validRows, int validCols, int mode>
 void test_tquant_mxfp8_fp16()
 {
-    constexpr int paddedCols = ((validCols + 31) / 32) * 32;
-    size_t srcFileSize = validRows * validCols * sizeof(uint16_t); // fp16 = 2 bytes
-    size_t dstExpFileSize = DIV_ROUNDUP(validRows * paddedCols, 32) * sizeof(uint8_t);
-    size_t dstFileSize = validRows * validCols * sizeof(uint8_t);
+    RunMxFp8Case<validRows, validCols, mode, uint16_t>([](uint8_t *dst, uint16_t *src, uint8_t *dstExp, void *stream) {
+        LaunchTQuantMXFP8_FP16<validRows, validCols, mode>(dst, src, dstExp, stream);
+    });
+}
 
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
+template <int validRows, int validCols>
+void test_tquant_mxfp4_e2m1_fp16()
+{
+    RunMxFp4E2M1Case<validRows, validCols>([](uint8_t *dst, uint16_t *src, uint8_t *dstExp, void *stream) {
+        LaunchTQuantMXFP4_E2M1_FP16<validRows, validCols>(dst, src, dstExp, stream);
+    });
+}
 
-    uint8_t *dstHost, *dstDevice, *dstExpHost, *dstExpDevice;
-    uint16_t *srcHost, *srcDevice;
-
-    aclrtMallocHost((void **)(&dstHost), dstFileSize);
-    aclrtMallocHost((void **)(&dstExpHost), dstExpFileSize);
-    aclrtMallocHost((void **)(&srcHost), srcFileSize);
-
-    aclrtMalloc((void **)&dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&dstExpDevice, dstExpFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    ReadFile(GetGoldenDir() + "/input.bin", srcFileSize, srcHost, srcFileSize);
-    aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-
-    LaunchTQuantMXFP8_FP16<validRows, validCols, mode>(dstDevice, srcDevice, dstExpDevice, stream);
-
-    aclError syncRet = aclrtSynchronizeStream(stream);
-    ASSERT_EQ(syncRet, ACL_SUCCESS) << "aclrtSynchronizeStream failed (ret=" << syncRet
-                                    << "): " << aclGetRecentErrMsg();
-    aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
-    aclrtMemcpy(dstExpHost, dstExpFileSize, dstExpDevice, dstExpFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    WriteFile(GetGoldenDir() + "/output_e4m3.bin", dstHost, dstFileSize);
-    WriteFile(GetGoldenDir() + "/output_e8m0.bin", dstExpHost, dstExpFileSize);
-
-    aclrtFree((void *)dstDevice);
-    aclrtFree((void *)dstExpDevice);
-    aclrtFree((void *)srcDevice);
-
-    aclrtFreeHost((void *)dstHost);
-    aclrtFreeHost((void *)dstExpHost);
-    aclrtFreeHost((void *)srcHost);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
-
-    std::vector<uint8_t> golden_fp8(dstFileSize);
-    std::vector<uint8_t> dev_fp8(dstFileSize);
-    std::vector<uint8_t> golden_e8m0(dstExpFileSize);
-    std::vector<uint8_t> dev_e8m0(dstExpFileSize);
-
-    ReadFile(GetGoldenDir() + "/golden_fp8.bin", dstFileSize, golden_fp8.data(), dstFileSize);
-    ReadFile(GetGoldenDir() + "/golden_e8m0.bin", dstExpFileSize, golden_e8m0.data(), dstExpFileSize);
-    ReadFile(GetGoldenDir() + "/output_e4m3.bin", dstFileSize, dev_fp8.data(), dstFileSize);
-    ReadFile(GetGoldenDir() + "/output_e8m0.bin", dstExpFileSize, dev_e8m0.data(), dstExpFileSize);
-
-    bool ret_fp8 = ResultCmp<uint8_t>(golden_fp8, dev_fp8, 0.0f);
-    bool ret_e8m0 = ResultCmp<uint8_t>(golden_e8m0, dev_e8m0, 0.0f);
-
-    EXPECT_TRUE(ret_e8m0);
-    EXPECT_TRUE(ret_fp8);
+template <int validRows, int validCols>
+void test_tquant_mxfp4_e2m1_bf16()
+{
+    RunMxFp4E2M1Case<validRows, validCols>([](uint8_t *dst, uint16_t *src, uint8_t *dstExp, void *stream) {
+        LaunchTQuantMXFP4_E2M1_BF16<validRows, validCols>(dst, src, dstExp, stream);
+    });
 }
 
 template <int validRows, int validCols, int mode>
@@ -515,6 +501,74 @@ TEST_F(TQUANTTEST, case_mxfp8_fp16_4x256_nd)
 TEST_F(TQUANTTEST, case_mxfp8_fp16_11x640_nd)
 {
     test_tquant_mxfp8_fp16<11, 640, 0>();
+}
+
+// MXFP4 E2M1 FP16 ND
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_2x128_special_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_2x128_subnormal_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_2x128_rounding_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_2x128_exp_random_a_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_2x128_exp_random_b_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_2x128_mixed_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_32x1024_mixed_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<32, 1024>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_32x1024_normal_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<32, 1024>();
+}
+
+// MXFP4 E2M1 BF16 ND
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_2x128_special_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_2x128_subnormal_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_2x128_rounding_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_2x128_exp_random_a_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_2x128_exp_random_b_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_2x128_mixed_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_32x1024_mixed_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<32, 1024>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_32x1024_normal_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<32, 1024>();
 }
 
 TEST_F(TQUANTTEST, case_mxfp8_fp16_32x128_nz)
