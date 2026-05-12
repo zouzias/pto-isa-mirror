@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TROWPROD_HPP
@@ -13,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
+
 #include "TRowReduceOps.hpp"
 
 namespace pto {
@@ -52,7 +55,7 @@ __tf__ PTO_INTERNAL void TRowProd(typename TileDataOut::TileDType __out__ dst,
             pipe_barrier(PIPE_V);
         }
 
-        PtoSetWaitFlag<PIPE_V, PIPE_S>();
+        pipe_barrier(PIPE_ALL);
         if constexpr (std::is_same_v<T, float>) {
             dstPtr[0] = tmpPtr[0] * tmpPtr[1] * tmpPtr[2] * tmpPtr[3] * tmpPtr[4] * tmpPtr[5] * tmpPtr[6] * tmpPtr[7];
         } else if constexpr (std::is_same_v<T, half>) {
@@ -69,7 +72,6 @@ __tf__ PTO_INTERNAL void TRowProd(typename TileDataOut::TileDType __out__ dst,
         } else {
             static_assert(sizeof(T) == 0, "T must be float, half, int32, or int16");
         }
-        PtoSetWaitFlag<PIPE_S, PIPE_V>();
     }
 
     set_mask_norm();

@@ -13,8 +13,9 @@ full text of the License.
 #ifndef __PTO_TPRINT_A2A3__
 #define __PTO_TPRINT_A2A3__
 
-#include "pto/common/pto_tile.hpp"
 #include <type_traits>
+
+#include "pto/common/pto_tile.hpp"
 
 namespace pto {
 
@@ -95,7 +96,7 @@ PTO_INTERNAL void PrintHorizontalSeparator(int totalCols, int validCols)
         if constexpr (Format == PrintFormat::Width10_Precision6) {
             cce::printf("----------"); // 10 dashes to match %10 width
         } else {
-            cce::printf("--------"); // 8 dashes to match %8 width
+            cce::printf("--------");   // 8 dashes to match %8 width
         }
 
         if (j == validCols - 1 && validCols > 0 && validCols < totalCols) {
@@ -157,8 +158,9 @@ template <PrintFormat Format, typename T>
 PTO_INTERNAL void PrintGlobalTensorNZ(T *dataPtr, int n0, int n1, int n2, int n3, int n4, int s0, int s1, int s2,
                                       int s3, int s4)
 {
-    // Shape<1, Cols/(C0Size/sizeof(T)), Rows/FractalRow, FractalRow, C0Size/sizeof(T)>
-    // Stride<C*R, R*C0Size/sizeof(T), FractalRow*C0Size/sizeof(T), C0Size/sizeof(T), 1>
+    // Shape<1, Cols/(C0Size/sizeof(T)), Rows/FractalRow, FractalRow,
+    // C0Size/sizeof(T)> Stride<C*R, R*C0Size/sizeof(T),
+    // FractalRow*C0Size/sizeof(T), C0Size/sizeof(T), 1>
     int logical_rows = n2 * n3;
     int logical_cols = n1 * n4;
     cce::printf("  Logical Shape: [%d, %d]\n", logical_rows, logical_cols);
@@ -223,7 +225,9 @@ PTO_INTERNAL void TPRINT_IMPL(T &src)
         TPrintGlobalTensorImpl<Format, T>(src);
         return;
     } else {
-        static_assert(sizeof(T) == 0, "TPRINT: Only Vec Tile and GlobalTensor are supported without tmp buffer.");
+        static_assert(sizeof(T) == 0,
+                      "TPRINT: Only Vec Tile and GlobalTensor are supported "
+                      "without tmp buffer.");
     }
 }
 
