@@ -44,6 +44,12 @@
 #   ./input/input_w2.bin                  (kE * F * O float16)
 #   ./output/golden_packed_output.bin     (T_PADDED * O float32; final FFN out)
 #   ./output/golden_hidden_relu.bin       (T_PADDED * F float32; post-ReLU; debug)
+#   ./output/golden_hidden_fp16.bin       (T_PADDED * F float16; post-ReLU,
+#                                          cast to FP16 — what GEMM1's combined
+#                                          TSTORE<...,NormalRelu> store should
+#                                          produce. Consumed by the debug
+#                                          executable + compare_hidden_debug.py
+#                                          to isolate Assumption A.combined.)
 #   ./output/t_padded.txt                 (single int line; consumed by main.cpp)
 #   ./output/expert_count_real.bin        (kE        int32 )  debug only
 # --------------------------------------------------------------------------------
@@ -89,7 +95,8 @@ def gen_golden_data(kT, kH, kF, kO, kE, kTileM):
         cursor += rc
 
     # ---- Per-expert FFN (FP32 accumulator over FP16 inputs) ---------------
-    hidden_relu = np.zeros((T_padded, kF), dtype=np.float32)
+    hidden_relu      = np.zeros((T_padded, kF), dtype=np.float32)
+    hidden_relu_fp16 = np.zeros((T_padded, kF), dtype=np.float16)
     golden_packed_output = np.zeros((T_padded, kO), dtype=np.float32)
     for e in range(kE):
         s = int(expert_start_padded[e])
@@ -106,7 +113,8 @@ def gen_golden_data(kT, kH, kF, kO, kE, kTileM):
         H1_back = H1_fp16.astype(np.float32)                      # [c, F]
         W2 = w2[e, :, :].astype(np.float32)                       # [F, O]
         Y  = H1_back @ W2                                         # [c, O]
-        hidden_relu[s : s + c, :]            = H1_back
+        hidden_relu     [s : s + c, :]       = H1_back
+        hidden_relu_fp16[s : s + c, :]       = H1_fp16
         golden_packed_output[s : s + c, :]   = Y
 
     # ---- Save -------------------------------------------------------------
@@ -119,6 +127,10 @@ def gen_golden_data(kT, kH, kF, kO, kE, kTileM):
     w2.tofile("./input/input_w2.bin")
     golden_packed_output.tofile("./output/golden_packed_output.bin")
     hidden_relu.tofile("./output/golden_hidden_relu.bin")
+    # Reference for the debug executable / compare_hidden_debug.py: the
+    # exact byte pattern the device kernel's combined-mode TSTORE
+    # (FP32 Acc -> FP16 GM + ReLU) should produce.
+    hidden_relu_fp16.tofile("./output/golden_hidden_fp16.bin")
     with open("./output/t_padded.txt", "w") as f:
         f.write(f"{T_padded}\n")
     expert_count_real.tofile("./output/expert_count_real.bin")

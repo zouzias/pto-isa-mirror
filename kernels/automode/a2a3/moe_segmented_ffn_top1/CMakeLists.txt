@@ -103,3 +103,30 @@ function(pto_example_cube_auto NAME)
 endfunction()
 
 pto_example_cube_auto(moe_segmented_ffn_top1)
+
+# ----------------------------------------------------------------------------
+# Debug executable: links against the SAME kernel SHARED library
+# (`moe_segmented_ffn_top1_kernel`) but uses main_debug.cpp as its driver.
+# Launches launchMoeSegmentedFfnTop1DebugHiddenFp16 — runs only GEMM1 and
+# writes the full-size FP16 hidden state to ../output/debug_hidden_fp16.bin
+# so the host can isolate Assumption A.combined (FP32->FP16 + ReLU in one
+# TSTORE) from Assumption A.reuse (Mat/Left/Right/Acc tile reuse across
+# GEMM1/GEMM2 in the main FFN kernel).
+# ----------------------------------------------------------------------------
+add_executable(moe_segmented_ffn_top1_debug main_debug.cpp)
+target_compile_options(moe_segmented_ffn_top1_debug PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
+target_include_directories(moe_segmented_ffn_top1_debug PRIVATE
+    ${PROJECT_SOURCE_DIR}/../../../../include/
+    ${PROJECT_SOURCE_DIR}/../../../../tests/common
+)
+target_link_directories(moe_segmented_ffn_top1_debug PUBLIC
+    ${ASCEND_HOME_PATH}/lib64
+    ${ASCEND_HOME_PATH}/simulator/${SOC_VERSION}/lib
+    ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
+)
+target_link_libraries(moe_segmented_ffn_top1_debug PRIVATE
+    moe_segmented_ffn_top1_kernel
+    $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
+    $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
+    stdc++ ascendcl m tiling_api platform c_sec dl nnopbase pthread
+)

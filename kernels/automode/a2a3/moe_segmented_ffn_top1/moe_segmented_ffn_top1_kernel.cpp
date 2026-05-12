@@ -224,3 +224,126 @@ extern "C" void launchMoeSegmentedFfnTop1Fp16(uint8_t *packed_output,
         packed_output, hidden_scratch, packed_tokens,
         expert_count, expert_start, w1, w2, stream);
 }
+
+// ============================================================================
+// DEBUG variant — runs only GEMM1 + ReLU + FP32->FP16 down-cast and writes
+// the hidden state to a FULL-SIZE [T_PADDED, F] FP16 GM buffer (per-tile
+// offset, NOT a fixed reused scratch). Isolates Assumption A.combined
+// (the combined TSTORE<AccTile float, GlobalTensor half, AtomicNone,
+// NormalRelu> form) from Assumption A.reuse (tile-reuse between GEMM1
+// and GEMM2 in the main kernel).
+//
+// If the host-readable hidden_debug_out matches the Python FP16 golden,
+// A.combined is OK and the main-kernel failure is on the GEMM2 / tile-reuse
+// side. If hidden_debug_out is zero/wrong, A.combined is the culprit and
+// we need fallback F1 (FP32 hidden + separate cast) or F2 (no-ReLU store +
+// vec ReLU).
+//
+// Kernel body is IDENTICAL to the GEMM1 half of runMoeSegmentedFfnTop1
+// except the TSTORE destination is `hidden_debug_out + row * kF` instead
+// of a fixed offset-0 scratch. The two TSTOREs use the same template-arg
+// list (same combined-mode form). Same five cube tiles, same alignment,
+// same auto-mode constraints.
+// ============================================================================
+template <typename TOut, typename TIn, typename TWeight>
+__global__ AICORE void runMoeSegmentedFfnTop1DebugHidden(
+    __gm__ uint8_t *hidden_debug_out_raw,
+    __gm__ uint8_t *packed_tokens_raw,
+    __gm__ int32_t *expert_count,
+    __gm__ int32_t *expert_start,
+    __gm__ uint8_t *w1_raw)
+{
+    using namespace moe_segmented_ffn_top1_cfg;
+
+    __gm__ TIn     *hidden_debug_out = reinterpret_cast<__gm__ TIn     *>(hidden_debug_out_raw);
+    __gm__ TIn     *packed_tokens    = reinterpret_cast<__gm__ TIn     *>(packed_tokens_raw);
+    __gm__ TWeight *w1               = reinterpret_cast<__gm__ TWeight *>(w1_raw);
+
+    constexpr int blockAlign = C0_SIZE_BYTE / sizeof(TIn);
+    constexpr int M  = ((kTileM + 15) / 16) * 16;
+    constexpr int KH = ((kH + blockAlign - 1) / blockAlign) * blockAlign;
+    constexpr int N  = ((kF + blockAlign - 1) / blockAlign) * blockAlign;
+
+    using GlobalDataA1 =
+        GlobalTensor<TIn, Shape<1, 1, 1, kTileM, kH>,
+                     Stride<1 * kTileM * kH, 1 * kTileM * kH, kTileM * kH, kH, 1>>;
+    using GlobalDataB1 =
+        GlobalTensor<TWeight, Shape<1, 1, 1, kH, kF>,
+                     Stride<1 * kH * kF, 1 * kH * kF, kH * kF, kF, 1>>;
+    // Per-tile destination into the full-size hidden buffer.
+    using GlobalDataHiddenFp16PerTile =
+        GlobalTensor<TIn, Shape<1, 1, 1, kTileM, kF>,
+                     Stride<1 * kTileM * kF, 1 * kTileM * kF, kTileM * kF, kF, 1>>;
+
+    using TileMatAData = Tile<TileType::Mat, TIn,     M, KH, BLayout::ColMajor,
+                              kTileM, kH, SLayout::RowMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, TWeight, KH, N, BLayout::ColMajor,
+                              kH,     kF, SLayout::RowMajor, 512>;
+
+    using LeftTile  = TileLeft <TIn,     M,  KH, kTileM, kH>;
+    using RightTile = TileRight<TWeight, KH, N,  kH,     kF>;
+    // Use TOut = float here even though the user only ever reads the FP16
+    // hidden buffer back. AccTile<float> matches the main FFN kernel's
+    // GEMM1 accumulator dtype so the TSTORE template arg list is the
+    // SAME combined form we are trying to validate.
+    using AccTile = TileAcc<float, M, N, kTileM, kF>;
+
+    TileMatAData aMatTile;
+    TileMatBData bMatTile;
+    LeftTile     aTile;
+    RightTile    bTile;
+    AccTile      cTile;
+
+    for (unsigned e = 0; e < kNumExperts; ++e) {
+        int32_t start = expert_start[e];
+        int32_t count = expert_count[e];
+
+        GlobalDataB1 b1Global(w1 + static_cast<size_t>(e) * kH * kF);
+
+        for (int32_t m0 = 0; m0 < count; m0 += static_cast<int32_t>(kTileM)) {
+            size_t row  = static_cast<size_t>(start) + static_cast<size_t>(m0);
+            size_t aOff = row * kH;
+            size_t hOff = row * kF;   // PER-TILE offset (full-size buffer)
+
+            GlobalDataA1              a1Global(packed_tokens   + aOff);
+            GlobalDataHiddenFp16PerTile hGlobal(hidden_debug_out + hOff);
+
+            TLOAD(aMatTile, a1Global);
+            TLOAD(bMatTile, b1Global);
+            TMOV (aTile,  aMatTile);
+            TMOV (bTile,  bMatTile);
+            TMATMUL(cTile, aTile, bTile);
+            // The SAME combined TSTORE form the main kernel uses.
+            TSTORE<AccTile, GlobalDataHiddenFp16PerTile,
+                   AtomicType::AtomicNone, ReluPreMode::NormalRelu>(hGlobal, cTile);
+        }
+    }
+}
+
+template <typename TIn, typename TWeight>
+void launchMoeSegmentedFfnTop1DebugHidden(uint8_t *hidden_debug_out,
+                                          uint8_t *packed_tokens,
+                                          int32_t *expert_count,
+                                          int32_t *expert_start,
+                                          uint8_t *w1,
+                                          void *stream)
+{
+    runMoeSegmentedFfnTop1DebugHidden<float, TIn, TWeight><<<1, nullptr, stream>>>(
+        hidden_debug_out, packed_tokens, expert_count, expert_start, w1);
+}
+
+template void launchMoeSegmentedFfnTop1DebugHidden<half, half>(
+    uint8_t *hidden_debug_out, uint8_t *packed_tokens,
+    int32_t *expert_count, int32_t *expert_start,
+    uint8_t *w1, void *stream);
+
+extern "C" void launchMoeSegmentedFfnTop1DebugHiddenFp16(uint8_t *hidden_debug_out,
+                                                          uint8_t *packed_tokens,
+                                                          int32_t *expert_count,
+                                                          int32_t *expert_start,
+                                                          uint8_t *w1,
+                                                          void *stream)
+{
+    launchMoeSegmentedFfnTop1DebugHidden<half, half>(
+        hidden_debug_out, packed_tokens, expert_count, expert_start, w1, stream);
+}
