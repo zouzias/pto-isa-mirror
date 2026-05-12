@@ -112,9 +112,11 @@ PTO_INTERNAL void TCONCAT_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc
         dst.data(), src0.data(), src1.data(), dst.GetValidRow(), src0.GetValidCol(), src1.GetValidCol());
 }
 
-template <typename TileDst, typename TileSrc0, typename TileSrc1, typename TileSrc0Idx, typename TileSrc1Idx>
+template <typename TileDst, typename TileSrc0, typename TileSrc1, typename TileDstIdx, typename TileSrc0Idx,
+          typename TileSrc1Idx, bool NeetCntDstIdx = false>
 __tf__ PTO_INTERNAL void TConcatIdx(typename TileDst::TileDType __out__ dst, typename TileSrc0::TileDType __in__ src0,
                                     typename TileSrc1::TileDType __in__ src1,
+                                    typename TileDstIdx::TileDType __out__ dstIdx,
                                     typename TileSrc0Idx::TileDType __in__ idx0,
                                     typename TileSrc1Idx::TileDType __in__ idx1, unsigned validRow,
                                     unsigned dstValidCol)
@@ -127,6 +129,11 @@ __tf__ PTO_INTERNAL void TConcatIdx(typename TileDst::TileDType __out__ dst, typ
     __ubuf__ dataType *src1Ptr = (__ubuf__ dataType *)__cce_get_tile_ptr(src1);
     __ubuf__ idxType *idx0Ptr = (__ubuf__ idxType *)__cce_get_tile_ptr(idx0);
     __ubuf__ idxType *idx1Ptr = (__ubuf__ idxType *)__cce_get_tile_ptr(idx1);
+    __ubuf__ idxType *dstIdxPtr = nullptr;
+
+    if constexpr (NeetCntDstIdx) {
+        dstIdxPtr = (__ubuf__ idxType *)__cce_get_tile_ptr(dstIdx);
+    }
 
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(dataType);
     constexpr unsigned dstStride = TileDst::RowStride;
@@ -134,6 +141,7 @@ __tf__ PTO_INTERNAL void TConcatIdx(typename TileDst::TileDType __out__ dst, typ
     constexpr unsigned src1Stride = TileSrc1::RowStride;
     constexpr unsigned idx0Stride = TileSrc0Idx::RowStride;
     constexpr unsigned idx1Stride = TileSrc1Idx::RowStride;
+    constexpr unsigned dstIdxStride = TileDstIdx::RowStride;
 
     __VEC_SCOPE__
     {
@@ -149,6 +157,14 @@ __tf__ PTO_INTERNAL void TConcatIdx(typename TileDst::TileDType __out__ dst, typ
         for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
             unsigned idx0Num = *(idx0Ptr + i * idx0Stride) / sizeof(idxType);
             unsigned idx1Num = *(idx1Ptr + i * idx1Stride) / sizeof(idxType);
+
+            if constexpr (NeetCntDstIdx) {
+                idxType dstIdxNum = ((idxType)(idx0Num + idx1Num)) < ((idxType)dstValidCol) ?
+                                        ((idxType)(idx0Num + idx1Num)) :
+                                        ((idxType)dstValidCol);
+                *(dstIdxPtr + i * dstIdxStride) = dstIdxNum * sizeof(idxType);
+            }
+
             unsigned sreg0 = idx0Num < dstValidCol ? idx0Num : dstValidCol;
             unsigned src1Col = dstValidCol > sreg0 ? dstValidCol - sreg0 : 0;
             unsigned sreg1 = idx1Num < src1Col ? idx1Num : src1Col;
@@ -174,7 +190,7 @@ __tf__ PTO_INTERNAL void TConcatIdx(typename TileDst::TileDType __out__ dst, typ
 }
 
 template <typename TileDst, typename TileSrc0, typename TileSrc1, typename TileSrc0Idx, typename TileSrc1Idx>
-PTO_INTERNAL void TCONCAT_IMPL(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1, TileSrc0Idx &src0Idx, TileSrc1Idx &src1Idx)
+PTO_INTERNAL void TConcatIdxCheck()
 {
     using dataType = typename TileDst::DType;
     using idxType = typename TileSrc0Idx::DType;
@@ -199,6 +215,12 @@ PTO_INTERNAL void TCONCAT_IMPL(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1, Til
                       std::is_same<idxType, int8_t>::value || std::is_same<idxType, uint32_t>::value ||
                       std::is_same<idxType, uint16_t>::value || std::is_same<idxType, uint8_t>::value,
                   "TCONCAT: Invalid data type of src0Idx.");
+}
+
+template <typename TileDst, typename TileSrc0, typename TileSrc1, typename TileSrc0Idx, typename TileSrc1Idx>
+PTO_INTERNAL void TCONCAT_IMPL(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1, TileSrc0Idx &src0Idx, TileSrc1Idx &src1Idx)
+{
+    TConcatIdxCheck<TileDst, TileSrc0, TileSrc1, TileSrc0Idx, TileSrc1Idx>();
 
     unsigned validRow = dst.GetValidRow();
     unsigned dstValidCol = dst.GetValidCol();
@@ -206,8 +228,28 @@ PTO_INTERNAL void TCONCAT_IMPL(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1, Til
     PTO_ASSERT(validRow == src0.GetValidRow(), "TCONCAT: validRow of src0 must match dst.");
     PTO_ASSERT(validRow == src1.GetValidRow(), "TCONCAT: validRow of src1 must match dst.");
 
-    TConcatIdx<TileDst, TileSrc0, TileSrc1, TileSrc0Idx, TileSrc1Idx>(
-        dst.data(), src0.data(), src1.data(), src0Idx.data(), src1Idx.data(), validRow, dstValidCol);
+    TConcatIdx<TileDst, TileSrc0, TileSrc1, TileSrc0Idx, TileSrc0Idx, TileSrc1Idx>(
+        dst.data(), src0.data(), src1.data(), src0Idx.data(), src0Idx.data(), src1Idx.data(), validRow, dstValidCol);
+}
+
+template <typename TileDst, typename TileSrc0, typename TileSrc1, typename TileDstIdx, typename TileSrc0Idx,
+          typename TileSrc1Idx>
+PTO_INTERNAL void TCONCAT_IMPL(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1, TileDstIdx &dstIdx, TileSrc0Idx &src0Idx,
+                               TileSrc1Idx &src1Idx)
+{
+    TConcatIdxCheck<TileDst, TileSrc0, TileSrc1, TileSrc0Idx, TileSrc1Idx>();
+    static_assert(std::is_same<typename TileSrc0Idx::DType, typename TileDstIdx::DType>::value,
+                  "TONCAT: Data type of src0Idx and dstIdx must be the same");
+
+    unsigned validRow = dst.GetValidRow();
+    unsigned dstValidCol = dst.GetValidCol();
+
+    PTO_ASSERT(validRow == src0.GetValidRow(), "TCONCAT: validRow of src0 must match dst.");
+    PTO_ASSERT(validRow == src1.GetValidRow(), "TCONCAT: validRow of src1 must match dst.");
+    PTO_ASSERT(dstIdx.GetValidRow() == 1, "TCONCAT: validCol of src1 must match 1.");
+
+    TConcatIdx<TileDst, TileSrc0, TileSrc1, TileDstIdx, TileSrc0Idx, TileSrc1Idx, true>(
+        dst.data(), src0.data(), src1.data(), dstIdx.data(), src0Idx.data(), src1Idx.data(), validRow, dstValidCol);
 }
 } // namespace pto
 #endif
