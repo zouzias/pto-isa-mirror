@@ -27,31 +27,9 @@ PTO_INTERNAL void TExtract_Impl(DstTileData &dst, SrcTileData &src, uint32_t idx
     using S = typename SrcTileData::DType;
 
     for (size_t c = 0; c < dst.GetValidCol(); c++) {
-        const size_t subTileDstC = c / DstTileData::InnerCols;
-        const size_t innerDstC = c % DstTileData::InnerCols;
-        const size_t cSrc = c + idxCol;
-        const size_t subTileSrcC = cSrc / SrcTileData::InnerCols;
-        const size_t innerSrcC = cSrc % SrcTileData::InnerCols;
-
         for (size_t r = 0; r < dst.GetValidRow(); r++) {
-            size_t srcTileIdx;
-            size_t dstTileIdx;
-            if constexpr (DstTileData::SFractal == SLayout::NoneBox) {
-                dstTileIdx = GetTileElementOffsetPlain<DstTileData>(r, c);
-            } else {
-                const size_t subTileR = r / DstTileData::InnerRows;
-                const size_t innerR = r % DstTileData::InnerRows;
-                dstTileIdx = GetTileElementOffsetSubfractals<DstTileData>(subTileR, innerR, subTileDstC, innerDstC);
-            }
-            const size_t rSrc = r + idxRow;
-
-            if constexpr (SrcTileData::SFractal == SLayout::NoneBox) {
-                srcTileIdx = GetTileElementOffsetPlain<SrcTileData>(rSrc, cSrc);
-            } else {
-                const size_t subTileR = rSrc / SrcTileData::InnerRows;
-                const size_t innerR = rSrc % SrcTileData::InnerRows;
-                srcTileIdx = GetTileElementOffsetSubfractals<SrcTileData>(subTileR, innerR, subTileSrcC, innerSrcC);
-            }
+            size_t srcTileIdx = GetTileElementOffset<SrcTileData>(r + idxRow, c + idxCol);
+            size_t dstTileIdx = GetTileElementOffset<DstTileData>(r, c); 
             if constexpr (quantMode != QuantModeCPU_t::NoQuant) {
                 uint64_t scalar = scalars[c];
                 dst.data()[dstTileIdx] = quantize_element<D, S, quantMode, applyRelu>(src.data()[srcTileIdx], scalar);
