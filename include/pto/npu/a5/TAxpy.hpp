@@ -31,7 +31,8 @@ PTO_INTERNAL static void CallAxpy(RegTensor<T> &reg_dst, RegTensor<U> &reg_src0,
 }
 
 template <typename T, typename U, unsigned elementsPerRepeat, unsigned dstRowStride, unsigned srcRowStride>
-PTO_INTERNAL void AxpyInstr(__ubuf__ T *dstPtr, __ubuf__ U *src0Ptr, U scalar, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void AxpyInstr(__ubuf__ T *dstPtr, __ubuf__ U *src0Ptr, U scalar, unsigned validRow, unsigned validCol,
+                            VFImplKind version)
 {
     uint16_t repeatTimes = CeilDivision(validCol, elementsPerRepeat);
 
@@ -62,14 +63,18 @@ PTO_INTERNAL void AxpyInstr(__ubuf__ T *dstPtr, __ubuf__ U *src0Ptr, U scalar, u
 
 template <typename TileDataDst, typename TileDataSrc, unsigned elementsPerRepeat, unsigned dstRowStride,
           unsigned src0RowStride>
-__tf__ PTO_INTERNAL void TAxpy(typename TileDataDst::TileDType __out__ dst, typename TileDataSrc::TileDType __in__ src0,
-                               typename TileDataSrc::DType scalar, unsigned validRow, unsigned validCol)
+__tf__ PTO_INTERNAL OP_NAME(TAXPY)
+    OP_TYPE(element_wise) void TAxpy(typename TileDataDst::TileDType __out__ dst,
+                                     typename TileDataSrc::TileDType __in__ src0, typename TileDataSrc::DType scalar,
+                                     unsigned validRow, unsigned validCol,
+                                     VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
 {
     using T = typename TileDataDst::DType;
     using U = typename TileDataSrc::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ U *src0Ptr = (__ubuf__ U *)__cce_get_tile_ptr(src0);
-    AxpyInstr<T, U, elementsPerRepeat, dstRowStride, src0RowStride>(dstPtr, src0Ptr, scalar, validRow, validCol);
+    AxpyInstr<T, U, elementsPerRepeat, dstRowStride, src0RowStride>(dstPtr, src0Ptr, scalar, validRow, validCol,
+                                                                    version);
 }
 
 template <typename TileDataDst, typename TileDataSrc>
