@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TAXPY_HPP
@@ -13,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
+
 #include "common.hpp"
 #include "utils.hpp"
 
@@ -53,7 +56,7 @@ PTO_INTERNAL void AxpyInstr(__ubuf__ T *dstPtr, __ubuf__ U *src0Ptr, U scalar, u
                 vlds(vreg2, dstPtr, i * dstRowStride + j * elementsPerRepeat, NORM);
                 uint32_t count =
                     ((j + 1) * elementsPerRepeat >= validCol ? validCol - j * elementsPerRepeat : elementsPerRepeat);
-                preg = CreatePredicate<T>(count);
+                preg = CreatePredicate<U>(count);
                 CallAxpy<T, U>(vreg2, vreg0, scalar, preg);
                 vsts(vreg2, dstPtr, i * dstRowStride + j * elementsPerRepeat, distValue, preg);
             }
@@ -85,7 +88,8 @@ PTO_INTERNAL void TAXPY_IMPL(TileDataDst &dst, TileDataSrc &src0, typename TileD
     static_assert(std::is_same_v<T, half> || std::is_same_v<T, float> || std::is_same_v<T, bfloat16_t>,
                   "TAXPY: Invalid data type");
     static_assert(std::is_same_v<T, U> || (std::is_same_v<T, float> && std::is_same_v<U, half>),
-                  "TAXPY: The data type of dst must be consistent with src or dst is float while src is half.");
+                  "TAXPY: The data type of dst must be consistent with src or "
+                  "dst is float while src is half.");
 
     static_assert(TileDataDst::Loc == TileType::Vec, "TileType of dst tiles must be TileType::Vec.");
 

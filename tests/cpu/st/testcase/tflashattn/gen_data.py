@@ -63,4 +63,3 @@ if __name__ == "__main__":
 
     for case in cases:
         gen_case(case, seq_len=seq_len, head_dim=head_dim, seed=seed, init_scale=init_scale)
-

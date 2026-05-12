@@ -18,7 +18,7 @@ $$\mathrm{dst}_{d_0, d_1, d_2,\; r \cdot H + i,\; j} = \mathrm{src}^{(r)}_{d_0, 
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [PTO ISA 语法与操作数](../syntax-and-operands/assembly-model_zh.md)。
 
 同步形式：
 
@@ -46,20 +46,21 @@ PTO_INST RecordEvent TGATHER(ParallelGroupType &parallelGroup, GlobalDstData &ds
 
 ## 约束
 
-- **类型约束**：
-    - `ParallelGroup::value_type::RawDType` 必须等于 `GlobalDstData::RawDType`。
-    - `TileData::DType` 必须等于 `GlobalDstData::RawDType`。
-- **内存约束**：
-    - `dstGlobalData` 必须指向本地内存（当前 NPU），且足够容纳所有 rank 拼接后的结果。具体要求：`dstGlobalData.GetShape(DIM_3)` 必须 $\geq N \times H$，其中 $H$ 为每个 rank 的 `GetShape(DIM_3)`。
-    - 若 `dstGlobalData.GetShape(DIM_3) > N × H`，则只写入前 `N × H` 行，其余行保持不变。
-    - `stagingTileData`（或 `pingTile` / `pongTile`）必须预先在 UB 中分配。
-- **ParallelGroup 约束**：
-    - `parallelGroup.tensors[r]` 必须指向 rank `r` 的源缓冲区（从根节点视角看到的远端 GM）。
-    - `parallelGroup.GetRootIdx()` 标识调用方 NPU 为 gather 根节点。
-    - 所有源 tensor 假定具有相同的形状和步幅；否则行为未定义。
-- **分块模式约束**（源数据超出单个 UB Tile 时）：
-    - 若 `TileData` 具有静态 `ValidRow`，则每个 rank 源数据的 `GetShape(DIM_3)` 必须能被 `ValidRow` 整除。如需支持不足一行的情况，请使用 `DYNAMIC` ValidRow 的 Tile。
-    - 若 `TileData` 具有静态 `ValidCol`，则 `GetShape(DIM_4)` 必须能被 `ValidCol` 整除。如需支持不足一列的情况，请使用 `DYNAMIC` ValidCol 的 Tile。
+!!! warning "约束"
+    - **类型约束**：
+        - `ParallelGroup::value_type::RawDType` 必须等于 `GlobalDstData::RawDType`。
+        - `TileData::DType` 必须等于 `GlobalDstData::RawDType`。
+    - **内存约束**：
+        - `dstGlobalData` 必须指向本地内存（当前 NPU），且足够容纳所有 rank 拼接后的结果。具体要求：`dstGlobalData.GetShape(DIM_3)` 必须 $\geq N \times H$，其中 $H$ 为每个 rank 的 `GetShape(DIM_3)`。
+        - 若 `dstGlobalData.GetShape(DIM_3) > N × H`，则只写入前 `N × H` 行，其余行保持不变。
+        - `stagingTileData`（或 `pingTile` / `pongTile`）必须预先在 UB 中分配。
+    - **ParallelGroup 约束**：
+        - `parallelGroup.tensors[r]` 必须指向 rank `r` 的源缓冲区（从根节点视角看到的远端 GM）。
+        - `parallelGroup.GetRootIdx()` 标识调用方 NPU 为 gather 根节点。
+        - 所有源 tensor 假定具有相同的形状和步幅；否则行为未定义。
+    - **分块模式约束**（源数据超出单个 UB Tile 时）：
+        - 若 `TileData` 具有静态 `ValidRow`，则每个 rank 源数据的 `GetShape(DIM_3)` 必须能被 `ValidRow` 整除。如需支持不足一行的情况，请使用 `DYNAMIC` ValidRow 的 Tile。
+        - 若 `TileData` 具有静态 `ValidCol`，则 `GetShape(DIM_4)` 必须能被 `ValidCol` 整除。如需支持不足一列的情况，请使用 `DYNAMIC` ValidCol 的 Tile。
 
 ## 示例
 
