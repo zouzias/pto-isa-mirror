@@ -87,6 +87,12 @@ constexpr unsigned kF          = 64;   // FFN intermediate dim (GEMM1 N = GEMM2 
 constexpr unsigned kTileM      = 128;  // M dim per cube tile
 constexpr unsigned kNumExperts = 4;    // experts (compile-time)
 
+// Debug toggle (stage isolation). When true, GEMM2 / TSTORE-to-output is
+// skipped — the kernel only runs GEMM1 + ReLU + TSTORE-to-FP16-scratch.
+// Use this together with main.cpp's poison-then-compare to confirm whether
+// the GEMM1 → scratch stage is the failing one. Default OFF.
+constexpr bool kStopAfterGemm1 = false;
+
 }  // namespace moe_segmented_ffn_top1_cfg
 
 template <typename TOut, typename TIn, typename TWeight, typename TScratch>
@@ -214,14 +220,19 @@ __global__ AICORE void runMoeSegmentedFfnTop1(
             // ============================================================
             // GEMM2: scratch (FP16) @ w2[e] (FP16) -> Acc<float> -> packed_output (FP32)
             // ============================================================
-            TLOAD(a2MatTile, a2Global);
-            TLOAD(b2MatTile, b2Global);
-            TMOV(a2Tile, a2MatTile);
-            TMOV(b2Tile, b2MatTile);
-            TMATMUL(c2Tile, a2Tile, b2Tile);
+            if constexpr (!kStopAfterGemm1) {
+                TLOAD(a2MatTile, a2Global);
+                TLOAD(b2MatTile, b2Global);
+                TMOV(a2Tile, a2MatTile);
+                TMOV(b2Tile, b2MatTile);
+                TMATMUL(c2Tile, a2Tile, b2Tile);
 
-            // L0C -> GM, plain FP32 store (no ReLU on the FFN output).
-            TSTORE(c2Global, c2Tile);
+                // L0C -> GM, plain FP32 store (no ReLU on the FFN output).
+                TSTORE(c2Global, c2Tile);
+            }
+            // If kStopAfterGemm1 is true: packed_output remains at the
+            // host-poisoned pattern (0x5A bytes). compare_outputs.py will
+            // call that out so we can attribute the failure to GEMM1 vs GEMM2.
         }
     }
 }
