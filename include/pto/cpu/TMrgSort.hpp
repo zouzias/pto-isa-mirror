@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TMRGSORT_HPP
@@ -14,8 +16,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <type_traits>
 #include <pto/common/pto_tile.hpp>
+#include <type_traits>
+
 #include "pto/cpu/tile_offsets.hpp"
 
 namespace pto {
@@ -178,7 +181,8 @@ PTO_INTERNAL void TMrgsort(typename DstTileData::TileDType dst, typename TmpTile
     WriteExhaused(i0, i1, i2, i3, mrgSortList0, mrgSortList1, mrgSortList2, mrgSortList3);
 }
 
-// blockLen includes values + indexes/payload, e.g. 32 (value,idx) pairs -> blockLen=64 for float.
+// blockLen includes values + indexes/payload, e.g. 32 (value,idx) pairs ->
+// blockLen=64 for float.
 template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TMrgsort(typename DstTileData::TileDType dst, typename SrcTileData::TileDType src, uint32_t maxCols,
                            uint32_t blockLen)
@@ -294,7 +298,8 @@ PTO_INTERNAL void TMRGSORT_IMPL(DstTileData &dst, MrgSortExecutedNumList &execut
                               executedNumList.mrgSortList3, src0Col, src1Col, 0, 0);
 }
 
-// The blockLen size includes values and indexes, such as 32 values and indexes: blockLen=64
+// The blockLen size includes values and indexes, such as 32 values and indexes:
+// blockLen=64
 template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TMRGSORT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t blockLen)
 {

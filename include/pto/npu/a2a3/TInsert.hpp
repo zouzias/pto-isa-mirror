@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TINSERT_HPP
@@ -224,7 +226,8 @@ PTO_INTERNAL void CheckTInsertVecToVecND()
                   "TINSERT ND Vec->Vec : DstTile RowStride bytes must be 32-byte aligned.");
     if constexpr (!(SrcTileData::ValidRow == 1 && SrcTileData::ValidCol == 1)) {
         static_assert((SrcTileData::ValidCol * sizeof(T)) % sizeof(uint16_t) == 0,
-                      "TINSERT ND Vec->Vec : SrcTile ValidCol bytes must be at least 2-byte aligned.");
+                      "TINSERT ND Vec->Vec : SrcTile ValidCol bytes must be at "
+                      "least 2-byte aligned.");
     }
 }
 
@@ -243,7 +246,8 @@ PTO_INTERNAL void CheckTInsertVecToVecNZ()
     static_assert(DstTileData::Cols % kC0Size == 0, "TINSERT NZ Vec->Vec : DstTile Cols must be c0Size-aligned.");
     if constexpr (!(SrcTileData::ValidRow == 1 && SrcTileData::ValidCol == 1)) {
         static_assert((SrcTileData::ValidCol * sizeof(T)) % sizeof(uint16_t) == 0,
-                      "TINSERT NZ Vec->Vec : SrcTile ValidCol bytes must be at least 2-byte aligned.");
+                      "TINSERT NZ Vec->Vec : SrcTile ValidCol bytes must be at "
+                      "least 2-byte aligned.");
     }
 }
 
@@ -260,11 +264,14 @@ PTO_INTERNAL void TInsertVecToVecNDDispatch(DstTileData &dst, SrcTileData &src, 
         TInsertVecToVecNDScalar<T, DstTileData, SrcTileData>(dst.data(), src.data(), idxRow, idxCol);
     } else {
         PTO_ASSERT(idxCol * sizeof(T) % BLOCK_BYTE_SIZE == 0,
-                   "TINSERT ND Vec->Vec : indexCol bytes must be 32-byte aligned (A3 limitation).");
+                   "TINSERT ND Vec->Vec : indexCol bytes must be 32-byte aligned "
+                   "(A3 limitation).");
         PTO_ASSERT(idxRow + SrcTileData::ValidRow <= DstTileData::Rows,
-                   "TINSERT ND Vec->Vec : indexRow + srcValidRow exceeds destination rows!");
+                   "TINSERT ND Vec->Vec : indexRow + srcValidRow exceeds "
+                   "destination rows!");
         PTO_ASSERT(idxCol + SrcTileData::ValidCol <= DstTileData::Cols,
-                   "TINSERT ND Vec->Vec : indexCol + srcValidCol exceeds destination cols!");
+                   "TINSERT ND Vec->Vec : indexCol + srcValidCol exceeds "
+                   "destination cols!");
         uint16_t validRow = static_cast<uint16_t>(src.GetValidRow());
         uint16_t validCol = static_cast<uint16_t>(src.GetValidCol());
         if constexpr ((SrcTileData::ValidCol * sizeof(T)) % BLOCK_BYTE_SIZE == 0) {
@@ -291,7 +298,9 @@ PTO_INTERNAL void TInsertVecToVecNZDispatch(DstTileData &dst, SrcTileData &src, 
         TInsertVecToVecNZScalar<T, DstTileData, SrcTileData>(dst.data(), src.data(), idxRow, idxCol);
     } else {
         PTO_ASSERT(idxRow % FRACTAL_NZ_ROW == 0, "TINSERT NZ Vec->Vec : indexRow must be 16-aligned (A3 limitation).");
-        PTO_ASSERT(idxCol % kC0Size == 0, "TINSERT NZ Vec->Vec : indexCol must be c0Size-aligned (A3 limitation).");
+        PTO_ASSERT(idxCol % kC0Size == 0,
+                   "TINSERT NZ Vec->Vec : indexCol must be c0Size-aligned (A3 "
+                   "limitation).");
         uint16_t validRow = static_cast<uint16_t>(src.GetValidRow());
         uint16_t validCol = static_cast<uint16_t>(src.GetValidCol());
         PTO_ASSERT(idxRow + validRow <= DstTileData::Rows,
@@ -320,7 +329,8 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t inde
             TInsertVecToVecNZDispatch<DstTileData, SrcTileData>(dst, src, indexRow, indexCol);
         } else {
             static_assert(DstTileData::isRowMajor == SrcTileData::isRowMajor,
-                          "TINSERT Vec->Vec : Source and destination layout must match (both ND or both NZ).");
+                          "TINSERT Vec->Vec : Source and destination layout must "
+                          "match (both ND or both NZ).");
             static_assert(DstTileData::SFractal == SrcTileData::SFractal,
                           "TINSERT Vec->Vec : Source and destination SFractal must match.");
         }
