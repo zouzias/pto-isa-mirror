@@ -1,15 +1,17 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
 #include <pto/common/fifo.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace pto;
 
@@ -51,7 +53,8 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ uint64_t *ffts_addr, __gm__ O
     constexpr uint32_t VEC_N = (SplitAxis == TileSplitAxis::TILE_LEFT_RIGHT) ? (TILE_N / VEC_CORES) : TILE_N;
 
     constexpr uint16_t FLAG_ID = 0;
-    constexpr uint8_t FIFO_DEPTH = 1;
+    constexpr uint8_t FIFO_DEPTH = 2;
+    constexpr uint8_t FIFO_PERIOD = 1;
     // local fifo base used for TPOP of vector side(vecTileHalf)
     constexpr uint32_t localFiFoBase = 0x0;
 
@@ -73,7 +76,8 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ uint64_t *ffts_addr, __gm__ O
                                  pto::Stride<TOTAL_M * TILE_K, TOTAL_M * TILE_K, CASE_TILE_M * TILE_K, TILE_K, 1>>;
     using GlobalB = GlobalTensor<InT, pto::Shape<1, 1, 1, TILE_K, TILE_N>,
                                  pto::Stride<TILE_K * TILE_N, TILE_K * TILE_N, TILE_K * TILE_N, TILE_N, 1>>;
-    // Row stride is always TILE_N (full matrix width) so TILE_LEFT_RIGHT sub-tiles are accessed correctly
+    // Row stride is always TILE_N (full matrix width) so TILE_LEFT_RIGHT
+    // sub-tiles are accessed correctly
     using GlobalBias = GlobalTensor<OutT, pto::Shape<1, 1, 1, VEC_M, VEC_N>,
                                     pto::Stride<TOTAL_M * TILE_N, TOTAL_M * TILE_N, VEC_M * TILE_N, TILE_N, 1>>;
     using GlobalOut = GlobalTensor<OutT, pto::Shape<1, 1, 1, VEC_M, VEC_N>,
@@ -99,12 +103,15 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ uint64_t *ffts_addr, __gm__ O
         TASSIGN(bTile, 0x0);
         TASSIGN(accTile, 0x0);
 
-        set_flag(PIPE_FIX, PIPE_MTE2, EVENT_ID0);
+        set_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
+        set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+
         for (int m_tile = 0; m_tile < NUM_M_TILES; m_tile++) {
             GlobalA globalA(srcA + m_tile * CASE_TILE_M * TILE_K);
             GlobalB globalB(srcB);
 
-            wait_flag(PIPE_FIX, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
 
             TLOAD(aMatTile, globalA);
             TLOAD(bMatTile, globalB);
@@ -112,22 +119,33 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ uint64_t *ffts_addr, __gm__ O
             set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 
+            wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+
             TMOV(aTile, aMatTile);
             TMOV(bTile, bMatTile);
+
+            set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
 
             set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
             wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
 
+            wait_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
+
             TMATMUL(accTile, aTile, bTile);
+
+            set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
 
             set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
             wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
 
             TPUSH<MatPipe, AccTile, SplitAxis>(mPipe, accTile);
 
-            set_flag(PIPE_FIX, PIPE_MTE2, EVENT_ID0);
+            set_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
         }
-        wait_flag(PIPE_FIX, PIPE_MTE2, EVENT_ID0);
+
+        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+        wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+        wait_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
 
         pipe_barrier(PIPE_ALL);
     }
@@ -141,9 +159,11 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ uint64_t *ffts_addr, __gm__ O
 
         uint32_t subBlockIdx = get_subblockid();
 
-        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+        set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
+
         for (int m_tile = 0; m_tile < NUM_M_TILES; m_tile++) {
-            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
 
             TPOP<MatPipe, VecTileHalf, SplitAxis>(mPipe, vecTileHalf);
 
@@ -162,7 +182,11 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ uint64_t *ffts_addr, __gm__ O
             set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
+            wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+
             TADD(outTile, vecTileHalf, biasTile);
+
+            set_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
 
             set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -176,9 +200,11 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ uint64_t *ffts_addr, __gm__ O
             GlobalOut globalOut(out + outOffset);
             TSTORE(globalOut, outTile);
 
-            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
         }
-        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+
+        wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
+        wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
 
         pipe_barrier(PIPE_ALL);
     }

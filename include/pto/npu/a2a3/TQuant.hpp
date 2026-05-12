@@ -1,20 +1,22 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TQUANT_HPP
 #define TQUANT_HPP
 
-#include "pto/npu/a2a3/TRowExpandMul.hpp"
-#include "pto/npu/a2a3/TRowExpandAdd.hpp"
-#include "pto/npu/a2a3/TCvt.hpp"
 #include "pto/npu/a2a3/TAssign.hpp"
+#include "pto/npu/a2a3/TCvt.hpp"
+#include "pto/npu/a2a3/TRowExpandAdd.hpp"
+#include "pto/npu/a2a3/TRowExpandMul.hpp"
 
 namespace pto {
 
@@ -36,7 +38,8 @@ PTO_INTERNAL bool TQuantBuffersOverlap(TileA &a, TileB &b)
 }
 
 // Row-by-row s32→fp16 conversion for in-place aliased buffers with a tail.
-// Processes each row's head + tail atomically to avoid cross-row data corruption.
+// Processes each row's head + tail atomically to avoid cross-row data
+// corruption.
 template <typename TileDataCvtF16, typename TileDataCvtS32, int PadColsSrc>
 PTO_INTERNAL void TQuantCvtS32ToFp16RowByRow(TileDataCvtF16 &src_f16, TileDataCvtS32 &src_s32, uint32_t validRow)
 {
@@ -62,7 +65,8 @@ PTO_INTERNAL void TQuantCvtS32ToFp16RowByRow(TileDataCvtF16 &src_f16, TileDataCv
     }
 }
 
-// s32→fp16 dispatch: uses row-by-row when buffers overlap and there's a tail, otherwise TCVT.
+// s32→fp16 dispatch: uses row-by-row when buffers overlap and there's a tail,
+// otherwise TCVT.
 template <int PadColsSrc, typename TileDataCvtF16, typename TileDataCvtS32>
 PTO_INTERNAL void TQuantCvtS32ToFp16(TileDataCvtF16 &src_f16, TileDataCvtS32 &src_s32, uint32_t validRow)
 {
@@ -115,9 +119,11 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataPara &
 
     TCVT_IMPL(src_s32, src, RoundMode::CAST_RINT); // fp32->s32
     pipe_barrier(PIPE_V);
-    TQuantCvtS32ToFp16<PadColsSrc>(src_f16, src_s32, src.GetValidRow()); // s32->fp16
+    TQuantCvtS32ToFp16<PadColsSrc>(src_f16, src_s32,
+                                   src.GetValidRow()); // s32->fp16
     pipe_barrier(PIPE_V);
-    TCVT_IMPL(dst, src_f16, RoundMode::CAST_RINT, SaturationMode::ON); // fp16->int8
+    TCVT_IMPL(dst, src_f16, RoundMode::CAST_RINT,
+              SaturationMode::ON); // fp16->int8
     pipe_barrier(PIPE_V);
 }
 } // namespace pto
