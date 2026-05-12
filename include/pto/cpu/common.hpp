@@ -116,18 +116,19 @@ inline float extract_m1_from_quant(uint64_t quant)
 }
 
 template <typename DstType, typename SrcType, QuantModeCPU_t mode, bool use_relu>
-DstType quantize_element(SrcType src_val, uint64_t scalar)
+DstType   quantize_element(SrcType src_val, uint64_t scalar)
 {
+    uint64_t ctrl_bits = get_task_cookie();
     float f_scale = extract_m1_from_quant(scalar);
     uint32_t offset = static_cast<uint32_t>((scalar >> 37) & 0x1FF);
     uint32_t sign = static_cast<uint32_t>((scalar >> 46) & 0x1);
-    uint32_t saturate_inf = static_cast<uint32_t>((scalar >> 48) & 0x1);
+    uint32_t saturate_inf = static_cast<uint32_t>((ctrl_bits >> 48) & 0x1);
 
     float result_f = static_cast<float>(src_val) * f_scale;
 
     if constexpr (mode == QuantModeCPU_t::QF322B8_PRE || mode == QuantModeCPU_t::VQF322B8_PRE ||
                   mode == QuantModeCPU_t::REQ8 || mode == QuantModeCPU_t::VREQ8) {
-        float rounded = std::round(result_f + offset);
+        float rounded = std::nearbyint(result_f + offset);
         float min = sign == 1 ? -128.0f : 0.0f;
         float max = sign == 1 ? 127.0f : 255.0f;
         result_f = std::clamp(rounded, min, max);
@@ -139,7 +140,21 @@ DstType quantize_element(SrcType src_val, uint64_t scalar)
         } else if (std::isfinite(result_f) || saturate_inf == 1) {
             result_f = std::clamp(result_f, -F16_MAX, F16_MAX);
         }
+    } else if constexpr (mode == QuantModeCPU_t::QF322BF16_PRE) {
+        if (std::isnan(result_f) && saturate_inf == 1) {
+            result_f = 0.0f;
+        } else if (std::isfinite(result_f) || saturate_inf == 1) {
+            float F32_MAX = std::numeric_limits<float>::max();
+            result_f = std::clamp(result_f, -F32_MAX, F32_MAX);
+        }
+    } else if constexpr (mode == QuantModeCPU_t::SHIFTS322S16 || mode == QuantModeCPU_t::VSHIFTS322S16) {
+        int32_t shift_bit = ((scalar >> 32) & 0xF) + 1;
+        int32_t shifted_val = src_val >> shift_bit;
+        int16_t I16_MAX = std::numeric_limits<int16_t>::max();
+        int16_t I16_MIN = std::numeric_limits<int16_t>::min();
+        result_f = std::clamp((int16_t)shifted_val, I16_MIN, I16_MAX);
     }
+
     if constexpr (use_relu)
         result_f = ReLU(result_f);
     return static_cast<DstType>(result_f);

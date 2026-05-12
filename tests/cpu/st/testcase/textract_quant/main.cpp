@@ -51,7 +51,7 @@ std::pair<int, int> get_closest_factor(int c)
 
 template <typename SrcT, typename DstT, size_t src_rows, size_t src_cols, size_t src_validRows, size_t src_validCols,
           size_t dst_rows, size_t dst_cols, size_t dst_validRows, size_t dst_validCols, size_t idx_row, size_t idx_col,
-          bool is_v_quant, bool apply_relu>
+          bool is_v_quant, bool apply_relu, bool apply_saturation = false>
 struct Params {
     using ST = SrcT;
     using DT = DstT;
@@ -67,6 +67,7 @@ struct Params {
     static constexpr size_t idxCol = idx_col;
     static constexpr bool isVQuant = is_v_quant;
     static constexpr bool applyRelu = apply_relu;
+    static constexpr bool applySaturation = apply_saturation;
 };
 
 template <typename Conf>
@@ -195,11 +196,19 @@ void test_textract()
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(quantDevice, quantFileSize, quantHost, quantFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    if constexpr (Conf::isVQuant) {
-        runTEXTRACT_Vector<Conf>(dstDevice, srcDevice, quantDevice);
-    } else {
-        runTEXTRACT_Scalar<Conf>(dstDevice, srcDevice, quantDevice);
-    }
+    auto run = [&](uint64_t cookie) {
+        pto::cpu_sim::set_task_cookie(cookie);
+        if constexpr (Conf::isVQuant) {
+            runTEXTRACT_Vector<Conf>(dstDevice, srcDevice, quantDevice);
+        } else {
+            runTEXTRACT_Scalar<Conf>(dstDevice, srcDevice, quantDevice);
+        }
+    };
+
+    uint64_t applySaturation = Conf::applySaturation ? 1 : 0;
+    uint64_t ctrl_bits = ((applySaturation & 0x1) << 48) & 0xFFFFFFFFFFFFFFFF;
+    std::thread process(run, ctrl_bits);
+    process.join();
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -401,11 +410,11 @@ TEST_F(TEXTRACTTest, case_42_float_half)
 }
 TEST_F(TEXTRACTTest, case_43_float_half)
 {
-    test_textract<Params<float, half, 128, 128, 128, 128, 64, 64, 64, 64, 0, 0, false, false>>();
+    test_textract<Params<float, half, 128, 128, 128, 128, 64, 64, 64, 64, 0, 0, false, false, true>>();
 }
 TEST_F(TEXTRACTTest, case_44_float_half)
 {
-    test_textract<Params<float, half, 256, 128, 256, 128, 128, 64, 128, 64, 0, 0, false, true>>();
+    test_textract<Params<float, half, 256, 128, 256, 128, 128, 64, 128, 64, 0, 0, false, true, true>>();
 }
 
 #ifdef CPU_SIM_BFLOAT_ENABLED
@@ -426,3 +435,12 @@ TEST_F(TEXTRACTTest, case_48_float_bfloat16_t)
     test_textract<Params<float, bfloat16_t, 256, 128, 256, 128, 128, 64, 128, 64, 0, 0, false, true>>();
 }
 #endif
+
+TEST_F(TEXTRACTTest, case_49_int32_t_int16_t)
+{
+    test_textract<Params<int32_t, int16_t, 128, 64, 128, 64, 128, 64, 128, 64, 0, 0, false, false>>();
+}
+TEST_F(TEXTRACTTest, case_50_int32_t_int16_t)
+{
+    test_textract<Params<int32_t, int16_t, 128, 64, 128, 64, 128, 64, 128, 64, 0, 0, false, false>>();
+}

@@ -27,8 +27,9 @@ class QuantMode:
     F32_TO_F16 = 1
     F32_TO_BF16 = 2
     I32_TO_F16 = 3
-    I32_TO_B8 = 4
-    BYPASS = 5
+    I32_TO_I16 = 4
+    I32_TO_B8 = 5
+    BYPASS = 6
 
 
 def get_quant_mode(src_dtype, dst_dtype):
@@ -40,23 +41,23 @@ def get_quant_mode(src_dtype, dst_dtype):
         return QuantMode.F32_TO_F16 if src_dtype == np.float32 else QuantMode.I32_TO_F16
     elif dst_dtype == bfloat16:
         return QuantMode.F32_TO_BF16
+    elif dst_dtype == np.int16:
+        return QuantMode.I32_TO_I16
     return QuantMode.BYPASS
 
 
-def get_quant_vector(dst_dtype, n, saturate_inf):
+def get_quant_vector(dst_dtype, n):
     result = []
 
     for _ in range(n):
         f_val = np.random.uniform(0.0, 5.0)
         f_bits = np.float32(f_val).view(np.uint32)
         offset_val = np.random.randint(0, 512)
+        shift_bits = np.random.randint(0, 16)
 
         sign_bit = 1 if (dst_dtype == np.int8) else 0
-        # if saturate_inf, saturate INF to +/- MAX, and NaN to 0 in float-2-float operations
-        # otherwise, keep it as is
-        sat_bit = 1 if saturate_inf else 0 
 
-        packed = (int(sat_bit) << 48) | \
+        packed = (int(shift_bits & 0xF) << 32) | \
                     (int(sign_bit) << 46) | \
                     (int(offset_val & 0x1FF) << 37) | \
                     (int(f_bits))
@@ -79,7 +80,6 @@ def extract_quant_params(quant_gm):
     m1_bits = (quant_gm >> 13) & 0x7FFFF
     offset = (quant_gm >> 37) & 0x1FF
     sign = (quant_gm >> 46) & 0x1
-    sat_bit = (quant_gm >> 48) & 0x1
 
     # Parse M1 into a floating-point number in (1,8,10) format.
     sign_bit = (m1_bits >> 18) & 0x1
@@ -88,11 +88,12 @@ def extract_quant_params(quant_gm):
     exponent_bias = 127  # Assuming the exponent bias is 127, which aligns with float32.
     m1 = (-1) ** sign_bit * (1 + mantissa / 1024) * (2 ** (exponent - exponent_bias))
 
-    return m1, offset, sign, sat_bit
+    return m1, offset, sign
 
 
-def apply_quant_element(src_val, quant_gm, mode, dst_dtype, use_relu=False):
-    m1, offset, sign, sat_bit = extract_quant_params(quant_gm)
+def apply_quant_element(src_val, quant_gm, mode, dst_dtype, use_relu=False, saturate_inf=False):
+    quant_gm = int(quant_gm)
+    m1, offset, sign = extract_quant_params(quant_gm)
     res = src_val.astype(np.float32) * m1
 
     if mode in [QuantMode.F32_TO_B8, QuantMode.I32_TO_B8]:
@@ -103,21 +104,27 @@ def apply_quant_element(src_val, quant_gm, mode, dst_dtype, use_relu=False):
         res = np.clip(res, min_v, max_v)
     elif mode in [QuantMode.F32_TO_F16]:
         f16_lim = np.finfo(np.float16)
-        if np.isnan(res) and sat_bit == 1:
+        if np.isnan(res) and saturate_inf:
             res = 0
-        elif np.isfinite(res) or sat_bit == 1:
+        elif np.isfinite(res) or saturate_inf:
             res = np.clip(res, f16_lim.min, f16_lim.max)
     elif mode == QuantMode.I32_TO_F16:
         f16_lim = np.finfo(np.float16)
         res = np.clip(res, f16_lim.min, f16_lim.max)
-    
+    elif mode == QuantMode.I32_TO_I16:
+        src_val = int(src_val)
+        shift_bits = ((quant_gm >> 32) & 0xF) + 1
+        src_val = src_val >> shift_bits
+        int16_lim = np.iinfo(np.int16)
+        res = np.clip(src_val, int16_lim.min, int16_lim.max)
+
     if use_relu:
         res = np.maximum(res, 0)
 
     return NumExt.astype(np.array([res]), dst_dtype)[0]
 
 
-def process_quant(data_array, quant_array, src_dtype, dst_dtype, is_vector, use_relu):
+def process_quant(data_array, quant_array, src_dtype, dst_dtype, is_vector, use_relu, saturate_inf):
     mode = get_quant_mode(src_dtype, dst_dtype)
     rows, cols = data_array.shape
     if NumExt.is_bf16(dst_dtype):
@@ -128,7 +135,7 @@ def process_quant(data_array, quant_array, src_dtype, dst_dtype, is_vector, use_
     for j in range(cols):
         q_param = quant_array[j] if is_vector else quant_array[0]
         for i in range(rows):
-            out[i, j] = apply_quant_element(data_array[i, j], q_param, mode, dst_dtype, use_relu)
+            out[i, j] = apply_quant_element(data_array[i, j], q_param, mode, dst_dtype, use_relu, saturate_inf)
     
     return out
 
@@ -149,11 +156,11 @@ def gen_golden_data(case_name, param: TExtractParams):
     tile = raw_data[idx_row:(idx_row + dst_shape[0]), idx_col:(idx_col + dst_shape[1])]
 
     if param.is_v_quant:
-        quant_gm = get_quant_vector(param.dst_dtype, param.dst_valid_cols, param.saturate_inf)
+        quant_gm = get_quant_vector(param.dst_dtype, param.dst_valid_cols)
     else:
-        quant_gm = get_quant_vector(param.dst_dtype, 1, param.saturate_inf)
+        quant_gm = get_quant_vector(param.dst_dtype, 1)
 
-    golden = process_quant(tile, quant_gm, param.src_dtype, param.dst_dtype, param.is_v_quant, param.use_relu)
+    golden = process_quant(tile, quant_gm, param.src_dtype, param.dst_dtype, param.is_v_quant, param.use_relu, param.saturate_inf)
     NumExt.write_array("./input.bin", raw_data, param.src_dtype)
     NumExt.write_array("./golden.bin", golden, param.dst_dtype)
     quant_gm.tofile("./quant.bin")
@@ -262,6 +269,9 @@ if __name__ == "__main__":
         TExtractParams(np.float32, bfloat16, 128, 64, 96, 32, 0, 0, False, False, True),
         TExtractParams(np.float32, bfloat16, 128, 128, 64, 64, 0, 0, False, True, False),
         TExtractParams(np.float32, bfloat16, 256, 128, 128, 64, 0, 0, False, True, True),
+
+        TExtractParams(np.int32, np.int16, 128, 64, 128, 64, 0, 0, False, False, False),
+        TExtractParams(np.int32, np.int16, 128, 64, 128, 64, 0, 0, False, False, False),
     ]
 
     for idx, case_param in enumerate(case_params_list):
