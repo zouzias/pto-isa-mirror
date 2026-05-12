@@ -99,27 +99,33 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
         pipe_barrier(PIPE_ALL);
     }
 
-    // ── MTE STORE PATH (2026-05-09, per HW team guidance) ────────────────
+    // ── MTE3 STORE + DCCI (2026-05-12, corrected) ──────────────────────
     //
-    // HW team confirmed: AIV must use MTE (DataCopy UB→GM, i.e. PIPE_MTE3)
-    // to write CKE VA, NOT scalar store (*ptr = val). Scalar stores go
-    // through a different bus path that doesn't trigger the CKE io-map.
+    // Two prior bugs fixed here:
+    //   (A) Missing dcci — MTE3 DataCopy lands in cache, never reaches the
+    //       physical CKE register. Every other pto-isa comm primitive
+    //       (TNotify, TWait, ready_queue, SDMA) calls dcci() after GM
+    //       writes; this kernel did not. See sdma_async_intrin.hpp pattern.
+    //   (B) Wrong byte position — rtGetDevResAddress returns per-CKE 8B
+    //       slots; the CKE mask occupies the LOW 2 bytes (byte 0-1),
+    //       not byte 6-7 (which is the driver ccu_data ABI, not the
+    //       hardware register layout).
     //
     // Strategy:
-    //   1. Allocate 32B UB buffer via TQue (minimum 1 DataBlock for MTE3)
-    //   2. Fill UB with mask pattern (16 × uint16_t = 32B) via SetValue
-    //   3. DataCopy(gmCke, ubBuf, 16) → MTE3 store to CKE VA
-    //   4. pipe_barrier(PIPE_MTE3)
+    //   1. Allocate 32B UB buffer (minimum DataBlock for MTE3)
+    //   2. Pre-clear: DataCopy 32B of zeros → flush with dcci
+    //   3. Trigger:  slot[0] low 2 bytes = mask, rest = 0 → flush with dcci
 
     TPipe pipe;
     TQue<QuePosition::VECOUT, 1> outQue;
     pipe.InitBuffer(outQue, 1, 32);
     LocalTensor<uint64_t> ubData = outQue.AllocTensor<uint64_t>();
 
-    // 8B slot layout: try mask (16-bit) at byte offset 0-1 = bits 0-15
-    // For mask=0x0001: slot value = 0x0000000000000001
-    // (If this doesn't work, try byte_off=6 via << 48)
+    // CKE register layout: 8B per slot, mask is low 16 bits (byte 0-1)
     const uint64_t slotValue = static_cast<uint64_t>(mask & 0xFFFF);
+
+    GlobalTensor<uint64_t> gmCke;
+    gmCke.SetGlobalBuffer(reinterpret_cast<__gm__ uint64_t *>(alignedTarget), 4);
 
     // Pre-clear: 4 × uint64_t = 32B, all zeros
     for (int i = 0; i < 4; i++) {
@@ -127,12 +133,14 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
     }
     pipe_barrier(PIPE_ALL);
 
-    GlobalTensor<uint64_t> gmCke;
-    gmCke.SetGlobalBuffer(reinterpret_cast<__gm__ uint64_t *>(alignedTarget), 4);
     DataCopy(gmCke, ubData, 4);
     pipe_barrier(PIPE_MTE3);
+    dcci(reinterpret_cast<__gm__ void *>(alignedTarget), ENTIRE_DATA_CACHE);
+    __asm__ __volatile__("" ::: "memory");
+    pipe_barrier(PIPE_ALL);
+    dsb(DSB_DDR);
 
-    // Trigger: slot[0] = mask at byte 6-7, slot[1..3] = 0 (don't disturb neighbors)
+    // Trigger: slot[0] = mask in low 2 bytes; slot[1..3] = 0 (don't disturb neighbors)
     ubData.SetValue(0, slotValue);
     ubData.SetValue(1, static_cast<uint64_t>(0));
     ubData.SetValue(2, static_cast<uint64_t>(0));
@@ -141,12 +149,17 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
 
     DataCopy(gmCke, ubData, 4);
     pipe_barrier(PIPE_MTE3);
+    dcci(reinterpret_cast<__gm__ void *>(alignedTarget), ENTIRE_DATA_CACHE);
+    __asm__ __volatile__("" ::: "memory");
+    pipe_barrier(PIPE_ALL);
+    dsb(DSB_DDR);
 
     outQue.FreeTensor(ubData);
 
-    // Also try scalar store as fallback (in case MTE write triggers
-    // but readback needs scalar path)
-    __gm__ uint16_t *target16 = reinterpret_cast<__gm__ uint16_t *>(alignedTarget + byte_off);
+    // Readback for marker diagnostic (use dcci before read to see physical state)
+    dcci(reinterpret_cast<__gm__ void *>(alignedTarget), SINGLE_CACHE_LINE);
+    __asm__ __volatile__("" ::: "memory");
+    __gm__ uint16_t *target16 = reinterpret_cast<__gm__ uint16_t *>(alignedTarget);
 
     if (m64 != nullptr) {
         m64[6] = static_cast<uint64_t>(*target16);
@@ -154,6 +167,8 @@ __global__ __aicore__ void pto_aiv_treduce_kernel(
 
     pipe_barrier(PIPE_ALL);
 
+    dcci(reinterpret_cast<__gm__ void *>(alignedTarget), SINGLE_CACHE_LINE);
+    __asm__ __volatile__("" ::: "memory");
     if (m64 != nullptr) {
         m64[3] = static_cast<uint64_t>(*target16);
         m64[7] = 0xFEEDFACECAFEBABEULL;
