@@ -41,10 +41,16 @@ pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
-template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar,
-                           TileDataTmp &tmp, WaitEvents &... events);
+template <auto PrecisionType = RemSAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename TileDataTmp,
+          typename... WaitEvents>
+PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar, TileDataTmp &tmp,
+                           WaitEvents &...events);
 ```
+
+`PrecisionType`可指定以下值：
+
+* `RemSAlgorithm::DEFAULT`：普通算法，速度快但精度较低。
+* `RemSAlgorithm::HIGH_PRECISION`：高精度算法，速度较慢，仅支持`float`类型。
 
 ## 约束
 
@@ -70,6 +76,8 @@ PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileData
 - **有效区域**:
     - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
 - **对于 `int32_t` 输入（仅 A2A3）**：`src` 的元素和 `scalar` 必须在 `[-2^24, 2^24]` 范围内（即 `[-16777216, 16777216]`），以确保在计算过程中能精确转换为 float32。
+- **高精度算法**
+    - 仅在A5上有效，`PrecisionType`选项A3上将被忽略。
 
 ## 示例
 
