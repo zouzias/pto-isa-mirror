@@ -119,3 +119,20 @@ void gather_pingpong(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_ran
     comm::TGATHER(group, dstG, pingTile, pongTile);
 }
 ```
+
+## CCU 后端（Ascend950）
+
+> CCU（Communication Control Unit）是 Ascend950 上的硬件加速通信引擎。CCU 后端将集合通信操作卸载到由 `hcomm::CcuRep` 原语构建的 CCU 微码上执行，AIV 核仅作为 CKE（Communication Kernel Engine）门控的触发器。
+
+与默认的 AIV 路径（使用 `ParallelGroup` + UB 暂存 Tile 在 AI Vector 核上执行）不同，CCU 路径通过 `CcuRep` 原语（`InitResource`、`PreSync`、`DoGather`、`PostSync`、`GeneArgs`）录制微码，由主机侧 `HcclCcuKernelRegister` / `HcclCcuKernelLaunch` 启动。AIV kernel 的唯一作用是通过 `rtGetDevResAddress` + store 打开 CKE 门控。
+
+### CCU 特有约束
+
+- **最小负载大小**：总负载必须至少为 **4096 字节**（例如 1024 个 float 元素）。小于 4096 字节的负载会导致 `hcomm::CcuRep::GetTokenInfo` 失败，抛出 `"Ccu api exception: failed to query tokenInfo."` 异常。
+- **HcclComm 生命周期共享**：同一进程内，`HcclComm`、CCU 通道和 Stream 必须一次创建、多次复用。反复执行 `HcclCommDestroy` / `HcclCommInitRootInfo` 循环会残留过期的 CCU 微码状态，导致后续不同负载大小的调用出现数据错误或挂死。
+- **通道协议**：CCU 通道使用 `UBC_CTP`（Unified Buffer Coherent Transport Protocol）。
+- **所有 rank 均需执行**：与 AIV 路径（仅根节点调用 `TGATHER`）不同，CCU 路径要求所有 rank 均注册并启动 CCU kernel。
+
+### ST 参考
+
+参见 `tests/npu/a5/comm/st/testcase/tgather_ccu/`，包含完整的主机侧测试驱动，演示 CCU kernel 注册、CKE 门控触发和结果验证。

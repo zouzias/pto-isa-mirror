@@ -126,3 +126,20 @@ void gather_pingpong(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_ran
     comm::TGATHER(group, dstG, pingTile, pongTile);
 }
 ```
+
+## CCU Backend (Ascend950)
+
+> CCU (Communication Control Unit) is a hardware-accelerated communication engine available on Ascend950. The CCU backend offloads collective operations to CCU microcode built with `hcomm::CcuRep` primitives, while the AIV core only serves as a trigger for the CKE (Communication Kernel Engine) gate.
+
+Unlike the default AIV path which uses `ParallelGroup` + UB staging tiles on AI Vector cores, the CCU path records microcode via `CcuRep` primitives (`InitResource`, `PreSync`, `DoGather`, `PostSync`, `GeneArgs`) and is launched by host-side `HcclCcuKernelRegister` / `HcclCcuKernelLaunch`. The AIV kernel's only role is to open the CKE gate via `rtGetDevResAddress` + store.
+
+### CCU-specific Constraints
+
+- **Minimum payload size**: The total payload must be at least **4096 bytes** (e.g., 1024 float elements). Payloads smaller than 4096 bytes cause `hcomm::CcuRep::GetTokenInfo` to fail with `"Ccu api exception: failed to query tokenInfo."`.
+- **Shared HcclComm lifecycle**: The `HcclComm`, CCU channels, and streams must be created once and reused across multiple CCU kernel invocations within the same process. Repeated `HcclCommDestroy` / `HcclCommInitRootInfo` cycles leave stale CCU microcode state, causing data corruption or hangs for subsequent invocations with different payload sizes.
+- **Channel protocol**: CCU channels use `UBC_CTP` (Unified Buffer Coherent Transport Protocol).
+- **All ranks execute**: Unlike the AIV path where only root calls `TGATHER`, the CCU path requires all ranks to register and launch the CCU kernel.
+
+### ST Reference
+
+See `tests/npu/a5/comm/st/testcase/tgather_ccu/` for a complete host-side test driver demonstrating CCU kernel registration, CKE gate triggering, and result verification.
