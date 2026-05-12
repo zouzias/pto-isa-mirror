@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TSTORE_HPP
@@ -13,6 +15,60 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "common.hpp"
 
 namespace pto {
+
+template <typename GlobalData, typename TileData>
+PTO_INTERNAL void CheckAccNzStoreShape(int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int validRow,
+                                       int validCol)
+{
+    PTO_ASSERT(validRow == gShape2 * gShape3, "The validRow of TileData must be equal to Shape2 * Shape3 of NZ shape!");
+    PTO_ASSERT(validCol == gShape0 * gShape1 * gShape4,
+               "The validCol of TileData must be equal to Shape0 * Shape1 * "
+               "Shape4 of NZ shape!");
+    static_assert(GlobalData::staticShape[3] == FRACTAL_NZ_ROW,
+                  "When GlobalData is NZ format, the second-to-last dimension "
+                  "shall be 16.");
+    static_assert((std::is_same_v<typename GlobalData::DType, __gm__ int32_t> && GlobalData::staticShape[4] == 16) ||
+                      (GlobalData::staticShape[4] == BLOCK_BYTE_SIZE / sizeof(typename GlobalData::DType)) ||
+                      (std::is_same_v<typename GlobalData::DType, __gm__ float> &&
+                       (GlobalData::staticShape[4] == 8 || GlobalData::staticShape[4] == 16)),
+                  "When GlobalData is in NZ format: if DstType is float, the "
+                  "last dimension must be either 8 or 16, "
+                  "and the dimension value is 8 if and only if Channel Split is "
+                  "enabled; if DstType is int32_t, the "
+                  "last dimension must be exactly 16. In addition, the last "
+                  "dimension must be static and satisfy 32 / "
+                  "sizeof(DstType).");
+}
+
+template <typename TileData>
+PTO_INTERNAL uint16_t GetAccNzSrcStride(int validRow)
+{
+    uint16_t srcStride = TileData::Rows;
+    if constexpr (CompactMode::Normal == TileData::Compact) {
+        srcStride = (FRACTAL_NZ_ROW - 1 + validRow) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW;
+    }
+    return srcStride;
+}
+
+template <typename TileData, typename GlobalData>
+PTO_INTERNAL uint32_t GetAccNzDstStride(int gShape2, int gShape3, int gShape4, uint8_t &channelSplitEn)
+{
+    uint16_t c0Size = 16;
+    if constexpr (sizeof(typename TileData::DType) == 1) {
+        c0Size = 32;
+    } else if constexpr (std::is_same_v<typename TileData::DType, float> &&
+                         std::is_same_v<typename GlobalData::DType, __gm__ float>) {
+        if (gShape4 == 8) {
+            c0Size = 8;
+            channelSplitEn = 1;
+        }
+    }
+    uint32_t dstStride = (gShape2 * gShape3 + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW * c0Size;
+    if constexpr (sizeof(typename GlobalData::DType) == 1) {
+        dstStride <<= 1;
+    }
+    return dstStride;
+}
 
 template <typename SrcType, typename DstType>
 PTO_INTERNAL constexpr QuantMode_t GetCastPreQuantModeGm()
@@ -120,21 +176,24 @@ PTO_INTERNAL void CheckStaticAcc()
     static_assert((GlobalData::layout == pto::Layout::ND) || (GlobalData::layout == pto::Layout::NZ) ||
                       (GlobalData::layout == pto::Layout::NHWC) || (GlobalData::layout == pto::Layout::NCHW) ||
                       (GlobalData::layout == pto::Layout::NCDHW),
-                  "TSTORE(Acc2GM) only support NZ2ND / NZ2NZ / NZ2NHWC / NZ2NCHW / NZ2NCDHW.");
+                  "TSTORE(Acc2GM) only support NZ2ND / NZ2NZ / NZ2NHWC / NZ2NCHW "
+                  "/ NZ2NCDHW.");
     static_assert(TileData::Cols >= 1 && TileData::Cols <= 4095, "The range of Cols is [1, 4095].");
     static_assert((GlobalData::layout == pto::Layout::ND && TileData::Rows >= 1 && TileData::Rows <= 8192) ||
                       ((GlobalData::layout == pto::Layout::NZ || (GlobalData::layout == pto::Layout::NHWC) ||
                         (GlobalData::layout == pto::Layout::NCHW) || (GlobalData::layout == pto::Layout::NCDHW)) &&
                        TileData::Rows >= 1 && TileData::Rows <= 65535 && TileData::Cols % 16 == 0),
                   "When GlobalData is ND format, the range of Rows is [1, 8192]."
-                  "When GlobalData is NZ/NHWC/NCHW/NCDHW format, the range of Rows is [1, 65535] and Cols"
+                  "When GlobalData is NZ/NHWC/NCHW/NCDHW format, the range of "
+                  "Rows is [1, 65535] and Cols"
                   "must be an integer multiple of 16.");
     if constexpr (!isQuant) {
         static_assert(std::is_same_v<typename GlobalData::DType, __gm__ int32_t> ||
                           std::is_same_v<typename GlobalData::DType, __gm__ float> ||
                           std::is_same_v<typename GlobalData::DType, __gm__ half> ||
                           std::is_same_v<typename GlobalData::DType, __gm__ bfloat16_t>,
-                      "The output data type must be restricted to int32_t/float/half/bfloat16_t!");
+                      "The output data type must be restricted to "
+                      "int32_t/float/half/bfloat16_t!");
     } else if constexpr (isQuant) {
         if constexpr (std::is_same_v<typename TileData::DType, float>) {
             static_assert(std::is_same<typename GlobalData::DType, __gm__ int8_t>::value ||
@@ -151,7 +210,8 @@ PTO_INTERNAL void CheckStaticAcc()
                               std::is_same<typename GlobalData::DType, __gm__ uint8_t>::value ||
                               std::is_same<typename GlobalData::DType, __gm__ bfloat16_t>::value ||
                               std::is_same<typename GlobalData::DType, __gm__ half>::value,
-                          "The output data type must be restricted to half/bfloat16_t/int8_t/uint8_t.");
+                          "The output data type must be restricted to "
+                          "half/bfloat16_t/int8_t/uint8_t.");
         }
     }
 }
@@ -175,8 +235,10 @@ PTO_INTERNAL void CheckStaticVec()
             std::is_same_v<typename TileData::DType, float4_e1m2x2_t> ||
             std::is_same_v<typename TileData::DType, float4_e2m1x2_t>,
         "Data type must be "
-        "int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/int64_t/uint64_t/half/bfloat16_t/float/float8_e4m3_t/"
-        "float8_e5m2_t/hifloat8_t/float8_e8m0_t/float4_e1m2x2_t/float4_e2m1x2_t!");
+        "int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/int64_t/"
+        "uint64_t/half/bfloat16_t/float/float8_e4m3_t/"
+        "float8_e5m2_t/hifloat8_t/float8_e8m0_t/float4_e1m2x2_t/"
+        "float4_e2m1x2_t!");
     static_assert(((GlobalData::layout == pto::Layout::ND) &&
                    (TileData::isRowMajor && (TileData::SFractal == SLayout::NoneBox))) ||
                       ((GlobalData::layout == pto::Layout::DN) &&
@@ -184,7 +246,8 @@ PTO_INTERNAL void CheckStaticVec()
                       ((GlobalData::layout == pto::Layout::NZ) &&
                        (!TileData::isRowMajor && (TileData::SFractal == SLayout::RowMajor))) ||
                       (TileData::Rows == 1) || (TileData::Cols == 1),
-                  "Src and dst layout must be same, only support ND/DN/NZ or the special case of one row/one column!");
+                  "Src and dst layout must be same, only support ND/DN/NZ or the special "
+                  "case of one row/one column!");
     static_assert(
         ((GlobalData::layout == pto::Layout::ND) && (TileData::Cols * sizeof(typename TileData::DType) % 32 == 0)) ||
         ((GlobalData::layout == pto::Layout::DN) && (TileData::Rows * sizeof(typename TileData::DType) % 32 == 0)) ||
@@ -242,43 +305,14 @@ PTO_INTERNAL void TStoreAccNZ(typename GlobalData::DType *dstAddr, __cc__ typena
                               int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
                               int validRow, int validCol)
 {
-    PTO_ASSERT(validRow == gShape2 * gShape3, "The validRow of TileData must be equal to Shape2 * Shape3 of NZ shape!");
-    PTO_ASSERT(validCol == gShape0 * gShape1 * gShape4,
-               "The validCol of TileData must be equal to Shape0 * Shape1 * Shape4 of NZ shape!");
-    static_assert(GlobalData::staticShape[3] == FRACTAL_NZ_ROW,
-                  "When GlobalData is NZ format, the second-to-last dimension shall be 16.");
-    static_assert((std::is_same_v<typename GlobalData::DType, __gm__ int32_t> && GlobalData::staticShape[4] == 16) ||
-                      (GlobalData::staticShape[4] == BLOCK_BYTE_SIZE / sizeof(typename GlobalData::DType)) ||
-                      (std::is_same_v<typename GlobalData::DType, __gm__ float> &&
-                       (GlobalData::staticShape[4] == 8 || GlobalData::staticShape[4] == 16)),
-                  "When GlobalData is in NZ format: if DstType is float, the last dimension must be either 8 or 16, "
-                  "and the dimension value is 8 if and only if Channel Split is enabled; if DstType is int32_t, the "
-                  "last dimension must be exactly 16. In addition, the last dimension must be static and satisfy 32 / "
-                  "sizeof(DstType).");
+    CheckAccNzStoreShape<GlobalData, TileData>(gShape0, gShape1, gShape2, gShape3, gShape4, validRow, validCol);
 
     uint16_t mSize = validRow;
     uint16_t nSize = validCol;
-    uint16_t srcStride = TileData::Rows;
-    if constexpr (CompactMode::Normal == TileData::Compact) {
-        srcStride = (FRACTAL_NZ_ROW - 1 + validRow) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW;
-    }
+    uint16_t srcStride = GetAccNzSrcStride<TileData>(validRow);
     constexpr uint8_t unitFlagCtrl = static_cast<uint8_t>(Phase);
     uint8_t channelSplitEn = 0;
-
-    uint16_t c0Size = 16;
-    if constexpr (sizeof(typename TileData::DType) == 1) {
-        c0Size = 32;
-    } else if constexpr (std::is_same_v<typename TileData::DType, float> &&
-                         std::is_same_v<typename GlobalData::DType, __gm__ float>) {
-        if (gShape4 == 8) {
-            c0Size = 8;
-            channelSplitEn = 1;
-        }
-    }
-    uint32_t dstStride = (gShape2 * gShape3 + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW * c0Size;
-    if constexpr (sizeof(typename GlobalData::DType) == 1) {
-        dstStride <<= 1;
-    }
+    uint32_t dstStride = GetAccNzDstStride<TileData, GlobalData>(gShape2, gShape3, gShape4, channelSplitEn);
     uint64_t xtReg = srcStride | // Xt[15:0] the source stride between the start addr
                      (static_cast<uint64_t>(unitFlagCtrl & 0x3) << 32) | // Xt[33:32] unit flag control bit
                      (((quantPre >> SHIFT_BLOCK_BYTE) & 0x1) << 29) |
@@ -300,7 +334,8 @@ PTO_INTERNAL void TStoreAccNHWC(typename GlobalData::DType *dstAddr, __cc__ type
                                 int gStride3, int validRow, int validCol)
 {
     PTO_ASSERT(validRow == gShape1 * gShape2 * gShape3,
-               "The validRow of TileData must be equal to Shape1 * Shape2 * Shape3 of NHWC shape!");
+               "The validRow of TileData must be equal to Shape1 * Shape2 * "
+               "Shape3 of NHWC shape!");
     PTO_ASSERT(validCol == gShape4, "The validCol of TileData must be equal to Shape4 of NHWC shape!");
 
     uint16_t mSize = validRow;
@@ -328,11 +363,12 @@ PTO_INTERNAL void TStoreAccNHWC(typename GlobalData::DType *dstAddr, __cc__ type
                      (static_cast<uint64_t>(quantPre & 0x1f) << 34) | // Xt[29], Xt[38:34] pre-stage quantization mode
                      ((static_cast<uint64_t>(reluPreMode) & 0x7) << 39) | //  Xt[41:39] relu pre mode
                      (static_cast<uint64_t>(nz2ndEn & 0x1) << 43);        //  Xt[43] nz2nd control bit
-    uint64_t loop3Config = loop3Num |                                     // LOOP3_PARA[15:0] the number of source nd
-                           (static_cast<uint64_t>(loop3SrcStirde & 0xffff)
-                            << 16) | // LOOP3_PARA[31:16] the source stride of loop3 in uint of C0_SIZE
-                           (static_cast<uint64_t>(loop3DstStirde & 0xffffffff)
-                            << 32); // LOOP3_PARA[63:32] the dst stride of loop3 in uint of element
+    uint64_t loop3Config =
+        loop3Num |                                               // LOOP3_PARA[15:0] the number of source nd
+        (static_cast<uint64_t>(loop3SrcStirde & 0xffff) << 16) | // LOOP3_PARA[31:16] the source stride of loop3 in uint
+                                                                 // of C0_SIZE
+        (static_cast<uint64_t>(loop3DstStirde & 0xffffffff)
+         << 32); // LOOP3_PARA[63:32] the dst stride of loop3 in uint of element
     set_loop3_para(loop3Config);
 
     copy_matrix_cc_to_gm(dstAddr, srcAddr, xmReg, xtReg);
@@ -346,11 +382,13 @@ PTO_INTERNAL void TStoreAccNCHW(typename GlobalData::DType *dstAddr, __cc__ type
 {
     if constexpr (GlobalData::layout == pto::Layout::NCHW) {
         PTO_ASSERT(validRow == gShape1 * gShape3 * gShape4,
-                   "The validRow of TileData must be equal to Shape1 * Shape3 * Shape4 of NCHW shape!");
+                   "The validRow of TileData must be equal to Shape1 * Shape3 * "
+                   "Shape4 of NCHW shape!");
         PTO_ASSERT(validCol == gShape2, "The validCol of TileData must be equal to Shape2 of NCHW shape!");
     } else { // NCDHW
         PTO_ASSERT(validRow == gShape0 * gShape3 * gShape4,
-                   "The validRow of TileData must be equal to Shape0 * Shape3 * Shape4 of NCDHW shape!");
+                   "The validRow of TileData must be equal to Shape0 * Shape3 * "
+                   "Shape4 of NCDHW shape!");
         PTO_ASSERT(validCol == gShape1, "The validCol of TileData must be equal to Shape1 of NCDHW shape!");
     }
 
@@ -378,11 +416,12 @@ PTO_INTERNAL void TStoreAccNCHW(typename GlobalData::DType *dstAddr, __cc__ type
                      (static_cast<uint64_t>(quantPre & 0x1f) << 34) | // Xt[29], Xt[38:34] pre-stage quantization mode
                      ((static_cast<uint64_t>(reluPreMode) & 0x7) << 39) | //  Xt[41:39] relu pre mode
                      (static_cast<uint64_t>(nz2dnEn & 0x1) << 62);        //  Xt[62] nz2dn control bit
-    uint64_t loop3Config = loop3Num |                                     // LOOP3_PARA[15:0] the number of source nd
-                           (static_cast<uint64_t>(loop3SrcStirde & 0xffff)
-                            << 16) | // LOOP3_PARA[31:16] the source stride of loop3 in uint of C0_SIZE
-                           (static_cast<uint64_t>(loop3DstStirde & 0xffffffff)
-                            << 32); // LOOP3_PARA[63:32] the dst stride of loop3 in uint of element
+    uint64_t loop3Config =
+        loop3Num |                                               // LOOP3_PARA[15:0] the number of source nd
+        (static_cast<uint64_t>(loop3SrcStirde & 0xffff) << 16) | // LOOP3_PARA[31:16] the source stride of loop3 in uint
+                                                                 // of C0_SIZE
+        (static_cast<uint64_t>(loop3DstStirde & 0xffffffff)
+         << 32); // LOOP3_PARA[63:32] the dst stride of loop3 in uint of element
     set_loop3_para(loop3Config);
     uint16_t loop0SrcStirde = 1; // loop0SrcStirde is 1 when src layout is NZ
     uint64_t channelConfig = static_cast<uint64_t>(loop0SrcStirde & 0xffff)
@@ -459,9 +498,12 @@ PTO_INTERNAL void TStoreVecND(typename GlobalData::DType *dstAddr, __ubuf__ type
                               int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
                               int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
 {
-    PTO_ASSERT(validCol == gShape4, "The validCol of TileData must be equal to the 5th dim(Shape4) of ND shape!");
+    PTO_ASSERT(validCol == gShape4,
+               "The validCol of TileData must be equal to the 5th dim(Shape4) of "
+               "ND shape!");
     PTO_ASSERT(validRow == gShape0 * gShape1 * gShape2 * gShape3,
-               "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape3) of ND shape!");
+               "The validRow of TileData must be equal to (Shape0 * Shape1 * "
+               "Shape2 * Shape3) of ND shape!");
     typename GlobalData::DType *dstGlobalAddr = dstAddr;
     __ubuf__ typename TileData::DType *srcTileAddr = srcAddr;
     uint32_t loop1SrcStride = GetByteSize<typename TileData::DType>(gShape3 * TileData::Cols);
@@ -507,9 +549,12 @@ PTO_INTERNAL void TStoreVecDN(typename GlobalData::DType *dstAddr, __ubuf__ type
                               int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
                               int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
 {
-    PTO_ASSERT(validRow == gShape3, "The validCol of TileData must be equal to the 4th dim(Shape3) of DN shape!");
+    PTO_ASSERT(validRow == gShape3,
+               "The validCol of TileData must be equal to the 4th dim(Shape3) of "
+               "DN shape!");
     PTO_ASSERT(validCol == gShape0 * gShape1 * gShape2 * gShape4,
-               "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape4) of DN shape!");
+               "The validRow of TileData must be equal to (Shape0 * Shape1 * "
+               "Shape2 * Shape4) of DN shape!");
     typename GlobalData::DType *dstGlobalAddr = dstAddr;
     __ubuf__ typename TileData::DType *srcTileAddr = srcAddr;
     uint32_t loop1SrcStride = GetByteSize<typename TileData::DType>(TileData::Rows * gShape4);
@@ -564,16 +609,21 @@ PTO_INTERNAL void TStoreVecNZ(typename GlobalData::DType *dstAddr, __ubuf__ type
              (GlobalData::staticShape[4] == 8 || GlobalData::staticShape[4] == 16)) ||
             (std::is_same_v<typename GlobalData::DType, __gm__ float4_e1m2x2_t> && GlobalData::staticShape[4] == 64) ||
             (std::is_same_v<typename GlobalData::DType, __gm__ float4_e2m1x2_t> && GlobalData::staticShape[4] == 64),
-        "When GlobalData is in NZ format: if DstType is float, the last dimension must be either 8 or 16, \n"
+        "When GlobalData is in NZ format: if DstType is float, the last "
+        "dimension must be either 8 or 16, \n"
         "if DstType is float4, the last dimension must be 64, \n"
-        "and the dimension value is 8 if and only if Channel Split is enabled; if DstType is int32_t, the \n"
-        "last dimension must be exactly 16. In addition, the last dimension must be static and satisfy 32 / \n"
+        "and the dimension value is 8 if and only if Channel Split is enabled; "
+        "if DstType is int32_t, the \n"
+        "last dimension must be exactly 16. In addition, the last dimension must "
+        "be static and satisfy 32 / \n"
         "sizeof(DstType).");
     static_assert(GlobalData::staticShape[3] == FRACTAL_NZ_ROW,
-                  "When GlobalData is NZ format, the second-to-last dimension shall be 16.");
+                  "When GlobalData is NZ format, the second-to-last dimension "
+                  "shall be 16.");
     PTO_ASSERT(validRow == gShape2 * gShape3, "The validRow of TileData must be equal to Shape2 * Shape3 of NZ shape!");
     PTO_ASSERT(validCol == gShape0 * gShape1 * gShape4,
-               "The validCol of TileData must be equal to Shape0 * Shape1 * Shape4 of NZ shape!");
+               "The validCol of TileData must be equal to Shape0 * Shape1 * "
+               "Shape4 of NZ shape!");
     typename GlobalData::DType *dstGlobalAddr = dstAddr;
     __ubuf__ typename TileData::DType *srcTileAddr = srcAddr;
     uint32_t nBurst = gShape1;

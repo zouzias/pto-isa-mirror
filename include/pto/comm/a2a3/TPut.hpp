@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_COMM_TPUT_HPP
@@ -13,11 +15,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <type_traits>
 
-#include "pto/common/debug.h"
-#include "pto/common/type.hpp"
-#include "pto/common/constants.hpp"
-#include "pto/common/pto_instr.hpp"
 #include "pto/comm/comm_types.hpp"
+#include "pto/common/constants.hpp"
+#include "pto/common/debug.h"
+#include "pto/common/pto_instr.hpp"
+#include "pto/common/type.hpp"
 
 namespace pto {
 namespace comm {
@@ -105,7 +107,8 @@ PTO_INTERNAL void TputChunkedSingle(GlobalDstData &dstGlobalData, GlobalSrcData 
 // ============================================================================
 // TPUT_IMPL: Remote write operation implementation
 //
-// Data flow: srcGlobalData (local GM) → stagingTileData (UB) → dstGlobalData (remote GM)
+// Data flow: srcGlobalData (local GM) → stagingTileData (UB) → dstGlobalData
+// (remote GM)
 //   - atomicType: Atomic operation type (AtomicNone or AtomicAdd)
 //
 // When the GlobalTensor exceeds the UB tile capacity in rows and/or columns,
@@ -180,12 +183,14 @@ PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
 
     if constexpr (!isDynamicRow) {
         PTO_ASSERT(logicalDims[3] % ubChunkRows == 0,
-                   "TPUT chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
+                   "TPUT chunked: shape3 must be divisible by tile ValidRow when ValidRow "
+                   "is static. "
                    "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
     }
     if constexpr (!isDynamicCol) {
         PTO_ASSERT(logicalDims[4] % ubChunkCols == 0,
-                   "TPUT chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
+                   "TPUT chunked: shape4 must be divisible by tile ValidCol when ValidCol "
+                   "is static. "
                    "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
     }
 
@@ -194,7 +199,8 @@ PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
         logicalDims[4], ubChunkRows, ubChunkCols);
 }
 
-// Process one chunk in the ping-pong pipeline: overlap TSTORE of previous chunk with TLOAD of current chunk
+// Process one chunk in the ping-pong pipeline: overlap TSTORE of previous chunk
+// with TLOAD of current chunk
 template <typename GlobalDstData, typename GlobalSrcData, typename TileData, AtomicType atomicType, typename StrideT>
 PTO_INTERNAL void TputPingPongProcessChunk(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
                                            TileData &pingTile, TileData &pongTile, TputPingPongState &pp,
@@ -270,8 +276,9 @@ PTO_INTERNAL void TputPingPongFlush(GlobalDstData &dstGlobalData, TileData &ping
 // wait_flag at the end ensures storeTile's UB is safe to reuse before
 // the NEXT iteration's TLOAD can overwrite it.
 //
-// MTE2 queue: [..., TLOAD(loadTile), set_flag(curEvent), wait_flag(prevEvent), ...]
-// MTE3 queue: [..., wait_flag(prevEvent), TSTORE(storeTile), set_flag(prevEvent), ...]
+// MTE2 queue: [..., TLOAD(loadTile), set_flag(curEvent), wait_flag(prevEvent),
+// ...] MTE3 queue: [..., wait_flag(prevEvent), TSTORE(storeTile),
+// set_flag(prevEvent), ...]
 template <typename GlobalDstData, typename GlobalSrcData, typename TileData, AtomicType atomicType>
 PTO_INTERNAL void TputChunkedPingPong(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &pingTile,
                                       TileData &pongTile, int gShape0, int gShape1, int gShape2, int gShape3,
@@ -329,10 +336,12 @@ PTO_INTERNAL void TputChunkedPingPong(GlobalDstData &dstGlobalData, GlobalSrcDat
 // behind the other.
 //
 // Timeline without ping-pong:
-//   [TLOAD chunk0] -> [TSTORE chunk0] -> [TLOAD chunk1] -> [TSTORE chunk1] -> ...
+//   [TLOAD chunk0] -> [TSTORE chunk0] -> [TLOAD chunk1] -> [TSTORE chunk1] ->
+//   ...
 //
 // Timeline with ping-pong (overlap TSTORE[i] with TLOAD[i+1]):
-//   [TLOAD chunk0] -> [TSTORE chunk0 | TLOAD chunk1] -> [TSTORE chunk1 | TLOAD chunk2] -> ...
+//   [TLOAD chunk0] -> [TSTORE chunk0 | TLOAD chunk1] -> [TSTORE chunk1 | TLOAD
+//   chunk2] -> ...
 //
 // Requirements:
 //   - pingTile and pongTile must have the same type and dimensions.
@@ -380,12 +389,14 @@ PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
 
     if constexpr (!isDynamicRow) {
         PTO_ASSERT(gShape3 % tileValidRow == 0,
-                   "TPUT chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
+                   "TPUT chunked: shape3 must be divisible by tile ValidRow when ValidRow "
+                   "is static. "
                    "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
     }
     if constexpr (!isDynamicCol) {
         PTO_ASSERT(gShape4 % tileValidCol == 0,
-                   "TPUT chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
+                   "TPUT chunked: shape4 must be divisible by tile ValidCol when ValidCol "
+                   "is static. "
                    "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
     }
 

@@ -32,4 +32,3 @@ def gen_case(case_dir: str, tile_rows: int, tile_cols: int, src_len: int):
 
 if __name__ == "__main__":
     gen_case("MGATHERTest.case_float_16x16_src512", 16, 16, 512)
-
