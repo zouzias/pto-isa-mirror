@@ -23,6 +23,7 @@ namespace pto {
 enum class QuantType
 {
     MXFP8,
+    MXFP4_E2M1,
     INT8_SYM,
     INT8_ASYM
 };
@@ -31,6 +32,18 @@ enum class QuantType
 template <typename TileData>
 using FlatTile1D = Tile<TileType::Vec, typename TileData::DType, 1, TileData::Rows * TileData::Cols, BLayout::RowMajor,
                         -1, -1, SLayout::NoneBox, 512, PadValue::Zero>;
+
+template <typename T, typename U>
+PTO_INTERNAL MaskReg TQuantPSetTyped(U dist)
+{
+    if constexpr (sizeof(T) == sizeof(float)) {
+        return pset_b32(dist);
+    } else if constexpr (sizeof(T) == sizeof(half)) {
+        return pset_b16(dist);
+    } else {
+        return pset_b8(dist);
+    }
+}
 
 PTO_INTERNAL void AbsReduceMax_Naive(__ubuf__ float *srcPtr, __ubuf__ float *maxPtr, unsigned total_elements_count,
                                      unsigned vl_count, unsigned elementsPerRepeat, MaskReg &preg_lower32,
@@ -196,7 +209,7 @@ PTO_INTERNAL void AbsReduceMax_b16_ND(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr, un
 {
     constexpr uint32_t elements_per_dintlv = 2 * REPEAT_BYTE / sizeof(T); // 256 b16 per DINTLV
     constexpr uint32_t grps_per_dintlv = elements_per_dintlv / 32;        // 8 BF16 abs maxima per iter
-    constexpr uint32_t blks_per_vl = REPEAT_BYTE / BLOCK_SIZE;
+    constexpr uint32_t blks_per_vl = REPEAT_BYTE / BLOCK_BYTE_SIZE;
     static constexpr auto distValue =
         std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
     uint16_t loop_num = CeilDivision(vl_count, 2);
@@ -259,7 +272,7 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_largesizes(__ubuf__ T *srcPtr, __ubuf__ T 
     constexpr uint32_t num_vl_per_outer_loop = 32;
     constexpr uint32_t grps_per_inner_loop = num_vl_per_inner_loop * grps_per_vl; // 2 * 4 = 8 grps per inner loop
     constexpr uint32_t grps_per_outer_loop = num_vl_per_outer_loop * grps_per_vl; // 32 * 4 = 128
-    constexpr uint32_t blks_per_vl = REPEAT_BYTE / BLOCK_SIZE;                    // 8 blocks per VL
+    constexpr uint32_t blks_per_vl = REPEAT_BYTE / BLOCK_BYTE_SIZE;               // 8 blocks per VL
     static constexpr auto distValue =
         std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
     vbr(vu16_bf16_abs_mask, kBf16AbsMask);
@@ -489,6 +502,70 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling(__ubuf__ T *maxPtr, __ubuf__ uint8
     }
 }
 
+template <typename T>
+PTO_INTERNAL void ExtractE2M1ExponentAndScalingVL(__ubuf__ T *maxPtr, __ubuf__ uint8_t *expPtr, __ubuf__ T *scalingPtr,
+                                                  uint32_t off, uint32_t rem)
+{
+    static_assert(std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
+                  "ExtractE2M1ExponentAndScalingVL: T must be bfloat16_t or half");
+    constexpr uint16_t kBf16ExpMask = 0x7F80;
+    constexpr uint16_t kBf16MantissaMask = 0x007F;
+    constexpr uint16_t kFp4E2M1MaxExp = 0x0100;
+    constexpr uint16_t kBf16ExpBias = 0x7F00;
+    constexpr uint16_t kFp4Nan = 0x00FF;
+    constexpr uint16_t kBf16Nan = 0x7FC0;
+
+    __ubuf__ uint16_t *maxPtr_u16 = (__ubuf__ uint16_t *)maxPtr;
+    __ubuf__ uint16_t *scalingPtr_u16 = (__ubuf__ uint16_t *)scalingPtr;
+    RegTensor<uint16_t> vu16_max_abs, vu16_max_exp, vu16_mantissa;
+    RegTensor<uint16_t> vu16_shared_exp, vu16_scale_value, vu16_recip_scale;
+    RegTensor<uint16_t> vu16_max_exp_value, vu16_scale_bias, vu16_fp4_nan;
+    RegTensor<uint16_t> vu16_nan, vu16_exp_mask, vu16_mantissa_mask;
+    vector_bool preg_clamp, preg_special, preg_nan;
+    vector_bool preg_b16 = CreatePredicate<T>(rem);
+
+    vbr(vu16_max_exp_value, kFp4E2M1MaxExp);
+    vbr(vu16_scale_bias, kBf16ExpBias);
+    vbr(vu16_fp4_nan, kFp4Nan);
+    vbr(vu16_nan, kBf16Nan);
+    vbr(vu16_exp_mask, kBf16ExpMask);
+    vbr(vu16_mantissa_mask, kBf16MantissaMask);
+
+    vlds(vu16_max_abs, maxPtr_u16, off, NORM);
+    vand(vu16_max_exp, vu16_max_abs, vu16_exp_mask, preg_b16, MODE_ZEROING);
+    vand(vu16_mantissa, vu16_max_abs, vu16_mantissa_mask, preg_b16, MODE_ZEROING);
+    vcmps_eq(preg_special, vu16_max_exp, kBf16ExpMask, preg_b16);
+    vcmps_ne(preg_nan, vu16_mantissa, 0, preg_special);
+    vcmps_le(preg_clamp, vu16_max_exp, kFp4E2M1MaxExp, preg_b16);
+    vsel(vu16_max_exp, vu16_max_exp_value, vu16_max_exp, preg_clamp);
+
+    vsub(vu16_shared_exp, vu16_max_exp, vu16_max_exp_value, preg_b16, MODE_ZEROING);
+    vshrs(vu16_scale_value, vu16_shared_exp, 7, preg_b16, MODE_ZEROING);
+    vsel(vu16_scale_value, vu16_fp4_nan, vu16_scale_value, preg_nan);
+    vsts(vu16_scale_value, (__ubuf__ uint16_t *)expPtr, off / sizeof(T), PK_B16, preg_b16);
+
+    vsub(vu16_recip_scale, vu16_scale_bias, vu16_shared_exp, preg_b16, MODE_ZEROING);
+    vsel(vu16_recip_scale, vu16_nan, vu16_recip_scale, preg_nan);
+    vsts(vu16_recip_scale, scalingPtr_u16, off, NORM_B16, preg_b16);
+}
+
+template <typename T>
+PTO_INTERNAL void ExtractE2M1ExponentAndScaling(__ubuf__ T *maxPtr, __ubuf__ uint8_t *expPtr, __ubuf__ T *scalingPtr,
+                                                unsigned exp_max_loop_count, unsigned total_elements_count)
+{
+    static_assert(std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
+                  "ExtractE2M1ExponentAndScaling: T must be bfloat16_t or half");
+    constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T);
+
+    for (uint16_t i = 0; i < (uint16_t)exp_max_loop_count; ++i) {
+        uint32_t off = i * elementsPerVL;
+        uint32_t rem = (total_elements_count > off) ? (total_elements_count - off) : 0;
+        if (rem > elementsPerVL)
+            rem = elementsPerVL;
+        ExtractE2M1ExponentAndScalingVL<T>(maxPtr, expPtr, scalingPtr, off, rem);
+    }
+}
+
 // 2D variant of ExtractB8ExponentAndScaling for the padded (validCols != srcCols) path.
 // Iterates per row, processing only the groups backing valid columns. Max, exp and
 // scaling buffers share a packed per-row layout (row r's first group at row * groupsPerRow).
@@ -684,6 +761,231 @@ PTO_INTERNAL void CalcQuantizedFP8Values_2D(__ubuf__ T *srcPtr, __ubuf__ T *scal
     }
 }
 
+PTO_INTERNAL void CalcE2M1SignedCodeI32(vector_s32 &signedCode, vector_f32 scaled, MaskReg &preg_f32)
+{
+    constexpr uint32_t kInfBits = 0x7F800000;
+    vector_u32 vu32_abs_bits, vu32_exp, vu32_tmp;
+    vector_bool preg_sign, preg_nan;
+
+    vshrs(vu32_tmp, (vector_u32 &)scaled, (int16_t)31, preg_f32, MODE_ZEROING);
+    vcmps_ne(preg_sign, vu32_tmp, (uint32_t)0, preg_f32);
+    vshls(vu32_abs_bits, (vector_u32 &)scaled, (int16_t)1, preg_f32, MODE_ZEROING);
+    vshrs(vu32_abs_bits, vu32_abs_bits, (int16_t)1, preg_f32, MODE_ZEROING);
+    vcmps_gt(preg_nan, vu32_abs_bits, kInfBits, preg_f32);
+
+    vshrs(vu32_exp, vu32_abs_bits, (int16_t)23, preg_f32, MODE_ZEROING);
+    vmaxs(vu32_exp, vu32_exp, (uint32_t)127, preg_f32, MODE_ZEROING);
+    vmins(vu32_exp, vu32_exp, (uint32_t)129, preg_f32, MODE_ZEROING);
+
+    vadds((vector_s32 &)vu32_tmp, (vector_s32 &)vu32_exp, (int32_t)22, preg_f32, MODE_ZEROING);
+    vshls(vu32_tmp, vu32_tmp, (int16_t)23, preg_f32, MODE_ZEROING);
+    vadd(scaled, (vector_f32 &)vu32_abs_bits, (vector_f32 &)vu32_tmp, preg_f32, MODE_ZEROING);
+    vsub(vu32_abs_bits, (vector_u32 &)scaled, vu32_tmp, preg_f32);
+
+    vadds((vector_s32 &)vu32_exp, (vector_s32 &)vu32_exp, (int32_t)-127, preg_f32, MODE_ZEROING);
+    vshls(vu32_exp, vu32_exp, (int16_t)1, preg_f32, MODE_ZEROING);
+    vadd(vu32_abs_bits, vu32_abs_bits, vu32_exp, preg_f32, MODE_ZEROING);
+    vmins(vu32_abs_bits, vu32_abs_bits, (uint32_t)7, preg_f32, MODE_ZEROING);
+
+    vadds(signedCode, (vector_s32 &)vu32_abs_bits, (int32_t)-8, preg_f32, MODE_ZEROING);
+    vsel(signedCode, signedCode, (vector_s32 &)vu32_abs_bits, preg_sign);
+
+    vsel(signedCode, (vector_s32 &)vu32_abs_bits, signedCode, preg_nan);
+}
+
+PTO_INTERNAL void PackE2M1SignedCodeBytes(vector_u8 &packedBytes, vector_s32 evenCode, vector_s32 oddCode,
+                                          vector_u8 &packIndex, MaskReg &preg_f32)
+{
+    vector_u32 vu32_even, vu32_odd;
+
+    vshls(vu32_even, (vector_u32 &)evenCode, (int16_t)28, preg_f32, MODE_ZEROING);
+    vshrs(vu32_even, vu32_even, (int16_t)28, preg_f32, MODE_ZEROING);
+    vshls(vu32_odd, (vector_u32 &)oddCode, (int16_t)28, preg_f32, MODE_ZEROING);
+    vshrs(vu32_odd, vu32_odd, (int16_t)24, preg_f32, MODE_ZEROING);
+    vor(vu32_even, vu32_even, vu32_odd, preg_f32, MODE_ZEROING);
+    vselr(packedBytes, (vector_u8 &)vu32_even, packIndex);
+}
+
+PTO_INTERNAL void SaturateBf16NaNToPosInf(vector_u16 &value, MaskReg &preg_b16)
+{
+    constexpr uint16_t kBf16AbsMask = 0x7FFF;
+    constexpr uint16_t kBf16Inf = 0x7F80;
+    vector_u16 v_abs, v_abs_mask, v_inf;
+    vector_bool preg_nan;
+
+    vbr(v_abs_mask, kBf16AbsMask);
+    vbr(v_inf, kBf16Inf);
+    vand(v_abs, value, v_abs_mask, preg_b16, MODE_ZEROING);
+    vcmps_gt(preg_nan, v_abs, kBf16Inf, preg_b16);
+    vsel(value, v_inf, value, preg_nan);
+}
+
+PTO_INTERNAL void CalcQuantizedFP4E2M1Values_Half_Window(__ubuf__ half *srcPtr, __ubuf__ half *scalingPtr,
+                                                         __ubuf__ uint8_t *dstPtr, uint16_t window,
+                                                         vector_u8 &packIndex)
+{
+    constexpr uint32_t kElementsPerWindow = 256;
+    constexpr uint32_t kPackedBytesPerWindow = kElementsPerWindow / 2;
+    constexpr uint32_t kB16LanesPerReg = REPEAT_BYTE / sizeof(half);
+    constexpr uint32_t kF32LanesPerReg = REPEAT_BYTE / sizeof(float);
+    uint32_t b16LanesPerReg = kB16LanesPerReg;
+    uint32_t f32LanesPerReg = kF32LanesPerReg;
+    uint32_t packedBytesPerWindow = kPackedBytesPerWindow;
+    MaskReg preg_b16 = CreatePredicate<half>(b16LanesPerReg);
+    MaskReg preg_f32 = CreatePredicate<float>(f32LanesPerReg);
+    MaskReg preg_b8 = CreatePredicate<uint8_t>(packedBytesPerWindow);
+    MaskReg preg_all_b16 = pset_b16(PAT_ALL);
+    RegTensor<half> v_input_0, v_input_1;
+    vector_bf16 v_scaling_bf16;
+    vector_f32 v_scaling_f32, v_mod_even, v_mod_odd;
+    vector_s32 v_even_code, v_odd_code;
+    vector_u8 v_pair01, v_pair23, v_output, v_scratch;
+
+    vlds(v_input_0, v_input_1, srcPtr, window * kElementsPerWindow, DINTLV_B16);
+    vlds((vector_u16 &)v_scaling_bf16, (__ubuf__ uint16_t *)scalingPtr, 8 * window, E2B_B16);
+    vcvt(v_scaling_f32, v_scaling_bf16, preg_all_b16, PART_EVEN);
+
+    vcvt(v_mod_even, v_input_0, preg_b16, PART_EVEN);
+    vcvt(v_mod_odd, v_input_1, preg_b16, PART_EVEN);
+    vmul(v_mod_even, v_mod_even, v_scaling_f32, preg_f32, MODE_ZEROING);
+    vmul(v_mod_odd, v_mod_odd, v_scaling_f32, preg_f32, MODE_ZEROING);
+    CalcE2M1SignedCodeI32(v_even_code, v_mod_even, preg_f32);
+    CalcE2M1SignedCodeI32(v_odd_code, v_mod_odd, preg_f32);
+    PackE2M1SignedCodeBytes(v_pair01, v_even_code, v_odd_code, packIndex, preg_f32);
+
+    vcvt(v_mod_even, v_input_0, preg_b16, PART_ODD);
+    vcvt(v_mod_odd, v_input_1, preg_b16, PART_ODD);
+    vmul(v_mod_even, v_mod_even, v_scaling_f32, preg_f32, MODE_ZEROING);
+    vmul(v_mod_odd, v_mod_odd, v_scaling_f32, preg_f32, MODE_ZEROING);
+    CalcE2M1SignedCodeI32(v_even_code, v_mod_even, preg_f32);
+    CalcE2M1SignedCodeI32(v_odd_code, v_mod_odd, preg_f32);
+    PackE2M1SignedCodeBytes(v_pair23, v_even_code, v_odd_code, packIndex, preg_f32);
+
+    vintlv((RegTensor<uint8_t> &)v_output, (RegTensor<uint8_t> &)v_scratch, (RegTensor<uint8_t> &)v_pair01,
+           (RegTensor<uint8_t> &)v_pair23);
+    vsts((RegTensor<uint8_t> &)v_output, (__ubuf__ uint8_t *)dstPtr, window * kPackedBytesPerWindow, NORM_B8, preg_b8);
+}
+
+PTO_INTERNAL void CalcQuantizedFP4E2M1Values_Half(__ubuf__ half *srcPtr, __ubuf__ half *scalingPtr,
+                                                  __ubuf__ uint8_t *dstPtr, uint32_t totalGroups)
+{
+    constexpr uint32_t kGroupSize = 32;
+    constexpr uint32_t kPackedBytesPerGroup = kGroupSize / 2;
+    uint32_t groupSize = kGroupSize;
+    uint32_t packedBytesPerGroup = kPackedBytesPerGroup;
+    MaskReg preg_b16 = CreatePredicate<half>(groupSize);
+    MaskReg preg_f32 = CreatePredicate<float>(packedBytesPerGroup);
+    MaskReg preg_all_b16 = pset_b16(PAT_ALL);
+    MaskReg preg_idx = pset_b8(PAT_ALL);
+
+    vector_u8 v_idx;
+    vci((RegTensor<int8_t> &)v_idx, (int8_t)0, INC_ORDER);
+    vmuls((RegTensor<int16_t> &)v_idx, (RegTensor<int16_t> &)v_idx, (int16_t)4, preg_idx);
+
+    uint32_t windowCount = totalGroups / 8;
+    for (uint16_t window = 0; window < (uint16_t)windowCount; ++window) {
+        CalcQuantizedFP4E2M1Values_Half_Window(srcPtr, scalingPtr, dstPtr, window, v_idx);
+    }
+
+    uint32_t tailGroups = totalGroups - windowCount * 8;
+    if (tailGroups == 0) {
+        return;
+    }
+
+    UnalignReg ureg_out;
+    __ubuf__ half *srcTailPtr = srcPtr + windowCount * 256;
+    __ubuf__ half *scalingTailPtr = scalingPtr + windowCount * 8;
+    __ubuf__ uint8_t *dstWritePtr = dstPtr + windowCount * 128;
+    for (uint16_t group = 0; group < (uint16_t)tailGroups; ++group) {
+        RegTensor<half> v_input;
+        vector_bf16 v_scaling_bf16;
+        vector_f32 v_scaling_f32, v_even, v_odd;
+        vector_s32 v_even_code, v_odd_code;
+        vector_u8 v_output;
+
+        vlds(v_input, srcTailPtr, group * kGroupSize, NORM);
+        vcvt(v_even, v_input, preg_b16, PART_EVEN);
+        vcvt(v_odd, v_input, preg_b16, PART_ODD);
+        vlds((vector_u16 &)v_scaling_bf16, (__ubuf__ uint16_t *)scalingTailPtr, group, BRC_B16);
+        vcvt(v_scaling_f32, v_scaling_bf16, preg_all_b16, PART_EVEN);
+        vmul(v_even, v_even, v_scaling_f32, preg_f32, MODE_ZEROING);
+        vmul(v_odd, v_odd, v_scaling_f32, preg_f32, MODE_ZEROING);
+        CalcE2M1SignedCodeI32(v_even_code, v_even, preg_f32);
+        CalcE2M1SignedCodeI32(v_odd_code, v_odd, preg_f32);
+        PackE2M1SignedCodeBytes(v_output, v_even_code, v_odd_code, v_idx, preg_f32);
+        mem_bar(VST_VST);
+        vstus(ureg_out, packedBytesPerGroup, (RegTensor<uint8_t> &)v_output, dstWritePtr, POST_UPDATE);
+    }
+    vstas(ureg_out, dstWritePtr, 0, POST_UPDATE);
+}
+
+PTO_INTERNAL void CalcQuantizedFP4E2M1Values_Bf16(__ubuf__ bfloat16_t *srcPtr, __ubuf__ bfloat16_t *scalingPtr,
+                                                  __ubuf__ uint8_t *dstPtr, uint32_t totalGroups)
+{
+    constexpr uint32_t kGroupSize = 32;
+    constexpr uint32_t kPackedBytesPerGroup = kGroupSize / 2;
+    constexpr uint32_t kGroupsPerWindow = 8;
+    constexpr uint32_t kElementsPerWindow = kGroupSize * kGroupsPerWindow;
+    constexpr uint32_t kPackedBytesPerWindow = kElementsPerWindow / 2;
+    constexpr uint32_t kPackedBytesPerHalfWindow = kPackedBytesPerWindow / 2;
+    uint32_t groupSize = kGroupSize;
+    uint32_t packedBytesPerGroup = kPackedBytesPerGroup;
+    MaskReg preg_b16_window = pset_b16(PAT_ALL);
+    MaskReg preg_b16_group = CreatePredicate<bfloat16_t>(groupSize);
+    MaskReg preg_idx = pset_b8(PAT_ALL);
+
+    vector_u8 v_idx;
+    vci((RegTensor<int8_t> &)v_idx, (int8_t)0, INC_ORDER);
+    vmuls((RegTensor<int16_t> &)v_idx, (RegTensor<int16_t> &)v_idx, (int16_t)4, preg_idx);
+
+    uint32_t windowCount = totalGroups / kGroupsPerWindow;
+    for (uint32_t window = 0; window < windowCount; ++window) {
+        vector_bf16 v_input_0, v_input_1;
+        vector_bf16 v_intlv_0, v_intlv_1;
+        vector_bf16 v_scale;
+        vector_f4e2m1x2 v_output_0, v_output_1;
+
+        vlds(v_input_0, v_input_1, srcPtr, window * kElementsPerWindow, DINTLV_B16);
+        vlds((vector_u16 &)v_scale, (__ubuf__ uint16_t *)scalingPtr, window * kGroupsPerWindow, E2B_B16);
+        vmul(v_input_0, v_input_0, v_scale, preg_b16_window, MODE_ZEROING);
+        vmul(v_input_1, v_input_1, v_scale, preg_b16_window, MODE_ZEROING);
+        SaturateBf16NaNToPosInf((vector_u16 &)v_input_0, preg_b16_window);
+        SaturateBf16NaNToPosInf((vector_u16 &)v_input_1, preg_b16_window);
+        vintlv(v_intlv_0, v_intlv_1, v_input_0, v_input_1);
+        vcvt(v_output_0, v_intlv_0, preg_b16_window, ROUND_R, PART_P0);
+        vcvt(v_output_1, v_intlv_1, preg_b16_window, ROUND_R, PART_P0);
+        vsts((RegTensor<uint8_t> &)v_output_0, dstPtr, window * kPackedBytesPerWindow, PK4_B32, preg_b16_window);
+        vsts((RegTensor<uint8_t> &)v_output_1, dstPtr, window * kPackedBytesPerWindow + kPackedBytesPerHalfWindow,
+             PK4_B32, preg_b16_window);
+    }
+
+    uint32_t tailGroups = totalGroups - windowCount * kGroupsPerWindow;
+    if (tailGroups == 0) {
+        return;
+    }
+
+    UnalignReg ureg_out;
+    __ubuf__ bfloat16_t *srcTailPtr = srcPtr + windowCount * kElementsPerWindow;
+    __ubuf__ bfloat16_t *scalingTailPtr = scalingPtr + windowCount * kGroupsPerWindow;
+    __ubuf__ uint8_t *dstWritePtr = dstPtr + windowCount * kPackedBytesPerWindow;
+    for (uint32_t group = 0; group < tailGroups; ++group) {
+        vector_bf16 v_input;
+        vector_bf16 v_scale;
+        vector_bf16 v_scaled;
+        vector_f4e2m1x2 v_output_p0, v_output;
+
+        vlds(v_input, srcTailPtr, group * kGroupSize, NORM);
+        vlds((vector_u16 &)v_scale, (__ubuf__ uint16_t *)scalingTailPtr, group, BRC_B16);
+        vmul(v_scaled, v_input, v_scale, preg_b16_group, MODE_ZEROING);
+        SaturateBf16NaNToPosInf((vector_u16 &)v_scaled, preg_b16_group);
+        vcvt(v_output_p0, v_scaled, preg_b16_group, ROUND_R, PART_P0);
+        vselr((RegTensor<uint8_t> &)v_output, (RegTensor<uint8_t> &)v_output_p0, (RegTensor<uint8_t> &)v_idx);
+        mem_bar(VST_VST);
+        vstus(ureg_out, packedBytesPerGroup, (RegTensor<uint8_t> &)v_output, dstWritePtr, POST_UPDATE);
+    }
+    vstas(ureg_out, dstWritePtr, 0, POST_UPDATE);
+}
+
 // FP32 -> MXFP8 quantization: AbsReduceMax + ExponentScaling + FP8 conversion.
 template <unsigned StaticRows, unsigned StaticCols>
 PTO_INTERNAL void TQuant_MXFP8_F32(__ubuf__ float *srcPtr, __ubuf__ uint8_t *expPtr, __ubuf__ uint8_t *dstPtr,
@@ -784,6 +1086,36 @@ PTO_INTERNAL void TQuant_MXFP8_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *expPtr,
     }
 }
 
+template <typename T>
+PTO_INTERNAL void TQuant_MXFP4_E2M1_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *expPtr, __ubuf__ uint8_t *dstPtr,
+                                        __ubuf__ T *maxPtr, __ubuf__ T *scalingPtr, uint16_t vl_count,
+                                        unsigned exp_loop_count, uint32_t numGroups, uint32_t total_elements_count,
+                                        unsigned validCols, unsigned srcCols)
+{
+    static_assert(std::is_same<T, half>::value || std::is_same<T, bfloat16_t>::value,
+                  "TQuant_MXFP4_E2M1_B16: T must be half or bfloat16_t");
+    __ubuf__ T *maxPtr_backup = maxPtr;
+    if (validCols == srcCols) {
+        // 1D fast path: source is contiguous; keep the reducer selection aligned with MXFP8 FP16.
+        constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T);
+        constexpr uint32_t elementsPerLargeLoop = 32 * elementsPerVL;
+        if (total_elements_count % elementsPerLargeLoop == 0)
+            AbsReduceMax_b16_ND_largesizes(srcPtr, maxPtr, vl_count, total_elements_count);
+        else
+            AbsReduceMax_b16_ND(srcPtr, maxPtr, vl_count, total_elements_count);
+    } else {
+        AbsReduceMax_b16_ND(srcPtr, maxPtr, vl_count, total_elements_count);
+    }
+    mem_bar(VST_VLD);
+    maxPtr = maxPtr_backup;
+    ExtractE2M1ExponentAndScaling(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups);
+    mem_bar(VST_VLD);
+    if constexpr (std::is_same<T, half>::value)
+        CalcQuantizedFP4E2M1Values_Half(srcPtr, scalingPtr, dstPtr, numGroups);
+    else
+        CalcQuantizedFP4E2M1Values_Bf16(srcPtr, scalingPtr, dstPtr, numGroups);
+}
+
 // Zero-pad columns [validCols, StaticCols) of a 16-bit source tile at VL-aligned
 // offsets (full-VL vlds -> vsel -> vsts). Sub-VL stores at non-VL-aligned offsets
 // are unreliable on some hardware revisions. Requires StaticCols | elemPerVL.
@@ -795,7 +1127,7 @@ PTO_INTERNAL void ZeroPadColumns_VLAligned(__ubuf__ T *srcPtr, unsigned validRow
     static_assert(elemPerVL % StaticCols == 0, "StaticCols must evenly divide elements-per-VL for VL-aligned padding");
     constexpr unsigned rowsPerVL = elemPerVL / StaticCols;
 
-    MaskReg pg_all = PSetTyped<T>(PAT_ALL);
+    MaskReg pg_all = TQuantPSetTyped<T>(PAT_ALL);
 
     // Build a periodic predicate: bit p is set iff (p % StaticCols) < validCols.
     // Row 0 contributes positions [0, validCols).
@@ -837,7 +1169,7 @@ PTO_INTERNAL void ZeroPadColumns_Unaligned(__ubuf__ T *srcPtr, unsigned validRow
     uint16_t padRepeatTimes = CeilDivision(padCols, padElemPerRepeat);
     RegTensor<T> vreg_zero;
     UnalignReg ureg_pad;
-    MaskReg pg_all = PSetTyped<T>(PAT_ALL);
+    MaskReg pg_all = TQuantPSetTyped<T>(PAT_ALL);
     vdup(vreg_zero, (T)0, pg_all, MODE_ZEROING);
     for (uint16_t i = 0; i < (uint16_t)(validRows); ++i) {
         uint32_t cols = (uint32_t)(padCols);
@@ -906,6 +1238,43 @@ __tf__ PTO_INTERNAL void TQuant_MXFP8_Impl(typename TileDataOut::TileDType __out
             TQuant_MXFP8_B16(srcPtr, (__ubuf__ uint8_t *)expPtr, (__ubuf__ uint8_t *)dstPtr, maxPtr, scalingPtr,
                              vlCount, expLoopCount, numGroups, totalElems, validRows, validCols,
                              (unsigned)TileDataSrc::Cols);
+    }
+}
+
+template <typename TileDataOut, typename TileDataSrc, typename TileDataExp, typename TileDataMax,
+          typename TileDataScaling>
+__tf__ PTO_INTERNAL void TQuant_MXFP4_E2M1_Impl(typename TileDataOut::TileDType __out__ dst,
+                                                typename TileDataExp::TileDType __out__ exp,
+                                                typename TileDataMax::TileDType __out__ max,
+                                                typename TileDataScaling::TileDType __out__ scaling,
+                                                typename TileDataSrc::TileDType __in__ src, unsigned validRows,
+                                                unsigned validCols)
+{
+    using T = typename TileDataSrc::DType;
+    using ExpT = typename TileDataExp::DType;
+    using OutT = typename TileDataOut::DType;
+    static_assert(std::is_same<T, half>::value || std::is_same<T, bfloat16_t>::value,
+                  "Fix: MXFP4_E2M1 currently supports fp16/bfloat16 source only.");
+    static_assert(std::is_same<OutT, float4_e2m1x2_t>::value, "Fix: MXFP4_E2M1 output must be float4_e2m1x2_t.");
+    __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
+    __ubuf__ ExpT *expPtr = (__ubuf__ ExpT *)__cce_get_tile_ptr(exp);
+    __ubuf__ OutT *dstPtr = (__ubuf__ OutT *)__cce_get_tile_ptr(dst);
+    __ubuf__ T *maxPtr = (__ubuf__ T *)__cce_get_tile_ptr(max);
+    __ubuf__ T *scalingPtr = (__ubuf__ T *)__cce_get_tile_ptr(scaling);
+
+    set_ctrl(static_cast<uint64_t>(1) << 50);
+    __VEC_SCOPE__
+    {
+        ZeroPadSourceTile<T, TileDataSrc::Cols>(srcPtr, validRows, validCols);
+        mem_bar(VST_VLD);
+
+        constexpr unsigned elemPerVL = REPEAT_BYTE / sizeof(T);
+        uint32_t totalElems = validRows * (unsigned)TileDataSrc::Cols;
+        uint16_t vlCount = CeilDivision(totalElems, elemPerVL);
+        uint32_t numGroups = totalElems / 32;
+        unsigned expLoopCount = CeilDivision(numGroups, elemPerVL);
+        TQuant_MXFP4_E2M1_B16(srcPtr, (__ubuf__ uint8_t *)expPtr, (__ubuf__ uint8_t *)dstPtr, maxPtr, scalingPtr,
+                              vlCount, expLoopCount, numGroups, totalElems, validCols, (unsigned)TileDataSrc::Cols);
     }
 }
 
@@ -1016,9 +1385,18 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
                               TileDataScaling *scaling)
 {
     using T = typename TileDataSrc::DType;
-    static_assert(
-        std::is_same<T, float32_t>::value || std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
-        "Fix: Input has to be float32, bfloat16, or float16 (half)");
+    static_assert(quant_type == QuantType::MXFP8 || quant_type == QuantType::MXFP4_E2M1,
+                  "Fix: MX quant overload supports MXFP8/MXFP4_E2M1.");
+    if constexpr (quant_type == QuantType::MXFP8) {
+        static_assert(
+            std::is_same<T, float32_t>::value || std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
+            "Fix: MXFP8 input has to be float32, bfloat16, or float16 (half)");
+    } else {
+        static_assert(std::is_same<T, half>::value || std::is_same<T, bfloat16_t>::value,
+                      "Fix: MXFP4_E2M1 input has to be float16 (half) or bfloat16");
+        static_assert(std::is_same<typename TileDataOut::DType, float4_e2m1x2_t>::value,
+                      "Fix: MXFP4_E2M1 output has to be float4_e2m1x2_t");
+    }
     // Create 1D flat views — TQuant operates on flattened buffers internally.
     constexpr int expN = TileDataExp::Rows * TileDataExp::Cols;
     FlatTile1D<TileDataExp> flatExp(1, expN);
@@ -1029,9 +1407,16 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
     constexpr int scalN = TileDataScaling::Rows * TileDataScaling::Cols;
     FlatTile1D<TileDataScaling> flatScaling(1, scalN);
     TRESHAPE_IMPL(flatScaling, *scaling);
-    TQuant_MXFP8_Impl<TileDataOut, TileDataSrc, FlatTile1D<TileDataExp>, FlatTile1D<TileDataMax>,
-                      FlatTile1D<TileDataScaling>>(dst.data(), flatExp.data(), flatMax.data(), flatScaling.data(),
-                                                   src.data(), src.GetValidRow(), src.GetValidCol());
+    if constexpr (quant_type == QuantType::MXFP8) {
+        TQuant_MXFP8_Impl<TileDataOut, TileDataSrc, FlatTile1D<TileDataExp>, FlatTile1D<TileDataMax>,
+                          FlatTile1D<TileDataScaling>>(dst.data(), flatExp.data(), flatMax.data(), flatScaling.data(),
+                                                       src.data(), src.GetValidRow(), src.GetValidCol());
+    } else {
+        TQuant_MXFP4_E2M1_Impl<TileDataOut, TileDataSrc, FlatTile1D<TileDataExp>, FlatTile1D<TileDataMax>,
+                               FlatTile1D<TileDataScaling>>(dst.data(), flatExp.data(), flatMax.data(),
+                                                            flatScaling.data(), src.data(), src.GetValidRow(),
+                                                            src.GetValidCol());
+    }
     // Reshape exp back to user's original tile shape. Max and scaling are scratch buffers.
     TRESHAPE_IMPL(*exp, flatExp);
 }
