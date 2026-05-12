@@ -207,6 +207,223 @@ TEST(TQuantCpuSimTest, MxFp8NdMatchesExactBytes)
     }
 }
 
+enum class MxFp4Case {
+    Special,
+    Subnormal,
+    Rounding,
+    ExpRandomA,
+    ExpRandomB,
+    Mixed,
+};
+
+float MakeMxFp4ExpRandomValue(int index, int seed)
+{
+    const int exponent = -24 + ((index * 13 + seed * 17) % 40);
+    const float mantissa = 1.0f + static_cast<float>((index * 29 + seed * 11) % 1024) / 1024.0f;
+    const float sign = ((index + seed) % 5 < 2) ? -1.0f : 1.0f;
+    return sign * std::ldexp(mantissa, exponent);
+}
+
+float MakeMxFp4CaseValue(MxFp4Case caseId, int index)
+{
+    static const float specialValues[] = {
+        0.0f, -0.0f, std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity(),
+        std::numeric_limits<float>::quiet_NaN(), 65504.0f, -65504.0f, 6.0f,
+        -6.0f, 4.0f, -4.0f, 1.5f, -1.5f, 0.5f, -0.5f, 0.25f,
+    };
+    static const float roundingValues[] = {
+        4.0f, -4.0f, 3.75f, -3.75f, 3.5f, -3.5f, 3.0f, -3.0f,
+        2.5f, -2.5f, 2.25f, -2.25f, 2.0f, -2.0f, 1.75f, -1.75f,
+        1.5f, -1.5f, 1.25f, -1.25f, 1.0f, -1.0f, 0.75f, -0.75f,
+        0.5f, -0.5f, 0.375f, -0.375f, 0.25f, -0.25f, 0.125f, -0.125f,
+    };
+
+    switch (caseId) {
+        case MxFp4Case::Special:
+            return specialValues[index % (sizeof(specialValues) / sizeof(specialValues[0]))];
+        case MxFp4Case::Subnormal: {
+            const float value = std::ldexp(static_cast<float>((index % 1023) + 1), -24);
+            return (index & 1) ? -value : value;
+        }
+        case MxFp4Case::Rounding:
+            return roundingValues[index % (sizeof(roundingValues) / sizeof(roundingValues[0]))];
+        case MxFp4Case::ExpRandomA:
+            return MakeMxFp4ExpRandomValue(index, 3);
+        case MxFp4Case::ExpRandomB:
+            return MakeMxFp4ExpRandomValue(index, 41);
+        case MxFp4Case::Mixed:
+            switch ((index / 32) % 4) {
+                case 0:
+                    return specialValues[index % (sizeof(specialValues) / sizeof(specialValues[0]))];
+                case 1:
+                    return MakeMxFp4CaseValue(MxFp4Case::Subnormal, index);
+                case 2:
+                    return roundingValues[index % (sizeof(roundingValues) / sizeof(roundingValues[0]))];
+                default:
+                    return MakeMxFp4ExpRandomValue(index, 71);
+            }
+    }
+    return 0.0f;
+}
+
+void ExpectFloatEqOrNan(float actual, float expected)
+{
+    if (std::isnan(expected)) {
+        EXPECT_TRUE(std::isnan(actual));
+    } else {
+        EXPECT_FLOAT_EQ(actual, expected);
+    }
+}
+
+template <typename SrcT, int validRows = 2, int validCols = 128>
+void RunMxFp4E2M1NdCase(MxFp4Case caseId)
+{
+    constexpr int groupCols = validCols / 32;
+    constexpr int totalGroups = validRows * groupCols;
+    constexpr int expCols = ((totalGroups + 31) / 32) * 32;
+    constexpr int maxCols = ((totalGroups + 7) / 8) * 8;
+    using SrcTile = Tile<TileType::Vec, SrcT, validRows, validCols>;
+    using DstTile = Tile<TileType::Vec, float4_e2m1x2_t, validRows, (validCols + 1) / 2>;
+    using ExpTile = Tile<TileType::Vec, uint8_t, 1, expCols>;
+    using MaxTile = Tile<TileType::Vec, float, 1, maxCols>;
+    SrcTile src;
+    DstTile dst;
+    ExpTile exp;
+    MaxTile max;
+    MaxTile scaling;
+    size_t addr = 0;
+    TASSIGN(src, addr);
+    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    TASSIGN(dst, addr);
+    addr += DstTile::Numel * sizeof(typename DstTile::DType);
+    TASSIGN(exp, addr);
+    addr += ExpTile::Numel * sizeof(typename ExpTile::DType);
+    TASSIGN(max, addr);
+    addr += MaxTile::Numel * sizeof(typename MaxTile::DType);
+    TASSIGN(scaling, addr);
+
+    for (int r = 0; r < src.GetValidRow(); ++r) {
+        for (int c = 0; c < src.GetValidCol(); ++c) {
+            src.data()[GetTileElementOffset<SrcTile>(r, c)] =
+                static_cast<SrcT>(MakeMxFp4CaseValue(caseId, r * SrcTile::Cols + c));
+        }
+    }
+
+    TQUANT<QuantType::MXFP4_E2M1>(dst, src, &exp, &max, &scaling);
+
+    const auto *dstBytes = reinterpret_cast<const uint8_t *>(dst.data());
+    for (int row = 0; row < validRows; ++row) {
+        for (int group = 0; group < groupCols; ++group) {
+            uint16_t maxAbsBf16Bits = 0;
+            for (int inner = 0; inner < 32; ++inner) {
+                const int col = group * 32 + inner;
+                const float value = static_cast<float>(src.data()[GetTileElementOffset<SrcTile>(row, col)]);
+                maxAbsBf16Bits = std::max(maxAbsBf16Bits, cpu_quant::AbsBf16BitsFromFloat(value));
+            }
+            const float expectedMax = cpu_quant::Bf16BitsToFloat(maxAbsBf16Bits);
+            const uint8_t expectedExp = cpu_quant::ComputeE2M1SharedExponent(expectedMax);
+            const float expectedScaling = cpu_quant::ComputeE2M1ScalingFromExponent(expectedExp);
+            const int flatGroupIdx = row * groupCols + group;
+            EXPECT_EQ(exp.data()[flatGroupIdx], expectedExp);
+            ExpectFloatEqOrNan(max.data()[flatGroupIdx], expectedMax);
+            ExpectFloatEqOrNan(scaling.data()[flatGroupIdx], expectedScaling);
+            for (int byte = 0; byte < 16; ++byte) {
+                const int col0 = group * 32 + byte * 2;
+                const int col1 = col0 + 1;
+                const uint8_t lo = cpu_quant::EncodeE2M1Magic(cpu_quant::ApplyE2M1ScaleForSource<SrcT>(
+                    src.data()[GetTileElementOffset<SrcTile>(row, col0)], expectedScaling));
+                const uint8_t hi = cpu_quant::EncodeE2M1Magic(cpu_quant::ApplyE2M1ScaleForSource<SrcT>(
+                    src.data()[GetTileElementOffset<SrcTile>(row, col1)], expectedScaling));
+                EXPECT_EQ(dstBytes[row * DstTile::Cols + col0 / 2], static_cast<uint8_t>(lo | (hi << 4)));
+            }
+        }
+    }
+}
+
+void RunMxFp4E2M1Fp16NdCase(MxFp4Case caseId)
+{
+    RunMxFp4E2M1NdCase<aclFloat16>(caseId);
+}
+
+#if defined(PTO_CPU_SIM_ENABLE_BF16)
+void RunMxFp4E2M1Bf16NdCase(MxFp4Case caseId)
+{
+    RunMxFp4E2M1NdCase<bfloat16_t>(caseId);
+}
+#endif
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Fp16NdSpecial)
+{
+    RunMxFp4E2M1Fp16NdCase(MxFp4Case::Special);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Fp16NdSubnormal)
+{
+    RunMxFp4E2M1Fp16NdCase(MxFp4Case::Subnormal);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Fp16NdRounding)
+{
+    RunMxFp4E2M1Fp16NdCase(MxFp4Case::Rounding);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Fp16NdExpRandomA)
+{
+    RunMxFp4E2M1Fp16NdCase(MxFp4Case::ExpRandomA);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Fp16NdExpRandomB)
+{
+    RunMxFp4E2M1Fp16NdCase(MxFp4Case::ExpRandomB);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Fp16NdMixed)
+{
+    RunMxFp4E2M1Fp16NdCase(MxFp4Case::Mixed);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Fp16NdMixed32x1024)
+{
+    RunMxFp4E2M1NdCase<aclFloat16, 32, 1024>(MxFp4Case::Mixed);
+}
+
+#if defined(PTO_CPU_SIM_ENABLE_BF16)
+TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdSpecial)
+{
+    RunMxFp4E2M1Bf16NdCase(MxFp4Case::Special);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdSubnormal)
+{
+    RunMxFp4E2M1Bf16NdCase(MxFp4Case::Subnormal);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdRounding)
+{
+    RunMxFp4E2M1Bf16NdCase(MxFp4Case::Rounding);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdExpRandomA)
+{
+    RunMxFp4E2M1Bf16NdCase(MxFp4Case::ExpRandomA);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdExpRandomB)
+{
+    RunMxFp4E2M1Bf16NdCase(MxFp4Case::ExpRandomB);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdMixed)
+{
+    RunMxFp4E2M1Bf16NdCase(MxFp4Case::Mixed);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdMixed32x1024)
+{
+    RunMxFp4E2M1NdCase<bfloat16_t, 32, 1024>(MxFp4Case::Mixed);
+}
+#endif
+
 TEST(TQuantCpuSimTest, MxFp8NzReordersExponentsExactly)
 {
     using SrcTile = Tile<TileType::Vec, float, 16, 64>;
