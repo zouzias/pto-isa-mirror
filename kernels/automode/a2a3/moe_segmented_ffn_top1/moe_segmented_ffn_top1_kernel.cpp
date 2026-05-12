@@ -115,120 +115,108 @@ __global__ AICORE void runMoeSegmentedFfnTop1(
 
     // ---- Tile alignment (FP16 path, per §A16 / §A17) -----------------------
     // For FP16 inputs: blockAlign = C0_SIZE_BYTE / sizeof(TIn) = 32 / 2 = 16.
-    // With kTileM=128, kH=kF=64 every dim is already aligned; M=128, K=N=64.
+    // With kTileM=128 and kH==kF==64 every dim is already aligned and BOTH
+    // GEMMs have identical (M, K, N) = (128, 64, 64) and identical dtypes
+    // (half/half -> float). So one set of cube tiles is enough — same budget
+    // and same shapes as §A16 / §A17, just reloaded with different GM data
+    // in each GEMM body. The original two-tile-set version pushed concurrent
+    // L0A/L0B/L0C usage and cross-tile GM dependencies that have no in-tree
+    // confirmed reference; consolidating to one tile set keeps every piece
+    // of the kernel inside the §A16/§A17 known-good envelope.
     constexpr int blockAlign = C0_SIZE_BYTE / sizeof(TIn);
-    constexpr int M  = ((kTileM + 15) / 16) * 16;
-    constexpr int K1 = ((kH      + blockAlign - 1) / blockAlign) * blockAlign;  // GEMM1 K
-    constexpr int N1 = ((kF      + blockAlign - 1) / blockAlign) * blockAlign;  // GEMM1 N
-    constexpr int K2 = ((kF      + blockAlign - 1) / blockAlign) * blockAlign;  // GEMM2 K
-    constexpr int N2 = ((kH      + blockAlign - 1) / blockAlign) * blockAlign;  // GEMM2 N
+    constexpr int M = ((kTileM + 15) / 16) * 16;
+    constexpr int K = ((kH      + blockAlign - 1) / blockAlign) * blockAlign;
+    constexpr int N = ((kF      + blockAlign - 1) / blockAlign) * blockAlign;
+    static_assert(kH == kF,
+        "This milestone requires kH == kF; otherwise GEMM1 and GEMM2 cube "
+        "shapes diverge and the consolidated tile set no longer applies.");
 
     // ---- GM tensor views ---------------------------------------------------
-    // GEMM1:  A1 = packed_tokens slice [kTileM, kH] half
-    //         B1 = w1[e]                [kH, kF]    half
-    //         C1 = scratch slice         [kTileM, kF] half  (post-ReLU)
-    // GEMM2:  A2 = scratch slice         [kTileM, kF] half
-    //         B2 = w2[e]                [kF, kH]    half
-    //         C2 = packed_output slice  [kTileM, kH] float
-    using GlobalDataA1 =
+    // Naming reflects ROLE, not dtype-symmetry. With kH == kF == 64 some of
+    // these typedefs are actually identical types (e.g. GlobalDataAHalf ==
+    // GlobalDataScratch) — kept separate for readability.
+    using GlobalDataAHalf =
         GlobalTensor<TIn,      Shape<1, 1, 1, kTileM, kH>,
                      Stride<1 * kTileM * kH, 1 * kTileM * kH, kTileM * kH, kH, 1>>;
-    using GlobalDataB1 =
+    using GlobalDataBHalf =
         GlobalTensor<TWeight,  Shape<1, 1, 1, kH,     kF>,
                      Stride<1 * kH * kF,     1 * kH * kF,     kH * kF,     kF, 1>>;
-    using GlobalDataC1 =
+    using GlobalDataScratch =
         GlobalTensor<TScratch, Shape<1, 1, 1, kTileM, kF>,
                      Stride<1 * kTileM * kF, 1 * kTileM * kF, kTileM * kF, kF, 1>>;
-    using GlobalDataA2 =
-        GlobalTensor<TScratch, Shape<1, 1, 1, kTileM, kF>,
-                     Stride<1 * kTileM * kF, 1 * kTileM * kF, kTileM * kF, kF, 1>>;
-    using GlobalDataB2 =
-        GlobalTensor<TWeight,  Shape<1, 1, 1, kF,     kH>,
-                     Stride<1 * kF * kH,     1 * kF * kH,     kF * kH,     kH, 1>>;
-    using GlobalDataC2 =
+    using GlobalDataCFloat =
         GlobalTensor<TOut,     Shape<1, 1, 1, kTileM, kH>,
                      Stride<1 * kTileM * kH, 1 * kTileM * kH, kTileM * kH, kH, 1>>;
 
     // ---- Tile aliases (exact RunTMATMUL pattern; see §A16) ----------------
-    // GEMM1
-    using TileMatA1Data = Tile<TileType::Mat, TIn,      M,  K1, BLayout::ColMajor,
-                               kTileM, kH, SLayout::RowMajor, 512>;
-    using TileMatB1Data = Tile<TileType::Mat, TWeight,  K1, N1, BLayout::ColMajor,
-                               kH,     kF, SLayout::RowMajor, 512>;
-    using LeftTile1     = TileLeft <TIn,      M,  K1, kTileM, kH>;  // L0A
-    using RightTile1    = TileRight<TWeight,  K1, N1, kH,     kF>;  // L0B
-    using AccTile1      = TileAcc  <TOut,     M,  N1, kTileM, kF>;  // L0C (FP32)
-
-    // GEMM2
-    using TileMatA2Data = Tile<TileType::Mat, TScratch, M,  K2, BLayout::ColMajor,
-                               kTileM, kF, SLayout::RowMajor, 512>;
-    using TileMatB2Data = Tile<TileType::Mat, TWeight,  K2, N2, BLayout::ColMajor,
-                               kF,     kH, SLayout::RowMajor, 512>;
-    using LeftTile2     = TileLeft <TScratch, M,  K2, kTileM, kF>;  // L0A
-    using RightTile2    = TileRight<TWeight,  K2, N2, kF,     kH>;  // L0B
-    using AccTile2      = TileAcc  <TOut,     M,  N2, kTileM, kH>;  // L0C (FP32)
+    // Single set, reused by both GEMMs. Mat / Left / Right are half; Acc is
+    // float. Both GEMMs use these tiles in the same TLOAD -> TMOV -> TMATMUL
+    // -> TSTORE order, just with different GM sources / destinations.
+    using TileMatAData = Tile<TileType::Mat, TIn,     M, K, BLayout::ColMajor,
+                              kTileM, kH, SLayout::RowMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, TWeight, K, N, BLayout::ColMajor,
+                              kH,     kF, SLayout::RowMajor, 512>;
+    using LeftTile     = TileLeft <TIn,     M, K, kTileM, kH>;  // L0A
+    using RightTile    = TileRight<TWeight, K, N, kH,     kF>;  // L0B
+    using AccTile      = TileAcc  <TOut,    M, N, kTileM, kF>;  // L0C (FP32)
 
     // Declare each tile once outside both loops. Auto allocator pins L1 / L0
-    // addresses; reused across all inner iterations.
-    TileMatA1Data a1MatTile;
-    TileMatB1Data b1MatTile;
-    LeftTile1     a1Tile;
-    RightTile1    b1Tile;
-    AccTile1      c1Tile;
-
-    TileMatA2Data a2MatTile;
-    TileMatB2Data b2MatTile;
-    LeftTile2     a2Tile;
-    RightTile2    b2Tile;
-    AccTile2      c2Tile;
+    // addresses; reused across BOTH GEMMs AND all inner iterations — the
+    // same pattern §A11 / §A16 / §A17 use for serial tile reuse.
+    TileMatAData aMatTile;
+    TileMatBData bMatTile;
+    LeftTile     aTile;
+    RightTile    bTile;
+    AccTile      cTile;
 
     for (unsigned e = 0; e < kNumExperts; ++e) {
         int32_t start = expert_start[e];      // GM scalar read (§11.4 / §A13)
         int32_t count = expert_count[e];      // GM scalar read (§11.4 / §A13)
 
         // Per-expert weight pointers; hoisted out of the inner loop.
-        GlobalDataB1 b1Global(w1 + static_cast<size_t>(e) * kH * kF);
-        GlobalDataB2 b2Global(w2 + static_cast<size_t>(e) * kF * kH);
+        GlobalDataBHalf b1Global(w1 + static_cast<size_t>(e) * kH * kF);
+        GlobalDataBHalf b2Global(w2 + static_cast<size_t>(e) * kF * kH);
 
         for (int32_t m0 = 0; m0 < count; m0 += static_cast<int32_t>(kTileM)) {
             size_t row    = static_cast<size_t>(start) + static_cast<size_t>(m0);
             size_t aOff   = row * kH;   // packed_tokens / packed_output stride
             size_t sOff   = row * kF;   // scratch stride
 
-            GlobalDataA1 a1Global(packed_tokens + aOff);
-            GlobalDataC1 c1Global(scratch       + sOff);
-            GlobalDataA2 a2Global(scratch       + sOff);
-            GlobalDataC2 c2Global(packed_output + aOff);
+            GlobalDataAHalf   a1Global(packed_tokens + aOff);
+            GlobalDataScratch c1Global(scratch       + sOff);
+            GlobalDataScratch a2Global(scratch       + sOff);
+            GlobalDataCFloat  c2Global(packed_output + aOff);
 
             // ============================================================
             // GEMM1: packed_tokens (FP16) @ w1[e] (FP16) -> Acc<float> -> ReLU -> scratch (FP16)
             // ============================================================
-            TLOAD(a1MatTile, a1Global);
-            TLOAD(b1MatTile, b1Global);
-            TMOV(a1Tile, a1MatTile);
-            TMOV(b1Tile, b1MatTile);
-            TMATMUL(c1Tile, a1Tile, b1Tile);
+            TLOAD(aMatTile, a1Global);
+            TLOAD(bMatTile, b1Global);
+            TMOV(aTile, aMatTile);
+            TMOV(bTile, bMatTile);
+            TMATMUL(cTile, aTile, bTile);
 
             // L0C -> GM with ReLU AND FP32 -> FP16 downcast fused into the
-            // FIX-pipe store. Template args order: <TileData, GlobalData,
-            // AtomicType, ReluPreMode>. Same call shape as §A17 except the
-            // GM destination dtype is half instead of float. See file
-            // header for the "NEW (single isolated assumption)" note.
-            TSTORE<AccTile1, GlobalDataC1, AtomicType::AtomicNone,
-                   ReluPreMode::NormalRelu>(c1Global, c1Tile);
+            // FIX-pipe store. Confirmed working in this milestone (the single
+            // new ND-layout assumption — see file header).
+            TSTORE<AccTile, GlobalDataScratch, AtomicType::AtomicNone,
+                   ReluPreMode::NormalRelu>(c1Global, cTile);
 
             // ============================================================
             // GEMM2: scratch (FP16) @ w2[e] (FP16) -> Acc<float> -> packed_output (FP32)
             // ============================================================
+            // Reuses the same five cube tiles. Auto-sync orders this against
+            // the GEMM1 chain via tile reuse (cTile drain -> aMatTile reload,
+            // etc.), which is the §A16 / §A17 known-good ordering pattern.
             if constexpr (!kStopAfterGemm1) {
-                TLOAD(a2MatTile, a2Global);
-                TLOAD(b2MatTile, b2Global);
-                TMOV(a2Tile, a2MatTile);
-                TMOV(b2Tile, b2MatTile);
-                TMATMUL(c2Tile, a2Tile, b2Tile);
+                TLOAD(aMatTile, a2Global);
+                TLOAD(bMatTile, b2Global);
+                TMOV(aTile, aMatTile);
+                TMOV(bTile, bMatTile);
+                TMATMUL(cTile, aTile, bTile);
 
                 // L0C -> GM, plain FP32 store (no ReLU on the FFN output).
-                TSTORE(c2Global, c2Tile);
+                TSTORE(c2Global, cTile);
             }
             // If kStopAfterGemm1 is true: packed_output remains at the
             // host-poisoned pattern (0x5A bytes). compare_outputs.py will
