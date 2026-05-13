@@ -437,6 +437,31 @@ See [known_good_kernel_examples.md §C4](known_good_kernel_examples.md). Listed 
 4. **Fix** — Use the loop induction variable directly; avoid wrapping the guard behind a non-constexpr predicate.
 5. **Confidence** — High. Status — Known.
 
+### 7.4 Cross-iter auto-sync gap on complex row-loop pipelines — `pipe_barrier(PIPE_ALL)` as a sanctioned escape hatch
+
+1. **Pattern** — A multi-iter in-kernel loop whose body contains a **complex pipeline of PTO ops on multiple distinct tiles** (e.g. `TLOAD srcTile + TLOAD idxTile → TSORT32 → TMRGSORT-loop → SortTailBlock → TGATHER (P0101) → TGATHER (P1010 via TRESHAPE type-pun) → TSTORE × 2`). The whole body is repeated per row, with the SAME tile *types* re-used iteration to iteration. No `set_flag`/`wait_flag`/`pipe_barrier`/`TPipe`/double-buffering is present.
+2. **Why risky** — The auto-sync passes (which insert MTE/V ordering) track dependencies **per tile identity, not per UB region**. For a simple body (`TLOAD a → TLOAD b → TADD c → TSTORE c`, like `add_tile_array`) this is sufficient: same-tile WAR/WAW deps across iters are caught. For the TopK-shape body above, the failure mode is:
+   - The auto allocator can decide that `outIdxTile` (live only `TGATHER → TSTORE`) and `idxTile` (live only `TLOAD → TSORT32`) have disjoint per-iter lifetimes and place them in the **same UB block**.
+   - Auto-sync sees them as different tiles and does not order iter `i`'s `TSTORE outIdxTile` against iter `i+1`'s `TLOAD idxTile`.
+   - Iter `i+1`'s TLOAD then clobbers the UB region before iter `i`'s TSTORE retires.
+   - Symmetric failure for `outValTile`↔`srcTile`.
+3. **Where, symptoms confirmed on Ascend910B1** (kernel: [kernels/automode/a2a3/topk/topk_kernel.cpp](../kernels/automode/a2a3/topk/topk_kernel.cpp), `kRows=4, kCols=1280, kTopK=512`):
+   - **No barrier, per-iter TLOAD, tiles inside loop**: rows 0/1/2 indices clobbered to identity (`[0, 1, 2, …]` — the contents `idxTile` held after iter `i+1`'s `TLOAD`), row 3 (last iter, no follower) idx perfect. Values ~25% bad per row.
+   - **No barrier, pre-loaded `srcAllTile` + `idxTile` outside the loop**: rows 0/2/3 fully correct, row 1 fully wrong — a different but still cross-iter artifact (Inferred: auto-pipelining at the second iter).
+   - **`pipe_barrier(PIPE_ALL)` at the START of each row iter** (either variant): `test value success` + `test index success` + `test success`. The barrier serializes the previous iter's ops before the next iter starts, closing the gap.
+4. **Fix — preferred order**:
+   1. First, try to remove the alias risk by data flow: pre-load shared inputs ONCE before the loop (e.g. an identity `idxTile` that is row-invariant), and use `TSUBVIEW` to slice per row. This eliminates one alias class without manual sync.
+   2. If a hardware run still shows iter-dependent failures (entire rows wrong, only "last iter correct" patterns, identity-shaped output), add `pipe_barrier(PIPE_ALL)` at the **start** of each iter as a serializing barrier.
+   3. Treat the barrier as load-bearing: leave an inline comment with the failure symptom + the hardware datum that motivated it. The barrier is a deliberate, narrowly-scoped deviation from §2.2 ("unguarded `pipe_barrier` at kernel scope is an anti-pattern").
+5. **When to NOT reach for the barrier**:
+   - Single-iter kernels (no loop).
+   - Loops with simple bodies that match the `add_tile_array` shape (`TLOAD a, TLOAD b, T<op> c, TSTORE c`) — no evidence the auto-sync gap manifests there.
+   - Anywhere correctness is not yet confirmed on hardware — the barrier is a **fix for an observed failure**, not a prophylactic. Adding it speculatively masks bugs and burns auto-mode parallelism unnecessarily.
+6. **Confidence** — High that the barrier-at-iter-start recipe works for the TopK 2D row-loop shape (hardware-confirmed). Medium for the underlying mechanism (the auto-sync passes' exact treatment of disjoint-lifetime aliased tiles is not documented in [docs/auto_mode/](../docs/auto_mode/) — diagnosis above is Inferred from hardware-observed symptoms).
+7. **Status** — Known (sanctioned exception, hardware-confirmed); refines §2.2.
+
+> **Cross-cutting rule** (refines §2.2): kernel-scope `pipe_barrier(PIPE_ALL)` is *normally* an anti-pattern, BUT it is the sanctioned escape hatch when a complex per-iter pipeline demonstrably fails on hardware due to a cross-iter auto-sync gap. Keep usage at a minimum — one barrier per row iteration at most — and document the failure symptom at the call site.
+
 ---
 
 ## Cross-references
