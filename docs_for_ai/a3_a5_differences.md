@@ -435,20 +435,15 @@ A5 mirror status (cross-cutting, audit pending) — Known where verified, Unknow
 
 ## 12. Open assumptions and items to verify
 
-Listed in source-line / question form; mark Confidence and the file to read.
+Tracked with full Confidence/Status labels in [assumptions_to_verify.md](assumptions_to_verify.md):
 
-1. **A5 cube compile flag** — Inferred `dav-c310-cube` (parallel to vec) but not verified. (Confidence Low; Unknown.) Read [tests/npu/a5/src/st/testcase/CMakeLists.txt](../tests/npu/a5/src/st/testcase/CMakeLists.txt) end-to-end.
-2. **A5 cube macro name** for the `Tile<TileType::Bias, ...>` storage gate — A3 uses `__DAV_C220_CUBE__` ([memory.hpp:74](../include/pto/common/memory.hpp#L74)); A5 equivalent Unknown. A wrong macro means `MemoryQualifier<Bias, T>::type` falls back to `uint64_t` silently. (Confidence Medium it exists; specific name Unknown.)
-3. **Why A5 `Tile<Bias>::TileDType` skips `tile_size(...)`** ([pto_tile.hpp:1534-1536](../include/pto/common/pto_tile.hpp#L1534-L1536)) — Inferred A5 cube exposes the bias buffer as a fixed-size construct that does not need an allocator marker. Confirm with the bisheng-CCE backend docs (outside this repo).
-4. **`TileLeft` BLayout split implication for `TileMatA` declarations** — both A3 and A5 in-tree tmatmul kernels declare `TileMatA` as `BLayout::ColMajor` ([a3 tmatmul:51](../tests/npu/a2a3/src/st/testcase/tmatmul/tmatmul_kernel.cpp#L51), [a5 tmatmul:53](../tests/npu/a5/src/st/testcase/tmatmul/tmatmul_kernel.cpp#L53)) despite the alias differing. Verify the auto-mode `TMOV` matches both (Inferred — should, since `TMOV` is dispatched per-arch via [pto_instr_impl.hpp](../include/pto/common/pto_instr_impl.hpp); but Unknown until tested).
-5. **A3 vs A5 GEMM-MX `SFractalSize`** — A5 `tmatmul_mx_kernel.cpp` uses `512` for AB Mat tiles regardless of element width ([line 95-97](../tests/npu/a5/src/st/testcase/tmatmul_mx/tmatmul_mx_kernel.cpp#L95-L97)). Whether `512` remains correct for FP4 (where `sizeof(T) < 1` effectively) — Unknown. See [auto_mode_bad_patterns.md §4.4](auto_mode_bad_patterns.md).
-6. **A5 quant `MXFP8` semantics** — separate path in [a5/TQuant.hpp](../include/pto/npu/a5/TQuant.hpp). Whether A3-style `TQUANT<INT8_SYM, ...>` calls produce identical output on A3 and A5 — Inferred yes (same enum value), but Unknown at the bit level.
-7. **A5 `TSCATTER` semantics** — file is much larger than A3's. Whether the user-facing `TSCATTER(...)` instruction has the same contract — Unknown until [a5/TScatter.hpp](../include/pto/npu/a5/TScatter.hpp) is read end-to-end.
-8. **A5 `TRsqrt` user API** — A3 lacks a dedicated `TRsqrt.hpp`. Whether the A3 `TRSQRT` user-API exists (composed) or is also missing — Unknown. Read [a3 pto_instr.hpp / pto_instr_impl.hpp](../include/pto/common/pto_instr.hpp) for the `TRSQRT` declaration.
-9. **A5 `Custom`/`Hp` helper API surface** — [a5/custom/Div754.hpp](../include/pto/npu/a5/custom/Div754.hpp), [TExp_Custom.hpp](../include/pto/npu/a5/custom/TExp_Custom.hpp), [TFmodRemHp.hpp](../include/pto/npu/a5/custom/TFmodRemHp.hpp), [TLog_Custom.hpp](../include/pto/npu/a5/custom/TLog_Custom.hpp), [TSqrtHp.hpp](../include/pto/npu/a5/custom/TSqrtHp.hpp). Whether these are kernel-callable user APIs or library-internal `_IMPL`s — Unknown without reading each. The naming `_Custom` suggests overrideable customization; `Hp` suggests library helper.
-10. **A5 PTO_URMA path** — `PTO_URMA_SUPPORTED` is defined only when `__NPU_ARCH__ == 3510` ([arch_macro.hpp:18-20](../include/pto/common/arch_macro.hpp#L18-L20)). 3101-only A5 builds skip [include/pto/comm/a5/async/](../include/pto/comm/a5/async/). Whether that affects auto-mode kernel generation — Inferred no (it only affects communication ops), but worth flagging.
-11. **A5 mirror full audit of PR-852 fix targets** — see §11 table. Spot-checks negative for the two most visible patterns (`__cce_get_tile_ptr(x+N)` and `PtoSetWaitFlag` inside `__tf__`); other items Unknown. A line-by-line audit of [a5/TQuant.hpp](../include/pto/npu/a5/TQuant.hpp), [a5/TReshape.hpp](../include/pto/npu/a5/TReshape.hpp), [a5/TTrans.hpp](../include/pto/npu/a5/TTrans.hpp) is the next step.
-12. **Whether A5 tests have an analogous "ST testcase failures in auto mode"** — PR-852 was triggered by failing A3 ST tests. **Unknown** whether the A5 ST test set was run under auto mode and what the failure surface looks like. Confirm with the user.
+- **§2** — A5 cube compile flag, A5 cube macro name, A5 `Tile<Bias>::TileDType` `tile_size(...)` skip, `TileLeft` BLayout split + `TileMatA` declarations, A5 ST sweep for "auto-mode failures."
+- **§5.4** — A5 quant `MXFP8` bit-level equivalence with A3 `TQUANT<INT8_SYM, ...>`.
+- **§5.5** — A5 `PTO_URMA` path (`__NPU_ARCH__ == 3510` only) effect on auto-mode kernel generation.
+- **§6** — A3 vs A5 GEMM-MX `SFractalSize = 512` for non-FP16, `BiasTile` element type divergence, alignment formula divergence.
+- **§7** — A3 `TRSQRT` user-API surface; A5 `Custom`/`Hp` helper kernel-callability and the A3-vs-A5 precision floor.
+- **§8.3** — A5 `TSCATTER` semantic divergence from A3.
+- **§9.1** — A5 mirror full audit of PR-852 fix targets ([a5/TQuant.hpp](../include/pto/npu/a5/TQuant.hpp), [a5/TReshape.hpp](../include/pto/npu/a5/TReshape.hpp), [a5/TTrans.hpp](../include/pto/npu/a5/TTrans.hpp)).
 
 ---
 

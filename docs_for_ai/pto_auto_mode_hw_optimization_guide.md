@@ -795,14 +795,7 @@ For every intermediate:
 
 ### 17.1 Lesson from TopK
 
-After `TSORT32`, data changes from raw values to packed `(value, index)` pairs. The correct width becomes:
-
-```text
-packed_width = raw_width * 2 * TYPE_COEF
-packed_topk  = topk * 2 * TYPE_COEF
-```
-
-Using the raw width after packing caused wrong output.
+After `TSORT32`, data changes from raw values to packed `(value, index)` pairs; every subsequent merge / `TGATHER` step must use the **packed** width, not the source width. Full anti-pattern catalog + fix at [auto_mode_bad_patterns.md §5.7](auto_mode_bad_patterns.md); confirmed recipe at [known_good_kernel_examples.md §A12](known_good_kernel_examples.md).
 
 ### 17.2 General rule
 
@@ -897,11 +890,7 @@ TSTORE bottleneck
 ### Step 3: local reuse
 
 - Keep stationary operands.
-- Pick the view operator by intent, not by what happens to compile:
-  - **Same-type prefix slice** → `TSUBVIEW(view, tile, 0, 0)` (zero-offset). Semantically clearer than `TRESHAPE` because it explicitly states "take a slice/prefix."
-  - **Same-type non-zero slice** → `TSUBVIEW(view, tile, rowOffset, colOffset)`.
-  - **Reshape / reinterpret / type-pun** → `TRESHAPE(view, tile)`. Reserve `TRESHAPE` for cases where the element type, layout, or dimensionality changes (e.g., float-packed buffer reinterpreted as `uint32` for `TGATHER P1010` index extraction).
-- `TSUBVIEW(x, y, 0, 0)` may be effectively similar to `TRESHAPE(x, y)` for same-type prefix views in the current toolchain, but using `TSUBVIEW` documents the intent and protects future optimization passes that might treat the two ops differently.
+- Pick the view operator (`TSUBVIEW` for slices, `TRESHAPE` for reinterpret) by intent — full convention table at [tile_type_reference.md §11.1](tile_type_reference.md).
 - Avoid in-place aliasing unless proven.
 
 ### Step 4: local multi-buffer

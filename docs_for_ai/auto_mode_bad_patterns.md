@@ -23,19 +23,6 @@ Several entries below are clarified or scheduled for fix by **PR-852** (A3 ST te
 
 ---
 
-## Important corrections to earlier docs
-
-The following entries in [repo_kernel_map.md](repo_kernel_map.md) and
-[known_good_kernel_examples.md](known_good_kernel_examples.md) under
-"Cross-cutting risks" had the polarity wrong. Both have been updated.
-See [qualifier_reference.md](qualifier_reference.md) for the full reconciliation.
-
-- **`__tf__` IS meaningful on A3/A5** (Inferred — strong). It is used pervasively in A3/A5 library headers: ~71 files in [include/pto/npu/a2a3/](../include/pto/npu/a2a3/) (e.g., [TAddS.hpp:32](../include/pto/npu/a2a3/TAddS.hpp#L32), [TSort32.hpp:70,103](../include/pto/npu/a2a3/TSort32.hpp#L70), [TPrint.hpp:108,231,264](../include/pto/npu/a2a3/TPrint.hpp#L108)) and ~80 files in [include/pto/npu/a5/](../include/pto/npu/a5/) (e.g., [MGather.hpp:164,185](../include/pto/npu/a5/MGather.hpp#L164), [MScatter.hpp:274,296,313](../include/pto/npu/a5/MScatter.hpp#L274)). The repo `#define`s `__tf__` **as empty** in three places only: [include/pto/common/arch_macro.hpp:30](../include/pto/common/arch_macro.hpp#L30) (kirin), [include/pto/common/cpu_stub.hpp:34](../include/pto/common/cpu_stub.hpp#L34) (CPU sim), and [include/pto/costmodel/common/qualifiers.hpp:27](../include/pto/costmodel/common/qualifiers.hpp#L27) (cost model). It is **never** `#define`d for A3/A5 device builds. The only consistent reading is that `__tf__` is a bisheng-CCE compiler keyword/builtin on A3/A5; the repo defines-it-empty fallbacks let the same source compile elsewhere. `__tf__` is REQUIRED on any A3/A5 helper that contains raw CCE intrinsics ([docs/auto_mode/Auto_Mode_Overview.md](../docs/auto_mode/Auto_Mode_Overview.md): "the tile function is a complete black-box to PTO compiler").
-- **`__in__` / `__out__` ARE meaningful on A3/A5** (Inferred — strong). Same `#define`-as-empty pattern in the same three files. Required on `TileDType` parameters of tile functions per [docs/auto_mode/Library_Developer_Rules_And_Limitations.md §6](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md): *"Ensure `__in__` or `__out__` attributes are properly attached to these `typename <...>::TileDType` parameters"*.
-- **`__cce_get_tile_ptr(...)` IS a real CCE call on A3/A5** (Inferred — strong). The repo macro forms are: `#define __cce_get_tile_ptr` (kirin, [arch_macro.hpp:33](../include/pto/common/arch_macro.hpp#L33) — object-like, makes `__cce_get_tile_ptr(x)` expand to `(x)`); `#define __cce_get_tile_ptr(x) x` (CPU-sim and cost-model). On A3/A5 device it is the actual CCE intrinsic that extracts a raw buffer pointer from a `TileDType` ([docs/auto_mode/Library_Developer_Rules_And_Limitations.md §6](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md): *"Always call `__cce_get_tile_ptr` on these `typename <...>::TileDType` arguments to get a tile's underlying buffer pointer"*).
-
----
-
 ## Group 1 — Memory and aliasing
 
 ### 1.1 Manual-mode TASSIGN aliasing trick (same address → silent non-aliasing in auto mode)
@@ -45,10 +32,7 @@ See [qualifier_reference.md](qualifier_reference.md) for the full reconciliation
 3. **Where**
    - [tests/npu/a2a3/src/st/testcase/tquant/tquant_kernel.cpp:45-47](../tests/npu/a2a3/src/st/testcase/tquant/tquant_kernel.cpp#L45-L47): `TASSIGN(srcTile, 0x0); TASSIGN(dstS8Tile, 0x0); TASSIGN(scaleTile, 0x20100);` — `srcTile` and `dstS8Tile` collide at `0x0`.
    - General pattern noted in [docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md §2.3, §2.4](../docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md).
-4. **Fix** — Two viable shapes:
-   - **Auto-mode-only kernel**: drop the `TASSIGN`s entirely; use `TRESHAPE(b, a)` (auto-mode hint that `b` and `a` share a base) or `TSUBVIEW(b, a, rowOffset, colOffset)` (offset view).
-   - **Dual-mode kernel** (must compile correctly under both `--cce-enable-pto-passes` and manual): keep both `TASSIGN(a, X); TASSIGN(b, X);` AND add `TRESHAPE(b, a);` immediately after. Manual mode honors the `TASSIGN` aliasing; auto mode honors the `TRESHAPE` hint (and no-ops the `TASSIGN`s). PR-852 introduces this recipe in [tests/npu/a2a3/src/st/testcase/tcvt/tcvt_kernel.cpp](../tests/npu/a2a3/src/st/testcase/tcvt/tcvt_kernel.cpp) (post-merge); see [external_context/pr_852_notes.md §T3](external_context/pr_852_notes.md) and [known_good_kernel_examples.md §A10](known_good_kernel_examples.md).
-   - For the library-internal analogue, compare with the in-tree auto branch [include/pto/npu/a2a3/TQuant.hpp:108-114](../include/pto/npu/a2a3/TQuant.hpp#L108-L114) which uses `TRESHAPE_IMPL` under `__PTO_AUTO__`.
+4. **Fix** — Auto-only kernels: drop the `TASSIGN`s and use `TRESHAPE(b, a)` / `TSUBVIEW(b, a, row, col)`. Dual-mode kernels: keep the `TASSIGN` pair AND add `TRESHAPE(b, a)` immediately after — full recipe + code block at [known_good_kernel_examples.md §A10](known_good_kernel_examples.md) (also the library-internal analogue in [include/pto/npu/a2a3/TQuant.hpp:108-114](../include/pto/npu/a2a3/TQuant.hpp#L108-L114)).
 5. **Confidence** — High.
 6. **Status** — Known.
 
@@ -154,24 +138,10 @@ See [qualifier_reference.md](qualifier_reference.md) for the full reconciliation
 ### 2.7 `PtoSetWaitFlag` inside a `__tf__` body silently drops sync in auto mode
 
 1. **Pattern** — A library helper is `__tf__ PTO_INTERNAL` (a tile function) and uses `PtoSetWaitFlag<PIPE_X, PIPE_Y>()` for sync between PTO operations *inside* its body, with no `__PTO_AUTO__` guard.
-2. **Why risky** — `PtoSetWaitFlag` is intentionally a no-op in auto mode (it exists so kernel-level code can be written once and let the auto-sync compiler insert real sync). But the auto-sync compiler **does not look inside tile functions** ([docs/auto_mode/Auto_Mode_Overview.md](../docs/auto_mode/Auto_Mode_Overview.md): *"the tile function is a complete black-box to PTO compiler"*). So inside a `__tf__` body, `PtoSetWaitFlag` becomes a no-op AND the compiler does not insert sync to compensate — the function ships with no sync at all. This is **exactly opposite** to the §3.3 kernel-level rule that prefers `PtoSetWaitFlag` over raw `set_flag`/`wait_flag`. The library spec ([docs/auto_mode/Library_Developer_Rules_And_Limitations.md §3](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md)) says it directly: *"Use `set_flag`, `wait_flag` or `pipe_barrier` explicitly in tile functions and all of their callees. Use `PtoSetWaitFlag` or `TSYNC` anywhere else."*
-3. **Where** (current source — to be fixed by PR-852)
-   - [include/pto/npu/a2a3/TConcat.hpp:124,137,153,157,158](../include/pto/npu/a2a3/TConcat.hpp#L124) — five `PtoSetWaitFlag<...>()` calls inside `__tf__ PTO_INTERNAL TConcatIdx`.
-   - [include/pto/npu/a2a3/TFillPad.hpp:56](../include/pto/npu/a2a3/TFillPad.hpp#L56) — inside `Handle32BAlignedPad_Byte`.
-   - [include/pto/npu/a2a3/TRowReduceIdxOps.hpp](../include/pto/npu/a2a3/TRowReduceIdxOps.hpp) — six places inside `ProcReduceIdxStage1`, `ProcReduceIdxStage2`, `ExtractValIdxFromTmp`.
-   - [include/pto/npu/a2a3/TTrans.hpp](../include/pto/npu/a2a3/TTrans.hpp) — `TransTailTiles`, `TTransConvNC1HWC02C1HWNC0`.
-4. **Fix** — Wrap each call:
-   ```cpp
-   #ifndef __PTO_AUTO__
-       PtoSetWaitFlag<PIPE_V, PIPE_S>();
-   #else
-       set_flag(PIPE_V, PIPE_S, EVENT_ID0);
-       wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
-   #endif
-   ```
-   Manual mode keeps the `PtoSetWaitFlag` shape (which expands to real `set_flag`/`wait_flag`); auto mode uses the raw CCE intrinsics directly. Either form is allowed inside a `__tf__` body. PR-852 applies this exact wrap across the four headers above. See [external_context/pr_852_notes.md §L2-L3, L6, L7b](external_context/pr_852_notes.md).
-5. **Confidence** — High.
-6. **Status** — Known anti-pattern; resolved-by-PR-852 (not yet merged).
+2. **Why risky** — `PtoSetWaitFlag` is intentionally a no-op in auto mode (it exists so kernel-level code can be written once and let the auto-sync compiler insert real sync). But the auto-sync compiler **does not look inside tile functions** ([docs/auto_mode/Auto_Mode_Overview.md](../docs/auto_mode/Auto_Mode_Overview.md): *"the tile function is a complete black-box to PTO compiler"*). So inside a `__tf__` body, `PtoSetWaitFlag` becomes a no-op AND the compiler does not insert sync to compensate — the function ships with no sync at all. This is **exactly opposite** to the kernel-level rule that prefers `PtoSetWaitFlag` over raw `set_flag`/`wait_flag`. The library spec ([docs/auto_mode/Library_Developer_Rules_And_Limitations.md §3](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md)) says it directly: *"Use `set_flag`, `wait_flag` or `pipe_barrier` explicitly in tile functions and all of their callees. Use `PtoSetWaitFlag` or `TSYNC` anywhere else."*
+3. **Where, symptom, fix code, and pre-PR-852 source-evidence list** — [compile_error_logbook.md §E2](compile_error_logbook.md). PR-852 applies the `#ifndef __PTO_AUTO__`-guarded wrap across the affected headers; see [external_context/pr_852_notes.md §L2, §L3, §L6, §L7b](external_context/pr_852_notes.md).
+4. **Confidence** — High.
+5. **Status** — Known anti-pattern; resolved-by-PR-852 (not yet merged).
 
 > Cross-cutting note (refines §2.1): the kernel rule "prefer `PtoSetWaitFlag`/`TSYNC` over `set_flag`/`wait_flag`" applies **only at kernel level**. Inside a `__tf__` body the polarity is reversed: real `set_flag`/`wait_flag`/`pipe_barrier` are required, and `PtoSetWaitFlag` is wrong.
 
@@ -392,7 +362,7 @@ See [qualifier_reference.md](qualifier_reference.md) for the full reconciliation
    - Use `kPackedTopK` for: tail-merge `tmpMrgSortedLen`/`tmpMrgArray` clip cap, final `TGATHER` source prefix view width.
    - All four `TMRGSORT` template roles (`Dst, Tmp, Src0, Src1`) should resolve to the **packed** tile type so the scratch matches the merge format.
 5. **Confidence** — High (caught and fixed during the topk bring-up; user-confirmed PASS after fix).
-6. **Status** — Known anti-pattern. Resolved-by-experiment in [kernels/automode/a2a3/topk/](../kernels/automode/a2a3/topk/); see [known_good_kernel_examples.md §A12](known_good_kernel_examples.md) and [tile_type_reference.md §11 item 15](tile_type_reference.md).
+6. **Status** — Known anti-pattern. Resolved-by-experiment in [kernels/automode/a2a3/topk/](../kernels/automode/a2a3/topk/); see [known_good_kernel_examples.md §A12](known_good_kernel_examples.md) and [tile_type_reference.md §11.2](tile_type_reference.md).
 
 ---
 

@@ -360,82 +360,7 @@ Implications (drawn together in [auto_mode_bad_patterns.md §3.3, §1.3, §3.2.1
 
 ## 8. Common patterns from A3 and A5 kernels
 
-### 8.1 Elementwise vec template (A3) — auto-mode-confirmed
-
-[demos/auto_mode/baseline/add/csrc/kernel/add_custom.cpp](../demos/auto_mode/baseline/add/csrc/kernel/add_custom.cpp) and [tests/npu/a2a3/src/st/testcase/tadd/tadd_kernel.cpp](../tests/npu/a2a3/src/st/testcase/tadd/tadd_kernel.cpp). (Known)
-
-```cpp
-using ShapeDim5 = pto::Shape<1, 1, 1, R, C>;
-using StridDim5 = pto::Stride<1, 1, 1, C, 1>;
-using GlobalData = pto::GlobalTensor<T, ShapeDim5, StridDim5>;
-using TileData = Tile<TileType::Vec, T, R, C, BLayout::RowMajor, -1, -1>;
-TileData t(validR, validC);            // dynamic valid region
-GlobalData g(gmPtr);
-TLOAD(t, g); ... TSTORE(g, t);
-```
-
-### 8.2 Cube GEMM template (A3) — Mat → L0 via TMOV → TMATMUL → TSTORE
-
-[tests/npu/a2a3/src/st/testcase/tmatmul/tmatmul_kernel.cpp:51-76](../tests/npu/a2a3/src/st/testcase/tmatmul/tmatmul_kernel.cpp#L51-L76). (Known)
-
-```cpp
-// L1-resident matrix tiles, ColMajor base, RowMajor 512-block fractal
-using TileMatAData = Tile<TileType::Mat, U, M, K, BLayout::ColMajor, validM, validK,
-                          SLayout::RowMajor, 512>;
-using TileMatBData = Tile<TileType::Mat, S, K, N, BLayout::ColMajor, validK, validN,
-                          SLayout::RowMajor, 512>;
-using TileBiasData = Tile<TileType::Mat, B, 1, N, BLayout::RowMajor, 1, validN>;
-
-// L0 operand tiles via aliases
-using LeftTile  = TileLeft <U, M, K, validM, validK>;
-using RightTile = TileRight<S, K, N, validK, validN>;
-using AccTile   = TileAcc  <T, M, N, validM, validN>;
-using BiasTile  = Tile<TileType::Bias, B, 1, N, BLayout::RowMajor, 1, validN>;
-```
-
-### 8.3 A5 MX FP4/FP8 GEMM template — adds scale tiles + MX layouts
-
-[tests/npu/a5/src/st/testcase/tmatmul_mx/tmatmul_mx_kernel.cpp:75-111](../tests/npu/a5/src/st/testcase/tmatmul_mx/tmatmul_mx_kernel.cpp#L75-L111). (Known)
-
-```cpp
-using MxShapeA  = TileShape2D<ScaleType, M, kMX, Layout::MX_A_ZZ>;
-using MxStrideA = BaseShape2D<ScaleType, M, kMX, Layout::MX_A_ZZ>;
-using GlobalDataSrc2 = GlobalTensor<ScaleType, MxShapeA, MxStrideA, Layout::MX_A_ZZ>;
-
-using TileScaleAData =
-    Tile<TileType::Mat, ScaleType, M, kMX, BLayout::RowMajor, validM, kMX, SLayout::RowMajor, 32>;
-using TileScaleBData =
-    Tile<TileType::Mat, ScaleType, kMX, N, BLayout::ColMajor, kMX, validN, SLayout::ColMajor, 32>;
-
-using LeftScaleTile  = TileLeftScale <ScaleType, M, kMX, validM, kMX>;
-using RightScaleTile = TileRightScale<ScaleType, kMX, N, kMX, validN>;
-```
-
-Notes (Known + Inferred):
-- The `512` fractal-size literal is the FP16-shaped value; A5 reuses `512` for the AB Mat tiles even when the element type is FP4/FP8 (Inferred — file uses `512` unconditionally). [auto_mode_bad_patterns.md §4.4](auto_mode_bad_patterns.md) flags this as a possible hazard for non-FP16 types.
-- A5 alignment uses `(sizeof(AType) == 1) ? 32 : 16` ([a5/tmatmul:32](../tests/npu/a5/src/st/testcase/tmatmul/tmatmul_kernel.cpp#L32)) — different from A3's `C0_SIZE_BYTE / sizeof(U)` ([a3/tmatmul:128](../tests/npu/a2a3/src/st/testcase/tmatmul/tmatmul_kernel.cpp#L128)).
-
-### 8.4 ND/DN row reduction (A3)
-
-[tests/npu/a2a3/src/st/testcase/trowsum/trowsum_kernel.cpp:55-88](../tests/npu/a2a3/src/st/testcase/trowsum/trowsum_kernel.cpp#L55-L88). (Known)
-
-```cpp
-using ValidSrcShape = TileShape2D<T, validRow, srcValidCol>;          // ND default
-using NDSrcShape    = BaseShape2D <T, row,      srcCol>;
-using GlobalDataSrc = GlobalTensor<T, ValidSrcShape, NDSrcShape>;
-
-using ValidDstShape = TileShape2D<T, dstCol, validRow>;
-using NDDstShape    = BaseShape2D <T, row,    dstCol>;
-using GlobalDataDst = GlobalTensor<T, ValidDstShape, NDDstShape>;
-
-using srcTileData    = Tile<TileType::Vec, T, row, srcCol, BLayout::RowMajor, row, srcCol>;
-using dstTileDataDN  = Tile<TileType::Vec, T, row, 1,      BLayout::ColMajor, row, 1>;
-TROWSUM(dstTile, srcTile, tmpTile);
-TRESHAPE(dstTileND, dstTile);    // alias to row-major view before TSTORE
-TSTORE(dstGlobal, dstTileND);
-```
-
-This is one of the few in-tree TRESHAPE-as-aliasing-hint examples — see [known_good_kernel_examples.md §A4](known_good_kernel_examples.md).
+Kernel-template recipes (elementwise vec, cube GEMM, A5 MX GEMM, ND/DN row reduction) live in [known_good_kernel_examples.md Group A](known_good_kernel_examples.md): §A1 elementwise vec, §A6 cube GEMM, §A8 A5 MX GEMM, §A4 ND/DN row reduction. This section keeps only the tile-template-specific patterns not covered there.
 
 ### 8.5 ConvTile (A3) — `tload_gm2mat` / `texpands_mat`
 
@@ -474,7 +399,7 @@ Quick index back to [auto_mode_bad_patterns.md](auto_mode_bad_patterns.md):
 
 | Risk | Where it appears in tile usage |
 |---|---|
-| §1.1 Manual `TASSIGN(a, X); TASSIGN(b, X);` aliasing | Replace with `TRESHAPE(b, a)` (auto-only) or keep + add `TRESHAPE` (dual-mode, PR-852 recipe in [known_good_kernel_examples.md §A10](known_good_kernel_examples.md)). |
+| §1.1 Manual `TASSIGN(a, X); TASSIGN(b, X);` aliasing | Fix recipe (auto-only or dual-mode) lives at [known_good_kernel_examples.md §A10](known_good_kernel_examples.md). |
 | §1.2 Dynamic `TASSIGN(tile, addr_chosen_at_runtime)` | Tile addresses are constant in auto mode ([pto_tile.hpp:1124-1129](../include/pto/common/pto_tile.hpp#L1124-L1129) for ConvTile; same model for Tile per [docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md §2.3](../docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md)). |
 | §1.3 `reinterpret_cast<uintptr_t>(tile.data())` | `tile.data()` returns a vector value in auto mode (§7); cast is meaningless. |
 | §1.5 `TLOAD(dstTile, dstGlobal)` on a write-only dst | Tile liveness analysis may coalesce dst with another tile. Exception: read-modify-write ops like `TAXPY`. |
@@ -524,33 +449,25 @@ Current `__tf__ PTO_INTERNAL TTransConv*<TileData, blockSizeElem>(...)` family i
 
 ## 11. Tile-usage patterns to avoid (auto-mode, A3/A5)
 
-Compact list. Detailed entries in [auto_mode_bad_patterns.md](auto_mode_bad_patterns.md).
+General anti-patterns (TASSIGN aliasing, `tile.data()` from kernel, `__cce_get_tile_ptr` misuse, `Tile<Bias>` on non-cube, `ConvTile` byte/element confusion, `Tile&` into `__tf__`, `TLOAD` on write-only dst, etc.) live in [auto_mode_bad_patterns.md §1–§5](auto_mode_bad_patterns.md). Tile-specific items kept here:
 
-1. **`Tile<...> t; ... TASSIGN(t, addr_runtime);`** — tile addresses are pinned in auto mode. (§1.2)
-2. **`TASSIGN(a, X); TASSIGN(b, X);`** to alias — auto mode no-ops `TASSIGN`. Use `TRESHAPE`/`TSUBVIEW`. (§1.1)
-3. **`reinterpret_cast<uintptr_t>(tile.data())`** — vector type, not pointer. (§1.3)
-4. **`tile.data()` from kernel code** — library-only API. (§3.3)
-5. **`__cce_get_tile_ptr(tile.data())` from kernel code** — same. (§3.2)
-6. **`__cce_get_tile_ptr(tmpTile + N)`** — pointer arithmetic before extraction crashes libexpand. (§3.2.1)
-7. **`Tile<TileType::Bias, ...>` on a non-cube target** — `MemoryQualifier::type` becomes `uint64_t`. (§5.3)
-8. **`ConvTile<..., elementSize * sizeof(T), ...>`** — `BufferSize_` is element count. (§5.6)
-9. **`__tf__ helper<TileData>(TileData::TileDType dst, TileData::TileDType src, TileData::TileDType tmp)`** — single template across mismatched roles. (§5.5)
-10. **`TLOAD(dstTile, dstGlobal)` on a write-only dst** — auto-allocator may coalesce. (§1.5)
-11. **`Tile&` parameters into `__tf__` helpers** — pass `TileDType` by value with `__in__`/`__out__` instead. (§3.3 fix; PR-852 [§T4a](external_context/pr_852_notes.md))
-12. **`ConvTile` with dynamic dims in auto mode** — `GetShape` returns `staticShape` only; runtime values are ignored ([pto_tile.hpp:1124-1129](../include/pto/common/pto_tile.hpp#L1124-L1129)). Use static dims.
-13. **`Bias` falling back to `uint64_t`** when the build does not define `__DAV_C220_CUBE__` ([memory.hpp:81-82](../include/pto/common/memory.hpp#L81-L82)). Only use Bias on a cube target.
-14. **`TRESHAPE(a, b)` used as memory reuse rather than semantic aliasing.** `TRESHAPE` is an aliasing/view hint (e.g., a different-layout or reinterpreted view of the same data). Aliasing two tiles that both hold independent live values is a correctness bug, not a memory-saving optimization — the auto allocator already coalesces non-overlapping liveness. Add a short comment at every view call naming (a) which tile owns the data, (b) prefix / offset / reinterpret intent, (c) why lifetimes do not conflict.
+### 11.1 View-operator selection convention
 
-   **Operator selection convention** (used by [topk_kernel.cpp](../kernels/automode/a2a3/topk/topk_kernel.cpp)):
+`TRESHAPE` and `TSUBVIEW` are both auto-mode aliasing hints, but they say different things. Use the form whose name matches the intent — the auto allocator already coalesces non-overlapping liveness, so view ops should express **what the view is**, not save memory. Add a short comment at every view call naming (a) which tile owns the data, (b) prefix / offset / reinterpret intent, (c) why lifetimes do not conflict.
 
-   | Intent | Form |
-   |---|---|
-   | Same-type prefix slice | `TSUBVIEW(view, tile, 0, 0)` |
-   | Same-type non-zero slice | `TSUBVIEW(view, tile, rowOffset, colOffset)` |
-   | Reshape / reinterpret / type-pun (element type, layout, or dimensionality changes) | `TRESHAPE(view, tile)` |
+| Intent | Form |
+|---|---|
+| Same-type prefix slice | `TSUBVIEW(view, tile, 0, 0)` |
+| Same-type non-zero slice | `TSUBVIEW(view, tile, rowOffset, colOffset)` |
+| Reshape / reinterpret / type-pun (element type, layout, or dimensionality changes) | `TRESHAPE(view, tile)` |
 
-   `TSUBVIEW(x, y, 0, 0)` may be effectively similar to `TRESHAPE(x, y)` for same-type prefix views in the current toolchain, but `TSUBVIEW` is semantically clearer because it explicitly means "take a slice/prefix" and is more robust against future optimization passes that may treat the two ops differently. Reserve `TRESHAPE` for true reshape / reinterpret cases — e.g., [topk_kernel.cpp Phase 5](../kernels/automode/a2a3/topk/topk_kernel.cpp) reinterprets the packed `(val, idx)` float buffer as `uint32` so `TGATHER P1010` can extract index slots.
-15. **Mixing source-element and packed-element widths after `TSORT32`.** `TSORT32`'s destination is `srcWidth * 2 * TYPE_COEF` wide (packed (val, idx) pairs). Subsequent `TMRGSORT` loop bounds, `FillMrgArray<>` schedules, tail-block clip caps, scratch-tile widths/types, and final `TGATHER` prefix views must use the **packed** widths, not the source widths. Define `kPackedCols = kCols * 2 * TYPE_COEF` and `kPackedTopK = kTopK * 2 * TYPE_COEF` and thread them through. Using raw source widths silently drops the second half of the TSORT32 output before it reaches the merge. (See [auto_mode_bad_patterns.md §5.7](auto_mode_bad_patterns.md), [known_good_kernel_examples.md §A12](known_good_kernel_examples.md).)
+`TSUBVIEW(x, y, 0, 0)` may be effectively similar to `TRESHAPE(x, y)` for same-type prefix views in the current toolchain, but `TSUBVIEW` is semantically clearer ("take a slice/prefix") and is more robust against future optimization passes that may treat the two ops differently. Reserve `TRESHAPE` for true reshape / reinterpret cases — e.g., [topk_kernel.cpp Phase 5](../kernels/automode/a2a3/topk/topk_kernel.cpp) reinterprets the packed `(val, idx)` float buffer as `uint32` so `TGATHER P1010` can extract index slots.
+
+Anti-pattern: using `TRESHAPE(a, b)` for memory reuse where `a` and `b` both hold independent live values. That is a correctness bug, not a memory-saving optimization.
+
+### 11.2 Packed-element widths after `TSORT32`
+
+`TSORT32`'s destination holds packed `(val, idx)` pairs of width `srcWidth * 2 * TYPE_COEF`. Every subsequent step (merge loop bounds, `FillMrgArray<>`, tail clip caps, scratch tile widths, final `TGATHER` prefix view) must use the **packed** widths. Full anti-pattern + fix: [auto_mode_bad_patterns.md §5.7](auto_mode_bad_patterns.md); recipe: [known_good_kernel_examples.md §A12](known_good_kernel_examples.md).
 
 ---
 
@@ -570,12 +487,4 @@ Compact list. Detailed entries in [auto_mode_bad_patterns.md](auto_mode_bad_patt
 
 ## 13. Caveat on testcase inclusion as evidence
 
-Inclusion in `ALL_TESTCASES` ([tests/npu/a2a3/src/st/testcase/CMakeLists.txt](../tests/npu/a2a3/src/st/testcase/CMakeLists.txt), [tests/npu/a5/src/st/testcase/CMakeLists.txt](../tests/npu/a5/src/st/testcase/CMakeLists.txt)) is **build-coverage** evidence, not **clean-style** evidence. Several in-list test kernels carry manual-mode idioms that this doc still flags as risky:
-
-- [tquant_kernel.cpp](../tests/npu/a2a3/src/st/testcase/tquant/tquant_kernel.cpp) — `TASSIGN(srcTile, 0x0); TASSIGN(dstS8Tile, 0x0)` overlap (mixed). [auto_mode_bad_patterns.md §6.1](auto_mode_bad_patterns.md).
-- [tdequant_kernel.cpp](../tests/npu/a2a3/src/st/testcase/tdequant/tdequant_kernel.cpp) — `TLOAD(dstTile, dstGlobal)` on a write-only dst. [auto_mode_bad_patterns.md §6.2](auto_mode_bad_patterns.md).
-- [tload_gm2mat_kernel.cpp](../tests/npu/a2a3/src/st/testcase/tload_gm2mat/tload_gm2mat_kernel.cpp) and [tload_shape2d_kernel.cpp](../tests/npu/a5/src/st/testcase/tload_shape2d/tload_shape2d_kernel.cpp) — `__cce_get_tile_ptr(tile.data())` chains. [auto_mode_bad_patterns.md §6.3](auto_mode_bad_patterns.md).
-- [textract_kernel.cpp](../tests/npu/a5/src/st/testcase/textract/textract_kernel.cpp) — direct `aTile.data()` in kernel body. [auto_mode_bad_patterns.md §6.4](auto_mode_bad_patterns.md).
-- [tcolexpandmax_kernel.cpp](../tests/npu/a2a3/src/st/testcase/tcolexpandmax/tcolexpandmax_kernel.cpp) and siblings — unguarded kernel-scope `pipe_barrier(PIPE_ALL)`. [auto_mode_bad_patterns.md §2.2](auto_mode_bad_patterns.md).
-
-When using a testcase as a tile-pattern reference, treat any of the above as **mixed / risky / manual-mode-curated** and prefer the patterns in [known_good_kernel_examples.md Group A](known_good_kernel_examples.md) instead.
+`ALL_TESTCASES` inclusion is **build-coverage** evidence only, not **clean-style** evidence. Specific testcases that build but carry manual-mode idioms (`tquant`, `tdequant`, `tload_gm2mat` / `tload_shape2d`, `textract`, `tcolexpand*`) are catalogued in [auto_mode_bad_patterns.md §6.1–§6.4](auto_mode_bad_patterns.md). When using a testcase as a tile-pattern reference, prefer the patterns in [known_good_kernel_examples.md Group A](known_good_kernel_examples.md) instead.
