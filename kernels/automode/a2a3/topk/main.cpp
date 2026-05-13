@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <cmath>
 #include <vector>
 
 using namespace std;
@@ -26,7 +27,7 @@ using namespace PtoTestCommon;
 template <typename T>
 void launchTopk(uint8_t *outVal, uint8_t *outIdx, uint8_t *src, uint8_t *idx, void *stream);
 
-template <typename T>
+template <typename T, int kRows, int kTopK>
 inline bool ValidateValueResults(size_t outValSize)
 {
     std::vector<T> golden(outValSize / sizeof(T));
@@ -40,10 +41,35 @@ inline bool ValidateValueResults(size_t outValSize)
         printf("test value success\n");
     } else {
         printf("test value failed\n");
+        // Localize: print first 5 mismatches with (row, col), gold, out.
+        int printed = 0;
+        for (int r = 0; r < kRows && printed < 5; ++r) {
+            for (int c = 0; c < kTopK && printed < 5; ++c) {
+                int i = r * kTopK + c;
+                float g = static_cast<float>(golden[i]);
+                float o = static_cast<float>(devFinal[i]);
+                if (std::fabs(g - o) > 0.001f) {
+                    printf("  val mismatch row=%d col=%d  gold=%g  out=%g\n", r, c, g, o);
+                    ++printed;
+                }
+            }
+        }
+        // Per-row mismatch counts so we can tell "row 0 only" vs "all rows".
+        for (int r = 0; r < kRows; ++r) {
+            int bad = 0;
+            for (int c = 0; c < kTopK; ++c) {
+                int i = r * kTopK + c;
+                float g = static_cast<float>(golden[i]);
+                float o = static_cast<float>(devFinal[i]);
+                if (std::fabs(g - o) > 0.001f) ++bad;
+            }
+            printf("  row=%d val_bad=%d / %d\n", r, bad, kTopK);
+        }
     }
     return ret;
 }
 
+template <int kRows, int kTopK>
 inline bool ValidateIndexResults(size_t outIdxSize)
 {
     std::vector<uint32_t> golden(outIdxSize / sizeof(uint32_t));
@@ -57,6 +83,25 @@ inline bool ValidateIndexResults(size_t outIdxSize)
         printf("test index success\n");
     } else {
         printf("test index failed\n");
+        int printed = 0;
+        for (int r = 0; r < kRows && printed < 5; ++r) {
+            for (int c = 0; c < kTopK && printed < 5; ++c) {
+                int i = r * kTopK + c;
+                if (golden[i] != devFinal[i]) {
+                    printf("  idx mismatch row=%d col=%d  gold=%u  out=%u\n",
+                           r, c, golden[i], devFinal[i]);
+                    ++printed;
+                }
+            }
+        }
+        for (int r = 0; r < kRows; ++r) {
+            int bad = 0;
+            for (int c = 0; c < kTopK; ++c) {
+                int i = r * kTopK + c;
+                if (golden[i] != devFinal[i]) ++bad;
+            }
+            printf("  row=%d idx_bad=%d / %d\n", r, bad, kTopK);
+        }
     }
     return ret;
 }
@@ -118,8 +163,8 @@ void TopkKernel()
     aclrtResetDevice(0);
     aclFinalize();
 
-    bool valOk = ValidateValueResults<T>(outValSize);
-    bool idxOk = ValidateIndexResults(outIdxSize);
+    bool valOk = ValidateValueResults<T, kRows, kTopK>(outValSize);
+    bool idxOk = ValidateIndexResults<kRows, kTopK>(outIdxSize);
     if (valOk && idxOk) {
         printf("test success\n");
     } else {
