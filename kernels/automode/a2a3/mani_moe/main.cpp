@@ -21,9 +21,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
  *   golden_expert_id.bin [kT]           uint32
  *   golden_Z.bin         [kT, kH]       fp32
  *
- * The kernel should expose launchManiMoeFp16(...) below. The host keeps all
- * fp16 buffers as uint8_t* so main.cpp never has to name the device-only
- * `half` type.
+ * Kernel launchers are split by target:
+ *   launchManiMoeRouterGemmFp16  (cube)
+ *   launchManiMoeTopkFp32        (vec)
+ * The host keeps all fp16 buffers as uint8_t* so main.cpp never has to name
+ * the device-only `half` type.
  */
 
 #include "acl/acl.h"
@@ -37,16 +39,17 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace PtoTestCommon;
 
-extern "C" void launchManiMoeFp16(uint8_t *z_fp32,
-                                  uint8_t *logits_fp32,
-                                  uint8_t *expert_id_u32,
-                                  uint8_t *x_fp16,
-                                  uint8_t *w_router_fp16,
-                                  uint8_t *w1_fp16,
-                                  uint8_t *w2_fp16,
-                                  uint8_t *topk_idx_u32,
-                                  uint8_t *topk_out_idx_u32,
-                                  void *stream);
+extern "C" void launchManiMoeRouterGemmFp16(uint8_t *logits_fp32,
+                                            uint8_t *x_fp16,
+                                            uint8_t *w_router_fp16,
+                                            void *stream);
+
+extern "C" void launchManiMoeTopkFp32(uint8_t *topk_values_fp32,
+                                      uint8_t *expert_id_u32,
+                                      uint8_t *logits_fp32,
+                                      uint8_t *topk_idx_u32,
+                                      uint8_t *topk_out_idx_u32,
+                                      void *stream);
 
 namespace {
 
@@ -164,8 +167,8 @@ int MoE()
              "aclrtMemset(expertIdDev)");
     CheckAcl(aclrtMemset(outDev, outBytes, kPoisonOut, outBytes), "aclrtMemset(outDev)");
 
-    launchManiMoeFp16(outDev, logitsDev, expertIdDev, xDev, wRouterDev, w1Dev, w2Dev, topkIdxDev, topkOutIdxDev,
-                      stream);
+    launchManiMoeRouterGemmFp16(logitsDev, xDev, wRouterDev, stream);
+    launchManiMoeTopkFp32(outDev, expertIdDev, logitsDev, topkIdxDev, topkOutIdxDev, stream);
 
     if (!CheckAcl(aclrtSynchronizeStream(stream), "aclrtSynchronizeStream")) {
         std::cerr << "[main] stream sync failed.\n";
