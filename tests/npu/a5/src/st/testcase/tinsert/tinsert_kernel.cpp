@@ -1810,11 +1810,11 @@ __tf__ PTO_INTERNAL void LoadDoubleInputNZ(
 #if defined(__DAV_VEC__)
     // Load zero_region from GM to UB, then copy to L1 to initialize L1 with zeros
     copy_gm_to_ubuf((__ubuf__ void *)ubAddr1, (__gm__ void *)src, 0, BurstNum, BurstLen, 0, 0);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID1);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID1);
 
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
     copy_ubuf_to_cbuf((__cbuf__ void *)matAddr, (__ubuf__ void *)ubAddr1, 0, BurstNum, BurstLen, 0, 0);
 
     // Barrier: ensure L1 zero-fill (MTE3) finishes before MTE2 writes to same UB
@@ -1823,11 +1823,11 @@ __tf__ PTO_INTERNAL void LoadDoubleInputNZ(
     // Load NZ data for both tiles from GM to UB (MTE2) — overwrites zeros in UB
     copy_gm_to_ubuf((__ubuf__ void *)ubAddr1, (__gm__ void *)nz1Addr1, 0, 1, Nz1BurstLen, 0, 0);
     copy_gm_to_ubuf((__ubuf__ void *)ubAddr2, (__gm__ void *)nz1Addr2, 0, 1, Nz1BurstLen, 0, 0);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID1);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID1);
 
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
 
     set_intra_block(PIPE_MTE3, syncId);
 #endif
