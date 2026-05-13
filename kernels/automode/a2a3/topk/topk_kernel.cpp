@@ -106,6 +106,7 @@ __global__ AICORE void RunTopk(__gm__ uint8_t *outVal_raw, __gm__ uint8_t *outId
     // correctness comes first.
     // ============================================================
     for (int row = 0; row < kRows; ++row) {
+        pipe_barrier(PIPE_ALL);
         SrcGlobal     srcGlobal(src + row * kCols);
         IdxGlobal     idxGlobal(idx);
         OutValGlobal  outValGlobal(outVal + row * kTopK);
