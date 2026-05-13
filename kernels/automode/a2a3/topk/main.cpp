@@ -10,7 +10,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "test_common.h"
 #include "acl/acl.h"
-#include "../kernel_timing.h"
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -87,14 +86,13 @@ bool TopkKernel()
     ReadFile("../input/x1_gm.bin", inFileSize, srcHost, inFileSize);
     ReadFile("../input/x1_idx.bin", inIdxSize, inIdxHost, inIdxSize);
 
-    aclrtMemcpy(srcDev, srcSize, srcHost, srcSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(idxDev, idxSize, idxHost, idxSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(srcDevice, inFileSize, srcHost, inFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(inIdxDevice, inIdxSize, inIdxHost, inIdxSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    launchTopk<T>(dstDevice, indexDevice, srcDevice, inIdxDevice, stream);
 
-    (void)PtoTiming::TimeKernelCallUs("topk", stream, [&]() {
-        launchTopk<T>(outValDev, outIdxDev, srcDev, idxDev, stream);
-    });
-    aclrtMemcpy(outValHost, outValSize, outValDev, outValSize, ACL_MEMCPY_DEVICE_TO_HOST);
-    aclrtMemcpy(outIdxHost, outIdxSize, outIdxDev, outIdxSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, outFileSize, dstDevice, outFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(indexHost, indexFileSize, indexDevice, indexFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
     WriteFile("../output/output_z.bin", dstHost, outFileSize);
     WriteFile("../output/index_z.bin", indexHost, indexFileSize);

@@ -1,28 +1,12 @@
-# topk — auto-mode A3 prototype (v2, 2D per-row TopK with values + indices)
+# Basic Topk Operator Example
 
-Per-row top-K (values + matching original indices) for a 2-D float32 array of
-shape `(kRows, kCols)`, single AICORE, serial in-kernel row loop, no
-buffering. Project layout mirrors
-[kernels/automode/a2a3/add_tile_array/](../add_tile_array/), so the same
-one-liner works:
+## Overview
 
-```bash
-bash run.sh -r npu -v Ascend910B1
-```
-
-**v2 change:** the kernel now accepts a 2-D input and produces a per-row
-top-K via a serial in-kernel row loop. The single-row pipeline (TSORT32 →
-merge → TGATHER values + TGATHER indices) is unchanged from v1; the only
-new code is the outer `for (row = 0; row < kRows; ++row)` and per-row
-GlobalTensor offsetting, which mirrors the
-[add_tile_array](../add_tile_array/) baseline pattern (tiles declared
-once outside the loop, globals recomputed per iter). Still stripped of
-double-buffering / multi-core / TPipe / manual sync vs. the manual TopK in
-[kernels/manual/a2a3/topk/](../../../manual/a2a3/topk/).
+This example demonstrates how to implement a Topk operator using PTO, including project setup, build, and execution.
 
 ## Supported AI Processors
 
-- A3 only.
+- A2/A3
 
 ## Directory Layout
 
