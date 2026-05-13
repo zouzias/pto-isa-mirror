@@ -165,7 +165,7 @@ Each entry uses:
 
 1. Assumption — on a build without `__DAV_C220_CUBE__` (or the A5 equivalent — see 2.2), declaring a `Tile<TileType::Bias, ...>` returns a `uint64_t` storage type silently.
 2. Why — silent type degradation is a class of bug invisible at the call site.
-3. Evidence — [memory.hpp:73-83](../include/pto/common/memory.hpp#L73-L83); [auto_mode_bad_patterns.md §5.3](auto_mode_bad_patterns.md), [tile_type_reference.md §11 item 13](tile_type_reference.md).
+3. Evidence — [memory.hpp:73-83](../include/pto/common/memory.hpp#L73-L83); [auto_mode_bad_patterns.md §5.3](auto_mode_bad_patterns.md).
 4. Platform — both, with A5 macro Unknown (see 2.2).
 5. Priority — medium.
 6. Next action — confirm via a small build with cube macro undefined; document the right `#if` guard for kernels.
@@ -191,13 +191,7 @@ See 1.1. Reiterated here because it is the load-bearing assumption behind the `C
 
 ### 4.2 `__cce_get_tile_ptr` accepts only the bare `TileDType` (not vector arithmetic on it)
 
-1. Assumption — extraction-then-arithmetic is the rule: `__cce_get_tile_ptr(tmp) + N`. Doing `__cce_get_tile_ptr(tmp + N)` crashes the libexpand pass during RAUW.
-2. Why — drives every `__tf__` body that indexes into a parameter.
-3. Evidence — PR-852 description ([§L1](external_context/pr_852_notes.md)) plus the eight rewrite sites in [include/pto/npu/a2a3/TCI.hpp:59,108,147,149,151,203](../include/pto/npu/a2a3/TCI.hpp#L59); [auto_mode_bad_patterns.md §3.2.1](auto_mode_bad_patterns.md).
-4. Platform — A3 (verified PR scope); A5 spot-check negative ([a3_a5_differences.md §11](a3_a5_differences.md)) but full audit pending.
-5. Priority — high.
-6. Next action — promote this rule to its own one-liner in `qualifier_reference.md` once PR-852 merges; full A5 audit.
-7. Status — Inferred (very strong); pending PR merge to become Known.
+Rule and full evidence: [auto_mode_bad_patterns.md §3.2.1](auto_mode_bad_patterns.md) (anti-pattern + fix) and [compile_error_logbook.md §E1](compile_error_logbook.md) (symptom). Open part: A5 full audit pending (A5 spot-check negative — see [a3_a5_differences.md §11](a3_a5_differences.md)). Status — Inferred (very strong); pending PR-852 merge to become Known.
 
 ### 4.3 Canonical `__tf__` migration shape: pass `TileDType` by value with `__in__`/`__out__`
 
@@ -214,13 +208,7 @@ See 1.1. Reiterated here because it is the load-bearing assumption behind the `C
 
 ### 4.4 Inside a `__tf__` body, `set_flag`/`wait_flag`/`pipe_barrier` are required even in auto mode
 
-1. Assumption — the auto-mode compiler does not look inside tile functions, so `PtoSetWaitFlag` (a no-op in auto mode) silently drops sync there. Library helpers must use raw CCE sync intrinsics.
-2. Why — refines the kernel-rules guidance which says "prefer `PtoSetWaitFlag`" — that guidance applies at kernel scope only.
-3. Evidence — [docs/auto_mode/Library_Developer_Rules_And_Limitations.md §3](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md); PR-852 [§L2, §L3, §L6, §L7b](external_context/pr_852_notes.md); [auto_mode_bad_patterns.md §2.7](auto_mode_bad_patterns.md).
-4. Platform — A3 (PR scope); A5 spot-check found no `PtoSetWaitFlag` inside tile-function bodies, so possibly already correct or using a different sync style — Unknown.
-5. Priority — high.
-6. Next action — full A5 audit of `TConcat.hpp`, `TFillPad.hpp`, `TRowReduceIdx.hpp`, `TTrans.hpp` for sync style.
-7. Status — Known anti-pattern (A3); Unknown for A5.
+Rule and runtime symptom: [auto_mode_bad_patterns.md §2.7](auto_mode_bad_patterns.md) + [compile_error_logbook.md §E2](compile_error_logbook.md). Open part: A5 audit of `TConcat.hpp`, `TFillPad.hpp`, `TRowReduceIdx.hpp`, `TTrans.hpp` for sync style (A5 spot-check found no `PtoSetWaitFlag` inside tile-function bodies — possibly already correct or using a different sync style). Status — Known on A3; Unknown for A5.
 
 ---
 
@@ -508,278 +496,71 @@ Items here have been promoted from `Inferred` / `Assumption` to `Known` by a
 verified build or run. Append (date · platform · evidence). Do not delete;
 the audit trail is useful when something later regresses.
 
+> Compact audit-trail entries. Full "what this confirms" / "do not copy" / "still Unknown" lists live in the corresponding `known_good_kernel_examples.md §A` entry; this section only records (date · platform · evidence · reference · any delta or open caveat not yet absorbed into §A).
+
 ### 11.1 Topk-style bisheng-direct CMake harness + `--cce-enable-pto-passes` builds and runs an auto-mode A3 kernel
 
-- **Resolved**: 2026-05-07 · A3 vec · user-reported `bash run.sh -r npu -v Ascend910B1` on
-  [kernels/automode/a2a3/add_tile_array/](../kernels/automode/a2a3/add_tile_array/)
-  produced `test data success` / `test success`.
-- **What this confirms (now Known)**:
-  - Static valid region `Tile<TileType::Vec, float, 64, 64, BLayout::RowMajor, 64, 64>` compiles and runs in auto mode on A3 (no `DYNAMIC = -1` / constructor required).
-  - An in-kernel serial `for` loop reusing the same Tile across iterations is auto-safe; the auto allocator's pinned-address rule does not break reuse.
-  - Reconstructing `GlobalTensor` per iteration with `base + offset` works.
-  - `TLOAD → TADD → TSTORE` with no manual sync produces exact output for integer-valued FP32 inputs.
-  - Auto mode enabled by **only** adding `--cce-enable-pto-passes` to the kernel target's compile options (no separate `-D__PTO_AUTO__` macro definition needed; `-O2` from the global `add_compile_options(...)` block carries through).
-  - The kernel-arch guard `#if __CCE_AICORE__ == 220 && defined(__DAV_C220_VEC__)` is **not required** when the CMake target sets `--cce-aicore-arch=dav-c220-vec` directly (matches the topk pattern).
-- **Reference entry**: [known_good_kernel_examples.md §A11](known_good_kernel_examples.md).
-- **What is still Unknown**: A5 mirror of the same pattern (the project is A3-only); larger / multi-core variants; behavior under `-r sim` (not yet exercised).
+- Resolved: 2026-05-07 · A3 vec · `bash run.sh -r npu -v Ascend910B1` on [kernels/automode/a2a3/add_tile_array/](../kernels/automode/a2a3/add_tile_array/) → `test data success` / `test success`.
+- Reference: [known_good_kernel_examples.md §A11](known_good_kernel_examples.md).
+- Delta beyond §A11: none.
+- Still Unknown: A5 mirror; multi-core variants; `-r sim` behaviour.
 
 ### 11.2 Compile errors first observed on this build
 
-Two real errors recorded as Occurrences in [compile_error_logbook.md](compile_error_logbook.md):
-
-- **E8** — `kernel_operator.h` not on the bisheng-direct include path (was inherited from the `demos/auto_mode/baseline/add` pattern which uses a different `ascendc.cmake` harness). Fix: drop the include; use only `<pto/common/constants.hpp>` and `<pto/pto-inst.hpp>`.
-- **E9** — `tests/common/test_common.h::ReadFile` second parameter is `size_t &`; cannot bind to `const size_t`. Fix: drop `const` on the `fileSize` local. Not auto-mode-specific.
+- Resolved: 2026-05-07 · A3 vec · in the course of §11.1.
+- Logbook entries opened: [§E8 (`kernel_operator.h` not on bisheng-direct include path)](compile_error_logbook.md), [§E9 (`ReadFile` `size_t &` binding)](compile_error_logbook.md).
 
 ### 11.3 Full auto-mode TopK with TSORT32 + TMRGSORT + TGATHER works on A3
 
-- **Resolved**: 2026-05-08 · A3 vec · user-reported `bash run.sh -r npu -v Ascend910B1` on
-  [kernels/automode/a2a3/topk/](../kernels/automode/a2a3/topk/) produced
-  `test value success` / `test index success` / `test success`.
-- **What this confirms (now Known)**:
-  - `TSORT32`, `TMRGSORT` (4-way self-merge AND 2-list explicit forms with `MrgSortExecutedNumList`), and `TGATHER` (template form `<DstTile, SrcTile, MaskPattern>(dst, src)`) are all auto-callable from kernel code on A3.
-  - `TGATHER` masks `P0101` (extract values from float-typed packed (val, idx) buffer) and `P1010` (extract indices from a uint32 type-pun view of the same buffer) work as documented in the manual TopK.
-  - `TRESHAPE` between tiles of **different element types** (`Tile<Vec, float, ...>` ↔ `Tile<Vec, uint32, ...>`) is auto-mode-safe at the kernel-level wrapper — sanctioned cross-element-type alias for type-pun, mirroring the [TQuant.hpp:108-114](../include/pto/npu/a2a3/TQuant.hpp#L108-L114) auto branch.
-  - `TSORT32`'s `tmp` parameter is pure scratch — content is irrelevant; an uninitialized independent tile suffices (no `TLOAD` of tmp from GM). Resolves the Inferred caveat in [§1 item 1.x earlier](#1-compiler--auto-mode-support).
-  - `SortTailBlock` writing to an **independent** destination tile (`mrgScratchTile`) and `TMOV`-back to the source-prefix is correct for a multi-iter tail (3 iterations in our `kCols=1280` shape's tail).
-  - Packed-width arithmetic — `kPackedCols = kCols * 2 * TYPE_COEF`, `kPackedTopK = kTopK * 2 * TYPE_COEF` — correctly drives the post-TSORT32 phases. Using raw source widths is a silent-data-loss bug (now captured as [auto_mode_bad_patterns.md §5.7](auto_mode_bad_patterns.md)).
-  - Two more compile errors recorded as Occurrences in the logbook:
-    - **E11** — host-side `reinterpret_cast<__gm__ T *>` rejected. Fix: kernel takes `__gm__ uint8_t *` and casts inside the body; host wrapper passes raw `uint8_t *`.
-    - **E12** — `Topk` naming collision (function and integer constant share the name). Fix: `k`-prefix on integer constants (`kCols`, `kTopK`); function renamed to `TopkKernel`.
-- **What is also Known after this experiment** (negative findings):
-  - The earlier "values-only TopK shortcut" (which assumed Python pre-sorted 64-element blocks and removed `TSORT32` / `idxTile` / `TGATHER`) is **not** equivalent to TopK and is **not** known-good — it produced wrong answers (interleaved output, dropped tail blocks). [known_good_kernel_examples.md §A12](known_good_kernel_examples.md) "Do not copy" makes this explicit.
-  - The transient `__cce_tinit` / `__cce_alias` / `matrix-types-extension` errors observed during local builds were caused by a misconfigured local bisheng-CCE toolchain — **not** a project-side bug. See [compile_error_logbook.md §E10 (WITHDRAWN)](compile_error_logbook.md). Do not add `-fenable-matrix` or fake `__cce_*` shims to project CMake on the basis of those errors.
-- **Reference entry**: [known_good_kernel_examples.md §A12](known_good_kernel_examples.md).
-- **Still Unknown for TopK** (out of scope for this v1):
-  - Half (`TYPE_COEF=2`) — mask patterns differ; not exercised.
-  - Multi-row, multi-AICORE (`block_idx`), and double-buffered variants.
-  - Other `kCols` / `kTopK` shapes — only `1280 / 512` was tested.
-  - Whether the manual's **in-place** TMRGSORT (curDstTile aliased onto srcTile.data()) would also be correct in auto mode; v1 sidesteps this with the independent `mrgScratchTile` + `TMOV`-back pattern.
+- Resolved: 2026-05-08 · A3 vec · `bash run.sh -r npu -v Ascend910B1` on [kernels/automode/a2a3/topk/](../kernels/automode/a2a3/topk/) → `test value success` / `test index success` / `test success`.
+- Reference: [known_good_kernel_examples.md §A12](known_good_kernel_examples.md).
+- Logbook entries opened: [§E11 (host-side `__gm__` cast rejected)](compile_error_logbook.md), [§E12 (`Topk` naming collision)](compile_error_logbook.md), [§E10 WITHDRAWN — transient toolchain issue, NOT a project bug](compile_error_logbook.md).
+- Delta beyond §A12: the transient `__cce_tinit` / `__cce_alias` / `matrix-types-extension` errors observed during local builds were attributed to a misconfigured local bisheng-CCE toolchain (logged as §E10 WITHDRAWN). Do not add `-fenable-matrix` or fake `__cce_*` shims on the basis of those errors.
+- Still Unknown: half (`TYPE_COEF=2`); multi-row, multi-AICORE, double-buffered variants; non-`1280/512` shapes; auto-mode safety of the manual's in-place TMRGSORT.
 
 ### 11.4 Device-side top-1 MoE forward permute on A3 auto mode works at the tested shape
 
-- **Resolved**: 2026-05-08 · A3 vec · user-reported `bash run.sh -r npu -v Ascend910B1` on
-  [kernels/automode/a2a3/moe_top1_permute/](../kernels/automode/a2a3/moe_top1_permute/)
-  produced matching `packed_tokens`, `expert_count`, `expert_start`, and `token_to_packed` against the Python golden.
-- **Scope of the resolution (narrow — do not generalize)**:
-  ```text
-  A3 auto mode
-  single AICORE
-  topK = 1
-  unlimited capacity
-  T = 256
-  H = 64
-  num_experts = 4
-  float32 tokens
-  int32 expert IDs / metadata
-  ```
-- **What this confirms (now Known at the above shape)**:
-  - **Scalar GM read of `int32_t` metadata from kernel code** (`int32_t e = expert_id[t];`). The auto-mode compiler accepts a plain GM-pointer dereference of a non-tile element.
-  - **Scalar GM write of `int32_t` metadata from kernel code** (`expert_count[e] = count[e]; expert_start[e] = start[e]; token_to_packed[t] = packed_pos;`). Auto-sync correctly orders these against the `TLOAD`/`TSTORE` on a different GM buffer in the same iteration.
-  - **Small device-local `int32_t arr[E]` indexed by a runtime scalar** (`count[e]`, `start[e]`, `counter[e]++`) with `E = 4` compile-time constant. Stack/register resident; coexists with the tile-shaped row buffer.
-  - **Runtime scalar used to compute GM row offset** for a per-iteration `GlobalTensor` (`GlobalTensor srcGlobal(tokens + size_t(t) * kH); GlobalTensor dstGlobal(packed_tokens + size_t(packed_pos) * kH);`). Confirms the data-dependent variant of the [§11.1 add_tile_array](#111-topk-style-bisheng-direct-cmake-harness----cce-enable-pto-passes-builds-and-runs-an-auto-mode-a3-kernel) runtime-offset pattern, where the offset there came from a compile-time loop induction variable.
-  - **Three sequential passes over the same `__gm__ int32_t *expert_id`** in one kernel (histogram pass, then pack pass) — re-reading the same GM scalar buffer twice is auto-mode-safe.
-  - **Multiple GM output buffers written in the same kernel** (`packed_tokens`, `expert_count`, `expert_start`, `token_to_packed`) with no manual sync between them.
-- **Sister directory clarification**: [kernels/automode/a2a3/moe_top1_gather_precomp/](../kernels/automode/a2a3/moe_top1_gather_precomp/) is a **reduced sanity/debug kernel only** (host-precomputes `packed_to_token` and the kernel does a pure indexed gather). It is NOT a confirmed implementation of the MoE permute milestone and must not be cited as such. The real milestone is `moe_top1_permute/` (this entry).
-- **Reference entry**: [known_good_kernel_examples.md §A13](known_good_kernel_examples.md).
-- **What is NOT proven by this experiment (still Unknown — do not claim resolved)**:
-  - Multi-core (`block_idx`) dispatch — would require a per-core histogram workspace and a cross-core prefix-sum / barrier; neither is implemented.
-  - `topK > 1` — changes the packing rule (each token contributes `topK` rows) and the metadata shape.
-  - Per-expert capacity / drop policy / fallback expert.
-  - Router argmax / topK (i.e., the kernel that *produces* `expert_id` from a router logits tensor) — not exercised.
-  - Weighted combine (`probs[t, k]` blending for `topK > 1`).
-  - Segmented compute (per-expert FFN microtile loop with `TILE_M = 128`) — separate downstream milestone.
-  - GEMM / FFN on packed segments.
-  - Backward pass.
-  - `fp16` / `bfloat16` tokens, `uint8` / `int16` expert IDs, larger `T` / `H` / `num_experts`, non-power-of-2 `num_experts`.
-  - Stack-array sizes beyond `kNumExperts = 4` (a moderately large `kNumExperts` may pressure stack/register allocation differently — Unknown).
+- Resolved: 2026-05-08 · A3 vec · `bash run.sh -r npu -v Ascend910B1` on [kernels/automode/a2a3/moe_top1_permute/](../kernels/automode/a2a3/moe_top1_permute/) → all four GM outputs match the Python golden.
+- Reference: [known_good_kernel_examples.md §A13](known_good_kernel_examples.md).
+- Delta beyond §A13: none.
+- Sister-directory note: [kernels/automode/a2a3/moe_top1_gather_precomp/](../kernels/automode/a2a3/moe_top1_gather_precomp/) is a reduced sanity/debug kernel (host-precomputed packing). Do NOT cite as the MoE permute milestone.
+- Still Unknown: multi-core dispatch; `topK > 1`; capacity / drop policy; router argmax; weighted combine; per-expert FFN segmented compute; backward; `fp16`/`bfloat16` tokens; larger `T`/`H`/`num_experts`; stack-array pressure beyond `kNumExperts=4`.
 
 ### 11.5 Top-1 MoE forward unpermute on A3 auto mode works at the tested shape
 
-- **Resolved**: 2026-05-08 · A3 vec · user-reported `bash run.sh -r npu -v Ascend910B1` on
-  [kernels/automode/a2a3/moe_top1_unpermute/](../kernels/automode/a2a3/moe_top1_unpermute/)
-  produced bit-exact `output` matching the Python golden.
-- **Scope of the resolution (narrow — do not generalize)**:
-  ```text
-  A3 auto mode
-  single AICORE
-  topK = 1
-  T = 256
-  H = 64
-  float32 data
-  int32 metadata
-  ```
-- **What this confirms (now Known at the above shape)** — beyond what §11.4 already established:
-  - **Scalar GM read from `token_to_packed[t]`** as the source-side index in a per-iteration row gather. Same shape as §11.4's `expert_id[t]` read; reconfirmed in the inverse direction.
-  - **Runtime scalar used as the source-side row offset multiplier**: `GlobalTensor srcGlobal(packed_output + size_t(packed_pos) * kH);`. §11.4 confirmed the *destination*-side use of a runtime scalar in `packed_tokens + size_t(packed_pos) * kH`; §11.5 closes the symmetric source-side case.
-  - **Runtime-offset row `TLOAD` from `packed_output`** and **row `TSTORE` to original token position** in the same loop iteration without manual sync.
-  - **Pure indexed-row-copy kernel** (no scalar GM writes, no device-local `int32_t arr[E]`, no histogram / prefix-sum / counter logic) is auto-mode-safe — confirms the §A14 pattern is a strict subset of the auto-mode capabilities already proven by §11.4.
-- **Reference entry**: [known_good_kernel_examples.md §A14](known_good_kernel_examples.md).
-- **What is NOT proven by this experiment (still Unknown — do not claim resolved)**:
-  - Multi-core (`block_idx`) dispatch.
-  - `topK > 1` weighted combine: `output[t, :] = sum_k prob[t, k] * packed_output[token_to_packed_topk[t, k], :]` is a different kernel (multiply + accumulate per slot) and is **not** validated.
-  - `fp16` / `bfloat16` data; `uint8` / `int16` metadata.
-  - Larger `T` / `H`; non-multiple-of-block `H`.
-  - Real expert FFN producing `packed_output` (this milestone fakes it as `packed_tokens + 1.0`).
-  - Backward pass.
+- Resolved: 2026-05-08 · A3 vec · `bash run.sh -r npu -v Ascend910B1` on [kernels/automode/a2a3/moe_top1_unpermute/](../kernels/automode/a2a3/moe_top1_unpermute/) → bit-exact `output` match.
+- Reference: [known_good_kernel_examples.md §A14](known_good_kernel_examples.md).
+- Delta beyond §A14: none.
+- Still Unknown: multi-core; `topK > 1` weighted combine; `fp16`/`bfloat16`; larger `T`/`H`; real expert FFN producing `packed_output`; backward.
 
 ### 11.6 Per-expert segmented microtile loop with elementwise op (TADDS) works at the tested shape
 
-- **Resolved**: 2026-05-08 · A3 vec · user-reported `bash run.sh -r npu -v Ascend910B1` on
-  [kernels/automode/a2a3/moe_segmented_identity/](../kernels/automode/a2a3/moe_segmented_identity/)
-  produced `test data success` / `test success` after the in-place→separate-tile patch (see gotcha below).
-- **Scope of the resolution (narrow — do not generalize)**:
-  ```text
-  A3 auto mode
-  single AICORE
-  float32 data
-  int32 metadata
-  H        = 64
-  T        = 256 real tokens
-  kE       = 4 experts
-  kTileM   = 128
-  host-padded expert segments
-  expert_count / expert_start values delivered to the kernel are PADDED
-  T_PADDED = sum(padded expert counts)
-  two 128 x 64 float Vec tiles concurrently live (srcTile, dstTile, 64 KB UB total)
-  TADDS(dstTile, srcTile, 1.0f) with separate src/dst tiles
-  ```
-- **What this confirms (now Known at the above shape)** — beyond what §11.1 / §11.4 / §11.5 already established:
-  - **Nested expert/tile loop** with both bounds (`expert_count[e]` outer, `expert_start[e] + m0` inner) coming from scalar GM reads of `int32_t` metadata, inside the same auto-mode kernel.
-  - **Runtime row offset `row = expert_start[e] + m0`** used to construct a per-iter `GlobalTensor`. Generalizes §11.4's data-dependent offset to a **nested** loop carrier.
-  - **Static `Tile<TileType::Vec, float, 128, 64, BLayout::RowMajor, 128, 64>`** declared at function scope, two concurrently live: `srcTile` and `dstTile`. Auto allocator pins both UB addresses; 32 KB × 2 = 64 KB total resident footprint, 4× the [§11.1 add_tile_array](#111-topk-style-bisheng-direct-cmake-harness----cce-enable-pto-passes-builds-and-runs-an-auto-mode-a3-kernel) tile.
-  - **`TADDS(dstTile, srcTile, 1.0f)` with separate src/dst tiles** called from inside a nested loop with runtime-driven GM offsets — matches the [tests/npu/a2a3/src/st/testcase/tadds/tadds_kernel.cpp](../tests/npu/a2a3/src/st/testcase/tadds/tadds_kernel.cpp) shape and the public wrapper at [include/pto/common/pto_instr.hpp:1517-1524](../include/pto/common/pto_instr.hpp#L1517-L1524).
-  - **Host-padded expert segment layout** as a workable v1 tail policy — kernel never invokes `SetValidRow` / `SetValidShape` / partial-tile stores.
-- **Reference entry**: [known_good_kernel_examples.md §A15](known_good_kernel_examples.md).
-- **New open gotcha (NOT a generalization — keep narrow)**:
-  - **In-place `TADDS(tile, tile, scalar)` is NOT known-good.** The first revision of `moe_segmented_identity` used a single `segTile` for both src and dst (`TADDS(segTile, segTile, 1.0f)`) and produced a zero-filled mismatch region around flat indices ~`0x1088..0x1132` in the output. Replacing with two distinct tiles (`srcTile`, `dstTile`) fixed it.
-  - **Polarity**: avoid the in-place `TADDS` form in A3 auto-mode kernels unless a separate experiment confirms it. Use distinct src/dst tiles.
-  - **What this does NOT prove**: that every `T*` instruction with `dst == src` is broken. The repo's [TAXPY](../tests/npu/a2a3/src/st/testcase/taxpy/taxpy_kernel.cpp) deliberately does dst-side `TLOAD` and that is documented as a legitimate read-modify-write op. The observation here is specific to `TADDS` and to the segmented-loop context; do not generalize.
-  - **Tracked separately as an Unknown** for any future kernel that might want the single-tile shape.
-- **What is NOT proven by this experiment (still Unknown — do not claim resolved)**:
-  - Dynamic tail handling with `validM`; `SetValidRow` / `SetValidShape`; partial-tile stores.
-  - GEMM / cube path (`TMATMUL`, `TileLeft`, `TileRight`, `TileAcc`, `TMOV` L1→L0); a fortiori no FFN.
-  - Multi-core (`block_idx`) work split.
-  - `topK > 1`; weighted combine.
-  - `fp16` / `bfloat16` data; non-`H=64` widths; `kE > 4`.
-  - Larger `kTileM` (e.g., 256), or shapes where multiple inner-tile iterations per expert race against each other in the auto allocator (only one inner iter exposes the worst race; multi-iter case is the new thing here but still bounded to ≤ a few iters per expert in the tested distribution).
+- Resolved: 2026-05-08 · A3 vec · `bash run.sh -r npu -v Ascend910B1` on [kernels/automode/a2a3/moe_segmented_identity/](../kernels/automode/a2a3/moe_segmented_identity/) → `test data success` / `test success` after in-place→separate-tile fix.
+- Reference: [known_good_kernel_examples.md §A15](known_good_kernel_examples.md) (the "Do not copy" block carries the in-place-`TADDS`-failed observation in detail).
+- Delta beyond §A15: none.
+- Still Unknown: dynamic tail (`SetValidRow`/`SetValidShape`); cube path; multi-core; `topK > 1`; `fp16`/`bfloat16`; non-`H=64` widths; `kE > 4`; larger `kTileM`.
 
 ### 11.7 First cube GEMM inside the per-expert segmented loop works at the tested shape
 
-- **Resolved**: 2026-05-08 · A3 cube · user-reported `bash run.sh -r npu -v Ascend910B1` on
-  [kernels/automode/a2a3/moe_segmented_gemm_one_layer/](../kernels/automode/a2a3/moe_segmented_gemm_one_layer/)
-  produced `test data success` / `test success` after the host-side `half` visibility fix (see compile-error logbook entry E13).
-- **Scope of the resolution (narrow — do not generalize)**:
-  ```text
-  A3 auto mode
-  single AICORE
-  build target: --cce-aicore-arch=dav-c220-cube --cce-enable-pto-passes -O2
-  host-padded expert segments (topK = 1 upstream layout)
-  T = 256 real tokens
-  H = 64  (K dim)
-  O = 64  (N dim)
-  kE = 4
-  kTileM = 128  (M dim)
-  packed_tokens : float16
-  expert_weight : float16
-  packed_output : float32 (cube FP32 accumulator)
-  TMATMUL<float, half, half, float, M=128, K=64, N=64, false>  (canonical A3 combo, no bias)
-  one expert-specific GEMM per expert microtile
-  ```
-- **What this confirms (now Known at the above shape)** — beyond what §11.6 already established for the segmented elementwise loop:
-  - **Cube `TMATMUL` inside the segmented expert/microtile loop** — outer over `kNumExperts`, inner over `m0 += kTileM`, with both bounds from scalar GM reads of `int32_t` metadata. All five tile types (`Mat ×2`, `Left`, `Right`, `Acc`) declared once outside the loops and reused across iters; auto-sync inserts MTE2 → MTE1 → M → FIX fences.
-  - **FP16 × FP16 → FP32 cube combo** at `(M, K, N) = (128, 64, 64)` static shape; matches the `LaunchTMATMUL<1>` reference instantiation.
-  - **Expert-specific weight GM offset by runtime/loop expert ID** — `expert_weight + e * (kH * kO)` per outer iter, fresh `GlobalDataB` reconstructed each time. `bMatTile`/`bTile` reused across the inner iters of the same expert.
-  - **Runtime packed-token row offset feeding the A-matrix load** — `packed_tokens + (start + m0) * kH` per inner iter; `aMatTile`/`aTile` reused across inner iters with fresh `GlobalDataA`.
-  - **Reuse of Mat/Left/Right/Acc tiles across nested loop iterations** without manual sync.
-  - **Host-padded expert segment layout works for one-layer GEMM** — padded rows are zero, so their GEMM output is exactly zero with no bias.
-  - **Non-template host launcher wrapper avoids host-side `half` visibility issues** — host TU compiled with `-xc++` cannot see `half` (a bisheng-CCE compiler-provided type only visible inside `-xcce` TUs that include `<pto/pto-inst.hpp>`); a `launch…Fp16(uint8_t*, uint8_t*, int32_t*, int32_t*, uint8_t*, void*)` non-template wrapper at the kernel TU boundary cleanly hides it.
-- **Reference entry**: [known_good_kernel_examples.md §A16](known_good_kernel_examples.md).
-- **What is NOT proven by this experiment (still Unknown — do not claim resolved)**:
-  - Full FFN with two GEMMs.
-  - Activation between GEMMs (cube → vec handoff, or fused-via-`ReluPreMode` TSTORE — the latter is documented in `tstore_acc2gm` but not yet exercised in the MoE-segmented context).
-  - Bias path (`TMATMUL_BIAS`).
-  - SplitK / accumulation across K splits (`TMATMUL_ACC`).
-  - TF32 path / FP32 × FP32 GEMM.
-  - INT8 / BF16 inputs.
-  - Different `(M, K, N)` shapes; non-multiple-of-blockAlign `K` or `N`.
-  - Dynamic tail handling with `validM` / `SetValidRow` / `SetValidShape`; partial-tile stores.
-  - Multi-core (`block_idx`) work split.
-  - `topK > 1`; weighted combine; router / argmax / top-K selection.
-  - Backward pass; performance characterization.
+- Resolved: 2026-05-08 · A3 cube · `bash run.sh -r npu -v Ascend910B1` on [kernels/automode/a2a3/moe_segmented_gemm_one_layer/](../kernels/automode/a2a3/moe_segmented_gemm_one_layer/) → `test data success` / `test success`.
+- Reference: [known_good_kernel_examples.md §A16](known_good_kernel_examples.md).
+- Logbook entries opened: [§E13 (host-side `half` visibility)](compile_error_logbook.md).
+- Delta beyond §A16: none.
+- Still Unknown: full FFN; activation between GEMMs; bias / SplitK / TF32 / INT8 / BF16; non-`(128,64,64)` shapes; dynamic tail; multi-core; `topK > 1`; backward; performance.
 
 ### 11.8 Fused ReLU via `TSTORE(..., ReluPreMode::NormalRelu)` in the per-expert segmented GEMM loop works at the tested shape
 
-- **Resolved**: 2026-05-08 · A3 cube · user-reported `bash run.sh -r npu -v Ascend910B1` on
-  [kernels/automode/a2a3/moe_segmented_gemm_relu/](../kernels/automode/a2a3/moe_segmented_gemm_relu/)
-  produced `test data success` / `test success`.
-- **Scope of the resolution (narrow — do not generalize)**:
-  ```text
-  A3 auto mode
-  single AICORE
-  --cce-aicore-arch=dav-c220-cube --cce-enable-pto-passes -O2
-  host-padded expert segments (topK = 1 upstream layout)
-  T = 256 real tokens
-  H = 64  (K dim)
-  O = 64  (N dim)
-  kE = 4
-  kTileM = 128  (M dim)
-  packed_tokens : float16
-  expert_weight : float16
-  packed_output : float32 (cube FP32 accumulator with FIX-pipe ReLU applied)
-  TMATMUL<float, half, half, float, M=128, K=64, N=64, false>
-  TSTORE<AccTile, GlobalDataC, AtomicType::AtomicNone, ReluPreMode::NormalRelu>
-  ```
-- **What this confirms (now Known at the above shape)** — beyond §11.7:
-  - **Fused ReLU in L0C → GM TSTORE** via the public PTO wrapper at
-    [include/pto/common/pto_instr.hpp:251-258](../include/pto/common/pto_instr.hpp#L251-L258).
-    Template form `TSTORE<TileData, GlobalData, AtomicType::AtomicNone, ReluPreMode::NormalRelu>(dst, src)`.
-  - **FIX-pipe activation fusion inside the per-expert segmented loop** is auto-mode-safe — generalizes the standalone single-tile `tstore_acc2gm` precedent to the per-expert nested-loop context.
-  - **`ReluPreMode::NormalRelu` template arg dispatch** through auto-mode TSTORE on cube arch.
-- **Reference entry**: [known_good_kernel_examples.md §A17](known_good_kernel_examples.md).
-- **What is NOT proven by this experiment (still Unknown — do not claim resolved)**:
-  - Activation other than `ReluPreMode::NormalRelu` (the enum only has `NoRelu`/`NormalRelu`; GELU / SiLU / LeakyReLU etc. are not options at this layer).
-  - The standalone `TRELU` / `TMAXS` wrappers operating on `TileType::Vec` tiles in an auto-mode kernel that mixes cube + vec — entirely unexercised by this milestone.
-  - ~~The **combination** of `ReluPreMode::NormalRelu` AND `AccTile<float>` → GM `half` down-cast in the **same TSTORE call**.~~ → Resolved by §11.9 below for ND layout at the FFN shape.
-  - GEMM2 chained after GEMM1+ReLU; cube → cube handoff via GM scratch. → Resolved by §11.9 below at the FFN shape.
-  - Bias path; SplitK; TF32; INT8 / BF16 GEMM dtypes; non-`(128, 64, 64)` shapes.
-  - Multi-core, dynamic tail, `topK > 1`, weighted combine, backward, performance.
+- Resolved: 2026-05-08 · A3 cube · `bash run.sh -r npu -v Ascend910B1` on [kernels/automode/a2a3/moe_segmented_gemm_relu/](../kernels/automode/a2a3/moe_segmented_gemm_relu/) → `test data success` / `test success`.
+- Reference: [known_good_kernel_examples.md §A17](known_good_kernel_examples.md).
+- Delta beyond §A17: the FP32-Acc → FP16-GM + `NormalRelu` ND-layout combination that §A17 left as "Do not copy" is Resolved by §11.9; cube→cube handoff via GM scratch is also Resolved there.
+- Still Unknown: activations other than `NormalRelu` (enum is `NoRelu`/`NormalRelu` only at this layer); standalone `TRELU` / `TMAXS` on `TileType::Vec` mixed with cube; bias / SplitK / TF32 / INT8 / BF16; non-`(128,64,64)` shapes; multi-core; dynamic tail; `topK > 1`; backward; performance.
 
 ### 11.9 Full top-1 segmented MoE FFN (GEMM1 + ReLU + FP16 scratch + GEMM2) works on A3 auto mode at the tested shape
 
-- **Resolved**: 2026-05-12 · A3 cube · user-reported PASS of `bash run.sh -r npu -v Ascend910B1` on
-  [kernels/automode/a2a3/moe_segmented_ffn_top1/](../kernels/automode/a2a3/moe_segmented_ffn_top1/)
-  after splitting the FFN into two stream-serialised kernels (see §A18 in `known_good_kernel_examples.md`).
-- **Scope of the resolution (narrow — do not generalize)**:
-  ```text
-  A3 auto mode
-  single AICORE per kernel
-  --cce-aicore-arch=dav-c220-cube --cce-enable-pto-passes -O2
-  host-padded expert segments (topK = 1 upstream layout)
-  T = 256 real tokens
-  H = 64  (GEMM1 K, GEMM2 N)
-  F = 64  (GEMM1 N, GEMM2 K)   ; kH == kF enforced by static_assert
-  kE = 4
-  kTileM = 128
-  packed_tokens : float16
-  w1, w2        : float16
-  scratch       : float16  (post-ReLU; FP32 acc -> FP16 GM + ReLU in ONE TSTORE)
-  packed_output : float32  (cube FP32 accumulator from GEMM2)
-  Composition: two separate __global__ AICORE kernels (Stage1 / Stage2) in one TU,
-  fired back-to-back on the same ACL stream. Stream-order guarantees the scratch
-  hand-off; no within-kernel cross-GEMM auto-sync involved.
-  ```
-- **What this confirms (now Known at the above shape)** — beyond §11.7 and §11.8:
-  - **FP32 Acc → FP16 GM + `ReluPreMode::NormalRelu` in a SINGLE TSTORE in ND layout** works. The same dtype + ReLU combo was already in `ALL_TESTCASES` for NZ layout via [tstore_acc2gm_kernel.cpp:627](../tests/npu/a2a3/src/st/testcase/tstore_acc2gm/tstore_acc2gm_kernel.cpp#L627) (`LaunchTStoreAcc2gmNz2nz<21>` instantiating `<0, float, float, half, ..., 1>`); the ND-layout variant is now Resolved at the FFN shape. (Note: the §A17 `known_good_kernel_examples.md` entry slightly understated this — `tstore_acc2gm` Nz2nz tilingKey=21 actually DOES combine both pieces; the ND-layout Nz2nd variant was the genuinely-missing piece, now Resolved.)
-  - **Two cube kernels chained through an FP16 GM scratch buffer on the same ACL stream** is auto-mode-safe — each kernel's auto-sync graph is independent; the cross-kernel dependency is at the ACL stream level.
-  - **A host-allocated, kernel-managed temporary device buffer** can be used between two kernel launches without host-side copies into it.
-- **Reference entry**: [known_good_kernel_examples.md §A18](known_good_kernel_examples.md).
-- **What is NOT proven by this experiment (still Unknown — do not claim resolved)**:
-  - **Fusing both GEMMs into a single `__global__ AICORE` body.** Two within-kernel forms were attempted and abandoned: (a) declaring two independent 5-tile cube sets (10 cube tiles total) produced numerically wrong output; (b) reusing a single 5-tile cube set across both GEMMs in the same inner iteration (`cTile` drain to scratch GM, then `aMatTile` reload from the same scratch GM) hung the device on a single run. **The root cause of the (b) hang is unverified** — it could be auto-sync producing an unmatched `wait_flag` for the cross-GEMM tile-reuse pattern, OR a transient hardware / driver issue unrelated to the kernel. The split-kernel form is the Known-good path; the fused single-kernel form remains **Unknown** until either (i) the (b) hang is reproduced under instrumented conditions and attributed to a specific auto-sync emission, or (ii) a successful run of (b) is obtained. Do NOT claim the fused form is broken on the basis of one hang.
-  - `kH != kF` shapes (the kernel hard-asserts they match in this milestone).
-  - Multiple K tiles inside a single GEMM (`kH > 64` or `kF > 64`) — would require SplitK accumulation, not exercised here.
-  - Multiple N tiles inside GEMM1 — would require Split-N pattern with two TSTOREs per microtile, not exercised here.
-  - Multi-core `block_idx` partitioning; dynamic tail handling; `SetValidRow` / `SetValidShape` / partial-tile stores; `topK > 1` (weighted combine); backward; performance.
-  - Activations other than `NormalRelu`; bias path; non-FP16 FFN dtypes; the full router GEMM (this milestone uses a precomputed top-1 packed layout).
+- Resolved: 2026-05-12 · A3 cube · `bash run.sh -r npu -v Ascend910B1` on [kernels/automode/a2a3/moe_segmented_ffn_top1/](../kernels/automode/a2a3/moe_segmented_ffn_top1/) → `test data success` / `test success`. Composition: two stream-serialised `__global__ AICORE` kernels (Stage1 / Stage2).
+- Reference: [known_good_kernel_examples.md §A18](known_good_kernel_examples.md) (the "Do not copy" block records the fused-single-kernel attempt and the unverified hang).
+- Delta beyond §A18: minor — the §A17 entry slightly understated `tstore_acc2gm`'s coverage; the genuinely-missing piece was the ND-layout Nz2nd variant of (FP32 Acc → FP16 GM + ReLU in a single TSTORE), and it is now Resolved at this shape.
+- Still Unknown: fused single-kernel form (root cause of the (b) hang unverified — do not claim broken on basis of one hang); `kH != kF`; multi-K-tile inside a GEMM; multi-N-tile inside GEMM1; multi-core; dynamic tail; `topK > 1`; backward; performance; activations other than `NormalRelu`; bias; non-FP16 FFN dtypes; full router GEMM.
 
 ---
 

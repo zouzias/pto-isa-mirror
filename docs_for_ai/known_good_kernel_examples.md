@@ -176,12 +176,7 @@ harness (Known: enumerated in `ALL_TESTCASES` of
    - `TMRGSORT(dst, src, blockLen)` is the **4-way merge** form. `blockLen` is in packed-element units; the implementation requires the merge width to be divisible by `blockLen * 4`, and each Phase-2 pass grows the sorted run length by **4×**. Hence the loop does `blockLen *= 4`.
    - `TMRGSORT(curDst, executedNumList, tmp, src0, src1)` is the **explicit 2-source** form used by `SortTailBlock` to handle residual / tail runs that are not a power of 4 of `blockLen`.
 
-   **View-operator convention** ([§14 in tile_type_reference.md](tile_type_reference.md)):
-   - Same-type prefix slice → `TSUBVIEW(view, tile, 0, 0)`
-   - Same-type non-zero slice → `TSUBVIEW(view, tile, 0, offset)`
-   - Reshape / reinterpret / type-pun → `TRESHAPE(view, tile)`
-
-   Phases 2-4 of this kernel use `TSUBVIEW(..., 0, 0)` for same-type prefix views (`srcSortedView`, `tmpSortedView`, `src0View`, `curDstView`, `copyBackView`, `sortedTopKView`); Phase 5 retains `TRESHAPE` because it reinterprets float-typed storage as `uint32` for `TGATHER P1010`.
+   **View-operator convention** — Phases 2-4 of this kernel use `TSUBVIEW(..., 0, 0)` for same-type prefix views (`srcSortedView`, `tmpSortedView`, `src0View`, `curDstView`, `copyBackView`, `sortedTopKView`); Phase 5 retains `TRESHAPE` because it reinterprets float-typed storage as `uint32` for `TGATHER P1010`. Full selection rule at [tile_type_reference.md §11.1](tile_type_reference.md).
 4. **Auto-mode compatibility** — Yes (Known, user-confirmed). Confirms several Inferred items:
    - `TSORT32`, `TMRGSORT` (4-way self-merge AND 2-list explicit forms with `MrgSortExecutedNumList`), and `TGATHER` (template form `<DstTile, SrcTile, MaskPattern>(dst, src)`) are all auto-callable from kernel code on A3.
    - `TGATHER` masks `P0101` (values from float-typed packed buffer) and `P1010` (indices from uint32 type-pun view) work as documented in the manual TopK.
@@ -294,7 +289,7 @@ harness (Known: enumerated in `ALL_TESTCASES` of
    - **Nested loop with both bounds from GM scalar metadata** — outer 4 experts × inner up to `padded_count / kTileM` microtiles; `expert_start[e]` and `expert_count[e]` are re-read each outer iter.
    - **Two `128 × 64` float Vec tiles concurrently live** (64 KB total UB allocation, 4× the [§A11 add_tile_array](#a11-add_tile_array--first-confirmed-built-auto-mode-kernel-with-an-in-kernel-serial-loop-a3) tile budget). Auto allocator pins both addresses; no manual `TASSIGN`.
    - **`TADDS(dstTile, srcTile, 1.0f)` with distinct src/dst tiles** from inside a nested loop with runtime-driven `GlobalTensor` offsets. Matches the shape in [tests/npu/a2a3/src/st/testcase/tadds/tadds_kernel.cpp](../tests/npu/a2a3/src/st/testcase/tadds/tadds_kernel.cpp) (which is in `ALL_TESTCASES`).
-   - **Host-padded expert segment layout** as a workable v1 tail policy — kernel sees only padded `expert_count` / `expert_start`; padded rows are processed identically to real rows; `SetValidRow` / `SetValidShape` / partial stores remain unused (and still Unknown for auto mode — see [tile_type_reference.md §6 / §11 item 12](tile_type_reference.md)).
+   - **Host-padded expert segment layout** as a workable v1 tail policy — kernel sees only padded `expert_count` / `expert_start`; padded rows are processed identically to real rows; `SetValidRow` / `SetValidShape` / partial stores remain unused (and still Unknown for auto mode — see [tile_type_reference.md §6](tile_type_reference.md)).
 5. **Copy** — the entire project layout for any auto-mode A3 prototype that needs **per-expert segmented compute on host-padded segments**:
    - the [moe_segmented_identity](../kernels/automode/a2a3/moe_segmented_identity/) directory shape;
    - the nested loop skeleton above (it transfers cleanly to a GEMM body once the elementwise call is swapped out);
@@ -569,13 +564,7 @@ harness (Known: enumerated in `ALL_TESTCASES` of
 
 ### D4. TDequant ST kernel — example of likely-redundant `TLOAD` on dst
 
-1. **File** — [tests/npu/a2a3/src/st/testcase/tdequant/tdequant_kernel.cpp](../tests/npu/a2a3/src/st/testcase/tdequant/tdequant_kernel.cpp)
-2. **Why** — `tdequant` IS in `ALL_TESTCASES`, **but** [line 50](../tests/npu/a2a3/src/st/testcase/tdequant/tdequant_kernel.cpp#L50) does `TLOAD(dstTile, dstGlobal)` on a tile that is **only an output** of `TDEQUANT`. This is exactly the "redundant `TLOAD` on dst" anti-pattern from [docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md §3.1](../docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md), which warns about data races in auto mode.
-3. **Pattern** — Standard dequant skeleton; `TASSIGN` with computed offsets via `size_t srcOffset = ...`.
-4. **Auto-mode compatibility** — Problematic (Inferred). Builds per the test list, but the `TLOAD(dstTile, ...)` is an explicitly-warned-against pattern. Either the test happens to pass because the compiler does not coalesce `srcTile` and `dstTile` here, or the result is silently incorrect — verify with the user before reusing.
-5. **Copy** — The scale/offset GM stride conventions; the `Tile<TileType::Vec, ...>` declarations.
-6. **Do not copy** — `TLOAD(dstTile, dstGlobal)` for write-only outputs. If you need to initialize a dst tile, use a deliberate value (e.g., `TFILLPAD`) or skip it.
-7. **Confidence** — Medium.
+[tests/npu/a2a3/src/st/testcase/tdequant/tdequant_kernel.cpp](../tests/npu/a2a3/src/st/testcase/tdequant/tdequant_kernel.cpp) at [line 50](../tests/npu/a2a3/src/st/testcase/tdequant/tdequant_kernel.cpp#L50) issues `TLOAD(dstTile, dstGlobal)` on a tile that is only the output of `TDEQUANT`. Full rule + symptom: [auto_mode_bad_patterns.md §1.5 / §6.2](auto_mode_bad_patterns.md) and [compile_error_logbook.md §E6](compile_error_logbook.md). **Do not copy** the redundant `TLOAD`. Confidence: Medium.
 
 ---
 
@@ -596,8 +585,7 @@ harness (Known: enumerated in `ALL_TESTCASES` of
 
 ## Cross-cutting risks observed (link back when reviewing)
 
-- **`__tf__` IS meaningful on A3/A5** (Known). The repo `#define`s `__tf__` as empty only for kirin ([include/pto/common/arch_macro.hpp:29-34](../include/pto/common/arch_macro.hpp#L29-L34)), CPU-sim ([include/pto/common/cpu_stub.hpp:34](../include/pto/common/cpu_stub.hpp#L34)), and cost-model ([include/pto/costmodel/common/qualifiers.hpp:27](../include/pto/costmodel/common/qualifiers.hpp#L27)). On A3/A5 it is a bisheng-CCE keyword, used pervasively in [include/pto/npu/a2a3/](../include/pto/npu/a2a3/) and [include/pto/npu/a5/](../include/pto/npu/a5/). Add `__tf__` on helpers that contain raw CCE intrinsics; do not add it to user-facing kernel entries. See [qualifier_reference.md](qualifier_reference.md).
-- **`__in__`/`__out__` ARE meaningful on A3/A5** (Inferred). Same `#define`-as-empty pattern in arch_macro.hpp / cpu_stub.hpp / qualifiers.hpp. The library spec ([docs/auto_mode/Library_Developer_Rules_And_Limitations.md §6](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md)) requires them on `TileDType` parameters of tile functions. Preserve when copying helper signatures.
+- **`__tf__` / `__in__` / `__out__` / `__cce_get_tile_ptr` are bisheng-CCE keywords/builtins on A3/A5** — add `__tf__` on helpers that contain raw CCE intrinsics; preserve `__in__`/`__out__` on `TileDType` parameters when copying helper signatures. See [qualifier_reference.md](qualifier_reference.md) for the full evidence chain.
 - **`TPUSH` / `TPOP` are not safe in auto mode** ([tests/npu/a2a3/src/st/testcase/CMakeLists.txt:213-220](../tests/npu/a2a3/src/st/testcase/CMakeLists.txt#L213-L220), [docs/auto_mode/Library_Developer_Rules_And_Limitations.md §4](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md)). Avoid in any auto-mode kernel.
 - **Double buffering is not supported for kernel devs today** ([docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md §1.4](../docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md)). Do not transplant ping-pong buffer logic from C1/C2/C3.
 - **`set_flag` / `wait_flag` / `Event<>` from manual kernels** must be either dropped or wrapped in `#ifndef __PTO_AUTO__` (canonical guard pattern: A4, A6, A7, D3).
