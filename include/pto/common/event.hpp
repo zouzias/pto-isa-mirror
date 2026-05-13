@@ -111,6 +111,12 @@ enum class Op : uint16_t
     OP_COUNT, // The Total number of operations, please add new operations before OP_COUNT
 };
 
+// Vec-only cores (e.g. dav-c310-vec) lack the FIX pipeline; fall back to
+// PIPE_ALL so that the opPipeList table compiles on all architectures.
+#ifndef PIPE_FIX
+#define PIPE_FIX PIPE_ALL
+#endif
+
 // opPipeList maps each operation in Op enum to its corresponding pipeline type.
 // This array is used to determine which hardware pipeline should be used for each operation.
 constexpr pipe_t opPipeList[] = {
