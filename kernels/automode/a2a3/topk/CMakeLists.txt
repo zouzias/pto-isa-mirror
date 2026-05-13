@@ -1,8 +1,11 @@
 # --------------------------------------------------------------------------------
-# topk - auto-mode A3 prototype.
-# Mirrors kernels/automode/a2a3/add_tile_array/CMakeLists.txt; the only
-# project-specific bits are the project name and the pto_example_vec_auto
-# call at the bottom.
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 
 
@@ -68,19 +71,9 @@ include_directories(
     ${ASCEND_DRIVER_PATH}/kernel/inc
 )
 
-# Auto-mode variant of pto_example_vec (from topk's manual CMakeLists). The
-# only difference is the added `--cce-enable-pto-passes` on the kernel target
-# which switches the bisheng-CCE compiler into PTO auto mode (per
-# docs/auto_mode/Auto_Mode_Overview.md). Identical to the function in
-# kernels/automode/a2a3/add_tile_array/CMakeLists.txt.
-function(pto_example_vec_auto NAME)
+function(pto_example_vec NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
-    target_compile_options(${NAME}_kernel PRIVATE
-        ${CMAKE_CCE_COMPILE_OPTIONS}
-        --cce-aicore-arch=dav-c220-vec
-        --cce-enable-pto-passes
-        -std=c++17
-    )
+    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220-vec -std=c++17)
     target_include_directories(${NAME}_kernel PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../include/
     )
@@ -107,4 +100,4 @@ function(pto_example_vec_auto NAME)
     )
 endfunction()
 
-pto_example_vec_auto(topk)
+pto_example_vec(topk)

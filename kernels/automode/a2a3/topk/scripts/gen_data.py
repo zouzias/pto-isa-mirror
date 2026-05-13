@@ -1,46 +1,94 @@
 #!/usr/bin/python3
 # coding=utf-8
 # --------------------------------------------------------------------------------
-# topk (auto-mode A3 prototype, 2D full TopK) - gen_data.py
-#
-# Generates a (kRows, kCols) float32 input and computes the per-row top-K
-# values and matching original-position indices via NumPy.
-#
-# Output files (raw little-endian, contiguous, no header):
-#   ./input/input_src.bin     kRows * kCols  float32   (raw random unsorted, row-major)
-#   ./input/input_idx.bin     1     * kCols  uint32_t  ([0..kCols-1]; shared across rows)
-#   ./output/golden_val.bin   kRows * kTopK  float32   (per-row top-K values, descending)
-#   ./output/golden_idx.bin   kRows * kTopK  uint32_t  (per-row matching original-position indices)
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 
 import os
 import numpy as np
-
 np.random.seed(19)
 
-kRows = 4
-kCols = 1280
-kTopK = 512
 
+def gen_golden_data(param):
+    src_type = param.src_type
+    index_type = param.index_type
+    g_shape0 = param.g_shape0
+    g_shape1 = param.g_shape1
+    g_shape2 = param.g_shape2
+    g_shape3 = param.g_shape3
+    g_shape4 = param.g_shape4
+    g_whole_shape0 = param.g_whole_shape0
+    g_whole_shape1 = param.g_whole_shape1
+    g_whole_shape2 = param.g_whole_shape2
+    g_whole_shape3 = param.g_whole_shape3
+    g_whole_shape4 = param.g_whole_shape4
+    topk = param.topk
 
-def gen_golden_data():
-    src = np.random.uniform(-1000.0, 1000.0, size=(kRows, kCols)).astype(np.float32)
-    # idx is the same identity row for every input row; kernel TLOADs it once
-    # per row from a shared (kCols,) GM region. Keep file size at kCols.
-    idx = np.arange(kCols, dtype=np.uint32)
+    valid_row = g_shape0 * g_shape1 * g_shape2 * g_shape3
+    valid_col = g_shape4
+    rows = g_whole_shape0 * g_whole_shape1 * g_whole_shape2 * g_whole_shape3
+    cols = g_whole_shape4
+    
+    new_data = np.zeros((rows, cols)).astype(src_type)
+    for i in range(valid_row):
+        data = np.random.uniform(i, i + valid_col, size=valid_col).astype(src_type)
+        new_data[i, :valid_col] = data
 
-    # Per-row descending sort by value, stable on original order for ties.
-    order = np.argsort(-src, axis=1, kind='stable')
-    topk_idx = order[:, :kTopK].astype(np.uint32)
-    topk_val = np.take_along_axis(src, topk_idx.astype(np.int64), axis=1).astype(np.float32)
+    x1_gm = np.zeros((rows, cols * 2)) 
+    for i in range(valid_row):
+        counter = 0
+        for j in range(valid_col):
+            original_value = new_data[i, j]
+            x1_gm[i, j * 2] = original_value
+            x1_gm[i, j * 2 + 1] = counter
+            counter += 1
+
+    topk_values = np.zeros((rows, topk)).astype(src_type)
+    topk_indices = np.zeros((rows, topk)).astype(index_type)
+    idx = np.arange(valid_col).astype(np.uint32)
+    for i in range(valid_row):
+        row = new_data[i, :valid_col]
+        sorted_indices = np.lexsort((idx, -row))
+        indices_sorted = sorted_indices[:topk]
+        values = row[indices_sorted]
+
+        topk_values[i] = values
+        topk_indices[i] = indices_sorted
 
     os.makedirs("input", exist_ok=True)
     os.makedirs("output", exist_ok=True)
-    src.tofile("./input/input_src.bin")
-    idx.tofile("./input/input_idx.bin")
-    topk_val.tofile("./output/golden_val.bin")
-    topk_idx.tofile("./output/golden_idx.bin")
+    new_data.tofile("./input/x1_gm.bin")
+    idx.tofile("./input/x1_idx.bin")
+    topk_indices.tofile("./output/golden_i.bin")
+    topk_values.tofile("./output/golden_d.bin")
 
+
+class TopkParams:
+    def __init__(self, src_type, index_type, g_shape0, g_shape1, g_shape2, g_shape3, g_shape4,
+                 g_whole_shape0, g_whole_shape1, g_whole_shape2, g_whole_shape3, g_whole_shape4, topk):
+        self.src_type = src_type
+        self.index_type = index_type
+        self.g_shape0 = g_shape0
+        self.g_shape1 = g_shape1
+        self.g_shape2 = g_shape2
+        self.g_shape3 = g_shape3
+        self.g_shape4 = g_shape4
+        self.g_whole_shape0 = g_whole_shape0
+        self.g_whole_shape1 = g_whole_shape1
+        self.g_whole_shape2 = g_whole_shape2
+        self.g_whole_shape3 = g_whole_shape3
+        self.g_whole_shape4 = g_whole_shape4
+        self.topk = topk
 
 if __name__ == "__main__":
-    gen_golden_data()
+
+    case_params_list = [
+        TopkParams(np.float32, np.int32, 1, 1, 1, 4800, 1024, 1, 1, 1, 4800, 1280, 1000)
+    ]
+    gen_golden_data(case_params_list[0])

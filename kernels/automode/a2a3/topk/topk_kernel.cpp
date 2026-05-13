@@ -1,52 +1,26 @@
 /**
- * topk_kernel.cpp - auto-mode A3 prototype, full top-K with values + indices.
- *
- * 2D variant: input is (kRows, kCols) row-major. Per-row top-K is produced
- * by a serial in-kernel row loop on a single AICORE. The single-row pipeline
- * is identical to v1; only the outer loop and per-row global offsets are new.
- * Pattern source for the row loop: kernels/automode/a2a3/add_tile_array
- * (confirmed-built auto-mode baseline: tiles declared once outside the loop,
- * GlobalTensor views recomputed at per-iter offsets, no manual sync).
- *
- * Pipeline per row (single AICORE, no buffering):
- *   1. TLOAD  src + idx
- *   2. TSORT32(packed, src, idx, scratch)        — per 32-element block sort,
- *                                                   emits (val, idx) packed format
- *   3. main TMRGSORT loop (4-way self-merge)     — blockLen = 64*TYPE_COEF, *= 4
- *   4. SortTailBlock for non-power-of-4 residual — independent dst + TMOV-back
- *   5. TGATHER  P0101 → outVal     (float-only mask; half is v2)
- *   6. TGATHER  P1010 → outIdx     (via TRESHAPE type-pun: float-buf as uint32)
- *   7. TSTORE  outVal + outIdx
- *
- * v2 limitations (deliberate; documented in README.md):
- *   - Single AICORE; no block_idx work split.
- *   - Serial in-kernel row loop (no row-level parallelism / pipelining).
- *   - Float dtype only (TYPE_COEF=1). Half (TYPE_COEF=2) mask patterns differ;
- *     deferred to a future iteration.
- *   - No double / multi-buffering; no TPipe / TPUSH / TPOP.
- *   - No unguarded set_flag / wait_flag / pipe_barrier in kernel scope.
- *   - SortTailBlock writes to an INDEPENDENT destination (mrgScratchTile)
- *     and TMOVs the merged run back to sort32DstTile prefix; this avoids
- *     the in-place TMRGSORT-with-dst-aliased-to-src pattern from the
- *     manual (in-place worked there with manual sync; auto-mode behavior
- *     of in-place merge is the open question we are sidestepping).
- *   - idx is a single shared identity row (shape (kCols,)); each row's
- *     TLOAD reads the same idx GM region — mirrors the manual TopK's
- *     "TLOAD indexTile once" approach but done per-iter for symmetry with
- *     the add_tile_array baseline's TLOAD-inside-loop pattern.
- */
+Copyright (c) 2026 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
 
-#include <pto/pto-inst.hpp>
-#include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/pto-inst.hpp>
+#include "multiBuffer.hpp"
 
 using namespace pto;
+constexpr uint32_t BUFFER_NUM = 2;
+constexpr uint32_t SINGLE_LOOP_ROW = 1; // FIXME: Other values not currently working for auto mode
 
-template <int kTCols_>
+template <int Cols>
 PTO_INTERNAL int32_t FillMrgArray(int32_t *mrgArray, int blockLen)
 {
     int32_t arrayCount = 0;
-    int32_t tmpInner = kTCols_;
+    int32_t tmpInner = Cols;
     for (int32_t i = blockLen; i >= 64; i /= 4) {
         int32_t count;
         for (count = 0; count < tmpInner / i; count++) {
@@ -57,217 +31,280 @@ PTO_INTERNAL int32_t FillMrgArray(int32_t *mrgArray, int blockLen)
     return arrayCount;
 }
 
-template <typename T, int kRows, int kCols, int kTopK>
-__global__ AICORE void RunTopk(__gm__ uint8_t *outVal_raw, __gm__ uint8_t *outIdx_raw,
-                                __gm__ uint8_t *src_raw,    __gm__ uint8_t *idx_raw)
+template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
+          int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4, int topk, int blockDim>
+AICORE inline void Check()
+{
+    constexpr int totalRow = gShape0 * gShape1 * gShape2 * gShape3;
+    constexpr int validRow = gShape0 * gShape1 * gShape2 * gShape3 / blockDim;
+    constexpr int validCol = gShape4;
+    constexpr int TYPE_COEF = sizeof(float) / sizeof(T);
+    constexpr int dstCols = validCol * 2 * TYPE_COEF;
+    constexpr uint32_t sort32DstSize = SINGLE_LOOP_ROW * dstCols * sizeof(T) * 2;
+    constexpr uint32_t srcSize = SINGLE_LOOP_ROW * validCol * sizeof(T) * 2;
+
+    static_assert(totalRow % blockDim == 0, "expect totalRow % blockDim == 0");
+    static_assert(sort32DstSize * 3 + validCol * sizeof(uint32_t) * 5 + srcSize < 192 * 1024, "memory is exhausted.");
+    static_assert(validRow % (SINGLE_LOOP_ROW * 2) == 0, "expect validRow % (SINGLE_LOOP_ROW * 2) == 0.");
+}
+
+template <typename DstTileData, typename SrcTileData, typename TmpTileData, typename T, int Cols, int topk>
+PTO_INTERNAL void SortTailBlock(DstTileData &dstTile, SrcTileData &srcTile, TmpTileData tmpTile, int blockLen)
+{
+    TmpTileData tmp1Tile(1, Cols);
+
+    int32_t mrgArray[15] = {0};
+    int32_t arrayCount = FillMrgArray<Cols>(mrgArray, blockLen);
+    uint16_t mrgSortedLen = 0;
+    MrgSortExecutedNumList executedNumList;
+    for (int32_t i = 0; i < arrayCount - 1; ++i) {
+        mrgSortedLen += static_cast<uint16_t>(mrgArray[i]);
+        uint64_t tmpMrgSortedLen = mrgSortedLen;
+        uint64_t tmpMrgArray = mrgArray[i + 1];
+        if (tmpMrgSortedLen > topk) {
+            tmpMrgSortedLen = topk;
+        }
+        if (tmpMrgArray > topk) {
+            tmpMrgArray = topk;
+        }
+
+        SrcTileData src0Tile(1, tmpMrgSortedLen);
+        SrcTileData src1Tile(1, tmpMrgArray);
+        SrcTileData curDstTile(1, tmpMrgSortedLen + tmpMrgArray);
+        TRESHAPE(src0Tile, srcTile);
+        TSUBVIEW(src1Tile, srcTile, 0, mrgSortedLen);
+        TRESHAPE(curDstTile, srcTile);
+        TRESHAPE(tmp1Tile, tmpTile);
+        TMRGSORT<DstTileData, TmpTileData, SrcTileData, SrcTileData, 0>(curDstTile, executedNumList, tmp1Tile, src0Tile,
+                                                                        src1Tile);
+    }
+}
+
+template <typename DstTileData, typename SrcTileData, int kTRows_, int kTCols_, int valid_row, int valid_col, int dtopk>
+PTO_INTERNAL void MrgsortSingleRow(DstTileData &dstTile, SrcTileData &srcTile)
+{
+    using T = typename SrcTileData::DType;
+    constexpr uint32_t TYPE_COEF = sizeof(float) / sizeof(T);
+    uint32_t blockLen = 64 * TYPE_COEF;
+    SrcTileData tmpTile(1, valid_col);
+
+    // Merge sort data for every 4 blockLen lengths.
+    for (; blockLen * 4 <= valid_col; blockLen *= 4) {
+        uint16_t cols = valid_col / (blockLen * 4) * (blockLen * 4);
+        SrcTileData srcSortedTile(1, cols);
+        SrcTileData tmpSortedTile(1, cols);
+        TRESHAPE(srcSortedTile, srcTile);
+        TRESHAPE(tmpSortedTile, tmpTile);
+        TMRGSORT<SrcTileData, SrcTileData>(tmpSortedTile, srcSortedTile, blockLen);
+        TMOV(srcSortedTile, tmpSortedTile);
+    }
+
+    // sort tail block
+    if (blockLen < valid_col) {
+        SortTailBlock<DstTileData, SrcTileData, SrcTileData, T, valid_col, dtopk>(srcTile, srcTile, blockLen);
+    } 
+
+    SrcTileData tmpMovTile(1, dtopk);
+    TRESHAPE(tmpMovTile, srcTile);
+    TMOV(dstTile, tmpMovTile);
+    
+}
+
+template <typename T, typename DstTileData, typename SrcTileData, typename RowTile, int kTRows_, int kTCols_,
+          int validRow, int validCol, int topk>
+PTO_INTERNAL void MrgsortSingleTile(DstTileData &dstTile, SrcTileData &srcTile)
+{
+    RowTile rowSrcTile(1, validCol);
+    TRESHAPE(rowSrcTile, srcTile);
+    RowTile rowDstTile(1, validCol);
+    TRESHAPE(rowDstTile, dstTile);
+    MrgsortSingleRow<RowTile, RowTile, 1, kTCols_, 1, validCol, topk>(rowDstTile, rowSrcTile);
+}
+
+template <typename T, typename DstTileData, typename SrcTileData, typename IdxTileData, 
+    typename DstRowTile, typename SrcRowTile, typename IdxRowTile, int kTRows_, int kTCols_, int validRow, int validCol>
+PTO_INTERNAL void SortEachGroup(DstTileData &dst, SrcTileData &src, IdxTileData &inIdx)
 {
     using indexT = uint32_t;
     constexpr int TYPE_COEF = sizeof(float) / sizeof(T);
-    // Packed (val, idx) widths per the manual TopK convention:
-    //   kPackedCols  ↔ manual `dstCols  = validCol * 2 * TYPE_COEF`
-    //   kPackedTopK  ↔ manual `dtopk    = topk     * 2 * TYPE_COEF`
-    // Everything POST-TSORT32 (main merge loop, SortTailBlock, final TGATHER
-    // prefix) operates on packed widths, not source-element widths.
-    constexpr int kPackedCols = kCols * 2 * TYPE_COEF;
-    constexpr int kPackedTopK = kTopK * 2 * TYPE_COEF;
+    
+    DstRowTile dstRowTile(1, validCol * 2 * TYPE_COEF);
+    SrcRowTile srcRowTile(1, validCol);
+    IdxRowTile tmpTile(1, validCol);
 
-    // Host launchers cannot apply __gm__ via reinterpret_cast (E11). Cast
-    // inside the kernel where __gm__ is a valid type qualifier.
-    __gm__ T      *outVal = reinterpret_cast<__gm__ T *>(outVal_raw);
-    __gm__ indexT *outIdx = reinterpret_cast<__gm__ indexT *>(outIdx_raw);
-    __gm__ T      *src    = reinterpret_cast<__gm__ T *>(src_raw);
-    __gm__ indexT *idx    = reinterpret_cast<__gm__ indexT *>(idx_raw);
+    TRESHAPE(dstRowTile, dst);
+    TRESHAPE(srcRowTile, src);
+    TSUBVIEW(tmpTile, inIdx, 0, kTCols_);
+    TSORT32(dstRowTile, srcRowTile, inIdx, tmpTile);
+}
 
-    using SrcGlobal    = GlobalTensor<T,      Shape<1, 1, 1, 1, kCols>, Stride<1, 1, 1, kCols, 1>>;
-    using IdxGlobal    = GlobalTensor<indexT, Shape<1, 1, 1, 1, kCols>, Stride<1, 1, 1, kCols, 1>>;
-    using OutValGlobal = GlobalTensor<T,      Shape<1, 1, 1, 1, kTopK>, Stride<1, 1, 1, kTopK, 1>>;
-    using OutIdxGlobal = GlobalTensor<indexT, Shape<1, 1, 1, 1, kTopK>, Stride<1, 1, 1, kTopK, 1>>;
-
-    using SrcTile       = Tile<TileType::Vec, T,      1, kCols,       BLayout::RowMajor, -1, -1>;
-    using IdxTile       = Tile<TileType::Vec, indexT, 1, kCols,       BLayout::RowMajor, -1, -1>;
-    using PackedTile    = Tile<TileType::Vec, T,      1, kPackedCols, BLayout::RowMajor, -1, -1>;
-    using PackedIdxTile = Tile<TileType::Vec, indexT, 1, kPackedCols, BLayout::RowMajor, -1, -1>;
-    using OutValTile    = Tile<TileType::Vec, T,      1, kTopK,       BLayout::RowMajor, -1, -1>;
-    using OutIdxTile    = Tile<TileType::Vec, indexT, 1, kTopK,       BLayout::RowMajor, -1, -1>;
-
-    // ============================================================
-    // Row loop. Per-row globals advance by row*kCols / row*kTopK; idx is
-    // a single shared identity row (no per-row offset).
-    //
-    // All storage tiles are declared INSIDE the loop so each iteration's
-    // tile lifetimes are self-contained and identical to v1's single-row
-    // body. v1 (no row loop) was confirmed-built; v2 with tiles declared
-    // OUTSIDE the loop regressed (outputs looked like raw src / identity
-    // idx — symptom consistent with auto allocator aliasing outValTile
-    // onto srcTile UB and outIdxTile onto idxTile UB once the loop
-    // wrapping changed cross-iter liveness analysis). Inside-loop
-    // declarations give the auto allocator a per-iter analysis that
-    // matches v1 exactly. Cost is some extra allocator work per iter;
-    // correctness comes first.
-    // ============================================================
-    for (int row = 0; row < kRows; ++row) {
-        pipe_barrier(PIPE_ALL);
-        SrcGlobal     srcGlobal(src + row * kCols);
-        IdxGlobal     idxGlobal(idx);
-        OutValGlobal  outValGlobal(outVal + row * kTopK);
-        OutIdxGlobal  outIdxGlobal(outIdx + row * kTopK);
-
-        SrcTile     srcTile(1, kCols);
-        IdxTile     idxTile(1, kCols);
-        SrcTile     sort32TmpTile(1, kCols);     // TSORT32 internal scratch (content irrelevant)
-        PackedTile  sort32DstTile(1, kPackedCols);
-        PackedTile  mrgScratchTile(1, kPackedCols);
-        OutValTile  outValTile(1, kTopK);
-        OutIdxTile  outIdxTile(1, kTopK);
-
-        // ============================================================
-        // Phase 1: TSORT32 — per-32-block in-place sort, emit (val, idx) packed.
-        // ============================================================
-        TLOAD(srcTile, srcGlobal);
-        TLOAD(idxTile, idxGlobal);
-        TSORT32(sort32DstTile, srcTile, idxTile, sort32TmpTile);
-
-        // ============================================================
-        // Phase 2: main merge loop — 4-way self-merge with ping-pong between
-        // sort32DstTile (post-TSORT32 source) and mrgScratchTile (independent
-        // destination buffer). After each TMRGSORT, TMOV copies the merged
-        // result back to sort32DstTile prefix so the next iteration's view of
-        // sort32DstTile sees fresh merged data.
-        // ============================================================
-        // blockLen and cols are in PACKED-element units (manual maps to valid_col
-        // = dstCols once MrgsortSingleRow operates on the post-TSORT32 buffer).
-        uint32_t blockLen = 64 * TYPE_COEF;
-        for (; blockLen * 4 <= kPackedCols; blockLen *= 4) {
-            uint16_t cols = kPackedCols / (blockLen * 4) * (blockLen * 4);
-            // Semantic prefix views (NOT memory reuse):
-            //   srcSortedView is the cols-wide prefix view of sort32DstTile,
-            //     which owns the data on iteration entry.
-            //   tmpSortedView is the cols-wide prefix view of mrgScratchTile,
-            //     an INDEPENDENT buffer used as the merge destination — not
-            //     overlapping with sort32DstTile's storage.
-            PackedTile srcSortedView(1, cols);
-            PackedTile tmpSortedView(1, cols);
-            // Same-type prefix slice — TSUBVIEW(..., 0, 0) is the canonical form.
-            // TRESHAPE is reserved for true reshape / type-pun cases (see Phase 5).
-            TSUBVIEW(srcSortedView, sort32DstTile, 0, 0);
-            TSUBVIEW(tmpSortedView, mrgScratchTile, 0, 0);
-            TMRGSORT<PackedTile, PackedTile>(tmpSortedView, srcSortedView, blockLen);
-            // Promote merged result back into sort32DstTile prefix so the next
-            // iteration's srcSortedView reads the fresh merged data. Lifetime:
-            // tmpSortedView is read once here (TMOV source), then becomes dead.
-            TMOV(srcSortedView, tmpSortedView);
-        }
-
-        // ============================================================
-        // Phase 3: SortTailBlock — handle non-power-of-4 residuals.
-        // Mirrors manual SortTailBlock structurally but writes to an INDEPENDENT
-        // destination (mrgScratchTile via curDstView) and TMOV-backs to
-        // sort32DstTile prefix. The manual's in-place merge (curDstTile aliased
-        // onto srcTile.data()) is NOT used — that pattern produced interleaved
-        // output in the previous values-only port.
-        // ============================================================
-        // Tail-block bound, mrgArray planning, and per-iter clip values are all
-        // in PACKED-element units. Manual mapping:
-        //   kPackedCols  ↔ Cols  (manual SortTailBlock template arg)
-        //   kPackedTopK  ↔ topk  (manual SortTailBlock template arg, = dtopk)
-        if (blockLen < kPackedCols) {
-            PackedTile tmp1Tile(1, kPackedCols);  // TMRGSORT scratch (manual: SrcTileData=RowTile, packed width)
-            int32_t mrgArray[15] = {0};
-            int32_t arrayCount = FillMrgArray<kPackedCols>(mrgArray, blockLen);
-            uint16_t mrgSortedLen = 0;
-            MrgSortExecutedNumList executedNumList;
-            for (int32_t i = 0; i < arrayCount - 1; ++i) {
-                mrgSortedLen += static_cast<uint16_t>(mrgArray[i]);
-                uint64_t tmpMrgSortedLen = mrgSortedLen;
-                uint64_t tmpMrgArray = mrgArray[i + 1];
-                if (tmpMrgSortedLen > kPackedTopK) tmpMrgSortedLen = kPackedTopK;
-                if (tmpMrgArray > kPackedTopK) tmpMrgArray = kPackedTopK;
-
-                // Semantic alias views into sort32DstTile (which owns the data on
-                // iteration entry):
-                //   src0View = tmpMrgSortedLen-wide prefix view  (already-merged region)
-                //   src1View = tmpMrgArray-wide offset view at offset mrgSortedLen
-                //              (the next tail run produced by the previous merge)
-                PackedTile src0View(1, tmpMrgSortedLen);
-                PackedTile src1View(1, tmpMrgArray);
-                // src0View is a same-type prefix slice (offset 0); src1View is a
-                // same-type slice at column offset mrgSortedLen. Both expressed
-                // via TSUBVIEW for semantic clarity.
-                TSUBVIEW(src0View, sort32DstTile, 0, 0);
-                TSUBVIEW(src1View, sort32DstTile, 0, mrgSortedLen);
-
-                // Independent destination view: curDstView aliases mrgScratchTile
-                // (NOT sort32DstTile). TMRGSORT reads src0View / src1View from
-                // sort32DstTile and writes the merged run into mrgScratchTile —
-                // no read/write overlap on the same buffer.
-                PackedTile curDstView(1, tmpMrgSortedLen + tmpMrgArray);
-                // Same-type prefix slice of the independent destination buffer.
-                TSUBVIEW(curDstView, mrgScratchTile, 0, 0);
-                // All four roles (Dst, Tmp, Src0, Src1) are PackedTile; matches the
-                // manual SortTailBlock instantiation `<DstTileData, SrcTileData,
-                // SrcTileData, ...>` where SrcTileData = RowTile (packed width).
-                TMRGSORT<PackedTile, PackedTile, PackedTile, PackedTile, 0>(
-                    curDstView, executedNumList, tmp1Tile, src0View, src1View);
-
-                // Semantic prefix view of sort32DstTile, target of TMOV-back from
-                // curDstView. After this TMOV, sort32DstTile[0..len-1] holds the
-                // merged run, so the next loop iteration's src0View sees it.
-                PackedTile copyBackView(1, tmpMrgSortedLen + tmpMrgArray);
-                // Same-type prefix slice of sort32DstTile (TMOV destination).
-                TSUBVIEW(copyBackView, sort32DstTile, 0, 0);
-                TMOV(copyBackView, curDstView);
+template <typename T, typename DstTileData, typename SrcTileData, typename DstRowTile, typename SrcRowTile, bool isIndex>
+PTO_INTERNAL void ExtractDataOrIndex(DstTileData &dstTile, SrcTileData &srcTile)
+{
+    for (size_t i = 0; i < srcTile.GetValidRow(); ++i) {
+        SrcRowTile rowTile(1, srcTile.GetValidCol());
+        TSUBVIEW(rowTile, srcTile, 0, i * SrcTileData::Cols);
+        if constexpr (isIndex == false) {
+            DstRowTile rowDTile(1, dstTile.GetValidCol());
+            TSUBVIEW(rowDTile, dstTile, 0, i * DstTileData::Cols);
+            if constexpr (std::is_same_v<T, half>) {
+                TGATHER<DstRowTile, SrcRowTile, MaskPattern::P0001>(rowDTile, rowTile);
+            } else {
+                TGATHER<DstRowTile, SrcRowTile, MaskPattern::P0101>(rowDTile, rowTile);
             }
-        }
-
-        // ============================================================
-        // Phase 4: TGATHER values from the (val, idx) packed buffer.
-        // ============================================================
-        // Semantic prefix view: sortedTopKView is the kPackedTopK-wide prefix of
-        // sort32DstTile (= manual `dtopk = topk * 2 * TYPE_COEF`). After phases
-        // 2-3, sort32DstTile[0..kPackedTopK-1] holds the descending-sorted top-K
-        // (val, idx) pairs. sort32DstTile owns the data; sortedTopKView is read
-        // once by TGATHER. Mask P0101 picks val slots for float (TYPE_COEF=1);
-        // P0001 for half (v2).
-        PackedTile sortedTopKView(1, kPackedTopK);
-        // Same-type prefix slice (kPackedTopK-wide prefix of sort32DstTile).
-        TSUBVIEW(sortedTopKView, sort32DstTile, 0, 0);
-        if constexpr (std::is_same_v<T, half>) {
-            TGATHER<OutValTile, PackedTile, MaskPattern::P0001>(outValTile, sortedTopKView);
         } else {
-            TGATHER<OutValTile, PackedTile, MaskPattern::P0101>(outValTile, sortedTopKView);
+            using indexT = uint32_t;
+            using CopySrcTileData = Tile<TileType::Vec, indexT, 1, DstTileData::Cols * 2, BLayout::RowMajor, -1, -1>;
+            CopySrcTileData copyTile(1, dstTile.GetValidCol() * 2);
+            TRESHAPE(copyTile, rowTile);
+
+            using IndexRowTileData = Tile<TileType::Vec, indexT, 1, DstTileData::Cols, BLayout::RowMajor, -1, -1>;
+            IndexRowTileData rowITile(1, dstTile.GetValidCol());
+            TSUBVIEW(rowITile, dstTile, 0, i * DstTileData::Cols);
+
+            TGATHER<IndexRowTileData, CopySrcTileData, MaskPattern::P1010>(rowITile, copyTile);
         }
+    }
+}
 
-        // ============================================================
-        // Phase 5: TGATHER indices via TRESHAPE type-pun (float-buf as uint32).
-        // ============================================================
-        // Semantic alias view (DIFFERENT element type — a sanctioned type-pun):
-        // sortedTopKIdxView is the same prefix of the same UB buffer that holds
-        // the packed (val, idx) data, but viewed as uint32 elements so TGATHER
-        // P1010 can pick the idx slots. Pattern lifted from include/pto/npu/a2a3/
-        // TQuant.hpp's auto branch (TRESHAPE_IMPL between half and int32 element
-        // types) — Inferred to apply at the kernel-level TRESHAPE wrapper here.
-        // sort32DstTile owns the bytes; sortedTopKIdxView reads them once.
-        PackedIdxTile sortedTopKIdxView(1, kPackedTopK);
-        TRESHAPE(sortedTopKIdxView, sort32DstTile);
-        TGATHER<OutIdxTile, PackedIdxTile, MaskPattern::P1010>(outIdxTile, sortedTopKIdxView);
+template <typename T, typename GlobalData, typename DstDataGlobalData, typename DstIdxGlobalData, typename DstTileData,
+          typename DstDataTileData, typename DstIndexTileData, typename SrcTileData, typename IndexTileData,
+          int SINGLE_LOOP_ROW, int dstCols, int validCol, int topk>
+AICORE inline void ProcessSingleRow(GlobalData &srcGlobal, DstDataGlobalData &dstDataGlobal,
+                                    DstIdxGlobalData &dstIdxGlobal, DstTileData &sort32DstTile, SrcTileData &srcTile,
+                                    IndexTileData &indexTile, DstTileData &mrgDstTile, DstDataTileData &dTile,
+                                    DstIndexTileData &iTile)
+{
+    constexpr int TYPE_COEF = sizeof(float) / sizeof(T);
+    using indexT = uint32_t;
+    using DstRowTileData = Tile<TileType::Vec, T, 1, dstCols, BLayout::RowMajor, -1, -1>;
+    using SrcRowTileData = Tile<TileType::Vec, T, 1, validCol, BLayout::RowMajor, -1, -1>;
+    using IdxRowTile = Tile<TileType::Vec, indexT, 1, validCol, BLayout::RowMajor, -1, -1>;
+    using DstIdxRowTile = Tile<TileType::Vec, indexT, 1, dstCols, BLayout::RowMajor, -1, -1>;
 
-        // ============================================================
-        // Phase 6: TSTORE values + indices to GM (at this row's offset).
-        // ============================================================
-        TSTORE(outValGlobal, outValTile);
-        TSTORE(outIdxGlobal, outIdxTile);
+
+    TLOAD(srcTile, srcGlobal);
+
+    SortEachGroup<T, DstTileData, SrcTileData, IndexTileData, DstRowTileData, SrcRowTileData, IdxRowTile, 
+        SINGLE_LOOP_ROW, validCol, SINGLE_LOOP_ROW, validCol>(sort32DstTile, srcTile, indexTile);
+
+    MrgsortSingleTile<T, DstTileData, DstTileData, DstRowTileData, DstRowTileData, SINGLE_LOOP_ROW, dstCols, SINGLE_LOOP_ROW,
+                      dstCols, topk * 2 * TYPE_COEF>(mrgDstTile, sort32DstTile);
+
+    ExtractDataOrIndex<T, DstDataTileData, DstTileData, DstRowTileData, DstRowTileData, IdxRowTile, 0>(dTile, mrgDstTile);
+    ExtractDataOrIndex<T, DstIndexTileData, DstTileData, IdxRowTile, DstRowTileData, DstIdxRowTile, 1>(iTile, mrgDstTile);
+
+    TSTORE(dstDataGlobal, dTile);
+    TSTORE(dstIdxGlobal, iTile);
+}
+
+template <typename T, typename GlobalData, typename DstDataGlobalData, typename DstIdxGlobalData, typename DstTileData,
+          typename DstDataTileData, typename DstIndexTileData, typename SrcTileData, typename IndexTileData,
+          int dstCols, int Cols, int validCol, int topk>
+AICORE inline void ProcessIteration(__gm__ T *out, __gm__ T *src, __gm__ uint32_t *index, uint32_t i, 
+                                    DstTileData &sort32DstTile, SrcTileData &srcTile, 
+                                    IndexTileData &indexTile, DstTileData &mrgDstTile, 
+                                    DstDataTileData &dTile, DstIndexTileData &iTile)
+{
+    using SingleRowTileData = Tile<TileType::Vec, T, 1, dstCols, BLayout::RowMajor, -1, -1>;
+    constexpr int TYPE_COEF = sizeof(float) / sizeof(T);
+    GlobalData src0Global(src + i * SINGLE_LOOP_ROW * Cols); // ND2ND
+    GlobalData src1Global(src + i * SINGLE_LOOP_ROW * Cols + SINGLE_LOOP_ROW * Cols);
+    DstDataGlobalData dst0DataGlobal(out + i * SINGLE_LOOP_ROW * topk);
+    DstDataGlobalData dst1DataGlobal(out + i * SINGLE_LOOP_ROW * topk + SINGLE_LOOP_ROW * topk);
+    DstIdxGlobalData dst0IdxGlobal(index + i * SINGLE_LOOP_ROW * topk);
+    DstIdxGlobalData dst1IdxGlobal(index + i * SINGLE_LOOP_ROW * topk + SINGLE_LOOP_ROW * topk);
+
+    ProcessSingleRow<T, GlobalData, DstDataGlobalData, DstIdxGlobalData, DstTileData, DstDataTileData, DstIndexTileData,
+                     SrcTileData, IndexTileData, SINGLE_LOOP_ROW, dstCols, validCol, topk>(
+        src0Global, dst0DataGlobal, dst0IdxGlobal, sort32DstTile, srcTile, indexTile, mrgDstTile, dTile, iTile);
+}
+
+template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
+          int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4, int topk, int blockDim>
+AICORE inline void runTOPK(__gm__ T *origOut, __gm__ uint32_t *origIndex, __gm__ T *origSrc, __gm__ uint32_t *origInIdx)
+{
+    using indexT = uint32_t;
+    constexpr int validRow = gShape0 * gShape1 * gShape2 * gShape3 / blockDim;
+    constexpr int validCol = gShape4;
+    __gm__ T *src = origSrc + get_block_idx() * validRow * gWholeShape4;
+    __gm__ T *out = origOut + get_block_idx() * validRow * topk;
+    __gm__ uint32_t *index = origIndex + get_block_idx() * validRow * topk;
+    __gm__ uint32_t *inIdx = origInIdx;
+    constexpr int Cols = gWholeShape4;
+    constexpr int TYPE_COEF = sizeof(float) / sizeof(T);
+    constexpr int dstCols = validCol * 2 * TYPE_COEF;
+
+    using IndexGlobalData =
+        GlobalTensor<indexT, pto::Shape<1, 1, 1, 1, validCol>, pto::Stride<validCol, validCol, validCol, validCol, 1>>;
+    IndexGlobalData idxGlobal(inIdx);
+    using GlobalData =
+        GlobalTensor<T, pto::Shape<1, 1, 1, SINGLE_LOOP_ROW, validCol>,
+                     pto::Stride<SINGLE_LOOP_ROW * Cols, SINGLE_LOOP_ROW * Cols, SINGLE_LOOP_ROW * Cols, Cols, 1>>;
+    using DstShapeDim5 = Shape<1, 1, 1, SINGLE_LOOP_ROW, topk>;
+    using DstStridDim5 = Stride<SINGLE_LOOP_ROW * topk, SINGLE_LOOP_ROW * topk, SINGLE_LOOP_ROW * topk, topk, 1>;
+    using DstDataGlobalData = GlobalTensor<T, DstShapeDim5, DstStridDim5>;
+    using DstIdxGlobalData = GlobalTensor<indexT, DstShapeDim5, DstStridDim5>;
+
+    using DstTileData = Tile<TileType::Vec, T, SINGLE_LOOP_ROW, dstCols, BLayout::RowMajor, SINGLE_LOOP_ROW, dstCols>;
+    using SrcTileData = Tile<TileType::Vec, T, SINGLE_LOOP_ROW, validCol, BLayout::RowMajor, SINGLE_LOOP_ROW, validCol>;
+    using SingleRowTileData = Tile<TileType::Vec, T, 1, dstCols, BLayout::RowMajor, -1, -1>;
+    using IndexTileData = Tile<TileType::Vec, indexT, 1, validCol, BLayout::RowMajor, 1, validCol>;
+    using DstDataTileData = Tile<TileType::Vec, T, SINGLE_LOOP_ROW, dstCols, BLayout::RowMajor, SINGLE_LOOP_ROW, topk>;
+    using DstIndexTileData = Tile<TileType::Vec, indexT, SINGLE_LOOP_ROW, validCol, BLayout::RowMajor, SINGLE_LOOP_ROW, topk>;
+
+    IndexTileData indexTile;
+
+    TLOAD(indexTile, idxGlobal);
+
+    constexpr uint32_t loopNum = validRow / SINGLE_LOOP_ROW;
+    MultiBuffered<BUFFER_NUM> double_buffer;
+    double_buffer.loop<Range<loopNum>>([&](auto context){
+        int iter = context.iter;
+
+        DstTileData sort32DstTile;
+        SrcTileData srcTile;
+        DstTileData mrgDstTile;
+        DstDataTileData dTile;
+        DstIndexTileData iTile;
+
+        ProcessIteration<T, GlobalData, DstDataGlobalData, DstIdxGlobalData, DstTileData, DstDataTileData,
+                         DstIndexTileData, SrcTileData, IndexTileData, dstCols, Cols, validCol, topk>(
+            out, src, index, iter, sort32DstTile, srcTile, indexTile, mrgDstTile, dTile, iTile);
+    });
+}
+
+template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
+          int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4, int topk, int blockDim>
+__global__ AICORE void Topk(__gm__ uint8_t *out, __gm__ uint8_t *index, __gm__ uint8_t *src, __gm__ uint8_t *inIdx)
+{
+    using indexT = uint32_t;
+    Check<half, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape3,
+          gWholeShape4, topk, blockDim>();
+    if constexpr (std::is_same_v<T, uint16_t>) {
+        runTOPK<half, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
+                gWholeShape3, gWholeShape4, topk, blockDim>(
+            reinterpret_cast<__gm__ half *>(out), reinterpret_cast<__gm__ indexT *>(index),
+            reinterpret_cast<__gm__ half *>(src), reinterpret_cast<__gm__ indexT *>(inIdx));
+    } else {
+        runTOPK<float, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
+                gWholeShape3, gWholeShape4, topk, blockDim>(
+            reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ indexT *>(index),
+            reinterpret_cast<__gm__ float *>(src), reinterpret_cast<__gm__ indexT *>(inIdx));
     }
 }
 
 template <typename T>
-void launchTopk(uint8_t *outVal, uint8_t *outIdx, uint8_t *src, uint8_t *idx, void *stream)
+void launchTopk(uint8_t *out, uint8_t *index, uint8_t *src, uint8_t *inIdx, void *stream)
 {
-    constexpr int kRows = 4;
-    constexpr int kCols = 1280;
-    constexpr int kTopK = 512;
-    // Pass raw uint8_t* directly. The kernel applies __gm__ + reinterpret
-    // internally; host-side casts to __gm__ pointers are rejected by bisheng (E11).
-    RunTopk<T, kRows, kCols, kTopK><<<1, nullptr, stream>>>(outVal, outIdx, src, idx);
+    constexpr int blockDim = 48;
+    constexpr int gShape3 = 4800;
+    constexpr int gShape4 = 1024;
+    constexpr int gWholeShape3 = 4800;
+    constexpr int gWholeShape4 = 1280;
+    constexpr int topk = 1000;
+    Topk<T, 1, 1, 1, gShape3, gShape4, 1, 1, 1, gWholeShape3, gWholeShape4, topk, blockDim>
+        <<<blockDim, nullptr, stream>>>(out, index, src, inIdx);
 }
 
-template void launchTopk<float>(uint8_t *outVal, uint8_t *outIdx, uint8_t *src, uint8_t *idx, void *stream);
+template void launchTopk<float>(uint8_t *out, uint8_t *index, uint8_t *src, uint8_t *inIdx, void *stream);
