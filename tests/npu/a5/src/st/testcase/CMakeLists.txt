@@ -238,6 +238,7 @@ set(ALL_TESTCASES
     tmov_zz
     tmov_nd2nz
     textract_acc2vec
+    tsyncall
     tpushpop_cv
     tpushpop_cv_nosplit
     tpushpop_vc
