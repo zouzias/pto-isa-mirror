@@ -1,131 +1,57 @@
-﻿# TWAIT
+# pto.twait
 
-## Introduction
+## Summary
 
-Blocking wait until signal(s) meet comparison condition. Used in conjunction with `TNOTIFY` for flag-based synchronization.
+`pto.twait` blocks until a signal object satisfies a comparison against an `int32_t` reference value.
 
-Supports single signal or multi-dimensional signal tensor (up to 5-D, shape derived from GlobalTensor).
+## Semantics
 
+`TWAIT` is the blocking counterpart to `TTEST`.
 
-## Math Interpretation
+The verified public wrapper accepts:
 
-Wait (spin) until the following condition is satisfied:
+- signal object,
+- `int32_t` comparison value,
+- `WaitCmp` comparison mode, and
+- optional event tokens to wait on before the wait begins.
 
-Single signal:
-
-$$ \mathrm{signal} \;\mathtt{cmp}\; \mathrm{cmpValue} $$
-
-Signal tensor (all elements must satisfy):
-
-$$ \forall d_0, d_1, d_2, d_3, d_4: \mathrm{signal}_{d_0, d_1, d_2, d_3, d_4} \;\mathtt{cmp}\; \mathrm{cmpValue} $$
-
-where `cmp` ∈ {`EQ`, `NE`, `GT`, `GE`, `LT`, `LE`}
+Conceptually, execution waits until the implementation-defined signal state satisfies the chosen comparison relation.
 
 ## Assembly Syntax
 
-PTO-AS form: see [PTO-AS Specification](../../assembly/PTO-AS.md).
-
 ```text
-twait %signal, %cmp_value {cmp = #pto.cmp<EQ>} : (!pto.memref<i32>, i32)
-twait %signal_matrix, %cmp_value {cmp = #pto.cmp<GE>} : (!pto.memref<i32, MxN>, i32)
+pto.twait %signal, %cmp_value {cmp = #pto.cmp<EQ>} : (!pto.memref<i32>, i32)
 ```
 
 ## C++ Intrinsic
 
-Declared in `include/pto/comm/pto_comm_inst.hpp`:
+Declared in `include/pto/comm/pto_comm_inst.hpp`.
 
 ```cpp
 template <typename GlobalSignalData, typename... WaitEvents>
-PTO_INST void TWAIT(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp, WaitEvents&... events);
+PTO_INST void TWAIT(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp, WaitEvents &... events);
 ```
 
 ## Constraints
 
-- **Type constraints**:
-    - `GlobalSignalData::DType` must be `int32_t` (32-bit signal).
-- **Memory constraints**:
-    - `signalData` must point to local address (on current NPU).
-- **Shape semantics**:
-    - For single signal: Shape is `<1,1,1,1,1>`.
-    - For signal tensor: Shape determines the multi-dimensional region (up to 5-D) to wait on. All signals in the tensor must satisfy the condition.
-- **Comparison operators** (WaitCmp):
-  | Value | Condition |
-  |-------|-----------|
-  | `EQ` | `signal == cmpValue` |
-  | `NE` | `signal != cmpValue` |
-  | `GT` | `signal > cmpValue` |
-  | `GE` | `signal >= cmpValue` |
-  | `LT` | `signal < cmpValue` |
-  | `LE` | `signal <= cmpValue` |
+!!! warning "Constraints"
+    - The public wrapper hard-codes the compare value type to `int32_t`.
+    - Signal storage must be compatible with the selected backend implementation.
+    - The wrapper waits on all incoming event tokens before entering the wait.
+
+## Relationship with `TNOTIFY` / `TTEST`
+
+- `TNOTIFY` produces signal updates.
+- `TWAIT` blocks until the update becomes visible and satisfies the comparison.
+- `TTEST` provides the non-blocking test form.
 
 ## Examples
 
-### Wait for Single Signal
-
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
-
 using namespace pto;
 
-void wait_for_ready(__gm__ int32_t* local_signal) {
-    comm::Signal sig(local_signal);
-
-    // Wait until signal == 1
-    comm::TWAIT(sig, 1, comm::WaitCmp::EQ);
-}
-```
-
-### Wait for Signal Matrix
-
-```cpp
-#include <pto/comm/pto_comm_inst.hpp>
-
-using namespace pto;
-
-// Wait for signals from a 4x8 dense grid of workers
-void wait_worker_grid(__gm__ int32_t* signal_matrix) {
-    comm::Signal2D<4, 8> grid(signal_matrix);
-
-    // Wait until all 32 signals == 1
-    comm::TWAIT(grid, 1, comm::WaitCmp::EQ);
-}
-```
-
-### Wait for Counter Threshold
-
-```cpp
-#include <pto/comm/pto_comm_inst.hpp>
-
-using namespace pto;
-
-void wait_for_count(__gm__ int32_t* local_counter, int expected_count) {
-    comm::Signal counter(local_counter);
-
-    // Wait until counter >= expected_count
-    comm::TWAIT(counter, expected_count, comm::WaitCmp::GE);
-}
-```
-
-### Producer-Consumer Pattern
-
-```cpp
-#include <pto/comm/pto_comm_inst.hpp>
-
-using namespace pto;
-
-// Producer: notify when data is ready
-void producer(__gm__ int32_t* remote_flag) {
-    // ... produce data ...
-
-    comm::Signal flag(remote_flag);
-    comm::TNOTIFY(flag, 1, comm::NotifyOp::Set);
-}
-
-// Consumer: wait for data
-void consumer(__gm__ int32_t* local_flag) {
-    comm::Signal flag(local_flag);
-    comm::TWAIT(flag, 1, comm::WaitCmp::EQ);
-
-    // ... consume data ...
+void wait_ready(auto &signal) {
+    comm::TWAIT(signal, 1, comm::WaitCmp::EQ);
 }
 ```
