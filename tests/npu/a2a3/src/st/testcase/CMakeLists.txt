@@ -216,6 +216,7 @@ tpushpop_cv_nosplit
 tpushpop_vc_nosplit
 tpushpop_dir_both
 tpushpop_subtile
+syncall
 )
 if (AUTO_MODE)
   set(AUTO_MODE_WHITELIST
@@ -243,14 +244,14 @@ if (AUTO_MODE)
 endif()
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
-message(STATUS "run : ${TEST_CASE}")
+    message(STATUS "run : ${TEST_CASE}")
 else()
-message(FATAL_ERROR "not found TEST_CASE: ${TEST_CASE}, support case is : ${ALL_TESTCASES}")
+    message(FATAL_ERROR "not found TEST_CASE: ${TEST_CASE}, support case is : ${ALL_TESTCASES}")
 endif()
 
 
 foreach(TESTCASE ${ALL_TESTCASES})
-if((DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE) OR (NOT DEFINED TEST_CASE) OR (TEST_CASE STREQUAL "all"))
-    add_subdirectory(${TESTCASE})
-endif()
+    if((DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE) OR (NOT DEFINED TEST_CASE) OR (TEST_CASE STREQUAL "all"))
+        add_subdirectory(${TESTCASE})
+    endif()
 endforeach()
