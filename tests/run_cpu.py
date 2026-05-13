@@ -21,7 +21,7 @@ import time
 import logging
 import platform
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 
 def _format_cmd(command: List[str]) -> str:
@@ -346,9 +346,9 @@ def run_binary(binary: Path, build_type: str, cwd: Optional[Path] = None) -> Non
     run_command([str(binary)], cwd=run_cwd)
 
 
-def _resolve_demo_source(demo_name: str, repo_root: Path) -> tuple[Path, str]:
+def _resolve_demo_source(demo_name: str, repo_root: Path) -> Tuple[Path, str]:
     demos_root = repo_root / ".." / "demos" / "cpu"
-    demo_map: dict[str, tuple[Path, str]] = {
+    demo_map: Dict[str, Tuple[Path, str]] = {
         "gemm": (demos_root / "gemm_demo", "gemm_demo"),
         "flash_attn": (demos_root / "flash_attention_demo", "flash_attention_demo"),
         "mla": (demos_root / "mla_attention_demo", "mla_attention_demo"),
@@ -574,7 +574,7 @@ def run_test_mode(args, repo_root, cxx, cc) -> int:
     return execute_tests(args, source_dir, build_dir)
 
 
-def parse_expected_testcases(source_dir: Path) -> Optional[set[str]]:
+def parse_expected_testcases(source_dir: Path) -> Optional[Set[str]]:
     cmake_list = source_dir / "testcase" / "CMakeLists.txt"
     if not cmake_list.exists():
         return None
@@ -585,7 +585,7 @@ def parse_expected_testcases(source_dir: Path) -> Optional[set[str]]:
         return None
 
     body = m.group(1)
-    cases: list[str] = []
+    cases: List[str] = []
     for raw_line in body.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -674,7 +674,7 @@ def execute_tests(args, source_dir, build_dir) -> int:
         logging.error(f"error: no binaries found under {build_dir / 'bin'} (did build succeed?)")
         return 2
 
-    selected: list[tuple[str, Path]]
+    selected: List[Tuple[str, Path]]
     if args.testcase:
         if args.testcase not in binaries:
             known = ", ".join(sorted(binaries.keys()))

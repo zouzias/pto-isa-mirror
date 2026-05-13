@@ -1,101 +1,56 @@
 # pto.tnotify
 
-## Introduction
+## Summary
 
-Send flag notification to remote NPU. Used for lightweight synchronization between NPUs without transferring bulk data.
+`pto.tnotify` sends an integer notification value to a signal location using a selected notify operation.
 
-## Math Interpretation
+## Semantics
 
-For `NotifyOp::Set`:
+The verified public wrapper accepts:
 
-$$ \mathrm{signal}^{\mathrm{remote}} = \mathrm{value} $$
+- destination signal object,
+- `int32_t` notification value,
+- `NotifyOp`, and
+- optional event tokens to wait on before issue.
 
-For `NotifyOp::AtomicAdd`:
+Conceptually:
 
-$$ \mathrm{signal}^{\mathrm{remote}} \mathrel{+}= \mathrm{value} \quad (\text{atomic}) $$
+- `NotifyOp::Set` writes the given value.
+- `NotifyOp` atomic-style variants perform the backend-selected update semantics associated with that enum value.
 
 ## Assembly Syntax
 
-Textual spelling is defined by the PTO ISA syntax-and-operands pages.
-
 ```text
 pto.tnotify %signal_remote, %value {op = #pto.notify_op<Set>} : (!pto.memref<i32>, i32)
-pto.tnotify %signal_remote, %value {op = #pto.notify_op<AtomicAdd>} : (!pto.memref<i32>, i32)
 ```
 
 ## C++ Intrinsic
 
-Declared in `include/pto/comm/pto_comm_inst.hpp`:
+Declared in `include/pto/comm/pto_comm_inst.hpp`.
 
 ```cpp
 template <typename GlobalSignalData, typename... WaitEvents>
-PTO_INST void NOTIFY(GlobalSignalData &dstSignalData, int32_t value, NotifyOp op, WaitEvents&... events);
+PTO_INST void TNOTIFY(GlobalSignalData &dstSignalData, int32_t value, NotifyOp op, WaitEvents &... events);
 ```
 
 ## Constraints
 
 !!! warning "Constraints"
-    - **Type constraints**:
-        - `GlobalSignalData::DType` must be `int32_t` (32-bit signal).
-    - **Memory constraints**:
-        - `dstSignalData` must point to remote address (on target NPU).
-        - `dstSignalData` should be 4-byte aligned.
-    - **Operation semantics**:
-        - `NotifyOp::Set`: Direct store to remote memory.
-        - `NotifyOp::AtomicAdd`: Hardware atomic add using `st_atomic` instruction.
+    - The public wrapper hard-codes the value type to `int32_t`.
+    - Signal storage must be compatible with the selected backend implementation.
+    - The wrapper waits on all incoming event tokens before issuing the notification.
+
+## Relationship with `TWAIT` / `TTEST`
+
+`TNOTIFY` is typically paired with `TWAIT` or `TTEST` for flag-style synchronization and polling.
 
 ## Examples
 
-### Basic Set Notification
-
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
-
 using namespace pto;
 
-void notify_set(__gm__ int32_t* remote_signal) {
-    comm::Signal sig(remote_signal);
-
-    // Set remote signal to 1
-    comm::NOTIFY(sig, 1, comm::NotifyOp::Set);
-}
-```
-
-### Atomic Counter Increment
-
-```cpp
-#include <pto/comm/pto_comm_inst.hpp>
-
-using namespace pto;
-
-void atomic_increment(__gm__ int32_t* remote_counter) {
-    comm::Signal counter(remote_counter);
-
-    // Atomically add 1 to remote counter
-    comm::NOTIFY(counter, 1, comm::NotifyOp::AtomicAdd);
-}
-```
-
-### Producer-Consumer Pattern
-
-```cpp
-#include <pto/comm/pto_comm_inst.hpp>
-
-using namespace pto;
-
-// Producer: notify when data is ready
-void producer(__gm__ int32_t* remote_flag) {
-    // ... produce data ...
-
-    comm::Signal flag(remote_flag);
-    comm::NOTIFY(flag, 1, comm::NotifyOp::Set);
-}
-
-// Consumer: wait for data
-void consumer(__gm__ int32_t* local_flag) {
-    comm::Signal flag(local_flag);
-    comm::WAIT(flag, 1, comm::WaitCmp::EQ);
-
-    // ... consume data ...
+void notify_one(auto &signal) {
+    comm::TNOTIFY(signal, 1, comm::NotifyOp::Set);
 }
 ```

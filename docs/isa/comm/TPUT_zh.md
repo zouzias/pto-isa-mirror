@@ -1,125 +1,71 @@
-# TPUT
+# pto.tput
 
-## 简介
+## 概要
 
-`TPUT` 是远程写原语：把当前 NPU 本地 GM 中的数据写到远端 NPU 的 GM。它通过 UB 中的暂存 Tile 完成 GM→UB→GM 路径。
+`pto.tput` 通过一个或两个显式 UB 暂存 tile，把本地 GlobalTensor 的数据远程写入到远端 GlobalTensor。
 
-当 `GlobalTensor` 的行或列超出单个 UB Tile 容量时，`TPUT` 会自动沿 `DIM_3` 和 `DIM_4` 做二维滑动分块。
+## 语义
 
-## 数学语义
-
-对有效区域内每个元素 `(i, j)`：
+从概念上看，`TPUT` 将本地源 tensor 复制到远端目标 tensor：
 
 $$ \mathrm{dst}^{\mathrm{remote}}_{i,j} = \mathrm{src}^{\mathrm{local}}_{i,j} $$
 
+公共 API 支持：
+
+- 单暂存 tile 形式，
+- 乒乓双缓冲形式，
+- 编译期原子模式选择，
+- 单 tile 形式下的运行时原子模式选择。
+
 ## 汇编语法
 
-PTO-AS 形式：
-
 ```text
-tput %dst_remote, %src_local : (!pto.memref<...>, !pto.memref<...>)
+pto.tput %dst_remote, %src_local : (!pto.memref<...>, !pto.memref<...>)
 ```
-
-lowering 会为 GM→UB→GM 路径引入 UB 暂存 Tile，因此 C++ 接口要求显式传入 `stagingTileData`，或在双缓冲场景下传入 `pingTile` / `pongTile`。
 
 ## C++ 内建接口
 
-声明于 `include/pto/comm/pto_comm_inst.hpp`：
-
-### 单暂存 Tile
+声明于 `include/pto/comm/pto_comm_inst.hpp`。
 
 ```cpp
-template <AtomicType atomicType = AtomicType::AtomicNone,
-          typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                          TileData &stagingTileData, WaitEvents&... events);
-```
+template <AtomicType atomicType = AtomicType::AtomicNone, typename GlobalDstData, typename GlobalSrcData,
+          typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &stagingTileData,
+                          WaitEvents &... events);
 
-### 乒乓双缓冲
-
-```cpp
-template <AtomicType atomicType = AtomicType::AtomicNone,
-          typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                          TileData &pingTile, TileData &pongTile, WaitEvents&... events);
-```
-
-### 运行时原子模式
-
-```cpp
 template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                          TileData &stagingTileData, AtomicType atomicType, WaitEvents&... events);
+PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &stagingTileData,
+                          AtomicType atomicType, WaitEvents &... events);
+
+template <AtomicType atomicType = AtomicType::AtomicNone, typename GlobalDstData, typename GlobalSrcData,
+          typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &pingTile,
+                          TileData &pongTile, WaitEvents &... events);
 ```
 
 ## 约束
 
 !!! warning "约束"
-    ### 类型约束
+    - `dstGlobalData`、`srcGlobalData` 与暂存 tile 的元素类型必须兼容。
+    - 源与目标的 layout 必须兼容。
+    - 暂存 tile 必须位于 UB，且大小适合所选分块策略。
+    - 运行时 `AtomicType` 分发在已核实 wrapper 中仅提供给单暂存 tile overload。
+    - 乒乓 tile 应位于互不重叠的 UB 区域。
 
-    - `GlobalSrcData::RawDType` 必须等于 `GlobalDstData::RawDType`
-    - `TileData::DType` 必须等于 `GlobalSrcData::RawDType`
-    - `GlobalSrcData::layout` 必须等于 `GlobalDstData::layout`
+## 面向目标的说明
 
-    ### 内存约束
-
-    - `dstGlobalData` 必须指向远端地址（目标 NPU）
-    - `srcGlobalData` 必须指向本地地址（当前 NPU）
-    - `stagingTileData`、`pingTile`、`pongTile` 必须预先在 UB 中分配
-
-    ### 原子与双缓冲约束
-
-    - 当前接口支持 `AtomicNone` 与 `AtomicAdd`
-    - `pingTile` 与 `pongTile` 的类型和维度必须一致
-    - 两者必须位于不重叠的 UB 偏移处
+- 公开原子模式为 `AtomicType::AtomicNone` 与 `AtomicType::AtomicAdd`。
+- wrapper 在进入实现前会先等待所有传入事件 token。
+- 双缓冲是显式 API 选择，不是单 tile overload 的隐式优化。
 
 ## 示例
 
-### 基础形式
-
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
-#include <pto/pto-inst.hpp>
-
 using namespace pto;
 
-template <typename T>
-void example_tput(__gm__ T* local_data, __gm__ T* remote_addr) {
-    using TileT   = Tile<TileType::Vec, T, 16, 16>;
-    using GShape  = Shape<1, 1, 1, 16, 16>;
-    using GStride = BaseShape2D<T, 16, 16, Layout::ND>;
-    using GTensor = GlobalTensor<T, GShape, GStride, Layout::ND>;
-
-    GTensor srcG(local_data);
-    GTensor dstG(remote_addr);
-    TileT stagingTile;
-    TASSIGN(stagingTile, 0);
-
+void example_put(auto &dstG, auto &srcG, auto &stagingTile) {
     comm::TPUT(dstG, srcG, stagingTile);
-    comm::TPUT<AtomicType::AtomicAdd>(dstG, srcG, stagingTile);
+    comm::TPUT<comm::AtomicType::AtomicAdd>(dstG, srcG, stagingTile);
 }
 ```
-
-### 乒乓双缓冲
-
-```cpp
-constexpr size_t tileUBBytes = ((64 * 64 * sizeof(float) + 1023) / 1024) * 1024;
-TileT pingTile(64, 64);
-TileT pongTile(64, 64);
-TASSIGN(pingTile, 0);
-TASSIGN(pongTile, tileUBBytes);
-
-comm::TPUT(dstG, srcG, pingTile, pongTile);
-```
-
-### 运行时指定原子模式
-
-```cpp
-comm::TPUT(dstG, srcG, stagingTile, AtomicType::AtomicAdd);
-```
-
-## 相关页面
-
-- [通信与运行时](communication-runtime_zh.md)
-- [TGET](./TGET_zh.md)
-- [TSCATTER](./TSCATTER_zh.md)

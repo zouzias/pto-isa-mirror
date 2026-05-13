@@ -4,55 +4,53 @@
 
 ## Summary
 
-Elementwise division with a scalar (tile/scalar or scalar/tile).
+`TDIVS` performs scalar-division forms between a source tile and a scalar value.
 
-## Mechanism
+Supported public forms are:
 
-Elementwise division with a scalar (tile/scalar or scalar/tile). It operates on tile payloads rather than scalar control state, and its legality is constrained by tile shape, layout, valid-region, and target-profile support.
+- tile/scalar: `src / scalar`
+- scalar/tile: `scalar / src`
 
-For each element `(i, j)` in the valid region:
+## Semantics
 
-- Tile/scalar:
+For each active lane in the destination valid region:
+
+- tile/scalar form computes:
 
   $$ \mathrm{dst}_{i,j} = \frac{\mathrm{src}_{i,j}}{\mathrm{scalar}} $$
 
-- Scalar/tile:
+- scalar/tile form computes:
 
   $$ \mathrm{dst}_{i,j} = \frac{\mathrm{scalar}}{\mathrm{src}_{i,j}} $$
 
+Backend implementations differ for integer vs floating-point element types, and A5 exposes a high-precision path for selected floating-point cases.
+
 ## Syntax
 
-Textual spelling is defined by the PTO ISA syntax-and-operands pages.
-
-Tile/scalar form:
+### Assembly Form (PTO-AS)
 
 ```text
-%dst = tdivs %src, %scalar : !pto.tile<...>, f32
-```
-
-Scalar/tile form:
-
-```text
-%dst = tdivs %scalar, %src : f32, !pto.tile<...>
+%dst = tdivs %src, %scalar : !pto.tile<...>, dtype
+%dst = tdivs %scalar, %src : dtype, !pto.tile<...>
 ```
 
 ### AS Level 1 (SSA)
 
-```text
+```mlir
 %dst = pto.tdivs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 %dst = pto.tdivs %scalar, %src : (dtype, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### AS Level 2 (DPS)
 
-```text
-pto.tdivs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
-pto.tdivs ins(%scalar, %src : dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```mlir
+pto.tdivs ins(%src, %scalar : !pto.tile_buf<...>, dtype)
+         outs(%dst : !pto.tile_buf<...>)
+pto.tdivs ins(%scalar, %src : dtype, !pto.tile_buf<...>)
+         outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ Intrinsic
-
-Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
@@ -63,121 +61,54 @@ PTO_INST RecordEvent TDIVS(TileDataDst &dst, TileDataSrc &src0, typename TileDat
 template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
           typename... WaitEvents>
 PTO_INST RecordEvent TDIVS(TileDataDst &dst, typename TileDataDst::DType scalar, TileDataSrc &src0,
-                           WaitEvents &... events)
+                           WaitEvents &... events);
 ```
-
-`PrecisionType` has the following values available:
-
-* `DivAlgorithm::DEFAULT`: Normal algorithm, faster but with lower precision.
-* `DivAlgorithm::HIGH_PRECISION`: High precision algorithm, but slower.
-
-## Inputs
-
-- `src` is the source tile.
-- `scalar` is the scalar value broadcast to all lanes.
-- `dst` names the destination tile.
-- The operation iterates over `dst`'s valid region.
-
-## Expected Outputs
-
-`dst` carries the result tile or updated tile payload produced by the operation.
-
-## Side Effects
-
-No architectural side effects beyond producing the destination tile. Does not implicitly fence unrelated traffic.
 
 ## Constraints
 
 !!! warning "Constraints"
-    - **Valid region**:
-        - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
-
-## Exceptions
-
-!!! danger "Exceptions"
-    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+    - `dst` and `src` must use the same element type.
+    - NPU backends require vector-tile execution paths.
+    - The documented backends require matching valid columns and rows.
+    - Division-by-zero behavior is backend-defined; some CPU/NPU helper paths assert or produce target-specific IEEE/integer outcomes.
 
 ## Target-Profile Restrictions
 
 ??? info "Target-Profile Restrictions"
-    - **Implementation checks (A2A3)** (both overloads):
-        - `TileData::DType` must be one of: `int32_t`, `int`, `int16_t`, `half`, `float16_t`, `float`, `float32_t`.
-        - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-        - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-        - Runtime: `src0.GetValidRow() == dst.GetValidRow()` and `src0.GetValidCol() == dst.GetValidCol()`.
-        - Tile layout must be row-major (`TileData::isRowMajor`).
+    | Element type | CPU Simulator | A2/A3 | A5 |
+    |---|---|---|---|
+    | `f32` | Supported via CPU scalar-op framework | Supported | Supported |
+    | `f16` | Supported via CPU scalar-op framework | Supported | Supported |
+    | `i32` | Supported via CPU scalar-op framework | Supported | Supported |
+    | `i16` | Supported via CPU scalar-op framework | Supported | Supported |
+    | `u32` | Supported via CPU scalar-op framework | No | Supported |
+    | `u16` | Supported via CPU scalar-op framework | No | Supported |
+    | `u8` | not verified in CPU pass | No | Supported |
+    | `i8` | not verified in CPU pass | No | Supported |
+    | `bf16` | not verified in CPU pass | No | No in verified file |
 
-    - **Implementation checks (A5)** (both overloads):
-        - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
-        - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-        - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-        - Runtime: `src0.GetValidRow() == dst.GetValidRow()` and `src0.GetValidCol() == dst.GetValidCol()`.
-        - Tile layout must be row-major (`TileData::isRowMajor`).
+    Notes:
 
-    - **Division-by-zero**:
-        - Behavior is target-defined; on A5 the tile/scalar form maps to multiply-by-reciprocal and uses `1/0 -> +inf` for `scalar == 0`.
+    - A2/A3 verified file supports `int32_t`, `int16_t`, `half`/`float16_t`, and `float`/`float32_t`.
+    - A5 verified file supports integer and floating-point families including `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, and `float`.
+    - `DivAlgorithm::HIGH_PRECISION` is meaningful on A5 for selected floating-point paths.
 
-    - **High Precision Algorithm**
-        - Only available on A5, `PrecisionType` option is ignored on A3.
+## Related Op Note
+
+There is no separate `trdivs.md` page in this checkout; the scalar/tile form is documented here as the second `TDIVS` overload.
 
 ## Examples
 
-### Auto
-
 ```cpp
 #include <pto/pto-inst.hpp>
-
 using namespace pto;
 
 void example_auto() {
-  using TileT = Tile<TileType::Vec, float, 16, 16>;
-  TileT src, dst;
-  TDIVS(dst, src, 2.0f);
-  TDIVS<DivAlgorithm::HIGH_PRECISION>(dst, src, 2.0f);
+    using TileT = Tile<TileType::Vec, float, 16, 16>;
+    TileT src, dst;
+    TDIVS(dst, src, 2.0f);
+    TDIVS(dst, 2.0f, src);
 }
-```
-
-### Manual
-
-```cpp
-#include <pto/pto-inst.hpp>
-
-using namespace pto;
-
-void example_manual() {
-  using TileT = Tile<TileType::Vec, float, 16, 16>;
-  TileT src, dst;
-  TASSIGN(src, 0x1000);
-  TASSIGN(dst, 0x2000);
-  TDIVS(dst, 2.0f, src);
-  TDIVS<DivAlgorithm::HIGH_PRECISION>(dst, 2.0f, src);
-}
-```
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tdivs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: bind resources explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tdivs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = pto.tdivs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tdivs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## Related Ops / Instruction Set Links

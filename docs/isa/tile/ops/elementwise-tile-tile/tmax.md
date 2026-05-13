@@ -4,21 +4,21 @@
 
 ## Summary
 
-Elementwise maximum of two tiles.
+`TMAX` performs lane-wise maximum selection of two source tiles into a destination tile.
 
-## Mechanism
-
-Elementwise maximum of two tiles.
-
-For each element `(i, j)` in the valid region:
+For every element inside the destination tile valid region:
 
 $$ \mathrm{dst}_{i,j} = \max(\mathrm{src0}_{i,j}, \mathrm{src1}_{i,j}) $$
 
+## Semantics
+
+`TMAX` reads corresponding lanes from `src0` and `src1` over the destination valid region and writes the lane-wise maximum into `dst`.
+
+Backend implementations require the source valid regions to match the destination valid region.
+
 ## Syntax
 
-Textual spelling is defined by the PTO ISA syntax-and-operands pages.
-
-Synchronous form:
+### Assembly Form (PTO-AS)
 
 ```text
 %dst = tmax %src0, %src1 : !pto.tile<...>
@@ -26,143 +26,75 @@ Synchronous form:
 
 ### AS Level 1 (SSA)
 
-```text
+```mlir
 %dst = pto.tmax %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### AS Level 2 (DPS)
 
-```text
-pto.tmax ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```mlir
+pto.tmax ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
+         outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ Intrinsic
-
-Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TMAX(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events);
 ```
 
-## Inputs
-
-| Operand | Role | Description |
-|---------|------|-------------|
-| `%src0` | Left tile | First source tile; read at `(i, j)` for each `(i, j)` in `dst` valid region |
-| `%src1` | Right tile | Second source tile; read at `(i, j)` for each `(i, j)` in `dst` valid region |
-| `WaitEvents...` | Optional synchronisation | `RecordEvent` tokens to wait on before issuing the operation |
-
-## Expected Outputs
-
-| Result | Type | Description |
-|--------|------|-------------|
-| `%dst` | `!pto.tile<...>` | Destination tile; all `(i, j)` in its valid region contain `max(src0[i,j], src1[i,j])` after the operation |
-
-## Side Effects
-
-No architectural side effects beyond producing the destination tile. Does not implicitly fence unrelated traffic.
-
 ## Constraints
 
 !!! warning "Constraints"
-    - **Valid region**:
-        - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain; `src0/src1` are assumed to be compatible (not validated by explicit runtime checks in this op).
-
-## Exceptions
-
-!!! danger "Exceptions"
-    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+    - `dst`, `src0`, and `src1` must use the same element type.
+    - `src0`, `src1`, and `dst` must have the same runtime valid shape.
+    - A2/A3 and A5 require RowMajor vector-tile execution paths.
+    - CPU simulator supports layout mapping through tile offsets.
 
 ## Target-Profile Restrictions
 
 ??? info "Target-Profile Restrictions"
-    - **Implementation checks (A2A3)**:
-        - `TileData::DType` must be one of: `int32_t`, `int16_t`, `half`, `float`.
-        - Tile layout must be row-major (`TileData::isRowMajor`).
-        - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-        - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-        - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
+    | Element type | CPU Simulator | A2/A3 | A5 |
+    |---|---|---|---|
+    | `f32` | Supported | Supported | Supported |
+    | `f16` | Supported | Supported | Supported |
+    | `i32` | Supported | Supported | Supported |
+    | `i16` | Supported | Supported | Supported |
+    | `u32` | Supported | No | Supported |
+    | `u16` | Supported | No | Supported |
+    | `u8` | Supported | No | Supported |
+    | `i8` | Supported | No | Supported |
 
-    - **Implementation checks (A5)**:
-        - `TileData::DType` must be one of: `uint32_t`, `int32_t`, `uint16_t`, `int16_t`, `uint8_t`,  `int8_t`, `float`, `half`.
-        - Tile layout must be row-major (`TileData::isRowMajor`).
-        - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-        - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-        - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
+    Notes:
+
+    - A2/A3 currently accepts `int32_t`, `int16_t`, `half`, and `float`.
+    - A5 currently accepts `uint32_t`, `int32_t`, `uint16_t`, `int16_t`, `uint8_t`, `int8_t`, `float`, and `half`.
 
 ## Performance
 
 ### A2/A3 Throughput
 
-`TMAX` compiles to CCE vector instructions via the `TBinOp.hpp` performance model. The throughput is identical to `TADD` (binary arithmetic):
+`TMAX` is a binary vector op using the same A2/A3 timing family as `TADD`.
 
-| Metric | Value (FP) | Value (INT) |
-|--------|-------------|-------------|
+| Metric | FP | INT |
+|---|---|---|
 | Startup latency | 14 | 14 |
 | Completion latency | 19 | 17 |
 | Per-repeat throughput | 2 | 2 |
 | Pipeline interval | 18 | 18 |
 
----
-
 ## Examples
-
-### Auto
 
 ```cpp
 #include <pto/pto-inst.hpp>
-
 using namespace pto;
 
 void example_auto() {
-  using TileT = Tile<TileType::Vec, float, 16, 16>;
-  TileT src0, src1, dst;
-  TMAX(dst, src0, src1);
+    using TileT = Tile<TileType::Vec, float, 16, 16>;
+    TileT src0, src1, dst;
+    TMAX(dst, src0, src1);
 }
-```
-
-### Manual
-
-```cpp
-#include <pto/pto-inst.hpp>
-
-using namespace pto;
-
-void example_manual() {
-  using TileT = Tile<TileType::Vec, float, 16, 16>;
-  TileT src0, src1, dst;
-  TASSIGN(src0, 0x1000);
-  TASSIGN(src1, 0x2000);
-  TASSIGN(dst,  0x3000);
-  TMAX(dst, src0, src1);
-}
-```
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tmax %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: bind resources explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tmax %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = tmax %src0, %src1 : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tmax ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## Related Ops / Instruction Set Links

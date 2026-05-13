@@ -1,19 +1,19 @@
 # Tile-标量与立即数指令集
 
-Tile-标量类操作把一个 tile 与一个标量或立即数结合。标量在语义上会广播到 tile 的有效区域。多数操作产生数值 tile，比较类变体产生谓词或可作为选择条件使用的结果。
+Tile-标量类操作把一个 tile 与一个标量或立即数结合。标量在语义上会广播到 tile 的有效区域。多数操作产生数值 tile；比较类变体则产生谓词或可作为选择条件使用的结果。
 
 ## 指令一览
 
 | 操作 | 说明 |
 | --- | --- |
-| `pto.tadds` / `tsubs` / `tmuls` / `tpows` / `tdivs` | 与标量做逐元素算术 |
+| `pto.tadds` / `pto.tsubs` / `pto.tmuls` / `pto.tpows` / `pto.tdivs` | 与标量做逐元素算术 |
 | `pto.taxpy` | 用标量系数做 AXPY 风格融合 tile 更新 |
-| `pto.tfmods` / `trems` | 与标量做模 / 余数 |
-| `pto.tmins` / `tmaxs` | 与标量做逐元素 min / max |
-| `pto.tands` / `tors` / `txors` | 与标量做逐元素按位逻辑 |
-| `pto.tshls` / `tshrs` | 用标量做逐元素位移 |
+| `pto.tfmods` / `pto.trems` | 与标量做模 / 余数 |
+| `pto.tmins` / `pto.tmaxs` | 与标量做逐元素 min / max |
+| `pto.tands` / `pto.tors` / `pto.txors` | 与标量做逐元素按位逻辑 |
+| `pto.tshls` / `pto.tshrs` | 用标量做逐元素位移 |
 | `pto.tlrelu` | 标量斜率的 Leaky ReLU |
-| `pto.taddsc` / `tsubsc` | 结合标量和第二个 tile 的融合逐元素运算 |
+| `pto.taddsc` / `pto.tsubsc` | 结合标量和第二个 tile 的融合逐元素运算 |
 | `pto.texpands` | 用标量填充整个目标 tile |
 | `pto.tcmps` | tile 与标量比较 |
 | `pto.tsels` | 用 mask / 标量参与逐元素选择 |
@@ -24,15 +24,15 @@ Tile-标量类操作把一个 tile 与一个标量或立即数结合。标量在
 
 $$ \mathrm{dst}_{r,c} = f(\mathrm{src}_{r,c}, \mathrm{scalar}) $$
 
-这里的 `scalar` 可以是：
+其中 `scalar` 可以是：
 
-- 标量寄存器值
-- 编译期立即数
-- 运行时传入的普通标量
+- 标量寄存器值，
+- 编译期立即数，
+- 运行时传入的普通标量。
 
-PTO 不允许在 tile-标量操作里依赖隐式类型提升。标量如何广播、比较结果如何编码、饱和与否怎样处理，都属于具体操作自己的架构语义。
+PTO 不允许在 tile-标量操作里依赖隐式类型提升。标量如何广播、比较结果如何编码、是否饱和处理，都属于具体操作自己的架构语义。
 
-`TAXPY` 属于本家族，因为它的核心合同是使用标量系数更新 tile payload：
+`TAXPY` 也属于本家族，因为它的核心合同是使用标量系数更新 tile payload：
 
 $$ \mathrm{dst}_{r,c} = \mathrm{src0}_{r,c} \times \mathrm{scalar} + \mathrm{src1}_{r,c} $$
 
@@ -51,7 +51,7 @@ $$ \mathrm{dst}_{r,c} = \mathrm{src0}_{r,c} \times \mathrm{scalar} + \mathrm{src
     - 标量类型必须与 tile 元素类型兼容。
     - `TSHLS` / `TSHRS` 将标量解释为无符号 shift count。
     - `TCMPS` 的结果不应被当成普通数值 tile 使用，除非对应 target/profile 明确约定其编码。
-    - 需要保持 valid region 语义的操作，迭代域都以 `dst` 的 valid row / col 为准。
+    - 需要保持 valid region 语义的操作，其迭代域都以 `dst` 的 valid row / col 为准。
 
 ## 不允许的情形
 
@@ -64,4 +64,9 @@ $$ \mathrm{dst}_{r,c} = \mathrm{src0}_{r,c} \times \mathrm{scalar} + \mathrm{src
 ## 相关页面
 
 - [Tile 指令族](../instruction-families/tile-families_zh.md)
-- [Tile 指令面](../instruction-families/tile-families_zh.md)
+- [TSUBS](./ops/tile-scalar-and-immediate/tsubs_zh.md)
+- [TDIVS](./ops/tile-scalar-and-immediate/tdivs_zh.md)
+- [TMULS](./ops/tile-scalar-and-immediate/tmuls_zh.md)
+- [TFMODS](./ops/tile-scalar-and-immediate/tfmods_zh.md)
+- [TSHLS](./ops/tile-scalar-and-immediate/tshls_zh.md)
+- [TSHRS](./ops/tile-scalar-and-immediate/tshrs_zh.md)

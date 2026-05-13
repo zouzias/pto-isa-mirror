@@ -4,23 +4,33 @@
 
 ## Summary
 
-Compare a tile against a scalar and write per-element comparison results.
+`TCMPS` compares a source tile against either a scalar value or a scalar carrier tile and writes a packed predicate-result tile.
 
-## Mechanism
+## Semantics
 
-Compare a tile against a scalar and write per-element comparison results. It operates on tile payloads rather than scalar control state, and its legality is constrained by tile shape, layout, valid-region, and target-profile support.
+For each logical source lane in the active comparison domain, `TCMPS` evaluates:
 
-For each element `(i, j)` in the valid region:
+$$ \mathrm{src}_{i,j}\ \mathrm{cmpMode}\ \mathrm{rhs} $$
 
-$$ \mathrm{dst}_{i,j} = \left(\mathrm{src}_{i,j}\ \mathrm{cmpMode}\ \mathrm{scalar}\right) $$
+where `rhs` is either:
 
-The encoding/type of `dst` is target-specific: on A2/A3 the predicate tile uses `uint8_t` with 1 bit per element (packed 8 elements per byte), and on A5 it uses `uint32_t` with 1 bit per element (packed 32 elements per DWORD).
+- a scalar immediate / scalar value passed directly, or
+- a tile operand whose first element is used as the scalar comparison value by the backend.
+
+The destination stores a backend-defined packed predicate encoding rather than a normal arithmetic tile payload.
+
+Supported compare modes are:
+
+- `CmpMode::EQ`
+- `CmpMode::NE`
+- `CmpMode::LT`
+- `CmpMode::LE`
+- `CmpMode::GT`
+- `CmpMode::GE`
 
 ## Syntax
 
-Textual spelling is defined by the PTO ISA syntax-and-operands pages.
-
-Synchronous form:
+### Assembly Form (PTO-AS)
 
 ```text
 %dst = tcmps %src, %scalar {cmpMode = #pto.cmp<EQ>} : !pto.tile<...> -> !pto.tile<...>
@@ -28,142 +38,72 @@ Synchronous form:
 
 ### AS Level 1 (SSA)
 
-```text
-%dst = pto.tcmps %src, %scalar {cmpMode = #pto<cmp xx>} : (!pto.tile<...>, dtype) -> !pto.tile<...>
+```mlir
+%dst = pto.tcmps %src, %scalar {cmpMode = #pto.cmp<EQ>} : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 ### AS Level 2 (DPS)
 
-```text
-pto.tcmps ins(%src, %scalar{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
-```
-
-### IR Level 1 (SSA)
-
-```text
-%dst = pto.tcmps %src, %scalar {cmpMode = #pto<cmp xx>} : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### IR Level 2 (DPS)
-
-```text
-pto.tcmps ins(%src, %scalar{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
+```mlir
+pto.tcmps ins(%src, %scalar {cmpMode = #pto.cmp<EQ>} : !pto.tile_buf<...>, dtype)
+          outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/type.hpp`:
-
 ```cpp
-template <typename TileDataDst, typename TileDataSrc0, typename T, typename... WaitEvents>
-PTO_INST RecordEvent TCMPS(TileDataDst& dst, TileDataSrc0& src0, T src1, CmpMode cmpMode, WaitEvents&... events);
+template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TCMPS(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType src1,
+                           CmpMode mode, WaitEvents &... events);
+
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+PTO_INST RecordEvent TCMPS(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1,
+                           CmpMode mode, WaitEvents &... events);
 ```
-
-## Inputs
-
-- `src` is the source tile.
-- `scalar` is the scalar value broadcast to all lanes; `cmpMode` selects comparison predicate.
-- `dst` names the destination predicate tile.
-- The operation iterates over `dst`'s valid region.
-
-## Expected Outputs
-
-`dst` carries the result tile or updated tile payload produced by the operation.
-
-## Side Effects
-
-No architectural side effects beyond producing the destination tile. Does not implicitly fence unrelated traffic.
 
 ## Constraints
 
 !!! warning "Constraints"
-    - **Common constraints**:
-        - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-        - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-        - Runtime: `src0` and `dst` must have the same valid row/col.
-
-    - **Valid region**:
-        - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
-
-    - **Comparison modes**:
-        - Supports `CmpMode::EQ`, `CmpMode::NE`, `CmpMode::LT`, `CmpMode::GT`, `CmpMode::LE`, `CmpMode::GE`.
-
-## Exceptions
-
-!!! danger "Exceptions"
-    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+    - Destination tile must be a packed predicate-result tile compatible with the selected backend.
+    - Source tile must be a vector tile on NPU backends.
+    - Backends require RowMajor destination layout.
+    - The documented backends explicitly require `src0.GetValidRow() == dst.GetValidRow()`.
+    - For the tile-RHS form, the RHS tile element type must match the source tile element type.
+    - The packed destination encoding is target-specific and must not be interpreted as a normal arithmetic tile payload.
 
 ## Target-Profile Restrictions
 
 ??? info "Target-Profile Restrictions"
-    - **Implementation checks (A2A3)**:
-        - `TileData::DType` must be one of: `int32_t`, `float`, `half`, `uint16_t`, `int16_t`.
-        - Tile layout must be row-major (`TileData::isRowMajor`).
+    | Property | CPU Simulator | A2/A3 | A5 |
+    |---|---|---|---|
+    | Supported source types | current CPU implementation focuses on scalar/tile compare emulation | `int32_t`, `float`, `half`, `uint16_t`, `int16_t` | `int32_t`, `uint32_t`, `float`, `int16_t`, `uint16_t`, `half`, `uint8_t`, `int8_t` |
+    | Destination kind | packed result bytes in current CPU implementation | packed predicate result tile | packed predicate result tile |
+    | Tile-RHS form | supported in API surface | supported | supported |
+    | Layout requirement | implementation-defined CPU layout handling | RowMajor dst | RowMajor dst |
 
-    - **Implementation checks (A5)**:
-        - `TileData::DType` must be one of: `int32_t`, `float`, `half`, `uint16_t`, `int16_t`.
-        - Tile layout must be row-major (`TileData::isRowMajor`).
+    Notes:
+
+    - On A2/A3, `int32_t` compare currently dispatches through EQ-only scalar compare behavior.
+    - On A2/A3 and A5, the tile-RHS overload reads the RHS scalar value from the provided tile payload.
+    - CPU simulator packs results into byte-oriented storage in its current implementation.
+
+## Relationship with `TSEL`
+
+`TCMPS` commonly produces a packed predicate tile that can later be consumed by `TSEL` / `TSELS`, but producer and consumer must agree on the same backend-specific packing convention.
 
 ## Examples
 
-### Auto
-
 ```cpp
 #include <pto/pto-inst.hpp>
-
 using namespace pto;
 
 void example_auto() {
-  using SrcT = Tile<TileType::Vec, float, 16, 16>;
-  using DstT = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
-  SrcT src;
-  DstT dst(16, 2);
-  TCMPS(dst, src, 0.0f, CmpMode::GT);
+    using SrcT = Tile<TileType::Vec, float, 16, 16>;
+    using DstT = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
+    SrcT src;
+    DstT dst(16, 2);
+    TCMPS(dst, src, 0.0f, CmpMode::GT);
 }
-```
-
-### Manual
-
-```cpp
-#include <pto/pto-inst.hpp>
-
-using namespace pto;
-
-void example_manual() {
-  using SrcT = Tile<TileType::Vec, float, 16, 16>;
-  using DstT = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
-  SrcT src;
-  DstT dst(16, 2);
-  TASSIGN(src, 0x1000);
-  TASSIGN(dst, 0x2000);
-  TCMPS(dst, src, 0.0f, CmpMode::GT);
-}
-```
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tcmps %src, %scalar {cmpMode = #pto<cmp xx>} : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: bind resources explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tcmps %src, %scalar {cmpMode = #pto<cmp xx>} : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = tcmps %src, %scalar {cmpMode = #pto.cmp<EQ>} : !pto.tile<...> -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tcmps ins(%src, %scalar{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## Related Ops / Instruction Set Links

@@ -29,7 +29,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Set, Tuple
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -52,7 +52,7 @@ def header_instructions(path: Path) -> List[str]:
     text = path.read_text(encoding="utf-8", errors="ignore")
     names = re.findall(r"PTO_INST\s+(?:void|RecordEvent)\s+([A-Z][A-Z0-9_]+)\s*\(", text)
     out: List[str] = []
-    seen: set[str] = set()
+    seen: Set[str] = set()
     for n in names:
         if n in seen:
             continue
@@ -61,7 +61,7 @@ def header_instructions(path: Path) -> List[str]:
     return out
 
 
-def docs_instructions(isa_dir: Path) -> set[str]:
+def docs_instructions(isa_dir: Path) -> Set[str]:
     return {
         p.stem
         for p in isa_dir.glob("*.md")
@@ -119,7 +119,7 @@ def main() -> int:
 
     errors: List[str] = []
 
-    seen: set[str] = set()
+    seen: Set[str] = set()
     for instr in manifest_instrs:
         if not instr:
             errors.append("manifest has empty instruction name")

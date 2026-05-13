@@ -1,68 +1,59 @@
 # 通信与运行时
 
-通信与运行时操作覆盖跨 NPU 的数据交换、集合通信和通知协议。它们属于 PTO 的架构可见行为，但不适合放进 tile、vector 或 scalar/control 主干中。
+通信指令覆盖跨 NPU 的点对点传输、集合数据搬运、集合归约以及基于 signal 的同步。
 
-## 操作概览
+## 操作
 
-| 操作 | 说明 |
-| --- | --- |
-| `tbroadcast` | 从根 NPU 广播到并行组内所有 rank |
-| `tget` | 从远端 NPU 读取数据 |
-| `tget_async` | `tget` 的异步形式 |
-| `tput` | 向远端 NPU 写入数据 |
-| `tput_async` | `tput` 的异步形式 |
-| `treduce` | 并行组内的集合归约 |
-| `tscatter` | 从根 NPU 向所有 rank 分发数据 |
-| `tgather` | 从所有 rank 向根 NPU 聚集数据 |
-| `tnotify` | 发送通知事件 |
-| `ttest` | 非阻塞测试通知条件 |
-| `twait` | 阻塞等待通知条件 |
+| 操作 | 说明 | IR spelling | C++ spelling |
+|---|---|---|---|
+| [TBROADCAST](./TBROADCAST_zh.md) | 从源缓冲区广播到组内各 rank 目标缓冲区 | `pto.tbroadcast` | `TBROADCAST` |
+| [TGET](./TGET_zh.md) | 同步远程读取 | `pto.tget` | `TGET` |
+| [TGET_ASYNC](./TGET_ASYNC_zh.md) | 异步远程读取 | `pto.tget_async` | `TGET_ASYNC` |
+| [TNOTIFY](./TNOTIFY_zh.md) | signal / notify 更新 | `pto.tnotify` | `TNOTIFY` |
+| [TPUT](./TPUT_zh.md) | 同步远程写入 | `pto.tput` | `TPUT` |
+| [TPUT_ASYNC](./TPUT_ASYNC_zh.md) | 异步远程写入 | `pto.tput_async` | `TPUT_ASYNC` |
+| [TREDUCE](./TREDUCE_zh.md) | 集合归约 | `pto.treduce` | `TREDUCE` |
+| [TSCATTER](./TSCATTER_zh.md) | 从源缓冲区向组内各 rank 分发 | `pto.tscatter` | `TSCATTER` |
+| [TGATHER](./TGATHER_zh.md) | 从组内各 rank 收集到目标缓冲区 | `pto.tgather` | `TGATHER` |
+| [TTEST](./TTEST_zh.md) | 非阻塞 signal 测试 | `pto.ttest` | `TTEST` |
+| [TWAIT](./TWAIT_zh.md) | 阻塞 signal 等待 | `pto.twait` | `TWAIT` |
 
-## 输入
+## 编程模型说明
 
-通信与运行时操作通常组合使用以下对象：
+`include/pto/comm/pto_comm_inst.hpp` 中已核实的 public wrapper 展示出若干共同模式：
 
-- 并行组句柄 `!pto.group<N>`
-- 本地或远端的 GM 视图
-- UB 暂存 tile
-- 归约算子、通知条件或异步事件句柄
+- 同步 comm wrapper 对点对点与 collective 数据搬运通常返回 `RecordEvent`；
+- signal 风格的 `TNOTIFY`、`TWAIT` 返回 `void`，`TTEST` 返回 `bool`；
+- wrapper 在分发到底层实现前会先等待所有传入事件 token；
+- 多个搬运类 collective 提供显式的单 tile 与 ping-pong tile overload；
+- 异步点对点操作基于 session，并返回 `AsyncEvent`。
 
-## 输出
+## 异步运行时说明
 
-这些操作会产生：
+异步传输操作使用 `AsyncSession` 与 `AsyncEvent` 作为 public 同步模型。
 
-- 跨 rank 的数据传输结果
-- 集合归约结果
-- 通知状态变化
-- 异步 DMA 或异步通信句柄
+已核实的 public helper 包括：
 
-## 副作用
+- `BuildAsyncSession(...)`
+- `AsyncEvent::Wait(const AsyncSession &session)`
+- `AsyncEvent::Test(const AsyncSession &session)`
 
-通信操作会引入跨 NPU 的排序和可见性要求：
+session 保存所选 DMA engine 以及 engine-specific 的执行/事件上下文。
 
-- 发起网络或互连流量
-- 修改远端或本地 GM 中的数据
-- 建立通知或等待条件
-- 在异步形式下引入额外的完成状态
+## 本页范围
 
-## 约束
-
-!!! warning "约束"
-    - 所有参与 rank 必须以匹配的 `ParallelGroup` 调用同一集合操作。
-    - 根节点与非根节点的源/目的缓冲区角色必须与操作语义一致。
-    - 异步操作使用的会话、暂存区和事件对象必须满足对应接口要求。
-    - CPU 仿真器不支持跨 NPU 通信操作。
-
-## 不允许的情形
-
-!!! danger "不允许的情形"
-    - 不同 rank 使用不匹配的并行组句柄。
-    - 集合操作中源/目的缓冲区尺寸与操作语义不匹配。
-    - 在未初始化的异步会话或事件对象上继续推进异步流程。
-    - 把 CPU 仿真路径误当作通信操作的可执行 profile。
+本页总结的是 public wrapper surface。更细的后端行为、合法性约束、root 角色约定以及传输特定限制，请参见各操作页面与具体后端实现代码。
 
 ## 相关页面
 
-- [通信指令集](../instruction-families/communication-families_zh.md)
-- [通信指令族](../instruction-families/communication-families_zh.md)
-- [PTO 通信参考入口](../comm/README_zh.md)
+- [TPUT](./TPUT_zh.md)
+- [TGET](./TGET_zh.md)
+- [TPUT_ASYNC](./TPUT_ASYNC_zh.md)
+- [TGET_ASYNC](./TGET_ASYNC_zh.md)
+- [TNOTIFY](./TNOTIFY_zh.md)
+- [TWAIT](./TWAIT_zh.md)
+- [TTEST](./TTEST_zh.md)
+- [TBROADCAST](./TBROADCAST_zh.md)
+- [TGATHER](./TGATHER_zh.md)
+- [TSCATTER](./TSCATTER_zh.md)
+- [TREDUCE](./TREDUCE_zh.md)

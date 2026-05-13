@@ -4,155 +4,78 @@
 
 ## Summary
 
-Broadcast a scalar into a destination tile.
+`TEXPANDS` broadcasts a scalar value into a destination tile.
 
-## Mechanism
+## Semantics
 
-Broadcast a scalar into a destination tile. It operates on tile payloads rather than scalar control state, and its legality is constrained by tile shape, layout, valid-region, and target-profile support.
+For vector tiles, `TEXPANDS` fills the destination over its active valid region with the same scalar value.
 
-For each element `(i, j)` in the valid region:
-
-$$ \mathrm{dst}_{i,j} = \mathrm{scalar} $$
+For matrix / conv-tile paths on NPU backends, the implementation fills the full backend-defined matrix storage region rather than using the vector valid-region iteration model.
 
 ## Syntax
 
-Textual spelling is defined by the PTO ISA syntax-and-operands pages.
-
-Synchronous form:
+### Assembly Form (PTO-AS)
 
 ```text
-%dst = texpands %scalar : f32, !pto.tile<...>
+%dst = texpands %scalar : dtype -> !pto.tile<...>
 ```
 
 ### AS Level 1 (SSA)
 
-```text
+```mlir
 %dst = pto.texpands %scalar : dtype -> !pto.tile<...>
 ```
 
 ### AS Level 2 (DPS)
 
-```text
-pto.texpands ins(%scalar : dtype) outs(%dst : !pto.tile_buf<...>)
+```mlir
+pto.texpands ins(%scalar : dtype)
+            outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ Intrinsic
-
-Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TEXPANDS(TileData &dst, typename TileData::DType scalar, WaitEvents &... events);
 ```
 
-## Inputs
-
-- `src` is the source tile.
-- `scalar` is the scalar value broadcast to all lanes.
-- `dst` names the destination tile.
-- The operation iterates over `dst`'s valid region.
-
-## Expected Outputs
-
-`dst` carries the result tile or updated tile payload produced by the operation.
-
-## Side Effects
-
-No architectural side effects beyond producing the destination tile. Does not implicitly fence unrelated traffic.
-
 ## Constraints
 
 !!! warning "Constraints"
-    - **Valid region**:
-        - For `TileType::Vec` :
-        - The op fills `dst` over `dst.GetValidRow()` / `dst.GetValidCol()`.
-        - For  `TileType::Mat` :
-        - For Tile : The op fills `dst` over `TileData::Rows` / `TileData::Cols`.
-        - For ConvTile : The op fills `dst` over `ConvTileData`'s shape.
-
-## Exceptions
-
-!!! danger "Exceptions"
-    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+    - NPU backends accept vector or matrix destination locations depending on the path.
+    - Vector-tile paths use the destination valid region.
+    - Matrix / conv-tile paths use backend-specific full-storage fill semantics.
+    - Supported element types differ slightly between A2/A3 and A5.
 
 ## Target-Profile Restrictions
 
 ??? info "Target-Profile Restrictions"
-    - **Implementation checks (A2A3)**:
-        - For `TileType::Vec` :
-          - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `bfloat16_t`, `float`.
-          - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-        - For  `TileType::Mat` :
-          - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `bfloat16_t`, `float`.
-          - Static valid bounds: `The range of  TileData::Rows * TileData::Cols * sizeof(T) / 32 is [1, 32767]`.
+    | Property | CPU Simulator | A2/A3 | A5 |
+    |---|---|---|---|
+    | Vec path | valid-region fill | Supported | Supported |
+    | Mat path | not documented in same backend terms | Supported | Supported |
+    | `bf16` | not verified in this pass | Supported | No in verified vec-type list |
+    | 8/16/32-bit ints | implementation-dependent | Supported | Supported |
+    | `half` / `float` | Supported | Supported | Supported |
 
-    - **Implementation checks (A5)**:
-        - For `TileType::Vec` :
-          - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
-          - Tile layout must be row-major (`TileData::isRowMajor`).
-          - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-        - For  `TileType::Mat` :
-          - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
-          - For`TileDataDst::layout == pto::Layout::NC1HWC0 || TileDataDst::layout == pto::Layout::FRACTAL_Z`:
-            - `The range of convtile's (shape0 * shape1 * shape2 * shape3) is [1, 32767]`.
-          - For`TileDataDst::layout == pto::Layout::NDC1HWC0 || TileDataDst::layout == pto::Layout::FRACTAL_Z_3D`:
-            - `The range of convtile's (shape0 * shape1 * shape2 * shape3 * shape4) is [1, 32767]`.
+    Notes:
+
+    - CPU simulator fills over `dst.GetValidRow()` / `dst.GetValidCol()` using the tile offset mapping.
+    - A2/A3 and A5 both expose matrix/convtile fill paths with repeat-count limits based on backend matrix fill instructions.
+    - A5 verified file supports `bfloat16_t` in its compile-time type check, but the older prose in the previous doc mixed vec/mat constraints imprecisely; this page keeps the statement backend-focused.
 
 ## Examples
 
-### Auto
-
 ```cpp
 #include <pto/pto-inst.hpp>
-
 using namespace pto;
 
 void example_auto() {
-  using TileT = Tile<TileType::Vec, float, 16, 16>;
-  TileT dst;
-  TEXPANDS(dst, 0.0f);
+    using TileT = Tile<TileType::Vec, float, 16, 16>;
+    TileT dst;
+    TEXPANDS(dst, 0.0f);
 }
-```
-
-### Manual
-
-```cpp
-#include <pto/pto-inst.hpp>
-
-using namespace pto;
-
-void example_manual() {
-  using TileT = Tile<TileType::Vec, float, 16, 16>;
-  TileT dst;
-  TASSIGN(dst, 0x1000);
-  TEXPANDS(dst, 0.0f);
-}
-```
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.texpands %scalar : dtype -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: bind resources explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.texpands %scalar : dtype -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = texpands %scalar : f32, !pto.tile<...>
-# AS Level 2 (DPS)
-pto.texpands ins(%scalar : dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## Related Ops / Instruction Set Links

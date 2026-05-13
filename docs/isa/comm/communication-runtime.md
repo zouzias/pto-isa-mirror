@@ -1,107 +1,59 @@
 # Communication And Runtime
 
-Communication operations span multiple NPUs in a parallel group. They express inter-NPU data exchange and collective reduction using a `ParallelGroup` handle.
+Communication instructions expose point-to-point transfer, collective movement, collective reduction, and signal-style synchronization across NPUs.
 
 ## Operations
 
-| | Operation | Description | Collective Type | IR Spelling | C++ Spelling |
-|-|-----------|-------------|----------------|-------------|--------------|
-| | [TBROADCAST](../comm/TBROADCAST.md) | Broadcast data from root NPU to all ranks | One-to-all | `pto.tbroadcast` | `BROADCAST` |
-| | [TGET](../comm/TGET.md) | Get data from a remote NPU | Point-to-point | `pto.tget` | `GET` |
-| | [TGET_ASYNC](../comm/TGET_ASYNC.md) | Asynchronous variant of TGET | Point-to-point | `pto.tget_async` | `GET_ASYNC` |
-| | [TNOTIFY](../comm/TNOTIFY.md) | Notify other ranks of an event | Synchronization | `pto.tnotify` | `NOTIFY` |
-| | [TPUT](../comm/TPUT.md) | Put data to a remote NPU | Point-to-point | `pto.tput` | `PUT` |
-| | [TPUT_ASYNC](../comm/TPUT_ASYNC.md) | Asynchronous variant of TPUT | Point-to-point | `pto.tput_async` | `PUT_ASYNC` |
-| | [TREDUCE](../comm/TREDUCE.md) | Collective reduction across all ranks | All-to-one | `pto.treduce` | `REDUCE` |
-| | [TSCATTER](../comm/TSCATTER.md) | Scatter data from root to all ranks | One-to-all | `pto.tscatter` | `SCATTER` |
-| | [TGATHER](../comm/TGATHER.md) | Gather data from all ranks to root | All-to-one | `pto.tgather` | `GATHER` |
-| | [TTEST](../comm/TTEST.md) | Test if a notification has been received | Synchronization | `pto.ttest` | `TEST` |
-| | [TWAIT](../comm/TWAIT.md) | Wait for a notification | Synchronization | `pto.twait` | `WAIT` |
+| Operation | Description | IR spelling | C++ spelling |
+|---|---|---|---|
+| [TBROADCAST](./TBROADCAST.md) | Broadcast from a source buffer to group destinations | `pto.tbroadcast` | `TBROADCAST` |
+| [TGET](./TGET.md) | Synchronous remote read | `pto.tget` | `TGET` |
+| [TGET_ASYNC](./TGET_ASYNC.md) | Asynchronous remote read | `pto.tget_async` | `TGET_ASYNC` |
+| [TNOTIFY](./TNOTIFY.md) | Signal/notify update | `pto.tnotify` | `TNOTIFY` |
+| [TPUT](./TPUT.md) | Synchronous remote write | `pto.tput` | `TPUT` |
+| [TPUT_ASYNC](./TPUT_ASYNC.md) | Asynchronous remote write | `pto.tput_async` | `TPUT_ASYNC` |
+| [TREDUCE](./TREDUCE.md) | Collective reduction | `pto.treduce` | `TREDUCE` |
+| [TSCATTER](./TSCATTER.md) | Scatter from source buffer to group destinations | `pto.tscatter` | `TSCATTER` |
+| [TGATHER](./TGATHER.md) | Gather from group sources into destination buffer | `pto.tgather` | `TGATHER` |
+| [TTEST](./TTEST.md) | Non-blocking signal test | `pto.ttest` | `TTEST` |
+| [TWAIT](./TWAIT.md) | Blocking signal wait | `pto.twait` | `TWAIT` |
 
-## Mechanism
+## Programming Model Notes
 
-Communication operations use a `ParallelGroup` handle (`!pto.group<N>`) to identify the set of participating NPUs. The group defines:
+The verified public wrappers in `include/pto/comm/pto_comm_inst.hpp` show several common patterns:
 
-- **Size**: Number of ranks `N` in the parallel group
-- **Root**: The designated NPU for broadcast/scatter operations (typically rank 0)
-- **Tensors**: Per-rank destination/source buffers
+- synchronous comm wrappers return `RecordEvent` for data-moving collectives and point-to-point operations,
+- signal-style wrappers `TNOTIFY` and `TWAIT` return `void`, while `TTEST` returns `bool`,
+- wrappers wait on incoming event tokens before dispatching the underlying implementation,
+- several movement collectives expose explicit single-tile and ping-pong staging-tile overloads,
+- async point-to-point operations are session-based and return `AsyncEvent`.
 
-### Data Flow
+## Async Runtime Notes
 
-All collective communication operations share a common data flow pattern:
+Async transfer operations use `AsyncSession` and `AsyncEvent` as the public synchronization model.
 
-```
-Local GM ──► UB (staging tile) ──► Inter-NPU interconnect ──► UB ──► Local GM
-```
+Verified public helpers include:
 
-A **staging tile** in UB is always required as an intermediate buffer. For large tensors that exceed the UB tile capacity, the operation automatically performs **2D sliding** — chunking along rows and columns to fit each chunk into the tile, iterating over all outer dimensions.
+- `BuildAsyncSession(...)`
+- `AsyncEvent::Wait(const AsyncSession &session)`
+- `AsyncEvent::Test(const AsyncSession &session)`
 
-### Broadcast
+The session stores the selected DMA engine and engine-specific execution/event context.
 
-All non-root NPUs receive data from the root:
+## Scope of This Overview
 
-$$ \mathrm{dst}^{(k)} = \mathrm{src}^{(\text{root})} \quad \forall k \in [0, N) $$
-
-Only the root calls `pto.tbroadcast`. Non-root ranks must ensure their destination buffers are allocated and writable for the duration of the operation.
-
-### Reduce
-
-All ranks contribute data to a reduction operation, with the result delivered to the root:
-
-$$ \mathrm{result}^{(\text{root})} = \bigoplus_{k=0}^{N-1} \mathrm{src}^{(k)} $$
-
-where $\bigoplus$ is the reduction operator (sum, max, min, etc.).
-
-### Scatter/Gather
-
-Scatter distributes slices of the root's data to each rank. Gather collects per-rank data back to the root.
-
-### Point-to-Point (TGET/TPUT)
-
-Point-to-point operations transfer data between two specific NPUs without involving the entire group:
-
-- **`TGET`** (`pto.tget`): Read remote GM → local GM. Data flows from the source NPU to the current NPU.
-- **`TPUT`** (`pto.tput`): Write local GM → remote GM. Data flows from the current NPU to the destination NPU.
-
-Both use a staging tile in UB as the intermediate buffer. For `TGET`, the data path is: `remote GM → staging tile → local GM`. For `TPUT`, the data path is: `local GM → staging tile → remote GM`.
-
-## ParallelGroup Handle
-
-```mlir
-// Define a parallel group of 8 NPUs
-%tensors = "pto.make_group"(%addrs0, %addrs1, ..., %addrs7)
-    : (!pto.memref<f32, 16x16>, ..., !pto.memref<f32, 16x16>) -> !pto.group<8>
-```
-
-In C++, the `ParallelGroup<GTensor>` template manages the group handle. See the per-op pages for C++ usage examples.
-
-## Large Tile Support
-
-When the GlobalTensor exceeds the UB tile capacity in rows and/or columns, transfers are automatically chunked via 2D sliding:
-
-- If `ValidRow` is static, `GetShape(DIM_3)` must be divisible by `ValidRow`
-- If `ValidCol` is static, `GetShape(DIM_4)` must be divisible by `ValidCol`
-- To handle non-divisible cases, use tiles with `DYNAMIC` valid row/column
-
-## Constraints
-
-!!! warning "Constraints"
-    - All participating NPUs must call the collective operation with matching `ParallelGroup` handles
-    - Non-root ranks must not call broadcast/scatter operations
-    - Root rank is identified by `parallelGroup.GetRootIdx()`
-    - Destination/source tensors are assumed to have the same shape and strides across ranks
-    - The staging tile must be pre-allocated in UB at non-overlapping offsets for ping-pong variants
-
-## Cases That Are Not Allowed
-
-!!! danger "Cases That Are Not Allowed"
-    - Calling collective operations with mismatched `ParallelGroup` handles across ranks
-    - Calling broadcast/scatter on non-root ranks (undefined behavior)
-    - Using uninitialized or improperly sized destination buffers
-    - Using overlapping UB offsets for ping/pong staging tiles
+This page summarizes the public wrapper surface. More detailed backend behavior, legality constraints, root-role conventions, and transport-specific restrictions are documented on the per-operation pages and in backend implementation code.
 
 ## See Also
 
-- [Communication instruction set](../instruction-families/communication-families.md) — Instruction set overview
-- [Communication ISA](../instruction-families/communication-families.md) — Instruction set description
-- [Ordering and Synchronization](../machine-model/ordering-and-synchronization.md) — PTO synchronization model
+- [TPUT](./TPUT.md)
+- [TGET](./TGET.md)
+- [TPUT_ASYNC](./TPUT_ASYNC.md)
+- [TGET_ASYNC](./TGET_ASYNC.md)
+- [TNOTIFY](./TNOTIFY.md)
+- [TWAIT](./TWAIT.md)
+- [TTEST](./TTEST.md)
+- [TBROADCAST](./TBROADCAST.md)
+- [TGATHER](./TGATHER.md)
+- [TSCATTER](./TSCATTER.md)
+- [TREDUCE](./TREDUCE.md)

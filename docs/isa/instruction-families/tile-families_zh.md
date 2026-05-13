@@ -8,7 +8,7 @@ Tile 指令族定义 `pto.t*` 各组操作共享的机制、操作数模型、�
 | --- | --- |
 | 同步与配置 | `tassign`、`tsync`、`talias`、`sethf32mode`、`settf32mode`、`setfmatrix` 等 |
 | 逐元素 Tile-Tile | `tadd`、`tmul`、`tpow`、`tcmp`、`tcvt` 等 |
-| Tile-标量与立即数 | `tadds`、`taxpy`、`tmuls`、`tpows`、`tmins` 等 |
+| Tile-标量与立即数 | `tadds`、`tsubs`、`tdivs`、`tmuls`、`tfmods`、`tshls`、`tshrs`、`taxpy` 等 |
 | 归约与扩展 | `trowsum`、`tcolmax`、`trowexpand` 等 |
 | 内存与数据搬运 | `tload`、`tstore`、`mgather`、`mscatter` |
 | 矩阵与矩阵-向量 | `tgemv`、`tmatmul` 及其变体 |
@@ -42,5 +42,5 @@ Tile 指令族定义 `pto.t*` 各组操作共享的机制、操作数模型、�
 
 ## 相关页面
 
-- [Tile 指令集](tile-families_zh.md)
+- [Tile-标量与立即数](../tile/tile-scalar-and-immediate_zh.md)
 - [Tile 参考入口](../tile/README_zh.md)

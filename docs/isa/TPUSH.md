@@ -4,7 +4,7 @@
 
 Push a producer tile into a `TPipe` FIFO for Cube-Vector communication.
 
-This page describes both the TileData overload and the `GlobalData` commit overload. For GM-slot workflows that expose the FIFO entry as a `GlobalTensor`, use `TALLOC` to allocate a slot view, write the slot with normal memory instructions, then use `TPUSH(Pipe&, GlobalData&)` to commit the slot.
+This page covers the tile-producing `TPUSH` forms and the `GlobalData` slot-commit form. In the `GlobalData` workflow, call `TALLOC` to obtain a FIFO slot view, write the slot with regular memory instructions such as `TSTORE`, and then call `TPUSH(Pipe&, GlobalData&)` to publish that slot to the consumer.
 
 ## Operation Semantics
 
@@ -42,7 +42,8 @@ struct TPipe;
 
 ## Constraints
 
-- **A2A3 TileData producer**:
+- **A2A3/A5 NPU only for tile push/pop**:
+    - The tile-producing `TPUSH` / tile-consuming `TPOP` FIFO protocol is an NPU feature and is not available on the CPU simulator.
     - `TileProd::Loc` must be `TileType::Acc` or `TileType::Vec`.
     - `Direction::DIR_C2V`: Cube produces an accumulator tile for vector consumption.
     - `Direction::DIR_V2C`: Vector produces a vector tile for cube consumption.
@@ -62,6 +63,7 @@ struct TPipe;
     - `gmTensor` must be a FIFO slot view returned by `TALLOC`.
     - Data must be written into `gmTensor` before calling `TPUSH(Pipe&, GlobalData&)`.
     - `TPUSH(Pipe&, GlobalData&)` ignores the tensor contents and only commits the FIFO slot to the consumer.
+    - The `GlobalData` slot workflow is supported on NPU and CPU simulator backends.
 
 ## Examples
 

@@ -1,120 +1,55 @@
-# TSCATTER
+# pto.tscatter
 
-## 简介
+## 概要
 
-Scatter 操作：调用方 NPU（根节点）将本地源 tensor 沿 **DIM_3**（行维度）拆分后分发到并行组中所有 rank。该操作是 `TGATHER` 的逆操作。
+`pto.tscatter` 使用一个或两个显式 UB 暂存 tile，把源 GlobalTensor 的数据分发到并行组中各 rank 的缓冲区。
 
-只有根节点需要执行 `TSCATTER`。非根节点只需确保在操作期间其目标缓冲区已分配且可写。在非根节点上调用 `TSCATTER` 属于未定义行为。
+## 语义
 
-**大 Tile 支持**：当每 rank 的数据在行和/或列方向超出 UB Tile 容量时，传输将通过二维滑动自动分块。
+已核实的 public wrapper 接受：
 
-## 数学语义
+- `parallelGroup`，
+- 源 GlobalTensor，
+- 一个暂存 tile 或一对 ping/pong tile，
+- 可选的等待事件 token。
 
-本地源 tensor 的形状为 $(D_0, D_1, D_2, N \times H, W)$，其中 $N$ 为 rank 总数，每个 rank 接收 $H$ 行。操作完成后：
-
-$$\mathrm{dst}^{(r)}_{d_0, d_1, d_2,\; i,\; j} = \mathrm{src}^{\mathrm{local}}_{d_0, d_1, d_2,\; r \cdot H + i,\; j} \quad \forall\, r \in [0, N),\; i \in [0, H),\; j \in [0, W)$$
+wrapper 会先等待所有传入事件，然后再委托给后端 scatter 实现。
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO ISA 语法与操作数](../syntax-and-operands/assembly-model_zh.md)。
-
-同步形式：
-
 ```text
-tscatter %group, %src : (!pto.group<...>, !pto.memref<...>)
+pto.tscatter %group, %src : (!pto.group<...>, !pto.memref<...>)
 ```
-
-降级时会为 GM→UB→GM 数据路径引入 UB 暂存 Tile；C++ 内建接口需要显式传入 `stagingTileData`（或 `pingTile` / `pongTile`）操作数。
 
 ## C++ 内建接口
 
-声明于 `include/pto/comm/pto_comm_inst.hpp`：
+声明于 `include/pto/comm/pto_comm_inst.hpp`。
 
 ```cpp
-// 基础 scatter（单暂存 Tile）
 template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TSCATTER(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
-                              TileData &stagingTileData, WaitEvents&... events);
+                              TileData &stagingTileData, WaitEvents &... events);
 
-// 乒乓 scatter（使用两个暂存 Tile 实现双缓冲）
 template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TSCATTER(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
-                              TileData &pingTile, TileData &pongTile, WaitEvents&... events);
+                              TileData &pingTile, TileData &pongTile, WaitEvents &... events);
 ```
 
 ## 约束
 
 !!! warning "约束"
-    - **类型约束**：
-        - `ParallelGroup::value_type::RawDType` 必须等于 `GlobalSrcData::RawDType`。
-        - `TileData::DType` 必须等于 `GlobalSrcData::RawDType`。
-    - **内存约束**：
-        - `srcGlobalData` 必须指向本地内存（当前 NPU），且足够容纳所有 rank 的数据。具体要求：`srcGlobalData.GetShape(DIM_3)` 必须 $\geq N \times H$，其中 $H$ 为每个 rank 的 `GetShape(DIM_3)`。
-        - 若 `srcGlobalData.GetShape(DIM_3) > N × H`，则只读取前 `N × H` 行，其余行被忽略。
-        - `stagingTileData`（或 `pingTile` / `pongTile`）必须预先在 UB 中分配。
-    - **ParallelGroup 约束**：
-        - `parallelGroup.tensors[r]` 必须指向 rank `r` 的目标缓冲区（从根节点视角看到的远端 GM）。
-        - `parallelGroup.GetRootIdx()` 标识调用方 NPU 为 scatter 根节点。
-        - 所有目标 tensor 假定具有相同的形状和步幅；否则行为未定义。
-    - **分块模式约束**（每 rank 数据超出单个 UB Tile 时）：
-        - 若 `TileData` 具有静态 `ValidRow`，则每个 rank 目标数据的 `GetShape(DIM_3)` 必须能被 `ValidRow` 整除。如需支持不足一行的情况，请使用 `DYNAMIC` ValidRow 的 Tile。
-        - 若 `TileData` 具有静态 `ValidCol`，则 `GetShape(DIM_4)` 必须能被 `ValidCol` 整除。如需支持不足一列的情况，请使用 `DYNAMIC` ValidCol 的 Tile。
+    - 并行组缓冲区描述、源 tensor 与暂存 tile 的元素类型必须兼容。
+    - 暂存 tile 必须位于 UB。
+    - ping/pong tile 应位于互不重叠的 UB 区域。
+    - wrapper 自身并不编码 root-only 校验；使用者需要遵守后端 collective 实现所期望的语义契约。
 
 ## 示例
 
-### 基础 Scatter（单暂存 Tile）
-
-根节点拥有 `NRANKS * ROWS` 行、宽度为 `COLS` 的数据，每个 rank 接收 `ROWS × COLS`，沿 DIM_3 拆分。
-Tile 大小可小于每 rank 的数据——此时实现会自动通过二维滑动进行分块传输。
-
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
-
 using namespace pto;
 
-template <typename T, int ROWS, int COLS, int TILE_ROWS, int TILE_COLS, int NRANKS>
-void scatter(__gm__ T* local_data, __gm__ T* group_addrs[NRANKS], int my_rank) {
-    using TileT    = Tile<TileType::Vec, T, TILE_ROWS, TILE_COLS, BLayout::RowMajor, -1, -1>;
-    using GPerRank = GlobalTensor<T, Shape<1,1,1,ROWS,COLS>,
-                                  BaseShape2D<T, ROWS, COLS, Layout::ND>, Layout::ND>;
-    using GSource  = GlobalTensor<T, Shape<1,1,1,NRANKS*ROWS,COLS>,
-                                  BaseShape2D<T, NRANKS*ROWS, COLS, Layout::ND>, Layout::ND>;
-
-    GPerRank tensors[NRANKS];
-    for (int i = 0; i < NRANKS; ++i) tensors[i] = GPerRank(group_addrs[i]);
-
-    comm::ParallelGroup<GPerRank> group(tensors, NRANKS, my_rank);
-    GSource srcG(local_data);
-    TileT stagingTile(TILE_ROWS, TILE_COLS);
+void example_scatter(auto &group, auto &srcG, auto &stagingTile) {
     comm::TSCATTER(group, srcG, stagingTile);
-}
-```
-
-### 乒乓 Scatter（双缓冲）
-
-使用两个 UB Tile，将下一块的 TLOAD（MTE2）与当前块的 TSTORE（MTE3）重叠执行。
-
-```cpp
-#include <pto/comm/pto_comm_inst.hpp>
-
-using namespace pto;
-
-template <typename T, int ROWS, int COLS, int TILE_ROWS, int TILE_COLS, int NRANKS>
-void scatter_pingpong(__gm__ T* local_data, __gm__ T* group_addrs[NRANKS], int my_rank) {
-    using TileT    = Tile<TileType::Vec, T, TILE_ROWS, TILE_COLS, BLayout::RowMajor, -1, -1>;
-    using GPerRank = GlobalTensor<T, Shape<1,1,1,ROWS,COLS>,
-                                  BaseShape2D<T, ROWS, COLS, Layout::ND>, Layout::ND>;
-    using GSource  = GlobalTensor<T, Shape<1,1,1,NRANKS*ROWS,COLS>,
-                                  BaseShape2D<T, NRANKS*ROWS, COLS, Layout::ND>, Layout::ND>;
-
-    GPerRank tensors[NRANKS];
-    for (int i = 0; i < NRANKS; ++i) tensors[i] = GPerRank(group_addrs[i]);
-
-    comm::ParallelGroup<GPerRank> group(tensors, NRANKS, my_rank);
-    GSource srcG(local_data);
-    TileT pingTile(TILE_ROWS, TILE_COLS);
-    TileT pongTile(TILE_ROWS, TILE_COLS);
-    // 乒乓模式：将 TLOAD 与 TSTORE 重叠执行以提升吞吐量
-    comm::TSCATTER(group, srcG, pingTile, pongTile);
 }
 ```

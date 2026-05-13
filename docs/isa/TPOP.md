@@ -4,7 +4,7 @@
 
 Pop a consumer tile from a `TPipe` FIFO for Cube-Vector communication.
 
-This page describes both the TileData overload and the `GlobalData` slot-view overload. In the TileData flow, `TPOP` performs both the data-ready wait and the free-space notification; a separate `TFREE` is not required for the same tile. In the `GlobalData` flow, `TPOP` returns a FIFO slot view and the caller must release it with `TFREE(Pipe&, GlobalData&)`.
+This page covers the tile-consuming `TPOP` forms and the `GlobalData` slot-view form. In the tile flow, `TPOP(Pipe&, TileData&)` already performs the wait, load, and free-space notification as one protocol step, so no extra `TFREE` is needed. In the `GlobalData` flow, `TPOP(Pipe&, GlobalData&)` returns a slot view and the caller must later release that slot with `TFREE(Pipe&, GlobalData&)`.
 
 ## Operation Semantics
 
@@ -42,7 +42,8 @@ struct TPipe;
 
 ## Constraints
 
-- **A2A3 TileData consumer**:
+- **A2A3/A5 NPU only for tile push/pop**:
+    - The tile-producing `TPUSH` / tile-consuming `TPOP` FIFO protocol is an NPU feature and is not available on the CPU simulator.
     - `TileCons::Loc` must be `TileType::Vec` or `TileType::Mat`.
     - `Direction::DIR_C2V`: vector consumes data produced by cube.
     - `Direction::DIR_V2C`: cube consumes data produced by vector.
@@ -61,6 +62,7 @@ struct TPipe;
     - `gmTensor` is assigned to the FIFO slot base address selected by `pipe.cons.tileIndex`.
     - For C2V split modes, vector subblock offsets are applied according to `Split`.
     - The caller must call `TFREE(Pipe&, GlobalData&)` after all loads from the slot view are complete.
+    - The `GlobalData` slot workflow is supported on NPU and CPU simulator backends.
 
 ## Examples
 

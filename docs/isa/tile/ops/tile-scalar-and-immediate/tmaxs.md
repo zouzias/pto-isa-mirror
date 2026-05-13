@@ -4,128 +4,84 @@
 
 ## Summary
 
-Elementwise max of a tile and a scalar: `max(src, scalar)`.
+`TMAXS` performs lane-wise maximum selection between a source tile and a scalar value.
 
-## Mechanism
-
-Elementwise max of a tile and a scalar: `max(src, scalar)`. It operates on tile payloads rather than scalar control state, and its legality is constrained by tile shape, layout, valid-region, and target-profile support.
-
-For each element `(i, j)` in the valid region:
+For every element inside the destination tile valid region:
 
 $$ \mathrm{dst}_{i,j} = \max(\mathrm{src}_{i,j}, \mathrm{scalar}) $$
 
+## Semantics
+
+`TMAXS` reads the source tile over the destination valid region and compares each lane against the scalar value, writing the lane-wise maximum into `dst`.
+
 ## Syntax
 
-Textual spelling is defined by the PTO ISA syntax-and-operands pages.
-
-Synchronous form:
+### Assembly Form (PTO-AS)
 
 ```text
-%dst = tmaxs %src, %scalar : !pto.tile<...>, f32
+%dst = tmaxs %src, %scalar : !pto.tile<...>, dtype
 ```
 
 ### AS Level 1 (SSA)
 
-```text
+```mlir
 %dst = pto.tmaxs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 ### AS Level 2 (DPS)
 
-```text
-pto.tmaxs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
+```mlir
+pto.tmaxs ins(%src, %scalar : !pto.tile_buf<...>, dtype)
+         outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
-
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TMAXS(TileDataDst& dst, TileDataSrc& src, typename TileDataSrc::DType scalar, WaitEvents&... events);
+PTO_INST RecordEvent TMAXS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar,
+                           WaitEvents &... events);
 ```
-
-## Inputs
-
-- `src` is the source tile.
-- `scalar` is the scalar value broadcast to all lanes.
-- `dst` names the destination tile.
-- The operation iterates over `dst`'s valid region.
-
-## Expected Outputs
-
-`dst` carries the result tile or updated tile payload produced by the operation.
-
-## Side Effects
-
-No architectural side effects beyond producing the destination tile. Does not implicitly fence unrelated traffic.
 
 ## Constraints
 
 !!! warning "Constraints"
-    - **Common constraints**:
-        - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-        - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-        - Runtime: `dst` and `src` must have the same valid row/col.
-        - Scalar type must match the Tile data type.
-
-    - **Valid region**:
-        - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
-
-## Exceptions
-
-!!! danger "Exceptions"
-    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+    - `dst` and `src` must use the same element type.
+    - The scalar type must match the source tile element type.
+    - NPU backends require vector-tile execution paths.
+    - The documented backends require at least matching valid columns; A2/A3 also explicitly checks matching valid rows and non-zero destination valid extents.
 
 ## Target-Profile Restrictions
 
 ??? info "Target-Profile Restrictions"
-    - **Implementation checks (A2A3)**:
-        - `TileData::DType` must be one of: `int32_t`, `int16_t`, `half`, `float`.
-        - Tile layout must be row-major (`TileData::isRowMajor`).
+    | Element type | CPU Simulator | A2/A3 | A5 |
+    |---|---|---|---|
+    | `f32` | not verified in this pass | Supported | Supported |
+    | `f16` | not verified in this pass | Supported | Supported |
+    | `i32` | not verified in this pass | Supported | Supported |
+    | `i16` | not verified in this pass | Supported | Supported |
+    | `u32` | not verified in this pass | No | Supported |
+    | `u16` | not verified in this pass | No | Supported |
+    | `u8` | not verified in this pass | No | Supported |
+    | `i8` | not verified in this pass | No | Supported |
+    | `bf16` | not verified in this pass | No | No in verified file | Supported in doc was overstated |
 
-    - **Implementation checks (A5)**:
-        - `TileData::DType` must be one of: `int32_t`, `uint32_t`, `float`, `int16_t`, `uint16_t`, `half`, `bfloat16_t`, `uint8_t`, `int8_t`.
-        - Tile layout must be row-major (`TileData::isRowMajor`).
+    Notes:
+
+    - A2/A3 currently accepts `int32_t`, `int16_t`, `half`/`float16_t`, and `float`/`float32_t`.
+    - A5 currently accepts `int32_t`, `uint32_t`, `float`, `int16_t`, `uint16_t`, `half`, `bfloat16_t`, `uint8_t`, and `int8_t`.
 
 ## Examples
 
 ```cpp
 #include <pto/pto-inst.hpp>
-
 using namespace pto;
 
 void example() {
-  using TileT = Tile<TileType::Vec, float, 16, 16>;
-  TileT x, out;
-  TMAXS(out, x, 0.0f);
+    using TileT = Tile<TileType::Vec, float, 16, 16>;
+    TileT x, out;
+    TMAXS(out, x, 0.0f);
 }
-```
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tmaxs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: bind resources explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tmaxs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = tmaxs %src, %scalar : !pto.tile<...>, f32
-# AS Level 2 (DPS)
-pto.tmaxs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## Related Ops / Instruction Set Links

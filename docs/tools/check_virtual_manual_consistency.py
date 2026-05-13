@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 from pathlib import Path
+from typing import List, Tuple
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -84,13 +85,13 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="ignore")
 
 
-def check_required_pages(errors: list[str]) -> None:
+def check_required_pages(errors: List[str]) -> None:
     for rel in REQUIRED_PAGES:
         if not (REPO_ROOT / rel).exists():
             errors.append(f"missing required PTO ISA page: {rel}")
 
 
-def check_nav(errors: list[str]) -> None:
+def check_nav(errors: List[str]) -> None:
     text = read(MKDOCS_YML)
     last = -1
     for section in EXPECTED_NAV_SECTIONS:
@@ -113,7 +114,7 @@ def check_nav(errors: list[str]) -> None:
         errors.append("MkDocs nav must use Tile, Vector, Scalar, Communication, and System Scheduling only")
 
 
-def check_isa_source_of_truth(errors: list[str]) -> None:
+def check_isa_source_of_truth(errors: List[str]) -> None:
     text = read(REPO_ROOT / "docs" / "isa" / "README.md")
     required = [
         "This directory is the canonical PTO ISA tree",
@@ -125,7 +126,7 @@ def check_isa_source_of_truth(errors: list[str]) -> None:
             errors.append(f"docs/isa/README.md is missing source-of-truth statement: {snippet}")
 
 
-def _scan_ptoas_forbidden_links(path: Path, forbidden: tuple[str, ...], errors: list[str]) -> None:
+def _scan_ptoas_forbidden_links(path: Path, forbidden: Tuple[str, ...], errors: List[str]) -> None:
     text = read(path)
     for needle in forbidden:
         if needle in text:
@@ -137,7 +138,7 @@ def _scan_ptoas_forbidden_links(path: Path, forbidden: tuple[str, ...], errors: 
             return
 
 
-def check_ptoas_single_location(errors: list[str]) -> None:
+def check_ptoas_single_location(errors: List[str]) -> None:
     for rel in REMOVED_PTOAS_PAGES:
         if (REPO_ROOT / rel).exists():
             errors.append(f"duplicate PTO-AS manual source remains: {rel}")
@@ -157,7 +158,7 @@ def _is_allowed_mkdocs_src(rel: str) -> bool:
     return any(rel.startswith(prefix) for prefix in ALLOWED_MKDOCS_SRC_PREFIXES)
 
 
-def check_mkdocs_source_hygiene(errors: list[str]) -> None:
+def check_mkdocs_source_hygiene(errors: List[str]) -> None:
     tracked = subprocess.check_output(
         ["git", "ls-files", "docs/mkdocs/src"],
         cwd=REPO_ROOT,
@@ -176,7 +177,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="compatibility flag; checks are always performed")
     _ = parser.parse_args()
 
-    errors: list[str] = []
+    errors: List[str] = []
     check_required_pages(errors)
     check_nav(errors)
     check_isa_source_of_truth(errors)

@@ -4,162 +4,95 @@
 
 ## Summary
 
-Elementwise absolute value of a tile.
+`TABS` computes the elementwise absolute value of a source tile into a destination tile.
 
-## Mechanism
-
-For each element `(i, j)` in the valid region:
+For every element inside the destination tile valid region:
 
 $$ \mathrm{dst}_{i,j} = \left|\mathrm{src}_{i,j}\right| $$
 
+## Semantics
+
+`TABS` iterates over the destination valid region and applies absolute value lane-wise.
+
+Backend implementations expect the source and destination valid shapes to match at use sites.
+
 ## Syntax
 
-Textual spelling is defined by the PTO ISA syntax-and-operands pages.
-
-Synchronous form:
+### Assembly Form (PTO-AS)
 
 ```text
-%dst = tabs %src : !pto.tile<...> -> !pto.tile<...>
+%dst = tabs %src : !pto.tile<...>
 ```
 
 ### AS Level 1 (SSA)
 
-```text
+```mlir
 %dst = pto.tabs %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
 ### AS Level 2 (DPS)
 
-```text
-pto.tabs ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```mlir
+pto.tabs ins(%src : !pto.tile_buf<...>)
+         outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ Intrinsic
-
-Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TABS(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events);
 ```
 
-## Inputs
-
-| Operand | Role | Description |
-|---------|------|-------------|
-| `%src` | Source tile | Source tile; read at `(i, j)` for each `(i, j)` in `dst` valid region |
-| `%dst` | Destination tile | Destination tile receiving the result |
-| `WaitEvents...` | Optional synchronisation | `RecordEvent` tokens to wait on before issuing the operation |
-
-## Expected Outputs
-
-| Result | Type | Description |
-|--------|------|-------------|
-| `%dst` | `!pto.tile<...>` | Destination tile; all `(i, j)` in its valid region contain `|src[i,j]|` after the operation |
-
-## Side Effects
-
-No architectural side effects beyond producing the destination tile. Does not implicitly fence unrelated traffic.
-
 ## Constraints
 
 !!! warning "Constraints"
-    - **Valid region**:
-        - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+    - `src` and `dst` must use a backend-supported element type.
+    - A2/A3 and A5 support RowMajor vector-tile execution paths.
+    - CPU simulator supports the documented CPU implementation types and uses tile offset mapping.
+    - Source and destination valid shapes should match for legal use.
 
-## Exceptions
+## Target-Profile Restrictions
 
-!!! danger "Exceptions"
-    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+??? info "Target-Profile Restrictions"
+    | Element type | CPU Simulator | A2/A3 | A5 |
+    |---|---|---|---|
+    | `f32` | Supported | Supported | Supported |
+    | `f16` | Supported | Supported | Supported |
+    | `bf16` | Supported | No | Supported |
+    | `i32` | Supported | No | No |
+    | `i16` | Supported | No | No |
+
+    Notes:
+
+    - CPU simulator currently accepts `int32_t`/`int`, `int16_t`, `half`, `bfloat16_t`, and `float`.
+    - NPU `TABS` is implemented through unary vector paths and is narrower in type support than binary ops.
 
 ## Performance
 
 ### A2/A3 Throughput
 
-`TABS` compiles to CCE vector instructions via the `TUnaryOp.hpp` performance model:
-
-| Metric | Value |
-|--------|-------|
-| Startup latency | 13 |
-| Completion latency | 26 (FP transcendental) |
-| Per-repeat throughput | 1 |
-| Pipeline interval | 18 |
-
----
-
-## Target-Profile Restrictions
-
-??? info "Target-Profile Restrictions"
-    - **Implementation checks (CPU sim)**:
-        - `TileData::DType` must be one of: `int32_t`, `int`, `int16_t`, `half`, `float`.
-        - The implementation iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
-
-    - **Implementation checks (Costmodel)**:
-        - `TileData::DType` must be one of: `int32_t`、`int16_t`、`int8_t`、`uint8_t`、`half`、`float`.
-
-    - **Implementation checks (NPU)**:
-        - `TileData::DType` must be one of: `float` or `half`;
-        - Tile location must be vector (`TileData::Loc == TileType::Vec`);
-        - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`;
-        - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`;
-        - Tile layout must be row-major (`TileData::isRowMajor`).
+`TABS` is implemented through the unary-op backend path. Exact total cycles depend on the selected unary instruction schedule and tile geometry.
 
 ## Examples
 
-### Auto
+### C++
 
 ```cpp
 #include <pto/pto-inst.hpp>
-
 using namespace pto;
 
 void example_auto() {
-  using TileT = Tile<TileType::Vec, float, 16, 16>;
-  TileT src, dst;
-  TABS(dst, src);
+    using TileT = Tile<TileType::Vec, float, 16, 16>;
+    TileT src, dst;
+    TABS(dst, src);
 }
 ```
 
-### Manual
+### MLIR
 
-```cpp
-#include <pto/pto-inst.hpp>
-
-using namespace pto;
-
-void example_manual() {
-  using TileT = Tile<TileType::Vec, float, 16, 16>;
-  TileT src, dst;
-  TASSIGN(src, 0x1000);
-  TASSIGN(dst, 0x2000);
-  TABS(dst, src);
-}
-```
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+```mlir
 %dst = pto.tabs %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: bind resources explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tabs %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = tabs %src : !pto.tile<...> -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tabs ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## Related Ops / Instruction Set Links

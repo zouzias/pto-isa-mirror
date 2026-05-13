@@ -4,21 +4,28 @@
 
 ## Summary
 
-Elementwise division of two tiles.
+`TDIV` performs lane-wise division of two source tiles into a destination tile.
 
-## Mechanism
-
-Elementwise division of two tiles.
-
-For each element `(i, j)` in the valid region:
+For every element inside the destination tile valid region:
 
 $$ \mathrm{dst}_{i,j} = \frac{\mathrm{src0}_{i,j}}{\mathrm{src1}_{i,j}} $$
 
+## Semantics
+
+`TDIV` reads corresponding lanes from `src0` and `src1` over the destination valid region and writes the quotient into `dst`.
+
+Backend implementations require the source valid regions to match the destination valid region.
+
+`PrecisionType` selects the backend division path where supported.
+
+## Precision Modes
+
+- `DivAlgorithm::DEFAULT`
+- `DivAlgorithm::HIGH_PRECISION`
+
 ## Syntax
 
-Textual spelling is defined by the PTO ISA syntax-and-operands pages.
-
-Synchronous form:
+### Assembly Form (PTO-AS)
 
 ```text
 %dst = tdiv %src0, %src1 : !pto.tile<...>
@@ -26,19 +33,18 @@ Synchronous form:
 
 ### AS Level 1 (SSA)
 
-```text
+```mlir
 %dst = pto.tdiv %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### AS Level 2 (DPS)
 
-```text
-pto.tdiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```mlir
+pto.tdiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
+         outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ Intrinsic
-
-Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0,
@@ -46,135 +52,52 @@ template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, type
 PTO_INST RecordEvent TDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events);
 ```
 
-`PrecisionType` has the following values available:
-
-* `DivAlgorithm::DEFAULT`: Normal algorithm, faster but with lower precision.
-* `DivAlgorithm::HIGH_PRECISION`: High precision algorithm, but slower.
-
-## Inputs
-
-| Operand | Role | Description |
-|---------|------|-------------|
-| `%src0` | Left tile | First source tile; read at `(i, j)` for each `(i, j)` in `dst` valid region |
-| `%src1` | Right tile | Second source tile; read at `(i, j)` for each `(i, j)` in `dst` valid region |
-| `WaitEvents...` | Optional synchronisation | `RecordEvent` tokens to wait on before issuing the operation |
-
-## Expected Outputs
-
-| Result | Type | Description |
-|--------|------|-------------|
-| `%dst` | `!pto.tile<...>` | Destination tile; all `(i, j)` in its valid region contain `src0[i,j] / src1[i,j]` after the operation |
-
-## Side Effects
-
-No architectural side effects beyond producing the destination tile. Does not implicitly fence unrelated traffic.
-
 ## Constraints
 
 !!! warning "Constraints"
-    - **Valid region**:
-        - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
-
-    - **Division-by-zero**:
-        - Behavior is target-defined.
-
-## Exceptions
-
-!!! danger "Exceptions"
-    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
-    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+    - `dst`, `src0`, and `src1` must use the same element type on the documented NPU backends.
+    - `src0`, `src1`, and `dst` must have the same runtime valid shape on the documented NPU backends.
+    - A2/A3 and A5 require RowMajor NPU execution paths.
+    - Division-by-zero behavior is backend-defined.
 
 ## Target-Profile Restrictions
 
 ??? info "Target-Profile Restrictions"
-    - **Implementation checks (A2A3)**:
-        - `TileData::DType` must be one of: `half`, `float`.
-        - Tile layout must be row-major (`TileData::isRowMajor`).
-        - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-        - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-        - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
+    | Element type | CPU Simulator | A2/A3 | A5 |
+    |---|---|---|---|
+    | `f32` | Supported | Supported | Supported |
+    | `f16` | Supported | Supported | Supported |
+    | `i32` | Supported | No | Supported |
+    | `u32` | Supported | No | Supported |
+    | `i16` | Supported | No | Supported |
+    | `u16` | Supported | No | Supported |
+    | `u8` | Supported | No | Supported |
+    | `i8` | Supported | No | Supported |
+    | `bf16` | not verified in CPU table | No | Supported |
 
-    - **Implementation checks (A5)**:
-        - `TileData::DType` must be one of: `int32_t`, `uint32_t`, `float`, `int16_t`, `uint16_t`, `half`.
-        - Tile layout must be row-major (`TileData::isRowMajor`).
-        - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-        - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-        - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
+    Notes:
 
-    - **High Precision Algorithm**
-        - Only available on A5, `PrecisionType` option is ignored on A3.
+    - A2/A3 currently accepts only `half`/`float16_t` and `float`/`float32_t`.
+    - A5 currently accepts `int32_t`, `uint32_t`, `float`, `int16_t`, `uint16_t`, `half`, `bfloat16_t`, `uint8_t`, and `int8_t`.
+    - `DivAlgorithm::HIGH_PRECISION` is meaningfully implemented on A5 for selected floating-point paths; A2/A3 does not expose a distinct high-precision backend path.
 
 ## Performance
 
 ### A2/A3 Throughput
 
-`TDIV` compiles to CCE vector instructions via the `TBinOp.hpp` performance model. The throughput is identical to `TADD` (binary arithmetic):
-
-| Metric | Value (FP) | Value (INT) |
-|--------|-------------|-------------|
-| Startup latency | 14 | 14 |
-| Completion latency | 19 | 17 |
-| Per-repeat throughput | 2 | 2 |
-| Pipeline interval | 18 | 18 |
-
----
+`TDIV` lowers through the binary-op helper family but has operation-specific backend cost characteristics; it should not be documented as identical to plain add/sub timing without a verified cost-model source.
 
 ## Examples
 
-### Auto
-
 ```cpp
 #include <pto/pto-inst.hpp>
-
 using namespace pto;
 
 void example_auto() {
-  using TileT = Tile<TileType::Vec, float, 16, 16>;
-  TileT src0, src1, dst;
-  TDIV(dst, src0, src1);
+    using TileT = Tile<TileType::Vec, float, 16, 16>;
+    TileT src0, src1, dst;
+    TDIV(dst, src0, src1);
 }
-```
-
-### Manual
-
-```cpp
-#include <pto/pto-inst.hpp>
-
-using namespace pto;
-
-void example_manual() {
-  using TileT = Tile<TileType::Vec, float, 16, 16>;
-  TileT src0, src1, dst;
-  TASSIGN(src0, 0x1000);
-  TASSIGN(src1, 0x2000);
-  TASSIGN(dst,  0x3000);
-  TDIV(dst, src0, src1);
-}
-```
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tdiv %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: bind resources explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tdiv %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = tdiv %src0, %src1 : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tdiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## Related Ops / Instruction Set Links

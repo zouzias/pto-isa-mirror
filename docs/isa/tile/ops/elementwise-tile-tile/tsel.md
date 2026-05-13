@@ -4,27 +4,17 @@
 
 ## Summary
 
-Per-element conditional selection between two tiles using a predicate mask.
+`TSEL` performs lane-wise conditional selection between two source tiles under control of a packed predicate mask tile.
 
-## Mechanism
+## Semantics
 
-For each element `(i, j)` in the destination's valid region:
+For each logical destination lane in the active valid region, `TSEL` selects either `src0` or `src1` according to the predicate information encoded in `selMask`.
 
-$$
-\mathrm{dst}_{i,j} =
-\begin{cases}
-\mathrm{src0}_{i,j} & \text{if } \mathrm{mask}_{i,j}\ \text{is true (non-zero)} \\
-\mathrm{src1}_{i,j} & \text{otherwise}
-\end{cases}
-$$
-
-The predicate mask tile uses a target-defined packed encoding. A temporary tile (`tmp`) is required as a working buffer for predicate unpacking.
+The exact in-memory representation of `selMask` is backend-specific and is tied to the packed compare-mask conventions used by predicate-producing operations such as `TCMP` / `TCMPS`.
 
 ## Syntax
 
-Textual spelling is defined by the PTO ISA syntax-and-operands pages.
-
-Synchronous form:
+### Assembly Form (PTO-AS)
 
 ```text
 %dst = tsel %mask, %src0, %src1 : !pto.tile<...>
@@ -32,19 +22,18 @@ Synchronous form:
 
 ### AS Level 1 (SSA)
 
-```text
+```mlir
 %dst = pto.tsel %mask, %src0, %src1 : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### AS Level 2 (DPS)
 
-```text
-pto.tsel ins(%mask, %src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```mlir
+pto.tsel ins(%mask, %src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>)
+         outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ Intrinsic
-
-Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileData, typename MaskTile, typename TmpTile, typename... WaitEvents>
@@ -52,125 +41,51 @@ PTO_INST RecordEvent TSEL(TileData &dst, MaskTile &selMask, TileData &src0,
                           TileData &src1, TmpTile &tmp, WaitEvents &... events);
 ```
 
-**Parameters:**
-- `dst`: destination tile receiving the selected values.
-- `selMask`: predicate mask tile. Lane `(i,j)` is true if non-zero; selects `src0[i,j]`.
-- `src0`: source tile selected when mask lane is true.
-- `src1`: source tile selected when mask lane is false.
-- `tmp`: required temporary working tile for predicate unpacking. Must have compatible shape.
-
-## Inputs
-
-| Operand | Role | Description |
-|---------|------|-------------|
-| `%dst` | Destination tile | Destination tile receiving the selected values |
-| `%mask` | Predicate mask tile | Predicate mask; lane `(i,j)` selects from `src0` if non-zero, otherwise from `src1` |
-| `%src0` | True-value source tile | Source tile selected for mask-true lanes; read at `(i, j)` for each `(i, j)` in `dst` valid region |
-| `%src1` | False-value source tile | Source tile selected for mask-false lanes; read at `(i, j)` for each `(i, j)` in `dst` valid region |
-| `%tmp` | Temporary tile | Required temporary working tile for predicate unpacking |
-| `WaitEvents...` | Optional synchronisation | `RecordEvent` tokens to wait on before issuing the operation |
-
-## Expected Outputs
-
-| Result | Type | Description |
-|--------|------|-------------|
-| `%dst` | `!pto.tile<...>` | Destination tile; all `(i, j)` in its valid region contain `src0[i,j]` where mask is true, otherwise `src1[i,j]` after the operation |
-
-## Side Effects
-
-No architectural side effects beyond producing the destination tile. Does not implicitly fence unrelated traffic.
-
 ## Constraints
 
 !!! warning "Constraints"
-    - `sizeof(TileData::DType)` MUST be `2` or `4` bytes.
-    - `dst`, `src0`, and `src1` MUST use the **same element type**.
-    - `dst`, `src0`, and `src1` MUST be row-major layout.
-    - `dst`, `src0`, and `src1` MUST have the same declared shape.
-    - `selMask` layout MUST be compatible with the target's predicate unpacking format.
-    - The iteration domain is `dst.GetValidRow()` × `dst.GetValidCol()`.
-    - `tmp` MUST have sufficient capacity to hold intermediate predicate bits; its exact requirements are target-defined.
-
-## Cases That Are Not Allowed
-
-!!! danger "Cases That Are Not Allowed"
-    - **MUST NOT** use non-row-major `dst`/`src0`/`src1` tiles.
-    - **MUST NOT** use `dst`/`src0`/`src1` with different declared shapes.
+    - `dst`, `src0`, and `src1` must use the same element type.
+    - A2/A3 requires 2-byte or 4-byte destination/source element sizes.
+    - A5 supports 1-byte, 2-byte, and 4-byte destination/source element sizes.
+    - `dst`, `src0`, and `src1` must use RowMajor layout on NPU backends.
+    - `selMask` must use a predicate-mask storage format compatible with the selected backend.
+    - `tmp` is required by the API and participates in backend-specific mask handling.
 
 ## Target-Profile Restrictions
 
 ??? info "Target-Profile Restrictions"
-    | Check | A2/A3 | A5 |
-    |-------|:-----:|:--:|
-    | Supported dtypes | `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float` | Same |
-    | sizeof(dtype) | 2 or 4 bytes | Same |
-    | Row-major layout | Required | Required |
-    | Same shape (dst/src0/src1) | Required | Required |
-    | `tmp` tile required | Yes | Yes |
+    | Property | CPU Simulator | A2/A3 | A5 |
+    |---|---|---|---|
+    | Data element sizes | follows CPU implementation behavior | 2 or 4 bytes | 1, 2, or 4 bytes |
+    | RowMajor requirement | not enforced in the same way as NPU docs | Required | Required |
+    | Packed predicate mask | byte-packed CPU interpretation | backend-specific packed format | backend-specific packed format |
+    | `tmp` required in API | Yes | Yes | Yes |
 
-## Performance
+    Notes:
 
-### A2/A3 Throughput
+    - CPU simulator currently interprets the mask tile as packed bits and does not use `tmp` for functional behavior.
+    - A2/A3 uses temporary storage to materialize compare masks before issuing `vsel`.
+    - A5 has separate 32-bit and 8/16-bit selection paths and still requires the `tmp` parameter in the public API.
 
-`TSEL` compiles to CCE vector instructions via the `TBinOp.hpp` performance model. The throughput is identical to `TADD` (binary arithmetic):
+## Relationship with `TCMP` / `TCMPS`
 
-| Metric | Value (FP) | Value (INT) |
-|--------|-------------|-------------|
-| Startup latency | 14 | 14 |
-| Completion latency | 19 | 17 |
-| Per-repeat throughput | 2 | 2 |
-| Pipeline interval | 18 | 18 |
-
----
+`TSEL` is typically paired with a packed predicate tile produced by `TCMP` or `TCMPS`. The producer and consumer must agree on the same backend-specific packing convention.
 
 ## Examples
 
-### Auto
-
 ```cpp
 #include <pto/pto-inst.hpp>
-
 using namespace pto;
 
 void example_auto() {
-  using TileT = Tile<TileType::Vec, float, 16, 16>;
-  using MaskT = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
-  using TmpT = Tile<TileType::Vec, uint32_t, 1, 16>;
-  TileT src0, src1, dst;
-  MaskT mask(16, 2);
-  TmpT tmp;
-  TSEL(dst, mask, src0, src1, tmp);
+    using TileT = Tile<TileType::Vec, float, 16, 16>;
+    using MaskT = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
+    using TmpT = Tile<TileType::Vec, uint32_t, 1, 16>;
+    TileT src0, src1, dst;
+    MaskT mask(16, 2);
+    TmpT tmp;
+    TSEL(dst, mask, src0, src1, tmp);
 }
-```
-
-### Manual
-
-```cpp
-#include <pto/pto-inst.hpp>
-
-using namespace pto;
-
-void example_manual() {
-  using TileT = Tile<TileType::Vec, float, 16, 16>;
-  using MaskT = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
-  using TmpT = Tile<TileType::Vec, uint32_t, 1, 16>;
-  TileT src0, src1, dst;
-  MaskT mask(16, 2);
-  TmpT tmp;
-  TASSIGN(src0, 0x1000);
-  TASSIGN(src1, 0x2000);
-  TASSIGN(dst,  0x3000);
-  TASSIGN(mask, 0x4000);
-  TASSIGN(tmp,  0x5000);
-  TSEL(dst, mask, src0, src1, tmp);
-}
-```
-
-### PTO Assembly Form
-
-```text
-%dst = tsel %mask, %src0, %src1 : !pto.tile<...>
-pto.tsel ins(%mask, %src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## Related Ops / Instruction Set Links

@@ -1,47 +1,59 @@
 # 通信指令族
 
-通信指令族覆盖跨 NPU collective、点到点交换和通知协议。这些操作需要并行组或远端 rank 语义，不能和 tile payload 计算或系统调度协议混在同一个分类中。
+通信指令族覆盖跨 NPU 的点对点传输、集合数据搬运、集合归约以及基于 signal 的同步。
 
-## 指令族概览
+## 指令概览
 
-| 指令族 | 说明 | Profile |
-| --- | --- | --- |
-| 通信与运行时 | 并行组上的点对点与集合通信 | A2/A3, A5 |
+| 操作 | PTO 名称 | 说明 |
+|---|---|---|
+| 点对点 put | `pto.tput` | 同步远程写入 |
+| 点对点 get | `pto.tget` | 同步远程读取 |
+| 异步 put | `pto.tput_async` | 返回 `AsyncEvent` 的异步远程写入 |
+| 异步 get | `pto.tget_async` | 返回 `AsyncEvent` 的异步远程读取 |
+| Broadcast | `pto.tbroadcast` | 从源缓冲区广播到组内各 rank 目标缓冲区 |
+| Scatter | `pto.tscatter` | 从源缓冲区向组内各 rank 分发 |
+| Gather | `pto.tgather` | 从组内各 rank 收集到目标缓冲区 |
+| Reduce | `pto.treduce` | 归约到目标缓冲区 |
+| Notify | `pto.tnotify` | signal / notify 更新 |
+| Test | `pto.ttest` | 非阻塞 signal 测试 |
+| Wait | `pto.twait` | 阻塞 signal 等待 |
 
-### 通信与运行时
+## 共享编程模型
 
-这组操作跨越并行组，需要 `ParallelGroup` 句柄，并引入网络 / 互连可见的排序与副作用。
+`include/pto/comm/pto_comm_inst.hpp` 中已核实的 public wrapper 展示出若干共同模式：
 
-| 类别 | 操作 |
-|------|------|
-| 集合广播 | `tbroadcast`、`tscatter`、`tgather` |
-| 点对点 | `tget`、`tget_async`、`tput`、`tput_async` |
-| 集合归约 | `treduce` |
-| 通知协议 | `tnotify`、`ttest`、`twait` |
+- 同步的数据搬运类通信 wrapper 返回 `RecordEvent`；
+- `TNOTIFY` 和 `TWAIT` 返回 `void`，`TTEST` 返回 `bool`；
+- wrapper 在分发到底层实现前会先等待所有传入事件 token；
+- 多个 collective 和点对点搬运操作提供显式的单暂存 tile 与 ping-pong 暂存 tile overload；
+- 异步点对点操作使用 `AsyncSession`，并返回 `AsyncEvent`。
 
-## 共享操作数模型
+## 共享操作数
 
-- 通信族使用并行组句柄、GM 视图、暂存 tile 和异步事件对象。
+通信指令可能使用：
 
-## 共享副作用
-
-- 通信族会引入跨 NPU 的排序与可见性副作用。
+- `ParallelGroup` 句柄，
+- 源 / 目标 `GlobalTensor` 视图，
+- 显式暂存 tile，
+- reduction / compare / notify 枚举，
+- `RecordEvent` 与 `AsyncEvent` 同步对象。
 
 ## 共享约束
 
-- 并行组一致性
-- 缓冲区角色与尺寸匹配
-- profile 支持子集明确可见
+!!! warning "约束"
+    - collective 操作依赖参与 rank 之间语义一致的 `ParallelGroup` 契约。
+    - 缓冲区角色、元素兼容性、layout 兼容性以及暂存 tile 要求都属于具体操作约束，请以各 per-op 页面为准。
+    - 异步操作要求先构建 `AsyncSession`，并通过返回的 `AsyncEvent` 显式检查完成状态。
+    - CPU 仿真器可用性与后端特定传输限制依赖具体实现；必要时请查看各操作页面与后端代码。
 
 ## 不允许的情形
 
 !!! danger "不允许的情形"
-    - 集合操作中各 rank 的协议不一致
-    - 依赖未声明的 backend 便利实现
-    - 在 CPU simulator 上使用通信指令
+    - 把后端特定的 collective 约定当成 public wrapper 已显式校验的通用规则。
+    - 在未通过相应 `AsyncEvent` API 检查完成状态前就复用异步结果。
+    - 未核对具体契约就假定一个通信操作的 root / rank 规则可直接套用到另一个操作。
 
 ## 相关页面
 
-- [通信指令集](./communication-families_zh.md)
 - [通信指令参考](../comm/README_zh.md)
-- [通信运行时契约](../comm/communication-runtime_zh.md)
+- [通信与运行时](../comm/communication-runtime_zh.md)
