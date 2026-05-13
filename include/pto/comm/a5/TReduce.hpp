@@ -7,4 +7,38 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
+#ifndef PTO_COMM_A5_TREDUCE_HPP
+#define PTO_COMM_A5_TREDUCE_HPP
+
+// AIV path - shared with a2a3, forwarded to avoid code duplication.
 #include "pto/comm/a2a3/TReduce.hpp"
+
+// CCU path - A5-only implementation used by TREDUCE<CollEngine::CCU>.
+#include "pto/comm/comm_types.hpp"
+#include "pto/comm/async_common/ccu_trigger.hpp"
+
+namespace pto {
+namespace comm {
+
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
+PTO_INTERNAL void TREDUCE_CCU_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
+                                   TileData &accTileData, TileData &recvTileData, ReduceOp op,
+                                   const CcuTriggerContext &ctx, WaitEvents &... events)
+{
+    WaitAllEvents(events...);
+    pto::comm::ccu::CkeTriggerFromTile(ctx.ckeSlotVA, ctx.mask, accTileData);
+}
+
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
+PTO_INTERNAL void TREDUCE_CCU_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
+                                   TileData &accTileData, TileData &pingTileData, TileData &pongTileData,
+                                   ReduceOp op, const CcuTriggerContext &ctx, WaitEvents &... events)
+{
+    WaitAllEvents(events...);
+    pto::comm::ccu::CkeTriggerFromTile(ctx.ckeSlotVA, ctx.mask, accTileData);
+}
+
+} // namespace comm
+} // namespace pto
+
+#endif // PTO_COMM_A5_TREDUCE_HPP
