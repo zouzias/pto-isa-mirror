@@ -49,7 +49,7 @@ AICORE inline void Check()
 }
 
 template <typename DstTileData, typename SrcTileData, typename TmpTileData, typename T, int Cols, int topk>
-PTO_INTERNAL void SortTailBlock(DstTileData &dstTile, SrcTileData &srcTile, TmpTileData tmpTile, int blockLen)
+PTO_INTERNAL void SortTailBlock(DstTileData &dstTile, SrcTileData &srcTile, TmpTileData &tmpTile, int blockLen)
 {
     TmpTileData tmp1Tile(1, Cols);
 
@@ -101,7 +101,7 @@ PTO_INTERNAL void MrgsortSingleRow(DstTileData &dstTile, SrcTileData &srcTile)
 
     // sort tail block
     if (blockLen < valid_col) {
-        SortTailBlock<DstTileData, SrcTileData, SrcTileData, T, valid_col, dtopk>(srcTile, srcTile, blockLen);
+        SortTailBlock<DstTileData, SrcTileData, SrcTileData, T, valid_col, dtopk>(srcTile, srcTile, tmpTile, blockLen);
     } 
 
     SrcTileData tmpMovTile(1, dtopk);
@@ -110,15 +110,15 @@ PTO_INTERNAL void MrgsortSingleRow(DstTileData &dstTile, SrcTileData &srcTile)
     
 }
 
-template <typename T, typename DstTileData, typename SrcTileData, typename RowTile, int kTRows_, int kTCols_,
+template <typename T, typename DstTileData, typename SrcTileData, typename DstRowTile, typename SrcRowTile, int kTRows_, int kTCols_,
           int validRow, int validCol, int topk>
 PTO_INTERNAL void MrgsortSingleTile(DstTileData &dstTile, SrcTileData &srcTile)
 {
-    RowTile rowSrcTile(1, validCol);
+    DstRowTile rowSrcTile(1, validCol);
     TRESHAPE(rowSrcTile, srcTile);
-    RowTile rowDstTile(1, validCol);
+    SrcRowTile rowDstTile(1, validCol);
     TRESHAPE(rowDstTile, dstTile);
-    MrgsortSingleRow<RowTile, RowTile, 1, kTCols_, 1, validCol, topk>(rowDstTile, rowSrcTile);
+    MrgsortSingleRow<DstRowTile, SrcRowTile, 1, kTCols_, 1, validCol, topk>(rowDstTile, rowSrcTile);
 }
 
 template <typename T, typename DstTileData, typename SrcTileData, typename IdxTileData, 
@@ -191,8 +191,8 @@ AICORE inline void ProcessSingleRow(GlobalData &srcGlobal, DstDataGlobalData &ds
     MrgsortSingleTile<T, DstTileData, DstTileData, DstRowTileData, DstRowTileData, SINGLE_LOOP_ROW, dstCols, SINGLE_LOOP_ROW,
                       dstCols, topk * 2 * TYPE_COEF>(mrgDstTile, sort32DstTile);
 
-    ExtractDataOrIndex<T, DstDataTileData, DstTileData, DstRowTileData, DstRowTileData, IdxRowTile, 0>(dTile, mrgDstTile);
-    ExtractDataOrIndex<T, DstIndexTileData, DstTileData, IdxRowTile, DstRowTileData, DstIdxRowTile, 1>(iTile, mrgDstTile);
+    ExtractDataOrIndex<T, DstDataTileData, DstTileData, DstRowTileData, DstRowTileData, 0>(dTile, mrgDstTile);
+    ExtractDataOrIndex<T, DstIndexTileData, DstTileData, IdxRowTile, DstRowTileData, 1>(iTile, mrgDstTile);
 
     TSTORE(dstDataGlobal, dTile);
     TSTORE(dstIdxGlobal, iTile);
