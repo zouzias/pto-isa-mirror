@@ -136,23 +136,36 @@ __global__ AICORE void runRouterStage2Argmax(
     __gm__ T_    *logits    = reinterpret_cast<__gm__ T_    *>(logits_raw);
     __gm__ TIdx_ *expert_id = reinterpret_cast<__gm__ TIdx_ *>(expert_id_raw);
 
+    // GM layout: expert_id is a flat [kT] uint32 array. Declared as [1, kT]
+    // RowMajor so the alignment-compliant TSTORE source can be a [1, kT]
+    // RowMajor reshape view (mirrors §A4 trowsum DN pattern).
     using LogitsGlobal   = GlobalTensor<T_,    Shape<1, 1, 1, kT, kE>, Stride<1, 1, 1, kE, 1>>;
-    using ExpertIdGlobal = GlobalTensor<TIdx_, Shape<1, 1, 1, kT, 1 >, Stride<1, 1, 1, 1 , 1>>;
+    using ExpertIdGlobal = GlobalTensor<TIdx_, Shape<1, 1, 1, 1,  kT>, Stride<1, 1, 1, kT, 1>>;
 
     using LogitsTile    = Tile<TileType::Vec, T_,    kT, kE, BLayout::RowMajor, -1, -1>;
     using TmpTile       = Tile<TileType::Vec, T_,    kT, kE, BLayout::RowMajor, -1, -1>;
-    using ExpertIdTile  = Tile<TileType::Vec, TIdx_, kT, 1,  BLayout::RowMajor, -1, -1>;
+    // [kT, 1] RowMajor uint32 would fail the static_assert
+    // ([pto_tile.hpp:1510-1522]): Cols*sizeof(uint32) = 4 < 32-byte align.
+    // Use ColMajor [kT, 1] so the alignment check switches to Rows*sizeof,
+    // which is 256*4 = 1024 (32-aligned). Same trick as §A4 trowsum.
+    using ExpertIdTile     = Tile<TileType::Vec, TIdx_, kT, 1, BLayout::ColMajor, kT, 1>;
+    // RowMajor [1, kT] reshape view used as the TSTORE source. Same memory
+    // layout (kT contiguous uint32s) but a layout TSTORE accepts; mirrors
+    // trowsum's `dstTileDataND`.
+    using ExpertIdTileND   = Tile<TileType::Vec, TIdx_, 1, kT, BLayout::RowMajor, 1, kT>;
 
-    LogitsTile   logitsTile(kT, kE);
-    TmpTile      tmpTile(kT, kE);
-    ExpertIdTile expertIdTile(kT, 1);
+    LogitsTile     logitsTile(kT, kE);
+    TmpTile        tmpTile(kT, kE);
+    ExpertIdTile   expertIdTile;
+    ExpertIdTileND expertIdTileND;
 
     LogitsGlobal   logitsGlobal(logits);
     ExpertIdGlobal expertIdGlobal(expert_id);
 
-    // TODO(body): TLOAD logits; call single-output TROWARGMAX(expertIdTile,
-    //             logitsTile, tmpTile); TSTORE expertIdTile.
-    (void)logitsTile; (void)tmpTile; (void)expertIdTile;
+    // TODO(body): TLOAD logits; TROWARGMAX(expertIdTile, logitsTile, tmpTile);
+    //             TRESHAPE(expertIdTileND, expertIdTile);
+    //             TSTORE(expertIdGlobal, expertIdTileND);
+    (void)logitsTile; (void)tmpTile; (void)expertIdTile; (void)expertIdTileND;
     (void)logitsGlobal; (void)expertIdGlobal;
 }
 
