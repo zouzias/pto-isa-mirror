@@ -21,12 +21,19 @@ See LICENSE in the root of the software repository for the full text of the Lice
  *   expertId [kT]           uint32
  *   Z        [kT, kH]       fp32
  *
- * This file intentionally wires the template/kernel/launcher shape only.
- * The computation body is left for manual implementation.
+ * Router-only milestone:
+ *   1. logits = X @ WRouter
+ *   2. expertId = top1(logits), implemented with TCI + TSORT32 + TGATHER
+ * Z / W1 / W2 are intentionally unused for now.
  */
 
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
+
+// Reuse the existing auto-mode TopK implementation directly. Its public
+// launcher is hardcoded for the standalone topk test shape, but the templated
+// RunTopk<T, kRows, kCols, kTopK> body is exactly what this router needs.
+#include "../topk/topk_kernel.cpp"
 
 using namespace pto;
 
@@ -83,7 +90,6 @@ __global__ AICORE void runRouterGemm(__gm__ uint8_t *logits_raw,
     GlobalDataW wGlobal(wRouter);
 
     for (unsigned m0 = 0; m0 < kT; m0 += kTileM) {
-        pipe_barrier(PIPE_ALL);
         GlobalDataX xGlobal(x + static_cast<size_t>(m0) * kH);
         GlobalDataLogits logitsGlobal(logits + static_cast<size_t>(m0) * kE);
 
@@ -96,34 +102,20 @@ __global__ AICORE void runRouterGemm(__gm__ uint8_t *logits_raw,
     }
 }
 
-template <typename TAcc, typename TIdx>
-__global__ AICORE void runRouterArgmax(__gm__ uint8_t *expert_id_raw, __gm__ uint8_t *logits_raw)
+template <typename TIdx>
+__global__ AICORE void runMakeTopkIdx(__gm__ uint8_t *idx_raw)
 {
     using namespace mani_moe_cfg;
 
-    __gm__ TAcc *logits = reinterpret_cast<__gm__ TAcc *>(logits_raw);
-    __gm__ TIdx *expertId = reinterpret_cast<__gm__ TIdx *>(expert_id_raw);
+    using IdxTile = Tile<TileType::Vec, TIdx, 1, kE, BLayout::RowMajor, -1, -1>;
+    using IdxGlobal = GlobalTensor<TIdx, Shape<1, 1, 1, 1, kE>, Stride<1, 1, 1, kE, 1>>;
 
-    using LogitsGlobal = GlobalTensor<TAcc, Shape<1, 1, 1, kT, kE>, Stride<1, 1, 1, kE, 1>>;
-    using ExpertIdGlobal = GlobalTensor<TIdx, Shape<1, 1, 1, 1, kT>, Stride<1, 1, 1, kT, 1>>;
+    __gm__ TIdx *idx = reinterpret_cast<__gm__ TIdx *>(idx_raw);
+    IdxTile idxTile(1, kE);
+    IdxGlobal idxGlobal(idx);
 
-    using LogitsVecTile = Tile<TileType::Vec, TAcc, kT, kE, BLayout::RowMajor, -1, -1>;
-    using TmpTile = Tile<TileType::Vec, TAcc, kT, kE, BLayout::RowMajor, -1, -1>;
-    using ExpertIdTile = Tile<TileType::Vec, TIdx, kT, 1, BLayout::ColMajor, kT, 1>;
-    using ExpertIdStoreTile = Tile<TileType::Vec, TIdx, 1, kT, BLayout::RowMajor, 1, kT>;
-
-    LogitsGlobal logitsGlobal(logits);
-    ExpertIdGlobal expertIdGlobal(expertId);
-
-    LogitsVecTile logitsTile(kT, kE);
-    TmpTile tmpTile(kT, kE);
-    ExpertIdTile expertIdTile;
-    ExpertIdStoreTile expertIdStoreTile;
-
-    TLOAD(logitsTile, logitsGlobal);
-    TROWARGMAX(expertIdTile, logitsTile, tmpTile);
-    TRESHAPE(expertIdStoreTile, expertIdTile);
-    TSTORE(expertIdGlobal, expertIdStoreTile);
+    TCI<IdxTile, TIdx, 0>(idxTile, 0);
+    TSTORE(idxGlobal, idxTile);
 }
 
 template <typename TIn, typename TWeight, typename TAcc>
@@ -132,14 +124,14 @@ void launchRouterGemm(uint8_t *logits, uint8_t *x, uint8_t *w_router, void *stre
     runRouterGemm<TIn, TWeight, TAcc><<<1, nullptr, stream>>>(logits, x, w_router);
 }
 
-template <typename TAcc, typename TIdx>
-void launchRouterArgmax(uint8_t *expert_id, uint8_t *logits, void *stream)
+template <typename TIdx>
+void launchMakeTopkIdx(uint8_t *idx, void *stream)
 {
-    runRouterArgmax<TAcc, TIdx><<<1, nullptr, stream>>>(expert_id, logits);
+    runMakeTopkIdx<TIdx><<<1, nullptr, stream>>>(idx);
 }
 
 template void launchRouterGemm<half, half, float>(uint8_t *logits, uint8_t *x, uint8_t *w_router, void *stream);
-template void launchRouterArgmax<float, uint32_t>(uint8_t *expert_id, uint8_t *logits, void *stream);
+template void launchMakeTopkIdx<uint32_t>(uint8_t *idx, void *stream);
 
 extern "C" void launchManiMoeFp16(uint8_t *z_fp32,
                                   uint8_t *logits_fp32,
@@ -148,12 +140,16 @@ extern "C" void launchManiMoeFp16(uint8_t *z_fp32,
                                   uint8_t *w_router_fp16,
                                   uint8_t *w1_fp16,
                                   uint8_t *w2_fp16,
+                                  uint8_t *topk_idx_u32,
                                   void *stream)
 {
-    (void)z_fp32;
     (void)w1_fp16;
     (void)w2_fp16;
 
+    uint8_t *topk_values_fp32 = z_fp32;
+
     launchRouterGemm<half, half, float>(logits_fp32, x_fp16, w_router_fp16, stream);
-    launchRouterArgmax<float, uint32_t>(expert_id_u32, logits_fp32, stream);
+    launchMakeTopkIdx<uint32_t>(topk_idx_u32, stream);
+    RunTopk<float, mani_moe_cfg::kT, mani_moe_cfg::kE, 1><<<1, nullptr, stream>>>(
+        topk_values_fp32, expert_id_u32, logits_fp32, topk_idx_u32);
 }
