@@ -44,6 +44,7 @@ constexpr unsigned kH = 64;
 constexpr unsigned kF = 64;
 constexpr unsigned kE = 16;
 constexpr unsigned kTileM = 128;
+constexpr unsigned kTopKScratch = 8;
 
 static_assert(kT % kTileM == 0, "mani_moe v1 expects kT to be a multiple of kTileM.");
 
@@ -130,8 +131,28 @@ void launchMakeTopkIdx(uint8_t *idx, void *stream)
     runMakeTopkIdx<TIdx><<<1, nullptr, stream>>>(idx);
 }
 
+template <typename TIdx>
+__global__ AICORE void runExtractTop1Idx(__gm__ uint8_t *expert_id_raw, __gm__ uint8_t *topk_out_idx_raw)
+{
+    using namespace mani_moe_cfg;
+
+    __gm__ TIdx *expertId = reinterpret_cast<__gm__ TIdx *>(expert_id_raw);
+    __gm__ TIdx *topkOutIdx = reinterpret_cast<__gm__ TIdx *>(topk_out_idx_raw);
+
+    for (unsigned row = 0; row < kT; ++row) {
+        expertId[row] = topkOutIdx[row * kTopKScratch];
+    }
+}
+
+template <typename TIdx>
+void launchExtractTop1Idx(uint8_t *expert_id, uint8_t *topk_out_idx, void *stream)
+{
+    runExtractTop1Idx<TIdx><<<1, nullptr, stream>>>(expert_id, topk_out_idx);
+}
+
 template void launchRouterGemm<half, half, float>(uint8_t *logits, uint8_t *x, uint8_t *w_router, void *stream);
 template void launchMakeTopkIdx<uint32_t>(uint8_t *idx, void *stream);
+template void launchExtractTop1Idx<uint32_t>(uint8_t *expert_id, uint8_t *topk_out_idx, void *stream);
 
 extern "C" void launchManiMoeFp16(uint8_t *z_fp32,
                                   uint8_t *logits_fp32,
@@ -141,6 +162,7 @@ extern "C" void launchManiMoeFp16(uint8_t *z_fp32,
                                   uint8_t *w1_fp16,
                                   uint8_t *w2_fp16,
                                   uint8_t *topk_idx_u32,
+                                  uint8_t *topk_out_idx_u32,
                                   void *stream)
 {
     (void)w1_fp16;
@@ -150,6 +172,7 @@ extern "C" void launchManiMoeFp16(uint8_t *z_fp32,
 
     launchRouterGemm<half, half, float>(logits_fp32, x_fp16, w_router_fp16, stream);
     launchMakeTopkIdx<uint32_t>(topk_idx_u32, stream);
-    RunTopk<float, mani_moe_cfg::kT, mani_moe_cfg::kE, 1><<<1, nullptr, stream>>>(
-        topk_values_fp32, expert_id_u32, logits_fp32, topk_idx_u32);
+    RunTopk<float, mani_moe_cfg::kT, mani_moe_cfg::kE, mani_moe_cfg::kTopKScratch><<<1, nullptr, stream>>>(
+        topk_values_fp32, topk_out_idx_u32, logits_fp32, topk_idx_u32);
+    launchExtractTop1Idx<uint32_t>(expert_id_u32, topk_out_idx_u32, stream);
 }
