@@ -29,22 +29,32 @@ treduce %group, %dst {op = #pto.reduce_op<Max>} : (!pto.group<...>, !pto.memref<
 
 降级时会为 reduce 流水线引入内部累加 Tile 和接收 Tile；C++ 内建接口需要显式传入 `accTileData`、`recvTileData`（或 `accTileData`、`pingTileData`、`pongTileData`）操作数。
 
+## 模板参数
+
+- `engine`：
+    - `CollEngine::AIV`（默认）
+    - `CollEngine::CCU`（Ascend950，仅 NPU_ARCH 3510）
+
 ## C++ 内建接口
 
 声明于 `include/pto/comm/pto_comm_inst.hpp`：
 
 ```cpp
 // 基础 reduce（累加 Tile + 接收 Tile）
-template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
+template <CollEngine engine = CollEngine::AIV,
+          typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... Args>
 PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
-                              TileData &accTileData, TileData &recvTileData, ReduceOp op, WaitEvents&... events);
+                              TileData &accTileData, TileData &recvTileData, ReduceOp op, Args&... args);
 
 // 乒乓 reduce（累加 Tile + ping/pong Tile 实现双缓冲）
-template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
+template <CollEngine engine = CollEngine::AIV,
+          typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... Args>
 PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
                               TileData &accTileData, TileData &pingTileData, TileData &pongTileData,
-                              ReduceOp op, WaitEvents&... events);
+                              ReduceOp op, Args&... args);
 ```
+
+当 `engine == CollEngine::CCU` 时，可变参数的第一个参数必须是包含 CKE slot 虚拟地址和 gate mask 的 `CcuTriggerContext`。AIV kernel 触发 CKE gate，实际的 reduce 数据路径在 CCU 引擎上执行。
 
 ## 约束
 
@@ -61,6 +71,8 @@ PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &ds
 - **分块模式约束**（数据超出单个 UB Tile 时）：
     - 若 `TileData` 具有静态 `ValidRow`，则 `GetShape(DIM_3)` 必须能被 `ValidRow` 整除。如需支持不足一行的情况，请使用 `DYNAMIC` ValidRow 的 Tile。
     - 若 `TileData` 具有静态 `ValidCol`，则 `GetShape(DIM_4)` 必须能被 `ValidCol` 整除。如需支持不足一列的情况，请使用 `DYNAMIC` ValidCol 的 Tile。
+
+> **CCU 路径**：与 AIV 路径（仅根节点调用 `TREDUCE`）不同，CCU 路径要求所有 rank 通过宿主侧 `HcclCcuKernelRegister` / `HcclCcuKernelLaunch` 注册并启动 CCU kernel。完整示例参见 `tests/npu/a5/comm/st/testcase/treduce_ccu/`。
 
 ## 示例
 
