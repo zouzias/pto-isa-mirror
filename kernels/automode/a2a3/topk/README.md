@@ -1,7 +1,8 @@
-# topk — auto-mode A3 prototype (v1, full TopK with values + indices)
+# topk — auto-mode A3 prototype (v2, 2D per-row TopK with values + indices)
 
-Full top-K (values + matching original indices) for a single 1-D float32 array,
-single AICORE, single row, no buffering. Project layout mirrors
+Per-row top-K (values + matching original indices) for a 2-D float32 array of
+shape `(kRows, kCols)`, single AICORE, serial in-kernel row loop, no
+buffering. Project layout mirrors
 [kernels/automode/a2a3/add_tile_array/](../add_tile_array/), so the same
 one-liner works:
 
@@ -9,12 +10,15 @@ one-liner works:
 bash run.sh -r npu -v Ascend910B1
 ```
 
-**Note:** the previous values-only shortcut (which assumed pre-sorted
-64-element blocks and skipped TSORT32 / index tracking) has been
-**removed**. The kernel now does the full TopK pipeline — TSORT32 → merge →
-TGATHER values + TGATHER indices — closer to the manual TopK in
-[kernels/manual/a2a3/topk/](../../../manual/a2a3/topk/) but stripped of
-double-buffering / multi-core / TPipe / manual sync.
+**v2 change:** the kernel now accepts a 2-D input and produces a per-row
+top-K via a serial in-kernel row loop. The single-row pipeline (TSORT32 →
+merge → TGATHER values + TGATHER indices) is unchanged from v1; the only
+new code is the outer `for (row = 0; row < kRows; ++row)` and per-row
+GlobalTensor offsetting, which mirrors the
+[add_tile_array](../add_tile_array/) baseline pattern (tiles declared
+once outside the loop, globals recomputed per iter). Still stripped of
+double-buffering / multi-core / TPipe / manual sync vs. the manual TopK in
+[kernels/manual/a2a3/topk/](../../../manual/a2a3/topk/).
 
 ## Supported AI Processors
 
@@ -45,30 +49,38 @@ After running `bash run.sh`, the project also contains:
 
 ### Function
 
-Returns the top-K values and their **original (unsorted)** indices from a
-random 1-D float32 row. Output is descending by value.
+Returns the per-row top-K values and their **original (unsorted, in-row)**
+indices from a 2-D float32 tensor. Output is descending by value within each row.
 
-| Item              | Value                                      |
-|-------------------|--------------------------------------------|
-| OpType            | `topk`                                     |
-| Input `src`       | float32, shape `(1, 1280)` — random unsorted |
-| Input `idx`       | uint32, shape `(1, 1280)` — identity `[0..1279]` |
-| Output `out_val`  | float32, shape `(1, 512)` — top-K values descending |
-| Output `out_idx`  | uint32, shape `(1, 512)` — matching original indices |
-| Kernel name       | `topk_kernel`                              |
+| Item              | Value                                          |
+|-------------------|------------------------------------------------|
+| OpType            | `topk`                                         |
+| Input `src`       | float32, shape `(4, 1280)` — random unsorted, row-major |
+| Input `idx`       | uint32, shape `(1280,)` — identity `[0..1279]` shared across rows |
+| Output `out_val`  | float32, shape `(4, 512)` — per-row top-K values descending |
+| Output `out_idx`  | uint32, shape `(4, 512)` — per-row matching original-position indices |
+| Kernel name       | `topk_kernel`                                  |
 
 ### Algorithm
 
 The kernel mirrors the manual `runTOPK` pipeline structurally, simplified
-for correctness-first auto-mode v1:
+for correctness-first auto-mode. The single-row pipeline is wrapped in a
+serial `for row in [0..kRows)` loop; per-row globals advance by
+`row*kCols` (src) / `row*kTopK` (outputs). `idx` is loaded from a shared
+identity row each iteration (no row offset).
 
 ```
-TLOAD srcTile              ← input_src.bin
-TLOAD idxTile              ← input_idx.bin (identity [0..kCols-1])
+for row in [0, kRows):
+  srcGlobal     = src    + row * kCols
+  outValGlobal  = outVal + row * kTopK
+  outIdxGlobal  = outIdx + row * kTopK
 
-TSORT32(packed, src, idx, scratch)          # per-32-block sort, emits (val, idx) packed
+  TLOAD srcTile              ← input_src.bin  (row-th row)
+  TLOAD idxTile              ← input_idx.bin  (identity [0..kCols-1])
 
-main TMRGSORT loop:                         # 4-way self-merge, blockLen *= 4
+  TSORT32(packed, src, idx, scratch)          # per-32-block sort, emits (val, idx) packed
+
+  main TMRGSORT loop:                         # 4-way self-merge, blockLen *= 4
     blockLen = 64 * TYPE_COEF
     for each iter:
         srcSortedView = TRESHAPE(sort32DstTile)         # source prefix view
@@ -76,19 +88,19 @@ main TMRGSORT loop:                         # 4-way self-merge, blockLen *= 4
         TMRGSORT(tmpSortedView, srcSortedView, blockLen)
         TMOV(srcSortedView, tmpSortedView)              # promote merged result back to source
 
-if (blockLen < kCols):                      # tail block — non-power-of-4 residual
-    FillMrgArray(...) plans the 2-list merges
-    for each planned merge:
-        src0View   = TRESHAPE(sort32DstTile)            # already-merged prefix
-        src1View   = TSUBVIEW(sort32DstTile, mrgSortedLen)  # next tail run (offset view)
-        curDstView = TRESHAPE(mrgScratchTile)           # INDEPENDENT destination
-        TMRGSORT(curDstView, executedNumList, tmp, src0View, src1View)
-        TMOV(TRESHAPE(sort32DstTile), curDstView)       # copy back so next iter sees it
+  if (blockLen < kCols):                      # tail block — non-power-of-4 residual
+      FillMrgArray(...) plans the 2-list merges
+      for each planned merge:
+          src0View   = TRESHAPE(sort32DstTile)            # already-merged prefix
+          src1View   = TSUBVIEW(sort32DstTile, mrgSortedLen)  # next tail run (offset view)
+          curDstView = TRESHAPE(mrgScratchTile)           # INDEPENDENT destination
+          TMRGSORT(curDstView, executedNumList, tmp, src0View, src1View)
+          TMOV(TRESHAPE(sort32DstTile), curDstView)       # copy back so next iter sees it
 
-TGATHER<P0101>(outValTile, sortedTopKView)              # extract values
-TGATHER<P1010>(outIdxTile, sortedTopKIdxView)           # extract indices via TRESHAPE float→uint32 type-pun
+  TGATHER<P0101>(outValTile, sortedTopKView)              # extract values
+  TGATHER<P1010>(outIdxTile, sortedTopKIdxView)           # extract indices via TRESHAPE float→uint32 type-pun
 
-TSTORE outValTile, outIdxTile               → output_val.bin, output_idx.bin
+  TSTORE outValTile, outIdxTile               → output_val.bin, output_idx.bin   (at this row's offset)
 ```
 
 Key auto-mode-safety choices:
@@ -113,20 +125,26 @@ Key auto-mode-safety choices:
   handles ordering).
 - No double / multi-buffering, no `TPipe` / `TPUSH` / `TPOP`.
 - No `Tile::data()` from kernel code; no `*_IMPL` calls.
-- Single AICORE; single row.
+- Single AICORE; serial in-kernel row loop (no row-level parallelism).
+- Big tiles (`srcTile`, `idxTile`, `sort32TmpTile`, `sort32DstTile`,
+  `mrgScratchTile`, `outValTile`, `outIdxTile`) are declared **once outside
+  the row loop** and reused across iterations — same lifetime pattern as
+  the confirmed-built `add_tile_array` baseline. Auto allocator pins tile
+  addresses across iterations.
 
 ## I/O shapes and formats
 
-All `.bin` files are raw little-endian, contiguous, no header.
+All `.bin` files are raw little-endian, contiguous, no header. Defaults:
+`kRows=4`, `kCols=1280`, `kTopK=512`.
 
-| File                        | Shape         | Bytes  | Source                | Consumer                  |
-|-----------------------------|---------------|--------|-----------------------|---------------------------|
-| `input/input_src.bin`       | `(1, 1280)` f32 | 5 120 | `scripts/gen_data.py` | `main.cpp`                |
-| `input/input_idx.bin`       | `(1, 1280)` u32 | 5 120 | `scripts/gen_data.py` | `main.cpp`                |
-| `output/golden_val.bin`     | `(1, 512)`  f32 | 2 048 | `scripts/gen_data.py` | `main.cpp` (`ResultCmp`)  |
-| `output/golden_idx.bin`     | `(1, 512)`  u32 | 2 048 | `scripts/gen_data.py` | `main.cpp` (`ResultCmp`)  |
-| `output/output_val.bin`     | `(1, 512)`  f32 | 2 048 | `main.cpp`            | `main.cpp` (`ResultCmp`)  |
-| `output/output_idx.bin`     | `(1, 512)`  u32 | 2 048 | `main.cpp`            | `main.cpp` (`ResultCmp`)  |
+| File                        | Shape           | Bytes  | Source                | Consumer                  |
+|-----------------------------|-----------------|--------|-----------------------|---------------------------|
+| `input/input_src.bin`       | `(4, 1280)` f32 | 20 480 | `scripts/gen_data.py` | `main.cpp`                |
+| `input/input_idx.bin`       | `(1280,)`   u32 |  5 120 | `scripts/gen_data.py` | `main.cpp`                |
+| `output/golden_val.bin`     | `(4, 512)`  f32 |  8 192 | `scripts/gen_data.py` | `main.cpp` (`ResultCmp`)  |
+| `output/golden_idx.bin`     | `(4, 512)`  u32 |  8 192 | `scripts/gen_data.py` | `main.cpp` (`ResultCmp`)  |
+| `output/output_val.bin`     | `(4, 512)`  f32 |  8 192 | `main.cpp`            | `main.cpp` (`ResultCmp`)  |
+| `output/output_idx.bin`     | `(4, 512)`  u32 |  8 192 | `main.cpp`            | `main.cpp` (`ResultCmp`)  |
 
 ## Numerical tolerance
 
@@ -165,15 +183,15 @@ test index success
 test success
 ```
 
-## v1 limitations and v2 roadmap
+## v2 limitations and future roadmap
 
-| Feature | v1 (this) | Manual mode | v2 / future |
+| Feature | v2 (this) | Manual mode | Future |
 |---|---|---|---|
 | Random-input handling | yes (TSORT32 in-kernel) | yes | — |
 | Index tracking | yes (TGATHER P1010 + type-pun) | yes | — |
 | dtype | float32 only | float32 + half | add half (P0001 mask + half index extraction) |
-| Multi-core | single AICORE | 48-core via `block_idx` | add `block_idx` work split |
-| Multi-row | single row | `SINGLE_LOOP_ROW = 2` | add row loop |
+| Multi-core | single AICORE | 48-core via `block_idx` | add `block_idx` row split |
+| Multi-row | yes (serial in-kernel loop, `kRows=4`) | `SINGLE_LOOP_ROW = 2` + multi-core | larger `kRows`, multi-core row partition |
 | Pipelining | none | double-buffered manual sync | wait for sanctioned auto-mode pipeline abstraction |
 | Tail-block merge | independent dst + TMOV-back | in-place via TASSIGN aliasing | revisit if in-place is auto-safe with proper hints |
 
@@ -198,6 +216,13 @@ test success
    wouldn't manifest at the current shape. If we change dims and it shows
    up, the auto-sync between `TMOV` and the next `TRESHAPE`-based read
    needs investigation.
+6. **Cross-iter aliasing on row-loop-reused tiles** — `sort32DstTile`,
+   `mrgScratchTile`, `outValTile`, `outIdxTile` are reused each row. If
+   the auto allocator decides their lifetimes overlap with the prior
+   row's TSTORE, we'd see row `i` clobbered by row `i+1`'s TLOAD/TSORT32
+   before row `i`'s TSTORE retires. (Inferred-safe by analogy to
+   `add_tile_array`, but worth checking row `i>0` output if values look
+   right only for row 0.)
 
 ## References
 
