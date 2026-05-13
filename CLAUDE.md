@@ -10,6 +10,8 @@ We are working on PTO-ISA kernel development for **A3 and A5 only**. This file i
 - Mark uncertainty as `Known` / `Inferred` / `Assumption` / `Unknown`.
 - Prefer small, reviewable patches. Preserve manual-mode behavior unless explicitly asked otherwise.
 - For large kernels (GEMM, Flash Attention, sparse attention), produce a design / skeleton first, not a full optimized implementation.
+- If you made a kernel it should be able run `bash run.sh -r npu -v Ascend910B1` and give\
+.0  1 you the outcome of comparing with the python script.
 
 ## Target platform scope
 
