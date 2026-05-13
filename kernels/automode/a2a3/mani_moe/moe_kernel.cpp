@@ -42,78 +42,104 @@ static_assert(kT % kTileM == 0, "mani_moe v1 expects kT to be a multiple of kTil
 
 }  // namespace mani_moe_cfg
 
-template <typename TIn, typename TWeight, typename TAcc, typename TIdx>
-__global__ AICORE void runManiMoe(__gm__ uint8_t *z_raw,
-                                  __gm__ uint8_t *logits_raw,
-                                  __gm__ uint8_t *expert_id_raw,
-                                  __gm__ uint8_t *x_raw,
-                                  __gm__ uint8_t *w_router_raw,
-                                  __gm__ uint8_t *w1_raw,
-                                  __gm__ uint8_t *w2_raw)
+template <typename TIn, typename TWeight, typename TAcc>
+__global__ AICORE void runRouterGemm(__gm__ uint8_t *logits_raw,
+                                     __gm__ uint8_t *x_raw,
+                                     __gm__ uint8_t *w_router_raw)
 {
     using namespace mani_moe_cfg;
 
-    __gm__ TAcc *z = reinterpret_cast<__gm__ TAcc *>(z_raw);
     __gm__ TAcc *logits = reinterpret_cast<__gm__ TAcc *>(logits_raw);
-    __gm__ TIdx *expertId = reinterpret_cast<__gm__ TIdx *>(expert_id_raw);
     __gm__ TIn *x = reinterpret_cast<__gm__ TIn *>(x_raw);
     __gm__ TWeight *wRouter = reinterpret_cast<__gm__ TWeight *>(w_router_raw);
-    __gm__ TWeight *w1 = reinterpret_cast<__gm__ TWeight *>(w1_raw);
-    __gm__ TWeight *w2 = reinterpret_cast<__gm__ TWeight *>(w2_raw);
 
-    // TODO(mani):
-    //   1. Router:
-    //        logits[t, e] = sum_h x[t, h] * wRouter[h, e]
-    //        expertId[t] = argmax_e logits[t, e]
-    //
-    //   2. Expert FFN:
-    //        hidden[f] = relu(sum_h x[t, h] * w1[expertId[t], h, f])
-    //        z[t, h]   = sum_f hidden[f] * w2[expertId[t], f, h]
-    //
-    //   Existing implementations worth copying from in small pieces:
-    //     - moe_router_top1: router GEMM + TROWARGMAX skeleton.
-    //     - moe_segmented_gemm_relu: one expert GEMM + fused ReLU pattern.
-    //     - moe_segmented_ffn_top1: split FFN1/FFN2 pattern.
-    //
-    //   Auto-mode reminder:
-    //     if a nested loop or a complex load/compute/store pattern compiles
-    //     but fails/hangs, also suspect auto-sync. A temporary #pragma unroll
-    //     on the relevant loop may help the compiler recognize the pattern.
-    (void)kT;
-    (void)kH;
-    (void)kF;
-    (void)kE;
-    (void)kTileM;
-    (void)z;
-    (void)logits;
-    (void)expertId;
-    (void)x;
-    (void)wRouter;
-    (void)w1;
-    (void)w2;
+    constexpr int blockAlign = C0_SIZE_BYTE / sizeof(TIn);
+    constexpr int M = ((kTileM + 15) / 16) * 16;
+    constexpr int K = ((kH + blockAlign - 1) / blockAlign) * blockAlign;
+    constexpr int N = ((kE + blockAlign - 1) / blockAlign) * blockAlign;
+
+    using GlobalDataX =
+        GlobalTensor<TIn, Shape<1, 1, 1, kTileM, kH>,
+                     Stride<1 * kTileM * kH, 1 * kTileM * kH, kTileM * kH, kH, 1>>;
+    using GlobalDataW =
+        GlobalTensor<TWeight, Shape<1, 1, 1, kH, kE>,
+                     Stride<1 * kH * kE, 1 * kH * kE, kH * kE, kE, 1>>;
+    using GlobalDataLogits =
+        GlobalTensor<TAcc, Shape<1, 1, 1, kTileM, kE>,
+                     Stride<1 * kTileM * kE, 1 * kTileM * kE, kTileM * kE, kE, 1>>;
+
+    using XMatTile = Tile<TileType::Mat, TIn, M, K, BLayout::ColMajor, kTileM, kH, SLayout::RowMajor, 512>;
+    using WMatTile = Tile<TileType::Mat, TWeight, K, N, BLayout::ColMajor, kH, kE, SLayout::RowMajor, 512>;
+    using XLeftTile = TileLeft<TIn, M, K, kTileM, kH>;
+    using WRightTile = TileRight<TWeight, K, N, kH, kE>;
+    using LogitsTile = TileAcc<TAcc, M, N, kTileM, kE>;
+
+    XMatTile xMatTile;
+    WMatTile wMatTile;
+    XLeftTile xTile;
+    WRightTile wRouterTile;
+    LogitsTile logitsTile;
+
+    GlobalDataW wGlobal(wRouter);
+
+    for (unsigned m0 = 0; m0 < kT; m0 += kTileM) {
+        pipe_barrier(PIPE_ALL);
+        GlobalDataX xGlobal(x + static_cast<size_t>(m0) * kH);
+        GlobalDataLogits logitsGlobal(logits + static_cast<size_t>(m0) * kE);
+
+        TLOAD(xMatTile, xGlobal);
+        TLOAD(wMatTile, wGlobal);
+        TMOV(xTile, xMatTile);
+        TMOV(wRouterTile, wMatTile);
+        TMATMUL(logitsTile, xTile, wRouterTile);
+        TSTORE(logitsGlobal, logitsTile);
+    }
 }
 
-template <typename TIn, typename TWeight, typename TAcc, typename TIdx>
-void launchManiMoe(uint8_t *z,
-                   uint8_t *logits,
-                   uint8_t *expert_id,
-                   uint8_t *x,
-                   uint8_t *w_router,
-                   uint8_t *w1,
-                   uint8_t *w2,
-                   void *stream)
+template <typename TAcc, typename TIdx>
+__global__ AICORE void runRouterArgmax(__gm__ uint8_t *expert_id_raw, __gm__ uint8_t *logits_raw)
 {
-    runManiMoe<TIn, TWeight, TAcc, TIdx><<<1, nullptr, stream>>>(z, logits, expert_id, x, w_router, w1, w2);
+    using namespace mani_moe_cfg;
+
+    __gm__ TAcc *logits = reinterpret_cast<__gm__ TAcc *>(logits_raw);
+    __gm__ TIdx *expertId = reinterpret_cast<__gm__ TIdx *>(expert_id_raw);
+
+    using LogitsGlobal = GlobalTensor<TAcc, Shape<1, 1, 1, kT, kE>, Stride<1, 1, 1, kE, 1>>;
+    using ExpertIdGlobal = GlobalTensor<TIdx, Shape<1, 1, 1, 1, kT>, Stride<1, 1, 1, kT, 1>>;
+
+    using LogitsVecTile = Tile<TileType::Vec, TAcc, kT, kE, BLayout::RowMajor, -1, -1>;
+    using TmpTile = Tile<TileType::Vec, TAcc, kT, kE, BLayout::RowMajor, -1, -1>;
+    using ExpertIdTile = Tile<TileType::Vec, TIdx, kT, 1, BLayout::ColMajor, kT, 1>;
+    using ExpertIdStoreTile = Tile<TileType::Vec, TIdx, 1, kT, BLayout::RowMajor, 1, kT>;
+
+    LogitsGlobal logitsGlobal(logits);
+    ExpertIdGlobal expertIdGlobal(expertId);
+
+    LogitsVecTile logitsTile(kT, kE);
+    TmpTile tmpTile(kT, kE);
+    ExpertIdTile expertIdTile;
+    ExpertIdStoreTile expertIdStoreTile;
+
+    TLOAD(logitsTile, logitsGlobal);
+    TROWARGMAX(expertIdTile, logitsTile, tmpTile);
+    TRESHAPE(expertIdStoreTile, expertIdTile);
+    TSTORE(expertIdGlobal, expertIdStoreTile);
 }
 
-template void launchManiMoe<half, half, float, uint32_t>(uint8_t *z,
-                                                         uint8_t *logits,
-                                                         uint8_t *expert_id,
-                                                         uint8_t *x,
-                                                         uint8_t *w_router,
-                                                         uint8_t *w1,
-                                                         uint8_t *w2,
-                                                         void *stream);
+template <typename TIn, typename TWeight, typename TAcc>
+void launchRouterGemm(uint8_t *logits, uint8_t *x, uint8_t *w_router, void *stream)
+{
+    runRouterGemm<TIn, TWeight, TAcc><<<1, nullptr, stream>>>(logits, x, w_router);
+}
+
+template <typename TAcc, typename TIdx>
+void launchRouterArgmax(uint8_t *expert_id, uint8_t *logits, void *stream)
+{
+    runRouterArgmax<TAcc, TIdx><<<1, nullptr, stream>>>(expert_id, logits);
+}
+
+template void launchRouterGemm<half, half, float>(uint8_t *logits, uint8_t *x, uint8_t *w_router, void *stream);
+template void launchRouterArgmax<float, uint32_t>(uint8_t *expert_id, uint8_t *logits, void *stream);
 
 extern "C" void launchManiMoeFp16(uint8_t *z_fp32,
                                   uint8_t *logits_fp32,
@@ -124,6 +150,10 @@ extern "C" void launchManiMoeFp16(uint8_t *z_fp32,
                                   uint8_t *w2_fp16,
                                   void *stream)
 {
-    launchManiMoe<half, half, float, uint32_t>(z_fp32, logits_fp32, expert_id_u32, x_fp16, w_router_fp16, w1_fp16,
-                                               w2_fp16, stream);
+    (void)z_fp32;
+    (void)w1_fp16;
+    (void)w2_fp16;
+
+    launchRouterGemm<half, half, float>(logits_fp32, x_fp16, w_router_fp16, stream);
+    launchRouterArgmax<float, uint32_t>(expert_id_u32, logits_fp32, stream);
 }
