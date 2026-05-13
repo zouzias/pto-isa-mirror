@@ -111,6 +111,17 @@ enum class Op : uint16_t
     OP_COUNT, // The Total number of operations, please add new operations before OP_COUNT
 };
 
+// FIX pipeline only exists on AI cores that have a cube unit.  Vec-only
+// arches like dav-c310-vec leave PIPE_FIX undefined in CANN's AscendC
+// headers.  When compiling with cce (and only then — host C++ TUs keep
+// the upstream behaviour unchanged), alias PIPE_FIX to PIPE_ALL so the
+// opPipeList constexpr table below stays well-formed.  The FIX ops it
+// references (TMOV_V2M, TINSERT_A2M, ...) are not dispatchable on a
+// vec-only core anyway, so PIPE_ALL is a safe conservative barrier.
+#if defined(__CCE_AICORE__) && !defined(PIPE_FIX)
+#define PIPE_FIX PIPE_ALL
+#endif
+
 // opPipeList maps each operation in Op enum to its corresponding pipeline type.
 // This array is used to determine which hardware pipeline should be used for each operation.
 constexpr pipe_t opPipeList[] = {
