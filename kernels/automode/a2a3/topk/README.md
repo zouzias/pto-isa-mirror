@@ -126,11 +126,16 @@ Key auto-mode-safety choices:
 - No double / multi-buffering, no `TPipe` / `TPUSH` / `TPOP`.
 - No `Tile::data()` from kernel code; no `*_IMPL` calls.
 - Single AICORE; serial in-kernel row loop (no row-level parallelism).
-- Big tiles (`srcTile`, `idxTile`, `sort32TmpTile`, `sort32DstTile`,
-  `mrgScratchTile`, `outValTile`, `outIdxTile`) are declared **once outside
-  the row loop** and reused across iterations — same lifetime pattern as
-  the confirmed-built `add_tile_array` baseline. Auto allocator pins tile
-  addresses across iterations.
+- All storage tiles (`srcTile`, `idxTile`, `sort32TmpTile`,
+  `sort32DstTile`, `mrgScratchTile`, `outValTile`, `outIdxTile`) are
+  declared **inside the row loop** so each iteration's lifetime analysis
+  is self-contained and matches v1 (single-row) exactly. Declaring them
+  outside the loop regressed correctness — outputs looked like raw src /
+  identity idx, consistent with the auto allocator aliasing
+  `outValTile`↔`srcTile` and `outIdxTile`↔`idxTile` once cross-iter
+  liveness changed. (Cf. `add_tile_array`, which declares tiles outside
+  the loop — its simpler input/output split doesn't trigger the same
+  aliasing.)
 
 ## I/O shapes and formats
 

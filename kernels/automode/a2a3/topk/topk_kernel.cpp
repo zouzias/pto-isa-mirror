@@ -90,29 +90,34 @@ __global__ AICORE void RunTopk(__gm__ uint8_t *outVal_raw, __gm__ uint8_t *outId
     using OutValTile    = Tile<TileType::Vec, T,      1, kTopK,       BLayout::RowMajor, -1, -1>;
     using OutIdxTile    = Tile<TileType::Vec, indexT, 1, kTopK,       BLayout::RowMajor, -1, -1>;
 
-    // Independent storage tiles, declared ONCE outside the row loop and
-    // reused across iterations. This mirrors the confirmed-built
-    // add_tile_array baseline (aTile/bTile/cTile declared outside, TLOADed
-    // inside the loop). Each row's pipeline fully consumes its writes
-    // before the next row's TLOAD/TSORT32 overwrites them — no cross-iter
-    // aliasing hazard. Auto allocator pins addresses across iterations.
-    SrcTile     srcTile(1, kCols);
-    IdxTile     idxTile(1, kCols);
-    SrcTile     sort32TmpTile(1, kCols);     // TSORT32 internal scratch (content irrelevant)
-    PackedTile  sort32DstTile(1, kPackedCols);
-    PackedTile  mrgScratchTile(1, kPackedCols);
-    OutValTile  outValTile(1, kTopK);
-    OutIdxTile  outIdxTile(1, kTopK);
-
     // ============================================================
     // Row loop. Per-row globals advance by row*kCols / row*kTopK; idx is
     // a single shared identity row (no per-row offset).
+    //
+    // All storage tiles are declared INSIDE the loop so each iteration's
+    // tile lifetimes are self-contained and identical to v1's single-row
+    // body. v1 (no row loop) was confirmed-built; v2 with tiles declared
+    // OUTSIDE the loop regressed (outputs looked like raw src / identity
+    // idx — symptom consistent with auto allocator aliasing outValTile
+    // onto srcTile UB and outIdxTile onto idxTile UB once the loop
+    // wrapping changed cross-iter liveness analysis). Inside-loop
+    // declarations give the auto allocator a per-iter analysis that
+    // matches v1 exactly. Cost is some extra allocator work per iter;
+    // correctness comes first.
     // ============================================================
     for (int row = 0; row < kRows; ++row) {
         SrcGlobal     srcGlobal(src + row * kCols);
         IdxGlobal     idxGlobal(idx);
         OutValGlobal  outValGlobal(outVal + row * kTopK);
         OutIdxGlobal  outIdxGlobal(outIdx + row * kTopK);
+
+        SrcTile     srcTile(1, kCols);
+        IdxTile     idxTile(1, kCols);
+        SrcTile     sort32TmpTile(1, kCols);     // TSORT32 internal scratch (content irrelevant)
+        PackedTile  sort32DstTile(1, kPackedCols);
+        PackedTile  mrgScratchTile(1, kPackedCols);
+        OutValTile  outValTile(1, kTopK);
+        OutIdxTile  outIdxTile(1, kTopK);
 
         // ============================================================
         // Phase 1: TSORT32 — per-32-block in-place sort, emit (val, idx) packed.
