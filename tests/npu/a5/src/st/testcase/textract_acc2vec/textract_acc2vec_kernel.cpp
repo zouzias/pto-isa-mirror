@@ -1,16 +1,18 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_tile.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace pto;
 
@@ -101,7 +103,8 @@ AICORE inline void RunMATMUL(__gm__ AType *src0, __gm__ BType *src1, __gm__ fbTy
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 #endif
 
-    /**********************************TMOV && TEXTRACT**********************************/
+    /**********************************TMOV &&
+     * TEXTRACT**********************************/
     TMOV(aTile, aMatTile);
     TMOV(bTile, bMatTile);
 
@@ -156,7 +159,8 @@ AICORE inline void RunMATMUL_NZUNALIGN(__gm__ AType *src0, __gm__ BType *src1, _
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 #endif
 
-    /**********************************TMOV && TEXTRACT**********************************/
+    /**********************************TMOV &&
+     * TEXTRACT**********************************/
     TMOV(aTile, aMatTile);
     TMOV(bTile, bMatTile);
 #ifndef __PTO_AUTO__
@@ -513,8 +517,9 @@ void LaunchTMOVAcc2VecNZ2ND(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t 
 {
     if constexpr (tilingKey == 1) {
         // OutType, AType, BType, validM, validK, validN, row, col,
-        // subBlockId = 0, isNZUnalign = false, isRelu = false, layoutType = Layout::ND, sfractalSize = 512,
-        // indexRow = 0, indexCol = 0, isInsert = false, dstRow = 0, dstCol = 0
+        // subBlockId = 0, isNZUnalign = false, isRelu = false, layoutType =
+        // Layout::ND, sfractalSize = 512, indexRow = 0, indexCol = 0, isInsert =
+        // false, dstRow = 0, dstCol = 0
         RunTMOV<float, half, half, 60, 127, 120, 0, 0, 0, false, true, Layout::ND, 512, 0, 16, false, 64, 128>
             <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0),
                                      reinterpret_cast<half *>(src1), reinterpret_cast<float *>(src2));
@@ -589,9 +594,9 @@ template <int32_t tilingKey>
 void LaunchTMOVAcc2VecSCQuantNZ2ND(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream)
 {
     // OutType, AType, BType, validM, validK, validN, row, col,
-    // subBlockId = 0, isNZUnalign = false, isRelu = false, layoutType = Layout::ND,
-    // sfractalSize = 512,
-    // indexRow = 0, indexCol = 0, isInsert = false, dstRow = 0, dstCol = 0
+    // subBlockId = 0, isNZUnalign = false, isRelu = false, layoutType =
+    // Layout::ND, sfractalSize = 512, indexRow = 0, indexCol = 0, isInsert =
+    // false, dstRow = 0, dstCol = 0
     if constexpr (tilingKey == 1) {
         RunTMOVSCQuant<half, float, float, 128, 48, 96, 128, 96, 0, false, true, Layout::ND, 512, 0, 0, false, 128, 96>
             <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<float *>(src0),
