@@ -112,13 +112,15 @@ Start with **(b)** because it touches no new auto-mode surface beyond
 
 ```bash
 bash run.sh -r npu -v Ascend910B1
-python scripts/compare_outputs.py
 ```
 
 `run.sh` regenerates input/output through `scripts/gen_data.py`, builds with
 `cmake … --cce-aicore-arch=dav-c220-vec --cce-enable-pto-passes`, runs the
-kernel, dumps device output to `output/output_topk_*.bin`, and exits.
-`compare_outputs.py` validates against the Python golden.
+kernel, dumps device output to `output/output_topk_*.bin`, and then the host
+driver itself prints `test success` / `test failed` after comparing against
+the goldens via `PtoTestCommon::ResultCmp` (matches §A18 moe_segmented_ffn_top1).
+`scripts/compare_outputs.py` is a stand-alone diagnostic tool — run it
+manually when you want a detailed mismatch report.
 
 ## How to compare against the Python reference
 

@@ -95,8 +95,12 @@ out of scope for v1.
 
 ```bash
 bash run.sh -r npu -v Ascend910B1
-python scripts/compare_outputs.py
 ```
+
+The host driver runs the comparison in-process (via `PtoTestCommon::ResultCmp`)
+and prints `test success` / `test failed` at exit — matches §A18.
+`scripts/compare_outputs.py` is a stand-alone diagnostic for detailed
+mismatch reports.
 
 ## How to compare against the Python reference
 

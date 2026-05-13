@@ -86,6 +86,32 @@ static int ReadIntFile(const char *path)
     return n;
 }
 
+template <typename TVal>
+static bool ValidateFloatBuffer(const char *goldenPath, const char *outputPath,
+                                size_t numBytes, const char *label, float eps)
+{
+    std::vector<TVal> golden(numBytes / sizeof(TVal));
+    std::vector<TVal> got   (numBytes / sizeof(TVal));
+    ReadFile(goldenPath, numBytes, golden.data(), numBytes);
+    ReadFile(outputPath, numBytes, got.data(),    numBytes);
+    bool ok = ResultCmp(golden, got, eps);
+    printf("[validate] %-10s : %s\n", label, ok ? "PASS" : "FAIL");
+    return ok;
+}
+
+template <typename TIdx>
+static bool ValidateIdxBuffer(const char *goldenPath, const char *outputPath,
+                              size_t numBytes, const char *label)
+{
+    std::vector<TIdx> golden(numBytes / sizeof(TIdx));
+    std::vector<TIdx> got   (numBytes / sizeof(TIdx));
+    ReadFile(goldenPath, numBytes, golden.data(), numBytes);
+    ReadFile(outputPath, numBytes, got.data(),    numBytes);
+    bool ok = ResultCmp(golden, got, 0.0f);
+    printf("[validate] %-10s : %s\n", label, ok ? "PASS" : "FAIL");
+    return ok;
+}
+
 int main()
 {
     constexpr size_t halfBytes = 2;
@@ -225,7 +251,25 @@ int main()
     aclrtResetDevice(0);
     aclFinalize();
 
-    printf("[main] device run complete. Compare against the Python golden with:\n"
-           "       python ../scripts/compare_outputs.py\n");
-    return 0;
+    // Stage-isolation diagnostics: validate each observable buffer
+    // independently so a downstream FAIL doesn't mask an upstream root cause.
+    bool logitsOk   = ValidateFloatBuffer<float>(
+        "../output/golden_logits.bin",
+        "../output/output_logits.bin",
+        logitsBytes,   "logits",     1e-3f);
+    bool expertIdOk = ValidateIdxBuffer<uint32_t>(
+        "../output/golden_expert_id.bin",
+        "../output/output_expert_id.bin",
+        expertIdBytes, "expert_id");
+    bool yOk        = ValidateFloatBuffer<float>(
+        "../output/golden_Y.bin",
+        "../output/output_Y.bin",
+        yBytes,        "Y",          1e-3f);
+
+    if (logitsOk && expertIdOk && yOk) {
+        printf("test success\n");
+        return 0;
+    }
+    printf("test failed\n");
+    return 1;
 }

@@ -64,6 +64,33 @@ static int ReadIntFile(const char *path)
     return n;
 }
 
+template <typename TVal>
+static bool ValidateFloatBuffer(const char *goldenPath, const char *outputPath,
+                                size_t numBytes, const char *label, float eps)
+{
+    std::vector<TVal> golden(numBytes / sizeof(TVal));
+    std::vector<TVal> got   (numBytes / sizeof(TVal));
+    ReadFile(goldenPath, numBytes, golden.data(), numBytes);
+    ReadFile(outputPath, numBytes, got.data(),    numBytes);
+    bool ok = ResultCmp(golden, got, eps);
+    printf("[validate] %-12s : %s\n", label, ok ? "PASS" : "FAIL");
+    return ok;
+}
+
+// Exact equality for integer index buffers (eps=0 → fail on any non-zero diff).
+template <typename TIdx>
+static bool ValidateIdxBuffer(const char *goldenPath, const char *outputPath,
+                              size_t numBytes, const char *label)
+{
+    std::vector<TIdx> golden(numBytes / sizeof(TIdx));
+    std::vector<TIdx> got   (numBytes / sizeof(TIdx));
+    ReadFile(goldenPath, numBytes, golden.data(), numBytes);
+    ReadFile(outputPath, numBytes, got.data(),    numBytes);
+    bool ok = ResultCmp(golden, got, 0.0f);
+    printf("[validate] %-12s : %s\n", label, ok ? "PASS" : "FAIL");
+    return ok;
+}
+
 int main()
 {
     constexpr size_t halfBytes = 2;
@@ -144,7 +171,23 @@ int main()
     aclrtResetDevice(0);
     aclFinalize();
 
-    printf("[main] device run complete. Compare against the Python golden with:\n"
-           "       python ../scripts/compare_outputs.py\n");
-    return 0;
+    // GEMM tolerance is loose (1.0 absolute) — the FP16×FP16→FP32 path can
+    // accumulate small rounding; the integer-valued [-4, 4] inputs keep it
+    // bit-exact in practice but eps gives breathing room. Argmax compare is
+    // strict (eps=0): a wrong index is always a real bug.
+    bool logitsOk   = ValidateFloatBuffer<float>(
+        "../output/golden_logits.bin",
+        "../output/output_logits.bin",
+        logitsBytes, "logits", 1e-3f);
+    bool expertIdOk = ValidateIdxBuffer<uint32_t>(
+        "../output/golden_expert_id.bin",
+        "../output/output_expert_id.bin",
+        expertIdBytes, "expert_id");
+
+    if (logitsOk && expertIdOk) {
+        printf("test success\n");
+        return 0;
+    }
+    printf("test failed\n");
+    return 1;
 }

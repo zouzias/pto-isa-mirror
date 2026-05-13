@@ -8,14 +8,18 @@
  *   ../output/t.txt                     (single int; written by gen_data.py)
  *   ../output/k.txt                     (single int; written by gen_data.py)
  *   ../input/input_scores.bin           (T * E float32)
- *   ../output/golden_topk_values.bin    (T * K float32)
- *   ../output/golden_topk_indices.bin   (T * K uint32)
- *   ../output/output_topk_values.bin    (T * K float32; this driver)
- *   ../output/output_topk_indices.bin   (T * K uint32 ; this driver)
+ *   ../output/golden_topk_values.bin    (K * T float32; TRANSPOSED — see kernel.cpp)
+ *   ../output/golden_topk_indices.bin   (K * T uint32 ; TRANSPOSED)
+ *   ../output/output_topk_values.bin    (K * T float32; this driver)
+ *   ../output/output_topk_indices.bin   (K * T uint32 ; this driver)
  *
- * Stage-isolation: poisons both output buffers BEFORE the launch so the
- * compare script can distinguish "kernel never wrote" from "wrote wrong
- * values" (same pattern as moe_segmented_ffn_top1/main.cpp).
+ * Stage-isolation: poisons both output buffers BEFORE the launch so a
+ * "never wrote" symptom is visually distinct from "wrote wrong values".
+ *
+ * Pass/fail verdict: this driver runs the comparison in-process (via
+ * PtoTestCommon::ResultCmp) and prints `test success` / `test failed` at
+ * exit — matches §A18 moe_segmented_ffn_top1. scripts/compare_outputs.py
+ * is a stand-alone diagnostic tool for inspecting mismatches in detail.
  */
 
 #include "test_common.h"
@@ -64,6 +68,34 @@ static int ReadIntFile(const char *path)
         std::exit(2);
     }
     return n;
+}
+
+template <typename TVal>
+static bool ValidateFloatBuffer(const char *goldenPath, const char *outputPath,
+                                size_t numBytes, const char *label, float eps)
+{
+    std::vector<TVal> golden(numBytes / sizeof(TVal));
+    std::vector<TVal> got   (numBytes / sizeof(TVal));
+    ReadFile(goldenPath, numBytes, golden.data(), numBytes);
+    ReadFile(outputPath, numBytes, got.data(),    numBytes);
+    bool ok = ResultCmp(golden, got, eps);
+    printf("[validate] %-16s : %s\n", label, ok ? "PASS" : "FAIL");
+    return ok;
+}
+
+// Exact equality for integer index buffers. ResultCmp with eps=0 reduces to
+// `diff > 0 && relRatio > 0` → fails on any non-zero difference.
+template <typename TIdx>
+static bool ValidateIdxBuffer(const char *goldenPath, const char *outputPath,
+                              size_t numBytes, const char *label)
+{
+    std::vector<TIdx> golden(numBytes / sizeof(TIdx));
+    std::vector<TIdx> got   (numBytes / sizeof(TIdx));
+    ReadFile(goldenPath, numBytes, golden.data(), numBytes);
+    ReadFile(outputPath, numBytes, got.data(),    numBytes);
+    bool ok = ResultCmp(golden, got, 0.0f);
+    printf("[validate] %-16s : %s\n", label, ok ? "PASS" : "FAIL");
+    return ok;
 }
 
 int main()
@@ -135,7 +167,19 @@ int main()
     aclrtResetDevice(0);
     aclFinalize();
 
-    printf("[main] device run complete. Compare against the Python golden with:\n"
-           "       python ../scripts/compare_outputs.py\n");
-    return 0;
+    bool valOk = ValidateFloatBuffer<float>(
+        "../output/golden_topk_values.bin",
+        "../output/output_topk_values.bin",
+        valBytes, "topk_values", 1e-5f);
+    bool idxOk = ValidateIdxBuffer<uint32_t>(
+        "../output/golden_topk_indices.bin",
+        "../output/output_topk_indices.bin",
+        idxBytes, "topk_indices");
+
+    if (valOk && idxOk) {
+        printf("test success\n");
+        return 0;
+    }
+    printf("test failed\n");
+    return 1;
 }
