@@ -8,6 +8,7 @@
 
 - 同步操作
     - [TSYNC](isa/TSYNC_zh.md)
+    - [SYNCALL](isa/SYNCALL_zh.md)
 
 - 手动/资源绑定
     - [TASSIGN](isa/TASSIGN_zh.md)
