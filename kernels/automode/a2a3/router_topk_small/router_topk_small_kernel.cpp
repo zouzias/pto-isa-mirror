@@ -84,25 +84,42 @@ __global__ AICORE void runRouterTopkSmall(
     __gm__ T_    *topk_values  = reinterpret_cast<__gm__ T_    *>(topk_values_raw);
     __gm__ TIdx_ *topk_indices = reinterpret_cast<__gm__ TIdx_ *>(topk_indices_raw);
 
+    // GM layout note: 32-byte UB-burst alignment ([pto_tile.hpp:1510-1522])
+    // requires RowMajor Cols*sizeof(DType) % 32 == 0 or ColMajor
+    // Rows*sizeof(DType) % 32 == 0. For T=256, sizeof=4 (uint32 / float),
+    // a RowMajor [kT, 1] tile holds 4 bytes per row — fails. The §A4 trowsum
+    // fix is: declare reduction outputs as ColMajor and TRESHAPE to a
+    // RowMajor [Cols, Rows] view before TSTORE. We do the same here, which
+    // *transposes* the GM layout: GM holds [kK, kT] instead of [kT, kK].
+    // Python golden + comparator are updated accordingly.
     using ScoresGlobal = GlobalTensor<T_,    Shape<1, 1, 1, kT, kE>, Stride<1, 1, 1, kE, 1>>;
-    using OutValGlobal = GlobalTensor<T_,    Shape<1, 1, 1, kT, kK>, Stride<1, 1, 1, kK, 1>>;
-    using OutIdxGlobal = GlobalTensor<TIdx_, Shape<1, 1, 1, kT, kK>, Stride<1, 1, 1, kK, 1>>;
+    using OutValGlobal = GlobalTensor<T_,    Shape<1, 1, 1, kK, kT>, Stride<1, 1, 1, kT, 1>>;
+    using OutIdxGlobal = GlobalTensor<TIdx_, Shape<1, 1, 1, kK, kT>, Stride<1, 1, 1, kT, 1>>;
 
     using ScoresTile  = Tile<TileType::Vec, T_,    kT, kE, BLayout::RowMajor, -1, -1>;
     using ScratchTile = Tile<TileType::Vec, T_,    kT, kE, BLayout::RowMajor, -1, -1>;  // workspace; suppression target
     using TmpTile     = Tile<TileType::Vec, T_,    kT, kE, BLayout::RowMajor, -1, -1>;  // TROWARGMAX scratch
-    using RowValTile  = Tile<TileType::Vec, T_,    kT, 1,  BLayout::RowMajor, -1, -1>;
-    using RowIdxTile  = Tile<TileType::Vec, TIdx_, kT, 1,  BLayout::RowMajor, -1, -1>;
-    using OutValTile  = Tile<TileType::Vec, T_,    kT, kK, BLayout::RowMajor, -1, -1>;
-    using OutIdxTile  = Tile<TileType::Vec, TIdx_, kT, kK, BLayout::RowMajor, -1, -1>;
+    // ColMajor [kT, 1] for the per-pass argmax outputs (mirrors §A4 trowsum).
+    using RowValTile  = Tile<TileType::Vec, T_,    kT, 1,  BLayout::ColMajor, kT, 1>;
+    using RowIdxTile  = Tile<TileType::Vec, TIdx_, kT, 1,  BLayout::ColMajor, kT, 1>;
+    // ColMajor [kT, kK] for the K-pass accumulators. ColMajor means a
+    // column-k subview is shape [kT, 1] ColMajor — alignment-clean — so the
+    // per-pass `rowValTile -> outValTile[:, k]` copy via TSUBVIEW works.
+    using OutValTile  = Tile<TileType::Vec, T_,    kT, kK, BLayout::ColMajor, kT, kK>;
+    using OutIdxTile  = Tile<TileType::Vec, TIdx_, kT, kK, BLayout::ColMajor, kT, kK>;
+    // RowMajor [kK, kT] reshape views used as the TSTORE source.
+    using OutValTileND = Tile<TileType::Vec, T_,    kK, kT, BLayout::RowMajor, kK, kT>;
+    using OutIdxTileND = Tile<TileType::Vec, TIdx_, kK, kT, BLayout::RowMajor, kK, kT>;
 
-    ScoresTile  scoresTile(kT, kE);
-    ScratchTile scratchTile(kT, kE);
-    TmpTile     tmpTile(kT, kE);
-    RowValTile  rowValTile(kT, 1);
-    RowIdxTile  rowIdxTile(kT, 1);
-    OutValTile  outValTile(kT, kK);
-    OutIdxTile  outIdxTile(kT, kK);
+    ScoresTile    scoresTile(kT, kE);
+    ScratchTile   scratchTile(kT, kE);
+    TmpTile       tmpTile(kT, kE);
+    RowValTile    rowValTile;
+    RowIdxTile    rowIdxTile;
+    OutValTile    outValTile;
+    OutIdxTile    outIdxTile;
+    OutValTileND  outValTileND;
+    OutIdxTileND  outIdxTileND;
 
     ScoresGlobal scoresGlobal(scores);
     OutValGlobal outValGlobal(topk_values);
@@ -121,18 +138,22 @@ __global__ AICORE void runRouterTopkSmall(
     for (unsigned k = 0; k < kK; ++k) {
         TROWARGMAX(rowValTile, rowIdxTile, scratchTile, tmpTile);
 
-        // TODO(body): TSUBVIEW outValTile[:, k:k+1] := rowValTile
-        //             TSUBVIEW outIdxTile[:, k:k+1] := rowIdxTile
-        //             TMOV (or equivalent) into the col-k slot.
+        // TODO(body): TSUBVIEW outValColK / outIdxColK := outValTile / outIdxTile
+        //             at (row=0, col=k) with shape [kT, 1] ColMajor. Then
+        //             TMOV(outValColK, rowValTile); TMOV(outIdxColK, rowIdxTile).
 
         // TODO(body): suppress scratchTile[t, rowIdxTile[t]] := -inf
         //             per option (a) TSCATTER, (b) ramp-mask, or (c) precomputed sort.
         (void)k;  // skeleton placeholder
     }
 
-    // Phase 3: store the assembled outVal/outIdx tiles.
-    TSTORE(outValGlobal, outValTile);
-    TSTORE(outIdxGlobal, outIdxTile);
+    // Phase 3: TRESHAPE the ColMajor [kT, kK] accumulators into RowMajor
+    // [kK, kT] views, then TSTORE. The GM layout is [kK, kT] — Python
+    // golden + comparator handle the transpose.
+    TRESHAPE(outValTileND, outValTile);
+    TRESHAPE(outIdxTileND, outIdxTile);
+    TSTORE(outValGlobal, outValTileND);
+    TSTORE(outIdxGlobal, outIdxTileND);
 }
 
 // ----------------------------------------------------------------------------

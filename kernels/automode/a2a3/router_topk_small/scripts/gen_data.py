@@ -24,10 +24,17 @@
 #     are FP16. The kernel template can be re-instantiated with `T = half` if
 #     needed; the current main.cpp + golden are FP32-only.
 #
+# GM layout note: the kernel TSTOREs the result as a *transposed* [K, T]
+# array (ColMajor [T, K] -> RowMajor [K, T] reshape). This is the §A4
+# trowsum trick to satisfy the 32-byte UB-burst alignment for narrow tiles
+# ([pto_tile.hpp:1510-1522]). gen_data.py therefore writes [K, T] to disk;
+# the kernel writes [K, T]; compare_outputs.py reads [K, T] and transposes
+# back to [T, K] for the diagnostic prints.
+#
 # Output files (all raw little-endian, contiguous, no header):
 #   ./input/input_scores.bin              (T * E float32)
-#   ./output/golden_topk_values.bin       (T * K float32)
-#   ./output/golden_topk_indices.bin      (T * K uint32)
+#   ./output/golden_topk_values.bin       (K * T float32; TRANSPOSED layout)
+#   ./output/golden_topk_indices.bin      (K * T uint32 ; TRANSPOSED layout)
 #   ./output/t.txt                        (single int: T)
 #   ./output/k.txt                        (single int: K)
 # --------------------------------------------------------------------------------
@@ -51,8 +58,9 @@ def gen_golden_data(kT, kE, kK):
     os.makedirs("input",  exist_ok=True)
     os.makedirs("output", exist_ok=True)
     scores.tofile("./input/input_scores.bin")
-    topk_values_np.tofile("./output/golden_topk_values.bin")
-    topk_indices_np.tofile("./output/golden_topk_indices.bin")
+    # Kernel emits [K, T] (TRANSPOSED); write golden the same way.
+    np.ascontiguousarray(topk_values_np.T ).tofile("./output/golden_topk_values.bin")
+    np.ascontiguousarray(topk_indices_np.T).tofile("./output/golden_topk_indices.bin")
     with open("./output/t.txt", "w") as f:
         f.write(f"{kT}\n")
     with open("./output/k.txt", "w") as f:
