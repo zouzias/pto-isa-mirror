@@ -5,18 +5,25 @@
 #
 # Compares the device output against the Python golden for two arrays:
 #
-#   1. topk_values [T, K] float32
-#   2. topk_indices[T, K] uint32
+#   1. topk_values  : float32, GM layout [K, T] (TRANSPOSED — see kernel header)
+#   2. topk_indices : uint32 , GM layout [K, T] (TRANSPOSED)
+#
+# The kernel writes the result transposed because the natural [T, K] layout
+# violates the 32-byte UB-burst alignment rule for narrow tiles
+# ([pto_tile.hpp:1510-1522]); the ColMajor->RowMajor reshape trick from §A4
+# trowsum produces [K, T]. This script reads [K, T] and transposes back to
+# [T, K] for the diagnostic prints so the mismatch reports stay readable in
+# the (token, k) idiom.
 #
 # The host driver pre-fills both output device buffers with poison patterns
 # BEFORE the launch. This script reports those poison patterns as "kernel
 # never wrote" — distinguishing that from "kernel wrote wrong values".
 #
 # Reads:
-#   ./output/golden_topk_values.bin       (T * K float32)
-#   ./output/golden_topk_indices.bin      (T * K uint32)
-#   ./output/output_topk_values.bin       (T * K float32; device output)
-#   ./output/output_topk_indices.bin      (T * K uint32 ; device output)
+#   ./output/golden_topk_values.bin       (K * T float32; TRANSPOSED layout)
+#   ./output/golden_topk_indices.bin      (K * T uint32 ; TRANSPOSED layout)
+#   ./output/output_topk_values.bin       (K * T float32; device output, transposed)
+#   ./output/output_topk_indices.bin      (K * T uint32 ; device output, transposed)
 #   ./output/t.txt
 #   ./output/k.txt
 # --------------------------------------------------------------------------------
@@ -58,10 +65,12 @@ def main():
         print(f"[compare] FAIL: topk_indices is all 0x{POISON_IDX_BYTE:02X} — kernel never wrote.")
         sys.exit(1)
 
-    golden_val = np.fromfile("./output/golden_topk_values.bin",  dtype=np.float32).reshape(T, K)
-    golden_idx = np.fromfile("./output/golden_topk_indices.bin", dtype=np.uint32 ).reshape(T, K)
-    out_val    = np.frombuffer(out_val_raw, dtype=np.float32).reshape(T, K)
-    out_idx    = np.frombuffer(out_idx_raw, dtype=np.uint32 ).reshape(T, K)
+    # Read [K, T] (transposed layout) and transpose back to [T, K] for the
+    # token-major diagnostic prints.
+    golden_val = np.fromfile("./output/golden_topk_values.bin",  dtype=np.float32).reshape(K, T).T
+    golden_idx = np.fromfile("./output/golden_topk_indices.bin", dtype=np.uint32 ).reshape(K, T).T
+    out_val    = np.frombuffer(out_val_raw, dtype=np.float32).reshape(K, T).T
+    out_idx    = np.frombuffer(out_idx_raw, dtype=np.uint32 ).reshape(K, T).T
 
     val_ok = np.allclose(out_val, golden_val, atol=1e-5, rtol=1e-5)
     idx_ok = np.array_equal(out_idx, golden_idx)
