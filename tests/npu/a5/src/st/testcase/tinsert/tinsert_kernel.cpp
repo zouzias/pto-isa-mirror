@@ -380,8 +380,8 @@ __tf__ PTO_INTERNAL void FillDstCopyToCbufAndReadback(typename MatTile::TileDTyp
     __ubuf__ T *dstUbAddr = (__ubuf__ T *)__cce_get_tile_ptr(dstTileData);
 
 #if defined(__DAV_VEC__)
-    constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
     constexpr uint32_t dstElements = DstRows * Cols;
+    constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
     constexpr uint16_t dstRepeats = static_cast<uint16_t>((dstElements + elementsPerRepeat - 1) / elementsPerRepeat);
 
     __VEC_SCOPE__
@@ -634,10 +634,14 @@ AICORE void runTInsertND(__gm__ int8_t *out, __gm__ int8_t *src)
     InsertSrcTile insertSrc;
     InsertDstTile insertDst;
 
+#ifndef __PTO_AUTO__
     TASSIGN(srcTile, 0x0);
     TASSIGN(insertSrc, 0x0);
     TASSIGN(dstTile, 0x10000);
     TASSIGN(insertDst, 0x0);
+#else
+    TRESHAPE(srcTile, insertSrc);
+#endif
 
     SrcGlobalData srcGlobal(src);
     OutGlobalData dstGlobal(out);
@@ -780,8 +784,12 @@ __global__ AICORE void RunTInsertNDVecValid(__gm__ T *out, __gm__ T *srcIn, __gm
     SrcInsertVec srcInsert;
     DstVec dstTile;
 
+#ifndef __PTO_AUTO__
     TASSIGN(srcLoad, 0x0);
     TASSIGN(srcInsert, 0x0);
+#else
+    TRESHAPE(srcLoad, srcInsert);
+#endif
     constexpr uint32_t srcSize = SrcRows * SrcCols * sizeof(T);
     constexpr uint32_t dstAssignAddr = ((srcSize + 0xFF) / 0x100) * 0x100;
     TASSIGN(dstTile, dstAssignAddr);
@@ -849,8 +857,12 @@ __global__ AICORE void RunTInsertNDVecScalar(__gm__ T *out, __gm__ T *srcIn, __g
     SrcInsertVec srcInsert;
     DstVec dstTile;
 
+#ifndef __PTO_AUTO__
     TASSIGN(srcLoad, 0x0);
     TASSIGN(srcInsert, 0x0);
+#else
+    TRESHAPE(srcLoad, srcInsert);
+#endif
     constexpr uint32_t srcSize = 1 * MinAlignedCols * sizeof(T);
     constexpr uint32_t dstAssignAddr = ((srcSize + 0xFF) / 0x100) * 0x100;
     TASSIGN(dstTile, dstAssignAddr);
@@ -889,121 +901,12 @@ void launchTInsertNDVecScalar(uint8_t *out, uint8_t *srcIn, uint8_t *dstIn, void
     }
 }
 
-template <typename MatTile, typename DstVecTile, typename TmpVecTile, uint32_t AlignedRow, uint32_t DstRows,
-          uint32_t Cols, uint32_t BurstNum, uint16_t BurstLen>
-__tf__ PTO_INTERNAL void InitUnalignedInsertNZ(typename MatTile::TileDType __out__ matTileData,
-                                               typename DstVecTile::TileDType __out__ dstTileData,
-                                               typename TmpVecTile::TileDType __out__ tmpTileData,
-                                               uint8_t &syncId, uint8_t eventIdNum)
-{
-    using T = typename MatTile::DType;
-
-    __cbuf__ T *matAddr = (__cbuf__ T *)__cce_get_tile_ptr(matTileData);
-    __ubuf__ T *dstUbAddr = (__ubuf__ T *)__cce_get_tile_ptr(dstTileData);
-    __ubuf__ T *tmpAddr = (__ubuf__ T *)__cce_get_tile_ptr(tmpTileData);
-
-#if defined(__DAV_VEC__)
-    constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
-    constexpr uint32_t tmpElements = (AlignedRow + 1) * Cols;
-    constexpr uint16_t tmpRepeats = static_cast<uint16_t>((tmpElements + elementsPerRepeat - 1) / elementsPerRepeat);
-    constexpr uint32_t dstElements = DstRows * Cols;
-    constexpr uint16_t dstRepeats = static_cast<uint16_t>((dstElements + elementsPerRepeat - 1) / elementsPerRepeat);
-
-    __VEC_SCOPE__
-    {
-        RegTensor<T> vreg;
-        uint32_t predCount = elementsPerRepeat;
-        MaskReg preg = CreatePredicate<T>(predCount);
-        vdup(vreg, static_cast<T>(1), preg, MODE_ZEROING);
-        for (uint16_t i = 0; i < tmpRepeats; ++i) {
-            vsts(vreg, tmpAddr, static_cast<uint32_t>(i) * elementsPerRepeat, NORM_B32, preg);
-        }
-        for (uint16_t i = 0; i < dstRepeats; ++i) {
-            vsts(vreg, dstUbAddr, static_cast<uint32_t>(i) * elementsPerRepeat, NORM_B32, preg);
-        }
-    }
-
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    copy_ubuf_to_cbuf((__cbuf__ void *)matAddr, (__ubuf__ void *)dstUbAddr, 0, BurstNum, BurstLen, 0, 0);
-#endif
-
-#if defined(__DAV_CUBE__)
-    ReadbackCbufToUbuf((__ubuf__ void *)dstUbAddr, (__cbuf__ void *)matAddr, BurstNum, BurstLen, 0, syncId, eventIdNum);
-#endif
-}
-
-template <typename T, uint32_t SrcRows, uint32_t DstRows, uint32_t Cols, uint32_t IdxRow>
-AICORE void runTInsertNZUnaligned(__gm__ T *out, __gm__ T *src)
-{
-    constexpr uint32_t c0Size = CUBE_BLOCK_SIZE / (FRACTAL_NZ_ROW * sizeof(T));
-    constexpr uint32_t AlignedRow = ((SrcRows + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW) * FRACTAL_NZ_ROW;
-
-    using SrcShapeDim5 = pto::Shape<1, 1, 1, SrcRows, Cols>;
-    using SrcStridDim5 = pto::Stride<1, 1, 1, Cols, 1>;
-    using SrcGlobalData = GlobalTensor<T, SrcShapeDim5, SrcStridDim5>;
-
-    using OutShapeDim5 = pto::Shape<1, Cols / c0Size, DstRows / FRACTAL_NZ_ROW, FRACTAL_NZ_ROW, c0Size>;
-    using OutStridDim5 =
-        pto::Stride<Cols / c0Size * c0Size * DstRows, DstRows * c0Size, FRACTAL_NZ_ROW * c0Size, c0Size, 1>;
-    using OutGlobalData = GlobalTensor<T, OutShapeDim5, OutStridDim5, Layout::NZ>;
-
-    using SrcVecTile = Tile<TileType::Vec, T, SrcRows, Cols, BLayout::RowMajor, -1, -1>;
-    using TmpVecTile = Tile<TileType::Vec, T, AlignedRow + 1, Cols, BLayout::ColMajor, SrcRows, Cols, SLayout::RowMajor,
-                            512, PadValue::Null, CompactMode::RowPlusOne>;
-    using DstVecTile = Tile<TileType::Vec, T, DstRows, Cols, BLayout::ColMajor, -1, -1, SLayout::RowMajor>;
-    using ZeroVecTile = Tile<TileType::Vec, T, DstRows, Cols, BLayout::RowMajor, -1, -1>;
-    using MatTile = Tile<TileType::Mat, T, DstRows, Cols, BLayout::ColMajor, -1, -1, SLayout::RowMajor>;
-
-    SrcVecTile srcTile(SrcRows, Cols);
-    TmpVecTile tmpTile;
-    DstVecTile dstTile(DstRows, Cols);
-    ZeroVecTile zeroTile(DstRows, Cols);
-    MatTile matTile(DstRows, Cols);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(tmpTile, 0x10000);
-    TASSIGN(dstTile, 0x20000);
-    TASSIGN(zeroTile, 0x20000);
-    TASSIGN(matTile, 0x0);
-
-    SrcGlobalData srcGlobal(src);
-    OutGlobalData dstGlobal(out);
-
-    uint8_t syncId = 0;
-    uint8_t eventIdNum = 16;
-
-    constexpr uint32_t burstNum = Cols / c0Size;
-    constexpr uint16_t burstLen = (DstRows * c0Size * sizeof(T)) / BLOCK_BYTE_SIZE;
-
-#if defined(__DAV_VEC__)
-    TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-#endif
-
-    InitUnalignedInsertNZ<MatTile, DstVecTile, TmpVecTile, AlignedRow, DstRows, Cols, burstNum, burstLen>(
-        matTile.data(), dstTile.data(), tmpTile.data(), syncId, eventIdNum);
-
-#if defined(__DAV_VEC__)
-    pto::TMovToVecNd2Nz<T, TmpVecTile, SrcVecTile>(tmpTile.data(), srcTile.data(), SrcRows, Cols, SrcRows);
-
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-
-    TINSERT(matTile, tmpTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(0));
-    set_intra_block(PIPE_MTE3, syncId);
-
-    WaitAndStore(dstGlobal, dstTile, syncId);
-#endif
-}
-
 template <typename MatTile, typename DstVecTile, typename TmpVecTile, uint32_t TmpRows, uint32_t DstRows,
           uint32_t Cols, uint32_t BurstNum, uint16_t BurstLen>
-__tf__ PTO_INTERNAL void InitTwoInsertNZ(typename MatTile::TileDType __out__ matTileData,
-                                         typename DstVecTile::TileDType __out__ dstTileData,
-                                         typename TmpVecTile::TileDType __out__ tmpTileData,
-                                         uint8_t &syncId, uint8_t eventIdNum)
+__tf__ PTO_INTERNAL void InitInsertNZ(typename MatTile::TileDType __out__ matTileData,
+                                      typename DstVecTile::TileDType __out__ dstTileData,
+                                      typename TmpVecTile::TileDType __out__ tmpTileData,
+                                      uint8_t &syncId, uint8_t eventIdNum)
 {
     using T = typename MatTile::DType;
 
@@ -1032,13 +935,75 @@ __tf__ PTO_INTERNAL void InitTwoInsertNZ(typename MatTile::TileDType __out__ mat
         }
     }
 
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
     copy_ubuf_to_cbuf((__cbuf__ void *)matAddr, (__ubuf__ void *)dstUbAddr, 0, BurstNum, BurstLen, 0, 0);
 #endif
 
 #if defined(__DAV_CUBE__)
     ReadbackCbufToUbuf((__ubuf__ void *)dstUbAddr, (__cbuf__ void *)matAddr, BurstNum, BurstLen, 0, syncId, eventIdNum);
+#endif
+}
+
+template <typename T, uint32_t SrcRows, uint32_t DstRows, uint32_t Cols, uint32_t IdxRow>
+AICORE void runTInsertNZUnaligned(__gm__ T *out, __gm__ T *src)
+{
+    constexpr uint32_t c0Size = CUBE_BLOCK_SIZE / (FRACTAL_NZ_ROW * sizeof(T));
+    constexpr uint32_t AlignedRow = ((SrcRows + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW) * FRACTAL_NZ_ROW;
+
+    using SrcShapeDim5 = pto::Shape<1, 1, 1, SrcRows, Cols>;
+    using SrcStridDim5 = pto::Stride<1, 1, 1, Cols, 1>;
+    using SrcGlobalData = GlobalTensor<T, SrcShapeDim5, SrcStridDim5>;
+
+    using OutShapeDim5 = pto::Shape<1, Cols / c0Size, DstRows / FRACTAL_NZ_ROW, FRACTAL_NZ_ROW, c0Size>;
+    using OutStridDim5 =
+        pto::Stride<Cols / c0Size * c0Size * DstRows, DstRows * c0Size, FRACTAL_NZ_ROW * c0Size, c0Size, 1>;
+    using OutGlobalData = GlobalTensor<T, OutShapeDim5, OutStridDim5, Layout::NZ>;
+
+    using SrcVecTile = Tile<TileType::Vec, T, SrcRows, Cols, BLayout::RowMajor, -1, -1>;
+    using TmpVecTile = Tile<TileType::Vec, T, AlignedRow + 1, Cols, BLayout::ColMajor, SrcRows, Cols, SLayout::RowMajor,
+                            512, PadValue::Null, CompactMode::RowPlusOne>;
+    using DstVecTile = Tile<TileType::Vec, T, DstRows, Cols, BLayout::ColMajor, -1, -1, SLayout::RowMajor>;
+    using MatTile = Tile<TileType::Mat, T, DstRows, Cols, BLayout::ColMajor, -1, -1, SLayout::RowMajor>;
+
+    SrcVecTile srcTile(SrcRows, Cols);
+    TmpVecTile tmpTile;
+    DstVecTile dstTile(DstRows, Cols);
+    MatTile matTile(DstRows, Cols);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(tmpTile, 0x10000);
+    TASSIGN(dstTile, 0x20000);
+    TASSIGN(matTile, 0x0);
+
+    SrcGlobalData srcGlobal(src);
+    OutGlobalData dstGlobal(out);
+
+    uint8_t syncId = 0;
+    uint8_t eventIdNum = 16;
+
+    constexpr uint32_t burstNum = Cols / c0Size;
+    constexpr uint16_t burstLen = (DstRows * c0Size * sizeof(T)) / BLOCK_BYTE_SIZE;
+
+#if defined(__DAV_VEC__)
+    TLOAD(srcTile, srcGlobal);
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+
+    InitInsertNZ<MatTile, DstVecTile, TmpVecTile, AlignedRow, DstRows, Cols, burstNum, burstLen>(
+        matTile.data(), dstTile.data(), tmpTile.data(), syncId, eventIdNum);
+
+#if defined(__DAV_VEC__)
+    pto::TMovToVecNd2Nz<T, TmpVecTile, SrcVecTile>(tmpTile.data(), srcTile.data(), SrcRows, Cols, SrcRows);
+
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+
+    TINSERT(matTile, tmpTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(0));
+    set_intra_block(PIPE_MTE3, syncId);
+
+    WaitAndStore(dstGlobal, dstTile, syncId);
 #endif
 }
 
@@ -1104,12 +1069,16 @@ AICORE void runTInsertNZTwoInsert(__gm__ T *out, __gm__ T *src1, __gm__ T *src2)
     DstVecTile dstTile(DstRows, Cols);
     MatTile matTile(DstRows, Cols);
 
+#ifndef __PTO_AUTO__
     TASSIGN(src1Tile, 0x0);
     TASSIGN(src2Tile, 0x4000);
     TASSIGN(tmpTile1, 0x10000);
     TASSIGN(tmpTile2, 0x10000);
     TASSIGN(dstTile, 0x20000);
     TASSIGN(matTile, 0x0);
+#else
+    TRESHAPE(tmpTile1, tmpTile2);
+#endif
 
     Src1GlobalData src1Global(src1);
     Src2GlobalData src2Global(src2);
@@ -1127,7 +1096,7 @@ AICORE void runTInsertNZTwoInsert(__gm__ T *out, __gm__ T *src1, __gm__ T *src2)
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
 
-    InitTwoInsertNZ<MatTile, DstVecTile, TmpVecTile1, MaxAlignedRow, DstRows, Cols, burstNum, burstLen>(
+    InitInsertNZ<MatTile, DstVecTile, TmpVecTile1, MaxAlignedRow, DstRows, Cols, burstNum, burstLen>(
         matTile.data(), dstTile.data(), tmpTile1.data(), syncId, eventIdNum);
 
 #if defined(__DAV_VEC__)
@@ -1267,12 +1236,16 @@ AICORE void runTInsertNZOverwrite(__gm__ T *out, __gm__ T *src1, __gm__ T *src2)
     DstVecTile dstTile(DstRows, Cols);
     MatTile matTile(DstRows, Cols);
 
+#ifndef __PTO_AUTO__
     TASSIGN(src1Tile, 0x0);
     TASSIGN(src2Tile, 0x4000);
     TASSIGN(tmpTile1, 0x10000);
     TASSIGN(tmpTile2, 0x10000);
     TASSIGN(dstTile, 0x20000);
     TASSIGN(matTile, 0x0);
+#else
+    TRESHAPE(tmpTile1, tmpTile2);
+#endif
 
     Src1GlobalData src1Global(src1);
     Src2GlobalData src2Global(src2);
@@ -1494,7 +1467,8 @@ void launchTInsertNZVecToVec(uint64_t *out, uint64_t *src, void *stream)
     }
 }
 
-template <typename MatTile, typename DstVecTile, typename TmpVecTile, uint32_t BurstNum, uint16_t BurstLen>
+template <typename MatTile, typename DstVecTile, typename TmpVecTile, uint32_t TmpRows, uint32_t TmpCols,
+          uint32_t BurstNum, uint16_t BurstLen>
 __tf__ PTO_INTERNAL void FillTmpAndReadbackNZ(typename MatTile::TileDType __out__ matTileData,
                                              typename DstVecTile::TileDType __out__ dstTileData,
                                              typename TmpVecTile::TileDType __out__ tmpTileData,
@@ -1509,9 +1483,8 @@ __tf__ PTO_INTERNAL void FillTmpAndReadbackNZ(typename MatTile::TileDType __out_
 #if defined(__DAV_VEC__)
     // Fill tmpTile UB with non-zero constant so rows beyond ValidRow carry a known value
     // after NZ conversion. TINSERT writes ALL alignedRows from tmpTile to L1.
-    constexpr uint32_t tmpTileBytes = BurstNum * (TmpVecTile::Rows) * CUBE_BLOCK_SIZE;
     constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
-    constexpr uint32_t tmpElements = tmpTileBytes / sizeof(T);
+    constexpr uint32_t tmpElements = TmpRows * TmpCols;
     constexpr uint16_t zeroRepeats = static_cast<uint16_t>((tmpElements + elementsPerRepeat - 1) / elementsPerRepeat);
 
     __VEC_SCOPE__
@@ -1580,7 +1553,7 @@ AICORE void runTInsertNZSplitCustom(__gm__ T *out, __gm__ T *src)
     TLOAD(srcTile, srcGlobal);
 #endif
 
-    FillTmpAndReadbackNZ<MatTile, DstVecTile, TmpVecTile, burstNum, burstLen>(
+    FillTmpAndReadbackNZ<MatTile, DstVecTile, TmpVecTile, DstRows + 1, Cols, burstNum, burstLen>(
         matTile.data(), dstTile.data(), tmpTile.data(), syncId, eventIdNum);
 
 #if defined(__DAV_VEC__)
@@ -1695,9 +1668,13 @@ AICORE void runTInsertNZTwoInputSplit(__gm__ T *out, __gm__ T *src)
     DstVecTile dstTile(DstRows, Cols);
     MatTile matTile(DstRows, Cols);
 
+#ifndef __PTO_AUTO__
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x0);
     TASSIGN(matTile, 0x0);
+#else
+    TRESHAPE(srcTile, dstTile);
+#endif
 
     OutGlobalData dstGlobal(out);
 
@@ -1888,10 +1865,14 @@ AICORE void runTInsertNZDoubleInput(__gm__ T *out, __gm__ T *src)
     DstVecTile dstTile(DstRows, Cols);
     MatTile matTile(DstRows, Cols);
 
+#ifndef __PTO_AUTO__
     TASSIGN(src1Tile, 0x0);
     TASSIGN(src2Tile, ubSrc2Offset);
     TASSIGN(dstTile, 0x0);
     TASSIGN(matTile, 0x0);
+#else
+    TRESHAPE(src1Tile, dstTile);
+#endif
 
     OutGlobalData dstGlobal(out);
 
