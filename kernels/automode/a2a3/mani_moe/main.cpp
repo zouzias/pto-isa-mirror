@@ -45,6 +45,7 @@ extern "C" void launchManiMoeFp16(uint8_t *z_fp32,
                                   uint8_t *w1_fp16,
                                   uint8_t *w2_fp16,
                                   uint8_t *topk_idx_u32,
+                                  uint8_t *topk_out_idx_u32,
                                   void *stream);
 
 namespace {
@@ -53,6 +54,7 @@ constexpr int kT = 256;
 constexpr int kH = 64;
 constexpr int kF = 64;
 constexpr int kE = 16;
+constexpr int kTopKScratch = 8;
 
 constexpr size_t kHalfBytes = 2;
 constexpr size_t kFp32Bytes = 4;
@@ -92,6 +94,7 @@ int MoE()
     size_t expertIdBytes = static_cast<size_t>(NUM_TOKENS_) * kU32Bytes;
     size_t outBytes = static_cast<size_t>(NUM_TOKENS_) * HIDDEN_ROWS_ * kFp32Bytes;
     size_t topkIdxBytes = static_cast<size_t>(NUM_EXPERTS_) * kU32Bytes;
+    size_t topkOutIdxBytes = static_cast<size_t>(NUM_TOKENS_) * kTopKScratch * kU32Bytes;
 
     constexpr uint8_t kPoisonLogits = 0x5A;
     constexpr uint8_t kPoisonExpertId = 0x7B;
@@ -120,7 +123,8 @@ int MoE()
     uint8_t *xHost = nullptr, *wRouterHost = nullptr, *w1Host = nullptr, *w2Host = nullptr;
     uint8_t *outHost = nullptr, *logitsHost = nullptr, *expertIdHost = nullptr;
     uint8_t *xDev = nullptr, *wRouterDev = nullptr, *w1Dev = nullptr, *w2Dev = nullptr;
-    uint8_t *outDev = nullptr, *logitsDev = nullptr, *expertIdDev = nullptr, *topkIdxDev = nullptr;
+    uint8_t *outDev = nullptr, *logitsDev = nullptr, *expertIdDev = nullptr;
+    uint8_t *topkIdxDev = nullptr, *topkOutIdxDev = nullptr;
 
     CheckAcl(aclrtMallocHost((void **)(&xHost), xBytes), "aclrtMallocHost(xHost)");
     CheckAcl(aclrtMallocHost((void **)(&wRouterHost), wRouterBytes), "aclrtMallocHost(wRouterHost)");
@@ -141,6 +145,8 @@ int MoE()
              "aclrtMalloc(expertIdDev)");
     CheckAcl(aclrtMalloc((void **)(&topkIdxDev), topkIdxBytes, ACL_MEM_MALLOC_HUGE_FIRST),
              "aclrtMalloc(topkIdxDev)");
+    CheckAcl(aclrtMalloc((void **)(&topkOutIdxDev), topkOutIdxBytes, ACL_MEM_MALLOC_HUGE_FIRST),
+             "aclrtMalloc(topkOutIdxDev)");
 
     ReadFile("../input/input_X.bin", xBytes, xHost, xBytes);
     ReadFile("../input/input_W_router.bin", wRouterBytes, wRouterHost, wRouterBytes);
@@ -158,7 +164,8 @@ int MoE()
              "aclrtMemset(expertIdDev)");
     CheckAcl(aclrtMemset(outDev, outBytes, kPoisonOut, outBytes), "aclrtMemset(outDev)");
 
-    launchManiMoeFp16(outDev, logitsDev, expertIdDev, xDev, wRouterDev, w1Dev, w2Dev, topkIdxDev, stream);
+    launchManiMoeFp16(outDev, logitsDev, expertIdDev, xDev, wRouterDev, w1Dev, w2Dev, topkIdxDev, topkOutIdxDev,
+                      stream);
 
     if (!CheckAcl(aclrtSynchronizeStream(stream), "aclrtSynchronizeStream")) {
         std::cerr << "[main] stream sync failed.\n";
@@ -177,6 +184,7 @@ int MoE()
     printf("[main] poison sentinels after launch: logits[0]=0x%02X expert_id[0]=0x%02X Z[0]=0x%02X\n",
            logitsHost[0], expertIdHost[0], outHost[0]);
 
+    aclrtFree(topkOutIdxDev);
     aclrtFree(topkIdxDev);
     aclrtFree(outDev);
     aclrtFree(expertIdDev);
