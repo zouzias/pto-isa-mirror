@@ -84,12 +84,12 @@ bool ValidateBuffer(const char *goldenPath, const char *outputPath, size_t numBy
 template <int NUM_TOKENS_, int HIDDEN_ROWS_, int FFN_ROWS_, int NUM_EXPERTS_>
 int MoE()
 {
-    constexpr size_t xBytes = static_cast<size_t>(NUM_TOKENS_) * HIDDEN_ROWS_ * kHalfBytes;
-    constexpr size_t wRouterBytes = static_cast<size_t>(HIDDEN_ROWS_) * NUM_EXPERTS_ * kHalfBytes;
-    constexpr size_t wBytes = static_cast<size_t>(NUM_EXPERTS_) * HIDDEN_ROWS_ * FFN_ROWS_ * kHalfBytes;
-    constexpr size_t logitsBytes = static_cast<size_t>(NUM_TOKENS_) * NUM_EXPERTS_ * kFp32Bytes;
-    constexpr size_t expertIdBytes = static_cast<size_t>(NUM_TOKENS_) * kU32Bytes;
-    constexpr size_t outBytes = static_cast<size_t>(NUM_TOKENS_) * HIDDEN_ROWS_ * kFp32Bytes;
+    size_t xBytes = static_cast<size_t>(NUM_TOKENS_) * HIDDEN_ROWS_ * kHalfBytes;
+    size_t wRouterBytes = static_cast<size_t>(HIDDEN_ROWS_) * NUM_EXPERTS_ * kHalfBytes;
+    size_t wBytes = static_cast<size_t>(NUM_EXPERTS_) * HIDDEN_ROWS_ * FFN_ROWS_ * kHalfBytes;
+    size_t logitsBytes = static_cast<size_t>(NUM_TOKENS_) * NUM_EXPERTS_ * kFp32Bytes;
+    size_t expertIdBytes = static_cast<size_t>(NUM_TOKENS_) * kU32Bytes;
+    size_t outBytes = static_cast<size_t>(NUM_TOKENS_) * HIDDEN_ROWS_ * kFp32Bytes;
 
     constexpr uint8_t kPoisonLogits = 0x5A;
     constexpr uint8_t kPoisonExpertId = 0x7B;
