@@ -5,12 +5,12 @@
  * out_val, out_idx, src, idx; ResultCmp on both values and indices).
  *
  * I/O contract (all little-endian, contiguous, no header):
- *   ../input/input_src.bin     1 * kCols  float32   (raw random unsorted)
- *   ../input/input_idx.bin     1 * kCols  uint32_t  ([0..kCols-1])
- *   ../output/golden_val.bin   1 * kTopK  float32   (top-K values, descending)
- *   ../output/golden_idx.bin   1 * kTopK  uint32_t  (matching indices)
- *   ../output/output_val.bin   1 * kTopK  float32   (kernel value output)
- *   ../output/output_idx.bin   1 * kTopK  uint32_t  (kernel index output)
+ *   ../input/input_src.bin     kRows * kCols  float32   (raw random unsorted, row-major)
+ *   ../input/input_idx.bin     1     * kCols  uint32_t  ([0..kCols-1]; shared across rows)
+ *   ../output/golden_val.bin   kRows * kTopK  float32   (per-row top-K values, descending)
+ *   ../output/golden_idx.bin   kRows * kTopK  uint32_t  (per-row matching indices)
+ *   ../output/output_val.bin   kRows * kTopK  float32   (kernel value output)
+ *   ../output/output_idx.bin   kRows * kTopK  uint32_t  (kernel index output)
  */
 
 #include "test_common.h"
@@ -61,14 +61,17 @@ inline bool ValidateIndexResults(size_t outIdxSize)
     return ret;
 }
 
-template <typename T, int kCols, int kTopK>
+template <typename T, int kRows, int kCols, int kTopK>
 void TopkKernel()
 {
     using indexT = uint32_t;
-    size_t srcSize    = static_cast<size_t>(kCols) * sizeof(T);
-    size_t idxSize    = static_cast<size_t>(kCols) * sizeof(indexT);
-    size_t outValSize = static_cast<size_t>(kTopK) * sizeof(T);
-    size_t outIdxSize = static_cast<size_t>(kTopK) * sizeof(indexT);
+    // 2D layout: src is (kRows, kCols), outputs are (kRows, kTopK). idx stays
+    // (kCols,) — a single identity row shared by every row of src on the
+    // kernel side.
+    size_t srcSize    = static_cast<size_t>(kRows) * kCols * sizeof(T);
+    size_t idxSize    = static_cast<size_t>(kCols)         * sizeof(indexT);
+    size_t outValSize = static_cast<size_t>(kRows) * kTopK * sizeof(T);
+    size_t outIdxSize = static_cast<size_t>(kRows) * kTopK * sizeof(indexT);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -126,8 +129,9 @@ void TopkKernel()
 
 int main()
 {
+    constexpr int kRows = 4;
     constexpr int kCols = 1280;
     constexpr int kTopK = 512;
-    TopkKernel<float, kCols, kTopK>();
+    TopkKernel<float, kRows, kCols, kTopK>();
     return 0;
 }

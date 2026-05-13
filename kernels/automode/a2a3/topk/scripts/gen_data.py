@@ -1,17 +1,16 @@
 #!/usr/bin/python3
 # coding=utf-8
 # --------------------------------------------------------------------------------
-# topk (auto-mode A3 prototype, full TopK) - gen_data.py
+# topk (auto-mode A3 prototype, 2D full TopK) - gen_data.py
 #
-# Generates random unsorted inputs + identity index array, computes the true
-# top-K values and indices via NumPy. Replaces the previous values-only
-# pre-sort recipe.
+# Generates a (kRows, kCols) float32 input and computes the per-row top-K
+# values and matching original-position indices via NumPy.
 #
 # Output files (raw little-endian, contiguous, no header):
-#   ./input/input_src.bin     1 * kCols  float32   (raw random unsorted)
-#   ./input/input_idx.bin     1 * kCols  uint32_t  ([0..kCols-1])
-#   ./output/golden_val.bin   1 * kTopK  float32   (top-K values, descending)
-#   ./output/golden_idx.bin   1 * kTopK  uint32_t  (matching original-position indices)
+#   ./input/input_src.bin     kRows * kCols  float32   (raw random unsorted, row-major)
+#   ./input/input_idx.bin     1     * kCols  uint32_t  ([0..kCols-1]; shared across rows)
+#   ./output/golden_val.bin   kRows * kTopK  float32   (per-row top-K values, descending)
+#   ./output/golden_idx.bin   kRows * kTopK  uint32_t  (per-row matching original-position indices)
 # --------------------------------------------------------------------------------
 
 import os
@@ -19,18 +18,21 @@ import numpy as np
 
 np.random.seed(19)
 
+kRows = 4
 kCols = 1280
 kTopK = 512
 
 
 def gen_golden_data():
-    src = np.random.uniform(-1000.0, 1000.0, size=(kCols,)).astype(np.float32)
+    src = np.random.uniform(-1000.0, 1000.0, size=(kRows, kCols)).astype(np.float32)
+    # idx is the same identity row for every input row; kernel TLOADs it once
+    # per row from a shared (kCols,) GM region. Keep file size at kCols.
     idx = np.arange(kCols, dtype=np.uint32)
 
-    # Descending sort by value, stable on original order for ties.
-    order = np.argsort(-src, kind='stable')
-    topk_idx = order[:kTopK].astype(np.uint32)
-    topk_val = src[topk_idx].astype(np.float32)
+    # Per-row descending sort by value, stable on original order for ties.
+    order = np.argsort(-src, axis=1, kind='stable')
+    topk_idx = order[:, :kTopK].astype(np.uint32)
+    topk_val = np.take_along_axis(src, topk_idx.astype(np.int64), axis=1).astype(np.float32)
 
     os.makedirs("input", exist_ok=True)
     os.makedirs("output", exist_ok=True)
