@@ -155,8 +155,11 @@ tested shape that is 2304 rows; tightening it is a future optimisation.
 
 ```bash
 bash run.sh -r npu -v Ascend910B1
-python scripts/compare_outputs.py
 ```
+
+The host driver runs three in-process validations (`logits`, `expert_id`, `Y`)
+via `PtoTestCommon::ResultCmp` and prints `test success` / `test failed` at
+exit — matches §A18. `scripts/compare_outputs.py` is a stand-alone diagnostic.
 
 ## How to compare against the Python reference
 
