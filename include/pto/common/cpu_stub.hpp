@@ -90,8 +90,7 @@ static inline int aclrtMallocHost(void **p, size_t sz)
 #define SKIP_IF_RANKS_LT(n)
 static constexpr uint32_t HCCL_MAX_RANK_NUM = 64;
 
-struct HcclRootInfo {
-};
+struct HcclRootInfo {};
 
 struct HcclDeviceContext {
     uint64_t workSpace;
@@ -234,8 +233,7 @@ inline uint64_t get_task_cookie()
 }
 
 template <typename T>
-struct is_event : std::false_type {
-};
+struct is_event : std::false_type {};
 
 template <typename... Ts>
 inline constexpr bool all_events_v = (is_event<Ts>::value && ...);
@@ -257,8 +255,7 @@ inline void TSYNCALL_SOFT_IMPL(int32_t *gmWorkspace, int32_t *ubWorkspace, int32
 }
 
 template <bool IsAIVOnly = false>
-inline void TSYNCALL_SOFT_MIX_IMPL(int32_t *gmWorkspace, int32_t *ubWorkspace, int32_t *l1Workspace,
-                                   int32_t usedCores)
+inline void TSYNCALL_SOFT_MIX_IMPL(int32_t *gmWorkspace, int32_t *ubWorkspace, int32_t *l1Workspace, int32_t usedCores)
 {
     (void)IsAIVOnly;
     (void)gmWorkspace;

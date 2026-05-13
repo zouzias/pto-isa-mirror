@@ -34,12 +34,21 @@ PTO_INTERNAL void TSYNCALL_SOFT_DCCI(__gm__ void *ptr)
     __asm__ __volatile__("");
 }
 
-PTO_INTERNAL void TSYNCALL_SOFT_DCCI_RANGE(__gm__ int32_t *ptr, int32_t lines)
+PTO_INTERNAL void TSYNCALL_SOFT_DCCI_RANGE(__gm__ int32_t *ptr, int32_t cachelines)
 {
-    for (int32_t i = 0; i < lines; ++i) {
+    for (int32_t i = 0; i < cachelines; ++i) {
         TSYNCALL_SOFT_DCCI(static_cast<__gm__ void *>(ptr + i * SYNCALL_SOFT_SLOT_INT32));
     }
     dsb(DSB_DDR);
+}
+
+PTO_INTERNAL int32_t TSYNCALL_GET_MIX_AIC_BLOCKS()
+{
+#if defined(__MIX_CORE_AIC_BLOCKS__)
+    return static_cast<int32_t>(__MIX_CORE_AIC_BLOCKS__);
+#else
+    return static_cast<int32_t>(get_block_num());
+#endif
 }
 
 PTO_INTERNAL int32_t TSYNCALL_GET_MIX_AIV_RATIO()
@@ -50,15 +59,6 @@ PTO_INTERNAL int32_t TSYNCALL_GET_MIX_AIV_RATIO()
     return static_cast<int32_t>(get_subblockdim());
 #else
     return 1;
-#endif
-}
-
-PTO_INTERNAL int32_t TSYNCALL_GET_MIX_AIC_BLOCKS()
-{
-#if defined(__MIX_CORE_AIC_BLOCKS__)
-    return static_cast<int32_t>(__MIX_CORE_AIC_BLOCKS__);
-#else
-    return static_cast<int32_t>(get_block_num());
 #endif
 }
 
@@ -121,8 +121,8 @@ PTO_INTERNAL void TSYNCALL_SOFT_AIC_STORE_SLOT(__gm__ int32_t *dst, __cbuf__ int
     constexpr int64_t repeatConfig = (static_cast<int64_t>(1) << 16) | 1;
     create_cbuf_matrix(l1Workspace, repeatConfig, static_cast<uint32_t>(value));
     pipe_barrier(PIPE_ALL);
-    copy_cbuf_to_ubuf(static_cast<__ubuf__ void *>(ubWorkspace),
-                      static_cast<__cbuf__ void *>(l1Workspace), 0, 1, 1, 0, 0);
+    copy_cbuf_to_ubuf(static_cast<__ubuf__ void *>(ubWorkspace), static_cast<__cbuf__ void *>(l1Workspace), 0, 1, 1, 0,
+                      0);
     pipe_barrier(PIPE_ALL);
     set_intra_block(PIPE_S, SYNC_PROXY_WRITE_REQ);
     wait_intra_block(PIPE_S, SYNC_PROXY_WRITE_DONE);
@@ -134,8 +134,8 @@ PTO_INTERNAL void TSYNCALL_SOFT_AIV_PROXY_WRITE(__gm__ int32_t *dst, __ubuf__ in
 {
     wait_intra_block(PIPE_S, SYNC_PROXY_WRITE_REQ);
     pipe_barrier(PIPE_ALL);
-    copy_ubuf_to_gm_align_v2(static_cast<__gm__ void *>(dst),
-                              static_cast<__ubuf__ void *>(ubWorkspace), 0, 1, 1, 0, 0, 0);
+    copy_ubuf_to_gm_align_v2(static_cast<__gm__ void *>(dst), static_cast<__ubuf__ void *>(ubWorkspace), 0, 1, 1, 0, 0,
+                             0);
     pipe_barrier(PIPE_ALL);
     TSYNCALL_SOFT_DCCI(static_cast<__gm__ void *>(dst));
     dsb(DSB_DDR);
@@ -152,8 +152,8 @@ PTO_INTERNAL int32_t TSYNCALL_SOFT_AIV_WRITE_SLOT(__gm__ int32_t *localSyncGM, _
     set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
 
-    const int32_t curValue = ubWorkspace[0] + 1;
-    ubWorkspace[0] = curValue;
+    const int32_t curVal = ubWorkspace[0] + 1;
+    ubWorkspace[0] = curVal;
 
     set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
@@ -163,38 +163,38 @@ PTO_INTERNAL int32_t TSYNCALL_SOFT_AIV_WRITE_SLOT(__gm__ int32_t *localSyncGM, _
     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
     TSYNCALL_SOFT_DCCI(static_cast<__gm__ void *>(localSyncGM));
     dsb(DSB_DDR);
-    return curValue;
+    return curVal;
 }
 
 PTO_INTERNAL void TSYNCALL_SOFT_AIV_BARRIER(__gm__ int32_t *gmWorkspace, __ubuf__ int32_t *ubWorkspace,
-                                            int32_t totalBlocks, int32_t blockIdx)
+                                            int32_t totalBlks, int32_t blockIdx)
 {
     __gm__ int32_t *localSyncGM = gmWorkspace + blockIdx * SYNCALL_SOFT_SLOT_INT32;
-    const int32_t curValue = TSYNCALL_SOFT_AIV_WRITE_SLOT(localSyncGM, ubWorkspace);
+    const int32_t curVal = TSYNCALL_SOFT_AIV_WRITE_SLOT(localSyncGM, ubWorkspace);
 
-    int32_t pollCount = 0;
+    int32_t pollCnt = 0;
     while (true) {
-        if (pollCount > SYNCALL_SOFT_BACKOFF_THRESHOLD) {
+        if (pollCnt > SYNCALL_SOFT_BACKOFF_THRESHOLD) {
             pipe_barrier(PIPE_ALL);
         }
-        TSYNCALL_SOFT_DCCI_RANGE(gmWorkspace, totalBlocks);
+        TSYNCALL_SOFT_DCCI_RANGE(gmWorkspace, totalBlks);
         copy_gm_to_ubuf(static_cast<__ubuf__ void *>(ubWorkspace), static_cast<__gm__ void *>(gmWorkspace), 0, 1,
-                        totalBlocks, 0, 0);
+                        totalBlks, 0, 0);
         set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
 
-        int32_t readyCount = 0;
-        for (int32_t i = 0; i < totalBlocks; ++i) {
-            if (ubWorkspace[i * SYNCALL_SOFT_SLOT_INT32] >= curValue) {
-                ++readyCount;
+        int32_t readyCnt = 0;
+        for (int32_t i = 0; i < totalBlks; ++i) {
+            if (ubWorkspace[i * SYNCALL_SOFT_SLOT_INT32] >= curVal) {
+                ++readyCnt;
             }
         }
         pipe_barrier(PIPE_ALL);
-        if (readyCount >= totalBlocks) {
+        if (readyCnt >= totalBlks) {
             break;
         }
-        ++pollCount;
-        if (pollCount >= SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
+        ++pollCnt;
+        if (pollCnt >= SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
             PTO_CPU_ASSERT(false, "TSYNCALL soft barrier timeout - possible deadlock");
             break;
         }
@@ -211,38 +211,38 @@ PTO_INTERNAL void TSYNCALL_SOFT_MIX_IMPL(__gm__ int32_t *gmWorkspace, __ubuf__ i
     pipe_barrier(PIPE_ALL);
 
 #if defined(__DAV_CUBE__)
-    const int32_t totalBlocks = (usedCores != 0) ? usedCores : TSYNCALL_GET_MIX_PARTICIPANT_COUNT();
+    const int32_t totalBlks = (usedCores != 0) ? usedCores : TSYNCALL_GET_MIX_PARTICIPANT_COUNT();
     const int32_t blockIdx = TSYNCALL_GET_MIX_PARTICIPANT_IDX();
     __gm__ int32_t *localSyncGM = gmWorkspace + blockIdx * SYNCALL_SOFT_SLOT_INT32;
 
     const int32_t curValue = TSYNCALL_SOFT_GM_LOAD(localSyncGM) + 1;
     TSYNCALL_SOFT_AIC_STORE_SLOT(localSyncGM, l1Workspace, ubWorkspace, curValue);
 
-    int32_t pollCount = 0;
+    int32_t pollCnt = 0;
     while (true) {
-        if (pollCount > SYNCALL_SOFT_BACKOFF_THRESHOLD) {
+        if (pollCnt > SYNCALL_SOFT_BACKOFF_THRESHOLD) {
             pipe_barrier(PIPE_ALL);
         }
         int32_t readyCount = 0;
-        for (int32_t i = 0; i < totalBlocks; ++i) {
+        for (int32_t i = 0; i < totalBlks; ++i) {
             __gm__ int32_t *syncGM = gmWorkspace + i * SYNCALL_SOFT_SLOT_INT32;
             if (TSYNCALL_SOFT_GM_LOAD(syncGM) >= curValue) {
                 ++readyCount;
             }
         }
         pipe_barrier(PIPE_ALL);
-        if (readyCount >= totalBlocks) {
+        if (readyCount >= totalBlks) {
             break;
         }
-        ++pollCount;
-        if (pollCount >= SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
+        ++pollCnt;
+        if (pollCnt >= SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
             PTO_CPU_ASSERT(false, "TSYNCALL soft MIX AIC barrier timeout - possible deadlock");
             break;
         }
     }
 #elif defined(__DAV_VEC__)
     (void)l1Workspace;
-    const int32_t totalBlocks = (usedCores != 0) ? usedCores : TSYNCALL_GET_MIX_PARTICIPANT_COUNT();
+    const int32_t totalBlks = (usedCores != 0) ? usedCores : TSYNCALL_GET_MIX_PARTICIPANT_COUNT();
     const int32_t blockIdx = TSYNCALL_GET_MIX_PARTICIPANT_IDX();
     const int32_t aicBlockIdx = static_cast<int32_t>(get_block_idx());
 
@@ -250,7 +250,7 @@ PTO_INTERNAL void TSYNCALL_SOFT_MIX_IMPL(__gm__ int32_t *gmWorkspace, __ubuf__ i
         __gm__ int32_t *aicSyncGM = gmWorkspace + aicBlockIdx * SYNCALL_SOFT_SLOT_INT32;
         TSYNCALL_SOFT_AIV_PROXY_WRITE(aicSyncGM, ubWorkspace);
     }
-    TSYNCALL_SOFT_AIV_BARRIER(gmWorkspace, ubWorkspace, totalBlocks, blockIdx);
+    TSYNCALL_SOFT_AIV_BARRIER(gmWorkspace, ubWorkspace, totalBlks, blockIdx);
 #endif
     pipe_barrier(PIPE_ALL);
 #endif
@@ -264,9 +264,9 @@ PTO_INTERNAL void TSYNCALL_SOFT_IMPL(__gm__ int32_t *gmWorkspace, __ubuf__ int32
     pipe_barrier(PIPE_ALL);
 
 #if defined(__DAV_VEC__)
-    const int32_t totalBlocks = (usedCores != 0) ? usedCores : static_cast<int32_t>(get_block_num());
+    const int32_t totalBlks = (usedCores != 0) ? usedCores : static_cast<int32_t>(get_block_num());
     const int32_t blockIdx = static_cast<int32_t>(get_block_idx());
-    TSYNCALL_SOFT_AIV_BARRIER(gmWorkspace, ubWorkspace, totalBlocks, blockIdx);
+    TSYNCALL_SOFT_AIV_BARRIER(gmWorkspace, ubWorkspace, totalBlks, blockIdx);
 #endif
     pipe_barrier(PIPE_ALL);
 #endif
