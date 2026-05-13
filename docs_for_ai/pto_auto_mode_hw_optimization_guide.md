@@ -617,15 +617,25 @@ The FA code uses:
 
 The code comments indicate this is a workaround for current auto-sync/memory-allocation limitations.
 
+Repo sources also use loop-unroll pragmas:
+
+```cpp
+#pragma unroll
+#pragma unroll(4)
+```
+
+Known examples include [include/pto/npu/a2a3/TCI.hpp](../include/pto/npu/a2a3/TCI.hpp) and A5 gather/scatter helpers under [include/pto/npu/a5/](../include/pto/npu/a5/). User-provided guidance: in auto-mode kernel work, loop-unroll pragmas may sometimes be used as a temporary hack when auto-sync does not recognize a complex pattern, especially nested loops. This is expected to be fixed later in the compiler.
+
 ### 12.2 How to treat it
 
-Treat these pragmas as implementation-specific hints, not as clean general rules.
+Treat these pragmas as implementation-specific hints, not as clean general rules. They should explain a concrete compiler / auto-sync limitation, not merely force an optimization by habit.
 
 ### 12.3 Rule
 
-Claude should not introduce `#pragma pto v_loop_barrier` unless:
+Claude should not introduce `#pragma pto v_loop_barrier`, `#pragma unroll`, or `#pragma unroll(N)` unless:
 - a known pattern requires it,
 - the exact pipeline stage boundary is understood,
+- for unroll pragmas, the loop pattern and the expected unrolled dependency shape are understood,
 - the user explicitly allows it,
 - the code comment marks it as a workaround.
 

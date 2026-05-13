@@ -462,6 +462,15 @@ See [known_good_kernel_examples.md §C4](known_good_kernel_examples.md). Listed 
 
 > **Cross-cutting rule** (refines §2.2): kernel-scope `pipe_barrier(PIPE_ALL)` is *normally* an anti-pattern, BUT it is the sanctioned escape hatch when a complex per-iter pipeline demonstrably fails on hardware due to a cross-iter auto-sync gap. Keep usage at a minimum — one barrier per row iteration at most — and document the failure symptom at the call site.
 
+### 7.5 Loop-unroll pragmas used as temporary auto-sync / pattern-recognition workarounds
+
+1. **Pattern** — Adding `#pragma unroll` or `#pragma unroll(N)` on a loop so the compiler sees a simpler / flatter PTO-instruction sequence. This may be used as a temporary hack when auto-sync does not recognize a complex loop pattern, especially nested loops or a loop body whose PTO dependencies are only obvious after unrolling.
+2. **Why risky** — This is a compiler-workaround, not an algorithmic requirement. It can hide an auto-sync pattern-recognition bug, increase code size, change scheduling, and make the kernel look more generally supported than it is. User-provided guidance says this workaround is expected to be fixed later in the compiler, so do not treat it as a clean permanent design rule.
+3. **Where** — `#pragma unroll` exists in current repo sources such as [include/pto/npu/a2a3/TCI.hpp](../include/pto/npu/a2a3/TCI.hpp) and `#pragma unroll(N)` exists in A5 gather/scatter helpers such as [include/pto/npu/a5/MGather.hpp](../include/pto/npu/a5/MGather.hpp) / [include/pto/npu/a5/MScatter.hpp](../include/pto/npu/a5/MScatter.hpp). The "use it as an auto-sync workaround for complex / nested loops" part is **user-provided guidance**, not yet tied to a specific checked-in kernel failure in this doc.
+4. **Fix / usage rule** — Prefer first simplifying the loop shape (hoist invariant guards, peel first/last iterations, split nested loops, or reduce live tile aliasing). If a hardware/compiler run shows auto-sync misses the pattern and unrolling fixes it, keep the pragma narrowly scoped, add an inline comment naming the auto-sync failure, and mark it as temporary. Remove it once the compiler recognizes the pattern without the pragma.
+5. **Confidence** — Medium. The pragma syntax is source-grounded; the auto-sync workaround rationale is user-provided and should be upgraded with a concrete build/run occurrence when available.
+6. **Status** — Known workaround; future compiler fix expected (user-provided).
+
 ---
 
 ## Cross-references
