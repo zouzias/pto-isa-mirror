@@ -70,10 +70,6 @@ __global__ AICORE void RunTopk(__gm__ uint8_t *outVal_raw, __gm__ uint8_t *outId
     // prefix) operates on packed widths, not source-element widths.
     constexpr int kPackedCols = kCols * 2 * TYPE_COEF;
     constexpr int kPackedTopK = kTopK * 2 * TYPE_COEF;
-    constexpr int kOutAlignElems = 32 / sizeof(T);
-    constexpr int kIdxAlignElems = 32 / sizeof(indexT);
-    constexpr int kTopKTileCols = ((kTopK + kOutAlignElems - 1) / kOutAlignElems) * kOutAlignElems;
-    constexpr int kTopKIdxTileCols = ((kTopK + kIdxAlignElems - 1) / kIdxAlignElems) * kIdxAlignElems;
 
     // Host launchers cannot apply __gm__ via reinterpret_cast (E11). Cast
     // inside the kernel where __gm__ is a valid type qualifier.
@@ -91,8 +87,8 @@ __global__ AICORE void RunTopk(__gm__ uint8_t *outVal_raw, __gm__ uint8_t *outId
     using IdxTile       = Tile<TileType::Vec, indexT, 1, kCols,       BLayout::RowMajor, -1, -1>;
     using PackedTile    = Tile<TileType::Vec, T,      1, kPackedCols, BLayout::RowMajor, -1, -1>;
     using PackedIdxTile = Tile<TileType::Vec, indexT, 1, kPackedCols, BLayout::RowMajor, -1, -1>;
-    using OutValTile    = Tile<TileType::Vec, T,      1, kTopKTileCols,    BLayout::RowMajor, 1, kTopK>;
-    using OutIdxTile    = Tile<TileType::Vec, indexT, 1, kTopKIdxTileCols, BLayout::RowMajor, 1, kTopK>;
+    using OutValTile    = Tile<TileType::Vec, T,      1, kTopK,       BLayout::RowMajor, -1, -1>;
+    using OutIdxTile    = Tile<TileType::Vec, indexT, 1, kTopK,       BLayout::RowMajor, -1, -1>;
 
     // ============================================================
     // Row loop. Per-row globals advance by row*kCols / row*kTopK; idx is
