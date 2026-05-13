@@ -13,6 +13,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "multiBuffer.hpp"
 
 using namespace pto;
+using namespace pto_auto;
+
 constexpr uint32_t BUFFER_NUM = 2;
 constexpr uint32_t SINGLE_LOOP_ROW = 1; // FIXME: Other values not currently working for auto mode
 
