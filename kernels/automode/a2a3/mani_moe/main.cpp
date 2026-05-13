@@ -81,84 +81,80 @@ bool ValidateBuffer(const char *goldenPath, const char *outputPath, size_t numBy
 
 }  // namespace
 
-int main()
+template <int NUM_TOKENS_, int HIDDEN_ROWS_, int FFN_ROWS_, int NUM_EXPERTS_>
+int MoE()
 {
-    const size_t xBytes = static_cast<size_t>(kT) * kH * kHalfBytes;
-    const size_t wRouterBytes = static_cast<size_t>(kH) * kE * kHalfBytes;
-    const size_t w1Bytes = static_cast<size_t>(kE) * kH * kF * kHalfBytes;
-    const size_t w2Bytes = static_cast<size_t>(kE) * kF * kH * kHalfBytes;
+    constexpr size_t xBytes = static_cast<size_t>(NUM_TOKENS_) * HIDDEN_ROWS_ * kHalfBytes;
+    constexpr size_t wRouterBytes = static_cast<size_t>(HIDDEN_ROWS_) * NUM_EXPERTS_ * kHalfBytes;
+    constexpr size_t wBytes = static_cast<size_t>(NUM_EXPERTS_) * HIDDEN_ROWS_ * FFN_ROWS_ * kHalfBytes;
+    constexpr size_t logitsBytes = static_cast<size_t>(NUM_TOKENS_) * NUM_EXPERTS_ * kFp32Bytes;
+    constexpr size_t expertIdBytes = static_cast<size_t>(NUM_TOKENS_) * kU32Bytes;
+    constexpr size_t outBytes = static_cast<size_t>(NUM_TOKENS_) * HIDDEN_ROWS_ * kFp32Bytes;
 
-    const size_t logitsBytes = static_cast<size_t>(kT) * kE * kFp32Bytes;
-    const size_t expertIdBytes = static_cast<size_t>(kT) * kU32Bytes;
-    const size_t zBytes = static_cast<size_t>(kT) * kH * kFp32Bytes;
+    constexpr uint8_t kPoisonLogits = 0x5A;
+    constexpr uint8_t kPoisonExpertId = 0x7B;
+    constexpr uint8_t kPoisonOut = 0x6C;
 
-    printf("[main] T=%d H=%d F=%d E=%d\n", kT, kH, kF, kE);
-    printf("[main] x=%zu w_router=%zu w1=%zu w2=%zu logits=%zu expert_id=%zu Z=%zu bytes\n",
-           xBytes, wRouterBytes, w1Bytes, w2Bytes, logitsBytes, expertIdBytes, zBytes);
+    printf("[main] T=%d  H=%d  F=%d  E=%d\n"
+           "       xBytes=%zu  wRouterBytes=%zu  wBytes=%zu  logitsBytes=%zu  expertIdBytes=%zu  outBytes=%zu\n",
+           NUM_TOKENS_, HIDDEN_ROWS_, FFN_ROWS_, NUM_EXPERTS_, xBytes, wRouterBytes, wBytes, logitsBytes,
+           expertIdBytes, outBytes);
 
-    if (!CheckAcl(aclInit(nullptr), "aclInit")) std::exit(3);
-    if (!CheckAcl(aclrtSetDevice(0), "aclrtSetDevice")) std::exit(3);
+    if (!CheckAcl(aclInit(nullptr), "aclInit")) {
+        return 1;
+    }
+    if (!CheckAcl(aclrtSetDevice(0), "aclrtSetDevice")) {
+        aclFinalize();
+        return 1;
+    }
 
     aclrtStream stream = nullptr;
-    if (!CheckAcl(aclrtCreateStream(&stream), "aclrtCreateStream")) std::exit(3);
+    if (!CheckAcl(aclrtCreateStream(&stream), "aclrtCreateStream")) {
+        aclrtResetDevice(0);
+        aclFinalize();
+        return 1;
+    }
 
-    uint8_t *xHost = nullptr;
-    uint8_t *wRouterHost = nullptr;
-    uint8_t *w1Host = nullptr;
-    uint8_t *w2Host = nullptr;
-    uint8_t *logitsHost = nullptr;
-    uint8_t *expertIdHost = nullptr;
-    uint8_t *zHost = nullptr;
+    uint8_t *xHost = nullptr, *wRouterHost = nullptr, *w1Host = nullptr, *w2Host = nullptr;
+    uint8_t *outHost = nullptr, *logitsHost = nullptr, *expertIdHost = nullptr;
+    uint8_t *xDev = nullptr, *wRouterDev = nullptr, *w1Dev = nullptr, *w2Dev = nullptr;
+    uint8_t *outDev = nullptr, *logitsDev = nullptr, *expertIdDev = nullptr;
 
-    uint8_t *xDev = nullptr;
-    uint8_t *wRouterDev = nullptr;
-    uint8_t *w1Dev = nullptr;
-    uint8_t *w2Dev = nullptr;
-    uint8_t *logitsDev = nullptr;
-    uint8_t *expertIdDev = nullptr;
-    uint8_t *zDev = nullptr;
+    CheckAcl(aclrtMallocHost((void **)(&xHost), xBytes), "aclrtMallocHost(xHost)");
+    CheckAcl(aclrtMallocHost((void **)(&wRouterHost), wRouterBytes), "aclrtMallocHost(wRouterHost)");
+    CheckAcl(aclrtMallocHost((void **)(&w1Host), wBytes), "aclrtMallocHost(w1Host)");
+    CheckAcl(aclrtMallocHost((void **)(&w2Host), wBytes), "aclrtMallocHost(w2Host)");
+    CheckAcl(aclrtMallocHost((void **)(&outHost), outBytes), "aclrtMallocHost(outHost)");
+    CheckAcl(aclrtMallocHost((void **)(&logitsHost), logitsBytes), "aclrtMallocHost(logitsHost)");
+    CheckAcl(aclrtMallocHost((void **)(&expertIdHost), expertIdBytes), "aclrtMallocHost(expertIdHost)");
 
-    CheckAcl(aclrtMallocHost(reinterpret_cast<void **>(&xHost), xBytes), "aclrtMallocHost(xHost)");
-    CheckAcl(aclrtMallocHost(reinterpret_cast<void **>(&wRouterHost), wRouterBytes),
-             "aclrtMallocHost(wRouterHost)");
-    CheckAcl(aclrtMallocHost(reinterpret_cast<void **>(&w1Host), w1Bytes), "aclrtMallocHost(w1Host)");
-    CheckAcl(aclrtMallocHost(reinterpret_cast<void **>(&w2Host), w2Bytes), "aclrtMallocHost(w2Host)");
-    CheckAcl(aclrtMallocHost(reinterpret_cast<void **>(&logitsHost), logitsBytes), "aclrtMallocHost(logitsHost)");
-    CheckAcl(aclrtMallocHost(reinterpret_cast<void **>(&expertIdHost), expertIdBytes),
-             "aclrtMallocHost(expertIdHost)");
-    CheckAcl(aclrtMallocHost(reinterpret_cast<void **>(&zHost), zBytes), "aclrtMallocHost(zHost)");
-
-    CheckAcl(aclrtMalloc(reinterpret_cast<void **>(&xDev), xBytes, ACL_MEM_MALLOC_HUGE_FIRST),
-             "aclrtMalloc(xDev)");
-    CheckAcl(aclrtMalloc(reinterpret_cast<void **>(&wRouterDev), wRouterBytes, ACL_MEM_MALLOC_HUGE_FIRST),
+    CheckAcl(aclrtMalloc((void **)(&xDev), xBytes, ACL_MEM_MALLOC_HUGE_FIRST), "aclrtMalloc(xDev)");
+    CheckAcl(aclrtMalloc((void **)(&wRouterDev), wRouterBytes, ACL_MEM_MALLOC_HUGE_FIRST),
              "aclrtMalloc(wRouterDev)");
-    CheckAcl(aclrtMalloc(reinterpret_cast<void **>(&w1Dev), w1Bytes, ACL_MEM_MALLOC_HUGE_FIRST),
-             "aclrtMalloc(w1Dev)");
-    CheckAcl(aclrtMalloc(reinterpret_cast<void **>(&w2Dev), w2Bytes, ACL_MEM_MALLOC_HUGE_FIRST),
-             "aclrtMalloc(w2Dev)");
-    CheckAcl(aclrtMalloc(reinterpret_cast<void **>(&logitsDev), logitsBytes, ACL_MEM_MALLOC_HUGE_FIRST),
-             "aclrtMalloc(logitsDev)");
-    CheckAcl(aclrtMalloc(reinterpret_cast<void **>(&expertIdDev), expertIdBytes, ACL_MEM_MALLOC_HUGE_FIRST),
+    CheckAcl(aclrtMalloc((void **)(&w1Dev), wBytes, ACL_MEM_MALLOC_HUGE_FIRST), "aclrtMalloc(w1Dev)");
+    CheckAcl(aclrtMalloc((void **)(&w2Dev), wBytes, ACL_MEM_MALLOC_HUGE_FIRST), "aclrtMalloc(w2Dev)");
+    CheckAcl(aclrtMalloc((void **)(&outDev), outBytes, ACL_MEM_MALLOC_HUGE_FIRST), "aclrtMalloc(outDev)");
+    CheckAcl(aclrtMalloc((void **)(&logitsDev), logitsBytes, ACL_MEM_MALLOC_HUGE_FIRST), "aclrtMalloc(logitsDev)");
+    CheckAcl(aclrtMalloc((void **)(&expertIdDev), expertIdBytes, ACL_MEM_MALLOC_HUGE_FIRST),
              "aclrtMalloc(expertIdDev)");
-    CheckAcl(aclrtMalloc(reinterpret_cast<void **>(&zDev), zBytes, ACL_MEM_MALLOC_HUGE_FIRST),
-             "aclrtMalloc(zDev)");
 
     ReadFile("../input/input_X.bin", xBytes, xHost, xBytes);
     ReadFile("../input/input_W_router.bin", wRouterBytes, wRouterHost, wRouterBytes);
-    ReadFile("../input/input_W1.bin", w1Bytes, w1Host, w1Bytes);
-    ReadFile("../input/input_W2.bin", w2Bytes, w2Host, w2Bytes);
+    ReadFile("../input/input_W1.bin", wBytes, w1Host, wBytes);
+    ReadFile("../input/input_W2.bin", wBytes, w2Host, wBytes);
 
     CheckAcl(aclrtMemcpy(xDev, xBytes, xHost, xBytes, ACL_MEMCPY_HOST_TO_DEVICE), "aclrtMemcpy(xDev)");
     CheckAcl(aclrtMemcpy(wRouterDev, wRouterBytes, wRouterHost, wRouterBytes, ACL_MEMCPY_HOST_TO_DEVICE),
              "aclrtMemcpy(wRouterDev)");
-    CheckAcl(aclrtMemcpy(w1Dev, w1Bytes, w1Host, w1Bytes, ACL_MEMCPY_HOST_TO_DEVICE), "aclrtMemcpy(w1Dev)");
-    CheckAcl(aclrtMemcpy(w2Dev, w2Bytes, w2Host, w2Bytes, ACL_MEMCPY_HOST_TO_DEVICE), "aclrtMemcpy(w2Dev)");
+    CheckAcl(aclrtMemcpy(w1Dev, wBytes, w1Host, wBytes, ACL_MEMCPY_HOST_TO_DEVICE), "aclrtMemcpy(w1Dev)");
+    CheckAcl(aclrtMemcpy(w2Dev, wBytes, w2Host, wBytes, ACL_MEMCPY_HOST_TO_DEVICE), "aclrtMemcpy(w2Dev)");
 
-    CheckAcl(aclrtMemset(logitsDev, logitsBytes, 0x5A, logitsBytes), "aclrtMemset(logitsDev)");
-    CheckAcl(aclrtMemset(expertIdDev, expertIdBytes, 0x7B, expertIdBytes), "aclrtMemset(expertIdDev)");
-    CheckAcl(aclrtMemset(zDev, zBytes, 0x4C, zBytes), "aclrtMemset(zDev)");
+    CheckAcl(aclrtMemset(logitsDev, logitsBytes, kPoisonLogits, logitsBytes), "aclrtMemset(logitsDev)");
+    CheckAcl(aclrtMemset(expertIdDev, expertIdBytes, kPoisonExpertId, expertIdBytes),
+             "aclrtMemset(expertIdDev)");
+    CheckAcl(aclrtMemset(outDev, outBytes, kPoisonOut, outBytes), "aclrtMemset(outDev)");
 
-    launchManiMoeFp16(zDev, logitsDev, expertIdDev, xDev, wRouterDev, w1Dev, w2Dev, stream);
+    launchManiMoeFp16(outDev, logitsDev, expertIdDev, xDev, wRouterDev, w1Dev, w2Dev, stream);
 
     if (!CheckAcl(aclrtSynchronizeStream(stream), "aclrtSynchronizeStream")) {
         std::cerr << "[main] stream sync failed.\n";
@@ -168,23 +164,23 @@ int main()
              "aclrtMemcpy(logitsHost)");
     CheckAcl(aclrtMemcpy(expertIdHost, expertIdBytes, expertIdDev, expertIdBytes, ACL_MEMCPY_DEVICE_TO_HOST),
              "aclrtMemcpy(expertIdHost)");
-    CheckAcl(aclrtMemcpy(zHost, zBytes, zDev, zBytes, ACL_MEMCPY_DEVICE_TO_HOST), "aclrtMemcpy(zHost)");
+    CheckAcl(aclrtMemcpy(outHost, outBytes, outDev, outBytes, ACL_MEMCPY_DEVICE_TO_HOST), "aclrtMemcpy(outHost)");
 
     WriteFile("../output/output_logits.bin", logitsHost, logitsBytes);
     WriteFile("../output/output_expert_id.bin", expertIdHost, expertIdBytes);
-    WriteFile("../output/output_Z.bin", zHost, zBytes);
+    WriteFile("../output/output_Z.bin", outHost, outBytes);
 
     printf("[main] poison sentinels after launch: logits[0]=0x%02X expert_id[0]=0x%02X Z[0]=0x%02X\n",
-           logitsHost[0], expertIdHost[0], zHost[0]);
+           logitsHost[0], expertIdHost[0], outHost[0]);
 
-    aclrtFree(zDev);
+    aclrtFree(outDev);
     aclrtFree(expertIdDev);
     aclrtFree(logitsDev);
     aclrtFree(w2Dev);
     aclrtFree(w1Dev);
     aclrtFree(wRouterDev);
     aclrtFree(xDev);
-    aclrtFreeHost(zHost);
+    aclrtFreeHost(outHost);
     aclrtFreeHost(expertIdHost);
     aclrtFreeHost(logitsHost);
     aclrtFreeHost(w2Host);
@@ -199,13 +195,18 @@ int main()
                                           "logits", 1e-2f);
     bool expertIdOk = ValidateBuffer<uint32_t>("../output/golden_expert_id.bin", "../output/output_expert_id.bin",
                                                expertIdBytes, "expert_id", 0.0f);
-    bool zOk = ValidateBuffer<float>("../output/golden_Z.bin", "../output/output_Z.bin", zBytes, "Z", 1e-1f);
+    bool outOk = ValidateBuffer<float>("../output/golden_Z.bin", "../output/output_Z.bin", outBytes, "Z", 1e-1f);
 
-    if (logitsOk && expertIdOk && zOk) {
+    if (logitsOk && expertIdOk && outOk) {
         printf("test success\n");
         return 0;
     }
 
     printf("test failed\n");
     return 1;
+}
+
+int main()
+{
+    return MoE<kT, kH, kF, kE>();
 }
