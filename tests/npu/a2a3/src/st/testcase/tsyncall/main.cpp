@@ -41,16 +41,16 @@ void LaunchTSyncAllMix12(uint8_t *ffts, int32_t *out, int32_t *flags, void *stre
 void LaunchSoftTSyncAllMix11(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t *syncWorkspace, void *stream);
 void LaunchSoftTSyncAllMix12(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t *syncWorkspace, void *stream);
 
-#define EXPECT_ACL_OK(expr)                                                                                         \
-    do {                                                                                                            \
-        const auto ret = (expr);                                                                                    \
-        ASSERT_EQ(ret, ACL_SUCCESS) << #expr << " failed, ret=" << ret;                                             \
+#define EXPECT_ACL_OK(expr)                                             \
+    do {                                                                \
+        const auto ret = (expr);                                        \
+        ASSERT_EQ(ret, ACL_SUCCESS) << #expr << " failed, ret=" << ret; \
     } while (0)
 
-#define EXPECT_RT_OK(expr)                                                                                          \
-    do {                                                                                                            \
-        const auto ret = (expr);                                                                                    \
-        ASSERT_EQ(ret, 0) << #expr << " failed, ret=" << ret;                                                       \
+#define EXPECT_RT_OK(expr)                                    \
+    do {                                                      \
+        const auto ret = (expr);                              \
+        ASSERT_EQ(ret, 0) << #expr << " failed, ret=" << ret; \
     } while (0)
 
 template <size_t blockCount, bool withWorkspace, typename LaunchFn>
@@ -76,7 +76,8 @@ void RunMixCase(LaunchFn launchFn, const char *label)
     EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void **>(&outDevice), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
     EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void **>(&flagsDevice), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
     if constexpr (withWorkspace) {
-        EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void **>(&syncWorkspaceDevice), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
+        EXPECT_ACL_OK(
+            aclrtMalloc(reinterpret_cast<void **>(&syncWorkspaceDevice), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
     }
 
     std::fill_n(outHost, elementCount, 0);

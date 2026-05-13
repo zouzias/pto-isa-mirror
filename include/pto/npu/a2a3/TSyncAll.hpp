@@ -216,7 +216,7 @@ template <bool IsAIVOnly = true>
 PTO_INTERNAL void TSYNCALL_SOFT_IMPL(__gm__ int32_t *gmWorkspace, __ubuf__ int32_t *ubWorkspace, int32_t usedCores = 0)
 {
 #ifndef __PTO_AUTO__
-    PTO_STATIC_ASSERT(IsAIVOnly, "Software TSYNCALL currently only supports AIV-only kernels.");
+    PTO_STATIC_ASSERT(IsAIVOnly, "Software TSYNCALL currently only supports AIV-only kernels on A2/A3.");
     pipe_barrier(PIPE_ALL);
 
 #if defined(__DAV_VEC__)

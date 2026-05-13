@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+# coding=utf-8
+# --------------------------------------------------------------------------------
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+# --------------------------------------------------------------------------------
 #
 # Build a compact registration ELF for runtime mix-kernel handle launch.
 #
@@ -11,11 +21,13 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import struct
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
 
 ELF_MAGIC = b"\x7fELF"
 ET_REL = 1
@@ -139,7 +151,7 @@ def raw_section_data(data: bytes, raw: tuple[int, int, int, int, int, int, int, 
     if typ == SHT_NULL or size == 0:
         return b""
     require(offset + size <= len(data), "section contents exceed ELF size")
-    return data[offset : offset + size]
+    return data[offset:offset + size]
 
 
 def read_c_string(data: bytes, offset: int) -> str:
@@ -191,7 +203,9 @@ def build_output(aic: ParsedElf, aiv: ParsedElf) -> bytes:
     text = aic_text + (b"\0" * (aiv_base - len(aic_text))) + aiv_text
 
     funcs: list[Symbol] = []
-    funcs.extend(Symbol(sym.name, sym.info, sym.other, 1, sym.value, sym.size) for sym in kernel_functions(aic, "_mix_aic"))
+    funcs.extend(
+        Symbol(sym.name, sym.info, sym.other, 1, sym.value, sym.size) for sym in kernel_functions(aic, "_mix_aic")
+    )
     funcs.extend(
         Symbol(sym.name, sym.info, sym.other, 1, aiv_base + sym.value, sym.size)
         for sym in kernel_functions(aiv, "_mix_aiv")
@@ -280,7 +294,7 @@ def build_output(aic: ParsedElf, aiv: ParsedElf) -> bytes:
         len(sections),
         shstrtab_index,
     )
-    body[: EHDR.size] = header
+    body[:EHDR.size] = header
     return bytes(body)
 
 
@@ -297,7 +311,7 @@ def main() -> int:
         require(aic.machine == aiv.machine, "AIC/AIV device ELFs use different machines")
         args.output.write_bytes(build_output(aic, aiv))
     except Exception as exc:  # noqa: BLE001 - keep build error concise.
-        print(f"make_mix_register_elf.py: {exc}", file=sys.stderr)
+        logger.error("make_mix_register_elf.py: %s", exc)
         return 1
     return 0
 

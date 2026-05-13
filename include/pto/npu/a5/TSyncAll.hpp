@@ -53,18 +53,13 @@ PTO_INTERNAL int32_t TSYNCALL_GET_MIX_AIC_BLOCKS()
 
 PTO_INTERNAL int32_t TSYNCALL_GET_MIX_AIV_RATIO()
 {
-#if defined(__MIX_CORE_AIV_RATIO__)
-    return static_cast<int32_t>(__MIX_CORE_AIV_RATIO__);
-#elif defined(__DAV_VEC__)
+#if defined(__DAV_VEC__)
     return static_cast<int32_t>(get_subblockdim());
+#elif defined(__MIX_CORE_AIV_RATIO__)
+    return static_cast<int32_t>(__MIX_CORE_AIV_RATIO__);
 #else
     return 1;
 #endif
-}
-
-PTO_INTERNAL int32_t TSYNCALL_GET_MIX_PARTICIPANT_COUNT()
-{
-    return static_cast<int32_t>(TSYNCALL_GET_MIX_AIC_BLOCKS() * (1 + TSYNCALL_GET_MIX_AIV_RATIO()));
 }
 
 PTO_INTERNAL int32_t TSYNCALL_GET_MIX_PARTICIPANT_IDX()
@@ -74,6 +69,11 @@ PTO_INTERNAL int32_t TSYNCALL_GET_MIX_PARTICIPANT_IDX()
 #else
     return static_cast<int32_t>(get_block_idx());
 #endif
+}
+
+PTO_INTERNAL int32_t TSYNCALL_GET_MIX_PARTICIPANT_COUNT()
+{
+    return static_cast<int32_t>(TSYNCALL_GET_MIX_AIC_BLOCKS() * (1 + TSYNCALL_GET_MIX_AIV_RATIO()));
 }
 
 template <bool IsAIVOnly = true>
@@ -260,7 +260,7 @@ template <bool IsAIVOnly = true>
 PTO_INTERNAL void TSYNCALL_SOFT_IMPL(__gm__ int32_t *gmWorkspace, __ubuf__ int32_t *ubWorkspace, int32_t usedCores = 0)
 {
 #ifndef __PTO_AUTO__
-    PTO_STATIC_ASSERT(IsAIVOnly, "Software TSYNCALL currently only supports AIV-only kernels.");
+    PTO_STATIC_ASSERT(IsAIVOnly, "Software TSYNCALL currently only supports AIV-only kernels on A5.");
     pipe_barrier(PIPE_ALL);
 
 #if defined(__DAV_VEC__)
