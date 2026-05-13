@@ -6,9 +6,9 @@
 #   kernel TU : moe_kernel.cpp
 #   executable: mani_moe
 #
-# Uses the cube target because the MoE path is expected to contain TMATMUL
-# stages. If this prototype becomes vec-only, switch dav-c220-cube to
-# dav-c220-vec.
+# Builds cube and vec kernel TUs separately:
+#   moe_kernel.cpp      : router GEMM, cube target
+#   moe_topk_kernel.cpp : router TopK, vec target
 # --------------------------------------------------------------------------------
 
 cmake_minimum_required(VERSION 3.16)
@@ -85,6 +85,18 @@ target_include_directories(mani_moe_kernel PRIVATE
 )
 target_link_options(mani_moe_kernel PRIVATE --cce-fatobj-link)
 
+add_library(mani_moe_topk_kernel SHARED moe_topk_kernel.cpp)
+target_compile_options(mani_moe_topk_kernel PRIVATE
+    ${CMAKE_CCE_COMPILE_OPTIONS}
+    --cce-aicore-arch=dav-c220-vec
+    --cce-enable-pto-passes
+    -std=c++17
+)
+target_include_directories(mani_moe_topk_kernel PRIVATE
+    ${PROJECT_SOURCE_DIR}/../../../../include/
+)
+target_link_options(mani_moe_topk_kernel PRIVATE --cce-fatobj-link)
+
 add_executable(mani_moe main.cpp)
 target_compile_options(mani_moe PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
 target_include_directories(mani_moe PRIVATE
@@ -100,6 +112,7 @@ target_link_directories(mani_moe PUBLIC
 
 target_link_libraries(mani_moe PRIVATE
     mani_moe_kernel
+    mani_moe_topk_kernel
     $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
     $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
     stdc++ ascendcl m tiling_api platform c_sec dl nnopbase pthread
