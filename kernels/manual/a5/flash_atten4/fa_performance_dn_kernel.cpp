@@ -869,14 +869,14 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
 
         wait_flag(PIPE_MTE3, PIPE_V, pTileEventId);
         if (initFlag) {
-            pto_macro_fa_softmax_dn<true, HEAD_SIZE, CAUSAL_MASK>(
+            pto_macro_fa_softmax_dn<true, HEAD_SIZE, CAUSAL_MASK, ReduceTileF_T, TileDataH_T, TileDataF_T, TileDataH_NZ_T, FIFO_MODE>(
                 x_expT, qkVecTile, m1_local_max_slice, l1_local_sum_slice, m2_global_max_slice, l2_global_sum_slice,
-                l1_exp_max_slice, input_reduce_tmp, qkVecTile, input_reduce_tmp, s0_index, s1_index, tile_id,
+                l1_exp_max_slice, input_reduce_tmp, qkVecTile, input_reduce_tmp, nzConvBuffer, s0_index, s1_index, tile_id,
                 sync_iter, last_tile);
         } else {
-            pto_macro_fa_softmax_dn<false, HEAD_SIZE, CAUSAL_MASK>(
+            pto_macro_fa_softmax_dn<false, HEAD_SIZE, CAUSAL_MASK, ReduceTileF_T, TileDataH_T, TileDataF_T, TileDataH_NZ_T, FIFO_MODE>(
                 x_expT, qkVecTile, m1_local_max_slice, l1_local_sum_slice, m2_global_max_slice, l2_global_sum_slice,
-                l1_exp_max_slice, input_reduce_tmp, qkVecTile, input_reduce_tmp, s0_index, s1_index, tile_id,
+                l1_exp_max_slice, input_reduce_tmp, qkVecTile, input_reduce_tmp, nzConvBuffer, s0_index, s1_index, tile_id,
                 sync_iter, last_tile);
         }
 
@@ -919,7 +919,7 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
                 TSTORE(pTileHalfSub, xExpSub);
             }
 
-            TMOV(nzConvBuffer, xExpSubND);
+            // TMOV(nzConvBuffer, xExpSubND);
 
             set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);

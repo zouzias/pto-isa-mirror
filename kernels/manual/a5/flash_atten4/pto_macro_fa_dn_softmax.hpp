@@ -88,14 +88,14 @@ AICORE inline bool aiv_should_wait_consumption(int sync_iter)
 
 #define USE_MANUAL 1
 
-template <int HEAD_SIZE, bool CAUSAL_MASK, typename ReduceTileD1, typename TileDataD2, typename TileDataS1>
+template <int HEAD_SIZE, bool CAUSAL_MASK, typename ReduceTileD1, typename TileDataD2, typename TileDataS1, typename TileDataH_NZ_T, int MODE>
 __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter, TileDataD2 __out__ x_exp,
                                                       TileDataS1 __in__ input_x,
                                                       ReduceTileD1 __out__ local_max, ReduceTileD1 __out__ local_sum,
                                                       ReduceTileD1 __out__ new_global_max,
                                                       ReduceTileD1 __out__ new_global_sum, ReduceTileD1 __out__ exp_max,
                                                       TileDataS1 __out__ tmp_float, TileDataS1 __out__ p_tile_f32,
-                                                      TileDataS1 triu, int s0_index, int s1_index, bool last_tile)
+                                                      TileDataS1 triu, TileDataH_NZ_T nzConvBuffer, int s0_index, int s1_index, bool last_tile)
 {
 #if USE_MANUAL
     __ubuf__ typename TileDataD2::DType *x_exp_Ptr = (__ubuf__ typename TileDataD2::DType *)__cce_get_tile_ptr(x_exp.data());
@@ -105,12 +105,17 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter
     __ubuf__ typename ReduceTileD1::DType *new_global_max_Ptr = (__ubuf__ typename ReduceTileD1::DType *)__cce_get_tile_ptr(new_global_max.data());
     __ubuf__ typename ReduceTileD1::DType *new_global_sum_Ptr = (__ubuf__ typename ReduceTileD1::DType *)__cce_get_tile_ptr(new_global_sum.data());
     __ubuf__ typename ReduceTileD1::DType *exp_max_Ptr = (__ubuf__ typename ReduceTileD1::DType *)__cce_get_tile_ptr(exp_max.data());
+    __ubuf__ typename TileDataH_NZ_T::DType *nz_buffer_Ptr = (__ubuf__ typename TileDataH_NZ_T::DType *)__cce_get_tile_ptr(nzConvBuffer.data());
 
     constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
     const bool is_vec1 = static_cast<size_t>(get_subblockid());
 
     unsigned ubM = TileDataD2::Cols;
     unsigned ubN = TileDataD2::Rows;
+
+    __ubuf__ half *nz_buffer_Ptr2 = nz_buffer_Ptr + 16;
+    __ubuf__ half *nz_buffer_Ptr3 = nz_buffer_Ptr + ubM*ubN/2/4;
+    __ubuf__ half *nz_buffer_Ptr4 = nz_buffer_Ptr + ubM*ubN/2/4 + 16;
 
     __VEC_SCOPE__{
         vector_f32 vreg_x_even;
@@ -203,6 +208,7 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter
         vbr(max_3b, 0);
 
         preg_108 = pset_b16(PAT_ALL);
+        vector_bool preg_low_half = pset_b16(PAT_VL64);
         // 128,64 -> 1,64
 
         for (uint16_t iter_m = 0; iter_m < uint16_t(ubN / 8) ; ++iter_m) {
@@ -264,11 +270,23 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter
             vmulscvt(vreg_x_exp_even_f16_1, vreg_x_exp_even_1, 1.0f, preg_135, PART_EVEN);
             vmulscvt(vreg_x_exp_odd_f16_1, vreg_x_exp_odd_1, 1.0f, preg_136, PART_EVEN);
 
-            vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg_x_exp_even_f16, vreg_x_exp_odd_f16);
-            vdintlv(vreg_x_exp_f16_1_pack, vreg_x_exp_f16_1_packa, vreg_x_exp_even_f16_1, vreg_x_exp_odd_f16_1);
+            if (MODE != 1) {
+                vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg_x_exp_even_f16, vreg_x_exp_odd_f16);
+                vdintlv(vreg_x_exp_f16_1_pack, vreg_x_exp_f16_1_packa, vreg_x_exp_even_f16_1, vreg_x_exp_odd_f16_1);
 
-            vsts(vreg_x_exp_f16_pack, ((__ubuf__ half *) x_exp_Ptr + i0*128), 0, NORM_B16, preg_108);
-            vsts(vreg_x_exp_f16_1_pack, ((__ubuf__ half *) x_exp_Ptr + ubN*ubM/2 + i0*128), 0, NORM_B16, preg_108);
+                vsts(vreg_x_exp_f16_pack, ((__ubuf__ half *) x_exp_Ptr + i0*128), 0, NORM_B16, preg_108);
+                vsts(vreg_x_exp_f16_1_pack, ((__ubuf__ half *) x_exp_Ptr + ubN*ubM/2 + i0*128), 0, NORM_B16, preg_108);
+            } else {
+                vpack((vector_u16&)vreg_x_exp_even_f16, (vector_u32&)vreg_x_exp_even_f16, LOWER);
+                vpack((vector_u16&)vreg_x_exp_odd_f16, (vector_u32&)vreg_x_exp_odd_f16, LOWER);
+                vpack((vector_u16&)vreg_x_exp_even_f16_1, (vector_u32&)vreg_x_exp_even_f16_1, LOWER);
+                vpack((vector_u16&)vreg_x_exp_odd_f16_1, (vector_u32&)vreg_x_exp_odd_f16_1, LOWER);
+
+                vsstb(vreg_x_exp_even_f16, ((__ubuf__ half *&) nz_buffer_Ptr), 0x810002, preg_low_half, POST_UPDATE);
+                vsstb(vreg_x_exp_odd_f16, ((__ubuf__ half *&) nz_buffer_Ptr2), 0x810002, preg_low_half, POST_UPDATE);
+                vsstb(vreg_x_exp_even_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr3), 0x810002, preg_low_half, POST_UPDATE);
+                vsstb(vreg_x_exp_odd_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr4), 0x810002, preg_low_half, POST_UPDATE);
+            }
 
             vadd(vreg_x_sum_even, vreg_x_exp_even, vreg_x_sum_even, preg_134, MODE_ZEROING);
             vadd(vreg_x_sum_odd, vreg_x_exp_odd, vreg_x_sum_odd, preg_134, MODE_ZEROING);
@@ -338,12 +356,12 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter
 #endif
 }
 
-template <int HEAD_SIZE, bool CAUSAL_MASK, typename ReduceTileD1, typename TileDataD2, typename TileDataS1>
+template <int HEAD_SIZE, bool CAUSAL_MASK, typename ReduceTileD1, typename TileDataD2, typename TileDataS1, typename TileDataH_NZ_T, int MODE>
 __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
     int tile_id, int sync_iter, TileDataD2 __out__ x_exp, TileDataS1 __in__ input_x,
     ReduceTileD1 __out__ local_max, ReduceTileD1 __out__ local_sum, ReduceTileD1 __out__ new_global_max,
     ReduceTileD1 __out__ new_global_sum, ReduceTileD1 __out__ exp_max, TileDataS1 __out__ tmp_float,
-    TileDataS1 __out__ p_tile_f32, TileDataS1 triu, int s0_index, int s1_index, bool last_tile)
+    TileDataS1 __out__ p_tile_f32, TileDataS1 triu, TileDataH_NZ_T nzConvBuffer, int s0_index, int s1_index, bool last_tile)
 {
 #if USE_MANUAL
     __ubuf__ typename TileDataD2::DType *x_exp_Ptr = (__ubuf__ typename TileDataD2::DType *)__cce_get_tile_ptr(x_exp.data());
@@ -353,6 +371,7 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
     __ubuf__ typename ReduceTileD1::DType *new_global_max_Ptr = (__ubuf__ typename ReduceTileD1::DType *)__cce_get_tile_ptr(new_global_max.data());
     __ubuf__ typename ReduceTileD1::DType *new_global_sum_Ptr = (__ubuf__ typename ReduceTileD1::DType *)__cce_get_tile_ptr(new_global_sum.data());
     __ubuf__ typename ReduceTileD1::DType *exp_max_Ptr = (__ubuf__ typename ReduceTileD1::DType *)__cce_get_tile_ptr(exp_max.data());
+    __ubuf__ typename TileDataH_NZ_T::DType *nz_buffer_Ptr = (__ubuf__ typename TileDataH_NZ_T::DType *)__cce_get_tile_ptr(nzConvBuffer.data());
 
     constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
     const bool is_vec1 = static_cast<size_t>(get_subblockid());
@@ -367,6 +386,10 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
 
     unsigned ubM = TileDataD2::Cols;
     unsigned ubN = TileDataD2::Rows;
+
+    __ubuf__ half *nz_buffer_Ptr2 = nz_buffer_Ptr + 16;
+    __ubuf__ half *nz_buffer_Ptr3 = nz_buffer_Ptr + ubM*ubN/2/4;
+    __ubuf__ half *nz_buffer_Ptr4 = nz_buffer_Ptr + ubM*ubN/2/4 + 16;
 
     __VEC_SCOPE__{
         vector_f32 vreg_x_even;
@@ -462,6 +485,7 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
         vbr(max_3b, 0);
 
         preg_108 = pset_b16(PAT_ALL);
+        vector_bool preg_low_half = pset_b16(PAT_VL64);
         // 128,64 -> 1,64
 
         for (uint16_t iter_m = 0; iter_m < uint16_t(ubN / 8) ; ++iter_m) {
@@ -537,11 +561,23 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
             vmulscvt(vreg_x_exp_even_f16_1, vreg_x_exp_even_1, 1.0f, preg_135, PART_EVEN);
             vmulscvt(vreg_x_exp_odd_f16_1, vreg_x_exp_odd_1, 1.0f, preg_136, PART_EVEN);
 
-            vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg_x_exp_even_f16, vreg_x_exp_odd_f16);
-            vdintlv(vreg_x_exp_f16_1_pack, vreg_x_exp_f16_1_packa, vreg_x_exp_even_f16_1, vreg_x_exp_odd_f16_1);
+            if (MODE != 1) {
+                vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg_x_exp_even_f16, vreg_x_exp_odd_f16);
+                vdintlv(vreg_x_exp_f16_1_pack, vreg_x_exp_f16_1_packa, vreg_x_exp_even_f16_1, vreg_x_exp_odd_f16_1);
 
-            vsts(vreg_x_exp_f16_pack, ((__ubuf__ half *) x_exp_Ptr + i0*128), 0, NORM_B16, preg_108);
-            vsts(vreg_x_exp_f16_1_pack, ((__ubuf__ half *) x_exp_Ptr + ubN*ubM/2 + i0*128), 0, NORM_B16, preg_108);
+                vsts(vreg_x_exp_f16_pack, ((__ubuf__ half *) x_exp_Ptr + i0*128), 0, NORM_B16, preg_108);
+                vsts(vreg_x_exp_f16_1_pack, ((__ubuf__ half *) x_exp_Ptr + ubN*ubM/2 + i0*128), 0, NORM_B16, preg_108);
+            } else {
+                vpack((vector_u16&)vreg_x_exp_even_f16, (vector_u32&)vreg_x_exp_even_f16, LOWER);
+                vpack((vector_u16&)vreg_x_exp_odd_f16, (vector_u32&)vreg_x_exp_odd_f16, LOWER);
+                vpack((vector_u16&)vreg_x_exp_even_f16_1, (vector_u32&)vreg_x_exp_even_f16_1, LOWER);
+                vpack((vector_u16&)vreg_x_exp_odd_f16_1, (vector_u32&)vreg_x_exp_odd_f16_1, LOWER);
+
+                vsstb(vreg_x_exp_even_f16, ((__ubuf__ half *&) nz_buffer_Ptr), 0x810002, preg_low_half, POST_UPDATE);
+                vsstb(vreg_x_exp_odd_f16, ((__ubuf__ half *&) nz_buffer_Ptr2), 0x810002, preg_low_half, POST_UPDATE);
+                vsstb(vreg_x_exp_even_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr3), 0x810002, preg_low_half, POST_UPDATE);
+                vsstb(vreg_x_exp_odd_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr4), 0x810002, preg_low_half, POST_UPDATE);
+            }
 
             vadd(vreg_x_sum_even, vreg_x_exp_even, vreg_x_sum_even, preg_134, MODE_ZEROING);
             vadd(vreg_x_sum_odd, vreg_x_exp_odd, vreg_x_sum_odd, preg_134, MODE_ZEROING);
@@ -693,23 +729,23 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
 }
 
 template <bool init = false, int HEAD_SIZE, bool CAUSAL_MASK, typename ReduceTileD1, typename TileDataD2,
-          typename TileDataS1>
+          typename TileDataS1, typename TileDataH_NZ_T, int MODE>
 AICORE inline void pto_macro_fa_softmax_dn(TileDataD2 __out__ x_exp, TileDataS1 __in__ input_x,
                                            ReduceTileD1 __out__ local_max, ReduceTileD1 __out__ local_sum,
                                            ReduceTileD1 __in__ new_global_max, ReduceTileD1 __out__ new_global_sum,
                                            ReduceTileD1 __out__ exp_max, TileDataS1 __out__ input_reduce_tmp,
-                                           TileDataS1 __out__ p_tile_fp32, TileDataS1 triu, int s0_index, int s1_index,
+                                           TileDataS1 __out__ p_tile_fp32, TileDataS1 triu, TileDataH_NZ_T nzConvBuffer, int s0_index, int s1_index,
                                            int tile_id, int sync_iter, bool last_tile)
 {
     if (s1_index <= s0_index || !CAUSAL_MASK) {
         if constexpr (init) {
-            softmax_opt_fa_dn_init_impl<HEAD_SIZE, CAUSAL_MASK, ReduceTileD1, TileDataD2, TileDataS1>(
+            softmax_opt_fa_dn_init_impl<HEAD_SIZE, CAUSAL_MASK, ReduceTileD1, TileDataD2, TileDataS1, TileDataH_NZ_T, MODE>(
                 tile_id, sync_iter, x_exp, input_x, local_max, local_sum, new_global_max, new_global_sum, exp_max,
-                input_reduce_tmp, p_tile_fp32, triu, s0_index, s1_index, last_tile);
+                input_reduce_tmp, p_tile_fp32, triu, nzConvBuffer, s0_index, s1_index, last_tile);
         } else {
-            softmax_opt_fa_dn_not_init_impl<HEAD_SIZE, CAUSAL_MASK, ReduceTileD1, TileDataD2, TileDataS1>(
+            softmax_opt_fa_dn_not_init_impl<HEAD_SIZE, CAUSAL_MASK, ReduceTileD1, TileDataD2, TileDataS1, TileDataH_NZ_T, MODE>(
                 tile_id, sync_iter, x_exp, input_x, local_max, local_sum, new_global_max, new_global_sum, exp_max,
-                input_reduce_tmp, p_tile_fp32, triu, s0_index, s1_index, last_tile);
+                input_reduce_tmp, p_tile_fp32, triu, nzConvBuffer, s0_index, s1_index, last_tile);
         }
     } else if constexpr (CAUSAL_MASK) {
         TMULS(x_exp, x_exp, 0.0);
