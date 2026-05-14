@@ -1,15 +1,17 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
 #include <pto/common/fifo.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace pto;
 
@@ -35,9 +37,10 @@ AICORE constexpr inline T CeilAlign(T num_1, T num_2)
 }
 
 /**
- * TILE_NO_SPLIT mode: a single Vec core (AIV0) handles the full TILE_K x TILE_N tile and
- * pushes it to L1 via TINSERT at row 0, col 0. No row-splitting across subcores.
- * Cube side waits/frees only one intra-block flag (vs two in TILE_UP_DOWN mode).
+ * TILE_NO_SPLIT mode: a single Vec core (AIV0) handles the full TILE_K x TILE_N
+ * tile and pushes it to L1 via TINSERT at row 0, col 0. No row-splitting across
+ * subcores. Cube side waits/frees only one intra-block flag (vs two in
+ * TILE_UP_DOWN mode).
  */
 template <typename QuantT, typename InT, typename OutT, int TOTAL_M, int TOTAL_K, int N, int CASE_TILE_K>
 __global__ AICORE void runTPushPopVCNSMatmul(__gm__ OutT *out, __gm__ InT *srcA, __gm__ QuantT *quantB,
@@ -59,7 +62,8 @@ __global__ AICORE void runTPushPopVCNSMatmul(__gm__ OutT *out, __gm__ InT *srcA,
         Tile<TileType::Mat, OutT, TILE_K, TILE_N, BLayout::ColMajor, TILE_K, TILE_N, SLayout::RowMajor, 512>;
 
     MatTileCons matFifoTile;
-    // FIFO slot size = full tile (same as TILE_UP_DOWN, just written by one Vec core)
+    // FIFO slot size = full tile (same as TILE_UP_DOWN, just written by one Vec
+    // core)
     using MatPipe = TPipe<FLAG_ID, Direction::DIR_V2C, TILE_K * TILE_N * sizeof(OutT), FIFO_DEPTH>;
     MatPipe mPipe((__gm__ void *)(uint64_t)0x0, (uint32_t)0x0, (uint32_t)0x10000);
 
@@ -87,8 +91,9 @@ __global__ AICORE void runTPushPopVCNSMatmul(__gm__ OutT *out, __gm__ InT *srcA,
     using OffsetTile = Tile<TileType::Vec, OutT, TILE_K, 8, BLayout::RowMajor, -1, -1>;
 
     if constexpr (DAV_VEC) {
-        // TILE_NO_SPLIT: only subcore 0 (AIV0) loads data and pushes the full tile to L1.
-        // Subcore 1 stays idle on the Vec side; the Cube only waits on a single intra-block flag.
+        // TILE_NO_SPLIT: only subcore 0 (AIV0) loads data and pushes the full tile
+        // to L1. Subcore 1 stays idle on the Vec side; the Cube only waits on a
+        // single intra-block flag.
         if (get_subblockid() == 0) {
             QuantTile quantTile;
             VecTileProd dequantTile;
@@ -168,7 +173,8 @@ __global__ AICORE void runTPushPopVCNSMatmul(__gm__ OutT *out, __gm__ InT *srcA,
             wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
 
             TLOAD(aMatTile, globalA);
-            // pop mat tile from FIFO; with TILE_NO_SPLIT the Cube waits on a single intra-block flag
+            // pop mat tile from FIFO; with TILE_NO_SPLIT the Cube waits on a single
+            // intra-block flag
             TPOP<MatPipe, MatTileCons, TileSplitAxis::TILE_NO_SPLIT>(mPipe, matFifoTile);
 
             set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
@@ -178,7 +184,8 @@ __global__ AICORE void runTPushPopVCNSMatmul(__gm__ OutT *out, __gm__ InT *srcA,
 
             TMOV(aTile, aMatTile);
             TMOV(bTile, matFifoTile);
-            // free FIFO slot; with TILE_NO_SPLIT sets only one intra-block flag back to Vec
+            // free FIFO slot; with TILE_NO_SPLIT sets only one intra-block flag back
+            // to Vec
             TFREE<MatPipe, TileSplitAxis::TILE_NO_SPLIT>(mPipe);
 
             set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);

@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TCONCAT_HPP
@@ -81,7 +83,8 @@ PTO_INTERNAL void TCONCAT_IMPL(TileDataD &dst, TileDataS0 &src0, TileDataS1 &src
         "TCONCAT: TileType of src and dst tiles must be TileType::Vec.");
     static_assert(TileDataD::ValidRow <= TileDataD::Rows && TileDataS0::ValidRow <= TileDataS0::Rows &&
                       TileDataS1::ValidRow <= TileDataS1::Rows,
-                  "TCONCAT: Number of valid rows must not be greater than number of tile rows.");
+                  "TCONCAT: Number of valid rows must not be greater than number "
+                  "of tile rows.");
 
     unsigned validRow = dst.GetValidRow();
     unsigned validCol0 = src0.GetValidCol();
@@ -207,7 +210,8 @@ PTO_INTERNAL void TCONCAT_IMPL(DstTile &dst, Src0Tile &src0, Src1Tile &src1, Src
                   "TCONCAT: TileType of src and dst tiles must be TileType::Vec.");
     static_assert(DstTile::ValidRow <= DstTile::Rows && Src0Tile::ValidRow <= Src0Tile::Rows &&
                       Src1Tile::ValidRow <= Src1Tile::Rows,
-                  "TCONCAT: Number of valid rows must not be greater than number of tile rows.");
+                  "TCONCAT: Number of valid rows must not be greater than number "
+                  "of tile rows.");
 
     unsigned validRow = dst.GetValidRow();
     unsigned dstValidCol = dst.GetValidCol();

@@ -18,7 +18,7 @@ $$\mathrm{dst}^{\mathrm{local}}_{i,j} = \bigoplus_{r=0}^{N-1} \mathrm{src}^{(r)}
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [PTO ISA 语法与操作数](../syntax-and-operands/assembly-model_zh.md)。
 
 同步形式：
 
@@ -48,19 +48,20 @@ PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &ds
 
 ## 约束
 
-- **类型约束**：
-    - `ParallelGroup::value_type::RawDType` 必须等于 `GlobalDstData::RawDType`。
-    - `TileData::DType` 必须等于 `GlobalDstData::RawDType`。
-- **内存约束**：
-    - `dstGlobalData` 必须指向本地内存（当前 NPU）。
-    - `accTileData`、`recvTileData`（或 `accTileData`、`pingTileData`、`pongTileData`）必须为预先分配的 UB Tile。
-- **ParallelGroup 约束**：
-    - `parallelGroup.tensors[r]` 必须指向 rank `r` 的源缓冲区（从根节点视角看到的远端 GM）。
-    - `parallelGroup.GetRootIdx()` 标识调用方 NPU 为 reduce 根节点。
-    - 所有源 tensor 假定具有相同的形状和步幅。
-- **分块模式约束**（数据超出单个 UB Tile 时）：
-    - 若 `TileData` 具有静态 `ValidRow`，则 `GetShape(DIM_3)` 必须能被 `ValidRow` 整除。如需支持不足一行的情况，请使用 `DYNAMIC` ValidRow 的 Tile。
-    - 若 `TileData` 具有静态 `ValidCol`，则 `GetShape(DIM_4)` 必须能被 `ValidCol` 整除。如需支持不足一列的情况，请使用 `DYNAMIC` ValidCol 的 Tile。
+!!! warning "约束"
+    - **类型约束**：
+        - `ParallelGroup::value_type::RawDType` 必须等于 `GlobalDstData::RawDType`。
+        - `TileData::DType` 必须等于 `GlobalDstData::RawDType`。
+    - **内存约束**：
+        - `dstGlobalData` 必须指向本地内存（当前 NPU）。
+        - `accTileData`、`recvTileData`（或 `accTileData`、`pingTileData`、`pongTileData`）必须为预先分配的 UB Tile。
+    - **ParallelGroup 约束**：
+        - `parallelGroup.tensors[r]` 必须指向 rank `r` 的源缓冲区（从根节点视角看到的远端 GM）。
+        - `parallelGroup.GetRootIdx()` 标识调用方 NPU 为 reduce 根节点。
+        - 所有源 tensor 假定具有相同的形状和步幅。
+    - **分块模式约束**（数据超出单个 UB Tile 时）：
+        - 若 `TileData` 具有静态 `ValidRow`，则 `GetShape(DIM_3)` 必须能被 `ValidRow` 整除。如需支持不足一行的情况，请使用 `DYNAMIC` ValidRow 的 Tile。
+        - 若 `TileData` 具有静态 `ValidCol`，则 `GetShape(DIM_4)` 必须能被 `ValidCol` 整除。如需支持不足一列的情况，请使用 `DYNAMIC` ValidCol 的 Tile。
 
 ## 示例
 
@@ -109,4 +110,3 @@ void reduce_max(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_rank) {
     comm::TREDUCE(group, dstG, accTile, recvTile, comm::ReduceOp::Max);
 }
 ```
-
