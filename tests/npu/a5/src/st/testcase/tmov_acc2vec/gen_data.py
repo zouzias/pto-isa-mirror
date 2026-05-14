@@ -283,6 +283,7 @@ if __name__ == "__main__":
         TMovParams(np.float32, np.float32, np.float32, 45, 80, 125, 48, 80, 128, "NZ", 1024),
         TMovParams(np.float16, np.float16, np.float32, 75, 16, 90, 80, 16, 96, "NZ", 1024),
         # nz2nz.split m
+<<<<<<< HEAD
         TMovParams(np.float16, np.float16, np.float32, 110, 48, 78, 112, 48, 80, "NZ", 1024),
         TMovParams(np.float32, np.float32, np.float32, 13, 112, 110, 16, 112, 112, "NZ", 1024),
         TMovParams(np.float32, np.float32, np.float32, 8, 7, 6, 0, 0, 0, "DN"),
@@ -320,6 +321,46 @@ if __name__ == "__main__":
         TMovParams(np.float32, np.float32, np.int8, 96, 128, 60, 0, 0, 0, "DN", 512, False, True, True, None, 5),
         TMovParams(np.int8, np.int8, np.float16, 32, 128, 64, 0, 0, 0, "DN", 512, False, True, False, None, 3),
         TMovParams(np.int8, np.int8, np.int8, 64, 64, 90, 0, 0, 0, "DN", 512, False, True, False, None, 1),
+=======
+        TMovParams(np.float16, np.float16, np.float32, 110, 48, 78, 112, 48, 80, 'NZ', 1024),
+        TMovParams(np.float32, np.float32, np.float32, 13, 112, 110, 16, 112, 112, 'NZ', 1024),
+
+        TMovParams(np.float32, np.float32, np.float32, 8, 7, 6, 0, 0, 0, 'DN'),
+        TMovParams(np.float16, np.float16, np.float16, 112, 48, 95, 0, 0, 0, 'DN'),
+        TMovParams(np.float16, np.float16, bfloat16, 48, 31, 31, 0, 0, 0, 'DN', 512, False, False, True),
+        TMovParams(np.float16, np.float16, np.float32, 88, 48, 95, 0, 0, 0, 'DN', 512, False, False, True),
+
+        TMovParams(np.int8, np.int8, np.int8, 128, 48, 128, 0, 0, 0, 'NZ', 512, True, False, False, np.uint64),
+        TMovParams(np.int8, np.int8, np.float16, 64, 80, 96, 0, 0, 0, 'NZ', 512, True, False, False, np.uint64),
+        TMovParams(np.float32, np.float32, np.int8, 125, 32, 91, 128, 32, 96, 'NZ', 512, True, False, True, np.uint64),
+        TMovParams(np.float32, np.float32, np.float16, 73, 16, 110, 80, 16, 112, 'NZ', 512, True, False, True, np.uint64),
+
+        TMovParams(np.float32, np.float32, np.float16, 48, 32, 80, 0, 0, 0, 'NZ', 512, False, True, True, None, 2),
+        TMovParams(np.int8, np.int8, np.float16, 96, 48, 128, 0, 0, 0, 'NZ', 512, False, True, True, None, 4),
+        TMovParams(np.int8, np.int8, np.int8, 125, 64, 124, 128, 64, 128, 'NZ', 512, False, True, False, None, 5),
+        TMovParams(np.float32, np.float32, np.int8, 61, 80, 93, 64, 80, 96, 'NZ', 512, False, True, False, None, 7),
+
+        TMovParams(np.int8, np.int8, np.int8, 30, 48, 64, 0, 0, 0, 'ND', 512, True, False, False, np.uint64),
+        TMovParams(np.int8, np.int8, np.float16, 60, 128, 32, 0, 0, 0, 'ND', 512, True, False, False, np.uint64),
+        TMovParams(np.int8, np.int8, bfloat16, 128, 64, 96, 0, 0, 0, 'ND', 512, True, False, False, np.uint64),
+        TMovParams(np.float32, np.float32, np.int8, 60, 128, 64, 0, 0, 0, 'ND', 512, True, False, True, np.uint64),
+        TMovParams(np.float32, np.float32, np.float16, 31, 128, 128, 0, 0, 0, 'ND', 512, True, False, True, np.uint64),
+
+        TMovParams(np.float32, np.float32, np.float16, 128, 48, 96, 0, 0, 0, 'ND', 512, False, True, True, None, 2),
+        TMovParams(np.float32, np.float32, np.int8, 60, 128, 64, 0, 0, 0, 'ND', 512, False, True, True, None, 5),
+        TMovParams(np.int8, np.int8, np.float16, 30, 48, 64, 0, 0, 0, 'ND', 512, False, True, False, None, 3),
+        TMovParams(np.int8, np.int8, np.int8, 60, 128, 32, 0, 0, 0, 'ND', 512, False, True, False, None, 1),
+
+        TMovParams(np.int8, np.int8, np.int8, 96, 128, 60, 0, 0, 0, 'DN', 512, True, False, False, np.uint64),
+        TMovParams(np.int8, np.int8, np.float16, 32, 48, 64, 0, 0, 0, 'DN', 512, True, False, False, np.uint64),
+        TMovParams(np.float16, np.float16, np.int8, 32, 128, 60, 0, 0, 0, 'DN', 512, True, False, True, np.uint64),
+        TMovParams(np.float16, np.float16, np.float16, 64, 64, 90, 0, 0, 0, 'DN', 512, True, False, True, np.uint64),
+
+        TMovParams(np.float32, np.float32, np.float16, 80, 40, 66, 0, 0, 0, 'DN', 512, False, True, True, None, 2),
+        TMovParams(np.float32, np.float32, np.int8, 96, 128, 60, 0, 0, 0, 'DN', 512, False, True, True, None, 5),
+        TMovParams(np.int8, np.int8, np.float16, 32, 128, 64, 0, 0, 0, 'DN', 512, False, True, False, None, 3),
+        TMovParams(np.int8, np.int8, np.int8, 64, 64, 90, 0, 0, 0, 'DN', 512, False, True, False, None, 1),
+>>>>>>> ed1c5a51 (Refactor duplicated kernel pipeline helpers)
     ]
 
     for i, case_name in enumerate(case_name_list):

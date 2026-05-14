@@ -131,7 +131,6 @@ if __name__ == "__main__":
     gen_case("TSCATTERTest.case_float_16x16_16x16_16x16", 16, 16)
 
     masked_cases = [
-        # float
         TScatterParamsMasked("TSCATTERTest.case_masked_float_P0101",
                              np.float32, FLOAT_P0101_ROW, FLOAT_P0101_COL, P0101),
         TScatterParamsMasked("TSCATTERTest.case_masked_float_P1010",
@@ -146,7 +145,6 @@ if __name__ == "__main__":
                              np.float32, FLOAT_P1000_ROW, FLOAT_P1000_COL, P1000),
         TScatterParamsMasked("TSCATTERTest.case_masked_float_P1111",
                              np.float32, FLOAT_P1111_ROW, FLOAT_P1111_COL, P1111),
-        # half
         TScatterParamsMasked("TSCATTERTest.case_masked_half_P0101",
                              np.float16, HALF_P0101_ROW, HALF_P0101_COL, P0101),
         TScatterParamsMasked("TSCATTERTest.case_masked_half_P1010",
@@ -157,7 +155,6 @@ if __name__ == "__main__":
                              np.float16, HALF_P0100_ROW, HALF_P0100_COL, P0100),
         TScatterParamsMasked("TSCATTERTest.case_masked_half_P1000",
                              np.float16, HALF_P1000_ROW, HALF_P1000_COL, P1000),
-        # uint16 / int16
         TScatterParamsMasked("TSCATTERTest.case_masked_U16_P0101",
                              np.uint16, HALF_P0101_ROW, HALF_P0101_COL, P0101),
         TScatterParamsMasked("TSCATTERTest.case_masked_U16_P1010",
@@ -166,7 +163,6 @@ if __name__ == "__main__":
                              np.int16, HALF_P0001_ROW, HALF_P0001_COL, P0001),
         TScatterParamsMasked("TSCATTERTest.case_masked_I16_P0010",
                              np.int16, HALF_P0010_ROW, HALF_P0010_COL, P0010),
-        # uint32 / int32
         TScatterParamsMasked("TSCATTERTest.case_masked_U32_P0100",
                              np.uint32, FLOAT_P0100_ROW, FLOAT_P0100_COL, P0100),
         TScatterParamsMasked("TSCATTERTest.case_masked_I32_P1000",
@@ -177,3 +173,4 @@ if __name__ == "__main__":
 
     for case in masked_cases:
         gen_masked_scatter_golden(case)
+

@@ -1,15 +1,17 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
 #include <pto/common/fifo.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace pto;
 
@@ -71,7 +73,8 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ OutT *out, __gm__ InT *srcA, 
                                  pto::Stride<TOTAL_M * TILE_K, TOTAL_M * TILE_K, CASE_TILE_M * TILE_K, TILE_K, 1>>;
     using GlobalB = GlobalTensor<InT, pto::Shape<1, 1, 1, TILE_K, TILE_N>,
                                  pto::Stride<TILE_K * TILE_N, TILE_K * TILE_N, TILE_K * TILE_N, TILE_N, 1>>;
-    // Row stride is always TILE_N (full matrix width) so TILE_LEFT_RIGHT sub-tiles are read correctly
+    // Row stride is always TILE_N (full matrix width) so TILE_LEFT_RIGHT
+    // sub-tiles are read correctly
     using GlobalBias = GlobalTensor<OutT, pto::Shape<1, 1, 1, VEC_M, VEC_N>,
                                     pto::Stride<TOTAL_M * TILE_N, TOTAL_M * TILE_N, VEC_M * TILE_N, TILE_N, 1>>;
     using GlobalOut = GlobalTensor<OutT, pto::Shape<1, 1, 1, VEC_M, VEC_N>,
