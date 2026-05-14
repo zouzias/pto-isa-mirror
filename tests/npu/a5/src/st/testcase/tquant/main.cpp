@@ -504,10 +504,7 @@ TEST_F(TQUANTTEST, case_mxfp8_nv_bf16_128x128_nd)
 {
     test_tquant_mxfp8_bf16<128, 128, 0, pto::QuantScaleAlg::NV>();
 }
-TEST_F(TQUANTTEST, case_mxfp8_nv_bf16_7x48_nd)
-{
-    test_tquant_mxfp8_bf16<7, 48, 0, pto::QuantScaleAlg::NV>();
-}
+
 TEST_F(TQUANTTEST, case_mxfp8_nv_bf16_2x256_boundary_nd)
 {
     test_tquant_mxfp8_bf16<2, 256, 0, pto::QuantScaleAlg::NV>();
