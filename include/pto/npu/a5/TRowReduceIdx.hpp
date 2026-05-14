@@ -13,11 +13,13 @@ full text of the License.
 #ifndef __ROW_REDUCE_IDX__
 #define __ROW_REDUCE_IDX__
 
+#include <math.h>
+
+#include <type_traits>
+
+#include "TPartBinOps.hpp"
 #include "common.hpp"
 #include "pto/common/pto_tile.hpp"
-#include "TPartBinOps.hpp"
-#include <math.h>
-#include <type_traits>
 
 namespace pto {
 

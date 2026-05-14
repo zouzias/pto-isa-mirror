@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef CONSTANTS_HPP
@@ -13,8 +15,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifdef __CPU_SIM
 #include <bit>
 #endif
-#include <pto/common/type.hpp>
 #include <pto/common/memory.hpp>
+#include <pto/common/type.hpp>
 
 namespace pto {
 constexpr int REPEAT_BYTE = 256;
@@ -98,7 +100,8 @@ inline constexpr PadValue PadCustom = static_cast<PadValue>(static_cast<uint64_t
 // Helper constexpr function to create custom PadValue from float
 // Works on both CPU_SIM and NPU (host + device) using __builtin_bit_cast
 // Usage: constexpr PadValue PadCustomNeg1 = PadValueCustom(-1.0f);
-// Note: For fp16/bf16, use PadValueCustomHalf()/PadValueCustomBf16() or pass fp16/bf16 bits directly
+// Note: For fp16/bf16, use PadValueCustomHalf()/PadValueCustomBf16() or pass
+// fp16/bf16 bits directly
 AICORE constexpr PadValue PadValueCustom(float value)
 {
     return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
@@ -129,8 +132,8 @@ AICORE constexpr PadValue PadValueCustom(bfloat16_t value)
 #endif
 
 #if defined(__CPU_SIM) || defined(__COSTMODEL)
-// Usage: constexpr PadValue PadCustomNeg1_Half = PadValueCustom((_Float16)-1.0);
-// Or with f16 suffix: PadValueCustom(-1.0f16)
+// Usage: constexpr PadValue PadCustomNeg1_Half =
+// PadValueCustom((_Float16)-1.0); Or with f16 suffix: PadValueCustom(-1.0f16)
 constexpr PadValue PadValueCustom(_Float16 value)
 {
     return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
@@ -138,8 +141,8 @@ constexpr PadValue PadValueCustom(_Float16 value)
 }
 
 #ifdef CPU_SIM_BFLOAT_ENABLED
-// Usage: constexpr PadValue PadCustomNeg1_Bf16 = PadValueCustom((bfloat16_t)-1.0);
-// Requires C++23 with std::bfloat16_t support
+// Usage: constexpr PadValue PadCustomNeg1_Bf16 =
+// PadValueCustom((bfloat16_t)-1.0); Requires C++23 with std::bfloat16_t support
 constexpr PadValue PadValueCustom(bfloat16_t value)
 {
     return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |

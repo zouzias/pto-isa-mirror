@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #define ENABLE_DEBUG_PRINT 1
@@ -13,11 +15,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
-
 #include <pto/pto-inst.hpp>
+
+#include "../common.hpp"
 #include "pto/comm/comm_types.hpp"
 #include "pto/common/pto_tile.hpp"
-#include "../common.hpp"
 
 static constexpr size_t HCCL_WIN_SYNC_PREFIX = 64 * sizeof(int32_t);
 
@@ -52,7 +54,8 @@ __global__ AICORE void TReduceKernelImpl(__gm__ T *input, __gm__ T *output, int 
 
     Global outputG(output, shape, stride);
 
-    // Create ParallelGroup: each tensor in the group is the input buffer on that rank
+    // Create ParallelGroup: each tensor in the group is the input buffer on that
+    // rank
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
@@ -163,7 +166,9 @@ bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
 
 #if ENABLE_DEBUG_PRINT
         if (is_ok) {
-            std::cout << "\n================================================================" << std::endl;
+            std::cout << "\n========================================================="
+                         "======="
+                      << std::endl;
             std::cout << "[DEBUG] Rank " << root << ": TREDUCE SUCCESSFUL!" << std::endl;
             std::cout << "Summary: Reduced " << n_ranks << " segments, result size " << count << " elements."
                       << std::endl;
@@ -174,7 +179,9 @@ bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
             if (count > 5)
                 std::cout << "... ";
             std::cout << "]" << std::endl;
-            std::cout << "================================================================\n" << std::endl;
+            std::cout << "==========================================================="
+                         "=====\n"
+                      << std::endl;
         }
 #endif
     }
@@ -379,9 +386,10 @@ bool RunReduceInt32_256_Min(int n_ranks, int n_devices, int first_rank_id, int f
 
 // ============================================================================
 // Large Shape Chunked Test Kernel
-// Tests TREDUCE with GlobalTensor shape > UB tile capacity (forces chunked path)
-// GlobalTensor per rank: (1, 1, 1, total_rows, cols), Tile: (tile_rows, cols)
-// where total_rows > tile_rows, triggering automatic chunking in TREDUCE_IMPL
+// Tests TREDUCE with GlobalTensor shape > UB tile capacity (forces chunked
+// path) GlobalTensor per rank: (1, 1, 1, total_rows, cols), Tile: (tile_rows,
+// cols) where total_rows > tile_rows, triggering automatic chunking in
+// TREDUCE_IMPL
 // ============================================================================
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows, pto::comm::ReduceOp op>
 __global__ AICORE void TReduceLargeShapeKernelImpl(__gm__ T *input, __gm__ T *output, int nranks,
@@ -497,7 +505,9 @@ bool RunReduceLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
 
 #if ENABLE_DEBUG_PRINT
         if (is_ok) {
-            std::cout << "\n================================================================" << std::endl;
+            std::cout << "\n========================================================="
+                         "======="
+                      << std::endl;
             std::cout << "[DEBUG] Rank 0: TREDUCE LargeShape SUCCESSFUL! (" << total_rows << "x" << cols
                       << ", tile=" << tile_rows << "x" << cols << ", chunks=" << (total_rows / tile_rows) << ")"
                       << std::endl;
@@ -508,7 +518,9 @@ bool RunReduceLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
             if (total_count > 5)
                 std::cout << "... ";
             std::cout << "]" << std::endl;
-            std::cout << "================================================================\n" << std::endl;
+            std::cout << "==========================================================="
+                         "=====\n"
+                      << std::endl;
         }
 #endif
     }
@@ -682,7 +694,9 @@ bool RunReducePingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
 
 #if ENABLE_DEBUG_PRINT
         if (is_ok) {
-            std::cout << "\n================================================================" << std::endl;
+            std::cout << "\n========================================================="
+                         "======="
+                      << std::endl;
             std::cout << "[DEBUG] Rank 0: TREDUCE PingPong SUCCESSFUL! (" << total_rows << "x" << cols
                       << ", tile=" << tile_rows << "x" << cols << ", chunks=" << (total_rows / tile_rows) << ")"
                       << std::endl;
@@ -693,7 +707,9 @@ bool RunReducePingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
             if (total_count > 5)
                 std::cout << "... ";
             std::cout << "]" << std::endl;
-            std::cout << "================================================================\n" << std::endl;
+            std::cout << "==========================================================="
+                         "=====\n"
+                      << std::endl;
         }
 #endif
     }

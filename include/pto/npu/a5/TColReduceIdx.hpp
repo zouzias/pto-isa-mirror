@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TCOLREDUCEIDX_HPP
@@ -13,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
+
 #include "common.hpp"
 #include "utils.hpp"
 
@@ -21,6 +24,8 @@ template <typename TileDataOut, typename TileDataIn>
 PTO_INTERNAL void TColReduceIdxCheck(unsigned srcValidRow, unsigned srcValidCol, unsigned dstValidRow,
                                      unsigned dstValidCol)
 {
+    static_assert(TileDataIn::ValidCol == 1 || TileDataIn::ValidCol == -1,
+                  "Fix: TCOLREDUCEIDX Src ValidCol must be 1 or -1");
     static_assert((sizeof(typename TileDataIn::DType) == 1) || (sizeof(typename TileDataIn::DType) == 2) ||
                       (sizeof(typename TileDataIn::DType) == 4),
                   "Fix: TCOLREDUCEIDX data type must be b8/b16/b32");
@@ -34,9 +39,10 @@ PTO_INTERNAL void TColReduceIdxCheck(unsigned srcValidRow, unsigned srcValidCol,
         "Fix: TCOLREDUCEIDX output data type must be s32 or u32.");
     PTO_ASSERT(srcValidRow != 0 && srcValidCol != 0,
                "Fix: TCOLREDUCEIDX input shape is invalid, validCol or validRow is 0.");
-    PTO_ASSERT(dstValidRow != 1, "Fix: TCOLREDUCEIDX output validRow must be 1");
-    PTO_ASSERT(srcValidCol != dstValidCol,
-               "Fix: TCOLREDUCEIDX input validCol must be consistent with the output validCol");
+    PTO_ASSERT(dstValidRow == 1, "Fix: TCOLREDUCEIDX output validRow must be 1");
+    PTO_ASSERT(srcValidCol == dstValidCol,
+               "Fix: TCOLREDUCEIDX input validCol must be consistent with the "
+               "output validCol");
 }
 template <typename TileDataOut, typename TileDataIn, bool IsArgMax>
 __tf__ PTO_INTERNAL void TColReduceIdx8(typename TileDataOut::TileDType __out__ dst,
@@ -244,9 +250,9 @@ PTO_INTERNAL void TCOLARG_DISPATCH(TileDataOut &dst, TileDataIn &src)
 
     if constexpr (sizeof(typename TileDataIn::DType) == 1) {
         TColReduceIdx8<TileDataOut, TileDataIn, IsArgMax>(dst.data(), src.data(), srcValidRow, srcValidCol);
-    } else if (sizeof(typename TileDataIn::DType) == 2) {
+    } else if constexpr (sizeof(typename TileDataIn::DType) == 2) {
         TColReduceIdx16<TileDataOut, TileDataIn, IsArgMax>(dst.data(), src.data(), srcValidRow, srcValidCol);
-    } else if (sizeof(typename TileDataIn::DType) == 4) {
+    } else if constexpr (sizeof(typename TileDataIn::DType) == 4) {
         TColReduceIdx32<TileDataOut, TileDataIn, IsArgMax>(dst.data(), src.data(), srcValidRow, srcValidCol);
     }
 }

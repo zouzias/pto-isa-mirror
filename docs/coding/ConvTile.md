@@ -12,7 +12,7 @@ A ConvTile is defined by five families of attributes:
 
 - **Location**: which logical tile storage class the tile belongs to (matrix/cube registers).
 - **Element type**: scalar element type (`float`, `half`, `int8_t`, ...).
-- **Buffer size**: the static space of convtile.
+- **Buffer size**: the number of elements in the convtile.
 - **Layout**: a layout (`NCHW`, `NHWC`, `NC1HWC0`, ...), used to guide lowering and target-specific fast paths.
 - **Shape**: a `pto::ConvTileShape<...>` (up to 6 dimensions).
 
@@ -37,17 +37,15 @@ pto::ConvTile<
 - `TileType::Vec`: vector tile storage (UB / vector pipeline).
 - `TileType::Mat`: general matrix tile storage (Matrix L1).
 
-
 Instruction pages in `docs/isa/` specify which locations are legal for each instruction.
 
 ### Capacity (`BufferSize_`)
 
-`BufferSize_` define the **static capacity** of the tile object. Most instructions require static shapes so they can be specialized and optimized at compile time.
+`BufferSize_` define the **static number of elements** of the tile object. Most instructions require static shapes so they can be specialized and optimized at compile time.
 
 ### Layout (`pto::Layout`)
 
 `ConvTile` includes a layout enum (`NCHW`, `NHWC`, `NC1HWC0`, `FRACTAL_Z`,  `FRACTAL_Z_S16S8`...).
-
 
 ### Shape (`pto::Shape`)
 
@@ -58,12 +56,11 @@ Instruction pages in `docs/isa/` specify which locations are legal for each inst
 
 The constructors enforce “number of runtime parameters equals number of dynamic dimensions” via `static_assert`, so mismatched construction fails at compile time.
 
-
 ## Address binding (`TASSIGN`)
 
 In manual placement flows, `TASSIGN(tile, addr)` binds a convtile object to an implementation-defined address. In auto flows, `TASSIGN(tile, addr)` may be a no-op depending on build configuration.
 
-See `docs/isa/TASSIGN.md` for details.
+See [TASSIGN](../isa/tile/ops/sync-and-config/tassign.md) for details.
 
 ## Minimal example
 
