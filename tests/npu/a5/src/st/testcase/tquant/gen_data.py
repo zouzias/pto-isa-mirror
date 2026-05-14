@@ -54,6 +54,14 @@ def scale_data_fp16(data_fp16, data_scaling, group_size=32):
     return data_casted
 
 
+def scale_data_fp16_nv(data_fp16, data_scaling, group_size=32):
+    data_fp16_reshaped = data_fp16.reshape(-1, group_size).astype(np.float32)
+    scaling_fp32 = data_scaling.astype(np.float32)
+    scaled_data = data_fp16_reshaped * scaling_fp32
+    data_scale_clipped = np.clip(scaled_data, -448.0, 448.0).astype(np.float32)
+    return data_scale_clipped.astype(float8_e4m3fn)
+
+
 def get_group_max_last_dim(data: np.ndarray, group_size: int = 32):
     data_abs = np.abs(data)
     data_grouped = data_abs.reshape(-1, group_size)
@@ -112,6 +120,31 @@ def fp32_maxes_to_fp8(data_abs_max, emax=8):
     e8m0s = np.array(e8m0s).astype(np.uint8)
     scalings = np.array(scalings).reshape(-1, 1).astype(np.float32)
     return e8m0s, scalings
+
+
+def nv_fp32_to_fp8_element(data_abs_max):
+    if np.float32(data_abs_max) == np.float32(0.0):
+        return 0x00, np.float32(0.0)
+    descale = np.float32(data_abs_max) * np.float32(1.0 / 448.0)
+    bits = np.uint32(np.frombuffer(descale.tobytes(), dtype=np.uint32)[0])
+    exponent = int((bits & np.uint32(0x7F800000)) >> np.uint32(23))
+    mantissa = int(bits & np.uint32(0x007FFFFF))
+    if exponent == 0xFF:
+        return 0xFF, np.float32(np.nan)
+    round_up = mantissa > 0 and exponent != 0xFE and not (exponent == 0 and mantissa <= 0x00400000)
+    e8m0 = exponent + (1 if round_up else 0)
+    scaling_bits = np.uint32((254 - e8m0) << 23)
+    return e8m0, scaling_bits.view(np.float32)
+
+
+def nv_maxes_to_fp8(data_abs_max):
+    e8m0s = []
+    scalings = []
+    for itm in data_abs_max.reshape(-1).tolist():
+        e8m0, scaling = nv_fp32_to_fp8_element(itm)
+        e8m0s.append(e8m0)
+        scalings.append(scaling)
+    return np.array(e8m0s).astype(np.uint8), np.array(scalings).reshape(-1, 1).astype(np.float32)
 
 
 def fp16_to_fp8_element(data_abs_max_fp16, emax):
@@ -256,10 +289,13 @@ def quant_fp16_to_e2m1(src):
     return e8m0, scaling_bf16, packed
 
 
-def quant_fp32_to_e4m3(src, mode="nd"):
+def quant_fp32_to_e4m3(src, mode="nd", scale_alg="ocp"):
     # get group max
     group_max = get_group_max_last_dim(src, group_size=32)
-    e8m0, scaling = fp32_maxes_to_fp8(group_max, emax=8)
+    if scale_alg == "nv":
+        e8m0, scaling = nv_maxes_to_fp8(group_max)
+    else:
+        e8m0, scaling = fp32_maxes_to_fp8(group_max, emax=8)
 
     if mode == "nz":
         tile_m = src.shape[0]
@@ -278,7 +314,7 @@ def quant_fp32_to_e4m3(src, mode="nd"):
     return e8m0, scaling, data_fp8, group_max
 
 
-def quant_bf16_to_e4m3(src, mode="nd"):
+def quant_bf16_to_e4m3(src, mode="nd", scale_alg="ocp"):
     # Get group max in bf16 precision, then convert to fp32 for exponent extraction
     data_abs = np.abs(src).astype(bfloat16)
     data_grouped = data_abs.reshape(-1, 32)
@@ -286,7 +322,10 @@ def quant_bf16_to_e4m3(src, mode="nd"):
 
     # Convert to fp32 for exponent extraction (exact: bf16 exponent == fp32 exponent)
     group_max_fp32 = group_max_bf16.astype(np.float32)
-    e8m0, scaling_fp32 = fp32_maxes_to_fp8(group_max_fp32, emax=8)
+    if scale_alg == "nv":
+        e8m0, scaling_fp32 = nv_maxes_to_fp8(group_max_fp32)
+    else:
+        e8m0, scaling_fp32 = fp32_maxes_to_fp8(group_max_fp32, emax=8)
 
     # Convert scaling to bf16 (exact since scaling is always a power of 2)
     scaling_bf16 = scaling_fp32.astype(bfloat16)
@@ -306,25 +345,40 @@ def quant_bf16_to_e4m3(src, mode="nd"):
     return e8m0, scaling_bf16, data_fp8, group_max_bf16
 
 
-def quant_fp16_to_e4m3(src, mode="nd"):
+def quant_fp16_to_e4m3(src, mode="nd", scale_alg="ocp"):
     # Get group max in fp16 precision
-    data_abs = np.abs(src).astype(np.float16)
-    data_grouped = data_abs.reshape(-1, 32)
-    group_max_fp16 = np.max(data_grouped, axis=1)
+    if scale_alg == "nv":
+        data_abs = np.abs(src).astype(np.float16)
+        data_grouped = data_abs.reshape(-1, 32)
+        group_max_for_scale = np.max(data_grouped, axis=1).astype(np.float32)
+        e8m0, scaling_fp32 = nv_maxes_to_fp8(group_max_for_scale)
+        scaling_fp16 = scaling_fp32.astype(bfloat16)
+    else:
+        data_abs = np.abs(src).astype(np.float16)
+        data_grouped = data_abs.reshape(-1, 32)
+        group_max_fp16 = np.max(data_grouped, axis=1)
 
-    # Extract E8M0 exponents and fp16 scaling factors using FP16-specific HW emulation.
-    # The CCE kernel path matches the OCP MX spec 100%, so this bit-level emulation is
-    # used as the golden reference (it avoids a torch/torchao runtime dependency).
-    e8m0, scaling_fp16 = fp16_maxes_to_fp8(group_max_fp16, emax=-104)
+        # Extract E8M0 exponents and fp16 scaling factors using FP16-specific HW emulation.
+        # The CCE kernel path matches the OCP MX spec 100%, so this bit-level emulation is
+        # used as the golden reference (it avoids a torch/torchao runtime dependency).
+        e8m0, scaling_fp16 = fp16_maxes_to_fp8(group_max_fp16, emax=-104)
 
     if mode == "nz":
         tile_m = src.shape[0]
         tile_n = src.shape[1]
-        data_fp8 = scale_data_fp16(src, scaling_fp16, group_size=32)
+        data_fp8 = (
+            scale_data_fp16_nv(src, scaling_fp16, group_size=32)
+            if scale_alg == "nv"
+            else scale_data_fp16(src, scaling_fp16, group_size=32)
+        )
         data_fp8 = nd2nz_mxfp8(data_fp8, tile_m, tile_n)
         e8m0 = nd2zz_e8m0(e8m0, tile_m, int(tile_n / 32))
     else:
-        data_fp8 = scale_data_fp16(src, scaling_fp16, group_size=32)
+        data_fp8 = (
+            scale_data_fp16_nv(src, scaling_fp16, group_size=32)
+            if scale_alg == "nv"
+            else scale_data_fp16(src, scaling_fp16, group_size=32)
+        )
 
     e8m0.tofile("golden_e8m0.bin")
     # Save scaling as fp32 for debugging (same as bf16 path)
@@ -333,15 +387,150 @@ def quant_fp16_to_e4m3(src, mode="nd"):
     return e8m0, scaling_fp16, data_fp8
 
 
-def fp16_to_mxfp8(valid_rows, valid_cols, mode):
+MX_BOUNDARY_GROUP_SIZE = 32
+MX_SCALE_ALG_ANY = "any"
+MX_DST_MXFP8 = "mxfp8"
+MX_SRC_FP16 = "fp16"
+MX_SRC_BF16 = "bf16"
+MX_SRC_FP32 = "fp32"
+
+
+def get_mx_src_dtype_key(dtype):
+    dtype = np.dtype(dtype)
+    if dtype == np.dtype(np.float16):
+        return MX_SRC_FP16
+    if dtype == np.dtype(bfloat16):
+        return MX_SRC_BF16
+    if dtype == np.dtype(np.float32):
+        return MX_SRC_FP32
+    raise ValueError(f"Unsupported MX source dtype: {dtype}")
+
+
+def get_mx_src_dtype(dtype_key):
+    return {MX_SRC_FP16: np.float16, MX_SRC_BF16: bfloat16, MX_SRC_FP32: np.float32}[dtype_key]
+
+
+def make_mxfp8_fp16_boundary_pattern():
+    return np.array(
+        [
+            0x0000,
+            0x8000,
+            0x0001,
+            0x8001,
+            0x03FF,
+            0x83FF,
+            0x0400,
+            0x8400,
+            0x5EFF,  # 447.75
+            0x5F00,  # 448
+            0x5F01,  # 448.25
+            0x6300,  # 896
+            0x6301,  # 896.5
+            0x7BFF,
+            0x7C00,
+            0x7E00,
+        ],
+        dtype=np.uint16,
+    ).view(np.float16)
+
+
+def make_mxfp8_bf16_boundary_pattern():
+    return np.array(
+        [
+            0.0,
+            -0.0,
+            np.float32(2.0**-133),
+            -np.float32(2.0**-133),
+            np.float32(2.0**-126),
+            -np.float32(2.0**-126),
+            446.0,
+            -446.0,
+            448.0,
+            -448.0,
+            450.0,
+            -450.0,
+            896.0,
+            898.0,
+            np.inf,
+            np.nan,
+        ],
+        dtype=np.float32,
+    ).astype(bfloat16)
+
+
+def make_mxfp8_fp32_boundary_pattern():
+    return np.array(
+        [
+            0.0,
+            -0.0,
+            np.float32(2.0**-149),
+            -np.float32(2.0**-149),
+            np.float32(2.0**-130),
+            -np.float32(2.0**-130),
+            np.nextafter(np.float32(448.0), np.float32(0.0)),
+            -np.nextafter(np.float32(448.0), np.float32(0.0)),
+            np.float32(448.0),
+            -np.float32(448.0),
+            np.nextafter(np.float32(448.0), np.float32(np.inf)),
+            -np.nextafter(np.float32(448.0), np.float32(-np.inf)),
+            np.float32(896.0),
+            np.nextafter(np.float32(896.0), np.float32(np.inf)),
+            np.inf,
+            np.nan,
+        ],
+        dtype=np.float32,
+    )
+
+
+MX_BOUNDARY_PATTERN_BUILDERS = {
+    (MX_DST_MXFP8, MX_SRC_FP16, MX_SCALE_ALG_ANY): make_mxfp8_fp16_boundary_pattern,
+    (MX_DST_MXFP8, MX_SRC_BF16, MX_SCALE_ALG_ANY): make_mxfp8_bf16_boundary_pattern,
+    (MX_DST_MXFP8, MX_SRC_FP32, MX_SCALE_ALG_ANY): make_mxfp8_fp32_boundary_pattern,
+}
+
+
+def get_mx_boundary_pattern(dst_format, src_dtype, scale_alg=MX_SCALE_ALG_ANY):
+    dtype_key = get_mx_src_dtype_key(src_dtype)
+    for key in ((dst_format, dtype_key, scale_alg), (dst_format, dtype_key, MX_SCALE_ALG_ANY)):
+        pattern_builder = MX_BOUNDARY_PATTERN_BUILDERS.get(key)
+        if pattern_builder is not None:
+            return pattern_builder()
+    raise ValueError(f"Unsupported MX boundary pattern: dst={dst_format}, src={dtype_key}, scale_alg={scale_alg}")
+
+
+def fill_mx_boundary_groups(total, src_dtype, pattern, group_size=MX_BOUNDARY_GROUP_SIZE):
+    values = np.zeros(total, dtype=src_dtype)
+    for begin in range(0, total, group_size):
+        end = min(begin + group_size, total)
+        if begin == 0:
+            continue
+        values[begin:end] = np.resize(pattern, end - begin).astype(src_dtype)
+    return values
+
+
+def make_mx_boundary_values(valid_rows, valid_cols, src_dtype, dst_format, scale_alg=MX_SCALE_ALG_ANY):
+    dtype_key = get_mx_src_dtype_key(src_dtype)
+    src_dtype = get_mx_src_dtype(dtype_key)
+    pattern = get_mx_boundary_pattern(dst_format, src_dtype, scale_alg=scale_alg)
+    values = fill_mx_boundary_groups(valid_rows * valid_cols, src_dtype, pattern)
+    return values.reshape(valid_rows, valid_cols).astype(src_dtype)
+
+
+def make_mxfp8_boundary_values(valid_rows, valid_cols, dtype, scale_alg=MX_SCALE_ALG_ANY):
+    return make_mx_boundary_values(valid_rows, valid_cols, dtype, MX_DST_MXFP8, scale_alg=scale_alg)
+
+
+def fp16_to_mxfp8(valid_rows, valid_cols, mode, scale_alg="ocp", case_suffix=None):
     padded_cols = ((valid_cols + 31) // 32) * 32
 
-    # Generate data with variance suitable for fp16 range (max ~65504)
-    mags = np.random.lognormal(mean=0.0, sigma=2.0, size=(valid_rows, valid_cols))
-    signs = np.where(np.random.rand(valid_rows, valid_cols) < 0.5, -1.0, 1.0)
-    src_fp32 = (mags * signs).astype(np.float32)
-    src_fp32 = np.clip(src_fp32, -6e4, 6e4)  # fp16 max is ~65504
-    src_fp16 = src_fp32.astype(np.float16)
+    if case_suffix == "boundary":
+        src_fp16 = make_mxfp8_boundary_values(valid_rows, valid_cols, np.float16, scale_alg=scale_alg)
+    else:
+        mags = np.random.lognormal(mean=0.0, sigma=2.0, size=(valid_rows, valid_cols))
+        signs = np.where(np.random.rand(valid_rows, valid_cols) < 0.5, -1.0, 1.0)
+        src_fp32 = (mags * signs).astype(np.float32)
+        src_fp32 = np.clip(src_fp32, -6e4, 6e4)  # fp16 max is ~65504
+        src_fp16 = src_fp32.astype(np.float16)
     src_fp16.tofile("input.bin")
 
     pad_value = np.float16(0.0)  # match kernel PadValue::Zero / ZeroPadSourceTile
@@ -349,7 +538,7 @@ def fp16_to_mxfp8(valid_rows, valid_cols, mode):
     padded_src[:, :valid_cols] = src_fp16
 
     # fp16 quantization, golden is saved in quant function
-    _, _, data_fp8 = quant_fp16_to_e4m3(padded_src, mode=mode)
+    _, _, data_fp8 = quant_fp16_to_e4m3(padded_src, mode=mode, scale_alg=scale_alg)
 
     # Trim FP8 golden to valid dimensions (kernel TSTORE only outputs valid columns)
     if padded_cols != valid_cols and mode == "nd":
@@ -586,15 +775,17 @@ def bf16_to_mxfp4_e2m1(valid_rows, valid_cols, mode, case_suffix=None):
     return
 
 
-def bf16_to_mxfp8(valid_rows, valid_cols, mode):
+def bf16_to_mxfp8(valid_rows, valid_cols, mode, scale_alg="ocp", case_suffix=None):
     padded_cols = ((valid_cols + 31) // 32) * 32
 
-    # Generate data with large variance using lognormal distribution
-    mags = np.random.lognormal(mean=0.0, sigma=2.0, size=(valid_rows, valid_cols))
-    signs = np.where(np.random.rand(valid_rows, valid_cols) < 0.5, -1.0, 1.0)
-    src_fp32 = (mags * signs).astype(np.float32)
-    src_fp32 = np.clip(src_fp32, -1e4, 1e4)  # bf16 has same exponent range but less mantissa
-    src_bf16 = src_fp32.astype(bfloat16)
+    if case_suffix == "boundary":
+        src_bf16 = make_mxfp8_boundary_values(valid_rows, valid_cols, bfloat16, scale_alg=scale_alg)
+    else:
+        mags = np.random.lognormal(mean=0.0, sigma=2.0, size=(valid_rows, valid_cols))
+        signs = np.where(np.random.rand(valid_rows, valid_cols) < 0.5, -1.0, 1.0)
+        src_fp32 = (mags * signs).astype(np.float32)
+        src_fp32 = np.clip(src_fp32, -1e4, 1e4)  # bf16 has same exponent range but less mantissa
+        src_bf16 = src_fp32.astype(bfloat16)
     src_bf16.tofile("input.bin")
 
     pad_value = bfloat16(0.0)  # match kernel PadValue::Zero
@@ -602,7 +793,7 @@ def bf16_to_mxfp8(valid_rows, valid_cols, mode):
     padded_src[:, :valid_cols] = src_bf16
 
     # bf16 quantization, golden is saved in quant function
-    e8m0, scaling, data_fp8, group_max = quant_bf16_to_e4m3(padded_src, mode=mode)
+    e8m0, scaling, data_fp8, group_max = quant_bf16_to_e4m3(padded_src, mode=mode, scale_alg=scale_alg)
 
     # Trim FP8 golden to valid dimensions (kernel TSTORE only outputs valid columns)
     if padded_cols != valid_cols and mode == "nd":
@@ -651,14 +842,16 @@ def fp32_to_int8_asym(valid_rows, valid_cols, mode):
     return src_fp32, src_u8
 
 
-def fp32_to_mxfp8(valid_rows, valid_cols, mode):
+def fp32_to_mxfp8(valid_rows, valid_cols, mode, scale_alg="ocp", case_suffix=None):
     padded_cols = ((valid_cols + 31) // 32) * 32
 
-    # generating data with large variance using lognormal distribution for better debugging
-    mags = np.random.lognormal(mean=0.0, sigma=2.0, size=(valid_rows, valid_cols))
-    signs = np.where(np.random.rand(valid_rows, valid_cols) < 0.5, -1.0, 1.0)
-    src_fp32 = (mags * signs).astype(np.float32)
-    src_fp32 = np.clip(src_fp32, -1e8, 1e8)
+    if case_suffix == "boundary":
+        src_fp32 = make_mxfp8_boundary_values(valid_rows, valid_cols, np.float32, scale_alg=scale_alg)
+    else:
+        mags = np.random.lognormal(mean=0.0, sigma=2.0, size=(valid_rows, valid_cols))
+        signs = np.where(np.random.rand(valid_rows, valid_cols) < 0.5, -1.0, 1.0)
+        src_fp32 = (mags * signs).astype(np.float32)
+        src_fp32 = np.clip(src_fp32, -1e8, 1e8)
     src_fp32.tofile("input.bin")
 
     pad_value = np.float32(-np.inf)
@@ -666,7 +859,7 @@ def fp32_to_mxfp8(valid_rows, valid_cols, mode):
     padded_src[:, :valid_cols] = src_fp32
 
     # fp8 quantization, golden is saved in quant function
-    e8m0, scaling, data_fp8, group_max = quant_fp32_to_e4m3(padded_src, mode=mode)
+    e8m0, scaling, data_fp8, group_max = quant_fp32_to_e4m3(padded_src, mode=mode, scale_alg=scale_alg)
 
     return
 
@@ -686,21 +879,24 @@ def gen_golden_data_tquant(case_name, param):
         else:
             fp16_to_mxfp4_e2m1(valid_rows, valid_cols, mode, case_suffix=param.case_suffix)
     elif dtype == bfloat16:
-        bf16_to_mxfp8(valid_rows, valid_cols, mode)
+        bf16_to_mxfp8(valid_rows, valid_cols, mode, scale_alg=param.scale_alg, case_suffix=param.case_suffix)
     elif dtype == np.float16:
-        fp16_to_mxfp8(valid_rows, valid_cols, mode)
+        fp16_to_mxfp8(valid_rows, valid_cols, mode, scale_alg=param.scale_alg, case_suffix=param.case_suffix)
     else:
-        fp32_to_mxfp8(valid_rows, valid_cols, mode)
+        fp32_to_mxfp8(valid_rows, valid_cols, mode, scale_alg=param.scale_alg, case_suffix=param.case_suffix)
     return
 
 
 class TQuantParams:
-    def __init__(self, out_dtype_str, valid_rows, valid_cols, mode="nd", dtype=np.float32, case_suffix=None):
+    def __init__(
+        self, out_dtype_str, valid_rows, valid_cols, mode="nd", dtype=np.float32, case_suffix=None, scale_alg="ocp"
+    ):
         self.valid_rows = valid_rows
         self.valid_cols = valid_cols
         self.dtype = dtype
         self.mode = mode
         self.case_suffix = case_suffix
+        self.scale_alg = scale_alg
         self.out_dtype_str = {"s8": "int8_sym", "mxfp8": "mxfp8", "mxfp4_e2m1": "mxfp4_e2m1", "u8": "int8_asym"}[
             out_dtype_str
         ]
@@ -711,8 +907,9 @@ class TQuantParams:
 
 def generate_case_name(param):
     suffix = f"_{param.case_suffix}" if param.case_suffix is not None else ""
+    alg_suffix = "_nv" if param.out_dtype_str == "mxfp8" and param.scale_alg == "nv" else ""
     return (
-        f"TQUANTTEST.case_{param.out_dtype_str}_{param.dtype_str}_"
+        f"TQUANTTEST.case_{param.out_dtype_str}{alg_suffix}_{param.dtype_str}_"
         f"{param.valid_rows}x{param.valid_cols}{suffix}_{param.mode}"
     )
 
@@ -735,6 +932,8 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 7, 64, mode="nd"),
         TQuantParams("mxfp8", 33, 64, mode="nd"),
         TQuantParams("mxfp8", 13, 192, mode="nd"),
+        TQuantParams("mxfp8", 32, 128, mode="nd", scale_alg="nv"),
+        TQuantParams("mxfp8", 2, 256, mode="nd", case_suffix="boundary", scale_alg="nv"),
         TQuantParams("mxfp8", 32, 64, mode="nz"),
         TQuantParams("mxfp8", 64, 128, mode="nz"),
         TQuantParams("mxfp8", 64, 256, mode="nz"),
@@ -773,11 +972,20 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=bfloat16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=bfloat16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=bfloat16),
+        TQuantParams("mxfp8", 32, 128, mode="nd", dtype=bfloat16, scale_alg="nv"),
+        TQuantParams("mxfp8", 64, 128, mode="nd", dtype=bfloat16, scale_alg="nv"),
+        TQuantParams("mxfp8", 128, 128, mode="nd", dtype=bfloat16, scale_alg="nv"),
+        TQuantParams("mxfp8", 7, 48, mode="nd", dtype=bfloat16, scale_alg="nv"),
+        TQuantParams("mxfp8", 2, 256, mode="nd", dtype=bfloat16, case_suffix="boundary", scale_alg="nv"),
         TQuantParams("mxfp8", 32, 128, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 64, 128, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 128, 128, mode="nd", dtype=np.float16),
         TQuantParams("mxfp8", 4, 256, mode="nd", dtype=np.float16),  # 1024 elems -> AbsReduceMax_b16_ND_opt
         TQuantParams("mxfp8", 11, 640, mode="nd", dtype=np.float16),  # 7040 elems -> 220 scale groups
+        TQuantParams("mxfp8", 32, 128, mode="nd", dtype=np.float16, scale_alg="nv"),
+        TQuantParams("mxfp8", 64, 128, mode="nd", dtype=np.float16, scale_alg="nv"),
+        TQuantParams("mxfp8", 128, 128, mode="nd", dtype=np.float16, scale_alg="nv"),
+        TQuantParams("mxfp8", 2, 256, mode="nd", dtype=np.float16, case_suffix="boundary", scale_alg="nv"),
         TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="special"),
         TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="subnormal"),
         TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="rounding"),
