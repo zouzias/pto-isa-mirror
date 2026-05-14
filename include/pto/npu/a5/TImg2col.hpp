@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TIMG2COL_HPP
@@ -110,7 +112,8 @@ PTO_INTERNAL void Timg2colConvTileCheck(TileData &dst, ConvTileData &src)
     static_assert((ConvTileData::layout == Layout::NC1HWC0) || (ConvTileData::layout == Layout::NDC1HWC0),
                   "TImg2col: Source layout only support NC1HWC0.");
     static_assert(TileData::SFractal == SLayout::RowMajor && !TileData::isRowMajor,
-                  "TImg2col: Destination layout only support SLayout is RowMajor ang BLayout is ColMajor.");
+                  "TImg2col: Destination layout only support SLayout is RowMajor ang "
+                  "BLayout is ColMajor.");
     static_assert(std::is_same_v<typename ConvTileData::DType, typename TileData::DType>,
                   "TImg2col: Destination and Source tile data types must be the same.");
     static_assert(
@@ -119,7 +122,9 @@ PTO_INTERNAL void Timg2colConvTileCheck(TileData &dst, ConvTileData &src)
             std::is_same_v<typename TileData::DType, int32_t> || std::is_same_v<typename TileData::DType, uint32_t> ||
             std::is_same_v<typename TileData::DType, half> || std::is_same_v<typename TileData::DType, bfloat16_t> ||
             std::is_same_v<typename TileData::DType, float>,
-        "Fix: Data type must be int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/half/bfloat16_t/float!");
+        "Fix: Data type must be "
+        "int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/half/"
+        "bfloat16_t/float!");
 }
 
 template <typename TileData, typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL>

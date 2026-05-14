@@ -1,19 +1,22 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_PREFETCH_HPP
 #define PTO_PREFETCH_HPP
 
 #include <acl/acl.h>
-#include <pto/pto-inst.hpp>
+
 #include <pto/npu/a2a3/TLoad.hpp>
+#include <pto/pto-inst.hpp>
 
 namespace pto {
 
@@ -68,15 +71,17 @@ PTO_INTERNAL void PtoPrefetchKernelBody(__gm__ uint8_t *tensor, uint64_t total_e
 }
 } // namespace detail
 
-// Generic prefetch kernel: split a 1D tensor across blocks (get_blockdim()) and issue TPREFETCH
+// Generic prefetch kernel: split a 1D tensor across blocks (get_blockdim()) and
+// issue TPREFETCH
 __global__ AICORE PTO_AIV_ATTR void PTO_PREFETCH_AIV(__gm__ uint8_t *tensor, uint64_t total_elems)
 {
     detail::PtoPrefetchKernelBody(tensor, total_elems);
 }
 #endif // PTO_PREFETCH_DEVICE_ENABLED
 
-// Host wrapper to launch PTO_PREFETCH with bytes input and optional SDMA/AIV core selection.
-// Use the template parameters to pick SDMA or AIV and to set aiv_cores for finer control.
+// Host wrapper to launch PTO_PREFETCH with bytes input and optional SDMA/AIV
+// core selection. Use the template parameters to pick SDMA or AIV and to set
+// aiv_cores for finer control.
 template <bool UseSdma = true, int AivCores = -1>
 void PTO_PREFETCH(__gm__ void *tensor, uint64_t tensor_bytes, aclrtStream stream)
 {
