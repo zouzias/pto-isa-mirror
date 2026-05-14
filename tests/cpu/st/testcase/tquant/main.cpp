@@ -30,6 +30,43 @@ uint32_t FloatToBits(float value)
     return std::bit_cast<uint32_t>(value);
 }
 
+uint8_t ComputeNvExponent(float maxAbs)
+{
+    if (maxAbs == 0.0f) {
+        return 0;
+    }
+    const float descale = maxAbs * (1.0f / 448.0f);
+    const uint32_t bits = FloatToBits(descale);
+    const uint32_t exponent = (bits & 0x7F800000u) >> 23;
+    const uint32_t mantissa = bits & 0x007FFFFFu;
+    if (exponent == 0xFFu) {
+        return 0xFFu;
+    }
+    const bool roundUp = mantissa > 0u && exponent != 0xFEu && !(exponent == 0u && mantissa <= 0x00400000u);
+    return static_cast<uint8_t>(exponent + (roundUp ? 1u : 0u));
+}
+
+uint8_t ComputeOcpExponent(float maxAbs)
+{
+    const uint32_t bits = FloatToBits(maxAbs);
+    const uint32_t exponent = (bits & 0x7F800000u) >> 23;
+    if (exponent == 0xFFu) {
+        return 0xFFu;
+    }
+    if (exponent <= 8u) {
+        return 0;
+    }
+    return static_cast<uint8_t>(exponent - 8u);
+}
+
+float ScalingFromE8M0(uint8_t e8m0)
+{
+    if (e8m0 == 0xFFu) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+    return BitsToFloat((254u - static_cast<uint32_t>(e8m0)) << 23);
+}
+
 uint8_t DecodeCandidateCode(uint8_t code, float &value)
 {
     const int sign = (code & 0x80u) ? -1 : 1;
@@ -46,6 +83,9 @@ uint8_t DecodeCandidateCode(uint8_t code, float &value)
 
 uint8_t EncodeE4M3Fn(float value)
 {
+    if (std::isnan(value)) {
+        return 0x7Fu;
+    }
     const float clipped = std::clamp(value, -448.0f, 448.0f);
     uint8_t best = 0;
     float bestDistance = std::numeric_limits<float>::infinity();
@@ -82,6 +122,86 @@ std::vector<uint8_t> ReorderExponentZZ(const std::vector<uint8_t> &exp, int rows
         }
     }
     return reordered;
+}
+
+std::vector<float> MxFp8BoundaryPattern()
+{
+    return {
+        0.0f,
+        -0.0f,
+        BitsToFloat(0x00000001u),
+        -BitsToFloat(0x00000001u),
+        std::ldexp(1.0f, -130),
+        -std::ldexp(1.0f, -130),
+        std::nextafter(448.0f, 0.0f),
+        -std::nextafter(448.0f, 0.0f),
+        448.0f,
+        -448.0f,
+        std::nextafter(448.0f, std::numeric_limits<float>::infinity()),
+        -std::nextafter(448.0f, -std::numeric_limits<float>::infinity()),
+        896.0f,
+        std::nextafter(896.0f, std::numeric_limits<float>::infinity()),
+        std::numeric_limits<float>::infinity(),
+        std::numeric_limits<float>::quiet_NaN(),
+    };
+}
+
+template <typename SrcTile>
+void FillMxFp8BoundarySource(SrcTile &src)
+{
+    const std::vector<float> pattern = MxFp8BoundaryPattern();
+    for (int row = 0; row < src.GetValidRow(); ++row) {
+        for (int group = 0; group < src.GetValidCol() / 32; ++group) {
+            for (int inner = 0; inner < 32; ++inner) {
+                float value = pattern[inner % pattern.size()];
+                if (row == 0 && group == 0) {
+                    value = 0.0f;
+                } else if (group == 1) {
+                    value = (inner & 1) == 0 ? 448.0f : static_cast<float>(static_cast<aclFloat16>(448.25f));
+                } else if (group == 2) {
+                    value = (inner & 1) == 0 ? 896.0f : static_cast<float>(static_cast<aclFloat16>(896.5f));
+                }
+                src.data()[GetTileElementOffset<SrcTile>(row, group * 32 + inner)] =
+                    static_cast<typename SrcTile::DType>(value);
+            }
+        }
+    }
+}
+
+template <QuantScaleAlg scaleAlg, typename SrcTile, typename DstTile, typename ExpTile, typename MaxTile,
+          typename ScalingTile>
+void ExpectMxFp8Result(SrcTile &src, DstTile &dst, ExpTile &exp, MaxTile &max, ScalingTile &scaling)
+{
+    for (int row = 0; row < src.GetValidRow(); ++row) {
+        for (int group = 0; group < src.GetValidCol() / 32; ++group) {
+            float maxAbs = 0.0f;
+            for (int inner = 0; inner < 32; ++inner) {
+                const float value =
+                    static_cast<float>(src.data()[GetTileElementOffset<SrcTile>(row, group * 32 + inner)]);
+                maxAbs = std::max(maxAbs, std::fabs(value));
+            }
+            const uint8_t expectedExp =
+                scaleAlg == QuantScaleAlg::NV ? ComputeNvExponent(maxAbs) : ComputeOcpExponent(maxAbs);
+            const float expectedScaling =
+                (scaleAlg == QuantScaleAlg::NV && maxAbs == 0.0f) ? 0.0f : ScalingFromE8M0(expectedExp);
+            const int flatGroupIdx = row * (src.GetValidCol() / 32) + group;
+            EXPECT_EQ(exp.data()[flatGroupIdx], expectedExp);
+            EXPECT_FLOAT_EQ(max.data()[flatGroupIdx], maxAbs);
+            for (int inner = 0; inner < 32; ++inner) {
+                const int col = group * 32 + inner;
+                const float actualScaling =
+                    static_cast<float>(scaling.data()[GetTileElementOffset<ScalingTile>(row, col)]);
+                if (std::isnan(expectedScaling)) {
+                    EXPECT_TRUE(std::isnan(actualScaling));
+                } else {
+                    EXPECT_FLOAT_EQ(actualScaling, expectedScaling);
+                }
+                const float value = static_cast<float>(src.data()[GetTileElementOffset<SrcTile>(row, col)]);
+                const uint8_t expectedByte = EncodeE4M3Fn(value * expectedScaling);
+                EXPECT_EQ(static_cast<uint8_t>(dst.data()[GetTileElementOffset<DstTile>(row, col)]), expectedByte);
+            }
+        }
+    }
 }
 } // namespace
 
@@ -206,6 +326,108 @@ TEST(TQuantCpuSimTest, MxFp8NdMatchesExactBytes)
         }
     }
 }
+
+TEST(TQuantCpuSimTest, MxFp8NvNdMatchesDescaleRceil)
+{
+    using SrcTile = Tile<TileType::Vec, float, 4, 32>;
+    using DstTile = Tile<TileType::Vec, int8_t, 4, 32>;
+    using ExpTile = Tile<TileType::Vec, uint8_t, 1, 32>;
+    using MaxTile = Tile<TileType::Vec, float, 1, 32>;
+    SrcTile src;
+    SrcTile scaling;
+    DstTile dst;
+    ExpTile exp;
+    MaxTile max;
+    size_t addr = 0;
+    TASSIGN(src, addr);
+    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    TASSIGN(scaling, addr);
+    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    TASSIGN(dst, addr);
+    addr += DstTile::Numel * sizeof(typename DstTile::DType);
+    TASSIGN(exp, addr);
+    addr += ExpTile::Numel * sizeof(typename ExpTile::DType);
+    TASSIGN(max, addr);
+
+    for (int r = 0; r < src.GetValidRow(); ++r) {
+        for (int c = 0; c < src.GetValidCol(); ++c) {
+            src.data()[GetTileElementOffset<SrcTile>(r, c)] = 0.0f;
+        }
+    }
+    src.data()[GetTileElementOffset<SrcTile>(1, 0)] = BitsToFloat(0x04600001u);
+    src.data()[GetTileElementOffset<SrcTile>(2, 0)] = std::nextafter(448.0f, std::numeric_limits<float>::infinity());
+    src.data()[GetTileElementOffset<SrcTile>(3, 0)] = -896.0f;
+
+    TQUANT<QuantType::MXFP8, QuantScaleAlg::NV>(dst, src, &exp, &max, &scaling);
+
+    for (int row = 0; row < 4; ++row) {
+        float maxAbs = 0.0f;
+        for (int col = 0; col < 32; ++col) {
+            maxAbs = std::max(maxAbs, std::fabs(src.data()[GetTileElementOffset<SrcTile>(row, col)]));
+        }
+        const uint8_t expectedExp = ComputeNvExponent(maxAbs);
+        const float expectedScaling = (maxAbs == 0.0f) ? 0.0f : ScalingFromE8M0(expectedExp);
+        EXPECT_EQ(exp.data()[row], expectedExp);
+        EXPECT_FLOAT_EQ(max.data()[row], maxAbs);
+        for (int col = 0; col < 32; ++col) {
+            EXPECT_FLOAT_EQ(scaling.data()[GetTileElementOffset<SrcTile>(row, col)], expectedScaling);
+            const uint8_t expectedByte =
+                EncodeE4M3Fn(src.data()[GetTileElementOffset<SrcTile>(row, col)] * expectedScaling);
+            EXPECT_EQ(static_cast<uint8_t>(dst.data()[GetTileElementOffset<DstTile>(row, col)]), expectedByte);
+        }
+    }
+}
+
+template <typename SrcT, QuantScaleAlg scaleAlg>
+void RunMxFp8Boundary2x256()
+{
+    using SrcTile = Tile<TileType::Vec, SrcT, 2, 256>;
+    using DstTile = Tile<TileType::Vec, int8_t, 2, 256>;
+    using ExpTile = Tile<TileType::Vec, uint8_t, 1, 32>;
+    using MaxTile = Tile<TileType::Vec, float, 1, 32>;
+    using ScalingTile = Tile<TileType::Vec, float, 2, 256>;
+    SrcTile src;
+    DstTile dst;
+    ExpTile exp;
+    MaxTile max;
+    ScalingTile scaling;
+    size_t addr = 0;
+    TASSIGN(src, addr);
+    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    TASSIGN(scaling, addr);
+    addr += ScalingTile::Numel * sizeof(typename ScalingTile::DType);
+    TASSIGN(dst, addr);
+    addr += DstTile::Numel * sizeof(typename DstTile::DType);
+    TASSIGN(exp, addr);
+    addr += ExpTile::Numel * sizeof(typename ExpTile::DType);
+    TASSIGN(max, addr);
+
+    FillMxFp8BoundarySource(src);
+    TQUANT<QuantType::MXFP8, scaleAlg>(dst, src, &exp, &max, &scaling);
+    ExpectMxFp8Result<scaleAlg>(src, dst, exp, max, scaling);
+}
+
+TEST(TQuantCpuSimTest, MxFp8OcpFp32Boundary2x256)
+{
+    RunMxFp8Boundary2x256<float, QuantScaleAlg::OCP>();
+}
+
+TEST(TQuantCpuSimTest, MxFp8NvFp32Boundary2x256)
+{
+    RunMxFp8Boundary2x256<float, QuantScaleAlg::NV>();
+}
+
+TEST(TQuantCpuSimTest, MxFp8NvFp16Boundary2x256)
+{
+    RunMxFp8Boundary2x256<aclFloat16, QuantScaleAlg::NV>();
+}
+
+#if defined(PTO_CPU_SIM_ENABLE_BF16)
+TEST(TQuantCpuSimTest, MxFp8NvBf16Boundary2x256)
+{
+    RunMxFp8Boundary2x256<bfloat16_t, QuantScaleAlg::NV>();
+}
+#endif
 
 enum class MxFp4Case
 {
