@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 // GEMM Compute Kernel (Cube Arch)
@@ -24,12 +26,17 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
-#include "ready_queue.hpp"
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
+
 #include "gemm_ar_config.h"
 #include "kernel_launchers.h"
+#include "ready_queue.hpp"
 
 using namespace pto;
 
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 // ============================================================================
 // ProcessKIteration: K-loop with L1 caching (stepK=4)
 // Every stepKa iterations, loads a larger panel into L1 for reuse,
@@ -37,60 +44,58 @@ using namespace pto;
 // ============================================================================
 template <typename T, typename U, typename S, int M, int K, int N, uint32_t baseM, uint32_t baseK, uint32_t baseN,
           uint32_t stepKa, uint32_t stepKb>
-AICORE inline void ProcessKIteration(
-    uint32_t kIter, __gm__ U *currentSrc0, __gm__ S *currentSrc1,
-    Tile<TileType::Mat, U, baseM, baseK * stepKa, BLayout::ColMajor, baseM, baseK * stepKa, SLayout::RowMajor>
-        aMatTile[2],
-    Tile<TileType::Mat, S, baseK * stepKb, baseN, BLayout::RowMajor, baseK * stepKb, baseN, SLayout::ColMajor>
-        bMatTile[2],
-    TileLeft<U, baseM, baseK, baseM, baseK> aTile[2], TileRight<S, baseK, baseN, baseK, baseN> bTile[2],
-    TileAcc<T, baseM, baseN, baseM, baseN> &cTile, uint8_t &mte2DBFlag, uint8_t &mte1DBFlag, uint32_t k_stride)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
+AICORE inline void LoadKPanel(uint32_t kIter, __gm__ U *currentSrc0, __gm__ S *currentSrc1,
+                              Tile<TileType::Mat, U, baseM, baseK * stepKa, BLayout::ColMajor, baseM,
+                                   baseK * stepKa, SLayout::RowMajor> aMatTile[2],
+                              Tile<TileType::Mat, S, baseK * stepKb, baseN, BLayout::RowMajor, baseK * stepKb, baseN,
+                                   SLayout::ColMajor> bMatTile[2],
+                              uint8_t &mte2DBFlag, uint32_t k_stride)
 {
     using NDValidShapeA = TileShape2D<U, baseM, baseK * stepKa, Layout::ND>;
     using NDsingleCoreShapeA = BaseShape2D<U, M, DYNAMIC, Layout::ND>;
     using GlobalDataSrcA = GlobalTensor<U, NDValidShapeA, NDsingleCoreShapeA, Layout::ND>;
-
     using NDValidShapeB = TileShape2D<U, baseK * stepKb, baseN, Layout::DN>;
     using NDsingleCoreShapeB = BaseShape2D<U, DYNAMIC, N, Layout::DN>;
     using GlobalDataSrcB = GlobalTensor<U, NDValidShapeB, NDsingleCoreShapeB, Layout::DN>;
 
-    const uint32_t kModStepKa = kIter % stepKa;
+    NDsingleCoreShapeA aStride(M, k_stride);
+    NDsingleCoreShapeB bStride(k_stride, N);
+    NDValidShapeA aShape;
+    NDValidShapeB bShape;
+    GlobalDataSrcA gmA(currentSrc0 + kIter * baseK, aShape, aStride);
+    GlobalDataSrcB gmB(currentSrc1 + kIter * baseK, bShape, bStride);
 
-    // TLOAD: every stepKa iterations, load larger panel into L1
-    if (kModStepKa == 0) {
-        NDsingleCoreShapeA aStride(M, k_stride);
-        NDsingleCoreShapeB bStride(k_stride, N);
-        NDValidShapeA aShape;
-        NDValidShapeB bShape;
-        GlobalDataSrcA gmA(currentSrc0 + kIter * baseK, aShape, aStride);
-        GlobalDataSrcB gmB(currentSrc1 + kIter * baseK, bShape, bStride);
+    wait_flag(PIPE_MTE1, PIPE_MTE2, (event_t)mte2DBFlag);
+    TLOAD(aMatTile[mte2DBFlag], gmA);
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    TLOAD(bMatTile[mte2DBFlag], gmB);
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
+    mte2DBFlag = (mte2DBFlag == 0) ? 1 : 0;
+}
 
-        wait_flag(PIPE_MTE1, PIPE_MTE2, (event_t)mte2DBFlag);
-        TLOAD(aMatTile[mte2DBFlag], gmA);
-        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-        TLOAD(bMatTile[mte2DBFlag], gmB);
-        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
-        mte2DBFlag = (mte2DBFlag == 0) ? 1 : 0;
-    }
-
-    const uint32_t currMte2Idx = (mte2DBFlag == 0) ? 1 : 0;
-
-    // TEXTRACT: extract current K-slice from cached L1 panel
+template <typename T, typename U, typename S, uint32_t baseM, uint32_t baseK, uint32_t baseN, uint32_t stepKa,
+          uint32_t stepKb>
+AICORE inline void ExtractAndMatmul(uint32_t kIter, uint32_t kModStepKa, uint32_t currMte2Idx,
+                                    Tile<TileType::Mat, U, baseM, baseK * stepKa, BLayout::ColMajor, baseM,
+                                         baseK * stepKa, SLayout::RowMajor> aMatTile[2],
+                                    Tile<TileType::Mat, S, baseK * stepKb, baseN, BLayout::RowMajor,
+                                         baseK * stepKb, baseN, SLayout::ColMajor> bMatTile[2],
+                                    TileLeft<U, baseM, baseK, baseM, baseK> aTile[2],
+                                    TileRight<S, baseK, baseN, baseK, baseN> bTile[2],
+                                    TileAcc<T, baseM, baseN, baseM, baseN> &cTile, uint8_t &mte1DBFlag)
+{
     wait_flag(PIPE_M, PIPE_MTE1, (event_t)mte1DBFlag);
-
     if (kModStepKa == 0)
         wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     TEXTRACT(aTile[mte1DBFlag], aMatTile[currMte2Idx], 0, kModStepKa * baseK);
-
     if (kModStepKa == 0)
         wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
     TEXTRACT(bTile[mte1DBFlag], bMatTile[currMte2Idx], (kIter % stepKb) * baseK, 0);
-
     if ((kIter + 1) % stepKa == 0) {
         set_flag(PIPE_MTE1, PIPE_MTE2, (event_t)currMte2Idx);
     }
-
-    // TMATMUL
     set_flag(PIPE_MTE1, PIPE_M, (event_t)mte1DBFlag);
     wait_flag(PIPE_MTE1, PIPE_M, (event_t)mte1DBFlag);
     if (kIter == 0) {
@@ -102,11 +107,53 @@ AICORE inline void ProcessKIteration(
     mte1DBFlag = (mte1DBFlag == 0) ? 1 : 0;
 }
 
+template <typename T, typename U, typename S, int M, int K, int N, uint32_t baseM, uint32_t baseK, uint32_t baseN,
+          uint32_t stepKa, uint32_t stepKb>
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
+AICORE inline void ProcessKIteration(
+    uint32_t kIter, __gm__ U *currentSrc0, __gm__ S *currentSrc1,
+    Tile<TileType::Mat, U, baseM, baseK * stepKa, BLayout::ColMajor, baseM, baseK * stepKa, SLayout::RowMajor>
+        aMatTile[2],
+    Tile<TileType::Mat, S, baseK * stepKb, baseN, BLayout::RowMajor, baseK * stepKb, baseN, SLayout::ColMajor>
+        bMatTile[2],
+    TileLeft<U, baseM, baseK, baseM, baseK> aTile[2], TileRight<S, baseK, baseN, baseK, baseN> bTile[2],
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
+    TileAcc<T, baseM, baseN, baseM, baseN> &cTile, uint8_t &mte2DBFlag, uint8_t &mte1DBFlag, uint32_t k_stride)
+{
+    using NDValidShapeA = TileShape2D<U, baseM, baseK * stepKa, Layout::ND>;
+    using NDsingleCoreShapeA = BaseShape2D<U, M, DYNAMIC, Layout::ND>;
+    using GlobalDataSrcA = GlobalTensor<U, NDValidShapeA, NDsingleCoreShapeA, Layout::ND>;
+
+    using NDValidShapeB = TileShape2D<U, baseK * stepKb, baseN, Layout::DN>;
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
+    using NDsingleCoreShapeB = BaseShape2D<U, DYNAMIC, N, Layout::DN>;
+    using GlobalDataSrcB = GlobalTensor<U, NDValidShapeB, NDsingleCoreShapeB, Layout::DN>;
+
+    const uint32_t kModStepKa = kIter % stepKa;
+
+    // TLOAD: every stepKa iterations, load larger panel into L1
+    if (kModStepKa == 0) {
+        LoadKPanel<T, U, S, M, K, N, baseM, baseK, baseN, stepKa, stepKb>(kIter, currentSrc0, currentSrc1, aMatTile,
+                                                                         bMatTile, mte2DBFlag, k_stride);
+    }
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
+
+    const uint32_t currMte2Idx = (mte2DBFlag == 0) ? 1 : 0;
+    ExtractAndMatmul<T, U, S, baseM, baseK, baseN, stepKa, stepKb>(kIter, kModStepKa, currMte2Idx, aMatTile, bMatTile,
+                                                                  aTile, bTile, cTile, mte1DBFlag);
+}
+
 // ============================================================================
 // Global GEMM parameters (shared across kernel and host code)
 // ============================================================================
 
 constexpr uint32_t G_K_LOOP = G_K / G_BASE_K;
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 
 // L1 caching: load stepK K-slices per TLOAD
 // L1 usage: 2×64KB(A) + 2×128KB(B) = 384KB ≤ 1024KB L1 capacity
@@ -114,6 +161,8 @@ constexpr uint32_t G_STEP_KA = 4;
 constexpr uint32_t G_STEP_KB = 4;
 static_assert(G_K_LOOP % G_STEP_KA == 0, "G_K_LOOP must be divisible by G_STEP_KA");
 static_assert(G_K_LOOP % G_STEP_KB == 0, "G_K_LOOP must be divisible by G_STEP_KB");
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 static_assert(G_STEP_KA == G_STEP_KB, "Current implementation assumes stepKa == stepKb");
 static_assert(G_K_LOOP >= G_STEP_KA, "K_LOOP must be >= stepKa for L1 caching");
 
@@ -121,6 +170,8 @@ static_assert(G_K_LOOP >= G_STEP_KA, "K_LOOP must be >= stepKa for L1 caching");
 // Type aliases for compute kernel tiles
 // ============================================================================
 using TileMatAData = Tile<TileType::Mat, half, G_BASE_M, G_BASE_K * G_STEP_KA, BLayout::ColMajor, G_BASE_M,
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
                           G_BASE_K * G_STEP_KA, SLayout::RowMajor>;
 using TileMatBData = Tile<TileType::Mat, half, G_BASE_K * G_STEP_KB, G_BASE_N, BLayout::RowMajor, G_BASE_K * G_STEP_KB,
                           G_BASE_N, SLayout::ColMajor>;
@@ -128,6 +179,8 @@ using LeftTileT = TileLeft<half, G_BASE_M, G_BASE_K, G_BASE_M, G_BASE_K>;
 using RightTileT = TileRight<half, G_BASE_K, G_BASE_N, G_BASE_K, G_BASE_N>;
 using ResTileT = TileAcc<float, G_BASE_M, G_BASE_N, G_BASE_M, G_BASE_N>;
 
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 // Swizzle: remap linear index to column-major within N_TILES-wide groups
 // to improve B-matrix L1 reuse (consecutive tiles share the same N column).
 AICORE inline void SwizzleTileIndex(int linear_idx, uint32_t &mi, uint32_t &ni)
@@ -135,6 +188,8 @@ AICORE inline void SwizzleTileIndex(int linear_idx, uint32_t &mi, uint32_t &ni)
     constexpr uint32_t SWIZZLE_GROUP = G_N_TILES;
     uint32_t group = linear_idx / SWIZZLE_GROUP;
     uint32_t local = linear_idx % SWIZZLE_GROUP;
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     mi = group;
     ni = (group & 1) ? (SWIZZLE_GROUP - 1 - local) : local;
     if (mi >= G_M_TILES) {
@@ -142,8 +197,11 @@ AICORE inline void SwizzleTileIndex(int linear_idx, uint32_t &mi, uint32_t &ni)
         ni = linear_idx % G_N_TILES;
     }
 }
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 
-// Run the K-loop for one output tile, then store result to GM and signal comm kernel.
+// Run the K-loop for one output tile, then store result to GM and signal comm
+// kernel.
 AICORE inline void ComputeAndStoreTile(__gm__ half *gemm_output, __gm__ half *src0, __gm__ half *src1,
                                        volatile __gm__ PerBlockQueue *my_queue, TileMatAData aMatTile[2],
                                        TileMatBData bMatTile[2], LeftTileT aTile[2], RightTileT bTile[2],
@@ -154,6 +212,8 @@ AICORE inline void ComputeAndStoreTile(__gm__ half *gemm_output, __gm__ half *sr
     using NDWholeShapeC = BaseShape2D<half, G_M, G_N>;
     using GlobalDataOut = GlobalTensor<half, NDValidShapeC, NDWholeShapeC>;
 
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     __gm__ half *currentSrc0 = src0 + mi * G_BASE_M * k_per_rank;
     __gm__ half *currentSrc1 = src1 + ni * G_BASE_N * k_per_rank;
 
@@ -161,6 +221,8 @@ AICORE inline void ComputeAndStoreTile(__gm__ half *gemm_output, __gm__ half *sr
     uint32_t k_loop_per_rank = k_per_rank / G_BASE_K;
     static_assert(G_BASE_K == 64, "G_BASE_K must be 64 for this implementation");
 
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
     set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
     set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
@@ -168,6 +230,8 @@ AICORE inline void ComputeAndStoreTile(__gm__ half *gemm_output, __gm__ half *sr
 
     for (uint32_t kIter = 0; kIter < k_loop_per_rank; kIter++) {
         ProcessKIteration<float, half, half, G_M, G_K, G_N, G_BASE_M, G_BASE_K, G_BASE_N, G_STEP_KA, G_STEP_KB>(
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
             kIter, currentSrc0, currentSrc1, aMatTile, bMatTile, aTile, bTile, cTile, mte2DBFlag, mte1DBFlag,
             k_per_rank);
     }
@@ -175,6 +239,8 @@ AICORE inline void ComputeAndStoreTile(__gm__ half *gemm_output, __gm__ half *sr
     wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
     wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
 
     uint64_t outOffset = (uint64_t)(mi * G_BASE_M) * G_N + ni * G_BASE_N;
@@ -182,6 +248,8 @@ AICORE inline void ComputeAndStoreTile(__gm__ half *gemm_output, __gm__ half *sr
 
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSTORE(dstGlobal, cTile);
 
     pipe_barrier(PIPE_ALL);
@@ -189,12 +257,17 @@ AICORE inline void ComputeAndStoreTile(__gm__ half *gemm_output, __gm__ half *sr
     int tile_idx = mi * G_N_TILES + ni;
     MultiBlockEnqueueFast(my_queue, tile_idx, enqueue_slot);
     enqueue_slot++;
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 }
 
 // ============================================================================
 // GemmComputeImpl: Core compute logic
 //
-// Each block handles a subset of tiles (no contention — sole producer per queue).
+// Each block handles a subset of tiles (no contention — sole producer per
+// queue).
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 // ============================================================================
 AICORE inline void GemmComputeImpl(__gm__ half *gemm_output, __gm__ half *src0, __gm__ half *src1,
                                    __gm__ MultiBlockQueueSet *queue_set, int launch_block_count, uint32_t k_per_rank)
@@ -207,6 +280,8 @@ AICORE inline void GemmComputeImpl(__gm__ half *gemm_output, __gm__ half *src0, 
     constexpr size_t l1BSize = G_BASE_K * G_STEP_KB * G_BASE_N * sizeof(half);
     TASSIGN(aMatTile[0], 0x0);
     TASSIGN(aMatTile[1], 0x0 + l1ASize);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TASSIGN(bMatTile[0], 0x0 + 2 * l1ASize);
     TASSIGN(bMatTile[1], 0x0 + 2 * l1ASize + l1BSize);
 
@@ -214,6 +289,8 @@ AICORE inline void GemmComputeImpl(__gm__ half *gemm_output, __gm__ half *src0, 
     RightTileT bTile[2];
     ResTileT cTile;
     TASSIGN(aTile[0], 0x0);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TASSIGN(aTile[1], 0x0 + G_BASE_M * G_BASE_K * sizeof(half));
     TASSIGN(bTile[0], 0x0);
     TASSIGN(bTile[1], 0x0 + G_BASE_K * G_BASE_N * sizeof(half));

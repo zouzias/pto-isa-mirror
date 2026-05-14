@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TTRANS_HPP
@@ -122,7 +124,7 @@ PTO_INTERNAL void TransB8FullSubTiles(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, un
             set_va_reg_sb(VA7, &tmpUb1[HALF_ADDR_NUM]);
             if (numSubTileY == 1) { // [32, 32]
                 Op::TransB8Instr(1, 0, 0);
-            } else { // larger then [32, 32], e.g, [32, 64]
+            } else {                // larger then [32, 32], e.g, [32, 64]
                 Op::TransB8Instr(numSubTileY, 1, vconvSrcStride);
             }
         } // end of numSubTileX
@@ -343,7 +345,7 @@ PTO_INTERNAL void TransRepeatXB8FullSubTiles(__ubuf__ T *dstPtr, __ubuf__ T *src
             set_va_reg_sb(VA1, &tmpUb[HALF_ADDR_NUM]);
             if (numSubTileX == 1) { // [32, 32]
                 Op::TransB8Instr(1, 0, 0);
-            } else { // larger than [32, 32], e.g, [32, 64]
+            } else {                // larger than [32, 32], e.g, [32, 64]
                 Op::TransB8Instr(numSubTileX, vconvDstStride, 1);
             }
         } // end of numSubTileY

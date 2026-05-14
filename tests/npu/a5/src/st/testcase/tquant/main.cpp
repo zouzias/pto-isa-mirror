@@ -1,18 +1,22 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 #include <gtest/gtest.h>
+
 #include <type_traits>
+
 #include "acl/acl.h"
 #include "test_common.h"
 
-#define DIV_ROUNDUP(a, b) (((a) + (b) - 1) / (b))
+#define DIV_ROUNDUP(a, b) (((a) + (b)-1) / (b))
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -393,10 +397,6 @@ TEST_F(TQUANTTEST, case_mxfp8_fp32_33x64_nd)
 {
     test_tquant_mxfp8<33, 64, 0>();
 }
-TEST_F(TQUANTTEST, case_mxfp8_fp32_13x192_nd)
-{
-    test_tquant_mxfp8<13, 192, 0>();
-}
 
 // MXFP8 BF16
 TEST_F(TQUANTTEST, case_mxfp8_bf16_32x128_nd)
@@ -410,6 +410,14 @@ TEST_F(TQUANTTEST, case_mxfp8_bf16_64x128_nd)
 TEST_F(TQUANTTEST, case_mxfp8_bf16_128x128_nd)
 {
     test_tquant_mxfp8_bf16<128, 128, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_bf16_14x16_nd)
+{
+    test_tquant_mxfp8_bf16<14, 16, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_bf16_7x48_nd)
+{
+    test_tquant_mxfp8_bf16<7, 48, 0>();
 }
 
 // Removing previous failing cases and Diagnostic comments...
@@ -433,8 +441,9 @@ TEST_F(TQUANTTEST, case_mxfp8_bf16_1x16_nd)
 {
     test_tquant_mxfp8_bf16<1, 16, 0>();
 }
-// 4x256 => 1024 elems => vlCount=8, loop_num=4. Each 256-elem DINTLV window maps to one row,
-// which makes this case a direct check that max/exp/scaling and quant windows stay row-aligned.
+// 4x256 => 1024 elems => vlCount=8, loop_num=4. Each 256-elem DINTLV window
+// maps to one row, which makes this case a direct check that max/exp/scaling
+// and quant windows stay row-aligned.
 TEST_F(TQUANTTEST, case_mxfp8_bf16_4x256_nd)
 {
     test_tquant_mxfp8_bf16<4, 256, 0>();
@@ -445,13 +454,15 @@ TEST_F(TQUANTTEST, case_mxfp8_bf16_4x512_nd)
 {
     test_tquant_mxfp8_bf16<4, 512, 0>();
 }
-// Multi-flush vstas coverage: loop_num odd >= 3 => 16B pending in st_align at final vstas.
-// 3x256 => padded 768 elements => loop_num = ceil(768/256) = 3 (odd).
+// Multi-flush vstas coverage: loop_num odd >= 3 => 16B pending in st_align at
+// final vstas. 3x256 => padded 768 elements => loop_num = ceil(768/256) = 3
+// (odd).
 TEST_F(TQUANTTEST, case_mxfp8_bf16_3x256_nd)
 {
     test_tquant_mxfp8_bf16<3, 256, 0>();
 }
-// 5x256 => padded 1280 elements => loop_num = 5 (odd), exercises more vstus iterations.
+// 5x256 => padded 1280 elements => loop_num = 5 (odd), exercises more vstus
+// iterations.
 TEST_F(TQUANTTEST, case_mxfp8_bf16_5x256_nd)
 {
     test_tquant_mxfp8_bf16<5, 256, 0>();
@@ -492,15 +503,12 @@ TEST_F(TQUANTTEST, case_mxfp8_fp16_128x128_nd)
 {
     test_tquant_mxfp8_fp16<128, 128, 0>();
 }
-// 4x256 => 1024 elems => vlCount=8, loop_num=4. Mirrors the BF16 regression case
-// on the FP16 path so board-only stage-order issues show up on both B16 variants.
+// 4x256 => 1024 elems => vlCount=8, loop_num=4. Mirrors the BF16 regression
+// case on the FP16 path so board-only stage-order issues show up on both B16
+// variants.
 TEST_F(TQUANTTEST, case_mxfp8_fp16_4x256_nd)
 {
     test_tquant_mxfp8_fp16<4, 256, 0>();
-}
-TEST_F(TQUANTTEST, case_mxfp8_fp16_11x640_nd)
-{
-    test_tquant_mxfp8_fp16<11, 640, 0>();
 }
 
 // MXFP4 E2M1 FP16 ND

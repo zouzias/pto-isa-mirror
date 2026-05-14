@@ -12,8 +12,8 @@ full text of the License.
 
 #ifndef TILE_TSUBVIEW_HPP
 #define TILE_TSUBVIEW_HPP
-#include <pto/common/type.hpp>
 #include <cstdint>
+#include <pto/common/type.hpp>
 
 template <typename TileDataDst, typename TileDataSrc>
 PTO_INTERNAL void TSUBVIEW_IMPL(TileDataDst &dst, TileDataSrc &src, uint16_t rowIdx, uint16_t colIdx)

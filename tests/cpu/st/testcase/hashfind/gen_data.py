@@ -107,4 +107,3 @@ def gen_case(case_dir: str, tile_rows: int, tile_cols: int, cap: int, max_probe:
 
 if __name__ == "__main__":
     gen_case("HASHFINDTest.case_int32_16x16_cap512", tile_rows=16, tile_cols=16, cap=512, max_probe=64)
-
