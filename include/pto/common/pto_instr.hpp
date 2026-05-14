@@ -1758,6 +1758,15 @@ PTO_INST RecordEvent TSCATTER(TileDataD &dst, TileDataS &src, TileDataI &indexes
     return {};
 }
 
+template <MaskPattern maskPattern = MaskPattern::P1111, typename DstTileData, typename SrcTileData,
+          typename... WaitEvents>
+PTO_INST RecordEvent TSCATTER(DstTileData &dst, SrcTileData &src, WaitEvents &...events)
+{
+    TSYNC(events...);
+    TSCATTER_IMPL<maskPattern>(dst, src);
+    return {};
+}
+
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TCOLEXPAND(TileDataDst &dst, TileDataSrc &src, WaitEvents &...events)
 {
