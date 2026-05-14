@@ -100,7 +100,8 @@ tget
 # Point-to-Point Communication (Asynchronous)
 tput_async
 tget_async
-# L2 Cache Prefetch (Asynchronous)
+# L2 Cache Prefetch (cross-rank cases for pto::TPREFETCH_L2; single-card cases
+# live under tests/npu/a2a3/src/st/testcase/tprefetch_l2/)
 tprefetch_l2
 # Signal-Based Synchronization
 tnotify
@@ -117,7 +118,9 @@ tbroadcast
 # These are excluded from the default "build everything" path so they do not
 # slow down CI. They are still valid TEST_CASE targets for local ST runs.
 set(OPT_IN_TESTCASES
-# Perf comparison: host pto::PTO_PREFETCH vs device pto::comm::TPREFETCH_L2
+# Cross-rank perf comparison (Scenario D, TPUT_ASYNC + receiver-side prefetch).
+# Single-card scenarios A/B/C live under
+# tests/npu/a2a3/src/st/testcase/tprefetch_compare/.
 tprefetch_compare
 )
 

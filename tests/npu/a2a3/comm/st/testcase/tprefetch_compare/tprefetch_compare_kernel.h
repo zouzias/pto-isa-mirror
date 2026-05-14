@@ -14,47 +14,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 
 // ============================================================================
-// tprefetch_compare — performance comparison between host-initiated
-// pto::PTO_PREFETCH (SDMA path, driven by aclrtCmoAsync) and device-initiated
-// pto::comm::TPREFETCH_L2 (SDMA CMO SQE built by the AI Core).
+// tprefetch_compare (cross-rank, Scenario D) — receiver-side prefetch over a
+// TPUT_ASYNC link, comparing host-initiated pto::PTO_PREFETCH against
+// device-initiated pto::TPREFETCH_L2.
 //
-// Every runner below is single-card (no HCCL): the focus is on the prefetch
-// primitive itself, not on inter-rank communication.
-//
-// Each runner returns false on ACL/runtime failure; a "false" returned from a
-// prefetch-comparison test does NOT mean PREFETCH lost the race, only that the
-// hardware refused to cooperate. The perf verdict is printed to stdout.
+// Single-card scenarios A / B / C live under
+// tests/npu/a2a3/src/st/testcase/tprefetch_compare/ since none of them need
+// the HCCL test scaffold pulled in by `comm/st`.
 // ============================================================================
-
-// ---- Scenario A: end-to-end wall-clock latency ---------------------------
-// For a given data size, runs 3 configurations:
-//   * baseline           — trash L2 + kernel TLOAD (no prefetch)
-//   * host PTO_PREFETCH  — trash L2 + host pto::PTO_PREFETCH + kernel TLOAD
-//   * device TPREFETCH_L2— trash L2 + kernel (TPREFETCH_L2 -> Wait -> TLOAD)
-// Wall-clock is measured host-side around "start of first op after trash" to
-// "aclrtSynchronizeStream returns".
-template <typename T, size_t count>
-bool RunScenarioAEndToEnd(int deviceId);
-
-// ---- Scenario B: prefetch-issue overhead ---------------------------------
-// Micro-benchmark: prefetch a tiny region (so transfer cost is negligible)
-// and measure the *issue+wait* time.
-//   * host side : host wall-clock over PTO_PREFETCH + aclrtSynchronizeStream.
-//   * device side: in-kernel syscnt cycles around TPREFETCH_L2 + evt.Wait.
-template <typename T, size_t count>
-bool RunScenarioBIssueOverhead(int deviceId);
-
-// ---- Scenario C: overlap with AI-Core compute ----------------------------
-// Kernel structure:    [optional device prefetch] -> compute-A -> [optional wait] -> TLOAD
-// host side may optionally issue a PTO_PREFETCH before kernel launch.
-// Three configurations:
-//   C0 no-prefetch     : trash L2 -> launch kernel(compute-A -> cold TLOAD)
-//   C1 host prefetch   : trash L2 -> host PTO_PREFETCH -> kernel(compute-A -> warm TLOAD)
-//   C2 device prefetch : trash L2 -> kernel(TPREFETCH_L2 -> compute-A -> Wait -> warm TLOAD)
-// Two metrics reported per config: kernel-self cycles (AI-Core view, via
-// syscnt), and host wall-clock (end-to-end including prefetch issue).
-template <typename T, size_t count>
-bool RunScenarioCOverlap(int deviceId);
 
 // ---- Scenario D: cross-rank receiver-side prefetch -----------------------
 // Producer-consumer pipeline over a TPUT_ASYNC link between two ranks:
@@ -62,7 +29,7 @@ bool RunScenarioCOverlap(int deviceId);
 //   Rank 1 (receiver) → 3 prefetch modes on its own recvBuf, then TLOAD:
 //     D0 no-prefetch
 //     D1 host   pto::PTO_PREFETCH (host-issued aclrtCmoAsync + stream sync)
-//     D2 device pto::comm::TPREFETCH_L2 (in-kernel SQE + Wait)
+//     D2 device pto::TPREFETCH_L2 (in-kernel SQE + Wait)
 // All three issue exactly one SDMA CMO prefetch (or none) against the
 // freshly received recvBuf, then measure the TLOAD sweep. The receiver
 // returns kernel cycles (TLOAD-only in D0/D1, prefetch+wait+TLOAD in D2)

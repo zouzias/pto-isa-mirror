@@ -8,6 +8,22 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
+// ============================================================================
+// Cross-rank ST for pto::TPREFETCH_L2 over HCCL.
+//
+// All kernels in this file are multi-rank by construction (they need
+// HcclDeviceContext / TPUT_ASYNC / TGET / HcclRemotePtr). Single-card
+// coverage lives under tests/npu/a2a3/src/st/testcase/tprefetch_l2/.
+//
+// Even though TPREFETCH_L2 itself takes a `__gm__ uint8_t *workspace`
+// (workspace overload), this file still uses the explicit AsyncSession
+// overload because every kernel below also issues TPUT_ASYNC / TPUT
+// against the same workspace. Building one session and reusing it for
+// both TPREFETCH_L2 and TPUT_ASYNC saves the per-call session-build cost
+// (a transient 256B scratch tile + BuildAsyncSession round trip) which
+// would otherwise show up in the perf numbers.
+// ============================================================================
+
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
@@ -23,13 +39,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using SdmaWorkspaceManager = pto::comm::sdma::SdmaWorkspaceManager;
 
 // ============================================================================
-// Kernel-wide type aliases
-//
-// Every TPREFETCH_L2 / TPUT / TGET perf+correctness kernel in this file uses
-// the same fully-dynamic 5-D Shape/Stride + a uint8 ScratchTile for building
-// AsyncSession. Defining them once at file scope keeps the kernel bodies
-// short and eliminates the identical 4-line `using` block that used to live
-// in every kernel.
+// Kernel-wide type aliases — every TPREFETCH_L2 / TPUT / TGET kernel below
+// uses the same fully-dynamic 5-D Shape/Stride + a uint8 ScratchTile for
+// building AsyncSession.
 // ============================================================================
 using KernelShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
 using KernelStrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -40,8 +52,6 @@ using KernelScratchTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, pto::comm::s
 // ============================================================================
 // Device-side helpers shared by multiple __global__ AICORE kernels.
 //
-// Each helper captures ONE semantic concept that would otherwise be repeated
-// verbatim across kernels:
 //   * BuildKernelSession    — allocate ScratchTile + BuildAsyncSession.
 //   * PrefetchRealOrTrash   — issue TPREFETCH_L2 against real or trash buffer
 //                             (keeps SDMA CMO overhead identical between warm
@@ -65,7 +75,7 @@ PTO_INTERNAL pto::comm::AsyncEvent PrefetchRealOrTrash(__gm__ T *realBuf, __gm__
     uint64_t totalBytes = static_cast<uint64_t>(elem_count) * sizeof(T);
     __gm__ void *target =
         enablePrefetch ? reinterpret_cast<__gm__ void *>(realBuf) : reinterpret_cast<__gm__ void *>(trashBuf);
-    return pto::comm::TPREFETCH_L2(target, totalBytes, session);
+    return pto::TPREFETCH_L2(target, totalBytes, session);
 }
 
 template <typename T>
@@ -112,11 +122,10 @@ struct RootBroadcastSetup {
 };
 
 // EnterRootBroadcastOrReturn — unified gate for "root-only TPREFETCH + broadcast"
-// kernels (TPrefetchL2TputAsyncKernel / TPrefetchL2PerfKernel). Performs bounds
-// check, root-rank gate, session build, and buffer/shape setup in one call.
-// On any failure emits pipe_barrier(PIPE_ALL) and returns false so the caller
-// can `return` immediately. On success, `s` is fully populated and the caller
-// is guaranteed to be on the root rank.
+// kernels. Performs bounds check, root-rank gate, session build, and
+// buffer/shape setup in one call. On any failure emits pipe_barrier(PIPE_ALL)
+// and returns false so the caller can `return` immediately. On success, `s`
+// is fully populated and the caller is guaranteed to be on the root rank.
 template <typename T, size_t count>
 PTO_INTERNAL bool EnterRootBroadcastOrReturn(__gm__ T *commBuf, __gm__ HcclDeviceContext *hcclCtx, int root_rank,
                                              int elem_count, __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId,
@@ -141,8 +150,8 @@ PTO_INTERNAL bool EnterRootBroadcastOrReturn(__gm__ T *commBuf, __gm__ HcclDevic
 }
 
 // ----------------------------------------------------------------------------
-// Perf-kernel tile tiling — file-scope aliases shared by all four performance
-// kernels (TloadPerfKernel, TloadRemotePerfKernel, TputSyncPerfKernel,
+// Perf-kernel tile tiling — file-scope aliases shared by all the multi-rank
+// performance kernels (TloadRemotePerfKernel, TputSyncPerfKernel,
 // TgetPerfKernel). These wrap the "chunk `count` elements into tiles of at
 // most 256 columns" convention so each kernel body doesn't repeat the
 // kTileCols/TileData alias block.
@@ -173,181 +182,6 @@ PTO_INTERNAL bool SetupPerfKernelOrReturn(__gm__ T *commBuf, int elem_count, __g
     s.my_rank = static_cast<int>(hcclCtx->rankId);
     s.sendBuf = commBuf;
     s.recvBuf = commBuf + count;
-    return true;
-}
-
-// ============================================================================
-// Common: TLOAD/TSTORE copy loop (shared by all kernels)
-// ============================================================================
-template <typename T, size_t count>
-PTO_INTERNAL void CopyViaTile(__gm__ T *src, __gm__ T *dst, int elem_count)
-{
-    constexpr int kTileCols = (count <= 256) ? static_cast<int>(count) : 256;
-    static_assert(count % kTileCols == 0, "count must be a multiple of kTileCols for fixed-size Tile");
-    using TileData = pto::Tile<pto::TileType::Vec, T, 1, kTileCols, pto::BLayout::RowMajor>;
-    using ChunkShape = pto::Shape<1, 1, 1, 1, kTileCols>;
-    using ChunkStride = pto::Stride<1, 1, 1, 1, 1>;
-
-    TileData tile;
-    TASSIGN(tile, 0x0);
-
-    for (int offset = 0; offset < elem_count; offset += kTileCols) {
-        pto::GlobalTensor<T, ChunkShape, ChunkStride, pto::Layout::ND> srcChunk(src + offset);
-        pto::GlobalTensor<T, ChunkShape, ChunkStride, pto::Layout::ND> dstChunk(dst + offset);
-
-        TLOAD(tile, srcChunk);
-        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        TSTORE(dstChunk, tile);
-        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID1);
-        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID1);
-    }
-}
-
-// ============================================================================
-// Baseline Kernel: pure TLOAD/TSTORE, no SDMA.  Sanity check.
-// ============================================================================
-template <typename T, size_t count>
-__global__ AICORE void BaselineKernel(__gm__ T *src, __gm__ T *dst, int elem_count)
-{
-    if (!BoundsOkOrFinalize<count>(elem_count)) {
-        return;
-    }
-
-    CopyViaTile<T, count>(src, dst, elem_count);
-
-    pipe_barrier(PIPE_ALL);
-}
-
-// ============================================================================
-// TPREFETCH_L2 Correctness Test Kernel (GlobalTensor overload)
-//
-// Prefetch is a performance hint; even if it fails the TLOAD/TSTORE loop
-// must still execute to validate correctness independently.
-// ============================================================================
-template <typename T, size_t count>
-__global__ AICORE void TPrefetchL2CorrectnessKernel(__gm__ T *src, __gm__ T *dst, int elem_count,
-                                                    __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
-{
-    if (!BoundsOkOrFinalize<count>(elem_count)) {
-        return;
-    }
-
-    KernelShapeDyn shape(1, 1, 1, 1, elem_count);
-    KernelStrideDyn stride(elem_count, elem_count, elem_count, elem_count, 1);
-    KernelGlobal<T> srcGlobal(src, shape, stride);
-
-    pto::comm::AsyncSession session;
-    if (BuildKernelSession(session, sdmaWorkspace, sdmaSyncId)) {
-        auto evt = pto::comm::TPREFETCH_L2(srcGlobal, session);
-        (void)evt.Wait(session);
-    }
-
-    CopyViaTile<T, count>(src, dst, elem_count);
-
-    pipe_barrier(PIPE_ALL);
-}
-
-// ============================================================================
-// TPREFETCH_L2 Raw Pointer Test Kernel
-// ============================================================================
-template <typename T, size_t count>
-__global__ AICORE void TPrefetchL2RawPtrKernel(__gm__ T *src, __gm__ T *dst, int elem_count,
-                                               __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
-{
-    if (!BoundsOkOrFinalize<count>(elem_count)) {
-        return;
-    }
-
-    uint64_t totalBytes = static_cast<uint64_t>(elem_count) * sizeof(T);
-
-    pto::comm::AsyncSession session;
-    if (BuildKernelSession(session, sdmaWorkspace, sdmaSyncId)) {
-        auto evt = pto::comm::TPREFETCH_L2(reinterpret_cast<__gm__ void *>(src), totalBytes, session);
-        (void)evt.Wait(session);
-    }
-
-    CopyViaTile<T, count>(src, dst, elem_count);
-
-    pipe_barrier(PIPE_ALL);
-}
-
-// ============================================================================
-// Test helpers — shared setup/teardown/verify to cut duplication
-// ============================================================================
-struct SingleCardTestEnv {
-    aclrtStream stream = nullptr;
-    uint8_t *inputHost = nullptr;
-    uint8_t *outputHost = nullptr;
-    void *srcDevice = nullptr;
-    void *dstDevice = nullptr;
-    size_t dataBytes = 0;
-    int aclStatus = 0;
-
-    bool Init(int deviceId, size_t bytes)
-    {
-        dataBytes = bytes;
-        aclStatus |= aclrtSetDevice(deviceId);
-        aclStatus |= aclrtCreateStream(&stream);
-        aclStatus |= aclrtMallocHost(reinterpret_cast<void **>(&inputHost), dataBytes);
-        aclStatus |= aclrtMallocHost(reinterpret_cast<void **>(&outputHost), dataBytes);
-        aclStatus |= aclrtMalloc(&srcDevice, dataBytes, ACL_MEM_MALLOC_HUGE_FIRST);
-        aclStatus |= aclrtMalloc(&dstDevice, dataBytes, ACL_MEM_MALLOC_HUGE_FIRST);
-        return aclStatus == 0;
-    }
-    void SyncAndReadBack()
-    {
-        aclStatus |= aclrtSynchronizeStream(stream);
-        aclStatus |= aclrtMemcpy(outputHost, dataBytes, dstDevice, dataBytes, ACL_MEMCPY_DEVICE_TO_HOST);
-    }
-    void Teardown()
-    {
-        aclStatus |= aclrtFree(srcDevice);
-        aclStatus |= aclrtFree(dstDevice);
-        aclStatus |= aclrtFreeHost(inputHost);
-        aclStatus |= aclrtFreeHost(outputHost);
-        aclStatus |= aclrtDestroyStream(stream);
-    }
-};
-
-template <typename T>
-inline void FillAndUpload(SingleCardTestEnv &env, size_t count, int modulus)
-{
-    T *in = reinterpret_cast<T *>(env.inputHost);
-    T *out = reinterpret_cast<T *>(env.outputHost);
-    for (size_t i = 0; i < count; ++i) {
-        in[i] = static_cast<T>(i % modulus);
-        out[i] = static_cast<T>(-1);
-    }
-    env.aclStatus |= aclrtMemcpy(env.srcDevice, env.dataBytes, env.inputHost, env.dataBytes, ACL_MEMCPY_HOST_TO_DEVICE);
-    env.aclStatus |=
-        aclrtMemcpy(env.dstDevice, env.dataBytes, env.outputHost, env.dataBytes, ACL_MEMCPY_HOST_TO_DEVICE);
-}
-
-template <typename T>
-inline bool VerifyOutputAndPrint(const SingleCardTestEnv &env, size_t count, int modulus, const char *tag)
-{
-    const T *out = reinterpret_cast<const T *>(env.outputHost);
-    for (size_t i = 0; i < count; ++i) {
-        T expected = static_cast<T>(i % modulus);
-        if (out[i] != expected) {
-            std::cout << tag << ": index " << i << " expected " << (float)expected << " got " << (float)out[i]
-                      << std::endl;
-            return false;
-        }
-    }
-#if ENABLE_DEBUG_PRINT
-    std::cout << "\n================================================================" << std::endl;
-    std::cout << "[DEBUG] " << tag << " SUCCESSFUL!" << std::endl;
-    std::cout << "  count=" << count << ", dtype_size=" << sizeof(T) << std::endl;
-    std::cout << "  Sample: [ ";
-    for (size_t i = 0; i < (count > 5 ? 5 : count); ++i)
-        std::cout << (float)out[i] << " ";
-    if (count > 5)
-        std::cout << "... ";
-    std::cout << "]" << std::endl;
-    std::cout << "================================================================\n" << std::endl;
-#endif
     return true;
 }
 
@@ -498,7 +332,7 @@ bool RunMultiRankPerfKernelGeneric(int rank_id, int n_ranks, int n_devices, int 
 // ----------------------------------------------------------------------------
 // PrintL2ColdWarmSummary: shared printer for all "L2-cold vs L2-warm" perf tests.
 //
-// TLOAD / Remote-TLOAD / TPUT-sync / TGET all report the same block structure
+// Remote-TLOAD / TPUT-sync / TGET all report the same block structure
 // (title → data size → chunk line → iterations → cold cycles → warm cycles →
 // speedup verdict). The only variations are the test title, the measured
 // instruction name ("TLOAD"/"TPUT"/"TGET"), and the chunk-line style.
@@ -551,8 +385,6 @@ inline void PrintL2ColdWarmSummary(const L2PerfSummaryFmt &fmt, uint64_t avgCold
 template <typename RunOnce, typename PrintSummary>
 bool RunColdWarmPerfSweep(int kWarmup, int kMeasured, RunOnce &&runOnce, PrintSummary &&printSummary)
 {
-    // Defensive: callers supply constexpr positive values (kMeasured >= 1), but
-    // static analysis cannot prove it, so guard against div-by-zero explicitly.
     if (kMeasured <= 0) {
         return false;
     }
@@ -586,91 +418,6 @@ bool RunColdWarmPerfSweep(int kWarmup, int kMeasured, RunOnce &&runOnce, PrintSu
 }
 
 // ============================================================================
-// Host-side test runners
-// ============================================================================
-
-template <typename T, size_t count>
-bool RunBaseline(int deviceId)
-{
-    constexpr size_t dataBytes = count * sizeof(T);
-    SingleCardTestEnv env;
-    if (!env.Init(deviceId, dataBytes)) {
-        std::cerr << "[ERROR] Baseline: init failed!" << std::endl;
-        return false;
-    }
-    FillAndUpload<T>(env, count, 1000);
-
-    BaselineKernel<T, count><<<1, nullptr, env.stream>>>(reinterpret_cast<T *>(env.srcDevice),
-                                                         reinterpret_cast<T *>(env.dstDevice), static_cast<int>(count));
-    env.SyncAndReadBack();
-
-    bool is_ok = VerifyOutputAndPrint<T>(env, count, 1000, "Baseline TLOAD/TSTORE");
-    env.Teardown();
-    return is_ok && (env.aclStatus == 0);
-}
-
-template <typename T, size_t count>
-bool RunPrefetchL2Correctness(int deviceId)
-{
-    constexpr size_t dataBytes = count * sizeof(T);
-    SingleCardTestEnv env;
-    if (!env.Init(deviceId, dataBytes)) {
-        std::cerr << "[ERROR] PrefetchL2: init failed!" << std::endl;
-        return false;
-    }
-    FillAndUpload<T>(env, count, 1000);
-
-    SdmaWorkspaceManager sdmaMgr;
-    if (!sdmaMgr.Init()) {
-        std::cerr << "[WARN] SdmaWorkspaceManager Init failed — prefetch will be skipped inside kernel" << std::endl;
-    }
-
-    TPrefetchL2CorrectnessKernel<T, count><<<1, nullptr, env.stream>>>(
-        reinterpret_cast<T *>(env.srcDevice), reinterpret_cast<T *>(env.dstDevice), static_cast<int>(count),
-        reinterpret_cast<uint8_t *>(sdmaMgr.GetWorkspaceAddr()), 0);
-    env.SyncAndReadBack();
-
-    bool is_ok = VerifyOutputAndPrint<T>(env, count, 1000, "TPREFETCH_L2 GlobalTensor correctness");
-    env.Teardown();
-    sdmaMgr.Finalize();
-    return is_ok && (env.aclStatus == 0);
-}
-
-template <typename T, size_t count>
-bool RunPrefetchL2RawPtr(int deviceId)
-{
-    constexpr size_t dataBytes = count * sizeof(T);
-    SingleCardTestEnv env;
-    if (!env.Init(deviceId, dataBytes)) {
-        std::cerr << "[ERROR] PrefetchL2 RawPtr: init failed!" << std::endl;
-        return false;
-    }
-    FillAndUpload<T>(env, count, 500);
-
-    SdmaWorkspaceManager sdmaMgr;
-    if (!sdmaMgr.Init()) {
-        std::cerr << "[WARN] SdmaWorkspaceManager Init failed — prefetch will be skipped inside kernel" << std::endl;
-    }
-
-    TPrefetchL2RawPtrKernel<T, count><<<1, nullptr, env.stream>>>(
-        reinterpret_cast<T *>(env.srcDevice), reinterpret_cast<T *>(env.dstDevice), static_cast<int>(count),
-        reinterpret_cast<uint8_t *>(sdmaMgr.GetWorkspaceAddr()), 0);
-    env.SyncAndReadBack();
-
-    bool is_ok = VerifyOutputAndPrint<T>(env, count, 500, "TPREFETCH_L2 raw pointer correctness");
-    env.Teardown();
-    sdmaMgr.Finalize();
-    return is_ok && (env.aclStatus == 0);
-}
-
-template bool RunBaseline<float, 4096>(int deviceId);
-template bool RunBaseline<int32_t, 4096>(int deviceId);
-template bool RunPrefetchL2Correctness<float, 4096>(int deviceId);
-template bool RunPrefetchL2Correctness<int32_t, 4096>(int deviceId);
-template bool RunPrefetchL2RawPtr<float, 4096>(int deviceId);
-template bool RunPrefetchL2RawPtr<int32_t, 4096>(int deviceId);
-
-// ============================================================================
 // Multi-card: TPREFETCH_L2 + TPUT_ASYNC Kernel
 //
 // Rank root_rank:
@@ -696,7 +443,7 @@ __global__ AICORE void TPrefetchL2TputAsyncKernel(__gm__ T *commBuf, int nranks,
     KernelGlobal<T> sendG(s.sendBuf, s.shape, s.stride);
 
     if (enablePrefetch) {
-        (void)pto::comm::TPREFETCH_L2(sendG, s.session);
+        (void)pto::TPREFETCH_L2(sendG, s.session);
     }
 
     BroadcastViaTputAsync<T>(sendG, s.recvBuf, s.shape, s.stride, nranks, root_rank, hcclCtx, s.session);
@@ -889,146 +636,6 @@ template bool RunPrefetchL2Perf<float, 65536>(int, int, int, int);
 template bool RunPrefetchL2Perf<float, 262144>(int, int, int, int);
 
 // ============================================================================
-// TLOAD Perf Kernel: measure TLOAD latency with/without L2 prefetch
-//
-// Uses trash-buffer technique for L2 cold control (cf. shmem/CMO example).
-// Both paths always execute a SDMA CMO prefetch for fair comparison:
-//   enablePrefetch=1: prefetch srcBuf → L2 warm
-//   enablePrefetch=0: prefetch trashBuf → L2 cold for srcBuf
-// ============================================================================
-template <typename T, size_t count>
-__global__ AICORE void TloadPerfKernel(__gm__ T *srcBuf, int elem_count, int enablePrefetch,
-                                       __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId, __gm__ uint8_t *trashBuf,
-                                       __gm__ uint64_t *cycleOut)
-{
-    constexpr int kTileCols = (count <= 256) ? static_cast<int>(count) : 256;
-    static_assert(count % kTileCols == 0, "count must be a multiple of kTileCols");
-    using TileData = pto::Tile<pto::TileType::Vec, T, 1, kTileCols, pto::BLayout::RowMajor>;
-    using ChunkShape = pto::Shape<1, 1, 1, 1, kTileCols>;
-    using ChunkStride = pto::Stride<1, 1, 1, 1, 1>;
-
-    if (!BoundsOkOrFinalize<count>(elem_count)) {
-        return;
-    }
-
-    {
-        pto::comm::AsyncSession session;
-        if (BuildKernelSession(session, sdmaWorkspace, sdmaSyncId)) {
-            auto evt = PrefetchRealOrTrash<T>(srcBuf, trashBuf, elem_count, enablePrefetch, session);
-            (void)evt.Wait(session);
-        }
-    }
-
-    TileData tile;
-    TASSIGN(tile, 0x0);
-
-    uint64_t t0 = get_syscnt();
-    for (int offset = 0; offset < elem_count; offset += kTileCols) {
-        pto::GlobalTensor<T, ChunkShape, ChunkStride, pto::Layout::ND> srcChunk(srcBuf + offset);
-        TLOAD(tile, srcChunk);
-        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    }
-    uint64_t t1 = get_syscnt();
-    *cycleOut = t1 - t0;
-
-    pipe_barrier(PIPE_ALL);
-}
-
-// ============================================================================
-// Host-side TLOAD perf runner
-// ============================================================================
-template <typename T, size_t count>
-bool RunTloadPerfOnce(int deviceId, bool prefetch, uint64_t &outCycles)
-{
-    constexpr size_t dataBytes = count * sizeof(T);
-    int aclStatus = 0;
-
-    aclStatus |= aclrtSetDevice(deviceId);
-    aclrtStream stream = nullptr;
-    aclStatus |= aclrtCreateStream(&stream);
-
-    uint8_t *inputHost = nullptr;
-    aclStatus |= aclrtMallocHost(reinterpret_cast<void **>(&inputHost), dataBytes);
-    if (aclStatus != 0) {
-        std::cerr << "[ERROR] TloadPerf: host alloc failed!" << std::endl;
-        return false;
-    }
-    for (size_t i = 0; i < count; ++i)
-        reinterpret_cast<T *>(inputHost)[i] = static_cast<T>(i);
-
-    void *srcDevice = nullptr;
-    void *trashDevice = nullptr;
-    aclStatus |= aclrtMalloc(&srcDevice, dataBytes, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclStatus |= aclrtMalloc(&trashDevice, dataBytes, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclStatus |= aclrtMemcpy(srcDevice, dataBytes, inputHost, dataBytes, ACL_MEMCPY_HOST_TO_DEVICE);
-
-    void *cycleDev = nullptr;
-    aclStatus |= aclrtMalloc(&cycleDev, sizeof(uint64_t), ACL_MEM_MALLOC_HUGE_FIRST);
-    uint64_t zero = 0;
-    aclStatus |= aclrtMemcpy(cycleDev, sizeof(uint64_t), &zero, sizeof(uint64_t), ACL_MEMCPY_HOST_TO_DEVICE);
-
-    SdmaWorkspaceManager sdmaMgr;
-    if (!sdmaMgr.Init()) {
-        std::cerr << "[ERROR] TloadPerf: SdmaWorkspaceManager Init failed!" << std::endl;
-        aclrtFree(cycleDev);
-        aclrtFree(trashDevice);
-        aclrtFree(srcDevice);
-        aclrtFreeHost(inputHost);
-        aclrtDestroyStream(stream);
-        return false;
-    }
-
-    int enablePrefetch = prefetch ? 1 : 0;
-    TloadPerfKernel<T, count><<<1, nullptr, stream>>>(reinterpret_cast<T *>(srcDevice), static_cast<int>(count),
-                                                      enablePrefetch, (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0,
-                                                      reinterpret_cast<uint8_t *>(trashDevice),
-                                                      reinterpret_cast<uint64_t *>(cycleDev));
-    aclStatus |= aclrtSynchronizeStream(stream);
-
-    aclrtMemcpy(&outCycles, sizeof(uint64_t), cycleDev, sizeof(uint64_t), ACL_MEMCPY_DEVICE_TO_HOST);
-
-    sdmaMgr.Finalize();
-    aclrtFree(cycleDev);
-    aclrtFree(trashDevice);
-    aclrtFree(srcDevice);
-    aclrtFreeHost(inputHost);
-    aclrtDestroyStream(stream);
-
-    return aclStatus == 0;
-}
-
-// ============================================================================
-// Top-level TLOAD perf comparison (single-card, rank 0 only)
-// ============================================================================
-template <typename T, size_t count>
-bool RunTloadPerf(int deviceId)
-{
-    constexpr int kWarmup = 3;
-    constexpr int kMeasured = 10;
-
-    auto runOnce = [&](bool prefetch, uint64_t &cycles) {
-        return RunTloadPerfOnce<T, count>(deviceId, prefetch, cycles);
-    };
-    auto printSummary = [&](uint64_t avgCold, uint64_t avgWarm) {
-        L2PerfSummaryFmt fmt{};
-        fmt.title = "TLOAD Latency: L2-cold vs L2-prefetched";
-        fmt.metric = "TLOAD";
-        fmt.dataBytes = count * sizeof(T);
-        fmt.kWarmup = kWarmup;
-        fmt.kMeasured = kMeasured;
-        fmt.tloadChunks = static_cast<int>(count / ((count <= 256) ? count : 256));
-        PrintL2ColdWarmSummary(fmt, avgCold, avgWarm);
-    };
-    return RunColdWarmPerfSweep(kWarmup, kMeasured, runOnce, printSummary);
-}
-
-template bool RunTloadPerf<float, 4096>(int);
-template bool RunTloadPerf<float, 65536>(int);
-template bool RunTloadPerf<float, 262144>(int);
-template bool RunTloadPerf<float, 1048576>(int);
-
-// ============================================================================
 // Multi-rank TLOAD Perf Kernel
 //
 // Rank 0 (sender):  TPUT_ASYNC → send data to Rank 1
@@ -1138,7 +745,6 @@ bool RunTloadRemotePerf(int n_ranks, int n_devices, int first_rank_id, int first
                                                           root_rank, prefetch, cycles);
             });
     };
-    // Measurement lives on the receiver (rank != root), so print from non-rank-0 too.
     // Measurement lives on the receiver (rank != root), so print from non-rank-0.
     auto printSummary = [&](uint64_t avgCold, uint64_t avgWarm) {
         if (CommMpiRank() == 0)
@@ -1371,7 +977,6 @@ bool RunTgetPerf(int n_ranks, int n_devices, int first_rank_id, int first_device
                                                    prefetch, cycles);
             });
     };
-    // Measurement lives on the reader (rank != source), i.e. non-rank-0.
     // Measurement lives on the reader rank (rank != source), so print from non-rank-0.
     auto printSummary = [&](uint64_t avgCold, uint64_t avgWarm) {
         if (CommMpiRank() == 0)

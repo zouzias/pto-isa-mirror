@@ -20,19 +20,19 @@ AICORE void runTPrefetchL2GlobalTensor(__gm__ T __in__ *input)
     using GStride = Stride<1, 1, 1, kGCols_, 1>;
     using GlobalData = GlobalTensor<T, GShape, GStride>;
 
-    pto::comm::AsyncSession session;
-
     GlobalData inputGlobal(input);
-    auto evt = comm::TPREFETCH_L2(inputGlobal, session);
+    // Pass nullptr workspace so the IMPL early-returns an empty AsyncEvent;
+    // CPU sim has no L2 cache concept and the IMPL itself is a no-op anyway.
+    auto evt = pto::TPREFETCH_L2(inputGlobal, static_cast<__gm__ uint8_t *>(nullptr));
+    (void)evt;
 }
 
 template <typename T, int kGRows_, int kGCols_>
 AICORE void runTPrefetchL2RawPtr(__gm__ T __in__ *input)
 {
-    pto::comm::AsyncSession session;
-
     uint64_t bytes = static_cast<uint64_t>(kGRows_) * kGCols_ * sizeof(T);
-    auto evt = comm::TPREFETCH_L2((__gm__ void *)input, bytes, session);
+    auto evt = pto::TPREFETCH_L2((__gm__ void *)input, bytes, static_cast<__gm__ uint8_t *>(nullptr));
+    (void)evt;
 }
 
 template <typename T, int kGRows_, int kGCols_>

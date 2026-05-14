@@ -209,6 +209,17 @@ tconcat
 textract_vec
 tinsert_vec
 )
+
+# Opt-in testcases: built ONLY when TEST_CASE=<name> is explicitly supplied.
+# These are excluded from the default "build everything" path so they do not
+# slow down CI. They are still valid TEST_CASE targets for local ST runs.
+set(OPT_IN_TESTCASES
+# Memory-access prefetch instruction (single-card cases)
+tprefetch_l2
+# Perf comparison: host pto::PTO_PREFETCH vs device pto::TPREFETCH_L2 (single-card)
+tprefetch_compare
+)
+
 if (NOT AUTO_MODE)
   # TPUSH and TPOP currently directly use TASSIGN inside their implementations,
   # which doesn't work for auto mode. They need to be disabled for auto mode 
@@ -216,15 +227,22 @@ if (NOT AUTO_MODE)
   list(APPEND ALL_TESTCASES tpushpop_cv tpushpop_vc tpushpop_cv_nosplit tpushpop_vc_nosplit tpushpop_dir_both)
 endif()
 
-if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
+if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE IN_LIST OPT_IN_TESTCASES) OR (TEST_CASE STREQUAL "all"))
 message(STATUS "run : ${TEST_CASE}")
 else()
-message(FATAL_ERROR "not found TEST_CASE: ${TEST_CASE}, support case is : ${ALL_TESTCASES}")
+message(FATAL_ERROR "not found TEST_CASE: ${TEST_CASE}, support case is : ${ALL_TESTCASES} ${OPT_IN_TESTCASES}")
 endif()
 
 
 foreach(TESTCASE ${ALL_TESTCASES})
 if((DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE) OR (NOT DEFINED TEST_CASE) OR (TEST_CASE STREQUAL "all"))
+    add_subdirectory(${TESTCASE})
+endif()
+endforeach()
+
+# Opt-in cases are built only when the user asked for them by name (or "all").
+foreach(TESTCASE ${OPT_IN_TESTCASES})
+if((DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE) OR (TEST_CASE STREQUAL "all"))
     add_subdirectory(${TESTCASE})
 endif()
 endforeach()
