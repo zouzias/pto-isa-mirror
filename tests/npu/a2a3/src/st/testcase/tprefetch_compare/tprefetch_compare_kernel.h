@@ -54,17 +54,20 @@ template <typename T, size_t count>
 bool RunScenarioAEndToEnd(int deviceId);
 
 // ---- Scenario B: prefetch-issue overhead ---------------------------------
-// Micro-benchmark: prefetch a tiny 4 KB region (well below a single L2 line
-// group, so transfer cost is negligible) and measure the issue+completion
-// roundtrip. Three metrics reported per call:
+// Micro-benchmark: prefetch a small region and measure the issue+completion
+// roundtrip. payloadBytes is varied at the call site so we can verify the
+// fixed-software-overhead claim and observe where transfer time starts to
+// dominate the wall. Three metrics per call:
 //   * host wall   — aclrtCmoAsync + aclrtSynchronizeStream wall-clock
 //   * device wall — kernel launch + in-kernel TPREFETCH_L2 + Wait + sync wall
 //                   (the apples-to-apples counterpart to host wall above)
 //   * device in-kernel — only the TPREFETCH_L2 + Wait segment inside the
 //                       kernel; models the marginal cost of embedding into
 //                       a kernel that's already being launched anyway.
+// The buffer size (template param `count`) just has to be >= payloadBytes;
+// it does not affect the measurement.
 template <typename T, size_t count>
-bool RunScenarioBIssueOverhead(int deviceId);
+bool RunScenarioBIssueOverhead(int deviceId, size_t payloadBytes = 4096);
 
 // ---- Scenario C: overlap with AI-Core compute ----------------------------
 // Kernel structure:    [optional device prefetch] -> compute-A -> [optional wait] -> TLOAD

@@ -615,10 +615,10 @@ template bool RunScenarioAEndToEnd<float, 33554432>(int);  // 128 MB
 // ============================================================================
 // Scenario B: prefetch-issue overhead
 //
-// Real-world question: how much does it cost to "just fire one prefetch and
-// wait", independent of how many bytes are moved? We use a 4 KB payload so
-// the actual SDMA transfer is well under a microsecond and the measurement
-// is dominated by the issue + completion roundtrip.
+// Real-world question: how much does it cost to "fire one prefetch and wait",
+// and how does that overhead scale with payload size? Tiny payloads (a few
+// KB) isolate the fixed software stack (issue + completion roundtrip);
+// larger payloads add SDMA transfer time on top of the same fixed overhead.
 //
 // Two metrics per side (apples-to-apples):
 //   * host wall      — aclrtCmoAsync + aclrtSynchronizeStream wall-clock
@@ -630,15 +630,17 @@ template bool RunScenarioAEndToEnd<float, 33554432>(int);  // 128 MB
 //     kernel that the application is already launching anyway (no extra
 //     launch+sync amortized). NOT comparable to host wall directly.
 //
-// 100 iterations, p5/p50/p95 reported, CSV per-size row.
+// 100 iterations, p5/p50/p95 reported, one CSV row per (payload, config).
 // ============================================================================
 template <typename T, size_t count>
-bool RunScenarioBIssueOverhead(int deviceId)
+bool RunScenarioBIssueOverhead(int deviceId, size_t payloadBytes)
 {
-    // Tiny prefetch payload — below a single L2 line group, so any observed
-    // cost is the fixed SDMA CMO issue+completion roundtrip, not actual bytes.
-    constexpr size_t payloadElems = 1024;  // 4 KB for float
-    static_assert(payloadElems <= count, "payload must fit inside allocated buffer");
+    const size_t payloadElems = payloadBytes / sizeof(T);
+    if (payloadElems == 0 || payloadElems > count) {
+        std::cerr << "[ERROR] ScenarioB: invalid payload " << payloadBytes
+                  << " bytes (buffer holds " << (count * sizeof(T)) << " bytes)" << std::endl;
+        return false;
+    }
     constexpr size_t dataBytes = count * sizeof(T);
     constexpr int kWarmup = 5;
     const int kIter = IterCount(100);
@@ -686,9 +688,21 @@ bool RunScenarioBIssueOverhead(int deviceId)
 
     env.Teardown();
 
+    auto payloadLabel = [&]() -> std::string {
+        std::ostringstream oss;
+        if (payloadBytes >= 1024 * 1024) {
+            oss << payloadBytes / 1024 / 1024 << "MB";
+        } else if (payloadBytes >= 1024) {
+            oss << payloadBytes / 1024 << "KB";
+        } else {
+            oss << payloadBytes << "B";
+        }
+        return oss.str();
+    };
+
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "\n================================================================" << std::endl;
-    std::cout << "[PERF] Scenario B - prefetch issue overhead (4 KB payload)" << std::endl;
+    std::cout << "[PERF] Scenario B - prefetch issue overhead (payload=" << payloadLabel() << ")" << std::endl;
     std::cout << "  Iterations:            " << kIter << " (warmup=" << kWarmup << ")" << std::endl;
     std::cout << "  Syscnt freq assumed:   " << (SyscntHz() / 1.0e6) << " MHz" << std::endl;
     std::cout << "  --- end-to-end wall (apples-to-apples instruction comparison) ---" << std::endl;
@@ -711,11 +725,12 @@ bool RunScenarioBIssueOverhead(int deviceId)
     std::cout << "================================================================\n" << std::endl;
 
     const std::string csvHeader =
-        "buffer_bytes,payload_bytes,config,iter,wall_p5_us,wall_p50_us,wall_p95_us,"
+        "buffer_bytes,payload_bytes,payload_label,config,iter,wall_p5_us,wall_p50_us,wall_p95_us,"
         "wall_min_us,wall_max_us";
     auto rowOf = [&](const std::string &cfg, const SampleSet &s) {
         std::ostringstream oss;
-        oss << dataBytes << ',' << (payloadElems * sizeof(T)) << ',' << cfg << ',' << kIter << ','
+        oss << dataBytes << ',' << (payloadElems * sizeof(T)) << ',' << payloadLabel() << ',' << cfg << ','
+            << kIter << ','
             << s.P5() << ',' << s.P50() << ',' << s.P95() << ',' << s.Min() << ',' << s.Max();
         return oss.str();
     };
@@ -725,9 +740,9 @@ bool RunScenarioBIssueOverhead(int deviceId)
     return true;
 }
 
-template bool RunScenarioBIssueOverhead<float, 262144>(int);
-template bool RunScenarioBIssueOverhead<float, 4194304>(int);
-template bool RunScenarioBIssueOverhead<float, 33554432>(int);
+template bool RunScenarioBIssueOverhead<float, 262144>(int, size_t);
+template bool RunScenarioBIssueOverhead<float, 4194304>(int, size_t);
+template bool RunScenarioBIssueOverhead<float, 33554432>(int, size_t);
 
 // ============================================================================
 // Scenario C: overlap with AI-Core compute

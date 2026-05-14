@@ -58,15 +58,44 @@ TEST(TPrefetchCompare, A_EndToEnd_128MB)
     ASSERT_TRUE((RunScenarioAEndToEnd<float, 33554432>(0)));
 }
 
-// ---- Scenario B: prefetch-issue overhead (single payload size) ----------
-// Scenario B fixes the prefetch payload at 4 KB regardless of allocated
-// buffer size — the metric is the fixed issue+completion roundtrip, not
-// transfer time. We keep one TEST at a representative buffer size; running
-// the same test at multiple buffer sizes would just duplicate the same
-// number with no extra information.
-TEST(TPrefetchCompare, B_IssueOverhead)
+// ---- Scenario B: prefetch-issue overhead (payload scan) -----------------
+// All B tests share the same 16 MB allocation so any payload up to 16 MB
+// fits without re-instantiating the kernel for each size. Scanning payloads
+// from 4 KB through 4 MB lets us see two things:
+//   1. Below ~64 KB the wall is dominated by the fixed software stack
+//      (issue + completion roundtrip). host wall and device wall should
+//      be roughly flat across these sizes — that's what proves the
+//      overhead is a constant rather than a payload-dependent cost.
+//   2. Above ~256 KB the SDMA transfer time starts to dominate; the gap
+//      between B and Scenario A at the same payload should shrink.
+TEST(TPrefetchCompare, B_IssueOverhead_4KB)
 {
-    ASSERT_TRUE((RunScenarioBIssueOverhead<float, 262144>(0)));
+    ASSERT_TRUE((RunScenarioBIssueOverhead<float, 4194304>(0, 4ULL * 1024)));
+}
+
+TEST(TPrefetchCompare, B_IssueOverhead_16KB)
+{
+    ASSERT_TRUE((RunScenarioBIssueOverhead<float, 4194304>(0, 16ULL * 1024)));
+}
+
+TEST(TPrefetchCompare, B_IssueOverhead_64KB)
+{
+    ASSERT_TRUE((RunScenarioBIssueOverhead<float, 4194304>(0, 64ULL * 1024)));
+}
+
+TEST(TPrefetchCompare, B_IssueOverhead_256KB)
+{
+    ASSERT_TRUE((RunScenarioBIssueOverhead<float, 4194304>(0, 256ULL * 1024)));
+}
+
+TEST(TPrefetchCompare, B_IssueOverhead_1MB)
+{
+    ASSERT_TRUE((RunScenarioBIssueOverhead<float, 4194304>(0, 1024ULL * 1024)));
+}
+
+TEST(TPrefetchCompare, B_IssueOverhead_4MB)
+{
+    ASSERT_TRUE((RunScenarioBIssueOverhead<float, 4194304>(0, 4096ULL * 1024)));
 }
 
 // ---- Scenario C: overlap with compute (3 representative sizes) ----------
