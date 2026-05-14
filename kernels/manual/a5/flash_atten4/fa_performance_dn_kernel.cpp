@@ -898,14 +898,14 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     TileMatPData pMatTile[pMatTNBuffers];
     TileMatVData vMatTile[vMatTNBuffers];
     TilePVData pvAccPendTile;
-    TilePVData pvAccTile;
+    TilePVData pvAccCurrTile;
 
     allocate_cube_tile_buffers(qMatTile, kMatTile, pMatTile, vMatTile);
 
-    // Assign accumulator tiles using ping-pong helper. qk starts at 0, pv starts at 1.
+    // Keep QK, pending PV, and current PV in distinct L0C regions.
     assign_running_acc_tile(qkAccTile, 0);
     TASSIGN(pvAccPendTile, 0x20000u);
-    assign_running_acc_tile(pvAccTile, 1);
+    TASSIGN(pvAccCurrTile, 0x30000u);
 
     if constexpr (DAV_VEC) {
         const bool is_vec1 = static_cast<size_t>(get_subblockid());
@@ -945,7 +945,12 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                                                 l2_global_sum, l1_exp_max_ififo, x_expT, pvVecTile, runningOTile);
 
     constexpr uint32_t nzBufSize = NzBufRows * Vec_S0 * sizeof(half);
-    constexpr uint32_t nzBufOffset = MAX_VEC_UB_BYTES - nzBufSize;
+    // softmax skip-rescale uses fixed UB scratch at 254 KiB (deltaMaxTile) and 255 KiB (ctrlTile).
+    // Keep the NZ conversion buffers below that scratch area because TINSERT consumes them after
+    // softmax decides the skip status.
+    constexpr uint32_t softmaxScratchOffset = 254U * 1024U;
+    static_assert(softmaxScratchOffset >= 2U * nzBufSize, "NZ conversion buffers overlap softmax scratch");
+    constexpr uint32_t nzBufOffset = softmaxScratchOffset - nzBufSize;
     if constexpr (DAV_VEC) {
         TASSIGN(nzConvBuffer[0], nzBufOffset);
         TASSIGN(nzConvBuffer[1], nzBufOffset - nzBufSize);
@@ -1005,6 +1010,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID3);
         set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
         set_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
+        set_flag(PIPE_FIX, PIPE_M, EVENT_ID2);
     }
     if constexpr (DAV_VEC) {
         set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
@@ -1018,7 +1024,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     int pv_src_pingpong_id = 0;   // separate ping-pong for P V tiles
 
     int qkAccTileEvtID = 0;
-    int pvAccTileEvtID = 0;
+    constexpr int pvAccTileEvtID = EVENT_ID2;
 
     // QK and P pre-computation (tile_id based)
     for (int preload_tile = 0; preload_tile < static_cast<int>(qkPreloadNum) && preload_tile < num_tiles_s1;
@@ -1059,8 +1065,6 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
 
         if (next_qk_tile != -1)
             qkAccTileEvtID = assign_running_acc_tile(qkAccTile);
-        pvAccTileEvtID = assign_running_acc_tile(pvAccTile);
-
         for (int sub_tile = 0; sub_tile < static_cast<int>(kTileFactor); ++sub_tile) {
             if constexpr (DAV_CUBE) {
                 if (next_qk_tile != -1) {
@@ -1097,7 +1101,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                            CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK, outOTileNBuffers>(
                     tile_id, sub_tile, tile_id % outOTileNBuffers, p_tile_fifo_block, v, pv_tile_fifo_block,
                     pv_pend_tile_fifo_block, pMatTile[pv_src_pingpong_id % pMatTNBuffers],
-                    vMatTile[pv_src_pingpong_id % vMatTNBuffers], pvAccTile, pvAccPendTile, runningOTile, pvPendTile,
+                    vMatTile[pv_src_pingpong_id % vMatTNBuffers], pvAccCurrTile, pvAccPendTile, runningOTile, pvPendTile,
                     pvVecTile, pv_src_pingpong_id % vMatTNBuffers + PV_EVENT_ID0, pvAccTileEvtID, sm2pvSync, pv2guSync,
                     pvUbBufSync, block_idx);
                 pv_src_pingpong_id++;
@@ -1131,6 +1135,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID3);
         wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
         wait_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
+        wait_flag(PIPE_FIX, PIPE_M, EVENT_ID2);
         for (int i = 0; i < pending_qk_sm_consumed; ++i)
             qk2smSync.allocate();
         for (int i = 0; i < pending_update_consumed; ++i)
