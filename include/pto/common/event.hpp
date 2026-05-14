@@ -111,6 +111,25 @@ enum class Op : uint16_t
     OP_COUNT, // The Total number of operations, please add new operations before OP_COUNT
 };
 
+// FIX pipeline only exists on AI cores that have a cube unit.  Vec-only
+// arches like dav-c310-vec leave PIPE_FIX undefined in CANN's AscendC
+// headers.  When compiling with cce (and only then — host C++ TUs keep
+// the upstream behaviour unchanged), alias PIPE_FIX to PIPE_ALL so the
+// opPipeList constexpr table below stays well-formed.  The FIX ops it
+// references (TMOV_V2M, TINSERT_A2M, ...) are not dispatchable on a
+// vec-only core anyway, so PIPE_ALL is a safe conservative barrier.
+//
+// IMPORTANT: this alias is scoped to opPipeList only — it is `#undef`-ed
+// right after the array definition below.  Without that scope, downstream
+// kernel TUs (e.g. cube tests like tmatmul_mx that legitimately write
+// `set_flag(PIPE_M, PIPE_FIX, ...)`) would see PIPE_FIX silently expand
+// to PIPE_ALL, which is outside the `set_flag` 2nd-parameter range
+// [0,0] U [2,5] U [10,10] and breaks the build on vec-only configs.
+#if defined(__CCE_AICORE__) && !defined(PIPE_FIX)
+#define PIPE_FIX PIPE_ALL
+#define PTO_PIPE_FIX_FALLBACK
+#endif
+
 // opPipeList maps each operation in Op enum to its corresponding pipeline type.
 // This array is used to determine which hardware pipeline should be used for each operation.
 constexpr pipe_t opPipeList[] = {
@@ -206,8 +225,16 @@ constexpr pipe_t opPipeList[] = {
     PIPE_ALL /* OP_COUNT */,
 };
 
-struct RecordEvent {
-};
+// End of opPipeList — drop the PIPE_FIX fallback so downstream TUs (e.g.
+// cube kernels in tests/npu/a5/src/st/testcase/tmatmul_mx) see PIPE_FIX
+// exactly as CANN's AscendC headers defined it (or kept undefined on
+// vec-only arches), rather than the conservative PIPE_ALL alias above.
+#ifdef PTO_PIPE_FIX_FALLBACK
+#undef PIPE_FIX
+#undef PTO_PIPE_FIX_FALLBACK
+#endif
+
+struct RecordEvent {};
 
 template <pipe_t SrcPipe, pipe_t DstPipe>
 class EventIdCounter {
@@ -236,7 +263,7 @@ private:
 };
 
 template <typename... WaitEvents>
-PTO_INTERNAL void WaitAllEvents(WaitEvents &... events)
+PTO_INTERNAL void WaitAllEvents(WaitEvents &...events)
 {
     (events.Wait(), ...);
 }

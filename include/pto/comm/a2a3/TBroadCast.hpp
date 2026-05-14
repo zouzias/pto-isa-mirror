@@ -446,6 +446,26 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
                                                                           dims[4], tileValidRow, tileValidCol, nranks);
 }
 
+// CCU engine is only available on A5 hardware.  Stub mirrors the URMA branch
+// in `a2a3/async/TPutAsync.hpp`: the template name must exist for the
+// qualified template-id `::pto::comm::TBROADCAST_CCU_IMPL<engine>(...)` in
+// pto_comm_inst.hpp to parse on A2/A3; the static_assert is dependent on the
+// `engine` parameter and only fires if the overload is actually instantiated.
+// `a5/TBroadCast.hpp` defines `PTO_COMM_A5_TBROADCAST_PROVIDED` before
+// including this header so the stub is omitted on A5 builds, where the real
+// `TBROADCAST_CCU_IMPL` overload lives.  Otherwise the generic `Args&&...`
+// pack would compete with the real `T&` parameters in `pto::comm`'s overload
+// set and could win under partial ordering on some compilers.
+#ifndef PTO_COMM_A5_TBROADCAST_PROVIDED
+template <CollEngine engine = CollEngine::CCU, typename... Args>
+PTO_INTERNAL void TBROADCAST_CCU_IMPL(Args &&...)
+{
+    static_assert(engine != CollEngine::CCU,
+                  "TBROADCAST<CollEngine::CCU> requires A5 hardware; "
+                  "CCU engine is not available on A2/A3.");
+}
+#endif // PTO_COMM_A5_TBROADCAST_PROVIDED
+
 } // namespace comm
 } // namespace pto
 
