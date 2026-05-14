@@ -172,8 +172,8 @@ if __name__ == "__main__":
         # int32 -> int32
         tmovParams(np.int8, np.int8, np.int32, np.int32, np.int32, np.uint64, 128, 64, 96, 1, 0),
         # Non-aligned, int32 -> int32
-        tmovParams(np.int8, np.int8, np.int32, np.int32, np.int32, np.uint64, 31, 63, 32, 1, 0),  
-        # dynamic tile, float32 -> float32    
+        tmovParams(np.int8, np.int8, np.int32, np.int32, np.int32, np.uint64, 31, 63, 32, 1, 0),
+        # dynamic tile, float32 -> float32
         tmovParams(np.float16, np.float16, np.float32, np.float16, np.float32, np.uint64, 64, 32, 80, 1, 0),
         # dynamic tile, bfloat16 -> float32
         tmovParams(np.float32, np.float32, np.float32, bfloat16, np.float32, np.uint64, 112, 48, 96, 1, 0),

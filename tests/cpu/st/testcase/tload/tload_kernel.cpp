@@ -1,17 +1,19 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include <pto/common/constants.hpp>
-#include <limits>
 #include <algorithm>
+#include <limits>
+#include <pto/common/constants.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace std;
 using namespace pto;
@@ -108,7 +110,6 @@ AICORE void runTLOADND(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, i
     TileData vecTile(kTRows_, gCols);
 
     constexpr int kGTRows = kTRows_ / shape0 / shape1 / shape2; // Dst Tile Rows, merged all shape0*shape1*shape2 row
-    constexpr int shape4_aligned = align_to_32B(shape4, T);
     auto srcGlobal =
         getGlobalTensor<T, shape0, shape1, shape2, kGTRows, shape4, kGTRows, shape4, BLayout::RowMajor, dyn_>(
             src, gShape0, gShape1, gShape2, kGTRows, shape4);
@@ -134,6 +135,29 @@ AICORE void runTLOADDN(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, i
     auto srcGlobal =
         getGlobalTensor<T, shape0, shape1, shape2, shape3, kGTCols, shape3, kGTCols, BLayout::RowMajor, dyn_>(
             src, gShape0, gShape1, gShape2, shape3, kGTCols);
+
+    TASSIGN(vecTile, 0);
+
+    TLOAD(vecTile, srcGlobal);
+    for (size_t i = 0; i < TileData::Rows * TileData::Cols; i++) {
+        out[i] = vecTile.data()[i];
+    }
+}
+
+template <typename T, int shape0, int shape1, int shape2, int shape3, int shape4, int kTRows_, int kTCols_, int dyn_,
+          PadValue PadVal_ = PadValue::Null>
+AICORE void runTLOADDNFlattenRows(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, int gShape2, int gRows,
+                                  int gCols, __gm__ uint64_t *gLog)
+{
+    using TileData =
+        Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::ColMajor, -1, -1, SLayout::NoneBox, 512, PadVal_>;
+    TileData vecTile(gRows, gCols);
+
+    using GlobalData =
+        GlobalTensor<T, Shape<shape0, shape1, shape2, shape3, shape4>,
+                     Stride<shape1 * shape2 * shape3 * shape4, shape2 * shape3 * shape4, shape3 * shape4, 1, shape3>,
+                     Layout::DN>;
+    GlobalData srcGlobal(src);
 
     TASSIGN(vecTile, 0);
 
@@ -213,30 +237,76 @@ extern "C" __global__ AICORE void launchTLOAD_10(__gm__ uint8_t *out, __gm__ uin
                                                                     gShape1, gShape2, gRows, gCols, gLog);
 }
 
+extern "C" __global__ AICORE void launchTLOAD_11(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
+                                                 int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
+{
+    runTLOADDNFlattenRows<float, 1, 1, 8, 8, 1, 64, 1, 1, PadValue::Null>(
+        (__gm__ float *)out, (__gm__ float *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
+}
+
 template <int32_t testKey>
 void launchTLOAD(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream)
 {
-    if constexpr (testKey == 1) {
-        launchTLOAD_1(out, src, 1, 1, 1, 128, 128, gLog);
-    } else if constexpr (testKey == 2) {
-        launchTLOAD_2(out, src, 2, 2, 2, 256, 64, gLog);
-    } else if constexpr (testKey == 3) {
-        launchTLOAD_3(out, src, 1, 1, 1, 128, 127, gLog);
-    } else if constexpr (testKey == 4) {
-        launchTLOAD_4(out, src, 1, 1, 1, 128, 127, gLog);
-    } else if constexpr (testKey == 5) {
-        launchTLOAD_5(out, src, 1, 1, 1, 128, 127, gLog);
-    } else if constexpr (testKey == 6) {
-        launchTLOAD_6(out, src, 1, 1, 32, 64, 128, gLog);
-    } else if constexpr (testKey == 7) {
-        launchTLOAD_7(out, src, 1, 1, 32, 64, 128, gLog);
-    } else if constexpr (testKey == 8) {
-        launchTLOAD_8(out, src, 2, 2, 2, 256, 60, gLog);
-    } else if constexpr (testKey == 9) {
-        launchTLOAD_9(out, src, 1, 1, 32, 64, 128, gLog);
-    } else if constexpr (testKey == 10) {
-        launchTLOAD_10(out, src, 2, 2, 2, 255, 64, gLog);
+    constexpr bool kValidKey = (testKey >= 1 && testKey <= 11);
+    static_assert(kValidKey, "Invalid testKey for launchTLOAD");
+    switch (testKey) {
+        case 1:
+            launchTLOAD_1(out, src, 1, 1, 1, 128, 128, gLog);
+            break;
+        case 2:
+            launchTLOAD_2(out, src, 2, 2, 2, 256, 64, gLog);
+            break;
+        case 3:
+            launchTLOAD_3(out, src, 1, 1, 1, 128, 127, gLog);
+            break;
+        case 4:
+            launchTLOAD_4(out, src, 1, 1, 1, 128, 127, gLog);
+            break;
+        case 5:
+            launchTLOAD_5(out, src, 1, 1, 1, 128, 127, gLog);
+            break;
+        case 6:
+            launchTLOAD_6(out, src, 1, 1, 32, 64, 128, gLog);
+            break;
+        case 7:
+            launchTLOAD_7(out, src, 1, 1, 32, 64, 128, gLog);
+            break;
+        case 8:
+            launchTLOAD_8(out, src, 2, 2, 2, 256, 60, gLog);
+            break;
+        case 9:
+            launchTLOAD_9(out, src, 1, 1, 32, 64, 128, gLog);
+            break;
+        case 10:
+            launchTLOAD_10(out, src, 2, 2, 2, 255, 64, gLog);
+            break;
+        case 11:
+            launchTLOAD_11(out, src, 1, 1, 8, 64, 1, gLog);
+            break;
+        default:
+            break;
     }
+}
+
+template <typename T, PadValue PadVal_>
+constexpr T getPadValueForGolden()
+{
+    if constexpr (std::numeric_limits<T>::has_infinity) {
+        if constexpr (PadVal_ == PadValue::Max) {
+            return std::numeric_limits<T>::infinity();
+        }
+        if constexpr (PadVal_ == PadValue::Min) {
+            return -std::numeric_limits<T>::infinity();
+        }
+    } else {
+        if constexpr (PadVal_ == PadValue::Max) {
+            return std::numeric_limits<T>::max();
+        }
+        if constexpr (PadVal_ == PadValue::Min) {
+            return std::numeric_limits<T>::min();
+        }
+    }
+    return T{0};
 }
 
 template <typename T, int Shape0, int Shape1, int Shape2, int Shape3, int Shape4, int kTRows_, int kTCols_,
@@ -246,40 +316,31 @@ int get_input_golden_case(uint8_t *input, uint8_t *golden)
     constexpr int shape4_aligned = align_to_32B(Shape4, T);
     static_assert((Shape3 % (Shape0 * Shape1 * Shape2)) == 0);
     constexpr int sh3 = Shape3 / (Shape0 * Shape1 * Shape2);
+    constexpr T padValue = getPadValueForGolden<T, PadVal_>();
     int in_byteSize = Shape0 * Shape1 * Shape2 * sh3 * Shape4 * sizeof(T);
     int out_byteSize = Shape0 * Shape1 * Shape2 * sh3 * shape4_aligned * sizeof(T);
 
     T in_arr[Shape0][Shape1][Shape2][sh3][Shape4] = {};
     T gold_arr[Shape0][Shape1][Shape2][sh3][shape4_aligned] = {};
 
-    for (int x0 = 0; x0 < Shape0; x0++)
-        for (int x1 = 0; x1 < Shape1; x1++)
-            for (int x2 = 0; x2 < Shape2; x2++)
-                for (int i = 0; i < sh3; i++) {
-                    for (int j = 0; j < shape4_aligned; j++) {
-                        if (j < Shape4) {
-                            in_arr[x0][x1][x2][i][j] = x0 * Shape1 * Shape2 * sh3 * Shape4 +
-                                                       x1 * Shape2 * sh3 * Shape4 + x2 * sh3 * Shape4 + i * Shape4 + j;
-                            gold_arr[x0][x1][x2][i][j] = in_arr[x0][x1][x2][i][j];
-                        } else {
-                            if (std::numeric_limits<T>::has_infinity) {
-                                if (PadVal_ == PadValue::Max)
-                                    gold_arr[x0][x1][x2][i][j] = std::numeric_limits<T>::infinity();
-                                else if (PadVal_ == PadValue::Min)
-                                    gold_arr[x0][x1][x2][i][j] = -std::numeric_limits<T>::infinity();
-                                else
-                                    gold_arr[x0][x1][x2][i][j] = 0;
-                            } else {
-                                if (PadVal_ == PadValue::Max)
-                                    gold_arr[x0][x1][x2][i][j] = std::numeric_limits<T>::max();
-                                else if (PadVal_ == PadValue::Min)
-                                    gold_arr[x0][x1][x2][i][j] = std::numeric_limits<T>::min();
-                                else
-                                    gold_arr[x0][x1][x2][i][j] = 0;
-                            }
-                        }
-                    } // j
-                }     // i
+    for (int x0 = 0; x0 < Shape0; ++x0) {
+        for (int x1 = 0; x1 < Shape1; ++x1) {
+            for (int x2 = 0; x2 < Shape2; ++x2) {
+                for (int i = 0; i < sh3; ++i) {
+                    const int base = x0 * Shape1 * Shape2 * sh3 * Shape4 + x1 * Shape2 * sh3 * Shape4 +
+                                     x2 * sh3 * Shape4 + i * Shape4;
+                    for (int j = 0; j < Shape4; ++j) {
+                        const T value = static_cast<T>(base + j);
+                        in_arr[x0][x1][x2][i][j] = value;
+                        gold_arr[x0][x1][x2][i][j] = value;
+                    }
+                    for (int j = Shape4; j < shape4_aligned; ++j) {
+                        gold_arr[x0][x1][x2][i][j] = padValue;
+                    }
+                }
+            }
+        }
+    }
 
     std::copy((uint8_t *)in_arr, ((uint8_t *)(in_arr)) + in_byteSize, input);
     std::copy((uint8_t *)gold_arr, ((uint8_t *)(gold_arr)) + out_byteSize, golden);
@@ -334,6 +395,46 @@ int get_input_golden_case_DN(uint8_t *input, uint8_t *golden)
     return sizeof(gold_arr);
 }
 
+template <typename T, int Shape3, int Shape4>
+void fillDNFlatRowsPlane(T (*plane)[Shape4], T *gold_arr, int shapeBase, int kTRows_gold)
+{
+    for (int i = 0; i < Shape3; i++) {
+        for (int j = 0; j < Shape4; j++) {
+            const T value = shapeBase + i * Shape4 + j;
+            const int flatRow = shapeBase / Shape4 + i;
+            plane[i][j] = value;
+            gold_arr[j * kTRows_gold + flatRow] = value;
+        }
+    }
+}
+
+template <typename T, int Shape0, int Shape1, int Shape2, int Shape3, int Shape4>
+void fillDNFlatRowsData(T (&in_arr)[Shape0][Shape1][Shape2][Shape3][Shape4], T *gold_arr, int kTRows_gold)
+{
+    for (int x0 = 0; x0 < Shape0; x0++)
+        for (int x1 = 0; x1 < Shape1; x1++)
+            for (int x2 = 0; x2 < Shape2; x2++) {
+                const int shapeBase = ((x0 * Shape1 + x1) * Shape2 + x2) * Shape3 * Shape4;
+                fillDNFlatRowsPlane<T, Shape3, Shape4>(in_arr[x0][x1][x2], gold_arr, shapeBase, kTRows_gold);
+            }
+}
+
+template <typename T, int Shape0, int Shape1, int Shape2, int Shape3, int Shape4, int kTRows_, int kTCols_>
+int get_input_golden_case_DN_flat_rows(uint8_t *input, uint8_t *golden)
+{
+    int in_byteSize = Shape0 * Shape1 * Shape2 * Shape3 * Shape4 * sizeof(T);
+    int out_byteSize = kTRows_ * kTCols_ * sizeof(T);
+
+    T in_arr[Shape0][Shape1][Shape2][Shape3][Shape4] = {};
+    T gold_arr[kTCols_][kTRows_] = {};
+
+    fillDNFlatRowsData<T, Shape0, Shape1, Shape2, Shape3, Shape4>(in_arr, &gold_arr[0][0], kTRows_);
+
+    std::copy((uint8_t *)in_arr, ((uint8_t *)(in_arr)) + in_byteSize, input);
+    std::copy((uint8_t *)gold_arr, ((uint8_t *)(gold_arr)) + out_byteSize, golden);
+    return out_byteSize;
+}
+
 template <int32_t testKey>
 int get_input_golden(uint8_t *input, uint8_t *golden)
 {
@@ -356,21 +457,32 @@ int get_input_golden(uint8_t *input, uint8_t *golden)
         return get_input_golden_case_DN<float, 1, 1, 32, 64, 128, 64, 128, PadValue::Null>(input, golden);
     } else if constexpr (testKey == 10) {
         return get_input_golden_case_DN<float, 2, 2, 2, 255, 64, 256, 64, PadValue::Null>(input, golden);
+    } else if constexpr (testKey == 11) {
+        return get_input_golden_case_DN_flat_rows<float, 1, 1, 8, 8, 1, 64, 1>(input, golden);
     }
 
     return 0;
 }
 
-template void launchTLOAD<1>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
-template void launchTLOAD<2>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
-template void launchTLOAD<3>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
-template void launchTLOAD<4>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
-template void launchTLOAD<5>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
-template void launchTLOAD<6>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
-template void launchTLOAD<7>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
-template void launchTLOAD<8>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
+template void launchTLOAD<1>(uint8_t *out, uint8_t *src, uint64_t *gLog,
+                             void *stream); // 实例化 Key=0 的版本
+template void launchTLOAD<2>(uint8_t *out, uint8_t *src, uint64_t *gLog,
+                             void *stream); // 实例化 Key=0 的版本
+template void launchTLOAD<3>(uint8_t *out, uint8_t *src, uint64_t *gLog,
+                             void *stream); // 实例化 Key=0 的版本
+template void launchTLOAD<4>(uint8_t *out, uint8_t *src, uint64_t *gLog,
+                             void *stream); // 实例化 Key=0 的版本
+template void launchTLOAD<5>(uint8_t *out, uint8_t *src, uint64_t *gLog,
+                             void *stream); // 实例化 Key=0 的版本
+template void launchTLOAD<6>(uint8_t *out, uint8_t *src, uint64_t *gLog,
+                             void *stream); // 实例化 Key=0 的版本
+template void launchTLOAD<7>(uint8_t *out, uint8_t *src, uint64_t *gLog,
+                             void *stream); // 实例化 Key=0 的版本
+template void launchTLOAD<8>(uint8_t *out, uint8_t *src, uint64_t *gLog,
+                             void *stream); // 实例化 Key=0 的版本
 template void launchTLOAD<9>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
 template void launchTLOAD<10>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
+template void launchTLOAD<11>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
 
 template int get_input_golden<1>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<2>(uint8_t *input, uint8_t *golden);
@@ -382,3 +494,4 @@ template int get_input_golden<7>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<8>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<9>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<10>(uint8_t *input, uint8_t *golden);
+template int get_input_golden<11>(uint8_t *input, uint8_t *golden);

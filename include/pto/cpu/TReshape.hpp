@@ -13,8 +13,9 @@ full text of the License.
 #ifndef __PTO_RESHAPE__
 #define __PTO_RESHAPE__
 
-#include "pto/common/pto_tile.hpp"
 #include <type_traits>
+
+#include "pto/common/pto_tile.hpp"
 
 namespace pto {
 template <typename TileDataOut, typename TileDataIn>

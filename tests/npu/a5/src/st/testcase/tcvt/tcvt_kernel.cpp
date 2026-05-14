@@ -1,16 +1,19 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_tile.hpp>
+#include <pto/pto-inst.hpp>
+
 #include "acl/acl.h"
 
 using namespace std;
@@ -118,7 +121,8 @@ __global__ AICORE void runTCVT(__gm__ T *out, __gm__ S *src)
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
 
-    // FP16->H8 conversion only supports ROUND_A or ROUND_H, use CAST_ROUND instead of CAST_RINT
+    // FP16->H8 conversion only supports ROUND_A or ROUND_H, use CAST_ROUND
+    // instead of CAST_RINT
     if constexpr (std::is_same_v<T, hifloat8_t> && std::is_same_v<S, half>) {
         TCVT(dstTile, srcTile, RoundMode::CAST_ROUND);
     } else {
@@ -303,8 +307,8 @@ __global__ AICORE void runTCVTSaturationTest(__gm__ T *outSaturated, __gm__ T *o
 #endif
 
     // Test 3: Default mode (no explicit saturation parameter)
-    // Uses type-based defaults: OFF for fp16→uint8/int8, fp32/fp16→int16, int64→int32, int32→int16
-    // All other conversions use ON
+    // Uses type-based defaults: OFF for fp16→uint8/int8, fp32/fp16→int16,
+    // int64→int32, int32→int16 All other conversions use ON
     TCVT(dstTileDefault, srcTile, RoundMode::CAST_RINT);
 
 #ifndef __PTO_AUTO__
