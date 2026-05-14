@@ -8,23 +8,38 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TLOAD_HPP
-#define TLOAD_HPP
+#ifndef TLOAD_HPP_310P3
+#define TLOAD_HPP_310P3
 
-#include "common.hpp"
+#include "TFillPad.hpp"
 
 namespace pto {
-template <typename TileData, typename GlobalData, bool isStrideMode = false>
+template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadInstrGm2ub(__ubuf__ typename TileData::DType *dst, typename GlobalData::DType *src,
-                                  uint16_t nBurst, uint32_t lenBurst, uint32_t gmGap, uint32_t ubGap)
+                                  uint16_t nBurst, uint32_t lenByteBurst, uint32_t gmByteGap, uint32_t ubGap,
+                                  uint32_t ubPad)
 {
-    if constexpr (!isStrideMode) {
-        copy_gm_to_ubuf(dst, src, 0, nBurst, lenBurst, gmGap, ubGap);
-        return;
+    constexpr uint32_t ELEMS_PER_BLOCK = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
+    uint32_t lenBurst = (lenByteBurst + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
+    uint32_t dstStride = (ubGap + lenBurst) * ELEMS_PER_BLOCK;
+    uint32_t srcStride = (gmByteGap + lenByteBurst) / sizeof(typename TileData::DType);
+
+    if (srcStride % ELEMS_PER_BLOCK == 0) {
+        copy_gm_to_ubuf(dst, src, 0, nBurst, lenBurst, srcStride / ELEMS_PER_BLOCK - lenBurst, ubGap);
+    } else {
+        for (int i = 0; i < nBurst; ++i) {
+            copy_gm_to_ubuf(dst + i * dstStride, src + i * srcStride, 0, 1, lenBurst, 0, 0);
+        }
     }
-    uint32_t gmStride = gmGap, ubStride = ubGap;
-    for (int i = 0; i < nBurst; ++i) {
-        copy_gm_to_ubuf(dst + i * ubStride, src + i * gmStride, 0, 1, lenBurst, 0, 0);
+    if (ubPad != 0) {
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID7);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID7);
+        auto padValue = GetPadValue<TileData>();
+        Handle32BAlignedPad_Other<TileData, TileData>(
+            (decltype(getCopyNullPtr<TileData>()))dst, nBurst, lenByteBurst / sizeof(typename TileData::DType), lenBurst * ELEMS_PER_BLOCK, padValue);
+        // 对外保持整个指令的结束流水是MTE2
+        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID7);
+        wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID7);
     }
 }
 
@@ -37,32 +52,14 @@ PTO_INTERNAL void TLoadNd2nzInstr(__cbuf__ typename TileData::DType *dst, typena
     // Parameter list:
     // dst, src, sid, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue,
     // dstNzC0Stride, dstNzNStride, dstNzMatrixStride
-    if constexpr (sizeof(typename TileData::DType) == 1) {
-        copy_gm_to_cbuf_multi_nd2nz_b8(dst, src, 0, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue, dstNzC0Stride,
-                                       dstNzNStride, dstNzMatrixStride);
-    } else if constexpr (sizeof(typename TileData::DType) == 2) {
-        PTO_ASSERT(ndNum == 1, "The ndNum must be 1 for 310P3 now.");
-        size_t typeSize = sizeof(typename TileData::DType);
-        // 转NZ时, 每一列是32字节
-        uint32_t n = ((dValue * typeSize) / 32);
-        for (size_t i = 0; i < n; i++) {
-            auto dstReal = dst + i * nValue * 16;
-            auto srcReal = src + i * 16;
-            // (每一行的元素个数 - 搬运一个burst的元素个数) * 元素大小 / 每个block大小
-            // 参考https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_00127.html#ZH-CN_TOPIC_0000002502733238__section87413163309
-            auto srcStride = ((srcDValue - 16) * typeSize) / 32;
-            copy_gm_to_cbuf(dstReal, srcReal, 0, nValue, 1, srcStride, 0, (pad_t)0);
-        }
-    } else if constexpr (sizeof(typename TileData::DType) == 4) {
-        copy_gm_to_cbuf_multi_nd2nz_b32s(dst, src, 0, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue,
-                                         dstNzC0Stride, dstNzNStride, dstNzMatrixStride);
-    } else if constexpr (sizeof(typename TileData::DType) == 8) {
-        auto dstCast = reinterpret_cast<__cbuf__ uint32_t *>(dst);
-        auto srcCast = reinterpret_cast<__gm__ uint32_t *>(src);
-        uint16_t dValueb64 = dValue * 2;
-        uint16_t srcDValueb64 = srcDValue * 2;
-        copy_gm_to_cbuf_multi_nd2nz_b32s(dstCast, srcCast, 0, ndNum, nValue, dValueb64, srcNdMatrixStride, srcDValueb64,
-                                         dstNzC0Stride, dstNzNStride, dstNzMatrixStride);
+    PTO_ASSERT(ndNum == 1, "The ndNum must be 1 for 310P3 now.");
+    (void)srcNdMatrixStride;
+    (void)dstNzMatrixStride;
+    constexpr uint32_t ELEMS_PER_BLOCK = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
+    uint32_t nBurst = ((dValue + ELEMS_PER_BLOCK - 1) / ELEMS_PER_BLOCK);
+    for (size_t i = 0; i < nValue; i++) {
+        copy_gm_to_cbuf(dst + i * dstNzNStride * ELEMS_PER_BLOCK, src + i * srcDValue, 0, 
+            nBurst, 1, 0, dstNzC0Stride - 1, (pad_t)0);
     }
 }
 
@@ -85,18 +82,20 @@ PTO_INTERNAL void TLoadGm2ubNd2nd(__ubuf__ typename TileData::DType *dstAddr, ty
     PTO_ASSERT(gShape3 < 4096, "The gshape3 (which equals nBurst) must be less than 4096 for 310P3");
     constexpr uint32_t blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
     uint16_t nBurst = gShape3;
-    uint32_t lenBurst = (validCol + blockSizeElem - 1) / blockSizeElem;
-    uint32_t gmGap = gStride3 % blockSizeElem == 0 ? (gStride3 / blockSizeElem - lenBurst) : gStride3;
-    uint32_t ubGap = gStride3 % blockSizeElem == 0 ? (TileData::Cols / blockSizeElem - lenBurst) : TileData::Cols;
-
+    uint32_t lenBurst = validCol * sizeof(typename TileData::DType);
+    uint64_t gmGapValue = (gStride3 - gShape4) * sizeof(typename TileData::DType);
+    uint32_t gmGap = (uint32_t)gmGapValue;
+    uint32_t ubGapElement = (TileData::Cols - validCol);
+    uint32_t ubGap = (ubGapElement * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE;
+    uint32_t ubPad = 0;
+    if constexpr (TileData::PadVal != PadValue::Null) {
+        ubPad = ubGapElement % blockSizeElem;
+    }
     __ubuf__ typename TileData::DType *dstAddrP = dstAddr;
     typename GlobalData::DType *srcAddrP = srcAddr;
     int64_t dstStride2 = gShape3 * TileData::Cols;
     int64_t dstStride1 = gShape2 * dstStride2;
     int64_t dstStride0 = gShape1 * dstStride1;
-
-    auto loadInstr = gStride3 % blockSizeElem == 0 ? 
-        TLoadInstrGm2ub<TileData, GlobalData> : TLoadInstrGm2ub<TileData, GlobalData, true>;
 
     for (uint32_t i = 0; i < gShape0; i++) {
         int64_t srcAddr0 = i * gStride0;
@@ -107,7 +106,7 @@ PTO_INTERNAL void TLoadGm2ubNd2nd(__ubuf__ typename TileData::DType *dstAddr, ty
             for (uint32_t k = 0; k < gShape2; k++) {
                 srcAddrP = srcAddr + srcAddr0 + srcAddr1 + k * gStride2;
                 dstAddrP = dstAddr + dstAddr0 + dstAddr1 + k * dstStride2;
-                loadInstr(dstAddrP, srcAddrP, nBurst, lenBurst, gmGap, ubGap);
+                TLoadInstrGm2ub<TileData, GlobalData>(dstAddrP, srcAddrP, nBurst, lenBurst, gmGap, ubGap, ubPad);
             }
         }
     }
@@ -600,41 +599,6 @@ __tf__ PTO_INTERNAL void TLoadFractalZ(typename TileData::TileDType __out__ dst,
     }
 }
 
-template <typename TileData, typename GlobalData, Layout Layout = Layout::ND>
-PTO_INTERNAL void TLoadCubeInstr(__cbuf__ typename TileData::DType *dst, typename GlobalData::DType *src,
-                                 uint64_t loop1SrcStride, uint16_t nValue, uint32_t dValue, uint64_t loop4SrcStride)
-{
-    if constexpr (Layout == Layout::ND) {
-        if constexpr (sizeof(typename TileData::DType) == 1) {
-            copy_gm_to_cbuf_multi_nd2nz(reinterpret_cast<__cbuf__ uint8_t *>(dst),
-                                        reinterpret_cast<__gm__ uint8_t *>(src), 0 /*sid*/, loop1SrcStride, 0, nValue,
-                                        dValue, loop4SrcStride, false);
-        } else if constexpr (sizeof(typename TileData::DType) == 2) {
-            copy_gm_to_cbuf_multi_nd2nz(reinterpret_cast<__cbuf__ uint16_t *>(dst),
-                                        reinterpret_cast<__gm__ uint16_t *>(src), 0 /*sid*/, loop1SrcStride, 0, nValue,
-                                        dValue, loop4SrcStride, false);
-        } else if constexpr (sizeof(typename TileData::DType) == 4) {
-            copy_gm_to_cbuf_multi_nd2nz(reinterpret_cast<__cbuf__ uint32_t *>(dst),
-                                        reinterpret_cast<__gm__ uint32_t *>(src), 0 /*sid*/, loop1SrcStride, 0, nValue,
-                                        dValue, loop4SrcStride, false);
-        }
-    } else {
-        if constexpr (sizeof(typename TileData::DType) == 1) {
-            copy_gm_to_cbuf_multi_dn2nz(reinterpret_cast<__cbuf__ uint8_t *>(dst),
-                                        reinterpret_cast<__gm__ uint8_t *>(src), 0 /*sid*/, loop1SrcStride, 0, nValue,
-                                        dValue, loop4SrcStride, false);
-        } else if constexpr (sizeof(typename TileData::DType) == 2) {
-            copy_gm_to_cbuf_multi_dn2nz(reinterpret_cast<__cbuf__ uint16_t *>(dst),
-                                        reinterpret_cast<__gm__ uint16_t *>(src), 0 /*sid*/, loop1SrcStride, 0, nValue,
-                                        dValue, loop4SrcStride, false);
-        } else if constexpr (sizeof(typename TileData::DType) == 4) {
-            copy_gm_to_cbuf_multi_dn2nz(reinterpret_cast<__cbuf__ uint32_t *>(dst),
-                                        reinterpret_cast<__gm__ uint32_t *>(src), 0 /*sid*/, loop1SrcStride, 0, nValue,
-                                        dValue, loop4SrcStride, false);
-        }
-    }
-}
-
 template <typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoadNCHW(typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__ *src,
                                    int srcShape0, int srcShape1, int srcShape2, int srcShape3, int srcShape4,
@@ -645,7 +609,7 @@ __tf__ PTO_INTERNAL void TLoadNCHW(typename TileData::TileDType __out__ dst, typ
     __cbuf__ typename TileData::DType *dstAddr = (__cbuf__ typename TileData::DType *)__cce_get_tile_ptr(dst);
     typename GlobalData::DType *srcAddr = src;
     constexpr uint16_t c0ElemCount      = C0_SIZE_BYTE / sizeof(typename TileData::DType);
-    constexpr uint16_t BLK_N_ELEMS      = BLOCK_BYTE_SIZE / sizeof(typename GlobalData::DType);
+    constexpr uint16_t ELEMS_PER_BLOCK  = BLOCK_BYTE_SIZE / sizeof(typename GlobalData::DType);
     constexpr uint16_t REPEAT_N_ELEMS   = REPEAT_BYTE / sizeof(typename GlobalData::DType);
 
     // ConvTile layout is [N,C1,H,W,C0] = [dstShape0, dstShape1, dstShape2, dstShape3, c0ElemCount]
@@ -658,7 +622,7 @@ __tf__ PTO_INTERNAL void TLoadNCHW(typename TileData::TileDType __out__ dst, typ
     ///////////////////////////////////
     // AscendC API
     const auto cDstShape1 = dstShape1 * c0ElemCount;
-    const uint16_t alignedW = (dstShape3 + BLK_N_ELEMS - 1) / BLK_N_ELEMS * BLK_N_ELEMS;
+    const uint16_t alignedW = (dstShape3 + ELEMS_PER_BLOCK - 1) / ELEMS_PER_BLOCK * ELEMS_PER_BLOCK;
     const uint16_t hwSize = dstShape2 * dstShape3;
     const uint16_t tileNumel = dstShape0 * cDstShape1 * hwSize;
     const uint16_t tileAlignedNumel = dstShape0 * cDstShape1 * dstShape2 * alignedW;
@@ -672,10 +636,10 @@ __tf__ PTO_INTERNAL void TLoadNCHW(typename TileData::TileDType __out__ dst, typ
     auto ascA1UB = ascTmpUB[0], ascUB = ascTmpUB[tileAlignedNumel]; // Both given aligned size.
 
     // 0.From GM to UB (Copy with W aliged.)
-    if (dstShape3 == gStride3 && gStride3 % BLK_N_ELEMS == 0) {
+    if (dstShape3 == gStride3 && gStride3 % ELEMS_PER_BLOCK == 0) {
         for (uint32_t i = 0; i < dstShape0; i++) {
             AscendC::DataCopyParams intriParams(
-                cDstShape1, hwSize / BLK_N_ELEMS,  (gStride2 - hwSize) / BLK_N_ELEMS, 0);
+                cDstShape1, hwSize / ELEMS_PER_BLOCK,  (gStride2 - hwSize) / ELEMS_PER_BLOCK, 0);
             AscendC::DataCopy(ascA1UB[i * cDstShape1 * hwSize], ascGM[i * gStride1], intriParams);
         }
     } else {
@@ -685,7 +649,7 @@ __tf__ PTO_INTERNAL void TLoadNCHW(typename TileData::TileDType __out__ dst, typ
                     auto dstOffset = ((i * cDstShape1 + j) * dstShape2 + k) * alignedW;
                     auto srcOffset = i * gStride1 + j * gStride2 + k * gStride3;
                     AscendC::DataCopy(
-                        ascA1UB[dstOffset], ascGM[srcOffset], {1, (uint16_t)(alignedW / BLK_N_ELEMS), 0, 0});
+                        ascA1UB[dstOffset], ascGM[srcOffset], {1, (uint16_t)(alignedW / ELEMS_PER_BLOCK), 0, 0});
                 }
             }
         }
@@ -703,9 +667,9 @@ __tf__ PTO_INTERNAL void TLoadNCHW(typename TileData::TileDType __out__ dst, typ
     // 3.From UB to A1 (Copy as-is.)
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID3);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID3);
-    // AscendC函数会失败，原因未知
+    // AscendC函数会失败，原因是嵌套模板参数认为类型不一致
     copy_ubuf_to_cbuf((__cbuf__ void*)ascA1.GetPhyAddr(), (__ubuf__ void *)(ascA1UB.GetPhyAddr()), 
-        0, (uint16_t)1, (uint16_t)((tileNumel + BLK_N_ELEMS - 1) / BLK_N_ELEMS), 0, 0);
+        0, (uint16_t)1, (uint16_t)((tileNumel + ELEMS_PER_BLOCK - 1) / ELEMS_PER_BLOCK), 0, 0);
     // Keep Consistency while from MTE2, to MTE2.
     set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID3);
     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID3);
@@ -831,4 +795,4 @@ PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src)
     }
 }
 } // namespace pto
-#endif // TLOAD_HPP
+#endif // TLOAD_HPP_310P3
