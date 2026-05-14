@@ -74,7 +74,7 @@ add_link_options(
 set(CMAKE_CCE_COMPILE_OPTIONS
     -xcce
     -Xhost-start -Xhost-end
-    --cce-aicore-arch=dav-m200 -DREGISTER_BASE
+    --cce-aicore-arch=dav-m200 -DMEMORY_BASE
     "SHELL:-mllvm -cce-aicore-record-overflow=true"
     "SHELL:-mllvm -cce-aicore-addr-transform"
     "SHELL:-mllvm -cce-aicore-dcci-insert-for-scalar=false"

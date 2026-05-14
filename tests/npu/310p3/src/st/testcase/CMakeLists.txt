@@ -92,6 +92,11 @@ endfunction()
 # 定义测试用例列表 testcase下如有新增用例目录需要在此加
 set(ALL_TESTCASES
     tadd
+    tadds
+    tdiv
+    tdivs
+    tmul
+    tsub
 )
 if (NOT AUTO_MODE)
   # TPUSH and TPOP currently directly use TASSIGN inside their implementations,

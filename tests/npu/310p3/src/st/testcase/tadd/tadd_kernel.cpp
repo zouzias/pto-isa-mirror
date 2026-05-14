@@ -47,11 +47,12 @@ __global__ AICORE void runTAdd(__gm__ T __out__ *out, __gm__ T __in__ *src0, __g
 template <typename T, int kTRows_, int kTCols_, int vRows, int vCols>
 void LaunchTAdd(T *out, T *src0, T *src1, void *stream)
 {
-    if constexpr (std::is_same_v<T, aclFloat16>)
+    if constexpr (std::is_same_v<T, aclFloat16>) {
         runTAdd<half, kTRows_, kTCols_, vRows, vCols>
             <<<1, nullptr, stream>>>((half *)(out), (half *)(src0), (half *)(src1));
-    else
+    } else {
         runTAdd<T, kTRows_, kTCols_, vRows, vCols><<<1, nullptr, stream>>>(out, src0, src1);
+    }
 }
 
 template void LaunchTAdd<float, 64, 64, 64, 64>(float *out, float *src0, float *src1, void *stream);
