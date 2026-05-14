@@ -83,58 +83,55 @@ bool RunScenarioBIssueOverhead(int deviceId, size_t payloadBytes = 4096);
 template <typename T, size_t count>
 bool RunScenarioCOverlap(int deviceId);
 
-// ---- Scenario F: chunked prefetch (N issues over different addresses) ---
-// Goal: measure how the per-issue cost scales when the application has to
-// prefetch N disjoint regions in a row. This is the deployment pattern where
-// device should structurally win — the kernel is launched once, the host has
-// to call aclrtCmoAsync N times.
+// ---- Scenario F: chunked prefetch + warm TLOAD (mirror of Scenario A) ---
+// Goal: hold the total prefetched bytes constant (= Scenario A's `count *
+// sizeof(T)`) and vary N — the number of chunks the prefetch is split into.
+// Compare host vs device end-to-end wall under the SAME consumer (a TLOAD
+// sweep over the full buffer). This isolates ONE variable: "1 big prefetch
+// vs N small prefetches", everything else (data size, TLOAD body, L2
+// trashing, single trailing sync) matches Scenario A exactly.
 //
-// Two paths, identical work (N chunks of `chunkBytes` each over the same
-// source buffer, addresses src + i*chunkBytes for i in [0, N)):
+// Two paths, identical total work (sum of all chunks = full buffer):
 //
 //   * host path:
-//         for i in [0, N): aclrtCmoAsync(src + i*chunkBytes, chunkBytes, stream)
-//         aclrtSynchronizeStream(stream)         // ONE sync, end of batch
-//     The N aclrtCmoAsync calls are individually asynchronous (each just
-//     enqueues a task into the stream FIFO and returns), but each call still
-//     pays the host-side ACL + STARS-enqueue cost. Wall-clock therefore
-//     scales with N.
+//         for i in [0, N): aclrtCmoAsync(src + i*chunk, chunk, stream)
+//         ScenarioA_TloadOnlyKernel<<<1, nullptr, stream>>>(...)   // warm TLOAD
+//         aclrtSynchronizeStream(stream)                            // ONE sync
+//     N aclrtCmoAsync are async-enqueues onto the same stream; the trailing
+//     TLOAD-only kernel is the "consumer" that reads everything; the FIFO
+//     order on the stream guarantees all CMO complete before TLOAD starts.
 //
 //   * device path:
-//         ScenarioF_DeviceMultiPrefetchKernel<<<1, nullptr, stream>>>(
-//             src, chunkBytes, N, workspace, cycleOut)
-//         aclrtSynchronizeStream(stream)         // ONE sync
-//     Inside the kernel we loop N times: TPREFETCH_L2(addr_i) + evt.Wait().
-//     Only one kernel launch is paid (the 17 us "kernel shell" floor from
-//     Scenario E1). The per-iteration cost inside the kernel is ~2 us (the
-//     in-kernel TPREFETCH+Wait time from Scenario B).
+//         ScenarioF_DeviceChunkedPrefetchAndTloadKernel<<<1, ...>>>(
+//             src, chunk, N, workspace, cycleOut)
+//         aclrtSynchronizeStream(stream)                            // ONE sync
+//     ONE kernel launch. Inside: loop N x { TPREFETCH_L2(addr_i) + Wait },
+//     then TLOAD the whole buffer — same TLOAD body as Scenario A device.
 //
-// Synchronisation correctness:
-//   - host path: stream FIFO orders the N CMO tasks; the trailing sync
-//     guarantees all N have completed before we stop the wall-clock timer.
-//   - device path: each iteration calls evt.Wait() before issuing the next
-//     TPREFETCH_L2, so the event flag is observed clean before reuse and
-//     all N transfers are confirmed complete by the time the kernel returns.
-//     The trailing aclrtSynchronizeStream then guarantees host-side
-//     observability of "kernel finished".
-//   Both paths therefore enforce "all N prefetches really completed" before
-//   the timer stops; they are apples-to-apples comparable.
+// Synchronisation correctness — both paths confirm "all chunks prefetched
+// and consumed by TLOAD" before the wall-clock timer stops:
+//   - host: stream FIFO orders the N CMO tasks before the TLOAD kernel; the
+//     trailing aclrtSynchronizeStream is a barrier against everything queued.
+//   - device: in-kernel evt.Wait() after every TPREFETCH_L2 ensures the
+//     event flag is consumed clean before reuse; the kernel cannot exit
+//     until the TLOAD sweep finishes; the trailing sync surfaces "kernel
+//     done" to the host.
 //
-// Predicted scaling (using Scenario B's per-call costs as the model):
-//     host   wall(N) ~  N * t_acl    + t_sync     // t_acl ~ a few us per call
-//     device wall(N) ~  t_launch_shell + N * t_in_kernel
-//                                                  // t_launch_shell ~ 17 us
-//                                                  // t_in_kernel    ~ 2 us
-//     crossover at N where N*(t_acl - t_in_kernel) = t_launch_shell.
+// Same-as-Scenario-A invariants: total bytes equal `count * sizeof(T)`,
+// L2 trashed once per measured iteration, single trailing sync, 100 iter
+// with 1 warmup, p5/p50/p95 reported. **N=1 reduces exactly to Scenario A's
+// host_sdma / device_l2 rows for the same `count`** — that's the natural
+// sanity check.
 //
-// Reports per-N: host wall p5/p50/p95, device wall p5/p50/p95, device
-// in-kernel cycle p50 (only the loop body inside the kernel). One CSV row
-// per (N, chunkBytes, config). chunkBytes is held constant per test case so
-// the only varying factor is N.
+// totalBytes (= count * sizeof(T)) MUST be divisible by numChunks; the
+// runner checks and bails out early otherwise.
 //
-// L2 IS trashed once before each measured iteration so every iteration sees
-// a true cold L2 (matching Scenario A semantics).
-bool RunScenarioFMultiChunkPrefetch(int deviceId, uint64_t chunkBytes, uint32_t numChunks);
+// CSV: one row per (totalBytes, N, config) — host_async + device_kernel.
+// host_kernel_p50 / device_kernel_p50 are the in-kernel cycle counters
+// (host: TLOAD only; device: N x prefetch+Wait + TLOAD), reported as
+// supplementary diagnostics; the apples-to-apples number is the wall.
+template <typename T, size_t count>
+bool RunScenarioFChunkedPrefetchAndTload(int deviceId, uint32_t numChunks);
 
 // ---- Scenario E1: kernel launch + dispatch + sync overhead --------------
 // Pure-overhead micro-benchmark used to localise where Scenario A's "device

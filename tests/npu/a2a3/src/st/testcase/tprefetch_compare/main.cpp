@@ -31,9 +31,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Scenario A scans 5 sizes (64KB, 1MB, 16MB, 64MB, 128MB) for a "real-world
 // prefetch + warm TLOAD" comparison. Scenario B is a payload scan of issue
 // overhead. Scenario C measures overlap with compute at 3 representative
-// sizes. Scenario F sweeps N (number of consecutive prefetch calls over
-// disjoint regions) at fixed chunk=64KB to expose the structural difference
-// between "N host calls" and "1 kernel launch + N in-kernel issues".
+// sizes. Scenario F holds total bytes = 16 MB (= Scenario A's 16MB row) and
+// varies N to compare "1 big prefetch + TLOAD" against "N small prefetches
+// + same TLOAD" — same total bytes / same TLOAD / same single trailing sync,
+// only varying whether the prefetch is split. N=1 is the natural cross-check
+// against Scenario A's 16MB host_sdma / device_l2 rows.
 //
 // Scenario E1 is a pure-overhead microbenchmark (empty AICore kernel) used
 // to isolate the device-path mandatory "launch + dispatch + sync" tax so
@@ -124,48 +126,48 @@ TEST(TPrefetchCompare, C_Overlap_128MB)
     ASSERT_TRUE((RunScenarioCOverlap<float, 33554432>(0)));
 }
 
-// ---- Scenario F: chunked prefetch (one launch vs N host calls) ----------
-// Fixed chunkBytes = 64 KB; N is varied so we can observe the per-call cost
-// of the host path accumulating linearly while the device path stays roughly
-// constant per chunk (1 launch shell + N x in-kernel issue+Wait). Each TEST
-// appends two rows (host_async, device_kernel) to scenarioF CSV; combine
-// across N to plot wall(N) for both paths and read off the crossover N.
+// ---- Scenario F: chunked prefetch + warm TLOAD (mirror of Scenario A) ---
+// Holds total bytes constant (= 16 MB, = Scenario A's A_EndToEnd_16MB) and
+// varies N (number of chunks the prefetch is split into). Same TLOAD body
+// as Scenario A, same single trailing sync. Each TEST appends two rows
+// (host_async, device_kernel) to scenarioF CSV; combine across N to see
+// how "1 big prefetch vs N small prefetches" affects end-to-end wall.
 //
-// Total data per N (chunk fixed at 64 KB):
-//   N=1    -> 64 KB    (degenerate: identical to Scenario A 64KB single call)
-//   N=4    -> 256 KB
-//   N=16   -> 1 MB
-//   N=64   -> 4 MB
-//   N=256  -> 16 MB
-//   N=1024 -> 64 MB
-TEST(TPrefetchCompare, F_MultiPrefetch_N1_64KB)
+// Chunk size derived from N (totalBytes / N):
+//   N=1    -> chunk=16 MB    (sanity check: should match Scenario A 16MB rows)
+//   N=4    -> chunk=4 MB
+//   N=16   -> chunk=1 MB
+//   N=64   -> chunk=256 KB
+//   N=256  -> chunk=64 KB
+//   N=1024 -> chunk=16 KB
+TEST(TPrefetchCompare, F_ChunkedPrefetchTload_16MB_N1)
 {
-    ASSERT_TRUE(RunScenarioFMultiChunkPrefetch(0, 64ULL * 1024, 1));
+    ASSERT_TRUE((RunScenarioFChunkedPrefetchAndTload<float, 4194304>(0, 1)));
 }
 
-TEST(TPrefetchCompare, F_MultiPrefetch_N4_64KB)
+TEST(TPrefetchCompare, F_ChunkedPrefetchTload_16MB_N4)
 {
-    ASSERT_TRUE(RunScenarioFMultiChunkPrefetch(0, 64ULL * 1024, 4));
+    ASSERT_TRUE((RunScenarioFChunkedPrefetchAndTload<float, 4194304>(0, 4)));
 }
 
-TEST(TPrefetchCompare, F_MultiPrefetch_N16_64KB)
+TEST(TPrefetchCompare, F_ChunkedPrefetchTload_16MB_N16)
 {
-    ASSERT_TRUE(RunScenarioFMultiChunkPrefetch(0, 64ULL * 1024, 16));
+    ASSERT_TRUE((RunScenarioFChunkedPrefetchAndTload<float, 4194304>(0, 16)));
 }
 
-TEST(TPrefetchCompare, F_MultiPrefetch_N64_64KB)
+TEST(TPrefetchCompare, F_ChunkedPrefetchTload_16MB_N64)
 {
-    ASSERT_TRUE(RunScenarioFMultiChunkPrefetch(0, 64ULL * 1024, 64));
+    ASSERT_TRUE((RunScenarioFChunkedPrefetchAndTload<float, 4194304>(0, 64)));
 }
 
-TEST(TPrefetchCompare, F_MultiPrefetch_N256_64KB)
+TEST(TPrefetchCompare, F_ChunkedPrefetchTload_16MB_N256)
 {
-    ASSERT_TRUE(RunScenarioFMultiChunkPrefetch(0, 64ULL * 1024, 256));
+    ASSERT_TRUE((RunScenarioFChunkedPrefetchAndTload<float, 4194304>(0, 256)));
 }
 
-TEST(TPrefetchCompare, F_MultiPrefetch_N1024_64KB)
+TEST(TPrefetchCompare, F_ChunkedPrefetchTload_16MB_N1024)
 {
-    ASSERT_TRUE(RunScenarioFMultiChunkPrefetch(0, 64ULL * 1024, 1024));
+    ASSERT_TRUE((RunScenarioFChunkedPrefetchAndTload<float, 4194304>(0, 1024)));
 }
 
 // ---- Scenario E1: kernel launch + dispatch + sync overhead --------------
