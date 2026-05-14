@@ -78,7 +78,7 @@ declare -a RESULTS
 PASS=0
 FAIL=0
 
-for folder in moe_topk_padded scatter expert_ffn gather; do
+for folder in router_matmul moe_topk_padded scatter expert_ffn gather; do
     echo
     echo "--- $folder ---"
     fdir="$HERE/$folder"

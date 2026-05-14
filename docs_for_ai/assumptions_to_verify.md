@@ -592,6 +592,32 @@ the audit trail is useful when something later regresses.
 - Delta beyond §A18: minor — the §A17 entry slightly understated `tstore_acc2gm`'s coverage; the genuinely-missing piece was the ND-layout Nz2nd variant of (FP32 Acc → FP16 GM + ReLU in a single TSTORE), and it is now Resolved at this shape.
 - Still Unknown: fused single-kernel form (root cause of the (b) hang unverified — do not claim broken on basis of one hang); `kH != kF`; multi-K-tile inside a GEMM; multi-N-tile inside GEMM1; multi-core; dynamic tail; `topK > 1`; backward; performance; activations other than `NormalRelu`; bias; non-FP16 FFN dtypes; full router GEMM.
 
+### 11.10 Three-part MoE pipeline (scatter / expert_ffn / gather) plus a generic-`kTopK` topk variant builds and passes at the v1 shape on A3 auto mode
+
+- Resolved: 2026-05-14 · A3 (mixed vec + cube) · `bash run.sh -r npu -v Ascend910B1` on each of
+  [kernels/automode/a2a3/MoE/moe_topk_padded/](../kernels/automode/a2a3/MoE/moe_topk_padded/) (vec),
+  [kernels/automode/a2a3/MoE/scatter/](../kernels/automode/a2a3/MoE/scatter/) (vec),
+  [kernels/automode/a2a3/MoE/expert_ffn/](../kernels/automode/a2a3/MoE/expert_ffn/) (cube ×2),
+  [kernels/automode/a2a3/MoE/gather/](../kernels/automode/a2a3/MoE/gather/) (vec)
+  → all four reported `test data success`. v1 shape: `kT=256, kH=64, kF=64, kE=32, kTopK=1`; `expert_ffn` uses `kTileM=16`. Together with the pre-existing [router_matmul](../kernels/automode/a2a3/MoE/router_matmul/) cube GEMM, this is the first five-stage MoE skeleton in tree.
+- Reference: [kernels/automode/a2a3/MoE/README.md](../kernels/automode/a2a3/MoE/README.md) (pipeline diagram, v1 shape table, per-folder status, sweep instructions).
+- Patterns this run confirms:
+  - **`scatter` extends `moe_top1_permute` to (t, k) pairs** with a back-mapping `A_id[r] = t` instead of the forward `token_to_packed[t] = r`. Same three-pass shape (histogram → prefix sum → pack) with the same stack-array `count`/`start`/`counter` pattern. Confirms the `count[kE]` / `start[kE]` arrays are still safe at `kE = 32` (resolves the "Still Unknown: `kE > 4`" caveat in §11.6 at this size).
+  - **`expert_ffn` is `moe_segmented_ffn_top1` (§11.9) with `kTileM=16`** (vs §11.9's 128) and the inner `for m0 = 0; m0 < count; m0 += kTileM` loop reading runtime `count[e]` / `start[e]` from GM. Confirms cube M = 16 is accepted by the auto-mode passes (within the documented 16-alignment rule, but not previously observed in tree). The +16-row trailing pad on `A`/`Y_scratch`/`B` absorbs the last non-empty expert's overspill.
+  - **`gather` extends `moe_top1_unpermute` with `TLOAD(cTile, cGlobal) + TADD + TSTORE`** in place of the simple `TLOAD → TSTORE` permute. At `kTopK=1` each row is written exactly once so the accumulation degenerates to "add zero" — the genuine multi-write scatter-add path is NOT exercised by this v1 run. Confirms only that the structural shape compiles and runs.
+  - **`moe_topk_padded` parameterizes the `kGatherWidth = max(8, kTopK)` trick** from `MoE/moe_topk` (which hardcoded kTopK=2). Confirms the trick generalizes for kTopK=1; the kTopK ∈ {2, 4, 8, 16} branches are exercised only by `sweep_all.sh`.
+- Delta beyond §11.9: kTileM = 16 is new; `count`/`start` arrays at `kE = 32` are new; the dynamic-from-GM-metadata expert loop shape is new (§11.9 used host-padded fixed-size segments).
+- Still Unknown after v1:
+  - `kTopK > 1` on hardware — code paths exist but the scatter-add accumulation and the `(t, k)` inner loop in `scatter` are untested.
+  - `kTopK = 16` on hardware — switches `moe_topk_padded` to `kGatherWidth = 16` (no padding); different output-tile geometry than v1.
+  - `kE = 16` on hardware — halves `kPackedCols` in `moe_topk_padded`; TSORT32 still does one block but at half-width.
+  - `kT ∈ {128, 512}` — pure loop-count stretch but not observed.
+  - `kH = kF = 128` — bigger matmul tiles, still inside L0A/L0B/L0C budgets (verified arithmetically) but not observed.
+  - `kH = kF = 256` — beyond L0B = 64 KB at fp16; requires Split-K, **postponed**.
+  - Multi-AICORE / `block_idx` parallelism.
+  - End-to-end glue chaining all five stages in one host driver.
+- Driver for the remaining sweep: [kernels/automode/a2a3/MoE/sweep_all.sh](../kernels/automode/a2a3/MoE/sweep_all.sh) walks a 20-config matrix and writes `sweep_all.log` + `sweep_all.summary`.
+
 ---
 
 ## Cross-references
