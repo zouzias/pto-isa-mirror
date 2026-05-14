@@ -424,6 +424,18 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
         tileValidCol, nranks, perRankRows);
 }
 
+// CCU engine is not available on A2/A3 hardware.  Deferred-fail stub so that
+// the qualified name `::pto::comm::TSCATTER_CCU_IMPL` is visible to the
+// discarded `if constexpr (engine == CCU)` branch in pto_comm_inst.hpp; the
+// body fires only if actually instantiated, which is the misuse we flag.
+template <typename... Args>
+PTO_INTERNAL void TSCATTER_CCU_IMPL(Args &&...)
+{
+    static_assert(detail::dependent_false_v<Args...>,
+                  "TSCATTER<CollEngine::CCU> requires A5 hardware; "
+                  "CCU engine is not available on A2/A3.");
+}
+
 } // namespace comm
 } // namespace pto
 

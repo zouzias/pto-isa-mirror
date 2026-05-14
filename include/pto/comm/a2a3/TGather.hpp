@@ -447,6 +447,20 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
                                                                        tileValidRow, tileValidCol, nranks, perRankRows);
 }
 
+// CCU engine is not available on A2/A3 hardware.  Provide a deferred-fail stub
+// so `if constexpr (engine == CollEngine::CCU)` branches in pto_comm_inst.hpp
+// satisfy name lookup (the fully-qualified `::pto::comm::TGATHER_CCU_IMPL`
+// must be visible even in discarded branches, per C++17 [stmt.if]/2).  The
+// body fires only if TGATHER<CollEngine::CCU> is actually instantiated on
+// this architecture, which is the misuse we want to flag.
+template <typename... Args>
+PTO_INTERNAL void TGATHER_CCU_IMPL(Args &&...)
+{
+    static_assert(detail::dependent_false_v<Args...>,
+                  "TGATHER<CollEngine::CCU> requires A5 hardware; "
+                  "CCU engine is not available on A2/A3.");
+}
+
 } // namespace comm
 } // namespace pto
 

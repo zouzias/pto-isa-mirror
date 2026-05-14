@@ -446,6 +446,18 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
                                                                           dims[4], tileValidRow, tileValidCol, nranks);
 }
 
+// CCU engine is not available on A2/A3 hardware.  Deferred-fail stub so that
+// the qualified name `::pto::comm::TBROADCAST_CCU_IMPL` is visible to the
+// discarded `if constexpr (engine == CCU)` branch in pto_comm_inst.hpp; the
+// body fires only if actually instantiated, which is the misuse we flag.
+template <typename... Args>
+PTO_INTERNAL void TBROADCAST_CCU_IMPL(Args &&...)
+{
+    static_assert(detail::dependent_false_v<Args...>,
+                  "TBROADCAST<CollEngine::CCU> requires A5 hardware; "
+                  "CCU engine is not available on A2/A3.");
+}
+
 } // namespace comm
 } // namespace pto
 
