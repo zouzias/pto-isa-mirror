@@ -7,7 +7,7 @@ This directory is **not** the upstream `kernels/manual/a5/topk` scaffold from `c
 
 ```bash
 cd kernels/manual/a5/topk_ub
-bash run.sh -r sim -v Ascend910_9599
+bash run.sh -r sim -v Ascend950PR_9599
 ```
 
 - Data: `scripts/gen_data.py` writes `input/` and `output/` under **this** directory.

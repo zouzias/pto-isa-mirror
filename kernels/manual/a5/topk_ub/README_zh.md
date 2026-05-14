@@ -7,7 +7,7 @@
 
 ```bash
 cd kernels/manual/a5/topk_ub
-bash run.sh -r sim -v Ascend910_9599
+bash run.sh -r sim -v Ascend950PR_9599
 ```
 
 - 数据由本目录下 `scripts/gen_data.py` 生成，输出在 **`input/`、`output/`**（与 `../topk` 互不覆盖）。
