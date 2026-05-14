@@ -472,9 +472,12 @@ device 异步框架约束：每个 AI Core 最多同时等待 **8 个** outstand
 
 ## 6. 启动开销分解（用 Scenario B 的数据倒推）
 
-实测：host 10–14 μs vs device ~3 μs。这 10+ μs 是怎么花掉的？
+> ⚠️ **本节是"时间花在哪"的拆解**，给出预期范围；具体数字请跑 Scenario B 后看 §15.8 / CSV。
+> - 6.1 量的是 host **end-to-end wall**（预期 10–14 μs 量级），对应 CSV 里 `host_wall.p50`
+> - 6.2 量的是 device 在 kernel 内的 **in-kernel cycles**（预期 ~3 μs），对应 CSV 里 `device_in_kernel.p50`
+> - **这两个口径不同，不能直接相减说 "device 快 10 μs"**。完整的 apples-to-apples wall vs wall 对比请用 CSV 里 `host_wall.p50` 对 `device_wall.p50`（device wall 比 in-kernel 多了 launch + sync 的 ~5–7 μs，预期总和 8–10 μs，跟 host 是一个量级，device 略快但不是数量级）
 
-### 6.1 host `PTO_PREFETCH` + `aclrtSynchronizeStream` 的 10–14 μs
+### 6.1 host `PTO_PREFETCH` + `aclrtSynchronizeStream` 的预期 10–14 μs
 
 ```
  0 us    user call PTO_PREFETCH → ACL 入口
@@ -496,7 +499,10 @@ device 异步框架约束：每个 AI Core 最多同时等待 **8 个** outstand
 
 这三块是纯软件 overhead，buffer 多大都一样。所以 B 场景（4KB）测出来就是**纯软件发起成本**。
 
-### 6.2 device `TPREFETCH_L2` + `evt.Wait` 的 ~3 μs
+### 6.2 device `TPREFETCH_L2` + `evt.Wait` 的预期 ~3 μs（in-kernel）
+
+> 注意：此处 ~3 μs 是 **kernel 内部 syscnt cycles**（对应 Scenario B CSV 的 `device_in_kernel.p50` 行），不含 kernel launch + `aclrtSynchronizeStream` 的固定开销。要做"指令对指令"端到端对比请用 Scenario B 的 `device_wall.p50` 行，预期 ~7–10 μs 量级。这 ~3 μs 是**把 TPREFETCH_L2 嵌入到一个本来就要 launch 的 kernel 时新增的边际开销**——这才是 device 路径的真正优势所在（不需要额外付 launch + sync）。
+
 
 ```
  0 us    kernel 内 call TPREFETCH_L2
@@ -528,16 +534,14 @@ device 异步框架约束：每个 AI Core 最多同时等待 **8 个** outstand
 ~100 ns 到几百 ns 量级。比 scalar/vector 指令（~ns）慢一两个数量级，但相比 host path
 的 PCIe 往返 + 中断唤醒（μs ~ 几十 μs 级），仍小至少一个数量级。
 
-### 6.3 为什么 device path 首次执行会额外贵一点？
+### 6.3 workspace API 与 session API 在 build 成本上的差别
 
-`BuildAsyncSession` 做了：
+`pto::TPREFETCH_L2` 现在有两组重载：
 
-- 分配 `ScratchTile` 并 `TASSIGN`
-- 构造 `SdmaExecContext`（读 workspace layout）
-- 构造 `SdmaSyncContext`
-- 校验 session config
+- **workspace API**（推荐，Scenario A/B/C 测试都在用）：每次调用内部构造一个 transient `SdmaSession`（`BuildTransientPrefetchL2Session` → `TASSIGN_IMPL` 初始化 scratch + `BuildAsyncSession`），构造成本约 ~3–5 μs，每次调用都付。所以 Scenario B 测得的 device in-kernel ~3 μs 已经**包含**这次 transient build。
+- **session API**（高级用户，需要复用）：上层一次 `BuildAsyncSession`（占 ~5–10 μs），后续多次 `TPREFETCH_L2` 调用复用 session，每次只付 issue + Wait，**不再付 build**。如果同一 kernel 内要发多条 prefetch，用 session API 能把 build 成本摊掉。
 
-首次 build 会占 ~5–10 μs。我们的测量里已经把 BuildAsyncSession 纳入 Scenario A 的 kernel 时间，所以 A 场景 device 比 host 多出来的 4–20 μs 主要就是它。对于 Scenario B 我们复用 session，所以 4 KB 下测得 3 μs 不含 build 成本。
+对 Scenario A：device wall 比 host wall 多出来的 ~10–20% 来自两块——一块是这次 transient session build（~3–5 μs），更大头是 §7 讲的 device 默认 1 MB/SQE 切分带来的 N × ~800–1000 ns 启动尾巴。后者在 ≥ 16 MB 量级才显著放大。
 
 ---
 
@@ -548,18 +552,28 @@ device 异步框架约束：每个 AI Core 最多同时等待 **8 个** outstand
 `ceil(bytes / 1MB)`，**每条 SQE 在 SDMA 引擎流水里都有 ~800 ns 的启动尾巴**。
 所以 buffer 越大，device path 累计的 per-SQE overhead 越多，看起来"带宽"略低。
 
-### 7.1 实测数据
+### 7.1 实测口径与定性结论
 
-实测 Scenario A，kernel time（包含 session build）：
+**度量**：本节所有讨论以 **end-to-end wall-clock**（`std::chrono::steady_clock` 量出 enqueue → `aclrtSynchronizeStream` 返回）为准，对应 Scenario A 测试输出里的 `wall_p50_us` 列。两条路径包含的内容：
 
-| Size | host kernel | device kernel | 理论传输 (280 GB/s) | host overhead | device overhead | iter_num | 每 SQE overhead |
-|---|---|---|---|---|---|---|---|
-| 1 MB | 3.98 us | 6.10 us | 3.6 us | ~0.4 us | ~2.5 us | 1 | — |
-| 16 MB | 60.70 us | 69.37 us | 57.1 us | ~3.6 us | ~12.3 us | 16 | ~770 ns |
-| 128 MB | 489.58 us | 590.25 us | 457 us | ~32.6 us | ~133 us | 128 | ~1040 ns |
+- **host SDMA wall** = `aclrtCmoAsync` 提交 + 排队 + SDMA 实际执行 + 后续 warm-TLOAD kernel 运行 + `aclrtSynchronizeStream` 返回
+- **device L2 wall** = kernel launch + (in-kernel `TPREFETCH_L2` 提交 SQE + Wait + warm TLOAD) + `aclrtSynchronizeStream` 返回
 
-可以看到 device overhead 几乎是 **iter_num × ~800–1000 ns**，证明开销确实和 SQE 条数线性相关，
-不是固定的 session build 成本。
+baseline（无 prefetch、cold TLOAD）作为基准，"host vs baseline" / "device vs baseline" 反映 prefetch 是否真正帮到了后续访问；"device vs host" 反映两条指令在同样 payload 下的端到端开销差。
+
+> ⚠️ 不要用 Scenario A 输出里的 `kernel_p50_us` 列做 host vs device 对比！host kernel 只跑 warm TLOAD（PTO_PREFETCH 在 kernel 外完成），device kernel 跑 prefetch+Wait+warm TLOAD，两边 kernel 内容根本不一样。`kernel` 列只用来诊断"设备侧 prefetch 嵌入到现有 kernel 时的边际成本"。
+
+**实测数据**：见 §15.8（跑完测试后填入）。**本节不再写估算数字**，避免误导。
+
+**定性预期**（这些是结构性结论，不依赖具体数字，跑完测试印证即可）：
+
+- **小 size**（≤ 1 MB）：prefetch + Wait 的固定开销摊不平，prefetch 模式 wall 可能略大于 baseline；device 比 host 多一份 transient session build（~3–5 μs）
+- **中 size**（16 MB 量级）：prefetch 收益开始显现，host 与 device 差距小（< 10%）
+- **大 size**（≥ 64 MB）：device 默认 1 MB/SQE 切分开始放大累计开销，device 比 host 慢 10–20%（差距 = N 条 SQE × ~800–1000 ns 启动尾巴，N = bytes/1MB）
+- **两者带宽相同**：host 和 device 的 `band_p50_gbs` 在大 size 下都接近 SDMA 引擎上限（A2/A3 ~280 GB/s）；差距来自上层切分策略而非引擎本身
+- **修复方法**：把 device 的 `block_bytes` 调大（见 §7.5），device 也能追平 host
+
+**结论**：在"端到端发起一次预取"的对比下，**host 略快、device 略慢**；差距不来自 SDMA 引擎本身，而是 device path 默认 1 MB/SQE 的切分。
 
 ### 7.2 ~800 ns per SQE 是哪来的
 
@@ -594,8 +608,16 @@ burst 间间隙（不能 100% 背靠背）                          ~ 300 ns
 不会开始执行。**没有 N×50ns（构造期 AICORE）被 N×700ns（执行期 SDMA）掩盖的可能**。
 
 **外部观测的 per-SQE 总开销** = 构造期 ~50 ns + 执行期 ~700 ns + 数据搬运 ≈
-**~750 ns per SQE 的纯启动尾巴**（数据搬运另算）。和 §7.1 实测 `~770~1040 ns`
-吻合（多出来的部分主要是 SQ depth 上升导致 NoC 仲裁压力增加）。
+**~750 ns per SQE 的纯启动尾巴**（数据搬运另算）。
+
+**实测验证**（跑完 Scenario A 后填 §15.8 数据，按下式反推单 SQE 开销）：
+
+```
+per_SQE_overhead ≈ (device_wall_p50 − host_wall_p50 − transient_session_build) / iter_num
+其中 iter_num = ceil(bytes / 1MB)，transient_session_build ≈ 3–5 μs
+```
+
+预期落在 **~800–1000 ns/SQE** 区间。如果实测明显高出此范围（例如 > 1500 ns/SQE），说明 SQ depth 上升导致 NoC 仲裁压力增加，或者环境异常。
 
 ### 7.3 host runtime 没这个问题的原因
 
@@ -610,11 +632,11 @@ host 路径在 CANN runtime 内部走的是经过精心调优的 SDMA descriptor
 | 外部观测 per-SQE 总开销 | ~800–1000 ns | ~800–1000 ns |
 | 构造与执行的重叠 | 单次调用内基本串行；**跨调用**间可流水（runtime 把多次合并下发） | 单次调用内串行（doorbell 在末尾一次性敲）；多 `queue_num` 通道间可并行 |
 
-128MB 任务下：
-- host：~8 条 SQE × ~1000 ns ≈ **8 us 启动尾巴**
-- device：128 条 SQE × ~1000 ns ≈ **128 us 启动尾巴**
+128MB 任务下（按上面表里 ~800–1000 ns / SQE 推算）：
+- host：~8 条 SQE × ~1000 ns ≈ **~8 us 启动尾巴**
+- device：128 条 SQE × ~1000 ns ≈ **~128 us 启动尾巴**
 
-差额 ~120 us，和实测 ~100 us 量级吻合。
+预期差额 **~120 us**。跑完 Scenario A 128MB 后用 `device_wall_p50 - host_wall_p50` 校验，应在百 μs 量级。
 
 ### 7.4 这个 gap 重要吗？什么时候改？
 
@@ -1069,15 +1091,136 @@ __global__ AICORE void big_kernel(...) {
 
 ## 15. 实测数据印证
 
-| 数据点 | 对应结论 |
-|---|---|
-| Scenario B: host 10+ μs, device 3 μs | host 软件 overhead 高出 ~3x，device 纯 in-kernel |
-| Scenario A: 16MB 下 host 149 μs, device 156 μs；128MB 下 host 1086 μs, device 1200 μs | 硬件吞吐一致，差额 = device session build + per-SQE 启动尾巴累计（1MB×N 条 SQE）|
-| Scenario A: 128MB 下 device overhead ~133 μs ≈ 128 SQE × 1 μs | 证实差距来自 `kDefaultSdmaBlockBytes = 1MB` 的切分策略，调大可消除 |
-| Scenario A/D: host 和 device 吞吐均 ~270 GB/s（小 buffer / 同 SQE 配置） | 证实底层 SDMA engine 同吞吐 |
-| Scenario C 大 buffer: C1 和 C2 cold-reduc 仅差 2–3 pp | prefetch 和 compute 并行时，发起方位置不影响并行效果 |
-| Scenario D: D1 35μs vs D2 38μs (1MB), D1 1465μs vs D2 1517μs (128MB) | 跨 rank 没放大差异，规律和单 rank 一致 |
-| Scenario D: D0→D1 省 ~40% wall | TPUT_ASYNC 写入远端后，远端 L2 是冷的，后续 prefetch 确有收益 |
+> **本节不写估算数字**，所有数字都从测试用例真实跑出来。文档只描述方法、口径、CSV 字段、运行命令。具体数据请运行 §15.7 的命令拿到 CSV 后填入或参考。
+
+### 15.1 测试用例位置
+
+```
+tests/npu/a2a3/src/st/testcase/tprefetch_compare/    # 单卡对比 (Scenario A/B/C)
+tests/npu/a2a3/comm/st/testcase/tprefetch_compare/   # 跨 rank 对比 (Scenario D)
+```
+
+参考 `shmem/examples/cmo/main.cpp` 的成熟范式：
+
+- **每个 Scenario × 每个 size × 每个 config 跑 100 次**（可用 `TPREFETCH_COMPARE_ITER=N` 覆盖）
+- 每次测量前 `TrashL2()`（用 ≥ 512 MB buffer evict 整块 L2）确保 cold start
+- 统计用 **p5 / p50 / p95**（中位数为主指标，p5/p95 反映尾延迟）
+- 结果同时打到 console 和 CSV 文件
+- 1 次 warmup
+
+### 15.2 测试输出口径
+
+| 度量 | 含义 | 用途 |
+|---|---|---|
+| `wall p50/p5/p95` | host `std::chrono::steady_clock` 量出的端到端 wall：包含 launch/排队/SDMA 实际执行/sync 全部 | **指令对指令公平对比，主指标** |
+| `kernel p50/p5/p95` | AICORE `MOV %0, SYS_CNT` 量出的 kernel 内部 syscnt cycles 换算的 μs | 仅作"嵌入到已有 kernel 的边际开销"参考；host 与 device 的 kernel 列**内容不同**，不能直接比 |
+| `in-kernel p50` (Scenario B) | device 路径的 `TPREFETCH_L2 + Wait` 在 kernel 内段的 syscnt | 嵌入到现有 kernel 时新增的边际开销，不含 launch+sync |
+| `cold-reduc` (Scenario C) | `1 - kern(C*)/kern(C0)`，越高 prefetch 越能藏在 compute 后面 | 衡量 overlap 效果 |
+| `band p50` (Scenario A) | `dataBytes / wall_p50_us` (GB/s) | 等效带宽 |
+
+### 15.3 CSV 字段说明
+
+CSV 默认写到 CWD（即 `tests/npu/a2a3/src/st/`），可通过 `TPREFETCH_COMPARE_CSV_DIR=<path>` 覆盖。
+
+**`tprefetch_compare_scenarioA.csv`**（每个 size 跑 3 行：baseline / host_sdma / device_l2）：
+
+```
+size_bytes,size_label,config,iter,wall_p5_us,wall_p50_us,wall_p95_us,wall_min_us,wall_max_us,band_p50_gbs,kernel_p50_us
+```
+
+**`tprefetch_compare_scenarioB.csv`**（每个 size 跑 3 行：host_wall / device_wall / device_in_kernel）：
+
+```
+buffer_bytes,payload_bytes,config,iter,wall_p5_us,wall_p50_us,wall_p95_us,wall_min_us,wall_max_us
+```
+
+**`tprefetch_compare_scenarioC.csv`**（每个 size 跑 3 行：C0_no_prefetch / C1_host_prefetch / C2_device_prefetch）：
+
+```
+size_bytes,size_label,spin_cycles,config,iter,wall_p5_us,wall_p50_us,wall_p95_us,kernel_p5_us,kernel_p50_us,kernel_p95_us,cold_reduc
+```
+
+### 15.4 Scenario A 怎么读
+
+每行表示一个 (size, config) 对。要做 host vs device 对比，**取同一 size 下 config=host_sdma 和 config=device_l2 的 `wall_p50_us` 直接比**。`band_p50_gbs` 给等效带宽。
+
+注意：
+
+- **wall 列才是公平对比**，kernel 列不是（host kernel = warm TLOAD only；device kernel = prefetch+wait+warm TLOAD，内容不同）
+- size 扫描覆盖 64KB / 1MB / 16MB / 64MB / 128MB，能看出 device 默认 1 MB/SQE 切分在哪个 size 开始放大累计开销
+
+### 15.5 Scenario B 怎么读
+
+3 行分别是：
+
+- `host_wall`：单次 PTO_PREFETCH + sync 的 wall。**host 路径的指令开销，包含全部固定软件栈成本**
+- `device_wall`：单次 kernel(TPREFETCH_L2 + Wait) + sync 的 wall。**device 路径的指令开销，apples-to-apples 对比 host_wall**
+- `device_in_kernel`：仅 kernel 内 TPREFETCH_L2 + Wait 那一段的 in-kernel cycles。**模拟"把 TPREFETCH_L2 嵌入到一个本来就要 launch 的 kernel 时新增的边际开销"**——这才是 device 路径在真实业务里的实际成本
+
+公平指令对比用 `host_wall.p50` vs `device_wall.p50`。但要理解 device 路径在真实部署中的优势，要看 `device_in_kernel.p50`。
+
+### 15.6 Scenario C 怎么读
+
+3 行 C0 / C1 / C2 + `cold_reduc` 列。`cold_reduc` 越接近 `1 - prefetch_time/cold_tload_time`，说明 prefetch 越能完全藏到 compute 后面。
+理想情况下，C1 和 C2 的 cold_reduc 应该接近——证明发起方位置（host 还是 device）在 overlap 场景下不重要。
+
+### 15.7 运行命令
+
+跑 Scenario A/B/C（单卡）：
+
+```bash
+cd pto-isa/tests
+python3 script/run_st.py -r npu -v a2 -t tprefetch_compare
+# CSV 会写到 pto-isa/tests/npu/a2a3/src/st/tprefetch_compare_*.csv
+```
+
+只跑某个 Scenario / 某个 size：
+
+```bash
+GTEST_FILTER='TPrefetchCompare.A_EndToEnd_*' python3 script/run_st.py -r npu -v a2 -t tprefetch_compare
+GTEST_FILTER='TPrefetchCompare.B_*'           python3 script/run_st.py -r npu -v a2 -t tprefetch_compare
+GTEST_FILTER='TPrefetchCompare.C_Overlap_128MB' python3 script/run_st.py -r npu -v a2 -t tprefetch_compare
+```
+
+CI 烟雾测试（iter 调小）：
+
+```bash
+TPREFETCH_COMPARE_ITER=10 python3 script/run_st.py -r npu -v a2 -t tprefetch_compare
+```
+
+跨 rank 跑 Scenario D：
+
+```bash
+python3 script/run_st.py -r npu -v a2 -t tprefetch_compare --comm -n 2
+```
+
+### 15.8 结果填写位置（待实测填入）
+
+跑完后请把 `tprefetch_compare_scenarioA.csv` 关键行（每个 size 取 wall_p50_us）填入下表，删掉本节注解：
+
+| Size | baseline wall_p50 | host_sdma wall_p50 | device_l2 wall_p50 | host band p50 | device band p50 | device/host ratio |
+|---|---|---|---|---|---|---|
+| 64 KB | TBD | TBD | TBD | TBD | TBD | TBD |
+| 1 MB | TBD | TBD | TBD | TBD | TBD | TBD |
+| 16 MB | TBD | TBD | TBD | TBD | TBD | TBD |
+| 64 MB | TBD | TBD | TBD | TBD | TBD | TBD |
+| 128 MB | TBD | TBD | TBD | TBD | TBD | TBD |
+
+Scenario B（4 KB payload）：
+
+| 度量 | p50 | p5 | p95 |
+|---|---|---|---|
+| host PTO_PREFETCH wall | TBD | TBD | TBD |
+| device TPREFETCH_L2 wall | TBD | TBD | TBD |
+| device TPREFETCH_L2 in-kernel | TBD | TBD | TBD |
+
+Scenario C：
+
+| Size | C0 wall_p50 | C1 wall_p50 | C2 wall_p50 | C1 cold_reduc | C2 cold_reduc |
+|---|---|---|---|---|---|
+| 1 MB | TBD | TBD | TBD | TBD | TBD |
+| 16 MB | TBD | TBD | TBD | TBD | TBD |
+| 128 MB | TBD | TBD | TBD | TBD | TBD |
 
 ---
 
