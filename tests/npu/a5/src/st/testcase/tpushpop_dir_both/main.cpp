@@ -1,16 +1,19 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include "test_common.h"
-#include "acl/acl.h"
 #include <gtest/gtest.h>
+
+#include "acl/acl.h"
+#include "test_common.h"
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -106,13 +109,15 @@ void TPushPopDirBothTestFunc(uint32_t M, uint32_t K, uint32_t N)
     EXPECT_TRUE(ret);
 }
 
-// TILE_UP_DOWN: cube result split along rows, each vector core gets upper/lower half
+// TILE_UP_DOWN: cube result split along rows, each vector core gets upper/lower
+// half
 TEST_F(TPushPopDirBothTest, case1_float_dir_both)
 {
     TPushPopDirBothTestFunc<float, 1>(128, 64, 128);
 }
 
-// TILE_LEFT_RIGHT: cube result split along columns, each vector core gets left/right half
+// TILE_LEFT_RIGHT: cube result split along columns, each vector core gets
+// left/right half
 TEST_F(TPushPopDirBothTest, case2_float_dir_both_left_right)
 {
     TPushPopDirBothTestFunc<float, 2>(128, 64, 128);
