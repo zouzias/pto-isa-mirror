@@ -51,7 +51,7 @@ TSORT32 alone fully sorts the 32-element row; no merge step is needed.
 | Item | Status |
 |------|--------|
 | TSORT32 valid for kCols=32 (one full 32-element block) | Inferred from topk (kCols=1280); exact behavior at boundary is assumed |
-| OutValTile/OutIdxTile width=2 (8 bytes for float32) | **Assumption**: tile allocator pads to alignment. If not, first failure point. Workaround: increase kTopK to 8 |
+| OutValTile/OutIdxTile tile Cols | Fixed: `Cols=kGatherWidth=8` (32 bytes, satisfies `pto_tile.hpp:1510` assertion). Valid region `(1, kTopK=2)` set via dynamic constructor. TSTORE stores exactly 2 elements. |
 | MaskPattern::P0001 for half dtype | Included via `if constexpr` (not tested; float path is primary) |
 
 ## How to build and run
