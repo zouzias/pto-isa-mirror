@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_INSTR_HPP
@@ -16,8 +18,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "pto/common/debug.h"
 #include "pto/common/event.hpp"
-#include "pto/common/tassign_check.hpp"
 #include "pto/common/pto_instr_impl.hpp"
+#include "pto/common/tassign_check.hpp"
 #ifdef __COSTMODEL
 #include "pto/costmodel/trace.hpp"
 #endif
@@ -87,13 +89,17 @@ template <typename T, typename AddrType>
 PTO_INST void TASSIGN(T &obj, AddrType addr)
 {
     MAP_INSTR_IMPL(TASSIGN, obj, addr);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 }
 
 // Compile-time address overload: TASSIGN<Addr>(tile)
-// Performs static bounds and alignment checks when Addr is a compile-time constant.
-// Only enabled for Tile / ConvTile types (not GlobalTensor).
+// Performs static bounds and alignment checks when Addr is a compile-time
+// constant. Only enabled for Tile / ConvTile types (not GlobalTensor).
 template <std::size_t Addr, typename T>
 PTO_INST std::enable_if_t<is_tile_data_v<T> || is_conv_tile_v<T>> TASSIGN(T &obj)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     // Trigger compile-time checks (static_assert inside tassign_static_check).
     (void)detail::tassign_static_check<std::remove_cv_t<T>, Addr>{};
@@ -101,6 +107,8 @@ PTO_INST std::enable_if_t<is_tile_data_v<T> || is_conv_tile_v<T>> TASSIGN(T &obj
     // Delegate to the existing runtime TASSIGN path.
     TASSIGN(obj, static_cast<std::size_t>(Addr));
 }
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 
 template <Op OpCode>
 PTO_INST void TSYNC()
@@ -108,6 +116,8 @@ PTO_INST void TSYNC()
     TSYNC_IMPL<OpCode>();
 }
 
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 template <typename... WaitEvents>
 PTO_INST void TSYNC(WaitEvents &... events)
 {
@@ -120,6 +130,8 @@ PTO_INST RecordEvent TADD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     TSYNC(events...);
     MAP_INSTR_IMPL(TADD, dst, src0, src1);
     return {};
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -127,6 +139,8 @@ PTO_INST RecordEvent TABS(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TABS, dst, src);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     return {};
 }
 
@@ -134,6 +148,8 @@ template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, ty
 PTO_INST RecordEvent TAND(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
     TSYNC(events...);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     MAP_INSTR_IMPL(TAND, dst, src0, src1);
     return {};
 }
@@ -141,6 +157,8 @@ PTO_INST RecordEvent TAND(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TOR(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TOR, dst, src0, src1);
     return {};
@@ -148,6 +166,8 @@ PTO_INST RecordEvent TOR(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TSUB(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TSUB, dst, src0, src1);
@@ -155,6 +175,8 @@ PTO_INST RecordEvent TSUB(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 PTO_INST RecordEvent TSUBVIEW(TileDataDst &dst, TileDataSrc &src, uint16_t rowIdx, uint16_t colIdx,
                               WaitEvents &... events)
 {
@@ -162,6 +184,8 @@ PTO_INST RecordEvent TSUBVIEW(TileDataDst &dst, TileDataSrc &src, uint16_t rowId
     MAP_INSTR_IMPL(TSUBVIEW, dst, src, rowIdx, colIdx);
     return {};
 }
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
@@ -169,6 +193,8 @@ PTO_INST RecordEvent TMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     TSYNC(events...);
     MAP_INSTR_IMPL(TMUL, dst, src0, src1);
     return {};
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 }
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
@@ -176,6 +202,8 @@ PTO_INST RecordEvent TMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TMIN, dst, src0, src1);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     return {};
 }
 
@@ -183,6 +211,8 @@ template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, ty
 PTO_INST RecordEvent TMAX(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
     TSYNC(events...);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     MAP_INSTR_IMPL(TMAX, dst, src0, src1);
     return {};
 }
@@ -190,6 +220,8 @@ PTO_INST RecordEvent TMAX(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 template <typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TEXPANDS(TileData &dst, typename TileData::DType scalar, WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TEXPANDS, dst, scalar);
     return {};
@@ -197,6 +229,8 @@ PTO_INST RecordEvent TEXPANDS(TileData &dst, typename TileData::DType scalar, Wa
 
 template <typename TileData, typename GlobalData, typename... WaitEvents>
 PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TLOAD, dst, src);
@@ -204,6 +238,8 @@ PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... event
 }
 
 template <typename TileData, typename GlobalData>
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 PTO_INST RecordEvent TPREFETCH(TileData &dst, GlobalData &src)
 {
     MAP_INSTR_IMPL(TPREFETCH, dst, src);
@@ -227,6 +263,8 @@ PTO_INST RecordEvent TCMPS(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &s
     TSYNC(events...);
     MAP_INSTR_IMPL(TCMPS, dst, src0, src1, mode);
     return {};
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -234,6 +272,8 @@ PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc &src0, TileDataSrc &src1
                           WaitEvents &... events)
 {
     TSYNC(events...);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     MAP_INSTR_IMPL(TCMP, dst, src0, src1, cmpMode);
     return {};
 }
@@ -254,7 +294,8 @@ PTO_INST RecordEvent TSTORE(GlobalData &dst, TileData &src, WaitEvents &... even
     return {};
 }
 
-// UF-aware overload: allow selecting unit-flag phase while keeping the TSTORE name.
+// UF-aware overload: allow selecting unit-flag phase while keeping the TSTORE
+// name.
 template <STPhase Phase, typename TileData, typename GlobalData, typename... WaitEvents>
 PTO_INST RecordEvent TSTORE(GlobalData &dst, TileData &src, WaitEvents &... events)
 {
@@ -338,6 +379,8 @@ PTO_INST RecordEvent TDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TSHL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TSHL, dst, src0, src1);
     return {};
@@ -345,6 +388,8 @@ PTO_INST RecordEvent TSHL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TSHR(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TSHR, dst, src0, src1);
@@ -352,6 +397,8 @@ PTO_INST RecordEvent TSHR(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 }
 
 template <typename TileData, typename... WaitEvents>
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 PTO_INST RecordEvent TAND(TileData &dst, TileData &src0, TileData &src1, WaitEvents &... events)
 {
     TSYNC(events...);
@@ -359,6 +406,8 @@ PTO_INST RecordEvent TAND(TileData &dst, TileData &src0, TileData &src1, WaitEve
     return {};
 }
 
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 template <typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TOR(TileData &dst, TileData &src0, TileData &src1, WaitEvents &... events)
 {
@@ -366,6 +415,8 @@ PTO_INST RecordEvent TOR(TileData &dst, TileData &src0, TileData &src1, WaitEven
     MAP_INSTR_IMPL(TOR, dst, src0, src1);
     return {};
 }
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
           typename... WaitEvents>
@@ -373,6 +424,8 @@ PTO_INST RecordEvent TXOR(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
                           WaitEvents &... events)
 {
     TSYNC(events...);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     MAP_INSTR_IMPL(TXOR, dst, src0, src1, tmp);
     return {};
 }
@@ -396,6 +449,8 @@ PTO_INST RecordEvent TRECIP(TileDataDst &dst, TileDataSrc &src, WaitEvents &... 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
           typename... WaitEvents>
 PTO_INST RecordEvent TPRELU(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp,
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
                             WaitEvents &... events)
 {
     TSYNC(events...);
@@ -414,6 +469,8 @@ PTO_INST RecordEvent TPRINT(TileData &src, WaitEvents &... events)
 template <typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TADDC(TileData &dst, TileData &src0, TileData &src1, TileData &src2, WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TADDC, dst, src0, src1, src2);
     return {};
@@ -421,6 +478,8 @@ PTO_INST RecordEvent TADDC(TileData &dst, TileData &src0, TileData &src1, TileDa
 
 template <typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TSUBC(TileData &dst, TileData &src0, TileData &src1, TileData &src2, WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TSUBC, dst, src0, src1, src2);
@@ -433,9 +492,12 @@ PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMa
     TSYNC(events...);
     MAP_INSTR_IMPL(TMATMUL, cMatrix, aMatrix, bMatrix);
     return {};
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 }
 
-// UF-aware overload enabling unit-flag selection via AccPhase while retaining the TMATMUL name.
+// UF-aware overload enabling unit-flag selection via AccPhase while retaining
+// the TMATMUL name.
 template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
 PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, WaitEvents &... events)
 {
@@ -447,13 +509,18 @@ PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMa
 template <typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
 PTO_INST RecordEvent TMATMUL_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix,
                                  WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TMATMUL_ACC, cOutMatrix, cInMatrix, aMatrix, bMatrix);
     return {};
 }
 
-// UF-aware overloads for TMATMUL_ACC: explicit input/output or shared accumulator tile.
+// UF-aware overloads for TMATMUL_ACC: explicit input/output or shared
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
+// accumulator tile.
 template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
 PTO_INST RecordEvent TMATMUL_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix,
                                  WaitEvents &... events)
@@ -475,13 +542,18 @@ PTO_INST RecordEvent TMATMUL_ACC(TileRes &cMatrix, TileLeft &aMatrix, TileRight 
 template <typename TileRes, typename TileLeft, typename TileRight, typename TileBias, typename... WaitEvents>
 PTO_INST RecordEvent TMATMUL_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData,
                                   WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TMATMUL_BIAS, cMatrix, aMatrix, bMatrix, biasData);
     return {};
 }
 
-// UF-aware overload enabling unit-flag selection for bias matmul while keeping the TMATMUL_BIAS name.
+// UF-aware overload enabling unit-flag selection for bias matmul while keeping
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
+// the TMATMUL_BIAS name.
 template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight, typename TileBias,
           typename... WaitEvents>
 PTO_INST RecordEvent TMATMUL_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData,
@@ -495,6 +567,8 @@ PTO_INST RecordEvent TMATMUL_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight
 template <typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
 PTO_INST RecordEvent TGEMV(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TGEMV, cMatrix, aMatrix, bMatrix);
     return {};
@@ -502,6 +576,8 @@ PTO_INST RecordEvent TGEMV(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatr
 
 template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
 PTO_INST RecordEvent TGEMV(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL_T(TGEMV, PTO_TEMPLATE_ARGS(Phase), cMatrix, aMatrix, bMatrix);
@@ -511,6 +587,8 @@ PTO_INST RecordEvent TGEMV(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatr
 template <typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
 PTO_INST RecordEvent TGEMV_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix,
                                WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TGEMV_ACC, cOutMatrix, cInMatrix, aMatrix, bMatrix);
@@ -518,6 +596,8 @@ PTO_INST RecordEvent TGEMV_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft
 }
 
 template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 PTO_INST RecordEvent TGEMV_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix,
                                WaitEvents &... events)
 {
@@ -529,6 +609,8 @@ PTO_INST RecordEvent TGEMV_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft
 template <typename TileRes, typename TileLeft, typename TileRight, typename TileBias, typename... WaitEvents>
 PTO_INST RecordEvent TGEMV_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData,
                                 WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TGEMV_BIAS, cMatrix, aMatrix, bMatrix, biasData);
@@ -536,6 +618,8 @@ PTO_INST RecordEvent TGEMV_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &
 }
 
 template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight, typename TileBias,
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
           typename... WaitEvents>
 PTO_INST RecordEvent TGEMV_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData,
                                 WaitEvents &... events)
@@ -585,6 +669,8 @@ PTO_INST RecordEvent TMRGSORT(DstTileData &dst, MrgSortExecutedNumList &executed
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TMRGSORT(DstTileData &dst, SrcTileData &src, uint32_t blockLen, WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TMRGSORT, dst, src, blockLen);
     return {};
@@ -592,6 +678,8 @@ PTO_INST RecordEvent TMRGSORT(DstTileData &dst, SrcTileData &src, uint32_t block
 
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0,
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
                               WaitEvents &... events)
 {
     TSYNC(events...);
@@ -599,6 +687,8 @@ PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, uint16_t index
     return {};
 }
 
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode, typename... WaitEvents>
 PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol,
                               WaitEvents &... events)
@@ -727,6 +817,8 @@ PTO_INST RecordEvent TFILLPAD(DstTileData &dst, SrcTileData &src, WaitEvents &..
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TFILLPAD_INPLACE(DstTileData &dst, SrcTileData &src, WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TFILLPAD_INPLACE, dst, src);
     return {};
@@ -734,6 +826,8 @@ PTO_INST RecordEvent TFILLPAD_INPLACE(DstTileData &dst, SrcTileData &src, WaitEv
 
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TFILLPAD_EXPAND(DstTileData &dst, SrcTileData &src, WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TFILLPAD_EXPAND, dst, src);
@@ -741,6 +835,8 @@ PTO_INST RecordEvent TFILLPAD_EXPAND(DstTileData &dst, SrcTileData &src, WaitEve
 }
 
 // TSORT32不自动实现wait, 需手动TSYNC(events...)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 template <typename DstTileData, typename SrcTileData, typename IdxTileData>
 PTO_INST RecordEvent TSORT32(DstTileData &dst, SrcTileData &src, IdxTileData &idx)
 {
@@ -748,6 +844,8 @@ PTO_INST RecordEvent TSORT32(DstTileData &dst, SrcTileData &src, IdxTileData &id
     return {};
 }
 
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 template <typename DstTileData, typename SrcTileData, typename IdxTileData, typename TmpTileData>
 PTO_INST RecordEvent TSORT32(DstTileData &dst, SrcTileData &src, IdxTileData &idx, TmpTileData &tmp)
 {
@@ -755,6 +853,8 @@ PTO_INST RecordEvent TSORT32(DstTileData &dst, SrcTileData &src, IdxTileData &id
     return {};
 }
 
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 template <typename TileDataD, typename TileDataS0, typename TileDataS1, typename TileDataTmp, typename... WaitEvents>
 PTO_INST RecordEvent TGATHER(TileDataD &dst, TileDataS0 &src0, TileDataS1 &src1, TileDataTmp &tmp,
                              WaitEvents &... events)
@@ -802,6 +902,8 @@ PTO_INST RecordEvent TGATHER(DstTileData &dst, SrcTileData &src, WaitEvents &...
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TPARTADD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TPARTADD, dst, src0, src1);
     return {};
@@ -809,6 +911,8 @@ PTO_INST RecordEvent TPARTADD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TPARTMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TPARTMUL, dst, src0, src1);
@@ -816,6 +920,8 @@ PTO_INST RecordEvent TPARTMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
 }
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 PTO_INST RecordEvent TPARTMAX(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
     TSYNC(events...);
@@ -823,6 +929,8 @@ PTO_INST RecordEvent TPARTMAX(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
     return {};
 }
 
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TPARTMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
@@ -852,6 +960,8 @@ template <typename TileDataD, typename TileDataS, typename... WaitEvents>
 PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode,
                           WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TCVT, dst, src, mode, satMode);
     return {};
@@ -859,6 +969,8 @@ PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, Satura
 
 template <typename TileDataD, typename TileDataS, typename... WaitEvents>
 PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TCVT, dst, src, mode);
@@ -866,6 +978,8 @@ PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, WaitEv
 }
 
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &... events)
 {
     TSYNC(events...);
@@ -929,6 +1043,8 @@ PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantS
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
 PTO_INST RecordEvent TROWSUM(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TROWSUM, dst, src, tmp);
     return {};
@@ -936,6 +1052,8 @@ PTO_INST RecordEvent TROWSUM(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
 
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
 PTO_INST RecordEvent TROWPROD(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TROWPROD, dst, src, tmp);
@@ -943,6 +1061,8 @@ PTO_INST RecordEvent TROWPROD(TileDataOut &dst, TileDataIn &src, TileDataTmp &tm
 }
 
 template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 PTO_INST RecordEvent TCOLSUM(TileDataOut &dst, TileDataIn &src, WaitEvents &... events)
 {
     TSYNC(events...);
@@ -950,6 +1070,8 @@ PTO_INST RecordEvent TCOLSUM(TileDataOut &dst, TileDataIn &src, WaitEvents &... 
     return {};
 }
 
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
 PTO_INST RecordEvent TCOLSUM(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, bool isBinary, WaitEvents &... events)
 {
@@ -957,6 +1079,8 @@ PTO_INST RecordEvent TCOLSUM(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
     MAP_INSTR_IMPL(TCOLSUM, dst, src, tmp, isBinary);
     return {};
 }
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 
 template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
 PTO_INST RecordEvent TCOLPROD(TileDataOut &dst, TileDataIn &src, WaitEvents &... events)
@@ -964,6 +1088,8 @@ PTO_INST RecordEvent TCOLPROD(TileDataOut &dst, TileDataIn &src, WaitEvents &...
     TSYNC(events...);
     MAP_INSTR_IMPL(TCOLPROD, dst, src);
     return {};
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 }
 
 template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
@@ -971,6 +1097,8 @@ PTO_INST RecordEvent TCOLMAX(TileDataOut &dst, TileDataIn &src, WaitEvents &... 
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TCOLMAX, dst, src);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     return {};
 }
 
@@ -993,6 +1121,8 @@ PTO_INST RecordEvent TROWARGMAX(TileDataOut &dst, TileDataIn &src, TileDataTmp &
 template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
 PTO_INST RecordEvent TRESHAPE(TileDataOut &dst, TileDataIn &src, WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TRESHAPE, dst, src);
     return {};
@@ -1000,6 +1130,8 @@ PTO_INST RecordEvent TRESHAPE(TileDataOut &dst, TileDataIn &src, WaitEvents &...
 
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
 PTO_INST RecordEvent TROWMIN(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TROWMIN, dst, src, tmp);
@@ -1017,6 +1149,8 @@ PTO_INST RecordEvent TROWARGMIN(TileDataOut &dst, TileDataIn &src, TileDataTmp &
 template <typename TileDataDst, typename TileDataMask, typename TileDataSrc, typename TileDataTmp,
           typename... WaitEvents>
 PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &src, TileDataTmp &tmp,
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
                            typename TileDataSrc::DType scalar, WaitEvents &... events)
 {
     TSYNC(events...);
@@ -1024,6 +1158,8 @@ PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &sr
     return {};
 }
 
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 template <typename TileData, typename MaskTile, typename TmpTile, typename... WaitEvents>
 PTO_INST RecordEvent TSEL(TileData &dst, MaskTile &selMask, TileData &src0, TileData &src1, TmpTile &tmp,
                           WaitEvents &... events)
@@ -1031,6 +1167,8 @@ PTO_INST RecordEvent TSEL(TileData &dst, MaskTile &selMask, TileData &src0, Tile
     TSYNC(events...);
     MAP_INSTR_IMPL(TSEL, dst, selMask, src0, src1, tmp);
     return {};
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
@@ -1038,6 +1176,8 @@ PTO_INST RecordEvent TTRANS(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TTRANS, dst, src, tmp);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     return {};
 }
 
@@ -1045,6 +1185,8 @@ template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TMINS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar,
                            WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TMINS, dst, src, scalar);
     return {};
@@ -1052,6 +1194,8 @@ PTO_INST RecordEvent TMINS(TileDataDst &dst, TileDataSrc &src, typename TileData
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TROWEXPAND(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TROWEXPAND, dst, src);
@@ -1079,6 +1223,8 @@ PTO_INST RecordEvent TROWEXPANDDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TROWEXPANDMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TROWEXPANDMUL, dst, src0, src1);
     return {};
@@ -1086,6 +1232,8 @@ PTO_INST RecordEvent TROWEXPANDMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
           typename... WaitEvents>
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 PTO_INST RecordEvent TROWEXPANDMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp,
                                    WaitEvents &... events)
 {
@@ -1093,6 +1241,8 @@ PTO_INST RecordEvent TROWEXPANDMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDat
     MAP_INSTR_IMPL(TROWEXPANDMUL, dst, src0, src1, tmp);
     return {};
 }
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TROWEXPANDSUB(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
@@ -1100,6 +1250,8 @@ PTO_INST RecordEvent TROWEXPANDSUB(TileDataDst &dst, TileDataSrc0 &src0, TileDat
     TSYNC(events...);
     MAP_INSTR_IMPL(TROWEXPANDSUB, dst, src0, src1);
     return {};
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 }
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
@@ -1107,6 +1259,8 @@ template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, ty
 PTO_INST RecordEvent TROWEXPANDSUB(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp,
                                    WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TROWEXPANDSUB, dst, src0, src1, tmp);
     return {};
@@ -1114,6 +1268,8 @@ PTO_INST RecordEvent TROWEXPANDSUB(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TROWEXPANDADD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TROWEXPANDADD, dst, src0, src1);
@@ -1121,6 +1277,8 @@ PTO_INST RecordEvent TROWEXPANDADD(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 }
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
           typename... WaitEvents>
 PTO_INST RecordEvent TROWEXPANDADD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp,
                                    WaitEvents &... events)
@@ -1128,6 +1286,8 @@ PTO_INST RecordEvent TROWEXPANDADD(TileDataDst &dst, TileDataSrc0 &src0, TileDat
     TSYNC(events...);
     MAP_INSTR_IMPL(TROWEXPANDADD, dst, src0, src1, tmp);
     return {};
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 }
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
@@ -1135,6 +1295,8 @@ PTO_INST RecordEvent TROWEXPANDMAX(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TROWEXPANDMAX, dst, src0, src1);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     return {};
 }
 
@@ -1142,6 +1304,8 @@ template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, ty
           typename... WaitEvents>
 PTO_INST RecordEvent TROWEXPANDMAX(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp,
                                    WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TROWEXPANDMAX, dst, src0, src1, tmp);
@@ -1149,6 +1313,8 @@ PTO_INST RecordEvent TROWEXPANDMAX(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 }
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 PTO_INST RecordEvent TROWEXPANDMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
     TSYNC(events...);
@@ -1156,6 +1322,8 @@ PTO_INST RecordEvent TROWEXPANDMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDat
     return {};
 }
 
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
           typename... WaitEvents>
 PTO_INST RecordEvent TROWEXPANDMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp,
@@ -1163,6 +1331,8 @@ PTO_INST RecordEvent TROWEXPANDMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TROWEXPANDMIN, dst, src0, src1, tmp);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     return {};
 }
 
@@ -1170,6 +1340,8 @@ template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, ty
 PTO_INST RecordEvent TROWEXPANDEXPDIF(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
     TSYNC(events...);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     MAP_INSTR_IMPL(TROWEXPANDEXPDIF, dst, src0, src1);
     return {};
 }
@@ -1177,6 +1349,8 @@ PTO_INST RecordEvent TROWEXPANDEXPDIF(TileDataDst &dst, TileDataSrc0 &src0, Tile
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
           typename... WaitEvents>
 PTO_INST RecordEvent TROWEXPANDEXPDIF(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp,
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
                                       WaitEvents &... events)
 {
     TSYNC(events...);
@@ -1220,6 +1394,8 @@ PTO_INST RecordEvent TEXP(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TNOT(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TNOT, dst, src);
     return {};
@@ -1227,6 +1403,8 @@ PTO_INST RecordEvent TNOT(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TRELU(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TRELU, dst, src);
@@ -1234,6 +1412,8 @@ PTO_INST RecordEvent TRELU(TileDataDst &dst, TileDataSrc &src, WaitEvents &... e
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename TileDataOffset, typename... WaitEvents>
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 PTO_INST RecordEvent TGATHERB(TileDataDst &dst, TileDataSrc &src, TileDataOffset &offset, WaitEvents &... events)
 {
     TSYNC(events...);
@@ -1241,6 +1421,8 @@ PTO_INST RecordEvent TGATHERB(TileDataDst &dst, TileDataSrc &src, TileDataOffset
     return {};
 }
 
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TADDS(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType scalar,
                            WaitEvents &... events)
@@ -1248,6 +1430,8 @@ PTO_INST RecordEvent TADDS(TileDataDst &dst, TileDataSrc &src0, typename TileDat
     TSYNC(events...);
     MAP_INSTR_IMPL(TADDS, dst, src0, scalar);
     return {};
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -1255,6 +1439,8 @@ PTO_INST RecordEvent TAXPY(TileDataDst &dst, TileDataSrc &src0, typename TileDat
                            WaitEvents &... events)
 {
     TSYNC(events...);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     MAP_INSTR_IMPL(TAXPY, dst, src0, scalar);
     return {};
 }
@@ -1262,6 +1448,8 @@ PTO_INST RecordEvent TAXPY(TileDataDst &dst, TileDataSrc &src0, typename TileDat
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TSUBS(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType scalar,
                            WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TSUBS, dst, src0, scalar);
@@ -1280,6 +1468,8 @@ PTO_INST RecordEvent TDIVS(TileDataDst &dst, TileDataSrc &src0, typename TileDat
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TMULS(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType scalar,
                            WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TMULS, dst, src0, scalar);
@@ -1316,6 +1506,8 @@ PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileData
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TMAXS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar,
                            WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TMAXS, dst, src, scalar);
@@ -1323,6 +1515,8 @@ PTO_INST RecordEvent TMAXS(TileDataDst &dst, TileDataSrc &src, typename TileData
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 PTO_INST RecordEvent TANDS(TileDataDst &dst, TileDataSrc &src, typename TileDataDst::DType scalar,
                            WaitEvents &... events)
 {
@@ -1330,6 +1524,8 @@ PTO_INST RecordEvent TANDS(TileDataDst &dst, TileDataSrc &src, typename TileData
     MAP_INSTR_IMPL(TANDS, dst, src, scalar);
     return {};
 }
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TORS(TileDataDst &dst, TileDataSrc &src, typename TileDataDst::DType scalar,
@@ -1338,6 +1534,8 @@ PTO_INST RecordEvent TORS(TileDataDst &dst, TileDataSrc &src, typename TileDataD
     TSYNC(events...);
     MAP_INSTR_IMPL(TORS, dst, src, scalar);
     return {};
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -1345,6 +1543,8 @@ PTO_INST RecordEvent TSHLS(TileDataDst &dst, TileDataSrc &src, typename TileData
                            WaitEvents &... events)
 {
     TSYNC(events...);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     MAP_INSTR_IMPL(TSHLS, dst, src, scalar);
     return {};
 }
@@ -1352,6 +1552,8 @@ PTO_INST RecordEvent TSHLS(TileDataDst &dst, TileDataSrc &src, typename TileData
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TSHRS(TileDataDst &dst, TileDataSrc &src, typename TileDataDst::DType scalar,
                            WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TSHRS, dst, src, scalar);
@@ -1359,6 +1561,8 @@ PTO_INST RecordEvent TSHRS(TileDataDst &dst, TileDataSrc &src, typename TileData
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 PTO_INST RecordEvent TXORS(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType scalar, TileDataTmp &tmp,
                            WaitEvents &... events)
 {
@@ -1366,6 +1570,8 @@ PTO_INST RecordEvent TXORS(TileDataDst &dst, TileDataSrc &src0, typename TileDat
     MAP_INSTR_IMPL(TXORS, dst, src0, scalar, tmp);
     return {};
 }
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TLRELU(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar,
@@ -1373,6 +1579,8 @@ PTO_INST RecordEvent TLRELU(TileDataDst &dst, TileDataSrc &src, typename TileDat
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TLRELU, dst, src, scalar);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     return {};
 }
 
@@ -1380,6 +1588,8 @@ template <typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TADDSC(TileData &dst, TileData &src0, typename TileData::DType scalar, TileData &src1,
                             WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TADDSC, dst, src0, scalar, src1);
     return {};
@@ -1387,6 +1597,8 @@ PTO_INST RecordEvent TADDSC(TileData &dst, TileData &src0, typename TileData::DT
 
 template <typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TSUBSC(TileData &dst, TileData &src0, typename TileData::DType scalar, TileData &src1,
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
                             WaitEvents &... events)
 {
     TSYNC(events...);
@@ -1394,6 +1606,8 @@ PTO_INST RecordEvent TSUBSC(TileData &dst, TileData &src0, typename TileData::DT
     return {};
 }
 
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
 PTO_INST RecordEvent TCOLMIN(TileDataOut &dst, TileDataIn &src, WaitEvents &... events)
 {
@@ -1401,6 +1615,8 @@ PTO_INST RecordEvent TCOLMIN(TileDataOut &dst, TileDataIn &src, WaitEvents &... 
     MAP_INSTR_IMPL(TCOLMIN, dst, src);
     return {};
 }
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 
 template <typename TileDataD, typename TileDataS, typename TileDataI, typename... WaitEvents>
 PTO_INST RecordEvent TSCATTER(TileDataD &dst, TileDataS &src, TileDataI &indexes, WaitEvents &... events)
@@ -1408,6 +1624,8 @@ PTO_INST RecordEvent TSCATTER(TileDataD &dst, TileDataS &src, TileDataI &indexes
     TSYNC(events...);
     MAP_INSTR_IMPL(TSCATTER, dst, src, indexes);
     return {};
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -1415,6 +1633,8 @@ PTO_INST RecordEvent TCOLEXPAND(TileDataDst &dst, TileDataSrc &src, WaitEvents &
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TCOLEXPAND, dst, src);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     return {};
 }
 
@@ -1422,6 +1642,8 @@ template <typename TileDst, typename GlobalData, typename TileInd, typename... W
 PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, WaitEvents &... events)
 {
     TSYNC(events...);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     MAP_INSTR_IMPL(MGATHER, dst, src, indexes);
     return {};
 }
@@ -1453,6 +1675,8 @@ PTO_INST RecordEvent TCOLEXPANDDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TCOLEXPANDMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TCOLEXPANDMUL, dst, src0, src1);
     return {};
@@ -1460,6 +1684,8 @@ PTO_INST RecordEvent TCOLEXPANDMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TCOLEXPANDADD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TCOLEXPANDADD, dst, src0, src1);
@@ -1467,6 +1693,8 @@ PTO_INST RecordEvent TCOLEXPANDADD(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 }
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 PTO_INST RecordEvent TCOLEXPANDMAX(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
     TSYNC(events...);
@@ -1474,6 +1702,8 @@ PTO_INST RecordEvent TCOLEXPANDMAX(TileDataDst &dst, TileDataSrc0 &src0, TileDat
     return {};
 }
 
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TCOLEXPANDMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
@@ -1481,6 +1711,8 @@ PTO_INST RecordEvent TCOLEXPANDMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDat
     MAP_INSTR_IMPL(TCOLEXPANDMIN, dst, src0, src1);
     return {};
 }
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TCOLEXPANDSUB(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
@@ -1488,6 +1720,8 @@ PTO_INST RecordEvent TCOLEXPANDSUB(TileDataDst &dst, TileDataSrc0 &src0, TileDat
     TSYNC(events...);
     MAP_INSTR_IMPL(TCOLEXPANDSUB, dst, src0, src1);
     return {};
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 }
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
@@ -1495,6 +1729,8 @@ PTO_INST RecordEvent TCOLEXPANDEXPDIF(TileDataDst &dst, TileDataSrc0 &src0, Tile
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TCOLEXPANDEXPDIF, dst, src0, src1);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     return {};
 }
 
@@ -1502,6 +1738,8 @@ template <typename TileDataDst, typename TileDataSrc, typename TileDataPara, typ
 PTO_INST RecordEvent TDEQUANT(TileDataDst &dst, TileDataSrc &src, TileDataPara &scale, TileDataPara &offset,
                               WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TDEQUANT, dst, src, scale, offset);
     return {};
@@ -1584,6 +1822,8 @@ PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataPara &sc
 template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
 PTO_INST RecordEvent TGET_SCALE_ADDR(TileDataOut &dst, TileDataIn &src, WaitEvents &... events)
 {
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     TSYNC(events...);
     MAP_INSTR_IMPL(TGET_SCALE_ADDR, dst, src);
     return {};

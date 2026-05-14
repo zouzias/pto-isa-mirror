@@ -1,16 +1,19 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include "test_common.h"
-#include "acl/acl.h"
 #include <gtest/gtest.h>
+
+#include "acl/acl.h"
+#include "test_common.h"
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -379,7 +382,8 @@ void test_tcvt_saturation()
     aclrtMemcpy(dstTruncHost, dstFileSize, dstTruncDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
     aclrtMemcpy(dstDefaultHost, dstFileSize, dstDefaultDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
-    // Write output files IMMEDIATELY after getting results - ensures fresh data every run
+    // Write output files IMMEDIATELY after getting results - ensures fresh data
+    // every run
     WriteFile(GetGoldenDir() + "/output_saturated.bin", dstSatHost, dstFileSize);
     WriteFile(GetGoldenDir() + "/output_truncated.bin", dstTruncHost, dstFileSize);
     WriteFile(GetGoldenDir() + "/output_default.bin", dstDefaultHost, dstFileSize);
@@ -392,7 +396,8 @@ void test_tcvt_saturation()
     bool truncOk = ResultCmp<D>(goldenTrunc, devTrunc, 0.001f);
 
     // Compare default output
-    // PyTorch only provides truncated mode golden data, so we compare against that
+    // PyTorch only provides truncated mode golden data, so we compare against
+    // that
     std::string goldenDefaultFile = GetGoldenDir() + "/golden_truncated.bin";
 
     std::vector<D> goldenDefault(dstFileSize);
@@ -421,7 +426,8 @@ void test_tcvt_saturation()
 
 // Saturation mode test cases (only for supported conversions on A2A3)
 // Minimal saturation mode tests (fp32→int8 is NOT supported on A2A3 hardware)
-// Disabled at compile time by default - define ENABLE_SATURATION_TESTS to enable
+// Disabled at compile time by default - define ENABLE_SATURATION_TESTS to
+// enable
 #ifdef ENABLE_SATURATION_TESTS
 TEST_F(TCVTTest, saturation_fp16_int8_1x32)
 {

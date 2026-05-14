@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TBINS_HPP
@@ -14,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <algorithm>
 #include <cmath>
 #include <pto/common/pto_tile.hpp>
+
 #include "pto/cpu/tile_offsets.hpp"
 
 namespace pto {
@@ -23,43 +26,60 @@ constexpr int CONSTRAINT_ROWMAJOR = 3;
 constexpr int NO_CONSTRAINT = 4;
 
 template <ElementOp op>
-struct CategoryBinSOps : std::false_type {};
+struct CategoryBinSOps : std::false_type {
+};
 
 template <>
-struct CategoryBinSOps<ElementOp::OP_ADDS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {};
+struct CategoryBinSOps<ElementOp::OP_ADDS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {
+};
 template <>
-struct CategoryBinSOps<ElementOp::OP_DIVS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {};
+struct CategoryBinSOps<ElementOp::OP_DIVS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {
+};
 template <>
-struct CategoryBinSOps<ElementOp::OP_RDIVS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {};
+struct CategoryBinSOps<ElementOp::OP_RDIVS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {
+};
 template <>
-struct CategoryBinSOps<ElementOp::OP_MULS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {};
+struct CategoryBinSOps<ElementOp::OP_MULS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {
+};
 template <>
-struct CategoryBinSOps<ElementOp::OP_MAXS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {};
+struct CategoryBinSOps<ElementOp::OP_MAXS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {
+};
 template <>
-struct CategoryBinSOps<ElementOp::OP_LRELU> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {};
+struct CategoryBinSOps<ElementOp::OP_LRELU> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {
+};
 
 template <>
-struct CategoryBinSOps<ElementOp::OP_SUBS> : std::integral_constant<int, CONSTRAINT_VEC> {};
+struct CategoryBinSOps<ElementOp::OP_SUBS> : std::integral_constant<int, CONSTRAINT_VEC> {
+};
 template <>
-struct CategoryBinSOps<ElementOp::OP_REMS> : std::integral_constant<int, CONSTRAINT_VEC> {};
+struct CategoryBinSOps<ElementOp::OP_REMS> : std::integral_constant<int, CONSTRAINT_VEC> {
+};
 template <>
-struct CategoryBinSOps<ElementOp::OP_MINS> : std::integral_constant<int, CONSTRAINT_VEC> {};
+struct CategoryBinSOps<ElementOp::OP_MINS> : std::integral_constant<int, CONSTRAINT_VEC> {
+};
 template <>
-struct CategoryBinSOps<ElementOp::OP_ANDS> : std::integral_constant<int, CONSTRAINT_VEC> {};
+struct CategoryBinSOps<ElementOp::OP_ANDS> : std::integral_constant<int, CONSTRAINT_VEC> {
+};
 template <>
-struct CategoryBinSOps<ElementOp::OP_ORS> : std::integral_constant<int, CONSTRAINT_VEC> {};
+struct CategoryBinSOps<ElementOp::OP_ORS> : std::integral_constant<int, CONSTRAINT_VEC> {
+};
 template <>
-struct CategoryBinSOps<ElementOp::OP_FMODS> : std::integral_constant<int, CONSTRAINT_VEC> {};
+struct CategoryBinSOps<ElementOp::OP_FMODS> : std::integral_constant<int, CONSTRAINT_VEC> {
+};
 template <>
-struct CategoryBinSOps<ElementOp::OP_SHLS> : std::integral_constant<int, CONSTRAINT_VEC> {};
+struct CategoryBinSOps<ElementOp::OP_SHLS> : std::integral_constant<int, CONSTRAINT_VEC> {
+};
 template <>
-struct CategoryBinSOps<ElementOp::OP_SHRS> : std::integral_constant<int, CONSTRAINT_VEC> {};
+struct CategoryBinSOps<ElementOp::OP_SHRS> : std::integral_constant<int, CONSTRAINT_VEC> {
+};
 
 template <>
-struct CategoryBinSOps<ElementOp::OP_SELS> : std::integral_constant<int, CONSTRAINT_ROWMAJOR> {};
+struct CategoryBinSOps<ElementOp::OP_SELS> : std::integral_constant<int, CONSTRAINT_ROWMAJOR> {
+};
 
 template <>
-struct CategoryBinSOps<ElementOp::OP_XORS> : std::integral_constant<int, NO_CONSTRAINT> {};
+struct CategoryBinSOps<ElementOp::OP_XORS> : std::integral_constant<int, NO_CONSTRAINT> {
+};
 
 template <typename TileData, ElementOp op>
 PTO_INTERNAL void CheckBinSOpTileData()
@@ -68,13 +88,16 @@ PTO_INTERNAL void CheckBinSOpTileData()
 
     if constexpr (CategoryBinSOps<op>::value == CONSTRAINT_ROWMAJOR ||
                   CategoryBinSOps<op>::value == CONSTRAINT_VEC_ROWMAJOR) {
-        static_assert(TileData::isRowMajor, "UnaryTileScalarOpImpl: TileType of src and dst tiles must be Row Major.");
+        static_assert(TileData::isRowMajor,
+                      "UnaryTileScalarOpImpl: TileType of src and dst tiles must "
+                      "be Row Major.");
     }
 
     if constexpr (CategoryBinSOps<op>::value == CONSTRAINT_VEC ||
                   CategoryBinSOps<op>::value == CONSTRAINT_VEC_ROWMAJOR) {
         static_assert(TileData::Loc == TileType::Vec,
-                      "UnaryTileScalarOpImpl: TileType of src and dst tiles must be TileType::Vec.");
+                      "UnaryTileScalarOpImpl: TileType of src and dst tiles must "
+                      "be TileType::Vec.");
     }
 }
 
@@ -82,7 +105,8 @@ template <typename TileDst, typename TileSrc, ElementOp op>
 PTO_INTERNAL void CheckDstSrcTileData(TileDst &dst, TileSrc &src)
 {
     static_assert(std::is_same_v<typename TileDst::DType, typename TileSrc::DType>,
-                  "UnaryTileScalarOpImpl: The data type of dst must be consistent with src.");
+                  "UnaryTileScalarOpImpl: The data type of dst must be consistent with "
+                  "src.");
 
     CheckBinSOpTileData<TileDst, op>();
     CheckBinSOpTileData<TileSrc, op>();

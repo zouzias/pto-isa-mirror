@@ -1,16 +1,19 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include "test_common.h"
-#include "acl/acl.h"
 #include <gtest/gtest.h>
+
+#include "acl/acl.h"
+#include "test_common.h"
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -99,7 +102,8 @@ void TPushPopMatmulAddTestFunc(uint32_t M, uint32_t K, uint32_t N)
     EXPECT_TRUE(ret);
 }
 
-// TILE_UP_DOWN: cube result split along rows, each vector core gets upper/lower half
+// TILE_UP_DOWN: cube result split along rows, each vector core gets upper/lower
+// half
 TEST_F(TPushPopCVTest, case1_half_single_tile)
 {
     TPushPopMatmulAddTestFunc<aclFloat16, float, 1>(16, 32, 32);
@@ -120,7 +124,8 @@ TEST_F(TPushPopCVTest, case3_float_single_tile)
     TPushPopMatmulAddTestFunc<float, float, 3>(16, 32, 32);
 }
 
-// TILE_LEFT_RIGHT: cube result split along columns, each vector core gets left/right half
+// TILE_LEFT_RIGHT: cube result split along columns, each vector core gets
+// left/right half
 TEST_F(TPushPopCVTest, case5_half_single_tile_left_right)
 {
     TPushPopMatmulAddTestFunc<aclFloat16, float, 5>(16, 32, 32);
