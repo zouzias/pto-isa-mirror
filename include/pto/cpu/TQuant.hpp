@@ -30,6 +30,12 @@ enum class QuantType
     INT8_ASYM
 };
 
+enum class QuantScaleAlg
+{
+    OCP,
+    NV
+};
+
 enum class VecStoreMode
 {
     ND,
@@ -174,7 +180,26 @@ inline uint8_t ComputeSharedExponent(float maxAbsValue)
     if (exponent == 0xFFu) {
         return 0xFFu;
     }
+    if (exponent <= 8u) {
+        return 0u;
+    }
     return static_cast<uint8_t>(exponent - 8u);
+}
+
+inline uint8_t ComputeSharedExponentNV(float maxAbsValue)
+{
+    if (maxAbsValue == 0.0f) {
+        return 0;
+    }
+    const float descale = maxAbsValue * (1.0f / 448.0f);
+    const uint32_t bits = FloatToBits(descale);
+    const uint32_t exponent = (bits & 0x7F800000u) >> 23;
+    const uint32_t mantissa = bits & 0x007FFFFFu;
+    if (exponent == 0xFFu) {
+        return 0xFFu;
+    }
+    const bool roundUp = mantissa > 0u && exponent != 0xFEu && !(exponent == 0u && mantissa <= 0x00400000u);
+    return static_cast<uint8_t>(exponent + (roundUp ? 1u : 0u));
 }
 
 inline uint8_t ComputeE2M1SharedExponent(float maxAbsValue)
@@ -273,6 +298,26 @@ inline float ComputeMxGroupScaling(uint8_t e8m0)
     return ComputeE2M1ScalingFromExponent(e8m0);
 }
 
+template <QuantType quant_type, QuantScaleAlg scale_alg>
+inline uint8_t ComputeMxSharedExponent(float maxAbsValue)
+{
+    if constexpr (quant_type == QuantType::MXFP8 && scale_alg == QuantScaleAlg::NV) {
+        return ComputeSharedExponentNV(maxAbsValue);
+    }
+    return ComputeMxSharedExponent<quant_type>(maxAbsValue);
+}
+
+template <QuantType quant_type, QuantScaleAlg scale_alg>
+inline float ComputeMxGroupScaling(float maxAbsValue, uint8_t e8m0)
+{
+    if constexpr (quant_type == QuantType::MXFP8 && scale_alg == QuantScaleAlg::NV) {
+        if (maxAbsValue == 0.0f) {
+            return 0.0f;
+        }
+    }
+    return ComputeMxGroupScaling<quant_type>(e8m0);
+}
+
 template <QuantType quant_type, typename TileDataOut, typename TileDataSrc, typename FlatScalingTile>
 inline void StoreMxEncodedValue(TileDataOut &dst, TileDataSrc &src, FlatScalingTile &flatScaling, int row, int col,
                                 int cols, int flatGroupIdx, float groupScaling)
@@ -334,16 +379,20 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataPara &
     }
 }
 
-template <QuantType quant_type, typename TileDataOut, typename TileDataSrc, typename TileDataExp, typename TileDataMax,
-          typename TileDataScaling>
-PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *exp, TileDataMax *max,
-                              TileDataScaling *scaling)
+template <QuantType quant_type, QuantScaleAlg scale_alg, typename TileDataOut, typename TileDataSrc,
+          typename TileDataExp, typename TileDataMax, typename TileDataScaling>
+inline void TQuantMxCpuImpl(TileDataOut &dst, TileDataSrc &src, TileDataExp *exp, TileDataMax *max,
+                            TileDataScaling *scaling)
 {
     static_assert(quant_type == QuantType::MXFP8 || quant_type == QuantType::MXFP4_E2M1,
                   "Fix: MX overload is reserved for MXFP8/MXFP4_E2M1.");
+    static_assert(scale_alg == QuantScaleAlg::OCP || quant_type == QuantType::MXFP8,
+                  "Fix: non-OCP scale algorithms are only supported for MXFP8.");
     using SrcT = typename TileDataSrc::DType;
     if constexpr (quant_type == QuantType::MXFP8) {
-        static_assert(std::is_same_v<SrcT, float>, "Fix: MXFP8 input has to be float 32");
+        static_assert(std::is_same_v<SrcT, float> || std::is_same_v<SrcT, half> ||
+                          std::is_same_v<SrcT, aclFloat16> || std::is_same_v<SrcT, bfloat16_t>,
+                      "Fix: MXFP8 CPU sim supports float/float16/bfloat16 source.");
         static_assert(std::is_same_v<typename TileDataOut::DType, int8_t>, "Fix: MXFP8 output must be int8 bytes.");
     } else {
         static_assert(std::is_same_v<SrcT, float> || std::is_same_v<SrcT, half> || std::is_same_v<SrcT, aclFloat16> ||
@@ -386,8 +435,8 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
         for (int group = 0; group < groupCols; ++group) {
             const int flatGroupIdx = row * groupCols + group;
             const float maxAbsValue = cpu_quant::ComputeMxGroupMax<quant_type>(src, row, group);
-            const uint8_t e8m0 = cpu_quant::ComputeMxSharedExponent<quant_type>(maxAbsValue);
-            const float groupScaling = cpu_quant::ComputeMxGroupScaling<quant_type>(e8m0);
+            const uint8_t e8m0 = cpu_quant::ComputeMxSharedExponent<quant_type, scale_alg>(maxAbsValue);
+            const float groupScaling = cpu_quant::ComputeMxGroupScaling<quant_type, scale_alg>(maxAbsValue, e8m0);
             flatMax.data()[flatGroupIdx] = maxAbsValue;
             flatExp.data()[flatGroupIdx] = e8m0;
             cpu_quant::QuantizeMxGroup<quant_type>(dst, src, flatScaling, row, group, cols, flatGroupIdx, groupScaling);
@@ -398,6 +447,23 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
     TRESHAPE_IMPL(*exp, flatExp);
     TRESHAPE_IMPL(*max, flatMax);
     TRESHAPE_IMPL(*scaling, flatScaling);
+}
+
+template <QuantType quant_type, typename TileDataOut, typename TileDataSrc, typename TileDataExp, typename TileDataMax,
+          typename TileDataScaling>
+PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *exp, TileDataMax *max,
+                              TileDataScaling *scaling)
+{
+    TQuantMxCpuImpl<quant_type, QuantScaleAlg::OCP>(dst, src, exp, max, scaling);
+}
+
+template <QuantType quant_type, QuantScaleAlg scale_alg, typename TileDataOut, typename TileDataSrc,
+          typename TileDataExp, typename TileDataMax, typename TileDataScaling>
+PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *exp, TileDataMax *max,
+                              TileDataScaling *scaling)
+{
+    static_assert(quant_type == QuantType::MXFP8, "Fix: scale algorithm overload is reserved for MXFP8.");
+    TQuantMxCpuImpl<quant_type, scale_alg>(dst, src, exp, max, scaling);
 }
 
 template <QuantType quant_type, VecStoreMode store_mode, typename TileDataOut, typename TileDataSrc,

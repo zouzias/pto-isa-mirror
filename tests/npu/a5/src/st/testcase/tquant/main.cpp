@@ -25,21 +25,27 @@ enum class QuantType
     INT8_SYM,
     INT8_ASYM
 };
+
+enum class QuantScaleAlg
+{
+    OCP,
+    NV
+};
 }
 
 namespace TQuantTest {
 
-template <int validRows, int validCols, int mode>
+template <int validRows, int validCols, int mode, pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void LaunchTQuantMXFP8(uint8_t *dst, float *src, uint8_t *dst_exp, void *stream);
 
 template <int validRows, int validCols, int mode, pto::QuantType quantType>
 void LaunchTQuantInt8(std::conditional_t<quantType == pto::QuantType::INT8_SYM, int8_t, uint8_t> *dst, float *src,
                       float *scale, void *stream, float *offset = nullptr);
 
-template <int validRows, int validCols, int mode>
+template <int validRows, int validCols, int mode, pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void LaunchTQuantMXFP8_BF16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
 
-template <int validRows, int validCols, int mode>
+template <int validRows, int validCols, int mode, pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void LaunchTQuantMXFP8_FP16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
 
 template <int validRows, int validCols>
@@ -202,27 +208,27 @@ void RunMxFp4E2M1Case(LaunchFunc launch)
     CompareMxFp4Outputs(dstFileSize, dstExpFileSize);
 }
 
-template <int validRows, int validCols, int mode>
+template <int validRows, int validCols, int mode, pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void test_tquant_mxfp8()
 {
     RunMxFp8Case<validRows, validCols, mode, float>([](uint8_t *dst, float *src, uint8_t *dstExp, void *stream) {
-        LaunchTQuantMXFP8<validRows, validCols, mode>(dst, src, dstExp, stream);
+        LaunchTQuantMXFP8<validRows, validCols, mode, scaleAlg>(dst, src, dstExp, stream);
     });
 }
 
-template <int validRows, int validCols, int mode>
+template <int validRows, int validCols, int mode, pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void test_tquant_mxfp8_bf16()
 {
     RunMxFp8Case<validRows, validCols, mode, uint16_t>([](uint8_t *dst, uint16_t *src, uint8_t *dstExp, void *stream) {
-        LaunchTQuantMXFP8_BF16<validRows, validCols, mode>(dst, src, dstExp, stream);
+        LaunchTQuantMXFP8_BF16<validRows, validCols, mode, scaleAlg>(dst, src, dstExp, stream);
     });
 }
 
-template <int validRows, int validCols, int mode>
+template <int validRows, int validCols, int mode, pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void test_tquant_mxfp8_fp16()
 {
     RunMxFp8Case<validRows, validCols, mode, uint16_t>([](uint8_t *dst, uint16_t *src, uint8_t *dstExp, void *stream) {
-        LaunchTQuantMXFP8_FP16<validRows, validCols, mode>(dst, src, dstExp, stream);
+        LaunchTQuantMXFP8_FP16<validRows, validCols, mode, scaleAlg>(dst, src, dstExp, stream);
     });
 }
 
@@ -397,6 +403,14 @@ TEST_F(TQUANTTEST, case_mxfp8_fp32_13x192_nd)
 {
     test_tquant_mxfp8<13, 192, 0>();
 }
+TEST_F(TQUANTTEST, case_mxfp8_nv_fp32_32x128_nd)
+{
+    test_tquant_mxfp8<32, 128, 0, pto::QuantScaleAlg::NV>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_nv_fp32_2x256_boundary_nd)
+{
+    test_tquant_mxfp8<2, 256, 0, pto::QuantScaleAlg::NV>();
+}
 
 // MXFP8 BF16
 TEST_F(TQUANTTEST, case_mxfp8_bf16_32x128_nd)
@@ -478,6 +492,26 @@ TEST_F(TQUANTTEST, case_mxfp8_bf16_128x128_nz)
 {
     test_tquant_mxfp8_bf16<128, 128, 1>();
 }
+TEST_F(TQUANTTEST, case_mxfp8_nv_bf16_32x128_nd)
+{
+    test_tquant_mxfp8_bf16<32, 128, 0, pto::QuantScaleAlg::NV>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_nv_bf16_64x128_nd)
+{
+    test_tquant_mxfp8_bf16<64, 128, 0, pto::QuantScaleAlg::NV>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_nv_bf16_128x128_nd)
+{
+    test_tquant_mxfp8_bf16<128, 128, 0, pto::QuantScaleAlg::NV>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_nv_bf16_7x48_nd)
+{
+    test_tquant_mxfp8_bf16<7, 48, 0, pto::QuantScaleAlg::NV>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_nv_bf16_2x256_boundary_nd)
+{
+    test_tquant_mxfp8_bf16<2, 256, 0, pto::QuantScaleAlg::NV>();
+}
 
 // MXFP8 FP16
 TEST_F(TQUANTTEST, case_mxfp8_fp16_32x128_nd)
@@ -501,6 +535,22 @@ TEST_F(TQUANTTEST, case_mxfp8_fp16_4x256_nd)
 TEST_F(TQUANTTEST, case_mxfp8_fp16_11x640_nd)
 {
     test_tquant_mxfp8_fp16<11, 640, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_nv_fp16_32x128_nd)
+{
+    test_tquant_mxfp8_fp16<32, 128, 0, pto::QuantScaleAlg::NV>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_nv_fp16_64x128_nd)
+{
+    test_tquant_mxfp8_fp16<64, 128, 0, pto::QuantScaleAlg::NV>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_nv_fp16_128x128_nd)
+{
+    test_tquant_mxfp8_fp16<128, 128, 0, pto::QuantScaleAlg::NV>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_nv_fp16_2x256_boundary_nd)
+{
+    test_tquant_mxfp8_fp16<2, 256, 0, pto::QuantScaleAlg::NV>();
 }
 
 // MXFP4 E2M1 FP16 ND
