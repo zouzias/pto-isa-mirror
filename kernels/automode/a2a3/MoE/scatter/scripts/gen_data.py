@@ -13,6 +13,7 @@
 #   ./input/input_expert_id.bin          kT * kTopK         int32
 #   ./output/golden_A.bin                (kT*kTopK + 16) * kH  half  (trailing 16 rows zero)
 #   ./output/golden_A_id.bin             (kT*kTopK + 16)       int32 (trailing 16 = -1)
+#   ./output/golden_rank_id.bin          (kT*kTopK + 16)       int32 (trailing 16 = -1)
 #   ./output/golden_expert_count.bin     kE                    int32
 #   ./output/golden_expert_start.bin     kE                    int32
 # --------------------------------------------------------------------------------
@@ -54,17 +55,21 @@ def gen_golden_data():
     # in ascending order, preserving the original within-expert ordering —
     # same rule the kernel implements via counter[e]++ in pass 3.
     token_ids_per_pair = np.repeat(np.arange(kT, dtype=np.int32), kTopK)
+    ranks_per_pair     = np.tile  (np.arange(kTopK, dtype=np.int32), kT)
     order = np.argsort(expert_id_flat, kind="stable")
 
-    A_valid    = X[token_ids_per_pair[order]]              # (kPackedRows, kH)
-    A_id_valid = token_ids_per_pair[order].astype(np.int32)  # (kPackedRows,)
+    A_valid       = X[token_ids_per_pair[order]]              # (kPackedRows, kH)
+    A_id_valid    = token_ids_per_pair[order].astype(np.int32) # (kPackedRows,)
+    rank_id_valid = ranks_per_pair[order].astype(np.int32)     # (kPackedRows,)
 
-    # Pad with kOverspillPad trailing rows: zeros for A, -1 for A_id (matches
-    # the host-side memset sentinel used as the "unwritten" marker).
-    A    = np.zeros((kAlloc, kH), dtype=np.float16)
-    A_id = np.full((kAlloc,), -1, dtype=np.int32)
-    A[:kPackedRows]    = A_valid
-    A_id[:kPackedRows] = A_id_valid
+    # Pad with kOverspillPad trailing rows: zeros for A, -1 for id arrays
+    # (matches the host-side memset sentinel used as the "unwritten" marker).
+    A       = np.zeros((kAlloc, kH), dtype=np.float16)
+    A_id    = np.full((kAlloc,), -1, dtype=np.int32)
+    rank_id = np.full((kAlloc,), -1, dtype=np.int32)
+    A[:kPackedRows]       = A_valid
+    A_id[:kPackedRows]    = A_id_valid
+    rank_id[:kPackedRows] = rank_id_valid
 
     os.makedirs("input",  exist_ok=True)
     os.makedirs("output", exist_ok=True)
@@ -73,6 +78,7 @@ def gen_golden_data():
     expert_id.tofile   ("./input/input_expert_id.bin")
     A.tofile           ("./output/golden_A.bin")
     A_id.tofile        ("./output/golden_A_id.bin")
+    rank_id.tofile     ("./output/golden_rank_id.bin")
     expert_count.tofile("./output/golden_expert_count.bin")
     expert_start.tofile("./output/golden_expert_start.bin")
 

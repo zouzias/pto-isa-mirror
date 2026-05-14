@@ -7,8 +7,13 @@
  *                expert_id [kT, kTopK]         int32
  * Outputs  (GM): A         [kT*kTopK + 16, kH] fp16  (kT*kTopK rows valid, +16 overspill pad)
  *                A_id      [kT*kTopK + 16]     int32 (kT*kTopK rows valid, +16 ignored)
+ *                rank_id   [kT*kTopK + 16]     int32 (kT*kTopK rows valid, +16 ignored)
  *                expert_count [kE]             int32
  *                expert_start [kE]             int32
+ *
+ * rank_id[r] is the k slot (0..kTopK-1) of the (t, k) pair that the packed
+ * row r came from. Used downstream by the gather kernel to look up
+ * softmax_weight[t, rank_id[r]] when kTopK > 1.
  *
  * Semantics (three passes — same shape as moe_top1_permute, extended to
  * (t, k) pairs for kTopK > 1):
@@ -19,8 +24,9 @@
  *   3. pack              : for each (t, k) in row-major order,
  *                          slot       = counter[expert_id[t, k]]++;
  *                          packed_pos = start[expert_id[t, k]] + slot;
- *                          A_id[packed_pos]  = t;
- *                          A[packed_pos, :]  = X[t, :];
+ *                          A_id[packed_pos]    = t;
+ *                          rank_id[packed_pos] = k;
+ *                          A[packed_pos, :]    = X[t, :];
  *
  * The trailing 16 rows of A and A_id are NOT written here. They are the
  * overspill landing pad for the downstream expert_ffn kernel and contain
@@ -70,6 +76,7 @@ template <typename TIn>
 __global__ AICORE void runScatter(
     __gm__ uint8_t *A_raw,
     __gm__ int32_t *A_id,
+    __gm__ int32_t *rank_id,
     __gm__ int32_t *expert_count,
     __gm__ int32_t *expert_start,
     __gm__ uint8_t *X_raw,
@@ -138,7 +145,8 @@ __global__ AICORE void runScatter(
             int32_t slot       = counter[e]++;
             int32_t packed_pos = start[e] + slot;
 
-            A_id[packed_pos] = static_cast<int32_t>(t);      // GM scalar write
+            A_id[packed_pos]   = static_cast<int32_t>(t);    // GM scalar write
+            rank_id[packed_pos] = static_cast<int32_t>(k);   // GM scalar write
 
             size_t src_off = static_cast<size_t>(t)          * kH;
             size_t dst_off = static_cast<size_t>(packed_pos) * kH;
@@ -153,26 +161,26 @@ __global__ AICORE void runScatter(
 }
 
 template <typename TIn>
-void launchScatter(uint8_t *A, int32_t *A_id,
+void launchScatter(uint8_t *A, int32_t *A_id, int32_t *rank_id,
                    int32_t *expert_count, int32_t *expert_start,
                    uint8_t *X, int32_t *expert_id,
                    void *stream)
 {
     runScatter<TIn><<<1, nullptr, stream>>>(
-        A, A_id, expert_count, expert_start, X, expert_id);
+        A, A_id, rank_id, expert_count, expert_start, X, expert_id);
 }
 
-template void launchScatter<half>(uint8_t *A, int32_t *A_id,
+template void launchScatter<half>(uint8_t *A, int32_t *A_id, int32_t *rank_id,
                                   int32_t *expert_count, int32_t *expert_start,
                                   uint8_t *X, int32_t *expert_id,
                                   void *stream);
 
 // Non-template wrapper: host TU is -xc++ and cannot name `half`.
 // (compile_error_logbook.md §E13)
-extern "C" void launchScatterFp16(uint8_t *A, int32_t *A_id,
+extern "C" void launchScatterFp16(uint8_t *A, int32_t *A_id, int32_t *rank_id,
                                   int32_t *expert_count, int32_t *expert_start,
                                   uint8_t *X, int32_t *expert_id,
                                   void *stream)
 {
-    launchScatter<half>(A, A_id, expert_count, expert_start, X, expert_id, stream);
+    launchScatter<half>(A, A_id, rank_id, expert_count, expert_start, X, expert_id, stream);
 }
