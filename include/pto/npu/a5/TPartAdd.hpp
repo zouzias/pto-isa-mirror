@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TPATIALADD_HPP
@@ -132,11 +134,12 @@ PTO_INTERNAL void TPARTOP_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc
     }
     bool condSrc0EqDst = (src0ValidRow == dstValidRow && src0ValidCol == dstValidCol);
     bool condSrc1EqDst = (src1ValidRow == dstValidRow && src1ValidCol == dstValidCol);
-    PTO_ASSERT(
-        condSrc0EqDst || condSrc1EqDst,
-        "Fix: TPARTADD/MUL At most one entry in the valid-rows and valid-cols of src0 and src1 is smaller than dst.");
+    PTO_ASSERT(condSrc0EqDst || condSrc1EqDst,
+               "Fix: TPARTADD/MUL At most one entry in the valid-rows and "
+               "valid-cols of src0 and src1 is smaller than dst.");
 
-    if (condSrc0EqDst) { // Ensure that the src equal to dst comes before the other
+    if (condSrc0EqDst) { // Ensure that the src equal to dst comes before the
+                         // other
         TPartOp<Op, TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem, dstRowStride,
                 src0RowStride, src1RowStride>(dst.data(), src0.data(), src1.data(), src0ValidRow, src0ValidCol,
                                               src1ValidRow, src1ValidCol, dstValidRow, dstValidCol);
