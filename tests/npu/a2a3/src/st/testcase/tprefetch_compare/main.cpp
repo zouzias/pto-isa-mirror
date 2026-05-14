@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "tprefetch_compare_kernel.h"
 
 // ============================================================================
-// Single-card prefetch comparison: Scenarios A / B / C / F.
+// Single-card prefetch comparison: Scenarios A / B / C / F / G.
 // Cross-rank Scenario D lives under comm/st/testcase/tprefetch_compare/.
 //
 // Statistics: each TEST runs 100 iterations (override via env
@@ -26,16 +26,20 @@ See LICENSE in the root of the software repository for the full text of the Lice
 //   tprefetch_compare_scenarioB.csv
 //   tprefetch_compare_scenarioC.csv
 //   tprefetch_compare_scenarioF.csv
+//   tprefetch_compare_scenarioG.csv
 //   tprefetch_compare_scenarioE1.csv
 //
 // Scenario A scans 5 sizes (64KB, 1MB, 16MB, 64MB, 128MB) for a "real-world
 // prefetch + warm TLOAD" comparison. Scenario B is a payload scan of issue
 // overhead. Scenario C measures overlap with compute at 3 representative
-// sizes. Scenario F holds total bytes = 16 MB (= Scenario A's 16MB row) and
-// varies N to compare "1 big prefetch + TLOAD" against "N small prefetches
-// + same TLOAD" — same total bytes / same TLOAD / same single trailing sync,
-// only varying whether the prefetch is split. N=1 is the natural cross-check
-// against Scenario A's 16MB host_sdma / device_l2 rows.
+// sizes. Scenario F holds total bytes = 16 MB and varies N to compare
+// "1 big prefetch + TLOAD" against "N small prefetches + same TLOAD".
+// Scenario G models a "compute-comm fusion" workload: M consecutive stages
+// of (prefetch + compute + TLOAD); host_serial pays M kernel launches with
+// no prefetch-compute overlap on a single stream, while device_pipelined
+// runs everything inside one fused kernel that overlaps prefetch_{i+1}
+// with compute_i — this is the deployment pattern where device should
+// structurally win, scaled across M and across compute/prefetch ratios.
 //
 // Scenario E1 is a pure-overhead microbenchmark (empty AICore kernel) used
 // to isolate the device-path mandatory "launch + dispatch + sync" tax so
@@ -168,6 +172,81 @@ TEST(TPrefetchCompare, F_ChunkedPrefetchTload_16MB_N256)
 TEST(TPrefetchCompare, F_ChunkedPrefetchTload_16MB_N1024)
 {
     ASSERT_TRUE((RunScenarioFChunkedPrefetchAndTload<float, 4194304>(0, 1024)));
+}
+
+// ---- Scenario G: fused multi-stage prefetch + compute -------------------
+// Workload: M consecutive stages, each = (prefetch 1 MB) + (spin compute) +
+// (warm TLOAD 1 MB). host_serial is the natural single-stream pattern (M
+// kernel launches interleaved with M PTO_PREFETCHs); device_pipelined is
+// one fused kernel that overlaps prefetch_{i+1} with compute_i.
+//
+// Two axes scanned:
+//   * M     in {2, 4, 8, 16}  — to see launch-shell savings accumulate
+//   * spin  in {5000, 20000, 80000} cycles  ~= {50, 200, 800} us per stage
+//                                              (compute < / ~= / >> prefetch)
+//
+// Predicted device advantage:
+//   - For any M >= 2: device saves (M-1) launch shells (~17 us each).
+//   - For spin >= prefetch (~23 us @ 1 MB): pipeline fully hides the
+//     prefetch under compute, so device wall ~= M*spin + 1 prefetch + 1 launch.
+TEST(TPrefetchCompare, G_Fused_M2_1MB_compute50us)
+{
+    ASSERT_TRUE((RunScenarioGFusedComputePrefetch<float, 262144>(0, 2, 5000)));
+}
+
+TEST(TPrefetchCompare, G_Fused_M2_1MB_compute200us)
+{
+    ASSERT_TRUE((RunScenarioGFusedComputePrefetch<float, 262144>(0, 2, 20000)));
+}
+
+TEST(TPrefetchCompare, G_Fused_M2_1MB_compute800us)
+{
+    ASSERT_TRUE((RunScenarioGFusedComputePrefetch<float, 262144>(0, 2, 80000)));
+}
+
+TEST(TPrefetchCompare, G_Fused_M4_1MB_compute50us)
+{
+    ASSERT_TRUE((RunScenarioGFusedComputePrefetch<float, 262144>(0, 4, 5000)));
+}
+
+TEST(TPrefetchCompare, G_Fused_M4_1MB_compute200us)
+{
+    ASSERT_TRUE((RunScenarioGFusedComputePrefetch<float, 262144>(0, 4, 20000)));
+}
+
+TEST(TPrefetchCompare, G_Fused_M4_1MB_compute800us)
+{
+    ASSERT_TRUE((RunScenarioGFusedComputePrefetch<float, 262144>(0, 4, 80000)));
+}
+
+TEST(TPrefetchCompare, G_Fused_M8_1MB_compute50us)
+{
+    ASSERT_TRUE((RunScenarioGFusedComputePrefetch<float, 262144>(0, 8, 5000)));
+}
+
+TEST(TPrefetchCompare, G_Fused_M8_1MB_compute200us)
+{
+    ASSERT_TRUE((RunScenarioGFusedComputePrefetch<float, 262144>(0, 8, 20000)));
+}
+
+TEST(TPrefetchCompare, G_Fused_M8_1MB_compute800us)
+{
+    ASSERT_TRUE((RunScenarioGFusedComputePrefetch<float, 262144>(0, 8, 80000)));
+}
+
+TEST(TPrefetchCompare, G_Fused_M16_1MB_compute50us)
+{
+    ASSERT_TRUE((RunScenarioGFusedComputePrefetch<float, 262144>(0, 16, 5000)));
+}
+
+TEST(TPrefetchCompare, G_Fused_M16_1MB_compute200us)
+{
+    ASSERT_TRUE((RunScenarioGFusedComputePrefetch<float, 262144>(0, 16, 20000)));
+}
+
+TEST(TPrefetchCompare, G_Fused_M16_1MB_compute800us)
+{
+    ASSERT_TRUE((RunScenarioGFusedComputePrefetch<float, 262144>(0, 16, 80000)));
 }
 
 // ---- Scenario E1: kernel launch + dispatch + sync overhead --------------

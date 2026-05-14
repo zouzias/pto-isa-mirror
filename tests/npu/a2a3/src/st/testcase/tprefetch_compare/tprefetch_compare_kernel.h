@@ -133,6 +133,55 @@ bool RunScenarioCOverlap(int deviceId);
 template <typename T, size_t count>
 bool RunScenarioFChunkedPrefetchAndTload(int deviceId, uint32_t numChunks);
 
+// ---- Scenario G: fused multi-stage prefetch + compute -------------------
+// Mirrors a "compute-comm fusion" workload: M consecutive stages, each
+// stage = (prefetch chunk_i) + (compute spinCycles on chunk_i) + (warm
+// TLOAD chunk_i). Total bytes prefetched = M * chunkBytes; total compute
+// = M * spinCycles. This is the deployment pattern where device should
+// structurally win — host has to interleave M kernel launches between M
+// prefetches on the same stream, while device can express the whole thing
+// as a single pipelined kernel.
+//
+// host_serial:
+//     for i in [0, M):
+//         pto::PTO_PREFETCH(src + i*chunk, chunk, stream)
+//         ScenarioC_ComputeThenTloadKernel<<<...stream>>>(stage_i)
+//     aclrtSynchronizeStream(stream)
+//   - M kernel launches; each pays the ~17us launch shell (E1).
+//   - Single stream FIFO orders prefetch_i before kernel_i; but
+//     prefetch_{i+1} cannot start until kernel_i finishes — so there is
+//     NO prefetch-compute overlap on a single stream.
+//   - Total wall ~ M * (T_prefetch + T_launch + T_compute) + T_sync.
+//
+// device_pipelined:
+//     ScenarioG_DeviceFusedKernel<<<1, nullptr, stream>>>(...)
+//         # in-kernel:
+//         # prefetch block_0; wait                    (no overlap on first)
+//         # for i in [0, M-1):
+//         #     issue prefetch block_{i+1}            (async fire)
+//         #     spin compute_i                        (AICORE busy)
+//         #     TLOAD block_i                         (warm)
+//         #     wait block_{i+1}                      (overlap: SDMA was running)
+//         # last stage: spin + TLOAD on block_{M-1}
+//     aclrtSynchronizeStream(stream)
+//   - ONE launch shell (saves (M-1) launches vs host).
+//   - prefetch_{i+1} runs concurrently with compute_i. If T_compute >=
+//     T_prefetch, the prefetch is fully hidden.
+//   - Total wall ~ T_launch + T_prefetch_first + (M-1)*max(T_compute,
+//     T_prefetch) + T_compute_last + T_sync.
+//
+// Same-as-Scenario-A invariants: total bytes = M*chunkBytes, L2 trashed
+// once per measured iteration, single trailing sync per path. The compute
+// body inside each host stage uses ScenarioC_ComputeThenTloadKernel so the
+// per-stage compute primitive is bit-identical to Scenario C.
+//
+// Reports per-(M, chunkBytes, spinCycles): host wall, device wall, plus
+// in-kernel cycles (host: last-stage representative; device: full
+// pipelined body sum). One CSV row per (M, chunk, spin, config) appended
+// to tprefetch_compare_scenarioG.csv.
+template <typename T, size_t chunkElems>
+bool RunScenarioGFusedComputePrefetch(int deviceId, uint32_t numStages, uint64_t spinCycles);
+
 // ---- Scenario E1: kernel launch + dispatch + sync overhead --------------
 // Pure-overhead micro-benchmark used to localise where Scenario A's "device
 // path is 4 us slower at small payloads" gap actually lives.
