@@ -82,3 +82,37 @@ bool RunScenarioBIssueOverhead(int deviceId, size_t payloadBytes = 4096);
 // latency hidden by the prefetch. Higher = better overlap.
 template <typename T, size_t count>
 bool RunScenarioCOverlap(int deviceId);
+
+// ---- Scenario E1: kernel launch + dispatch + sync overhead --------------
+// Pure-overhead micro-benchmark used to localise where Scenario A's "device
+// path is 4 us slower at small payloads" gap actually lives.
+//
+// Launches an empty AI-Core kernel (no SDMA, no TLOAD, no UB use) and times
+// the host-visible window:
+//
+//     t0 = HrClock::now()
+//     NoopKernel<<<1, nullptr, stream>>>()
+//     aclrtSynchronizeStream(stream)
+//     t1 = HrClock::now()
+//
+// The reported `wall_p50` is therefore the cost of "kernel launch + AICORE
+// dispatch + sync return" with NO useful work done in the kernel.
+//
+// How to use the result:
+//     fair_device_in_kernel_overhead
+//         = ScenarioA<size>.device_wall_p50 - ScenarioE1.wall_p50
+//
+// In other words, subtract this number from the device-path wall in any
+// other scenario to isolate the in-kernel cost (transient session build,
+// SQE submission, busy poll, SDMA itself). This is the fair "instruction
+// vs instruction" view that the user asked for in the experiment plan.
+//
+// Also reports the in-kernel syscnt delta around an empty `pipe_barrier`,
+// which doubles as a sanity check on the syscnt-to-microsecond conversion.
+//
+// L2 is intentionally NOT trashed between iterations — a no-op kernel does
+// not touch L2, so trashing would only add measurement noise.
+//
+// 100 iterations, p5/p50/p95 reported, single CSV row appended to:
+//     tprefetch_compare_scenarioE1.csv
+bool RunScenarioE1NoopKernel(int deviceId);

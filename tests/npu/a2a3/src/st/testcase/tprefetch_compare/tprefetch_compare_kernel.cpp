@@ -100,6 +100,26 @@ PTO_INTERNAL uint64_t TloadSweepCycles(__gm__ T *srcBuf, int elem_count)
 }
 
 // ============================================================================
+// Scenario E1: empty kernel for launch+dispatch+sync overhead measurement
+//
+// Used to isolate the "device path's mandatory kernel launch tax" so any
+// other device-path scenario can subtract it for a fair instruction-vs-
+// instruction comparison against the host path. See header for full intent.
+//
+// The kernel does literally nothing useful — just records syscnt around a
+// pipe_barrier so the optimiser can't fold it away, and writes the cycle
+// delta so the host can sanity-check the syscnt-to-microsecond conversion.
+// ============================================================================
+__global__ AICORE void ScenarioE1_NoopKernel(__gm__ uint64_t *cycleOut)
+{
+    uint64_t t0 = cmp_syscnt();
+    pipe_barrier(PIPE_ALL);
+    uint64_t t1 = cmp_syscnt();
+    *cycleOut = t1 - t0;
+    pipe_barrier(PIPE_ALL);
+}
+
+// ============================================================================
 // Scenario A kernels
 // ============================================================================
 
@@ -883,3 +903,88 @@ bool RunScenarioCOverlap(int deviceId)
 template bool RunScenarioCOverlap<float, 262144>(int);
 template bool RunScenarioCOverlap<float, 4194304>(int);
 template bool RunScenarioCOverlap<float, 33554432>(int);
+
+// ============================================================================
+// Scenario E1: kernel launch + dispatch + sync overhead
+//
+// Minimal env: stream + 8 B GM slot for cycleOut. We do NOT init the SDMA
+// workspace or allocate the L2 trash buffer — neither is touched by the
+// no-op kernel, and skipping them keeps init noise out of the measurement.
+//
+// L2 is intentionally NOT trashed between iterations (a no-op kernel does
+// not touch L2 at all, so a trash would only inflate measurement noise).
+// ============================================================================
+bool RunScenarioE1NoopKernel(int deviceId)
+{
+    constexpr int kWarmup = 1;
+    const int kIter = IterCount(100);
+
+    aclrtStream stream = nullptr;
+    void *cycleDev = nullptr;
+    int aclStatus = 0;
+
+    aclStatus |= aclrtSetDevice(deviceId);
+    aclStatus |= aclrtCreateStream(&stream);
+    aclStatus |= aclrtMalloc(&cycleDev, sizeof(uint64_t), ACL_MEM_MALLOC_HUGE_FIRST);
+    if (aclStatus != 0) {
+        if (cycleDev != nullptr) {
+            aclrtFree(cycleDev);
+        }
+        if (stream != nullptr) {
+            aclrtDestroyStream(stream);
+        }
+        std::cerr << "[ERROR] ScenarioE1: env init failed (acl=" << aclStatus << ")" << std::endl;
+        return false;
+    }
+
+    SampleSet noopWall;
+    SampleSet noopCycles;
+
+    for (int i = 0; i < kWarmup + kIter; ++i) {
+        auto t0 = HrClock::now();
+        ScenarioE1_NoopKernel<<<1, nullptr, stream>>>(reinterpret_cast<uint64_t *>(cycleDev));
+        aclStatus |= aclrtSynchronizeStream(stream);
+        auto t1 = HrClock::now();
+
+        uint64_t cycles = 0;
+        aclrtMemcpy(&cycles, sizeof(uint64_t), cycleDev, sizeof(uint64_t), ACL_MEMCPY_DEVICE_TO_HOST);
+
+        if (i >= kWarmup) {
+            noopWall.Add(static_cast<double>(ElapsedMicros(t0, t1)));
+            noopCycles.Add(CyclesToUs(cycles));
+        }
+    }
+
+    aclrtFree(cycleDev);
+    aclrtDestroyStream(stream);
+
+    std::cout << std::fixed << std::setprecision(2);
+    std::cout << "\n================================================================" << std::endl;
+    std::cout << "[PERF] Scenario E1 - kernel launch + dispatch + sync overhead (NoopKernel)" << std::endl;
+    std::cout << "  Iterations:            " << kIter << " (warmup=" << kWarmup << ")" << std::endl;
+    std::cout << "  Syscnt freq assumed:   " << (SyscntHz() / 1.0e6) << " MHz" << std::endl;
+    std::cout << "  --- end-to-end wall (the device-path \"launch tax\") ---" << std::endl;
+    std::cout << "  noop kernel wall       p50=" << noopWall.P50()
+              << "us   p5=" << noopWall.P5() << " p95=" << noopWall.P95()
+              << "   (host launch + STARS dispatch + AICORE accept + sync return)" << std::endl;
+    std::cout << "  --- supplementary: in-kernel syscnt sanity ---" << std::endl;
+    std::cout << "  in-kernel pipe_barrier p50=" << noopCycles.P50()
+              << "us   p5=" << noopCycles.P5() << " p95=" << noopCycles.P95()
+              << "   (should be sub-microsecond)" << std::endl;
+    std::cout << "  HOWTO: subtract the wall p50 above from any other scenario's" << std::endl;
+    std::cout << "         device wall to isolate the in-kernel cost only." << std::endl;
+    std::cout << "  CSV: " << CsvFilePath("scenarioE1") << std::endl;
+    std::cout << "================================================================\n" << std::endl;
+
+    const std::string csvHeader =
+        "config,iter,wall_p5_us,wall_p50_us,wall_p95_us,wall_min_us,wall_max_us,"
+        "in_kernel_p50_us";
+    std::ostringstream oss;
+    oss << "noop_kernel," << kIter << ','
+        << noopWall.P5() << ',' << noopWall.P50() << ',' << noopWall.P95() << ','
+        << noopWall.Min() << ',' << noopWall.Max() << ','
+        << noopCycles.P50();
+    CsvAppendRow("scenarioE1", csvHeader, oss.str());
+
+    return aclStatus == 0;
+}

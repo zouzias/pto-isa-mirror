@@ -30,6 +30,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // prefetch + warm TLOAD" comparison. Scenario B is a single 4KB-payload
 // micro-benchmark of issue overhead. Scenario C measures overlap with
 // compute at 3 representative sizes.
+//
+// Scenario E1 is a pure-overhead microbenchmark (empty AICore kernel) used
+// to isolate the device-path mandatory "launch + dispatch + sync" tax so
+// any other scenario's device wall can be normalised against it. See
+// PROFILING.md in this directory for how to combine E1 with msprof to fully
+// localise where the host-vs-device gap lives.
 // ============================================================================
 
 // ---- Scenario A: end-to-end wall (5 sizes) -------------------------------
@@ -112,6 +118,17 @@ TEST(TPrefetchCompare, C_Overlap_16MB)
 TEST(TPrefetchCompare, C_Overlap_128MB)
 {
     ASSERT_TRUE((RunScenarioCOverlap<float, 33554432>(0)));
+}
+
+// ---- Scenario E1: kernel launch + dispatch + sync overhead --------------
+// Localises the "device path mandatory launch tax" so we can subtract it
+// from any other device-path measurement to get a fair instruction-vs-
+// instruction comparison. Run alongside Scenario A; the result is a single
+// number (p50, microseconds) that you subtract from
+// `tprefetch_compare_scenarioA.csv` device-path wall_p50.
+TEST(TPrefetchCompare, E1_NoopKernel)
+{
+    ASSERT_TRUE(RunScenarioE1NoopKernel(0));
 }
 
 int main(int argc, char **argv)
