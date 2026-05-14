@@ -20,8 +20,12 @@ Usage examples:
     # Override cube-side preload depth (defaults to 4)
     python3 generate_cases.py --qk-preload 6
 
-Each --cases entry format: HEAD_SIZE,S0,S1,CUBE_S0[,TILE_S1]
-CUBE_S1 is fixed at 128; TILE_S1 defaults to 256 if omitted.
+Each --cases entry format (backward compatible):
+    HEAD_SIZE,S0,S1,CUBE_S0[,TILE_S1]
+or:
+    HEAD_SIZE,S0,S1,CUBE_S0,CUBE_S1,TILE_S1
+
+CUBE_S1 defaults to 128 when omitted; TILE_S1 defaults to 128 when omitted.
 Defaults replicate the previous hard-coded set if --cases is omitted.
 """
 import argparse
@@ -31,30 +35,41 @@ from pathlib import Path
 from typing import List, Dict
 
 TILE_S1_DEFAULT = 128
+CUBE_S1_DEFAULT = 128
 QK_PRELOAD_DEFAULT = 4
 
 DEFAULT_CASES = [
-    (128, 128, 1024, 128, TILE_S1_DEFAULT, False),
-    (128, 128, 2048, 128, TILE_S1_DEFAULT, False),
-    (128, 128, 8192, 128, TILE_S1_DEFAULT, False),
-    (128, 512, 1024, 128, TILE_S1_DEFAULT, False),
-    (128, 512, 2048, 128, TILE_S1_DEFAULT, False),
-    (128, 512, 8192, 128, TILE_S1_DEFAULT, False),
+    (128, 128, 1024, 128, CUBE_S1_DEFAULT, TILE_S1_DEFAULT, False),
+    (128, 128, 2048, 128, CUBE_S1_DEFAULT, TILE_S1_DEFAULT, False),
+    (128, 128, 8192, 128, CUBE_S1_DEFAULT, TILE_S1_DEFAULT, False),
+    (128, 512, 1024, 128, CUBE_S1_DEFAULT, TILE_S1_DEFAULT, False),
+    (128, 512, 2048, 128, CUBE_S1_DEFAULT, TILE_S1_DEFAULT, False),
+    (128, 512, 8192, 128, CUBE_S1_DEFAULT, TILE_S1_DEFAULT, False),
 ]
 
 
 def _parse_case_entry(raw: str, qk_preload: int, causal_mask: bool) -> Dict[str, int]:
     parts = [p.strip() for p in raw.split(',') if p.strip()]
-    if len(parts) not in (4, 5):
-        raise ValueError(f"Expected 4 or 5 comma-separated values (HEAD_SIZE,S0,S1,CUBE_S0[,TILE_S1]), got '{raw}'")
+    if len(parts) not in (4, 5, 6):
+        raise ValueError(
+            "Expected 4, 5, or 6 comma-separated values "
+            "(HEAD_SIZE,S0,S1,CUBE_S0[,TILE_S1] or HEAD_SIZE,S0,S1,CUBE_S0,CUBE_S1,TILE_S1), "
+            f"got '{raw}'"
+        )
     head, s0, s1, cube_s0 = map(int, parts[:4])
-    tile_s1 = int(parts[4]) if len(parts) == 5 else TILE_S1_DEFAULT
+    cube_s1 = CUBE_S1_DEFAULT
+    tile_s1 = TILE_S1_DEFAULT
+    if len(parts) == 5:
+        tile_s1 = int(parts[4])
+    elif len(parts) == 6:
+        cube_s1 = int(parts[4])
+        tile_s1 = int(parts[5])
     return {
         "head_size": head,
         "s0": s0,
         "s1": s1,
         "cube_s0": cube_s0,
-        "cube_s1": 128,
+        "cube_s1": cube_s1,
         "tile_s1": tile_s1,
         "qk_preload": qk_preload,
         "causal_mask": int(causal_mask),
@@ -68,12 +83,12 @@ def _default_cases(qk_preload: int) -> List[Dict[str, int]]:
             "s0": s0,
             "s1": s1,
             "cube_s0": cube_s0,
-            "cube_s1": 128,
+            "cube_s1": cube_s1,
             "tile_s1": tile_s1,
             "qk_preload": qk_preload,
             "causal_mask": int(causal_mask),
         }
-        for (head, s0, s1, cube_s0, tile_s1, causal_mask) in DEFAULT_CASES
+        for (head, s0, s1, cube_s0, cube_s1, tile_s1, causal_mask) in DEFAULT_CASES
     ]
 
 
@@ -89,11 +104,10 @@ def _normalize_case(case: Dict[str, int]) -> Dict[str, int]:
     if case["cube_s0"] > case["s0"] or case["s0"] % case["cube_s0"] != 0:
         case["cube_s0"] = case["s0"]
 
-    # Fix cube_s1 to 128 and ensure divisibility
-    if case["cube_s1"] != 128:
-        case["cube_s1"] = 128
+    if case["cube_s1"] < 1:
+        raise ValueError("CUBE_S1 must be >= 1")
     if case["s1"] % case["cube_s1"] != 0:
-        raise ValueError("S1 must be divisible by CUBE_S1 (128)")
+        raise ValueError("S1 must be divisible by CUBE_S1")
 
     # Ensure TILE_S1 divides S1 and is a multiple of CUBE_S1
     if case["tile_s1"] % case["cube_s1"] != 0:
@@ -168,7 +182,10 @@ def main() -> None:
         "--cases",
         action="append",
         default=None,
-        help="Case entry in the format HEAD_SIZE,S0,S1,CUBE_S0[,TILE_S1] (repeat for multiple entries; CUBE_S1 fixed at 128)",
+        help=(
+            "Case entry format: HEAD_SIZE,S0,S1,CUBE_S0[,TILE_S1] (legacy) "
+            "or HEAD_SIZE,S0,S1,CUBE_S0,CUBE_S1,TILE_S1 (repeat for multiple entries)"
+        ),
     )
     parser.add_argument(
         "--qk-preload",

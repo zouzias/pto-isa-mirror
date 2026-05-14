@@ -83,6 +83,30 @@ if [[ "${SKIP_RESCALE}" == "ON" && "${FIFO_MODE}" != "1" ]]; then
 fi
 
 GEN_CASE_ARGS=()
+GEN_DATA_CASE_ARGS=()
+
+convert_case_for_gen_data() {
+    # gen_data.py currently supports:
+    #   HEAD_SIZE,S0,S1
+    #   HEAD_SIZE,S0,S1,CUBE_S0
+    #   HEAD_SIZE,S0,S1,CUBE_S0,TILE_S1
+    # generate_cases.py additionally supports:
+    #   HEAD_SIZE,S0,S1,CUBE_S0,CUBE_S1,TILE_S1
+    # For 6-field entries we drop CUBE_S1 and keep TILE_S1 so data generation remains compatible.
+    local entry="$1"
+    IFS=',' read -ra fields <<< "$entry"
+    local field_count="${#fields[@]}"
+    if [[ "${field_count}" -eq 6 ]]; then
+        echo "${fields[0]},${fields[1]},${fields[2]},${fields[3]},${fields[5]}"
+    elif [[ "${field_count}" -eq 4 || "${field_count}" -eq 5 || "${field_count}" -eq 3 ]]; then
+        echo "$entry"
+    else
+        echo "[ERROR] Unsupported --cases entry '${entry}'" >&2
+        echo "[ERROR] Expected HEAD_SIZE,S0,S1,CUBE_S0[,TILE_S1] or HEAD_SIZE,S0,S1,CUBE_S0,CUBE_S1,TILE_S1" >&2
+        return 1
+    fi
+}
+
 # Handle missing value after -c/--case (e.g. user passed -c and then --cases)
 if [[ -n "${CASE_FILTER:-}" && "${CASE_FILTER}" == --* ]]; then
     CASE_FILTER=""
@@ -92,11 +116,13 @@ if [[ -n "${CASES_RAW:-}" ]]; then
     IFS=';' read -ra CASE_ENTRIES <<< "${CASES_RAW}"
     for entry in "${CASE_ENTRIES[@]}"; do
         GEN_CASE_ARGS+=(--cases "$entry")
+        GEN_DATA_CASE_ARGS+=(--cases "$(convert_case_for_gen_data "$entry")")
     done
 elif [[ -n "${CASE_FILTER:-}" ]]; then
     # If only a single case filter was provided, ensure generation for numeric tuple filters
     if [[ "${CASE_FILTER}" == *","* ]]; then
         GEN_CASE_ARGS+=(--cases "${CASE_FILTER}")
+        GEN_DATA_CASE_ARGS+=(--cases "$(convert_case_for_gen_data "${CASE_FILTER}")")
     fi
 fi
 
@@ -106,6 +132,7 @@ echo "[RUN.SH] NPU_ID=${NPU_ID}"
 echo "[RUN.SH] QK_PRELOAD=${QK_PRELOAD}"
 echo "[RUN.SH] FIFO_MODE=${FIFO_MODE} (0=ALL_GM, 1=ALL_UB, 2=QK_PV_UB_ONLY)"
 echo "[RUN.SH] GEN_CASE_ARGS=${GEN_CASE_ARGS[*]:-<none>}"
+echo "[RUN.SH] GEN_DATA_CASE_ARGS=${GEN_DATA_CASE_ARGS[*]:-<none>}"
 echo "[RUN.SH] INTERMEDIATE=${INTERMEDIATE:-0}"
 echo "[RUN.SH] CAUSAL_MASK=${CAUSAL_MASK:-0}"
 echo "[RUN.SH] DEBUG=${DEBUG_BUILD:-0}"
@@ -136,12 +163,12 @@ if [[ "${SKIP_RESCALE}" == "ON" ]]; then
 fi
 
 if [[ -n "${CASE_FILTER:-}" ]]; then
-    python3 ../scripts/gen_data.py --case="${CASE_FILTER}" "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}" "${GEN_DATA_EXTRA_ARGS[@]}"
+    python3 ../scripts/gen_data.py --case="${CASE_FILTER}" "${GEN_DATA_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}" "${GEN_DATA_EXTRA_ARGS[@]}"
     time ./fa_performance_dn --npu="${NPU_ID}" --case="${CASE_FILTER}" "${EXTRA_BIN_ARGS[@]}"
 elif [[ -n "${CASES_RAW:-}" ]]; then
-    python3 ../scripts/gen_data.py "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}" "${GEN_DATA_EXTRA_ARGS[@]}"
+    python3 ../scripts/gen_data.py "${GEN_DATA_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}" "${GEN_DATA_EXTRA_ARGS[@]}"
     time ./fa_performance_dn --npu="${NPU_ID}" --cases="${CASES_RAW}" "${EXTRA_BIN_ARGS[@]}"
 else
-    python3 ../scripts/gen_data.py "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}" "${GEN_DATA_EXTRA_ARGS[@]}"
+    python3 ../scripts/gen_data.py "${GEN_DATA_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}" "${GEN_DATA_EXTRA_ARGS[@]}"
     time ./fa_performance_dn --npu="${NPU_ID}" "${EXTRA_BIN_ARGS[@]}"
 fi

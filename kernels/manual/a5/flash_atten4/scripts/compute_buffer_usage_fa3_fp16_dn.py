@@ -5,17 +5,14 @@ Compute UB and L1 buffer usage for FlashAttention kernel.
 Based on allocate_vec_tile_buffers and allocate_cube_tile_buffers in fa_performance_dn_kernel.cpp.
 
 Usage Examples:
-    # Separate allocation (qkVecTile and pvVecTile use separate UB)
+    # Separate allocation (current kernel default - A5 has 256KB UB)
     python3 scripts/compute_buffer_usage_fa3_fp16_dn.py --cube_s0 128 --cube_s1 64 --head_size 128 --tile_s1 128
 
-    # Union allocation (qkVecTile and pvVecTile share UB, saves space)
+    # Union allocation (qkVecTile/pvVecTile share UB - for A2/A3 with 192KB)
     python3 scripts/compute_buffer_usage_fa3_fp16_dn.py --cube_s0 128 --cube_s1 64 --head_size 128 --tile_s1 128 --union
 
     # With custom CV FIFO size
     python3 scripts/compute_buffer_usage_fa3_fp16_dn.py --cube_s0 128 --cube_s1 64 --head_size 128 --tile_s1 128 --cv_fifo_size 8
-
-    # Large parameters (shows overflow detection)
-    python3 scripts/compute_buffer_usage_fa3_fp16_dn.py --cube_s0 256 --cube_s1 128 --head_size 256 --tile_s1 256
 """
 
 import argparse
@@ -24,35 +21,21 @@ import argparse
 def compute_l1_usage(cube_s0: int, cube_s1: int, head_size: int) -> dict:
     """
     Compute L1 buffer usage for cube tiles in FlashAttention kernel.
-    
-    Args:
-        cube_s0: Per-block rows for cube matmul
-        cube_s1: Per-tile S1 chunk size
-        head_size: Inner dimension (HEAD_SIZE)
-    
-    Returns:
-        Dictionary with L1 usage details
     """
-    # Buffer counts from kernel
     q_mat_tn_buffers = 1
     k_mat_tn_buffers = 2
     p_mat_tn_buffers = 2
     v_mat_tn_buffers = 2
     
-    # Tile shapes: (Rows, Cols, DType)
-    # TileMatQData: Tile<Mat, half, HEAD_SIZE, Cube_S0>
     tile_mat_q_shape = (head_size, cube_s0, "half")
     tile_mat_q_bytes = head_size * cube_s0 * 2
     
-    # TileMatKData: Tile<Mat, half, Cube_S1, HEAD_SIZE>
     tile_mat_k_shape = (cube_s1, head_size, "half")
     tile_mat_k_bytes = cube_s1 * head_size * 2
     
-    # TileMatPData: Tile<Mat, half, Cube_S0, Cube_S1>
     tile_mat_p_shape = (cube_s0, cube_s1, "half")
     tile_mat_p_bytes = cube_s0 * cube_s1 * 2
     
-    # TileMatVData: Tile<Mat, half, Cube_S1, HEAD_SIZE>
     tile_mat_v_shape = (cube_s1, head_size, "half")
     tile_mat_v_bytes = cube_s1 * head_size * 2
     
@@ -63,7 +46,7 @@ def compute_l1_usage(cube_s0: int, cube_s1: int, head_size: int) -> dict:
     
     total_bytes = q_bytes + k_bytes + p_bytes + v_bytes
     
-    MAX_TILE_L1_BYTES = 512 * 1024  # 512KB
+    MAX_TILE_L1_BYTES = 512 * 1024
     
     result = {
         "tile_shapes": {
@@ -100,21 +83,30 @@ def compute_l1_usage(cube_s0: int, cube_s1: int, head_size: int) -> dict:
 
 
 def compute_buffer_usage_fa3_fp16_dn(cube_s0: int, cube_s1: int, head_size: int, tile_s1: int,
-                     cv_fifo_size: int, use_union: bool) -> dict:
+                      cv_fifo_size: int, use_union: bool) -> dict:
     """
     Compute UB usage for vector tiles in FlashAttention kernel.
     
-    Args:
-        cube_s0: Per-block rows for cube matmul
-        cube_s1: Per-tile S1 chunk size
-        head_size: Inner dimension (HEAD_SIZE)
-        tile_s1: Logical tile size along S1
-        cv_fifo_size: CV FIFO size (controls l1_exp_max_ififo array size)
-        use_union: True for union allocation (qkVecTile/pvVecTile share UB),
-                   False for separate allocation
+    Based on allocate_vec_tile_buffers() in fa_performance_dn_kernel.cpp (lines 213-266).
     
-    Returns:
-        Dictionary with UB usage details
+    Actual allocation order (separate mode - current kernel):
+        1. qkVecTile[srcVecTNBuffers]  - TileDataF_T (float)
+        2. runningOTile                 - TileOutGuT (float, single buffer)
+        3. pvVecTile[outOTileNBuffers] - TileOutGuT (float)
+        4. m1_local_max                 - ReduceTileF_T (float, single row)
+        5. m2_global_max                - ReduceTileF_T
+        6. l1_local_sum                 - ReduceTileF_T
+        7. l2_global_sum                - ReduceTileF_T
+        8. l1_exp_max[cv_fifo_size]    - ReduceTileF_T
+    
+    NOT allocated (commented out in kernel):
+        - input_reduce_tmp (line 252-254)
+        - x_expT (line 264-265) - declared but NOT used in allocation
+    
+    nzConvBuffer[2] allocated separately at fixed UB offset (254KB - nzBufSize).
+    
+    Union mode (--union): qkVecTile and pvVecTile share the same UB space,
+    useful for A2/A3 with smaller UB (192KB).
     """
     VEC_CORES = 2
     src_vec_tn_buffers = 2
@@ -127,50 +119,42 @@ def compute_buffer_usage_fa3_fp16_dn(cube_s0: int, cube_s1: int, head_size: int,
     vec_gu_rows = cube_s0 // VEC_CORES
     subblock_rows = cube_s0 // VEC_CORES
     
-    # Tile shapes: (Rows, Cols, DType)
-    # TileDataF_T: Tile<Vec, float, Tile_S1, Vec_S0>
     tile_data_f_shape = (tile_s1, vec_s0, "float")
     tile_data_f_bytes = tile_s1 * vec_s0 * 4
     
-    # ReduceTileF_T: Tile<Vec, float, 1, SubblockRows>
     reduce_tile_f_shape = (1, subblock_rows, "float")
     reduce_tile_f_bytes = subblock_rows * 4
     
-    # TileDataH_T: Tile<Vec, half, Tile_S1, Vec_S0>
     tile_data_h_shape = (tile_s1, vec_s0, "half")
     tile_data_h_bytes = tile_s1 * vec_s0 * 2
     
-    # TileOutGuT: Tile<Vec, float, VecGuRows, HEAD_SIZE>
     tile_out_gu_shape = (vec_gu_rows, head_size, "float")
     tile_out_gu_bytes = vec_gu_rows * head_size * 4
     
-    # TileDataH_NZ_T: Tile<Vec, half, NzBufRows, Vec_S0> where NzBufRows = Cube_S1 + 1
     nz_buf_rows = cube_s1 + 1
     tile_data_h_nz_shape = (nz_buf_rows, vec_s0, "half")
     tile_data_h_nz_bytes = nz_buf_rows * vec_s0 * 2
     
     src_bytes = tile_data_f_bytes * src_vec_tn_buffers
     pv_bytes = tile_out_gu_bytes * out_o_tile_n_buffers
-    xexp_bytes = tile_data_h_bytes * xexp_vec_tn_buffers
     
     exp_max_buffers = cv_fifo_size
-    
-    # Note: input_reduce_tmp removed (can reuse qkVecTile buffer)
     
     if use_union:
         union_stride = max(tile_data_f_bytes, tile_out_gu_bytes)
         union_bytes = union_stride * src_vec_tn_buffers
-        total_bytes = union_bytes + xexp_bytes + \
-                      (reduce_tile_f_bytes * (3 + exp_max_buffers)) + tile_out_gu_bytes
+        seq_bytes = union_bytes + tile_out_gu_bytes + \
+                    (reduce_tile_f_bytes * 4) + (reduce_tile_f_bytes * exp_max_buffers)
     else:
-        total_bytes = src_bytes + pv_bytes + xexp_bytes + \
-                      (reduce_tile_f_bytes * (3 + exp_max_buffers)) + tile_out_gu_bytes
-        union_stride = 0
-    
-    # nzConvBuffer is allocated at the end of UB (separate from main allocation)
-    total_bytes += tile_data_h_nz_bytes
+        seq_bytes = src_bytes + tile_out_gu_bytes + pv_bytes + \
+                    (reduce_tile_f_bytes * 4) + (reduce_tile_f_bytes * exp_max_buffers)
     
     MAX_VEC_UB_BYTES = 256 * 1024
+    softmax_scratch_offset = 254 * 1024
+    nz_buf_size = tile_data_h_nz_bytes
+    nz_buf_total = nz_buf_size * 2
+    
+    total_bytes = seq_bytes + nz_buf_total
     
     result = {
         "parameters": {
@@ -213,26 +197,29 @@ def compute_buffer_usage_fa3_fp16_dn(cube_s0: int, cube_s1: int, head_size: int,
         "max_ub_bytes": MAX_VEC_UB_BYTES,
         "utilization_pct": (total_bytes / MAX_VEC_UB_BYTES) * 100,
         "fits_in_ub": total_bytes <= MAX_VEC_UB_BYTES,
+        "notes": [
+            "input_reduce_tmp declared but NOT allocated (lines 252-254 commented out)",
+            "x_expT declared but NOT used in allocate_vec_tile_buffers (lines 264-265 commented out)",
+            "nzConvBuffer[2] allocated at fixed UB offset (254KB area), not sequential",
+        ],
     }
     
-    # Add union info if applicable
+    result["sequential_bytes"] = seq_bytes
+    
     if use_union:
         result["union_info"] = {
             "stride": union_stride,
             "buffers": src_vec_tn_buffers,
         }
-    
-    if use_union:
         result["breakdown"] = {
+            f"union(qkVecTile/pvVecTile)[{src_vec_tn_buffers}]": union_bytes,
             "runningOTile": tile_out_gu_bytes,
-            f"union(qkVecTile/pvVecTile)[{src_vec_tn_buffers}]": union_stride * src_vec_tn_buffers,
             "m1_local_max": reduce_tile_f_bytes,
             "m2_global_max": reduce_tile_f_bytes,
             "l1_local_sum": reduce_tile_f_bytes,
             "l2_global_sum": reduce_tile_f_bytes,
             f"l1_exp_max[{exp_max_buffers}]": reduce_tile_f_bytes * exp_max_buffers,
-            f"x_expT[{xexp_vec_tn_buffers}]": xexp_bytes,
-            "nzConvBuffer": tile_data_h_nz_bytes,
+            f"nzConvBuffer[2]": nz_buf_total,
         }
     else:
         result["breakdown"] = {
@@ -244,9 +231,16 @@ def compute_buffer_usage_fa3_fp16_dn(cube_s0: int, cube_s1: int, head_size: int,
             "l1_local_sum": reduce_tile_f_bytes,
             "l2_global_sum": reduce_tile_f_bytes,
             f"l1_exp_max[{exp_max_buffers}]": reduce_tile_f_bytes * exp_max_buffers,
-            f"x_expT[{xexp_vec_tn_buffers}]": xexp_bytes,
-            "nzConvBuffer": tile_data_h_nz_bytes,
+            f"nzConvBuffer[2]": nz_buf_total,
         }
+    
+    result["nz_buf_info"] = {
+        "nz_buf_size": nz_buf_size,
+        "nz_buf_total": nz_buf_total,
+        "nz_buf_offset": softmax_scratch_offset - nz_buf_size,
+        "softmax_scratch_offset": softmax_scratch_offset,
+        "note": "allocated at fixed UB offset (254KB area)",
+    }
     
     return result
 
@@ -283,7 +277,6 @@ def print_allocation_table(title: str, breakdown: dict, tile_shapes: dict, tile_
         tile_type = var_to_tile_type.get(base_name if not is_union_var else "union", base_name)
         
         if is_union_var:
-            # Show union info with actual tile shapes
             tile_type_str = "TileDataF_T/TileOutGuT"
             qk_shape = tile_shapes.get("TileDataF_T", ("-", "-", "-"))
             pv_shape = tile_shapes.get("TileOutGuT", ("-", "-", "-"))
@@ -346,7 +339,7 @@ def main():
     parser.add_argument("--cv_fifo_size", type=int, default=4,
                         help="CV FIFO size (default: 4)")
     parser.add_argument("--union", action="store_true",
-                        help="Use union allocation for qkVecTile/pvVecTile (saves UB)")
+                        help="Use union allocation for qkVecTile/pvVecTile (for A2/A3 with 192KB UB)")
     
     args = parser.parse_args()
     
@@ -354,14 +347,12 @@ def main():
         print(f"Error: TILE_S1 ({args.tile_s1}) must be divisible by CUBE_S1 ({args.cube_s1})")
         return
     
-    # Compute L1 usage
     l1_result = compute_l1_usage(
         cube_s0=args.cube_s0,
         cube_s1=args.cube_s1,
         head_size=args.head_size,
     )
     
-    # Compute UB usage
     ub_result = compute_buffer_usage_fa3_fp16_dn(
         cube_s0=args.cube_s0,
         cube_s1=args.cube_s1,
@@ -383,7 +374,6 @@ def main():
     for k, v in ub_result["derived"].items():
         print(f"  {k}: {v}")
     
-    # L1 allocation table
     l1_var_to_tile_type = {
         "qMatTile": "TileMatQData",
         "kMatTile": "TileMatKData",
@@ -404,13 +394,11 @@ def main():
         buffer_name="L1",
     )
     
-    # UB allocation table
     ub_var_to_tile_type = {
         "qkVecTile": "TileDataF_T",
         "pvVecTile": "TileOutGuT",
         "union(qkVecTile/pvVecTile)": "union",
         "runningOTile": "TileOutGuT",
-        "x_expT": "TileDataH_T",
         "m1_local_max": "ReduceTileF_T",
         "m2_global_max": "ReduceTileF_T",
         "l1_local_sum": "ReduceTileF_T",
@@ -419,7 +407,6 @@ def main():
         "nzConvBuffer": "TileDataH_NZ_T",
     }
     
-    # Get union info if applicable
     union_stride = 0
     union_bufs = 0
     if args.union and "union_info" in ub_result:
@@ -427,7 +414,7 @@ def main():
         union_bufs = ub_result["union_info"]["buffers"]
     
     print_allocation_table(
-        title="UB Allocation Table",
+        title="UB Allocation Table (allocate_vec_tile_buffers)",
         breakdown=ub_result["breakdown"],
         tile_shapes=ub_result["tile_shapes"],
         tile_sizes=ub_result["tile_sizes"],
@@ -441,6 +428,17 @@ def main():
         union_stride=union_stride,
         union_bufs=union_bufs,
     )
+    
+    print("\n[nzConvBuffer Allocation Details]")
+    nz_info = ub_result["nz_buf_info"]
+    print(f"  Size per buffer: {format_size(nz_info['nz_buf_size'])}")
+    print(f"  Total (2 buffers): {format_size(nz_info['nz_buf_total'])}")
+    print(f"  Offset: {nz_info['nz_buf_offset']} (softmaxScratchOffset - nzBufSize)")
+    print(f"  Note: {nz_info['note']}")
+    
+    print("\n[Notes]")
+    for note in ub_result["notes"]:
+        print(f"  - {note}")
 
 
 if __name__ == "__main__":
