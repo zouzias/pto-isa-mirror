@@ -158,53 +158,68 @@ TEST(TQuantCpuSimTest, Int8AsymMatchesExactReference)
     }
 }
 
-TEST(TQuantCpuSimTest, MxFp8NdMatchesExactBytes)
+template <typename SrcType>
+void TestFP8ExactMatch()
 {
-    using SrcTile = Tile<TileType::Vec, float, 16, 32>;
+    using SrcTile = Tile<TileType::Vec, SrcType, 16, 32>;
+    using ScaleTile = Tile<TileType::Vec, float, 16, 32>;
     using DstTile = Tile<TileType::Vec, int8_t, 16, 32>;
     using ExpTile = Tile<TileType::Vec, uint8_t, 1, 32, BLayout::RowMajor, 1, 16>;
     using MaxTile = Tile<TileType::Vec, float, 1, 16>;
     SrcTile src;
-    SrcTile scaling;
+    ScaleTile scaling;
     DstTile dst;
-    ExpTile exp;
+    ExpTile expTile;
     MaxTile max;
     size_t addr = 0;
     TASSIGN(src, addr);
     addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
     TASSIGN(scaling, addr);
-    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    addr += ScaleTile::Numel * sizeof(typename ScaleTile::DType);
     TASSIGN(dst, addr);
     addr += DstTile::Numel * sizeof(typename DstTile::DType);
-    TASSIGN(exp, addr);
+    TASSIGN(expTile, addr);
     addr += ExpTile::Numel * sizeof(typename ExpTile::DType);
     TASSIGN(max, addr);
 
     for (int r = 0; r < src.GetValidRow(); ++r) {
         for (int c = 0; c < src.GetValidCol(); ++c) {
-            const float base = (c % 8 == 0) ? 32.0f : static_cast<float>((r + c) % 9 + 1);
-            src.data()[GetTileElementOffset<SrcTile>(r, c)] = ((r + c) % 2 == 0) ? base : -base;
+            double fraction = pow(static_cast<double>(r * SrcTile::Cols + c) / SrcTile::Numel, 10);
+            double base =
+                fraction * ((r + c) % 2 ? std::numeric_limits<SrcType>::max() : std::numeric_limits<SrcType>::lowest());
+            src.data()[GetTileElementOffset<SrcTile>(r, c)] = static_cast<SrcType>(base);
         }
     }
 
-    TQUANT<QuantType::MXFP8>(dst, src, &exp, &max, &scaling);
+    TQUANT<QuantType::MXFP8>(dst, src, &expTile, &max, &scaling);
 
     for (int row = 0; row < 16; ++row) {
         float maxAbs = 0.0f;
         for (int col = 0; col < 32; ++col) {
-            maxAbs = std::max(maxAbs, std::fabs(src.data()[GetTileElementOffset<SrcTile>(row, col)]));
+            maxAbs =
+                std::max(maxAbs, std::fabs(static_cast<float>(src.data()[GetTileElementOffset<SrcTile>(row, col)])));
         }
         const uint8_t expectedExp = static_cast<uint8_t>(((FloatToBits(maxAbs) & 0x7F800000u) >> 23) - 8u);
         const float expectedScaling = BitsToFloat((254u - expectedExp) << 23);
-        EXPECT_EQ(exp.data()[row], expectedExp);
+        EXPECT_EQ(expTile.data()[row], expectedExp);
         EXPECT_FLOAT_EQ(max.data()[row], maxAbs);
         for (int col = 0; col < 32; ++col) {
-            EXPECT_FLOAT_EQ(scaling.data()[GetTileElementOffset<SrcTile>(row, col)], expectedScaling);
+            EXPECT_FLOAT_EQ(scaling.data()[GetTileElementOffset<ScaleTile>(row, col)], expectedScaling);
             const uint8_t expectedByte =
                 EncodeE4M3Fn(src.data()[GetTileElementOffset<SrcTile>(row, col)] * expectedScaling);
             EXPECT_EQ(static_cast<uint8_t>(dst.data()[GetTileElementOffset<DstTile>(row, col)]), expectedByte);
         }
     }
+}
+
+TEST(TQuantCpuSimTest, MxFp8NdMatchesExactBytes)
+{
+    TestFP8ExactMatch<float>();
+}
+
+TEST(TQuantCpuSimTest, MxFp8FP16NdMatchesExactBytes)
+{
+    TestFP8ExactMatch<half>();
 }
 
 enum class MxFp4Case
@@ -464,6 +479,70 @@ TEST(TQuantCpuSimTest, MxFp4E2M1Fp16NdMixed32x1024)
     RunMxFp4E2M1NdCase<aclFloat16, 32, 1024>(MxFp4Case::Mixed);
 }
 
+template <typename SrcType>
+void TestFp8NzReordersExponentsExactly()
+{
+    using SrcTile = Tile<TileType::Vec, SrcType, 16, 64>;
+    using ScaleTile = Tile<TileType::Vec, float, 16, 64>;
+    using DstTile = Tile<TileType::Vec, int8_t, 16, 64>;
+    using ExpTile = Tile<TileType::Vec, uint8_t, 1, 32>;
+    using MaxTile = Tile<TileType::Vec, float, 1, 32>;
+    SrcTile src;
+    ScaleTile scaling;
+    DstTile dst;
+    ExpTile exp;
+    ExpTile expZz;
+    MaxTile max;
+    size_t addr = 0;
+    TASSIGN(src, addr);
+    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    TASSIGN(scaling, addr);
+    addr += ScaleTile::Numel * sizeof(typename ScaleTile::DType);
+    TASSIGN(dst, addr);
+    addr += DstTile::Numel * sizeof(typename DstTile::DType);
+    TASSIGN(exp, addr);
+    addr += ExpTile::Numel * sizeof(typename ExpTile::DType);
+    TASSIGN(expZz, addr);
+    addr += ExpTile::Numel * sizeof(typename ExpTile::DType);
+    TASSIGN(max, addr);
+
+    for (int r = 0; r < src.GetValidRow(); ++r) {
+        for (int c = 0; c < src.GetValidCol(); ++c) {
+            const SrcType base =
+                (c % 32 == 0) ? static_cast<SrcType>(64.0f) : static_cast<SrcType>((r * 3 + c) % 13 + 1);
+            src.data()[GetTileElementOffset<SrcTile>(r, c)] = ((r + c) % 3 == 0) ? -base : base;
+        }
+    }
+
+    TQUANT<QuantType::MXFP8, VecStoreMode::NZ>(dst, src, &exp, &max, &scaling, &expZz);
+
+    std::vector<uint8_t> expFlat(32);
+    for (int i = 0; i < 32; ++i) {
+        expFlat[i] = exp.data()[i];
+    }
+    const auto reordered = ReorderExponentZZ(expFlat, 16, 2);
+    for (int i = 0; i < 32; ++i) {
+        EXPECT_EQ(expZz.data()[i], reordered[i]);
+    }
+    for (int row = 0; row < 16; ++row) {
+        for (int col = 0; col < 64; ++col) {
+            const float scale = scaling.data()[GetTileElementOffset<ScaleTile>(row, col)];
+            const uint8_t expectedByte = EncodeE4M3Fn(src.data()[GetTileElementOffset<SrcTile>(row, col)] * scale);
+            EXPECT_EQ(static_cast<uint8_t>(dst.data()[GetTileElementOffset<DstTile>(row, col)]), expectedByte);
+        }
+    }
+}
+
+TEST(TQuantCpuSimTest, MxFp8NzReordersExponentsExactly)
+{
+    TestFp8NzReordersExponentsExactly<float>();
+}
+
+TEST(TQuantCpuSimTest, MxFp8FP16NzReordersExponentsExactly)
+{
+    TestFp8NzReordersExponentsExactly<half>();
+}
+
 #if defined(PTO_CPU_SIM_ENABLE_BF16)
 TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdSpecial)
 {
@@ -499,55 +578,14 @@ TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdMixed32x1024)
 {
     RunMxFp4E2M1NdCase<bfloat16_t, 32, 1024>(MxFp4Case::Mixed);
 }
-#endif
 
-TEST(TQuantCpuSimTest, MxFp8NzReordersExponentsExactly)
+TEST(TQuantCpuSimTest, MxFp8BF16NdMatchesExactBytes)
 {
-    using SrcTile = Tile<TileType::Vec, float, 16, 64>;
-    using DstTile = Tile<TileType::Vec, int8_t, 16, 64>;
-    using ExpTile = Tile<TileType::Vec, uint8_t, 1, 32>;
-    using MaxTile = Tile<TileType::Vec, float, 1, 32>;
-    SrcTile src;
-    SrcTile scaling;
-    DstTile dst;
-    ExpTile exp;
-    ExpTile expZz;
-    MaxTile max;
-    size_t addr = 0;
-    TASSIGN(src, addr);
-    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
-    TASSIGN(scaling, addr);
-    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
-    TASSIGN(dst, addr);
-    addr += DstTile::Numel * sizeof(typename DstTile::DType);
-    TASSIGN(exp, addr);
-    addr += ExpTile::Numel * sizeof(typename ExpTile::DType);
-    TASSIGN(expZz, addr);
-    addr += ExpTile::Numel * sizeof(typename ExpTile::DType);
-    TASSIGN(max, addr);
-
-    for (int r = 0; r < src.GetValidRow(); ++r) {
-        for (int c = 0; c < src.GetValidCol(); ++c) {
-            const float base = (c % 32 == 0) ? 64.0f : static_cast<float>((r * 3 + c) % 13 + 1);
-            src.data()[GetTileElementOffset<SrcTile>(r, c)] = ((r + c) % 3 == 0) ? -base : base;
-        }
-    }
-
-    TQUANT<QuantType::MXFP8, VecStoreMode::NZ>(dst, src, &exp, &max, &scaling, &expZz);
-
-    std::vector<uint8_t> expFlat(32);
-    for (int i = 0; i < 32; ++i) {
-        expFlat[i] = exp.data()[i];
-    }
-    const auto reordered = ReorderExponentZZ(expFlat, 16, 2);
-    for (int i = 0; i < 32; ++i) {
-        EXPECT_EQ(expZz.data()[i], reordered[i]);
-    }
-    for (int row = 0; row < 16; ++row) {
-        for (int col = 0; col < 64; ++col) {
-            const float scale = scaling.data()[GetTileElementOffset<SrcTile>(row, col)];
-            const uint8_t expectedByte = EncodeE4M3Fn(src.data()[GetTileElementOffset<SrcTile>(row, col)] * scale);
-            EXPECT_EQ(static_cast<uint8_t>(dst.data()[GetTileElementOffset<DstTile>(row, col)]), expectedByte);
-        }
-    }
+    TestFP8ExactMatch<bfloat16_t>();
 }
+
+TEST(TQuantCpuSimTest, MxFp8BF16NzReordersExponentsExactly)
+{
+    TestFp8NzReordersExponentsExactly<bfloat16_t>();
+}
+#endif
