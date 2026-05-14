@@ -28,21 +28,31 @@ tbroadcast %group, %src : (!pto.group<...>, !pto.memref<...>)
 
 降级时会为 GM→UB→GM 数据路径引入 UB 暂存 Tile；C++ 内建接口需要显式传入 `stagingTileData`（或 `pingTile` / `pongTile`）操作数。
 
+## 模板参数
+
+- `engine`：
+    - `CollEngine::AIV`（默认）
+    - `CollEngine::CCU`（Ascend950，仅 NPU_ARCH 3510）
+
 ## C++ 内建接口
 
 声明于 `include/pto/comm/pto_comm_inst.hpp`：
 
 ```cpp
 // 基础广播（单暂存 Tile）
-template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+template <CollEngine engine = CollEngine::AIV,
+          typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... Args>
 PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
-                                TileData &stagingTileData, WaitEvents&... events);
+                                TileData &stagingTileData, Args&... args);
 
 // 乒乓广播（使用两个暂存 Tile 实现双缓冲）
-template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+template <CollEngine engine = CollEngine::AIV,
+          typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... Args>
 PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
-                                TileData &pingTile, TileData &pongTile, WaitEvents&... events);
+                                TileData &pingTile, TileData &pongTile, Args&... args);
 ```
+
+当 `engine == CollEngine::CCU` 时，可变参数的第一个参数必须是包含 CKE slot 虚拟地址和 gate mask 的 `CcuTriggerContext`。AIV kernel 触发 CKE gate，实际的广播数据路径在 CCU 引擎上执行。
 
 ## 约束
 
@@ -59,6 +69,8 @@ PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData 
 - **分块模式约束**（数据超出单个 UB Tile 时）：
     - 若 `TileData` 具有静态 `ValidRow`，则 `GetShape(DIM_3)` 必须能被 `ValidRow` 整除。如需支持不足一行的情况，请使用 `DYNAMIC` ValidRow 的 Tile。
     - 若 `TileData` 具有静态 `ValidCol`，则 `GetShape(DIM_4)` 必须能被 `ValidCol` 整除。如需支持不足一列的情况，请使用 `DYNAMIC` ValidCol 的 Tile。
+
+> **CCU 路径**：与 AIV 路径（仅根节点调用 `TBROADCAST`）不同，CCU 路径要求所有 rank 通过宿主侧 `HcclCcuKernelRegister` / `HcclCcuKernelLaunch` 注册并启动 CCU kernel。完整示例参见 `tests/npu/a5/comm/st/testcase/tbroadcast_ccu/`。
 
 ## 示例
 
