@@ -1,19 +1,21 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TPOW_HPP
 #define TPOW_HPP
 
 #include <pto/common/constants.hpp>
-#include <pto/common/utils.hpp>
 #include <pto/common/type.hpp>
+#include <pto/common/utils.hpp>
 
 #include "utils.hpp"
 
@@ -59,7 +61,8 @@ PTO_INTERNAL void RFloor(RegTensor<float> &dstReg, RegTensor<float> &srcReg, Mas
 
 PTO_INTERNAL void ComputeExpoOddInt(MaskReg &oddMask, RegTensor<float> &expReg, RegTensor<float> &twoReg, MaskReg &mask)
 {
-    // calculate exp is odd or not: expo_odd_int = fmaf (-2.0f, floorf (0.5f * b), b) == 1.0f;
+    // calculate exp is odd or not: expo_odd_int = fmaf (-2.0f, floorf (0.5f * b),
+    // b) == 1.0f;
     RegTensor<float> tmpFloatReg;
     vmuls(tmpFloatReg, expReg, 0.5f, mask);
     RFloor(tmpFloatReg, tmpFloatReg, mask);
@@ -95,7 +98,8 @@ PTO_INTERNAL void ProcessFloatSpecialCase(RegTensor<float> &dstReg, RegTensor<fl
     // if (isinf(base) || base == 0.0f) {
     //     if (exp < 0.0f)
     //         base = base ^ 0x7F800000;          // 指数为负：翻转指数位
-    //     return (exp is odd) ? base : (base & 0x7FFFFFFF); // 奇数指数保留符号，否则取绝对值
+    //     return (exp is odd) ? base : (base & 0x7FFFFFFF); //
+    //     奇数指数保留符号，否则取绝对值
     // }
     pxor(curMask, cmpMask2, curMask, mask);
     IsInfNum(cmpMask1, baseReg, tmpR12Reg, curMask);
@@ -609,17 +613,23 @@ PTO_INTERNAL void PowCheckType()
     static_assert(DstTile::Loc == TileType::Vec && BaseTile::Loc == TileType::Vec && ExpTile::Loc == TileType::Vec,
                   "TPOW: TileType of dst, base and exp tiles must be TileType::Vec.");
     static_assert(DstTile::ValidCol <= DstTile::Cols,
-                  "TPOW: Number of dst's valid columns must not be greater than number of tile columns.");
+                  "TPOW: Number of dst's valid columns must not be greater than "
+                  "number of tile columns.");
     static_assert(DstTile::ValidRow <= DstTile::Rows,
-                  "TPOW: Number of dst's valid rows must not be greater than number of tile rows.");
+                  "TPOW: Number of dst's valid rows must not be greater than "
+                  "number of tile rows.");
     static_assert(BaseTile::ValidCol <= BaseTile::Cols,
-                  "TPOW: Number of base's valid columns must not be greater than number of tile columns.");
+                  "TPOW: Number of base's valid columns must not be greater than "
+                  "number of tile columns.");
     static_assert(BaseTile::ValidRow <= BaseTile::Rows,
-                  "TPOW: Number of base's valid rows must not be greater than number of tile rows.");
+                  "TPOW: Number of base's valid rows must not be greater than "
+                  "number of tile rows.");
     static_assert(ExpTile::ValidCol <= ExpTile::Cols,
-                  "TPOW: Number of exp's valid columns must not be greater than number of tile columns.");
+                  "TPOW: Number of exp's valid columns must not be greater than "
+                  "number of tile columns.");
     static_assert(ExpTile::ValidRow <= ExpTile::Rows,
-                  "TPOW: Number of exp's valid rows must not be greater than number of tile rows.");
+                  "TPOW: Number of exp's valid rows must not be greater than "
+                  "number of tile rows.");
 
     using T = typename DstTile::DType;
 
@@ -628,7 +638,8 @@ PTO_INTERNAL void PowCheckType()
                       "Type must be half/float/bfloat16 in high precision algorithm.");
     } else {
         static_assert(isSupportType<T, float, half, int32_t, uint32_t, int16_t, uint16_t, int8_t, uint8_t>,
-                      "Type must be uint8/int8/uint16/int16/uint32/int32/half/float in default algorithm.");
+                      "Type must be uint8/int8/uint16/int16/uint32/int32/half/float in "
+                      "default algorithm.");
     }
     static_assert(std::is_same_v<T, typename BaseTile::DType> && std::is_same_v<T, typename ExpTile::DType>,
                   "TPOW: The data type of dst, base and exp must be consistent");

@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 // GEMM Compute Kernel (Cube Arch)
@@ -24,9 +26,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
-#include "ready_queue.hpp"
+
 #include "gemm_ar_config.h"
 #include "kernel_launchers.h"
+#include "ready_queue.hpp"
 
 using namespace pto;
 
@@ -143,7 +146,8 @@ AICORE inline void SwizzleTileIndex(int linear_idx, uint32_t &mi, uint32_t &ni)
     }
 }
 
-// Run the K-loop for one output tile, then store result to GM and signal comm kernel.
+// Run the K-loop for one output tile, then store result to GM and signal comm
+// kernel.
 AICORE inline void ComputeAndStoreTile(__gm__ half *gemm_output, __gm__ half *src0, __gm__ half *src1,
                                        volatile __gm__ PerBlockQueue *my_queue, TileMatAData aMatTile[2],
                                        TileMatBData bMatTile[2], LeftTileT aTile[2], RightTileT bTile[2],
@@ -194,7 +198,8 @@ AICORE inline void ComputeAndStoreTile(__gm__ half *gemm_output, __gm__ half *sr
 // ============================================================================
 // GemmComputeImpl: Core compute logic
 //
-// Each block handles a subset of tiles (no contention — sole producer per queue).
+// Each block handles a subset of tiles (no contention — sole producer per
+// queue).
 // ============================================================================
 AICORE inline void GemmComputeImpl(__gm__ half *gemm_output, __gm__ half *src0, __gm__ half *src1,
                                    __gm__ MultiBlockQueueSet *queue_set, int launch_block_count, uint32_t k_per_rank)

@@ -1,29 +1,32 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
+#include <unistd.h>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <cmath>
 #include <cstring>
-#include "securec.h"
-#include <unistd.h>
-#include <algorithm>
-#include <chrono>
 #include <iomanip>
-#include <vector>
-#include <string>
 #include <iostream>
+#include <string>
+#include <vector>
 
 #include "ready_queue.hpp"
+#include "securec.h"
 
 #ifdef DT_UNDEFINED
 #define DT_UNDEFINED_SAVED DT_UNDEFINED
@@ -696,7 +699,9 @@ static void PrintBanner(int n_ranks)
 int main(int argc, char **argv)
 {
     if (!CommMpiInit(&argc, &argv)) {
-        fprintf(stderr, "[FATAL] CommMpiInit failed. Launch with: mpirun -n <N> ./allgather_gemm\n");
+        fprintf(stderr,
+                "[FATAL] CommMpiInit failed. Launch with: mpirun -n <N> "
+                "./allgather_gemm\n");
         return 1;
     }
 

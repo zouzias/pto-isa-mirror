@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TQUANT_HPP
@@ -15,8 +17,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 #include <pto/npu/a5/common.hpp>
 #include <pto/npu/a5/utils.hpp>
-#include "TReshape.hpp"
 #include <type_traits>
+
+#include "TReshape.hpp"
 
 namespace pto {
 
@@ -165,8 +168,9 @@ PTO_INTERNAL void AbsReduceMax_b16_DintlvWindow(__ubuf__ T *srcPtr, uint32_t off
         RegTensor<uint16_t> vu16_fp16_mantissa_1, vu16_fp16_mantissa_2, vu16_bf16_inf, vu16_bf16_nan;
         vector_bool preg_special_1, preg_special_2, preg_nan_1, preg_nan_2, preg_inf_1, preg_inf_2;
 
-        // Preserve fp16 Inf/NaN before abs/max, since NaN propagation requires a non-saturating
-        // f16->bf16 cast, while the following FP8 quantization path requires saturating mode.
+        // Preserve fp16 Inf/NaN before abs/max, since NaN propagation requires a
+        // non-saturating f16->bf16 cast, while the following FP8 quantization path
+        // requires saturating mode.
         vbr(vu16_fp16_abs_mask, kBf16AbsMask);
         vbr(vu16_fp16_exp_mask, kFp16ExpMask);
         vbr(vu16_fp16_mantissa_mask, kFp16MantissaMask);
@@ -244,7 +248,8 @@ PTO_INTERNAL void AbsReduceMax_b16_ND(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr, un
 
 // Assumption: input total size is a multiple of 32 VLs.
 // Uses 2 VLs per inner iteration (1 DINTLV + 1 vcgmax + 1 vstus) to avoid
-// WAW hazard on the vstus auto-increment scalar register when using 2 vstus per iteration.
+// WAW hazard on the vstus auto-increment scalar register when using 2 vstus per
+// iteration.
 template <typename T>
 PTO_INTERNAL void AbsReduceMax_b16_ND_largesizes(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr, unsigned vl_count,
                                                  unsigned total_elements_count)
@@ -289,7 +294,8 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_largesizes(__ubuf__ T *srcPtr, __ubuf__ T 
             MaskReg preg_vl1 = CreatePredicate<T>(total_count);
             uint32_t offset = (i * num_vl_per_outer_loop + j * num_vl_per_inner_loop) * elements_per_vl;
             uint32_t grp_offset = grps_per_outer_loop * i + grps_per_inner_loop * j;
-            vlds(vb16_in_1, vb16_in_2, srcPtr, offset, DINTLV_B16); // loads 2 VLs (256 bf16 elements)
+            vlds(vb16_in_1, vb16_in_2, srcPtr, offset,
+                 DINTLV_B16); // loads 2 VLs (256 bf16 elements)
 
             if constexpr (std::is_same<T, half>::value) {
                 vector_bool preg_special_1, preg_special_2, preg_nan_1, preg_nan_2, preg_inf_1, preg_inf_2;
@@ -326,15 +332,16 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_largesizes(__ubuf__ T *srcPtr, __ubuf__ T 
     }
 }
 
-// 2D version of AbsReduceMax_b16: iterates row-by-row, respecting a physical row
-// stride (srcCols) distinct from the valid element count per row (validCols).
-// Use when the dynamic valid width differs from the static (padded) tile width so
-// rows are NOT contiguous in UB. Assumes pad columns [validCols, srcCols) of the
-// source tile have been zero-filled (e.g. by ZeroPadSourceTile) so that pad groups
-// produce a zero group-max naturally through vmax/vcgmax.
+// 2D version of AbsReduceMax_b16: iterates row-by-row, respecting a physical
+// row stride (srcCols) distinct from the valid element count per row
+// (validCols). Use when the dynamic valid width differs from the static
+// (padded) tile width so rows are NOT contiguous in UB. Assumes pad columns
+// [validCols, srcCols) of the source tile have been zero-filled (e.g. by
+// ZeroPadSourceTile) so that pad groups produce a zero group-max naturally
+// through vmax/vcgmax.
 //
-// Max buffer layout: per-row stride = srcCols / 32 (groups per row), matching the
-// flattened layout used by the downstream ExtractB8ExponentAndScaling pass.
+// Max buffer layout: per-row stride = srcCols / 32 (groups per row), matching
+// the flattened layout used by the downstream ExtractB8ExponentAndScaling pass.
 template <typename T>
 PTO_INTERNAL void AbsReduceMax_b16_ND_2D(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr, unsigned validRows, unsigned validCols,
                                          unsigned srcCols)
@@ -347,9 +354,10 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_2D(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr,
     constexpr uint32_t grps_per_dintlv = elements_per_dintlv / grp_size; // 8 group maxes per DINTLV
     uint32_t groupsPerRow = srcCols / grp_size;                          // srcCols is always 32-aligned
     uint16_t loop_num_per_row = CeilDivision(srcCols, elements_per_dintlv);
-    // Max buffer is packed contiguously across rows (row N's maxes sit right after row N-1's).
-    // Stream the stores through a single alignment register with POST_UPDATE so the hardware
-    // tracks its own position; a single vstas at the end drains the residual.
+    // Max buffer is packed contiguously across rows (row N's maxes sit right
+    // after row N-1's). Stream the stores through a single alignment register
+    // with POST_UPDATE so the hardware tracks its own position; a single vstas at
+    // the end drains the residual.
     __ubuf__ T *writePtr = maxPtr;
     for (uint16_t row = 0; row < (uint16_t)validRows; ++row) {
         uint32_t src_row_off = row * srcCols;
@@ -371,7 +379,8 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_2D(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr,
         }
     }
     vstas(ureg_max, writePtr, 0, POST_UPDATE);
-    (void)validCols; // padded source makes validCols implicit; retained for API symmetry
+    (void)validCols; // padded source makes validCols implicit; retained for API
+                     // symmetry
 }
 
 // Computing scalar focus and exponent for F32 -> b8 e4m3 quantization
@@ -434,9 +443,9 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling(__ubuf__ float *maxPtr, __ubuf__ u
 }
 
 // B16 (BF16/FP16) -> FP8 shared-exponent + BF16 reciprocal scaling for MXFP8.
-// AbsReduceMax_b16_ND stores BF16 abs raw bits in maxPtr for both BF16 and FP16.
-// E8M0 encoded 0 is the minimum scale 2^-127, so maxExp==0 keeps the reciprocal
-// BF16 scale at 2^127 instead of becoming numeric zero.
+// AbsReduceMax_b16_ND stores BF16 abs raw bits in maxPtr for both BF16 and
+// FP16. E8M0 encoded 0 is the minimum scale 2^-127, so maxExp==0 keeps the
+// reciprocal BF16 scale at 2^127 instead of becoming numeric zero.
 template <typename T>
 PTO_INTERNAL void ExtractB8ExponentAndScalingVL(__ubuf__ T *maxPtr, __ubuf__ uint8_t *expPtr, __ubuf__ T *scalingPtr,
                                                 uint32_t off, uint32_t rem)
@@ -566,12 +575,12 @@ PTO_INTERNAL void ExtractE2M1ExponentAndScaling(__ubuf__ T *maxPtr, __ubuf__ uin
     }
 }
 
-// 2D variant of ExtractB8ExponentAndScaling for the padded (validCols != srcCols) path.
-// Iterates per row, processing only the groups backing valid columns. Max, exp and
-// scaling buffers share a packed per-row layout (row r's first group at row * groupsPerRow).
-// Only safe when groupsPerRow * sizeof(T) is a multiple of 32 B (i.e. srcCols >= 512 for
-// B16) so that each per-row NORM load/store address is 32-byte aligned. Callers must
-// gate on that condition.
+// 2D variant of ExtractB8ExponentAndScaling for the padded (validCols !=
+// srcCols) path. Iterates per row, processing only the groups backing valid
+// columns. Max, exp and scaling buffers share a packed per-row layout (row r's
+// first group at row * groupsPerRow). Only safe when groupsPerRow * sizeof(T)
+// is a multiple of 32 B (i.e. srcCols >= 512 for B16) so that each per-row NORM
+// load/store address is 32-byte aligned. Callers must gate on that condition.
 template <typename T>
 PTO_INTERNAL void ExtractB8ExponentAndScaling_2D(__ubuf__ T *maxPtr, __ubuf__ uint8_t *expPtr, __ubuf__ T *scalingPtr,
                                                  unsigned validRows, unsigned validCols, unsigned srcCols)
@@ -580,7 +589,7 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling_2D(__ubuf__ T *maxPtr, __ubuf__ ui
                   "ExtractB8ExponentAndScaling_2D: T must be bfloat16_t or half");
     constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T); // 128 group-maxes per VL
 
-    uint32_t groupsPerRow = srcCols / 32; // srcCols is 32-aligned
+    uint32_t groupsPerRow = srcCols / 32;                       // srcCols is 32-aligned
     uint32_t validGroupsPerRow = CeilDivision((uint32_t)validCols, 32u);
     uint16_t loopsPerRow = CeilDivision(validGroupsPerRow, elementsPerVL);
     for (uint16_t row = 0; row < (uint16_t)validRows; ++row) {
@@ -638,11 +647,12 @@ PTO_INTERNAL void CalcQuantizedFP8Values_Unroll2(__ubuf__ float *srcPtr, __ubuf_
     }
 }
 
-// B16 (BF16/FP16) -> FP8. FP16 uses BF16 reciprocal scale, matching dynamic_mx_quant:
-// convert input and BF16 scale to fp32, multiply in fp32, then downcast to fp8.
-// Quantize one 256-element DINTLV_B16 window to FP8: scale via broadcast of
-// 8 per-group scaling values, upcast b16->fp32 (EVEN/ODD), downcast fp32->fp8
-// (PART_P0-P3 pack mod-4 bytes), OR-combine, and store.
+// B16 (BF16/FP16) -> FP8. FP16 uses BF16 reciprocal scale, matching
+// dynamic_mx_quant: convert input and BF16 scale to fp32, multiply in fp32,
+// then downcast to fp8. Quantize one 256-element DINTLV_B16 window to FP8:
+// scale via broadcast of 8 per-group scaling values, upcast b16->fp32
+// (EVEN/ODD), downcast fp32->fp8 (PART_P0-P3 pack mod-4 bytes), OR-combine, and
+// store.
 template <typename T>
 PTO_INTERNAL void CalcQuantizedFP8Values_B16_Window(__ubuf__ T *srcPtr, __ubuf__ T *scalingPtr,
                                                     __ubuf__ uint8_t *dstPtr, uint16_t i, uint32_t offset_b16,
@@ -675,7 +685,8 @@ PTO_INTERNAL void CalcQuantizedFP8Values_B16_Window(__ubuf__ T *srcPtr, __ubuf__
         MaskReg preg_all_b16 = pset_b16(PAT_ALL);
         vlds((vector_u16 &)vb16_scaling_bf16, (__ubuf__ uint16_t *)scalingPtr, 8 * i, E2B_B16);
         vcvt(vb32_scaling, vb16_scaling_bf16, preg_all_b16, PART_EVEN);
-        // b16->fp32 EVEN/ODD splits each 128-lane reg into 2x64 fp32 (mod-4: 0,2,1,3).
+        // b16->fp32 EVEN/ODD splits each 128-lane reg into 2x64 fp32 (mod-4:
+        // 0,2,1,3).
         vcvt(vb32_cvt_1, vb16_in_1, preg_b16_1, PART_EVEN);
         vcvt(vb32_cvt_2, vb16_in_1, preg_b16_1, PART_ODD);
         vcvt(vb32_cvt_3, vb16_in_2, preg_b16_2, PART_EVEN);
@@ -688,13 +699,15 @@ PTO_INTERNAL void CalcQuantizedFP8Values_B16_Window(__ubuf__ T *srcPtr, __ubuf__
         vlds((vector_u16 &)vb16_scaling, (__ubuf__ uint16_t *)scalingPtr, 8 * i, E2B_B16);
         vmul(vb16_out_1, vb16_in_1, vb16_scaling, preg_b16_1, MODE_ZEROING);
         vmul(vb16_out_2, vb16_in_2, vb16_scaling, preg_b16_2, MODE_ZEROING);
-        // b16->fp32 EVEN/ODD splits each 128-lane reg into 2x64 fp32 (mod-4: 0,2,1,3).
+        // b16->fp32 EVEN/ODD splits each 128-lane reg into 2x64 fp32 (mod-4:
+        // 0,2,1,3).
         vcvt(vb32_cvt_1, vb16_out_1, preg_b16_1, PART_EVEN);
         vcvt(vb32_cvt_2, vb16_out_1, preg_b16_1, PART_ODD);
         vcvt(vb32_cvt_3, vb16_out_2, preg_b16_2, PART_EVEN);
         vcvt(vb32_cvt_4, vb16_out_2, preg_b16_2, PART_ODD);
     }
-    // fp32->fp8 P0..P3 writes to bytes 0..3 of each 32-bit slot; pair with mod-4 index.
+    // fp32->fp8 P0..P3 writes to bytes 0..3 of each 32-bit slot; pair with mod-4
+    // index.
     vcvt(vb8_p0, vb32_cvt_1, preg_f32_1_even, ROUND_R, RS_ENABLE, PART_P0);
     vcvt(vb8_p1, vb32_cvt_3, preg_f32_2_even, ROUND_R, RS_ENABLE, PART_P1);
     vcvt(vb8_p2, vb32_cvt_2, preg_f32_1_odd, ROUND_R, RS_ENABLE, PART_P2);
@@ -727,14 +740,17 @@ PTO_INTERNAL void CalcQuantizedFP8Values(__ubuf__ T *srcPtr, __ubuf__ T *scaling
     }
 }
 
-// 2D variant of CalcQuantizedFP8Values for the padded (validCols != srcCols) path.
-// Iterates per row using srcCols as src/dst stride (elements) and groupsPerRow as the
-// packed scaling-buffer stride. Processes only validCols elements per row; pad-col dst
-// bytes are not written (TSTORE trims them via GM shape). Alignment requirements:
+// 2D variant of CalcQuantizedFP8Values for the padded (validCols != srcCols)
+// path. Iterates per row using srcCols as src/dst stride (elements) and
+// groupsPerRow as the packed scaling-buffer stride. Processes only validCols
+// elements per row; pad-col dst bytes are not written (TSTORE trims them via GM
+// shape). Alignment requirements:
 //   - scalingPtr + row * groupsPerRow must be 16 B-aligned for E2B_B16 load
 //     (groupsPerRow * sizeof(T) % 16 == 0, i.e. srcCols % 256 == 0)
-//   - srcPtr  + row * srcCols must be 32 B-aligned for DINTLV_B16 (srcCols % 16 == 0)
-//   - dstPtr  + row * srcCols must be 32 B-aligned for NORM_B8 (srcCols % 32 == 0, always true)
+//   - srcPtr  + row * srcCols must be 32 B-aligned for DINTLV_B16 (srcCols % 16
+//   == 0)
+//   - dstPtr  + row * srcCols must be 32 B-aligned for NORM_B8 (srcCols % 32 ==
+//   0, always true)
 // Callers must gate on the srcCols %% 256 == 0 condition.
 template <typename T>
 PTO_INTERNAL void CalcQuantizedFP8Values_2D(__ubuf__ T *srcPtr, __ubuf__ T *scalingPtr, __ubuf__ uint8_t *dstPtr,
@@ -1034,13 +1050,14 @@ PTO_INTERNAL void TQuant_MXFP8_F32(__ubuf__ float *srcPtr, __ubuf__ uint8_t *exp
                            preg_upper32);
 }
 
-// B16 (BF16/FP16) -> MXFP8 quantization: AbsReduceMax + ExponentScaling + FP8 conversion.
-// When validCols == srcCols (static == dynamic width), the source tile is contiguous in UB
-// so the flat 1D reducer applies. Otherwise rows are padded to srcCols (ZeroPadSourceTile)
-// and we dispatch the 2D per-row reducer that honors the row stride. The 2D Extract/Calc
-// passes are only used when srcCols % 512 == 0 (NORM 32 B / E2B_B16 16 B alignment), else
-// we fall back to the flat Extract/Calc over the zero-padded buffer (pad lanes are zero
-// so the result is exact; TSTORE trims pad cols via the GM shape).
+// B16 (BF16/FP16) -> MXFP8 quantization: AbsReduceMax + ExponentScaling + FP8
+// conversion. When validCols == srcCols (static == dynamic width), the source
+// tile is contiguous in UB so the flat 1D reducer applies. Otherwise rows are
+// padded to srcCols (ZeroPadSourceTile) and we dispatch the 2D per-row reducer
+// that honors the row stride. The 2D Extract/Calc passes are only used when
+// srcCols % 512 == 0 (NORM 32 B / E2B_B16 16 B alignment), else we fall back to
+// the flat Extract/Calc over the zero-padded buffer (pad lanes are zero so the
+// result is exact; TSTORE trims pad cols via the GM shape).
 template <typename T>
 PTO_INTERNAL void TQuant_MXFP8_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *expPtr, __ubuf__ uint8_t *dstPtr,
                                    __ubuf__ T *maxPtr, __ubuf__ T *scalingPtr, uint16_t vl_count,
@@ -1049,23 +1066,25 @@ PTO_INTERNAL void TQuant_MXFP8_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *expPtr,
 {
     __ubuf__ T *maxPtr_backup = maxPtr;
     if (validCols == srcCols) {
-        // 1D fast path: source is contiguous; pick the best flat reducer by size.znme
+        // 1D fast path: source is contiguous; pick the best flat reducer by
+        // size.znme
         constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T);
         constexpr uint32_t elementsPerLargeLoop = 32 * elementsPerVL;
         if (total_elements_count % elementsPerLargeLoop == 0)
             AbsReduceMax_b16_ND_largesizes(srcPtr, maxPtr, vl_count, total_elements_count);
         else
             AbsReduceMax_b16_ND(srcPtr, maxPtr, vl_count, total_elements_count);
-        // Board: add VST_VST alongside VST_VLD/VV_ALL. Sim orders stores implicitly,
-        // board does not — missing VST_VST lets Phase-3 E2B_B16 read stale scaling.
+        // Board: add VST_VST alongside VST_VLD/VV_ALL. Sim orders stores
+        // implicitly, board does not — missing VST_VST lets Phase-3 E2B_B16 read
+        // stale scaling.
         mem_bar(VST_VLD);
         maxPtr = maxPtr_backup;
         ExtractB8ExponentAndScaling(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups);
         mem_bar(VST_VLD);
         CalcQuantizedFP8Values(srcPtr, scalingPtr, dstPtr, total_elements_count);
     } else {
-        // 2D path: iterate per row with srcCols stride. ZeroPadSourceTile has zeroed
-        // pad lanes so per-row max is correct.
+        // 2D path: iterate per row with srcCols stride. ZeroPadSourceTile has
+        // zeroed pad lanes so per-row max is correct.
         AbsReduceMax_b16_ND_2D(srcPtr, maxPtr, validRows, validCols, srcCols);
         mem_bar(VST_VLD);
         maxPtr = maxPtr_backup;
@@ -1096,7 +1115,8 @@ PTO_INTERNAL void TQuant_MXFP4_E2M1_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *ex
                   "TQuant_MXFP4_E2M1_B16: T must be half or bfloat16_t");
     __ubuf__ T *maxPtr_backup = maxPtr;
     if (validCols == srcCols) {
-        // 1D fast path: source is contiguous; keep the reducer selection aligned with MXFP8 FP16.
+        // 1D fast path: source is contiguous; keep the reducer selection aligned
+        // with MXFP8 FP16.
         constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T);
         constexpr uint32_t elementsPerLargeLoop = 32 * elementsPerVL;
         if (total_elements_count % elementsPerLargeLoop == 0)
@@ -1116,10 +1136,10 @@ PTO_INTERNAL void TQuant_MXFP4_E2M1_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *ex
         CalcQuantizedFP4E2M1Values_Bf16(srcPtr, scalingPtr, dstPtr, numGroups);
 }
 
-// Zero-pad columns [validCols, StaticCols) of a 16-bit source tile at VL-aligned
-// offsets (full-VL vlds -> vsel -> vsts). Sub-VL stores at non-VL-aligned offsets
-// are unreliable on some hardware revisions. Requires StaticCols | elemPerVL.
-// Must be called from inside a __VEC_SCOPE__.
+// Zero-pad columns [validCols, StaticCols) of a 16-bit source tile at
+// VL-aligned offsets (full-VL vlds -> vsel -> vsts). Sub-VL stores at
+// non-VL-aligned offsets are unreliable on some hardware revisions. Requires
+// StaticCols | elemPerVL. Must be called from inside a __VEC_SCOPE__.
 template <typename T, unsigned StaticCols>
 PTO_INTERNAL void ZeroPadColumns_VLAligned(__ubuf__ T *srcPtr, unsigned validRows, unsigned validCols)
 {
@@ -1159,8 +1179,8 @@ PTO_INTERNAL void ZeroPadColumns_VLAligned(__ubuf__ T *srcPtr, unsigned validRow
     }
 }
 
-// Fallback zero-padding using vstus/vstas for cases where StaticCols doesn't divide VL.
-// Must be called from inside a __VEC_SCOPE__.
+// Fallback zero-padding using vstus/vstas for cases where StaticCols doesn't
+// divide VL. Must be called from inside a __VEC_SCOPE__.
 template <typename T, unsigned StaticCols>
 PTO_INTERNAL void ZeroPadColumns_Unaligned(__ubuf__ T *srcPtr, unsigned validRows, unsigned validCols)
 {
@@ -1183,9 +1203,9 @@ PTO_INTERNAL void ZeroPadColumns_Unaligned(__ubuf__ T *srcPtr, unsigned validRow
     }
 }
 
-// Zero-pad source tile columns for non-float types. Dispatches between VL-aligned
-// (full-VL vlds/vsel/vsts) and unaligned (vstus/vstas) paths based on tile geometry.
-// Must be called from inside a __VEC_SCOPE__.
+// Zero-pad source tile columns for non-float types. Dispatches between
+// VL-aligned (full-VL vlds/vsel/vsts) and unaligned (vstus/vstas) paths based
+// on tile geometry. Must be called from inside a __VEC_SCOPE__.
 template <typename T, unsigned StaticCols>
 PTO_INTERNAL void ZeroPadSourceTile(__ubuf__ T *srcPtr, unsigned validRows, unsigned validCols)
 {
@@ -1378,7 +1398,8 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataPara &
 }
 
 // TQuant Interface for FP32/BF16/FP16->MXFP8 (ND mode)
-// E8M0, max, and scaling tiles may be passed as 2D; TQuant reshapes them to 1D internally.
+// E8M0, max, and scaling tiles may be passed as 2D; TQuant reshapes them to 1D
+// internally.
 template <QuantType quant_type, typename TileDataOut, typename TileDataSrc, typename TileDataExp, typename TileDataMax,
           typename TileDataScaling>
 PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *exp, TileDataMax *max,
@@ -1417,7 +1438,8 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
                                                             flatScaling.data(), src.data(), src.GetValidRow(),
                                                             src.GetValidCol());
     }
-    // Reshape exp back to user's original tile shape. Max and scaling are scratch buffers.
+    // Reshape exp back to user's original tile shape. Max and scaling are scratch
+    // buffers.
     TRESHAPE_IMPL(*exp, flatExp);
 }
 } // namespace pto

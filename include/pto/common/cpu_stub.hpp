@@ -1,23 +1,25 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_CPUSTUB_HPP
 #define PTO_CPUSTUB_HPP
 
+#include <dlfcn.h>
+
+#include <cassert>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <cassert>
-#include <cstdio>
 #include <type_traits>
-#include <dlfcn.h>
 
 #define __global__
 #define AICORE
@@ -58,7 +60,9 @@ constexpr pipe_t opPipeList[] = {};
 
 static inline int aclrtMallocHost(void **p, size_t sz)
 {
-    assert(sz != 0 && "[PTO][CA] Constraint violated. Condition: %s. Hint: see docs/coding/debug.md\n");
+    assert(sz != 0 &&
+           "[PTO][CA] Constraint violated. Condition: %s. Hint: see "
+           "docs/coding/debug.md\n");
     *p = malloc(sz);
     return 0;
 }
@@ -90,8 +94,7 @@ static inline int aclrtMallocHost(void **p, size_t sz)
 #define SKIP_IF_RANKS_LT(n)
 static constexpr uint32_t HCCL_MAX_RANK_NUM = 64;
 
-struct HcclRootInfo {
-};
+struct HcclRootInfo {};
 
 struct HcclDeviceContext {
     uint64_t workSpace;
@@ -115,6 +118,11 @@ using SetExecutionContextHookFn = void (*)(uint32_t block_idx, uint32_t subblock
 using GetExecutionContextHookFn = void (*)(uint32_t *block_idx, uint32_t *subblock_id, uint32_t *subblock_dim);
 using GetSharedStorageHookFn = void *(*)(const char *key, size_t size);
 using GetTaskCookieHookFn = uint64_t (*)();
+using GetSubblockIdInjectedHookFn = uint32_t (*)();
+using GetPipeSharedStateInjectedHookFn = void *(*)(uint64_t pipe_key, size_t size);
+
+inline GetSubblockIdInjectedHookFn injected_subblock_id_hook = nullptr;
+inline GetPipeSharedStateInjectedHookFn injected_pipe_shared_state_hook = nullptr;
 
 inline SetExecutionContextHookFn ResolveSetExecutionContextHook()
 {
@@ -142,6 +150,19 @@ inline GetTaskCookieHookFn ResolveTaskCookieHook()
     return hook;
 }
 
+inline GetSubblockIdInjectedHookFn ResolveSubblockIdHook()
+{
+    static auto hook = reinterpret_cast<GetSubblockIdInjectedHookFn>(dlsym(RTLD_DEFAULT, "pto_sim_get_subblock_id"));
+    return hook;
+}
+
+inline GetPipeSharedStateInjectedHookFn ResolvePipeSharedStateHook()
+{
+    static auto hook =
+        reinterpret_cast<GetPipeSharedStateInjectedHookFn>(dlsym(RTLD_DEFAULT, "pto_sim_get_pipe_shared_state"));
+    return hook;
+}
+
 struct ExecutionContext {
     uint32_t block_idx = 0;
     uint32_t subblock_id = 0;
@@ -150,6 +171,12 @@ struct ExecutionContext {
 };
 
 inline thread_local ExecutionContext execution_context{};
+
+inline void register_hooks(void *get_subblock_id, void *get_pipe_shared_state)
+{
+    injected_subblock_id_hook = reinterpret_cast<GetSubblockIdInjectedHookFn>(get_subblock_id);
+    injected_pipe_shared_state_hook = reinterpret_cast<GetPipeSharedStateInjectedHookFn>(get_pipe_shared_state);
+}
 
 inline void set_execution_context(uint32_t block_idx, uint32_t subblock_id, uint32_t subblock_dim = 1)
 {
@@ -203,6 +230,12 @@ inline uint32_t get_block_idx()
 
 inline uint32_t get_subblockid()
 {
+    if (pto::cpu_sim::injected_subblock_id_hook != nullptr) {
+        return pto::cpu_sim::injected_subblock_id_hook();
+    }
+    if (auto hook = pto::cpu_sim::ResolveSubblockIdHook(); hook != nullptr) {
+        return hook();
+    }
     if (auto hook = pto::cpu_sim::ResolveExecutionContextHook(); hook != nullptr) {
         uint32_t block_idx = 0;
         uint32_t subblock_id = 0;
@@ -234,8 +267,7 @@ inline uint64_t get_task_cookie()
 }
 
 template <typename T>
-struct is_event : std::false_type {
-};
+struct is_event : std::false_type {};
 
 template <typename... Ts>
 inline constexpr bool all_events_v = (is_event<Ts>::value && ...);

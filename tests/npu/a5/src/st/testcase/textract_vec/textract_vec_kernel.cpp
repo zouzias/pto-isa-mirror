@@ -1,16 +1,18 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_tile.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace pto;
 
@@ -175,8 +177,9 @@ __global__ AICORE void RunTExtractNZVec(__gm__ T *out, __gm__ T *srcIn, __gm__ T
 #endif
 }
 
-// 1-byte-dtype NZ vector kernel via int8-alias. Used for hifloat8/float8_*/float4_*
-// to bypass TMov / TLoad intrinsic gaps for sub-int8 dtypes.
+// 1-byte-dtype NZ vector kernel via int8-alias. Used for
+// hifloat8/float8_*/float4_* to bypass TMov / TLoad intrinsic gaps for sub-int8
+// dtypes.
 template <typename TByteType, uint32_t SrcRows, uint32_t SrcCols, uint32_t DstRows, uint32_t DstCols, uint32_t IdxRow,
           uint32_t IdxCol = 0, uint32_t DstValidRows = DstRows, uint32_t DstValidCols = DstCols>
 __global__ AICORE void RunTExtractNZVecByteAlias(__gm__ uint8_t *out, __gm__ uint8_t *srcIn, __gm__ uint8_t *dstInitIn)
@@ -245,8 +248,9 @@ __global__ AICORE void RunTExtractNZVecByteAlias(__gm__ uint8_t *out, __gm__ uin
 #endif
 }
 
-// FP4 ND vector kernel via int8-alias. Uses int8 TLOAD/TSTORE; fp4 TEXTRACT alias drives the code under test.
-// Aligned-only (validCol*sizeof(fp4) and indexCol*sizeof(fp4) must be 32B-aligned -> validCol/indexCol multiples of
+// FP4 ND vector kernel via int8-alias. Uses int8 TLOAD/TSTORE; fp4 TEXTRACT
+// alias drives the code under test. Aligned-only (validCol*sizeof(fp4) and
+// indexCol*sizeof(fp4) must be 32B-aligned -> validCol/indexCol multiples of
 // 64).
 template <typename TFp4, uint32_t SrcRows, uint32_t SrcCols, uint32_t DstRows, uint32_t DstCols, uint32_t DstValidRows,
           uint32_t DstValidCols, uint32_t IdxRow, uint32_t IdxCol>
@@ -520,11 +524,13 @@ void launchTExtractVecND(uint8_t *out, uint8_t *srcIn, uint8_t *dstInitIn, void 
             <<<1, nullptr, stream>>>(reinterpret_cast<float8_e5m2_t *>(out), reinterpret_cast<float8_e5m2_t *>(srcIn),
                                      reinterpret_cast<float8_e5m2_t *>(dstInitIn));
     } else if constexpr (testKey == 16) {
-        // ND partial valid: half src 32x32, dst static 16x16 valid 4x16, idxRow=2, idxCol=8
+        // ND partial valid: half src 32x32, dst static 16x16 valid 4x16, idxRow=2,
+        // idxCol=8
         RunTExtractNDVec<half, 32, 32, 16, 16, 4, 16, 2, 8><<<1, nullptr, stream>>>(
             reinterpret_cast<half *>(out), reinterpret_cast<half *>(srcIn), reinterpret_cast<half *>(dstInitIn));
     } else if constexpr (testKey == 17) {
-        // ND fp4_e2m1 aligned via int8-alias: src 16x128 fp4 (=16x64 byte), dst 16x64 fp4 (=16x32 byte), idxCol=64
+        // ND fp4_e2m1 aligned via int8-alias: src 16x128 fp4 (=16x64 byte), dst
+        // 16x64 fp4 (=16x32 byte), idxCol=64
         // (=32B aligned)
         RunTExtractNDVecFp4<float4_e2m1x2_t, 16, 64, 16, 32, 16, 32, 0, 32>
             <<<1, nullptr, stream>>>(out, srcIn, dstInitIn);
@@ -585,7 +591,8 @@ void launchTExtractVecNZ(uint8_t *out, uint8_t *srcIn, uint8_t *dstInitIn, void 
         RunTExtractNZVec<int8_t, 32, 64, 16, 64, 16><<<1, nullptr, stream>>>(
             reinterpret_cast<int8_t *>(out), reinterpret_cast<int8_t *>(srcIn), reinterpret_cast<int8_t *>(dstInitIn));
     } else if constexpr (testKey == 7) {
-        // indexCol != 0 (one fractal block over): src 32x64, dst 16x32, idxRow=8, idxCol=32
+        // indexCol != 0 (one fractal block over): src 32x64, dst 16x32, idxRow=8,
+        // idxCol=32
         RunTExtractNZVec<int8_t, 32, 64, 16, 32, 8, 32><<<1, nullptr, stream>>>(
             reinterpret_cast<int8_t *>(out), reinterpret_cast<int8_t *>(srcIn), reinterpret_cast<int8_t *>(dstInitIn));
     } else if constexpr (testKey == 8) {
@@ -593,7 +600,8 @@ void launchTExtractVecNZ(uint8_t *out, uint8_t *srcIn, uint8_t *dstInitIn, void 
         RunTExtractNZVec<half, 32, 32, 16, 32, 4, 0, 8, 16><<<1, nullptr, stream>>>(
             reinterpret_cast<half *>(out), reinterpret_cast<half *>(srcIn), reinterpret_cast<half *>(dstInitIn));
     } else if constexpr (testKey == 9) {
-        // multi-fractal-row dst: src 64x32, dst 32x32 (2 fractal blocks of 16 rows), idxRow=0
+        // multi-fractal-row dst: src 64x32, dst 32x32 (2 fractal blocks of 16
+        // rows), idxRow=0
         RunTExtractNZVec<half, 64, 32, 32, 32, 0><<<1, nullptr, stream>>>(
             reinterpret_cast<half *>(out), reinterpret_cast<half *>(srcIn), reinterpret_cast<half *>(dstInitIn));
     } else if constexpr (testKey == 10) {

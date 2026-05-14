@@ -30,7 +30,7 @@ Where `validCols0 = src0.GetValidCol()` and `validCols1 = src1.GetValidCol()`.
 
 ## Assembly Syntax
 
-PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
+PTO-AS form: see [assembly syntax model](syntax-and-operands/assembly-model.md).
 
 ### AS Level 1 (SSA)
 

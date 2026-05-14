@@ -75,7 +75,7 @@ def gen_golden_data(param):
         min_m = min(valid_row, golden.shape[0])
         min_k = min(valid_col, golden.shape[1])
         golden[:min_m, :min_k] = x1_gm[:min_m, :min_k]
-        x1_gm = x1_gm.reshape((whole_shape3 // 16, 16, whole_shape4 // 2, 2)).transpose(0, 2, 1, 3).astype(src_type)        
+        x1_gm = x1_gm.reshape((whole_shape3 // 16, 16, whole_shape4 // 2, 2)).transpose(0, 2, 1, 3).astype(src_type)
     elif param.load_type == DataFormat['BND2NN'].value:
         x1_gm = np.random.randint(1, 5, [whole_shape3, whole_shape4]).astype(src_type)
         golden = np.zeros([tile_rows, tile_cols]).astype(src_type)  # L1中Tile大小
@@ -96,7 +96,7 @@ def gen_golden_data(param):
         min_m = min(valid_row, golden.shape[0])
         min_k = min(valid_col, golden.shape[1])
         golden[:min_m, :min_k] = x1_gm[:min_m, :min_k]
-        x1_gm = x1_gm.reshape((whole_shape3 // 2, 2, whole_shape4 // 16, 16)).transpose(2, 0, 3, 1).astype(src_type)            
+        x1_gm = x1_gm.reshape((whole_shape3 // 2, 2, whole_shape4 // 16, 16)).transpose(2, 0, 3, 1).astype(src_type)
 
     x2_gm = np.random.randint(1, 5, [valid_row, valid_col]).astype(src_type)
     golden = update_golden(golden, param, tile_rows, tile_cols)
@@ -142,7 +142,7 @@ if __name__ == "__main__":
         TmatmulParams("TLOADMXTest.1_1_1_128_128_uint8_AND2ZZ", np.uint8, np.uint8, np.uint8, 1, 1, 1,
                       128, 128, 1, 1, 1, 128, 128, 128, 128, DataFormat['AND2ZZ'].value),
         TmatmulParams("TLOADMXTest.1_1_1_64_128_uint8_AND2ZZ", np.uint8, np.uint8, np.uint8, 1, 1, 1,
-                      31, 118, 1, 1, 1, 34, 126, 64, 128, DataFormat['AND2ZZ'].value),                      
+                      31, 118, 1, 1, 1, 34, 126, 64, 128, DataFormat['AND2ZZ'].value),
         # ADN2ZZ
         TmatmulParams("TLOADMXTest.1_1_1_16_4_uint8_ADN2ZZ", np.uint8, np.uint8, np.uint8, 1, 1, 1,
                       1, 2, 1, 1, 1, 1, 65534, 16, 8, DataFormat['ADN2ZZ'].value),

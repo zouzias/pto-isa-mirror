@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef EVENT_HPP
@@ -13,8 +15,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #define EVENT_ID_MAX 8
 
-#include <type_traits>
 #include <pto/common/type.hpp>
+#include <type_traits>
 
 namespace pto {
 enum class Op : uint16_t
@@ -108,11 +110,13 @@ enum class Op : uint16_t
     SET_IMG2COL_PADDING,
     TCONCAT,
     TDEQUANT,
-    OP_COUNT, // The Total number of operations, please add new operations before OP_COUNT
+    OP_COUNT, // The Total number of operations, please add new operations before
+              // OP_COUNT
 };
 
 // opPipeList maps each operation in Op enum to its corresponding pipeline type.
-// This array is used to determine which hardware pipeline should be used for each operation.
+// This array is used to determine which hardware pipeline should be used for
+// each operation.
 constexpr pipe_t opPipeList[] = {
     PIPE_MTE2 /* TLOAD */,
     PIPE_MTE3 /* TSTORE_VEC */,
@@ -206,8 +210,7 @@ constexpr pipe_t opPipeList[] = {
     PIPE_ALL /* OP_COUNT */,
 };
 
-struct RecordEvent {
-};
+struct RecordEvent {};
 
 template <pipe_t SrcPipe, pipe_t DstPipe>
 class EventIdCounter {
@@ -236,7 +239,7 @@ private:
 };
 
 template <typename... WaitEvents>
-PTO_INTERNAL void WaitAllEvents(WaitEvents &... events)
+PTO_INTERNAL void WaitAllEvents(WaitEvents &...events)
 {
     (events.Wait(), ...);
 }

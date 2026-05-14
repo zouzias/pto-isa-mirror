@@ -1,19 +1,22 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TPOW_HPP
 #define TPOW_HPP
 
 #include <pto/common/constants.hpp>
-#include <pto/common/utils.hpp>
 #include <pto/common/type.hpp>
+#include <pto/common/utils.hpp>
+
 #include "pto/npu/a2a3/TBinOp.hpp"
 #include "pto/npu/a2a3/TBinSOp.hpp"
 
@@ -67,7 +70,8 @@ PTO_INTERNAL int TPowICore(int base, int exp)
         // (-1)^even = 1, (-1)^odd = -1
         return (exp & 1) ? -1 : 1;
     } else if (exp < 0) {
-        return 0; // PyTorch behavior: negative integer exponent is not allowed for integer base
+        return 0; // PyTorch behavior: negative integer exponent is not allowed for
+                  // integer base
     }
 
     int result = 1;
@@ -241,17 +245,23 @@ PTO_INTERNAL void PowCheckType()
     static_assert(DstTile::Loc == TileType::Vec && BaseTile::Loc == TileType::Vec && ExpTile::Loc == TileType::Vec,
                   "TPOW: TileType of dst, base and exp tiles must be TileType::Vec.");
     static_assert(DstTile::ValidCol <= DstTile::Cols,
-                  "TPOW: Number of dst's valid columns must not be greater than number of tile columns.");
+                  "TPOW: Number of dst's valid columns must not be greater than "
+                  "number of tile columns.");
     static_assert(DstTile::ValidRow <= DstTile::Rows,
-                  "TPOW: Number of dst's valid rows must not be greater than number of tile rows.");
+                  "TPOW: Number of dst's valid rows must not be greater than "
+                  "number of tile rows.");
     static_assert(BaseTile::ValidCol <= BaseTile::Cols,
-                  "TPOW: Number of base's valid columns must not be greater than number of tile columns.");
+                  "TPOW: Number of base's valid columns must not be greater than "
+                  "number of tile columns.");
     static_assert(BaseTile::ValidRow <= BaseTile::Rows,
-                  "TPOW: Number of base's valid rows must not be greater than number of tile rows.");
+                  "TPOW: Number of base's valid rows must not be greater than "
+                  "number of tile rows.");
     static_assert(ExpTile::ValidCol <= ExpTile::Cols,
-                  "TPOW: Number of exp's valid columns must not be greater than number of tile columns.");
+                  "TPOW: Number of exp's valid columns must not be greater than "
+                  "number of tile columns.");
     static_assert(ExpTile::ValidRow <= ExpTile::Rows,
-                  "TPOW: Number of exp's valid rows must not be greater than number of tile rows.");
+                  "TPOW: Number of exp's valid rows must not be greater than "
+                  "number of tile rows.");
     static_assert(DstTile::isRowMajor && BaseTile::isRowMajor && ExpTile::isRowMajor,
                   "TPOW: Not supported Layout type");
 
@@ -272,11 +282,14 @@ PTO_INTERNAL void TPOW_IMPL(DstTile &dst, BaseTile &base, ExpTile &exp, TmpTile 
     unsigned validRows = dst.GetValidRow();
     unsigned validCols = dst.GetValidCol();
     PTO_ASSERT(validRows == base.GetValidRow() && validCols == base.GetValidCol(),
-               "Fix: TPOW input tile base valid shape mismatch with output tile dst shape.");
+               "Fix: TPOW input tile base valid shape mismatch with output tile "
+               "dst shape.");
     PTO_ASSERT(validRows == exp.GetValidRow() && validCols == exp.GetValidCol(),
-               "Fix: TPOW input tile exp valid shape mismatch with output tile dst shape.");
+               "Fix: TPOW input tile exp valid shape mismatch with output tile "
+               "dst shape.");
     PTO_ASSERT(std::is_integral_v<T> || (validRows == tmp.GetValidRow() && validCols == tmp.GetValidCol()),
-               "Fix: TPOW input tile tmp valid shape mismatch with output tile dst shape when the data type is "
+               "Fix: TPOW input tile tmp valid shape mismatch with output tile "
+               "dst shape when the data type is "
                "floating point.");
 
     TPow<DstTile, BaseTile, ExpTile, TmpTile>(dst.data(), base.data(), exp.data(), tmp.data(), validRows, validCols);
@@ -311,9 +324,11 @@ PTO_INTERNAL void TPOWS_IMPL(DstTile &dst, BaseTile &base, typename DstTile::DTy
     unsigned validRows = dst.GetValidRow();
     unsigned validCols = dst.GetValidCol();
     PTO_ASSERT(validRows == base.GetValidRow() && validCols == base.GetValidCol(),
-               "Fix: TPOW input tile base valid shape mismatch with output tile dst shape.");
+               "Fix: TPOW input tile base valid shape mismatch with output tile "
+               "dst shape.");
     PTO_ASSERT(std::is_integral_v<T> || (validRows == tmp.GetValidRow() && validCols == tmp.GetValidCol()),
-               "Fix: TPOW input tile tmp valid shape mismatch with output tile dst shape when the data type is "
+               "Fix: TPOW input tile tmp valid shape mismatch with output tile "
+               "dst shape when the data type is "
                "floating point.");
 
     TPows<DstTile, BaseTile, TmpTile>(dst.data(), base.data(), exp, tmp.data(), validRows, validCols);

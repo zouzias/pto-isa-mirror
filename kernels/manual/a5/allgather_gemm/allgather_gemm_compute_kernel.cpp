@@ -1,15 +1,18 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
+
 #include "gemm_config.hpp"
 #include "ready_queue.hpp"
 
@@ -44,7 +47,8 @@ using NDWholeShapeC = BaseShape2D<float, G_M, G_N>;
 using GlobalDataOut = GlobalTensor<float, NDValidShapeC, NDWholeShapeC>;
 
 // ---------------------------------------------------------------------------
-// ProcessKIterationContinuous: 单次 K-iteration 的 L1 load + L0 extract + matmul
+// ProcessKIterationContinuous: 单次 K-iteration 的 L1 load + L0 extract +
+// matmul
 // ---------------------------------------------------------------------------
 template <typename T, typename U, typename S, int M, int K, int N, uint32_t baseM, uint32_t baseK, uint32_t baseN,
           uint32_t stepKa, uint32_t stepKb>
