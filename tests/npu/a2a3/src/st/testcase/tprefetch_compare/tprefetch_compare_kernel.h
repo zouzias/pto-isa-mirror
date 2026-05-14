@@ -83,6 +83,59 @@ bool RunScenarioBIssueOverhead(int deviceId, size_t payloadBytes = 4096);
 template <typename T, size_t count>
 bool RunScenarioCOverlap(int deviceId);
 
+// ---- Scenario F: chunked prefetch (N issues over different addresses) ---
+// Goal: measure how the per-issue cost scales when the application has to
+// prefetch N disjoint regions in a row. This is the deployment pattern where
+// device should structurally win — the kernel is launched once, the host has
+// to call aclrtCmoAsync N times.
+//
+// Two paths, identical work (N chunks of `chunkBytes` each over the same
+// source buffer, addresses src + i*chunkBytes for i in [0, N)):
+//
+//   * host path:
+//         for i in [0, N): aclrtCmoAsync(src + i*chunkBytes, chunkBytes, stream)
+//         aclrtSynchronizeStream(stream)         // ONE sync, end of batch
+//     The N aclrtCmoAsync calls are individually asynchronous (each just
+//     enqueues a task into the stream FIFO and returns), but each call still
+//     pays the host-side ACL + STARS-enqueue cost. Wall-clock therefore
+//     scales with N.
+//
+//   * device path:
+//         ScenarioF_DeviceMultiPrefetchKernel<<<1, nullptr, stream>>>(
+//             src, chunkBytes, N, workspace, cycleOut)
+//         aclrtSynchronizeStream(stream)         // ONE sync
+//     Inside the kernel we loop N times: TPREFETCH_L2(addr_i) + evt.Wait().
+//     Only one kernel launch is paid (the 17 us "kernel shell" floor from
+//     Scenario E1). The per-iteration cost inside the kernel is ~2 us (the
+//     in-kernel TPREFETCH+Wait time from Scenario B).
+//
+// Synchronisation correctness:
+//   - host path: stream FIFO orders the N CMO tasks; the trailing sync
+//     guarantees all N have completed before we stop the wall-clock timer.
+//   - device path: each iteration calls evt.Wait() before issuing the next
+//     TPREFETCH_L2, so the event flag is observed clean before reuse and
+//     all N transfers are confirmed complete by the time the kernel returns.
+//     The trailing aclrtSynchronizeStream then guarantees host-side
+//     observability of "kernel finished".
+//   Both paths therefore enforce "all N prefetches really completed" before
+//   the timer stops; they are apples-to-apples comparable.
+//
+// Predicted scaling (using Scenario B's per-call costs as the model):
+//     host   wall(N) ~  N * t_acl    + t_sync     // t_acl ~ a few us per call
+//     device wall(N) ~  t_launch_shell + N * t_in_kernel
+//                                                  // t_launch_shell ~ 17 us
+//                                                  // t_in_kernel    ~ 2 us
+//     crossover at N where N*(t_acl - t_in_kernel) = t_launch_shell.
+//
+// Reports per-N: host wall p5/p50/p95, device wall p5/p50/p95, device
+// in-kernel cycle p50 (only the loop body inside the kernel). One CSV row
+// per (N, chunkBytes, config). chunkBytes is held constant per test case so
+// the only varying factor is N.
+//
+// L2 IS trashed once before each measured iteration so every iteration sees
+// a true cold L2 (matching Scenario A semantics).
+bool RunScenarioFMultiChunkPrefetch(int deviceId, uint64_t chunkBytes, uint32_t numChunks);
+
 // ---- Scenario E1: kernel launch + dispatch + sync overhead --------------
 // Pure-overhead micro-benchmark used to localise where Scenario A's "device
 // path is 4 us slower at small payloads" gap actually lives.

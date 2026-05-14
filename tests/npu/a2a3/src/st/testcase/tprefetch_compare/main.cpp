@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "tprefetch_compare_kernel.h"
 
 // ============================================================================
-// Single-card prefetch comparison: Scenarios A / B / C.
+// Single-card prefetch comparison: Scenarios A / B / C / F.
 // Cross-rank Scenario D lives under comm/st/testcase/tprefetch_compare/.
 //
 // Statistics: each TEST runs 100 iterations (override via env
@@ -25,11 +25,15 @@ See LICENSE in the root of the software repository for the full text of the Lice
 //   tprefetch_compare_scenarioA.csv
 //   tprefetch_compare_scenarioB.csv
 //   tprefetch_compare_scenarioC.csv
+//   tprefetch_compare_scenarioF.csv
+//   tprefetch_compare_scenarioE1.csv
 //
 // Scenario A scans 5 sizes (64KB, 1MB, 16MB, 64MB, 128MB) for a "real-world
-// prefetch + warm TLOAD" comparison. Scenario B is a single 4KB-payload
-// micro-benchmark of issue overhead. Scenario C measures overlap with
-// compute at 3 representative sizes.
+// prefetch + warm TLOAD" comparison. Scenario B is a payload scan of issue
+// overhead. Scenario C measures overlap with compute at 3 representative
+// sizes. Scenario F sweeps N (number of consecutive prefetch calls over
+// disjoint regions) at fixed chunk=64KB to expose the structural difference
+// between "N host calls" and "1 kernel launch + N in-kernel issues".
 //
 // Scenario E1 is a pure-overhead microbenchmark (empty AICore kernel) used
 // to isolate the device-path mandatory "launch + dispatch + sync" tax so
@@ -118,6 +122,50 @@ TEST(TPrefetchCompare, C_Overlap_16MB)
 TEST(TPrefetchCompare, C_Overlap_128MB)
 {
     ASSERT_TRUE((RunScenarioCOverlap<float, 33554432>(0)));
+}
+
+// ---- Scenario F: chunked prefetch (one launch vs N host calls) ----------
+// Fixed chunkBytes = 64 KB; N is varied so we can observe the per-call cost
+// of the host path accumulating linearly while the device path stays roughly
+// constant per chunk (1 launch shell + N x in-kernel issue+Wait). Each TEST
+// appends two rows (host_async, device_kernel) to scenarioF CSV; combine
+// across N to plot wall(N) for both paths and read off the crossover N.
+//
+// Total data per N (chunk fixed at 64 KB):
+//   N=1    -> 64 KB    (degenerate: identical to Scenario A 64KB single call)
+//   N=4    -> 256 KB
+//   N=16   -> 1 MB
+//   N=64   -> 4 MB
+//   N=256  -> 16 MB
+//   N=1024 -> 64 MB
+TEST(TPrefetchCompare, F_MultiPrefetch_N1_64KB)
+{
+    ASSERT_TRUE(RunScenarioFMultiChunkPrefetch(0, 64ULL * 1024, 1));
+}
+
+TEST(TPrefetchCompare, F_MultiPrefetch_N4_64KB)
+{
+    ASSERT_TRUE(RunScenarioFMultiChunkPrefetch(0, 64ULL * 1024, 4));
+}
+
+TEST(TPrefetchCompare, F_MultiPrefetch_N16_64KB)
+{
+    ASSERT_TRUE(RunScenarioFMultiChunkPrefetch(0, 64ULL * 1024, 16));
+}
+
+TEST(TPrefetchCompare, F_MultiPrefetch_N64_64KB)
+{
+    ASSERT_TRUE(RunScenarioFMultiChunkPrefetch(0, 64ULL * 1024, 64));
+}
+
+TEST(TPrefetchCompare, F_MultiPrefetch_N256_64KB)
+{
+    ASSERT_TRUE(RunScenarioFMultiChunkPrefetch(0, 64ULL * 1024, 256));
+}
+
+TEST(TPrefetchCompare, F_MultiPrefetch_N1024_64KB)
+{
+    ASSERT_TRUE(RunScenarioFMultiChunkPrefetch(0, 64ULL * 1024, 1024));
 }
 
 // ---- Scenario E1: kernel launch + dispatch + sync overhead --------------

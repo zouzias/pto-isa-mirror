@@ -247,6 +247,38 @@ __global__ AICORE void ScenarioC_DeviceOverlapKernel(__gm__ T *srcBuf, int elem_
     pipe_barrier(PIPE_ALL);
 }
 
+// ============================================================================
+// Scenario F kernel — device-side "one launch, N chunks" multi-prefetch.
+//
+// Issues numChunks back-to-back TPREFETCH_L2(src + i*chunkBytes, chunkBytes)
+// inside a single kernel launch, waiting on each event before issuing the
+// next so the per-iteration event-flag state is observed clean.
+//
+// The matching host path (in the runner) is N consecutive aclrtCmoAsync
+// calls on the same stream followed by a single aclrtSynchronizeStream.
+// Both paths therefore enforce "all N chunks completed" before the timer
+// stops; the only structural difference is "one kernel launch + N in-kernel
+// issues" vs "N host-side ACL calls".
+//
+// chunkBytes is bounded only by `pto::TPREFETCH_L2`'s internal SDMA chunking
+// (1 MB SQEs); any value works, but small chunks (~64 KB) maximise the
+// signal we want to see — the host-side per-call cost.
+// ============================================================================
+__global__ AICORE void ScenarioF_DeviceMultiPrefetchKernel(__gm__ uint8_t *src, uint64_t chunkBytes,
+                                                           uint32_t numChunks, __gm__ uint8_t *sdmaWorkspace,
+                                                           __gm__ uint64_t *cycleOut)
+{
+    uint64_t t0 = cmp_syscnt();
+    for (uint32_t i = 0; i < numChunks; ++i) {
+        __gm__ uint8_t *addr = src + static_cast<uint64_t>(i) * chunkBytes;
+        auto evt = pto::TPREFETCH_L2(reinterpret_cast<__gm__ void *>(addr), chunkBytes, sdmaWorkspace);
+        (void)evt.Wait();
+    }
+    uint64_t t1 = cmp_syscnt();
+    *cycleOut = t1 - t0;
+    pipe_barrier(PIPE_ALL);
+}
+
 // Explicit instantiations for the three sizes listed in main.cpp.
 // float/int32 aliasing doesn't matter here since the kernels only TLOAD/write
 // cycle counters; we test float throughout.
@@ -987,4 +1019,162 @@ bool RunScenarioE1NoopKernel(int deviceId)
     CsvAppendRow("scenarioE1", csvHeader, oss.str());
 
     return aclStatus == 0;
+}
+
+// ============================================================================
+// Scenario F: chunked prefetch (N issues over different addresses)
+//
+// Holds chunkBytes constant and varies numChunks (N). For each (chunkBytes,
+// N), runs:
+//
+//   * host:    N x aclrtCmoAsync(src + i*chunkBytes, chunkBytes, stream)
+//              followed by ONE aclrtSynchronizeStream.
+//              The N enqueues are individually asynchronous, but each call
+//              still pays the host-side ACL + STARS-enqueue cost.
+//
+//   * device:  ONE kernel launch ScenarioF_DeviceMultiPrefetchKernel
+//              (which loops N x { TPREFETCH_L2 + Wait } inside)
+//              followed by ONE aclrtSynchronizeStream.
+//              Only one kernel-launch tax; N-1 launches are saved.
+//
+// Synchronisation correctness — both paths confirm "all N transfers really
+// completed" before stopping the wall-clock timer:
+//   * host: stream FIFO orders all N tasks; the trailing sync is a barrier
+//     against all enqueued work.
+//   * device: in-kernel evt.Wait() after every TPREFETCH_L2 ensures the
+//     event flag is observed clean before reuse, and the kernel cannot exit
+//     until the loop finishes; the trailing aclrtSynchronizeStream then
+//     surfaces "kernel exited" to the host.
+//
+// Allocations: srcDevice is sized to chunkBytes * numChunks so all addresses
+// (src + i*chunkBytes for i in [0, N)) are valid. Trash buffer and cycle
+// slot are inherited from the standard CmpEnv.
+//
+// Expected scaling (using Scenario B's per-call costs):
+//     host   wall(N) ~  N * t_acl     + t_sync       (linear in N)
+//     device wall(N) ~  t_launch_shell + N * t_in_kernel
+// device dominates once N is large enough that the host-side per-call cost
+// adds up to more than the kernel-shell tax.
+//
+// CSV: one row per (chunkBytes, N, config) — host_async + device_kernel.
+// 100 iterations, p5/p50/p95 reported. L2 trashed once per measured iter.
+// ============================================================================
+bool RunScenarioFMultiChunkPrefetch(int deviceId, uint64_t chunkBytes, uint32_t numChunks)
+{
+    if (chunkBytes == 0 || numChunks == 0) {
+        std::cerr << "[ERROR] ScenarioF: chunkBytes and numChunks must be > 0" << std::endl;
+        return false;
+    }
+    const uint64_t totalBytes = chunkBytes * static_cast<uint64_t>(numChunks);
+    constexpr int kWarmup = 1;
+    const int kIter = IterCount(100);
+
+    CmpEnv env;
+    if (!env.Init(deviceId, totalBytes)) {
+        std::cerr << "[ERROR] ScenarioF: env init failed (totalBytes=" << totalBytes << ")" << std::endl;
+        env.Teardown();
+        return false;
+    }
+
+    SampleSet hostWall;
+    SampleSet deviceWall;
+    SampleSet deviceCycles;
+
+    for (int i = 0; i < kWarmup + kIter; ++i) {
+        // host path: N async issues + one stream sync.
+        env.TrashL2();
+        auto h0 = HrClock::now();
+        for (uint32_t k = 0; k < numChunks; ++k) {
+            uint8_t *addr = static_cast<uint8_t *>(env.srcDevice) + static_cast<uint64_t>(k) * chunkBytes;
+            pto::PTO_PREFETCH(addr, chunkBytes, env.stream);
+        }
+        env.aclStatus |= aclrtSynchronizeStream(env.stream);
+        auto h1 = HrClock::now();
+        uint64_t hostWallUs = ElapsedMicros(h0, h1);
+
+        // device path: one kernel launch (loops N x issue+Wait inside) + one sync.
+        env.TrashL2();
+        auto d0 = HrClock::now();
+        ScenarioF_DeviceMultiPrefetchKernel<<<1, nullptr, env.stream>>>(
+            reinterpret_cast<uint8_t *>(env.srcDevice), chunkBytes, numChunks,
+            reinterpret_cast<uint8_t *>(env.sdmaMgr.GetWorkspaceAddr()),
+            reinterpret_cast<uint64_t *>(env.cycleDev));
+        env.aclStatus |= aclrtSynchronizeStream(env.stream);
+        auto d1 = HrClock::now();
+        uint64_t deviceWallUs = ElapsedMicros(d0, d1);
+        uint64_t devCyc = env.ReadCycles();
+
+        if (i >= kWarmup) {
+            hostWall.Add(static_cast<double>(hostWallUs));
+            deviceWall.Add(static_cast<double>(deviceWallUs));
+            deviceCycles.Add(CyclesToUs(devCyc));
+        }
+    }
+
+    env.Teardown();
+
+    auto bytesLabel = [](uint64_t b) -> std::string {
+        std::ostringstream oss;
+        if (b >= 1024ULL * 1024) {
+            oss << b / 1024 / 1024 << "MB";
+        } else if (b >= 1024) {
+            oss << b / 1024 << "KB";
+        } else {
+            oss << b << "B";
+        }
+        return oss.str();
+    };
+
+    auto bandGBs = [&](double us) {
+        return us > 0.0 ? (static_cast<double>(totalBytes) / us / 1000.0) : 0.0;
+    };
+
+    std::cout << std::fixed << std::setprecision(2);
+    std::cout << "\n================================================================" << std::endl;
+    std::cout << "[PERF] Scenario F - chunked prefetch (N=" << numChunks
+              << ", chunk=" << bytesLabel(chunkBytes) << ", total=" << bytesLabel(totalBytes) << ")"
+              << std::endl;
+    std::cout << "  Iterations:            " << kIter << " (warmup=" << kWarmup << ")" << std::endl;
+    std::cout << "  Syscnt freq assumed:   " << (SyscntHz() / 1.0e6) << " MHz" << std::endl;
+    std::cout << "  --- end-to-end wall (apples-to-apples) ---" << std::endl;
+    std::cout << "  host  N x PTO_PREFETCH + sync  p50=" << hostWall.P50()
+              << "us   p5=" << hostWall.P5() << " p95=" << hostWall.P95()
+              << "   band(p50)=" << bandGBs(hostWall.P50()) << " GB/s"
+              << "   per-issue=" << (numChunks > 0 ? hostWall.P50() / numChunks : 0.0) << "us"
+              << std::endl;
+    std::cout << "  device 1 x kernel(N x prefetch+Wait) + sync  p50=" << deviceWall.P50()
+              << "us   p5=" << deviceWall.P5() << " p95=" << deviceWall.P95()
+              << "   band(p50)=" << bandGBs(deviceWall.P50()) << " GB/s"
+              << "   per-issue=" << (numChunks > 0 ? deviceWall.P50() / numChunks : 0.0) << "us"
+              << "   ratio vs host: " << (hostWall.P50() > 0 ? deviceWall.P50() / hostWall.P50() : 0.0)
+              << std::endl;
+    std::cout << "  --- supplementary: in-kernel cycles (loop body only) ---" << std::endl;
+    std::cout << "  device in-kernel       p50=" << deviceCycles.P50()
+              << "us   p5=" << deviceCycles.P5() << " p95=" << deviceCycles.P95()
+              << "   per-issue=" << (numChunks > 0 ? deviceCycles.P50() / numChunks : 0.0) << "us"
+              << std::endl;
+    std::cout << "  CSV: " << CsvFilePath("scenarioF") << std::endl;
+    std::cout << "================================================================\n" << std::endl;
+
+    const std::string csvHeader =
+        "chunk_bytes,chunk_label,num_chunks,total_bytes,total_label,config,iter,"
+        "wall_p5_us,wall_p50_us,wall_p95_us,wall_min_us,wall_max_us,band_p50_gbs,"
+        "per_issue_p50_us,in_kernel_p50_us";
+
+    auto rowOf = [&](const std::string &cfg, const SampleSet &wall, double inKernelP50) {
+        std::ostringstream oss;
+        oss << chunkBytes << ',' << bytesLabel(chunkBytes) << ',' << numChunks << ','
+            << totalBytes << ',' << bytesLabel(totalBytes) << ','
+            << cfg << ',' << kIter << ','
+            << wall.P5() << ',' << wall.P50() << ',' << wall.P95() << ','
+            << wall.Min() << ',' << wall.Max() << ','
+            << bandGBs(wall.P50()) << ','
+            << (numChunks > 0 ? wall.P50() / numChunks : 0.0) << ','
+            << inKernelP50;
+        return oss.str();
+    };
+    CsvAppendRow("scenarioF", csvHeader, rowOf("host_async", hostWall, 0.0));
+    CsvAppendRow("scenarioF", csvHeader, rowOf("device_kernel", deviceWall, deviceCycles.P50()));
+
+    return env.aclStatus == 0;
 }
