@@ -446,6 +446,19 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
                                                                           dims[4], tileValidRow, tileValidCol, nranks);
 }
 
+// CCU engine is only available on A5 hardware.  Stub mirrors the URMA branch
+// in `a2a3/async/TPutAsync.hpp`: the template name must exist for the
+// qualified template-id `::pto::comm::TBROADCAST_CCU_IMPL<engine>(...)` in
+// pto_comm_inst.hpp to parse on A2/A3; the static_assert is dependent on the
+// `engine` parameter and only fires if the overload is actually instantiated.
+template <CollEngine engine = CollEngine::CCU, typename... Args>
+PTO_INTERNAL void TBROADCAST_CCU_IMPL(Args &&...)
+{
+    static_assert(engine != CollEngine::CCU,
+                  "TBROADCAST<CollEngine::CCU> requires A5 hardware; "
+                  "CCU engine is not available on A2/A3.");
+}
+
 } // namespace comm
 } // namespace pto
 

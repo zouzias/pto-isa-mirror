@@ -447,6 +447,20 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
                                                                        tileValidRow, tileValidCol, nranks, perRankRows);
 }
 
+// CCU engine is only available on A5 hardware.  This stub mirrors the
+// `a2a3/async/TPutAsync.hpp` URMA branch: the name must exist as a template
+// in `pto::comm` so that `::pto::comm::TGATHER_CCU_IMPL<engine>(...)` in
+// pto_comm_inst.hpp parses on A2/A3 builds; the body's static_assert depends
+// on the `engine` template parameter and only fires if the overload is
+// actually instantiated, which is the misuse it flags.
+template <CollEngine engine = CollEngine::CCU, typename... Args>
+PTO_INTERNAL void TGATHER_CCU_IMPL(Args &&...)
+{
+    static_assert(engine != CollEngine::CCU,
+                  "TGATHER<CollEngine::CCU> requires A5 hardware; "
+                  "CCU engine is not available on A2/A3.");
+}
+
 } // namespace comm
 } // namespace pto
 

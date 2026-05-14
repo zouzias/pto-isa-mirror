@@ -28,21 +28,31 @@ tgather %group, %dst : (!pto.group<...>, !pto.memref<...>)
 ```
 Lowering introduces UB staging tile(s) for the GM→UB→GM data path; the C++ intrinsic requires explicit `stagingTileData` (or `pingTile` / `pongTile`) operand(s).
 
+## Template Parameter
+
+- `engine`:
+    - `CollEngine::AIV` (default)
+    - `CollEngine::CCU` (Ascend950, NPU_ARCH 3510 only)
+
 ## C++ Intrinsic
 
 Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
 // Basic gather (single staging tile)
-template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
+template <CollEngine engine = CollEngine::AIV,
+          typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... Args>
 PTO_INST RecordEvent TGATHER(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
-                             TileData &stagingTileData, WaitEvents&... events);
+                             TileData &stagingTileData, Args&... args);
 
 // Ping-pong gather (double buffering with two staging tiles)
-template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
+template <CollEngine engine = CollEngine::AIV,
+          typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... Args>
 PTO_INST RecordEvent TGATHER(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
-                             TileData &pingTile, TileData &pongTile, WaitEvents&... events);
+                             TileData &pingTile, TileData &pongTile, Args&... args);
 ```
+
+When `engine == CollEngine::CCU`, the first variadic argument must be a `CcuTriggerContext` containing the CKE slot VA and gate mask. The AIV kernel triggers the CKE gate; the actual gather data path runs on the CCU engine.
 
 ## Constraints
 
@@ -60,6 +70,8 @@ PTO_INST RecordEvent TGATHER(ParallelGroupType &parallelGroup, GlobalDstData &ds
 - **Chunked mode constraints** (when source data exceeds a single UB tile):
     - If `TileData` has static `ValidRow`, `GetShape(DIM_3)` of each rank's source must be divisible by `ValidRow`. Use a Tile with `DYNAMIC` ValidRow for partial row support.
     - If `TileData` has static `ValidCol`, `GetShape(DIM_4)` must be divisible by `ValidCol`. Use a Tile with `DYNAMIC` ValidCol for partial column support.
+
+> **CCU path**: Unlike the AIV path where only root calls `TGATHER`, the CCU path requires all ranks to register and launch the CCU kernel via host-side `HcclCcuKernelRegister` / `HcclCcuKernelLaunch`. See `tests/npu/a5/comm/st/testcase/tgather_ccu/` for a complete example.
 
 ## Examples
 
