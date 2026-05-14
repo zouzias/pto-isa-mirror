@@ -22,8 +22,10 @@
  *   TMUL   out  = relu * w2      -- output gate
  *   TSTORE output[t]
  *
- * Tiles declared INSIDE the inner token loop (topk lesson: per-iter liveness
- * isolation prevents cross-iter UB aliasing in nested loops).
+ * Tiles declared OUTSIDE both loops (moe_segmented_gemm_relu / add_tile_array
+ * pattern). Inside-inner-loop placement (v1) produced 94% error — suspected
+ * cross-iter auto-sync gap in nested loop context; pipe_barrier(PIPE_ALL) at
+ * the start of the inner token loop guards this.
  *
  * Limitations (v1):
  *   - Single AICORE; no block_idx work split.
@@ -65,6 +67,16 @@ __global__ AICORE void runExpertFfn(
     // Vec tile: (1, kD) float32, static valid region.
     using VecTile = Tile<TileType::Vec, T, 1, kD, BLayout::RowMajor, 1, kD>;
 
+    // Tiles declared OUTSIDE both loops (moe_segmented_gemm_relu / add_tile_array
+    // pattern, confirmed-working for nested loops). Inside-inner-loop placement
+    // caused 94% error in v1: suspected cross-iter auto-sync gap in nested context.
+    VecTile xTile;
+    VecTile w1Tile;
+    VecTile w2Tile;
+    VecTile hTile;
+    VecTile reluTile;
+    VecTile outTile;
+
     for (unsigned e = 0; e < kNumExperts; ++e) {
         int32_t start = expert_start[e];
         int32_t count = expert_count[e];
@@ -75,27 +87,23 @@ __global__ AICORE void runExpertFfn(
         WGlobal w2Global(w2 + static_cast<size_t>(e) * kD);
 
         for (int32_t t = 0; t < count; ++t) {
+            // pipe_barrier at token-loop start: guards cross-iter auto-sync gap.
+            // Same hardware-confirmed requirement as topk row loop.
+            pipe_barrier(PIPE_ALL);
+
             size_t tokOff = static_cast<size_t>(start + t) * kD;
             TokenGlobal xGlobal(x_packed + tokOff);
             TokenGlobal outGlobal(output   + tokOff);
 
-            // Tiles declared inside inner loop: per-iter liveness isolation.
-            VecTile xTile;
-            VecTile w1Tile;
-            VecTile w2Tile;
-            VecTile hTile;
-            VecTile reluTile;
-            VecTile outTile;
-
             // Reload w1/w2 every iteration from the same expert view
-            // (same w1[e], w2[e] data; wasteful but correctness-first).
+            // (same w1[e], w2[e] data; matches moe_segmented_gemm_relu bMatTile reload).
             TLOAD(w1Tile, w1Global);
             TLOAD(w2Tile, w2Global);
             TLOAD(xTile,  xGlobal);
 
-            TMUL(hTile,    xTile,    w1Tile);      // h    = x * w1
-            TMAXS(reluTile, hTile, static_cast<T>(0));  // relu = max(h, 0)
-            TMUL(outTile, reluTile, w2Tile);       // out  = relu * w2
+            TMUL(hTile,    xTile,   w1Tile);   // h    = x * w1
+            TMAXS(reluTile, hTile,  0.0f);     // relu = max(h, 0)
+            TMUL(outTile, reluTile, w2Tile);   // out  = relu * w2
 
             TSTORE(outGlobal, outTile);
         }

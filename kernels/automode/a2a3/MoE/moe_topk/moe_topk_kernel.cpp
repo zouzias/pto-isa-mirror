@@ -50,6 +50,13 @@ __global__ AICORE void RunMoeTopk(__gm__ uint8_t *outVal_raw, __gm__ uint8_t *ou
     constexpr int kPackedCols = kCols * 2 * TYPE_COEF;  // 32*2*1 = 64
     constexpr int kPackedTopK = kTopK * 2 * TYPE_COEF;  //  2*2*1 =  4
 
+    // pto_tile.hpp:1510 asserts Cols * sizeof(DType) % 32 == 0 (32-byte alignment).
+    // kTopK=2 gives 2*4=8 bytes which fails. Use kGatherWidth=8 (exactly 32 bytes)
+    // for the OutValTile/OutIdxTile Cols template parameter; the runtime valid
+    // region stays (1, kTopK=2) via the dynamic constructor, so only kTopK values
+    // are written by TGATHER and stored to GM.
+    constexpr int kGatherWidth = 8;  // min 32-byte-aligned tile for float/uint32
+
     __gm__ T      *outVal = reinterpret_cast<__gm__ T *>(outVal_raw);
     __gm__ indexT *outIdx = reinterpret_cast<__gm__ indexT *>(outIdx_raw);
     __gm__ T      *src    = reinterpret_cast<__gm__ T *>(src_raw);
@@ -60,12 +67,14 @@ __global__ AICORE void RunMoeTopk(__gm__ uint8_t *outVal_raw, __gm__ uint8_t *ou
     using OutValGlobal = GlobalTensor<T,      Shape<1, 1, 1, 1, kTopK>, Stride<1, 1, 1, kTopK, 1>>;
     using OutIdxGlobal = GlobalTensor<indexT, Shape<1, 1, 1, 1, kTopK>, Stride<1, 1, 1, kTopK, 1>>;
 
-    using SrcTile       = Tile<TileType::Vec, T,      1, kCols,       BLayout::RowMajor, -1, -1>;
-    using IdxTile       = Tile<TileType::Vec, indexT, 1, kCols,       BLayout::RowMajor, -1, -1>;
-    using PackedTile    = Tile<TileType::Vec, T,      1, kPackedCols, BLayout::RowMajor, -1, -1>;
-    using PackedIdxTile = Tile<TileType::Vec, indexT, 1, kPackedCols, BLayout::RowMajor, -1, -1>;
-    using OutValTile    = Tile<TileType::Vec, T,      1, kTopK,       BLayout::RowMajor, -1, -1>;
-    using OutIdxTile    = Tile<TileType::Vec, indexT, 1, kTopK,       BLayout::RowMajor, -1, -1>;
+    using SrcTile       = Tile<TileType::Vec, T,      1, kCols,        BLayout::RowMajor, -1, -1>;
+    using IdxTile       = Tile<TileType::Vec, indexT, 1, kCols,        BLayout::RowMajor, -1, -1>;
+    using PackedTile    = Tile<TileType::Vec, T,      1, kPackedCols,  BLayout::RowMajor, -1, -1>;
+    using PackedIdxTile = Tile<TileType::Vec, indexT, 1, kPackedCols,  BLayout::RowMajor, -1, -1>;
+    // Cols=kGatherWidth (not kTopK) satisfies the 32-byte alignment assertion.
+    // Dynamic valid region allows construction with (1, kTopK) at runtime.
+    using OutValTile    = Tile<TileType::Vec, T,      1, kGatherWidth, BLayout::RowMajor, -1, -1>;
+    using OutIdxTile    = Tile<TileType::Vec, indexT, 1, kGatherWidth, BLayout::RowMajor, -1, -1>;
 
     for (int row = 0; row < kRows; ++row) {
         // pipe_barrier at row-loop start: hardware-confirmed requirement for
