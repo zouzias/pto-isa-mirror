@@ -1,16 +1,19 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include "test_common.h"
-#include "acl/acl.h"
 #include <gtest/gtest.h>
+
+#include "acl/acl.h"
+#include "test_common.h"
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -107,7 +110,8 @@ void TPushPopVCMatmulTestFunc(uint32_t M, uint32_t K, uint32_t N)
     EXPECT_TRUE(ret);
 }
 
-// TILE_UP_DOWN: vector cores split quantB along K rows, each handles TILE_K/2 rows
+// TILE_UP_DOWN: vector cores split quantB along K rows, each handles TILE_K/2
+// rows
 TEST_F(TPushPopVCTest, case1_int8_single_k_tile)
 {
     TPushPopVCMatmulTestFunc<int8_t, float, float, 1>(16, 64, 32);
@@ -138,8 +142,9 @@ TEST_F(TPushPopVCTest, case6_int16_four_k_tiles)
     TPushPopVCMatmulTestFunc<int16_t, float, float, 6>(16, 256, 32);
 }
 
-// TILE_LEFT_RIGHT: vector cores split quantB along N columns, each handles TILE_N/2 cols
-// N=64 for int8 TILE_LEFT_RIGHT: PROD_N=32, satisfies 32-byte tile alignment (32*sizeof(int8_t)=32)
+// TILE_LEFT_RIGHT: vector cores split quantB along N columns, each handles
+// TILE_N/2 cols N=64 for int8 TILE_LEFT_RIGHT: PROD_N=32, satisfies 32-byte
+// tile alignment (32*sizeof(int8_t)=32)
 TEST_F(TPushPopVCTest, case7_int8_single_k_tile_left_right)
 {
     TPushPopVCMatmulTestFunc<int8_t, float, float, 7>(16, 64, 64);
