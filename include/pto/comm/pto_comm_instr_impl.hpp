@@ -51,9 +51,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/a5/TReduce.hpp"
 #endif
 
-// L2 Cache Prefetch (SDMA CMO) — shared across A2/A3 and A5 since the backing
-// hardware path is SDMA, which is common to both architectures.
-#include "pto/comm/async_common/TPrefetchL2.hpp"
+// NOTE: TPREFETCH_L2 has been moved out of `comm/`. Its NPU implementation
+// now lives at `pto/npu/TPrefetchL2.hpp` and is included from
+// `pto/common/pto_instr_impl.hpp` (alongside other memory-access instruction
+// backends).
 
 #endif
 
@@ -73,8 +74,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/comm/TBroadcast.hpp"
 #include "pto/cpu/comm/TScatter.hpp"
 
-// L2 Cache Prefetch (no-op on CPU sim)
-#include "pto/cpu/comm/TPrefetchL2.hpp"
+// NOTE: CPU-sim TPREFETCH_L2 has been moved to `pto/cpu/TPrefetchL2.hpp` and
+// is included from `pto/common/pto_instr_impl.hpp`.
 #endif
 
 #endif // PTO_COMM_INSTR_IMPL_HPP

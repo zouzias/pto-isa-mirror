@@ -277,47 +277,12 @@ PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcG
     return ::pto::comm::TGET_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
 }
 
-// ============================================================================
-// TPREFETCH_L2: L2 cache prefetch via SDMA CMO (opcode=6).
-// Prefetches data from GM/HBM into L2 cache without consuming UB space.
-// Subsequent TLOAD operations on the same region will hit L2, reducing latency.
-//
-// Returns AsyncEvent for synchronization via Wait()/Test().
-// ============================================================================
-
-// GlobalTensor overload with AsyncSession
-template <typename GlobalData, typename... WaitEvents>
-PTO_INST AsyncEvent TPREFETCH_L2(GlobalData &srcGlobalData, const AsyncSession &session, WaitEvents &... events)
-{
-    WaitAllEvents(events...);
-    return ::pto::comm::TPREFETCH_L2_IMPL(srcGlobalData, session);
-}
-
-// Raw pointer overload with AsyncSession
-template <typename... WaitEvents>
-PTO_INST AsyncEvent TPREFETCH_L2(__gm__ void *src, uint64_t bytes, const AsyncSession &session, WaitEvents &... events)
-{
-    WaitAllEvents(events...);
-    return ::pto::comm::TPREFETCH_L2_IMPL(src, bytes, session);
-}
-
-// GlobalTensor overload with SdmaExecContext (direct context access)
-template <typename GlobalData, typename... WaitEvents>
-PTO_INST AsyncEvent TPREFETCH_L2(GlobalData &srcGlobalData, const sdma::SdmaExecContext &execCtx,
-                                 WaitEvents &... events)
-{
-    WaitAllEvents(events...);
-    return ::pto::comm::TPREFETCH_L2_IMPL(srcGlobalData, execCtx);
-}
-
-// Raw pointer overload with SdmaExecContext (direct context access)
-template <typename... WaitEvents>
-PTO_INST AsyncEvent TPREFETCH_L2(__gm__ void *src, uint64_t bytes, const sdma::SdmaExecContext &execCtx,
-                                 WaitEvents &... events)
-{
-    WaitAllEvents(events...);
-    return ::pto::comm::TPREFETCH_L2_IMPL(src, bytes, execCtx);
-}
+// NOTE: TPREFETCH_L2 used to live here under `pto::comm::`. It has been moved
+// to `pto::TPREFETCH_L2` (declared in `pto/common/pto_instr.hpp`) because the
+// instruction is logically a memory-access primitive rather than a comm
+// primitive — it just happens to use the SDMA CMO path internally. The
+// implementation now lives in `pto/npu/TPrefetchL2.hpp` (NPU) and
+// `pto/cpu/TPrefetchL2.hpp` (CPU sim).
 
 } // namespace comm
 } // namespace pto

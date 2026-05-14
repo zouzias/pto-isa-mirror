@@ -156,6 +156,24 @@ struct AsyncEvent {
 
     PTO_INTERNAL bool Wait(const AsyncSession &session) const;
     PTO_INTERNAL bool Test(const AsyncSession &session) const;
+
+    // Workspace-based Wait/Test — companions to the workspace-based
+    // pto::TPREFETCH_L2(input, bytes, workspace) overload. Each call rebuilds
+    // a transient SdmaSession internally with default parameters
+    // (channelGroupIdx = get_block_idx(), syncId = 0, queue_num = 1) that
+    // match what the workspace-based TPREFETCH_L2 issues. Do NOT use these on
+    // an AsyncEvent produced by a session-based API call with non-default
+    // SdmaBaseConfig — the queue layout would not match and the wait would
+    // poll the wrong slot.
+    PTO_INTERNAL bool Wait(__gm__ uint8_t *workspace) const;
+    PTO_INTERNAL bool Test(__gm__ uint8_t *workspace) const;
+
+    // 0-arg Wait/Test — convenience for AsyncEvents produced by the
+    // workspace-based TPREFETCH_L2: the workspace base address IS already
+    // stored in `handle`, so no extra arg is needed. Same caveat as above
+    // about not mixing with non-default-config session-based call sites.
+    PTO_INTERNAL bool Wait() const;
+    PTO_INTERNAL bool Test() const;
 };
 
 // ============================================================================

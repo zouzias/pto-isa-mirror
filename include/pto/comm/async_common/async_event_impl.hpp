@@ -88,6 +88,82 @@ PTO_INTERNAL bool AsyncEvent::Test(const AsyncSession &session) const
     }
 }
 
+// ============================================================================
+// AsyncEvent::Wait / Test — workspace overloads (companions to the
+// workspace-based pto::TPREFETCH_L2 API). Build a transient SdmaSession with
+// the same default configuration the issuing TPREFETCH_L2 call used, then
+// dispatch to the existing session-based Wait/Test.
+// ============================================================================
+
+namespace detail {
+
+// Scratch tile reused by the workspace-/0-arg Wait/Test helpers. 256B UB
+// per call, lives on the AICORE stack frame and is destroyed when the
+// helper returns; the resulting SdmaSession is consumed before the tile
+// goes out of scope so this is safe.
+using AsyncEventScratchTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, sdma::UB_ALIGN_SIZE>;
+
+PTO_INTERNAL bool BuildTransientSdmaSession(__gm__ uint8_t *workspace, AsyncEventScratchTile &scratchTile,
+                                            sdma::SdmaSession &sdmaSession)
+{
+    if (workspace == nullptr) {
+        sdmaSession.valid = false;
+        return false;
+    }
+    return sdma::BuildSdmaSession(scratchTile, workspace, sdmaSession);
+}
+
+} // namespace detail
+
+PTO_INTERNAL bool AsyncEvent::Wait(__gm__ uint8_t *workspace) const
+{
+    if (handle == 0) {
+        return true;
+    }
+    if (engine != DmaEngine::SDMA) {
+        return false;
+    }
+    detail::AsyncEventScratchTile scratchTile;
+    // Use fully-qualified TASSIGN_IMPL to dodge two-phase template lookup:
+    // the public TASSIGN wrapper in pto/common/pto_instr.hpp has not been
+    // declared yet at the point this header is parsed.
+    ::pto::TASSIGN_IMPL(scratchTile, 0x0);
+    sdma::SdmaSession sdmaSession;
+    if (!detail::BuildTransientSdmaSession(workspace, scratchTile, sdmaSession)) {
+        return false;
+    }
+    return sdma::detail::SdmaWaitEvent(handle, sdmaSession);
+}
+
+PTO_INTERNAL bool AsyncEvent::Test(__gm__ uint8_t *workspace) const
+{
+    if (handle == 0) {
+        return true;
+    }
+    if (engine != DmaEngine::SDMA) {
+        return false;
+    }
+    detail::AsyncEventScratchTile scratchTile;
+    ::pto::TASSIGN_IMPL(scratchTile, 0x0);
+    sdma::SdmaSession sdmaSession;
+    if (!detail::BuildTransientSdmaSession(workspace, scratchTile, sdmaSession)) {
+        return false;
+    }
+    return sdma::detail::SdmaTestEvent(handle, sdmaSession);
+}
+
+PTO_INTERNAL bool AsyncEvent::Wait() const
+{
+    // For workspace-based TPREFETCH_L2 the handle equals the workspace base
+    // address (see SdmaCmoPrefetch returning reinterpret_cast<uint64_t>(contextGm)).
+    return Wait(reinterpret_cast<__gm__ uint8_t *>(handle));
+}
+
+PTO_INTERNAL bool AsyncEvent::Test() const
+{
+    return Test(reinterpret_cast<__gm__ uint8_t *>(handle));
+}
+
 } // namespace comm
 } // namespace pto
 

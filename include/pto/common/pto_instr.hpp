@@ -165,6 +165,80 @@ PTO_INST RecordEvent TPREFETCH(TileData &dst, GlobalData &src)
     return {};
 }
 
+// ============================================================================
+// TPREFETCH_L2 — L2 cache prefetch via SDMA CMO (opcode = 6).
+//
+// Stages a contiguous GM/HBM region into the on-chip L2 cache so that
+// subsequent TLOADs hit warm lines. Implemented by submitting an SDMA CMO
+// SQE from the AI Core; **no UB is consumed for the data itself**, only a
+// small (256B) scratch tile is used during SQE construction.
+//
+// Two call shapes are supported:
+//
+//   * Workspace-based (recommended, simple):
+//       auto evt = pto::TPREFETCH_L2(input, bytes, workspace);
+//       evt.Wait();                 // 0-arg overload reuses workspace from handle
+//       evt.Wait(workspace);        // explicit workspace overload, equivalent
+//
+//     Each call builds a transient AsyncSession on the AICORE stack
+//     (channelGroupIdx = get_block_idx(), syncId = 0, queue_num = 1).
+//     Adds a few hundred cycles per call vs the session-based shape; pick
+//     this when you do not need to amortize session-build cost.
+//
+//   * Session-based (advanced — amortize session build across many calls):
+//       comm::AsyncSession session;
+//       comm::BuildAsyncSession(scratchTile, workspace, session);
+//       auto evt = pto::TPREFETCH_L2(input, bytes, session);
+//       evt.Wait(session);
+//
+//   `workspace` (a __gm__ pointer) must be initialised host-side via
+//   `SdmaWorkspaceManager::Init` before the kernel launch.
+//
+// Guarded with the same condition as the rest of the comm-typed surface:
+// the templates return `comm::AsyncEvent`, which lives in the comm headers
+// not pulled in for COSTMODEL or PTO_COMM_NOT_SUPPORTED builds.
+// ============================================================================
+#if !defined(__COSTMODEL) && !defined(PTO_COMM_NOT_SUPPORTED)
+
+// GlobalTensor + workspace
+template <typename GlobalData, typename... WaitEvents,
+          std::enable_if_t<all_events_v<WaitEvents...>, int> = 0>
+PTO_INST comm::AsyncEvent TPREFETCH_L2(GlobalData &srcGlobalData, __gm__ uint8_t *workspace, WaitEvents &... events)
+{
+    TSYNC(events...);
+    return TPREFETCH_L2_IMPL(srcGlobalData, workspace);
+}
+
+// Raw pointer + workspace
+template <typename... WaitEvents>
+PTO_INST comm::AsyncEvent TPREFETCH_L2(__gm__ void *src, uint64_t bytes, __gm__ uint8_t *workspace,
+                                       WaitEvents &... events)
+{
+    TSYNC(events...);
+    return TPREFETCH_L2_IMPL(src, bytes, workspace);
+}
+
+// GlobalTensor + AsyncSession (advanced)
+template <typename GlobalData, typename... WaitEvents,
+          std::enable_if_t<all_events_v<WaitEvents...>, int> = 0>
+PTO_INST comm::AsyncEvent TPREFETCH_L2(GlobalData &srcGlobalData, const comm::AsyncSession &session,
+                                       WaitEvents &... events)
+{
+    TSYNC(events...);
+    return TPREFETCH_L2_IMPL(srcGlobalData, session);
+}
+
+// Raw pointer + AsyncSession (advanced)
+template <typename... WaitEvents>
+PTO_INST comm::AsyncEvent TPREFETCH_L2(__gm__ void *src, uint64_t bytes, const comm::AsyncSession &session,
+                                       WaitEvents &... events)
+{
+    TSYNC(events...);
+    return TPREFETCH_L2_IMPL(src, bytes, session);
+}
+
+#endif // !__COSTMODEL && !PTO_COMM_NOT_SUPPORTED
+
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents,
           std::enable_if_t<all_events_v<WaitEvents...>, int> = 0>
 PTO_INST RecordEvent TCMPS(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType src1, CmpMode mode,
