@@ -247,6 +247,50 @@ __global__ AICORE void ScenarioC_DeviceOverlapKernel(__gm__ T *srcBuf, int elem_
     pipe_barrier(PIPE_ALL);
 }
 
+// ============================================================================
+// Scenario F kernel — device-side "one launch, N chunked prefetches, then
+// warm TLOAD". Mirrors ScenarioA_DevicePrefetchKernel but splits the single
+// large prefetch into N chunks of `chunkBytes` over consecutive addresses.
+//
+// In-kernel control flow:
+//     for i in [0, N):
+//         evt = TPREFETCH_L2(srcBuf + i*chunkBytes, chunkBytes, workspace)
+//         evt.Wait()                          // event flag consumed clean
+//     TloadSweepCycles<T, count>(srcBuf, ...) // warm TLOAD over full buffer
+//
+// cycleOut covers the WHOLE in-kernel window (all N issue+Wait + TLOAD),
+// matching the host-side wall measured around the kernel launch in the
+// runner.
+// ============================================================================
+template <typename T, size_t count>
+__global__ AICORE void ScenarioF_DeviceChunkedPrefetchAndTloadKernel(__gm__ T *srcBuf, int elem_count,
+                                                                     uint64_t chunkBytes, uint32_t numChunks,
+                                                                     __gm__ uint8_t *sdmaWorkspace,
+                                                                     __gm__ uint64_t *cycleOut)
+{
+    if (elem_count <= 0 || elem_count > static_cast<int>(count)) {
+        pipe_barrier(PIPE_ALL);
+        return;
+    }
+
+    uint64_t t0 = cmp_syscnt();
+
+    __gm__ uint8_t *srcBytes = reinterpret_cast<__gm__ uint8_t *>(srcBuf);
+    for (uint32_t i = 0; i < numChunks; ++i) {
+        __gm__ uint8_t *addr = srcBytes + static_cast<uint64_t>(i) * chunkBytes;
+        auto evt = pto::TPREFETCH_L2(reinterpret_cast<__gm__ void *>(addr), chunkBytes, sdmaWorkspace);
+        (void)evt.Wait();
+    }
+
+    uint64_t tloadCycles = TloadSweepCycles<T, count>(srcBuf, elem_count);
+    (void)tloadCycles;
+
+    uint64_t t1 = cmp_syscnt();
+    *cycleOut = t1 - t0;
+
+    pipe_barrier(PIPE_ALL);
+}
+
 // Explicit instantiations for the three sizes listed in main.cpp.
 // float/int32 aliasing doesn't matter here since the kernels only TLOAD/write
 // cycle counters; we test float throughout.
@@ -259,7 +303,9 @@ __global__ AICORE void ScenarioC_DeviceOverlapKernel(__gm__ T *srcBuf, int elem_
     template __global__ AICORE void ScenarioC_ComputeThenTloadKernel<T, COUNT>(__gm__ T *, int, uint64_t,              \
                                                                                 __gm__ uint64_t *);                    \
     template __global__ AICORE void ScenarioC_DeviceOverlapKernel<T, COUNT>(__gm__ T *, int, uint64_t,                 \
-                                                                             __gm__ uint8_t *, __gm__ uint64_t *)
+                                                                             __gm__ uint8_t *, __gm__ uint64_t *);     \
+    template __global__ AICORE void ScenarioF_DeviceChunkedPrefetchAndTloadKernel<T, COUNT>(                           \
+        __gm__ T *, int, uint64_t, uint32_t, __gm__ uint8_t *, __gm__ uint64_t *)
 
 CMP_INSTANTIATE(float, 16384);     // 64 KB
 CMP_INSTANTIATE(float, 262144);    // 1 MB
@@ -988,3 +1034,155 @@ bool RunScenarioE1NoopKernel(int deviceId)
 
     return aclStatus == 0;
 }
+
+// ============================================================================
+// Scenario F: chunked prefetch + warm TLOAD (mirror of Scenario A)
+//
+// Total bytes = `count * sizeof(T)` is held constant (= one of Scenario A's
+// sizes); chunkBytes = totalBytes / numChunks. Each iteration runs both
+// paths once, separated by L2 trash, identical TLOAD body, single trailing
+// sync per path:
+//
+//   host_async    : trash L2 -> N x aclrtCmoAsync(src+i*chunk, chunk, stream)
+//                   -> ScenarioA_TloadOnlyKernel<<<...stream>>>
+//                   -> aclrtSynchronizeStream(stream)
+//
+//   device_kernel : trash L2 -> ScenarioF_DeviceChunkedPrefetchAndTloadKernel
+//                                 (N x { TPREFETCH_L2 + Wait } then TLOAD)
+//                   -> aclrtSynchronizeStream(stream)
+//
+// N=1 reduces exactly to Scenario A's host_sdma / device_l2 rows for the
+// same `count`, providing a built-in cross-check.
+//
+// totalBytes MUST be divisible by numChunks (the runner asserts and bails
+// otherwise). Reports per-(size, N): host wall, device wall, plus the
+// in-kernel cycle counters (host: TLOAD only kernel; device: full body).
+// 100 iter / 1 warmup, p5/p50/p95.
+// ============================================================================
+template <typename T, size_t count>
+bool RunScenarioFChunkedPrefetchAndTload(int deviceId, uint32_t numChunks)
+{
+    constexpr size_t totalBytes = count * sizeof(T);
+    if (numChunks == 0 || (totalBytes % numChunks) != 0) {
+        std::cerr << "[ERROR] ScenarioF: totalBytes=" << totalBytes
+                  << " not divisible by numChunks=" << numChunks << std::endl;
+        return false;
+    }
+    const uint64_t chunkBytes = static_cast<uint64_t>(totalBytes) / numChunks;
+    constexpr int kWarmup = 1;
+    const int kIter = IterCount(100);
+
+    CmpEnv env;
+    if (!env.Init(deviceId, totalBytes)) {
+        std::cerr << "[ERROR] ScenarioF: env init failed (totalBytes=" << totalBytes << ")" << std::endl;
+        env.Teardown();
+        return false;
+    }
+
+    SampleSet hostWall;
+    SampleSet deviceWall;
+    SampleSet hostKern;
+    SampleSet deviceKern;
+
+    for (int i = 0; i < kWarmup + kIter; ++i) {
+        // host path: N async CMO + TLOAD-only kernel + one stream sync.
+        env.TrashL2();
+        auto h0 = HrClock::now();
+        for (uint32_t k = 0; k < numChunks; ++k) {
+            uint8_t *addr = static_cast<uint8_t *>(env.srcDevice) + static_cast<uint64_t>(k) * chunkBytes;
+            pto::PTO_PREFETCH(addr, chunkBytes, env.stream);
+        }
+        ScenarioA_TloadOnlyKernel<T, count>
+            <<<1, nullptr, env.stream>>>(reinterpret_cast<T *>(env.srcDevice), static_cast<int>(count),
+                                         reinterpret_cast<uint64_t *>(env.cycleDev));
+        env.aclStatus |= aclrtSynchronizeStream(env.stream);
+        auto h1 = HrClock::now();
+        uint64_t hostWallUs = ElapsedMicros(h0, h1);
+        uint64_t hostKernCyc = env.ReadCycles();
+
+        // device path: one kernel (N x prefetch+Wait then TLOAD) + one sync.
+        env.TrashL2();
+        auto d0 = HrClock::now();
+        ScenarioF_DeviceChunkedPrefetchAndTloadKernel<T, count><<<1, nullptr, env.stream>>>(
+            reinterpret_cast<T *>(env.srcDevice), static_cast<int>(count), chunkBytes, numChunks,
+            reinterpret_cast<uint8_t *>(env.sdmaMgr.GetWorkspaceAddr()),
+            reinterpret_cast<uint64_t *>(env.cycleDev));
+        env.aclStatus |= aclrtSynchronizeStream(env.stream);
+        auto d1 = HrClock::now();
+        uint64_t deviceWallUs = ElapsedMicros(d0, d1);
+        uint64_t deviceKernCyc = env.ReadCycles();
+
+        if (i >= kWarmup) {
+            hostWall.Add(static_cast<double>(hostWallUs));
+            deviceWall.Add(static_cast<double>(deviceWallUs));
+            hostKern.Add(CyclesToUs(hostKernCyc));
+            deviceKern.Add(CyclesToUs(deviceKernCyc));
+        }
+    }
+
+    env.Teardown();
+
+    auto bytesLabel = [](uint64_t b) -> std::string {
+        std::ostringstream oss;
+        if (b >= 1024ULL * 1024) {
+            oss << b / 1024 / 1024 << "MB";
+        } else if (b >= 1024) {
+            oss << b / 1024 << "KB";
+        } else {
+            oss << b << "B";
+        }
+        return oss.str();
+    };
+
+    auto bandGBs = [&](double us) {
+        return us > 0.0 ? (static_cast<double>(totalBytes) / us / 1000.0) : 0.0;
+    };
+
+    std::cout << std::fixed << std::setprecision(2);
+    std::cout << "\n================================================================" << std::endl;
+    std::cout << "[PERF] Scenario F - chunked prefetch + warm TLOAD (total=" << bytesLabel(totalBytes)
+              << ", N=" << numChunks << ", chunk=" << bytesLabel(chunkBytes) << ")" << std::endl;
+    std::cout << "  Iterations:            " << kIter << " (warmup=" << kWarmup << ")" << std::endl;
+    std::cout << "  Syscnt freq assumed:   " << (SyscntHz() / 1.0e6) << " MHz" << std::endl;
+    std::cout << "  --- end-to-end wall (apples-to-apples) ---" << std::endl;
+    std::cout << "  host_async    p50=" << hostWall.P50()
+              << "us   p5=" << hostWall.P5() << " p95=" << hostWall.P95()
+              << "   band(p50)=" << bandGBs(hostWall.P50()) << " GB/s"
+              << "   (N x aclrtCmoAsync + TLOAD kernel + sync)" << std::endl;
+    std::cout << "  device_kernel p50=" << deviceWall.P50()
+              << "us   p5=" << deviceWall.P5() << " p95=" << deviceWall.P95()
+              << "   band(p50)=" << bandGBs(deviceWall.P50()) << " GB/s"
+              << "   ratio vs host: " << (hostWall.P50() > 0 ? deviceWall.P50() / hostWall.P50() : 0.0)
+              << "   (1 kernel(N prefetch+Wait then TLOAD) + sync)" << std::endl;
+    std::cout << "  --- supplementary: in-kernel cycles (NOT apples-to-apples) ---" << std::endl;
+    std::cout << "  host_async    in-kernel p50=" << hostKern.P50() << "us  (warm TLOAD only)" << std::endl;
+    std::cout << "  device_kernel in-kernel p50=" << deviceKern.P50()
+              << "us  (incl. N x in-kernel prefetch+wait + warm TLOAD)" << std::endl;
+    std::cout << "  CSV: " << CsvFilePath("scenarioF") << std::endl;
+    std::cout << "================================================================\n" << std::endl;
+
+    const std::string csvHeader =
+        "total_bytes,total_label,num_chunks,chunk_bytes,chunk_label,config,iter,"
+        "wall_p5_us,wall_p50_us,wall_p95_us,wall_min_us,wall_max_us,band_p50_gbs,"
+        "kernel_p50_us";
+
+    auto rowOf = [&](const std::string &cfg, const SampleSet &wall, const SampleSet &kern) {
+        std::ostringstream oss;
+        oss << totalBytes << ',' << bytesLabel(totalBytes) << ',' << numChunks << ','
+            << chunkBytes << ',' << bytesLabel(chunkBytes) << ','
+            << cfg << ',' << kIter << ','
+            << wall.P5() << ',' << wall.P50() << ',' << wall.P95() << ','
+            << wall.Min() << ',' << wall.Max() << ','
+            << bandGBs(wall.P50()) << ','
+            << kern.P50();
+        return oss.str();
+    };
+    CsvAppendRow("scenarioF", csvHeader, rowOf("host_async", hostWall, hostKern));
+    CsvAppendRow("scenarioF", csvHeader, rowOf("device_kernel", deviceWall, deviceKern));
+
+    return env.aclStatus == 0;
+}
+
+template bool RunScenarioFChunkedPrefetchAndTload<float, 4194304>(int, uint32_t);    // 16 MB
+template bool RunScenarioFChunkedPrefetchAndTload<float, 16777216>(int, uint32_t);   // 64 MB
+template bool RunScenarioFChunkedPrefetchAndTload<float, 33554432>(int, uint32_t);   // 128 MB

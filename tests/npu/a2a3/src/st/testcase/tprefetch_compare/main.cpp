@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "tprefetch_compare_kernel.h"
 
 // ============================================================================
-// Single-card prefetch comparison: Scenarios A / B / C.
+// Single-card prefetch comparison: Scenarios A / B / C / F.
 // Cross-rank Scenario D lives under comm/st/testcase/tprefetch_compare/.
 //
 // Statistics: each TEST runs 100 iterations (override via env
@@ -25,11 +25,17 @@ See LICENSE in the root of the software repository for the full text of the Lice
 //   tprefetch_compare_scenarioA.csv
 //   tprefetch_compare_scenarioB.csv
 //   tprefetch_compare_scenarioC.csv
+//   tprefetch_compare_scenarioF.csv
+//   tprefetch_compare_scenarioE1.csv
 //
 // Scenario A scans 5 sizes (64KB, 1MB, 16MB, 64MB, 128MB) for a "real-world
-// prefetch + warm TLOAD" comparison. Scenario B is a single 4KB-payload
-// micro-benchmark of issue overhead. Scenario C measures overlap with
-// compute at 3 representative sizes.
+// prefetch + warm TLOAD" comparison. Scenario B is a payload scan of issue
+// overhead. Scenario C measures overlap with compute at 3 representative
+// sizes. Scenario F holds total bytes = 16 MB (= Scenario A's 16MB row) and
+// varies N to compare "1 big prefetch + TLOAD" against "N small prefetches
+// + same TLOAD" — same total bytes / same TLOAD / same single trailing sync,
+// only varying whether the prefetch is split. N=1 is the natural cross-check
+// against Scenario A's 16MB host_sdma / device_l2 rows.
 //
 // Scenario E1 is a pure-overhead microbenchmark (empty AICore kernel) used
 // to isolate the device-path mandatory "launch + dispatch + sync" tax so
@@ -118,6 +124,50 @@ TEST(TPrefetchCompare, C_Overlap_16MB)
 TEST(TPrefetchCompare, C_Overlap_128MB)
 {
     ASSERT_TRUE((RunScenarioCOverlap<float, 33554432>(0)));
+}
+
+// ---- Scenario F: chunked prefetch + warm TLOAD (mirror of Scenario A) ---
+// Holds total bytes constant (= 16 MB, = Scenario A's A_EndToEnd_16MB) and
+// varies N (number of chunks the prefetch is split into). Same TLOAD body
+// as Scenario A, same single trailing sync. Each TEST appends two rows
+// (host_async, device_kernel) to scenarioF CSV; combine across N to see
+// how "1 big prefetch vs N small prefetches" affects end-to-end wall.
+//
+// Chunk size derived from N (totalBytes / N):
+//   N=1    -> chunk=16 MB    (sanity check: should match Scenario A 16MB rows)
+//   N=4    -> chunk=4 MB
+//   N=16   -> chunk=1 MB
+//   N=64   -> chunk=256 KB
+//   N=256  -> chunk=64 KB
+//   N=1024 -> chunk=16 KB
+TEST(TPrefetchCompare, F_ChunkedPrefetchTload_16MB_N1)
+{
+    ASSERT_TRUE((RunScenarioFChunkedPrefetchAndTload<float, 4194304>(0, 1)));
+}
+
+TEST(TPrefetchCompare, F_ChunkedPrefetchTload_16MB_N4)
+{
+    ASSERT_TRUE((RunScenarioFChunkedPrefetchAndTload<float, 4194304>(0, 4)));
+}
+
+TEST(TPrefetchCompare, F_ChunkedPrefetchTload_16MB_N16)
+{
+    ASSERT_TRUE((RunScenarioFChunkedPrefetchAndTload<float, 4194304>(0, 16)));
+}
+
+TEST(TPrefetchCompare, F_ChunkedPrefetchTload_16MB_N64)
+{
+    ASSERT_TRUE((RunScenarioFChunkedPrefetchAndTload<float, 4194304>(0, 64)));
+}
+
+TEST(TPrefetchCompare, F_ChunkedPrefetchTload_16MB_N256)
+{
+    ASSERT_TRUE((RunScenarioFChunkedPrefetchAndTload<float, 4194304>(0, 256)));
+}
+
+TEST(TPrefetchCompare, F_ChunkedPrefetchTload_16MB_N1024)
+{
+    ASSERT_TRUE((RunScenarioFChunkedPrefetchAndTload<float, 4194304>(0, 1024)));
 }
 
 // ---- Scenario E1: kernel launch + dispatch + sync overhead --------------
