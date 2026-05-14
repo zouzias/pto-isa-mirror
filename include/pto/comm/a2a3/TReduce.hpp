@@ -557,6 +557,18 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
         tileValidRow, tileValidCol, rootIdx, nranks, remoteCount);
 }
 
+// CCU engine is only available on A5 hardware.  Stub template mirrors the
+// TPUT_ASYNC_IMPL<engine> pattern so `::pto::comm::TREDUCE_CCU_IMPL<engine>`
+// parses on A2/A3; static_assert is dependent on the pack and fires only on
+// actual instantiation (the misuse it flags).
+template <CollEngine = CollEngine::CCU, typename... Args>
+PTO_INTERNAL void TREDUCE_CCU_IMPL(Args &&...)
+{
+    static_assert(sizeof...(Args) + 1 == 0,
+                  "TREDUCE<CollEngine::CCU> requires A5 hardware; "
+                  "CCU engine is not available on A2/A3.");
+}
+
 } // namespace comm
 } // namespace pto
 
