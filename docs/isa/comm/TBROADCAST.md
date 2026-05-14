@@ -27,21 +27,31 @@ tbroadcast %group, %src : (!pto.group<...>, !pto.memref<...>)
 ```
 Lowering introduces UB staging tile(s) for the GM→UB→GM data path; the C++ intrinsic requires explicit `stagingTileData` (or `pingTile` / `pongTile`) operand(s).
 
+## Template Parameter
+
+- `engine`:
+    - `CollEngine::AIV` (default)
+    - `CollEngine::CCU` (Ascend950, NPU_ARCH 3510 only)
+
 ## C++ Intrinsic
 
 Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
 // Basic broadcast (single staging tile)
-template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+template <CollEngine engine = CollEngine::AIV,
+          typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... Args>
 PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
-                                TileData &stagingTileData, WaitEvents&... events);
+                                TileData &stagingTileData, Args&... args);
 
 // Ping-pong broadcast (double buffering with two staging tiles)
-template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+template <CollEngine engine = CollEngine::AIV,
+          typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... Args>
 PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
-                                TileData &pingTile, TileData &pongTile, WaitEvents&... events);
+                                TileData &pingTile, TileData &pongTile, Args&... args);
 ```
+
+When `engine == CollEngine::CCU`, the first variadic argument must be a `CcuTriggerContext` containing the CKE slot VA and gate mask. The AIV kernel triggers the CKE gate; the actual broadcast data path runs on the CCU engine.
 
 ## Constraints
 
@@ -58,6 +68,8 @@ PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData 
 - **Chunked mode constraints** (when data exceeds a single UB tile):
     - If `TileData` has static `ValidRow`, `GetShape(DIM_3)` must be divisible by `ValidRow`. Use a Tile with `DYNAMIC` ValidRow for partial row support.
     - If `TileData` has static `ValidCol`, `GetShape(DIM_4)` must be divisible by `ValidCol`. Use a Tile with `DYNAMIC` ValidCol for partial column support.
+
+> **CCU path**: Unlike the AIV path where only root calls `TBROADCAST`, the CCU path requires all ranks to register and launch the CCU kernel via host-side `HcclCcuKernelRegister` / `HcclCcuKernelLaunch`. See `tests/npu/a5/comm/st/testcase/tbroadcast_ccu/` for a complete example.
 
 ## Examples
 
