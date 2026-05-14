@@ -236,21 +236,20 @@ PTO_INTERNAL void AbsReduceMax_b16_ND(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr, un
         vsts(vb16_max, maxPtr, 0, distValue, preg_out);
         return;
     }
-    // loop_num>=2: stream 16-B group-max chunks through one alignment
-    // register. POST_UPDATE keeps the stream's continuation address aligned
-    // with vstas; passing a fresh 16-B offset per vstus can leave later chunks
-    // uncommitted on board.
+    // loop_num>=2: stream via vstus, then vstas flushes st_align remainder
+    // at the continuation addr (maxPtr + loop_num*grps_per_dintlv).
+    // Board: stores within a loop may not be ordered w.r.t. one another;
+    // VST_VST forces each iter's vstus to commit before the next iter's.
     vector_align ureg_max;
-    __ubuf__ T *writePtr = maxPtr;
     for (uint16_t i = 0; i < loop_num; ++i) {
         uint32_t offset = i * elements_per_dintlv;
         uint32_t remaining = (total_elem_count > offset) ? (total_elem_count - offset) : 0;
         if (remaining > elements_per_dintlv)
             remaining = elements_per_dintlv;
         AbsReduceMax_b16_DintlvWindow<T, fp16AsBf16ForMax>(srcPtr, offset, remaining, vb16_max);
-        vstus(ureg_max, blks_per_vl, vb16_max, writePtr, POST_UPDATE);
+        vstus(ureg_max, blks_per_vl, vb16_max, maxPtr + i * grps_per_dintlv);
     }
-    vstas(ureg_max, writePtr, 0, POST_UPDATE);
+    vstas(ureg_max, maxPtr + loop_num * grps_per_dintlv, 0);
 }
 
 // Assumption: input total size is a multiple of 32 VLs.
@@ -629,7 +628,7 @@ PTO_INTERNAL void ExtractB8ExponentAndScalingNV(__ubuf__ T *maxPtr, __ubuf__ uin
         uint32_t chunkCount = (total_elements_count > chunkOffset) ? (total_elements_count - chunkOffset) : 0;
         if (chunkCount > elementsPerChunk)
             chunkCount = elementsPerChunk;
-        uint32_t chunkCountB16 = chunkCount;
+        uint32_t chunkCountB16 = chunkCount * 2;
         uint32_t chunkCountB32 = chunkCount;
         MaskReg preg_b16 = CreatePredicate<T>(chunkCountB16);
         MaskReg preg_b32 = CreatePredicate<float>(chunkCountB32);
