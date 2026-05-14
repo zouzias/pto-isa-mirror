@@ -181,6 +181,36 @@ Each entry uses:
 6. Next action — once merged, add a check in code review for `TRESHAPE(a, b)` where `a.Loc != b.Loc`.
 7. Status — Inferred (post-merge).
 
+### 3.6 A3 GM total size
+
+1. Question — what is the total GM (global memory) capacity on A3 / Ascend 910B1?
+2. Why — bounds the maximum problem size we can fit without tiling across multiple GM allocations. Especially relevant for MoE buffers like `A` and `B` at large `(kT·kTopK, kH)`.
+3. Evidence — user-provided architecture briefing (2026-05) listed L1=512 KB, L0A=64 KB, L0B=64 KB, L0C=128 KB, UB=192 KB, but explicitly noted "dont know about GM". Captured in [pto_auto_mode_hw_optimization_guide.md §1.3](pto_auto_mode_hw_optimization_guide.md) and [a3_a5_differences.md §14](a3_a5_differences.md).
+4. Platform — A3.
+5. Priority — low (we are nowhere near GM exhaustion at the prototype shapes).
+6. Next action — ask user, or check `aclrtGetDevResource` / SoC datasheet.
+7. Status — Unknown.
+
+### 3.7 A5 per-AI-core buffer capacities
+
+1. Question — what are L1 / L0A / L0B / L0C / UB sizes on A5 (`dav-c310`)?
+2. Why — needed before any A5 mirror of MoE / FFN / FA kernels can do correct tile-budget arithmetic. Currently the [a3_a5_differences.md §14](a3_a5_differences.md) row for A5 is `Unknown`.
+3. Evidence — none in tree; A3 capacities came from user briefing (2026-05).
+4. Platform — A5.
+5. Priority — medium (blocks A5 mirror work).
+6. Next action — ask user when A5 work begins; otherwise check Ascend documentation.
+7. Status — Unknown.
+
+### 3.8 A3 cube ↔ vec handoff requires a GM round-trip
+
+1. Assumption — cube cannot read UB and vector cannot read L1/L0A/L0B/L0C; therefore any kernel mixing matmul with non-matmul work (e.g., `GEMM → ReLU → GEMM`) must `TSTORE` cube output to GM, then a vector TU `TLOAD`s it back, then a second cube TU re-reads from GM.
+2. Why — drives kernel decomposition for the MoE FFN (Part 2: gemm1 / relu / gemm2) and any future fused activation patterns. Misunderstanding this leads to attempts at a single-TU GEMM-ReLU-GEMM that cannot work.
+3. Evidence — user-provided briefing (2026-05); consistent with the cube/vec build-target split in [tests/npu/a2a3/src/st/testcase/CMakeLists.txt:14, :43](../tests/npu/a2a3/src/st/testcase/CMakeLists.txt#L14) and with the two-stream-serialised cube kernels documented in [§11.9 moe_segmented_ffn_top1](#119-full-top-1-segmented-moe-ffn-gemm1--relu--fp16-scratch--gemm2-works-on-a3-auto-mode-at-the-tested-shape).
+4. Platform — A3 (A5 likely same; Inferred — same arch family).
+5. Priority — high (blocks correct FFN decomposition).
+6. Next action — confirm by reviewing one of the existing two-stage MoE kernels' TSTORE/TLOAD boundaries; capture any exception (e.g., fused `TSTORE(..., ReluPreMode::NormalRelu)` in cube which **does** avoid a vector hop — see [§11.8 moe_segmented_gemm_relu](#118-fused-relu-via-tstore-relupremodenormalrelu-in-the-per-expert-segmented-gemm-loop-works-at-the-tested-shape)) in `auto_mode_bad_patterns.md` or `known_good_kernel_examples.md`.
+7. Status — Assumption (with strong corroborating evidence from §11.9).
+
 ---
 
 ## 4. Qualifier / `__tf__` / `TileDType` rules

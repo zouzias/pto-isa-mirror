@@ -68,6 +68,61 @@ This separation matters because memory allocation, auto-sync, and available inst
 
 **Rule:** Do not write one mixed blob and hope auto mode finds the hardware structure. Explicitly separate cube stages and vector stages.
 
+### 1.3 A3 (Ascend 910B1 / `dav-c220`) concrete capacities and data flow
+
+Source: user-provided architecture briefing (2026-05). A5 (`dav-c310`) capacities are **Unknown** — see [a3_a5_differences.md §10](a3_a5_differences.md). GM total size is **Unknown** — see [assumptions_to_verify.md §6.1](assumptions_to_verify.md).
+
+**Per-chip totals (A3 / Ascend 910B1):** 25 AI cores, 50 vec cores, 4 AICPUs. Cube is matmul/GEMM-only; everything non-matmul (TMAXS / ReLU, casts, element-wise math, reductions, gather/scatter) runs on vector. (Known: user briefing.)
+
+**Per-AI-core buffer capacities (A3):**
+
+| Buffer | Size | Side | Role |
+|---|---|---|---|
+| L1  | 512 KB | cube  | staging from GM; feeds L0A / L0B; also receives L0C via FixPipe |
+| L0A |  64 KB | cube  | left operand of `TMATMUL` (`TileLeft`, `__ca__`) |
+| L0B |  64 KB | cube  | right operand of `TMATMUL` (`TileRight`, `__cb__`) |
+| L0C | 128 KB | cube  | accumulator out of `TMATMUL` (`TileAcc`, `__cc__`); fp32 |
+| UB  | 192 KB | vec   | vector staging from GM; feeds the vector unit |
+| GM  | (Unknown) | shared | the only buffer cube and vector both see |
+
+The element-count-vs-byte distinction for `tile_size(N)` is documented in [tile_type_reference.md §1](tile_type_reference.md) — these capacity numbers are **bytes**, so a fp16 (`half`) L0B tile holds at most 32K elements, a fp32 L0C tile holds at most 32K elements, etc. (Known.)
+
+**Data-flow shape (A3):**
+
+```text
+                    ┌─────────────────── GM ───────────────────┐
+                    │           (shared, both sides)           │
+                    └────────┬────────────────────┬────────────┘
+                             │                    │
+                  ┌──────────┴─────────┐ ┌────────┴─────────┐
+                  │      cube side      │ │    vector side   │
+                  │                     │ │                  │
+                  │   GM ↔ L1 (512 KB)  │ │   GM ↔ UB (192K) │
+                  │           │         │ │           │      │
+                  │   L1 → L0A (64 KB)  │ │   UB ↔ Vector    │
+                  │   L1 → L0B (64 KB)  │ │   unit (TMAXS,   │
+                  │           │         │ │   element ops,   │
+                  │      [ CUBE ]       │ │   reductions,    │
+                  │           │         │ │   gather/scatter)│
+                  │   L0C (128 KB, fp32 │ │                  │
+                  │   accumulator)      │ │   Scalar ↔ UB    │
+                  │           │         │ │   Scalar ↔ GM    │
+                  │   FixPipe → L1 or   │ │                  │
+                  │             GM      │ │                  │
+                  └─────────────────────┘ └──────────────────┘
+```
+
+**The cube/vec handoff round-trips through GM.** Cube cannot read UB; vector cannot read L1/L0A/L0B/L0C. Any kernel that mixes matmul with non-matmul work (e.g., `GEMM → ReLU → GEMM`) must `TSTORE` cube output to GM, then a vector TU `TLOAD`s from GM, does the op, `TSTORE`s back, then a second cube TU `TLOAD`s from GM and does the next matmul. (Known: user briefing; consistent with the cube/vec build-target split in [tests/npu/a2a3/src/st/testcase/CMakeLists.txt:14](../tests/npu/a2a3/src/st/testcase/CMakeLists.txt#L14) and [:43](../tests/npu/a2a3/src/st/testcase/CMakeLists.txt#L43).)
+
+**Practical tile-budget implications (fp16 inputs, fp32 accumulator):**
+
+- L0A holds at most `64 KB / 2 = 32K` fp16 elements → e.g., M·K ≤ 32768 for the left operand.
+- L0B holds at most `32K` fp16 elements → K·N ≤ 32768 for the right operand. A full `256×256` fp16 weight tile (`131072` bytes) **does not fit**; must Split-K or Split-N.
+- L0C holds at most `128 KB / 4 = 32K` fp32 elements → M·N ≤ 32768 for the accumulator.
+- UB holds at most `192 KB` for vector-side staging — divide by element size and by the number of simultaneously-live tiles.
+
+For Split-K/Split-N inside one cube TU, use the [§A6 Split-K pattern](known_good_kernel_examples.md#L81) (`if (i == 0) TMATMUL else TMATMUL_ACC`).
+
 ---
 
 ## 2. Optimization mindset

@@ -480,3 +480,24 @@ What is **the same** between A3 and A5 (auto-mode-relevant, Known):
 - The `__tf__`/`__in__`/`__out__`/`__cce_get_tile_ptr` keyword set ([qualifier_reference.md](qualifier_reference.md)).
 
 What is **Unknown** (audit pending) — see §12.
+
+---
+
+## 14. Per-AI-core buffer capacities and cube/vec data flow
+
+Source: user-provided architecture briefing (2026-05). The full diagram and tile-budget arithmetic live in [pto_auto_mode_hw_optimization_guide.md §1.3](pto_auto_mode_hw_optimization_guide.md). Summarized here for cross-arch comparison.
+
+| Resource | A3 (`dav-c220` / Ascend 910B1) | A5 (`dav-c310`) |
+|---|---|---|
+| AI cores per chip | 25 | **Unknown** |
+| Vec cores per chip | 50 | **Unknown** |
+| AICPUs per chip | 4 | **Unknown** |
+| L1 (cube staging) | 512 KB | **Unknown** |
+| L0A (`TileLeft`, `__ca__`) | 64 KB | **Unknown** |
+| L0B (`TileRight`, `__cb__`) | 64 KB | **Unknown** |
+| L0C (`TileAcc`, `__cc__`, fp32) | 128 KB | **Unknown** |
+| UB (vec staging, `__ubuf__`) | 192 KB | **Unknown** |
+| GM total | **Unknown** | **Unknown** |
+| Cube ↔ vec handoff | round-trips through GM | round-trips through GM (Inferred — same arch family) |
+
+A5 capacities are **Unknown** pending user input. See [assumptions_to_verify.md §6.1](assumptions_to_verify.md). Cube unit only does matmul; non-matmul work (TMAXS / ReLU, casts, element ops, reductions, gather/scatter) runs on vector on both arches — same kernel-rules contract from [docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md](../docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md).
