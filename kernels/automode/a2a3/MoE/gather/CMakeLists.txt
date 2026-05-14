@@ -1,9 +1,6 @@
 # --------------------------------------------------------------------------------
-# expert_ffn - auto-mode A3 prototype (cube path; rewrite of the v1 vec
-# placeholder). Mirrors MoE/router_matmul/CMakeLists.txt and the §11.9
-# moe_segmented_ffn_top1 CMake; one shared .cpp holds both Stage 1 and
-# Stage 2 __global__ AICORE functions.
-# Cube arch (--cce-aicore-arch=dav-c220-cube) + auto mode (--cce-enable-pto-passes).
+# gather - auto-mode A3 prototype (vec path).
+# Vec arch (--cce-aicore-arch=dav-c220-vec) + auto mode (--cce-enable-pto-passes).
 # --------------------------------------------------------------------------------
 
 cmake_minimum_required(VERSION 3.16)
@@ -68,11 +65,11 @@ include_directories(
     ${ASCEND_DRIVER_PATH}/kernel/inc
 )
 
-function(pto_example_cube_auto NAME)
+function(pto_example_vec_auto NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
     target_compile_options(${NAME}_kernel PRIVATE
         ${CMAKE_CCE_COMPILE_OPTIONS}
-        --cce-aicore-arch=dav-c220-cube
+        --cce-aicore-arch=dav-c220-vec
         --cce-enable-pto-passes
         -std=c++17
     )
@@ -102,4 +99,4 @@ function(pto_example_cube_auto NAME)
     )
 endfunction()
 
-pto_example_cube_auto(expert_ffn)
+pto_example_vec_auto(gather)
