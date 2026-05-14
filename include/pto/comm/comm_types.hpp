@@ -137,6 +137,28 @@ enum class DmaEngine : uint8_t
 };
 
 // ============================================================================
+// CollEngine: Backend engine selector for collective instructions
+//   AIV  — default tile-based path (TLOAD + compute + TSTORE)
+//   CCU  — AIV triggers CKE gate, CCU hardware performs the collective
+// ============================================================================
+
+enum class CollEngine : uint8_t
+{
+    AIV = 0,
+    CCU = 1,
+};
+
+// ============================================================================
+// CcuTriggerContext: Opaque context passed from host to AIV kernel for CCU path.
+// Host fills it from ccu::TryGet() + rtGetDevResAddress() before kernel launch.
+// ============================================================================
+
+struct CcuTriggerContext {
+    uint64_t ckeSlotVA{0}; // CKE slot VA from rtGetDevResAddress(dieId, ckeId)
+    uint32_t mask{0};      // 16-bit CKE trigger mask
+};
+
+// ============================================================================
 // AsyncEvent: Returned by TPUT_ASYNC / TGET_ASYNC for asynchronous DMA
 // ============================================================================
 
