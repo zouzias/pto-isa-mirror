@@ -44,17 +44,17 @@ using PrefetchL2ScratchTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, comm::sd
 template <typename GlobalData>
 PTO_INTERNAL bool TPrefetchL2IsFlatContiguous1D(GlobalData &globalData)
 {
-    const int dim0 = globalData.GetShape(comm::GlobalTensorDim::DIM_0);
-    const int dim1 = globalData.GetShape(comm::GlobalTensorDim::DIM_1);
-    const int dim2 = globalData.GetShape(comm::GlobalTensorDim::DIM_2);
-    const int dim3 = globalData.GetShape(comm::GlobalTensorDim::DIM_3);
-    const int dim4 = globalData.GetShape(comm::GlobalTensorDim::DIM_4);
+    const int dim0 = globalData.GetShape(GlobalTensorDim::DIM_0);
+    const int dim1 = globalData.GetShape(GlobalTensorDim::DIM_1);
+    const int dim2 = globalData.GetShape(GlobalTensorDim::DIM_2);
+    const int dim3 = globalData.GetShape(GlobalTensorDim::DIM_3);
+    const int dim4 = globalData.GetShape(GlobalTensorDim::DIM_4);
 
-    const int pitch0 = globalData.GetStride(comm::GlobalTensorDim::DIM_0);
-    const int pitch1 = globalData.GetStride(comm::GlobalTensorDim::DIM_1);
-    const int pitch2 = globalData.GetStride(comm::GlobalTensorDim::DIM_2);
-    const int pitch3 = globalData.GetStride(comm::GlobalTensorDim::DIM_3);
-    const int pitch4 = globalData.GetStride(comm::GlobalTensorDim::DIM_4);
+    const int pitch0 = globalData.GetStride(GlobalTensorDim::DIM_0);
+    const int pitch1 = globalData.GetStride(GlobalTensorDim::DIM_1);
+    const int pitch2 = globalData.GetStride(GlobalTensorDim::DIM_2);
+    const int pitch3 = globalData.GetStride(GlobalTensorDim::DIM_3);
+    const int pitch4 = globalData.GetStride(GlobalTensorDim::DIM_4);
 
     const bool hasPackedLayout = (pitch4 == 1) && (pitch3 == dim4) && (pitch2 == dim3 * pitch3) &&
                                  (pitch1 == dim2 * pitch2) && (pitch0 == dim1 * pitch1);
@@ -65,11 +65,11 @@ PTO_INTERNAL bool TPrefetchL2IsFlatContiguous1D(GlobalData &globalData)
 template <typename GlobalData>
 PTO_INTERNAL uint64_t TPrefetchL2GetTotalBytes(GlobalData &globalData)
 {
-    const uint64_t d0 = static_cast<uint64_t>(globalData.GetShape(comm::GlobalTensorDim::DIM_0));
-    const uint64_t d1 = static_cast<uint64_t>(globalData.GetShape(comm::GlobalTensorDim::DIM_1));
-    const uint64_t d2 = static_cast<uint64_t>(globalData.GetShape(comm::GlobalTensorDim::DIM_2));
-    const uint64_t d3 = static_cast<uint64_t>(globalData.GetShape(comm::GlobalTensorDim::DIM_3));
-    const uint64_t d4 = static_cast<uint64_t>(globalData.GetShape(comm::GlobalTensorDim::DIM_4));
+    const uint64_t d0 = static_cast<uint64_t>(globalData.GetShape(GlobalTensorDim::DIM_0));
+    const uint64_t d1 = static_cast<uint64_t>(globalData.GetShape(GlobalTensorDim::DIM_1));
+    const uint64_t d2 = static_cast<uint64_t>(globalData.GetShape(GlobalTensorDim::DIM_2));
+    const uint64_t d3 = static_cast<uint64_t>(globalData.GetShape(GlobalTensorDim::DIM_3));
+    const uint64_t d4 = static_cast<uint64_t>(globalData.GetShape(GlobalTensorDim::DIM_4));
     using T = typename GlobalData::RawDType;
     return (((d0 * d1) * d2) * d3) * d4 * sizeof(T);
 }
