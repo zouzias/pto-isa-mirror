@@ -30,7 +30,7 @@ $$ \mathrm{dst}_{i, j} = \begin{cases} \mathrm{src0}_{i, j} & \text{若 } 0 \le 
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [语法模型](syntax-and-operands/assembly-model_zh.md)。
 
 ### AS Level 1 (SSA)
 

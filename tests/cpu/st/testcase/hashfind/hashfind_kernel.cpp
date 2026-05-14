@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #include <limits>
@@ -66,7 +68,8 @@ AICORE void runHashFind(__gm__ int32_t __out__ *out, __gm__ int32_t __in__ *tabl
     TileI32 update(kTileRows, kTileCols);
 
     // No direct Tile memory assignment is made (via TASSIGN)
-    // So, __PTO_AUTO__ macro should be enabled in compiler definitions for auto memory assignment
+    // So, __PTO_AUTO__ macro should be enabled in compiler definitions for auto
+    // memory assignment
 
     TLOAD(qTile, queryGlobal);
     TCVT(qU32Tile, qTile, RoundMode::CAST_NONE);
@@ -79,8 +82,8 @@ AICORE void runHashFind(__gm__ int32_t __out__ *out, __gm__ int32_t __in__ *tabl
 
     constexpr uint32_t mask = static_cast<uint32_t>(kCap - 1);
 
-    // Compute the base hash indices for all query elements using PTO vector-tile instructions.
-    // h = hash_u32(q) & (cap - 1)
+    // Compute the base hash indices for all query elements using PTO vector-tile
+    // instructions. h = hash_u32(q) & (cap - 1)
     TMOV(hTile, qU32Tile);
     TEXPANDS(shift16, static_cast<uint32_t>(16));
     TEXPANDS(shift15, static_cast<uint32_t>(15));

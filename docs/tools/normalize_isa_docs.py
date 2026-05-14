@@ -62,8 +62,8 @@ _EXPLICIT_FALLBACK_FORMS: Dict[str, Dict[str, str]] = {
         "level2": "pto.tquant ins(%src, %qp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)",
     },
     "SETFMATRIX": {
-        "level1": "pto.SETFMATRIX %cfg : !pto.fmatrix_config -> ()",
-        "level2": "pto.SETFMATRIX ins(%cfg : !pto.fmatrix_config) outs()",
+        "level1": "pto.setfmatrix %cfg : !pto.fmatrix_config -> ()",
+        "level2": "pto.setfmatrix ins(%cfg : !pto.fmatrix_config) outs()",
     },
     "TTRI": {
         "level1": "%dst = pto.ttri %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>",
@@ -251,7 +251,13 @@ def _resolve_level_formats(instr: str, assembly_body: str, level_formats: Dict[s
         level1 = "// Level 1 (SSA) does not support explicit synchronization primitives."
         level2 = _sync_level2_from_table(level_formats)
         if not level2:
-            level2 = "pto.record_event[src_op, dst_op, eventID]\npto.wait_event[src_op, dst_op, eventID]\npto.barrier(op)"
+            level2 = (
+                "pto.record_event[src_op, dst_op, eventID]\n"
+                "pto.wait_event[src_op, dst_op, eventID]\n"
+                "pto.barrier(op)\n\n"
+                "Note: for the current PTO-DSL front-end flow, prefer sync-free source plus "
+                "`ptoas --enable-insert-sync`."
+            )
         return {"level1": level1, "level2": level2}
 
     item = level_formats.get(instr, {})
@@ -319,7 +325,7 @@ For `TGEMV_MX`, scale tiles participate in implementation-defined mixed-precisio
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/assembly/PTO-AS.md`.
+PTO-AS form: see `docs/isa/syntax-and-operands/assembly-model.md`.
 
 Schematic form:
 
@@ -374,7 +380,7 @@ $$
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/assembly/PTO-AS.md`.
+PTO-AS form: see `docs/isa/syntax-and-operands/assembly-model.md`.
 
 Synchronous form:
 
@@ -429,8 +435,8 @@ void example_manual() {
 ```
 """
 
-    if instr == "TSETHF32MODE":
-        return """# TSETHF32MODE
+    if instr == "SETHF32MODE":
+        return """# SETHF32MODE
 
 ## Introduction
 
@@ -444,12 +450,12 @@ No direct tensor arithmetic is produced by this instruction. It updates target m
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/assembly/PTO-AS.md`.
+PTO-AS form: see `docs/isa/syntax-and-operands/assembly-model.md`.
 
 Schematic form:
 
 ```text
-tsethf32mode {enable = true, mode = ...}
+sethf32mode {enable = true, mode = ...}
 ```
 
 ## C++ Intrinsic
@@ -458,7 +464,7 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <bool isEnable, RoundMode hf32TransMode = RoundMode::CAST_ROUND, typename... WaitEvents>
-PTO_INST RecordEvent TSETHF32MODE(WaitEvents &... events);
+PTO_INST RecordEvent SETHF32MODE(WaitEvents &... events);
 ```
 
 ## Constraints
@@ -474,13 +480,13 @@ PTO_INST RecordEvent TSETHF32MODE(WaitEvents &... events);
 using namespace pto;
 
 void example_enable_hf32() {
-  TSETHF32MODE<true, RoundMode::CAST_ROUND>();
+  SETHF32MODE<true, RoundMode::CAST_ROUND>();
 }
 ```
 """
 
-    if instr == "TSETTF32MODE":
-        return """# TSETTF32MODE
+    if instr == "SETTF32MODE":
+        return """# SETTF32MODE
 
 ## Introduction
 
@@ -494,12 +500,12 @@ No direct tensor arithmetic is produced by this instruction. It updates target m
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/assembly/PTO-AS.md`.
+PTO-AS form: see `docs/isa/syntax-and-operands/assembly-model.md`.
 
 Schematic form:
 
 ```text
-tsettf32mode {enable = true, mode = ...}
+settf32mode {enable = true, mode = ...}
 ```
 
 ## C++ Intrinsic
@@ -508,7 +514,7 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <bool isEnable, RoundMode tf32TransMode = RoundMode::CAST_ROUND, typename... WaitEvents>
-PTO_INST RecordEvent TSETTF32MODE(WaitEvents &... events);
+PTO_INST RecordEvent SETTF32MODE(WaitEvents &... events);
 ```
 
 ## Constraints
@@ -524,7 +530,7 @@ PTO_INST RecordEvent TSETTF32MODE(WaitEvents &... events);
 using namespace pto;
 
 void example_enable_tf32() {
-  TSETTF32MODE<true, RoundMode::CAST_ROUND>();
+  SETTF32MODE<true, RoundMode::CAST_ROUND>();
 }
 ```
 """
@@ -541,7 +547,7 @@ Semantics are instruction-specific. Unless stated otherwise, behavior is defined
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/assembly/PTO-AS.md`.
+PTO-AS form: see `docs/isa/syntax-and-operands/assembly-model.md`.
 
 ## C++ Intrinsic
 
@@ -590,7 +596,7 @@ def ensure_required_sections(instr: str, text: str) -> str:
         ),
         (
             "Assembly Syntax",
-            "## Assembly Syntax\n\nPTO-AS form: see `docs/assembly/PTO-AS.md`.\n",
+            "## Assembly Syntax\n\nPTO-AS form: see `docs/isa/syntax-and-operands/assembly-model.md`.\n",
         ),
         (
             "C++ Intrinsic",
@@ -743,7 +749,7 @@ def build_zh_page(instr: str, summary_zh: str, en_text: str) -> str:
     if asm_en:
         lines.append(_translate_md_to_zh(asm_en))
     else:
-        lines.append("PTO-AS 形式：参见 `docs/assembly/PTO-AS.md`。")
+        lines.append("PTO-AS 形式：参见 `docs/isa/syntax-and-operands/assembly-model.md`。")
     lines.append("")
     lines.append("## C++ 内建接口")
     lines.append("")

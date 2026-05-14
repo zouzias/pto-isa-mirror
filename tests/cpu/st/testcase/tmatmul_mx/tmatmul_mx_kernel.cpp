@@ -1,16 +1,19 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_tile.hpp>
+#include <pto/pto-inst.hpp>
+
 #include "pto/cpu/MXTypes.hpp"
 
 using namespace pto;
@@ -153,7 +156,8 @@ __global__ AICORE void RunTMATMULMX(__gm__ OutType *out, __gm__ AType *src0, __g
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 #endif
 
-    /**********************************TMOV && TEXTRACT**********************************/
+    /**********************************TMOV &&
+     * TEXTRACT**********************************/
     TMOV(aTile, aMatTile);
     TMOV(bTile, bMatTile);
 
@@ -457,7 +461,8 @@ __global__ AICORE void RunTGEMVMX(__gm__ OutType *out, __gm__ AType *src0, __gm_
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 #endif
 
-    /**********************************TMOV && TEXTRACT**********************************/
+    /**********************************TMOV &&
+     * TEXTRACT**********************************/
 
     TEXTRACT(aTile, aMatTile, 0, 0);
     TEXTRACT(bTile, bMatTile, 0, 0);

@@ -11,8 +11,10 @@ If you are looking for the *ISA reference*, start from [docs/isa/README.md](../i
 - [More tutorial examples](tutorials/README.md)
 - [Debugging and assertion lookup](debug.md)
 - [Tile abstraction and layout/valid-region rules](Tile.md)
+- [ConvTile programming model](ConvTile.md)
 - [Global memory tensors (shape/stride/layout)](GlobalTensor.md)
 - [Events and synchronization model](Event.md)
+- [CPU_SIM backend notes](cpu_sim.md)
 - [Scalar values, type mnemonics, and enums](Scalar.md)
 
 ## Related

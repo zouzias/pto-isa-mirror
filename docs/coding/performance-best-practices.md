@@ -1,6 +1,6 @@
 # Performance Best Practices
 
-This document summarizes practical performance-tuning guidance for PTO operators. All numeric examples should be treated as analysis heuristics, not guaranteed hardware values, because achievable performance depends on chip generation, clocking, memory hierarchy, compiler behavior, workload shape, and the surrounding runtime.
+This document summarizes performance tuning best practices for PTO operators, providing systematic optimization methods and experience.
 
 ---
 
@@ -9,7 +9,7 @@ This document summarizes practical performance-tuning guidance for PTO operators
 ### 1.1 Standard Optimization Process
 
 ```
-Correctness Verification → Performance Baseline → Bottleneck Analysis → 
+Correctness Verification → Performance Baseline → Bottleneck Analysis →
 Targeted Optimization → Verification → Iteration
 ```
 
@@ -120,15 +120,24 @@ printf("TLOAD time: %ld us\n", duration.count());
 
 ### 2.3 Theoretical Performance Calculation
 
-Theoretical peak numbers are useful only for rough upper-bound analysis. Prefer comparing kernels under the same measurement setup, and rely on profiler evidence before drawing conclusions.
-
-**Example reasoning pattern**:
+**GEMM Theoretical Peak**:
 ```
-Theoretical throughput upper bound = peak compute capability × estimated utilization
-Achieved throughput               = measured workload FLOPs / measured execution time
+Theoretical TFLOPS = Hardware Peak × Core Count × Utilization
+
+Example A3 (24 cores):
+- Hardware peak: ~50 TFLOPS/core (fp16)
+- Theoretical peak: 50 × 24 = 1200 TFLOPS
+- Achievable: ~70-80% = 840-960 TFLOPS
 ```
 
-Use this comparison to decide whether a kernel is primarily compute-bound or memory-bound; avoid hard-coding platform figures in design conclusions unless they come from the target platform's official specifications.
+**Memory Bandwidth Theoretical Value**:
+```
+Theoretical Bandwidth = Hardware Bandwidth × Utilization
+
+Example A3:
+- Hardware bandwidth: ~900 GB/s
+- Achievable: ~70-80% = 630-720 GB/s
+```
 
 ---
 
@@ -166,7 +175,7 @@ for (int k = 0; k < K; k += TILE_K) {
 }
 ```
 
-✅ **Use double buffering or staged overlap when applicable**
+✅ **Use Double Buffering**
 ```cpp
 // Preload
 TLOAD(tile[0], ...);
@@ -174,11 +183,11 @@ TLOAD(tile[0], ...);
 for (int i = 0; i < N; i++) {
   int curr = i % 2;
   int next = (i + 1) % 2;
-  
-  // Compute current tile
-  process_tile(result[curr], tile[curr]);
-  
-  // Load next tile in parallel when possible
+
+  // Compute current
+  TCOMPUTE(result[curr], tile[curr]);
+
+  // Load next simultaneously
   if (i + 1 < N) {
     TLOAD(tile[next], ...);
   }
@@ -389,4 +398,3 @@ constexpr int baseN = 512;
 - [Debugging Guide](debug.md)
 - [GEMM Optimization Case](../../kernels/manual/a2a3/gemm_performance/README.md)
 - [Flash Attention Case](../../kernels/manual/common/flash_atten/README.md)
-
