@@ -7,37 +7,45 @@ Five independently buildable kernels that together implement a top-`kTopK` MoE f
 ```
                        ┌────────────────┐
    X      ─────────────►│ router_matmul │──► logits
-  (fp16)                │   (cube)      │   (fp32)
+  (fp16)                │   (cube)       │   (fp32)
                        └────────────────┘
                                 │
                                 ▼
                        ┌────────────────┐
-                       │ moe_topk_padded│──► expert_id
-                       │    (vec)       │    [kT, kTopK] int32
-                       └────────────────┘
-                                │
-                                ▼
-              X  ───►  ┌────────────────┐  ──► A             [kT·kTopK + 16, kH] fp16
-                       │   scatter      │  ──► A_id          [kT·kTopK + 16]     int32
-                       │    (vec)       │  ──► expert_count  [kE]                int32
-                       │                │  ──► expert_start  [kE]                int32
+                       │ moe_topk_padded│──► expert_id  [kT, kTopK] int32
+                       │    (vec)       │──► outVal     [kT, kTopK] fp32 (descending sorted)
+                       └────────────────┘                                  │
+                                │                                          │
+                                ▼                                          │
+              X  ───►  ┌────────────────┐  ──► A             [kT·kTopK+16, kH] fp16
+                       │   scatter      │  ──► A_id          [kT·kTopK+16]     int32
+                       │    (vec)       │  ──► rank_id       [kT·kTopK+16]     int32
+                       │                │  ──► expert_count  [kE]              int32
+                       │                │  ──► expert_start  [kE]              int32
                        └────────────────┘
                                 │
                                 ▼
               W1, W2 ──►┌────────────────┐
-                       │  expert_ffn    │──► B             [kT·kTopK + 16, kH] fp32
+                       │  expert_ffn    │──► B               [kT·kTopK+16, kH] fp32
                        │ (cube + cube,  │
                        │  Stage1+Stage2)│
                        └────────────────┘
+                                │                                          │
+                                ▼                                          ▼
+                       ┌────────────────────────────────────────────────────┐
+                       │              gather (vec)                          │
+                       │   Pass 1 (kTopK > 1): softmax(outVal) -> weights   │
+                       │   Pass 2: C[A_id[r]] += weights[A_id[r],rank_id[r]]│
+                       │                              * B[r]                │
+                       └────────────────────────────────────────────────────┘
                                 │
                                 ▼
-                       ┌────────────────┐
-                       │   gather       │──► C             [kT, kH] fp32
-                       │    (vec)       │
-                       └────────────────┘
+                                C  [kT, kH] fp32
 ```
 
-The +16 trailing rows on `A`, `A_id`, `B`, and `Y_scratch` are the **overspill landing pad** for `expert_ffn`'s last-tile writes; `gather` ignores them.
+The +16 trailing rows on `A`, `A_id`, `rank_id`, `B`, and `Y_scratch` are the **overspill landing pad** for `expert_ffn`'s last-tile writes; `gather` ignores them.
+
+For `kTopK == 1` softmax is degenerate (single-value softmax = 1.0), so `gather` takes a **fast path** that skips Pass 1 entirely and reduces to the unweighted v1 permute / accumulation.
 
 ## Sub-folders
 
@@ -46,9 +54,9 @@ The +16 trailing rows on `A`, `A_id`, `B`, and `Y_scratch` are the **overspill l
 | [router_matmul](router_matmul/) | cube | GEMM: `logits = X @ W_router` | confirmed-built (pre-existing) |
 | [moe_topk](moe_topk/) | vec | top-1 only (legacy; do not touch) | confirmed-built (pre-existing) |
 | [moe_topk_padded](moe_topk_padded/) | vec | generic top-K with `kGatherWidth = max(8, kTopK)` + valid-region crop | confirmed-built v1 (kT=256, kE=32, kTopK=1) |
-| [scatter](scatter/) | vec | pack tokens by expert; emits `A`, `A_id`, `count`, `start` | confirmed-built v1 |
+| [scatter](scatter/) | vec | pack tokens by expert; emits `A`, `A_id`, `rank_id`, `count`, `start` | confirmed-built v1 (kTopK=1); `rank_id` output added later |
 | [expert_ffn](expert_ffn/) | cube ×2 | two-stage GEMM1+ReLU / GEMM2 with overspill | confirmed-built v1 |
-| [gather](gather/) | vec | `C[A_id[r]] += B[r]` (zero-init by host) | confirmed-built v1 |
+| [gather](gather/) | vec | softmax-weighted scatter-add; `if kTopK==1` skips softmax | confirmed-built v1 (kTopK=1 = unweighted fast path); softmax path untested |
 
 "Confirmed-built v1" = user ran `bash run.sh -r npu -v Ascend910B1` at the v1 shape and saw `test data success`. Other shapes have not been observed yet — that's what `sweep_all.sh` is for.
 
