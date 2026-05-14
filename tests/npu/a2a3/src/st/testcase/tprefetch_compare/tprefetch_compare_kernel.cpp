@@ -23,11 +23,17 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // HCCL test scaffold is available.
 // ============================================================================
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
 
 #include <pto/pto-inst.hpp>
 #include <pto/npu/kernels/Pto_prefetch.hpp>
@@ -235,8 +241,10 @@ __global__ AICORE void ScenarioC_DeviceOverlapKernel(__gm__ T *srcBuf, int elem_
     template __global__ AICORE void ScenarioC_DeviceOverlapKernel<T, COUNT>(__gm__ T *, int, uint64_t,                 \
                                                                              __gm__ uint8_t *, __gm__ uint64_t *)
 
+CMP_INSTANTIATE(float, 16384);     // 64 KB
 CMP_INSTANTIATE(float, 262144);    // 1 MB
 CMP_INSTANTIATE(float, 4194304);   // 16 MB
+CMP_INSTANTIATE(float, 16777216);  // 64 MB
 CMP_INSTANTIATE(float, 33554432);  // 128 MB
 #undef CMP_INSTANTIATE
 
@@ -279,6 +287,103 @@ inline double SyscntHz()
 inline double CyclesToUs(uint64_t cycles)
 {
     return static_cast<double>(cycles) * 1.0e6 / SyscntHz();
+}
+
+// ============================================================================
+// Statistics helpers — collect samples, report p5/p50/p95/min/max
+// ============================================================================
+struct SampleSet {
+    std::vector<double> samples;
+
+    void Add(double v)
+    {
+        samples.push_back(v);
+    }
+
+    double Percentile(double p) const
+    {
+        if (samples.empty()) {
+            return 0.0;
+        }
+        std::vector<double> sorted = samples;
+        std::sort(sorted.begin(), sorted.end());
+        size_t idx = static_cast<size_t>(p / 100.0 * static_cast<double>(sorted.size()));
+        if (idx >= sorted.size()) {
+            idx = sorted.size() - 1;
+        }
+        return sorted[idx];
+    }
+
+    double P5() const { return Percentile(5.0); }
+    double P50() const { return Percentile(50.0); }
+    double P95() const { return Percentile(95.0); }
+    double Min() const
+    {
+        if (samples.empty()) {
+            return 0.0;
+        }
+        return *std::min_element(samples.begin(), samples.end());
+    }
+    double Max() const
+    {
+        if (samples.empty()) {
+            return 0.0;
+        }
+        return *std::max_element(samples.begin(), samples.end());
+    }
+};
+
+// ============================================================================
+// CSV writer — appends rows to ./tprefetch_compare_<scenario>.csv (or path
+// from env var TPREFETCH_COMPARE_CSV_DIR). Header is written automatically
+// the first time a file is touched in this process.
+// ============================================================================
+inline std::string CsvFilePath(const std::string &scenario)
+{
+    const char *dir = std::getenv("TPREFETCH_COMPARE_CSV_DIR");
+    std::string base = (dir != nullptr && dir[0] != '\0') ? std::string(dir) : std::string(".");
+    return base + "/tprefetch_compare_" + scenario + ".csv";
+}
+
+inline void CsvAppendRow(const std::string &scenario, const std::string &header, const std::string &row)
+{
+    std::string path = CsvFilePath(scenario);
+
+    // Determine whether the file is empty (need to write header) without
+    // racing against concurrent appends. Tests in this binary run serially
+    // (gtest default), so a simple stat-then-append is safe enough.
+    bool need_header = false;
+    {
+        std::ifstream check(path);
+        if (!check.good() || check.peek() == std::ifstream::traits_type::eof()) {
+            need_header = true;
+        }
+    }
+
+    std::ofstream f(path, std::ios::app);
+    if (!f.is_open()) {
+        std::cerr << "[WARN] CsvAppendRow: failed to open " << path << std::endl;
+        return;
+    }
+    if (need_header) {
+        f << header << "\n";
+    }
+    f << row << "\n";
+}
+
+// Allow CI to dial iteration counts down for smoke runs while keeping the
+// "real" (shmem-style) 100-iter default for serious measurements. Callers
+// pass their default; env var TPREFETCH_COMPARE_ITER overrides.
+inline int IterCount(int defaultIter)
+{
+    const char *env = std::getenv("TPREFETCH_COMPARE_ITER");
+    if (env != nullptr && env[0] != '\0') {
+        int v = std::atoi(env);
+        if (v > 0) {
+            return v;
+        }
+    }
+    return defaultIter;
 }
 
 struct CmpEnv {
@@ -338,18 +443,25 @@ inline uint64_t ElapsedMicros(HrClock::time_point t0, HrClock::time_point t1)
 
 // ============================================================================
 // Scenario A: end-to-end wall-clock latency
+//
+// The "real-world" question this scenario answers: starting from a cold L2,
+// how long does it take from issuing a prefetch to having the warm TLOAD
+// complete? Three configurations measured at each size:
+//
+//   * baseline   — trash L2, then kernel(cold TLOAD only)
+//   * host SDMA  — trash L2, then host PTO_PREFETCH on stream + kernel(warm TLOAD)
+//   * device L2  — trash L2, then kernel(TPREFETCH_L2 -> Wait -> warm TLOAD)
+//
+// All three measurements time the entire host-visible window (start of first
+// op after trash → aclrtSynchronizeStream returns), so they are apples-to-
+// apples wall-clock comparable.
+//
+// Statistics (shmem-style): collect kIter raw samples per config, report
+// p5 / p50 / p95. Per-iteration values are also persisted to a CSV for
+// offline post-processing. 1 warmup precedes the measured samples.
 // ============================================================================
-struct ScenarioASample {
-    uint64_t wallUs_baseline = 0;
-    uint64_t wallUs_hostSdma = 0;
-    uint64_t wallUs_deviceL2 = 0;
-    uint64_t kernCyc_baseline = 0;
-    uint64_t kernCyc_hostSdma = 0;
-    uint64_t kernCyc_deviceL2 = 0;
-};
 
-// Host runner: single iteration of one (size, config) pair. Returns the
-// measured wall-clock microseconds and the kernel-side cycle counter.
+// Single measurement of one (mode) pair. Returns wall-clock μs.
 template <typename T, size_t count>
 inline bool RunAOne(CmpEnv &env, int mode, uint64_t &wallUs, uint64_t &kernCycles)
 {
@@ -390,8 +502,8 @@ template <typename T, size_t count>
 bool RunScenarioAEndToEnd(int deviceId)
 {
     constexpr size_t dataBytes = count * sizeof(T);
-    constexpr int kWarmup = 2;
-    constexpr int kMeasured = 5;
+    constexpr int kWarmup = 1;
+    const int kIter = IterCount(100);
 
     CmpEnv env;
     if (!env.Init(deviceId, dataBytes)) {
@@ -400,78 +512,136 @@ bool RunScenarioAEndToEnd(int deviceId)
         return false;
     }
 
-    ScenarioASample s;
-    auto accumulate = [&](int mode, uint64_t &wallAcc, uint64_t &kernAcc) {
-        uint64_t totalWall = 0;
-        uint64_t totalKern = 0;
-        for (int i = 0; i < kWarmup + kMeasured; ++i) {
+    SampleSet wallBase;
+    SampleSet wallHost;
+    SampleSet wallDev;
+    SampleSet kernBase;
+    SampleSet kernHost;
+    SampleSet kernDev;
+
+    auto collect = [&](int mode, SampleSet &wallSet, SampleSet &kernSet) {
+        for (int i = 0; i < kWarmup + kIter; ++i) {
             uint64_t wall = 0;
             uint64_t kern = 0;
             if (!RunAOne<T, count>(env, mode, wall, kern)) {
                 return false;
             }
             if (i >= kWarmup) {
-                totalWall += wall;
-                totalKern += kern;
+                wallSet.Add(static_cast<double>(wall));
+                kernSet.Add(CyclesToUs(kern));
             }
         }
-        wallAcc = totalWall / static_cast<uint64_t>(kMeasured);
-        kernAcc = totalKern / static_cast<uint64_t>(kMeasured);
         return true;
     };
 
-    bool ok = accumulate(0, s.wallUs_baseline, s.kernCyc_baseline) &&
-              accumulate(1, s.wallUs_hostSdma, s.kernCyc_hostSdma) &&
-              accumulate(2, s.wallUs_deviceL2, s.kernCyc_deviceL2);
+    bool ok = collect(0, wallBase, kernBase) && collect(1, wallHost, kernHost) && collect(2, wallDev, kernDev);
     env.Teardown();
     if (!ok) {
         return false;
     }
 
-    double ratioHost = (s.wallUs_baseline > 0)
-                            ? static_cast<double>(s.wallUs_hostSdma) / static_cast<double>(s.wallUs_baseline)
-                            : 0.0;
-    double ratioDev = (s.wallUs_baseline > 0)
-                           ? static_cast<double>(s.wallUs_deviceL2) / static_cast<double>(s.wallUs_baseline)
-                           : 0.0;
+    auto bandGBs = [&](double us) {
+        return us > 0.0 ? (static_cast<double>(dataBytes) / us / 1000.0) : 0.0;
+    };
+
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "\n================================================================" << std::endl;
     std::cout << "[PERF] Scenario A - end-to-end wall-clock latency" << std::endl;
-    std::cout << "  Data size:             " << dataBytes << " bytes (" << dataBytes / 1024 / 1024 << " MB)"
-              << std::endl;
-    std::cout << "  Iterations:            " << kMeasured << " (warmup=" << kWarmup << ")" << std::endl;
+    std::cout << "  Data size:             " << dataBytes << " bytes (";
+    if (dataBytes >= 1024 * 1024) {
+        std::cout << dataBytes / 1024 / 1024 << " MB)";
+    } else {
+        std::cout << dataBytes / 1024 << " KB)";
+    }
+    std::cout << std::endl;
+    std::cout << "  Iterations:            " << kIter << " (warmup=" << kWarmup << ")" << std::endl;
     std::cout << "  Syscnt freq assumed:   " << (SyscntHz() / 1.0e6) << " MHz" << std::endl;
-    std::cout << "  baseline    wall:      " << static_cast<double>(s.wallUs_baseline) << " us"
-              << "   kernel: " << CyclesToUs(s.kernCyc_baseline) << " us" << std::endl;
-    std::cout << "  hostSDMA    wall:      " << static_cast<double>(s.wallUs_hostSdma) << " us"
-              << "   kernel: " << CyclesToUs(s.kernCyc_hostSdma) << " us"
-              << "   wall-ratio vs baseline: " << ratioHost << std::endl;
-    std::cout << "  deviceL2    wall:      " << static_cast<double>(s.wallUs_deviceL2) << " us"
-              << "   kernel: " << CyclesToUs(s.kernCyc_deviceL2) << " us   (incl. prefetch+wait)"
-              << "   wall-ratio vs baseline: " << ratioDev << std::endl;
+    std::cout << "  --- end-to-end wall (apples-to-apples instruction comparison) ---" << std::endl;
+    std::cout << "  baseline               p50=" << wallBase.P50()
+              << "us   p5=" << wallBase.P5() << " p95=" << wallBase.P95() << std::endl;
+    std::cout << "  hostSDMA  PTO_PREFETCH p50=" << wallHost.P50()
+              << "us   p5=" << wallHost.P5() << " p95=" << wallHost.P95()
+              << "   band(p50)=" << bandGBs(wallHost.P50()) << " GB/s"
+              << "   ratio vs base: " << (wallBase.P50() > 0 ? wallHost.P50() / wallBase.P50() : 0.0)
+              << std::endl;
+    std::cout << "  deviceL2  TPREFETCH_L2 p50=" << wallDev.P50()
+              << "us   p5=" << wallDev.P5() << " p95=" << wallDev.P95()
+              << "   band(p50)=" << bandGBs(wallDev.P50()) << " GB/s"
+              << "   ratio vs base: " << (wallBase.P50() > 0 ? wallDev.P50() / wallBase.P50() : 0.0)
+              << "   ratio vs host: " << (wallHost.P50() > 0 ? wallDev.P50() / wallHost.P50() : 0.0)
+              << std::endl;
+    std::cout << "  --- supplementary: in-kernel cycles (NOT apples-to-apples) ---" << std::endl;
+    std::cout << "  baseline               p50=" << kernBase.P50() << "us" << std::endl;
+    std::cout << "  hostSDMA  PTO_PREFETCH p50=" << kernHost.P50() << "us  (warm TLOAD only)" << std::endl;
+    std::cout << "  deviceL2  TPREFETCH_L2 p50=" << kernDev.P50() << "us  (incl. in-kernel prefetch+wait)"
+              << std::endl;
+    std::cout << "  CSV: " << CsvFilePath("scenarioA") << std::endl;
     std::cout << "================================================================\n" << std::endl;
+
+    // CSV: one row per (size, config) — six rows total per RunScenarioAEndToEnd
+    // call. Combined with the per-size TESTs in main.cpp, the final CSV has
+    // six rows per size.
+    const std::string csvHeader =
+        "size_bytes,size_label,config,iter,wall_p5_us,wall_p50_us,wall_p95_us,"
+        "wall_min_us,wall_max_us,band_p50_gbs,kernel_p50_us";
+    auto sizeLabel = [&]() -> std::string {
+        std::ostringstream oss;
+        if (dataBytes >= 1024 * 1024) {
+            oss << dataBytes / 1024 / 1024 << "MB";
+        } else {
+            oss << dataBytes / 1024 << "KB";
+        }
+        return oss.str();
+    };
+    auto rowOf = [&](const std::string &cfg, const SampleSet &wall, const SampleSet &kern) {
+        std::ostringstream oss;
+        oss << dataBytes << ',' << sizeLabel() << ',' << cfg << ',' << kIter << ','
+            << wall.P5() << ',' << wall.P50() << ',' << wall.P95() << ',' << wall.Min() << ',' << wall.Max() << ','
+            << bandGBs(wall.P50()) << ',' << kern.P50();
+        return oss.str();
+    };
+    CsvAppendRow("scenarioA", csvHeader, rowOf("baseline", wallBase, kernBase));
+    CsvAppendRow("scenarioA", csvHeader, rowOf("host_sdma", wallHost, kernHost));
+    CsvAppendRow("scenarioA", csvHeader, rowOf("device_l2", wallDev, kernDev));
     return true;
 }
 
-template bool RunScenarioAEndToEnd<float, 262144>(int);
-template bool RunScenarioAEndToEnd<float, 4194304>(int);
-template bool RunScenarioAEndToEnd<float, 33554432>(int);
+template bool RunScenarioAEndToEnd<float, 16384>(int);     // 64 KB
+template bool RunScenarioAEndToEnd<float, 262144>(int);    // 1 MB
+template bool RunScenarioAEndToEnd<float, 4194304>(int);   // 16 MB
+template bool RunScenarioAEndToEnd<float, 16777216>(int);  // 64 MB
+template bool RunScenarioAEndToEnd<float, 33554432>(int);  // 128 MB
 
 // ============================================================================
 // Scenario B: prefetch-issue overhead
+//
+// Real-world question: how much does it cost to "just fire one prefetch and
+// wait", independent of how many bytes are moved? We use a 4 KB payload so
+// the actual SDMA transfer is well under a microsecond and the measurement
+// is dominated by the issue + completion roundtrip.
+//
+// Two metrics per side (apples-to-apples):
+//   * host wall      — aclrtCmoAsync + aclrtSynchronizeStream wall-clock
+//   * device wall    — kernel launch + in-kernel TPREFETCH_L2 + Wait + sync wall-clock
+//
+// Plus one supplementary metric:
+//   * device in-kernel — only the TPREFETCH_L2 issue+Wait segment inside the
+//     kernel. This models the marginal cost of embedding TPREFETCH_L2 into a
+//     kernel that the application is already launching anyway (no extra
+//     launch+sync amortized). NOT comparable to host wall directly.
+//
+// 100 iterations, p5/p50/p95 reported, CSV per-size row.
 // ============================================================================
 template <typename T, size_t count>
 bool RunScenarioBIssueOverhead(int deviceId)
 {
-    // We intentionally keep the "prefetch payload" very small so transfer
-    // time is dominated by issue overhead. 4 KB is below a single L2 line
-    // group; any observed cost is the fixed SDMA CMO issue+completion
-    // roundtrip, not the actual bytes moved.
+    // Tiny prefetch payload — below a single L2 line group, so any observed
+    // cost is the fixed SDMA CMO issue+completion roundtrip, not actual bytes.
     constexpr size_t payloadElems = 1024;  // 4 KB for float
     static_assert(payloadElems <= count, "payload must fit inside allocated buffer");
     constexpr size_t dataBytes = count * sizeof(T);
     constexpr int kWarmup = 5;
-    constexpr int kMeasured = 50;
+    const int kIter = IterCount(100);
 
     CmpEnv env;
     if (!env.Init(deviceId, dataBytes)) {
@@ -480,47 +650,78 @@ bool RunScenarioBIssueOverhead(int deviceId)
         return false;
     }
 
-    uint64_t hostTotal = 0;
-    uint64_t deviceTotal = 0;
+    SampleSet hostWall;
+    SampleSet deviceWall;
+    SampleSet deviceCycles;
 
-    for (int i = 0; i < kWarmup + kMeasured; ++i) {
+    for (int i = 0; i < kWarmup + kIter; ++i) {
         env.TrashL2();
 
-        // host path: PTO_PREFETCH + sync, host-timed.
+        // host path wall.
         auto h0 = HrClock::now();
         pto::PTO_PREFETCH(env.srcDevice, payloadElems * sizeof(T), env.stream);
         env.aclStatus |= aclrtSynchronizeStream(env.stream);
         auto h1 = HrClock::now();
-        uint64_t hostUs = ElapsedMicros(h0, h1);
+        uint64_t hostWallUs = ElapsedMicros(h0, h1);
 
-        // device path: in-kernel TPREFETCH_L2 + Wait, reports syscnt cycles.
+        env.TrashL2();
+
+        // device path wall.
+        auto d0 = HrClock::now();
         ScenarioB_DeviceIssueKernel<T, count><<<1, nullptr, env.stream>>>(
             reinterpret_cast<T *>(env.srcDevice), static_cast<int>(payloadElems),
             reinterpret_cast<uint8_t *>(env.sdmaMgr.GetWorkspaceAddr()),
             reinterpret_cast<uint64_t *>(env.cycleDev));
         env.aclStatus |= aclrtSynchronizeStream(env.stream);
-        uint64_t devCycles = env.ReadCycles();
+        auto d1 = HrClock::now();
+        uint64_t deviceWallUs = ElapsedMicros(d0, d1);
+        uint64_t devCyc = env.ReadCycles();
 
         if (i >= kWarmup) {
-            hostTotal += hostUs;
-            deviceTotal += devCycles;
+            hostWall.Add(static_cast<double>(hostWallUs));
+            deviceWall.Add(static_cast<double>(deviceWallUs));
+            deviceCycles.Add(CyclesToUs(devCyc));
         }
     }
 
-    uint64_t avgHostUs = hostTotal / static_cast<uint64_t>(kMeasured);
-    uint64_t avgDevCycles = deviceTotal / static_cast<uint64_t>(kMeasured);
     env.Teardown();
 
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "\n================================================================" << std::endl;
     std::cout << "[PERF] Scenario B - prefetch issue overhead (4 KB payload)" << std::endl;
-    std::cout << "  Iterations:            " << kMeasured << " (warmup=" << kWarmup << ")" << std::endl;
+    std::cout << "  Iterations:            " << kIter << " (warmup=" << kWarmup << ")" << std::endl;
     std::cout << "  Syscnt freq assumed:   " << (SyscntHz() / 1.0e6) << " MHz" << std::endl;
-    std::cout << "  host   PTO_PREFETCH:   " << static_cast<double>(avgHostUs)
-              << " us   (wall-clock, incl. kernel launch + sync)" << std::endl;
-    std::cout << "  device TPREFETCH_L2:   " << CyclesToUs(avgDevCycles)
-              << " us   (in-kernel issue+Wait, excl. launch cost)" << std::endl;
+    std::cout << "  --- end-to-end wall (apples-to-apples instruction comparison) ---" << std::endl;
+    std::cout << "  host   PTO_PREFETCH    p50=" << hostWall.P50()
+              << "us   p5=" << hostWall.P5() << " p95=" << hostWall.P95()
+              << "   (aclrtCmoAsync + aclrtSynchronizeStream)" << std::endl;
+    std::cout << "  device TPREFETCH_L2    p50=" << deviceWall.P50()
+              << "us   p5=" << deviceWall.P5() << " p95=" << deviceWall.P95()
+              << "   (launch + in-kernel issue+Wait + sync)"
+              << "   ratio vs host: " << (hostWall.P50() > 0 ? deviceWall.P50() / hostWall.P50() : 0.0)
+              << std::endl;
+    std::cout << "  --- supplementary: device marginal cost when embedded ---" << std::endl;
+    std::cout << "  device TPREFETCH_L2    in-kernel p50=" << deviceCycles.P50()
+              << "us   p5=" << deviceCycles.P5() << " p95=" << deviceCycles.P95() << std::endl;
+    std::cout << "                                  (issue+Wait inside kernel, excl. launch+sync;"
+              << " what you actually pay" << std::endl;
+    std::cout << "                                   when adding TPREFETCH_L2 to a kernel that's"
+              << " already running)" << std::endl;
+    std::cout << "  CSV: " << CsvFilePath("scenarioB") << std::endl;
     std::cout << "================================================================\n" << std::endl;
+
+    const std::string csvHeader =
+        "buffer_bytes,payload_bytes,config,iter,wall_p5_us,wall_p50_us,wall_p95_us,"
+        "wall_min_us,wall_max_us";
+    auto rowOf = [&](const std::string &cfg, const SampleSet &s) {
+        std::ostringstream oss;
+        oss << dataBytes << ',' << (payloadElems * sizeof(T)) << ',' << cfg << ',' << kIter << ','
+            << s.P5() << ',' << s.P50() << ',' << s.P95() << ',' << s.Min() << ',' << s.Max();
+        return oss.str();
+    };
+    CsvAppendRow("scenarioB", csvHeader, rowOf("host_wall", hostWall));
+    CsvAppendRow("scenarioB", csvHeader, rowOf("device_wall", deviceWall));
+    CsvAppendRow("scenarioB", csvHeader, rowOf("device_in_kernel", deviceCycles));
     return true;
 }
 
@@ -553,9 +754,9 @@ template <typename T, size_t count>
 bool RunScenarioCOverlap(int deviceId)
 {
     constexpr size_t dataBytes = count * sizeof(T);
-    constexpr int kWarmup = 2;
-    constexpr int kMeasured = 5;
+    constexpr int kWarmup = 1;
     constexpr uint64_t spinCycles = SpinCyclesFor(dataBytes);
+    const int kIter = IterCount(100);
 
     CmpEnv env;
     if (!env.Init(deviceId, dataBytes)) {
@@ -593,37 +794,29 @@ bool RunScenarioCOverlap(int deviceId)
         return env.aclStatus == 0;
     };
 
-    uint64_t wallTot[3] = {0, 0, 0};
-    uint64_t kernTot[3] = {0, 0, 0};
+    SampleSet wall[3];
+    SampleSet kern[3];
     for (int mode = 0; mode < 3; ++mode) {
-        for (int i = 0; i < kWarmup + kMeasured; ++i) {
-            uint64_t wall = 0;
-            uint64_t kern = 0;
-            if (!runOne(mode, wall, kern)) {
+        for (int i = 0; i < kWarmup + kIter; ++i) {
+            uint64_t w = 0;
+            uint64_t k = 0;
+            if (!runOne(mode, w, k)) {
                 env.Teardown();
                 return false;
             }
             if (i >= kWarmup) {
-                wallTot[mode] += wall;
-                kernTot[mode] += kern;
+                wall[mode].Add(static_cast<double>(w));
+                kern[mode].Add(CyclesToUs(k));
             }
         }
     }
     env.Teardown();
 
-    uint64_t wallAvg[3];
-    uint64_t kernAvg[3];
-    for (int i = 0; i < 3; ++i) {
-        wallAvg[i] = wallTot[i] / static_cast<uint64_t>(kMeasured);
-        kernAvg[i] = kernTot[i] / static_cast<uint64_t>(kMeasured);
-    }
-
-    // cold-reduc = 1 - kern(C*) / kern(C0). Higher means more cold-TLOAD
+    // cold-reduc = 1 - kern(C*)/kern(C0). Higher means more cold-TLOAD
     // latency was hidden behind the prefetch (positive value = win).
-    double reducHost = (kernAvg[0] > 0)
-                            ? 1.0 - static_cast<double>(kernAvg[1]) / static_cast<double>(kernAvg[0])
-                            : 0.0;
-    double reducDev = (kernAvg[0] > 0) ? 1.0 - static_cast<double>(kernAvg[2]) / static_cast<double>(kernAvg[0]) : 0.0;
+    auto coldReduc = [&](int mode) {
+        return kern[0].P50() > 0 ? 1.0 - kern[mode].P50() / kern[0].P50() : 0.0;
+    };
 
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "\n================================================================" << std::endl;
@@ -632,18 +825,43 @@ bool RunScenarioCOverlap(int deviceId)
               << std::endl;
     std::cout << "  compute-A spin:        " << spinCycles << " cycles (" << CyclesToUs(spinCycles) << " us)"
               << std::endl;
-    std::cout << "  Iterations:            " << kMeasured << " (warmup=" << kWarmup << ")" << std::endl;
+    std::cout << "  Iterations:            " << kIter << " (warmup=" << kWarmup << ")" << std::endl;
     std::cout << "  Syscnt freq assumed:   " << (SyscntHz() / 1.0e6) << " MHz" << std::endl;
-    std::cout << "  C0 no-prefetch           wall=" << static_cast<double>(wallAvg[0])
-              << " us   kernel=" << CyclesToUs(kernAvg[0]) << " us" << std::endl;
-    std::cout << "  C1 host   PTO_PREFETCH   wall=" << static_cast<double>(wallAvg[1])
-              << " us   kernel=" << CyclesToUs(kernAvg[1]) << " us"
-              << "   cold-reduc=" << reducHost << std::endl;
-    std::cout << "  C2 device TPREFETCH_L2   wall=" << static_cast<double>(wallAvg[2])
-              << " us   kernel=" << CyclesToUs(kernAvg[2]) << " us"
-              << "   cold-reduc=" << reducDev << std::endl;
+    std::cout << "  C0 no-prefetch         wall p50=" << wall[0].P50()
+              << "us   kernel p50=" << kern[0].P50() << "us" << std::endl;
+    std::cout << "  C1 host   PTO_PREFETCH wall p50=" << wall[1].P50()
+              << "us   kernel p50=" << kern[1].P50() << "us"
+              << "   cold-reduc=" << coldReduc(1) << std::endl;
+    std::cout << "  C2 device TPREFETCH_L2 wall p50=" << wall[2].P50()
+              << "us   kernel p50=" << kern[2].P50() << "us"
+              << "   cold-reduc=" << coldReduc(2) << std::endl;
     std::cout << "  (higher cold-reduc = more cold-TLOAD latency hidden by prefetch)" << std::endl;
+    std::cout << "  CSV: " << CsvFilePath("scenarioC") << std::endl;
     std::cout << "================================================================\n" << std::endl;
+
+    const std::string csvHeader =
+        "size_bytes,size_label,spin_cycles,config,iter,wall_p5_us,wall_p50_us,wall_p95_us,"
+        "kernel_p5_us,kernel_p50_us,kernel_p95_us,cold_reduc";
+    auto sizeLabel = [&]() -> std::string {
+        std::ostringstream oss;
+        if (dataBytes >= 1024 * 1024) {
+            oss << dataBytes / 1024 / 1024 << "MB";
+        } else {
+            oss << dataBytes / 1024 << "KB";
+        }
+        return oss.str();
+    };
+    auto rowOf = [&](int mode, const std::string &cfg) {
+        std::ostringstream oss;
+        oss << dataBytes << ',' << sizeLabel() << ',' << spinCycles << ',' << cfg << ',' << kIter << ','
+            << wall[mode].P5() << ',' << wall[mode].P50() << ',' << wall[mode].P95() << ','
+            << kern[mode].P5() << ',' << kern[mode].P50() << ',' << kern[mode].P95() << ','
+            << (mode == 0 ? 0.0 : coldReduc(mode));
+        return oss.str();
+    };
+    CsvAppendRow("scenarioC", csvHeader, rowOf(0, "C0_no_prefetch"));
+    CsvAppendRow("scenarioC", csvHeader, rowOf(1, "C1_host_prefetch"));
+    CsvAppendRow("scenarioC", csvHeader, rowOf(2, "C2_device_prefetch"));
     return true;
 }
 
