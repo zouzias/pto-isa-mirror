@@ -6,10 +6,11 @@ Auto-mode A3 prototype. Pack tokens by expert assignment for downstream per-expe
 
 For `X ∈ R^{kT × kH}` and `expert_id ∈ Z^{kT × kTopK}`, group `(t, k)` pairs by expert id, preserve original order within each expert, and emit:
 
-- `A    [kT·kTopK + 16, kH]`  — packed token rows; row order is expert-major.
-- `A_id [kT·kTopK + 16]`      — back-map: `A_id[r]` is the token id that row `r` of `A` came from.
-- `expert_count [kE]`          — histogram of expert assignments.
-- `expert_start [kE]`          — prefix sum of `expert_count` (where each expert's chunk starts in `A`).
+- `A       [kT·kTopK + 16, kH]`  — packed token rows; row order is expert-major.
+- `A_id    [kT·kTopK + 16]`      — back-map: `A_id[r]` is the token id that row `r` of `A` came from.
+- `rank_id [kT·kTopK + 16]`      — back-map: `rank_id[r]` is the **top-k slot index** (0..kTopK-1) of the `(t, k)` pair that produced row `r`. Used by the gather kernel to look up `softmax_weight[t, rank_id[r]]` when `kTopK > 1`.
+- `expert_count [kE]`            — histogram of expert assignments.
+- `expert_start [kE]`            — prefix sum of `expert_count` (where each expert's chunk starts in `A`).
 
 The trailing 16 rows are an **overspill landing pad** for the downstream `expert_ffn`'s last-tile writes. They are not initialized by this kernel.
 
@@ -45,6 +46,7 @@ Sequence:
 | `input/input_expert_id.bin` | `kT × kTopK` | int32 |
 | `output/golden_A.bin` | `(kT·kTopK + 16) × kH` | half |
 | `output/golden_A_id.bin` | `(kT·kTopK + 16)` | int32 |
+| `output/golden_rank_id.bin` | `(kT·kTopK + 16)` | int32 |
 | `output/golden_expert_count.bin` | `kE` | int32 |
 | `output/golden_expert_start.bin` | `kE` | int32 |
 
