@@ -51,3 +51,36 @@ git apply kernels/manual/a5/topk_ub/include_hpp_changes.patch
 ```
 
 Regenerate the patch after you change headers: `git diff --no-color include/ > kernels/manual/a5/topk_ub/include_hpp_changes.patch`.
+
+## Performance Analysis (A5 sim, 2026-05-14)
+
+Dataset: `build/OPPROF_20260514154240_NYBGOWGNYQBFCTNM` on `core0.veccore0`.
+
+Notes:
+
+- IPC for `VF01~VF17` is cycle-accurate (from retire/issue queue logs).
+- IPC for `VF18~VF26` is trace-window estimated (retire records are truncated in `ccu.vec_issque` tail).
+
+### Phase-level summary
+
+| Phase | VF range | Duration (us) | IPC | Main PTO ISA | Comment |
+|---|---:|---:|---:|---|---|
+| Phase1 | VF01-VF02 | 1.358 | 1.503 | `TASSIGN/TLOAD/THISTOGRAM(BYTE_1)/TMOV` | MSB histogram main compute |
+| Phase2 | VF03-VF13 | 0.838 | 0.447 | `TCMPS/TCI/TSELS/TROWMIN/TGATHER/TSUB` | Winner MSB + remainK (control-heavy) |
+| Phase3 | VF14 | 1.464 | 1.481 | `TCVT/THISTOGRAM(BYTE_0)/TMOV` | LSB histogram main compute |
+| Phase4 | VF15-VF17 | 0.359 | 0.148 | `TCMPS/TSELS/TROWMIN/TGATHER/TSHLS/TOR` | Winner LSB + packed threshold |
+| Phase5 | VF18-VF26 | 6.803 | 0.864* | `TGATHER<GT>/TGATHER<EQ>/TCONCAT_IMPL/TSTORE` | Full-width gather + concat + store |
+
+\* Phase5 IPC includes estimated segments (VF18~VF26).
+
+### Key VF hotspots (for regression tracking)
+
+| VF | PC | Duration (us) | IPC | Dominant RV ISA cluster | Code intent |
+|---|---|---:|---:|---|---|
+| VF02 | `0x10d0d16c` | 1.327 | 1.527 | `RV_VCVT_I2I/RV_VADD/RV_VMOV` | MSB histogram body in `Phase1` |
+| VF14 | `0x10d0d764` | 1.464 | 1.481 | `RV_VCVT_I2I/RV_VADD/RV_VMOV` | LSB histogram body in `Phase3` |
+| VF24 | `0x10d0dcc8` | 2.891 | 0.976* | `RV_VLD/RV_VADD/RV_VCMP_GT` | `TGATHER<GT>` heavy segment in `Phase5` |
+| VF25 | `0x10d0dd14` | 2.959 | 0.966* | `RV_VSTUR/RV_VSQZ/RV_VLD` | `TGATHER<EQ>` heavy segment in `Phase5` |
+| VF16 | `0x10d0d85c` | 0.247 | 0.080 | `RV_VLD/RV_PLT/RV_VLOOPv2` | Small control/predicate-heavy segment in `Phase4` |
+
+\* VF24/VF25 IPC is trace-window estimated.
