@@ -1640,8 +1640,6 @@ __tf__ PTO_INTERNAL void LoadTwoInputSplitNZ(typename MatTile::TileDType __out__
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-
-    set_intra_block(PIPE_MTE3, syncId);
 #endif
 
 #if defined(__DAV_CUBE__)
@@ -1699,6 +1697,7 @@ AICORE void runTInsertNZTwoInputSplit(__gm__ T *out, __gm__ T *src)
 
 #if defined(__DAV_VEC__)
     TINSERT<Mode>(matTile, srcTile);
+    set_intra_block(PIPE_MTE3, syncId);
     WaitAndStore(dstGlobal, dstTile, syncId);
 #endif
 }
@@ -1828,8 +1827,6 @@ __tf__ PTO_INTERNAL void LoadDoubleInputNZ(
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
-
-    set_intra_block(PIPE_MTE3, syncId);
 #endif
 
 #if defined(__DAV_CUBE__)
@@ -1896,6 +1893,7 @@ AICORE void runTInsertNZDoubleInput(__gm__ T *out, __gm__ T *src)
 #if defined(__DAV_VEC__)
     TINSERT(matTile, src1Tile, static_cast<uint16_t>(IndexRow1), static_cast<uint16_t>(0));
     TINSERT(matTile, src2Tile, static_cast<uint16_t>(IndexRow2), static_cast<uint16_t>(0));
+    set_intra_block(PIPE_MTE3, syncId);
     WaitAndStore(dstGlobal, dstTile, syncId);
 #endif
 }
@@ -1987,8 +1985,6 @@ __tf__ PTO_INTERNAL void LoadAndInsertFp4(typename MatTile::TileDType __out__ ma
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-
-    set_intra_block(PIPE_MTE3, syncId);
 #endif
 
 #if defined(__DAV_CUBE__)
@@ -2041,6 +2037,7 @@ AICORE void runTInsertNZFp4Offset(__gm__ T *out, __gm__ T *src)
 
 #if defined(__DAV_VEC__)
     TINSERT(matTile, srcTile, static_cast<uint16_t>(IndexRow), static_cast<uint16_t>(IndexCol));
+    set_intra_block(PIPE_MTE3, syncId);
     WaitAndStore(dstGlobal, dstTile, syncId);
 #endif
 }
@@ -2051,6 +2048,34 @@ __global__ AICORE void launchTInsertNZFp4OffsetKernel(__gm__ uint64_t *out, __gm
 {
     runTInsertNZFp4Offset<T, SrcRows, SrcCols, ValidRows, IndexRow, IndexCol, DstRows, DstCols>(
         reinterpret_cast<__gm__ T *>(out), reinterpret_cast<__gm__ T *>(src));
+}
+
+template <typename MatTile, typename DstUbTile, uint32_t BurstNum, uint16_t BurstLen>
+__tf__ PTO_INTERNAL void InitCbufAndReadback(typename MatTile::TileDType __out__ matTileData,
+                                             typename DstUbTile::TileDType __out__ dstTileData,
+                                             __gm__ typename MatTile::DType *initGmAddr, uint8_t &syncId,
+                                             uint8_t eventIdNum)
+{
+    using T = typename MatTile::DType;
+
+    __cbuf__ T *matAddr = (__cbuf__ T *)__cce_get_tile_ptr(matTileData);
+    __ubuf__ T *dstUbAddr = (__ubuf__ T *)__cce_get_tile_ptr(dstTileData);
+
+#if defined(__DAV_VEC__)
+    copy_gm_to_ubuf((__ubuf__ void *)dstUbAddr, (__gm__ void *)initGmAddr, 0, BurstNum, BurstLen, 0, 0);
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    copy_ubuf_to_cbuf((__cbuf__ void *)matAddr, (__ubuf__ void *)dstUbAddr, 0, BurstNum, BurstLen, 0, 0);
+
+    pipe_barrier(PIPE_ALL);
+#endif
+
+#if defined(__DAV_CUBE__)
+    ReadbackCbufToUbuf((__ubuf__ void *)dstUbAddr, (__cbuf__ void *)matAddr, BurstNum, BurstLen, 0, syncId, eventIdNum);
+#endif
 }
 
 template <typename T, uint32_t SrcRows, uint32_t SrcCols, uint32_t ValidRow, uint32_t ValidCol, uint32_t DstRows,
@@ -2094,41 +2119,23 @@ AICORE void runTInsertCompactNullTLoad(__gm__ T *out, __gm__ T *src)
     constexpr uint32_t initBurstNum = DstCols / c0Size;
     constexpr uint16_t initBurstLen = (DstRows * c0Size * sizeof(T)) / BLOCK_BYTE_SIZE;
 
-    __cbuf__ T *matAddr = matTile.data();
-    __ubuf__ T *dstUbAddr = dstTile.data();
-    __ubuf__ T *nzUbAddr = nzTile.data();
-
     uint8_t syncId = 0;
     uint8_t eventIdNum = 16;
 
+    InitCbufAndReadback<MatTile, DstUbTile, initBurstNum, initBurstLen>(matTile.data(), dstTile.data(),
+                                                                        initGlobal.data(), syncId, eventIdNum);
+
 #if defined(__DAV_VEC__)
-    copy_gm_to_ubuf((__ubuf__ void *)dstUbAddr, (__gm__ void *)initGlobal.data(), 0, initBurstNum, initBurstLen, 0, 0);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    copy_ubuf_to_cbuf((__cbuf__ void *)matAddr, (__ubuf__ void *)dstUbAddr, 0, initBurstNum, initBurstLen, 0, 0);
-
-    pipe_barrier(PIPE_ALL);
-
     TLOAD(nzTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    (void)nzUbAddr;
+
     TINSERT(matTile, nzTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
     set_intra_block(PIPE_MTE3, syncId);
-#endif
 
-#if defined(__DAV_CUBE__)
-    ReadbackCbufToUbuf((__ubuf__ void *)dstUbAddr, (__cbuf__ void *)matAddr, initBurstNum, initBurstLen, 0, syncId,
-                       eventIdNum);
-#endif
-
-#if defined(__DAV_VEC__)
     WaitAndStore(dstGlobal, dstTile, syncId);
 #endif
 }
@@ -2176,23 +2183,13 @@ AICORE void runTInsertCompactTMov(__gm__ T *out, __gm__ T *src)
     constexpr uint32_t initBurstNum = DstCols / c0Size;
     constexpr uint16_t initBurstLen = (DstRows * c0Size * sizeof(T)) / BLOCK_BYTE_SIZE;
 
-    __cbuf__ T *matAddr = matTile.data();
-    __ubuf__ T *dstUbAddr = dstTile.data();
-
     uint8_t syncId = 0;
     uint8_t eventIdNum = 16;
 
+    InitCbufAndReadback<MatTile, DstUbTile, initBurstNum, initBurstLen>(matTile.data(), dstTile.data(),
+                                                                        initGlobal.data(), syncId, eventIdNum);
+
 #if defined(__DAV_VEC__)
-    copy_gm_to_ubuf((__ubuf__ void *)dstUbAddr, (__gm__ void *)initGlobal.data(), 0, initBurstNum, initBurstLen, 0, 0);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    copy_ubuf_to_cbuf((__cbuf__ void *)matAddr, (__ubuf__ void *)dstUbAddr, 0, initBurstNum, initBurstLen, 0, 0);
-
-    pipe_barrier(PIPE_ALL);
-
     TLOAD(ndTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
@@ -2203,14 +2200,7 @@ AICORE void runTInsertCompactTMov(__gm__ T *out, __gm__ T *src)
 
     TINSERT(matTile, nzTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
     set_intra_block(PIPE_MTE3, syncId);
-#endif
 
-#if defined(__DAV_CUBE__)
-    ReadbackCbufToUbuf((__ubuf__ void *)dstUbAddr, (__cbuf__ void *)matAddr, initBurstNum, initBurstLen, 0, syncId,
-                       eventIdNum);
-#endif
-
-#if defined(__DAV_VEC__)
     WaitAndStore(dstGlobal, dstTile, syncId);
 #endif
 }
