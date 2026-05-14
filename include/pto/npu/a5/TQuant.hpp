@@ -628,8 +628,10 @@ PTO_INTERNAL void ExtractB8ExponentAndScalingNV(__ubuf__ T *maxPtr, __ubuf__ uin
         uint32_t chunkCount = (total_elements_count > chunkOffset) ? (total_elements_count - chunkOffset) : 0;
         if (chunkCount > elementsPerChunk)
             chunkCount = elementsPerChunk;
-        MaskReg preg_b16 = CreatePredicate<T>(chunkCount);
-        MaskReg preg_b32 = CreatePredicate<float>(chunkCount);
+        uint32_t chunkCountB16 = chunkCount;
+        uint32_t chunkCountB32 = chunkCount;
+        MaskReg preg_b16 = CreatePredicate<T>(chunkCountB16);
+        MaskReg preg_b32 = CreatePredicate<float>(chunkCountB32);
         vlds(vb16_max, maxPtr, chunkOffset, UNPK_B16);
         vcvt(vb32_max, vb16_max, preg_b16, PART_EVEN);
         vcmps_eq(preg_zero, (vector_s32 &)vb32_max, 0, preg_b32);
