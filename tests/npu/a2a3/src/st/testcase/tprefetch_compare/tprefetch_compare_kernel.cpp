@@ -365,6 +365,106 @@ __global__ AICORE void ScenarioG_DeviceFusedKernel(__gm__ T *srcBuf, uint64_t ch
     pipe_barrier(PIPE_ALL);
 }
 
+// ============================================================================
+// Scenario H: data-dependent prefetch (host forced to sync per stage)
+// ----------------------------------------------------------------------------
+// Two kernels to express the same semantic on host vs device:
+//   * ScenarioH_HostStageKernel    - one stage of the host_dep_sync loop:
+//                                    compute spin + warm TLOAD + write next
+//                                    offset to a device slot. The host then
+//                                    aclrtSynchronizeStream + aclrtMemcpy to
+//                                    read the slot before issuing the next
+//                                    PTO_PREFETCH.
+//   * ScenarioH_DeviceFusedKernel  - one launch covering all M stages,
+//                                    pipelined exactly like Scenario G; the
+//                                    "next offset" lives in an AICORE
+//                                    register and is fed straight into the
+//                                    next TPREFETCH_L2 with no host hop.
+//
+// Both use the trivial recurrence offset_{i+1} = (offset_i + 1) % modulus.
+// The recurrence itself is cheap on either side; what differs is whether the
+// value crosses the host-device boundary.
+// ============================================================================
+template <typename T, size_t count>
+__global__ AICORE void ScenarioH_HostStageKernel(__gm__ T *srcBuf, int elem_count, uint64_t spinCycles,
+                                                 uint32_t prevOffset, uint32_t modulus,
+                                                 __gm__ uint64_t *cycleOut, __gm__ uint32_t *nextOffsetOut)
+{
+    if (elem_count <= 0 || elem_count > static_cast<int>(count) || modulus == 0) {
+        pipe_barrier(PIPE_ALL);
+        return;
+    }
+
+    uint64_t t0 = cmp_syscnt();
+    SpinCycles(spinCycles);
+    uint64_t tloadCycles = TloadSweepCycles<T, count>(srcBuf, elem_count);
+    uint64_t t1 = cmp_syscnt();
+
+    *cycleOut = t1 - t0;
+
+    // Trivial recurrence — what matters is that the host has to read this
+    // back from device memory before it can issue the next prefetch.
+    *nextOffsetOut = (prevOffset + 1U) % modulus;
+
+    (void)tloadCycles;
+    pipe_barrier(PIPE_ALL);
+}
+
+template <typename T, size_t chunkElems>
+__global__ AICORE void ScenarioH_DeviceFusedKernel(__gm__ T *srcBuf, uint64_t chunkBytes, uint32_t numStages,
+                                                   uint32_t modulus, uint64_t spinCycles,
+                                                   __gm__ uint8_t *sdmaWorkspace, __gm__ uint64_t *cycleOut)
+{
+    if (numStages == 0 || modulus == 0) {
+        pipe_barrier(PIPE_ALL);
+        return;
+    }
+
+    uint64_t t0 = cmp_syscnt();
+
+    __gm__ uint8_t *srcBytes = reinterpret_cast<__gm__ uint8_t *>(srcBuf);
+    uint32_t offset = 0U;
+
+    // Step 1: prime with prefetch of block_offset_0.
+    {
+        __gm__ uint8_t *firstAddr = srcBytes + static_cast<uint64_t>(offset) * chunkBytes;
+        auto evt = pto::TPREFETCH_L2(reinterpret_cast<__gm__ void *>(firstAddr), chunkBytes, sdmaWorkspace);
+        (void)evt.Wait();
+    }
+
+    uint64_t tloadCyclesAcc = 0;
+
+    // Pipelined body: stages 0..M-2 overlap prefetch_{i+1} with compute_i.
+    for (uint32_t i = 0; i + 1 < numStages; ++i) {
+        // Compute the next offset in-register; no host roundtrip needed.
+        uint32_t nextOffset = (offset + 1U) % modulus;
+
+        __gm__ uint8_t *nextAddr = srcBytes + static_cast<uint64_t>(nextOffset) * chunkBytes;
+        auto evtNext = pto::TPREFETCH_L2(reinterpret_cast<__gm__ void *>(nextAddr), chunkBytes, sdmaWorkspace);
+
+        SpinCycles(spinCycles);
+
+        __gm__ T *stageSrc = reinterpret_cast<__gm__ T *>(srcBytes + static_cast<uint64_t>(offset) * chunkBytes);
+        tloadCyclesAcc += TloadSweepCycles<T, chunkElems>(stageSrc, static_cast<int>(chunkElems));
+
+        (void)evtNext.Wait();
+        offset = nextOffset;
+    }
+
+    // Last stage.
+    {
+        SpinCycles(spinCycles);
+        __gm__ T *lastSrc = reinterpret_cast<__gm__ T *>(srcBytes + static_cast<uint64_t>(offset) * chunkBytes);
+        tloadCyclesAcc += TloadSweepCycles<T, chunkElems>(lastSrc, static_cast<int>(chunkElems));
+    }
+
+    uint64_t t1 = cmp_syscnt();
+    *cycleOut = t1 - t0;
+    (void)tloadCyclesAcc;
+
+    pipe_barrier(PIPE_ALL);
+}
+
 // Explicit instantiations for the three sizes listed in main.cpp.
 // float/int32 aliasing doesn't matter here since the kernels only TLOAD/write
 // cycle counters; we test float throughout.
@@ -381,7 +481,12 @@ __global__ AICORE void ScenarioG_DeviceFusedKernel(__gm__ T *srcBuf, uint64_t ch
     template __global__ AICORE void ScenarioF_DeviceChunkedPrefetchAndTloadKernel<T, COUNT>(                           \
         __gm__ T *, int, uint64_t, uint32_t, __gm__ uint8_t *, __gm__ uint64_t *);                                     \
     template __global__ AICORE void ScenarioG_DeviceFusedKernel<T, COUNT>(__gm__ T *, uint64_t, uint32_t, uint64_t,    \
-                                                                          __gm__ uint8_t *, __gm__ uint64_t *)
+                                                                          __gm__ uint8_t *, __gm__ uint64_t *);        \
+    template __global__ AICORE void ScenarioH_HostStageKernel<T, COUNT>(__gm__ T *, int, uint64_t, uint32_t, uint32_t, \
+                                                                         __gm__ uint64_t *, __gm__ uint32_t *);        \
+    template __global__ AICORE void ScenarioH_DeviceFusedKernel<T, COUNT>(__gm__ T *, uint64_t, uint32_t, uint32_t,    \
+                                                                           uint64_t, __gm__ uint8_t *,                 \
+                                                                           __gm__ uint64_t *)
 
 CMP_INSTANTIATE(float, 16384);     // 64 KB
 CMP_INSTANTIATE(float, 262144);    // 1 MB
@@ -1421,3 +1526,199 @@ bool RunScenarioGFusedComputePrefetch(int deviceId, uint32_t numStages, uint64_t
 }
 
 template bool RunScenarioGFusedComputePrefetch<float, 262144>(int, uint32_t, uint64_t);  // chunk = 1 MB
+
+// ============================================================================
+// Scenario H: data-dependent prefetch (host forced to sync per stage)
+// ----------------------------------------------------------------------------
+// Same total / per-stage primitives as Scenario G, but the address of the
+// next prefetch is the previous stage's device-side output — so the host
+// has to aclrtSynchronizeStream + aclrtMemcpy(D2H) one uint32_t between
+// every pair of stages, breaking the SDMA-launch overlap that made
+// Scenario G's host_serial competitive.
+//
+//   host_dep_sync :
+//       offsets[0] = 0
+//       trash L2
+//       for i in [0, M):
+//           addr = src + offsets[i] * chunkBytes
+//           pto::PTO_PREFETCH(addr, chunkBytes, stream)
+//           ScenarioH_HostStageKernel<<<...stream>>>(addr, ..., offsets[i],
+//                                                     &deviceOffsets[i])
+//           if i < M-1:
+//               aclrtSynchronizeStream(stream)
+//               aclrtMemcpy(&offsets[i+1], &deviceOffsets[i], 4, D2H)
+//       aclrtSynchronizeStream(stream)
+//
+//   device_in_reg :
+//       trash L2
+//       ScenarioH_DeviceFusedKernel<<<1, ...>>>(src, chunk, M, M, spin, ws, ...)
+//       aclrtSynchronizeStream(stream)
+//
+// chunkBytes = chunkElems * sizeof(T) is held constant per test (= 1 MB by
+// default for chunkElems=262144). Total bytes prefetched = M * chunkBytes,
+// matching Scenario G for any (M, spin) pair so cross-scenario diffing
+// isolates exactly the (M-1) forced syncs.
+// ============================================================================
+template <typename T, size_t chunkElems>
+bool RunScenarioHDependentPrefetch(int deviceId, uint32_t numStages, uint64_t spinCycles)
+{
+    if (numStages == 0) {
+        std::cerr << "[ERROR] ScenarioH: numStages must be > 0" << std::endl;
+        return false;
+    }
+    constexpr uint64_t chunkBytes = static_cast<uint64_t>(chunkElems) * sizeof(T);
+    const uint64_t totalBytes = chunkBytes * static_cast<uint64_t>(numStages);
+    constexpr int kWarmup = 1;
+    const int kIter = IterCount(100);
+    const uint32_t modulus = numStages;
+
+    CmpEnv env;
+    if (!env.Init(deviceId, totalBytes)) {
+        std::cerr << "[ERROR] ScenarioH: env init failed (totalBytes=" << totalBytes << ")" << std::endl;
+        env.Teardown();
+        return false;
+    }
+
+    // Per-stage device slots holding "next offset" written by each host stage.
+    void *deviceOffsets = nullptr;
+    int allocStatus = aclrtMalloc(&deviceOffsets, sizeof(uint32_t) * numStages, ACL_MEM_MALLOC_HUGE_FIRST);
+    if (allocStatus != 0 || deviceOffsets == nullptr) {
+        std::cerr << "[ERROR] ScenarioH: aclrtMalloc(deviceOffsets) failed" << std::endl;
+        env.Teardown();
+        return false;
+    }
+    {
+        // Initialise to a known value so the first read after kernel run is
+        // always meaningful.
+        std::vector<uint32_t> zeros(numStages, 0U);
+        env.aclStatus |= aclrtMemcpy(deviceOffsets, sizeof(uint32_t) * numStages, zeros.data(),
+                                     sizeof(uint32_t) * numStages, ACL_MEMCPY_HOST_TO_DEVICE);
+    }
+    std::vector<uint32_t> hostOffsets(numStages, 0U);
+
+    SampleSet hostWall;
+    SampleSet deviceWall;
+    SampleSet hostLastStageKern;
+    SampleSet deviceKern;
+
+    for (int i = 0; i < kWarmup + kIter; ++i) {
+        // ---- host_dep_sync path ----
+        env.TrashL2();
+        std::fill(hostOffsets.begin(), hostOffsets.end(), 0U);
+        auto h0 = HrClock::now();
+        for (uint32_t s = 0; s < numStages; ++s) {
+            uint32_t offset = hostOffsets[s];
+            uint8_t *addr = static_cast<uint8_t *>(env.srcDevice) + static_cast<uint64_t>(offset) * chunkBytes;
+            pto::PTO_PREFETCH(addr, chunkBytes, env.stream);
+            T *stageSrc = reinterpret_cast<T *>(addr);
+            uint32_t *devOffsetSlot = reinterpret_cast<uint32_t *>(deviceOffsets) + s;
+            ScenarioH_HostStageKernel<T, chunkElems>
+                <<<1, nullptr, env.stream>>>(stageSrc, static_cast<int>(chunkElems), spinCycles, offset, modulus,
+                                             reinterpret_cast<uint64_t *>(env.cycleDev), devOffsetSlot);
+            if (s + 1 < numStages) {
+                // Forced sync: must drain the stream before reading the slot,
+                // because aclrtMemcpy D2H from a kernel-written address otherwise
+                // races with the in-flight kernel.
+                env.aclStatus |= aclrtSynchronizeStream(env.stream);
+                env.aclStatus |= aclrtMemcpy(&hostOffsets[s + 1], sizeof(uint32_t), devOffsetSlot, sizeof(uint32_t),
+                                             ACL_MEMCPY_DEVICE_TO_HOST);
+            }
+        }
+        env.aclStatus |= aclrtSynchronizeStream(env.stream);
+        auto h1 = HrClock::now();
+        uint64_t hostWallUs = ElapsedMicros(h0, h1);
+        // cycleDev is overwritten every stage; what we read is the last stage's
+        // in-kernel cycles (representative per-stage cost — same convention as G).
+        uint64_t hostLastKernCyc = env.ReadCycles();
+
+        // ---- device_in_reg path ----
+        env.TrashL2();
+        auto d0 = HrClock::now();
+        ScenarioH_DeviceFusedKernel<T, chunkElems><<<1, nullptr, env.stream>>>(
+            reinterpret_cast<T *>(env.srcDevice), chunkBytes, numStages, modulus, spinCycles,
+            reinterpret_cast<uint8_t *>(env.sdmaMgr.GetWorkspaceAddr()),
+            reinterpret_cast<uint64_t *>(env.cycleDev));
+        env.aclStatus |= aclrtSynchronizeStream(env.stream);
+        auto d1 = HrClock::now();
+        uint64_t deviceWallUs = ElapsedMicros(d0, d1);
+        uint64_t deviceKernCyc = env.ReadCycles();
+
+        if (i >= kWarmup) {
+            hostWall.Add(static_cast<double>(hostWallUs));
+            deviceWall.Add(static_cast<double>(deviceWallUs));
+            hostLastStageKern.Add(CyclesToUs(hostLastKernCyc));
+            deviceKern.Add(CyclesToUs(deviceKernCyc));
+        }
+    }
+
+    aclrtFree(deviceOffsets);
+    env.Teardown();
+
+    auto bytesLabel = [](uint64_t b) -> std::string {
+        std::ostringstream oss;
+        if (b >= 1024ULL * 1024) {
+            oss << b / 1024 / 1024 << "MB";
+        } else if (b >= 1024) {
+            oss << b / 1024 << "KB";
+        } else {
+            oss << b << "B";
+        }
+        return oss.str();
+    };
+
+    auto bandGBs = [&](double us) {
+        return us > 0.0 ? (static_cast<double>(totalBytes) / us / 1000.0) : 0.0;
+    };
+
+    const double spinUs = static_cast<double>(spinCycles) * 1.0e6 / SyscntHz();
+
+    std::cout << std::fixed << std::setprecision(2);
+    std::cout << "\n================================================================" << std::endl;
+    std::cout << "[PERF] Scenario H - data-dependent prefetch (host sync between stages)"
+              << " (M=" << numStages << ", chunk=" << bytesLabel(chunkBytes)
+              << ", total=" << bytesLabel(totalBytes)
+              << ", spin=" << spinCycles << " cycles ~ " << spinUs << "us per stage)" << std::endl;
+    std::cout << "  Iterations:            " << kIter << " (warmup=" << kWarmup << ")" << std::endl;
+    std::cout << "  Syscnt freq assumed:   " << (SyscntHz() / 1.0e6) << " MHz" << std::endl;
+    std::cout << "  --- end-to-end wall (apples-to-apples) ---" << std::endl;
+    std::cout << "  host_dep_sync    p50=" << hostWall.P50()
+              << "us   p5=" << hostWall.P5() << " p95=" << hostWall.P95()
+              << "   band(p50)=" << bandGBs(hostWall.P50()) << " GB/s"
+              << "   (M x [PTO_PREFETCH + kernel + sync + D2H memcpy])" << std::endl;
+    std::cout << "  device_in_reg    p50=" << deviceWall.P50()
+              << "us   p5=" << deviceWall.P5() << " p95=" << deviceWall.P95()
+              << "   band(p50)=" << bandGBs(deviceWall.P50()) << " GB/s"
+              << "   ratio vs host: " << (hostWall.P50() > 0 ? deviceWall.P50() / hostWall.P50() : 0.0)
+              << "   (1 fused kernel + 1 sync, offset in-register)" << std::endl;
+    std::cout << "  --- supplementary: in-kernel cycles (NOT apples-to-apples) ---" << std::endl;
+    std::cout << "  host_dep_sync    last-stage kernel p50=" << hostLastStageKern.P50()
+              << "us  (spin + warm TLOAD; representative per-stage)" << std::endl;
+    std::cout << "  device_in_reg    fused kernel     p50=" << deviceKern.P50()
+              << "us  (M x prefetch+compute+TLOAD pipelined)" << std::endl;
+    std::cout << "  CSV: " << CsvFilePath("scenarioH") << std::endl;
+    std::cout << "================================================================\n" << std::endl;
+
+    const std::string csvHeader =
+        "total_bytes,total_label,num_stages,chunk_bytes,chunk_label,spin_cycles,spin_us,config,iter,"
+        "wall_p5_us,wall_p50_us,wall_p95_us,wall_min_us,wall_max_us,band_p50_gbs,"
+        "kernel_p50_us";
+
+    auto rowOf = [&](const std::string &cfg, const SampleSet &wall, const SampleSet &kern) {
+        std::ostringstream oss;
+        oss << totalBytes << ',' << bytesLabel(totalBytes) << ',' << numStages << ','
+            << chunkBytes << ',' << bytesLabel(chunkBytes) << ','
+            << spinCycles << ',' << spinUs << ','
+            << cfg << ',' << kIter << ','
+            << wall.P5() << ',' << wall.P50() << ',' << wall.P95() << ','
+            << wall.Min() << ',' << wall.Max() << ','
+            << bandGBs(wall.P50()) << ','
+            << kern.P50();
+        return oss.str();
+    };
+    CsvAppendRow("scenarioH", csvHeader, rowOf("host_dep_sync", hostWall, hostLastStageKern));
+    CsvAppendRow("scenarioH", csvHeader, rowOf("device_in_reg", deviceWall, deviceKern));
+
+    return env.aclStatus == 0;
+}
+
+template bool RunScenarioHDependentPrefetch<float, 262144>(int, uint32_t, uint64_t);  // chunk = 1 MB

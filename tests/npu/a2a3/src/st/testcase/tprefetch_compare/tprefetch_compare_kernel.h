@@ -182,6 +182,50 @@ bool RunScenarioFChunkedPrefetchAndTload(int deviceId, uint32_t numChunks);
 template <typename T, size_t chunkElems>
 bool RunScenarioGFusedComputePrefetch(int deviceId, uint32_t numStages, uint64_t spinCycles);
 
+// ---- Scenario H: data-dependent prefetch (host forced to sync per stage) ---
+// Variant of Scenario G that makes the prefetch address of stage i+1 depend
+// on a value computed by stage i. The host CANNOT pre-issue all stages on
+// the stream up-front because the address for prefetch_{i+1} is not known
+// until kernel_i has run and written its result to device memory; therefore
+// host must aclrtSynchronizeStream + aclrtMemcpy(D2H) between every pair
+// of stages — exactly the stream pipeline that made Scenario G a tie is
+// broken here. Device, on the other hand, keeps the offset in an AICORE
+// register and pipelines as in Scenario G.
+//
+// Algorithm (identical on both paths): offset_{i+1} = (offset_i + 1) % M.
+// The trivial computation is irrelevant; what matters is WHERE the value
+// lives — the contract is "the address comes from the previous stage's
+// device-side output". host has to materialize it on the host side; device
+// passes it through a register.
+//
+// host_dep_sync :
+//     offsets[0] = 0
+//     for i in [0, M):
+//         pto::PTO_PREFETCH(src + offsets[i]*chunk, chunk, stream)
+//         ScenarioH_HostStageKernel<<<...stream>>>(stage_i, ..., offsets[i],
+//                                                   &deviceOffsetBuf[i])
+//         if i < M-1:
+//             aclrtSynchronizeStream(stream)                  # FORCED SYNC
+//             aclrtMemcpy(&offsets[i+1], &deviceOffsetBuf[i],
+//                         sizeof(uint32_t), ACL_MEMCPY_DEVICE_TO_HOST)
+//     aclrtSynchronizeStream(stream)
+//   - M launches AND (M-1) forced sync+D2H roundtrips.
+//   - Each forced sync drains the stream — kills the SDMA-launch overlap
+//     that made Scenario G's host_serial competitive.
+//
+// device_in_reg :
+//     ScenarioH_DeviceFusedKernel<<<1, ...>>>(src, chunk, M, M, spin, ws, ...)
+//         # in-kernel: offset starts at 0, pipelined loop
+//         #            (prefetch first; for i in M-1: issue next, spin,
+//         #             TLOAD current, wait next; last: spin + TLOAD)
+//     aclrtSynchronizeStream(stream)
+//   - ONE launch + ONE sync. Offset propagation is in-register, instant.
+//
+// Predicted device advantage on top of Scenario G:
+//   ~ (M-1) * (T_sync_round + T_d2h_memcpy_overhead) ~ (M-1) * 15-20 us.
+template <typename T, size_t chunkElems>
+bool RunScenarioHDependentPrefetch(int deviceId, uint32_t numStages, uint64_t spinCycles);
+
 // ---- Scenario E1: kernel launch + dispatch + sync overhead --------------
 // Pure-overhead micro-benchmark used to localise where Scenario A's "device
 // path is 4 us slower at small payloads" gap actually lives.

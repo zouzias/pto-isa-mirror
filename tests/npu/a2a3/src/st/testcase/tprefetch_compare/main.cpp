@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "tprefetch_compare_kernel.h"
 
 // ============================================================================
-// Single-card prefetch comparison: Scenarios A / B / C / F / G.
+// Single-card prefetch comparison: Scenarios A / B / C / F / G / H.
 // Cross-rank Scenario D lives under comm/st/testcase/tprefetch_compare/.
 //
 // Statistics: each TEST runs 100 iterations (override via env
@@ -27,6 +27,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 //   tprefetch_compare_scenarioC.csv
 //   tprefetch_compare_scenarioF.csv
 //   tprefetch_compare_scenarioG.csv
+//   tprefetch_compare_scenarioH.csv
 //   tprefetch_compare_scenarioE1.csv
 //
 // Scenario A scans 5 sizes (64KB, 1MB, 16MB, 64MB, 128MB) for a "real-world
@@ -40,6 +41,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // runs everything inside one fused kernel that overlaps prefetch_{i+1}
 // with compute_i — this is the deployment pattern where device should
 // structurally win, scaled across M and across compute/prefetch ratios.
+//
+// Scenario H is Scenario G with one twist: the address of prefetch_{i+1}
+// is computed inside kernel_i, so the host has to aclrtSynchronizeStream
+// + aclrtMemcpy(D2H) one uint32_t between every pair of stages. Device
+// keeps the offset in an AICORE register and pipelines as in G. This is
+// the missing scenario that should make device structurally faster — the
+// stream-level SDMA-launch overlap that made G a tie cannot survive a
+// forced sync per stage.
 //
 // Scenario E1 is a pure-overhead microbenchmark (empty AICore kernel) used
 // to isolate the device-path mandatory "launch + dispatch + sync" tax so
@@ -247,6 +256,36 @@ TEST(TPrefetchCompare, G_Fused_M16_1MB_compute200us)
 TEST(TPrefetchCompare, G_Fused_M16_1MB_compute800us)
 {
     ASSERT_TRUE((RunScenarioGFusedComputePrefetch<float, 262144>(0, 16, 80000)));
+}
+
+// ---- Scenario H: data-dependent prefetch (host forced to sync per stage) ---
+// Same M / chunk / spin axes as Scenario G but the address of prefetch_{i+1}
+// depends on a uint32_t written by kernel_i to device memory; host must
+// aclrtSynchronizeStream + aclrtMemcpy(D2H, 4 bytes) between every pair of
+// stages, breaking the SDMA-launch overlap that made G a tie. Device runs
+// one fused pipelined kernel that keeps the offset in an AICORE register.
+//
+// Predicted device advantage on top of G: ~ (M-1) x (T_sync + T_d2h) ~
+// (M-1) x 15-20 us. Single spin level (50 us) is enough to make the
+// per-sync overhead show up as a fraction of per-stage cost.
+TEST(TPrefetchCompare, H_DepSync_M2_1MB_compute50us)
+{
+    ASSERT_TRUE((RunScenarioHDependentPrefetch<float, 262144>(0, 2, 5000)));
+}
+
+TEST(TPrefetchCompare, H_DepSync_M4_1MB_compute50us)
+{
+    ASSERT_TRUE((RunScenarioHDependentPrefetch<float, 262144>(0, 4, 5000)));
+}
+
+TEST(TPrefetchCompare, H_DepSync_M8_1MB_compute50us)
+{
+    ASSERT_TRUE((RunScenarioHDependentPrefetch<float, 262144>(0, 8, 5000)));
+}
+
+TEST(TPrefetchCompare, H_DepSync_M16_1MB_compute50us)
+{
+    ASSERT_TRUE((RunScenarioHDependentPrefetch<float, 262144>(0, 16, 5000)));
 }
 
 // ---- Scenario E1: kernel launch + dispatch + sync overhead --------------
