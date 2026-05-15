@@ -45,7 +45,7 @@ extern "C" __global__ AICORE void RunSoftSyncAll(__gm__ int32_t __out__ *out, __
     const int32_t idx = block_idx;
     StoreInt32Line(flags + idx * kInt32PerCacheLine, idx + 1, kFlagUbAddr);
 
-    GlobalTensor<int32_t, Shape<>, Stride<>> gmWs(syncWorkspace);
+    GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(syncWorkspace);
     Tile<TileType::Vec, int32_t, 1, SYNCALL_SOFT_SLOT_INT32> syncUbTile;
     syncUbTile.data() = reinterpret_cast<__ubuf__ int32_t *>(kSoftSyncUbAddr);
     SYNCALL<SyncAllMode::Soft>(gmWs, syncUbTile, kBlockCount);

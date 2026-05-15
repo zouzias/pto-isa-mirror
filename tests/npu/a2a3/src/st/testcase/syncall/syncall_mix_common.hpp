@@ -128,7 +128,7 @@ PTO_INTERNAL void RunMixSyncAllBody(__gm__ uint64_t *fftsAddr, __gm__ int32_t *o
     StoreMixInt32Line(flags + idx * kInt32PerCacheLine, idx + 1, kMixFlagUbAddr, kMixFlagL1Addr);
 
     if constexpr (UseSoft) {
-        GlobalTensor<int32_t, Shape<>, Stride<>> gmWs(syncWorkspace);
+        GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(syncWorkspace);
         Tile<TileType::Vec, int32_t, 1, SYNCALL_SOFT_SLOT_INT32> syncUbTile;
         syncUbTile.data() = reinterpret_cast<__ubuf__ int32_t *>(kMixSoftUbAddr);
         Tile<TileType::Mat, int32_t, 1, SYNCALL_SOFT_SLOT_INT32> syncL1Tile;
@@ -141,7 +141,7 @@ PTO_INTERNAL void RunMixSyncAllBody(__gm__ uint64_t *fftsAddr, __gm__ int32_t *o
     const int32_t allFirstVisible = CheckMixFlags(flags, TotalParticipants, kMixReadUbAddr, kMixReadL1Addr, 1);
 
     if constexpr (UseSoft) {
-        GlobalTensor<int32_t, Shape<>, Stride<>> gmWs(syncWorkspace);
+        GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(syncWorkspace);
         Tile<TileType::Vec, int32_t, 1, SYNCALL_SOFT_SLOT_INT32> syncUbTile;
         syncUbTile.data() = reinterpret_cast<__ubuf__ int32_t *>(kMixSoftUbAddr);
         Tile<TileType::Mat, int32_t, 1, SYNCALL_SOFT_SLOT_INT32> syncL1Tile;
@@ -154,7 +154,7 @@ PTO_INTERNAL void RunMixSyncAllBody(__gm__ uint64_t *fftsAddr, __gm__ int32_t *o
     StoreMixInt32Line(flags + idx * kInt32PerCacheLine, (idx + 1) * 2, kMixFlagUbAddr, kMixFlagL1Addr);
 
     if constexpr (UseSoft) {
-        GlobalTensor<int32_t, Shape<>, Stride<>> gmWs(syncWorkspace);
+        GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(syncWorkspace);
         Tile<TileType::Vec, int32_t, 1, SYNCALL_SOFT_SLOT_INT32> syncUbTile;
         syncUbTile.data() = reinterpret_cast<__ubuf__ int32_t *>(kMixSoftUbAddr);
         Tile<TileType::Mat, int32_t, 1, SYNCALL_SOFT_SLOT_INT32> syncL1Tile;
