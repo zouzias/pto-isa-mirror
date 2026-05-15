@@ -13,8 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <gtest/gtest.h>
 
-#include "tprefetch_compare_kernel.h"
-#include "tprefetch_l2_kernel.h"
+#include "tprefetch_async_kernel.h"
 
 // ============================================================================
 // Focused single-card tests for device-side async L2 prefetch.
@@ -22,57 +21,65 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Functionality:
 //   - GlobalTensor API correctness
 //   - raw pointer API correctness
-//   - TPREFETCH_L2 must reduce TLOAD latency versus cold TLOAD
+//   - async prefetch must reduce TLOAD latency versus cold TLOAD
 //
 // Performance comparison:
-//   - Scenario A: host PTO_PREFETCH vs device TPREFETCH_L2 at small/large sizes
-//   - Scenario G: static-address multi-stage workload
-//   - Scenario H: data-dependent multi-stage workload
+//   - host PTO_PREFETCH vs device async prefetch at small/large sizes
+//   - static-address multi-stage workload
+//   - data-dependent multi-stage workload
 // ============================================================================
 
-TEST(TPrefetchAsync, Correctness_Float_4096)
+class TPrefetchAsyncTest : public testing::Test {
+protected:
+    void SetUp() override
+    {}
+    void TearDown() override
+    {}
+};
+
+TEST_F(TPrefetchAsyncTest, case_float_4096_globaltensor)
 {
-    ASSERT_TRUE((RunPrefetchL2Correctness<float, 4096>(0)));
+    ASSERT_TRUE((RunPrefetchAsyncCorrectness<float, 4096>(0)));
 }
 
-TEST(TPrefetchAsync, Correctness_Int32_4096)
+TEST_F(TPrefetchAsyncTest, case_int32_4096_globaltensor)
 {
-    ASSERT_TRUE((RunPrefetchL2Correctness<int32_t, 4096>(0)));
+    ASSERT_TRUE((RunPrefetchAsyncCorrectness<int32_t, 4096>(0)));
 }
 
-TEST(TPrefetchAsync, RawPtr_Float_4096)
+TEST_F(TPrefetchAsyncTest, case_float_4096_rawptr)
 {
-    ASSERT_TRUE((RunPrefetchL2RawPtr<float, 4096>(0)));
+    ASSERT_TRUE((RunPrefetchAsyncRawPtr<float, 4096>(0)));
 }
 
-TEST(TPrefetchAsync, RawPtr_Int32_4096)
+TEST_F(TPrefetchAsyncTest, case_int32_4096_rawptr)
 {
-    ASSERT_TRUE((RunPrefetchL2RawPtr<int32_t, 4096>(0)));
+    ASSERT_TRUE((RunPrefetchAsyncRawPtr<int32_t, 4096>(0)));
 }
 
-TEST(TPrefetchAsync, PrefetchReducesTloadLatency_Float_1MB)
+TEST_F(TPrefetchAsyncTest, case_float_1mb_prefetch_reduce_tload_latency)
 {
     ASSERT_TRUE((RunTloadPerf<float, 262144>(0)));
 }
 
-TEST(TPrefetchAsync, A_EndToEnd_1MB)
+TEST_F(TPrefetchAsyncTest, case_float_1mb_host_device_prefetch)
 {
-    ASSERT_TRUE((RunScenarioAEndToEnd<float, 262144>(0)));
+    ASSERT_TRUE((RunHostDevicePrefetch<float, 262144>(0)));
 }
 
-TEST(TPrefetchAsync, A_EndToEnd_128MB)
+TEST_F(TPrefetchAsyncTest, case_float_128mb_host_device_prefetch)
 {
-    ASSERT_TRUE((RunScenarioAEndToEnd<float, 33554432>(0)));
+    ASSERT_TRUE((RunHostDevicePrefetch<float, 33554432>(0)));
 }
 
-TEST(TPrefetchAsync, G_StaticAddress_M16_1MB_compute50us)
+TEST_F(TPrefetchAsyncTest, case_float_16mb_static_address_prefetch)
 {
-    ASSERT_TRUE((RunScenarioGFusedComputePrefetch<float, 262144>(0, 16, 5000)));
+    ASSERT_TRUE((RunStaticAddressPrefetch<float, 262144>(0, 16, 5000)));
 }
 
-TEST(TPrefetchAsync, H_DataDependent_M16_1MB_compute50us)
+TEST_F(TPrefetchAsyncTest, case_float_16mb_data_dependent_prefetch)
 {
-    ASSERT_TRUE((RunScenarioHDependentPrefetch<float, 262144>(0, 16, 5000)));
+    ASSERT_TRUE((RunDataDependentPrefetch<float, 262144>(0, 16, 5000)));
 }
 
 int main(int argc, char **argv)

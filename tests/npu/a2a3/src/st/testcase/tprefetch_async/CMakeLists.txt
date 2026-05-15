@@ -9,8 +9,7 @@
 # --------------------------------------------------------------------------------
 
 add_library(tprefetch_async_kernel SHARED
-    tprefetch_l2_kernel.cpp
-    tprefetch_compare_kernel.cpp
+    tprefetch_async_kernel.cpp
 )
 target_compile_options(tprefetch_async_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220-vec -DMEMORY_BASE -std=c++17)
 target_include_directories(tprefetch_async_kernel PRIVATE
