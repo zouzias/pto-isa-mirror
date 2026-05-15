@@ -88,6 +88,75 @@ PTO_INTERNAL bool AsyncEvent::Test(const AsyncSession &session) const
     }
 }
 
+// ============================================================================
+// AsyncEvent::Wait / Test - workspace overloads for SDMA events that use the
+// default single-queue layout. Build a transient SdmaSession, then dispatch to
+// the existing session-based Wait/Test.
+// ============================================================================
+
+namespace detail {
+
+// Scratch tile reused by the workspace-/0-arg Wait/Test helpers. 256B UB
+// per call, lives on the AICORE stack frame and is destroyed when the
+// helper returns; the resulting SdmaSession is consumed before the tile
+// goes out of scope so this is safe.
+using AsyncEventScratchTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, sdma::UB_ALIGN_SIZE>;
+
+PTO_INTERNAL bool BuildTransientSdmaSession(__gm__ uint8_t *workspace, AsyncEventScratchTile &scratchTile,
+                                            sdma::SdmaSession &sdmaSession)
+{
+    if (workspace == nullptr) {
+        sdmaSession.valid = false;
+        return false;
+    }
+    return sdma::BuildSdmaSession(scratchTile, workspace, sdmaSession);
+}
+
+PTO_INTERNAL bool DispatchTransientSdmaEvent(uint64_t eventHandle, DmaEngine eventEngine, __gm__ uint8_t *workspace,
+                                             bool wait)
+{
+    if (eventHandle == 0) {
+        return true;
+    }
+    if (eventEngine != DmaEngine::SDMA) {
+        return false;
+    }
+    AsyncEventScratchTile scratchTile;
+    // Use fully-qualified TASSIGN_IMPL to dodge two-phase template lookup:
+    // the public TASSIGN wrapper in pto/common/pto_instr.hpp has not been
+    // declared yet at the point this header is parsed.
+    ::pto::TASSIGN_IMPL(scratchTile, 0x0);
+    sdma::SdmaSession sdmaSession;
+    if (!BuildTransientSdmaSession(workspace, scratchTile, sdmaSession)) {
+        return false;
+    }
+    return wait ? sdma::detail::SdmaWaitEvent(eventHandle, sdmaSession)
+                : sdma::detail::SdmaTestEvent(eventHandle, sdmaSession);
+}
+
+} // namespace detail
+
+PTO_INTERNAL bool AsyncEvent::Wait(__gm__ uint8_t *workspace) const
+{
+    return detail::DispatchTransientSdmaEvent(handle, engine, workspace, true);
+}
+
+PTO_INTERNAL bool AsyncEvent::Test(__gm__ uint8_t *workspace) const
+{
+    return detail::DispatchTransientSdmaEvent(handle, engine, workspace, false);
+}
+
+PTO_INTERNAL bool AsyncEvent::Wait() const
+{
+    // Some SDMA events store the workspace base address in handle.
+    return Wait(reinterpret_cast<__gm__ uint8_t *>(handle));
+}
+
+PTO_INTERNAL bool AsyncEvent::Test() const
+{
+    return Test(reinterpret_cast<__gm__ uint8_t *>(handle));
+}
+
 } // namespace comm
 } // namespace pto
 
