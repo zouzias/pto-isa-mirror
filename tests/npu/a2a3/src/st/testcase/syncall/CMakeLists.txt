@@ -119,3 +119,15 @@ endfunction()
 
 pto_syncall_mix_kernel(syncall_mix_1_1_kernel syncall_mix_1_1_kernel.cpp -D__MIX_CORE_AIV_RATIO__=1)
 pto_syncall_mix_kernel(syncall_mix_1_2_kernel syncall_mix_1_2_kernel.cpp -D__MIX_CORE_AIV_RATIO__=2)
+pto_syncall_mix_kernel(syncall_aic_hard_kernel syncall_aic_hard_kernel.cpp -D__MIX_CORE_AIV_RATIO__=0)
+
+add_library(syncall_aic_kernel SHARED syncall_aic_kernel.cpp)
+target_compile_options(syncall_aic_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220-cube
+                                                   -DMEMORY_BASE -std=c++17)
+target_include_directories(syncall_aic_kernel PRIVATE
+    ${ASCEND_HOME_PATH}/pkg_inc/
+    ${ASCEND_HOME_PATH}/pkg_inc/profiling/
+    ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
+)
+target_link_options(syncall_aic_kernel PRIVATE --cce-fatobj-link)
+target_link_libraries(syncall PRIVATE syncall_aic_kernel)

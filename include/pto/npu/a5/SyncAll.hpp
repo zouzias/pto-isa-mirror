@@ -76,16 +76,19 @@ PTO_INTERNAL int32_t SYNCALL_GET_MIX_PARTICIPANT_COUNT()
     return static_cast<int32_t>(SYNCALL_GET_MIX_AIC_BLOCKS() * (1 + SYNCALL_GET_MIX_AIV_RATIO()));
 }
 
-template <bool IsAIVOnly = true>
+template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
 PTO_INTERNAL void SYNCALL_IMPL()
 {
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
-    if constexpr (IsAIVOnly) {
+    if constexpr (CoreType == SyncCoreType::AIVOnly) {
 #if defined(__DAV_VEC__)
         ffts_cross_core_sync(PIPE_MTE3, getFFTSMsg(0x0, SYNC_AIV_ONLY_ALL));
         wait_flag_dev(PIPE_S, SYNC_AIV_ONLY_ALL);
 #endif
+        return;
+    } else if constexpr (CoreType == SyncCoreType::AICOnly) {
+        PTO_STATIC_ASSERT(CoreType != SyncCoreType::AICOnly, "AIC-only SYNCALL is not supported on A5.");
         return;
     }
 
@@ -202,12 +205,12 @@ PTO_INTERNAL void SYNCALL_SOFT_AIV_BARRIER(__gm__ int32_t *gmWorkspace, __ubuf__
 }
 #endif
 
-template <bool IsAIVOnly = false>
+template <SyncCoreType CoreType = SyncCoreType::Mix>
 PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t *gmWorkspace, __ubuf__ int32_t *ubWorkspace,
                                         __cbuf__ int32_t *l1Workspace, int32_t usedCores = 0)
 {
 #ifndef __PTO_AUTO__
-    PTO_STATIC_ASSERT(!IsAIVOnly, "Software SYNCALL mix overload is for AIC/AIV kernels.");
+    PTO_STATIC_ASSERT(CoreType == SyncCoreType::Mix, "Software SYNCALL mix overload is for AIC/AIV kernels.");
     pipe_barrier(PIPE_ALL);
 
 #if defined(__DAV_CUBE__)
@@ -256,11 +259,24 @@ PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t *gmWorkspace, __ubuf__ in
 #endif
 }
 
-template <bool IsAIVOnly = true>
+template <bool AlwaysFalse = false>
+PTO_INTERNAL void SYNCALL_SOFT_AIC_IMPL(__gm__ int32_t *gmWorkspace, __cbuf__ int32_t *l1Workspace,
+                                        int32_t usedCores = 0)
+{
+#ifndef __PTO_AUTO__
+    (void)gmWorkspace;
+    (void)l1Workspace;
+    (void)usedCores;
+    PTO_STATIC_ASSERT(AlwaysFalse, "AIC-only software SYNCALL is not supported on A5.");
+#endif
+}
+
+template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
 PTO_INTERNAL void SYNCALL_SOFT_IMPL(__gm__ int32_t *gmWorkspace, __ubuf__ int32_t *ubWorkspace, int32_t usedCores = 0)
 {
 #ifndef __PTO_AUTO__
-    PTO_STATIC_ASSERT(IsAIVOnly, "Software SYNCALL currently only supports AIV-only kernels on A5.");
+    PTO_STATIC_ASSERT(CoreType == SyncCoreType::AIVOnly,
+                      "Software SYNCALL GM+UB overload only supports AIV-only kernels on A5.");
     pipe_barrier(PIPE_ALL);
 
 #if defined(__DAV_VEC__)

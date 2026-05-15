@@ -49,36 +49,62 @@ PTO_INST void TSYNC()
     TSYNC_IMPL<OpCode>();
 }
 
-template <bool IsAIVOnly = true>
+template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
 PTO_INST void SYNCALL()
 {
 #if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
-    SYNCALL_IMPL<IsAIVOnly>();
+    SYNCALL_IMPL<CoreType>();
 #else
-    PTO_STATIC_ASSERT(IsAIVOnly != IsAIVOnly, "SYNCALL is not supported on this backend.");
+    PTO_STATIC_ASSERT(CoreType != CoreType, "SYNCALL is not supported on this backend.");
 #endif
 }
 
-template <SyncAllMode Mode, bool IsAIVOnly = true>
-PTO_INST void SYNCALL(__gm__ int32_t *gmWorkspace, __ubuf__ int32_t *ubWorkspace, int32_t usedCores = 0)
+template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AIVOnly, typename GlobalData, typename TileData,
+          std::enable_if_t<is_global_data_v<GlobalData> && is_tile_data_v<TileData> && TileData::Loc == TileType::Vec,
+                           int> = 0>
+PTO_INST void SYNCALL(GlobalData &gmWorkspace, TileData &ubWorkspace, int32_t usedCores = 0)
 {
 #if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
     if constexpr (Mode == SyncAllMode::Hard) {
         (void)gmWorkspace;
         (void)ubWorkspace;
         (void)usedCores;
-        SYNCALL_IMPL<IsAIVOnly>();
+        SYNCALL_IMPL<CoreType>();
     } else {
-        SYNCALL_SOFT_IMPL<IsAIVOnly>(gmWorkspace, ubWorkspace, usedCores);
+        SYNCALL_SOFT_IMPL<CoreType>(gmWorkspace.data(), ubWorkspace.data(), usedCores);
     }
 #else
     PTO_STATIC_ASSERT(Mode != Mode, "SYNCALL is not supported on this backend.");
 #endif
 }
 
-template <SyncAllMode Mode, bool IsAIVOnly = false>
-PTO_INST void SYNCALL(__gm__ int32_t *gmWorkspace, __ubuf__ int32_t *ubWorkspace, __cbuf__ int32_t *l1Workspace,
-                      int32_t usedCores = 0)
+template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AICOnly, typename GlobalData, typename TileData,
+          std::enable_if_t<is_global_data_v<GlobalData> && is_tile_data_v<TileData> && TileData::Loc == TileType::Mat,
+                           int> = 0>
+PTO_INST void SYNCALL(GlobalData &gmWorkspace, TileData &l1Workspace, int32_t usedCores = 0)
+{
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+    PTO_STATIC_ASSERT(CoreType == SyncCoreType::AICOnly, "GM+L1 overload is for AIC-only mode.");
+    if constexpr (Mode == SyncAllMode::Hard) {
+        (void)gmWorkspace;
+        (void)l1Workspace;
+        (void)usedCores;
+        SYNCALL_IMPL<CoreType>();
+    } else {
+        SYNCALL_SOFT_AIC_IMPL(gmWorkspace.data(), l1Workspace.data(), usedCores);
+    }
+#else
+    PTO_STATIC_ASSERT(Mode != Mode, "SYNCALL is not supported on this backend.");
+#endif
+}
+
+template <
+    SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::Mix, typename GlobalData, typename UbTileData,
+    typename L1TileData,
+    std::enable_if_t<is_global_data_v<GlobalData> && is_tile_data_v<UbTileData> && UbTileData::Loc == TileType::Vec &&
+                         is_tile_data_v<L1TileData> && L1TileData::Loc == TileType::Mat,
+                     int> = 0>
+PTO_INST void SYNCALL(GlobalData &gmWorkspace, UbTileData &ubWorkspace, L1TileData &l1Workspace, int32_t usedCores = 0)
 {
 #if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
     if constexpr (Mode == SyncAllMode::Hard) {
@@ -86,9 +112,9 @@ PTO_INST void SYNCALL(__gm__ int32_t *gmWorkspace, __ubuf__ int32_t *ubWorkspace
         (void)ubWorkspace;
         (void)l1Workspace;
         (void)usedCores;
-        SYNCALL_IMPL<IsAIVOnly>();
+        SYNCALL_IMPL<CoreType>();
     } else {
-        SYNCALL_SOFT_MIX_IMPL<IsAIVOnly>(gmWorkspace, ubWorkspace, l1Workspace, usedCores);
+        SYNCALL_SOFT_MIX_IMPL<CoreType>(gmWorkspace.data(), ubWorkspace.data(), l1Workspace.data(), usedCores);
     }
 #else
     PTO_STATIC_ASSERT(Mode != Mode, "SYNCALL is not supported on this backend.");

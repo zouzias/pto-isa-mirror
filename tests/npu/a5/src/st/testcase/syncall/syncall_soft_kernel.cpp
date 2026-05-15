@@ -44,8 +44,10 @@ extern "C" __global__ AICORE void RunSoftSyncAll(__gm__ int32_t __out__ *out, __
     const int32_t idx = static_cast<int32_t>(get_block_idx());
     StoreInt32Line(flags + idx * kInt32PerCacheLine, idx + 1, kFlagUbAddr);
 
-    __ubuf__ int32_t *syncUb = reinterpret_cast<__ubuf__ int32_t *>(kSoftSyncUbAddr);
-    SYNCALL<SyncAllMode::Soft>(syncWorkspace, syncUb, totalBlocks);
+    GlobalTensor<int32_t, Shape<>, Stride<>> gmWs(syncWorkspace);
+    Tile<TileType::Vec, int32_t, 1, SYNCALL_SOFT_SLOT_INT32> syncUbTile;
+    syncUbTile.data() = reinterpret_cast<__ubuf__ int32_t *>(kSoftSyncUbAddr);
+    SYNCALL<SyncAllMode::Soft>(gmWs, syncUbTile, totalBlocks);
 
     __ubuf__ int32_t *readUb = reinterpret_cast<__ubuf__ int32_t *>(kReadUbAddr);
     InvalidateInt32Lines(flags, totalBlocks);
@@ -59,10 +61,10 @@ extern "C" __global__ AICORE void RunSoftSyncAll(__gm__ int32_t __out__ *out, __
         }
     }
 
-    SYNCALL<SyncAllMode::Soft>(syncWorkspace, syncUb, totalBlocks);
+    SYNCALL<SyncAllMode::Soft>(gmWs, syncUbTile, totalBlocks);
 
     StoreInt32Line(flags + idx * kInt32PerCacheLine, (idx + 1) * 2, kFlagUbAddr);
-    SYNCALL<SyncAllMode::Soft>(syncWorkspace, syncUb, totalBlocks);
+    SYNCALL<SyncAllMode::Soft>(gmWs, syncUbTile, totalBlocks);
 
     InvalidateInt32Lines(flags, totalBlocks);
     copy_gm_to_ubuf(static_cast<__ubuf__ void *>(readUb), static_cast<__gm__ void *>(flags), 0, 1, totalBlocks, 0, 0);

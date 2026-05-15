@@ -64,15 +64,21 @@ PTO_INTERNAL int32_t SYNCALL_GET_MIX_PARTICIPANT_IDX()
 #endif
 }
 
-template <bool IsAIVOnly = true>
+template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
 PTO_INTERNAL void SYNCALL_IMPL()
 {
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
-    if constexpr (IsAIVOnly) {
+    if constexpr (CoreType == SyncCoreType::AIVOnly) {
 #if defined(__DAV_VEC__)
         ffts_cross_core_sync(PIPE_MTE3, getFFTSMsg(0x0, SYNC_AIV_ONLY_ALL));
         wait_flag_dev(SYNC_AIV_ONLY_ALL);
+#endif
+        return;
+    } else if constexpr (CoreType == SyncCoreType::AICOnly) {
+#if defined(__DAV_CUBE__)
+        ffts_cross_core_sync(PIPE_FIX, getFFTSMsg(0x0, SYNC_AIC_FLAG));
+        wait_flag_dev(SYNC_AIC_FLAG);
 #endif
         return;
     }
@@ -163,12 +169,12 @@ PTO_INTERNAL void SYNCALL_SOFT_AIV_BARRIER(__gm__ int32_t *gmWorkspace, __ubuf__
     }
 }
 
-template <bool IsAIVOnly = false>
+template <SyncCoreType CoreType = SyncCoreType::Mix>
 PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t *gmWorkspace, __ubuf__ int32_t *ubWorkspace,
                                         __cbuf__ int32_t *l1Workspace, int32_t usedCores = 0)
 {
 #ifndef __PTO_AUTO__
-    PTO_STATIC_ASSERT(!IsAIVOnly, "Software SYNCALL mix overload is for AIC/AIV kernels.");
+    PTO_STATIC_ASSERT(CoreType == SyncCoreType::Mix, "Software SYNCALL mix overload is for AIC/AIV kernels.");
     pipe_barrier(PIPE_ALL);
 
 #if defined(__DAV_CUBE__)
@@ -212,11 +218,53 @@ PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t *gmWorkspace, __ubuf__ in
 #endif
 }
 
-template <bool IsAIVOnly = true>
+PTO_INTERNAL void SYNCALL_SOFT_AIC_IMPL(__gm__ int32_t *gmWorkspace, __cbuf__ int32_t *l1Workspace,
+                                        int32_t usedCores = 0)
+{
+#ifndef __PTO_AUTO__
+    pipe_barrier(PIPE_ALL);
+
+#if defined(__DAV_CUBE__)
+    const int32_t totalBlocks = (usedCores != 0) ? usedCores : static_cast<int32_t>(get_block_num());
+    const int32_t blockIdx = static_cast<int32_t>(get_block_idx());
+    __gm__ int32_t *localSyncGM = gmWorkspace + blockIdx * SYNCALL_SOFT_SLOT_INT32;
+
+    const int32_t curValue = SYNCALL_SOFT_GM_LOAD(localSyncGM) + 1;
+    SYNCALL_SOFT_AIC_STORE_SLOT(localSyncGM, l1Workspace, curValue);
+
+    int32_t pollCount = 0;
+    while (true) {
+        if (pollCount > SYNCALL_SOFT_BACKOFF_THRESHOLD) {
+            pipe_barrier(PIPE_ALL);
+        }
+        int32_t readyCount = 0;
+        for (int32_t i = 0; i < totalBlocks; ++i) {
+            __gm__ int32_t *syncGM = gmWorkspace + i * SYNCALL_SOFT_SLOT_INT32;
+            if (SYNCALL_SOFT_GM_LOAD(syncGM) >= curValue) {
+                ++readyCount;
+            }
+        }
+        pipe_barrier(PIPE_ALL);
+        if (readyCount >= totalBlocks) {
+            break;
+        }
+        ++pollCount;
+        if (pollCount >= SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
+            PTO_CPU_ASSERT(false, "SYNCALL soft AIC-only barrier timeout - possible deadlock");
+            break;
+        }
+    }
+#endif
+    pipe_barrier(PIPE_ALL);
+#endif
+}
+
+template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
 PTO_INTERNAL void SYNCALL_SOFT_IMPL(__gm__ int32_t *gmWorkspace, __ubuf__ int32_t *ubWorkspace, int32_t usedCores = 0)
 {
 #ifndef __PTO_AUTO__
-    PTO_STATIC_ASSERT(IsAIVOnly, "Software SYNCALL currently only supports AIV-only kernels on A2/A3.");
+    PTO_STATIC_ASSERT(CoreType == SyncCoreType::AIVOnly,
+                      "Software SYNCALL GM+UB overload only supports AIV-only kernels on A2/A3.");
     pipe_barrier(PIPE_ALL);
 
 #if defined(__DAV_VEC__)

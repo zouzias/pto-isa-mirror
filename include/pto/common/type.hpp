@@ -250,6 +250,13 @@ enum class SyncAllMode : uint8_t
     Soft = 1,
 };
 
+enum class SyncCoreType : uint8_t
+{
+    AIVOnly = 0,
+    AICOnly = 1,
+    Mix = 2,
+};
+
 constexpr uint16_t SYNC_AIC_FLAG = 11;
 constexpr uint16_t SYNC_AIV_FLAG = 12;
 constexpr uint16_t SYNC_AIC_AIV_FLAG = 13;

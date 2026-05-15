@@ -17,6 +17,7 @@ namespace pto {
 namespace detail {
 constexpr uint16_t PTO_META_F_TYPE_KTYPE = 1;
 constexpr uint16_t PTO_META_F_TYPE_MIX_TASK_RATION = 3;
+constexpr uint32_t PTO_META_K_TYPE_AIC_ONLY = 1;
 constexpr uint32_t PTO_META_K_TYPE_MIX_AIC_MAIN = 4;
 constexpr uint32_t PTO_META_K_TYPE_MIX_AIV_MAIN = 5;
 
@@ -56,5 +57,11 @@ struct PtoMetaFunLevelMixCoreType {
         __attribute__((used, section(".ascend.meta." #kernelName))) = {                                                \
             {{::pto::detail::PTO_META_F_TYPE_KTYPE, sizeof(uint32_t)}, ::pto::detail::PTO_META_K_TYPE_MIX_AIC_MAIN},   \
             {{::pto::detail::PTO_META_F_TYPE_MIX_TASK_RATION, sizeof(uint32_t)}, aicRatio, aivRatio}}
+
+#define PTO_SYNCALL_AIC_KERNEL_META(kernelName)                                                                    \
+    static const ::pto::detail::PtoMetaFunLevelMixCoreType PTO_DETAIL_CONCAT(g_pto_syncall_aic_meta_, __COUNTER__) \
+        __attribute__((used, section(".ascend.meta." #kernelName))) = {                                            \
+            {{::pto::detail::PTO_META_F_TYPE_KTYPE, sizeof(uint32_t)}, ::pto::detail::PTO_META_K_TYPE_AIC_ONLY},   \
+            {{::pto::detail::PTO_META_F_TYPE_MIX_TASK_RATION, sizeof(uint32_t)}, 1, 0}}
 
 #endif
