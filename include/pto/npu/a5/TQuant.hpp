@@ -34,6 +34,18 @@ enum class QuantScaleAlg
     NV
 };
 
+struct NvMxFp8E4M3Spec {
+    static constexpr float descaleMultiplier = 1.0f / 448.0f;
+    static constexpr uint32_t b16SpecialScaleBits = 0x7F81u;
+    static constexpr uint32_t f32SpecialScaleBits = 0x7FC00000u;
+};
+
+struct NvMxFp4E2M1Spec {
+    static constexpr float descaleMultiplier = 1.0f / 6.0f;
+    static constexpr uint32_t b16SpecialScaleBits = 0x7FC0u;
+    static constexpr uint32_t f32SpecialScaleBits = 0x7FC00000u;
+};
+
 // Helper alias: creates a 1D flat tile from a 2D tile's total element count.
 template <typename TileData>
 using FlatTile1D = Tile<TileType::Vec, typename TileData::DType, 1, TileData::Rows * TileData::Cols, BLayout::RowMajor,
@@ -370,8 +382,7 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_2D(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr,
             uint32_t remaining = (srcCols > col_offset) ? (srcCols - col_offset) : 0;
             if (remaining > elements_per_dintlv)
                 remaining = elements_per_dintlv;
-            AbsReduceMax_b16_DintlvWindow<T, fp16AsBf16ForMax>(srcPtr, src_row_off + col_offset, remaining,
-                                                               vb16_max_1);
+            AbsReduceMax_b16_DintlvWindow<T, fp16AsBf16ForMax>(srcPtr, src_row_off + col_offset, remaining, vb16_max_1);
             // Clamp store width to the groups actually present in this row; writing a
             // full grps_per_dintlv (=8) would overshoot into the next row's max slots
             // when groupsPerRow < 8 (e.g. srcCols=32 → 1 group/row).
@@ -444,36 +455,38 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling(__ubuf__ float *maxPtr, __ubuf__ u
     }
 }
 
-// NVIDIA MXFP8 scale algorithm:
-// shared_exp = ceil(log2(max_abs / 448)) + fp32_bias, with exact-power cases kept
+// NVIDIA MX scale algorithm:
+// shared_exp = ceil(log2(max_abs * descaleMultiplier)) + fp32_bias, with exact-power cases kept
 // unrounded. The stored reciprocal scale remains 2^(254 - shared_exp).
-template <bool unroll = false>
-PTO_INTERNAL void ExtractB8ExponentAndScalingNV(__ubuf__ float *maxPtr, __ubuf__ uint8_t *expPtr,
-                                                __ubuf__ float *scalingPtr, unsigned exp_max_loop_count,
-                                                unsigned total_elements_count, unsigned elementsPerRepeat)
+template <typename NvFormatSpec, bool unroll = false>
+PTO_INTERNAL void ExtractNVExponentAndScalingF32(__ubuf__ float *maxPtr, __ubuf__ uint8_t *expPtr,
+                                                 __ubuf__ float *scalingPtr, unsigned exp_max_loop_count,
+                                                 unsigned total_elements_count, unsigned elementsPerRepeat)
 {
     static constexpr auto distValue =
         std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<float, DistVST::DIST_NORM>())>();
+    constexpr float descaleMultiplier = NvFormatSpec::descaleMultiplier;
+    constexpr uint32_t f32SpecialScaleBits = NvFormatSpec::f32SpecialScaleBits;
     vector_f32 vb32_max;
     vector_s32 vb32_exponent, vb32_mantissa, vb32_shared_exp, vb32_shared_exp_inc, vb32_scaling;
-    vector_s32 vb32_b8_nan, vb32_f32_nan, vb32_exp_mask, vb32_mantissa_mask, vb32_exp_max, vb32_zero;
+    vector_s32 vb32_b8_nan, vb32_b8_exp_fe, vb32_f32_nan, vb32_f32_min_rcp;
+    vector_s32 vb32_exp_mask, vb32_mantissa_mask;
     constexpr int shr = 23;
     vbr(vb32_exp_mask, 0x7F800000);
     vbr(vb32_mantissa_mask, 0x007FFFFF);
     vbr(vb32_b8_nan, 0xFF);
-    vbr(vb32_f32_nan, 0x7FC00000);
-    vbr(vb32_exp_max, 0xFE);
-    vbr(vb32_zero, 0);
-    vector_bool preg_special, preg_round_normal, preg_round_subnormal, preg_round_up;
-    vector_bool preg_exp_gt_zero, preg_exp_lt_max, preg_exp_eq_zero, preg_mant_gt_zero;
-    vector_bool preg_mant_gt_half_subnormal, preg_zero;
+    vbr(vb32_b8_exp_fe, 0xFE);
+    vbr(vb32_f32_nan, f32SpecialScaleBits);
+    vbr(vb32_f32_min_rcp, 0x00400000);
+    vector_bool preg_exp_ff, preg_inf, preg_nan, preg_round_normal, preg_round_subnormal, preg_round_up;
+    vector_bool preg_exp_gt_zero, preg_exp_lt_max, preg_exp_eq_zero, preg_mant_gt_zero, preg_mant_eq_zero;
+    vector_bool preg_mant_gt_half_subnormal;
     uint32_t total_count = total_elements_count;
     uint32_t scaling_elem_count = total_elements_count * 2;
     for (uint16_t i = 0; i < (uint16_t)exp_max_loop_count; ++i) {
         vector_bool preg_b32 = CreatePredicate<float>(total_count);
         vlds((vector_s32 &)vb32_max, (__ubuf__ int32_t *)maxPtr, i * elementsPerRepeat, NORM);
-        vcmps_eq(preg_zero, (vector_s32 &)vb32_max, 0, preg_b32);
-        vmuls(vb32_max, vb32_max, 1.0f / 448.0f, preg_b32, MODE_ZEROING);
+        vmuls(vb32_max, vb32_max, descaleMultiplier, preg_b32, MODE_ZEROING);
         vand(vb32_exponent, (vector_s32 &)vb32_max, vb32_exp_mask, preg_b32, MODE_ZEROING);
         vand(vb32_mantissa, (vector_s32 &)vb32_max, vb32_mantissa_mask, preg_b32, MODE_ZEROING);
         vshrs(vb32_exponent, vb32_exponent, shr, preg_b32, MODE_ZEROING);
@@ -491,27 +504,39 @@ PTO_INTERNAL void ExtractB8ExponentAndScalingNV(__ubuf__ float *maxPtr, __ubuf__
         por(preg_round_up, preg_round_normal, preg_round_subnormal, preg_b32);
         vsel(vb32_shared_exp, vb32_shared_exp_inc, vb32_shared_exp, preg_round_up);
 
-        vsub(vb32_scaling, vb32_exp_max, vb32_shared_exp, preg_b32);
+        vsub(vb32_scaling, vb32_b8_exp_fe, vb32_shared_exp, preg_b32);
         vshls((vector_u32 &)vb32_scaling, (vector_u32 &)vb32_scaling, shr, preg_b32, MODE_ZEROING);
-        vsel(vb32_scaling, vb32_zero, vb32_scaling, preg_zero);
 
-        vcmps_eq(preg_special, vb32_exponent, 0xFF, preg_b32);
-        vsel(vb32_scaling, vb32_f32_nan, vb32_scaling, preg_special);
-        vsel(vb32_shared_exp, vb32_b8_nan, vb32_shared_exp, preg_special);
+        vcmps_eq(preg_exp_ff, vb32_exponent, 0xFF, preg_b32);
+        pnot(preg_mant_eq_zero, preg_mant_gt_zero, preg_b32);
+        pand(preg_inf, preg_exp_ff, preg_mant_eq_zero, preg_b32);
+        pand(preg_nan, preg_exp_ff, preg_mant_gt_zero, preg_b32);
+        vsel(vb32_scaling, vb32_f32_min_rcp, vb32_scaling, preg_inf);
+        vsel(vb32_shared_exp, vb32_b8_exp_fe, vb32_shared_exp, preg_inf);
+        vsel(vb32_scaling, vb32_f32_nan, vb32_scaling, preg_nan);
+        vsel(vb32_shared_exp, vb32_b8_nan, vb32_shared_exp, preg_nan);
         vsts((vector_s32 &)vb32_shared_exp, ((__ubuf__ int32_t *)expPtr), i * elementsPerRepeat / 4, PK4_B32, preg_b32);
         if constexpr (unroll) {
             vector_s32 vb32_scaling_0, vb32_scaling_1;
             vintlv(vb32_scaling_0, vb32_scaling_1, vb32_scaling, vb32_scaling);
             MaskReg preg_scaling_0 = CreatePredicate<float>(scaling_elem_count);
             MaskReg preg_scaling_1 = CreatePredicate<float>(scaling_elem_count);
-            vsts(vb32_scaling_0, ((__ubuf__ int32_t *)scalingPtr), 2 * i * elementsPerRepeat, NORM_B32,
-                 preg_scaling_0);
+            vsts(vb32_scaling_0, ((__ubuf__ int32_t *)scalingPtr), 2 * i * elementsPerRepeat, NORM_B32, preg_scaling_0);
             vsts(vb32_scaling_1, ((__ubuf__ int32_t *)scalingPtr + 64), 2 * i * elementsPerRepeat, NORM_B32,
                  preg_scaling_1);
         } else {
             vsts(vb32_scaling, ((__ubuf__ int32_t *)scalingPtr), i * elementsPerRepeat, distValue, preg_b32);
         }
     }
+}
+
+template <bool unroll = false>
+PTO_INTERNAL void ExtractB8ExponentAndScalingNV(__ubuf__ float *maxPtr, __ubuf__ uint8_t *expPtr,
+                                                __ubuf__ float *scalingPtr, unsigned exp_max_loop_count,
+                                                unsigned total_elements_count, unsigned elementsPerRepeat)
+{
+    ExtractNVExponentAndScalingF32<NvMxFp8E4M3Spec, unroll>(maxPtr, expPtr, scalingPtr, exp_max_loop_count,
+                                                            total_elements_count, elementsPerRepeat);
 }
 
 // B16 (BF16/FP16) -> FP8 shared-exponent + BF16 reciprocal scaling for MXFP8.
@@ -600,27 +625,30 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling(__ubuf__ T *maxPtr, __ubuf__ uint8
  *      指数位为 0
  *      这个时候看尾数的  40 00 00
  */
-template <typename T>
-PTO_INTERNAL void ExtractB8ExponentAndScalingNV(__ubuf__ T *maxPtr, __ubuf__ uint8_t *expPtr, __ubuf__ T *scalingPtr,
-                                                unsigned /*exp_max_loop_count*/, unsigned total_elements_count)
+template <typename T, typename NvFormatSpec>
+PTO_INTERNAL void ExtractNVExponentAndScalingB16(__ubuf__ T *maxPtr, __ubuf__ uint8_t *expPtr, __ubuf__ T *scalingPtr,
+                                                 unsigned total_elements_count)
 {
     static_assert(std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
-                  "ExtractB8ExponentAndScalingNV B16: T must be bfloat16_t or half");
+                  "ExtractNVExponentAndScalingB16: T must be bfloat16_t or half");
+    constexpr float descaleMultiplier = NvFormatSpec::descaleMultiplier;
+    constexpr uint32_t b16SpecialScaleBits = NvFormatSpec::b16SpecialScaleBits;
     RegTensor<T> vb16_max;
     vector_f32 vb32_max;
     vector_s32 vb32_exponent, vb32_mantissa, vb32_shared_exp, vb32_shared_exp_inc, vb32_bf16_scale_bits;
-    vector_s32 vb32_b8_nan, vb32_bf16_nan, vb32_exp_mask, vb32_mantissa_mask, vb32_exp_max, vb32_zero;
+    vector_s32 vb32_exp_nan, vb32_bf16_nan, vb32_bf16_min_rcp;
+    vector_s32 vb32_exp_mask, vb32_mantissa_mask, vb32_exp_max;
     constexpr int f32ExpShift = 23;
     constexpr int bf16ExpShift = 7;
     vbr(vb32_exp_mask, 0x7F800000);
     vbr(vb32_mantissa_mask, 0x007FFFFF);
-    vbr(vb32_b8_nan, 0xFF);
-    vbr(vb32_bf16_nan, 0x7F81);
+    vbr(vb32_exp_nan, 0xFF);
+    vbr(vb32_bf16_nan, b16SpecialScaleBits);
+    vbr(vb32_bf16_min_rcp, 0x0040);
     vbr(vb32_exp_max, 0xFE);
-    vbr(vb32_zero, 0);
-    vector_bool preg_special, preg_round_normal, preg_round_subnormal, preg_round_up;
-    vector_bool preg_exp_gt_zero, preg_exp_lt_max, preg_exp_eq_zero, preg_mant_gt_zero;
-    vector_bool preg_mant_gt_half_subnormal, preg_zero;
+    vector_bool preg_exp_ff, preg_inf, preg_nan, preg_round_normal, preg_round_subnormal, preg_round_up;
+    vector_bool preg_exp_gt_zero, preg_exp_lt_max, preg_exp_eq_zero, preg_mant_gt_zero, preg_mant_eq_zero;
+    vector_bool preg_mant_gt_half_subnormal;
     constexpr uint32_t elementsPerChunk = REPEAT_BYTE / sizeof(float);
     uint16_t loopCount = CeilDivision(total_elements_count, elementsPerChunk);
     for (uint16_t i = 0; i < loopCount; ++i) {
@@ -634,16 +662,15 @@ PTO_INTERNAL void ExtractB8ExponentAndScalingNV(__ubuf__ T *maxPtr, __ubuf__ uin
         MaskReg preg_b32 = CreatePredicate<float>(chunkCountB32);
         vlds(vb16_max, maxPtr, chunkOffset, UNPK_B16);
         vcvt(vb32_max, vb16_max, preg_b16, PART_EVEN);
-        vcmps_eq(preg_zero, (vector_s32 &)vb32_max, 0, preg_b32);
-        vmuls(vb32_max, vb32_max, 1.0f / 448.0f, preg_b32, MODE_ZEROING);
+        vmuls(vb32_max, vb32_max, descaleMultiplier, preg_b32, MODE_ZEROING);
         vand(vb32_exponent, (vector_s32 &)vb32_max, vb32_exp_mask, preg_b32, MODE_ZEROING);
         vand(vb32_mantissa, (vector_s32 &)vb32_max, vb32_mantissa_mask, preg_b32, MODE_ZEROING);
         vshrs(vb32_exponent, vb32_exponent, f32ExpShift, preg_b32, MODE_ZEROING);
 
         vb32_shared_exp = vb32_exponent;
         vadds(vb32_shared_exp_inc, vb32_shared_exp, 1, preg_b32, MODE_ZEROING);
-        vcmps_ne(preg_mant_gt_zero, vb32_mantissa, 0, preg_b32);// 不为0
-        vcmps_gt(preg_exp_gt_zero, vb32_exponent, 0, preg_b32);// 正规数
+        vcmps_ne(preg_mant_gt_zero, vb32_mantissa, 0, preg_b32); // 不为0
+        vcmps_gt(preg_exp_gt_zero, vb32_exponent, 0, preg_b32);  // 正规数
         vcmps_lt(preg_exp_lt_max, vb32_exponent, 0xFE, preg_b32);
         vcmps_eq(preg_exp_eq_zero, vb32_exponent, 0, preg_b32);
         pand(preg_round_normal, preg_mant_gt_zero, preg_exp_gt_zero, preg_b32);
@@ -659,14 +686,26 @@ PTO_INTERNAL void ExtractB8ExponentAndScalingNV(__ubuf__ T *maxPtr, __ubuf__ uin
         vsub(vb32_bf16_scale_bits, vb32_exp_max, vb32_shared_exp, preg_b32);
         vshls((vector_u32 &)vb32_bf16_scale_bits, (vector_u32 &)vb32_bf16_scale_bits, bf16ExpShift, preg_b32,
               MODE_ZEROING);
-        vsel(vb32_bf16_scale_bits, vb32_zero, vb32_bf16_scale_bits, preg_zero);
-        vcmps_eq(preg_special, vb32_exponent, 0xFF, preg_b32);
-        vsel(vb32_bf16_scale_bits, vb32_bf16_nan, vb32_bf16_scale_bits, preg_special);
-        vsel(vb32_shared_exp, vb32_b8_nan, vb32_shared_exp, preg_special);
+
+        vcmps_eq(preg_exp_ff, vb32_exponent, 0xFF, preg_b32);
+        pnot(preg_mant_eq_zero, preg_mant_gt_zero, preg_b32);
+        pand(preg_inf, preg_exp_ff, preg_mant_eq_zero, preg_b32);
+        pand(preg_nan, preg_exp_ff, preg_mant_gt_zero, preg_b32);
+        vsel(vb32_bf16_scale_bits, vb32_bf16_min_rcp, vb32_bf16_scale_bits, preg_inf);
+        vsel(vb32_shared_exp, vb32_exp_max, vb32_shared_exp, preg_inf);
+        vsel(vb32_bf16_scale_bits, vb32_bf16_nan, vb32_bf16_scale_bits, preg_nan);
+        vsel(vb32_shared_exp, vb32_exp_nan, vb32_shared_exp, preg_nan);
 
         vsts(vb32_shared_exp, ((__ubuf__ int32_t *)expPtr), chunkOffset / 4, PK4_B32, preg_b32);
         vsts((vector_u16 &)vb32_bf16_scale_bits, (__ubuf__ uint16_t *)scalingPtr, chunkOffset, PK_B32, preg_b32);
     }
+}
+
+template <typename T>
+PTO_INTERNAL void ExtractB8ExponentAndScalingNV(__ubuf__ T *maxPtr, __ubuf__ uint8_t *expPtr, __ubuf__ T *scalingPtr,
+                                                unsigned /*exp_max_loop_count*/, unsigned total_elements_count)
+{
+    ExtractNVExponentAndScalingB16<T, NvMxFp8E4M3Spec>(maxPtr, expPtr, scalingPtr, total_elements_count);
 }
 
 template <typename T>
@@ -731,6 +770,13 @@ PTO_INTERNAL void ExtractE2M1ExponentAndScaling(__ubuf__ T *maxPtr, __ubuf__ uin
             rem = elementsPerVL;
         ExtractE2M1ExponentAndScalingVL<T>(maxPtr, expPtr, scalingPtr, off, rem);
     }
+}
+
+template <typename T>
+PTO_INTERNAL void ExtractE2M1ExponentAndScalingNV(__ubuf__ T *maxPtr, __ubuf__ uint8_t *expPtr, __ubuf__ T *scalingPtr,
+                                                  unsigned /*exp_max_loop_count*/, unsigned total_elements_count)
+{
+    ExtractNVExponentAndScalingB16<T, NvMxFp4E2M1Spec>(maxPtr, expPtr, scalingPtr, total_elements_count);
 }
 
 // 2D variant of ExtractB8ExponentAndScaling for the padded (validCols != srcCols) path.
@@ -1278,7 +1324,7 @@ PTO_INTERNAL void TQuant_MXFP8_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *expPtr,
     }
 }
 
-template <typename T>
+template <QuantScaleAlg scale_alg, typename T>
 PTO_INTERNAL void TQuant_MXFP4_E2M1_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *expPtr, __ubuf__ uint8_t *dstPtr,
                                         __ubuf__ T *maxPtr, __ubuf__ T *scalingPtr, uint16_t vl_count,
                                         unsigned exp_loop_count, uint32_t numGroups, uint32_t total_elements_count,
@@ -1291,16 +1337,29 @@ PTO_INTERNAL void TQuant_MXFP4_E2M1_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *ex
         // 1D fast path: source is contiguous; keep the reducer selection aligned with MXFP8 FP16.
         constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T);
         constexpr uint32_t elementsPerLargeLoop = 32 * elementsPerVL;
-        if (total_elements_count % elementsPerLargeLoop == 0)
-            AbsReduceMax_b16_ND_largesizes(srcPtr, maxPtr, vl_count, total_elements_count);
+        if constexpr (scale_alg == QuantScaleAlg::NV && std::is_same<T, half>::value) {
+            if (total_elements_count % elementsPerLargeLoop == 0)
+                AbsReduceMax_b16_ND_largesizes<T, false>(srcPtr, maxPtr, vl_count, total_elements_count);
+            else
+                AbsReduceMax_b16_ND<T, false>(srcPtr, maxPtr, vl_count, total_elements_count);
+        } else {
+            if (total_elements_count % elementsPerLargeLoop == 0)
+                AbsReduceMax_b16_ND_largesizes(srcPtr, maxPtr, vl_count, total_elements_count);
+            else
+                AbsReduceMax_b16_ND(srcPtr, maxPtr, vl_count, total_elements_count);
+        }
+    } else {
+        if constexpr (scale_alg == QuantScaleAlg::NV && std::is_same<T, half>::value)
+            AbsReduceMax_b16_ND<T, false>(srcPtr, maxPtr, vl_count, total_elements_count);
         else
             AbsReduceMax_b16_ND(srcPtr, maxPtr, vl_count, total_elements_count);
-    } else {
-        AbsReduceMax_b16_ND(srcPtr, maxPtr, vl_count, total_elements_count);
     }
     mem_bar(VST_VLD);
     maxPtr = maxPtr_backup;
-    ExtractE2M1ExponentAndScaling(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups);
+    if constexpr (scale_alg == QuantScaleAlg::NV)
+        ExtractE2M1ExponentAndScalingNV(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups);
+    else
+        ExtractE2M1ExponentAndScaling(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups);
     mem_bar(VST_VLD);
     if constexpr (std::is_same<T, half>::value)
         CalcQuantizedFP4E2M1Values_Half(srcPtr, scalingPtr, dstPtr, numGroups);
@@ -1393,8 +1452,8 @@ PTO_INTERNAL void ZeroPadSourceTile(__ubuf__ T *srcPtr, unsigned validRows, unsi
 }
 
 // TQuant: FP32/BF16/FP16 -> MXFP8 (e4m3) quantization, ND mode only.
-template <QuantScaleAlg scale_alg, typename TileDataOut, typename TileDataSrc, typename TileDataExp, typename TileDataMax,
-          typename TileDataScaling>
+template <QuantScaleAlg scale_alg, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
+          typename TileDataMax, typename TileDataScaling>
 __tf__ PTO_INTERNAL void TQuant_MXFP8_Impl(typename TileDataOut::TileDType __out__ dst,
                                            typename TileDataExp::TileDType __out__ exp,
                                            typename TileDataMax::TileDType __out__ max,
@@ -1433,8 +1492,8 @@ __tf__ PTO_INTERNAL void TQuant_MXFP8_Impl(typename TileDataOut::TileDType __out
     }
 }
 
-template <typename TileDataOut, typename TileDataSrc, typename TileDataExp, typename TileDataMax,
-          typename TileDataScaling>
+template <QuantScaleAlg scale_alg, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
+          typename TileDataMax, typename TileDataScaling>
 __tf__ PTO_INTERNAL void TQuant_MXFP4_E2M1_Impl(typename TileDataOut::TileDType __out__ dst,
                                                 typename TileDataExp::TileDType __out__ exp,
                                                 typename TileDataMax::TileDType __out__ max,
@@ -1465,8 +1524,9 @@ __tf__ PTO_INTERNAL void TQuant_MXFP4_E2M1_Impl(typename TileDataOut::TileDType 
         uint16_t vlCount = CeilDivision(totalElems, elemPerVL);
         uint32_t numGroups = totalElems / 32;
         unsigned expLoopCount = CeilDivision(numGroups, elemPerVL);
-        TQuant_MXFP4_E2M1_B16(srcPtr, (__ubuf__ uint8_t *)expPtr, (__ubuf__ uint8_t *)dstPtr, maxPtr, scalingPtr,
-                              vlCount, expLoopCount, numGroups, totalElems, validCols, (unsigned)TileDataSrc::Cols);
+        TQuant_MXFP4_E2M1_B16<scale_alg>(srcPtr, (__ubuf__ uint8_t *)expPtr, (__ubuf__ uint8_t *)dstPtr, maxPtr,
+                                         scalingPtr, vlCount, expLoopCount, numGroups, totalElems, validCols,
+                                         (unsigned)TileDataSrc::Cols);
     }
 }
 
@@ -1605,10 +1665,10 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
             dst.data(), flatExp.data(), flatMax.data(), flatScaling.data(), src.data(), src.GetValidRow(),
             src.GetValidCol());
     } else {
-        TQuant_MXFP4_E2M1_Impl<TileDataOut, TileDataSrc, FlatTile1D<TileDataExp>, FlatTile1D<TileDataMax>,
-                               FlatTile1D<TileDataScaling>>(dst.data(), flatExp.data(), flatMax.data(),
-                                                            flatScaling.data(), src.data(), src.GetValidRow(),
-                                                            src.GetValidCol());
+        TQuant_MXFP4_E2M1_Impl<QuantScaleAlg::OCP, TileDataOut, TileDataSrc, FlatTile1D<TileDataExp>,
+                               FlatTile1D<TileDataMax>, FlatTile1D<TileDataScaling>>(
+            dst.data(), flatExp.data(), flatMax.data(), flatScaling.data(), src.data(), src.GetValidRow(),
+            src.GetValidCol());
     }
     // Reshape exp back to user's original tile shape. Max and scaling are scratch buffers.
     TRESHAPE_IMPL(*exp, flatExp);
@@ -1620,10 +1680,18 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
                               TileDataScaling *scaling)
 {
     using T = typename TileDataSrc::DType;
-    static_assert(quant_type == QuantType::MXFP8, "Fix: scale algorithm overload supports MXFP8 only.");
-    static_assert(std::is_same<T, float32_t>::value || std::is_same<T, bfloat16_t>::value ||
-                      std::is_same<T, half>::value,
-                  "Fix: MXFP8 input has to be float32, bfloat16, or float16 (half)");
+    static_assert(quant_type == QuantType::MXFP8 || quant_type == QuantType::MXFP4_E2M1,
+                  "Fix: scale algorithm overload supports MXFP8/MXFP4_E2M1.");
+    if constexpr (quant_type == QuantType::MXFP8) {
+        static_assert(
+            std::is_same<T, float32_t>::value || std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
+            "Fix: MXFP8 input has to be float32, bfloat16, or float16 (half)");
+    } else {
+        static_assert(std::is_same<T, half>::value || std::is_same<T, bfloat16_t>::value,
+                      "Fix: MXFP4_E2M1 input has to be float16 (half) or bfloat16");
+        static_assert(std::is_same<typename TileDataOut::DType, float4_e2m1x2_t>::value,
+                      "Fix: MXFP4_E2M1 output has to be float4_e2m1x2_t");
+    }
 
     constexpr int expN = TileDataExp::Rows * TileDataExp::Cols;
     FlatTile1D<TileDataExp> flatExp(1, expN);
@@ -1635,9 +1703,16 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
     FlatTile1D<TileDataScaling> flatScaling(1, scalN);
     TRESHAPE_IMPL(flatScaling, *scaling);
 
-    TQuant_MXFP8_Impl<scale_alg, TileDataOut, TileDataSrc, FlatTile1D<TileDataExp>, FlatTile1D<TileDataMax>,
-                      FlatTile1D<TileDataScaling>>(dst.data(), flatExp.data(), flatMax.data(), flatScaling.data(),
-                                                   src.data(), src.GetValidRow(), src.GetValidCol());
+    if constexpr (quant_type == QuantType::MXFP8) {
+        TQuant_MXFP8_Impl<scale_alg, TileDataOut, TileDataSrc, FlatTile1D<TileDataExp>, FlatTile1D<TileDataMax>,
+                          FlatTile1D<TileDataScaling>>(dst.data(), flatExp.data(), flatMax.data(), flatScaling.data(),
+                                                       src.data(), src.GetValidRow(), src.GetValidCol());
+    } else {
+        TQuant_MXFP4_E2M1_Impl<scale_alg, TileDataOut, TileDataSrc, FlatTile1D<TileDataExp>, FlatTile1D<TileDataMax>,
+                               FlatTile1D<TileDataScaling>>(dst.data(), flatExp.data(), flatMax.data(),
+                                                            flatScaling.data(), src.data(), src.GetValidRow(),
+                                                            src.GetValidCol());
+    }
     TRESHAPE_IMPL(*exp, flatExp);
 }
 } // namespace pto

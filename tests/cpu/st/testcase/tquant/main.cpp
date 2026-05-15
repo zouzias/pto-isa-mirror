@@ -30,43 +30,6 @@ uint32_t FloatToBits(float value)
     return std::bit_cast<uint32_t>(value);
 }
 
-uint8_t ComputeNvExponent(float maxAbs)
-{
-    if (maxAbs == 0.0f) {
-        return 0;
-    }
-    const float descale = maxAbs * (1.0f / 448.0f);
-    const uint32_t bits = FloatToBits(descale);
-    const uint32_t exponent = (bits & 0x7F800000u) >> 23;
-    const uint32_t mantissa = bits & 0x007FFFFFu;
-    if (exponent == 0xFFu) {
-        return 0xFFu;
-    }
-    const bool roundUp = mantissa > 0u && exponent != 0xFEu && !(exponent == 0u && mantissa <= 0x00400000u);
-    return static_cast<uint8_t>(exponent + (roundUp ? 1u : 0u));
-}
-
-uint8_t ComputeOcpExponent(float maxAbs)
-{
-    const uint32_t bits = FloatToBits(maxAbs);
-    const uint32_t exponent = (bits & 0x7F800000u) >> 23;
-    if (exponent == 0xFFu) {
-        return 0xFFu;
-    }
-    if (exponent <= 8u) {
-        return 0;
-    }
-    return static_cast<uint8_t>(exponent - 8u);
-}
-
-float ScalingFromE8M0(uint8_t e8m0)
-{
-    if (e8m0 == 0xFFu) {
-        return std::numeric_limits<float>::quiet_NaN();
-    }
-    return BitsToFloat((254u - static_cast<uint32_t>(e8m0)) << 23);
-}
-
 uint8_t DecodeCandidateCode(uint8_t code, float &value)
 {
     const int sign = (code & 0x80u) ? -1 : 1;
@@ -180,10 +143,9 @@ void ExpectMxFp8Result(SrcTile &src, DstTile &dst, ExpTile &exp, MaxTile &max, S
                     static_cast<float>(src.data()[GetTileElementOffset<SrcTile>(row, group * 32 + inner)]);
                 maxAbs = std::max(maxAbs, std::fabs(value));
             }
-            const uint8_t expectedExp =
-                scaleAlg == QuantScaleAlg::NV ? ComputeNvExponent(maxAbs) : ComputeOcpExponent(maxAbs);
+            const uint8_t expectedExp = cpu_quant::ComputeMxSharedExponent<QuantType::MXFP8, scaleAlg>(maxAbs);
             const float expectedScaling =
-                (scaleAlg == QuantScaleAlg::NV && maxAbs == 0.0f) ? 0.0f : ScalingFromE8M0(expectedExp);
+                cpu_quant::ComputeMxGroupScaling<QuantType::MXFP8, scaleAlg>(maxAbs, expectedExp);
             const int flatGroupIdx = row * (src.GetValidCol() / 32) + group;
             EXPECT_EQ(exp.data()[flatGroupIdx], expectedExp);
             EXPECT_FLOAT_EQ(max.data()[flatGroupIdx], maxAbs);
@@ -365,8 +327,9 @@ TEST(TQuantCpuSimTest, MxFp8NvNdMatchesDescaleRceil)
         for (int col = 0; col < 32; ++col) {
             maxAbs = std::max(maxAbs, std::fabs(src.data()[GetTileElementOffset<SrcTile>(row, col)]));
         }
-        const uint8_t expectedExp = ComputeNvExponent(maxAbs);
-        const float expectedScaling = (maxAbs == 0.0f) ? 0.0f : ScalingFromE8M0(expectedExp);
+        const uint8_t expectedExp = cpu_quant::ComputeMxSharedExponent<QuantType::MXFP8, QuantScaleAlg::NV>(maxAbs);
+        const float expectedScaling =
+            cpu_quant::ComputeMxGroupScaling<QuantType::MXFP8, QuantScaleAlg::NV>(maxAbs, expectedExp);
         EXPECT_EQ(exp.data()[row], expectedExp);
         EXPECT_FLOAT_EQ(max.data()[row], maxAbs);
         for (int col = 0; col < 32; ++col) {
@@ -376,6 +339,59 @@ TEST(TQuantCpuSimTest, MxFp8NvNdMatchesDescaleRceil)
             EXPECT_EQ(static_cast<uint8_t>(dst.data()[GetTileElementOffset<DstTile>(row, col)]), expectedByte);
         }
     }
+}
+
+TEST(TQuantCpuSimTest, MxFpNvExponentScalingEdges)
+{
+    const float inf = std::numeric_limits<float>::infinity();
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+
+    const uint8_t fp4InfExp = cpu_quant::ComputeMxSharedExponent<QuantType::MXFP4_E2M1, QuantScaleAlg::NV>(inf);
+    EXPECT_EQ(fp4InfExp, 0xFEu);
+    EXPECT_FLOAT_EQ((cpu_quant::ComputeMxGroupScaling<QuantType::MXFP4_E2M1, QuantScaleAlg::NV>(inf, fp4InfExp)),
+                    std::ldexp(1.0f, -127));
+
+    const uint8_t fp4ZeroExp = cpu_quant::ComputeMxSharedExponent<QuantType::MXFP4_E2M1, QuantScaleAlg::NV>(0.0f);
+    EXPECT_EQ(fp4ZeroExp, 0u);
+    EXPECT_FLOAT_EQ((cpu_quant::ComputeMxGroupScaling<QuantType::MXFP4_E2M1, QuantScaleAlg::NV>(0.0f, fp4ZeroExp)),
+                    std::ldexp(1.0f, 127));
+
+    const uint8_t fp4NanExp = cpu_quant::ComputeMxSharedExponent<QuantType::MXFP4_E2M1, QuantScaleAlg::NV>(nan);
+    EXPECT_EQ(fp4NanExp, 0xFFu);
+    EXPECT_TRUE(std::isnan(cpu_quant::ComputeMxGroupScaling<QuantType::MXFP4_E2M1, QuantScaleAlg::NV>(nan, fp4NanExp)));
+
+    const uint8_t fp8InfExp = cpu_quant::ComputeMxSharedExponent<QuantType::MXFP8, QuantScaleAlg::NV>(inf);
+    EXPECT_EQ(fp8InfExp, 0xFEu);
+    EXPECT_FLOAT_EQ((cpu_quant::ComputeMxGroupScaling<QuantType::MXFP8, QuantScaleAlg::NV>(inf, fp8InfExp)),
+                    std::ldexp(1.0f, -127));
+}
+
+TEST(TQuantCpuSimTest, MxFpOcpExponentScalingInfEdges)
+{
+    const float inf = std::numeric_limits<float>::infinity();
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+
+    const uint8_t fp4InfExp = cpu_quant::ComputeMxSharedExponent<QuantType::MXFP4_E2M1, QuantScaleAlg::OCP>(inf);
+    EXPECT_EQ(fp4InfExp, 0xFDu);
+    const float fp4InfScaling =
+        cpu_quant::ComputeMxGroupScaling<QuantType::MXFP4_E2M1, QuantScaleAlg::OCP>(inf, fp4InfExp);
+    EXPECT_FLOAT_EQ(fp4InfScaling, std::ldexp(1.0f, -126));
+    EXPECT_EQ(cpu_quant::EncodeE2M1Magic(inf * fp4InfScaling), 0x7u);
+    EXPECT_EQ(cpu_quant::EncodeE2M1Magic(-inf * fp4InfScaling), 0xFu);
+
+    const uint8_t fp4NanExp = cpu_quant::ComputeMxSharedExponent<QuantType::MXFP4_E2M1, QuantScaleAlg::OCP>(nan);
+    EXPECT_EQ(fp4NanExp, 0xFFu);
+    EXPECT_TRUE(
+        std::isnan(cpu_quant::ComputeMxGroupScaling<QuantType::MXFP4_E2M1, QuantScaleAlg::OCP>(nan, fp4NanExp)));
+
+    const uint8_t fp8InfExp = cpu_quant::ComputeMxSharedExponent<QuantType::MXFP8, QuantScaleAlg::OCP>(inf);
+    EXPECT_EQ(fp8InfExp, 0xF7u);
+    EXPECT_FLOAT_EQ((cpu_quant::ComputeMxGroupScaling<QuantType::MXFP8, QuantScaleAlg::OCP>(inf, fp8InfExp)),
+                    std::ldexp(1.0f, -120));
+
+    const uint8_t fp8NanExp = cpu_quant::ComputeMxSharedExponent<QuantType::MXFP8, QuantScaleAlg::OCP>(nan);
+    EXPECT_EQ(fp8NanExp, 0xFFu);
+    EXPECT_TRUE(std::isnan(cpu_quant::ComputeMxGroupScaling<QuantType::MXFP8, QuantScaleAlg::OCP>(nan, fp8NanExp)));
 }
 
 template <typename SrcT, QuantScaleAlg scaleAlg>
@@ -570,16 +586,24 @@ void FillMxFp4Source(SrcTile &src, MxFp4Case caseId)
     }
 }
 
-template <typename SrcTile>
-uint16_t ComputeMxFp4MaxBits(SrcTile &src, int row, int group)
+template <QuantScaleAlg scaleAlg, typename SrcTile>
+float ComputeMxFp4Max(SrcTile &src, int row, int group)
 {
+    float maxAbsValue = 0.0f;
     uint16_t maxAbsBf16Bits = 0;
     for (int inner = 0; inner < 32; ++inner) {
         const int col = group * 32 + inner;
         const float value = static_cast<float>(src.data()[GetTileElementOffset<SrcTile>(row, col)]);
-        maxAbsBf16Bits = std::max(maxAbsBf16Bits, cpu_quant::AbsBf16BitsFromFloat(value));
+        if constexpr (scaleAlg == QuantScaleAlg::NV) {
+            maxAbsValue = std::max(maxAbsValue, std::fabs(value));
+        } else {
+            maxAbsBf16Bits = std::max(maxAbsBf16Bits, cpu_quant::AbsBf16BitsFromFloat(value));
+        }
     }
-    return maxAbsBf16Bits;
+    if constexpr (scaleAlg == QuantScaleAlg::OCP) {
+        maxAbsValue = cpu_quant::Bf16BitsToFloat(maxAbsBf16Bits);
+    }
+    return maxAbsValue;
 }
 
 template <typename SrcTile, typename DstTile>
@@ -597,16 +621,18 @@ void ExpectMxFp4PackedBytes(SrcTile &src, const uint8_t *dstBytes, int row, int 
     }
 }
 
-template <typename SrcTile, typename DstTile, typename ExpTile, typename MaxTile>
+template <QuantScaleAlg scaleAlg, typename SrcTile, typename DstTile, typename ExpTile, typename MaxTile>
 void ExpectMxFp4Result(SrcTile &src, DstTile &dst, ExpTile &exp, MaxTile &max, MaxTile &scaling)
 {
     constexpr int groupCols = SrcTile::Cols / 32;
     const auto *dstBytes = reinterpret_cast<const uint8_t *>(dst.data());
     for (int row = 0; row < SrcTile::Rows; ++row) {
         for (int group = 0; group < groupCols; ++group) {
-            const float expectedMax = cpu_quant::Bf16BitsToFloat(ComputeMxFp4MaxBits(src, row, group));
-            const uint8_t expectedExp = cpu_quant::ComputeE2M1SharedExponent(expectedMax);
-            const float expectedScaling = cpu_quant::ComputeE2M1ScalingFromExponent(expectedExp);
+            const float expectedMax = ComputeMxFp4Max<scaleAlg>(src, row, group);
+            const uint8_t expectedExp =
+                cpu_quant::ComputeMxSharedExponent<QuantType::MXFP4_E2M1, scaleAlg>(expectedMax);
+            const float expectedScaling =
+                cpu_quant::ComputeMxGroupScaling<QuantType::MXFP4_E2M1, scaleAlg>(expectedMax, expectedExp);
             const int flatGroupIdx = row * groupCols + group;
             EXPECT_EQ(exp.data()[flatGroupIdx], expectedExp);
             ExpectFloatEqOrNan(max.data()[flatGroupIdx], expectedMax);
@@ -616,7 +642,7 @@ void ExpectMxFp4Result(SrcTile &src, DstTile &dst, ExpTile &exp, MaxTile &max, M
     }
 }
 
-template <typename SrcT, int validRows = 2, int validCols = 128>
+template <typename SrcT, int validRows = 2, int validCols = 128, QuantScaleAlg scaleAlg = QuantScaleAlg::OCP>
 void RunMxFp4E2M1NdCase(MxFp4Case caseId)
 {
     constexpr int groupCols = validCols / 32;
@@ -635,8 +661,12 @@ void RunMxFp4E2M1NdCase(MxFp4Case caseId)
 
     AssignMxFp4Tiles(src, dst, exp, max, scaling);
     FillMxFp4Source(src, caseId);
-    TQUANT<QuantType::MXFP4_E2M1>(dst, src, &exp, &max, &scaling);
-    ExpectMxFp4Result(src, dst, exp, max, scaling);
+    if constexpr (scaleAlg == QuantScaleAlg::OCP) {
+        TQUANT<QuantType::MXFP4_E2M1>(dst, src, &exp, &max, &scaling);
+    } else {
+        TQUANT<QuantType::MXFP4_E2M1, scaleAlg>(dst, src, &exp, &max, &scaling);
+    }
+    ExpectMxFp4Result<scaleAlg>(src, dst, exp, max, scaling);
 }
 
 void RunMxFp4E2M1Fp16NdCase(MxFp4Case caseId)
@@ -644,10 +674,20 @@ void RunMxFp4E2M1Fp16NdCase(MxFp4Case caseId)
     RunMxFp4E2M1NdCase<aclFloat16>(caseId);
 }
 
+void RunMxFp4E2M1NvFp16NdCase(MxFp4Case caseId)
+{
+    RunMxFp4E2M1NdCase<aclFloat16, 2, 128, QuantScaleAlg::NV>(caseId);
+}
+
 #if defined(PTO_CPU_SIM_ENABLE_BF16)
 void RunMxFp4E2M1Bf16NdCase(MxFp4Case caseId)
 {
     RunMxFp4E2M1NdCase<bfloat16_t>(caseId);
+}
+
+void RunMxFp4E2M1NvBf16NdCase(MxFp4Case caseId)
+{
+    RunMxFp4E2M1NdCase<bfloat16_t, 2, 128, QuantScaleAlg::NV>(caseId);
 }
 #endif
 
@@ -686,6 +726,21 @@ TEST(TQuantCpuSimTest, MxFp4E2M1Fp16NdMixed32x1024)
     RunMxFp4E2M1NdCase<aclFloat16, 32, 1024>(MxFp4Case::Mixed);
 }
 
+TEST(TQuantCpuSimTest, MxFp4E2M1NVFp16NdSpecial)
+{
+    RunMxFp4E2M1NvFp16NdCase(MxFp4Case::Special);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1NVFp16NdRounding)
+{
+    RunMxFp4E2M1NvFp16NdCase(MxFp4Case::Rounding);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1NVFp16NdMixed)
+{
+    RunMxFp4E2M1NvFp16NdCase(MxFp4Case::Mixed);
+}
+
 #if defined(PTO_CPU_SIM_ENABLE_BF16)
 TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdSpecial)
 {
@@ -720,6 +775,21 @@ TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdMixed)
 TEST(TQuantCpuSimTest, MxFp4E2M1Bf16NdMixed32x1024)
 {
     RunMxFp4E2M1NdCase<bfloat16_t, 32, 1024>(MxFp4Case::Mixed);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1NVBf16NdSpecial)
+{
+    RunMxFp4E2M1NvBf16NdCase(MxFp4Case::Special);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1NVBf16NdRounding)
+{
+    RunMxFp4E2M1NvBf16NdCase(MxFp4Case::Rounding);
+}
+
+TEST(TQuantCpuSimTest, MxFp4E2M1NVBf16NdMixed)
+{
+    RunMxFp4E2M1NvBf16NdCase(MxFp4Case::Mixed);
 }
 #endif
 

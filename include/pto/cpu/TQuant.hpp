@@ -54,6 +54,18 @@ inline uint32_t FloatToBits(float value)
     return std::bit_cast<uint32_t>(value);
 }
 
+struct NvMxFp8E4M3Spec {
+    static constexpr float descaleMultiplier = 1.0f / 448.0f;
+    static constexpr uint32_t b16SpecialScaleBits = 0x7F81u;
+    static constexpr uint32_t f32SpecialScaleBits = 0x7FC00000u;
+};
+
+struct NvMxFp4E2M1Spec {
+    static constexpr float descaleMultiplier = 1.0f / 6.0f;
+    static constexpr uint32_t b16SpecialScaleBits = 0x7FC0u;
+    static constexpr uint32_t f32SpecialScaleBits = 0x7FC00000u;
+};
+
 inline uint16_t FloatToBf16BitsTrunc(float value)
 {
     return static_cast<uint16_t>(FloatToBits(value) >> 16);
@@ -177,7 +189,8 @@ inline uint8_t ComputeSharedExponent(float maxAbsValue)
 {
     const uint32_t bits = FloatToBits(maxAbsValue);
     const uint32_t exponent = (bits & 0x7F800000u) >> 23;
-    if (exponent == 0xFFu) {
+    const uint32_t mantissa = bits & 0x007FFFFFu;
+    if (exponent == 0xFFu && mantissa != 0u) {
         return 0xFFu;
     }
     if (exponent <= 8u) {
@@ -186,17 +199,19 @@ inline uint8_t ComputeSharedExponent(float maxAbsValue)
     return static_cast<uint8_t>(exponent - 8u);
 }
 
-inline uint8_t ComputeSharedExponentNV(float maxAbsValue)
+template <typename NvFormatSpec>
+inline uint8_t ComputeNvSharedExponent(float maxAbsValue)
 {
     if (maxAbsValue == 0.0f) {
         return 0;
     }
-    const float descale = maxAbsValue * (1.0f / 448.0f);
+    constexpr float descaleMultiplier = NvFormatSpec::descaleMultiplier;
+    const float descale = maxAbsValue * descaleMultiplier;
     const uint32_t bits = FloatToBits(descale);
     const uint32_t exponent = (bits & 0x7F800000u) >> 23;
     const uint32_t mantissa = bits & 0x007FFFFFu;
     if (exponent == 0xFFu) {
-        return 0xFFu;
+        return mantissa == 0u ? 0xFEu : 0xFFu;
     }
     const bool roundUp = mantissa > 0u && exponent != 0xFEu && !(exponent == 0u && mantissa <= 0x00400000u);
     return static_cast<uint8_t>(exponent + (roundUp ? 1u : 0u));
@@ -205,8 +220,9 @@ inline uint8_t ComputeSharedExponentNV(float maxAbsValue)
 inline uint8_t ComputeE2M1SharedExponent(float maxAbsValue)
 {
     const uint32_t bits = FloatToBits(maxAbsValue);
-    uint32_t exponent = (bits & 0x7F800000u) >> 23;
-    if (exponent == 0xFFu) {
+    const uint32_t exponent = (bits & 0x7F800000u) >> 23;
+    const uint32_t mantissa = bits & 0x007FFFFFu;
+    if (exponent == 0xFFu && mantissa != 0u) {
         return 0xFFu;
     }
     if (exponent <= 2u) {
@@ -226,6 +242,17 @@ inline float ComputeMxScalingFromExponent(uint8_t e8m0)
         scaling = std::ldexp(1.0f, -127);
     }
     return scaling;
+}
+
+inline float ComputeNvScalingFromExponent(uint8_t e8m0)
+{
+    if (e8m0 == 0xFFu) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+    if (e8m0 == 0xFEu) {
+        return std::ldexp(1.0f, -127);
+    }
+    return ComputeMxScalingFromExponent(e8m0);
 }
 
 inline float ComputeE2M1ScalingFromExponent(uint8_t e8m0)
@@ -261,20 +288,21 @@ inline std::vector<uint8_t> ReorderExponentZZ(const std::vector<uint8_t> &exp, i
     return reordered;
 }
 
-template <QuantType quant_type, typename TileDataSrc>
+template <QuantType quant_type, QuantScaleAlg scale_alg, typename TileDataSrc>
 inline float ComputeMxGroupMax(TileDataSrc &src, int row, int group)
 {
     float maxAbsValue = 0.0f;
     uint16_t maxAbsBf16Bits = 0;
     for (int inner = 0; inner < 32; ++inner) {
         const float value = src.data()[GetTileElementOffset<TileDataSrc>(row, group * 32 + inner)];
-        if constexpr (quant_type == QuantType::MXFP8) {
+        if constexpr (quant_type == QuantType::MXFP8 ||
+                      (quant_type == QuantType::MXFP4_E2M1 && scale_alg == QuantScaleAlg::NV)) {
             maxAbsValue = std::max(maxAbsValue, std::fabs(value));
         } else {
             maxAbsBf16Bits = std::max(maxAbsBf16Bits, AbsBf16BitsFromFloat(value));
         }
     }
-    if constexpr (quant_type == QuantType::MXFP4_E2M1) {
+    if constexpr (quant_type == QuantType::MXFP4_E2M1 && scale_alg == QuantScaleAlg::OCP) {
         maxAbsValue = Bf16BitsToFloat(maxAbsBf16Bits);
     }
     return maxAbsValue;
@@ -302,7 +330,9 @@ template <QuantType quant_type, QuantScaleAlg scale_alg>
 inline uint8_t ComputeMxSharedExponent(float maxAbsValue)
 {
     if constexpr (quant_type == QuantType::MXFP8 && scale_alg == QuantScaleAlg::NV) {
-        return ComputeSharedExponentNV(maxAbsValue);
+        return ComputeNvSharedExponent<NvMxFp8E4M3Spec>(maxAbsValue);
+    } else if constexpr (quant_type == QuantType::MXFP4_E2M1 && scale_alg == QuantScaleAlg::NV) {
+        return ComputeNvSharedExponent<NvMxFp4E2M1Spec>(maxAbsValue);
     }
     return ComputeMxSharedExponent<quant_type>(maxAbsValue);
 }
@@ -310,10 +340,9 @@ inline uint8_t ComputeMxSharedExponent(float maxAbsValue)
 template <QuantType quant_type, QuantScaleAlg scale_alg>
 inline float ComputeMxGroupScaling(float maxAbsValue, uint8_t e8m0)
 {
-    if constexpr (quant_type == QuantType::MXFP8 && scale_alg == QuantScaleAlg::NV) {
-        if (maxAbsValue == 0.0f) {
-            return 0.0f;
-        }
+    if constexpr (scale_alg == QuantScaleAlg::NV) {
+        (void)maxAbsValue;
+        return ComputeNvScalingFromExponent(e8m0);
     }
     return ComputeMxGroupScaling<quant_type>(e8m0);
 }
@@ -362,8 +391,8 @@ inline void CheckMxQuantTypes()
 {
     static_assert(quant_type == QuantType::MXFP8 || quant_type == QuantType::MXFP4_E2M1,
                   "Fix: MX overload is reserved for MXFP8/MXFP4_E2M1.");
-    static_assert(scale_alg == QuantScaleAlg::OCP || quant_type == QuantType::MXFP8,
-                  "Fix: non-OCP scale algorithms are only supported for MXFP8.");
+    static_assert(scale_alg == QuantScaleAlg::OCP || scale_alg == QuantScaleAlg::NV,
+                  "Fix: MX scale algorithm must be OCP or NV.");
     using SrcT = typename TileDataSrc::DType;
     if constexpr (quant_type == QuantType::MXFP8) {
         static_assert(std::is_same_v<SrcT, float> || std::is_same_v<SrcT, half> || std::is_same_v<SrcT, aclFloat16> ||
@@ -420,7 +449,7 @@ inline void QuantizeMxTile(TileDataOut &dst, TileDataSrc &src, FlatExpTile &flat
     for (int row = 0; row < rows; ++row) {
         for (int group = 0; group < groupCols; ++group) {
             const int flatGroupIdx = row * groupCols + group;
-            const float maxAbsValue = ComputeMxGroupMax<quant_type>(src, row, group);
+            const float maxAbsValue = ComputeMxGroupMax<quant_type, scale_alg>(src, row, group);
             const uint8_t e8m0 = ComputeMxSharedExponent<quant_type, scale_alg>(maxAbsValue);
             const float groupScaling = ComputeMxGroupScaling<quant_type, scale_alg>(maxAbsValue, e8m0);
             flatMax.data()[flatGroupIdx] = maxAbsValue;
@@ -499,7 +528,8 @@ template <QuantType quant_type, QuantScaleAlg scale_alg, typename TileDataOut, t
 PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *exp, TileDataMax *max,
                               TileDataScaling *scaling)
 {
-    static_assert(quant_type == QuantType::MXFP8, "Fix: scale algorithm overload is reserved for MXFP8.");
+    static_assert(quant_type == QuantType::MXFP8 || quant_type == QuantType::MXFP4_E2M1,
+                  "Fix: scale algorithm overload is reserved for MXFP8/MXFP4_E2M1.");
     TQuantMxCpuImpl<quant_type, scale_alg>(dst, src, exp, max, scaling);
 }
 

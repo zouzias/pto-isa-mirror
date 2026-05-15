@@ -31,7 +31,7 @@ enum class QuantScaleAlg
     OCP,
     NV
 };
-}
+} // namespace pto
 
 namespace TQuantTest {
 
@@ -48,10 +48,10 @@ void LaunchTQuantMXFP8_BF16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void 
 template <int validRows, int validCols, int mode, pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void LaunchTQuantMXFP8_FP16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
 
-template <int validRows, int validCols>
+template <int validRows, int validCols, pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void LaunchTQuantMXFP4_E2M1_FP16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
 
-template <int validRows, int validCols>
+template <int validRows, int validCols, pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void LaunchTQuantMXFP4_E2M1_BF16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
 
 class TQUANTTEST : public testing::Test {
@@ -232,19 +232,19 @@ void test_tquant_mxfp8_fp16()
     });
 }
 
-template <int validRows, int validCols>
+template <int validRows, int validCols, pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void test_tquant_mxfp4_e2m1_fp16()
 {
     RunMxFp4E2M1Case<validRows, validCols>([](uint8_t *dst, uint16_t *src, uint8_t *dstExp, void *stream) {
-        LaunchTQuantMXFP4_E2M1_FP16<validRows, validCols>(dst, src, dstExp, stream);
+        LaunchTQuantMXFP4_E2M1_FP16<validRows, validCols, scaleAlg>(dst, src, dstExp, stream);
     });
 }
 
-template <int validRows, int validCols>
+template <int validRows, int validCols, pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void test_tquant_mxfp4_e2m1_bf16()
 {
     RunMxFp4E2M1Case<validRows, validCols>([](uint8_t *dst, uint16_t *src, uint8_t *dstExp, void *stream) {
-        LaunchTQuantMXFP4_E2M1_BF16<validRows, validCols>(dst, src, dstExp, stream);
+        LaunchTQuantMXFP4_E2M1_BF16<validRows, validCols, scaleAlg>(dst, src, dstExp, stream);
     });
 }
 
@@ -555,6 +555,10 @@ TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_2x128_special_nd)
 {
     test_tquant_mxfp4_e2m1_fp16<2, 128>();
 }
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_2x128_inf_only_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<2, 128>();
+}
 TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_2x128_subnormal_nd)
 {
     test_tquant_mxfp4_e2m1_fp16<2, 128>();
@@ -584,8 +588,27 @@ TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_32x1024_normal_nd)
     test_tquant_mxfp4_e2m1_fp16<32, 1024>();
 }
 
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_nv_fp16_2x256_boundary_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<2, 256, pto::QuantScaleAlg::NV>();
+}
+
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_nv_fp16_2x256_rounding_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<2, 256, pto::QuantScaleAlg::NV>();
+}
+
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_nv_fp16_2x256_mixed_nd)
+{
+    test_tquant_mxfp4_e2m1_fp16<2, 256, pto::QuantScaleAlg::NV>();
+}
+
 // MXFP4 E2M1 BF16 ND
 TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_2x128_special_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<2, 128>();
+}
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_2x128_inf_only_nd)
 {
     test_tquant_mxfp4_e2m1_bf16<2, 128>();
 }
@@ -616,6 +639,21 @@ TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_32x1024_mixed_nd)
 TEST_F(TQUANTTEST, case_mxfp4_e2m1_bf16_32x1024_normal_nd)
 {
     test_tquant_mxfp4_e2m1_bf16<32, 1024>();
+}
+
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_nv_bf16_2x256_boundary_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<2, 256, pto::QuantScaleAlg::NV>();
+}
+
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_nv_bf16_2x256_rounding_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<2, 256, pto::QuantScaleAlg::NV>();
+}
+
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_nv_bf16_2x256_mixed_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16<2, 256, pto::QuantScaleAlg::NV>();
 }
 
 TEST_F(TQUANTTEST, case_mxfp8_fp16_32x128_nz)

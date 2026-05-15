@@ -73,8 +73,8 @@ __global__ AICORE void runTQuant(__gm__ uint8_t __out__ *out_e8m0, __gm__ uint8_
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
 
-        TQUANT<pto::QuantType::MXFP8, scaleAlg, DstFP8Tile, SrcTile, DstE8Tile, MaxTile>(
-            fp8Tile, srcTile, &e8Tile, &maxPerGpTile, &scalingTile);
+        TQUANT<pto::QuantType::MXFP8, scaleAlg, DstFP8Tile, SrcTile, DstE8Tile, MaxTile>(fp8Tile, srcTile, &e8Tile,
+                                                                                         &maxPerGpTile, &scalingTile);
 
 #ifndef __PTO_AUTO__
         set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -117,8 +117,8 @@ __global__ AICORE void runTQuant(__gm__ uint8_t __out__ *out_e8m0, __gm__ uint8_
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
         // Step 1: Plain TQUANT (ND output), same as mode==0
-        TQUANT<pto::QuantType::MXFP8, scaleAlg, DstFP8Tile, SrcTile, DstE8Tile, MaxTile>(
-            fp8Tile, srcTile, &e8Tile, &maxPerGpTile, &scalingTile);
+        TQUANT<pto::QuantType::MXFP8, scaleAlg, DstFP8Tile, SrcTile, DstE8Tile, MaxTile>(fp8Tile, srcTile, &e8Tile,
+                                                                                         &maxPerGpTile, &scalingTile);
         // Step 2: Convert E8M0 exponents ND → ZZ layout
         TMOV(e8ZzTile, e8Tile, tmpTile);
         // Step 3: Convert FP8 data ND → NZ layout
@@ -303,8 +303,8 @@ __global__ AICORE void runTQuantBF16(__gm__ uint8_t __out__ *out_e8m0, __gm__ ui
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
 
-        TQUANT<pto::QuantType::MXFP8, scaleAlg, DstFP8Tile, SrcTile, DstE8Tile, MaxTile>(
-            fp8Tile, srcTile, &e8Tile, &maxPerGpTile, &scalingTile);
+        TQUANT<pto::QuantType::MXFP8, scaleAlg, DstFP8Tile, SrcTile, DstE8Tile, MaxTile>(fp8Tile, srcTile, &e8Tile,
+                                                                                         &maxPerGpTile, &scalingTile);
 
 #ifndef __PTO_AUTO__
         set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -353,8 +353,8 @@ __global__ AICORE void runTQuantBF16(__gm__ uint8_t __out__ *out_e8m0, __gm__ ui
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
         // Step 1: Plain TQUANT (ND output)
-        TQUANT<pto::QuantType::MXFP8, scaleAlg, DstFP8Tile, SrcTile, DstE8Tile, MaxTile>(
-            fp8Tile, srcTile, &e8Tile, &maxPerGpTile, &scalingTile);
+        TQUANT<pto::QuantType::MXFP8, scaleAlg, DstFP8Tile, SrcTile, DstE8Tile, MaxTile>(fp8Tile, srcTile, &e8Tile,
+                                                                                         &maxPerGpTile, &scalingTile);
         // Step 2: Convert E8M0 exponents ND -> ZZ layout
         TMOV(e8ZzTile, e8Tile, tmpTile);
         // Step 3: Convert FP8 data ND -> NZ layout
@@ -432,8 +432,8 @@ __global__ AICORE void runTQuantFP16(__gm__ uint8_t __out__ *out_e8m0, __gm__ ui
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
 
-        TQUANT<pto::QuantType::MXFP8, scaleAlg, DstFP8Tile, SrcTile, DstE8Tile, MaxTile>(
-            fp8Tile, srcTile, &e8Tile, &maxPerGpTile, &scalingTile);
+        TQUANT<pto::QuantType::MXFP8, scaleAlg, DstFP8Tile, SrcTile, DstE8Tile, MaxTile>(fp8Tile, srcTile, &e8Tile,
+                                                                                         &maxPerGpTile, &scalingTile);
 
 #ifndef __PTO_AUTO__
         set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -477,8 +477,8 @@ __global__ AICORE void runTQuantFP16(__gm__ uint8_t __out__ *out_e8m0, __gm__ ui
         set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-        TQUANT<pto::QuantType::MXFP8, scaleAlg, DstFP8Tile, SrcTile, DstE8Tile, MaxTile>(
-            fp8Tile, srcTile, &e8Tile, &maxPerGpTile, &scalingTile);
+        TQUANT<pto::QuantType::MXFP8, scaleAlg, DstFP8Tile, SrcTile, DstE8Tile, MaxTile>(fp8Tile, srcTile, &e8Tile,
+                                                                                         &maxPerGpTile, &scalingTile);
         TMOV(e8ZzTile, e8Tile, tmpTile);
         TMOV(fp8TileNZ, fp8Tile);
 
@@ -604,7 +604,7 @@ PTO_INTERNAL void StoreMxFp4B16Result(typename Spec::DstFP4Tile &fp4Tile, typena
     TSTORE(fp4Global, fp4BytesTile);
 }
 
-template <typename SrcT, int validRows, int validCols>
+template <typename SrcT, int validRows, int validCols, pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 __global__ AICORE void runTQuantMXFP4E2M1B16(__gm__ uint8_t __out__ *out_e8m0, __gm__ uint8_t __out__ *out_fp4,
                                              __gm__ SrcT __in__ *src)
 {
@@ -630,21 +630,28 @@ __global__ AICORE void runTQuantMXFP4E2M1B16(__gm__ uint8_t __out__ *out_e8m0, _
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
 
-    TQUANT<pto::QuantType::MXFP4_E2M1, typename Spec::DstFP4Tile, typename Spec::SrcTile, typename Spec::DstE8Tile,
-           typename Spec::MaxTile>(fp4Tile, srcTile, &e8Tile, &maxPerGpTile, &scalingTile);
+    if constexpr (scaleAlg == pto::QuantScaleAlg::OCP) {
+        TQUANT<pto::QuantType::MXFP4_E2M1, typename Spec::DstFP4Tile, typename Spec::SrcTile, typename Spec::DstE8Tile,
+               typename Spec::MaxTile>(fp4Tile, srcTile, &e8Tile, &maxPerGpTile, &scalingTile);
+    } else {
+        TQUANT<pto::QuantType::MXFP4_E2M1, scaleAlg, typename Spec::DstFP4Tile, typename Spec::SrcTile,
+               typename Spec::DstE8Tile, typename Spec::MaxTile>(fp4Tile, srcTile, &e8Tile, &maxPerGpTile,
+                                                                 &scalingTile);
+    }
     StoreMxFp4B16Result<Spec>(fp4Tile, fp4BytesTile, e8Global, fp4Global);
 }
 
-template <int validRows, int validCols>
+template <int validRows, int validCols, pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void LaunchTQuantMXFP4_E2M1_FP16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream)
 {
-    runTQuantMXFP4E2M1B16<half, validRows, validCols><<<1, nullptr, stream>>>(dst_exp, dst, (half *)src);
+    runTQuantMXFP4E2M1B16<half, validRows, validCols, scaleAlg><<<1, nullptr, stream>>>(dst_exp, dst, (half *)src);
 }
 
-template <int validRows, int validCols>
+template <int validRows, int validCols, pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void LaunchTQuantMXFP4_E2M1_BF16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream)
 {
-    runTQuantMXFP4E2M1B16<bfloat16_t, validRows, validCols><<<1, nullptr, stream>>>(dst_exp, dst, (bfloat16_t *)src);
+    runTQuantMXFP4E2M1B16<bfloat16_t, validRows, validCols, scaleAlg>
+        <<<1, nullptr, stream>>>(dst_exp, dst, (bfloat16_t *)src);
 }
 
 } // namespace TQuantTest
@@ -663,10 +670,10 @@ template void TQuantTest::LaunchTQuantMXFP8<15, 32, 0>(uint8_t *dst, float *src,
 template void TQuantTest::LaunchTQuantMXFP8<7, 64, 0>(uint8_t *dst, float *src, uint8_t *dst_exp, void *stream);
 template void TQuantTest::LaunchTQuantMXFP8<33, 64, 0>(uint8_t *dst, float *src, uint8_t *dst_exp, void *stream);
 template void TQuantTest::LaunchTQuantMXFP8<13, 192, 0>(uint8_t *dst, float *src, uint8_t *dst_exp, void *stream);
-template void TQuantTest::LaunchTQuantMXFP8<32, 128, 0, pto::QuantScaleAlg::NV>(
-    uint8_t *dst, float *src, uint8_t *dst_exp, void *stream);
-template void TQuantTest::LaunchTQuantMXFP8<2, 256, 0, pto::QuantScaleAlg::NV>(
-    uint8_t *dst, float *src, uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuantMXFP8<32, 128, 0, pto::QuantScaleAlg::NV>(uint8_t *dst, float *src,
+                                                                                uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuantMXFP8<2, 256, 0, pto::QuantScaleAlg::NV>(uint8_t *dst, float *src,
+                                                                               uint8_t *dst_exp, void *stream);
 // INT8 SYM cases
 template void TQuantTest::LaunchTQuantInt8<64, 128, 0, pto::QuantType::INT8_SYM>(int8_t *dst, float *src, float *scale,
                                                                                  void *stream, float *offset);
@@ -727,16 +734,16 @@ template void TQuantTest::LaunchTQuantMXFP8_BF16<64, 128, 1>(uint8_t *dst, uint1
                                                              void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_BF16<128, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                               void *stream);
-template void TQuantTest::LaunchTQuantMXFP8_BF16<32, 128, 0, pto::QuantScaleAlg::NV>(
-    uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
-template void TQuantTest::LaunchTQuantMXFP8_BF16<64, 128, 0, pto::QuantScaleAlg::NV>(
-    uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
-template void TQuantTest::LaunchTQuantMXFP8_BF16<128, 128, 0, pto::QuantScaleAlg::NV>(
-    uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
-template void TQuantTest::LaunchTQuantMXFP8_BF16<7, 48, 0, pto::QuantScaleAlg::NV>(
-    uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
-template void TQuantTest::LaunchTQuantMXFP8_BF16<2, 256, 0, pto::QuantScaleAlg::NV>(
-    uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuantMXFP8_BF16<32, 128, 0, pto::QuantScaleAlg::NV>(uint8_t *dst, uint16_t *src,
+                                                                                     uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuantMXFP8_BF16<64, 128, 0, pto::QuantScaleAlg::NV>(uint8_t *dst, uint16_t *src,
+                                                                                     uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuantMXFP8_BF16<128, 128, 0, pto::QuantScaleAlg::NV>(uint8_t *dst, uint16_t *src,
+                                                                                      uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuantMXFP8_BF16<7, 48, 0, pto::QuantScaleAlg::NV>(uint8_t *dst, uint16_t *src,
+                                                                                   uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuantMXFP8_BF16<2, 256, 0, pto::QuantScaleAlg::NV>(uint8_t *dst, uint16_t *src,
+                                                                                    uint8_t *dst_exp, void *stream);
 // MXFP8 FP16 cases
 template void TQuantTest::LaunchTQuantMXFP8_FP16<32, 128, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                              void *stream);
@@ -748,22 +755,26 @@ template void TQuantTest::LaunchTQuantMXFP8_FP16<4, 256, 0>(uint8_t *dst, uint16
                                                             void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_FP16<11, 640, 0>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                              void *stream);
-template void TQuantTest::LaunchTQuantMXFP8_FP16<32, 128, 0, pto::QuantScaleAlg::NV>(
-    uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
-template void TQuantTest::LaunchTQuantMXFP8_FP16<64, 128, 0, pto::QuantScaleAlg::NV>(
-    uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
-template void TQuantTest::LaunchTQuantMXFP8_FP16<128, 128, 0, pto::QuantScaleAlg::NV>(
-    uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
-template void TQuantTest::LaunchTQuantMXFP8_FP16<2, 256, 0, pto::QuantScaleAlg::NV>(
-    uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuantMXFP8_FP16<32, 128, 0, pto::QuantScaleAlg::NV>(uint8_t *dst, uint16_t *src,
+                                                                                     uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuantMXFP8_FP16<64, 128, 0, pto::QuantScaleAlg::NV>(uint8_t *dst, uint16_t *src,
+                                                                                     uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuantMXFP8_FP16<128, 128, 0, pto::QuantScaleAlg::NV>(uint8_t *dst, uint16_t *src,
+                                                                                      uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuantMXFP8_FP16<2, 256, 0, pto::QuantScaleAlg::NV>(uint8_t *dst, uint16_t *src,
+                                                                                    uint8_t *dst_exp, void *stream);
 template void TQuantTest::LaunchTQuantMXFP4_E2M1_FP16<2, 128>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                               void *stream);
 template void TQuantTest::LaunchTQuantMXFP4_E2M1_FP16<32, 1024>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                                 void *stream);
+template void TQuantTest::LaunchTQuantMXFP4_E2M1_FP16<2, 256, pto::QuantScaleAlg::NV>(uint8_t *dst, uint16_t *src,
+                                                                                      uint8_t *dst_exp, void *stream);
 template void TQuantTest::LaunchTQuantMXFP4_E2M1_BF16<2, 128>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                               void *stream);
 template void TQuantTest::LaunchTQuantMXFP4_E2M1_BF16<32, 1024>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                                 void *stream);
+template void TQuantTest::LaunchTQuantMXFP4_E2M1_BF16<2, 256, pto::QuantScaleAlg::NV>(uint8_t *dst, uint16_t *src,
+                                                                                      uint8_t *dst_exp, void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_FP16<32, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                              void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_FP16<64, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
