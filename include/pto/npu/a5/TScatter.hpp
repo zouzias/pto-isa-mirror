@@ -174,10 +174,6 @@ PTO_INTERNAL void TSCATTER_IMPL(TileDataD &dst, TileDataS &src, TileDataI &idx)
         TScatter_b8<TileDataD, TileDataS, TileDataI>(dst.data(), src.data(), idx.data(), validRow, validCol);
     }
 }
-
-template <MaskPattern mask, typename DstTile, typename SrcTile>
-PTO_INTERNAL void TSCATTER_IMPL(DstTile &dst, SrcTile &src)
-{}
 } // namespace pto
 
 #endif

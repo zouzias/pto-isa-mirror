@@ -22,10 +22,20 @@ namespace pto {
 
 template <typename T>
 struct AndOp {
-    using U = std::conditional_t<sizeof(T) == 1, uint8_t, std::conditional_t<sizeof(T) == 2, uint16_t, uint32_t>>;
-    PTO_INTERNAL static void BinInstr(RegTensor<T> &dstReg, RegTensor<T> &src0Reg, RegTensor<T> &src1Reg, MaskReg &pReg)
+    PTO_INTERNAL static void BinInstr(RegTensor<T> &reg_dst, RegTensor<T> &reg_src0, RegTensor<T> &reg_src1,
+                                      MaskReg &preg)
     {
-        vand((RegTensor<U> &)dstReg, (RegTensor<U> &)src0Reg, (RegTensor<U> &)src1Reg, pReg);
+        if constexpr (sizeof(T) == 4) {
+            vand((RegTensor<uint32_t> &)reg_dst, (RegTensor<uint32_t> &)reg_src0, (RegTensor<uint32_t> &)reg_src1,
+                 preg);
+        } else if constexpr (sizeof(T) == 2) {
+            vand((RegTensor<uint16_t> &)reg_dst, (RegTensor<uint16_t> &)reg_src0, (RegTensor<uint16_t> &)reg_src1,
+                 preg);
+        } else if constexpr (sizeof(T) == 1) {
+            vand((RegTensor<uint8_t> &)reg_dst, (RegTensor<uint8_t> &)reg_src0, (RegTensor<uint8_t> &)reg_src1, preg);
+        } else {
+            vand(reg_dst, reg_src0, reg_src1, preg, MODE_ZEROING);
+        }
     }
 };
 

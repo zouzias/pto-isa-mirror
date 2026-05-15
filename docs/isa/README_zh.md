@@ -11,6 +11,7 @@
 
 ## 同步
 - [TSYNC](TSYNC_zh.md) - 同步 PTO 执行（等待事件或插入每操作流水线屏障）。
+- [SYNCALL](SYNCALL_zh.md) - 跨核同步屏障（硬件 FFTS 或软件 GM 轮询）。
 
 ## 手动 / 资源绑定
 - [TASSIGN](TASSIGN_zh.md) - 将 Tile 对象绑定到实现定义的片上地址（手动放置）。
@@ -134,7 +135,6 @@
 - [TTRANS](TTRANS_zh.md) - 使用实现定义的临时 Tile 进行转置。
 - [TSUBVIEW](TSUBVIEW_zh.md) - 表达一个tile是另一个tile的subview。
 - [TGET_SCALE_ADDR](TGET_SCALE_ADDR_zh.md) - 将输出tile的片上内存值绑定为扩展后的输入tile内存的值。
-- [TCONCAT](TCONCAT_zh.md) - 将两个 Tile 沿列维度水平拼接。
 
 ## 复杂指令
 - [TPRINT](TPRINT_zh.md) - 调试/打印 Tile 中的元素（实现定义）。

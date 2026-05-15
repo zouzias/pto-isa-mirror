@@ -222,10 +222,8 @@ PTO_INTERNAL void TTransB8RowWise(__ubuf__ typename TileDataDst::DType *dstPtr,
 }
 
 template <typename TileDataDst, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem>
-__tf__ PTO_INTERNAL OP_NAME(TTRANS)
-    OP_TYPE(element_wise) void TTransTile(typename TileDataDst::TileDType __out__ dst,
-                                          typename TileDataSrc::TileDType __in__ src, unsigned validRows,
-                                          unsigned validCols, VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
+__tf__ PTO_INTERNAL void TTransTile(typename TileDataDst::TileDType __out__ dst,
+                                    typename TileDataSrc::TileDType __in__ src, unsigned numRows, unsigned numCols)
 {
     using T = typename TileDataSrc::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
@@ -237,42 +235,42 @@ __tf__ PTO_INTERNAL OP_NAME(TTRANS)
             static_assert(
                 (unsigned long long)(TileDataDst::Rows - 1) * dstStride + (TileDataDst::Cols - 1) <= 0xFFFFFFFFULL,
                 "Fix: TTRANS scatter index may overflow uint32_t register");
-            TTransB32RowWise<TileDataSrc, TileDataDst, elementsPerRepeat, blockSizeElem>(
-                dstPtr, srcPtr, validRows, validCols, dstStride, srcStride);
+            TTransB32RowWise<TileDataSrc, TileDataDst, elementsPerRepeat, blockSizeElem>(dstPtr, srcPtr, numRows,
+                                                                                         numCols, dstStride, srcStride);
         } else {
             static_assert(
                 (unsigned long long)(TileDataSrc::Rows - 1) * srcStride + (TileDataSrc::Cols - 1) <= 0xFFFFFFFFULL,
                 "Fix: TTRANS gather index may overflow uint32_t register");
-            TTransB32ColWise<TileDataSrc, TileDataDst, elementsPerRepeat, blockSizeElem>(
-                dstPtr, srcPtr, validRows, validCols, dstStride, srcStride);
+            TTransB32ColWise<TileDataSrc, TileDataDst, elementsPerRepeat, blockSizeElem>(dstPtr, srcPtr, numRows,
+                                                                                         numCols, dstStride, srcStride);
         }
     } else if constexpr (sizeof(T) == 2) {
         if constexpr (TileDataSrc::Rows < TileDataSrc::Cols) {
             static_assert(
                 (unsigned long long)(TileDataDst::Rows - 1) * dstStride + (TileDataDst::Cols - 1) <= 0xFFFFULL,
                 "Fix: TTRANS scatter index may overflow uint16_t register");
-            TTransB16RowWise<TileDataSrc, TileDataDst, elementsPerRepeat, blockSizeElem>(
-                dstPtr, srcPtr, validRows, validCols, dstStride, srcStride);
+            TTransB16RowWise<TileDataSrc, TileDataDst, elementsPerRepeat, blockSizeElem>(dstPtr, srcPtr, numRows,
+                                                                                         numCols, dstStride, srcStride);
         } else {
             static_assert(
                 (unsigned long long)(TileDataSrc::Rows - 1) * srcStride + (TileDataSrc::Cols - 1) <= 0xFFFFULL,
                 "Fix: TTRANS gather index may overflow uint16_t register");
-            TTransB16ColWise<TileDataSrc, TileDataDst, elementsPerRepeat, blockSizeElem>(
-                dstPtr, srcPtr, validRows, validCols, dstStride, srcStride);
+            TTransB16ColWise<TileDataSrc, TileDataDst, elementsPerRepeat, blockSizeElem>(dstPtr, srcPtr, numRows,
+                                                                                         numCols, dstStride, srcStride);
         }
     } else if constexpr (sizeof(T) == 1) {
         if constexpr (TileDataSrc::Rows < TileDataSrc::Cols) {
             static_assert(
                 (unsigned long long)(TileDataDst::Rows - 1) * dstStride + (TileDataDst::Cols - 1) <= 0xFFFFULL,
                 "Fix: TTRANS scatter index may overflow uint16_t register");
-            TTransB8RowWise<TileDataSrc, TileDataDst, elementsPerRepeat, blockSizeElem>(
-                dstPtr, srcPtr, validRows, validCols, dstStride, srcStride);
+            TTransB8RowWise<TileDataSrc, TileDataDst, elementsPerRepeat, blockSizeElem>(dstPtr, srcPtr, numRows,
+                                                                                        numCols, dstStride, srcStride);
         } else {
             static_assert(
                 (unsigned long long)(TileDataSrc::Rows - 1) * srcStride + (TileDataSrc::Cols - 1) <= 0xFFFFULL,
                 "Fix: TTRANS gather index may overflow uint16_t register");
-            TTransB8ColWise<TileDataSrc, TileDataDst, elementsPerRepeat, blockSizeElem>(
-                dstPtr, srcPtr, validRows, validCols, dstStride, srcStride);
+            TTransB8ColWise<TileDataSrc, TileDataDst, elementsPerRepeat, blockSizeElem>(dstPtr, srcPtr, numRows,
+                                                                                        numCols, dstStride, srcStride);
         }
     }
 }

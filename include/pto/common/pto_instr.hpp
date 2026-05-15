@@ -49,6 +49,78 @@ PTO_INST void TSYNC()
     TSYNC_IMPL<OpCode>();
 }
 
+template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
+PTO_INST void SYNCALL()
+{
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+    SYNCALL_IMPL<CoreType>();
+#else
+    PTO_STATIC_ASSERT(CoreType != CoreType, "SYNCALL is not supported on this backend.");
+#endif
+}
+
+template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AIVOnly, typename GlobalData, typename TileData,
+          std::enable_if_t<is_global_data_v<GlobalData> && is_tile_data_v<TileData> && TileData::Loc == TileType::Vec,
+                           int> = 0>
+PTO_INST void SYNCALL(GlobalData &gmWorkspace, TileData &ubWorkspace, int32_t usedCores = 0)
+{
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+    if constexpr (Mode == SyncAllMode::Hard) {
+        (void)gmWorkspace;
+        (void)ubWorkspace;
+        (void)usedCores;
+        SYNCALL_IMPL<CoreType>();
+    } else {
+        SYNCALL_SOFT_IMPL<CoreType>(gmWorkspace.data(), ubWorkspace.data(), usedCores);
+    }
+#else
+    PTO_STATIC_ASSERT(Mode != Mode, "SYNCALL is not supported on this backend.");
+#endif
+}
+
+template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AICOnly, typename GlobalData, typename TileData,
+          std::enable_if_t<is_global_data_v<GlobalData> && is_tile_data_v<TileData> && TileData::Loc == TileType::Mat,
+                           int> = 0>
+PTO_INST void SYNCALL(GlobalData &gmWorkspace, TileData &l1Workspace, int32_t usedCores = 0)
+{
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+    PTO_STATIC_ASSERT(CoreType == SyncCoreType::AICOnly, "GM+L1 overload is for AIC-only mode.");
+    if constexpr (Mode == SyncAllMode::Hard) {
+        (void)gmWorkspace;
+        (void)l1Workspace;
+        (void)usedCores;
+        SYNCALL_IMPL<CoreType>();
+    } else {
+        SYNCALL_SOFT_AIC_IMPL(gmWorkspace.data(), l1Workspace.data(), usedCores);
+    }
+#else
+    PTO_STATIC_ASSERT(Mode != Mode, "SYNCALL is not supported on this backend.");
+#endif
+}
+
+template <
+    SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::Mix, typename GlobalData, typename UbTileData,
+    typename L1TileData,
+    std::enable_if_t<is_global_data_v<GlobalData> && is_tile_data_v<UbTileData> && UbTileData::Loc == TileType::Vec &&
+                         is_tile_data_v<L1TileData> && L1TileData::Loc == TileType::Mat,
+                     int> = 0>
+PTO_INST void SYNCALL(GlobalData &gmWorkspace, UbTileData &ubWorkspace, L1TileData &l1Workspace, int32_t usedCores = 0)
+{
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+    if constexpr (Mode == SyncAllMode::Hard) {
+        (void)gmWorkspace;
+        (void)ubWorkspace;
+        (void)l1Workspace;
+        (void)usedCores;
+        SYNCALL_IMPL<CoreType>();
+    } else {
+        SYNCALL_SOFT_MIX_IMPL<CoreType>(gmWorkspace.data(), ubWorkspace.data(), l1Workspace.data(), usedCores);
+    }
+#else
+    PTO_STATIC_ASSERT(Mode != Mode, "SYNCALL is not supported on this backend.");
+#endif
+}
+
 template <typename... WaitEvents>
 PTO_INST void TSYNC(WaitEvents &...events)
 {
@@ -212,17 +284,6 @@ PTO_INST RecordEvent TCONCAT(DstTile &dst, Src0Tile &src0, Src1Tile &src1, Src0I
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TCONCAT, dst, src0, src1, src0Idx, src1Idx);
-    return {};
-}
-
-template <typename DstTile, typename Src0Tile, typename Src1Tile, typename DstIdxTile, typename Src0IdxTile,
-          typename Src1IdxTile, typename... WaitEvents,
-          std::enable_if_t<is_tile_data_v<Src1IdxTile> && all_events_v<WaitEvents...>, int> = 0>
-PTO_INST RecordEvent TCONCAT(DstTile &dst, Src0Tile &src0, Src1Tile &src1, DstIdxTile &dstIdx, Src0IdxTile &src0Idx,
-                             Src1IdxTile &src1Idx, WaitEvents &...events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TCONCAT, dst, src0, src1, dstIdx, src0Idx, src1Idx);
     return {};
 }
 
@@ -1103,37 +1164,12 @@ PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &...eve
     return {};
 }
 
-template <STPhase Phase, typename DstTileData, typename SrcTileData, typename... WaitEvents>
-PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &...events)
-{
-    TSYNC(events...);
-    TMOV_IMPL<DstTileData, SrcTileData, ReluPreMode::NoRelu, Phase>(dst, src);
-    return {};
-}
-
-template <STPhase Phase, typename DstTileData, typename SrcTileData, ReluPreMode reluMode, typename... WaitEvents>
-PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &...events)
-{
-    TSYNC(events...);
-    TMOV_IMPL<DstTileData, SrcTileData, reluMode, Phase>(dst, src);
-    return {};
-}
-
 template <typename DstTileData, typename SrcTileData, AccToVecMode mode, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
 PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &...events)
 {
     TSYNC(events...);
     TMOV_IMPL<DstTileData, SrcTileData, mode, reluMode>(dst, src);
-    return {};
-}
-
-template <STPhase Phase, typename DstTileData, typename SrcTileData, AccToVecMode mode,
-          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
-PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &...events)
-{
-    TSYNC(events...);
-    TMOV_IMPL<DstTileData, SrcTileData, mode, reluMode, Phase>(dst, src);
     return {};
 }
 
@@ -1146,30 +1182,12 @@ PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp,
     return {};
 }
 
-template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
-          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
-PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &...events)
-{
-    TSYNC(events...);
-    TMOV_IMPL<DstTileData, SrcTileData, FpTileData, reluMode, Phase>(dst, src, fp);
-    return {};
-}
-
 template <typename DstTileData, typename SrcTileData, typename FpTileData, AccToVecMode mode,
           ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &...events)
 {
     TSYNC(events...);
     TMOV_IMPL<DstTileData, SrcTileData, FpTileData, mode, reluMode>(dst, src, fp);
-    return {};
-}
-
-template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData, AccToVecMode mode,
-          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
-PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &...events)
-{
-    TSYNC(events...);
-    TMOV_IMPL<DstTileData, SrcTileData, FpTileData, mode, reluMode, Phase>(dst, src, fp);
     return {};
 }
 
@@ -1182,30 +1200,12 @@ PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantS
     return {};
 }
 
-template <STPhase Phase, typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
-          typename... WaitEvents>
-PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, WaitEvents &...events)
-{
-    TSYNC(events...);
-    TMOV_IMPL<DstTileData, SrcTileData, reluMode, Phase>(dst, src, preQuantScalar);
-    return {};
-}
-
 template <typename DstTileData, typename SrcTileData, AccToVecMode mode, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
 PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, WaitEvents &...events)
 {
     TSYNC(events...);
     TMOV_IMPL<DstTileData, SrcTileData, mode, reluMode>(dst, src, preQuantScalar);
-    return {};
-}
-
-template <STPhase Phase, typename DstTileData, typename SrcTileData, AccToVecMode mode,
-          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
-PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, WaitEvents &...events)
-{
-    TSYNC(events...);
-    TMOV_IMPL<DstTileData, SrcTileData, mode, reluMode, Phase>(dst, src, preQuantScalar);
     return {};
 }
 
@@ -1270,26 +1270,6 @@ PTO_INST RecordEvent TCOLARGMIN(TileDataOut &dst, TileDataIn &src, TileDataTmp &
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TCOLARGMIN, dst, src, tmp);
-    return {};
-}
-
-template <typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn, typename TileDataTmp,
-          typename... WaitEvents, std::enable_if_t<is_tile_data_v<TileDataTmp> && all_events_v<WaitEvents...>, int> = 0>
-PTO_INST RecordEvent TCOLARGMAX(TileDataOutVal &dstVal, TileDataOutIdx &dstIdx, TileDataIn &src, TileDataTmp &tmp,
-                                WaitEvents &...events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TCOLARGMAX, dstVal, dstIdx, src, tmp);
-    return {};
-}
-
-template <typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn, typename TileDataTmp,
-          typename... WaitEvents, std::enable_if_t<is_tile_data_v<TileDataTmp> && all_events_v<WaitEvents...>, int> = 0>
-PTO_INST RecordEvent TCOLARGMIN(TileDataOutVal &dstVal, TileDataOutIdx &dstIdx, TileDataIn &src, TileDataTmp &tmp,
-                                WaitEvents &...events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TCOLARGMIN, dstVal, dstIdx, src, tmp);
     return {};
 }
 
@@ -1775,15 +1755,6 @@ PTO_INST RecordEvent TSCATTER(TileDataD &dst, TileDataS &src, TileDataI &indexes
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TSCATTER, dst, src, indexes);
-    return {};
-}
-
-template <MaskPattern maskPattern = MaskPattern::P1111, typename DstTileData, typename SrcTileData,
-          typename... WaitEvents>
-PTO_INST RecordEvent TSCATTER(DstTileData &dst, SrcTileData &src, WaitEvents &...events)
-{
-    TSYNC(events...);
-    TSCATTER_IMPL<maskPattern>(dst, src);
     return {};
 }
 

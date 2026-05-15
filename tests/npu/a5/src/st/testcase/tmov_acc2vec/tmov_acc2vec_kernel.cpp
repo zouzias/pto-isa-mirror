@@ -64,8 +64,7 @@ __tf__ PTO_INTERNAL void tf_copy_ubuf_to_gm(typename GlobalData::DType __out__ *
     }
 }
 
-template <typename AType, typename BType, typename fbType, int M, int K, int N, int validM, int validK, int validN,
-          AccPhase phase = AccPhase::Unspecified>
+template <typename AType, typename BType, typename fbType, int M, int K, int N, int validM, int validK, int validN>
 AICORE inline void RunMATMUL(__gm__ AType *src0, __gm__ BType *src1, __gm__ fbType *src2)
 {
     using GlobalDataSrc0 =
@@ -112,11 +111,7 @@ AICORE inline void RunMATMUL(__gm__ AType *src0, __gm__ BType *src1, __gm__ fbTy
 #endif
 
     /**********************************TMATMUL**********************************/
-    if constexpr (phase == AccPhase::Unspecified) {
-        TMATMUL(cTile, aTile, bTile);
-    } else {
-        TMATMUL<phase>(cTile, aTile, bTile);
-    }
+    TMATMUL(cTile, aTile, bTile);
 
 #ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
@@ -255,7 +250,7 @@ AICORE inline constexpr SLayout GetTileSLayout()
 
 template <typename OutType, typename AType, typename BType, int validM, int validK, int validN, int row, int col,
           int subBlockId = 0, bool isNZUnalign = false, bool isRelu = false, Layout layoutType = Layout::ND,
-          int sfractalSize = 512, STPhase phase = STPhase::Unspecified, AccPhase accPhase = AccPhase::Unspecified>
+          int sfractalSize = 512>
 __global__ AICORE void RunTMOV(__gm__ OutType *out, __gm__ AType *src0, __gm__ BType *src1)
 {
     constexpr int blockAlign = std::is_same_v<AType, int8_t> ? 32 : 16;
@@ -263,7 +258,7 @@ __global__ AICORE void RunTMOV(__gm__ OutType *out, __gm__ AType *src0, __gm__ B
     constexpr int N = CeilAlign<int>(validN, blockAlign);
     constexpr int K = CeilAlign<int>(validK, blockAlign);
     if constexpr (!isNZUnalign) {
-        RunMATMUL<AType, BType, OutType, M, K, N, validM, validK, validN, accPhase>(src0, src1, nullptr);
+        RunMATMUL<AType, BType, OutType, M, K, N, validM, validK, validN>(src0, src1, nullptr);
     } else {
         RunMATMUL_NZUNALIGN<AType, BType, OutType, M, K, N, validM, validK, validN>(src0, src1, nullptr);
     }
@@ -284,33 +279,15 @@ __global__ AICORE void RunTMOV(__gm__ OutType *out, __gm__ AType *src0, __gm__ B
     constexpr uint8_t mode = getMode<subBlockId, 0>();
     if constexpr (subBlockId == 0) {
         if constexpr (isRelu) {
-            if constexpr (phase == STPhase::Unspecified) {
-                TMOV<DstTileData, AccTile, ReluPreMode::NormalRelu>(dstTileData, cTile);
-            } else {
-                TMOV<phase, DstTileData, AccTile, ReluPreMode::NormalRelu>(dstTileData, cTile);
-            }
+            TMOV<DstTileData, AccTile, ReluPreMode::NormalRelu>(dstTileData, cTile);
         } else {
-            if constexpr (phase == STPhase::Unspecified) {
-                TMOV(dstTileData, cTile);
-            } else {
-                TMOV<phase>(dstTileData, cTile);
-            }
+            TMOV(dstTileData, cTile);
         }
     } else {
         if constexpr (isRelu) {
-            if constexpr (phase == STPhase::Unspecified) {
-                TMOV<DstTileData, AccTile, static_cast<AccToVecMode>(mode), ReluPreMode::NormalRelu>(dstTileData,
-                                                                                                     cTile);
-            } else {
-                TMOV<phase, DstTileData, AccTile, static_cast<AccToVecMode>(mode), ReluPreMode::NormalRelu>(dstTileData,
-                                                                                                            cTile);
-            }
+            TMOV<DstTileData, AccTile, static_cast<AccToVecMode>(mode), ReluPreMode::NormalRelu>(dstTileData, cTile);
         } else {
-            if constexpr (phase == STPhase::Unspecified) {
-                TMOV<DstTileData, AccTile, static_cast<AccToVecMode>(mode)>(dstTileData, cTile);
-            } else {
-                TMOV<phase, DstTileData, AccTile, static_cast<AccToVecMode>(mode)>(dstTileData, cTile);
-            }
+            TMOV<DstTileData, AccTile, static_cast<AccToVecMode>(mode)>(dstTileData, cTile);
         }
     }
 
@@ -332,8 +309,7 @@ __global__ AICORE void RunTMOV(__gm__ OutType *out, __gm__ AType *src0, __gm__ B
 
 template <typename OutType, typename AType, typename BType, typename fbType, int validM, int validK, int validN,
           int row, int col, int subBlockId = 0, bool isNZUnalign = false, bool isRelu = false,
-          Layout layoutType = Layout::ND, int sfractalSize = 512, STPhase phase = STPhase::Unspecified,
-          AccPhase accPhase = AccPhase::Unspecified>
+          Layout layoutType = Layout::ND, int sfractalSize = 512>
 __global__ AICORE void RunTMOVFBQuant(__gm__ OutType *out, __gm__ AType *src0, __gm__ BType *src1, __gm__ fbType *src2)
 {
     constexpr int blockAlign = std::is_same_v<AType, int8_t> ? 32 : 16;
@@ -341,7 +317,7 @@ __global__ AICORE void RunTMOVFBQuant(__gm__ OutType *out, __gm__ AType *src0, _
     constexpr int N = CeilAlign<int>(validN, blockAlign);
     constexpr int K = CeilAlign<int>(validK, blockAlign);
     if constexpr (!isNZUnalign) {
-        RunMATMUL<AType, BType, fbType, M, K, N, validM, validK, validN, accPhase>(src0, src1, src2);
+        RunMATMUL<AType, BType, fbType, M, K, N, validM, validK, validN>(src0, src1, src2);
     } else {
         RunMATMUL_NZUNALIGN<AType, BType, fbType, M, K, N, validM, validK, validN>(src0, src1, src2);
     }
@@ -386,33 +362,16 @@ __global__ AICORE void RunTMOVFBQuant(__gm__ OutType *out, __gm__ AType *src0, _
     constexpr uint8_t mode = getMode<subBlockId, 0>();
     if constexpr (subBlockId == 0) {
         if constexpr (isRelu) {
-            if constexpr (phase == STPhase::Unspecified) {
-                TMOV_FP<DstTileData, AccTile, FbTile, ReluPreMode::NormalRelu>(dstTileData, cTile, fbTile);
-            } else {
-                TMOV_FP<phase, DstTileData, AccTile, FbTile, ReluPreMode::NormalRelu>(dstTileData, cTile, fbTile);
-            }
+            TMOV_FP<DstTileData, AccTile, FbTile, ReluPreMode::NormalRelu>(dstTileData, cTile, fbTile);
         } else {
-            if constexpr (phase == STPhase::Unspecified) {
-                TMOV_FP<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile);
-            } else {
-                TMOV_FP<phase, DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile);
-            }
+            TMOV_FP<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile);
         }
     } else {
         if constexpr (isRelu) {
-            if constexpr (phase == STPhase::Unspecified) {
-                TMOV<DstTileData, AccTile, FbTile, static_cast<AccToVecMode>(mode), ReluPreMode::NormalRelu>(
-                    dstTileData, cTile, fbTile);
-            } else {
-                TMOV<phase, DstTileData, AccTile, FbTile, static_cast<AccToVecMode>(mode), ReluPreMode::NormalRelu>(
-                    dstTileData, cTile, fbTile);
-            }
+            TMOV<DstTileData, AccTile, FbTile, static_cast<AccToVecMode>(mode), ReluPreMode::NormalRelu>(dstTileData,
+                                                                                                         cTile, fbTile);
         } else {
-            if constexpr (phase == STPhase::Unspecified) {
-                TMOV<DstTileData, AccTile, FbTile, static_cast<AccToVecMode>(mode)>(dstTileData, cTile, fbTile);
-            } else {
-                TMOV<phase, DstTileData, AccTile, FbTile, static_cast<AccToVecMode>(mode)>(dstTileData, cTile, fbTile);
-            }
+            TMOV<DstTileData, AccTile, FbTile, static_cast<AccToVecMode>(mode)>(dstTileData, cTile, fbTile);
         }
     }
 
@@ -434,7 +393,7 @@ __global__ AICORE void RunTMOVFBQuant(__gm__ OutType *out, __gm__ AType *src0, _
 
 template <typename OutType, typename AType, typename BType, int validM, int validK, int validN, int row, int col,
           int subBlockId = 0, bool isNZUnalign = false, bool isRelu = false, Layout layoutType = Layout::ND,
-          int sfractalSize = 512, STPhase phase = STPhase::Unspecified, AccPhase accPhase = AccPhase::Unspecified>
+          int sfractalSize = 512>
 __global__ AICORE void RunTMOVSCQuant(__gm__ OutType *out, __gm__ AType *src0, __gm__ BType *src1, float scalar)
 {
     constexpr int blockAlign = std::is_same_v<AType, int8_t> ? 32 : 16;
@@ -442,7 +401,7 @@ __global__ AICORE void RunTMOVSCQuant(__gm__ OutType *out, __gm__ AType *src0, _
     constexpr int N = CeilAlign<int>(validN, blockAlign);
     constexpr int K = CeilAlign<int>(validK, blockAlign);
     if constexpr (!isNZUnalign) {
-        RunMATMUL<AType, BType, OutType, M, K, N, validM, validK, validN, accPhase>(src0, src1, nullptr);
+        RunMATMUL<AType, BType, OutType, M, K, N, validM, validK, validN>(src0, src1, nullptr);
     } else {
         RunMATMUL_NZUNALIGN<AType, BType, OutType, M, K, N, validM, validK, validN>(src0, src1, nullptr);
     }
@@ -467,33 +426,16 @@ __global__ AICORE void RunTMOVSCQuant(__gm__ OutType *out, __gm__ AType *src0, _
     constexpr uint8_t mode = getMode<subBlockId, 0>();
     if constexpr (subBlockId == 0) {
         if constexpr (isRelu) {
-            if constexpr (phase == STPhase::Unspecified) {
-                TMOV<DstTileData, AccTile, ReluPreMode::NormalRelu>(dstTileData, cTile, preScalar);
-            } else {
-                TMOV<phase, DstTileData, AccTile, ReluPreMode::NormalRelu>(dstTileData, cTile, preScalar);
-            }
+            TMOV<DstTileData, AccTile, ReluPreMode::NormalRelu>(dstTileData, cTile, preScalar);
         } else {
-            if constexpr (phase == STPhase::Unspecified) {
-                TMOV<DstTileData, AccTile>(dstTileData, cTile, preScalar);
-            } else {
-                TMOV<phase, DstTileData, AccTile>(dstTileData, cTile, preScalar);
-            }
+            TMOV<DstTileData, AccTile>(dstTileData, cTile, preScalar);
         }
     } else {
         if constexpr (isRelu) {
-            if constexpr (phase == STPhase::Unspecified) {
-                TMOV<DstTileData, AccTile, static_cast<AccToVecMode>(mode), ReluPreMode::NormalRelu>(dstTileData, cTile,
-                                                                                                     preScalar);
-            } else {
-                TMOV<phase, DstTileData, AccTile, static_cast<AccToVecMode>(mode), ReluPreMode::NormalRelu>(
-                    dstTileData, cTile, preScalar);
-            }
+            TMOV<DstTileData, AccTile, static_cast<AccToVecMode>(mode), ReluPreMode::NormalRelu>(dstTileData, cTile,
+                                                                                                 preScalar);
         } else {
-            if constexpr (phase == STPhase::Unspecified) {
-                TMOV<DstTileData, AccTile, static_cast<AccToVecMode>(mode)>(dstTileData, cTile, preScalar);
-            } else {
-                TMOV<phase, DstTileData, AccTile, static_cast<AccToVecMode>(mode)>(dstTileData, cTile, preScalar);
-            }
+            TMOV<DstTileData, AccTile, static_cast<AccToVecMode>(mode)>(dstTileData, cTile, preScalar);
         }
     }
 
@@ -732,14 +674,6 @@ void LaunchTMOVAcc2VecNZ2ND(uint8_t *out, uint8_t *src0, uint8_t *src1, void *st
     } else if constexpr (tilingKey == 6) {
         RunSplitTMOV<float, half, half, 48, 32, 128, false><<<1, nullptr, stream>>>(
             reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1));
-    } else if constexpr (tilingKey == 7) {
-        RunTMOV<float, half, half, 6, 7, 8, 32, 32, 0, false, true, Layout::ND, 512, STPhase::Final, AccPhase::Final>
-            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1));
-    } else if constexpr (tilingKey == 8) {
-        RunTMOV<float, half, half, 6, 7, 8, 32, 32, 1, false, false, Layout::ND, 512, STPhase::Final, AccPhase::Final>
-            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1));
     }
 }
 
@@ -749,8 +683,6 @@ template void LaunchTMOVAcc2VecNZ2ND<3>(uint8_t *out, uint8_t *src0, uint8_t *sr
 template void LaunchTMOVAcc2VecNZ2ND<4>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMOVAcc2VecNZ2ND<5>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMOVAcc2VecNZ2ND<6>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2VecNZ2ND<7>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2VecNZ2ND<8>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
 template <int32_t tilingKey>
 void LaunchTMOVAcc2VecNZ2NZ(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
@@ -865,16 +797,6 @@ void LaunchTMOVAcc2VecFBQuantNZ2ND(uint8_t *out, uint8_t *src0, uint8_t *src1, u
         RunTMOVFBQuant<half, float, float, uint64_t, 31, 128, 128, 31, 128, 0, false, true>
             <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<float *>(src0),
                                      reinterpret_cast<float *>(src1), reinterpret_cast<uint64_t *>(src2));
-    } else if constexpr (tilingKey == 6) {
-        RunTMOVFBQuant<half, float, float, uint64_t, 31, 128, 128, 31, 128, 0, false, true, Layout::ND, 512,
-                       STPhase::Final, AccPhase::Final>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<float *>(src0),
-                                     reinterpret_cast<float *>(src1), reinterpret_cast<uint64_t *>(src2));
-    } else if constexpr (tilingKey == 7) {
-        RunTMOVFBQuant<int8_t, float, float, uint64_t, 60, 128, 64, 64, 64, 1, false, true, Layout::ND, 512,
-                       STPhase::Final, AccPhase::Final>
-            <<<1, nullptr, stream>>>(reinterpret_cast<int8_t *>(out), reinterpret_cast<float *>(src0),
-                                     reinterpret_cast<float *>(src1), reinterpret_cast<uint64_t *>(src2));
     }
 }
 
@@ -883,8 +805,6 @@ template void LaunchTMOVAcc2VecFBQuantNZ2ND<2>(uint8_t *out, uint8_t *src0, uint
 template void LaunchTMOVAcc2VecFBQuantNZ2ND<3>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
 template void LaunchTMOVAcc2VecFBQuantNZ2ND<4>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
 template void LaunchTMOVAcc2VecFBQuantNZ2ND<5>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
-template void LaunchTMOVAcc2VecFBQuantNZ2ND<6>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
-template void LaunchTMOVAcc2VecFBQuantNZ2ND<7>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
 
 template <int32_t tilingKey>
 void LaunchTMOVAcc2VecSCQuantNZ2ND(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
@@ -901,14 +821,6 @@ void LaunchTMOVAcc2VecSCQuantNZ2ND(uint8_t *out, uint8_t *src0, uint8_t *src1, v
     } else if constexpr (tilingKey == 4) {
         RunTMOVSCQuant<int8_t, int8_t, int8_t, 60, 128, 32, 64, 32><<<1, nullptr, stream>>>(
             reinterpret_cast<int8_t *>(out), reinterpret_cast<int8_t *>(src0), reinterpret_cast<int8_t *>(src1), 1);
-    } else if constexpr (tilingKey == 5) {
-        RunTMOVSCQuant<half, float, float, 128, 48, 96, 128, 96, 0, false, true, Layout::ND, 512, STPhase::Final,
-                       AccPhase::Final><<<1, nullptr, stream>>>(
-            reinterpret_cast<half *>(out), reinterpret_cast<float *>(src0), reinterpret_cast<float *>(src1), 2);
-    } else if constexpr (tilingKey == 6) {
-        RunTMOVSCQuant<int8_t, float, float, 60, 128, 64, 64, 64, 1, false, true, Layout::ND, 512, STPhase::Final,
-                       AccPhase::Final><<<1, nullptr, stream>>>(
-            reinterpret_cast<int8_t *>(out), reinterpret_cast<float *>(src0), reinterpret_cast<float *>(src1), 5);
     }
 }
 
@@ -916,8 +828,6 @@ template void LaunchTMOVAcc2VecSCQuantNZ2ND<1>(uint8_t *out, uint8_t *src0, uint
 template void LaunchTMOVAcc2VecSCQuantNZ2ND<2>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMOVAcc2VecSCQuantNZ2ND<3>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMOVAcc2VecSCQuantNZ2ND<4>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2VecSCQuantNZ2ND<5>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2VecSCQuantNZ2ND<6>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
 template <int32_t tilingKey>
 void LaunchTMOVAcc2VecNZ2DN(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)

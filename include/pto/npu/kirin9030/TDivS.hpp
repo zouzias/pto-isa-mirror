@@ -20,7 +20,6 @@ namespace pto {
 
 template <typename T>
 struct DivSOp {
-    static constexpr bool isDynFunc = false;
     PTO_INTERNAL static void BinSInstr(RegTensor<T> &vregdst, RegTensor<T> &vregsrc, T src1, MaskReg &preg)
     {
         vdup(vregdst, src1, preg, MODE_ZEROING);
@@ -30,7 +29,6 @@ struct DivSOp {
 
 template <typename T>
 struct DivSOpS {
-    static constexpr bool isDynFunc = false;
     PTO_INTERNAL static void BinSInstr(RegTensor<T> &vregdst, RegTensor<T> &vregsrc, T src0, MaskReg &preg)
     {
         vdup(vregdst, src0, preg, MODE_ZEROING);
