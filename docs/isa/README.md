@@ -11,6 +11,7 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 
 ## Synchronization
 - [TSYNC](TSYNC.md) - Synchronize PTO execution (wait on events or insert a per-op pipeline barrier).
+- [SYNCALL](SYNCALL.md) - Cross-core synchronization barrier (hardware FFTS or software GM polling).
 
 ## Manual / Resource Binding
 - [TASSIGN](TASSIGN.md) - Bind a Tile object to an implementation-defined on-chip address (manual placement).
