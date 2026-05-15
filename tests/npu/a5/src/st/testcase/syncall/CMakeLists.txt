@@ -146,3 +146,4 @@ target_link_libraries(syncall PRIVATE
 
 pto_syncall_mix_kernel(syncall_mix_1_1_kernel syncall_mix_1_1_kernel.cpp -D__MIX_CORE_AIV_RATIO__=1)
 pto_syncall_mix_kernel(syncall_mix_1_2_kernel syncall_mix_1_2_kernel.cpp -D__MIX_CORE_AIV_RATIO__=2)
+pto_syncall_mix_kernel(syncall_aic_hard_kernel syncall_aic_hard_kernel.cpp -D__MIX_CORE_AIV_RATIO__=0)

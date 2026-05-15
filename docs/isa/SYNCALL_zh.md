@@ -5,39 +5,49 @@
 `SYNCALL` 是跨核同步屏障，支持 A2/A3 和 A5 NPU 后端。通过模板参数 `SyncCoreType` 选择核类型模式：
 
 - **AIV-only**（默认）：`SYNCALL()` 同步所有 AIV 核。
-- **AIC-only**：`SYNCALL<SyncCoreType::AICOnly>()` 同步所有 AIC 核（当前仅 A2/A3 支持）。
+- **AIC-only**：`SYNCALL<SyncCoreType::AICOnly>()` 同步所有 AIC 核（A2/A3 支持硬件和软件模式；A5 仅支持硬件模式）。
 - **MIX（AIC+AIV）**：`SYNCALL<SyncCoreType::Mix>()` 同步 AIC 和 AIV 混合核。
 
 每种核类型模式均支持硬件模式（FFTS）和软件模式（GM 轮询）两种同步机制。
 
 ## C++ 内建接口
 
-声明于 `include/pto/common/pto_instr.hpp`：
+声明于 `include/pto/common/pto_instr.hpp`。软件模式接口使用类型安全的 `GlobalTensor` 和 `Tile` 参数（通过 SFINAE 约束）：
 
 ```cpp
 // 硬件模式（所有 CoreType 通用）
 template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
 PTO_INST void SYNCALL();
 
-// 软件模式 — AIV-only（GM + UB workspace）
-template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AIVOnly>
-PTO_INST void SYNCALL(__gm__ int32_t *gmWorkspace, __ubuf__ int32_t *ubWorkspace, int32_t usedCores = 0);
+// 软件模式 — AIV-only（GlobalTensor + Vec Tile）
+template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AIVOnly,
+          typename GlobalData, typename TileData,
+          std::enable_if_t<is_global_data_v<GlobalData> &&
+                           is_tile_data_v<TileData> && TileData::Loc == TileType::Vec, int> = 0>
+PTO_INST void SYNCALL(GlobalData &gmWorkspace, TileData &ubWorkspace, int32_t usedCores = 0);
 
-// 软件模式 — AIC-only（GM + L1 workspace）
-template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AICOnly>
-PTO_INST void SYNCALL(__gm__ int32_t *gmWorkspace, __cbuf__ int32_t *l1Workspace, int32_t usedCores = 0);
+// 软件模式 — AIC-only（GlobalTensor + Mat Tile）
+template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AICOnly,
+          typename GlobalData, typename TileData,
+          std::enable_if_t<is_global_data_v<GlobalData> &&
+                           is_tile_data_v<TileData> && TileData::Loc == TileType::Mat, int> = 0>
+PTO_INST void SYNCALL(GlobalData &gmWorkspace, TileData &l1Workspace, int32_t usedCores = 0);
 
-// 软件模式 — MIX（GM + UB + L1 workspace）
-template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::Mix>
-PTO_INST void SYNCALL(__gm__ int32_t *gmWorkspace, __ubuf__ int32_t *ubWorkspace, __cbuf__ int32_t *l1Workspace,
+// 软件模式 — MIX（GlobalTensor + Vec Tile + Mat Tile）
+template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::Mix,
+          typename GlobalData, typename UbTileData, typename L1TileData,
+          std::enable_if_t<is_global_data_v<GlobalData> &&
+                           is_tile_data_v<UbTileData> && UbTileData::Loc == TileType::Vec &&
+                           is_tile_data_v<L1TileData> && L1TileData::Loc == TileType::Mat, int> = 0>
+PTO_INST void SYNCALL(GlobalData &gmWorkspace, UbTileData &ubWorkspace, L1TileData &l1Workspace,
                        int32_t usedCores = 0);
 ```
 
 ## 参数
 
-- `gmWorkspace`: 软件模式使用的 GM workspace。调用前需要初始化为 0。每个参与 core 占用 8 个 `int32_t`（按 cache line 隔离同步计数）。
-- `ubWorkspace`: AIV-only 和 MIX 软件模式使用的 UB scratch，容量至少为 `usedCores * 8 * sizeof(int32_t)`。
-- `l1Workspace`: AIC-only 和 MIX 软件模式使用的 L1（cbuf）scratch，用于 `create_cbuf_matrix` 填充同步值后经 DMA 搬移到 GM。
+- `gmWorkspace`: `GlobalTensor<int32_t, Shape<>, Stride<>>`。软件模式使用的 GM workspace，调用前需要初始化为 0。每个参与 core 占用 8 个 `int32_t`（按 cache line 隔离同步计数）。
+- `ubWorkspace`: `Tile<TileType::Vec, int32_t, 1, SYNCALL_SOFT_SLOT_INT32>`。AIV-only 和 MIX 软件模式使用的 UB scratch，容量至少为 `usedCores * 8 * sizeof(int32_t)`。
+- `l1Workspace`: `Tile<TileType::Mat, int32_t, 1, SYNCALL_SOFT_SLOT_INT32>`。AIC-only 和 MIX 软件模式使用的 L1（cbuf）scratch，用于 `create_cbuf_matrix` 填充同步值后经 DMA 搬移到 GM。
 - `usedCores`: 参与软件 barrier 的 core 数。为 0 时自动推算——AIV-only 使用 `get_block_num()`，AIC-only 使用 `get_block_num()`，MIX 使用 `SYNCALL_GET_MIX_PARTICIPANT_COUNT()`（即 `AIC blocks × (1 + AIV ratio)`）。
 
 ## Kernel Meta 宏
@@ -76,7 +86,7 @@ PTO_SYNCALL_AIV_KERNEL_META(MyKernel_mix_aiv);             // AIV kernel ELF
 | 核类型 | 硬件模式 | 软件模式 |
 |--------|---------|---------|
 | AIV-only | 支持 | 支持 |
-| AIC-only | 不支持 | 不支持 |
+| AIC-only | 支持 | 不支持 |
 | MIX | 不支持 | 支持 |
 
 ## 约束
@@ -86,7 +96,8 @@ PTO_SYNCALL_AIV_KERNEL_META(MyKernel_mix_aiv);             // AIV kernel ELF
   - AIC-only 模式（仅 A2/A3）：AIC 核通过 `copy_cbuf_to_gm`（L1→GM DMA）直接写入和读取 GM slot 完成同步。
   - A2/A3 混合模式：AIC 核通过 `copy_cbuf_to_gm`（L1→GM DMA）直接写入 GM slot，AIV 核通过 UB workspace 写入。
   - A5 混合模式：A5 AIC（`dav-c310-cube`）不支持 `copy_cbuf_to_gm` 等直接写 GM 的 DMA 指令，改为通过 `intra_block` 信号委托同 block 的 AIV subblock 0 代为执行 UB→GM 写入。
-- A5 AIC-only 模式不支持：A5 AIC 缺少独立写 GM 的 DMA 路径。
+- A5 AIC-only 硬件模式已支持：AIC 通过 `ffts_cross_core_sync` + `wait_flag_dev` 实现跨核同步，不需要 `set_ffts_base_addr`。
+- A5 AIC-only 软件模式不支持：A5 AIC（`dav-c310-cube`）缺少 `copy_cbuf_to_gm` 等独立写 GM 的 DMA 路径，无法实现 GM 轮询同步。
 - A5 硬件 MIX 模式不可用：运行时接口 `rtGetC2cCtrlAddr` 在 A5（`CHIP_DAVID`）平台返回 `RT_ERROR_FEATURE_NOT_SUPPORT`（207000），无法获取 FFTS 基地址。
 - 软件模式要求所有参与 core 以相同顺序进入同一组 barrier；每个参与 core 在 `gmWorkspace` 中占用 8 个 `int32_t`，用于按 cache line 隔离同步计数。
 - 软件模式只提供 barrier 到达语义。若 barrier 前后还需要观察其他 GM 数据，调用方仍需保证对应数据的 cache 可见性。
