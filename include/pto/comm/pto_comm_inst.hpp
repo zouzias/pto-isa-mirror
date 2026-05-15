@@ -277,6 +277,12 @@ PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcG
     return ::pto::comm::TGET_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
 }
 
+// NOTE: TPREFETCH_ASYNC lives under `pto::` (declared in
+// `pto/common/pto_instr.hpp`) because the instruction is logically a
+// memory-access primitive rather than a comm primitive. The implementation
+// lives in `pto/npu/TPrefetchAsync.hpp` (NPU) and
+// `pto/cpu/TPrefetchAsync.hpp` (CPU sim).
+
 } // namespace comm
 } // namespace pto
 
