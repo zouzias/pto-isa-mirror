@@ -88,7 +88,10 @@ PTO_INTERNAL void SYNCALL_IMPL()
 #endif
         return;
     } else if constexpr (CoreType == SyncCoreType::AICOnly) {
-        PTO_STATIC_ASSERT(CoreType != SyncCoreType::AICOnly, "AIC-only SYNCALL is not supported on A5.");
+#if defined(__DAV_CUBE__)
+        ffts_cross_core_sync(PIPE_FIX, getFFTSMsg(0x0, SYNC_AIC_FLAG));
+        wait_flag_dev(PIPE_S, SYNC_AIC_FLAG);
+#endif
         return;
     }
 
