@@ -14,6 +14,35 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TFillPad.hpp"
 
 namespace pto {
+
+template <typename TileData>
+PTO_INTERNAL void T32BAlignedPadInstr(__ubuf__ typename TileData::DType *tail, uint16_t validRow, uint32_t validCol, 
+                                      decltype(GetPadValue<TileData>()) padValue)
+{
+    constexpr uint32_t ELEMS_PER_BLOCK = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
+    if constexpr (sizeof(typename TileData::DType) == 1) {
+        set_flag(PIPE_V, PIPE_S, EVENT_ID7);
+        wait_flag(PIPE_V, PIPE_S, EVENT_ID7);
+        Handle32BAlignedPad_Byte<TileData, TileData>((decltype(getCopyNullPtr<TileData>()))(tail), 
+            validRow, validCol, ELEMS_PER_BLOCK, padValue);
+        // 对外保持整个指令的结束流水是 PIPE_V
+        set_flag(PIPE_S, PIPE_V, EVENT_ID7);
+        wait_flag(PIPE_S, PIPE_V, EVENT_ID7);
+    } else if constexpr (sizeof(typename TileData::DType) == 8) {
+        PTO_ASSERT((padValue == PadValueMap<uint64_t, PadValue::Min>::value || 
+            padValue == PadValueMap<uint64_t, PadValue::Max>::value), 
+            "Only support padding with uint64_t while sizeof(T) == 8.");
+        set_mask_norm();
+        set_vector_mask(0, (1 << (ELEMS_PER_BLOCK * 2)) - (1 << (validCol * 2)));
+        vector_dup((__ubuf__ int32_t*)tail, 0, validRow, 0, 0, TileData::Cols / ELEMS_PER_BLOCK, 0);
+        set_mask_norm();
+        set_vector_mask(-1, -1);
+    } else {
+        Handle32BAlignedPad_Other<TileData, TileData>((decltype(getCopyNullPtr<TileData>()))(tail),
+            validRow, validCol, ELEMS_PER_BLOCK, padValue);
+    }
+}
+
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadInstrGm2ub(__ubuf__ typename TileData::DType *dst, typename GlobalData::DType *src,
                                   uint16_t nBurst, uint32_t lenByteBurst, uint32_t gmByteGap, uint32_t ubGap,
@@ -32,12 +61,12 @@ PTO_INTERNAL void TLoadInstrGm2ub(__ubuf__ typename TileData::DType *dst, typena
         }
     }
     if (ubPad != 0) {
+        uint32_t validCol = lenByteBurst / sizeof(typename TileData::DType);
+        uint32_t remains = validCol % ELEMS_PER_BLOCK;
         set_flag(PIPE_MTE2, PIPE_V, EVENT_ID7);
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID7);
-        auto padValue = GetPadValue<TileData>();
-        Handle32BAlignedPad_Other<TileData, TileData>(
-            (decltype(getCopyNullPtr<TileData>()))dst, nBurst, lenByteBurst / sizeof(typename TileData::DType), lenBurst * ELEMS_PER_BLOCK, padValue);
-        // 对外保持整个指令的结束流水是MTE2
+        T32BAlignedPadInstr<TileData>(dst + validCol - remains, nBurst, remains, GetPadValue<TileData>());
+        // 对外保持整个指令的结束流水是 PIPE_MTE2
         set_flag(PIPE_V, PIPE_MTE2, EVENT_ID7);
         wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID7);
     }

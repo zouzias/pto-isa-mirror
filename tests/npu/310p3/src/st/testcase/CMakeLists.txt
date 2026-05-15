@@ -95,6 +95,7 @@ set(ALL_TESTCASES
     tadds
     tdiv
     tdivs
+    tload
     tmul
     tsub
 )
