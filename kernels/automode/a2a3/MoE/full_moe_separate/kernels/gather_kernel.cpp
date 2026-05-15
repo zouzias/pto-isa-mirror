@@ -155,7 +155,7 @@ __global__ AICORE void runGather(
     __gm__ int32_t __in__    *A_id,
     __gm__ int32_t __in__    *rank_id,
     __gm__ T       __in__    *outVal,
-    __gm__ T       __inout__ *weights_scratch)
+    __gm__ T       __out__   *weights_scratch)
 {
     using namespace gather_cfg;
 
