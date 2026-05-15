@@ -17,11 +17,14 @@ using namespace PtoTestCommon;
 
 class TADDTest : public testing::Test {
 protected:
-    void SetUp() override {}
-    void TearDown() override {}
+    void SetUp() override
+    {}
+    void TearDown() override
+    {}
 };
 
-std::string GetGoldenDir() {
+std::string GetGoldenDir()
+{
     const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
@@ -30,15 +33,16 @@ std::string GetGoldenDir() {
 }
 
 template <typename T, int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows,
-    int vCols>
+          int vCols>
 void LaunchTAdd(T *out, T *src0, T *src1, void *stream);
 
 template <int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows, int vCols>
 void LaunchTAddHalf(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream);
 
 template <typename T, int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows,
-    int vCols>
-void test_tadd() {
+          int vCols, bool isHalf = false>
+void test_tadd()
+{
     size_t fileSizeDst = dstTileH * dstTileW * sizeof(T);
     size_t fileSizeSrc0 = src0TileH * src0TileW * sizeof(T);
     size_t fileSizeSrc1 = src1TileH * src1TileW * sizeof(T);
@@ -59,12 +63,15 @@ void test_tadd() {
     aclrtMalloc((void **)&src0Device, fileSizeSrc0, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&src1Device, fileSizeSrc1, ACL_MEM_MALLOC_HUGE_FIRST);
 
+    memset(dstHost, 0, fileSizeDst);
     ReadFile(GetGoldenDir() + "/input1.bin", fileSizeSrc0, src0Host, fileSizeSrc0);
     ReadFile(GetGoldenDir() + "/input2.bin", fileSizeSrc1, src1Host, fileSizeSrc1);
 
+    aclrtMemcpy(dstDevice, fileSizeDst, dstHost, fileSizeDst, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src0Device, fileSizeSrc0, src0Host, fileSizeSrc0, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, fileSizeSrc1, src1Host, fileSizeSrc1, ACL_MEMCPY_HOST_TO_DEVICE);
-    if constexpr (std::is_same<T, aclFloat16>::value) {
+    // At present compiler cannot distinguish between aclFloat16 and uint16_t
+    if constexpr (isHalf) {
         LaunchTAddHalf<dstTileH, dstTileW, src0TileH, src0TileW, src1TileH, src1TileW, vRows, vCols>(
             dstDevice, src0Device, src1Device, stream);
     } else {
@@ -98,42 +105,59 @@ void test_tadd() {
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TADDTest, case_float_64x64_64x64_64x64_64x64) {
+TEST_F(TADDTest, case_float_64x64_64x64_64x64_64x64)
+{
     test_tadd<float, 64, 64, 64, 64, 64, 64, 64, 64>();
 }
-TEST_F(TADDTest, case_int32_64x64_64x64_64x64_64x64) {
+TEST_F(TADDTest, case_float_64x128_64x128_64x128_64x128)
+{
+    test_tadd<float, 64, 128, 64, 128, 64, 128, 64, 128>();
+}
+TEST_F(TADDTest, case_int32_64x64_64x64_64x64_64x64)
+{
     test_tadd<int32_t, 64, 64, 64, 64, 64, 64, 64, 64>();
 }
-TEST_F(TADDTest, case_int16_64x64_64x64_64x64_64x64) {
+TEST_F(TADDTest, case_int16_64x64_64x64_64x64_64x64)
+{
     test_tadd<int16_t, 64, 64, 64, 64, 64, 64, 64, 64>();
 }
-TEST_F(TADDTest, case_half_16x256_16x256_16x256_16x256) {
-    test_tadd<aclFloat16, 16, 256, 16, 256, 16, 256, 16, 256>();
+TEST_F(TADDTest, case_half_16x256_16x256_16x256_16x256)
+{
+    test_tadd<aclFloat16, 16, 256, 16, 256, 16, 256, 16, 256, true>();
 }
-TEST_F(TADDTest, case_half_16x64_16x128_16x128_16x64) {
-    test_tadd<aclFloat16, 16, 64, 16, 128, 16, 128, 16, 64>();
+TEST_F(TADDTest, case_half_16x64_16x128_16x128_16x64)
+{
+    test_tadd<aclFloat16, 16, 64, 16, 128, 16, 128, 16, 64, true>();
 }
-TEST_F(TADDTest, case_float_16x32_16x64_16x32_16x32) {
+TEST_F(TADDTest, case_float_16x32_16x64_16x32_16x32)
+{
     test_tadd<float, 16, 32, 16, 64, 16, 32, 16, 32>();
 }
-TEST_F(TADDTest, case_int16_32x128_32x128_32x256_32x128) {
+TEST_F(TADDTest, case_int16_32x128_32x128_32x256_32x128)
+{
     test_tadd<int16_t, 32, 128, 32, 128, 32, 256, 32, 128>();
 }
-TEST_F(TADDTest, case_int32_16x32_16x64_16x32_16x32) {
+TEST_F(TADDTest, case_int32_16x32_16x64_16x32_16x32)
+{
     test_tadd<int32_t, 16, 32, 16, 64, 16, 32, 16, 32>();
 }
-TEST_F(TADDTest, case_half_16x64_16x128_16x128_16x63) {
-    test_tadd<aclFloat16, 16, 64, 16, 128, 16, 128, 16, 63>();
+TEST_F(TADDTest, case_half_16x64_16x128_16x128_16x63)
+{
+    test_tadd<aclFloat16, 16, 64, 16, 128, 16, 128, 16, 63, true>();
 }
-TEST_F(TADDTest, case_float_16x32_16x64_16x32_16x31) {
+TEST_F(TADDTest, case_float_16x32_16x64_16x32_16x31)
+{
     test_tadd<float, 16, 32, 16, 64, 16, 32, 16, 31>();
 }
-TEST_F(TADDTest, case_int16_32x128_32x128_32x256_32x127) {
+TEST_F(TADDTest, case_int16_32x128_32x128_32x256_32x127)
+{
     test_tadd<int16_t, 32, 128, 32, 128, 32, 256, 32, 127>();
 }
-TEST_F(TADDTest, case_int32_16x32_16x64_16x32_16x31) {
+TEST_F(TADDTest, case_int32_16x32_16x64_16x32_16x31)
+{
     test_tadd<int32_t, 16, 32, 16, 64, 16, 32, 16, 31>();
 }
-TEST_F(TADDTest, case_half_2x128_2x128_2x128_1x106) {
-    test_tadd<aclFloat16, 2, 128, 2, 128, 2, 128, 1, 106>();
+TEST_F(TADDTest, case_half_2x128_2x128_2x128_1x106)
+{
+    test_tadd<aclFloat16, 2, 128, 2, 128, 2, 128, 1, 106, true>();
 }

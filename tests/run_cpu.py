@@ -35,6 +35,7 @@ def run_command(
     title: Optional[str] = None,
     verbose: bool = False,
     always_print_patterns: Optional[List[str]] = None,
+    env: Optional[Dict[str, str]] = None,
 ) -> float:
     cwd_str = str(cwd) if cwd is not None else None
     start = time.perf_counter()
@@ -46,6 +47,7 @@ def run_command(
         completed = subprocess.run(
             [str(x) for x in command],
             cwd=cwd_str,
+            env=env or os.environ,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -119,25 +121,143 @@ def cmake_friendly_path(p: Optional[str]) -> Optional[str]:
     return p
 
 
+def get_compiler_major_version(compiler_path: str) -> int:
+    """Get the major version number of the compiler."""
+    if not compiler_path:
+        return 0
+
+    try:
+        logging.debug("Checking version for compiler: %s", compiler_path)
+        # check=False ensures that even if the command returns a non-zero status code,
+        # it will not raise CalledProcessError, but judge by result.returncode.
+        result = subprocess.run(
+            [compiler_path, "--version"],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+
+        if result.returncode != 0:
+            logging.warning("Failed to run --version on: %s", compiler_path)
+            return 0
+
+        match = re.search(r'(\d+)\.', result.stdout)
+        if match:
+            version = int(match.group(1))
+            logging.debug("Parsed version for %s: %d", compiler_path, version)
+            return version
+
+    except Exception as e:
+        logging.warning("Exception occurred while checking compiler version: %s", e)
+        return 0
+
+    return 0
+
+
+def _try_find_compiler(cxx_name: str, cc_name: str, min_ver: int) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Try to find a specific C++ compiler and check if the version meets the requirements.
+    """
+    cxx_path = shutil.which(cxx_name)
+    if not cxx_path:
+        return None, None
+
+    ver = get_compiler_major_version(cxx_path)
+
+    # Log the detection result
+    logging.debug("Found candidate %s, version: %d (required: %d)", cxx_path, ver, min_ver)
+
+    if ver >= min_ver:
+        cc_path = shutil.which(cc_name)
+        logging.info("Selected compiler pair: %s / %s (Version >= %d)", cxx_path, cc_path, min_ver)
+        return cxx_path, cc_path
+
+    return None, None
+
+
+def _auto_detect_compilers() -> Tuple[str, Optional[str]]:
+    logging.info("CXX not specified, starting automatic detection...")
+
+    # 1. Try Clang
+    cxx, cc = _try_find_compiler("clang++", "clang", 15)
+    if cxx:
+        return cxx, cc
+
+    # 2. Try GCC
+    cxx, cc = _try_find_compiler("g++", "gcc", 13)
+    if cxx:
+        return cxx, cc
+
+    # 3. Fail
+    error_msg = (
+        "Could not find a suitable compiler.\n"
+        "Requirements:\n"
+        " - clang++ >= 15\n"
+        " - OR g++ >= 13"
+    )
+    logging.error(error_msg)
+    raise RuntimeError(error_msg)
+
+
+def _derive_cc_from_cxx(cxx_path: str) -> Optional[str]:
+    """
+    Guess the corresponding CC based on the path name of CXX.
+    """
+    if not cxx_path:
+        return None
+
+    logging.debug("Attempting to derive CC from CXX: %s", cxx_path)
+    name = Path(cxx_path).name
+
+    # Match as long as the path contains "g++" or "clang" keywords
+    if "clang" in name:
+        logging.info("Derived CC as clang")
+        return shutil.which("clang")
+
+    if "g++" in name:
+        logging.info("Derived CC as gcc")
+        return shutil.which("gcc")
+
+    return None
+
+
 def detect_compilers(cxx_arg: Optional[str], cc_arg: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+    # 1. Initialize variables
     cxx = cxx_arg or os.environ.get("CXX")
     cc = cc_arg or os.environ.get("CC")
 
+    if cxx:
+        logging.info("Using explicit CXX: %s", cxx)
+
+    # 2. Determine CXX path
     if not cxx:
-        cxx = shutil.which("clang++") or shutil.which("g++")
+        # Auto detection mode
+        cxx, auto_cc = _auto_detect_compilers()
+        if not cc:
+            cc = auto_cc
     elif not Path(cxx).is_absolute():
-        cxx = shutil.which(cxx) or cxx
+        # Resolve relative path
+        resolved_cxx = shutil.which(cxx)
+        if resolved_cxx:
+            logging.debug("Resolved relative path '%s' to '%s'", cxx, resolved_cxx)
+            cxx = resolved_cxx
 
+    # 3. Determine CC path
     if not cc:
-        if cxx and Path(cxx).name in ("clang++", "clang-cl"):
-            cc = shutil.which("clang")
-        elif cxx and Path(cxx).name == "g++":
-            cc = shutil.which("gcc")
+        cc = _derive_cc_from_cxx(cxx)
     elif not Path(cc).is_absolute():
-        cc = shutil.which(cc) or cc
-    cxx = cmake_friendly_path(cxx)
-    cc = cmake_friendly_path(cc)
+        resolved_cc = shutil.which(cc) or cc
+        if resolved_cc != cc:
+            logging.debug("Resolved relative path '%s' to '%s'", cc, resolved_cc)
+        cc = resolved_cc
 
+    # 4. Format paths
+    if cxx:
+        cxx = cmake_friendly_path(cxx)
+    if cc:
+        cc = cmake_friendly_path(cc)
+
+    logging.info("Final Compiler Selection -> CXX: %s, CC: %s", cxx, cc)
     return cxx, cc
 
 
@@ -151,8 +271,15 @@ def cmake_build(build_dir: Path, build_type: str) -> None:
 
 def generate_golden(build_dir: Path, gen_script: Path) -> None:
     dst = build_dir / "gen_data.py"
+    st_dir = gen_script.resolve().parent.parent.parent
     shutil.copyfile(gen_script, dst)
-    run_command([sys.executable, str(dst.name)], cwd=build_dir)
+
+    env = os.environ.copy()
+    pp = env.get("PYTHONPATH", "")
+    new_path = str(st_dir)
+    env["PYTHONPATH"] = f"{new_path}{os.pathsep}{pp}" if pp else new_path
+
+    run_command([sys.executable, str(dst.name)], cwd=build_dir, env=env)
 
 
 def read_cmake_cache_var(build_dir: Path, var_name: str) -> Optional[str]:
@@ -345,6 +472,11 @@ def parse_arguments():
     parser.add_argument("--demo-only", action="store_true", help="Same as --demo (demo runs without CPU ST).")
     parser.add_argument("--generator", default=None, help="CMake generator(Windows required: 'MinGW Makefiles' etc..)")
     parser.add_argument("--cmake_prefix_path", default=None, help="-DCMAKE_PREFIX_PATH=<path> e.g. D:\\gtest")
+    parser.add_argument(
+        "--enable-bf16",
+        action="store_true",
+        help="Enable BF16 CPU-SIM coverage. Requires a compiler with C++23 std::bfloat16_t support.",
+    )
     args = parser.parse_args()
     return args
 
@@ -355,8 +487,20 @@ def setup_environment(args) -> None:
         ensure_cmake_tools()
 
 
+def resolve_bf16_compiler_pair(args) -> None:
+    from tests.script.cpu_bfloat16 import detect_bfloat16_cxx, derive_cc_from_cxx
+
+    selected_cxx = detect_bfloat16_cxx(args.cxx)
+    if args.cxx and (shutil.which(args.cxx) or args.cxx) != selected_cxx:
+        raise RuntimeError(f"--cxx={args.cxx} does not support std::bfloat16_t")
+    args.cxx = selected_cxx
+    if not args.cc:
+        args.cc = derive_cc_from_cxx(selected_cxx)
+
+
 def log_build_info(args, cxx, cc) -> None:
     logging.info(f"[INFO] build_type={args.build_type}")
+    logging.info(f"[INFO] bf16={'ON' if args.enable_bf16 else 'OFF'}")
     if cxx:
         logging.info(f"[INFO] cxx={cxx}")
     if cc:
@@ -483,6 +627,7 @@ def perform_build(args, source_dir, build_dir, cxx, cc) -> bool:
             "-B",
             str(build_dir),
             f"-DCMAKE_BUILD_TYPE={args.build_type}",
+            f"-DPTO_CPU_SIM_ENABLE_BF16={'ON' if args.enable_bf16 else 'OFF'}",
             *([f"-DTEST_CASE={args.testcase}"] if args.testcase else []),
             *([f"-DCMAKE_C_COMPILER={cc}"] if cc else []),
             *([f"-DCMAKE_CXX_COMPILER={cxx}"] if cxx else []),
@@ -536,7 +681,22 @@ def run_selected_tests(args, source_dir, build_dir, selected, xml_dir) -> List[L
         gen_script = source_dir / "testcase" / testcase / "gen_data.py"
         if not args.no_gen and gen_script.exists():
             logging.info(f"[STEP] gen_data: {testcase}")
-            generate_golden(build_dir=build_dir, gen_script=gen_script)
+            old_pythonpath = os.environ.get("PYTHONPATH", "")
+            old_bf16_flag = os.environ.get("PTO_CPU_SIM_ENABLE_BF16")
+            repo_root = Path(__file__).resolve().parent.parent
+            os.environ["PYTHONPATH"] = str(repo_root) + (os.pathsep + old_pythonpath if old_pythonpath else "")
+            if args.enable_bf16:
+                os.environ["PTO_CPU_SIM_ENABLE_BF16"] = "1"
+            else:
+                os.environ.pop("PTO_CPU_SIM_ENABLE_BF16", None)
+            try:
+                generate_golden(build_dir=build_dir, gen_script=gen_script)
+            finally:
+                os.environ["PYTHONPATH"] = old_pythonpath
+                if old_bf16_flag is None:
+                    os.environ.pop("PTO_CPU_SIM_ENABLE_BF16", None)
+                else:
+                    os.environ["PTO_CPU_SIM_ENABLE_BF16"] = old_bf16_flag
 
         xml_output = (xml_dir / f"{testcase}.xml") if xml_dir else None
         t0 = time.perf_counter()
@@ -570,6 +730,9 @@ def main() -> int:
     args = parse_arguments()
     setup_environment(args)
     repo_root = Path(__file__).resolve().parent
+
+    if args.enable_bf16:
+        resolve_bf16_compiler_pair(args)
 
     cxx, cc = detect_compilers(args.cxx, args.cc)
     log_build_info(args, cxx, cc)

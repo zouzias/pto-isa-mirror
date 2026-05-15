@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+from utils import NumExt
 np.random.seed(19)
 
 def gen_golden_data(case_name, param):
@@ -21,23 +22,20 @@ def gen_golden_data(case_name, param):
     h_valid, w_valid = [param.valid_row, param.valid_col]
 
     # Generate random input arrays
-    input1 = np.random.random(size=(H,W)).astype(dtype)
+    input1 = NumExt.astype(np.random.random(size=(H, W)), dtype)
 
     # Perform the operation
-    golden = np.sqrt(input1)
+    golden = NumExt.astype(np.sqrt(input1), dtype)
 
     # Apply valid region constraints
-    output = np.zeros([H, W]).astype(dtype)
-    for h in range(H):
-        for w in range(W):
-            if h >= h_valid or w >= w_valid:
-                golden[h][w] = output[h][w]
+    golden[h_valid:, :] = 0
+    golden[:, w_valid:] = 0
 
     # Save the input and golden data to binary files
-    input1.tofile("input1.bin")
-    golden.tofile("golden.bin")
+    NumExt.write_array("input1.bin", input1, dtype)
+    NumExt.write_array("golden.bin", golden, dtype)
 
-    return output, input1, golden
+    return input1, golden
 
 class tunaryParams:
     def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col, in_place = False):
@@ -51,13 +49,7 @@ class tunaryParams:
         self.in_place = in_place
 
 def generate_case_name(param):
-    dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int8: 'int8',
-        np.int32: 'int32',
-        np.int16: 'int16'
-    }[param.dtype]
+    dtype_str = NumExt.get_short_type_name(param.dtype)
     return f"TSQRTTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}_inPlace_{param.in_place}"
 
 if __name__ == "__main__":
@@ -74,6 +66,8 @@ if __name__ == "__main__":
         tunaryParams(np.float32, 64, 64, 64, 64, 64, 64, False),
         tunaryParams(np.float16, 64, 64, 64, 64, 64, 64, True),
         tunaryParams(np.float16, 64, 64, 64, 64, 64, 64, False),
+        tunaryParams(NumExt.bf16, 64, 64, 64, 64, 64, 64, True),
+        tunaryParams(NumExt.bf16, 64, 64, 64, 64, 64, 64, False)
     ]
 
     for i, param in enumerate(case_params_list):

@@ -13,22 +13,45 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <pto/common/pto_tile.hpp>
 
+#ifdef __CPU_SIM
+#include <pto/cpu/NPUMemoryModel.hpp>
+#endif
+
 namespace pto {
+
 template <typename T, typename AddrType>
-PTO_INTERNAL void TASSIGN_IMPL(T &obj, AddrType addr) {
-  if constexpr (is_tile_data_v<T>) {
-    return;
-  } else {
-    static_assert(is_global_data_v<T>,
-                  "Only Tile and GlobalTensor data types are supported.");
-    static_assert(
-        std::is_pointer_v<AddrType>,
-        "GlobalTensor can only be assigned with address of pointer type.");
-    static_assert(
-        std::is_same_v<std::remove_cv_t<std::remove_pointer_t<AddrType>>, typename T::DType>,
-        "GlobalTensor can only be assigned with pointer of same data type.");
-    obj.SetAddr(addr);
-  }
+PTO_INTERNAL void TASSIGN_IMPL(T &obj, AddrType addr)
+{
+    if constexpr (is_tile_data_v<T>) {
+        static_assert(std::is_integral_v<AddrType>, "Tile can only be assigned with address of int type.");
+
+        obj.assignData(NPUMemoryModel::Instance().ResolveAssignedAddress<T>(static_cast<std::uintptr_t>(addr)));
+    } else {
+        static_assert(is_global_data_v<T>, "Only Tile and GlobalTensor data types are supported.");
+        static_assert(std::is_pointer_v<AddrType>, "GlobalTensor can only be assigned with address of pointer type.");
+        static_assert(std::is_same_v<std::remove_cv_t<std::remove_pointer_t<AddrType>>, typename T::DType>,
+                      "GlobalTensor can only be assigned with pointer of same data type.");
+        obj.SetAddr(addr);
+    }
 }
+
+#ifdef __CPU_SIM
+// Initialize NPU memory model with specific architecture
+// Call once at program start (optional, defaults to A2A3)
+// Sets the default arch for all threads, and initializes the calling thread's instance.
+// Other threads auto-initialize via EnsureInitialized() on first use.
+inline void NPU_MEMORY_INIT(NPUArch arch = NPUArch::A2A3)
+{
+    NPUMemoryModel::SetDefaultArch(arch);
+    NPUMemoryModel::Instance().Initialize(arch);
+}
+
+// Clear all NPU memory (useful between test iterations)
+inline void NPU_MEMORY_CLEAR()
+{
+    NPUMemoryModel::Instance().Clear();
+}
+#endif
+
 } // namespace pto
 #endif

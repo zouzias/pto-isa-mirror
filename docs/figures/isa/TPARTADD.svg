@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="660" viewBox="0 0 1200 660" role="img" aria-label="TPARTADD tile operation diagram">
+<defs>
+  <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+    <path d="M0,0 L0,8 L8,4 z" fill="#C53A79"/>
+  </marker>
+  <marker id="axisArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+    <path d="M0,0 L0,8 L8,4 z" fill="#64748b"/>
+  </marker>
+</defs>
+<style>
+svg { font-family: Arial, Helvetica, sans-serif; }
+.title { font-size: 30px; font-weight: 700; fill: #0f172a; }
+.subtitle { font-size: 14px; fill: #334155; }
+.meta { font-size: 12px; fill: #64748b; }
+.frame { fill: white; }
+.panel { fill: #FDF0F6; stroke: #e2e8f0; stroke-width: 1.5; rx: 14; }
+.tileLabel { font-size: 15px; font-weight: 700; fill: #0f172a; }
+.tileNote { font-size: 12px; fill: #475569; }
+.tileBorder { fill: none; stroke: #475569; stroke-width: 1.5; }
+.cell { fill: #ffffff; stroke: #94a3b8; stroke-width: 1; }
+.cellMasked { fill: #e2e8f0; }
+.cellHL { stroke-width: 2; }
+.arrow { stroke-width: 2.5; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.axisLine { stroke: #64748b; stroke-width: 1.5; fill: none; }
+.axisText { font-size: 10px; fill: #64748b; font-weight: 700; }
+.opRect { fill: #ffffff; stroke: #C53A79; stroke-width: 2; rx: 10; }
+.opText { font-size: 16px; font-weight: 800; fill: #0f172a; }
+.validBox { fill: none; stroke-width: 2; stroke-dasharray: 6 4; }
+.caption { font-size: 12px; fill: #475569; }
+</style>
+<rect x="0" y="0" width="1200" height="660" class="frame" />
+<rect x="24" y="24" width="1152" height="612" class="panel" />
+<text x="40" y="58" class="title">TPARTADD</text>
+<text x="40" y="84" class="subtitle">Partial elementwise add over the destination valid region.</text>
+<text x="40" y="104" class="meta">Legend: dashed=valid region, shaded=outside valid region, r down / c right</text>
+<line x1="36" y1="118" x2="1164" y2="118" stroke="#e2e8f0" stroke-width="1.5" />
+<text x="600" y="152" class="subtitle" text-anchor="middle" fill="#C53A79">dst[r,c] = src0[r,c] + src1[r,c] when both valid; otherwise copy the only valid input</text>
+
+<text x="390" y="194" class="tileLabel" text-anchor="middle">src0</text>
+<text x="390" y="212" class="tileNote" text-anchor="middle">example: valid region matches dst</text>
+<rect x="335" y="228" width="110" height="110" class="tileBorder" />
+<rect x="335" y="228" width="22" height="22" class="cell" />
+<rect x="357" y="228" width="22" height="22" class="cell" />
+<rect x="379" y="228" width="22" height="22" class="cell" />
+<rect x="401" y="228" width="22" height="22" class="cell cellMasked" />
+<rect x="423" y="228" width="22" height="22" class="cell cellMasked" />
+<rect x="335" y="250" width="22" height="22" class="cell" />
+<rect x="357" y="250" width="22" height="22" class="cell" />
+<rect x="379" y="250" width="22" height="22" class="cell cellHL" stroke="#C53A79" />
+<rect x="401" y="250" width="22" height="22" class="cell cellMasked" />
+<rect x="423" y="250" width="22" height="22" class="cell cellMasked" />
+<rect x="335" y="272" width="22" height="22" class="cell" />
+<rect x="357" y="272" width="22" height="22" class="cell" />
+<rect x="379" y="272" width="22" height="22" class="cell" />
+<rect x="401" y="272" width="22" height="22" class="cell cellMasked" />
+<rect x="423" y="272" width="22" height="22" class="cell cellMasked" />
+<rect x="335" y="294" width="22" height="22" class="cell cellMasked" />
+<rect x="357" y="294" width="22" height="22" class="cell cellMasked" />
+<rect x="379" y="294" width="22" height="22" class="cell cellMasked" />
+<rect x="401" y="294" width="22" height="22" class="cell cellMasked" />
+<rect x="423" y="294" width="22" height="22" class="cell cellMasked" />
+<rect x="335" y="316" width="22" height="22" class="cell cellMasked" />
+<rect x="357" y="316" width="22" height="22" class="cell cellMasked" />
+<rect x="379" y="316" width="22" height="22" class="cell cellMasked" />
+<rect x="401" y="316" width="22" height="22" class="cell cellMasked" />
+<rect x="423" y="316" width="22" height="22" class="cell cellMasked" />
+<rect x="335" y="228" width="66" height="66" class="validBox" stroke="#C53A79" />
+<path d="M 345 238 L 379 238" class="axisLine" marker-end="url(#axisArrow)" />
+<path d="M 345 238 L 345 272" class="axisLine" marker-end="url(#axisArrow)" />
+<text x="383" y="242" class="axisText">c</text>
+<text x="343" y="276" class="axisText" text-anchor="end">r</text>
+
+<text x="810" y="194" class="tileLabel" text-anchor="middle">src1</text>
+<text x="810" y="212" class="tileNote" text-anchor="middle">example: smaller valid region, still within dst</text>
+<rect x="755" y="228" width="110" height="110" class="tileBorder" />
+<rect x="755" y="228" width="22" height="22" class="cell" />
+<rect x="777" y="228" width="22" height="22" class="cell" />
+<rect x="799" y="228" width="22" height="22" class="cell cellMasked" />
+<rect x="821" y="228" width="22" height="22" class="cell cellMasked" />
+<rect x="843" y="228" width="22" height="22" class="cell cellMasked" />
+<rect x="755" y="250" width="22" height="22" class="cell" />
+<rect x="777" y="250" width="22" height="22" class="cell cellHL" stroke="#C53A79" />
+<rect x="799" y="250" width="22" height="22" class="cell cellMasked" />
+<rect x="821" y="250" width="22" height="22" class="cell cellMasked" />
+<rect x="843" y="250" width="22" height="22" class="cell cellMasked" />
+<rect x="755" y="272" width="22" height="22" class="cell" />
+<rect x="777" y="272" width="22" height="22" class="cell" />
+<rect x="799" y="272" width="22" height="22" class="cell cellMasked" />
+<rect x="821" y="272" width="22" height="22" class="cell cellMasked" />
+<rect x="843" y="272" width="22" height="22" class="cell cellMasked" />
+<rect x="755" y="294" width="22" height="22" class="cell cellMasked" />
+<rect x="777" y="294" width="22" height="22" class="cell cellMasked" />
+<rect x="799" y="294" width="22" height="22" class="cell cellMasked" />
+<rect x="821" y="294" width="22" height="22" class="cell cellMasked" />
+<rect x="843" y="294" width="22" height="22" class="cell cellMasked" />
+<rect x="755" y="316" width="22" height="22" class="cell cellMasked" />
+<rect x="777" y="316" width="22" height="22" class="cell cellMasked" />
+<rect x="799" y="316" width="22" height="22" class="cell cellMasked" />
+<rect x="821" y="316" width="22" height="22" class="cell cellMasked" />
+<rect x="843" y="316" width="22" height="22" class="cell cellMasked" />
+<rect x="755" y="228" width="44" height="66" class="validBox" stroke="#C53A79" />
+<path d="M 765 238 L 799 238" class="axisLine" marker-end="url(#axisArrow)" />
+<path d="M 765 238 L 765 272" class="axisLine" marker-end="url(#axisArrow)" />
+<text x="803" y="242" class="axisText">c</text>
+<text x="763" y="276" class="axisText" text-anchor="end">r</text>
+
+<rect x="540" y="310" width="120" height="50" class="opRect" />
+<text x="600" y="340" class="opText" text-anchor="middle">TPARTADD</text>
+<path d="M 445 314 L 540 332" class="arrow" stroke="#C53A79" marker-end="url(#arrow)" />
+<path d="M 755 314 L 660 332" class="arrow" stroke="#C53A79" marker-end="url(#arrow)" />
+
+<rect x="545" y="430" width="110" height="110" class="tileBorder" />
+<rect x="545" y="430" width="22" height="22" class="cell" />
+<rect x="567" y="430" width="22" height="22" class="cell" />
+<rect x="589" y="430" width="22" height="22" class="cell" />
+<rect x="611" y="430" width="22" height="22" class="cell cellMasked" />
+<rect x="633" y="430" width="22" height="22" class="cell cellMasked" />
+<rect x="545" y="452" width="22" height="22" class="cell" />
+<rect x="567" y="452" width="22" height="22" class="cell" />
+<rect x="589" y="452" width="22" height="22" class="cell cellHL" stroke="#C53A79" />
+<rect x="611" y="452" width="22" height="22" class="cell cellMasked" />
+<rect x="633" y="452" width="22" height="22" class="cell cellMasked" />
+<rect x="545" y="474" width="22" height="22" class="cell" />
+<rect x="567" y="474" width="22" height="22" class="cell" />
+<rect x="589" y="474" width="22" height="22" class="cell" />
+<rect x="611" y="474" width="22" height="22" class="cell cellMasked" />
+<rect x="633" y="474" width="22" height="22" class="cell cellMasked" />
+<rect x="545" y="496" width="22" height="22" class="cell cellMasked" />
+<rect x="567" y="496" width="22" height="22" class="cell cellMasked" />
+<rect x="589" y="496" width="22" height="22" class="cell cellMasked" />
+<rect x="611" y="496" width="22" height="22" class="cell cellMasked" />
+<rect x="633" y="496" width="22" height="22" class="cell cellMasked" />
+<rect x="545" y="518" width="22" height="22" class="cell cellMasked" />
+<rect x="567" y="518" width="22" height="22" class="cell cellMasked" />
+<rect x="589" y="518" width="22" height="22" class="cell cellMasked" />
+<rect x="611" y="518" width="22" height="22" class="cell cellMasked" />
+<rect x="633" y="518" width="22" height="22" class="cell cellMasked" />
+<rect x="545" y="430" width="66" height="66" class="validBox" stroke="#C53A79" />
+<path d="M 555 440 L 589 440" class="axisLine" marker-end="url(#axisArrow)" />
+<path d="M 555 440 L 555 474" class="axisLine" marker-end="url(#axisArrow)" />
+<text x="593" y="444" class="axisText">c</text>
+<text x="553" y="478" class="axisText" text-anchor="end">r</text>
+<path d="M 600 360 L 600 420" class="arrow" stroke="#C53A79" marker-end="url(#arrow)" />
+
+<text x="600" y="570" class="tileLabel" text-anchor="middle">dst</text>
+<text x="600" y="588" class="tileNote" text-anchor="middle">result domain = destination valid region</text>
+<text x="40" y="616" class="caption">Example validity pattern shown: one source matches dst, the other stays within dst. Other unsupported patterns are omitted.</text>
+</svg>

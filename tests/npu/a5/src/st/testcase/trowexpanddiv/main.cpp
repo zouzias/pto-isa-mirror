@@ -15,11 +15,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace PtoTestCommon;
 
-namespace TRowExpandDivTest{
-template <typename T, uint32_t dstRow, uint32_t dstCol, uint32_t src1Row, uint32_t src1Col, bool src0eqdst>
+namespace TRowExpandDivTest {
+template <typename T, uint32_t dstRow, uint32_t dstCol, uint32_t src1Row, uint32_t src1Col, bool src0eqdst,
+          bool highPrecision>
 void launchTRowExpandDiv(T *out, T *src0, T *src1, void *stream);
 
-template <typename T, uint32_t dstRow, uint32_t dstCol, uint32_t src1Row, uint32_t src1Col, bool src0eqdst>
+template <typename T, uint32_t dstRow, uint32_t dstCol, uint32_t src1Row, uint32_t src1Col, bool src0eqdst,
+          bool highPrecision>
 void launchTRowExpandDiv2(T *out, T *src0, T *src1, void *stream);
 
 class TRowExpandDivTest : public testing::Test {
@@ -30,7 +32,8 @@ protected:
     {}
 };
 
-std::string GetGoldenDir() {
+std::string GetGoldenDir()
+{
     const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
@@ -38,8 +41,10 @@ std::string GetGoldenDir() {
     return fullPath;
 }
 
-template <typename T, uint32_t dstRow, uint32_t dstCol, uint32_t src1Row, uint32_t src1Col, bool src0eqdst, bool isRowMajor>
-void test_trowexpanddiv() {
+template <typename T, uint32_t dstRow, uint32_t dstCol, uint32_t src1Row, uint32_t src1Col, bool src0eqdst,
+          bool isRowMajor, bool highPrecision = false>
+void test_trowexpanddiv()
+{
     size_t inputFileSize = src1Row * src1Col * sizeof(T);
     size_t outputFileSize = dstRow * dstCol * sizeof(T);
 
@@ -65,9 +70,11 @@ void test_trowexpanddiv() {
     aclrtMemcpy(src0Device, outputFileSize, src0Host, outputFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, inputFileSize, src1Host, inputFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     if (isRowMajor) {
-        launchTRowExpandDiv2<T, dstRow, dstCol, src1Row, src1Col, src0eqdst>(dstDevice, src0Device, src1Device, stream);
+        launchTRowExpandDiv2<T, dstRow, dstCol, src1Row, src1Col, src0eqdst, highPrecision>(dstDevice, src0Device,
+                                                                                            src1Device, stream);
     } else {
-        launchTRowExpandDiv<T, dstRow, dstCol, src1Row, src1Col, src0eqdst>(dstDevice, src0Device, src1Device, stream);
+        launchTRowExpandDiv<T, dstRow, dstCol, src1Row, src1Col, src0eqdst, highPrecision>(dstDevice, src0Device,
+                                                                                           src1Device, stream);
     }
 
     aclrtSynchronizeStream(stream);
@@ -91,7 +98,8 @@ void test_trowexpanddiv() {
     std::vector<float> devFinal(outputFileSize);
     ReadFile(GetGoldenDir() + "/golden.bin", outputFileSize, golden.data(), outputFileSize);
     ReadFile(GetGoldenDir() + "/output.bin", outputFileSize, devFinal.data(), outputFileSize);
-    bool ret = ResultCmp(golden, devFinal, 0.001f);
+    auto resPrecision = highPrecision ? 0.0000001f : 0.001f;
+    bool ret = ResultCmp(golden, devFinal, resPrecision);
 
     EXPECT_TRUE(ret);
 }
@@ -136,4 +144,28 @@ TEST_F(TRowExpandDivTest, case_fp16_16_64)
 {
     test_trowexpanddiv<aclFloat16, 16, 64, 16, 16, false, true>();
 }
+TEST_F(TRowExpandDivTest, case_fp32_40_32)
+{
+    test_trowexpanddiv<float, 40, 32, 40, 1, true, false, true>();
 }
+TEST_F(TRowExpandDivTest, case_fp16_16_128)
+{
+    test_trowexpanddiv<aclFloat16, 16, 128, 16, 1, true, false, true>();
+}
+TEST_F(TRowExpandDivTest, case_fp32_8_32)
+{
+    test_trowexpanddiv<float, 8, 32, 8, 8, true, true, true>();
+}
+TEST_F(TRowExpandDivTest, case_fp16_8_128)
+{
+    test_trowexpanddiv<aclFloat16, 8, 128, 8, 16, true, true, true>();
+}
+TEST_F(TRowExpandDivTest, case_int32_16_32)
+{
+    test_trowexpanddiv<int32_t, 16, 32, 16, 1, true, false>();
+}
+TEST_F(TRowExpandDivTest, case_int16_16_64)
+{
+    test_trowexpanddiv<int16_t, 16, 64, 16, 1, true, false>();
+}
+} // namespace TRowExpandDivTest

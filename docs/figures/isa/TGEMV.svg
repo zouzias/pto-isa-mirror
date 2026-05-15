@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-label="TGEMV tile operation diagram">
+<defs>
+  <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#1B7F91"/></marker>
+</defs>
+<style>
+svg { font-family: Arial, Helvetica, sans-serif; }
+.title { font-size: 30px; font-weight: 700; fill: #0f172a; }
+.subtitle { font-size: 14px; fill: #334155; }
+.meta { font-size: 12px; fill: #64748b; }
+.frame { fill: white; }
+.panel { fill: #E8F8FB; stroke: #e2e8f0; stroke-width: 1.5; rx: 14; }
+.tileLabel { font-size: 14px; font-weight: 700; fill: #0f172a; }
+.tileBorder { fill: none; stroke: #475569; stroke-width: 1.5; }
+.cell { fill: #ffffff; stroke: #94a3b8; stroke-width: 1; }
+.cellA { fill: #ecfeff; }
+.cellB { fill: #eff6ff; }
+.cellC { fill: #f5f3ff; }
+.cellText { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; fill: #0f172a; }
+.arrow { stroke-width: 1.5; fill: none; stroke-linejoin: round; stroke-linecap: round; marker-end: url(#arrow); }
+.procBox { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.5; rx: 12; }
+.procTitle { font-size: 14px; font-weight: 700; fill: #0f172a; }
+.procText { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; fill: #0f172a; }
+.opBox { fill: #ffffff; stroke: #1B7F91; stroke-width: 2; rx: 12; }
+.opText { font-size: 13px; font-weight: 800; fill: #0f172a; }
+.note { font-size: 12px; fill: #334155; }
+</style>
+<rect x="0" y="0" width="1200" height="720" class="frame" />
+<rect x="24" y="24" width="1152" height="672" class="panel" />
+<text x="40" y="46" class="title">TGEMV</text>
+<text x="40" y="72" class="subtitle">General Matrix-Vector multiplication producing an accumulator tile.</text>
+<text x="40" y="92" class="meta">GEMV domain: M = 1, A is a row vector, B is a matrix, result is a 1 × N accumulator row.</text>
+<line x1="36" y1="104" x2="1164" y2="104" stroke="#e2e8f0" stroke-width="1.5" />
+
+<text x="250" y="170" class="tileLabel" text-anchor="middle">A / left tile (1 × K)</text>
+<rect x="80" y="200" width="340" height="90" class="tileBorder" />
+<rect x="80" y="200" width="68" height="90" class="cell cellA" />
+<rect x="148" y="200" width="68" height="90" class="cell cellA" />
+<rect x="216" y="200" width="68" height="90" class="cell cellA" />
+<rect x="284" y="200" width="68" height="90" class="cell cellA" />
+<rect x="352" y="200" width="68" height="90" class="cell cellA" />
+<text x="114" y="250" class="cellText" text-anchor="middle">A₀₀</text>
+<text x="182" y="250" class="cellText" text-anchor="middle">A₀₁</text>
+<text x="250" y="250" class="cellText" text-anchor="middle">…</text>
+<text x="318" y="250" class="cellText" text-anchor="middle">A₀,k</text>
+<text x="386" y="250" class="cellText" text-anchor="middle">A₀,K-1</text>
+
+<text x="860" y="170" class="tileLabel" text-anchor="middle">B / right tile (K × N)</text>
+<rect x="650" y="190" width="420" height="220" class="tileBorder" />
+<rect x="650" y="190" width="84" height="55" class="cell cellB" /><rect x="734" y="190" width="84" height="55" class="cell cellB" /><rect x="818" y="190" width="84" height="55" class="cell cellB" /><rect x="902" y="190" width="84" height="55" class="cell cellB" /><rect x="986" y="190" width="84" height="55" class="cell cellB" />
+<rect x="650" y="245" width="84" height="55" class="cell cellB" /><rect x="734" y="245" width="84" height="55" class="cell cellB" /><rect x="818" y="245" width="84" height="55" class="cell cellB" /><rect x="902" y="245" width="84" height="55" class="cell cellB" /><rect x="986" y="245" width="84" height="55" class="cell cellB" />
+<rect x="650" y="300" width="84" height="55" class="cell cellB" /><rect x="734" y="300" width="84" height="55" class="cell cellB" /><rect x="818" y="300" width="84" height="55" class="cell cellB" /><rect x="902" y="300" width="84" height="55" class="cell cellB" /><rect x="986" y="300" width="84" height="55" class="cell cellB" />
+<rect x="650" y="355" width="84" height="55" class="cell cellB" /><rect x="734" y="355" width="84" height="55" class="cell cellB" /><rect x="818" y="355" width="84" height="55" class="cell cellB" /><rect x="902" y="355" width="84" height="55" class="cell cellB" /><rect x="986" y="355" width="84" height="55" class="cell cellB" />
+<text x="692" y="223" class="cellText" text-anchor="middle">B₀₀</text>
+<text x="776" y="223" class="cellText" text-anchor="middle">B₀₁</text>
+<text x="860" y="223" class="cellText" text-anchor="middle">…</text>
+<text x="944" y="223" class="cellText" text-anchor="middle">B₀,j</text>
+<text x="692" y="278" class="cellText" text-anchor="middle">B₁₀</text>
+<text x="776" y="278" class="cellText" text-anchor="middle">B₁₁</text>
+<text x="944" y="278" class="cellText" text-anchor="middle">B₁,j</text>
+<text x="860" y="333" class="cellText" text-anchor="middle">⋮</text>
+<text x="944" y="388" class="cellText" text-anchor="middle">Bₖ,j</text>
+
+<rect x="480" y="300" width="110" height="52" class="opBox" />
+<text x="535" y="331" class="opText" text-anchor="middle">TGEMV</text>
+<path d="M 420 245 C 450 245, 450 315, 480 315" class="arrow" stroke="#1B7F91" />
+<path d="M 650 300 C 625 300, 620 335, 590 335" class="arrow" stroke="#1B7F91" />
+
+<text x="535" y="410" class="tileLabel" text-anchor="middle">C / acc tile (1 × N)</text>
+<rect x="325" y="440" width="420" height="90" class="tileBorder" />
+<rect x="325" y="440" width="84" height="90" class="cell cellC" />
+<rect x="409" y="440" width="84" height="90" class="cell cellC" />
+<rect x="493" y="440" width="84" height="90" class="cell cellC" />
+<rect x="577" y="440" width="84" height="90" class="cell cellC" />
+<rect x="661" y="440" width="84" height="90" class="cell cellC" />
+<text x="367" y="490" class="cellText" text-anchor="middle">C₀₀</text>
+<text x="451" y="490" class="cellText" text-anchor="middle">C₀₁</text>
+<text x="535" y="490" class="cellText" text-anchor="middle">…</text>
+<text x="619" y="490" class="cellText" text-anchor="middle">C₀,j</text>
+<text x="703" y="490" class="cellText" text-anchor="middle">C₀,N-1</text>
+<path d="M 535 352 L 535 440" class="arrow" stroke="#1B7F91" />
+
+<rect x="50" y="580" width="1100" height="56" class="procBox" />
+<text x="68" y="606" class="procTitle">Conceptual behavior</text>
+<text x="68" y="626" class="procText">for each output column j: C[0,j] = Σ_k A[0,k] × B[k,j]</text>
+</svg>

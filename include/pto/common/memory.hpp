@@ -8,90 +8,86 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef LAYOUT_HPP
-#define LAYOUT_HPP
+#ifndef PTO_MEMORY_HPP
+#define PTO_MEMORY_HPP
 
 #include <stdint.h>
 #include <type_traits>
+#include <pto/common/arch_macro.hpp>
 #include <pto/common/type.hpp>
+#include <pto/common/arch_macro.hpp>
 
 namespace pto {
-enum class TileType {
-  Vec,
-  Mat,
-  Left,
-  Right,
-  Acc,
-  Bias,
-  Scaling,
-  ScaleLeft,
-  ScaleRight,
-};
-
-enum class BLayout {
-  RowMajor = 0,
-  ColMajor = 1,
-};
-
-enum class SLayout {
-  NoneBox = 0,
-  RowMajor = 1,
-  ColMajor = 2,
-};
-
 // returns the memory qualifier for a given TileType and data type.
 // compilation errors occur if the TileType does not have a specialized version.
-template <TileType L, typename DType> struct MemoryQualifier {};
+template <TileType L, typename DType>
+struct MemoryQualifier {
+};
 
-template <typename DType> struct MemoryQualifier<TileType::Vec, DType> {
+template <typename DType>
+struct MemoryQualifier<TileType::Vec, DType> {
 #ifdef __PTO_AUTO__
-  using type = __ubuf__ DType;
+    using type = __ubuf__ DType;
 #else
-  using type = __ubuf__ DType *;
+    using type = __ubuf__ DType *;
 #endif
 };
 
-template <typename DType> struct MemoryQualifier<TileType::Mat, DType> {
+template <typename DType>
+struct MemoryQualifier<TileType::Mat, DType> {
 #ifdef __PTO_AUTO__
-  using type = __cbuf__ DType;
+    using type = __cbuf__ DType;
 #else
-  using type = __cbuf__ DType *;
+    using type = __cbuf__ DType *;
 #endif
 };
 
-template <typename DType> struct MemoryQualifier<TileType::Left, DType> {
+template <typename DType>
+struct MemoryQualifier<TileType::Left, DType> {
 #ifdef __PTO_AUTO__
-  using type = __ca__ DType;
+    using type = __ca__ DType;
 #else
-  using type = __ca__ DType *;
+    using type = __ca__ DType *;
 #endif
 };
 
-template <typename DType> struct MemoryQualifier<TileType::Right, DType> {
+template <typename DType>
+struct MemoryQualifier<TileType::Right, DType> {
 #ifdef __PTO_AUTO__
-  using type = __cb__ DType;
+    using type = __cb__ DType;
 #else
-  using type = __cb__ DType *;
+    using type = __cb__ DType *;
 #endif
 };
 
-template <typename DType> struct MemoryQualifier<TileType::Acc, DType> {
+template <typename DType>
+struct MemoryQualifier<TileType::Acc, DType> {
 #ifdef __PTO_AUTO__
-  using type = __cc__ DType;
+    using type = __cc__ DType;
 #else
-  using type = __cc__ DType *;
+    using type = __cc__ DType *;
 #endif
 };
 
-template <typename DType> struct MemoryQualifier<TileType::Bias, DType> {
-  using type = uint64_t;
+template <typename DType>
+struct MemoryQualifier<TileType::Bias, DType> {
+#if defined(__DAV_C220_CUBE__)
+#ifdef __PTO_AUTO__
+    using type = __biasbuf__ DType;
+#else
+    using type = __biasbuf__ DType *;
+#endif
+#else
+    using type = uint64_t;
+#endif
 };
 
-template <typename DType> struct MemoryQualifier<TileType::Scaling, DType> {
+template <typename DType>
+struct MemoryQualifier<TileType::Scaling, DType> {
 #ifdef __PTO_AUTO__
-  using type = __fbuf__ DType;
+    using type = __fbuf__ DType;
 #else
-  using type = __fbuf__ DType *;
+    using type = __fbuf__ DType *;
 #endif
 };
 
@@ -113,18 +109,52 @@ struct MemoryQualifier<TileType::ScaleRight, DType> {
 #endif
 };
 
-PTO_INTERNAL constexpr const __gm__ char *
-GetLayoutName(BLayout bType, SLayout sType) noexcept {
-  switch (sType) {
-  case SLayout::NoneBox:
-    return (bType == BLayout::RowMajor) ? "ND" : "DN";
-  case SLayout::RowMajor:
-    return (bType == BLayout::RowMajor) ? "Zz" : "Nz";
-  case SLayout::ColMajor:
-    return (bType == BLayout::RowMajor) ? "Zn" : "Nn";
-  default:
-    return "Unknown";
-  }
+template <typename DType>
+struct MemoryQualifier<TileType::Ctrl, DType> {
+    using type = uint64_t;
+};
+
+PTO_INTERNAL constexpr const __gm__ char *GetLayoutName(BLayout bType, SLayout sType) noexcept
+{
+    switch (sType) {
+        case SLayout::NoneBox:
+            return (bType == BLayout::RowMajor) ? "ND" : "DN";
+        case SLayout::RowMajor:
+            return (bType == BLayout::RowMajor) ? "Zz" : "Nz";
+        case SLayout::ColMajor:
+            return (bType == BLayout::RowMajor) ? "Zn" : "Nn";
+        default:
+            return "Unknown";
+    }
+}
+
+template <TileType type>
+PTO_INTERNAL constexpr const __gm__ char *GetTileTypeName() noexcept
+{
+    switch (type) {
+        case TileType::Vec:
+            return "Vec";
+        case TileType::Mat:
+            return "Mat";
+        case TileType::Left:
+            return "Left";
+        case TileType::Right:
+            return "Right";
+        case TileType::Acc:
+            return "Acc";
+        case TileType::Bias:
+            return "Bias";
+        case TileType::Scaling:
+            return "Scaling";
+        case TileType::ScaleLeft:
+            return "ScaleLeft";
+        case TileType::ScaleRight:
+            return "ScaleRight";
+        case TileType::Ctrl:
+            return "Ctrl";
+        default:
+            return "Unknown";
+    }
 }
 
 } // namespace pto

@@ -15,7 +15,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <typename T, int kTRows_, int kTCols_, int kGRows_, int kGCols_>
-__global__ AICORE void runTMax( __gm__ T __out__ *out, __gm__ T __in__ *src0,  __gm__ T __in__ *src1) {
+__global__ AICORE void runTMax(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
+{
     using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim5 = pto::Stride<1, 1, 1, kGCols_, 1>;
     using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
@@ -32,26 +33,31 @@ __global__ AICORE void runTMax( __gm__ T __out__ *out, __gm__ T __in__ *src0,  _
     GlobalData src1Global(src1 + offset);
     GlobalData dstGlobal(out + offset);
 
+    Event<Op::TLOAD, Op::TMAX> event0;
+    Event<Op::TMAX, Op::TSTORE_VEC> event1;
+
     TLOAD(src0Tile, src0Global);
-    TLOAD(src1Tile, src1Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TMAX(dstTile, src0Tile, src1Tile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    event0 = TLOAD(src1Tile, src1Global);
+    event1 = TMAX(dstTile, src0Tile, src1Tile, event0);
+    TSTORE(dstGlobal, dstTile, event1);
     out = dstGlobal.data();
 }
 
-template <typename T, int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH,
-    int src1TileW, int vRows, int vCols>
-__global__ AICORE void runTMax( __gm__ T __out__ *out, __gm__ T __in__ *src0,  __gm__ T __in__ *src1) {
+template <typename T, int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows,
+          int vCols>
+__global__ AICORE void runTMax(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
+{
     using DynShape = pto::Shape<-1, -1, -1, -1, -1>;
     using DynStride = pto::Stride<-1, -1, -1, -1, -1>;
     using GlobalData = GlobalTensor<T, DynShape, DynStride>;
-    GlobalData dstGlobal(out, pto::Shape(1, 1, 1, vRows, vCols), pto::Stride(1, 1, 1, dstTileW, 1));
-    GlobalData src0Global(src0, pto::Shape(1, 1, 1, vRows, vCols), pto::Stride(1, 1, 1, src0TileW, 1));
-    GlobalData src1Global(src1, pto::Shape(1, 1, 1, vRows, vCols), pto::Stride(1, 1, 1, src1TileW, 1));
+    GlobalData dstGlobal(out, pto::Shape(1, 1, 1, vRows, vCols),
+                         pto::Stride(dstTileH * dstTileW, dstTileH * dstTileW, dstTileH * dstTileW, dstTileW, 1));
+    GlobalData src0Global(
+        src0, pto::Shape(1, 1, 1, vRows, vCols),
+        pto::Stride(src0TileH * src0TileW, src0TileH * src0TileW, src0TileH * src0TileW, src0TileW, 1));
+    GlobalData src1Global(
+        src1, pto::Shape(1, 1, 1, vRows, vCols),
+        pto::Stride(src1TileH * src1TileW, src1TileH * src1TileW, src1TileH * src1TileW, src1TileW, 1));
 
     using TileDataDst = Tile<TileType::Vec, T, dstTileH, dstTileW, BLayout::RowMajor, -1, -1>;
     using TileDataSrc0 = Tile<TileType::Vec, T, src0TileH, src0TileW, BLayout::RowMajor, -1, -1>;
@@ -63,64 +69,62 @@ __global__ AICORE void runTMax( __gm__ T __out__ *out, __gm__ T __in__ *src0,  _
     TASSIGN(src1Tile, 0x10000);
     TASSIGN(dstTile, 0x20000);
 
+    Event<Op::TLOAD, Op::TMAX> event0;
+    Event<Op::TMAX, Op::TSTORE_VEC> event1;
+
     TLOAD(src0Tile, src0Global);
-    TLOAD(src1Tile, src1Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TMAX<TileDataDst, TileDataSrc0, TileDataSrc1>(dstTile, src0Tile, src1Tile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    event0 = TLOAD(src1Tile, src1Global);
+    event1 = TMAX<TileDataDst, TileDataSrc0, TileDataSrc1>(dstTile, src0Tile, src1Tile, event0);
+    TSTORE(dstGlobal, dstTile, event1);
     out = dstGlobal.data();
 }
 
-template <typename T, int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH,
-    int src1TileW, int vRows, int vCols, bool sameTile>
+template <typename T, int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows,
+          int vCols, bool sameTile>
 void LaunchTMax(T *out, T *src0, T *src1, void *stream)
 {
     if constexpr (sameTile) {
         runTMax<T, dstTileH, dstTileW, vRows, vCols><<<1, nullptr, stream>>>(out, src0, src1);
     } else {
-        runTMax<T, dstTileH, dstTileW, src0TileH, src0TileW, src1TileH,
-            src1TileW, vRows, vCols><<<1, nullptr, stream>>>(out, src0, src1);
+        runTMax<T, dstTileH, dstTileW, src0TileH, src0TileW, src1TileH, src1TileW, vRows, vCols>
+            <<<1, nullptr, stream>>>(out, src0, src1);
     }
 }
 
-template <int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH,
-    int src1TileW, int vRows, int vCols, bool sameTile>
+template <int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows, int vCols,
+          bool sameTile>
 void LaunchTMaxHalf(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream)
 {
     if constexpr (sameTile) {
-        runTMax<half, dstTileH, dstTileW, vRows, vCols><<<1, nullptr, stream>>>
-            ((half*)(out), (half*)(src0), (half*)(src1));
+        runTMax<half, dstTileH, dstTileW, vRows, vCols>
+            <<<1, nullptr, stream>>>((half *)(out), (half *)(src0), (half *)(src1));
     } else {
-        runTMax<half, dstTileH, dstTileW, src0TileH, src0TileW, src1TileH,
-            src1TileW, vRows, vCols><<<1, nullptr, stream>>>
-            ((half*)(out), (half*)(src0), (half*)(src1));
+        runTMax<half, dstTileH, dstTileW, src0TileH, src0TileW, src1TileH, src1TileW, vRows, vCols>
+            <<<1, nullptr, stream>>>((half *)(out), (half *)(src0), (half *)(src1));
     }
 }
 
-template void LaunchTMax<float, 64, 64, 64, 64, 64, 64, 64, 64, true>
-    (float *out, float *src0, float *src1, void *stream);
-template void LaunchTMax<int32_t, 64, 64, 64, 64, 64, 64, 64, 64, true>
-    (int32_t *out, int32_t *src0, int32_t *src1, void *stream);
-template void LaunchTMax<int16_t, 64, 64, 64, 64, 64, 64, 64, 64, true>
-    (int16_t *out, int16_t *src0, int16_t *src1, void *stream);
-template void LaunchTMaxHalf<16, 256, 16, 256, 16, 256, 16, 256, true>
-    (aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream);
-template void LaunchTMaxHalf<16, 64, 16, 128, 16, 128, 16, 64, false>
-    (aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream);
-template void LaunchTMax<float, 16, 32, 16, 64, 16, 32, 16, 32, false>
-    (float *out, float *src0, float *src1, void *stream);
-template void LaunchTMax<int16_t, 32, 128, 32, 128, 32, 256, 32, 128, false>
-    (int16_t *out, int16_t *src0, int16_t *src1, void *stream);
-template void LaunchTMax<int32_t, 16, 32, 16, 64, 16, 32, 16, 32, false>
-    (int32_t *out, int32_t *src0, int32_t *src1, void *stream);
-template void LaunchTMaxHalf<16, 64, 16, 128, 16, 128, 16, 63, false>
-    (aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream);
-template void LaunchTMax<float, 16, 32, 16, 64, 16, 32, 16, 31, false>
-    (float *out, float *src0, float *src1, void *stream);
-template void LaunchTMax<int16_t, 32, 128, 32, 128, 32, 256, 32, 127, false>
-    (int16_t *out, int16_t *src0, int16_t *src1, void *stream);
-template void LaunchTMax<int32_t, 16, 32, 16, 64, 16, 32, 16, 31, false>
-    (int32_t *out, int32_t *src0, int32_t *src1, void *stream);
+template void LaunchTMax<float, 64, 64, 64, 64, 64, 64, 64, 64, true>(float *out, float *src0, float *src1,
+                                                                      void *stream);
+template void LaunchTMax<int32_t, 64, 64, 64, 64, 64, 64, 64, 64, true>(int32_t *out, int32_t *src0, int32_t *src1,
+                                                                        void *stream);
+template void LaunchTMax<int16_t, 64, 64, 64, 64, 64, 64, 64, 64, true>(int16_t *out, int16_t *src0, int16_t *src1,
+                                                                        void *stream);
+template void LaunchTMaxHalf<16, 256, 16, 256, 16, 256, 16, 256, true>(aclFloat16 *out, aclFloat16 *src0,
+                                                                       aclFloat16 *src1, void *stream);
+template void LaunchTMaxHalf<16, 64, 16, 128, 16, 128, 16, 64, false>(aclFloat16 *out, aclFloat16 *src0,
+                                                                      aclFloat16 *src1, void *stream);
+template void LaunchTMax<float, 16, 32, 16, 64, 16, 32, 16, 32, false>(float *out, float *src0, float *src1,
+                                                                       void *stream);
+template void LaunchTMax<int16_t, 32, 128, 32, 128, 32, 256, 32, 128, false>(int16_t *out, int16_t *src0, int16_t *src1,
+                                                                             void *stream);
+template void LaunchTMax<int32_t, 16, 32, 16, 64, 16, 32, 16, 32, false>(int32_t *out, int32_t *src0, int32_t *src1,
+                                                                         void *stream);
+template void LaunchTMaxHalf<16, 64, 16, 128, 16, 128, 16, 63, false>(aclFloat16 *out, aclFloat16 *src0,
+                                                                      aclFloat16 *src1, void *stream);
+template void LaunchTMax<float, 16, 32, 16, 64, 16, 32, 16, 31, false>(float *out, float *src0, float *src1,
+                                                                       void *stream);
+template void LaunchTMax<int16_t, 32, 128, 32, 128, 32, 256, 32, 127, false>(int16_t *out, int16_t *src0, int16_t *src1,
+                                                                             void *stream);
+template void LaunchTMax<int32_t, 16, 32, 16, 64, 16, 32, 16, 31, false>(int32_t *out, int32_t *src0, int32_t *src1,
+                                                                         void *stream);

@@ -16,6 +16,65 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace pto;
 
+// ============================================================================
+// Static assertions for PadValueCustom encoding/decoding verification
+// ============================================================================
+
+// --- Float (32-bit) ---
+static_assert(PadValueCustom(-1.0f) == static_cast<PadValue>(0x1BF800000ULL),
+              "PadValueCustom(-1.0f) encoding mismatch");
+static_assert(PadValueCustom(0.5f) == static_cast<PadValue>(0x13F000000ULL), "PadValueCustom(0.5f) encoding mismatch");
+static_assert(getCustomPadBits(PadValueCustom(-1.0f)) == 0xBF800000U, "getCustomPadBits for float decoding mismatch");
+
+// --- Int32 ---
+static_assert(PadValueCustom(int32_t(-1)) == static_cast<PadValue>(0x1FFFFFFFFULL),
+              "PadValueCustom(int32_t(-1)) encoding mismatch");
+static_assert(PadValueCustom(int32_t(42)) == static_cast<PadValue>(0x10000002AULL),
+              "PadValueCustom(int32_t(42)) encoding mismatch");
+static_assert(getCustomPadBits(PadValueCustom(int32_t(-1))) == 0xFFFFFFFFU,
+              "getCustomPadBits for int32 decoding mismatch");
+
+// --- UInt32 ---
+static_assert(PadValueCustom(uint32_t(0xDEADBEEF)) == static_cast<PadValue>(0x1DEADBEEFULL),
+              "PadValueCustom(uint32_t) encoding mismatch");
+static_assert(getCustomPadBits(PadValueCustom(uint32_t(0xDEADBEEF))) == 0xDEADBEEFU,
+              "getCustomPadBits for uint32 decoding mismatch");
+
+// --- Int16 ---
+static_assert(PadValueCustom(int16_t(-1)) == static_cast<PadValue>(0x10000FFFFULL),
+              "PadValueCustom(int16_t(-1)) encoding mismatch");
+static_assert(PadValueCustom(int16_t(-32768)) == static_cast<PadValue>(0x100008000ULL),
+              "PadValueCustom(int16_t MIN) encoding mismatch");
+static_assert((getCustomPadBits(PadValueCustom(int16_t(-1))) & 0xFFFF) == 0xFFFFU,
+              "getCustomPadBits for int16 decoding mismatch");
+
+// --- Int8 ---
+static_assert(PadValueCustom(int8_t(-1)) == static_cast<PadValue>(0x1000000FFULL),
+              "PadValueCustom(int8_t(-1)) encoding mismatch");
+static_assert(PadValueCustom(int8_t(-128)) == static_cast<PadValue>(0x100000080ULL),
+              "PadValueCustom(int8_t MIN) encoding mismatch");
+static_assert((getCustomPadBits(PadValueCustom(int8_t(-1))) & 0xFF) == 0xFFU,
+              "getCustomPadBits for int8 decoding mismatch");
+
+// --- UInt8 ---
+static_assert(PadValueCustom(uint8_t(255)) == static_cast<PadValue>(0x1000000FFULL),
+              "PadValueCustom(uint8_t(255)) encoding mismatch");
+static_assert(PadValueCustom(uint8_t(0x42)) == static_cast<PadValue>(0x100000042ULL),
+              "PadValueCustom(uint8_t) encoding mismatch");
+static_assert((getCustomPadBits(PadValueCustom(uint8_t(255))) & 0xFF) == 0xFFU,
+              "getCustomPadBits for uint8 decoding mismatch");
+
+// --- isCustomPadValue verification ---
+static_assert(isCustomPadValue(PadValueCustom(-1.0f)) == true, "isCustomPadValue should return true for custom values");
+static_assert(isCustomPadValue(PadValue::Null) == false, "isCustomPadValue should return false for standard values");
+static_assert(isCustomPadValue(PadValue::Zero) == false, "isCustomPadValue should return false for Zero");
+static_assert(isCustomPadValue(PadValue::Max) == false, "isCustomPadValue should return false for Max");
+static_assert(isCustomPadValue(PadValue::Min) == false, "isCustomPadValue should return false for Min");
+
+// Custom pad value for test case 12
+// -1.0f has bit pattern 0xBF800000
+constexpr PadValue PadCustomNeg1 = PadValueCustom(-1.0f);
+
 #define LOGSIZE 128
 #define PRINTLOG 4
 #define DEBUGLOG
@@ -27,7 +86,8 @@ using namespace pto;
 
 // case shape is static, but testing would do dynamic or static test
 template <int shape0, int shape1, int shape2, int shape3, int shape4>
-AICORE __inline__ auto getOptDynShape(int gShape0, int gShape1, int gShape2, int gShape3, int gShape4) {
+AICORE __inline__ auto getOptDynShape(int gShape0, int gShape1, int gShape2, int gShape3, int gShape4)
+{
     if constexpr (shape0 == 1) {
         using DynShapeDim5 = Shape<1, -1, -1, -1, -1>;
         DynShapeDim5 dynShape(gShape1, gShape2, gShape3, gShape4);
@@ -53,9 +113,9 @@ AICORE __inline__ auto getOptDynShape(int gShape0, int gShape1, int gShape2, int
 
 // case shape is static, but testing would do dynamic or static test
 template <typename T, int shape0, int shape1, int shape2, int shape3, int shape4, int tRows, int tCols, BLayout major,
-    int dyn>
-AICORE __inline__ auto getGlobalTensor(
-    __gm__ T *addr, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4) {
+          int dyn>
+AICORE __inline__ auto getGlobalTensor(__gm__ T *addr, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4)
+{
     if constexpr (dyn) {
         int stride0 = gShape1 * gShape2 * shape3 * shape4;
         int stride1 = gShape2 * shape3 * shape4;
@@ -105,10 +165,12 @@ inline AICORE uint64_t get_syscnt() // dont use get_sys_cnt(), need volatile for
 #define align_to_32B(x, T) ((((x) + type_32_aligned(T) - 1) / type_32_aligned(T)) * (type_32_aligned(T)));
 
 template <typename T, int shape0, int shape1, int shape2, int shape3, int shape4, int kTRows_, int kTCols_, int dyn_,
-    PadValue LoadPadVal_ = PadValue::Null, PadValue FillPadVal_ = PadValue::Null, bool inplace = false,
-    bool expand = false>
-AICORE void runTFILLPAD(
-    __gm__ T *out, __gm__ T *src, int gShape0, int gShape1, int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog) {
+          PadValue LoadPadVal_ = PadValue::Null, PadValue FillPadVal_ = PadValue::Null, bool inplace = false,
+          bool expand = false>
+AICORE void runTFILLPAD(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, int gShape2, int gRows, int gCols,
+                        __gm__ uint64_t *gLog)
+{
+#ifndef __PTO_AUTO__
     // Avoid stack dcache miss
     {
 #define INIT_STACK 8192
@@ -126,8 +188,12 @@ AICORE void runTFILLPAD(
     asm volatile("MOV %0, PC\n" : "+l"(pc));
     preload((void *)pc, 2);
     while (get_icache_prl_st()) {
+#if defined(__DAV_C220_CUBE__) || defined(__DAV_C220_VEC__)
+        // seems to compile for a2a3; will crash in HiIPUJumpOpt pass for A5
         asm("nop");
+#endif
     }
+#endif
 
 #ifdef DEBUGLOG
     gLog += block_idx * LOGSIZE;
@@ -149,15 +215,35 @@ AICORE void runTFILLPAD(
             out + dstOffset, gShape0, gShape1, gShape2, kGTRows, kTCols_); // dst TStore GlobalTensor just use static
 
     volatile uint64_t t0, t1, t2;
+    constexpr PadValue PadCustomNeg1_Test = PadValueCustom(-1.0f); // Test device usage
+    static_assert(PadCustomNeg1_Test == static_cast<PadValue>(0x00000001BF800000ULL),
+                  "PadValueCustom float device test");
+    constexpr PadValue PadCustomNeg1_Half_Test = PadValueCustom((half)-1.0); // fp16 using half type
+    static_assert(PadCustomNeg1_Half_Test == static_cast<PadValue>(0x000000010000BC00ULL),
+                  "PadValueCustom16 fp16 device test");
+    constexpr PadValue PadCustomNeg1_Bf16_Test = PadValueCustom((bfloat16_t)-1.0); // bf16 using bfloat16_t type
+    static_assert(PadCustomNeg1_Bf16_Test == static_cast<PadValue>(0x000000010000BF80ULL),
+                  "PadValueCustom bf16 encoding test");
+    // Verify decoding: getCustomPadBits should return 0xBF80 (bf16 -1.0), NOT 0 from bits >> 16
+    static_assert(getCustomPadBits(PadCustomNeg1_Bf16_Test) == 0xBF80U, "PadValueCustom bf16 decoding test");
+
+    // Test custom pad bits extraction for each type (catches decode bugs!)
+    // For 16-bit types, bits & 0xFFFF must return the correct fp16/bf16 bits
+    constexpr uint32_t float_bits = getCustomPadBits(PadCustomNeg1_Test);
+    constexpr uint32_t half_bits = getCustomPadBits(PadCustomNeg1_Half_Test) & 0xFFFF;
+    constexpr uint32_t bf16_bits = getCustomPadBits(PadCustomNeg1_Bf16_Test) & 0xFFFF;
+    static_assert(float_bits == 0xBF800000U, "Custom pad float: expected -1.0f bits");
+    static_assert(half_bits == 0xBC00U, "Custom pad half: expected fp16 -1.0 bits (0xBC00)");
+    static_assert(bf16_bits == 0xBF80U, "Custom pad bf16: expected bf16 -1.0 bits (0xBF80)");
 
     using TileDataP =
-        Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, kTCols_, SLayout::NoneBox, 512, FillPadVal_>;
-    TileDataP vecTileP(kTRows_);
+        Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512, FillPadVal_>;
+    TileDataP vecTileP(kTRows_, kTCols_);
     TASSIGN(vecTileP, (uint64_t)ubaddr1);
 
     if constexpr (expand) {
         using TileData = Tile<TileType::Vec, T, kTRows_, shape4_aligned, BLayout::RowMajor, -1, -1, SLayout::NoneBox,
-            512, LoadPadVal_>;
+                              512, LoadPadVal_>;
         // using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
 
         TileData vecTile(shape3, shape4);
@@ -165,8 +251,10 @@ AICORE void runTFILLPAD(
 
         // TLOAD(vecTile, srcGlobal); //warm up...
         TLOAD(vecTile, srcGlobal);
+#ifndef __PTO_AUTO__
         set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
         t0 = get_syscnt();
         TFILLPAD_EXPAND(vecTileP, vecTile);
     } else {
@@ -179,20 +267,29 @@ AICORE void runTFILLPAD(
 
         // TLOAD(vecTile, srcGlobal); //warm up...
         TLOAD(vecTile, srcGlobal);
+#ifndef __PTO_AUTO__
         set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
         t0 = get_syscnt();
-        if constexpr (inplace)
+        if constexpr (inplace) {
+#ifdef __PTO_AUTO__
+            TRESHAPE(vecTileP, vecTile);
+#endif
             TFILLPAD_INPLACE(vecTileP, vecTile);
-        else
+        } else
             TFILLPAD(vecTileP, vecTile);
     }
     t1 = get_syscnt();
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, vecTileP);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+#endif
     t2 = get_syscnt(); /*FIXME: compile would insert a dcci at above set/wait t2 timing may not be very correct*/
     LOG(t0);
     LOG(t1 - t0);
@@ -200,73 +297,101 @@ AICORE void runTFILLPAD(
 }
 
 extern "C" __global__ AICORE void launchTFILLPAD_1(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
-    int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog) {
+                                                   int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
+{
     runTFILLPAD<float, 1, 1, 1, 128, 127, 128, 128, 1, PadValue::Max, PadValue::Max>(
         (__gm__ float *)out, (__gm__ float *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
 extern "C" __global__ AICORE void launchTFILLPAD_2(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
-    int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog) {
+                                                   int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
+{
     runTFILLPAD<float, 1, 1, 1, 128, 127, 128, 160, 1, PadValue::Max, PadValue::Max>(
         (__gm__ float *)out, (__gm__ float *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
 extern "C" __global__ AICORE void launchTFILLPAD_3(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
-    int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog) {
+                                                   int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
+{
     runTFILLPAD<float, 1, 1, 1, 128, 127, 128, 160, 1, PadValue::Min, PadValue::Max>(
         (__gm__ float *)out, (__gm__ float *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
 extern "C" __global__ AICORE void launchTFILLPAD_4(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
-    int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog) {
+                                                   int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
+{
     runTFILLPAD<float, 1, 1, 1, 260, 7, 260, 16, 1, PadValue::Min, PadValue::Max>(
         (__gm__ float *)out, (__gm__ float *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
 extern "C" __global__ AICORE void launchTFILLPAD_5(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
-    int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog) {
+                                                   int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
+{
     runTFILLPAD<float, 1, 1, 1, 260, 7, 260, 16, 1, PadValue::Min, PadValue::Max, true>(
         (__gm__ float *)out, (__gm__ float *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
 extern "C" __global__ AICORE void launchTFILLPAD_6(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
-    int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog) {
+                                                   int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
+{
     runTFILLPAD<uint16_t, 1, 1, 1, 260, 7, 260, 32, 1, PadValue::Min, PadValue::Max>(
         (__gm__ uint16_t *)out, (__gm__ uint16_t *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
 extern "C" __global__ AICORE void launchTFILLPAD_7(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
-    int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog) {
+                                                   int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
+{
     runTFILLPAD<int8_t, 1, 1, 1, 260, 7, 260, 64, 1, PadValue::Min, PadValue::Max>(
         (__gm__ int8_t *)out, (__gm__ int8_t *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
 extern "C" __global__ AICORE void launchTFILLPAD_8(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
-    int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog) {
+                                                   int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
+{
     runTFILLPAD<uint16_t, 1, 1, 1, 259, 7, 260, 32, 1, PadValue::Min, PadValue::Max, false, true>(
         (__gm__ uint16_t *)out, (__gm__ uint16_t *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
 extern "C" __global__ AICORE void launchTFILLPAD_9(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
-    int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog) {
+                                                   int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
+{
     runTFILLPAD<int8_t, 1, 1, 1, 259, 7, 260, 64, 1, PadValue::Min, PadValue::Max, false, true>(
         (__gm__ int8_t *)out, (__gm__ int8_t *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
 extern "C" __global__ AICORE void launchTFILLPAD_10(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
-    int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog) {
+                                                    int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
+{
     runTFILLPAD<int16_t, 1, 1, 1, 260, 7, 260, 32, 1, PadValue::Min, PadValue::Min>(
         (__gm__ int16_t *)out, (__gm__ int16_t *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
 extern "C" __global__ AICORE void launchTFILLPAD_11(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
-    int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog) {
+                                                    int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
+{
     runTFILLPAD<int32_t, 1, 1, 1, 260, 7, 260, 32, 1, PadValue::Min, PadValue::Min>(
         (__gm__ int32_t *)out, (__gm__ int32_t *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
+// Case 12: Custom pad value (-1.0f)
+extern "C" __global__ AICORE void launchTFILLPAD_12(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
+                                                    int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
+{
+    runTFILLPAD<float, 1, 1, 1, 128, 64, 128, 128, 1, PadValue::Null, PadCustomNeg1>(
+        (__gm__ float *)out, (__gm__ float *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
+}
+
+// Case 13: Custom pad value for both TLOAD and TFILLPAD (32B unaligned: 127 cols)
+extern "C" __global__ AICORE void launchTFILLPAD_13(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
+                                                    int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
+{
+    runTFILLPAD<float, 1, 1, 1, 128, 127, 128, 160, 1, PadCustomNeg1, PadCustomNeg1>(
+        (__gm__ float *)out, (__gm__ float *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
+}
+
 template <int32_t testKey>
-void launchTFILLPAD(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream) {
+void launchTFILLPAD(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream)
+{
     if constexpr (testKey == 1) {
         launchTFILLPAD_1<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 128, 127, gLog);
     } else if constexpr (testKey == 2) {
@@ -289,25 +414,25 @@ void launchTFILLPAD(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream) {
         launchTFILLPAD_10<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 260, 7, gLog);
     } else if constexpr (testKey == 11) {
         launchTFILLPAD_11<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 260, 7, gLog);
+    } else if constexpr (testKey == 12) {
+        launchTFILLPAD_12<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 128, 64, gLog);
+    } else if constexpr (testKey == 13) {
+        launchTFILLPAD_13<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 128, 127, gLog);
     }
 }
 
 template <typename T>
-constexpr auto getGoldenZero() {
-    if constexpr (sizeof(T) == 4) {
-        return (uint32_t)0;
-    } else if constexpr (sizeof(T) == 2) {
-        return (uint16_t)0;
-    } else if constexpr (sizeof(T) == 1) {
-        return (uint8_t)0;
-    }
+constexpr T getGoldenZero()
+{
+    return T{0};
 }
 
 template <typename U, int Shape0, int Shape1, int Shape2, int Shape3, int Shape4, int kTRows_, int kTCols_,
-    PadValue PadVal_ = PadValue::Null>
-int get_input_golden_case(uint8_t *input, uint8_t *golden) {
+          auto PadVal_ = PadValue::Null>
+int get_input_golden_case(uint8_t *input, uint8_t *golden)
+{
     auto arr = getGoldenZero<U>();
-    using T = typeof(arr);
+    using T = decltype(arr);
 
     constexpr int shape4_aligned = align_to_32B(Shape4, T);
     int in_shape[5] = {Shape0, Shape1, Shape2, Shape3, Shape4};
@@ -318,7 +443,11 @@ int get_input_golden_case(uint8_t *input, uint8_t *golden) {
     int out_byteSize = out_capacity * sizeof(T);
 
     U u_padVal[1] = {0};
-    if (std::numeric_limits<U>::has_infinity) {
+    if constexpr (static_cast<uint64_t>(PadVal_) >= static_cast<uint64_t>(PadValue::CustomBase)) {
+        // Custom pad value - extract float bits
+        uint32_t bits = static_cast<uint32_t>(static_cast<uint64_t>(PadVal_) & 0xFFFFFFFFULL);
+        u_padVal[0] = *reinterpret_cast<const U *>(&bits);
+    } else if (std::numeric_limits<U>::has_infinity) {
         if (PadVal_ == PadValue::Max)
             u_padVal[0] = std::numeric_limits<U>::infinity();
         else if (PadVal_ == PadValue::Min)
@@ -347,7 +476,7 @@ int get_input_golden_case(uint8_t *input, uint8_t *golden) {
                             gold_arr[x0][x1][x2][i][j] = t_padVal;
                         }
                     } // j
-                }     // i
+                } // i
 
     std::copy((uint8_t *)in_arr, ((uint8_t *)(in_arr)) + in_byteSize, input);
     std::copy((uint8_t *)gold_arr, ((uint8_t *)(gold_arr)) + out_byteSize, golden);
@@ -355,7 +484,8 @@ int get_input_golden_case(uint8_t *input, uint8_t *golden) {
 }
 
 template <int32_t testKey>
-int get_input_golden(uint8_t *input, uint8_t *golden) {
+int get_input_golden(uint8_t *input, uint8_t *golden)
+{
     if constexpr (testKey == 1) {
         return get_input_golden_case<float, 1, 1, 1, 128, 127, 128, 128, PadValue::Max>(input, golden);
     } else if constexpr (testKey == 2 || testKey == 3) {
@@ -374,6 +504,10 @@ int get_input_golden(uint8_t *input, uint8_t *golden) {
         return get_input_golden_case<int16_t, 1, 1, 1, 260, 7, 260, 32, PadValue::Min>(input, golden);
     } else if constexpr (testKey == 11) {
         return get_input_golden_case<int32_t, 1, 1, 1, 260, 7, 260, 32, PadValue::Min>(input, golden);
+    } else if constexpr (testKey == 12) {
+        return get_input_golden_case<float, 1, 1, 1, 128, 64, 128, 128, PadCustomNeg1>(input, golden);
+    } else if constexpr (testKey == 13) {
+        return get_input_golden_case<float, 1, 1, 1, 128, 127, 128, 160, PadCustomNeg1>(input, golden);
     }
 
     return 0;
@@ -389,7 +523,9 @@ template void launchTFILLPAD<7>(uint8_t *out, uint8_t *src, uint64_t *gLog, void
 template void launchTFILLPAD<8>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);  // 实例化 Key=0 的版本
 template void launchTFILLPAD<9>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);  // 实例化 Key=0 的版本
 template void launchTFILLPAD<10>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
-template void launchTFILLPAD<11>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
+template void launchTFILLPAD<11>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
+template void launchTFILLPAD<12>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
+template void launchTFILLPAD<13>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
 
 template int get_input_golden<1>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<2>(uint8_t *input, uint8_t *golden);
@@ -402,3 +538,5 @@ template int get_input_golden<8>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<9>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<10>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<11>(uint8_t *input, uint8_t *golden);
+template int get_input_golden<12>(uint8_t *input, uint8_t *golden);
+template int get_input_golden<13>(uint8_t *input, uint8_t *golden);

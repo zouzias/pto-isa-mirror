@@ -8,15 +8,16 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
+#include <type_traits>
 #include <pto/pto-inst.hpp>
-#include <pto/common/constants.hpp>
 #include <acl/acl.h>
 
 using namespace std;
 using namespace pto;
 
-template<typename T, int dstTileRow, int dstTileCol, int row, int validRow, int col, int validCol>
-PTO_INTERNAL void runTMAXS(__gm__ T *out, __gm__  T *src, T scalar) {
+template <typename T, int dstTileRow, int dstTileCol, int row, int validRow, int col, int validCol>
+PTO_INTERNAL void runTMAXS(__gm__ T *out, __gm__ T *src, T scalar)
+{
     using DynDim2Shape = Shape<1, 1, 1, -1, -1>;
     using DynDim2Stride = pto::Stride<1, 1, -1, -1, 1>;
     using GlobalData = GlobalTensor<T, DynDim2Shape, DynDim2Stride>;
@@ -30,15 +31,23 @@ PTO_INTERNAL void runTMAXS(__gm__ T *out, __gm__  T *src, T scalar) {
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x28000);
 
+// causes issues in automode as the tile returned from the TLOAD tfcall appears unused and this tload may not finish
+// before the second tload
+#ifndef __PTO_AUTO__
     TLOAD(dstTile, dstGlobal);
+#endif
 
     TLOAD(srcTile, srcGlobal);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
     TMAXS(dstTile, srcTile, scalar);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
 }
@@ -49,7 +58,7 @@ extern "C" __global__ AICORE void launchTMAXSCase1(__gm__ float *out, __gm__ flo
 }
 extern "C" __global__ AICORE void launchTMAXSCase2(__gm__ aclFloat16 *out, __gm__ aclFloat16 *src, float scalar)
 {
-    runTMAXS<half, 63, 64, 63, 63, 64, 64>((__gm__ half*)out, (__gm__ half*)src, (half)scalar);
+    runTMAXS<half, 63, 64, 63, 63, 64, 64>((__gm__ half *)out, (__gm__ half *)src, (half)scalar);
 }
 extern "C" __global__ AICORE void launchTMAXSCase3(__gm__ int32_t *out, __gm__ int32_t *src, int32_t scalar)
 {
@@ -73,7 +82,7 @@ extern "C" __global__ AICORE void launchTMAXSCase7(__gm__ float *out, __gm__ flo
 }
 extern "C" __global__ AICORE void launchTMAXSCase8(__gm__ aclFloat16 *out, __gm__ aclFloat16 *src, float scalar)
 {
-    runTMAXS<half, 63, 128, 63, 63, 64, 64>((__gm__ half*)out, (__gm__ half*)src, (half)scalar);
+    runTMAXS<half, 63, 128, 63, 63, 64, 64>((__gm__ half *)out, (__gm__ half *)src, (half)scalar);
 }
 extern "C" __global__ AICORE void launchTMAXSCase9(__gm__ int32_t *out, __gm__ int32_t *src, int32_t scalar)
 {
@@ -93,8 +102,9 @@ extern "C" __global__ AICORE void launchTMAXSCase12(__gm__ float *out, __gm__ fl
 }
 
 template <uint32_t caseId>
-void launchTMAXSTestCase(void *out, void *src, float scalar, aclrtStream stream) {
-    switch(caseId) {
+void launchTMAXSTestCase(void *out, void *src, float scalar, aclrtStream stream)
+{
+    switch (caseId) {
         case 1: {
             launchTMAXSCase1<<<1, nullptr, stream>>>((float *)out, (float *)src, scalar);
             break;
@@ -147,7 +157,6 @@ void launchTMAXSTestCase(void *out, void *src, float scalar, aclrtStream stream)
         }
     }
 }
-
 
 template void launchTMAXSTestCase<1>(void *out, void *src, float scalar, aclrtStream stream);
 template void launchTMAXSTestCase<2>(void *out, void *src, float scalar, aclrtStream stream);

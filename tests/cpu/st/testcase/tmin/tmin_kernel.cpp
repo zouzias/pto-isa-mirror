@@ -11,11 +11,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
 
-
 using namespace pto;
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-AICORE void runTMin( __gm__ T __out__ *out, __gm__ T __in__ *src0,  __gm__ T __in__ *src1) {
+AICORE void runTMin(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
+{
     using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim5 = Stride<1, 1, 1, kGCols_, 1>;
     using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
@@ -28,6 +28,10 @@ AICORE void runTMin( __gm__ T __out__ *out, __gm__ T __in__ *src0,  __gm__ T __i
     GlobalData src1Global(src1);
     GlobalData dstGlobal(out);
 
+    TASSIGN(src0Tile, 0);
+    TASSIGN(src1Tile, kTRows_ * kTCols_ * sizeof(typename TileData::DType));
+    TASSIGN(dstTile, 2 * kTRows_ * kTCols_ * sizeof(typename TileData::DType));
+
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
     TMIN(dstTile, src0Tile, src1Tile);
@@ -38,9 +42,9 @@ AICORE void runTMin( __gm__ T __out__ *out, __gm__ T __in__ *src0,  __gm__ T __i
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void LaunchTMin(T *out, T *src0, T *src1, void *stream)
 {
-    if constexpr ( std::is_same_v<T, aclFloat16> )
-        runTMin<half, kGRows_, kGCols_, kTRows_, kTCols_>((half*)(out), (half*)(src0), (half*)(src1));
-    else 
+    if constexpr (std::is_same_v<T, aclFloat16>)
+        runTMin<half, kGRows_, kGCols_, kTRows_, kTCols_>((half *)(out), (half *)(src0), (half *)(src1));
+    else
         runTMin<T, kGRows_, kGCols_, kTRows_, kTCols_>(out, src0, src1);
 }
 const int NUM_16 = 16;
@@ -53,3 +57,7 @@ template void LaunchTMin<aclFloat16, NUM_16, NUM_256, NUM_16, NUM_256>(aclFloat1
                                                                        aclFloat16 *src1, void *stream);
 template void LaunchTMin<int16_t, NUM_64, NUM_64, NUM_64, NUM_64>(int16_t *out, int16_t *src0, int16_t *src1,
                                                                   void *stream);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+template void LaunchTMin<bfloat16_t, NUM_16, NUM_256, NUM_16, NUM_256>(bfloat16_t *out, bfloat16_t *src0,
+                                                                       bfloat16_t *src1, void *stream);
+#endif

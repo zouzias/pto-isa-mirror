@@ -30,10 +30,11 @@ Use these codes referenced in the assertion index:
 - `FIX-A09` GlobalTensor shape/stride mismatch or out-of-range: ensure the 5-D shape/stride matches the intended view and obeys backend constraints (ND/DN/NZ rules, range limits for dims, and alignment restrictions).
 - `FIX-A10` Gather/scatter contiguity/alignment: some gather/scatter paths require continuous rows/cols or 32B alignment—adjust valid sizes, layout, or use a different path.
 - `FIX-A11` Invalid numeric domain (e.g., divide-by-zero): avoid feeding illegal inputs (add epsilon/clamp) before `RECIP/RSQRT/DIV`-like ops.
+- `FIX-A12` `TASSIGN<Addr>(tile)` address/capacity error: ensure the target memory space exists on the current architecture (e.g. `ScaleLeft`/`ScaleRight` are A5-only); reduce tile dimensions (`Rows`/`Cols`) or element size so that `Rows * Cols * sizeof(DType) <= capacity`; choose `Addr` so that `Addr + tile_size <= capacity` and `Addr` is a multiple of the alignment (typically 32 bytes). Capacities can be overridden via `-DPTO_xxx_SIZE_BYTES=<value>` (see `include/pto/common/buffer_limits.hpp`).
 
 ## Notes
 
-- Many assertions are backend- and SoC-specific (e.g., `include/pto/npu/a2a3/*` vs `include/pto/npu/a5/*`). Ensure your compile flags match the intended target (arch, `MEMORY_BASE` vs `REGISTER_BASE`, etc.).
+- Many assertions are backend- and SoC-specific (e.g., `include/pto/npu/a2a3/*` vs `include/pto/npu/a5/*`).
 - For instruction legality (tile types/layouts/supported dtypes), the authoritative reference is the instruction page under `docs/isa/`.
 
 <!-- The assertion index below is generated from `include/pto/`. Keep it sorted and indexed for quick lookup. -->
@@ -189,7 +190,6 @@ Use these codes referenced in the assertion index:
 - **SA-0146** TCOLEXPANDMUL: not supported Layout type (At: `include/pto/npu/a5/TColExpandMul.hpp:54`; Fix: `FIX-A06`)
 - **SA-0147** TCOLEXPANDSUB: Invalid data type. (At: `include/pto/npu/a5/TColExpandSub.hpp:51`; Fix: `FIX-A05`)
 - **SA-0148** TCOLEXPANDSUB: not supported Layout type (At: `include/pto/npu/a5/TColExpandSub.hpp:54`; Fix: `FIX-A06`)
-- **SA-0149** TCOPY: src and dst data type is different! (At: `include/pto/npu/a5/TFillPad.hpp:67`; Fix: `-`)
 - **SA-0150** TDIV: Invalid data type. (At: `include/pto/npu/a2a3/TDiv.hpp:47 (+1)`; Fix: `FIX-A05`)
 - **SA-0151** TDIV: not supported Layout type (At: `include/pto/npu/a5/TDiv.hpp:54`; Fix: `FIX-A06`)
 - **SA-0152** TDIVS: Invalid data type (At: `include/pto/npu/a2a3/TDivS.hpp:212 (+1)`; Fix: `FIX-A05`)
@@ -298,7 +298,7 @@ Use these codes referenced in the assertion index:
 - **SA-0255** TMov: DstTile Invalid Fractal. (At: `include/pto/npu/a5/TMov.hpp:310 (+1)`; Fix: `FIX-A05`)
 - **SA-0256** TMov: Invalid data type. (At: `include/pto/npu/a2a3/TMov.hpp:61`; Fix: `FIX-A05`)
 - **SA-0257** TMov: Invalid TileType. (At: `include/pto/npu/a2a3/TMov.hpp:141 (+1)`; Fix: `FIX-A05,FIX-A08`)
-- **SA-0258** TMOV: src and dst data type is different! (At: `include/pto/npu/a2a3/TCopy.hpp:30`; Fix: `-`)
+- **SA-0258** TMOV: src and dst data type is different! (At: `include/pto/npu/a2a3/TMov.hpp:91`; Fix: `-`)
 - **SA-0259** TMov: SrcTile Invalid Fractal. (At: `include/pto/npu/a5/TMov.hpp:195`; Fix: `FIX-A05`)
 - **SA-0260** TMov: The memory occupation of BiasTile exceeds 4.0KB bias table size. (At: `include/pto/npu/a5/TMov.hpp:38`; Fix: `-`)
 - **SA-0261** TMov: The memory occupation of FbTile exceeds 4.0KB fixpipe buffer size. (At: `include/pto/npu/a5/TMov.hpp:72`; Fix: `FIX-A07`)
@@ -391,6 +391,10 @@ Use these codes referenced in the assertion index:
 - **SA-0348** Unsupport CMP_MODE. (At: `include/pto/cpu/ElementOp.h:416`; Fix: `-`)
 - **SA-0349** Unsupport element op. (At: `include/pto/cpu/ElementOp.h:77`; Fix: `-`)
 - **SA-0350** When TileData is NZ format, the last 2 dim must be static and satisfy [16, 32 / sizeof(DataType)] (At: `include/pto/npu/a2a3/TLoad.hpp:144 (+1)`; Fix: `-`)
+- **SA-0351** TASSIGN: memory space is not available on this architecture (capacity is 0). (At: `include/pto/common/tassign_check.hpp`; Fix: `FIX-A12`)
+- **SA-0352** TASSIGN: Tile storage size exceeds memory space capacity. (At: `include/pto/common/tassign_check.hpp`; Fix: `FIX-A12`)
+- **SA-0353** TASSIGN: addr + tile_size exceeds memory space capacity (out of bounds). (At: `include/pto/common/tassign_check.hpp`; Fix: `FIX-A12`)
+- **SA-0354** TASSIGN: addr is not properly aligned for the target memory space. (At: `include/pto/common/tassign_check.hpp`; Fix: `FIX-A12`)
 
 ### Runtime checks (`PTO_ASSERT`)
 - **PA-0001** blockLen is a multiple of 64 (At: `include/pto/npu/a2a3/TMrgSort.hpp:282`; Fix: `-`)

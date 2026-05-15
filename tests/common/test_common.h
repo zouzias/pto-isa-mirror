@@ -20,7 +20,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cmath>
 #include <sys/stat.h>
 #ifndef __CPU_SIM
+#ifndef __COSTMODEL
 #include "acl/acl.h"
+#endif
 #endif
 #include <pto/common/type.hpp>
 
@@ -34,9 +36,12 @@ namespace PtoTestCommon {
 #define PAD_VALUE_MAX (1)
 #define PAD_VALUE_MIN (-1)
 
-#define CHECK_RESULT_GTEST(x) if(!(x)) ASSERT_TRUE(false);
+#define CHECK_RESULT_GTEST(x) \
+    if (!(x))                 \
+        ASSERT_TRUE(false);
 
-typedef enum {
+typedef enum
+{
     DT_UNDEFINED = -1,
     FLOAT = 0,
     HALF = 1,
@@ -84,7 +89,7 @@ bool ReadFile(const std::string &filePath, size_t &fileSize, void *buffer, size_
         return false;
     }
     if (size > bufferSize) {
-        ERROR_LOG("%s: file size (%lu) is larger than buffer size (%lu)",filePath.c_str(), size , bufferSize);
+        ERROR_LOG("%s: file size (%lu) is larger than buffer size (%lu)", filePath.c_str(), size, bufferSize);
         file.close();
         return false;
     }
@@ -138,12 +143,12 @@ void DoPrintHalfData(const aclFloat16 *data, size_t count, size_t elementsPerRow
 {
     assert(elementsPerRow != 0);
     for (size_t i = 0; i < count; ++i) {
-        std::cout << std::setw(5) << std::setprecision(6) << 
-            #ifdef __CPU_SIM  
-                (float)data[i];
-            #else
-                aclFloat16ToFloat(data[i]);
-            #endif
+        std::cout << std::setw(5) << std::setprecision(6) <<
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
+            (float)data[i];
+#else
+            aclFloat16ToFloat(data[i]);
+#endif
         if (i % elementsPerRow == elementsPerRow - 1) {
             std::cout << std::endl;
         }
@@ -202,9 +207,12 @@ void PrintData(const void *data, size_t count, printDataType dataType, size_t el
     std::cout << std::endl;
 }
 
+#define RESET "\033[0m"
+#define BOLD_RED "\033[1;31m"
+
 template <typename T>
 bool ResultCmp(const std::vector<T> &outDataValExp, const T *outDataValAct, float eps, size_t threshold = 0,
-    size_t zeroCountThreshold = 1000, bool printAll = false, bool printErr = false, size_t testNum = 0)
+               size_t zeroCountThreshold = 1000, bool printAll = false, bool printErr = false, size_t testNum = 0)
 {
     threshold = threshold == 0 ? static_cast<int>(outDataValExp.size() * eps) : threshold;
 
@@ -214,7 +222,7 @@ bool ResultCmp(const std::vector<T> &outDataValExp, const T *outDataValAct, floa
     size_t errCount = 0;
 
     bool rst = true;
-    size_t eSize = outDataValExp.size() / sizeof(T);
+    size_t eSize = outDataValExp.size();
     for (size_t eIdx = 0; eIdx < eSize; eIdx++) {
         auto expVal = static_cast<float>(outDataValExp[eIdx]);
         auto actVal = static_cast<float>(outDataValAct[eIdx]);
@@ -233,19 +241,20 @@ bool ResultCmp(const std::vector<T> &outDataValExp, const T *outDataValAct, floa
         }
 
         if ((printAll) || (eErr && printErr) || (testNum > 0)) {
-            std::cout << "diff threshold: " << eps << ", idx: " << eIdx << ", exp->" << expVal << ", act->" << actVal
-                      << ", diff->" << diff << ", diff ratio->" << relRatio << ", zero count->" << zeroCount
-                      << ", zero threshold->" << zeroCountThreshold << std::endl;
+            std::cout << (eErr ? BOLD_RED : "") << "idx: 0x" << eIdx << ", exp->" << expVal << ", act->" << actVal
+                      << ", diff->" << diff << ", diff ratio->" << relRatio << ", zero count->0x" << zeroCount
+                      << (eErr ? (" [ERROR]" RESET) : "") << std::endl;
         }
         rst = !((errCount > threshold || zeroCount > zeroCountThreshold));
     }
 
     float errCountRatio = static_cast<float>(errCount) / static_cast<float>(eSize);
     float zeroCountRatio = static_cast<float>(zeroCount) / static_cast<float>(eSize);
-    std::cout << "max diff: " << maxDiff << ", max diff ratio: " << maxDiffRatio << ", err count: " << errCount
-              << ", err threshold: " << threshold << ", err count ratio: " << errCountRatio
-              << ", act zero count: " << zeroCount << ", act zero threshold: " << zeroCountThreshold
-              << ", act zero ratio: " << zeroCountRatio << std::endl;
+    std::cout << "max diff: " << maxDiff << ", diff threshold: " << eps << ", max diff ratio: " << maxDiffRatio
+              << ", err count: " << errCount << ", err threshold: " << threshold
+              << ", err count ratio: " << errCountRatio << ", act zero count: 0x" << zeroCount
+              << ", act zero threshold: 0x" << zeroCountThreshold << ", act zero ratio: " << zeroCountRatio
+              << std::endl;
     if (rst || printAll || printErr) {
         return rst;
     }
@@ -268,9 +277,9 @@ bool ResultCmp(const std::vector<T> &outDataValExp, const T *outDataValAct, floa
         }
 
         if (eErr) {
-            std::cout << "diff threshold: " << eps << ", idx: " << eIdx << ", exp->" << expVal << ", act->" << actVal
-                      << ", diff->" << diff << ", diff ratio->" << relRatio << ", zero count->" << zeroCount
-                      << ", zero threshold->" << zeroCountThreshold << std::endl;
+            std::cout << BOLD_RED << "idx: 0x" << eIdx << ", exp->" << expVal << ", act->" << actVal << ", diff->"
+                      << diff << ", diff ratio->" << relRatio << ", zero count->0x" << zeroCount << " [ERROR]" RESET
+                      << std::endl;
         }
         rst = !((errCount > threshold || zeroCount > zeroCountThreshold));
         if (!rst) {
@@ -281,15 +290,16 @@ bool ResultCmp(const std::vector<T> &outDataValExp, const T *outDataValAct, floa
 }
 template <typename T>
 bool ResultCmp(const std::vector<T> &outDataValExp, const std::vector<T> &outDataValAct, float eps,
-    size_t threshold = 0, size_t zeroCountThreshold = 1000, bool printAll = false, bool printErr = false,
-    size_t testNum = 0) {
+               size_t threshold = 0, size_t zeroCountThreshold = 1000, bool printAll = false, bool printErr = false,
+               size_t testNum = 0)
+{
     if (outDataValExp.size() != outDataValAct.size()) {
         std::cout << "out size is not eq, golden: " << outDataValExp.size() << ", act: " << outDataValAct.size()
                   << std::endl;
         return false;
     }
-    return ResultCmp(outDataValExp, outDataValAct.data(), eps, threshold,
-        zeroCountThreshold, printAll, printErr, testNum);
+    return ResultCmp(outDataValExp, outDataValAct.data(), eps, threshold, zeroCountThreshold, printAll, printErr,
+                     testNum);
 }
 
-}
+} // namespace PtoTestCommon

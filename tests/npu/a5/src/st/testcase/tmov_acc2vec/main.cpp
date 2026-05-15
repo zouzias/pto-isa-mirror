@@ -44,8 +44,10 @@ void LaunchTMOVAcc2VecSCQuantNZ2DN(uint8_t *out, uint8_t *src0, uint8_t *src1, v
 
 class TMOVTest : public testing::Test {
 protected:
-    void SetUp() override {}
-    void TearDown() override {}
+    void SetUp() override
+    {}
+    void TearDown() override
+    {}
 };
 
 std::string GetGoldenDir()
@@ -224,6 +226,16 @@ TEST_F(TMOVTest, case_nz2nd_split_2)
     tmov_acc2vec_test<1, uint32_t, uint16_t, uint16_t, 6>(48, 32, 128);
 }
 
+TEST_F(TMOVTest, case_nz2nd_uf_partial)
+{
+    tmov_acc2vec_test<1, uint32_t, uint16_t, uint16_t, 7>(6, 7, 8);
+}
+
+TEST_F(TMOVTest, case_nz2nd_uf_final_mode)
+{
+    tmov_acc2vec_test<1, uint32_t, uint16_t, uint16_t, 8>(6, 7, 8);
+}
+
 TEST_F(TMOVTest, case_nz2nz_1)
 {
     tmov_acc2vec_test<2, uint16_t, uint16_t, uint16_t, 1>(96, 80, 112);
@@ -329,6 +341,16 @@ TEST_F(TMOVTest, case_nz2nd_fb_quant_5)
     tmov_acc2vec_fb_quant_test<1, uint16_t, uint32_t, uint32_t, uint64_t, 5>(31, 128, 128);
 }
 
+TEST_F(TMOVTest, case_nz2nd_fb_quant_uf_partial)
+{
+    tmov_acc2vec_fb_quant_test<1, uint16_t, uint32_t, uint32_t, uint64_t, 6>(31, 128, 128);
+}
+
+TEST_F(TMOVTest, case_nz2nd_fb_quant_uf_final_mode)
+{
+    tmov_acc2vec_fb_quant_test<1, int8_t, uint32_t, uint32_t, uint64_t, 7>(60, 128, 64);
+}
+
 TEST_F(TMOVTest, case_nz2nd_sc_quant_1)
 {
     tmov_acc2vec_test<4, uint16_t, uint32_t, uint32_t, 1>(128, 48, 96);
@@ -347,6 +369,16 @@ TEST_F(TMOVTest, case_nz2nd_sc_quant_3)
 TEST_F(TMOVTest, case_nz2nd_sc_quant_4)
 {
     tmov_acc2vec_test<4, int8_t, int8_t, int8_t, 4>(60, 128, 32);
+}
+
+TEST_F(TMOVTest, case_nz2nd_sc_quant_uf_partial)
+{
+    tmov_acc2vec_test<4, uint16_t, uint32_t, uint32_t, 5>(128, 48, 96);
+}
+
+TEST_F(TMOVTest, case_nz2nd_sc_quant_uf_final_mode)
+{
+    tmov_acc2vec_test<4, int8_t, uint32_t, uint32_t, 6>(60, 128, 64);
 }
 
 TEST_F(TMOVTest, case_nz2dn_1)

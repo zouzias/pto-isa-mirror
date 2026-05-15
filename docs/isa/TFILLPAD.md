@@ -1,4 +1,9 @@
-# TFILLPAD
+﻿# TFILLPAD
+
+
+## Tile Operation Diagram
+
+![TFILLPAD tile operation](../figures/isa/TFILLPAD.svg)
 
 ## Introduction
 
@@ -25,7 +30,7 @@ otherwise `std::numeric_limits<T>::max()/min()`).
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/grammar/PTO-AS.md`.
+PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
 Synchronous form (conceptual):
 
@@ -33,22 +38,27 @@ Synchronous form (conceptual):
 %dst = tfillpad %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
+### AS Level 1 (SSA)
+
+```text
+%dst = pto.tfillpad %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### AS Level 2 (DPS)
+
+```text
+pto.tfillpad ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
 ## C++ Intrinsic
 
 Implemented in the backend headers pulled in by `include/pto/common/pto_instr_impl.hpp`:
 
 ```cpp
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TFILLPAD(TileDataDst& dst, TileDataSrc& src);
+template <typename TileData, PadValue PadVal = PadValue::Zero, typename... WaitEvents>
+PTO_INST RecordEvent TFILLPAD(TileData &dst, TileData &src, WaitEvents &... events);
 
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TFILLPAD_INPLACE(TileDataDst& dst, TileDataSrc& src);
-
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TFILLPAD_EXPAND(TileDataDst& dst, TileDataSrc& src);
-
-template <typename TileData, PadValue PadVal = PadValue::Zero>
-PTO_INTERNAL void TFILLPAD(TileData &dst, TileData &src);
+template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
+PTO_INST RecordEvent TFILLPAD(DstTileData &dst, SrcTileData &src, WaitEvents &... events);
 ```
 
 ## Constraints
@@ -81,5 +91,32 @@ void example2() {
   TileMatData matTile;
   TFILLPAD(matTile, matTile);
 }
+```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.tfillpad %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: resources must be bound explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.tfillpad %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = pto.tfillpad %src : !pto.tile<...> -> !pto.tile<...>
+# AS Level 2 (DPS)
+pto.tfillpad ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 

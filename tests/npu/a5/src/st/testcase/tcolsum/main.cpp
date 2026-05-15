@@ -18,7 +18,8 @@ using namespace PtoTestCommon;
 template <uint32_t caseId>
 void launchTCOLSUMTestCase(void *out, void *src, aclrtStream stream);
 
-std::string GetGoldenDir() {
+std::string GetGoldenDir()
+{
     const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
@@ -164,5 +165,10 @@ TEST_F(TCOLSUMTest, case24)
 TEST_F(TCOLSUMTest, case25)
 {
     bool ret = TCOLSUMTestFramework<25, int8_t, 64, 64, 1, 128, 128>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLSUMTest, case31)
+{
+    bool ret = TCOLSUMTestFramework<31, float, 1, 1, 1, 512, 511>();
     EXPECT_TRUE(ret);
 }

@@ -15,7 +15,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-__global__ AICORE void runTNeg( __gm__ T __out__ *out, __gm__ T __in__ *src) {
+__global__ AICORE void runTNeg(__gm__ T __out__ *out, __gm__ T __in__ *src)
+{
     using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim5 = pto::Stride<1, 1, 1, kGCols_, 1>;
     using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
@@ -29,11 +30,15 @@ __global__ AICORE void runTNeg( __gm__ T __out__ *out, __gm__ T __in__ *src) {
     GlobalData dstGlobal(out);
 
     TLOAD(srcTile, srcGlobal);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
     TNEG(dstTile, srcTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
 }
@@ -41,10 +46,9 @@ __global__ AICORE void runTNeg( __gm__ T __out__ *out, __gm__ T __in__ *src) {
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void LaunchTNeg(T *out, T *src, void *stream)
 {
-    if constexpr ( std::is_same_v<T, aclFloat16> )
-        runTNeg<half, kGRows_, kGCols_, kTRows_, kTCols_><<<1, nullptr, stream>>>((half*)(out),
-                                                                                             (half*)(src));
-    else 
+    if constexpr (std::is_same_v<T, aclFloat16>)
+        runTNeg<half, kGRows_, kGCols_, kTRows_, kTCols_><<<1, nullptr, stream>>>((half *)(out), (half *)(src));
+    else
         runTNeg<T, kGRows_, kGCols_, kTRows_, kTCols_><<<1, nullptr, stream>>>(out, src);
 }
 

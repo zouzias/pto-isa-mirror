@@ -13,11 +13,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "acl/acl.h"
 
 using namespace pto;
-namespace TRowExpandTest{
+namespace TRowExpandTest {
 
 template <typename T, uint32_t dstRows, uint32_t dstCols>
-__global__ AICORE void runROWEXPAND(__gm__ T __out__ *out, __gm__ T __in__ *src) {
-
+__global__ AICORE void runROWEXPAND(__gm__ T __out__ *out, __gm__ T __in__ *src)
+{
     using SrcDynShapeDim5 = Shape<1, 1, 1, dstRows, 1>;
     using SrcDynStridDim5 = pto::Stride<1, 1, dstRows, 1, 1>;
     using GlobalData = GlobalTensor<T, SrcDynShapeDim5, SrcDynStridDim5, Layout::DN>;
@@ -36,31 +36,37 @@ __global__ AICORE void runROWEXPAND(__gm__ T __out__ *out, __gm__ T __in__ *src)
     GlobalData srcGlobal(src);
     DstGlobalData dstGlobal(out);
 
-    TLOAD(dstTile, dstGlobal);
     TLOAD(srcTile, srcGlobal);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
     TROWEXPAND(dstTile, srcTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dstTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
     wait_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
     pipe_barrier(PIPE_ALL);
+#endif
     out = dstGlobal.data();
 }
 
 // dstCols = BLOCKSIZE / sizeof(T)
 template <typename T, uint32_t dstRows, uint32_t dstCols>
-void launchTROWEXPAND(T *out, T*src, void *stream) {
+void launchTROWEXPAND(T *out, T *src, void *stream)
+{
     if constexpr (std::is_same_v<T, aclFloat16>) {
-        runROWEXPAND<half, dstRows, dstCols><<<1, nullptr, stream>>>((half*)out, (half*)src);
+        runROWEXPAND<half, dstRows, dstCols><<<1, nullptr, stream>>>((half *)out, (half *)src);
     } else {
         runROWEXPAND<T, dstRows, dstCols><<<1, nullptr, stream>>>(out, src);
     }
 }
 
 template void launchTROWEXPAND<aclFloat16, 4800, 16>(aclFloat16 *out, aclFloat16 *src, void *stream);
-template void launchTROWEXPAND<float, 7280, 8>(float  *out, float  *src, void *stream);
-template void launchTROWEXPAND<float, 16, 8>(float  *out, float  *src, void *stream);
-}
+template void launchTROWEXPAND<float, 7280, 8>(float *out, float *src, void *stream);
+template void launchTROWEXPAND<float, 16, 8>(float *out, float *src, void *stream);
+} // namespace TRowExpandTest

@@ -14,27 +14,33 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/tile_offsets.hpp"
 #include <cmath>
 
-namespace pto{
+namespace pto {
 
-    template <typename tile_type>
-    void TSqrt_Impl(typename tile_type::TileDType dst,
-                            typename tile_type::TileDType src,
-                            int validRow, int validCol
-                        ) {
-        for(size_t c=0; c<(size_t)validCol; c++) {
-            for(size_t r=0; r<(size_t)validRow; r++) {
-                size_t idx = GetTileElementOffset<tile_type>(r,c);
-                dst[idx] = static_cast<typename tile_type::DType>(std::sqrt(static_cast<double>(src[idx])));
-            }
+template <typename TileDataDst, typename TileDataSrc>
+void TSqrt_Impl(TileDataDst dst, TileDataSrc src, int validRow, int validCol)
+{
+    for (size_t c = 0; c < (size_t)validCol; c++) {
+        for (size_t r = 0; r < (size_t)validRow; r++) {
+            const auto x = static_cast<double>(src.data()[GetTileElementOffset<TileDataSrc>(r, c)]);
+            dst.data()[GetTileElementOffset<TileDataDst>(r, c)] =
+                static_cast<typename TileDataDst::DType>(std::sqrt(x));
         }
     }
-
-    template <typename tile_type>
-    PTO_INTERNAL void TSQRT_IMPL(tile_type &dst, tile_type &src) {
-        static_assert(std::is_same<typename tile_type::DType, half>::value ||
-                      std::is_same<typename tile_type::DType, float>::value,
-                      "TSQRT: Invalid data type");
-        TSqrt_Impl<tile_type>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol());
-    }
 }
-#endif  // TSQRT_HPP
+
+template <auto PrecisionType = SqrtAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc>
+PTO_INTERNAL void TSQRT_IMPL(TileDataDst &dst, TileDataSrc &src)
+{
+    static_assert((std::is_same<typename TileDataDst::DType, bfloat16_t>::value &&
+                   std::is_same<typename TileDataSrc::DType, bfloat16_t>::value) ||
+                      (std::is_same<typename TileDataDst::DType, half>::value &&
+                       std::is_same<typename TileDataSrc::DType, half>::value) ||
+                      (std::is_same<typename TileDataSrc::DType, float>::value &&
+                       std::is_same<typename TileDataDst::DType, float>::value),
+                  "TSQRT: Invalid data type");
+    static_assert(TileDataSrc::ValidRow == TileDataDst::ValidRow && TileDataSrc::ValidCol == TileDataDst::ValidCol,
+                  "TSQRT: Src valid row/col != Dst valid row/col");
+    TSqrt_Impl<TileDataDst, TileDataSrc>(dst, src, dst.GetValidRow(), dst.GetValidCol());
+}
+} // namespace pto
+#endif // TSQRT_HPP

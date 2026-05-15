@@ -11,11 +11,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
 
-
 using namespace pto;
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-AICORE void runTXors( __gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ T __in__ *scalar) {
+AICORE void runTXors(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ T __in__ *scalar)
+{
     using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim5 = Stride<1, 1, 1, kGCols_, 1>;
     using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
@@ -27,6 +27,10 @@ AICORE void runTXors( __gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ T __in
     GlobalData srcGlobal(src);
     GlobalData dstGlobal(out);
 
+    TASSIGN(srcTile, 0);
+    TASSIGN(dstTile, kTRows_ * kTCols_ * sizeof(typename TileData::DType));
+    TASSIGN(tmpTile, 2 * kTRows_ * kTCols_ * sizeof(typename TileData::DType));
+
     TLOAD(srcTile, srcGlobal);
     TXORS(dstTile, srcTile, scalar[0], tmpTile);
     TSTORE(dstGlobal, dstTile);
@@ -36,8 +40,8 @@ AICORE void runTXors( __gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ T __in
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void LaunchTXors(T *out, T *src, T *scalar, void *stream)
 {
-    if constexpr ( std::is_same_v<T, aclFloat16> )
-        runTXors<half, kGRows_, kGCols_, kTRows_, kTCols_>((half*)(out), (half*)(src), (half*)(scalar));
+    if constexpr (std::is_same_v<T, aclFloat16>)
+        runTXors<half, kGRows_, kGCols_, kTRows_, kTCols_>((half *)(out), (half *)(src), (half *)(scalar));
     else
         runTXors<T, kGRows_, kGCols_, kTRows_, kTCols_>(out, src, scalar);
 }

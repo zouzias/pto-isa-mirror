@@ -12,7 +12,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 #include <gtest/gtest.h>
 
-
 using namespace std;
 using namespace PtoTestCommon;
 
@@ -27,7 +26,8 @@ protected:
     {}
 };
 
-std::string GetGoldenDir() {
+std::string GetGoldenDir()
+{
     const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
@@ -35,12 +35,12 @@ std::string GetGoldenDir() {
     return fullPath;
 }
 
-
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void LaunchTRems(T *out, T *src, T *scalar, void *stream);
 
-template<typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-void test_trems() {
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
+void test_trems()
+{
     size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
     size_t scalarSize = sizeof(T);
 
@@ -92,17 +92,50 @@ void test_trems() {
 }
 
 const int NUM_16 = 16;
+const int NUM_32 = 64;
 const int NUM_64 = 64;
 const int NUM_256 = 256;
-TEST_F(TREMSTest, case_float_64x64_64x64_64x64) {
+const int NUM_512 = 512;
+TEST_F(TREMSTest, case_float_64x64_64x64)
+{
     test_trems<float, NUM_64, NUM_64, NUM_64, NUM_64>();
 }
-TEST_F(TREMSTest, case_int32_64x64_64x64_64x64) {
+TEST_F(TREMSTest, case_int32_64x64_64x64)
+{
     test_trems<int32_t, NUM_64, NUM_64, NUM_64, NUM_64>();
 }
-TEST_F(TREMSTest, case_int16_64x64_64x64_64x64) {
+TEST_F(TREMSTest, case_int16_64x64_64x64)
+{
     test_trems<int16_t, NUM_64, NUM_64, NUM_64, NUM_64>();
 }
-TEST_F(TREMSTest, case_half_16x256_16x256_16x256) {
+TEST_F(TREMSTest, case_half_16x256_16x256)
+{
     test_trems<aclFloat16, NUM_16, NUM_256, NUM_16, NUM_256>();
 }
+
+TEST_F(TREMSTest, case_float_64x512_64x64)
+{
+    test_trems<float, NUM_64, NUM_512, NUM_64, NUM_64>();
+}
+TEST_F(TREMSTest, case_int32_64x512_64x64)
+{
+    test_trems<int32_t, NUM_64, NUM_512, NUM_64, NUM_64>();
+}
+TEST_F(TREMSTest, case_int16_64x512_64x64)
+{
+    test_trems<int16_t, NUM_64, NUM_512, NUM_64, NUM_64>();
+}
+TEST_F(TREMSTest, case_half_32x512_16x256)
+{
+    test_trems<aclFloat16, NUM_32, NUM_512, NUM_16, NUM_256>();
+}
+#ifdef CPU_SIM_BFLOAT_ENABLED
+TEST_F(TREMSTest, case_bf16_16x256_16x256)
+{
+    test_trems<bfloat16_t, NUM_16, NUM_256, NUM_16, NUM_256>();
+}
+TEST_F(TREMSTest, case_bf16_32x256_16x256)
+{
+    test_trems<bfloat16_t, NUM_32, NUM_256, NUM_16, NUM_256>();
+}
+#endif

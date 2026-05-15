@@ -21,14 +21,14 @@ AICORE inline void runTCOLMAX(__gm__ T __out__ *out, __gm__ T __in__ *src)
     DstGlobalData dstGlobal(out);
 
     using SrcTileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
-    using DscTileData = Tile<TileType::Vec, T,       1, kTCols_, BLayout::RowMajor, -1, -1>;
+    using DscTileData = Tile<TileType::Vec, T, 1, kTCols_, BLayout::RowMajor, -1, -1>;
     SrcTileData srcTile(kTRows_, kTCols_);
     DscTileData dstTile(1, kTCols_);
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x4000);
 
     std::fill(dstTile.data(), dstTile.data() + kTCols_, 0);
-    
+
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
@@ -42,12 +42,15 @@ AICORE inline void runTCOLMAX(__gm__ T __out__ *out, __gm__ T __in__ *src)
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void LaunchTCOLMAX(T *out, T *src, void *stream)
 {
-    if constexpr ( std::is_same_v<T, aclFloat16> ) {
-        runTCOLMAX<half, kGRows_, kGCols_, kTRows_, kTCols_>( (half*)(out), (half*)src);
+    if constexpr (std::is_same_v<T, aclFloat16>) {
+        runTCOLMAX<half, kGRows_, kGCols_, kTRows_, kTCols_>((half *)(out), (half *)src);
     } else {
-        runTCOLMAX<T, kGRows_, kGCols_, kTRows_, kTCols_>( out, src);
+        runTCOLMAX<T, kGRows_, kGCols_, kTRows_, kTCols_>(out, src);
     }
 }
 
 template void LaunchTCOLMAX<float, 64, 64, 64, 64>(float *out, float *src, void *stream);
 template void LaunchTCOLMAX<aclFloat16, 16, 256, 16, 256>(aclFloat16 *out, aclFloat16 *src, void *stream);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+template void LaunchTCOLMAX<bfloat16_t, 16, 256, 16, 256>(bfloat16_t *out, bfloat16_t *src, void *stream);
+#endif

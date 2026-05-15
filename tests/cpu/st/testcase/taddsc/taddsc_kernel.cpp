@@ -11,11 +11,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
 
-
 using namespace pto;
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-AICORE void runTAddsc( __gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *scalar, __gm__ T __in__ *src1) {
+AICORE void runTAddsc(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *scalar, __gm__ T __in__ *src1)
+{
     using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim5 = Stride<1, 1, 1, kGCols_, 1>;
     using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
@@ -28,6 +28,10 @@ AICORE void runTAddsc( __gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __
     GlobalData src1Global(src1);
     GlobalData dstGlobal(out);
 
+    TASSIGN(src0Tile, 0);
+    TASSIGN(src1Tile, kTRows_ * kTCols_ * sizeof(typename TileData::DType));
+    TASSIGN(dstTile, 2 * kTRows_ * kTCols_ * sizeof(typename TileData::DType));
+
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
     TADDSC(dstTile, src0Tile, scalar[0], src1Tile);
@@ -38,9 +42,9 @@ AICORE void runTAddsc( __gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void LaunchTAddsc(T *out, T *src0, T *scalar, T *src1, void *stream)
 {
-    if constexpr ( std::is_same_v<T, aclFloat16> )
-        runTAddsc<half, kGRows_, kGCols_, kTRows_, kTCols_>((half*)(out), (half*)(src0), (half*)(scalar),
-                                                            (half*)(src1));
+    if constexpr (std::is_same_v<T, aclFloat16>)
+        runTAddsc<half, kGRows_, kGCols_, kTRows_, kTCols_>((half *)(out), (half *)(src0), (half *)(scalar),
+                                                            (half *)(src1));
     else
         runTAddsc<T, kGRows_, kGCols_, kTRows_, kTCols_>(out, src0, scalar, src1);
 }
@@ -56,3 +60,8 @@ template void LaunchTAddsc<aclFloat16, NUM_16, NUM_256, NUM_16, NUM_256>(aclFloa
                                                                          void *stream);
 template void LaunchTAddsc<int16_t, NUM_64, NUM_64, NUM_64, NUM_64>(int16_t *out, int16_t *src0, int16_t *scalar,
                                                                     int16_t *src1, void *stream);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+template void LaunchTAddsc<bfloat16_t, NUM_16, NUM_256, NUM_16, NUM_256>(bfloat16_t *out, bfloat16_t *src0,
+                                                                         bfloat16_t *scalar, bfloat16_t *src1,
+                                                                         void *stream);
+#endif

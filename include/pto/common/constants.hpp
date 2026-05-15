@@ -10,6 +10,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef CONSTANTS_HPP
 #define CONSTANTS_HPP
+#ifdef __CPU_SIM
+#include <bit>
+#endif
 #include <pto/common/type.hpp>
 #include <pto/common/memory.hpp>
 
@@ -17,8 +20,10 @@ namespace pto {
 constexpr int REPEAT_BYTE = 256;
 constexpr int REPEAT_MAX = 255;
 constexpr const int BLOCK_BYTE_SIZE = 32;
+constexpr const int FIXP_BURST_UNIT_LEN = 64;
 constexpr const uint32_t SHIFT_BLOCK_LEN = 4;
 constexpr const uint32_t SHIFT_BLOCK_BYTE = 5;
+constexpr const uint32_t SHIFT_FRACTAL_BYTE = 9;
 constexpr const int REPEAT_STRIDE_MAX = 255;
 constexpr const uint64_t BLOCK_MAX_PER_REPEAT = 8;
 constexpr const uint32_t TMP_UB_SIZE = 8 * 1024;
@@ -29,58 +34,156 @@ constexpr const int CUBE_BLOCK_SIZE = 512;
 constexpr const int C0_SIZE_BYTE = 32;
 constexpr const int FRACTAL_NZ_ROW = 16;
 constexpr const int ACC_C0_SIZE = 16;
+constexpr const uint32_t B4_C0_SIZE = 64;
+constexpr const int MX_COL_LEN = 2;
+constexpr const int MX_ROW_LEN = 16;
+constexpr const int MX_BLOCK_SIZE = 32;
+constexpr const int B8_DATA_TYPE_OFFSET = 8;
+constexpr const int MAD_MODE_BIT = 46;
+constexpr const int MAD_ROUND_MODE_BIT = 47;
+constexpr const int TROW_PROD_LOOP_B16 = 7;
+constexpr const int TROW_PROD_LOOP_B32 = 6;
+constexpr const int PAD_SHIFT_LENGTH = 32;
 
-enum VFImplKind : unsigned {
-    VFIMPL_DEFAULT              = 0,    // 默认版本
-    VFIMPL_1D_NO_POST_UPDATE    = 1,
-    VFIMPL_2D_NO_POST_UPDATE    = 2,
-    VFIMPL_1D_POST_UPDATE       = 3,
-    VFIMPL_2D_POST_UPDATE       = 4,
-};
+// ============================================================================
+// Custom pad value helpers for uint64_t-based PadValue enum
+// ============================================================================
+// PadValue uses uint64_t underlying type
+// - Values 0-3 are standard enum cases (Null, Zero, Max, Min)
+// - Custom values have bit 32 set, with the float bit pattern in bits [32:63]
 
-enum class RoundMode : uint8_t {
-    CAST_NONE = 0,
-    CAST_RINT = 1,  // round to nearest, tie to even
-    CAST_ROUND = 2, // round to nearest, tie away from zero
-    CAST_FLOOR = 3, // round to minus infinity
-    CAST_CEIL = 4,  // round to positive infinity
-    CAST_TRUNC = 5, // round to zero
-    CAST_ODD = 6,   // round to odd (Von Neumann rounding)
-};
+// Check if a PadValue is a custom value (bit 32+ set)
+AICORE constexpr bool isCustomPadValue(PadValue pv)
+{
+    return static_cast<uint64_t>(pv) >= static_cast<uint64_t>(PadValue::CustomBase);
+}
 
-enum class TCopyMode : uint8_t {
-    SHALLOW_COPY = 0,
-    DEEP_COPY = 1,
-};
+// Extract the 32-bit value from a custom PadValue (returns the float bits)
+AICORE constexpr uint32_t getCustomPadBits(PadValue pv)
+{
+    return static_cast<uint32_t>(static_cast<uint64_t>(pv) & 0xFFFFFFFFULL);
+}
 
-enum class AccToVecMode : uint8_t {
-    SingleModeVec0 = 0,
-    SingleModeVec1 = 1,
-    DualModeSplitM = 2,
-    DualModeSplitN = 3,
-};
+// Helper to create a custom PadValue from a compile-time float/int constant
+// Usage: PadCustom<-1.0f>, PadCustom<0.5f>, PadCustom<42>
+namespace detail {
+// Use union for compile-time float-to-bits (works on NPU compilers)
+template <auto V>
+constexpr uint32_t floatToBits()
+{
+    if constexpr (std::is_same_v<decltype(V), float>) {
+        union {
+            float f;
+            uint32_t u;
+        } conv = {V};
+        return conv.u;
+    } else if constexpr (std::is_same_v<decltype(V), double>) {
+        union {
+            float f;
+            uint32_t u;
+        } conv = {static_cast<float>(V)};
+        return conv.u;
+    } else if constexpr (std::is_integral_v<decltype(V)>) {
+        return static_cast<uint32_t>(V);
+    } else {
+        return 0;
+    }
+}
+} // namespace detail
 
-enum class ReluPreMode : uint8_t {
-    NoRelu = 0,
-    NormalRelu = 1,
-};
+template <auto V>
+inline constexpr PadValue PadCustom = static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                                            static_cast<uint64_t>(detail::floatToBits<V>()));
 
-enum class AtomicType : uint8_t {
-    AtomicNone = 0,
-    AtomicAdd = 1,
-};
+// Helper constexpr function to create custom PadValue from float
+// Works on both CPU_SIM and NPU (host + device) using __builtin_bit_cast
+// Usage: constexpr PadValue PadCustomNeg1 = PadValueCustom(-1.0f);
+// Note: For fp16/bf16, use PadValueCustomHalf()/PadValueCustomBf16() or pass fp16/bf16 bits directly
+AICORE constexpr PadValue PadValueCustom(float value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 static_cast<uint64_t>(__builtin_bit_cast(uint32_t, value)));
+}
 
-enum class PadValue {
-    Null,
-    Zero,
-    Max,
-    Min,
-};
+// For fp16/bf16, pass the raw 16-bit representation directly
+AICORE constexpr PadValue PadValueCustom16(uint16_t bits16)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) | static_cast<uint64_t>(bits16));
+}
 
-enum class CompactMode {
-    Null,
-    Normal,
-};
+// ============================================================================
+// Integer type overloads for PadValueCustom
+// ============================================================================
+
+// 32-bit integers: store raw bits directly
+AICORE constexpr PadValue PadValueCustom(int32_t value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 static_cast<uint64_t>(static_cast<uint32_t>(value)));
+}
+
+AICORE constexpr PadValue PadValueCustom(uint32_t value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) | static_cast<uint64_t>(value));
+}
+
+// 16-bit integers: store in lower 16 bits
+AICORE constexpr PadValue PadValueCustom(int16_t value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 static_cast<uint64_t>(static_cast<uint16_t>(value)));
+}
+
+// Note: uint16_t overload already exists as PadValueCustom16()
+
+// 8-bit integers: store in lower 8 bits
+AICORE constexpr PadValue PadValueCustom(int8_t value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 static_cast<uint64_t>(static_cast<uint8_t>(value)));
+}
+
+AICORE constexpr PadValue PadValueCustom(uint8_t value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) | static_cast<uint64_t>(value));
+}
+
+#if !defined(__CPU_SIM) && !defined(__COSTMODEL)
+// Usage: constexpr PadValue PadCustomNeg1_Half = PadValueCustom((half)-1.0);
+// NPU aicore compiler has half as built-in type
+AICORE constexpr PadValue PadValueCustom(half value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 static_cast<uint64_t>(__builtin_bit_cast(uint16_t, value)));
+}
+
+// NPU aicore compiler has bfloat16_t as built-in type
+AICORE constexpr PadValue PadValueCustom(bfloat16_t value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 static_cast<uint64_t>(__builtin_bit_cast(uint16_t, value)));
+}
+#endif
+
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
+// Usage: constexpr PadValue PadCustomNeg1_Half = PadValueCustom((_Float16)-1.0);
+// Or with f16 suffix: PadValueCustom(-1.0f16)
+constexpr PadValue PadValueCustom(_Float16 value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 static_cast<uint64_t>(__builtin_bit_cast(uint16_t, value)));
+}
+
+#ifdef CPU_SIM_BFLOAT_ENABLED
+// Usage: constexpr PadValue PadCustomNeg1_Bf16 = PadValueCustom((bfloat16_t)-1.0);
+// Requires C++23 with std::bfloat16_t support
+constexpr PadValue PadValueCustom(bfloat16_t value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 static_cast<uint64_t>(__builtin_bit_cast(uint16_t, value)));
+}
+#endif
+#endif
 
 template <typename DType, PadValue PadVal>
 struct PadValueMap {
@@ -148,6 +251,7 @@ struct PadValueMap<uint32_t, PadValue::Max> {
 };
 
 #ifndef __CPU_SIM
+#ifndef __COSTMODEL
 template <>
 struct PadValueMap<bfloat16_t, PadValue::Null> {
     static constexpr auto value = uint16_t(0);
@@ -165,6 +269,7 @@ template <>
 struct PadValueMap<bfloat16_t, PadValue::Max> {
     static constexpr auto value = uint16_t(0x7f80);
 };
+#endif
 #endif
 template <>
 struct PadValueMap<half, PadValue::Null> {
@@ -251,13 +356,29 @@ struct PadValueMap<uint8_t, PadValue::Max> {
     static constexpr auto value = uint8_t(0xff);
 };
 
-#if defined(REGISTER_BASE)
+#if defined(PTO_NPU_ARCH_A5)
 template <PadValue PadVal>
 struct PadValueMap<float4_e1m2x2_t, PadVal> {
     static constexpr auto value = uint8_t(0);
 };
 template <PadValue PadVal>
 struct PadValueMap<float4_e2m1x2_t, PadVal> {
+    static constexpr auto value = uint8_t(0);
+};
+template <PadValue PadVal>
+struct PadValueMap<float8_e8m0_t, PadVal> {
+    static constexpr auto value = uint8_t(0);
+};
+template <PadValue PadVal>
+struct PadValueMap<float8_e4m3_t, PadVal> {
+    static constexpr auto value = uint8_t(0);
+};
+template <PadValue PadVal>
+struct PadValueMap<float8_e5m2_t, PadVal> {
+    static constexpr auto value = uint8_t(0);
+};
+template <PadValue PadVal>
+struct PadValueMap<hifloat8_t, PadVal> {
     static constexpr auto value = uint8_t(0);
 };
 #endif
@@ -267,17 +388,24 @@ PTO_INTERNAL constexpr auto GetPadValue()
 {
     using DType = typename TileData::DType;
     constexpr PadValue PadVal = TileData::PadVal;
-    return PadValueMap<DType, PadVal>::value;
+    // Handle custom pad values (works on both CPU and NPU)
+    if constexpr (isCustomPadValue(PadVal)) {
+        constexpr uint32_t bits = getCustomPadBits(PadVal);
+        if constexpr (std::is_same_v<DType, float>) {
+            return bits; // float uses raw bits directly
+        } else if constexpr (sizeof(DType) == 2) {
+            // fp16 and bf16 both use lower 16 bits
+            // (PadValueCustom(half) and PadValueCustom(bfloat16_t) store native bits)
+            return static_cast<uint32_t>(bits & 0xFFFF);
+        } else if constexpr (sizeof(DType) == 1) {
+            return static_cast<uint32_t>(bits & 0xFF);
+        } else {
+            return bits;
+        }
+    } else {
+        return PadValueMap<DType, PadVal>::value;
+    }
 }
-
-enum class TileLayoutCustom : uint8_t {
-    ND,
-    DN,
-    NZ,
-    ZN,
-    ZZ,
-    NONE,
-};
 
 template <typename TileData>
 PTO_INTERNAL constexpr TileLayoutCustom GetTileLayoutCustom()

@@ -13,11 +13,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "acl/acl.h"
 
 using namespace pto;
-namespace TColExpandExpdifTest{
+namespace TColExpandExpdifTest {
 
 template <typename T, uint32_t dstRow, uint32_t dstCol, uint32_t src1Row, uint32_t src1Col>
-__global__ AICORE void runCOLEXPANDEXPDIF(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1) {
-
+__global__ AICORE void runCOLEXPANDEXPDIF(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
+{
     using DynShapeDim5 = Shape<1, 1, 1, src1Row, src1Col>;
     using DynStridDim5 = pto::Stride<1, 1, 1, src1Col, 1>;
     using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
@@ -40,25 +40,32 @@ __global__ AICORE void runCOLEXPANDEXPDIF(__gm__ T __out__ *out, __gm__ T __in__
     GlobalData src1Global(src1 + offset);
     DstGlobalData dstGlobal(out + offset);
 
-    TLOAD(dstTile, dstGlobal);
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
     TCOLEXPANDEXPDIF(dstTile, src0Tile, src1Tile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dstTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
     wait_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
     pipe_barrier(PIPE_ALL);
+#endif
     out = dstGlobal.data();
 }
 
 template <typename T, uint32_t dstRow, uint32_t dstCol, uint32_t src1Row, uint32_t src1Col>
-void launchTColExpandExpdif(T *out, T*src0, T*src1, void *stream) {
+void launchTColExpandExpdif(T *out, T *src0, T *src1, void *stream)
+{
     if constexpr (std::is_same_v<T, aclFloat16>) {
-        runCOLEXPANDEXPDIF<half, dstRow, dstCol, src1Row, src1Col><<<1, nullptr, stream>>>((half*)out, (half*)src0, (half*)src1);
+        runCOLEXPANDEXPDIF<half, dstRow, dstCol, src1Row, src1Col>
+            <<<1, nullptr, stream>>>((half *)out, (half *)src0, (half *)src1);
     } else {
         runCOLEXPANDEXPDIF<T, dstRow, dstCol, src1Row, src1Col><<<1, nullptr, stream>>>(out, src0, src1);
     }
@@ -66,6 +73,8 @@ void launchTColExpandExpdif(T *out, T*src0, T*src1, void *stream) {
 
 template void launchTColExpandExpdif<float, 32, 16, 1, 16>(float *out, float *src0, float *src1, void *stream);
 template void launchTColExpandExpdif<float, 16, 32, 1, 32>(float *out, float *src0, float *src1, void *stream);
-template void launchTColExpandExpdif<aclFloat16, 32, 32, 1, 32>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream);
-template void launchTColExpandExpdif<aclFloat16, 16, 128, 1, 128>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream);
-}
+template void launchTColExpandExpdif<aclFloat16, 32, 32, 1, 32>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
+                                                                void *stream);
+template void launchTColExpandExpdif<aclFloat16, 16, 128, 1, 128>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
+                                                                  void *stream);
+} // namespace TColExpandExpdifTest

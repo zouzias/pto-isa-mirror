@@ -12,8 +12,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "acl/acl.h"
 #include <gtest/gtest.h>
 
-#include "acl/acl.h"
-
 using namespace std;
 using namespace PtoTestCommon;
 
@@ -25,7 +23,8 @@ protected:
     {}
 };
 
-std::string GetGoldenDir() {
+std::string GetGoldenDir()
+{
     const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
@@ -33,12 +32,12 @@ std::string GetGoldenDir() {
     return fullPath;
 }
 
-
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool isInPlace = false>
 void LaunchTRsqrt(T *out, T *src, void *stream);
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool isInPlace = false>
-void test_trsqrt() {
+void test_trsqrt()
+{
     size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
 
     aclInit(nullptr);
@@ -81,15 +80,13 @@ void test_trsqrt() {
 
     float eps = 0.0f;
     if constexpr (std::is_same_v<T, float>) {
-#ifdef ACCURATE_RSQRT
-        eps = 0.0001f;
-#else
-        // Known issue with accuracy for built-in `vrsqrt` intrinsic funtion
-        // Thats why epsilon is 0.003f, while requirement 0.0001f
-        // #define ACCURATE_RSQRT in TUnaryOp.hpp to enable accurate implementation
-        // or add_compile_definitions(ACCURATE_RSQRT) in CMake files
-        eps = 0.003f;
-#endif
+        if constexpr (isInPlace) {
+            eps = 0.0001f;
+        } else {
+            // Known issue with accuracy for built-in `vrsqrt` intrinsic funtion
+            // Thats why epsilon is 0.003f, while requirement 0.0001f
+            eps = 0.003f;
+        }
     } else if constexpr (std::is_same_v<T, aclFloat16>) {
         eps = 0.001f;
     }
@@ -98,15 +95,19 @@ void test_trsqrt() {
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TRSQRTTest, case_float_64x64_64x64_64x64_inPlace_True) {
+TEST_F(TRSQRTTest, case_float_64x64_64x64_64x64_inPlace_True)
+{
     test_trsqrt<float, 64, 64, 64, 64, true>();
 }
-TEST_F(TRSQRTTest, case_float_64x64_64x64_64x64_inPlace_False) {
+TEST_F(TRSQRTTest, case_float_64x64_64x64_64x64_inPlace_False)
+{
     test_trsqrt<float, 64, 64, 64, 64, false>();
 }
-TEST_F(TRSQRTTest, case_half_64x64_64x64_64x64_inPlace_True) {
+TEST_F(TRSQRTTest, case_half_64x64_64x64_64x64_inPlace_True)
+{
     test_trsqrt<aclFloat16, 64, 64, 64, 64, true>();
 }
-TEST_F(TRSQRTTest, case_half_64x64_64x64_64x64_inPlace_False) {
+TEST_F(TRSQRTTest, case_half_64x64_64x64_64x64_inPlace_False)
+{
     test_trsqrt<aclFloat16, 64, 64, 64, 64, false>();
 }

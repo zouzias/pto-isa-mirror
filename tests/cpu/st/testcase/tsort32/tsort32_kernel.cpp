@@ -13,8 +13,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
-template <typename T0, typename T1, int kGRows, int kGCols, int kTRows, int kTCols, int validRow,int validCol>
-__global__ AICORE void runTSort32( __gm__ T0 __out__ *out, __gm__ T0 __in__ *src,  __gm__ T1 __in__ *idx)
+template <typename T0, typename T1, int kGRows, int kGCols, int kTRows, int kTCols, int validRow, int validCol>
+__global__ AICORE void runTSort32(__gm__ T0 __out__ *out, __gm__ T0 __in__ *src, __gm__ T1 __in__ *idx)
 {
     const int totalByte = 8;
     const int totalNum = totalByte / sizeof(T0);
@@ -29,18 +29,21 @@ __global__ AICORE void runTSort32( __gm__ T0 __out__ *out, __gm__ T0 __in__ *src
     using TileDataSrc = Tile<TileType::Vec, T0, kTRows, kTCols, BLayout::RowMajor, -1, -1>;
     using TileDataIdx = Tile<TileType::Vec, T1, kTRows, kTCols, BLayout::RowMajor, -1, -1>;
     using TileDataDst = Tile<TileType::Vec, T0, kTRows, kTCols * totalNum, BLayout::RowMajor, -1, -1>;
+    using TmpTileData = Tile<TileType::Vec, T0, 1, 32, BLayout::RowMajor>;
     TileDataSrc srcTile(validRow, validCol);
     TileDataIdx idxTile(validRow, validCol);
     TileDataDst dstTile(validRow, validCol * totalNum);
+    TmpTileData tmpTile;
     TASSIGN(srcTile, 0x0);
     TASSIGN(idxTile, kTRows * kTCols * sizeof(T0));
     TASSIGN(dstTile, kTRows * kTCols * sizeof(T0) + kTRows * kTCols * sizeof(T1));
+    TASSIGN(tmpTile, 2 * kTRows * kTCols * sizeof(T0) + kTRows * kTCols * sizeof(T1));
 
     TLOAD(srcTile, srcGlobal);
     TLOAD(idxTile, idxGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TSORT32(dstTile, srcTile, idxTile);
+    TSORT32(dstTile, srcTile, idxTile, tmpTile);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstTile);
@@ -51,18 +54,18 @@ template <typename T0, typename T1, int kGRows, int kGCols, int kTRows, int kTCo
 void launchTSort32(T0 *out, T0 *src, T1 *idx, aclrtStream stream)
 {
     if constexpr (std::is_same_v<T0, aclFloat16>) {
-        runTSort32<half, uint32_t, kGRows, kGCols, kTRows, kTCols, validRow, validCol>((half*)(out), (half*)(src), idx);
-    } else { 
-        runTSort32<T0, T1, kGRows, kGCols,kTRows, kTCols, validRow, validCol>(out, src, idx);
+        runTSort32<half, uint32_t, kGRows, kGCols, kTRows, kTCols, validRow, validCol>((half *)(out), (half *)(src),
+                                                                                       idx);
+    } else {
+        runTSort32<T0, T1, kGRows, kGCols, kTRows, kTCols, validRow, validCol>(out, src, idx);
     }
 }
 
-template void launchTSort32<int16_t, uint32_t, 16, 16, 16, 16, 16, 16>
-    (int16_t *out, int16_t *src, uint32_t *idx, aclrtStream stream);
-template void launchTSort32<float, uint32_t, 8, 32, 8, 32, 8, 32>
-    (float *out, float *src, uint32_t *idx, aclrtStream stream);
-template void launchTSort32<int32_t, uint32_t, 7, 32, 7, 32, 7, 32>
-    (int32_t *out, int32_t *src, uint32_t *idx, aclrtStream stream);
-template void launchTSort32<aclFloat16, uint32_t, 32, 16, 32, 16, 32, 16>
-    (aclFloat16 *out, aclFloat16 *src, uint32_t *idx, aclrtStream stream);
-
+template void launchTSort32<int16_t, uint32_t, 16, 16, 16, 16, 16, 16>(int16_t *out, int16_t *src, uint32_t *idx,
+                                                                       aclrtStream stream);
+template void launchTSort32<float, uint32_t, 8, 32, 8, 32, 8, 32>(float *out, float *src, uint32_t *idx,
+                                                                  aclrtStream stream);
+template void launchTSort32<int32_t, uint32_t, 7, 32, 7, 32, 7, 32>(int32_t *out, int32_t *src, uint32_t *idx,
+                                                                    aclrtStream stream);
+template void launchTSort32<aclFloat16, uint32_t, 32, 16, 32, 16, 32, 16>(aclFloat16 *out, aclFloat16 *src,
+                                                                          uint32_t *idx, aclrtStream stream);

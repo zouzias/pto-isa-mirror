@@ -14,6 +14,7 @@ import os
 import struct
 import ctypes
 import numpy as np
+
 np.random.seed(2025)
 
 
@@ -25,8 +26,12 @@ def gen_golden_data(case_name, param):
     if param.is_rowmajor:
         src1vc = 32 // np.dtype(dtype).itemsize
 
-    input1 = np.random.random(vr * vc).astype(dtype)
-    input2 = np.random.random(vr * src1vc).astype(dtype)
+    if np.issubdtype(dtype, np.integer):
+        input1 = np.random.randint(1, 10, size=vr * vc).astype(dtype)
+        input2 = np.random.randint(1, 10, size=vr * src1vc).astype(dtype)
+    else:
+        input1 = np.random.random(vr * vc).astype(dtype)
+        input2 = np.random.random(vr * src1vc).astype(dtype)
     golden = np.zeros(vr * vc).astype(dtype)
 
     for i in range(vr):
@@ -65,6 +70,14 @@ if __name__ == "__main__":
         "TROWEXPANDMULTest.case12",
         "TROWEXPANDMULTest.case13",
         "TROWEXPANDMULTest.case14",
+        "TROWEXPANDMULTest.case15",
+        "TROWEXPANDMULTest.case16",
+        "TROWEXPANDMULTest.case17",
+        "TROWEXPANDMULTest.case18",
+        "TROWEXPANDMULTest.case19",
+        "TROWEXPANDMULTest.case20",
+        "TROWEXPANDMULTest.case21",
+        "TROWEXPANDMULTest.case22",
     ]
 
     case_params_list = [
@@ -82,6 +95,14 @@ if __name__ == "__main__":
         TRowExpandMul(np.float32, 2048, 1, 2048, 8, True, True),
         TRowExpandMul(np.float32, 16, 16, 16, 16, False, False),
         TRowExpandMul(np.float32, 16, 16, 16, 16, False, True),
+        TRowExpandMul(np.float32, 16, 16, 32, 32, True, False),
+        TRowExpandMul(np.float16, 16, 16, 16, 16, True, False),
+        TRowExpandMul(np.float32, 1, 16384, 1, 16384, True, False),
+        TRowExpandMul(np.float32, 2048, 1, 2048, 8, True, False),
+        TRowExpandMul(np.int32, 16, 16, 16, 16, True, False),
+        TRowExpandMul(np.int32, 16, 16, 16, 16, True, True),
+        TRowExpandMul(np.int16, 16, 16, 16, 16, True, False),
+        TRowExpandMul(np.int16, 16, 16, 16, 16, True, True),
     ]
 
     for i, case_name in enumerate(case_name_list):

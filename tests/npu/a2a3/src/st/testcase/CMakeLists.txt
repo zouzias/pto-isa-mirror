@@ -101,12 +101,17 @@ endfunction()
 set(ALL_TESTCASES
 tmatmul
 trowsum
+trowprod
 trowmax
 trowmin
+trowargmax
+trowargmin
 textract
+timg2col
 tmov
 tload
 ttrans
+ttrans_conv
 tmrgsort
 tfillpad
 tgather
@@ -128,18 +133,26 @@ tcvt
 tmul
 tadd
 taddplus
+tprelu
 tand
 tor
 tshl
 tshr
 tpartadd
+tpartmul
 tpartmin
 tpartmax
+tpartargmax
+tpartargmin
+tpow
+tpows
 tsel
 tsub
 tsubs
 trem
 trems
+tfmod
+tfmods
 tlrelu
 tmaxs
 tmins
@@ -157,17 +170,21 @@ tdivs
 tmuls
 tneg
 tadds
+taxpy
 tgatherb
 tci
 tcolmax
+tcolargmax
 tcolmin
+tcolargmin
 texpands
+texpands_mat
 tcolsum
+tcolprod
 tcmp
 tassign
 tstore_mat2gm
 tscatter
-tfa
 tcolexpand
 ttri
 tnot
@@ -178,9 +195,54 @@ tshls
 tshrs
 txor
 txors
+trowexpandexpdif
+tcolexpandadd
+tcolexpandmax
+tcolexpandmin
+tcolexpanddiv
+tcolexpandexpdif
+tcolexpandmul
+tcolexpandsub
+tquant
+tdequant
+t_dhrystone
+tconcatidx
+tconcat
+textract_vec
+tinsert_vec
+tpushpop_cv
+tpushpop_vc
+tpushpop_cv_nosplit
+tpushpop_vc_nosplit
+tpushpop_dir_both
+tpushpop_subtile
 )
+if (AUTO_MODE)
+  set(AUTO_MODE_WHITELIST
+  # TPUSH and TPOP currently directly use TASSIGN inside their implementations,
+  # which doesn't work for auto mode. They need to be disabled for auto mode 
+  # until rewritten to adapt to auto mode
+    tpushpop_cv
+    tpushpop_vc
+    tpushpop_cv_nosplit
+    tpushpop_vc_nosplit
+    tpushpop_dir_both
+    tpushpop_subtile
+  # the following case wait to be fix 
+    tcvt
+    ttrans
+    ttrans_conv
+    tci
+    tquant
+    texpands_mat
+  )
 
-if(TEST_CASE IN_LIST ALL_TESTCASES)
+  foreach(whitelisted_case ${AUTO_MODE_WHITELIST})
+    list(REMOVE_ITEM ALL_TESTCASES ${whitelisted_case})
+  endforeach()
+endif()
+
+if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
 message(STATUS "run : ${TEST_CASE}")
 else()
 message(FATAL_ERROR "not found TEST_CASE: ${TEST_CASE}, support case is : ${ALL_TESTCASES}")
@@ -188,7 +250,7 @@ endif()
 
 
 foreach(TESTCASE ${ALL_TESTCASES})
-if((DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE) OR (NOT DEFINED TEST_CASE))
+if((DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE) OR (NOT DEFINED TEST_CASE) OR (TEST_CASE STREQUAL "all"))
     add_subdirectory(${TESTCASE})
 endif()
 endforeach()

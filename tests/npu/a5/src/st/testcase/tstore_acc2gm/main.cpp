@@ -35,8 +35,10 @@ void LaunchTStoreAcc2gmVectorNz2nz(uint8_t *out, uint8_t *src0, uint8_t *src1, u
 
 class TStoreAcc2gmTest : public testing::Test {
 protected:
-    void SetUp() override {}
-    void TearDown() override {}
+    void SetUp() override
+    {}
+    void TearDown() override
+    {}
 };
 
 std::string GetGoldenDir()
@@ -703,4 +705,104 @@ TEST_F(TStoreAcc2gmTest, case_relu_41)
 TEST_F(TStoreAcc2gmTest, case_relu_51)
 {
     test_tstore_acc2gm_vector_nz2nz<21, uint8_t, uint8_t, 128, 128, 123>();
+}
+
+TEST_F(TStoreAcc2gmTest, case_nhwc_1)
+{
+    test_tstore_acc2gm_nz2nd<31, float, float, 128, 128, 16>();
+}
+
+TEST_F(TStoreAcc2gmTest, case_nhwc_2)
+{
+    test_tstore_acc2gm_nz2nd<32, uint32_t, uint8_t, 512, 63, 31>();
+}
+
+TEST_F(TStoreAcc2gmTest, case_nhwc_3)
+{
+    test_tstore_acc2gm_nz2nd<33, uint16_t, float, 1024, 32, 8>();
+}
+
+TEST_F(TStoreAcc2gmTest, case_nhwc_4)
+{
+    test_tstore_acc2gm_nz2nd<34, float, uint16_t, 126, 43, 64>();
+}
+
+TEST_F(TStoreAcc2gmTest, case_nhwc_5)
+{
+    test_tstore_acc2gm_scalar_nz2nd<31, uint8_t, uint8_t, 640, 64, 96>(3);
+}
+
+TEST_F(TStoreAcc2gmTest, case_nhwc_6)
+{
+    test_tstore_acc2gm_vector_nz2nd<31, uint16_t, uint8_t, 352, 64, 32>();
+}
+
+TEST_F(TStoreAcc2gmTest, case_nhwc_7)
+{
+    test_tstore_acc2gm_vector_nz2nd<32, float, uint16_t, 256, 128, 32>();
+}
+
+TEST_F(TStoreAcc2gmTest, case_nchw_1)
+{
+    test_tstore_acc2gm_nz2nd<41, float, float, 128, 128, 16>();
+}
+
+TEST_F(TStoreAcc2gmTest, case_nchw_2)
+{
+    test_tstore_acc2gm_nz2nd<42, uint32_t, uint8_t, 512, 63, 31>();
+}
+
+TEST_F(TStoreAcc2gmTest, case_nchw_3)
+{
+    test_tstore_acc2gm_nz2nd<43, uint16_t, float, 1024, 32, 8>();
+}
+
+TEST_F(TStoreAcc2gmTest, case_nchw_4)
+{
+    test_tstore_acc2gm_nz2nd<44, float, uint16_t, 126, 43, 64>();
+}
+
+TEST_F(TStoreAcc2gmTest, case_nchw_5)
+{
+    test_tstore_acc2gm_scalar_nz2nd<41, uint8_t, uint8_t, 640, 64, 96>(3);
+}
+
+TEST_F(TStoreAcc2gmTest, case_nchw_6)
+{
+    test_tstore_acc2gm_vector_nz2nd<41, uint16_t, uint8_t, 352, 64, 32>();
+}
+
+TEST_F(TStoreAcc2gmTest, case_nchw_7)
+{
+    test_tstore_acc2gm_vector_nz2nd<42, float, uint16_t, 256, 128, 32>();
+}
+TEST_F(TStoreAcc2gmTest, case_ncdhw_1)
+{
+    test_tstore_acc2gm_nz2nd<51, float, float, 256, 128, 16>();
+}
+TEST_F(TStoreAcc2gmTest, case_ncdhw_2)
+{
+    test_tstore_acc2gm_nz2nd<52, uint32_t, uint8_t, 1536, 63, 31>();
+}
+TEST_F(TStoreAcc2gmTest, case_ncdhw_3)
+{
+    test_tstore_acc2gm_nz2nd<53, uint16_t, float, 4096, 32, 8>();
+}
+TEST_F(TStoreAcc2gmTest, case_ncdhw_4)
+{
+    test_tstore_acc2gm_nz2nd<54, float, uint16_t, 252, 43, 64>();
+}
+TEST_F(TStoreAcc2gmTest, case_ncdhw_5)
+{
+    test_tstore_acc2gm_scalar_nz2nd<51, uint8_t, uint8_t, 2560, 64, 96>(3);
+}
+
+TEST_F(TStoreAcc2gmTest, case_ncdhw_6)
+{
+    test_tstore_acc2gm_vector_nz2nd<51, uint16_t, uint8_t, 1056, 64, 32>();
+}
+
+TEST_F(TStoreAcc2gmTest, case_ncdhw_7)
+{
+    test_tstore_acc2gm_vector_nz2nd<52, float, uint16_t, 1024, 128, 32>();
 }

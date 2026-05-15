@@ -15,7 +15,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-__global__ AICORE void runTDiv( __gm__ T __out__ *out, __gm__ T __in__ *src0,  __gm__ T __in__ *src1) {
+__global__ AICORE void runTDiv(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
+{
     using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim5 = Stride<1, 1, 1, kGCols_, 1>;
     using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
@@ -34,11 +35,15 @@ __global__ AICORE void runTDiv( __gm__ T __out__ *out, __gm__ T __in__ *src0,  _
 
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
     TDIV(dstTile, src0Tile, src1Tile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
 }
@@ -46,11 +51,10 @@ __global__ AICORE void runTDiv( __gm__ T __out__ *out, __gm__ T __in__ *src0,  _
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void LaunchTDiv(T *out, T *src0, T *src1, void *stream)
 {
-    if constexpr ( std::is_same_v<T, aclFloat16> )
-        runTDiv<half, kGRows_, kGCols_, kTRows_, kTCols_><<<1, nullptr, stream>>>((half*)(out),
-                                                                                  (half*)(src0),
-                                                                                  (half*)(src1));
-    else 
+    if constexpr (std::is_same_v<T, aclFloat16>)
+        runTDiv<half, kGRows_, kGCols_, kTRows_, kTCols_>
+            <<<1, nullptr, stream>>>((half *)(out), (half *)(src0), (half *)(src1));
+    else
         runTDiv<T, kGRows_, kGCols_, kTRows_, kTCols_><<<1, nullptr, stream>>>(out, src0, src1);
 }
 

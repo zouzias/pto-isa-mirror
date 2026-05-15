@@ -12,7 +12,6 @@
 
 import os
 import numpy as np
-np.random.seed(19)
 
 
 def gen_golden_data(case_name, param):
@@ -72,6 +71,7 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
+        TAddParams(np.float32, 64, 128, 64, 128, 64, 128, 64, 128),
         TAddParams(np.float32, 64, 64, 64, 64, 64, 64, 64, 64),
         TAddParams(np.int32, 64, 64, 64, 64, 64, 64, 64, 64),
         TAddParams(np.int16, 64, 64, 64, 64, 64, 64, 64, 64),

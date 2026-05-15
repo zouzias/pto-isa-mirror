@@ -23,11 +23,14 @@ int get_input_golden(uint8_t *input, uint8_t *golden);
 
 class TFILLPADTest : public testing::Test {
 protected:
-    void SetUp() override {}
-    void TearDown() override {}
+    void SetUp() override
+    {}
+    void TearDown() override
+    {}
 };
 
-std::string GetGoldenDir() {
+std::string GetGoldenDir()
+{
     const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
@@ -41,18 +44,14 @@ std::string GetGoldenDir() {
 #define MAXBLOCK 64
 
 template <typename T>
-constexpr auto getGoldenZero() {
-    if constexpr (sizeof(T) == 4) {
-        return (uint32_t)0;
-    } else if constexpr (sizeof(T) == 2) {
-        return (uint16_t)0;
-    } else if constexpr (sizeof(T) == 1) {
-        return (uint8_t)0;
-    }
+constexpr T getGoldenZero()
+{
+    return T{0};
 }
 
 template <int32_t testKey, typename T, int32_t kBlock>
-void tfillpad_test() {
+void tfillpad_test()
+{
     uint32_t M = 1024;
     uint32_t N = 1024;
 
@@ -125,7 +124,7 @@ void tfillpad_test() {
     int elements = actual_out_byteSize / sizeof(T);
 
     auto zero = getGoldenZero<T>();
-    using CT = typeof(zero);
+    using CT = decltype(zero);
     std::vector<CT> golden(elements);
     std::vector<CT> devFinal(elements);
     size_t oFileSize = actual_out_byteSize;
@@ -147,46 +146,66 @@ void tfillpad_test() {
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TFILLPADTest, case_float_GT_128_127_VT_128_128_BLK1_PADMAX_PADMAX) {
+TEST_F(TFILLPADTest, case_float_GT_128_127_VT_128_128_BLK1_PADMAX_PADMAX)
+{
     tfillpad_test<1, float, 1>();
 }
 
-TEST_F(TFILLPADTest, case_float_GT_128_127_VT_128_160_BLK1_PADMAX_PADMAX) {
+TEST_F(TFILLPADTest, case_float_GT_128_127_VT_128_160_BLK1_PADMAX_PADMAX)
+{
     tfillpad_test<2, float, 1>();
 }
 
-TEST_F(TFILLPADTest, case_float_GT_128_127_VT_128_160_BLK1_PADMIN_PADMAX) {
+TEST_F(TFILLPADTest, case_float_GT_128_127_VT_128_160_BLK1_PADMIN_PADMAX)
+{
     tfillpad_test<3, float, 1>();
 }
 
-TEST_F(TFILLPADTest, case_float_GT_260_7_VT_260_16_BLK1_PADMIN_PADMAX) {
+TEST_F(TFILLPADTest, case_float_GT_260_7_VT_260_16_BLK1_PADMIN_PADMAX)
+{
     tfillpad_test<4, float, 1>();
 }
 
-TEST_F(TFILLPADTest, case_float_GT_260_7_VT_260_16_BLK1_PADMIN_PADMAX_INPLACE) {
+TEST_F(TFILLPADTest, case_float_GT_260_7_VT_260_16_BLK1_PADMIN_PADMAX_INPLACE)
+{
     tfillpad_test<5, float, 1>();
 }
 
-TEST_F(TFILLPADTest, case_u16_GT_260_7_VT_260_32_BLK1_PADMIN_PADMAX) {
+TEST_F(TFILLPADTest, case_u16_GT_260_7_VT_260_32_BLK1_PADMIN_PADMAX)
+{
     tfillpad_test<6, uint16_t, 1>();
 }
 
-TEST_F(TFILLPADTest, case_s8_GT_260_7_VT_260_64_BLK1_PADMIN_PADMAX) {
+TEST_F(TFILLPADTest, case_s8_GT_260_7_VT_260_64_BLK1_PADMIN_PADMAX)
+{
     tfillpad_test<7, int8_t, 1>();
 }
 
-TEST_F(TFILLPADTest, case_u16_GT_259_7_VT_260_32_BLK1_PADMIN_PADMAX_EXPAND) {
+TEST_F(TFILLPADTest, case_u16_GT_259_7_VT_260_32_BLK1_PADMIN_PADMAX_EXPAND)
+{
     tfillpad_test<8, uint16_t, 1>();
 }
 
-TEST_F(TFILLPADTest, case_s8_GT_259_7_VT_260_64_BLK1_PADMIN_PADMAX_EXPAND) {
+TEST_F(TFILLPADTest, case_s8_GT_259_7_VT_260_64_BLK1_PADMIN_PADMAX_EXPAND)
+{
     tfillpad_test<9, int8_t, 1>();
 }
 
-TEST_F(TFILLPADTest, case_s16_GT_260_7_VT_260_32_BLK1_PADMIN_PADMIN) {
+TEST_F(TFILLPADTest, case_s16_GT_260_7_VT_260_32_BLK1_PADMIN_PADMIN)
+{
     tfillpad_test<10, int16_t, 1>();
 }
 
-TEST_F(TFILLPADTest, case_s32_GT_260_7_VT_260_32_BLK1_PADMIN_PADMIN) {
+TEST_F(TFILLPADTest, case_s32_GT_260_7_VT_260_32_BLK1_PADMIN_PADMIN)
+{
     tfillpad_test<11, int32_t, 1>();
+}
+TEST_F(TFILLPADTest, case_float_GT_128_64_VT_128_128_PADCUSTOM_NEG1)
+{
+    tfillpad_test<12, float, 1>();
+}
+
+TEST_F(TFILLPADTest, case_float_GT_128_127_VT_128_160_BLK1_PADCUSTOM_NEG1_PADCUSTOM_NEG1)
+{
+    tfillpad_test<13, float, 1>();
 }

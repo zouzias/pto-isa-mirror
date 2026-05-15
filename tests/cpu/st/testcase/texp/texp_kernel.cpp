@@ -11,11 +11,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
 
-
 using namespace pto;
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-AICORE void runTEXP( __gm__ T __out__ *out, __gm__ T __in__ *src) {
+AICORE void runTEXP(__gm__ T __out__ *out, __gm__ T __in__ *src)
+{
     using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim5 = Stride<1, 1, 1, kGCols_, 1>;
     using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
@@ -27,6 +27,9 @@ AICORE void runTEXP( __gm__ T __out__ *out, __gm__ T __in__ *src) {
 
     GlobalData srcGlobal(src);
     GlobalData dstGlobal(out);
+
+    TASSIGN(srcTile, 0);
+    TASSIGN(dstTile, kTRows_ * kTCols_ * sizeof(typename TileData::DType));
 
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
@@ -41,10 +44,9 @@ AICORE void runTEXP( __gm__ T __out__ *out, __gm__ T __in__ *src) {
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void LaunchTExp(T *out, T *src, void *stream)
 {
-    if constexpr ( std::is_same_v<T, aclFloat16> )
-        runTEXP<half, kGRows_, kGCols_, kTRows_, kTCols_>((half*)(out),
-                                                          (half*)(src));
-    else 
+    if constexpr (std::is_same_v<T, aclFloat16>)
+        runTEXP<half, kGRows_, kGCols_, kTRows_, kTCols_>((half *)(out), (half *)(src));
+    else
         runTEXP<T, kGRows_, kGCols_, kTRows_, kTCols_>(out, src);
 }
 
@@ -53,3 +55,7 @@ template void LaunchTExp<aclFloat16, 64, 64, 64, 64>(aclFloat16 *out, aclFloat16
 template void LaunchTExp<aclFloat16, 32, 32, 32, 32>(aclFloat16 *out, aclFloat16 *src, void *stream);
 template void LaunchTExp<float, 32, 32, 32, 32>(float *out, float *src, void *stream);
 template void LaunchTExp<float, 32, 16, 32, 16>(float *out, float *src, void *stream);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+template void LaunchTExp<bfloat16_t, 64, 64, 64, 64>(bfloat16_t *out, bfloat16_t *src, void *stream);
+template void LaunchTExp<bfloat16_t, 32, 32, 32, 32>(bfloat16_t *out, bfloat16_t *src, void *stream);
+#endif

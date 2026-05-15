@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 # ----------------------------------------------------------------------------
-# This program is free software, you can redistribute it and/or modify it.
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
-# This file is a part of the CANN Open Software.
-# Licensed under CANN Open Software License Agreement Version 2.0 (the "License").
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
-# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
-# BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 # ----------------------------------------------------------------------------
 
 """基础构件。"""
 
-import os 
+import os
 from functools import partial
 from itertools import chain, tee
 from operator import methodcaller
@@ -26,7 +25,7 @@ DELIVERY_PATH = "build/_CPack_Packages/makeself_staging"
 CONFIG_SCRIPT_PATH = 'package'
 BLOCK_CONFIG_PATH = 'package/module'
 
-SUCCESS = 0
+SUCC = 0
 FAIL = -1
 
 
@@ -43,6 +42,14 @@ class PackageConfigError(PackageError):
 
 class BlockConfigError(PackageError):
     """块配置错误异常。"""
+
+
+class MultiPkgModError(PackageError):
+    """多个pkg_mod元素报错。"""
+
+
+class MultiPkgSoftlinkError(PackageError):
+    """多个pkg_softlink元素报错。"""
 
 
 class ParseOsArchError(PackageError):
@@ -69,6 +76,10 @@ class UnknownOperateTypeError(PackageError):
     """未知的操作类型。"""
 
 
+class PkgInnerSoftlinkNotAllowed(PackageError):
+    """不允许使用pkg_inner_softlink。"""
+
+
 class PackageNameEmptyError(PackageError):
     """包名为空错误。"""
 
@@ -91,6 +102,18 @@ class CompressError(PackageError):
     def __init__(self, package_name: Optional[str]):
         super().__init__(package_name)
         self.package_name = package_name
+
+
+class InstallScriptNotInPackageInfo(PackageError):
+    """package_info中没有配置install_script。"""
+
+
+class InstallScriptFormatError(PackageError):
+    """install_script配置格式错误。"""
+
+
+class VersionInfoNotExist(PackageError):
+    """version.info文件不存在。"""
 
 
 def flatten(list_of_lists):

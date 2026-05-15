@@ -11,22 +11,24 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
 
-
 using namespace pto;
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-__aicore__ void runTSelS( __gm__ T *out,  int8_t scalar, __gm__ T *src0, __gm__ T *src1) {
+__aicore__ void runTSelS(__gm__ T *out, int8_t scalar, __gm__ T *src0, __gm__ T *src1)
+{
     using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim5 = Stride<1, 1, 1, kGCols_, 1>;
     using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
     using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
+    using TmpTile = Tile<TileType::Vec, uint8_t, 1, 32, BLayout::RowMajor, -1, -1>;
     TileData src0Tile(kTRows_, kTCols_);
     TileData src1Tile(kTRows_, kTCols_);
     TileData dstTile(kTRows_, kTCols_);
+    TmpTile tmpTile(1, 32);
     TASSIGN(src0Tile, 0x0);
     TASSIGN(src1Tile, 0x4000);
     TASSIGN(dstTile, 0x8000);
-
+    TASSIGN(tmpTile, 0x12000);
     GlobalData src0Global(src0);
     GlobalData src1Global(src1);
     GlobalData dstGlobal(out);
@@ -35,7 +37,7 @@ __aicore__ void runTSelS( __gm__ T *out,  int8_t scalar, __gm__ T *src0, __gm__ 
     TLOAD(src1Tile, src1Global);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TSELS(dstTile, src0Tile, src1Tile, scalar);
+    TSELS(dstTile, src0Tile, src1Tile, tmpTile, scalar);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstTile);
@@ -45,16 +47,21 @@ __aicore__ void runTSelS( __gm__ T *out,  int8_t scalar, __gm__ T *src0, __gm__ 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void LaunchTSelS(T *out, int8_t scalar, T *src0, T *src1, void *stream)
 {
-    if constexpr ( std::is_same_v<T, aclFloat16> )
-        runTSelS<half, kGRows_, kGCols_, kTRows_, kTCols_>((half*)(out),
-                                                            (half)(scalar),
-                                                            (half*)(src0),
-                                                            (half*)(src1));
-    else 
+    if constexpr (std::is_same_v<T, aclFloat16>)
+        runTSelS<half, kGRows_, kGCols_, kTRows_, kTCols_>((half *)(out), (half)(scalar), (half *)(src0),
+                                                           (half *)(src1));
+    else
         runTSelS<T, kGRows_, kGCols_, kTRows_, kTCols_>(out, scalar, src0, src1);
 }
 
 template void LaunchTSelS<float, 64, 64, 64, 64>(float *out, int8_t scalar, float *src0, float *src1, void *stream);
-template void LaunchTSelS<int32_t, 64, 64, 64, 64>(int32_t *out, int8_t scalar, int32_t *src0, int32_t *src1, void *stream);
-template void LaunchTSelS<aclFloat16, 16, 256, 16, 256>(aclFloat16 *out, int8_t scalar, aclFloat16 *src0, aclFloat16 *src1, void *stream);
-template void LaunchTSelS<int16_t, 64, 64, 64, 64>(int16_t *out, int8_t scalar, int16_t *src0, int16_t *src1, void *stream);
+template void LaunchTSelS<int32_t, 64, 64, 64, 64>(int32_t *out, int8_t scalar, int32_t *src0, int32_t *src1,
+                                                   void *stream);
+template void LaunchTSelS<aclFloat16, 16, 256, 16, 256>(aclFloat16 *out, int8_t scalar, aclFloat16 *src0,
+                                                        aclFloat16 *src1, void *stream);
+template void LaunchTSelS<int16_t, 64, 64, 64, 64>(int16_t *out, int8_t scalar, int16_t *src0, int16_t *src1,
+                                                   void *stream);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+template void LaunchTSelS<bfloat16_t, 16, 256, 16, 256>(bfloat16_t *out, int8_t scalar, bfloat16_t *src0,
+                                                        bfloat16_t *src1, void *stream);
+#endif

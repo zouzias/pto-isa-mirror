@@ -15,9 +15,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace pto;
 
-template <typename T, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-__global__ AICORE void runTCVT(__gm__ T *out, __gm__ S *src) {
-
+template <typename T, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, pto::SaturationMode saturation>
+__global__ AICORE void runTCVT(__gm__ T *out, __gm__ S *src)
+{
     using DynShapeDim4 = pto::Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim4 = pto::Stride<1, 1, 1, kGCols_, 1>;
     using GlobalData_src = GlobalTensor<S, DynShapeDim4, DynStridDim4>;
@@ -36,38 +36,63 @@ __global__ AICORE void runTCVT(__gm__ T *out, __gm__ S *src) {
 
     GlobalData_dst dstGlobal(out);
 
+    TASSIGN(srcTile, 0);
+    TASSIGN(dstTile, kTRows_ * kTCols_ * sizeof(typename TileDataSrc::DType));
+
     TLOAD(srcTile, srcGlobal);
 
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-    TCVT(dstTile, srcTile, RoundMode::CAST_RINT);
+    TCVT(dstTile, srcTile, RoundMode::CAST_RINT, saturation);
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
     TSTORE(dstGlobal, dstTile);
-    
+
     out = dstGlobal.data();
 }
 
-template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-void launchTCVT(D *dst, S *src, void *stream) {
-    if constexpr ( std::is_same_v<D, aclFloat16> ) {
-        runTCVT<half, S, kGRows_, kGCols_, kTRows_, kTCols_>((half*) dst, src);
-    } else if constexpr ( std::is_same_v<S, aclFloat16> ) {
-        runTCVT<D, half, kGRows_, kGCols_, kTRows_, kTCols_>(dst, (half*)src);
+template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, pto::SaturationMode saturation>
+void launchTCVT(D *dst, S *src, void *stream)
+{
+    if constexpr (std::is_same_v<D, aclFloat16>) {
+        runTCVT<half, S, kGRows_, kGCols_, kTRows_, kTCols_, saturation>((half *)dst, src);
+    } else if constexpr (std::is_same_v<S, aclFloat16>) {
+        runTCVT<D, half, kGRows_, kGCols_, kTRows_, kTCols_, saturation>(dst, (half *)src);
     } else {
-         runTCVT<D, S, kGRows_, kGCols_, kTRows_, kTCols_>(dst, src);
+        runTCVT<D, S, kGRows_, kGCols_, kTRows_, kTCols_, saturation>(dst, src);
     }
-} 
+}
 
-template void launchTCVT<int32_t, float, 128, 128, 128, 128>(int32_t *dst, float *src, void *stream);
-template void launchTCVT<float, int32_t, 256, 64, 256, 64>(float *dst, int32_t *src, void *stream);
-template void launchTCVT<int16_t, float, 16, 32, 16, 32>(int16_t *dst, float *src, void *stream);
-template void launchTCVT<int32_t, float, 32, 512, 32, 512>(int32_t *dst, float *src, void *stream);
-template void launchTCVT<int32_t, int16_t, 2, 512, 2, 512>(int32_t *dst, int16_t *src, void *stream);
-template void launchTCVT<int32_t, float, 4, 4096, 4, 4096>(int32_t *dst, float *src, void *stream);
-template void launchTCVT<float, int16_t, 64, 64, 64, 64>(float *dst, int16_t *src, void *stream);
-template void launchTCVT<aclFloat16, float, 64, 64, 64, 64>(aclFloat16 *dst, float *src, void *stream);
-template void launchTCVT<uint8_t, aclFloat16, 64, 64, 64, 64>(uint8_t *dst, aclFloat16 *src, void *stream);
+template void launchTCVT<int32_t, float, 128, 128, 128, 128, pto::SaturationMode::OFF>(int32_t *dst, float *src,
+                                                                                       void *stream);
+template void launchTCVT<float, int32_t, 256, 64, 256, 64, pto::SaturationMode::OFF>(float *dst, int32_t *src,
+                                                                                     void *stream);
+template void launchTCVT<int16_t, float, 16, 32, 16, 32, pto::SaturationMode::OFF>(int16_t *dst, float *src,
+                                                                                   void *stream);
+template void launchTCVT<int32_t, float, 32, 512, 32, 512, pto::SaturationMode::OFF>(int32_t *dst, float *src,
+                                                                                     void *stream);
+template void launchTCVT<int32_t, int16_t, 2, 512, 2, 512, pto::SaturationMode::OFF>(int32_t *dst, int16_t *src,
+                                                                                     void *stream);
+template void launchTCVT<int32_t, float, 4, 4096, 4, 4096, pto::SaturationMode::OFF>(int32_t *dst, float *src,
+                                                                                     void *stream);
+template void launchTCVT<float, int16_t, 64, 64, 64, 64, pto::SaturationMode::OFF>(float *dst, int16_t *src,
+                                                                                   void *stream);
+template void launchTCVT<aclFloat16, float, 64, 64, 64, 64, pto::SaturationMode::OFF>(aclFloat16 *dst, float *src,
+                                                                                      void *stream);
+template void launchTCVT<uint8_t, aclFloat16, 64, 64, 64, 64, pto::SaturationMode::OFF>(uint8_t *dst, aclFloat16 *src,
+                                                                                        void *stream);
+template void launchTCVT<float, int32_t, 64, 64, 64, 64, pto::SaturationMode::ON>(float *dst, int32_t *src,
+                                                                                  void *stream);
+template void launchTCVT<float, int8_t, 128, 128, 128, 128, pto::SaturationMode::ON>(float *dst, int8_t *src,
+                                                                                     void *stream);
+template void launchTCVT<uint8_t, float, 64, 64, 64, 64, pto::SaturationMode::ON>(uint8_t *dst, float *src,
+                                                                                  void *stream);
+template void launchTCVT<int16_t, int32_t, 64, 64, 64, 64, pto::SaturationMode::ON>(int16_t *dst, int32_t *src,
+                                                                                    void *stream);
+template void launchTCVT<int8_t, aclFloat16, 32, 32, 32, 32, pto::SaturationMode::ON>(int8_t *dst, aclFloat16 *src,
+                                                                                      void *stream);
+template void launchTCVT<uint8_t, aclFloat16, 64, 64, 64, 64, pto::SaturationMode::ON>(uint8_t *dst, aclFloat16 *src,
+                                                                                       void *stream);

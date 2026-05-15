@@ -23,7 +23,8 @@ protected:
     {}
 };
 
-std::string GetGoldenDir() {
+std::string GetGoldenDir()
+{
     const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
@@ -31,12 +32,14 @@ std::string GetGoldenDir() {
     return fullPath;
 }
 
-
-template <typename T, int dstRow, int dstCol, int srcRow, int srcCol, int validRow, int validCol, bool isInPlace = false>
+template <typename T, int dstRow, int dstCol, int srcRow, int srcCol, int validRow, int validCol,
+          bool isInPlace = false, bool highPrecision = false>
 void LaunchTExp(T *out, T *src, void *stream);
 
-template <typename T, int dstRow, int dstCol, int srcRow, int srcCol, int validRow, int validCol, bool isInPlace = false>
-void test_texp() {
+template <typename T, int dstRow, int dstCol, int srcRow, int srcCol, int validRow, int validCol,
+          bool isInPlace = false, bool highPrecision = false>
+void test_texp()
+{
     size_t srcFileSize = srcRow * srcCol * sizeof(T);
     size_t dstFileSize = dstRow * dstCol * sizeof(T);
 
@@ -55,7 +58,8 @@ void test_texp() {
 
     ReadFile(GetGoldenDir() + "/input.bin", srcFileSize, srcHost, srcFileSize);
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTExp<T, dstRow, dstCol, srcRow, srcCol, validRow, validCol, isInPlace>(dstDevice, srcDevice, stream);
+    LaunchTExp<T, dstRow, dstCol, srcRow, srcCol, validRow, validCol, isInPlace, highPrecision>(dstDevice, srcDevice,
+                                                                                                stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -76,36 +80,49 @@ void test_texp() {
     ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstFileSize, devFinal.data(), dstFileSize);
 
-    float eps = 0.0005f;
-    if constexpr (std::is_same_v<T, float>) {
-        eps = 0.00005f;
-    }
+    constexpr float eps = highPrecision ? 0.0000001f : std::is_same_v<T, float> ? 0.00005f : 0.0005f;
     bool ret = ResultCmp(golden, devFinal, eps);
 
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TEXPTest, case1) {
+TEST_F(TEXPTest, case1)
+{
     test_texp<float, 64, 64, 64, 64, 64, 64, true>();
 }
-TEST_F(TEXPTest, case2) {
-    test_texp<float, 64, 64, 64, 64, 64, 64, false>();
+TEST_F(TEXPTest, case2)
+{
+    test_texp<float, 64, 64, 64, 64, 64, 64>();
 }
-TEST_F(TEXPTest, case3) {
+TEST_F(TEXPTest, case3)
+{
     test_texp<aclFloat16, 64, 64, 64, 64, 64, 64, true>();
 }
-TEST_F(TEXPTest, case4) {
-    test_texp<aclFloat16, 64, 64, 64, 64, 64, 64, false>();
+TEST_F(TEXPTest, case4)
+{
+    test_texp<aclFloat16, 64, 64, 64, 64, 64, 64>();
 }
-TEST_F(TEXPTest, case5) {
+TEST_F(TEXPTest, case5)
+{
     test_texp<float, 128, 128, 64, 64, 64, 64>();
 }
-TEST_F(TEXPTest, case6) {
+TEST_F(TEXPTest, case6)
+{
     test_texp<float, 64, 64, 128, 128, 32, 32>();
 }
-TEST_F(TEXPTest, case7) {
+TEST_F(TEXPTest, case7)
+{
     test_texp<aclFloat16, 128, 256, 64, 64, 64, 64>();
 }
-TEST_F(TEXPTest, case8) {
+TEST_F(TEXPTest, case8)
+{
     test_texp<aclFloat16, 64, 64, 128, 256, 32, 32>();
+}
+TEST_F(TEXPTest, caseHP1)
+{
+    test_texp<float, 64, 64, 64, 64, 64, 64, false, true>();
+}
+TEST_F(TEXPTest, caseHP2)
+{
+    test_texp<aclFloat16, 64, 64, 64, 64, 64, 64, false, true>();
 }

@@ -11,23 +11,27 @@
 function(pto_vec_st NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310-vec -DREGISTER_BASE -std=c++17)
+    if(STRAIGHT_INTRINSICS_IMPL)
+        message(STATUS "!!! Using high-precision algorithms for some operations.")
+        add_compile_definitions(STRAIGHT_INTRINSICS_IMPL)
+    endif()
+
     target_include_directories(${NAME}_kernel PRIVATE 
         ${ASCEND_HOME_PATH}/pkg_inc/
         ${ASCEND_HOME_PATH}/pkg_inc/profiling/
         ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
     )
     target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
-    
+
     add_executable(${NAME} main.cpp)
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
     target_include_directories(${NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../common
     )
-
+    
     target_link_directories(${NAME} PUBLIC
         ${ASCEND_HOME_PATH}/lib64
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
-        ${ASCEND_HOME_PATH}/simulator/${SOC_VERSION}/lib
     )
 
     target_link_libraries(${NAME} PRIVATE
@@ -41,13 +45,13 @@ endfunction()
 function(pto_cube_st NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310-cube -DREGISTER_BASE -std=c++17)
-    target_include_directories(${NAME}_kernel PRIVATE 
+    target_include_directories(${NAME}_kernel PRIVATE
         ${ASCEND_HOME_PATH}/pkg_inc/
         ${ASCEND_HOME_PATH}/pkg_inc/profiling/
         ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
     )
     target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
-    
+
     add_executable(${NAME} main.cpp)
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
     target_include_directories(${NAME} PRIVATE
@@ -57,7 +61,6 @@ function(pto_cube_st NAME)
     target_link_directories(${NAME} PUBLIC
         ${ASCEND_HOME_PATH}/lib64
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
-        ${ASCEND_HOME_PATH}/simulator/${SOC_VERSION}/lib
     )
 
     target_link_libraries(${NAME} PRIVATE
@@ -72,7 +75,7 @@ function(pto_mix_st NAME)
     add_library(${NAME}_kernel_mix SHARED ${NAME}_kernel.cpp)
     target_compile_options(${NAME}_kernel_mix PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310 -DREGISTER_BASE -std=c++17)
 
-    target_include_directories(${NAME}_kernel_mix PRIVATE 
+    target_include_directories(${NAME}_kernel_mix PRIVATE
         ${ASCEND_HOME_PATH}/pkg_inc/
         ${ASCEND_HOME_PATH}/pkg_inc/profiling/
         ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
@@ -81,7 +84,7 @@ function(pto_mix_st NAME)
 
     add_executable(${NAME} main.cpp)
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
-    target_include_directories(${NAME} PRIVATE 
+    target_include_directories(${NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../common
     )
 
@@ -101,7 +104,7 @@ endfunction()
 # 定义测试用例列表 testcase下如有新增用例目录需要在此加
 set(ALL_TESTCASES
     tsubs
-    tmaxs    
+    tmaxs
     tci
     tmatmul
     tmatmul_mx
@@ -113,15 +116,22 @@ set(ALL_TESTCASES
     tload_mx_gmtensor
     tmrgsort
     ttrans
+    ttrans_conv
     tstore
     textract
     textract_compact
     trowsum
+    trowprod
     trowmax
+    trowargmax
     trowmin
+    trowargmin
     tcolsum
+    tcolprod
     tcolmax
+    tcolargmax
     tcolmin
+    tcolargmin
     tsort32
     trowexpand
     trowexpandadd
@@ -134,6 +144,9 @@ set(ALL_TESTCASES
     tgather
     tcvt
     tsub
+    trem
+    tfmod
+    tprelu
     tand
     tor
     tands
@@ -146,6 +159,7 @@ set(ALL_TESTCASES
     tshrs
     tadd
     tpartadd
+    tpartmul
     tfillpad
     tmin
     tmax
@@ -169,12 +183,16 @@ set(ALL_TESTCASES
     tdivs
     tmuls
     tadds
+    taxpy
     tgatherb
     tpartmin
     tpartmax
+    tpartargmin
+    tpartargmax
     tmov_vect
     texpands
     tmov_acc2mat
+    timg2col
     tassign
     tmov_ub2l1
     tcmp
@@ -186,8 +204,13 @@ set(ALL_TESTCASES
     trowexpand_trowsum
     trowsum_trowexpand
     trowexpand_tdiv
+    trems
+    tfmods
     tscatter
     tneg
+    tcolexpandadd
+    tcolexpandmax
+    tcolexpandmin
     tcolexpanddiv
     tcolexpandmul
     tcolexpandsub
@@ -197,9 +220,68 @@ set(ALL_TESTCASES
     tcolexpand
     tnot
     trelu
+    tquant
+    tdequant
+    trandom
+    mgather
+    mscatter
+    t_dhrystone
+    tpow
+    tpows
+    tconcatdstidx
+    tconcatidx
+    tconcat
+    thistogram
+    tinsert
+    tinsert_acc2vec
+    textract_nd_vec
+    textract_vec
+    tmov_zz
+    tmov_nd2nz
+    textract_acc2vec
+    tpushpop_cv
+    tpushpop_cv_nosplit
+    tpushpop_vc
+    tpushpop_vc_nosplit
+    tpushpop_dir_both
+    texpands_mat
+    tpushpop_subtile
 )
 
-if(TEST_CASE IN_LIST ALL_TESTCASES)
+if (AUTO_MODE)
+  set(AUTO_MODE_WHITELIST
+  # TPUSH and TPOP currently directly use TASSIGN inside their implementations,
+  # which doesn't work for auto mode. They need to be disabled for auto mode 
+  # until rewritten to adapt to auto mode
+    tpushpop_cv
+    tpushpop_cv_nosplit
+    tpushpop_vc
+    tpushpop_vc_nosplit
+    tpushpop_dir_both
+    tpushpop_subtile
+  # the following case wait to be fix 
+    tcvt
+    ttrans
+    ttrans_conv
+    tci
+    tquant
+    texpands_mat
+    tinsert
+    tscatter
+    tcolargmin
+    tcolargmax
+    tmov
+    tmatmul
+    tmatmul_mx
+    tmov_zz
+  )
+
+  foreach(whitelisted_case ${AUTO_MODE_WHITELIST})
+    list(REMOVE_ITEM ALL_TESTCASES ${whitelisted_case})
+  endforeach()
+endif()
+
+if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
     message(STATUS "run : ${TEST_CASE}")
 else()
     message(FATAL_ERROR "not found TEST_CASE: ${TEST_CASE}, support case is : ${ALL_TESTCASES}")
@@ -207,7 +289,7 @@ endif()
 
 
 foreach(TESTCASE ${ALL_TESTCASES})
-    if((DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE) OR (NOT DEFINED TEST_CASE))
+    if((DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE) OR (NOT DEFINED TEST_CASE) OR (TEST_CASE STREQUAL "all"))
         add_subdirectory(${TESTCASE})
     endif()
 endforeach()

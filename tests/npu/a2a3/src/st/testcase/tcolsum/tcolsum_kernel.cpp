@@ -16,7 +16,8 @@ using namespace std;
 using namespace pto;
 
 template <typename T, int cols, int src_row, int src_validRow, bool IsBinary>
-__global__ AICORE void runTCOLSUM(__gm__ T __out__ *out, __gm__ T __in__ *src) {
+__global__ AICORE void runTCOLSUM(__gm__ T __out__ *out, __gm__ T __in__ *src)
+{
     using DynDim2Shape = Shape<1, 1, 1, -1, -1>;
     using DynDim2Stride = pto::Stride<1, 1, -1, -1, 1>;
     using GlobalData = GlobalTensor<T, DynDim2Shape, DynDim2Stride>;
@@ -33,18 +34,30 @@ __global__ AICORE void runTCOLSUM(__gm__ T __out__ *out, __gm__ T __in__ *src) {
     TASSIGN(dstTile, 0x14000);
     TASSIGN(tmpTile, 0x28000);
 
+// causes issues in automode as the tile returned from the TLOAD tfcall appears unused and this tload may not finish
+// before the second tload
+#ifndef __PTO_AUTO__
     // 清除脏数据
     TLOAD(dstTile, dstGlobal);
+#endif
 
     // 搬运数据
     TLOAD(srcTile, srcGlobal);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TCOLSUM(dstTile, srcTile, tmpTile, IsBinary);
+#endif
+    if constexpr (IsBinary) {
+        TCOLSUM(dstTile, srcTile, tmpTile, IsBinary);
+    } else {
+        TCOLSUM(dstTile, srcTile);
+    }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
 }
