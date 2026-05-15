@@ -216,6 +216,7 @@ tpushpop_cv_nosplit
 tpushpop_vc_nosplit
 tpushpop_dir_both
 tpushpop_subtile
+syncall
 )
 if (AUTO_MODE)
   set(AUTO_MODE_WHITELIST
