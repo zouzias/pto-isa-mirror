@@ -158,8 +158,8 @@ __tf__ PTO_INLINE void TStore(typename GlobalData::DType __out__ *dst, typename 
 template <typename TileData, typename GlobalData, QuantModeCPU_t quantMode, bool applyRelu>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData &dst, TileData &src, const std::vector<uint64_t> &scalars = {})
 {
-    static_assert(sizeof(typename TileData::DType) == sizeof(typename GlobalData::DType),
-                  "Source dtype must be same with dst dtype!");
+    // static_assert(sizeof(typename TileData::DType) == sizeof(typename GlobalData::DType),
+    //               "Source dtype must be same with dst dtype!");
     static_assert(GlobalData::layout == pto::Layout::ND || GlobalData::layout == pto::Layout::DN,
                   "Only ND and DN GLobal Tensors are currently supported");
     TStore<GlobalData, TileData, quantMode, applyRelu>(
@@ -202,13 +202,13 @@ __aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src)
 template <typename TileData, typename GlobalData, AtomicType atomicType, ReluPreMode reluPreMode>
 __aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src, uint64_t preQuantScalar)
 {
-    constexpr QuantModeCPU_t quantPre = GetScalarPreQuantMode<typename GlobalData::DType, typename TileData::DType>();
+    constexpr QuantModeCPU_t quantPre = GetScalarPreQuantMode<typename TileData::DType, typename GlobalData::DType>();
     constexpr bool useRelu = reluPreMode == ReluPreMode::NormalRelu;
     size_t vector_size = 0;
     if constexpr (TileData::isRowMajor) {
-        vector_size = dst.GetValidCol();
+        vector_size = src.GetValidCol();
     } else {
-        vector_size = dst.GetValidRow();
+        vector_size = src.GetValidRow();
     }
     std::vector<uint64_t> scalars(vector_size, preQuantScalar);
     TSTORE_IMPL<TileData, GlobalData, quantPre, useRelu>(dst, src, scalars);
@@ -218,13 +218,13 @@ template <typename TileData, typename GlobalData, AtomicType atomicType, ReluPre
 __aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src, uint64_t preQuantScalar)
 {
     (void)Phase;
-    constexpr QuantModeCPU_t quantPre = GetScalarPreQuantMode<typename GlobalData::DType, typename TileData::DType>();
+    constexpr QuantModeCPU_t quantPre = GetScalarPreQuantMode<typename TileData::DType, typename GlobalData::DType>();
     constexpr bool useRelu = reluPreMode == ReluPreMode::NormalRelu;
     size_t vector_size = 0;
     if constexpr (TileData::isRowMajor) {
-        vector_size = dst.GetValidCol();
+        vector_size = src.GetValidCol();
     } else {
-        vector_size = dst.GetValidRow();
+        vector_size = src.GetValidRow();
     }
     std::vector<uint64_t> scalars(vector_size, preQuantScalar);
     TSTORE_IMPL<TileData, GlobalData, quantPre, useRelu>(dst, src, scalars);
@@ -233,7 +233,7 @@ __aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src, uint64_t preQuantSca
 template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType, ReluPreMode reluPreMode>
 __aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src, FpTileData &fp)
 {
-    constexpr QuantModeCPU_t quantPre = GetScalarPreQuantMode<typename GlobalData::DType, typename TileData::DType>();
+    constexpr QuantModeCPU_t quantPre = GetScalarPreQuantMode<typename TileData::DType, typename GlobalData::DType>();
     constexpr bool useRelu = reluPreMode == ReluPreMode::NormalRelu;
 
     std::vector<uint64_t> scalars(fp.GetValidCol(), 0);

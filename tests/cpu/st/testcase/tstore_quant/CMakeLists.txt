@@ -1,1 +1,1 @@
-pto_cpu_sim_st(tstore)
+pto_cpu_sim_st(tstore_quant)
