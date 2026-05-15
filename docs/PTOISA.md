@@ -20,9 +20,9 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 |---|---|---|
 | Synchronization | [`TSYNC`](isa/TSYNC.md) | Synchronize PTO execution (wait on events or insert a per-op pipeline barrier). |
 | Manual / Resource Binding | [`TASSIGN`](isa/TASSIGN.md) | Bind a Tile object to an implementation-defined on-chip address (manual placement). |
-| Manual / Resource Binding | [`TSETFMATRIX`](isa/TSETFMATRIX.md) | Set FMATRIX register(s) for IMG2COL-like ops. |
-| Manual / Resource Binding | [`TSET_IMG2COL_RPT`](isa/TSET_IMG2COL_RPT.md) | Set IMG2COL repeat metadata from an IMG2COL configuration tile. |
-| Manual / Resource Binding | [`TSET_IMG2COL_PADDING`](isa/TSET_IMG2COL_PADDING.md) | Set IMG2COL padding metadata from an IMG2COL configuration tile. |
+| Manual / Resource Binding | [`SETFMATRIX`](isa/SETFMATRIX.md) | Set FMATRIX register(s) for IMG2COL-like ops. |
+| Manual / Resource Binding | [`SET_IMG2COL_RPT`](isa/SET_IMG2COL_RPT.md) | Set IMG2COL repeat metadata from an IMG2COL configuration tile. |
+| Manual / Resource Binding | [`SET_IMG2COL_PADDING`](isa/SET_IMG2COL_PADDING.md) | Set IMG2COL padding metadata from an IMG2COL configuration tile. |
 | Elementwise (Tile-Tile) | [`TADD`](isa/TADD.md) | Elementwise add of two tiles. |
 | Elementwise (Tile-Tile) | [`TABS`](isa/TABS.md) | Elementwise absolute value of a tile. |
 | Elementwise (Tile-Tile) | [`TAND`](isa/TAND.md) | Elementwise bitwise AND of two tiles. |
@@ -51,6 +51,7 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Elementwise (Tile-Tile) | [`TNEG`](isa/TNEG.md) | Elementwise negation of a tile. |
 | Elementwise (Tile-Tile) | [`TREM`](isa/TREM.md) | Elementwise remainder of two tiles. |
 | Elementwise (Tile-Tile) | [`TFMOD`](isa/TFMOD.md) | Elementwise fmod of two tiles. |
+| Elementwise (Tile-Tile) | [`TPOW`](isa/TPOW.md) | Elementwise power of two tiles. |
 | Tile-Scalar / Tile-Immediate | [`TEXPANDS`](isa/TEXPANDS.md) | Broadcast a scalar into a destination tile. |
 | Tile-Scalar / Tile-Immediate | [`TCMPS`](isa/TCMPS.md) | Compare a tile against a scalar and write per-element comparison results. |
 | Tile-Scalar / Tile-Immediate | [`TSELS`](isa/TSELS.md) | Select between source tile and scalar using a mask tile (per-element selection for source tile). |
@@ -70,6 +71,7 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Tile-Scalar / Tile-Immediate | [`TLRELU`](isa/TLRELU.md) | Leaky ReLU with a scalar slope. |
 | Tile-Scalar / Tile-Immediate | [`TADDSC`](isa/TADDSC.md) | Elementwise fused add with scalar and a second tile: `src0 + scalar + src1`. |
 | Tile-Scalar / Tile-Immediate | [`TSUBSC`](isa/TSUBSC.md) | Elementwise fused op: `src0 - scalar + src1`. |
+| Tile-Scalar / Tile-Immediate | [`TPOWS`](isa/TPOWS.md) | Elementwise power of a tile by a scalar. |
 | Axis Reduce / Expand | [`TROWSUM`](isa/TROWSUM.md) | Reduce each row by summing across columns. |
 | Axis Reduce / Expand | [`TROWPROD`](isa/TROWPROD.md) | Reduce each row by multiplying across columns. |
 | Axis Reduce / Expand | [`TCOLSUM`](isa/TCOLSUM.md) | Reduce each column by summing across rows. |
@@ -126,6 +128,7 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Data Movement / Layout | [`TTRANS`](isa/TTRANS.md) | Transpose with an implementation-defined temporary tile. |
 | Data Movement / Layout | [`TSUBVIEW`](isa/TSUBVIEW.md) | Reinterpret a tile as a subtile of another tile. |
 | Data Movement / Layout | [`TGET_SCALE_ADDR`](isa/TGET_SCALE_ADDR.md) | Bind the on-chip address of output tile to a scaled factor of that of input tile. |
+| Data Movement / Layout | [`TCONCAT`](isa/TCONCAT.md) | Concatenate two tiles horizontally along the column dimension. |
 | Complex | [`TPRINT`](isa/TPRINT.md) | Debug/print elements from a tile (implementation-defined). |
 | Complex | [`TMRGSORT`](isa/TMRGSORT.md) | Merge sort for multiple sorted lists (implementation-defined element format and layout). |
 | Complex | [`TSORT32`](isa/TSORT32.md) | Sort 32-element blocks of `src` with accompanying `idx` entries and output sorted value-index pairs. |
@@ -137,6 +140,8 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Complex | [`TPARTMUL`](isa/TPARTMUL.md) | Partial elementwise multiply with implementation-defined handling of mismatched valid regions. |
 | Complex | [`TPARTMAX`](isa/TPARTMAX.md) | Partial elementwise max with implementation-defined handling of mismatched valid regions. |
 | Complex | [`TPARTMIN`](isa/TPARTMIN.md) | Partial elementwise min with implementation-defined handling of mismatched valid regions. |
+| Complex | [`TPARTARGMAX`](isa/TPARTARGMAX.md) | Partial elementwise max selection returning corresponding index (argmax), with implementation-defined handling of mismatched valid regions. |
+| Complex | [`TPARTARGMIN`](isa/TPARTARGMIN.md) | Partial elementwise min selection returning corresponding index (argmin), with implementation-defined handling of mismatched valid regions. |
 | Complex | [`TGATHERB`](isa/TGATHERB.md) | Gather elements using byte offsets. |
 | Complex | [`TSCATTER`](isa/TSCATTER.md) | Scatter rows of a source tile into a destination tile using per-element row indices. |
 | Complex | [`TQUANT`](isa/TQUANT.md) | Quantize a tile (e.g. FP32 to FP8) producing exponent/scaling/max outputs. |

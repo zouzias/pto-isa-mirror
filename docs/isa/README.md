@@ -1,4 +1,4 @@
-﻿<p align="center">
+<p align="center">
   <img src="../figures/pto_logo.svg" alt="PTO Tile Lib" width="180" />
 </p>
 
@@ -14,9 +14,9 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 
 ## Manual / Resource Binding
 - [TASSIGN](TASSIGN.md) - Bind a Tile object to an implementation-defined on-chip address (manual placement).
-- [TSETFMATRIX](TSETFMATRIX.md) - Set FMATRIX register(s) for IMG2COL-like ops.
-- [TSET_IMG2COL_RPT](TSET_IMG2COL_RPT.md) - Set IMG2COL repeat metadata from an IMG2COL configuration tile.
-- [TSET_IMG2COL_PADDING](TSET_IMG2COL_PADDING.md) - Set IMG2COL padding metadata from an IMG2COL configuration tile.
+- [SETFMATRIX](SETFMATRIX.md) - Set FMATRIX register(s) for IMG2COL-like ops.
+- [SET_IMG2COL_RPT](SET_IMG2COL_RPT.md) - Set IMG2COL repeat metadata from an IMG2COL configuration tile.
+- [SET_IMG2COL_PADDING](SET_IMG2COL_PADDING.md) - Set IMG2COL padding metadata from an IMG2COL configuration tile.
 
 ## Elementwise (Tile-Tile)
 - [TADD](TADD.md) - Elementwise add of two tiles.
@@ -47,6 +47,7 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TNEG](TNEG.md) - Elementwise negation of a tile.
 - [TREM](TREM.md) - Elementwise remainder of two tiles.
 - [TFMOD](TFMOD.md) - Elementwise fmod of two tiles.
+- [TPOW](TPOW.md) - Elementwise power of two tiles.
 
 ## Tile-Scalar / Tile-Immediate
 - [TEXPANDS](TEXPANDS.md) - Broadcast a scalar into a destination tile.
@@ -68,6 +69,7 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TLRELU](TLRELU.md) - Leaky ReLU with a scalar slope.
 - [TADDSC](TADDSC.md) - Elementwise fused add with scalar and a second tile: `src0 + scalar + src1`.
 - [TSUBSC](TSUBSC.md) - Elementwise fused op: `src0 - scalar + src1`.
+- [TPOWS](TPOWS.md) - Elementwise power of a tile by a scalar.
 
 ## Axis Reduce / Expand
 - [TROWSUM](TROWSUM.md) - Reduce each row by summing across columns.
@@ -132,6 +134,7 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TTRANS](TTRANS.md) - Transpose with an implementation-defined temporary tile.
 - [TSUBVIEW](TSUBVIEW.md) - Reinterpret a tile as a subtile of another tile.
 - [TGET_SCALE_ADDR](TGET_SCALE_ADDR.md) - Bind the on-chip address of output tile to a scaled factor of that of input tile.
+- [TCONCAT](TCONCAT.md) - Concatenate two tiles horizontally along the column dimension.
 
 ## Complex
 - [TPRINT](TPRINT.md) - Debug/print elements from a tile (implementation-defined).
@@ -145,9 +148,17 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TPARTMUL](TPARTMUL.md) - Partial elementwise multiply with implementation-defined handling of mismatched valid regions.
 - [TPARTMAX](TPARTMAX.md) - Partial elementwise max with implementation-defined handling of mismatched valid regions.
 - [TPARTMIN](TPARTMIN.md) - Partial elementwise min with implementation-defined handling of mismatched valid regions.
+- [TPARTARGMAX](TPARTARGMAX.md) - Partial elementwise max selection returning corresponding index (argmax), with implementation-defined handling of mismatched valid regions.
+- [TPARTARGMIN](TPARTARGMIN.md) - Partial elementwise min selection returning corresponding index (argmin), with implementation-defined handling of mismatched valid regions.
 - [TGATHERB](TGATHERB.md) - Gather elements using byte offsets.
 - [TSCATTER](TSCATTER.md) - Scatter rows of a source tile into a destination tile using per-element row indices.
 - [TQUANT](TQUANT.md) - Quantize a tile (e.g. FP32 to FP8) producing exponent/scaling/max outputs.
+
+## Cross-core Communication
+- [TALLOC](TALLOC.md) - Allocate a TPipe FIFO slot as a GlobalTensor view.
+- [TPUSH](TPUSH.md) - Push a producer tile into a TPipe FIFO for Cube-Vector communication.
+- [TPOP](TPOP.md) - Pop a consumer tile from a TPipe FIFO for Cube-Vector communication.
+- [TFREE](TFREE.md) - Release FIFO space for a TPipe entry; no-op for TileData TPOP flow.
 
 ## Communication
 

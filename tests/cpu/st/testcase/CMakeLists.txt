@@ -48,6 +48,8 @@ tadds
 taddsc
 tand
 tands
+targreduceop
+taxpy
 tbroadcast
 tci
 tcmp
@@ -65,6 +67,7 @@ tdivs
 texp
 texpands
 textract
+textract_quant
 tfillpad
 tflashattn
 tfmod
@@ -72,6 +75,10 @@ tfmods
 tgather
 tgatherb
 tget
+tget_async
+tget_scale_addr
+thistogram
+timg2col
 tinsert
 tload
 tloadconv
@@ -79,6 +86,7 @@ tlog
 tlrelu
 tmatmul
 tmatmul_layout
+#tmatmul_mx
 tmax
 tmaxs
 tmin
@@ -99,16 +107,21 @@ tprefetch
 tprelu
 tpushpop
 tput
+tput_async
+tquant
+trandom
 trecip
 treduce
 trelu
 trem
 trems
+treshape
 trowexpand
 trowexpandop
 trowmax
 trowmin
 trowsum
+trowprod
 trsqrt
 tscatter
 tsel
@@ -124,20 +137,13 @@ tsub
 tsubc
 tsubs
 tsubsc
+tsubview
 ttest
 ttrans
 ttri
 twait
-treshape
-trandom
-thistogram
-timg2col
-tquant
 txor
 txors
-tget_async
-tput_async
-tsubview
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})

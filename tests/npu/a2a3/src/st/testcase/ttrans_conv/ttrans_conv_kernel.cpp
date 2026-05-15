@@ -39,18 +39,23 @@ __global__ AICORE void runTTRANSConv1(__gm__ T __out__ *out, __gm__ T __in__ *sr
     using SrcTileData = Tile<TileType::Vec, T, 1, elemNum, BLayout::RowMajor, 1, elemNum>;
     SrcTileData src0Tile;
     TASSIGN(src0Tile, 0x0);
-    using TileData =
-        ConvTile<TileType::Vec, T, bufferSize, Layout::NCHW, ConvTileShape<dstN, dstC0 * dstC1, dstH, dstW>>;
+    using TileData = ConvTile<TileType::Vec, T, elemNum, Layout::NCHW, ConvTileShape<dstN, dstC0 * dstC1, dstH, dstW>>;
     TileData srcTile;
     static_assert(srcTile.totalDimCount == 4);
     TASSIGN(srcTile, 0x0);
+#ifdef __PTO_AUTO__
+    TRESHAPE(src0Tile, srcTile);
+#endif
 
     using DstTileData =
-        ConvTile<TileType::Vec, T, bufferSize, Layout::NC1HWC0, ConvTileShape<dstN, dstC1, dstH, dstW, dstC0>>;
+        ConvTile<TileType::Vec, T, elemNum, Layout::NC1HWC0, ConvTileShape<dstN, dstC1, dstH, dstW, dstC0>>;
     DstTileData dstTile;
     static_assert(dstTile.totalDimCount == 5);
     TASSIGN(dstTile, 0x0 + dstN * dstC1 * dstH * dstW * dstC0 * sizeof(T));
     SrcTileData dst0Tile;
+#ifdef __PTO_AUTO__
+    TRESHAPE(dst0Tile, dstTile);
+#endif
     TASSIGN(dst0Tile, 0x0 + dstN * dstC1 * dstH * dstW * dstC0 * sizeof(T));
 
     constexpr int tmpTileH = dstH * dstW;
@@ -63,15 +68,19 @@ __global__ AICORE void runTTRANSConv1(__gm__ T __out__ *out, __gm__ T __in__ *sr
     GlobalDataIn srcGlobal(src);
     GlobalDataIn dstGlobal(out);
     TLOAD(src0Tile, srcGlobal);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+#endif
     TTRANS(dstTile, srcTile, tmpTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dst0Tile);
 }
 
@@ -98,22 +107,31 @@ __global__ AICORE void runTTRANSConv2(__gm__ T __out__ *out, __gm__ T __in__ *sr
     SrcTileData src0Tile;
     TASSIGN(src0Tile, 0x0);
     using TileData =
-        ConvTile<TileType::Vec, T, bufferSize, Layout::NC1HWC0, ConvTileShape<srcN, dstC1, dstH, dstW, dstC0>>;
+        ConvTile<TileType::Vec, T, elemNum, Layout::NC1HWC0, ConvTileShape<srcN, dstC1, dstH, dstW, dstC0>>;
     TileData srcTile;
     static_assert(srcTile.totalDimCount == 5);
     TASSIGN(srcTile, 0x0);
+#ifdef __PTO_AUTO__
+    TRESHAPE(src0Tile, srcTile);
+#endif
 
-    using DstTileData = ConvTile<TileType::Vec, T, bufferSize, Layout::FRACTAL_Z,
-                                 ConvTileShape<dstC1 * dstH * dstW, dstN1, dstN0, dstC0>>;
+    using DstTileData =
+        ConvTile<TileType::Vec, T, elemNum, Layout::FRACTAL_Z, ConvTileShape<dstC1 * dstH * dstW, dstN1, dstN0, dstC0>>;
     using TmpTileData = Tile<TileType::Vec, T, 16, 32, BLayout::RowMajor, 16, 32>;
     DstTileData dstTile;
     static_assert(dstTile.totalDimCount == 4);
     SrcTileData dst0Tile;
+#ifdef __PTO_AUTO__
+    TRESHAPE(dst0Tile, dstTile);
+#endif
     TASSIGN(dstTile, 0x0 + bufferSize);
     TASSIGN(dst0Tile, 0x0 + bufferSize);
     using ZeroTileData =
         Tile<TileType::Vec, int32_t, 1, elemNum * sizeof(T) / 4, BLayout::RowMajor, 1, elemNum * sizeof(T) / 4>;
     ZeroTileData dst1Tile;
+#ifdef __PTO_AUTO__
+    TRESHAPE(dst1Tile, dstTile);
+#endif
     TASSIGN(dst1Tile, 0x0 + bufferSize);
 
     TmpTileData tmpTile;
@@ -122,17 +140,23 @@ __global__ AICORE void runTTRANSConv2(__gm__ T __out__ *out, __gm__ T __in__ *sr
     GlobalDataIn srcGlobal(src);
     GlobalDataIn dstGlobal(out);
     TLOAD(src0Tile, srcGlobal);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
     TSUB(dst1Tile, dst1Tile, dst1Tile);
+#ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
     set_flag(PIPE_V, PIPE_S, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
+#endif
     TTRANS(dstTile, srcTile, tmpTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dst0Tile);
 }
 
@@ -218,17 +242,23 @@ __global__ AICORE void runTTRANSGroupConv1(__gm__ T __out__ *out, __gm__ T __in_
     SrcTileData src0Tile;
     TASSIGN(src0Tile, 0x0);
     using TileData =
-        ConvTile<TileType::Vec, T, bufferSize, Layout::GNCHW, ConvTileShape<dstG, dstN, dstC0 * dstC1, dstH, dstW>>;
+        ConvTile<TileType::Vec, T, elemNum, Layout::GNCHW, ConvTileShape<dstG, dstN, dstC0 * dstC1, dstH, dstW>>;
     TileData srcTile;
     static_assert(srcTile.totalDimCount == 5);
     TASSIGN(srcTile, 0x0);
+#ifdef __PTO_AUTO__
+    TRESHAPE(src0Tile, srcTile);
+#endif
 
     using DstTileData =
-        ConvTile<TileType::Vec, T, bufferSize, Layout::GNC1HWC0, ConvTileShape<dstG, dstN, dstC1, dstH, dstW, dstC0>>;
+        ConvTile<TileType::Vec, T, elemNum, Layout::GNC1HWC0, ConvTileShape<dstG, dstN, dstC1, dstH, dstW, dstC0>>;
     DstTileData dstTile;
     static_assert(dstTile.totalDimCount == 6);
     TASSIGN(dstTile, 0x0 + dstG * dstN * dstC1 * dstH * dstW * dstC0 * sizeof(T));
     SrcTileData dst0Tile;
+#ifdef __PTO_AUTO__
+    TRESHAPE(dst0Tile, dstTile);
+#endif
     TASSIGN(dst0Tile, 0x0 + dstG * dstN * dstC1 * dstH * dstW * dstC0 * sizeof(T));
 
     constexpr int tmpTileH = dstH * dstW;
@@ -241,15 +271,19 @@ __global__ AICORE void runTTRANSGroupConv1(__gm__ T __out__ *out, __gm__ T __in_
     GlobalDataIn srcGlobal(src);
     GlobalDataIn dstGlobal(out);
     TLOAD(src0Tile, srcGlobal);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+#endif
     TTRANS(dstTile, srcTile, tmpTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dst0Tile);
 }
 
@@ -275,17 +309,22 @@ __global__ AICORE void runTTRANSGroupConv2(__gm__ T __out__ *out, __gm__ T __in_
     SrcTileData src0Tile;
     TASSIGN(src0Tile, 0x0);
     using TileData =
-        ConvTile<TileType::Vec, T, bufferSize, Layout::GNC1HWC0, ConvTileShape<srcG, srcN, dstC1, dstH, dstW, dstC0>>;
+        ConvTile<TileType::Vec, T, elemNum, Layout::GNC1HWC0, ConvTileShape<srcG, srcN, dstC1, dstH, dstW, dstC0>>;
     TileData srcTile;
     static_assert(srcTile.totalDimCount == 6);
     TASSIGN(srcTile, 0x0);
-
-    using DstTileData = ConvTile<TileType::Vec, T, bufferSize, Layout::FRACTAL_Z,
+#ifdef __PTO_AUTO__
+    TRESHAPE(src0Tile, srcTile);
+#endif
+    using DstTileData = ConvTile<TileType::Vec, T, elemNum, Layout::FRACTAL_Z,
                                  ConvTileShape<dstG * dstC1 * dstH * dstW, dstN1, dstN0, dstC0>>;
     using TmpTileData = Tile<TileType::Vec, T, 16, 32, BLayout::RowMajor, 16, 32>;
     DstTileData dstTile;
     static_assert(dstTile.totalDimCount == 4);
     SrcTileData dst0Tile;
+#ifdef __PTO_AUTO__
+    TRESHAPE(dst0Tile, dstTile);
+#endif
     TASSIGN(dstTile, 0x0 + bufferSize);
     TASSIGN(dst0Tile, 0x0 + bufferSize);
     using ZeroTileData =
@@ -299,17 +338,23 @@ __global__ AICORE void runTTRANSGroupConv2(__gm__ T __out__ *out, __gm__ T __in_
     GlobalDataIn srcGlobal(src);
     GlobalDataIn dstGlobal(out);
     TLOAD(src0Tile, srcGlobal);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
     TSUB(dst1Tile, dst1Tile, dst1Tile);
     pipe_barrier(PIPE_ALL);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_S, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
+#endif
     TTRANS(dstTile, srcTile, tmpTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dst0Tile);
 }
 

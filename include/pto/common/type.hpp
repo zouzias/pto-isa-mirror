@@ -97,6 +97,15 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 // Signed 4-bit integer type (packed: 2 elements per byte using uint8_t storage).
 // Compatible with AscendC int4b_t. The vconv intrinsics use void* for the packed side.
+//
+// Defined inside `namespace pto` to avoid conflicting with AscendC's own
+// global `int4b_t` type alias (e.g. `using int4b_t = IntegerSubType<...>;`)
+// which is exposed by some AscendC internal headers in global scope.
+// Inside `namespace pto`, unqualified `int4b_t` resolves to `pto::int4b_t`.
+
+#include <type_traits>
+
+namespace pto {
 struct int4b_t {
     uint8_t storage;
     int4b_t() = default;
@@ -107,8 +116,7 @@ struct int4b_t {
         return (storage & 0x08) ? static_cast<int8_t>(storage | 0xF0) : static_cast<int8_t>(storage & 0x0F);
     }
 };
-
-#include <type_traits>
+} // namespace pto
 
 namespace pto {
 enum class TileType
@@ -381,7 +389,19 @@ enum class FmodAlgorithm : uint8_t
     HIGH_PRECISION
 };
 
+enum class FmodSAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
 enum class RemAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class RemSAlgorithm : uint8_t
 {
     DEFAULT,
     HIGH_PRECISION
@@ -415,7 +435,6 @@ typedef float float32_t;
 #if defined(__has_include) && __has_include(<stdfloat>) && __cplusplus >= 202302L && defined(__STDCPP_BFLOAT16_T__)
 #include <stdfloat>
 typedef std::bfloat16_t bfloat16_t;
-#define CPU_SIM_BFLOAT_ENABLED
 #elif defined(PTO_CPU_SIM_ENABLE_BF16)
 #error "PTO_CPU_SIM_ENABLE_BF16 requires C++23 <stdfloat> with std::bfloat16_t support."
 #else

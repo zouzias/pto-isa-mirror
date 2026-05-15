@@ -10,15 +10,15 @@ This appendix is generated from `docs/isa/manifest.yaml` and provides a source-s
 |---|---:|
 | Synchronization | 1 |
 | Manual / Resource Binding | 4 |
-| Elementwise (Tile-Tile) | 28 |
-| Tile-Scalar / Tile-Immediate | 19 |
+| Elementwise (Tile-Tile) | 29 |
+| Tile-Scalar / Tile-Immediate | 20 |
 | Axis Reduce / Expand | 24 |
 | Memory (GM <-> Tile) | 6 |
 | Matrix Multiply | 8 |
-| Data Movement / Layout | 12 |
-| Complex | 13 |
+| Data Movement / Layout | 13 |
+| Complex | 15 |
 | Communication | 11 |
-| Total | 126 |
+| Total | 129 |
 
 ## D.3 Header synchronization status
 
@@ -33,7 +33,7 @@ This appendix is generated from `docs/isa/manifest.yaml` and provides a source-s
 |---|---|---|---|---|
 | Synchronization | [TSYNC](/docs/isa/TSYNC.md) | `sync` | `producer, consumer` | `docs/isa/TSYNC.md` |
 | Manual / Resource Binding | [TASSIGN](/docs/isa/TASSIGN.md) | `config` | `config, state` | `docs/isa/TASSIGN.md` |
-| Manual / Resource Binding | [TSETFMATRIX](/docs/isa/TSETFMATRIX.md) | `config` | `config, state` | `docs/isa/TSETFMATRIX.md` |
+| Manual / Resource Binding | [SETFMATRIX](/docs/isa/SETFMATRIX.md) | `config` | `config, state` | `docs/isa/SETFMATRIX.md` |
 | Elementwise (Tile-Tile) | [TADD](/docs/isa/TADD.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TADD.md` |
 | Elementwise (Tile-Tile) | [TABS](/docs/isa/TABS.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TABS.md` |
 | Elementwise (Tile-Tile) | [TAND](/docs/isa/TAND.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TAND.md` |
@@ -62,6 +62,7 @@ This appendix is generated from `docs/isa/manifest.yaml` and provides a source-s
 | Elementwise (Tile-Tile) | [TNEG](/docs/isa/TNEG.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TNEG.md` |
 | Elementwise (Tile-Tile) | [TREM](/docs/isa/TREM.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TREM.md` |
 | Elementwise (Tile-Tile) | [TFMOD](/docs/isa/TFMOD.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TFMOD.md` |
+| Elementwise (Tile-Tile) | [TPOW](/docs/isa/TPOW.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TPOW.md` |
 | Tile-Scalar / Tile-Immediate | [TEXPANDS](/docs/isa/TEXPANDS.md) | `scalar` | `dst, src, scalar` | `docs/isa/TEXPANDS.md` |
 | Tile-Scalar / Tile-Immediate | [TCMPS](/docs/isa/TCMPS.md) | `scalar` | `dst, src, scalar` | `docs/isa/TCMPS.md` |
 | Tile-Scalar / Tile-Immediate | [TSELS](/docs/isa/TSELS.md) | `scalar` | `dst, src, scalar` | `docs/isa/TSELS.md` |
@@ -81,6 +82,7 @@ This appendix is generated from `docs/isa/manifest.yaml` and provides a source-s
 | Tile-Scalar / Tile-Immediate | [TLRELU](/docs/isa/TLRELU.md) | `scalar` | `dst, src, scalar` | `docs/isa/TLRELU.md` |
 | Tile-Scalar / Tile-Immediate | [TADDSC](/docs/isa/TADDSC.md) | `scalar` | `dst, src, scalar` | `docs/isa/TADDSC.md` |
 | Tile-Scalar / Tile-Immediate | [TSUBSC](/docs/isa/TSUBSC.md) | `scalar` | `dst, src, scalar` | `docs/isa/TSUBSC.md` |
+| Tile-Scalar / Tile-Immediate | [TPOWS](/docs/isa/TPOWS.md) | `scalar` | `dst, src, scalar` | `docs/isa/TPOWS.md` |
 | Axis Reduce / Expand | [TROWSUM](/docs/isa/TROWSUM.md) | `reduce_expand` | `dst, src` | `docs/isa/TROWSUM.md` |
 | Axis Reduce / Expand | [TROWPROD](/docs/isa/TROWPROD.md) | `reduce_expand` | `dst, src` | `docs/isa/TROWPROD.md` |
 | Axis Reduce / Expand | [TCOLSUM](/docs/isa/TCOLSUM.md) | `reduce_expand` | `dst, src` | `docs/isa/TCOLSUM.md` |
@@ -135,6 +137,7 @@ This appendix is generated from `docs/isa/manifest.yaml` and provides a source-s
 | Data Movement / Layout | [TTRANS](/docs/isa/TTRANS.md) | `reshape_move` | `dst, src` | `docs/isa/TTRANS.md` |
 | Data Movement / Layout | [TSUBVIEW](/docs/isa/TSUBVIEW.md) | `reshape_move` | `dst, src, rowOffset, colOffset` | `docs/isa/TSUBVIEW.md` |
 | Data Movement / Layout | [TGET_SCALE_ADDR](/docs/isa/TGET_SCALE_ADDR.md) | `reshape_move` | `dst, src` | `docs/isa/TGET_SCALE_ADDR.md` |
+| Data Movement / Layout | [TCONCAT](/docs/isa/TCONCAT.md) | `reshape_move` | `dst, src0, src1` | `docs/isa/TCONCAT.md` |
 | Complex | [TPRINT](/docs/isa/TPRINT.md) | `complex` | `dst, src0, src1` | `docs/isa/TPRINT.md` |
 | Complex | [TMRGSORT](/docs/isa/TMRGSORT.md) | `complex` | `dst, src0, src1` | `docs/isa/TMRGSORT.md` |
 | Complex | [TSORT32](/docs/isa/TSORT32.md) | `complex` | `dst, src0, src1` | `docs/isa/TSORT32.md` |
@@ -145,6 +148,8 @@ This appendix is generated from `docs/isa/manifest.yaml` and provides a source-s
 | Complex | [TPARTMUL](/docs/isa/TPARTMUL.md) | `complex` | `dst, src0, src1` | `docs/isa/TPARTMUL.md` |
 | Complex | [TPARTMAX](/docs/isa/TPARTMAX.md) | `complex` | `dst, src0, src1` | `docs/isa/TPARTMAX.md` |
 | Complex | [TPARTMIN](/docs/isa/TPARTMIN.md) | `complex` | `dst, src0, src1` | `docs/isa/TPARTMIN.md` |
+| Complex | [TPARTARGMAX](/docs/isa/TPARTARGMAX.md) | `complex` | `dstVal, dstIdx, src0Val, src1Val, src0Idx, src1Idx` | `docs/isa/TPARTARGMAX.md` |
+| Complex | [TPARTARGMIN](/docs/isa/TPARTARGMIN.md) | `complex` | `dstVal, dstIdx, src0Val, src1Val, src0Idx, src1Idx` | `docs/isa/TPARTARGMIN.md` |
 | Complex | [TGATHERB](/docs/isa/TGATHERB.md) | `complex` | `dst, src0, src1` | `docs/isa/TGATHERB.md` |
 | Complex | [TSCATTER](/docs/isa/TSCATTER.md) | `complex` | `dst, src0, src1` | `docs/isa/TSCATTER.md` |
 | Complex | [TQUANT](/docs/isa/TQUANT.md) | `complex` | `dst, src0, src1` | `docs/isa/TQUANT.md` |

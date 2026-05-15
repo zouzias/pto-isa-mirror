@@ -72,12 +72,11 @@ __tf__ PTO_INLINE void StorePlain(typename GlobalData::DType __out__ *dst, typen
     }
 }
 
-template <typename GlobalData, typename TileData, std::enable_if_t<TileData::isRowMajor, int> = 0>
+template <typename GlobalData, typename TileData>
 __tf__ PTO_INLINE void StoreSubfractalMatrix(typename GlobalData::DType __out__ *dst,
                                              typename TileData::TileDType __in__ src, int gShape3, int gShape4,
                                              int gStride3, int gStride4, int validRow, int validCol)
 {
-    // Zn layout
     cpu::parallel_for_1d(
         0, static_cast<std::size_t>(gShape4), static_cast<std::size_t>(gShape3) * gShape4, [&](std::size_t c) {
             size_t subTileC = c / TileData::InnerCols;
@@ -86,33 +85,9 @@ __tf__ PTO_INLINE void StoreSubfractalMatrix(typename GlobalData::DType __out__ 
                 size_t subTileR = r / TileData::InnerRows;
                 size_t innerR = r % TileData::InnerRows;
 
-                size_t tile_idx = subTileR * TileData::Cols * TileData::InnerRows + subTileC * TileData::InnerNumel +
-                                  innerC * TileData::InnerRows + innerR;
+                size_t tile_idx = GetTileElementOffsetSubfractals<TileData>(subTileR, innerR, subTileC, innerC);
 
                 size_t gd_idx = r * static_cast<std::size_t>(gStride3) + c * static_cast<std::size_t>(gStride4);
-                dst[gd_idx] = src[tile_idx];
-            }
-        });
-}
-
-template <typename GlobalData, typename TileData, std::enable_if_t<!TileData::isRowMajor, int> = 0>
-__tf__ PTO_INLINE void StoreSubfractalMatrix(typename GlobalData::DType __out__ *dst,
-                                             typename TileData::TileDType __in__ src, int gShape3, int gShape4,
-                                             int gStride3, int gStride4, int validRow, int validCol)
-{
-    // Nz layout
-    cpu::parallel_for_1d(
-        0, static_cast<std::size_t>(gShape4), static_cast<std::size_t>(gShape3) * gShape4, [&](std::size_t c) {
-            size_t subTileC = c / TileData::InnerCols;
-            size_t innerC = c % TileData::InnerCols;
-            for (size_t r = 0; r < static_cast<std::size_t>(gShape3); r++) {
-                size_t subTileR = r / TileData::InnerRows;
-                size_t innerR = r % TileData::InnerRows;
-
-                size_t tile_idx = subTileC * TileData::Rows * TileData::InnerCols + subTileR * TileData::InnerNumel +
-                                  innerR * TileData::InnerCols + innerC;
-                size_t gd_idx = r * static_cast<std::size_t>(gStride3) + c * static_cast<std::size_t>(gStride4);
-
                 dst[gd_idx] = src[tile_idx];
             }
         });
@@ -123,8 +98,7 @@ __tf__ PTO_INLINE void TStore(typename GlobalData::DType __out__ *dst, typename 
                               int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
                               int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
 {
-    assert((gShape0 * gShape1 * gShape2 * gShape3 == validRow && gShape4 == validCol && TileData::isRowMajor) ||
-           (gShape0 * gShape1 * gShape2 * gShape4 == validCol && gShape3 == validRow && !TileData::isRowMajor));
+    assert(gShape0 * gShape1 * gShape2 * gShape3 * gShape4 >= validRow * validCol);
     if (TileData::SFractal == SLayout::NoneBox) {
         StorePlain<GlobalData, TileData>(dst, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1,
                                          gStride2, gStride3, gStride4, validRow, validCol);
@@ -134,7 +108,7 @@ __tf__ PTO_INLINE void TStore(typename GlobalData::DType __out__ *dst, typename 
     }
 }
 
-template <typename TileData, typename GlobalData, AtomicType atomicType = AtomicType::AtomicNone>
+template <typename TileData, typename GlobalData, AtomicType atomicType>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData &dst, TileData &src)
 {
     static_assert(sizeof(typename TileData::DType) == sizeof(typename GlobalData::DType),
@@ -149,15 +123,46 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData &dst, TileData &src)
                                  dst.GetStride(pto::GlobalTensorDim::DIM_4), src.GetValidRow(), src.GetValidCol());
 }
 
-template <typename TileData, typename GlobalData, AtomicType atomicType = AtomicType::AtomicNone>
-__aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src, uint64_t preQuantScalar)
+template <typename TileData, typename GlobalData, AtomicType atomicType, STPhase Phase>
+__aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src)
 {
-    (void)preQuantScalar;
+    (void)Phase;
     TSTORE_IMPL<TileData, GlobalData, atomicType>(dst, src);
 }
 
-template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
-          ReluPreMode reluPreMode = ReluPreMode::NoRelu>
+template <typename TileData, typename GlobalData, AtomicType atomicType, ReluPreMode reluPreMode>
+__aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src)
+{
+    (void)reluPreMode;
+    TSTORE_IMPL<TileData, GlobalData, atomicType>(dst, src);
+}
+
+template <typename TileData, typename GlobalData, AtomicType atomicType, ReluPreMode reluPreMode, STPhase Phase>
+__aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src)
+{
+    (void)Phase;
+    (void)reluPreMode;
+    TSTORE_IMPL<TileData, GlobalData, atomicType>(dst, src);
+}
+
+template <typename TileData, typename GlobalData, AtomicType atomicType, ReluPreMode reluPreMode>
+__aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src, uint64_t preQuantScalar)
+{
+    (void)preQuantScalar;
+    (void)reluPreMode;
+    TSTORE_IMPL<TileData, GlobalData, atomicType>(dst, src);
+}
+
+template <typename TileData, typename GlobalData, AtomicType atomicType, ReluPreMode reluPreMode, STPhase Phase>
+__aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src, uint64_t preQuantScalar)
+{
+    (void)Phase;
+    (void)preQuantScalar;
+    (void)reluPreMode;
+    TSTORE_IMPL<TileData, GlobalData, atomicType>(dst, src);
+}
+
+template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType, ReluPreMode reluPreMode>
 __aicore__ void TSTORE_IMPL(GlobalData &dst, TileData &src, FpTileData &fp)
 {
     (void)fp;

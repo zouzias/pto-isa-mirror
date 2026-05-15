@@ -130,12 +130,23 @@ python3 tests/script/run_st.py -r sim -v a3 -t tadd -g TADDTest.case_float_64x64
 
 ### Flash Attention
 
-- 参考实现：`kernels/manual/common/flash_atten/`
-- 详细分析与调参说明：[Flash Attention 算子实现](kernels/manual/common/flash_atten/README_zh.md)
+- 算子实现与调优说明：[A2/A3 版本](kernels/manual/common/flash_atten/README_zh.md)，[A5 版本](kernels/manual/a5/flash_atten/README_zh.md)
+- A5 构建说明（A5 性能数据待补充）：[Flash Attention Performance Kernel (A5)](kernels/manual/a5/flash_atten/README_zh.md)
 - S0：query 序列长度（Q/O 的行数）
 - S1：key/value 序列长度（K/V 的行数）
 
-![Flash Attention 归一化 TFLOPS（A2/A3）](docs/figures/performance/fa_normalized_tflops_a2a3.svg)
+Ascend 910B2 多核对比，基线为 `torch_npu`：
+
+| 序列长度 | PTO 时间 (us) | torch_npu 时间 (us) | PTO TFLOPS | torch_npu TFLOPS | PTO 加速比 |
+| --- | --- | --- | --- | --- | --- |
+| 1024 | 20.960 | 58.461 | 25.61 | 9.18 | 2.79x |
+| 2048 | 32.461 | 70.801 | 66.16 | 30.33 | 2.18x |
+| 4096 | 88.902 | 118.302 | 96.62 | 72.61 | 1.33x |
+| 8192 | 292.626 | 353.147 | 117.42 | 97.30 | 1.21x |
+| 16384 | 909.058 | 1118.462 | 151.19 | 122.88 | 1.23x |
+| 32768 | 3262.645 | 3646.173 | 168.50 | 150.78 | 1.12x |
+
+![Flash Attention 910B2 PTO vs torch_npu](docs/figures/performance/fa_910b2_pto_vs_torch_npu.png)
 
 ### 通信指令带宽
 
@@ -164,14 +175,18 @@ python3 tests/script/run_st.py -r sim -v a3 -t tadd -g TADDTest.case_float_64x64
 
 未来计划发布的特性：
 
-| 功能 | 描述 | 范围 |
-| --- | --- | --- |
-| PTO Auto Mode | BiSheng 编译器支持：自动分配 tile buffer 并插入同步。 | 编译器 / 工具链 |
-| PTO Tile Fusion | BiSheng 编译器支持：自动融合 tile 操作。 | 编译器 / 工具链 |
-| PTO-AS | PTO ISA 的字节码（Byte Code）支持。 | 编译器 / 工具链 |
-| **卷积扩展** | PTO ISA 对卷积 kernel 的支持。 | ISA 扩展 |
-| **集合通信扩展** | PTO ISA 对集合通信 kernel 的支持。 | ISA 扩展 |
-| **系统调度扩展** | PTO ISA 对 SPMD/MPMD 编程的调度支持。 | ISA 扩展 |
+| 功能 | 描述 | 范围 | 进度 / 完成时间 |
+| --- | --- | --- | --- |
+| **PTO Auto Mode** | BiSheng 编译器支持：自动分配 tile buffer 并插入同步。 | 编译器 / 工具链 | 持续演进 |
+| **PTO Tile Fusion** | BiSheng 编译器支持：自动融合 tile 操作。 | 编译器 / 工具链 | 持续演进 |
+| **PTO-AS** | PTO ISA 的字节码（Byte Code）支持。 | 编译器 / 工具链 | 持续演进 |
+| **卷积扩展** | PTO ISA 对卷积 kernel 的支持。 | ISA 扩展 | 持续演进 |
+| **集合通信扩展** | 新增支持 Ccu 及 Roce 异步通信指令，新增 TPREFECTH（AIV 直驱）通信指令。 | 通信 ISA 扩展 | 2026 Q2 |
+| **系统调度扩展** | PTO ISA 对 SPMD/MPMD 编程的调度支持。 | ISA 扩展 | 规划中 |
+| **微指令** | 支持用户通过微指令表达高性能算子，同时提供基础的高性能微指令库。 | ISA 扩展 / 算子开发 | 2026 Q2 |
+| **基础指令** | 进一步优化 A5 指令性能，新增 Pooling 相关基础指令，并增强卷积、量化、Fixpipe 类指令能力。 | ISA 扩展 | 2026 Q2 |
+| **CostModel** | 支持 A5 指令的 CostModel 性能仿真。 | 工具链 / 性能建模 | 2026 Q2 |
+| **CPU-SIM** | CPU-SIM 随指令增强同步构建。 | CPU 仿真 | 2026 Q2 |
 
 ## 🗃️ 目录结构
 
@@ -206,8 +221,8 @@ python3 tests/script/run_st.py -r sim -v a3 -t tadd -g TADDTest.case_float_64x64
 - [版本说明](ReleaseNote_zh.md)：版本更新与发布记录
 - [许可证](LICENSE)：CANN Open Software License Agreement Version 2.0
 - [PyPTO](https://gitcode.com/cann/pypto/)：PTO 生态中的上层编程框架
-- [PTOAS](https://gitcode.com/cann/PTOAS/)：面向 PTO 工作流的汇编器与编译后端
-- [pto-dsl](https://gitcode.com/cann/pto-dsl/)：面向 PTO 的 Python 前端与 JIT 工作流探索
+- [PTOAS](https://github.com/PTO-ISA/PTOAS/)：面向 PTO 工作流的汇编器与编译后端
+- [pto-dsl](https://github.com/PTO-ISA/pto-dsl/)：面向 PTO 的 Python 前端与 JIT 工作流探索
 
 ## 📬 联系我们
 
