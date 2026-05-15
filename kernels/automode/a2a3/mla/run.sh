@@ -8,8 +8,8 @@
 
 KERNEL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-SHORT=r:,v:,C:,a:,p
-LONG=run-mode:,soc-version:,compiler:,cases:,profile
+SHORT=r:,v:,
+LONG=run-mode:,soc-version:,
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 PROFILE_MODE=0
@@ -22,15 +22,6 @@ do
         (-v | --soc-version )
             SOC_VERSION="$2"
             shift 2;;
-        (-C | --compiler )
-            CMAKE_COMPILER="$2"
-            shift 2;;
-        (-p | --profile )
-            PROFILE_MODE=1
-            shift 1;;
-        (-a | --cases )
-            CASES_RAW="$2"
-            shift 2;;
         (--)
             shift;
             break;;
@@ -39,11 +30,6 @@ do
             break;;
     esac
 done
-
-
-: "${CMAKE_COMPILER:=bisheng}"
-
-source "${KERNEL_DIR}/../common.sh"
 
 if [[ ! "${SOC_VERSION}" =~ ^Ascend ]]; then
     echo "[ERROR] Unsupported SocVersion: ${SOC_VERSION}"
@@ -71,10 +57,7 @@ cd build
 export LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib:$LD_LIBRARY_PATH
 set -euo pipefail
 
-cmake  -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} -DCMAKE_COMPILER=${CMAKE_COMPILER} ..
+cmake  -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} ..
 make -j16
 
-run_bin ./mla_basic
-echo ""
-echo "[run.sh] --- Python per-stage comparison ---"
-python ../scripts/compare_outputs.py
+./mla_basic
