@@ -585,6 +585,62 @@ __tf__ AICORE void TGather_b16_gt(typename TileDataD::TileDType __out__ dst, typ
     }
 }
 
+// =============================================================================
+// TGather_b16_eq — bounded-K stream compaction (vsqz NO_STORED + vscatter)
+// -----------------------------------------------------------------------------
+// Per row, write the global flat indices of the first K positions whose b16
+// value bit-exactly equals k_scalar[i] into dst[i][0..K-1] (golden: gen_data.py
+// EQ mode). Per b16 VL (UNPK_B16 -> 64 b32 lanes):
+//
+//   1) vlds UNPK_B16         load 64 b16 elems into b32 lanes
+//   2) vcmps_eq(p_eq, ...)   bit-level EQ under auto-decrementing tail predicate
+//   3) vsqz NO_STORED ×2     squeeze (v_in_idx, v_one) under p_eq:
+//                              v_sqz_idx = [I_0..I_{N-1}, 0..]   (N = popcount)
+//                              v_sqz_one = [1..1, 0..]
+//   4) vcmps_eq -> p_sqz     predicate covering the first N lanes
+//   5) vcmps_lt -> p_bnd     keep only lanes with v_out_pos < K
+//   6) vscatter              dst_row[v_out_pos[t]] = v_sqz_idx[t]
+//   7) vcadd + vdup LOWEST   N broadcast to all lanes
+//   8) vadd                  v_out_pos += N ; v_in_idx += 64
+//
+// Pros vs. the legacy VSQZ STORED + VSTUR + SPR_AR impl:
+//   + Generic.  No use of the SPR_AR scalar pointer register or sprclr/sprsts
+//     scratch protocol; same code shape works for b8/b16/b32 by swapping the
+//     load mode, k zero-extension width, and step constant. Naturally extends
+//     to GT/LT/GE/LE/NE by swapping vcmps_eq->vcmps_*.
+//   + K-bounded.  The vcmps_lt against dstValidCol guards every scatter, so
+//     dst[i] is never overwritten past K, even on rows whose match count
+//     exceeds K. Legacy impl relied on AR-pointer post-increment never tripping
+//     past the row stride, which is only safe when caller guarantees M_i <= K.
+//   + Per-row reset is a single vci, not an SPR clear+restore round-trip.
+//   + Valid tail handled by CreatePredicate's POST_UPDATE auto-decrement; no
+//     manual remaining-count bookkeeping inside the loop.
+//
+// Cons / tradeoffs:
+//   - Higher static instruction count per block (~10 vec ops vs ~5 in legacy).
+//   - Adds a SLIDE-pipe round-trip (vcadd -> vdup POS_LOWEST -> vadd) on the
+//     critical path; legacy keeps the running count entirely in the scalar SPR.
+//   - Two VSQZ issues per block instead of one (the second one just produces
+//     the bit-vector for popcount + first-N-lanes predicate).
+//   - Uses GSU (vscatter) instead of LSU+POST_UPDATE; on workloads that issue
+//     other GSU traffic this can become the bottleneck.
+//
+// Numerical stability: identical. Both impls produce bit-exact matches against
+// the b16 bit pattern of k_scalar; no float arithmetic is performed.
+//
+// Hardware-friendliness: spreads work across more pipes (LSU+VEC+SLIDE+GSU)
+// rather than serializing through the SPR_AR scalar resource, which tends to
+// hide better behind unrelated scalar work and avoids the SPR clear/restore
+// fence that legacy needs around row boundaries. On the other hand the SLIDE
+// dependency chain (vcadd->vdup->vadd) is fully serial and bounds the per-block
+// latency.
+//
+// Correctness sketch: with INC_ORDER, v_out_pos = [base..base+63] before the
+// scatter; p_sqz selects exactly the N populated lanes after vsqz; p_bnd then
+// drops any lane with position >= K. So writes are dst_row[base+t] = I_t for
+// t in [0, min(N, K-base)). Induction over blocks (with v_out_pos += N) yields
+// dst_row[k] = k-th matching global flat index for k in [0, min(M_i, K)). ∎
+// =============================================================================
 template <typename TileDataD, typename TileDataS, typename TileDataS1, typename TileDataC, CmpMode cmpMode>
 __tf__ AICORE void TGather_b16_eq(typename TileDataD::TileDType __out__ dst, typename TileDataS::TileDType __in__ src0,
                                   typename TileDataS1::TileDType __in__ k_value, uint32_t offset,
@@ -595,42 +651,74 @@ __tf__ AICORE void TGather_b16_eq(typename TileDataD::TileDType __out__ dst, typ
     __ubuf__ typename TileDataS::DType *src0Ptr = (__ubuf__ typename TileDataS::DType *)__cce_get_tile_ptr(src0);
     __ubuf__ typename TileDataC::DType *cdstPtr = (__ubuf__ typename TileDataC::DType *)__cce_get_tile_ptr(cdst);
     __ubuf__ typename TileDataS1::DType *kvaluePtr = (__ubuf__ typename TileDataS1::DType *)__cce_get_tile_ptr(k_value);
+    (void)cdstPtr;  // intermediate UB tile, never compared against golden
 
+    // After UNPK_B16, every repeat consumes 64 b16 elements -> 64 b32 lanes.
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(typename TileDataD::DType);
     uint16_t repeatTimes = CeilDivision(srcValidCol, elementsPerRepeat);
 
     __VEC_SCOPE__
     {
-        vector_bool preg_b32 = pset_b32(PAT_ALL);
-        vector_bool preg_b16 = pset_b16(PAT_ALL);
-        vector_align align_index;
-        vector_u32 mask_k;
+        vector_bool preg_b32_all = pset_b32(PAT_ALL);
 
-        vector_s32 index;
-        vci(index, offset, INC_ORDER);
-        vector_s32 idx_offset;
-        vbr(idx_offset, 0x00000040);
-        sprclr(SPR_AR);
+        vector_u32 v_one;
+        vbr(v_one, (uint32_t)1);
+
+        vector_s32 v_step_vl;
+        vbr(v_step_vl, (int32_t)elementsPerRepeat);
+        vector_u32 v_out_col_size;
+        vbr(v_out_col_size, 0);
+
+        // Global flat-index counter; continuous across rows and blocks.
+        vector_s32 v_in_idx;
+        vci(v_in_idx, (int32_t)offset, INC_ORDER);
 
         for (uint16_t i = 0; i < (uint16_t)srcValidRow; ++i) {
-            typename TileDataS1::DType k_scalar = *(kvaluePtr + i);
-            float k_value_f32 = (float)k_scalar;
-            vbr(mask_k, k_value_f32);
+            uint32_t k_u32 = (uint32_t)(*(kvaluePtr + i));  // bit-pattern EQ on b16, zero-extended
+
+            // Per-row reset of the per-lane output positions: lane k starts at k.
+            vector_s32 v_out_pos;
+            vci(v_out_pos, 0, INC_ORDER);
+
+            // POST_UPDATE inside CreatePredicate auto-decrements sreg by VL (=64
+            // for b32) on each call, so no manual remaining-count bookkeeping.
+            uint32_t sreg = (uint32_t)srcValidCol;
 
             for (uint16_t j = 0; j < repeatTimes; ++j) {
+                vector_bool p_valid = CreatePredicate<uint32_t>(sreg);
+
                 vector_u16 score;
                 vlds(score, (__ubuf__ uint16_t *)src0Ptr, (i * TileDataS::Cols + j * elementsPerRepeat), UNPK_B16);
 
-                vector_bool pout_eq;
-                vector_s32 sqz_index_out;
-                vcmp_eq(pout_eq, (vector_u32)score, mask_k, preg_b32);
-                vsqz(sqz_index_out, index, pout_eq, MODE_STORED);
-                vstur(align_index, (vector_u32)sqz_index_out, (__ubuf__ uint32_t *)dstPtr, POST_UPDATE);
-                vadd(index, index, idx_offset, preg_b32, MODE_ZEROING);
+                vector_bool p_eq;
+                vcmps_eq(p_eq, (vector_u32)score, k_u32, p_valid);
+
+                vector_u32 v_sqz_idx;
+                vector_u32 v_sqz_one;
+                vsqz(v_sqz_idx, (vector_u32 &)v_in_idx, p_eq, MODE_NO_STORED);
+                vsqz(v_sqz_one, v_one, p_eq, MODE_NO_STORED);
+
+                vector_bool p_sqz;
+                vcmps_eq(p_sqz, v_sqz_one, (uint32_t)1, preg_b32_all);
+
+                vector_bool p_bnd;
+                vcmps_lt(p_bnd, (vector_u32 &)v_out_pos, (uint32_t)dstValidCol, p_sqz);
+
+                vscatter(v_sqz_idx, (__ubuf__ uint32_t *)dstPtr, (vector_u32 &)v_out_pos, p_bnd);
+
+                vector_u32 v_n;
+                vcadd(v_n, v_sqz_one, p_bnd, MODE_ZEROING);
+                vadd(v_out_col_size, v_out_col_size, v_n, preg_b32_all, MODE_ZEROING);
+
+                vector_u32 v_n_brc;
+                vdup(v_n_brc, v_n, preg_b32_all, POS_LOWEST, MODE_ZEROING);
+
+                vadd(v_out_pos, v_out_pos, (vector_s32 &)v_n_brc, preg_b32_all, MODE_ZEROING);
+                vadd(v_in_idx, v_in_idx, v_step_vl, preg_b32_all, MODE_ZEROING);
             }
-            vstar(align_index, (__ubuf__ uint32_t *)dstPtr);
-            sprsts(SPR_AR, cdstPtr, i * sizeof(typename TileDataC::DType));
-            sprclr(SPR_AR);
+            vmuls(v_out_col_size, v_out_col_size, (uint32_t)sizeof(typename TileDataD::DType), preg_b32_all, MODE_ZEROING);
+            vsts(v_out_col_size, (__ubuf__ uint32_t *)cdstPtr, i, ONEPT_B32, preg_b32_all);
+
             dstPtr = dstPtr + TileDataD::Cols;
         }
     }

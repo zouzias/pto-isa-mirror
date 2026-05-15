@@ -101,8 +101,9 @@ using GatherSrcI16 = Tile<TileType::Vec, int16_t, 1, ValidCols, BLayout::RowMajo
 // Keys already in UB at kUbFullKeys (same layout as GM); slice [base, base+validCols) for TGATHER.
 constexpr uint64_t kUbFullKeys = 0x00000;
 
-// Full-width compare-gather dst (1×kN indices); keys already contiguous in UB at kUbFullKeys.
-using GatherFullU32 = Tile<TileType::Vec, uint32_t, 1, kN, BLayout::RowMajor, -1, -1>;
+// Compare-gather dst tile type (size decided in Phase5 by TopK).
+template <int ValidCols>
+using GatherDstU32 = Tile<TileType::Vec, uint32_t, 1, ValidCols, BLayout::RowMajor, -1, -1>;
 constexpr int kGatherConcatRows =
     (1 * static_cast<int>(sizeof(uint32_t)) < 32) ? (32 / static_cast<int>(sizeof(uint32_t))) : 1;
 using GatherConcatCountTile = Tile<TileType::Vec, uint32_t, kGatherConcatRows, 1, BLayout::ColMajor, -1, -1>;
@@ -373,11 +374,11 @@ AICORE inline void Phase5_TgatherGtEqTconcatAndStore(PackedU16Tile &packedThrU, 
     constexpr uint64_t kGatherUbTmp = 0x29000;
     constexpr int cmpVCol = (kN + 7) / 8;
     constexpr int cmpCol = (cmpVCol + 31) / 32 * 32;
-    using DstTile = Tile<TileType::Vec, uint32_t, 1, kN, BLayout::RowMajor, -1, -1>;
+    using DstTile = GatherDstU32<TopK>;
     using TmpGatherTile = Tile<TileType::Vec, uint8_t, 1, cmpCol, BLayout::RowMajor, -1, -1>;
 
-    GatherFullU32 gtChunk(1, kN);
-    GatherFullU32 eqChunk(1, kN);
+    GatherDstU32<TopK> gtChunk(1, TopK);
+    GatherDstU32<TopK> eqChunk(1, TopK);
     GatherConcatCountTile idxGtCnt(1, 1);
     GatherConcatCountTile idxEqCnt(1, 1);
     TASSIGN(gtChunk, kFullGatherGtDst);
@@ -402,7 +403,7 @@ AICORE inline void Phase5_TgatherGtEqTconcatAndStore(PackedU16Tile &packedThrU, 
     srcGt.SetValidCol(kN);
     TASSIGN(srcGt, kUbFullKeys);
     gtChunk.SetValidRow(1);
-    gtChunk.SetValidCol(kN);
+    gtChunk.SetValidCol(TopK);
     tmpGt.SetValidRow(1);
     tmpGt.SetValidCol(cmpVCol);
     TGATHER<DstTile, GatherSrcI16<kN>, PackedU16Tile, GatherConcatCountTile, TmpGatherTile, CmpMode::GT>(
@@ -415,7 +416,7 @@ AICORE inline void Phase5_TgatherGtEqTconcatAndStore(PackedU16Tile &packedThrU, 
     srcEq.SetValidCol(kN);
     TASSIGN(srcEq, kUbFullKeys);
     eqChunk.SetValidRow(1);
-    eqChunk.SetValidCol(kN);
+    eqChunk.SetValidCol(TopK);
     tmpEq.SetValidRow(1);
     tmpEq.SetValidCol(cmpVCol);
     TGATHER<DstTile, GatherSrcI16<kN>, PackedU16Tile, GatherConcatCountTile, TmpGatherTile, CmpMode::EQ>(
