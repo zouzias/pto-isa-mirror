@@ -231,12 +231,12 @@ __global__ AICORE void runGather(
         // data on hardware and the softmax outputs are wrong.
         TLOAD(valTile, outValGlobal);                  // (kT, kPadded) <- host-padded GM
         TROWMAX(maxTile, valTile, tmpTile);            // (kT, 8) broadcast max
-        pipe_barrier(PIPE_ALL);
+        pipe_barrier(PIPE_V);
         TROWEXPANDSUB(tmpTile, valTile, maxTile);      // val - max
         TEXP(expTile, tmpTile);                        // exp(val - max)
-        pipe_barrier(PIPE_ALL);
+        pipe_barrier(PIPE_V);
         TROWSUM(sumTile, expTile, tmpTile);            // (kT, 8) broadcast sum
-        pipe_barrier(PIPE_ALL);
+        pipe_barrier(PIPE_V);
         TROWEXPANDDIV(weightTile, expTile, sumTile);   // exp(...) / sum
         TSTORE(weightsGlobal, weightTile);             // -> GM scratch
         // Pass-2 reads weights_scratch from GM via scalar accesses; flush
