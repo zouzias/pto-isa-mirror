@@ -11,23 +11,12 @@
 # --------------------------------------------------------------------------------
 
 import os
-import numpy as np
+
+
+def main():
+    # tprefetch_async is a runtime-only benchmark/correctness test; no golden data needed.
+    os.makedirs("testcases", exist_ok=True)
 
 
 if __name__ == "__main__":
-    for case_name in (
-        "SYNCALLTest.case_aiv_only_all_blocks",
-        "SYNCALLTest.case_soft_aiv_only_all_blocks",
-        "SYNCALLTest.case_mix_1_1_all_blocks",
-        "SYNCALLTest.case_soft_mix_1_1_all_blocks",
-    ):
-        golden = np.ones(48, dtype=np.int32)
-        os.makedirs(case_name, exist_ok=True)
-        golden.tofile(os.path.join(case_name, "golden.bin"))
-    for case_name in (
-        "SYNCALLTest.case_mix_1_2_all_blocks",
-        "SYNCALLTest.case_soft_mix_1_2_all_blocks",
-    ):
-        golden = np.ones(72, dtype=np.int32)
-        os.makedirs(case_name, exist_ok=True)
-        golden.tofile(os.path.join(case_name, "golden.bin"))
+    main()

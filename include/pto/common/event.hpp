@@ -206,7 +206,8 @@ constexpr pipe_t opPipeList[] = {
     PIPE_ALL /* OP_COUNT */,
 };
 
-struct RecordEvent {};
+struct RecordEvent {
+};
 
 template <pipe_t SrcPipe, pipe_t DstPipe>
 class EventIdCounter {
@@ -214,31 +215,17 @@ public:
     PTO_INTERNAL static event_t GetNextId()
     {
         event_t id = NextId();
-#if defined(__CPU_SIM) || defined(__COSTMODEL)
-        PTO_CPU_ASSERT(!(OccupiedMask() & (1u << static_cast<uint8_t>(id))),
-                       "Event ID still occupied - likely missing Wait()");
-        OccupiedMask() |= (1u << static_cast<uint8_t>(id));
-#endif
         NextId() = (event_t)(((uint8_t)NextId() + 1) % EVENT_ID_MAX);
         return id;
     }
     PTO_INTERNAL static void Reset()
     {
         NextId() = EVENT_ID0;
-#if defined(__CPU_SIM) || defined(__COSTMODEL)
-        OccupiedMask() = 0;
-#endif
     }
     PTO_INTERNAL static event_t PeekNextId()
     {
         return NextId();
     }
-#if defined(__CPU_SIM) || defined(__COSTMODEL)
-    PTO_INTERNAL static void MarkFree(event_t id)
-    {
-        OccupiedMask() &= ~(1u << static_cast<uint8_t>(id));
-    }
-#endif
 
 private:
     static event_t &NextId()
@@ -246,17 +233,10 @@ private:
         static event_t id = EVENT_ID0;
         return id;
     }
-#if defined(__CPU_SIM) || defined(__COSTMODEL)
-    static uint8_t &OccupiedMask()
-    {
-        static uint8_t mask = 0;
-        return mask;
-    }
-#endif
 };
 
 template <typename... WaitEvents>
-PTO_INTERNAL void WaitAllEvents(WaitEvents &...events)
+PTO_INTERNAL void WaitAllEvents(WaitEvents &... events)
 {
     (events.Wait(), ...);
 }
