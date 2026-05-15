@@ -20,7 +20,7 @@ For `kTopK == 1` the softmax is degenerate (single-element softmax = 1.0), so th
 | `B` (input)         | `(kT·kTopK + 16, kH)` | fp32 | first `kT·kTopK` rows consulted |
 | `A_id` (input)      | `(kT·kTopK + 16)`     | int32 | first `kT·kTopK` consulted |
 | `rank_id` (input)   | `(kT·kTopK + 16)`     | int32 | only used when `kTopK > 1` |
-| `outVal` (input)    | `(kT, kPadded)`       | fp32 | cols `kTopK..kPadded-1` host-padded with `-1e30` |
+| `outVal` (input)    | `(kT, kPadded)`       | fp32 | cols `kTopK..kPadded-1` host-padded with `-1e4` |
 | `weights_scratch` (GM scratch) | `(kT, kPadded)` | fp32 | written by pass 1, read by pass 2 |
 | `C` (output)        | `(kT, kH)`            | fp32 | zero-initialized by host before launch |
 
@@ -42,12 +42,12 @@ TSTORE         weights_scratch <- weightTile
 
 No libc math (no `expf`), no scalar UB reads, no manual `pipe_barrier(PIPE_V)` — trusts auto-mode RAW dependency analysis through the five-instruction chain.
 
-### Why outVal columns `kTopK..kPadded-1` need `-1e30` padding
+### Why outVal columns `kTopK..kPadded-1` need `-1e4` padding
 
-`TROWMAX`, `TROWEXPANDSUB`, `TEXP`, `TROWSUM` all read the full tile width. For `kTopK ∈ {1, 2, 4}` (where `kPadded = 8 > kTopK`), the unused columns must not corrupt the softmax. Filling them with `-1e30` makes the pipeline neutralize them automatically:
+`TROWMAX`, `TROWEXPANDSUB`, `TEXP`, `TROWSUM` all read the full tile width. For `kTopK ∈ {1, 2, 4}` (where `kPadded = 8 > kTopK`), the unused columns must not corrupt the softmax. Filling them with `-1e4` makes the pipeline neutralize them automatically:
 
 ```
--1e30 - real_max  ≈ -inf
+-1e4 - real_max  ≈ -10000 (well past fp32 exp underflow ~ -88)
 exp(-inf)         =  0
 0 contributes nothing to the row sum
 0 / real_sum      =  0   →  padding cols of weights_scratch end up at 0.0

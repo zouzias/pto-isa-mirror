@@ -7,7 +7,7 @@
  *   1. router_matmul    : logits = X @ W_router
  *   2. moe_topk_padded  : expert_id, outVal_compact = topK(logits)
  *   <host bridge>       : pad outVal_compact (kT, kTopK) -> outVal_padded (kT, kPadded)
- *                          with -1e30 in cols kTopK..kPadded-1 (needed by gather softmax).
+ *                          with -1e4 in cols kTopK..kPadded-1 (needed by gather softmax).
  *   3. scatter          : A, A_id, rank_id, count, start = pack(X, expert_id)
  *   4. expert_ffn       : B = FFN(A, W1, W2, count, start)   (2 stages, cube)
  *   5. gather           : C = softmax_weighted_gather(B, A_id, rank_id, outVal_padded)
@@ -88,7 +88,7 @@ constexpr int kPadded = (kTopK < 8) ? 8 : kTopK;
 constexpr size_t kHalfBytes  = 2;
 constexpr size_t kFloatBytes = 4;
 
-constexpr float  kOutValPad  = -1e30f;
+constexpr float  kOutValPad  = -1e4f;
 
 }  // namespace
 
@@ -193,7 +193,7 @@ int main()
     ReadFile("../input/input_W2.bin",       w2Bytes,      w2Host,      w2Bytes);
     ReadFile("../input/input_idx_init.bin", idxInitBytes, idxInitHost, idxInitBytes);
 
-    // Pre-fill the host-side outVal_padded buffer with -1e30 so the kTopK..
+    // Pre-fill the host-side outVal_padded buffer with -1e4 so the kTopK..
     // kPadded-1 padding columns are already in place; we only copy the
     // first kTopK fp32 floats of each row from the compact buffer.
     for (size_t i = 0; i < outValPaddedBytes / sizeof(float); ++i) {
@@ -241,8 +241,8 @@ int main()
     aclrtSynchronizeStream(stream);
 
     // --- Host bridge: pad outVal_compact (kT, kTopK) -> outVal_padded
-    //                  (kT, kPadded) with -1e30 in the trailing kPadded - kTopK
-    //                  columns. We pre-filled outValPaddedHost with -1e30 above,
+    //                  (kT, kPadded) with -1e4 in the trailing kPadded - kTopK
+    //                  columns. We pre-filled outValPaddedHost with -1e4 above,
     //                  so we only memcpy the first kTopK floats per row in.
     printf("[bridge ] host pad outVal_compact -> outVal_padded\n");
     aclrtMemcpy(outValCompactHost, outValCompactBytes, outValCompactDev,
