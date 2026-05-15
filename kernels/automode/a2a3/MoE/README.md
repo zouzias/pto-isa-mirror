@@ -47,6 +47,15 @@ The +16 trailing rows on `A`, `A_id`, `rank_id`, `B`, and `Y_scratch` are the **
 
 For `kTopK == 1` softmax is degenerate (single-value softmax = 1.0), so `gather` takes a **fast path** that skips Pass 1 entirely and reduces to the unweighted v1 permute / accumulation.
 
+### End-to-end variants
+
+Two folders chain all five stages into a complete MoE forward pass — same Python golden, same C output, different orchestration:
+
+- **[full_moe_separate](full_moe_separate/)** — main.cpp calls each of the 5 launchers individually with an explicit `aclrtSynchronizeStream` after each, plus a host-side memcpy bridge to pad outVal from `(kT, kTopK)` to `(kT, kPadded)` between the topk and gather stages.
+- **[full_moe_combined](full_moe_combined/)** — main.cpp calls **one** wrapper launcher (`launchFullMoeCombined`) that fires six `__global__ AICORE` kernels on the same stream with **no** intermediate sync. The pad bridge is replaced by a small device-side `outval_pad` kernel. Only one final `aclrtSynchronizeStream` before reading C back to host.
+
+Both folders include their own `sweep.sh` for shape-axis testing (kT / kH / kF / kE / kTopK), patching local kernel copies under `./kernels/` rather than the original sub-folders.
+
 ## Sub-folders
 
 | Folder | Target | Kind | Status |
@@ -56,7 +65,9 @@ For `kTopK == 1` softmax is degenerate (single-value softmax = 1.0), so `gather`
 | [moe_topk_padded](moe_topk_padded/) | vec | generic top-K with `kGatherWidth = max(8, kTopK)` + valid-region crop | confirmed-built v1 (kT=256, kE=32, kTopK=1) |
 | [scatter](scatter/) | vec | pack tokens by expert; emits `A`, `A_id`, `rank_id`, `count`, `start` | confirmed-built v1 (kTopK=1); `rank_id` output added later |
 | [expert_ffn](expert_ffn/) | cube ×2 | two-stage GEMM1+ReLU / GEMM2 with overspill | confirmed-built v1 |
-| [gather](gather/) | vec | softmax-weighted scatter-add; `if kTopK==1` skips softmax | confirmed-built v1 (kTopK=1 = unweighted fast path); softmax path untested |
+| [gather](gather/) | vec | softmax-weighted scatter-add; `if kTopK==1` skips softmax | confirmed-built v1 (kTopK=1 = unweighted fast path); softmax path tested via sweep |
+| [full_moe_separate](full_moe_separate/) | mixed | end-to-end pipeline; 5 launches with sync between each + host-side outVal pad bridge | first version of end-to-end |
+| [full_moe_combined](full_moe_combined/) | mixed | end-to-end pipeline; one host wrapper fires 6 kernels on stream + device-side `outval_pad` + one final sync | first version of end-to-end with stream-orchestrated chain |
 
 "Confirmed-built v1" = user ran `bash run.sh -r npu -v Ascend910B1` at the v1 shape and saw `test data success`. Other shapes have not been observed yet — that's what `sweep_all.sh` is for.
 
