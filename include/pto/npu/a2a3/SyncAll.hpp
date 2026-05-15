@@ -229,18 +229,18 @@ PTO_INTERNAL void SYNCALL_SOFT_AIC_IMPL(__gm__ int32_t *gmWorkspace, __cbuf__ in
     const int32_t blockIdx = static_cast<int32_t>(get_block_idx());
     __gm__ int32_t *localSyncGM = gmWorkspace + blockIdx * SYNCALL_SOFT_SLOT_INT32;
 
-    const int32_t curValue = SYNCALL_SOFT_GM_LOAD(localSyncGM) + 1;
-    SYNCALL_SOFT_AIC_STORE_SLOT(localSyncGM, l1Workspace, curValue);
+    const int32_t curVal = SYNCALL_SOFT_GM_LOAD(localSyncGM) + 1;
+    SYNCALL_SOFT_AIC_STORE_SLOT(localSyncGM, l1Workspace, curVal);
 
-    int32_t pollCount = 0;
+    int32_t pollCnt = 0;
     while (true) {
-        if (pollCount > SYNCALL_SOFT_BACKOFF_THRESHOLD) {
+        if (pollCnt > SYNCALL_SOFT_BACKOFF_THRESHOLD) {
             pipe_barrier(PIPE_ALL);
         }
         int32_t readyCount = 0;
         for (int32_t i = 0; i < totalBlocks; ++i) {
             __gm__ int32_t *syncGM = gmWorkspace + i * SYNCALL_SOFT_SLOT_INT32;
-            if (SYNCALL_SOFT_GM_LOAD(syncGM) >= curValue) {
+            if (SYNCALL_SOFT_GM_LOAD(syncGM) >= curVal) {
                 ++readyCount;
             }
         }
@@ -248,8 +248,8 @@ PTO_INTERNAL void SYNCALL_SOFT_AIC_IMPL(__gm__ int32_t *gmWorkspace, __cbuf__ in
         if (readyCount >= totalBlocks) {
             break;
         }
-        ++pollCount;
-        if (pollCount >= SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
+        ++pollCnt;
+        if (pollCnt >= SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
             PTO_CPU_ASSERT(false, "SYNCALL soft AIC-only barrier timeout - possible deadlock");
             break;
         }

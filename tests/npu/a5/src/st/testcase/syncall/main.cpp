@@ -39,6 +39,7 @@ void LaunchSoftSyncAll(int32_t *out, int32_t *flags, int32_t *syncWorkspace, int
 void LaunchHardSyncAll(int32_t *out, int32_t *flags, int32_t totalBlocks, void *stream);
 void LaunchSoftSyncAllMix11(int32_t *out, int32_t *flags, int32_t *syncWorkspace, void *stream);
 void LaunchSoftSyncAllMix12(int32_t *out, int32_t *flags, int32_t *syncWorkspace, void *stream);
+void LaunchHardSyncAllAIC(int32_t *out, void *stream);
 
 #define EXPECT_ACL_OK(expr)                                             \
     do {                                                                \
@@ -300,6 +301,28 @@ TEST_F(SYNCALLTest, case_soft_mix_1_1_all_blocks)
     EXPECT_ACL_OK(aclrtFree(syncWorkspaceDevice));
     EXPECT_ACL_OK(aclrtFreeHost(outHost));
     EXPECT_ACL_OK(aclrtFreeHost(flagsHost));
+    EXPECT_ACL_OK(aclrtDestroyStream(stream));
+    EXPECT_ACL_OK(aclrtResetDevice(0));
+    EXPECT_ACL_OK(aclFinalize());
+}
+
+TEST_F(SYNCALLTest, case_hard_aic_only_all_blocks)
+{
+    constexpr int32_t blockCount = 18;
+    constexpr size_t byteSize = blockCount * sizeof(int32_t);
+
+    EXPECT_ACL_OK(aclInit(nullptr));
+    EXPECT_ACL_OK(aclrtSetDevice(0));
+    aclrtStream stream;
+    EXPECT_ACL_OK(aclrtCreateStream(&stream));
+
+    int32_t *outDevice = nullptr;
+    EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void **>(&outDevice), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
+
+    LaunchHardSyncAllAIC(outDevice, stream);
+    EXPECT_ACL_OK(aclrtSynchronizeStream(stream));
+
+    EXPECT_ACL_OK(aclrtFree(outDevice));
     EXPECT_ACL_OK(aclrtDestroyStream(stream));
     EXPECT_ACL_OK(aclrtResetDevice(0));
     EXPECT_ACL_OK(aclFinalize());
