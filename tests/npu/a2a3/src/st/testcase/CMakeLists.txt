@@ -222,10 +222,8 @@ tpushpop_subtile
 # These are excluded from the default "build everything" path so they do not
 # slow down CI. They are still valid TEST_CASE targets for local ST runs.
 set(OPT_IN_TESTCASES
-# Memory-access prefetch instruction (single-card cases)
-tprefetch_l2
-# Perf comparison: host pto::PTO_PREFETCH vs device pto::TPREFETCH_L2 (single-card)
-tprefetch_compare
+# Device-side async L2 prefetch: correctness + focused perf comparison
+tprefetch_async
 )
 
 if (AUTO_MODE)

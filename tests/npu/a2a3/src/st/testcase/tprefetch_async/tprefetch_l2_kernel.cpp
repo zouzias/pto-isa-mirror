@@ -9,13 +9,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 // ============================================================================
-// Single-card ST for pto::TPREFETCH_L2 (workspace API only).
-//
-// This file purposely does NOT pull in HCCL or any comm/* host infrastructure
-// beyond the host-side SdmaWorkspaceManager that allocates the SDMA workspace
-// (a runtime-only helper). Cross-rank coverage for TPREFETCH_L2 lives under
-// tests/npu/a2a3/comm/st/testcase/tprefetch_l2/ where TPUT_ASYNC / TGET test
-// drivers already require the full HCCL test scaffold.
+// Single-card ST for pto::TPREFETCH_L2 correctness. This file purposely does
+// NOT pull in HCCL or any comm/* host infrastructure beyond the host-side
+// SdmaWorkspaceManager that allocates the SDMA workspace.
 // ============================================================================
 
 #include <cstddef>
@@ -339,6 +335,11 @@ bool RunColdWarmPerfSweep(int kWarmup, int kMeasured, RunOnce &&runOnce, PrintSu
     uint64_t avgCold = coldTotal / static_cast<uint64_t>(kMeasured);
     uint64_t avgWarm = warmTotal / static_cast<uint64_t>(kMeasured);
     printSummary(avgCold, avgWarm);
+    if (avgWarm >= avgCold) {
+        std::cerr << "[ERROR] L2 prefetch did not reduce TLOAD latency: cold=" << avgCold
+                  << " cycles, warm=" << avgWarm << " cycles" << std::endl;
+        return false;
+    }
     return true;
 }
 

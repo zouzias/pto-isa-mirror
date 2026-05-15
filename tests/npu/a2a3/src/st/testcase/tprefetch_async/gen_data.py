@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+# coding=utf-8
 # --------------------------------------------------------------------------------
 # Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
@@ -8,4 +10,13 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 
-pto_vec_st(tprefetch_compare)
+import os
+
+
+def main():
+    # tprefetch_async is a runtime-only benchmark/correctness test; no golden data needed.
+    os.makedirs("testcases", exist_ok=True)
+
+
+if __name__ == "__main__":
+    main()

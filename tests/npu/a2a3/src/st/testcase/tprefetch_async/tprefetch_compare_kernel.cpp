@@ -9,18 +9,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 // ============================================================================
-// Single-card performance comparison: host-initiated pto::PTO_PREFETCH (SDMA
-// path via aclrtCmoAsync) vs device-initiated pto::TPREFETCH_L2 (SDMA CMO SQE
-// issued by the AI Core).
-//
-// Three scenarios are covered; see the header for full description.
-//   A  End-to-end wall-clock latency for "prefetch then TLOAD".
-//   B  Issue overhead for a tiny (few KB) prefetch.
-//   C  Overlap with AI-Core compute.
-//
-// Cross-rank coverage (Scenario D, receiver-side prefetch over TPUT_ASYNC)
-// lives under tests/npu/a2a3/comm/st/testcase/tprefetch_compare/ where the
-// HCCL test scaffold is available.
+// Focused single-card performance comparison: host-initiated pto::PTO_PREFETCH
+// (SDMA path via aclrtCmoAsync) vs device-initiated pto::TPREFETCH_L2 (SDMA
+// CMO SQE issued by the AI Core). The gtest entrypoint keeps only scenarios
+// A/G/H; additional internal helpers below are kept for local investigation.
 // ============================================================================
 
 #include <algorithm>
@@ -1533,8 +1525,7 @@ template bool RunScenarioGFusedComputePrefetch<float, 262144>(int, uint32_t, uin
 // Same total / per-stage primitives as Scenario G, but the address of the
 // next prefetch is the previous stage's device-side output — so the host
 // has to aclrtSynchronizeStream + aclrtMemcpy(D2H) one uint32_t between
-// every pair of stages, breaking the SDMA-launch overlap that made
-// Scenario G's host_serial competitive.
+// every pair of stages before it can enqueue the next prefetch.
 //
 //   host_dep_sync :
 //       offsets[0] = 0

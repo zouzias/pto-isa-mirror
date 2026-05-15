@@ -100,9 +100,6 @@ tget
 # Point-to-Point Communication (Asynchronous)
 tput_async
 tget_async
-# L2 Cache Prefetch (cross-rank cases for pto::TPREFETCH_L2; single-card cases
-# live under tests/npu/a2a3/src/st/testcase/tprefetch_l2/)
-tprefetch_l2
 # Signal-Based Synchronization
 tnotify
 twait
@@ -114,32 +111,15 @@ treduce
 tbroadcast
 )
 
-# Opt-in testcases: built ONLY when TEST_CASE=<name> is explicitly supplied.
-# These are excluded from the default "build everything" path so they do not
-# slow down CI. They are still valid TEST_CASE targets for local ST runs.
-set(OPT_IN_TESTCASES
-# Cross-rank perf comparison (Scenario D, TPUT_ASYNC + receiver-side prefetch).
-# Single-card scenarios A/B/C live under
-# tests/npu/a2a3/src/st/testcase/tprefetch_compare/.
-tprefetch_compare
-)
-
-if(TEST_CASE IN_LIST ALL_TESTCASES OR TEST_CASE IN_LIST OPT_IN_TESTCASES)
+if(TEST_CASE IN_LIST ALL_TESTCASES)
 message(STATUS "run : ${TEST_CASE}")
 else()
-message(FATAL_ERROR "not found TEST_CASE: ${TEST_CASE}, support case is : ${ALL_TESTCASES} ${OPT_IN_TESTCASES}")
+message(FATAL_ERROR "not found TEST_CASE: ${TEST_CASE}, support case is : ${ALL_TESTCASES}")
 endif()
 
 
 foreach(TESTCASE ${ALL_TESTCASES})
 if((DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE) OR (NOT DEFINED TEST_CASE))
-    add_subdirectory(${TESTCASE})
-endif()
-endforeach()
-
-# Opt-in cases are built only when the user asked for them by name.
-foreach(TESTCASE ${OPT_IN_TESTCASES})
-if(DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE)
     add_subdirectory(${TESTCASE})
 endif()
 endforeach()

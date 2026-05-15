@@ -14,15 +14,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 
 // ============================================================================
-// Single-card runners for pto::TPREFETCH_L2 (workspace API).
-//
-// Cross-rank coverage (TPUT_ASYNC + prefetch, remote TLOAD perf, TGET perf,
-// etc.) lives under tests/npu/a2a3/comm/st/testcase/tprefetch_l2/ since
-// those drivers depend on the HCCL test scaffold.
+// Single-card correctness runners for pto::TPREFETCH_L2.
 // ============================================================================
-
-template <typename T, size_t count>
-bool RunBaseline(int deviceId);
 
 template <typename T, size_t count>
 bool RunPrefetchL2Correctness(int deviceId);
@@ -30,6 +23,6 @@ bool RunPrefetchL2Correctness(int deviceId);
 template <typename T, size_t count>
 bool RunPrefetchL2RawPtr(int deviceId);
 
-// L2-cold vs L2-prefetched TLOAD latency (single-card)
+// Effectiveness check: TLOAD after TPREFETCH_L2 must be faster than cold TLOAD.
 template <typename T, size_t count>
 bool RunTloadPerf(int deviceId);
