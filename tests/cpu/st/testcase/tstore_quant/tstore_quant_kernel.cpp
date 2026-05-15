@@ -207,9 +207,8 @@ template void LaunchTStoreQuant<0, int8_t, float, 1, 1, 1, 2, 128, 1, 1, 1, 2, 1
 template void LaunchTStoreQuant<0, int16_t, int32_t, 1, 2, 1, 23, 121, 3, 2, 2, 35, 125, true, true, false>(int16_t *out, int32_t *src, uint64_t *fbQuant, void *stream);
 template void LaunchTStoreQuant<0, int8_t, int32_t, 2, 2, 3, 23, 47, 3, 3, 4, 32, 50, true, false, true>(int8_t *out, int32_t *src, uint64_t *fbQuant, void *stream);
 template void LaunchTStoreQuant<1, aclFloat16, float, 1, 1, 1, 4, 21, 1, 1, 1, 8, 32, false, true, true>(aclFloat16 *out, float *src, uint64_t *fbQuant, void *stream);
-template void LaunchTStoreQuant<1, int16_t, float, 3, 1, 1, 1, 124, 5, 1, 1, 2, 128, true, false, false>(int16_t *out, float *src, uint64_t *fbQuant, void *stream);
+template void LaunchTStoreQuant<1, aclFloat16, float, 3, 1, 1, 1, 124, 5, 1, 1, 2, 128, true, false, false>(aclFloat16 *out, float *src, uint64_t *fbQuant, void *stream);
 template void LaunchTStoreQuant<1, int8_t, int32_t, 2, 1, 2, 32, 32, 3, 4, 3, 64, 35, false, true, false>(int8_t *out, int32_t *src, uint64_t *fbQuant, void *stream);
 template void LaunchTStoreQuant<1, aclFloat16, float, 1, 1, 1, 16, 8, 1, 1, 2, 16, 8, false, false, true>(aclFloat16 *out, float *src, uint64_t *fbQuant, void *stream);
 template void LaunchTStoreQuant<1, int16_t, int32_t, 2, 2, 2, 16, 16, 5, 3, 3, 16, 16, false, false, false>(int16_t *out, int32_t *src, uint64_t *fbQuant, void *stream);
 template void LaunchTStoreQuant<1, int8_t, int32_t, 1, 2, 1, 16, 32, 2, 4, 2, 16, 32, true, true, true>(int8_t *out, int32_t *src, uint64_t *fbQuant, void *stream);
-   

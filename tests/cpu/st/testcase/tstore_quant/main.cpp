@@ -43,7 +43,7 @@ void test_tstore_quant()
 {
     size_t srcDataSize = gWholeShape0 * gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4 * sizeof(SrcDataType);
     size_t dstDataSize = gWholeShape0 * gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4 * sizeof(DstDataType);
-    size_t vectorSize = (is_v_quant ? 1 : (format == 0 ? gShape4 : gShape3)) * sizeof(uint64_t);
+    size_t vectorSize = (is_v_quant ? (format == 0 ? gWholeShape4 : gWholeShape3) : 1) * sizeof(uint64_t);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -123,7 +123,7 @@ TEST_F(TStoreQuantTest, DN_4)
 
 TEST_F(TStoreQuantTest, DN_5)
 {
-    test_tstore_quant<1, float, int16_t, 3, 1, 1, 1, 124, 5, 1, 1, 2, 128, true, false, false>();
+    test_tstore_quant<1, float, aclFloat16, 3, 1, 1, 1, 124, 5, 1, 1, 2, 128, true, false, false>();
 }
    
 TEST_F(TStoreQuantTest, DN_6)

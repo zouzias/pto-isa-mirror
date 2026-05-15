@@ -230,15 +230,15 @@ class GlobalTensorInfo:
 if __name__ == "__main__":
     # 用例名称
     case_name_list = [
-        "TStoreTest.ND_1",
-        "TStoreTest.ND_2",
-        "TStoreTest.ND_3",
-        "TStoreTest.DN_4",
-        "TStoreTest.DN_5",
-        "TStoreTest.DN_6",
-        "TStoreTest.NZ_7",
-        "TStoreTest.NZ_8",
-        "TStoreTest.NZ_9",
+        "TStoreQuantTest.ND_1",
+        "TStoreQuantTest.ND_2",
+        "TStoreQuantTest.ND_3",
+        "TStoreQuantTest.DN_4",
+        "TStoreQuantTest.DN_5",
+        "TStoreQuantTest.DN_6",
+        "TStoreQuantTest.DN_7",
+        "TStoreQuantTest.DN_8",
+        "TStoreQuantTest.DN_9",
     ]
 
     case_params_list = [
@@ -246,11 +246,11 @@ if __name__ == "__main__":
         GlobalTensorInfo(np.int32, np.int16, "ND", True, True, False, 1, 2, 1, 23, 121, 3, 2, 2, 35, 125),
         GlobalTensorInfo(np.int32, np.int8, "ND", True, False, True, 2, 2, 3, 23, 47, 3, 3, 4, 32, 50),
         GlobalTensorInfo(np.float32, np.float16, "DN",False, True, True, 1, 1, 1, 4, 21, 1, 1, 1, 8, 32),
-        GlobalTensorInfo(np.float32, np.int16, "DN", True, False, False, 3, 1, 1, 1, 124, 5, 1, 1, 2, 128),
+        GlobalTensorInfo(np.float32, np.float16, "DN", True, False, False, 3, 1, 1, 1, 124, 5, 1, 1, 2, 128),
         GlobalTensorInfo(np.int32, np.int8, "DN", False, True, False, 2, 1, 2, 32, 32, 3, 4, 3, 64, 35),
-        GlobalTensorInfo(np.float32, np.float16, "NZ", False, False, True, 1, 1, 1, 16, 8, 1, 1, 2, 16, 8),
-        GlobalTensorInfo(np.int32, np.int16, "NZ", False, False, False, 2, 2, 2, 16, 16, 5, 3, 3, 16, 16),
-        GlobalTensorInfo(np.int32, np.int8, "NZ", True, True, True, 1, 2, 1, 16, 32, 2, 4, 2, 16, 32),
+        GlobalTensorInfo(np.float32, np.float16, "DN", False, False, True, 1, 1, 1, 16, 8, 1, 1, 2, 16, 8),
+        GlobalTensorInfo(np.int32, np.int16, "DN", False, False, False, 2, 2, 2, 16, 16, 5, 3, 3, 16, 16),
+        GlobalTensorInfo(np.int32, np.int8, "DN", True, True, True, 1, 2, 1, 16, 32, 2, 4, 2, 16, 32),
     ]
 
     for i, case_name  in enumerate(case_name_list):
