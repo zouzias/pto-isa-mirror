@@ -156,6 +156,19 @@ struct AsyncEvent {
 
     PTO_INTERNAL bool Wait(const AsyncSession &session) const;
     PTO_INTERNAL bool Test(const AsyncSession &session) const;
+
+    // Workspace-based Wait/Test for SDMA events produced with the default
+    // single-queue SDMA layout. Do NOT use these on an AsyncEvent produced by
+    // a session-based API call with non-default SdmaBaseConfig - the queue
+    // layout would not match and the wait would poll the wrong slot.
+    PTO_INTERNAL bool Wait(__gm__ uint8_t *workspace) const;
+    PTO_INTERNAL bool Test(__gm__ uint8_t *workspace) const;
+
+    // 0-arg Wait/Test - convenience for AsyncEvents whose handle stores the
+    // workspace base address. Same caveat as above about not mixing with
+    // non-default-config session-based call sites.
+    PTO_INTERNAL bool Wait() const;
+    PTO_INTERNAL bool Test() const;
 };
 
 // ============================================================================
