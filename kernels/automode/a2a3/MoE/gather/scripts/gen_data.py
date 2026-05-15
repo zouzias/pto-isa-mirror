@@ -11,7 +11,7 @@
 #   ./input/input_B.bin       (kT*kTopK + 16) * kH    float32
 #   ./input/input_A_id.bin    (kT*kTopK + 16)         int32   (trailing 16 = -1)
 #   ./input/input_rank_id.bin (kT*kTopK + 16)         int32   (trailing 16 = -1, only consulted when kTopK > 1)
-#   ./input/input_outVal.bin   kT * kPadded           float32 (cols kTopK..kPadded-1 = -1e30)
+#   ./input/input_outVal.bin   kT * kPadded           float32 (cols kTopK..kPadded-1 = -1e4)
 #   ./output/golden_C.bin     kT * kH                 float32
 #
 #   kPadded = max(8, kTopK) — softmax tile column padding for 32-byte UB alignment.
@@ -39,7 +39,7 @@ kPadded       = max(8, kTopK)
 
 # Sentinel value for padded outVal columns. Must be very negative so that
 # exp(value - max) underflows to 0 in the kernel's softmax pipeline.
-kOutValPad    = -1e30
+kOutValPad    = -1e4
 
 
 def gen_golden_data():
@@ -67,7 +67,7 @@ def gen_golden_data():
     outVal_unsorted = np.random.uniform(-5.0, 5.0, size=(kT, kTopK)).astype(np.float32)
     outVal_sorted   = -np.sort(-outVal_unsorted, axis=1)   # descending per row
 
-    # Pad outVal columns kTopK..kPadded-1 with -1e30 so exp underflows to 0
+    # Pad outVal columns kTopK..kPadded-1 with -1e4 so exp underflows to 0
     # in the kernel softmax pipeline.
     outVal_padded = np.full((kT, kPadded), kOutValPad, dtype=np.float32)
     outVal_padded[:, :kTopK] = outVal_sorted
