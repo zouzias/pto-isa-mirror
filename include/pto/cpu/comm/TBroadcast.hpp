@@ -14,6 +14,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/pto_tile.hpp>
 #include <type_traits>
 
+#include "pto/comm/comm_types.hpp"
+
 namespace pto {
 namespace comm {
 template <typename GlobalData>
@@ -60,6 +62,19 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
                                   TileData &pongTile)
 {
     TBroadcast_Impl<ParallelGroupType, GlobalSrcData>(parallelGroup, srcGlobalData);
+}
+
+// CCU engine is only available on A5 NPU hardware.  Deferred-fail stub
+// mirroring the a2a3 pattern: the template name must exist in `pto::comm`
+// so that `::pto::comm::TBROADCAST_CCU_IMPL<engine>(...)` in pto_comm_inst.hpp
+// parses on CPU simulator builds; the static_assert depends on `engine` and
+// fires only if the overload is actually instantiated.
+template <CollEngine engine = CollEngine::CCU, typename... Args>
+PTO_INTERNAL void TBROADCAST_CCU_IMPL(Args &&...)
+{
+    static_assert(engine != CollEngine::CCU,
+                  "TBROADCAST<CollEngine::CCU> is not supported on the CPU simulator; "
+                  "CCU engine requires A5 NPU hardware.");
 }
 
 } // namespace comm
