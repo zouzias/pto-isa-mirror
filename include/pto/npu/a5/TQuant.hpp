@@ -1085,9 +1085,9 @@ PTO_INTERNAL void CalcQuantizedFP4E2M1Values_Half(__ubuf__ half *srcPtr, __ubuf_
     constexpr uint32_t kGroupSize = 32;
     constexpr uint32_t kPackedBytesPerGroup = kGroupSize / 2;
     uint32_t groupSize = kGroupSize;
-    uint32_t packedBytesPerGroup = kPackedBytesPerGroup;
+    uint32_t packedBytesPerGroupForPred = kPackedBytesPerGroup;
     MaskReg preg_b16 = CreatePredicate<half>(groupSize);
-    MaskReg preg_f32 = CreatePredicate<float>(packedBytesPerGroup);
+    MaskReg preg_f32 = CreatePredicate<float>(packedBytesPerGroupForPred);
     MaskReg preg_all_b16 = pset_b16(PAT_ALL);
     MaskReg preg_idx = pset_b8(PAT_ALL);
 
@@ -1127,7 +1127,7 @@ PTO_INTERNAL void CalcQuantizedFP4E2M1Values_Half(__ubuf__ half *srcPtr, __ubuf_
         CalcE2M1SignedCodeI32(v_odd_code, v_odd, preg_f32);
         PackE2M1SignedCodeBytes(v_output, v_even_code, v_odd_code, v_idx, preg_f32);
         mem_bar(VST_VST);
-        vstus(ureg_out, packedBytesPerGroup, (RegTensor<uint8_t> &)v_output, dstWritePtr, POST_UPDATE);
+        vstus(ureg_out, kPackedBytesPerGroup, (RegTensor<uint8_t> &)v_output, dstWritePtr, POST_UPDATE);
     }
     vstas(ureg_out, dstWritePtr, 0, POST_UPDATE);
 }
@@ -1142,7 +1142,6 @@ PTO_INTERNAL void CalcQuantizedFP4E2M1Values_Bf16(__ubuf__ bfloat16_t *srcPtr, _
     constexpr uint32_t kPackedBytesPerWindow = kElementsPerWindow / 2;
     constexpr uint32_t kPackedBytesPerHalfWindow = kPackedBytesPerWindow / 2;
     uint32_t groupSize = kGroupSize;
-    uint32_t packedBytesPerGroup = kPackedBytesPerGroup;
     MaskReg preg_b16_window = pset_b16(PAT_ALL);
     MaskReg preg_b16_group = CreatePredicate<bfloat16_t>(groupSize);
     MaskReg preg_idx = pset_b8(PAT_ALL);
@@ -1194,7 +1193,7 @@ PTO_INTERNAL void CalcQuantizedFP4E2M1Values_Bf16(__ubuf__ bfloat16_t *srcPtr, _
         vcvt(v_output_p0, v_scaled, preg_b16_group, ROUND_R, PART_P0);
         vselr((RegTensor<uint8_t> &)v_output, (RegTensor<uint8_t> &)v_output_p0, (RegTensor<uint8_t> &)v_idx);
         mem_bar(VST_VST);
-        vstus(ureg_out, packedBytesPerGroup, (RegTensor<uint8_t> &)v_output, dstWritePtr, POST_UPDATE);
+        vstus(ureg_out, kPackedBytesPerGroup, (RegTensor<uint8_t> &)v_output, dstWritePtr, POST_UPDATE);
     }
     vstas(ureg_out, dstWritePtr, 0, POST_UPDATE);
 }
