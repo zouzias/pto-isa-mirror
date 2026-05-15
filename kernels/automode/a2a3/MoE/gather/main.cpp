@@ -8,7 +8,7 @@
  *   ../input/input_B.bin       (kT*kTopK + 16) * kH    float32
  *   ../input/input_A_id.bin    (kT*kTopK + 16)         int32 (trailing 16 = -1)
  *   ../input/input_rank_id.bin (kT*kTopK + 16)         int32 (trailing 16 = -1, only consulted when kTopK > 1)
- *   ../input/input_outVal.bin  kT * kPadded            float32 (cols kTopK..kPadded-1 host-padded with -1e4)
+ *   ../input/input_outVal.bin  kT * kPadded            float32 (cols kTopK..kPadded-1 host-padded with -1e30)
  *   ../output/golden_C.bin     kT * kH                 float32
  *   ../output/output_C.bin     kT * kH                 float32 (kernel-emitted)
  *

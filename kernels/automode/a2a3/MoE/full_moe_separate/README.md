@@ -80,11 +80,11 @@ Per-row top-K of `logits`. Outputs `outVal` (kT × kTopK fp32, descending sorted
 
 ### Host bridge — outVal pad
 
-The gather kernel's softmax operates on a (kT, kPadded) tile where `kPadded = max(8, kTopK)` and cols `kTopK..kPadded-1` must hold `-1e4` so they neutralize the per-row softmax (`exp(-1e4 - real_max) = 0`). `moe_topk_padded` writes the compact `(kT, kTopK)` form, so this host bridge:
+The gather kernel's softmax operates on a (kT, kPadded) tile where `kPadded = max(8, kTopK)` and cols `kTopK..kPadded-1` must hold `-1e30` so they neutralize the per-row softmax (`exp(-1e30 - real_max) = 0`). `moe_topk_padded` writes the compact `(kT, kTopK)` form, so this host bridge:
 
-1. Pre-fills the host-side padded buffer with `-1e4`.
+1. Pre-fills the host-side padded buffer with `-1e30`.
 2. Reads compact form back to host.
-3. Memcpys the first `kTopK` floats of each row from compact into the padded buffer's first `kTopK` columns (the `kTopK..kPadded-1` cols stay `-1e4`).
+3. Memcpys the first `kTopK` floats of each row from compact into the padded buffer's first `kTopK` columns (the `kTopK..kPadded-1` cols stay `-1e30`).
 4. Copies the padded buffer back to device.
 
 This is one D2H + one H2D round-trip per pipeline run. The full_moe_combined folder avoids it by running a small device-side `outval_pad` kernel.

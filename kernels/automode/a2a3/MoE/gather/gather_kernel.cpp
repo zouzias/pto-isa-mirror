@@ -9,7 +9,7 @@
  *                rank_id          [kT*kTopK + 16]     int32 (only used when kTopK > 1)
  *                outVal           [kT, kPadded]       fp32  (only used when kTopK > 1;
  *                                                            cols kTopK..kPadded-1 host-padded
- *                                                            with -1e4 so exp() underflows to 0)
+ *                                                            with -1e30 so exp() underflows to 0)
  * Scratch  (GM): weights_scratch  [kT, kPadded]       fp32  (only used when kTopK > 1)
  * Outputs  (GM): C                [kT, kH]            fp32  (zero-initialized by host)
  *
@@ -71,7 +71,7 @@
  * lanes of a 32-byte block). See include/pto/npu/a2a3/TRowExpandSub.hpp:70-71.
  *
  * ===========================================================================
- * Why outVal cols kTopK..kPadded-1 are host-padded with -1e4
+ * Why outVal cols kTopK..kPadded-1 are host-padded with -1e30
  * ===========================================================================
  *
  * For kTopK in {1, 2, 4}, kPadded = 8 (32-byte alignment for fp32 UB).
@@ -80,9 +80,9 @@
  * tile width. If padding values were random, they'd corrupt the per-row
  * max (and through it, the softmax denominator and the weights).
  *
- * Filling padding with -1e4 (a very large negative) makes the softmax
+ * Filling padding with -1e30 (a very large negative) makes the softmax
  * pipeline neutralize them automatically:
- *     -1e4 - real_max  ≈ -10000 (well past fp32 exp underflow ~ -88)
+ *     -1e30 - real_max  ≈ -inf
  *     exp(-inf)         = 0
  *     0 contributes nothing to the row sum.
  *     0 / real_sum      = 0
@@ -91,7 +91,7 @@
  * a padding column at gather time.
  *
  * The host (scripts/gen_data.py for standalone, or a small pad step in the
- * end-to-end driver) is responsible for the -1e4 fill. Both pass the same
+ * end-to-end driver) is responsible for the -1e30 fill. Both pass the same
  * pre-padded outVal blob to this kernel.
  *
  * ===========================================================================
@@ -221,27 +221,13 @@ __global__ AICORE void runGather(
         SoftmaxGlobal outValGlobal (outVal);
         SoftmaxGlobal weightsGlobal(weights_scratch);
 
-        // Pipe barriers mirror tfa/pto_macro_fa_softmax.hpp:54-60. The
-        // auto-mode passes do not appear to insert RAW edges across this
-        // particular chain (TROWMAX broadcast tile -> TROWEXPANDSUB ->
-        // TEXP -> TROWSUM broadcast tile -> TROWEXPANDDIV), even though
-        // each dst/src pairing is a normal read-after-write on a Vec tile.
-        // Without these barriers, kTopK=1 still passes because it takes
-        // the fast path and skips the whole block; kTopK>1 reads stale
-        // data on hardware and the softmax outputs are wrong.
         TLOAD(valTile, outValGlobal);                  // (kT, kPadded) <- host-padded GM
         TROWMAX(maxTile, valTile, tmpTile);            // (kT, 8) broadcast max
-        pipe_barrier(PIPE_V);
         TROWEXPANDSUB(tmpTile, valTile, maxTile);      // val - max
         TEXP(expTile, tmpTile);                        // exp(val - max)
-        pipe_barrier(PIPE_V);
         TROWSUM(sumTile, expTile, tmpTile);            // (kT, 8) broadcast sum
-        pipe_barrier(PIPE_V);
         TROWEXPANDDIV(weightTile, expTile, sumTile);   // exp(...) / sum
         TSTORE(weightsGlobal, weightTile);             // -> GM scratch
-        // Pass-2 reads weights_scratch from GM via scalar accesses; flush
-        // pipe-V (the vector TSTORE) before those reads can fire.
-        pipe_barrier(PIPE_ALL);
 
         // ============================================================
         // Pass 2: weighted scatter-add. Per packed row:
