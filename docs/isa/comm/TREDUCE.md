@@ -29,32 +29,22 @@ treduce %group, %dst {op = #pto.reduce_op<Max>} : (!pto.group<...>, !pto.memref<
 ```
 Lowering introduces internal accumulator and receive tiles for the reduce pipeline; the C++ intrinsic requires explicit `accTileData`, `recvTileData` (or `accTileData`, `pingTileData`, `pongTileData`) operand(s).
 
-## Template Parameter
-
-- `engine`:
-    - `CollEngine::AIV` (default)
-    - `CollEngine::CCU` (Ascend950, NPU_ARCH 3510 only)
-
 ## C++ Intrinsic
 
 Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
 // Basic reduce (accumulator + receive tile)
-template <CollEngine engine = CollEngine::AIV,
-          typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... Args>
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, 
-                              TileData &accTileData, TileData &recvTileData, ReduceOp op, Args&... args);
+                              TileData &accTileData, TileData &recvTileData, ReduceOp op, WaitEvents&... events);
 
 // Ping-pong reduce (accumulator + ping + pong tiles for double buffering)
-template <CollEngine engine = CollEngine::AIV,
-          typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... Args>
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
                               TileData &accTileData, TileData &pingTileData, TileData &pongTileData,
-                              ReduceOp op, Args&... args);
+                              ReduceOp op, WaitEvents&... events);
 ```
-
-When `engine == CollEngine::CCU`, the first variadic argument must be a `CcuTriggerContext` containing the CKE slot VA and gate mask. The AIV kernel triggers the CKE gate; the actual reduce data path runs on the CCU engine.
 
 ## Constraints
 
@@ -71,8 +61,6 @@ When `engine == CollEngine::CCU`, the first variadic argument must be a `CcuTrig
 - **Chunked mode constraints** (when data exceeds a single UB tile):
     - If `TileData` has static `ValidRow`, `GetShape(DIM_3)` must be divisible by `ValidRow`. Use a Tile with `DYNAMIC` ValidRow for partial row support.
     - If `TileData` has static `ValidCol`, `GetShape(DIM_4)` must be divisible by `ValidCol`. Use a Tile with `DYNAMIC` ValidCol for partial column support.
-
-> **CCU path**: Unlike the AIV path where only root calls `TREDUCE`, the CCU path requires all ranks to register and launch the CCU kernel via host-side `HcclCcuKernelRegister` / `HcclCcuKernelLaunch`. See `tests/npu/a5/comm/st/testcase/treduce_ccu/` for a complete example.
 
 ## Examples
 

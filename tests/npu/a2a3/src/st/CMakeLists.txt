@@ -11,10 +11,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(pto_test)
 
-# bisheng/cce-ld does not support --dependency-file; disable linker dep tracking
-# that CMake 3.27+ enables by default.
-set(CMAKE_LINK_DEPENDS_USE_LINKER FALSE)
-
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

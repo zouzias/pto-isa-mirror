@@ -49,84 +49,6 @@ PTO_INST void TSYNC()
     TSYNC_IMPL<OpCode>();
 }
 
-template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
-PTO_INST void SYNCALL()
-{
-#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
-    SYNCALL_IMPL<CoreType>();
-#else
-    PTO_STATIC_ASSERT(CoreType != CoreType, "SYNCALL is not supported on this backend.");
-#endif
-}
-
-template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AIVOnly, typename GlobalData, typename TileData,
-          std::enable_if_t<is_global_data_v<GlobalData> && is_tile_data_v<TileData> && TileData::Loc == TileType::Vec,
-                           int> = 0>
-PTO_INST void SYNCALL(GlobalData &gmWorkspace, TileData &ubWorkspace, int32_t usedCores = 0)
-{
-#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
-    if constexpr (Mode == SyncAllMode::Hard) {
-        (void)gmWorkspace;
-        (void)ubWorkspace;
-        (void)usedCores;
-        SYNCALL_IMPL<CoreType>();
-    } else {
-#ifndef __PTO_AUTO__
-        SYNCALL_SOFT_IMPL<CoreType>(gmWorkspace.data(), ubWorkspace.data(), usedCores);
-#endif
-    }
-#else
-    PTO_STATIC_ASSERT(Mode != Mode, "SYNCALL is not supported on this backend.");
-#endif
-}
-
-template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AICOnly, typename GlobalData, typename TileData,
-          std::enable_if_t<is_global_data_v<GlobalData> && is_tile_data_v<TileData> && TileData::Loc == TileType::Mat,
-                           int> = 0>
-PTO_INST void SYNCALL(GlobalData &gmWorkspace, TileData &l1Workspace, int32_t usedCores = 0)
-{
-#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
-    PTO_STATIC_ASSERT(CoreType == SyncCoreType::AICOnly, "GM+L1 overload is for AIC-only mode.");
-    if constexpr (Mode == SyncAllMode::Hard) {
-        (void)gmWorkspace;
-        (void)l1Workspace;
-        (void)usedCores;
-        SYNCALL_IMPL<CoreType>();
-    } else {
-#ifndef __PTO_AUTO__
-        SYNCALL_SOFT_AIC_IMPL(gmWorkspace.data(), l1Workspace.data(), usedCores);
-#endif
-    }
-#else
-    PTO_STATIC_ASSERT(Mode != Mode, "SYNCALL is not supported on this backend.");
-#endif
-}
-
-template <
-    SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::Mix, typename GlobalData, typename UbTileData,
-    typename L1TileData,
-    std::enable_if_t<is_global_data_v<GlobalData> && is_tile_data_v<UbTileData> && UbTileData::Loc == TileType::Vec &&
-                         is_tile_data_v<L1TileData> && L1TileData::Loc == TileType::Mat,
-                     int> = 0>
-PTO_INST void SYNCALL(GlobalData &gmWorkspace, UbTileData &ubWorkspace, L1TileData &l1Workspace, int32_t usedCores = 0)
-{
-#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
-    if constexpr (Mode == SyncAllMode::Hard) {
-        (void)gmWorkspace;
-        (void)ubWorkspace;
-        (void)l1Workspace;
-        (void)usedCores;
-        SYNCALL_IMPL<CoreType>();
-    } else {
-#ifndef __PTO_AUTO__
-        SYNCALL_SOFT_MIX_IMPL<CoreType>(gmWorkspace.data(), ubWorkspace.data(), l1Workspace.data(), usedCores);
-#endif
-    }
-#else
-    PTO_STATIC_ASSERT(Mode != Mode, "SYNCALL is not supported on this backend.");
-#endif
-}
-
 template <typename... WaitEvents>
 PTO_INST void TSYNC(WaitEvents &...events)
 {
@@ -242,6 +164,25 @@ PTO_INST RecordEvent TPREFETCH(TileData &dst, GlobalData &src)
     MAP_INSTR_IMPL(TPREFETCH, dst, src);
     return {};
 }
+
+// ============================================================================
+// TPREFETCH_ASYNC - L2 cache prefetch via SDMA CMO (opcode = 6).
+//
+// Stages a contiguous GlobalTensor region into L2 cache so subsequent TLOADs
+// hit warm lines. The public compute API takes a compute-side prefetch context;
+// the implementation builds the SDMA session in that context, and callers can
+// wait on the returned event with evt.Wait(ctx.session).
+// ============================================================================
+#if (defined(__CCE_AICORE__) || defined(__CPU_SIM)) && !defined(__COSTMODEL) && !defined(PTO_COMM_NOT_SUPPORTED)
+
+template <typename GlobalData, typename... WaitEvents, std::enable_if_t<all_events_v<WaitEvents...>, int> = 0>
+PTO_INST comm::AsyncEvent TPREFETCH_ASYNC(GlobalData &srcGlobalData, PrefetchAsyncContext &ctx, WaitEvents &...events)
+{
+    TSYNC(events...);
+    return TPREFETCH_ASYNC_IMPL(srcGlobalData, ctx);
+}
+
+#endif // (__CCE_AICORE__ || __CPU_SIM) && !__COSTMODEL && !PTO_COMM_NOT_SUPPORTED
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents,
           std::enable_if_t<all_events_v<WaitEvents...>, int> = 0>
