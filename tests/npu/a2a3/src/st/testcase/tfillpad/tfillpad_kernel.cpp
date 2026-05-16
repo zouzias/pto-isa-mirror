@@ -169,6 +169,12 @@ AICORE void runTFILLPAD(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, 
     constexpr PadValue PadCustomNeg1_Bf16_Test = PadValueCustom((bfloat16_t)-1.0); // bf16 using bfloat16_t type
     static_assert(PadCustomNeg1_Bf16_Test == static_cast<PadValue>(0x000000010000BF80ULL),
                   "PadValueCustom bf16 encoding test");
+    constexpr PadValue PadCustomNeg1_Test = PadValueCustom(-1.0f);  // Test device usage
+    static_assert(PadCustomNeg1_Test == static_cast<PadValue>(0x00000001BF800000ULL), "PadValueCustom float device test");
+    constexpr PadValue PadCustomNeg1_Half_Test = PadValueCustom((half)-1.0);  // fp16 using half type
+    static_assert(PadCustomNeg1_Half_Test == static_cast<PadValue>(0x000000010000BC00ULL), "PadValueCustom16 fp16 device test");
+    constexpr PadValue PadCustomNeg1_Bf16_Test = PadValueCustom((bfloat16_t)-1.0);  // bf16 using bfloat16_t type
+    static_assert(PadCustomNeg1_Bf16_Test == static_cast<PadValue>(0x000000010000BF80ULL), "PadValueCustom bf16 encoding test");
     // Verify decoding: getCustomPadBits should return 0xBF80 (bf16 -1.0), NOT 0 from bits >> 16
     static_assert(getCustomPadBits(PadCustomNeg1_Bf16_Test) == 0xBF80U, "PadValueCustom bf16 decoding test");
 
