@@ -34,7 +34,7 @@ PTO_INTERNAL void pto_load_cbuf_to_cb(__cb__ T *dst, __cbuf__ T *src, uint16_t b
     load_cbuf_to_cb(dst, src, baseIdx, repeat, srcStride, dstStride, false, addr_cal_mode_t(0));
 #endif
 }
-#elif defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030)
+#else
 template <bool Transpose, typename T>
 PTO_INTERNAL void pto_load_cbuf_to_cb(__cb__ T *dst, __cbuf__ T *src, uint16_t mStartPosition, uint16_t kStartPosition,
                                       uint8_t mStep, uint8_t kStep, uint16_t srcStride, uint16_t dstStride)
@@ -42,5 +42,39 @@ PTO_INTERNAL void pto_load_cbuf_to_cb(__cb__ T *dst, __cbuf__ T *src, uint16_t m
     load_cbuf_to_cb(dst, src, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, Transpose);
 }
 #endif
+
+#if defined(PTO_NPU_ARCH_A2A3)
+template <typename T>
+PTO_INTERNAL void pto_vgatherb(__ubuf__ T *dst, __ubuf__ uint32_t *src, uint32_t offsetAddr, uint16_t dstRepeatStride,
+                               uint8_t dstBlockStride, uint8_t repeat)
+{
+    vgatherb(dst, src, offsetAddr, dstRepeatStride, dstBlockStride, repeat);
+}
+#else
+template <typename T, typename U, typename S>
+PTO_INTERNAL void pto_vgatherb(T &dstReg, __ubuf__ U *base, S &idxReg, vector_bool &mask)
+{
+#if defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
+    vgatherb(dstReg, base, idxReg);
+#else
+    vgatherb(dstReg, base, idxReg, mask);
+#endif
+}
+#endif
+
+template <typename T, typename U>
+PTO_INTERNAL void pto_create_cbuf_matrix(__cbuf__ T *dst, int64_t repeatConfig, U value)
+{
+#if defined(PTO_NPU_ARCH_KIRIN9030)
+    set_l0_set_value_ui((uint32_t)value);
+    set_l1_2d(dst, repeatConfig);
+#else
+    if constexpr (std::is_same<T, bfloat16_t>::value) {
+        create_cbuf_matrix_bf16(dst, repeatConfig, value);
+    } else {
+        create_cbuf_matrix(dstPtr, repeatConfig, value);
+    }
+#endif
+}
 
 #endif // ARCH_CCE_INTRINSIC_HPP
