@@ -421,7 +421,7 @@ int get_input_golden_case(uint8_t *input, uint8_t *golden)
                             gold_arr[x0][x1][x2][i][j] = t_padVal;
                         }
                     } // j
-                }     // i
+                } // i
 
     std::copy((uint8_t *)in_arr, ((uint8_t *)(in_arr)) + in_byteSize, input);
     std::copy((uint8_t *)gold_arr, ((uint8_t *)(gold_arr)) + out_byteSize, golden);
