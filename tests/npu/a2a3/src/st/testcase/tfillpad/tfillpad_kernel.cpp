@@ -119,7 +119,7 @@ AICORE void runTFILLPAD(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, 
     // Avoid stack dcache miss
     {
 #define INIT_STACK 8192
-        uint64_t stack[INIT_STACK / sizeof(uint64_t)]; // 8KB
+        uint64_t stack[INIT_STACK / sizeof(uint64_t)];              // 8KB
         volatile uint64_t *pStack = stack;
         for (int i = 0; i < INIT_STACK; i += 64 / sizeof(uint64_t)) // cacheline is 64B
         {
@@ -160,6 +160,15 @@ AICORE void runTFILLPAD(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, 
             out + dstOffset, gShape0, gShape1, gShape2, kGTRows, kTCols_); // dst TStore GlobalTensor just use static
 
     volatile uint64_t t0, t1, t2;
+    constexpr PadValue PadCustomNeg1_Test = PadValueCustom(-1.0f); // Test device usage
+    static_assert(PadCustomNeg1_Test == static_cast<PadValue>(0x00000001BF800000ULL),
+                  "PadValueCustom float device test");
+    constexpr PadValue PadCustomNeg1_Half_Test = PadValueCustom((half)-1.0); // fp16 using half type
+    static_assert(PadCustomNeg1_Half_Test == static_cast<PadValue>(0x000000010000BC00ULL),
+                  "PadValueCustom16 fp16 device test");
+    constexpr PadValue PadCustomNeg1_Bf16_Test = PadValueCustom((bfloat16_t)-1.0); // bf16 using bfloat16_t type
+    static_assert(PadCustomNeg1_Bf16_Test == static_cast<PadValue>(0x000000010000BF80ULL),
+                  "PadValueCustom bf16 encoding test");
     constexpr PadValue PadCustomNeg1_Test = PadValueCustom(-1.0f); // Test device usage
     static_assert(PadCustomNeg1_Test == static_cast<PadValue>(0x00000001BF800000ULL),
                   "PadValueCustom float device test");
