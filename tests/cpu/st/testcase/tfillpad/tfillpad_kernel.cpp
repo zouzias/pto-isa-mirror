@@ -20,6 +20,7 @@ using namespace pto;
 // Custom pad value constant for -1.0f (bit pattern 0xBF800000)
 constexpr PadValue PadCustomNeg1 = PadValueCustom(-1.0f);
 constexpr PadValue PadCustomNeg1_Half = PadValueCustom16(0xBC00); // fp16 -1.0
+constexpr PadValue PadCustomNeg1_Half = PadValueCustom16(0xBC00); // fp16 -1.0
 
 #define LOGSIZE 128
 #define PRINTLOG 4
