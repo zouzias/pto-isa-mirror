@@ -1,24 +1,27 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
+
+#include <sys/time.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
-#include <sys/time.h>
-
-#include <pto/pto-inst.hpp>
 #include <pto/comm/pto_comm_inst.hpp>
+#include <pto/pto-inst.hpp>
+
+#include "common.hpp"
 #include "pto/common/pto_tile.hpp"
 #include "pto/npu/comm/async/sdma/sdma_types.hpp"
-#include "common.hpp"
 
 constexpr size_t kTileElems = 1024;
 constexpr size_t kBytesPerKiB = 1024;
@@ -572,7 +575,9 @@ bool RunTGetBandwidthSweepKernel(int rankId, int nRanks, int nDevices, int first
         }
 
         if (rankId == rootRank) {
-            std::cout << "\n================ TGET/TGET_ASYNC Bandwidth Sweep ================" << std::endl;
+            std::cout << "\n================ TGET/TGET_ASYNC Bandwidth Sweep "
+                         "================"
+                      << std::endl;
             std::cout << "peer_rank=" << peerRank << " dtype=float tile_elems=" << kTileElems << std::endl;
         }
 

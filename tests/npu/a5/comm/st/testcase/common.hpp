@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #pragma once
@@ -28,7 +30,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 // ============================================================================
 // Debug logging helpers. Enabled by cmake -DDEBUG_MODE=ON (defines COMM_DEBUG).
-// Uses COMM_DEBUG instead of _DEBUG to avoid activating PTO's PTO_ASSERT which calls cce::printf (unsupported on A5).
+// Uses COMM_DEBUG instead of _DEBUG to avoid activating PTO's PTO_ASSERT which
+// calls cce::printf (unsupported on A5).
 // ============================================================================
 #ifdef COMM_DEBUG
 #include <chrono>
@@ -113,7 +116,8 @@ struct Mc2CommConfigV2 {
 };
 
 // ============================================================================
-// Device-side helper: convert a local window pointer to the equivalent address on a remote rank.
+// Device-side helper: convert a local window pointer to the equivalent address
+// on a remote rank.
 // ============================================================================
 template <typename T>
 AICORE inline __gm__ T *HcclRemotePtr(__gm__ HcclDeviceContext *ctx, __gm__ T *localPtr, int pe)
@@ -247,9 +251,8 @@ struct TestContext {
             return false;
         }
 
-        COMM_LOG("[INFO] Rank " << rankId << " hccl init OK"
-                                << " rankId=" << hostCtx.rankId << " rankNum=" << hostCtx.rankNum
-                                << " winSize=" << hostCtx.winSize);
+        COMM_LOG("[INFO] Rank " << rankId << " hccl init OK" << " rankId=" << hostCtx.rankId
+                                << " rankNum=" << hostCtx.rankNum << " winSize=" << hostCtx.winSize);
         for (uint32_t i = 0; i < hostCtx.rankNum && i < HCCL_MAX_RANK_NUM; ++i) {
             COMM_LOG("[INFO] Rank " << rankId << ": windowsIn[" << i << "]=0x" << std::hex << hostCtx.windowsIn[i]
                                     << " windowsOut[" << i << "]=0x" << hostCtx.windowsOut[i] << std::dec);
@@ -393,9 +396,10 @@ static int MpiBarrierWrapper(void *ctx)
 // ============================================================================
 // UrmaTestContext: shared URMA host setup for TGET_ASYNC / TPUT_ASYNC ST.
 //
-// Allocates huge-page symmetric GM, runs UrmaWorkspaceManager::Init (HCCP MR + Jetty + bootstrap allgather).
-// Peer symmetric bases for device code come from UrmaMemInfo in the workspace (UrmaPeerMrBaseAddr),
-// not a separate MPI pointer table — same data as RegMemResultInfo.address.
+// Allocates huge-page symmetric GM, runs UrmaWorkspaceManager::Init (HCCP MR +
+// Jetty + bootstrap allgather). Peer symmetric bases for device code come from
+// UrmaMemInfo in the workspace (UrmaPeerMrBaseAddr), not a separate MPI pointer
+// table — same data as RegMemResultInfo.address.
 // ============================================================================
 struct UrmaTestContext {
     int deviceId{-1};
@@ -407,7 +411,8 @@ struct UrmaTestContext {
     size_t allocSize{0};
     UrmaWorkspaceManager urmaMgr;
 
-    // Allocate huge-page device memory (2MB aligned, required by URMA MR registration).
+    // Allocate huge-page device memory (2MB aligned, required by URMA MR
+    // registration).
     bool AllocHugePageBuffer(size_t commBytesNeeded)
     {
         constexpr size_t kHugePageSize = 2UL * 1024 * 1024;
@@ -476,8 +481,9 @@ struct UrmaTestContext {
 
 // ============================================================================
 // RunUrmaTestMpiLaunch: MPI-based multi-rank launch for standalone URMA tests.
-// KernelFn: (rank_id, n_ranks, n_devices, first_device_id, first_rank_id, root_rank).
-// URMA peer index in workspace is CommMpiRank() == rank_id - first_rank_id.
+// KernelFn: (rank_id, n_ranks, n_devices, first_device_id, first_rank_id,
+// root_rank). URMA peer index in workspace is CommMpiRank() == rank_id -
+// first_rank_id.
 // ============================================================================
 using UrmaKernelFn = bool (*)(int, int, int, int, int, int);
 

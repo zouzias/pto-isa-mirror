@@ -1,17 +1,19 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include <pto/common/constants.hpp>
-#include <limits>
 #include <algorithm>
+#include <limits>
+#include <pto/common/constants.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace std;
 using namespace pto;
@@ -106,9 +108,6 @@ inline AICORE uint64_t get_syscnt() // dont use get_sys_cnt(), need volatile for
     return syscnt;
 }
 
-#define type_32_aligned(T) (32 / sizeof(T))
-#define align_to_32B(x, T) ((((x) + type_32_aligned(T) - 1) / type_32_aligned(T)) * (type_32_aligned(T)));
-
 template <typename T, int shape0, int shape1, int shape2, int shape3, int shape4, int kTRows_, int kTCols_, int dyn_,
           PadValue LoadPadVal_ = PadValue::Null, PadValue FillPadVal_ = PadValue::Null, bool inplace = false,
           bool expand = false>
@@ -157,7 +156,8 @@ AICORE void runTFILLPAD(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, 
     int dstOffset = (block_idx) * (shape3 / block_num) * kTCols_;
     auto dstGlobal =
         getGlobalTensor<T, shape0, shape1, shape2, shape3, kTCols_, kGTRows, kTCols_, BLayout::RowMajor, 0>(
-            out + dstOffset, gShape0, gShape1, gShape2, kGTRows, kTCols_); // dst TStore GlobalTensor just use static
+            out + dstOffset, gShape0, gShape1, gShape2, kGTRows,
+            kTCols_); // dst TStore GlobalTensor just use static
 
     volatile uint64_t t0, t1, t2;
     constexpr PadValue PadCustomNeg1_Test = PadValueCustom(-1.0f); // Test device usage
@@ -169,7 +169,8 @@ AICORE void runTFILLPAD(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, 
     constexpr PadValue PadCustomNeg1_Bf16_Test = PadValueCustom((bfloat16_t)-1.0); // bf16 using bfloat16_t type
     static_assert(PadCustomNeg1_Bf16_Test == static_cast<PadValue>(0x000000010000BF80ULL),
                   "PadValueCustom bf16 encoding test");
-    // Verify decoding: getCustomPadBits should return 0xBF80 (bf16 -1.0), NOT 0 from bits >> 16
+    // Verify decoding: getCustomPadBits should return 0xBF80 (bf16 -1.0), NOT 0
+    // from bits >> 16
     static_assert(getCustomPadBits(PadCustomNeg1_Bf16_Test) == 0xBF80U, "PadValueCustom bf16 decoding test");
 
     // Test custom pad bits extraction for each type (catches decode bugs!)
@@ -189,7 +190,8 @@ AICORE void runTFILLPAD(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, 
     if constexpr (expand) {
         using TileData = Tile<TileType::Vec, T, kTRows_, shape4_aligned, BLayout::RowMajor, -1, -1, SLayout::NoneBox,
                               512, LoadPadVal_>;
-        // using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
+        // using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_,
+        // BLayout::RowMajor, -1, -1>;
 
         TileData vecTile(shape3, shape4);
         TASSIGN(vecTile, (uint64_t)ubaddr0);
@@ -205,7 +207,8 @@ AICORE void runTFILLPAD(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, 
     } else {
         using TileData =
             Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512, LoadPadVal_>;
-        // using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
+        // using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_,
+        // BLayout::RowMajor, -1, -1>;
 
         TileData vecTile(shape3, shape4);
         TASSIGN(vecTile, (uint64_t)ubaddr0);
@@ -235,7 +238,8 @@ AICORE void runTFILLPAD(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, 
     set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
 #endif
-    t2 = get_syscnt(); /*FIXME: compile would insert a dcci at above set/wait t2 timing may not be very correct*/
+    t2 = get_syscnt(); /*FIXME: compile would insert a dcci at above set/wait t2
+                          timing may not be very correct*/
     LOG(t0);
     LOG(t1 - t0);
     LOG(t2 - t1);
@@ -326,7 +330,8 @@ extern "C" __global__ AICORE void launchTFILLPAD_12(__gm__ uint8_t *out, __gm__ 
         (__gm__ float *)out, (__gm__ float *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
-// Case 13: Custom pad value for both TLOAD and TFILLPAD (32B unaligned: 127 cols)
+// Case 13: Custom pad value for both TLOAD and TFILLPAD (32B unaligned: 127
+// cols)
 extern "C" __global__ AICORE void launchTFILLPAD_13(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
                                                     int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
 {
@@ -421,7 +426,7 @@ int get_input_golden_case(uint8_t *input, uint8_t *golden)
                             gold_arr[x0][x1][x2][i][j] = t_padVal;
                         }
                     } // j
-                }     // i
+                } // i
 
     std::copy((uint8_t *)in_arr, ((uint8_t *)(in_arr)) + in_byteSize, input);
     std::copy((uint8_t *)gold_arr, ((uint8_t *)(gold_arr)) + out_byteSize, golden);
@@ -458,30 +463,37 @@ int get_input_golden(uint8_t *input, uint8_t *golden)
     return 0;
 }
 
-template void launchTFILLPAD<1>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);  // 实例化 Key=0 的版本
-template void launchTFILLPAD<2>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);  // 实例化 Key=0 的版本
-template void launchTFILLPAD<3>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);  // 实例化 Key=0 的版本
-template void launchTFILLPAD<4>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);  // 实例化 Key=0 的版本
-template void launchTFILLPAD<5>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);  // 实例化 Key=0 的版本
-template void launchTFILLPAD<6>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);  // 实例化 Key=0 的版本
-template void launchTFILLPAD<7>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);  // 实例化 Key=0 的版本
-template void launchTFILLPAD<8>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);  // 实例化 Key=0 的版本
-template void launchTFILLPAD<9>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);  // 实例化 Key=0 的版本
-template void launchTFILLPAD<10>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
-template void launchTFILLPAD<11>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
-template void launchTFILLPAD<12>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
-template void launchTFILLPAD<13>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
+#define INSTANTIATE_TFILLPAD(Key) \
+    template void launchTFILLPAD<Key>(uint8_t * out, uint8_t * src, uint64_t * gLog, void *stream)
+#define INSTANTIATE_TFILLPAD_GOLDEN(Key) template int get_input_golden<Key>(uint8_t * input, uint8_t * golden)
 
-template int get_input_golden<1>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<2>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<3>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<4>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<5>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<6>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<7>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<8>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<9>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<10>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<11>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<12>(uint8_t *input, uint8_t *golden);
-template int get_input_golden<13>(uint8_t *input, uint8_t *golden);
+INSTANTIATE_TFILLPAD(1);
+INSTANTIATE_TFILLPAD(2);
+INSTANTIATE_TFILLPAD(3);
+INSTANTIATE_TFILLPAD(4);
+INSTANTIATE_TFILLPAD(5);
+INSTANTIATE_TFILLPAD(6);
+INSTANTIATE_TFILLPAD(7);
+INSTANTIATE_TFILLPAD(8);
+INSTANTIATE_TFILLPAD(9);
+INSTANTIATE_TFILLPAD(10);
+INSTANTIATE_TFILLPAD(11);
+INSTANTIATE_TFILLPAD(12);
+INSTANTIATE_TFILLPAD(13);
+
+INSTANTIATE_TFILLPAD_GOLDEN(1);
+INSTANTIATE_TFILLPAD_GOLDEN(2);
+INSTANTIATE_TFILLPAD_GOLDEN(3);
+INSTANTIATE_TFILLPAD_GOLDEN(4);
+INSTANTIATE_TFILLPAD_GOLDEN(5);
+INSTANTIATE_TFILLPAD_GOLDEN(6);
+INSTANTIATE_TFILLPAD_GOLDEN(7);
+INSTANTIATE_TFILLPAD_GOLDEN(8);
+INSTANTIATE_TFILLPAD_GOLDEN(9);
+INSTANTIATE_TFILLPAD_GOLDEN(10);
+INSTANTIATE_TFILLPAD_GOLDEN(11);
+INSTANTIATE_TFILLPAD_GOLDEN(12);
+INSTANTIATE_TFILLPAD_GOLDEN(13);
+
+#undef INSTANTIATE_TFILLPAD_GOLDEN
+#undef INSTANTIATE_TFILLPAD
