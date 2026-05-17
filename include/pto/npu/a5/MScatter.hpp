@@ -16,27 +16,16 @@ full text of the License.
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 
+#include <pto/common/gather_scatter.hpp>
+
 #include "common.hpp"
 #include "utils.hpp"
 
 namespace pto {
 
-enum class ScatterAtomicOp : uint8_t
-{
-    None = 0, // Non-atomic write
-    Add = 1,  // Atomic addition
-    Max = 2,  // Atomic maximum
-    Min = 3   // Atomic minimum
-};
+using ScatterAtomicOp = ::pto::ScatterAtomicOp;
 
-enum class ScatterOOB : uint8_t
-{
-    Undefined = 0, // No bounds check
-    Skip = 1,      // Skip OOB writes (no memory access)
-    Clamp = 2,     // Clamp to valid range
-    Wrap = 3       // Modulo wrap
-};
-
+using ScatterOOB = ::pto::ScatterOOB;
 template <typename T, ScatterAtomicOp Atomic>
 struct IsValidScatterAtomic {
     static constexpr bool value =

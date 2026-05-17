@@ -16,6 +16,9 @@ full text of the License.
 #include <pto/common/constants.hpp>
 
 #include "pto/costmodel/costmodel_types.hpp"
+// Required standard headers
+#include <vector>
+#include <type_traits>
 
 namespace pto {
 constexpr unsigned SMALL_RPT_BINOP = 4;

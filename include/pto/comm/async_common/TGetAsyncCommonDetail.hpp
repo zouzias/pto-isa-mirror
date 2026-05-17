@@ -10,8 +10,8 @@ PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
 full text of the License.
 */
 
-#ifndef PTO_COMM_TGET_ASYNC_HPP
-#define PTO_COMM_TGET_ASYNC_HPP
+#ifndef PTO_COMM_TGET_ASYNC_COMMON_DETAIL_HPP
+#define PTO_COMM_TGET_ASYNC_COMMON_DETAIL_HPP
 
 #include "pto/comm/async/async_types.hpp"
 #include "pto/comm/comm_types.hpp"
@@ -187,4 +187,4 @@ PTO_INTERNAL AsyncEvent TGET_ASYNC_IMPL(GlobalDstData &dstGlobalData, GlobalSrcD
 } // namespace comm
 } // namespace pto
 
-#endif // PTO_COMM_TGET_ASYNC_HPP
+#endif // PTO_COMM_TGET_ASYNC_COMMON_DETAIL_HPP

@@ -16,18 +16,14 @@ full text of the License.
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 
+#include <pto/common/gather_scatter.hpp>
+
 #include "common.hpp"
 #include "utils.hpp"
 
 namespace pto {
 
-enum class GatherOOB : uint8_t
-{
-    Undefined = 0, // No bounds check
-    Clamp = 1,     // Clamp to valid range [0, tableSize-1]
-    Wrap = 2,      // Modulo wrap (idx % tableSize)
-    Zero = 3       // Return zero for OOB accesses
-};
+using GatherOOB = ::pto::GatherOOB;
 
 namespace mgather_cfg {
 constexpr uint32_t WARP_SIZE = 32;

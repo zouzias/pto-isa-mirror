@@ -14,6 +14,10 @@ full text of the License.
 #define PTO_COMM_TPUT_ASYNC_HPP
 
 #include "pto/comm/async_common/TGetAsyncCommonDetail.hpp"
+#include "pto/npu/comm/async/sdma/sdma_async_intrin.hpp"
+#ifdef PTO_URMA_SUPPORTED
+#include "pto/npu/comm/async/urma/urma_async_intrin.hpp"
+#endif
 
 namespace pto {
 namespace comm {

@@ -16,6 +16,7 @@ full text of the License.
 #include "pto/common/debug.h"
 #include "pto/common/event.hpp"
 #include "pto/common/fifo.hpp"
+#include "pto/common/gather_scatter.hpp"
 #include "pto/common/pto_instr_impl.hpp"
 #include "pto/common/tassign_check.hpp"
 #if !defined(__COSTMODEL) && !defined(PTO_COMM_NOT_SUPPORTED)
