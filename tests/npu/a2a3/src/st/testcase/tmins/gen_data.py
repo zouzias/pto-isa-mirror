@@ -62,7 +62,7 @@ def gen_golden_data(case_name, param):
 
 
 class TMinsParams:
-    def __init__(self, dtype, dst_tile_row, dst_tile_col, src0_tile_row, src0_tile_col, src1_tile_row, src1_tile_col, 
+    def __init__(self, dtype, dst_tile_row, dst_tile_col, src0_tile_row, src0_tile_col, src1_tile_row, src1_tile_col,
                  valid_row, valid_col, pad_value_type=PAD_VALUE_NULL):
         self.dtype = dtype
         self.dst_tile_row = dst_tile_row
@@ -70,7 +70,7 @@ class TMinsParams:
         self.src0_tile_row = src0_tile_row
         self.src0_tile_col = src0_tile_col
         self.src1_tile_row = src1_tile_row
-        self.src1_tile_col = src1_tile_col 
+        self.src1_tile_col = src1_tile_col
         self.valid_row = valid_row
         self.valid_col = valid_col
         self.pad_value_type = pad_value_type

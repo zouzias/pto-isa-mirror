@@ -1,18 +1,20 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TMOV_HPP
 #define TMOV_HPP
-#include "common.hpp"
 #include "TExtract.hpp"
 #include "TPartAdd.hpp"
+#include "common.hpp"
 
 namespace pto {
 template <typename DstTile, typename SrcTile>
@@ -28,7 +30,8 @@ __tf__ AICORE void TMovToBt(typename DstTile::TileDType __out__ dst, typename Sr
     static_assert(DstTile::Cols % BIAS_TABLE_UNIT_ELEM == 0,
                   "Fix: TMov: When TileType is Bias, col must be aligned to 16.");
     static_assert(DstTile::Cols * sizeof(DstType) <= PTO_BIAS_SIZE_BYTES,
-                  "Fix: TMov: The memory occupation of BiasTile exceeds 1.0KB bias table size.");
+                  "Fix: TMov: The memory occupation of BiasTile exceeds 1.0KB "
+                  "bias table size.");
 
     __cbuf__ SrcType *srcP = (__cbuf__ SrcType *)(src);
     uint64_t dstAddr = (uint64_t)dst;
@@ -46,9 +49,11 @@ __tf__ AICORE void TMovToFb(typename DstTile::TileDType __out__ dst, typename Sr
     constexpr const int FIXPIPE_BUFFER_SIZE = 7 * 1024;
     static_assert(SrcTile::Rows == 1, "TMov: When TileType is Scaling, row must be 1.");
     static_assert(DstTile::Cols * sizeof(DstType) % FIXPIPE_BUFFER_UNIT == 0,
-                  "TMov: When TileType is Scaling, col * sizeof(Dtype) must be aligned to 128.");
+                  "TMov: When TileType is Scaling, col * sizeof(Dtype) must be "
+                  "aligned to 128.");
     static_assert(DstTile::Cols * sizeof(DstType) <= FIXPIPE_BUFFER_SIZE,
-                  "TMov: The memory occupation of FbTile exceeds 7.0KB fixpipe buffer size.");
+                  "TMov: The memory occupation of FbTile exceeds 7.0KB fixpipe "
+                  "buffer size.");
 
     __cbuf__ SrcType *srcP = (__cbuf__ SrcType *)(src);
     __fbuf__ DstType *dstP = (__fbuf__ DstType *)(dst);
@@ -88,9 +93,9 @@ PTO_INTERNAL constexpr uint32_t GetTmovAccDstStride()
     } else if constexpr (!DstTile::isRowMajor && DstTile::SFractal == SLayout::NoneBox) {
         return DstTile::Rows;
     }
-    constexpr bool channelSplitEnable =
-        (!DstTile::isRowMajor && (DstTile::SFractal == SLayout::RowMajor)) &&
-        (std::is_same_v<typename DstTile::DType, float>)&&(DstTile::SFractalSize == 512);
+    constexpr bool channelSplitEnable = (!DstTile::isRowMajor && (DstTile::SFractal == SLayout::RowMajor)) &&
+                                        (std::is_same_v<typename DstTile::DType, float>) &&
+                                        (DstTile::SFractalSize == 512);
     constexpr uint32_t c0Size = (!channelSplitEnable) &&
                                         (!DstTile::isRowMajor && (DstTile::SFractal == SLayout::RowMajor)) &&
                                         (DstTile::SFractalSize == 1024) ?
@@ -112,9 +117,9 @@ __tf__ AICORE void TMovCcToCb(typename DstTile::TileDType __out__ dst, typename 
             Dst Tile Cols * sizeof(dstType) must be multiples of 32 and not 0 when nz2nz.");
     constexpr int32_t c0Size = BLOCK_BYTE_SIZE / sizeof(dstType);
     constexpr bool enableNz2Nz = (!DstTile::isRowMajor && DstTile::SFractal == SLayout::RowMajor);
-    constexpr bool channelSplitEnable =
-        (!DstTile::isRowMajor && (DstTile::SFractal == SLayout::RowMajor)) &&
-        (std::is_same_v<typename DstTile::DType, float>)&&(DstTile::SFractalSize == 512);
+    constexpr bool channelSplitEnable = (!DstTile::isRowMajor && (DstTile::SFractal == SLayout::RowMajor)) &&
+                                        (std::is_same_v<typename DstTile::DType, float>) &&
+                                        (DstTile::SFractalSize == 512);
     if constexpr (enableNz2Nz) {
         validRow = SrcTile::Rows;
         if constexpr (std::is_same_v<typename DstTile::DType, float>) {
@@ -155,9 +160,9 @@ __tf__ AICORE void TMovCcToUb(typename DstTile::TileDType __out__ dst, typename 
     constexpr bool enableNz2Nd = (DstTile::isRowMajor && DstTile::SFractal == SLayout::NoneBox);
     constexpr bool enableNz2Dn = (!DstTile::isRowMajor && DstTile::SFractal == SLayout::NoneBox);
     constexpr bool enableNz2Nz = (!DstTile::isRowMajor && DstTile::SFractal == SLayout::RowMajor);
-    constexpr bool channelSplitEnable =
-        (!DstTile::isRowMajor && (DstTile::SFractal == SLayout::RowMajor)) &&
-        (std::is_same_v<typename DstTile::DType, float>)&&(DstTile::SFractalSize == 512);
+    constexpr bool channelSplitEnable = (!DstTile::isRowMajor && (DstTile::SFractal == SLayout::RowMajor)) &&
+                                        (std::is_same_v<typename DstTile::DType, float>) &&
+                                        (DstTile::SFractalSize == 512);
     constexpr uint32_t dstStride = GetTmovAccDstStride<DstTile, SrcTile>();
     static_assert(((dstStride * sizeof(dstType) % C0_SIZE_BYTE == 0) && ((dstStride) > 0)),
                   "Dst Tile Cols * sizeof(dstT) must be multiples of 32 and not 0 when nz2nd. \
@@ -205,13 +210,15 @@ PTO_INTERNAL constexpr void CommonCheck()
         static_assert(std::is_same_v<T, half> || std::is_same_v<T, int8_t>,
                       "Fix: TMov: Unsupported data type! Supported types: int8_t, half");
         static_assert(DstTile::SFractal == SLayout::RowMajor && !DstTile::isRowMajor,
-                      "Fix: TMov: Dst fractal format should be (BFractal: ColMajor, SFractal: RowMajor).");
+                      "Fix: TMov: Dst fractal format should be (BFractal: ColMajor, "
+                      "SFractal: RowMajor).");
     }
     if constexpr (DstTile::Loc == TileType::Right) {
         static_assert(std::is_same_v<T, half> || std::is_same_v<T, int8_t>,
                       "Fix: TMov: Unsupported data type! Supported types: int8_t, half");
         static_assert(DstTile::SFractal == SLayout::ColMajor && DstTile::isRowMajor,
-                      "Fix: TMov: Dst fractal format should be (BFractal: RowMajor, SFractal: ColMajor).");
+                      "Fix: TMov: Dst fractal format should be (BFractal: "
+                      "RowMajor, SFractal: ColMajor).");
     }
 
     static_assert((SrcTile::SFractal == SLayout::ColMajor && SrcTile::isRowMajor) ||

@@ -1,16 +1,18 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_tile.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace pto;
 
@@ -133,9 +135,11 @@ __global__ AICORE void RunTMOVMX(__gm__ OutType *out, __gm__ AType *src0, __gm__
     TLOAD(bMatTile, src1Global);
 
     if constexpr ((kAlign - validK) * sizeof(AType) >= C0_SIZE_BYTE) {
-        TFILLPAD(aMatTile, aMatTile); // TLOAD can only pad to 32B，mmad_mx needs to be aligned to 64 in k direction
+        TFILLPAD(aMatTile, aMatTile); // TLOAD can only pad to 32B，mmad_mx needs
+                                      // to be aligned to 64 in k direction
     }
-    TFILLPAD(bMatTile, bMatTile); // B input is nk,  TLOAD does not pad zeros in k direction
+    TFILLPAD(bMatTile,
+             bMatTile); // B input is nk,  TLOAD does not pad zeros in k direction
 
     TLOAD<TileScaleAData, GlobalDataSrc2>(aScaleMatTile, src2Global);
     TLOAD<TileScaleBData, GlobalDataSrc3>(bScaleMatTile, src3Global);
@@ -145,7 +149,8 @@ __global__ AICORE void RunTMOVMX(__gm__ OutType *out, __gm__ AType *src0, __gm__
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 #endif
 
-    /**********************************TMOV && TEXTRACT**********************************/
+    /**********************************TMOV &&
+     * TEXTRACT**********************************/
 
     TEXTRACT(aTile, aMatTile, 0, 0);
     TEXTRACT(bTile, bMatTile, 0, 0);
@@ -274,7 +279,8 @@ __global__ AICORE void RunTEXTRACTMX(__gm__ OutType *out, __gm__ AType *src0, __
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 #endif
 
-    /**********************************TMOV && TEXTRACT**********************************/
+    /**********************************TMOV &&
+     * TEXTRACT**********************************/
     TEXTRACT(aTile, aMatTile, indexM, indexK);
     TEXTRACT(bTile, bMatTile, indexK, indexN);
 
@@ -393,7 +399,8 @@ __global__ AICORE void RunTEXTRACTMX_COMPACT(__gm__ OutType *out, __gm__ AType *
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 #endif
 
-    /**********************************TMOV && TEXTRACT**********************************/
+    /**********************************TMOV &&
+     * TEXTRACT**********************************/
     TEXTRACT(aTile, aMatTile, indexM, indexK);
     TEXTRACT(bTile, bMatTile, indexK, indexN);
 

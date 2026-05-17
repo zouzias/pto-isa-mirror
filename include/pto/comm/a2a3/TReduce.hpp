@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_COMM_TREDUCE_HPP
@@ -13,11 +15,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <type_traits>
 
-#include "pto/common/debug.h"
-#include "pto/common/type.hpp"
-#include "pto/common/constants.hpp"
-#include "pto/common/pto_instr.hpp"
 #include "pto/comm/comm_types.hpp"
+#include "pto/common/constants.hpp"
+#include "pto/common/debug.h"
+#include "pto/common/pto_instr.hpp"
+#include "pto/common/type.hpp"
 
 namespace pto {
 namespace comm {
@@ -215,7 +217,8 @@ PTO_INTERNAL void TreduceChunkedSingle(ParallelGroupType &parallelGroup, GlobalD
 //     Use DYNAMIC ValidRow for partial row chunk support.
 //   - If TileData has static ValidCol, shape4 must be divisible by ValidCol.
 //     Use DYNAMIC ValidCol for partial column chunk support.
-//   - All ranks in the ParallelGroup are assumed to have the same shape/strides.
+//   - All ranks in the ParallelGroup are assumed to have the same
+//   shape/strides.
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalDstData, typename TileData>
@@ -264,12 +267,14 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
 
     if constexpr (!isDynamicRow) {
         PTO_ASSERT(gShape3 % chunkRows == 0,
-                   "TREDUCE chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
+                   "TREDUCE chunked: shape3 must be divisible by tile ValidRow when "
+                   "ValidRow is static. "
                    "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
     }
     if constexpr (!isDynamicCol) {
         PTO_ASSERT(gShape4 % chunkCols == 0,
-                   "TREDUCE chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
+                   "TREDUCE chunked: shape4 must be divisible by tile ValidCol when "
+                   "ValidCol is static. "
                    "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
     }
 
@@ -491,7 +496,8 @@ PTO_INTERNAL void TreduceChunkedPingPong(ParallelGroupType &parallelGroup, Globa
 //   [TLOAD remote0] -> [Reduce] -> [TLOAD remote1] -> [Reduce] -> ...
 //
 // Timeline with ping-pong (overlap TLOAD[i+1] with Reduce[i]):
-//   [TLOAD remote0] -> [Reduce remote0 | TLOAD remote1] -> [Reduce remote1 | TLOAD remote2] -> ...
+//   [TLOAD remote0] -> [Reduce remote0 | TLOAD remote1] -> [Reduce remote1 |
+//   TLOAD remote2] -> ...
 //
 // Constraints: same as TREDUCE_IMPL for chunked mode.
 // ============================================================================
@@ -543,12 +549,14 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
 
     if constexpr (!isDynamicRow) {
         PTO_ASSERT(gShape3 % tileValidRow == 0,
-                   "TREDUCE chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
+                   "TREDUCE chunked: shape3 must be divisible by tile ValidRow when "
+                   "ValidRow is static. "
                    "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
     }
     if constexpr (!isDynamicCol) {
         PTO_ASSERT(gShape4 % tileValidCol == 0,
-                   "TREDUCE chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
+                   "TREDUCE chunked: shape4 must be divisible by tile ValidCol when "
+                   "ValidCol is static. "
                    "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
     }
 

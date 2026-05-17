@@ -1,16 +1,19 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 #ifndef TCOLREDUCEIDX_CPU_HPP
 #define TCOLREDUCEIDX_CPU_HPP
 
 #include <pto/common/pto_tile.hpp>
+
 #include "pto/cpu/tile_offsets.hpp"
 
 namespace pto {
@@ -51,12 +54,15 @@ PTO_INTERNAL void CheckArgTiles()
     using T = typename TileSrc::DType;
     using TIdx = typename TileDst::DType;
     static_assert(std::is_same_v<T, float> || std::is_same_v<T, half>,
-                  "TColArgMin(Max) TRowArgMin(Max): The data type of src must be one of: `half`, `float`");
+                  "TColArgMin(Max) TRowArgMin(Max): The data type of src must be "
+                  "one of: `half`, `float`");
     static_assert(std::is_same_v<TIdx, int32_t> || std::is_same_v<TIdx, uint32_t>,
-                  "TColArgMin(Max) TRowArgMin(Max): The data type of dstIdx must be one of: `int32_t`, `uint32_t`");
+                  "TColArgMin(Max) TRowArgMin(Max): The data type of dstIdx must "
+                  "be one of: `int32_t`, `uint32_t`");
 
     static_assert(TileDst::Loc == TileType::Vec && TileDst::Loc == TileType::Vec,
-                  "TColArgMin(Max) TRowArgMin(Max): TileType of src and dst tiles must be `TileType::Vec`.");
+                  "TColArgMin(Max) TRowArgMin(Max): TileType of src and dst "
+                  "tiles must be `TileType::Vec`.");
 }
 
 template <typename TileDst, typename TileSrc>
@@ -65,7 +71,8 @@ PTO_INTERNAL void CheckColArgTiles(TileDst &dstIdx, TileSrc &src)
     CheckArgTiles<TileDst, TileSrc>();
     static_assert(TileSrc::SFractal == SLayout::NoneBox, "TColArgMin(Max): `src` may use ND or DN non-fractal layout");
     static_assert(TileDst::isRowMajor && TileDst::SFractal == SLayout::NoneBox,
-                  "TColArgMin(Max): `dst` must use standard ND layout: row-major and non-fractal");
+                  "TColArgMin(Max): `dst` must use standard ND layout: row-major "
+                  "and non-fractal");
 
     PTO_ASSERT(src.GetValidRow() != 0 && src.GetValidCol() != 0, "Number of rows and cols of src must be > 0");
     PTO_ASSERT(dstIdx.GetValidRow() == 1, "Number of rows of dst must be 1.");
@@ -78,7 +85,8 @@ PTO_INTERNAL void CheckRowArgTiles(TileDst &dstIdx, TileSrc &src)
     CheckArgTiles<TileDst, TileSrc>();
     static_assert(TileDst::SFractal == SLayout::NoneBox, "TRowArgMin(Max): `dst` may use ND or DN non-fractal layout");
     static_assert(TileSrc::isRowMajor && TileSrc::SFractal == SLayout::NoneBox,
-                  "TRowArgMin(Max): `src` must use standard ND layout: row-major and non-fractal");
+                  "TRowArgMin(Max): `src` must use standard ND layout: row-major "
+                  "and non-fractal");
 
     PTO_ASSERT(src.GetValidRow() != 0 && src.GetValidCol() != 0, "Number of rows and cols of src must be > 0");
     PTO_ASSERT(dstIdx.GetValidRow() == src.GetValidRow(), "Number of rows of src and dst must be the same.");

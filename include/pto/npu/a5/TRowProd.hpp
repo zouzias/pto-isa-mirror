@@ -13,11 +13,13 @@ full text of the License.
 #ifndef TROWPROD_HPP
 #define TROWPROD_HPP
 
-#include "common.hpp"
-#include "pto/common/pto_tile.hpp"
-#include "pto/common/constants.hpp"
 #include <math.h>
+
 #include <type_traits>
+
+#include "common.hpp"
+#include "pto/common/constants.hpp"
+#include "pto/common/pto_tile.hpp"
 
 namespace pto {
 template <typename TileDataOut, typename TileDataIn>
@@ -35,7 +37,8 @@ PTO_INTERNAL void TRowProdCheck(uint32_t srcValidRows, uint32_t srcValidCols, ui
                   "TRowProd only works on vector tiles (TileType::Vec). "
                   "Fix: Instantiate TileDataIn and TileDataOut with Loc_ = TileType::Vec.");
     static_assert(TileDataIn::isRowMajor && !TileDataIn::isBoxedLayout,
-                  "TRowProd input tile must use standard ND layout (row-major, non-fractal). "
+                  "TRowProd input tile must use standard ND layout (row-major, "
+                  "non-fractal). "
                   "Fix: Define TileDataIn with BFractal_ = BLayout::RowMajor and SFractal_ "
                   "= SLayout::NoneBox, e.g.,\n"
                   "     Tile<TileType::Vec, T, ROWS, COLS, BLayout::RowMajor, ..., "
@@ -48,10 +51,12 @@ PTO_INTERNAL void TRowProdCheck(uint32_t srcValidRows, uint32_t srcValidCols, ui
                   "SLayout::NoneBox + Cols=1.\n"
                   "Fix: Choose one of the following for TileDataOut:\n"
                   "     - Tile<..., ROWS, COLS, BLayout::RowMajor, ValidRows, 1>   // ND\n"
-                  "     - Tile<..., ROWS, 1, BLayout::ColMajor, ValidRows, 1>  // DN with Cols=1");
+                  "     - Tile<..., ROWS, 1, BLayout::ColMajor, ValidRows, 1>  // DN with "
+                  "Cols=1");
     // runtime checks
     PTO_ASSERT(srcValidRows != 0 && srcValidCols != 0,
-               "TRowProd input source valid rows or columns is zero — TRowProd requires at "
+               "TRowProd input source valid rows or columns is zero — TRowProd "
+               "requires at "
                "least one element per row. "
                "Fix: Ensure srcValidRows > 0 and srcValidCols > 0.");
     PTO_ASSERT(srcValidRows == dstValidRow,
