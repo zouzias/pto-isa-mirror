@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #pragma once
@@ -71,7 +73,7 @@ struct alignas(64) ChunkFlagMatrix {
     int32_t my_rank;    // Local rank id
     int32_t epoch;      // Monotonically increasing generation counter (starts at 1)
     int32_t padding[9]; // Pad header to 64 bytes
-    // Followed by int32_t chunk_flags[num_ranks * stride]
+                        // Followed by int32_t chunk_flags[num_ranks * stride]
 };
 
 inline size_t ChunkFlagMatrixSize(int num_ranks, int num_tiles_per_src, int chunk_size)
@@ -159,7 +161,8 @@ AICORE inline volatile __gm__ int32_t *GetChunkFlagPtr(volatile __gm__ ChunkFlag
     return base + idx;
 }
 
-// Summary base address: right after flag matrix, one int32 doorbell per src rank.
+// Summary base address: right after flag matrix, one int32 doorbell per src
+// rank.
 AICORE inline volatile __gm__ int32_t *GetSummaryBase(volatile __gm__ ChunkFlagMatrix *flags)
 {
     return reinterpret_cast<volatile __gm__ int32_t *>(reinterpret_cast<volatile __gm__ uint8_t *>(flags) +

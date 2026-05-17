@@ -7,9 +7,9 @@
 #See LICENSE in the root of the software repository for the full text of the License.
 #-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-import os 
+import os
 import struct
-import numpy as np 
+import numpy as np
 
 np.random.seed(19)
 
@@ -20,7 +20,7 @@ op_types = [
 
 def gen_golden_data(param):
     op_type = param.operation_type
-    
+
     shared_memory = np.random.randint(1, 100, size=[1]).astype(np.int32)
     signal = np.random.randint(1, 100, size=[1]).astype(np.int32)
 
@@ -41,7 +41,7 @@ class TNotifyParams:
 
 if __name__ == "__main__":
     #Get the absolute path of the script
-    script_dir = os.path.dirname(os.path.abspath(__file__)) 
+    script_dir = os.path.dirname(os.path.abspath(__file__))
     testcases_dir = os.path.join(script_dir, "testcases")
 
     #Ensure the testcases directory exists
@@ -49,15 +49,15 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TNotifyParams("Add", "TNOTIFY.case1"), 
+        TNotifyParams("Add", "TNOTIFY.case1"),
         TNotifyParams("Set", "TNOTIFY.case2")
     ]
 
     for i, param in enumerate(case_params_list):
         case_name = param.case_name
         if not os.path.exists(case_name):
-            os.makedirs(case_name) 
-        original_dir = os.getcwd() 
-        os.chdir(case_name) 
-        gen_golden_data(param) 
+            os.makedirs(case_name)
+        original_dir = os.getcwd()
+        os.chdir(case_name)
+        gen_golden_data(param)
         os.chdir(original_dir)
