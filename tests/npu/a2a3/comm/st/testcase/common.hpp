@@ -1,14 +1,21 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #pragma once
+
+#include <dlfcn.h>
+#include <sys/mman.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include <cstdint>
 #include <cstdlib>
@@ -17,24 +24,21 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <limits>
 #include <numeric>
 #include <vector>
-#include <dlfcn.h>
+
 #include "acl/acl.h"
 #include "hccl/hccl_comm.h"
-#include <sys/mman.h>
-#include <sys/wait.h>
-#include <unistd.h>
 
 #if __has_include("hccl/hccl.h")
 #include "hccl/hccl.h"
 #endif
+#include "comm_mpi.h"
 #include "hccl/hccl_types.h"
 #include "hccl_context.h"
-#include "comm_mpi.h"
 
 // ============================================================================
-// Debug logging helpers.  Enabled by cmake -DDEBUG_MODE=ON  (defines COMM_DEBUG).
-// Uses COMM_DEBUG instead of _DEBUG to avoid activating PTO's PTO_ASSERT which
-// calls cce::printf (unsupported on A5).
+// Debug logging helpers.  Enabled by cmake -DDEBUG_MODE=ON  (defines
+// COMM_DEBUG). Uses COMM_DEBUG instead of _DEBUG to avoid activating PTO's
+// PTO_ASSERT which calls cce::printf (unsupported on A5).
 // ============================================================================
 #ifdef COMM_DEBUG
 #include <chrono>
@@ -400,7 +404,8 @@ struct TestContext {
         COMM_LOG("[INIT] Rank " << rankId << ": MPI barrier after HCCL comm init done");
 
         // V2 tiling matching PyPTO's TilingStructV2 for A5 (DAV_3510).
-        // Also works on A2/A3 — HCCL accepts the tiling and returns a valid context.
+        // Also works on A2/A3 — HCCL accepts the tiling and returns a valid
+        // context.
         Mc2CommConfigV2 tiling{};
         memset(&tiling, 0, sizeof(tiling));
 
@@ -454,7 +459,8 @@ struct TestContext {
     }
 
 private:
-    // MESH: HCCL returns HcclCombinOpParamA5 whose first fields match HcclDeviceContext.
+    // MESH: HCCL returns HcclCombinOpParamA5 whose first fields match
+    // HcclDeviceContext.
     bool InitMeshPath(int rankId, void *ctxPtr)
     {
         deviceCtx = reinterpret_cast<HcclDeviceContext *>(ctxPtr);
@@ -465,9 +471,8 @@ private:
             return false;
         }
 
-        COMM_LOG("[INFO] Rank " << rankId << " hccl init OK (MESH)"
-                                << " rankId=" << hostCtx.rankId << " rankNum=" << hostCtx.rankNum
-                                << " winSize=" << hostCtx.winSize);
+        COMM_LOG("[INFO] Rank " << rankId << " hccl init OK (MESH)" << " rankId=" << hostCtx.rankId
+                                << " rankNum=" << hostCtx.rankNum << " winSize=" << hostCtx.winSize);
         for (uint32_t i = 0; i < hostCtx.rankNum && i < HCCL_MAX_RANK_NUM; ++i) {
             COMM_LOG("[INFO] Rank " << rankId << ": windowsIn[" << i << "]=0x" << std::hex << hostCtx.windowsIn[i]
                                     << " windowsOut[" << i << "]=0x" << hostCtx.windowsOut[i] << std::dec);
@@ -483,7 +488,8 @@ private:
         using namespace hccl_compat;
         auto *rawCtx = reinterpret_cast<uint8_t *>(ctxPtr);
 
-        // 1. Read HcclOpResParam head (from localUsrRankId through localWindowsExp).
+        // 1. Read HcclOpResParam head (from localUsrRankId through
+        // localWindowsExp).
         HcclOpResParamHead head{};
         const size_t headOff = offsetof(HcclOpResParam, localUsrRankId);
         aclError aRet = aclrtMemcpy(&head, sizeof(head), rawCtx + headOff, sizeof(head), ACL_MEMCPY_DEVICE_TO_HOST);
@@ -562,7 +568,8 @@ private:
                                     << std::dec << " (remote, remoteRankId=" << remoteInfo.remoteUsrRankId << ")");
         }
 
-        // 4. Allocate new device memory and copy our correctly-built HcclDeviceContext.
+        // 4. Allocate new device memory and copy our correctly-built
+        // HcclDeviceContext.
         void *newDevMem = nullptr;
         aRet = aclrtMalloc(&newDevMem, sizeof(HcclDeviceContext), ACL_MEM_MALLOC_HUGE_FIRST);
         if (aRet != ACL_SUCCESS || newDevMem == nullptr) {
@@ -583,9 +590,8 @@ private:
         deviceCtx = reinterpret_cast<HcclDeviceContext *>(newDevMem);
         ownsDeviceCtx = true;
 
-        COMM_LOG("[INFO] Rank " << rankId << " hccl init OK (RING)"
-                                << " rankId=" << hostCtx.rankId << " rankNum=" << hostCtx.rankNum
-                                << " winSize=" << hostCtx.winSize);
+        COMM_LOG("[INFO] Rank " << rankId << " hccl init OK (RING)" << " rankId=" << hostCtx.rankId
+                                << " rankNum=" << hostCtx.rankNum << " winSize=" << hostCtx.winSize);
         return true;
     }
 };
@@ -709,6 +715,7 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
     return perRankFn(rankId, &rootInfo);
 }
 
-// SdmaWorkspaceManager moved to pto/npu/comm/async/sdma/sdma_workspace_manager.hpp
+// SdmaWorkspaceManager moved to
+// pto/npu/comm/async/sdma/sdma_workspace_manager.hpp
 #include "pto/npu/comm/async/sdma/sdma_workspace_manager.hpp"
 using SdmaWorkspaceManager = pto::comm::sdma::SdmaWorkspaceManager;

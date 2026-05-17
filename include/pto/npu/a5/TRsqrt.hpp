@@ -1,23 +1,26 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TRSQRT_HPP
 #define TRSQRT_HPP
 
 #include <pto/common/constants.hpp>
-#include <pto/common/utils.hpp>
 #include <pto/common/type.hpp>
+#include <pto/common/utils.hpp>
+
 #include "common.hpp"
-#include "utils.hpp"
-#include "custom/TSqrtHp.hpp"
 #include "custom/Div754.hpp"
+#include "custom/TSqrtHp.hpp"
+#include "utils.hpp"
 
 namespace pto {
 template <typename Op, RsqrtAlgorithm PrecisionType, typename T, unsigned nRepeatElem>
@@ -174,13 +177,17 @@ PTO_INTERNAL void TRSQRT_IMPL(DstTile &dst, SrcTile &src)
     static_assert(DstTile::Loc == TileType::Vec && SrcTile::Loc == TileType::Vec,
                   "TRSQRT: TileType of src and dst tiles must be TileType::Vec.");
     static_assert(DstTile::ValidCol <= DstTile::Cols,
-                  "TRSQRT: Number of dst's valid columns must not be greater than number of tile columns.");
+                  "TRSQRT: Number of dst's valid columns must not be greater "
+                  "than number of tile columns.");
     static_assert(DstTile::ValidRow <= DstTile::Rows,
-                  "TRSQRT: Number of dst's valid rows must not be greater than number of tile rows.");
+                  "TRSQRT: Number of dst's valid rows must not be greater than "
+                  "number of tile rows.");
     static_assert(SrcTile::ValidCol <= SrcTile::Cols,
-                  "TRSQRT: Number of src's valid columns must not be greater than number of tile columns.");
+                  "TRSQRT: Number of src's valid columns must not be greater "
+                  "than number of tile columns.");
     static_assert(SrcTile::ValidRow <= SrcTile::Rows,
-                  "TRSQRT: Number of src's valid rows must not be greater than number of tile rows.");
+                  "TRSQRT: Number of src's valid rows must not be greater than "
+                  "number of tile rows.");
     static_assert(std::is_same_v<typename DstTile::DType, typename SrcTile::DType>,
                   "TRSQRT: The data type of dst must be consistent with of src");
     static_assert(

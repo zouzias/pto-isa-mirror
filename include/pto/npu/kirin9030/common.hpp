@@ -1,18 +1,21 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef COMMON_HPP
 #define COMMON_HPP
 
-#include "datatype.hpp"
 #include <pto/common/type.hpp>
+
+#include "datatype.hpp"
 
 namespace pto {
 
@@ -54,7 +57,7 @@ struct RegTensor {
     using RegType = typename TypeGet<T>::T;
     RegType reg;
 
-    PTO_INTERNAL RegTensor(){};
+    PTO_INTERNAL RegTensor() {};
     PTO_INTERNAL operator RegType &()
     {
         return reg;
@@ -122,18 +125,22 @@ PTO_INTERNAL void CheckTMovAccValid()
         if constexpr (std::is_same_v<SrcType, half>) {
             static_assert(std::is_same_v<DstType, half> || std::is_same_v<DstType, int8_t> ||
                               std::is_same_v<DstType, uint8_t> || std::is_same_v<DstType, int16_t>,
-                          "The output data type must be int8/uint8/half/int16 when input is data type half.");
+                          "The output data type must be int8/uint8/half/int16 when "
+                          "input is data type half.");
         } else if constexpr (std::is_same_v<SrcType, int32_t>) {
             static_assert(std::is_same_v<DstType, half> || std::is_same_v<DstType, int8_t> ||
                               std::is_same_v<DstType, uint8_t> || std::is_same_v<DstType, int16_t>,
-                          "The output data type must be int8/uint8/half/int16/int32 when input is data type int32.");
+                          "The output data type must be int8/uint8/half/int16/int32 "
+                          "when input is data type int32.");
         }
     } else {
         static_assert(std::is_same_v<DstType, SrcType>,
-                      "The input data type must be consistent with the output data type when preQuantScalar is not "
+                      "The input data type must be consistent with the output data "
+                      "type when preQuantScalar is not "
                       "configured");
         static_assert(std::is_same_v<DstType, half> || std::is_same_v<DstType, int32_t>,
-                      "The data type must be half or int32 when preQuantScalar is not configured");
+                      "The data type must be half or int32 when preQuantScalar is not "
+                      "configured");
     }
     static_assert((DstTileData::isRowMajor && DstTileData::SFractal == SLayout::NoneBox) ||
                       (!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::NoneBox) ||

@@ -7,3 +7,6 @@ makeself:
 json:
   version: v3.11.3
   type: run
+sgl-kernel-npu:
+  version: unknown
+  type: run
