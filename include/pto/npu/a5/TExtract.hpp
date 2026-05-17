@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TEXTRACT_HPP
@@ -444,7 +446,8 @@ __tf__ PTO_INTERNAL void TExtractAccToVec(typename DstTileData::TileDType __out_
     constexpr uint8_t dualDstCtl = GetDualDstCtl<DstTileData, SrcTileData, mode, quantPre>();
     constexpr uint32_t dstStride = DstTileData::Cols;
     static_assert(((dstStride * sizeof(dstType) % C0_SIZE_BYTE == 0) && ((dstStride) > 0)),
-                  "Dst Tile Cols * sizeof(dstT) must be multiples of 32 and not 0 when nz2nd.");
+                  "Dst Tile Cols * sizeof(dstT) must be multiples of 32 and not 0 when "
+                  "nz2nd.");
     constexpr uint16_t ndNum = 1;
     constexpr uint16_t dstNdStride = 0;
     constexpr uint16_t srcNdStride = 0;
@@ -559,7 +562,8 @@ PTO_INTERNAL void TEXTRACT_TILE_IMPL(DstTileData &dst, SrcTileData &src, uint16_
                          (DstTileData::Loc == TileType::Mat || DstTileData::Loc == TileType::Vec)) {
         static_assert((!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor) ||
                           (DstTileData::isRowMajor && DstTileData::SFractal == SLayout::NoneBox),
-                      "Dst fractal format should be (BFractal: ColMajor, SFractal: RowMajor) or (BFractal: RowMajor, "
+                      "Dst fractal format should be (BFractal: ColMajor, SFractal: "
+                      "RowMajor) or (BFractal: RowMajor, "
                       "SFractal: NoneBox).");
         CheckTMovAccValid<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType>();
         constexpr QuantMode_t quantPre =
@@ -609,7 +613,9 @@ PTO_INTERNAL void TextractConvTileCheck(DstTileData &dst, SrcTileData &src)
                       std::is_same_v<typename DstTileData::DType, half> ||
                       std::is_same_v<typename DstTileData::DType, bfloat16_t> ||
                       std::is_same_v<typename DstTileData::DType, float>,
-                  "Fix: Data type must be int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/half/bfloat16_t/float!");
+                  "Fix: Data type must be "
+                  "int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/half/"
+                  "bfloat16_t/float!");
     static_assert(SrcTileData::Loc == pto::TileType::Mat, "Fix: Src TileType must be Mat!");
     static_assert(DstTileData::Loc == pto::TileType::Right, "Fix: Dst TileType must be Right!");
     static_assert(sizeof(typename DstTileData::DType) == sizeof(typename SrcTileData::DType),
@@ -618,7 +624,8 @@ PTO_INTERNAL void TextractConvTileCheck(DstTileData &dst, SrcTileData &src)
     static_assert((SrcTileData::layout == Layout::FRACTAL_Z) || (SrcTileData::layout == Layout::FRACTAL_Z_3D),
                   "TExtract: Source layout only support FRACTAL_Z or FRACTAL_Z_3D.");
     static_assert(DstTileData::SFractal == SLayout::ColMajor && DstTileData::isRowMajor,
-                  "TExtract: Destination layout only support SLayout is ColMajor ang BLayout is RowMajor.");
+                  "TExtract: Destination layout only support SLayout is ColMajor ang "
+                  "BLayout is RowMajor.");
 }
 
 template <typename DstTileData, typename SrcTileData>
@@ -628,7 +635,8 @@ PTO_INTERNAL void TEXTRACT_CONVTILE_IMPL(DstTileData &dst, SrcTileData &src, uin
     constexpr uint32_t c0ElemCount = C0_SIZE_BYTE / sizeof(typename SrcTileData::DType);
     if constexpr (SrcTileData::totalDimCount == 4) { // ConvTile layout is [C1HW,N/16,16,C0]
         static_assert(SrcTileData::staticShape[2] == FRACTAL_NZ_ROW && SrcTileData::staticShape[3] == c0ElemCount,
-                      "Fix: The SrcTileData last 2 dim must be static and satisfy [16, 32 / sizeof(DataType)]");
+                      "Fix: The SrcTileData last 2 dim must be static and satisfy "
+                      "[16, 32 / sizeof(DataType)]");
         uint16_t srcCol = src.GetShape(1) * src.GetShape(2);
         TExtractToBConv<DstTileData, SrcTileData>(dst.data(), src.data(), srcCol, dst.GetValidRow(), dst.GetValidCol(),
                                                   indexRow, indexCol);
@@ -664,9 +672,10 @@ __tf__ PTO_INTERNAL void TExtractVecToVecNDImpl(typename DstTileData::TileDType 
     }
 }
 
-// For 1-byte non-int8/uint8 dtypes (hifloat8/float8_*), vector intrinsics (vlds/vsts/...) have no
-// overload, so reinterpret the UB pointers as int8 and operate via int8 intrinsics. Semantics match
-// since each element occupies exactly one byte. fp4 (sub-byte) is handled separately via byte-DMA.
+// For 1-byte non-int8/uint8 dtypes (hifloat8/float8_*), vector intrinsics
+// (vlds/vsts/...) have no overload, so reinterpret the UB pointers as int8 and
+// operate via int8 intrinsics. Semantics match since each element occupies
+// exactly one byte. fp4 (sub-byte) is handled separately via byte-DMA.
 template <typename T>
 using TExtractRegT =
     std::conditional_t<sizeof(T) == 1 && !std::is_same_v<T, int8_t> && !std::is_same_v<T, uint8_t>, int8_t, T>;
@@ -771,20 +780,24 @@ PTO_INTERNAL void TExtractVecToVecNDDispatch(DstTileData &dst, SrcTileData &src,
     PTO_ASSERT(indexCol + DstTileData::ValidCol <= SrcTileData::Cols,
                "TEXTRACT ND_VEC : indexCol + dstValidCols exceeds srcCols!");
 
-    // fp4 (float4_e2m1x2_t / float4_e1m2x2_t) is sub-byte: each T packs 2 elements into 1 byte.
-    // Vector intrinsics cannot address individual fp4 elements, so only the byte-DMA path
-    // (TExtractVecToVecNDImpl) is valid. The DMA path treats T as one packed unit (1 byte),
-    // so callers must use packed-unit counts: indexCol/validCol/RowStride must be in T units
-    // (not individual fp4 elements), and DMA further requires indexCol to be 32-byte aligned
-    // for the aligned-stride fast path.
+    // fp4 (float4_e2m1x2_t / float4_e1m2x2_t) is sub-byte: each T packs 2
+    // elements into 1 byte. Vector intrinsics cannot address individual fp4
+    // elements, so only the byte-DMA path (TExtractVecToVecNDImpl) is valid. The
+    // DMA path treats T as one packed unit (1 byte), so callers must use
+    // packed-unit counts: indexCol/validCol/RowStride must be in T units (not
+    // individual fp4 elements), and DMA further requires indexCol to be 32-byte
+    // aligned for the aligned-stride fast path.
     constexpr bool isFp4Type = std::is_same_v<T, float4_e2m1x2_t> || std::is_same_v<T, float4_e1m2x2_t>;
     if constexpr (isFp4Type) {
         static_assert(SrcTileData::RowStride * sizeof(T) % BLOCK_BYTE_SIZE == 0,
-                      "TEXTRACT ND Vec\u2192Vec fp4: SrcTile RowStride must be 32-byte aligned.");
+                      "TEXTRACT ND Vec\u2192Vec fp4: SrcTile RowStride must be "
+                      "32-byte aligned.");
         static_assert(DstTileData::RowStride * sizeof(T) % BLOCK_BYTE_SIZE == 0,
-                      "TEXTRACT ND Vec\u2192Vec fp4: DstTile RowStride must be 32-byte aligned.");
+                      "TEXTRACT ND Vec\u2192Vec fp4: DstTile RowStride must be "
+                      "32-byte aligned.");
         static_assert(DstTileData::ValidCol * sizeof(T) % BLOCK_BYTE_SIZE == 0,
-                      "TEXTRACT ND Vec\u2192Vec fp4: DstTile ValidCol must be 32-byte aligned.");
+                      "TEXTRACT ND Vec\u2192Vec fp4: DstTile ValidCol must be "
+                      "32-byte aligned.");
         PTO_ASSERT(indexCol * sizeof(T) % BLOCK_BYTE_SIZE == 0,
                    "TEXTRACT ND Vec\u2192Vec fp4: indexCol must be 32-byte aligned.");
         TExtractVecToVecNDImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), indexRow, indexCol, validRow,
@@ -906,7 +919,8 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t ind
             }
         } else {
             static_assert(DstTileData::isRowMajor == SrcTileData::isRowMajor,
-                          "TEXTRACT Vec→Vec : Source and destination layout must match (both ND or both NZ)");
+                          "TEXTRACT Vec→Vec : Source and destination layout must "
+                          "match (both ND or both NZ)");
         }
     } else if constexpr (is_conv_tile_v<SrcTileData>) {
         TEXTRACT_CONVTILE_IMPL(dst, src, indexRow, indexCol);
@@ -934,7 +948,8 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t ind
     CheckTMovAccValid<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType>();
     static_assert((!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor) ||
                       (DstTileData::isRowMajor && DstTileData::SFractal == SLayout::NoneBox),
-                  "Dst fractal format should be (BFractal: ColMajor, SFractal: RowMajor) or (BFractal: RowMajor, "
+                  "Dst fractal format should be (BFractal: ColMajor, SFractal: "
+                  "RowMajor) or (BFractal: RowMajor, "
                   "SFractal: NoneBox).");
     constexpr QuantMode_t quantPre = GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     if constexpr ((DstTileData::Loc == TileType::Mat)) {
@@ -968,7 +983,8 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint64_t pre
                   "Destination TileType only support Mat.");
     static_assert((!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor) ||
                       (DstTileData::isRowMajor && DstTileData::SFractal == SLayout::NoneBox),
-                  "Dst fractal format should be (BFractal: ColMajor, SFractal: RowMajor) or (BFractal: RowMajor, "
+                  "Dst fractal format should be (BFractal: ColMajor, SFractal: "
+                  "RowMajor) or (BFractal: RowMajor, "
                   "SFractal: NoneBox).");
     constexpr QuantMode_t quantPre = GetScalarPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     set_quant_pre(preQuantScalar);
@@ -1005,7 +1021,8 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &
                   "Destination TileType only support Mat and Vec.");
     static_assert((!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor) ||
                       (DstTileData::isRowMajor && DstTileData::SFractal == SLayout::NoneBox),
-                  "Dst fractal format should be (BFractal: ColMajor, SFractal: RowMajor) or (BFractal: RowMajor, "
+                  "Dst fractal format should be (BFractal: ColMajor, SFractal: "
+                  "RowMajor) or (BFractal: RowMajor, "
                   "SFractal: NoneBox).");
     static_assert(FpTileData::Loc == TileType::Scaling, "Fp only support Scaling.");
     constexpr QuantMode_t quantPre = GetVectorPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();

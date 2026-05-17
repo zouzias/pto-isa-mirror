@@ -1,16 +1,19 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include "test_common.h"
-#include "acl/acl.h"
 #include <gtest/gtest.h>
+
+#include "acl/acl.h"
+#include "test_common.h"
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -117,8 +120,9 @@ void test_tmov()
     EXPECT_TRUE(ret);
 }
 
-// template <typename AT, typename BT, typename L0CT, typename BiasT, typename GMT, typename ScalingT, int M, int N, int
-// K, int IsTransA, int IsTransB, int IsBias, int IsQuant, int ReluMode=0, int Isdynamic=0, int IsNd=1>
+// template <typename AT, typename BT, typename L0CT, typename BiasT, typename
+// GMT, typename ScalingT, int M, int N, int K, int IsTransA, int IsTransB, int
+// IsBias, int IsQuant, int ReluMode=0, int Isdynamic=0, int IsNd=1>
 TEST_F(TMOVTest, case1_bias_static_half_float_0_1_1_0_0_param)
 {
     test_tmov<uint16_t, uint16_t, float, float, float, uint64_t, 64, 32, 80, 0, 1, 1, 0, 0, 0>();

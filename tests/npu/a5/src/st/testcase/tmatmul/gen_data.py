@@ -129,21 +129,21 @@ def float32_to_tf32(x, round_mode="CAST_RINT"):
     """
     packed = struct.pack('f', x)
     bits = struct.unpack('I', packed)[0]
-    
+
     # Extract sign, exponent, and mantissa
     sign = (bits >> 31) & 0x1
     exponent = (bits >> 23) & 0xFF
     mantissa = bits & 0x7FFFFF
-    
+
     # Handle special values
     if exponent == 0xFF:  # NaN or Inf
         if mantissa != 0:
             return float('nan')
         return float('inf') * (-1 if sign else 1)
-    
+
     if exponent == 0 and mantissa == 0:  # Zero
         return 0.0 if sign == 0 else -0.0
-    
+
     # Handle subnormal numbers: normalize first
     if exponent == 0 and mantissa != 0:
         # Subnormal number: actual exponent is -126, no hidden 1 in mantissa
@@ -154,15 +154,15 @@ def float32_to_tf32(x, round_mode="CAST_RINT"):
         if abs(actual_value) < 1e-30:  # Very small subnormal number
             return 0.0 if sign == 0 else -0.0
         # Otherwise continue processing
-    
+
     # TF32: 10-bit mantissa, need to handle lower 13 bits
     mantissa_10bit = mantissa >> 13  # Upper 10 bits
     lost_bits = mantissa & 0x1FFF    # Lower 13 bits
-    
+
     # Apply rounding mode
     round_bit = (lost_bits >> 12) & 0x1      # 12th bit (0x1000)
     sticky_bit = 1 if (lost_bits & 0xFFF) != 0 else 0  # Sticky bit for lower bits
-    
+
     if round_mode == "CAST_RINT":  # roundTiesToEven
         # Round to nearest, ties to even
         if round_bit == 1:
@@ -174,26 +174,26 @@ def float32_to_tf32(x, round_mode="CAST_RINT"):
                 if mantissa_10bit & 0x1:  # If LSB is 1 (odd)
                     mantissa_10bit += 1
                 # If LSB is 0 (even), keep unchanged
-    
+
     elif round_mode == "CAST_ROUND":  # roundTiesAway
         # Round to nearest, ties away from zero
         if round_bit == 1 and (sticky_bit == 1 or mantissa_10bit & 0x1):
             # Greater than 0.5, or exactly 0.5 and currently odd: round up
             mantissa_10bit += 1
-    
+
     # Check mantissa overflow (10-bit mantissa max is 0x3FF)
     if mantissa_10bit >= 0x400:  # 0x400 = 1024, exceeds 10-bit range
         mantissa_10bit >>= 1
         exponent += 1
-    
+
     # Check exponent overflow
     if exponent >= 0xFF:
         return float('inf') if sign == 0 else -float('inf')
-    
+
     # Reconstruct TF32
     tf32_mantissa = mantissa_10bit << 13
     tf32_bits = (sign << 31) | (exponent << 23) | tf32_mantissa
-    
+
     return struct.unpack('f', struct.pack('I', tf32_bits))[0]
 
 
@@ -269,7 +269,7 @@ class tmatmulParams:
         self.ctype = ctype
         self.m = m
         self.k = k
-        self.n = n 
+        self.n = n
         self.is_bias = is_bias
         if (bias_type):
             self.bias_type = bias_type

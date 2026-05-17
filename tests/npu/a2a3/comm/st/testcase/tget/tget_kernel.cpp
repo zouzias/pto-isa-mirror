@@ -1,20 +1,22 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
-
 #include <pto/pto-inst.hpp>
-#include "pto/common/pto_tile.hpp"
+
 #include "../common.hpp"
+#include "pto/common/pto_tile.hpp"
 
 #define ENABLE_DEBUG_PRINT 1
 
@@ -142,7 +144,8 @@ bool RunGetRingKernel(int rank_id, int n_ranks, int n_devices, int first_device_
     aclrtMemcpy(output_host, count * sizeof(T), output_ptr, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
 
     // Verify: Each rank should get data from next rank
-    // rank_id reads from (rank_id + 1) % n_ranks, which has data: i + next_rank * 10000
+    // rank_id reads from (rank_id + 1) % n_ranks, which has data: i + next_rank *
+    // 10000
     bool is_ok = true;
     if (n_ranks < 2) {
         std::cout << "[DEBUG] I can't run this test with less than 2 ranks" << std::endl;
@@ -819,7 +822,8 @@ __global__ AICORE void TGetIrregularShapeKernelImpl(__gm__ T *dst, __gm__ T *src
         return;
     constexpr size_t total_count = total_rows * cols;
     static_assert(total_rows > tile_rows, "total_rows must exceed tile_rows to test chunking");
-    // Note: total_rows % tile_rows may NOT be 0 — this is intentional for testing partial chunks!
+    // Note: total_rows % tile_rows may NOT be 0 — this is intentional for testing
+    // partial chunks!
 
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -872,7 +876,8 @@ __global__ AICORE void TGetIrregularShapeKernelImpl(__gm__ T *dst, __gm__ T *src
         TASSIGN(stagingTile, 0x0);
         TASSIGN(resultTile, 0x10000);
 
-        // stagingTile starts with tile_rows RowMask — TGET_IMPL reads initial tileValidRow
+        // stagingTile starts with tile_rows RowMask — TGET_IMPL reads initial
+        // tileValidRow
         __gm__ T *remote_send_shmem = HcclRemotePtr(hcclCtx, send_shmem, next_rank);
         Global remoteSendG(remote_send_shmem, fullShape, fullStride);
         pto::comm::TGET(recvG, remoteSendG, stagingTile);
@@ -1259,11 +1264,12 @@ template bool RunGetRing2DSliding<int32_t, 128, 256, 32, 64>(int n_ranks, int n_
 template bool RunGetRing2DSliding<float, 256, 512, 64, 128>(int n_ranks, int n_devices, int first_rank_id,
                                                             int first_device_id);
 
-// ---- Irregular 2D sliding (partial last chunks via DYNAMIC ValidRow/ValidCol) ----
-// float: 65x64, tile 16x32 → rows: 4+1(1), cols: 2 (irregular row only)
+// ---- Irregular 2D sliding (partial last chunks via DYNAMIC ValidRow/ValidCol)
+// ---- float: 65x64, tile 16x32 → rows: 4+1(1), cols: 2 (irregular row only)
 template bool RunGetRing2DSliding<float, 65, 64, 16, 32>(int n_ranks, int n_devices, int first_rank_id,
                                                          int first_device_id);
-// float: 64x104, tile 16x32 → rows: 4 (regular), cols: 3+1(8) (irregular col only)
+// float: 64x104, tile 16x32 → rows: 4 (regular), cols: 3+1(8) (irregular col
+// only)
 template bool RunGetRing2DSliding<float, 64, 104, 16, 32>(int n_ranks, int n_devices, int first_rank_id,
                                                           int first_device_id);
 // float: 65x104, tile 16x32 → rows: 4+1(1), cols: 3+1(8) (both irregular)
@@ -1285,7 +1291,8 @@ __global__ AICORE void TGetPingPongKernelImpl(__gm__ T *dst, __gm__ T *src, __gm
         return;
     constexpr size_t total_count = total_rows * total_cols;
     static_assert(total_rows > tile_rows || total_cols > tile_cols,
-                  "At least one dimension must exceed tile size to test ping-pong chunking");
+                  "At least one dimension must exceed tile size to test "
+                  "ping-pong chunking");
 
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -1494,6 +1501,7 @@ template bool RunGetRingPingPong<float, 128, 128, 16, 32>(int n_ranks, int n_dev
 // Regular: int32 256x256, tile 32x64 → 8×4=32 chunks
 template bool RunGetRingPingPong<int32_t, 256, 256, 32, 64>(int n_ranks, int n_devices, int first_rank_id,
                                                             int first_device_id);
-// Irregular: float 65x104, tile 16x32 → (4+1)×(3+1)=20 chunks, partial rows+cols
+// Irregular: float 65x104, tile 16x32 → (4+1)×(3+1)=20 chunks, partial
+// rows+cols
 template bool RunGetRingPingPong<float, 65, 104, 16, 32>(int n_ranks, int n_devices, int first_rank_id,
                                                          int first_device_id);

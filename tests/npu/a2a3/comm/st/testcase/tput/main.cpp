@@ -1,20 +1,23 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 // 验证通过 PTO TPut（HCCL 后端）进行环形互传：从前一 rank 拉取数据
-#include <cstddef>
-#include <cstdint>
 #include <gtest/gtest.h>
 
-#include "tput_kernel.h"
+#include <cstddef>
+#include <cstdint>
+
 #include "../comm_mpi.h"
+#include "tput_kernel.h"
 
 // ============================================================================
 // 1D Vector Tile Tests
@@ -65,7 +68,8 @@ TEST(TPut, AtomicAdd_Int32_4Ranks)
 
 // ============================================================================
 // Large Shape Chunked Tests
-// GlobalTensor shape exceeds UB tile capacity, TPUT_IMPL auto-chunks the transfer
+// GlobalTensor shape exceeds UB tile capacity, TPUT_IMPL auto-chunks the
+// transfer
 // ============================================================================
 // float: 128 rows x 64 cols (8192 elems), tile 16 rows → 8 chunks
 TEST(TPut, LargeShape_Float_128x64_tile16)
@@ -114,13 +118,15 @@ TEST(TPut, LargeShape_Int32_4096x64_tile128)
 // Multi-Dimensional Chunked Tests
 // GlobalTensor has outer dims > 1, TPUT_IMPL iterates outer dims + chunks dim3
 // ============================================================================
-// float: (2,2,1,32,32)=4096 elems, tile 16 rows → 4 outer iters × 2 inner chunks
+// float: (2,2,1,32,32)=4096 elems, tile 16 rows → 4 outer iters × 2 inner
+// chunks
 TEST(TPut, MultiDim_Float_2x2x1x32x32_tile16)
 {
     SKIP_IF_RANKS_LT(2);
     ASSERT_TRUE((RunPutRingMultiDim<float, 2, 2, 1, 32, 32, 16>(2, 2, 0, 0)));
 }
-// int32: (4,1,1,32,64)=8192 elems, tile 16 rows → 4 outer iters × 2 inner chunks
+// int32: (4,1,1,32,64)=8192 elems, tile 16 rows → 4 outer iters × 2 inner
+// chunks
 TEST(TPut, MultiDim_Int32_4x1x1x32x64_tile16)
 {
     SKIP_IF_RANKS_LT(2);
@@ -217,7 +223,9 @@ TEST(TPut, PingPong_Irregular_Float_65x104_tile16x32)
 int main(int argc, char **argv)
 {
     if (!CommMpiInit(&argc, &argv)) {
-        std::cerr << "[FATAL] CommMpiInit failed. Ensure the binary is launched via mpirun." << std::endl;
+        std::cerr << "[FATAL] CommMpiInit failed. Ensure the binary is launched "
+                     "via mpirun."
+                  << std::endl;
         return 1;
     }
     ::testing::InitGoogleTest(&argc, argv);
