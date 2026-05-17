@@ -1,0 +1,32 @@
+# pto.pintlv_b16
+
+对谓词做交错组合。
+
+## 语法
+
+### PTO 汇编形式
+
+```text
+pintlv_b16 %dst, %src0, %src1 : !pto.mask, !pto.mask, !pto.mask
+```
+
+### AS Level 1（SSA）
+
+```mlir
+%dst = pto.pintlv_b16 %src0, %src1 : !pto.mask, !pto.mask -> !pto.mask
+```
+
+### AS Level 2（DPS）
+
+```mlir
+pto.pintlv_b16 ins(%src0, %src1 : !pto.mask, !pto.mask) outs(%dst : !pto.mask)
+```
+
+## 关键约束
+
+- 参与操作的谓词宽度必须兼容。
+- pattern / partition token 必须属于文档化取值域。
+
+## 相关页面
+
+- [谓词生成与代数](../../predicate-generation-and-algebra_zh.md)

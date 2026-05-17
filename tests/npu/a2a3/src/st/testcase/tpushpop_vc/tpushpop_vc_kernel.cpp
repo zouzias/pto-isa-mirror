@@ -1,15 +1,17 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
 #include <pto/common/fifo.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace pto;
 
@@ -113,7 +115,8 @@ __global__ AICORE void runTPushPopVCMatmul(__gm__ uint64_t *ffts_addr, __gm__ Ou
                 quantBOffset = static_cast<size_t>(k_tile) * TILE_K * TILE_N + subBlockIdx * PROD_K * TILE_N;
                 scaleOffsetOffset = static_cast<size_t>(k_tile) * TILE_K + subBlockIdx * PROD_K;
             } else {
-                // each subblock reads a different column range; scale/offset are shared across cores
+                // each subblock reads a different column range; scale/offset are shared
+                // across cores
                 quantBOffset = static_cast<size_t>(k_tile) * TILE_K * TILE_N + subBlockIdx * PROD_N;
                 scaleOffsetOffset = static_cast<size_t>(k_tile) * TILE_K;
             }
@@ -245,7 +248,8 @@ void LaunchTPushPopVCMatmul(uint8_t *ffts, uint8_t *out, uint8_t *srcA, uint8_t 
         LaunchTPushPopVCMatmulImpl<int16_t, float, float, 16, 256, 32, 64, TileSplitAxis::TILE_UP_DOWN>(
             ffts, out, srcA, quantB, scale, offset, fifoMem, stream);
         // Keys 7-12: TILE_LEFT_RIGHT (split along N columns)
-        // int8_t uses N=64 (PROD_N=32) to satisfy 32-byte alignment; int16_t uses N=32 (PROD_N=16, 16*2=32 bytes OK)
+        // int8_t uses N=64 (PROD_N=32) to satisfy 32-byte alignment; int16_t uses
+        // N=32 (PROD_N=16, 16*2=32 bytes OK)
     } else if constexpr (tilingKey == 7) {
         LaunchTPushPopVCMatmulImpl<int8_t, float, float, 16, 64, 64, 64, TileSplitAxis::TILE_LEFT_RIGHT>(
             ffts, out, srcA, quantB, scale, offset, fifoMem, stream);

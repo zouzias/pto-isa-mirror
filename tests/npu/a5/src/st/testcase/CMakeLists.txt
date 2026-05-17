@@ -16,7 +16,7 @@ function(pto_vec_st NAME)
         add_compile_definitions(STRAIGHT_INTRINSICS_IMPL)
     endif()
 
-    target_include_directories(${NAME}_kernel PRIVATE 
+    target_include_directories(${NAME}_kernel PRIVATE
         ${ASCEND_HOME_PATH}/pkg_inc/
         ${ASCEND_HOME_PATH}/pkg_inc/profiling/
         ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
@@ -28,7 +28,7 @@ function(pto_vec_st NAME)
     target_include_directories(${NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../common
     )
-    
+
     target_link_directories(${NAME} PUBLIC
         ${ASCEND_HOME_PATH}/lib64
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
@@ -239,47 +239,15 @@ set(ALL_TESTCASES
     tmov_zz
     tmov_nd2nz
     textract_acc2vec
-    syncall
-    tpushpop_cv
-    tpushpop_cv_nosplit
-    tpushpop_vc
-    tpushpop_vc_nosplit
-    tpushpop_dir_both
-    texpands_mat
-    tpushpop_subtile
 )
 
-if (AUTO_MODE)
-  set(AUTO_MODE_WHITELIST
+if(NOT AUTO_MODE)
   # TPUSH and TPOP currently directly use TASSIGN inside their implementations,
-  # which doesn't work for auto mode. They need to be disabled for auto mode 
-  # until rewritten to adapt to auto mode
-    tpushpop_cv
-    tpushpop_cv_nosplit
-    tpushpop_vc
-    tpushpop_vc_nosplit
-    tpushpop_dir_both
-    tpushpop_subtile
-  # the following case wait to be fix 
-    tcvt
-    ttrans
-    ttrans_conv
-    tci
-    tquant
-    texpands_mat
-    tinsert
-    tscatter
-    tcolargmin
-    tcolargmax
-    tmov
-    tmatmul
-    tmatmul_mx
-    tmov_zz
-  )
-
-  foreach(whitelisted_case ${AUTO_MODE_WHITELIST})
-    list(REMOVE_ITEM ALL_TESTCASES ${whitelisted_case})
-  endforeach()
+  # which doesn't work for auto mode. They need to be disabled for auto mode
+  # until rewritten to adapt to auto mode. texpands_mat currently has to
+  # directly call CCE intrinsics in the kernel, which won't compile in auto
+  # mode; besides the auto-sync won't work with raw CCE intrinsics
+  list(APPEND ALL_TESTCASES tpushpop_cv tpushpop_cv_nosplit tpushpop_vc tpushpop_vc_nosplit tpushpop_dir_both texpands_mat)
 endif()
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
