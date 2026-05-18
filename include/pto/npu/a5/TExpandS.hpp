@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TEXPANDS_HPP
@@ -13,9 +15,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
+
+#include "TBinSOp.hpp"
 #include "common.hpp"
 #include "utils.hpp"
-#include "TBinSOp.hpp"
 
 namespace pto {
 inline namespace TExpandsInternel {
@@ -63,15 +66,19 @@ PTO_INTERNAL void TExpandSInstrMat(__cbuf__ typename TileData::DType *dstPtr, in
         auto dstCast = reinterpret_cast<__cbuf__ uint32_t *>(dstPtr);
         uint16_t expanded16 = static_cast<uint16_t>(value) | (static_cast<uint16_t>(value) << 8);
         uint32_t expanded32 = static_cast<uint32_t>(expanded16) | (static_cast<uint32_t>(expanded16) << 16);
-        pto_create_cbuf_matrix(dstCast, repeatConfig, expanded32);
+        create_cbuf_matrix(dstCast, repeatConfig, expanded32);
     } else if constexpr (sizeof(typename TileData::DType) == 2) {
-        pto_create_cbuf_matrix(dstPtr, repeatConfig, value);
+        if constexpr (std::is_same<typename TileData::DType, bfloat16_t>::value) {
+            create_cbuf_matrix_bf16(reinterpret_cast<__cbuf__ bfloat16_t *>(dstPtr), repeatConfig, value);
+        } else {
+            create_cbuf_matrix(dstPtr, repeatConfig, value);
+        }
     } else if constexpr (sizeof(typename TileData::DType) == 4) {
         if constexpr (std::is_same_v<typename TileData::DType, float>) {
             uint32_t bits = *(uint32_t *)(&value);
-            pto_create_cbuf_matrix(dstPtr, repeatConfig, bits);
+            create_cbuf_matrix(dstPtr, repeatConfig, bits);
         } else {
-            pto_create_cbuf_matrix(dstPtr, repeatConfig, static_cast<uint32_t>(value));
+            create_cbuf_matrix(dstPtr, repeatConfig, static_cast<uint32_t>(value));
         }
     }
 }
@@ -86,7 +93,8 @@ __tf__ PTO_INTERNAL void TExpandsTile(typename TileData::TileDType __out__ dst, 
     constexpr uint64_t repeat = totalBytes / BLOCK_BYTE_SIZE;
     constexpr uint16_t repeatTimes = static_cast<uint16_t>(repeat);
     static_assert(repeatTimes >= 1 && repeatTimes <= EXPANDS_MAX_SUPPORT_REPEAT_TIMES,
-                  "TEXPAND ERROR: The range of dstRow * dstCol * sizeof(U) / 32 is [1, 32767].");
+                  "TEXPAND ERROR: The range of dstRow * dstCol * sizeof(U) / 32 is [1, "
+                  "32767].");
     constexpr int64_t repeatConfig =
         ((static_cast<int64_t>(0) & 0x7FFF) << 32) |  // [46:32] is the repeat gap between two consecutive repeats
         ((static_cast<int64_t>(1) & 0xFFFF) << 16) |  // [30:16] is the block number of each repeat
@@ -120,7 +128,8 @@ PTO_INTERNAL void TExpandsConvTile(TileData &dst, typename TileData::DType scala
         uint64_t repeat = totalBytes / BLOCK_BYTE_SIZE;
         uint16_t repeatTimes = static_cast<uint16_t>(repeat);
         PTO_ASSERT(repeatTimes >= 1 && repeatTimes <= EXPANDS_MAX_SUPPORT_REPEAT_TIMES,
-                   "ERROR: The range of convtile's (shape0 * shape1 * shape2 * shape3) is [1, 32767].");
+                   "ERROR: The range of convtile's (shape0 * shape1 * shape2 * shape3) is "
+                   "[1, 32767].");
         TExpandsMatConv<TileData>(dst.data(), scalar, repeatTimes);
     } else if constexpr (TileData::layout == pto::Layout::NDC1HWC0 || TileData::layout == pto::Layout::FRACTAL_Z_3D) {
         // dim5 is c0Size
@@ -129,7 +138,8 @@ PTO_INTERNAL void TExpandsConvTile(TileData &dst, typename TileData::DType scala
         uint64_t repeat = totalBytes / BLOCK_BYTE_SIZE;
         uint16_t repeatTimes = static_cast<uint16_t>(repeat);
         PTO_ASSERT(repeatTimes >= 1 && repeatTimes <= EXPANDS_MAX_SUPPORT_REPEAT_TIMES,
-                   "ERROR: The range of convtile's (shape0 * shape1 * shape2 * shape3 * shape4) is [1, 32767].");
+                   "ERROR: The range of convtile's (shape0 * shape1 * shape2 * shape3 * "
+                   "shape4) is [1, 32767].");
         TExpandsMatConv<TileData>(dst.data(), scalar, repeatTimes);
     }
 }
@@ -149,7 +159,8 @@ PTO_INTERNAL void TEXPANDS_IMPL(TileData &dst, typename TileData::DType scalar)
 
     if constexpr (TileData::Loc == TileType::Vec) {
         static_assert(TileData::ValidCol <= TileData::Cols,
-                      "Number of valid columns must not be greater than number of tile columns.");
+                      "Number of valid columns must not be greater than number of "
+                      "tile columns.");
         static_assert(TileData::ValidRow <= TileData::Rows,
                       "Number of valid rows must not be greater than number of tile rows.");
 

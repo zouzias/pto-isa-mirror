@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TFILLPAD_HPP
@@ -14,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 #include <pto/npu/a5/utils.hpp>
+
 #include "TLoad.hpp"
 
 namespace pto {
@@ -135,7 +138,8 @@ template <typename TileDataDst, typename TileDataSrc>
 PTO_INTERNAL void TFILLPAD_INPLACE_IMPL(TileDataDst &dst, TileDataSrc &src)
 {
     static_assert(TileDataDst::Cols == TileDataSrc::Cols && TileDataDst::Rows == TileDataSrc::Rows,
-                  "Fix: TFillPad Dst vecTile Rows/Cols must be greater or equal to src vecTile.");
+                  "Fix: TFillPad Dst vecTile Rows/Cols must be greater or equal "
+                  "to src vecTile.");
 
     TFILLPAD_GENERIC_IMPL<TileDataDst, TileDataSrc, true>(dst, src);
 }
@@ -170,9 +174,10 @@ __tf__ PTO_INTERNAL void TFillPad_cube(typename TileData::TileDType __out__ dst,
             uint16_t repeatGap = TileData::Rows - blockLen;
             int64_t repeatConfig =
                 (static_cast<uint64_t>(blockLen) << 16) |  // [30:16] is the block number of each repeat
-                (static_cast<uint64_t>(repeatGap) << 32) | // [46:32] is the repeat gap between two consecutive repeats
+                (static_cast<uint64_t>(repeatGap) << 32) | // [46:32] is the repeat gap between two consecutive
+                                                           // repeats
                 static_cast<uint64_t>(repeat);             // [14:0] is the repeat times
-            pto_create_cbuf_matrix((__cbuf__ uint16_t *)(dstPtr + dstValidRow * elementsPerBlock), repeatConfig, 0);
+            create_cbuf_matrix((__cbuf__ uint16_t *)(dstPtr + dstValidRow * elementsPerBlock), repeatConfig, 0);
         }
     } else {
         uint16_t blockLen = TileData::Rows - dstValidRow; // unit is 32B
@@ -184,14 +189,14 @@ __tf__ PTO_INTERNAL void TFillPad_cube(typename TileData::TileDType __out__ dst,
             (static_cast<uint64_t>(repeatGap) << 32) | // [46:32] is the repeat gap between two consecutive repeats
             static_cast<uint64_t>(repeat);             // [14:0] is the repeat times
         if (blockLen != 0) {
-            pto_create_cbuf_matrix((__cbuf__ uint16_t *)(dstPtr + dstValidRow * elementsPerBlock), repeatConfig, 0);
+            create_cbuf_matrix((__cbuf__ uint16_t *)(dstPtr + dstValidRow * elementsPerBlock), repeatConfig, 0);
         }
-        if (alignedValidCol <
-            TileData::Cols) { // if alignedValidCol is not equal to TileData::Cols, need to pad the left column
+        if (alignedValidCol < TileData::Cols) { // if alignedValidCol is not equal to TileData::Cols,
+                                                // need to pad the left column
             blockLen = TileData::Rows * (TileData::Cols - alignedValidCol) / elementsPerBlock; // unit is 32B
             repeatConfig = (static_cast<uint64_t>(blockLen) << 16) | // [30:16] is the block number of each repeat
                            (static_cast<uint64_t>(0) << 32) | 1;     // [46:32] is the repeat gap
-            pto_create_cbuf_matrix((__cbuf__ uint16_t *)(dstPtr + TileData::Rows * alignedValidCol), repeatConfig, 0);
+            create_cbuf_matrix((__cbuf__ uint16_t *)(dstPtr + TileData::Rows * alignedValidCol), repeatConfig, 0);
         }
     }
 #endif

@@ -2,7 +2,7 @@
 
 This document describes element-wise operations between two tiles.
 
-**Total Operations:** 29
+**Total Operations:** 28
 
 ---
 
@@ -10,15 +10,16 @@ This document describes element-wise operations between two tiles.
 
 ### TADD
 
-For detailed instruction documentation, see [isa/TADD](../isa/TADD.md)
-
+For detailed instruction documentation, see [isa/TADD](../isa/tile/ops/elementwise-tile-tile/tadd.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tadd %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tadd ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -27,15 +28,16 @@ pto.tadd ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TABS
 
-For detailed instruction documentation, see [isa/TABS](../isa/TABS.md)
-
+For detailed instruction documentation, see [isa/TABS](../isa/tile/ops/elementwise-tile-tile/tabs.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tabs %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tabs ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -44,15 +46,16 @@ pto.tabs ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TAND
 
-For detailed instruction documentation, see [isa/TAND](../isa/TAND.md)
-
+For detailed instruction documentation, see [isa/TAND](../isa/tile/ops/elementwise-tile-tile/tand.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tand %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tand ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -61,15 +64,16 @@ pto.tand ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TOR
 
-For detailed instruction documentation, see [isa/TOR](../isa/TOR.md)
-
+For detailed instruction documentation, see [isa/TOR](../isa/tile/ops/elementwise-tile-tile/tor.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tor %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tor ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -78,15 +82,16 @@ pto.tor ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !
 
 ### TSUB
 
-For detailed instruction documentation, see [isa/TSUB](../isa/TSUB.md)
-
+For detailed instruction documentation, see [isa/TSUB](../isa/tile/ops/elementwise-tile-tile/tsub.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tsub %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tsub ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -95,15 +100,16 @@ pto.tsub ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TMUL
 
-For detailed instruction documentation, see [isa/TMUL](../isa/TMUL.md)
-
+For detailed instruction documentation, see [isa/TMUL](../isa/tile/ops/elementwise-tile-tile/tmul.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tmul %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tmul ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -112,15 +118,16 @@ pto.tmul ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TMIN
 
-For detailed instruction documentation, see [isa/TMIN](../isa/TMIN.md)
-
+For detailed instruction documentation, see [isa/TMIN](../isa/tile/ops/elementwise-tile-tile/tmin.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tmin %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -129,15 +136,16 @@ pto.tmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TMAX
 
-For detailed instruction documentation, see [isa/TMAX](../isa/TMAX.md)
-
+For detailed instruction documentation, see [isa/TMAX](../isa/tile/ops/elementwise-tile-tile/tmax.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tmax %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tmax ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -146,15 +154,16 @@ pto.tmax ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TCMP
 
-For detailed instruction documentation, see [isa/TCMP](../isa/TCMP.md)
-
+For detailed instruction documentation, see [isa/TCMP](../isa/tile/ops/elementwise-tile-tile/tcmp.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tcmp %src0, %src1{cmpMode = #pto<cmp xx>}: (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tcmp ins(%src0, %src1{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -163,15 +172,16 @@ pto.tcmp ins(%src0, %src1{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, !pto.tile
 
 ### TDIV
 
-For detailed instruction documentation, see [isa/TDIV](../isa/TDIV.md)
-
+For detailed instruction documentation, see [isa/TDIV](../isa/tile/ops/elementwise-tile-tile/tdiv.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tdiv %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tdiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -180,15 +190,16 @@ pto.tdiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TSHL
 
-For detailed instruction documentation, see [isa/TSHL](../isa/TSHL.md)
-
+For detailed instruction documentation, see [isa/TSHL](../isa/tile/ops/elementwise-tile-tile/tshl.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tshl %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tshl ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -197,15 +208,16 @@ pto.tshl ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TSHR
 
-For detailed instruction documentation, see [isa/TSHR](../isa/TSHR.md)
-
+For detailed instruction documentation, see [isa/TSHR](../isa/tile/ops/elementwise-tile-tile/tshr.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tshr %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tshr ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -214,15 +226,16 @@ pto.tshr ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TXOR
 
-For detailed instruction documentation, see [isa/TXOR](../isa/TXOR.md)
-
+For detailed instruction documentation, see [isa/TXOR](../isa/tile/ops/elementwise-tile-tile/txor.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.txor %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.txor ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -231,15 +244,16 @@ pto.txor ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TLOG
 
-For detailed instruction documentation, see [isa/TLOG](../isa/TLOG.md)
-
+For detailed instruction documentation, see [isa/TLOG](../isa/tile/ops/elementwise-tile-tile/tlog.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tlog %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tlog ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -248,15 +262,16 @@ pto.tlog ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TRECIP
 
-For detailed instruction documentation, see [isa/TRECIP](../isa/TRECIP.md)
-
+For detailed instruction documentation, see [isa/TRECIP](../isa/tile/ops/elementwise-tile-tile/trecip.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.trecip %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.trecip ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -265,15 +280,16 @@ pto.trecip ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TPRELU
 
-For detailed instruction documentation, see [isa/TPRELU](../isa/TPRELU.md)
-
+For detailed instruction documentation, see [isa/TPRELU](../isa/tile/ops/elementwise-tile-tile/tprelu.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tprelu %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tprelu ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -282,15 +298,16 @@ pto.tprelu ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst 
 
 ### TADDC
 
-For detailed instruction documentation, see [isa/TADDC](../isa/TADDC.md)
-
+For detailed instruction documentation, see [isa/TADDC](../isa/tile/ops/elementwise-tile-tile/taddc.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.taddc %src0, %src1, %src2 : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.taddc ins(%src0, %src1, %src2 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -299,15 +316,16 @@ pto.taddc ins(%src0, %src1, %src2 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto
 
 ### TSUBC
 
-For detailed instruction documentation, see [isa/TSUBC](../isa/TSUBC.md)
-
+For detailed instruction documentation, see [isa/TSUBC](../isa/tile/ops/elementwise-tile-tile/tsubc.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tsubc %src0, %src1, %src2 : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tsubc ins(%src0, %src1, %src2 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -316,15 +334,16 @@ pto.tsubc ins(%src0, %src1, %src2 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto
 
 ### TCVT
 
-For detailed instruction documentation, see [isa/TCVT](../isa/TCVT.md)
-
+For detailed instruction documentation, see [isa/TCVT](../isa/tile/ops/elementwise-tile-tile/tcvt.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tcvt %src{rmode = #pto<round_mode xx>}: !pto.tile<...> -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tcvt ins(%src{rmode = #pto<round_mode xx>}: !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -333,15 +352,16 @@ pto.tcvt ins(%src{rmode = #pto<round_mode xx>}: !pto.tile_buf<...>) outs(%dst : 
 
 ### TSEL
 
-For detailed instruction documentation, see [isa/TSEL](../isa/TSEL.md)
-
+For detailed instruction documentation, see [isa/TSEL](../isa/tile/ops/elementwise-tile-tile/tsel.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tsel %mask, %src0, %src1 : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tsel ins(%mask, %src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -350,15 +370,16 @@ pto.tsel ins(%mask, %src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.
 
 ### TRSQRT
 
-For detailed instruction documentation, see [isa/TRSQRT](../isa/TRSQRT.md)
-
+For detailed instruction documentation, see [isa/TRSQRT](../isa/tile/ops/elementwise-tile-tile/trsqrt.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.trsqrt %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.trsqrt ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -367,15 +388,16 @@ pto.trsqrt ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TSQRT
 
-For detailed instruction documentation, see [isa/TSQRT](../isa/TSQRT.md)
-
+For detailed instruction documentation, see [isa/TSQRT](../isa/tile/ops/elementwise-tile-tile/tsqrt.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tsqrt %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tsqrt ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -384,15 +406,16 @@ pto.tsqrt ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TEXP
 
-For detailed instruction documentation, see [isa/TEXP](../isa/TEXP.md)
-
+For detailed instruction documentation, see [isa/TEXP](../isa/tile/ops/elementwise-tile-tile/texp.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.texp %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.texp ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -401,15 +424,16 @@ pto.texp ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TNOT
 
-For detailed instruction documentation, see [isa/TNOT](../isa/TNOT.md)
-
+For detailed instruction documentation, see [isa/TNOT](../isa/tile/ops/elementwise-tile-tile/tnot.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tnot %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tnot ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -418,15 +442,16 @@ pto.tnot ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TRELU
 
-For detailed instruction documentation, see [isa/TRELU](../isa/TRELU.md)
-
+For detailed instruction documentation, see [isa/TRELU](../isa/tile/ops/elementwise-tile-tile/trelu.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.trelu %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.trelu ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -435,15 +460,16 @@ pto.trelu ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TNEG
 
-For detailed instruction documentation, see [isa/TNEG](../isa/TNEG.md)
-
+For detailed instruction documentation, see [isa/TNEG](../isa/tile/ops/elementwise-tile-tile/tneg.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tneg %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tneg ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -452,15 +478,16 @@ pto.tneg ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TREM
 
-For detailed instruction documentation, see [isa/TREM](../isa/TREM.md)
-
+For detailed instruction documentation, see [isa/TREM](../isa/tile/ops/elementwise-tile-tile/trem.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.trem %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.trem ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -469,15 +496,16 @@ pto.trem ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TFMOD
 
-For detailed instruction documentation, see [isa/TFMOD](../isa/TFMOD.md)
-
+For detailed instruction documentation, see [isa/TFMOD](../isa/tile/ops/elementwise-tile-tile/tfmod.md)
 
 **AS Level 1 (SSA):**
+
 ```text
 %dst = pto.tfmod %src0, %src1 : !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
+
 ```text
 pto.tfmod ins(%src0, %src1 : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -486,8 +514,7 @@ pto.tfmod ins(%src0, %src1 : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TPOW
 
-For detailed instruction documentation, see [isa/TPOW](../isa/TPOW.md)
-
+For detailed instruction documentation, see [isa/TPOW](../isa/tile/ops/elementwise-tile-tile/tpow.md)
 
 **AS Level 1 (SSA):**
 ```text
@@ -500,4 +527,3 @@ pto.tpow ins(%base, %exp, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.ti
 ```
 
 ---
-

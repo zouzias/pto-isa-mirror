@@ -1,19 +1,21 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_COMM_TNOTIFY_HPP
 #define PTO_COMM_TNOTIFY_HPP
 
+#include "pto/comm/comm_types.hpp"
 #include "pto/common/type.hpp"
 #include "pto/common/utils.hpp"
-#include "pto/comm/comm_types.hpp"
 
 namespace pto {
 namespace comm {
@@ -50,7 +52,8 @@ PTO_INTERNAL void TNOTIFY_IMPL(GlobalSignalData &dstSignalData, int32_t value, N
         dsb(DSB_DDR);
     } else {
         // Set operation - direct store to remote memory
-        // Invalidate cache first to prevent stale cached data from overwriting the new value
+        // Invalidate cache first to prevent stale cached data from overwriting the
+        // new value
         detail::DcciSignal((__gm__ int32_t *)sigPtr);
         *sigPtr = value;
         detail::DcciSignal((__gm__ int32_t *)sigPtr);
