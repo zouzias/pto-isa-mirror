@@ -48,7 +48,6 @@ PTO_INTERNAL void TgetTransferOnce(DstGT &dst, SrcGT &src, TileData &tile)
     TLOAD(tile, src);
     set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    pipe_barrier(PIPE_ALL);
     TSTORE(dst, tile);
     set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
@@ -183,53 +182,6 @@ PTO_INTERNAL void TgetChunkedSingle(GlobalDstData &dstGlobalData, GlobalSrcData 
 }
 
 // ============================================================================
-// TgetChunkedDispatch: Validate chunked constraints and dispatch to the
-// appropriate chunked transfer path (with or without intra-tile ping-pong).
-// ============================================================================
-
-template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
-PTO_INTERNAL void TgetChunkedDispatch(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                                      TileData &stagingTileData, const int (&remoteDims)[5], int singleTileRows,
-                                      int singleTileCols)
-{
-    constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
-    constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
-
-    if constexpr (!isDynamicRow) {
-        PTO_ASSERT(remoteDims[3] % singleTileRows == 0,
-                   "TGET chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
-                   "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
-    }
-    if constexpr (!isDynamicCol) {
-        PTO_ASSERT(remoteDims[4] % singleTileCols == 0,
-                   "TGET chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
-                   "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
-    }
-
-    constexpr bool canUseIntraTilePingPong = (TileData::Loc == TileType::Vec) &&
-                                             (TileData::BFractal == BLayout::RowMajor) &&
-                                             (TileData::SFractal == SLayout::NoneBox) && (TileData::Rows % 2 == 0);
-    if constexpr (canUseIntraTilePingPong) {
-        const int64_t outerChunkGroups = static_cast<int64_t>(remoteDims[0]) * remoteDims[1] * remoteDims[2];
-        const int64_t rowChunkCount = (static_cast<int64_t>(remoteDims[3]) + singleTileRows - 1) / singleTileRows;
-        const int64_t colChunkCount = (static_cast<int64_t>(remoteDims[4]) + singleTileCols - 1) / singleTileCols;
-        const int64_t totalChunkCount = outerChunkGroups * rowChunkCount * colChunkCount;
-
-        if (singleTileRows == TileData::Rows && singleTileCols == TileData::Cols && singleTileRows >= 2 &&
-            totalChunkCount >= 8) {
-            TgetChunkedSingle<GlobalDstData, GlobalSrcData, TileData, true>(
-                dstGlobalData, srcGlobalData, stagingTileData, remoteDims[0], remoteDims[1], remoteDims[2],
-                remoteDims[3], remoteDims[4], singleTileRows, singleTileCols);
-            return;
-        }
-    }
-
-    TgetChunkedSingle<GlobalDstData, GlobalSrcData, TileData, false>(
-        dstGlobalData, srcGlobalData, stagingTileData, remoteDims[0], remoteDims[1], remoteDims[2], remoteDims[3],
-        remoteDims[4], singleTileRows, singleTileCols);
-}
-
-// ============================================================================
 // TGET_IMPL: Remote read operation implementation
 //
 // Data flow: srcGlobalData (remote GM) → stagingTileData (UB) → dstGlobalData (local GM)
@@ -268,13 +220,51 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
         return;
     }
 
+    // Simple path: data fits in UB tile in both dimensions
     if (totalRemoteRows <= singleTileRows && remoteDims[4] <= singleTileCols) {
         TgetTransferOnce<TileData, GlobalDstData, GlobalSrcData>(dstGlobalData, srcGlobalData, stagingTileData);
         return;
     }
 
-    TgetChunkedDispatch<GlobalDstData, GlobalSrcData, TileData>(dstGlobalData, srcGlobalData, stagingTileData,
-                                                                remoteDims, singleTileRows, singleTileCols);
+    // 2D sliding chunked path
+    PTO_ASSERT(singleTileRows > 0, "TGET: tile ValidRow must be greater than 0 for chunked transfer");
+    PTO_ASSERT(singleTileCols > 0, "TGET: tile ValidCol must be greater than 0 for chunked transfer");
+
+    constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
+    constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
+
+    if constexpr (!isDynamicRow) {
+        PTO_ASSERT(remoteDims[3] % singleTileRows == 0,
+                   "TGET chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
+                   "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
+    }
+    if constexpr (!isDynamicCol) {
+        PTO_ASSERT(remoteDims[4] % singleTileCols == 0,
+                   "TGET chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
+                   "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
+    }
+
+    constexpr bool canUseIntraTilePingPong = (TileData::Loc == TileType::Vec) &&
+                                             (TileData::BFractal == BLayout::RowMajor) &&
+                                             (TileData::SFractal == SLayout::NoneBox) && (TileData::Rows % 2 == 0);
+    if constexpr (canUseIntraTilePingPong) {
+        const int64_t outerChunkGroups = static_cast<int64_t>(remoteDims[0]) * remoteDims[1] * remoteDims[2];
+        const int64_t rowChunkCount = (static_cast<int64_t>(remoteDims[3]) + singleTileRows - 1) / singleTileRows;
+        const int64_t colChunkCount = (static_cast<int64_t>(remoteDims[4]) + singleTileCols - 1) / singleTileCols;
+        const int64_t totalChunkCount = outerChunkGroups * rowChunkCount * colChunkCount;
+
+        if (singleTileRows == TileData::Rows && singleTileCols == TileData::Cols && singleTileRows >= 2 &&
+            totalChunkCount >= 8) {
+            TgetChunkedSingle<GlobalDstData, GlobalSrcData, TileData, true>(
+                dstGlobalData, srcGlobalData, stagingTileData, remoteDims[0], remoteDims[1], remoteDims[2],
+                remoteDims[3], remoteDims[4], singleTileRows, singleTileCols);
+            return;
+        }
+    }
+
+    TgetChunkedSingle<GlobalDstData, GlobalSrcData, TileData, false>(
+        dstGlobalData, srcGlobalData, stagingTileData, remoteDims[0], remoteDims[1], remoteDims[2], remoteDims[3],
+        remoteDims[4], singleTileRows, singleTileCols);
 }
 
 // Process one chunk in the ping-pong pipeline: overlap TSTORE of previous chunk with TLOAD of current chunk
@@ -305,7 +295,6 @@ PTO_INTERNAL void TgetPingPongProcessChunk(GlobalDstData &dstGlobalData, GlobalS
         TileData &storeTile = pp.usePing ? pongTile : pingTile;
         event_t prevEvent = pp.usePing ? EVENT_ID1 : EVENT_ID0;
         wait_flag(PIPE_MTE2, PIPE_MTE3, prevEvent);
-        pipe_barrier(PIPE_ALL);
         DynShape pendShape(1, 1, 1, pp.pendingRows, pp.pendingCols);
         DstViewT pendView(dstGlobalData.data() + pp.pendingDstOffset, pendShape, localChunkStride);
         TSTORE(pendView, storeTile);
@@ -340,7 +329,6 @@ PTO_INTERNAL void TgetPingPongFlush(GlobalDstData &dstGlobalData, TileData &ping
     TileData &finalTile = pp.usePing ? pongTile : pingTile;
     event_t finalEvent = pp.usePing ? EVENT_ID1 : EVENT_ID0;
     wait_flag(PIPE_MTE2, PIPE_MTE3, finalEvent);
-    pipe_barrier(PIPE_ALL);
     ChunkShape finalShape(1, 1, 1, pp.pendingRows, pp.pendingCols);
     DstView finalView(dstGlobalData.data() + pp.pendingDstOffset, finalShape, localChunkStride);
     TSTORE(finalView, finalTile);
