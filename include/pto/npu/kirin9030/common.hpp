@@ -1,18 +1,21 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef COMMON_HPP
 #define COMMON_HPP
 
-#include "datatype.hpp"
 #include <pto/common/type.hpp>
+
+#include "datatype.hpp"
 
 namespace pto {
 
@@ -64,9 +67,6 @@ struct RegTensor {
 template <typename SrcType, typename DstType>
 PTO_INTERNAL constexpr QuantMode_t GetCastPreQuantMode()
 {
-    static_assert(std::is_same_v<SrcType, DstType>,
-                  "Fix: For Kirin, when Acc -> Mat/Vec/GM without quantization "
-                  "parameter configured, the srcType must be consistent with the DstType.");
     return QuantMode_t::NoQuant;
 }
 
@@ -125,35 +125,27 @@ PTO_INTERNAL void CheckTMovAccValid()
         if constexpr (std::is_same_v<SrcType, half>) {
             static_assert(std::is_same_v<DstType, half> || std::is_same_v<DstType, int8_t> ||
                               std::is_same_v<DstType, uint8_t> || std::is_same_v<DstType, int16_t>,
-                          "The output data type must be int8/uint8/half/int16 when input is data type half.");
+                          "The output data type must be int8/uint8/half/int16 when "
+                          "input is data type half.");
         } else if constexpr (std::is_same_v<SrcType, int32_t>) {
             static_assert(std::is_same_v<DstType, half> || std::is_same_v<DstType, int8_t> ||
                               std::is_same_v<DstType, uint8_t> || std::is_same_v<DstType, int16_t>,
-                          "The output data type must be int8/uint8/half/int16/int32 when input is data type int32.");
+                          "The output data type must be int8/uint8/half/int16/int32 "
+                          "when input is data type int32.");
         }
     } else {
         static_assert(std::is_same_v<DstType, SrcType>,
-                      "The input data type must be consistent with the output data type when preQuantScalar is not "
+                      "The input data type must be consistent with the output data "
+                      "type when preQuantScalar is not "
                       "configured");
         static_assert(std::is_same_v<DstType, half> || std::is_same_v<DstType, int32_t>,
-                      "The data type must be half or int32 when preQuantScalar is not configured");
+                      "The data type must be half or int32 when preQuantScalar is not "
+                      "configured");
     }
     static_assert((DstTileData::isRowMajor && DstTileData::SFractal == SLayout::NoneBox) ||
                       (!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::NoneBox) ||
                       (!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor),
                   "Only support nz2nz, nz2nd or nz2dn.");
-}
-
-template <typename DstTile, typename SrcTile, AccToVecMode mode, QuantMode_t quantPre>
-PTO_INTERNAL constexpr uint8_t GetDualDstCtl()
-{
-    if constexpr (mode == AccToVecMode::DualModeSplitM || mode == AccToVecMode::DualModeSplitN) {
-        static_assert(quantPre == QuantMode_t::NoQuant, "Quant is not support in dual Dst Mode.");
-        static_assert((!(!DstTile::isRowMajor && DstTile::SFractal == SLayout::NoneBox)),
-                      "Dual Dst Mode is not support in nz2dn.");
-        return ((mode == AccToVecMode::DualModeSplitM) ? 1 : 2);
-    }
-    return 0;
 }
 } // namespace pto
 

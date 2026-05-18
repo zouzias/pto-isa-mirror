@@ -1,29 +1,32 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
+#include <unistd.h>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <cmath>
 #include <cstring>
-#include "securec.h"
-#include <unistd.h>
-#include <algorithm>
-#include <chrono>
 #include <iomanip>
-#include <vector>
-#include <string>
 #include <iostream>
+#include <string>
+#include <vector>
 
 #include "ready_queue.hpp"
+#include "securec.h"
 
 #ifdef DT_UNDEFINED
 #define DT_UNDEFINED_SAVED DT_UNDEFINED
@@ -250,19 +253,18 @@ static void PrintTimingDetails(const PerfStats &comp_s, const PerfStats &seq_s, 
     auto gflops = [](double flops, double us) { return (us > 0.0) ? (flops / (us * 1e-6) / 1e9) : 0.0; };
     auto bw_gbs = [&](double us) { return (us > 0.0) ? (ag_bytes / (us * 1e-6) / (1024.0 * 1024.0 * 1024.0)) : 0.0; };
 
-    std::cout << "\n  Compute-only:   " << std::setprecision(1) << comp_s.avg << " us"
-              << "  (" << std::setprecision(0) << gflops(flops_per_rank, comp_s.avg) << " GFLOPS)" << std::endl;
+    std::cout << "\n  Compute-only:   " << std::setprecision(1) << comp_s.avg << " us" << "  (" << std::setprecision(0)
+              << gflops(flops_per_rank, comp_s.avg) << " GFLOPS)" << std::endl;
     std::cout << "\n  Sequential:     " << std::setprecision(1) << seq_s.avg << " us" << std::endl;
-    std::cout << "    comm:         " << std::setprecision(1) << seq_comm_s.avg << " us"
-              << "  (" << std::setprecision(1) << bw_gbs(seq_comm_s.avg) << " GB/s)" << std::endl;
-    std::cout << "    compute:      " << seq_compute_s.avg << " us"
-              << "  (" << std::setprecision(0) << gflops(flops_per_rank, seq_compute_s.avg) << " GFLOPS)" << std::endl;
+    std::cout << "    comm:         " << std::setprecision(1) << seq_comm_s.avg << " us" << "  ("
+              << std::setprecision(1) << bw_gbs(seq_comm_s.avg) << " GB/s)" << std::endl;
+    std::cout << "    compute:      " << seq_compute_s.avg << " us" << "  (" << std::setprecision(0)
+              << gflops(flops_per_rank, seq_compute_s.avg) << " GFLOPS)" << std::endl;
     std::cout << "\n  Pipelined:      " << std::setprecision(1) << pipe_s.avg << " us" << std::endl;
-    std::cout << "    comm done:    " << pipe_comm_s.avg << " us"
-              << "  (" << std::setprecision(1) << bw_gbs(pipe_comm_s.avg) << " GB/s)" << std::endl;
-    std::cout << "    compute done: " << pipe_compute_s.avg << " us"
-              << "  (" << std::setprecision(0) << gflops(flops_per_rank, pipe_compute_s.avg) << " GFLOPS, "
-              << std::setprecision(1)
+    std::cout << "    comm done:    " << pipe_comm_s.avg << " us" << "  (" << std::setprecision(1)
+              << bw_gbs(pipe_comm_s.avg) << " GB/s)" << std::endl;
+    std::cout << "    compute done: " << pipe_compute_s.avg << " us" << "  (" << std::setprecision(0)
+              << gflops(flops_per_rank, pipe_compute_s.avg) << " GFLOPS, " << std::setprecision(1)
               << ((comp_s.avg > 0.0) ?
                       (gflops(flops_per_rank, pipe_compute_s.avg) / gflops(flops_per_rank, comp_s.avg) * 100.0) :
                       0.0)
@@ -274,9 +276,9 @@ static void PrintTimingDetails(const PerfStats &comp_s, const PerfStats &seq_s, 
         (overlap_time > 0.0) ? (overlap_time / std::min(seq_comm_s.avg, seq_compute_s.avg) * 100.0) : 0.0;
 
     std::cout << "\n  Speedup:        " << std::setprecision(3) << speedup << "x" << std::endl;
-    std::cout << "  Time saved:     " << std::setprecision(1) << (seq_s.avg - pipe_s.avg) << " us"
-              << " (" << std::setprecision(1)
-              << ((seq_s.avg > 0.0) ? ((seq_s.avg - pipe_s.avg) / seq_s.avg * 100.0) : 0.0) << "%)" << std::endl;
+    std::cout << "  Time saved:     " << std::setprecision(1) << (seq_s.avg - pipe_s.avg) << " us" << " ("
+              << std::setprecision(1) << ((seq_s.avg > 0.0) ? ((seq_s.avg - pipe_s.avg) / seq_s.avg * 100.0) : 0.0)
+              << "%)" << std::endl;
     std::cout << "  Overlap eff:    " << std::setprecision(1) << overlap_eff << "%" << std::endl;
     std::cout << "  Throughput:     " << std::setprecision(0) << gflops(flops_total, pipe_s.avg) << " GFLOPS (total)"
               << std::endl;
@@ -591,6 +593,8 @@ static void Cleanup(RankResources &r)
 {
     aclrtFree(r.src1_dev);
     aclrtFree(r.output_dev);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     aclrtFreeHost(r.chunk_flag_host);
     if (r.computeStream)
         aclrtDestroyStream(r.computeStream);
@@ -696,7 +700,9 @@ static void PrintBanner(int n_ranks)
 int main(int argc, char **argv)
 {
     if (!CommMpiInit(&argc, &argv)) {
-        fprintf(stderr, "[FATAL] CommMpiInit failed. Launch with: mpirun -n <N> ./allgather_gemm\n");
+        fprintf(stderr,
+                "[FATAL] CommMpiInit failed. Launch with: mpirun -n <N> "
+                "./allgather_gemm\n");
         return 1;
     }
 

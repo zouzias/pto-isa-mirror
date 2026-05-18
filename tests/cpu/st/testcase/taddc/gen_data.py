@@ -39,6 +39,22 @@ def gen_golden_data_taddc(case_name, param):
 
 
 
+def ensure_directory(path: str) -> None:
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+
+def generate_case(param: "TAddcParams") -> None:
+    case_name = generate_case_name(param)
+    ensure_directory(case_name)
+    original_dir = os.getcwd()
+    try:
+        os.chdir(case_name)
+        gen_golden_data_taddc(case_name, param)
+    finally:
+        os.chdir(original_dir)
+
+
 class TAddcParams:
     def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
         self.dtype = dtype
@@ -52,15 +68,15 @@ class TAddcParams:
 
 def generate_case_name(param):
     dtype_str = NumExt.get_short_type_name(param.dtype)
-    
+
     def substring(a, b) -> str:
         return f"_{a}x{b}"
-        
-    name = f"TADDCTest.case_{dtype_str}" 
+
+    name = f"TADDCTest.case_{dtype_str}"
     name += substring(param.global_row, param.global_col)
     name += substring(param.tile_row, param.tile_col)
     name += substring(param.valid_row, param.valid_col)
-    
+
     return name
 
 
