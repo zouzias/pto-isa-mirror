@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TREMS_HPP
@@ -16,7 +18,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 // Formula: remainder(a, b) = a - floor(a/b) * b
 // Note: For fp32, after computing remainder, we check if result * scalar < 0.
-//       If signs differ, we add scalar to result to ensure the result has the same sign as scalar.
+//       If signs differ, we add scalar to result to ensure the result has the
+//       same sign as scalar.
 struct RemSOp {
     PTO_INTERNAL static void RemSF32Instr(__ubuf__ float *dst, __ubuf__ float *src, float x, __ubuf__ float *tmp)
     {
@@ -128,9 +131,11 @@ PTO_INTERNAL void TREMS_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDa
 
     // dynamic checks
     PTO_ASSERT(dst.GetValidRow() == src.GetValidRow() && dst.GetValidRow() > 0,
-               "TREMS: Number of valid rows of dst and src must be the same, and both greater than 0.");
+               "TREMS: Number of valid rows of dst and src must be the same, and "
+               "both greater than 0.");
     PTO_ASSERT(dst.GetValidCol() == src.GetValidCol() && dst.GetValidCol() > 0,
-               "TREMS: Number of valid columns of dst and src must be the same, and all greater than 0.");
+               "TREMS: Number of valid columns of dst and src must be the same, "
+               "and all greater than 0.");
     PTO_ASSERT(tmp.GetValidCol() >= dst.GetValidCol(), "TREMS: tmp tile must have at least dst.GetValidCol() columns.");
     PTO_ASSERT(tmp.GetValidRow() >= 1, "TREMS: tmp tile must have at least 1 row.");
 

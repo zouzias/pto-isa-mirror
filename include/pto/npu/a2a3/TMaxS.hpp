@@ -1,17 +1,20 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TMAXS_HPP
 #define TMAXS_HPP
 
 #include <pto/common/constants.hpp>
+
 #include "pto/npu/a2a3/TBinSOp.hpp"
 
 namespace pto {
@@ -62,7 +65,8 @@ PTO_INTERNAL void TMAXS_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDa
     unsigned dstValidRow = dst.GetValidRow();
     unsigned dstValidCol = dst.GetValidCol();
     PTO_ASSERT(dstValidRow > 0 && dstValidCol > 0,
-               "TMAXS: Number of valid rows and valid columns of dst tile must be greater than 0.");
+               "TMAXS: Number of valid rows and valid columns of dst tile must "
+               "be greater than 0.");
     PTO_ASSERT(dstValidRow == src.GetValidRow(), "TMAXS: Number of valid rows of dst and src must be the same.");
     PTO_ASSERT(dstValidCol == src.GetValidCol(), "TMAXS: Number of valid columns of dst and src must be the same.");
 

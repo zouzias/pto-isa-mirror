@@ -118,7 +118,7 @@ def gen_golden_data(param: TGatherParamsBase):
         x1_gm.tofile("./x1_gm.bin")
         golden.tofile("./golden.bin")
         os.chdir(original_dir)
-    elif isinstance(param, TGatherParams1D): 
+    elif isinstance(param, TGatherParams1D):
         output = np.zeros([param.dst_row * param.dst_col]).astype(param.src_type)
         src_data = np.random.randint(-20, 20, (param.src_row * param.src_col)).astype(param.src_type)
         src_data.tofile("./src0.bin")

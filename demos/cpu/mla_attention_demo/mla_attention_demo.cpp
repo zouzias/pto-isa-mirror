@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #include <algorithm>
@@ -16,11 +18,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <pto/pto-inst.hpp>
 #include <random>
 #include <string>
 #include <vector>
-
-#include <pto/pto-inst.hpp>
 
 using namespace pto;
 
@@ -222,8 +223,10 @@ void mla_pto(const std::vector<float> &q, const std::vector<float> &k, const std
     //   O = C_lat * Wo                             where Wo:(R×D), O:(S×D)
     //
     // Notes on PTO tiling:
-    // - "Plain" tiles (SLayout::NoneBox) are used as temporary row-major buffers for elementwise ops.
-    // - Matmul expects Left/Right/Acc tile roles; TMOV bridges between Plain and Matmul tiles.
+    // - "Plain" tiles (SLayout::NoneBox) are used as temporary row-major buffers
+    // for elementwise ops.
+    // - Matmul expects Left/Right/Acc tile roles; TMOV bridges between Plain and
+    // Matmul tiles.
     constexpr int kB = kBatch;
     constexpr int kH = kHeads;
     constexpr int kS = kSeqLen;
@@ -268,7 +271,8 @@ void mla_pto(const std::vector<float> &q, const std::vector<float> &k, const std
 
     const float scale = 1.0f / std::sqrt(static_cast<float>(kR));
 
-    // Load projection weights once (shared across all heads/batches in this demo).
+    // Load projection weights once (shared across all heads/batches in this
+    // demo).
     GlobalWqr wqGlobal(const_cast<float *>(wq.data()));
     GlobalWqr wkGlobal(const_cast<float *>(wk.data()));
     GlobalWqr wvGlobal(const_cast<float *>(wv.data()));
@@ -346,7 +350,8 @@ void mla_pto(const std::vector<float> &q, const std::vector<float> &k, const std
             TMULS(scores, scores, scale);
 
             // 5) Softmax over each row of scores:
-            //    probs = exp(scores - row_max(scores)) / row_sum(exp(scores - row_max(scores))).
+            //    probs = exp(scores - row_max(scores)) / row_sum(exp(scores -
+            //    row_max(scores))).
             RowReducePlain rowMax;
             ScoresPlain scoresCentered;
             ScoresPlain expScores;
@@ -368,7 +373,8 @@ void mla_pto(const std::vector<float> &q, const std::vector<float> &k, const std
             AccSR ctxLatAcc;
             TMATMUL(ctxLatAcc, probsLeft, vLatRight);
 
-            // 7) Output projection: (S×R) * (R×D) -> (S×D), then store to global memory.
+            // 7) Output projection: (S×R) * (R×D) -> (S×D), then store to global
+            // memory.
             LeftSR ctxLatLeft;
             TMOV(ctxLatLeft, ctxLatAcc);
 
