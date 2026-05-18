@@ -97,40 +97,6 @@ AICORE PTO_INLINE void MGatherRowMultiDma(__ubuf__ T *dst, __gm__ T *src, uint16
 }
 
 template <typename T>
-AICORE PTO_INLINE void MGatherElemDma(__ubuf__ T *dst, __gm__ T *src)
-{
-    if constexpr (sizeof(T) == 1) {
-        copy_gm_to_ubuf_align_b8(dst, src, 0, 1, sizeof(T), 0, 0, 0, 0);
-    } else if constexpr (sizeof(T) == 2) {
-        copy_gm_to_ubuf_align_b16(dst, src, 0, 1, sizeof(T), 0, 0, 0, 0);
-    } else if constexpr (sizeof(T) == 4) {
-        copy_gm_to_ubuf_align_b32(dst, src, 0, 1, sizeof(T), 0, 0, 0, 0);
-    }
-}
-
-template <typename DstTile, typename T>
-AICORE PTO_INLINE void MGatherZeroFillUB(__ubuf__ T *dstPtr)
-{
-    using U = std::conditional_t<sizeof(T) == 4, uint32_t, uint16_t>;
-    __ubuf__ U *dst = (__ubuf__ U *)dstPtr;
-    constexpr uint32_t numel = DstTile::Numel * sizeof(T) / sizeof(U);
-    set_mask_count();
-    set_vector_mask(0, numel);
-    vector_dup(dst, (U)0, 0, 1, 1, 8, 8);
-    set_mask_norm();
-    set_vector_mask(-1, -1);
-}
-
-template <typename DstTile, typename T>
-AICORE PTO_INLINE uint32_t MGatherNZUbOffset(uint32_t r, uint32_t c)
-{
-    constexpr uint32_t kC0 = C0_SIZE_BYTE / sizeof(T);
-    const uint32_t blockCol = c / kC0;
-    const uint32_t colInBlock = c - blockCol * kC0;
-    return blockCol * (uint32_t)DstTile::Rows * kC0 + r * kC0 + colInBlock;
-}
-
-template <typename T>
 AICORE PTO_INLINE uint64_t MGatherNZGmOffset(uint32_t logicalRow, uint32_t logicalCol, int gShape0, int gShape1,
                                              int gStride0, int gStride1, int gStride2, int gStride3, int gStride4)
 {
@@ -147,54 +113,6 @@ AICORE PTO_INLINE uint64_t MGatherNZGmOffset(uint32_t logicalRow, uint32_t logic
            (uint64_t)colInBlock * (uint64_t)gStride4;
 }
 
-template <typename T>
-AICORE PTO_INLINE void MGatherZeroSlice(__ubuf__ T *dstSlice, __ubuf__ int32_t *idxSlice, uint32_t count,
-                                        uint32_t tableSize)
-{
-    set_vector_mask(0, count);
-    vmuls(idxSlice, idxSlice, static_cast<int32_t>(-1), 1, 1, 1, 8, 8);
-    pipe_barrier(PIPE_V);
-    vadds(idxSlice, idxSlice, static_cast<int32_t>(tableSize), 1, 1, 1, 8, 8);
-    pipe_barrier(PIPE_V);
-    vrelu(idxSlice, idxSlice, 1, 1, 1, 8, 8);
-    pipe_barrier(PIPE_V);
-    vmins(idxSlice, idxSlice, static_cast<int32_t>(1), 1, 1, 1, 8, 8);
-    pipe_barrier(PIPE_V);
-
-    if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t>) {
-        vmul(reinterpret_cast<__ubuf__ int32_t *>(dstSlice), reinterpret_cast<__ubuf__ int32_t *>(dstSlice), idxSlice,
-             1, 1, 1, 1, 8, 8, 8);
-        pipe_barrier(PIPE_V);
-    } else if constexpr (std::is_same_v<T, float>) {
-        __ubuf__ float *idxF = reinterpret_cast<__ubuf__ float *>(idxSlice);
-        vconv_s322f32(idxF, idxSlice, 1, 1, 1, 8, 8);
-        pipe_barrier(PIPE_V);
-        vmul(reinterpret_cast<__ubuf__ float *>(dstSlice), reinterpret_cast<__ubuf__ float *>(dstSlice), idxF, 1, 1, 1,
-             1, 8, 8, 8);
-        pipe_barrier(PIPE_V);
-    } else if constexpr (std::is_same_v<T, half>) {
-        __ubuf__ float *idxF = reinterpret_cast<__ubuf__ float *>(idxSlice);
-        __ubuf__ half *idxH = reinterpret_cast<__ubuf__ half *>(idxSlice);
-        vconv_s322f32(idxF, idxSlice, 1, 1, 1, 8, 8);
-        pipe_barrier(PIPE_V);
-        vconv_f322f16(idxH, idxF, 1, 1, 1, 8, 8);
-        pipe_barrier(PIPE_V);
-        vmul(reinterpret_cast<__ubuf__ half *>(dstSlice), reinterpret_cast<__ubuf__ half *>(dstSlice), idxH, 1, 1, 1, 1,
-             8, 8, 8);
-        pipe_barrier(PIPE_V);
-    } else if constexpr (std::is_same_v<T, int16_t> || std::is_same_v<T, uint16_t>) {
-        __ubuf__ float *idxF = reinterpret_cast<__ubuf__ float *>(idxSlice);
-        __ubuf__ int16_t *idxS = reinterpret_cast<__ubuf__ int16_t *>(idxSlice);
-        vconv_s322f32(idxF, idxSlice, 1, 1, 1, 8, 8);
-        pipe_barrier(PIPE_V);
-        vconv_f322s16r(idxS, idxF, 1, 1, 1, 8, 8);
-        pipe_barrier(PIPE_V);
-        vmul(reinterpret_cast<__ubuf__ int16_t *>(dstSlice), reinterpret_cast<__ubuf__ int16_t *>(dstSlice), idxS, 1, 1,
-             1, 1, 8, 8, 8);
-        pipe_barrier(PIPE_V);
-    }
-}
-
 template <GatherOOB Oob, typename T, typename TIdx, typename DstTile, typename IdxTile>
 __tf__ AICORE void MGatherRowImpl(typename DstTile::TileDType __out__ dst, __gm__ T *tablePtr,
                                   typename IdxTile::TileDType __in__ indices, uint32_t validRow, uint32_t validCol,
@@ -203,29 +121,45 @@ __tf__ AICORE void MGatherRowImpl(typename DstTile::TileDType __out__ dst, __gm_
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ TIdx *idxPtr = (__ubuf__ TIdx *)__cce_get_tile_ptr(indices);
 
-    if constexpr (Oob == GatherOOB::Zero) {
-        MGatherZeroFillUB<DstTile, T>(dstPtr);
-        PtoSetWaitFlag<PIPE_V, PIPE_MTE2>();
-    }
-
     PtoSetWaitFlag<PIPE_V, PIPE_S>();
+    PtoSetWaitFlag<PIPE_MTE3, PIPE_S>();
 
     const uint32_t lenBytes = validCol * sizeof(T);
     constexpr uint32_t kRowStride = DstTile::RowStride;
 
-    for (uint32_t r = 0; r < validRow; r++) {
-        uint32_t rawIdx = static_cast<uint32_t>(idxPtr[r]);
-        uint32_t doRead;
-        uint32_t safeIdx = mgather_remap<Oob>(rawIdx, tableRows, doRead);
-        if (doRead) {
-            __gm__ T *srcRow = tablePtr + static_cast<uint64_t>(safeIdx) * tableRowStride;
+    if constexpr (Oob == GatherOOB::Zero) {
+        for (uint32_t r = 0; r < validRow; r++) {
+            uint32_t rawIdx = static_cast<uint32_t>(idxPtr[r]);
+            uint32_t doRead;
+            uint32_t safeIdx = mgather_remap<Oob>(rawIdx, tableRows, doRead);
             __ubuf__ T *dstRow = dstPtr + r * kRowStride;
-            MGatherRowDma<T>(dstRow, srcRow, lenBytes);
+            if (doRead) {
+                __gm__ T *srcRow = tablePtr + static_cast<uint64_t>(safeIdx) * tableRowStride;
+                MGatherRowDma<T>(dstRow, srcRow, lenBytes);
+            } else {
+                for (uint32_t c = 0; c < validCol; c++) {
+                    dstRow[c] = static_cast<T>(0);
+                }
+            }
+        }
+    } else {
+        for (uint32_t r = 0; r < validRow; r++) {
+            uint32_t rawIdx = static_cast<uint32_t>(idxPtr[r]);
+            uint32_t doRead;
+            uint32_t safeIdx = mgather_remap<Oob>(rawIdx, tableRows, doRead);
+            if (doRead) {
+                __gm__ T *srcRow = tablePtr + static_cast<uint64_t>(safeIdx) * tableRowStride;
+                __ubuf__ T *dstRow = dstPtr + r * kRowStride;
+                MGatherRowDma<T>(dstRow, srcRow, lenBytes);
+            }
         }
     }
 
+    PtoSetWaitFlag<PIPE_S, PIPE_MTE2>();
     PtoSetWaitFlag<PIPE_MTE2, PIPE_V>();
+    PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
     PtoSetWaitFlag<PIPE_S, PIPE_V>();
+    PtoSetWaitFlag<PIPE_S, PIPE_MTE3>();
 }
 
 template <GatherOOB Oob, typename T, typename TIdx, typename DstTile, typename IdxTile>
@@ -240,17 +174,20 @@ __tf__ AICORE void MGatherRowNzImpl(typename DstTile::TileDType __out__ dst, __g
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ TIdx *idxPtr = (__ubuf__ TIdx *)__cce_get_tile_ptr(indices);
 
-    if constexpr (Oob == GatherOOB::Zero) {
-        MGatherZeroFillUB<DstTile, T>(dstPtr);
-        PtoSetWaitFlag<PIPE_V, PIPE_MTE2>();
-    }
-
     PtoSetWaitFlag<PIPE_V, PIPE_S>();
+    PtoSetWaitFlag<PIPE_MTE3, PIPE_S>();
 
     const uint32_t tableLogicalRows = (uint32_t)gShape2 * kFRow;
     const uint32_t gmGapBytes = ((uint32_t)gStride1 - kC0) * (uint32_t)sizeof(T);
     constexpr uint32_t ubGapBlocks = (uint32_t)DstTile::Rows - 1u;
     const int64_t tileOuterStrideElem = (int64_t)gShape1 * (int64_t)DstTile::Rows * (int64_t)kC0;
+
+    if constexpr (Oob == GatherOOB::Zero) {
+        constexpr uint32_t kDstNumel = (uint32_t)DstTile::Rows * (uint32_t)DstTile::Cols;
+        for (uint32_t i = 0; i < kDstNumel; i++) {
+            dstPtr[i] = static_cast<T>(0);
+        }
+    }
 
     for (uint32_t r = 0; r < validRow; r++) {
         uint32_t rawIdx = static_cast<uint32_t>(idxPtr[r]);
@@ -274,8 +211,11 @@ __tf__ AICORE void MGatherRowNzImpl(typename DstTile::TileDType __out__ dst, __g
         }
     }
 
+    PtoSetWaitFlag<PIPE_S, PIPE_MTE2>();
     PtoSetWaitFlag<PIPE_MTE2, PIPE_V>();
+    PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
     PtoSetWaitFlag<PIPE_S, PIPE_V>();
+    PtoSetWaitFlag<PIPE_S, PIPE_MTE3>();
 }
 
 template <GatherOOB Oob, typename T, typename TIdx, typename DstTile, typename IdxTile>
@@ -286,12 +226,9 @@ __tf__ AICORE void MGatherElemImpl(typename DstTile::TileDType __out__ dst, __gm
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ TIdx *idxPtr = (__ubuf__ TIdx *)__cce_get_tile_ptr(indices);
 
-    if constexpr (Oob == GatherOOB::Zero) {
-        MGatherZeroFillUB<DstTile, T>(dstPtr);
-        PtoSetWaitFlag<PIPE_V, PIPE_MTE2>();
-    }
-
     PtoSetWaitFlag<PIPE_V, PIPE_S>();
+    PtoSetWaitFlag<PIPE_MTE3, PIPE_S>();
+    PtoSetWaitFlag<PIPE_MTE2, PIPE_S>();
 
     constexpr uint32_t kDstRowStride = DstTile::RowStride;
     constexpr uint32_t kIdxRowStride = IdxTile::RowStride;
@@ -305,36 +242,17 @@ __tf__ AICORE void MGatherElemImpl(typename DstTile::TileDType __out__ dst, __gm
             uint32_t rawIdx = static_cast<uint32_t>(idxPtr[idxOff]);
             uint32_t doRead;
             uint32_t safeIdx = mgather_remap<Oob>(rawIdx, tableSize, doRead);
-            if constexpr (Oob == GatherOOB::Zero) {
-                if (!doRead) {
-                    safeIdx = 0;
-                }
-                doRead = 1u;
-            }
             if (doRead) {
-                __gm__ T *srcElem = tablePtr + safeIdx;
-                __ubuf__ T *dstElem = dstPtr + dstOff;
-                MGatherElemDma<T>(dstElem, srcElem);
+                dstPtr[dstOff] = tablePtr[safeIdx];
+            } else if constexpr (Oob == GatherOOB::Zero) {
+                dstPtr[dstOff] = static_cast<T>(0);
             }
         }
     }
 
-    if constexpr (Oob == GatherOOB::Zero) {
-        PtoSetWaitFlag<PIPE_S, PIPE_V>();
-        PtoSetWaitFlag<PIPE_MTE2, PIPE_V>();
-        set_mask_count();
-        for (uint32_t r = 0; r < validRow; r++) {
-            __ubuf__ int32_t *idxRow = reinterpret_cast<__ubuf__ int32_t *>(idxPtr) + r * kIdxRowStride;
-            __ubuf__ T *dstRow = dstPtr + r * kDstRowStride;
-            MGatherZeroSlice<T>(dstRow, idxRow, validCol, tableSize);
-        }
-        set_mask_norm();
-        set_vector_mask(-1, -1);
-        PtoSetWaitFlag<PIPE_V, PIPE_S>();
-    }
-
-    PtoSetWaitFlag<PIPE_MTE2, PIPE_V>();
     PtoSetWaitFlag<PIPE_S, PIPE_V>();
+    PtoSetWaitFlag<PIPE_S, PIPE_MTE2>();
+    PtoSetWaitFlag<PIPE_S, PIPE_MTE3>();
 }
 
 template <GatherOOB Oob, typename T, typename TIdx, typename DstTile, typename IdxTile>
@@ -347,12 +265,9 @@ __tf__ AICORE void MGatherElemNzImpl(typename DstTile::TileDType __out__ dst, __
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ TIdx *idxPtr = (__ubuf__ TIdx *)__cce_get_tile_ptr(indices);
 
-    if constexpr (Oob == GatherOOB::Zero) {
-        MGatherZeroFillUB<DstTile, T>(dstPtr);
-        PtoSetWaitFlag<PIPE_V, PIPE_MTE2>();
-    }
-
     PtoSetWaitFlag<PIPE_V, PIPE_S>();
+    PtoSetWaitFlag<PIPE_MTE3, PIPE_S>();
+    PtoSetWaitFlag<PIPE_MTE2, PIPE_S>();
 
     constexpr uint32_t kIdxRowStride = IdxTile::RowStride;
     const uint32_t nColBlocks = (validCol + kC0 - 1u) / kC0;
@@ -372,76 +287,23 @@ __tf__ AICORE void MGatherElemNzImpl(typename DstTile::TileDType __out__ dst, __
                 uint32_t rawIdx = static_cast<uint32_t>(idxPtr[idxOff]);
                 uint32_t doRead;
                 uint32_t safeIdx = mgather_remap<Oob>(rawIdx, tableSize, doRead);
-                if constexpr (Oob == GatherOOB::Zero) {
-                    if (!doRead) {
-                        safeIdx = 0;
-                    }
-                    doRead = 1u;
-                }
                 if (doRead) {
                     const uint32_t logicalRow = safeIdx / nLogicalCols;
                     const uint32_t logicalCol = safeIdx - logicalRow * nLogicalCols;
                     const uint64_t srcOff = MGatherNZGmOffset<T>(logicalRow, logicalCol, gShape0, gShape1, gStride0,
                                                                  gStride1, gStride2, gStride3, gStride4);
-                    __gm__ T *srcElem = tablePtr + srcOff;
-                    __ubuf__ T *dstElem = dstRowBase + cInner;
-                    MGatherElemDma<T>(dstElem, srcElem);
+                    dstRowBase[cInner] = tablePtr[srcOff];
+                } else if constexpr (Oob == GatherOOB::Zero) {
+                    dstRowBase[cInner] = static_cast<T>(0);
                 }
             }
         }
     }
 
-    if constexpr (Oob == GatherOOB::Zero) {
-        PtoSetWaitFlag<PIPE_S, PIPE_V>();
-        PtoSetWaitFlag<PIPE_MTE2, PIPE_V>();
-        set_mask_count();
-        for (uint32_t bcol = 0; bcol < nColBlocks; bcol++) {
-            const uint32_t cBase = bcol * kC0;
-            const uint32_t cLimit = (cBase + kC0 < validCol) ? (cBase + kC0) : validCol;
-            const uint32_t kInBlock = cLimit - cBase;
-            for (uint32_t r = 0; r < validRow; r++) {
-                __ubuf__ T *dstSlice =
-                    dstPtr + (uint64_t)bcol * (uint64_t)kDstColBlockStride + (uint64_t)r * (uint64_t)kC0;
-                __ubuf__ int32_t *idxSlice = reinterpret_cast<__ubuf__ int32_t *>(idxPtr) + r * kIdxRowStride + cBase;
-                MGatherZeroSlice<T>(dstSlice, idxSlice, kInBlock, tableSize);
-            }
-        }
-        set_mask_norm();
-        set_vector_mask(-1, -1);
-        PtoSetWaitFlag<PIPE_V, PIPE_S>();
-    }
-
-    PtoSetWaitFlag<PIPE_MTE2, PIPE_V>();
     PtoSetWaitFlag<PIPE_S, PIPE_V>();
+    PtoSetWaitFlag<PIPE_S, PIPE_MTE2>();
+    PtoSetWaitFlag<PIPE_S, PIPE_MTE3>();
 }
-
-template <GatherOOB Oob, typename T, typename TIdx, typename DstTile, typename IdxTile>
-__tf__ AICORE void MGatherElemScalarImpl(typename DstTile::TileDType __out__ dst, __gm__ T *tablePtr,
-                                         typename IdxTile::TileDType __in__ indices, uint32_t tableSize)
-{
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
-    __ubuf__ TIdx *idxPtr = (__ubuf__ TIdx *)__cce_get_tile_ptr(indices);
-
-    PtoSetWaitFlag<PIPE_V, PIPE_S>();
-
-    uint32_t rawIdx = static_cast<uint32_t>(idxPtr[0]);
-    uint32_t doRead;
-    uint32_t safeIdx = mgather_remap<Oob>(rawIdx, tableSize, doRead);
-    if (doRead) {
-        dstPtr[0] = tablePtr[safeIdx];
-    } else {
-        dstPtr[0] = static_cast<T>(0);
-    }
-
-    PtoSetWaitFlag<PIPE_S, PIPE_V>();
-}
-
-template <typename T>
-struct IsMGatherZeroVecCoreSupportedDType {
-    static constexpr bool value = std::is_same_v<T, int16_t> || std::is_same_v<T, uint16_t> ||
-                                  std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> ||
-                                  std::is_same_v<T, half> || std::is_same_v<T, float>;
-};
 
 template <Coalesce Mode, GatherOOB Oob, typename DstTile, typename GlobalTable, typename IdxTile>
 PTO_INTERNAL void MGatherCheck()
@@ -505,15 +367,6 @@ PTO_INTERNAL void MGatherCheck()
             static_assert(kIdxValidC == kDstValidC,
                           "MGATHER A2/A3 Coalesce::Elem requires index tile ValidCol == destination ValidCol.");
         }
-        if constexpr (Oob == GatherOOB::Zero) {
-            static_assert(IsMGatherZeroVecCoreSupportedDType<T>::value,
-                          "MGATHER A2/A3 Coalesce::Elem with GatherOOB::Zero requires a dtype supported by the "
-                          "vec-core post-pass (int16/uint16/int32/uint32/half/float). int8/uint8/bfloat16 are not "
-                          "supported because vmul has no native instruction for those dtypes.");
-            static_assert(std::is_same_v<TIdx, int32_t>,
-                          "MGATHER A2/A3 Coalesce::Elem with GatherOOB::Zero requires int32_t indices (the vec-core "
-                          "valid-mask computation operates in signed int32 lanes).");
-        }
     }
 }
 
@@ -550,13 +403,9 @@ PTO_INTERNAL void MGATHER_IMPL(DstTile &dst, GlobalTable &table, IdxTile &indice
             constexpr uint32_t kC0 = C0_SIZE_BYTE / sizeof(T);
             const uint32_t nLogicalCols = static_cast<uint32_t>(gShape0 * gShape1) * kC0;
             const uint32_t tableSize = static_cast<uint32_t>(gShape2 * FRACTAL_NZ_ROW) * nLogicalCols;
-            if constexpr (DstTile::ValidRow == 1 && DstTile::ValidCol == 1) {
-                MGatherElemScalarImpl<Oob, T, TIdx, DstTile, IdxTile>(dst.data(), tablePtr, indices.data(), tableSize);
-            } else {
-                MGatherElemNzImpl<Oob, T, TIdx, DstTile, IdxTile>(dst.data(), tablePtr, indices.data(), validRow,
-                                                                  validCol, tableSize, gShape0, gShape1, gStride0,
-                                                                  gStride1, gStride2, gStride3, gStride4, nLogicalCols);
-            }
+            MGatherElemNzImpl<Oob, T, TIdx, DstTile, IdxTile>(dst.data(), tablePtr, indices.data(), validRow, validCol,
+                                                              tableSize, gShape0, gShape1, gStride0, gStride1, gStride2,
+                                                              gStride3, gStride4, nLogicalCols);
         }
     } else {
         if constexpr (Mode == Coalesce::Row) {
@@ -571,12 +420,8 @@ PTO_INTERNAL void MGATHER_IMPL(DstTile &dst, GlobalTable &table, IdxTile &indice
                 static_cast<uint32_t>(table.GetShape(GlobalTensorDim::DIM_0) * table.GetShape(GlobalTensorDim::DIM_1) *
                                       table.GetShape(GlobalTensorDim::DIM_2) * table.GetShape(GlobalTensorDim::DIM_3) *
                                       table.GetShape(GlobalTensorDim::DIM_4));
-            if constexpr (DstTile::ValidRow == 1 && DstTile::ValidCol == 1) {
-                MGatherElemScalarImpl<Oob, T, TIdx, DstTile, IdxTile>(dst.data(), tablePtr, indices.data(), tableSize);
-            } else {
-                MGatherElemImpl<Oob, T, TIdx, DstTile, IdxTile>(dst.data(), tablePtr, indices.data(), validRow,
-                                                                validCol, tableSize);
-            }
+            MGatherElemImpl<Oob, T, TIdx, DstTile, IdxTile>(dst.data(), tablePtr, indices.data(), validRow, validCol,
+                                                            tableSize);
         }
     }
 }
