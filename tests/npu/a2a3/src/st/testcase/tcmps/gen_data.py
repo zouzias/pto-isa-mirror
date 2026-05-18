@@ -31,15 +31,15 @@ def gen_golden_data_tcmps(case_name, param):
     if param.mode == "CmpMode::EQ":
         golden = np.equal(input1, input2[0])
     if param.mode == "CmpMode::NE":
-        golden = np.not_equal(input1, input2[0]) 
+        golden = np.not_equal(input1, input2[0])
     if param.mode == "CmpMode::LT":
-        golden = np.less(input1, input2[0]) 
+        golden = np.less(input1, input2[0])
     if param.mode == "CmpMode::GT":
-        golden = np.greater(input1, input2[0]) 
+        golden = np.greater(input1, input2[0])
     if param.mode == "CmpMode::GE":
-        golden = np.greater_equal(input1, input2[0]) 
+        golden = np.greater_equal(input1, input2[0])
     if param.mode == "CmpMode::LE":
-        golden = np.less_equal(input1, input2[0]) 
+        golden = np.less_equal(input1, input2[0])
 
     # Apply valid region constraints
     output = np.zeros([H, W]).astype(dtype)

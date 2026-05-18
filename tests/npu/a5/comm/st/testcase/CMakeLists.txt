@@ -22,6 +22,8 @@ function(pto_comm_st NAME)
 
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=${CCE_AICORE_ARCH} -D${CCE_MEMORY_MODEL} -std=c++17
         -Wno-non-c-typedef-for-linkage -Wno-braced-scalar-init)
+    # Ensure A5-specific macros are visible
+    add_compile_definitions(PTO_NPU_ARCH_A5)
 
     # Host-arch aware include root: x86_64 first, fallback to aarch64.
     set(PTO_TOOLKIT_DIR "${ASCEND_HOME_PATH}/x86_64-linux")
@@ -162,6 +164,8 @@ function(pto_comm_ccu_st NAME)
 
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=${CCE_AICORE_ARCH} -D${CCE_MEMORY_MODEL} -std=c++17
         -Wno-non-c-typedef-for-linkage -Wno-braced-scalar-init)
+    # Ensure A5-specific macros are visible
+    add_compile_definitions(PTO_NPU_ARCH_A5)
 
     set(PTO_TOOLKIT_DIR "${ASCEND_HOME_PATH}/x86_64-linux")
     if(NOT EXISTS "${PTO_TOOLKIT_DIR}")

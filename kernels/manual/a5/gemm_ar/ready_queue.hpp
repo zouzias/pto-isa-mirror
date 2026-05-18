@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 /**
@@ -65,6 +67,8 @@ struct alignas(64) MultiBlockQueueSet {
     int32_t tiles_per_block;
     int32_t consumed_count;
     int32_t padding[4];
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     int32_t queue_offsets[MAX_COMPUTE_BLOCKS];
 };
 
@@ -72,6 +76,8 @@ struct alignas(64) MultiBlockQueueSet {
 // Size calculations
 // ============================================================================
 
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 constexpr size_t PerBlockQueueSize(int capacity)
 {
     return sizeof(PerBlockQueue) - sizeof(PerBlockQueueSlot) + capacity * sizeof(PerBlockQueueSlot);
@@ -105,6 +111,8 @@ inline void MultiBlockQueueSetInit(MultiBlockQueueSet *qset, int num_blocks, int
 {
     qset->num_blocks = num_blocks;
     qset->total_tiles = total_tiles;
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     qset->tiles_per_block = (num_blocks == 0) ? 0 : (total_tiles + num_blocks - 1) / num_blocks;
     qset->consumed_count = 0;
     for (int i = 0; i < 4; i++)
@@ -112,6 +120,8 @@ inline void MultiBlockQueueSetInit(MultiBlockQueueSet *qset, int num_blocks, int
 
     size_t per_queue_size = PerBlockQueueSize(qset->tiles_per_block);
     per_queue_size = ((per_queue_size + 63) / 64) * 64;
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     size_t base_offset = sizeof(MultiBlockQueueSet);
 
     for (int b = 0; b < num_blocks; b++) {
@@ -119,6 +129,8 @@ inline void MultiBlockQueueSetInit(MultiBlockQueueSet *qset, int num_blocks, int
         PerBlockQueue *pq =
             reinterpret_cast<PerBlockQueue *>(reinterpret_cast<uint8_t *>(qset) + qset->queue_offsets[b]);
         PerBlockQueueInit(pq, qset->tiles_per_block, b);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     }
     for (int b = num_blocks; b < MAX_COMPUTE_BLOCKS; b++) {
         qset->queue_offsets[b] = 0;
@@ -126,6 +138,8 @@ inline void MultiBlockQueueSetInit(MultiBlockQueueSet *qset, int num_blocks, int
 }
 
 // ============================================================================
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 // Device-side functions (AICORE only — excluded from host unit-test builds)
 // ============================================================================
 

@@ -117,12 +117,12 @@ def gen_golden_data(param: TGatherParamsBase):
             res = x1_gm[:, 3::4]
         elif pattern == P1111:
             res = x1_gm[:, :]
-        
+
         golden = res.flatten()
 
         golden.tofile("./golden.bin")
         x1_gm.tofile("./x1_gm.bin")
-        os.chdir(original_dir) 
+        os.chdir(original_dir)
 
 
 class TGatherParamsNorm(TGatherParamsBase):

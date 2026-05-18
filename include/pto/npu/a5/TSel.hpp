@@ -1,17 +1,20 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 #ifndef TSEL_HPP
 #define TSEL_HPP
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
+
 #include "utils.hpp"
 
 namespace pto {
@@ -28,10 +31,9 @@ __tf__ PTO_INTERNAL void TSel_b32(TileT __out__ dstData, MaskT __in__ maskData, 
     __VEC_SCOPE__
     {
         MaskReg pReg, selMask0, selMask1, selMask2, tmpMask;
+        MaskReg tmpMask1 = pset_b16(PAT_ALL);
         RegTensor<T> vreg0, vreg1, vreg2, vreg3, dreg0, dreg1;
-        unsigned colOffset0, colOffset1;
-        unsigned sReg = validCol;
-        MaskReg tmpMask1 = CreatePredicate<T>(sReg);
+        unsigned sReg, colOffset0, colOffset1;
         constexpr auto distValue =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
         for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
@@ -52,13 +54,9 @@ __tf__ PTO_INTERNAL void TSel_b32(TileT __out__ dstData, MaskT __in__ maskData, 
                 pReg = CreatePredicate<T>(sReg);
                 vsts(dreg1, dst, (int32_t)(i * dstRowStride + colOffset1), distValue, pReg);
             }
-        }
 
-        if (sReg > 0) {
-            uint32_t remain = sReg;
-            colOffset0 = 2 * loopTimes * nRepeatElem;
-            for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
-                sReg = remain;
+            if (sReg > 0) {
+                colOffset0 = 2 * loopTimes * nRepeatElem;
                 plds(tmpMask, (__ubuf__ uint32_t *)mask, i * maskRowStride + 2 * 8 * loopTimes, US);
                 punpack(selMask0, tmpMask, LOWER);
                 vlds(vreg0, src0, (int32_t)(i * src0RowStride + colOffset0), NORM);

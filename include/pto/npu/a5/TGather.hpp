@@ -1,17 +1,20 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TGATHER_HPP
 #define TGATHER_HPP
 
 #include <pto/common/constants.hpp>
+
 #include "common.hpp"
 
 namespace pto {
@@ -293,14 +296,16 @@ PTO_INTERNAL void TGATHER_IMPL(DstTileData &dst, SrcTileData &src)
                       std::is_same_v<T, half> || std::is_same_v<T, bfloat16_t> || std::is_same_v<T, float> ||
                       std::is_same_v<T, float8_e4m3_t> || std::is_same_v<T, float8_e5m2_t> ||
                       std::is_same_v<T, hifloat8_t>,
-                  "Fix: TGATHER Src data type must be int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/"
+                  "Fix: TGATHER Src data type must be "
+                  "int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/"
                   "half/bfloat16_t/float/float8_e4m3_t/float8_e5m2_t/hifloat8_t.");
     static_assert(std::is_same_v<U, int8_t> || std::is_same_v<U, uint8_t> || std::is_same_v<U, int16_t> ||
                       std::is_same_v<U, uint16_t> || std::is_same_v<U, int32_t> || std::is_same_v<U, uint32_t> ||
                       std::is_same_v<U, half> || std::is_same_v<U, bfloat16_t> || std::is_same_v<U, float> ||
                       std::is_same_v<U, float8_e4m3_t> || std::is_same_v<U, float8_e5m2_t> ||
                       std::is_same_v<U, hifloat8_t>,
-                  "Fix: TGATHER Dst data type must be int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/"
+                  "Fix: TGATHER Dst data type must be "
+                  "int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/"
                   "half/bfloat16_t/float/float8_e4m3_t/float8_e5m2_t/hifloat8_t.");
     static_assert((sizeof(U) == sizeof(T)), "Fix: TGATHER expect same type size for dst and src");
     static_assert((DstTileData::Loc == TileType::Vec) && (SrcTileData::Loc == TileType::Vec),
@@ -791,7 +796,8 @@ PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS &src0, TileDataS1 &k_va
         std::is_same_v<typename TileDataS::DType, float> || std::is_same_v<typename TileDataS::DType, uint32_t> ||
             std::is_same_v<typename TileDataS::DType, int32_t> || std::is_same_v<typename TileDataS::DType, uint16_t> ||
             std::is_same_v<typename TileDataS::DType, int16_t> || std::is_same_v<typename TileDataS::DType, half>,
-        "Fix: TGATHER Src data type must be int16_t/uint16_t/int32_t/uint32_t/half/float.");
+        "Fix: TGATHER Src data type must be "
+        "int16_t/uint16_t/int32_t/uint32_t/half/float.");
     static_assert((cmpMode == CmpMode::GT || cmpMode == CmpMode::EQ), "Fix: TGATHER only support GT or EQ mode");
     static_assert(
         (std::is_same_v<typename TileDataS1::DType, uint16_t> || std::is_same_v<typename TileDataS1::DType, uint32_t>),
