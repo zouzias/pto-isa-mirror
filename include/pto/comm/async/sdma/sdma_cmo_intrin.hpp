@@ -11,7 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_COMM_ASYNC_SDMA_SDMA_CMO_INTRIN_HPP
 #define PTO_COMM_ASYNC_SDMA_SDMA_CMO_INTRIN_HPP
 
-#include "pto/comm/async/sdma/sdma_async_intrin.hpp"
+#include "pto/npu/comm/async/sdma/sdma_async_intrin.hpp"
 
 namespace pto {
 namespace comm {
@@ -88,7 +88,7 @@ PTO_INTERNAL void AddOneCmoSqe(__gm__ BatchWriteChannelInfo *channelInfo, __gm__
 
 template <typename = void>
 PTO_INTERNAL void SubmitCmoPrefetchSqes(__gm__ BatchWriteChannelInfo *batchWriteChannelInfo, __gm__ uint8_t *src,
-                                        const SdmaConfig &config, uint32_t *sqTail, uint32_t sqTailLen)
+                                        const SdmaConfig &config, uint32_t *sqTail)
 {
     for (uint32_t idx = 0U; idx < config.iter_num; ++idx) {
         uint32_t queueIdx = idx % config.queue_num;
@@ -116,9 +116,9 @@ PTO_INTERNAL uint64_t SdmaCmoPrefetch(__gm__ uint8_t *src, uint64_t messageLen, 
         return 0;
     }
 
-    const uint32_t syncId = execCtx.syncId;
-    const uint32_t channelGroupIndex = execCtx.channelGroupIdx;
     UbTmpBuf tmpBuf = execCtx.tmpBuf;
+    const uint32_t syncId = execCtx.syncId;
+    const uint32_t channelGroupIdx = execCtx.channelGroupIdx;
 
     SdmaConfig config;
     if (!BuildTransferConfig(execCtx.baseConfig, messageLen, config)) {
@@ -128,22 +128,22 @@ PTO_INTERNAL uint64_t SdmaCmoPrefetch(__gm__ uint8_t *src, uint64_t messageLen, 
     if (config.iter_num == 0) {
         return 0;
     }
-    if (channelGroupIndex >= (kSdmaMaxChannel / config.queue_num)) {
+    const uint32_t sqePerQueue = (config.iter_num + config.queue_num - 1) / config.queue_num + 1;
+    if (sqePerQueue > kSqDepth) {
         return 0;
     }
-    const uint32_t sqePerQue = (config.iter_num + config.queue_num - 1) / config.queue_num + 1;
-    if (sqePerQue > kSqDepth) {
+    if (channelGroupIdx >= (kSdmaMaxChannel / config.queue_num)) {
         return 0;
     }
 
     __gm__ BatchWriteChannelInfo *batchWriteChannelBase =
         (__gm__ BatchWriteChannelInfo *)(contextGm + sizeof(BatchWriteFlagInfo));
-    __gm__ BatchWriteChannelInfo *batchWriteChannelInfo = batchWriteChannelBase + channelGroupIndex * config.queue_num;
+    __gm__ BatchWriteChannelInfo *batchWriteChannelInfo = batchWriteChannelBase + channelGroupIdx * config.queue_num;
 
     uint32_t sqTail[64] = {0};
-    InitSqTailArray(batchWriteChannelInfo, config.queue_num, sqTail, 64, tmpBuf);
+    InitSqTailArray(batchWriteChannelInfo, config.queue_num, sqTail, tmpBuf);
 
-    SubmitCmoPrefetchSqes(batchWriteChannelInfo, src, config, sqTail, 64);
+    SubmitCmoPrefetchSqes(batchWriteChannelInfo, src, config, sqTail);
 
     FlushCacheAndRingDoorbell(batchWriteChannelInfo, config, sqTail, tmpBuf, syncId);
     UpdateSqTailState(batchWriteChannelInfo, config, sqTail, tmpBuf, syncId);
