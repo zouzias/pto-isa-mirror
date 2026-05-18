@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TMRGSORT_HPP
@@ -107,7 +109,8 @@ __tf__ AICORE void TMrgsort(typename DstTileData::TileDType __out__ dst, typenam
 
         config |= (uint64_t(0b0111) << 8); // Xt[11:8]: 4-bit mask signal
 
-        count |= (uint64_t(src2Col) << 32); // VMS4_SR[47:32], number of finished region proposals in list2
+        count |= (uint64_t(src2Col) << 32); // VMS4_SR[47:32], number of finished
+                                            // region proposals in list2
 
         __ubuf__ typename DstTileData::DType *addrArray[LIST_NUM_3] = {
             (__ubuf__ typename DstTileData::DType *)(src0Ptr), (__ubuf__ typename DstTileData::DType *)(src1Ptr),
@@ -122,8 +125,10 @@ __tf__ AICORE void TMrgsort(typename DstTileData::TileDType __out__ dst, typenam
 
         config |= (uint64_t(0b1111) << 8); // Xt[11:8]: 4-bit mask signal
 
-        count |= (uint64_t(src2Col) << 32); // VMS4_SR[47:32], number of finished region proposals in list2
-        count |= (uint64_t(src3Col) << 48); // VMS4_SR[63:48], number of finished region proposals in list3
+        count |= (uint64_t(src2Col) << 32); // VMS4_SR[47:32], number of finished
+                                            // region proposals in list2
+        count |= (uint64_t(src3Col) << 48); // VMS4_SR[63:48], number of finished
+                                            // region proposals in list3
 
         __ubuf__ typename DstTileData::DType *addrArray[LIST_NUM_4] = {
             (__ubuf__ typename DstTileData::DType *)(src0Ptr), (__ubuf__ typename DstTileData::DType *)(src1Ptr),
@@ -270,7 +275,8 @@ PTO_INTERNAL void TMRGSORT_IMPL(DstTileData &dst, MrgSortExecutedNumList &execut
         executedNumList.mrgSortList3, src0Col, src1Col, EMPTY_LIST_SIZE, EMPTY_LIST_SIZE);
 }
 
-// The blockLen size includes values and indexes, such as 32 values and indexes: blockLen=64
+// The blockLen size includes values and indexes, such as 32 values and indexes:
+// blockLen=64
 template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TMRGSORT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t blockLen)
 {
@@ -284,7 +290,8 @@ PTO_INTERNAL void TMRGSORT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t blo
     uint32_t numStrcutures = blockLen * sizeof(typename SrcTileData::DType) >> STRUCT_SIZE_SHIFT;
     PTO_ASSERT(blockLen % TMRGSORT_BLOCK_LEN == 0, "blockLen is a multiple of 64");
     PTO_ASSERT(srcCol % (blockLen * BLOCK_NUM) == 0,
-               "ERROR: The input Tile Valid size requirement is an integer multiple of blockLen * 4.");
+               "ERROR: The input Tile Valid size requirement is an integer "
+               "multiple of blockLen * 4.");
     uint8_t repeatTimes = srcCol / (blockLen * BLOCK_NUM);
     PTO_ASSERT(repeatTimes >= REPEAT_ONE_TIME && repeatTimes <= MAX_REPEAT_TIMES,
                "ERROR: The range of Tile Valid divided by blockLen is [1,255].");

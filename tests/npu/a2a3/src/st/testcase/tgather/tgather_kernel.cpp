@@ -1,18 +1,21 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include <pto/common/constants.hpp>
 #include <iostream>
-#include "tgather_common.h"
+#include <pto/common/constants.hpp>
+#include <pto/pto-inst.hpp>
+
 #include "acl/acl.h"
+#include "tgather_common.h"
 
 using namespace pto;
 using namespace std;
@@ -260,8 +263,9 @@ __global__ AICORE void runTGATHER_CMP(__gm__ srcT *src, __gm__ src1T *src1, __gm
     using TmpTileData = Tile<TileType::Vec, uint8_t, kTRows_, cmpCol, BLayout::RowMajor, -1, -1>;
     // tmp所需空间如下
     // cmps所需tmp：kTRows_ * cmpCol * sizeof(uint8_t)
-    // index所需tmp：kTRows_ * kTCols_ * sizeof(dstT)即与src相同的shape，数据类型为dst的
-    // cvt所需tmp：kTRows_ * sizeof(src1T)
+    // index所需tmp：kTRows_ * kTCols_ *
+    // sizeof(dstT)即与src相同的shape，数据类型为dst的 cvt所需tmp：kTRows_ *
+    // sizeof(src1T)
     size_t tmpSize = kTRows_ * cmpCol * sizeof(uint8_t) + kTRows_ * kTCols_ * sizeof(dstT) + kTRows_ * sizeof(src1T);
     TmpTileData tmpTile(kTRows_, cmpVCol);
     TASSIGN(tmpTile, srcSize + src1Size + dstSize + concatSize);
