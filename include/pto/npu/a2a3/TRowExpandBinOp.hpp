@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TROWEXPANDBIN_HPP
@@ -121,7 +123,8 @@ PTO_INTERNAL void TRowExpandBinaryInstr(__ubuf__ T *dstPtr, __ubuf__ T *src0Ptr,
                 TRowExpandBinaryNormModeTail<Op, T, elementsPerRepeat, blockSizeElem, DstRowStride, Src0RowStride>(
                     dstPtr, src0Ptr, tmpPtr, validRow, validCol);
             }
-        } else { // 大于256行时repeatstride不会越界，且norm mode计算次数较少，使用norm mode
+        } else { // 大于256行时repeatstride不会越界，且norm
+                 // mode计算次数较少，使用norm mode
             TRowExpandBinaryNormMode<Op, T, U, elementsPerRepeat, blockSizeElem, DstRowStride, Src0RowStride>(
                 dstPtr, src0Ptr, src1Ptr, tmpPtr, tmpPtr_, validRow, validCol);
         }

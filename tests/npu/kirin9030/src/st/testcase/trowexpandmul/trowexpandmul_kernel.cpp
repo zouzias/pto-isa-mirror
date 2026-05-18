@@ -1,15 +1,18 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <type_traits>
 #include <pto/pto-inst.hpp>
+#include <type_traits>
+
 #include "acl/acl.h"
 
 using namespace pto;
@@ -31,8 +34,9 @@ __global__ AICORE void runROWEXPANDMUL(__gm__ T *out, __gm__ T *src0, __gm__ T *
     DstTileData src0Tile(dstRow, dstCol);
     TileData src1Tile(src1Row, 1);
     DstTileData dstTile(dstRow, dstCol);
+    size_t size = dstRow * dstCol * sizeof(T);
     TASSIGN<0x0>(src0Tile);
-    TASSIGN<DstTileData::Numel * sizeof(T)>(src1Tile);
+    TASSIGN<size>(src1Tile);
     TASSIGN<0x0>(dstTile);
 
     int offset = 0;
@@ -71,8 +75,9 @@ __global__ AICORE void runROWEXPANDMUL2(__gm__ T *out, __gm__ T *src0, __gm__ T 
     DstTileData src0Tile(dstRow, dstCol);
     TileData src1Tile(src1Row, src1Col);
     DstTileData dstTile(dstRow, dstCol);
+    size_t size = dstRow * dstCol * sizeof(T);
     TASSIGN<0x0>(src0Tile);
-    TASSIGN<DstTileData::Numel * sizeof(T)>(src1Tile);
+    TASSIGN<size>(src1Tile);
     TASSIGN<0x0>(dstTile);
 
     int offset = 0;

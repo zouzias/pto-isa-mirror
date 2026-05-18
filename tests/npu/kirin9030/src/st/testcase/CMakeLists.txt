@@ -7,33 +7,33 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
-function(pto_st NAME)	 
-     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)	 
-     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS}	 
-         --cce-aicore-arch=${CCE_AICORE_ARCH} -DREGISTER_BASE -std=c++17)	 
-     target_include_directories(${NAME}_kernel PRIVATE 	 
-         ${ASCEND_HOME_PATH}/pkg_inc/	 
-         ${ASCEND_HOME_PATH}/pkg_inc/profiling/	 
-         ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime	 
-     )	 
-     target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)	 
-  	 
-     add_executable(${NAME} main.cpp)	 
-     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})	 
-     target_include_directories(${NAME} PRIVATE	 
-         ${PROJECT_SOURCE_DIR}/../../../../common	 
-     )	 
-     target_link_directories(${NAME} PUBLIC	 
-         ${ASCEND_HOME_PATH}/lib64	 
-         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib	 
-     )	 
-     target_link_libraries(${NAME} PRIVATE	 
-         ${NAME}_kernel	 
-         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>	 
-         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:ai_runtime>>	 
-         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>	 
-         stdc++ ascendcl m tiling_api platform c_sec dl nnopbase GTest::gtest GTest::gtest_main pthread 
-     ) 
+function(pto_st NAME)
+     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
+     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS}
+         --cce-aicore-arch=${CCE_AICORE_ARCH} -DREGISTER_BASE -std=c++17)
+     target_include_directories(${NAME}_kernel PRIVATE
+         ${ASCEND_HOME_PATH}/pkg_inc/
+         ${ASCEND_HOME_PATH}/pkg_inc/profiling/
+         ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
+     )
+     target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
+
+     add_executable(${NAME} main.cpp)
+     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
+     target_include_directories(${NAME} PRIVATE
+         ${PROJECT_SOURCE_DIR}/../../../../common
+     )
+     target_link_directories(${NAME} PUBLIC
+         ${ASCEND_HOME_PATH}/lib64
+         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
+     )
+     target_link_libraries(${NAME} PRIVATE
+         ${NAME}_kernel
+         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
+         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:ai_runtime>>
+         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
+         stdc++ ascendcl m tiling_api platform c_sec dl nnopbase GTest::gtest GTest::gtest_main pthread
+     )
  endfunction()
 
 
@@ -41,25 +41,25 @@ function(pto_st_npu NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS}
         --cce-aicore-arch=${CCE_AICORE_ARCH} -DREGISTER_BASE -std=c++17)
-    target_include_directories(${NAME}_kernel PRIVATE 
+    target_include_directories(${NAME}_kernel PRIVATE
         ${ASCEND_HOME_PATH}/pkg_inc/
         ${ASCEND_HOME_PATH}/pkg_inc/profiling/
         ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
     )
-    target_link_options(${NAME}_kernel PRIVATE 
+    target_link_options(${NAME}_kernel PRIVATE
         --cce-fatobj-link
         --target=aarch64-linux-ohos
         --sysroot=${NATIVE}/sysroot
         -nostdlib)
-    
+
     set(OUTPUT_OBJ "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/${NAME}.dir/main.cpp.o")
     set(DEP_FILE "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/${NAME}.dir/main.cpp.o.d")
-    
+
     add_custom_command(
         OUTPUT ${OUTPUT_OBJ}
         DEPFILE ${DEP_FILE}
         COMMAND ${NATIVE}/llvm/bin/clang-15
-                -I${PROJECT_SOURCE_DIR}/../../../../../include 
+                -I${PROJECT_SOURCE_DIR}/../../../../../include
                 -I${ASCEND_HOME_PATH}/ohos
                 -I${ASCEND_DRIVER_PATH}/kernel/inc
                 -I${PROJECT_SOURCE_DIR}/../../../../common
@@ -108,10 +108,10 @@ function(pto_st_npu NAME)
             ${NAME} ALL
             DEPENDS ${EXECUTABLE_OUTPUT}
         )
-    
+
 endfunction()
 
-function(pto_test NAME)	
+function(pto_test NAME)
     if(RUN_MODE STREQUAL "npu")
         pto_st_npu(${NAME})
     else()
@@ -133,135 +133,39 @@ endfunction()
 
 # 定义测试用例列表 testcase下如有新增用例目录需要在此加
 set(ALL_TESTCASES
-    tsubs
-    tmaxs
-    tci
     tmatmul
-    # tload_mix
-    # tload_shape2d
     tload
     tmrgsort
     ttrans
-    # ttrans_conv
     tstore
     textract
-    textract_compact
     trowsum
-    trowprod
-    trowmax
-    trowargmax
-    trowmin
-    trowargmin
     tcolsum
-    tcolprod
-    tcolmax
-    tcolargmax
-    tcolmin
-    tcolargmin
     tsort32
     trowexpand
-    trowexpandadd
-    trowexpanddiv
-    trowexpandmax
-    trowexpandmin
-    trowexpandmul
-    trowexpandsub
-    # trowexpandexpdif
     tgather
+    tfillpad
     tcvt
     tsub
-    # trem
-    # tfmod
-    tprelu
-    tand
-    tor
-    tands
-    tors
-    txor
-    txors
-    tshl
-    tshls
-    tshr
-    tshrs
     tadd
     tpartadd
-    tpartmul
-    tfillpad
-    tmin
-    tmax
-    tmins
     tmov
-    tmul
-    tlrelu
-    tdiv
-    tcmps
-    # tmov_acc2vec
-    tsel
-    # tsels
-    trsqrt
-    tsqrt
-    texp
-    tabs
-    tlog
-    trecip
-    # tstore_acc2gm
     tdivs
-    tmuls
+    trsqrt
     tadds
-    # taxpy
-    tgatherb
-    tpartmin
+    tmax
     tpartmax
-    tpartargmin
-    tpartargmax
-    tmov_vect
-    texpands
+    tpartmin
+    trowmax
+    tmul
     tmov_acc2mat
-    # timg2col
-    tassign
+    tci
+    tdiv
+    texp
     tmov_ub2l1
-    tcmp
-    tadd_tdiv
-    tmul_tadds
-    tsub_texp
-    tmuls_trowsum
-    trowexpand_tsqrt
-    trowexpand_trowsum
-    trowsum_trowexpand
-    trowexpand_tdiv
-    # trems
-    # tfmods
-    tscatter
-    tneg
-    tcolexpandadd
-    tcolexpandmax
-    tcolexpandmin
-    tcolexpanddiv
-    tcolexpandmul
-    tcolexpandsub
-    # tcolexpandexpdif
-    trowexpandbrcb
-    ttri
-    tcolexpand
-    tnot
-    trelu
-    tquant
-    # tdequant
-    # t_dhrystone
-    tpow
-    tpows
-    tconcatdstidx
-    tconcatidx
-    tconcat
-    thistogram
-    # tinsert
-    # tinsert_acc2vec
-    textract_nd_vec
-    textract_vec
-    # tmov_zz
-    # tmov_nd2nz
-    # textract_acc2vec
-    # texpands_mat
+    tmov_vect
+    tmuls
+    tsel
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))

@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TROWEXPAND_HPP
@@ -13,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
+
 #include "common.hpp"
 #include "utils.hpp"
 
@@ -32,9 +35,11 @@ PTO_INTERNAL void TRowExpandCheck(unsigned srcValidRow, unsigned srcValidCol, un
     static_assert(TileDataOut::isRowMajor && TileDataOut::SFractal == SLayout::NoneBox,
                   "Fix: TROWEXPAND only support Nd fractal Tile");
     static_assert(std::is_same_v<typename TileDataOut::DType, typename TileDataIn::DType>,
-                  "Fix: TROWEXPAND input data type must be consistent with the output data type.");
+                  "Fix: TROWEXPAND input data type must be consistent with the output data "
+                  "type.");
     PTO_ASSERT(srcValidRow == dstValidRow,
-               "Fix: TROWEXPAND input valid row must be consistent with the output valid row.");
+               "Fix: TROWEXPAND input valid row must be consistent with the "
+               "output valid row.");
     PTO_ASSERT(srcValidRow != 0 && srcValidCol != 0,
                "Fix: TROWEXPAND input shape is invalid, validCol or validRow is 0.");
 }
@@ -73,12 +78,12 @@ PTO_INTERNAL constexpr bool needBrcb()
         isBroadcastSupportType:
             Only 16bit and 32bit are supported.
         isStaticShape:
-            Broadcast is a special case where the src tile is a single row or column,
-            src and dst tile are static shapes to ensure that the tile data is saved continuously.
-        isBroadcast:
-            [M, 1] -> [M, elemPerBlock], src is column major.
-            The value of sizeof(T) x M is a multiple of 32Byte, it also means that M must be a multiple of 8,
-            this constraint is implemented by the Tile basic definition.
+            Broadcast is a special case where the src tile is a single row or
+       column, src and dst tile are static shapes to ensure that the tile data is
+       saved continuously. isBroadcast: [M, 1] -> [M, elemPerBlock], src is column
+       major. The value of sizeof(T) x M is a multiple of 32Byte, it also means
+       that M must be a multiple of 8, this constraint is implemented by the Tile
+       basic definition.
     */
     constexpr bool isBroadcastSupportType = (sizeof(T) == 2 || sizeof(T) == 4);
     constexpr bool isStaticShape =
