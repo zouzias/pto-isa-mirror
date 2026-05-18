@@ -13,17 +13,17 @@ This appendix is generated from `docs/isa/manifest.yaml` and provides a source-s
 | Elementwise (Tile-Tile) | 29 |
 | Tile-Scalar / Tile-Immediate | 20 |
 | Axis Reduce / Expand | 24 |
-| Memory (GM <-> Tile) | 7 |
+| Memory (GM <-> Tile) | 6 |
 | Matrix Multiply | 8 |
 | Data Movement / Layout | 13 |
 | Complex | 15 |
 | Communication | 11 |
-| Total | 130 |
+| Total | 129 |
 
 ## D.3 Header synchronization status
 
-- Header inventory source: `include/pto/common/pto_instr.hpp` (116 unique instruction APIs)
-- Manifest inventory source: `docs/isa/manifest.yaml` (116 entries)
+- Header inventory source: `include/pto/common/pto_instr.hpp` (115 unique instruction APIs)
+- Manifest inventory source: `docs/isa/manifest.yaml` (115 entries)
 - Missing in manifest: none
 - Present in manifest but missing in header: none
 
@@ -113,7 +113,6 @@ This appendix is generated from `docs/isa/manifest.yaml` and provides a source-s
 | Axis Reduce / Expand | [TCOLEXPANDEXPDIF](/docs/isa/TCOLEXPANDEXPDIF.md) | `reduce_expand` | `dst, src` | `docs/isa/TCOLEXPANDEXPDIF.md` |
 | Memory (GM <-> Tile) | [TLOAD](/docs/isa/TLOAD.md) | `memory` | `tile, global` | `docs/isa/TLOAD.md` |
 | Memory (GM <-> Tile) | [TPREFETCH](/docs/isa/TPREFETCH.md) | `memory` | `tile, global` | `docs/isa/TPREFETCH.md` |
-| Memory (GM <-> Tile) | [TPREFETCH_ASYNC](/docs/isa/TPREFETCH_ASYNC.md) | `memory` | `global, context` | `docs/isa/TPREFETCH_ASYNC.md` |
 | Memory (GM <-> Tile) | [TSTORE](/docs/isa/TSTORE.md) | `memory` | `tile, global` | `docs/isa/TSTORE.md` |
 | Memory (GM <-> Tile) | [TSTORE_FP](/docs/isa/TSTORE_FP.md) | `memory` | `tile, global` | `docs/isa/TSTORE_FP.md` |
 | Memory (GM <-> Tile) | [MGATHER](/docs/isa/MGATHER.md) | `memory` | `tile, global` | `docs/isa/MGATHER.md` |

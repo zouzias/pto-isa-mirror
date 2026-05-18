@@ -31,7 +31,7 @@ T ConvertType(T value)
 }
 
 template <typename... Ts>
-constexpr auto ConvertTypes(Ts &... args)
+constexpr auto ConvertTypes(Ts &...args)
 {
     return std::make_tuple(ConvertType(args)...);
 }
@@ -55,7 +55,7 @@ inline at::Tensor CopyScalarToDevice(const c10::Scalar &cpu_scalar, at::ScalarTy
         auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);     \
         auto acl_call = [acl_stream, blockdim, converted_params]() -> int { \
             std::apply(                                                     \
-                [&](auto &&... params) {                                    \
+                [&](auto &&...params) {                                     \
                     ACLRT_LAUNCH_KERNEL(kernel_name)                        \
                     (blockdim, acl_stream, params...);                      \
                 },                                                          \
