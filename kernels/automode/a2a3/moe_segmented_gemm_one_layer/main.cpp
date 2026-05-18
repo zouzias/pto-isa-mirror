@@ -22,6 +22,7 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "../kernel_timing.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -137,10 +138,10 @@ int main()
 
     // FP16 x FP16 -> FP32 (the auto-mode-eligible A3 cube combo). The host
     // never names `half` directly; the wrapper in the kernel TU does.
-    launchMoeSegmentedGemmOneLayerFp16(
-        outputDev, tokensDev, countDev, startDev, weightDev, stream);
-
-    aclrtSynchronizeStream(stream);
+    (void)PtoTiming::TimeKernelCallUs("moe_segmented_gemm_one_layer", stream, [&]() {
+        launchMoeSegmentedGemmOneLayerFp16(
+            outputDev, tokensDev, countDev, startDev, weightDev, stream);
+    });
     aclrtMemcpy(outputHost, packedOutputBytes, outputDev, packedOutputBytes, ACL_MEMCPY_DEVICE_TO_HOST);
 
     WriteFile("../output/output_packed_output.bin", outputHost, packedOutputBytes);

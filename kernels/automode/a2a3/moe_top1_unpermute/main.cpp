@@ -19,6 +19,7 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "../kernel_timing.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -81,9 +82,9 @@ void MoeTop1Unpermute()
     aclrtMemcpy(packedOutputDev, packedOutputBytes, packedOutputHost, packedOutputBytes, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(ttopDev,         tokIdxBytes,       ttopHost,         tokIdxBytes,       ACL_MEMCPY_HOST_TO_DEVICE);
 
-    launchMoeTop1Unpermute<T>(outputDev, packedOutputDev, ttopDev, stream);
-
-    aclrtSynchronizeStream(stream);
+    (void)PtoTiming::TimeKernelCallUs("moe_top1_unpermute", stream, [&]() {
+        launchMoeTop1Unpermute<T>(outputDev, packedOutputDev, ttopDev, stream);
+    });
     aclrtMemcpy(outputHost, outputBytes, outputDev, outputBytes, ACL_MEMCPY_DEVICE_TO_HOST);
 
     WriteFile("../output/output_output.bin", outputHost, outputBytes);

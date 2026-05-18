@@ -20,6 +20,7 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "../../kernel_timing.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -116,9 +117,9 @@ int main()
     aclrtMemcpy(rankIdDev, rankIdBytes, rankIdHost, rankIdBytes, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(outValDev, outValBytes, outValHost, outValBytes, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    launchGather<float>(cDev, bDev, aIdDev, rankIdDev, outValDev, weightsDev, stream);
-
-    aclrtSynchronizeStream(stream);
+    (void)PtoTiming::TimeKernelCallUs("gather", stream, [&]() {
+        launchGather<float>(cDev, bDev, aIdDev, rankIdDev, outValDev, weightsDev, stream);
+    });
     aclrtMemcpy(cHost, cBytes, cDev, cBytes, ACL_MEMCPY_DEVICE_TO_HOST);
 
     WriteFile("../output/output_C.bin", cHost, cBytes);

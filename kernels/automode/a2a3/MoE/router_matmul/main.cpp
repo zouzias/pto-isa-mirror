@@ -10,6 +10,7 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "../../kernel_timing.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -58,9 +59,9 @@ int main()
     aclrtMemcpy(xDev, xBytes, xHost, xBytes, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(wDev, wBytes, wHost, wBytes, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    launchRouterMatmulFp16(logitsDev, xDev, wDev, stream);
-
-    aclrtSynchronizeStream(stream);
+    (void)PtoTiming::TimeKernelCallUs("router_matmul", stream, [&]() {
+        launchRouterMatmulFp16(logitsDev, xDev, wDev, stream);
+    });
     aclrtMemcpy(logitsHost, logitsBytes, logitsDev, logitsBytes, ACL_MEMCPY_DEVICE_TO_HOST);
 
     WriteFile("../output/output_logits.bin", logitsHost, logitsBytes);

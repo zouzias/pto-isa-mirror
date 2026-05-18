@@ -15,9 +15,8 @@
  * The "separate" model: each launcher is fired individually with
  * aclrtSynchronizeStream between each so that we can intercept intermediates
  * (currently for the outVal padding bridge). The companion full_moe_combined
- * folder runs the same pipeline with one host wrapper launcher and only one
- * final sync; that variant uses a device-side outval_pad kernel instead of
- * the host bridge here.
+ * folder runs the same pipeline with one host wrapper and a device-side
+ * outval_pad kernel instead of the host bridge here.
  *
  * I/O contract (all little-endian, contiguous, no header):
  *   ../input/input_X.bin           kT * kH            half (fp16)
@@ -31,6 +30,7 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "../../kernel_timing.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -228,17 +228,19 @@ int main()
 
     // --- Stage 1: router matmul ---------------------------------------------
     printf("[stage 1] router_matmul\n");
-    launchRouterMatmulFp16(logitsDev, xDev, wRouterDev, stream);
-    aclrtSynchronizeStream(stream);
+    (void)PtoTiming::TimeKernelCallUs("full_moe_separate/router_matmul", stream, [&]() {
+        launchRouterMatmulFp16(logitsDev, xDev, wRouterDev, stream);
+    });
 
     // --- Stage 2: top-K -----------------------------------------------------
     printf("[stage 2] moe_topk_padded\n");
-    launchMoeTopkPadded<float>(reinterpret_cast<uint8_t *>(outValCompactDev),
-                               reinterpret_cast<uint8_t *>(expertIdDev),
-                               logitsDev,
-                               reinterpret_cast<uint8_t *>(idxInitDev),
-                               stream);
-    aclrtSynchronizeStream(stream);
+    (void)PtoTiming::TimeKernelCallUs("full_moe_separate/moe_topk_padded", stream, [&]() {
+        launchMoeTopkPadded<float>(reinterpret_cast<uint8_t *>(outValCompactDev),
+                                   reinterpret_cast<uint8_t *>(expertIdDev),
+                                   logitsDev,
+                                   reinterpret_cast<uint8_t *>(idxInitDev),
+                                   stream);
+    });
 
     // --- Host bridge: pad outVal_compact (kT, kTopK) -> outVal_padded
     //                  (kT, kPadded) with -1e30 in the trailing kPadded - kTopK
@@ -257,22 +259,25 @@ int main()
 
     // --- Stage 3: scatter ---------------------------------------------------
     printf("[stage 3] scatter\n");
-    launchScatterFp16(aDev, aIdDev, rankIdDev, countDev, startDev, xDev,
-                      reinterpret_cast<int32_t *>(expertIdDev), stream);
-    aclrtSynchronizeStream(stream);
+    (void)PtoTiming::TimeKernelCallUs("full_moe_separate/scatter", stream, [&]() {
+        launchScatterFp16(aDev, aIdDev, rankIdDev, countDev, startDev, xDev,
+                          reinterpret_cast<int32_t *>(expertIdDev), stream);
+    });
 
     // --- Stage 4: expert FFN (cube + cube internally) -----------------------
     printf("[stage 4] expert_ffn\n");
-    launchExpertFfnFp16(bDev, aDev, countDev, startDev, w1Dev, w2Dev,
-                        yScratchDev, stream);
-    aclrtSynchronizeStream(stream);
+    (void)PtoTiming::TimeKernelCallUs("full_moe_separate/expert_ffn", stream, [&]() {
+        launchExpertFfnFp16(bDev, aDev, countDev, startDev, w1Dev, w2Dev,
+                            yScratchDev, stream);
+    });
 
     // --- Stage 5: gather (softmax-weighted) ---------------------------------
     printf("[stage 5] gather\n");
-    launchGather<float>(cDev, reinterpret_cast<float *>(bDev),
-                        aIdDev, rankIdDev,
-                        outValPaddedDev, weightsScratchDev, stream);
-    aclrtSynchronizeStream(stream);
+    (void)PtoTiming::TimeKernelCallUs("full_moe_separate/gather", stream, [&]() {
+        launchGather<float>(cDev, reinterpret_cast<float *>(bDev),
+                            aIdDev, rankIdDev,
+                            outValPaddedDev, weightsScratchDev, stream);
+    });
 
     // ------------------------------------------------------------------------
     // D2H + validate.

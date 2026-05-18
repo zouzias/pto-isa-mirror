@@ -18,6 +18,7 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "../../kernel_timing.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -182,9 +183,9 @@ int main()
     aclrtMemcpy(xDev,        xBytes,        xHost,        xBytes,        ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(expertIdDev, expertIdBytes, expertIdHost, expertIdBytes, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    launchScatterFp16(aDev, aIdDev, rankIdDev, countDev, startDev, xDev, expertIdDev, stream);
-
-    aclrtSynchronizeStream(stream);
+    (void)PtoTiming::TimeKernelCallUs("scatter", stream, [&]() {
+        launchScatterFp16(aDev, aIdDev, rankIdDev, countDev, startDev, xDev, expertIdDev, stream);
+    });
 
     aclrtMemcpy(aHost,      aBytes,        aDev,      aBytes,        ACL_MEMCPY_DEVICE_TO_HOST);
     aclrtMemcpy(aIdHost,    aIdBytes,      aIdDev,    aIdBytes,      ACL_MEMCPY_DEVICE_TO_HOST);

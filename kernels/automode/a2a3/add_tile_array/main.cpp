@@ -18,6 +18,7 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "../kernel_timing.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -77,9 +78,9 @@ void AddTileArray()
     aclrtMemcpy(aDevice, fileSize, aHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(bDevice, fileSize, bHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    launchAddTileArray<T>(cDevice, aDevice, bDevice, stream);
-
-    aclrtSynchronizeStream(stream);
+    (void)PtoTiming::TimeKernelCallUs("add_tile_array", stream, [&]() {
+        launchAddTileArray<T>(cDevice, aDevice, bDevice, stream);
+    });
     aclrtMemcpy(cHost, fileSize, cDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
     WriteFile("../output/output_c.bin", cHost, fileSize);

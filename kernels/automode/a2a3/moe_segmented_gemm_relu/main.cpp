@@ -19,6 +19,7 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "../kernel_timing.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -129,10 +130,10 @@ int main()
 
     // FP16 x FP16 -> FP32 -> ReLU-in-TSTORE (the auto-mode-eligible A3 cube
     // combo plus the FIX-pipe ReluPreMode::NormalRelu fusion).
-    launchMoeSegmentedGemmReluFp16(
-        outputDev, tokensDev, countDev, startDev, weightDev, stream);
-
-    aclrtSynchronizeStream(stream);
+    (void)PtoTiming::TimeKernelCallUs("moe_segmented_gemm_relu", stream, [&]() {
+        launchMoeSegmentedGemmReluFp16(
+            outputDev, tokensDev, countDev, startDev, weightDev, stream);
+    });
     aclrtMemcpy(outputHost, packedOutputBytes, outputDev, packedOutputBytes, ACL_MEMCPY_DEVICE_TO_HOST);
 
     WriteFile("../output/output_packed_output.bin", outputHost, packedOutputBytes);

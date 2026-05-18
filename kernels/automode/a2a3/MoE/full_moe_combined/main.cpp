@@ -1,10 +1,8 @@
 /**
  * main.cpp - host driver for full_moe_combined.
  *
- * End-to-end MoE forward pass driven by a SINGLE host wrapper launcher
- * (`launchFullMoeCombined`) that fires six `__global__ AICORE` kernels on
- * the same stream — no intermediate aclrtSynchronizeStream. Only the final
- * sync before reading C back to host.
+ * End-to-end MoE forward pass driven by a host wrapper (`launchFullMoeCombined`)
+ * that fires six `__global__ AICORE` kernels on the same stream.
  *
  *   launchFullMoeCombined(...)
  *     -> launchRouterMatmulFp16     (cube)
@@ -18,14 +16,15 @@
  *   - Uses a device-side `outval_pad` kernel instead of a host-side memcpy
  *     bridge to convert outVal (kT, kTopK) -> (kT, kPadded) with -1e30 in
  *     padding columns.
- *   - Has only one aclrtSynchronizeStream call total (at the end), so the
- *     entire pipeline executes back-to-back on the stream.
+ *   - Times each kernel launch with an immediate aclrtSynchronizeStream so
+ *     per-stage latency is visible from host logs.
  *
  * I/O contract — identical to full_moe_separate (same gen_data.py).
  */
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "../../kernel_timing.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -65,9 +64,7 @@ void launchGather(T *C, T *B,
                   void *stream);
 
 // ----------------------------------------------------------------------------
-// The single host wrapper. Fires six kernels on `stream` with no
-// intermediate synchronization — ACL stream-order semantics serialize
-// the launches and the necessary intermediate GM writes/reads.
+// Host wrapper. Fires six kernels on `stream` and times each stage.
 // ----------------------------------------------------------------------------
 static void launchFullMoeCombined(
     float    *C,
@@ -83,13 +80,25 @@ static void launchFullMoeCombined(
     float    *weights_scratch,
     void     *stream)
 {
-    launchRouterMatmulFp16    (logits, X, W_router, stream);
-    launchMoeTopkPadded<float>(outVal_compact_u8, expert_id_u8, logits, idx_init, stream);
-    launchOutValPad<float>    (outVal_padded, outVal_compact_f, stream);
-    launchScatterFp16         (A, A_id, rank_id, expert_count, expert_start, X, expert_id_i32, stream);
-    launchExpertFfnFp16       (B, A, expert_count, expert_start, W1, W2, Y_scratch, stream);
-    launchGather<float>       (C, reinterpret_cast<float *>(B), A_id, rank_id,
-                               outVal_padded, weights_scratch, stream);
+    (void)PtoTiming::TimeKernelCallUs("full_moe_combined/router_matmul", stream, [&]() {
+        launchRouterMatmulFp16(logits, X, W_router, stream);
+    });
+    (void)PtoTiming::TimeKernelCallUs("full_moe_combined/moe_topk_padded", stream, [&]() {
+        launchMoeTopkPadded<float>(outVal_compact_u8, expert_id_u8, logits, idx_init, stream);
+    });
+    (void)PtoTiming::TimeKernelCallUs("full_moe_combined/outval_pad", stream, [&]() {
+        launchOutValPad<float>(outVal_padded, outVal_compact_f, stream);
+    });
+    (void)PtoTiming::TimeKernelCallUs("full_moe_combined/scatter", stream, [&]() {
+        launchScatterFp16(A, A_id, rank_id, expert_count, expert_start, X, expert_id_i32, stream);
+    });
+    (void)PtoTiming::TimeKernelCallUs("full_moe_combined/expert_ffn", stream, [&]() {
+        launchExpertFfnFp16(B, A, expert_count, expert_start, W1, W2, Y_scratch, stream);
+    });
+    (void)PtoTiming::TimeKernelCallUs("full_moe_combined/gather", stream, [&]() {
+        launchGather<float>(C, reinterpret_cast<float *>(B), A_id, rank_id,
+                            outVal_padded, weights_scratch, stream);
+    });
 }
 
 // ----------------------------------------------------------------------------
@@ -230,7 +239,7 @@ int main()
     aclrtMemset(weightsScratchDev, weightsScratchBytes, 0x77, weightsScratchBytes);
 
     // ========================================================================
-    // ONE host wrapper, six kernel launches on the stream, NO intermediate sync.
+    // One host wrapper, six timed kernel launches on the stream.
     // ========================================================================
     printf("[combined] launching full MoE pipeline...\n");
     launchFullMoeCombined(
@@ -247,9 +256,6 @@ int main()
         yScratchDev, bDev,
         weightsScratchDev,
         stream);
-
-    // ONE final sync.
-    aclrtSynchronizeStream(stream);
 
     // D2H final output.
     aclrtMemcpy(cHost, cBytes, cDev, cBytes, ACL_MEMCPY_DEVICE_TO_HOST);

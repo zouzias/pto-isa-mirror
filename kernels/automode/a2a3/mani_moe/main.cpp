@@ -30,6 +30,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "acl/acl.h"
 #include "test_common.h"
+#include "../kernel_timing.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -167,11 +168,17 @@ int MoE()
              "aclrtMemset(expertIdDev)");
     CheckAcl(aclrtMemset(outDev, outBytes, kPoisonOut, outBytes), "aclrtMemset(outDev)");
 
-    launchManiMoeRouterGemmFp16(logitsDev, xDev, wRouterDev, stream);
-    launchManiMoeTopkFp32(outDev, expertIdDev, logitsDev, topkIdxDev, topkOutIdxDev, stream);
-
-    if (!CheckAcl(aclrtSynchronizeStream(stream), "aclrtSynchronizeStream")) {
-        std::cerr << "[main] stream sync failed.\n";
+    if (!CheckAcl(PtoTiming::TimeKernelCallUs("mani_moe_router_gemm", stream, [&]() {
+            launchManiMoeRouterGemmFp16(logitsDev, xDev, wRouterDev, stream);
+        }),
+                  "aclrtSynchronizeStream(mani_moe_router_gemm)")) {
+        std::cerr << "[main] router GEMM stream sync failed.\n";
+    }
+    if (!CheckAcl(PtoTiming::TimeKernelCallUs("mani_moe_topk", stream, [&]() {
+            launchManiMoeTopkFp32(outDev, expertIdDev, logitsDev, topkIdxDev, topkOutIdxDev, stream);
+        }),
+                  "aclrtSynchronizeStream(mani_moe_topk)")) {
+        std::cerr << "[main] topk stream sync failed.\n";
     }
 
     CheckAcl(aclrtMemcpy(logitsHost, logitsBytes, logitsDev, logitsBytes, ACL_MEMCPY_DEVICE_TO_HOST),

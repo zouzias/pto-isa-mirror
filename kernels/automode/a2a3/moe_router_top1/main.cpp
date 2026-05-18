@@ -16,6 +16,7 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "../kernel_timing.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -142,9 +143,10 @@ int main()
     CheckAcl(aclrtMemset(expertIdDev, expertIdBytes, kPoisonExpertId, expertIdBytes),
              "aclrtMemset(expertIdDev=0x7B)");
 
-    launchMoeRouterTop1Fp16(logitsDev, expertIdDev, xDev, wDev, stream);
-
-    if (!CheckAcl(aclrtSynchronizeStream(stream), "aclrtSynchronizeStream")) {
+    if (!CheckAcl(PtoTiming::TimeKernelCallUs("moe_router_top1", stream, [&]() {
+            launchMoeRouterTop1Fp16(logitsDev, expertIdDev, xDev, wDev, stream);
+        }),
+                  "aclrtSynchronizeStream(moe_router_top1)")) {
         std::cerr << "[main] stream sync failed.\n";
     }
 
