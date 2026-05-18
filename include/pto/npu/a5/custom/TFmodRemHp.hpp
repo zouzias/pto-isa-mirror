@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TFMODHP_HPP
@@ -37,10 +39,10 @@ PTO_INTERNAL void GetSignBit(RegTensor<float> &dstReg, RegTensor<float> &srcReg,
     RegTensor<uint32_t> oneReg, tmpReg;
     uint32_t len32 = static_cast<uint16_t>(VECTOR_REG_WIDTH / sizeof(float));
     MaskReg preg_b32 = CreatePredicate<float>(len32);
-    vdup(oneReg, 1, mask, MODE_ZEROING);
+    vdup(oneReg, static_cast<float>(1), mask, MODE_ZEROING);
     vshrs(tmpReg, (RegTensor<uint32_t> &)srcReg, signRightNum, mask, MODE_ZEROING);
     vand(tmpReg, tmpReg, oneReg, mask, MODE_ZEROING);
-    vcvt(dstReg, (RegTensor<int32_t> &)tmpReg, preg_b32, ROUND_R);
+    vcvt(dstReg, (RegTensor<int32_t> &)tmpReg, preg_b32, __cce_simd::RoundRType());
 }
 
 template <typename RoundMode, int32_t iterationNum>

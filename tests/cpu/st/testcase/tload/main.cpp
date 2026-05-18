@@ -1,16 +1,21 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include "test_common.h"
 #include <gtest/gtest.h>
+
+#include <filesystem>
+#include <pto/pto-inst.hpp>
+
+#include "test_common.h"
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -89,6 +94,7 @@ void tload_test()
     aclrtMemcpy(logHost, sizeof(logHost), logDevice, sizeof(logHost), ACL_MEMCPY_DEVICE_TO_HOST);
 #endif
 
+    std::filesystem::create_directories(GetGoldenDir());
     std::ofstream inFile(GetGoldenDir() + "/input.bin", std::ios::binary | std::ios::out);
     std::ofstream outFile(GetGoldenDir() + "/output.bin", std::ios::binary | std::ios::out);
     std::ofstream goldFile(GetGoldenDir() + "/golden.bin", std::ios::binary | std::ios::out);
@@ -183,4 +189,9 @@ TEST_F(TLOADTest, case_float_GT_32_64_128_VT_64_128_BLK32_DN)
 TEST_F(TLOADTest, case_float_GT_2_2_2_255_60_VT_256_64_BLK8_DN)
 {
     tload_test<10, float, 8>();
+}
+
+TEST_F(TLOADTest, case_float_GT_1_1_8_8_1_VT_64_1_BLK1_DN_FLAT_ROWS)
+{
+    tload_test<11, float, 1>();
 }

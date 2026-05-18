@@ -1,17 +1,21 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include "test_common.h"
-#include "acl/acl.h"
 #include <gtest/gtest.h>
+
 #include <cstdint>
+
+#include "acl/acl.h"
+#include "test_common.h"
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -511,29 +515,34 @@ void TLOADMIXFUNCB4()
 // format 0:ND2NZ 1:DN2NZ 2:ND2ND 3:DN2DN 4 NZ2NZ
 TEST_F(TLOADMIXTest, 1_2_1_64_128_1_3_4_128_128_128_128_fp4x2_e1m2_t_ND2ND)
 {
-    // T固定uint8，dtype=0 表示e1m2 dtype=1 表示e2m1 内部处理的时候最内轴按cols * 2处理
+    // T固定uint8，dtype=0 表示e1m2 dtype=1 表示e2m1 内部处理的时候最内轴按cols *
+    // 2处理
     TLOADMIXFUNCB4<uint8_t, 2, 0, 1, 2, 1, 64, 128, 1, 3, 4, 128, 128, 128, 128>();
 }
 TEST_F(TLOADMIXTest, 1_1_1_59_119_1_1_1_64_128_64_128_fp4x2_e2m1_t_ND2NZ)
 {
-    // T固定uint8，dtype=0 表示e1m2 dtype=1 表示e2m1 内部处理的时候最内轴按cols * 2处理
+    // T固定uint8，dtype=0 表示e1m2 dtype=1 表示e2m1 内部处理的时候最内轴按cols *
+    // 2处理
     TLOADMIXFUNCB4<uint8_t, 0, 1, 1, 1, 1, 59, 119, 1, 1, 1, 64, 128, 64, 128>();
 }
 
 TEST_F(TLOADMIXTest, 1_8_4_16_32_1_9_4_16_32_80_256_fp4x2_e1m2_t_NZ2NZ)
 {
-    // T固定uint8，dtype=0 表示e1m2 dtype=1 表示e2m1 内部处理的时候最内轴按cols * 2处理
+    // T固定uint8，dtype=0 表示e1m2 dtype=1 表示e2m1 内部处理的时候最内轴按cols *
+    // 2处理
     TLOADMIXFUNCB4<uint8_t, 4, 0, 1, 8, 4, 16, 32, 1, 9, 4, 16, 32, 80, 256>();
 }
 
 TEST_F(TLOADMIXTest, 1_1_1_37_126_1_1_1_37_126_64_126_fp4x2_e1m2_t_DN2DN)
 {
-    // T固定uint8，dtype=0 表示e1m2 dtype=1 表示e2m1 内部处理的时候最内轴按cols * 2处理
+    // T固定uint8，dtype=0 表示e1m2 dtype=1 表示e2m1 内部处理的时候最内轴按cols *
+    // 2处理
     TLOADMIXFUNCB4<uint8_t, 3, 0, 1, 1, 1, 37, 126, 1, 1, 1, 37, 126, 64, 126>();
 }
 
 TEST_F(TLOADMIXTest, 1_1_1_59_119_1_1_1_64_128_64_128_fp4x2_e1m2_t_DN2ZN)
 {
-    // T固定uint8，dtype=0 表示e1m2 dtype=1 表示e2m1 内部处理的时候最内轴按cols * 2处理
+    // T固定uint8，dtype=0 表示e1m2 dtype=1 表示e2m1 内部处理的时候最内轴按cols *
+    // 2处理
     TLOADMIXFUNCB4<uint8_t, 5, 0, 1, 1, 1, 59, 119, 1, 1, 1, 64, 128, 64, 128>();
 }
