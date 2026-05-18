@@ -16,6 +16,9 @@ ENABLE_A5=false
 ENABLE_KIRIN9030=false
 ENABLE_KIRINX90=false
 ENABLE_SIMPLE=false
+ENABLE_SIMPLE_P1=false
+ENABLE_SIMPLE_P2=false
+ENABLE_SIMPLE_P3=false
 ENABLE_ALL=false
 ENABLE_COMM=false
 ARGS=" "
@@ -59,6 +62,18 @@ checkopts() {
         ;;
       --simple)
         ENABLE_SIMPLE=true
+        shift
+        ;;
+      --simple_p1)
+        ENABLE_SIMPLE_P1=true
+        shift
+        ;;
+      --simple_p2)
+        ENABLE_SIMPLE_P2=true
+        shift
+        ;;
+      --simple_p3)
+        ENABLE_SIMPLE_P3=true
         shift
         ;;
       --all)
@@ -375,8 +390,14 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
 fi
 
 if [ "$ENABLE_A5" = "true" ]; then
-  if [ "$ENABLE_SIMPLE" = "true" ]; then           # 单个用例
+  if [ "$ENABLE_SIMPLE" = "true" ] \
+     || [ "$ENABLE_SIMPLE_P1" = "true" ] \
+     || [ "$ENABLE_SIMPLE_P2" = "true" ] \
+     || [ "$ENABLE_SIMPLE_P3" = "true" ]; then     # 单个用例(可拆分为 P1/P2/P3)
     python3 tests/script/build_st.py $ARGS -v a5 -t all
+
+    # ---------- Part 1 (40 cases: tconcatdstidx .. tmatmul_mx) ----------
+    if [ "$ENABLE_SIMPLE" = "true" ] || [ "$ENABLE_SIMPLE_P1" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tconcatdstidx -g TCONCATTest.case_int16_16x32_16x16_16x16_8x16_8x16
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartargmax -g TPARTARGMAXTest.case_fp32_64x64_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartargmin -g TPARTARGMINTest.case_fp32_64x64_64x64_64x64
@@ -421,6 +442,10 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload_shape2d -g TLOADSHAPE2DTest.1_1_1_59_119_1_1_1_64_128_64_128_int8_t_ND2NZ
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmatmul -g TMATMULTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmatmul_mx -g TMATMULMXTest.case1
+    fi
+
+    # ---------- Part 2 (40 cases: tmov .. mscatter case_uint8) ----------
+    if [ "$ENABLE_SIMPLE" = "true" ] || [ "$ENABLE_SIMPLE_P2" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov -g TMOVTest.case_bias1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_acc2vec -g TMOVTest.case_nz2nd_1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_vect -g TMOVTest.vect_copy_case1
@@ -461,6 +486,10 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_acc2mat -g TMOVTest.case_nz2nz_insert
     python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather -g MGATHERTest.case_half_16x128_8x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t mscatter -g MSCATTERTest.case_uint8_16x64_2048
+    fi
+
+    # ---------- Part 3 (41 cases: mscatter case_int32 .. textract_vec case_nz_scalar_fp4_e1m2) ----------
+    if [ "$ENABLE_SIMPLE" = "true" ] || [ "$ENABLE_SIMPLE_P3" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t mscatter -g MSCATTERTest.case_int32_clamp_8x16_256
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tquant -g TQUANTTEST.case_int8_sym_fp32_128x128_nd
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tquant -g TQUANTTEST.case_int8_asym_fp32_128x128_nd
@@ -502,6 +531,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nz_scalar_1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nz_scalar_fp4_e2m1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nz_scalar_fp4_e1m2
+    fi
 
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
