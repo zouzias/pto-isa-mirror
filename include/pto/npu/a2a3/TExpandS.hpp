@@ -1,17 +1,20 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TEXPANDS_HPP
 #define TEXPANDS_HPP
 
 #include <pto/common/constants.hpp>
+
 #include "TBinSOp.hpp"
 
 namespace pto {
@@ -80,17 +83,21 @@ PTO_INTERNAL void TExpandSInstrMat(__cbuf__ typename TileData::DType *dstPtr, in
     if constexpr (sizeof(typename TileData::DType) == 4) {
         if constexpr (std::is_same_v<typename TileData::DType, float>) {
             uint32_t bits = *(uint32_t *)(&value);
-            pto_create_cbuf_matrix(dstPtr, repeatConfig, bits);
+            create_cbuf_matrix(dstPtr, repeatConfig, bits);
         } else {
-            pto_create_cbuf_matrix(dstPtr, repeatConfig, static_cast<uint32_t>(value));
+            create_cbuf_matrix(dstPtr, repeatConfig, static_cast<uint32_t>(value));
         }
     } else if constexpr (sizeof(typename TileData::DType) == 2) {
-        pto_create_cbuf_matrix(dstPtr, repeatConfig, value);
+        if constexpr (std::is_same<typename TileData::DType, bfloat16_t>::value) {
+            create_cbuf_matrix_bf16(reinterpret_cast<__cbuf__ bfloat16_t *>(dstPtr), repeatConfig, value);
+        } else {
+            create_cbuf_matrix(dstPtr, repeatConfig, value);
+        }
     } else if constexpr (sizeof(typename TileData::DType) == 1) {
         auto dstCast = reinterpret_cast<__cbuf__ uint32_t *>(dstPtr);
         uint16_t expanded16 = static_cast<uint16_t>(value) | (static_cast<uint16_t>(value) << 8);
         uint32_t expanded32 = static_cast<uint32_t>(expanded16) | (static_cast<uint32_t>(expanded16) << 16);
-        pto_create_cbuf_matrix(dstCast, repeatConfig, expanded32);
+        create_cbuf_matrix(dstCast, repeatConfig, expanded32);
     }
 }
 
@@ -123,7 +130,8 @@ __tf__ PTO_INTERNAL void TExpandsMat5HD(typename TileData::TileDType __out__ dst
     uint64_t repeat = totalBytes / BLOCK_BYTE_SIZE;
     uint16_t repeatTimes = static_cast<uint16_t>(repeat);
     PTO_ASSERT(repeatTimes >= 1 && repeatTimes <= EXPANDS_MAX_SUPPORT_REPEAT_TIMES,
-               "ERROR: The range of convtile's (shape0 * shape1 * shape2 * shape3) is [1, 32767].");
+               "ERROR: The range of convtile's (shape0 * shape1 * shape2 * shape3) is "
+               "[1, 32767].");
     int64_t repeatConfig = 0;
     // [46:32] is the repeat gap between two consecutive repeats
     repeatConfig |= (static_cast<int64_t>(0) & 0x7FFF) << 32;
@@ -140,14 +148,16 @@ PTO_INTERNAL void TEXPANDS_IMPL(TileData &dst, typename TileData::DType scalar)
 
     if constexpr (TileData::Loc == TileType::Vec) {
         static_assert(TileData::ValidCol <= TileData::Cols,
-                      "Number of valid columns must not be greater than number of tile columns.");
+                      "Number of valid columns must not be greater than number of "
+                      "tile columns.");
         static_assert(TileData::ValidRow <= TileData::Rows,
                       "Number of valid rows must not be greater than number of tile rows.");
         unsigned validRow = dst.GetValidRow();
         unsigned validCol = dst.GetValidCol();
         TExpandS<TileData>(dst.data(), scalar, validRow, validCol);
     } else if constexpr (TileData::Loc == TileType::Mat) {
-        if constexpr (is_conv_tile_v<TileData>) { // layout is NC1HWC0 or C1HWNC0, dst dim4 is c0Size
+        if constexpr (is_conv_tile_v<TileData>) { // layout is NC1HWC0 or C1HWNC0,
+                                                  // dst dim4 is c0Size
             TExpandsMat5HD<TileData>(dst.data(), scalar, dst.GetShape(0), dst.GetShape(1), dst.GetShape(2),
                                      dst.GetShape(3), dst.GetShape(4));
         } else {

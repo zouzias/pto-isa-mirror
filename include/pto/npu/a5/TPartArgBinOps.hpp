@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TPARTARGBINOPS_HPP
@@ -122,14 +124,18 @@ PTO_INTERNAL void TPartArgCheck(DstValTileData &dstVal, Src0ValTileData &src0Val
     unsigned dstValidRow = dstVal.GetValidRow();
     unsigned dstValidCol = dstVal.GetValidCol();
     PTO_ASSERT(src0ValidRow == src0Idx.GetValidRow() && src0ValidCol == src0Idx.GetValidCol(),
-               "Fix: TPARTARG input tile src0Val valid shape mismatch with input tile src0Idx valid shape");
+               "Fix: TPARTARG input tile src0Val valid shape mismatch with input "
+               "tile src0Idx valid shape");
     PTO_ASSERT(src1ValidRow == src1Idx.GetValidRow() && src1ValidCol == src1Idx.GetValidCol(),
-               "Fix: TPARTARG input tile src1Val valid shape mismatch with input tile src1Idx valid shape");
+               "Fix: TPARTARG input tile src1Val valid shape mismatch with input "
+               "tile src1Idx valid shape");
     PTO_ASSERT(dstValidRow == dstIdx.GetValidRow() && dstValidCol == dstIdx.GetValidCol(),
-               "Fix: TPARTARG output tile dstVal valid shape mismatch with output tile dstIdx valid shape");
+               "Fix: TPARTARG output tile dstVal valid shape mismatch with "
+               "output tile dstIdx valid shape");
     PTO_ASSERT((dstValidRow == src0ValidRow && dstValidCol == src0ValidCol) ||
                    (dstValidRow == src1ValidRow && dstValidCol == src1ValidCol),
-               "Fix: TPARTARG output tile dstVal valid shape mismatch with input tile src0Val or src1Val valid shape");
+               "Fix: TPARTARG output tile dstVal valid shape mismatch with input "
+               "tile src0Val or src1Val valid shape");
 }
 } // namespace pto
 
