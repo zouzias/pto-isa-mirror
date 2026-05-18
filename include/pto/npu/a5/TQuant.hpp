@@ -20,20 +20,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-enum class QuantType
-{
-    MXFP8,
-    MXFP4_E2M1,
-    INT8_SYM,
-    INT8_ASYM
-};
-
-enum class QuantScaleAlg
-{
-    OCP,
-    NV
-};
-
 struct NvMxFp8E4M3Spec {
     static constexpr float descaleMultiplier = 1.0f / 448.0f;
     static constexpr uint32_t b16SpecialScaleBits = 0x7F81u;
