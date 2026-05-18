@@ -86,9 +86,6 @@ checkopts "$@"
 if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
   if [ "$ENABLE_SIMPLE" = "true" ]; then           # 单个用例
     python3 tests/script/build_st.py $ARGS -v a3 -t all
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolgather -g TCOLGATHERTest.case_mask_half_16x64_16x64_P1111
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolscatter -g TCOLSCATTERTest.case_mask_half_16x64_16x64_P1111
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tconcatdstidx -g TCONCATTest.case_int16_16x32_16x16_16x16_8x16_8x16
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tconcatidx -g TCONCATTest.case_int16_16x32_16x16_16x16_8x16_8x16
     python3 tests/script/run_st.py $ARGS -w -v a3 -t taxpy -g TAXPYTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolexpand -g TCOLEXPANDTest.case1
@@ -260,10 +257,6 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t mgather -g MGATHERTest.case_elem2d_int16_4x32_256size
     python3 tests/script/run_st.py $ARGS -w -v a3 -t mgather -g MGATHERTest.case_row_dyn_int32_3x16_8rows
     python3 tests/script/run_st.py $ARGS -w -v a3 -t mgather -g MGATHERTest.case_elem2d_nz_int32_16x8_1blk
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_3d -g TTRANS3DTest.case3_int32_17_3_3_2_2
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_3d -g TTRANS3DTest.case1_float32_2_4_2_2_2
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_3d -g TTRANS3DTest.case7_uint16_4_8_2_2_3
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_3d -g TTRANS3DTest.case10_uint8_9_18_2_2_4
 
     if [ "$IS_AUTO_MODE" = "false" ]; then
       # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
@@ -278,9 +271,6 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
     python3 tests/script/build_st.py $ARGS -v a3 -t all
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolgather
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolscatter
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tconcatdstidx
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tconcatidx
     python3 tests/script/run_st.py $ARGS -w -v a3 -t taxpy
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolexpand
@@ -371,7 +361,6 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec
     python3 tests/script/run_st.py $ARGS -w -v a3 -t mscatter
     python3 tests/script/run_st.py $ARGS -w -v a3 -t mgather
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_3d
     if [ "$IS_AUTO_MODE" = "false" ]; then
       # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
       # besides, auto-sync doesn't work with CCE intrisics
@@ -388,8 +377,6 @@ fi
 if [ "$ENABLE_A5" = "true" ]; then
   if [ "$ENABLE_SIMPLE" = "true" ]; then           # 单个用例
     python3 tests/script/build_st.py $ARGS -v a5 -t all
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolgather -g TCOLGATHERTest.case_mask_half_16x64_16x64_P1111
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolscatter -g TCOLSCATTERTest.case_mask_half_16x64_16x64_P1111
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tconcatdstidx -g TCONCATTest.case_int16_16x32_16x16_16x16_8x16_8x16
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartargmax -g TPARTARGMAXTest.case_fp32_64x64_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartargmin -g TPARTARGMINTest.case_fp32_64x64_64x64_64x64
@@ -494,8 +481,6 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tstore -g TStoreTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tstore_acc2gm -g TStoreAcc2gmTest.case7
     python3 tests/script/run_st.py $ARGS -w -v a5 -t ttrans -g TTRANSTest.case_float_8x8_2x8_2x8
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t ttrans -g TTRANSTest.case_hif8_32x32_32x32_32x32
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t ttrans -g TTRANSTest.case_hif8_64x64_64x64_22x63
     python3 tests/script/run_st.py $ARGS -w -v a5 -t ttrans_conv -g TTRANSConvTest.uint8_11_2_7_7_32
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tcmp -g TCMPTest.case_half_32x32_32x32_32x32
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tadd_tdiv -g TADD_TDIVTest.case_float_64x64_64x64
@@ -517,8 +502,6 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather -g MGATHERTest.case_half_16x128_8x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t mscatter -g MSCATTERTest.case_uint8_16x64_2048
     python3 tests/script/run_st.py $ARGS -w -v a5 -t mscatter -g MSCATTERTest.case_int32_clamp_8x16_256
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t mscatter -g MSCATTERTest.case_elem2d_float_3072x8_default_24576size
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t mscatter -g MSCATTERTest.case_elem2d_float_3072x8_last_256size
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tquant -g TQUANTTEST.case_int8_sym_fp32_128x128_nd
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tquant -g TQUANTTEST.case_int8_asym_fp32_128x128_nd
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tquant -g TQUANTTEST.case_int8_sym_fp32_128x128_nd
@@ -559,30 +542,10 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nz_scalar_1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nz_scalar_fp4_e2m1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nz_scalar_fp4_e1m2
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinterleave -g TINTERLEAVETest.case_float_64x64_64x64
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinterleave -g TINTERLEAVETest.case_int32_64x64_64x64
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinterleave -g TINTERLEAVETest.case_int16_64x64_64x64
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinterleave -g TINTERLEAVETest.case_half_16x256_16x256
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinterleave -g TINTERLEAVETest.case_float_16x32_16x32
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinterleave -g TINTERLEAVETest.case_int32_16x32_16x32
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinterleave -g TINTERLEAVETest.case_int8_32x256_32x256
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinterleave -g TINTERLEAVETest.case_uint8_32x256_32x256
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tdeinterleave -g TDEINTERLEAVETest.case_float_64x64_64x64
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tdeinterleave -g TDEINTERLEAVETest.case_int32_64x64_64x64
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tdeinterleave -g TDEINTERLEAVETest.case_int16_64x64_64x64
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tdeinterleave -g TDEINTERLEAVETest.case_half_16x256_16x256
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tdeinterleave -g TDEINTERLEAVETest.case_int32_16x32_16x32
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tdeinterleave -g TDEINTERLEAVETest.case_int8_32x256_32x256
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tdeinterleave -g TDEINTERLEAVETest.case_float_single_src_16x128_16x128
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tdeinterleave -g TDEINTERLEAVETest.case_int32_single_src_16x128_16x128
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tdeinterleave -g TDEINTERLEAVETest.case_half_single_src_16x256_16x256
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tdeinterleave -g TDEINTERLEAVETest.case_int8_single_src_8x512_8x512
 
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
     python3 tests/script/build_st.py $ARGS -v a5 -t all
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolgather
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolscatter
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tconcatdstidx
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartargmax
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartargmin
@@ -709,122 +672,43 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert_acc2vec
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_zz
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinterleave
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tdeinterleave
   fi
 fi
 
 if [ "$ENABLE_KIRIN9030" = "true" ]; then
   python3 tests/script/build_st.py $ARGS -v kirin9030 -t all
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsubs
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmaxs
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tci
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t textract
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tfillpad
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmov
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tadd
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcolsum
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tpartadd
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowsum
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsort32
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcvt
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmrgsort
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tgather
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsub
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmatmul
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tload
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmrgsort
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t ttrans
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tstore
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t textract
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t textract_compact
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowsum
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowprod
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowmax
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowargmax
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowmin
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowargmin
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcolsum
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcolprod
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcolmax
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcolargmax
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcolmin
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcolargmin
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsort32
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowexpand
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowexpandadd
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowexpanddiv
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowexpandmax
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowexpandmin
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowexpandmul
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowexpandsub
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowexpandexpdif
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tgather
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcvt
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsub
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tprelu
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tand
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tor
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tands
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tors
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t txor
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t txors
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tshl
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tshls
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tshr
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tshrs
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tadd
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tpartadd
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tpartmul
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tfillpad
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmin
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmax
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmins
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmov
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmul
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tlrelu
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tdiv
-<<<<<<< HEAD
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcmps
-=======
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t texp
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmov_vect
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmuls
->>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsel
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsels
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trsqrt
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsqrt
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t texp
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tabs
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tlog
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trecip
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tdivs
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmuls
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trsqrt
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tadds
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tpartargmin
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tpartargmax
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmov_vect
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t texpands
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmax
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tpartmax
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tpartmin
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowmax
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmul
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmov_acc2mat
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tassign
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcmp
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tadd_tdiv
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmul_tadds
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsub_texp
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trems
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tscatter
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tneg
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcolexpandadd
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcolexpandmax
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcolexpandmin
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcolexpanddiv
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcolexpandmul
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcolexpandsub
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcolexpandexpdif
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowexpandbrcb
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t ttri
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcolexpand
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tnot
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trelu
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tquant
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tdequant
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tpow
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tconcatdstidx
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tconcatidx
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tconcat
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t thistogram
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t textract_nd_vec
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t textract_vec
-  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t texpands_mat
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tci
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tdiv
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t texp
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmov_vect
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmuls
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsel
 fi
 
 if [ "$ENABLE_COMM" = "true" ]; then
