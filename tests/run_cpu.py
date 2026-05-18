@@ -552,7 +552,7 @@ def run_test_mode(args, repo_root, cxx, cc) -> int:
     return execute_tests(args, source_dir, build_dir)
 
 
-def parse_expected_testcases(source_dir: Path) -> Optional[set[str]]:
+def parse_expected_testcases(source_dir: Path) -> Optional[set]:
     cmake_list = source_dir / "testcase" / "CMakeLists.txt"
     if not cmake_list.exists():
         return None
