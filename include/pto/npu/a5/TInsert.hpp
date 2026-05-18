@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TINSERT_HPP
@@ -131,7 +133,8 @@ PTO_INTERNAL void TInsertAccDispatch(DstTileData &dst, SrcTileData &src, uint16_
 {
     if constexpr (DstTileData::Loc == TileType::Mat) {
         static_assert((!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor),
-                      "Dst fractal format should be (BFractal: ColMajor, SFractal: RowMajor).");
+                      "Dst fractal format should be (BFractal: ColMajor, SFractal: "
+                      "RowMajor).");
         TInsertAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(dst.data(), src.data(), src.GetValidRow(),
                                                                       src.GetValidCol(), indexRow, indexCol);
     } else if constexpr (DstTileData::Loc == TileType::Vec) {
@@ -230,15 +233,7 @@ PTO_INTERNAL void ComputeNZBlockParams(uint32_t validRow, uint32_t validCol, uin
     uint32_t colBlockOffset = (byteIndexCol / c0Size) * dstRow * c0Size;
     uint32_t rowOffset = indexRow * c0Size + (byteIndexCol % c0Size);
     dstOffset = colBlockOffset + rowOffset;
-    uint32_t srcStrideRows;
-    if constexpr (SrcTileData::Compact == CompactMode::Null) {
-        srcStrideRows = SrcTileData::Rows;
-    } else if constexpr (SrcTileData::Compact == CompactMode::RowPlusOne) {
-        srcStrideRows = CeilDivision(validRow, static_cast<uint32_t>(FRACTAL_NZ_ROW)) * FRACTAL_NZ_ROW + 1;
-    } else {
-        srcStrideRows = CeilDivision(validRow, static_cast<uint32_t>(FRACTAL_NZ_ROW)) * FRACTAL_NZ_ROW;
-    }
-    srcGap = static_cast<uint16_t>(srcStrideRows - validRow);
+    srcGap = static_cast<uint16_t>(SrcTileData::Rows - validRow);
     dstGap = static_cast<uint16_t>(dstRow - validRow);
 }
 
@@ -277,15 +272,7 @@ __tf__ PTO_INTERNAL void TInsertSplitImpl(typename DstTileData::TileDType __out_
     uint16_t burstLen = (alignedRow * c0Size * typeSize) / BLOCK_BYTE_SIZE;
     uint16_t partBurstNum = totalBurstNum / SplitCount;
     uint16_t lastBurstNum = totalBurstNum - partBurstNum * (SplitCount - 1);
-    uint32_t srcStrideRows;
-    if constexpr (SrcTileData::Compact == CompactMode::Null) {
-        srcStrideRows = SrcTileData::Rows;
-    } else if constexpr (SrcTileData::Compact == CompactMode::RowPlusOne) {
-        srcStrideRows = alignedRow + 1;
-    } else {
-        srcStrideRows = alignedRow;
-    }
-    uint16_t srcGap = static_cast<uint16_t>(srcStrideRows - alignedRow);
+    uint16_t srcGap = static_cast<uint16_t>(SrcTileData::Rows - alignedRow);
     uint16_t dstGap = static_cast<uint16_t>(DstTileData::Rows - alignedRow);
     uint32_t srcBlockSize = (burstLen + srcGap) * BLOCK_BYTE_SIZE / typeSize;
     uint32_t dstBlockSize = DstTileData::Rows * c0Size;
@@ -543,7 +530,8 @@ PTO_INTERNAL void TInsertVecToVecImpl(DstTileData &dst, SrcTileData &src, uint16
             dst.data(), src.data(), validRow, validCol, static_cast<uint16_t>(DstTileData::Rows), indexRow, indexCol);
     } else {
         static_assert(DstTileData::isRowMajor == SrcTileData::isRowMajor,
-                      "TINSERT Vec→Vec : Source and destination layout must match (both ND or both NZ)");
+                      "TINSERT Vec→Vec : Source and destination layout must match "
+                      "(both ND or both NZ)");
     }
 }
 
@@ -560,8 +548,8 @@ PTO_INTERNAL void TInsertVecToMatImpl(DstTileData &dst, SrcTileData &src, uint16
         TInsertNDImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, dstCols, indexRow,
                                                    indexCol);
     } else if constexpr (!SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::RowMajor)) {
-        constexpr uint16_t dstRow = static_cast<uint16_t>(DstTileData::Rows);
-        PTO_ASSERT(indexRow + validRow <= dstRow, "TINSERT NZ : indexRow + validRow exceeds destination rows!");
+        uint16_t dstRow = static_cast<uint16_t>(dst.GetValidRow());
+        PTO_ASSERT(indexRow + validRow <= dstRow, "TINSERT NZ : indexRow + validRow exceeds destination valid rows!");
         TInsertImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, dstRow, indexRow,
                                                  indexCol);
     }
