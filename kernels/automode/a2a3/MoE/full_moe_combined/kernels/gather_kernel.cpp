@@ -11,7 +11,7 @@
  *                                                            cols kTopK..kPadded-1 host-padded
  *                                                            with -1e30 so exp() underflows to 0)
  * Scratch  (GM): weights_scratch  [kT, kPadded]       fp32  (only used when kTopK > 1)
- * Outputs  (GM): C                [kT, kH]            fp32  (zero-initialized by host)
+ * Outputs  (GM): C                [kT, kH]            fp32  (zero-initialized by host; only required for kTopK > 1)
  *
  *   kPadded = max(8, kTopK) — softmax tile column padding for 32-byte UB alignment.
  *
@@ -20,15 +20,12 @@
  * ===========================================================================
  *
  *   if constexpr (kTopK == 1):
- *       // Fast path: softmax of a single value is always 1.0, so the weighted
- *       // gather degenerates to an unweighted permute / accumulation. Match v1
- *       // behavior bit-for-bit; skip the softmax entirely.
+ *       // Fast path: softmax of a single value is always 1.0, and each token
+ *       // has exactly one packed row. The gather degenerates to a row reorder.
  *       for r in [0, kPackedRows):
  *           t = A_id[r]
  *           TLOAD bTile from B[r]
- *           TLOAD cTile from C[t]
- *           TADD  sumTile = cTile + bTile
- *           TSTORE C[t] = sumTile
+ *           TSTORE C[t] = bTile
  *
  *   else:
  *       // Pass 1: softmax(outVal) -> weights_scratch
@@ -122,7 +119,7 @@
  * Pattern sources:
  *   - tests/npu/a2a3/src/st/testcase/tfa/pto_macro_fa_softmax.hpp (softmax recipe)
  *   - kernels/automode/a2a3/moe_top1_unpermute/moe_top1_unpermute_kernel.cpp
- *     (row TLOAD->TADD->TSTORE skeleton, §11.5)
+ *     (row TLOAD->TSTORE skeleton, §11.5)
  */
 
 #include <pto/common/constants.hpp>
@@ -169,19 +166,15 @@ __global__ AICORE void runGather(
 
     if constexpr (kTopK == 1) {
         // ============================================================
-        // Fast path: softmax(single value) = 1.0, so weighted gather
-        // degenerates to unweighted permute / accumulation.
-        // Matches v1 gather byte-for-byte. outVal / rank_id /
-        // weights_scratch params are unused on this path.
+        // Fast path: softmax(single value) = 1.0, and each token has exactly
+        // one packed row. This is a pure row reorder; C does not need to be
+        // read because there is nothing to accumulate.
         // ============================================================
         (void)rank_id;
         (void)outVal;
         (void)weights_scratch;
 
         RowTile bTile;
-        RowTile cTile;
-        RowTile sumTile;
-
         for (unsigned r = 0; r < kPackedRows; ++r) {
             pipe_barrier(PIPE_ALL);
 
@@ -194,9 +187,7 @@ __global__ AICORE void runGather(
             RowGlobal cGlobal(C + dst_off);
 
             TLOAD(bTile, bGlobal);
-            TLOAD(cTile, cGlobal);
-            TADD (sumTile, cTile, bTile);
-            TSTORE(cGlobal, sumTile);
+            TSTORE(cGlobal, bTile);
         }
     } else {
         // ============================================================

@@ -6,14 +6,16 @@ Auto-mode A3 prototype. Unpack and accumulate per-expert FFN outputs back into p
 
 ```
 weights = softmax(outVal, axis=1)       # only computed when kTopK > 1
-C       := 0
 for r in [0, kT·kTopK):
     t = A_id[r]
     k = rank_id[r]
-    C[t] += weights[t, k] * B[r]        # weight = 1.0 when kTopK == 1
+    if kTopK == 1:
+        C[t] = B[r]                     # row reorder only
+    else:
+        C[t] += weights[t, k] * B[r]    # C is zero-initialized before launch
 ```
 
-For `kTopK == 1` the softmax is degenerate (single-element softmax = 1.0), so the kernel takes a **fast path** that skips the entire pass-1 softmax computation, and the `TMULS` in pass 2 — pure permute / accumulation, identical to the v1 gather byte-for-byte.
+For `kTopK == 1` the softmax is degenerate (single-element softmax = 1.0), and each token appears exactly once in `A_id`. The kernel takes a **fast path** that skips pass-1 softmax, skips `TMULS`, and directly stores each packed row into its original token row.
 
 | Buffer | Shape | dtype | Notes |
 |---|---|---|---|
@@ -22,7 +24,7 @@ For `kTopK == 1` the softmax is degenerate (single-element softmax = 1.0), so th
 | `rank_id` (input)   | `(kT·kTopK + 16)`     | int32 | only used when `kTopK > 1` |
 | `outVal` (input)    | `(kT, kPadded)`       | fp32 | cols `kTopK..kPadded-1` host-padded with `-1e30` |
 | `weights_scratch` (GM scratch) | `(kT, kPadded)` | fp32 | written by pass 1, read by pass 2 |
-| `C` (output)        | `(kT, kH)`            | fp32 | zero-initialized by host before launch |
+| `C` (output)        | `(kT, kH)`            | fp32 | zero-initialized by host before launch; only required for `kTopK > 1` |
 
 `kPadded = max(8, kTopK)` — softmax tile column padding for the 32-byte UB alignment requirement on fp32 (`Cols * 4 % 32 == 0` ⇒ `Cols % 8 == 0`).
 
@@ -68,7 +70,7 @@ A3 / Ascend 910B1. Vec target (`--cce-aicore-arch=dav-c220-vec`).
 
 ## Initialization
 
-The kernel does **not** pre-zero `C`. The host driver calls `aclrtMemset(cDev, ..., 0x00)` before launch (0x00 bytes in fp32 = `+0.0f`), so the first `TLOAD` of any `C[t]` reads zeros. This makes the same `TLOAD → (TMULS →) TADD → TSTORE` code correct for both `kTopK = 1` (each row written once) and `kTopK > 1` (rows accumulate).
+The kernel does **not** pre-zero `C`. The host driver calls `aclrtMemset(cDev, ..., 0x00)` before launch (0x00 bytes in fp32 = `+0.0f`). That memset is only required for `kTopK > 1`, where the weighted path reads `C[t]`, accumulates into it, and stores it back. For `kTopK == 1`, the fast path is a direct `TLOAD(B[r]) → TSTORE(C[A_id[r]])` row reorder.
 
 ## How to build and run
 
