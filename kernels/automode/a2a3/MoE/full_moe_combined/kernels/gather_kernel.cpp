@@ -35,10 +35,10 @@
  *       //   Composition mirrors tfa/pto_macro_fa_softmax.hpp lines 54-60:
  *       //   row-max -> broadcast-subtract -> exp -> row-sum -> broadcast-divide.
  *       TLOAD          valTile     from outVal[:, :kPadded]
- *       TROWMAX        maxTile     <- valTile                  // (kT, 8) per-row max
+ *       TROWMAX        maxTile     <- valTile                  // (kT, 1) per-row max
  *       TROWEXPANDSUB  tmpTile     <- valTile - maxTile        // broadcast subtract
  *       TEXP           expTile     <- exp(tmpTile)
- *       TROWSUM        sumTile     <- expTile                  // (kT, 8) per-row sum
+ *       TROWSUM        sumTile     <- expTile                  // (kT, 1) per-row sum
  *       TROWEXPANDDIV  weightTile  <- expTile / sumTile        // softmax
  *       TSTORE         weights_scratch <- weightTile
  *
@@ -65,10 +65,9 @@
  *     to insert the RAW edges; if it doesn't, that's the first thing to suspect
  *     if the kernel produces wrong numbers.
  *
- * The TROWEXPANDSUB / TROWEXPANDDIV broadcast-tile contract requires src1 to
- * have `validCol == 32 / sizeof(T) == 8` for fp32 row-major. TROWMAX/TROWSUM
- * emit exactly that shape (a per-row scalar in lane 0, replicated across all 8
- * lanes of a 32-byte block). See include/pto/npu/a2a3/TRowExpandSub.hpp:70-71.
+ * The TROWEXPANDSUB / TROWEXPANDDIV broadcast-tile contract accepts a DN
+ * scalar row-vector (`BLayout::ColMajor`, validCol == 1). TROWMAX/TROWSUM
+ * produce exactly one scalar per row, so max/sum use that layout.
  *
  * ===========================================================================
  * Why outVal cols kTopK..kPadded-1 are host-padded with -1e30
@@ -209,7 +208,7 @@ __global__ AICORE void runGather(
         using SoftmaxGlobal = GlobalTensor<T, SoftmaxShape, SoftmaxStride>;
 
         using ValTile   = Tile<TileType::Vec, T, kT, kPadded, BLayout::RowMajor, kT, kPadded>;
-        using BcastTile = Tile<TileType::Vec, T, kT, 8,       BLayout::RowMajor, kT, 8>;
+        using BcastTile = Tile<TileType::Vec, T, kT, 1,       BLayout::ColMajor, kT, 1>;
 
         ValTile   valTile;
         BcastTile maxTile;
@@ -222,10 +221,10 @@ __global__ AICORE void runGather(
         SoftmaxGlobal weightsGlobal(weights_scratch);
 
         TLOAD(valTile, outValGlobal);                  // (kT, kPadded) <- host-padded GM
-        TROWMAX(maxTile, valTile, tmpTile);            // (kT, 8) broadcast max
+        TROWMAX(maxTile, valTile, tmpTile);            // (kT, 1) row max
         TROWEXPANDSUB(tmpTile, valTile, maxTile);      // val - max
         TEXP(expTile, tmpTile);                        // exp(val - max)
-        TROWSUM(sumTile, expTile, tmpTile);            // (kT, 8) broadcast sum
+        TROWSUM(sumTile, expTile, tmpTile);            // (kT, 1) row sum
         TROWEXPANDDIV(weightTile, expTile, sumTile);   // exp(...) / sum
         TSTORE(weightsGlobal, weightTile);             // -> GM scratch
 
