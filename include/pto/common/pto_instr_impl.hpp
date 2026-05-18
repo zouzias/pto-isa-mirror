@@ -278,6 +278,15 @@ full text of the License.
 #include "pto/npu/kirinX90/header.hpp"
 #endif
 
+// Async L2 cache prefetch via SDMA CMO. Same backend file is reused across A2/A3
+// and A5 because the SDMA infrastructure is common to both architectures
+// (the actual SQE-field differences are handled inside the SDMA helpers via
+// `#ifdef PTO_NPU_ARCH_A5`). Guarded so that costmodel and CPU sim builds
+// pick up their own variant from the blocks below.
+#if defined(__CCE_AICORE__) && !(defined(__CPU_SIM) || defined(__COSTMODEL))
+#include "pto/npu/TPrefetchAsync.hpp"
+#endif
+
 #ifdef __CPU_SIM
 #include "pto/cpu/ElementTileOp.h"
 #include "pto/cpu/ElementTileScalarOp.h"
@@ -351,6 +360,9 @@ full text of the License.
 #include "pto/cpu/comm/TReduce.hpp"
 #include "pto/cpu/comm/TTest.hpp"
 #include "pto/cpu/comm/TWait.hpp"
+
+// Async L2 cache prefetch (no-op on CPU sim - kept for API surface compatibility).
+#include "pto/cpu/TPrefetchAsync.hpp"
 
 #endif
 

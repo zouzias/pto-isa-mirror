@@ -105,6 +105,7 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 ## Memory (GM <-> Tile)
 - [TLOAD](TLOAD.md) - Load data from a GlobalTensor (GM) into a Tile.
 - [TPREFETCH](TPREFETCH.md) - Prefetch data from global memory into a tile-local cache/buffer (hint).
+- [TPREFETCH_ASYNC](TPREFETCH_ASYNC.md) - Asynchronously prefetch a GlobalTensor region from GM into L2 cache via SDMA CMO.
 - [TSTORE](TSTORE.md) - Store data from a Tile into a GlobalTensor (GM), optionally using atomic write or quantization parameters.
 - [TSTORE_FP](TSTORE_FP.md) - Store an accumulator tile into global memory using a scaling (`fp`) tile for vector quantization parameters.
 - [MGATHER](MGATHER.md) - Gather-load elements from global memory into a tile using per-element indices.
