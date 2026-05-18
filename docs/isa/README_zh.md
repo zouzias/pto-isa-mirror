@@ -105,6 +105,7 @@
 ## 内存（GM <-> Tile）
 - [TLOAD](TLOAD_zh.md) - 从 GlobalTensor (GM) 加载数据到 Tile。
 - [TPREFETCH](TPREFETCH_zh.md) - 将数据从全局内存预取到 Tile 本地缓存/缓冲区（提示）。
+- [TPREFETCH_ASYNC](TPREFETCH_ASYNC_zh.md) - 通过 SDMA CMO 将 GlobalTensor 区域从 GM 异步预取到 L2 Cache。
 - [TSTORE](TSTORE_zh.md) - 将 Tile 中的数据存储到 GlobalTensor (GM)，可选使用原子写入或量化参数。
 - [TSTORE_FP](TSTORE_FP_zh.md) - 使用缩放 (`fp`) Tile 作为向量量化参数，将累加器 Tile 存储到全局内存。
 - [MGATHER](MGATHER_zh.md) - 使用逐元素索引从全局内存收集加载元素到 Tile 中。
