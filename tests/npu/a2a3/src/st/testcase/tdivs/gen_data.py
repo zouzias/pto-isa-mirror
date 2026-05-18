@@ -41,7 +41,7 @@ def gen_golden_data(param):
                 output_arr[i, j] = divide(input_arr[i, j], divider[0, 0], data_type)
             else:
                 output_arr[i, j] = divide(divider[0, 0], input_arr[i, j], data_type)
-    
+
     input_arr.tofile('input.bin')
     with open("divider.bin", 'wb') as f:
         f.write(struct.pack('f', np.float32(divider[0, 0])))

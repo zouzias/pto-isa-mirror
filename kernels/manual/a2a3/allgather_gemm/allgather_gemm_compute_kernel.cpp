@@ -1,15 +1,18 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
+
 #include "gemm_config.hpp"
 #include "ready_queue.hpp"
 
@@ -44,7 +47,8 @@ using NDWholeShapeC = BaseShape2D<float, G_M, G_N>;
 using GlobalDataOut = GlobalTensor<float, NDValidShapeC, NDWholeShapeC>;
 
 // ---------------------------------------------------------------------------
-// ProcessKIterationContinuous: 单次 K-iteration 的 L1 load + L0 extract + matmul
+// ProcessKIterationContinuous: 单次 K-iteration 的 L1 load + L0 extract +
+// matmul
 // ---------------------------------------------------------------------------
 template <typename T, typename U, typename S, int M, int K, int N, uint32_t baseM, uint32_t baseK, uint32_t baseN,
           uint32_t stepKa, uint32_t stepKb>
@@ -329,9 +333,9 @@ AICORE inline void AllocateComputeTiles(TileMatAData aMatTile[BUFFER_NUM], TileM
 //   Phase 2: 远程 rank row-group streaming 等待后计算
 // ---------------------------------------------------------------------------
 AICORE inline void AllGatherGemmComputeStreamingImpl(__gm__ float *output, __gm__ half *shmem_input, __gm__ half *src1,
-                                                     __gm__ ChunkFlagMatrix *chunk_flags, int launch_block_count)
+                                                     __gm__ ChunkFlagMatrix *chunk_flags, int block_num)
 {
-    const int core_idx = get_block_idx();
+    const int block_idx = get_block_idx();
 
     volatile __gm__ ChunkFlagMatrix *flags = reinterpret_cast<volatile __gm__ ChunkFlagMatrix *>(chunk_flags);
 
@@ -355,12 +359,12 @@ AICORE inline void AllGatherGemmComputeStreamingImpl(__gm__ float *output, __gm_
     if (my_rank >= 0 && my_rank < n_ranks) {
         int local_mi_start = my_rank * m_tiles_per_rank;
         int local_mi_end = local_mi_start + m_tiles_per_rank;
-        for (int mi = local_mi_start + core_idx; mi < local_mi_end; mi += launch_block_count) {
+        for (int mi = local_mi_start + block_idx; mi < local_mi_end; mi += block_num) {
             ComputeRowGroupDirect(output, shmem_input, src1, mi, k_tiles, aMatTile, bMatTile, aTile, bTile, cTile);
         }
     }
 
-    for (int mi = core_idx; mi < m_tiles; mi += launch_block_count) {
+    for (int mi = block_idx; mi < m_tiles; mi += block_num) {
         int src_rank = mi / m_tiles_per_rank;
         if (src_rank == my_rank)
             continue;
@@ -373,19 +377,18 @@ AICORE inline void AllGatherGemmComputeStreamingImpl(__gm__ float *output, __gm_
 
 __global__ AICORE void AllGatherGemmComputeStreamingKernel(__gm__ uint8_t *output, __gm__ uint8_t *shmem_input,
                                                            __gm__ uint8_t *src1, __gm__ uint8_t *chunk_flags,
-                                                           int launch_block_count)
+                                                           int block_num)
 {
 #ifdef __CCE_AICORE__
-    AllGatherGemmComputeStreamingImpl(reinterpret_cast<__gm__ float *>(output),
-                                      reinterpret_cast<__gm__ half *>(shmem_input),
-                                      reinterpret_cast<__gm__ half *>(src1),
-                                      reinterpret_cast<__gm__ ChunkFlagMatrix *>(chunk_flags), launch_block_count);
+    AllGatherGemmComputeStreamingImpl(
+        reinterpret_cast<__gm__ float *>(output), reinterpret_cast<__gm__ half *>(shmem_input),
+        reinterpret_cast<__gm__ half *>(src1), reinterpret_cast<__gm__ ChunkFlagMatrix *>(chunk_flags), block_num);
 #endif
 }
 
 void launchAllGatherGemmComputeStreaming(uint8_t *output, uint8_t *shmem_input, uint8_t *src1, uint8_t *chunk_flags,
-                                         void *stream, int launch_block_count = COMPUTE_BLOCK_NUM)
+                                         void *stream, int block_num = COMPUTE_BLOCK_NUM)
 {
-    AllGatherGemmComputeStreamingKernel<<<launch_block_count, nullptr, stream>>>(output, shmem_input, src1, chunk_flags,
-                                                                                 launch_block_count);
+    AllGatherGemmComputeStreamingKernel<<<block_num, nullptr, stream>>>(output, shmem_input, src1, chunk_flags,
+                                                                        block_num);
 }

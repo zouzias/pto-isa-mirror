@@ -1,17 +1,19 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TSYNC_HPP
 #define TSYNC_HPP
-#include <pto/common/type.hpp>
 #include <pto/common/event.hpp>
+#include <pto/common/type.hpp>
 
 namespace pto {
 template <Op OpCode>
@@ -115,12 +117,10 @@ struct Event {
 };
 
 template <typename T>
-struct is_event : std::false_type {
-};
+struct is_event : std::false_type {};
 
 template <Op SrcOp, Op DstOp, bool AutoToken, event_t EventID>
-struct is_event<Event<SrcOp, DstOp, AutoToken, EventID>> : std::true_type {
-};
+struct is_event<Event<SrcOp, DstOp, AutoToken, EventID>> : std::true_type {};
 
 template <typename... Ts>
 inline constexpr bool all_events_v = (is_event<Ts>::value && ...);

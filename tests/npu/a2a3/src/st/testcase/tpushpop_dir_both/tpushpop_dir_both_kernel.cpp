@@ -1,15 +1,17 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
 #include <pto/common/fifo.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace pto;
 
@@ -42,9 +44,9 @@ AICORE constexpr inline T CeilAlign(T num_1, T num_2)
 //
 //   Vec: tileC = tileA + tileB  (per vector core portion)
 //   Vec→Cube (V2C): TPUSH tileC → combined [TOTAL_M, K] in FIFO
-//   Cube: TPOP [TOTAL_M,K], TLOAD tileD[K,N], tileE = TMATMUL([TOTAL_M,K]×[K,N])
-//   Cube→Vec (C2V): TPUSH tileE[TOTAL_M,N] → vectors pop their portion
-//   Vec: tileG = tileE_part - tileF, TSTORE tileG
+//   Cube: TPOP [TOTAL_M,K], TLOAD tileD[K,N], tileE =
+//   TMATMUL([TOTAL_M,K]×[K,N]) Cube→Vec (C2V): TPUSH tileE[TOTAL_M,N] → vectors
+//   pop their portion Vec: tileG = tileE_part - tileF, TSTORE tileG
 template <typename T, int TOTAL_M, int K, int N, TileSplitAxis SplitAxis = TileSplitAxis::TILE_UP_DOWN>
 __global__ AICORE void runTPushPopDirBoth(__gm__ uint64_t *ffts_addr, __gm__ T *out, __gm__ T *srcA, __gm__ T *srcB,
                                           __gm__ T *srcD, __gm__ T *srcF, __gm__ T *fifoMem)
