@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef _PTO_INCLUDE_NPU_TYPE_H_
@@ -34,7 +36,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // PTO assertion helpers
 //
 // Goals:
-// - Provide a consistent diagnostic prefix across compile-time and runtime checks.
+// - Provide a consistent diagnostic prefix across compile-time and runtime
+// checks.
 // - Always print/encode the violated condition when possible.
 // - Provide a stable “next step” for users: see docs/coding/debug.md.
 //
@@ -63,40 +66,48 @@ See LICENSE in the root of the software repository for the full text of the Lice
                           "Hint: see docs/coding/debug.md and search for " __FILE__ ":" PTO_DETAIL_STR(__LINE__))
 
 #define PTO_DETAIL_GET_MACRO(_1, _2, NAME, ...) NAME
-#define PTO_STATIC_ASSERT(...) PTO_DETAIL_GET_MACRO(__VA_ARGS__, PTO_STATIC_ASSERT_2, PTO_STATIC_ASSERT_1)(__VA_ARGS__)
+#define PTO_STATIC_ASSERT(...)                                                  \
+    PTO_DETAIL_GET_MACRO(__VA_ARGS__, PTO_STATIC_ASSERT_2, PTO_STATIC_ASSERT_1) \
+    (__VA_ARGS__)
 
 #if defined(__CPU_SIM) || defined(__COSTMODEL)
 #include <cstdio>
 #include <cstdlib>
 
-#define PTO_CPU_ASSERT_1(cond)                                                                               \
-    do {                                                                                                     \
-        if (!(cond)) {                                                                                       \
-            std::fprintf(stderr,                                                                             \
-                         "[PTO][CA] Constraint violated. Condition: %s. Hint: see docs/coding/debug.md and " \
-                         "search for %s:%d\n",                                                               \
-                         #cond, __FILE__, __LINE__);                                                         \
-            std::abort();                                                                                    \
-        }                                                                                                    \
+#define PTO_CPU_ASSERT_1(cond)                                                      \
+    do {                                                                            \
+        if (!(cond)) {                                                              \
+            std::fprintf(stderr,                                                    \
+                         "[PTO][CA] Constraint violated. Condition: %s. Hint: see " \
+                         "docs/coding/debug.md and "                                \
+                         "search for %s:%d\n",                                      \
+                         #cond, __FILE__, __LINE__);                                \
+            std::abort();                                                           \
+        }                                                                           \
     } while (0)
 
-#define PTO_CPU_ASSERT_2(cond, msg)                                                                                   \
-    do {                                                                                                              \
-        if (!(cond)) {                                                                                                \
-            std::fprintf(stderr, "[PTO][CA] %s Condition: %s. Hint: see docs/coding/debug.md and search for %s:%d\n", \
-                         (msg), #cond, __FILE__, __LINE__);                                                           \
-            std::abort();                                                                                             \
-        }                                                                                                             \
+#define PTO_CPU_ASSERT_2(cond, msg)                                     \
+    do {                                                                \
+        if (!(cond)) {                                                  \
+            std::fprintf(stderr,                                        \
+                         "[PTO][CA] %s Condition: %s. Hint: see "       \
+                         "docs/coding/debug.md and search for %s:%d\n", \
+                         (msg), #cond, __FILE__, __LINE__);             \
+            std::abort();                                               \
+        }                                                               \
     } while (0)
 
-#define PTO_CPU_ASSERT(...) PTO_DETAIL_GET_MACRO(__VA_ARGS__, PTO_CPU_ASSERT_2, PTO_CPU_ASSERT_1)(__VA_ARGS__)
+#define PTO_CPU_ASSERT(...)                                               \
+    PTO_DETAIL_GET_MACRO(__VA_ARGS__, PTO_CPU_ASSERT_2, PTO_CPU_ASSERT_1) \
+    (__VA_ARGS__)
 #else
 // Non-CPU builds should not depend on CPU-only assertion behavior.
 #define PTO_CPU_ASSERT(...) ((void)0)
 #endif
 
-// Signed 4-bit integer type (packed: 2 elements per byte using uint8_t storage).
-// Compatible with AscendC int4b_t. The vconv intrinsics use void* for the packed side.
+// Signed 4-bit integer type (packed: 2 elements per byte using uint8_t
+// storage). Compatible with AscendC int4b_t. The vconv intrinsics use void* for
+// the packed side.
 //
 // Defined inside `namespace pto` to avoid conflicting with AscendC's own
 // global `int4b_t` type alias (e.g. `using int4b_t = IntegerSubType<...>;`)
@@ -229,7 +240,8 @@ enum class STPhase : uint8_t
     Final = 0x3,
 };
 
-// Accumulate phase for unit-flag aware TMATMUL paths; Unknown is kept as an alias for compatibility.
+// Accumulate phase for unit-flag aware TMATMUL paths; Unknown is kept as an
+// alias for compatibility.
 enum class AccPhase : uint8_t
 {
     Unspecified = 0x0,
@@ -335,7 +347,8 @@ enum class CompactMode
     Null,
     Normal,
     RowPlusOne,
-    RowAlignedPadding, // apply padding only to the part of ValidRow aligned upward to 16 in TFILLPAD.
+    RowAlignedPadding, // apply padding only to the part of ValidRow aligned
+                       // upward to 16 in TFILLPAD.
 };
 enum class SetFmatrixMode
 {
@@ -473,11 +486,12 @@ typedef float float32_t;
 // Note: clang version should be >=15 and gcc version should be >=14
 // Use native BF16 automatically when the current toolchain already supports it.
 // PTO_CPU_SIM_ENABLE_BF16 remains useful as a strict request: if callers define
-// it on an unsupported toolchain, we fail loudly instead of silently falling back
-// to the placeholder _Float16 alias.
+// it on an unsupported toolchain, we fail loudly instead of silently falling
+// back to the placeholder _Float16 alias.
 #if defined(__has_include) && __has_include(<stdfloat>) && __cplusplus >= 202302L && defined(__STDCPP_BFLOAT16_T__)
 #include <stdfloat>
 typedef std::bfloat16_t bfloat16_t;
+#define CPU_SIM_BFLOAT_ENABLED
 #elif defined(PTO_CPU_SIM_ENABLE_BF16)
 #error "PTO_CPU_SIM_ENABLE_BF16 requires C++23 <stdfloat> with std::bfloat16_t support."
 #else
@@ -485,7 +499,8 @@ typedef std::bfloat16_t bfloat16_t;
 // For CPU simulation, a best-effort 16-bit float type is sufficient.
 // Default CPU simulator builds keep the existing compiler baseline.
 // bfloat16_t remains available as a placeholder type, but BF16 ST coverage and
-// bit-accurate custom-value paths are compiled only when CPU_SIM_BFLOAT_ENABLED is set.
+// bit-accurate custom-value paths are compiled only when CPU_SIM_BFLOAT_ENABLED
+// is set.
 typedef _Float16 bfloat16_t;
 #endif
 #endif

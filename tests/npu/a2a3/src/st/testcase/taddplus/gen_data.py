@@ -53,7 +53,7 @@ class TAddPlusParams:
         self.src0_tile_row = src0_tileR
         self.src0_tile_col = src0_tileC
         self.src1_tile_row = src1_tileR
-        self.src1_tile_col = src1_tileC 
+        self.src1_tile_col = src1_tileC
         self.valid_row = valid_row
         self.valid_col = valid_col
 

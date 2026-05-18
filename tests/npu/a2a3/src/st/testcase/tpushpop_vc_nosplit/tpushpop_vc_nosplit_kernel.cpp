@@ -1,15 +1,17 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
 #include <pto/common/fifo.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace pto;
 
@@ -35,12 +37,13 @@ AICORE constexpr inline T CeilAlign(T num_1, T num_2)
 }
 
 /**
- * TILE_NO_SPLIT mode: each Vec sub-core independently loads the full TILE_K × TILE_N
- * quantized tile, dequantizes it, and pushes to the same FIFO slot (subAIVOffset = 0).
- * Both AIV0 and AIV1 participate in the a2a3 CV_CORES_SYNC handshake; the hardware
- * collects both signals before unblocking the Cube, ensuring data coherency without
- * any per-subcore row split.  Compare to TILE_UP_DOWN where each AIV writes only its
- * HALF_TILE_K rows at a distinct offset.
+ * TILE_NO_SPLIT mode: each Vec sub-core independently loads the full TILE_K ×
+ * TILE_N quantized tile, dequantizes it, and pushes to the same FIFO slot
+ * (subAIVOffset = 0). Both AIV0 and AIV1 participate in the a2a3 CV_CORES_SYNC
+ * handshake; the hardware collects both signals before unblocking the Cube,
+ * ensuring data coherency without any per-subcore row split.  Compare to
+ * TILE_UP_DOWN where each AIV writes only its HALF_TILE_K rows at a distinct
+ * offset.
  */
 template <typename QuantT, typename InT, typename OutT, int TOTAL_M, int TOTAL_K, int N, int CASE_TILE_K>
 __global__ AICORE void runTPushPopVCNSMatmul(__gm__ uint64_t *ffts_addr, __gm__ OutT *out, __gm__ InT *srcA,
@@ -63,7 +66,8 @@ __global__ AICORE void runTPushPopVCNSMatmul(__gm__ uint64_t *ffts_addr, __gm__ 
     using MatTileCons =
         Tile<TileType::Mat, OutT, TILE_K, TILE_N, BLayout::ColMajor, TILE_K, TILE_N, SLayout::RowMajor, 512>;
 
-    // Slot size = full TILE_K × TILE_N (same byte count as TILE_UP_DOWN; one AIV writes per slot)
+    // Slot size = full TILE_K × TILE_N (same byte count as TILE_UP_DOWN; one AIV
+    // writes per slot)
     using MatPipe = TPipe<FLAG_ID, Direction::DIR_V2C, TILE_K * TILE_N * sizeof(OutT), FIFO_DEPTH>;
     MatPipe mPipe((__gm__ void *)fifoMem, 0x0, localFiFoBase);
 

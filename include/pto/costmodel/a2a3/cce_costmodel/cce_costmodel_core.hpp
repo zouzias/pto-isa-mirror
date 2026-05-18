@@ -1,17 +1,18 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
-
 #include <pto/costmodel/arch_config.hpp>
 #include <pto/costmodel/trace.hpp>
 
@@ -168,7 +169,8 @@ inline uint64_t ExtractBits(uint64_t value, uint32_t shift, uint64_t mask)
     return (value >> shift) & mask;
 }
 
-// Temporary common latency model for vconv_*; the detailed behavior is not fully understood yet.
+// Temporary common latency model for vconv_*; the detailed behavior is not
+// fully understood yet.
 inline uint64_t _EstimateVconvCycles(uint64_t repeat)
 {
     return EstimateLinearCycles(repeat, 14, 2, 18);
