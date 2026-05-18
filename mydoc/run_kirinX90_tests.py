@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+import subprocess
+import sys
+
+SUPPORTED_TESTS = [
+    "tabs",
+    "tadd",
+    "tadds",
+    "tadd_tdiv",
+    "tand",
+    "tands",
+    "tassign",
+    "tci",
+    "tcmp",
+    "tcmps",
+    "tcolargmax",
+    "tcolargmin",
+    "tcolexpand",
+    "tcolexpandadd",
+    "tcolexpanddiv",
+    "tcolexpandmax",
+    "tcolexpandmin",
+    "tcolexpandmul",
+    "tcolexpandsub",
+    "tcolmax",
+    "tcolmin",
+    "tcolprod",
+    "tcolsum",
+    "tconcat",
+    "tconcatdstidx",
+    "tconcatidx",
+    "tcvt",
+    "tdiv",
+    "tdivs",
+    "texp",
+    "texpands",
+    "texpands_mat",
+    "textract",
+    "textract_acc2vec",
+    "textract_compact",
+    "textract_nd_vec",
+    "textract_vec",
+    "tfillpad",
+    "tgather",
+    "tgatherb",
+    "tload",
+    "tload_shape2d",
+    "tlog",
+    "tlrelu",
+    "tmatmul",
+    "tmax",
+    "tmaxs",
+    "tmin",
+    "tmins",
+    "tmov",
+    "tmov_acc2mat",
+    "tmov_ub2l1",
+    "tmov_vect",
+    "tmrgsort",
+    "tmul",
+    "tmuls",
+    "tmuls_trowsum",
+    "tmul_tadds",
+    "tneg",
+    "tnot",
+    "tor",
+    "tors",
+    "tpartadd",
+    "tpartargmax",
+    "tpartargmin",
+    "tpartmax",
+    "tpartmin",
+    "tpartmul",
+    "tpow",
+    "tpows",
+    "tprelu",
+    "tquant",
+    "trecip",
+    "trelu",
+    "trowargmax",
+    "trowargmin",
+    "trowexpand",
+    "trowexpandadd",
+    "trowexpandbrcb",
+    "trowexpanddiv",
+    "trowexpandmax",
+    "trowexpandmin",
+    "trowexpandmul",
+    "trowexpandsub",
+    "trowexpand_tdiv",
+    "trowexpand_trowsum",
+    "trowexpand_tsqrt",
+    "trowmax",
+    "trowmin",
+    "trowprod",
+    "trowsum",
+    "trowsum_trowexpand",
+    "trsqrt",
+    "tscatter",
+    "tsel",
+    "tsels",
+    "tshl",
+    "tshls",
+    "tshr",
+    "tshrs",
+    "tsort32",
+    "tsqrt",
+    "tstore",
+    "tsub",
+    "tsubs",
+    "tsub_texp",
+    "ttrans",
+    "ttrans_conv",
+    "ttri",
+    "txor",
+    "txors",
+]
+
+
+def main():
+    passed, failed, skipped = 0, 0, 0
+    for test in SUPPORTED_TESTS:
+        cmd = ["python3", "-u", "tests/script/run_st.py", "-v", "kirinX90", "-t", test]
+        print(f"[RUN] {test} ... ", end="", flush=True)
+        result = subprocess.run(cmd, capture_output=False)
+        if result.returncode == 0:
+            passed += 1
+            print("PASS")
+        else:
+            failed += 1
+            print(f"FAIL (exit {result.returncode})")
+    print(f"\n{'=' * 50}")
+    print(f"Total: {len(SUPPORTED_TESTS)}, Passed: {passed}, Failed: {failed}")
+
+
+if __name__ == "__main__":
+    main()
