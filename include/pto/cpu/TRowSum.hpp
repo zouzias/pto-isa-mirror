@@ -1,17 +1,19 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TROWSUM_HPP
 #define TROWSUM_HPP
-#include "pto/cpu/tile_offsets.hpp"
 #include "pto/cpu/parallel.hpp"
+#include "pto/cpu/tile_offsets.hpp"
 
 namespace pto {
 template <typename TileDst, typename TileSrc>
@@ -47,10 +49,7 @@ PTO_INTERNAL void CheckRSValid()
                       (std::is_same_v<SrcType, bfloat16_t> && std::is_same_v<DstType, bfloat16_t>) || // bf162bf16
                       (std::is_same_v<SrcType, half> && std::is_same_v<DstType, float>) ||            // f162f32
                       (std::is_same_v<SrcType, bfloat16_t> && std::is_same_v<DstType, float>) ||      // bf162f32
-                      (std::is_same_v<SrcType, float> && std::is_same_v<DstType, float>) ||           // f322f32
-                      (std::is_same_v<SrcType, int16_t> && std::is_same_v<DstType, int16_t>) ||       // i162i16
-                      (std::is_same_v<SrcType, int16_t> && std::is_same_v<DstType, int32_t>) ||       // i162i32
-                      (std::is_same_v<SrcType, int32_t> && std::is_same_v<DstType, int32_t>)          // i322i32
+                      (std::is_same_v<SrcType, float> && std::is_same_v<DstType, float>)              // f322f32
                   ,
                   "Not supported data type");
     static_assert((TileSrc::Rows == TileDst::Rows), "Inconsistent number of m, n");

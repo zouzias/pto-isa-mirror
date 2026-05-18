@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TUNARYOP_HPP
@@ -234,13 +236,17 @@ PTO_INTERNAL void TunaryCheck()
     static_assert(DstTile::Loc == TileType::Vec && SrcTile::Loc == TileType::Vec,
                   "TUnaryOp: TileType of src and dst tiles must be TileType::Vec.");
     static_assert(SrcTile::ValidCol <= SrcTile::Cols,
-                  "TUnaryOp: Number of src's valid columns must not be greater than number of tile columns.");
+                  "TUnaryOp: Number of src's valid columns must not be greater "
+                  "than number of tile columns.");
     static_assert(DstTile::ValidCol <= DstTile::Cols,
-                  "TUnaryOp: Number of dst's valid columns must not be greater than number of tile columns.");
+                  "TUnaryOp: Number of dst's valid columns must not be greater "
+                  "than number of tile columns.");
     static_assert(SrcTile::ValidRow <= SrcTile::Rows,
-                  "TUnaryOp: Number of src's valid rows must not be greater than number of tile rows.");
+                  "TUnaryOp: Number of src's valid rows must not be greater than "
+                  "number of tile rows.");
     static_assert(DstTile::ValidRow <= DstTile::Rows,
-                  "TUnaryOp: Number of dst's valid rows must not be greater than number of tile rows.");
+                  "TUnaryOp: Number of dst's valid rows must not be greater than "
+                  "number of tile rows.");
     static_assert(std::is_same<typename DstTile::DType, typename SrcTile::DType>::value,
                   "TUnaryOp: The data type of dst must be consistent with of src");
     static_assert(!floatOnly || std::is_same<typename DstTile::DType, float32_t>::value ||

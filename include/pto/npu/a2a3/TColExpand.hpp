@@ -1,18 +1,20 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TCOLEXPAND_HPP
 #define TCOLEXPAND_HPP
 
-#include <pto/common/utils.hpp>
 #include <pto/common/type.hpp>
+#include <pto/common/utils.hpp>
 
 namespace pto {
 template <typename T, typename TileDataDst, typename TileDataSrc, unsigned dstStride>
@@ -41,9 +43,11 @@ PTO_INTERNAL void TColExpandCheck(int SrcValidRow, int SrcValidCol, int DstValid
     static_assert((sizeof(T) == 1) || (sizeof(T) == 2) || (sizeof(T) == 4),
                   "Fix: TCOLEXPAND input data type is not supported by this instruction.");
     static_assert(std::is_same_v<typename TileDataOut::DType, T>,
-                  "Fix: TCOLEXPAND input data type must be consistent with the output data type.");
+                  "Fix: TCOLEXPAND input data type must be consistent with the "
+                  "output data type.");
     PTO_ASSERT(SrcValidCol == DstValidCol,
-               "Fix: TCOLEXPAND input valid col must be consistent with the output valid row.");
+               "Fix: TCOLEXPAND input valid col must be consistent with the "
+               "output valid row.");
 }
 
 template <typename TileDataOut, typename TileDataIn>

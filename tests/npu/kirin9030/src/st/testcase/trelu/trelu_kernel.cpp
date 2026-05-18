@@ -1,15 +1,18 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <type_traits>
 #include <pto/pto-inst.hpp>
+#include <type_traits>
+
 #include "acl/acl.h"
 
 using namespace pto;
@@ -25,11 +28,12 @@ __global__ AICORE void runTRELU(__gm__ T *out, __gm__ T *input)
     TileData srcTile(kGRows_, kGCols_);
     TileData dstTile(kGRows_, kGCols_);
 
-    TASSIGN<0x0>(srcTile);
-    TASSIGN<TileData::Numel * sizeof(T)>(dstTile);
+    TASSIGN<0x0 + 0x400 * block_idx>(srcTile);
+    TASSIGN<0x4000 + 0x400 * block_idx>(dstTile);
 
-    GlobalData srcGlobal(input);
-    GlobalData dstGlobal(out);
+    int offset = (block_idx / 4) * (64 * 16) + (block_idx % 4) * 16;
+    GlobalData srcGlobal(input + offset);
+    GlobalData dstGlobal(out + offset);
 
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);

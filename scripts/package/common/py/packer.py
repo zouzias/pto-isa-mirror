@@ -113,7 +113,7 @@ def compose_makeself_command(params: MakeselfPkgParams) -> str:
         if params.cleanup:
             return ['--cleanup', params.cleanup]
         return []
-    
+
     compress_tool = get_compress_tool()
     tar_format = get_compress_format()
     commands = chain(
@@ -125,7 +125,7 @@ def compose_makeself_command(params: MakeselfPkgParams) -> str:
         get_cleanup_commands(),
         [params.package_name, params.comments]
     )
-    
+
     command = ' '.join(commands)
     return command
 
