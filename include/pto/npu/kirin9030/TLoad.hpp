@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifdef PTO_NPU_ARCH_KIRINX90
@@ -13,8 +15,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #elif defined(PTO_NPU_ARCH_KIRIN9030)
 #ifndef TLOAD_HPP
 #define TLOAD_HPP
-#include "common.hpp"
 #include <pto/common/utils.hpp>
+
+#include "common.hpp"
 
 namespace pto {
 template <typename DstTile, typename SrcGlobal>
@@ -157,7 +160,8 @@ PTO_INTERNAL void TLoadCubeCheck()
                         (!DstTile::isRowMajor && (DstTile::SFractal == SLayout::NoneBox)))) ||
                       (((SrcGlobal::layout == pto::Layout::DN) &&
                         (DstTile::isRowMajor && (DstTile::SFractal == SLayout::ColMajor)))),
-                  "Fix: now only support ND2NZ DN2NZ ND2ND DN2DN NZ2NZ DN2ZN in current platform");
+                  "Fix: now only support ND2NZ DN2NZ ND2ND DN2DN NZ2NZ DN2ZN in current "
+                  "platform");
 
     // L1 space check
     static_assert(DstTile::Rows <= 16384, "Fix: DstTile::Rows must less than 16384 in L1");
@@ -179,7 +183,8 @@ PTO_INTERNAL void TLoadCubeCheck()
                   (!DstTile::isRowMajor && (DstTile::SFractal == SLayout::RowMajor))) {
         static_assert(BLOCK_BYTE_SIZE / sizeof(typename SrcGlobal::DType) == SrcGlobal::staticShape[4] &&
                           BLOCK_LEN == SrcGlobal::staticShape[3],
-                      "Fix: Src GlobalTensor staticShape[3][4] must be satisfied with NZ format require!");
+                      "Fix: Src GlobalTensor staticShape[3][4] must be satisfied "
+                      "with NZ format require!");
     }
 }
 
@@ -436,7 +441,8 @@ PTO_INTERNAL void StaticCheck()
     static_assert(sizeof(typename DstTile::DType) == sizeof(typename SrcGlobal::DType),
                   "Fix: Source dtype must be same with dst dtype!");
 
-    // for static shape case, enforce the global tensor (tiled) shape matching with vecTile valid shape for xfer
+    // for static shape case, enforce the global tensor (tiled) shape matching
+    // with vecTile valid shape for xfer
     if constexpr (DstTile::Loc == pto::TileType::Vec) {
         static_assert(((SrcGlobal::layout == pto::Layout::ND) &&
                        (DstTile::isRowMajor && (DstTile::SFractal == SLayout::NoneBox))) ||
@@ -455,14 +461,16 @@ PTO_INTERNAL void StaticCheck()
                 constexpr const int mergedRows = SrcGlobal::staticShape[0] * SrcGlobal::staticShape[1] *
                                                  SrcGlobal::staticShape[2] * SrcGlobal::staticShape[3];
                 static_assert(DstTile::ValidRow == mergedRows,
-                              "Fix: Src GlobalTensor Row Products and Tile ValidRow must be the same!");
+                              "Fix: Src GlobalTensor Row Products and Tile ValidRow "
+                              "must be the same!");
             }
         }
         if constexpr ((SrcGlobal::layout == pto::Layout::NZ) &&
                       (!DstTile::isRowMajor && (DstTile::SFractal == SLayout::RowMajor))) {
             static_assert(BLOCK_BYTE_SIZE / sizeof(typename SrcGlobal::DType) == SrcGlobal::staticShape[4] &&
                               BLOCK_LEN == SrcGlobal::staticShape[3],
-                          "Fix: Src GlobalTensor staticShape[3][4] must be satisfied with NZ format require!");
+                          "Fix: Src GlobalTensor staticShape[3][4] must be satisfied "
+                          "with NZ format require!");
         }
     }
 }
@@ -504,7 +512,8 @@ __tf__ PTO_INTERNAL void TLoad5HD(typename DstTile::TileDType __out__ dst, typen
     constexpr uint32_t c0ElemCount = C0_SIZE_BYTE / sizeof(typename DstTile::DType);
 
     PTO_ASSERT(srcShape1 == dstShape1 && srcShape2 == dstShape2 && srcShape0 == dstShape0 && srcShape3 == dstShape3,
-               "Fix: when layout is NC1HWC0 or C1HWNC0, srcShape dstShape should be same!");
+               "Fix: when layout is NC1HWC0 or C1HWNC0, srcShape dstShape should "
+               "be same!");
 
     uint32_t nBurst = dstShape2;
     // lenBurst gmStride dstStride unit is byte
@@ -542,9 +551,11 @@ __tf__ PTO_INTERNAL void TLoadFractalZ(typename DstTile::TileDType __out__ dst, 
 
     // ConvTile layout is [C1HW,N/16,16,C0]
     static_assert(DstTile::staticShape[2] == FRACTAL_NZ_ROW && DstTile::staticShape[3] == c0ElemCount,
-                  "Fix: The DstTile last 2 dim must be static and satisfy [16, 32 / sizeof(DataType)]");
+                  "Fix: The DstTile last 2 dim must be static and satisfy [16, "
+                  "32 / sizeof(DataType)]");
     static_assert(SrcGlobal::staticShape[3] == FRACTAL_NZ_ROW && SrcGlobal::staticShape[4] == c0ElemCount,
-                  "Fix: The GlobalTensor last 2 dim must be static and satisfy [16, 32 / sizeof(DataType)]");
+                  "Fix: The GlobalTensor last 2 dim must be static and satisfy "
+                  "[16, 32 / sizeof(DataType)]");
 
     PTO_ASSERT(srcShape1 == dstShape0 && srcShape2 == dstShape1 && srcShape3 == dstShape2 && srcShape4 == dstShape3,
                "Fix: layout is [C1HW,N/16,16,C0], srcShape dstShape should be same!");
@@ -566,7 +577,8 @@ PTO_INTERNAL void CheckConvTileData(DstTile &dst, SrcGlobal &src)
             std::is_same_v<typename DstTile::DType, int16_t> || std::is_same_v<typename DstTile::DType, uint16_t> ||
             std::is_same_v<typename DstTile::DType, int32_t> || std::is_same_v<typename DstTile::DType, uint32_t> ||
             std::is_same_v<typename DstTile::DType, half> || std::is_same_v<typename DstTile::DType, float>,
-        "Fix: Data type must be int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/half/float!");
+        "Fix: Data type must be "
+        "int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/half/float!");
     static_assert(DstTile::Loc == pto::TileType::Mat, "Fix: Dst TileType must be Mat!");
     static_assert(sizeof(typename DstTile::DType) == sizeof(typename SrcGlobal::DType),
                   "Fix: Source dtype must be same with dst dtype!");

@@ -1,22 +1,25 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TCVT_HPP
 #define TCVT_HPP
 
+#include <cmath>
 #include <pto/common/constants.hpp>
 #include <pto/common/pto_tile.hpp>
-#include "pto/cpu/tile_offsets.hpp"
-#include "pto/common/debug.h"
-#include <cmath>
 #include <type_traits>
+
+#include "pto/common/debug.h"
+#include "pto/cpu/tile_offsets.hpp"
 
 namespace pto {
 constexpr double CAST_ODD_THRESHHOLD = 0.5;
@@ -24,9 +27,11 @@ constexpr double CAST_ODD_THRESHHOLD = 0.5;
 inline void PrintFloatBits(double val, const char *name)
 {
     uint64_t bits = *reinterpret_cast<const uint64_t *>(&val);
-    std::printf("[PTO][TCVT] %s: %.17g bits=0x%016lx sign=%lu exp=%lu(0x%lx) mantissa=0x%lx\n", name, val, bits,
-                (unsigned long)((bits >> 63) & 1), (unsigned long)((bits >> 52) & 0x7FF),
-                (unsigned long)((bits >> 52) & 0x7FF), (unsigned long)(bits & 0xFFFFFFFFFFFFF));
+    std::printf(
+        "[PTO][TCVT] %s: %.17g bits=0x%016lx sign=%lu exp=%lu(0x%lx) "
+        "mantissa=0x%lx\n",
+        name, val, bits, (unsigned long)((bits >> 63) & 1), (unsigned long)((bits >> 52) & 0x7FF),
+        (unsigned long)((bits >> 52) & 0x7FF), (unsigned long)(bits & 0xFFFFFFFFFFFFF));
 }
 
 inline void PrintFloatBits(float val, const char *name)

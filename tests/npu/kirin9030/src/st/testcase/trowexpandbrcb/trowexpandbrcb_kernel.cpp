@@ -1,15 +1,18 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <type_traits>
 #include <pto/pto-inst.hpp>
+#include <type_traits>
+
 #include "acl/acl.h"
 
 using namespace pto;
@@ -31,7 +34,7 @@ __global__ AICORE void runROWEXPAND(__gm__ T *out, __gm__ T *src)
     SrcTileData srcTile;
     DstTileData dstTile;
     TASSIGN<0x0>(srcTile);
-    TASSIGN<sizeof(T) * 1 * dstRows>(dstTile); // UB最大到0x20000
+    TASSIGN<sizeof(T) * 1 * dstRows>(dstTile); // UB最大到0x40000
 
     GlobalData srcGlobal(src);
     DstGlobalData dstGlobal(out);
@@ -61,7 +64,7 @@ void launchTROWEXPAND(T *out, T *src, void *stream)
     }
 }
 
-template void launchTROWEXPAND<aclFloat16, 2400, 16>(aclFloat16 *out, aclFloat16 *src, void *stream);
-template void launchTROWEXPAND<float, 3640, 8>(float *out, float *src, void *stream);
+template void launchTROWEXPAND<aclFloat16, 4800, 16>(aclFloat16 *out, aclFloat16 *src, void *stream);
+template void launchTROWEXPAND<float, 7280, 8>(float *out, float *src, void *stream);
 template void launchTROWEXPAND<float, 16, 8>(float *out, float *src, void *stream);
 } // namespace TRowExpandTest

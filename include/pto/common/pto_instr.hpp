@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_INSTR_HPP
@@ -14,8 +16,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/debug.h"
 #include "pto/common/event.hpp"
 #include "pto/common/fifo.hpp"
-#include "pto/common/tassign_check.hpp"
+#include "pto/common/gather_scatter.hpp"
 #include "pto/common/pto_instr_impl.hpp"
+#include "pto/common/tassign_check.hpp"
 #if !defined(__COSTMODEL) && !defined(PTO_COMM_NOT_SUPPORTED)
 #include "pto/comm/pto_comm_inst.hpp"
 #endif
@@ -31,8 +34,8 @@ PTO_INST void TASSIGN(T &obj, AddrType addr)
 }
 
 // Compile-time address overload: TASSIGN<Addr>(tile)
-// Performs static bounds and alignment checks when Addr is a compile-time constant.
-// Only enabled for Tile / ConvTile types (not GlobalTensor).
+// Performs static bounds and alignment checks when Addr is a compile-time
+// constant. Only enabled for Tile / ConvTile types (not GlobalTensor).
 template <std::size_t Addr, typename T>
 PTO_INST std::enable_if_t<is_tile_data_v<T> || is_conv_tile_v<T>> TASSIGN(T &obj)
 {
@@ -331,7 +334,8 @@ PTO_INST RecordEvent TSTORE(GlobalData &dst, TileData &src, WaitEvents &...event
     return {};
 }
 
-// UF-aware overload: allow selecting unit-flag phase while keeping the TSTORE name.
+// UF-aware overload: allow selecting unit-flag phase while keeping the TSTORE
+// name.
 template <STPhase Phase, typename TileData, typename GlobalData, typename... WaitEvents>
 PTO_INST RecordEvent TSTORE(GlobalData &dst, TileData &src, WaitEvents &...events)
 {
@@ -467,7 +471,8 @@ PTO_INST RecordEvent TRECIP(TileDataDst &dst, TileDataSrc &src, WaitEvents &...e
 {
     TSYNC(events...);
     /*
-     * A3's TRECIP instruction does not support setting the source Tile and destination Tile to the same memory.
+     * A3's TRECIP instruction does not support setting the source Tile and
+     * destination Tile to the same memory.
      */
     TDIVS_IMPL<static_cast<DivAlgorithm>(PrecisionType)>(dst, 1, src);
     return {};
@@ -570,7 +575,8 @@ PTO_INST RecordEvent TMATMUL_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftSca
     return {};
 }
 
-// UF-aware overload enabling unit-flag selection via AccPhase while retaining the TMATMUL name.
+// UF-aware overload enabling unit-flag selection via AccPhase while retaining
+// the TMATMUL name.
 template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight,
           typename TileRightScale, typename... WaitEvents>
 PTO_INST RecordEvent TMATMUL_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
@@ -638,7 +644,8 @@ PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMa
     return {};
 }
 
-// UF-aware overload enabling unit-flag selection via AccPhase while retaining the TMATMUL name.
+// UF-aware overload enabling unit-flag selection via AccPhase while retaining
+// the TMATMUL name.
 template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
 PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, WaitEvents &...events)
 {
@@ -656,7 +663,8 @@ PTO_INST RecordEvent TMATMUL_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLe
     return {};
 }
 
-// UF-aware overloads for TMATMUL_ACC: explicit input/output or shared accumulator tile.
+// UF-aware overloads for TMATMUL_ACC: explicit input/output or shared
+// accumulator tile.
 template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
 PTO_INST RecordEvent TMATMUL_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix,
                                  WaitEvents &...events)
@@ -684,7 +692,8 @@ PTO_INST RecordEvent TMATMUL_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight
     return {};
 }
 
-// UF-aware overload enabling unit-flag selection for bias matmul while keeping the TMATMUL_BIAS name.
+// UF-aware overload enabling unit-flag selection for bias matmul while keeping
+// the TMATMUL_BIAS name.
 template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight, typename TileBias,
           typename... WaitEvents>
 PTO_INST RecordEvent TMATMUL_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData,
@@ -893,7 +902,7 @@ PTO_INST RecordEvent SET_IMG2COL_PADDING(ConvTileData &src, WaitEvents &...event
     return {};
 }
 #endif
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(__CPU_SIM)
+#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
 template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
 PTO_INST RecordEvent SET_IMG2COL_RPT(ConvTileData &src, WaitEvents &...events)
 {
@@ -977,7 +986,7 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, FpTileData &fp,
     return {};
 }
 
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030)
+#ifdef PTO_NPU_ARCH_A5
 template <TInsertMode mode, typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0,
                              WaitEvents &...events)
@@ -1919,25 +1928,6 @@ PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, Wa
 }
 #endif
 
-#ifdef PTO_NPU_ARCH_A2A3
-template <Coalesce CMode, typename TileDst, typename GlobalData, typename TileInd, typename... WaitEvents>
-PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, WaitEvents &...events)
-{
-    TSYNC(events...);
-    MGATHER_IMPL<CMode>(dst, src, indexes);
-    return {};
-}
-
-template <Coalesce CMode, GatherOOB Mode, typename TileDst, typename GlobalData, typename TileInd,
-          typename... WaitEvents>
-PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, WaitEvents &...events)
-{
-    TSYNC(events...);
-    MGATHER_IMPL<CMode, Mode>(dst, src, indexes);
-    return {};
-}
-#endif
-
 template <typename GlobalData, typename TileSrc, typename TileInd, typename... WaitEvents>
 PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, WaitEvents &...events)
 {
@@ -1979,34 +1969,6 @@ PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, W
 {
     TSYNC(events...);
     MSCATTER_IMPL<Mode, Atomic, Oob, Conflict>(dst, src, indexes);
-    return {};
-}
-#endif
-
-#ifdef PTO_NPU_ARCH_A2A3
-template <Coalesce Mode, typename GlobalData, typename TileSrc, typename TileInd, typename... WaitEvents>
-PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, WaitEvents &...events)
-{
-    TSYNC(events...);
-    MSCATTER_IMPL<Mode>(dst, src, indexes);
-    return {};
-}
-
-template <Coalesce Mode, ScatterAtomicOp Atomic, typename GlobalData, typename TileSrc, typename TileInd,
-          typename... WaitEvents>
-PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, WaitEvents &...events)
-{
-    TSYNC(events...);
-    MSCATTER_IMPL<Mode, Atomic>(dst, src, indexes);
-    return {};
-}
-
-template <Coalesce Mode, ScatterAtomicOp Atomic, ScatterOOB Oob, typename GlobalData, typename TileSrc,
-          typename TileInd, typename... WaitEvents>
-PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, WaitEvents &...events)
-{
-    TSYNC(events...);
-    MSCATTER_IMPL<Mode, Atomic, Oob>(dst, src, indexes);
     return {};
 }
 #endif
@@ -2189,7 +2151,8 @@ PTO_INST RecordEvent TFREE(Pipe &pipe, WaitEvents &...events)
     TFREE_IMPL<Pipe>(pipe);
     return {};
 }
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(__CPU_SIM)
+
+#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
 template <HistByte byte, typename TileDataDst, typename TileDataSrc, typename TileDataIdx, typename... WaitEvents>
 PTO_INST RecordEvent THISTOGRAM(TileDataDst &dst, TileDataSrc &src, TileDataIdx &idx, WaitEvents &...events)
 {

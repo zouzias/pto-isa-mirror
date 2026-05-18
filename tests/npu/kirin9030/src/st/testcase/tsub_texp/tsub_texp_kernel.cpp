@@ -1,15 +1,18 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <type_traits>
 #include <pto/pto-inst.hpp>
+#include <type_traits>
+
 #include "acl/acl.h"
 
 using namespace pto;
@@ -53,7 +56,7 @@ __global__ AICORE void CONCAT(run, CASENAME)(__gm__ T *out, __gm__ T *src0, __gm
 template <typename T, int kTRows_, int kTCols_, int vRows, int vCols>
 void CONCAT(Launch, CASENAME)(T *out, T *src0, T *src1, void *stream)
 {
-    if constexpr (std::is_same_v<T, aclFloat16>)
+    if constexpr (_v<T, aclFloat16>)
         CONCAT(run, CASENAME)<half, kTRows_, kTCols_, vRows, vCols>
             <<<1, nullptr, stream>>>((half *)(out), (half *)(src0), (half *)(src1));
     else

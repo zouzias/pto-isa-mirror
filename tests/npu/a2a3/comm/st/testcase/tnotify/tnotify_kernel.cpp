@@ -1,29 +1,32 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
-
-#include <cstdint>
 
 #include <sys/wait.h>
 #include <unistd.h>
-#include <vector>
-#include <string>
-#include <iostream>
 
+#include <cstdint>
+#include <iostream>
 #include <pto/pto-inst.hpp>
-#include "pto/common/pto_tile.hpp"
+#include <string>
+#include <vector>
+
 #include "../common.hpp"
+#include "pto/common/pto_tile.hpp"
 
 #define ENABLE_DEBUG_PRINT 1
 
 // HCCL may use the first portion of window memory for internal barrier/sync
-// operations. Reserve this prefix so user data doesn't overlap with HCCL internals.
+// operations. Reserve this prefix so user data doesn't overlap with HCCL
+// internals.
 static constexpr size_t HCCL_WIN_SYNC_PREFIX = 64 * sizeof(int32_t);
 
 // ============================================================================
@@ -191,10 +194,14 @@ bool RunNotifyAtomicAddKernel(int rank_id, int n_ranks, int n_devices, int first
         }
 #if ENABLE_DEBUG_PRINT
         else {
-            std::cout << "\n================================================================" << std::endl;
+            std::cout << "\n========================================================="
+                         "======="
+                      << std::endl;
             std::cout << "[DEBUG] Rank 0: TNOTIFY AtomicAdd SUCCESSFUL!" << std::endl;
             std::cout << "Counter = " << result << " (expected " << n_ranks << ")" << std::endl;
-            std::cout << "================================================================\n" << std::endl;
+            std::cout << "==========================================================="
+                         "=====\n"
+                      << std::endl;
         }
 #endif
     }
@@ -315,14 +322,18 @@ bool RunNotifyScoreboardKernel(int rank_id, int n_ranks, int n_devices, int firs
 
 #if ENABLE_DEBUG_PRINT
         if (is_ok) {
-            std::cout << "\n================================================================" << std::endl;
+            std::cout << "\n========================================================="
+                         "======="
+                      << std::endl;
             std::cout << "[DEBUG] Rank 0: TNOTIFY Scoreboard SUCCESSFUL! (" << numSlots << " slots)" << std::endl;
             std::cout << "Scoreboard values: [ ";
             for (int i = 0; i < n_ranks && i < static_cast<int>(numSlots); ++i) {
                 std::cout << results[i] << " ";
             }
             std::cout << "]" << std::endl;
-            std::cout << "================================================================\n" << std::endl;
+            std::cout << "==========================================================="
+                         "=====\n"
+                      << std::endl;
         }
 #endif
     }
@@ -373,10 +384,14 @@ bool RunNotifyRuntimeOpKernel(int rank_id, int n_ranks, int n_devices, int first
         }
 #if ENABLE_DEBUG_PRINT
         else {
-            std::cout << "\n================================================================" << std::endl;
+            std::cout << "\n========================================================="
+                         "======="
+                      << std::endl;
             std::cout << "[DEBUG] Rank 0: TNOTIFY RuntimeOp (Set) SUCCESSFUL!" << std::endl;
             std::cout << "Counter = " << result << " (last writer wins)" << std::endl;
-            std::cout << "================================================================\n" << std::endl;
+            std::cout << "==========================================================="
+                         "=====\n"
+                      << std::endl;
         }
 #endif
     }
