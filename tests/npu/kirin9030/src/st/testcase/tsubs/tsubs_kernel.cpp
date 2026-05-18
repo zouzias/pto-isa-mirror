@@ -31,7 +31,10 @@ PTO_INTERNAL void runTSubS(__gm__ T *out, __gm__ T *src, T scalar)
     dstTileData dstTile;
     TASSIGN<0x0>(srcTile);
     TASSIGN<srcTileData::Numel * sizeof(T)>(dstTile);
+<<<<<<< HEAD
 
+=======
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
     TLOAD(dstTile, dstGlobal);
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);

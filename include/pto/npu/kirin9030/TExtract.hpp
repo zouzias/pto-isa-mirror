@@ -284,13 +284,24 @@ __tf__ PTO_INTERNAL void TExtractAccToMat(typename DstTile::TileDType __out__ ds
 }
 
 template <typename DstTile, typename SrcTile, AccToVecMode mode, QuantMode_t quantPre, ReluPreMode reluMode>
+<<<<<<< HEAD
 __tf__ PTO_INTERNAL void TExtractAccToVec(typename DstTile::TileDType __out__ dst,
                                           typename SrcTile::TileDType __in__ src, uint16_t validRow, uint16_t validCol,
                                           uint16_t srcValidRow, uint16_t indexRow, uint16_t indexCol)
+=======
+__tf__ AICORE void TExtractAccToVec(typename DstTile::TileDType __out__ dst, typename SrcTile::TileDType __in__ src,
+                                    uint16_t validRow, uint16_t validCol, uint16_t srcValidRow, uint16_t indexRow,
+                                    uint16_t indexCol)
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 {
     using dstType = typename DstTile::DType;
     using srcType = typename SrcTile::DType;
     constexpr int32_t c0Size = BLOCK_BYTE_SIZE / sizeof(dstType);
+<<<<<<< HEAD
+=======
+    constexpr bool subBlockId = (mode == AccToVecMode::SingleModeVec1);
+    constexpr uint8_t dualDstCtl = GetDualDstCtl<DstTile, SrcTile, mode, quantPre>();
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
     constexpr uint32_t dstStride = DstTile::Cols;
     static_assert(((dstStride * sizeof(dstType) % C0_SIZE_BYTE == 0) && ((dstStride) > 0)),
                   "Dst Tile Cols * sizeof(dstT) must be multiples of 32 and not 0 when nz2nd.");
@@ -311,8 +322,14 @@ __tf__ PTO_INTERNAL void TExtractAccToVec(typename DstTile::TileDType __out__ ds
     }
     validCol = (validCol + c0Size - 1) / c0Size * c0Size;
     __cc__ srcType *srcData = (__cc__ srcType *)__cce_get_tile_ptr(src) + srcOffset;
+<<<<<<< HEAD
     copy_matrix_cc_to_ub(dstAddr, srcData, 0, validCol, validRow, dstStride, srcStride, 0, 0, quantPre, reluMode, false,
                          true, 0, 0, false, false, 0, false, false, false, false, false, false);
+=======
+    copy_matrix_cc_to_ub(dstAddr, srcData, 0, validCol, validRow, dstStride, srcStride, dualDstCtl, subBlockId, 0, 0,
+                         quantPre, reluMode, false, true, 0, 0, false, false, 0, false, false, false, false, false,
+                         false);
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 }
 
 template <typename T>
@@ -421,9 +438,15 @@ PTO_INTERNAL void TEXTRACT_TILE_IMPL(DstTile &dst, SrcTile &src, uint16_t indexR
 }
 
 template <typename DstTile, typename SrcTile>
+<<<<<<< HEAD
 __tf__ PTO_INTERNAL void TExtractToBConv(typename DstTile::TileDType __out__ dst,
                                          typename SrcTile::TileDType __in__ src, uint16_t srcCol, uint16_t dstValidRow,
                                          uint16_t dstValidCol, uint16_t indexRow, uint16_t indexCol)
+=======
+__tf__ AICORE void TExtractToBConv(typename DstTile::TileDType __out__ dst, typename SrcTile::TileDType __in__ src,
+                                   uint16_t srcCol, uint16_t dstValidRow, uint16_t dstValidCol, uint16_t indexRow,
+                                   uint16_t indexCol)
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 {
     using DataType = typename SrcTile::DType;
     constexpr int c0Size = BLOCK_BYTE_SIZE / sizeof(DataType);
@@ -480,9 +503,15 @@ PTO_INTERNAL void TEXTRACT_CONVTILE_IMPL(DstTile &dst, SrcTile &src, uint16_t in
 }
 
 template <typename T, typename DstTile, typename SrcTile>
+<<<<<<< HEAD
 __tf__ PTO_INTERNAL void TExtractVecToVecNDImpl(typename DstTile::TileDType __out__ dst,
                                                 typename SrcTile::TileDType __in__ src, uint16_t validRow,
                                                 uint16_t validCol, uint32_t indexRow, uint32_t indexCol)
+=======
+__tf__ AICORE void TExtractVecToVecNDImpl(typename DstTile::TileDType __out__ dst,
+                                          typename SrcTile::TileDType __in__ src, uint16_t validRow, uint16_t validCol,
+                                          uint32_t indexRow, uint32_t indexCol)
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 {
     __ubuf__ T *dstAddr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcAddr = (__ubuf__ T *)__cce_get_tile_ptr(src);
@@ -513,9 +542,15 @@ using TExtractRegT =
     std::conditional_t<sizeof(T) == 1 && !std::is_same_v<T, int8_t> && !std::is_same_v<T, uint8_t>, int8_t, T>;
 
 template <typename T, typename DstTile, typename SrcTile>
+<<<<<<< HEAD
 __tf__ PTO_INTERNAL void TExtractVecToVecNDAlignedImpl(typename DstTile::TileDType __out__ dst,
                                                        typename SrcTile::TileDType __in__ src, uint16_t validRow,
                                                        uint16_t validCol, uint32_t indexRow, uint32_t indexCol)
+=======
+__tf__ AICORE void TExtractVecToVecNDAlignedImpl(typename DstTile::TileDType __out__ dst,
+                                                 typename SrcTile::TileDType __in__ src, uint16_t validRow,
+                                                 uint16_t validCol, uint32_t indexRow, uint32_t indexCol)
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 {
     using RegT = TExtractRegT<T>;
     __ubuf__ RegT *dstAddr = (__ubuf__ RegT *)__cce_get_tile_ptr(dst);
@@ -546,9 +581,15 @@ __tf__ PTO_INTERNAL void TExtractVecToVecNDAlignedImpl(typename DstTile::TileDTy
 }
 
 template <typename T, typename DstTile, typename SrcTile>
+<<<<<<< HEAD
 __tf__ PTO_INTERNAL void TExtractVecToVecNDVectorImpl(typename DstTile::TileDType __out__ dst,
                                                       typename SrcTile::TileDType __in__ src, uint16_t validRow,
                                                       uint16_t validCol, uint32_t indexRow, uint32_t indexCol)
+=======
+__tf__ AICORE void TExtractVecToVecNDVectorImpl(typename DstTile::TileDType __out__ dst,
+                                                typename SrcTile::TileDType __in__ src, uint16_t validRow,
+                                                uint16_t validCol, uint32_t indexRow, uint32_t indexCol)
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 {
     using RegT = TExtractRegT<T>;
     __ubuf__ RegT *dstAddr = (__ubuf__ RegT *)__cce_get_tile_ptr(dst);
@@ -581,9 +622,15 @@ __tf__ PTO_INTERNAL void TExtractVecToVecNDVectorImpl(typename DstTile::TileDTyp
 }
 
 template <typename T, typename DstTile, typename SrcTile>
+<<<<<<< HEAD
 __tf__ PTO_INTERNAL void TExtractVecToVecNDScalarImpl(typename DstTile::TileDType __out__ dst,
                                                       typename SrcTile::TileDType __in__ src, uint32_t indexRow,
                                                       uint32_t indexCol)
+=======
+__tf__ AICORE void TExtractVecToVecNDScalarImpl(typename DstTile::TileDType __out__ dst,
+                                                typename SrcTile::TileDType __in__ src, uint32_t indexRow,
+                                                uint32_t indexCol)
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 {
     __ubuf__ T *dstAddr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcAddr = (__ubuf__ T *)__cce_get_tile_ptr(src);
@@ -630,9 +677,15 @@ PTO_INTERNAL void TExtractVecToVecNDDispatch(DstTile &dst, SrcTile &src, uint32_
 }
 
 template <typename T, typename DstTile, typename SrcTile>
+<<<<<<< HEAD
 __tf__ PTO_INTERNAL void TExtractVecToVecNZScalarImpl(typename DstTile::TileDType __out__ dst,
                                                       typename SrcTile::TileDType __in__ src, uint32_t indexRow,
                                                       uint32_t indexCol)
+=======
+__tf__ AICORE void TExtractVecToVecNZScalarImpl(typename DstTile::TileDType __out__ dst,
+                                                typename SrcTile::TileDType __in__ src, uint32_t indexRow,
+                                                uint32_t indexCol)
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 {
     __ubuf__ T *dstAddr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcAddr = (__ubuf__ T *)__cce_get_tile_ptr(src);
@@ -647,10 +700,16 @@ __tf__ PTO_INTERNAL void TExtractVecToVecNZScalarImpl(typename DstTile::TileDTyp
 }
 
 template <typename T, typename DstTile, typename SrcTile>
+<<<<<<< HEAD
 __tf__ PTO_INTERNAL void TExtractVecToVecNZImpl(typename DstTile::TileDType __out__ dst,
                                                 typename SrcTile::TileDType __in__ src, uint16_t validRow,
                                                 uint16_t validCol, uint16_t srcRow, uint16_t indexRow,
                                                 uint16_t indexCol)
+=======
+__tf__ AICORE void TExtractVecToVecNZImpl(typename DstTile::TileDType __out__ dst,
+                                          typename SrcTile::TileDType __in__ src, uint16_t validRow, uint16_t validCol,
+                                          uint16_t srcRow, uint16_t indexRow, uint16_t indexCol)
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 {
     __ubuf__ T *dstAddr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcAddr = (__ubuf__ T *)__cce_get_tile_ptr(src);

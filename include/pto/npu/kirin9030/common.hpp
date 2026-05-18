@@ -156,6 +156,7 @@ PTO_INTERNAL constexpr uint8_t GetDualDstCtl()
     }
     return 0;
 }
+<<<<<<< HEAD
 
 template <typename T>
 struct Padding {
@@ -202,6 +203,8 @@ struct Padding {
     static constexpr Type Max = GetPaddingMax();
 };
 
+=======
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 } // namespace pto
 
 #endif

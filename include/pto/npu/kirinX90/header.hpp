@@ -32,6 +32,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/kirinX90/TCvt.hpp"
 #endif
 #include "pto/npu/a2a3/TAssign.hpp"
+<<<<<<< HEAD
+=======
+#include "pto/npu/a2a3/TExtract.hpp"
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 #include "pto/npu/kirin9030/TSync.hpp"
 #include "pto/npu/a5/TAdd.hpp"
 #include "pto/npu/a5/TAddS.hpp"
@@ -55,6 +59,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TPartAdd.hpp"
 #include "pto/npu/a5/TPartMax.hpp"
 #include "pto/npu/a5/TPartMin.hpp"
+<<<<<<< HEAD
 #include "pto/npu/kirin9030/TGather.hpp"
 #include "pto/npu/kirinX90/TQuant.hpp"
 #include "pto/npu/a5/TDeQuant.hpp"
@@ -114,6 +119,15 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TColProd.hpp"
 #include "pto/npu/a5/TRowExpandExpdif.hpp"
 #include "pto/npu/a5/TColExpandExpdif.hpp"
+=======
+// #include "pto/npu/kirin9030/TInsert.hpp"
+#include "pto/npu/kirin9030/TGather.hpp"
+#include "pto/npu/a5/TRsqrt.hpp"
+#include "pto/npu/a5/TUnaryOp.hpp"
+#include "pto/npu/a5/TBinSOp.hpp"
+#include "pto/npu/a5/TDiv.hpp"
+#include "pto/npu/a5/TMul.hpp"
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 #undef bfloat16_t
 #undef hifloat8_t
 #undef float8_e4m3_t

@@ -74,6 +74,7 @@ __tf__ PTO_INTERNAL void TMovToVecImpl(typename DstTileData::TileDType __out__ d
     __ubuf__ U *dstPtr = (__ubuf__ U *)__cce_get_tile_ptr(dst);
 
     static_assert(sizeof(T) == sizeof(U), "TMOV: src and dst data type is different!");
+<<<<<<< HEAD
     constexpr unsigned nRepeatElem = CCE_VL / sizeof(T);
     __VEC_SCOPE__
     {
@@ -91,6 +92,29 @@ __tf__ PTO_INTERNAL void TMovToVecImpl(typename DstTileData::TileDType __out__ d
                 vsts(vreg0, dstPtr, i * DstTileData::RowStride + j * nRepeatElem, distValue, pReg);
             }
         }
+=======
+    if constexpr (DstTileData::Cols == SrcTileData::Cols || DstTileData::Rows == 1) {
+        unsigned blockLen = (DstTileData::Cols * validRow * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
+        if constexpr (DstTileData::Cols == DstTileData::ValidCol) {
+            pto_copy_ubuf_to_ubuf(dstPtr, srcPtr, 1, blockLen, 0, 0);
+        } else {
+            if (DstTileData::Cols == validCol) {
+                pto_copy_ubuf_to_ubuf(dstPtr, srcPtr, 1, blockLen, 0, 0);
+            } else {
+                blockLen = (validCol * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
+                for (int i = 0; i < validRow; i++) {
+                    pto_copy_ubuf_to_ubuf(dstPtr + i * dstStride, srcPtr + i * srcStride, 1, blockLen, 0, 0);
+                }
+            }
+        }
+    } else {
+        unsigned blockLen = CeilDivision(validCol * sizeof(T), BLOCK_BYTE_SIZE);
+        unsigned srcGap = SrcTileData::Cols * sizeof(T) / BLOCK_BYTE_SIZE - blockLen;
+        unsigned dstGap = DstTileData::Cols * sizeof(T) / BLOCK_BYTE_SIZE - blockLen;
+        for (int i = 0; i < validRow; i++) {
+            pto_copy_ubuf_to_ubuf(dstPtr + i * dstStride, srcPtr + i * srcStride, 1, blockLen, srcGap, dstGap);
+        }
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
     }
 }
 

@@ -12,8 +12,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define ARCH_CCE_INTRINSIC_HPP
 #include <pto/common/arch_macro.hpp>
 #ifndef __CPU_SIM
+<<<<<<< HEAD
 
 namespace pto {
+=======
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 
 PTO_INTERNAL void pto_copy_ubuf_to_ubuf(__ubuf__ void *dst, __ubuf__ void *src, uint16_t nBurst, uint16_t lenBurst,
                                         uint16_t srcGap, uint16_t dstGap)
@@ -69,11 +72,15 @@ template <typename T, typename U>
 PTO_INTERNAL void pto_create_cbuf_matrix(__cbuf__ T *dst, int64_t repeatConfig, U value)
 {
 #if defined(PTO_NPU_ARCH_KIRIN9030)
+<<<<<<< HEAD
     if constexpr (std::is_integral_v<U>) {
         set_l0_set_value_ui(value);
     } else if (std::is_same_v<U, half>) {
         set_l0_set_value_h(value);
     }
+=======
+    set_l0_set_value_ui((uint32_t)value);
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
     set_l1_2d(dst, repeatConfig);
 #else
     if constexpr (std::is_same<T, bfloat16_t>::value) {
@@ -83,6 +90,7 @@ PTO_INTERNAL void pto_create_cbuf_matrix(__cbuf__ T *dst, int64_t repeatConfig, 
     }
 #endif
 }
+<<<<<<< HEAD
 
 #if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
 template <typename T, typename U, typename S>
@@ -226,5 +234,7 @@ PTO_INTERNAL void pto_copy_ubuf_to_gm_align_v2(__gm__ T *dst, __ubuf__ T *src, u
 
 } // namespace pto
 
+=======
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 #endif // __CPU_SIM
 #endif // ARCH_CCE_INTRINSIC_HPP

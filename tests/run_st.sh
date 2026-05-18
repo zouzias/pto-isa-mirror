@@ -772,7 +772,13 @@ if [ "$ENABLE_KIRIN9030" = "true" ]; then
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmul
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tlrelu
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tdiv
+<<<<<<< HEAD
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tcmps
+=======
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t texp
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmov_vect
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmuls
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsel
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsels
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trsqrt

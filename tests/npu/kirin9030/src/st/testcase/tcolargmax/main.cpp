@@ -117,9 +117,12 @@ protected:
         aclrtMalloc(&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
         ReadFile(GetGoldenDir() + "/input.bin", srcByteSize, srcHost, srcByteSize);
+<<<<<<< HEAD
         aclrtMemset(dstHost, dstByteSize, 0, dstByteSize);
 
         aclrtMemcpy(dstDevice, dstByteSize, dstHost, dstByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
+=======
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
         aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
         launchTCOLCMAXTestCase<caseId>(dstDevice, srcDevice, stream);
@@ -155,11 +158,14 @@ protected:
         aclrtMalloc(&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
         ReadFile(GetGoldenDir() + "/input.bin", srcByteSize, srcHost, srcByteSize);
+<<<<<<< HEAD
         aclrtMemset(dstHostIdx, dstIdxByteSize, 0, dstIdxByteSize);
         aclrtMemset(dstHostVal, dstValByteSize, 0, dstValByteSize);
 
         aclrtMemcpy(dstDeviceIdx, dstIdxByteSize, dstHostIdx, dstIdxByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
         aclrtMemcpy(dstDeviceVal, dstValByteSize, dstHostVal, dstValByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
+=======
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
         aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
         launchTCOLIDXVALMAXCase<caseId>(dstDeviceVal, dstDeviceIdx, srcDevice, stream);

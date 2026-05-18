@@ -167,12 +167,21 @@ set(ALL_TESTCASES
     trowexpandmin
     trowexpandmul
     trowexpandsub
+<<<<<<< HEAD
     trowexpandexpdif
     tgather
     tcvt
     tsub
     trem
     tfmod
+=======
+    # trowexpandexpdif
+    tgather
+    tcvt
+    tsub
+    # trem
+    # tfmod
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
     tprelu
     tand
     tor
@@ -198,7 +207,11 @@ set(ALL_TESTCASES
     tcmps
     # tmov_acc2vec
     tsel
+<<<<<<< HEAD
     tsels
+=======
+    # tsels
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
     trsqrt
     tsqrt
     texp
@@ -209,7 +222,11 @@ set(ALL_TESTCASES
     tdivs
     tmuls
     tadds
+<<<<<<< HEAD
     taxpy
+=======
+    # taxpy
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
     tgatherb
     tpartmin
     tpartmax
@@ -230,8 +247,13 @@ set(ALL_TESTCASES
     trowexpand_trowsum
     trowsum_trowexpand
     trowexpand_tdiv
+<<<<<<< HEAD
     trems
     tfmods
+=======
+    # trems
+    # tfmods
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
     tscatter
     tneg
     tcolexpandadd
@@ -240,14 +262,22 @@ set(ALL_TESTCASES
     tcolexpanddiv
     tcolexpandmul
     tcolexpandsub
+<<<<<<< HEAD
     tcolexpandexpdif
+=======
+    # tcolexpandexpdif
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
     trowexpandbrcb
     ttri
     tcolexpand
     tnot
     trelu
     tquant
+<<<<<<< HEAD
     tdequant
+=======
+    # tdequant
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
     # t_dhrystone
     tpow
     tpows
@@ -262,7 +292,11 @@ set(ALL_TESTCASES
     # tmov_zz
     # tmov_nd2nz
     # textract_acc2vec
+<<<<<<< HEAD
     texpands_mat
+=======
+    # texpands_mat
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))

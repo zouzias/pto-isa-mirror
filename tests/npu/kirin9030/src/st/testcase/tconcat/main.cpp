@@ -44,9 +44,15 @@ template <typename T, int dstTileH, int dstTileW, int src0TileH, int src0TileW, 
           int vCols0, int vCols1>
 void test_tconcat()
 {
+<<<<<<< HEAD
     size_t dstSize = dstTileH * dstTileW * sizeof(T);
     size_t src0Size = src0TileH * src0TileW * sizeof(T);
     size_t src1Size = src1TileH * src1TileW * sizeof(T);
+=======
+    size_t fileSizeDst = dstTileH * dstTileW * sizeof(T);
+    size_t fileSizeSrc0 = src0TileH * src0TileW * sizeof(T);
+    size_t fileSizeSrc1 = src1TileH * src1TileW * sizeof(T);
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -56,6 +62,7 @@ void test_tconcat()
     T *dstHost, *src0Host, *src1Host;
     T *dstDevice, *src0Device, *src1Device;
 
+<<<<<<< HEAD
     aclrtMallocHost((void **)(&src0Host), src0Size);
     aclrtMallocHost((void **)(&src1Host), src1Size);
     aclrtMallocHost((void **)(&dstHost), dstSize);
@@ -71,6 +78,21 @@ void test_tconcat()
     aclrtMemcpy(src0Device, src0Size, src0Host, src0Size, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, src1Size, src1Host, src1Size, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(dstDevice, dstSize, dstHost, dstSize, ACL_MEMCPY_HOST_TO_DEVICE);
+=======
+    aclrtMallocHost((void **)(&dstHost), fileSizeDst);
+    aclrtMallocHost((void **)(&src0Host), fileSizeSrc0);
+    aclrtMallocHost((void **)(&src1Host), fileSizeSrc1);
+
+    aclrtMalloc((void **)&dstDevice, fileSizeDst, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&src0Device, fileSizeSrc0, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&src1Device, fileSizeSrc1, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/input1.bin", fileSizeSrc0, src0Host, fileSizeSrc0);
+    ReadFile(GetGoldenDir() + "/input2.bin", fileSizeSrc1, src1Host, fileSizeSrc1);
+
+    aclrtMemcpy(src0Device, fileSizeSrc0, src0Host, fileSizeSrc0, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(src1Device, fileSizeSrc1, src1Host, fileSizeSrc1, ACL_MEMCPY_HOST_TO_DEVICE);
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
     if constexpr (std::is_same<T, aclFloat16>::value) {
         LaunchTConcatHalf<dstTileH, dstTileW, src0TileH, src0TileW, src1TileH, src1TileW, vRows, vCols0, vCols1>(
             dstDevice, src0Device, src1Device, stream);
@@ -80,6 +102,7 @@ void test_tconcat()
     }
 
     aclrtSynchronizeStream(stream);
+<<<<<<< HEAD
     aclrtMemcpy(dstHost, dstSize, dstDevice, dstSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
     WriteFile(GetGoldenDir() + "/output.bin", dstHost, dstSize);
@@ -90,14 +113,34 @@ void test_tconcat()
     aclrtFree(src1Device);
     aclrtFree(dstDevice);
 
+=======
+    aclrtMemcpy(dstHost, fileSizeDst, dstDevice, fileSizeDst, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output.bin", dstHost, fileSizeDst);
+
+    aclrtFree(dstDevice);
+    aclrtFree(src0Device);
+    aclrtFree(src1Device);
+
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(src0Host);
+    aclrtFreeHost(src1Host);
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);
     aclFinalize();
 
+<<<<<<< HEAD
     std::vector<T> devFinal(dstTileH * dstTileW);
     std::vector<T> golden(dstTileH * dstTileW);
     ReadFile(GetGoldenDir() + "/golden.bin", dstSize, golden.data(), dstSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstSize, devFinal.data(), dstSize);
+=======
+    std::vector<T> golden(fileSizeDst);
+    std::vector<T> devFinal(fileSizeDst);
+    ReadFile(GetGoldenDir() + "/golden.bin", fileSizeDst, golden.data(), fileSizeDst);
+    ReadFile(GetGoldenDir() + "/output.bin", fileSizeDst, devFinal.data(), fileSizeDst);
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 
     bool ret = ResultCmp<T>(golden, devFinal, 0.001f);
     ASSERT_TRUE(ret);

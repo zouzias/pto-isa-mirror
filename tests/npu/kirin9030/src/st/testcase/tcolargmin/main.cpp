@@ -75,9 +75,12 @@ protected:
         aclrtMalloc(&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
         ReadFile(GetGoldenDir() + "/input.bin", srcByteSize, srcHost, srcByteSize);
+<<<<<<< HEAD
         aclrtMemset(dstHost, dstByteSize, 0, dstByteSize);
 
         aclrtMemcpy(dstDevice, dstByteSize, dstHost, dstByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
+=======
+>>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
         aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
         launchTCOLCMINTestCase<caseId>(dstDevice, srcDevice, stream);
