@@ -1,18 +1,20 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TCOLSUM_HPP
 #define TCOLSUM_HPP
 
-#include <pto/common/utils.hpp>
 #include <pto/common/type.hpp>
+#include <pto/common/utils.hpp>
 
 namespace pto {
 template <typename T, int SrcStride, int DstStride>
@@ -98,7 +100,8 @@ PTO_INTERNAL void TColSumCheck()
         std::is_same_v<T, half> || std::is_same_v<T, float> || std::is_same_v<T, int16_t> || std::is_same_v<T, int32_t>,
         "Fix: TCOLSUM input data type is not supported by this instruction.");
     static_assert(std::is_same_v<typename TileDataDst::DType, T>,
-                  "Fix: TCOLSUM input data type must be consistent with the output data type.");
+                  "Fix: TCOLSUM input data type must be consistent with the "
+                  "output data type.");
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
@@ -113,7 +116,8 @@ PTO_INTERNAL void TCOLSUM_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataTmp &
     constexpr int dstStride = TileDataDst::RowStride;
 
     PTO_ASSERT(validCol == dst.GetValidCol(),
-               "Fix: TCOLSUM input valid col must be consistent with the output valid row.");
+               "Fix: TCOLSUM input valid col must be consistent with the output "
+               "valid row.");
     if (validRow == 0 || validCol == 0) {
         return;
     }
@@ -121,7 +125,8 @@ PTO_INTERNAL void TCOLSUM_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataTmp &
     if (IsBinary) {
         constexpr int tmpStride = TileDataTmp::RowStride * sizeof(typename TileDataTmp::DType) / sizeof(T);
         PTO_ASSERT(validCol <= tmpStride,
-                   "Fix: TCOLSUM input valid columns must be less than or equal to the tmp columns.");
+                   "Fix: TCOLSUM input valid columns must be less than or equal to "
+                   "the tmp columns.");
         TColSum<T, TileDataDst, TileDataSrc, TileDataTmp, srcStride, dstStride, tmpStride, true>(
             dst.data(), src.data(), tmp.data(), validRow, validCol);
     } else {
@@ -157,7 +162,8 @@ PTO_INTERNAL void TCOLSUM_IMPL(TileDataDst &dst, TileDataSrc &src)
     int validCol = src.GetValidCol();
 
     PTO_ASSERT(validCol == dst.GetValidCol(),
-               "Fix: TCOLSUM input valid col must be consistent with the output valid row.");
+               "Fix: TCOLSUM input valid col must be consistent with the output "
+               "valid row.");
     if (validRow == 0 || validCol == 0) {
         return;
     }

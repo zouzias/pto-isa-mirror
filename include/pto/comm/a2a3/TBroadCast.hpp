@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_COMM_TBROADCAST_HPP
@@ -13,11 +15,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <type_traits>
 
-#include "pto/common/debug.h"
-#include "pto/common/type.hpp"
-#include "pto/common/constants.hpp"
-#include "pto/common/pto_instr.hpp"
 #include "pto/comm/comm_types.hpp"
+#include "pto/common/constants.hpp"
+#include "pto/common/debug.h"
+#include "pto/common/pto_instr.hpp"
+#include "pto/common/type.hpp"
 
 namespace pto {
 namespace comm {
@@ -49,7 +51,8 @@ PTO_INTERNAL void TbroadcastChunkTransfer(ParallelGroupType &parallelGroup, Tile
     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 }
 
-// Process one (dim0, dim1, dim2) slice with 2D row/col sliding for chunked broadcast
+// Process one (dim0, dim1, dim2) slice with 2D row/col sliding for chunked
+// broadcast
 template <typename ParallelGroupType, typename TileData, typename SrcViewT, typename DstViewT, typename DynShape,
           typename GlobalSrcData, typename DynStride>
 PTO_INTERNAL void TbroadcastChunked2DSlice(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
@@ -137,7 +140,8 @@ PTO_INTERNAL void TbroadcastChunkedSingle(ParallelGroupType &parallelGroup, Glob
 // Constraints for chunked mode:
 //   - If TileData has static ValidRow, shape3 must be divisible by ValidRow.
 //   - If TileData has static ValidCol, shape4 must be divisible by ValidCol.
-//   - All ranks in the ParallelGroup are assumed to have the same shape/strides.
+//   - All ranks in the ParallelGroup are assumed to have the same
+//   shape/strides.
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalSrcData, typename TileData>
@@ -202,12 +206,14 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
     constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
     if constexpr (!isDynamicRow) {
         PTO_ASSERT(gShape3 % tileValidRow == 0,
-                   "TBROADCAST chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
+                   "TBROADCAST chunked: shape3 must be divisible by tile ValidRow when "
+                   "ValidRow is static. "
                    "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
     }
     if constexpr (!isDynamicCol) {
         PTO_ASSERT(gShape4 % tileValidCol == 0,
-                   "TBROADCAST chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
+                   "TBROADCAST chunked: shape4 must be divisible by tile ValidCol when "
+                   "ValidCol is static. "
                    "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
     }
 
@@ -364,10 +370,12 @@ PTO_INTERNAL void TbroadcastChunkedPingPong(ParallelGroupType &parallelGroup, Gl
 // chunk (MTE2) with TSTORE of the current chunk to all ranks (MTE3).
 //
 // Timeline without ping-pong:
-//   [TLOAD chunk0] -> [N×TSTORE chunk0] -> [TLOAD chunk1] -> [N×TSTORE chunk1] -> ...
+//   [TLOAD chunk0] -> [N×TSTORE chunk0] -> [TLOAD chunk1] -> [N×TSTORE chunk1]
+//   -> ...
 //
 // Timeline with ping-pong:
-//   [TLOAD chunk0] -> [N×TSTORE chunk0 | TLOAD chunk1] -> [N×TSTORE chunk1 | TLOAD chunk2] -> ...
+//   [TLOAD chunk0] -> [N×TSTORE chunk0 | TLOAD chunk1] -> [N×TSTORE chunk1 |
+//   TLOAD chunk2] -> ...
 //
 // Constraints: same as TBROADCAST_IMPL for chunked mode.
 // ============================================================================
@@ -432,12 +440,14 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
     constexpr bool hasDynCol = (TileData::ValidCol == DYNAMIC);
     if constexpr (!hasDynRow) {
         PTO_ASSERT(dims[3] % tileValidRow == 0,
-                   "TBROADCAST chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
+                   "TBROADCAST chunked: shape3 must be divisible by tile ValidRow when "
+                   "ValidRow is static. "
                    "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
     }
     if constexpr (!hasDynCol) {
         PTO_ASSERT(dims[4] % tileValidCol == 0,
-                   "TBROADCAST chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
+                   "TBROADCAST chunked: shape4 must be divisible by tile ValidCol when "
+                   "ValidCol is static. "
                    "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
     }
 

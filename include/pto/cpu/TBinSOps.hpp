@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TBINS_HPP
@@ -14,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <algorithm>
 #include <cmath>
 #include <pto/common/pto_tile.hpp>
+
 #include "pto/cpu/tile_offsets.hpp"
 
 namespace pto {
@@ -68,13 +71,16 @@ PTO_INTERNAL void CheckBinSOpTileData()
 
     if constexpr (CategoryBinSOps<op>::value == CONSTRAINT_ROWMAJOR ||
                   CategoryBinSOps<op>::value == CONSTRAINT_VEC_ROWMAJOR) {
-        static_assert(TileData::isRowMajor, "UnaryTileScalarOpImpl: TileType of src and dst tiles must be Row Major.");
+        static_assert(TileData::isRowMajor,
+                      "UnaryTileScalarOpImpl: TileType of src and dst tiles must "
+                      "be Row Major.");
     }
 
     if constexpr (CategoryBinSOps<op>::value == CONSTRAINT_VEC ||
                   CategoryBinSOps<op>::value == CONSTRAINT_VEC_ROWMAJOR) {
         static_assert(TileData::Loc == TileType::Vec,
-                      "UnaryTileScalarOpImpl: TileType of src and dst tiles must be TileType::Vec.");
+                      "UnaryTileScalarOpImpl: TileType of src and dst tiles must "
+                      "be TileType::Vec.");
     }
 }
 
@@ -82,7 +88,8 @@ template <typename TileDst, typename TileSrc, ElementOp op>
 PTO_INTERNAL void CheckDstSrcTileData(TileDst &dst, TileSrc &src)
 {
     static_assert(std::is_same_v<typename TileDst::DType, typename TileSrc::DType>,
-                  "UnaryTileScalarOpImpl: The data type of dst must be consistent with src.");
+                  "UnaryTileScalarOpImpl: The data type of dst must be consistent with "
+                  "src.");
 
     CheckBinSOpTileData<TileDst, op>();
     CheckBinSOpTileData<TileSrc, op>();
