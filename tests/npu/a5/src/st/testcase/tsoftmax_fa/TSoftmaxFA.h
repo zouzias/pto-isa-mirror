@@ -54,6 +54,11 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
     unsigned ubM = TileDataD2::Cols;
     unsigned ubN = TileDataD2::Rows;
 
+    __ubuf__ typename TileDataD2::DType *nz_buffer_Ptr = (__ubuf__ typename TileDataD2::DType *)__cce_get_tile_ptr(x_exp.data());
+    __ubuf__ half *nz_buffer_Ptr2 = nz_buffer_Ptr + 16;
+    __ubuf__ half *nz_buffer_Ptr3 = nz_buffer_Ptr + ubM*ubN/2/4;
+    __ubuf__ half *nz_buffer_Ptr4 = nz_buffer_Ptr + ubM*ubN/2/4 + 16;
+
     __VEC_SCOPE__{
         // --------- flash softmax -------------
         vector_f32 vreg_x_even;
@@ -146,9 +151,10 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
         vbr(max_3b, 0);
 
         preg_108 = pset_b16(PAT_ALL);
+        vector_bool preg_low_half = pset_b16(PAT_VL64);
         // 128,64 -> 1,64
 
-        // data dependency because of vag
+        // find max v1, data dependency because of vag
         // for (uint16_t iter_m = 0; iter_m < uint16_t(ubN / 8) ; ++iter_m) {
         //     // vector_address areg_0_1 = vag_b16(512);
         //     vector_address areg_0_1 = vag_b32(256);
@@ -170,54 +176,94 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
         //     vmax(max_3b, max_3b, src_03b, preg_108);
         // }
 
-        for (uint16_t iter_m = 0; iter_m < uint16_t(ubN / 8) ; ++iter_m) {
-            vlds(src_00a, src0_ub,        512, NORM, POST_UPDATE);
-            vlds(src_00b, src0_ub_unroll, 512, NORM, POST_UPDATE);
-            vmax(max_0a, max_0a, src_00a, preg_108);
-            vmax(max_0b, max_0b, src_00b, preg_108);
+        // find max v2
+        // for (uint16_t iter_m = 0; iter_m < uint16_t(ubN / 8) ; ++iter_m) {
+        //     vlds(src_00a, src0_ub,        512, NORM, POST_UPDATE);
+        //     vlds(src_00b, src0_ub_unroll, 512, NORM, POST_UPDATE);
+        //     vmax(max_0a, max_0a, src_00a, preg_108);
+        //     vmax(max_0b, max_0b, src_00b, preg_108);
 
-            vlds(src_01a, src0_ub1,      512, NORM, POST_UPDATE);
-            vlds(src_01b, src0_ub1_unroll, 512, NORM, POST_UPDATE);
-            vmax(max_1a, max_1a, src_01a, preg_108);
-            vmax(max_1b, max_1b, src_01b, preg_108);
+        //     vlds(src_01a, src0_ub1,      512, NORM, POST_UPDATE);
+        //     vlds(src_01b, src0_ub1_unroll, 512, NORM, POST_UPDATE);
+        //     vmax(max_1a, max_1a, src_01a, preg_108);
+        //     vmax(max_1b, max_1b, src_01b, preg_108);
             
-            vlds(src_02a, src0_ub2,      512, NORM, POST_UPDATE);
-            vlds(src_02b, src0_ub2_unroll, 512, NORM, POST_UPDATE);
-            vmax(max_2a, max_2a, src_02a, preg_108);
-            vmax(max_2b, max_2b, src_02b, preg_108);
+        //     vlds(src_02a, src0_ub2,      512, NORM, POST_UPDATE);
+        //     vlds(src_02b, src0_ub2_unroll, 512, NORM, POST_UPDATE);
+        //     vmax(max_2a, max_2a, src_02a, preg_108);
+        //     vmax(max_2b, max_2b, src_02b, preg_108);
             
-            vlds(src_03a, src0_ub3,      512, NORM, POST_UPDATE);
-            vlds(src_03b, src0_ub3_unroll, 512, NORM, POST_UPDATE);
-            vmax(max_3a, max_3a, src_03a, preg_108);
-            vmax(max_3b, max_3b, src_03b, preg_108);
+        //     vlds(src_03a, src0_ub3,      512, NORM, POST_UPDATE);
+        //     vlds(src_03b, src0_ub3_unroll, 512, NORM, POST_UPDATE);
+        //     vmax(max_3a, max_3a, src_03a, preg_108);
+        //     vmax(max_3b, max_3b, src_03b, preg_108);
+        // }
+
+        // if (not init)
+        // {
+        //     vlds(vreg_x_max_f32_b, new_global_max_Ptr, 0, NORM);
+        //     vmax(max_0a, max_0a, max_1a, preg_108);
+        //     vmax(max_0b, max_0b, max_1b, preg_108);
+        //     vmax(max_2a, max_2a, max_3a, preg_108);
+        //     vmax(max_2b, max_2b, max_3b, preg_108);
+        //     vmax(max_0a, max_0a, max_2a, preg_108);
+        //     vmax(max_0b, max_0b, max_2b, preg_108);
+        //     vmax(max_0a, max_0a, max_0b, preg_108);
+        //     vsts(max_0a, local_max_Ptr, 0, NORM_B16, preg_108);     //Store input max in local_max, a trick because ping-pong will change it to global max
+        //     vmuls(max_0a, max_0a, scale, preg_108);
+        //     vmax(max_0a, max_0a, vreg_x_max_f32_b, preg_108);
+        //     vexpdif(vreg_x_max_f32_b, vreg_x_max_f32_b, max_0a, preg_134, PART_ODD);
+        //     vsts(vreg_x_max_f32_b, exp_max_Ptr, 0, NORM_B16, preg_108);     //Store input max in local_max
+        // }
+        // else
+        // {
+        //     vmax(max_0a, max_0a, max_1a, preg_108);
+        //     vmax(max_0b, max_0b, max_1b, preg_108);
+        //     vmax(max_2a, max_2a, max_3a, preg_108);
+        //     vmax(max_2b, max_2b, max_3b, preg_108);
+        //     vmax(max_0a, max_0a, max_2a, preg_108);
+        //     vmax(max_0b, max_0b, max_2b, preg_108);
+        //     vmax(max_0a, max_0a, max_0b, preg_108);
+        //     // vsts(max_0a, (__ubuf__ float *)local_max_Ptr, 0, NORM_B16, preg_108);     //Store input max in local_max, a trick because ping-pong will change it to global max
+        //     vsts(max_0a, (__ubuf__ float *)new_global_max_Ptr, 0, NORM_B16, preg_108);
+        //     vmuls(max_0a, max_0a, scale, preg_108);
+        // }
+
+        // find max v3, less vmax
+        __ubuf__ float *p0 = src0_ub + 4 * 64;
+        __ubuf__ float *p1 = src0_ub + 5 * 64;
+        __ubuf__ float *p2 = src0_ub + 6 * 64;
+        __ubuf__ float *p3 = src0_ub + 7 * 64;
+
+        vlds(max_0a, src0_ub, 0 * 64, NORM);
+        vlds(max_1a, src0_ub, 1 * 64, NORM);
+        vlds(max_2a, src0_ub, 2 * 64, NORM);
+        vlds(max_3a, src0_ub, 3 * 64, NORM);
+
+        RegTensor<float> v_row;
+        for (uint16_t row = 4; row < 128; row += 4) {
+            vlds(v_row, p0, 4 * 64, NORM, POST_UPDATE);
+            vmax(max_0a, max_0a, v_row, preg_108, MODE_ZEROING);
+            vlds(v_row, p1, 4 * 64, NORM, POST_UPDATE);
+            vmax(max_1a, max_1a, v_row, preg_108, MODE_ZEROING);
+            vlds(v_row, p2, 4 * 64, NORM, POST_UPDATE);
+            vmax(max_2a, max_2a, v_row, preg_108, MODE_ZEROING);
+            vlds(v_row, p3, 4 * 64, NORM, POST_UPDATE);
+            vmax(max_3a, max_3a, v_row, preg_108, MODE_ZEROING);
         }
 
-        if (not init)
-        {
+        vmax(max_0a, max_0a, max_1a, preg_108, MODE_ZEROING);
+        vmax(max_2a, max_2a, max_3a, preg_108, MODE_ZEROING);
+        vmax(max_0a, max_0a, max_2a, preg_108, MODE_ZEROING);
+
+        if (not init){
             vlds(vreg_x_max_f32_b, new_global_max_Ptr, 0, NORM);
-            vmax(max_0a, max_0a, max_1a, preg_108);
-            vmax(max_0b, max_0b, max_1b, preg_108);
-            vmax(max_2a, max_2a, max_3a, preg_108);
-            vmax(max_2b, max_2b, max_3b, preg_108);
-            vmax(max_0a, max_0a, max_2a, preg_108);
-            vmax(max_0b, max_0b, max_2b, preg_108);
-            vmax(max_0a, max_0a, max_0b, preg_108);
-            vsts(max_0a, local_max_Ptr, 0, NORM_B16, preg_108);     //Store input max in local_max, a trick because ping-pong will change it to global max
+            vsts(max_0a, local_max_Ptr, 0, NORM_B16, preg_108);
             vmuls(max_0a, max_0a, scale, preg_108);
             vmax(max_0a, max_0a, vreg_x_max_f32_b, preg_108);
             vexpdif(vreg_x_max_f32_b, vreg_x_max_f32_b, max_0a, preg_134, PART_ODD);
-            vsts(vreg_x_max_f32_b, exp_max_Ptr, 0, NORM_B16, preg_108);     //Store input max in local_max
-        }
-        else
-        {
-            vmax(max_0a, max_0a, max_1a, preg_108);
-            vmax(max_0b, max_0b, max_1b, preg_108);
-            vmax(max_2a, max_2a, max_3a, preg_108);
-            vmax(max_2b, max_2b, max_3b, preg_108);
-            vmax(max_0a, max_0a, max_2a, preg_108);
-            vmax(max_0b, max_0b, max_2b, preg_108);
-            vmax(max_0a, max_0a, max_0b, preg_108);
-            // vsts(max_0a, (__ubuf__ float *)local_max_Ptr, 0, NORM_B16, preg_108);     //Store input max in local_max, a trick because ping-pong will change it to global max
+            vsts(vreg_x_max_f32_b, exp_max_Ptr, 0, NORM_B16, preg_108);
+        } else {
             vsts(max_0a, (__ubuf__ float *)new_global_max_Ptr, 0, NORM_B16, preg_108);
             vmuls(max_0a, max_0a, scale, preg_108);
         }
@@ -229,6 +275,8 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
         vdup(vreg_x_sum_1_even, 0, preg_134, MODE_ZEROING);
         vdup(vreg_x_sum_1_odd, 0, preg_134, MODE_ZEROING);
 
+        // for (uint16_t i0 = 0; i0 < uint16_t(ubN / 2) ; ++i0) {    
+        // less unroll, just 1 vdintlv + 1 vsts, performance worse
         for (uint16_t i0 = 0; i0 < uint16_t(ubN / 4) ; ++i0) { //128,64
             vector_address areg_x_1 = vag_b32(128);
             vld(vreg_x_f32_a, input_x_Ptr, areg_x_1, NORM);
@@ -247,12 +295,22 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
             vmuls(vreg_x_f32_b, vreg_x_f32_b, scale, preg_108);
             vexpdif(vreg_x_exp_even, vreg_x_f32_a, max_0a, preg_134, PART_ODD);// 0 ??????part_xx
             vexpdif(vreg_x_exp_odd, vreg_x_f32_b, max_0a, preg_134, PART_ODD); // 1
+            // vexpdif faster than vsub+vexp
+            // vsub(vreg_x_f32_a, vreg_x_f32_a, max_0a, preg_134);
+            // vsub(vreg_x_f32_b, vreg_x_f32_b, max_0a, preg_134);
+            // vexp(vreg_x_exp_even, vreg_x_f32_a, preg_134);
+            // vexp(vreg_x_exp_odd, vreg_x_f32_b, preg_134);
 
             vmuls(vreg_x_f32_1_a, vreg_x_f32_1_a, scale, preg_108);
             vmuls(vreg_x_f32_1_b, vreg_x_f32_1_b, scale, preg_108);
             vexpdif(vreg_x_exp_even_1, vreg_x_f32_1_a, max_0a, preg_134, PART_ODD);// 0 ??????part_xx
             vexpdif(vreg_x_exp_odd_1, vreg_x_f32_1_b, max_0a, preg_134, PART_ODD); // 1
+            // vsub(vreg_x_f32_1_a, vreg_x_f32_1_a, max_0a, preg_134);
+            // vsub(vreg_x_f32_1_b, vreg_x_f32_1_b, max_0a, preg_134);
+            // vexp(vreg_x_exp_even_1, vreg_x_f32_1_a, preg_134);
+            // vexp(vreg_x_exp_odd_1, vreg_x_f32_1_b, preg_134);
 
+            // vmulscvt is faster than vmuls+vcvt
             // vmuls(vreg_x_exp_even, vreg_x_exp_even, 1.0f, preg_108);
             // vmuls(vreg_x_exp_odd, vreg_x_exp_odd, 1.0f, preg_108);
             // vmuls(vreg_x_exp_even_1, vreg_x_exp_even_1, 1.0f, preg_108);
@@ -268,6 +326,7 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
             vmulscvt(vreg_x_exp_even_f16_1, vreg_x_exp_even_1, 1.0f, preg_135, PART_EVEN);
             vmulscvt(vreg_x_exp_odd_f16_1, vreg_x_exp_odd_1, 1.0f, preg_136, PART_EVEN);
 
+            // ND output
             vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg_x_exp_even_f16, vreg_x_exp_odd_f16);
             vdintlv(vreg_x_exp_f16_1_pack, vreg_x_exp_f16_1_packa, vreg_x_exp_even_f16_1, vreg_x_exp_odd_f16_1);
 
@@ -283,6 +342,17 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
             //         0x810001,                                                                 
             //         preg_136,                                                                
             //         POST_UPDATE); 
+
+            // NZ+1 output, not faster than direct ND output
+            // vpack((vector_u16&)vreg_x_exp_even_f16, (vector_u32&)vreg_x_exp_even_f16, LOWER);
+            // vpack((vector_u16&)vreg_x_exp_odd_f16, (vector_u32&)vreg_x_exp_odd_f16, LOWER);
+            // vpack((vector_u16&)vreg_x_exp_even_f16_1, (vector_u32&)vreg_x_exp_even_f16_1, LOWER);
+            // vpack((vector_u16&)vreg_x_exp_odd_f16_1, (vector_u32&)vreg_x_exp_odd_f16_1, LOWER);
+
+            // vsstb(vreg_x_exp_even_f16, ((__ubuf__ half *&) nz_buffer_Ptr), 0x810002, preg_low_half, POST_UPDATE);
+            // vsstb(vreg_x_exp_odd_f16, ((__ubuf__ half *&) nz_buffer_Ptr2), 0x810002, preg_low_half, POST_UPDATE);
+            // vsstb(vreg_x_exp_even_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr3), 0x810002, preg_low_half, POST_UPDATE);
+            // vsstb(vreg_x_exp_odd_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr4), 0x810002, preg_low_half, POST_UPDATE);
 
             vadd(vreg_x_sum_even, vreg_x_exp_even, vreg_x_sum_even, preg_134, MODE_ZEROING);//np.sum(x_exp, axis=-2, keepdims=True)
             vadd(vreg_x_sum_odd, vreg_x_exp_odd, vreg_x_sum_odd, preg_134, MODE_ZEROING);   //np.sum(x_exp, axis=-2, keepdims=True)
