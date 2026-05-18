@@ -265,19 +265,20 @@ template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_EXPDIF> {
     static void apply(DType &dst, const DType &src0, const DType &src1)
     {
-        dst = static_cast<DType>(std::exp(static_cast<double>(src0 - src1)));
+        using CalcType = std::conditional_t<std::is_same_v<DType, half>, float, double>;
+        dst = static_cast<DType>(std::exp(static_cast<CalcType>(src0 - src1)));
     }
 };
 
-#if defined(__GNUC__) && !defined(__clang__)
-template <>
-struct ElementOpCal<half, ElementOp::OP_EXPDIF> {
-    static void apply(half &dst, const half &src0, const half &src1)
-    {
-        dst = std::exp(src0 - src1);
-    }
-};
-#endif
+//#if defined(__GNUC__) && !defined(__clang__)
+//template <>
+//struct ElementOpCal<half, ElementOp::OP_EXPDIF> {
+//    static void apply(half &dst, const half &src0, const half &src1)
+//    {
+//        dst = std::exp(src0 - src1);
+//    }
+//};
+//#endif
 
 template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_FMOD> {
