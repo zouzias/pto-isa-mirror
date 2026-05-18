@@ -16,8 +16,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 template <typename T>
 struct TColMinOp {
-    using PadType = typename Padding<T>::Type;
-    static constexpr auto InitVal = Padding<T>::Max;
     PTO_INTERNAL static void ReduceInstr(RegTensor<T> &dst, RegTensor<T> &src0, RegTensor<T> &src1, MaskReg &pReg)
     {
         vmin(dst, src0, src1, pReg, MODE_ZEROING);
@@ -27,7 +25,7 @@ struct TColMinOp {
 template <typename T, typename TileDataOut, typename TileDataIn>
 __tf__ PTO_INTERNAL OP_NAME(TCOLMIN)
     OP_TYPE(reduce) void TColMin(typename TileDataOut::TileDType __out__ dstData,
-                                 typename TileDataIn::TileDType __in__ srcData, unsigned validRow, unsigned validCol,
+                                 typename TileDataIn::TileDType __in__ srcData, uint16_t validRow, int validCol,
                                  unsigned version = VFImplKind::VFIMPL_DEFAULT)
 {
     __ubuf__ T *dst = (__ubuf__ T *)__cce_get_tile_ptr(dstData);
@@ -39,8 +37,8 @@ __tf__ PTO_INTERNAL OP_NAME(TCOLMIN)
 template <typename TileDataOut, typename TileDataIn>
 PTO_INTERNAL void TCOLMIN_IMPL(TileDataOut &dst, TileDataIn &src)
 {
-    unsigned validCol = src.GetValidCol();
-    unsigned validRow = src.GetValidRow();
+    int validCol = src.GetValidCol();
+    int validRow = src.GetValidRow();
     TColReduceCheck<TileDataOut, TileDataIn>(validRow, validCol, dst.GetValidCol());
     if (validCol == 0 || validRow == 0) {
         return;
