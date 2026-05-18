@@ -15,6 +15,7 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "../kernel_timing.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -77,9 +78,9 @@ void MoeTop1GatherPrecomp()
     aclrtMemcpy(tokensDev, tokensBytes,  tokensHost, tokensBytes,  ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(ptDev,     indicesBytes, ptHost,     indicesBytes, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    launchMoeTop1GatherPrecomp<T>(packedDev, tokensDev, ptDev, stream);
-
-    aclrtSynchronizeStream(stream);
+    (void)PtoTiming::TimeKernelCallUs("moe_top1_gather_precomp", stream, [&]() {
+        launchMoeTop1GatherPrecomp<T>(packedDev, tokensDev, ptDev, stream);
+    });
     aclrtMemcpy(packedHost, packedBytes, packedDev, packedBytes, ACL_MEMCPY_DEVICE_TO_HOST);
 
     WriteFile("../output/output_packed_tokens.bin", packedHost, packedBytes);

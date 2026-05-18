@@ -20,6 +20,7 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "../kernel_timing.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -110,10 +111,10 @@ void MoeSegmentedIdentity()
     aclrtMemcpy(countDev,        expertBytes,       countHost,        expertBytes,       ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(startDev,        expertBytes,       startHost,        expertBytes,       ACL_MEMCPY_HOST_TO_DEVICE);
 
-    launchMoeSegmentedIdentity<T>(packedOutputDev, packedTokensDev,
-                                   countDev, startDev, stream);
-
-    aclrtSynchronizeStream(stream);
+    (void)PtoTiming::TimeKernelCallUs("moe_segmented_identity", stream, [&]() {
+        launchMoeSegmentedIdentity<T>(packedOutputDev, packedTokensDev,
+                                      countDev, startDev, stream);
+    });
     aclrtMemcpy(packedOutputHost, packedOutputBytes, packedOutputDev, packedOutputBytes, ACL_MEMCPY_DEVICE_TO_HOST);
 
     WriteFile("../output/output_packed_output.bin", packedOutputHost, packedOutputBytes);

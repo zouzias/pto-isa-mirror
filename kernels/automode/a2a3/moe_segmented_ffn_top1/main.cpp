@@ -26,6 +26,7 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "../kernel_timing.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -197,11 +198,12 @@ int main()
     printf("[main] poisoned scratchDev=0x%02X (%zu B), outputDev=0x%02X (%zu B)\n",
            kPoisonScratch, scratchBytes, kPoisonOutput, packedOutputBytes);
 
-    launchMoeSegmentedFfnTop1Fp16(
-        outputDev, tokensDev, countDev, startDev,
-        w1Dev, w2Dev, scratchDev, stream);
-
-    if (!CheckAcl(aclrtSynchronizeStream(stream), "aclrtSynchronizeStream")) {
+    if (!CheckAcl(PtoTiming::TimeKernelCallUs("moe_segmented_ffn_top1", stream, [&]() {
+            launchMoeSegmentedFfnTop1Fp16(
+                outputDev, tokensDev, countDev, startDev,
+                w1Dev, w2Dev, scratchDev, stream);
+        }),
+                  "aclrtSynchronizeStream(moe_segmented_ffn_top1)")) {
         std::cerr << "[main] stream sync failed — kernel likely crashed or never ran.\n";
     }
 

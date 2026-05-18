@@ -24,6 +24,7 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "../kernel_timing.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -140,9 +141,10 @@ int main()
     CheckAcl(aclrtMemset(valDev, valBytes, kPoisonVal, valBytes), "aclrtMemset(valDev=0x5A)");
     CheckAcl(aclrtMemset(idxDev, idxBytes, kPoisonIdx, idxBytes), "aclrtMemset(idxDev=0x7B)");
 
-    launchRouterTopkSmallFp32(valDev, idxDev, scoresDev, stream);
-
-    if (!CheckAcl(aclrtSynchronizeStream(stream), "aclrtSynchronizeStream")) {
+    if (!CheckAcl(PtoTiming::TimeKernelCallUs("router_topk_small", stream, [&]() {
+            launchRouterTopkSmallFp32(valDev, idxDev, scoresDev, stream);
+        }),
+                  "aclrtSynchronizeStream(router_topk_small)")) {
         std::cerr << "[main] stream sync failed.\n";
     }
 

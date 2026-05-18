@@ -17,6 +17,7 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "../kernel_timing.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -114,10 +115,10 @@ void MoeTop1Permute()
     aclrtMemcpy(tokensDev,   tokensBytes,   tokensHost,   tokensBytes,   ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(expertIdDev, expertIdBytes, expertIdHost, expertIdBytes, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    launchMoeTop1Permute<T>(packedDev, countDev, startDev, ttopDev,
-                             tokensDev, expertIdDev, stream);
-
-    aclrtSynchronizeStream(stream);
+    (void)PtoTiming::TimeKernelCallUs("moe_top1_permute", stream, [&]() {
+        launchMoeTop1Permute<T>(packedDev, countDev, startDev, ttopDev,
+                                tokensDev, expertIdDev, stream);
+    });
     aclrtMemcpy(packedHost, packedBytes, packedDev, packedBytes, ACL_MEMCPY_DEVICE_TO_HOST);
     aclrtMemcpy(countHost,  expertBytes, countDev,  expertBytes, ACL_MEMCPY_DEVICE_TO_HOST);
     aclrtMemcpy(startHost,  expertBytes, startDev,  expertBytes, ACL_MEMCPY_DEVICE_TO_HOST);

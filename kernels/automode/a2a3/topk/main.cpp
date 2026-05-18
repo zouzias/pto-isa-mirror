@@ -15,6 +15,7 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "../kernel_timing.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -142,9 +143,9 @@ void TopkKernel()
     aclrtMemcpy(srcDev, srcSize, srcHost, srcSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(idxDev, idxSize, idxHost, idxSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    launchTopk<T>(outValDev, outIdxDev, srcDev, idxDev, stream);
-
-    aclrtSynchronizeStream(stream);
+    (void)PtoTiming::TimeKernelCallUs("topk", stream, [&]() {
+        launchTopk<T>(outValDev, outIdxDev, srcDev, idxDev, stream);
+    });
     aclrtMemcpy(outValHost, outValSize, outValDev, outValSize, ACL_MEMCPY_DEVICE_TO_HOST);
     aclrtMemcpy(outIdxHost, outIdxSize, outIdxDev, outIdxSize, ACL_MEMCPY_DEVICE_TO_HOST);
 

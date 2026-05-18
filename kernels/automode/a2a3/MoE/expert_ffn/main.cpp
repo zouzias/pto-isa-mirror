@@ -20,6 +20,7 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "../../kernel_timing.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -130,9 +131,9 @@ int main()
     aclrtMemset(bDev, bBytes, 0x5A, bBytes);
     aclrtMemset(yDev, yBytes, 0x7B, yBytes);
 
-    launchExpertFfnFp16(bDev, aDev, countDev, startDev, w1Dev, w2Dev, yDev, stream);
-
-    aclrtSynchronizeStream(stream);
+    (void)PtoTiming::TimeKernelCallUs("expert_ffn", stream, [&]() {
+        launchExpertFfnFp16(bDev, aDev, countDev, startDev, w1Dev, w2Dev, yDev, stream);
+    });
     aclrtMemcpy(bHost, bBytes, bDev, bBytes, ACL_MEMCPY_DEVICE_TO_HOST);
 
     WriteFile("../output/output_B.bin", bHost, bBytes);
