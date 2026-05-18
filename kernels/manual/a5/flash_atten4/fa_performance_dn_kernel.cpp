@@ -823,17 +823,14 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                               __gm__ float *qk_tile_fifo, __gm__ float *pv_tile_fifo, __gm__ float *pv_pend_tile_fifo,
                               __gm__ uint8_t *cv_comm_buf, __gm__ uint8_t *profile_buf)
 {
-    uint64_t tStart = get_sys_cnt();
-
     set_ffts_base_addr((uint64_t)ffts_addr);
-    if constexpr (DAV_CUBE) {
-        set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
-        set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
-    }
 
     // S0 (rows total), Cube_S0 (per-block rows), S1 (cols), HEAD_SIZE (inner)
     constexpr uint32_t Cube_S0 = CUBE_S0;
-    constexpr uint32_t block_rows = S0 / CUBE_S0;
+    constexpr uint32_t logical_block_count = S0 / CUBE_S0;
+    constexpr uint32_t launch_block_count =
+        (logical_block_count < static_cast<uint32_t>(kFaLaunchCoreCount)) ? logical_block_count :
+                                                                               static_cast<uint32_t>(kFaLaunchCoreCount);
     constexpr uint32_t Cube_S1 = CUBE_S1; // per-tile S1 chunk
     constexpr uint32_t Tile_S1 = TILE_S1; // logical tile along S1
     static_assert(Tile_S1 % Cube_S1 == 0, "TILE_S1 must be divisible by CUBE_S1");
@@ -903,16 +900,8 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     allocate_cube_tile_buffers(qMatTile, kMatTile, pMatTile, vMatTile);
 
     // Keep QK, pending PV, and current PV in distinct L0C regions.
-    assign_running_acc_tile(qkAccTile, 0);
     TASSIGN(pvAccPendTile, 0x20000u);
     TASSIGN(pvAccCurrTile, 0x30000u);
-
-    if constexpr (DAV_VEC) {
-        const bool is_vec1 = static_cast<size_t>(get_subblockid());
-        for (int i = 0; i < SKIP_STATUS_FIFO_SIZE; ++i) {
-            write_skip_status_slot(i, is_vec1, 0);
-        }
-    }
 
     // Define tile types for FA softmax P computation. UB offsets for softmax tiles
     // Define per-tile vector tiles sized to Cube_S1
@@ -956,26 +945,6 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         TASSIGN(nzConvBuffer[1], nzBufOffset - nzBufSize);
     }
 
-    // block offset for logical S0
-    const int block_offset_rows = block_idx * static_cast<int>(Cube_S0);
-
-    constexpr bool use_cv_comm = (!INTERMEDIATE_CHECK) && (block_rows >= static_cast<uint32_t>(pto::kCvMaxCores));
-    int comm_slot = block_idx;
-
-    if constexpr (use_cv_comm) {
-        comm_slot = pto::TSYNC_CVID(block_idx, cv_comm_buf);
-    }
-    __gm__ uint64_t *profile_entry = nullptr;
-    if (profile_buf != nullptr) {
-        std::size_t profile_block_base = static_cast<std::size_t>(block_idx) * kFaProfileBytesPerBlock;
-        std::size_t profile_offset = profile_block_base;
-        if constexpr (DAV_VEC) {
-            profile_offset +=
-                (static_cast<std::size_t>(get_subblockid()) + 1U) * 1024U; // vec subblock 0/1 use 2nd/3rd KB
-        }
-        profile_entry = reinterpret_cast<__gm__ uint64_t *>(profile_buf + profile_offset);
-        profile_entry[0] = tStart;
-    }
     const size_t p_fifo_block_stride =
         static_cast<size_t>(qkp_tile_fifo_size) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(Tile_S1);
     const size_t p_max_fifo_block_stride = static_cast<size_t>(qkp_tile_fifo_size) * static_cast<size_t>(Cube_S0);
@@ -983,209 +952,255 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     const size_t pv_fifo_block_stride =
         static_cast<size_t>(pv_tile_fifo_size) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(HEAD_SIZE);
 
-    __gm__ half *q_block = q + block_offset_rows * HEAD_SIZE;
-    __gm__ half *p_tile_fifo_block = p_tile_fifo + static_cast<size_t>(comm_slot) * p_fifo_block_stride;
-    __gm__ float *exp_max_ififo_block = exp_max_ififo + static_cast<size_t>(comm_slot) * p_max_fifo_block_stride;
-    __gm__ float *global_sum_block = global_sum_out + block_offset_rows;
-    __gm__ float *exp_max_block = exp_max_out + block_offset_rows;
-    __gm__ float *o_out_block = o_out + static_cast<size_t>(block_offset_rows) * static_cast<size_t>(HEAD_SIZE);
-    __gm__ float *o_parts_block = o_parts_out + static_cast<size_t>(block_offset_rows) * static_cast<size_t>(HEAD_SIZE);
-    __gm__ float *qk_tile_fifo_block = qk_tile_fifo + static_cast<size_t>(comm_slot) * qk_fifo_block_stride;
-    __gm__ float *pv_tile_fifo_block = pv_tile_fifo + static_cast<size_t>(comm_slot) * pv_fifo_block_stride;
-    __gm__ float *pv_pend_tile_fifo_block = pv_pend_tile_fifo + static_cast<size_t>(comm_slot) * pv_fifo_block_stride;
-
     constexpr TSync_Custom<SyncOpType::TSTORE_C2GM, SyncOpType::TLOAD> qk2smSync = {BUF0_QK_READY};
     constexpr TSync_Custom<SyncOpType::TINSERT_V2L1, SyncOpType::TLOAD> sm2pvSync = {BUF1_SM_READY};
     constexpr TSync_Custom<SyncOpType::TMOV_C2UB, SyncOpType::TLOAD> pv2guSync = {UPDATE_READY};
     constexpr TSync_Custom<SyncOpType::TMOV_C2UB, SyncOpType::TLOAD> ubBufSync = {UB_BUF_READY};
     constexpr TSync_Custom<SyncOpType::TMOV_C2UB, SyncOpType::TLOAD> pvUbBufSync = {PV_UB_BUF_READY};
-
-    int num_tiles_s1 = S1 / Tile_S1;
-    if constexpr (CAUSAL_MASK)
-        num_tiles_s1 = (1 + ((block_idx * CUBE_S0) / Tile_S1));
-    if constexpr (DAV_CUBE) {
-        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
-        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
-        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
-        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID3);
-        set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
-        set_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
-        set_flag(PIPE_FIX, PIPE_M, EVENT_ID2);
-    }
-    if constexpr (DAV_VEC) {
-        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
-        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
-        set_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
-        set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
-    }
-
-    int p_gu_src_pingpong_id = 0; // shared ping-pong for softmax vec tiles, pv output tiles, and GU input tiles
-    int k_src_pingpong_id = 0;    // separate ping-pong for K tiles
-    int pv_src_pingpong_id = 0;   // separate ping-pong for P V tiles
-
-    int qkAccTileEvtID = 0;
+    constexpr bool use_cv_comm =
+        (!INTERMEDIATE_CHECK) && (launch_block_count >= static_cast<uint32_t>(kFaLaunchCoreCount));
     constexpr int pvAccTileEvtID = EVENT_ID2;
+    const int physical_block_idx = block_idx;
+    for (int logical_block_idx = physical_block_idx; logical_block_idx < static_cast<int>(logical_block_count);
+         logical_block_idx += static_cast<int>(launch_block_count)) {
+        const uint64_t tStart = get_sys_cnt();
 
-    // QK and P pre-computation (tile_id based)
-    for (int preload_tile = 0; preload_tile < static_cast<int>(qkPreloadNum) && preload_tile < num_tiles_s1;
-         ++preload_tile) {
         if constexpr (DAV_CUBE) {
-            for (int sub_tile = 0; sub_tile < static_cast<int>(kTileFactor); ++sub_tile) {
-                qkAccTileEvtID = assign_running_acc_tile(qkAccTile);
-                const int tile_buf_idx = preload_tile % srcVecTNBuffers;
-                compute_qk<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD,
-                           INTERMEDIATE_CHECK, CAUSAL_MASK, srcVecTNBuffers>(
-                    preload_tile, sub_tile, tile_buf_idx, q_block, k, qk_tile_fifo_block, qMatTile[0],
-                    kMatTile[k_src_pingpong_id % kMatTNBuffers], qkAccTile, qkVecTile[tile_buf_idx],
-                    k_src_pingpong_id % kMatTNBuffers, qkAccTileEvtID, qk2smSync, ubBufSync, block_idx);
+            set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+            set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+        }
 
-                k_src_pingpong_id++;
+        assign_running_acc_tile(qkAccTile, 0);
+
+        if constexpr (DAV_VEC) {
+            const bool is_vec1 = static_cast<size_t>(get_subblockid());
+            for (int i = 0; i < SKIP_STATUS_FIFO_SIZE; ++i) {
+                write_skip_status_slot(i, is_vec1, 0);
             }
+        }
+
+        const int block_offset_rows = logical_block_idx * static_cast<int>(Cube_S0);
+        int comm_slot = logical_block_idx;
+        if constexpr (use_cv_comm) {
+            comm_slot = pto::TSYNC_CVID(logical_block_idx, cv_comm_buf);
+        }
+
+        __gm__ uint64_t *profile_entry = nullptr;
+        if (profile_buf != nullptr) {
+            std::size_t profile_block_base = static_cast<std::size_t>(logical_block_idx) * kFaProfileBytesPerBlock;
+            std::size_t profile_offset = profile_block_base;
+            if constexpr (DAV_VEC) {
+                profile_offset +=
+                    (static_cast<std::size_t>(get_subblockid()) + 1U) * 1024U; // vec subblock 0/1 use 2nd/3rd KB
+            }
+            profile_entry = reinterpret_cast<__gm__ uint64_t *>(profile_buf + profile_offset);
+            profile_entry[0] = tStart;
+        }
+
+        __gm__ half *q_block = q + block_offset_rows * HEAD_SIZE;
+        __gm__ half *p_tile_fifo_block = p_tile_fifo + static_cast<size_t>(comm_slot) * p_fifo_block_stride;
+        __gm__ float *exp_max_ififo_block = exp_max_ififo + static_cast<size_t>(comm_slot) * p_max_fifo_block_stride;
+        __gm__ float *global_sum_block = global_sum_out + block_offset_rows;
+        __gm__ float *exp_max_block = exp_max_out + block_offset_rows;
+        __gm__ float *o_out_block = o_out + static_cast<size_t>(block_offset_rows) * static_cast<size_t>(HEAD_SIZE);
+        __gm__ float *o_parts_block =
+            o_parts_out + static_cast<size_t>(block_offset_rows) * static_cast<size_t>(HEAD_SIZE);
+        __gm__ float *qk_tile_fifo_block = qk_tile_fifo + static_cast<size_t>(comm_slot) * qk_fifo_block_stride;
+        __gm__ float *pv_tile_fifo_block = pv_tile_fifo + static_cast<size_t>(comm_slot) * pv_fifo_block_stride;
+        __gm__ float *pv_pend_tile_fifo_block =
+            pv_pend_tile_fifo + static_cast<size_t>(comm_slot) * pv_fifo_block_stride;
+
+        int num_tiles_s1 = S1 / Tile_S1;
+        if constexpr (CAUSAL_MASK)
+            num_tiles_s1 = (1 + ((logical_block_idx * CUBE_S0) / Tile_S1));
+        if constexpr (DAV_CUBE) {
+            set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+            set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+            set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
+            set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID3);
+            set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+            set_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
+            set_flag(PIPE_FIX, PIPE_M, EVENT_ID2);
         }
         if constexpr (DAV_VEC) {
-            for (int row_slice = 0; row_slice < static_cast<int>(kTileFactor); ++row_slice) {
-                const int tile_buf_idx = preload_tile % srcVecTNBuffers;
-                compute_p<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD,
-                          INTERMEDIATE_CHECK, CAUSAL_MASK>(
-                    preload_tile, row_slice, qk_tile_fifo_block, p_tile_fifo_block, exp_max_ififo_block,
-                    global_sum_block, exp_max_block, qkVecTile[tile_buf_idx],
-                    x_expT[p_gu_src_pingpong_id % xexpVecTNBuffers], input_reduce_tmp, m1_local_max, l1_local_sum,
-                    m2_global_max, l2_global_sum, l1_exp_max_ififo[preload_tile % qkp_tile_fifo_size],
-                    pMatTile[preload_tile % pMatTNBuffers], nzConvBuffer[p_gu_src_pingpong_id % xexpVecTNBuffers],
-                    p_gu_src_pingpong_id % xexpVecTNBuffers, qk2smSync, sm2pvSync, ubBufSync, block_idx, num_tiles_s1);
-                p_gu_src_pingpong_id++;
-            }
+            set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+            set_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
+            set_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
+            set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
         }
-    }
 
-    for (int tile_id = 0; tile_id < num_tiles_s1; ++tile_id) {
-        int next_qk_tile = (tile_id + static_cast<int>(qkPreloadNum) >= num_tiles_s1) ?
-                               -1 :
-                               (tile_id + static_cast<int>(qkPreloadNum));
+        int p_gu_src_pingpong_id = 0; // shared ping-pong for softmax vec tiles, pv output tiles, and GU input tiles
+        int k_src_pingpong_id = 0;    // separate ping-pong for K tiles
+        int pv_src_pingpong_id = 0;   // separate ping-pong for P V tiles
 
-        if (next_qk_tile != -1)
-            qkAccTileEvtID = assign_running_acc_tile(qkAccTile);
-        for (int sub_tile = 0; sub_tile < static_cast<int>(kTileFactor); ++sub_tile) {
+        int qkAccTileEvtID = 0;
+
+        // QK and P pre-computation (tile_id based)
+        for (int preload_tile = 0; preload_tile < static_cast<int>(qkPreloadNum) && preload_tile < num_tiles_s1;
+             ++preload_tile) {
             if constexpr (DAV_CUBE) {
-                if (next_qk_tile != -1) {
-                    const int tile_buf_idx = next_qk_tile % srcVecTNBuffers;
+                for (int sub_tile = 0; sub_tile < static_cast<int>(kTileFactor); ++sub_tile) {
+                    qkAccTileEvtID = assign_running_acc_tile(qkAccTile);
+                    const int tile_buf_idx = preload_tile % srcVecTNBuffers;
                     compute_qk<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size,
                                CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK, srcVecTNBuffers>(
-                        next_qk_tile, sub_tile, tile_buf_idx, q_block, k, qk_tile_fifo_block, qMatTile[0],
+                        preload_tile, sub_tile, tile_buf_idx, q_block, k, qk_tile_fifo_block, qMatTile[0],
                         kMatTile[k_src_pingpong_id % kMatTNBuffers], qkAccTile, qkVecTile[tile_buf_idx],
-                        k_src_pingpong_id % kMatTNBuffers, qkAccTileEvtID, qk2smSync, ubBufSync, block_idx);
+                        k_src_pingpong_id % kMatTNBuffers, qkAccTileEvtID, qk2smSync, ubBufSync, logical_block_idx);
 
                     k_src_pingpong_id++;
                 }
             }
-
             if constexpr (DAV_VEC) {
-                if (next_qk_tile != -1) {
-                    const int tile_buf_idx = next_qk_tile % srcVecTNBuffers;
+                for (int row_slice = 0; row_slice < static_cast<int>(kTileFactor); ++row_slice) {
+                    const int tile_buf_idx = preload_tile % srcVecTNBuffers;
                     compute_p<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size,
                               CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK>(
-                        next_qk_tile, sub_tile, qk_tile_fifo_block, p_tile_fifo_block, exp_max_ififo_block,
+                        preload_tile, row_slice, qk_tile_fifo_block, p_tile_fifo_block, exp_max_ififo_block,
                         global_sum_block, exp_max_block, qkVecTile[tile_buf_idx],
                         x_expT[p_gu_src_pingpong_id % xexpVecTNBuffers], input_reduce_tmp, m1_local_max, l1_local_sum,
-                        m2_global_max, l2_global_sum, l1_exp_max_ififo[next_qk_tile % qkp_tile_fifo_size],
-                        pMatTile[next_qk_tile % pMatTNBuffers], nzConvBuffer[p_gu_src_pingpong_id % xexpVecTNBuffers],
-                        p_gu_src_pingpong_id % xexpVecTNBuffers, qk2smSync, sm2pvSync, ubBufSync, block_idx,
+                        m2_global_max, l2_global_sum, l1_exp_max_ififo[preload_tile % qkp_tile_fifo_size],
+                        pMatTile[preload_tile % pMatTNBuffers], nzConvBuffer[p_gu_src_pingpong_id % xexpVecTNBuffers],
+                        p_gu_src_pingpong_id % xexpVecTNBuffers, qk2smSync, sm2pvSync, ubBufSync, logical_block_idx,
                         num_tiles_s1);
                     p_gu_src_pingpong_id++;
                 }
             }
+        }
 
-            if constexpr (DAV_CUBE) {
+        for (int tile_id = 0; tile_id < num_tiles_s1; ++tile_id) {
+            int next_qk_tile = (tile_id + static_cast<int>(qkPreloadNum) >= num_tiles_s1) ?
+                                   -1 :
+                                   (tile_id + static_cast<int>(qkPreloadNum));
+
+            if (next_qk_tile != -1)
+                qkAccTileEvtID = assign_running_acc_tile(qkAccTile);
+            for (int sub_tile = 0; sub_tile < static_cast<int>(kTileFactor); ++sub_tile) {
+                if constexpr (DAV_CUBE) {
+                    if (next_qk_tile != -1) {
+                        const int tile_buf_idx = next_qk_tile % srcVecTNBuffers;
+                        compute_qk<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size,
+                                   CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK, srcVecTNBuffers>(
+                            next_qk_tile, sub_tile, tile_buf_idx, q_block, k, qk_tile_fifo_block, qMatTile[0],
+                            kMatTile[k_src_pingpong_id % kMatTNBuffers], qkAccTile, qkVecTile[tile_buf_idx],
+                            k_src_pingpong_id % kMatTNBuffers, qkAccTileEvtID, qk2smSync, ubBufSync,
+                            logical_block_idx);
+
+                        k_src_pingpong_id++;
+                    }
+                }
+
+                if constexpr (DAV_VEC) {
+                    if (next_qk_tile != -1) {
+                        const int tile_buf_idx = next_qk_tile % srcVecTNBuffers;
+                        compute_p<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size,
+                                  CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK>(
+                            next_qk_tile, sub_tile, qk_tile_fifo_block, p_tile_fifo_block, exp_max_ififo_block,
+                            global_sum_block, exp_max_block, qkVecTile[tile_buf_idx],
+                            x_expT[p_gu_src_pingpong_id % xexpVecTNBuffers], input_reduce_tmp, m1_local_max,
+                            l1_local_sum, m2_global_max, l2_global_sum,
+                            l1_exp_max_ififo[next_qk_tile % qkp_tile_fifo_size],
+                            pMatTile[next_qk_tile % pMatTNBuffers],
+                            nzConvBuffer[p_gu_src_pingpong_id % xexpVecTNBuffers],
+                            p_gu_src_pingpong_id % xexpVecTNBuffers, qk2smSync, sm2pvSync, ubBufSync,
+                            logical_block_idx, num_tiles_s1);
+                        p_gu_src_pingpong_id++;
+                    }
+                }
+
+                if constexpr (DAV_CUBE) {
+                    TileOutGuT &pvPendTile = pvVecTile[max(0, (tile_id + 1)) % outOTileNBuffers];
+                    compute_pv<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size, pv_tile_fifo_size,
+                               CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK, outOTileNBuffers>(
+                        tile_id, sub_tile, tile_id % outOTileNBuffers, p_tile_fifo_block, v, pv_tile_fifo_block,
+                        pv_pend_tile_fifo_block, pMatTile[pv_src_pingpong_id % pMatTNBuffers],
+                        vMatTile[pv_src_pingpong_id % vMatTNBuffers], pvAccCurrTile, pvAccPendTile, runningOTile,
+                        pvPendTile, pvVecTile, pv_src_pingpong_id % vMatTNBuffers + PV_EVENT_ID0, pvAccTileEvtID,
+                        sm2pvSync, pv2guSync, pvUbBufSync, logical_block_idx);
+                    pv_src_pingpong_id++;
+                }
+            }
+
+            if constexpr (DAV_VEC) {
                 TileOutGuT &pvPendTile = pvVecTile[max(0, (tile_id + 1)) % outOTileNBuffers];
-                compute_pv<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size, pv_tile_fifo_size,
-                           CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK, outOTileNBuffers>(
-                    tile_id, sub_tile, tile_id % outOTileNBuffers, p_tile_fifo_block, v, pv_tile_fifo_block,
-                    pv_pend_tile_fifo_block, pMatTile[pv_src_pingpong_id % pMatTNBuffers],
-                    vMatTile[pv_src_pingpong_id % vMatTNBuffers], pvAccCurrTile, pvAccPendTile, runningOTile, pvPendTile,
-                    pvVecTile, pv_src_pingpong_id % vMatTNBuffers + PV_EVENT_ID0, pvAccTileEvtID, sm2pvSync, pv2guSync,
-                    pvUbBufSync, block_idx);
-                pv_src_pingpong_id++;
+                compute_gu<S0, HEAD_SIZE, S1, CUBE_S0, Tile_S1, pv_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD,
+                           INTERMEDIATE_CHECK, CAUSAL_MASK, srcVecTNBuffers, outOTileNBuffers>(
+                    tile_id, num_tiles_s1, pv_tile_fifo_block, pv_pend_tile_fifo_block, o_out_block, o_parts_block,
+                    runningOTile, pvVecTile[tile_id % outOTileNBuffers], pvPendTile,
+                    l1_exp_max_ififo[tile_id % qkp_tile_fifo_size], l2_global_sum, tile_id % outOTileNBuffers,
+                    pv2guSync, ubBufSync, pvUbBufSync);
+                p_gu_src_pingpong_id++;
+            }
+        }
+
+        const int pending_qk_sm_consumed =
+            pending_consumption_events(num_tiles_s1, static_cast<int>(qkp_tile_fifo_size), CV_FIFO_CONS_SYNC_PERIOD);
+        const int pending_sv_consumed = pending_qk_sm_consumed; // same schedule and FIFO settings
+        const int pending_update_consumed =
+            pending_consumption_events(num_tiles_s1, static_cast<int>(qkp_tile_fifo_size), CV_FIFO_CONS_SYNC_PERIOD);
+
+        if constexpr (DAV_CUBE) {
+            wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+            wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+            wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+            wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
+            wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID3);
+            wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+            wait_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
+            wait_flag(PIPE_FIX, PIPE_M, EVENT_ID2);
+            for (int i = 0; i < pending_qk_sm_consumed; ++i)
+                qk2smSync.allocate();
+            for (int i = 0; i < pending_update_consumed; ++i)
+                pv2guSync.allocate();
+            {
+                const int ub_drain_count =
+                    (num_tiles_s1 < static_cast<int>(srcVecTNBuffers)) ? num_tiles_s1 : static_cast<int>(srcVecTNBuffers);
+                for (int i = 0; i < ub_drain_count; ++i)
+                    ubBufSync.allocate();
+            }
+            {
+#if skip_rescale
+                const int pv_ub_drain_count =
+                    (num_tiles_s1 < static_cast<int>(outOTileNBuffers)) ? num_tiles_s1 : static_cast<int>(1);
+#else
+                const int pv_ub_drain_count =
+                    (num_tiles_s1 < static_cast<int>(outOTileNBuffers)) ? num_tiles_s1 : static_cast<int>(outOTileNBuffers);
+#endif
+                for (int i = 0; i < pv_ub_drain_count; ++i)
+                    pvUbBufSync.allocate();
             }
         }
 
         if constexpr (DAV_VEC) {
-            TileOutGuT &pvPendTile = pvVecTile[max(0, (tile_id + 1)) % outOTileNBuffers];
-            compute_gu<S0, HEAD_SIZE, S1, CUBE_S0, Tile_S1, pv_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD,
-                       INTERMEDIATE_CHECK, CAUSAL_MASK, srcVecTNBuffers, outOTileNBuffers>(
-                tile_id, num_tiles_s1, pv_tile_fifo_block, pv_pend_tile_fifo_block, o_out_block, o_parts_block,
-                runningOTile, pvVecTile[tile_id % outOTileNBuffers], pvPendTile,
-                l1_exp_max_ififo[tile_id % qkp_tile_fifo_size], l2_global_sum, tile_id % outOTileNBuffers, pv2guSync,
-                ubBufSync, pvUbBufSync);
-            p_gu_src_pingpong_id++;
-        }
-    }
-
-    const int pending_qk_sm_consumed =
-        pending_consumption_events(num_tiles_s1, static_cast<int>(qkp_tile_fifo_size), CV_FIFO_CONS_SYNC_PERIOD);
-    const int pending_sv_consumed = pending_qk_sm_consumed; // same schedule and FIFO settings
-    const int pending_update_consumed =
-        pending_consumption_events(num_tiles_s1, static_cast<int>(qkp_tile_fifo_size), CV_FIFO_CONS_SYNC_PERIOD);
-
-    if constexpr (DAV_CUBE) {
-        wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
-        wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
-        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
-        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
-        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID3);
-        wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
-        wait_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
-        wait_flag(PIPE_FIX, PIPE_M, EVENT_ID2);
-        for (int i = 0; i < pending_qk_sm_consumed; ++i)
-            qk2smSync.allocate();
-        for (int i = 0; i < pending_update_consumed; ++i)
-            pv2guSync.allocate();
-        {
-            const int ub_drain_count =
-                (num_tiles_s1 < static_cast<int>(srcVecTNBuffers)) ? num_tiles_s1 : static_cast<int>(srcVecTNBuffers);
-            for (int i = 0; i < ub_drain_count; ++i)
-                ubBufSync.allocate();
-        }
-        {
+            wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
+            wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
+            wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+            for (int i = 0; i < pending_sv_consumed; ++i) {
+                sm2pvSync.allocate();
 #if skip_rescale
-            const int pv_ub_drain_count =
-                (num_tiles_s1 < static_cast<int>(outOTileNBuffers)) ? num_tiles_s1 : static_cast<int>(1);
-#else
-            const int pv_ub_drain_count =
-                (num_tiles_s1 < static_cast<int>(outOTileNBuffers)) ? num_tiles_s1 : static_cast<int>(outOTileNBuffers);
+                wait_intra_block(PIPE_S, FftsBufferFlag::SS_BUF_READY + 1);
 #endif
-            for (int i = 0; i < pv_ub_drain_count; ++i)
-                pvUbBufSync.allocate();
+            }
         }
-    }
 
-    if constexpr (DAV_VEC) {
-        wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
-        wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
-        wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
-        for (int i = 0; i < pending_sv_consumed; ++i) {
-            sm2pvSync.allocate();
-#if skip_rescale
-            wait_intra_block(PIPE_S, FftsBufferFlag::SS_BUF_READY + 1);
-#endif
+        const uint64_t tEnd = get_sys_cnt();
+        if (profile_entry != nullptr) {
+            profile_entry[1] = tEnd;
         }
-    }
-
-    pipe_barrier(PIPE_ALL);
-    uint64_t tEnd = get_sys_cnt();
-    if (profile_entry != nullptr) {
-        profile_entry[1] = tEnd;
-    }
 #ifdef _DEBUG
-    if constexpr (DAV_CUBE) {
-        cce::printf("Core %d Cube Block %d, Start @%d End @%d (%d us)\n", get_coreid(), block_idx, int(tStart),
-                    int(tEnd), int(tEnd - tStart) * 20 / 1000);
-    } else {
-        cce::printf("Core %d Vec Block %d, SubBlock %d, Start @%d End @%d (%d us)\n", get_coreid(), block_idx,
-                    int(get_subblockid()), int(tStart), int(tEnd), int(tEnd - tStart) * 20 / 1000);
-    }
+        if constexpr (DAV_CUBE) {
+            cce::printf("Core %d Cube Block %d, Start @%d End @%d (%d us)\n", get_coreid(), logical_block_idx,
+                        int(tStart), int(tEnd), int(tEnd - tStart) * 20 / 1000);
+        } else {
+            cce::printf("Core %d Vec Block %d, SubBlock %d, Start @%d End @%d (%d us)\n", get_coreid(),
+                        logical_block_idx, int(get_subblockid()), int(tStart), int(tEnd),
+                        int(tEnd - tStart) * 20 / 1000);
+        }
 #endif
+    }
+    pipe_barrier(PIPE_ALL);
 }
 
 // Empty kernel to warm up cores
@@ -1201,7 +1216,10 @@ void LaunchTFA(uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclF
                aclrtStream stream, uint8_t *cv_comm_buf)
 {
     static_assert(S0 % CUBE_S0 == 0, "S0 must be divisible by CUBE_S0");
-    constexpr uint32_t block_rows = S0 / CUBE_S0;
+    constexpr uint32_t logical_block_count = S0 / CUBE_S0;
+    constexpr uint32_t launch_block_count =
+        (logical_block_count < static_cast<uint32_t>(kFaLaunchCoreCount)) ? logical_block_count :
+                                                                               static_cast<uint32_t>(kFaLaunchCoreCount);
 
     // Warm up all cores first, then prefetch q/k/v into L2
     warmup_kernel<<<32, nullptr, stream>>>();
@@ -1222,7 +1240,7 @@ void LaunchTFA(uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclF
     }
 
     runTFA<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, CV_FIFO_SIZE, INTERMEDIATE_CHECK, CAUSAL_MASK,
-           CV_FIFO_CONS_SYNC_PERIOD><<<block_rows, nullptr, stream>>>(
+           CV_FIFO_CONS_SYNC_PERIOD><<<launch_block_count, nullptr, stream>>>(
         (__gm__ uint64_t *)ffts, (half *)q, (half *)k, (half *)v, (half *)p_tile_fifo, exp_max_ififo, global_sum_out,
         exp_max_out, o_out, o_parts_out, qk_tile_fifo, pv_tile_fifo, pv_pend_tile_fifo, cv_comm_buf, profile_data);
 }

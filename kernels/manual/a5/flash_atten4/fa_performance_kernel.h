@@ -21,6 +21,7 @@ constexpr int kFaCvFifoConsSyncPeriod = kFaCvFifoSize / 2;
 constexpr int kFaCubeS1 = 128;
 constexpr int kFaTileS1 = 256;
 constexpr int kFaQkPreload = 4;
+constexpr int kFaLaunchCoreCount = 28;
 constexpr std::size_t kFaProfileBytesPerBlock = 1024 * 3; // cube + two vec subblocks
 constexpr std::size_t kFaCvCommSlotBytes = 512U;
 constexpr int VEC_CORES = 2;
