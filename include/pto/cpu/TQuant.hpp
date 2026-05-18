@@ -18,14 +18,32 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <limits>
 #include <type_traits>
 #include <vector>
-#include <pto/common/type.hpp>
 #include "pto/cpu/tile_offsets.hpp"
 
 namespace pto {
+#if !defined(PTO_NPU_ARCH_A2A3) && !defined(PTO_NPU_ARCH_A5) && !defined(PTO_NPU_ARCH_KIRIN9030)
+enum class QuantType
+{
+    MXFP8,
+    MXFP4_E2M1,
+    INT8_SYM,
+    INT8_ASYM
+};
+
+enum class QuantScaleAlg
+{
+    OCP,
+    NV
+};
+
+enum class VecStoreMode
+{
+    ND,
+    NZ
+};
+#endif
+
 namespace cpu_quant {
-
-constexpr uint16_t bf16Bits = 16;
-
 inline float BitsToFloat(uint32_t bits)
 {
     return std::bit_cast<float>(bits);
@@ -50,21 +68,19 @@ struct NvMxFp4E2M1Spec {
 
 inline uint16_t FloatToBf16BitsTrunc(float value)
 {
-    return static_cast<uint16_t>(FloatToBits(value) >> bf16Bits);
+    return static_cast<uint16_t>(FloatToBits(value) >> 16);
 }
 
 inline uint16_t FloatToBf16BitsRound(float value)
 {
-    constexpr uint32_t bitsShift = 16;
     const uint32_t bits = FloatToBits(value);
-    const uint32_t lsb = (bits >> bitsShift) & 1u;
-    return static_cast<uint16_t>((bits + 0x7FFFu + lsb) >> bitsShift);
+    const uint32_t lsb = (bits >> 16) & 1u;
+    return static_cast<uint16_t>((bits + 0x7FFFu + lsb) >> 16);
 }
 
 inline float Bf16BitsToFloat(uint16_t bits)
 {
-    constexpr uint32_t bitsShift = 16;
-    return BitsToFloat(static_cast<uint32_t>(bits) << bitsShift);
+    return BitsToFloat(static_cast<uint32_t>(bits) << 16);
 }
 
 inline uint16_t AbsBf16BitsFromFloat(float value)
@@ -111,38 +127,25 @@ inline float DecodeE4M3Fn(uint8_t code)
         if (mant == 0) {
             return sign < 0 ? -0.0f : 0.0f;
         }
-        constexpr int scaleExp = 9;
-        return static_cast<float>(sign) * std::ldexp(static_cast<float>(mant), -scaleExp);
+        return static_cast<float>(sign) * std::ldexp(static_cast<float>(mant), -9);
     }
     if (exp == 0x0F && mant == 0x07) {
         return std::numeric_limits<float>::quiet_NaN();
     }
     const float significand = 1.0f + static_cast<float>(mant) / 8.0f;
-    constexpr int scaleExp = 7;
-    return static_cast<float>(sign) * std::ldexp(significand, exp - scaleExp);
+    return static_cast<float>(sign) * std::ldexp(significand, exp - 7);
 }
 
-template <QuantScaleAlg scale_alg>
 inline uint8_t EncodeE4M3Fn(float value)
 {
     if (std::isnan(value)) {
         return 0x7Fu;
     }
-    if (scale_alg == QuantScaleAlg::NV && std::fabs(value) < 0.0009765625f) {
-        // FIX: Safe Sign-Retention Check mimicking Python's ml_dtypes underflow tracking
-        if (std::signbit(value)) {
-            return 0x80u; // Match negative zero output requirement
-        } else {
-            return 0x00u; // Clean positive zero
-        }
-    }
-
     const float clipped = std::clamp(value, -448.0f, 448.0f);
     uint8_t bestCode = 0;
     float bestDistance = std::numeric_limits<float>::infinity();
     bool bestEven = true;
-    constexpr int codeMax = 256;
-    for (int code = 0; code < codeMax; ++code) {
+    for (int code = 0; code < 256; ++code) {
         if ((code & 0x7F) == 0x7F) {
             continue;
         }
@@ -228,8 +231,6 @@ inline uint8_t ComputeE2M1SharedExponent(float maxAbsValue)
     return static_cast<uint8_t>(exponent - 2u);
 }
 
-constexpr int SCALE_MIN_EXP = -127;
-
 inline float ComputeMxScalingFromExponent(uint8_t e8m0)
 {
     if (e8m0 == 0xFFu) {
@@ -238,7 +239,7 @@ inline float ComputeMxScalingFromExponent(uint8_t e8m0)
     const uint32_t scaleExp = 254u - static_cast<uint32_t>(e8m0);
     float scaling = BitsToFloat(scaleExp << 23);
     if (scaling == 0.0f) {
-        scaling = std::ldexp(1.0f, SCALE_MIN_EXP);
+        scaling = std::ldexp(1.0f, -127);
     }
     return scaling;
 }
@@ -249,7 +250,7 @@ inline float ComputeNvScalingFromExponent(uint8_t e8m0)
         return std::numeric_limits<float>::quiet_NaN();
     }
     if (e8m0 == 0xFEu) {
-        return std::ldexp(1.0f, SCALE_MIN_EXP);
+        return std::ldexp(1.0f, -127);
     }
     return ComputeMxScalingFromExponent(e8m0);
 }
@@ -266,21 +267,19 @@ inline float ComputeScalingFromExponent(uint8_t e8m0)
 
 inline std::vector<uint8_t> ReorderExponentZZ(const std::vector<uint8_t> &exp, int rows, int groupCols)
 {
-    constexpr int groupBlockSize = 2;
-    constexpr int rowBlockSize = 16;
-    PTO_CPU_ASSERT(rows % rowBlockSize == 0 && groupCols % groupBlockSize == 0,
+    PTO_CPU_ASSERT(rows % 16 == 0 && groupCols % 2 == 0,
                    "Fix: MXFP8 NZ exponent reorder currently requires rows "
                    "multiple of 16 and group cols multiple of 2.");
-    const int rowBlocks = rows / rowBlockSize;
-    const int groupBlocks = groupCols / groupBlockSize;
+    const int rowBlocks = rows / 16;
+    const int groupBlocks = groupCols / 2;
     std::vector<uint8_t> reordered;
     reordered.reserve(exp.size());
     for (int rb = 0; rb < rowBlocks; ++rb) {
         for (int gb = 0; gb < groupBlocks; ++gb) {
-            for (int innerRow = 0; innerRow < rowBlockSize; ++innerRow) {
-                for (int innerGroup = 0; innerGroup < groupBlockSize; ++innerGroup) {
-                    const int row = rb * rowBlockSize + innerRow;
-                    const int group = gb * groupBlockSize + innerGroup;
+            for (int innerRow = 0; innerRow < 16; ++innerRow) {
+                for (int innerGroup = 0; innerGroup < 2; ++innerGroup) {
+                    const int row = rb * 16 + innerRow;
+                    const int group = gb * 2 + innerGroup;
                     reordered.push_back(exp[row * groupCols + group]);
                 }
             }
@@ -294,9 +293,8 @@ inline float ComputeMxGroupMax(TileDataSrc &src, int row, int group)
 {
     float maxAbsValue = 0.0f;
     uint16_t maxAbsBf16Bits = 0;
-    constexpr int colGroupSize = 32;
-    for (int inner = 0; inner < colGroupSize; ++inner) {
-        const float value = src.data()[GetTileElementOffset<TileDataSrc>(row, group * colGroupSize + inner)];
+    for (int inner = 0; inner < 32; ++inner) {
+        const float value = src.data()[GetTileElementOffset<TileDataSrc>(row, group * 32 + inner)];
         if constexpr (quant_type == QuantType::MXFP8 ||
                       (quant_type == QuantType::MXFP4_E2M1 && scale_alg == QuantScaleAlg::NV)) {
             maxAbsValue = std::max(maxAbsValue, std::fabs(value));
@@ -349,16 +347,15 @@ inline float ComputeMxGroupScaling(float maxAbsValue, uint8_t e8m0)
     return ComputeMxGroupScaling<quant_type>(e8m0);
 }
 
-template <QuantType quant_type, QuantScaleAlg scale_alg, typename TileDataOut, typename TileDataSrc,
-          typename FlatScalingTile>
+template <QuantType quant_type, typename TileDataOut, typename TileDataSrc, typename FlatScalingTile>
 inline void StoreMxEncodedValue(TileDataOut &dst, TileDataSrc &src, FlatScalingTile &flatScaling, int row, int col,
                                 int cols, int flatGroupIdx, float groupScaling)
 {
     using SrcT = typename TileDataSrc::DType;
     if constexpr (quant_type == QuantType::MXFP8) {
-        flatScaling.data()[flatGroupIdx] = groupScaling;
+        flatScaling.data()[row * cols + col] = static_cast<typename FlatScalingTile::DType>(groupScaling);
         const float value = static_cast<float>(src.data()[GetTileElementOffset<TileDataSrc>(row, col)]);
-        const uint8_t encoded = EncodeE4M3Fn<scale_alg>(value * groupScaling);
+        const uint8_t encoded = EncodeE4M3Fn(value * groupScaling);
         dst.data()[GetTileElementOffset<TileDataOut>(row, col)] = static_cast<int8_t>(encoded);
     } else {
         flatScaling.data()[flatGroupIdx] = groupScaling;
@@ -369,21 +366,18 @@ inline void StoreMxEncodedValue(TileDataOut &dst, TileDataSrc &src, FlatScalingT
         if ((col & 1) == 0) {
             dstBytes[byteOffset] = static_cast<uint8_t>((dstBytes[byteOffset] & 0xF0u) | encoded);
         } else {
-            constexpr uint8_t encodedShift = 4;
-            dstBytes[byteOffset] = static_cast<uint8_t>((dstBytes[byteOffset] & 0x0Fu) | (encoded << encodedShift));
+            dstBytes[byteOffset] = static_cast<uint8_t>((dstBytes[byteOffset] & 0x0Fu) | (encoded << 4));
         }
     }
 }
 
-template <QuantType quant_type, QuantScaleAlg scale_alg, typename TileDataOut, typename TileDataSrc,
-          typename FlatScalingTile>
+template <QuantType quant_type, typename TileDataOut, typename TileDataSrc, typename FlatScalingTile>
 inline void QuantizeMxGroup(TileDataOut &dst, TileDataSrc &src, FlatScalingTile &flatScaling, int row, int group,
                             int cols, int flatGroupIdx, float groupScaling)
 {
-    constexpr int colGroupSize = 32;
-    for (int inner = 0; inner < colGroupSize; ++inner) {
-        const int col = group * colGroupSize + inner;
-        StoreMxEncodedValue<quant_type, scale_alg>(dst, src, flatScaling, row, col, cols, flatGroupIdx, groupScaling);
+    for (int inner = 0; inner < 32; ++inner) {
+        const int col = group * 32 + inner;
+        StoreMxEncodedValue<quant_type>(dst, src, flatScaling, row, col, cols, flatGroupIdx, groupScaling);
     }
 }
 
@@ -418,9 +412,8 @@ inline void CheckMxQuantTypes()
 template <typename TileDataSrc, typename TileDataExp, typename TileDataMax, typename TileDataScaling>
 inline void CheckMxQuantInputs(TileDataSrc &src, TileDataExp *exp, TileDataMax *max, TileDataScaling *scaling)
 {
-    constexpr unsigned srcColDiv = 32;
     PTO_CPU_ASSERT(exp != nullptr && max != nullptr && scaling != nullptr, "Fix: MX quant requires tiles.");
-    PTO_CPU_ASSERT(src.GetValidCol() % srcColDiv == 0,
+    PTO_CPU_ASSERT(src.GetValidCol() % 32 == 0,
                    "Fix: MX CPU sim currently requires valid cols to be a multiple of 32.");
 }
 
@@ -461,7 +454,7 @@ inline void QuantizeMxTile(TileDataOut &dst, TileDataSrc &src, FlatExpTile &flat
             const float groupScaling = ComputeMxGroupScaling<quant_type, scale_alg>(maxAbsValue, e8m0);
             flatMax.data()[flatGroupIdx] = maxAbsValue;
             flatExp.data()[flatGroupIdx] = e8m0;
-            QuantizeMxGroup<quant_type, scale_alg>(dst, src, flatScaling, row, group, cols, flatGroupIdx, groupScaling);
+            QuantizeMxGroup<quant_type>(dst, src, flatScaling, row, group, cols, flatGroupIdx, groupScaling);
         }
     }
 }
