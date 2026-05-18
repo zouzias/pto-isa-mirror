@@ -128,15 +128,17 @@ bool WriteFile(const std::string &filePath, const void *buffer, size_t size)
 }
 
 template <typename T>
-void DoPrintData(const T *data, size_t count, size_t elementsPerRow)
+bool VerifyProfilingAccuracy(T cycle, float profiling, float accuracy)
 {
-    assert(elementsPerRow != 0);
-    for (size_t i = 0; i < count; ++i) {
-        std::cout << std::setw(5) << data[i];
-        if (i % elementsPerRow == elementsPerRow - 1) {
-            std::cout << std::endl;
-        }
+    const float costResult = static_cast<float>(cycle);
+    const float epsilon = std::numeric_limits<float>::epsilon();
+    if (std::fabs(profiling) <= epsilon) {
+        return std::fabs(costResult) <= epsilon;
     }
+    const float delta = std::fabs(profiling - costResult);
+    const float absProfiling = std::fabs(profiling);
+    return delta <= (1.0f - accuracy) * absProfiling || delta <= epsilon ||
+           delta + accuracy * absProfiling <= absProfiling;
 }
 
 void DoPrintHalfData(const aclFloat16 *data, size_t count, size_t elementsPerRow)

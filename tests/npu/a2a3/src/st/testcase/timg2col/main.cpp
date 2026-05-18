@@ -1,16 +1,19 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include "test_common.h"
-#include "acl/acl.h"
 #include <gtest/gtest.h>
+
+#include "acl/acl.h"
+#include "test_common.h"
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -207,7 +210,8 @@ TEST_F(TIMG2COLTest, case8_int8_splitk)
 {
     timg2col_test<8, int32_t, int8_t>(1, 2, 29, 60, 32, 2, 2, 2, 64, 32, 2, 2, 2, 2, 1, 1, 1, 0);
 }
-TEST_F(TIMG2COLTest, case9_bfloat16_fractalZ4d) // C1HWNC0  -->C1HW  N/ 16 16 C0
+TEST_F(TIMG2COLTest,
+       case9_bfloat16_fractalZ4d) // C1HWNC0  -->C1HW  N/ 16 16 C0
 {
     timg2col_test_fractal4d<9, float, uint16_t>(1, 4, 13, 57, 16, 36, 3, 16, 16, 3, 3, 2, 2, 2, 2, 1, 2, 1, 2);
 }
