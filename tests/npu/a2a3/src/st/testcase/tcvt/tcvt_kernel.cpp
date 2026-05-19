@@ -1,16 +1,19 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_tile.hpp>
+#include <pto/pto-inst.hpp>
+
 #include "acl/acl.h"
 
 using namespace std;
@@ -105,7 +108,8 @@ void launchTCVT(D *dst, S *src, void *stream)
         <<<1, nullptr, stream>>>(reinterpret_cast<DstType *>(dst), reinterpret_cast<SrcType *>(src));
 }
 
-// Macro to generate template instantiations for all shapes for a given type pair
+// Macro to generate template instantiations for all shapes for a given type
+// pair
 #define INSTANTIATE_TCVT(dst_type, src_type)                                                                           \
     template void launchTCVT<dst_type, src_type, 1, 32, 1, 32>(dst_type * dst, src_type * src, void *stream);          \
     template void launchTCVT<dst_type, src_type, 2, 64, 2, 64>(dst_type * dst, src_type * src, void *stream);          \
@@ -157,9 +161,9 @@ INSTANTIATE_TCVT(int32_t, int64_t)
 // ============================================================================
 // Int4b_t (S4) Conversion Kernels
 // ============================================================================
-// int4b_t is a packed 4-bit type (2 elements per byte). TLOAD/TSTORE cannot handle
-// int4b_t directly, so we use uint8_t tiles for DMA and int4b_t tiles for TCVT.
-// kGCols_ is the number of fp16 elements (= number of int4 elements).
+// int4b_t is a packed 4-bit type (2 elements per byte). TLOAD/TSTORE cannot
+// handle int4b_t directly, so we use uint8_t tiles for DMA and int4b_t tiles
+// for TCVT. kGCols_ is the number of fp16 elements (= number of int4 elements).
 // The packed byte count is kGCols_ / 2.
 
 // FP16 → S4: Load fp16 src, TCVT to int4b_t, store packed bytes
@@ -178,7 +182,8 @@ __global__ AICORE void runTCVT_fp16_to_s4(__gm__ uint8_t *out, __gm__ half *src)
 
     using TileSrc = Tile<TileType::Vec, half, kTRows_, kTCols_, BLayout::RowMajor>;
     using TileS4 = Tile<TileType::Vec, int4b_t, kTRows_, kTCols_, BLayout::RowMajor>;
-    // Use kTCols_ cols to match int4b_t tile's RowStride, with dynamic validCols = kPackedCols
+    // Use kTCols_ cols to match int4b_t tile's RowStride, with dynamic validCols
+    // = kPackedCols
     using TileDstBytes = Tile<TileType::Vec, uint8_t, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
 
     GlobalSrc srcGlobal(src);
@@ -240,7 +245,8 @@ __global__ AICORE void runTCVT_s4_to_fp16(__gm__ half *out, __gm__ uint8_t *src)
     using DstStride = pto::Stride<1, 1, 1, kGCols_, 1>;
     using GlobalDst = GlobalTensor<half, DstShape, DstStride>;
 
-    // Use kTCols_ cols to match int4b_t tile's RowStride, with dynamic validCols = kPackedCols
+    // Use kTCols_ cols to match int4b_t tile's RowStride, with dynamic validCols
+    // = kPackedCols
     using TileSrcBytes = Tile<TileType::Vec, uint8_t, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     using TileS4 = Tile<TileType::Vec, int4b_t, kTRows_, kTCols_, BLayout::RowMajor>;
     using TileDst = Tile<TileType::Vec, half, kTRows_, kTCols_, BLayout::RowMajor>;
@@ -349,8 +355,8 @@ __global__ AICORE void runTCVTSaturationTest(__gm__ T *outSaturated, __gm__ T *o
 #endif
 
     // Test 3: Default mode (no explicit saturation parameter)
-    // Uses type-based defaults: OFF for fp16→uint8/int8, fp32/fp16→int16, int64→int32, int32→int16
-    // All other conversions use ON
+    // Uses type-based defaults: OFF for fp16→uint8/int8, fp32/fp16→int16,
+    // int64→int32, int32→int16 All other conversions use ON
     TCVT(dstTileDefault, srcTile, RoundMode::CAST_RINT);
 
 #ifndef __PTO_AUTO__
@@ -401,7 +407,8 @@ template void launchTCVTSaturationTest<int16_t, int32_t, 1, 32, 1, 32>(int16_t *
 // NonSatTorch Test Kernels (with explicit tmp tile)
 // ============================================================================
 // Test kernel that uses an explicit tmp tile to exercise the NonSatTorch path.
-// When EDGE_CASE_ALIGN_ENABLE is 1 and satMode is OFF, this requires a tmp tile.
+// When EDGE_CASE_ALIGN_ENABLE is 1 and satMode is OFF, this requires a tmp
+// tile.
 template <typename T, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kValidRows_ = kTRows_,
           int kValidCols_ = kTCols_>
 __global__ AICORE void runTCVTNonSatTorch(__gm__ T *outTruncated, __gm__ S *src)
