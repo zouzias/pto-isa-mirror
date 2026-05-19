@@ -59,7 +59,8 @@ PTO_INTERNAL void TROWEXPANDSUB_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileD
     unsigned src0ValidRow = src0.GetValidRow();
     unsigned src1ValidRow = src1.GetValidRow();
     unsigned src1ValidCol = src1.GetValidCol();
-    bool src0eqdst = (validRow == src0ValidRow) && (validCol == src0ValidCol);
+    #ifndef __PTO_AUTO__
+    bool src0eqdst = (validRow == src0ValidRow) && (validCol == src0ValidCol) && (src1ValidCol == TileDataSrc1::Cols);
     bool src1eqdst = (validRow == src1ValidRow) && (validCol == src1ValidCol);
     if (src0eqdst && src1eqdst) {
         src0eqdst = (TileDataSrc0::RowStride >= TileDataSrc1::RowStride);
