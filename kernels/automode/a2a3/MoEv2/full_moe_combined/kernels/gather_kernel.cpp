@@ -264,12 +264,14 @@ __global__ AICORE void runGather(
         using WeightGlobal = GlobalTensor<T, WeightShape, WeightStride>;
 
         using ChunkTile  = Tile<TileType::Vec, T, kT, kCombineCols, BLayout::RowMajor, kT, kCombineCols>;
+        using WeightRow  = Tile<TileType::Vec, T, kT, 1,            BLayout::RowMajor, kT, 1>;
         using WeightTile = Tile<TileType::Vec, T, kT, 1,            BLayout::ColMajor, kT, 1>;
 
         ChunkTile accTile;
         ChunkTile dTile;
         ChunkTile scaledTile;
         ChunkTile sumTile;
+        WeightRow weightRow;
         WeightTile weightTile;
 
         for (unsigned col = 0; col < kH; col += kCombineCols) {
@@ -280,7 +282,8 @@ __global__ AICORE void runGather(
                 WeightGlobal weightGlobal(weights_scratch + k);
 
                 TLOAD(dTile, dGlobal);
-                TLOAD(weightTile, weightGlobal);
+                TLOAD(weightRow, weightGlobal);
+                TRESHAPE(weightTile, weightRow);
                 TROWEXPANDMUL(scaledTile, dTile, weightTile);
                 TADD(sumTile, accTile, scaledTile);
                 TMOV(accTile, sumTile);

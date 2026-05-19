@@ -125,9 +125,12 @@ __global__ AICORE void runGather(
         using AIdShape  = Shape <1, 1, 1, kT, 1>;
         using AIdStride = Stride<kT, kT, kT, 1, 1>;
         using AIdGlobal = GlobalTensor<int32_t, AIdShape, AIdStride>;
+        using AIdRow    = Tile<TileType::Vec, int32_t, kT, 1,
+                               BLayout::RowMajor, kT, 1>;
         using AIdCol    = Tile<TileType::Vec, int32_t, kT, 1,
                                BLayout::ColMajor, kT, 1>;
 
+        AIdRow    aIdRow;
         AIdCol    aIdCol;
         AIdCol    baseCol;
         IdxTile   baseTile;
@@ -139,7 +142,8 @@ __global__ AICORE void runGather(
         AIdGlobal aIdGlobal(A_id);
 
         // ---- Hoisted index construction (reused across all H-chunks) ----
-        TLOAD(aIdCol, aIdGlobal);                                  // (kT, 1)
+        TLOAD(aIdRow, aIdGlobal);                                  // ND global -> ND tile
+        TRESHAPE(aIdCol, aIdRow);                                  // DN view for row broadcast
         TMULS(baseCol, aIdCol, static_cast<int32_t>(kChunkH));     // A_id * kChunkH
         TROWEXPAND(baseTile, baseCol);                             // (kT, kChunkH) row-broadcast
         TCI<RampRow, int32_t, /*descending=*/0>(rampRow, 0);       // (1, kChunkH) = [0..kChunkH)
@@ -201,6 +205,8 @@ __global__ AICORE void runGather(
         using WeightShape  = Shape <1, 1, 1, kT, 1>;
         using WeightStride = Stride<kT * kPadded, kT * kPadded, kT * kPadded, kPadded, 1>;
         using WeightGlobal = GlobalTensor<T, WeightShape, WeightStride>;
+        using WeightRow    = Tile<TileType::Vec, T, kT, 1,
+                                  BLayout::RowMajor, kT, 1>;
         using WeightTile   = Tile<TileType::Vec, T, kT, 1,
                                   BLayout::ColMajor, kT, 1>;
 
@@ -280,6 +286,7 @@ __global__ AICORE void runGather(
         RInvKRow   rInvKRow;
         RInvKCol   rInvKCol;
         RInvKCol   rInvKColScaled;
+        WeightRow  weightRow;
         WeightTile weightK;
 
         TCI<RampRow, int32_t, /*descending=*/0>(rampRow, 0);     // (1, kChunkH)
@@ -302,7 +309,8 @@ __global__ AICORE void runGather(
                 TGATHER(gathK, bChunkBig, idxK, tmpK);
 
                 WeightGlobal weightGlobal(weights_scratch + k);
-                TLOAD(weightK, weightGlobal);
+                TLOAD(weightRow, weightGlobal);
+                TRESHAPE(weightK, weightRow);
 
                 TROWEXPANDMUL(scaledK, gathK, weightK);
                 TADD(accChunk, accChunk, scaledK);
