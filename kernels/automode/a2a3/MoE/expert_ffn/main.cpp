@@ -51,6 +51,11 @@ constexpr int kPackedRows   = kT * kTopK;
 constexpr int kOverspillPad = kTileM;
 constexpr int kAlloc        = kPackedRows + kOverspillPad;
 
+// Cube blockAlign for fp16 = 16.  A/W1/W2 are zero-padded to these dims
+// so the GEMM MatTile K/N padding columns read zeros, not garbage UB.
+constexpr int kH_aligned = ((kH + 15) / 16) * 16;
+constexpr int kF_aligned = ((kF + 15) / 16) * 16;
+
 constexpr size_t kHalfBytes  = 2;
 constexpr size_t kFloatBytes = 4;
 
@@ -77,11 +82,11 @@ bool ValidateB(size_t allocBytes)
 
 int main()
 {
-    size_t aBytes      = static_cast<size_t>(kAlloc) * kH                 * kHalfBytes;
-    size_t yBytes      = static_cast<size_t>(kAlloc) * kF                 * kHalfBytes;
-    size_t bBytes      = static_cast<size_t>(kAlloc) * kH                 * kFloatBytes;
-    size_t w1Bytes     = static_cast<size_t>(kE)     * kH * kF            * kHalfBytes;
-    size_t w2Bytes     = static_cast<size_t>(kE)     * kF * kH            * kHalfBytes;
+    size_t aBytes      = static_cast<size_t>(kAlloc) * kH_aligned          * kHalfBytes;
+    size_t yBytes      = static_cast<size_t>(kAlloc) * kF_aligned          * kHalfBytes;
+    size_t bBytes      = static_cast<size_t>(kAlloc) * kH                  * kFloatBytes;
+    size_t w1Bytes     = static_cast<size_t>(kE)     * kH_aligned * kF_aligned * kHalfBytes;
+    size_t w2Bytes     = static_cast<size_t>(kE)     * kF_aligned * kH_aligned * kHalfBytes;
     size_t expBytes    = static_cast<size_t>(kE)                          * sizeof(int32_t);
 
     printf("[main] kT=%d  kH=%d  kF=%d  kE=%d  kTopK=%d  kTileM=%d  kAlloc=%d\n",

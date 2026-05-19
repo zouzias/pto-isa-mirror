@@ -85,6 +85,25 @@ constexpr int kAlloc        = kPackedRows + kOverspillPad;
 // fp32 -> Cols * 4 % 32 == 0 -> Cols % 8 == 0.
 constexpr int kPadded = (kTopK < 8) ? 8 : kTopK;
 
+// router_matmul tile height (must match router_matmul_cfg::kTileM).
+// The loop runs while m0 < kT with stride kTileM, so the last tile reads
+// kTileM rows from X and writes kTileM rows to logits even when kT is not
+// a multiple of kTileM.  Allocate both buffers with the padded row count so
+// the tail TLOAD/TSTORE stays within the device allocation.  The padding
+// rows of X are zero-filled (zero @ W_router = 0) and the padding rows of
+// logits are never read by the topk kernel (it loops over exactly kT rows).
+constexpr int kTileM_router = 128;
+constexpr int kTRouterAlloc = ((kT + kTileM_router - 1) / kTileM_router) * kTileM_router;
+
+// Cube blockAlign for fp16 = 16. W1, W2, Y-scratch, and A are zero-padded to
+// K/N-aligned dimensions so GEMM MatTile padding columns read zeros.
+// NOTE: when kH or kF are not multiples of 16, the scatter kernel still writes
+// A with stride kH (unaligned). For the full pipeline with non-aligned kH,
+// aDev must be zero-initialized and scatter's dstGlobal stride must use
+// kH_aligned — tracked as a known limitation for non-aligned kH.
+constexpr int kH_aligned = ((kH + 15) / 16) * 16;
+constexpr int kF_aligned = ((kF + 15) / 16) * 16;
+
 constexpr size_t kHalfBytes  = 2;
 constexpr size_t kFloatBytes = 4;
 
@@ -97,13 +116,15 @@ int main()
     // ------------------------------------------------------------------------
     // Sizes.
     // ------------------------------------------------------------------------
-    size_t xBytes              = static_cast<size_t>(kT)     * kH         * kHalfBytes;
+    size_t xBytes              = static_cast<size_t>(kT)           * kH      * kHalfBytes;
+    size_t xDevBytes           = static_cast<size_t>(kTRouterAlloc) * kH      * kHalfBytes;  // padded
     size_t wRouterBytes        = static_cast<size_t>(kH)     * kE         * kHalfBytes;
-    size_t w1Bytes             = static_cast<size_t>(kE)     * kH * kF    * kHalfBytes;
-    size_t w2Bytes             = static_cast<size_t>(kE)     * kF * kH    * kHalfBytes;
+    size_t w1Bytes             = static_cast<size_t>(kE) * kH_aligned * kF_aligned * kHalfBytes;
+    size_t w2Bytes             = static_cast<size_t>(kE) * kF_aligned * kH_aligned * kHalfBytes;
     size_t idxInitBytes        = static_cast<size_t>(kE)                  * sizeof(uint32_t);
 
-    size_t logitsBytes         = static_cast<size_t>(kT)     * kE         * kFloatBytes;
+    size_t logitsBytes         = static_cast<size_t>(kT)           * kE    * kFloatBytes;
+    size_t logitsDevBytes      = static_cast<size_t>(kTRouterAlloc) * kE    * kFloatBytes;   // padded
     size_t expertIdBytes       = static_cast<size_t>(kT)     * kTopK      * sizeof(uint32_t);
     size_t outValCompactBytes  = static_cast<size_t>(kT)     * kTopK      * kFloatBytes;
     size_t outValPaddedBytes   = static_cast<size_t>(kT)     * kPadded    * kFloatBytes;
@@ -114,8 +135,8 @@ int main()
     size_t countBytes          = static_cast<size_t>(kE)                  * sizeof(int32_t);
     size_t startBytes          = countBytes;
 
-    size_t yScratchBytes       = static_cast<size_t>(kAlloc) * kF         * kHalfBytes;
-    size_t bBytes              = static_cast<size_t>(kAlloc) * kH         * kFloatBytes;
+    size_t yScratchBytes       = static_cast<size_t>(kAlloc) * kF_aligned  * kHalfBytes;
+    size_t bBytes              = static_cast<size_t>(kAlloc) * kH          * kFloatBytes;
     size_t weightsScratchBytes = static_cast<size_t>(kT)     * kPadded    * kFloatBytes;
 
     size_t cBytes              = static_cast<size_t>(kT)     * kH         * kFloatBytes;
@@ -161,13 +182,13 @@ int main()
     float    *weightsScratchDev = nullptr;
     float    *cDev = nullptr;
 
-    aclrtMalloc((void **)&xDev,               xBytes,              ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&xDev,               xDevBytes,           ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&wRouterDev,         wRouterBytes,        ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&w1Dev,              w1Bytes,             ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&w2Dev,              w2Bytes,             ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&idxInitDev,         idxInitBytes,        ACL_MEM_MALLOC_HUGE_FIRST);
 
-    aclrtMalloc((void **)&logitsDev,          logitsBytes,         ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&logitsDev,          logitsDevBytes,      ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&expertIdDev,        expertIdBytes,       ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&outValCompactDev,   outValCompactBytes,  ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&outValPaddedDev,    outValPaddedBytes,   ACL_MEM_MALLOC_HUGE_FIRST);
@@ -204,7 +225,10 @@ int main()
     // H2D copy: inputs + the pre-padded outVal_padded.
     // C must be zero on entry (gather pass-2 TLOAD-TADD-TSTORE accumulates).
     // ------------------------------------------------------------------------
-    aclrtMemcpy(xDev,         xBytes,       xHost,       xBytes,       ACL_MEMCPY_HOST_TO_DEVICE);
+    // Zero-fill the full padded xDev first so kT..kTRouterAlloc-1 tail rows
+    // that the router_matmul last tile reads are 0 (not garbage device memory).
+    aclrtMemset(xDev, xDevBytes, 0x00, xDevBytes);
+    aclrtMemcpy(xDev,         xDevBytes,    xHost,       xBytes,       ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(wRouterDev,   wRouterBytes, wRouterHost, wRouterBytes, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(w1Dev,        w1Bytes,      w1Host,      w1Bytes,      ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(w2Dev,        w2Bytes,      w2Host,      w2Bytes,      ACL_MEMCPY_HOST_TO_DEVICE);
