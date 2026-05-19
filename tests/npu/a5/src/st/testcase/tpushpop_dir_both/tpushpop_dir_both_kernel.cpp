@@ -1,15 +1,17 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
 #include <pto/common/fifo.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace pto;
 
@@ -37,14 +39,15 @@ AICORE constexpr inline T CeilAlign(T num_1, T num_2)
 }
 
 // Computation flow (DIR_BOTH pipe, a5 local FIFOs):
-//   TILE_UP_DOWN:    split along rows    — each vector handles [M/2, K] and [M/2, N]
-//   TILE_LEFT_RIGHT: split along columns — each vector handles [M, K/2] and [M, N/2]
+//   TILE_UP_DOWN:    split along rows    — each vector handles [M/2, K] and
+//   [M/2, N] TILE_LEFT_RIGHT: split along columns — each vector handles [M,
+//   K/2] and [M, N/2]
 //
 //   Vec: tileC = tileA + tileB  (per vector core)
 //   Vec→Cube (V2C): TPUSH tileC_NZ → Mat FIFO in L1, combined [TOTAL_M, K]
 //   Cube: TPOP [TOTAL_M,K] from Mat FIFO, TLOAD tileD[K,N], tileE = TMATMUL
-//   Cube→Vec (C2V): TPUSH tileE[TOTAL_M,N] → Vec FIFO in UB, vectors pop their portion
-//   Vec: tileG = tileE_part - tileF, TSTORE tileG
+//   Cube→Vec (C2V): TPUSH tileE[TOTAL_M,N] → Vec FIFO in UB, vectors pop their
+//   portion Vec: tileG = tileE_part - tileF, TSTORE tileG
 template <typename T, int TOTAL_M, int K, int N, TileSplitAxis SplitAxis = TileSplitAxis::TILE_UP_DOWN>
 __global__ AICORE void runTPushPopDirBoth(__gm__ T *out, __gm__ T *srcA, __gm__ T *srcB, __gm__ T *srcD, __gm__ T *srcF)
 {

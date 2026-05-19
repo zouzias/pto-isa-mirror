@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_COMMON_TASSIGN_CHECK_HPP
@@ -21,8 +23,7 @@ namespace pto {
 namespace detail {
 
 template <typename TileT, std::size_t Addr>
-struct tassign_static_check {
-};
+struct tassign_static_check {};
 
 } // namespace detail
 } // namespace pto
@@ -129,7 +130,8 @@ struct BufferTraits<TileType::ScaleRight> {
 };
 
 // =============================================================================
-// tassign_static_check: compile-time address validation for TASSIGN<Addr>(tile).
+// tassign_static_check: compile-time address validation for
+// TASSIGN<Addr>(tile).
 //
 // Checks performed (SA-0351 .. SA-0354):
 //   1. Memory space exists on this architecture (capacity != 0).
@@ -167,14 +169,17 @@ struct tassign_static_check {
     //          or reduce the tile size.
     static_assert(capacity == 0 || end_addr <= capacity,
                   "[SA-0353] TASSIGN: addr + tile_size exceeds memory space capacity "
-                  "(out of bounds). Use a smaller address or reduce tile size. (Fix: FIX-A12)");
+                  "(out of bounds). Use a smaller address or reduce tile size. (Fix: "
+                  "FIX-A12)");
 
     // SA-0354: addr is not properly aligned for the target memory space.
     // FIX-A12: Choose an Addr that is a multiple of the alignment requirement
     //          (see include/pto/common/buffer_limits.hpp for values).
     static_assert(alignment == 0 || (Addr % alignment) == 0,
-                  "[SA-0354] TASSIGN: addr is not properly aligned for the target memory space. "
-                  "Addr must be a multiple of the alignment (e.g. 32 bytes). (Fix: FIX-A12)");
+                  "[SA-0354] TASSIGN: addr is not properly aligned for the "
+                  "target memory space. "
+                  "Addr must be a multiple of the alignment (e.g. 32 bytes). "
+                  "(Fix: FIX-A12)");
 };
 
 } // namespace detail
