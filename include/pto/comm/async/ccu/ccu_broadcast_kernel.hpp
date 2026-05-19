@@ -38,8 +38,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "hcomm/ccu/ccu_kernel_signature.h"
 #include "hcomm/ccu/ccu_task_arg_v1.h"
 
-#include "pto/comm/async/ccu/ccu_gate_registry.hpp"
-#include "pto/comm/async/ccu/ccu_mesh_common.hpp"
+#include "pto/npu/comm/async/ccu/ccu_gate_registry.hpp"
 
 namespace pto {
 namespace comm {
@@ -79,33 +78,16 @@ struct CcuBroadcastKernelArg : public hcomm::CcuKernelArg {
     }
 };
 
-static constexpr uint32_t kMaxBroadcastRanks = 16;
-
 struct CcuBroadcastTaskArg : public hcomm::CcuTaskArg {
     uint64_t inputAddr{0};
     uint64_t outputAddr{0};
     uint64_t length{0};
     uint64_t token{0};
 
-    uint32_t peerCount{0};
-    uint64_t peerInput[kMaxBroadcastRanks]{};
-    uint64_t peerOutput[kMaxBroadcastRanks]{};
-    uint64_t peerToken[kMaxBroadcastRanks]{};
-
     CcuBroadcastTaskArg() = default;
     CcuBroadcastTaskArg(uint64_t in, uint64_t out, uint64_t len, uint64_t tok)
         : inputAddr(in), outputAddr(out), length(len), token(tok)
     {}
-
-    void SetPeerAddrs(uint32_t rankSize, const uint64_t *inputs, const uint64_t *outputs, const uint64_t *tokens)
-    {
-        peerCount = rankSize;
-        for (uint32_t i = 0; i < rankSize && i < kMaxBroadcastRanks; ++i) {
-            peerInput[i] = inputs[i];
-            peerOutput[i] = outputs[i];
-            peerToken[i] = tokens[i];
-        }
-    }
 };
 
 // ============================================================================
@@ -114,6 +96,9 @@ struct CcuBroadcastTaskArg : public hcomm::CcuTaskArg {
 
 namespace detail {
 
+constexpr uint32_t BC_INPUT_XN_ID = 0;
+constexpr uint32_t BC_OUTPUT_XN_ID = 1;
+constexpr uint32_t BC_TOKEN_XN_ID = 2;
 constexpr uint32_t BC_POST_SYNC_ID = 3;
 constexpr uint32_t BC_CKE_IDX_0 = 0;
 
@@ -123,9 +108,9 @@ inline void BroadcastTrace(const char *tag, uint32_t rank, const char *msg)
     std::fflush(stderr);
 }
 
-class CcuBroadcastMesh1D : public CcuMeshKernelBase {
+class CcuBroadcastMesh1D : public hcomm::CcuKernel {
 public:
-    inline explicit CcuBroadcastMesh1D(const hcomm::CcuKernelArg &arg) : CcuMeshKernelBase(arg)
+    inline explicit CcuBroadcastMesh1D(const hcomm::CcuKernelArg &arg) : CcuKernel(arg)
     {
         const auto *kArg = dynamic_cast<const CcuBroadcastKernelArg *>(&arg);
         if (kArg != nullptr) {
@@ -170,6 +155,8 @@ public:
         WaitEvent(gateEvent_);
         BroadcastTrace("algo", rankId_, "gate released");
 
+        PreSync();
+
         if (rankId_ == rootId_) {
             DoBroadcast();
         }
@@ -195,15 +182,15 @@ public:
 
         std::fprintf(stderr,
                      "[CCU_BROADCAST/gene] rank=%u published (die=%u, cke=%u, mask=0x%x) "
-                     "input=0x%llx output=0x%llx len=%llu token=0x%llx peerCount=%u gateOnly=%d\n",
+                     "input=0x%llx output=0x%llx len=%llu token=0x%llx gateOnly=%d\n",
                      rankId_, dieId, ckeId, gateMask_, static_cast<unsigned long long>(tArg->inputAddr),
                      static_cast<unsigned long long>(tArg->outputAddr), static_cast<unsigned long long>(tArg->length),
-                     static_cast<unsigned long long>(tArg->token), tArg->peerCount, static_cast<int>(gateOnly_));
+                     static_cast<unsigned long long>(tArg->token), static_cast<int>(gateOnly_));
 
         if (gateOnly_) {
             return {};
         }
-        return PackPeerArgs(rankSize_, tArg->peerInput, tArg->peerOutput, tArg->peerToken, tArg->length);
+        return {tArg->inputAddr, tArg->outputAddr, tArg->token, tArg->length};
     }
 
 private:
@@ -245,10 +232,22 @@ private:
 
     inline HcclResult InitResourceWithChannels()
     {
+        uint16_t channelIdx = 0;
         for (uint32_t peerId = 0; peerId < rankSize_; peerId++) {
-            input_.push_back(CreateVariable());
-            output_.push_back(CreateVariable());
-            token_.push_back(CreateVariable());
+            if (peerId == rankId_) {
+                input_.push_back(CreateVariable());
+                output_.push_back(CreateVariable());
+                token_.push_back(CreateVariable());
+            } else {
+                hcomm::CcuRep::Variable inputVar, outputVar, tokenVar;
+                (void)CreateVariable(ownChannels_[channelIdx], BC_INPUT_XN_ID, &inputVar);
+                input_.push_back(inputVar);
+                (void)CreateVariable(ownChannels_[channelIdx], BC_OUTPUT_XN_ID, &outputVar);
+                output_.push_back(outputVar);
+                (void)CreateVariable(ownChannels_[channelIdx], BC_TOKEN_XN_ID, &tokenVar);
+                token_.push_back(tokenVar);
+                channelIdx++;
+            }
         }
 
         lengthVar_ = CreateVariable();
@@ -273,12 +272,34 @@ private:
 
     inline void LoadArgs()
     {
-        LoadPeerArgs(input_, output_, token_, lengthVar_);
+        Load(input_[rankId_]);
+        Load(output_[rankId_]);
+        Load(token_[rankId_]);
+        Load(lengthVar_);
+    }
+
+    inline void PreSync()
+    {
+        for (auto ch : ownChannels_) {
+            (void)NotifyRecord(ch, BC_CKE_IDX_0, BC_INPUT_XN_ID, input_[rankId_], 1u << BC_INPUT_XN_ID);
+            (void)NotifyRecord(ch, BC_CKE_IDX_0, BC_OUTPUT_XN_ID, output_[rankId_], 1u << BC_OUTPUT_XN_ID);
+            (void)NotifyRecord(ch, BC_CKE_IDX_0, BC_TOKEN_XN_ID, token_[rankId_], 1u << BC_TOKEN_XN_ID);
+        }
+        uint32_t allBit = (1u << BC_INPUT_XN_ID) | (1u << BC_OUTPUT_XN_ID) | (1u << BC_TOKEN_XN_ID);
+        for (auto ch : ownChannels_) {
+            (void)NotifyWait(ch, BC_CKE_IDX_0, allBit);
+        }
+        BroadcastTrace("sync", rankId_, "PreSync done");
     }
 
     inline void PostSync()
     {
-        NotifyBarrier(ownChannels_, BC_CKE_IDX_0, BC_POST_SYNC_ID);
+        for (auto &ch : ownChannels_) {
+            (void)NotifyRecord(ch, BC_CKE_IDX_0, 1u << BC_POST_SYNC_ID);
+        }
+        for (auto &ch : ownChannels_) {
+            (void)NotifyWait(ch, BC_CKE_IDX_0, 1u << BC_POST_SYNC_ID);
+        }
         BroadcastTrace("sync", rankId_, "PostSync done");
     }
 

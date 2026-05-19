@@ -192,13 +192,14 @@ bool RunPrefetchAsyncCorrectness(int deviceId)
     FillAndUpload<T>(env, count, 1000);
 
     SdmaWorkspaceManager sdmaMgr;
-    if (!sdmaMgr.Init()) {
+    bool sdmaOk = sdmaMgr.Init();
+    if (!sdmaOk) {
         std::cerr << "[WARN] SdmaWorkspaceManager Init failed - prefetch will be skipped inside kernel" << std::endl;
     }
+    uint8_t *wsAddr = sdmaOk ? reinterpret_cast<uint8_t *>(sdmaMgr.GetWorkspaceAddr()) : nullptr;
 
-    TPrefetchAsyncCorrectnessKernel<T, count>
-        <<<1, nullptr, env.stream>>>(reinterpret_cast<T *>(env.srcDevice), reinterpret_cast<T *>(env.dstDevice),
-                                     static_cast<int>(count), reinterpret_cast<uint8_t *>(sdmaMgr.GetWorkspaceAddr()));
+    TPrefetchAsyncCorrectnessKernel<T, count><<<1, nullptr, env.stream>>>(
+        reinterpret_cast<T *>(env.srcDevice), reinterpret_cast<T *>(env.dstDevice), static_cast<int>(count), wsAddr);
     env.SyncAndReadBack();
 
     bool is_ok = VerifyOutputAndPrint<T>(env, count, 1000, "TPREFETCH_ASYNC GlobalTensor correctness");
