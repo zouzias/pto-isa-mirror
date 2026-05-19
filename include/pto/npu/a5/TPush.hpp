@@ -30,12 +30,17 @@ struct TPipe {
     static constexpr bool is_c2v_gm = (DIR_TYPE == Direction::DIR_C2V_GM);     // 5
     static constexpr bool is_v2c_gm = (DIR_TYPE == Direction::DIR_V2C_GM);     // 6
     static constexpr bool is_both_gm = (DIR_TYPE == Direction::DIR_BOTH_GM);   // 7
-    static constexpr uint32_t SyncPeriod = (SlotNum <= 2) ? SlotNum : SlotNum / 2;
+    static constexpr uint32_t SyncPeriod = SlotNum;
+    static constexpr uint8_t FlagIDPlusOne = FlagID + 1;
+    static constexpr uint8_t FlagIDPlusTwo = FlagID + 2;
+    static constexpr uint8_t FlagIDPlusThree = FlagID + 3;
     static constexpr bool is_c2v = is_c2v_gm || is_c2v_ub;
     static constexpr bool is_v2c = is_v2c_gm || is_v2c_mat || is_v2c_ctrl;
     static_assert(is_c2v || is_v2c || is_both || is_both_gm,
                   "Fix: TPipe only supports C2V or V2C or Both communication on A5.");
     static constexpr uint8_t VEC_CORE_ID_OFFSET = 16;
+    static_assert(FlagIDPlusOne < 16,
+                  "Fix: With Both direction, FlagID + 1 must be less than 16 due to hardware limit.");
 
     // -------------------------------------------------------------------------
     // RingFiFo
@@ -44,23 +49,20 @@ struct TPipe {
 
     PTO_INTERNAL static bool shouldWaitFree(uint32_t tileIndex)
     {
-        // Startup protection: Don't check flags when buffer is empty
         if constexpr (SlotNum == 1) {
-            return true;
+            return true; // With only 1 slot, producer must always wait for consumer to free
         } else {
             if (tileIndex < SlotNum) {
                 return false;
             }
-            // Sparse sync: Only check flags periodically to reduce overhead
             return (tileIndex % SyncPeriod) == 0;
         }
     }
 
     PTO_INTERNAL static bool shouldNotifyFree(uint32_t tileIndex)
     {
-        // Notify consumer to free buffer when producer is one slot ahead of consumer
         if constexpr (SlotNum == 1) {
-            return true;
+            return true; // With only 1 slot, producer must always notify consumer to free
         } else {
             return ((tileIndex + 1) % SyncPeriod) == 0;
         }
@@ -147,29 +149,33 @@ struct TPipe {
         {
             if constexpr (is_c2v) {
 #ifdef __DAV_CUBE__
-                waitIntraBlockBySplit<PIPE_FIX, Split>(FlagID + 1);
+                waitIntraBlockBySplit<PIPE_FIX, Split>(FlagIDPlusOne);
 #endif
             } else if constexpr (is_v2c_gm || is_v2c_mat) { // is_v2c (both gm and mat)
 #ifdef __DAV_VEC__
-                wait_intra_block(PIPE_MTE3, FlagID + 1);
+                wait_intra_block(PIPE_MTE3, FlagIDPlusOne);
 #endif
             } else if constexpr (is_both) {
 #ifdef __DAV_CUBE__
-                waitIntraBlockBySplit<PIPE_FIX, Split>(FlagID + 1);
+                waitIntraBlockBySplit<PIPE_FIX, Split>(FlagIDPlusOne);
 #endif
 #ifdef __DAV_VEC__
-                wait_intra_block(PIPE_MTE3, FlagID + 3);
+                static_assert(FlagIDPlusThree < 16,
+                              "Fix: With Both direction, FlagID + 3 must be less than 16 due to hardware limit.");
+                wait_intra_block(PIPE_MTE3, FlagIDPlusThree);
 #endif
             } else if constexpr (is_v2c_ctrl) {
 #ifdef __DAV_VEC__
-                wait_intra_block(PIPE_S, FlagID + 1);
+                wait_intra_block(PIPE_S, FlagIDPlusOne);
 #endif
             } else if constexpr (is_both_gm) {
 #ifdef __DAV_CUBE__
-                waitIntraBlockBySplit<PIPE_FIX, Split>(FlagID + 1);
+                waitIntraBlockBySplit<PIPE_FIX, Split>(FlagIDPlusOne);
 #endif
 #ifdef __DAV_VEC__
-                wait_intra_block(PIPE_MTE3, FlagID + 3);
+                static_assert(FlagIDPlusThree < 16,
+                              "Fix: With Both direction, FlagID + 3 must be less than 16 due to hardware limit.");
+                wait_intra_block(PIPE_MTE3, FlagIDPlusThree);
 #endif
             }
         }
@@ -193,13 +199,13 @@ struct TPipe {
                 setIntraBlockBySplit<PIPE_FIX, Split>(FlagID);
 #endif
 #ifdef __DAV_VEC__
-                set_intra_block(PIPE_MTE3, FlagID + 2);
+                set_intra_block(PIPE_MTE3, FlagIDPlusTwo);
 #endif
             } else if constexpr (is_v2c_ctrl) {
                 set_intra_block(PIPE_S, FlagID);
             } else if constexpr (is_both_gm) {
 #ifdef __DAV_VEC__
-                set_intra_block(PIPE_MTE3, FlagID + 2);
+                set_intra_block(PIPE_MTE3, FlagIDPlusTwo);
 #endif
 #ifdef __DAV_CUBE__
                 setIntraBlockBySplit<PIPE_FIX, Split>(FlagID);
@@ -427,16 +433,16 @@ struct TPipe {
                 wait_intra_block(PIPE_V, FlagID);
 #endif
 #ifdef __DAV_CUBE__ // v2c_mat
-                waitIntraBlockBySplit<PIPE_MTE1, Split>(FlagID + 2);
+                waitIntraBlockBySplit<PIPE_MTE1, Split>(FlagIDPlusTwo);
 #endif
             } else if constexpr (is_v2c_ctrl) {
                 waitIntraBlockBySplit<PIPE_S, Split>(FlagID);
             } else if constexpr (is_both_gm) {
 #ifdef __DAV_VEC__
-                wait_intra_block(PIPE_MTE2, FlagID + 1);
+                wait_intra_block(PIPE_MTE2, FlagIDPlusOne);
 #endif
 #ifdef __DAV_CUBE__
-                waitIntraBlockBySplit<PIPE_MTE2, Split>(FlagID + 2);
+                waitIntraBlockBySplit<PIPE_MTE2, Split>(FlagIDPlusTwo);
 #endif
             }
         }
@@ -449,33 +455,37 @@ struct TPipe {
         {
             if constexpr (is_c2v_gm) {
 #ifdef __DAV_VEC__
-                set_intra_block(PIPE_MTE2, FlagID + 1);
+                set_intra_block(PIPE_MTE2, FlagIDPlusOne);
 #endif
             } else if constexpr (is_c2v_ub) {
 #ifdef __DAV_VEC__
-                set_intra_block(PIPE_V, FlagID + 1);
+                set_intra_block(PIPE_V, FlagIDPlusOne);
 #endif
             } else if constexpr (is_both) {
 #ifdef __DAV_VEC__
-                set_intra_block(PIPE_V, FlagID + 1);
+                set_intra_block(PIPE_V, FlagIDPlusOne);
 #endif
 #ifdef __DAV_CUBE__
-                setIntraBlockBySplit<PIPE_MTE1, Split>(FlagID + 3);
+                static_assert(FlagIDPlusThree < 16,
+                              "Fix: With Both direction, FlagID + 3 must be less than 16 due to hardware limit.");
+                setIntraBlockBySplit<PIPE_MTE1, Split>(FlagIDPlusThree);
 #endif
             } else if constexpr (is_v2c_gm || is_v2c_mat) {
 #ifdef __DAV_CUBE__
-                setIntraBlockBySplit<PIPE_MTE1, Split>(FlagID + 1);
+                setIntraBlockBySplit<PIPE_MTE1, Split>(FlagIDPlusOne);
 #endif
             } else if constexpr (is_v2c_ctrl) {
 #ifdef __DAV_CUBE__
-                setIntraBlockBySplit<PIPE_S, Split>(FlagID + 1);
+                setIntraBlockBySplit<PIPE_S, Split>(FlagIDPlusOne);
 #endif
             } else if constexpr (is_both_gm) {
 #ifdef __DAV_VEC__
-                set_intra_block(PIPE_MTE2, FlagID + 1);
+                set_intra_block(PIPE_MTE2, FlagIDPlusOne);
 #endif
 #ifdef __DAV_CUBE__
-                setIntraBlockBySplit<PIPE_MTE1, Split>(FlagID + 3);
+                static_assert(FlagIDPlusThree < 16,
+                              "Fix: With Both direction, FlagID + 3 must be less than 16 due to hardware limit.");
+                setIntraBlockBySplit<PIPE_MTE1, Split>(FlagIDPlusThree);
 #endif
             }
         }
@@ -611,7 +621,11 @@ struct TPipe {
     // Destructor for TPipe
     PTO_INTERNAL ~TPipe()
     {
-        for (uint32_t i = 0; i < SyncPeriod; ++i) {
+        uint32_t drainCount = SyncPeriod;
+        if (SlotNum > 1 && prod.tileIndex % SyncPeriod == 0 && prod.tileIndex > 0) {
+            drainCount += 1;
+        }
+        for (uint32_t i = 0; i < drainCount; ++i) {
             if constexpr (IsNoSplit) {
                 prod.template allocate<TileSplitAxis::TILE_NO_SPLIT>();
             } else {
@@ -665,6 +679,7 @@ template <uint8_t FlagID, FIFOType FiFoType, uint8_t FiFoDepth, uint8_t FiFoSync
           typename TileDataCons, bool EN_UNIT_FLAG = false, uint8_t LocalFiFoDepth = 2,
           VecCubeRatio VCRatio = VecCubeRatio::V2C1_VECS>
 struct TMPipe {
+    static constexpr uint8_t FlagIDPlusOne = FlagID + 1;
     static constexpr bool is_c2v_gm =
         (FiFoType == FIFOType::GM_FIFO) && (TileDataProd::Loc == TileType::Acc) && (TileDataCons::Loc == TileType::Vec);
     static constexpr bool is_c2v_ub = (FiFoType == FIFOType::VEC_FIFO) && (TileDataProd::Loc == TileType::Acc) &&
@@ -680,8 +695,9 @@ struct TMPipe {
     static_assert(
         is_c2v || is_v2c,
         "TPipe currently only supports Cube-to-Vec or Vec-to-Cube communication with specified tile and FIFO types.");
-
     static constexpr int VEC_CORE_ID_OFFSET = 16;
+    static_assert(FlagIDPlusOne < 16,
+                  "Fix: With single direction, FlagID + 1 must be less than 16 due to hardware limit.");
 
     using DataFiFo =
         std::conditional_t<(FiFoType == FIFOType::GM_FIFO),
@@ -753,21 +769,21 @@ struct TMPipe {
                 // Vec signals on flag_id+1 only, but Cube must wait on BOTH
                 // (because Vec0 signals flag_id+1, Vec1 signals flag_id+1+16 from Cube's view)
 #ifdef __DAV_CUBE__
-                wait_intra_block(PIPE_FIX, FlagID + 1);
-                wait_intra_block(PIPE_FIX, FlagID + 1 + VEC_CORE_ID_OFFSET);
+                wait_intra_block(PIPE_FIX, FlagIDPlusOne);
+                wait_intra_block(PIPE_FIX, FlagIDPlusOne + VEC_CORE_ID_OFFSET);
 #endif
             } else if constexpr (is_v2c_gm || is_v2c_mat) {
                 // is_v2c (both gm and mat)
                 // Vec producer waits for Cube consumer to free buffer
                 // Cube signals on BOTH, Vec waits on flag_id+1 only
 #ifdef __DAV_VEC__
-                wait_intra_block(PIPE_MTE3, FlagID + 1);
+                wait_intra_block(PIPE_MTE3, FlagIDPlusOne);
 #endif
             } else if constexpr (is_v2c_ctrl) {
                 // is_v2c_ctrl
                 // Control signals from Vec to Cube: Vec signals on flag_id, Cube waits on flag_id only
 #ifdef __DAV_VEC__
-                wait_intra_block(PIPE_S, FlagID + 1);
+                wait_intra_block(PIPE_S, FlagIDPlusOne);
 #endif
             }
         }
@@ -1053,29 +1069,29 @@ struct TMPipe {
             if constexpr (is_c2v_gm) {
                 // Vec consumer frees buffer for Cube - signals on PIPE_MTE2, flag_id+1 only
 #ifdef __DAV_VEC__
-                uint8_t freeCubeID = FlagID + 1;
+                uint8_t freeCubeID = FlagIDPlusOne;
                 set_intra_block(PIPE_MTE2, freeCubeID);
 #endif
             } else if constexpr (is_c2v_ub) {
                 // Vec consumer frees buffer for Cube - signals on PIPE_V, flag_id+1 only
                 // Vec signals after vector ops complete (PIPE_V)
 #ifdef __DAV_VEC__
-                uint8_t freeCubeID = FlagID + 1;
+                uint8_t freeCubeID = FlagIDPlusOne;
                 set_intra_block(PIPE_V, freeCubeID);
 #endif
             } else if constexpr (is_v2c_gm || is_v2c_mat) { // is_v2c (both gm and mat)
                 // Cube consumer frees buffer for Vec - signals BOTH flags on PIPE_MTE1
 #ifdef __DAV_CUBE__
-                uint8_t freeVec0ID = FlagID + 1;
-                uint8_t freeVec1ID = FlagID + 1 + VEC_CORE_ID_OFFSET;
+                uint8_t freeVec0ID = FlagIDPlusOne;
+                uint8_t freeVec1ID = FlagIDPlusOne + VEC_CORE_ID_OFFSET;
                 set_intra_block(PIPE_MTE1, freeVec0ID);
                 set_intra_block(PIPE_MTE1, freeVec1ID);
 #endif
             } else { // is_v2c_ctrl
                      // Control signals from Vec to Cube: Vec signals on flag_id, Cube waits on flag_id only
 #ifdef __DAV_CUBE__
-                uint8_t freeVec0ID = FlagID + 1;
-                uint8_t freeVec1ID = FlagID + 1 + VEC_CORE_ID_OFFSET;
+                uint8_t freeVec0ID = FlagIDPlusOne;
+                uint8_t freeVec1ID = FlagIDPlusOne + VEC_CORE_ID_OFFSET;
                 set_intra_block(PIPE_S, freeVec0ID);
                 set_intra_block(PIPE_S, freeVec1ID);
 #endif
