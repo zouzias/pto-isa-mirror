@@ -30,10 +30,10 @@ using namespace pto;
 namespace router_matmul_cfg {
 constexpr unsigned kH     = 64;   // d_model (input hidden dim)
 constexpr unsigned kE     = 32;   // num_experts
-constexpr unsigned kTileM = 128;  // token tile height (cube M dimension)
+constexpr unsigned kTileM = 128;  // max token tile height (cube M dimension)
 constexpr unsigned kT     = 256;  // total tokens; tail rows are handled dynamically.
 
-constexpr int kL1LoadBudgetBytes = 1 << 17;  // X panel + full-row W_router panel, fp16.
+constexpr int kWorkingSetBudgetBytes = 1 << 16;  // X panel + full-row W_router panel + fp32 logits tile.
 constexpr int kL0ABudgetBytes    = 64 * 1024;
 constexpr int kL0BBudgetBytes    = 64 * 1024;
 constexpr int kL0CBudgetBytes    = 128 * 1024;
@@ -59,11 +59,35 @@ AICORE inline constexpr int chooseDivisibleKBlock(int totalK, int maxK, int alig
     }
     return 0;
 }
+
+AICORE inline constexpr int chooseMBlock(int maxM, int n, int kMin, int inBytes, int weightBytes, int outBytes,
+                                         int budget, int align)
+{
+    const int minWeightBytes = kMin * n * weightBytes;
+    if (minWeightBytes >= budget) {
+        return 0;
+    }
+    const int maxByBudget = (budget - minWeightBytes) / (kMin * inBytes + n * outBytes);
+    const int block = alignDownTo(minInt(maxM, maxByBudget), align);
+    return block >= align ? block : 0;
+}
+
+AICORE inline constexpr int chooseKPanel(int totalK, int m, int n, int inBytes, int weightBytes, int outBytes,
+                                         int budget, int align)
+{
+    const int cBytes = m * n * outBytes;
+    if (cBytes >= budget) {
+        return 0;
+    }
+    const int maxK = (budget - cBytes) / (m * inBytes + n * weightBytes);
+    return chooseDivisibleKBlock(totalK, maxK, align);
+}
 }  // namespace router_matmul_cfg
 
 // Two-level K tiling:
-//   GM -> L1: load K_l1 panels whose X + full-row W_router footprint is <= 2^17 bytes.
+//   GM -> L1: load K_l1 panels while X + full-row W_router + logits tile is <= 2^16 bytes.
 //   L1 -> L0: TEXTRACT K_l0 slices into L0A/L0B, then accumulate into one L0C tile.
+//   GM store: write each M-tile's logits to GM before moving to the next M tile.
 template <typename TOut, typename TIn, typename TWeight>
 __global__ AICORE void runRouterMatmul(
     __gm__ uint8_t *logits_raw,
@@ -77,23 +101,32 @@ __global__ AICORE void runRouterMatmul(
     __gm__ TWeight *w_router = reinterpret_cast<__gm__ TWeight *>(w_router_raw);
 
     constexpr int blockAlign = C0_SIZE_BYTE / sizeof(TIn);
-    constexpr int M = ((kTileM + 15) / 16) * 16;
+    constexpr int mAlign = 16;
+    constexpr int M_max = ((kTileM + mAlign - 1) / mAlign) * mAlign;
     constexpr int K = ((kH + blockAlign - 1) / blockAlign) * blockAlign;
     constexpr int N = ((kE + blockAlign - 1) / blockAlign) * blockAlign;
 
     static_assert(kH % blockAlign == 0, "router_matmul currently requires kH to be block-aligned.");
+
+    constexpr int M_raw = chooseMBlock(M_max, N, blockAlign, static_cast<int>(sizeof(TIn)),
+                                       static_cast<int>(sizeof(TWeight)), static_cast<int>(sizeof(TOut)),
+                                       kWorkingSetBudgetBytes, mAlign);
+    static_assert(M_raw >= mAlign,
+                  "No valid M tile: full-row W_router plus one aligned X/logits tile exceeds the 2^16-byte cap.");
+    constexpr int M = (M_raw >= mAlign) ? M_raw : mAlign;
     static_assert(static_cast<size_t>(M) * N * sizeof(TOut) <= kL0CBudgetBytes,
                   "Accumulator tile exceeds L0C; reduce kTileM or kE.");
 
-    constexpr int K_l1_max =
-        kL1LoadBudgetBytes / (M * static_cast<int>(sizeof(TIn)) + N * static_cast<int>(sizeof(TWeight)));
-    constexpr int K_l1_raw = chooseDivisibleKBlock(K, K_l1_max, blockAlign);
+    constexpr int K_l1_raw =
+        chooseKPanel(K, M, N, static_cast<int>(sizeof(TIn)), static_cast<int>(sizeof(TWeight)),
+                     static_cast<int>(sizeof(TOut)), kWorkingSetBudgetBytes, blockAlign);
     static_assert(K_l1_raw >= blockAlign,
-                  "No valid K_l1: X panel + full-row W_router panel exceeds the 2^17-byte L1 cap.");
+                  "No valid K_l1: X panel + full-row W_router panel + logits tile exceeds the 2^16-byte cap.");
     constexpr int K_l1 = (K_l1_raw >= blockAlign) ? K_l1_raw : blockAlign;
     static_assert((static_cast<size_t>(M) * K_l1 * sizeof(TIn) +
-                   static_cast<size_t>(K_l1) * N * sizeof(TWeight)) <= kL1LoadBudgetBytes,
-                  "L1 panel budget exceeded: X + full-row W_router must be <= 2^17 bytes.");
+                   static_cast<size_t>(K_l1) * N * sizeof(TWeight) +
+                   static_cast<size_t>(M) * N * sizeof(TOut)) <= kWorkingSetBudgetBytes,
+                  "Working-set budget exceeded: X + full-row W_router + logits must be <= 2^16 bytes.");
 
     constexpr int K_l0_max_L0A = kL0ABudgetBytes / (M * static_cast<int>(sizeof(TIn)));
     constexpr int K_l0_max_L0B = kL0BBudgetBytes / (N * static_cast<int>(sizeof(TWeight)));
@@ -113,13 +146,13 @@ __global__ AICORE void runRouterMatmul(
     using GlobalShapeC = Shape<1, 1, 1, DYNAMIC, kE>;
     using GlobalDataA =
         GlobalTensor<TIn,     GlobalShapeA,
-                     Stride<kTileM * kH, kTileM * kH, kTileM * kH, kH, 1>>;
+                     Stride<M * kH, M * kH, M * kH, kH, 1>>;
     using GlobalDataB =
         GlobalTensor<TWeight, Shape<1, 1, 1, K_l1, kE>,
                      Stride<K_l1 * kE, K_l1 * kE, K_l1 * kE, kE, 1>>;
     using GlobalDataC =
         GlobalTensor<TOut,    GlobalShapeC,
-                     Stride<kTileM * kE, kTileM * kE, kTileM * kE, kE, 1>>;
+                     Stride<M * kE, M * kE, M * kE, kE, 1>>;
 
     using TileMatAData = Tile<TileType::Mat, TIn,     M, K_l1, BLayout::ColMajor,
                               DYNAMIC, K_l1, SLayout::RowMajor, 512>;
@@ -130,14 +163,14 @@ __global__ AICORE void runRouterMatmul(
     using RightTile = TileRight<TWeight, K_l0, N, K_l0, kE>;
     using AccTile   = TileAcc  <TOut,    M, N, DYNAMIC, kE>;  // valid kE cols -> logits
 
-    TileMatAData aMatTile(kTileM);
+    TileMatAData aMatTile(M);
     TileMatBData bMatTile;
-    LeftTile     aTile(kTileM);
+    LeftTile     aTile(M);
     RightTile    bTile;
-    AccTile      cTile(kTileM);
+    AccTile      cTile(M);
 
-    for (unsigned m0 = 0; m0 < kT; m0 += kTileM) {
-        const unsigned currentM = ((m0 + kTileM) <= kT) ? kTileM : (kT - m0);
+    for (unsigned m0 = 0; m0 < kT; m0 += M) {
+        const unsigned currentM = ((m0 + M) <= kT) ? M : (kT - m0);
         aMatTile.SetValidRow(currentM);
         aTile.SetValidRow(currentM);
         cTile.SetValidRow(currentM);
