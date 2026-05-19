@@ -450,6 +450,66 @@ __tf__ PTO_INTERNAL void TTransConvNCHW2NC1HWC0(typename TileDataDst::TileDType 
     }
 }
 
+template <typename T, unsigned blockSizeElem>
+PTO_INTERNAL void ConvNC1HWC02NCHWUnalign(__ubuf__ T *dst, __ubuf__ T *src, unsigned srcN, unsigned srcC1,
+                                          unsigned srcH, unsigned srcW, unsigned srcC0)
+{
+    unsigned validCol = srcC0;
+    unsigned validRow = srcH * srcW;
+    unsigned srcStride = srcC0;
+    unsigned dstStride = srcH * srcW;
+    unsigned nStride = srcC1 * srcH * srcW * srcC0;
+    unsigned cStride = srcC0 * srcH * srcW;
+    constexpr unsigned yTileSizeElem = (sizeof(T) == 1) ? Y_ELEM_B8 : Y_ELEM_OTHER;
+    // N C1 HW C0 -> N C1 C0 HW
+    for (int n = 0; n < srcN; n++) {
+        for (int c = 0; c < srcC1; c++) {
+            __ubuf__ T *srcPtr = src + n * nStride + c * cStride;
+            __ubuf__ T *dstPtr = dst + n * nStride + c * cStride;
+            // tmpStride should computed in static way
+            unsigned tmpStride = (validRow + yTileSizeElem - 1) / yTileSizeElem * yTileSizeElem;
+            TransTailTiles<T, blockSizeElem, yTileSizeElem>(dstPtr, srcPtr, tmpStride, validRow, validCol, dstStride,
+                                                            srcStride);
+        }
+    }
+}
+
+template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, unsigned blockSizeElem>
+__tf__ PTO_INTERNAL void TTransConvNC1HWC02NCHW(typename TileDataDst::TileDType __out__ dst,
+                                                typename TileDataSrc::TileDType __in__ src,
+                                                typename TileDataTmp::TileDType __in__ tmp, unsigned srcN,
+                                                unsigned srcC1, unsigned srcH, unsigned srcW, unsigned srcC0)
+{
+    using Tdst = typename TileDataDst::DType;
+    using Tsrc = typename TileDataSrc::DType;
+    using Ttmp = typename TileDataTmp::DType;
+
+    __ubuf__ Tdst *dstPtrOrig = (__ubuf__ Tdst *)__cce_get_tile_ptr(dst);
+    __ubuf__ Tsrc *srcPtrOrig = (__ubuf__ Tsrc *)__cce_get_tile_ptr(src);
+    __ubuf__ Ttmp *tmpPtr = (__ubuf__ Ttmp *)__cce_get_tile_ptr(tmp);
+    unsigned validCol = srcC0;
+    unsigned validRow = srcH * srcW;
+    unsigned srcStride = srcC0;
+    unsigned dstStride = srcH * srcW;
+
+    if (((dstStride % blockSizeElem) != 0) || ((srcStride % blockSizeElem) != 0) || srcStride / blockSizeElem > 255) {
+        ConvNC1HWC02NCHWUnalign<Tsrc, blockSizeElem>(dstPtrOrig, srcPtrOrig, srcN, srcC1, srcH, srcW, srcC0);
+        return;
+    }
+
+    unsigned nStride = srcC1 * srcH * srcW * srcC0;
+    unsigned cStride = srcC0 * srcH * srcW;
+    // N C1 HW C0 -> N C1 C0 HW
+    for (int n = 0; n < srcN; n++) {
+        for (int c = 0; c < srcC1; c++) {
+            __ubuf__ Tsrc *srcPtr = srcPtrOrig + n * nStride + c * cStride;
+            __ubuf__ Tdst *dstPtr = dstPtrOrig + n * nStride + c * cStride;
+            TTransRepeatXOperation<Tsrc, blockSizeElem>(dstPtr, srcPtr, tmpPtr, validRow, validCol, dstStride,
+                                                        srcStride);
+        }
+    }
+}
+
 template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, unsigned blockSizeElem>
 __tf__ PTO_INTERNAL void TTransConvNC1HWC02C1HWNC0(typename TileDataDst::TileDType __out__ dst,
                                                    typename TileDataSrc::TileDType __in__ src,
@@ -558,6 +618,69 @@ __tf__ PTO_INTERNAL void TTransConvGNCHW2GNC1HWC0(typename TileDataDst::TileDTyp
     for (unsigned g = 0; g < srcG; g++) {
         for (unsigned n = 0; n < srcN; n++) {
             for (unsigned c = 0; c < dstC1; c++) {
+                __ubuf__ Tsrc *srcPtr = srcPtrOrig + g * gStride + n * nStride + c * cStride;
+                __ubuf__ Tdst *dstPtr = dstPtrOrig + g * gStride + n * nStride + c * cStride;
+                TTransRepeatXOperation<Tsrc, blockSizeElem>(dstPtr, srcPtr, tmpPtr, validRow, validCol, dstStride,
+                                                            srcStride);
+            }
+        }
+    }
+}
+
+template <typename T, unsigned blockSizeElem>
+PTO_INTERNAL void ConvGNC1HWC02GNCHWUnalign(__ubuf__ T *dst, __ubuf__ T *src, unsigned srcG, unsigned srcN,
+                                            unsigned srcC1, unsigned srcH, unsigned srcW, unsigned srcC0)
+{
+    unsigned validCol = srcC0;
+    unsigned validRow = srcH * srcW;
+    unsigned srcStride = srcC0;
+    unsigned dstStride = srcH * srcW;
+    unsigned gStride = srcN * srcC1 * srcC0 * srcH * srcW;
+    unsigned nStride = srcC1 * srcC0 * srcH * srcW;
+    unsigned cStride = srcC0 * srcH * srcW;
+    constexpr unsigned yTileSizeElem = (sizeof(T) == 1) ? Y_ELEM_B8 : Y_ELEM_OTHER;
+    for (unsigned g = 0; g < srcG; g++) {
+        for (unsigned n = 0; n < srcN; n++) {
+            for (unsigned c = 0; c < srcC1; c++) {
+                __ubuf__ T *srcPtr = src + g * gStride + n * nStride + c * cStride;
+                __ubuf__ T *dstPtr = dst + g * gStride + n * nStride + c * cStride;
+                unsigned tmpStride = (validRow + yTileSizeElem - 1) / yTileSizeElem * yTileSizeElem;
+                TransTailTiles<T, blockSizeElem, yTileSizeElem>(dstPtr, srcPtr, tmpStride, validRow, validCol,
+                                                                dstStride, srcStride);
+            }
+        }
+    }
+}
+
+template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, unsigned blockSizeElem>
+__tf__ PTO_INTERNAL void TTransConvGNC1HWC02GNCHW(typename TileDataDst::TileDType __out__ dst,
+                                                  typename TileDataSrc::TileDType __in__ src,
+                                                  typename TileDataTmp::TileDType __in__ tmp, unsigned srcG,
+                                                  unsigned srcN, unsigned srcC1, unsigned srcH, unsigned srcW,
+                                                  unsigned srcC0)
+{
+    using Tdst = typename TileDataDst::DType;
+    using Tsrc = typename TileDataSrc::DType;
+    using Ttmp = typename TileDataTmp::DType;
+
+    __ubuf__ Tdst *dstPtrOrig = (__ubuf__ Tdst *)__cce_get_tile_ptr(dst);
+    __ubuf__ Tsrc *srcPtrOrig = (__ubuf__ Tsrc *)__cce_get_tile_ptr(src);
+    __ubuf__ Ttmp *tmpPtr = (__ubuf__ Ttmp *)__cce_get_tile_ptr(tmp);
+    unsigned validCol = srcC0;
+    unsigned validRow = srcH * srcW;
+    unsigned srcStride = srcC0;
+    unsigned dstStride = srcH * srcW;
+    if (((dstStride % blockSizeElem) != 0) || ((srcStride % blockSizeElem) != 0) || srcStride / blockSizeElem > 255) {
+        ConvGNC1HWC02GNCHWUnalign<Tsrc, blockSizeElem>(dstPtrOrig, srcPtrOrig, srcG, srcN, srcC1 * srcC0, srcH, srcW,
+                                                       srcC0);
+        return;
+    }
+    unsigned gStride = srcN * srcC1 * srcC0 * srcH * srcW;
+    unsigned nStride = srcC1 * srcC0 * srcH * srcW;
+    unsigned cStride = srcC0 * srcH * srcW;
+    for (unsigned g = 0; g < srcG; g++) {
+        for (unsigned n = 0; n < srcN; n++) {
+            for (unsigned c = 0; c < srcC1; c++) {
                 __ubuf__ Tsrc *srcPtr = srcPtrOrig + g * gStride + n * nStride + c * cStride;
                 __ubuf__ Tdst *dstPtr = dstPtrOrig + g * gStride + n * nStride + c * cStride;
                 TTransRepeatXOperation<Tsrc, blockSizeElem>(dstPtr, srcPtr, tmpPtr, validRow, validCol, dstStride,
@@ -1045,7 +1168,7 @@ PTO_INTERNAL void TTransImplConvTile(TileDataDst &dst, TileDataSrc &src, TileDat
         unsigned dstC0 = dst.GetShape(GlobalTensorDim::TOTAL_DIM);
         TTransConvGNCHW2GNC1HWC0<TileDataDst, TileDataSrc, TileDataTmp, blockSizeElem>(
             dst.data(), src.data(), tmp.data(), srcG, srcN, srcC, srcH, srcW, dstC0);
-    } else if (TileDataSrc::layout == Layout::GNC1HWC0 && TileDataDst::layout == Layout::FRACTAL_Z) {
+    } else if constexpr (TileDataSrc::layout == Layout::GNC1HWC0 && TileDataDst::layout == Layout::FRACTAL_Z) {
         CheckGroupConvTile<TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp);
         unsigned dstN1 = dst.GetShape(GlobalTensorDim::DIM_1);
         unsigned dstN0 = dst.GetShape(GlobalTensorDim::DIM_2);
@@ -1057,7 +1180,7 @@ PTO_INTERNAL void TTransImplConvTile(TileDataDst &dst, TileDataSrc &src, TileDat
         unsigned srcC0 = src.GetShape(GlobalTensorDim::TOTAL_DIM);
         TTransConvGNC1HWC02GC1HWNC0<TileDataDst, TileDataSrc, TileDataTmp, blockSizeElem>(
             dst.data(), src.data(), tmp.data(), dstN0 * dstN1, srcG, srcN, srcC1 * srcH * srcW, srcC0);
-    } else if (TileDataSrc::layout == Layout::NCHW && TileDataDst::layout == Layout::NC1HWC0) {
+    } else if constexpr (TileDataSrc::layout == Layout::NCHW && TileDataDst::layout == Layout::NC1HWC0) {
         CheckConvTile<TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp);
         unsigned srcN = src.GetShape(GlobalTensorDim::DIM_0);
         unsigned srcC = src.GetShape(GlobalTensorDim::DIM_1);
@@ -1077,6 +1200,25 @@ PTO_INTERNAL void TTransImplConvTile(TileDataDst &dst, TileDataSrc &src, TileDat
         unsigned dstC0 = dst.GetShape(GlobalTensorDim::DIM_3);
         TTransConvNCDHW2FractalZ3D<TileDataDst, TileDataSrc, TileDataTmp, blockSizeElem>(
             dst.data(), src.data(), tmp.data(), srcN, srcC, srcD, srcH, srcW, dstN0, dstC0);
+    } else if constexpr (TileDataSrc::layout == Layout::NC1HWC0 && TileDataDst::layout == Layout::NCHW) {
+        CheckConvTile<TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp);
+        unsigned srcN = src.GetShape(GlobalTensorDim::DIM_0);
+        unsigned srcC1 = src.GetShape(GlobalTensorDim::DIM_1);
+        unsigned srcH = src.GetShape(GlobalTensorDim::DIM_2);
+        unsigned srcW = src.GetShape(GlobalTensorDim::DIM_3);
+        unsigned srcC0 = src.GetShape(GlobalTensorDim::DIM_4);
+        TTransConvNC1HWC02NCHW<TileDataDst, TileDataSrc, TileDataTmp, blockSizeElem>(dst.data(), src.data(), tmp.data(),
+                                                                                     srcN, srcC1, srcH, srcW, srcC0);
+    } else if constexpr (TileDataSrc::layout == Layout::GNC1HWC0 && TileDataDst::layout == Layout::GNCHW) {
+        CheckGroupConvTile<TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp);
+        unsigned srcG = src.GetShape(GlobalTensorDim::DIM_0);
+        unsigned srcN = src.GetShape(GlobalTensorDim::DIM_1);
+        unsigned srcC1 = src.GetShape(GlobalTensorDim::DIM_2);
+        unsigned srcH = src.GetShape(GlobalTensorDim::DIM_3);
+        unsigned srcW = src.GetShape(GlobalTensorDim::DIM_4);
+        constexpr unsigned srcC0 = BLOCK_BYTE_SIZE / sizeof(T);
+        TTransConvGNC1HWC02GNCHW<TileDataDst, TileDataSrc, TileDataTmp, blockSizeElem>(
+            dst.data(), src.data(), tmp.data(), srcG, srcN, srcC1, srcH, srcW, srcC0);
     }
 }
 
