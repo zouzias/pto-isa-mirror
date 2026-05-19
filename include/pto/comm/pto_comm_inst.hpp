@@ -317,6 +317,39 @@ PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &ds
 }
 
 // ============================================================================
+// TALL_REDUCE: AllReduce — all ranks get the full reduced result.
+//
+// Template parameter `engine` selects the backend:
+//   CollEngine::CCU — AIV triggers CKE gate; first variadic arg must be CcuTriggerContext
+// ============================================================================
+
+template <CollEngine engine = CollEngine::CCU, typename ParallelGroupType, typename GlobalDstData, typename TileData,
+          typename... Args>
+PTO_INST RecordEvent TALL_REDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
+                                 TileData &recvTileData, ReduceOp op, Args &...args)
+{
+    if constexpr (engine == CollEngine::CCU) {
+        static_assert(sizeof...(Args) >= 1, "TALL_REDUCE<CCU> requires CcuTriggerContext as first argument");
+        ::pto::comm::TALL_REDUCE_CCU_IMPL<engine>(parallelGroup, dstGlobalData, accTileData, recvTileData, op,
+                                                  args...);
+    }
+    return {};
+}
+
+template <CollEngine engine = CollEngine::CCU, typename ParallelGroupType, typename GlobalDstData, typename TileData,
+          typename... Args>
+PTO_INST RecordEvent TALL_REDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
+                                 TileData &pingTileData, TileData &pongTileData, ReduceOp op, Args &...args)
+{
+    if constexpr (engine == CollEngine::CCU) {
+        static_assert(sizeof...(Args) >= 1, "TALL_REDUCE<CCU> requires CcuTriggerContext as first argument");
+        ::pto::comm::TALL_REDUCE_CCU_IMPL<engine>(parallelGroup, dstGlobalData, accTileData, pingTileData, pongTileData,
+                                                  op, args...);
+    }
+    return {};
+}
+
+// ============================================================================
 // TREDUCE_SCATTER: ReduceScatter — all ranks reduce, each keeps one slice.
 //
 // Template parameter `engine` selects the backend:

@@ -262,6 +262,7 @@ tbroadcast
 # Collective Communication (CCU backend)
 treduce_ccu
 treduce_scatter_ccu
+tall_reduce_ccu
 tscatter_ccu
 tbroadcast_ccu
 tgather_ccu
