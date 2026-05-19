@@ -1153,4 +1153,3 @@ template void LaunchTStoreAcc2gmVectorNz2nz<21>(uint8_t *out, uint8_t *src0, uin
                                                 void *stream);
 template void LaunchTStoreAcc2gmVectorNz2NDC1HWC0<21>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *quantTensor,
                                                       void *stream);
-
