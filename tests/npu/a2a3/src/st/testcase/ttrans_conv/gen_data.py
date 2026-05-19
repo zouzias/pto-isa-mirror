@@ -740,6 +740,24 @@ if __name__ == "__main__":
             4,
         ),
         TTRANSParams(
+            "TTRANSConvTest.float32_NC1HWC02NC1C0HW_0",
+            np.float32,
+            DataFormat["NC1HWC02NC1C0HW"].value,
+            1, #g_shape0
+            1, #g_shape1
+            2, #g_shape2
+            4, #g_shape3
+            8, #g_shape4
+            1, #g_shape5
+            1, #g_whole_shape0
+            1, #g_whole_shape1
+            2, #g_whole_shape2
+            4, #g_whole_shape3
+            8  #g_whole_shape4
+            #g_shape6=1
+            #g_whole_shape5=1
+        ),
+        TTRANSParams(
             "TTRANSConvTest.float32_NC1HWC02NC1C0HW_1",
             np.float32,
             DataFormat["NC1HWC02NC1C0HW"].value,
