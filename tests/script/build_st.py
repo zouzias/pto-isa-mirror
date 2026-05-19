@@ -114,24 +114,32 @@ def main():
     if args.gtest_filter != None:
         default_cases = args.gtest_filter
 
+    testcase = args.testcase
+    is_comm = testcase.startswith("comm/")
+    if is_comm:
+        testcase = testcase[len("comm/"):]
+
     original_dir = os.getcwd()
     try:
-        # 获取当前脚本（run_st.py）的绝对路径
         script_path = os.path.abspath(__file__)
         target_dir = os.path.dirname(os.path.dirname(script_path))
 
-        if args.soc_version == "a3":
+        if is_comm and args.soc_version == "a5":
+            target_dir = target_dir + "/npu/a5/comm/st"
+        elif is_comm:
+            target_dir = target_dir + "/npu/a2a3/comm/st"
+        elif args.soc_version == "a3":
             target_dir = target_dir + "/npu/a2a3/src/st"
-        elif args.soc_version == "kirinX90" or args.soc_version == "kirin9030": # kirin9030 与 kirinX90 共享代码
+        elif args.soc_version == "kirinX90" or args.soc_version == "kirin9030":
             target_dir = target_dir + "/npu/kirin9030/src/st"
-        else : # a5
+        else:  # a5
             target_dir = target_dir + "/npu/a5/src/st"
 
         print(f"target_dir: {target_dir}")
         os.chdir(target_dir)
 
         # 执行构建
-        build_project(args.run_mode, default_soc_version, args.auto_mode_enable, args.testcase)
+        build_project(args.run_mode, default_soc_version, args.auto_mode_enable, testcase)
 
     except Exception as e:
         print(f"run failed: {str(e)}", file=sys.stderr)
