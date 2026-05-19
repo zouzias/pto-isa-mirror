@@ -109,6 +109,10 @@ tgather
 tscatter
 treduce
 tbroadcast
+tall_reduce
+tall_gather
+treduce_scatter
+tall_to_all
 )
 
 if(TEST_CASE IN_LIST ALL_TESTCASES)
