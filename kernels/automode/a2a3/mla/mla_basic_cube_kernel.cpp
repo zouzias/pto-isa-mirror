@@ -62,21 +62,25 @@ constexpr unsigned kHidden   = 4096;
 constexpr unsigned kNumHeads = 32;
 constexpr unsigned kHeadDim  = 128;
 constexpr unsigned kLatent   = 64;
+constexpr unsigned kRopeDim  = 64;    // DeepSeek-V2 decoupled rope dim
 
 constexpr unsigned kTileM    = 128;
 constexpr unsigned kInnerK   = 64;
 constexpr unsigned kInnerN   = 64;
 
 // Derived
-constexpr unsigned kQKVHidden = kNumHeads * kHeadDim;   // 4096
+constexpr unsigned kQKVHidden  = kNumHeads * kHeadDim;   // 4096
+constexpr unsigned kQRopeWidth = kNumHeads * kRopeDim;   // 2048  (flat W_q_rope width)
 static_assert(kQKVHidden == kHidden, "MLA v1 assumes num_heads*head_dim == hidden");
 
-constexpr unsigned kHiddenKIter = kHidden  / kInnerK;   // 64
-constexpr unsigned kQKVNIter    = kQKVHidden / kInnerN; // 64
-constexpr unsigned kHeadDimKIter = kHeadDim / kInnerK;  // 2
-constexpr unsigned kHeadDimNIter = kHeadDim / kInnerN;  // 2
-constexpr unsigned kSeqNIter     = kSeqLen  / kInnerN;  // 2
-constexpr unsigned kSeqKIter     = kSeqLen  / kInnerK;  // 2
+constexpr unsigned kHiddenKIter   = kHidden    / kInnerK;   // 64
+constexpr unsigned kQKVNIter      = kQKVHidden / kInnerN;   // 64
+constexpr unsigned kQRopeNIter    = kQRopeWidth / kInnerN;  // 32 (== kNumHeads)
+constexpr unsigned kHeadDimKIter  = kHeadDim   / kInnerK;   // 2
+constexpr unsigned kHeadDimNIter  = kHeadDim   / kInnerN;   // 2
+constexpr unsigned kSeqNIter      = kSeqLen    / kInnerN;   // 2
+constexpr unsigned kSeqKIter      = kSeqLen    / kInnerK;   // 2
+static_assert(kRopeDim == kInnerN, "Assumes rope dim fits in one inner-N tile");
 
 }  // namespace mla_basic_cfg
 
@@ -526,6 +530,235 @@ __global__ AICORE void runAttnPV(__gm__ uint8_t *out_raw,
     }
 }
 
+// =============================================================================
+// Stage 5d (NEW) -- Q_rope projection (DeepSeek-V2 decoupled RoPE).
+//   X        : [kSeqLen, kHidden]                   half     (M=128, K_full=4096)
+//   W_q_rope : [kHidden, kNumHeads*kRopeDim]        half     (K_full=4096, N_full=2048)
+//   Q_rope   : [kNumHeads, kSeqLen, kRopeDim]       half     <-- head-major layout
+//
+// The GEMM naturally produces cols of [S, Nh*Rd]. Each nIter covers
+// kInnerN=kRopeDim=64 cols, which is exactly one head's worth. So we
+// reinterpret nIter as a head index and write the tile to
+//   q_rope + head_h * kSeqLen * kRopeDim
+// with row stride kRopeDim. This puts Q_rope into [Nh, S, Rd] head-major
+// layout *during the GEMM store*, no separate transpose kernel needed.
+// =============================================================================
+template <typename TIn, typename TWeight, typename TOut>
+__global__ AICORE void runQRopeProjection(__gm__ uint8_t *q_rope_raw,
+                                          __gm__ uint8_t *x_raw,
+                                          __gm__ uint8_t *w_q_rope_raw)
+{
+    using namespace mla_basic_cfg;
+
+    __gm__ TIn     *x        = reinterpret_cast<__gm__ TIn     *>(x_raw);
+    __gm__ TWeight *w_q_rope = reinterpret_cast<__gm__ TWeight *>(w_q_rope_raw);
+    __gm__ TOut    *q_rope   = reinterpret_cast<__gm__ TOut    *>(q_rope_raw);
+
+    constexpr int blockAlign = C0_SIZE_BYTE / sizeof(TIn);
+    constexpr int M = ((kTileM  + 15) / 16) * 16;
+    constexpr int K = ((kInnerK + blockAlign - 1) / blockAlign) * blockAlign;
+    constexpr int N = ((kInnerN + blockAlign - 1) / blockAlign) * blockAlign;
+
+    using GlobalDataA = GlobalTensor<TIn,     Shape<1, 1, 1, kTileM,  kInnerK>,
+                                     Stride<1, 1, 1, kHidden, 1>>;
+    using GlobalDataB = GlobalTensor<TWeight, Shape<1, 1, 1, kInnerK, kInnerN>,
+                                     Stride<1, 1, 1, kQRopeWidth, 1>>;
+    // C: head-major destination. Row stride = kRopeDim (NOT kQRopeWidth);
+    // base pointer carries the per-head offset.
+    using GlobalDataC = GlobalTensor<TOut,    Shape<1, 1, 1, kTileM,  kInnerN>,
+                                     Stride<1, 1, 1, kRopeDim, 1>>;
+
+    using TileMatAData = Tile<TileType::Mat, TIn,     M, K, BLayout::ColMajor,
+                              kTileM, kInnerK, SLayout::RowMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, TWeight, K, N, BLayout::ColMajor,
+                              kInnerK, kInnerN, SLayout::RowMajor, 512>;
+    using LeftTile     = TileLeft <TIn,     M, K, kTileM,  kInnerK>;
+    using RightTile    = TileRight<TWeight, K, N, kInnerK, kInnerN>;
+    using AccTile      = TileAcc  <float,   M, N, kTileM,  kInnerN>;
+
+    TileMatAData aMatTile;
+    TileMatBData bMatTile;
+    LeftTile     aTile;
+    RightTile    bTile;
+    AccTile      cTile;
+
+    // nIter == head index (each iter contributes one full [S, kRopeDim] head tile).
+    for (unsigned nIter = 0; nIter < kQRopeNIter; ++nIter) {
+        const size_t nOffset = static_cast<size_t>(nIter) * kInnerN;
+
+        for (unsigned kIter = 0; kIter < kHiddenKIter; ++kIter) {
+            const size_t kOffset = static_cast<size_t>(kIter) * kInnerK;
+
+            GlobalDataA aGlobal(x        + kOffset);
+            GlobalDataB bGlobal(w_q_rope + kOffset * kQRopeWidth + nOffset);
+
+            TLOAD(aMatTile, aGlobal);
+            TLOAD(bMatTile, bGlobal);
+            TMOV (aTile, aMatTile);
+            TMOV (bTile, bMatTile);
+
+            if (kIter == 0) {
+                TMATMUL    (cTile, aTile, bTile);
+            } else {
+                TMATMUL_ACC(cTile, aTile, bTile);
+            }
+        }
+
+        // Head-major output: this tile is head nIter's [S, kRopeDim] block.
+        GlobalDataC cGlobal(q_rope + static_cast<size_t>(nIter) * kSeqLen * kRopeDim);
+        TSTORE<AccTile, GlobalDataC,
+               AtomicType::AtomicNone,
+               ReluPreMode::NoRelu>(cGlobal, cTile);
+    }
+}
+
+// =============================================================================
+// Stage 5e (NEW) -- K_rope projection (shared across heads).
+//   X        : [kSeqLen, kHidden]    half   (M=128, K_full=4096)
+//   W_k_rope : [kHidden, kRopeDim]   half   (K_full=4096, N=64)
+//   K_rope   : [kSeqLen, kRopeDim]   half   (M=128, N=64)
+//
+// Same structure as runKVCompression with kRopeDim in place of kLatent.
+// =============================================================================
+template <typename TIn, typename TWeight, typename TOut>
+__global__ AICORE void runKRopeProjection(__gm__ uint8_t *k_rope_raw,
+                                          __gm__ uint8_t *x_raw,
+                                          __gm__ uint8_t *w_k_rope_raw)
+{
+    using namespace mla_basic_cfg;
+
+    __gm__ TIn     *x        = reinterpret_cast<__gm__ TIn     *>(x_raw);
+    __gm__ TWeight *w_k_rope = reinterpret_cast<__gm__ TWeight *>(w_k_rope_raw);
+    __gm__ TOut    *k_rope   = reinterpret_cast<__gm__ TOut    *>(k_rope_raw);
+
+    constexpr int blockAlign = C0_SIZE_BYTE / sizeof(TIn);
+    constexpr int M = ((kTileM   + 15) / 16) * 16;
+    constexpr int K = ((kInnerK  + blockAlign - 1) / blockAlign) * blockAlign;
+    constexpr int N = ((kRopeDim + blockAlign - 1) / blockAlign) * blockAlign;
+
+    using GlobalDataA = GlobalTensor<TIn,     Shape<1, 1, 1, kTileM,  kInnerK>,
+                                     Stride<1, 1, 1, kHidden, 1>>;
+    using GlobalDataB = GlobalTensor<TWeight, Shape<1, 1, 1, kInnerK, kRopeDim>,
+                                     Stride<1, 1, 1, kRopeDim, 1>>;
+    using GlobalDataC = GlobalTensor<TOut,    Shape<1, 1, 1, kTileM,  kRopeDim>,
+                                     Stride<1, 1, 1, kRopeDim, 1>>;
+
+    using TileMatAData = Tile<TileType::Mat, TIn,     M, K, BLayout::ColMajor,
+                              kTileM, kInnerK,  SLayout::RowMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, TWeight, K, N, BLayout::ColMajor,
+                              kInnerK, kRopeDim, SLayout::RowMajor, 512>;
+    using LeftTile     = TileLeft <TIn,     M, K, kTileM,  kInnerK>;
+    using RightTile    = TileRight<TWeight, K, N, kInnerK, kRopeDim>;
+    using AccTile      = TileAcc  <float,   M, N, kTileM,  kRopeDim>;
+
+    TileMatAData aMatTile;
+    TileMatBData bMatTile;
+    LeftTile     aTile;
+    RightTile    bTile;
+    AccTile      cTile;
+
+    for (unsigned kIter = 0; kIter < kHiddenKIter; ++kIter) {
+        const size_t kOffset = static_cast<size_t>(kIter) * kInnerK;
+
+        GlobalDataA aGlobal(x        + kOffset);
+        GlobalDataB bGlobal(w_k_rope + kOffset * kRopeDim);
+
+        TLOAD(aMatTile, aGlobal);
+        TLOAD(bMatTile, bGlobal);
+        TMOV (aTile, aMatTile);
+        TMOV (bTile, bMatTile);
+
+        if (kIter == 0) {
+            TMATMUL    (cTile, aTile, bTile);
+        } else {
+            TMATMUL_ACC(cTile, aTile, bTile);
+        }
+    }
+
+    GlobalDataC cGlobal(k_rope);
+    TSTORE<AccTile, GlobalDataC,
+           AtomicType::AtomicNone,
+           ReluPreMode::NoRelu>(cGlobal, cTile);
+}
+
+// =============================================================================
+// Stage 5f (NEW) -- Attention QK rope:
+//      scores_rope[h] = Q_rope_rot_h @ K_rope_rot^T,  per head h
+//
+//   Q_rope_rot : [kNumHeads, kSeqLen, kRopeDim]   half   (head-major)
+//   K_rope_rot : [kSeqLen, kRopeDim]              half   (shared across heads)
+//   scores_rope: [kNumHeads, kSeqLen, kSeqLen]    half
+//
+// M=kSeqLen=128, K=kRopeDim=64 (single K iter), N=kSeqLen=128 (split-N x 2).
+// Reuses the Layout::DN / ZN trick from runAttnQK for the transposed B.
+// =============================================================================
+template <typename TIn, typename TOut>
+__global__ AICORE void runAttnQKRope(__gm__ uint8_t *scores_raw,
+                                     __gm__ uint8_t *q_rope_raw,
+                                     __gm__ uint8_t *k_rope_raw)
+{
+    using namespace mla_basic_cfg;
+
+    __gm__ TIn  *q_rope = reinterpret_cast<__gm__ TIn  *>(q_rope_raw);
+    __gm__ TIn  *k_rope = reinterpret_cast<__gm__ TIn  *>(k_rope_raw);
+    __gm__ TOut *scores = reinterpret_cast<__gm__ TOut *>(scores_raw);
+
+    constexpr int blockAlign = C0_SIZE_BYTE / sizeof(TIn);
+    constexpr int M = ((kTileM   + 15) / 16) * 16;
+    constexpr int K = ((kRopeDim + blockAlign - 1) / blockAlign) * blockAlign;
+    constexpr int N = ((kInnerN  + blockAlign - 1) / blockAlign) * blockAlign;
+
+    // A : Q_rope_rot_h sub-tile (kTileM, kRopeDim), head-major layout with row stride kRopeDim.
+    using GlobalDataA = GlobalTensor<TIn, Shape<1, 1, 1, kTileM,   kRopeDim>,
+                                     Stride<1, 1, 1, kRopeDim, 1>>;
+    // B : K_rope_rot^T view (kRopeDim, kInnerN). Same DN trick as runAttnQK.
+    using GlobalDataBT = GlobalTensor<TIn, Shape<1, 1, 1, kRopeDim, kInnerN>,
+                                      Stride<1, 1, 1, 1, kRopeDim>, Layout::DN>;
+    // C : scores_rope[h] sub-tile (kTileM, kInnerN), row stride kSeqLen.
+    using GlobalDataC  = GlobalTensor<TOut, Shape<1, 1, 1, kTileM, kInnerN>,
+                                      Stride<1, 1, 1, kSeqLen, 1>>;
+
+    using TileMatAData = Tile<TileType::Mat, TIn, M, K, BLayout::ColMajor,
+                              kTileM,   kRopeDim, SLayout::RowMajor, 512>;
+    // BLayout::RowMajor + SLayout::ColMajor -> ZN, matches Layout::DN GlobalTensor.
+    using TileMatBData = Tile<TileType::Mat, TIn, K, N, BLayout::RowMajor,
+                              kRopeDim, kInnerN,  SLayout::ColMajor, 512>;
+    using LeftTile     = TileLeft <TIn,   M, K, kTileM,   kRopeDim>;
+    using RightTile    = TileRight<TIn,   K, N, kRopeDim, kInnerN>;
+    using AccTile      = TileAcc  <float, M, N, kTileM,   kInnerN>;
+
+    TileMatAData aMatTile;
+    TileMatBData bMatTile;
+    LeftTile     aTile;
+    RightTile    bTile;
+    AccTile      cTile;
+
+    for (unsigned h = 0; h < kNumHeads; ++h) {
+        const size_t qBase      = static_cast<size_t>(h) * kSeqLen * kRopeDim;
+        const size_t scoresBase = static_cast<size_t>(h) * kSeqLen * kSeqLen;
+
+        for (unsigned nIter = 0; nIter < kSeqNIter; ++nIter) {
+            const size_t nOffset = static_cast<size_t>(nIter) * kInnerN;
+
+            // Single K iter (kRopeDim == kInnerN == 64).
+            GlobalDataA  aGlobal(q_rope + qBase);
+            GlobalDataBT bGlobal(k_rope + nOffset * kRopeDim);
+
+            TLOAD(aMatTile, aGlobal);
+            TLOAD(bMatTile, bGlobal);
+            TMOV (aTile, aMatTile);
+            TMOV (bTile, bMatTile);
+
+            TMATMUL(cTile, aTile, bTile);
+
+            GlobalDataC cGlobal(scores + scoresBase + nOffset);
+            TSTORE<AccTile, GlobalDataC,
+                   AtomicType::AtomicNone,
+                   ReluPreMode::NoRelu>(cGlobal, cTile);
+        }
+    }
+}
+
 // ----------------------------------------------------------------------------
 // Templated host-side launchers + explicit instantiations + non-template
 // `…Fp16` wrappers that hide `half` from main.cpp.
@@ -567,11 +800,32 @@ void launchAttnPV(uint8_t *out, uint8_t *probs, uint8_t *v, void *stream)
     runAttnPV<TIn, TOut><<<1, nullptr, stream>>>(out, probs, v);
 }
 
+template <typename TIn, typename TWeight, typename TOut>
+void launchQRopeProjection(uint8_t *q_rope, uint8_t *x, uint8_t *w_q_rope, void *stream)
+{
+    runQRopeProjection<TIn, TWeight, TOut><<<1, nullptr, stream>>>(q_rope, x, w_q_rope);
+}
+
+template <typename TIn, typename TWeight, typename TOut>
+void launchKRopeProjection(uint8_t *k_rope, uint8_t *x, uint8_t *w_k_rope, void *stream)
+{
+    runKRopeProjection<TIn, TWeight, TOut><<<1, nullptr, stream>>>(k_rope, x, w_k_rope);
+}
+
+template <typename TIn, typename TOut>
+void launchAttnQKRope(uint8_t *scores_rope, uint8_t *q_rope, uint8_t *k_rope, void *stream)
+{
+    runAttnQKRope<TIn, TOut><<<1, nullptr, stream>>>(scores_rope, q_rope, k_rope);
+}
+
 template void launchQProjection<half, half, half>(uint8_t *, uint8_t *, uint8_t *, void *);
 template void launchKVCompression<half, half, half>(uint8_t *, uint8_t *, uint8_t *, void *);
 template void launchKVReconstruction<half, half, half>(uint8_t *, uint8_t *, uint8_t *, uint8_t *, uint8_t *, void *);
 template void launchAttnQK<half, half>(uint8_t *, uint8_t *, uint8_t *, void *);
 template void launchAttnPV<half, half>(uint8_t *, uint8_t *, uint8_t *, void *);
+template void launchQRopeProjection<half, half, half>(uint8_t *, uint8_t *, uint8_t *, void *);
+template void launchKRopeProjection<half, half, half>(uint8_t *, uint8_t *, uint8_t *, void *);
+template void launchAttnQKRope<half, half>(uint8_t *, uint8_t *, uint8_t *, void *);
 
 // Non-template wrappers consumed by main.cpp.
 extern "C" void launchMlaQProjectionFp16(uint8_t *q, uint8_t *x, uint8_t *w_q, void *stream)
@@ -600,4 +854,22 @@ extern "C" void launchMlaAttnQKFp16(uint8_t *scores, uint8_t *q, uint8_t *k, voi
 extern "C" void launchMlaAttnPVFp16(uint8_t *out, uint8_t *probs, uint8_t *v, void *stream)
 {
     launchAttnPV<half, half>(out, probs, v, stream);
+}
+
+extern "C" void launchMlaQRopeProjectionFp16(uint8_t *q_rope, uint8_t *x,
+                                             uint8_t *w_q_rope, void *stream)
+{
+    launchQRopeProjection<half, half, half>(q_rope, x, w_q_rope, stream);
+}
+
+extern "C" void launchMlaKRopeProjectionFp16(uint8_t *k_rope, uint8_t *x,
+                                             uint8_t *w_k_rope, void *stream)
+{
+    launchKRopeProjection<half, half, half>(k_rope, x, w_k_rope, stream);
+}
+
+extern "C" void launchMlaAttnQKRopeFp16(uint8_t *scores_rope, uint8_t *q_rope_rot,
+                                        uint8_t *k_rope_rot, void *stream)
+{
+    launchAttnQKRope<half, half>(scores_rope, q_rope_rot, k_rope_rot, stream);
 }
