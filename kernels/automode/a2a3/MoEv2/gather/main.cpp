@@ -1,8 +1,8 @@
 /**
- * main.cpp - host driver for gather.
+ * main.cpp - host driver for gather (v3).
  *
- * Unpack-and-accumulate with softmax routing weights when kTopK > 1.
- * For kTopK == 1 the kernel takes the fast path (no softmax, no TMULS).
+ * v3 changes: drops the reordered_scratch GM buffer. The kTopK > 1 path now
+ * builds r_inv in UB and does the reorder UB-side via TGATHER per k.
  *
  * I/O contract (all little-endian, contiguous, no header):
  *   ../input/input_B.bin       (kT*kTopK + 16) * kH    float32
@@ -14,9 +14,9 @@
  *
  *   kPadded = max(8, kTopK) — softmax tile column padding for 32-byte UB alignment.
  *
- * weights_scratch and reordered_scratch are GM-only scratch buffers (no host
- * files). For kTopK > 1 the kernel writes softmax weights, reorders B into
- * token-major scratch, then combines across kTopK with vector tile ops.
+ * weights_scratch is a GM-only scratch buffer (no host file). Used only when
+ * kTopK > 1 to stage softmax weights so the per-k weight column can be
+ * TLOAD-ed back with a strided GlobalTensor view inside pass 2.
  */
 
 #include "test_common.h"
@@ -33,7 +33,7 @@ using namespace PtoTestCommon;
 template <typename T>
 void launchGather(T *C, T *B,
                   int32_t *A_id, int32_t *rank_id,
-                  T *outVal, T *weights_scratch, T *reordered_scratch,
+                  T *outVal, T *weights_scratch,
                   void *stream);
 
 namespace {
@@ -71,7 +71,6 @@ int main()
     size_t rankIdBytes   = static_cast<size_t>(kAlloc)             * sizeof(int32_t);
     size_t outValBytes   = static_cast<size_t>(kT)      * kPadded  * sizeof(float);
     size_t weightsBytes  = static_cast<size_t>(kT)      * kPadded  * sizeof(float);
-    size_t reorderedBytes = static_cast<size_t>(kPackedRows) * kH   * sizeof(float);
     size_t cBytes        = static_cast<size_t>(kT)      * kH       * sizeof(float);
 
     printf("[main] kT=%d  kH=%d  kTopK=%d  kPadded=%d  kAlloc=%d\n",
@@ -85,7 +84,7 @@ int main()
     float   *bHost = nullptr, *cHost = nullptr, *outValHost = nullptr;
     int32_t *aIdHost = nullptr, *rankIdHost = nullptr;
 
-    float   *bDev = nullptr, *cDev = nullptr, *outValDev = nullptr, *weightsDev = nullptr, *reorderedDev = nullptr;
+    float   *bDev = nullptr, *cDev = nullptr, *outValDev = nullptr, *weightsDev = nullptr;
     int32_t *aIdDev = nullptr, *rankIdDev = nullptr;
 
     aclrtMallocHost((void **)&bHost,      bBytes);
@@ -100,7 +99,6 @@ int main()
     aclrtMalloc((void **)&rankIdDev,  rankIdBytes,  ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&outValDev,  outValBytes,  ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&weightsDev, weightsBytes, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&reorderedDev, reorderedBytes, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile("../input/input_B.bin",       bBytes,      bHost,      bBytes);
     ReadFile("../input/input_A_id.bin",    aIdBytes,    aIdHost,    aIdBytes);
@@ -111,9 +109,8 @@ int main()
     // writes C directly on both fast and weighted paths.
     aclrtMemset(cDev, cBytes, 0x00, cBytes);
 
-    // Poison scratch buffers so skipped writes are easier to notice.
+    // Poison scratch buffer so skipped writes are easier to notice.
     aclrtMemset(weightsDev, weightsBytes, 0x5A, weightsBytes);
-    aclrtMemset(reorderedDev, reorderedBytes, 0x6B, reorderedBytes);
 
     aclrtMemcpy(bDev,      bBytes,      bHost,      bBytes,      ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(aIdDev,    aIdBytes,    aIdHost,    aIdBytes,    ACL_MEMCPY_HOST_TO_DEVICE);
@@ -121,13 +118,12 @@ int main()
     aclrtMemcpy(outValDev, outValBytes, outValHost, outValBytes, ACL_MEMCPY_HOST_TO_DEVICE);
 
     (void)PtoTiming::TimeKernelCallUs("gather", stream, [&]() {
-        launchGather<float>(cDev, bDev, aIdDev, rankIdDev, outValDev, weightsDev, reorderedDev, stream);
+        launchGather<float>(cDev, bDev, aIdDev, rankIdDev, outValDev, weightsDev, stream);
     });
     aclrtMemcpy(cHost, cBytes, cDev, cBytes, ACL_MEMCPY_DEVICE_TO_HOST);
 
     WriteFile("../output/output_C.bin", cHost, cBytes);
 
-    aclrtFree(reorderedDev);
     aclrtFree(weightsDev);
     aclrtFree(outValDev);
     aclrtFree(rankIdDev);
