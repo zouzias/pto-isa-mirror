@@ -15,40 +15,27 @@ HALF = np.float16
 
 # Poison constants matching main.cpp
 POISON = {
-    "Q":           0xA1,
-    "C_kv":        0xA2,
-    "C_cache":     0xA3,
-    "K":           0xA4,
-    "V":           0xA5,
-    "scores_nope": 0xA6,
-    "probs":       0xA7,
-    "out":         0xA8,
-    "Q_rope":      0xB1,
-    "K_rope":      0xB2,
-    "Q_rope_rot":  0xB3,
-    "K_rope_rot":  0xB4,
-    "scores_rope": 0xB5,
+    "Q":       0xA1,
+    "C_kv":    0xA2,
+    "C_cache": 0xA3,
+    "K":       0xA4,
+    "V":       0xA5,
+    "scores":  0xA6,
+    "probs":   0xA7,
+    "out":     0xA8,
 }
 
 # (stage_name, golden_path, device_path, dtype, abs_tol, rel_tol)
 STAGES = [
-    ("Q",           "../output/golden_q.bin",           "../output/output_q.bin",           HALF, 0.10, 0.02),
-    ("C_kv",        "../output/golden_c_kv.bin",        "../output/output_c_kv.bin",        HALF, 0.10, 0.02),
+    ("Q",       "../output/golden_q.bin",      "../output/output_q.bin",       HALF,  0.10, 0.02),
+    ("C_kv",    "../output/golden_c_kv.bin",   "../output/output_c_kv.bin",    HALF,  0.10, 0.02),
     # C_cache is a copy of C_kv; compare against golden_c_kv.
-    ("C_cache",     "../output/golden_c_kv.bin",        "../output/output_c_cache.bin",     HALF, 0.10, 0.02),
-    ("K",           "../output/golden_k.bin",           "../output/output_k.bin",           HALF, 0.10, 0.02),
-    ("V",           "../output/golden_v.bin",           "../output/output_v.bin",           HALF, 0.10, 0.02),
-    # The cube path writes nope-only scores; the rope+nope sum lives only
-    # inside the softmax kernel.
-    ("scores_nope", "../output/golden_scores_nope.bin", "../output/output_scores.bin",      HALF, 0.20, 0.05),
-    # Decoupled RoPE stages.
-    ("Q_rope",      "../output/golden_q_rope.bin",      "../output/output_q_rope.bin",      HALF, 0.05, 0.02),
-    ("K_rope",      "../output/golden_k_rope.bin",      "../output/output_k_rope.bin",      HALF, 0.05, 0.02),
-    ("Q_rope_rot",  "../output/golden_q_rope_rot.bin",  "../output/output_q_rope_rot.bin",  HALF, 0.05, 0.02),
-    ("K_rope_rot",  "../output/golden_k_rope_rot.bin",  "../output/output_k_rope_rot.bin",  HALF, 0.05, 0.02),
-    ("scores_rope", "../output/golden_scores_rope.bin", "../output/output_scores_rope.bin", HALF, 0.20, 0.05),
-    ("probs",       "../output/golden_probs.bin",       "../output/output_probs.bin",       HALF, 0.10, 0.02),
-    ("out",         "../output/golden_out.bin",         "../output/output_out.bin",         HALF, 0.50, 0.05),
+    ("C_cache", "../output/golden_c_kv.bin",   "../output/output_c_cache.bin", HALF,  0.10, 0.02),
+    ("K",       "../output/golden_k.bin",      "../output/output_k.bin",       HALF,  0.10, 0.02),
+    ("V",       "../output/golden_v.bin",      "../output/output_v.bin",       HALF,  0.10, 0.02),
+    ("scores",  "../output/golden_scores.bin", "../output/output_scores.bin",  HALF,  0.20, 0.05),
+    ("probs",   "../output/golden_probs.bin",  "../output/output_probs.bin",   HALF,  0.10, 0.02),
+    ("out",     "../output/golden_out.bin",    "../output/output_out.bin",     HALF,  0.50, 0.05),
 ]
 
 def load(path, dtype):
