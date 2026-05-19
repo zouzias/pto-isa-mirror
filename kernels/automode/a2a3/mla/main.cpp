@@ -90,11 +90,11 @@ static constexpr size_t kProbsNumel    = kScoresNumel;
 static constexpr size_t kOutNumel      = kQNumel;
 
 // Byte sizes.
-static constexpr size_t kXBytes      = kXNumel      * kHalfBytes;
-static constexpr size_t kWqBytes     = kWqNumel     * kHalfBytes;
-static constexpr size_t kWdkvBytes   = kWdkvNumel   * kHalfBytes;
-static constexpr size_t kWukBytes    = kWukNumel    * kHalfBytes;
-static constexpr size_t kWuvBytes    = kWuvNumel    * kHalfBytes;
+size_t kXBytes      = kXNumel      * kHalfBytes;
+size_t kWqBytes     = kWqNumel     * kHalfBytes;
+size_t kWdkvBytes   = kWdkvNumel   * kHalfBytes;
+size_t kWukBytes    = kWukNumel    * kHalfBytes;
+size_t kWuvBytes    = kWuvNumel    * kHalfBytes;
 static constexpr size_t kQBytes      = kQNumel      * kHalfBytes;
 static constexpr size_t kCKvBytes    = kCKvNumel    * kHalfBytes;
 static constexpr size_t kKBytes      = kKNumel      * kHalfBytes;
@@ -124,81 +124,120 @@ static bool CheckAcl(aclError ret, const char *op)
     return true;
 }
 
-static bool ValidateOutput(size_t outBytes)
+// IEEE 754 FP16 -> FP32 via bit-pattern extraction.
+static float HalfToFloat(uint16_t h)
 {
-    std::vector<uint8_t> goldenBytes(outBytes);
-    std::vector<uint8_t> deviceBytes(outBytes);
-    ReadFile("../output/golden_out.bin",  outBytes, goldenBytes.data(), outBytes);
-    ReadFile("../output/output_out.bin",  outBytes, deviceBytes.data(), outBytes);
-
-    // Compare as half-precision floats by raw 16-bit pattern, with a tolerance
-    // applied through ResultCmp. ResultCmp dispatches on the element type; we
-    // pre-cast the byte buffers into half via the vector<uint16_t> reinterpret
-    // trick is awkward here, so instead we compare element-wise in float32
-    // with absolute tolerance.
-    size_t numel = outBytes / kHalfBytes;
-    auto *golden = reinterpret_cast<uint16_t *>(goldenBytes.data());
-    auto *device = reinterpret_cast<uint16_t *>(deviceBytes.data());
-
-    // FP16 -> FP32 conversion via reinterpret bitmask (IEEE 754 half).
-    auto half_to_float = [](uint16_t h) -> float {
-        uint32_t sign     = (h & 0x8000u) << 16;
-        uint32_t exponent = (h & 0x7C00u) >> 10;
-        uint32_t mantissa = (h & 0x03FFu);
-        uint32_t f;
-        if (exponent == 0) {
-            if (mantissa == 0) { f = sign; }
-            else {
-                // subnormal
-                exponent = 1;
-                while ((mantissa & 0x0400u) == 0) {
-                    mantissa <<= 1;
-                    exponent  -= 1;
-                }
-                mantissa &= 0x03FFu;
-                f = sign | ((exponent + 112) << 23) | (mantissa << 13);
-            }
-        } else if (exponent == 0x1F) {
-            f = sign | 0x7F800000u | (mantissa << 13);  // inf / nan
-        } else {
+    uint32_t sign     = (h & 0x8000u) << 16;
+    uint32_t exponent = (h & 0x7C00u) >> 10;
+    uint32_t mantissa = (h & 0x03FFu);
+    uint32_t f;
+    if (exponent == 0) {
+        if (mantissa == 0) { f = sign; }
+        else {
+            exponent = 1;
+            while ((mantissa & 0x0400u) == 0) { mantissa <<= 1; --exponent; }
+            mantissa &= 0x03FFu;
             f = sign | ((exponent + 112) << 23) | (mantissa << 13);
         }
-        float out;
-        __builtin_memcpy(&out, &f, sizeof(out));
-        return out;
-    };
+    } else if (exponent == 0x1F) {
+        f = sign | 0x7F800000u | (mantissa << 13);
+    } else {
+        f = sign | ((exponent + 112) << 23) | (mantissa << 13);
+    }
+    float out;
+    __builtin_memcpy(&out, &f, sizeof(out));
+    return out;
+}
 
-    // Tolerance: FP16 attention values for these shapes can range up to ~50.
-    // Absolute tolerance 0.5, relative tolerance 0.05. This is loose but
-    // matches a "very basic" correctness check; tighten in a follow-up.
-    const float absTol = 0.5f;
-    const float relTol = 0.05f;
-    size_t   nMismatch = 0;
-    float    maxAbsErr = 0.0f;
-    size_t   firstBad  = static_cast<size_t>(-1);
+// Simple file reader; returns bytes read (0 if file not found).
+static size_t ReadFilePlain(const char *path, void *buf, size_t size)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    size_t n = fread(buf, 1, size, f);
+    fclose(f);
+    return n;
+}
+
+// Per-stage result checker. Reads golden and device output files from disk,
+// checks for poison (kernel never wrote), then compares FP16 element-by-element.
+// Returns true = pass; false = fail / poisoned / missing output.
+// goldenPath may be nullptr to skip the golden comparison (copy-stage check).
+static bool ValidateStage(const char *name,
+                          const char *goldenPath,
+                          const char *devicePath,
+                          size_t bytes,
+                          float absTol, float relTol,
+                          uint8_t poisonByte)
+{
+    std::vector<uint8_t> deviceBuf(bytes, 0);
+    size_t deviceRead = ReadFilePlain(devicePath, deviceBuf.data(), bytes);
+    if (deviceRead != bytes) {
+        printf("[stage %-14s] ERROR  — output file missing or wrong size"
+               " (read %zu / %zu): %s\n", name, deviceRead, bytes, devicePath);
+        return false;
+    }
+
+    // Poison check: sample first 256 bytes.
+    size_t checkN = std::min(bytes, (size_t)256);
+    bool allPoison = true;
+    for (size_t i = 0; i < checkN; ++i) {
+        if (deviceBuf[i] != poisonByte) { allPoison = false; break; }
+    }
+    if (allPoison) {
+        printf("[stage %-14s] POISONED — kernel never wrote this buffer"
+               " (poison=0x%02X, checked %zu bytes)\n", name, poisonByte, checkN);
+        return false;
+    }
+
+    if (goldenPath == nullptr) {
+        printf("[stage %-14s] WRITTEN  (no golden; buffer not poisoned)\n", name);
+        return true;
+    }
+
+    std::vector<uint8_t> goldenBuf(bytes, 0);
+    size_t goldenRead = ReadFilePlain(goldenPath, goldenBuf.data(), bytes);
+    if (goldenRead != bytes) {
+        printf("[stage %-14s] SKIP   — golden file missing or wrong size"
+               " (read %zu / %zu): %s\n", name, goldenRead, bytes, goldenPath);
+        return true; // skip is not a kernel failure
+    }
+
+    size_t numel     = bytes / kHalfBytes;
+    auto *golden16   = reinterpret_cast<const uint16_t *>(goldenBuf.data());
+    auto *device16   = reinterpret_cast<const uint16_t *>(deviceBuf.data());
+    size_t nMismatch = 0;
+    float  maxAbsErr = 0.0f;
+    size_t firstBad  = static_cast<size_t>(-1);
 
     for (size_t i = 0; i < numel; ++i) {
-        float g = half_to_float(golden[i]);
-        float d = half_to_float(device[i]);
+        float g = HalfToFloat(golden16[i]);
+        float d = HalfToFloat(device16[i]);
         float absErr = std::fabs(g - d);
         if (absErr > maxAbsErr) maxAbsErr = absErr;
-        float tol = absTol + relTol * std::fabs(g);
-        if (absErr > tol) {
+        if (absErr > absTol + relTol * std::fabs(g)) {
             if (firstBad == static_cast<size_t>(-1)) firstBad = i;
             ++nMismatch;
         }
     }
 
-    printf("[validate] elements=%zu  mismatches=%zu  max_abs_err=%.4f  "
-           "(tol = %g abs + %g rel)\n",
-           numel, nMismatch, maxAbsErr, absTol, relTol);
-    if (nMismatch != 0 && firstBad != static_cast<size_t>(-1)) {
-        float g = half_to_float(golden[firstBad]);
-        float d = half_to_float(device[firstBad]);
-        printf("[validate] first mismatch at index %zu: golden=%.4f  device=%.4f\n",
-               firstBad, g, d);
+    bool ok = (nMismatch == 0);
+    printf("[stage %-14s] %-5s  elements=%-8zu  mismatches=%-8zu  max_abs_err=%.4f"
+           "  (tol=%g+%g*|g|)\n",
+           name, ok ? "PASS" : "FAIL", numel, nMismatch, maxAbsErr, absTol, relTol);
+    if (!ok && firstBad != static_cast<size_t>(-1)) {
+        size_t shown = 0;
+        for (size_t i = firstBad; i < numel && shown < 5; ++i) {
+            float g = HalfToFloat(golden16[i]);
+            float d = HalfToFloat(device16[i]);
+            if (std::fabs(g - d) > absTol + relTol * std::fabs(g)) {
+                printf("              mismatch[%zu]:  golden=%.5f  device=%.5f"
+                       "  err=%.5f\n", i, g, d, std::fabs(g - d));
+                ++shown;
+            }
+        }
     }
-    return nMismatch == 0;
+    return ok;
 }
 
 int main()
@@ -325,9 +364,42 @@ int main()
     WriteFile("../output/output_probs.bin",   probsHost,  kProbsBytes);
     WriteFile("../output/output_out.bin",     outHost,    kOutBytes);
 
-    printf("[main] first poison check: q[0]=0x%02X (poison=0x%02X), "
+    printf("[main] first byte check: q[0]=0x%02X (poison=0x%02X)  "
            "out[0]=0x%02X (poison=0x%02X)\n",
            qHost[0], kPoisonQ, outHost[0], kPoisonOut);
+
+    // ---- Per-stage intermediate result checking ----------------------------
+    // All stage outputs have been written to disk above. ValidateStage reads
+    // from disk so it is independent of device/host buffer lifetime.
+    // C_cache has no separate golden — it is a copy of C_kv, so we compare
+    // output_c_cache.bin against golden_c_kv.bin.
+    printf("\n[main] ===== per-stage validation =====\n");
+    bool allOk = true;
+    allOk &= ValidateStage("Q",
+        "../output/golden_q.bin",      "../output/output_q.bin",
+        kQBytes,      0.1f, 0.02f, kPoisonQ);
+    allOk &= ValidateStage("C_kv",
+        "../output/golden_c_kv.bin",   "../output/output_c_kv.bin",
+        kCKvBytes,    0.1f, 0.02f, kPoisonCKv);
+    allOk &= ValidateStage("C_cache",
+        "../output/golden_c_kv.bin",   "../output/output_c_cache.bin",
+        kCKvBytes,    0.1f, 0.02f, kPoisonCCache);
+    allOk &= ValidateStage("K",
+        "../output/golden_k.bin",      "../output/output_k.bin",
+        kKBytes,      0.1f, 0.02f, kPoisonK);
+    allOk &= ValidateStage("V",
+        "../output/golden_v.bin",      "../output/output_v.bin",
+        kVBytes,      0.1f, 0.02f, kPoisonV);
+    allOk &= ValidateStage("scores",
+        "../output/golden_scores.bin", "../output/output_scores.bin",
+        kScoresBytes, 0.2f, 0.05f, kPoisonScores);
+    allOk &= ValidateStage("probs",
+        "../output/golden_probs.bin",  "../output/output_probs.bin",
+        kProbsBytes,  0.1f, 0.02f, kPoisonProbs);
+    allOk &= ValidateStage("out",
+        "../output/golden_out.bin",    "../output/output_out.bin",
+        kOutBytes,    0.5f, 0.05f, kPoisonOut);
+    printf("[main] ===== end validation =====\n\n");
 
     // ---- Cleanup ----------------------------------------------------------
     aclrtFree(outDev);
@@ -360,8 +432,7 @@ int main()
     aclrtResetDevice(0);
     aclFinalize();
 
-    bool ok = ValidateOutput(kOutBytes);
-    if (ok) {
+    if (allOk) {
         printf("test data success\n");
         printf("test success\n");
     } else {

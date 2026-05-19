@@ -61,3 +61,6 @@ cmake  -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} ..
 make -j16
 
 ./mla_basic
+echo ""
+echo "[run.sh] --- Python per-stage comparison ---"
+python ../scripts/compare_outputs.py
