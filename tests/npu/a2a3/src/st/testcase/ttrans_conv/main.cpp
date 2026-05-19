@@ -290,3 +290,8 @@ TEST_F(TTRANSConvTest, float16_4_7_2_1_8_4)
 {
     test_ttrans_group<aclFloat16, 1, 4, 2, 1, 8, 1, 16, 4, 4, 7, 2, 1, 8, 4>();
 }
+
+TEST_F(TTRANSConvTest, float32_NC1HWC02NC1C0HW_0)
+{
+    test_ttrans<float, 2, 1, 1, 2, 4, 8, 1, 1, 1, 2, 4, 8>();
+}
