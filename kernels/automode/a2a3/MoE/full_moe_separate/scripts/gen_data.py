@@ -35,14 +35,24 @@ kF     = 64
 kE     = 32
 kTopK  = 1
 
+# Cube blockAlign for fp16 = 16. W1 and W2 are zero-padded to aligned dims
+# so the GEMM MatTile K/N padding columns read zeros, not garbage.
+kH_aligned = ((kH + 15) // 16) * 16
+kF_aligned = ((kF + 15) // 16) * 16
+
 
 def gen_golden_data():
     # FP16-representable integers (matches mani_moe / scatter / expert_ffn
     # gen_data distributions; small-int FP16 GEMM is bit-exact with FP32 acc).
     X        = (np.random.randint(-10, 11, size=(kT, kH)).astype(np.float16) / np.float16(3.0))
     W_router = (np.random.randint(-10, 11, size=(kH, kE)).astype(np.float16) / np.float16(3.0))
-    W1       = (np.random.randint(-10, 11, size=(kE, kH, kF)).astype(np.float16) / np.float16(3.0))
-    W2       = (np.random.randint(-10, 11, size=(kE, kF, kH)).astype(np.float16) / np.float16(3.0))
+    W1_raw   = (np.random.randint(-10, 11, size=(kE, kH, kF)).astype(np.float16) / np.float16(3.0))
+    W2_raw   = (np.random.randint(-10, 11, size=(kE, kF, kH)).astype(np.float16) / np.float16(3.0))
+    # Zero-pad weights to aligned dimensions for the GEMM kernel.
+    W1 = np.zeros((kE, kH_aligned, kF_aligned), dtype=np.float16)
+    W2 = np.zeros((kE, kF_aligned, kH_aligned), dtype=np.float16)
+    W1[:, :kH, :kF] = W1_raw
+    W2[:, :kF, :kH] = W2_raw
 
     idx_init = np.arange(kE, dtype=np.uint32)
 
@@ -68,10 +78,10 @@ def gen_golden_data():
     for t in range(kT):
         for k in range(kTopK):
             e = int(top_idx[t, k])
-            Y_pre = X[t].astype(np.float32) @ W1[e].astype(np.float32)
+            Y_pre = X[t].astype(np.float32) @ W1_raw[e].astype(np.float32)
             Y_pre = np.maximum(Y_pre, 0.0)
             Y     = Y_pre.astype(np.float16)
-            B_tk  = Y.astype(np.float32) @ W2[e].astype(np.float32)
+            B_tk  = Y.astype(np.float32) @ W2_raw[e].astype(np.float32)
             C[t] += weights[t, k] * B_tk
 
     os.makedirs("input",  exist_ok=True)

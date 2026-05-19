@@ -109,14 +109,14 @@ __global__ AICORE void runFfnStage1Gemm1Relu(
     constexpr int N = ((kF      + blockAlign - 1) / blockAlign) * blockAlign;
 
     using GlobalDataA =
-        GlobalTensor<TIn,      Shape<1, 1, 1, kTileM, kH>,
-                     Stride<1 * kTileM * kH, 1 * kTileM * kH, kTileM * kH, kH, 1>>;
+        GlobalTensor<TIn,      Shape<1, 1, 1, kTileM, K>,
+                     Stride<1 * kTileM * K, 1 * kTileM * K, kTileM * K, K, 1>>;
     using GlobalDataB =
-        GlobalTensor<TWeight,  Shape<1, 1, 1, kH,     kF>,
-                     Stride<1 * kH * kF,     1 * kH * kF,     kH * kF,     kF, 1>>;
+        GlobalTensor<TWeight,  Shape<1, 1, 1, K,      N>,
+                     Stride<1 * K * N,     1 * K * N,     K * N,     N, 1>>;
     using GlobalDataC =
-        GlobalTensor<TScratch, Shape<1, 1, 1, kTileM, kF>,
-                     Stride<1 * kTileM * kF, 1 * kTileM * kF, kTileM * kF, kF, 1>>;
+        GlobalTensor<TScratch, Shape<1, 1, 1, kTileM, N>,
+                     Stride<1 * kTileM * N, 1 * kTileM * N, kTileM * N, N, 1>>;
 
     using TileMatAData = Tile<TileType::Mat, TIn,     M, K, BLayout::ColMajor,
                               kTileM, kH, SLayout::RowMajor, 512>;
@@ -124,7 +124,7 @@ __global__ AICORE void runFfnStage1Gemm1Relu(
                               kH,     kF, SLayout::RowMajor, 512>;
     using LeftTile     = TileLeft <TIn,     M, K, kTileM, kH>;
     using RightTile    = TileRight<TWeight, K, N, kH,     kF>;
-    using AccTile      = TileAcc  <float,   M, N, kTileM, kF>;  // FP32 acc
+    using AccTile      = TileAcc  <float,   M, N, kTileM, N>;  // write all N cols to Y
 
     TileMatAData aMatTile;
     TileMatBData bMatTile;
@@ -136,12 +136,12 @@ __global__ AICORE void runFfnStage1Gemm1Relu(
         int32_t start = expert_start[e];
         int32_t count = expert_count[e];
 
-        GlobalDataB bGlobal(W1 + static_cast<size_t>(e) * kH * kF);
+        GlobalDataB bGlobal(W1 + static_cast<size_t>(e) * K * N);
 
         for (int32_t m0 = 0; m0 < count; m0 += static_cast<int32_t>(kTileM)) {
             size_t row  = static_cast<size_t>(start) + static_cast<size_t>(m0);
-            size_t aOff = row * kH;
-            size_t cOff = row * kF;
+            size_t aOff = row * K;
+            size_t cOff = row * N;
 
             GlobalDataA aGlobal(A + aOff);
             GlobalDataC cGlobal(Y + cOff);
@@ -184,11 +184,11 @@ __global__ AICORE void runFfnStage2Gemm2(
     constexpr int N = ((kH      + blockAlign - 1) / blockAlign) * blockAlign;
 
     using GlobalDataA =
-        GlobalTensor<TScratch, Shape<1, 1, 1, kTileM, kF>,
-                     Stride<1 * kTileM * kF, 1 * kTileM * kF, kTileM * kF, kF, 1>>;
+        GlobalTensor<TScratch, Shape<1, 1, 1, kTileM, K>,
+                     Stride<1 * kTileM * K, 1 * kTileM * K, kTileM * K, K, 1>>;
     using GlobalDataB =
-        GlobalTensor<TWeight,  Shape<1, 1, 1, kF,     kH>,
-                     Stride<1 * kF * kH,     1 * kF * kH,     kF * kH,     kH, 1>>;
+        GlobalTensor<TWeight,  Shape<1, 1, 1, K,      N>,
+                     Stride<1 * K * N,     1 * K * N,     K * N,     N, 1>>;
     using GlobalDataC =
         GlobalTensor<TOut,     Shape<1, 1, 1, kTileM, kH>,
                      Stride<1 * kTileM * kH, 1 * kTileM * kH, kTileM * kH, kH, 1>>;
@@ -199,7 +199,7 @@ __global__ AICORE void runFfnStage2Gemm2(
                               kF,     kH, SLayout::RowMajor, 512>;
     using LeftTile     = TileLeft <TScratch, M, K, kTileM, kF>;
     using RightTile    = TileRight<TWeight,  K, N, kF,     kH>;
-    using AccTile      = TileAcc  <TOut,     M, N, kTileM, kH>;  // FP32 acc
+    using AccTile      = TileAcc  <TOut,     M, N, kTileM, kH>;  // valid kH cols -> B
 
     TileMatAData aMatTile;
     TileMatBData bMatTile;
@@ -211,11 +211,11 @@ __global__ AICORE void runFfnStage2Gemm2(
         int32_t start = expert_start[e];
         int32_t count = expert_count[e];
 
-        GlobalDataB bGlobal(W2 + static_cast<size_t>(e) * kF * kH);
+        GlobalDataB bGlobal(W2 + static_cast<size_t>(e) * K * N);
 
         for (int32_t m0 = 0; m0 < count; m0 += static_cast<int32_t>(kTileM)) {
             size_t row  = static_cast<size_t>(start) + static_cast<size_t>(m0);
-            size_t aOff = row * kF;
+            size_t aOff = row * K;
             size_t cOff = row * kH;
 
             GlobalDataA aGlobal(Y + aOff);
