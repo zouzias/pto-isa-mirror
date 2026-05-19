@@ -320,27 +320,34 @@ PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &ds
 // TALL_REDUCE: AllReduce — all ranks get the full reduced result.
 //
 // Template parameter `engine` selects the backend:
+//   CollEngine::AIV — each rank directly TLOADs from all peers, reduces in UB
 //   CollEngine::CCU — AIV triggers CKE gate; first variadic arg must be CcuTriggerContext
 // ============================================================================
 
-template <CollEngine engine = CollEngine::CCU, typename ParallelGroupType, typename GlobalDstData, typename TileData,
+template <CollEngine engine = CollEngine::AIV, typename ParallelGroupType, typename GlobalDstData, typename TileData,
           typename... Args>
 PTO_INST RecordEvent TALL_REDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
                                  TileData &recvTileData, ReduceOp op, Args &...args)
 {
-    if constexpr (engine == CollEngine::CCU) {
+    if constexpr (engine == CollEngine::AIV) {
+        WaitAllEvents(args...);
+        ::pto::comm::TALL_REDUCE_IMPL(parallelGroup, dstGlobalData, accTileData, recvTileData, op);
+    } else if constexpr (engine == CollEngine::CCU) {
         static_assert(sizeof...(Args) >= 1, "TALL_REDUCE<CCU> requires CcuTriggerContext as first argument");
         ::pto::comm::TALL_REDUCE_CCU_IMPL<engine>(parallelGroup, dstGlobalData, accTileData, recvTileData, op, args...);
     }
     return {};
 }
 
-template <CollEngine engine = CollEngine::CCU, typename ParallelGroupType, typename GlobalDstData, typename TileData,
+template <CollEngine engine = CollEngine::AIV, typename ParallelGroupType, typename GlobalDstData, typename TileData,
           typename... Args>
 PTO_INST RecordEvent TALL_REDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
                                  TileData &pingTileData, TileData &pongTileData, ReduceOp op, Args &...args)
 {
-    if constexpr (engine == CollEngine::CCU) {
+    if constexpr (engine == CollEngine::AIV) {
+        WaitAllEvents(args...);
+        ::pto::comm::TALL_REDUCE_IMPL(parallelGroup, dstGlobalData, accTileData, pingTileData, pongTileData, op);
+    } else if constexpr (engine == CollEngine::CCU) {
         static_assert(sizeof...(Args) >= 1, "TALL_REDUCE<CCU> requires CcuTriggerContext as first argument");
         ::pto::comm::TALL_REDUCE_CCU_IMPL<engine>(parallelGroup, dstGlobalData, accTileData, pingTileData, pongTileData,
                                                   op, args...);
@@ -352,15 +359,19 @@ PTO_INST RecordEvent TALL_REDUCE(ParallelGroupType &parallelGroup, GlobalDstData
 // TREDUCE_SCATTER: ReduceScatter — all ranks reduce, each keeps one slice.
 //
 // Template parameter `engine` selects the backend:
+//   CollEngine::AIV — each rank directly TLOADs its slice from all peers, reduces in UB
 //   CollEngine::CCU — AIV triggers CKE gate; first variadic arg must be CcuTriggerContext
 // ============================================================================
 
-template <CollEngine engine = CollEngine::CCU, typename ParallelGroupType, typename GlobalDstData, typename TileData,
+template <CollEngine engine = CollEngine::AIV, typename ParallelGroupType, typename GlobalDstData, typename TileData,
           typename... Args>
 PTO_INST RecordEvent TREDUCE_SCATTER(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
                                      TileData &accTileData, TileData &recvTileData, ReduceOp op, Args &...args)
 {
-    if constexpr (engine == CollEngine::CCU) {
+    if constexpr (engine == CollEngine::AIV) {
+        WaitAllEvents(args...);
+        ::pto::comm::TREDUCE_SCATTER_IMPL(parallelGroup, dstGlobalData, accTileData, recvTileData, op);
+    } else if constexpr (engine == CollEngine::CCU) {
         static_assert(sizeof...(Args) >= 1, "TREDUCE_SCATTER<CCU> requires CcuTriggerContext as first argument");
         ::pto::comm::TREDUCE_SCATTER_CCU_IMPL<engine>(parallelGroup, dstGlobalData, accTileData, recvTileData, op,
                                                       args...);
@@ -368,13 +379,16 @@ PTO_INST RecordEvent TREDUCE_SCATTER(ParallelGroupType &parallelGroup, GlobalDst
     return {};
 }
 
-template <CollEngine engine = CollEngine::CCU, typename ParallelGroupType, typename GlobalDstData, typename TileData,
+template <CollEngine engine = CollEngine::AIV, typename ParallelGroupType, typename GlobalDstData, typename TileData,
           typename... Args>
 PTO_INST RecordEvent TREDUCE_SCATTER(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
                                      TileData &accTileData, TileData &pingTileData, TileData &pongTileData, ReduceOp op,
                                      Args &...args)
 {
-    if constexpr (engine == CollEngine::CCU) {
+    if constexpr (engine == CollEngine::AIV) {
+        WaitAllEvents(args...);
+        ::pto::comm::TREDUCE_SCATTER_IMPL(parallelGroup, dstGlobalData, accTileData, pingTileData, pongTileData, op);
+    } else if constexpr (engine == CollEngine::CCU) {
         static_assert(sizeof...(Args) >= 1, "TREDUCE_SCATTER<CCU> requires CcuTriggerContext as first argument");
         ::pto::comm::TREDUCE_SCATTER_CCU_IMPL<engine>(parallelGroup, dstGlobalData, accTileData, pingTileData,
                                                       pongTileData, op, args...);
@@ -386,9 +400,39 @@ PTO_INST RecordEvent TREDUCE_SCATTER(ParallelGroupType &parallelGroup, GlobalDst
 // TALL_GATHER: AllGather — each rank contributes a chunk, all get the full result.
 //
 // Template parameter `engine` selects the backend:
+//   CollEngine::AIV — each rank TLOADs all peers' data, assembles full output
 //   CollEngine::CCU — AIV triggers CKE gate; first variadic arg must be CcuTriggerContext
+//
+// AIV overloads take ParallelGroup (for remote access).
+// CCU overloads take GlobalSrcData + GlobalDstData (CCU kernel handles remotes).
 // ============================================================================
 
+// AIV overloads (ParallelGroup-based)
+template <CollEngine engine = CollEngine::AIV, typename ParallelGroupType, typename GlobalDstData, typename TileData,
+          typename... Args>
+PTO_INST RecordEvent TALL_GATHER(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
+                                 TileData &stagingTileData, Args &...args)
+{
+    if constexpr (engine == CollEngine::AIV) {
+        WaitAllEvents(args...);
+        ::pto::comm::TALL_GATHER_IMPL(parallelGroup, dstGlobalData, stagingTileData);
+    }
+    return {};
+}
+
+template <CollEngine engine = CollEngine::AIV, typename ParallelGroupType, typename GlobalDstData, typename TileData,
+          typename... Args>
+PTO_INST RecordEvent TALL_GATHER(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &pingTileData,
+                                 TileData &pongTileData, Args &...args)
+{
+    if constexpr (engine == CollEngine::AIV) {
+        WaitAllEvents(args...);
+        ::pto::comm::TALL_GATHER_IMPL(parallelGroup, dstGlobalData, pingTileData, pongTileData);
+    }
+    return {};
+}
+
+// CCU overloads (GlobalSrcData + GlobalDstData, no ParallelGroup)
 template <CollEngine engine = CollEngine::CCU, typename GlobalSrcData, typename GlobalDstData, typename TileData,
           typename... Args>
 PTO_INST RecordEvent TALL_GATHER(GlobalSrcData &srcGlobalData, GlobalDstData &dstGlobalData, TileData &srcTileData,
@@ -417,9 +461,39 @@ PTO_INST RecordEvent TALL_GATHER(GlobalSrcData &srcGlobalData, GlobalDstData &ds
 // TALL_TO_ALL: AllToAll — full exchange, each rank sends slice i to rank i.
 //
 // Template parameter `engine` selects the backend:
+//   CollEngine::AIV — each rank TLOADs its designated slice from each peer
 //   CollEngine::CCU — AIV triggers CKE gate; first variadic arg must be CcuTriggerContext
+//
+// AIV overloads take ParallelGroup (for remote access).
+// CCU overloads take GlobalSrcData + GlobalDstData (CCU kernel handles remotes).
 // ============================================================================
 
+// AIV overloads (ParallelGroup-based)
+template <CollEngine engine = CollEngine::AIV, typename ParallelGroupType, typename GlobalDstData, typename TileData,
+          typename... Args>
+PTO_INST RecordEvent TALL_TO_ALL(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
+                                 TileData &stagingTileData, Args &...args)
+{
+    if constexpr (engine == CollEngine::AIV) {
+        WaitAllEvents(args...);
+        ::pto::comm::TALL_TO_ALL_IMPL(parallelGroup, dstGlobalData, stagingTileData);
+    }
+    return {};
+}
+
+template <CollEngine engine = CollEngine::AIV, typename ParallelGroupType, typename GlobalDstData, typename TileData,
+          typename... Args>
+PTO_INST RecordEvent TALL_TO_ALL(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &pingTileData,
+                                 TileData &pongTileData, Args &...args)
+{
+    if constexpr (engine == CollEngine::AIV) {
+        WaitAllEvents(args...);
+        ::pto::comm::TALL_TO_ALL_IMPL(parallelGroup, dstGlobalData, pingTileData, pongTileData);
+    }
+    return {};
+}
+
+// CCU overloads (GlobalSrcData + GlobalDstData, no ParallelGroup)
 template <CollEngine engine = CollEngine::CCU, typename GlobalSrcData, typename GlobalDstData, typename TileData,
           typename... Args>
 PTO_INST RecordEvent TALL_TO_ALL(GlobalSrcData &srcGlobalData, GlobalDstData &dstGlobalData, TileData &srcTileData,

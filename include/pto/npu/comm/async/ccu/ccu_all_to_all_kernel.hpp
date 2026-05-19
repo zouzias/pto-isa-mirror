@@ -90,7 +90,12 @@ struct CcuAllToAllTaskArg : public hcomm::CcuTaskArg {
     CcuAllToAllTaskArg() = default;
     CcuAllToAllTaskArg(uint64_t in, uint64_t out, uint64_t slice, uint64_t tok, uint64_t sstride, uint64_t soff,
                        uint64_t doff)
-        : inputAddr(in), outputAddr(out), sliceSize(slice), token(tok), srcStride(sstride), srcOffset(soff),
+        : inputAddr(in),
+          outputAddr(out),
+          sliceSize(slice),
+          token(tok),
+          srcStride(sstride),
+          srcOffset(soff),
           dstOffset(doff)
     {}
 };
@@ -141,8 +146,7 @@ public:
 
         HcclResult ret = InitResource();
         if (ret != HcclResult::HCCL_SUCCESS) {
-            std::fprintf(stderr, "[CCU_A2A/algo] rank=%u InitResource FAILED ret=%d\n", rankId_,
-                         static_cast<int>(ret));
+            std::fprintf(stderr, "[CCU_A2A/algo] rank=%u InitResource FAILED ret=%d\n", rankId_, static_cast<int>(ret));
             return ret;
         }
 
@@ -184,20 +188,17 @@ public:
                      "[CCU_A2A/gene] rank=%u published (die=%u, cke=%u, mask=0x%x) "
                      "input=0x%llx output=0x%llx slice=%llu srcStride=%llu "
                      "srcOff=%llu dstOff=%llu token=0x%llx gateOnly=%d\n",
-                     rankId_, dieId, ckeId, gateMask_,
-                     static_cast<unsigned long long>(tArg->inputAddr),
+                     rankId_, dieId, ckeId, gateMask_, static_cast<unsigned long long>(tArg->inputAddr),
                      static_cast<unsigned long long>(tArg->outputAddr),
-                     static_cast<unsigned long long>(tArg->sliceSize),
-                     static_cast<unsigned long long>(tArg->srcStride),
-                     static_cast<unsigned long long>(tArg->srcOffset),
-                     static_cast<unsigned long long>(tArg->dstOffset),
+                     static_cast<unsigned long long>(tArg->sliceSize), static_cast<unsigned long long>(tArg->srcStride),
+                     static_cast<unsigned long long>(tArg->srcOffset), static_cast<unsigned long long>(tArg->dstOffset),
                      static_cast<unsigned long long>(tArg->token), static_cast<int>(gateOnly_));
 
         if (gateOnly_) {
             return {};
         }
-        return {tArg->inputAddr, tArg->outputAddr, tArg->token, tArg->sliceSize, tArg->srcStride, tArg->srcOffset,
-                tArg->dstOffset};
+        return {tArg->inputAddr, tArg->outputAddr, tArg->token,    tArg->sliceSize,
+                tArg->srcStride, tArg->srcOffset,  tArg->dstOffset};
     }
 
 private:
