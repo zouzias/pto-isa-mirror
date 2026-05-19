@@ -7,7 +7,7 @@ Auto-mode A3 prototype. Unpack and accumulate per-expert FFN outputs back into p
 - **kTopK == 1**: replaces the per-row `TLOAD → TSTORE` loop with a chunked bulk-**TSCATTER** row reorder. Idx tile built on-chip from `A_id` + `TCI` ramp + `TCOLEXPANDADD`.
 - **kTopK > 1**: drops the `reordered_scratch` GM round-trip. Builds the inverse map `r_inv[k, t] = r` in UB via one **TSCATTER**, then fuses pass 2 (reorder) and pass 3 (weighted combine) into a single H-chunked loop where the per-k reorder is a UB-side **TGATHER**.
 
-The `weights_scratch` GM buffer is retained — the per-k weight column needs a strided `TLOAD` from GM, and the Tile type system hard-codes `RowStride` from layout + Cols, so UB-side column slicing of a `(kT, kPadded)` softmax tile is not possible.
+The `weights_scratch` GM buffer is retained for debug/inspection parity with v2, but the fused path gathers per-k weights directly from the UB softmax tile.
 
 ## What it does
 
@@ -80,7 +80,7 @@ for col in [0, kH, kChunkH):
         TROWEXPAND baseK    : (kT, kChunkH) int32
         TCOLEXPANDADD idxK = baseK + rampRow           // idx[t, h] = r_inv[k, t]*kChunkH + h
         TGATHER    gathK, bChunkBig, idxK, tmpK        // (kT, kChunkH) <- bChunkBig[idxK]
-        TLOAD      weightK : (kT, 1) ColMajor          <- weights_scratch[:, k] (strided)
+        TGATHER    weightK : (kT, 8) RowMajor          <- weightTile[:, k] broadcast lanes
         TROWEXPANDMUL scaledK = gathK * weightK
         TADD       accChunk += scaledK
     TSTORE accChunk -> C[:, col:col+kChunkH]

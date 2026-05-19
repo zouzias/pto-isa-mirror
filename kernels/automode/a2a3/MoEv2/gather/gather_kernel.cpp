@@ -201,20 +201,22 @@ __global__ AICORE void runGather(
         using BcastTile = Tile<TileType::Vec, T, kT, 1,
                                BLayout::ColMajor, kT, 1>;
 
-        // Per-k weight column from GM scratch via strided GlobalTensor.
-        using WeightShape  = Shape <1, 1, 1, kT, 1>;
-        using WeightStride = Stride<kT * kPadded, kT * kPadded, kT * kPadded, kPadded, 1>;
-        using WeightGlobal = GlobalTensor<T, WeightShape, WeightStride>;
-        using WeightRow    = Tile<TileType::Vec, T, kT, 1,
-                                  BLayout::RowMajor, kT, 1>;
-        using WeightTile   = Tile<TileType::Vec, T, kT, 1,
-                                  BLayout::ColMajor, kT, 1>;
-
         // Per-chunk tiles.
         using ChunkTile = Tile<TileType::Vec, T, kT, kChunkH,
                                BLayout::RowMajor, kT, kChunkH>;
         using IdxTile   = Tile<TileType::Vec, int32_t, kT, kChunkH,
                                BLayout::RowMajor, kT, kChunkH>;
+
+        // Per-k softmax weights gathered from the UB softmax tile.
+        constexpr unsigned kWeightCols = 32 / sizeof(T);
+        using WeightWide = Tile<TileType::Vec, T, kT, kWeightCols,
+                                BLayout::RowMajor, kT, kWeightCols>;
+        using WeightIdxRow  = Tile<TileType::Vec, int32_t, 1, kT,
+                                   BLayout::RowMajor, 1, kT>;
+        using WeightIdxCol  = Tile<TileType::Vec, int32_t, kT, 1,
+                                   BLayout::ColMajor, kT, 1>;
+        using WeightIdxTile = Tile<TileType::Vec, int32_t, kT, kWeightCols,
+                                   BLayout::RowMajor, kT, kWeightCols>;
 
         // ----------------------------------------------------------------
         // Pass 0: build r_inv[k, t] = r in UB.
@@ -237,12 +239,9 @@ __global__ AICORE void runGather(
         TSCATTER(rInvFlat, iotaRow, slotRow);                    // rInvFlat[slot[r]] = r
 
         // ----------------------------------------------------------------
-        // Pass 1: softmax(outVal) -> weights_scratch.
-        //   weights_scratch stays as a GM buffer because the per-k weight
-        //   column needs a strided TLOAD (RowStride is hard-coded to Cols
-        //   in the Tile type system, so UB-side per-k slicing via TSUBVIEW
-        //   would not give a (kT, 1) ColMajor view of column k of a
-        //   (kT, kPadded) RowMajor tile).
+        // Pass 1: softmax(outVal) -> weightTile.
+        //   weights_scratch keeps the old debug/inspection output, but pass 2
+        //   gathers per-k weights directly from the UB softmax tile.
         // ----------------------------------------------------------------
         ValTile   valTile;
         BcastTile maxTile;
@@ -271,7 +270,7 @@ __global__ AICORE void runGather(
         //       rInvK = view (kT, 1) of rInvFlat row k
         //       idxK[t, h] = rInvK[t] * kChunkH + h
         //       gathK = bChunkBig[idxK]             (UB-side TGATHER)
-        //       weightK = weights_scratch[:, k]     (GM strided TLOAD)
+        //       weightK = weightTile[:, k]          (UB-side TGATHER)
         //       accChunk += weightK * gathK         (TROWEXPANDMUL + TADD)
         //     TSTORE accChunk -> C[:, col:col+kChunkH]
         // ----------------------------------------------------------------
@@ -286,10 +285,19 @@ __global__ AICORE void runGather(
         RInvKRow   rInvKRow;
         RInvKCol   rInvKCol;
         RInvKCol   rInvKColScaled;
-        WeightRow  weightRow;
-        WeightTile weightK;
+        WeightWide weightK;
+        WeightIdxRow  weightIotaRow;
+        WeightIdxCol  weightBaseCol;
+        WeightIdxCol  weightBaseScaledCol;
+        WeightIdxTile weightBase;
+        WeightIdxTile weightIdx;
+        WeightIdxTile weightTmp;
 
         TCI<RampRow, int32_t, /*descending=*/0>(rampRow, 0);     // (1, kChunkH)
+        TCI<WeightIdxRow, int32_t, /*descending=*/0>(weightIotaRow, 0);
+        TRESHAPE(weightBaseCol, weightIotaRow);
+        TMULS(weightBaseScaledCol, weightBaseCol, static_cast<int32_t>(kPadded));
+        TROWEXPAND(weightBase, weightBaseScaledCol);
 
         for (unsigned col = 0; col < kH; col += kChunkH) {
             BBigGlobal   bGlobal(B + col);
@@ -308,9 +316,8 @@ __global__ AICORE void runGather(
 
                 TGATHER(gathK, bChunkBig, idxK, tmpK);
 
-                WeightGlobal weightGlobal(weights_scratch + k);
-                TLOAD(weightRow, weightGlobal);
-                TRESHAPE(weightK, weightRow);
+                TADDS(weightIdx, weightBase, static_cast<int32_t>(k));
+                TGATHER(weightK, weightTile, weightIdx, weightTmp);
 
                 TROWEXPANDMUL(scaledK, gathK, weightK);
                 TADD(accChunk, accChunk, scaledK);
