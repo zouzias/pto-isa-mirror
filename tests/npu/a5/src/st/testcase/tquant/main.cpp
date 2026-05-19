@@ -9,6 +9,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 #include <gtest/gtest.h>
 #include <type_traits>
+#include <pto/common/type.hpp>
 #include "acl/acl.h"
 #include "test_common.h"
 
@@ -16,22 +17,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace std;
 using namespace PtoTestCommon;
-
-namespace pto {
-enum class QuantType
-{
-    MXFP8,
-    MXFP4_E2M1,
-    INT8_SYM,
-    INT8_ASYM
-};
-
-enum class QuantScaleAlg
-{
-    OCP,
-    NV
-};
-} // namespace pto
 
 namespace TQuantTest {
 

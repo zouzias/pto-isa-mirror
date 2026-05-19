@@ -11,26 +11,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TQUANT_HPP
 #define TQUANT_HPP
 
-<<<<<<< HEAD
 #include <pto/common/type.hpp>
-=======
->>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 #include "pto/npu/a5/TReshape.hpp"
 #include <type_traits>
 
 namespace pto {
 
-<<<<<<< HEAD
-=======
-enum class QuantType
-{
-    MXFP8,
-    MXFP4_E2M1,
-    INT8_SYM,
-    INT8_ASYM
-};
-
->>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 template <typename TileDataOut, typename TileDataSrc, typename TileDataPara>
 __tf__ PTO_INTERNAL void TQuant_Int8Sym(typename TileDataOut::TileDType __out__ dst,
                                         typename TileDataSrc::TileDType __in__ src,
