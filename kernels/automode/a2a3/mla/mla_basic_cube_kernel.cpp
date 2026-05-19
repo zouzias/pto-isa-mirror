@@ -371,21 +371,28 @@ __global__ AICORE void runAttnQK(__gm__ uint8_t *scores_raw,
     constexpr int K = ((kInnerK  + blockAlign - 1) / blockAlign) * blockAlign;
     constexpr int N = ((kInnerN  + blockAlign - 1) / blockAlign) * blockAlign;
 
-    // A : Q_h sub-tile (kTileM, kInnerK), stride = kQKVHidden (= 4096).
+    // A : Q_h sub-tile (kTileM, kInnerK), row stride = kQKVHidden (= 4096).
     using GlobalDataA = GlobalTensor<TIn, Shape<1, 1, 1, kTileM,  kInnerK>,
                                      Stride<1, 1, 1, kQKVHidden, 1>>;
-    // B : K_h^T view sub-tile (kInnerK, kInnerN). Stride swapped: row=1,
-    //     col=kQKVHidden.
+    // B : K_h^T view sub-tile (kInnerK, kInnerN).
+    //   Stored in K as [S, Nh, Hd]: element K[s, h, d] = k + s*kQKVHidden + h*kHeadDim + d.
+    //   For K_h^T[d, s]: row = d (stride-1 direction), col = s (stride-kQKVHidden direction).
+    //   Layout::DN signals the DN (col-major) tensor layout to the DMA, enabling
+    //   the DN->ZN TLOAD path (include/pto/npu/a2a3/TLoad.hpp:471).
+    //   Matches the flash_atten GlobalDataK pattern (fa_performance_kernel.cpp:161-166).
     using GlobalDataBT = GlobalTensor<TIn, Shape<1, 1, 1, kInnerK, kInnerN>,
-                                      Stride<1, 1, 1, 1, kQKVHidden>>;
+                                      Stride<1, 1, 1, 1, kQKVHidden>, Layout::DN>;
     // C : scores_h sub-tile (kTileM, kInnerN), row stride = kSeqLen.
     using GlobalDataC  = GlobalTensor<TOut, Shape<1, 1, 1, kTileM, kInnerN>,
                                       Stride<1, 1, 1, kSeqLen, 1>>;
 
     using TileMatAData = Tile<TileType::Mat, TIn, M, K, BLayout::ColMajor,
                               kTileM, kInnerK, SLayout::RowMajor, 512>;
-    using TileMatBData = Tile<TileType::Mat, TIn, K, N, BLayout::ColMajor,
-                              kInnerK, kInnerN, SLayout::RowMajor, 512>;
+    // BLayout::RowMajor + SLayout::ColMajor -> GetTileLayoutCustom() = ZN,
+    // which pairs with Layout::DN GlobalTensor for the DN->ZN TLOAD path.
+    // Mirrors fa_performance_kernel.cpp:444 TileMatKData.
+    using TileMatBData = Tile<TileType::Mat, TIn, K, N, BLayout::RowMajor,
+                              kInnerK, kInnerN, SLayout::ColMajor, 512>;
     using LeftTile     = TileLeft <TIn,   M, K, kTileM,  kInnerK>;
     using RightTile    = TileRight<TIn,   K, N, kInnerK, kInnerN>;
     using AccTile      = TileAcc  <float, M, N, kTileM,  kInnerN>;
