@@ -38,17 +38,17 @@ constexpr int kL0ABudgetBytes    = 64 * 1024;
 constexpr int kL0BBudgetBytes    = 64 * 1024;
 constexpr int kL0CBudgetBytes    = 128 * 1024;
 
-constexpr int minInt(int lhs, int rhs)
+AICORE inline constexpr int minInt(int lhs, int rhs)
 {
     return lhs < rhs ? lhs : rhs;
 }
 
-constexpr int alignDownTo(int value, int align)
+AICORE inline constexpr int alignDownTo(int value, int align)
 {
     return (value / align) * align;
 }
 
-constexpr int chooseDivisibleKBlock(int totalK, int maxK, int align)
+AICORE inline constexpr int chooseDivisibleKBlock(int totalK, int maxK, int align)
 {
     int block = alignDownTo(minInt(totalK, maxK), align);
     while (block >= align) {
