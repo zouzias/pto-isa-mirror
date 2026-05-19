@@ -124,7 +124,8 @@ __tf__ PTO_INLINE void StoreSubfractalMatrix(typename GlobalData::DType __out__ 
 
                 size_t gd_idx = r * static_cast<std::size_t>(gStride3) + c * static_cast<std::size_t>(gStride4);
                 if constexpr (quantMode != QuantModeCPU_t::NoQuant) {
-                    uint64_t scalar = scalars[c];
+                    size_t scalarIndex = TileData::isRowMajor? c : r; 
+                    uint64_t scalar = scalars[scalarIndex];
                     dst[gd_idx] = quantize_element<D, S, quantMode, applyRelu>(src[tile_idx], scalar);
                 } else {
                     S val = src[tile_idx];
@@ -158,8 +159,8 @@ __tf__ PTO_INLINE void TStore(typename GlobalData::DType __out__ *dst, typename 
 template <typename TileData, typename GlobalData, QuantModeCPU_t quantMode, bool applyRelu>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData &dst, TileData &src, const std::vector<uint64_t> &scalars = {})
 {
-    // static_assert(GlobalData::layout == pto::Layout::ND || GlobalData::layout == pto::Layout::DN,
-    //               "Only ND and DN GLobal Tensors are currently supported");
+    static_assert(GlobalData::layout == pto::Layout::ND || GlobalData::layout == pto::Layout::DN,
+                  "Only ND and DN GLobal Tensors are currently supported");
     TStore<GlobalData, TileData, quantMode, applyRelu>(
         dst.data(), src.data(), scalars, dst.GetShape(pto::GlobalTensorDim::DIM_0),
         dst.GetShape(pto::GlobalTensorDim::DIM_1), dst.GetShape(pto::GlobalTensorDim::DIM_2),
