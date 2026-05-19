@@ -35,10 +35,16 @@ struct TPipe {
     static constexpr bool is_both = (DIR_TYPE == Direction::DIR_BOTH);         // 3
     static constexpr bool is_v2c_ctrl = (DIR_TYPE == Direction::DIR_V2C_CTRL); // 4
     static constexpr uint32_t SyncPeriod = (SlotNum <= 2) ? SlotNum : SlotNum / 2;
+    // get rid of codechecker warnings
+    static constexpr uint8_t FlagIDPlusOne = FlagID + 1;
+    static constexpr uint8_t FlagIDPlusTwo = FlagID + 2;
+    static constexpr uint8_t FlagIDPlusThree = FlagID + 3;
     static_assert(SlotNum >= 1, "Fix: TPipe requires SlotNum >= 1.");
     static_assert(SyncPeriod >= 1, "Fix: TPipe requires SyncPeriod >= 1.");
     static_assert(is_c2v || is_v2c || is_both || is_v2c_ctrl,
                   "Fix: TPipe only supports C2V or V2C or Both or V2C_CTRL communication on A2A3.");
+    static_assert(FlagIDPlusOne < 16,
+                  "Fix: With Both direction, FlagID + 1 must be less than 16 due to hardware limit.");
 
     using RingFiFo = RingFIFO<SlotSize, SlotNum, LocalSlotNum>;
 
@@ -123,22 +129,24 @@ struct TPipe {
 
         PTO_INTERNAL void allocate() const
         {
+            static_assert((FlagIDPlusThree < 16),
+                          "Fix: With Both direction, FlagID + 3 must be less than 16 due to hardware limit.");
             // Cube waits for Vector to free buffer
             if constexpr (is_c2v) {
 #ifdef __DAV_CUBE__
-                wait_flag_dev(FlagID + 1);
+                wait_flag_dev(FlagIDPlusOne);
 #endif
             } else if constexpr (is_v2c) {
                 // Vector waits for Cube to free buffer
 #ifdef __DAV_VEC__
-                wait_flag_dev(FlagID + 1);
+                wait_flag_dev(FlagIDPlusOne);
 #endif
             } else if constexpr (is_both) {
 #ifdef __DAV_CUBE__
-                wait_flag_dev(FlagID + 1);
+                wait_flag_dev(FlagIDPlusOne);
 #endif
 #ifdef __DAV_VEC__
-                wait_flag_dev(FlagID + 3);
+                wait_flag_dev(FlagIDPlusThree);
 #endif
             }
         }
@@ -160,7 +168,7 @@ struct TPipe {
                 ffts_cross_core_sync(PIPE_FIX, getFFTSMsgCfg(TSyncCVMode::CV_CORES_SYNC, FlagID));
 #endif
 #ifdef __DAV_VEC__
-                ffts_cross_core_sync(PIPE_MTE3, getFFTSMsgCfg(TSyncCVMode::CV_CORES_SYNC, FlagID + 2));
+                ffts_cross_core_sync(PIPE_MTE3, getFFTSMsgCfg(TSyncCVMode::CV_CORES_SYNC, FlagIDPlusTwo));
 #endif
             }
         }
@@ -444,7 +452,9 @@ struct TPipe {
     // Destructor for TPipe
     PTO_INTERNAL ~TPipe()
     {
-        for (uint32_t i = 0; i < SyncPeriod; ++i) {
+        constexpr uint32_t kSkippedBatches = (SlotNum > 1) ? (SlotNum / SyncPeriod) : 0;
+        constexpr uint32_t kDestructorWaits = SyncPeriod + kSkippedBatches;
+        for (uint32_t i = 0; i < kDestructorWaits; ++i) {
             prod.allocate();
         }
     }
@@ -491,12 +501,15 @@ template <uint8_t FlagID, FIFOType FiFoType, uint8_t FiFoDepth, uint8_t FiFoSync
           typename TileDataCons, bool EN_UNIT_FLAG = false, uint8_t LocalFiFoDepth = 2,
           VecCubeRatio VCRatio = VecCubeRatio::V2C1_VECS>
 struct TMPipe {
+    static constexpr uint8_t FlagIDPlusOne = FlagID + 1;
     static constexpr bool is_c2v =
         (FiFoType == FIFOType::GM_FIFO) && (TileDataProd::Loc == TileType::Acc) && (TileDataCons::Loc == TileType::Vec);
     static constexpr bool is_v2c =
         (FiFoType == FIFOType::GM_FIFO) && (TileDataProd::Loc == TileType::Vec) && (TileDataCons::Loc == TileType::Mat);
 
     using DataFiFo = DataFIFO<typename TileDataCons::DType, FiFoType, FiFoDepth, FiFoSyncT, LocalFiFoDepth>;
+    static_assert(FlagIDPlusOne < 16,
+                  "Fix: With single direction, FlagID + 1 must be less than 16 due to hardware limit.");
 
     PTO_INTERNAL static uint64_t getFFTSMsgCfg(TSyncCVMode mode, uint16_t flagID, uint16_t base_const = 0x1)
     {
@@ -566,12 +579,12 @@ struct TMPipe {
             // Cube waits for Vector to free buffer
             if constexpr (is_c2v) {
 #ifdef __DAV_CUBE__
-                wait_flag_dev(FlagID + 1);
+                wait_flag_dev(FlagIDPlusOne);
 #endif
             } else {
                 // Vector waits for Cube to free buffer
 #ifdef __DAV_VEC__
-                wait_flag_dev(FlagID + 1);
+                wait_flag_dev(FlagIDPlusOne);
 #endif
             }
         }
@@ -740,12 +753,12 @@ struct TMPipe {
             if constexpr (is_c2v) {
 #ifdef __DAV_VEC__
                 // Vec consumer frees buffer for Cube
-                ffts_cross_core_sync(PIPE_MTE2, getFFTSMsgCfg(TSyncCVMode::CV_CORES_SYNC, FlagID + 1));
+                ffts_cross_core_sync(PIPE_MTE2, getFFTSMsgCfg(TSyncCVMode::CV_CORES_SYNC, FlagIDPlusOne));
 #endif
             } else { // is_v2c
                      // cube consumer frees buffer for vec
 #ifdef __DAV_CUBE__
-                ffts_cross_core_sync(PIPE_MTE2, getFFTSMsgCfg(TSyncCVMode::CV_CORES_SYNC, FlagID + 1));
+                ffts_cross_core_sync(PIPE_MTE2, getFFTSMsgCfg(TSyncCVMode::CV_CORES_SYNC, FlagIDPlusOne));
 #endif
             }
         }
