@@ -415,6 +415,37 @@ PTO_INST RecordEvent TALL_GATHER(GlobalSrcData &srcGlobalData, GlobalDstData &ds
 }
 
 // ============================================================================
+// TALL_TO_ALL: AllToAll — full exchange, each rank sends slice i to rank i.
+//
+// Template parameter `engine` selects the backend:
+//   CollEngine::CCU — AIV triggers CKE gate; first variadic arg must be CcuTriggerContext
+// ============================================================================
+
+template <CollEngine engine = CollEngine::CCU, typename GlobalSrcData, typename GlobalDstData, typename TileData,
+          typename... Args>
+PTO_INST RecordEvent TALL_TO_ALL(GlobalSrcData &srcGlobalData, GlobalDstData &dstGlobalData, TileData &srcTileData,
+                                 Args &...args)
+{
+    if constexpr (engine == CollEngine::CCU) {
+        static_assert(sizeof...(Args) >= 1, "TALL_TO_ALL<CCU> requires CcuTriggerContext as first argument");
+        ::pto::comm::TALL_TO_ALL_CCU_IMPL<engine>(srcGlobalData, dstGlobalData, srcTileData, args...);
+    }
+    return {};
+}
+
+template <CollEngine engine = CollEngine::CCU, typename GlobalSrcData, typename GlobalDstData, typename TileData,
+          typename... Args>
+PTO_INST RecordEvent TALL_TO_ALL(GlobalSrcData &srcGlobalData, GlobalDstData &dstGlobalData, TileData &pingTileData,
+                                 TileData &pongTileData, Args &...args)
+{
+    if constexpr (engine == CollEngine::CCU) {
+        static_assert(sizeof...(Args) >= 1, "TALL_TO_ALL<CCU> requires CcuTriggerContext as first argument");
+        ::pto::comm::TALL_TO_ALL_CCU_IMPL<engine>(srcGlobalData, dstGlobalData, pingTileData, pongTileData, args...);
+    }
+    return {};
+}
+
+// ============================================================================
 // TPUT_ASYNC: Asynchronous remote write (GM-to-GM via DMA engine).
 // Build once with comm::BuildAsyncSession<engine>(), then pass to all calls.
 // ============================================================================
