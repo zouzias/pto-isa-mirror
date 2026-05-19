@@ -125,8 +125,6 @@ public:
 
     void Finalize()
     {
-        if (!inited_)
-            return;
         if (streamsDevicePtr_) {
             aclrtFree(streamsDevicePtr_);
             streamsDevicePtr_ = nullptr;
