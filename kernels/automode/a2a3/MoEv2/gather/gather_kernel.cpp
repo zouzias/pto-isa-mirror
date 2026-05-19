@@ -122,11 +122,11 @@ __global__ AICORE void runGather(
         using IdxTile   = Tile<TileType::Vec, int32_t, kT, kChunkH,
                                BLayout::RowMajor, kT, kChunkH>;
 
-        using AIdShape  = Shape <1, 1, 1, kT, 1>;
-        using AIdStride = Stride<kT, kT, kT, 1, 1>;
+        using AIdShape  = Shape <1, 1, 1, 1, kT>;
+        using AIdStride = Stride<kT, kT, kT, kT, 1>;
         using AIdGlobal = GlobalTensor<int32_t, AIdShape, AIdStride>;
-        using AIdRow    = Tile<TileType::Vec, int32_t, kT, 1,
-                               BLayout::RowMajor, kT, 1>;
+        using AIdRow    = Tile<TileType::Vec, int32_t, 1, kT,
+                               BLayout::RowMajor, 1, kT>;
         using AIdCol    = Tile<TileType::Vec, int32_t, kT, 1,
                                BLayout::ColMajor, kT, 1>;
 

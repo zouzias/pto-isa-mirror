@@ -32,7 +32,7 @@ if kTopK > 1:
 
 ```cpp
 // Hoisted once:
-TLOAD     aIdRow   : (kT, 1) RowMajor int32         <- A_id
+TLOAD     aIdRow   : (1, kT) RowMajor int32         <- A_id
 TRESHAPE  aIdCol   : (kT, 1) ColMajor int32         // same UB data, DN view
 TMULS     baseCol  = aIdCol * kChunkH                // (kT, 1)
 TROWEXPAND baseTile : (kT, kChunkH) int32            // broadcast across kChunkH
