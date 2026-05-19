@@ -31,6 +31,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/a2a3/TScatter.hpp"
 #include "pto/comm/a2a3/TBroadCast.hpp"
 #include "pto/comm/a2a3/TReduce.hpp"
+#include "pto/comm/a2a3/TReduceScatter.hpp"
+#include "pto/comm/a2a3/TAllReduce.hpp"
+#include "pto/comm/a2a3/TAllGather.hpp"
+#include "pto/comm/a2a3/TAlltoAll.hpp"
 #endif
 
 #ifdef PTO_NPU_ARCH_A5
@@ -72,6 +76,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/comm/TGather.hpp"
 #include "pto/cpu/comm/TBroadcast.hpp"
 #include "pto/cpu/comm/TScatter.hpp"
+#include "pto/cpu/comm/TReduceScatter.hpp"
+#include "pto/cpu/comm/TAllReduce.hpp"
+#include "pto/cpu/comm/TAllGather.hpp"
+#include "pto/cpu/comm/TAlltoAll.hpp"
 #endif
 
 #endif // PTO_COMM_INSTR_IMPL_HPP

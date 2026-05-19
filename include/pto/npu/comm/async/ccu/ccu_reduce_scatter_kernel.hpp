@@ -155,8 +155,7 @@ public:
 
         HcclResult ret = InitResource();
         if (ret != HcclResult::HCCL_SUCCESS) {
-            std::fprintf(stderr, "[CCU_RS/algo] rank=%u InitResource FAILED ret=%d\n", rankId_,
-                         static_cast<int>(ret));
+            std::fprintf(stderr, "[CCU_RS/algo] rank=%u InitResource FAILED ret=%d\n", rankId_, static_cast<int>(ret));
             return ret;
         }
 
@@ -197,12 +196,9 @@ public:
         std::fprintf(stderr,
                      "[CCU_RS/gene] rank=%u published (die=%u, cke=%u, mask=0x%x) "
                      "input=0x%llx output=0x%llx offset=%llu slice=%llu token=0x%llx gateOnly=%d\n",
-                     rankId_, dieId, ckeId, gateMask_,
-                     static_cast<unsigned long long>(tArg->inputAddr),
-                     static_cast<unsigned long long>(tArg->outputAddr),
-                     static_cast<unsigned long long>(tArg->offset),
-                     static_cast<unsigned long long>(tArg->sliceSize),
-                     static_cast<unsigned long long>(tArg->token),
+                     rankId_, dieId, ckeId, gateMask_, static_cast<unsigned long long>(tArg->inputAddr),
+                     static_cast<unsigned long long>(tArg->outputAddr), static_cast<unsigned long long>(tArg->offset),
+                     static_cast<unsigned long long>(tArg->sliceSize), static_cast<unsigned long long>(tArg->token),
                      static_cast<int>(gateOnly_));
 
         if (gateOnly_) {
