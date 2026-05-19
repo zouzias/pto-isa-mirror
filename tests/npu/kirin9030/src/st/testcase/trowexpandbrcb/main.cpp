@@ -1,16 +1,19 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include "test_common.h"
-#include "acl/acl.h"
 #include <gtest/gtest.h>
+
+#include "acl/acl.h"
+#include "test_common.h"
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -87,11 +90,11 @@ void test_trowexpand()
 
 TEST_F(TROWEXPANDBRCBTest, case0_half_4800_16)
 {
-    test_trowexpand<aclFloat16, 2400, 16>();
+    test_trowexpand<aclFloat16, 4800, 16>();
 }
-TEST_F(TROWEXPANDBRCBTest, case1_float_3640_8)
+TEST_F(TROWEXPANDBRCBTest, case1_float_7280_8)
 {
-    test_trowexpand<float, 3640, 8>();
+    test_trowexpand<float, 7280, 8>();
 }
 TEST_F(TROWEXPANDBRCBTest, case2_float_16_8)
 {

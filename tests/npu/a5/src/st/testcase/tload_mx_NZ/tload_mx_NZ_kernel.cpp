@@ -1,17 +1,19 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #include <cstdint>
-#include <pto/pto-inst.hpp>
-#include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_tile.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace pto;
 
@@ -30,8 +32,9 @@ template <typename T, int N0, int N1, int N2, int N3, int N4, int WN0, int WN1, 
           int baseCol, int validRow, int validCol, bool isScaleA>
 AICORE inline void runTLOAD_SCALE(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
 {
-    // ZZ2ZZ: GM->L1,concatenate N0 in the row direction; L1->UB, Write continuously to UB
-    // NN2NN: GM->L1,concatenate N0 in the col direction; L1->UB, Write continuously to UB
+    // ZZ2ZZ: GM->L1,concatenate N0 in the row direction; L1->UB, Write
+    // continuously to UB NN2NN: GM->L1,concatenate N0 in the col direction;
+    // L1->UB, Write continuously to UB
     constexpr int validSize = N0 * N1 * N2 * N3 * N4;
     using GlobalDataSrc0 = std::conditional_t<
         isScaleA,

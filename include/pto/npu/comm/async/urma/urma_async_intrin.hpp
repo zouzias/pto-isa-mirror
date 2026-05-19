@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_NPU_COMM_ASYNC_URMA_INTRIN_HPP
@@ -13,8 +15,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifdef PTO_URMA_SUPPORTED
 
-#include "pto/common/debug.h"
 #include "pto/comm/async_common/async_types.hpp"
+#include "pto/common/debug.h"
 #include "pto/npu/comm/async/urma/urma_types.hpp"
 
 namespace pto {
@@ -38,7 +40,8 @@ AICORE inline void DcciCachelines(__gm__ uint8_t *addr, uint64_t length)
 namespace detail {
 
 // ============================================================================
-// UrmaPollCqUpdateInfo — update CQ/WQ tail and ring CQ doorbell after polling (URMA)
+// UrmaPollCqUpdateInfo — update CQ/WQ tail and ring CQ doorbell after polling
+// (URMA)
 // ============================================================================
 AICORE inline void UrmaPollCqUpdateInfo(uint32_t curTail, __gm__ UrmaCqCtx *cqCtxEntry, __gm__ UrmaWQCtx *wqCtxEntry)
 {
@@ -288,8 +291,9 @@ AICORE inline bool BuildUrmaSession(__gm__ uint8_t *contextGm, uint32_t destRank
 // ============================================================================
 // UrmaPeerMrBaseAddr — symmetric MR base (device VA) for peer index peerRank
 //
-// Indexes into the per-peer UrmaMemInfo array at memPtr + sizeof(UrmaMemInfo) * peerRank.
-// peerRank uses UrmaWorkspaceManager allgather order (MPI rank order, 0 .. rankCount-1).
+// Indexes into the per-peer UrmaMemInfo array at memPtr + sizeof(UrmaMemInfo) *
+// peerRank. peerRank uses UrmaWorkspaceManager allgather order (MPI rank order,
+// 0 .. rankCount-1).
 // ============================================================================
 AICORE inline uint64_t UrmaPeerMrBaseAddr(__gm__ uint8_t *urmaWorkspace, uint32_t peerRank)
 {
