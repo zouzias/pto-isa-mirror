@@ -24,6 +24,10 @@
 - [**TSCATTER**](TSCATTER_zh.md)：向所有 rank 分发数据
 - [**TREDUCE**](TREDUCE_zh.md)：从所有 rank 归约数据到本地
 - [**TBROADCAST**](TBROADCAST_zh.md)：从当前 NPU 广播数据到所有 rank
+- [**TREDUCE_SCATTER**](TREDUCE_SCATTER_zh.md)：归约 + 分散（每个 rank 获得归约结果的一个分片）
+- [**TALL_REDUCE**](TALL_REDUCE_zh.md)：AllReduce（所有 rank 获得完整归约结果）
+- [**TALL_GATHER**](TALL_GATHER_zh.md)：AllGather（所有 rank 获得所有输入的拼接）
+- [**TALL_TO_ALL**](TALL_TO_ALL_zh.md)：AllToAll（全交换，每个 rank 向每个其他 rank 发送不同分片）
 
 ## 类型定义
 
