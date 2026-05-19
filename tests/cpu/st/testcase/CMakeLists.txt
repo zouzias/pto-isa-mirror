@@ -80,6 +80,7 @@ tget_scale_addr
 thistogram
 timg2col
 tinsert
+tinsert_quant
 tload
 tloadconv
 tlog
