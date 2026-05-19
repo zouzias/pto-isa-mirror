@@ -61,8 +61,19 @@ extern "C" void launchMlaKVCacheStoreFp16   (uint8_t *c_cache, uint8_t *c_kv, vo
 extern "C" void launchMlaKVReconstructionFp16(uint8_t *k, uint8_t *v, uint8_t *c_cache,
                                               uint8_t *w_uk, uint8_t *w_uv, void *stream);
 extern "C" void launchMlaAttnQKFp16         (uint8_t *scores, uint8_t *q, uint8_t *k, void *stream);
-extern "C" void launchMlaAttnSoftmaxFp16    (uint8_t *probs, uint8_t *scores, float scale, void *stream);
+extern "C" void launchMlaAttnSoftmaxFp16    (uint8_t *probs, uint8_t *scores_nope,
+                                             uint8_t *scores_rope, float scale, void *stream);
 extern "C" void launchMlaAttnPVFp16         (uint8_t *out, uint8_t *probs, uint8_t *v, void *stream);
+// DeepSeek-V2 decoupled RoPE additions.
+extern "C" void launchMlaQRopeProjectionFp16(uint8_t *q_rope, uint8_t *x,
+                                             uint8_t *w_q_rope, void *stream);
+extern "C" void launchMlaKRopeProjectionFp16(uint8_t *k_rope, uint8_t *x,
+                                             uint8_t *w_k_rope, void *stream);
+extern "C" void launchMlaRoPEFp16           (uint8_t *y, uint8_t *x,
+                                             uint8_t *cos, uint8_t *sin,
+                                             unsigned numBlocks, void *stream);
+extern "C" void launchMlaAttnQKRopeFp16     (uint8_t *scores_rope, uint8_t *q_rope_rot,
+                                             uint8_t *k_rope_rot, void *stream);
 
 // ----- MLA shapes; must match scripts/gen_data.py and the kernel namespaces.
 static constexpr int kBatch    = 1;
@@ -71,7 +82,11 @@ static constexpr int kHidden   = 4096;
 static constexpr int kNumHeads = 32;
 static constexpr int kHeadDim  = 128;
 static constexpr int kLatent   = 64;
-static constexpr int kQKVHidden = kNumHeads * kHeadDim;   // 4096
+static constexpr int kRopeDim  = 64;
+static constexpr int kRopeHalf = kRopeDim / 2;
+static constexpr int kQKVHidden  = kNumHeads * kHeadDim;   // 4096
+static constexpr int kQRopeWidth = kNumHeads * kRopeDim;   // 2048
+static constexpr int kHeadDimTotal = kHeadDim + kRopeDim;  // 192 — for softmax scale
 
 static constexpr size_t kHalfBytes = 2;
 
@@ -88,6 +103,14 @@ static constexpr size_t kVNumel        = kQNumel;
 static constexpr size_t kScoresNumel   = static_cast<size_t>(kNumHeads) * kSeqLen * kSeqLen;  // 32 * 128 * 128
 static constexpr size_t kProbsNumel    = kScoresNumel;
 static constexpr size_t kOutNumel      = kQNumel;
+// RoPE buffers.
+static constexpr size_t kWqRopeNumel   = static_cast<size_t>(kHidden) * kQRopeWidth;  // 4096 * 2048
+static constexpr size_t kWkRopeNumel   = static_cast<size_t>(kHidden) * kRopeDim;     // 4096 * 64
+static constexpr size_t kCosNumel      = static_cast<size_t>(kSeqLen) * kRopeHalf;    // 128 * 32
+static constexpr size_t kSinNumel      = kCosNumel;
+static constexpr size_t kQRopeNumel    = static_cast<size_t>(kNumHeads) * kSeqLen * kRopeDim; // [Nh, S, Rd]
+static constexpr size_t kKRopeNumel    = static_cast<size_t>(kSeqLen) * kRopeDim;             // [S,    Rd]
+static constexpr size_t kScoresRopeNumel = kScoresNumel;
 
 // Byte sizes.
 size_t kXBytes      = kXNumel      * kHalfBytes;
@@ -99,9 +122,16 @@ static constexpr size_t kQBytes      = kQNumel      * kHalfBytes;
 static constexpr size_t kCKvBytes    = kCKvNumel    * kHalfBytes;
 static constexpr size_t kKBytes      = kKNumel      * kHalfBytes;
 static constexpr size_t kVBytes      = kVNumel      * kHalfBytes;
-static constexpr size_t kScoresBytes = kScoresNumel * kHalfBytes;
-static constexpr size_t kProbsBytes  = kProbsNumel  * kHalfBytes;
-static constexpr size_t kOutBytes    = kOutNumel    * kHalfBytes;
+static constexpr size_t kScoresBytes    = kScoresNumel    * kHalfBytes;
+static constexpr size_t kProbsBytes     = kProbsNumel     * kHalfBytes;
+static constexpr size_t kOutBytes       = kOutNumel       * kHalfBytes;
+static constexpr size_t kWqRopeBytes    = kWqRopeNumel    * kHalfBytes;
+static constexpr size_t kWkRopeBytes    = kWkRopeNumel    * kHalfBytes;
+static constexpr size_t kCosBytes       = kCosNumel       * kHalfBytes;
+static constexpr size_t kSinBytes       = kSinNumel       * kHalfBytes;
+static constexpr size_t kQRopeBytes     = kQRopeNumel     * kHalfBytes;
+static constexpr size_t kKRopeBytes     = kKRopeNumel     * kHalfBytes;
+static constexpr size_t kScoresRopeBytes = kScoresRopeNumel * kHalfBytes;
 
 // Poison bytes (distinct per buffer so compare_outputs.py can name the
 // stage if a buffer is still poisoned post-launch).
@@ -110,9 +140,15 @@ static constexpr uint8_t kPoisonCKv      = 0xA2;
 static constexpr uint8_t kPoisonCCache   = 0xA3;
 static constexpr uint8_t kPoisonK        = 0xA4;
 static constexpr uint8_t kPoisonV        = 0xA5;
-static constexpr uint8_t kPoisonScores   = 0xA6;
-static constexpr uint8_t kPoisonProbs    = 0xA7;
-static constexpr uint8_t kPoisonOut      = 0xA8;
+static constexpr uint8_t kPoisonScores    = 0xA6;
+static constexpr uint8_t kPoisonProbs     = 0xA7;
+static constexpr uint8_t kPoisonOut       = 0xA8;
+// RoPE poison bytes.
+static constexpr uint8_t kPoisonQRope     = 0xB1;
+static constexpr uint8_t kPoisonKRope     = 0xB2;
+static constexpr uint8_t kPoisonQRopeRot  = 0xB3;
+static constexpr uint8_t kPoisonKRopeRot  = 0xB4;
+static constexpr uint8_t kPoisonScoresRope= 0xB5;
 
 // Mirrors kernels/manual/a2a3/tget_bandwidth/tget_bandwidth_kernel.cpp:91-98.
 static bool CheckAcl(aclError ret, const char *op)
@@ -268,6 +304,16 @@ int main()
     uint8_t *vHost      = nullptr;
     uint8_t *scoresHost = nullptr;
     uint8_t *probsHost  = nullptr;
+    // RoPE host buffers.
+    uint8_t *wqRopeHost     = nullptr;
+    uint8_t *wkRopeHost     = nullptr;
+    uint8_t *cosHost        = nullptr;
+    uint8_t *sinHost        = nullptr;
+    uint8_t *qRopeHost      = nullptr;
+    uint8_t *kRopeHost      = nullptr;
+    uint8_t *qRopeRotHost   = nullptr;
+    uint8_t *kRopeRotHost   = nullptr;
+    uint8_t *scoresRopeHost = nullptr;
 
     CheckAcl(aclrtMallocHost((void **)&xHost,      kXBytes),     "MallocHost(x)");
     CheckAcl(aclrtMallocHost((void **)&wqHost,     kWqBytes),    "MallocHost(w_q)");
@@ -282,6 +328,15 @@ int main()
     CheckAcl(aclrtMallocHost((void **)&vHost,      kVBytes),     "MallocHost(v)");
     CheckAcl(aclrtMallocHost((void **)&scoresHost, kScoresBytes),"MallocHost(scores)");
     CheckAcl(aclrtMallocHost((void **)&probsHost,  kProbsBytes), "MallocHost(probs)");
+    CheckAcl(aclrtMallocHost((void **)&wqRopeHost,    kWqRopeBytes),     "MallocHost(w_q_rope)");
+    CheckAcl(aclrtMallocHost((void **)&wkRopeHost,    kWkRopeBytes),     "MallocHost(w_k_rope)");
+    CheckAcl(aclrtMallocHost((void **)&cosHost,       kCosBytes),        "MallocHost(cos)");
+    CheckAcl(aclrtMallocHost((void **)&sinHost,       kSinBytes),        "MallocHost(sin)");
+    CheckAcl(aclrtMallocHost((void **)&qRopeHost,     kQRopeBytes),      "MallocHost(q_rope)");
+    CheckAcl(aclrtMallocHost((void **)&kRopeHost,     kKRopeBytes),      "MallocHost(k_rope)");
+    CheckAcl(aclrtMallocHost((void **)&qRopeRotHost,  kQRopeBytes),      "MallocHost(q_rope_rot)");
+    CheckAcl(aclrtMallocHost((void **)&kRopeRotHost,  kKRopeBytes),      "MallocHost(k_rope_rot)");
+    CheckAcl(aclrtMallocHost((void **)&scoresRopeHost,kScoresRopeBytes), "MallocHost(scores_rope)");
 
     // ---- Device allocations ----------------------------------------------
     uint8_t *xDev = nullptr, *wqDev = nullptr, *wdkvDev = nullptr;
@@ -290,6 +345,16 @@ int main()
     uint8_t *kDev = nullptr, *vDev = nullptr;
     uint8_t *scoresDev = nullptr, *probsDev = nullptr;
     uint8_t *outDev = nullptr;
+    // RoPE device buffers.
+    uint8_t *wqRopeDev     = nullptr;
+    uint8_t *wkRopeDev     = nullptr;
+    uint8_t *cosDev        = nullptr;
+    uint8_t *sinDev        = nullptr;
+    uint8_t *qRopeDev      = nullptr;
+    uint8_t *kRopeDev      = nullptr;
+    uint8_t *qRopeRotDev   = nullptr;
+    uint8_t *kRopeRotDev   = nullptr;
+    uint8_t *scoresRopeDev = nullptr;
 
     CheckAcl(aclrtMalloc((void **)&xDev,      kXBytes,      ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(x)");
     CheckAcl(aclrtMalloc((void **)&wqDev,     kWqBytes,     ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_q)");
@@ -304,41 +369,71 @@ int main()
     CheckAcl(aclrtMalloc((void **)&scoresDev, kScoresBytes, ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(scores)");
     CheckAcl(aclrtMalloc((void **)&probsDev,  kProbsBytes,  ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(probs)");
     CheckAcl(aclrtMalloc((void **)&outDev,    kOutBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(out)");
+    CheckAcl(aclrtMalloc((void **)&wqRopeDev,    kWqRopeBytes,     ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_q_rope)");
+    CheckAcl(aclrtMalloc((void **)&wkRopeDev,    kWkRopeBytes,     ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_k_rope)");
+    CheckAcl(aclrtMalloc((void **)&cosDev,       kCosBytes,        ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(cos)");
+    CheckAcl(aclrtMalloc((void **)&sinDev,       kSinBytes,        ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(sin)");
+    CheckAcl(aclrtMalloc((void **)&qRopeDev,     kQRopeBytes,      ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(q_rope)");
+    CheckAcl(aclrtMalloc((void **)&kRopeDev,     kKRopeBytes,      ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(k_rope)");
+    CheckAcl(aclrtMalloc((void **)&qRopeRotDev,  kQRopeBytes,      ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(q_rope_rot)");
+    CheckAcl(aclrtMalloc((void **)&kRopeRotDev,  kKRopeBytes,      ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(k_rope_rot)");
+    CheckAcl(aclrtMalloc((void **)&scoresRopeDev,kScoresRopeBytes, ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(scores_rope)");
 
     // ---- Read inputs from disk -------------------------------------------
-    ReadFile("../input/input_x.bin",     kXBytes,    xHost,    kXBytes);
-    ReadFile("../input/input_w_q.bin",   kWqBytes,   wqHost,   kWqBytes);
-    ReadFile("../input/input_w_dkv.bin", kWdkvBytes, wdkvHost, kWdkvBytes);
-    ReadFile("../input/input_w_uk.bin",  kWukBytes,  wukHost,  kWukBytes);
-    ReadFile("../input/input_w_uv.bin",  kWuvBytes,  wuvHost,  kWuvBytes);
+    ReadFile("../input/input_x.bin",        kXBytes,     xHost,      kXBytes);
+    ReadFile("../input/input_w_q.bin",      kWqBytes,    wqHost,     kWqBytes);
+    ReadFile("../input/input_w_dkv.bin",    kWdkvBytes,  wdkvHost,   kWdkvBytes);
+    ReadFile("../input/input_w_uk.bin",     kWukBytes,   wukHost,    kWukBytes);
+    ReadFile("../input/input_w_uv.bin",     kWuvBytes,   wuvHost,    kWuvBytes);
+    ReadFile("../input/input_w_q_rope.bin", kWqRopeBytes,wqRopeHost, kWqRopeBytes);
+    ReadFile("../input/input_w_k_rope.bin", kWkRopeBytes,wkRopeHost, kWkRopeBytes);
+    ReadFile("../input/input_cos.bin",      kCosBytes,   cosHost,    kCosBytes);
+    ReadFile("../input/input_sin.bin",      kSinBytes,   sinHost,    kSinBytes);
 
     // ---- Upload inputs ----------------------------------------------------
-    CheckAcl(aclrtMemcpy(xDev,    kXBytes,    xHost,    kXBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(x)");
-    CheckAcl(aclrtMemcpy(wqDev,   kWqBytes,   wqHost,   kWqBytes,   ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_q)");
-    CheckAcl(aclrtMemcpy(wdkvDev, kWdkvBytes, wdkvHost, kWdkvBytes, ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_dkv)");
-    CheckAcl(aclrtMemcpy(wukDev,  kWukBytes,  wukHost,  kWukBytes,  ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_uk)");
-    CheckAcl(aclrtMemcpy(wuvDev,  kWuvBytes,  wuvHost,  kWuvBytes,  ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_uv)");
+    CheckAcl(aclrtMemcpy(xDev,        kXBytes,      xHost,      kXBytes,      ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(x)");
+    CheckAcl(aclrtMemcpy(wqDev,       kWqBytes,     wqHost,     kWqBytes,     ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_q)");
+    CheckAcl(aclrtMemcpy(wdkvDev,     kWdkvBytes,   wdkvHost,   kWdkvBytes,   ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_dkv)");
+    CheckAcl(aclrtMemcpy(wukDev,      kWukBytes,    wukHost,    kWukBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_uk)");
+    CheckAcl(aclrtMemcpy(wuvDev,      kWuvBytes,    wuvHost,    kWuvBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_uv)");
+    CheckAcl(aclrtMemcpy(wqRopeDev,   kWqRopeBytes, wqRopeHost, kWqRopeBytes, ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_q_rope)");
+    CheckAcl(aclrtMemcpy(wkRopeDev,   kWkRopeBytes, wkRopeHost, kWkRopeBytes, ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_k_rope)");
+    CheckAcl(aclrtMemcpy(cosDev,      kCosBytes,    cosHost,    kCosBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(cos)");
+    CheckAcl(aclrtMemcpy(sinDev,      kSinBytes,    sinHost,    kSinBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(sin)");
 
     // ---- Poison every device output buffer -------------------------------
-    CheckAcl(aclrtMemset(qDev,      kQBytes,      kPoisonQ,      kQBytes),      "Memset(q)");
-    CheckAcl(aclrtMemset(ckvDev,    kCKvBytes,    kPoisonCKv,    kCKvBytes),    "Memset(c_kv)");
-    CheckAcl(aclrtMemset(ccacheDev, kCKvBytes,    kPoisonCCache, kCKvBytes),    "Memset(c_cache)");
-    CheckAcl(aclrtMemset(kDev,      kKBytes,      kPoisonK,      kKBytes),      "Memset(k)");
-    CheckAcl(aclrtMemset(vDev,      kVBytes,      kPoisonV,      kVBytes),      "Memset(v)");
-    CheckAcl(aclrtMemset(scoresDev, kScoresBytes, kPoisonScores, kScoresBytes), "Memset(scores)");
-    CheckAcl(aclrtMemset(probsDev,  kProbsBytes,  kPoisonProbs,  kProbsBytes),  "Memset(probs)");
-    CheckAcl(aclrtMemset(outDev,    kOutBytes,    kPoisonOut,    kOutBytes),    "Memset(out)");
+    CheckAcl(aclrtMemset(qDev,          kQBytes,         kPoisonQ,         kQBytes),         "Memset(q)");
+    CheckAcl(aclrtMemset(ckvDev,        kCKvBytes,       kPoisonCKv,       kCKvBytes),       "Memset(c_kv)");
+    CheckAcl(aclrtMemset(ccacheDev,     kCKvBytes,       kPoisonCCache,    kCKvBytes),       "Memset(c_cache)");
+    CheckAcl(aclrtMemset(kDev,          kKBytes,         kPoisonK,         kKBytes),         "Memset(k)");
+    CheckAcl(aclrtMemset(vDev,          kVBytes,         kPoisonV,         kVBytes),         "Memset(v)");
+    CheckAcl(aclrtMemset(scoresDev,     kScoresBytes,    kPoisonScores,    kScoresBytes),    "Memset(scores)");
+    CheckAcl(aclrtMemset(probsDev,      kProbsBytes,     kPoisonProbs,     kProbsBytes),     "Memset(probs)");
+    CheckAcl(aclrtMemset(outDev,        kOutBytes,       kPoisonOut,       kOutBytes),       "Memset(out)");
+    CheckAcl(aclrtMemset(qRopeDev,      kQRopeBytes,     kPoisonQRope,     kQRopeBytes),     "Memset(q_rope)");
+    CheckAcl(aclrtMemset(kRopeDev,      kKRopeBytes,     kPoisonKRope,     kKRopeBytes),     "Memset(k_rope)");
+    CheckAcl(aclrtMemset(qRopeRotDev,   kQRopeBytes,     kPoisonQRopeRot,  kQRopeBytes),     "Memset(q_rope_rot)");
+    CheckAcl(aclrtMemset(kRopeRotDev,   kKRopeBytes,     kPoisonKRopeRot,  kKRopeBytes),     "Memset(k_rope_rot)");
+    CheckAcl(aclrtMemset(scoresRopeDev, kScoresRopeBytes,kPoisonScoresRope,kScoresRopeBytes),"Memset(scores_rope)");
 
-    const float scale = 1.0f / std::sqrt(static_cast<float>(kHeadDim));
-    printf("[main] softmax scale = 1/sqrt(%d) = %.6f\n", kHeadDim, scale);
+    const float scale = 1.0f / std::sqrt(static_cast<float>(kHeadDimTotal));
+    printf("[main] softmax scale = 1/sqrt(%d) = %.6f\n", kHeadDimTotal, scale);
 
     // ---- Pipeline launches (all on the same stream; ACL stream-order) ----
+    // nope path
     launchMlaQProjectionFp16    (qDev, xDev, wqDev, stream);
     launchMlaKVCompressionFp16  (ckvDev, xDev, wdkvDev, stream);
     launchMlaKVCacheStoreFp16   (ccacheDev, ckvDev, stream);
     launchMlaKVReconstructionFp16(kDev, vDev, ccacheDev, wukDev, wuvDev, stream);
     launchMlaAttnQKFp16         (scoresDev, qDev, kDev, stream);
-    launchMlaAttnSoftmaxFp16    (probsDev, scoresDev, scale, stream);
+    // rope path
+    launchMlaQRopeProjectionFp16(qRopeDev, xDev, wqRopeDev, stream);
+    launchMlaKRopeProjectionFp16(kRopeDev, xDev, wkRopeDev, stream);
+    launchMlaRoPEFp16           (qRopeRotDev, qRopeDev, cosDev, sinDev, kNumHeads, stream);
+    launchMlaRoPEFp16           (kRopeRotDev, kRopeDev, cosDev, sinDev, 1,         stream);
+    launchMlaAttnQKRopeFp16     (scoresRopeDev, qRopeRotDev, kRopeRotDev, stream);
+    // combine + softmax + PV
+    launchMlaAttnSoftmaxFp16    (probsDev, scoresDev, scoresRopeDev, scale, stream);
     launchMlaAttnPVFp16         (outDev, probsDev, vDev, stream);
 
     if (!CheckAcl(aclrtSynchronizeStream(stream), "SynchronizeStream")) {
@@ -354,11 +449,21 @@ int main()
     CheckAcl(aclrtMemcpy(scoresHost, kScoresBytes, scoresDev, kScoresBytes, ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(scores)");
     CheckAcl(aclrtMemcpy(probsHost,  kProbsBytes,  probsDev,  kProbsBytes,  ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(probs)");
     CheckAcl(aclrtMemcpy(outHost,    kOutBytes,    outDev,    kOutBytes,    ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(out)");
+    CheckAcl(aclrtMemcpy(qRopeHost,      kQRopeBytes,     qRopeDev,      kQRopeBytes,     ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(q_rope)");
+    CheckAcl(aclrtMemcpy(kRopeHost,      kKRopeBytes,     kRopeDev,      kKRopeBytes,     ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(k_rope)");
+    CheckAcl(aclrtMemcpy(qRopeRotHost,   kQRopeBytes,     qRopeRotDev,   kQRopeBytes,     ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(q_rope_rot)");
+    CheckAcl(aclrtMemcpy(kRopeRotHost,   kKRopeBytes,     kRopeRotDev,   kKRopeBytes,     ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(k_rope_rot)");
+    CheckAcl(aclrtMemcpy(scoresRopeHost, kScoresRopeBytes,scoresRopeDev, kScoresRopeBytes,ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(scores_rope)");
 
-    WriteFile("../output/output_q.bin",       qHost,      kQBytes);
-    WriteFile("../output/output_c_kv.bin",    ckvHost,    kCKvBytes);
-    WriteFile("../output/output_c_cache.bin", ccacheHost, kCKvBytes);
-    WriteFile("../output/output_k.bin",       kHost,      kKBytes);
+    WriteFile("../output/output_q.bin",          qHost,          kQBytes);
+    WriteFile("../output/output_c_kv.bin",       ckvHost,        kCKvBytes);
+    WriteFile("../output/output_c_cache.bin",    ccacheHost,     kCKvBytes);
+    WriteFile("../output/output_k.bin",          kHost,          kKBytes);
+    WriteFile("../output/output_q_rope.bin",     qRopeHost,      kQRopeBytes);
+    WriteFile("../output/output_k_rope.bin",     kRopeHost,      kKRopeBytes);
+    WriteFile("../output/output_q_rope_rot.bin", qRopeRotHost,   kQRopeBytes);
+    WriteFile("../output/output_k_rope_rot.bin", kRopeRotHost,   kKRopeBytes);
+    WriteFile("../output/output_scores_rope.bin",scoresRopeHost, kScoresRopeBytes);
     WriteFile("../output/output_v.bin",       vHost,      kVBytes);
     WriteFile("../output/output_scores.bin",  scoresHost, kScoresBytes);
     WriteFile("../output/output_probs.bin",   probsHost,  kProbsBytes);
@@ -390,9 +495,26 @@ int main()
     allOk &= ValidateStage("V",
         "../output/golden_v.bin",      "../output/output_v.bin",
         kVBytes,      0.1f, 0.02f, kPoisonV);
-    allOk &= ValidateStage("scores",
-        "../output/golden_scores.bin", "../output/output_scores.bin",
+    // runAttnQK writes the nope-only term; combined scores live only inside
+    // the softmax kernel. Compare device scores against golden_scores_nope.
+    allOk &= ValidateStage("scores_nope",
+        "../output/golden_scores_nope.bin", "../output/output_scores.bin",
         kScoresBytes, 0.2f, 0.05f, kPoisonScores);
+    allOk &= ValidateStage("Q_rope",
+        "../output/golden_q_rope.bin", "../output/output_q_rope.bin",
+        kQRopeBytes, 0.05f, 0.02f, kPoisonQRope);
+    allOk &= ValidateStage("K_rope",
+        "../output/golden_k_rope.bin", "../output/output_k_rope.bin",
+        kKRopeBytes, 0.05f, 0.02f, kPoisonKRope);
+    allOk &= ValidateStage("Q_rope_rot",
+        "../output/golden_q_rope_rot.bin", "../output/output_q_rope_rot.bin",
+        kQRopeBytes, 0.05f, 0.02f, kPoisonQRopeRot);
+    allOk &= ValidateStage("K_rope_rot",
+        "../output/golden_k_rope_rot.bin", "../output/output_k_rope_rot.bin",
+        kKRopeBytes, 0.05f, 0.02f, kPoisonKRopeRot);
+    allOk &= ValidateStage("scores_rope",
+        "../output/golden_scores_rope.bin", "../output/output_scores_rope.bin",
+        kScoresRopeBytes, 0.2f, 0.05f, kPoisonScoresRope);
     allOk &= ValidateStage("probs",
         "../output/golden_probs.bin",  "../output/output_probs.bin",
         kProbsBytes,  0.1f, 0.02f, kPoisonProbs);
@@ -402,6 +524,15 @@ int main()
     printf("[main] ===== end validation =====\n\n");
 
     // ---- Cleanup ----------------------------------------------------------
+    aclrtFree(scoresRopeDev);
+    aclrtFree(kRopeRotDev);
+    aclrtFree(qRopeRotDev);
+    aclrtFree(kRopeDev);
+    aclrtFree(qRopeDev);
+    aclrtFree(sinDev);
+    aclrtFree(cosDev);
+    aclrtFree(wkRopeDev);
+    aclrtFree(wqRopeDev);
     aclrtFree(outDev);
     aclrtFree(probsDev);
     aclrtFree(scoresDev);
@@ -415,6 +546,15 @@ int main()
     aclrtFree(wdkvDev);
     aclrtFree(wqDev);
     aclrtFree(xDev);
+    aclrtFreeHost(scoresRopeHost);
+    aclrtFreeHost(kRopeRotHost);
+    aclrtFreeHost(qRopeRotHost);
+    aclrtFreeHost(kRopeHost);
+    aclrtFreeHost(qRopeHost);
+    aclrtFreeHost(sinHost);
+    aclrtFreeHost(cosHost);
+    aclrtFreeHost(wkRopeHost);
+    aclrtFreeHost(wqRopeHost);
     aclrtFreeHost(probsHost);
     aclrtFreeHost(scoresHost);
     aclrtFreeHost(vHost);
