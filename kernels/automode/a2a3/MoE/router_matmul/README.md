@@ -32,11 +32,11 @@ A3 (`PTO_NPU_ARCH_A2A3`). Cube path: `--cce-aicore-arch=dav-c220-cube`.
 
 | Dimension | Value | Note |
 |-----------|-------|------|
-| kT        | 256   | total tokens, must be kTileM-multiple |
+| kT        | 256   | total tokens; final partial kTileM tile is supported |
 | kH        | 64    | d_model |
 | kE        | 32    | num_experts |
 | kTileM    | 128   | cube M dimension |
-| Iterations | 2    | kT / kTileM |
+| Iterations | 2    | ceil(kT / kTileM) |
 
 Alignment: `blockAlign = C0_SIZE_BYTE / sizeof(half) = 16`. kH=64, kE=32, kTileM=128 are all 16-aligned.
 
@@ -58,7 +58,6 @@ Or manually inspect `output/golden_logits.bin` vs `output/output_logits.bin` usi
 
 ## Known limitations
 
-- kT must be an exact multiple of kTileM=128.
 - No softmax or temperature scaling (raw logits only).
 - Not connected to `moe_topk`; standalone prototype.
 - No claim of build/run success until user provides compiler output.
