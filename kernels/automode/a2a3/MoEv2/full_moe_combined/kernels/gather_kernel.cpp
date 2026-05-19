@@ -259,32 +259,40 @@ __global__ AICORE void runGather(
         using ChunkGlobal = GlobalTensor<T, ChunkShape, CStride>;
         using DGlobal     = GlobalTensor<T, ChunkShape, DStride>;
 
-        using WeightShape  = Shape <1, 1, 1, kT, 1>;
-        using WeightStride = Stride<kT * kPadded, kT * kPadded, kT * kPadded, kPadded, 1>;
-        using WeightGlobal = GlobalTensor<T, WeightShape, WeightStride>;
-
         using ChunkTile  = Tile<TileType::Vec, T, kT, kCombineCols, BLayout::RowMajor, kT, kCombineCols>;
-        using WeightRow  = Tile<TileType::Vec, T, kT, 1,            BLayout::RowMajor, kT, 1>;
-        using WeightTile = Tile<TileType::Vec, T, kT, 1,            BLayout::ColMajor, kT, 1>;
+        constexpr unsigned kWeightCols = 32 / sizeof(T);
+        using WeightWide = Tile<TileType::Vec, T, kT, kWeightCols, BLayout::RowMajor, kT, kWeightCols>;
+        using WeightIdxRow  = Tile<TileType::Vec, int32_t, 1, kT, BLayout::RowMajor, 1, kT>;
+        using WeightIdxCol  = Tile<TileType::Vec, int32_t, kT, 1, BLayout::ColMajor, kT, 1>;
+        using WeightIdxTile = Tile<TileType::Vec, int32_t, kT, kWeightCols, BLayout::RowMajor, kT, kWeightCols>;
 
         ChunkTile accTile;
         ChunkTile dTile;
         ChunkTile scaledTile;
         ChunkTile sumTile;
-        WeightRow weightRow;
-        WeightTile weightTile;
+        WeightWide weightK;
+        WeightIdxRow  weightIotaRow;
+        WeightIdxCol  weightBaseCol;
+        WeightIdxCol  weightBaseScaledCol;
+        WeightIdxTile weightBase;
+        WeightIdxTile weightIdx;
+        WeightIdxTile weightTmp;
+
+        TCI<WeightIdxRow, int32_t, /*descending=*/0>(weightIotaRow, 0);
+        TRESHAPE(weightBaseCol, weightIotaRow);
+        TMULS(weightBaseScaledCol, weightBaseCol, static_cast<int32_t>(kPadded));
+        TROWEXPAND(weightBase, weightBaseScaledCol);
 
         for (unsigned col = 0; col < kH; col += kCombineCols) {
             TEXPANDS(accTile, static_cast<T>(0));
 
             for (unsigned k = 0; k < kTopK; ++k) {
                 DGlobal dGlobal(reordered_scratch + static_cast<size_t>(k) * kH + col);
-                WeightGlobal weightGlobal(weights_scratch + k);
 
                 TLOAD(dTile, dGlobal);
-                TLOAD(weightRow, weightGlobal);
-                TRESHAPE(weightTile, weightRow);
-                TROWEXPANDMUL(scaledTile, dTile, weightTile);
+                TADDS(weightIdx, weightBase, static_cast<int32_t>(k));
+                TGATHER(weightK, weightTile, weightIdx, weightTmp);
+                TROWEXPANDMUL(scaledTile, dTile, weightK);
                 TADD(sumTile, accTile, scaledTile);
                 TMOV(accTile, sumTile);
             }
