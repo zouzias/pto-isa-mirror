@@ -24,6 +24,10 @@ This directory contains the per-instruction reference for the PTO Communication 
 - [**TSCATTER**](TSCATTER.md): Scatter data to all ranks
 - [**TREDUCE**](TREDUCE.md): Reduce data from all ranks to local
 - [**TBROADCAST**](TBROADCAST.md): Broadcast from current NPU to all ranks
+- [**TREDUCE_SCATTER**](TREDUCE_SCATTER.md): Reduce + scatter (each rank gets a slice of the reduced result)
+- [**TALL_REDUCE**](TALL_REDUCE.md): AllReduce (all ranks get the full reduced result)
+- [**TALL_GATHER**](TALL_GATHER.md): AllGather (all ranks get the concatenation of all inputs)
+- [**TALL_TO_ALL**](TALL_TO_ALL.md): AllToAll (full exchange, each rank sends a distinct slice to every other rank)
 
 ## Type Definitions
 
