@@ -263,6 +263,7 @@ tbroadcast
 treduce_ccu
 treduce_scatter_ccu
 tall_reduce_ccu
+tall_gather_ccu
 tscatter_ccu
 tbroadcast_ccu
 tgather_ccu
