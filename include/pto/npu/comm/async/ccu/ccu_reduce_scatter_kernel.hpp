@@ -288,7 +288,7 @@ private:
     inline void LoadArgs()
     {
         Load(input_[rankId_]);
-        Load(output_[rankId_]);
+        Load(output_[0]);
         Load(token_[rankId_]);
         Load(offsetVar_);
         Load(sliceSizeVar_);
@@ -339,8 +339,8 @@ private:
         srcAddr_[rankSize_ - 1].addr += offsetVar_;
         srcAddr_[rankSize_ - 1].token = token_[rankId_];
 
-        // dst: this rank's output buffer
-        dstAddr_.addr = output_[rankId_];
+        // dst: this rank's output buffer (output_ has only 1 element)
+        dstAddr_.addr = output_[0];
         dstAddr_.token = token_[rankId_];
 
         // ReadNb from remote peers
