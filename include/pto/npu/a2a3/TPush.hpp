@@ -55,7 +55,7 @@ struct TPipe {
         if constexpr (SlotNum == 1) {
             return true; // With only 1 slot, producer must always wait for consumer to free
         } else {
-            if (tileIndex < SlotNum) {
+            if (tileIndex < SyncPeriod) {
                 return false;
             }
             return (tileIndex % SyncPeriod) == 0;

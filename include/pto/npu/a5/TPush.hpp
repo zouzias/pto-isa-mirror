@@ -48,7 +48,7 @@ struct TPipe {
         if constexpr (SlotNum == 1) {
             return true;
         } else {
-            if (tileIndex < SlotNum) {
+            if (tileIndex < SyncPeriod) {
                 return false;
             }
             // Sparse sync: Only check flags periodically to reduce overhead
