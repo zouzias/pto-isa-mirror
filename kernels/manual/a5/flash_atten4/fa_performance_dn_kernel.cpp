@@ -526,6 +526,8 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
                 }
 #endif
                 if (tile_id == 0) {
+                    wait_intra_block(PIPE_FIX, RUNNING_O_AVALIABLE);
+                    wait_intra_block(PIPE_FIX, RUNNING_O_AVALIABLE + 16);
                     TMOV<TileOutT, TilePVData, AccToVecMode::DualModeSplitM>(runningOTile, pvAccTile);
                 } else {
                     TMOV<TileOutT, TilePVData, AccToVecMode::DualModeSplitM>(pvVecTile[pv_ub_buf_idx], pvAccTile);
@@ -557,6 +559,8 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
             }
 
             if (tile_id == 0) {
+                wait_intra_block(PIPE_FIX, RUNNING_O_AVALIABLE);
+                wait_intra_block(PIPE_FIX, RUNNING_O_AVALIABLE + 16);
                 TMOV<TileOutT, TilePVData, AccToVecMode::DualModeSplitM>(runningOTile, pvAccTile);
             } else {
                 TMOV<TileOutT, TilePVData, AccToVecMode::DualModeSplitM>(pvVecTile[pv_ub_buf_idx], pvAccTile);
@@ -811,6 +815,7 @@ AICORE inline void compute_gu(int tile_id, int num_tiles, __gm__ float *pv_tile_
                 GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
             GlobalOutT outGlobal((__gm__ float *)(o_out + subblock_base_rows * HEAD_SIZE));
             TSTORE(outGlobal, runningOTile);
+            set_intra_block(PIPE_MTE3, RUNNING_O_AVALIABLE);
         }
     }
 }
@@ -961,18 +966,33 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         (!INTERMEDIATE_CHECK) && (launch_block_count >= static_cast<uint32_t>(kFaLaunchCoreCount));
     constexpr int pvAccTileEvtID = EVENT_ID2;
     const int physical_block_idx = block_idx;
+    if constexpr (DAV_CUBE) {
+        set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+        set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
+        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID3);
+        set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+        set_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
+        set_flag(PIPE_FIX, PIPE_M, EVENT_ID2);
+    }
+    if constexpr (DAV_VEC) {
+        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
+        set_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
+        set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+        set_intra_block(PIPE_MTE3, RUNNING_O_AVALIABLE);
+    }
+    const int physical_comm_slot = use_cv_comm ? pto::TSYNC_CVID(physical_block_idx, cv_comm_buf) : physical_block_idx;
+
     for (int logical_block_idx = physical_block_idx; logical_block_idx < static_cast<int>(logical_block_count);
          logical_block_idx += static_cast<int>(launch_block_count)) {
         const uint64_t tStart = get_sys_cnt();
 
-        if constexpr (DAV_CUBE) {
-            set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
-            set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
-        }
-
         assign_running_acc_tile(qkAccTile, 0);
 
-        if constexpr (DAV_VEC) {
+        if constexpr (DAV_VEC && skip_rescale) {
             const bool is_vec1 = static_cast<size_t>(get_subblockid());
             for (int i = 0; i < SKIP_STATUS_FIFO_SIZE; ++i) {
                 write_skip_status_slot(i, is_vec1, 0);
@@ -980,10 +1000,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         }
 
         const int block_offset_rows = logical_block_idx * static_cast<int>(Cube_S0);
-        int comm_slot = logical_block_idx;
-        if constexpr (use_cv_comm) {
-            comm_slot = pto::TSYNC_CVID(logical_block_idx, cv_comm_buf);
-        }
+        const int comm_slot = use_cv_comm ? physical_comm_slot : logical_block_idx;
 
         __gm__ uint64_t *profile_entry = nullptr;
         if (profile_buf != nullptr) {
@@ -1013,21 +1030,6 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         int num_tiles_s1 = S1 / Tile_S1;
         if constexpr (CAUSAL_MASK)
             num_tiles_s1 = (1 + ((logical_block_idx * CUBE_S0) / Tile_S1));
-        if constexpr (DAV_CUBE) {
-            set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
-            set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
-            set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
-            set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID3);
-            set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
-            set_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
-            set_flag(PIPE_FIX, PIPE_M, EVENT_ID2);
-        }
-        if constexpr (DAV_VEC) {
-            set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
-            set_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
-            set_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
-            set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
-        }
 
         int p_gu_src_pingpong_id = 0; // shared ping-pong for softmax vec tiles, pv output tiles, and GU input tiles
         int k_src_pingpong_id = 0;    // separate ping-pong for K tiles
@@ -1140,15 +1142,6 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
             pending_consumption_events(num_tiles_s1, static_cast<int>(qkp_tile_fifo_size), CV_FIFO_CONS_SYNC_PERIOD);
 
         if constexpr (DAV_CUBE) {
-            wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
-            wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
-            wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
-            wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
-            wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
-            wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID3);
-            wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
-            wait_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
-            wait_flag(PIPE_FIX, PIPE_M, EVENT_ID2);
             for (int i = 0; i < pending_qk_sm_consumed; ++i)
                 qk2smSync.allocate();
             for (int i = 0; i < pending_update_consumed; ++i)
@@ -1173,10 +1166,6 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         }
 
         if constexpr (DAV_VEC) {
-            wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
-            wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
-            wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
-            wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
             for (int i = 0; i < pending_sv_consumed; ++i) {
                 sm2pvSync.allocate();
 #if skip_rescale
@@ -1199,6 +1188,26 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                         int(tEnd - tStart) * 20 / 1000);
         }
 #endif
+    }
+
+    if constexpr (DAV_CUBE) {
+        wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
+        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID3);
+        wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+        wait_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
+        wait_flag(PIPE_FIX, PIPE_M, EVENT_ID2);
+        wait_intra_block(PIPE_FIX, RUNNING_O_AVALIABLE);
+        wait_intra_block(PIPE_FIX, RUNNING_O_AVALIABLE + 16);
+    }
+    if constexpr (DAV_VEC) {
+        wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
+        wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
     }
     pipe_barrier(PIPE_ALL);
 }

@@ -48,6 +48,7 @@ enum FftsBufferFlag : uint32_t
     PV_UB_BUF_READY = 8, // pvUbBufSync: uses flags 8, 9 (+ 24, 25 for dual core)
     CV_BLOCK_END = 10,   // CV comm slot block end (CV_COMM_CTRL reserved in TSyncCVID)
     SS_BUF_READY = 12,
+    RUNNING_O_AVALIABLE = 14,
 };
 #endif
 
