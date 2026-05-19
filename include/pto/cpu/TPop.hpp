@@ -26,6 +26,7 @@ PTO_INTERNAL void TPOP_IMPL(Pipe &pipe, TileCons &tile)
     const std::size_t entryBase =
         slotIndex * Pipe::RingFiFo::SLOT_SIZE + static_cast<std::size_t>(pipe.cons.entryOffset);
 
+    // --- PATH 1: GLOBAL MEMORY (A2/A3) ---
     if (pipe.fifo.GM_SLOT_BUFFER != nullptr) {
         using T = typename TileCons::DType;
         constexpr int rows = TileCons::Rows;
@@ -39,33 +40,31 @@ PTO_INTERNAL void TPOP_IMPL(Pipe &pipe, TileCons &tile)
                                                   entryBase + subOffset);
         GlobalData globalData(addr);
         TLOAD_IMPL(tile, globalData);
-    } else if constexpr (Pipe::is_c2v) {
+    } 
+    else {
         using T = typename TileCons::DType;
-        if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
-            constexpr int rows = TileCons::Rows;
-            constexpr int cols = TileCons::Cols;
-            using SlotTile = Tile<TileType::Vec, T, rows, cols, BLayout::RowMajor, rows, cols>;
+        auto &shared_state = Pipe::GetSharedState();
+        const auto &slotStorage = shared_state.local_slot_storage[slotIndex];
 
-            SlotTile slotTile;
-            TASSIGN(slotTile, static_cast<uint64_t>(pipe.fifo.C2V_CONSUMER_BUF + entryBase));
-            TMOV_IMPL(tile, slotTile);
-        } else {
-            constexpr uint32_t splitCount = cpu_pipe::GetSplitCount<Split>();
-            const uint32_t splitIndex = (get_subblockid() < splitCount) ? get_subblockid() : (splitCount - 1);
-            const auto &slotStorage = Pipe::GetSharedState().local_slot_storage[slotIndex];
+        if constexpr (Pipe::is_c2v) {
+            uint32_t splitCount = cpu_pipe::GetSplitCount<Split>();
+            uint32_t splitIndex = 0;
+            
+            if constexpr (Split != TileSplitAxis::TILE_NO_SPLIT) {
+                splitIndex = (get_subblockid() < splitCount) ? get_subblockid() : (splitCount - 1);
+            }
+
             const auto *slotPtr = reinterpret_cast<const T *>(
                 slotStorage.data() + splitIndex * Pipe::RingFiFo::SLOT_SIZE + pipe.cons.entryOffset);
+            
+            cpu_pipe::CopyLinearToTile(tile, slotPtr, static_cast<uint32_t>(tile.GetValidCol()));
+        } 
+        else if constexpr (Pipe::is_v2c) {
+            const auto *slotPtr = reinterpret_cast<const T *>(
+                slotStorage.data() + pipe.cons.entryOffset);
+            
             cpu_pipe::CopyLinearToTile(tile, slotPtr, static_cast<uint32_t>(tile.GetValidCol()));
         }
-    } else if constexpr (Pipe::is_v2c) {
-        using T = typename TileCons::DType;
-        constexpr int rows = TileCons::Rows;
-        constexpr int cols = TileCons::Cols;
-        using SlotTile = Tile<TileType::Mat, T, rows, cols, BLayout::RowMajor, rows, cols>;
-
-        SlotTile slotTile;
-        TASSIGN(slotTile, static_cast<uint64_t>(pipe.fifo.V2C_CONSUMER_BUF + entryBase));
-        TMOV_IMPL(tile, slotTile);
     }
 }
 
