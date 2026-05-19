@@ -37,7 +37,19 @@ PTO_INTERNAL void TBROADCAST_CCU_IMPL(ParallelGroupType &parallelGroup, GlobalSr
                                       TileData &stagingTileData, const CcuTriggerContext &ctx, WaitEvents &...events)
 {
     WaitAllEvents(events...);
+
+    if (ctx.inputSource == CcuInputSource::AivStored) {
+        if (static_cast<int>(ctx.selfIdx) == parallelGroup.GetRootIdx()) {
+            set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+            wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+            TSTORE(srcGlobalData, stagingTileData);
+            pipe_barrier(PIPE_MTE3);
+        }
+    }
+
     pto::comm::ccu::CkeTriggerFromTile(ctx.ckeSlotVA, ctx.mask, stagingTileData);
+
+    (void)parallelGroup;
 }
 
 template <CollEngine = CollEngine::CCU, typename ParallelGroupType, typename GlobalSrcData, typename TileData,
@@ -47,7 +59,20 @@ PTO_INTERNAL void TBROADCAST_CCU_IMPL(ParallelGroupType &parallelGroup, GlobalSr
                                       WaitEvents &...events)
 {
     WaitAllEvents(events...);
+
+    if (ctx.inputSource == CcuInputSource::AivStored) {
+        if (static_cast<int>(ctx.selfIdx) == parallelGroup.GetRootIdx()) {
+            set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+            wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+            TSTORE(srcGlobalData, pingTile);
+            pipe_barrier(PIPE_MTE3);
+        }
+    }
+
     pto::comm::ccu::CkeTriggerFromTile(ctx.ckeSlotVA, ctx.mask, pingTile);
+
+    (void)parallelGroup;
+    (void)pongTile;
 }
 
 } // namespace comm
