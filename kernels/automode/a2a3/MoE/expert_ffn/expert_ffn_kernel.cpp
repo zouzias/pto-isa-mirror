@@ -86,8 +86,16 @@ constexpr unsigned kAlloc        = kPackedRows + kOverspillPad;
 
 // ============================================================================
 // Stage 1 — GEMM1 + fused ReLU + fp32->fp16 in TSTORE.
-//   A_tile (rows start[e]+m0..+kTileM, kH cols) @ W1[e] (kH×kF)
-//   -> Y[same rows, kF cols] with ReLU + fp32->fp16 fused in FixPipe.
+//   A_tile [start+m0 : +kTileM, kH] @ W1[e] [kH, kF] -> Y [same rows, kF].
+//
+// Split-K over kH: loads K_block-wide slices of A and W1 per inner iteration
+// and accumulates into cTile (L0C).  TSTORE + ReLU fires once after all
+// K_nblocks, draining L0C to Y.  When K ≤ K_block_max (kH/kF ≤ 128 for fp16,
+// no L0B pressure) K_block = K and K_nblocks = 1 — identical to the old path.
+//
+// Inferred A3/Ascend910B: L0B = 64KB = 32768 fp16 elements.  K_block chosen
+// so RightTile K_block*N ≤ 32768.  Assumption: TMATMUL accumulates C += A×B
+// into L0C across iterations; TSTORE zeroes L0C after drain.
 // ============================================================================
 template <typename TIn, typename TWeight, typename TScratch>
 __global__ AICORE void runFfnStage1Gemm1Relu(
@@ -108,29 +116,36 @@ __global__ AICORE void runFfnStage1Gemm1Relu(
     constexpr int K = ((kH      + blockAlign - 1) / blockAlign) * blockAlign;
     constexpr int N = ((kF      + blockAlign - 1) / blockAlign) * blockAlign;
 
-    // GlobalTensor shapes use K/N (blockAlign-rounded) so the last tile
-    // of a non-aligned kH/kF row reads zero-padded data rather than
-    // uninitialized UB columns.  Input data must be padded to K/N per row
-    // (gen_data.py and main.cpp handle this).  Output Y uses N per row so
-    // Stage 2 can read K2=N consistent rows.  AccTile valid uses N (not kF)
-    // so TSTORE writes all N columns to Y (extra cols are zero from W1 padding).
+    // Split-K block size constrained by L0B (RightTile K_block*N ≤ 32768 fp16).
+    constexpr int kL0B_fp16   = 32768;
+    constexpr int K_block_max = ((kL0B_fp16 / N) / blockAlign) * blockAlign;
+    constexpr int K_block     = (K <= K_block_max) ? K : K_block_max;
+    constexpr int K_nblocks   = K / K_block;
+    static_assert(K_block >= blockAlign,
+        "K_block < blockAlign: kF is too large for L0B; reduce kF.");
+    static_assert(K % K_block == 0,
+        "K not divisible by K_block: adjust kH so kH_aligned % K_block == 0.");
+
+    // GlobalDataA: shape (kTileM, K_block), row stride K (full padded row width).
+    // GlobalDataB: shape (K_block, N), stride N per row within the slice.
+    // GlobalDataC: shape (kTileM, N), stride N per row.
     using GlobalDataA =
-        GlobalTensor<TIn,      Shape<1, 1, 1, kTileM, K>,
+        GlobalTensor<TIn,      Shape<1, 1, 1, kTileM, K_block>,
                      Stride<1 * kTileM * K, 1 * kTileM * K, kTileM * K, K, 1>>;
     using GlobalDataB =
-        GlobalTensor<TWeight,  Shape<1, 1, 1, K,      N>,
-                     Stride<1 * K * N,     1 * K * N,     K * N,     N, 1>>;
+        GlobalTensor<TWeight,  Shape<1, 1, 1, K_block, N>,
+                     Stride<1 * K_block * N, 1 * K_block * N, K_block * N, N, 1>>;
     using GlobalDataC =
         GlobalTensor<TScratch, Shape<1, 1, 1, kTileM, N>,
                      Stride<1 * kTileM * N, 1 * kTileM * N, kTileM * N, N, 1>>;
 
-    using TileMatAData = Tile<TileType::Mat, TIn,     M, K, BLayout::ColMajor,
-                              kTileM, kH, SLayout::RowMajor, 512>;
-    using TileMatBData = Tile<TileType::Mat, TWeight, K, N, BLayout::ColMajor,
-                              kH,     kF, SLayout::RowMajor, 512>;
-    using LeftTile     = TileLeft <TIn,     M, K, kTileM, kH>;
-    using RightTile    = TileRight<TWeight, K, N, kH,     kF>;
-    using AccTile      = TileAcc  <float,   M, N, kTileM, N>;  // write all N cols to Y
+    using TileMatAData = Tile<TileType::Mat, TIn,     M, K_block, BLayout::ColMajor,
+                              kTileM, K_block, SLayout::RowMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, TWeight, K_block, N, BLayout::ColMajor,
+                              K_block, N,     SLayout::RowMajor, 512>;
+    using LeftTile     = TileLeft <TIn,     M, K_block, kTileM, K_block>;
+    using RightTile    = TileRight<TWeight, K_block, N, K_block, N>;
+    using AccTile      = TileAcc  <float,   M, N, kTileM, N>;  // accumulates across K_blocks
 
     TileMatAData aMatTile;
     TileMatBData bMatTile;
@@ -142,23 +157,27 @@ __global__ AICORE void runFfnStage1Gemm1Relu(
         int32_t start = expert_start[e];
         int32_t count = expert_count[e];
 
-        GlobalDataB bGlobal(W1 + static_cast<size_t>(e) * K * N);
-
         for (int32_t m0 = 0; m0 < count; m0 += static_cast<int32_t>(kTileM)) {
             size_t row  = static_cast<size_t>(start) + static_cast<size_t>(m0);
-            size_t aOff = row * K;  // A row stride = K (padded)
-            size_t cOff = row * N;  // Y row stride = N (padded)
-
-            GlobalDataA aGlobal(A + aOff);
+            size_t cOff = row * N;
             GlobalDataC cGlobal(Y + cOff);
 
-            TLOAD(aMatTile, aGlobal);
-            TLOAD(bMatTile, bGlobal);
-            TMOV(aTile, aMatTile);
-            TMOV(bTile, bMatTile);
-            TMATMUL(cTile, aTile, bTile);
+            for (int kb = 0; kb < K_nblocks; ++kb) {
+                size_t aOff = row * K + static_cast<size_t>(kb) * K_block;
+                size_t bOff = static_cast<size_t>(e) * K * N
+                              + static_cast<size_t>(kb) * K_block * N;
 
-            // L0C -> GM with ReLU + FP32->FP16 fused in FixPipe (§A17 / §11.8).
+                GlobalDataA aGlobal(A  + aOff);
+                GlobalDataB bGlobal(W1 + bOff);
+
+                TLOAD(aMatTile, aGlobal);
+                TLOAD(bMatTile, bGlobal);
+                TMOV(aTile, aMatTile);
+                TMOV(bTile, bMatTile);
+                TMATMUL(cTile, aTile, bTile);
+            }
+
+            // ReLU + FP32→FP16 fused in FixPipe after all K_blocks. (§A17 / §11.8)
             TSTORE<AccTile, GlobalDataC, AtomicType::AtomicNone,
                    ReluPreMode::NormalRelu>(cGlobal, cTile);
         }
@@ -169,6 +188,10 @@ __global__ AICORE void runFfnStage1Gemm1Relu(
 // Stage 2 — GEMM2 only.
 //   Y_tile (rows start[e]+m0..+kTileM, kF cols) @ W2[e] (kF×kH)
 //   -> B[same rows, kH cols] as fp32 accumulator.
+//
+// Split-K over kF: loads K_block-wide slices of Y and W2 per inner iteration
+// and accumulates into cTile (L0C).  TSTORE fires once after all K_nblocks.
+// No ReLU.  When K ≤ K_block_max K_nblocks = 1 — identical to old path.
 // ============================================================================
 template <typename TOut, typename TScratch, typename TWeight>
 __global__ AICORE void runFfnStage2Gemm2(
@@ -186,27 +209,38 @@ __global__ AICORE void runFfnStage2Gemm2(
 
     constexpr int blockAlign = C0_SIZE_BYTE / sizeof(TScratch);
     constexpr int M = ((kTileM + 15) / 16) * 16;
-    constexpr int K = ((kF      + blockAlign - 1) / blockAlign) * blockAlign;
-    constexpr int N = ((kH      + blockAlign - 1) / blockAlign) * blockAlign;
+    constexpr int K = ((kF      + blockAlign - 1) / blockAlign) * blockAlign;  // contraction
+    constexpr int N = ((kH      + blockAlign - 1) / blockAlign) * blockAlign;  // output
 
-    // Stage 2: Y has K (=N_stage1) cols per row; W2 is K×N padded; B keeps kH cols (unpadded).
-    // AccTile valid=(kTileM, kH): TSTORE writes only the kH real result columns to B.
+    // Split-K block size constrained by L0B (RightTile K_block*N ≤ 32768 fp16).
+    constexpr int kL0B_fp16   = 32768;
+    constexpr int K_block_max = ((kL0B_fp16 / N) / blockAlign) * blockAlign;
+    constexpr int K_block     = (K <= K_block_max) ? K : K_block_max;
+    constexpr int K_nblocks   = K / K_block;
+    static_assert(K_block >= blockAlign,
+        "K_block < blockAlign: kH is too large for L0B; reduce kH.");
+    static_assert(K % K_block == 0,
+        "K not divisible by K_block: adjust kF so kF_aligned % K_block == 0.");
+
+    // GlobalDataA: shape (kTileM, K_block), row stride K (full padded row width).
+    // GlobalDataB: shape (K_block, N), stride N per row within the slice.
+    // GlobalDataC: shape (kTileM, kH), stride kH per row (unpadded B output).
     using GlobalDataA =
-        GlobalTensor<TScratch, Shape<1, 1, 1, kTileM, K>,
+        GlobalTensor<TScratch, Shape<1, 1, 1, kTileM, K_block>,
                      Stride<1 * kTileM * K, 1 * kTileM * K, kTileM * K, K, 1>>;
     using GlobalDataB =
-        GlobalTensor<TWeight,  Shape<1, 1, 1, K,      N>,
-                     Stride<1 * K * N,     1 * K * N,     K * N,     N, 1>>;
+        GlobalTensor<TWeight,  Shape<1, 1, 1, K_block, N>,
+                     Stride<1 * K_block * N, 1 * K_block * N, K_block * N, N, 1>>;
     using GlobalDataC =
         GlobalTensor<TOut,     Shape<1, 1, 1, kTileM, kH>,
                      Stride<1 * kTileM * kH, 1 * kTileM * kH, kTileM * kH, kH, 1>>;
 
-    using TileMatAData = Tile<TileType::Mat, TScratch, M, K, BLayout::ColMajor,
-                              kTileM, kF, SLayout::RowMajor, 512>;
-    using TileMatBData = Tile<TileType::Mat, TWeight,  K, N, BLayout::ColMajor,
-                              kF,     kH, SLayout::RowMajor, 512>;
-    using LeftTile     = TileLeft <TScratch, M, K, kTileM, kF>;
-    using RightTile    = TileRight<TWeight,  K, N, kF,     kH>;
+    using TileMatAData = Tile<TileType::Mat, TScratch, M, K_block, BLayout::ColMajor,
+                              kTileM, K_block, SLayout::RowMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, TWeight,  K_block, N, BLayout::ColMajor,
+                              K_block, N,     SLayout::RowMajor, 512>;
+    using LeftTile     = TileLeft <TScratch, M, K_block, kTileM, K_block>;
+    using RightTile    = TileRight<TWeight,  K_block, N, K_block, N>;
     using AccTile      = TileAcc  <TOut,     M, N, kTileM, kH>;  // valid kH cols -> B (unpadded)
 
     TileMatAData aMatTile;
@@ -219,21 +253,25 @@ __global__ AICORE void runFfnStage2Gemm2(
         int32_t start = expert_start[e];
         int32_t count = expert_count[e];
 
-        GlobalDataB bGlobal(W2 + static_cast<size_t>(e) * K * N);
-
         for (int32_t m0 = 0; m0 < count; m0 += static_cast<int32_t>(kTileM)) {
             size_t row  = static_cast<size_t>(start) + static_cast<size_t>(m0);
-            size_t aOff = row * K;   // Y row stride = K (= N_stage1, padded)
-            size_t cOff = row * kH;  // B row stride = kH (unpadded)
-
-            GlobalDataA aGlobal(Y + aOff);
+            size_t cOff = row * kH;
             GlobalDataC cGlobal(B + cOff);
 
-            TLOAD(aMatTile, aGlobal);
-            TLOAD(bMatTile, bGlobal);
-            TMOV(aTile, aMatTile);
-            TMOV(bTile, bMatTile);
-            TMATMUL(cTile, aTile, bTile);
+            for (int kb = 0; kb < K_nblocks; ++kb) {
+                size_t aOff = row * K + static_cast<size_t>(kb) * K_block;
+                size_t bOff = static_cast<size_t>(e) * K * N
+                              + static_cast<size_t>(kb) * K_block * N;
+
+                GlobalDataA aGlobal(Y  + aOff);
+                GlobalDataB bGlobal(W2 + bOff);
+
+                TLOAD(aMatTile, aGlobal);
+                TLOAD(bMatTile, bGlobal);
+                TMOV(aTile, aMatTile);
+                TMOV(bTile, bMatTile);
+                TMATMUL(cTile, aTile, bTile);
+            }
 
             TSTORE(cGlobal, cTile);
         }
