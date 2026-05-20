@@ -55,7 +55,8 @@ using namespace PtoTestCommon;
 
 // ----- Kernel launchers exposed by the two kernel TUs ----------------------
 
-extern "C" void launchMlaQProjectionFp16    (uint8_t *q, uint8_t *x, uint8_t *w_q, void *stream);
+extern "C" void launchMlaQCompressionFp16   (uint8_t *c_q, uint8_t *x, uint8_t *w_dq, void *stream);
+extern "C" void launchMlaQReconstructionFp16(uint8_t *q_nope, uint8_t *c_q, uint8_t *w_uq, void *stream);
 extern "C" void launchMlaKVCompressionFp16  (uint8_t *c_kv, uint8_t *x, uint8_t *w_dkv, void *stream);
 extern "C" void launchMlaKVCacheStoreFp16   (uint8_t *c_cache, uint8_t *c_kv, void *stream);
 extern "C" void launchMlaKVReconstructionFp16(uint8_t *k, uint8_t *v, uint8_t *c_cache,
@@ -82,27 +83,33 @@ static constexpr int kHidden   = 4096;
 static constexpr int kNumHeads = 32;
 static constexpr int kHeadDim  = 128;
 static constexpr int kLatent   = 64;
+static constexpr int kNopeDim  = 64;                       // DeepSeek-V2 non-rope per-head dim
 static constexpr int kRopeDim  = 64;
 static constexpr int kRopeHalf = kRopeDim / 2;
-static constexpr int kQKVHidden  = kNumHeads * kHeadDim;   // 4096
+static constexpr int kQLatent  = 64;                       // DeepSeek-V2 Q latent dim
+static constexpr int kQKVHidden  = kNumHeads * kHeadDim;   // 4096 (V/Out row stride)
+static constexpr int kQNopeWidth = kNumHeads * kNopeDim;   // 2048 (Q_nope/K_nope row stride)
 static constexpr int kQRopeWidth = kNumHeads * kRopeDim;   // 2048
-static constexpr int kHeadDimTotal = kHeadDim + kRopeDim;  // 192 — for softmax scale
+static_assert(kNopeDim + kRopeDim == kHeadDim,
+              "DeepSeek-V2: head_dim must split into nope_dim + rope_dim");
 
 static constexpr size_t kHalfBytes = 2;
 
 // Per-buffer element counts.
 static constexpr size_t kXNumel        = static_cast<size_t>(kSeqLen) * kHidden;          // 128 * 4096
-static constexpr size_t kWqNumel       = static_cast<size_t>(kHidden) * kQKVHidden;       // 4096 * 4096
+static constexpr size_t kWdqNumel      = static_cast<size_t>(kHidden) * kQLatent;         // 4096 * 64   (NEW)
+static constexpr size_t kWuqNumel      = static_cast<size_t>(kQLatent) * kQNopeWidth;     // 64 * 2048   (NEW)
 static constexpr size_t kWdkvNumel     = static_cast<size_t>(kHidden) * kLatent;          // 4096 * 64
-static constexpr size_t kWukNumel      = static_cast<size_t>(kLatent) * kQKVHidden;       // 64 * 4096
+static constexpr size_t kWukNumel      = static_cast<size_t>(kLatent) * kQNopeWidth;      // 64 * 2048   (HALVED)
 static constexpr size_t kWuvNumel      = static_cast<size_t>(kLatent) * kQKVHidden;       // 64 * 4096
-static constexpr size_t kQNumel        = static_cast<size_t>(kSeqLen) * kQKVHidden;       // 128 * 4096
+static constexpr size_t kCQNumel       = static_cast<size_t>(kSeqLen) * kQLatent;         // 128 * 64    (NEW)
+static constexpr size_t kQNumel        = static_cast<size_t>(kSeqLen) * kQNopeWidth;      // 128 * 2048  (Q_nope)
 static constexpr size_t kCKvNumel      = static_cast<size_t>(kSeqLen) * kLatent;          // 128 * 64
-static constexpr size_t kKNumel        = kQNumel;
-static constexpr size_t kVNumel        = kQNumel;
-static constexpr size_t kScoresNumel   = static_cast<size_t>(kNumHeads) * kSeqLen * kSeqLen;  // 32 * 128 * 128
+static constexpr size_t kKNumel        = kQNumel;                                         //              (K_nope same shape)
+static constexpr size_t kVNumel        = static_cast<size_t>(kSeqLen) * kQKVHidden;       // 128 * 4096  (V unchanged)
+static constexpr size_t kScoresNumel   = static_cast<size_t>(kNumHeads) * kSeqLen * kSeqLen;
 static constexpr size_t kProbsNumel    = kScoresNumel;
-static constexpr size_t kOutNumel      = kQNumel;
+static constexpr size_t kOutNumel      = kVNumel;                                         //              (Out has V shape)
 // RoPE buffers.
 static constexpr size_t kWqRopeNumel   = static_cast<size_t>(kHidden) * kQRopeWidth;  // 4096 * 2048
 static constexpr size_t kWkRopeNumel   = static_cast<size_t>(kHidden) * kRopeDim;     // 4096 * 64
@@ -114,10 +121,12 @@ static constexpr size_t kScoresRopeNumel = kScoresNumel;
 
 // Byte sizes.
 size_t kXBytes      = kXNumel      * kHalfBytes;
-size_t kWqBytes     = kWqNumel     * kHalfBytes;
+size_t kWdqBytes    = kWdqNumel    * kHalfBytes;
+size_t kWuqBytes    = kWuqNumel    * kHalfBytes;
 size_t kWdkvBytes   = kWdkvNumel   * kHalfBytes;
 size_t kWukBytes    = kWukNumel    * kHalfBytes;
 size_t kWuvBytes    = kWuvNumel    * kHalfBytes;
+static constexpr size_t kCQBytes     = kCQNumel     * kHalfBytes;
 static constexpr size_t kQBytes      = kQNumel      * kHalfBytes;
 static constexpr size_t kCKvBytes    = kCKvNumel    * kHalfBytes;
 static constexpr size_t kKBytes      = kKNumel      * kHalfBytes;
@@ -149,6 +158,7 @@ static constexpr uint8_t kPoisonKRope     = 0xB2;
 static constexpr uint8_t kPoisonQRopeRot  = 0xB3;
 static constexpr uint8_t kPoisonKRopeRot  = 0xB4;
 static constexpr uint8_t kPoisonScoresRope= 0xB5;
+static constexpr uint8_t kPoisonCQ        = 0xC1;
 
 // Mirrors kernels/manual/a2a3/tget_bandwidth/tget_bandwidth_kernel.cpp:91-98.
 static bool CheckAcl(aclError ret, const char *op)
@@ -278,12 +288,12 @@ static bool ValidateStage(const char *name,
 
 int main()
 {
-    printf("[main] MLA basic: B=%d S=%d H=%d Nh=%d Hd=%d L=%d\n",
-           kBatch, kSeqLen, kHidden, kNumHeads, kHeadDim, kLatent);
-    printf("[main] sizes (bytes): x=%zu  w_q=%zu  w_dkv=%zu  w_uk=%zu  w_uv=%zu\n",
-           kXBytes, kWqBytes, kWdkvBytes, kWukBytes, kWuvBytes);
-    printf("[main]                 q=%zu  c_kv=%zu  k=%zu  v=%zu\n",
-           kQBytes, kCKvBytes, kKBytes, kVBytes);
+    printf("[main] MLA DeepSeek-V2: B=%d S=%d H=%d Nh=%d Hd=%d (nope=%d rope=%d) L=%d qL=%d\n",
+           kBatch, kSeqLen, kHidden, kNumHeads, kHeadDim, kNopeDim, kRopeDim, kLatent, kQLatent);
+    printf("[main] sizes (bytes): x=%zu  w_dq=%zu  w_uq=%zu  w_dkv=%zu  w_uk=%zu  w_uv=%zu\n",
+           kXBytes, kWdqBytes, kWuqBytes, kWdkvBytes, kWukBytes, kWuvBytes);
+    printf("[main]                 c_q=%zu  q_nope=%zu  c_kv=%zu  k_nope=%zu  v=%zu\n",
+           kCQBytes, kQBytes, kCKvBytes, kKBytes, kVBytes);
     printf("[main]                 scores=%zu  probs=%zu  out=%zu\n",
            kScoresBytes, kProbsBytes, kOutBytes);
 
@@ -293,8 +303,9 @@ int main()
     if (!CheckAcl(aclrtCreateStream(&stream), "aclrtCreateStream")) std::exit(3);
 
     // ---- Host allocations ------------------------------------------------
-    uint8_t *xHost = nullptr, *wqHost = nullptr, *wdkvHost = nullptr;
+    uint8_t *xHost = nullptr, *wdqHost = nullptr, *wuqHost = nullptr, *wdkvHost = nullptr;
     uint8_t *wukHost = nullptr, *wuvHost = nullptr;
+    uint8_t *cQHost   = nullptr;
     uint8_t *outHost = nullptr;
     // (Debug stage outputs)
     uint8_t *qHost      = nullptr;
@@ -316,10 +327,12 @@ int main()
     uint8_t *scoresRopeHost = nullptr;
 
     CheckAcl(aclrtMallocHost((void **)&xHost,      kXBytes),     "MallocHost(x)");
-    CheckAcl(aclrtMallocHost((void **)&wqHost,     kWqBytes),    "MallocHost(w_q)");
+    CheckAcl(aclrtMallocHost((void **)&wdqHost,    kWdqBytes),   "MallocHost(w_dq)");
+    CheckAcl(aclrtMallocHost((void **)&wuqHost,    kWuqBytes),   "MallocHost(w_uq)");
     CheckAcl(aclrtMallocHost((void **)&wdkvHost,   kWdkvBytes),  "MallocHost(w_dkv)");
     CheckAcl(aclrtMallocHost((void **)&wukHost,    kWukBytes),   "MallocHost(w_uk)");
     CheckAcl(aclrtMallocHost((void **)&wuvHost,    kWuvBytes),   "MallocHost(w_uv)");
+    CheckAcl(aclrtMallocHost((void **)&cQHost,     kCQBytes),    "MallocHost(c_q)");
     CheckAcl(aclrtMallocHost((void **)&outHost,    kOutBytes),   "MallocHost(out)");
     CheckAcl(aclrtMallocHost((void **)&qHost,      kQBytes),     "MallocHost(q)");
     CheckAcl(aclrtMallocHost((void **)&ckvHost,    kCKvBytes),   "MallocHost(c_kv)");
@@ -339,8 +352,9 @@ int main()
     CheckAcl(aclrtMallocHost((void **)&scoresRopeHost,kScoresRopeBytes), "MallocHost(scores_rope)");
 
     // ---- Device allocations ----------------------------------------------
-    uint8_t *xDev = nullptr, *wqDev = nullptr, *wdkvDev = nullptr;
+    uint8_t *xDev = nullptr, *wdqDev = nullptr, *wuqDev = nullptr, *wdkvDev = nullptr;
     uint8_t *wukDev = nullptr, *wuvDev = nullptr;
+    uint8_t *cQDev = nullptr;
     uint8_t *qDev = nullptr, *ckvDev = nullptr, *ccacheDev = nullptr;
     uint8_t *kDev = nullptr, *vDev = nullptr;
     uint8_t *scoresDev = nullptr, *probsDev = nullptr;
@@ -357,10 +371,12 @@ int main()
     uint8_t *scoresRopeDev = nullptr;
 
     CheckAcl(aclrtMalloc((void **)&xDev,      kXBytes,      ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(x)");
-    CheckAcl(aclrtMalloc((void **)&wqDev,     kWqBytes,     ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_q)");
+    CheckAcl(aclrtMalloc((void **)&wdqDev,    kWdqBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_dq)");
+    CheckAcl(aclrtMalloc((void **)&wuqDev,    kWuqBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_uq)");
     CheckAcl(aclrtMalloc((void **)&wdkvDev,   kWdkvBytes,   ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_dkv)");
     CheckAcl(aclrtMalloc((void **)&wukDev,    kWukBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_uk)");
     CheckAcl(aclrtMalloc((void **)&wuvDev,    kWuvBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_uv)");
+    CheckAcl(aclrtMalloc((void **)&cQDev,     kCQBytes,     ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(c_q)");
     CheckAcl(aclrtMalloc((void **)&qDev,      kQBytes,      ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(q)");
     CheckAcl(aclrtMalloc((void **)&ckvDev,    kCKvBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(c_kv)");
     CheckAcl(aclrtMalloc((void **)&ccacheDev, kCKvBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(c_cache)");
@@ -380,19 +396,24 @@ int main()
     CheckAcl(aclrtMalloc((void **)&scoresRopeDev,kScoresRopeBytes, ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(scores_rope)");
 
     // ---- Read inputs from disk -------------------------------------------
-    ReadFile("../input/input_x.bin",        kXBytes,     xHost,      kXBytes);
-    ReadFile("../input/input_w_q.bin",      kWqBytes,    wqHost,     kWqBytes);
-    ReadFile("../input/input_w_dkv.bin",    kWdkvBytes,  wdkvHost,   kWdkvBytes);
-    ReadFile("../input/input_w_uk.bin",     kWukBytes,   wukHost,    kWukBytes);
-    ReadFile("../input/input_w_uv.bin",     kWuvBytes,   wuvHost,    kWuvBytes);
-    ReadFile("../input/input_w_q_rope.bin", kWqRopeBytes,wqRopeHost, kWqRopeBytes);
-    ReadFile("../input/input_w_k_rope.bin", kWkRopeBytes,wkRopeHost, kWkRopeBytes);
-    ReadFile("../input/input_cos.bin",      kCosBytes,   cosHost,    kCosBytes);
-    ReadFile("../input/input_sin.bin",      kSinBytes,   sinHost,    kSinBytes);
+    // ReadFile's second arg is `size_t&` (out-param for actual file size),
+    // so it cannot bind to constexpr byte-size constants. Use a local.
+    size_t actualSize = 0;
+    ReadFile("../input/input_x.bin",        actualSize, xHost,      kXBytes);
+    ReadFile("../input/input_w_dq.bin",     actualSize, wdqHost,    kWdqBytes);
+    ReadFile("../input/input_w_uq.bin",     actualSize, wuqHost,    kWuqBytes);
+    ReadFile("../input/input_w_dkv.bin",    actualSize, wdkvHost,   kWdkvBytes);
+    ReadFile("../input/input_w_uk.bin",     actualSize, wukHost,    kWukBytes);
+    ReadFile("../input/input_w_uv.bin",     actualSize, wuvHost,    kWuvBytes);
+    ReadFile("../input/input_w_q_rope.bin", actualSize, wqRopeHost, kWqRopeBytes);
+    ReadFile("../input/input_w_k_rope.bin", actualSize, wkRopeHost, kWkRopeBytes);
+    ReadFile("../input/input_cos.bin",      actualSize, cosHost,    kCosBytes);
+    ReadFile("../input/input_sin.bin",      actualSize, sinHost,    kSinBytes);
 
     // ---- Upload inputs ----------------------------------------------------
     CheckAcl(aclrtMemcpy(xDev,        kXBytes,      xHost,      kXBytes,      ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(x)");
-    CheckAcl(aclrtMemcpy(wqDev,       kWqBytes,     wqHost,     kWqBytes,     ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_q)");
+    CheckAcl(aclrtMemcpy(wdqDev,      kWdqBytes,    wdqHost,    kWdqBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_dq)");
+    CheckAcl(aclrtMemcpy(wuqDev,      kWuqBytes,    wuqHost,    kWuqBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_uq)");
     CheckAcl(aclrtMemcpy(wdkvDev,     kWdkvBytes,   wdkvHost,   kWdkvBytes,   ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_dkv)");
     CheckAcl(aclrtMemcpy(wukDev,      kWukBytes,    wukHost,    kWukBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_uk)");
     CheckAcl(aclrtMemcpy(wuvDev,      kWuvBytes,    wuvHost,    kWuvBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_uv)");
@@ -402,6 +423,7 @@ int main()
     CheckAcl(aclrtMemcpy(sinDev,      kSinBytes,    sinHost,    kSinBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(sin)");
 
     // ---- Poison every device output buffer -------------------------------
+    CheckAcl(aclrtMemset(cQDev,         kCQBytes,        kPoisonCQ,        kCQBytes),        "Memset(c_q)");
     CheckAcl(aclrtMemset(qDev,          kQBytes,         kPoisonQ,         kQBytes),         "Memset(q)");
     CheckAcl(aclrtMemset(ckvDev,        kCKvBytes,       kPoisonCKv,       kCKvBytes),       "Memset(c_kv)");
     CheckAcl(aclrtMemset(ccacheDev,     kCKvBytes,       kPoisonCCache,    kCKvBytes),       "Memset(c_cache)");
@@ -416,12 +438,14 @@ int main()
     CheckAcl(aclrtMemset(kRopeRotDev,   kKRopeBytes,     kPoisonKRopeRot,  kKRopeBytes),     "Memset(k_rope_rot)");
     CheckAcl(aclrtMemset(scoresRopeDev, kScoresRopeBytes,kPoisonScoresRope,kScoresRopeBytes),"Memset(scores_rope)");
 
-    const float scale = 1.0f / std::sqrt(static_cast<float>(kHeadDimTotal));
-    printf("[main] softmax scale = 1/sqrt(%d) = %.6f\n", kHeadDimTotal, scale);
+    // DeepSeek-V2 softmax scale = 1/sqrt(head_dim) = 1/sqrt(128).
+    const float scale = 1.0f / std::sqrt(static_cast<float>(kHeadDim));
+    printf("[main] softmax scale = 1/sqrt(%d) = %.6f\n", kHeadDim, scale);
 
     // ---- Pipeline launches (all on the same stream; ACL stream-order) ----
-    // nope path
-    launchMlaQProjectionFp16    (qDev, xDev, wqDev, stream);
+    // nope path (Q compressed -> reconstructed; K via KV cache)
+    launchMlaQCompressionFp16   (cQDev, xDev, wdqDev, stream);
+    launchMlaQReconstructionFp16(qDev, cQDev, wuqDev, stream);
     launchMlaKVCompressionFp16  (ckvDev, xDev, wdkvDev, stream);
     launchMlaKVCacheStoreFp16   (ccacheDev, ckvDev, stream);
     launchMlaKVReconstructionFp16(kDev, vDev, ccacheDev, wukDev, wuvDev, stream);
@@ -441,7 +465,8 @@ int main()
     }
 
     // ---- Copy every output back for debug + main validation ---------------
-    CheckAcl(aclrtMemcpy(qHost,      kQBytes,      qDev,      kQBytes,      ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(q)");
+    CheckAcl(aclrtMemcpy(cQHost,     kCQBytes,     cQDev,     kCQBytes,     ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(c_q)");
+    CheckAcl(aclrtMemcpy(qHost,      kQBytes,      qDev,      kQBytes,      ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(q_nope)");
     CheckAcl(aclrtMemcpy(ckvHost,    kCKvBytes,    ckvDev,    kCKvBytes,    ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(c_kv)");
     CheckAcl(aclrtMemcpy(ccacheHost, kCKvBytes,    ccacheDev, kCKvBytes,    ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(c_cache)");
     CheckAcl(aclrtMemcpy(kHost,      kKBytes,      kDev,      kKBytes,      ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(k)");
@@ -455,6 +480,7 @@ int main()
     CheckAcl(aclrtMemcpy(kRopeRotHost,   kKRopeBytes,     kRopeRotDev,   kKRopeBytes,     ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(k_rope_rot)");
     CheckAcl(aclrtMemcpy(scoresRopeHost, kScoresRopeBytes,scoresRopeDev, kScoresRopeBytes,ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(scores_rope)");
 
+    WriteFile("../output/output_c_q.bin",        cQHost,         kCQBytes);
     WriteFile("../output/output_q.bin",          qHost,          kQBytes);
     WriteFile("../output/output_c_kv.bin",       ckvHost,        kCKvBytes);
     WriteFile("../output/output_c_cache.bin",    ccacheHost,     kCKvBytes);
@@ -480,7 +506,10 @@ int main()
     // output_c_cache.bin against golden_c_kv.bin.
     printf("\n[main] ===== per-stage validation =====\n");
     bool allOk = true;
-    allOk &= ValidateStage("Q",
+    allOk &= ValidateStage("C_q",
+        "../output/golden_c_q.bin",    "../output/output_c_q.bin",
+        kCQBytes,     0.05f, 0.02f, kPoisonCQ);
+    allOk &= ValidateStage("Q_nope",
         "../output/golden_q.bin",      "../output/output_q.bin",
         kQBytes,      0.1f, 0.02f, kPoisonQ);
     allOk &= ValidateStage("C_kv",
@@ -489,7 +518,7 @@ int main()
     allOk &= ValidateStage("C_cache",
         "../output/golden_c_kv.bin",   "../output/output_c_cache.bin",
         kCKvBytes,    0.1f, 0.02f, kPoisonCCache);
-    allOk &= ValidateStage("K",
+    allOk &= ValidateStage("K_nope",
         "../output/golden_k.bin",      "../output/output_k.bin",
         kKBytes,      0.1f, 0.02f, kPoisonK);
     allOk &= ValidateStage("V",
@@ -541,10 +570,12 @@ int main()
     aclrtFree(ccacheDev);
     aclrtFree(ckvDev);
     aclrtFree(qDev);
+    aclrtFree(cQDev);
     aclrtFree(wuvDev);
     aclrtFree(wukDev);
     aclrtFree(wdkvDev);
-    aclrtFree(wqDev);
+    aclrtFree(wuqDev);
+    aclrtFree(wdqDev);
     aclrtFree(xDev);
     aclrtFreeHost(scoresRopeHost);
     aclrtFreeHost(kRopeRotHost);
@@ -563,10 +594,12 @@ int main()
     aclrtFreeHost(ckvHost);
     aclrtFreeHost(qHost);
     aclrtFreeHost(outHost);
+    aclrtFreeHost(cQHost);
     aclrtFreeHost(wuvHost);
     aclrtFreeHost(wukHost);
     aclrtFreeHost(wdkvHost);
-    aclrtFreeHost(wqHost);
+    aclrtFreeHost(wuqHost);
+    aclrtFreeHost(wdqHost);
     aclrtFreeHost(xHost);
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);

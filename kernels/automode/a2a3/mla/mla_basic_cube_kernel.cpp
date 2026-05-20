@@ -10,9 +10,17 @@
  * same stream (ACL stream-order is the cross-kernel sync, exactly the §A18
  * recipe in docs_for_ai/known_good_kernel_examples.md).
  *
- * Stage 1 -- runQProjection
- *      Q[B,S,Nh,Hd]   = X[B,S,H]  @  W_q[H, Nh*Hd]
- *      M=128  K=4096  N=4096  (split-K x 64 then split-N x 64)
+ * DeepSeek-V2 MLA path: Q is compressed (W_dq) and reconstructed (W_uq);
+ * head_dim is partitioned into nope_dim + rope_dim. Stages 5d/5e/5f and the
+ * vec runRoPE add the decoupled RoPE branch.
+ *
+ * Stage 1a -- runQCompression
+ *      C_q[B,S,qL]    = X[B,S,H]  @  W_dq[H, qL]              qL=kQLatent=64
+ *      M=128  K=4096  N=64   (split-K x 64, single N tile)
+ *
+ * Stage 1b -- runQReconstruction
+ *      Q_nope[B,S,Nh,nope_d] = C_q[B,S,qL]  @  W_uq[qL, Nh*nope_d]
+ *      M=128  K=64  N=2048   (single K tile, split-N x 32)
  *
  * Stage 2 -- runKVCompression
  *      C_kv[B,S,L]    = X[B,S,H]  @  W_dkv[H, L]
@@ -21,20 +29,17 @@
  * (Stage 3 -- cache store -- is in the vec TU.)
  *
  * Stage 4 -- runKVReconstruction
- *      K[B,S,Nh,Hd]   = C_cache[B,S,L]  @  W_uk[L, Nh*Hd]
- *      V[B,S,Nh,Hd]   = C_cache[B,S,L]  @  W_uv[L, Nh*Hd]
- *      M=128  K=64  N=4096   (single K tile, split-N x 64) -- twice.
+ *      K_nope[B,S,Nh,nope_d] = C_cache[B,S,L]  @  W_uk[L, Nh*nope_d]
+ *      V[B,S,Nh,head_d]      = C_cache[B,S,L]  @  W_uv[L, Nh*head_d]
+ *      Two GEMMs with DIFFERENT output widths (K=2048, V=4096).
  *
- * Stage 5a -- runAttnQK
- *      scores[h][S,S] = Q_h[S,Hd] @ K_h_T[Hd,S]    per head h in [0, Nh)
- *      K^T view is built from K_h via a GlobalTensor with swapped strides
- *      (row stride 1, col stride Nh*Hd = 4096) -- no physical transpose
- *      kernel needed. See tile_type_reference.md section 1.3 (GlobalTensor
- *      Stride) and the row-softmax tutorial's use of arbitrary 5-D strides.
- *      M=128  K=128  N=128  (split-K x 2, split-N x 2)
+ * Stage 5a -- runAttnQK (nope branch)
+ *      scores_nope[h][S,S] = Q_nope_h[S,nope_d] @ K_nope_h_T[nope_d,S]
+ *      K^T view via Layout::DN + ZN tile (no physical transpose).
+ *      M=128  K=64  N=128  (single K iter, split-N x 2)
  *
  * Stage 5c -- runAttnPV
- *      Out_h[S,Hd]    = probs_h[S,S] @ V_h[S,Hd]    per head h
+ *      Out_h[S,head_d] = probs_h[S,S] @ V_h[S,head_d]
  *      M=128  K=128  N=128  (split-K x 2, split-N x 2)
  *
  * Tile shapes inside every cube body match the §A16 / §A17 / §A18 references
@@ -61,73 +66,74 @@ constexpr unsigned kBatch    = 1;
 constexpr unsigned kSeqLen   = 128;   // matches kTileM exactly -> single M tile
 constexpr unsigned kHidden   = 4096;
 constexpr unsigned kNumHeads = 32;
-constexpr unsigned kHeadDim  = 128;
-constexpr unsigned kLatent   = 64;
-constexpr unsigned kRopeDim  = 64;    // DeepSeek-V2 decoupled rope dim
+constexpr unsigned kHeadDim  = 128;   // total per-head dim (nope + rope) for V/Out
+constexpr unsigned kNopeDim  = 64;    // DeepSeek-V2 non-rope per-head dim for Q_nope/K_nope
+constexpr unsigned kRopeDim  = 64;    // DeepSeek-V2 rope per-head dim
+constexpr unsigned kLatent   = 64;    // kv latent dim
+constexpr unsigned kQLatent  = 64;    // q  latent dim (DeepSeek-V2 compresses Q too)
 
 constexpr unsigned kTileM    = 128;
 constexpr unsigned kInnerK   = 64;
 constexpr unsigned kInnerN   = 64;
 
 // Derived
-constexpr unsigned kQKVHidden  = kNumHeads * kHeadDim;   // 4096
-constexpr unsigned kQRopeWidth = kNumHeads * kRopeDim;   // 2048  (flat W_q_rope width)
-static_assert(kQKVHidden == kHidden, "MLA v1 assumes num_heads*head_dim == hidden");
+constexpr unsigned kQKVHidden   = kNumHeads * kHeadDim;   // 4096  (V row stride; Out row stride)
+constexpr unsigned kQNopeWidth  = kNumHeads * kNopeDim;   // 2048  (Q_nope, K_nope row stride)
+constexpr unsigned kQRopeWidth  = kNumHeads * kRopeDim;   // 2048  (flat W_q_rope width)
+static_assert(kQKVHidden == kHidden,           "MLA assumes num_heads*head_dim == hidden");
+static_assert(kNopeDim + kRopeDim == kHeadDim, "head_dim must split into nope+rope");
+static_assert(kNopeDim == kInnerK,             "Assumes nope dim fits a single inner-K tile");
+static_assert(kRopeDim == kInnerN,             "Assumes rope dim fits a single inner-N tile");
 
-constexpr unsigned kHiddenKIter   = kHidden    / kInnerK;   // 64
-constexpr unsigned kQKVNIter      = kQKVHidden / kInnerN;   // 64
-constexpr unsigned kQRopeNIter    = kQRopeWidth / kInnerN;  // 32 (== kNumHeads)
-constexpr unsigned kHeadDimKIter  = kHeadDim   / kInnerK;   // 2
-constexpr unsigned kHeadDimNIter  = kHeadDim   / kInnerN;   // 2
-constexpr unsigned kSeqNIter      = kSeqLen    / kInnerN;   // 2
-constexpr unsigned kSeqKIter      = kSeqLen    / kInnerK;   // 2
-static_assert(kRopeDim == kInnerN, "Assumes rope dim fits in one inner-N tile");
+constexpr unsigned kHiddenKIter   = kHidden     / kInnerK;   // 64
+constexpr unsigned kQKVNIter      = kQKVHidden  / kInnerN;   // 64  (V-side N iters)
+constexpr unsigned kQNopeNIter    = kQNopeWidth / kInnerN;   // 32  (K_nope, Q_nope reconstruction)
+constexpr unsigned kQRopeNIter    = kQRopeWidth / kInnerN;   // 32  (== kNumHeads)
+constexpr unsigned kHeadDimNIter  = kHeadDim    / kInnerN;   // 2   (runAttnPV N iters)
+constexpr unsigned kSeqNIter      = kSeqLen     / kInnerN;   // 2
+constexpr unsigned kSeqKIter      = kSeqLen     / kInnerK;   // 2
 
 }  // namespace mla_basic_cfg
 
 // =============================================================================
-// Stage 1 -- Query projection: Q = X @ W_q
-//   X    : [kSeqLen, kHidden]              half     (M=128, K_full=4096)
-//   W_q  : [kHidden, kNumHeads*kHeadDim]   half     (K_full=4096, N_full=4096)
-//   Q    : [kSeqLen, kNumHeads, kHeadDim]  half     (M=128, N_full=4096)
+// Stage 1a (DeepSeek-V2) -- Q compression: C_q = X @ W_dq
+//   X    : [kSeqLen, kHidden]                  half     (M=128, K_full=4096)
+//   W_dq : [kHidden, kQLatent]                 half     (K_full=4096, N=64)
+//   C_q  : [kSeqLen, kQLatent]                 half     (M=128, N=64)
 //
-// Single AICORE. Outer split-N loop (64 iters of 64 cols), inner split-K loop
-// (64 iters of 64 cols). Pattern: §A16 moe_segmented_gemm_one_layer +
-// §A6 tmatmul SplitK (TMATMUL on i==0, TMATMUL_ACC thereafter).
+// Structurally identical to runKVCompression (single N tile, split-K x 64).
 // =============================================================================
 template <typename TIn, typename TWeight, typename TOut>
-__global__ AICORE void runQProjection(__gm__ uint8_t *q_raw,
-                                      __gm__ uint8_t *x_raw,
-                                      __gm__ uint8_t *w_q_raw)
+__global__ AICORE void runQCompression(__gm__ uint8_t *c_q_raw,
+                                       __gm__ uint8_t *x_raw,
+                                       __gm__ uint8_t *w_dq_raw)
 {
     using namespace mla_basic_cfg;
 
-    __gm__ TIn     *x   = reinterpret_cast<__gm__ TIn     *>(x_raw);
-    __gm__ TWeight *w_q = reinterpret_cast<__gm__ TWeight *>(w_q_raw);
-    __gm__ TOut    *q   = reinterpret_cast<__gm__ TOut    *>(q_raw);
+    __gm__ TIn     *x    = reinterpret_cast<__gm__ TIn     *>(x_raw);
+    __gm__ TWeight *w_dq = reinterpret_cast<__gm__ TWeight *>(w_dq_raw);
+    __gm__ TOut    *c_q  = reinterpret_cast<__gm__ TOut    *>(c_q_raw);
 
     constexpr int blockAlign = C0_SIZE_BYTE / sizeof(TIn);
-    constexpr int M = ((kTileM   + 15) / 16) * 16;                          // 128
-    constexpr int K = ((kInnerK  + blockAlign - 1) / blockAlign) * blockAlign; // 64
-    constexpr int N = ((kInnerN  + blockAlign - 1) / blockAlign) * blockAlign; // 64
+    constexpr int M = ((kTileM   + 15) / 16) * 16;
+    constexpr int K = ((kInnerK  + blockAlign - 1) / blockAlign) * blockAlign;
+    constexpr int N = ((kQLatent + blockAlign - 1) / blockAlign) * blockAlign;
+    static_assert(kQLatent == kInnerN, "MLA assumes q_latent == kInnerN so N fits one tile");
 
-    // GM views sliced down to a (M x K) or (K x N) cube tile. Row stride is
-    // always the FULL parent column count -- we are addressing a sub-tile of
-    // a wider matrix, not a self-contained tile.
     using GlobalDataA = GlobalTensor<TIn,     Shape<1, 1, 1, kTileM,  kInnerK>,
-                                     Stride<1, 1, 1, kHidden,   1>>;
-    using GlobalDataB = GlobalTensor<TWeight, Shape<1, 1, 1, kInnerK, kInnerN>,
-                                     Stride<1, 1, 1, kQKVHidden, 1>>;
-    using GlobalDataC = GlobalTensor<TOut,    Shape<1, 1, 1, kTileM,  kInnerN>,
-                                     Stride<1, 1, 1, kQKVHidden, 1>>;
+                                     Stride<1, 1, 1, kHidden,  1>>;
+    using GlobalDataB = GlobalTensor<TWeight, Shape<1, 1, 1, kInnerK, kQLatent>,
+                                     Stride<1, 1, 1, kQLatent, 1>>;
+    using GlobalDataC = GlobalTensor<TOut,    Shape<1, 1, 1, kTileM,  kQLatent>,
+                                     Stride<1, 1, 1, kQLatent, 1>>;
 
     using TileMatAData = Tile<TileType::Mat, TIn,     M, K, BLayout::ColMajor,
-                              kTileM, kInnerK, SLayout::RowMajor, 512>;
+                              kTileM,  kInnerK,  SLayout::RowMajor, 512>;
     using TileMatBData = Tile<TileType::Mat, TWeight, K, N, BLayout::ColMajor,
-                              kInnerK, kInnerN, SLayout::RowMajor, 512>;
+                              kInnerK, kQLatent, SLayout::RowMajor, 512>;
     using LeftTile     = TileLeft <TIn,     M, K, kTileM,  kInnerK>;
-    using RightTile    = TileRight<TWeight, K, N, kInnerK, kInnerN>;
-    using AccTile      = TileAcc  <float,   M, N, kTileM,  kInnerN>;  // FP32 accumulator
+    using RightTile    = TileRight<TWeight, K, N, kInnerK, kQLatent>;
+    using AccTile      = TileAcc  <float,   M, N, kTileM,  kQLatent>;
 
     TileMatAData aMatTile;
     TileMatBData bMatTile;
@@ -135,31 +141,88 @@ __global__ AICORE void runQProjection(__gm__ uint8_t *q_raw,
     RightTile    bTile;
     AccTile      cTile;
 
-    for (unsigned nIter = 0; nIter < kQKVNIter; ++nIter) {
+    for (unsigned kIter = 0; kIter < kHiddenKIter; ++kIter) {
+        const size_t kOffset = static_cast<size_t>(kIter) * kInnerK;
+
+        GlobalDataA aGlobal(x    + kOffset);
+        GlobalDataB bGlobal(w_dq + kOffset * kQLatent);
+
+        TLOAD(aMatTile, aGlobal);
+        TLOAD(bMatTile, bGlobal);
+        TMOV (aTile, aMatTile);
+        TMOV (bTile, bMatTile);
+
+        if (kIter == 0) { TMATMUL    (cTile, aTile, bTile); }
+        else            { TMATMUL_ACC(cTile, aTile, bTile); }
+    }
+
+    GlobalDataC cGlobal(c_q);
+    TSTORE<AccTile, GlobalDataC,
+           AtomicType::AtomicNone,
+           ReluPreMode::NoRelu>(cGlobal, cTile);
+}
+
+// =============================================================================
+// Stage 1b (DeepSeek-V2) -- Q reconstruction: Q_nope = C_q @ W_uq
+//   C_q    : [kSeqLen, kQLatent]                half  (M=128, K_full=64)
+//   W_uq   : [kQLatent, kNumHeads*kNopeDim]     half  (K_full=64, N_full=2048)
+//   Q_nope : [kSeqLen, kNumHeads, kNopeDim]     half  (M=128, N_full=2048)
+//
+// Structurally identical to the K-branch of the post-refactor
+// runKVReconstruction below. Single K iter (kQLatent==kInnerK), split-N x 32.
+// =============================================================================
+template <typename TIn, typename TWeight, typename TOut>
+__global__ AICORE void runQReconstruction(__gm__ uint8_t *q_nope_raw,
+                                          __gm__ uint8_t *c_q_raw,
+                                          __gm__ uint8_t *w_uq_raw)
+{
+    using namespace mla_basic_cfg;
+
+    __gm__ TIn     *c_q    = reinterpret_cast<__gm__ TIn     *>(c_q_raw);
+    __gm__ TWeight *w_uq   = reinterpret_cast<__gm__ TWeight *>(w_uq_raw);
+    __gm__ TOut    *q_nope = reinterpret_cast<__gm__ TOut    *>(q_nope_raw);
+
+    constexpr int blockAlign = C0_SIZE_BYTE / sizeof(TIn);
+    constexpr int M = ((kTileM   + 15) / 16) * 16;
+    constexpr int K = ((kQLatent + blockAlign - 1) / blockAlign) * blockAlign;
+    constexpr int N = ((kInnerN  + blockAlign - 1) / blockAlign) * blockAlign;
+
+    using GlobalDataA = GlobalTensor<TIn,     Shape<1, 1, 1, kTileM,   kQLatent>,
+                                     Stride<1, 1, 1, kQLatent,    1>>;
+    using GlobalDataB = GlobalTensor<TWeight, Shape<1, 1, 1, kQLatent, kInnerN>,
+                                     Stride<1, 1, 1, kQNopeWidth, 1>>;
+    using GlobalDataC = GlobalTensor<TOut,    Shape<1, 1, 1, kTileM,   kInnerN>,
+                                     Stride<1, 1, 1, kQNopeWidth, 1>>;
+
+    using TileMatAData = Tile<TileType::Mat, TIn,     M, K, BLayout::ColMajor,
+                              kTileM,   kQLatent, SLayout::RowMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, TWeight, K, N, BLayout::ColMajor,
+                              kQLatent, kInnerN,  SLayout::RowMajor, 512>;
+    using LeftTile     = TileLeft <TIn,     M, K, kTileM,   kQLatent>;
+    using RightTile    = TileRight<TWeight, K, N, kQLatent, kInnerN>;
+    using AccTile      = TileAcc  <float,   M, N, kTileM,   kInnerN>;
+
+    TileMatAData aMatTile;
+    TileMatBData bMatTile;
+    LeftTile     aTile;
+    RightTile    bTile;
+    AccTile      cTile;
+
+    // A is the full C_q tile, K-dim invariant across the N-loop.
+    GlobalDataA aGlobal(c_q);
+    TLOAD(aMatTile, aGlobal);
+    TMOV (aTile, aMatTile);
+
+    for (unsigned nIter = 0; nIter < kQNopeNIter; ++nIter) {
         const size_t nOffset = static_cast<size_t>(nIter) * kInnerN;
 
-        for (unsigned kIter = 0; kIter < kHiddenKIter; ++kIter) {
-            const size_t kOffset = static_cast<size_t>(kIter) * kInnerK;
+        GlobalDataB bGlobal(w_uq + nOffset);
+        TLOAD(bMatTile, bGlobal);
+        TMOV (bTile, bMatTile);
 
-            GlobalDataA aGlobal(x   + kOffset);                            // X[:, kOffset:kOffset+64]
-            GlobalDataB bGlobal(w_q + kOffset * kQKVHidden + nOffset);     // W_q[kOffset:..,nOffset:..]
+        TMATMUL(cTile, aTile, bTile);
 
-            TLOAD(aMatTile, aGlobal);
-            TLOAD(bMatTile, bGlobal);
-            TMOV (aTile, aMatTile);
-            TMOV (bTile, bMatTile);
-
-            if (kIter == 0) {
-                TMATMUL    (cTile, aTile, bTile);
-            } else {
-                TMATMUL_ACC(cTile, aTile, bTile);
-            }
-        }
-
-        GlobalDataC cGlobal(q + nOffset);
-        // Fused FP32 acc -> FP16 GM via FIX pipe (no ReLU). Same template
-        // shape as §A18 stage 1 minus the activation. Assumption: this combo
-        // works without ReluPreMode::NormalRelu.
+        GlobalDataC cGlobal(q_nope + nOffset);
         TSTORE<AccTile, GlobalDataC,
                AtomicType::AtomicNone,
                ReluPreMode::NoRelu>(cGlobal, cTile);
@@ -237,18 +300,20 @@ __global__ AICORE void runKVCompression(__gm__ uint8_t *c_kv_raw,
 }
 
 // =============================================================================
-// Stage 4 -- KV reconstruction: K = C_cache @ W_uk; V = C_cache @ W_uv
-//   C_cache : [kSeqLen, kLatent]              half   (M=128, K=64)
-//   W_uk    : [kLatent, kNumHeads*kHeadDim]   half   (K=64,  N_full=4096)
-//   W_uv    : [kLatent, kNumHeads*kHeadDim]   half   (same shape as W_uk)
-//   K       : [kSeqLen, kNumHeads, kHeadDim]  half
-//   V       : [kSeqLen, kNumHeads, kHeadDim]  half
+// Stage 4 -- KV reconstruction (DeepSeek-V2):
+//   K_nope = C_cache @ W_uk   -> [S, Nh*kNopeDim]  (per-head dim = nope_dim)
+//   V      = C_cache @ W_uv   -> [S, Nh*kHeadDim]  (per-head dim = head_dim)
 //
-// Two GEMMs in a single __global__: the second one starts after the first one
-// completes via auto-sync within the same kernel (matches §A18 split-kernel
-// approach but consolidated because each GEMM has a single cube-tile working
-// set; no L0C reuse hazard like the abandoned §A18 fused-single-kernel form).
-// Inside each GEMM: single K tile (kLatent = kInnerK = 64), outer split-N.
+//   C_cache : [kSeqLen, kLatent]                 half  (M=128, K=64)
+//   W_uk    : [kLatent, kNumHeads*kNopeDim]      half  (K=64,  N_full=2048)
+//   W_uv    : [kLatent, kNumHeads*kHeadDim]      half  (K=64,  N_full=4096)
+//   K_nope  : [kSeqLen, kNumHeads, kNopeDim]     half
+//   V       : [kSeqLen, kNumHeads, kHeadDim]     half
+//
+// K_nope and V have DIFFERENT row strides (kQNopeWidth vs kQKVHidden), so the
+// two branches use different GlobalDataB/C types. The Mat/Left/Right/Acc tile
+// shapes are the same (kInnerN=64) so the same tile instances are reused
+// across both branches. Same single-K-iter structure as before.
 // =============================================================================
 template <typename TIn, typename TWeight, typename TOut>
 __global__ AICORE void runKVReconstruction(__gm__ uint8_t *k_raw,
@@ -270,12 +335,9 @@ __global__ AICORE void runKVReconstruction(__gm__ uint8_t *k_raw,
     constexpr int K = ((kLatent  + blockAlign - 1) / blockAlign) * blockAlign;
     constexpr int N = ((kInnerN  + blockAlign - 1) / blockAlign) * blockAlign;
 
-    using GlobalDataA = GlobalTensor<TIn,     Shape<1, 1, 1, kTileM,  kLatent>,
+    // C_cache (A) shape/stride is shared by both branches.
+    using GlobalDataA = GlobalTensor<TIn, Shape<1, 1, 1, kTileM, kLatent>,
                                      Stride<1, 1, 1, kLatent, 1>>;
-    using GlobalDataB = GlobalTensor<TWeight, Shape<1, 1, 1, kLatent, kInnerN>,
-                                     Stride<1, 1, 1, kQKVHidden, 1>>;
-    using GlobalDataC = GlobalTensor<TOut,    Shape<1, 1, 1, kTileM,  kInnerN>,
-                                     Stride<1, 1, 1, kQKVHidden, 1>>;
 
     using TileMatAData = Tile<TileType::Mat, TIn,     M, K, BLayout::ColMajor,
                               kTileM, kLatent, SLayout::RowMajor, 512>;
@@ -285,51 +347,58 @@ __global__ AICORE void runKVReconstruction(__gm__ uint8_t *k_raw,
     using RightTile    = TileRight<TWeight, K, N, kLatent, kInnerN>;
     using AccTile      = TileAcc  <float,   M, N, kTileM,  kInnerN>;
 
-    // A is read-only across both GEMMs (C_cache); B and C are per-GEMM but
-    // the tile *shapes* match so we declare them once and reuse. The
-    // GlobalTensor base pointer differs per GEMM/per nIter.
     TileMatAData aMatTile;
     TileMatBData bMatTile;
     LeftTile     aTile;
     RightTile    bTile;
     AccTile      cTile;
 
-    // --- GEMM 1 : K = C_cache @ W_uk ----------------------------------------
+    // --- GEMM 1 : K_nope = C_cache @ W_uk  (output width kQNopeWidth=2048) --
     {
+        using GlobalDataB_K = GlobalTensor<TWeight, Shape<1, 1, 1, kLatent, kInnerN>,
+                                           Stride<1, 1, 1, kQNopeWidth, 1>>;
+        using GlobalDataC_K = GlobalTensor<TOut,    Shape<1, 1, 1, kTileM,  kInnerN>,
+                                           Stride<1, 1, 1, kQNopeWidth, 1>>;
+
         GlobalDataA aGlobal(c_cache);
         TLOAD(aMatTile, aGlobal);
         TMOV (aTile, aMatTile);
 
-        for (unsigned nIter = 0; nIter < kQKVNIter; ++nIter) {
+        for (unsigned nIter = 0; nIter < kQNopeNIter; ++nIter) {
             const size_t nOffset = static_cast<size_t>(nIter) * kInnerN;
 
-            GlobalDataB bGlobal(w_uk + nOffset);
+            GlobalDataB_K bGlobal(w_uk + nOffset);
             TLOAD(bMatTile, bGlobal);
             TMOV (bTile, bMatTile);
 
             TMATMUL(cTile, aTile, bTile);
 
-            GlobalDataC cGlobal(k + nOffset);
-            TSTORE<AccTile, GlobalDataC,
+            GlobalDataC_K cGlobal(k + nOffset);
+            TSTORE<AccTile, GlobalDataC_K,
                    AtomicType::AtomicNone,
                    ReluPreMode::NoRelu>(cGlobal, cTile);
         }
     }
 
-    // --- GEMM 2 : V = C_cache @ W_uv ----------------------------------------
+    // --- GEMM 2 : V = C_cache @ W_uv      (output width kQKVHidden=4096) ---
     {
+        using GlobalDataB_V = GlobalTensor<TWeight, Shape<1, 1, 1, kLatent, kInnerN>,
+                                           Stride<1, 1, 1, kQKVHidden, 1>>;
+        using GlobalDataC_V = GlobalTensor<TOut,    Shape<1, 1, 1, kTileM,  kInnerN>,
+                                           Stride<1, 1, 1, kQKVHidden, 1>>;
+
         // A (c_cache) is unchanged; reuse aMatTile / aTile contents.
         for (unsigned nIter = 0; nIter < kQKVNIter; ++nIter) {
             const size_t nOffset = static_cast<size_t>(nIter) * kInnerN;
 
-            GlobalDataB bGlobal(w_uv + nOffset);
+            GlobalDataB_V bGlobal(w_uv + nOffset);
             TLOAD(bMatTile, bGlobal);
             TMOV (bTile, bMatTile);
 
             TMATMUL(cTile, aTile, bTile);
 
-            GlobalDataC cGlobal(v + nOffset);
-            TSTORE<AccTile, GlobalDataC,
+            GlobalDataC_V cGlobal(v + nOffset);
+            TSTORE<AccTile, GlobalDataC_V,
                    AtomicType::AtomicNone,
                    ReluPreMode::NoRelu>(cGlobal, cTile);
         }
@@ -337,27 +406,22 @@ __global__ AICORE void runKVReconstruction(__gm__ uint8_t *k_raw,
 }
 
 // =============================================================================
-// Stage 5a -- Attention QK^T:
-//      scores[h] = Q_h @ K_h^T,  per head h in [0, kNumHeads)
+// Stage 5a -- Attention QK^T (DeepSeek-V2 nope branch):
+//      scores_nope[h] = Q_nope_h @ K_nope_h^T,  per head h in [0, kNumHeads)
 //
-//   Q       : [kSeqLen, kNumHeads, kHeadDim]   half
-//   K       : [kSeqLen, kNumHeads, kHeadDim]   half
-//   scores  : [kNumHeads, kSeqLen, kSeqLen]    half     (FP16 to fit UB)
+//   Q_nope     : [kSeqLen, kNumHeads, kNopeDim]    half
+//   K_nope     : [kSeqLen, kNumHeads, kNopeDim]    half
+//   scores_nope: [kNumHeads, kSeqLen, kSeqLen]     half     (FP16 to fit UB)
 //
-// Per-head GEMM with M=kSeqLen=128, K=kHeadDim=128, N=kSeqLen=128. Split-K
-// and split-N both x 2 (kInnerK=kInnerN=64).
+// Per-head GEMM with M=kSeqLen=128, K=kNopeDim=64, N=kSeqLen=128. Since
+// kNopeDim == kInnerK, there is a SINGLE K iter (no TMATMUL_ACC). Split-N
+// stays at 2 (kSeqNIter).
 //
-// K^T view: we want B = K_h^T of shape (kHeadDim, kSeqLen). K_h's storage in
-// GM is (kSeqLen rows of stride kQKVHidden, kHeadDim cols of stride 1) at
-// base K + h*kHeadDim. Swapping the GlobalTensor strides to (col stride =
-// kQKVHidden, row stride = 1) for shape (kHeadDim, kSeqLen) produces the
-// transposed read pattern with NO physical transpose pass. The cube TLOAD
-// handles arbitrary stride by walking the GM in that pattern.
+// Row stride changes from kQKVHidden (4096, was head_dim layout) to
+// kQNopeWidth (2048, new nope-only width). Per-head base offset is h*kNopeDim
+// (was h*kHeadDim).
 //
-//   row stride 1         -> moving down the "rows" of B advances by 1 byte
-//                           (= advances K_h column index by 1)
-//   col stride kQKVHidden -> moving across the "cols" of B advances by
-//                           kQKVHidden (= advances K_h row index by 1)
+// K^T view: same Layout::DN trick as before, with col stride = kQNopeWidth.
 // =============================================================================
 template <typename TIn, typename TOut>
 __global__ AICORE void runAttnQK(__gm__ uint8_t *scores_raw,
@@ -375,26 +439,23 @@ __global__ AICORE void runAttnQK(__gm__ uint8_t *scores_raw,
     constexpr int K = ((kInnerK  + blockAlign - 1) / blockAlign) * blockAlign;
     constexpr int N = ((kInnerN  + blockAlign - 1) / blockAlign) * blockAlign;
 
-    // A : Q_h sub-tile (kTileM, kInnerK), row stride = kQKVHidden (= 4096).
+    // A : Q_nope_h sub-tile (kTileM, kNopeDim==kInnerK), row stride = kQNopeWidth.
     using GlobalDataA = GlobalTensor<TIn, Shape<1, 1, 1, kTileM,  kInnerK>,
-                                     Stride<1, 1, 1, kQKVHidden, 1>>;
-    // B : K_h^T view sub-tile (kInnerK, kInnerN).
-    //   Stored in K as [S, Nh, Hd]: element K[s, h, d] = k + s*kQKVHidden + h*kHeadDim + d.
-    //   For K_h^T[d, s]: row = d (stride-1 direction), col = s (stride-kQKVHidden direction).
-    //   Layout::DN signals the DN (col-major) tensor layout to the DMA, enabling
-    //   the DN->ZN TLOAD path (include/pto/npu/a2a3/TLoad.hpp:471).
-    //   Matches the flash_atten GlobalDataK pattern (fa_performance_kernel.cpp:161-166).
+                                     Stride<1, 1, 1, kQNopeWidth, 1>>;
+    // B : K_nope_h^T view sub-tile (kInnerK, kInnerN).
+    //   K_nope storage: [S, Nh, kNopeDim], element at s*kQNopeWidth + h*kNopeDim + d.
+    //   K_nope_h^T[d, s] base = k + h*kNopeDim; row stride 1 (d direction),
+    //   col stride kQNopeWidth (s direction). Layout::DN + ZN tile, same
+    //   pattern as flash_atten / Stage 5f below.
     using GlobalDataBT = GlobalTensor<TIn, Shape<1, 1, 1, kInnerK, kInnerN>,
-                                      Stride<1, 1, 1, 1, kQKVHidden>, Layout::DN>;
+                                      Stride<1, 1, 1, 1, kQNopeWidth>, Layout::DN>;
     // C : scores_h sub-tile (kTileM, kInnerN), row stride = kSeqLen.
     using GlobalDataC  = GlobalTensor<TOut, Shape<1, 1, 1, kTileM, kInnerN>,
                                       Stride<1, 1, 1, kSeqLen, 1>>;
 
     using TileMatAData = Tile<TileType::Mat, TIn, M, K, BLayout::ColMajor,
                               kTileM, kInnerK, SLayout::RowMajor, 512>;
-    // BLayout::RowMajor + SLayout::ColMajor -> GetTileLayoutCustom() = ZN,
-    // which pairs with Layout::DN GlobalTensor for the DN->ZN TLOAD path.
-    // Mirrors fa_performance_kernel.cpp:444 TileMatKData.
+    // BLayout::RowMajor + SLayout::ColMajor -> ZN, pairs with Layout::DN.
     using TileMatBData = Tile<TileType::Mat, TIn, K, N, BLayout::RowMajor,
                               kInnerK, kInnerN, SLayout::ColMajor, 512>;
     using LeftTile     = TileLeft <TIn,   M, K, kTileM,  kInnerK>;
@@ -408,33 +469,23 @@ __global__ AICORE void runAttnQK(__gm__ uint8_t *scores_raw,
     AccTile      cTile;
 
     for (unsigned h = 0; h < kNumHeads; ++h) {
-        const size_t qBase     = static_cast<size_t>(h) * kHeadDim;
-        const size_t kBase     = static_cast<size_t>(h) * kHeadDim;
+        const size_t qBase      = static_cast<size_t>(h) * kNopeDim;
+        const size_t kBase      = static_cast<size_t>(h) * kNopeDim;
         const size_t scoresBase = static_cast<size_t>(h) * kSeqLen * kSeqLen;
 
         for (unsigned nIter = 0; nIter < kSeqNIter; ++nIter) {
             const size_t nOffset = static_cast<size_t>(nIter) * kInnerN;
 
-            for (unsigned kIter = 0; kIter < kHeadDimKIter; ++kIter) {
-                const size_t kOffset = static_cast<size_t>(kIter) * kInnerK;
+            // Single K iter: kNopeDim == kInnerK == 64.
+            GlobalDataA  aGlobal(q + qBase);
+            GlobalDataBT bGlobal(k + kBase + nOffset * kQNopeWidth);
 
-                GlobalDataA  aGlobal(q + qBase + kOffset);
-                // K^T view: outer kOffset is rows-of-B (= cols-of-K_h, stride 1).
-                //           outer nOffset is cols-of-B (= rows-of-K_h, stride kQKVHidden).
-                GlobalDataBT bGlobal(k + kBase + kOffset
-                                       + nOffset * kQKVHidden);
+            TLOAD(aMatTile, aGlobal);
+            TLOAD(bMatTile, bGlobal);
+            TMOV (aTile, aMatTile);
+            TMOV (bTile, bMatTile);
 
-                TLOAD(aMatTile, aGlobal);
-                TLOAD(bMatTile, bGlobal);
-                TMOV (aTile, aMatTile);
-                TMOV (bTile, bMatTile);
-
-                if (kIter == 0) {
-                    TMATMUL    (cTile, aTile, bTile);
-                } else {
-                    TMATMUL_ACC(cTile, aTile, bTile);
-                }
-            }
+            TMATMUL(cTile, aTile, bTile);
 
             GlobalDataC cGlobal(scores + scoresBase + nOffset);
             TSTORE<AccTile, GlobalDataC,
@@ -769,9 +820,15 @@ __global__ AICORE void runAttnQKRope(__gm__ uint8_t *scores_raw,
 // ----------------------------------------------------------------------------
 
 template <typename TIn, typename TWeight, typename TOut>
-void launchQProjection(uint8_t *q, uint8_t *x, uint8_t *w_q, void *stream)
+void launchQCompression(uint8_t *c_q, uint8_t *x, uint8_t *w_dq, void *stream)
 {
-    runQProjection<TIn, TWeight, TOut><<<1, nullptr, stream>>>(q, x, w_q);
+    runQCompression<TIn, TWeight, TOut><<<1, nullptr, stream>>>(c_q, x, w_dq);
+}
+
+template <typename TIn, typename TWeight, typename TOut>
+void launchQReconstruction(uint8_t *q_nope, uint8_t *c_q, uint8_t *w_uq, void *stream)
+{
+    runQReconstruction<TIn, TWeight, TOut><<<1, nullptr, stream>>>(q_nope, c_q, w_uq);
 }
 
 template <typename TIn, typename TWeight, typename TOut>
@@ -819,7 +876,8 @@ void launchAttnQKRope(uint8_t *scores_rope, uint8_t *q_rope, uint8_t *k_rope, vo
     runAttnQKRope<TIn, TOut><<<1, nullptr, stream>>>(scores_rope, q_rope, k_rope);
 }
 
-template void launchQProjection<half, half, half>(uint8_t *, uint8_t *, uint8_t *, void *);
+template void launchQCompression<half, half, half>(uint8_t *, uint8_t *, uint8_t *, void *);
+template void launchQReconstruction<half, half, half>(uint8_t *, uint8_t *, uint8_t *, void *);
 template void launchKVCompression<half, half, half>(uint8_t *, uint8_t *, uint8_t *, void *);
 template void launchKVReconstruction<half, half, half>(uint8_t *, uint8_t *, uint8_t *, uint8_t *, uint8_t *, void *);
 template void launchAttnQK<half, half>(uint8_t *, uint8_t *, uint8_t *, void *);
@@ -829,9 +887,15 @@ template void launchKRopeProjection<half, half, half>(uint8_t *, uint8_t *, uint
 template void launchAttnQKRope<half, half>(uint8_t *, uint8_t *, uint8_t *, void *);
 
 // Non-template wrappers consumed by main.cpp.
-extern "C" void launchMlaQProjectionFp16(uint8_t *q, uint8_t *x, uint8_t *w_q, void *stream)
+extern "C" void launchMlaQCompressionFp16(uint8_t *c_q, uint8_t *x, uint8_t *w_dq, void *stream)
 {
-    launchQProjection<half, half, half>(q, x, w_q, stream);
+    launchQCompression<half, half, half>(c_q, x, w_dq, stream);
+}
+
+extern "C" void launchMlaQReconstructionFp16(uint8_t *q_nope, uint8_t *c_q,
+                                             uint8_t *w_uq, void *stream)
+{
+    launchQReconstruction<half, half, half>(q_nope, c_q, w_uq, stream);
 }
 
 extern "C" void launchMlaKVCompressionFp16(uint8_t *c_kv, uint8_t *x, uint8_t *w_dkv, void *stream)

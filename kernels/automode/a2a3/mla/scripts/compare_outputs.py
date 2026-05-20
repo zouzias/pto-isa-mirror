@@ -13,12 +13,12 @@ import numpy as np
 
 HALF = np.float16
 
-# Poison constants matching main.cpp
+# Poison constants matching main.cpp (DeepSeek-V2 layout).
 POISON = {
-    "Q":           0xA1,
+    "Q_nope":      0xA1,
     "C_kv":        0xA2,
     "C_cache":     0xA3,
-    "K":           0xA4,
+    "K_nope":      0xA4,
     "V":           0xA5,
     "scores_nope": 0xA6,
     "probs":       0xA7,
@@ -28,15 +28,19 @@ POISON = {
     "Q_rope_rot":  0xB3,
     "K_rope_rot":  0xB4,
     "scores_rope": 0xB5,
+    "C_q":         0xC1,
 }
 
 # (stage_name, golden_path, device_path, dtype, abs_tol, rel_tol)
 STAGES = [
-    ("Q",           "../output/golden_q.bin",           "../output/output_q.bin",           HALF, 0.10, 0.02),
+    # DeepSeek-V2 compressed Q path
+    ("C_q",         "../output/golden_c_q.bin",         "../output/output_c_q.bin",         HALF, 0.05, 0.02),
+    ("Q_nope",      "../output/golden_q.bin",           "../output/output_q.bin",           HALF, 0.10, 0.02),
+    # KV path
     ("C_kv",        "../output/golden_c_kv.bin",        "../output/output_c_kv.bin",        HALF, 0.10, 0.02),
     # C_cache is a copy of C_kv; compare against golden_c_kv.
     ("C_cache",     "../output/golden_c_kv.bin",        "../output/output_c_cache.bin",     HALF, 0.10, 0.02),
-    ("K",           "../output/golden_k.bin",           "../output/output_k.bin",           HALF, 0.10, 0.02),
+    ("K_nope",      "../output/golden_k.bin",           "../output/output_k.bin",           HALF, 0.10, 0.02),
     ("V",           "../output/golden_v.bin",           "../output/output_v.bin",           HALF, 0.10, 0.02),
     # The cube path writes nope-only scores; the rope+nope sum lives only
     # inside the softmax kernel.
