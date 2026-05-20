@@ -50,7 +50,7 @@ __global__ AICORE void runTTRANSConv1(__gm__ T __out__ *out, __gm__ T __in__ *sr
         ConvTile<TileType::Vec, T, bufferSize, Layout::NC1HWC0, ConvTileShape<dstN, dstC1, dstH, dstW, dstC0>>;
     DstTileData dstTile;
     static_assert(dstTile.totalDimCount == 5);
-    TASSIGN(dstTile, 0x0 + dstN * dstC1 * dstH * dstW * dstC0 * sizeof(T));
+    // TASSIGN(dstTile, 0x0 + dstN * dstC1 * dstH * dstW * dstC0 * sizeof(T));
     SrcTileData dst0Tile;
     TASSIGN(dst0Tile, 0x0 + dstN * dstC1 * dstH * dstW * dstC0 * sizeof(T));
     dstTile.data() = dst0Tile.data();

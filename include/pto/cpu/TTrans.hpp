@@ -47,43 +47,15 @@ inline void TTRANS_NCHW_TO_NC1HWC0_CORE(DstTileData &dst, SrcTileData &src)
     int64_t size = N * C * H * W;
     int64_t C1 = (C + C0 - 1) / C0;
 
-    // for (int64_t n = 0; n < N; ++n) {
-    //     for (int64_t c1 = 0; c1 < C1; ++c1) {
-    //         for (int64_t h = 0; h < H; ++h) {
-    //             for (int64_t w = 0; w < W; ++w) {
-    //                 for (int64_t c0 = 0; c0 < C0; ++c0) {
-    //                     int64_t actual_c = c1 * C0 + c0;
-    //                     int64_t dst_idx = (n * C1 * H * W * C0) +
-    //                                       (c1 * H * W * C0) +
-    //                                       (h * W * C0) +
-    //                                       (w * C0) +
-    //                                       c0;
-
-    //                     if (actual_c < C) {
-    //                         int64_t src_idx = (n * C * H * W) +
-    //                                           (actual_c * H * W) +
-    //                                           (h * W) +
-    //                                           w;
-    //                         if (src_idx >= size || dst_idx >= size) {
-    //                             int a = 0;
-    //                         }
-    //                         dst_ptr[dst_idx] = src_ptr[src_idx];
-    //                     } else {
-    //                         if (dst_idx >= size) {
-    //                             int a = 0;
-    //                         }
-    //                         dst_ptr[dst_idx] = static_cast<DstDType>(0);
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
     for (int64_t n = 0; n < N; ++n) {
-        for (int64_t c = 0; c < C; ++c1) {
+        for (int64_t c = 0; c < C; ++c) {
+            size_t r = c / C0;
+            size_t cl = c % C0;
             for (int64_t h = 0; h < H; ++h) {
                 for (int64_t w = 0; w < W; ++w) {
-                        
+                        size_t srcIndex = w + W*h + W*H*c + W*H*C*n;
+                        size_t dstIndex = W*H*C*n + C0*H*W*r + C0*W*h + C0*w + cl;
+                        dst_ptr[dstIndex] = src_ptr[srcIndex];
                 }
             }
         }
@@ -187,7 +159,7 @@ PTO_INTERNAL void TTRANS_IMPL(DstTileData &dst, SrcTileData &src, TmpTileData &t
     }
     else if constexpr (src_layout == Layout::NC1HWC0 && dst_layout == Layout::FRACTAL_Z) {
         TTRANS_NC1HWC0_TO_FRACTAL_Z_CORE(dst, src);
-    } else {
+    } else if constexpr (is_tile_data_v<SrcTileData>){
         // static_assert(SrcTileData::ValidRow == DstTileData::ValidCol && SrcTileData::ValidCol == DstTileData::ValidRow);
         // unsigned validRow = src.GetValidRow();
         // unsigned validCol = src.GetValidCol();
