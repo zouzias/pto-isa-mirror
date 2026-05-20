@@ -19,8 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdio>
 #include <type_traits>
 #include <dlfcn.h>
-#include <string>
-#include "type.hpp"
+#include "pto/common/type.hpp"
 
 #define __global__
 #define AICORE
@@ -38,7 +37,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 typedef void *aclrtStream;
 typedef int pipe_t;
-using event_t = int;
 const pipe_t PIPE_S = 0;
 const pipe_t PIPE_V = 1;
 const pipe_t PIPE_MTE1 = 2;
@@ -54,7 +52,7 @@ inline void pipe_barrier(pipe_t pipe)
 
 constexpr pipe_t opPipeList[] = {};
 
-#define aclFloat16ToFloat(x) (float)(x)
+#define aclFloat16ToFloat(x) ((float)(x)
 #define aclInit(x)
 #define aclrtSetDevice(x)
 
@@ -96,7 +94,7 @@ static constexpr uint32_t HCCL_MAX_RANK_NUM = 64;
 
 struct HcclRootInfo {};
 
-struct CommDeviceContext {
+struct HcclDeviceContext {
     uint64_t workSpace;
     uint64_t workSpaceSize;
 
@@ -108,17 +106,15 @@ struct CommDeviceContext {
 };
 /* </Hccl> */
 
+typedef int event_t;
 #define EVENT_ID0 0
-#define EVENT_ID1 1
-#define EVENT_ID2 2
-#define EVENT_ID3 3
 
 #define F16_MAX 65504.0f
 
 namespace pto::cpu_sim {
 using SetExecutionContextHookFn = void (*)(uint32_t block_idx, uint32_t subblock_id, uint32_t subblock_dim);
 using GetExecutionContextHookFn = void (*)(uint32_t *block_idx, uint32_t *subblock_id, uint32_t *subblock_dim);
-using GetSharedStorageHookFn = void *(*)(std::string key, size_t size);
+using GetSharedStorageHookFn = void *(*)(const char *key, size_t size);
 using GetTaskCookieHookFn = uint64_t (*)();
 
 inline SetExecutionContextHookFn ResolveSetExecutionContextHook()
