@@ -64,11 +64,15 @@ inline AICORE void runRow(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ TI
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     pipe_barrier(PIPE_ALL);
 #endif
     MSCATTER<Coalesce::Row, Atomic, Oob, Conflict>(outGlobal, srcTile, idxTile);
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
+    set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     FlushGmOutput(out, kTableRows * kSrcCols * (int)sizeof(T));
@@ -106,11 +110,15 @@ inline AICORE void runRowPadded(__gm__ T __out__ *out, __gm__ T __in__ *src, __g
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     pipe_barrier(PIPE_ALL);
 #endif
     MSCATTER<Coalesce::Row, Atomic, Oob, Conflict>(outGlobal, srcTile, idxTile);
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
+    set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     FlushGmOutput(out, kTableRows * kSrcCols * (int)sizeof(T));
@@ -149,11 +157,15 @@ inline AICORE void runRowColIdx(__gm__ T __out__ *out, __gm__ T __in__ *src, __g
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     pipe_barrier(PIPE_ALL);
 #endif
     MSCATTER<Coalesce::Row, Atomic, Oob, Conflict>(outGlobal, srcTile, idxTile);
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
+    set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     FlushGmOutput(out, kTableRows * kSrcCols * (int)sizeof(T));
@@ -191,11 +203,15 @@ inline AICORE void runElem(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ T
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     pipe_barrier(PIPE_ALL);
 #endif
     MSCATTER<Coalesce::Elem, Atomic, Oob, Conflict>(outGlobal, srcTile, idxTile);
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
+    set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     FlushGmOutput(out, kTableSize * (int)sizeof(T));
@@ -233,11 +249,15 @@ inline AICORE void runElem2DPadded(__gm__ T __out__ *out, __gm__ T __in__ *src, 
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     pipe_barrier(PIPE_ALL);
 #endif
     MSCATTER<Coalesce::Elem, Atomic, Oob, Conflict>(outGlobal, srcTile, idxTile);
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
+    set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     FlushGmOutput(out, kTableSize * (int)sizeof(T));
@@ -283,11 +303,15 @@ inline AICORE void runElem2DDyn(__gm__ T __out__ *out, __gm__ T __in__ *src, __g
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     pipe_barrier(PIPE_ALL);
 #endif
     MSCATTER<Coalesce::Elem, Atomic, Oob, Conflict>(outGlobal, srcTile, idxTile);
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
+    set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     FlushGmOutput(out, static_cast<int>(kRtTableR * kRtTableC) * (int)sizeof(T));
@@ -333,11 +357,15 @@ inline AICORE void runRowDyn(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     pipe_barrier(PIPE_ALL);
 #endif
     MSCATTER<Coalesce::Row, Atomic, Oob, Conflict>(outGlobal, srcTile, idxTile);
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
+    set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     FlushGmOutput(out, static_cast<int>(kRtTableR * kRtValidCols) * (int)sizeof(T));
@@ -376,11 +404,15 @@ inline AICORE void runElem2D(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     pipe_barrier(PIPE_ALL);
 #endif
     MSCATTER<Coalesce::Elem, Atomic, Oob, Conflict>(outGlobal, srcTile, idxTile);
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
+    set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     FlushGmOutput(out, kTableSize * (int)sizeof(T));
