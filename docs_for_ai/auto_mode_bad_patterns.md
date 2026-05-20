@@ -110,12 +110,30 @@ Several entries below are clarified or scheduled for fix by **PR-852** (A3 ST te
 
 ### 2.4 FFTS device-side handshakes (`wait_flag_dev` / `TPipe` / `TPUSH` / `TPOP`)
 
-1. **Pattern** — `TPUSH<...>(pipe, slot)`, `TPOP<...>(pipe, slot)`, `wait_flag_dev(BUF0_QK_READY)`, `TPipe<flagId, dirType, slotSize, slotNum, ...>` declarations.
-2. **Why risky** — `TPUSH`/`TPOP` "currently directly use TASSIGN inside their implementations, which doesn't work for auto mode" (Known: [tests/npu/a2a3/src/st/testcase/CMakeLists.txt:213-220](../tests/npu/a2a3/src/st/testcase/CMakeLists.txt#L213-L220), [tests/npu/a5/src/st/testcase/CMakeLists.txt:243-250](../tests/npu/a5/src/st/testcase/CMakeLists.txt#L243-L250), [docs/auto_mode/Library_Developer_Rules_And_Limitations.md §4](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md)). FFTS-managed pipelines depend on user-managed buffer flags — incompatible with the auto-allocator.
+1. **Pattern** — `TPUSH<...>(pipe, slot)`, `TPOP<...>(pipe, slot)`, `wait_flag_dev(BUF0_QK_READY)`, `TPipe<flagId, dirType, slotSize, slotNum, ...>` declarations **via the old `TPipe` API**.
+2. **Why risky** — `TPipe`/`TPUSH`/`TPOP` "currently directly use TASSIGN inside their implementations, which doesn't work for auto mode" (Known: [tests/npu/a2a3/src/st/testcase/CMakeLists.txt:213-220](../tests/npu/a2a3/src/st/testcase/CMakeLists.txt#L213-L220), [tests/npu/a5/src/st/testcase/CMakeLists.txt:243-250](../tests/npu/a5/src/st/testcase/CMakeLists.txt#L243-L250), [docs/auto_mode/Library_Developer_Rules_And_Limitations.md §4](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md)). FFTS-managed pipelines depend on user-managed buffer flags — incompatible with the auto-allocator.
 3. **Where** — [tests/npu/a2a3/src/st/testcase/tfa/tfa_kernel.cpp](../tests/npu/a2a3/src/st/testcase/tfa/tfa_kernel.cpp), [tests/npu/a2a3/src/st/testcase/tpushpop_*/](../tests/npu/a2a3/src/st/testcase/) (all `tpushpop_*` testcases are explicitly excluded from auto mode), [kernels/manual/common/flash_atten/](../kernels/manual/common/flash_atten/), [include/pto/npu/a2a3/TPush.hpp](../include/pto/npu/a2a3/TPush.hpp), [include/pto/npu/a2a3/TPop.hpp](../include/pto/npu/a2a3/TPop.hpp).
-4. **Fix** — Do not use any of these in an auto-mode kernel today. There is no auto-mode-safe equivalent of `TPipe` yet — design without ping-pong / multi-slot pipelines, per §1.4 of the kernel rules.
-5. **Confidence** — High.
-6. **Status** — Known.
+4. **Fix** — Do NOT use the old `TPipe` / bare `TPUSH` / `TPOP` in an auto-mode kernel. Use `TMPipe<FlagId, FIFOType::GM_FIFO, Depth, SyncPeriod, ProdTile, ConsTile, UF, Offset>` (from `<pto/npu/a2a3/custom/TSync_Custom.hpp>`) combined with the setter API:
+   ```cpp
+   using QKPipe = TMPipe<BUF0_QK_READY, FIFOType::GM_FIFO, FifoDepth, SyncPeriod,
+                         TileQKData, TileDataF_T, UF_ENABLE, 0>;
+   QKPipe qkPipe(qk_tile_fifo_block_ptr);
+   // Producer side:
+   qkPipe.prod.setTileId(tile_id, sub_tile);
+   qkPipe.prod.setAllocateStatus(should_wait);   // wait for consumer slot
+   qkPipe.prod.setRecordStatus(should_record);   // signal data ready
+   qkPipe.prod.setEntryOffset(byte_offset);
+   TPUSH(accTile, qkPipe);
+   // Consumer side:
+   qkPipe.cons.setTileId(tile_id, row_slice);
+   qkPipe.cons.setWaitStatus(should_wait);       // wait for producer
+   qkPipe.cons.setFreeStatus(should_free);       // signal slot reusable
+   qkPipe.cons.setEntryOffset(byte_offset);
+   TPOP(vecTile, qkPipe);
+   ```
+   This is hardware-confirmed in [kernels/automode/a2a3/flash_atten/fa_performance_kernel.cpp](../kernels/automode/a2a3/flash_atten/fa_performance_kernel.cpp) (see [known_good_kernel_examples.md §A19](known_good_kernel_examples.md)). The `FifoType::GM_FIFO` form uses a GM intermediate buffer rather than TASSIGN-based UB slots, making it compatible with the auto-allocator. (Inferred — internal implementation of `TMPipe` not independently audited, but hardware produces correct output.)
+5. **Confidence** — High for old `TPipe` being unsafe. Inferred for `TMPipe` being safe (hardware-confirmed, mechanism not independently audited).
+6. **Status** — Known (old `TPipe` unsafe). Inferred (`TMPipe` safe via hardware run).
 
 ### 2.5 Double / multi-buffering (ping-pong) in kernel code
 

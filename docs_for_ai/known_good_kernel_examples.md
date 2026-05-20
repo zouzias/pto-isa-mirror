@@ -421,6 +421,76 @@ harness (Known: enumerated in `ALL_TESTCASES` of
    - The `kSkipStage2` host-wrapper toggle is a debug aid, not a production switch.
 7. **Confidence** — High for the fixed shape; behavior at other shapes / dtypes / `kH != kF` / multi-core / dynamic-tail / fused-single-kernel form / non-NormalRelu activations is **Unknown**.
 
+### A19. flash_atten (auto-mode A3, full Flash Attention 2.0 with cube/vector SPMD pipeline) — hardware-confirmed optimized prototype
+
+> First in-tree auto-mode A3 kernel that implements a complete Flash Attention 2.0 operator using a pipelined cube + vector architecture. Introduces several new auto-mode patterns not seen in A11–A18: cross-stage FIFO via `TMPipe`, vector SPMD via `get_subblockid()`, `TEXTRACT` for L1→L0 panel slicing, `TTRI` for causal masking, `AccPhase::Final/Partial` in `TMATMUL_ACC`, and `#pragma pto v_loop_barrier`. Hardware-confirmed per README performance tables (onboard A3 TFLOPS measurements). Status: **Known** (hardware-confirmed per README, user describes as a working optimized auto-mode prototype).
+
+1. **Files** —
+   - [kernels/automode/a2a3/flash_atten/fa_performance_kernel.cpp](../kernels/automode/a2a3/flash_atten/fa_performance_kernel.cpp) — main kernel (cube + vector paths in one TU)
+   - [kernels/automode/a2a3/flash_atten/pto_macro_matmul.hpp](../kernels/automode/a2a3/flash_atten/pto_macro_matmul.hpp) — generic GEMM macro with `TEXTRACT`-based K-split and `AccMode` enum
+   - [kernels/automode/a2a3/flash_atten/pto_macro_fa_softmax.hpp](../kernels/automode/a2a3/flash_atten/pto_macro_fa_softmax.hpp) — streaming softmax macro (FA-2.0 init/non-init)
+   - [kernels/automode/a2a3/flash_atten/pto_macro_fa_gu.hpp](../kernels/automode/a2a3/flash_atten/pto_macro_fa_gu.hpp) — GU running-update macro
+   - [kernels/automode/a2a3/flash_atten/multiBuffer.hpp](../kernels/automode/a2a3/flash_atten/multiBuffer.hpp) — `MultiBuffered<N>` / `MultiStaged<N>` in `pto_auto` namespace
+
+2. **Why** — Most complex in-tree auto-mode A3 kernel. Validates a pipeline of 4 stages (QK cube → P vec softmax → PV cube → GU vec update) across S1 tiles with FIFO handoff. Introduces the most optimization-relevant new patterns for subsequent high-performance kernels. Performance table in README records onboard TFLOPS for multiple (S0, S1, cores) configurations.
+
+3. **Pattern** — Cube/vector SPMD inside a single kernel TU:
+   ```cpp
+   // Build-time constants exposed as constexpr bools
+   constexpr bool DAV_CUBE = /* __DAV_CUBE__ defined */;
+   constexpr bool DAV_VEC  = /* __DAV_VEC__  defined */;
+
+   // Cross-stage FIFO (GM_FIFO type, depth = CV_FIFO_SIZE)
+   using QKPipe = TMPipe<BUF0_QK_READY, FIFOType::GM_FIFO, FiFoDepth, FiFoSyncT,
+                         TileQKData, TileDataF_T, UF_ENABLE, 0>;
+   QKPipe qkPipe(qk_tile_fifo_block);
+
+   if constexpr (DAV_CUBE) {
+       // warmup (compute_qk only), main (compute_qk + compute_pv with MultiStaged<2>), drain (compute_pv only)
+       // TPUSH(qkAccTile, qkPipe); with .prod.setTileId/.setAllocateStatus/.setRecordStatus/.setEntryOffset
+   }
+   if constexpr (DAV_VEC) {
+       // warmup (compute_p only), main (compute_p + compute_gu with mb.loop), drain (compute_gu only)
+       // TPOP(pMatTile, pPipe); with .cons.setTileId/.setWaitStatus/.setFreeStatus/.setEntryOffset
+       // #pragma pto v_loop_barrier between phases
+   }
+   ```
+
+4. **Auto-mode compatibility** — Yes (Known, hardware-confirmed per README performance tables). Confirms the following patterns at the tested shapes:
+   - **`TMPipe<FlagId, FIFOType::GM_FIFO, Depth, SyncPeriod, ProdTile, ConsTile, UF, Offset>`** (from `<pto/npu/a2a3/custom/TSync_Custom.hpp>`) with `TPUSH`/`TPOP` via setter-based prod/cons API is auto-mode-safe. This is the replacement for `TPipe` (which uses `TASSIGN` internally and is NOT auto-mode-safe per [auto_mode_bad_patterns.md §2.4](auto_mode_bad_patterns.md)).
+   - **`MultiBuffered<N>::loop<Range<Dim>>()` and `MultiStaged<N>::run(f1, f2)`** (`pto_auto` namespace, `multiBuffer.hpp`) — auto-mode-safe compile-time pipeline scheduling helpers. `MultiBuffered` maps iterations onto buffer lanes for warmup/main/drain scheduling; `MultiStaged` overlaps same-engine stages offset by a dependency distance.
+   - **`TEXTRACT(l0Tile, l1Tile, row, col)`** — extracts a Cube_K–wide sub-panel from an L1 Mat tile into an L0A/L0B tile (LeftTile/RightTile). Used inside `pto_macro_matmul` for K-split without manual address arithmetic. Auto-mode-safe when called from the kernel.
+   - **`AccPhase::Final` / `AccPhase::Partial`** template args on `TMATMUL<AccPhase::Final>(cTile, aTile, bTile)` and `TMATMUL_ACC<AccPhase::Partial>(...)` — signal to the hardware whether this is the final accumulation slice (triggering FixPipe store) or an intermediate partial. `pto_macro_matmul` selects these automatically based on `AccMode` arg.
+   - **`get_subblockid()`** — returns `0` or `1` for the 2 vector subblocks within one AI core. Enables SPMD-style parallelism: each subblock handles its own row slice (`Vec_S0 = Cube_S0 / VEC_CORES / kTileFactor` rows) without explicit inter-subblock sync.
+   - **`TTRI<TileType, kDiag>(triu, diagOffset)`** — fills a triangular mask tile for causal attention masking. Auto-mode-safe from kernel code at the tested shape. (Inferred — the causal mask path compiles and is exercised by `CAUSAL_MASK=true` template arg.)
+   - **`TROWEXPANDSUB(dst, src, rowTile)`** — user-facing (not `_IMPL`) row-expanded subtraction; auto-mode-safe. Used in softmax init.
+   - **`TROWEXPANDMUL(dst, dst, rowTile)`** / **`TROWEXPANDDIV(dst, dst, rowTile)`** — in-place row-expanded multiply/divide for the GU running rescale and final normalization. Auto-mode-safe.
+   - **`#pragma pto v_loop_barrier`** — auto-mode pragma that inserts a vector pipeline barrier between phases of the vector computation. Used at the boundary between warmup/main and main/drain sections of the vector side.
+   - **`PTO_PREFETCH(ptr, bytes, stream)` from `<pto/npu/kernels/Pto_prefetch.hpp>`** — pre-fetches Q/K/V tensors into L2 before the main kernel launch. Host-side only; does not appear in kernel code.
+   - **`TSYNC_CVID(block_idx, cv_comm_buf)`** — maps a logical `block_idx` to a physical comm slot when `block_rows >= kCvMaxCores`, avoiding cube/vector comm slot aliasing under high parallelism.
+   - **`pto_example_mixed(NAME)` CMake function** — builds a mixed cube+vector kernel with `--cce-aicore-arch=dav-c220` (no `-cube`/`-vec` suffix), `--cce-enable-pto-passes`, `-O2`, and `--cce-fatobj-link`. The single arch flag covers both cube and vector compilation paths in one CMake target.
+   - **`wait_flag_dev(CV_BLOCK_END)` and `ffts_cross_core_sync(...)`** — used at kernel tail in the cube and vector sections respectively for final inter-core drain signalling. These are low-level FFTS primitives; their exact auto-mode behavior is **Inferred** safe because the kernel produces correct output on hardware.
+
+5. **Copy** — the following patterns transfer to any new high-performance auto-mode A3 kernel:
+   - The `DAV_CUBE`/`DAV_VEC` constexpr flag pattern for separating cube and vector sections in one TU.
+   - The `TMPipe` + `TPUSH`/`TPOP` + setter API for inter-stage FIFO — this is the first auto-mode-confirmed FIFO pipeline; replaces the forbidden `TPipe`/`TPUSH`/`TPOP`.
+   - The `MultiBuffered<kMatTNBuffers>::loop<Range<Dim>>()` + `MultiStaged<2>::run(f1, f2)` scheduling pattern for warmup/main/drain stages.
+   - The `pto_macro_matmul<M, K, N>(aMatTile, bMatTile, cAccTile, AccMode)` wrapper for any K-split GEMM — it auto-selects `Cube_K` via `calculateFittingCubeK()` and internally uses `TEXTRACT + TMATMUL/TMATMUL_ACC` with `AccPhase` for each segment.
+   - The `get_subblockid()` SPMD pattern: `const size_t subblock_base_rows = (Cube_S0 / VEC_CORES) * get_subblockid()` to partition row work across 2 vector subblocks within one core.
+   - `TROWEXPANDSUB`, `TROWEXPANDMUL`, `TROWEXPANDDIV` in-place for softmax/GU numerics — confirmed auto-mode-safe.
+   - `#pragma pto v_loop_barrier` between pipeline phases on the vector side.
+   - The `FftsBufferFlag` enum (named flags) and `should_wait_consumption<FifoSize, SyncPeriod>(iter)` / `should_notify_consumption<FifoSize, SyncPeriod>(iter)` helpers for FIFO backpressure control.
+   - `pto_example_mixed(NAME)` CMake function pattern.
+
+6. **Do not copy** —
+   - `wait_flag_dev(CV_BLOCK_END)` / `ffts_cross_core_sync(...)` verbatim without understanding the FFTS comm slot protocol — these depend on the `TSYNC_CVID` slot assignment and the `CV_BLOCK_END` flag in `FftsBufferFlag`. Incorrect reuse breaks cross-core draining.
+   - The fixed shapes (`CUBE_S0`, `CUBE_S1 = 128`, `TILE_S1 = 256`, `QK_PRELOAD = 4`, `CV_FIFO_SIZE = 8`) are tuned for the tested configurations; other shapes need re-tuning.
+   - The `CAUSAL_MASK = true` path (`TTRI`, diagonal offset arithmetic) is Inferred correct but not explicitly validated in isolation — treat as a working reference rather than a separately confirmed shape.
+   - `kMatTNBuffers = 1` in the main loop (outer-loop double buffering is intentionally disabled because the staged QK/PV pipeline already saturates the resource pattern — do NOT add local double buffering without measuring).
+   - `VEC_CORES = 2` is hard-coded; changing it requires updating all `Cube_S0 / VEC_CORES` row-partition arithmetic.
+
+7. **Confidence** — High for the tested shapes per the README performance tables; the exact compile/auto-sync details of `TMPipe`, `TTRI`, and the FFTS tail drain are **Inferred** correct (hardware produces correct output but internal mechanism not independently audited).
+
 ---
 
 ## Group B — Pattern references (use semantics, not source as-is)
@@ -445,15 +515,19 @@ harness (Known: enumerated in `ALL_TESTCASES` of
 6. **Do not copy** — N/A (not source code).
 7. **Confidence** — Medium.
 
-### B3. FA softmax helper macros (FA-internal, library-level)
+### B3. FA softmax helper macros (auto-mode version preferred; library-level)
 
-1. **File** — [tests/npu/a2a3/src/st/testcase/tfa/pto_macro_fa_softmax.hpp](../tests/npu/a2a3/src/st/testcase/tfa/pto_macro_fa_softmax.hpp)
+> **Prefer the auto-mode versions.** The old reference at `tests/npu/a2a3/src/st/testcase/tfa/pto_macro_fa_softmax.hpp` uses `pipe_barrier(PIPE_V)` and `*_IMPL` variants (manual-only). The hardware-confirmed auto-mode versions live in [kernels/automode/a2a3/flash_atten/](../kernels/automode/a2a3/flash_atten/) and use only user-facing instructions.
+
+1. **Files** —
+   - Auto-mode (preferred): [kernels/automode/a2a3/flash_atten/pto_macro_fa_softmax.hpp](../kernels/automode/a2a3/flash_atten/pto_macro_fa_softmax.hpp), [kernels/automode/a2a3/flash_atten/pto_macro_fa_gu.hpp](../kernels/automode/a2a3/flash_atten/pto_macro_fa_gu.hpp)
+   - Manual-only (semantic reference): [tests/npu/a2a3/src/st/testcase/tfa/pto_macro_fa_softmax.hpp](../tests/npu/a2a3/src/st/testcase/tfa/pto_macro_fa_softmax.hpp)
 2. **Why** — Concrete FA-2.0 online-softmax math expressed in PTO instructions, including the init/non-init distinction (rescale prior global sum by `exp_max`). Matches the math in [tests/npu/a2a3/src/st/testcase/tfa/TFA_kernel.md](../tests/npu/a2a3/src/st/testcase/tfa/TFA_kernel.md).
-3. **Pattern** — `TROWMAX → TROWEXPANDSUB_IMPL → TMULS(scale) → TEXP → TCVT → TROWSUM → TADD/TMUL` with a numerically-stable max/sum recurrence. Uses `TRESHAPE` to alias 1-D and 2-D views of the same tile (auto-friendly).
-4. **Auto-mode compatibility** — Manual-only when used as-is (Known). It calls `pipe_barrier(PIPE_V)` directly and `*_IMPL` variants — both are library-developer-only per [docs/auto_mode/Library_Developer_Rules_And_Limitations.md §3, §5](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md). Also relies on the FA driver kernel that is **not** in `ALL_TESTCASES` (Known: missing from [tests/npu/a2a3/src/st/testcase/CMakeLists.txt](../tests/npu/a2a3/src/st/testcase/CMakeLists.txt)).
-5. **Copy** — The math/operation sequence; the `TRESHAPE` view-aliasing for column-vs-1D access; the FA-2.0 init vs non-init split.
-6. **Do not copy** — `pipe_barrier(PIPE_V)` calls and `TROWEXPANDSUB_IMPL` from this file. Use the user-facing `TROWEXPAND + TSUB` instead per [docs/coding/tutorials/row-softmax.md](../docs/coding/tutorials/row-softmax.md). Note: `__in__`/`__out__` qualifiers ARE meaningful on A3/A5 (compiler-provided keywords; only `#define`d as empty for kirin, CPU-sim, and cost-model — see [qualifier_reference.md](qualifier_reference.md)); keep them on tile-function parameter declarations.
-7. **Confidence** — Medium for math; Low for direct code reuse in auto mode.
+3. **Pattern (auto-mode version)** — `TROWMAX → TROWEXPANDSUB → TMULS(scale) → TEXP → TCVT → TROWSUM` (init) or `TROWMAX → TMAX → TSUB → TMULS → TEXP × 2 → TCVT → TMUL → TROWSUM → TADD` (non-init). GU: `TROWEXPANDMUL(prev, prev, exp_max) → TADD(prev, prev, est) → [TROWEXPANDDIV on last tile]`. Uses `TRESHAPE` for 1-D/2-D view aliasing.
+4. **Auto-mode compatibility** — Yes for the `kernels/automode/a2a3/flash_atten/` versions (Known — hardware-confirmed; uses only user-facing instructions). Manual-only for the `tests/.../tfa/` version (Known — uses `pipe_barrier(PIPE_V)` and `*_IMPL` variants per [docs/auto_mode/Library_Developer_Rules_And_Limitations.md §3, §5](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md)).
+5. **Copy** — The math/operation sequence from the auto-mode version; `TROWEXPANDSUB` (not `_IMPL`); the `TRESHAPE` view-aliasing; the FA-2.0 init vs non-init split; `constexpr_inv_sqrt(HEAD_SIZE)` for the scale factor.
+6. **Do not copy** — `pipe_barrier(PIPE_V)` or `TROWEXPANDSUB_IMPL` from the old manual-only file. `__in__`/`__out__` qualifiers ARE meaningful on A3/A5 — keep them on tile-function parameter declarations (see [qualifier_reference.md](qualifier_reference.md)).
+7. **Confidence** — High for auto-mode version (hardware-confirmed in §A19); Medium for direct code reuse from the manual-only tfa/ file.
 
 ### B4. CPU FA demo (host-runnable functional reference)
 
@@ -576,8 +650,8 @@ harness (Known: enumerated in `ALL_TESTCASES` of
 | Power / scalar-broadcast | A3 tpow | D1 TPow library | — |
 | Reductions | A4 trowsum | B1 row-softmax tutorial | — |
 | GEMM | A6 tmatmul A3, A7 tmatmul A5, A8 tmatmul_mx A5 | B2 GEMM tutorial | C1 gemm_performance |
-| Softmax | (none in-tree fully auto) | B1 row-softmax, B3 fa_softmax math | — |
-| Attention | (none in-tree fully auto) | B3 fa_softmax, B4 cpu FA | C2 common FA, C3 A5 FA, C4 tfa ST |
+| Softmax | A19 FA softmax macro (auto, inline) | B1 row-softmax, B3 fa_softmax math | — |
+| Attention | A19 flash_atten (auto, cube+vec SPMD) | B3 fa_softmax, B4 cpu FA | C2 common FA, C3 A5 FA, C4 tfa ST |
 | Quant / Dequant | D2 TQuant library auto branch | — | D3 tquant ST aliasing trick, D4 tdequant TLOAD-on-dst |
 | Aliasing recipes | A10 dual-mode `TASSIGN`+`TRESHAPE` (PR-852, not yet merged) | — | — |
 
@@ -586,7 +660,7 @@ harness (Known: enumerated in `ALL_TESTCASES` of
 ## Cross-cutting risks observed (link back when reviewing)
 
 - **`__tf__` / `__in__` / `__out__` / `__cce_get_tile_ptr` are bisheng-CCE keywords/builtins on A3/A5** — add `__tf__` on helpers that contain raw CCE intrinsics; preserve `__in__`/`__out__` on `TileDType` parameters when copying helper signatures. See [qualifier_reference.md](qualifier_reference.md) for the full evidence chain.
-- **`TPUSH` / `TPOP` are not safe in auto mode** ([tests/npu/a2a3/src/st/testcase/CMakeLists.txt:213-220](../tests/npu/a2a3/src/st/testcase/CMakeLists.txt#L213-L220), [docs/auto_mode/Library_Developer_Rules_And_Limitations.md §4](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md)). Avoid in any auto-mode kernel.
+- **Direct `TPUSH` / `TPOP` via the old `TPipe` abstraction are not safe in auto mode** ([tests/npu/a2a3/src/st/testcase/CMakeLists.txt:213-220](../tests/npu/a2a3/src/st/testcase/CMakeLists.txt#L213-L220), [docs/auto_mode/Library_Developer_Rules_And_Limitations.md §4](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md)). However, `TMPipe<FlagId, FIFOType::GM_FIFO, ...>` (from `<pto/npu/a2a3/custom/TSync_Custom.hpp>`) uses a different internal mechanism and appears auto-mode-safe — confirmed via hardware run in [§A19 flash_atten](known_good_kernel_examples.md#a19-flash_atten). Do not use the raw `TPipe` form; use `TMPipe` with the setter API (`prod.setTileId`, `prod.setAllocateStatus`, etc.).
 - **Double buffering is not supported for kernel devs today** ([docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md §1.4](../docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md)). Do not transplant ping-pong buffer logic from C1/C2/C3.
 - **`set_flag` / `wait_flag` / `Event<>` from manual kernels** must be either dropped or wrapped in `#ifndef __PTO_AUTO__` (canonical guard pattern: A4, A6, A7, D3).
 - **Aliasing**: in auto mode, `TASSIGN(a, addr)` followed by `TASSIGN(b, addr)` does NOT alias `a` and `b`. Use `TRESHAPE(b, a)` (same base) or `TSUBVIEW(b, a, row, col)` (offset). Examples: A4 (`TRESHAPE`), D2 (auto branch), A10 (dual-mode recipe from PR-852, not yet merged).

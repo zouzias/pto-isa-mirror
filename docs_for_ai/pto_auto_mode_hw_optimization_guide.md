@@ -1025,9 +1025,84 @@ Before running a pipelined kernel, verify:
 
 ---
 
-## 22. Guidance for Claude
+## 22. Concrete API names confirmed in the auto-mode FA kernel
 
-When using this document:
+This section maps guide concepts to the specific identifiers observed in [kernels/automode/a2a3/flash_atten/fa_performance_kernel.cpp](../kernels/automode/a2a3/flash_atten/fa_performance_kernel.cpp). All items are **Inferred** auto-mode-safe unless marked Known (hardware-confirmed per README performance tables).
+
+### 22.1 Cross-stage FIFO: `TMPipe` (not `TPipe`)
+
+The auto-mode-safe FIFO class is `TMPipe`, from `<pto/npu/a2a3/custom/TSync_Custom.hpp>`. The old `TPipe` uses `TASSIGN` internally and is NOT auto-mode-safe. (Known — see [auto_mode_bad_patterns.md §2.4](auto_mode_bad_patterns.md).)
+
+```cpp
+using QKPipe = TMPipe<BUF0_QK_READY, FIFOType::GM_FIFO,
+                      CV_FIFO_SIZE, CV_FIFO_CONS_SYNC_PERIOD,
+                      TileQKData, TileDataF_T,
+                      UF_ENABLE ? true : false, 0>;
+QKPipe qkPipe(qk_tile_fifo_block_ptr);
+```
+
+Use `TPUSH(tile, pipe)` / `TPOP(tile, pipe)` via the setter API (§9.2 / §9.3 of this guide).
+
+### 22.2 L1→L0 panel extraction: `TEXTRACT`
+
+```cpp
+TEXTRACT(al0Tiles, aMatTile, 0, k * Cube_K);   // row 0, col k*Cube_K
+TEXTRACT(bl0Tiles, bMatTile, k * Cube_K, 0);   // row k*Cube_K, col 0
+```
+
+Extracts a `Cube_K`-wide sub-panel from an L1 `TileType::Mat` tile into an `L0A` `TileLeft` or `L0B` `TileRight`. Used inside `pto_macro_matmul` for K-split; the macro auto-selects `Cube_K` via `calculateFittingCubeK(M, N)`. (Inferred — part of the hardware-confirmed FA build.)
+
+### 22.3 AccPhase in TMATMUL / TMATMUL_ACC
+
+```cpp
+TMATMUL<AccPhase::Final>(cAccTile, al0Tiles, bl0Tiles);
+TMATMUL_ACC<AccPhase::Partial>(cAccTile, al0Tiles, bl0Tiles);
+```
+
+`AccPhase::Final` triggers the FixPipe drain of L0C to GM; `AccPhase::Partial` suppresses it. The `pto_macro_matmul<M, K, N>()` wrapper resolves the correct phase from the `AccMode` enum argument. (Inferred — part of the hardware-confirmed FA build.)
+
+### 22.4 Vector subblock SPMD: `get_subblockid()`
+
+Returns `0` or `1` for the 2 vector subblocks within one AI core. Use to partition row work:
+
+```cpp
+const size_t subblock_base_rows = (Cube_S0 / VEC_CORES) * get_subblockid();
+const size_t row_offset = subblock_base_rows + row_slice * Vec_S0;
+```
+
+Each subblock operates on its own row range with no inter-subblock sync required. `VEC_CORES = 2` is a build-time constant. (Inferred — part of the hardware-confirmed FA build.)
+
+### 22.5 Triangular causal mask: `TTRI`
+
+```cpp
+TTRI<TileDataS1, 1>(triu, 1 + (s0_index % TileDataS1::Cols));
+TMULS(triu, triu, negInf);
+TADD(input_x, input_x, triu);  // apply -inf mask to above-diagonal positions
+```
+
+`TTRI<TileType, kDiag>(dst, diagOffset)` fills a triangular mask tile. Used for causal attention masking when `CAUSAL_MASK=true`. (Inferred — compiles under the `CAUSAL_MASK` template path; causal correctness not independently validated on hardware.)
+
+### 22.6 L2 prefetch: `PTO_PREFETCH`
+
+Host-side only (not in kernel code). Launches an SDMA prefetch of a GM tensor into L2 before the main kernel:
+
+```cpp
+#include <pto/npu/kernels/Pto_prefetch.hpp>
+PTO_PREFETCH((__gm__ void *)q, tensor_bytes, stream);     // SDMA variant
+PTO_PREFETCH<false, kPrefetchAivCores>(..., stream);       // AIV variant
+```
+
+Call before the main kernel launch on the same stream. Requires warmup kernel (`warmup_kernel<<<24, nullptr, stream>>>`) to be launched first so all AIV cores are ready. (Inferred — part of the hardware-confirmed FA build.)
+
+### 22.7 `pto_example_mixed` CMake function
+
+Mixed cube+vector kernels use `pto_example_mixed(NAME)` instead of `pto_example_vec_auto` / `pto_example_cube_auto`. Key difference: uses `--cce-aicore-arch=dav-c220` (no `-cube`/`-vec` suffix), which covers both cube and vector code paths in one CMake target with `--cce-fatobj-link`. (Inferred — from [CMakeLists.txt](../kernels/automode/a2a3/flash_atten/CMakeLists.txt).)
+
+---
+
+## 23. Guidance for Claude
+
+When using this document (including the new §22 API names):
 
 1. Do not copy FA performance code blindly.
 2. Extract the stage graph first.
