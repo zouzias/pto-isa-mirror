@@ -345,6 +345,10 @@ AICORE void example_row_colidx(__gm__ half* tablePtr, __gm__ int32_t* idxPtr)
 
 When sizing a workload, account for both the **destination** tile (`R * C * sizeof(T)`, padded up to the 32-byte burst alignment) and the **index** tile (`R * C * sizeof(TIdx)`, same padding rule). `MGATHER` itself does not allocate any UB scratch — every read flows GM → register → UB.
 
+### Large-Workload Tiling
+
+A single `TSTORE` after the gather is bounded by the available UB window. When the destination tile approaches the ~216 KB budget (or any other per-DMA-burst limit the platform imposes), split the work across multiple iterations: invoke `MGATHER` for a slice of indices, `TSTORE` that slice to its GM region, then advance to the next slice. `MGATHER` has no cross-element ordering semantics, so slice order is unconstrained.
+
 ## Runtime Dispatch Requirement
 
 `MGATHER` (like every SIMT kernel in PTO and CANN) uses `cce::async_invoke<simt_mgather_*_kernel>(cce::dim3{WARP_SIZE, kLaunchWarps}, …)` internally to fan a per-warp/per-lane workload out across up to `32 × 32 = 1024` threads. `cce::async_invoke` consumes hardware/runtime state — TID registers (`__cce_simt_get_TID_X/Y`), warp/lane configuration, vector-pipe scheduling — that the **launch path** has to install **before** the kernel function is entered. The standard CANN launch (`rtKernelLaunch`, used by the `<<<1, nullptr, stream>>>` syntax in every ST in this suite) installs that state correctly.

@@ -415,6 +415,10 @@ AICORE void example_last_deterministic(__gm__ half* tablePtr)
 
 When sizing a workload, account for both the **source** tile (`R * C * sizeof(T)`, padded up to the 32-byte burst alignment) and the **index** tile (`R * C * sizeof(TIdx)`, same padding rule). For `Conflict::Last` the destination side adds no extra UB pressure — the slot-centric scan operates directly out of the same `src` / `idx` UB tiles and stores straight to GM.
 
+### Large-Workload Tiling
+
+A single `TLOAD` is bounded by the available UB window. When the combined `src` + `idx` footprint approaches the ~216 KB budget (or any other per-DMA-burst limit the platform imposes), split the work across multiple iterations: load a slice of `src` / `idx`, invoke `MSCATTER` for that slice, then advance to the next slice. Processing slices in ascending source-element order preserves `Conflict::Last` semantics — later slices overwrite earlier slices' writes to colliding slots, so the globally last element still wins. `Conflict::Default` and the atomic modes are slice-order-insensitive. The `elem2d_float_3456x8_*` cases in this suite are the canonical worked example (3456×8 input split into eight 432×8 chunks, each chunk holding both tiles in ~28 KB of UB).
+
 ## Runtime Dispatch Requirement
 
 `MSCATTER` (like every SIMT kernel in PTO and CANN) uses `cce::async_invoke<simt_mscatter_*_kernel>(cce::dim3{WARP_SIZE, kLaunchWarps}, …)` internally to fan a per-warp/per-lane workload out across up to `32 × 32 = 1024` threads. `cce::async_invoke` consumes hardware/runtime state — TID registers (`__cce_simt_get_TID_X/Y`), warp/lane configuration, vector-pipe scheduling — that the **launch path** has to install **before** the kernel function is entered. The standard CANN launch (`rtKernelLaunchWithHandleV2`, used by the `<<<1, nullptr, stream>>>` syntax in every ST in this suite) installs that state correctly.
