@@ -76,7 +76,7 @@ PTO_INTERNAL void TREDUCE_CCU_IMPL(ParallelGroupType &parallelGroup, GlobalDstDa
         pipe_barrier(PIPE_MTE3);
     }
 
-    pto::comm::ccu::CkeTriggerFromTile(ctx.ckeSlotVA, ctx.mask, accTileData);
+    CkeTriggerFromTile(ctx.ckeSlotVA, ctx.mask, accTileData);
 
     (void)dstGlobalData;
     (void)recvTileData;
@@ -101,7 +101,7 @@ PTO_INTERNAL void TREDUCE_CCU_IMPL(ParallelGroupType &parallelGroup, GlobalDstDa
         pipe_barrier(PIPE_MTE3);
     }
 
-    pto::comm::ccu::CkeTriggerFromTile(ctx.ckeSlotVA, ctx.mask, accTileData);
+    CkeTriggerFromTile(ctx.ckeSlotVA, ctx.mask, accTileData);
 
     (void)dstGlobalData;
     (void)pingTileData;

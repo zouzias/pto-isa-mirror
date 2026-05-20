@@ -47,7 +47,7 @@ PTO_INTERNAL void TBROADCAST_CCU_IMPL(ParallelGroupType &parallelGroup, GlobalSr
         }
     }
 
-    pto::comm::ccu::CkeTriggerFromTile(ctx.ckeSlotVA, ctx.mask, stagingTileData);
+    CkeTriggerFromTile(ctx.ckeSlotVA, ctx.mask, stagingTileData);
 
     (void)parallelGroup;
 }
@@ -69,7 +69,7 @@ PTO_INTERNAL void TBROADCAST_CCU_IMPL(ParallelGroupType &parallelGroup, GlobalSr
         }
     }
 
-    pto::comm::ccu::CkeTriggerFromTile(ctx.ckeSlotVA, ctx.mask, pingTile);
+    CkeTriggerFromTile(ctx.ckeSlotVA, ctx.mask, pingTile);
 
     (void)parallelGroup;
     (void)pongTile;
