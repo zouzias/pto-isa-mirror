@@ -12,7 +12,134 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/pto_tile.hpp>
 #include "pto/cpu/tile_offsets.hpp"
+#include <type_traits>
+#include <cstdint>
+
+
 namespace pto {
+
+// Target layout formats defined in your system architecture
+template<bool ignored = true> enum class Layout {
+    NCHW,
+    NC1HWC0,
+    FRACTAL_Z
+};
+
+// ============================================================================
+// Independent Layout Implementation Workers
+// ============================================================================
+
+template <typename DstTileData, typename SrcTileData>
+inline void TTRANS_NCHW_TO_NC1HWC0_CORE(DstTileData &dst, SrcTileData &src)
+{
+    using SrcDType = typename SrcTileData::DType;
+    using DstDType = typename DstTileData::DType;
+
+    const auto* src_ptr = reinterpret_cast<const SrcDType*>(src.data());
+    auto* dst_ptr = reinterpret_cast<DstDType*>(dst.data());
+
+    constexpr int64_t C0 = 32 / sizeof(SrcDType);
+
+    int64_t N = src.GetShape(0);
+    int64_t C = src.GetShape(1);
+    int64_t H = src.GetShape(2);
+    int64_t W = src.GetShape(3);
+    int64_t size = N * C * H * W;
+    int64_t C1 = (C + C0 - 1) / C0;
+
+    // for (int64_t n = 0; n < N; ++n) {
+    //     for (int64_t c1 = 0; c1 < C1; ++c1) {
+    //         for (int64_t h = 0; h < H; ++h) {
+    //             for (int64_t w = 0; w < W; ++w) {
+    //                 for (int64_t c0 = 0; c0 < C0; ++c0) {
+    //                     int64_t actual_c = c1 * C0 + c0;
+    //                     int64_t dst_idx = (n * C1 * H * W * C0) +
+    //                                       (c1 * H * W * C0) +
+    //                                       (h * W * C0) +
+    //                                       (w * C0) +
+    //                                       c0;
+
+    //                     if (actual_c < C) {
+    //                         int64_t src_idx = (n * C * H * W) +
+    //                                           (actual_c * H * W) +
+    //                                           (h * W) +
+    //                                           w;
+    //                         if (src_idx >= size || dst_idx >= size) {
+    //                             int a = 0;
+    //                         }
+    //                         dst_ptr[dst_idx] = src_ptr[src_idx];
+    //                     } else {
+    //                         if (dst_idx >= size) {
+    //                             int a = 0;
+    //                         }
+    //                         dst_ptr[dst_idx] = static_cast<DstDType>(0);
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
+    for (int64_t n = 0; n < N; ++n) {
+        for (int64_t c = 0; c < C; ++c1) {
+            for (int64_t h = 0; h < H; ++h) {
+                for (int64_t w = 0; w < W; ++w) {
+                        
+                }
+            }
+        }
+    }
+}
+
+template <typename DstTileData, typename SrcTileData>
+inline void TTRANS_NC1HWC0_TO_FRACTAL_Z_CORE(DstTileData &dst, SrcTileData &src)
+{
+    using SrcDType = typename SrcTileData::DType;
+    using DstDType = typename DstTileData::DType;
+
+    const auto* src_ptr = reinterpret_cast<const SrcDType*>(src.data());
+    auto* dst_ptr = reinterpret_cast<DstDType*>(dst.data());
+
+    constexpr int64_t C0 = 32 / sizeof(SrcDType);
+    constexpr int64_t N0 = 16;
+
+    int64_t N  = src.GetShape(0);
+    int64_t C1 = src.GetShape(1);
+    int64_t H  = src.GetShape(2);
+    int64_t W  = src.GetShape(3);
+    int64_t N1 = (N + N0 - 1) / N0;
+    int64_t col_dim = C1 * H * W;
+
+    for (int64_t n1 = 0; n1 < N1; ++n1) {
+        for (int64_t c1 = 0; c1 < C1; ++c1) {
+            for (int64_t h = 0; h < H; ++h) {
+                for (int64_t w = 0; w < W; ++w) {
+                    int64_t col_idx = (c1 * H * W) + (h * W) + w;
+
+                    for (int64_t c0 = 0; c0 < C0; ++c0) {
+                        for (int64_t n0 = 0; n0 < N0; ++n0) {
+                            int64_t actual_n = n1 * N0 + n0;
+                            int64_t dst_idx = (n1 * col_dim * C0 * N0) +
+                                              (col_idx * C0 * N0) +
+                                              (c0 * N0) +
+                                              n0;
+
+                            if (actual_n < N) {
+                                int64_t src_idx = (actual_n * C1 * H * W * C0) +
+                                                  (c1 * H * W * C0) +
+                                                  (h * W * C0) +
+                                                  (w * C0) +
+                                                  c0;
+                                dst_ptr[dst_idx] = src_ptr[src_idx];
+                            } else {
+                                dst_ptr[dst_idx] = static_cast<DstDType>(0);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 template <typename DstTileData, typename SrcTileData>
 void TTrans_Impl(typename DstTileData::TileDType dst, typename SrcTileData::TileDType src, unsigned validRow,
                  unsigned validCol)
@@ -48,11 +175,26 @@ void TTrans_Impl(typename DstTileData::TileDType dst, typename SrcTileData::Tile
 template <typename DstTileData, typename SrcTileData, typename TmpTileData>
 PTO_INTERNAL void TTRANS_IMPL(DstTileData &dst, SrcTileData &src, TmpTileData &tmp)
 {
-    static_assert(SrcTileData::ValidRow == DstTileData::ValidCol && SrcTileData::ValidCol == DstTileData::ValidRow);
-    unsigned validRow = src.GetValidRow();
-    unsigned validCol = src.GetValidCol();
-    TTrans_Impl<DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol);
+    // Validate matching element widths at compilation
+    static_assert(sizeof(typename SrcTileData::DType) == sizeof(typename DstTileData::DType), 
+                  "Data type sizes between source and destination tiles must match.");
+
+    constexpr Layout src_layout = SrcTileData::layout;
+    constexpr Layout dst_layout = DstTileData::layout;
+
+    if constexpr (src_layout == Layout::NCHW && dst_layout == Layout::NC1HWC0) {
+        TTRANS_NCHW_TO_NC1HWC0_CORE(dst, src);
+    }
+    else if constexpr (src_layout == Layout::NC1HWC0 && dst_layout == Layout::FRACTAL_Z) {
+        TTRANS_NC1HWC0_TO_FRACTAL_Z_CORE(dst, src);
+    } else {
+        // static_assert(SrcTileData::ValidRow == DstTileData::ValidCol && SrcTileData::ValidCol == DstTileData::ValidRow);
+        // unsigned validRow = src.GetValidRow();
+        // unsigned validCol = src.GetValidCol();
+        // TTrans_Impl<DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol);
+    }   
 }
+
 } // namespace pto
 
 #endif // TTRANS_HPP
