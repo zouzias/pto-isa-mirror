@@ -335,6 +335,16 @@ AICORE void example_row_colidx(__gm__ half* tablePtr, __gm__ int32_t* idxPtr)
 
 7. **Register pressure / MRF.** The kernels carry `LAUNCH_BOUND(1024)` (32 regs/thread budget) and use ≤ 12 live registers per thread in the hot path. No spills are produced; the compile flag `-mllvm -cce-aicore-record-overflow=true` reports no overflow events for any of the instantiations.
 
+## SIMT Usage Restrictions
+
+`MGATHER` runs as a SIMT launch on the AIV vector core. Because every SIMT entry shares the AIV's Unified Buffer with the compiler runtime, the **caller-usable UB budget is smaller than the raw 256 KB device limit**:
+
+- **Compiler stack reservation:** ~8 KB per warp configuration (set via `-mllvm -cce-aicore-stack-size=0x8000 -mllvm -cce-aicore-function-stack-size=0x8000`).
+- **D-cache reservation:** 32 KB carved out for scalar/vector dcache backing.
+- **Effective UB for user tiles:** **~216 KB** (`256 KB − 40 KB`). All `TASSIGN` / `Tile` UB offsets and live tile sizes for `dst`, `idx`, plus any companion tiles must fit within this window across the entire kernel.
+
+When sizing a workload, account for both the **destination** tile (`R * C * sizeof(T)`, padded up to the 32-byte burst alignment) and the **index** tile (`R * C * sizeof(TIdx)`, same padding rule). `MGATHER` itself does not allocate any UB scratch — every read flows GM → register → UB.
+
 ## Runtime Dispatch Requirement
 
 `MGATHER` (like every SIMT kernel in PTO and CANN) uses `cce::async_invoke<simt_mgather_*_kernel>(cce::dim3{WARP_SIZE, kLaunchWarps}, …)` internally to fan a per-warp/per-lane workload out across up to `32 × 32 = 1024` threads. `cce::async_invoke` consumes hardware/runtime state — TID registers (`__cce_simt_get_TID_X/Y`), warp/lane configuration, vector-pipe scheduling — that the **launch path** has to install **before** the kernel function is entered. The standard CANN launch (`rtKernelLaunch`, used by the `<<<1, nullptr, stream>>>` syntax in every ST in this suite) installs that state correctly.
