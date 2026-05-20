@@ -1,8 +1,8 @@
 /**
- * main.cpp - host driver for gather (v3).
+ * main.cpp - host driver for gather.
  *
- * v3 changes: drops the reordered_scratch GM buffer. The kTopK > 1 path now
- * builds r_inv in UB and does the reorder UB-side via TGATHER per k.
+ * Unpack-and-accumulate with softmax routing weights when kTopK > 1.
+ * For kTopK == 1 the kernel takes the fast path (no softmax, no TMULS).
  *
  * I/O contract (all little-endian, contiguous, no header):
  *   ../input/input_B.bin       (kT*kTopK + 16) * kH    float32
@@ -14,9 +14,8 @@
  *
  *   kPadded = max(8, kTopK) — softmax tile column padding for 32-byte UB alignment.
  *
- * weights_scratch is a GM-only scratch buffer (no host file). Used only when
- * kTopK > 1 to stage softmax weights so the per-k weight column can be
- * TLOAD-ed back with a strided GlobalTensor view inside pass 2.
+ * weights_scratch is GM-only (no host file). The host allocates it but never
+ * touches the contents; the kernel writes it in pass 1 and reads in pass 2.
  */
 
 #include "test_common.h"
@@ -105,11 +104,12 @@ int main()
     ReadFile("../input/input_rank_id.bin", rankIdBytes, rankIdHost, rankIdBytes);
     ReadFile("../input/input_outVal.bin",  outValBytes, outValHost, outValBytes);
 
-    // Zero-init C for consistency with the original harness. The v2 gather
-    // writes C directly on both fast and weighted paths.
+    // Zero-init C: kernel does TLOAD(C[t]) on the very first contribution,
+    // so C must be zero on entry. 0x00 bytes in float32 = +0.0f.
     aclrtMemset(cDev, cBytes, 0x00, cBytes);
 
-    // Poison scratch buffer so skipped writes are easier to notice.
+    // Poison weights_scratch so we can detect if the kernel forgot to write
+    // it before reading in pass 2. (Only matters when kTopK > 1.)
     aclrtMemset(weightsDev, weightsBytes, 0x5A, weightsBytes);
 
     aclrtMemcpy(bDev,      bBytes,      bHost,      bBytes,      ACL_MEMCPY_HOST_TO_DEVICE);

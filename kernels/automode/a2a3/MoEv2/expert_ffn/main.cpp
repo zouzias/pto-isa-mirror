@@ -1,8 +1,8 @@
 /**
  * main.cpp - host driver for expert_ffn.
  *
- * Two-stage per-expert FFN: Stage 1 = A @ W1[e] + ReLU + fp32->fp16, Stage 2
- * = Y @ W2[e]. Both stages stream-serialised inside `launchExpertFfnFp16`.
+ * Fused per-expert FFN: for each expert-local A_s tile, compute
+ * relu(A_s @ W1_t) @ W2_t and store B_s to GM before moving to the next A_s.
  *
  * I/O contract (all little-endian, contiguous, no header):
  *   ../input/input_A.bin             (kT*kTopK + 16) * kH        half (fp16)
@@ -14,8 +14,7 @@
  *   ../output/output_B.bin            (kT*kTopK + 16) * kH        float32  (kernel-emitted)
  *
  * Validation compares only the first kT*kTopK rows of B; the trailing 16-row
- * overspill pad is ignored (it gets written with garbage by the last
- * non-empty expert's last tile).
+ * ABI pad is ignored.
  */
 
 #include "test_common.h"
@@ -51,6 +50,11 @@ constexpr int kPackedRows   = kT * kTopK;
 constexpr int kOverspillPad = kTileM;
 constexpr int kAlloc        = kPackedRows + kOverspillPad;
 
+// Cube blockAlign for fp16 = 16.  A/W1/W2 are zero-padded to these dims
+// so the GEMM MatTile K/N padding columns read zeros, not garbage UB.
+constexpr int kH_aligned = ((kH + 15) / 16) * 16;
+constexpr int kF_aligned = ((kF + 15) / 16) * 16;
+
 constexpr size_t kHalfBytes  = 2;
 constexpr size_t kFloatBytes = 4;
 
@@ -77,11 +81,11 @@ bool ValidateB(size_t allocBytes)
 
 int main()
 {
-    size_t aBytes      = static_cast<size_t>(kAlloc) * kH                 * kHalfBytes;
-    size_t yBytes      = static_cast<size_t>(kAlloc) * kF                 * kHalfBytes;
-    size_t bBytes      = static_cast<size_t>(kAlloc) * kH                 * kFloatBytes;
-    size_t w1Bytes     = static_cast<size_t>(kE)     * kH * kF            * kHalfBytes;
-    size_t w2Bytes     = static_cast<size_t>(kE)     * kF * kH            * kHalfBytes;
+    size_t aBytes      = static_cast<size_t>(kAlloc) * kH_aligned          * kHalfBytes;
+    size_t yBytes      = static_cast<size_t>(kAlloc) * kF_aligned          * kHalfBytes;
+    size_t bBytes      = static_cast<size_t>(kAlloc) * kH                  * kFloatBytes;
+    size_t w1Bytes     = static_cast<size_t>(kE)     * kH_aligned * kF_aligned * kHalfBytes;
+    size_t w2Bytes     = static_cast<size_t>(kE)     * kF_aligned * kH_aligned * kHalfBytes;
     size_t expBytes    = static_cast<size_t>(kE)                          * sizeof(int32_t);
 
     printf("[main] kT=%d  kH=%d  kF=%d  kE=%d  kTopK=%d  kTileM=%d  kAlloc=%d\n",

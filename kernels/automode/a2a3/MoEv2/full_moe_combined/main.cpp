@@ -9,7 +9,7 @@
  *     -> launchMoeTopkPadded<float> (vec)
  *     -> launchOutValPad<float>     (vec)  // device-side pad bridge
  *     -> launchScatterFp16          (vec)
- *     -> launchExpertFfnFp16        (cube + cube)
+ *     -> launchExpertFfnFp16        (fused cube)
  *     -> launchGather<float>        (vec)
  *
  * Compared with full_moe_separate, this folder:
@@ -60,7 +60,7 @@ extern "C" void launchExpertFfnFp16(uint8_t *B, uint8_t *A,
 template <typename T>
 void launchGather(T *C, T *B,
                   int32_t *A_id, int32_t *rank_id,
-                  T *outVal, T *weights_scratch, T *reordered_scratch,
+                  T *outVal, T *weights_scratch,
                   void *stream);
 
 // ----------------------------------------------------------------------------
@@ -77,7 +77,7 @@ static void launchFullMoeCombined(
     uint8_t  *A,         int32_t  *A_id,     int32_t  *rank_id,
     int32_t  *expert_count, int32_t *expert_start,
     uint8_t  *Y_scratch, uint8_t  *B,
-    float    *weights_scratch, float *reordered_scratch,
+    float    *weights_scratch,
     void     *stream)
 {
     (void)PtoTiming::TimeKernelCallUs("full_moe_combined/router_matmul", stream, [&]() {
@@ -97,7 +97,7 @@ static void launchFullMoeCombined(
     });
     (void)PtoTiming::TimeKernelCallUs("full_moe_combined/gather", stream, [&]() {
         launchGather<float>(C, reinterpret_cast<float *>(B), A_id, rank_id,
-                            outVal_padded, weights_scratch, reordered_scratch, stream);
+                            outVal_padded, weights_scratch, stream);
     });
 }
 
@@ -147,7 +147,6 @@ int main()
     size_t yScratchBytes       = static_cast<size_t>(kAlloc) * kF         * kHalfBytes;
     size_t bBytes              = static_cast<size_t>(kAlloc) * kH         * kFloatBytes;
     size_t weightsScratchBytes = static_cast<size_t>(kT)     * kPadded    * kFloatBytes;
-    size_t reorderedScratchBytes = static_cast<size_t>(kPackedRows) * kH   * kFloatBytes;
 
     size_t cBytes              = static_cast<size_t>(kT)     * kH         * kFloatBytes;
 
@@ -182,7 +181,7 @@ int main()
     float    *outValCompactDev = nullptr, *outValPaddedDev = nullptr;
     uint8_t  *aDev = nullptr, *yScratchDev = nullptr, *bDev = nullptr;
     int32_t  *aIdDev = nullptr, *rankIdDev = nullptr, *countDev = nullptr, *startDev = nullptr;
-    float    *weightsScratchDev = nullptr, *reorderedScratchDev = nullptr;
+    float    *weightsScratchDev = nullptr;
     float    *cDev = nullptr;
 
     aclrtMalloc((void **)&xDev,               xBytes,              ACL_MEM_MALLOC_HUGE_FIRST);
@@ -205,7 +204,6 @@ int main()
     aclrtMalloc((void **)&yScratchDev,        yScratchBytes,       ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&bDev,               bBytes,              ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&weightsScratchDev,  weightsScratchBytes, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&reorderedScratchDev, reorderedScratchBytes, ACL_MEM_MALLOC_HUGE_FIRST);
 
     aclrtMalloc((void **)&cDev,               cBytes,              ACL_MEM_MALLOC_HUGE_FIRST);
 
@@ -231,7 +229,7 @@ int main()
     aclrtMemcpy(idxInitDev,      idxInitBytes,      idxInitHost,          idxInitBytes,      ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(outValPaddedDev, outValPaddedBytes, outValPaddedSeedHost, outValPaddedBytes, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    // Zero-init C for consistency; v2 gather writes it directly. Poison the scratches.
+    // Zero-init C. Poison the scratches.
     aclrtMemset(cDev,              cBytes,             0x00, cBytes);
     aclrtMemset(aDev,              aBytes,             0x5A, aBytes);
     aclrtMemset(aIdDev,            aIdBytes,           0xFF, aIdBytes);
@@ -239,7 +237,6 @@ int main()
     aclrtMemset(yScratchDev,       yScratchBytes,      0x6C, yScratchBytes);
     aclrtMemset(bDev,              bBytes,             0x4D, bBytes);
     aclrtMemset(weightsScratchDev, weightsScratchBytes, 0x77, weightsScratchBytes);
-    aclrtMemset(reorderedScratchDev, reorderedScratchBytes, 0x6B, reorderedScratchBytes);
 
     // ========================================================================
     // One host wrapper, six timed kernel launches on the stream.
@@ -257,7 +254,7 @@ int main()
         outValPaddedDev,
         aDev, aIdDev, rankIdDev, countDev, startDev,
         yScratchDev, bDev,
-        weightsScratchDev, reorderedScratchDev,
+        weightsScratchDev,
         stream);
 
     // D2H final output.
@@ -266,7 +263,6 @@ int main()
 
     // Free.
     aclrtFree(cDev);
-    aclrtFree(reorderedScratchDev);
     aclrtFree(weightsScratchDev);
     aclrtFree(bDev);
     aclrtFree(yScratchDev);

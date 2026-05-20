@@ -65,7 +65,7 @@ Both folders include their own `sweep.sh` for shape-axis testing (kT / kH / kF /
 | [moe_topk_padded](moe_topk_padded/) | vec | generic top-K with `kGatherWidth = max(8, kTopK)` + valid-region crop | confirmed-built v1 (kT=256, kE=32, kTopK=1) |
 | [scatter](scatter/) | vec | pack tokens by expert; emits `A`, `A_id`, `rank_id`, `count`, `start` | confirmed-built v1 (kTopK=1); `rank_id` output added later |
 | [expert_ffn](expert_ffn/) | cube ×2 | two-stage GEMM1+ReLU / GEMM2 with overspill | confirmed-built v1 |
-| [gather](gather/) | vec | v2 split: reorder to `D[t,k,h]`, then vector weighted combine; `if kTopK==1` skips softmax | experimental v2 in this folder |
+| [gather](gather/) | vec | softmax-weighted scatter-add; `if kTopK==1` skips softmax | confirmed-built v1 (kTopK=1 = unweighted fast path); softmax path tested via sweep |
 | [full_moe_separate](full_moe_separate/) | mixed | end-to-end pipeline; 5 launches with sync between each + host-side outVal pad bridge | first version of end-to-end |
 | [full_moe_combined](full_moe_combined/) | mixed | end-to-end pipeline; one host wrapper fires 6 kernels on stream + device-side `outval_pad` + one final sync | first version of end-to-end with stream-orchestrated chain |
 
