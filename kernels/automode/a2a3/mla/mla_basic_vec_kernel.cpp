@@ -100,9 +100,6 @@ __global__ AICORE void runKVCacheStore(__gm__ T *c_cache, __gm__ T *c_kv)
 //
 // numBlocks is a runtime argument: for Q_rope it is kNumHeads (32 head-major
 // blocks); for K_rope it is 1 (shared across heads).
-//
-// Each block is processed independently with a `pipe_barrier(PIPE_ALL)` at
-// the start (mirrors runAttnSoftmax's cross-iter auto-sync escape hatch).
 // =============================================================================
 template <typename T>
 __global__ AICORE void runRoPE(__gm__ T *y, __gm__ T *x,
@@ -140,10 +137,6 @@ __global__ AICORE void runRoPE(__gm__ T *y, __gm__ T *x,
     TLOAD(sinTile, sinGlobal);
 
     for (unsigned b = 0; b < numBlocks; ++b) {
-        // Sanctioned cross-iter auto-sync barrier (see docs_for_ai/
-        // auto_mode_bad_patterns.md §7.4). 7 distinct tiles, 8+ ops per body.
-        pipe_barrier(PIPE_ALL);
-
         const size_t blockOffset = static_cast<size_t>(b) * kSeqLen * kRopeDim;
 
         GlobalDataHalfX x1Global(x + blockOffset);                 // first half
@@ -215,14 +208,6 @@ __global__ AICORE void runAttnSoftmax(__gm__ T *probs,
     RowReduceTile  rowSumTile(kSeqLen, 1);
 
     for (unsigned h = 0; h < kNumHeads; ++h) {
-        // Sanctioned escape hatch: auto-sync tracks dependencies per tile
-        // identity, not per UB region. With 7 distinct tiles and a 12-op
-        // pipeline in this loop body, the auto-allocator can place tiles
-        // with disjoint per-iter lifetimes in overlapping UB regions, so
-        // iter i+1's TLOAD can clobber iter i's in-flight data before its
-        // TSTORE drains. See docs_for_ai/auto_mode_bad_patterns.md §7.4.
-        pipe_barrier(PIPE_ALL);
-
         const size_t headOffset = static_cast<size_t>(h) * kSeqLen * kSeqLen;
 
         GlobalData srcNopeGlobal(scores_nope + headOffset);
