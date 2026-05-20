@@ -299,12 +299,12 @@ add("MSCATTERTest.case_row_int32_unaligned_3x8_8rows", lambda n: case_row(n, np.
 add("MSCATTERTest.case_row_int32_unaligned_9x16_16rows", lambda n: case_row(n, np.int32, 9, 16, 16))
 
 add(
-    "MSCATTERTest.case_elem2d_float_3456x8_last_256size",
-    lambda n: case_elem2d(n, np.float32, 3456, 8, 256, conflict="last", idx_kind="random"),
+    "MSCATTERTest.case_elem2d_float_3072x8_last_256size",
+    lambda n: case_elem2d(n, np.float32, 3072, 8, 256, conflict="last", idx_kind="random"),
 )
 add(
-    "MSCATTERTest.case_elem2d_float_3456x8_default_27648size",
-    lambda n: case_elem2d(n, np.float32, 3456, 8, 27648, conflict="default", idx_kind="seq"),
+    "MSCATTERTest.case_elem2d_float_3072x8_default_24576size",
+    lambda n: case_elem2d(n, np.float32, 3072, 8, 24576, conflict="default", idx_kind="seq"),
 )
 
 

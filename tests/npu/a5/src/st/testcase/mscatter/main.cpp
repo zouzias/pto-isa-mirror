@@ -141,8 +141,8 @@ DECLARE_LAUNCH(elem2d_int32_scalar_1x1_in_1x8_8size, int32_t, int32_t)
 DECLARE_LAUNCH(row_int32_unaligned_3x8_8rows, int32_t, int32_t)
 DECLARE_LAUNCH(row_int32_unaligned_9x16_16rows, int32_t, int32_t)
 
-DECLARE_LAUNCH(elem2d_float_3456x8_last_256size, float, int32_t)
-DECLARE_LAUNCH(elem2d_float_3456x8_default_27648size, float, int32_t)
+DECLARE_LAUNCH(elem2d_float_3072x8_last_256size, float, int32_t)
+DECLARE_LAUNCH(elem2d_float_3072x8_default_24576size, float, int32_t)
 
 DECLARE_LAUNCH(elem2d_dyn_user_float_1x9_in_1x16_3x10, float, int32_t)
 DECLARE_LAUNCH(elem2d_dyn_int32_4x8_in_4x8_64size, int32_t, int32_t)
@@ -223,8 +223,8 @@ ROW_TEST(row_int32_unaligned_9x16_16rows, int32_t, int32_t, 9, 16, 16)
         run_mscatter_test<THOST, TIDX>((size_t)RVR * RVC, (size_t)RVR * RVC, (size_t)RTR * RTC, Launch_##NAME); \
     }
 
-ELEM2D_TEST(elem2d_float_3456x8_last_256size, float, int32_t, 3456, 8, 256)
-ELEM2D_TEST(elem2d_float_3456x8_default_27648size, float, int32_t, 3456, 8, 27648)
+ELEM2D_TEST(elem2d_float_3072x8_last_256size, float, int32_t, 3072, 8, 256)
+ELEM2D_TEST(elem2d_float_3072x8_default_24576size, float, int32_t, 3072, 8, 24576)
 
 ELEM2D_DYN_TEST(elem2d_dyn_user_float_1x9_in_1x16_3x10, float, int32_t, 1, 9, 3, 10)
 ELEM2D_DYN_TEST(elem2d_dyn_int32_4x8_in_4x8_64size, int32_t, int32_t, 4, 8, 1, 64)

@@ -409,15 +409,15 @@ AICORE void example_last_deterministic(__gm__ half* tablePtr)
 
 `MSCATTER` runs as a SIMT launch on the AIV vector core. Because every SIMT entry shares the AIV's Unified Buffer with the compiler runtime, the **caller-usable UB budget is smaller than the raw 256 KB device limit**:
 
-- **Compiler stack reservation:** ~8 KB per warp configuration (set via `-mllvm -cce-aicore-stack-size=0x8000 -mllvm -cce-aicore-function-stack-size=0x8000`).
+- **Compiler stack reservation:** 32 KB per warp configuration (set via `-mllvm -cce-aicore-stack-size=0x8000 -mllvm -cce-aicore-function-stack-size=0x8000`, where `0x8000` is hex for `32768`).
 - **D-cache reservation:** 32 KB carved out for scalar/vector dcache backing.
-- **Effective UB for user tiles:** **~216 KB** (`256 KB − 40 KB`). All `TASSIGN` / `Tile` UB offsets and live tile sizes for `src`, `idx`, plus any companion tiles must fit within this window across the entire kernel.
+- **Effective UB for user tiles:** **~192 KB** (`256 KB − 64 KB`). All `TASSIGN` / `Tile` UB offsets and live tile sizes for `src`, `idx`, plus any companion tiles must fit within this window across the entire kernel. Exceeding it does **not** error at compile time and frequently passes on the simulator, but on real hardware the overflowed tile bytes overlap the stack and get corrupted when any SIMT thread spills, producing silent all-zero or undefined results.
 
 When sizing a workload, account for both the **source** tile (`R * C * sizeof(T)`, padded up to the 32-byte burst alignment) and the **index** tile (`R * C * sizeof(TIdx)`, same padding rule). For `Conflict::Last` the destination side adds no extra UB pressure — the slot-centric scan operates directly out of the same `src` / `idx` UB tiles and stores straight to GM.
 
-### Large-Workload Tiling
+### Large-Workload Sizing
 
-A single `TLOAD` is bounded by the available UB window. When the combined `src` + `idx` footprint approaches the ~216 KB budget (or any other per-DMA-burst limit the platform imposes), split the work across multiple iterations: load a slice of `src` / `idx`, invoke `MSCATTER` for that slice, then advance to the next slice. Processing slices in ascending source-element order preserves `Conflict::Last` semantics — later slices overwrite earlier slices' writes to colliding slots, so the globally last element still wins. `Conflict::Default` and the atomic modes are slice-order-insensitive. The `elem2d_float_3456x8_*` cases in this suite are the canonical worked example (3456×8 input split into eight 432×8 chunks, each chunk holding both tiles in ~28 KB of UB).
+The `elem2d_float_3072x8_*` cases exercise shapes near the 192 KB UB ceiling. With `float` src and `int32_t` index (both 4 bytes), each tile is `3072 × 8 × 4 = 96 KB` (32-byte aligned), totalling `96 + 96 = 192 KB` — exactly the user UB budget. Shapes whose combined `src` + `idx` tile footprint exceeds this limit will pass the simulator but produce silent all-zero results on-board because the tile bytes collide with the compiler stack region.
 
 ## Runtime Dispatch Requirement
 
@@ -509,8 +509,8 @@ In dependency order (cheapest first): Note - We will try to resolve this issue a
 | case_elem2d_float_8x32_random_256size       | float | 8×32     | 256   | None | Undefined | Last    | random |
 | case_elem2d_int32_8x16_random_256size       | int32 | 8×16     | 256   | None | Undefined | Last    | random |
 | case_elem2d_half_4x32_random_256size        | half  | 4×32     | 256   | None | Undefined | Last    | random |
-| case_elem2d_float_3456x8_last_256size       | float | 3456×8   | 256   | None | Undefined | Last    | random |
-| case_elem2d_float_3456x8_default_27648size  | float | 3456×8   | 27648 | None | Undefined | Default | seq    |
+| case_elem2d_float_3072x8_last_256size       | float | 3072×8   | 256   | None | Undefined | Last    | random |
+| case_elem2d_float_3072x8_default_24576size  | float | 3072×8   | 24576 | None | Undefined | Default | seq    |
 
 ### Unaligned / Odd-Dimension Tiles
 

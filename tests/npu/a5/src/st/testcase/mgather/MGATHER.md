@@ -339,9 +339,9 @@ AICORE void example_row_colidx(__gm__ half* tablePtr, __gm__ int32_t* idxPtr)
 
 `MGATHER` runs as a SIMT launch on the AIV vector core. Because every SIMT entry shares the AIV's Unified Buffer with the compiler runtime, the **caller-usable UB budget is smaller than the raw 256 KB device limit**:
 
-- **Compiler stack reservation:** ~8 KB per warp configuration (set via `-mllvm -cce-aicore-stack-size=0x8000 -mllvm -cce-aicore-function-stack-size=0x8000`).
+- **Compiler stack reservation:** 32 KB per warp configuration (set via `-mllvm -cce-aicore-stack-size=0x8000 -mllvm -cce-aicore-function-stack-size=0x8000`, where `0x8000` is hex for `32768`).
 - **D-cache reservation:** 32 KB carved out for scalar/vector dcache backing.
-- **Effective UB for user tiles:** **~216 KB** (`256 KB − 40 KB`). All `TASSIGN` / `Tile` UB offsets and live tile sizes for `dst`, `idx`, plus any companion tiles must fit within this window across the entire kernel.
+- **Effective UB for user tiles:** **~192 KB** (`256 KB − 64 KB`). All `TASSIGN` / `Tile` UB offsets and live tile sizes for `dst`, `idx`, plus any companion tiles must fit within this window across the entire kernel. Exceeding it does **not** error at compile time and frequently passes on the simulator, but on real hardware the overflowed tile bytes overlap the stack and get corrupted when any SIMT thread spills, producing silent all-zero or undefined results.
 
 When sizing a workload, account for both the **destination** tile (`R * C * sizeof(T)`, padded up to the 32-byte burst alignment) and the **index** tile (`R * C * sizeof(TIdx)`, same padding rule). `MGATHER` itself does not allocate any UB scratch — every read flows GM → register → UB.
 
