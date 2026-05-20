@@ -1,19 +1,22 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TFILLPAD_HPP
 #define TFILLPAD_HPP
-#include <pto/common/pto_tile.hpp>
 #include <bit>
-#include "pto/cpu/tile_offsets.hpp"
+#include <pto/common/pto_tile.hpp>
+
 #include "pto/cpu/parallel.hpp"
+#include "pto/cpu/tile_offsets.hpp"
 
 namespace pto {
 
@@ -89,11 +92,9 @@ PTO_INTERNAL void TFILLPAD_IMPL(TileDataDst &dst, TileDataSrc &src)
     TFillPad<TileDataDst, TileDataSrc>(dst.data(), src.data(), validDstRow, validDstCol, validSrcRow, validSrcCol);
 }
 
-template <typename TileData, PadValue PadVal = PadValue::Zero>
+template <typename TileData, PadValue PadVal = TileData::PadVal>
 PTO_INTERNAL void TFILLPAD_IMPL(TileData &dst, TileData &src)
 {
-    constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
-    constexpr unsigned Stride = TileData::RowStride;
     unsigned validSrcRow = src.GetValidRow();
     unsigned validSrcCol = src.GetValidCol();
     unsigned validDstRow = dst.GetValidRow();
@@ -119,7 +120,7 @@ PTO_INTERNAL void TFILLPAD_IMPL(TileDataDst &dst, TileDataSrc &src)
 }
 
 template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TFILLPAD_INPLACE_IMPL(TileDataDst &dst, TileDataSrc &src)
+PTO_INTERNAL void TFILLPAD_INPLACE(TileDataDst &dst, TileDataSrc &src)
 {
     static_assert(TileDataDst::Cols == TileDataSrc::Cols && TileDataDst::Rows == TileDataSrc::Rows,
                   "TFillPad: dst and src should have the same rows/cols!");
@@ -128,12 +129,24 @@ PTO_INTERNAL void TFILLPAD_INPLACE_IMPL(TileDataDst &dst, TileDataSrc &src)
 }
 
 template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TFILLPAD_EXPAND_IMPL(TileDataDst &dst, TileDataSrc &src)
+PTO_INTERNAL void TFILLPAD_INPLACE_IMPL(TileDataDst &dst, TileDataSrc &src)
+{
+    TFILLPAD_INPLACE(dst, src);
+}
+
+template <typename TileDataDst, typename TileDataSrc>
+PTO_INTERNAL void TFILLPAD_EXPAND(TileDataDst &dst, TileDataSrc &src)
 {
     static_assert(TileDataDst::Cols >= TileDataSrc::Cols && TileDataDst::Rows >= TileDataSrc::Rows,
                   "TFillPad: dst and src should have the same rows/cols!");
 
     TFILLPAD_IMPL<TileDataDst, TileDataSrc, false>(dst, src);
+}
+
+template <typename TileDataDst, typename TileDataSrc>
+PTO_INTERNAL void TFILLPAD_EXPAND_IMPL(TileDataDst &dst, TileDataSrc &src)
+{
+    TFILLPAD_EXPAND(dst, src);
 }
 } // namespace pto
 #endif

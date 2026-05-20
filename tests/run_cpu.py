@@ -21,7 +21,7 @@ import time
 import logging
 import platform
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 
 def _format_cmd(command: List[str]) -> str:
@@ -346,10 +346,9 @@ def run_binary(binary: Path, build_type: str, cwd: Optional[Path] = None) -> Non
     run_command([str(binary)], cwd=run_cwd)
 
 
-def build_and_run_demo(demo_name: str, repo_root: Path, build_type: str, cxx: Optional[str], cc: Optional[str], *,
-	                   verbose: bool) -> None:
+def _resolve_demo_source(demo_name: str, repo_root: Path) -> Tuple[Path, str]:
     demos_root = repo_root / ".." / "demos" / "cpu"
-    demo_map: dict[str, tuple[Path, str]] = {
+    demo_map: Dict[str, Tuple[Path, str]] = {
         "gemm": (demos_root / "gemm_demo", "gemm_demo"),
         "flash_attn": (demos_root / "flash_attention_demo", "flash_attention_demo"),
         "mla": (demos_root / "mla_attention_demo", "mla_attention_demo"),
@@ -360,10 +359,42 @@ def build_and_run_demo(demo_name: str, repo_root: Path, build_type: str, cxx: Op
     demo_src, exe_stem = demo_map[demo_name]
     legacy_demo_src = repo_root / "demo"
     if demo_name == "gemm" and not demo_src.exists() and legacy_demo_src.exists():
-        demo_src = legacy_demo_src
-        exe_stem = "gemm_demo"
+        return legacy_demo_src, "gemm_demo"
     if not demo_src.exists():
         raise RuntimeError(f"demo dir not found: {demo_src}")
+    return demo_src, exe_stem
+
+
+def _demo_executable_path(demo_build: Path, exe_stem: str, build_type: str) -> Path:
+    exe_name = f"{exe_stem}.exe" if os.name == "nt" else exe_stem
+    if os.name == "nt":
+        return demo_build / build_type / exe_name
+    return demo_build / exe_name
+
+
+def _run_demo_executable(exe: Path, exe_stem: str, build_type: str, *, verbose: bool) -> None:
+    run_cwd = exe.parent
+    if os.name == "nt" and exe.parent.name.lower() == build_type.lower():
+        run_cwd = exe.parent.parent
+    run_command(
+        [str(exe)],
+        cwd=run_cwd,
+        title=f"[STEP] demo: run {exe_stem}",
+        verbose=verbose,
+        always_print_patterns=[r"^perf:"],
+    )
+
+
+def build_and_run_demo(
+    demo_name: str,
+    repo_root: Path,
+    build_type: str,
+    cxx: Optional[str],
+    cc: Optional[str],
+    *,
+    verbose: bool,
+) -> None:
+    demo_src, exe_stem = _resolve_demo_source(demo_name, repo_root)
 
     demo_build = demo_src / "build"
     if demo_build.exists():
@@ -390,21 +421,12 @@ def build_and_run_demo(demo_name: str, repo_root: Path, build_type: str, cxx: Op
         verbose=verbose,
     )
 
-    exe_name = f"{exe_stem}.exe" if os.name == "nt" else exe_stem
-    exe = demo_build / exe_name
-    if os.name == "nt":
-        exe = demo_build / build_type / exe_name
+    exe = _demo_executable_path(demo_build, exe_stem, build_type)
 
     if not exe.exists():
         raise RuntimeError(f"demo binary not found: {exe}")
 
-    run_command([str(exe)],
-                cwd=(exe.parent.parent
-                    if (os.name == "nt" and exe.parent.name.lower() == build_type.lower())
-                    else exe.parent),
-                title=f"[STEP] demo: run {exe_stem}",
-                verbose=verbose,
-                always_print_patterns=[r"^perf:"])
+    _run_demo_executable(exe, exe_stem, build_type, verbose=verbose)
 
 
 def _format_seconds(seconds: float) -> str:
@@ -552,7 +574,7 @@ def run_test_mode(args, repo_root, cxx, cc) -> int:
     return execute_tests(args, source_dir, build_dir)
 
 
-def parse_expected_testcases(source_dir: Path) -> Optional[set[str]]:
+def parse_expected_testcases(source_dir: Path) -> Optional[Set[str]]:
     cmake_list = source_dir / "testcase" / "CMakeLists.txt"
     if not cmake_list.exists():
         return None
@@ -563,7 +585,7 @@ def parse_expected_testcases(source_dir: Path) -> Optional[set[str]]:
         return None
 
     body = m.group(1)
-    cases: list[str] = []
+    cases: List[str] = []
     for raw_line in body.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -652,7 +674,7 @@ def execute_tests(args, source_dir, build_dir) -> int:
         logging.error(f"error: no binaries found under {build_dir / 'bin'} (did build succeed?)")
         return 2
 
-    selected: list[tuple[str, Path]]
+    selected: List[Tuple[str, Path]]
     if args.testcase:
         if args.testcase not in binaries:
             known = ", ".join(sorted(binaries.keys()))

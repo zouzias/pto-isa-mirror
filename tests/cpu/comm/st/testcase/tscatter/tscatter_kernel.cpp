@@ -1,22 +1,24 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
-
-#include "pto/pto-inst.hpp"
-#include "pto/common/pto_tile.hpp"
-#include "pto/common/cpu_stub.hpp"
-#include "../common.hpp"
 #include <pto/pto-inst.hpp>
+
+#include "../common.hpp"
+#include "pto/common/cpu_stub.hpp"
+#include "pto/common/pto_tile.hpp"
+#include "pto/pto-inst.hpp"
 
 #define ENABLE_DEBUG_PRINT 1
 
@@ -66,7 +68,8 @@ __global__ AICORE void TScatterKernelImpl(__gm__ T *src, __gm__ T *dst, int nran
     ShapeDyn dstShape(1, 1, 1, 1, count);
     StrideDyn dstStride(count, count, count, count, 1);
 
-    // Create ParallelGroup: each tensor in the group is the destination buffer on that rank
+    // Create ParallelGroup: each tensor in the group is the destination buffer on
+    // that rank
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
@@ -360,8 +363,8 @@ template bool RunScatterEmpty<float, 256>(int n_ranks, int n_devices, int first_
 // ============================================================================
 // Large Shape Chunked Test Kernel
 // Tests TSCATTER with root's GlobalTensor shape > UB tile capacity
-// Root src: (1, 1, 1, nranks * total_rows, cols), each rank dst: (1, 1, 1, total_rows, cols)
-// Tile: (tile_rows, cols)
+// Root src: (1, 1, 1, nranks * total_rows, cols), each rank dst: (1, 1, 1,
+// total_rows, cols) Tile: (tile_rows, cols)
 // ============================================================================
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 __global__ AICORE void TScatterLargeShapeKernelImpl(__gm__ T *src, __gm__ T *dst, int nranks,

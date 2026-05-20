@@ -1,15 +1,18 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <type_traits>
 #include <pto/pto-inst.hpp>
+#include <type_traits>
+
 #include "acl/acl.h"
 
 using namespace pto;
@@ -27,9 +30,9 @@ __global__ AICORE void runTCmp(__gm__ uint32_t *out, __gm__ T *src0, __gm__ T *s
     TileData_src src0Tile(kTRows_, kTCols_);
     TileData_src src1Tile(kTRows_, kTCols_);
     TileData_dst dstTile(kTRows_, kTCols_);
-    TASSIGN<0x0>(src0Tile);
-    TASSIGN<TileData_src::Numel * sizeof(T)>(src1Tile);
-    TASSIGN<2 * TileData_src::Numel * sizeof(T)>(dstTile);
+    TASSIGN<0x0 + 0x400 * block_idx>(src0Tile);
+    TASSIGN<0x8000 + 0x400 * block_idx>(src1Tile);
+    TASSIGN<0x16000 + 0x400 * block_idx>(dstTile);
 
     GlobalData_src src0Global(src0);
     GlobalData_src src1Global(src1);

@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_MOCKER_TRACE_HPP
@@ -15,13 +17,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <pto/costmodel/arch_config.hpp>
 #include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
-
-#include <pto/costmodel/arch_config.hpp>
 
 namespace pto::mocker {
 
@@ -111,7 +112,8 @@ inline uint64_t ToTraceValue(T value)
         return std::bit_cast<uint64_t>(value);
     } else if constexpr (sizeof(Decayed) == sizeof(uint16_t) && !std::is_integral_v<Decayed> &&
                          !std::is_enum_v<Decayed> && !std::is_pointer_v<Decayed>) {
-        // Handles _Float16 / __fp16 / half which may not satisfy std::is_floating_point_v
+        // Handles _Float16 / __fp16 / half which may not satisfy
+        // std::is_floating_point_v
         return static_cast<uint64_t>(std::bit_cast<uint16_t>(value));
     } else {
         static_assert(kUnsupportedTraceType<Decayed>, "Unsupported trace argument type.");
@@ -189,7 +191,7 @@ inline void EndPtoInstr()
 inline constexpr std::size_t kInvalidCceCallIndex = static_cast<std::size_t>(-1);
 
 template <typename... Args>
-inline std::size_t AppendCceCall(std::string_view name, uint64_t cycles, Args &&... args)
+inline std::size_t AppendCceCall(std::string_view name, uint64_t cycles, Args &&...args)
 {
     auto &trace = g_trace_state;
     if (trace.active_pto_stack.empty()) {
@@ -211,13 +213,13 @@ inline std::size_t AppendCceCall(std::string_view name, uint64_t cycles, Args &&
 }
 
 template <typename... Args>
-inline void RecordCceCall(std::string_view name, uint64_t cycles, Args &&... args)
+inline void RecordCceCall(std::string_view name, uint64_t cycles, Args &&...args)
 {
     (void)AppendCceCall(name, cycles, std::forward<Args>(args)...);
 }
 
 template <typename... Args>
-inline void RecordCceCall(evaluator::PipeKey pipe, std::string_view name, uint64_t cycles, Args &&... args)
+inline void RecordCceCall(evaluator::PipeKey pipe, std::string_view name, uint64_t cycles, Args &&...args)
 {
     auto &trace = g_trace_state;
     const std::size_t call_index = AppendCceCall(name, cycles, std::forward<Args>(args)...);

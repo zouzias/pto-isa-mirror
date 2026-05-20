@@ -1,16 +1,18 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include <limits>
 #include <algorithm>
+#include <limits>
+#include <pto/pto-inst.hpp>
 
 using namespace std;
 using namespace pto;
@@ -134,7 +136,8 @@ AICORE void runTLOADND(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, i
 #endif
     using TileData =
         Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512, PadVal_>;
-    // using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
+    // using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_,
+    // BLayout::RowMajor, -1, -1>;
     TileData vecTile(kTRows_, gCols);
     TASSIGN<0x0>(vecTile);
 
@@ -164,7 +167,8 @@ AICORE void runTLOADND(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, i
     TSTORE(dstGlobal, vecTileP);
     set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-    t2 = get_syscnt(); /*FIXME: compile would insert a dcci at above set/wait t2 timing may not be very correct*/
+    t2 = get_syscnt(); /*FIXME: compile would insert a dcci at above set/wait t2
+                          timing may not be very correct*/
     LOG(t0);
     LOG(t1 - t0);
     LOG(t2 - t1);
@@ -326,7 +330,7 @@ int get_input_golden_case(uint8_t *input, uint8_t *golden)
                             }
                         }
                     } // j
-                }     // i
+                } // i
 
     std::copy((uint8_t *)in_arr, ((uint8_t *)(in_arr)) + in_byteSize, input);
     std::copy((uint8_t *)gold_arr, ((uint8_t *)(gold_arr)) + out_byteSize, golden);
@@ -363,14 +367,22 @@ int get_input_golden(uint8_t *input, uint8_t *golden)
     return 0;
 }
 
-template void launchTLOAD<1>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
-template void launchTLOAD<2>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
-template void launchTLOAD<3>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
-template void launchTLOAD<4>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
-template void launchTLOAD<5>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
-template void launchTLOAD<6>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
-template void launchTLOAD<7>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
-template void launchTLOAD<8>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
+template void launchTLOAD<1>(uint8_t *out, uint8_t *src, uint64_t *gLog,
+                             void *stream); // 实例化 Key=0 的版本
+template void launchTLOAD<2>(uint8_t *out, uint8_t *src, uint64_t *gLog,
+                             void *stream); // 实例化 Key=0 的版本
+template void launchTLOAD<3>(uint8_t *out, uint8_t *src, uint64_t *gLog,
+                             void *stream); // 实例化 Key=0 的版本
+template void launchTLOAD<4>(uint8_t *out, uint8_t *src, uint64_t *gLog,
+                             void *stream); // 实例化 Key=0 的版本
+template void launchTLOAD<5>(uint8_t *out, uint8_t *src, uint64_t *gLog,
+                             void *stream); // 实例化 Key=0 的版本
+template void launchTLOAD<6>(uint8_t *out, uint8_t *src, uint64_t *gLog,
+                             void *stream); // 实例化 Key=0 的版本
+template void launchTLOAD<7>(uint8_t *out, uint8_t *src, uint64_t *gLog,
+                             void *stream); // 实例化 Key=0 的版本
+template void launchTLOAD<8>(uint8_t *out, uint8_t *src, uint64_t *gLog,
+                             void *stream); // 实例化 Key=0 的版本
 template void launchTLOAD<9>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
 template void launchTLOAD<10>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
 template void launchTLOAD<11>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);

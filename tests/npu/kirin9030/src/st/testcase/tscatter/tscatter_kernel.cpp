@@ -1,15 +1,18 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
 #include <acl/acl.h>
+
+#include <pto/pto-inst.hpp>
 
 using namespace std;
 using namespace pto;
@@ -44,8 +47,8 @@ PTO_INTERNAL void runTScatter(__gm__ Tsrc0 *out, __gm__ Tsrc0 *src0, __gm__ Tsrc
     TileData_src1 src1Tile(src1_row, src1_col); // index
     TileData_dst dstTile(dst_row, dst_col);
     TASSIGN<0x0>(src0Tile);
-    TASSIGN<TileData_src0::Numel * sizeof(Tsrc0)>(src1Tile);
-    TASSIGN<TileData_src0::Numel * sizeof(Tsrc0) + TileData_src1::Numel * sizeof(Tsrc1)>(dstTile);
+    TASSIGN<0x20000>(src1Tile);
+    TASSIGN<0x28000>(dstTile);
 
     GlobalData_src0 src0Global(src0);
     GlobalData_src1 src1Global(src1);
