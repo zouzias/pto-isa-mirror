@@ -2,7 +2,7 @@
  * Radix-select TopK (2-byte key) for Ascend A5 with pto-isa.
  *
  * All pto-isa ops (including TASSIGN / TLOAD) live only in five `Phase*` functions — no callees that emit
- * T-instructions. `RunRadixTopKDraft` only constructs tile objects and calls the phases. Tiled 2048 / 256:
+ * T-instructions. `RunRadixTopKDraft` only constructs tile objects and calls the phases. Tiled 8192 / 256:
  * Phase1/3 stream `TLOAD` + `THISTOGRAM`; Phase5 per-tile `TGATHER` + per-tile six-arg `TCONCAT_IMPL` into `gtSeg`/`eqSeg`.
  *
  * 1) **Phase1** — TASSIGN, tile `TLOAD` + `THISTOGRAM<BYTE_1>`, cumulative `chistMSB`
@@ -11,7 +11,7 @@
  * 4) **Phase4** — LSB winner + `TOR` packed threshold; `TASSIGN` `packedThrU` @ `kRemainUbOut`
  * 5) **Phase5** — per-tile `TGATHER` + six-arg `TCONCAT_IMPL` (`NeetCntDstIdx`): `idx*Out` → `idx*Acc` per loop, final five-arg merge + `TSTORE`
  *
- * Current example: N = 2048, TopK = 512 (see `scripts/gen_data.py`).
+ * Current example: N = 8192, TopK = 512 (see `scripts/gen_data.py`).
  */
 
 #include <pto/pto-inst.hpp>
@@ -28,7 +28,7 @@ using namespace pto;
 
 namespace topk_radix_detail {
 
-constexpr int kN = 2048;
+constexpr int kN = 8192;
 constexpr int kTileCols = 256;
 constexpr int kBinNum = 256;
 #define PTO_DIV_ROUNDUP(x, y) (((x) + (y)-1) / (y))
@@ -249,8 +249,7 @@ AICORE inline void Phase2_WinnerMsbAndRemainK(HistTile &chistMSB, WinnerBinTile 
         TCMPS(cwSelMask, msbWinnerSaved, static_cast<uint32_t>(0), CmpMode::EQ);
         TSEL(cwFixT, cwSelMask, remainKTile, cwT, cwSelTmp);
         TSUB(remainKTile, thrMsbT, cwFixT);
-        set_flag(PIPE_V, PIPE_S, EVENT_ID1);
-        wait_flag(PIPE_V, PIPE_S, EVENT_ID1);
+        // PIPE_V/PIPE_S sync removed: test whether Phase3 TCMPS(GT) vs remainK is safe without scalar fence
     }
 }
 
@@ -373,8 +372,7 @@ AICORE inline void Phase4_WinnerLsbRemainKAndPackedThresholdTor(HistTile &chistL
         TSHLS(hiU, msbU, kShift8);
         TCVT(lsbU, lsbWinnerBin, RoundMode::CAST_TRUNC);
         TOR(outU, hiU, lsbU);
-        set_flag(PIPE_V, PIPE_S, EVENT_ID1);
-        wait_flag(PIPE_V, PIPE_S, EVENT_ID1);
+        // PIPE_V/PIPE_S sync removed: test whether Phase5 TGATHER vs packedThrU is safe without scalar fence
     }
 
     TASSIGN(packedThrU, kRemainUbOut);

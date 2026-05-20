@@ -2,11 +2,11 @@
 
 本目录为 **Ascend A5** 上的 TopK 示例工程；**设备侧**写在 **`draft.cpp`**，与 `kernels/manual/a2a3/topk` 的排序归并路线不同。
 
-与 **`kernels/manual/a5/topk_ub`** 对齐：**共五个 `Phase*`**，所有 PTO 指令（含 `TASSIGN` / `TLOAD` 等）只出现在这些 Phase 中。本工程为 **分块从 GM 读入**（N = 2048，每块 256 列）；`topk_ub` 为 **整段 key 在 UB**、整段比较 `TGATHER`。
+与 **`kernels/manual/a5/topk_ub`** 对齐：**共五个 `Phase*`**，所有 PTO 指令（含 `TASSIGN` / `TLOAD` 等）只出现在这些 Phase 中。本工程为 **分块从 GM 读入**（N = 8192，每块 256 列，共 32 tile）；`topk_ub` 为 **整段 key 在 UB**、整段比较 `TGATHER`。
 
 ## 当前用例
 
-- 输入：**`[1, 2048]`** `uint16` key（`input/keys.bin`）
+- 输入：**`[1, 8192]`** `uint16` key（`input/keys.bin`）
 - 输出：**Top-512** 个下标（按 **uint16 全序**取最大的 512 个 key；**不要求**对输出下标排序）
 - 校验：host 上比较「`keys[out[i]]` 的多重集合」是否与 golden 一致（`scripts/gen_data.py` 生成 `golden_topk_multiset.bin`）
 
@@ -67,7 +67,7 @@ bash run.sh -r sim -v Ascend950PR_9599
 bash run.sh -r npu -v <你的 A5 板卡对应 SOC 字符串>
 ```
 
-## 回归（2K）
+## 回归（8K）
 
 在 `kernels/manual/a5/topk` 下：
 
@@ -81,4 +81,35 @@ done
 python3 scripts/gen_data.py --const 0x1234 && cd build && ./topk | grep RESULT
 ```
 
-单次仿真约 **90–120 s**；应全部为 **`RESULT: PASS`**。
+单次仿真约 **6–10 min**（8K 为 32 tile）；应全部为 **`RESULT: PASS`**。
+
+## 性能（8K 仿真，seed `1241200609`）
+
+数据目录：`perf/`（`msprof op simulator ./topk`，`Ascend950PR_9599`，`core0.veccore0`）。
+
+| 文件 | 说明 |
+|------|------|
+| `perf/trace_8k_seed1241200609_veccore0.json` | Chrome trace（`msprof` 时间线） |
+| `perf/phase_perf_8k_seed1241200609.json` | 按 Phase 的 VF / PMU 汇总（JSON） |
+
+重新生成 Phase 汇总：
+
+```bash
+python3 scripts/parse_phase_perf.py --build-dir build --seed 1241200609 \
+  -o perf/phase_perf_8k_seed1241200609.json
+```
+
+### 分 Phase 汇总（`vf_real_execute_time`，单位 cycle）
+
+| Phase | VF 数 | vf_real | 占 rvec | 主要 PTO |
+|-------|------:|--------:|--------:|----------|
+| Phase1 初始化 | 1 | 520 | 1.7% | `TASSIGN` / `TEXPANDS` |
+| Phase1+3 直方图（32 tile×2） | 64 | 3,969 | 12.7% | `TLOAD` + `THISTOGRAM` |
+| Phase2+4 控制 | 20 | 1,998 | 6.4% | `TCMPS` / `TSELS` / `TOR` |
+| Phase5 分块（32×8 VF） | 256 | 24,733 | 79.2% | `TGATHER` / `TCONCAT` / `TSTORE` |
+
+**PMU**：kernel **76,906** tick；**MTE2 约 81%**；**rvec 约 41%**。瓶颈在 GM `TLOAD` 与流水线同步。
+
+**Phase5 热点**（每 tile `vf_real`）：`TGATHER<GT>` ~221 cyc；GT `TCONCAT` ~151 cyc。
+
+**同步**：Phase2 `TSUB`、Phase4 `TOR` 之后的手写 `PIPE_V`/`PIPE_S` fence 已去掉；8K 仿真 3 seed + `--const` 仍 **PASS**。

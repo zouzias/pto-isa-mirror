@@ -21,7 +21,7 @@ using namespace PtoTestCommon;
 template <int TopK>
 void LaunchRadixTopKDraft(uint16_t *src, uint32_t *outIdx, void *stream);
 
-constexpr int kN = 2048;
+constexpr int kN = 8192;
 constexpr int kTopK = 512;
 
 namespace {

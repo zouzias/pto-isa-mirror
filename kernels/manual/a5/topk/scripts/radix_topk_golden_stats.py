@@ -13,7 +13,7 @@ import sys
 
 import numpy as np
 
-N = 2048
+N = 8192
 TOPK = 512
 
 

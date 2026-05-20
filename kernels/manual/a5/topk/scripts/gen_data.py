@@ -10,14 +10,14 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 
-"""Generate [1, 2048] uint16 keys and golden multiset for Top-512 (largest keys)."""
+"""Generate [1, 8192] uint16 keys and golden multiset for Top-512 (largest keys)."""
 
 import argparse
 import os
 
 import numpy as np
 
-N = 2048
+N = 8192
 TOPK = 512
 
 

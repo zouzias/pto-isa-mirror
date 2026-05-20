@@ -20,7 +20,7 @@ import sys
 
 import numpy as np
 
-N_DEFAULT = 2048
+N_DEFAULT = 8192
 TOPK_DEFAULT = 512
 
 
