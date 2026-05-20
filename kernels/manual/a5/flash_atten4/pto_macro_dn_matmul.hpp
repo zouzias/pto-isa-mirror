@@ -119,6 +119,10 @@ struct MatmulCallConfig {
     AccPhase phase; // UF mapping
 };
 
+struct NoOpMatmulHook {
+    AICORE inline void operator()() const {}
+};
+
 AICORE inline MatmulCallConfig resolve_acc_mode(AccMode mode, bool isFirstSlice, bool isLastSlice)
 {
     switch (mode) {
@@ -139,9 +143,9 @@ AICORE inline MatmulCallConfig resolve_acc_mode(AccMode mode, bool isFirstSlice,
 }
 
 template <unsigned Cube_M, unsigned Tile_K, unsigned Cube_N, layout_t LAYOUT = layout_t::NONE, typename TileDataA,
-          typename TileDataB, typename TileDataC>
+          typename TileDataB, typename TileDataC, typename OpHook = NoOpMatmulHook>
 AICORE inline void pto_macro_matmul(TileDataA &aMatTile, TileDataB &bMatTile, TileDataC &cAccTile,
-                                    AccMode accMode = AccMode::Init)
+                                    AccMode accMode = AccMode::Init, OpHook opHook = OpHook())
 {
     constexpr layout_t layout = deduce_layout<TileDataA, TileDataB>();
 
@@ -191,6 +195,9 @@ AICORE inline void pto_macro_matmul(TileDataA &aMatTile, TileDataB &bMatTile, Ti
         wait_flag(PIPE_MTE1, PIPE_M, pingpong);
 
         const bool isLast = (k + 1 == kSegments);
+        if (isLast) {
+            opHook();
+        }
         MatmulCallConfig cfg = resolve_acc_mode(accMode, k == 0, isLast);
         if (cfg.useAcc) {
             if (cfg.phase == AccPhase::Final) {
