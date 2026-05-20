@@ -37,5 +37,11 @@ docs/mkdocs/src/manual/isa-reference.md
 docs/mkdocs/src/manual/isa-reference_zh.md
 docs/mkdocs/src/scripts/
 docs/mkdocs/src/tests/
+<<<<<<< HEAD
 kernels/**/**/**/build/
 PROF*/
+=======
+PROF*/
+googletest*
+.venv/
+>>>>>>> fork/master
