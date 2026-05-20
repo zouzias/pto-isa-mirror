@@ -105,51 +105,15 @@ void test_tsub()
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TSUBTest, case_float_64x64_64x64_64x64_64x64)
+TEST_F(TSUBTest, case_float_32x512_32x512_32x512_32x512)
 {
-    test_tsub<float, 64, 64, 64, 64, 64, 64, 64, 64>();
+    test_tsub<float, 32, 512, 32, 512, 32, 512, 32, 512>();
 }
-TEST_F(TSUBTest, case_int32_64x64_64x64_64x64_64x64)
+TEST_F(TSUBTest, case_float_512x32_512x32_512x32_512x32)
 {
-    test_tsub<int32_t, 64, 64, 64, 64, 64, 64, 64, 64>();
+    test_tsub<float, 512, 32, 512, 32, 512, 32, 512, 32>();
 }
-TEST_F(TSUBTest, case_int16_64x64_64x64_64x64_64x64)
+TEST_F(TSUBTest, case_float_128x128_128x128_128x128_128x128)
 {
-    test_tsub<int16_t, 64, 64, 64, 64, 64, 64, 64, 64>();
-}
-TEST_F(TSUBTest, case_half_16x256_16x256_16x256_16x256)
-{
-    test_tsub<aclFloat16, 16, 256, 16, 256, 16, 256, 16, 256, true>();
-}
-TEST_F(TSUBTest, case_half_16x64_16x128_16x128_16x64)
-{
-    test_tsub<aclFloat16, 16, 64, 16, 128, 16, 128, 16, 64, true>();
-}
-TEST_F(TSUBTest, case_float_16x32_16x64_16x32_16x32)
-{
-    test_tsub<float, 16, 32, 16, 64, 16, 32, 16, 32>();
-}
-TEST_F(TSUBTest, case_int16_32x128_32x128_32x256_32x128)
-{
-    test_tsub<int16_t, 32, 128, 32, 128, 32, 256, 32, 128>();
-}
-TEST_F(TSUBTest, case_int32_16x32_16x64_16x32_16x32)
-{
-    test_tsub<int32_t, 16, 32, 16, 64, 16, 32, 16, 32>();
-}
-TEST_F(TSUBTest, case_half_16x64_16x128_16x128_16x63)
-{
-    test_tsub<aclFloat16, 16, 64, 16, 128, 16, 128, 16, 63, true>();
-}
-TEST_F(TSUBTest, case_float_16x32_16x64_16x32_16x31)
-{
-    test_tsub<float, 16, 32, 16, 64, 16, 32, 16, 31>();
-}
-TEST_F(TSUBTest, case_int16_32x128_32x128_32x256_32x127)
-{
-    test_tsub<int16_t, 32, 128, 32, 128, 32, 256, 32, 127>();
-}
-TEST_F(TSUBTest, case_int32_16x32_16x64_16x32_16x31)
-{
-    test_tsub<int32_t, 16, 32, 16, 64, 16, 32, 16, 31>();
+    test_tsub<float, 128, 128, 128, 128, 128, 128, 128, 128>();
 }

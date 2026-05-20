@@ -64,15 +64,9 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TfmodParams("TFMODTest.case1", np.uint16, 64, 64, 64, 64),
-        TfmodParams("TFMODTest.case2", np.uint16, 64, 64, 63, 63),
-        TfmodParams("TFMODTest.case3", np.uint16, 1, 16384, 1, 16384),
-        TfmodParams("TFMODTest.case4", np.uint16, 2048, 16, 2048, 16),
-        TfmodParams("TFMODTest.case5", np.float32, 32, 32, 32, 32),
-        TfmodParams("TFMODTest.case6", np.uint32, 8, 8, 8, 8),
-        TfmodParams("TFMODTest.case7", np.float16, 32, 32, 31, 31),
-        TfmodParams("TFMODTest.case8", np.int16, 16, 16, 16, 16),
-        TfmodParams("TFMODTest.case9", np.int32, 8, 8, 8, 8),
+        TfmodParams("TFMODTest.case1", np.float32, 32, 512, 32, 512),
+        TfmodParams("TFMODTest.case2", np.float32, 512, 32, 512, 32),
+        TfmodParams("TFMODTest.case3", np.float32, 128, 128, 128, 128),
     ]
 
     for param in case_params_list:

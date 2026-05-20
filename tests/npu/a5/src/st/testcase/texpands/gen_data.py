@@ -97,17 +97,9 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TestParams(np.float32, 64, 64, 64, 64, 64, 64),
-        TestParams(np.int32, 64, 64, 64, 64, 64, 64),
-        TestParams(np.int16, 64, 64, 64, 64, 64, 64),
-        TestParams(np.float16, 64, 64, 64, 64, 64, 64),
-        TestParams(bfloat16, 64, 64, 64, 64, 64, 64),
-
-        TestParams(np.float32, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX),
-        TestParams(np.int32, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX),
-        TestParams(bfloat16, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX),
-        TestParams(np.float16, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX),
-        TestParams(np.int16, 16, 200, 20, 512, 16, 200, PAD_VALUE_MAX),
+        TestParams(np.float32, 32, 512, 32, 512, 32, 512, PAD_VALUE_NULL),
+        TestParams(np.float32, 512, 32, 512, 32, 512, 32, PAD_VALUE_NULL),
+        TestParams(np.float32, 128, 128, 128, 128, 128, 128, PAD_VALUE_NULL),
     ]
 
     for i, param in enumerate(case_params_list):

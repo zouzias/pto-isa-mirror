@@ -71,10 +71,7 @@ void launchTColExpandDiv(T *out, T *src0, T *src1, void *stream)
     }
 }
 
-template void launchTColExpandDiv<float, 32, 64, 1, 64>(float *out, float *src0, float *src1, void *stream);
-template void launchTColExpandDiv<float, 8, 32, 1, 32>(float *out, float *src0, float *src1, void *stream);
-template void launchTColExpandDiv<aclFloat16, 16, 64, 1, 64>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
-                                                             void *stream);
-template void launchTColExpandDiv<aclFloat16, 4, 128, 1, 128>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
-                                                              void *stream);
+template void launchTColExpandDiv<float, 32, 512, 32, 512>(float *out, float *src0, float *src1, void *stream);
+template void launchTColExpandDiv<float, 512, 32, 512, 32>(float *out, float *src0, float *src1, void *stream);
+template void launchTColExpandDiv<float, 128, 128, 128, 128>(float *out, float *src0, float *src1, void *stream);
 } // namespace TColExpandDivTest

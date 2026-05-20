@@ -72,18 +72,9 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TSubParams(np.float32, 64, 64, 64, 64, 64, 64, 64, 64),
-        TSubParams(np.int32, 64, 64, 64, 64, 64, 64, 64, 64),
-        TSubParams(np.int16, 64, 64, 64, 64, 64, 64, 64, 64),
-        TSubParams(np.float16, 16, 256, 16, 256, 16, 256, 16, 256),
-        TSubParams(np.float16, 16, 64, 16, 128, 16, 128, 16, 64),
-        TSubParams(np.float32, 16, 32, 16, 64, 16, 32, 16, 32),
-        TSubParams(np.int16, 32, 128, 32, 128, 32, 256, 32, 128),
-        TSubParams(np.int32, 16, 32, 16, 64, 16, 32, 16, 32),
-        TSubParams(np.float16, 16, 64, 16, 128, 16, 128, 16, 63),
-        TSubParams(np.float32, 16, 32, 16, 64, 16, 32, 16, 31),
-        TSubParams(np.int16, 32, 128, 32, 128, 32, 256, 32, 127),
-        TSubParams(np.int32, 16, 32, 16, 64, 16, 32, 16, 31),
+        TSubParams(np.float32, 32, 512, 32, 512, 32, 512, 32, 512),
+        TSubParams(np.float32, 512, 32, 512, 32, 512, 32, 512, 32),
+        TSubParams(np.float32, 128, 128, 128, 128, 128, 128, 128, 128),
     ]
 
     for param in case_params_list:

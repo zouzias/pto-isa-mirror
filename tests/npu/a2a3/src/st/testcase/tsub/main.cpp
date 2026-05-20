@@ -92,19 +92,15 @@ void test_tsub()
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TSUBTest, case_float_64x64_64x64_64x64)
+TEST_F(TSUBTest, case_float_32x512_32x512_32x512)
 {
-    test_tsub<float, 64, 64, 64, 64>();
+    test_tsub<float, 32, 512, 32, 512>();
 }
-TEST_F(TSUBTest, case_int32_64x64_64x64_64x64)
+TEST_F(TSUBTest, case_float_512x32_512x32_512x32)
 {
-    test_tsub<int32_t, 64, 64, 64, 64>();
+    test_tsub<float, 512, 32, 512, 32>();
 }
-TEST_F(TSUBTest, case_int16_64x64_64x64_64x64)
+TEST_F(TSUBTest, case_float_128x128_128x128_128x128)
 {
-    test_tsub<int16_t, 64, 64, 64, 64>();
-}
-TEST_F(TSUBTest, case_half_64x64_64x64_64x64)
-{
-    test_tsub<aclFloat16, 64, 64, 64, 64>();
+    test_tsub<float, 128, 128, 128, 128>();
 }

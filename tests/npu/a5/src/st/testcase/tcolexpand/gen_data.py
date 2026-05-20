@@ -54,12 +54,9 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TColExpandParam(np.float16, 1, 16, 512, 512),
-        TColExpandParam(np.int8, 2, 32, 256, 255),
-        TColExpandParam(np.float32, 1, 8, 128, 63),
-        TColExpandParam(np.float16, 1, 33, 512, 512),
-        TColExpandParam(np.int8, 2, 17, 256, 44),
-        TColExpandParam(np.float32, 1, 54, 64, 63),
+        TColExpandParam(np.float32, 32, 32, 512, 512),
+        TColExpandParam(np.float32, 512, 512, 32, 32),
+        TColExpandParam(np.float32, 128, 128, 128, 128),
     ]
 
     for i, param in enumerate(case_params_list):

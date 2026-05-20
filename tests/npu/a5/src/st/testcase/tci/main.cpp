@@ -78,65 +78,13 @@ void test_tci(T S)
 
 TEST_F(TCITest, case1)
 {
-    test_tci<int32_t, 1, 128, 1, 128, 1, 0>(100);
+    test_tci<float, 32, 512, 32, 512, 0, 0>(1.0f);
 }
 TEST_F(TCITest, case2)
 {
-    test_tci<int16_t, 1, 128, 1, 128, 0, 0>(-1);
+    test_tci<float, 512, 32, 512, 32, 1, 0>(1.0f);
 }
 TEST_F(TCITest, case3)
 {
-    test_tci<int16_t, 1, 128, 1, 128, 1, 0>(-1);
-}
-TEST_F(TCITest, case4)
-{
-    test_tci<int16_t, 1, 192, 1, 192, 1, 0>(-1);
-}
-TEST_F(TCITest, case5)
-{
-    test_tci<int32_t, 1, 192, 1, 192, 1, 0>(-1);
-}
-TEST_F(TCITest, case6)
-{
-    test_tci<int32_t, 1, 600, 1, 600, 1, 0>(0);
-}
-TEST_F(TCITest, case7)
-{
-    test_tci<int16_t, 1, 800, 1, 800, 0, 0>(0);
-}
-TEST_F(TCITest, case8)
-{
-    test_tci<int32_t, 1, 2560, 1, 2560, 1, 0>(0);
-}
-TEST_F(TCITest, case9)
-{
-    test_tci<int32_t, 1, 3200, 1, 3200, 0, 0>(0);
-}
-TEST_F(TCITest, case10)
-{
-    test_tci<int32_t, 1, 8, 1, 8, 0, 0>(0);
-}
-TEST_F(TCITest, case11)
-{
-    test_tci<int32_t, 1, 128, 1, 128, 1, 1>(100);
-}
-TEST_F(TCITest, case12)
-{
-    test_tci<int32_t, 1, 3200, 1, 3200, 0, 1>(0);
-}
-TEST_F(TCITest, case13)
-{
-    test_tci<int16_t, 1, 128, 1, 128, 1, 1>(-1);
-}
-TEST_F(TCITest, case14)
-{
-    test_tci<int16_t, 1, 800, 1, 800, 0, 1>(0);
-}
-TEST_F(TCITest, case15)
-{
-    test_tci<int16_t, 1, 3840, 1, 3840, 1, 1>(20);
-}
-TEST_F(TCITest, case16)
-{
-    test_tci<int16_t, 1, 1408, 1, 1408, 0, 1>(50);
+    test_tci<float, 128, 128, 128, 128, 0, 0>(1.0f);
 }

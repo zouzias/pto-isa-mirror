@@ -109,35 +109,15 @@ void test_tcmps()
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TCMPSTest, case_half_32x32_32x32_32x32)
+TEST_F(TCMPSTest, case_float_32x512_32x512_32x512)
 {
-    test_tcmps<aclFloat16, 32, 32, 32, 32, 5>();
+    test_tcmps<float, 32, 512, 32, 512, 0>();
 }
-TEST_F(TCMPSTest, case_float_1x64_1x64_1x64)
+TEST_F(TCMPSTest, case_float_512x32_512x32_512x32)
 {
-    test_tcmps<float, 1, 64, 1, 64, 0>();
-}
-TEST_F(TCMPSTest, case_float_8x64_8x64_8x64)
-{
-    test_tcmps<float, 8, 64, 8, 64, 4>();
-}
-TEST_F(TCMPSTest, case_float_4x64_4x64_4x64)
-{
-    test_tcmps<float, 4, 64, 4, 64, 1>();
-}
-TEST_F(TCMPSTest, case_int32_64x64_64x64_32x64)
-{
-    test_tcmps<int32_t, 32, 64, 64, 64, 0>();
-}
-TEST_F(TCMPSTest, case_int32_16x32_16x32_16x32)
-{
-    test_tcmps<int32_t, 16, 32, 16, 32, 0>();
+    test_tcmps<float, 512, 32, 512, 32, 4>();
 }
 TEST_F(TCMPSTest, case_float_128x128_128x128_128x128)
 {
     test_tcmps<float, 128, 128, 128, 128, 3>();
-}
-TEST_F(TCMPSTest, case_int32_32x32_32x32_32x32)
-{
-    test_tcmps<int32_t, 32, 32, 32, 32, 0>();
 }

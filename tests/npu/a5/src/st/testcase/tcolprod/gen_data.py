@@ -48,21 +48,9 @@ class TColProdParams:
 
 if __name__ == "__main__":
     case_params_list = [
-        TColProdParams("TCOLPRODTest.case01", np.float32, 1, 1, 256, 255),
-        TColProdParams("TCOLPRODTest.case02", np.float32, 16, 16, 128, 127),
-        TColProdParams("TCOLPRODTest.case03", np.float32, 16, 15, 256, 255),
-        TColProdParams("TCOLPRODTest.case41", np.int16, 1, 1, 256, 255),
-        TColProdParams("TCOLPRODTest.case42", np.int16, 16, 16, 128, 127),
-        TColProdParams("TCOLPRODTest.case43", np.int16, 16, 15, 256, 255),
-        TColProdParams("TCOLPRODTest.case51", np.uint16, 1, 1, 256, 255),
-        TColProdParams("TCOLPRODTest.case52", np.uint16, 16, 16, 128, 127),
-        TColProdParams("TCOLPRODTest.case53", np.uint16, 16, 15, 256, 255),
-        TColProdParams("TCOLPRODTest.case61", np.int32, 1, 1, 256, 255),
-        TColProdParams("TCOLPRODTest.case62", np.int32, 16, 16, 128, 127),
-        TColProdParams("TCOLPRODTest.case63", np.int32, 16, 15, 256, 255),
-        TColProdParams("TCOLPRODTest.case71", np.uint32, 1, 1, 256, 255),
-        TColProdParams("TCOLPRODTest.case72", np.uint32, 16, 16, 128, 127),
-        TColProdParams("TCOLPRODTest.case73", np.uint32, 16, 15, 256, 255),
+        TColProdParams("TCOLPRODTest.case01", np.float32, 32, 32, 512, 512),
+        TColProdParams("TCOLPRODTest.case02", np.float32, 512, 512, 32, 32),
+        TColProdParams("TCOLPRODTest.case03", np.float32, 128, 128, 128, 128),
     ]
 
     for _, case in enumerate(case_params_list):

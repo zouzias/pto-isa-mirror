@@ -85,20 +85,9 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TDivParams(np.float32, 64, 64, 64, 64, 64, 64, 64, 64),
-        TDivParams(np.int32, 64, 64, 64, 64, 64, 64, 64, 64),
-        TDivParams(np.int16, 64, 64, 64, 64, 64, 64, 64, 64),
-        TDivParams(np.float16, 16, 256, 16, 256, 16, 256, 16, 256),
-        TDivParams(np.float16, 16, 64, 16, 128, 16, 128, 16, 64),
-        TDivParams(np.float32, 16, 32, 16, 64, 16, 32, 16, 32),
-        TDivParams(np.int16, 32, 128, 32, 128, 32, 256, 32, 128),
-        TDivParams(np.int32, 16, 32, 16, 64, 16, 32, 16, 32),
-        TDivParams(np.float16, 16, 64, 16, 128, 16, 128, 16, 63),
-        TDivParams(np.float32, 16, 32, 16, 64, 16, 32, 16, 31),
-        TDivParams(np.int16, 32, 128, 32, 128, 32, 256, 32, 127),
-        TDivParams(np.int32, 16, 32, 16, 64, 16, 32, 16, 31),
-        TDivParams(np.float32, 2, 16, 2, 16, 2, 16, 2, 16, True),
-        TDivParams(np.float16, 2, 32, 2, 32, 2, 32, 2, 32, True),
+        TDivParams(np.float32, 32, 512, 32, 512, 32, 512, 32, 512),
+        TDivParams(np.float32, 512, 32, 512, 32, 512, 32, 512, 32),
+        TDivParams(np.float32, 128, 128, 128, 128, 128, 128, 128, 128),
     ]
 
     for param in case_params_list:

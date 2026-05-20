@@ -104,27 +104,9 @@ void LaunchTSubHalf(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *s
     }
 }
 
-template void LaunchTSub<float, 64, 64, 64, 64, 64, 64, 64, 64, true>(float *out, float *src0, float *src1,
-                                                                      void *stream);
-template void LaunchTSub<int32_t, 64, 64, 64, 64, 64, 64, 64, 64, true>(int32_t *out, int32_t *src0, int32_t *src1,
-                                                                        void *stream);
-template void LaunchTSub<int16_t, 64, 64, 64, 64, 64, 64, 64, 64, true>(int16_t *out, int16_t *src0, int16_t *src1,
-                                                                        void *stream);
-template void LaunchTSubHalf<16, 256, 16, 256, 16, 256, 16, 256, true>(aclFloat16 *out, aclFloat16 *src0,
-                                                                       aclFloat16 *src1, void *stream);
-template void LaunchTSubHalf<16, 64, 16, 128, 16, 128, 16, 64, false>(aclFloat16 *out, aclFloat16 *src0,
-                                                                      aclFloat16 *src1, void *stream);
-template void LaunchTSub<float, 16, 32, 16, 64, 16, 32, 16, 32, false>(float *out, float *src0, float *src1,
-                                                                       void *stream);
-template void LaunchTSub<int16_t, 32, 128, 32, 128, 32, 256, 32, 128, false>(int16_t *out, int16_t *src0, int16_t *src1,
-                                                                             void *stream);
-template void LaunchTSub<int32_t, 16, 32, 16, 64, 16, 32, 16, 32, false>(int32_t *out, int32_t *src0, int32_t *src1,
+template void LaunchTSub<float, 32, 512, 32, 512, 32, 512, 32, 512, true>(float *out, float *src0, float *src1,
                                                                          void *stream);
-template void LaunchTSubHalf<16, 64, 16, 128, 16, 128, 16, 63, false>(aclFloat16 *out, aclFloat16 *src0,
-                                                                      aclFloat16 *src1, void *stream);
-template void LaunchTSub<float, 16, 32, 16, 64, 16, 32, 16, 31, false>(float *out, float *src0, float *src1,
-                                                                       void *stream);
-template void LaunchTSub<int16_t, 32, 128, 32, 128, 32, 256, 32, 127, false>(int16_t *out, int16_t *src0, int16_t *src1,
-                                                                             void *stream);
-template void LaunchTSub<int32_t, 16, 32, 16, 64, 16, 32, 16, 31, false>(int32_t *out, int32_t *src0, int32_t *src1,
+template void LaunchTSub<float, 512, 32, 512, 32, 512, 32, 512, 32, true>(float *out, float *src0, float *src1,
                                                                          void *stream);
+template void LaunchTSub<float, 128, 128, 128, 128, 128, 128, 128, 128, true>(float *out, float *src0, float *src1,
+                                                                             void *stream);

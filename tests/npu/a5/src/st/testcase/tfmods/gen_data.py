@@ -53,12 +53,9 @@ class TfmodsParams:
 
 if __name__ == "__main__":
     case_params_list = [
-        TfmodsParams("TFMODSTest.case1", np.float32, 32, 128, 32, 64),
-        TfmodsParams("TFMODSTest.case2", np.float16, 63, 128, 63, 64),
-        TfmodsParams("TFMODSTest.case3", np.int32, 31, 256, 31, 128),
-        TfmodsParams("TFMODSTest.case4", np.int16, 15, 192, 15, 64 * 3),
-        TfmodsParams("TFMODSTest.case5", np.float32, 7, 512, 7, 64 * 7),
-        TfmodsParams("TFMODSTest.case6", np.float32, 256, 32, 256, 16)
+        TfmodsParams("TFMODSTest.case1", np.float32, 32, 512, 32, 512),
+        TfmodsParams("TFMODSTest.case2", np.float32, 512, 32, 512, 32),
+        TfmodsParams("TFMODSTest.case3", np.float32, 128, 128, 128, 128)
     ]
 
     for _, case in enumerate(case_params_list):

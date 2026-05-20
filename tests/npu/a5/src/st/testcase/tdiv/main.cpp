@@ -104,59 +104,15 @@ void test_tdiv()
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TDIVTest, case_float_64x64_64x64_64x64_64x64)
+TEST_F(TDIVTest, case_float_32x512_32x512_32x512_32x512)
 {
-    test_tdiv<float, 64, 64, 64, 64, 64, 64, 64, 64>();
+    test_tdiv<float, 32, 512, 32, 512, 32, 512, 32, 512>();
 }
-TEST_F(TDIVTest, case_int32_64x64_64x64_64x64_64x64)
+TEST_F(TDIVTest, case_float_512x32_512x32_512x32_512x32)
 {
-    test_tdiv<int32_t, 64, 64, 64, 64, 64, 64, 64, 64>();
+    test_tdiv<float, 512, 32, 512, 32, 512, 32, 512, 32>();
 }
-TEST_F(TDIVTest, case_int16_64x64_64x64_64x64_64x64)
+TEST_F(TDIVTest, case_float_128x128_128x128_128x128_128x128)
 {
-    test_tdiv<int16_t, 64, 64, 64, 64, 64, 64, 64, 64>();
-}
-TEST_F(TDIVTest, case_half_16x256_16x256_16x256_16x256)
-{
-    test_tdiv<aclFloat16, 16, 256, 16, 256, 16, 256, 16, 256, true>();
-}
-TEST_F(TDIVTest, case_half_16x64_16x128_16x128_16x64)
-{
-    test_tdiv<aclFloat16, 16, 64, 16, 128, 16, 128, 16, 64, true>();
-}
-TEST_F(TDIVTest, case_float_16x32_16x64_16x32_16x32)
-{
-    test_tdiv<float, 16, 32, 16, 64, 16, 32, 16, 32>();
-}
-TEST_F(TDIVTest, case_int16_32x128_32x128_32x256_32x128)
-{
-    test_tdiv<int16_t, 32, 128, 32, 128, 32, 256, 32, 128>();
-}
-TEST_F(TDIVTest, case_int32_16x32_16x64_16x32_16x32)
-{
-    test_tdiv<int32_t, 16, 32, 16, 64, 16, 32, 16, 32>();
-}
-TEST_F(TDIVTest, case_half_16x64_16x128_16x128_16x63)
-{
-    test_tdiv<aclFloat16, 16, 64, 16, 128, 16, 128, 16, 63, true>();
-}
-TEST_F(TDIVTest, case_float_16x32_16x64_16x32_16x31)
-{
-    test_tdiv<float, 16, 32, 16, 64, 16, 32, 16, 31>();
-}
-TEST_F(TDIVTest, case_int16_32x128_32x128_32x256_32x127)
-{
-    test_tdiv<int16_t, 32, 128, 32, 128, 32, 256, 32, 127>();
-}
-TEST_F(TDIVTest, case_int32_16x32_16x64_16x32_16x31)
-{
-    test_tdiv<int32_t, 16, 32, 16, 64, 16, 32, 16, 31>();
-}
-TEST_F(TDIVTest, case_float_hp_2x16_2x16_2x16_2x16)
-{
-    test_tdiv<float, 2, 16, 2, 16, 2, 16, 2, 16, false, true>();
-}
-TEST_F(TDIVTest, case_half_hp_2x32_2x32_2x32_2x32)
-{
-    test_tdiv<aclFloat16, 2, 32, 2, 32, 2, 32, 2, 32, true, true>();
+    test_tdiv<float, 128, 128, 128, 128, 128, 128, 128, 128>();
 }

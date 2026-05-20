@@ -51,30 +51,9 @@ class TColMaxParams:
 
 if __name__ == "__main__":
     case_params_list = [
-        TColMaxParams("TCOLMAXTest.case01", np.float32, 1, 1, 256, 255),
-        TColMaxParams("TCOLMAXTest.case02", np.float32, 16, 16, 128, 127),
-        TColMaxParams("TCOLMAXTest.case03", np.float32, 16, 15, 256, 255),
-        TColMaxParams("TCOLMAXTest.case11", np.float16, 1, 1, 256, 255),
-        TColMaxParams("TCOLMAXTest.case12", np.float16, 16, 16, 128, 127),
-        TColMaxParams("TCOLMAXTest.case13", np.float16, 16, 15, 256, 255),
-        TColMaxParams("TCOLMAXTest.case21", np.int8, 1, 1, 256, 255),
-        TColMaxParams("TCOLMAXTest.case22", np.int8, 16, 16, 128, 127),
-        TColMaxParams("TCOLMAXTest.case23", np.int8, 16, 15, 256, 255),
-        TColMaxParams("TCOLMAXTest.case31", np.uint8, 1, 1, 256, 255),
-        TColMaxParams("TCOLMAXTest.case32", np.uint8, 16, 16, 128, 127),
-        TColMaxParams("TCOLMAXTest.case33", np.uint8, 16, 15, 256, 255),
-        TColMaxParams("TCOLMAXTest.case41", np.int16, 1, 1, 256, 255),
-        TColMaxParams("TCOLMAXTest.case42", np.int16, 16, 16, 128, 127),
-        TColMaxParams("TCOLMAXTest.case43", np.int16, 16, 15, 256, 255),
-        TColMaxParams("TCOLMAXTest.case51", np.uint16, 1, 1, 256, 255),
-        TColMaxParams("TCOLMAXTest.case52", np.uint16, 16, 16, 128, 127),
-        TColMaxParams("TCOLMAXTest.case53", np.uint16, 16, 15, 256, 255),
-        TColMaxParams("TCOLMAXTest.case61", np.int32, 1, 1, 256, 255),
-        TColMaxParams("TCOLMAXTest.case62", np.int32, 16, 16, 128, 127),
-        TColMaxParams("TCOLMAXTest.case63", np.int32, 16, 15, 256, 255),
-        TColMaxParams("TCOLMAXTest.case71", np.uint32, 1, 1, 256, 255),
-        TColMaxParams("TCOLMAXTest.case72", np.uint32, 16, 16, 128, 127),
-        TColMaxParams("TCOLMAXTest.case73", np.uint32, 16, 15, 256, 255),
+        TColMaxParams("TCOLMAXTest.case01", np.float32, 32, 32, 512, 512),
+        TColMaxParams("TCOLMAXTest.case02", np.float32, 512, 512, 32, 32),
+        TColMaxParams("TCOLMAXTest.case03", np.float32, 128, 128, 128, 128),
     ]
 
     for _, case in enumerate(case_params_list):

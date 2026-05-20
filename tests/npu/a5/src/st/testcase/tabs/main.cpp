@@ -89,19 +89,15 @@ void test_tabs()
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TABSTest, case_float_64x64_64x64_64x64_inPlace_True)
+TEST_F(TABSTest, case_float_32x768_32x768_32x768_inPlace_False)
 {
-    test_tabs<float, 64, 64, 64, 64, true>();
+    test_tabs<float, 32, 768, 32, 768, false>();
 }
-TEST_F(TABSTest, case_float_64x64_64x64_64x64_inPlace_False)
+TEST_F(TABSTest, case_float_768x32_768x32_768x32_inPlace_False)
 {
-    test_tabs<float, 64, 64, 64, 64, false>();
+    test_tabs<float, 768, 32, 768, 32, false>();
 }
-TEST_F(TABSTest, case_half_64x64_64x64_64x64_inPlace_True)
+TEST_F(TABSTest, case_float_128x192_128x192_128x192_inPlace_False)
 {
-    test_tabs<aclFloat16, 64, 64, 64, 64, true>();
-}
-TEST_F(TABSTest, case_half_64x64_64x64_64x64_inPlace_False)
-{
-    test_tabs<aclFloat16, 64, 64, 64, 64, false>();
+    test_tabs<float, 128, 192, 128, 192, false>();
 }

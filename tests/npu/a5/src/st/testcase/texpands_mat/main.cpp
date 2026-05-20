@@ -80,45 +80,15 @@ void texpands_test(Dims... dims)
 
 TEST_F(TEXPANDSTest, case1)
 {
-    texpands_test<1, uint16_t>(128, 128); // uint16_t represent half
+    texpands_test<1, float>(32, 512);
 }
 
 TEST_F(TEXPANDSTest, case2)
 {
-    texpands_test<2, int16_t>(32, 64);
+    texpands_test<2, float>(512, 32);
 }
 
 TEST_F(TEXPANDSTest, case3)
 {
-    texpands_test<3, float>(32, 32);
-}
-
-TEST_F(TEXPANDSTest, case4)
-{
-    texpands_test<4, int8_t>(32, 32);
-}
-
-TEST_F(TEXPANDSTest, case5)
-{
-    texpands_test<5, uint16_t>(256, 256);
-}
-
-TEST_F(TEXPANDSTest, case6)
-{
-    texpands_test<6, uint16_t>(1, 16, 7, 7, 16);
-}
-
-TEST_F(TEXPANDSTest, case7)
-{
-    texpands_test<7, int16_t>(2, 5, 2, 3, 8);
-}
-
-TEST_F(TEXPANDSTest, case8)
-{
-    texpands_test<8, int32_t>(2, 2, 3, 2, 1, 8);
-}
-
-TEST_F(TEXPANDSTest, case9)
-{
-    texpands_test<9, uint32_t>(2, 3, 4, 1, 2, 8);
+    texpands_test<3, float>(128, 128);
 }

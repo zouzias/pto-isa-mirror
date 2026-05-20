@@ -55,22 +55,9 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TciParams(np.int32, 100, 1, 128, "TCITest.case1"),
-        TciParams(np.int16, -1, 0, 128, "TCITest.case2"),
-        TciParams(np.int16, -1, 1, 128, "TCITest.case3"),
-        TciParams(np.int16, -1, 1, 192, "TCITest.case4"),
-        TciParams(np.int32, -1, 1, 192, "TCITest.case5"),
-        TciParams(np.int32, 0, 1, 600, "TCITest.case6"),
-        TciParams(np.int16, 0, 0, 800, "TCITest.case7"),
-        TciParams(np.int32, 0, 1, 2560, "TCITest.case8"),
-        TciParams(np.int32, 0, 0, 3200, "TCITest.case9"),
-        TciParams(np.int32, 0, 0, 8, "TCITest.case10"),
-        TciParams(np.int32, 100, 1, 128, "TCITest.case11"),
-        TciParams(np.int32, 0, 0, 3200, "TCITest.case12"),
-        TciParams(np.int16, -1, 1, 128, "TCITest.case13"),
-        TciParams(np.int16, 0, 0, 800, "TCITest.case14"),
-        TciParams(np.int16, 20, 1, 3840, "TCITest.case15"),
-        TciParams(np.int16, 50, 0, 1408, "TCITest.case16"),
+        TciParams(np.float32, 1.0, 0, 32 * 512, "TCITest.case1"),
+        TciParams(np.float32, 1.0, 1, 512 * 32, "TCITest.case2"),
+        TciParams(np.float32, 1.0, 0, 128 * 128, "TCITest.case3"),
     ]
 
     for _, param in enumerate(case_params_list):

@@ -72,30 +72,9 @@ void LaunchTDivHalf(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *s
         <<<1, nullptr, stream>>>((half *)(out), (half *)(src0), (half *)(src1));
 }
 
-template void LaunchTDiv<float, 64, 64, 64, 64, 64, 64, 64, 64, false>(float *out, float *src0, float *src1,
-                                                                       void *stream);
-template void LaunchTDiv<int32_t, 64, 64, 64, 64, 64, 64, 64, 64, false>(int32_t *out, int32_t *src0, int32_t *src1,
-                                                                         void *stream);
-template void LaunchTDiv<int16_t, 64, 64, 64, 64, 64, 64, 64, 64, false>(int16_t *out, int16_t *src0, int16_t *src1,
-                                                                         void *stream);
-template void LaunchTDivHalf<16, 256, 16, 256, 16, 256, 16, 256, false>(aclFloat16 *out, aclFloat16 *src0,
-                                                                        aclFloat16 *src1, void *stream);
-template void LaunchTDivHalf<16, 64, 16, 128, 16, 128, 16, 64, false>(aclFloat16 *out, aclFloat16 *src0,
-                                                                      aclFloat16 *src1, void *stream);
-template void LaunchTDiv<float, 16, 32, 16, 64, 16, 32, 16, 32, false>(float *out, float *src0, float *src1,
-                                                                       void *stream);
-template void LaunchTDiv<int16_t, 32, 128, 32, 128, 32, 256, 32, 128, false>(int16_t *out, int16_t *src0, int16_t *src1,
-                                                                             void *stream);
-template void LaunchTDiv<int32_t, 16, 32, 16, 64, 16, 32, 16, 32, false>(int32_t *out, int32_t *src0, int32_t *src1,
-                                                                         void *stream);
-template void LaunchTDivHalf<16, 64, 16, 128, 16, 128, 16, 63, false>(aclFloat16 *out, aclFloat16 *src0,
-                                                                      aclFloat16 *src1, void *stream);
-template void LaunchTDiv<float, 16, 32, 16, 64, 16, 32, 16, 31, false>(float *out, float *src0, float *src1,
-                                                                       void *stream);
-template void LaunchTDiv<int16_t, 32, 128, 32, 128, 32, 256, 32, 127, false>(int16_t *out, int16_t *src0, int16_t *src1,
-                                                                             void *stream);
-template void LaunchTDiv<int32_t, 16, 32, 16, 64, 16, 32, 16, 31, false>(int32_t *out, int32_t *src0, int32_t *src1,
-                                                                         void *stream);
-template void LaunchTDiv<float, 2, 16, 2, 16, 2, 16, 2, 16, true>(float *out, float *src0, float *src1, void *stream);
-template void LaunchTDivHalf<2, 32, 2, 32, 2, 32, 2, 32, true>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
-                                                               void *stream);
+template void LaunchTDiv<float, 32, 512, 32, 512, 32, 512, 32, 512, false>(float *out, float *src0, float *src1,
+                                                                          void *stream);
+template void LaunchTDiv<float, 512, 32, 512, 32, 512, 32, 512, 32, false>(float *out, float *src0, float *src1,
+                                                                          void *stream);
+template void LaunchTDiv<float, 128, 128, 128, 128, 128, 128, 128, 128, false>(float *out, float *src0, float *src1,
+                                                                              void *stream);

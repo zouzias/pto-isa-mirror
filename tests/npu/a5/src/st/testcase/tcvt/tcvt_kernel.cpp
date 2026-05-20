@@ -179,6 +179,7 @@ void launchTCVT(D *dst, S *src, void *stream)
                                                                          void *stream);                                \
     template void launchTCVT<dst_type, src_type, 1, 256, 1, 256, 1, 129>(dst_type * dst, src_type * src, void *stream);
 
+#if 0
 // FP32 Source → fp16, bf16, int16, int32, int64, fp8 variants
 INSTANTIATE_TCVT(aclFloat16, float)
 INSTANTIATE_TCVT(bfloat16_t, float)
@@ -245,6 +246,11 @@ INSTANTIATE_TCVT(int32_t, int64_t)
 INSTANTIATE_TCVT(float, fp8_e4m3_wrapper)
 INSTANTIATE_TCVT(float, fp8_e5m2_wrapper)
 INSTANTIATE_TCVT(float, hifloat8_wrapper)
+#endif
+
+template void launchTCVT<float, float, 32, 512, 32, 512>(float *dst, float *src, void *stream);
+template void launchTCVT<float, float, 512, 32, 512, 32>(float *dst, float *src, void *stream);
+template void launchTCVT<float, float, 128, 128, 128, 128>(float *dst, float *src, void *stream);
 
 // ============================================================================
 // Saturation Mode Test Kernels

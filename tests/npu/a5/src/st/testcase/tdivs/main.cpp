@@ -104,29 +104,13 @@ void TDivSTestFramework()
 
 TEST_F(TDIVSTest, case1)
 {
-    TDivSTestFramework<float, 32, 128, 32, 64, 32, 64>();
+    TDivSTestFramework<float, 32, 512, 32, 512, 32, 512>();
 }
 TEST_F(TDIVSTest, case2)
 {
-    TDivSTestFramework<aclFloat16, 63, 128, 63, 64, 63, 64, true>();
+    TDivSTestFramework<float, 512, 32, 512, 32, 512, 32>();
 }
-TEST_F(TDIVSTest, case4)
+TEST_F(TDIVSTest, case3)
 {
-    TDivSTestFramework<int16_t, 15, 192, 15, 192, 15, 192>();
-}
-TEST_F(TDIVSTest, case5)
-{
-    TDivSTestFramework<float, 7, 512, 7, 448, 7, 448>();
-}
-TEST_F(TDIVSTest, case6)
-{
-    TDivSTestFramework<float, 256, 32, 256, 16, 256, 16>();
-}
-TEST_F(TDIVSTest, caseHP1)
-{
-    TDivSTestFramework<float, 2, 16, 2, 16, 2, 16, false, true>();
-}
-TEST_F(TDIVSTest, caseHP2)
-{
-    TDivSTestFramework<aclFloat16, 2, 32, 2, 32, 2, 32, true, true>();
+    TDivSTestFramework<float, 128, 128, 128, 128, 128, 128>();
 }

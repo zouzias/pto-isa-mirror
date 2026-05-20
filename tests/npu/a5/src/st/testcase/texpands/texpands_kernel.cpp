@@ -58,24 +58,9 @@ void LaunchTExpandS(void *out, void *scalar, void *stream)
     }
 }
 
-template void LaunchTExpandS<float, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL, false>(void *out, void *scalar,
-                                                                                   void *stream);
-template void LaunchTExpandS<int32_t, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL, false>(void *out, void *scalar,
-                                                                                     void *stream);
-template void LaunchTExpandS<uint16_t, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL, false>(void *out, void *scalar,
+template void LaunchTExpandS<float, 32, 512, 32, 512, 32, 512, PAD_VALUE_NULL, false>(void *out, void *scalar,
                                                                                       void *stream);
-template void LaunchTExpandS<uint16_t, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL, true>(void *out, void *scalar,
-                                                                                     void *stream);
-template void LaunchTExpandS<int16_t, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL, false>(void *out, void *scalar,
-                                                                                     void *stream);
-
-template void LaunchTExpandS<float, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX, false>(void *out, void *scalar,
-                                                                                  void *stream);
-template void LaunchTExpandS<int32_t, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX, false>(void *out, void *scalar,
-                                                                                    void *stream);
-template void LaunchTExpandS<uint16_t, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX, false>(void *out, void *scalar,
-                                                                                        void *stream);
-template void LaunchTExpandS<uint16_t, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX, true>(void *out, void *scalar,
-                                                                                       void *stream);
-template void LaunchTExpandS<int16_t, 16, 200, 20, 512, 16, 200, PAD_VALUE_MAX, false>(void *out, void *scalar,
-                                                                                       void *stream);
+template void LaunchTExpandS<float, 512, 32, 512, 32, 512, 32, PAD_VALUE_NULL, false>(void *out, void *scalar,
+                                                                                      void *stream);
+template void LaunchTExpandS<float, 128, 128, 128, 128, 128, 128, PAD_VALUE_NULL, false>(void *out, void *scalar,
+                                                                                         void *stream);

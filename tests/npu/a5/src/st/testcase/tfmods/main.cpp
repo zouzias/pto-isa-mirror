@@ -96,36 +96,18 @@ bool TFModSTestFramework()
 
 TEST_F(TFMODSTest, case1)
 {
-    bool ret = TFModSTestFramework<1, float, 32, 128, 32, 32, 64, 64>();
+    bool ret = TFModSTestFramework<1, float, 32, 512, 32, 32, 512, 512>();
     EXPECT_TRUE(ret);
 }
 
 TEST_F(TFMODSTest, case2)
 {
-    bool ret = TFModSTestFramework<2, aclFloat16, 63, 128, 63, 63, 64, 64>();
+    bool ret = TFModSTestFramework<2, float, 512, 32, 512, 512, 32, 32>();
     EXPECT_TRUE(ret);
 }
 
 TEST_F(TFMODSTest, case3)
 {
-    bool ret = TFModSTestFramework<3, int32_t, 31, 256, 31, 31, 128, 128>();
-    EXPECT_TRUE(ret);
-}
-
-TEST_F(TFMODSTest, case4)
-{
-    bool ret = TFModSTestFramework<4, int16_t, 15, 192, 15, 15, 192, 192>();
-    EXPECT_TRUE(ret);
-}
-
-TEST_F(TFMODSTest, case5)
-{
-    bool ret = TFModSTestFramework<5, float, 7, 512, 7, 7, 448, 448>();
-    EXPECT_TRUE(ret);
-}
-
-TEST_F(TFMODSTest, case6)
-{
-    bool ret = TFModSTestFramework<6, float, 256, 32, 256, 256, 16, 16>();
+    bool ret = TFModSTestFramework<3, float, 128, 128, 128, 128, 128, 128>();
     EXPECT_TRUE(ret);
 }

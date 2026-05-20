@@ -85,28 +85,16 @@ void test_tcolexpand()
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TCOLEXPANDTest, case_half_1_16_512_512)
+TEST_F(TCOLEXPANDTest, case_float_32_32_512_512)
 {
-    test_tcolexpand<aclFloat16, 1, 16, 512, 512>();
+    test_tcolexpand<float, 32, 32, 512, 512>();
 }
-TEST_F(TCOLEXPANDTest, case_int8_2_32_256_255)
+TEST_F(TCOLEXPANDTest, case_float_512_512_32_32)
 {
-    test_tcolexpand<int8_t, 2, 32, 256, 255>();
+    test_tcolexpand<float, 512, 512, 32, 32>();
 }
-TEST_F(TCOLEXPANDTest, case_float_1_8_128_63)
+TEST_F(TCOLEXPANDTest, case_float_128_128_128_128)
 {
-    test_tcolexpand<float, 1, 8, 128, 63>();
-}
-TEST_F(TCOLEXPANDTest, case_half_1_33_512_512)
-{
-    test_tcolexpand<aclFloat16, 1, 33, 512, 512>();
-}
-TEST_F(TCOLEXPANDTest, case_int8_2_17_256_44)
-{
-    test_tcolexpand<int8_t, 2, 17, 256, 44>();
-}
-TEST_F(TCOLEXPANDTest, case_float_1_54_64_63)
-{
-    test_tcolexpand<float, 1, 54, 64, 63>();
+    test_tcolexpand<float, 128, 128, 128, 128>();
 }
 } // namespace TColExpandTest

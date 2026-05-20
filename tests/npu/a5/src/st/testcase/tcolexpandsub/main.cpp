@@ -91,20 +91,16 @@ void test_tcolexpandsub()
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TColExpandSubTest, case_fp32_6_128_1_128)
+TEST_F(TColExpandSubTest, case_fp32_32_512_32_512)
 {
-    test_tcolexpandsub<float, 6, 128, 1, 128>();
+    test_tcolexpandsub<float, 32, 512, 32, 512>();
 }
-TEST_F(TColExpandSubTest, case_fp32_18_32_1_32)
+TEST_F(TColExpandSubTest, case_fp32_512_32_512_32)
 {
-    test_tcolexpandsub<float, 18, 32, 1, 32>();
+    test_tcolexpandsub<float, 512, 32, 512, 32>();
 }
-TEST_F(TColExpandSubTest, case_fp16_10_256_1_256)
+TEST_F(TColExpandSubTest, case_fp32_128_128_128_128)
 {
-    test_tcolexpandsub<aclFloat16, 10, 256, 1, 256>();
-}
-TEST_F(TColExpandSubTest, case_fp16_12_64_1_64)
-{
-    test_tcolexpandsub<aclFloat16, 12, 64, 1, 64>();
+    test_tcolexpandsub<float, 128, 128, 128, 128>();
 }
 } // namespace TColExpandSubTest

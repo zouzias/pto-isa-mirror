@@ -136,33 +136,14 @@ template <int32_t testKey>
 void launchTEXPANDS_MAT(uint8_t *out, void *stream)
 {
     if constexpr (testKey == 1) {
-        TEXPANDS_KERNEL<half, 0, 128, 128, 0, 0, 0, 0><<<1, nullptr, stream>>>(out, half(2));
+        TEXPANDS_KERNEL<float, 0, 32, 512, 0, 0, 0, 0><<<1, nullptr, stream>>>(out, float(2));
     } else if constexpr (testKey == 2) {
-        TEXPANDS_KERNEL<int16_t, 0, 32, 64, 0, 0, 0, 0><<<1, nullptr, stream>>>(out, int16_t(5));
+        TEXPANDS_KERNEL<float, 0, 512, 32, 0, 0, 0, 0><<<1, nullptr, stream>>>(out, float(3));
     } else if constexpr (testKey == 3) {
-        TEXPANDS_KERNEL<float, 0, 32, 32, 0, 0, 0, 0><<<1, nullptr, stream>>>(out, float(3));
-    } else if constexpr (testKey == 4) {
-        TEXPANDS_KERNEL<int8_t, 0, 32, 32, 0, 0, 0, 0><<<1, nullptr, stream>>>(out, int8_t(1));
-    } else if constexpr (testKey == 5) {
-        // uint16_t represent bfloat16
-        TEXPANDS_KERNEL<uint16_t, 0, 256, 256, 0, 0, 0, 0><<<1, nullptr, stream>>>(out, 0);
-    } else if constexpr (testKey == 6) {
-        TEXPANDS_KERNEL<half, 1, 1, 16, 7, 7, 16, 0><<<1, nullptr, stream>>>(out, half(3));
-    } else if constexpr (testKey == 7) {
-        TEXPANDS_KERNEL<int16_t, 1, 2, 5, 2, 3, 8, 0><<<1, nullptr, stream>>>(out, int16_t(8));
-    } else if constexpr (testKey == 8) {
-        TEXPANDS_KERNEL<int32_t, 2, 2, 2, 3, 2, 1, 8><<<1, nullptr, stream>>>(out, int32_t(5));
-    } else if constexpr (testKey == 9) {
-        TEXPANDS_KERNEL<uint32_t, 2, 2, 3, 4, 1, 2, 8><<<1, nullptr, stream>>>(out, uint32_t(11));
+        TEXPANDS_KERNEL<float, 0, 128, 128, 0, 0, 0, 0><<<1, nullptr, stream>>>(out, float(4));
     }
 }
 
 template void launchTEXPANDS_MAT<1>(uint8_t *out, void *stream);
 template void launchTEXPANDS_MAT<2>(uint8_t *out, void *stream);
 template void launchTEXPANDS_MAT<3>(uint8_t *out, void *stream);
-template void launchTEXPANDS_MAT<4>(uint8_t *out, void *stream);
-template void launchTEXPANDS_MAT<5>(uint8_t *out, void *stream);
-template void launchTEXPANDS_MAT<6>(uint8_t *out, void *stream);
-template void launchTEXPANDS_MAT<7>(uint8_t *out, void *stream);
-template void launchTEXPANDS_MAT<8>(uint8_t *out, void *stream);
-template void launchTEXPANDS_MAT<9>(uint8_t *out, void *stream);

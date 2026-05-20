@@ -72,10 +72,7 @@ void launchTColExpandAdd(T *out, T *src0, T *src1, void *stream)
     }
 }
 
-template void launchTColExpandAdd<float, 16, 128, 1, 128>(float *out, float *src0, float *src1, void *stream);
-template void launchTColExpandAdd<float, 32, 32, 1, 32>(float *out, float *src0, float *src1, void *stream);
-template void launchTColExpandAdd<aclFloat16, 4, 256, 1, 256>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
-                                                              void *stream);
-template void launchTColExpandAdd<aclFloat16, 10, 64, 1, 64>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
-                                                             void *stream);
+template void launchTColExpandAdd<float, 32, 512, 32, 512>(float *out, float *src0, float *src1, void *stream);
+template void launchTColExpandAdd<float, 512, 32, 512, 32>(float *out, float *src0, float *src1, void *stream);
+template void launchTColExpandAdd<float, 128, 128, 128, 128>(float *out, float *src0, float *src1, void *stream);
 } // namespace TColExpandAddTest

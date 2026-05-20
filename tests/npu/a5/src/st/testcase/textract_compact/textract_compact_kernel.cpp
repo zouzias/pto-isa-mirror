@@ -94,256 +94,31 @@ AICORE inline void runTEXTRACT_UNALIGN(__gm__ T *out, __gm__ U *src0, __gm__ S *
 
 extern "C" __global__ AICORE void launchTEXTRACT_11(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
 {
-    runTEXTRACT_UNALIGN<float, half, half, 63, 48, 66, 0, 0, 0, 128, 64, 256, false, false>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ half *>(src0),
-        reinterpret_cast<__gm__ half *>(src1));
+    runTEXTRACT_UNALIGN<float, float, float, 32, 256, 32, 0, 0, 0, 32, 256, 32, false, false>(
+        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float *>(src0),
+        reinterpret_cast<__gm__ float *>(src1));
 }
 extern "C" __global__ AICORE void launchTEXTRACT_12(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
 {
-    runTEXTRACT_UNALIGN<float, half, half, 68, 93, 97, 0, 0, 0, 128, 128, 128, true, true>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ half *>(src0),
-        reinterpret_cast<__gm__ half *>(src1));
+    runTEXTRACT_UNALIGN<float, float, float, 256, 32, 32, 0, 0, 0, 256, 32, 32, false, false>(
+        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float *>(src0),
+        reinterpret_cast<__gm__ float *>(src1));
 }
 extern "C" __global__ AICORE void launchTEXTRACT_13(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
 {
-    runTEXTRACT_UNALIGN<float, half, half, 75, 201, 79, 16, 16, 16, 80, 256, 80, false, false>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ half *>(src0),
-        reinterpret_cast<__gm__ half *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_14(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, half, half, 59, 232, 61, 16, 16, 16, 64, 256, 64, true, true>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ half *>(src0),
-        reinterpret_cast<__gm__ half *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_21(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, float, float, 68, 70, 69, 0, 0, 0, 80, 128, 80, false, false>(
+    runTEXTRACT_UNALIGN<float, float, float, 128, 128, 128, 0, 0, 0, 128, 128, 128, false, false>(
         reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float *>(src0),
         reinterpret_cast<__gm__ float *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_22(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, float, float, 20, 22, 21, 0, 0, 0, 64, 96, 64, true, true>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float *>(src0),
-        reinterpret_cast<__gm__ float *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_23(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, float, float, 49, 119, 63, 16, 32, 16, 64, 128, 64, false, false>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float *>(src0),
-        reinterpret_cast<__gm__ float *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_24(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, float, float, 127, 60, 102, 16, 16, 32, 128, 64, 128, true, true>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float *>(src0),
-        reinterpret_cast<__gm__ float *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_31(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<int32_t, int8_t, int8_t, 97, 231, 83, 0, 0, 0, 128, 256, 128, false, false>(
-        reinterpret_cast<__gm__ int32_t *>(out), reinterpret_cast<__gm__ int8_t *>(src0),
-        reinterpret_cast<__gm__ int8_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_32(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<int32_t, int8_t, int8_t, 71, 188, 82, 0, 0, 0, 128, 256, 128, true, true>(
-        reinterpret_cast<__gm__ int32_t *>(out), reinterpret_cast<__gm__ int8_t *>(src0),
-        reinterpret_cast<__gm__ int8_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_33(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<int32_t, int8_t, int8_t, 63, 112, 98, 32, 32, 32, 64, 128, 128, false, false>(
-        reinterpret_cast<__gm__ int32_t *>(out), reinterpret_cast<__gm__ int8_t *>(src0),
-        reinterpret_cast<__gm__ int8_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_34(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<int32_t, int8_t, int8_t, 106, 125, 60, 32, 32, 32, 128, 128, 64, true, true>(
-        reinterpret_cast<__gm__ int32_t *>(out), reinterpret_cast<__gm__ int8_t *>(src0),
-        reinterpret_cast<__gm__ int8_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_41(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, bfloat16_t, bfloat16_t, 23, 24, 25, 0, 0, 0, 96, 64, 96, false, false>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ bfloat16_t *>(src0),
-        reinterpret_cast<__gm__ bfloat16_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_42(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, bfloat16_t, bfloat16_t, 23, 24, 25, 0, 0, 0, 96, 64, 96, true, true>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ bfloat16_t *>(src0),
-        reinterpret_cast<__gm__ bfloat16_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_43(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, bfloat16_t, bfloat16_t, 39, 40, 41, 16, 16, 16, 96, 64, 96, false, false>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ bfloat16_t *>(src0),
-        reinterpret_cast<__gm__ bfloat16_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_44(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, bfloat16_t, bfloat16_t, 39, 40, 41, 16, 16, 16, 96, 64, 96, true, true>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ bfloat16_t *>(src0),
-        reinterpret_cast<__gm__ bfloat16_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_51(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, hifloat8_t, hifloat8_t, 46, 40, 45, 0, 0, 0, 128, 96, 128, false, false>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ hifloat8_t *>(src0),
-        reinterpret_cast<__gm__ hifloat8_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_52(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, hifloat8_t, hifloat8_t, 46, 40, 45, 0, 0, 0, 128, 96, 128, true, true>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ hifloat8_t *>(src0),
-        reinterpret_cast<__gm__ hifloat8_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_53(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, hifloat8_t, hifloat8_t, 78, 72, 77, 32, 32, 32, 128, 96, 128, false, false>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ hifloat8_t *>(src0),
-        reinterpret_cast<__gm__ hifloat8_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_54(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, hifloat8_t, hifloat8_t, 78, 72, 77, 32, 32, 32, 128, 96, 128, true, true>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ hifloat8_t *>(src0),
-        reinterpret_cast<__gm__ hifloat8_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_61(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, float8_e4m3_t, float8_e4m3_t, 46, 40, 45, 0, 0, 0, 128, 96, 128, false, false>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float8_e4m3_t *>(src0),
-        reinterpret_cast<__gm__ float8_e4m3_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_62(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, float8_e4m3_t, float8_e4m3_t, 46, 40, 45, 0, 0, 0, 128, 96, 128, true, true>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float8_e4m3_t *>(src0),
-        reinterpret_cast<__gm__ float8_e4m3_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_63(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, float8_e4m3_t, float8_e4m3_t, 78, 72, 77, 32, 32, 32, 128, 96, 128, false, false>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float8_e4m3_t *>(src0),
-        reinterpret_cast<__gm__ float8_e4m3_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_64(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, float8_e4m3_t, float8_e4m3_t, 78, 72, 77, 32, 32, 32, 128, 96, 128, true, true>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float8_e4m3_t *>(src0),
-        reinterpret_cast<__gm__ float8_e4m3_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_71(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, float8_e5m2_t, float8_e5m2_t, 46, 40, 45, 0, 0, 0, 128, 96, 128, false, false>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float8_e5m2_t *>(src0),
-        reinterpret_cast<__gm__ float8_e5m2_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_72(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, float8_e5m2_t, float8_e5m2_t, 46, 40, 45, 0, 0, 0, 128, 96, 128, true, true>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float8_e5m2_t *>(src0),
-        reinterpret_cast<__gm__ float8_e5m2_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_73(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, float8_e5m2_t, float8_e5m2_t, 78, 72, 77, 32, 32, 32, 128, 96, 128, false, false>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float8_e5m2_t *>(src0),
-        reinterpret_cast<__gm__ float8_e5m2_t *>(src1));
-}
-extern "C" __global__ AICORE void launchTEXTRACT_74(__gm__ uint8_t *out, __gm__ uint8_t *src0, __gm__ uint8_t *src1)
-{
-    runTEXTRACT_UNALIGN<float, float8_e5m2_t, float8_e5m2_t, 78, 72, 77, 32, 32, 32, 128, 96, 128, true, true>(
-        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float8_e5m2_t *>(src0),
-        reinterpret_cast<__gm__ float8_e5m2_t *>(src1));
 }
 
 template <int32_t tilingKey>
 void launchTEXTRACT(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
 {
-    if constexpr (tilingKey == 11) {
-        launchTEXTRACT_11<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 12) {
-        launchTEXTRACT_12<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 13) {
-        launchTEXTRACT_13<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 14) {
-        launchTEXTRACT_14<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 21) {
-        launchTEXTRACT_21<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 22) {
-        launchTEXTRACT_22<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 23) {
-        launchTEXTRACT_23<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 24) {
-        launchTEXTRACT_24<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 31) {
-        launchTEXTRACT_31<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 32) {
-        launchTEXTRACT_32<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 33) {
-        launchTEXTRACT_33<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 34) {
-        launchTEXTRACT_34<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 41) {
-        launchTEXTRACT_41<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 42) {
-        launchTEXTRACT_42<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 43) {
-        launchTEXTRACT_43<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 44) {
-        launchTEXTRACT_44<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 51) {
-        launchTEXTRACT_51<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 52) {
-        launchTEXTRACT_52<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 53) {
-        launchTEXTRACT_53<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 54) {
-        launchTEXTRACT_54<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 61) {
-        launchTEXTRACT_61<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 62) {
-        launchTEXTRACT_62<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 63) {
-        launchTEXTRACT_63<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 64) {
-        launchTEXTRACT_64<<<1, nullptr, stream>>>(out, src0, src1);
-    } else if constexpr (tilingKey == 71) {
-        launchTEXTRACT_71<<<1, nullptr, stream>>>(out, src0, src1);
     } else if constexpr (tilingKey == 72) {
         launchTEXTRACT_72<<<1, nullptr, stream>>>(out, src0, src1);
     } else if constexpr (tilingKey == 73) {
         launchTEXTRACT_73<<<1, nullptr, stream>>>(out, src0, src1);
     } else if constexpr (tilingKey == 74) {
-        launchTEXTRACT_74<<<1, nullptr, stream>>>(out, src0, src1);
-    }
-}
-
-template void launchTEXTRACT<11>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<12>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<13>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<14>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<21>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<22>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<23>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<24>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<31>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<32>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<33>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<34>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<41>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<42>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<43>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<44>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<51>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<52>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<53>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<54>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void launchTEXTRACT<61>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void launchTEXTRACT<62>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void launchTEXTRACT<63>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void launchTEXTRACT<64>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);

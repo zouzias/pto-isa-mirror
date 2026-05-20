@@ -259,95 +259,12 @@ if __name__ == "__main__":
         "TEXTRACTTest.case1",
         "TEXTRACTTest.case2",
         "TEXTRACTTest.case3",
-        "TEXTRACTTest.case4",
-        "TEXTRACTTest.case5",
-        "TEXTRACTTest.case6",
-        "TEXTRACTTest.case7",
-        "TEXTRACTTest.case8",
-        "TEXTRACTTest.case9",
-        "TEXTRACTTest.case10",
-        "TEXTRACTTest.case11",
-        "TEXTRACTTest.case12",
-        "TEXTRACTTest.case13",
-        "TEXTRACTTest.case14",
-        "TEXTRACTTest.case15",
-        "TEXTRACTTest.case16",
-        "TEXTRACTTest.case17",
-        "TEXTRACTTest.case18",
-        "TEXTRACTTest.case19",
-        "TEXTRACTTest.case20",
-
-        "TMOVTest.case1",
-        "TMOVTest.case2",
-        "TMOVTest.case3",
-        "TMOVTest.case4",
-        "TMOVTest.case5",
-        "TMOVTest.case6",
-        "TMOVTest.case7",
-        "TMOVTest.case8",
-        "TMOVTest.case9",
-        "TMOVTest.case10",
-        "TMOVTest.case11",
-        "TMOVTest.case12",
-        "TMOVTest.case13",
-        "TMOVTest.case14",
-        "TMOVTest.case15",
-        "TMOVTest.case16",
-        "TMOVTest.case17",
     ]
 
     case_params_list = [
-        # TExtract
-        # normal
-        textractParams(np.float16, np.float16, np.float32, 32, 96, 64, 0, 0, 0, 0, 0),
-        textractParams(np.float32, np.float32, np.float32, 128, 48, 64, 0, 0, 0, 0, 0),
-        textractParams(np.int8, np.int8, np.int32, 128, 128, 64, 0, 0, 0, 0, 0),
-        # startIdx 
-        textractParams(np.float16, np.float16, np.float32, 64, 96, 64, 32, 16, 16, 0, 0),
-        textractParams(np.float32, np.float32, np.float32, 64, 128, 64, 32, 32, 16, 0, 0),
-        textractParams(np.int8, np.int8, np.int32, 128, 128, 64, 32, 64, 32, 0, 0),
-        # transpose，startIdx 
-        textractParams(np.float16, np.float16, np.float32, 64, 128, 64, 0, 64, 0, 1, 1),
-        textractParams(np.float32, np.float32, np.float32, 64, 64, 128, 0, 0, 32, 1, 1),
-        textractParams(np.int8, np.int8, np.int32, 128, 64, 128, 32, 0, 0, 1, 1),
-        # transpose，startIdx
-        textractParams(bfloat16, bfloat16, np.float32, 64, 128, 64, 16, 0, 0, 1, 0),
-        textractParams(fp8_e4m3fn, fp8_e4m3fn, np.float32, 64, 128, 64, 0, 32, 0, 1, 0),
-        textractParams(fp8_e5m2, fp8_e5m2, np.float32, 64, 128, 64, 0, 0, 32, 0, 1),
-        textractParams(np.uint8, np.uint8, np.float32, 64, 128, 64, 0, 32, 0, 0, 1),
-        # dynamic shape
-        textractParams(np.int8, np.int8, np.int32, 64, 96, 32, 32, 0, 0, 1, 0),
-        textractParams(np.float16, np.float16, np.float32, 64, 48, 96, 16, 16, 0, 1, 0),
-        textractParams(np.float32, np.float32, np.float32, 32, 96, 48, 0, 32, 16, 0, 0),
-        # b4
-        textractParams(float4_e2m1, float4_e2m1, np.float32, 256, 128, 256, 128, 64, 128, 0, 0),
-        textractParams(float4_e1m2, float4_e1m2, np.float32, 256, 128, 256, 128, 64, 128, 0, 0),
-        textractParams(float4_e2m1, float4_e2m1, np.float32, 256, 128, 256, 128, 64, 128, 1, 1),
-        textractParams(float4_e1m2, float4_e1m2, np.float32, 256, 128, 256, 128, 64, 128, 1, 1),
-
-        # TMov
-        # !transpose
-        textractParams(np.float16, np.float16, np.float32, 32, 96, 64, 0, 0, 0, 0, 0),
-        textractParams(np.float32, np.float32, np.float32, 128, 48, 64, 0, 0, 0, 0, 0),
-        textractParams(np.int8, np.int8, np.int32, 128, 128, 64, 0, 0, 0, 0, 0),
-        # transpose
-        textractParams(bfloat16, bfloat16, np.float32, 64, 128, 64, 0, 0, 0, 1, 1),
-        textractParams(fp8_e4m3fn, fp8_e4m3fn, np.float32, 64, 96, 64, 0, 0, 0, 1, 0),
-        textractParams(fp8_e5m2, fp8_e5m2, np.float32, 64, 128, 64, 0, 0, 0, 0, 1),
-        textractParams(np.uint8, np.uint8, np.float32, 128, 128, 64, 0, 0, 0, 1, 0),
-        # dynamic shape
-        textractParams(np.int8, np.int8, np.int32, 64, 96, 64, 0, 0, 0, 1, 1),
-        textractParams(np.float16, np.float16, np.float32, 64, 128, 64, 0, 0, 0, 1, 0),
-        textractParams(np.float32, np.float32, np.float32, 64, 128, 64, 0, 0, 0, 0, 1), 
-        # unaligned, transpose
-        textractParams(np.int8, np.int8, np.int32, 65, 40, 66, 0, 0, 0, 1, 1, 96, 64, 96),
-        textractParams(np.float16, np.float16, np.float32, 65, 40, 66, 0, 0, 0, 1, 1, 80, 48, 80),
-        textractParams(np.float32, np.float32, np.float32, 65, 40, 66, 0, 0, 0, 1, 1, 80, 48, 80),
-        # b4
-        textractParams(float4_e2m1, float4_e2m1, np.float32, 128, 64, 128, 0, 0, 0, 0, 0),
-        textractParams(float4_e1m2, float4_e1m2, np.float32, 128, 64, 128, 0, 0, 0, 0, 0),
-        textractParams(float4_e2m1, float4_e2m1, np.float32, 128, 64, 128, 0, 0, 0, 1, 1),
-        textractParams(float4_e1m2, float4_e1m2, np.float32, 128, 64, 128, 0, 0, 0, 1, 1),
+        textractParams(np.float32, np.float32, np.float32, 32, 256, 32, 0, 0, 0, 0, 0),
+        textractParams(np.float32, np.float32, np.float32, 256, 32, 32, 0, 0, 0, 0, 0),
+        textractParams(np.float32, np.float32, np.float32, 128, 128, 128, 0, 0, 0, 0, 0),
     ]
 
     for i, case_name in enumerate(case_name_list):

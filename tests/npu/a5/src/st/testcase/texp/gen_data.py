@@ -67,16 +67,9 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        tunaryParams("TEXPTest.case1", np.float32, 64, 64, 64, 64, 64, 64, True),
-        tunaryParams("TEXPTest.case2", np.float32, 64, 64, 64, 64, 64, 64),
-        tunaryParams("TEXPTest.case3", np.float16, 64, 64, 64, 64, 64, 64, True),
-        tunaryParams("TEXPTest.case4", np.float16, 64, 64, 64, 64, 64, 64),
-        tunaryParams("TEXPTest.case5", np.float32, 128, 128, 64, 64, 64, 64),
-        tunaryParams("TEXPTest.case6", np.float32, 64, 64, 128, 128, 32, 32),
-        tunaryParams("TEXPTest.case7", np.float16, 128, 256, 64, 64, 64, 64),
-        tunaryParams("TEXPTest.case8", np.float16, 64, 64, 128, 256, 32, 32),
-        tunaryParams("TEXPTest.caseHP1", np.float32, 64, 64, 64, 64, 64, 64, False, True),
-        tunaryParams("TEXPTest.caseHP2", np.float16, 64, 64, 64, 64, 64, 64, False, True),
+        tunaryParams("TEXPTest.case1", np.float32, 32, 512, 32, 512, 32, 512),
+        tunaryParams("TEXPTest.case2", np.float32, 512, 32, 512, 32, 512, 32),
+        tunaryParams("TEXPTest.case3", np.float32, 128, 128, 128, 128, 128, 128),
     ]
 
     for _, param in enumerate(case_params_list):

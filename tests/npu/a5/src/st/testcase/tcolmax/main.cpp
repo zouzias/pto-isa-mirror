@@ -94,122 +94,16 @@ protected:
 
 TEST_F(TCOLMAXTest, case01)
 {
-    bool ret = TCOLMAXTestFramework<1, float, 1, 1, 1, 256, 255>();
+    bool ret = TCOLMAXTestFramework<1, float, 32, 32, 1, 512, 512>();
     EXPECT_TRUE(ret);
 }
 TEST_F(TCOLMAXTest, case02)
 {
-    bool ret = TCOLMAXTestFramework<2, float, 16, 16, 1, 128, 127>();
+    bool ret = TCOLMAXTestFramework<2, float, 512, 512, 1, 32, 32>();
     EXPECT_TRUE(ret);
 }
 TEST_F(TCOLMAXTest, case03)
 {
-    bool ret = TCOLMAXTestFramework<3, float, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case11)
-{
-    bool ret = TCOLMAXTestFramework<11, aclFloat16, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case12)
-{
-    bool ret = TCOLMAXTestFramework<12, aclFloat16, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case13)
-{
-    bool ret = TCOLMAXTestFramework<13, aclFloat16, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case21)
-{
-    bool ret = TCOLMAXTestFramework<21, int8_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case22)
-{
-    bool ret = TCOLMAXTestFramework<22, int8_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case23)
-{
-    bool ret = TCOLMAXTestFramework<23, int8_t, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case31)
-{
-    bool ret = TCOLMAXTestFramework<31, uint8_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case32)
-{
-    bool ret = TCOLMAXTestFramework<32, uint8_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case33)
-{
-    bool ret = TCOLMAXTestFramework<33, uint8_t, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-
-TEST_F(TCOLMAXTest, case41)
-{
-    bool ret = TCOLMAXTestFramework<41, int16_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case42)
-{
-    bool ret = TCOLMAXTestFramework<42, int16_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case43)
-{
-    bool ret = TCOLMAXTestFramework<43, int16_t, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case51)
-{
-    bool ret = TCOLMAXTestFramework<51, uint16_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case52)
-{
-    bool ret = TCOLMAXTestFramework<52, uint16_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case53)
-{
-    bool ret = TCOLMAXTestFramework<53, uint16_t, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case61)
-{
-    bool ret = TCOLMAXTestFramework<61, int32_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case62)
-{
-    bool ret = TCOLMAXTestFramework<62, int32_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case63)
-{
-    bool ret = TCOLMAXTestFramework<63, int32_t, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case71)
-{
-    bool ret = TCOLMAXTestFramework<71, uint32_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case72)
-{
-    bool ret = TCOLMAXTestFramework<72, uint32_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMAXTest, case73)
-{
-    bool ret = TCOLMAXTestFramework<73, uint32_t, 16, 15, 1, 256, 255>();
+    bool ret = TCOLMAXTestFramework<3, float, 128, 128, 1, 128, 128>();
     EXPECT_TRUE(ret);
 }

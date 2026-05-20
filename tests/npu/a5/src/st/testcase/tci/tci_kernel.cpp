@@ -52,19 +52,6 @@ void LaunchTci(T *out, T S, void *stream)
     runTci<T, kGRows_, kGCols_, kTRows_, kTCols_, reverse, mode><<<1, nullptr, stream>>>((T *)(out), S);
 }
 
-template void LaunchTci<int32_t, 1, 128, 1, 128, 1, 0>(int32_t *out, int32_t S = 100, void *stream);
-template void LaunchTci<int16_t, 1, 128, 1, 128, 0, 0>(int16_t *out, int16_t S = -1, void *stream);
-template void LaunchTci<int16_t, 1, 128, 1, 128, 1, 0>(int16_t *out, int16_t S = -1, void *stream);
-template void LaunchTci<int16_t, 1, 192, 1, 192, 1, 0>(int16_t *out, int16_t S = -1, void *stream);
-template void LaunchTci<int32_t, 1, 192, 1, 192, 1, 0>(int32_t *out, int32_t S = -1, void *stream);
-template void LaunchTci<int32_t, 1, 600, 1, 600, 1, 0>(int32_t *out, int32_t S = 0, void *stream);
-template void LaunchTci<int16_t, 1, 800, 1, 800, 0, 0>(int16_t *out, int16_t S = 0, void *stream);
-template void LaunchTci<int32_t, 1, 2560, 1, 2560, 1, 0>(int32_t *out, int32_t S = 0, void *stream);
-template void LaunchTci<int32_t, 1, 3200, 1, 3200, 0, 0>(int32_t *out, int32_t S = 0, void *stream);
-template void LaunchTci<int32_t, 1, 8, 1, 8, 0, 0>(int32_t *out, int32_t S = 0, void *stream);
-template void LaunchTci<int32_t, 1, 128, 1, 128, 1, 1>(int32_t *out, int32_t S = 100, void *stream);
-template void LaunchTci<int32_t, 1, 3200, 1, 3200, 0, 1>(int32_t *out, int32_t S = 0, void *stream);
-template void LaunchTci<int16_t, 1, 128, 1, 128, 1, 1>(int16_t *out, int16_t S = -1, void *stream);
-template void LaunchTci<int16_t, 1, 800, 1, 800, 0, 1>(int16_t *out, int16_t S = 0, void *stream);
-template void LaunchTci<int16_t, 1, 3840, 1, 3840, 1, 1>(int16_t *out, int16_t S = 20, void *stream);
-template void LaunchTci<int16_t, 1, 1408, 1, 1408, 0, 1>(int16_t *out, int16_t S = 50, void *stream);
+template void LaunchTci<float, 32, 512, 32, 512, 0, 0>(float *out, float S = 1.0f, void *stream);
+template void LaunchTci<float, 512, 32, 512, 32, 1, 0>(float *out, float S = 1.0f, void *stream);
+template void LaunchTci<float, 128, 128, 128, 128, 0, 0>(float *out, float S = 1.0f, void *stream);

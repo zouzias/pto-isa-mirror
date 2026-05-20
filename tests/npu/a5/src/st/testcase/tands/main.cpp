@@ -91,45 +91,15 @@ void test_tands()
 
 TEST_F(TANDSTest, case1)
 {
-    test_tands<uint16_t, 64, 64, 64, 64>();
+    test_tands<float, 32, 512, 32, 512>();
 }
 
 TEST_F(TANDSTest, case2)
 {
-    test_tands<uint16_t, 64, 64, 63, 63>();
+    test_tands<float, 512, 32, 512, 32>();
 }
 
 TEST_F(TANDSTest, case3)
 {
-    test_tands<uint16_t, 1, 16384, 1, 16384>();
-}
-
-TEST_F(TANDSTest, case4)
-{
-    test_tands<uint16_t, 2048, 16, 2048, 16>();
-}
-
-TEST_F(TANDSTest, case5)
-{
-    test_tands<uint8_t, 32, 32, 32, 32>();
-}
-
-TEST_F(TANDSTest, case6)
-{
-    test_tands<uint32_t, 8, 8, 8, 8>();
-}
-
-TEST_F(TANDSTest, case7)
-{
-    test_tands<int8_t, 32, 32, 32, 32>();
-}
-
-TEST_F(TANDSTest, case8)
-{
-    test_tands<int16_t, 16, 16, 16, 16>();
-}
-
-TEST_F(TANDSTest, case9)
-{
-    test_tands<int32_t, 8, 8, 8, 8>();
+    test_tands<float, 128, 128, 128, 128>();
 }

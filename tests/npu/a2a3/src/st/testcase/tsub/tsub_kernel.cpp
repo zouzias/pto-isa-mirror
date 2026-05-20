@@ -58,7 +58,6 @@ void LaunchTSub(T *out, T *src0, T *src1, void *stream)
         runTSUB<T, kGRows_, kGCols_, kTRows_, kTCols_><<<1, nullptr, stream>>>(out, src0, src1);
 }
 
-template void LaunchTSub<float, 64, 64, 64, 64>(float *out, float *src0, float *src1, void *stream);
-template void LaunchTSub<int32_t, 64, 64, 64, 64>(int32_t *out, int32_t *src0, int32_t *src1, void *stream);
-template void LaunchTSub<aclFloat16, 64, 64, 64, 64>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream);
-template void LaunchTSub<int16_t, 64, 64, 64, 64>(int16_t *out, int16_t *src0, int16_t *src1, void *stream);
+template void LaunchTSub<float, 32, 512, 32, 512>(float *out, float *src0, float *src1, void *stream);
+template void LaunchTSub<float, 512, 32, 512, 32>(float *out, float *src0, float *src1, void *stream);
+template void LaunchTSub<float, 128, 128, 128, 128>(float *out, float *src0, float *src1, void *stream);

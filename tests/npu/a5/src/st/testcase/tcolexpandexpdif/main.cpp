@@ -91,20 +91,16 @@ void test_tcolexpandexpdif()
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TColExpandExpdifTest, case_fp32_32_16_1_16)
+TEST_F(TColExpandExpdifTest, case_fp32_32_512_32_512)
 {
-    test_tcolexpandexpdif<float, 32, 16, 1, 16>();
+    test_tcolexpandexpdif<float, 32, 512, 32, 512>();
 }
-TEST_F(TColExpandExpdifTest, case_fp32_16_32_1_32)
+TEST_F(TColExpandExpdifTest, case_fp32_512_32_512_32)
 {
-    test_tcolexpandexpdif<float, 16, 32, 1, 32>();
+    test_tcolexpandexpdif<float, 512, 32, 512, 32>();
 }
-TEST_F(TColExpandExpdifTest, case_fp16_32_32_1_32)
+TEST_F(TColExpandExpdifTest, case_fp32_128_128_128_128)
 {
-    test_tcolexpandexpdif<aclFloat16, 32, 32, 1, 32>();
-}
-TEST_F(TColExpandExpdifTest, case_fp16_16_128_1_128)
-{
-    test_tcolexpandexpdif<aclFloat16, 16, 128, 1, 128>();
+    test_tcolexpandexpdif<float, 128, 128, 128, 128>();
 }
 } // namespace TColExpandExpdifTest

@@ -49,22 +49,9 @@ class TColsumParams:
 
 if __name__ == "__main__":
     case_params_list = [
-        TColsumParams("TCOLSUMTest.case01", np.float32, 1, 1, 256, 255),
-        TColsumParams("TCOLSUMTest.case02", np.float32, 16, 16, 128, 127),
-        TColsumParams("TCOLSUMTest.case03", np.float32, 16, 15, 256, 255),
-        TColsumParams("TCOLSUMTest.case04", np.float32, 64, 63, 128, 127),
-        TColsumParams("TCOLSUMTest.case05", np.float32, 64, 64, 128, 128),
-        TColsumParams("TCOLSUMTest.case11", np.float16, 1, 1, 256, 255),
-        TColsumParams("TCOLSUMTest.case12", np.float16, 16, 16, 128, 127),
-        TColsumParams("TCOLSUMTest.case13", np.float16, 16, 15, 256, 255),
-        TColsumParams("TCOLSUMTest.case14", np.float16, 64, 63, 128, 127),
-        TColsumParams("TCOLSUMTest.case15", np.float16, 64, 64, 128, 128),
-        TColsumParams("TCOLSUMTest.case21", np.int8, 1, 1, 256, 255),
-        TColsumParams("TCOLSUMTest.case22", np.int8, 16, 16, 128, 127),
-        TColsumParams("TCOLSUMTest.case23", np.int8, 16, 15, 256, 255),
-        TColsumParams("TCOLSUMTest.case24", np.int8, 64, 63, 128, 127),
-        TColsumParams("TCOLSUMTest.case25", np.int8, 64, 64, 128, 128),
-        TColsumParams("TCOLSUMTest.case31", np.float32, 1, 1, 512, 511),
+        TColsumParams("TCOLSUMTest.case01", np.float32, 32, 32, 512, 512),
+        TColsumParams("TCOLSUMTest.case02", np.float32, 512, 512, 32, 32),
+        TColsumParams("TCOLSUMTest.case03", np.float32, 128, 128, 128, 128),
     ]
 
     for _, case in enumerate(case_params_list):

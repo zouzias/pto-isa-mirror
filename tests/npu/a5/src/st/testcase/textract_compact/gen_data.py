@@ -31,67 +31,17 @@ def check(x, n):
 def cast(c, dtype):
     if dtype == 'fp16':
         c = np.array(c).astype(np.float16)
-    elif dtype == 'fp32':
-        c = np.array(c).astype(np.float32)
-    return c
+    case_name_list = [
+        "TEXTRACTTest.case11",
+        "TEXTRACTTest.case12",
+        "TEXTRACTTest.case13",
+    ]
 
-
-def hif8_convert(input):
-    d, e = '', ''
-    s, m = input[0], input[5:]
-    m1, m2, m3 = int(input[5]), int(input[6]), int(input[7])
-    if input[1] == '1' or input[2] == '1':
-        d, e = input[1:3], input[3:5]
-    elif input[3] == '1':
-        d, e = input[1:4], input[4]
-    else:
-        d, e = input[1:5], ''
-    f1 = -1 if s == '1' else 1
-    f2 = 1
-    if d == '0000':
-        if s == '1':
-            if m == '000':
-                return np.nan
-            input = 2 ** (m1 * 4 + m2 * 2 + m3 - 23) * f1
-        else:
-            if m == '000':
-                return 0
-            input = 2 ** (m1 * 4 + m2 * 2 + m3 - 23)
-        return input
-    elif d == '0001':
-        f2 = 0
-        input = (1 + (m1 * 4 + m2 * 2 + m3) / 8) * 2 ** f2 * f1
-        return input
-    elif d == '001':
-        f2 = -1 if e == '1' else 1
-        input = (1 + (m1 * 4 + m2 * 2 + m3) / 8) * 2 ** f2 * f1
-        return input
-    elif d == '01':
-        f2 = -1 if int(input[3]) == 1 else 1
-        input = (1 + (m1 * 4 + m2 * 2 + m3) / 8) * 2 ** (f2 * (2 + int(input[4]))) * f1
-        return input
-    elif d == '10':
-        f2 = -1 if int(input[3]) == 1 else 1
-        input = (1 + (m2 * 2 + m3) / 4) * 2 ** (f2 * (4 + int(input[4]) * 2 + int(input[5]))) * f1
-        return input
-    elif d == '11':
-        f2 = -1 if int(input[3]) == 1 else 1
-        if e == '01' and m == '111':
-            return f1 * np.inf
-        input = (1 + m3 / 2) * 2 ** (f2 * (8 + int(input[4]) * 4 + int(input[5]) * 2 + int(input[6]))) * f1
-        return input
-
-
-def get_hif8_golden(x1_gm, x2_gm, start_m, start_k, start_n, dst_type):
-    s1 = x1_gm.reshape(-1)
-    s2 = x2_gm.reshape(-1)
-    s1_len = len(s1)
-    s2_len = len(s2)
-    re1 = [0] * s1_len
-    re2 = [0] * s2_len
-    for i in range(s1_len):
-        temp = bin(s1[i])
-        temp = temp.split('b')[1]
+    case_params_list = [
+        textractParams(np.float32, np.float32, np.float32, 32, 256, 32, 0, 0, 0, 0, 0, 32, 256, 32),
+        textractParams(np.float32, np.float32, np.float32, 256, 32, 32, 0, 0, 0, 0, 0, 256, 32, 32),
+        textractParams(np.float32, np.float32, np.float32, 128, 128, 128, 0, 0, 0, 0, 0, 128, 128, 128),
+    ]
         temp = check(temp, 8)
         re1[i] = hif8_convert(temp)
     s1 = cast(re1, 'fp32')

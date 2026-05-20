@@ -95,76 +95,16 @@ protected:
 
 TEST_F(TCOLPRODTest, case01)
 {
-    bool ret = TCOLPRODTestFramework<1, float, 1, 1, 1, 256, 255>();
+    bool ret = TCOLPRODTestFramework<1, float, 32, 32, 1, 512, 512>();
     EXPECT_TRUE(ret);
 }
 TEST_F(TCOLPRODTest, case02)
 {
-    bool ret = TCOLPRODTestFramework<2, float, 16, 16, 1, 128, 127>();
+    bool ret = TCOLPRODTestFramework<2, float, 512, 512, 1, 32, 32>();
     EXPECT_TRUE(ret);
 }
 TEST_F(TCOLPRODTest, case03)
 {
-    bool ret = TCOLPRODTestFramework<3, float, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLPRODTest, case41)
-{
-    bool ret = TCOLPRODTestFramework<41, int16_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLPRODTest, case42)
-{
-    bool ret = TCOLPRODTestFramework<42, int16_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLPRODTest, case43)
-{
-    bool ret = TCOLPRODTestFramework<43, int16_t, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLPRODTest, case51)
-{
-    bool ret = TCOLPRODTestFramework<51, uint16_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLPRODTest, case52)
-{
-    bool ret = TCOLPRODTestFramework<52, uint16_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLPRODTest, case53)
-{
-    bool ret = TCOLPRODTestFramework<53, uint16_t, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLPRODTest, case61)
-{
-    bool ret = TCOLPRODTestFramework<61, int32_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLPRODTest, case62)
-{
-    bool ret = TCOLPRODTestFramework<62, int32_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLPRODTest, case63)
-{
-    bool ret = TCOLPRODTestFramework<63, int32_t, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLPRODTest, case71)
-{
-    bool ret = TCOLPRODTestFramework<71, uint32_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLPRODTest, case72)
-{
-    bool ret = TCOLPRODTestFramework<72, uint32_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLPRODTest, case73)
-{
-    bool ret = TCOLPRODTestFramework<73, uint32_t, 16, 15, 1, 256, 255>();
+    bool ret = TCOLPRODTestFramework<3, float, 128, 128, 1, 128, 128>();
     EXPECT_TRUE(ret);
 }

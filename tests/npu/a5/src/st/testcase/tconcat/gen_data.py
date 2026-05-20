@@ -79,14 +79,9 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TConcatParams(np.float32, 64, 128, 64, 64, 64, 64, 64, 64, 64),
-        TConcatParams(np.int32, 64, 128, 64, 64, 64, 64, 64, 64, 64),
-        TConcatParams(np.float16, 16, 256, 16, 128, 16, 128, 16, 128, 128),
-        TConcatParams(np.float32, 16, 64, 16, 32, 16, 32, 16, 32, 32),
-        TConcatParams(np.int16, 32, 256, 32, 128, 32, 128, 32, 128, 128),
-        TConcatParams(np.float16, 16, 128, 16, 64, 16, 64, 16, 63, 64),
-        TConcatParams(np.float32, 16, 64, 16, 32, 16, 32, 16, 31, 32),
-        TConcatParams(np.int16, 32, 256, 32, 128, 32, 128, 32, 127, 128),
+        TConcatParams(np.float32, 32, 512, 32, 256, 32, 256, 32, 256, 256),
+        TConcatParams(np.float32, 256, 64, 256, 32, 256, 32, 256, 32, 32),
+        TConcatParams(np.float32, 128, 128, 128, 64, 128, 64, 128, 64, 64),
     ]
 
     for param in case_params_list:

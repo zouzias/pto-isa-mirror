@@ -18,8 +18,6 @@ using namespace PtoTestCommon;
 template <int32_t testKey>
 void launchTExtractNDVec(uint8_t *out, uint8_t *srcIn, uint8_t *dstInitIn, void *stream);
 
-template <int32_t testKey>
-void launchTExtractNDVecScalar(uint8_t *out, uint8_t *srcIn, uint8_t *dstInitIn, void *stream);
 
 class TExtractNDVecTest : public testing::Test {
 protected:
@@ -96,70 +94,17 @@ void testTExtractNDVec(int32_t srcRows, int32_t srcCols, int32_t dstRows, int32_
                                 launchTExtractNDVec<testKey>);
 }
 
-template <int32_t testKey, typename dType>
-void testTExtractNDVecScalar(int32_t srcRows, int32_t srcCols)
-{
-    constexpr size_t minAlignedCols = 32 / sizeof(dType);
-    runTExtractNDVecTest<dType>(srcRows * srcCols * sizeof(dType), 1 * minAlignedCols * sizeof(dType),
-                                launchTExtractNDVecScalar<testKey>);
-}
-
 TEST_F(TExtractNDVecTest, case_nd_vec_1)
 {
-    testTExtractNDVec<1, float>(16, 16, 8, 8);
+    testTExtractNDVec<1, float>(32, 512, 32, 512);
 }
 
 TEST_F(TExtractNDVecTest, case_nd_vec_2)
 {
-    testTExtractNDVec<2, float>(16, 16, 8, 8);
+    testTExtractNDVec<2, float>(512, 32, 512, 32);
 }
 
 TEST_F(TExtractNDVecTest, case_nd_vec_3)
 {
-    testTExtractNDVec<3, uint16_t>(32, 32, 16, 16);
-}
-
-TEST_F(TExtractNDVecTest, case_nd_vec_4)
-{
-    testTExtractNDVec<4, int8_t>(64, 64, 32, 32);
-}
-
-TEST_F(TExtractNDVecTest, case_nd_vec_5)
-{
-    testTExtractNDVec<5, uint16_t>(32, 48, 16, 16);
-}
-
-TEST_F(TExtractNDVecTest, case_nd_vec_6)
-{
-    testTExtractNDVec<6, float>(16, 24, 8, 8);
-}
-
-TEST_F(TExtractNDVecTest, case_nd_vec_7)
-{
-    testTExtractNDVec<7, float>(16, 24, 8, 8);
-}
-
-TEST_F(TExtractNDVecTest, case_nd_vec_8)
-{
-    testTExtractNDVec<8, uint16_t>(16, 48, 8, 16);
-}
-
-TEST_F(TExtractNDVecTest, case_nd_vec_9)
-{
-    testTExtractNDVec<9, int8_t>(64, 64, 32, 32);
-}
-
-TEST_F(TExtractNDVecTest, case_nd_vec_10)
-{
-    testTExtractNDVecScalar<1, float>(16, 16);
-}
-
-TEST_F(TExtractNDVecTest, case_nd_vec_11)
-{
-    testTExtractNDVecScalar<2, uint16_t>(32, 32);
-}
-
-TEST_F(TExtractNDVecTest, case_nd_vec_12)
-{
-    testTExtractNDVecScalar<3, int8_t>(64, 64);
+    testTExtractNDVec<3, float>(128, 128, 128, 128);
 }

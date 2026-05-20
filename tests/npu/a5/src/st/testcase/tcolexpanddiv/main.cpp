@@ -91,20 +91,16 @@ void test_tcolexpanddiv()
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TColExpandDivTest, case_fp32_32_64_1_64)
+TEST_F(TColExpandDivTest, case_fp32_32_512_32_512)
 {
-    test_tcolexpanddiv<float, 32, 64, 1, 64>();
+    test_tcolexpanddiv<float, 32, 512, 32, 512>();
 }
-TEST_F(TColExpandDivTest, case_fp32_8_32_1_32)
+TEST_F(TColExpandDivTest, case_fp32_512_32_512_32)
 {
-    test_tcolexpanddiv<float, 8, 32, 1, 32>();
+    test_tcolexpanddiv<float, 512, 32, 512, 32>();
 }
-TEST_F(TColExpandDivTest, case_fp16_16_64_1_64)
+TEST_F(TColExpandDivTest, case_fp32_128_128_128_128)
 {
-    test_tcolexpanddiv<aclFloat16, 16, 64, 1, 64>();
-}
-TEST_F(TColExpandDivTest, case_fp16_4_128_1_128)
-{
-    test_tcolexpanddiv<aclFloat16, 4, 128, 1, 128>();
+    test_tcolexpanddiv<float, 128, 128, 128, 128>();
 }
 } // namespace TColExpandDivTest

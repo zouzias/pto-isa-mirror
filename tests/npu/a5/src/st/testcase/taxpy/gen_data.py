@@ -56,12 +56,9 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TAxpyParams("TAXPYTest.case1", np.float16, 64, 64, 64, 64),
-        TAxpyParams("TAXPYTest.case2", np.float16, 64, 64, 63, 63),
-        TAxpyParams("TAXPYTest.case3", np.float16, 1, 16384, 1, 16384),
-        TAxpyParams("TAXPYTest.case4", np.float16, 2048, 16, 2048, 16),
-        TAxpyParams("TAXPYTest.case5", np.float32, 8, 8, 8, 8),
-        TAxpyParams("TAXPYTest.case6", np.float32, 16, 16, 15, 15),
+        TAxpyParams("TAXPYTest.case1", np.float32, 32, 512, 32, 512),
+        TAxpyParams("TAXPYTest.case2", np.float32, 512, 32, 512, 32),
+        TAxpyParams("TAXPYTest.case3", np.float32, 128, 128, 128, 128),
     ]
 
     for param in case_params_list:

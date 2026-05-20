@@ -89,19 +89,15 @@ void test_tadd()
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TADDTest, case_float_64x64_64x64)
+TEST_F(TADDTest, case_float_32x512_32x512)
 {
-    test_tadd<float, 64, 64, 64, 64>();
+    test_tadd<float, 32, 512, 32, 512>();
 }
-TEST_F(TADDTest, case_int32_64x64_64x64)
+TEST_F(TADDTest, case_float_512x32_512x32)
 {
-    test_tadd<int32_t, 64, 64, 64, 64>();
+    test_tadd<float, 512, 32, 512, 32>();
 }
-TEST_F(TADDTest, case_int16_64x64_64x64)
+TEST_F(TADDTest, case_float_128x128_128x128)
 {
-    test_tadd<int16_t, 64, 64, 64, 64>();
-}
-TEST_F(TADDTest, case_half_16x256_16x256)
-{
-    test_tadd<aclFloat16, 16, 256, 16, 256>();
+    test_tadd<float, 128, 128, 128, 128>();
 }

@@ -58,14 +58,6 @@ void LaunchTExp(T *out, T *src, void *stream)
     }
 }
 
-template void LaunchTExp<float, 64, 64, 64, 64, 64, 64, true>(float *out, float *src, void *stream);
-template void LaunchTExp<float, 64, 64, 64, 64, 64, 64>(float *out, float *src, void *stream);
-template void LaunchTExp<aclFloat16, 64, 64, 64, 64, 64, 64, true>(aclFloat16 *out, aclFloat16 *src, void *stream);
-template void LaunchTExp<aclFloat16, 64, 64, 64, 64, 64, 64>(aclFloat16 *out, aclFloat16 *src, void *stream);
-template void LaunchTExp<float, 128, 128, 64, 64, 64, 64>(float *out, float *src, void *stream);
-template void LaunchTExp<float, 64, 64, 128, 128, 32, 32>(float *out, float *src, void *stream);
-template void LaunchTExp<aclFloat16, 128, 256, 64, 64, 64, 64>(aclFloat16 *out, aclFloat16 *src, void *stream);
-template void LaunchTExp<aclFloat16, 64, 64, 128, 256, 32, 32>(aclFloat16 *out, aclFloat16 *src, void *stream);
-template void LaunchTExp<float, 64, 64, 64, 64, 64, 64, false, true>(float *out, float *src, void *stream);
-template void LaunchTExp<aclFloat16, 64, 64, 64, 64, 64, 64, false, true>(aclFloat16 *out, aclFloat16 *src,
-                                                                          void *stream);
+template void LaunchTExp<float, 32, 512, 32, 512, 32, 512>(float *out, float *src, void *stream);
+template void LaunchTExp<float, 512, 32, 512, 32, 512, 32>(float *out, float *src, void *stream);
+template void LaunchTExp<float, 128, 128, 128, 128, 128, 128>(float *out, float *src, void *stream);

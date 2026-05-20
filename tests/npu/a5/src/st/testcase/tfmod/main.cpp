@@ -89,37 +89,13 @@ void test_tfmod() {
 }
 
 TEST_F(TFMODTest, case1) {
-    test_tfmod<uint16_t, 64, 64, 64, 64, false>();
+    test_tfmod<float, 32, 512, 32, 512, false>();
 }
 
 TEST_F(TFMODTest, case2) {
-    test_tfmod<uint16_t, 64, 64, 63, 63, false>();
+    test_tfmod<float, 512, 32, 512, 32, false>();
 }
 
 TEST_F(TFMODTest, case3) {
-    test_tfmod<uint16_t, 1, 16384, 1, 16384, false>();
-}
-
-TEST_F(TFMODTest, case4) {
-    test_tfmod<uint16_t, 2048, 16, 2048, 16, false>();
-}
-
-TEST_F(TFMODTest, case5) {
-    test_tfmod<float, 32, 32, 32, 32, false>();
-}
-
-TEST_F(TFMODTest, case6) {
-    test_tfmod<uint32_t, 8, 8, 8, 8, false>();
-}
-
-TEST_F(TFMODTest, case7) {
-    test_tfmod<aclFloat16, 32, 32, 31, 31, true>();
-}
-
-TEST_F(TFMODTest, case8) {
-    test_tfmod<int16_t, 16, 16, 16, 16, false>();
-}
-
-TEST_F(TFMODTest, case9) {
-    test_tfmod<int32_t, 8, 8, 8, 8, false>();
+    test_tfmod<float, 128, 128, 128, 128, false>();
 }

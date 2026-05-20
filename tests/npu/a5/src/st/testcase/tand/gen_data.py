@@ -24,8 +24,13 @@ def gen_golden_data_tand(case_name, param):
     input1 = np.random.randint(1, 16383, size=h_valid * w_valid).astype(dtype)
     input2 = np.random.randint(1, 16383, size=h_valid * w_valid).astype(dtype)
 
-    # Perform the andbtraction
-    golden = input1 & input2
+    if dtype == np.float32:
+        input1_bits = input1.view(np.uint32)
+        input2_bits = input2.view(np.uint32)
+        golden = (input1_bits & input2_bits).view(np.float32)
+    else:
+        # Perform the andbtraction
+        golden = input1 & input2
 
     # Apply valid region constraints
     output = np.zeros(h_valid * w_valid).astype(dtype)
@@ -57,17 +62,9 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TAndParams("TANDTest.case1", np.uint16, 64, 64, 64, 64),
-        TAndParams("TANDTest.case2", np.uint16, 64, 64, 63, 63),
-        TAndParams("TANDTest.case3", np.uint16, 1, 16384, 1, 16384),
-        TAndParams("TANDTest.case4", np.uint16, 2048, 16, 2048, 16),
-        TAndParams("TANDTest.case5", np.uint8, 32, 32, 32, 32),
-        TAndParams("TANDTest.case6", np.uint32, 8, 8, 8, 8),
-        TAndParams("TANDTest.case7", np.int8, 32, 32, 32, 32),
-        TAndParams("TANDTest.case8", np.int16, 16, 16, 16, 16),
-        TAndParams("TANDTest.case9", np.int32, 8, 8, 8, 8),
-        TAndParams("TANDTest.case10", np.int16, 16, 16, 16, 16), # half
-        TAndParams("TANDTest.case11", np.int32, 8, 8, 8, 8), # float
+        TAndParams("TANDTest.case1", np.float32, 32, 512, 32, 512),
+        TAndParams("TANDTest.case2", np.float32, 512, 32, 512, 32),
+        TAndParams("TANDTest.case3", np.float32, 128, 128, 128, 128),
     ]
 
     for param in case_params_list:

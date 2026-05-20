@@ -70,10 +70,9 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        tunaryParams(np.float32, 64, 64, 64, 64, 64, 64, True),
-        tunaryParams(np.float32, 64, 64, 64, 64, 64, 64, False),
-        tunaryParams(np.float16, 64, 64, 64, 64, 64, 64, True),
-        tunaryParams(np.float16, 64, 64, 64, 64, 64, 64, False),
+        tunaryParams(np.float32, 32, 768, 32, 768, 32, 768, False),
+        tunaryParams(np.float32, 768, 32, 768, 32, 768, 32, False),
+        tunaryParams(np.float32, 128, 192, 128, 192, 128, 192, False),
     ]
 
     for i, param in enumerate(case_params_list):

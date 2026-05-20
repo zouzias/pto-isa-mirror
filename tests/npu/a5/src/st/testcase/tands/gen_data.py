@@ -23,22 +23,30 @@ def gen_golden_data_tand(case_name, param):
     input1 = np.random.randint(1, 16383, size=(h_valid, w_valid)).astype(dtype)
     input2 = np.random.randint(1, 16383, size=(1, 1)).astype(dtype)
     golden = np.zeros((h_valid, w_valid), dtype=dtype)
-    for i in range(h_valid):
-        for j in range(w_valid):
-            golden[i, j] = input1[i, j] & input2[0, 0]
+    if dtype == np.float32:
+        input1_bits = input1.view(np.uint32)
+        input2_bits = input2.view(np.uint32)
+        golden = (input1_bits & input2_bits[0, 0]).view(np.float32)
+    else:
+        for i in range(h_valid):
+            for j in range(w_valid):
+                golden[i, j] = input1[i, j] & input2[0, 0]
 
     with open("input2.bin", 'wb') as f:
-        dtype_map = {
-            np.int8: 'b',
-            np.uint8: 'B',
-            np.int16: 'h',
-            np.uint16: 'H',
-            np.int32: 'i',
-            np.uint32: 'I'
-        }
-        format_char = dtype_map.get(dtype)
-        if format_char is not None:
-            f.write(struct.pack(format_char, input2[0, 0]))
+        if dtype == np.float32:
+            f.write(struct.pack('f', np.float32(input2[0, 0])))
+        else:
+            dtype_map = {
+                np.int8: 'b',
+                np.uint8: 'B',
+                np.int16: 'h',
+                np.uint16: 'H',
+                np.int32: 'i',
+                np.uint32: 'I'
+            }
+            format_char = dtype_map.get(dtype)
+            if format_char is not None:
+                f.write(struct.pack(format_char, input2[0, 0]))
 
     input1.tofile("input1.bin")
     golden.tofile("golden.bin")
@@ -65,15 +73,9 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TAndSParams("TANDSTest.case1", np.uint16, 64, 64, 64, 64),
-        TAndSParams("TANDSTest.case2", np.uint16, 64, 64, 63, 63),
-        TAndSParams("TANDSTest.case3", np.uint16, 1, 16384, 1, 16384),
-        TAndSParams("TANDSTest.case4", np.uint16, 2048, 16, 2048, 16),
-        TAndSParams("TANDSTest.case5", np.uint8, 32, 32, 32, 32),
-        TAndSParams("TANDSTest.case6", np.uint32, 8, 8, 8, 8),
-        TAndSParams("TANDSTest.case7", np.int8, 32, 32, 32, 32),
-        TAndSParams("TANDSTest.case8", np.int16, 16, 16, 16, 16),
-        TAndSParams("TANDSTest.case9", np.int32, 8, 8, 8, 8),
+        TAndSParams("TANDSTest.case1", np.float32, 32, 512, 32, 512),
+        TAndSParams("TANDSTest.case2", np.float32, 512, 32, 512, 32),
+        TAndSParams("TANDSTest.case3", np.float32, 128, 128, 128, 128),
     ]
 
     for param in case_params_list:

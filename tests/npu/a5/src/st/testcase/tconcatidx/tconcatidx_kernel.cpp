@@ -86,18 +86,12 @@ void LaunchTConcatHalf(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, idxT
         <<<1, nullptr, stream>>>((half *)(out), (half *)(src0), (half *)(src1), src0Idx, src1Idx);
 }
 
-template void LaunchTConcat<int16_t, int16_t, 16, 32, 16, 16, 16, 16, 8, 16, 16>(int16_t *out, int16_t *src0,
-                                                                                 int16_t *src1, int16_t *src0Idx,
-                                                                                 int16_t *src1Idx, void *stream);
-template void LaunchTConcat<int32_t, int16_t, 64, 128, 64, 64, 64, 64, 64, 64, 64>(int32_t *out, int32_t *src0,
-                                                                                   int32_t *src1, int16_t *src0Idx,
-                                                                                   int16_t *src1Idx, void *stream);
-template void LaunchTConcatHalf<int32_t, 16, 256, 16, 128, 16, 128, 16, 128, 128>(aclFloat16 *out, aclFloat16 *src0,
-                                                                                  aclFloat16 *src1, int32_t *src0Idx,
-                                                                                  int32_t *src1Idx, void *stream);
-template void LaunchTConcat<float, int16_t, 16, 64, 16, 32, 16, 32, 16, 32, 32>(float *out, float *src0, float *src1,
-                                                                                int16_t *src0Idx, int16_t *src1Idx,
-                                                                                void *stream);
-template void LaunchTConcat<int16_t, int16_t, 32, 256, 32, 128, 32, 128, 32, 128, 128>(int16_t *out, int16_t *src0,
-                                                                                       int16_t *src1, int16_t *src0Idx,
-                                                                                       int16_t *src1Idx, void *stream);
+template void LaunchTConcat<float, int32_t, 32, 512, 32, 256, 32, 256, 32, 256, 256>(float *out, float *src0,
+                                                                                     float *src1, int32_t *src0Idx,
+                                                                                     int32_t *src1Idx, void *stream);
+template void LaunchTConcat<float, int32_t, 256, 64, 256, 32, 256, 32, 256, 32, 32>(float *out, float *src0,
+                                                                                   float *src1, int32_t *src0Idx,
+                                                                                   int32_t *src1Idx, void *stream);
+template void LaunchTConcat<float, int32_t, 128, 128, 128, 64, 128, 64, 128, 64, 64>(float *out, float *src0,
+                                                                                    float *src1, int32_t *src0Idx,
+                                                                                    int32_t *src1Idx, void *stream);

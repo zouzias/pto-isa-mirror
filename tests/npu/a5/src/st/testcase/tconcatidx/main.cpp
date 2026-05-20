@@ -119,27 +119,17 @@ void test_tconcat()
     ASSERT_TRUE(ret);
 }
 
-TEST_F(TCONCATTest, case_int16_16x32_16x16_16x16_8x16_8x16)
+TEST_F(TCONCATTest, case_float_32x512_32x256_32x256_32x256_32x256)
 {
-    test_tconcat<int16_t, int16_t, 16, 32, 16, 16, 16, 16, 8, 16, 16>();
+    test_tconcat<float, int32_t, 32, 512, 32, 256, 32, 256, 32, 256, 256>();
 }
 
-TEST_F(TCONCATTest, case_int32_64x128_64x64_64x64_64x64_64x64)
+TEST_F(TCONCATTest, case_float_256x64_256x32_256x32_256x32_256x32)
 {
-    test_tconcat<int32_t, int16_t, 64, 128, 64, 64, 64, 64, 64, 64, 64>();
+    test_tconcat<float, int32_t, 256, 64, 256, 32, 256, 32, 256, 32, 32>();
 }
 
-TEST_F(TCONCATTest, case_half_16x256_16x128_16x128_16x128_16x128)
+TEST_F(TCONCATTest, case_float_128x128_128x64_128x64_128x64_128x64)
 {
-    test_tconcat<aclFloat16, int32_t, 16, 256, 16, 128, 16, 128, 16, 128, 128>();
-}
-
-TEST_F(TCONCATTest, case_float_16x64_16x32_16x32_16x32_16x32)
-{
-    test_tconcat<float, int16_t, 16, 64, 16, 32, 16, 32, 16, 32, 32>();
-}
-
-TEST_F(TCONCATTest, case_int16_32x256_32x128_32x128_32x128_32x128)
-{
-    test_tconcat<int16_t, int16_t, 32, 256, 32, 128, 32, 128, 32, 128, 128>();
+    test_tconcat<float, int32_t, 128, 128, 128, 64, 128, 64, 128, 64, 64>();
 }

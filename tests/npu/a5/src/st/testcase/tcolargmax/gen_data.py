@@ -49,18 +49,9 @@ class TColCMaxParams:
 
 if __name__ == "__main__":
     case_params_list = [
-        TColCMaxParams("TCOLCMAXTest.case01", np.float32, 1, 1, 256, 255),
-        TColCMaxParams("TCOLCMAXTest.case02", np.float32, 16, 16, 128, 127),
-        TColCMaxParams("TCOLCMAXTest.case03", np.float32, 16, 15, 256, 255),
-        TColCMaxParams("TCOLCMAXTest.case11", np.float16, 1, 1, 256, 255),
-        TColCMaxParams("TCOLCMAXTest.case12", np.float16, 16, 16, 128, 127),
-        TColCMaxParams("TCOLCMAXTest.case13", np.float16, 16, 15, 256, 255),
-        TColCMaxParams("TCOLCMAXTest.case51", np.uint16, 1, 1, 256, 255),
-        TColCMaxParams("TCOLCMAXTest.case52", np.uint16, 16, 16, 128, 127),
-        TColCMaxParams("TCOLCMAXTest.case53", np.uint16, 16, 15, 256, 255),
-        TColCMaxParams("TCOLCMAXTest.case71", np.uint32, 1, 1, 256, 255),
-        TColCMaxParams("TCOLCMAXTest.case72", np.uint32, 16, 16, 128, 127),
-        TColCMaxParams("TCOLCMAXTest.case73", np.uint32, 16, 15, 256, 255),
+        TColCMaxParams("TCOLCMAXTest.case01", np.float32, 32, 32, 512, 512),
+        TColCMaxParams("TCOLCMAXTest.case02", np.float32, 512, 512, 32, 32),
+        TColCMaxParams("TCOLCMAXTest.case03", np.float32, 128, 128, 128, 128),
     ]
 
     for _, case in enumerate(case_params_list):

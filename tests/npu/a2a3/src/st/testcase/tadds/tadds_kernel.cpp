@@ -54,15 +54,15 @@ PTO_INTERNAL void runTAddS(__gm__ T *out, __gm__ T *src, T scalar)
 
 extern "C" __global__ AICORE void launchTADDSCase1(__gm__ float *out, __gm__ float *src, float scalar)
 {
-    runTAddS<float, 32, 64, 32, 32, 64, 64>(out, src, scalar);
+    runTAddS<float, 32, 768, 32, 32, 768, 768>(out, src, scalar);
 }
-extern "C" __global__ AICORE void launchTADDSCase2(__gm__ aclFloat16 *out, __gm__ aclFloat16 *src, float scalar)
+extern "C" __global__ AICORE void launchTADDSCase2(__gm__ float *out, __gm__ float *src, float scalar)
 {
-    runTAddS<half, 63, 64, 63, 63, 64, 64>((__gm__ half *)out, (__gm__ half *)src, (half)scalar);
+    runTAddS<float, 768, 32, 768, 768, 32, 32>(out, src, scalar);
 }
-extern "C" __global__ AICORE void launchTADDSCase3(__gm__ int32_t *out, __gm__ int32_t *src, int32_t scalar)
+extern "C" __global__ AICORE void launchTADDSCase3(__gm__ float *out, __gm__ float *src, float scalar)
 {
-    runTAddS<int32_t, 31, 128, 31, 31, 128, 128>(out, src, scalar);
+    runTAddS<float, 128, 192, 128, 128, 192, 192>(out, src, scalar);
 }
 extern "C" __global__ AICORE void launchTADDSCase4(__gm__ int16_t *out, __gm__ int16_t *src, int16_t scalar)
 {

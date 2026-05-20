@@ -60,20 +60,9 @@ void LaunchTCmp(uint32_t *out, T *src0, T *src1, void *stream)
         runTCmp<T, kGRows_, kGCols_, kTRows_, kTCols_, cmpMode><<<1, nullptr, stream>>>(out, src0, src1);
 }
 
-template void LaunchTCmp<aclFloat16, 32, 32, 32, 32, CmpMode::EQ>(uint32_t *out, aclFloat16 *src0, aclFloat16 *src1,
-                                                                  void *stream);
-template void LaunchTCmp<float, 8, 64, 8, 64, CmpMode::GT>(uint32_t *out, float *src0, float *src1, void *stream);
-template void LaunchTCmp<int32_t, 4, 64, 4, 64, CmpMode::NE>(uint32_t *out, int32_t *src0, int32_t *src1, void *stream);
-// template void LaunchTCmp<int32_t, 128, 128, 64, 64, CmpMode::LT>(uint32_t *out, int32_t *src0, int32_t *src1, void
-// *stream); template void LaunchTCmp<int32_t, 64, 64, 32, 32, CmpMode::EQ>(uint32_t *out, int32_t *src0, int32_t *src1,
-// void *stream);
-template void LaunchTCmp<int32_t, 16, 32, 16, 32, CmpMode::EQ>(uint32_t *out, int32_t *src0, int32_t *src1,
+template void LaunchTCmp<float, 32, 512, 32, 512, CmpMode::EQ>(uint32_t *out, float *src0, float *src1,
                                                                void *stream);
-// template void LaunchTCmp<float, 128, 128, 64, 64, CmpMode::LE>(uint32_t *out, float *src0, float *src1, void
-// *stream); template void LaunchTCmp<int32_t, 77, 81, 32, 32, CmpMode::EQ>(uint32_t *out, int32_t *src0, int32_t *src1,
-// void *stream);
-template void LaunchTCmp<int32_t, 32, 32, 32, 32, CmpMode::EQ>(uint32_t *out, int32_t *src0, int32_t *src1,
+template void LaunchTCmp<float, 512, 32, 512, 32, CmpMode::GT>(uint32_t *out, float *src0, float *src1,
                                                                void *stream);
-// template void LaunchTCmp<int16_t, 32, 32, 16, 32, CmpMode::EQ>(uint32_t *out, int16_t *src0, int16_t *src1, void
-// *stream); template void LaunchTCmp<int16_t, 77, 81, 32, 32, CmpMode::LE>(uint32_t *out, int16_t *src0, int16_t *src1,
-// void *stream);
+template void LaunchTCmp<float, 128, 128, 128, 128, CmpMode::LT>(uint32_t *out, float *src0, float *src1,
+                                                                 void *stream);

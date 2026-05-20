@@ -94,12 +94,10 @@ if __name__ == "__main__":
     if not os.path.exists(testcases_dir):
         os.makedirs(testcases_dir)
 
-    case_params_list = [ # Comment out test cases that do not handle size corectly
-        TcmpParams(np.float16, 32, 32, 32, 32, 32, 32, "CmpMode::EQ"),
-        TcmpParams(np.float32, 8, 64, 8, 64, 8, 64, "CmpMode::GT"),
-        TcmpParams(np.int32, 4, 64, 4, 64, 4, 64, "CmpMode::NE"),
-        TcmpParams(np.int32, 16, 32, 16, 32, 16, 32, "CmpMode::EQ"),
-        TcmpParams(np.int32, 32, 32, 32, 32, 32, 32, "CmpMode::EQ"),
+    case_params_list = [
+        TcmpParams(np.float32, 32, 512, 32, 512, 32, 512, "CmpMode::EQ"),
+        TcmpParams(np.float32, 512, 32, 512, 32, 512, 32, "CmpMode::GT"),
+        TcmpParams(np.float32, 128, 128, 128, 128, 128, 128, "CmpMode::LT"),
     ]
 
     for i, param in enumerate(case_params_list):

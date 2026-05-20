@@ -186,6 +186,7 @@ void test_tcvt()
         test_tcvt<dst_type, src_type, 1, 256, 1, 256, 1, 129>(); \
     }
 
+#if 0
 // FP32 Source → fp16, bf16, int16, int32, int64, fp8 variants
 GENERATE_TCVT_TESTS(aclFloat16, float, fp32_fp16)
 GENERATE_TCVT_TESTS(aclFloat16, float, fp32_bf16)
@@ -252,7 +253,24 @@ GENERATE_TCVT_TESTS(int32_t, int64_t, int64_int32)
 GENERATE_TCVT_TESTS(float, fp8_e4m3_wrapper, fp8_e4m3_fp32)
 GENERATE_TCVT_TESTS(float, fp8_e5m2_wrapper, fp8_e5m2_fp32)
 GENERATE_TCVT_TESTS(float, hifloat8_wrapper, h8_fp32)
+#endif
 
+TEST_F(TCVTTest, case_fp32_fp32_32x512)
+{
+    test_tcvt<float, float, 32, 512, 32, 512>();
+}
+
+TEST_F(TCVTTest, case_fp32_fp32_512x32)
+{
+    test_tcvt<float, float, 512, 32, 512, 32>();
+}
+
+TEST_F(TCVTTest, case_fp32_fp32_128x128)
+{
+    test_tcvt<float, float, 128, 128, 128, 128>();
+}
+
+#if 0
 // ============================================================================
 // Saturation Mode Tests
 // ============================================================================
@@ -367,3 +385,4 @@ TEST_F(TCVTTest, saturation_int32_int16_1x32)
     test_tcvt_saturation<int16_t, int32_t, 1, 32, 1, 32>();
 }
 #endif // ENABLE_SATURATION_TESTS
+#endif

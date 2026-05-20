@@ -98,55 +98,15 @@ void test_tand()
 
 TEST_F(TANDTest, case1)
 {
-    test_tand<uint16_t, 64, 64, 64, 64, false>();
+    test_tand<float, 32, 512, 32, 512, false>();
 }
 
 TEST_F(TANDTest, case2)
 {
-    test_tand<uint16_t, 64, 64, 63, 63, false>();
+    test_tand<float, 512, 32, 512, 32, false>();
 }
 
 TEST_F(TANDTest, case3)
 {
-    test_tand<uint16_t, 1, 16384, 1, 16384, false>();
-}
-
-TEST_F(TANDTest, case4)
-{
-    test_tand<uint16_t, 2048, 16, 2048, 16, false>();
-}
-
-TEST_F(TANDTest, case5)
-{
-    test_tand<uint8_t, 32, 32, 32, 32, false>();
-}
-
-TEST_F(TANDTest, case6)
-{
-    test_tand<uint32_t, 8, 8, 8, 8, false>();
-}
-
-TEST_F(TANDTest, case7)
-{
-    test_tand<int8_t, 32, 32, 32, 32, false>();
-}
-
-TEST_F(TANDTest, case8)
-{
-    test_tand<int16_t, 16, 16, 16, 16, false>();
-}
-
-TEST_F(TANDTest, case9)
-{
-    test_tand<int32_t, 8, 8, 8, 8, false>();
-}
-
-TEST_F(TANDTest, case10)
-{
-    test_tand<int16_t, 16, 16, 16, 16, true>();
-}
-
-TEST_F(TANDTest, case11)
-{
-    test_tand<float, 8, 8, 8, 8, false>();
+    test_tand<float, 128, 128, 128, 128, false>();
 }

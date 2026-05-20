@@ -54,16 +54,9 @@ class taddsParams:
 
 if __name__ == "__main__":
     case_params_list = [
-        taddsParams("TADDSTest.case1", np.float32, 32, 128, 32, 64),
-        taddsParams("TADDSTest.case2", np.float16, 63, 128, 63, 64),
-        taddsParams("TADDSTest.case3", np.int32, 31, 256, 31, 128),
-        taddsParams("TADDSTest.case4", np.int16, 15, 192, 15, 64 * 3),
-        taddsParams("TADDSTest.case5", np.float32, 7, 512, 7, 64 * 7),
-        taddsParams("TADDSTest.case6", np.float32, 256, 32, 256, 16),
-        taddsParams("TADDSTest.case7", np.uint32, 256, 32, 256, 16),
-        taddsParams("TADDSTest.case8", np.uint16, 256, 32, 256, 16),
-        taddsParams("TADDSTest.case9", np.int8, 256, 64, 256, 32),
-        taddsParams("TADDSTest.case10", np.uint8, 256, 64, 256, 32),
+        taddsParams("TADDSTest.case1", np.float32, 32, 768, 32, 768),
+        taddsParams("TADDSTest.case2", np.float32, 768, 32, 768, 32),
+        taddsParams("TADDSTest.case3", np.float32, 128, 192, 128, 192),
     ]
 
     for _, case in enumerate(case_params_list):

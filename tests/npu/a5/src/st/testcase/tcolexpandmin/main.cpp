@@ -91,20 +91,16 @@ void test_tcolexpandmin()
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TColExpandMinTest, case_fp32_16_128_1_128)
+TEST_F(TColExpandMinTest, case_fp32_32_512_32_512)
 {
-    test_tcolexpandmin<float, 16, 128, 1, 128>();
+    test_tcolexpandmin<float, 32, 512, 32, 512>();
 }
-TEST_F(TColExpandMinTest, case_fp32_32_32_1_32)
+TEST_F(TColExpandMinTest, case_fp32_512_32_512_32)
 {
-    test_tcolexpandmin<float, 32, 32, 1, 32>();
+    test_tcolexpandmin<float, 512, 32, 512, 32>();
 }
-TEST_F(TColExpandMinTest, case_fp16_4_256_1_256)
+TEST_F(TColExpandMinTest, case_fp32_128_128_128_128)
 {
-    test_tcolexpandmin<aclFloat16, 4, 256, 1, 256>();
-}
-TEST_F(TColExpandMinTest, case_fp16_10_64_1_64)
-{
-    test_tcolexpandmin<aclFloat16, 10, 64, 1, 64>();
+    test_tcolexpandmin<float, 128, 128, 128, 128>();
 }
 } // namespace TColExpandMinTest

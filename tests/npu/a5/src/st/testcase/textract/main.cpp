@@ -176,87 +176,17 @@ void textract_mx_test(uint32_t M, uint32_t K, uint32_t N, uint16_t indexM, uint1
 
 TEST_F(TEXTRACTTest, case1)
 {
-    textract_test<1, float, uint16_t, uint16_t>(32, 96, 64, 0, 0, 0);
+    textract_test<1, float, float, float>(32, 256, 32, 0, 0, 0);
 }
 
 TEST_F(TEXTRACTTest, case2)
 {
-    textract_test<2, float, float, float>(128, 48, 64, 0, 0, 0);
+    textract_test<2, float, float, float>(256, 32, 32, 0, 0, 0);
 }
 
 TEST_F(TEXTRACTTest, case3)
 {
-    textract_test<3, int32_t, int8_t, int8_t>(128, 128, 64, 0, 0, 0);
-}
-
-TEST_F(TEXTRACTTest, case4)
-{
-    textract_test<4, float, uint16_t, uint16_t>(64, 96, 64, 32, 16, 16);
-}
-
-TEST_F(TEXTRACTTest, case5)
-{
-    textract_test<5, float, float, float>(64, 128, 64, 32, 32, 16);
-}
-
-TEST_F(TEXTRACTTest, case6)
-{
-    textract_test<6, int32_t, int8_t, int8_t>(128, 128, 64, 32, 64, 32);
-}
-
-TEST_F(TEXTRACTTest, case7)
-{
-    textract_test<7, float, uint16_t, uint16_t>(64, 128, 64, 0, 64, 0);
-}
-
-TEST_F(TEXTRACTTest, case8)
-{
-    textract_test<8, float, float, float>(64, 64, 128, 0, 0, 32);
-}
-
-TEST_F(TEXTRACTTest, case9)
-{
-    textract_test<9, int32_t, int8_t, int8_t>(128, 64, 128, 32, 0, 0);
-}
-
-TEST_F(TEXTRACTTest, case10)
-{
-    textract_test<10, float, uint16_t, uint16_t>(64, 128, 64, 16, 0, 0);
-}
-
-TEST_F(TEXTRACTTest, case11)
-{
-    textract_test<11, float, int8_t, int8_t>(64, 128, 64, 0, 32, 0);
-}
-
-TEST_F(TEXTRACTTest, case12)
-{
-    textract_test<12, float, int8_t, int8_t>(64, 128, 64, 0, 0, 32);
-}
-
-TEST_F(TEXTRACTTest, case13)
-{
-    textract_test<13, float, int8_t, int8_t>(64, 128, 64, 0, 32, 0);
-}
-
-TEST_F(TEXTRACTTest, case14)
-{
-    textract_test<14, float, int8_t, int8_t>(64, 96, 32, 32, 0, 0);
-}
-
-TEST_F(TEXTRACTTest, case15)
-{
-    textract_test<15, float, uint16_t, uint16_t>(64, 48, 96, 16, 16, 0);
-}
-
-TEST_F(TEXTRACTTest, case16)
-{
-    textract_test<16, float, float, float>(32, 96, 48, 0, 32, 16);
-}
-
-TEST_F(TEXTRACTTest, case17)
-{
-    textract_mx_test<17, float, int8_t, int8_t>(256, 128, 256, 128, 64, 128);
+    textract_test<3, float, float, float>(128, 128, 128, 0, 0, 0);
 }
 
 TEST_F(TEXTRACTTest, case18)

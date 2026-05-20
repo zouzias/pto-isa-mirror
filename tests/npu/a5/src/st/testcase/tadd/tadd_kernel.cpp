@@ -70,26 +70,9 @@ void LaunchTAddHalf(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *s
         <<<1, nullptr, stream>>>((half *)(out), (half *)(src0), (half *)(src1));
 }
 
-template void LaunchTAdd<float, 64, 64, 64, 64, 64, 64, 64, 64>(float *out, float *src0, float *src1, void *stream);
-template void LaunchTAdd<int32_t, 64, 64, 64, 64, 64, 64, 64, 64>(int32_t *out, int32_t *src0, int32_t *src1,
-                                                                  void *stream);
-template void LaunchTAdd<int16_t, 64, 64, 64, 64, 64, 64, 64, 64>(int16_t *out, int16_t *src0, int16_t *src1,
-                                                                  void *stream);
-template void LaunchTAddHalf<16, 256, 16, 256, 16, 256, 16, 256>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
-                                                                 void *stream);
-template void LaunchTAddHalf<16, 64, 16, 128, 16, 128, 16, 64>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
-                                                               void *stream);
-template void LaunchTAdd<float, 16, 32, 16, 64, 16, 32, 16, 32>(float *out, float *src0, float *src1, void *stream);
-template void LaunchTAdd<int16_t, 32, 128, 32, 128, 32, 256, 32, 128>(int16_t *out, int16_t *src0, int16_t *src1,
-                                                                      void *stream);
-template void LaunchTAdd<int32_t, 16, 32, 16, 64, 16, 32, 16, 32>(int32_t *out, int32_t *src0, int32_t *src1,
-                                                                  void *stream);
-template void LaunchTAddHalf<16, 64, 16, 128, 16, 128, 16, 63>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
-                                                               void *stream);
-template void LaunchTAdd<float, 16, 32, 16, 64, 16, 32, 16, 31>(float *out, float *src0, float *src1, void *stream);
-template void LaunchTAdd<int16_t, 32, 128, 32, 128, 32, 256, 32, 127>(int16_t *out, int16_t *src0, int16_t *src1,
-                                                                      void *stream);
-template void LaunchTAdd<int32_t, 16, 32, 16, 64, 16, 32, 16, 31>(int32_t *out, int32_t *src0, int32_t *src1,
-                                                                  void *stream);
-template void LaunchTAddHalf<2, 128, 2, 128, 2, 128, 1, 106>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
-                                                             void *stream);
+template void LaunchTAdd<float, 32, 512, 32, 512, 32, 512, 32, 512>(float *out, float *src0, float *src1,
+                                                                    void *stream);
+template void LaunchTAdd<float, 512, 32, 512, 32, 512, 32, 512, 32>(float *out, float *src0, float *src1,
+                                                                    void *stream);
+template void LaunchTAdd<float, 128, 128, 128, 128, 128, 128, 128, 128>(float *out, float *src0, float *src1,
+                                                                        void *stream);

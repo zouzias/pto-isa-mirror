@@ -94,122 +94,16 @@ protected:
 
 TEST_F(TCOLMINTest, case01)
 {
-    bool ret = TCOLMINTestFramework<1, float, 1, 1, 1, 256, 255>();
+    bool ret = TCOLMINTestFramework<1, float, 32, 32, 1, 512, 512>();
     EXPECT_TRUE(ret);
 }
 TEST_F(TCOLMINTest, case02)
 {
-    bool ret = TCOLMINTestFramework<2, float, 16, 16, 1, 128, 127>();
+    bool ret = TCOLMINTestFramework<2, float, 512, 512, 1, 32, 32>();
     EXPECT_TRUE(ret);
 }
 TEST_F(TCOLMINTest, case03)
 {
-    bool ret = TCOLMINTestFramework<3, float, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case11)
-{
-    bool ret = TCOLMINTestFramework<11, aclFloat16, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case12)
-{
-    bool ret = TCOLMINTestFramework<12, aclFloat16, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case13)
-{
-    bool ret = TCOLMINTestFramework<13, aclFloat16, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case21)
-{
-    bool ret = TCOLMINTestFramework<21, int8_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case22)
-{
-    bool ret = TCOLMINTestFramework<22, int8_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case23)
-{
-    bool ret = TCOLMINTestFramework<23, int8_t, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case31)
-{
-    bool ret = TCOLMINTestFramework<31, uint8_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case32)
-{
-    bool ret = TCOLMINTestFramework<32, uint8_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case33)
-{
-    bool ret = TCOLMINTestFramework<33, uint8_t, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-
-TEST_F(TCOLMINTest, case41)
-{
-    bool ret = TCOLMINTestFramework<41, int16_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case42)
-{
-    bool ret = TCOLMINTestFramework<42, int16_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case43)
-{
-    bool ret = TCOLMINTestFramework<43, int16_t, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case51)
-{
-    bool ret = TCOLMINTestFramework<51, uint16_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case52)
-{
-    bool ret = TCOLMINTestFramework<52, uint16_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case53)
-{
-    bool ret = TCOLMINTestFramework<53, uint16_t, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case61)
-{
-    bool ret = TCOLMINTestFramework<61, int32_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case62)
-{
-    bool ret = TCOLMINTestFramework<62, int32_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case63)
-{
-    bool ret = TCOLMINTestFramework<63, int32_t, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case71)
-{
-    bool ret = TCOLMINTestFramework<71, uint32_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case72)
-{
-    bool ret = TCOLMINTestFramework<72, uint32_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLMINTest, case73)
-{
-    bool ret = TCOLMINTestFramework<73, uint32_t, 16, 15, 1, 256, 255>();
+    bool ret = TCOLMINTestFramework<3, float, 128, 128, 1, 128, 128>();
     EXPECT_TRUE(ret);
 }

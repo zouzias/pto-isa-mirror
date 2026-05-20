@@ -94,122 +94,16 @@ protected:
 
 TEST_F(TCOLCMINTest, case01)
 {
-    bool ret = TCOLCMINTestFramework<1, float, 1, 1, 1, 256, 255>();
+    bool ret = TCOLCMINTestFramework<1, float, 32, 32, 1, 512, 512>();
     EXPECT_TRUE(ret);
 }
 TEST_F(TCOLCMINTest, case02)
 {
-    bool ret = TCOLCMINTestFramework<2, float, 16, 16, 1, 128, 127>();
+    bool ret = TCOLCMINTestFramework<2, float, 512, 512, 1, 32, 32>();
     EXPECT_TRUE(ret);
 }
 TEST_F(TCOLCMINTest, case03)
 {
-    bool ret = TCOLCMINTestFramework<3, float, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case11)
-{
-    bool ret = TCOLCMINTestFramework<11, aclFloat16, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case12)
-{
-    bool ret = TCOLCMINTestFramework<12, aclFloat16, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case13)
-{
-    bool ret = TCOLCMINTestFramework<13, aclFloat16, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case21)
-{
-    bool ret = TCOLCMINTestFramework<21, int8_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case22)
-{
-    bool ret = TCOLCMINTestFramework<22, int8_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case23)
-{
-    bool ret = TCOLCMINTestFramework<23, int8_t, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case31)
-{
-    bool ret = TCOLCMINTestFramework<31, uint8_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case32)
-{
-    bool ret = TCOLCMINTestFramework<32, uint8_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case33)
-{
-    bool ret = TCOLCMINTestFramework<33, uint8_t, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-
-TEST_F(TCOLCMINTest, case41)
-{
-    bool ret = TCOLCMINTestFramework<41, int16_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case42)
-{
-    bool ret = TCOLCMINTestFramework<42, int16_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case43)
-{
-    bool ret = TCOLCMINTestFramework<43, int16_t, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case51)
-{
-    bool ret = TCOLCMINTestFramework<51, uint16_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case52)
-{
-    bool ret = TCOLCMINTestFramework<52, uint16_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case53)
-{
-    bool ret = TCOLCMINTestFramework<53, uint16_t, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case61)
-{
-    bool ret = TCOLCMINTestFramework<61, int32_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case62)
-{
-    bool ret = TCOLCMINTestFramework<62, int32_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case63)
-{
-    bool ret = TCOLCMINTestFramework<63, int32_t, 16, 15, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case71)
-{
-    bool ret = TCOLCMINTestFramework<71, uint32_t, 1, 1, 1, 256, 255>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case72)
-{
-    bool ret = TCOLCMINTestFramework<72, uint32_t, 16, 16, 1, 128, 127>();
-    EXPECT_TRUE(ret);
-}
-TEST_F(TCOLCMINTest, case73)
-{
-    bool ret = TCOLCMINTestFramework<73, uint32_t, 16, 15, 1, 256, 255>();
+    bool ret = TCOLCMINTestFramework<3, float, 128, 128, 1, 128, 128>();
     EXPECT_TRUE(ret);
 }

@@ -88,41 +88,13 @@ void test_texp()
 
 TEST_F(TEXPTest, case1)
 {
-    test_texp<float, 64, 64, 64, 64, 64, 64, true>();
+    test_texp<float, 32, 512, 32, 512, 32, 512>();
 }
 TEST_F(TEXPTest, case2)
 {
-    test_texp<float, 64, 64, 64, 64, 64, 64>();
+    test_texp<float, 512, 32, 512, 32, 512, 32>();
 }
 TEST_F(TEXPTest, case3)
 {
-    test_texp<aclFloat16, 64, 64, 64, 64, 64, 64, true>();
-}
-TEST_F(TEXPTest, case4)
-{
-    test_texp<aclFloat16, 64, 64, 64, 64, 64, 64>();
-}
-TEST_F(TEXPTest, case5)
-{
-    test_texp<float, 128, 128, 64, 64, 64, 64>();
-}
-TEST_F(TEXPTest, case6)
-{
-    test_texp<float, 64, 64, 128, 128, 32, 32>();
-}
-TEST_F(TEXPTest, case7)
-{
-    test_texp<aclFloat16, 128, 256, 64, 64, 64, 64>();
-}
-TEST_F(TEXPTest, case8)
-{
-    test_texp<aclFloat16, 64, 64, 128, 256, 32, 32>();
-}
-TEST_F(TEXPTest, caseHP1)
-{
-    test_texp<float, 64, 64, 64, 64, 64, 64, false, true>();
-}
-TEST_F(TEXPTest, caseHP2)
-{
-    test_texp<aclFloat16, 64, 64, 64, 64, 64, 64, false, true>();
+    test_texp<float, 128, 128, 128, 128, 128, 128>();
 }

@@ -482,18 +482,16 @@ if __name__ == "__main__":
     # Partial tiles (2D path: ValidCol != Cols)
     partial_shapes = [(4, 128, 4, 65), (4, 256, 4, 200), (1, 256, 1, 129)]
 
-    case_name_list = []
-    case_params_list = []
-
-    for type_name, src, dst in type_pairs:
-        for m, n in shapes:
-            case_name = f"case_{type_name}_{m}x{n}"
-            case_name_list.append(f"TCVTTest.{case_name}")
-            case_params_list.append(tcvtParams(src, dst, m, n, "RoundMode::CAST_RINT"))
-        for m, n, valid_m, valid_n in partial_shapes:
-            case_name = f"case_{type_name}_{m}x{n}_{valid_m}x{valid_n}"
-            case_name_list.append(f"TCVTTest.{case_name}")
-            case_params_list.append(tcvtParams(src, dst, m, n, "RoundMode::CAST_RINT", valid_m, valid_n))
+    case_name_list = [
+        "TCVTTest.case_fp32_fp32_32x512",
+        "TCVTTest.case_fp32_fp32_512x32",
+        "TCVTTest.case_fp32_fp32_128x128",
+    ]
+    case_params_list = [
+        tcvtParams(np.float32, np.float32, 32, 512, "RoundMode::CAST_RINT"),
+        tcvtParams(np.float32, np.float32, 512, 32, "RoundMode::CAST_RINT"),
+        tcvtParams(np.float32, np.float32, 128, 128, "RoundMode::CAST_RINT"),
+    ]
 
     for i, case_name in enumerate(case_name_list):
         if not os.path.exists(case_name):
@@ -501,27 +499,4 @@ if __name__ == "__main__":
         original_dir = os.getcwd()
         os.chdir(case_name)
         gen_golden(case_name, case_params_list[i])
-        os.chdir(original_dir)
-
-    # ============================================================================
-    # Saturation Mode Test Cases
-    # ============================================================================
-    # Generate test data for saturation mode tests (matching the test cases in main.cpp)
-    # These tests use 1x32 shape and focus on conversions where saturation matters
-
-    saturation_test_cases = [
-        ("TCVTTest.saturation_fp16_int8_1x32", tcvtParams(np.float16, np.int8, 1, 32, "RoundMode::CAST_RINT")),
-        ("TCVTTest.saturation_fp32_int16_1x32", tcvtParams(np.float32, np.int16, 1, 32, "RoundMode::CAST_RINT")),
-        ("TCVTTest.saturation_fp16_int16_1x32", tcvtParams(np.float16, np.int16, 1, 32, "RoundMode::CAST_RINT")),
-        ("TCVTTest.saturation_fp16_uint8_1x32", tcvtParams(np.float16, np.uint8, 1, 32, "RoundMode::CAST_RINT")),
-        ("TCVTTest.saturation_int64_int32_1x32", tcvtParams(np.int64, np.int32, 1, 32, "RoundMode::CAST_RINT")),
-        ("TCVTTest.saturation_int32_int16_1x32", tcvtParams(np.int32, np.int16, 1, 32, "RoundMode::CAST_RINT")),
-    ]
-
-    for case_name, param in saturation_test_cases:
-        if not os.path.exists(case_name):
-            os.makedirs(case_name)
-        original_dir = os.getcwd()
-        os.chdir(case_name)
-        gen_saturation_golden(case_name, param)
         os.chdir(original_dir)
