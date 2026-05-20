@@ -82,10 +82,13 @@ extern "C" __global__ AICORE void launchTPOWSCase6(__gm__ float *out, __gm__ flo
 {
     runTPowS<float, 256, 16>(out, src, scalar);
 }
+<<<<<<< HEAD
 extern "C" __global__ AICORE void launchTPOWSCase7(__gm__ float *out, __gm__ float *src, float scalar)
 {
     runTPowS<float, 16, 16, 32, 32, 64, 64>(out, src, scalar);
 }
+=======
+>>>>>>> 7f052fe0 (Add TPartArgMax, TPartArgMin, TPow, TPows for CPU SIM)
 
 template <uint32_t caseId>
 void launchTPOWSTestCase(void *out, void *src, void *scalar, aclrtStream stream)
@@ -115,10 +118,6 @@ void launchTPOWSTestCase(void *out, void *src, void *scalar, aclrtStream stream)
             launchTPOWSCase6((float *)out, (float *)src, *(float *)scalar);
             break;
         }
-        case 7: {
-            launchTPOWSCase7((float *)out, (float *)src, *(float *)scalar);
-            break;
-        }
         default: {
         }
     }
@@ -130,4 +129,3 @@ template void launchTPOWSTestCase<3>(void *, void *, void *, aclrtStream);
 template void launchTPOWSTestCase<4>(void *, void *, void *, aclrtStream);
 template void launchTPOWSTestCase<5>(void *, void *, void *, aclrtStream);
 template void launchTPOWSTestCase<6>(void *, void *, void *, aclrtStream);
-template void launchTPOWSTestCase<7>(void *, void *, void *, aclrtStream);

@@ -42,7 +42,7 @@ template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kV
 void test_tpow()
 {
     size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
-
+    size_t readSize = 0;
     aclInit(nullptr);
     aclrtSetDevice(0);
     aclrtStream stream;
@@ -59,8 +59,8 @@ void test_tpow()
     aclrtMalloc((void **)&src0Device, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&src1Device, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input1.bin", fileSize, src0Host, fileSize));
-    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input2.bin", fileSize, src1Host, fileSize));
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input1.bin", readSize, src0Host, fileSize));
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input2.bin", readSize, src1Host, fileSize));
 
     aclrtMemcpy(src0Device, fileSize, src0Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, fileSize, src1Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -84,8 +84,8 @@ void test_tpow()
 
     std::vector<T> golden(kGRows_ * kGCols_);
     std::vector<T> devFinal(kGRows_ * kGCols_);
-    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", fileSize, golden.data(), fileSize));
-    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/output.bin", fileSize, devFinal.data(), fileSize));
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", readSize, golden.data(), fileSize));
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/output.bin", readSize, devFinal.data(), fileSize));
 
     constexpr float eps = std::is_same_v<T, float> ? 0.0005f : 0.00005f;
     bool ret = ResultCmp<T>(golden, devFinal, eps);

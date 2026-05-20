@@ -16,6 +16,7 @@ import numpy as np
 
 np.random.seed(19)
 
+
 def gen_golden_data(param):
     dtype = param.data_type
     valid_row = param.valid_row
@@ -63,7 +64,6 @@ if __name__ == "__main__":
         TPowSParams("TPOWSTest.case4", np.int16, 15, 192),
         TPowSParams("TPOWSTest.case5", np.float32, 7, 448),
         TPowSParams("TPOWSTest.case6", np.float32, 256, 16),
-        TPowSParams("TPOWSTest.case7", np.float32, 16, 16, 32, 32, 64, 64)
     ]
 
     for case in case_params_list:

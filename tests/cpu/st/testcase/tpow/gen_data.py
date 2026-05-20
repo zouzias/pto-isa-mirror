@@ -16,7 +16,8 @@ from utils import NumExt
 
 np.random.seed(19)
 ENABLE_BF16 = os.environ.get("PTO_CPU_SIM_ENABLE_BF16") == "1"
-        
+
+
 def gen_golden_data_tpow(case_name, param):
     dtype = param.dtype
     row, col = [param.tile_row, param.tile_col]

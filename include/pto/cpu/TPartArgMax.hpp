@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TPartOp.hpp"
 
 namespace pto {
+<<<<<<< HEAD
 template <typename TileDataDstVal, typename TileDataDstIdx, typename TileDataSrc0Val, typename TileDataSrc0Idx,
           typename TileDataSrc1Val, typename TileDataSrc1Idx>
 struct PartArgMaxOp {
@@ -28,12 +29,52 @@ struct PartArgMaxOp {
         } else {
             dstVal[DstOffset] = src1Val[Src1Offset];
             dstIdx[DstOffset] = src1Idx[Src1Offset];
+=======
+template <typename TileData>
+struct ValidRegion {
+    int row;
+    int col;
+    
+    ValidRegion(const TileData& tile) 
+        : row(tile.GetValidRow()), col(tile.GetValidCol()) {}
+};
+
+template <typename DstVal, typename Src0Val, typename Src1Val>
+static inline void CheckAndGetValidRegions(
+    const DstVal& dstVal, const Src0Val& src0Val, const Src1Val& src1Val,
+    int& dstRow, int& dstCol, int& src0Row, int& src0Col, int& src1Row, int& src1Col)
+{
+    using T = typename Src0Val::DType;
+    TPartCheck<T, DstVal, Src0Val, Src1Val>(dstVal.GetValidRow(), dstVal.GetValidCol());
+    dstRow = dstVal.GetValidRow();
+    dstCol = dstVal.GetValidCol();
+    src0Row = src0Val.GetValidRow();
+    src0Col = src0Val.GetValidCol();
+    src1Row = src1Val.GetValidRow();
+    src1Col = src1Val.GetValidCol();
+}
+
+template <typename ValType, typename IdxType>
+struct MaxWithIndexOp {
+    static inline void apply(
+        ValType& dstVal, IdxType& dstIdx,
+        ValType src0Val, IdxType src0Idx,
+        ValType src1Val, IdxType src1Idx)
+    {
+        if (src0Val >= src1Val) {
+            dstVal = src0Val;
+            dstIdx = src0Idx;
+        } else {
+            dstVal = src1Val;
+            dstIdx = src1Idx;
+>>>>>>> 7f052fe0 (Add TPartArgMax, TPartArgMin, TPow, TPows for CPU SIM)
         }
     }
 };
 
 template <typename TileDataDstVal, typename TileDataDstIdx, typename TileDataSrc0Val, typename TileDataSrc0Idx,
           typename TileDataSrc1Val, typename TileDataSrc1Idx>
+<<<<<<< HEAD
 PTO_INTERNAL void TPARTARGMAX_IMPL(TileDataDstVal &dstVal, TileDataDstIdx &dstIdx, TileDataSrc0Val &src0Val, TileDataSrc0Idx &src0Idx, 
                                    TileDataSrc1Val &src1Val, TileDataSrc1Idx &src1Idx)
 {
@@ -52,3 +93,42 @@ PTO_INTERNAL void TPARTARGMAX_IMPL(TileDataDstVal &dstVal, TileDataDstIdx &dstId
 }
 } // namespace pto
 #endif
+=======
+struct PartArgMaxOp {
+    PTO_INTERNAL static void PartInstr(typename TileDataDstVal::TileDType dstVal,
+                                       typename TileDataDstIdx::TileDType dstIdx,
+                                       typename TileDataSrc0Val::TileDType src0Val,
+                                       typename TileDataSrc0Idx::TileDType src0Idx,
+                                       typename TileDataSrc1Val::TileDType src1Val,
+                                       typename TileDataSrc1Idx::TileDType src1Idx,
+                                       int DstOffset, int Src0Offset, int Src1Offset)
+    {
+        MaxWithIndexOp<
+            typename TileDataSrc0Val::DType,
+            typename TileDataSrc0Idx::DType
+        >::apply(
+            dstVal[DstOffset], dstIdx[DstOffset],
+            src0Val[Src0Offset], src0Idx[Src0Offset],
+            src1Val[Src1Offset], src1Idx[Src1Offset]
+        );
+    }
+};
+
+template <typename TileDataDstVal, typename TileDataDstIdx, typename TileDataSrc0Val, typename TileDataSrc0Idx,
+          typename TileDataSrc1Val, typename TileDataSrc1Idx>
+PTO_INTERNAL void TPARTARGMAX_IMPL(TileDataDstVal &dstVal, TileDataDstIdx &dstIdx, TileDataSrc0Val &src0Val,
+                                   TileDataSrc0Idx &src0Idx, TileDataSrc1Val &src1Val, TileDataSrc1Idx &src1Idx)
+{
+    int dstRow, dstCol, src0Row, src0Col, src1Row, src1Col;
+    CheckAndGetValidRegions(dstVal, src0Val, src1Val, dstRow, dstCol, src0Row, src0Col, src1Row, src1Col);
+    
+    TPartInstr2<PartArgMaxOp<TileDataDstVal, TileDataDstIdx, TileDataSrc0Val, TileDataSrc0Idx,
+                             TileDataSrc1Val, TileDataSrc1Idx>,
+                TileDataDstVal, TileDataDstIdx, TileDataSrc0Val, TileDataSrc0Idx, TileDataSrc1Val, TileDataSrc1Idx>(
+        dstVal.data(), dstIdx.data(), src0Val.data(), src0Idx.data(), src1Val.data(), src1Idx.data(),
+        dstRow, dstCol, src0Row, src0Col, src1Row, src1Col);
+}
+} // namespace pto
+
+#endif // TPARTARGMAX_HPP
+>>>>>>> 7f052fe0 (Add TPartArgMax, TPartArgMin, TPow, TPows for CPU SIM)

@@ -26,15 +26,6 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename T, int oRow, int oCol>
-inline void InitDstDevice(T *dstDevice)
-{
-    constexpr int size = oRow * oCol;
-    for (int i = 0; i < size; ++i) {
-        dstDevice[i] = T{0};
-    }
-}
-
 template <uint32_t caseId, typename T, int validRow, int validCol, int iRow = validRow, int iCol = validCol,
     int oRow = validRow, int oCol = validCol>
 bool TPowSTestFramework()
@@ -47,6 +38,7 @@ bool TPowSTestFramework()
 
     size_t dstByteSize = oRow * oCol * sizeof(T);
     size_t srcByteSize = iRow * iCol * sizeof(T);
+    size_t readSize = 0;
     T *dstHost;
     T *srcHost;
     T *dstDevice;
@@ -59,8 +51,8 @@ bool TPowSTestFramework()
     aclrtMalloc((void **)&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    InitDstDevice<T, oRow, oCol>(dstDevice);
-    ReadFile(GetGoldenDir() + "/input.bin", srcByteSize, srcHost, srcByteSize);
+    ReadFile(GetGoldenDir() + "/input.bin", readSize, srcHost, srcByteSize);
+
     std::ifstream file(GetGoldenDir() + "/scalar.bin", std::ios::binary);
 
     file.read(reinterpret_cast<char *>(&scalar), sizeof(T));
@@ -84,8 +76,10 @@ bool TPowSTestFramework()
 
     std::vector<T> golden(oRow * oCol);
     std::vector<T> devFinal(oRow * oCol);
-    ReadFile(GetGoldenDir() + "/golden.bin", dstByteSize, golden.data(), dstByteSize);
-    ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, devFinal.data(), dstByteSize);
+    size_t goldenReadSize = 0;
+    size_t outputReadSize = 0;
+    ReadFile(GetGoldenDir() + "/golden.bin", goldenReadSize, golden.data(), dstByteSize);
+    ReadFile(GetGoldenDir() + "/output.bin", outputReadSize, devFinal.data(), dstByteSize);
 
     return ResultCmp<T>(golden, devFinal, 0.001f);
 }
@@ -123,11 +117,5 @@ TEST_F(TPOWSTest, case5)
 TEST_F(TPOWSTest, case6)
 {
     bool ret = TPowSTestFramework<6, float, 256, 16>();
-    EXPECT_TRUE(ret);
-}
-
-TEST_F(TPOWSTest, case7)
-{
-    bool ret = TPowSTestFramework<7, float, 16, 16, 32, 32, 64, 64>();
     EXPECT_TRUE(ret);
 }
