@@ -14,16 +14,23 @@
 
 针对 **uint16 可排序 key** 的 **Radix-Select TopK**（2 字节）：
 
-1. **Phase1** — UB `TASSIGN`，按 tile 从 GM `TLOAD`，`THISTOGRAM<HistByte::BYTE_1>`（MSB）累加成 `chistMSB`（`TEXPANDS` 清零后每块 `TADD`）
-2. **Phase2** — 在 `chistMSB` 上找 MSB 胜出（`TCMPS` / `TCI` / `TSELS`），`TROWMIN`+`TGATHER` 得到 raw MSB 与 `WinnerBinU8` 路径；`remainK` 用 `TGATHER` 取 `C[w]` 与 `TSUB`（对 u32 减 1 用 `TEXPANDS`+`TSUB`，避免老 CANN 上 `TADDS` 对 u32 的限制）
-3. **Phase3** — `TCVT` 将 raw MSB 写入 `idxFilter`；再按 tile `TLOAD`，`THISTOGRAM<BYTE_0>`（LSB，带 MSB 过滤）累加成 `chistLSB`
-4. **Phase4** — LSB 侧在 `chistLSB` 与 `remainK` 上找胜出 bin，`TCVT` / `TSHLS` / `TOR` 得到 **16 位 packed 阈值**（与 key 同 bit 含义供比较路径使用）
-5. **Phase5** — 每 tile 上 **比较 `TGATHER`（GT/EQ）**：阈值为 **uint16 tile**（UB `kRemainUbOut`），**全局下标**由指令的 **offset 实参**（本 tile 在 GM 上的 `base`）与 tile 内相对下标一起决定；将各 tile 结果 **scalar 追加** 到 GT/EQ 段，再 **五参 `TCONCAT_IMPL`（`TConcatIdx`）**（计数字为 **字节数**）合并，`TSTORE` 输出
+1. **Phase1** — UB `TASSIGN`，按 tile 从 GM `TLOAD`，`THISTOGRAM<HistByte::BYTE_1>`（MSB）累加成 `chistMSB`
+2. **Phase2** — MSB 胜出（`TCMPS` / `TCI` / `TSELS`），`WinnerBinU8` 路径；`winner==0` 时强制 `C[-1]=0`；`TGATHER` + `TSUB` 得 `remainK`
+3. **Phase3** — `TCVT` 写 `idxFilter`；再按 tile `TLOAD`，`THISTOGRAM<BYTE_0>`（LSB，带 MSB 过滤）累加成 `chistLSB`
+4. **Phase4** — LSB 胜出（`TCMPS` `GT` vs `remainK` tile），`TOR` 得到 **16 位 packed 阈值**（`kRemainUbOut`）
+5. **Phase5** — 每 tile **比较 `TGATHER`（GT/EQ）**；每 tile **六参 `TCONCAT_IMPL`（`NeetCntDstIdx`）** 累加到 `gtSeg`/`eqSeg`（`idx*Out` → `TMOV` → `idx*Acc`）；最后五参合并 + `TSTORE`
+
+## 数据生成
+
+```bash
+python3 scripts/gen_data.py --seed <int>      # 随机 key
+python3 scripts/gen_data.py --const 0x1234  # 全同值（走 EQ 路径）
+```
 
 ## 目录与构建相关
 
-- `CMakeLists.txt` 使用 **`BEFORE` 本仓库 `include/`**，使 `pto-isa` 头文件优先于 `ASCEND_HOME_PATH` 中的旧版头（如 `TCONCAT` 五参、`THISTOGRAM` 的 `HistByte` 等），与 `topk_ub` 一致
-- 其余文件：`main.cpp`、`scripts/gen_data.py`、`run.sh` 等见上表
+- `CMakeLists.txt` 使用 **`BEFORE` 本仓库 `include/`**，使 `pto-isa` 头文件优先于 `ASCEND_HOME_PATH` 中的旧版头，与 `topk_ub` 一致
+- `scripts/radix_topk_golden_stats.py` — 打印理论 MSB/LSB winner 与 GT|EQ 数量
 
 ```
 kernels/manual/a5/topk/
@@ -47,12 +54,11 @@ kernels/manual/a5/topk/
 
 需已 `source` CANN 的 `set_env.sh`，**`bisheng` 在 `PATH` 中**，`ASCEND_HOME_PATH` 已设置。
 
-**仿真**（与本仓库其他 A5 manual 示例一致，如 **`Ascend910_9599`**，勿用 `Ascend310P*`）：
+**仿真**（**`Ascend950PR_9599`**，勿用 `Ascend310P*`）：
 
 ```bash
 cd kernels/manual/a5/topk
-chmod +x run.sh
-bash run.sh -r sim -v Ascend910_9599
+bash run.sh -r sim -v Ascend950PR_9599
 ```
 
 **真机**：
@@ -61,4 +67,18 @@ bash run.sh -r sim -v Ascend910_9599
 bash run.sh -r npu -v <你的 A5 板卡对应 SOC 字符串>
 ```
 
-若可执行文件报缺 `.so`，先 `source set_env.sh` 再跑，保证 `lib64` 等在 `LD_LIBRARY_PATH` 中。
+## 回归（2K）
+
+在 `kernels/manual/a5/topk` 下：
+
+```bash
+source $ASCEND_HOME_PATH/set_env.sh
+export LD_LIBRARY_PATH=$ASCEND_HOME_PATH/tools/simulator/Ascend950PR_9599/lib:$ASCEND_HOME_PATH/aarch64-linux/lib64:$LD_LIBRARY_PATH
+cd build && make -j16 && cd ..
+for s in 1241200609 2203936584 191132090; do
+  python3 scripts/gen_data.py --seed $s && cd build && ./topk | grep RESULT; cd ..
+done
+python3 scripts/gen_data.py --const 0x1234 && cd build && ./topk | grep RESULT
+```
+
+单次仿真约 **90–120 s**；应全部为 **`RESULT: PASS`**。

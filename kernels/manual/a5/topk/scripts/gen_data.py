@@ -29,10 +29,26 @@ def main():
         default=None,
         help="RNG seed (default: random each run)",
     )
+    parser.add_argument(
+        "--const",
+        type=lambda x: int(x, 0),
+        default=None,
+        metavar="VAL",
+        help="All keys equal to this uint16 (e.g. 0x1234). Stress-tests EQ-only TopK path.",
+    )
     args = parser.parse_args()
-    seed = args.seed if args.seed is not None else int.from_bytes(os.urandom(4), "little")
-    np.random.seed(seed)
-    keys = np.random.randint(0, 65536, size=N, dtype=np.uint16)
+
+    if args.const is not None:
+        if args.const < 0 or args.const > 0xFFFF:
+            raise SystemExit("--const must be in [0, 0xFFFF]")
+        keys = np.full(N, np.uint16(args.const), dtype=np.uint16)
+        print(f"const = 0x{args.const:04x}  (all {N} keys identical)")
+    else:
+        seed = args.seed if args.seed is not None else int.from_bytes(os.urandom(4), "little")
+        np.random.seed(seed)
+        keys = np.random.randint(0, 65536, size=N, dtype=np.uint16)
+        print(f"seed = {seed}  (re-run with: python3 scripts/gen_data.py --seed {seed})")
+
     # Reference multiset of the K largest keys (written ascending only for host-side multiset compare)
     topk_vals = np.sort(keys)[-TOPK:]
 
@@ -41,7 +57,6 @@ def main():
     keys.tofile(os.path.join("input", "keys.bin"))
     topk_vals.tofile(os.path.join("output", "golden_topk_multiset.bin"))
     print(f"Wrote input/keys.bin ({N} x uint16), output/golden_topk_multiset.bin ({TOPK} x uint16).")
-    print(f"seed = {seed}  (re-run with: python3 scripts/gen_data.py --seed {seed})")
 
 
 if __name__ == "__main__":

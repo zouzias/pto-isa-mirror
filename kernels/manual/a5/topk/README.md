@@ -13,17 +13,25 @@ The structure matches **`kernels/manual/a5/topk_ub`**: **five `Phase*`** functio
 ## Pipeline (see `draft.cpp` header)
 
 1. **Phase1** — `TASSIGN` UB, stream keys from GM in tiles, `THISTOGRAM<BYTE_1>`, cumulative `chistMSB` (`TEXPANDS` + per-tile `TADD`)
-2. **Phase2** — `TCMPS` / `TCI` / `TSELS`, raw MSB bin + `WinnerBinU8` path (`TSUB` by 1, not `TADDS` on u32), `TGATHER` + `TSUB` for `remainK`
+2. **Phase2** — `TCMPS` / `TCI` / `TSELS`, raw MSB bin + `WinnerBinU8` path; `winner==0` fixes `C[-1]=0` for `remain_k`; `TGATHER` + `TSUB` for `remainK`
 3. **Phase3** — `TCVT` MSB into `idxFilter`, stream keys again, `THISTOGRAM<BYTE_0>`, cumulative `chistLSB`
-4. **Phase4** — LSB winner (`TCMPS` `GT` vs `remainK`, `TROWMIN`, broadcast), `TOR` packed **uint16** threshold
-5. **Phase5** — Per-tile `TLOAD` + compare `TGATCHER` (threshold **tile** at `kRemainUbOut`, runtime **index offset** = tile base), scalar append to GT/EQ segments, five-tile `TCONCAT_IMPL` (`TConcatIdx` counts in **bytes**), `TSTORE`
+4. **Phase4** — LSB winner (`TCMPS` `GT` vs `remainK` tile), `TROWMIN`, `TOR` packed **uint16** threshold at `kRemainUbOut`
+5. **Phase5** — Per-tile `TLOAD` + compare `TGATHER` (GT/EQ); per-tile **six-arg `TCONCAT_IMPL`** (`NeetCntDstIdx`, byte counts from `TGATHER` concat tiles) accumulates into `gtSeg`/`eqSeg`; `TMOV` updates segment and `idx*Acc`; final five-arg merge + `TSTORE`
+
+## Data generation
+
+```bash
+python3 scripts/gen_data.py --seed <int>      # random keys
+python3 scripts/gen_data.py --const 0x1234  # all-equal keys (EQ-only stress)
+```
 
 ## Layout
 
 - `CMakeLists.txt` — builds `draft.cpp` into `libtopk_kernel.so` (`dav-c310-vec`); **`target_include_directories(... BEFORE ...)`** prefers this repo’s `include/pto` over `$ASCEND_HOME_PATH/include` (same idea as `topk_ub`)
 - `draft.cpp` — `RunRadixTopKDraft` / `LaunchRadixTopKDraft`
 - `main.cpp` — ACL host: read inputs, `LaunchRadixTopKDraft<512>`, multiset validation
-- `scripts/gen_data.py` — random keys + golden top-512 value multiset
+- `scripts/gen_data.py` — random or constant keys + golden top-512 value multiset
+- `scripts/radix_topk_golden_stats.py` — print theoretical MSB/LSB winner and GT|EQ counts
 - `run.sh` — `gen_data`, then configure, build, run `topk`
 
 ## Related in this repo
@@ -37,11 +45,11 @@ The structure matches **`kernels/manual/a5/topk_ub`**: **five `Phase*`** functio
 
 Source your CANN environment (`set_env.sh`), ensure **`bisheng`** is on `PATH`, then:
 
-**Simulator** (same SOC string as other `kernels/manual/a5/*` examples, e.g. `flash_atten` / `engram_simt` — **not** `Ascend310P*`):
+**Simulator** (same SOC string as other `kernels/manual/a5/*` examples, e.g. `topk_ub` / `flash_atten` — use **`Ascend950PR_9599`**, **not** `Ascend310P*`):
 
 ```bash
 cd kernels/manual/a5/topk
-bash run.sh -r sim -v Ascend910_9599
+bash run.sh -r sim -v Ascend950PR_9599
 ```
 
 **On-device**:
@@ -51,3 +59,19 @@ bash run.sh -r npu -v <SOC string for your A5 board>
 ```
 
 `run.sh` prepends `$ASCEND_HOME_PATH/tools/simulator/$SOC_VERSION/lib` to `LD_LIBRARY_PATH` for sim; if the host executable fails to load Ascend libraries, source `set_env.sh` first so `lib64` paths are set.
+
+## Regression (2K)
+
+After code changes, from `kernels/manual/a5/topk`:
+
+```bash
+source $ASCEND_HOME_PATH/set_env.sh
+export LD_LIBRARY_PATH=$ASCEND_HOME_PATH/tools/simulator/Ascend950PR_9599/lib:$ASCEND_HOME_PATH/aarch64-linux/lib64:$LD_LIBRARY_PATH
+cd build && make -j16 && cd ..
+for s in 1241200609 2203936584 191132090; do
+  python3 scripts/gen_data.py --seed $s && cd build && ./topk | grep RESULT; cd ..
+done
+python3 scripts/gen_data.py --const 0x1234 && cd build && ./topk | grep RESULT
+```
+
+Expect **`RESULT: PASS`** for all runs (~90–120 s per sim run on 2K).

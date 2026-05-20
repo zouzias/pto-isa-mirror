@@ -3,13 +3,13 @@
  *
  * All pto-isa ops (including TASSIGN / TLOAD) live only in five `Phase*` functions — no callees that emit
  * T-instructions. `RunRadixTopKDraft` only constructs tile objects and calls the phases. Tiled 2048 / 256:
- * Phase1/3 stream `TLOAD` + `THISTOGRAM`; Phase5 per-tile compare `TGATCHER` + scalar UB append to `gtSeg`/`eqSeg`.
+ * Phase1/3 stream `TLOAD` + `THISTOGRAM`; Phase5 per-tile `TGATHER` + per-tile six-arg `TCONCAT_IMPL` into `gtSeg`/`eqSeg`.
  *
  * 1) **Phase1** — TASSIGN, tile `TLOAD` + `THISTOGRAM<BYTE_1>`, cumulative `chistMSB`
  * 2) **Phase2** — `TCMPS`/`TCI`/`TSELS`, raw MSB + `WinnerBinU8` path, `TGATHER`+`TSUB` remainK
  * 3) **Phase3** — `TCVT` idx; tile `TLOAD` + `THISTOGRAM<BYTE_0>`, `chistLSB`
  * 4) **Phase4** — LSB winner + `TOR` packed threshold; `TASSIGN` `packedThrU` @ `kRemainUbOut`
- * 5) **Phase5** — per-tile `TLOAD` + `TGATHER` GT/EQ, scalar cat, `TCONCAT_IMPL` + `TSTORE`
+ * 5) **Phase5** — per-tile `TGATHER` + six-arg `TCONCAT_IMPL` (`NeetCntDstIdx`): `idx*Out` → `idx*Acc` per loop, final five-arg merge + `TSTORE`
  *
  * Current example: N = 2048, TopK = 512 (see `scripts/gen_data.py`).
  */
@@ -219,22 +219,38 @@ AICORE inline void Phase2_WinnerMsbAndRemainK(HistTile &chistMSB, WinnerBinTile 
         using U32x32 = Tile<TileType::Vec, uint32_t, 1, 32, BLayout::RowMajor, -1, -1>;
         U32x32 thrMsbT(1, 32);
         U32x32 cwT(1, 32);
+        U32x32 cwFixT(1, 32);
         TmpSelsTile gatherTmp(1, 32);
+        SelMaskRowTile cwSelMask(1, 32);
+        TmpSelsTile cwSelTmp(1, 32);
         TASSIGN(thrMsbT, kRemainUbTopk);
         TASSIGN(cwT, kRemainUbCw);
+        TASSIGN(cwFixT, kRemainUbN);
         TASSIGN(remainKTile, kRemainUbOut);
         TASSIGN(gatherTmp, kWinnerUbRowMinTmp);
+        TASSIGN(cwSelMask, kWinnerUbSelMask);
+        TASSIGN(cwSelTmp, kWinnerUbTselTmp);
         thrMsbT.SetValidRow(1);
         thrMsbT.SetValidCol(32);
         cwT.SetValidRow(1);
         cwT.SetValidCol(32);
+        cwFixT.SetValidRow(1);
+        cwFixT.SetValidCol(32);
         remainKTile.SetValidRow(1);
         remainKTile.SetValidCol(32);
         gatherTmp.SetValidCol(32);
+        cwSelMask.SetValidRow(1);
+        cwSelMask.SetValidCol(32);
+        cwSelTmp.SetValidCol(32);
         constexpr uint32_t kThrMsbU = static_cast<uint32_t>(kN - TopK);
         TEXPANDS(thrMsbT, kThrMsbU);
         TGATHER(cwT, chistMSB, msbWinnerBin, gatherTmp);
-        TSUB(remainKTile, thrMsbT, cwT);
+        TEXPANDS(remainKTile, 0u);
+        TCMPS(cwSelMask, msbWinnerSaved, static_cast<uint32_t>(0), CmpMode::EQ);
+        TSEL(cwFixT, cwSelMask, remainKTile, cwT, cwSelTmp);
+        TSUB(remainKTile, thrMsbT, cwFixT);
+        set_flag(PIPE_V, PIPE_S, EVENT_ID1);
+        wait_flag(PIPE_V, PIPE_S, EVENT_ID1);
     }
 }
 
@@ -373,162 +389,155 @@ AICORE inline void Phase5_TgatherGtEqTconcatAndStore(__gm__ uint16_t *src, __gm_
     constexpr int kLoop = (kN + kTileCols - 1) / kTileCols;
     constexpr int cmpVCol = (kTileCols + 7) / 8;
     constexpr int cmpCol = (cmpVCol + 31) / 32 * 32;
-    using DstCmpTile = Tile<TileType::Vec, uint32_t, 1, kTileCols, BLayout::RowMajor, -1, -1>;
+    using GatherSrcTile = GatherSrcI16<kTileCols>;
+    using GatherDstTile = Tile<TileType::Vec, uint32_t, 1, kTileCols, BLayout::RowMajor, -1, -1>;
     using TmpCmpTile = Tile<TileType::Vec, uint8_t, 1, cmpCol, BLayout::RowMajor, -1, -1>;
     using ConcatTile = GatherConcatCountTile;
-    constexpr uint64_t kChunkGtDst = 0x20800;
-    constexpr uint64_t kChunkEqDst = 0x20C00;
-    constexpr uint64_t kChunkConcatGt = 0x21000;
-    constexpr uint64_t kChunkConcatEq = 0x21040;
-    constexpr uint64_t kGatherUbSrc = 0x20000;
-    constexpr uint64_t kGatherUbTmp = 0x21880;
-
-    GatherChunkU32 gtChunk(1, kTileCols);
-    GatherChunkU32 eqChunk(1, kTileCols);
-    TASSIGN(gtChunk, kChunkGtDst);
-    TASSIGN(eqChunk, kChunkEqDst);
-    gtChunk.SetValidRow(1);
-    gtChunk.SetValidCol(kTileCols);
-    eqChunk.SetValidRow(1);
-    eqChunk.SetValidCol(kTileCols);
+    constexpr uint64_t kGatherTileSrcUbBytes = static_cast<uint64_t>(kTileCols) * sizeof(uint16_t);
+    constexpr uint64_t kGatherTileDstUbBytes = static_cast<uint64_t>(kTileCols) * sizeof(uint32_t);
+    constexpr uint64_t kGatherUbSrcGt = 0x20000;
+    constexpr uint64_t kGatherUbSrcEq = kGatherUbSrcGt + kGatherTileSrcUbBytes;
+    constexpr uint64_t kChunkGtDst = kGatherUbSrcEq + kGatherTileSrcUbBytes;
+    constexpr uint64_t kChunkEqDst = kChunkGtDst + kGatherTileDstUbBytes;
+    constexpr uint64_t kChunkConcatGt = kChunkEqDst + kGatherTileDstUbBytes;
+    constexpr uint64_t kChunkConcatEq = kChunkConcatGt + 64u;
+    constexpr uint64_t kGatherUbTmpGt = 0x21880;
+    constexpr uint64_t kGatherUbTmpEq = kGatherUbTmpGt + static_cast<uint64_t>(cmpCol);
 
     constexpr uint64_t kUbGtSeg = 0x28000;
     constexpr uint64_t kUbEqSeg = kUbGtSeg + static_cast<uint64_t>(TopK) * sizeof(uint32_t);
-    constexpr uint64_t kUbMerged = kUbEqSeg + static_cast<uint64_t>(TopK) * sizeof(uint32_t);
-    constexpr uint64_t kUbIdxConcat0 = kUbMerged + static_cast<uint64_t>(2 * TopK) * sizeof(uint32_t);
-    constexpr uint64_t kUbIdxConcat1 = kUbIdxConcat0 + 128u;
+    constexpr uint64_t kUbSegTmp = kUbEqSeg + static_cast<uint64_t>(TopK) * sizeof(uint32_t);
+    constexpr uint64_t kUbMerged = kUbSegTmp + static_cast<uint64_t>(TopK) * sizeof(uint32_t);
+    constexpr uint64_t kUbIdxGtAcc = kUbMerged + static_cast<uint64_t>(2 * TopK) * sizeof(uint32_t);
+    constexpr uint64_t kUbIdxGtOut = kUbIdxGtAcc + 64u;
+    constexpr uint64_t kUbIdxEqAcc = kUbIdxGtOut + 64u;
+    constexpr uint64_t kUbIdxEqOut = kUbIdxEqAcc + 64u;
 
     using SegIdxTile = Tile<TileType::Vec, uint32_t, 1, TopK, BLayout::RowMajor, -1, -1>;
     using MergedIdxTile = Tile<TileType::Vec, uint32_t, 1, 2 * TopK, BLayout::RowMajor, -1, -1>;
 
     SegIdxTile gtSeg(1, TopK);
     SegIdxTile eqSeg(1, TopK);
+    SegIdxTile segTmp(1, TopK);
     MergedIdxTile mergedIdx(1, 2 * TopK);
-    GatherConcatCountTile idxGtCnt(1, 1);
-    GatherConcatCountTile idxEqCnt(1, 1);
+    GatherConcatCountTile idxGtAcc(1, 1);
+    GatherConcatCountTile idxGtOut(1, 1);
+    GatherConcatCountTile idxEqAcc(1, 1);
+    GatherConcatCountTile idxEqOut(1, 1);
 
     TASSIGN(gtSeg, kUbGtSeg);
     TASSIGN(eqSeg, kUbEqSeg);
+    TASSIGN(segTmp, kUbSegTmp);
     TASSIGN(mergedIdx, kUbMerged);
-    TASSIGN(idxGtCnt, kUbIdxConcat0);
-    TASSIGN(idxEqCnt, kUbIdxConcat1);
+    TASSIGN(idxGtAcc, kUbIdxGtAcc);
+    TASSIGN(idxGtOut, kUbIdxGtOut);
+    TASSIGN(idxEqAcc, kUbIdxEqAcc);
+    TASSIGN(idxEqOut, kUbIdxEqOut);
 
     gtSeg.SetValidRow(1);
     gtSeg.SetValidCol(TopK);
     eqSeg.SetValidRow(1);
     eqSeg.SetValidCol(TopK);
+    segTmp.SetValidRow(1);
+    segTmp.SetValidCol(TopK);
     mergedIdx.SetValidRow(1);
     mergedIdx.SetValidCol(2 * TopK);
-    idxGtCnt.SetValidRow(1);
-    idxGtCnt.SetValidCol(1);
-    idxEqCnt.SetValidRow(1);
-    idxEqCnt.SetValidCol(1);
+    idxGtAcc.SetValidRow(1);
+    idxGtAcc.SetValidCol(1);
+    idxGtOut.SetValidRow(1);
+    idxGtOut.SetValidCol(1);
+    idxEqAcc.SetValidRow(1);
+    idxEqAcc.SetValidCol(1);
+    idxEqOut.SetValidRow(1);
+    idxEqOut.SetValidCol(1);
 
     TEXPANDS(gtSeg, 0u);
     TEXPANDS(eqSeg, 0u);
-    __ubuf__ uint32_t *gtPtr = reinterpret_cast<__ubuf__ uint32_t *>(gtSeg.data());
-    __ubuf__ uint32_t *eqPtr = reinterpret_cast<__ubuf__ uint32_t *>(eqSeg.data());
-    __ubuf__ uint32_t *gtLane = reinterpret_cast<__ubuf__ uint32_t *>(gtChunk.data());
-    __ubuf__ uint32_t *eqLane = reinterpret_cast<__ubuf__ uint32_t *>(eqChunk.data());
 
-    const uint32_t kTopKU = static_cast<uint32_t>(TopK);
-    uint32_t gtCount = 0;
-    for (int i = 0; i < kLoop; ++i) {
-        int base = i * kTileCols;
-        int valid = (base + kTileCols <= kN) ? kTileCols : (kN - base);
-        if (valid <= 0) {
-            break;
-        }
-        GatherSrcI16<kTileCols> srcG(1, valid);
-        DstCmpTile dstG(1, kTileCols);
-        ConcatTile concatG(1, 1);
-        TmpCmpTile tmpG(1, cmpVCol);
-        srcG.SetValidRow(1);
-        srcG.SetValidCol(valid);
-        dstG.SetValidRow(1);
-        dstG.SetValidCol(valid);
-        concatG.SetValidRow(1);
-        concatG.SetValidCol(1);
-        tmpG.SetValidRow(1);
-        tmpG.SetValidCol(cmpVCol);
-        TASSIGN(srcG, kGatherUbSrc);
-        TASSIGN(dstG, kChunkGtDst);
-        TASSIGN(concatG, kChunkConcatGt);
-        TASSIGN(tmpG, kGatherUbTmp);
-        using Sg = GlobalTensor<int16_t, pto::Shape<1, 1, 1, 1, kTileCols>,
+    __ubuf__ uint32_t *idxGtAccBytes = reinterpret_cast<__ubuf__ uint32_t *>(idxGtAcc.data());
+    __ubuf__ uint32_t *idxGtOutBytes = reinterpret_cast<__ubuf__ uint32_t *>(idxGtOut.data());
+    __ubuf__ uint32_t *idxEqAccBytes = reinterpret_cast<__ubuf__ uint32_t *>(idxEqAcc.data());
+    __ubuf__ uint32_t *idxEqOutBytes = reinterpret_cast<__ubuf__ uint32_t *>(idxEqOut.data());
+    idxGtAccBytes[0] = 0u;
+    idxEqAccBytes[0] = 0u;
+
+    GatherSrcTile srcG(1, kTileCols);
+    GatherDstTile dstG(1, kTileCols);
+    ConcatTile concatG(1, 1);
+    TmpCmpTile tmpG(1, cmpVCol);
+    GatherSrcTile srcE(1, kTileCols);
+    GatherDstTile dstE(1, kTileCols);
+    ConcatTile concatE(1, 1);
+    TmpCmpTile tmpE(1, cmpVCol);
+
+    TASSIGN(srcG, kGatherUbSrcGt);
+    TASSIGN(dstG, kChunkGtDst);
+    TASSIGN(concatG, kChunkConcatGt);
+    TASSIGN(tmpG, kGatherUbTmpGt);
+    TASSIGN(srcE, kGatherUbSrcEq);
+    TASSIGN(dstE, kChunkEqDst);
+    TASSIGN(concatE, kChunkConcatEq);
+    TASSIGN(tmpE, kGatherUbTmpEq);
+
+    srcG.SetValidRow(1);
+    srcG.SetValidCol(kTileCols);
+    dstG.SetValidRow(1);
+    dstG.SetValidCol(kTileCols);
+    concatG.SetValidRow(1);
+    concatG.SetValidCol(1);
+    tmpG.SetValidRow(1);
+    tmpG.SetValidCol(cmpVCol);
+    srcE.SetValidRow(1);
+    srcE.SetValidCol(kTileCols);
+    dstE.SetValidRow(1);
+    dstE.SetValidCol(kTileCols);
+    concatE.SetValidRow(1);
+    concatE.SetValidCol(1);
+    tmpE.SetValidRow(1);
+    tmpE.SetValidCol(cmpVCol);
+    segTmp.SetValidCol(TopK);
+
+    using TileGm = GlobalTensor<int16_t, pto::Shape<1, 1, 1, 1, kTileCols>,
                                 pto::Stride<kTileCols, kTileCols, kTileCols, kTileCols, 1>>;
-        Sg ggm(reinterpret_cast<__gm__ int16_t *>(src) + base);
+
+    for (int i = 0; i < kLoop; ++i) {
+        TileGm ggm(reinterpret_cast<__gm__ int16_t *>(src) + i * kTileCols);
+        if (i > 0) {
+            wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+        }
         TLOAD(srcG, ggm);
         set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-        TGATHER<DstCmpTile, GatherSrcI16<kTileCols>, PackedU16Tile, ConcatTile, TmpCmpTile, CmpMode::GT>(
-            dstG, srcG, packedThrU, concatG, tmpG, base);
-        set_flag(PIPE_V, PIPE_S, EVENT_ID1);
-        wait_flag(PIPE_V, PIPE_S, EVENT_ID1);
-        __ubuf__ uint32_t *cntG = reinterpret_cast<__ubuf__ uint32_t *>(concatG.data());
-        uint32_t cnt = cntG[0]/sizeof(uint32_t);
-        if (kTopKU != 0u && cnt != 0u) {
-            uint32_t room = (kTopKU > gtCount) ? (kTopKU - gtCount) : 0u;
-            uint32_t take = (cnt < room) ? cnt : room;
-            for (uint32_t j = 0; j < take; ++j) {
-                gtPtr[gtCount + j] = gtLane[j];
-            }
-            gtCount += take;
-        }
+        TGATHER<GatherDstTile, GatherSrcTile, PackedU16Tile, ConcatTile, TmpCmpTile, CmpMode::GT>(
+            dstG, srcG, packedThrU, concatG, tmpG, i * kTileCols);
+        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+        TCONCAT_IMPL(segTmp, gtSeg, dstG, idxGtOut, idxGtAcc, concatG);
+        TMOV(gtSeg, segTmp);
+        TMOV(idxGtAcc, idxGtOut);
     }
 
+    const uint32_t kTopKU = static_cast<uint32_t>(TopK);
+    const uint32_t gtCount = idxGtAccBytes[0] / sizeof(uint32_t);
     const uint32_t eqCap = (kTopKU > gtCount) ? (kTopKU - gtCount) : 0u;
-    uint32_t eqCount = 0;
-    for (int i2 = 0; i2 < kLoop; ++i2) {
-        int base2 = i2 * kTileCols;
-        int valid2 = (base2 + kTileCols <= kN) ? kTileCols : (kN - base2);
-        if (valid2 <= 0) {
-            break;
+    segTmp.SetValidCol(static_cast<int>(eqCap));
+
+    for (int i = 0; i < kLoop; ++i) {
+        TileGm egm(reinterpret_cast<__gm__ int16_t *>(src) + i * kTileCols);
+        if (i > 0) {
+            wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
         }
-        GatherSrcI16<kTileCols> srcE(1, valid2);
-        DstCmpTile dstE(1, kTileCols);
-        ConcatTile concatE(1, 1);
-        TmpCmpTile tmpE(1, cmpVCol);
-        srcE.SetValidRow(1);
-        srcE.SetValidCol(valid2);
-        dstE.SetValidRow(1);
-        dstE.SetValidCol(valid2);
-        concatE.SetValidRow(1);
-        concatE.SetValidCol(1);
-        tmpE.SetValidRow(1);
-        tmpE.SetValidCol(cmpVCol);
-        TASSIGN(srcE, kGatherUbSrc);
-        TASSIGN(dstE, kChunkEqDst);
-        TASSIGN(concatE, kChunkConcatEq);
-        TASSIGN(tmpE, kGatherUbTmp);
-        using Se = GlobalTensor<int16_t, pto::Shape<1, 1, 1, 1, kTileCols>,
-                                pto::Stride<kTileCols, kTileCols, kTileCols, kTileCols, 1>>;
-        Se egm(reinterpret_cast<__gm__ int16_t *>(src) + base2);
         TLOAD(srcE, egm);
         set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-        TGATHER<DstCmpTile, GatherSrcI16<kTileCols>, PackedU16Tile, ConcatTile, TmpCmpTile, CmpMode::EQ>(
-            dstE, srcE, packedThrU, concatE, tmpE, base2);
-        set_flag(PIPE_V, PIPE_S, EVENT_ID1);
-        wait_flag(PIPE_V, PIPE_S, EVENT_ID1);
-        __ubuf__ uint32_t *cntE2 = reinterpret_cast<__ubuf__ uint32_t *>(concatE.data());
-        uint32_t cntE1 = cntE2[0]/sizeof(uint32_t);
-        if (eqCap != 0u && cntE1 != 0u) {
-            uint32_t room2 = (eqCap > eqCount) ? (eqCap - eqCount) : 0u;
-            uint32_t take2 = (cntE1 < room2) ? cntE1 : room2;
-            for (uint32_t j2 = 0; j2 < take2; ++j2) {
-                eqPtr[eqCount + j2] = eqLane[j2];
-            }
-            eqCount += take2;
-        }
+        TGATHER<GatherDstTile, GatherSrcTile, PackedU16Tile, ConcatTile, TmpCmpTile, CmpMode::EQ>(
+            dstE, srcE, packedThrU, concatE, tmpE, i * kTileCols);
+        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+        TCONCAT_IMPL(segTmp, eqSeg, dstE, idxEqOut, idxEqAcc, concatE);
+        TMOV(eqSeg, segTmp);
+        TMOV(idxEqAcc, idxEqOut);
     }
 
-    __ubuf__ uint32_t *ig = reinterpret_cast<__ubuf__ uint32_t *>(idxGtCnt.data());
-    __ubuf__ uint32_t *ie = reinterpret_cast<__ubuf__ uint32_t *>(idxEqCnt.data());
-    ig[0] = gtCount * static_cast<uint32_t>(sizeof(uint32_t));
-    ie[0] = eqCount * static_cast<uint32_t>(sizeof(uint32_t));
-
-    TCONCAT_IMPL(mergedIdx, gtSeg, eqSeg, idxGtCnt, idxEqCnt);
+    TCONCAT_IMPL(mergedIdx, gtSeg, eqSeg, idxGtAcc, idxEqAcc);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID2);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID2);
 
