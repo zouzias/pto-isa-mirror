@@ -54,7 +54,9 @@ brew install cmake
 - Clang >= 15.0
 - MSVC 2022 (Windows)
 
-**Python** (>= 3.8):
+**Python** (>= 3.9.x):
+
+> Note: Python 3.7.x/3.8.x have reached EOL, and CANN will soon stop supporting these versions. Please upgrade to Python >= 3.9.x.
 
 ```bash
 sudo apt install python3 python3-pip

@@ -294,7 +294,8 @@ This document provides PTO development-related references, academic papers, onli
   - Optimization support
   - [gcc.gnu.org](https://gcc.gnu.org/)
 
-- **Python** (>= 3.8)
+- **Python** (>= 3.9.x)
+  - Note: Python 3.7.x/3.8.x have reached EOL, and CANN will soon stop supporting these versions. Please upgrade to Python >= 3.9.x.
   - Scripting and testing
   - Framework integration
   - [python.org](https://www.python.org/)

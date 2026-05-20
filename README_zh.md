@@ -58,7 +58,7 @@ PTO Tile Lib 主要面向以下开发者：
 
 ### 环境准备
 
-- **CPU 路径**：需要 Python、CMake 和支持 C++20 的编译器，适合跨平台快速验证。
+- **CPU 路径**：需要 Python >= 3.9.x、CMake 和支持 C++20 的编译器，适合跨平台快速验证。
 - **NPU 路径**：需要 Linux 环境与 Ascend CANN toolkit，适合在昇腾硬件或模拟器上运行。
 - 更详细的环境部署说明请参见：[快速开始指南](docs/getting-started_zh.md)
 

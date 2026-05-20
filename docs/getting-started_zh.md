@@ -199,9 +199,11 @@ Windows 特定选项（如需要）：
 
 **系统要求：**
 - Linux（推荐 Ubuntu 20.04+）
-- Python >= 3.8.0
+- Python >= 3.9.x
 - GCC >= 7.3.0
 - CMake >= 3.16.0
+
+> 备注：python宣布3.7.x/3.8.x已经EOL, CANN即将停止对该版本的支持，请升级到>=3.9.x的版本。
 
 **GoogleTest（单元测试所需）：**
 

@@ -58,7 +58,7 @@ PTO Tile Lib is mainly intended for the following developers:
 
 ### Environment Setup
 
-- **CPU path**: requires Python, CMake, and a C++20-capable compiler; suitable for quick cross-platform validation.
+- **CPU path**: requires Python >= 3.9.x, CMake, and a C++20-capable compiler; suitable for quick cross-platform validation.
 - **NPU path**: requires Linux and the Ascend CANN toolkit; suitable for running on Ascend hardware or simulator.
 - For detailed environment setup instructions, see the [Getting Started Guide](docs/getting-started.md)
 
