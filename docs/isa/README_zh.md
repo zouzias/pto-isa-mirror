@@ -11,6 +11,7 @@
 
 ## 同步
 - [TSYNC](TSYNC_zh.md) - 同步 PTO 执行（等待事件或插入每操作流水线屏障）。
+- [SYNCALL](SYNCALL_zh.md) - 跨核同步屏障（硬件 FFTS 或软件 GM 轮询）。
 
 ## 手动 / 资源绑定
 - [TASSIGN](TASSIGN_zh.md) - 将 Tile 对象绑定到实现定义的片上地址（手动放置）。
@@ -81,8 +82,8 @@
 - [TROWMIN](TROWMIN_zh.md) - 通过取列间最小值来归约每一行。
 - [TROWARGMAX](TROWARGMAX_zh.md) - 获取每行最大值对应列索引。
 - [TROWARGMIN](TROWARGMIN_zh.md) - 获取每行最小值对应列索引。
-- [TCOLARGMAX](TCOLARGMAX_zh.md) - 获取每列最大值对应行索引。
-- [TCOLARGMIN](TCOLARGMIN_zh.md) - 获取每列最小值对应行索引。
+- [TCOLARGMAX](TCOLARGMAX_zh.md) - 获取每列最大值对应行索引/获取每列最大值对应值和行索引。
+- [TCOLARGMIN](TCOLARGMIN_zh.md) - 获取每列最小值对应行索引/获取每列最大值对应值和行索引。
 - [TROWEXPAND](TROWEXPAND_zh.md) - 将每个源行的第一个元素广播到目标行中。
 - [TROWEXPANDDIV](TROWEXPANDDIV_zh.md) - 行广播除法：将 `src0` 的每一行除以一个每行标量向量 `src1`。
 - [TROWEXPANDMUL](TROWEXPANDMUL_zh.md) - 行广播乘法：将 `src0` 的每一行乘以一个每行标量向量 `src1`。
@@ -104,6 +105,7 @@
 ## 内存（GM <-> Tile）
 - [TLOAD](TLOAD_zh.md) - 从 GlobalTensor (GM) 加载数据到 Tile。
 - [TPREFETCH](TPREFETCH_zh.md) - 将数据从全局内存预取到 Tile 本地缓存/缓冲区（提示）。
+- [TPREFETCH_ASYNC](TPREFETCH_ASYNC_zh.md) - 通过 SDMA CMO 将 GlobalTensor 区域从 GM 异步预取到 L2 Cache。
 - [TSTORE](TSTORE_zh.md) - 将 Tile 中的数据存储到 GlobalTensor (GM)，可选使用原子写入或量化参数。
 - [TSTORE_FP](TSTORE_FP_zh.md) - 使用缩放 (`fp`) Tile 作为向量量化参数，将累加器 Tile 存储到全局内存。
 - [MGATHER](MGATHER_zh.md) - 使用逐元素索引从全局内存收集加载元素到 Tile 中。
@@ -134,6 +136,7 @@
 - [TTRANS](TTRANS_zh.md) - 使用实现定义的临时 Tile 进行转置。
 - [TSUBVIEW](TSUBVIEW_zh.md) - 表达一个tile是另一个tile的subview。
 - [TGET_SCALE_ADDR](TGET_SCALE_ADDR_zh.md) - 将输出tile的片上内存值绑定为扩展后的输入tile内存的值。
+- [TCONCAT](TCONCAT_zh.md) - 将两个 Tile 沿列维度水平拼接。
 
 ## 复杂指令
 - [TPRINT](TPRINT_zh.md) - 调试/打印 Tile 中的元素（实现定义）。
@@ -152,6 +155,12 @@
 - [TGATHERB](TGATHERB_zh.md) - 使用字节偏移量收集元素。
 - [TSCATTER](TSCATTER_zh.md) - 使用逐元素行索引将源 Tile 的行散播到目标 Tile 中。
 - [TQUANT](TQUANT_zh.md) - 量化 Tile（例如 FP32 到 FP8），生成指数/缩放/最大值输出。
+
+## 核间通信
+- [TALLOC](TALLOC_zh.md) - 将 TPipe FIFO 槽位分配为一个 GlobalTensor 视图。
+- [TPUSH](TPUSH_zh.md) - 将生产者 tile 推入 TPipe FIFO，用于 Cube-Vector 通信。
+- [TPOP](TPOP_zh.md) - 从 TPipe FIFO 弹出消费者 tile/globalTensor，用于 Cube-Vector 通信。
+- [TFREE](TFREE_zh.md) - 释放 TPipe 的 FIFO 空间；对于 TileData/GlobalTensor 的 TPOP 流程，该操作为空操作。
 
 ## 通信
 

@@ -19,6 +19,7 @@
 | 分类 | 指令 | 描述 |
 |---|---|---|
 | 同步 | [`TSYNC`](isa/TSYNC_zh.md) | 同步 PTO 执行（等待事件或插入每操作流水线屏障）。 |
+| 同步 | [`SYNCALL`](isa/SYNCALL_zh.md) | 跨核同步屏障（硬件 FFTS 或软件 GM 轮询）。 |
 | 手动 / 资源绑定 | [`TASSIGN`](isa/TASSIGN_zh.md) | 将 Tile 对象绑定到实现定义的片上地址（手动放置）。 |
 | 手动 / 资源绑定 | [`SETFMATRIX`](isa/SETFMATRIX_zh.md) | 为类 IMG2COL 操作设置 FMATRIX 寄存器。 |
 | 手动 / 资源绑定 | [`SET_IMG2COL_RPT`](isa/SET_IMG2COL_RPT_zh.md) | 从 IMG2COL 配置 Tile 设置 IMG2COL 重复次数元数据。 |
@@ -81,8 +82,8 @@
 | 轴归约 / 扩展 | [`TROWMIN`](isa/TROWMIN_zh.md) | 通过取列间最小值来归约每一行。 |
 | 轴归约 / 扩展 | [`TROWARGMAX`](isa/TROWARGMAX_zh.md) | 获取每行最大值对应列索引。 |
 | 轴归约 / 扩展 | [`TROWARGMIN`](isa/TROWARGMIN_zh.md) | 获取每行最小值对应列索引。 |
-| 轴归约 / 扩展 | [`TCOLARGMAX`](isa/TCOLARGMAX_zh.md) | 获取每列最大值对应行索引。 |
-| 轴归约 / 扩展 | [`TCOLARGMIN`](isa/TCOLARGMIN_zh.md) | 获取每列最小值对应行索引。 |
+| 轴归约 / 扩展 | [`TCOLARGMAX`](isa/TCOLARGMAX_zh.md) | 获取每列最大值对应行索引/获取每列最大值对应行值和索引。 |
+| 轴归约 / 扩展 | [`TCOLARGMIN`](isa/TCOLARGMIN_zh.md) | 获取每列最小值对应行索引/获取每列最小值对应行值和索引。 |
 | 轴归约 / 扩展 | [`TROWEXPAND`](isa/TROWEXPAND_zh.md) | 将每个源行的第一个元素广播到目标行中。 |
 | 轴归约 / 扩展 | [`TROWEXPANDDIV`](isa/TROWEXPANDDIV_zh.md) | 行广播除法：将 `src0` 的每一行除以一个每行标量向量 `src1`。 |
 | 轴归约 / 扩展 | [`TROWEXPANDMUL`](isa/TROWEXPANDMUL_zh.md) | 行广播乘法：将 `src0` 的每一行乘以一个每行标量向量 `src1`。 |
@@ -128,6 +129,7 @@
 | 数据搬运 / 布局 | [`TTRANS`](isa/TTRANS_zh.md) | 使用实现定义的临时 Tile 进行转置。 |
 | 数据搬运 / 布局 | [`TSUBVIEW`](isa/TSUBVIEW_zh.md) | 表达一个tile是另一个tile的subview |
 | 数据搬运 / 布局 | [`TGET_SCALE_ADDR`](isa/TGET_SCALE_ADDR_zh.md) | 将输出tile的片上内存值绑定为扩展后的输入tile内存的值。 |
+| 数据搬运 / 布局 | [`TCONCAT`](isa/TCONCAT_zh.md) | 将两个 Tile 沿列维度水平拼接。 |
 | 复杂指令 | [`TPRINT`](isa/TPRINT_zh.md) | 调试/打印 Tile 中的元素（实现定义）。 |
 | 复杂指令 | [`TMRGSORT`](isa/TMRGSORT_zh.md) | 用于多个已排序列表的归并排序（实现定义的元素格式和布局）。 |
 | 复杂指令 | [`TSORT32`](isa/TSORT32_zh.md) | 对 `src` 的每个 32 元素块连同对应的 `idx` 条目一起排序，并输出排序后的 value-index 对。 |

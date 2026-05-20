@@ -51,8 +51,7 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ uint64_t *ffts_addr, __gm__ O
     constexpr uint32_t VEC_N = (SplitAxis == TileSplitAxis::TILE_LEFT_RIGHT) ? (TILE_N / VEC_CORES) : TILE_N;
 
     constexpr uint16_t FLAG_ID = 0;
-    constexpr uint8_t FIFO_DEPTH = 2;
-    constexpr uint8_t FIFO_PERIOD = 1;
+    constexpr uint8_t FIFO_DEPTH = 1;
     // local fifo base used for TPOP of vector side(vecTileHalf)
     constexpr uint32_t localFiFoBase = 0x0;
 
@@ -100,15 +99,12 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ uint64_t *ffts_addr, __gm__ O
         TASSIGN(bTile, 0x0);
         TASSIGN(accTile, 0x0);
 
-        set_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
-        set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
-        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
-
+        set_flag(PIPE_FIX, PIPE_MTE2, EVENT_ID0);
         for (int m_tile = 0; m_tile < NUM_M_TILES; m_tile++) {
             GlobalA globalA(srcA + m_tile * CASE_TILE_M * TILE_K);
             GlobalB globalB(srcB);
 
-            wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+            wait_flag(PIPE_FIX, PIPE_MTE2, EVENT_ID0);
 
             TLOAD(aMatTile, globalA);
             TLOAD(bMatTile, globalB);
@@ -116,33 +112,22 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ uint64_t *ffts_addr, __gm__ O
             set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 
-            wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
-
             TMOV(aTile, aMatTile);
             TMOV(bTile, bMatTile);
-
-            set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
 
             set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
             wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
 
-            wait_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
-
             TMATMUL(accTile, aTile, bTile);
-
-            set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
 
             set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
             wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
 
             TPUSH<MatPipe, AccTile, SplitAxis>(mPipe, accTile);
 
-            set_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
+            set_flag(PIPE_FIX, PIPE_MTE2, EVENT_ID0);
         }
-
-        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
-        wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
-        wait_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
+        wait_flag(PIPE_FIX, PIPE_MTE2, EVENT_ID0);
 
         pipe_barrier(PIPE_ALL);
     }
@@ -156,11 +141,9 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ uint64_t *ffts_addr, __gm__ O
 
         uint32_t subBlockIdx = get_subblockid();
 
-        set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
-        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
-
+        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         for (int m_tile = 0; m_tile < NUM_M_TILES; m_tile++) {
-            wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
+            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 
             TPOP<MatPipe, VecTileHalf, SplitAxis>(mPipe, vecTileHalf);
 
@@ -179,11 +162,7 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ uint64_t *ffts_addr, __gm__ O
             set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-            wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
-
             TADD(outTile, vecTileHalf, biasTile);
-
-            set_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
 
             set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -197,11 +176,9 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ uint64_t *ffts_addr, __gm__ O
             GlobalOut globalOut(out + outOffset);
             TSTORE(globalOut, outTile);
 
-            set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         }
-
-        wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
-        wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 
         pipe_barrier(PIPE_ALL);
     }

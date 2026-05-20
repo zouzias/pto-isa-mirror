@@ -19,6 +19,7 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Category | Instruction | Description |
 |---|---|---|
 | Synchronization | [`TSYNC`](isa/TSYNC.md) | Synchronize PTO execution (wait on events or insert a per-op pipeline barrier). |
+| Synchronization | [`SYNCALL`](isa/SYNCALL.md) | Cross-core synchronization barrier (hardware FFTS or software GM polling). |
 | Manual / Resource Binding | [`TASSIGN`](isa/TASSIGN.md) | Bind a Tile object to an implementation-defined on-chip address (manual placement). |
 | Manual / Resource Binding | [`SETFMATRIX`](isa/SETFMATRIX.md) | Set FMATRIX register(s) for IMG2COL-like ops. |
 | Manual / Resource Binding | [`SET_IMG2COL_RPT`](isa/SET_IMG2COL_RPT.md) | Set IMG2COL repeat metadata from an IMG2COL configuration tile. |
@@ -81,8 +82,8 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Axis Reduce / Expand | [`TROWMIN`](isa/TROWMIN.md) | Reduce each row by taking the minimum across columns. |
 | Axis Reduce / Expand | [`TROWARGMAX`](isa/TROWARGMAX.md) | Get the column index of the maximum element for each row. |
 | Axis Reduce / Expand | [`TROWARGMIN`](isa/TROWARGMIN.md) | Get the column index of the minimum element for each row. |
-| Axis Reduce / Expand | [`TCOLARGMAX`](isa/TCOLARGMAX.md) | Get the row index of the maximum element for each column. |
-| Axis Reduce / Expand | [`TCOLARGMIN`](isa/TCOLARGMIN.md) | Get the row index of the minimum element for each column. |
+| Axis Reduce / Expand | [`TCOLARGMAX`](isa/TCOLARGMAX.md) | Get the row index of the maximum element for each column/Get the row value and index of the maximum element for each column|
+| Axis Reduce / Expand | [`TCOLARGMIN`](isa/TCOLARGMIN.md) | Get the row index of the minimum element for each column/Get the row value and index of the minimum element for each column|
 | Axis Reduce / Expand | [`TROWEXPAND`](isa/TROWEXPAND.md) | Broadcast the first element of each source row across the destination row. |
 | Axis Reduce / Expand | [`TROWEXPANDDIV`](isa/TROWEXPANDDIV.md) | Row-wise broadcast divide: divide each row of `src0` by a per-row scalar vector `src1`. |
 | Axis Reduce / Expand | [`TROWEXPANDMUL`](isa/TROWEXPANDMUL.md) | Row-wise broadcast multiply: multiply each row of `src0` by a per-row scalar vector `src1`. |
@@ -128,6 +129,7 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Data Movement / Layout | [`TTRANS`](isa/TTRANS.md) | Transpose with an implementation-defined temporary tile. |
 | Data Movement / Layout | [`TSUBVIEW`](isa/TSUBVIEW.md) | Reinterpret a tile as a subtile of another tile. |
 | Data Movement / Layout | [`TGET_SCALE_ADDR`](isa/TGET_SCALE_ADDR.md) | Bind the on-chip address of output tile to a scaled factor of that of input tile. |
+| Data Movement / Layout | [`TCONCAT`](isa/TCONCAT.md) | Concatenate two tiles horizontally along the column dimension. |
 | Complex | [`TPRINT`](isa/TPRINT.md) | Debug/print elements from a tile (implementation-defined). |
 | Complex | [`TMRGSORT`](isa/TMRGSORT.md) | Merge sort for multiple sorted lists (implementation-defined element format and layout). |
 | Complex | [`TSORT32`](isa/TSORT32.md) | Sort 32-element blocks of `src` with accompanying `idx` entries and output sorted value-index pairs. |

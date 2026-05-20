@@ -52,7 +52,7 @@ __tf__ PTO_INTERNAL void TRowProd(typename TileDataOut::TileDType __out__ dst,
             pipe_barrier(PIPE_V);
         }
 
-        pipe_barrier(PIPE_ALL);
+        PtoSetWaitFlag<PIPE_V, PIPE_S>();
         if constexpr (std::is_same_v<T, float>) {
             dstPtr[0] = tmpPtr[0] * tmpPtr[1] * tmpPtr[2] * tmpPtr[3] * tmpPtr[4] * tmpPtr[5] * tmpPtr[6] * tmpPtr[7];
         } else if constexpr (std::is_same_v<T, half>) {
@@ -69,6 +69,7 @@ __tf__ PTO_INTERNAL void TRowProd(typename TileDataOut::TileDType __out__ dst,
         } else {
             static_assert(sizeof(T) == 0, "T must be float, half, int32, or int16");
         }
+        PtoSetWaitFlag<PIPE_S, PIPE_V>();
     }
 
     set_mask_norm();

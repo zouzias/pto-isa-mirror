@@ -3028,11 +3028,19 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
                           std::is_same<typename TileDataS::DType, float>::value) {
                 implTCVT<TileDataD, TileDataS, RoundOType>(dst.data(), src.data(), satMode, dst.GetValidRow(),
                                                            dst.GetValidCol());
-            }
-            break;
+                break;
+            } // others will go to default case
         default:
-            implTCVT<TileDataD, TileDataS, RoundRType>(dst.data(), src.data(), satMode, dst.GetValidRow(),
-                                                       dst.GetValidCol());
+            // PyTorch-compatible default rounding (also matches a2a3 per-(src,dst) defaults):
+            //   float -> integer : truncate toward zero (RoundZType)
+            //   everything else  : round-to-nearest-even (RoundRType)
+            if constexpr (is_any_float<SrcType>::value && std::is_integral<DstType>::value) {
+                implTCVT<TileDataD, TileDataS, RoundZType>(dst.data(), src.data(), satMode, dst.GetValidRow(),
+                                                           dst.GetValidCol());
+            } else {
+                implTCVT<TileDataD, TileDataS, RoundRType>(dst.data(), src.data(), satMode, dst.GetValidRow(),
+                                                           dst.GetValidCol());
+            }
             break;
     }
 

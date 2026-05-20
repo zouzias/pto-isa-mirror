@@ -51,6 +51,7 @@ PTO_INST RecordEvent TPRELU(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &
 - The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
 - Temporary space is required by A3 for calculation, while not used by A5.
 - For A3, 2 source Tile, destination Tile, temporary space must in different memory range without overlapping.
+- For A3, temporary space's `ValidRow` must greater or equal to `dst.GetValidCol() + 1`.
 
 ## Examples
 
@@ -78,7 +79,7 @@ void example() {
 ### Manual Mode
 
 ```text
-# Manual mode: bind resources explicitly before issuing the instruction.
+# Manual mode: resources must be bound explicitly before issuing the instruction.
 # Optional for tile operands:
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)

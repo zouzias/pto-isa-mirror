@@ -67,7 +67,7 @@ PTO_INTERNAL void TColExpandBinOps_PostUpdate(__ubuf__ typename TileData::DType 
         constexpr auto distValue =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
         for (uint16_t i = 0; i < (uint16_t)(kValidRows); ++i) {
-            uint32_t cols = (uint32_t)(kValidRows);
+            uint32_t cols = (uint32_t)(kValidCols);
             src0Offset = src0Ptr + i * rowStride;
             dstOffset = dstPtr + i * rowStride;
             for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
@@ -101,8 +101,11 @@ PTO_INTERNAL void ColExpandBinaryInstr(__ubuf__ typename TileData::DType *dstPtr
 
 template <typename Op, typename TileData, typename TileDataSrc0, typename TileDataSrc1, unsigned elementsPerRepeat,
           unsigned blockSizeElem, unsigned rowStride>
-__tf__ AICORE void TColExpandOp(typename TileData::TileDType __out__ dst, typename TileDataSrc0::TileDType __in__ src0,
-                                typename TileDataSrc1::TileDType __in__ src1, unsigned validRow, unsigned validCol)
+__tf__ PTO_INTERNAL OP_NAME(TCOLEXPAND)
+    OP_TYPE(broadcast) void TColExpandOp(typename TileData::TileDType __out__ dst,
+                                         typename TileDataSrc0::TileDType __in__ src0,
+                                         typename TileDataSrc1::TileDType __in__ src1, unsigned validRow,
+                                         unsigned validCol, VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
 {
     using T = typename TileData::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);

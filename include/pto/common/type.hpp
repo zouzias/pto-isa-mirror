@@ -97,6 +97,15 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 // Signed 4-bit integer type (packed: 2 elements per byte using uint8_t storage).
 // Compatible with AscendC int4b_t. The vconv intrinsics use void* for the packed side.
+//
+// Defined inside `namespace pto` to avoid conflicting with AscendC's own
+// global `int4b_t` type alias (e.g. `using int4b_t = IntegerSubType<...>;`)
+// which is exposed by some AscendC internal headers in global scope.
+// Inside `namespace pto`, unqualified `int4b_t` resolves to `pto::int4b_t`.
+
+#include <type_traits>
+
+namespace pto {
 struct int4b_t {
     uint8_t storage;
     int4b_t() = default;
@@ -107,8 +116,7 @@ struct int4b_t {
         return (storage & 0x08) ? static_cast<int8_t>(storage | 0xF0) : static_cast<int8_t>(storage & 0x0F);
     }
 };
-
-#include <type_traits>
+} // namespace pto
 
 namespace pto {
 enum class TileType
@@ -193,6 +201,26 @@ enum class CmpMode : uint8_t
     GE = 5,
 };
 
+enum class QuantType
+{
+    MXFP8 = 0,
+    MXFP4_E2M1 = 1,
+    INT8_SYM = 2,
+    INT8_ASYM = 3,
+};
+
+enum class QuantScaleAlg
+{
+    OCP = 0,
+    NV = 1,
+};
+
+enum class VecStoreMode
+{
+    ND = 0,
+    NZ = 1,
+};
+
 // UF store phase encodes unit flag behavior for accumulator stores.
 enum class STPhase : uint8_t
 {
@@ -235,6 +263,29 @@ enum class TCopyMode : uint8_t
     SHALLOW_COPY = 0,
     DEEP_COPY = 1,
 };
+
+enum class SyncAllMode : uint8_t
+{
+    Hard = 0,
+    Soft = 1,
+};
+
+enum class SyncCoreType : uint8_t
+{
+    AIVOnly = 0,
+    AICOnly = 1,
+    Mix = 2,
+};
+
+constexpr uint16_t SYNC_AIC_FLAG = 11;
+constexpr uint16_t SYNC_AIV_FLAG = 12;
+constexpr uint16_t SYNC_AIC_AIV_FLAG = 13;
+constexpr uint16_t SYNC_AIV_ONLY_ALL = 14;
+constexpr uint16_t SYNC_FLAG_ID_MAX = 16;
+
+constexpr int32_t SYNCALL_SOFT_SLOT_INT32 = 8;
+constexpr int32_t SYNCALL_SOFT_BACKOFF_THRESHOLD = 16;
+constexpr int32_t SYNCALL_SOFT_MAX_POLL_ITERATIONS = 1000000;
 
 enum class AccToVecMode : uint8_t
 {
@@ -381,7 +432,19 @@ enum class FmodAlgorithm : uint8_t
     HIGH_PRECISION
 };
 
+enum class FmodSAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
 enum class RemAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class RemSAlgorithm : uint8_t
 {
     DEFAULT,
     HIGH_PRECISION
@@ -415,7 +478,6 @@ typedef float float32_t;
 #if defined(__has_include) && __has_include(<stdfloat>) && __cplusplus >= 202302L && defined(__STDCPP_BFLOAT16_T__)
 #include <stdfloat>
 typedef std::bfloat16_t bfloat16_t;
-#define CPU_SIM_BFLOAT_ENABLED
 #elif defined(PTO_CPU_SIM_ENABLE_BF16)
 #error "PTO_CPU_SIM_ENABLE_BF16 requires C++23 <stdfloat> with std::bfloat16_t support."
 #else

@@ -67,6 +67,7 @@ tdivs
 texp
 texpands
 textract
+textract_quant
 tfillpad
 tflashattn
 tfmod
@@ -132,6 +133,7 @@ tshrs
 tsort32
 tsqrt
 tstore
+tstore_quant
 tsub
 tsubc
 tsubs

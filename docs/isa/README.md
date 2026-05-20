@@ -11,6 +11,7 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 
 ## Synchronization
 - [TSYNC](TSYNC.md) - Synchronize PTO execution (wait on events or insert a per-op pipeline barrier).
+- [SYNCALL](SYNCALL.md) - Cross-core synchronization barrier (hardware FFTS or software GM polling).
 
 ## Manual / Resource Binding
 - [TASSIGN](TASSIGN.md) - Bind a Tile object to an implementation-defined on-chip address (manual placement).
@@ -81,8 +82,8 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TROWMIN](TROWMIN.md) - Reduce each row by taking the minimum across columns.
 - [TROWARGMAX](TROWARGMAX.md) - Get the column index of the maximum element for each row.
 - [TROWARGMIN](TROWARGMIN.md) - Get the column index of the minimum element for each row.
-- [TCOLARGMAX](TCOLARGMAX.md) - Get the row index of the maximum element for each column.
-- [TCOLARGMIN](TCOLARGMIN.md) - Get the row index of the minimum element for each column.
+- [TCOLARGMAX](TCOLARGMAX.md) - Get the row index /(value and row index) of the maximum element for each column.
+- [TCOLARGMIN](TCOLARGMIN.md) - Get the row index /(value and row index) of the minimum element for each column.
 - [TROWEXPAND](TROWEXPAND.md) - Broadcast the first element of each source row across the destination row.
 - [TROWEXPANDDIV](TROWEXPANDDIV.md) - Row-wise broadcast divide: divide each row of `src0` by a per-row scalar vector `src1`.
 - [TROWEXPANDMUL](TROWEXPANDMUL.md) - Row-wise broadcast multiply: multiply each row of `src0` by a per-row scalar vector `src1`.
@@ -104,6 +105,7 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 ## Memory (GM <-> Tile)
 - [TLOAD](TLOAD.md) - Load data from a GlobalTensor (GM) into a Tile.
 - [TPREFETCH](TPREFETCH.md) - Prefetch data from global memory into a tile-local cache/buffer (hint).
+- [TPREFETCH_ASYNC](TPREFETCH_ASYNC.md) - Asynchronously prefetch a GlobalTensor region from GM into L2 cache via SDMA CMO.
 - [TSTORE](TSTORE.md) - Store data from a Tile into a GlobalTensor (GM), optionally using atomic write or quantization parameters.
 - [TSTORE_FP](TSTORE_FP.md) - Store an accumulator tile into global memory using a scaling (`fp`) tile for vector quantization parameters.
 - [MGATHER](MGATHER.md) - Gather-load elements from global memory into a tile using per-element indices.
@@ -134,6 +136,7 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TTRANS](TTRANS.md) - Transpose with an implementation-defined temporary tile.
 - [TSUBVIEW](TSUBVIEW.md) - Reinterpret a tile as a subtile of another tile.
 - [TGET_SCALE_ADDR](TGET_SCALE_ADDR.md) - Bind the on-chip address of output tile to a scaled factor of that of input tile.
+- [TCONCAT](TCONCAT.md) - Concatenate two tiles horizontally along the column dimension.
 
 ## Complex
 - [TPRINT](TPRINT.md) - Debug/print elements from a tile (implementation-defined).
@@ -152,6 +155,12 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TGATHERB](TGATHERB.md) - Gather elements using byte offsets.
 - [TSCATTER](TSCATTER.md) - Scatter rows of a source tile into a destination tile using per-element row indices.
 - [TQUANT](TQUANT.md) - Quantize a tile (e.g. FP32 to FP8) producing exponent/scaling/max outputs.
+
+## Cross-core Communication
+- [TALLOC](TALLOC.md) - Allocate a TPipe FIFO slot as a GlobalTensor view.
+- [TPUSH](TPUSH.md) - Push a producer tile into a TPipe FIFO for Cube-Vector communication.
+- [TPOP](TPOP.md) - Pop a consumer tile from a TPipe FIFO for Cube-Vector communication.
+- [TFREE](TFREE.md) - Release FIFO space for a TPipe entry; no-op for TileData TPOP flow.
 
 ## Communication
 
