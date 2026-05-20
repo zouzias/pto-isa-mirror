@@ -44,9 +44,10 @@ public:
         uint64_t dblMantissa = dblBits & ((1ULL << MAN_DBL) - 1);
         int64_t outExponent = 0;
         uint64_t outMantissa = 0;
+        constexpr two = 2;
 
         // Out-of-bounds values
-        if (dblExponent - EXP_DBL_BIAS > (1ULL << EXP_SZ) - 2) {
+        if (dblExponent - EXP_DBL_BIAS > (1ULL << EXP_SZ) - two) {
             // MIN, MAX, INF
             if (((dblBits >> MAN_DBL) & ((1ULL << EXP_DBL) - 1)) == (1ULL << EXP_DBL) - 1) {
                 outExponent = (1ULL << EXP_SZ) - 1;
@@ -146,11 +147,21 @@ protected:
     uint8_t data;
 };
 
-using float4_e2m1x2_t = MXType<2, 1, 1, true>;
-using float4_e1m2x2_t = MXType<1, 2, 1, true>;
-using float8_e8m0_t = MXType<8, 0, 127, false>;
-using float8_e4m3_t = MXType<4, 3, 7, false>;
-using float8_e5m2_t = MXType<5, 2, 15, false>;
+constexpr int MX_ITWO = 2;
+constexpr int MX_MAN_SZ_E4M3 = 3;
+constexpr int MX_EXP_SZ_E4M3 = 4;
+constexpr int MX_EXP_SZ_E5M2 = 5;
+constexpr int MX_EXP_SZ_E4M3 = 4;
+constexpr int MX_EXP_BIAS_E4M3 = 7;
+constexpr int MX_EXP_SZ_E8M0 = 8;
+constexpr int MX_EXP_BIAS_E5M2 = 15;
+constexpr int MX_EXP_BIAS_E8M0 = 127;
+
+using float4_e2m1x2_t = MXType<MX_ITWO, 1, 1, true>;
+using float4_e1m2x2_t = MXType<1, MX_ITWO, 1, true>;
+using float8_e8m0_t = MXType<MX_EXP_SZ_E8M0, 0, MX_EXP_BIAS_E8M0, false>;
+using float8_e4m3_t = MXType<MX_EXP_SZ_E4M3, MX_MAN_SZ_E4M3, MX_EXP_BIAS_E4M3, false>;
+using float8_e5m2_t = MXType<MX_EXP_SZ_E5M2, MX_ITWO, MX_EXP_BIAS_E5M2, false>;
 
 template <typename T>
 constexpr bool isTwinType()
