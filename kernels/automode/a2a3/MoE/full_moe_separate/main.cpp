@@ -95,7 +95,7 @@ constexpr int kPadded = (kTopK < 8) ? 8 : kTopK;
 constexpr int kTileM_router = 128;
 constexpr int kTRouterAlloc = ((kT + kTileM_router - 1) / kTileM_router) * kTileM_router;
 
-// Cube blockAlign for fp16 = 16. W1, W2, Y-scratch, and A are zero-padded to
+// Cube blockAlign for fp16 = 16. W1, W2, the ABI Y-scratch, and A are zero-padded to
 // K/N-aligned dimensions so GEMM MatTile padding columns read zeros.
 // NOTE: when kH or kF are not multiples of 16, the scatter kernel still writes
 // A with stride kH (unaligned). For the full pipeline with non-aligned kH,
@@ -288,7 +288,7 @@ int main()
                           reinterpret_cast<int32_t *>(expertIdDev), stream);
     });
 
-    // --- Stage 4: expert FFN (cube + cube internally) -----------------------
+    // --- Stage 4: expert FFN (fused cube) ----------------------------------
     printf("[stage 4] expert_ffn\n");
     (void)PtoTiming::TimeKernelCallUs("full_moe_separate/expert_ffn", stream, [&]() {
         launchExpertFfnFp16(bDev, aDev, countDev, startDev, w1Dev, w2Dev,

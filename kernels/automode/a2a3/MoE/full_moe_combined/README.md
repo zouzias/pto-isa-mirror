@@ -10,7 +10,7 @@ launchFullMoeCombined(...)  // one host call from main.cpp
   → launchMoeTopkPadded<float> (vec)
   → launchOutValPad<float>     (vec)   // device-side compact -> padded bridge
   → launchScatterFp16          (vec)
-  → launchExpertFfnFp16        (cube + cube)
+  → launchExpertFfnFp16        (fused cube)
   → launchGather<float>        (vec)
 aclrtSynchronizeStream(stream)         // one final sync only
 ```

@@ -9,7 +9,7 @@
  *     -> launchMoeTopkPadded<float> (vec)
  *     -> launchOutValPad<float>     (vec)  // device-side pad bridge
  *     -> launchScatterFp16          (vec)
- *     -> launchExpertFfnFp16        (cube + cube)
+ *     -> launchExpertFfnFp16        (fused cube)
  *     -> launchGather<float>        (vec)
  *
  * Compared with full_moe_separate, this folder:
