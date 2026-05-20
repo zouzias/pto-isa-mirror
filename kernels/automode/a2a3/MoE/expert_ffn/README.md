@@ -11,11 +11,12 @@ For each expert `e` with `count[e] > 0`, applied to its packed slice `A[start[e]
 
 ```
 for each expert-local A_s tile:
-    B_s = 0
-    for each F_l1 panel:
-        Y_t = relu(A_s @ W1[e, :, f:f+F_l1]).astype(fp16)
-        B_s += Y_t @ W2[e, f:f+F_l1, :]
-    store B_s to GM
+    for each N_l1 output-column panel:
+        B_s[:, n:n+N_l1] = 0
+        for each F_l1 panel:
+            Y_t = relu(A_s @ W1[e, :, f:f+F_l1]).astype(fp16)
+            B_s[:, n:n+N_l1] += Y_t @ W2[e, f:f+F_l1, n:n+N_l1]
+        store that B_s panel to GM
 ```
 
 | Buffer | Shape | dtype | Notes |
@@ -42,14 +43,14 @@ TU; one `__global__ AICORE` function (`runExpertFfn`) launched by
 
 - Single AICORE; no `block_idx` work split.
 - Static tile maxima with dynamic valid rows for the per-expert tail.
-- `A_s` loads full rows of size `H`; `W1_t` loads full `H` rows and an
-  `F_l1` column panel; `W2_t` loads the matching `F_l1` rows and full `H`
-  columns.
+- `A_s` loads full logical rows but may panel the aligned `H` dimension as
+  `H_l1`; `W1_t` loads the matching `H_l1 x F_l1` panel; `W2_t` loads the
+  matching `F_l1 x N_l1` output-column panel.
 - ReLU + fp32→fp16 is fused into `TMOV<..., ReluPreMode::NormalRelu>` from the
   Stage-1 accumulator to the L1 `Y_t` Mat tile. No vector hop and no GM scratch
   hop.
 - The selected local working set is capped at `2^17` bytes:
-  `A_s + W1_t + W2_t + Y_t + fp32 B_s footprint`.
+  `A_s + W1_t + W2_t + Y_t + fp32 B_s panel footprint`.
 - No `TASSIGN` literal addresses, no `#ifndef __PTO_AUTO__` manual-sync, no
   `Tile::data()` in kernel, no `*_IMPL` calls, no raw CCE intrinsics, no
   `Event<>`, no `TPipe`/`TPUSH`/`TPOP`, no double buffering, no A5-only ops.
@@ -92,8 +93,7 @@ panel sizes must still divide the aligned dimensions.
 - `kTileM = 16` — below §11.9's proven `kTileM = 128`. Within the cube
   M-alignment rule, but un-tested at this exact size. The local-budget chooser
   may shrink from larger requested tile heights.
-- `kH = kF = 64`. Larger shapes are now tiled over `H_l0`, `F_l1`, and `F_l0`,
-  but still require divisibility by the selected aligned panel sizes.
+- Larger shapes are tiled over `N_l1`, `H_l1`, `H_l0`, `F_l1`, and `F_l0`.
 - Single AICORE; no block_idx parallelism (per-expert parallelism or per-tile parallelism is a separate milestone).
 - Only `ReluPreMode::NormalRelu` (no GELU/SiLU/LeakyReLU — the enum on this layer is `NoRelu` / `NormalRelu`).
 - fp16 inputs / weights, fp32 accumulator; no other dtype paths.
