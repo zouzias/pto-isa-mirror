@@ -14,11 +14,7 @@ struct DispatchFFNCombineLaunchArgs {
     void *out = nullptr;
     void *expert_token_nums = nullptr;
     void *workspace = nullptr;
-#if defined(__CCE_AICORE__)
-    uint8_t *tiling = nullptr;
-#else
     void *tiling = nullptr;
-#endif
     uint32_t block_dim = 1;
 };
 

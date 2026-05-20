@@ -23,9 +23,9 @@ if [ -z "${ASCEND_CANN_PATH}" ] || [ ! -f "${ASCEND_CANN_PATH}" ]; then
   echo "[ERROR] Cannot find CANN set_env.sh. Set ASCEND_CANN_PATH to <cann-install> or <cann-install>/set_env.sh"
   exit 1
 fi
-set +u
+set +eu
 source "${ASCEND_CANN_PATH}"
-set -u
+set -euo pipefail
 
 if [ -n "${MPI_ENV_BIN:-}" ] && [ -x "${MPI_ENV_BIN}/mpirun" ]; then
   export PATH="${MPI_ENV_BIN}:$PATH"
@@ -78,7 +78,7 @@ fi
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 OUT_DIR="${SCRIPT_DIR}/out"
-BUILD_DIR="${SCRIPT_DIR}/build"
+BUILD_DIR="${DISPATCH_FFN_COMBINE_V3_BUILD_DIR:-/tmp/dispatch_ffn_combine_v3_a5_run_build}"
 
 rm -rf /dev/shm/sem.hccl* 2>/dev/null || true
 ipcrm -a 2>/dev/null || true

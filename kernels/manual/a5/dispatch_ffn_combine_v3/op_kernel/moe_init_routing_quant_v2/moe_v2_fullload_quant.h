@@ -31,20 +31,19 @@ class MoeV2FullLoadQuant : public MoeV2FullLoadQuantBase {
 
  private:
   __aicore__ inline void Compute(int64_t xLocalLength);
-  __aicore__ inline void LoadXRows(const AscendC::LocalTensor<T>& xLocal, int64_t startXRow, int64_t rowCount,
-                                   int64_t inFactor);
-  __aicore__ inline void StoreExpandedXRow(int32_t outIndex, const AscendC::LocalTensor<int8_t>& outLocal,
-                                           int64_t localOffset);
+  __aicore__ inline void LoadXRows(uint64_t xUb, int64_t startXRow, int64_t rowCount, int64_t inFactor);
+  __aicore__ inline void StoreExpandedXRow(int32_t outIndex, uint64_t outUb, int64_t localOffset);
   __aicore__ inline void CopyOutX();
 
  private:
-  AscendC::TQue<QuePosition::VECOUT, 1> floatQueue;
-  AscendC::TQue<QuePosition::VECOUT, 1> halfQueue;
-  AscendC::TQue<QuePosition::VECOUT, 1> inputXCopyOutQueue;
+  uint64_t inputXUb;
+  uint64_t outputXUb;
+  uint64_t floatUb;
+  uint64_t halfUb;
 
-  AscendC::GlobalTensor<T> xGm;
-  AscendC::GlobalTensor<float> scaleGm;
-  AscendC::GlobalTensor<float> offsetGm;
+  __gm__ T *xGm;
+  __gm__ float *scaleGm;
+  __gm__ float *offsetGm;
 
   float scale;
   float offset;
@@ -52,80 +51,71 @@ class MoeV2FullLoadQuant : public MoeV2FullLoadQuantBase {
 
 template <typename T>
 __aicore__ inline void MoeV2FullLoadQuant<T>::Compute(int64_t xLocalLength) {
-  AscendC::LocalTensor<T> inLocal = xCopyInQueue.DeQue<T>();
-  AscendC::LocalTensor<int8_t> outLocal = inputXCopyOutQueue.AllocTensor<int8_t>();
-  AscendC::LocalTensor<float> floatLocal = floatQueue.AllocTensor<float>();
-  AscendC::LocalTensor<half> halfLocal = halfQueue.AllocTensor<half>();
-
   uint32_t elements = Align(this->cols, sizeof(int8_t)) * xLocalLength;
   if constexpr (IsSameType<T, bfloat16_t>::value) {
-    pto_detail::PtoCastVector(floatLocal, inLocal, elements, pto::RoundMode::CAST_NONE);
-    pto_detail::PtoCastVector(halfLocal, floatLocal, elements, pto::RoundMode::CAST_NONE);
-    pto_detail::PtoMulVector(halfLocal, halfLocal, elements, static_cast<half>(this->scale));
-    pto_detail::PtoAddScalarVector(halfLocal, halfLocal, elements, static_cast<half>(this->offset));
-    AscendC::LocalTensor<int32_t> intLocal = floatLocal.ReinterpretCast<int32_t>();
-    pto_detail::PtoCastVector(intLocal, halfLocal, elements, pto::RoundMode::CAST_RINT);
+    pto_detail::PtoCastVector<float, T>(this->floatUb, this->inputXUb, elements, pto::RoundMode::CAST_NONE);
+    pto_detail::PtoCastVector<half, float>(this->halfUb, this->floatUb, elements, pto::RoundMode::CAST_NONE);
+    pto_detail::PtoMulVector<half>(this->halfUb, this->halfUb, elements, static_cast<half>(this->scale));
+    pto_detail::PtoAddScalarVector<half>(this->halfUb, this->halfUb, elements, static_cast<half>(this->offset));
+    pto_detail::PtoCastVector<int32_t, half>(this->floatUb, this->halfUb, elements, pto::RoundMode::CAST_RINT);
     SetDeqScale((half)1.000000e+00f);
     pto_detail::PtoPipeBarrier<PIPE_V>();
-    pto_detail::PtoCastVector(halfLocal, intLocal, elements, pto::RoundMode::CAST_RINT);
-    pto_detail::PtoCastVector(outLocal, halfLocal, elements, pto::RoundMode::CAST_RINT);
+    pto_detail::PtoCastVector<half, int32_t>(this->halfUb, this->floatUb, elements, pto::RoundMode::CAST_RINT);
+    pto_detail::PtoCastVector<int8_t, half>(this->outputXUb, this->halfUb, elements, pto::RoundMode::CAST_RINT);
   } else if constexpr (IsSameType<T, float>::value) {
-    pto_detail::PtoCastVector(halfLocal, inLocal, elements, pto::RoundMode::CAST_NONE);
-    pto_detail::PtoMulVector(halfLocal, halfLocal, elements, static_cast<half>(this->scale));
-    pto_detail::PtoAddScalarVector(halfLocal, halfLocal, elements, static_cast<half>(this->offset));
-    pto_detail::PtoCastVector(outLocal, halfLocal, elements, pto::RoundMode::CAST_RINT);
+    pto_detail::PtoCastVector<half, T>(this->halfUb, this->inputXUb, elements, pto::RoundMode::CAST_NONE);
+    pto_detail::PtoMulVector<half>(this->halfUb, this->halfUb, elements, static_cast<half>(this->scale));
+    pto_detail::PtoAddScalarVector<half>(this->halfUb, this->halfUb, elements, static_cast<half>(this->offset));
+    pto_detail::PtoCastVector<int8_t, half>(this->outputXUb, this->halfUb, elements, pto::RoundMode::CAST_RINT);
   } else {
-    pto_detail::PtoMulVector(inLocal, inLocal, elements, static_cast<T>(this->scale));
-    pto_detail::PtoAddScalarVector(inLocal, inLocal, elements, static_cast<T>(this->offset));
-    pto_detail::PtoCastVector(outLocal, inLocal, elements, pto::RoundMode::CAST_RINT);
+    pto_detail::PtoMulVector<T>(this->inputXUb, this->inputXUb, elements, static_cast<T>(this->scale));
+    pto_detail::PtoAddScalarVector<T>(this->inputXUb, this->inputXUb, elements, static_cast<T>(this->offset));
+    pto_detail::PtoCastVector<int8_t, T>(this->outputXUb, this->inputXUb, elements, pto::RoundMode::CAST_RINT);
   }
-  inputXCopyOutQueue.EnQue(outLocal);
-  xCopyInQueue.FreeTensor(inLocal);
-  floatQueue.FreeTensor(floatLocal);
-  halfQueue.FreeTensor(halfLocal);
 }
 
 template <typename T>
-__aicore__ inline void MoeV2FullLoadQuant<T>::LoadXRows(const AscendC::LocalTensor<T>& xLocal,
+__aicore__ inline void MoeV2FullLoadQuant<T>::LoadXRows(uint64_t xUb,
                                                         int64_t startXRow,
                                                         int64_t rowCount,
                                                         int64_t inFactor) {
   for (int64_t row = 0; row < rowCount; ++row) {
-    pto_detail::PtoLoadVector(xLocal[row * inFactor], xGm[(startXRow + row) * this->cols], this->cols);
+    pto_detail::PtoLoadVector<T>(xUb + static_cast<uint64_t>(row * inFactor) * sizeof(T),
+                                 xGm + (startXRow + row) * this->cols,
+                                 this->cols);
   }
 }
 
 template <typename T>
 __aicore__ inline void MoeV2FullLoadQuant<T>::StoreExpandedXRow(int32_t outIndex,
-                                                                const AscendC::LocalTensor<int8_t>& outLocal,
+                                                                uint64_t outUb,
                                                                 int64_t localOffset) {
-  pto_detail::PtoStoreVector(expandedXGm[outIndex * this->cols], outLocal[localOffset], this->cols);
+  pto_detail::PtoStoreVector(expandedXGm + outIndex * this->cols,
+                             outUb + static_cast<uint64_t>(localOffset) * sizeof(int8_t),
+                             this->cols);
 }
 
 template <typename T>
 __aicore__ inline void MoeV2FullLoadQuant<T>::CopyOutX() {
-  AscendC::LocalTensor<T> xLocal = xCopyInQueue.AllocTensor<T>();
-  AscendC::LocalTensor<int32_t> expandedRowIdx = expandedRowIdxCopyOutQueue.DeQue<int32_t>();
   int64_t inFactor = Align(this->cols, sizeof(int8_t));
   int64_t curRowsStart = this->blockIdx * this->perCoreRows;
   int64_t startXRow = curRowsStart / this->k;
   int64_t endXRow = (curRowsStart + this->coreRows - 1) / this->k;
 
-  LoadXRows(xLocal, startXRow, endXRow - startXRow + 1, inFactor);
-  xCopyInQueue.EnQue(xLocal);
+  LoadXRows(this->inputXUb, startXRow, endXRow - startXRow + 1, inFactor);
+  pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
   Compute(endXRow - startXRow + 1);
-  AscendC::LocalTensor<int8_t> outLocal = inputXCopyOutQueue.DeQue<int8_t>();
+  pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
   int64_t k = 0;
   for (int64_t i = startXRow; i <= endXRow; i++) {
     for (; k < this->perCoreRows && curRowsStart / this->k == i; curRowsStart++, k++) {
-      int32_t outIndex = expandedRowIdx.GetValue(curRowsStart);
+      int32_t outIndex = pto_detail::PtoGetValue<int32_t>(this->expandedRowIdxUb, curRowsStart);
       if (outIndex < this->activateRows) {
-        StoreExpandedXRow(outIndex, outLocal, (i - startXRow) * inFactor);
+        StoreExpandedXRow(outIndex, this->outputXUb, (i - startXRow) * inFactor);
       }
     }
   }
-  expandedRowIdxCopyOutQueue.FreeTensor(expandedRowIdx);
-  inputXCopyOutQueue.FreeTensor(outLocal);
+  pto_detail::PtoSetWaitFlag<HardEvent::MTE3_V>(HardEvent::MTE3_V);
 }
 
 template <typename T>
@@ -134,19 +124,20 @@ __aicore__ inline void MoeV2FullLoadQuant<T>::Init(GM_ADDR x, GM_ADDR expertIdx,
                                                    GM_ADDR expertTokensCountOrCumsum, GM_ADDR workspace,
                                                    const MoeInitRoutingQuantV2TilingData* tilingData, AscendC::TPipe* tPipe) {
   this->InitBase(x, expertIdx, expandedX, expandedRowIdx, expertTokensCountOrCumsum, workspace, tilingData, tPipe);
-  xGm.SetGlobalBuffer((__gm__ T*)x);
-  scaleGm.SetGlobalBuffer((__gm__ float*)scale, 1);
-  offsetGm.SetGlobalBuffer((__gm__ float*)offset, 1);
-  this->scale = scaleGm.GetValue(0);
-  this->offset = offsetGm.GetValue(0);
+  xGm = (__gm__ T*)x;
+  scaleGm = (__gm__ float*)scale;
+  offsetGm = (__gm__ float*)offset;
+  this->scale = scaleGm[0];
+  this->offset = offsetGm[0];
 
   int64_t curRowsStart = this->blockIdx * this->perCoreRows;
   int64_t rowLength = (curRowsStart + this->coreRows - 1) / this->k - curRowsStart / this->k + 1;
   int64_t xAlignedCount = Align(this->cols, sizeof(int8_t));
-  pipe->InitBuffer(xCopyInQueue, bufferNum, xAlignedCount * sizeof(T) * rowLength);
-  pipe->InitBuffer(inputXCopyOutQueue, 1, xAlignedCount * sizeof(int8_t) * rowLength);
-  pipe->InitBuffer(floatQueue, 1, xAlignedCount * sizeof(float) * rowLength);
-  pipe->InitBuffer(halfQueue, 1, xAlignedCount * sizeof(half) * rowLength);
+  uint64_t baseUb = this->mergeTmpUb + GetSortLen<float>(this->sortNum) * sizeof(float);
+  this->inputXUb = baseUb;
+  this->outputXUb = this->inputXUb + AlignBytes(xAlignedCount * rowLength, sizeof(T));
+  this->floatUb = this->outputXUb + AlignBytes(xAlignedCount * rowLength, sizeof(int8_t));
+  this->halfUb = this->floatUb + AlignBytes(xAlignedCount * rowLength, sizeof(float));
 }
 
 template <typename T>

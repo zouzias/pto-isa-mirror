@@ -29,11 +29,10 @@ class MoeV2SortBase {
   __aicore__ inline void SyncAll();
 
  protected:
-  TPipe* pipe;
-  TQue<QuePosition::VECIN, 1> sortDataCopyInQueue;
-  TQue<QuePosition::VECOUT, 1> sortDataCopyOutQueue;
-  TBuf<TPosition::VECCALC> tempBuffer;
-  TBuf<TPosition::VECCALC> sortedBuffer;
+  uint64_t sortInputUb;
+  uint64_t sortOutputUb;
+  uint64_t sortTempUb;
+  uint64_t sortMergeTmpUb;
 
   __gm__ int32_t *expertIdxGm;
   __gm__ int32_t *sortedexpertIdxGm;
@@ -42,7 +41,6 @@ class MoeV2SortBase {
   __gm__ int32_t *expertTokensBeforeCapacityGm;
 
   int64_t tileLength;
-  int64_t bufferNum = 1;
   int64_t totalLength;
   int64_t coreNum;
   int64_t n;

@@ -6,7 +6,6 @@
 #include <cstring>
 #include <fstream>
 #include <limits>
-#include <cstdlib>
 #include <stdexcept>
 
 namespace {

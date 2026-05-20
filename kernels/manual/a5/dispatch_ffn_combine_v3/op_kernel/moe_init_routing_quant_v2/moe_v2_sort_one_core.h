@@ -41,41 +41,31 @@ class MoeV2SortOneCore : public MoeV2SortBase {
 };
 
 __aicore__ inline void MoeV2SortOneCore::CopyIn() {
-  AscendC::LocalTensor<int32_t> inLocal = sortDataCopyInQueue.AllocTensor<int32_t>();
-  pto_detail::PtoLoadVector(inLocal[0], expertIdxGm, this->totalLength);
-
-  AscendC::LocalTensor<int32_t> rowIdxLocal = inLocal[this->sortNum];
-  ArithProgression<int32_t>(rowIdxLocal, 0, 1, this->sortNum);
-  sortDataCopyInQueue.EnQue(inLocal);
+  pto_detail::PtoLoadVector<int32_t>(this->sortInputUb, expertIdxGm, this->totalLength);
+  pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
+  pto_detail::PtoFillArithProgressionInt32(this->sortInputUb + static_cast<uint64_t>(this->sortNum) * sizeof(int32_t), 0, 1, this->sortNum);
 }
 
 __aicore__ inline void MoeV2SortOneCore::SortCompute() {
-  AscendC::LocalTensor<int32_t> inLocal = sortDataCopyInQueue.DeQue<int32_t>();
-  AscendC::LocalTensor<int32_t> expertForSourceRowLocal = inLocal[0];
-  AscendC::LocalTensor<uint32_t> sourceRowLocal = inLocal[this->sortNum].ReinterpretCast<uint32_t>();
+  const uint64_t expertForSourceRowUb = this->sortInputUb;
+  const uint64_t sourceRowUb = this->sortInputUb + static_cast<uint64_t>(this->sortNum) * sizeof(int32_t);
+  const uint64_t sortedExpertUb = this->sortOutputUb;
+  const uint64_t sortedRowUb = this->sortOutputUb + static_cast<uint64_t>(this->sortNum) * sizeof(int32_t);
 
-  AscendC::LocalTensor<int32_t> outLocal = sortDataCopyOutQueue.AllocTensor<int32_t>();
-  AscendC::LocalTensor<int32_t> sortedExpertForSourceRowLocal = outLocal[0];
-  AscendC::LocalTensor<uint32_t> expandDstToSrcRowLocal = outLocal[this->sortNum].ReinterpretCast<uint32_t>();
-  AscendC::LocalTensor<float> packedSortLocal = tempBuffer.Get<float>(GetSortLen<float>(this->sortNum));
-  AscendC::LocalTensor<float> mergeTmpLocal = sortedBuffer.Get<float>(GetSortLen<float>(this->sortNum));
-
-  pto_detail::PtoSortInt32AscendingUB(expertForSourceRowLocal,
-                                      sourceRowLocal,
-                                      sortedExpertForSourceRowLocal,
-                                      expandDstToSrcRowLocal,
-                                      packedSortLocal,
-                                      mergeTmpLocal,
+  pto_detail::PtoSortInt32AscendingUB(expertForSourceRowUb,
+                                      sourceRowUb,
+                                      sortedExpertUb,
+                                      sortedRowUb,
+                                      this->sortTempUb,
+                                      this->sortMergeTmpUb,
                                       this->totalLength);
-  sortDataCopyOutQueue.EnQue<int32_t>(outLocal);
-  sortDataCopyInQueue.FreeTensor(inLocal);
 }
 
 __aicore__ inline void MoeV2SortOneCore::CopyOut() {
-  AscendC::LocalTensor<int32_t> outLocal = sortDataCopyOutQueue.DeQue<int32_t>();
-  pto_detail::PtoStoreVector(sortedexpertIdxGm, outLocal[0], this->totalLength);
-  pto_detail::PtoStoreVector(expandDstToSrcRowGm, outLocal[this->sortNum], this->totalLength);
-  sortDataCopyOutQueue.FreeTensor(outLocal);
+  pto_detail::PtoStoreVector<int32_t>(sortedexpertIdxGm, this->sortOutputUb, this->totalLength);
+  pto_detail::PtoStoreVector<int32_t>(expandDstToSrcRowGm,
+                                      this->sortOutputUb + static_cast<uint64_t>(this->sortNum) * sizeof(int32_t),
+                                      this->totalLength);
 }
 
 template <typename TilingData>
@@ -87,37 +77,33 @@ __aicore__ inline void MoeV2SortOneCore::Init(GM_ADDR expertIdx, GM_ADDR expertT
   this->sortNum = Ceil(this->tileLength, ONE_REPEAT_SORT_NUM) * ONE_REPEAT_SORT_NUM;
   this->totalLength = tilingData->n * tilingData->k;
   this->coreNum = tilingData->coreNum;
-  this->pipe = tPipe;
   this->n = tilingData->n;
   this->k = tilingData->k;
   this->expertNum = tilingData->expertNum;
   this->expertTokensCountOrCumsumFlag = tilingData->expertTokensCountOrCumsumFlag;
   this->expertTokensBeforeCapacityFlag = tilingData->expertTokensBeforeCapacityFlag;
 
-  expertIdxGm.SetGlobalBuffer((__gm__ int32_t*)expertIdx, this->tileLength);
-  sortedexpertIdxGm.SetGlobalBuffer(reinterpret_cast<__gm__ int32_t*>(workspace), this->tileLength);
-  expandDstToSrcRowGm.SetGlobalBuffer(reinterpret_cast<__gm__ int32_t*>(workspace) + this->tileLength,
-                                      this->tileLength);
+  expertIdxGm = (__gm__ int32_t*)expertIdx;
+  sortedexpertIdxGm = reinterpret_cast<__gm__ int32_t*>(workspace);
+  expandDstToSrcRowGm = reinterpret_cast<__gm__ int32_t*>(workspace) + this->tileLength;
 
   if (this->blockIdx == this->coreNum - 1) {
     if (this->expertTokensCountOrCumsumFlag > 0) {
-      expertTokensCountOrCumsumGm.SetGlobalBuffer((__gm__ int32_t*)expertTokensCountOrCumsum,
-                                                  Align(this->expertNum, sizeof(int32_t)));
+      expertTokensCountOrCumsumGm = (__gm__ int32_t*)expertTokensCountOrCumsum;
       InitGlobalMemory(expertTokensCountOrCumsumGm, this->expertNum, 0);
     }
     if (this->expertTokensBeforeCapacityFlag == 1) {
-      expertTokensBeforeCapacityGm.SetGlobalBuffer((__gm__ int32_t*)expertTokensBeforeCapacity,
-                                                   Align(this->expertNum, sizeof(int32_t)));
+      expertTokensBeforeCapacityGm = (__gm__ int32_t*)expertTokensBeforeCapacity;
       InitGlobalMemory(expertTokensBeforeCapacityGm, this->expertNum, 0);
     }
   }
-  // key and value
   int64_t kvFactor = 2;
-  int64_t buffSize = this->sortNum * sizeof(int32_t) * kvFactor;
-  pipe->InitBuffer(sortDataCopyInQueue, bufferNum, buffSize);
-  pipe->InitBuffer(sortDataCopyOutQueue, bufferNum, buffSize);
-  pipe->InitBuffer(tempBuffer, buffSize);
-  pipe->InitBuffer(sortedBuffer, buffSize);
+  int64_t sortBytes = this->sortNum * sizeof(int32_t) * kvFactor;
+  int64_t scratchBytes = GetSortLen<float>(this->sortNum) * sizeof(float);
+  this->sortInputUb = 0;
+  this->sortOutputUb = this->sortInputUb + sortBytes;
+  this->sortTempUb = this->sortOutputUb + sortBytes;
+  this->sortMergeTmpUb = this->sortTempUb + scratchBytes;
 }
 
 __aicore__ inline void MoeV2SortOneCore::Process() {

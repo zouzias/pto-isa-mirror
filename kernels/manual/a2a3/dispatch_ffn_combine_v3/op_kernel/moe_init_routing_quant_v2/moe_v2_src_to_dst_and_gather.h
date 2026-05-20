@@ -31,34 +31,35 @@ class MoeV2SrcToDstAndGather {
 
  private:
   __aicore__ inline void CopyIn(int64_t progress);
-  __aicore__ inline void LoadInputTile(const LocalTensor<float>& inLocal, int64_t srcOffset, int64_t elemNum);
-  __aicore__ inline void StoreExpandedXTile(int64_t dstOffset, const LocalTensor<int8_t>& outLocal, int64_t elemNum);
+  __aicore__ inline void LoadInputTile(uint64_t inUb, int64_t srcOffset, int64_t elemNum);
+  __aicore__ inline void StoreExpandedXTile(int64_t dstOffset, uint64_t outUb, int64_t elemNum);
   __aicore__ inline void CopyOut(int64_t progress);
   __aicore__ inline void CopyOutLoops(int64_t progress);
   __aicore__ inline void Compute(int32_t srcIdx, int32_t dstIdx, int32_t expertIdx);
-  __aicore__ inline float ComputeMax(LocalTensor<float>& inLocal, LocalTensor<float>& tempLocal,
-                                     LocalTensor<float>& dynamicQuantLocal, int32_t srcIdx, int32_t expertIdx,
-                                     int64_t j);
-  __aicore__ inline void ComputeScale(LocalTensor<float>& inLocal, LocalTensor<float>& tempLocal, float scaleTemp,
+  __aicore__ inline float ComputeMax(uint64_t inUb, uint64_t tempUb, uint64_t dynamicQuantScaleUb,
+                                     int32_t srcIdx, int32_t expertIdx, int64_t j);
+  __aicore__ inline void ComputeScale(uint64_t inUb, uint64_t tempUb, float scaleTemp,
                                       int64_t dstIndex, int64_t j);
   __aicore__ inline void ComputeLoops(int32_t srcIdx, int32_t dstIdx, int32_t expertIdx);
 
   __aicore__ inline void CopyOutRemain();
   __aicore__ inline void SyncAll();
   __aicore__ inline void AssistInit();
+  __aicore__ inline void InitZeroBuffers();
+  __aicore__ inline void InitPreviousCoreExpertState();
+  __aicore__ inline void BindZeroBuffers();
+  __aicore__ inline void ProcessRowLoops();
 
  private:
-  TPipe* pipe;
-  TQue<QuePosition::VECIN, 1> copyInQueue;
-  TQue<QuePosition::VECOUT, 1> copyOutQueue;
-  TQue<QuePosition::VECOUT, 1> copyOutZeroQueue;
-
-  TQue<QuePosition::VECIN, 1> inputXInQueue;
-  TQue<QuePosition::VECIN, 1> smoothInQueue;
-  TQue<QuePosition::VECOUT, 1> calcQueue;
-  TQue<QuePosition::VECOUT, 1> inputXOutQueue;
-  TQue<QuePosition::VECOUT, 1> scaleOutQueue;
-  TQue<QuePosition::VECOUT, 1> scaleOutZeroQueue;
+  uint64_t inputIdxUb;
+  uint64_t outputIdxUb;
+  uint64_t outTmpUb;
+  uint64_t scaleOutTmpUb;
+  uint64_t inputXUb;
+  uint64_t smoothUb;
+  uint64_t tempUb;
+  uint64_t outputXUb;
+  uint64_t scaleUb;
 
   __gm__ int32_t *expandDstToSrcRowGm;
   __gm__ int32_t *expandedRowIdxGm;
@@ -70,10 +71,6 @@ class MoeV2SrcToDstAndGather {
   __gm__ float *quantSmoothGm;
   __gm__ float *dynamicQuantScaleGm;
   __gm__ float *quantSrcGm;
-
-  LocalTensor<int8_t> outTmpLocal;
-  LocalTensor<float> scaleOutTmpLocal;
-  LocalTensor<float> smoothLocal;
 
   const InnerMoeV2GatherOutComputeTilingData* srcToDstTilingData;
 
@@ -103,14 +100,14 @@ class MoeV2SrcToDstAndGather {
 };
 
 template <typename T, typename TilingData>
-__aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::AssistInit() {
-  LocalTensor<int16_t> outLocal = copyOutZeroQueue.AllocTensor<int16_t>();
-  pto_detail::PtoFillVector(outLocal, static_cast<int16_t>(0), this->perLoopCols);
-  copyOutZeroQueue.EnQue<int16_t>(outLocal);
-  LocalTensor<float> scaleOutLocal = scaleOutZeroQueue.AllocTensor<float>();
-  pto_detail::PtoFillVector(scaleOutLocal, 0.0f, 8);
-  scaleOutZeroQueue.EnQue<float>(scaleOutLocal);
+__aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::InitZeroBuffers() {
+  pto_detail::PtoFillVector<int16_t>(this->outTmpUb, static_cast<int16_t>(0), this->perLoopCols);
+  pto_detail::PtoFillVector<float>(this->scaleOutTmpUb, 0.0f, 8);
+  pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
+}
 
+template <typename T, typename TilingData>
+__aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::InitPreviousCoreExpertState() {
   if (this->blockIdx != 0) {
     this->lastCoreExpertId = expertIdxValueGm[(this->blockIdx - 1) * 2];
     this->lastCoreExpertIdNum = expertIdxValueGm[(this->blockIdx - 1) * 2 + 1];
@@ -126,105 +123,93 @@ __aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::AssistInit() {
 }
 
 template <typename T, typename TilingData>
-__aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::CopyIn(int64_t progress) {
-  LocalTensor<int32_t> inLocal = copyInQueue.AllocTensor<int32_t>();
-  pto_detail::PtoLoadVector(inLocal, expandDstToSrcRowGm + progress * perLoopRows, currentLoopRows);
-  pto_detail::PtoLoadVector(inLocal[Align(currentLoopRows, sizeof(int32_t))],
-                            expandedExpertIdxGm + progress * perLoopRows,
-                            currentLoopRows);
-
-  copyInQueue.EnQue<int32_t>(inLocal);
+__aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::AssistInit() {
+  InitZeroBuffers();
+  InitPreviousCoreExpertState();
 }
 
 template <typename T, typename TilingData>
-__aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::LoadInputTile(const LocalTensor<float>& inLocal,
+__aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::CopyIn(int64_t progress) {
+  pto_detail::PtoLoadVector<int32_t>(this->inputIdxUb, expandDstToSrcRowGm + progress * perLoopRows, currentLoopRows);
+  pto_detail::PtoLoadVector<int32_t>(this->inputIdxUb + static_cast<uint64_t>(Align(currentLoopRows, sizeof(int32_t))) * sizeof(int32_t),
+                                    expandedExpertIdxGm + progress * perLoopRows,
+                                    currentLoopRows);
+}
+
+template <typename T, typename TilingData>
+__aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::LoadInputTile(uint64_t inUb,
                                                                             int64_t srcOffset,
                                                                             int64_t elemNum) {
   if constexpr (IsSameType<T, float>::value) {
-    pto_detail::PtoLoadVector(inLocal, inputXGm + srcOffset, elemNum);
+    pto_detail::PtoLoadVector<float>(inUb, inputXGm + srcOffset, elemNum);
   } else {
-    LocalTensor<T> inputLocal = inLocal.template ReinterpretCast<T>()[perLoopColsAlign];
-    pto_detail::PtoLoadVector(inputLocal, inputXGm + srcOffset, elemNum);
+    pto_detail::PtoLoadVector<T>(inUb + static_cast<uint64_t>(perLoopColsAlign) * sizeof(T),
+                                 inputXGm + srcOffset,
+                                 elemNum);
   }
 }
 
 template <typename T, typename TilingData>
 __aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::StoreExpandedXTile(int64_t dstOffset,
-                                                                                 const LocalTensor<int8_t>& outLocal,
+                                                                                 uint64_t outUb,
                                                                                  int64_t elemNum) {
-  pto_detail::PtoStoreVector(expandedXGm + dstOffset, outLocal, elemNum);
+  pto_detail::PtoStoreVector(expandedXGm + dstOffset, outUb, elemNum);
 }
 
 template <typename T, typename TilingData>
 __aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::Compute(int32_t srcIdx, int32_t dstIdx,
                                                                       int32_t expertIdx) {
-
-  LocalTensor<float> inLocal = inputXInQueue.AllocTensor<float>();
-  LoadInputTile(inLocal, srcIdx / this->k * this->cols, this->cols);
+  LoadInputTile(this->inputXUb, srcIdx / this->k * this->cols, this->cols);
+  pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
 
   if (smoothType == 2) {
-    pto_detail::PtoLoadVector(smoothLocal, quantSmoothGm + expertIdx * this->cols, this->cols);
+    pto_detail::PtoLoadVector<float>(this->smoothUb, quantSmoothGm + expertIdx * this->cols, this->cols);
+    pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
   }
 
-  inputXInQueue.EnQue<float>(inLocal);
-  smoothInQueue.EnQue(smoothLocal);
-  smoothLocal = smoothInQueue.DeQue<float>();
-
-  inLocal = inputXInQueue.DeQue<float>();
-
-  LocalTensor<float> tempLocal = calcQueue.AllocTensor<float>();
-  LocalTensor<int8_t> outLocal = inputXOutQueue.AllocTensor<int8_t>();
-  LocalTensor<float> dynamicQuantLocal = scaleOutQueue.AllocTensor<float>();
+  const uint64_t inUb = this->inputXUb;
+  const uint64_t tempUb = this->tempUb;
+  const uint64_t outputPayloadUb = this->outputXUb;
+  const uint64_t dynamicQuantScaleUb = this->scaleUb;
 
   if constexpr (!IsSameType<T, float>::value) {
-    pto_detail::PtoCastVector(inLocal, inLocal.template ReinterpretCast<T>()[perLoopColsAlign], this->cols,
-                              pto::RoundMode::CAST_NONE);
+    const uint64_t rawInputUb = inUb + static_cast<uint64_t>(perLoopColsAlign) * sizeof(T);
+    pto_detail::PtoCastVector<float, T>(inUb, rawInputUb, this->cols, pto::RoundMode::CAST_NONE);
     pto_detail::PtoPipeBarrier<PIPE_V>();
   }
 
   if (smoothType != 0) {
-    pto_detail::PtoMulElementwiseVector(inLocal, inLocal, smoothLocal, this->cols);
+    pto_detail::PtoMulElementwiseVector<float>(inUb, inUb, this->smoothUb, this->cols);
     pto_detail::PtoPipeBarrier<PIPE_V>();
   }
 
-  pto_detail::PtoAbsVector(tempLocal, inLocal, this->cols);
+  pto_detail::PtoAbsVector<float>(tempUb, inUb, this->cols);
   pto_detail::PtoPipeBarrier<PIPE_V>();
 
-  pto_detail::PtoReduceMaxVector(dynamicQuantLocal, tempLocal, tempLocal, this->cols);
+  pto_detail::PtoReduceMaxVector(dynamicQuantScaleUb, tempUb, tempUb, this->cols);
   pto_detail::PtoPipeBarrier<PIPE_V>();
 
-  float maxValue = pto_detail::PtoGetValue<float>(dynamicQuantLocal, 0) / 127.0f;
+  float maxValue = pto_detail::PtoGetValue<float>(dynamicQuantScaleUb, 0) / 127.0f;
 
-  pto_detail::PtoFillVector(dynamicQuantLocal, maxValue, 8);
-  pto_detail::PtoFillVector(tempLocal, maxValue, this->cols);
+  pto_detail::PtoFillVector<float>(dynamicQuantScaleUb, maxValue, 8);
+  pto_detail::PtoFillVector<float>(tempUb, maxValue, this->cols);
   pto_detail::PtoPipeBarrier<PIPE_V>();
 
-  pto_detail::PtoDivVector(tempLocal, inLocal, tempLocal, this->cols);
+  pto_detail::PtoDivVector<float>(tempUb, inUb, tempUb, this->cols);
   pto_detail::PtoPipeBarrier<PIPE_V>();
 
-  pto_detail::PtoCastVector(tempLocal.ReinterpretCast<half>(), tempLocal, this->cols, pto::RoundMode::CAST_TRUNC);
+  pto_detail::PtoCastVector<half, float>(tempUb, tempUb, this->cols, pto::RoundMode::CAST_TRUNC);
   pto_detail::PtoPipeBarrier<PIPE_V>();
 
-  pto_detail::PtoCastVector(outLocal, tempLocal.ReinterpretCast<half>(), this->cols, pto::RoundMode::CAST_ROUND);
+  pto_detail::PtoCastVector<int8_t, half>(outputPayloadUb, tempUb, this->cols, pto::RoundMode::CAST_ROUND);
+  pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
 
-  calcQueue.FreeTensor(tempLocal);
-  inputXOutQueue.EnQue(outLocal);
-  scaleOutQueue.EnQue(dynamicQuantLocal);
-
-  LocalTensor<float> quantScaleLocal = scaleOutQueue.DeQue<float>();
-  pto_detail::PtoStoreVector(dynamicQuantScaleGm + dstIdx, quantScaleLocal, 1);
-
-  outLocal = inputXOutQueue.DeQue<int8_t>();
-  StoreExpandedXTile(dstIdx * this->cols, outLocal, this->cols);
-  inputXInQueue.FreeTensor(inLocal);
-  inputXOutQueue.FreeTensor(outLocal);
-  scaleOutQueue.FreeTensor(quantScaleLocal);
+  pto_detail::PtoStoreVector<float>(dynamicQuantScaleGm + dstIdx, dynamicQuantScaleUb, 1);
+  StoreExpandedXTile(dstIdx * this->cols, outputPayloadUb, this->cols);
 }
 
 template <typename T, typename TilingData>
 __aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::CopyOut(int64_t progress) {
-  LocalTensor<int32_t> inLocal = copyInQueue.DeQue<int32_t>();
-  LocalTensor<int32_t> outLocal = copyOutQueue.AllocTensor<int32_t>();
   int64_t length = Align(currentLoopRows, sizeof(int32_t));
 
   pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
@@ -233,14 +218,14 @@ __aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::CopyOut(int64_t pr
     this->tokenCount = this->lastCoreExpertIdNum;
   }
   for (int64_t idx = 0; idx < currentLoopRows; idx++) {
-    int32_t expertIdx = pto_detail::PtoGetValue<int32_t>(inLocal[length], idx);
+    int32_t expertIdx = pto_detail::PtoGetValue<int32_t>(this->inputIdxUb + static_cast<uint64_t>(length) * sizeof(int32_t), idx);
     pto_detail::PtoSetWaitFlag<HardEvent::S_MTE3>(HardEvent::S_MTE3);
     int32_t index = 0;
     while (this->lastExpertId < expertIdx) {
       while (this->tokenCount < this->expertCapacity) {
         index = this->lastExpertId * this->expertCapacity + this->tokenCount;
-        pto_detail::PtoStoreVector(expandedXGm + index * this->cols, this->outTmpLocal, this->cols);
-        pto_detail::PtoStoreVector(dynamicQuantScaleGm + index, this->scaleOutTmpLocal, 1);
+        pto_detail::PtoStoreVector(expandedXGm + index * this->cols, this->outTmpUb, this->cols);
+        pto_detail::PtoStoreVector(dynamicQuantScaleGm + index, this->scaleOutTmpUb, 1);
         this->tokenCount++;
       }
       this->tokenCount = 0;
@@ -248,97 +233,81 @@ __aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::CopyOut(int64_t pr
     }
 
     if (this->tokenCount < this->expertCapacity) {
-      int32_t outOffset = pto_detail::PtoGetValue<int32_t>(inLocal, idx);
+      int32_t outOffset = pto_detail::PtoGetValue<int32_t>(this->inputIdxUb, idx);
       index = expertIdx * this->expertCapacity + this->tokenCount;
-      pto_detail::PtoSetValue<int32_t>(outLocal, 0, index);
+      pto_detail::PtoSetValue<int32_t>(this->outputIdxUb, 0, index);
       pto_detail::PtoSetWaitFlag<HardEvent::S_MTE3>(HardEvent::S_MTE3);
-      pto_detail::PtoStoreVector(expandedRowIdxGm + outOffset, outLocal, 1);
+      pto_detail::PtoStoreVector<int32_t>(expandedRowIdxGm + outOffset, this->outputIdxUb, 1);
       Compute(outOffset, index, expertIdx);
       pto_detail::PtoSetWaitFlag<HardEvent::MTE3_S>(HardEvent::MTE3_S);
       this->tokenCount++;
     }
   }
-  copyInQueue.FreeTensor(inLocal);
-  copyOutQueue.FreeTensor(outLocal);
 }
 
 template <typename T, typename TilingData>
-__aicore__ inline float MoeV2SrcToDstAndGather<T, TilingData>::ComputeMax(LocalTensor<float>& inLocal,
-                                                                          LocalTensor<float>& tempLocal,
-                                                                          LocalTensor<float>& dynamicQuantLocal,
+__aicore__ inline float MoeV2SrcToDstAndGather<T, TilingData>::ComputeMax(uint64_t inUb,
+                                                                          uint64_t tempUb,
+                                                                          uint64_t dynamicQuantScaleUb,
                                                                           int32_t srcIdx, int32_t expertIdx,
                                                                           int64_t j) {
-  LocalTensor<float> smoothLocal = smoothInQueue.AllocTensor<float>();
-
-  LoadInputTile(inLocal, srcIdx * this->cols + j * this->perLoopCols, colsTileLength);
-
-  inputXInQueue.EnQue<float>(inLocal);
-  inLocal = inputXInQueue.DeQue<float>();
+  LoadInputTile(inUb, srcIdx * this->cols + j * this->perLoopCols, colsTileLength);
+  pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
 
   if constexpr (!IsSameType<T, float>::value) {
-    pto_detail::PtoCastVector(inLocal, inLocal.ReinterpretCast<T>()[perLoopColsAlign], colsTileLength,
-                              pto::RoundMode::CAST_NONE);
+    pto_detail::PtoCastVector<float, T>(inUb,
+                                        inUb + static_cast<uint64_t>(perLoopColsAlign) * sizeof(T),
+                                        colsTileLength,
+                                        pto::RoundMode::CAST_NONE);
     pto_detail::PtoPipeBarrier<PIPE_V>();
   }
 
   if (smoothType != 0) {
-    pto_detail::PtoLoadVector(smoothLocal, quantSmoothGm + expertIdx * this->cols + j * this->perLoopCols, colsTileLength);
-    smoothInQueue.EnQue(smoothLocal);
-    smoothLocal = smoothInQueue.DeQue<float>();
-
-    pto_detail::PtoMulElementwiseVector(inLocal, inLocal, smoothLocal, colsTileLength);
+    pto_detail::PtoLoadVector<float>(this->smoothUb,
+                                     quantSmoothGm + expertIdx * this->cols + j * this->perLoopCols,
+                                     colsTileLength);
+    pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
+    pto_detail::PtoMulElementwiseVector<float>(inUb, inUb, this->smoothUb, colsTileLength);
     pto_detail::PtoPipeBarrier<PIPE_V>();
   }
 
-  pto_detail::PtoAbsVector(tempLocal, inLocal, colsTileLength);
+  pto_detail::PtoAbsVector<float>(tempUb, inUb, colsTileLength);
   pto_detail::PtoPipeBarrier<PIPE_V>();
 
-  pto_detail::PtoReduceMaxVector(dynamicQuantLocal[8], tempLocal, tempLocal, colsTileLength);
+  pto_detail::PtoReduceMaxVector(dynamicQuantScaleUb + 8 * sizeof(float), tempUb, tempUb, colsTileLength);
 
-  pto_detail::PtoStoreVector(quantSrcGm + j * this->perLoopCols, inLocal, colsTileLength);
-  smoothInQueue.FreeTensor(smoothLocal);
+  pto_detail::PtoStoreVector<float>(quantSrcGm + j * this->perLoopCols, inUb, colsTileLength);
   pto_detail::PtoSetWaitFlag<HardEvent::MTE3_MTE2>(HardEvent::MTE3_MTE2);
 
-  return pto_detail::PtoGetValue<float>(dynamicQuantLocal, 8);
+  return pto_detail::PtoGetValue<float>(dynamicQuantScaleUb, 8);
 }
 
 template <typename T, typename TilingData>
-__aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::ComputeScale(LocalTensor<float>& inLocal,
-                                                                           LocalTensor<float>& tempLocal,
+__aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::ComputeScale(uint64_t inUb,
+                                                                           uint64_t tempUb,
                                                                            float scaleTemp, int64_t dstIndex,
                                                                            int64_t j) {
-  LocalTensor<int8_t> outLocal = inputXOutQueue.AllocTensor<int8_t>();
+  pto_detail::PtoLoadVector<float>(inUb, quantSrcGm + j * this->perLoopCols, colsTileLength);
+  pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
 
-  pto_detail::PtoLoadVector(inLocal, quantSrcGm + j * this->perLoopCols, colsTileLength);
-  inputXInQueue.EnQue<float>(inLocal);
-  inLocal = inputXInQueue.DeQue<float>();
-
-  pto_detail::PtoFillVector(tempLocal, scaleTemp, colsTileLength);
+  pto_detail::PtoFillVector<float>(tempUb, scaleTemp, colsTileLength);
   pto_detail::PtoPipeBarrier<PIPE_V>();
 
-  pto_detail::PtoDivVector(tempLocal, inLocal, tempLocal, colsTileLength);
+  pto_detail::PtoDivVector<float>(tempUb, inUb, tempUb, colsTileLength);
   pto_detail::PtoPipeBarrier<PIPE_V>();
 
-  pto_detail::PtoCastVector(tempLocal.ReinterpretCast<half>(), tempLocal, colsTileLength, pto::RoundMode::CAST_TRUNC);
+  pto_detail::PtoCastVector<half, float>(tempUb, tempUb, colsTileLength, pto::RoundMode::CAST_TRUNC);
   pto_detail::PtoPipeBarrier<PIPE_V>();
 
-  pto_detail::PtoCastVector(outLocal, tempLocal.ReinterpretCast<half>(), colsTileLength, pto::RoundMode::CAST_ROUND);
-
-  inputXOutQueue.EnQue(outLocal);
-  outLocal = inputXOutQueue.DeQue<int8_t>();
-  StoreExpandedXTile(dstIndex * this->cols + j * this->perLoopCols, outLocal, colsTileLength);
-
-  inputXOutQueue.FreeTensor(outLocal);
+  pto_detail::PtoCastVector<int8_t, half>(this->outputXUb, tempUb, colsTileLength, pto::RoundMode::CAST_ROUND);
+  pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
+  StoreExpandedXTile(dstIndex * this->cols + j * this->perLoopCols, this->outputXUb, colsTileLength);
   pto_detail::PtoSetWaitFlag<HardEvent::MTE3_MTE2>(HardEvent::MTE3_MTE2);
 }
 
 template <typename T, typename TilingData>
 __aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::ComputeLoops(int32_t srcIdx, int32_t dstIdx,
                                                                            int32_t expertIdx) {
-  LocalTensor<float> inLocal = inputXInQueue.AllocTensor<float>();
-  LocalTensor<float> tempLocal = calcQueue.AllocTensor<float>();
-  LocalTensor<float> quantScaleLocal = scaleOutQueue.AllocTensor<float>();
-
   uint32_t tmp = 0xFF7FFFFF;
   float reduceMax = *((float*)&tmp);
   for (int64_t j = 0; j < this->colLoops; j++) {
@@ -346,34 +315,26 @@ __aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::ComputeLoops(int32
     if (j == this->colLoops - 1) {
       colsTileLength = this->lastLoopCols;
     }
-    float tileMax = ComputeMax(inLocal, tempLocal, quantScaleLocal, srcIdx / this->k, expertIdx, j);
+    float tileMax = ComputeMax(this->inputXUb, this->tempUb, this->scaleUb, srcIdx / this->k, expertIdx, j);
     reduceMax = (reduceMax > tileMax) ? reduceMax : tileMax;
   }
 
   float scaleTemp = reduceMax / 127.0f;
-  pto_detail::PtoFillVector(quantScaleLocal, scaleTemp, 8);
-  scaleOutQueue.EnQue(quantScaleLocal);
-  quantScaleLocal = scaleOutQueue.DeQue<float>();
-
-  pto_detail::PtoStoreVector(dynamicQuantScaleGm + dstIdx, quantScaleLocal, 1);
+  pto_detail::PtoFillVector<float>(this->scaleUb, scaleTemp, 8);
+  pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
+  pto_detail::PtoStoreVector<float>(dynamicQuantScaleGm + dstIdx, this->scaleUb, 1);
 
   for (int64_t j = 0; j < this->colLoops; j++) {
     colsTileLength = this->perLoopCols;
     if (j == this->colLoops - 1) {
       colsTileLength = this->lastLoopCols;
     }
-    ComputeScale(inLocal, tempLocal, scaleTemp, dstIdx, j);
+    ComputeScale(this->inputXUb, this->tempUb, scaleTemp, dstIdx, j);
   }
-
-  inputXInQueue.FreeTensor(inLocal);
-  calcQueue.FreeTensor(tempLocal);
-  scaleOutQueue.FreeTensor(quantScaleLocal);
 }
 
 template <typename T, typename TilingData>
 __aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::CopyOutLoops(int64_t progress) {
-  LocalTensor<int32_t> inLocal = copyInQueue.DeQue<int32_t>();
-  LocalTensor<int32_t> outLocal = copyOutQueue.AllocTensor<int32_t>();
   int64_t length = Align(currentLoopRows, sizeof(int32_t));
 
   pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
@@ -382,19 +343,19 @@ __aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::CopyOutLoops(int64
     this->tokenCount = this->lastCoreExpertIdNum;
   }
   for (int64_t idx = 0; idx < currentLoopRows; idx++) {
-    int32_t expertIdx = pto_detail::PtoGetValue<int32_t>(inLocal[length], idx);
+    int32_t expertIdx = pto_detail::PtoGetValue<int32_t>(this->inputIdxUb + static_cast<uint64_t>(length) * sizeof(int32_t), idx);
     pto_detail::PtoSetWaitFlag<HardEvent::S_MTE3>(HardEvent::S_MTE3);
     int32_t index = 0;
     while (this->lastExpertId < expertIdx) {
       while (this->tokenCount < this->expertCapacity) {
         index = this->lastExpertId * this->expertCapacity + this->tokenCount;
         int64_t col = this->perLoopCols;
-        pto_detail::PtoStoreVector(dynamicQuantScaleGm + index, this->scaleOutTmpLocal, 1);
+        pto_detail::PtoStoreVector(dynamicQuantScaleGm + index, this->scaleOutTmpUb, 1);
         for (int64_t i = 0; i < this->colLoops; i++) {
           if (i == this->colLoops - 1) {
             col = this->lastLoopCols;
           }
-          pto_detail::PtoStoreVector(expandedXGm + index * this->cols + i * this->perLoopCols, this->outTmpLocal, col);
+          pto_detail::PtoStoreVector(expandedXGm + index * this->cols + i * this->perLoopCols, this->outTmpUb, col);
           pto_detail::PtoSetWaitFlag<HardEvent::MTE3_S>(HardEvent::MTE3_S);
         }
         this->tokenCount++;
@@ -404,11 +365,11 @@ __aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::CopyOutLoops(int64
     }
 
     if (this->tokenCount < this->expertCapacity) {
-      int32_t outOffset = pto_detail::PtoGetValue<int32_t>(inLocal, idx);
+      int32_t outOffset = pto_detail::PtoGetValue<int32_t>(this->inputIdxUb, idx);
       index = expertIdx * this->expertCapacity + this->tokenCount;
-      pto_detail::PtoSetValue<int32_t>(outLocal, 0, index);
+      pto_detail::PtoSetValue<int32_t>(this->outputIdxUb, 0, index);
       pto_detail::PtoSetWaitFlag<HardEvent::S_MTE3>(HardEvent::S_MTE3);
-      pto_detail::PtoStoreVector(expandedRowIdxGm + outOffset, outLocal, 1);
+      pto_detail::PtoStoreVector<int32_t>(expandedRowIdxGm + outOffset, this->outputIdxUb, 1);
       if (smoothType == 2) {
         ComputeLoops(outOffset, index, expertIdx);
       } else {
@@ -418,27 +379,23 @@ __aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::CopyOutLoops(int64
       this->tokenCount++;
     }
   }
-  copyInQueue.FreeTensor(inLocal);
-  copyOutQueue.FreeTensor(outLocal);
 }
 
 template <typename T, typename TilingData>
 __aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::CopyOutRemain() {
   if (this->blockIdx != this->srcToDstTilingData->needCoreNum - 1) {
-    copyOutZeroQueue.FreeTensor(this->outTmpLocal);
-    scaleOutZeroQueue.FreeTensor(this->scaleOutTmpLocal);
     return;
   }
   while (this->lastExpertId < this->expertNum) {
     while (this->tokenCount < this->expertCapacity) {
       int32_t index = this->lastExpertId * this->expertCapacity + this->tokenCount;
       int64_t col = this->perLoopCols;
-      pto_detail::PtoStoreVector(dynamicQuantScaleGm + index, this->scaleOutTmpLocal, 1);
+      pto_detail::PtoStoreVector(dynamicQuantScaleGm + index, this->scaleOutTmpUb, 1);
       for (int64_t i = 0; i < this->colLoops; i++) {
         if (i == this->colLoops - 1) {
           col = this->lastLoopCols;
         }
-        pto_detail::PtoStoreVector(expandedXGm + index * this->cols + i * this->perLoopCols, this->outTmpLocal, col);
+        pto_detail::PtoStoreVector(expandedXGm + index * this->cols + i * this->perLoopCols, this->outTmpUb, col);
         pto_detail::PtoSetWaitFlag<HardEvent::MTE3_S>(HardEvent::MTE3_S);
       }
       this->tokenCount++;
@@ -446,8 +403,6 @@ __aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::CopyOutRemain() {
     this->tokenCount = 0;
     this->lastExpertId++;
   }
-  copyOutZeroQueue.FreeTensor(this->outTmpLocal);
-  scaleOutZeroQueue.FreeTensor(this->scaleOutTmpLocal);
 }
 
 template <typename T, typename TilingData>
@@ -456,7 +411,7 @@ __aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::Init(GM_ADDR x, GM
                                                                    GM_ADDR workspace, const TilingData* tilingData,
                                                                    TPipe* tPipe) {
   int64_t blockNum = GetBlockNum();
-  this->pipe = tPipe;
+  (void)tPipe;
   this->blockIdx = get_block_idx() + get_subblockid() * get_block_num();
 
   this->coreNum = tilingData->coreNum;
@@ -499,51 +454,56 @@ __aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::Init(GM_ADDR x, GM
     quantSrcGm = (__gm__ float*)workspace + length * 2 + this->coreNum * 2 + this->blockIdx * this->cols;
   }
 
-  pipe->InitBuffer(copyInQueue, 1, AlignBytes(this->perLoopRows, sizeof(int32_t)) * 2);
-  pipe->InitBuffer(copyOutQueue, 1, AlignBytes(INT32_ONE_BLOCK_NUM, sizeof(int32_t)));
-  pipe->InitBuffer(copyOutZeroQueue, 1, AlignBytes(this->perLoopCols, sizeof(int16_t)));
-
   int64_t perLoopColsAlignBytes = AlignBytes(this->perLoopCols, sizeof(T));
   perLoopColsAlignBytes =
       Max(int64_t(perLoopColsAlignBytes * sizeof(float) / sizeof(T)), int64_t(BLOCK_BYTES + BLOCK_BYTES));
 
-  pipe->InitBuffer(inputXInQueue, 1, perLoopColsAlignBytes);
-  pipe->InitBuffer(smoothInQueue, 1, AlignBytes(this->perLoopCols, sizeof(float)));
-  pipe->InitBuffer(calcQueue, 1, AlignBytes(this->perLoopCols, sizeof(float)));
-  pipe->InitBuffer(inputXOutQueue, 1, AlignBytes(this->perLoopCols, sizeof(int8_t)));
-  pipe->InitBuffer(scaleOutQueue, 1, BLOCK_BYTES + BLOCK_BYTES);
-  pipe->InitBuffer(scaleOutZeroQueue, 1, BLOCK_BYTES);
+  this->inputIdxUb = 0;
+  this->outputIdxUb = this->inputIdxUb + AlignBytes(this->perLoopRows, sizeof(int32_t)) * 2;
+  this->outTmpUb = this->outputIdxUb + AlignBytes(INT32_ONE_BLOCK_NUM, sizeof(int32_t));
+  this->scaleOutTmpUb = this->outTmpUb + AlignBytes(this->perLoopCols, sizeof(int16_t));
+  this->inputXUb = this->scaleOutTmpUb + BLOCK_BYTES;
+  this->smoothUb = this->inputXUb + perLoopColsAlignBytes;
+  this->tempUb = this->smoothUb + AlignBytes(this->perLoopCols, sizeof(float));
+  this->outputXUb = this->tempUb + AlignBytes(this->perLoopCols, sizeof(float));
+  this->scaleUb = this->outputXUb + AlignBytes(this->perLoopCols, sizeof(int8_t));
+}
+
+template <typename T, typename TilingData>
+__aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::BindZeroBuffers() {}
+
+template <typename T, typename TilingData>
+__aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::ProcessRowLoops() {
+  currentLoopRows = perLoopRows;
+  if (colLoops > 1) {
+    for (int64_t loop = 0; loop < this->rowLoops; loop++) {
+      if (loop == this->rowLoops - 1) {
+        currentLoopRows = lastLoopRows;
+      }
+      CopyIn(loop);
+      CopyOutLoops(loop);
+    }
+  } else {
+    if (smoothType == 1) {
+      pto_detail::PtoLoadVector<float>(this->smoothUb, quantSmoothGm, this->cols);
+      pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
+    }
+    for (int64_t loop = 0; loop < this->rowLoops; loop++) {
+      if (loop == this->rowLoops - 1) {
+        currentLoopRows = lastLoopRows;
+      }
+      CopyIn(loop);
+      CopyOut(loop);
+    }
+  }
 }
 
 template <typename T, typename TilingData>
 __aicore__ inline void MoeV2SrcToDstAndGather<T, TilingData>::Process() {
   if (this->blockIdx < this->srcToDstTilingData->needCoreNum) {
     AssistInit();
-    this->outTmpLocal = copyOutZeroQueue.DeQue<int8_t>();
-    this->scaleOutTmpLocal = scaleOutZeroQueue.DeQue<float>();
-    currentLoopRows = perLoopRows;
-    if (colLoops > 1) {
-      for (int64_t loop = 0; loop < this->rowLoops; loop++) {
-        if (loop == this->rowLoops - 1) {
-          currentLoopRows = lastLoopRows;
-        }
-        CopyIn(loop);
-        CopyOutLoops(loop);
-      }
-    } else {
-      smoothLocal = smoothInQueue.AllocTensor<float>();
-      if (smoothType == 1) {
-        pto_detail::PtoLoadVector(smoothLocal, quantSmoothGm, this->cols);
-      }
-      for (int64_t loop = 0; loop < this->rowLoops; loop++) {
-        if (loop == this->rowLoops - 1) {
-          currentLoopRows = lastLoopRows;
-        }
-        CopyIn(loop);
-        CopyOut(loop);
-      }
-      smoothInQueue.FreeTensor(smoothLocal);
-    }
+    BindZeroBuffers();
+    ProcessRowLoops();
     CopyOutRemain();
   }
 }

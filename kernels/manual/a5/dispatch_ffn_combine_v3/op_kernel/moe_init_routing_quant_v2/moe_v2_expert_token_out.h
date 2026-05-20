@@ -37,24 +37,21 @@ class MoeV2ExpertTokenOut {
   __aicore__ inline void SyncAll();
   __aicore__ inline void InitLocal();
   __aicore__ inline void GetExpertTokenCount(int32_t curExpertId);
-  __aicore__ inline void AtomicStoreCountSlice(const AscendC::GlobalTensor<int32_t>& dstGm, int64_t offset, int64_t copyLength);
+  __aicore__ inline void AtomicStoreCountSlice(__gm__ int32_t *dstGm, int64_t offset, int64_t copyLength);
   __aicore__ inline void CopyOutTokenGm();
   __aicore__ inline void CopyOutExpertTokensCumsum(bool isTail);
   __aicore__ inline void CopyOutExpertTokensCount(bool isTail);
 
  private:
-  AscendC::TPipe* pipe;
-  AscendC::TQue<QuePosition::VECIN, 1> copyInQueue;
-  AscendC::TQue<QuePosition::VECIN, 1> expertTokenIdxCopyInQueue;
-  AscendC::TQue<QuePosition::VECOUT, 1> expertTokenIdxCopyOutQueue;
+  uint64_t inputExpertIdxUb;
+  uint64_t expertTokenIdxOutUb;
+  uint64_t expandedRowIdxInitUb;
 
-  AscendC::GlobalTensor<int32_t> expertTokensCountOrCumsumGm;
-  AscendC::GlobalTensor<int32_t> expertTokensBeforeCapacityGm;
-  AscendC::GlobalTensor<int32_t> expandedExpertIdxGm;
-  AscendC::GlobalTensor<int32_t> expertIdxValueGm;
-  AscendC::GlobalTensor<int32_t> expandedRowIdxGm;
-
-  AscendC::LocalTensor<int32_t> expertTokenIdxOutLocal;
+  __gm__ int32_t *expertTokensCountOrCumsumGm;
+  __gm__ int32_t *expertTokensBeforeCapacityGm;
+  __gm__ int32_t *expandedExpertIdxGm;
+  __gm__ int32_t *expertIdxValueGm;
+  __gm__ int32_t *expandedRowIdxGm;
 
   const InnerMoeV2GatherOutComputeTilingData* srcToDstTilingData;
 
@@ -80,18 +77,15 @@ class MoeV2ExpertTokenOut {
 };
 
 __aicore__ inline void MoeV2ExpertTokenOut::InitLocal() {
-  AscendC::LocalTensor<int32_t> tokenIdxLocal = expertTokenIdxCopyOutQueue.AllocTensor<int32_t>();
-  pto_detail::PtoFillVector(tokenIdxLocal, static_cast<int32_t>(0), this->expertNumUbAlign);
-  expertTokenIdxCopyOutQueue.EnQue<int32_t>(tokenIdxLocal);
+  pto_detail::PtoFillVector(this->expertTokenIdxOutUb, static_cast<int32_t>(0), this->expertNumUbAlign);
 
   // expandedRowIdx initialized to -1, which is used in the src_to_dst_with_capacity step.
   // use this step SyncAll to synchronize every core data
   if (this->dropPadMode == 0) {
     return;
   }
-  AscendC::LocalTensor<int32_t> outLocal = copyInQueue.AllocTensor<int32_t>();
   int64_t loops = (coreRows + perLoopRows - 1) / perLoopRows;
-  pto_detail::PtoFillVector(outLocal, static_cast<int32_t>(-1), perLoopRows);
+  pto_detail::PtoFillVector(this->expandedRowIdxInitUb, static_cast<int32_t>(-1), perLoopRows);
   pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
   for (int64_t loop = 0; loop < loops; loop++) {
     int64_t copyLength = perLoopRows;
@@ -99,24 +93,23 @@ __aicore__ inline void MoeV2ExpertTokenOut::InitLocal() {
       copyLength = lastLoopRows;
     }
     pto_detail::PtoStoreVector(
-        expandedRowIdxGm[this->blockIdx * this->srcToDstTilingData->perCoreRows + loop * perLoopRows],
-        outLocal,
+        expandedRowIdxGm + this->blockIdx * this->srcToDstTilingData->perCoreRows + loop * perLoopRows,
+        this->expandedRowIdxInitUb,
         copyLength);
   }
   pto_detail::PtoSetWaitFlag<HardEvent::MTE3_MTE2>(HardEvent::MTE3_MTE2);
-  copyInQueue.FreeTensor(outLocal);
 }
 
 __aicore__ inline void MoeV2ExpertTokenOut::CopyIn(int64_t progress) {
-  AscendC::LocalTensor<int32_t> inLocal = copyInQueue.AllocTensor<int32_t>();
-  pto_detail::PtoLoadVector(inLocal, expandedExpertIdxGm[progress * perLoopRows], currentLoopRows);
-  copyInQueue.EnQue<int32_t>(inLocal);
+  pto_detail::PtoLoadVector<int32_t>(this->inputExpertIdxUb,
+                                     expandedExpertIdxGm + progress * perLoopRows,
+                                     currentLoopRows);
 }
 
 __aicore__ inline void MoeV2ExpertTokenOut::GetExpertTokenCount(int32_t curExpertId) {
   this->tokenCount++;
   if (this->lastExpertId < curExpertId) {
-    this->expertTokenIdxOutLocal.SetValue(this->expertIdx, this->tokenCount - 1);
+    pto_detail::PtoSetValue<int32_t>(this->expertTokenIdxOutUb, this->expertIdx, this->tokenCount - 1);
     this->tokenCount = 1;
     this->expertIdx += (curExpertId - this->lastExpertId);
     while (curExpertId - this->firstExpertId + 1 > this->expertNumUbAlign) {
@@ -124,7 +117,7 @@ __aicore__ inline void MoeV2ExpertTokenOut::GetExpertTokenCount(int32_t curExper
       CopyOutExpertTokensCumsum(false);
       CopyOutExpertTokensCount(false);
       pto_detail::PtoSetWaitFlag<HardEvent::MTE3_V>(HardEvent::MTE3_V);
-      pto_detail::PtoFillVector(this->expertTokenIdxOutLocal, static_cast<int32_t>(0), this->expertNumUbAlign);
+      pto_detail::PtoFillVector(this->expertTokenIdxOutUb, static_cast<int32_t>(0), this->expertNumUbAlign);
       pto_detail::PtoSetWaitFlag<HardEvent::V_S>(HardEvent::V_S);
       this->firstExpertId += this->expertNumUbAlign;
       this->expertIdx = curExpertId - this->firstExpertId;
@@ -134,24 +127,22 @@ __aicore__ inline void MoeV2ExpertTokenOut::GetExpertTokenCount(int32_t curExper
 }
 
 __aicore__ inline void MoeV2ExpertTokenOut::Compute(int64_t progress) {
-  AscendC::LocalTensor<int32_t> inLocal = copyInQueue.DeQue<int32_t>();
   pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
   if (this->lastExpertId == -1) {
-    this->lastExpertId = inLocal.GetValue(0);
+    this->lastExpertId = pto_detail::PtoGetValue<int32_t>(this->inputExpertIdxUb, 0);
     this->firstExpertId = this->lastExpertId;
   }
   for (int64_t i = 0; i < currentLoopRows; i++) {
-    int32_t expertId = inLocal.GetValue(i);
+    int32_t expertId = pto_detail::PtoGetValue<int32_t>(this->inputExpertIdxUb, i);
     GetExpertTokenCount(expertId);
   }
-  this->expertTokenIdxOutLocal.SetValue(this->expertIdx, this->tokenCount);
-  copyInQueue.FreeTensor(inLocal);
+  pto_detail::PtoSetValue<int32_t>(this->expertTokenIdxOutUb, this->expertIdx, this->tokenCount);
 }
 
-__aicore__ inline void MoeV2ExpertTokenOut::AtomicStoreCountSlice(const AscendC::GlobalTensor<int32_t>& dstGm,
+__aicore__ inline void MoeV2ExpertTokenOut::AtomicStoreCountSlice(__gm__ int32_t *dstGm,
                                                                  int64_t offset,
                                                                  int64_t copyLength) {
-  pto_detail::PtoStoreAtomicAddVector(dstGm[offset], this->expertTokenIdxOutLocal, static_cast<uint32_t>(copyLength));
+  pto_detail::PtoStoreAtomicAddVector(dstGm + offset, this->expertTokenIdxOutUb, static_cast<uint32_t>(copyLength));
 }
 
 __aicore__ inline void MoeV2ExpertTokenOut::CopyOutExpertTokensCumsum(bool isTail) {
@@ -161,18 +152,18 @@ __aicore__ inline void MoeV2ExpertTokenOut::CopyOutExpertTokensCumsum(bool isTai
   int64_t copyLength = isTail ? this->lastExpertId - this->firstExpertId + 1 : this->expertNumUbAlign;
   int64_t end = this->expertNum - this->firstExpertId;
   for (int64_t i = 0; i < copyLength; i++) {
-    this->expertTokenValue += this->expertTokenIdxOutLocal.GetValue(i);
-    this->expertTokenIdxOutLocal.SetValue(i, this->expertTokenValue);
+    this->expertTokenValue += pto_detail::PtoGetValue<int32_t>(this->expertTokenIdxOutUb, i);
+    pto_detail::PtoSetValue<int32_t>(this->expertTokenIdxOutUb, i, this->expertTokenValue);
   }
   // if the remaining UB is sufficient, use the UB space to copy
   // otherwise, copy the calculated data first, and then copy the last tokenValue to remaining expert position
   if (isTail && end <= this->expertNumUbAlign) {
     int64_t startAlign = Min(Align(copyLength, sizeof(int32_t)), end);
     for (int64_t i = copyLength; i < startAlign; i++) {
-      this->expertTokenIdxOutLocal.SetValue(i, this->expertTokenValue);
+      pto_detail::PtoSetValue<int32_t>(this->expertTokenIdxOutUb, i, this->expertTokenValue);
     }
     if (startAlign < end) {
-      pto_detail::PtoFillVector(this->expertTokenIdxOutLocal[startAlign], this->expertTokenValue, end - startAlign);
+      pto_detail::PtoFillVector(this->expertTokenIdxOutUb + static_cast<uint64_t>(startAlign) * sizeof(int32_t), this->expertTokenValue, end - startAlign);
     }
     copyLength = end;
     pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
@@ -181,7 +172,7 @@ __aicore__ inline void MoeV2ExpertTokenOut::CopyOutExpertTokensCumsum(bool isTai
   if (isTail && end > this->expertNumUbAlign) {
     int64_t remainderLength = end - copyLength;
     pto_detail::PtoSetWaitFlag<HardEvent::MTE3_V>(HardEvent::MTE3_V);
-    pto_detail::PtoFillVector(this->expertTokenIdxOutLocal, this->expertTokenValue, this->expertNumUbAlign);
+    pto_detail::PtoFillVector(this->expertTokenIdxOutUb, this->expertTokenValue, this->expertNumUbAlign);
     pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
     int64_t loopTimes = remainderLength / this->expertNumUbAlign + 1;
     for (int64_t i = 0; i < loopTimes; i++) {
@@ -210,11 +201,11 @@ __aicore__ inline void MoeV2ExpertTokenOut::CopyOutTokenGm() {
     CopyOutExpertTokensCount(true);
     return;
   }
-  this->expertTokenIdxOutLocal.SetValue(this->expertNumUbAlign, this->lastExpertId);
-  this->expertTokenIdxOutLocal.SetValue(this->expertNumUbAlign + 1, this->tokenCount);
+  pto_detail::PtoSetValue<int32_t>(this->expertTokenIdxOutUb, this->expertNumUbAlign, this->lastExpertId);
+  pto_detail::PtoSetValue<int32_t>(this->expertTokenIdxOutUb, this->expertNumUbAlign + 1, this->tokenCount);
   pto_detail::PtoSetWaitFlag<HardEvent::S_MTE3>(HardEvent::S_MTE3);
-  pto_detail::PtoStoreVector(expertIdxValueGm[this->blockIdx * EXPERT_ID_VALUE_NUM],
-                             this->expertTokenIdxOutLocal[this->expertNumUbAlign],
+  pto_detail::PtoStoreVector(expertIdxValueGm + this->blockIdx * EXPERT_ID_VALUE_NUM,
+                             this->expertTokenIdxOutUb + static_cast<uint64_t>(this->expertNumUbAlign) * sizeof(int32_t),
                              EXPERT_ID_VALUE_NUM);
   CopyOutExpertTokensCount(true);
 }
@@ -230,9 +221,6 @@ template <typename TilingData>
 __aicore__ inline void MoeV2ExpertTokenOut::Init(GM_ADDR expertTokensCountOrCumsum, GM_ADDR expertTokensBeforeCapacity,
                                                  GM_ADDR expandedRowIdx, GM_ADDR workspace,
                                                  const TilingData* tilingData, AscendC::TPipe* tPipe) {
-  int64_t blockNum = GetBlockNum();
-  this->pipe = tPipe;
-  //this->blockIdx = GetBlockIdx();
   this->blockIdx = get_block_idx() + get_subblockid() * get_block_num();
   this->coreNum = tilingData->coreNum;
   this->totalLength = tilingData->n * tilingData->k;
@@ -252,24 +240,21 @@ __aicore__ inline void MoeV2ExpertTokenOut::Init(GM_ADDR expertTokensCountOrCums
     this->lastLoopRows = this->srcToDstTilingData->perCoreLastLoopRows;
   }
 
-  expandedRowIdxGm.SetGlobalBuffer((__gm__ int32_t*)expandedRowIdx, Align(this->totalLength, sizeof(int32_t)));
+  expandedRowIdxGm = (__gm__ int32_t*)expandedRowIdx;
   if (this->dropPadMode == DROPLESS_MODE && this->expertTokensCountOrCumsumFlag > EXERPT_TOKENS_NONE) {
-    expertTokensCountOrCumsumGm.SetGlobalBuffer((__gm__ int32_t*)expertTokensCountOrCumsum, this->expertNum);
+    expertTokensCountOrCumsumGm = (__gm__ int32_t*)expertTokensCountOrCumsum;
   }
   if (this->dropPadMode == DROP_PAD_MODE && this->expertTokensBeforeCapacityFlag == EXERPT_TOKENS_BEFORE_CAPACITY) {
-    expertTokensBeforeCapacityGm.SetGlobalBuffer((__gm__ int32_t*)expertTokensBeforeCapacity, this->expertNum);
+    expertTokensBeforeCapacityGm = (__gm__ int32_t*)expertTokensBeforeCapacity;
   }
 
-  expandedExpertIdxGm.SetGlobalBuffer(
-      (__gm__ int32_t*)workspace + this->blockIdx * this->srcToDstTilingData->perCoreRows,
-      Align(this->coreRows, sizeof(int32_t)));
-  expertIdxValueGm.SetGlobalBuffer((__gm__ int32_t*)workspace + Align(this->totalLength, sizeof(int32_t)) * 2,
-                                   this->coreNum * 2);
+  expandedExpertIdxGm = (__gm__ int32_t*)workspace + this->blockIdx * this->srcToDstTilingData->perCoreRows;
+  expertIdxValueGm = (__gm__ int32_t*)workspace + Align(this->totalLength, sizeof(int32_t)) * 2;
 
   this->expertNumUbAlign = Min(Align(this->expertNum, sizeof(int32_t)), MAX_EXPERT_NUM);
-  pipe->InitBuffer(copyInQueue, 1, this->perLoopRows * BLOCK_BYTES);
-  pipe->InitBuffer(expertTokenIdxCopyInQueue, 1, this->expertNumUbAlign * sizeof(int32_t));
-  pipe->InitBuffer(expertTokenIdxCopyOutQueue, 1, (this->expertNumUbAlign + EXPERT_ID_VALUE_NUM) * sizeof(int32_t));
+  this->inputExpertIdxUb = 0;
+  this->expertTokenIdxOutUb = AlignBytes(this->perLoopRows, sizeof(int32_t));
+  this->expandedRowIdxInitUb = this->expertTokenIdxOutUb + AlignBytes(this->expertNumUbAlign + EXPERT_ID_VALUE_NUM, sizeof(int32_t));
 }
 
 __aicore__ inline void MoeV2ExpertTokenOut::Process() {
@@ -277,7 +262,6 @@ __aicore__ inline void MoeV2ExpertTokenOut::Process() {
     int64_t loops = (coreRows + perLoopRows - 1) / perLoopRows;
     currentLoopRows = perLoopRows;
     InitLocal();
-    this->expertTokenIdxOutLocal = expertTokenIdxCopyOutQueue.DeQue<int32_t>();
     for (int64_t loop = 0; loop < loops - 1; loop++) {
       CopyIn(loop);
       Compute(loop);
@@ -286,7 +270,6 @@ __aicore__ inline void MoeV2ExpertTokenOut::Process() {
     CopyIn(loops - 1);
     Compute(loops - 1);
     CopyOutTokenGm();
-    expertTokenIdxCopyOutQueue.FreeTensor(this->expertTokenIdxOutLocal);
   }
   this->SyncAll();
 }

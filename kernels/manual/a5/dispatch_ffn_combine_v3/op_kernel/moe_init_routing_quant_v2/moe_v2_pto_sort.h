@@ -59,13 +59,27 @@ using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoAddVector;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoCastVector;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoDivVector;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoFillVector;
+using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoGetValue;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoLoadVector;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoMoveVector;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoMulElementwiseVector;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoMulVector;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoReduceMaxVector;
+using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoSetValue;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoStoreAtomicAddVector;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoStoreVector;
+
+PTO_INTERNAL void PtoFillArithProgressionInt32(uint64_t dstUb, int32_t firstValue, int32_t diffValue, uint32_t count)
+{
+    __ubuf__ int32_t *dstPtr = reinterpret_cast<__ubuf__ int32_t *>(dstUb);
+    int32_t value = firstValue;
+    for (uint32_t idx = 0; idx < count; ++idx) {
+        dstPtr[idx] = value;
+        value += diffValue;
+    }
+    PtoSetFlag<AscendC::HardEvent::S_V>(0);
+    PtoWaitFlag<AscendC::HardEvent::S_V>(0);
+}
 
 PTO_INTERNAL uint32_t AlignUpSortBlock(uint32_t elemNum)
 {
@@ -147,12 +161,12 @@ PTO_INTERNAL void MergePackedSortRecords(PtoV2PackedSortTile &packedSortTile,
     }
 }
 
-PTO_INTERNAL void PtoMergePackedSortRecords(AscendC::LocalTensor<float> &dstLocal,
-                                            AscendC::LocalTensor<float> &tmpLocal,
-                                            AscendC::LocalTensor<float> &src0Local,
-                                            AscendC::LocalTensor<float> &src1Local,
-                                            AscendC::LocalTensor<float> &src2Local,
-                                            AscendC::LocalTensor<float> &src3Local,
+PTO_INTERNAL void PtoMergePackedSortRecords(uint64_t dstUb,
+                                            uint64_t tmpUb,
+                                            uint64_t src0Ub,
+                                            uint64_t src1Ub,
+                                            uint64_t src2Ub,
+                                            uint64_t src3Ub,
                                             const uint16_t *elementCountList,
                                             uint32_t remainListNum,
                                             uint32_t *listSortedNums)
@@ -172,12 +186,16 @@ PTO_INTERNAL void PtoMergePackedSortRecords(AscendC::LocalTensor<float> &dstLoca
     PtoV2PackedSortTile src1Tile(1, src1Cols);
     PtoV2PackedSortTile src2Tile(1, src2Cols);
     PtoV2PackedSortTile src3Tile(1, src3Cols);
-    pto::TASSIGN(dstTile, reinterpret_cast<uint64_t>(dstLocal.GetPhyAddr()));
-    pto::TASSIGN(tmpTile, reinterpret_cast<uint64_t>(tmpLocal.GetPhyAddr()));
-    pto::TASSIGN(src0Tile, reinterpret_cast<uint64_t>(src0Local.GetPhyAddr()));
-    pto::TASSIGN(src1Tile, reinterpret_cast<uint64_t>(src1Local.GetPhyAddr()));
-    pto::TASSIGN(src2Tile, reinterpret_cast<uint64_t>(src2Local.GetPhyAddr()));
-    pto::TASSIGN(src3Tile, reinterpret_cast<uint64_t>(src3Local.GetPhyAddr()));
+    pto::TASSIGN(dstTile, dstUb);
+    pto::TASSIGN(tmpTile, tmpUb);
+    pto::TASSIGN(src0Tile, src0Ub);
+    pto::TASSIGN(src1Tile, src1Ub);
+    if (src2Cols > 0) {
+        pto::TASSIGN(src2Tile, src2Ub);
+    }
+    if (src3Cols > 0) {
+        pto::TASSIGN(src3Tile, src3Ub);
+    }
 
     pto::MrgSortExecutedNumList executedNumList{};
     if (remainListNum == MERGE_LIST_TWO) {
@@ -203,10 +221,10 @@ PTO_INTERNAL void PtoMergePackedSortRecords(AscendC::LocalTensor<float> &dstLoca
     listSortedNums[3] = executedNumList.mrgSortList3;
 }
 
-PTO_INTERNAL void PtoSortInt32ToPackedUB(AscendC::LocalTensor<int32_t> &inputValueLocal,
-                                        AscendC::LocalTensor<uint32_t> &inputPayloadLocal,
-                                        AscendC::LocalTensor<float> &packedSortLocal,
-                                        AscendC::LocalTensor<float> &mergeTmpLocal,
+PTO_INTERNAL void PtoSortInt32ToPackedUB(uint64_t inputValueUb,
+                                        uint64_t inputPayloadUb,
+                                        uint64_t packedSortUb,
+                                        uint64_t mergeTmpUb,
                                         uint32_t elemNum)
 {
     if (elemNum == 0) {
@@ -218,12 +236,12 @@ PTO_INTERNAL void PtoSortInt32ToPackedUB(AscendC::LocalTensor<int32_t> &inputVal
         KERNEL_LOG(KERNEL_ERROR, "alignedElemNum exceeds PTO sort capacity");
     });
 
-    AscendC::LocalTensor<float> sortKeyLocal = mergeTmpLocal;
-    PtoCastVector(sortKeyLocal, inputValueLocal, elemNum, pto::RoundMode::CAST_CEIL);
-    PtoMulVector(sortKeyLocal, sortKeyLocal, elemNum, -1.0F);
+    const uint64_t sortKeyUb = mergeTmpUb;
+    PtoCastVector<float, int32_t>(sortKeyUb, inputValueUb, elemNum, pto::RoundMode::CAST_CEIL);
+    PtoMulVector<float>(sortKeyUb, sortKeyUb, elemNum, -1.0F);
 
-    __ubuf__ float *sortKeyPtr = reinterpret_cast<__ubuf__ float *>(sortKeyLocal.GetPhyAddr());
-    __ubuf__ uint32_t *payloadPtr = reinterpret_cast<__ubuf__ uint32_t *>(inputPayloadLocal.GetPhyAddr());
+    __ubuf__ float *sortKeyPtr = reinterpret_cast<__ubuf__ float *>(sortKeyUb);
+    __ubuf__ uint32_t *payloadPtr = reinterpret_cast<__ubuf__ uint32_t *>(inputPayloadUb);
     for (uint32_t i = elemNum; i < alignedElemNum; ++i) {
         sortKeyPtr[i] = PTO_SORT_NEG_INF;
         payloadPtr[i] = 0;
@@ -233,77 +251,77 @@ PTO_INTERNAL void PtoSortInt32ToPackedUB(AscendC::LocalTensor<int32_t> &inputVal
     PtoV2SortPayloadTile payloadTile(1, alignedElemNum);
     PtoV2PackedSortTile packedTile(1, alignedElemNum * 2);
     PtoV2PackedSortTile mergeTmpTile(1, alignedElemNum * 2);
-    pto::TASSIGN(srcTile, reinterpret_cast<uint64_t>(sortKeyLocal.GetPhyAddr()));
-    pto::TASSIGN(payloadTile, reinterpret_cast<uint64_t>(inputPayloadLocal.GetPhyAddr()));
-    pto::TASSIGN(packedTile, reinterpret_cast<uint64_t>(packedSortLocal.GetPhyAddr()));
-    pto::TASSIGN(mergeTmpTile, reinterpret_cast<uint64_t>(mergeTmpLocal.GetPhyAddr()));
+    pto::TASSIGN(srcTile, sortKeyUb);
+    pto::TASSIGN(payloadTile, inputPayloadUb);
+    pto::TASSIGN(packedTile, packedSortUb);
+    pto::TASSIGN(mergeTmpTile, mergeTmpUb);
 
     pto::TSORT32(packedTile, srcTile, payloadTile);
     AscendC::PipeBarrier<PIPE_V>();
     MergePackedSortRecords(packedTile, mergeTmpTile, alignedElemNum * 2);
 }
 
-PTO_INTERNAL void PtoExtractPackedSortResult(AscendC::LocalTensor<int32_t> &sortedValueLocal,
-                                             AscendC::LocalTensor<uint32_t> &sortedPayloadLocal,
-                                             AscendC::LocalTensor<float> &packedSortLocal,
+PTO_INTERNAL void PtoExtractPackedSortResult(uint64_t sortedValueUb,
+                                             uint64_t sortedPayloadUb,
+                                             uint64_t packedSortUb,
                                              uint32_t elemNum)
 {
     if (elemNum == 0) {
         return;
     }
     if (elemNum == 1) {
-        __ubuf__ const float *packedPtr = reinterpret_cast<__ubuf__ const float *>(packedSortLocal.GetPhyAddr());
-        __ubuf__ int32_t *valueOut = reinterpret_cast<__ubuf__ int32_t *>(sortedValueLocal.GetPhyAddr());
-        __ubuf__ uint32_t *payloadOut = reinterpret_cast<__ubuf__ uint32_t *>(sortedPayloadLocal.GetPhyAddr());
-        __ubuf__ const uint32_t *packedPayloadPtr = reinterpret_cast<__ubuf__ const uint32_t *>(packedSortLocal.GetPhyAddr());
+        __ubuf__ const float *packedPtr = reinterpret_cast<__ubuf__ const float *>(packedSortUb);
+        __ubuf__ int32_t *valueOut = reinterpret_cast<__ubuf__ int32_t *>(sortedValueUb);
+        __ubuf__ uint32_t *payloadOut = reinterpret_cast<__ubuf__ uint32_t *>(sortedPayloadUb);
+        __ubuf__ const uint32_t *packedPayloadPtr = reinterpret_cast<__ubuf__ const uint32_t *>(packedSortUb);
         valueOut[0] = -static_cast<int32_t>(packedPtr[0]);
         payloadOut[0] = packedPayloadPtr[1];
         return;
     }
 
-    AscendC::LocalTensor<float> sortedValueScratchLocal = sortedValueLocal.ReinterpretCast<float>();
+    const uint64_t sortedValueScratchUb = sortedValueUb;
     PtoV2PackedPayloadTile packedPayloadTile(1, elemNum * 2);
     PtoV2SortPayloadTile sortedPayloadTile(1, elemNum);
-    pto::TASSIGN(packedPayloadTile, reinterpret_cast<uint64_t>(packedSortLocal.GetPhyAddr()));
-    pto::TASSIGN(sortedPayloadTile, reinterpret_cast<uint64_t>(sortedPayloadLocal.GetPhyAddr()));
+    pto::TASSIGN(packedPayloadTile, packedSortUb);
+    pto::TASSIGN(sortedPayloadTile, sortedPayloadUb);
     pto::TGATHER<PtoV2SortPayloadTile, PtoV2PackedPayloadTile, pto::MaskPattern::P1010>(sortedPayloadTile,
                                                                                           packedPayloadTile);
     AscendC::PipeBarrier<PIPE_V>();
 
     PtoV2SortKeyTile sortedKeyTile(1, elemNum);
     PtoV2PackedSortTile packedTile(1, elemNum * 2);
-    pto::TASSIGN(sortedKeyTile, reinterpret_cast<uint64_t>(sortedValueScratchLocal.GetPhyAddr()));
-    pto::TASSIGN(packedTile, reinterpret_cast<uint64_t>(packedSortLocal.GetPhyAddr()));
+    pto::TASSIGN(sortedKeyTile, sortedValueScratchUb);
+    pto::TASSIGN(packedTile, packedSortUb);
     pto::TGATHER<PtoV2SortKeyTile, PtoV2PackedSortTile, pto::MaskPattern::P0101>(sortedKeyTile, packedTile);
     AscendC::PipeBarrier<PIPE_V>();
-    PtoMulVector(sortedValueScratchLocal, sortedValueScratchLocal, elemNum, -1.0F);
+    PtoMulVector<float>(sortedValueScratchUb, sortedValueScratchUb, elemNum, -1.0F);
 
-    PtoCastVector(sortedValueLocal, sortedValueScratchLocal, elemNum, pto::RoundMode::CAST_CEIL);
+    PtoCastVector<int32_t, float>(sortedValueUb, sortedValueScratchUb, elemNum, pto::RoundMode::CAST_CEIL);
 }
 
-PTO_INTERNAL void PtoSortInt32AscendingUB(AscendC::LocalTensor<int32_t> &inputValueLocal,
-                                          AscendC::LocalTensor<uint32_t> &inputPayloadLocal,
-                                          AscendC::LocalTensor<int32_t> &sortedValueLocal,
-                                          AscendC::LocalTensor<uint32_t> &sortedPayloadLocal,
-                                          AscendC::LocalTensor<float> &packedSortLocal,
-                                          AscendC::LocalTensor<float> &mergeTmpLocal,
+PTO_INTERNAL void PtoSortInt32AscendingUB(uint64_t inputValueUb,
+                                          uint64_t inputPayloadUb,
+                                          uint64_t sortedValueUb,
+                                          uint64_t sortedPayloadUb,
+                                          uint64_t packedSortUb,
+                                          uint64_t mergeTmpUb,
                                           uint32_t elemNum)
 {
     if (elemNum == 0) {
         return;
     }
     if (elemNum == 1) {
-        __ubuf__ const int32_t *valueIn = reinterpret_cast<__ubuf__ const int32_t *>(inputValueLocal.GetPhyAddr());
-        __ubuf__ const uint32_t *payloadIn = reinterpret_cast<__ubuf__ const uint32_t *>(inputPayloadLocal.GetPhyAddr());
-        __ubuf__ int32_t *valueOut = reinterpret_cast<__ubuf__ int32_t *>(sortedValueLocal.GetPhyAddr());
-        __ubuf__ uint32_t *payloadOut = reinterpret_cast<__ubuf__ uint32_t *>(sortedPayloadLocal.GetPhyAddr());
+        __ubuf__ const int32_t *valueIn = reinterpret_cast<__ubuf__ const int32_t *>(inputValueUb);
+        __ubuf__ const uint32_t *payloadIn = reinterpret_cast<__ubuf__ const uint32_t *>(inputPayloadUb);
+        __ubuf__ int32_t *valueOut = reinterpret_cast<__ubuf__ int32_t *>(sortedValueUb);
+        __ubuf__ uint32_t *payloadOut = reinterpret_cast<__ubuf__ uint32_t *>(sortedPayloadUb);
         valueOut[0] = valueIn[0];
         payloadOut[0] = payloadIn[0];
         return;
     }
 
-    PtoSortInt32ToPackedUB(inputValueLocal, inputPayloadLocal, packedSortLocal, mergeTmpLocal, elemNum);
-    PtoExtractPackedSortResult(sortedValueLocal, sortedPayloadLocal, packedSortLocal, elemNum);
+    PtoSortInt32ToPackedUB(inputValueUb, inputPayloadUb, packedSortUb, mergeTmpUb, elemNum);
+    PtoExtractPackedSortResult(sortedValueUb, sortedPayloadUb, packedSortUb, elemNum);
 }
 
 }  // namespace pto_detail

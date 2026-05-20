@@ -26,6 +26,9 @@ void FillCoCTiling(CoCTiling &coc, const CaseConfig &cfg)
 
 auto *GetPlatform(const CaseConfig &cfg)
 {
+    if (cfg.soc_version.empty()) {
+        return platform_ascendc::PlatformAscendCManager::GetInstance();
+    }
     return platform_ascendc::PlatformAscendCManager::GetInstance(cfg.soc_version.c_str());
 }
 

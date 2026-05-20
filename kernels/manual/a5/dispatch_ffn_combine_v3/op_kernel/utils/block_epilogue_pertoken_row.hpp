@@ -114,9 +114,9 @@ public:
         int32_t eventVMTE3 = 0;
         int32_t blockN = params.n2;
         for (uint32_t i = 0; i < UB_STAGES; ++i) {
-            ubCList[i] = resource.ubBuf.template GetBufferByByte<ElementC>(ubOffset);
+            ubCOffsetList[i] = ubOffset;
             ubOffset += blockN * sizeof(ElementC);
-            ubDList[i] = resource.ubBuf.template GetBufferByByte<ElementD>(ubOffset);
+            ubDOffsetList[i] = ubOffset;
             ubOffset += blockN * sizeof(ElementD);
 
             eventUbCVMTE2List[i] = eventVMTE2++;
@@ -125,7 +125,7 @@ public:
             eventUbDVMTE3List[i] = eventVMTE3++;
 
 
-            ubCFp32List[i] = resource.ubBuf.template GetBufferByByte<float>(ubOffset);
+            ubCFp32OffsetList[i] = ubOffset;
             ubOffset += blockN * sizeof(float);
         }
     }
@@ -160,9 +160,9 @@ public:
 
     PTO_DEVICE
     void operator() (
-        AscendC::GlobalTensor<ElementC> const &gmC,
+        __gm__ ElementC *gmCPtr,
         PtoShape2D const &shapeC,
-        AscendC::GlobalTensor<ElementPerTokenScale> const &gmPerTokenScale,
+        __gm__ ElementPerTokenScale *gmPerTokenScalePtr,
         __gm__ ElementD* ptrD,
         int32_t dstRank
     )
@@ -179,46 +179,41 @@ public:
         int32_t logicalSubCoreIdx = get_block_idx() + get_subblockid() * get_block_num();
         int64_t scratchOffsetBytes = params.scratchOffset + static_cast<int64_t>(logicalSubCoreIdx) * scratchCols * sizeof(ElementD);
         __gm__ ElementD* localScratch = reinterpret_cast<__gm__ ElementD*>(params.remoteWindow(scratchOffsetBytes, params.rank));
-        AscendC::GlobalTensor<ElementD> gmLocalScratch;
-        gmLocalScratch.SetGlobalBuffer(localScratch);
 
         for (uint32_t loopIdx = 0; loopIdx < tileLoops; loopIdx ++) {
-            auto gmTileC = gmC[loopIdx * blockN];
-            auto &ubC = ubCList[ubListId];
-            auto &ubCFp32 = ubCFp32List[ubListId];
-            auto &ubMul = ubMulList[ubListId];
-            auto &ubD = ubDList[ubListId];
+            __gm__ ElementC *gmTileC = gmCPtr + loopIdx * blockN;
+            uint64_t ubCOffset = ubCOffsetList[ubListId];
+            uint64_t ubCFp32Offset = ubCFp32OffsetList[ubListId];
+            uint64_t ubDOffset = ubDOffsetList[ubListId];
 
             row_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
-            row_detail::PtoLoadVector(ubC, gmTileC, blockN);
+            row_detail::PtoLoadVector(ubCOffset, gmTileC, blockN);
             row_detail::PtoSetFlag<AscendC::HardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
 
             row_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
-            row_detail::PtoCastVector(ubCFp32, ubC, blockN, pto::RoundMode::CAST_NONE);
+            row_detail::PtoCastVector<ElementPerTokenScale, ElementC>(ubCFp32Offset, ubCOffset, blockN, pto::RoundMode::CAST_NONE);
             row_detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
 
-            ElementPerTokenScale perTokenScale = gmPerTokenScale(loopIdx);
+            ElementPerTokenScale perTokenScale = gm_load(gmPerTokenScalePtr + loopIdx);
 
             row_detail::PtoSetFlag<AscendC::HardEvent::S_V>(0);
             row_detail::PtoWaitFlag<AscendC::HardEvent::S_V>(0);
             row_detail::PtoPipeBarrier<PIPE_V>();
-            row_detail::PtoMulVector(ubCFp32, ubCFp32, blockN, perTokenScale);
+            row_detail::PtoMulVector(ubCFp32Offset, ubCFp32Offset, blockN, perTokenScale);
             row_detail::PtoPipeBarrier<PIPE_V>();
 
             row_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[ubListId]);
-            row_detail::PtoCastVector(ubD, ubCFp32, blockN, pto::RoundMode::CAST_RINT);
+            row_detail::PtoCastVector<ElementD, ElementPerTokenScale>(ubDOffset, ubCFp32Offset, blockN, pto::RoundMode::CAST_RINT);
             row_detail::PtoSetFlag<AscendC::HardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
 
             row_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
             __gm__ ElementD* dstRowBase = ptrD + loopIdx * blockN;
             if (dstRank == params.rank) {
-                AscendC::GlobalTensor<ElementD> gmTileD;
-                gmTileD.SetGlobalBuffer(dstRowBase);
-                row_detail::PtoStoreVector(gmTileD[0], ubD, blockN);
+                row_detail::PtoStoreVector(dstRowBase, ubDOffset, blockN);
             } else {
                 for (uint32_t colOffset = 0; colOffset < blockN; colOffset += scratchCols) {
                     uint32_t chunkCols = (blockN - colOffset < scratchCols) ? (blockN - colOffset) : scratchCols;
-                    row_detail::PtoStoreVector(gmLocalScratch[0], ubD[colOffset], chunkCols);
+                    row_detail::PtoStoreVector(localScratch, ubDOffset + static_cast<uint64_t>(colOffset) * sizeof(ElementD), chunkCols);
                     ShapeDyn rowShape(1, 1, 1, 1, chunkCols);
                     StrideDyn rowStride(chunkCols, chunkCols, chunkCols, chunkCols, 1);
                     TputTile tputTile(1, chunkCols < scratchCols ? chunkCols : scratchCols);
@@ -237,8 +232,8 @@ public:
 private:
     Params params;
 
-    AscendC::LocalTensor<ElementC> ubCList[UB_STAGES];
-    AscendC::LocalTensor<ElementD> ubDList[UB_STAGES];
+    uint64_t ubCOffsetList[UB_STAGES];
+    uint64_t ubDOffsetList[UB_STAGES];
 
     int32_t eventUbCVMTE2List[UB_STAGES];
     int32_t eventUbCMTE2VList[UB_STAGES];
@@ -247,8 +242,7 @@ private:
 
     uint32_t ubListId{0};
 
-    AscendC::LocalTensor<float> ubCFp32List[UB_STAGES];
-    AscendC::LocalTensor<float> ubMulList[UB_STAGES];
+    uint64_t ubCFp32OffsetList[UB_STAGES];
 
 };
 

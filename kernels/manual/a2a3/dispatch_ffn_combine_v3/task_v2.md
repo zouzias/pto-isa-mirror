@@ -53,7 +53,7 @@
 | 分类 | 文件 | 处理策略 |
 | --- | --- | --- |
 | 入口/launch 直接依赖 | `op_kernel/dispatch_ffn_combine.cpp`, `op_kernel/dispatch_ffn_combine.h`, `op_kernel/dispatch_ffn_combine_kernel.hpp` | 暂保留；先减少业务 helper 签名里的 AscendC 类型。 |
-| routing base 直接依赖 | `moe_v2_common.h`, `moe_v2_fullload_quant_base.h`, `moe_v2_gather_out.h`, `moe_v2_gather_quant.h`, `moe_v2_mrgsort*.h`, `moe_v2_sort_base.h` | 暂保留；这些文件仍拥有 `TPipe/TQue/GlobalTensor/LocalTensor` 生命周期。 |
+| routing base 直接依赖 | `moe_v2_common.h`, `moe_v2_fullload_quant_base.h`, `moe_v2_gather_quant.h`, `moe_v2_mrgsort*.h`, `moe_v2_sort_base.h` | 暂保留；这些文件仍拥有 `TPipe/TQue/GlobalTensor/LocalTensor` 生命周期。 |
 | unpermute 直接依赖 | `op_kernel/unpermute/moe_token_unpermute.h` | 暂保留；`TPipe/TQue/DataCopyPad` 还没 PTO 化。 |
 | substrate/helper 直接依赖 | `dispatch_policy_custom.hpp`, `hccl_window.hpp`, `get_tensor_addr.hpp`, `layout3d.hpp` | `dispatch_policy_custom.hpp`/`hccl_window.hpp` 保留；两个小工具后续可检查是否通过上层头间接化。 |
 | transitive AscendC user | `block_epilogue_pertoken*.hpp`, `block_mmad_preload_async_fixpipe_quant.hpp`, `moe_v2_pto_sort.h` 等 | 优先改这些 PTO seam 的签名与 adapter，减少 `AscendC::GlobalTensor/LocalTensor` 外露。 |

@@ -64,8 +64,6 @@ private:
     GM_ADDR expertTokensBeforeCapacity = nullptr;
 
 
-    TBuf<AscendC::TPosition::VECCALC> uBuf_;
-
     int32_t rank;
     int32_t rankSize;
     int32_t aivNum;

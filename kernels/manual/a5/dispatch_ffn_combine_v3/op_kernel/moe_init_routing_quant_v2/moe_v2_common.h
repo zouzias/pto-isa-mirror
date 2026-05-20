@@ -92,5 +92,12 @@ __aicore__ inline void SetWaitFlag(HardEvent evt) {
   WaitFlag<event>(eventId);
 }
 
+template <typename T>
+__aicore__ inline void InitGlobalMemory(__gm__ T *gm, int64_t elementNum, T value) {
+  for (int64_t idx = 0; idx < elementNum; ++idx) {
+    gm[idx] = value;
+  }
+}
+
 }  // namespace MoeInitRoutingQuantV2
 #endif  // INNER_MOE_V2_COMMON_H

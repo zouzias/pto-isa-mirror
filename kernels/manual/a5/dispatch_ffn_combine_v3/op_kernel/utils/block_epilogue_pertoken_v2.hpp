@@ -31,62 +31,72 @@ PTO_DEVICE void PtoWaitFlag(int32_t eventId)
     AscendC::WaitFlag<Event>(eventId);
 }
 
-template <typename Element, int TileElems = 128>
-PTO_DEVICE void PtoLoadVector(AscendC::LocalTensor<Element> const &dst,
-                              AscendC::GlobalTensor<Element> const &src,
-                              uint32_t elemNum)
-{
-    pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoLoadVector<Element, TileElems>(dst, src, elemNum);
-}
+using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoElemOffsetBytes;
 
-template <typename Element, int TileElems = 128>
-PTO_DEVICE void PtoStoreVector(AscendC::GlobalTensor<Element> const &dst,
-                               AscendC::LocalTensor<Element> const &src,
-                               uint32_t elemNum)
+template <typename Element>
+PTO_DEVICE __ubuf__ Element *PtoUbPtr(uint64_t ubOffsetBytes)
 {
-    pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoStoreVector<Element, TileElems>(dst, src, elemNum);
+    return reinterpret_cast<__ubuf__ Element *>(ubOffsetBytes);
 }
 
 template <typename DstElement, typename SrcElement, int TileElems = 128>
-PTO_DEVICE void PtoCastVector(AscendC::LocalTensor<DstElement> const &dst,
-                              AscendC::LocalTensor<SrcElement> const &src,
+PTO_DEVICE void PtoCastVector(uint64_t dstUbOffsetBytes,
+                              uint64_t srcUbOffsetBytes,
                               uint32_t elemNum,
                               pto::RoundMode mode)
 {
-    pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoCastVector<DstElement, SrcElement, TileElems>(dst, src, elemNum, mode);
+    pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoCastVector<DstElement, SrcElement, TileElems>(
+        dstUbOffsetBytes, srcUbOffsetBytes, elemNum, mode);
 }
 
 template <typename Element, int TileElems = 128>
-PTO_DEVICE void PtoMulVector(AscendC::LocalTensor<Element> const &dst,
-                             AscendC::LocalTensor<Element> const &src,
+PTO_DEVICE void PtoMulVector(uint64_t dstUbOffsetBytes,
+                             uint64_t srcUbOffsetBytes,
                              uint32_t elemNum,
                              Element scalar)
 {
-    pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoMulVector<Element, TileElems>(dst, src, elemNum, scalar);
+    pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoMulVector<Element, TileElems>(
+        dstUbOffsetBytes, srcUbOffsetBytes, elemNum, scalar);
 }
 
 template <typename Element, int TileElems = 128>
-PTO_DEVICE void PtoLoadMatrixRows(AscendC::LocalTensor<Element> const &dst,
-                                  AscendC::GlobalTensor<Element> const &src,
+PTO_DEVICE void PtoLoadVector(uint64_t dstUbOffsetBytes,
+                              __gm__ Element *src,
+                              uint32_t elemNum)
+{
+    pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoLoadVector<Element, TileElems>(dstUbOffsetBytes, src, elemNum);
+}
+
+template <typename Element, int TileElems = 128>
+PTO_DEVICE void PtoStoreVector(__gm__ Element *dst,
+                               uint64_t srcUbOffsetBytes,
+                               uint32_t elemNum)
+{
+    pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoStoreVector<Element, TileElems>(dst, srcUbOffsetBytes, elemNum);
+}
+
+template <typename Element, int TileElems = 128>
+PTO_DEVICE void PtoLoadMatrixRows(uint64_t dstUbOffsetBytes,
+                                  __gm__ Element *src,
                                   uint32_t rowNum,
                                   uint32_t colNum,
                                   uint32_t dstStride,
                                   uint32_t srcStride)
 {
     pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoLoadMatrixRows<Element, TileElems>(
-        dst, src, rowNum, colNum, dstStride, srcStride);
+        dstUbOffsetBytes, src, rowNum, colNum, dstStride, srcStride);
 }
 
 template <typename Element, int TileElems = 128>
-PTO_DEVICE void PtoStoreMatrixRows(AscendC::GlobalTensor<Element> const &dst,
-                                   AscendC::LocalTensor<Element> const &src,
+PTO_DEVICE void PtoStoreMatrixRows(__gm__ Element *dst,
+                                   uint64_t srcUbOffsetBytes,
                                    uint32_t rowNum,
                                    uint32_t colNum,
                                    uint32_t dstStride,
                                    uint32_t srcStride)
 {
     pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoStoreMatrixRows<Element, TileElems>(
-        dst, src, rowNum, colNum, dstStride, srcStride);
+        dst, srcUbOffsetBytes, rowNum, colNum, dstStride, srcStride);
 }
 
 }  // namespace detail
@@ -147,19 +157,19 @@ public:
     {
         //ub:192KB
         n0 = params.n0;
-        size_t ubOffset = 0;
+        uint64_t ubOffset = 0;
         for(int32_t i = 0; i < 2; i++) {
-            ubCList[i] = resource.ubBuf.template GetBufferByByte<ElementC>(ubOffset);
+            ubCOffsetList[i] = ubOffset;
             ubOffset += max_len * sizeof(ElementC);
-            ubDList[i] = resource.ubBuf.template GetBufferByByte<ElementD>(ubOffset);
+            ubDOffsetList[i] = ubOffset;
             ubOffset += max_len * sizeof(ElementD);
-            ubFp32List[i] = resource.ubBuf.template GetBufferByByte<float>(ubOffset);
+            ubFp32OffsetList[i] = ubOffset;
             ubOffset += max_len * sizeof(float);
-            scaleUbList[i] = resource.ubBuf.template GetBufferByByte<float>(ubOffset);
+            scaleUbOffsetList[i] = ubOffset;
             ubOffset += (max_len / n0) * sizeof(float);
             source_scale_offset[i] = -1;
         }
-        tokenPerExpert.SetGlobalBuffer(reinterpret_cast<__gm__ int32_t *>(params.ptrTokenPerExpert));
+        tokenPerExpertPtr = reinterpret_cast<__gm__ int32_t *>(params.ptrTokenPerExpert);
         tokenPerExpertLayout = params.tokenPerExpertLayout;
         is_ping = true;
     }
@@ -196,13 +206,13 @@ public:
     }
     PTO_DEVICE
     void operator() (
-        AscendC::GlobalTensor<ElementC> const &gmC,
-        AscendC::GlobalTensor<ElementPerTokenScale> const &gmPerTokenScale,
+        __gm__ ElementC *gmCPtr,
+        __gm__ ElementPerTokenScale *gmPerTokenScalePtr,
         PtoCoord2D const &blockCoord,
         PtoShape2D const &actualBlockShape,
         int32_t groupIdx,
         int32_t preSrcExpertSum,
-        AscendC::GlobalTensor<int32_t> preSumBeforeRank
+        __gm__ int32_t *preSumBeforeRank
     ){
         is_ping = !is_ping;
         auto event_id = is_ping ? EVENT_ID0 : EVENT_ID1;
@@ -212,20 +222,24 @@ public:
         uint32_t actualM = static_cast<uint32_t>(actualBlockShape.shape[0]);
         uint32_t actualN = static_cast<uint32_t>(actualBlockShape.shape[1]);
 
-        auto &ubC = ubCList[is_ping];
-        auto &ubD = ubDList[is_ping];
+        uint64_t ubCOffset = ubCOffsetList[is_ping];
+        uint64_t ubDOffset = ubDOffsetList[is_ping];
         int32_t gmCOffset = preSrcExpertSum * params.n2 + blockRow * params.n2 + blockCol;
-        auto gmTileC = gmC[gmCOffset];
-        auto &ubCFp32 = ubFp32List[is_ping];
-        auto &scaleUb = scaleUbList[is_ping];
+        __gm__ ElementC *gmTileC = gmCPtr + gmCOffset;
+        uint64_t ubCFp32Offset = ubFp32OffsetList[is_ping];
+        uint64_t scaleUbOffset = scaleUbOffsetList[is_ping];
 
         detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(event_id);
-        detail::PtoLoadMatrixRows(ubC, gmTileC, actualM, actualN, n0, params.n2);
+        detail::PtoLoadMatrixRows(ubCOffset, gmTileC, actualM, actualN, n0, params.n2);
         detail::PtoSetFlag<AscendC::HardEvent::MTE2_V>(event_id);
 
         detail::PtoWaitFlag<AscendC::HardEvent::MTE2_V>(event_id);
         for (uint32_t row = 0; row < actualM; ++row) {
-                detail::PtoCastVector(ubCFp32[n0 * row], ubC[n0 * row], actualN, pto::RoundMode::CAST_NONE);
+                detail::PtoCastVector<float, ElementC>(
+                    ubCFp32Offset + detail::PtoElemOffsetBytes<float>(n0 * row),
+                    ubCOffset + detail::PtoElemOffsetBytes<ElementC>(n0 * row),
+                    actualN,
+                    pto::RoundMode::CAST_NONE);
         }
         detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(event_id);
 
@@ -236,7 +250,7 @@ public:
         int32_t gmScaleOffset = preSrcExpertSum + blockRow;
         if (source_scale_offset[event_id] != gmScaleOffset) {
                 source_scale_offset[event_id] = gmScaleOffset;
-                detail::PtoLoadVector(scaleUb, gmPerTokenScale[gmScaleOffset], actualM);
+                detail::PtoLoadVector(scaleUbOffset, gmPerTokenScalePtr + gmScaleOffset, actualM);
         }
 
         detail::PtoSetFlag<AscendC::HardEvent::MTE2_S>(event_id_2);
@@ -249,14 +263,20 @@ public:
         detail::PtoWaitFlag<AscendC::HardEvent::MTE2_S>(event_id_2); // Note that the value must be MTE2_S instead of MTE2_V.
                                                                    // Otherwise, 0 will be read, causing garbled characters.
         detail::PtoPipeBarrier<PIPE_V>();
+        __ubuf__ float *scaleUbPtr = detail::PtoUbPtr<float>(scaleUbOffset);
         for (uint32_t row = 0; row < actualM; ++row) {
-                float scale = scaleUb(row);
-                detail::PtoMulVector(ubCFp32[n0 * row], ubCFp32[n0 * row], actualN, scale);
+                float scale = scaleUbPtr[row];
+                uint64_t rowFp32Offset = ubCFp32Offset + detail::PtoElemOffsetBytes<float>(n0 * row);
+                detail::PtoMulVector<float>(rowFp32Offset, rowFp32Offset, actualN, scale);
         }
         detail::PtoPipeBarrier<PIPE_V>();
         detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(event_id);
         for (uint32_t row = 0; row < actualM; ++row) {
-                detail::PtoCastVector(ubD[n0 * row], ubCFp32[n0 * row], actualN, pto::RoundMode::CAST_RINT);
+                detail::PtoCastVector<ElementD, float>(
+                    ubDOffset + detail::PtoElemOffsetBytes<ElementD>(n0 * row),
+                    ubCFp32Offset + detail::PtoElemOffsetBytes<float>(n0 * row),
+                    actualN,
+                    pto::RoundMode::CAST_RINT);
         }
         detail::PtoSetFlag<AscendC::HardEvent::S_MTE2>(event_id_2);
         detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(event_id_2);
@@ -270,8 +290,8 @@ public:
 
         detail::PtoWaitFlag<AscendC::HardEvent::V_MTE3>(event_id);
         for (int32_t dstEpIdx = 0; dstEpIdx < params.EP; dstEpIdx ++) {
-            int32_t lenRankInExpert = tokenPerExpert(tokenPerExpertLayout(dstEpIdx, params.rank, groupIdx));
-            int32_t dstExpertOffset = preSumBeforeRank(dstEpIdx * params.expertPerRank + groupIdx);
+            int32_t lenRankInExpert = gm_load(tokenPerExpertPtr + tokenPerExpertLayout(dstEpIdx, params.rank, groupIdx));
+            int32_t dstExpertOffset = gm_load(preSumBeforeRank + dstEpIdx * params.expertPerRank + groupIdx);
             int32_t stRankInExpert = preSumRankInExpert;
             int32_t edRankInExpert = stRankInExpert + lenRankInExpert;
             preSumRankInExpert += lenRankInExpert;
@@ -292,14 +312,19 @@ public:
             if (stTile > stRankInExpert) {
                 dstOffsetInExpert = stTile - stRankInExpert;
             }
-            AscendC::GlobalTensor<ElementD> gmRemotePeer;
             __gm__ void* dstPeermemPtr = params.remoteWindow(params.offsetD, dstEpIdx);
-            gmRemotePeer.SetGlobalBuffer(reinterpret_cast<__gm__ ElementD*>(dstPeermemPtr));
+            __gm__ ElementD *gmRemotePeerPtr = reinterpret_cast<__gm__ ElementD*>(dstPeermemPtr);
             auto dstOffset = MakePtoCoord2D(dstOffsetInExpert + dstExpertOffset, blockCol);
             int64_t gmDstOffset = params.layoutC.GetOffset(dstOffset);
-            auto gmTileD = gmRemotePeer[gmDstOffset];
+            __gm__ ElementD *gmTileD = gmRemotePeerPtr + gmDstOffset;
             if (dstEpIdx == params.rank) {
-                detail::PtoStoreMatrixRows(gmTileD, ubD[tileOffset * n0], lenData, actualN, params.n2, n0);
+                detail::PtoStoreMatrixRows(
+                    gmTileD,
+                    ubDOffset + detail::PtoElemOffsetBytes<ElementD>(tileOffset * n0),
+                    lenData,
+                    actualN,
+                    params.n2,
+                    n0);
             } else {
                 using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
                 using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -309,8 +334,6 @@ public:
                 int32_t logicalSubCoreIdx = get_block_idx() + get_subblockid() * get_block_num();
                 int64_t scratchOffsetBytes = params.scratchOffset + static_cast<int64_t>(logicalSubCoreIdx) * n0 * sizeof(ElementD);
                 __gm__ ElementD* localScratch = reinterpret_cast<__gm__ ElementD*>(params.remoteWindow(scratchOffsetBytes, params.rank));
-                AscendC::GlobalTensor<ElementD> gmLocalScratch;
-                gmLocalScratch.SetGlobalBuffer(localScratch);
                 ShapeDyn rowShape(1, 1, 1, 1, actualN);
                 StrideDyn localStride(actualN, actualN, actualN, actualN, 1);
                 StrideDyn remoteStride(params.n2, params.n2, params.n2, params.n2, 1);
@@ -318,7 +341,10 @@ public:
                 __gm__ ElementD* remotePeerBase = reinterpret_cast<__gm__ ElementD*>(dstPeermemPtr) + gmDstOffset;
 
                 for (uint32_t rowIdx = 0; rowIdx < lenData; ++rowIdx) {
-                    detail::PtoStoreVector(gmLocalScratch[0], ubD[(tileOffset + rowIdx) * n0], actualN);
+                    detail::PtoStoreVector(
+                        localScratch,
+                        ubDOffset + detail::PtoElemOffsetBytes<ElementD>((tileOffset + rowIdx) * n0),
+                        actualN);
                     TputGlobal localRowG(localScratch, rowShape, localStride);
                     TputGlobal remoteRowG(remotePeerBase + rowIdx * params.n2, rowShape, remoteStride);
                     pto::comm::TPUT(remoteRowG, localRowG, tputTile);
@@ -333,10 +359,10 @@ public:
 private:
 
     Params params;
-    AscendC::LocalTensor<ElementC> ubCList[UB_STAGES];
-    AscendC::LocalTensor<ElementD> ubDList[UB_STAGES];
-    AscendC::LocalTensor<float> ubFp32List[UB_STAGES];
-    AscendC::LocalTensor<float> scaleUbList[UB_STAGES];
+    uint64_t ubCOffsetList[UB_STAGES];
+    uint64_t ubDOffsetList[UB_STAGES];
+    uint64_t ubFp32OffsetList[UB_STAGES];
+    uint64_t scaleUbOffsetList[UB_STAGES];
     int32_t source_scale_offset[UB_STAGES];
 
     int32_t max_len = 8 * 32 / 4 * 128;
@@ -346,7 +372,7 @@ private:
     
     int32_t repeat = 128;
 
-    AscendC::GlobalTensor<int32_t> tokenPerExpert;
+    __gm__ int32_t *tokenPerExpertPtr;
     Layout3D tokenPerExpertLayout;
 };
 }

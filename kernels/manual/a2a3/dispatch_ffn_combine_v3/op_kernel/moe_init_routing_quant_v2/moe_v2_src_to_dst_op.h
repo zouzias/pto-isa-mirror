@@ -36,10 +36,9 @@ class MoeV2SrcToDstOp {
   __aicore__ inline void AssistInit();
 
  private:
-  TPipe* pipe;
-  TQue<QuePosition::VECIN, 1> copyInQueue;
-  TQue<QuePosition::VECOUT, 1> copyOutQueue;
-  TBuf<TPosition::VECCALC> assistBuffer;
+  uint64_t inputDstToSrcUb;
+  uint64_t outputSrcToDstUb;
+  uint64_t assistUb;
 
   __gm__ int32_t *expandDstToSrcRowGm;
   __gm__ int32_t *expandSrcToDstRowGm;
@@ -60,45 +59,45 @@ __aicore__ inline void MoeV2SrcToDstOp::AssistInit() {
 #if defined(ASCENDC_OOM) && ASCENDC_OOM == 1
   OOMCheckAddrRange(assistGm, ASSIST_NUM * sizeof(int32_t));
 #endif
-  LocalTensor<int32_t> assistTensor = assistBuffer.Get<int32_t>(ASSIST_NUM);
-  pto_detail::PtoLoadVector(assistTensor, assistGm, ASSIST_NUM);
+  pto_detail::PtoLoadVector<int32_t>(this->assistUb, assistGm, ASSIST_NUM);
   pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
-  pto_detail::PtoAddScalarVector(assistTensor, assistTensor, ASSIST_NUM,
-                                 static_cast<int32_t>(this->blockIdx * this->srcToDstTilingData->perCoreRows));
+  pto_detail::PtoAddScalarVector<int32_t>(this->assistUb, this->assistUb, ASSIST_NUM,
+                                          static_cast<int32_t>(this->blockIdx * this->srcToDstTilingData->perCoreRows));
 }
 
 __aicore__ inline void MoeV2SrcToDstOp::CopyIn(int64_t progress) {
-  LocalTensor<int32_t> inLocal = copyInQueue.AllocTensor<int32_t>();
-  pto_detail::PtoLoadVector(inLocal, expandDstToSrcRowGm + progress * perLoopRows, currentLoopRows);
-  copyInQueue.EnQue<int32_t>(inLocal);
+  pto_detail::PtoLoadVector<int32_t>(this->inputDstToSrcUb,
+                                     expandDstToSrcRowGm + progress * perLoopRows,
+                                     currentLoopRows);
 }
 
 __aicore__ inline void MoeV2SrcToDstOp::Compute(int64_t progress) {
-  LocalTensor<int32_t> outLocal = copyOutQueue.AllocTensor<int32_t>();
-  LocalTensor<int32_t> assistTensor = assistBuffer.Get<int32_t>(ASSIST_NUM);
-
+  pto_detail::PtoWaitFlag<HardEvent::MTE3_V>(EVENT_ID0);
   pto_detail::PtoPipeBarrier<PIPE_V>();
   int64_t loops = Ceil(currentLoopRows, ASSIST_INDEX_NUM);
   for (int64_t i = 0; i < loops; i++) {
-    pto_detail::PtoAddScalarVector(outLocal[i * ASSIST_NUM], assistTensor, ASSIST_NUM,
-                                   static_cast<int32_t>(this->perLoopRows * progress + i * ASSIST_INDEX_NUM));
+    pto_detail::PtoAddScalarVector<int32_t>(
+        this->outputSrcToDstUb + static_cast<uint64_t>(i * ASSIST_NUM) * sizeof(int32_t),
+        this->assistUb,
+        ASSIST_NUM,
+        static_cast<int32_t>(this->perLoopRows * progress + i * ASSIST_INDEX_NUM));
   }
   pto_detail::PtoPipeBarrier<PIPE_V>();
-  copyOutQueue.EnQue<int32_t>(outLocal);
+  pto_detail::PtoSetFlag<HardEvent::V_MTE3>(EVENT_ID0);
 }
 
 __aicore__ inline void MoeV2SrcToDstOp::CopyOut() {
-  LocalTensor<int32_t> inLocal = copyInQueue.DeQue<int32_t>();
-  LocalTensor<int32_t> outLocal = copyOutQueue.DeQue<int32_t>();
+  pto_detail::PtoWaitFlag<HardEvent::V_MTE3>(EVENT_ID0);
   pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
   uint32_t outOffset;
   for (int64_t idx = 0; idx < currentLoopRows; idx++) {
-    outOffset = pto_detail::PtoGetValue<int32_t>(inLocal, idx);
-    pto_detail::PtoStoreVector(expandSrcToDstRowGm + outOffset, outLocal[idx * INT32_ONE_BLOCK_NUM], 1);
+    outOffset = pto_detail::PtoGetValue<int32_t>(this->inputDstToSrcUb, idx);
+    pto_detail::PtoStoreVector<int32_t>(
+        expandSrcToDstRowGm + outOffset,
+        this->outputSrcToDstUb + static_cast<uint64_t>(idx * INT32_ONE_BLOCK_NUM) * sizeof(int32_t),
+        1);
   }
-
-  copyInQueue.FreeTensor(inLocal);
-  copyOutQueue.FreeTensor(outLocal);
+  pto_detail::PtoSetFlag<HardEvent::MTE3_V>(EVENT_ID0);
 }
 
 __aicore__ inline void MoeV2SrcToDstOp::SyncAll() {
@@ -111,8 +110,6 @@ __aicore__ inline void MoeV2SrcToDstOp::SyncAll() {
 template <typename TilingData>
 __aicore__ inline void MoeV2SrcToDstOp::Init(GM_ADDR expandSrcToDstRow, GM_ADDR workspace, const TilingData* tilingData,
                                              TPipe* tPipe) {
-  int64_t blockNum = GetBlockNum();
-  this->pipe = tPipe;
   this->blockIdx = get_block_idx() + get_subblockid() * get_block_num();
 
   this->coreNum = tilingData->coreNum;
@@ -134,9 +131,10 @@ __aicore__ inline void MoeV2SrcToDstOp::Init(GM_ADDR expandSrcToDstRow, GM_ADDR 
                         this->blockIdx * this->srcToDstTilingData->perCoreRows;
   assistGm = (__gm__ int32_t*)assist;
 
-  pipe->InitBuffer(copyInQueue, 1, this->perLoopRows * BLOCK_BYTES);
-  pipe->InitBuffer(copyOutQueue, 1, Ceil(this->perLoopRows, ASSIST_NUM) * ASSIST_NUM * BLOCK_BYTES);
-  pipe->InitBuffer(assistBuffer, ASSIST_NUM * sizeof(int32_t));
+  this->inputDstToSrcUb = 0;
+  this->outputSrcToDstUb = AlignBytes(this->perLoopRows, sizeof(int32_t));
+  this->assistUb = this->outputSrcToDstUb + Ceil(this->perLoopRows, ASSIST_NUM) * ASSIST_NUM * BLOCK_BYTES;
+  pto_detail::PtoSetFlag<HardEvent::MTE3_V>(EVENT_ID0);
 }
 
 __aicore__ inline void MoeV2SrcToDstOp::Process() {

@@ -40,11 +40,8 @@ class MoeV2FullLoadQuantBase {
  protected:
   const InnerMoeV2GatherOutComputeTilingData* gatherOutTilingData;
 
-  AscendC::TPipe* pipe;
   int64_t tileLength;
-  int64_t bufferNum = 1;
   int64_t totalLength;
-  int64_t coreNum;
   int64_t sortNum;
   int64_t blockIdx;
   int64_t needCoreNum;
@@ -55,26 +52,22 @@ class MoeV2FullLoadQuantBase {
   int64_t cols;
   int64_t activateRows;
   int64_t expertNum;
-  int64_t expertCapacity;
 
-  AscendC::TQue<QuePosition::VECIN, 1> sortDataCopyInQueue;
-  AscendC::TBuf<TPosition::VECCALC> tempBuffer;
-  AscendC::TBuf<TPosition::VECCALC> sortedBuffer;
-  AscendC::TQue<QuePosition::VECIN, 1> xCopyInQueue;
-  AscendC::TQue<QuePosition::VECOUT, 1> expandedRowIdxCopyOutQueue;
-  AscendC::TQue<QuePosition::VECOUT, 1> expandedExpertIdxCopyOutQueue;
-  AscendC::TQue<QuePosition::VECOUT, 1> expandDstToSrcRowQueue;
-  AscendC::TQue<QuePosition::VECOUT, 1> expertTokensCopyOutQueue;
+  uint64_t sortInputExpertIdxUb;
+  uint64_t sortInputRowIdxUb;
+  uint64_t expandedExpertIdxUb;
+  uint64_t expandDstToSrcRowUb;
+  uint64_t expandedRowIdxUb;
+  uint64_t expertTokensUb;
+  uint64_t packedSortUb;
+  uint64_t mergeTmpUb;
 
-  AscendC::GlobalTensor<int32_t> expertIdxGm;
-  AscendC::GlobalTensor<int8_t> expandedXGm;
-  AscendC::GlobalTensor<int32_t> expandedRowIdxGm;
-  AscendC::GlobalTensor<int32_t> expandedExpertIdxGm;
-  AscendC::GlobalTensor<int32_t> expertTokensCountOrCumsumGm;
-  AscendC::GlobalTensor<int32_t> expertTokensBeforeCapacityGm;
+  __gm__ int32_t *expertIdxGm;
+  __gm__ int8_t *expandedXGm;
+  __gm__ int32_t *expandedRowIdxGm;
+  __gm__ int32_t *expertTokensCountOrCumsumGm;
 
   int64_t expertTokensCountOrCumsumFlag = 0;
-  int64_t expertTokensBeforeCapacityFlag = 0;
   int64_t dropPadMode = 0;
   static constexpr int64_t DST_BLK_STRIDE = 1;
   static constexpr int64_t DST_REP_STRIDE = 8;
@@ -82,96 +75,67 @@ class MoeV2FullLoadQuantBase {
 };
 
 __aicore__ inline void MoeV2FullLoadQuantBase::CopyIn() {
-  AscendC::LocalTensor<int32_t> inLocal = sortDataCopyInQueue.AllocTensor<int32_t>();
-  pto_detail::PtoLoadVector(inLocal[0], expertIdxGm, this->totalLength);
-  ArithProgression<int32_t>(inLocal[this->sortNum], 0, 1, this->totalLength);
-  sortDataCopyInQueue.EnQue(inLocal);
+  pto_detail::PtoLoadVector<int32_t>(this->sortInputExpertIdxUb, expertIdxGm, this->totalLength);
+  pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
+  pto_detail::PtoFillArithProgressionInt32(this->sortInputRowIdxUb, 0, 1, this->totalLength);
 }
 
 __aicore__ inline void MoeV2FullLoadQuantBase::SortCompute() {
-  AscendC::LocalTensor<int32_t> inLocal = sortDataCopyInQueue.DeQue<int32_t>();
-  AscendC::LocalTensor<int32_t> expertIdxLocal = inLocal[0];
-  AscendC::LocalTensor<uint32_t> rowIdxLocal = inLocal[this->sortNum].template ReinterpretCast<uint32_t>();
-  AscendC::LocalTensor<float> packedSortLocal = tempBuffer.Get<float>(GetSortLen<float>(this->sortNum));
-  AscendC::LocalTensor<float> mergeTmpLocal = sortedBuffer.Get<float>(GetSortLen<float>(this->sortNum));
-
-  AscendC::LocalTensor<int32_t> expandedExpertIdxLocal = expandedExpertIdxCopyOutQueue.AllocTensor<int32_t>();
-  AscendC::LocalTensor<uint32_t> expandDstToSrcRowLocal = expandDstToSrcRowQueue.AllocTensor<uint32_t>();
-  pto_detail::PtoSortInt32AscendingUB(expertIdxLocal,
-                                      rowIdxLocal,
-                                      expandedExpertIdxLocal,
-                                      expandDstToSrcRowLocal,
-                                      packedSortLocal,
-                                      mergeTmpLocal,
+  pto_detail::PtoSortInt32AscendingUB(this->sortInputExpertIdxUb,
+                                      this->sortInputRowIdxUb,
+                                      this->expandedExpertIdxUb,
+                                      this->expandDstToSrcRowUb,
+                                      this->packedSortUb,
+                                      this->mergeTmpUb,
                                       this->totalLength);
-  expandedExpertIdxCopyOutQueue.EnQue<int32_t>(expandedExpertIdxLocal);
 
-  AscendC::LocalTensor<uint32_t> expandedRowIdx = expandedRowIdxCopyOutQueue.AllocTensor<uint32_t>();
-  AscendC::LocalTensor<uint32_t> expandedRowIdxU32 = expandedRowIdx.ReinterpretCast<uint32_t>();
-  AscendC::LocalTensor<int32_t> expandDstToSrcRowLocalInt32 = expandDstToSrcRowLocal.ReinterpretCast<int32_t>();
-  AscendC::LocalTensor<int32_t> rowSortScratchLocal = expertIdxLocal;
-  ArithProgression<int32_t>(inLocal[this->sortNum], 0, 1, this->totalLength);
+  pto_detail::PtoFillArithProgressionInt32(this->sortInputRowIdxUb, 0, 1, this->totalLength);
   pto_detail::PtoPipeBarrier<PIPE_V>();
-  pto_detail::PtoSortInt32AscendingUB(expandDstToSrcRowLocalInt32,
-                                      rowIdxLocal,
-                                      rowSortScratchLocal,
-                                      expandedRowIdxU32,
-                                      packedSortLocal,
-                                      mergeTmpLocal,
+  pto_detail::PtoSortInt32AscendingUB(this->expandDstToSrcRowUb,
+                                      this->sortInputRowIdxUb,
+                                      this->sortInputExpertIdxUb,
+                                      this->expandedRowIdxUb,
+                                      this->packedSortUb,
+                                      this->mergeTmpUb,
                                       this->totalLength);
-  expandedRowIdxCopyOutQueue.EnQue<uint32_t>(expandedRowIdx);
-  sortDataCopyInQueue.FreeTensor(inLocal);
-
-  expandDstToSrcRowQueue.FreeTensor(expandDstToSrcRowLocal);
 }
 
 __aicore__ inline void MoeV2FullLoadQuantBase::CopyOutIdx() {
-  AscendC::LocalTensor<int32_t> expandedRowIdx = expandedRowIdxCopyOutQueue.DeQue<int32_t>();
-  pto_detail::PtoStoreVector(expandedRowIdxGm, expandedRowIdx, this->totalLength);
-  expandedRowIdxCopyOutQueue.EnQue(expandedRowIdx);
+  pto_detail::PtoStoreVector<int32_t>(expandedRowIdxGm, this->expandedRowIdxUb, this->totalLength);
 }
 
 __aicore__ inline void MoeV2FullLoadQuantBase::ComputeExpertTokenCountOrCumsum() {
-  AscendC::LocalTensor<int32_t> expandedExpertIdx = expandedExpertIdxCopyOutQueue.DeQue<int32_t>();
-  AscendC::LocalTensor<int32_t> expertTokensCount = expertTokensCopyOutQueue.AllocTensor<int32_t>();
-
   int64_t expertNumAlign = Align(this->expertNum, sizeof(int32_t));
-  Duplicate(expertTokensCount, 0, expertNumAlign);
+  pto_detail::PtoFillVector<int32_t>(this->expertTokensUb, static_cast<int32_t>(0), expertNumAlign);
   pto_detail::PtoSetWaitFlag<HardEvent::V_S>(HardEvent::V_S);
 
-  int32_t lastExpertId = expandedExpertIdx.GetValue(0);
+  int32_t lastExpertId = pto_detail::PtoGetValue<int32_t>(this->expandedExpertIdxUb, 0);
   int64_t tokenCount = 0;
-  int64_t lastExpertCount = 0;
   for (int64_t i = 0; i < this->totalLength; i++) {
-    int32_t curExpertId = expandedExpertIdx.GetValue(i);
+    int32_t curExpertId = pto_detail::PtoGetValue<int32_t>(this->expandedExpertIdxUb, i);
     tokenCount++;
     while (lastExpertId < curExpertId) {
-      expertTokensCount.SetValue(lastExpertId, tokenCount - 1);
+      pto_detail::PtoSetValue<int32_t>(this->expertTokensUb, lastExpertId, tokenCount - 1);
       if (this->expertTokensCountOrCumsumFlag == EXERPT_TOKENS_COUNT) {
         tokenCount = 1;
       }
       lastExpertId++;
     }
   }
-  expertTokensCount.SetValue(lastExpertId, tokenCount);
+  pto_detail::PtoSetValue<int32_t>(this->expertTokensUb, lastExpertId, tokenCount);
   if (this->expertTokensCountOrCumsumFlag == EXERPT_TOKENS_CUMSUM) {
     lastExpertId++;
     while (lastExpertId < this->expertNum) {
-      expertTokensCount.SetValue(lastExpertId, tokenCount);
+      pto_detail::PtoSetValue<int32_t>(this->expertTokensUb, lastExpertId, tokenCount);
       lastExpertId++;
     }
   }
   if (this->expertTokensCountOrCumsumFlag > 0) {
-    pto_detail::PtoStoreVector(expertTokensCountOrCumsumGm, expertTokensCount, this->expertNum);
+    pto_detail::PtoStoreVector<int32_t>(expertTokensCountOrCumsumGm, this->expertTokensUb, this->expertNum);
   }
-  expertTokensCopyOutQueue.FreeTensor(expertTokensCount);
-  expandedExpertIdxCopyOutQueue.FreeTensor(expandedExpertIdx);
 }
 
-__aicore__ inline void MoeV2FullLoadQuantBase::CopyOutEmpty() {
-  AscendC::LocalTensor<int32_t> outLocal = expandedExpertIdxCopyOutQueue.DeQue<int32_t>();
-  expandedExpertIdxCopyOutQueue.FreeTensor(outLocal);
-}
+__aicore__ inline void MoeV2FullLoadQuantBase::CopyOutEmpty() {}
 
 __aicore__ inline void MoeV2FullLoadQuantBase::InitBase(GM_ADDR x, GM_ADDR expertIdx, GM_ADDR expandedX,
                                                         GM_ADDR expandedRowIdx, GM_ADDR expertTokensCountOrCumsum,
@@ -198,28 +162,26 @@ __aicore__ inline void MoeV2FullLoadQuantBase::InitBase(GM_ADDR x, GM_ADDR exper
   this->tileLength = Align(tilingData->vbsComputeParamsOp.lastCorePerLoopElements, sizeof(int32_t));
   this->sortNum = Ceil(this->tileLength, ONE_REPEAT_SORT_NUM) * ONE_REPEAT_SORT_NUM;
   this->totalLength = tilingData->n * tilingData->k;
-  this->pipe = tPipe;
 
-  expertIdxGm.SetGlobalBuffer((__gm__ int32_t*)expertIdx, this->tileLength);
+  expertIdxGm = (__gm__ int32_t*)expertIdx;
 
-  expandedXGm.SetGlobalBuffer((__gm__ int8_t*)expandedX);
-  expandedRowIdxGm.SetGlobalBuffer((__gm__ int32_t*)expandedRowIdx, this->tileLength);
+  expandedXGm = (__gm__ int8_t*)expandedX;
+  expandedRowIdxGm = (__gm__ int32_t*)expandedRowIdx;
   if (this->expertTokensCountOrCumsumFlag > 0) {
     // dropless
-    expertTokensCountOrCumsumGm.SetGlobalBuffer((__gm__ int32_t*)expertTokensCountOrCumsum,
-                                                Align(this->expertNum, sizeof(int32_t)));
+    expertTokensCountOrCumsumGm = (__gm__ int32_t*)expertTokensCountOrCumsum;
   }
 
-  int64_t kvFactor = 2;
-  int64_t buffSize = this->sortNum * sizeof(int32_t);
-
-  pipe->InitBuffer(expandedRowIdxCopyOutQueue, bufferNum, buffSize);
-  pipe->InitBuffer(expandedExpertIdxCopyOutQueue, bufferNum, buffSize);
-  pipe->InitBuffer(expertTokensCopyOutQueue, bufferNum, AlignBytes(this->expertNum, sizeof(int32_t)));
-  pipe->InitBuffer(expandDstToSrcRowQueue, bufferNum, buffSize);
-  pipe->InitBuffer(sortDataCopyInQueue, bufferNum, buffSize * kvFactor);
-  pipe->InitBuffer(tempBuffer, buffSize * kvFactor);
-  pipe->InitBuffer(sortedBuffer, buffSize * kvFactor);
+  int64_t sortBytes = AlignBytes(this->sortNum, sizeof(int32_t));
+  int64_t sortScratchBytes = GetSortLen<float>(this->sortNum) * sizeof(float);
+  this->sortInputExpertIdxUb = 0;
+  this->sortInputRowIdxUb = this->sortInputExpertIdxUb + sortBytes;
+  this->expandedExpertIdxUb = this->sortInputRowIdxUb + sortBytes;
+  this->expandDstToSrcRowUb = this->expandedExpertIdxUb + sortBytes;
+  this->expandedRowIdxUb = this->expandDstToSrcRowUb + sortBytes;
+  this->expertTokensUb = this->expandedRowIdxUb + sortBytes;
+  this->packedSortUb = this->expertTokensUb + AlignBytes(this->expertNum, sizeof(int32_t));
+  this->mergeTmpUb = this->packedSortUb + sortScratchBytes;
 }
 
 __aicore__ inline void MoeV2FullLoadQuantBase::ProcessBase() {

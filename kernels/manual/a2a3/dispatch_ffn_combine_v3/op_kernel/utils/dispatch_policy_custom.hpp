@@ -852,125 +852,43 @@ struct AtlasA2 {
     static constexpr uint32_t L0C_SIZE = 128 * 1024;
 };
 
-struct LocalTensorBufferBase {
+struct PtoTileBufferBase {
     PTO_DEVICE uint64_t GetBufferAddrByByte(const uint32_t offset) const
     {
-        return baseAddr + offset;
+        return offset;
     }
 
 protected:
-    PTO_DEVICE LocalTensorBufferBase() = default;
-    uint64_t baseAddr{0};
+    PTO_DEVICE PtoTileBufferBase() = default;
 };
 
-template <class ArchTag, AscendC::TPosition Position>
-struct LocalTensorBuffer {
-    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported local tensor buffer");
-};
-
-template <class ArchTag>
-struct LocalTensorBuffer<ArchTag, AscendC::TPosition::A1> : LocalTensorBufferBase {
-    PTO_DEVICE LocalTensorBuffer()
-    {
-        AscendC::TBuf<AscendC::TPosition::A1> buf;
-        GetTPipePtr()->InitBuffer(buf, ArchTag::L1_SIZE);
-        auto tensor = buf.Get<uint8_t>();
-        baseAddr = reinterpret_cast<uint64_t>(tensor.GetPhyAddr());
-    }
-};
-
-template <class ArchTag>
-struct LocalTensorBuffer<ArchTag, AscendC::TPosition::A2> : LocalTensorBufferBase {
-    PTO_DEVICE LocalTensorBuffer()
-    {
-        AscendC::TBuf<AscendC::TPosition::A2> buf;
-        GetTPipePtr()->InitBuffer(buf, ArchTag::L0A_SIZE);
-        auto tensor = buf.Get<uint8_t>();
-        baseAddr = reinterpret_cast<uint64_t>(tensor.GetPhyAddr());
-    }
-};
-
-template <class ArchTag>
-struct LocalTensorBuffer<ArchTag, AscendC::TPosition::B2> : LocalTensorBufferBase {
-    PTO_DEVICE LocalTensorBuffer()
-    {
-        AscendC::TBuf<AscendC::TPosition::B2> buf;
-        GetTPipePtr()->InitBuffer(buf, ArchTag::L0B_SIZE);
-        auto tensor = buf.Get<uint8_t>();
-        baseAddr = reinterpret_cast<uint64_t>(tensor.GetPhyAddr());
-    }
-};
-
-template <class ArchTag>
-struct LocalTensorBuffer<ArchTag, AscendC::TPosition::C2> : LocalTensorBufferBase {
-    PTO_DEVICE LocalTensorBuffer()
-    {
-        AscendC::TBuf<AscendC::TPosition::C2> buf;
-        GetTPipePtr()->InitBuffer(buf, ArchTag::BIAS_SIZE);
-        auto tensor = buf.Get<uint8_t>();
-        baseAddr = reinterpret_cast<uint64_t>(tensor.GetPhyAddr());
-    }
-};
-
-template <class ArchTag>
-struct LocalTensorBuffer<ArchTag, AscendC::TPosition::CO1> : LocalTensorBufferBase {
-    PTO_DEVICE LocalTensorBuffer()
-    {
-        AscendC::TBuf<AscendC::TPosition::CO1> buf;
-        GetTPipePtr()->InitBuffer(buf, ArchTag::L0C_SIZE);
-        auto tensor = buf.Get<uint8_t>();
-        baseAddr = reinterpret_cast<uint64_t>(tensor.GetPhyAddr());
-    }
-};
-
-template <class ArchTag>
-struct LocalTensorBuffer<ArchTag, AscendC::TPosition::VECCALC> : LocalTensorBufferBase {
-    PTO_DEVICE LocalTensorBuffer()
-    {
-        AscendC::TBuf<AscendC::TPosition::VECCALC> buf;
-        GetTPipePtr()->InitBuffer(buf, ArchTag::UB_SIZE);
-        auto tensor = buf.Get<uint8_t>();
-        baseAddr = reinterpret_cast<uint64_t>(tensor.GetPhyAddr());
-    }
-};
-
-template <class ArchTag>
-struct LocalTensorBuffer<ArchTag, AscendC::TPosition::C2PIPE2GM> : LocalTensorBufferBase {
-    PTO_DEVICE LocalTensorBuffer()
-    {
-        AscendC::TBuf<AscendC::TPosition::C2PIPE2GM> buf;
-        GetTPipePtr()->InitBuffer(buf, ArchTag::FIXBUF_SIZE);
-        auto tensor = buf.Get<uint8_t>();
-        baseAddr = reinterpret_cast<uint64_t>(tensor.GetPhyAddr());
-    }
+template <pto::TileType TileType>
+struct PtoTileBuffer : PtoTileBufferBase {
+    static constexpr pto::TileType TILE_TYPE = TileType;
 };
 
 template <class ArchTag>
 struct Resource {
-    AscendC::TPipe pipe;
-    LocalTensorBuffer<ArchTag, AscendC::TPosition::A1> l1Buf;
-    LocalTensorBuffer<ArchTag, AscendC::TPosition::A2> l0ABuf;
-    LocalTensorBuffer<ArchTag, AscendC::TPosition::B2> l0BBuf;
-    LocalTensorBuffer<ArchTag, AscendC::TPosition::C2> btBuf;
-    LocalTensorBuffer<ArchTag, AscendC::TPosition::CO1> l0CBuf;
-    LocalTensorBuffer<ArchTag, AscendC::TPosition::VECCALC> ubBuf;
-    LocalTensorBuffer<ArchTag, AscendC::TPosition::C2PIPE2GM> fpBuf;
+    PtoTileBuffer<pto::TileType::Mat> l1Buf;
+    PtoTileBuffer<pto::TileType::Left> l0ABuf;
+    PtoTileBuffer<pto::TileType::Right> l0BBuf;
+    PtoTileBuffer<pto::TileType::Bias> btBuf;
+    PtoTileBuffer<pto::TileType::Acc> l0CBuf;
+    PtoTileBuffer<pto::TileType::Vec> ubBuf;
+    PtoTileBuffer<pto::TileType::Scaling> fpBuf;
 
-    PTO_DEVICE Resource()
-    {
-        pipe.Destroy();
-    }
+    PTO_DEVICE Resource() = default;
 };
 
 }  // namespace Arch
 
 namespace Gemm {
 
-template <class Element_, class Layout_, AscendC::TPosition Position_ = AscendC::TPosition::GM>
+template <class Element_, class Layout_, pto::TileType TileType_ = pto::TileType::Vec>
 struct GemmType {
     using Element = Element_;
     using Layout = Layout_;
-    static constexpr AscendC::TPosition Position = Position_;
+    static constexpr pto::TileType TileType = TileType_;
 };
 
 struct MmadAtlasA2 {
@@ -1060,17 +978,17 @@ struct L1ATypeSelector {
 
 template <class Element>
 struct L1ATypeSelector<GemmType<Element, layout::VectorLayout>> {
-    using L1AType = GemmType<Element, layout::VectorLayout, AscendC::TPosition::A1>;
+    using L1AType = GemmType<Element, layout::VectorLayout, pto::TileType::Mat>;
 };
 
 template <class Element>
 struct L1ATypeSelector<GemmType<Element, layout::ND>> {
-    using L1AType = GemmType<Element, layout::Zn, AscendC::TPosition::A1>;
+    using L1AType = GemmType<Element, layout::Zn, pto::TileType::Mat>;
 };
 
 template <class Element>
 struct L1ATypeSelector<GemmType<Element, layout::Zn>> {
-    using L1AType = GemmType<Element, layout::Zn, AscendC::TPosition::A1>;
+    using L1AType = GemmType<Element, layout::Zn, pto::TileType::Mat>;
 };
 
 template <class GmBType>
@@ -1080,7 +998,7 @@ struct L1BTypeSelector {
 
 template <class Element>
 struct L1BTypeSelector<GemmType<Element, layout::Zn>> {
-    using L1BType = GemmType<Element, layout::Zn, AscendC::TPosition::A1>;
+    using L1BType = GemmType<Element, layout::Zn, pto::TileType::Mat>;
 };
 
 }  // namespace helper
@@ -1149,7 +1067,7 @@ struct CopyGmToL1 {
 template <class Element>
 struct CopyGmToL1<Arch::AtlasA2,
                   GemmType<Element, layout::ND>,
-                  GemmType<Element, layout::Zn, AscendC::TPosition::A1>> {
+                  GemmType<Element, layout::Zn, pto::TileType::Mat>> {
     using LayoutDst = layout::Zn;
     using LayoutSrc = layout::ND;
 
@@ -1159,7 +1077,7 @@ struct CopyGmToL1<Arch::AtlasA2,
 template <class ArchTag, class Element>
 struct CopyGmToL1<ArchTag,
                   GemmType<Element, layout::Zn>,
-                  GemmType<Element, layout::Zn, AscendC::TPosition::A1>> {
+                  GemmType<Element, layout::Zn, pto::TileType::Mat>> {
     using LayoutDst = layout::Zn;
     using LayoutSrc = layout::Zn;
 
@@ -1169,7 +1087,7 @@ struct CopyGmToL1<ArchTag,
 template <class ArchTag, class Element>
 struct CopyGmToL1<ArchTag,
                   GemmType<Element, layout::VectorLayout>,
-                  GemmType<Element, layout::VectorLayout, AscendC::TPosition::A1>> {
+                  GemmType<Element, layout::VectorLayout, pto::TileType::Mat>> {
     using LayoutDst = layout::VectorLayout;
     using LayoutSrc = layout::VectorLayout;
 
@@ -1183,8 +1101,8 @@ struct CopyL1ToL0A {
 
 template <class ArchTag, class Element>
 struct CopyL1ToL0A<ArchTag,
-                   GemmType<Element, layout::Zn, AscendC::TPosition::A1>,
-                   GemmType<Element, layout::Zz, AscendC::TPosition::A2>> {
+                   GemmType<Element, layout::Zn, pto::TileType::Mat>,
+                   GemmType<Element, layout::Zz, pto::TileType::Left>> {
     using LayoutDst = layout::Zz;
     using LayoutSrc = layout::Zn;
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
@@ -1193,10 +1111,10 @@ struct CopyL1ToL0A<ArchTag,
 };
 
 template <class ArchTag, class Element>
-struct CopyL1ToL0A<ArchTag, GemmType<Element, layout::Zn, AscendC::TPosition::A1>>
+struct CopyL1ToL0A<ArchTag, GemmType<Element, layout::Zn, pto::TileType::Mat>>
     : CopyL1ToL0A<ArchTag,
-                  GemmType<Element, layout::Zn, AscendC::TPosition::A1>,
-                  GemmType<Element, layout::Zz, AscendC::TPosition::A2>> {};
+                  GemmType<Element, layout::Zn, pto::TileType::Mat>,
+                  GemmType<Element, layout::Zz, pto::TileType::Left>> {};
 
 template <class ArchTag, class L1Type, class L0Type = void>
 struct CopyL1ToL0B {
@@ -1205,8 +1123,8 @@ struct CopyL1ToL0B {
 
 template <class ArchTag>
 struct CopyL1ToL0B<ArchTag,
-                   GemmType<int8_t, layout::Zn, AscendC::TPosition::A1>,
-                   GemmType<int8_t, layout::Nz, AscendC::TPosition::B2>> {
+                   GemmType<int8_t, layout::Zn, pto::TileType::Mat>,
+                   GemmType<int8_t, layout::Nz, pto::TileType::Right>> {
     using Element = int8_t;
     using LayoutDst = layout::Nz;
     using LayoutSrc = layout::Zn;
@@ -1217,10 +1135,10 @@ struct CopyL1ToL0B<ArchTag,
 };
 
 template <class ArchTag>
-struct CopyL1ToL0B<ArchTag, GemmType<int8_t, layout::Zn, AscendC::TPosition::A1>>
+struct CopyL1ToL0B<ArchTag, GemmType<int8_t, layout::Zn, pto::TileType::Mat>>
     : CopyL1ToL0B<ArchTag,
-                  GemmType<int8_t, layout::Zn, AscendC::TPosition::A1>,
-                  GemmType<int8_t, layout::Nz, AscendC::TPosition::B2>> {};
+                  GemmType<int8_t, layout::Zn, pto::TileType::Mat>,
+                  GemmType<int8_t, layout::Nz, pto::TileType::Right>> {};
 
 template <class ArchTag, class L1Type, class L0Type = void>
 struct CopyL1ToFP {
@@ -1229,8 +1147,8 @@ struct CopyL1ToFP {
 
 template <class ArchTag, class ElementSrc, class ElementDst>
 struct CopyL1ToFP<ArchTag,
-                  GemmType<ElementSrc, layout::VectorLayout, AscendC::TPosition::A1>,
-                  GemmType<ElementDst, layout::VectorLayout, AscendC::TPosition::C2PIPE2GM>> {
+                  GemmType<ElementSrc, layout::VectorLayout, pto::TileType::Mat>,
+                  GemmType<ElementDst, layout::VectorLayout, pto::TileType::Scaling>> {
     using LayoutDst = layout::VectorLayout;
     using LayoutSrc = layout::VectorLayout;
     static constexpr uint32_t ELE_NUM_PER_FP = BYTE_PER_BLK_FP / sizeof(ElementSrc);
@@ -1290,8 +1208,8 @@ struct QuantTileCopy : public TileCopyGemm<ArchTag, AType, BType, CType, BiasTyp
     using ElementAccumulator = typename Base::ElementAccumulator;
     using CopyL0CToGm = Tile::CopyL0CToGm<ArchTag, ElementAccumulator, CType, SCALE_GRANU, false>;
     using CopyL1ToFP = Tile::CopyL1ToFP<ArchTag,
-        GemmType<uint64_t, layout::VectorLayout, AscendC::TPosition::A1>,
-        GemmType<uint64_t, layout::VectorLayout, AscendC::TPosition::C2PIPE2GM>>;
+        GemmType<uint64_t, layout::VectorLayout, pto::TileType::Mat>,
+        GemmType<uint64_t, layout::VectorLayout, pto::TileType::Scaling>>;
 };
 
 template <class ArchTag, class AType, class BType, class BiasType = void>

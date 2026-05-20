@@ -8,7 +8,7 @@
 #include "pto/comm/pto_comm_inst.hpp"
 
 #define FORCE_INLINE_AICORE inline __attribute__((always_inline)) __aicore__
-constexpr int32_t MAX_RANK_SIZE = PTO_HCCL_MAX_RANKS;
+constexpr int32_t MAX_RANK_SIZE = 32;
 constexpr int32_t PTO_REMOTE_WINDOW_MEM = 700 * MB_SIZE;
 
 constexpr uint32_t BARRIER_COUNTER_STRIDE = 16;

@@ -38,18 +38,17 @@ class MoeV2GatherQuant {
   __aicore__ inline void CopyOut(int64_t progress);
 
  private:
-  AscendC::TPipe* pipe;
-  AscendC::TQue<QuePosition::VECIN, BUFFER_NUM> inputXCopyInQueue;
-  AscendC::TQue<QuePosition::VECIN, BUFFER_NUM> expandRowIdxCopyInQueue;
-  AscendC::TQue<QuePosition::VECOUT, BUFFER_NUM> inputXCopyOutQueue;
-  AscendC::TQue<QuePosition::VECOUT, 1> floatQueue;
-  AscendC::TQue<QuePosition::VECOUT, 1> halfQueue;
+  uint64_t indicesUbOffset;
+  uint64_t inputXUbOffset;
+  uint64_t outputXUbOffset;
+  uint64_t floatUbOffset;
+  uint64_t halfUbOffset;
 
-  AscendC::GlobalTensor<T> inputXGm;
-  AscendC::GlobalTensor<int8_t> expandedXGm;
-  AscendC::GlobalTensor<int32_t> expandedRowIdxGm;
-  AscendC::GlobalTensor<float> scaleGm;
-  AscendC::GlobalTensor<float> offsetGm;
+  __gm__ T *inputXGm;
+  __gm__ int8_t *expandedXGm;
+  __gm__ int32_t *expandedRowIdxGm;
+  __gm__ float *scaleGm;
+  __gm__ float *offsetGm;
 
   const InnerMoeV2GatherOutComputeTilingData* gatherOutTilingData;
 
@@ -80,47 +79,38 @@ class MoeV2GatherQuant {
 template <typename T>
 __aicore__ inline void MoeV2GatherQuant<T>::CopyInIndices(int64_t progress) {
   this->indicesOffset = progress * this->perLoopRows;
-  AscendC::LocalTensor<int32_t> indicesLocal = expandRowIdxCopyInQueue.AllocTensor<int32_t>();
-  pto_detail::PtoLoadVector(indicesLocal, expandedRowIdxGm[indicesOffset], this->currentLoopRows);
-  expandRowIdxCopyInQueue.EnQue<int32_t>(indicesLocal);
+  pto_detail::PtoLoadVector<int32_t>(this->indicesUbOffset,
+                                     expandedRowIdxGm + indicesOffset,
+                                     this->currentLoopRows);
 }
 
 template <typename T>
 __aicore__ inline void MoeV2GatherQuant<T>::Compute() {
-  AscendC::LocalTensor<T> inLocal = inputXCopyInQueue.DeQue<T>();
-  AscendC::LocalTensor<int8_t> outLocal = inputXCopyOutQueue.AllocTensor<int8_t>();
-  AscendC::LocalTensor<float> floatLocal = floatQueue.AllocTensor<float>();
-  AscendC::LocalTensor<half> halfLocal = halfQueue.AllocTensor<half>();
   uint32_t elements = Align(this->colsTileLength, sizeof(T));
   if constexpr (IsSameType<T, bfloat16_t>::value) {
-    pto_detail::PtoCastVector(floatLocal, inLocal, elements, pto::RoundMode::CAST_NONE);
-    pto_detail::PtoCastVector(halfLocal, floatLocal, elements, pto::RoundMode::CAST_NONE);
-    pto_detail::PtoMulVector(halfLocal, halfLocal, elements, static_cast<half>(this->scale));
-    pto_detail::PtoAddScalarVector(halfLocal, halfLocal, elements, static_cast<half>(this->offset));
-    AscendC::LocalTensor<int32_t> intLocal = floatLocal.ReinterpretCast<int32_t>();
-    pto_detail::PtoCastVector(intLocal, halfLocal, elements, pto::RoundMode::CAST_RINT);
+    pto_detail::PtoCastVector<float, T>(this->floatUbOffset, this->inputXUbOffset, elements, pto::RoundMode::CAST_NONE);
+    pto_detail::PtoCastVector<half, float>(this->halfUbOffset, this->floatUbOffset, elements, pto::RoundMode::CAST_NONE);
+    pto_detail::PtoMulVector<half>(this->halfUbOffset, this->halfUbOffset, elements, static_cast<half>(this->scale));
+    pto_detail::PtoAddScalarVector<half>(this->halfUbOffset, this->halfUbOffset, elements, static_cast<half>(this->offset));
+    pto_detail::PtoCastVector<int32_t, half>(this->floatUbOffset, this->halfUbOffset, elements, pto::RoundMode::CAST_RINT);
     SetDeqScale((half)1.000000e+00f);
     pto_detail::PtoPipeBarrier<PIPE_V>();
-    pto_detail::PtoCastVector(halfLocal, intLocal, elements, pto::RoundMode::CAST_RINT);
-    pto_detail::PtoCastVector(outLocal, halfLocal, elements, pto::RoundMode::CAST_RINT);
+    pto_detail::PtoCastVector<half, int32_t>(this->halfUbOffset, this->floatUbOffset, elements, pto::RoundMode::CAST_RINT);
+    pto_detail::PtoCastVector<int8_t, half>(this->outputXUbOffset, this->halfUbOffset, elements, pto::RoundMode::CAST_RINT);
   } else if constexpr (IsSameType<T, float>::value) {
-    pto_detail::PtoCastVector(halfLocal, inLocal, elements, pto::RoundMode::CAST_NONE);
-    pto_detail::PtoMulVector(halfLocal, halfLocal, elements, static_cast<half>(this->scale));
-    pto_detail::PtoAddScalarVector(halfLocal, halfLocal, elements, static_cast<half>(this->offset));
-    pto_detail::PtoCastVector(outLocal, halfLocal, elements, pto::RoundMode::CAST_RINT);
+    pto_detail::PtoCastVector<half, T>(this->halfUbOffset, this->inputXUbOffset, elements, pto::RoundMode::CAST_NONE);
+    pto_detail::PtoMulVector<half>(this->halfUbOffset, this->halfUbOffset, elements, static_cast<half>(this->scale));
+    pto_detail::PtoAddScalarVector<half>(this->halfUbOffset, this->halfUbOffset, elements, static_cast<half>(this->offset));
+    pto_detail::PtoCastVector<int8_t, half>(this->outputXUbOffset, this->halfUbOffset, elements, pto::RoundMode::CAST_RINT);
   } else {
-    pto_detail::PtoMulVector(inLocal, inLocal, elements, static_cast<T>(this->scale));
-    pto_detail::PtoAddScalarVector(inLocal, inLocal, elements, static_cast<T>(this->offset));
-    pto_detail::PtoCastVector(outLocal, inLocal, elements, pto::RoundMode::CAST_RINT);
+    pto_detail::PtoMulVector<T>(this->inputXUbOffset, this->inputXUbOffset, elements, static_cast<T>(this->scale));
+    pto_detail::PtoAddScalarVector<T>(this->inputXUbOffset, this->inputXUbOffset, elements, static_cast<T>(this->offset));
+    pto_detail::PtoCastVector<int8_t, T>(this->outputXUbOffset, this->inputXUbOffset, elements, pto::RoundMode::CAST_RINT);
   }
-  inputXCopyOutQueue.EnQue(outLocal);
-  floatQueue.FreeTensor(floatLocal);
-  halfQueue.FreeTensor(halfLocal);
 }
 
 template <typename T>
 __aicore__ inline void MoeV2GatherQuant<T>::CopyOut(int64_t progress) {
-  AscendC::LocalTensor<int32_t> indicesLocal = expandRowIdxCopyInQueue.DeQue<int32_t>();
   pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
   colsTileLength = this->perLoopCols;
   for (int64_t colsLoop = 0; colsLoop < this->colLoops; colsLoop++) {
@@ -132,35 +122,31 @@ __aicore__ inline void MoeV2GatherQuant<T>::CopyOut(int64_t progress) {
     int64_t currentLoopStartRow = initialRow / this->k;
     int64_t currentLoopLastRow = (initialRow + this->currentLoopRows - 1) / this->k;
     for (int64_t row = currentLoopStartRow; row <= currentLoopLastRow; row++) {
-      AscendC::LocalTensor<T> inLocal = inputXCopyInQueue.AllocTensor<T>();
       // input row position
       inputOffset = row * this->cols + colsLoop * this->perLoopCols;
-      pto_detail::PtoLoadVector(inLocal, inputXGm[inputOffset], this->colsTileLength);
-      inputXCopyInQueue.EnQue<T>(inLocal);
+      pto_detail::PtoLoadVector<T>(this->inputXUbOffset, inputXGm + inputOffset, this->colsTileLength);
+      pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
       Compute();
-      AscendC::LocalTensor<int8_t> outLocal = inputXCopyOutQueue.DeQue<int8_t>();
+      pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
       while (curLoopRow < this->currentLoopRows && initialRow / this->k == row) {
-        int32_t outIndex = indicesLocal.GetValue(curLoopRow);
+        int32_t outIndex = pto_detail::PtoGetValue<int32_t>(this->indicesUbOffset, curLoopRow);
         curLoopRow++;
         initialRow++;
         if (outIndex == -1 || (this->dropPadMode == DROPLESS_MODE && outIndex >= this->activateRows)) {
           continue;
         }
         outOffset = outIndex * cols + colsLoop * this->perLoopCols;
-        pto_detail::PtoStoreVector(expandedXGm[outOffset], outLocal, this->colsTileLength);
+        pto_detail::PtoStoreVector<int8_t>(expandedXGm + outOffset, this->outputXUbOffset, this->colsTileLength);
       }
-      inputXCopyInQueue.FreeTensor(inLocal);
-      inputXCopyOutQueue.FreeTensor(outLocal);
+      pto_detail::PtoSetWaitFlag<HardEvent::MTE3_V>(HardEvent::MTE3_V);
     }
   }
-  expandRowIdxCopyInQueue.FreeTensor(indicesLocal);
 }
 
 template <typename T>
 __aicore__ inline void MoeV2GatherQuant<T>::Init(GM_ADDR inputX, GM_ADDR scale, GM_ADDR offset, GM_ADDR expandedRowIdx,
                                                  GM_ADDR expandedX, GM_ADDR workspace,
                                                  const MoeInitRoutingQuantV2TilingData* tilingData, AscendC::TPipe* tPipe) {
-  this->pipe = tPipe;
   this->blockIdx = get_block_idx() + get_subblockid() * get_block_num();
   this->gatherOutTilingData = &(tilingData->gatherOutComputeParamsOp);
 
@@ -186,21 +172,19 @@ __aicore__ inline void MoeV2GatherQuant<T>::Init(GM_ADDR inputX, GM_ADDR scale, 
   this->lastLoopCols = this->gatherOutTilingData->lastLoopCols;
   this->colLoops = this->gatherOutTilingData->colLoops;
 
-  inputXGm.SetGlobalBuffer((__gm__ T*)inputX);
-  expandedXGm.SetGlobalBuffer((__gm__ int8_t*)expandedX);
-  expandedRowIdxGm.SetGlobalBuffer(
-      (__gm__ int32_t*)expandedRowIdx + this->blockIdx * this->gatherOutTilingData->perCoreRows,
-      Align(this->coreRows, sizeof(int32_t)));
-  scaleGm.SetGlobalBuffer((__gm__ float*)scale, 1);
-  offsetGm.SetGlobalBuffer((__gm__ float*)offset, 1);
-  this->scale = scaleGm.GetValue(0);
-  this->offset = offsetGm.GetValue(0);
+  inputXGm = (__gm__ T*)inputX;
+  expandedXGm = (__gm__ int8_t*)expandedX;
+  expandedRowIdxGm = (__gm__ int32_t*)expandedRowIdx + this->blockIdx * this->gatherOutTilingData->perCoreRows;
+  scaleGm = (__gm__ float*)scale;
+  offsetGm = (__gm__ float*)offset;
+  this->scale = scaleGm[0];
+  this->offset = offsetGm[0];
 
-  pipe->InitBuffer(inputXCopyInQueue, BUFFER_NUM, AlignBytes(this->perLoopCols, sizeof(T)));
-  pipe->InitBuffer(inputXCopyOutQueue, BUFFER_NUM, AlignBytes(this->perLoopCols, sizeof(int8_t)));
-  pipe->InitBuffer(expandRowIdxCopyInQueue, BUFFER_NUM, AlignBytes(this->perLoopRows, sizeof(int32_t)));
-  pipe->InitBuffer(floatQueue, 1, AlignBytes(this->perLoopCols, sizeof(float)));
-  pipe->InitBuffer(halfQueue, 1, AlignBytes(this->perLoopCols, sizeof(half)));
+  this->indicesUbOffset = 0;
+  this->inputXUbOffset = AlignBytes(this->perLoopRows, sizeof(int32_t));
+  this->outputXUbOffset = this->inputXUbOffset + AlignBytes(this->perLoopCols, sizeof(T));
+  this->floatUbOffset = this->outputXUbOffset + AlignBytes(this->perLoopCols, sizeof(int8_t));
+  this->halfUbOffset = this->floatUbOffset + AlignBytes(this->perLoopCols, sizeof(float));
 }
 
 template <typename T>

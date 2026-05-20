@@ -862,119 +862,43 @@ struct AtlasA5 {
     static constexpr uint32_t L0C_SIZE = 256 * 1024;
 };
 
-struct LocalTensorBufferBase {
-    template <class Element = half>
-    PTO_DEVICE AscendC::LocalTensor<Element> GetBufferByByte(const uint32_t offset) const
+struct PtoTileBufferBase {
+    PTO_DEVICE uint64_t GetBufferAddrByByte(const uint32_t offset) const
     {
-        return tensor[offset].template ReinterpretCast<Element>();
+        return offset;
     }
 
 protected:
-    PTO_DEVICE LocalTensorBufferBase() = default;
-    AscendC::LocalTensor<uint8_t> tensor;
+    PTO_DEVICE PtoTileBufferBase() = default;
 };
 
-template <class ArchTag, AscendC::TPosition Position>
-struct LocalTensorBuffer {
-    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported local tensor buffer");
-};
-
-template <class ArchTag>
-struct LocalTensorBuffer<ArchTag, AscendC::TPosition::A1> : LocalTensorBufferBase {
-    PTO_DEVICE LocalTensorBuffer()
-    {
-        AscendC::TBuf<AscendC::TPosition::A1> buf;
-        GetTPipePtr()->InitBuffer(buf, ArchTag::L1_SIZE);
-        tensor = buf.Get<uint8_t>();
-    }
-};
-
-template <class ArchTag>
-struct LocalTensorBuffer<ArchTag, AscendC::TPosition::A2> : LocalTensorBufferBase {
-    PTO_DEVICE LocalTensorBuffer()
-    {
-        AscendC::TBuf<AscendC::TPosition::A2> buf;
-        GetTPipePtr()->InitBuffer(buf, ArchTag::L0A_SIZE);
-        tensor = buf.Get<uint8_t>();
-    }
-};
-
-template <class ArchTag>
-struct LocalTensorBuffer<ArchTag, AscendC::TPosition::B2> : LocalTensorBufferBase {
-    PTO_DEVICE LocalTensorBuffer()
-    {
-        AscendC::TBuf<AscendC::TPosition::B2> buf;
-        GetTPipePtr()->InitBuffer(buf, ArchTag::L0B_SIZE);
-        tensor = buf.Get<uint8_t>();
-    }
-};
-
-template <class ArchTag>
-struct LocalTensorBuffer<ArchTag, AscendC::TPosition::C2> : LocalTensorBufferBase {
-    PTO_DEVICE LocalTensorBuffer()
-    {
-        AscendC::TBuf<AscendC::TPosition::C2> buf;
-        GetTPipePtr()->InitBuffer(buf, ArchTag::BIAS_SIZE);
-        tensor = buf.Get<uint8_t>();
-    }
-};
-
-template <class ArchTag>
-struct LocalTensorBuffer<ArchTag, AscendC::TPosition::CO1> : LocalTensorBufferBase {
-    PTO_DEVICE LocalTensorBuffer()
-    {
-        AscendC::TBuf<AscendC::TPosition::CO1> buf;
-        GetTPipePtr()->InitBuffer(buf, ArchTag::L0C_SIZE);
-        tensor = buf.Get<uint8_t>();
-    }
-};
-
-template <class ArchTag>
-struct LocalTensorBuffer<ArchTag, AscendC::TPosition::VECCALC> : LocalTensorBufferBase {
-    PTO_DEVICE LocalTensorBuffer()
-    {
-        AscendC::TBuf<AscendC::TPosition::VECCALC> buf;
-        GetTPipePtr()->InitBuffer(buf, ArchTag::UB_SIZE);
-        tensor = buf.Get<uint8_t>();
-    }
-};
-
-template <class ArchTag>
-struct LocalTensorBuffer<ArchTag, AscendC::TPosition::C2PIPE2GM> : LocalTensorBufferBase {
-    PTO_DEVICE LocalTensorBuffer()
-    {
-        AscendC::TBuf<AscendC::TPosition::C2PIPE2GM> buf;
-        GetTPipePtr()->InitBuffer(buf, ArchTag::FIXBUF_SIZE);
-        tensor = buf.Get<uint8_t>();
-    }
+template <pto::TileType TileType>
+struct PtoTileBuffer : PtoTileBufferBase {
+    static constexpr pto::TileType TILE_TYPE = TileType;
 };
 
 template <class ArchTag>
 struct Resource {
-    AscendC::TPipe pipe;
-    LocalTensorBuffer<ArchTag, AscendC::TPosition::A1> l1Buf;
-    LocalTensorBuffer<ArchTag, AscendC::TPosition::A2> l0ABuf;
-    LocalTensorBuffer<ArchTag, AscendC::TPosition::B2> l0BBuf;
-    LocalTensorBuffer<ArchTag, AscendC::TPosition::C2> btBuf;
-    LocalTensorBuffer<ArchTag, AscendC::TPosition::CO1> l0CBuf;
-    LocalTensorBuffer<ArchTag, AscendC::TPosition::VECCALC> ubBuf;
-    LocalTensorBuffer<ArchTag, AscendC::TPosition::C2PIPE2GM> fpBuf;
+    PtoTileBuffer<pto::TileType::Mat> l1Buf;
+    PtoTileBuffer<pto::TileType::Left> l0ABuf;
+    PtoTileBuffer<pto::TileType::Right> l0BBuf;
+    PtoTileBuffer<pto::TileType::Bias> btBuf;
+    PtoTileBuffer<pto::TileType::Acc> l0CBuf;
+    PtoTileBuffer<pto::TileType::Vec> ubBuf;
+    PtoTileBuffer<pto::TileType::Scaling> fpBuf;
 
-    PTO_DEVICE Resource()
-    {
-        pipe.Destroy();
-    }
+    PTO_DEVICE Resource() = default;
 };
 
 }  // namespace Arch
 
 namespace Gemm {
 
-template <class Element_, class Layout_, AscendC::TPosition Position_ = AscendC::TPosition::GM>
+template <class Element_, class Layout_, pto::TileType TileType_ = pto::TileType::Vec>
 struct GemmType {
     using Element = Element_;
     using Layout = Layout_;
-    static constexpr AscendC::TPosition Position = Position_;
+    static constexpr pto::TileType TileType = TileType_;
 };
 
 struct MmadAtlasA2 {
@@ -1096,17 +1020,17 @@ struct L1ATypeSelector {
 
 template <class Element>
 struct L1ATypeSelector<GemmType<Element, layout::VectorLayout>> {
-    using L1AType = GemmType<Element, layout::VectorLayout, AscendC::TPosition::A1>;
+    using L1AType = GemmType<Element, layout::VectorLayout, pto::TileType::Mat>;
 };
 
 template <class Element>
 struct L1ATypeSelector<GemmType<Element, layout::ND>> {
-    using L1AType = GemmType<Element, layout::Zn, AscendC::TPosition::A1>;
+    using L1AType = GemmType<Element, layout::Zn, pto::TileType::Mat>;
 };
 
 template <class Element>
 struct L1ATypeSelector<GemmType<Element, layout::Zn>> {
-    using L1AType = GemmType<Element, layout::Zn, AscendC::TPosition::A1>;
+    using L1AType = GemmType<Element, layout::Zn, pto::TileType::Mat>;
 };
 
 template <class GmBType>
@@ -1116,7 +1040,7 @@ struct L1BTypeSelector {
 
 template <class Element>
 struct L1BTypeSelector<GemmType<Element, layout::Zn>> {
-    using L1BType = GemmType<Element, layout::Zn, AscendC::TPosition::A1>;
+    using L1BType = GemmType<Element, layout::Zn, pto::TileType::Mat>;
 };
 
 }  // namespace helper
@@ -1181,74 +1105,6 @@ template <class ElementSrc, class ElementDst, ScaleGranularity Granularity>
 struct CopyL0CToGmQuantMode<Arch::AtlasA5, ElementSrc, ElementDst, Granularity>
     : CopyL0CToGmQuantMode<Arch::AtlasA2, ElementSrc, ElementDst, Granularity> {};
 
-namespace substrate_bridge {
-
-template <typename Element>
-PTO_DEVICE void PtoDataCopyGmToL1Nd2Nz(AscendC::LocalTensor<Element> const &dstTensor,
-                                       AscendC::GlobalTensor<Element> const &srcTensor,
-                                       AscendC::Nd2NzParams const &params)
-{
-    AscendC::DataCopy(dstTensor, srcTensor, params);
-}
-
-template <typename Element>
-PTO_DEVICE void PtoDataCopyGmToL1Nd2NzRow(AscendC::LocalTensor<Element> const &dstTensor,
-                                          AscendC::GlobalTensor<Element> const &srcTensor,
-                                          AscendC::Nd2NzParams const &params)
-{
-    AscendC::DataCopy(dstTensor, srcTensor, params);
-}
-
-template <typename Element>
-PTO_DEVICE void PtoDataCopyGmToL1(AscendC::LocalTensor<Element> const &dstTensor,
-                                  AscendC::GlobalTensor<Element> const &srcTensor,
-                                  AscendC::DataCopyParams const &params)
-{
-    AscendC::DataCopy(dstTensor, srcTensor, params);
-}
-
-template <typename Element>
-PTO_DEVICE void PtoDataCopyL1ToFp(AscendC::LocalTensor<Element> const &dstTensor,
-                                  AscendC::LocalTensor<Element> const &srcTensor,
-                                  AscendC::DataCopyParams const &params)
-{
-    AscendC::DataCopy(dstTensor, srcTensor, params);
-}
-
-template <typename Element>
-PTO_DEVICE void PtoLoadDataL1ToL0A(AscendC::LocalTensor<Element> const &dstTensor,
-                                   AscendC::LocalTensor<Element> const &srcTensor,
-                                   AscendC::LoadData2DParams const &params)
-{
-    AscendC::LoadData(dstTensor, srcTensor, params);
-}
-
-PTO_DEVICE void PtoLoadDataL1ToL0B(AscendC::LocalTensor<int8_t> const &dstTensor,
-                                   AscendC::LocalTensor<int8_t> const &srcTensor,
-                                   AscendC::LoadData2dTransposeParams const &params)
-{
-    AscendC::LoadDataWithTranspose(dstTensor, srcTensor, params);
-}
-
-template <typename ElementDst, typename ElementSrc>
-PTO_DEVICE void PtoFixpipeL0CToGm(AscendC::GlobalTensor<ElementDst> const &dst,
-                                  AscendC::LocalTensor<ElementSrc> const &src,
-                                  AscendC::FixpipeParamsV220 const &params)
-{
-    AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_ROW_MAJOR>(dst, src, params);
-}
-
-template <typename ElementDst, typename ElementSrc>
-PTO_DEVICE void PtoFixpipeL0CToGm(AscendC::GlobalTensor<ElementDst> const &dst,
-                                  AscendC::LocalTensor<ElementSrc> const &src,
-                                  AscendC::LocalTensor<uint64_t> const &workspace,
-                                  AscendC::FixpipeParamsV220 const &params)
-{
-    AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_ROW_MAJOR>(dst, src, workspace, params);
-}
-
-}  // namespace substrate_bridge
-
 template <class ArchTag, class GmType, class L1Type = typename helper::L1ATypeSelector<GmType>::L1AType>
 struct CopyGmToL1 {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy gm to l1");
@@ -1257,111 +1113,39 @@ struct CopyGmToL1 {
 template <class Element>
 struct CopyGmToL1<Arch::AtlasA2,
                   GemmType<Element, layout::ND>,
-                  GemmType<Element, layout::Zn, AscendC::TPosition::A1>> {
+                  GemmType<Element, layout::Zn, pto::TileType::Mat>> {
     using LayoutDst = layout::Zn;
     using LayoutSrc = layout::ND;
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
     PTO_DEVICE CopyGmToL1() = default;
-
-    PTO_DEVICE void operator()(AscendC::LocalTensor<Element> const &dstTensor,
-                                   AscendC::GlobalTensor<Element> const &srcTensor,
-                                   LayoutDst const &layoutDst,
-                                   LayoutSrc const &layoutSrc)
-    {
-        AscendC::Nd2NzParams intriParams;
-        intriParams.ndNum = 1;
-        intriParams.dValue = layoutSrc.shape(1);
-        intriParams.srcNdMatrixStride = 0;
-        intriParams.dstNzC0Stride = layoutDst.stride(3) / ELE_NUM_PER_C0;
-        intriParams.dstNzMatrixStride = 0;
-
-        if (layoutSrc.stride(0) < STRIDE_LIMIT) {
-            intriParams.nValue = layoutSrc.shape(0);
-            intriParams.srcDValue = layoutSrc.stride(0);
-            intriParams.dstNzNStride = layoutDst.stride(0) / ELE_NUM_PER_C0;
-            substrate_bridge::PtoDataCopyGmToL1Nd2Nz(dstTensor, srcTensor, intriParams);
-        } else {
-            intriParams.nValue = 1;
-            intriParams.srcDValue = 0;
-            intriParams.dstNzNStride = 0;
-            for (uint32_t i = 0; i < layoutSrc.shape(0); i++) {
-                substrate_bridge::PtoDataCopyGmToL1Nd2NzRow(dstTensor[i * ELE_NUM_PER_C0], srcTensor[i * layoutSrc.stride(0)], intriParams);
-            }
-        }
-    }
 };
 
 template <class Element>
 struct CopyGmToL1<Arch::AtlasA5,
                   GemmType<Element, layout::ND>,
-                  GemmType<Element, layout::Zn, AscendC::TPosition::A1>>
+                  GemmType<Element, layout::Zn, pto::TileType::Mat>>
     : CopyGmToL1<Arch::AtlasA2,
                  GemmType<Element, layout::ND>,
-                 GemmType<Element, layout::Zn, AscendC::TPosition::A1>> {};
+                 GemmType<Element, layout::Zn, pto::TileType::Mat>> {};
 
 template <class ArchTag, class Element>
 struct CopyGmToL1<ArchTag,
                   GemmType<Element, layout::Zn>,
-                  GemmType<Element, layout::Zn, AscendC::TPosition::A1>> {
+                  GemmType<Element, layout::Zn, pto::TileType::Mat>> {
     using LayoutDst = layout::Zn;
     using LayoutSrc = layout::Zn;
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
     PTO_DEVICE CopyGmToL1() = default;
-
-    PTO_DEVICE void operator()(AscendC::LocalTensor<Element> const &dstTensor,
-                                   AscendC::GlobalTensor<Element> const &srcTensor,
-                                   LayoutDst const &layoutDst,
-                                   LayoutSrc const &layoutSrc)
-    {
-        uint32_t blockCount = CeilDiv<ELE_NUM_PER_C0>(layoutSrc.orgShape(1));
-        uint32_t blockLen = layoutSrc.orgShape(0);
-        AscendC::DataCopyParams repeatParams;
-
-        if (layoutSrc.stride(3) / ELE_NUM_PER_C0 < STRIDE_LIMIT) {
-            repeatParams.blockCount = blockCount;
-            repeatParams.blockLen = blockLen;
-            repeatParams.srcStride = layoutSrc.stride(3) / ELE_NUM_PER_C0 - blockLen;
-            repeatParams.dstStride = layoutDst.stride(3) / ELE_NUM_PER_C0 - blockLen;
-            substrate_bridge::PtoDataCopyGmToL1(dstTensor, srcTensor, repeatParams);
-        } else {
-            repeatParams.blockCount = 1;
-            repeatParams.blockLen = blockLen;
-            repeatParams.srcStride = 0;
-            repeatParams.dstStride = 0;
-            for (uint32_t i = 0; i < blockCount; i++) {
-                uint64_t dstOffset = i * layoutDst.stride(3);
-                uint64_t srcOffset = i * layoutSrc.stride(3);
-                substrate_bridge::PtoDataCopyGmToL1(dstTensor[dstOffset], srcTensor[srcOffset], repeatParams);
-            }
-        }
-    }
 };
 
 template <class ArchTag, class Element>
 struct CopyGmToL1<ArchTag,
                   GemmType<Element, layout::VectorLayout>,
-                  GemmType<Element, layout::VectorLayout, AscendC::TPosition::A1>> {
+                  GemmType<Element, layout::VectorLayout, pto::TileType::Mat>> {
     using LayoutDst = layout::VectorLayout;
     using LayoutSrc = layout::VectorLayout;
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
     PTO_DEVICE CopyGmToL1() = default;
-
-    PTO_DEVICE void operator()(AscendC::LocalTensor<Element> const &dstTensor,
-                                   AscendC::GlobalTensor<Element> const &srcTensor,
-                                   LayoutDst const &layoutDst,
-                                   LayoutSrc const &layoutSrc)
-    {
-        (void)layoutSrc;
-        AscendC::DataCopyParams intriParams;
-        intriParams.blockCount = 1;
-        intriParams.blockLen = layoutDst.shape(0) / ELE_NUM_PER_C0;
-        intriParams.srcStride = 0;
-        intriParams.dstStride = 0;
-        substrate_bridge::PtoDataCopyGmToL1(dstTensor, srcTensor, intriParams);
-    }
 };
 
 template <class ArchTag, class L1Type, class L0Type = void>
@@ -1371,39 +1155,20 @@ struct CopyL1ToL0A {
 
 template <class ArchTag, class Element>
 struct CopyL1ToL0A<ArchTag,
-                   GemmType<Element, layout::Zn, AscendC::TPosition::A1>,
-                   GemmType<Element, layout::Zz, AscendC::TPosition::A2>> {
+                   GemmType<Element, layout::Zn, pto::TileType::Mat>,
+                   GemmType<Element, layout::Zz, pto::TileType::Left>> {
     using LayoutDst = layout::Zz;
     using LayoutSrc = layout::Zn;
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
 
     PTO_DEVICE CopyL1ToL0A() = default;
-
-    PTO_DEVICE void operator()(AscendC::LocalTensor<Element> const &dstTensor,
-                                   AscendC::LocalTensor<Element> const &srcTensor,
-                                   LayoutDst const &layoutDst,
-                                   LayoutSrc const &layoutSrc)
-    {
-        AscendC::LoadData2DParams loadDataParams;
-        loadDataParams.startIndex = 0;
-        loadDataParams.repeatTimes = static_cast<uint16_t>(layoutDst.shape(3));
-        loadDataParams.srcStride = layoutSrc.stride(3) / ELE_NUM_PER_FRACTAL;
-        loadDataParams.sid = 0;
-        loadDataParams.dstGap = layoutDst.stride(3) / ELE_NUM_PER_FRACTAL - 1;
-        loadDataParams.ifTranspose = false;
-        loadDataParams.addrMode = 0;
-
-        for (uint32_t i = 0; i < layoutDst.shape(1); i++) {
-            substrate_bridge::PtoLoadDataL1ToL0A(dstTensor[i * layoutDst.stride(1)], srcTensor[i * layoutSrc.stride(1)], loadDataParams);
-        }
-    }
 };
 
 template <class ArchTag, class Element>
-struct CopyL1ToL0A<ArchTag, GemmType<Element, layout::Zn, AscendC::TPosition::A1>>
+struct CopyL1ToL0A<ArchTag, GemmType<Element, layout::Zn, pto::TileType::Mat>>
     : CopyL1ToL0A<ArchTag,
-                  GemmType<Element, layout::Zn, AscendC::TPosition::A1>,
-                  GemmType<Element, layout::Zz, AscendC::TPosition::A2>> {};
+                  GemmType<Element, layout::Zn, pto::TileType::Mat>,
+                  GemmType<Element, layout::Zz, pto::TileType::Left>> {};
 
 template <class ArchTag, class L1Type, class L0Type = void>
 struct CopyL1ToL0B {
@@ -1412,8 +1177,8 @@ struct CopyL1ToL0B {
 
 template <class ArchTag>
 struct CopyL1ToL0B<ArchTag,
-                   GemmType<int8_t, layout::Zn, AscendC::TPosition::A1>,
-                   GemmType<int8_t, layout::Nz, AscendC::TPosition::B2>> {
+                   GemmType<int8_t, layout::Zn, pto::TileType::Mat>,
+                   GemmType<int8_t, layout::Nz, pto::TileType::Right>> {
     using Element = int8_t;
     using LayoutDst = layout::Nz;
     using LayoutSrc = layout::Zn;
@@ -1421,32 +1186,13 @@ struct CopyL1ToL0B<ArchTag,
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
 
     PTO_DEVICE CopyL1ToL0B() = default;
-
-    PTO_DEVICE void operator()(AscendC::LocalTensor<Element> const &dstTensor,
-                                   AscendC::LocalTensor<Element> const &srcTensor,
-                                   LayoutDst const &layoutDst,
-                                   LayoutSrc const &layoutSrc)
-    {
-        AscendC::LoadData2dTransposeParams loadDataParams;
-        loadDataParams.startIndex = 0;
-        loadDataParams.repeatTimes = static_cast<uint16_t>(CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(1)));
-        loadDataParams.srcStride = layoutSrc.stride(3) / ELE_NUM_PER_FRACTAL / 2;
-        loadDataParams.dstGap = 1;
-        loadDataParams.dstFracGap = 0;
-
-        for (uint32_t i = 0; i < CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(0)); i++) {
-            substrate_bridge::PtoLoadDataL1ToL0B(dstTensor[i * layoutDst.stride(1)],
-                                                 srcTensor[i * layoutSrc.stride(1) * 2],
-                                                 loadDataParams);
-        }
-    }
 };
 
 template <class ArchTag>
-struct CopyL1ToL0B<ArchTag, GemmType<int8_t, layout::Zn, AscendC::TPosition::A1>>
+struct CopyL1ToL0B<ArchTag, GemmType<int8_t, layout::Zn, pto::TileType::Mat>>
     : CopyL1ToL0B<ArchTag,
-                  GemmType<int8_t, layout::Zn, AscendC::TPosition::A1>,
-                  GemmType<int8_t, layout::Nz, AscendC::TPosition::B2>> {};
+                  GemmType<int8_t, layout::Zn, pto::TileType::Mat>,
+                  GemmType<int8_t, layout::Nz, pto::TileType::Right>> {};
 
 template <class ArchTag, class L1Type, class L0Type = void>
 struct CopyL1ToFP {
@@ -1455,27 +1201,13 @@ struct CopyL1ToFP {
 
 template <class ArchTag, class ElementSrc, class ElementDst>
 struct CopyL1ToFP<ArchTag,
-                  GemmType<ElementSrc, layout::VectorLayout, AscendC::TPosition::A1>,
-                  GemmType<ElementDst, layout::VectorLayout, AscendC::TPosition::C2PIPE2GM>> {
+                  GemmType<ElementSrc, layout::VectorLayout, pto::TileType::Mat>,
+                  GemmType<ElementDst, layout::VectorLayout, pto::TileType::Scaling>> {
     using LayoutDst = layout::VectorLayout;
     using LayoutSrc = layout::VectorLayout;
     static constexpr uint32_t ELE_NUM_PER_FP = BYTE_PER_BLK_FP / sizeof(ElementSrc);
 
     PTO_DEVICE CopyL1ToFP() = default;
-
-    PTO_DEVICE void operator()(AscendC::LocalTensor<ElementDst> dstTensor,
-                                   AscendC::LocalTensor<ElementSrc> srcTensor,
-                                   LayoutDst layoutDst,
-                                   LayoutSrc layoutSrc)
-    {
-        (void)layoutSrc;
-        AscendC::DataCopyParams intriParams;
-        intriParams.blockCount = 1;
-        intriParams.blockLen = (layoutDst.shape(0) + ELE_NUM_PER_FP - 1) / ELE_NUM_PER_FP;
-        intriParams.srcStride = 0;
-        intriParams.dstStride = 0;
-        substrate_bridge::PtoDataCopyL1ToFp(dstTensor, srcTensor, intriParams);
-    }
 };
 
 template <class ArchTag, class ElementAccumulator, class GmType,
@@ -1509,41 +1241,6 @@ struct CopyL0CToGm<Arch::AtlasA2,
 
     PTO_DEVICE CopyL0CToGm() = default;
     PTO_DEVICE CopyL0CToGm(Params const &params_) : params(params_) {}
-
-    PTO_DEVICE void operator()(AscendC::GlobalTensor<ElementDst> const &dst,
-                                   AscendC::LocalTensor<ElementSrc> const &src,
-                                   LayoutDst const &dstLayout,
-                                   LayoutSrc const &srcLayout,
-                                   uint8_t unitFlag = 0)
-    {
-        AscendC::FixpipeParamsV220 intriParams;
-        intriParams.nSize = dstLayout.shape(1);
-        intriParams.mSize = dstLayout.shape(0);
-        intriParams.srcStride = srcLayout.stride(3) / srcLayout.stride(0);
-        intriParams.dstStride = dstLayout.stride(0);
-        intriParams.quantPre = quantPre;
-        intriParams.reluEn = reluEn;
-        intriParams.unitFlag = unitFlag;
-        substrate_bridge::PtoFixpipeL0CToGm(dst, src, intriParams);
-    }
-
-    PTO_DEVICE void operator()(AscendC::GlobalTensor<ElementDst> const &dst,
-                                   AscendC::LocalTensor<ElementSrc> const &src,
-                                   AscendC::LocalTensor<uint64_t> cbufWorkspace,
-                                   LayoutDst const &dstLayout,
-                                   LayoutSrc const &srcLayout,
-                                   uint8_t unitFlag = 0)
-    {
-        AscendC::FixpipeParamsV220 intriParams;
-        intriParams.nSize = dstLayout.shape(1);
-        intriParams.mSize = dstLayout.shape(0);
-        intriParams.srcStride = srcLayout.stride(3) / srcLayout.stride(0);
-        intriParams.dstStride = dstLayout.stride(0);
-        intriParams.quantPre = quantPre;
-        intriParams.reluEn = reluEn;
-        intriParams.unitFlag = unitFlag;
-        substrate_bridge::PtoFixpipeL0CToGm(dst, src, cbufWorkspace, intriParams);
-    }
 };
 
 template <class ElementAccumulator_, class ElementDst_, ScaleGranularity Granularity_, bool ReluEnable_>
@@ -1585,8 +1282,8 @@ struct QuantTileCopy : public TileCopyGemm<ArchTag, AType, BType, CType, BiasTyp
     using ElementAccumulator = typename Base::ElementAccumulator;
     using CopyL0CToGm = Tile::CopyL0CToGm<ArchTag, ElementAccumulator, CType, SCALE_GRANU, false>;
     using CopyL1ToFP = Tile::CopyL1ToFP<ArchTag,
-        GemmType<uint64_t, layout::VectorLayout, AscendC::TPosition::A1>,
-        GemmType<uint64_t, layout::VectorLayout, AscendC::TPosition::C2PIPE2GM>>;
+        GemmType<uint64_t, layout::VectorLayout, pto::TileType::Mat>,
+        GemmType<uint64_t, layout::VectorLayout, pto::TileType::Scaling>>;
 };
 
 template <class ArchTag, class AType, class BType, class BiasType = void>

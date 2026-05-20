@@ -36,7 +36,6 @@ using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoMulVector;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoReduceMaxVector;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoSetValue;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoStoreVector;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoUbBaseAddr;
 
 template <auto Pipe>
 PTO_DEVICE void PtoPipeBarrier()

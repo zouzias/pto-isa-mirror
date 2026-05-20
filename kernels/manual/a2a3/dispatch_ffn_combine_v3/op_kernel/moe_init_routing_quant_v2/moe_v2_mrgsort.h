@@ -20,7 +20,6 @@
 #include "kernel_operator.h"
 
 namespace MoeInitRoutingQuantV2 {
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoUbBaseAddr;
 using namespace AscendC;
 using namespace optiling;
 struct MoeV2MrgsortParam {
@@ -34,9 +33,9 @@ class MoeV2Mrgsort {
   __aicore__ inline MoeV2Mrgsort(){};
   __aicore__ inline void Init(MoeV2MrgsortParam* param);
   __aicore__ inline void Process();
-  __aicore__ inline void SetInput(__gm__ float * gmInput, LocalTensor<float>& ubInput);
-  __aicore__ inline void SetOutput(__gm__ float * gmOutput, LocalTensor<float>& ubOutput);
-  __aicore__ inline void SetBuffer(LocalTensor<float>& tempBuffer);
+  __aicore__ inline void SetInput(__gm__ float * gmInput, uint64_t ubInput);
+  __aicore__ inline void SetOutput(__gm__ float * gmOutput, uint64_t ubOutput);
+  __aicore__ inline void SetBuffer(uint64_t tempBuffer);
 
  private:
   __aicore__ inline void CopyIn();
@@ -52,9 +51,9 @@ class MoeV2Mrgsort {
   __gm__ float *gmInputs[4];
   __gm__ float *gmOutput;
 
-  LocalTensor<float> ubInputs[4];
-  LocalTensor<float> ubOutput;
-  LocalTensor<float> tempBuffer;
+  uint64_t ubInputs[4];
+  uint64_t ubOutput;
+  uint64_t tempBuffer;
 
   int64_t listNum{0};
   int64_t remainListNum{0};
@@ -69,7 +68,7 @@ class MoeV2Mrgsort {
   uint16_t validBitTail{0};
   uint16_t elementCountListTail[4];
   uint32_t listSortedNums[4];
-  LocalTensor<float> tmpUbInputs[4];
+  uint64_t tmpUbInputs[4];
 };
 
 __aicore__ inline void MoeV2Mrgsort::ClearCache() {
@@ -78,18 +77,18 @@ __aicore__ inline void MoeV2Mrgsort::ClearCache() {
   this->outOffset = 0;
 }
 
-__aicore__ inline void MoeV2Mrgsort::SetInput(__gm__ float * gmInput, LocalTensor<float>& ubInput) {
+__aicore__ inline void MoeV2Mrgsort::SetInput(__gm__ float * gmInput, uint64_t ubInput) {
   this->gmInputs[listNum] = gmInput;
   this->ubInputs[listNum] = ubInput;
   this->listNum += 1;
 }
 
-__aicore__ inline void MoeV2Mrgsort::SetOutput(__gm__ float * gmOutput, LocalTensor<float>& ubOutput) {
+__aicore__ inline void MoeV2Mrgsort::SetOutput(__gm__ float * gmOutput, uint64_t ubOutput) {
   this->gmOutput = gmOutput;
   this->ubOutput = ubOutput;
 }
 
-__aicore__ inline void MoeV2Mrgsort::SetBuffer(LocalTensor<float>& tempBuffer) {
+__aicore__ inline void MoeV2Mrgsort::SetBuffer(uint64_t tempBuffer) {
   this->tempBuffer = tempBuffer;
 }
 
@@ -114,7 +113,7 @@ __aicore__ inline void MoeV2Mrgsort::CopyIn() {
   for (int64_t i = 0, j = 0; i < listNum; i++) {
     lengths[i] = Min(param->oneLoopMaxElements, listRemainElements[i]);
     if (lengths[i] > 0) {
-      pto_detail::PtoLoadVector(PtoUbBaseAddr(this->ubInputs[i]), this->gmInputs[i] + offsets[i], GetSortLen<float>(lengths[i]));
+      pto_detail::PtoLoadVector(this->ubInputs[i], this->gmInputs[i] + offsets[i], GetSortLen<float>(lengths[i]));
       tmpUbInputs[j] = this->ubInputs[i];
       elementCountListTail[j] = lengths[i];
       this->remainListNum += 1;
@@ -130,13 +129,15 @@ __aicore__ inline void MoeV2Mrgsort::MrgsortCompute() {
                                           this->tempBuffer,
                                           this->tmpUbInputs[0],
                                           this->tmpUbInputs[1],
-                                          this->tmpUbInputs[MERGE_LIST_IDX_TWO],
-                                          this->tmpUbInputs[MERGE_LIST_IDX_THREE],
+                                          this->remainListNum >= MERGE_LIST_THREE ?
+                                              this->tmpUbInputs[MERGE_LIST_IDX_TWO] : 0,
+                                          this->remainListNum >= MERGE_LIST_FOUR ?
+                                              this->tmpUbInputs[MERGE_LIST_IDX_THREE] : 0,
                                           this->elementCountListTail,
                                           this->remainListNum,
                                           this->listSortedNums);
   } else {
-    pto_detail::PtoMoveVector<float>(PtoUbBaseAddr(this->ubOutput), PtoUbBaseAddr(this->tmpUbInputs[0]), GetSortLen<float>(elementCountListTail[0]));
+    pto_detail::PtoMoveVector<float>(this->ubOutput, this->tmpUbInputs[0], GetSortLen<float>(elementCountListTail[0]));
     listSortedNums[0] = elementCountListTail[0];
   }
 }
@@ -159,7 +160,7 @@ __aicore__ inline void MoeV2Mrgsort::UpdateSortInfo() {
 
 __aicore__ inline void MoeV2Mrgsort::CopyOut() {
   pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
-  pto_detail::PtoStoreVector(this->gmOutput + outOffset, PtoUbBaseAddr(this->ubOutput), GetSortLen<float>(curLoopSortedNum));
+  pto_detail::PtoStoreVector(this->gmOutput + outOffset, this->ubOutput, GetSortLen<float>(curLoopSortedNum));
   outOffset += GetSortLen<float>(curLoopSortedNum);
 }
 

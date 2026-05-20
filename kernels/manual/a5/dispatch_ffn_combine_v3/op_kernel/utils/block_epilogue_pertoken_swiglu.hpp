@@ -29,10 +29,12 @@ using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoAddScalarVector;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoCastVector;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoDivVector;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoExpVector;
+using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoGetValue;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoLoadVector;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoMulElementwiseVector;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoMulVector;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoReduceMaxVector;
+using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoSetValue;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoStoreVector;
 
 template <auto Pipe>
@@ -126,20 +128,18 @@ public:
         uint32_t HalfChunkTileLen = ChunkTileLen / 2;
 
         for (uint32_t i = 0; i < UB_STAGES; ++i) {
-            ubCList[i] = resource.ubBuf.template GetBufferByByte<ElementC>(ubOffset);
+            ubCOffsetList[i] = resource.ubBuf.GetBufferAddrByByte(ubOffset);
             ubOffset += blockN * sizeof(ElementC);
-            ubDList[i] = resource.ubBuf.template GetBufferByByte<ElementD>(ubOffset);
+            ubDOffsetList[i] = resource.ubBuf.GetBufferAddrByByte(ubOffset);
             ubOffset += blockN * sizeof(ElementD);
-            ubCFp32List[i] = resource.ubBuf.template GetBufferByByte<float>(ubOffset);
+            ubCFp32OffsetList[i] = resource.ubBuf.GetBufferAddrByByte(ubOffset);
             ubOffset += blockN * sizeof(float);
-            ubCFp32ChunkNList[i] = resource.ubBuf.template GetBufferByByte<float>(ubOffset);
+            ubCFp32ChunkNOffsetList[i] = resource.ubBuf.GetBufferAddrByByte(ubOffset);
             ubOffset += ChunkTileLen * sizeof(float);
-            ubCFp32ChunkNAbsList[i] = resource.ubBuf.template GetBufferByByte<float>(ubOffset);
+            ubCFp32ChunkNAbsOffsetList[i] = resource.ubBuf.GetBufferAddrByByte(ubOffset);
             ubOffset += ChunkTileLen * sizeof(float);
-            ubCFp32ChunkNMaxList[i] = resource.ubBuf.template GetBufferByByte<float>(ubOffset);
+            ubCFp32ChunkNMaxOffsetList[i] = resource.ubBuf.GetBufferAddrByByte(ubOffset);
             ubOffset += HalfChunkTileLen * sizeof(float);
-            ubQuantS32List[i] = ubCFp32ChunkNAbsList[i].template ReinterpretCast<int32_t>();
-            ubQuantF16List[i] = ubCFp32ChunkNAbsList[i].template ReinterpretCast<half>();
 
             eventUbCVMTE2List[i] = eventVMTE2++;
             eventUbCMTE2VList[i] = eventMTE2V++;
@@ -150,7 +150,7 @@ public:
             swiglu_detail::PtoSetFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[i]);
         }
 
-        ubPerTokenScaleOutput = resource.ubBuf.template GetBufferByByte<float>(ubOffset);
+        ubPerTokenScaleOutputOffset = resource.ubBuf.GetBufferAddrByByte(ubOffset);
     }
     PTO_DEVICE
     void Finalize()
@@ -174,11 +174,11 @@ public:
     template <typename CallbackT = pto_ext::support::NoopCallback>
     PTO_DEVICE
     void operator() (
-        AscendC::GlobalTensor<ElementC> const &gmC,
+        __gm__ ElementC *gmCPtr,
         PtoShape2D const &shapeC,
-        AscendC::GlobalTensor<ElementPerTokenScale> const &gmPerTokenScale1,
-        AscendC::GlobalTensor<ElementD> const &gmD,
-        AscendC::GlobalTensor<ElementPerTokenScale> const &gmPerTokenScale2,
+        __gm__ ElementPerTokenScale *gmPerTokenScale1Ptr,
+        __gm__ ElementD *gmDPtr,
+        __gm__ ElementPerTokenScale *gmPerTokenScale2Ptr,
 
         uint32_t epilogueCoreNum = 40,
         CallbackT &&callback = CallbackT{}
@@ -213,84 +213,82 @@ public:
 
         for (uint32_t loopIdx = loopStartIdx; loopIdx < loopStartIdx + tasksForIdx; ++loopIdx) {
 
-            auto gmTileC = gmC[loopIdx * blockN];
+            __gm__ ElementC *gmTileC = gmCPtr + loopIdx * blockN;
 
-            auto &ubC = ubCList[ubListId];
-            auto &ubD = ubDList[ubListId];
+            auto ubCOffset = ubCOffsetList[ubListId];
+            auto ubDOffset = ubDOffsetList[ubListId];
+            auto ubCFp32Offset = ubCFp32OffsetList[ubListId];
+            auto ubCFp32ChunkNOffset = ubCFp32ChunkNOffsetList[ubListId];
+            auto ubAbsOffset = ubCFp32ChunkNAbsOffsetList[ubListId];
+            auto ubReduceMaxOffset = ubCFp32ChunkNMaxOffsetList[ubListId];
+            auto ubOutputTmpOffset = ubAbsOffset;
+            auto ubQuantScratchOffset = ubAbsOffset;
 
-            auto &ubCFp32 = ubCFp32List[ubListId];
-            auto &ubCFp32ChunkN = ubCFp32ChunkNList[ubListId];
-            auto &ubAbs = ubCFp32ChunkNAbsList[ubListId];
-            auto &ubReduceMax = ubCFp32ChunkNMaxList[ubListId];
-            auto &ubOutputTmp = ubAbs;
-            auto &ubQuantS32 = ubQuantS32List[ubListId];
-            auto &ubQuantF16 = ubQuantF16List[ubListId];
-
-            auto gmTileD = gmD[loopIdx * ChunkTileLen];
+            __gm__ ElementD *gmTileD = gmDPtr + loopIdx * ChunkTileLen;
             // Move C from GM workspace to UB
             swiglu_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
-            swiglu_detail::PtoLoadVector(ubC, gmTileC, blockN);
+            swiglu_detail::PtoLoadVector<ElementC>(ubCOffset, gmTileC, blockN);
             swiglu_detail::PtoSetFlag<AscendC::HardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
 
             // Cast C to FP32 in UB
             swiglu_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
-            swiglu_detail::PtoCastVector(ubCFp32, ubC, blockN, pto::RoundMode::CAST_NONE);
+            swiglu_detail::PtoCastVector<float, ElementC>(ubCFp32Offset, ubCOffset, blockN, pto::RoundMode::CAST_NONE);
             swiglu_detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
 
             // Get per-token scale from row loopIdx of gmPerTokenScale
-            ElementPerTokenScale perTokenScale = gmPerTokenScale1(loopIdx);
+            ElementPerTokenScale perTokenScale = gm_load(gmPerTokenScale1Ptr + loopIdx);
 
             swiglu_detail::PtoSetFlag<AscendC::HardEvent::S_V>(0);
             swiglu_detail::PtoWaitFlag<AscendC::HardEvent::S_V>(0);
             // Multiply FP32 C by the per-token scale
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
-            swiglu_detail::PtoMulVector(ubCFp32, ubCFp32, blockN, perTokenScale);
+            swiglu_detail::PtoMulVector(ubCFp32Offset, ubCFp32Offset, blockN, perTokenScale);
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
 
             // Swiglu computation process
-            swiglu_detail::PtoMulVector(ubCFp32ChunkN, ubCFp32, ChunkTileLen, -1.0f);
+            swiglu_detail::PtoMulVector(ubCFp32ChunkNOffset, ubCFp32Offset, ChunkTileLen, -1.0f);
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
-            swiglu_detail::PtoExpVector(ubCFp32ChunkN, ubCFp32ChunkN, ChunkTileLen);
+            swiglu_detail::PtoExpVector<float>(ubCFp32ChunkNOffset, ubCFp32ChunkNOffset, ChunkTileLen);
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
-            swiglu_detail::PtoAddScalarVector(ubCFp32ChunkN, ubCFp32ChunkN, ChunkTileLen, 1.0f);
+            swiglu_detail::PtoAddScalarVector(ubCFp32ChunkNOffset, ubCFp32ChunkNOffset, ChunkTileLen, 1.0f);
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
-            swiglu_detail::PtoDivVector(ubCFp32ChunkN, ubCFp32, ubCFp32ChunkN, ChunkTileLen);
+            swiglu_detail::PtoDivVector<float>(ubCFp32ChunkNOffset, ubCFp32Offset, ubCFp32ChunkNOffset, ChunkTileLen);
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
-            swiglu_detail::PtoMulElementwiseVector(ubCFp32ChunkN, ubCFp32ChunkN, ubCFp32[ChunkTileLen], ChunkTileLen);
+            swiglu_detail::PtoMulElementwiseVector<float>(ubCFp32ChunkNOffset, ubCFp32ChunkNOffset, ubCFp32Offset + static_cast<uint64_t>(ChunkTileLen) * sizeof(float), ChunkTileLen);
 
             // Quantization process; difference between the two approaches
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
-            swiglu_detail::PtoAbsVector(ubAbs, ubCFp32ChunkN, ChunkTileLen);
+            swiglu_detail::PtoAbsVector<float>(ubAbsOffset, ubCFp32ChunkNOffset, ChunkTileLen);
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
 
-            swiglu_detail::PtoReduceMaxVector(ubReduceMax, ubAbs, ubAbs, ChunkTileLen);
+            swiglu_detail::PtoReduceMaxVector(ubReduceMaxOffset, ubAbsOffset, ubAbsOffset, ChunkTileLen);
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
 
             swiglu_detail::PtoSetFlag<AscendC::HardEvent::V_S>(0);
             swiglu_detail::PtoWaitFlag<AscendC::HardEvent::V_S>(0);
 
-            ElementPerTokenScale GMubDequantScale = ubReduceMax.GetValue(0);
+            ElementPerTokenScale GMubDequantScale = swiglu_detail::PtoGetValue<ElementPerTokenScale>(ubReduceMaxOffset, 0);
             swiglu_detail::PtoSetFlag<AscendC::HardEvent::S_V>(0);
 
-            auto ubPerTokenScaleOutputOffset = loopIdx - loopStartIdx;
-            ubPerTokenScaleOutput.SetValue(ubPerTokenScaleOutputOffset, GMubDequantScale / 127.f);
+            auto ubPerTokenScaleOutputElemOffset = loopIdx - loopStartIdx;
+            swiglu_detail::PtoSetValue<ElementPerTokenScale>(ubPerTokenScaleOutputOffset, ubPerTokenScaleOutputElemOffset, GMubDequantScale / 127.f);
 
             swiglu_detail::PtoWaitFlag<AscendC::HardEvent::S_V>(0);
-            swiglu_detail::PtoMulVector(ubOutputTmp, ubCFp32ChunkN, ChunkTileLen, 127.f / GMubDequantScale);
+            swiglu_detail::PtoMulVector(ubOutputTmpOffset, ubCFp32ChunkNOffset, ChunkTileLen, 127.f / GMubDequantScale);
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
 
-            swiglu_detail::PtoCastVector(ubQuantS32, ubOutputTmp, ChunkTileLen, pto::RoundMode::CAST_RINT);
+            swiglu_detail::PtoCastVector<int32_t, float>(ubQuantScratchOffset, ubOutputTmpOffset, ChunkTileLen, pto::RoundMode::CAST_RINT);
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
             AscendC::SetDeqScale(static_cast<half>(1.0));
-            swiglu_detail::PtoCastVector(ubQuantF16, ubQuantS32, ChunkTileLen, pto::RoundMode::CAST_RINT);
+            swiglu_detail::PtoCastVector<half, int32_t>(ubQuantScratchOffset, ubQuantScratchOffset, ChunkTileLen, pto::RoundMode::CAST_RINT);
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
 
             swiglu_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(eventUbDVMTE3List[ubListId]);
-            swiglu_detail::PtoCastVector(ubD, ubQuantF16, ChunkTileLen, pto::RoundMode::CAST_RINT);
+            swiglu_detail::PtoCastVector<ElementD, half>(ubDOffset, ubQuantScratchOffset, ChunkTileLen, pto::RoundMode::CAST_RINT);
             swiglu_detail::PtoSetFlag<AscendC::HardEvent::V_MTE3>(eventUbDMTE3VList[ubListId]);
 
             swiglu_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
-            swiglu_detail::PtoStoreVector(gmTileD, ubD, ChunkTileLen);
+            swiglu_detail::PtoStoreVector<ElementD>(gmTileD, ubDOffset, ChunkTileLen);
             swiglu_detail::PtoSetFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[ubListId]);
             ubListId = (ubListId + 1 < UB_STAGES) ? (ubListId + 1) : 0;
         }
@@ -299,7 +297,7 @@ public:
             swiglu_detail::PtoSetFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
             swiglu_detail::PtoWaitFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
 
-            swiglu_detail::PtoStoreVector(gmPerTokenScale2[loopStartIdx], ubPerTokenScaleOutput[0], tasksForIdx);
+            swiglu_detail::PtoStoreVector<ElementPerTokenScale>(gmPerTokenScale2Ptr + loopStartIdx, ubPerTokenScaleOutputOffset, tasksForIdx);
         }
 
 
@@ -308,8 +306,8 @@ public:
 private:
     Params params;
 
-    AscendC::LocalTensor<ElementC> ubCList[UB_STAGES];
-    AscendC::LocalTensor<ElementD> ubDList[UB_STAGES];
+    uint64_t ubCOffsetList[UB_STAGES];
+    uint64_t ubDOffsetList[UB_STAGES];
 
     int32_t eventUbCVMTE2List[UB_STAGES];
     int32_t eventUbCMTE2VList[UB_STAGES];
@@ -318,13 +316,11 @@ private:
 
     uint32_t ubListId{0};
 
-    AscendC::LocalTensor<float> ubCFp32List[UB_STAGES];
-    AscendC::LocalTensor<float> ubCFp32ChunkNList[UB_STAGES];
-    AscendC::LocalTensor<float> ubCFp32ChunkNAbsList[UB_STAGES];
-    AscendC::LocalTensor<float> ubCFp32ChunkNMaxList[UB_STAGES];
-    AscendC::LocalTensor<int32_t> ubQuantS32List[UB_STAGES];
-    AscendC::LocalTensor<half> ubQuantF16List[UB_STAGES];
-    AscendC::LocalTensor<float> ubPerTokenScaleOutput;
+    uint64_t ubCFp32OffsetList[UB_STAGES];
+    uint64_t ubCFp32ChunkNOffsetList[UB_STAGES];
+    uint64_t ubCFp32ChunkNAbsOffsetList[UB_STAGES];
+    uint64_t ubCFp32ChunkNMaxOffsetList[UB_STAGES];
+    uint64_t ubPerTokenScaleOutputOffset{0};
 
 };
 

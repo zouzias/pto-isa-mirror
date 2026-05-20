@@ -15,7 +15,7 @@ struct CaseConfig {
     uint32_t world_size = 0;
     uint32_t max_output_size = 0;
     uint32_t list_len = 1;
-    std::string soc_version = "Ascend950PR_958b";
+    std::string soc_version;
     double compare_atol = 1e-3;
     double compare_rtol = 1e-3;
     double input_tokens_all_ranks = 0.0;

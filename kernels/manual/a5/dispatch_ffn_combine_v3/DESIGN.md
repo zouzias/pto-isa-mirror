@@ -98,7 +98,17 @@ V4 将 PTO seam 分成三层：
 
 ### 4.3 Stage facade
 
-V4 使用 `op_kernel/stages/stage_sequence.hpp` 组织主链路 facade，保持 `PTO_DEVICE` inline，不改变 kernel ABI。该文件集中 AIC/AIV stage 顺序和 stage facade 调用，避免多个单函数 header 分散。
+V4 使用 `op_kernel/stages/` 组织主链路 facade。每个 stage 是 header-only，保持 `PTO_DEVICE` inline，不改变 kernel ABI：
+
+| Stage header | 职责 |
+| --- | --- |
+| `kernel_context.hpp` | 汇总执行上下文、阶段参数传递约定 |
+| `routing_stage.hpp` | active mask、routing、local count |
+| `dispatch_gather_stage.hpp` | count sync、remote gather、`TGET` |
+| `gmm_stage.hpp` | GMM1/GMM2 high-level facade |
+| `swiglu_stage.hpp` | GMM1 epilogue、SwiGLU、quant/dequant seam |
+| `combine_stage.hpp` | CombineV1/V2 facade、local/remote return |
+| `restore_stage.hpp` | unpermute / restore facade |
 
 ## 5. 未替换项与原因
 

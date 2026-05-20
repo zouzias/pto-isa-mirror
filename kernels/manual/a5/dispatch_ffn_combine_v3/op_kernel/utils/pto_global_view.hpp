@@ -33,22 +33,6 @@ PTO_INTERNAL PtoGlobalNd<Element> MakeGlobalFromPtr(__gm__ Element *ptr,
     return PtoGlobalNd<Element>(ptr, shape, stride);
 }
 
-template <typename Element>
-PTO_INTERNAL PtoGlobalNd<Element> MakeContiguousGlobal(AscendC::GlobalTensor<Element> const &tensor, uint32_t elemNum)
-{
-    auto *ptr = const_cast<__gm__ Element *>(tensor.GetPhyAddr());
-    return MakeContiguousGlobalFromPtr(ptr, elemNum);
-}
-
-template <typename Element>
-PTO_INTERNAL PtoGlobalNd<Element> MakeGlobal(AscendC::GlobalTensor<Element> const &tensor,
-                                          int64_t validRow,
-                                          int64_t validCol,
-                                          int64_t leadingDim)
-{
-    auto *ptr = const_cast<__gm__ Element *>(tensor.GetPhyAddr());
-    return MakeGlobalFromPtr(ptr, validRow, validCol, leadingDim);
-}
 
 }  // namespace pto_ext::dispatch_ffn_combine_v3::pto_bridge
 
