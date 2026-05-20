@@ -53,12 +53,9 @@ __global__ AICORE void RunMoeTopkPadded(__gm__ uint8_t *outVal_raw,
 {
     using indexT = uint32_t;
     constexpr int TYPE_COEF = sizeof(float) / sizeof(T);
-    constexpr int kPackedCols = kE_   * 2 * TYPE_COEF;  // 32*2 = 64
-    constexpr int kPackedTopK = kTopK_ * 2 * TYPE_COEF;  // kTopK*2
+    constexpr int kPackedCols = kE_   * 2 * TYPE_COEF;
+    constexpr int kPackedTopK = kTopK_ * 2 * TYPE_COEF;
 
-    // Pad output tile width up to the smallest multiple of 8 floats so the
-    // 32-byte-alignment assertion passes. valid region (set in constructor
-    // below) is (1, kTopK_), so TGATHER + TSTORE only emit kTopK_ values.
     constexpr int kGatherWidth = (kTopK_ < 8) ? 8 : kTopK_;
 
     __gm__ T      *outVal = reinterpret_cast<__gm__ T *>(outVal_raw);
@@ -78,47 +75,78 @@ __global__ AICORE void RunMoeTopkPadded(__gm__ uint8_t *outVal_raw,
     using OutValTile    = Tile<TileType::Vec, T,      1, kGatherWidth, BLayout::RowMajor, -1, -1>;
     using OutIdxTile    = Tile<TileType::Vec, indexT, 1, kGatherWidth, BLayout::RowMajor, -1, -1>;
 
-    for (int row = 0; row < kT_; ++row) {
-        pipe_barrier(PIPE_ALL);
+    if constexpr (kE_ <= 32) {
+        // ----------------------------------------------------------------
+        // Tile path: TSORT32 handles exactly one 32-element block.
+        // ----------------------------------------------------------------
+        for (int row = 0; row < kT_; ++row) {
+            pipe_barrier(PIPE_ALL);
 
-        SrcGlobal     srcGlobal(src + row * kE_);
-        IdxGlobal     idxGlobal(idx);
-        OutValGlobal  outValGlobal(outVal + row * kTopK_);
-        OutIdxGlobal  outIdxGlobal(outIdx + row * kTopK_);
+            SrcGlobal     srcGlobal(src + row * kE_);
+            IdxGlobal     idxGlobal(idx);
+            OutValGlobal  outValGlobal(outVal + row * kTopK_);
+            OutIdxGlobal  outIdxGlobal(outIdx + row * kTopK_);
 
-        SrcTile     srcTile(1, kE_);
-        IdxTile     idxTile(1, kE_);
-        SrcTile     sort32TmpTile(1, kE_);
-        PackedTile  sort32DstTile(1, kPackedCols);
-        // Valid region (1, kTopK_) — TGATHER and TSTORE clip to this even
-        // though the tile's static Cols template parameter is kGatherWidth.
-        OutValTile  outValTile(1, kTopK_);
-        OutIdxTile  outIdxTile(1, kTopK_);
+            SrcTile     srcTile(1, kE_);
+            IdxTile     idxTile(1, kE_);
+            SrcTile     sort32TmpTile(1, kE_);
+            PackedTile  sort32DstTile(1, kPackedCols);
+            OutValTile  outValTile(1, kTopK_);
+            OutIdxTile  outIdxTile(1, kTopK_);
 
-        // Phase 1: TSORT32 fully sorts a single 32-element row.
-        TLOAD(srcTile, srcGlobal);
-        TLOAD(idxTile, idxGlobal);
-        TSORT32(sort32DstTile, srcTile, idxTile, sort32TmpTile);
+            TLOAD(srcTile, srcGlobal);
+            TLOAD(idxTile, idxGlobal);
+            TSORT32(sort32DstTile, srcTile, idxTile, sort32TmpTile);
 
-        // Phase 4: TGATHER values from the first kPackedTopK packed elements.
-        // For kTopK_ in {1,2,4}: kPackedTopK in {2,4,8}, all <= kPackedCols.
-        // For kTopK_ in {8,16}: kPackedTopK in {16,32}, both <= kPackedCols.
-        PackedTile sortedTopKView(1, kPackedTopK);
-        TSUBVIEW(sortedTopKView, sort32DstTile, 0, 0);
-        if constexpr (std::is_same_v<T, half>) {
-            TGATHER<OutValTile, PackedTile, MaskPattern::P0001>(outValTile, sortedTopKView);
-        } else {
-            TGATHER<OutValTile, PackedTile, MaskPattern::P0101>(outValTile, sortedTopKView);
+            PackedTile sortedTopKView(1, kPackedTopK);
+            TSUBVIEW(sortedTopKView, sort32DstTile, 0, 0);
+            if constexpr (std::is_same_v<T, half>) {
+                TGATHER<OutValTile, PackedTile, MaskPattern::P0001>(outValTile, sortedTopKView);
+            } else {
+                TGATHER<OutValTile, PackedTile, MaskPattern::P0101>(outValTile, sortedTopKView);
+            }
+
+            PackedIdxTile sortedTopKIdxView(1, kPackedTopK);
+            TRESHAPE(sortedTopKIdxView, sort32DstTile);
+            TGATHER<OutIdxTile, PackedIdxTile, MaskPattern::P1010>(outIdxTile, sortedTopKIdxView);
+
+            TSTORE(outValGlobal, outValTile);
+            TSTORE(outIdxGlobal, outIdxTile);
         }
+    } else {
+        // ----------------------------------------------------------------
+        // Scalar fallback for kE > 32 (e.g., kE=64).
+        // TSORT32 only handles 32 elements; a tile-based 2-pass merge is
+        // complex in auto-mode.  We use a scalar selection sort on the SPU
+        // instead.  kE <= 64 → 256 bytes per value/index array on the
+        // scalar stack (well within the 32 KB limit).
+        // ----------------------------------------------------------------
+        static_assert(kE_ <= 64,
+            "Scalar fallback supports kE up to 64; extend or implement tile merge for larger kE");
 
-        // Phase 5: TGATHER indices via TRESHAPE type-pun.
-        PackedIdxTile sortedTopKIdxView(1, kPackedTopK);
-        TRESHAPE(sortedTopKIdxView, sort32DstTile);
-        TGATHER<OutIdxTile, PackedIdxTile, MaskPattern::P1010>(outIdxTile, sortedTopKIdxView);
+        for (int row = 0; row < kT_; ++row) {
+            pipe_barrier(PIPE_ALL);
 
-        // Phase 6: TSTORE (only the kTopK_ valid-region elements are written).
-        TSTORE(outValGlobal, outValTile);
-        TSTORE(outIdxGlobal, outIdxTile);
+            T        logit_vals[kE_];
+            indexT   logit_idx[kE_];
+            for (int i = 0; i < kE_; ++i) {
+                logit_vals[i] = src[row * kE_ + i];
+                logit_idx[i]  = static_cast<indexT>(i);
+            }
+
+            for (int k = 0; k < kTopK_; ++k) {
+                int best = k;
+                for (int i = k + 1; i < kE_; ++i) {
+                    if (logit_vals[i] > logit_vals[best]) best = i;
+                }
+                if (best != k) {
+                    T      tv = logit_vals[k]; logit_vals[k] = logit_vals[best]; logit_vals[best] = tv;
+                    indexT ti = logit_idx[k];  logit_idx[k]  = logit_idx[best];  logit_idx[best]  = ti;
+                }
+                outVal[row * kTopK_ + k] = logit_vals[k];
+                outIdx[row * kTopK_ + k] = logit_idx[k];
+            }
+        }
     }
 }
 

@@ -10,12 +10,12 @@ launchFullMoeCombined(...)  // one host call from main.cpp
   → launchMoeTopkPadded<float> (vec)
   → launchOutValPad<float>     (vec)   // device-side compact -> padded bridge
   → launchScatterFp16          (vec)
-  → launchExpertFfnFp16        (cube + cube)
+  → launchExpertFfnFp16        (fused cube)
   → launchGather<float>        (vec)
 aclrtSynchronizeStream(stream)         // one final sync only
 ```
 
-For `kTopK == 1` the gather softmax is degenerate (weight = 1.0) and `gather` takes its direct row-reorder fast path.
+For `kTopK == 1` the gather softmax is degenerate (weight = 1.0) and `gather` takes its fast path; the output is bit-equivalent to an unweighted sum.
 
 ## Differences vs full_moe_separate
 

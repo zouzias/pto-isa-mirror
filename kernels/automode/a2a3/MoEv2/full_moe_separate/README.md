@@ -8,13 +8,13 @@ End-to-end MoE forward pass driven by **five separate kernel launches** with exp
 logits   = X @ W_router                                  (router_matmul)
 top_idx, top_val = topk(logits, kTopK)                   (moe_topk_padded)
 A, A_id, rank_id, count, start = pack(X, top_idx)        (scatter)
-B        = FFN(A, W1, W2, count, start)                  (expert_ffn, cube + cube)
+B        = FFN(A, W1, W2, count, start)                  (expert_ffn, fused cube)
 weights  = softmax(top_val, axis=1)
 C[t]     = Σ_k weights[t, k] * B[r where A_id[r]=t,      (gather)
                                   rank_id[r]=k]
 ```
 
-For `kTopK == 1` the gather softmax is degenerate (weight = 1.0) and the kernel takes the direct row-reorder fast path.
+For `kTopK == 1` the gather softmax is degenerate (weight = 1.0) and the kernel takes the unweighted fast path — output equals an unweighted accumulation.
 
 ## Differences vs full_moe_combined
 
@@ -50,7 +50,9 @@ Sequence:
 2. CMake reconfigures and builds the 5 kernel `.so` files + the host executable.
 3. `./full_moe_separate` loads inputs, copies to device, fires 5 stages with sync between each, copies `C` back, validates against golden.
 
-Validation tolerance is `5e-2` abs — generous because the full pipeline stacks fp16 matmul rounding, fp32 accumulation, fp32→fp16 cast between the two FFN GEMMs, softmax, and the final weighted sum.
+Validation tolerance is `5e-2` abs — generous because the full pipeline stacks
+fp16 matmul rounding, fp32 accumulation, the FFN's local fp32→fp16 ReLU
+handoff, softmax, and the final weighted sum.
 
 ## Sweeping kT / kH / kF / kE / kTopK
 
@@ -91,7 +93,8 @@ This is one D2H + one H2D round-trip per pipeline run. The full_moe_combined fol
 
 ### Stages 3–5
 
-`scatter` → `expert_ffn` (two cube launches internally) → `gather`. See each folder's README for the kernel-side detail.
+`scatter` → `expert_ffn` (one fused cube launch) → `gather`. See each folder's
+README for the kernel-side detail.
 
 ## Known limitations
 
@@ -104,5 +107,5 @@ This is one D2H + one H2D round-trip per pipeline run. The full_moe_combined fol
 - [../router_matmul/](../router_matmul/) (cube GEMM)
 - [../moe_topk_padded/](../moe_topk_padded/) (top-K with kGatherWidth padding)
 - [../scatter/](../scatter/) (histogram + prefix + pack with `rank_id`)
-- [../expert_ffn/](../expert_ffn/) (two-stage cube FFN with NormalRelu fuse)
-- [../gather/](../gather/) (v2 gather: softmax, reorder to `D[t,k,h]`, vector weighted combine)
+- [../expert_ffn/](../expert_ffn/) (fused cube FFN with local NormalRelu handoff)
+- [../gather/](../gather/) (softmax-weighted scatter-add via TROWMAX/TROWEXPANDSUB/TEXP/TROWSUM/TROWEXPANDDIV)

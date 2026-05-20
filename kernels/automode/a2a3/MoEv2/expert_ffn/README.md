@@ -1,15 +1,22 @@
 # expert_ffn
 
-Auto-mode A3 prototype. Per-expert two-stage FFN over packed-by-expert tokens. **Rewrite** of the earlier element-wise gating placeholder — this version does the real two-matmul MoE FFN body.
+Auto-mode A3 prototype. Per-expert fused FFN over packed-by-expert tokens.
+**Rewrite** of the earlier element-wise gating placeholder — this version does
+the real two-matmul MoE FFN body while keeping the ReLU intermediate local to
+the expert/tile.
 
 ## What it does
 
 For each expert `e` with `count[e] > 0`, applied to its packed slice `A[start[e] : start[e]+count[e]]`:
 
 ```
-Y_pre = A_chunk @ W1[e]                   # fp16 @ fp16 -> fp32  (Stage 1 GEMM1)
-Y     = relu(Y_pre).astype(fp16)          # fused in Stage 1's TSTORE FixPipe
-B     = Y @ W2[e]                         # fp16 @ fp16 -> fp32  (Stage 2 GEMM2)
+for each expert-local A_s tile:
+    for each N_l1 output-column panel:
+        B_s[:, n:n+N_l1] = 0
+        for each F_l1 panel:
+            Y_t = relu(A_s @ W1[e, :, f:f+F_l1]).astype(fp16)
+            B_s[:, n:n+N_l1] += Y_t @ W2[e, f:f+F_l1, n:n+N_l1]
+        store that B_s panel to GM
 ```
 
 | Buffer | Shape | dtype | Notes |
@@ -19,35 +26,45 @@ B     = Y @ W2[e]                         # fp16 @ fp16 -> fp32  (Stage 2 GEMM2)
 | `expert_start` (input) | `kE` | int32 | prefix sum of `expert_count` |
 | `W1` (input)           | `(kE, kH, kF)` | fp16 | per-expert up-projection |
 | `W2` (input)           | `(kE, kF, kH)` | fp16 | per-expert down-projection |
-| `Y_scratch` (GM scratch) | `(kT·kTopK + 16, kF)` | fp16 | post-ReLU fp16 intermediate |
+| `Y_scratch` (ABI only) | `(kT·kTopK + 16, kF)` | fp16 | currently ignored by the fused kernel |
 | `B` (output)           | `(kT·kTopK + 16, kH)` | fp32 | first `kT·kTopK` rows are the answer |
 
-The +16 trailing pad absorbs the last non-empty expert's last-tile overspill writes. Validation only checks the first `kT·kTopK` rows of `B`.
+The +16 trailing pad is still allocated for ABI compatibility with the full
+pipeline. The fused kernel uses dynamic valid rows, so validation only checks
+the first `kT·kTopK` rows of `B`.
 
 ## Target platform
 
-A3 / Ascend 910B1. Cube target (`--cce-aicore-arch=dav-c220-cube`). One shared TU; two `__global__ AICORE` functions (`runFfnStage1Gemm1Relu`, `runFfnStage2Gemm2`); two stream-serialised launches inside `launchExpertFfnFp16`.
+A3 / Ascend 910B1. Cube target (`--cce-aicore-arch=dav-c220-cube`). One shared
+TU; one `__global__ AICORE` function (`runExpertFfn`) launched by
+`launchExpertFfnFp16`.
 
 ## Auto-mode constraints honored
 
-- Single AICORE per stage; no `block_idx` work split.
-- Static tile shapes (`M = ceil(kTileM/16)*16 = 16`, `K`/`N` rounded to `blockAlign`).
-- 5 cube tiles per stage (`TileMatA`, `TileMatB`, `TileLeft`, `TileRight`, `TileAcc`), all declared **outside** both loops (single auto-allocator analysis pin — same pattern as §A18 / §11.9).
-- ReLU + fp32→fp16 fused into Stage 1's `TSTORE<..., ReluPreMode::NormalRelu>` (proven by §A17 / §11.8). No vector hop.
-- ACL stream-order semantics guarantee Stage 2 only starts after Stage 1's `TSTORE`-to-`Y_scratch` is fully drained to GM — no within-kernel cross-GEMM auto-sync.
-- No `TASSIGN` literal addresses, no `#ifndef __PTO_AUTO__` manual-sync, no `Tile::data()` in kernel, no `*_IMPL` calls, no raw CCE intrinsics, no `Event<>`, no `TPipe`/`TPUSH`/`TPOP`, no double buffering, no A5-only ops.
+- Single AICORE; no `block_idx` work split.
+- Static tile maxima with dynamic valid rows for the per-expert tail.
+- `A_s` loads full logical rows but may panel the aligned `H` dimension as
+  `H_l1`; `W1_t` loads the matching `H_l1 x F_l1` panel; `W2_t` loads the
+  matching `F_l1 x N_l1` output-column panel.
+- ReLU + fp32→fp16 is fused into `TMOV<..., ReluPreMode::NormalRelu>` from the
+  Stage-1 accumulator to the L1 `Y_t` Mat tile. No vector hop and no GM scratch
+  hop.
+- The selected local working set is capped at `2^17` bytes:
+  `A_s + W1_t + W2_t + Y_t + fp32 B_s panel footprint`.
+- No `TASSIGN` literal addresses, no `#ifndef __PTO_AUTO__` manual-sync, no
+  `Tile::data()` in kernel, no `*_IMPL` calls, no raw CCE intrinsics, no
+  `Event<>`, no `TPipe`/`TPUSH`/`TPOP`, no double buffering, no A5-only ops.
 
-## Overspill scheme
+## Tail Handling
 
-The per-expert loop writes `kTileM = 16` rows per iteration even when `count[e]` is not a multiple of 16:
+The per-expert loop advances by the selected `M` tile, but sets dynamic valid rows for the last tile:
 
 ```cpp
-for (m0 = 0; m0 < count; m0 += kTileM) { ... }   // ceil(count/kTileM) iters
+currentM = min(M, count[e] - m0)
 ```
 
-For `count[e] = 4`, the kernel writes rows `[start, start+16)` — 12 of those are overspill into the territory of the next non-empty expert `e'` (whose `start[e'] = start[e]+count[e]`). When `e'` is processed, it overwrites those 12 rows with the correct data. The last non-empty expert's overspill lands in the trailing 16-row pad.
-
-The arithmetic: max overspill per expert is `kTileM - 1 = 15` rows; `kTileM = 16` trailing pad is sufficient.
+So each `A_s` tile belongs to exactly one expert and the kernel no longer
+relies on expert-to-expert overspill overwrites.
 
 ## How to build and run
 
@@ -55,7 +72,10 @@ The arithmetic: max overspill per expert is `kTileM - 1 = 15` rows; `kTileM = 16
 bash run.sh -r npu -v Ascend910B1
 ```
 
-`scripts/gen_data.py` synthesizes a plausible `(count, start, A)` directly (no scatter dependency); the C++ driver runs both stages and compares `B[0 : kT·kTopK]` against the numpy reference at `1e-2` abs tolerance (fp16 input → fp32 accumulator, distribution scale `[-3.3, 3.3]`).
+`scripts/gen_data.py` synthesizes a plausible `(count, start, A)` directly (no
+scatter dependency); the C++ driver runs the fused kernel and compares
+`B[0 : kT·kTopK]` against the numpy reference at `1e-2` abs tolerance (fp16
+input → fp32 accumulator, distribution scale `[-3.3, 3.3]`).
 
 ## Sweeping kTopK / kE / kT / kH / kF
 
@@ -65,12 +85,15 @@ Three places to update together:
 - `main.cpp`                : `constexpr int kT/kH/kF/kE/kTopK/kTileM`
 - `expert_ffn_kernel.cpp`   : `namespace expert_ffn_cfg { constexpr unsigned ... }`
 
-Larger `kH` / `kF` (≥ 128) approach the L0B 64 KB ceiling for fp16 weights and need Split-K or Split-N inside each stage — **postponed** to a later milestone.
+Larger `kH` / `kF` are tiled over the H and F dimensions, but the selected
+panel sizes must still divide the aligned dimensions.
 
 ## Known limitations (v1)
 
-- `kTileM = 16` — below §11.9's proven `kTileM = 128`. Within the cube M-alignment rule, but un-tested at this exact size. Falls back to 128 by changing one constant if needed.
-- `kH = kF = 64`. Larger shapes require Split-K/Split-N (separate milestone; see [pto_auto_mode_hw_optimization_guide.md §1.3](../../../../../docs_for_ai/pto_auto_mode_hw_optimization_guide.md)).
-- Single AICORE per stage; no block_idx parallelism (per-expert parallelism or per-tile parallelism is a separate milestone).
+- `kTileM = 16` — below §11.9's proven `kTileM = 128`. Within the cube
+  M-alignment rule, but un-tested at this exact size. The local-budget chooser
+  may shrink from larger requested tile heights.
+- Larger shapes are tiled over `N_l1`, `H_l1`, `H_l0`, `F_l1`, and `F_l0`.
+- Single AICORE; no block_idx parallelism (per-expert parallelism or per-tile parallelism is a separate milestone).
 - Only `ReluPreMode::NormalRelu` (no GELU/SiLU/LeakyReLU — the enum on this layer is `NoRelu` / `NormalRelu`).
 - fp16 inputs / weights, fp32 accumulator; no other dtype paths.

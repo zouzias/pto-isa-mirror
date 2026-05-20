@@ -11,8 +11,7 @@
  *                                                            cols kTopK..kPadded-1 host-padded
  *                                                            with -1e30 so exp() underflows to 0)
  * Scratch  (GM): weights_scratch  [kT, kPadded]       fp32  (only used when kTopK > 1)
- *                reordered_scratch [kT*kTopK, kH]     fp32  (only used when kTopK > 1)
- * Outputs  (GM): C                [kT, kH]            fp32
+ * Outputs  (GM): C                [kT, kH]            fp32  (zero-initialized by host; only required for kTopK > 1)
  *
  *   kPadded = max(8, kTopK) — softmax tile column padding for 32-byte UB alignment.
  *
@@ -40,20 +39,16 @@
  *       TROWEXPANDDIV  weightTile  <- expTile / sumTile        // softmax
  *       TSTORE         weights_scratch <- weightTile
  *
- *       // Pass 2: reorder packed B into token-major D
+ *       // Pass 2: weighted scatter-add
  *       for r in [0, kPackedRows):
  *           t = A_id[r]
  *           k = rank_id[r]
+ *           w = weights_scratch[t * kPadded + k]   // GM scalar read
  *           TLOAD  bTile      from B[r]
- *           TSTORE D[t,k]     = bTile
- *
- *       // Pass 3: vector weighted combine
- *       for h-block in kH:
- *           acc[:,h] = 0
- *           for k in [0, kTopK):
- *               scaled[:,h] = D[:,k,h] * weights_scratch[:,k]
- *               acc[:,h] += scaled[:,h]
- *           TSTORE C[:,h] = acc[:,h]
+ *           TMULS  scaledTile = bTile * w
+ *           TLOAD  cTile      from C[t]
+ *           TADD   sumTile    = cTile + scaledTile
+ *           TSTORE C[t]       = sumTile
  *
  * ===========================================================================
  * Tile-based softmax composition (kTopK > 1 only)
@@ -146,8 +141,6 @@ constexpr unsigned kAlloc        = kPackedRows + kOverspillPad;
 // Softmax tile column padding for 32-byte UB alignment.
 // fp32 needs Cols * 4 % 32 == 0  ->  Cols % 8 == 0.
 constexpr unsigned kPadded = (kTopK < 8) ? 8 : kTopK;
-constexpr unsigned kCombineCols = 32;
-static_assert(kH % kCombineCols == 0, "gather v2 expects kH to be a multiple of 32");
 
 }  // namespace gather_cfg
 
@@ -158,8 +151,7 @@ __global__ AICORE void runGather(
     __gm__ int32_t __in__    *A_id,
     __gm__ int32_t __in__    *rank_id,
     __gm__ T       __in__    *outVal,
-    __gm__ T       __out__   *weights_scratch,
-    __gm__ T       __out__   *reordered_scratch)
+    __gm__ T       __out__   *weights_scratch)
 {
     using namespace gather_cfg;
 
@@ -181,7 +173,6 @@ __global__ AICORE void runGather(
         (void)rank_id;
         (void)outVal;
         (void)weights_scratch;
-        (void)reordered_scratch;
 
         RowTile bTile;
         for (unsigned r = 0; r < kPackedRows; ++r) {
@@ -229,76 +220,32 @@ __global__ AICORE void runGather(
         TSTORE(weightsGlobal, weightTile);             // -> GM scratch
 
         // ============================================================
-        // Pass 2: reorder into token-major D[t, k, h] scratch.
+        // Pass 2: weighted scatter-add. Per packed row:
+        //   C[t] += weights_scratch[t * kPadded + k] * B[r]
         // ============================================================
         RowTile bTile;
+        RowTile cTile;
+        RowTile scaledTile;
+        RowTile sumRowTile;
 
         for (unsigned r = 0; r < kPackedRows; ++r) {
             pipe_barrier(PIPE_ALL);
 
             int32_t t = A_id[r];                                   // GM scalar read
             int32_t k = rank_id[r];                                // GM scalar read
+            T       w = weights_scratch[t * kPadded + k];          // GM scalar read
 
             size_t src_off = static_cast<size_t>(r) * kH;
-            size_t dst_off = (static_cast<size_t>(t) * kTopK + static_cast<size_t>(k)) * kH;
+            size_t dst_off = static_cast<size_t>(t) * kH;
 
             RowGlobal bGlobal(B + src_off);
-            RowGlobal dGlobal(reordered_scratch + dst_off);
+            RowGlobal cGlobal(C + dst_off);
 
             TLOAD (bTile, bGlobal);
-            TSTORE(dGlobal, bTile);
-        }
-
-        // ============================================================
-        // Pass 3: C[t, h] = sum_k weights[t, k] * D[t, k, h].
-        // Process 32 columns at a time to keep UB use comfortably below 192 KB.
-        // ============================================================
-        using ChunkShape  = Shape <1, 1, 1, kT, kCombineCols>;
-        using CStride     = Stride<kT * kH, kT * kH, kT * kH, kH, 1>;
-        using DStride     = Stride<kT * kTopK * kH, kT * kTopK * kH, kT * kTopK * kH, kTopK * kH, 1>;
-        using ChunkGlobal = GlobalTensor<T, ChunkShape, CStride>;
-        using DGlobal     = GlobalTensor<T, ChunkShape, DStride>;
-
-        using ChunkTile  = Tile<TileType::Vec, T, kT, kCombineCols, BLayout::RowMajor, kT, kCombineCols>;
-        constexpr unsigned kWeightCols = 32 / sizeof(T);
-        using WeightWide = Tile<TileType::Vec, T, kT, kWeightCols, BLayout::RowMajor, kT, kWeightCols>;
-        using WeightIdxRow  = Tile<TileType::Vec, int32_t, 1, kT, BLayout::RowMajor, 1, kT>;
-        using WeightIdxCol  = Tile<TileType::Vec, int32_t, kT, 1, BLayout::ColMajor, kT, 1>;
-        using WeightIdxTile = Tile<TileType::Vec, int32_t, kT, kWeightCols, BLayout::RowMajor, kT, kWeightCols>;
-
-        ChunkTile accTile;
-        ChunkTile dTile;
-        ChunkTile scaledTile;
-        ChunkTile sumTile;
-        WeightWide weightK;
-        WeightIdxRow  weightIotaRow;
-        WeightIdxCol  weightBaseCol;
-        WeightIdxCol  weightBaseScaledCol;
-        WeightIdxTile weightBase;
-        WeightIdxTile weightIdx;
-        WeightIdxTile weightTmp;
-
-        TCI<WeightIdxRow, int32_t, /*descending=*/0>(weightIotaRow, 0);
-        TRESHAPE(weightBaseCol, weightIotaRow);
-        TMULS(weightBaseScaledCol, weightBaseCol, static_cast<int32_t>(kPadded));
-        TROWEXPAND(weightBase, weightBaseScaledCol);
-
-        for (unsigned col = 0; col < kH; col += kCombineCols) {
-            TEXPANDS(accTile, static_cast<T>(0));
-
-            for (unsigned k = 0; k < kTopK; ++k) {
-                DGlobal dGlobal(reordered_scratch + static_cast<size_t>(k) * kH + col);
-
-                TLOAD(dTile, dGlobal);
-                TADDS(weightIdx, weightBase, static_cast<int32_t>(k));
-                TGATHER(weightK, weightTile, weightIdx, weightTmp);
-                TROWEXPANDMUL(scaledTile, dTile, weightK);
-                TADD(sumTile, accTile, scaledTile);
-                TMOV(accTile, sumTile);
-            }
-
-            ChunkGlobal cGlobal(C + col);
-            TSTORE(cGlobal, accTile);
+            TMULS (scaledTile, bTile, w);
+            TLOAD (cTile, cGlobal);
+            TADD  (sumRowTile, cTile, scaledTile);
+            TSTORE(cGlobal, sumRowTile);
         }
     }
 }
@@ -306,13 +253,13 @@ __global__ AICORE void runGather(
 template <typename T>
 void launchGather(T *C, T *B,
                   int32_t *A_id, int32_t *rank_id,
-                  T *outVal, T *weights_scratch, T *reordered_scratch,
+                  T *outVal, T *weights_scratch,
                   void *stream)
 {
-    runGather<T><<<1, nullptr, stream>>>(C, B, A_id, rank_id, outVal, weights_scratch, reordered_scratch);
+    runGather<T><<<1, nullptr, stream>>>(C, B, A_id, rank_id, outVal, weights_scratch);
 }
 
 template void launchGather<float>(float *C, float *B,
                                   int32_t *A_id, int32_t *rank_id,
-                                  float *outVal, float *weights_scratch, float *reordered_scratch,
+                                  float *outVal, float *weights_scratch,
                                   void *stream);
