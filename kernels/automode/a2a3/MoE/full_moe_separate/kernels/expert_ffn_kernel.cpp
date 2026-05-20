@@ -35,9 +35,7 @@ constexpr unsigned kTileM = 16;  // max expert-local token tile height
 constexpr unsigned kPackedRows = kT * kTopK;
 
 constexpr int kWorkingSetBudgetBytes = 1 << 17;
-constexpr int kL0ABudgetBytes        = 64 * 1024;
-constexpr int kL0BBudgetBytes        = 64 * 1024;
-constexpr int kL0CBudgetBytes        = 128 * 1024;
+constexpr int kL0BudgetBytes         = 1 << 14;
 
 AICORE inline constexpr int minInt(int lhs, int rhs)
 {
@@ -138,7 +136,7 @@ __global__ AICORE void runExpertFfn(
     constexpr int F_l1_raw =
         chooseFPanel(F, M, H, static_cast<int>(sizeof(TIn)), static_cast<int>(sizeof(TWeight)),
                      static_cast<int>(sizeof(TScratch)), static_cast<int>(sizeof(TOut)), sizeof(float),
-                     kWorkingSetBudgetBytes, kL0CBudgetBytes, blockAlign);
+                     kWorkingSetBudgetBytes, kL0BudgetBytes, blockAlign);
     static_assert(F_l1_raw >= blockAlign,
                   "No valid F_l1 tile: A_s + W1_t + W2_t + Y_t + B_s exceeds the 2^17-byte cap.");
     constexpr int F_l1 = (F_l1_raw >= blockAlign) ? F_l1_raw : blockAlign;
@@ -149,34 +147,34 @@ __global__ AICORE void runExpertFfn(
                    static_cast<size_t>(M) * F_l1 * sizeof(TScratch) +
                    static_cast<size_t>(M) * H * sizeof(TOut)) <= kWorkingSetBudgetBytes,
                   "Working-set budget exceeded: A_s + W1_t + W2_t + Y_t + B_s must be <= 2^17 bytes.");
-    static_assert(static_cast<size_t>(M) * F_l1 * sizeof(float) <= kL0CBudgetBytes,
+    static_assert(static_cast<size_t>(M) * F_l1 * sizeof(float) <= kL0BudgetBytes,
                   "Stage-1 intermediate accumulator exceeds L0C; reduce kTileM or F_l1.");
-    static_assert(static_cast<size_t>(M) * H * sizeof(TOut) <= kL0CBudgetBytes,
+    static_assert(static_cast<size_t>(M) * H * sizeof(TOut) <= kL0BudgetBytes,
                   "Stage-2 output accumulator exceeds L0C; reduce kTileM or kH.");
     static_assert((static_cast<size_t>(M) * F_l1 * sizeof(float) +
-                   static_cast<size_t>(M) * H * sizeof(TOut)) <= kL0CBudgetBytes,
+                   static_cast<size_t>(M) * H * sizeof(TOut)) <= kL0BudgetBytes,
                   "Combined stage-1 and stage-2 accumulators exceed L0C.");
 
-    constexpr int H_l0_max_L0A = kL0ABudgetBytes / (M * static_cast<int>(sizeof(TIn)));
-    constexpr int H_l0_max_L0B = kL0BBudgetBytes / (F_l1 * static_cast<int>(sizeof(TWeight)));
+    constexpr int H_l0_max_L0A = (kL0BudgetBytes / 2) / (M * static_cast<int>(sizeof(TIn)));
+    constexpr int H_l0_max_L0B = (kL0BudgetBytes / 2) / (F_l1 * static_cast<int>(sizeof(TWeight)));
     constexpr int H_l0_raw = chooseDivisibleBlock(H, minInt(H_l0_max_L0A, H_l0_max_L0B), blockAlign);
     static_assert(H_l0_raw >= blockAlign,
                   "No valid H_l0 tile: L0A/L0B cannot hold the minimum W1 contraction slice.");
     constexpr int H_l0 = (H_l0_raw >= blockAlign) ? H_l0_raw : blockAlign;
     static_assert(H % H_l0 == 0, "H must be divisible by H_l0.");
 
-    constexpr int F_l0_max_L0A = kL0ABudgetBytes / (M * static_cast<int>(sizeof(TScratch)));
-    constexpr int F_l0_max_L0B = kL0BBudgetBytes / (H * static_cast<int>(sizeof(TWeight)));
+    constexpr int F_l0_max_L0A = (kL0BudgetBytes / 2) / (M * static_cast<int>(sizeof(TScratch)));
+    constexpr int F_l0_max_L0B = (kL0BudgetBytes / 2) / (H * static_cast<int>(sizeof(TWeight)));
     constexpr int F_l0_raw = chooseDivisibleBlock(F_l1, minInt(F_l0_max_L0A, F_l0_max_L0B), blockAlign);
     static_assert(F_l0_raw >= blockAlign,
                   "No valid F_l0 tile: L0A/L0B cannot hold the minimum W2 contraction slice.");
     constexpr int F_l0 = (F_l0_raw >= blockAlign) ? F_l0_raw : blockAlign;
     static_assert(F_l1 % F_l0 == 0, "F_l1 must be divisible by F_l0.");
     static_assert((static_cast<size_t>(M) * H_l0 * sizeof(TIn) +
-                   static_cast<size_t>(M) * F_l0 * sizeof(TScratch)) <= kL0ABudgetBytes,
+                   static_cast<size_t>(M) * F_l0 * sizeof(TScratch)) <= kL0BudgetBytes,
                   "Combined A/Y L0A tiles exceed L0A.");
     static_assert((static_cast<size_t>(H_l0) * F_l1 * sizeof(TWeight) +
-                   static_cast<size_t>(F_l0) * H * sizeof(TWeight)) <= kL0BBudgetBytes,
+                   static_cast<size_t>(F_l0) * H * sizeof(TWeight)) <= kL0BudgetBytes,
                   "Combined W1/W2 L0B tiles exceed L0B.");
 
     constexpr int F_l1_blocks = F / F_l1;
