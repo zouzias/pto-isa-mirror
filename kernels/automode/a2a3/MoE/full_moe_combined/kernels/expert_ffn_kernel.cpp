@@ -162,6 +162,8 @@ __global__ AICORE void runExpertFfn(
                   "No valid H_l0 tile: L0A/L0B cannot hold the minimum W1 contraction slice.");
     constexpr int H_l0 = (H_l0_raw >= blockAlign) ? H_l0_raw : blockAlign;
     static_assert(H % H_l0 == 0, "H must be divisible by H_l0.");
+    static_assert(H == H_l0,
+                  "Stage-1 split-H via TEXTRACT currently hangs on hardware; keep H == H_l0.");
 
     constexpr int F_l0_max_L0A = (kL0BudgetBytes / 2) / (M * static_cast<int>(sizeof(TScratch)));
     constexpr int F_l0_max_L0B = (kL0BudgetBytes / 2) / (H * static_cast<int>(sizeof(TWeight)));
@@ -180,7 +182,6 @@ __global__ AICORE void runExpertFfn(
                   "Combined W1/W2 L0B tiles exceed L0B.");
 
     constexpr int F_l1_blocks = F / F_l1;
-    constexpr int H_l0_segments = H / H_l0;
 
     using GlobalShapeA = Shape<1, 1, 1, DYNAMIC, H>;
     using GlobalShapeB = Shape<1, 1, 1, DYNAMIC, kH>;
@@ -257,16 +258,9 @@ __global__ AICORE void runExpertFfn(
 
                 TLOAD(w1MatTile, w1Global);
 
-                for (int h0 = 0; h0 < H_l0_segments; ++h0) {
-                    const uint16_t hOff = static_cast<uint16_t>(h0 * H_l0);
-                    TEXTRACT(aTile,  aMatTile,  0, hOff);
-                    TEXTRACT(w1Tile, w1MatTile, hOff, 0);
-                    if (h0 == 0) {
-                        TMATMUL(yAccTile, aTile, w1Tile);
-                    } else {
-                        TMATMUL_ACC(yAccTile, aTile, w1Tile);
-                    }
-                }
+                TMOV(aTile, aMatTile);
+                TMOV(w1Tile, w1MatTile);
+                TMATMUL(yAccTile, aTile, w1Tile);
 
                 TMOV<TileMatYData, YAccTile, ReluPreMode::NormalRelu>(yMatTile, yAccTile);
                 TLOAD(w2MatTile, w2Global);
