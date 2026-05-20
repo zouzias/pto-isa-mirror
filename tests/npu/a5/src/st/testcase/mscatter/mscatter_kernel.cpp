@@ -21,14 +21,11 @@ template <typename T>
 PTO_INTERNAL void FlushGmOutput(__gm__ T *out, int totalBytes)
 {
 #ifndef __PTO_AUTO__
-    constexpr int kCacheLineBytes = 32;
-    const int kLines = (totalBytes + kCacheLineBytes - 1) / kCacheLineBytes;
-    __gm__ char *p = reinterpret_cast<__gm__ char *>(out);
-    for (int i = 0; i < kLines; ++i) {
-        __asm__ __volatile__("");
-        dcci(static_cast<__gm__ void *>(p + i * kCacheLineBytes), SINGLE_CACHE_LINE);
-        __asm__ __volatile__("");
-    }
+    (void)out;
+    (void)totalBytes;
+    __asm__ __volatile__("");
+    dcci(static_cast<__gm__ void *>(0), ENTIRE_DATA_CACHE);
+    __asm__ __volatile__("");
     dsb(DSB_DDR);
 #else
     (void)out;
