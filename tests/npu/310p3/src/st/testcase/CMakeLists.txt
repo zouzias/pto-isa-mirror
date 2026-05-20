@@ -96,6 +96,7 @@ set(ALL_TESTCASES
     tdiv
     tdivs
     tload
+    tload_gm2mat
     tmul
     tsub
 )

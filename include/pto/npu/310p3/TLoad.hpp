@@ -655,6 +655,8 @@ __tf__ PTO_INTERNAL void TLoadNCHW(typename TileData::TileDType __out__ dst, typ
     const uint16_t hwSize = dstShape2 * dstShape3;
     const uint16_t tileNumel = dstShape0 * cDstShape1 * hwSize;
     const uint16_t tileAlignedNumel = dstShape0 * cDstShape1 * dstShape2 * alignedW;
+    PTO_ASSERT(tileAlignedNumel * 2 * sizeof(typename TileData::DType) < 256 * 1024,
+               "Fix: Fix: Twice the tileAlignedNumel must be smaller than the size of UB(256KB)");
 
     AscendC::GlobalTensor<typename GlobalData::DType> ascGM;
     ascGM.SetGlobalBuffer(srcAddr);
@@ -692,7 +694,7 @@ __tf__ PTO_INTERNAL void TLoadNCHW(typename TileData::TileDType __out__ dst, typ
         AscendC::TransposeType::TRANSPOSE_NCHW2NHWC});
     // 2.MEM@UB NC1HW_alignWC0 -> NC1HWC0
     pipe_barrier(PIPE_V);
-    AscendC::DataCopy(ascA1UB, ascUB, {(uint16_t)(dstShape0 * dstShape1 * c0ElemCount), (uint16_t)dstShape3, (uint16_t)(alignedW - dstShape3), 0});
+    AscendC::DataCopy(ascA1UB, ascUB, {(uint16_t)(dstShape0 * dstShape1 * dstShape2), (uint16_t)dstShape3, (uint16_t)(alignedW - dstShape3), 0});
     // 3.From UB to A1 (Copy as-is.)
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID3);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID3);
@@ -712,7 +714,7 @@ __tf__ PTO_INTERNAL void TLoadNCHW2FractalZ(typename TileData::TileDType __out__
                                             int dstShape2, int dstShape3)
 {
     /*
-    kn: align16(O)_align16(C)(HW) -> [transpose]align16(C)_HW_align16(O)-> [transpose5d]C1_HW_align16(O)_C0
+    kn: align16(N)_align16(C)(HW) -> C1HW*N/16*16*C0, C0=32/sizeof(T)
      */
     __cbuf__ typename TileData::DType *dstAddr = (__cbuf__ typename TileData::DType *)__cce_get_tile_ptr(dst);
     typename GlobalData::DType *srcAddr = src;
@@ -724,9 +726,10 @@ __tf__ PTO_INTERNAL void TLoadNCHW2FractalZ(typename TileData::TileDType __out__
     // ConvTile layout is [C1HW,N/16,16,C0] = [dstShape0, dstShape1, dstShape2, dstShape3]
     // GlobalTensor layout is [1,N,C,H,W] = [1, srcShape1, srcShape2, srcShape3, srcShape4]
     PTO_ASSERT(gStride2 == srcShape3 * srcShape4,
-               "Fix: src layout is [1,N,C,H,W],dst layout [N,C1,H,W,C0], H*W should be all load");
-    PTO_ASSERT(srcShape2 % c0ElemCount == 0, "Fix: expect align 32 bytes for Ci");
-    PTO_ASSERT(srcShape1 % c0ElemCount == 0, "Fix: expect align 32 bytes for C0");
+               "Fix: src layout is [1,N,C,H,W],dst layout [C1HW,N/16,16,C0], H*W should be all load");
+    PTO_ASSERT(srcShape2 % c0ElemCount == 0, "Fix: expect align 32 bytes for C");
+    PTO_ASSERT(srcShape1 % 16 == 0, "Fix: expect align 16 for N");
+    PTO_ASSERT(TileData::bufferSize * 2 <= 256 * 1024, "Fix: Twice the bufferSize must be smaller than the size of UB(256KB)");
 
     ///////////////////////////////////
     // AscendC API
@@ -735,7 +738,7 @@ __tf__ PTO_INTERNAL void TLoadNCHW2FractalZ(typename TileData::TileDType __out__
     AscendC::GlobalTensor<typename GlobalData::DType> ascGM;
     ascGM.SetGlobalBuffer(srcAddr);
     AscendC::LocalTensor<typename GlobalData::DType> ascTmpUB(AscendC::TPosition::VECOUT, 0, (TMP_UB_OFFSET + TMP_UB_SIZE) / typeSize);  // 总的临时UB的缓存
-    auto ascUB0= ascTmpUB[0];  // 用以gm->ub copy, ub->ub,trans5D
+    auto ascUB0= ascTmpUB[0];  // 用以gm->ub copy, ub->ub,transpose
     auto ascUB1 = ascTmpUB[dstNumel];  // 用以ub->ub,transpose
     // GM->UB (copy as-is)
     AscendC::DataCopyParams gm2ubParams(1, srcShape2 * gStride2 / numsOfElemInOneBlk, 0, 0);
@@ -744,21 +747,21 @@ __tf__ PTO_INTERNAL void TLoadNCHW2FractalZ(typename TileData::TileDType __out__
     }
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID3);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID3);
-    // CoCiHW->CiHWCo (transpose NCHW->NHWC, when N=1,C=Co,HW=CiHW)
+    // NCHW->CHWN (transpose NCHW->NHWC, when N=1,C=N,HW=CHW)
     AscendC::LocalTensor<uint8_t> ascDummy; // not used
     AscendC::Transpose(ascUB1, ascUB0, ascDummy,
         {1, (uint16_t)srcShape1, (uint16_t)1, (uint16_t)(srcShape2 * gStride2),
         AscendC::TransposeType::TRANSPOSE_NCHW2NHWC});
     pipe_barrier(PIPE_V);
-    // CiHWCo->Ci1HWCo1Co0Ci0 (transpose, NCHW->NHWC, when N=1*Ci1,C=Ci0,HW=HWCo)
+    // CHWN->C1HW,N/16,16,C0 (transpose, NCHW->NHWC, when N=1*C1,C=C0,HW=HWN)
     int Ci1 = srcShape2 / c0ElemCount;
-    int hwSize = srcShape3 * srcShape4;  // HW->real H, Co->real W
+    int hwSize = srcShape3 * srcShape4;  // HW->real H, N->real W
     AscendC::Transpose(ascUB0, ascUB1, ascDummy,
         {(uint16_t)Ci1, (uint16_t)c0ElemCount, (uint16_t)hwSize, (uint16_t)srcShape1,
         AscendC::TransposeType::TRANSPOSE_NCHW2NHWC});
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID3);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID3);
-    // ub->l1, (ci1,HWCo,Ci0)=>(ci1HW,Co1,Co0,Ci0), copy as-is
+    // ub->l1, (C1,HWN,C0)=>(C1HW,N/16,16,C0), copy as-is
     copy_ubuf_to_cbuf((__cbuf__ void*)dstAddr, (__ubuf__ void *)(ascUB0.GetPhyAddr()), 0, (uint16_t)(dstShape0 * dstShape1), (uint16_t)(dstShape2 * dstShape3 / numsOfElemInOneBlk), 0, 0);
     set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID3);
     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID3);
