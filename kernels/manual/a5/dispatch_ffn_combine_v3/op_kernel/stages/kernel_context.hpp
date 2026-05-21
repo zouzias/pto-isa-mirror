@@ -12,19 +12,29 @@ using KernelParams = typename Kernel::Params;
 template <typename Kernel>
 PTO_DEVICE void RunAicMain(Kernel &kernel, KernelParams<Kernel> const &params)
 {
+    kernel.DebugStage(0, 0, params);
     kernel.RunGmm1Stage(params);
+    kernel.DebugStage(0, 1, params);
     kernel.RunGmmInterlockStage(params);
+    kernel.DebugStage(0, 2, params);
     kernel.RunGmm2Stage(params);
+    kernel.DebugStage(0, 3, params);
 }
 
 template <typename Kernel>
 PTO_DEVICE void RunAivMain(Kernel &kernel, KernelParams<Kernel> const &params)
 {
+    kernel.DebugStage(1, 0, params);
     kernel.RunRoutingStage(params);
+    kernel.DebugStage(1, 1, params);
     kernel.RunDispatchGatherStage(params);
+    kernel.DebugStage(1, 2, params);
     kernel.RunSwigluStage(params);
+    kernel.DebugStage(1, 3, params);
     kernel.RunCombineStage(params);
+    kernel.DebugStage(1, 4, params);
     kernel.RunRestoreStage(params);
+    kernel.DebugStage(1, 5, params);
 }
 
 }  // namespace pto_ext::Gemm::Kernel::stages

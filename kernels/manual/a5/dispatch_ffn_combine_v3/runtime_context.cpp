@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <iostream>
 #include <vector>
 
 void StandaloneHcclContext::AttachExternalRemoteWindowContext(PtoRemoteWindowContext *remoteWindowCtx)
@@ -76,6 +77,12 @@ bool StandaloneHcclContext::CopyHostRemoteWindowContextToDevice()
 }
 
 namespace {
+
+void DebugRuntimeLog(int rank_id, const char *message)
+{
+    std::cerr << "[DEBUG-a5hang] rank=" << rank_id << " runtime " << message << std::endl;
+}
+
 namespace pto_hccl_compat {
 
 constexpr uint32_t MAX_CC_TILING_NUM = 8U;
@@ -331,32 +338,46 @@ bool InitStandaloneRankRuntime(StandaloneRankRuntime &runtime, int rank_id, int 
     runtime.hccl.world_size = world_size;
     runtime.hccl.device_id = rank_id;
 
+    DebugRuntimeLog(rank_id, "aclrtSetDevice begin");
     if (aclrtSetDevice(runtime.hccl.device_id) != ACL_SUCCESS) {
+        DebugRuntimeLog(rank_id, "aclrtSetDevice failed");
         return false;
     }
+    DebugRuntimeLog(rank_id, "aclrtCreateStream begin");
     if (aclrtCreateStream(&runtime.compute_stream) != ACL_SUCCESS) {
+        DebugRuntimeLog(rank_id, "aclrtCreateStream failed");
         return false;
     }
+    DebugRuntimeLog(rank_id, "rtStreamCreate begin");
     if (rtStreamCreate(&runtime.hccl.hccl_stream, RT_STREAM_PRIORITY_DEFAULT) != 0) {
+        DebugRuntimeLog(rank_id, "rtStreamCreate failed");
         return false;
     }
+    DebugRuntimeLog(rank_id, "HcclCommInitRootInfo begin");
     if (HcclCommInitRootInfo(static_cast<uint32_t>(world_size), &root_info, static_cast<uint32_t>(rank_id),
                              &runtime.hccl.comm) != HCCL_SUCCESS) {
+        DebugRuntimeLog(rank_id, "HcclCommInitRootInfo failed");
         return false;
     }
 
     char group[pto_hccl_compat::GROUP_NAME_SIZE] = {};
+    DebugRuntimeLog(rank_id, "HcclGetCommName begin");
     if (HcclGetCommName(runtime.hccl.comm, group) != HCCL_SUCCESS) {
+        DebugRuntimeLog(rank_id, "HcclGetCommName failed");
         return false;
     }
 
     uint32_t topo = 0;
+    DebugRuntimeLog(rank_id, "HcomGetL0TopoTypeEx begin");
     if (HcomGetL0TopoTypeEx(group, &topo, COMM_IS_NOT_SET_DEVICE) != HCCL_SUCCESS) {
+        DebugRuntimeLog(rank_id, "HcomGetL0TopoTypeEx failed");
         return false;
     }
 
     HcclComm comm_handle = nullptr;
+    DebugRuntimeLog(rank_id, "HcomGetCommHandleByGroup begin");
     if (HcomGetCommHandleByGroup(group, &comm_handle) != HCCL_SUCCESS) {
+        DebugRuntimeLog(rank_id, "HcomGetCommHandleByGroup failed");
         return false;
     }
 
@@ -374,42 +395,64 @@ bool InitStandaloneRankRuntime(StandaloneRankRuntime &runtime, int rank_id, int 
     std::strncpy(tiling.inner.algConfig, "BatchWrite=level0:fullmesh", pto_hccl_compat::ALG_CONFIG_SIZE - 1U);
 
     void *ctx_ptr = nullptr;
+    DebugRuntimeLog(rank_id, "HcclAllocComResourceByTiling begin");
     if (HcclAllocComResourceByTiling(comm_handle, runtime.hccl.hccl_stream, &tiling, &ctx_ptr) != HCCL_SUCCESS ||
         ctx_ptr == nullptr) {
+        DebugRuntimeLog(rank_id, "HcclAllocComResourceByTiling failed");
         return false;
     }
+    DebugRuntimeLog(rank_id, "HcclAllocComResourceByTiling done");
 
     if (topo == COMM_TOPO_MESH) {
-        return LoadMeshRemoteWindowContext(runtime.hccl, ctx_ptr);
+        DebugRuntimeLog(rank_id, "LoadMeshRemoteWindowContext begin");
+        const bool ok = LoadMeshRemoteWindowContext(runtime.hccl, ctx_ptr);
+        DebugRuntimeLog(rank_id, ok ? "LoadMeshRemoteWindowContext done" : "LoadMeshRemoteWindowContext failed");
+        return ok;
     }
 
     auto *raw_ctx = reinterpret_cast<uint8_t *>(ctx_ptr);
     pto_hccl_compat::HcclOpResParamHead head{};
     std::vector<pto_hccl_compat::RemoteResPtr> remote_res_arr;
+    DebugRuntimeLog(rank_id, "ReadRingParams begin");
     if (!ReadRingParams(raw_ctx, head, remote_res_arr)) {
+        DebugRuntimeLog(rank_id, "ReadRingParams failed");
         return false;
     }
+    DebugRuntimeLog(rank_id, "BuildRingHostRemoteWindowContext begin");
     if (!BuildRingHostRemoteWindowContext(runtime.hccl, raw_ctx, head, remote_res_arr)) {
+        DebugRuntimeLog(rank_id, "BuildRingHostRemoteWindowContext failed");
         return false;
     }
-    return runtime.hccl.CopyHostRemoteWindowContextToDevice();
+    DebugRuntimeLog(rank_id, "CopyHostRemoteWindowContextToDevice begin");
+    const bool ok = runtime.hccl.CopyHostRemoteWindowContextToDevice();
+    DebugRuntimeLog(rank_id, ok ? "CopyHostRemoteWindowContextToDevice done" : "CopyHostRemoteWindowContextToDevice failed");
+    return ok;
 }
 
 void DestroyStandaloneRankRuntime(StandaloneRankRuntime &runtime)
 {
+    const int rank_id = runtime.hccl.rank_id;
+    DebugRuntimeLog(rank_id, "destroy begin");
     runtime.hccl.ReleaseRemoteWindowContext();
     runtime.hccl.ResetHostRemoteWindowContext();
 
     if (runtime.hccl.comm != nullptr) {
+        DebugRuntimeLog(rank_id, "HcclCommDestroy begin");
         HcclCommDestroy(runtime.hccl.comm);
+        DebugRuntimeLog(rank_id, "HcclCommDestroy done");
         runtime.hccl.comm = nullptr;
     }
     if (runtime.hccl.hccl_stream != nullptr) {
+        DebugRuntimeLog(rank_id, "rtStreamDestroy begin");
         rtStreamDestroy(runtime.hccl.hccl_stream);
+        DebugRuntimeLog(rank_id, "rtStreamDestroy done");
         runtime.hccl.hccl_stream = nullptr;
     }
     if (runtime.compute_stream != nullptr) {
+        DebugRuntimeLog(rank_id, "aclrtDestroyStream begin");
         aclrtDestroyStream(runtime.compute_stream);
+        DebugRuntimeLog(rank_id, "aclrtDestroyStream done");
         runtime.compute_stream = nullptr;
     }
+    DebugRuntimeLog(rank_id, "destroy done");
 }
