@@ -97,7 +97,7 @@ CaseConfig LoadCaseConfig(const std::string &case_json_path)
     cfg.world_size = ParseJsonUInt(text, "world_size");
     cfg.max_output_size = ParseJsonUInt(text, "max_output_size");
     cfg.list_len = 1;
-    const char *soc_env = std::getenv("DISPATCH_FFN_COMBINE_V3_SOC_VERSION");
+    const char *soc_env = std::getenv("DISPATCH_COMBINE_MOE_SOC_VERSION");
     if (soc_env != nullptr && soc_env[0] != '\0') {
         cfg.soc_version = soc_env;
     }

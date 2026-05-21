@@ -22,20 +22,20 @@ namespace pto_ext::Epilogue::Block {
 namespace swiglu_detail {
 
 template <typename Element, int TileElems = 1024>
-using PtoVecTile = pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoVecTile<Element, TileElems>;
+using PtoVecTile = pto_ext::dispatch_combine_moe::pto_bridge::PtoVecTile<Element, TileElems>;
 
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoAbsVector;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoAddScalarVector;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoCastVector;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoDivVector;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoExpVector;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoGetValue;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoLoadVector;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoMulElementwiseVector;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoMulVector;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoReduceMaxVector;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoSetValue;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoStoreVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoAbsVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoAddScalarVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoCastVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoDivVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoExpVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoGetValue;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoLoadVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoMulElementwiseVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoMulVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoReduceMaxVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoSetValue;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoStoreVector;
 
 template <auto Pipe>
 PTO_DEVICE void PtoPipeBarrier()

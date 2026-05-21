@@ -19,7 +19,7 @@
 namespace pto_ext::Gemm::Block {
 namespace detail {
 
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoGlobalNd;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoGlobalNd;
 
 template <typename TileAcc, typename TileLeft, typename TileRight>
 PTO_DEVICE void LaunchPtoMatmul(TileAcc &cTile, TileLeft &aTile, TileRight &bTile, bool initC, uint8_t unitFlag)
@@ -210,7 +210,7 @@ PTO_DEVICE void PtoStoreAccToGm(__gm__ ElementDst *dst, uint64_t accOffset, uint
     const int64_t leadingDim = static_cast<int64_t>(dstLayout.stride(0));
 
     GlobalDataOut dstGlobal =
-        pto_ext::dispatch_ffn_combine_v3::pto_bridge::MakeGlobalFromPtr(dst, validRow, validCol, leadingDim);
+        pto_ext::dispatch_combine_moe::pto_bridge::MakeGlobalFromPtr(dst, validRow, validCol, leadingDim);
     AccTile accTile(validRow, validCol);
     ScalingTile scalingTile(validCol);
 
@@ -238,7 +238,7 @@ PTO_DEVICE void PtoStoreAccToGm(__gm__ ElementDst *dst, uint64_t accOffset, layo
     const int64_t leadingDim = static_cast<int64_t>(dstLayout.stride(0));
 
     GlobalDataOut dstGlobal =
-        pto_ext::dispatch_ffn_combine_v3::pto_bridge::MakeGlobalFromPtr(dst, validRow, validCol, leadingDim);
+        pto_ext::dispatch_combine_moe::pto_bridge::MakeGlobalFromPtr(dst, validRow, validCol, leadingDim);
     AccTile accTile(validRow, validCol);
 
     pto::TASSIGN(accTile, accOffset);

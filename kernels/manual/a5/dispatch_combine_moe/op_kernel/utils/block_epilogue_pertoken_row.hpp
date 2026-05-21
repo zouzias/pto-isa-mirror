@@ -40,10 +40,10 @@ PTO_DEVICE void PtoWaitFlag(int32_t eventId)
     AscendC::WaitFlag<Event>(eventId);
 }
 
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoCastVector;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoLoadVector;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoMulVector;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoStoreVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoCastVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoLoadVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoMulVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoStoreVector;
 
 } // namespace row_detail
 

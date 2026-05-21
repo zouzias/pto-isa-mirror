@@ -4,7 +4,7 @@ set(CMAKE_COMPILER bisheng)
 set(CMAKE_C_COMPILER ${CMAKE_COMPILER})
 set(CMAKE_CXX_COMPILER ${CMAKE_COMPILER})
 
-project(dispatch_ffn_combine_v3_a5)
+project(dispatch_combine_moe_a5)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -130,30 +130,30 @@ set(HOST_LINK_DIRS
     ${ASCEND_HOME_PATH}/lib64
 )
 
-add_library(dispatch_ffn_combine_v3_kernel SHARED op_kernel/dispatch_ffn_combine.cpp)
-target_compile_options(dispatch_ffn_combine_v3_kernel PRIVATE
+add_library(dispatch_combine_moe_kernel SHARED op_kernel/dispatch_ffn_combine.cpp)
+target_compile_options(dispatch_combine_moe_kernel PRIVATE
     ${CMAKE_CCE_COMPILE_OPTIONS}
     --cce-aicore-arch=dav-c310
     -DMEMORY_BASE -std=c++17
     -DDTYPE_W1=int8_t
     -DDTYPE_OUT=half
 )
-target_include_directories(dispatch_ffn_combine_v3_kernel PRIVATE ${KERNEL_INCLUDE_DIRS})
-target_link_directories(dispatch_ffn_combine_v3_kernel PRIVATE ${ASCEND_HOME_PATH}/lib64)
-target_link_libraries(dispatch_ffn_combine_v3_kernel PRIVATE runtime hcomm nnopbase)
-target_link_options(dispatch_ffn_combine_v3_kernel PRIVATE --cce-fatobj-link)
+target_include_directories(dispatch_combine_moe_kernel PRIVATE ${KERNEL_INCLUDE_DIRS})
+target_link_directories(dispatch_combine_moe_kernel PRIVATE ${ASCEND_HOME_PATH}/lib64)
+target_link_libraries(dispatch_combine_moe_kernel PRIVATE runtime hcomm nnopbase)
+target_link_options(dispatch_combine_moe_kernel PRIVATE --cce-fatobj-link)
 
-add_executable(dispatch_ffn_combine_v3
+add_executable(dispatch_combine_moe
     main.cpp
     op_host/runtime_context.cpp
     op_host/tiling_builder.cpp
     op_host/data_utils.cpp
 )
-target_compile_options(dispatch_ffn_combine_v3 PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
-target_include_directories(dispatch_ffn_combine_v3 PRIVATE ${HOST_INCLUDE_DIRS})
-target_link_directories(dispatch_ffn_combine_v3 PUBLIC ${HOST_LINK_DIRS})
-target_link_libraries(dispatch_ffn_combine_v3 PRIVATE
-    dispatch_ffn_combine_v3_kernel
+target_compile_options(dispatch_combine_moe PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
+target_include_directories(dispatch_combine_moe PRIVATE ${HOST_INCLUDE_DIRS})
+target_link_directories(dispatch_combine_moe PUBLIC ${HOST_LINK_DIRS})
+target_link_libraries(dispatch_combine_moe PRIVATE
+    dispatch_combine_moe_kernel
     runtime
     stdc++ ascendcl hcomm m tiling_api unified_dlog register platform c_sec dl nnopbase pthread
 )

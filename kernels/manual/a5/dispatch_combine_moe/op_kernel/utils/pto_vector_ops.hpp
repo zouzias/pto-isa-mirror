@@ -1,5 +1,5 @@
-#ifndef PTO_EXT_DISPATCH_FFN_COMBINE_V3_PTO_VECTOR_OPS_HPP
-#define PTO_EXT_DISPATCH_FFN_COMBINE_V3_PTO_VECTOR_OPS_HPP
+#ifndef PTO_EXT_DISPATCH_COMBINE_MOE_PTO_VECTOR_OPS_HPP
+#define PTO_EXT_DISPATCH_COMBINE_MOE_PTO_VECTOR_OPS_HPP
 
 #include "kernel_operator.h"
 
@@ -8,7 +8,7 @@
 
 #include <type_traits>
 
-namespace pto_ext::dispatch_ffn_combine_v3::pto_bridge {
+namespace pto_ext::dispatch_combine_moe::pto_bridge {
 
 using PtoShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
 using PtoStrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -525,6 +525,6 @@ PTO_DEVICE void PtoReduceMaxVector(DstUbTensor<float> const &dst, SrcUbTensor<fl
     PtoReduceMaxVector<TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src), PtoUbBaseAddr(tmp), elemNum);
 }
 
-} // namespace pto_ext::dispatch_ffn_combine_v3::pto_bridge
+} // namespace pto_ext::dispatch_combine_moe::pto_bridge
 
-#endif // PTO_EXT_DISPATCH_FFN_COMBINE_V3_PTO_VECTOR_OPS_HPP
+#endif // PTO_EXT_DISPATCH_COMBINE_MOE_PTO_VECTOR_OPS_HPP

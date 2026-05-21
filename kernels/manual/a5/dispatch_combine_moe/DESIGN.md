@@ -1,8 +1,8 @@
-# dispatch_ffn_combine_v3 A5 设计说明
+# dispatch_combine_moe A5 设计说明
 
 ## 1. 这份文档解决什么问题
 
-本文面向第一次阅读 `kernels/manual/a5/dispatch_ffn_combine_v3` 的开发者，目标是把三个问题讲清楚：
+本文面向第一次阅读 `kernels/manual/a5/dispatch_combine_moe` 的开发者，目标是把三个问题讲清楚：
 
 1. 这个项目要解决什么 MoE 场景问题。
 2. MegaMoE / MC2 背景里的算法思想，如何落到当前 A5 PTO 项目里。
@@ -34,7 +34,7 @@ probs[token, k]      = 这个专家输出在最终结果里的权重
 - token routing、量化、GMM、SwiGLU、combine/unpermute 很难形成流水。
 - AIC 计算核和 AIV 搬运/通信核的职责不清晰，容易互相等待。
 
-`dispatch_ffn_combine_v3` 的目标就是把这些步骤收进一个 mixed AIC/AIV kernel，用 PTO 通信和计算原语显式表达跨 rank 搬运、GMM、vector epilogue 和同步，让通信、GMM 和后处理尽量贴在一起执行。
+`dispatch_combine_moe` 的目标就是把这些步骤收进一个 mixed AIC/AIV kernel，用 PTO 通信和计算原语显式表达跨 rank 搬运、GMM、vector epilogue 和同步，让通信、GMM 和后处理尽量贴在一起执行。
 
 ## 3. 先分清几个容易混淆的概念
 
@@ -162,7 +162,7 @@ MegaMoE 文章强调的关键不是机械列举四种模式，而是让通信发
 ## 5. 项目目录和文件分工
 
 ```text
-kernels/manual/a5/dispatch_ffn_combine_v3/
+kernels/manual/a5/dispatch_combine_moe/
 ├── run.sh                               # 生成数据、构建、mpirun 启动
 ├── main.cpp                             # Host 主程序：MPI/ACL/HCCL 初始化、launch、计时、校验
 ├── runtime_context.{hpp,cpp}            # HCCL comm/resource/window context 初始化
@@ -201,7 +201,7 @@ Host 侧每个 MPI rank 对应一张 NPU。整体流程如下：
 run.sh
   -> scripts/gen_data.py 生成 out/case.json 和 rank*.bin
   -> cmake 构建 host exe 和 kernel so
-  -> mpirun 启动 dispatch_ffn_combine_v3
+  -> mpirun 启动 dispatch_combine_moe
 
 main.cpp
   -> CommMpiInit
@@ -611,8 +611,8 @@ source /home/ntlab/liulei/can/cann-9.0.0-beta.1/set_env.sh
 export PATH=/home/ntlab/miniconda3/envs/ltr_pto/bin:$PATH
 export LD_LIBRARY_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib:${LD_LIBRARY_PATH:-}
 export MPI_LIB_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib/libmpi.so
-cmake -S kernels/manual/a5/dispatch_ffn_combine_v3 -B /tmp/dispatch_ffn_combine_v3_a5_build -DCMAKE_BUILD_TYPE=Release
-cmake --build /tmp/dispatch_ffn_combine_v3_a5_build --target dispatch_ffn_combine_v3 -j1
+cmake -S kernels/manual/a5/dispatch_combine_moe -B /tmp/dispatch_combine_moe_a5_build -DCMAKE_BUILD_TYPE=Release
+cmake --build /tmp/dispatch_combine_moe_a5_build --target dispatch_combine_moe -j1
 ```
 
 A5 端到端正确性需要在 A5-capable 环境运行 `run.sh`，并看到每个 rank 输出 `PASS rank=<id>`。

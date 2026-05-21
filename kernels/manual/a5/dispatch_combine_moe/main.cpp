@@ -231,7 +231,7 @@ void PrintPerfSummary(const CaseConfig &cfg, int warmup_iters, int measure_iters
 
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "\n===============================================================\n";
-    std::cout << "[PROFILE] dispatch_ffn_combine_v3\n";
+    std::cout << "[PROFILE] dispatch_combine_moe\n";
     std::cout << "  shape: m=" << cfg.m << " k=" << cfg.k << " n=" << cfg.n << " topk=" << cfg.topk
               << " expert_per_rank=" << cfg.expert_per_rank << " world_size=" << cfg.world_size << '\n';
     std::cout << "  iters: warmup=" << warmup_iters << " measure=" << measure_iters << '\n';
@@ -269,8 +269,8 @@ bool RunOneRank(int rank_id, int world_size, const std::string &case_dir, const 
 
     bool ok = false;
     try {
-        const int warmup_iters = ParseEnvInt("DISPATCH_FFN_COMBINE_V3_WARMUP_ITERS", kDefaultWarmupIters);
-        const int measure_iters = ParseEnvInt("DISPATCH_FFN_COMBINE_V3_MEASURE_ITERS", kDefaultMeasureIters);
+        const int warmup_iters = ParseEnvInt("DISPATCH_COMBINE_MOE_WARMUP_ITERS", kDefaultWarmupIters);
+        const int measure_iters = ParseEnvInt("DISPATCH_COMBINE_MOE_MEASURE_ITERS", kDefaultMeasureIters);
         if (warmup_iters < 0 || measure_iters < 0) {
             throw std::runtime_error("warmup/measure iters must be non-negative");
         }
@@ -416,7 +416,7 @@ int main(int argc, char **argv)
 
     const int rank_id = CommMpiRank();
     const int world_size = CommMpiSize();
-    const char *case_dir_env = std::getenv("DISPATCH_FFN_COMBINE_V3_CASE_DIR");
+    const char *case_dir_env = std::getenv("DISPATCH_COMBINE_MOE_CASE_DIR");
     const std::string case_dir = case_dir_env ? case_dir_env : "../out";
 
     if (aclInit(nullptr) != ACL_SUCCESS) {

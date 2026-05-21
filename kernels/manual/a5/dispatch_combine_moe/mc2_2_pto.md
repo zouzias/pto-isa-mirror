@@ -1,11 +1,11 @@
-# dispatch_ffn_combine_v2 → dispatch_ffn_combine_v3 PTO 转换点
+# dispatch_ffn_combine_v2 → dispatch_combine_moe PTO 转换点
 
 ## 文档范围
 
-本文只记录从 MC2 `dispatch_ffn_combine_v2` 改造成 PTO `dispatch_ffn_combine_v3` 后的**最终转换点**，不记录阶段执行历史。
+本文只记录从 MC2 `dispatch_ffn_combine_v2` 改造成 PTO `dispatch_combine_moe` 后的**最终转换点**，不记录阶段执行历史。
 
 - 原始 MC2 工程：`/home/ntlab/zy/code/zhangyuan/vllm-ascend-zy/csrc/mc2/dispatch_ffn_combine_v2`
-- 当前 PTO 工程：`kernels/manual/a5/dispatch_ffn_combine_v3`
+- 当前 PTO 工程：`kernels/manual/a5/dispatch_combine_moe`
 - 当前目标形态：A5 / Ascend950，kernel 编译目标 `dav-c310`
 - 当前验证边界：本机已完成 A5 compile-only；A5 runtime PASS 与性能数据需在 A5-capable 环境闭环。
 
@@ -13,11 +13,11 @@
 
 | MC2 v2 | PTO v3 最终落点 | 转换点 |
 | ------ | ---------------- | ------ |
-| `csrc/mc2/dispatch_ffn_combine_v2` | `kernels/manual/a5/dispatch_ffn_combine_v3` | 从 vLLM Ascend MC2 子工程迁到 PTO ISA 仓内手写 kernel 示例目录。 |
-| `ascendc_library(dispatch_ffn_combine_v2_kernel ...)` | `add_library(dispatch_ffn_combine_v3_kernel SHARED ...)` | 从 AscendC/CATLASS 工程封装改成显式 CMake target。 |
+| `csrc/mc2/dispatch_ffn_combine_v2` | `kernels/manual/a5/dispatch_combine_moe` | 从 vLLM Ascend MC2 子工程迁到 PTO ISA 仓内手写 kernel 示例目录。 |
+| `ascendc_library(dispatch_ffn_combine_v2_kernel ...)` | `add_library(dispatch_combine_moe_kernel SHARED ...)` | 从 AscendC/CATLASS 工程封装改成显式 CMake target。 |
 | `CATLASS_ARCH=2201` / A2A3 默认 | `PTO_NPU_ARCH_A5` + `--cce-aicore-arch=dav-c310` | 编译目标切到 A5 / `dav-c310`。 |
 | MC2 工程内 include 路径 | `${PTO_ROOT}/include` 前置 | PTO 头文件优先于 CANN 内置路径，确保使用仓内 PTO primitive。 |
-| `dispatch_ffn_combine_v2` binary | `dispatch_ffn_combine_v3` binary | host runner、target 名称和环境变量统一切到 v3。 |
+| `dispatch_ffn_combine_v2` binary | `dispatch_combine_moe` binary | host runner、target 名称和环境变量统一切到 v3。 |
 
 最终构建入口：
 
@@ -33,7 +33,7 @@
 | host 侧直接维护 HCCL window table | `StandaloneHcclContext::remote_window_ctx` | device 侧不再直接吃原始 symmetric window table，而是吃 PTO remote-window context。 |
 | `HcclDeviceContext` / ring resource 解析 | `LoadA5RemoteWindowContext()` + ring fallback | A5 direct context 优先，无法解析时回退到 ring 参数解析。 |
 | `window_table_dev` | `PtoRemoteWindowContext` device copy | host 把 `rank/rankSize/windowBytes/windowIn/windowOut` 规整成统一结构后拷到 device。 |
-| 固定/隐式 SoC | `DISPATCH_FFN_COMBINE_V3_SOC_VERSION` | `run.sh --soc-version` 透传到 host tiling 的 `PlatformAscendCManager`。 |
+| 固定/隐式 SoC | `DISPATCH_COMBINE_MOE_SOC_VERSION` | `run.sh --soc-version` 透传到 host tiling 的 `PlatformAscendCManager`。 |
 
 最终 host flow 保持：MPI 初始化 → ACL 设卡 → HCCL root info 广播 → runtime 初始化 → tiling 构造 → warmup/measure/verify launch → D2H compare。
 
@@ -221,7 +221,7 @@ PTO 改造完成后，当前 v3 不是纯 PTO kernel。最终边界如下：
 当前已验证：
 
 ```text
-[100%] Built target dispatch_ffn_combine_v3
+[100%] Built target dispatch_combine_moe
 ```
 
 本机验证命令使用 A5 CANN beta 环境完成 compile-only：
@@ -231,8 +231,8 @@ source /home/ntlab/liulei/can/cann-9.0.0-beta.1/set_env.sh
 export PATH=/home/ntlab/miniconda3/envs/ltr_pto/bin:$PATH
 export LD_LIBRARY_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib:${LD_LIBRARY_PATH:-}
 export MPI_LIB_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib/libmpi.so
-cmake -S kernels/manual/a5/dispatch_ffn_combine_v3 -B /tmp/dispatch_ffn_combine_v3_a5_readme_verify -DCMAKE_BUILD_TYPE=Release
-cmake --build /tmp/dispatch_ffn_combine_v3_a5_readme_verify --target dispatch_ffn_combine_v3 -j1
+cmake -S kernels/manual/a5/dispatch_combine_moe -B /tmp/dispatch_combine_moe_a5_readme_verify -DCMAKE_BUILD_TYPE=Release
+cmake --build /tmp/dispatch_combine_moe_a5_readme_verify --target dispatch_combine_moe -j1
 ```
 
 未声明完成：

@@ -77,11 +77,11 @@ PTO_DEVICE void PtoSyncAll()
     AscendC::SyncAll<NeedWait>();
 }
 
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoAddScalarVector;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoAddVector;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoFillVector;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoLoadVector;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoStoreVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoAddScalarVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoAddVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoFillVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoLoadVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoStoreVector;
 
 } // namespace kernel_detail
 
@@ -111,7 +111,7 @@ public:
     using BlockEpilogue1 = BlockEpilogue1_;
     using BlockEpilogue2 = BlockEpilogue2_;
     using BlockEpilogue3 = BlockEpilogue3_;
-    using IntPtoGlobal = pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoGlobalNd<int32_t>;
+    using IntPtoGlobal = pto_ext::dispatch_combine_moe::pto_bridge::PtoGlobalNd<int32_t>;
 
     using ElementD1 = typename BlockEpilogue1::ElementD;
     using LayoutD1 = typename BlockEpilogue1::LayoutD;
@@ -542,7 +542,7 @@ private:
         for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
             uint32_t cur = (elemNum - offset > TileElems) ? TileElems : (elemNum - offset);
             auto srcGlobal =
-                pto_ext::dispatch_ffn_combine_v3::pto_bridge::MakeContiguousGlobalFromPtr(src + offset, cur);
+                pto_ext::dispatch_combine_moe::pto_bridge::MakeContiguousGlobalFromPtr(src + offset, cur);
             Tile tile(1, cur);
             pto::TASSIGN(tile, ubOffsetBytes + static_cast<uint64_t>(offset) * sizeof(T));
             pto::TLOAD(tile, srcGlobal);
@@ -556,7 +556,7 @@ private:
         for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
             uint32_t cur = (elemNum - offset > TileElems) ? TileElems : (elemNum - offset);
             auto dstGlobal =
-                pto_ext::dispatch_ffn_combine_v3::pto_bridge::MakeContiguousGlobalFromPtr(dst + offset, cur);
+                pto_ext::dispatch_combine_moe::pto_bridge::MakeContiguousGlobalFromPtr(dst + offset, cur);
             Tile tile(1, cur);
             pto::TASSIGN(tile, ubOffsetBytes + static_cast<uint64_t>(offset) * sizeof(T));
             pto::TSTORE(dstGlobal, tile);
@@ -570,7 +570,7 @@ private:
         for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
             uint32_t cur = (elemNum - offset > TileElems) ? TileElems : (elemNum - offset);
             auto dstGlobal =
-                pto_ext::dispatch_ffn_combine_v3::pto_bridge::MakeContiguousGlobalFromPtr(dst + offset, cur);
+                pto_ext::dispatch_combine_moe::pto_bridge::MakeContiguousGlobalFromPtr(dst + offset, cur);
             Tile tile(1, cur);
             pto::TASSIGN(tile, ubOffsetBytes);
             for (uint32_t i = 0; i < cur; ++i) {
@@ -767,7 +767,7 @@ private:
         constexpr uint64_t tmpUbOffset = 0;
         for (int32_t offset = 0; offset < copySize; offset += TileElems) {
             uint32_t cur = static_cast<uint32_t>((copySize - offset > TileElems) ? TileElems : (copySize - offset));
-            auto expertIdxGlobal = pto_ext::dispatch_ffn_combine_v3::pto_bridge::MakeContiguousGlobalFromPtr(
+            auto expertIdxGlobal = pto_ext::dispatch_combine_moe::pto_bridge::MakeContiguousGlobalFromPtr(
                 expertIdxPtr + startIdx + offset, cur);
             Tile tile(1, cur);
             pto::TASSIGN(tile, tmpUbOffset);

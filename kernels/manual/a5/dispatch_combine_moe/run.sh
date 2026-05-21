@@ -78,7 +78,7 @@ fi
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 OUT_DIR="${SCRIPT_DIR}/out"
-BUILD_DIR="${DISPATCH_FFN_COMBINE_V3_BUILD_DIR:-/tmp/dispatch_ffn_combine_v3_a5_run_build}"
+BUILD_DIR="${DISPATCH_COMBINE_MOE_BUILD_DIR:-/tmp/dispatch_combine_moe_a5_run_build}"
 
 rm -rf /dev/shm/sem.hccl* 2>/dev/null || true
 ipcrm -a 2>/dev/null || true
@@ -94,16 +94,16 @@ python3 "${SCRIPT_DIR}/scripts/gen_data.py" \
   --rtol "${RTOL}"
 
 cmake -S "${SCRIPT_DIR}" -B "${BUILD_DIR}"
-cmake --build "${BUILD_DIR}" --target dispatch_ffn_combine_v3 -j16
+cmake --build "${BUILD_DIR}" --target dispatch_combine_moe -j16
 
 export LD_LIBRARY_PATH="${BUILD_DIR}/lib:${LD_LIBRARY_PATH:-}"
-export DISPATCH_FFN_COMBINE_V3_CASE_DIR="${OUT_DIR}"
+export DISPATCH_COMBINE_MOE_CASE_DIR="${OUT_DIR}"
 if [ -n "${SOC_VERSION}" ]; then
-  export DISPATCH_FFN_COMBINE_V3_SOC_VERSION="${SOC_VERSION}"
+  export DISPATCH_COMBINE_MOE_SOC_VERSION="${SOC_VERSION}"
 else
-  unset DISPATCH_FFN_COMBINE_V3_SOC_VERSION
+  unset DISPATCH_COMBINE_MOE_SOC_VERSION
 fi
-export DISPATCH_FFN_COMBINE_V3_WARMUP_ITERS="${WARMUP_ITERS}"
-export DISPATCH_FFN_COMBINE_V3_MEASURE_ITERS="${MEASURE_ITERS}"
+export DISPATCH_COMBINE_MOE_WARMUP_ITERS="${WARMUP_ITERS}"
+export DISPATCH_COMBINE_MOE_MEASURE_ITERS="${MEASURE_ITERS}"
 
-"${MPI_RUNNER}" -n "${WORLD_SIZE}" "${BUILD_DIR}/dispatch_ffn_combine_v3"
+"${MPI_RUNNER}" -n "${WORLD_SIZE}" "${BUILD_DIR}/dispatch_combine_moe"

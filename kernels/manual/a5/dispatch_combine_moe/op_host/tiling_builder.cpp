@@ -59,7 +59,7 @@ void ValidateRemoteWindowCapacity(const CaseConfig &cfg, const StandaloneRankRun
 {
     const uint64_t segmentBytes = runtime.hccl.WindowBytes();
     if (segmentBytes <= 3 * MB_SIZE) {
-        throw std::runtime_error("HCCL remote window is too small for dispatch_ffn_combine_v3 layout");
+        throw std::runtime_error("HCCL remote window is too small for dispatch_combine_moe layout");
     }
 
     const uint64_t offsetPeerPerTokenScale = AlignUpHost(segmentBytes / 3, 512);

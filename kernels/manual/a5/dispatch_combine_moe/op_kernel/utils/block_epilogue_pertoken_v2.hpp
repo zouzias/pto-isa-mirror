@@ -31,7 +31,7 @@ PTO_DEVICE void PtoWaitFlag(int32_t eventId)
     AscendC::WaitFlag<Event>(eventId);
 }
 
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoElemOffsetBytes;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoElemOffsetBytes;
 
 template <typename Element>
 PTO_DEVICE __ubuf__ Element *PtoUbPtr(uint64_t ubOffsetBytes)
@@ -43,34 +43,34 @@ template <typename DstElement, typename SrcElement, int TileElems = 128>
 PTO_DEVICE void PtoCastVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum,
                               pto::RoundMode mode)
 {
-    pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoCastVector<DstElement, SrcElement, TileElems>(
+    pto_ext::dispatch_combine_moe::pto_bridge::PtoCastVector<DstElement, SrcElement, TileElems>(
         dstUbOffsetBytes, srcUbOffsetBytes, elemNum, mode);
 }
 
 template <typename Element, int TileElems = 128>
 PTO_DEVICE void PtoMulVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum, Element scalar)
 {
-    pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoMulVector<Element, TileElems>(dstUbOffsetBytes, srcUbOffsetBytes,
+    pto_ext::dispatch_combine_moe::pto_bridge::PtoMulVector<Element, TileElems>(dstUbOffsetBytes, srcUbOffsetBytes,
                                                                                    elemNum, scalar);
 }
 
 template <typename Element, int TileElems = 128>
 PTO_DEVICE void PtoLoadVector(uint64_t dstUbOffsetBytes, __gm__ Element *src, uint32_t elemNum)
 {
-    pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoLoadVector<Element, TileElems>(dstUbOffsetBytes, src, elemNum);
+    pto_ext::dispatch_combine_moe::pto_bridge::PtoLoadVector<Element, TileElems>(dstUbOffsetBytes, src, elemNum);
 }
 
 template <typename Element, int TileElems = 128>
 PTO_DEVICE void PtoStoreVector(__gm__ Element *dst, uint64_t srcUbOffsetBytes, uint32_t elemNum)
 {
-    pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoStoreVector<Element, TileElems>(dst, srcUbOffsetBytes, elemNum);
+    pto_ext::dispatch_combine_moe::pto_bridge::PtoStoreVector<Element, TileElems>(dst, srcUbOffsetBytes, elemNum);
 }
 
 template <typename Element, int TileElems = 128>
 PTO_DEVICE void PtoLoadMatrixRows(uint64_t dstUbOffsetBytes, __gm__ Element *src, uint32_t rowNum, uint32_t colNum,
                                   uint32_t dstStride, uint32_t srcStride)
 {
-    pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoLoadMatrixRows<Element, TileElems>(dstUbOffsetBytes, src, rowNum,
+    pto_ext::dispatch_combine_moe::pto_bridge::PtoLoadMatrixRows<Element, TileElems>(dstUbOffsetBytes, src, rowNum,
                                                                                         colNum, dstStride, srcStride);
 }
 
@@ -78,7 +78,7 @@ template <typename Element, int TileElems = 128>
 PTO_DEVICE void PtoStoreMatrixRows(__gm__ Element *dst, uint64_t srcUbOffsetBytes, uint32_t rowNum, uint32_t colNum,
                                    uint32_t dstStride, uint32_t srcStride)
 {
-    pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoStoreMatrixRows<Element, TileElems>(dst, srcUbOffsetBytes, rowNum,
+    pto_ext::dispatch_combine_moe::pto_bridge::PtoStoreMatrixRows<Element, TileElems>(dst, srcUbOffsetBytes, rowNum,
                                                                                          colNum, dstStride, srcStride);
 }
 

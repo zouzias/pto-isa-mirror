@@ -26,8 +26,8 @@
 #include "moe_token_unpermute_tiling.h"
 #include "../moe_init_routing_quant_v2/moe_v2_pto_sort.h"
 using namespace AscendC;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoFillVector;
-using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoGetValue;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoFillVector;
+using pto_ext::dispatch_combine_moe::pto_bridge::PtoGetValue;
 
 template <typename T1, typename T2, typename T3, bool PROBS>
 class KernelMoeTokenUnpermute {
