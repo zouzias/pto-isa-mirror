@@ -407,17 +407,57 @@ AICORE void example_last_deterministic(__gm__ half* tablePtr)
 
 ## SIMT Usage Restrictions
 
-`MSCATTER` runs as a SIMT launch on the AIV vector core. Because every SIMT entry shares the AIV's Unified Buffer with the compiler runtime, the **caller-usable UB budget is smaller than the raw 256 KB device limit**:
+`MSCATTER` is a SIMT launch on the AIV vector core. Every byte the runtime, the compiler, and the user store in UB must coexist inside the single 256 KB Unified Buffer that the AIV exposes. The following table itemises every region the toolchain carves out before user tiles are allocated, with the source of each value so the budget is reproducible:
 
-- **Compiler stack reservation:** 32 KB per warp configuration (set via `-mllvm -cce-aicore-stack-size=0x8000 -mllvm -cce-aicore-function-stack-size=0x8000`, where `0x8000` is hex for `32768`).
-- **D-cache reservation:** 32 KB carved out for scalar/vector dcache backing.
-- **Effective UB for user tiles:** **~192 KB** (`256 KB − 64 KB`). All `TASSIGN` / `Tile` UB offsets and live tile sizes for `src`, `idx`, plus any companion tiles must fit within this window across the entire kernel. Exceeding it does **not** error at compile time and frequently passes on the simulator, but on real hardware the overflowed tile bytes overlap the stack and get corrupted when any SIMT thread spills, producing silent all-zero or undefined results.
+| Region                         | Size on a5 (V310)               | Source                                                                                                       |
+|--------------------------------|----------------------------------|--------------------------------------------------------------------------------------------------------------|
+| Physical UB                    | 256 KB                           | Hardware                                                                                                     |
+| Hardware D-cache scratch       | 8 KB (top of UB)                 | `TOTAL_UB_SIZE = 248 * 1024` for `__NPU_ARCH__ == 3510` in `kernel_utils_constants.h` (256 − 248)             |
+| AscendC / TBE reserved         | 2 KB                             | `--user-reserved-ub-size` default (`2048` bytes from `ccec -mllvm --print-all-options`)                      |
+| Scalar main stack              | 32 KB                            | `--cce-aicore-stack-size=0x8000` set in `tests/npu/a5/src/st/CMakeLists.txt`                                  |
+| Per-call-depth scalar stack    | 32 KB × depth                    | `--cce-aicore-function-stack-size=0x8000` set in `tests/npu/a5/src/st/CMakeLists.txt`                        |
+| Vector-fragment (VF) stack     | 8 KB                             | `--cce-vf-stack-size` default (`8192` bytes from `ccec -mllvm --print-all-options`)                          |
+| Per-thread SIMT stack          | 4 KB                             | `--cce-simt-stack-size` default (`4096` bytes from `ccec -mllvm --print-all-options`)                        |
+
+The `MSCATTER` call chain is `runMSCATTER_* → MSCATTER<...> → MScatter{Row,Elem}Impl → cce::async_invoke<simt_mscatter_*_kernel>`. The `Impl` layer is marked `__tf__ + PTO_INLINE`, so the compiler typically inlines it into the scalar entry, giving a scalar call-depth of **1**. When the inliner keeps the impl as a separate frame, the depth grows to **2**. The SIMT-VF kernel launched by `async_invoke` runs in its own VF + per-thread context whose stacks are counted separately and do not extend the scalar chain.
+
+Adding up both cases:
+
+```
+                                   depth = 1     depth = 2
+256 KB  physical UB                256 KB        256 KB
+−  8 KB  D-cache scratch          − 8 KB        − 8 KB
+−  2 KB  AscendC / TBE reserved   − 2 KB        − 2 KB
+− 32 KB  scalar main stack        −32 KB        −32 KB
+−        function stack frames    −32 KB        −64 KB   (32 KB × depth)
+−  8 KB  VF stack                 − 8 KB        − 8 KB
+−  4 KB  per-thread SIMT stack    − 4 KB        − 4 KB
+=                                 170 KB        138 KB
+```
+
+The **170 KB** figure is the per-launch upper bound under the current compile flags and is what the ST suite targets. The **138 KB** figure is what the budget collapses to if a future refactor introduces a second scalar frame; designs that must survive that refactor without re-validation should stay below it.
 
 When sizing a workload, account for both the **source** tile (`R * C * sizeof(T)`, padded up to the 32-byte burst alignment) and the **index** tile (`R * C * sizeof(TIdx)`, same padding rule). For `Conflict::Last` the destination side adds no extra UB pressure — the slot-centric scan operates directly out of the same `src` / `idx` UB tiles and stores straight to GM.
 
-### Large-Workload Sizing
+Overflowing the ceiling is **silent**. The compiler does not error, the simulator does not flag it, and small overruns may even appear to work on hardware. When the overflow reaches the stack region, however, the first spilled value from any SIMT thread corrupts a tile byte and the kernel returns all-zero (or otherwise undefined) output on-board while still passing the CPU simulator.
 
-The `elem2d_float_3072x8_*` cases exercise shapes near the 192 KB UB ceiling. With `float` src and `int32_t` index (both 4 bytes), each tile is `3072 × 8 × 4 = 96 KB` (32-byte aligned), totalling `96 + 96 = 192 KB` — exactly the user UB budget. Shapes whose combined `src` + `idx` tile footprint exceeds this limit will pass the simulator but produce silent all-zero results on-board because the tile bytes collide with the compiler stack region.
+### Largest Verified Shape
+
+The two `case_elem2d_float_2720x8_*` ST cases sit at the 170 KB ceiling. With `float` source and `int32_t` index (both 4 bytes), each tile occupies `2720 × 8 × 4 = 87 040 B = 85 KB` (already 32-byte burst aligned), and the combined footprint is `85 + 85 = 170 KB` — exactly the depth-1 user-UB budget derived above. Going beyond this shape collides with the stack region and reproduces the silent on-board failure described in the previous paragraph (for example, the rejected `3072 × 8` ≈ 192 KB attempt). Larger source tensors must be processed in tiled iterations whose per-iteration `src + idx` footprint stays under 170 KB; halve it to 128 KB (e.g. `2048 × 8`) to retain headroom against a possible depth-2 future refactor.
+
+### Cache-Coherence Flush
+
+Every `runMSCATTER_*` wrapper finishes with a `FlushScatterOutput()` helper:
+
+```cpp
+AICORE PTO_INLINE void FlushScatterOutput()
+{
+    dcci(static_cast<__gm__ void *>(0), ENTIRE_DATA_CACHE);
+    dsb(DSB_DDR);
+}
+```
+
+`dcci(0, ENTIRE_DATA_CACHE)` invalidates the AIV scalar D-cache so any GM writes still buffered in the cache are forced down to HBM, and `dsb(DSB_DDR)` waits until the writes are observable at the DDR boundary. On a5/V310 the compiler default `--cce-no-dcache-flush=0` already emits a similar flush before kernel exit, but `MSCATTER` issues its GM writes from inside an `async_invoke` SIMT VF call (depth 2), so adding the explicit flush guarantees the writes are committed regardless of where the compiler decides to insert the implicit one.
 
 ## Runtime Dispatch Requirement
 
@@ -509,8 +549,8 @@ In dependency order (cheapest first): Note - We will try to resolve this issue a
 | case_elem2d_float_8x32_random_256size       | float | 8×32     | 256   | None | Undefined | Last    | random |
 | case_elem2d_int32_8x16_random_256size       | int32 | 8×16     | 256   | None | Undefined | Last    | random |
 | case_elem2d_half_4x32_random_256size        | half  | 4×32     | 256   | None | Undefined | Last    | random |
-| case_elem2d_float_3072x8_last_256size       | float | 3072×8   | 256   | None | Undefined | Last    | random |
-| case_elem2d_float_3072x8_default_24576size  | float | 3072×8   | 24576 | None | Undefined | Default | seq    |
+| case_elem2d_float_2720x8_last_256size       | float | 2720×8   | 256   | None | Undefined | Last    | random |
+| case_elem2d_float_2720x8_default_21760size  | float | 2720×8   | 21760 | None | Undefined | Default | seq    |
 
 ### Unaligned / Odd-Dimension Tiles
 

@@ -55,8 +55,6 @@ inline AICORE void runRow(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ TI
     TLOAD(idxTile, idxGlobal);
     TLOAD(srcTile, srcGlobal);
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
@@ -98,8 +96,6 @@ inline AICORE void runRowPadded(__gm__ T __out__ *out, __gm__ T __in__ *src, __g
     TLOAD(idxTile, idxGlobal);
     TLOAD(srcTile, srcGlobal);
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
@@ -142,8 +138,6 @@ inline AICORE void runRowColIdx(__gm__ T __out__ *out, __gm__ T __in__ *src, __g
     TLOAD(idxTile, idxGlobal);
     TLOAD(srcTile, srcGlobal);
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
@@ -185,8 +179,6 @@ inline AICORE void runElem(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ T
     TLOAD(idxTile, idxGlobal);
     TLOAD(srcTile, srcGlobal);
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
@@ -228,8 +220,6 @@ inline AICORE void runElem2DPadded(__gm__ T __out__ *out, __gm__ T __in__ *src, 
     TLOAD(idxTile, idxGlobal);
     TLOAD(srcTile, srcGlobal);
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
@@ -279,8 +269,6 @@ inline AICORE void runElem2DDyn(__gm__ T __out__ *out, __gm__ T __in__ *src, __g
     TLOAD(idxTile, idxGlobal);
     TLOAD(srcTile, srcGlobal);
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
@@ -330,8 +318,6 @@ inline AICORE void runRowDyn(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__
     TLOAD(idxTile, idxGlobal);
     TLOAD(srcTile, srcGlobal);
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
@@ -374,8 +360,6 @@ inline AICORE void runElem2D(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__
     TLOAD(idxTile, idxGlobal);
     TLOAD(srcTile, srcGlobal);
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
@@ -534,8 +518,8 @@ DEFINE_ELEM2D_PAD(elem2d_int32_scalar_1x1_in_1x8_8size, int32_t, int32_t, int32_
 DEFINE_ROW_PAD(row_int32_unaligned_3x8_8rows, int32_t, int32_t, int32_t, 3, 8, 8, 8, None, Undefined, Last)
 DEFINE_ROW_PAD(row_int32_unaligned_9x16_16rows, int32_t, int32_t, int32_t, 9, 16, 16, 16, None, Undefined, Last)
 
-DEFINE_ELEM2D(elem2d_float_3072x8_last_256size, float, float, int32_t, 3072, 8, 256, None, Undefined, Last)
-DEFINE_ELEM2D(elem2d_float_3072x8_default_24576size, float, float, int32_t, 3072, 8, 24576, None, Undefined, Default)
+DEFINE_ELEM2D(elem2d_float_2720x8_last_256size, float, float, int32_t, 2720, 8, 256, None, Undefined, Last)
+DEFINE_ELEM2D(elem2d_float_2720x8_default_21760size, float, float, int32_t, 2720, 8, 21760, None, Undefined, Default)
 
 DEFINE_ELEM2D_DYN(elem2d_dyn_user_float_1x9_in_1x16_3x10, float, float, int32_t, 1, 16, 1, 9, 3, 10, None, Skip, Last)
 DEFINE_ELEM2D_DYN(elem2d_dyn_int32_4x8_in_4x8_64size, int32_t, int32_t, int32_t, 4, 8, 4, 8, 8, 8, None, Undefined,
