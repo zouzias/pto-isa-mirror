@@ -1,26 +1,28 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
-
-#include <cstddef>
-#include <cstdint>
 
 #include <sys/wait.h>
 #include <unistd.h>
-#include <vector>
-#include <string>
-#include <iostream>
 
+#include <cstddef>
+#include <cstdint>
+#include <iostream>
 #include <pto/pto-inst.hpp>
+#include <string>
+#include <vector>
+
+#include "../common.hpp"
 #include "pto/comm/comm_types.hpp"
 #include "pto/common/pto_tile.hpp"
-#include "../common.hpp"
 
 #define ENABLE_DEBUG_PRINT 1
 
@@ -266,8 +268,9 @@ bool RunTTestTrueKernel(int rank_id, int n_ranks, int n_devices, int first_devic
         aclrtFree(result_dev);
 
         if (testResult != 1) {
-            std::cerr << "TTest True test failed! TTEST(EQ, 42) should return true (1), Got: " << testResult
-                      << std::endl;
+            std::cerr << "TTest True test failed! TTEST(EQ, 42) should return true "
+                         "(1), Got: "
+                      << testResult << std::endl;
             is_ok = false;
         } else {
             std::cout << "Rank 1: TTEST(EQ, 42) returned " << testResult << " (expected 1/true)" << std::endl;
@@ -318,7 +321,8 @@ bool RunTTestFalseKernel(int rank_id, int n_ranks, int n_devices, int first_devi
         aclrtFree(result_dev);
 
         if (testResult != 0) {
-            std::cerr << "TTest False test failed! TTEST(EQ, 100) when signal=42 should return false (0), Got: "
+            std::cerr << "TTest False test failed! TTEST(EQ, 100) when signal=42 "
+                         "should return false (0), Got: "
                       << testResult << std::endl;
             is_ok = false;
         } else {
@@ -489,8 +493,9 @@ bool RunTTestNEKernel(int rank_id, int n_ranks, int n_devices, int first_device_
         aclrtFree(result_dev);
 
         if (testResult != 1) {
-            std::cerr << "TTest NE test failed! TTEST(NE, 0) when signal=50 should return true (1), Got: " << testResult
-                      << std::endl;
+            std::cerr << "TTest NE test failed! TTEST(NE, 0) when signal=50 should "
+                         "return true (1), Got: "
+                      << testResult << std::endl;
             is_ok = false;
         } else {
             std::cout << "Rank 1: TTEST(NE, 0) when signal=50 returned " << testResult << " (expected 1/true)"
@@ -546,8 +551,9 @@ bool RunTTestSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_
         aclrtFree(result_dev);
 
         if (testResult != 1) {
-            std::cerr << "TTest SubRegion test failed! TTEST on sub-region should return true (1), Got: " << testResult
-                      << std::endl;
+            std::cerr << "TTest SubRegion test failed! TTEST on sub-region should "
+                         "return true (1), Got: "
+                      << testResult << std::endl;
             is_ok = false;
         } else {
             std::cout << "Rank 1: TTEST sub-region returned " << testResult << " (expected 1/true)" << std::endl;
@@ -614,7 +620,8 @@ bool RunTTestNE(int n_ranks, int n_devices, int first_rank_id, int first_device_
         });
 }
 
-// Non-template wrapper functions for host-side linkage (avoid including comm_types.hpp in main.cpp)
+// Non-template wrapper functions for host-side linkage (avoid including
+// comm_types.hpp in main.cpp)
 bool RunTTestCompare_GE(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int32_t signalValue,
                         int32_t cmpValue, bool expectedResult)
 {

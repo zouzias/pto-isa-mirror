@@ -1,16 +1,18 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_tile.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace pto;
 constexpr uint32_t BUFFER_NUM = 2;
@@ -37,21 +39,23 @@ AICORE constexpr inline T Max(T num_1, T num_2)
 template <typename OutTile, typename LeftTile, typename RightTile>
 AICORE inline void MatmulAcc(OutTile cTile, LeftTile aTile, RightTile bTile, uint32_t kIter)
 {
-    if (kIter == 0) {
-        TMATMUL(cTile, aTile, bTile);
-    } else {
+    if (kIter != 0) {
         TMATMUL_ACC(cTile, cTile, aTile, bTile);
+        return;
     }
+    TMATMUL(cTile, aTile, bTile);
 }
 template <pipe_t srcPipe, pipe_t dstPipe>
 AICORE inline void SetFlag(uint32_t id)
 {
-    set_flag(srcPipe, dstPipe, static_cast<event_t>(id));
+    const auto eventId = static_cast<event_t>(id);
+    set_flag(srcPipe, dstPipe, eventId);
 }
 template <pipe_t srcPipe, pipe_t dstPipe>
 AICORE inline void WaitFlag(uint32_t id)
 {
-    wait_flag(srcPipe, dstPipe, static_cast<event_t>(id));
+    const auto eventId = static_cast<event_t>(id);
+    wait_flag(srcPipe, dstPipe, eventId);
 }
 template <typename T, typename U, typename S, int n, uint32_t singleCoreN, uint32_t cin, uint32_t hin, uint32_t win,
           uint32_t c0, uint32_t hout, uint32_t wout>
@@ -59,7 +63,8 @@ AICORE inline void InitGMOffsets(__gm__ U *&currentSrc0, __gm__ S *&currentSrc1,
                                  __gm__ U *src0, __gm__ S *src1)
 {
     // - Each core owns a contiguous C tile of shape [singleCoreM, singleCoreN].
-    // - It reads the corresponding A panel [singleCoreM, K] and B panel [K, singleCoreN].
+    // - It reads the corresponding A panel [singleCoreM, K] and B panel [K,
+    // singleCoreN].
     constexpr uint32_t nIdex = n / singleCoreN;
     uint32_t mCoreIdx = get_block_idx() / nIdex; // get current launch core idx
     uint32_t nCoreIdx = get_block_idx() % nIdex;
@@ -116,10 +121,12 @@ AICORE inline void MacroMatmul(uint32_t kIter, uint8_t currMte2Idx, uint8_t mte1
                                uint32_t woutStart)
 {
     const uint32_t kModStepKa = kIter % stepKa;
-    // Wait until TMATMUL is done with the current L0A/L0B buffer before overwriting it via TEXTRACT.
+    // Wait until TMATMUL is done with the current L0A/L0B buffer before
+    // overwriting it via TEXTRACT.
     WaitFlag<PIPE_M, PIPE_MTE1>(mte1DBFlag);
 
-    // TEXTRACT stage: slice the loaded L1 panel into the baseK chunk we need this iteration.
+    // TEXTRACT stage: slice the loaded L1 panel into the baseK chunk we need this
+    // iteration.
     if (kModStepKa == 0)
         WaitFlag<PIPE_MTE2, PIPE_MTE1>(0);
     TIMG2COL(aTile[mte1DBFlag], fmapMat[currMte2Idx], woutStart, kModStepKa * baseK);
@@ -136,7 +143,8 @@ AICORE inline void MacroMatmul(uint32_t kIter, uint8_t currMte2Idx, uint8_t mte1
     SetFlag<PIPE_MTE1, PIPE_M>(mte1DBFlag);
     WaitFlag<PIPE_MTE1, PIPE_M>(mte1DBFlag);
     MatmulAcc(cTile, aTile[mte1DBFlag], bTile[mte1DBFlag], kIter);
-    // Signal that TMATMUL is done, so the next iteration may TEXTRACT into the other ping-pong slot.
+    // Signal that TMATMUL is done, so the next iteration may TEXTRACT into the
+    // other ping-pong slot.
     SetFlag<PIPE_M, PIPE_MTE1>(mte1DBFlag);
 }
 template <typename U, uint32_t cin, uint32_t hin, uint32_t win, uint32_t c0, uint32_t n, uint32_t channelSize,

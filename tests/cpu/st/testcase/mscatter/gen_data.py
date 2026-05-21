@@ -38,4 +38,3 @@ def gen_case(case_dir: str, tile_rows: int, tile_cols: int, dst_len: int):
 
 if __name__ == "__main__":
     gen_case("MSCATTERTest.case_float_dst512_src16x16", 16, 16, 512)
-
