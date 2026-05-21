@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 // Allgather Async Demo — URMA Engine Kernels
@@ -13,19 +15,21 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Mirrors the 3 SDMA AllGather algorithms in allgather_kernel.cpp, replacing:
 //   HcclDeviceContext + SdmaWorkspaceManager + HcclRemotePtr
 // with:
-//   UrmaWorkspaceManager + UrmaPeerMrBaseAddr + BuildAsyncSession<DmaEngine::URMA>
+//   UrmaWorkspaceManager + UrmaPeerMrBaseAddr +
+//   BuildAsyncSession<DmaEngine::URMA>
 //
-// On non-URMA targets (PTO_URMA_SUPPORTED not defined, i.e. __NPU_ARCH__ != 3510)
-// the device-side URMA instructions are compiled out via #ifdef; host runners still
-// execute but verification will fail because remote data never arrives.
+// On non-URMA targets (PTO_URMA_SUPPORTED not defined, i.e. __NPU_ARCH__ !=
+// 3510) the device-side URMA instructions are compiled out via #ifdef; host
+// runners still execute but verification will fail because remote data never
+// arrives.
 
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
-
 #include <pto/pto-inst.hpp>
-#include "pto/common/pto_tile.hpp"
+
 #include "common.hpp"
+#include "pto/common/pto_tile.hpp"
 #ifdef PTO_URMA_SUPPORTED
 #include "pto/npu/comm/async/urma/urma_async_intrin.hpp"
 #endif
@@ -151,8 +155,9 @@ __global__ AICORE void AllgatherUrmaGetMulticoreKernel(__gm__ int32_t *dataBuf, 
 // Ring URMA TPUT_ASYNC AllGather — per-round kernel
 //
 // Same ring algorithm as SDMA version, using TPUT_ASYNC<DmaEngine::URMA>.
-//   round 0: local copy sendBuf → recvBuf[myPeer], then TPUT sendBuf → next peer
-//   round r (r>=1): TPUT recvBuf[chunk] → next peer (forwarding received data)
+//   round 0: local copy sendBuf → recvBuf[myPeer], then TPUT sendBuf → next
+//   peer round r (r>=1): TPUT recvBuf[chunk] → next peer (forwarding received
+//   data)
 // ============================================================================
 __global__ AICORE void RingUrmaAllgatherRoundKernel(__gm__ int32_t *dataBuf, int nranks, int myPeer,
                                                     __gm__ uint8_t *urmaWorkspace, int elemCount, int round)

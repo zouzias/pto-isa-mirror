@@ -19,7 +19,7 @@ np.random.seed(19)
 class Dequantizer:
     def __init__(self):
         self.deqf16_factor = []
-    
+
     def extract_quant_params(self, quant_value_uint64):
         """
         Extract parameters from a uint64 quantization factor.
@@ -31,31 +31,31 @@ class Dequantizer:
         """
         # Ensure it is an integer type.
         quant_uint64 = int(quant_value_uint64)
-        
+
         # Extract the various bit fields.
         M1_uint32 = quant_uint64 & 0xFFFFFFFF  # [31:0] M1
         N_shift = (quant_uint64 >> 32) & 0xF   # [35:32] N (4bit)
         mcb_and_reserved = (quant_uint64 >> 36) & 0xFFFFFFF  # [63:36] mcb + reserved
-        
+
         mcb = mcb_and_reserved & 0x1
-        
+
         # Convert M1 from uint32 to float32.
         M1_bytes = M1_uint32.to_bytes(4, byteorder='little', signed=False)
         M1 = np.frombuffer(M1_bytes, dtype=np.float32)[0]
-        
+
         # M2 = M1 (ReLU disabled).
         M2 = M1
-        
+
         return mcb, N_shift, M1, M2
-    
+
     def deqf16_quantization(self, quant_value_uint64, src_value_in_s32):
         """
         Dequantizer - without ReLU
         """
         tmp0 = np.int32(src_value_in_s32)
-        
+
         mcb, N, M1, M2 = self.extract_quant_params(quant_value_uint64)
-        
+
         if mcb == 0:
             # Mode 0: Direct 32-bit to floating-point conversion.
             tmp2 = tmp0.astype(np.float32)
@@ -66,48 +66,48 @@ class Dequantizer:
                 shifted = -((-tmp0) >> N)
             else:
                 shifted = tmp0 >> N
-                
+
             tmp1 = np.clip(shifted, -32768, 32767).astype(np.int16)
             tmp2 = tmp1.astype(np.float32)
-        
+
         # When ReLU is not used, M1 is applied to both positive and negative values.
         tmp3 = tmp2 * M1
-        
+
         # Cast to half precision (float16).
         tmp4 = np.float16(tmp3)
-        
+
         return tmp4
-    
+
     def process_batch_column_based(self, quant_tensor, s32_elements):
         """
         Per-column quantization without ReLU activation
         """
         if len(s32_elements.shape) != 2:
             raise ValueError(f"输入应该是二维数组，当前形状: {s32_elements.shape}")
-        
+
         M, N = s32_elements.shape
-        
+
         if quant_tensor.dtype != np.uint64:
             quant_tensor = quant_tensor.astype(np.uint64)
-        
+
         if len(quant_tensor) != N:
             raise ValueError(f"量化参数数量{len(quant_tensor)}与输出列数{N}不匹配")
-        
+
         for col_idx in range(min(N, 3)):
             quant_value = quant_tensor[col_idx]
             mcb, N_shift, M1, M2 = self.extract_quant_params(quant_value)
-            
+
             print(f"  第{col_idx}列:")
             print(f"    uint64值: 0x{quant_value:016X}")
             print(f"    解析: mcb={mcb}, N={N_shift}, M1={M1:.6f}, M2={M2:.6f}")
 
         results = np.zeros((M, N), dtype=np.float16)
-        
+
         for row_idx in range(M):
             for col_idx in range(N):
                 result = self.deqf16_quantization(quant_tensor[col_idx], s32_elements[row_idx, col_idx])
                 results[row_idx, col_idx] = result
-        
+
         print(f"  输出形状: {results.shape}, 范围: [{np.min(results):.6f}, {np.max(results):.6f}]")
         return results
 
@@ -121,38 +121,38 @@ def create_quant_tensor_uint64(nAlign):
     M1_value = [0.25 for i in range(nAlign)]
 
     quant_tensor = np.zeros(nAlign, dtype=np.uint64)
-    
+
     for i in range(nAlign):
         if isinstance(mcb_value, (list, np.ndarray)):
             mcb = mcb_value[i] if i < len(mcb_value) else mcb_value[-1]
         else:
             mcb = mcb_value if mcb_value is not None else (i % 2)
-        
+
         if isinstance(N_value, (list, np.ndarray)):
             N_shift = N_value[i] if i < len(N_value) else N_value[-1]
         else:
             N_shift = N_value if N_value is not None else ((i % 8) + 2)
-        
+
         if isinstance(M1_value, (list, np.ndarray)):
             M1_val = M1_value[i] if i < len(M1_value) else M1_value[-1]
         else:
             M1_val = M1_value if M1_value is not None else (0.5 + (i % 10) * 0.1)
-        
+
         # Constrain N_shift to a 4-bit range
         N_shift = N_shift & 0xF
-        
+
         # In non-ReLU configuration, the reserved field consists solely of mcb bits.
         reserved = mcb  # The bit field contains only mcb without any ReLU mode indication bits.
-        
+
         # Convert parameter M1 from float32 format to uint32 representation.
         M1_array = np.array([M1_val], dtype=np.float32)
         M1_bytes = M1_array.tobytes()
         M1_uint32 = int.from_bytes(M1_bytes, byteorder='little', signed=False)
-        
+
         # Assemble/construct a 64-bit unsigned integer (uint64) value from these components.
         quant_value = (reserved << 36) | (N_shift << 32) | M1_uint32
         quant_tensor[i] = quant_value
-    
+
     return quant_tensor
 
 
@@ -186,7 +186,7 @@ def gen_golden_data(case_name, param):
 
     m, k, n, start_m, start_k, is_bias, is_atrans, is_btrans =  param.m, param.k, param.n, param.start_m, param.start_k,True, param.is_atrans, param.is_btrans
     is_bias, is_quant, relu_mode, is_nd = param.is_bias, param.is_quant, param.relu_mode,param.is_nd
-    
+
     biasNAlign = n
     scalingNAlign = n
     # The bias addr needs to be 64B aligned.
@@ -205,9 +205,9 @@ def gen_golden_data(case_name, param):
     x1_slice = x1_gm[start_m:, start_k:]  # Starting from position (rowIdx1, colIdx1) and continuing to the end.
     x2_slice = x2_gm[start_k:, :]  # Starting from position (rowIdx2, colIdx2) and continuing to the end.
 
-    """For bias, users must ensure 64-byte alignment. 
-    In the bias_gm buffer, only the first n values are valid; 
-    the remaining values are invalid and 
+    """For bias, users must ensure 64-byte alignment.
+    In the bias_gm buffer, only the first n values are valid;
+    the remaining values are invalid and
     are only included to meet the alignment requirement—they do not participate in computation.
     """
     if bias_gm.ndim == 1:
@@ -227,16 +227,16 @@ def gen_golden_data(case_name, param):
     if dst_type == np.int8:
         temp_quant_tensor = np.random.randint(1, 5, [scalingNAlign, ]).astype(np.float32)
         temp_quant_tensor_slice = temp_quant_tensor[:n]
-        """For scaling, users must ensure 128-byte alignment. 
-        In the scaling_gm buffer, only the first n values are valid; 
-        the remaining values are invalid and 
+        """For scaling, users must ensure 128-byte alignment.
+        In the scaling_gm buffer, only the first n values are valid;
+        the remaining values are invalid and
         are only included to meet the alignment requirement—they do not participate in computation.
         """
         temp_quant_tensor_api = copy.deepcopy(temp_quant_tensor).astype(np.uint64)
         for i, _ in enumerate(temp_quant_tensor_api):
             # Convert each float32 bit pattern to uint64 while preserving the floating-point bit pattern.
             temp_quant_tensor_api[i] = struct.unpack('!I', struct.pack('!f', temp_quant_tensor[i]))[0]
-            """For B8 output scenarios, configure a feature flag in the data to specify 
+            """For B8 output scenarios, configure a feature flag in the data to specify
             whether the output format is unsigned 8-bit (u8) or signed 8-bit (s8).
             [46]=0 , dst_type=uint8; [46]=1 ,dst_type=int8
             """
@@ -250,9 +250,9 @@ def gen_golden_data(case_name, param):
         # Create a dequantizer.
         dequantizer = Dequantizer()
         scaling_gm = create_quant_tensor_uint64(scalingNAlign)
-        """For scaling, users must ensure 128-byte alignment. 
-        In the scaling_gm buffer, only the first n values are valid; 
-        the remaining values are invalid and 
+        """For scaling, users must ensure 128-byte alignment.
+        In the scaling_gm buffer, only the first n values are valid;
+        the remaining values are invalid and
         are only included to meet the alignment requirement—they do not participate in computation.
         """
         scaling_gm_slice = scaling_gm[:n]

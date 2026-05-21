@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 // Communication Kernel (Vec Arch) for GEMM + AllReduce — HCCL backend
@@ -16,10 +18,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // without a device-wide RS→AG barrier.
 //
 // Signal matrix layout in HCCL window (per rank):
-//   [0 .. MAX_RANKS-1]                Reserved legacy cross-rank barrier counters
-//   [MAX_RANKS]                       Reserved legacy local broadcast flag slot
-//   [MAX_RANKS + 1]                   Reserved legacy intra-rank arrival slot
-//   [G_SIGNAL_SUBTILE_READY_OFFSET .. G_SIGNAL_AG_SUMMARY_OFFSET-1]
+//   [0 .. MAX_RANKS-1]                Reserved legacy cross-rank barrier
+//   counters [MAX_RANKS]                       Reserved legacy local broadcast
+//   flag slot [MAX_RANKS + 1]                   Reserved legacy intra-rank
+//   arrival slot [G_SIGNAL_SUBTILE_READY_OFFSET ..
+//   G_SIGNAL_AG_SUMMARY_OFFSET-1]
 //                                     Owner-local subtile-ready counters
 //   [G_SIGNAL_AG_SUMMARY_OFFSET .. G_SIGNAL_TOTAL_SLOTS-1]
 //                                     Per-AG-block summary wakeup counters
@@ -30,25 +33,28 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <cstddef>
 #include <cstdint>
-
-#include "pto/comm/pto_comm_inst.hpp"
-#include "pto/common/pto_tile.hpp"
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 #include <pto/pto-inst.hpp>
 
 #include "common.hpp"
-#include "ready_queue.hpp"
-
 #include "gemm_ar_config.h"
 #include "kernel_launchers.h"
+#include "pto/comm/pto_comm_inst.hpp"
+#include "pto/common/pto_tile.hpp"
+#include "ready_queue.hpp"
 
 // Signal matrix layout (per rank, in HCCL RDMA window):
-//   [0 .. G_SIGNAL_RS_DONE_SLOTS-1]             Reserved legacy cross-rank barrier counters
-//   [G_SIGNAL_LOCAL_FLAG_OFFSET]                Reserved legacy local broadcast flag slot
-//   [G_SIGNAL_INTRA_RANK_COUNTER_OFFSET]        Reserved legacy intra-rank arrival slot
-//   [G_SIGNAL_SUBTILE_READY_OFFSET .. G_SIGNAL_AG_SUMMARY_OFFSET-1]
-//                                              Owner-local subtile-ready counters
+//   [0 .. G_SIGNAL_RS_DONE_SLOTS-1]             Reserved legacy cross-rank
+//   barrier counters [G_SIGNAL_LOCAL_FLAG_OFFSET]                Reserved
+//   legacy local broadcast flag slot [G_SIGNAL_INTRA_RANK_COUNTER_OFFSET]
+//   Reserved legacy intra-rank arrival slot [G_SIGNAL_SUBTILE_READY_OFFSET ..
+//   G_SIGNAL_AG_SUMMARY_OFFSET-1]
+//                                              Owner-local subtile-ready
+//                                              counters
 //   [G_SIGNAL_AG_SUMMARY_OFFSET .. G_SIGNAL_TOTAL_SLOTS-1]
-//                                              Per-AG-block summary wakeup counters
+//                                              Per-AG-block summary wakeup
+//                                              counters
 
 using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
 using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -85,12 +91,13 @@ AICORE inline int RsOwnerLocalSubtileId(int tile_idx, int nranks, int stripe_id)
 }
 
 // Subtile -> owning comm block mapping.
-// Reversed-stripe layout: subtile k goes to block (num_comm_blocks-1-k%num_comm_blocks).
-// Rationale: combined with A's rsN balancing (blocks 0..remainder-1 get the
-// heavier rsN=ceil and blocks remainder.. get the lighter rsN=floor), reversing
-// AG makes AG's "heavy" blocks (agN=ceil) land on RS's "light" blocks, so the
-// total (rsN+agN) workload is flatter. Must stay consistent with
-// AgInitAssignedState starting index.
+// Reversed-stripe layout: subtile k goes to block
+// (num_comm_blocks-1-k%num_comm_blocks). Rationale: combined with A's rsN
+// balancing (blocks 0..remainder-1 get the heavier rsN=ceil and blocks
+// remainder.. get the lighter rsN=floor), reversing AG makes AG's "heavy"
+// blocks (agN=ceil) land on RS's "light" blocks, so the total (rsN+agN)
+// workload is flatter. Must stay consistent with AgInitAssignedState starting
+// index.
 AICORE inline int AgSummaryBlockForSubtile(int local_subtile_id, int num_comm_blocks)
 {
     return (num_comm_blocks > 0) ? (num_comm_blocks - 1 - (local_subtile_id % num_comm_blocks)) : 0;
@@ -456,7 +463,8 @@ AICORE inline void ReduceScatterPhase(__gm__ half *gemm_output, __gm__ half *red
     dsb(DSB_DDR);
 }
 
-// Transfer a contiguous sub-tile of rows from local reduced_output to a remote rank.
+// Transfer a contiguous sub-tile of rows from local reduced_output to a remote
+// rank.
 AICORE inline void AgTransferRows(__gm__ half *reduced_output, __gm__ HcclDeviceContext *hcclCtx,
                                   const StrideDyn &tileStride, int r, uint64_t row_offset, int nrows)
 {
@@ -478,8 +486,9 @@ AICORE inline void AgTransferRows(__gm__ half *reduced_output, __gm__ HcclDevice
 }
 
 // ============================================================================
-// Phase 2 helpers: map owner-local subtile ids back to the global reduced_output.
-// A communication tile is logically split along M into fixed-height subtile rows.
+// Phase 2 helpers: map owner-local subtile ids back to the global
+// reduced_output. A communication tile is logically split along M into
+// fixed-height subtile rows.
 // ============================================================================
 AICORE inline int AgGetMyTileCount(int total_tiles, int my_rank, int nranks)
 {
@@ -822,6 +831,8 @@ AICORE inline void GemmCommAllImpl(__gm__ half *gemm_output, __gm__ half *reduce
 // Kernel entry point
 // ============================================================================
 __global__ AICORE void GemmCommAllKernel(__gm__ uint8_t *gemm_output, __gm__ uint8_t *reduced_output,
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
                                          __gm__ uint8_t *signal_matrix, __gm__ uint8_t *queue_set,
                                          __gm__ uint8_t *hcclCtx, int rank, int nranks, int num_compute_blocks,
                                          int num_comm_blocks)
@@ -829,6 +840,8 @@ __global__ AICORE void GemmCommAllKernel(__gm__ uint8_t *gemm_output, __gm__ uin
     GemmCommAllImpl(reinterpret_cast<__gm__ half *>(gemm_output), reinterpret_cast<__gm__ half *>(reduced_output),
                     reinterpret_cast<__gm__ int32_t *>(signal_matrix),
                     reinterpret_cast<__gm__ MultiBlockQueueSet *>(queue_set),
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
                     reinterpret_cast<__gm__ HcclDeviceContext *>(hcclCtx), rank, nranks, num_compute_blocks,
                     get_block_idx(), num_comm_blocks);
 }
@@ -836,6 +849,8 @@ __global__ AICORE void GemmCommAllKernel(__gm__ uint8_t *gemm_output, __gm__ uin
 // ============================================================================
 // Host-side kernel launcher
 // ============================================================================
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 void launchGemmCommAll(uint8_t *gemm_output, uint8_t *reduced_output, uint8_t *signal_matrix, uint8_t *queue_set,
                        uint8_t *hcclCtx, int rank, int nranks, void *stream, int num_compute_blocks)
 {

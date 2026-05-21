@@ -1,42 +1,43 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
 #include <acl/acl.h>
+
+#include <pto/pto-inst.hpp>
+
+#include "../../../../../common/kernel_common.hpp"
 
 using namespace std;
 using namespace pto;
+using namespace pto::test;
 
 template <typename T, int dstTileRow, int dstTileCol, int row, int validRow, int col, int validCol>
 PTO_INTERNAL void runTMuls(__gm__ T *out, __gm__ T *src, T scalar)
 {
-    using DynDim2Shape = Shape<1, 1, 1, -1, -1>;
-    using DynDim2Stride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<T, DynDim2Shape, DynDim2Stride>;
-    GlobalData dstGlobal(out, DynDim2Shape(validRow, validCol), DynDim2Stride(dstTileRow, dstTileCol));
-    GlobalData srcGlobal(src, DynDim2Shape(validRow, validCol), DynDim2Stride(row, col));
+    using Shape2D = Shape<1, 1, 1, -1, -1>;
+    using Stride2D = pto::Stride<1, 1, -1, -1, 1>;
+    using GlobalData = GlobalTensor<T, Shape2D, Stride2D>;
+    using DstTileData = Tile<TileType::Vec, T, dstTileRow, dstTileCol, BLayout::RowMajor, -1, -1>;
+    using SrcTileData = Tile<TileType::Vec, T, row, col, BLayout::RowMajor, -1, -1>;
 
-    using dstTileData = Tile<TileType::Vec, T, dstTileRow, dstTileCol, BLayout::RowMajor, -1, -1>;
-    using srcTileData = Tile<TileType::Vec, T, row, col, BLayout::RowMajor, -1, -1>;
-    srcTileData srcTile(validRow, validCol);
-    dstTileData dstTile(validRow, validCol);
+    const Shape2D dynShape(validRow, validCol);
+    DstTileData dstTile(validRow, validCol);
+    SrcTileData srcTile(validRow, validCol);
+    GlobalData srcGlobal(src, dynShape, Stride2D(row, col));
+    GlobalData dstGlobal(out, dynShape, Stride2D(dstTileRow, dstTileCol));
     TASSIGN<0x0>(srcTile);
-    TASSIGN<srcTileData::Numel * sizeof(T)>(dstTile);
-    TLOAD(dstTile, dstGlobal);
-    TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TMULS(dstTile, srcTile, scalar);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    TASSIGN<SrcTileData::Numel * sizeof(T)>(dstTile);
+    RunVecBinaryWithManualEvents(dstTile, srcTile, dstGlobal, srcGlobal, scalar,
+                                 [](auto &dst, auto &srcTileRef, auto value) { TMULS(dst, srcTileRef, value); });
     out = dstGlobal.data();
 }
 

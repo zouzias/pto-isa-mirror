@@ -1,33 +1,23 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_tile.hpp>
+#include <pto/pto-inst.hpp>
+
+#include "../../../../../common/kernel_common.hpp"
 
 using namespace pto;
-
-template <typename TileData>
-__tf__ PTO_INTERNAL void tf_create_cbuf_matrix(typename TileData::TileDType __out__ tile, int64_t repeat_bit, int n)
-{
-    create_cbuf_matrix((__cbuf__ uint16_t *)__cce_get_tile_ptr(tile), repeat_bit, n);
-}
-
-template <typename TileDataDst, typename TileDataSrc>
-__tf__ PTO_INTERNAL void tf_copy_cbuf_to_ubuf(typename TileDataDst::TileDType __out__ dst,
-                                              typename TileDataSrc::TileDType __in__ src, int vec_core, int block_count,
-                                              int block_len, int src_stride, int dst_stride)
-{
-    copy_cbuf_to_ubuf((__ubuf__ void *)__cce_get_tile_ptr(dst), (__cbuf__ void *)__cce_get_tile_ptr(src), vec_core,
-                      block_count, block_len, src_stride, dst_stride);
-}
+using namespace pto::test;
 
 template <typename T, Layout layout, typename GlobalDataSrc0>
 AICORE inline auto GetGlobalTensor(__gm__ T *addr, __gm__ T *addr2)
@@ -45,6 +35,31 @@ AICORE inline auto GetGlobalTensor(__gm__ T *addr, __gm__ T *addr2)
     return srcGlobal;
 }
 
+template <typename T, typename GlobalDataSrc0, typename GlobalDataOut, typename TileMatScaAData, typename TileUBData,
+          typename TLoadFn>
+AICORE inline void FinalizeLoadAndStore(GlobalDataOut &dstGlobal, TileUBData &srcTile, TileMatScaAData &aMatTile,
+                                        TLoadFn &&tloadFn, uint16_t totalSize)
+{
+    uint8_t syncID = 0;
+    // clear memory in L1 to help verify data in unaligned case
+#if defined(__DAV_CUBE__)
+    uint16_t blockLen = totalSize * sizeof(T) / 32;
+    int64_t repeatBit = (static_cast<uint64_t>(blockLen) << 16) | (static_cast<uint64_t>(0) << 32) | 1;
+    TfCreateCbufMatrix<TileMatScaAData>(aMatTile.data(), repeatBit, 0);
+
+    /*************************************TLOAD****************************************/
+    tloadFn();
+    MovL1ToUbuf<TileUBData, TileMatScaAData, 0>(srcTile, aMatTile);
+#endif
+
+#if defined(__DAV_VEC__)
+    // veccore0 id0 correspond cubecore id is id0,  veccore1 id0 correspond
+    // cubecore id is 16
+    wait_intra_block(PIPE_MTE3, syncID);
+    TSTORE(dstGlobal, srcTile); // UB -> GM : AIV
+#endif
+}
+
 template <typename T, typename GlobalDataSrc0, typename GlobalDataOut, typename TileMatScaAData, typename TileUBData>
 AICORE inline void RunLoadAndStoreDyn(__gm__ T *out, __gm__ T *src0, __gm__ T *src1, uint16_t totalSize)
 {
@@ -56,42 +71,9 @@ AICORE inline void RunLoadAndStoreDyn(__gm__ T *out, __gm__ T *src0, __gm__ T *s
 
     TileMatScaAData aMatTile;
     TASSIGN(aMatTile, 0x0);
-    ;
 
-    uint8_t syncID = 0;
-    // clear memory in L1 to help verify data in unaligned case
-#if defined(__DAV_CUBE__)
-    uint16_t blockLen = totalSize * sizeof(T) / 32;
-    int64_t repeatBit = (static_cast<uint64_t>(blockLen) << 16) | (static_cast<uint64_t>(0) << 32) | 1;
-    tf_create_cbuf_matrix<TileMatScaAData>(aMatTile.data(), repeatBit, 0);
-
-    /*************************************TLOAD****************************************/
-    TLOAD(aMatTile, src0Global);
-
-    // L1 -> UB : AIC
-    uint16_t blockCount = 1;
-
-#ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-#endif
-    // move to vector    core0
-    tf_copy_cbuf_to_ubuf<TileUBData, TileMatScaAData>(srcTile.data(), aMatTile.data(), 0, blockCount, blockLen, 0, 0);
-    // move to vector    core1
-    tf_copy_cbuf_to_ubuf<TileUBData, TileMatScaAData>(srcTile.data(), aMatTile.data(), 1, blockCount, blockLen, 0, 0);
-#ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-#endif
-    set_intra_block(PIPE_MTE1, syncID);
-    set_intra_block(PIPE_MTE1, syncID + 16);
-#endif
-
-#if defined(__DAV_VEC__)
-    // veccore0 id0 correspond cubecore id is id0,  veccore1 id0 correspond cubecore id is 16
-    wait_intra_block(PIPE_MTE3, syncID);
-    TSTORE(dstGlobal, srcTile); // UB -> GM : AIV
-#endif
+    FinalizeLoadAndStore<T, GlobalDataSrc0, GlobalDataOut, TileMatScaAData, TileUBData>(
+        dstGlobal, srcTile, aMatTile, [&]() { TLOAD(aMatTile, src0Global); }, totalSize);
     out = dstGlobal.data();
 }
 
@@ -107,40 +89,9 @@ AICORE inline void RunLoadAndStore(__gm__ T *out, __gm__ T *src0, __gm__ T *src1
     TileMatScaAData aMatTile;
     TASSIGN(aMatTile, 0x0);
 
-    uint8_t syncID = 0;
-    // clear memory in L1 to help verify data in unaligned case
-#if defined(__DAV_CUBE__)
-    uint16_t blockLen = totalSize * sizeof(T) / 32;
-    int64_t repeatBit = (static_cast<uint64_t>(blockLen) << 16) | (static_cast<uint64_t>(0) << 32) | 1;
-    tf_create_cbuf_matrix<TileMatScaAData>(aMatTile.data(), repeatBit, 0);
-
-    /*************************************TLOAD****************************************/
-    TLOAD<TileMatScaAData, GlobalDataSrc0>(aMatTile, src0Global);
-
-    // L1 -> UB : AIC
-    uint16_t blockCount = 1;
-
-#ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-#endif
-    // move to vector    core0
-    tf_copy_cbuf_to_ubuf<TileUBData, TileMatScaAData>(srcTile.data(), aMatTile.data(), 0, blockCount, blockLen, 0, 0);
-    // move to vector    core1
-    tf_copy_cbuf_to_ubuf<TileUBData, TileMatScaAData>(srcTile.data(), aMatTile.data(), 1, blockCount, blockLen, 0, 0);
-#ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-#endif
-    set_intra_block(PIPE_MTE1, syncID);
-    set_intra_block(PIPE_MTE1, syncID + 16);
-#endif
-
-#if defined(__DAV_VEC__)
-    // veccore0 id0 correspond cubecore id is id0,  veccore1 id0 correspond cubecore id is 16
-    wait_intra_block(PIPE_MTE3, syncID);
-    TSTORE(dstGlobal, srcTile); // UB -> GM : AIV
-#endif
+    FinalizeLoadAndStore<T, GlobalDataSrc0, GlobalDataOut, TileMatScaAData, TileUBData>(
+        dstGlobal, srcTile, aMatTile, [&]() { TLOAD<TileMatScaAData, GlobalDataSrc0>(aMatTile, src0Global); },
+        totalSize);
     out = dstGlobal.data();
 }
 

@@ -1,20 +1,22 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
-
 #include <pto/pto-inst.hpp>
-#include "pto/common/pto_tile.hpp"
+
 #include "../common.hpp"
+#include "pto/common/pto_tile.hpp"
 
 #define ENABLE_DEBUG_PRINT 1
 
@@ -282,7 +284,8 @@ bool RunPutAtomicAddKernel(int rank_id, int n_ranks, int n_devices, int first_de
     size_t winOffset = 0;
     void *shmem_ptr = WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t) + count * sizeof(T));
 
-    // Zero-initialize the recv buffer in shmem (only rank 0 needs this, but all do for simplicity)
+    // Zero-initialize the recv buffer in shmem (only rank 0 needs this, but all
+    // do for simplicity)
     uint8_t *shmem_data = reinterpret_cast<uint8_t *>(shmem_ptr) + 64 * sizeof(int32_t);
     aclrtMemset(shmem_data, count * sizeof(T), 0, count * sizeof(T));
 
@@ -1420,11 +1423,13 @@ template bool RunPutRing2DSliding<int32_t, 128, 256, 32, 64>(int n_ranks, int n_
 template bool RunPutRing2DSliding<float, 256, 512, 64, 128>(int n_ranks, int n_devices, int first_rank_id,
                                                             int first_device_id);
 
-// ---- Irregular 2D sliding (partial last chunks via DYNAMIC ValidRow/ValidCol) ----
-// float: 65x64, tile 16x32 → rows: 4+1(1), cols: 2 (regular col, irregular row)
+// ---- Irregular 2D sliding (partial last chunks via DYNAMIC ValidRow/ValidCol)
+// ---- float: 65x64, tile 16x32 → rows: 4+1(1), cols: 2 (regular col, irregular
+// row)
 template bool RunPutRing2DSliding<float, 65, 64, 16, 32>(int n_ranks, int n_devices, int first_rank_id,
                                                          int first_device_id);
-// float: 64x104, tile 16x32 → rows: 4 (regular), cols: 3+1(8) (irregular col, 8*4=32B aligned)
+// float: 64x104, tile 16x32 → rows: 4 (regular), cols: 3+1(8) (irregular col,
+// 8*4=32B aligned)
 template bool RunPutRing2DSliding<float, 64, 104, 16, 32>(int n_ranks, int n_devices, int first_rank_id,
                                                           int first_device_id);
 // float: 65x104, tile 16x32 → rows: 4+1(1), cols: 3+1(8) (both irregular)
@@ -1446,7 +1451,8 @@ __global__ AICORE void TPutPingPongKernelImpl(__gm__ T *dst, __gm__ T *src, __gm
         return;
     constexpr size_t total_count = total_rows * total_cols;
     static_assert(total_rows > tile_rows || total_cols > tile_cols,
-                  "At least one dimension must exceed tile size to test ping-pong chunking");
+                  "At least one dimension must exceed tile size to test "
+                  "ping-pong chunking");
 
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -1661,6 +1667,7 @@ template bool RunPutRingPingPong<float, 128, 128, 16, 32>(int n_ranks, int n_dev
 // Regular: int32 256x256, tile 32x64 → 8×4=32 chunks
 template bool RunPutRingPingPong<int32_t, 256, 256, 32, 64>(int n_ranks, int n_devices, int first_rank_id,
                                                             int first_device_id);
-// Irregular: float 65x104, tile 16x32 → (4+1)×(3+1)=20 chunks, partial rows+cols
+// Irregular: float 65x104, tile 16x32 → (4+1)×(3+1)=20 chunks, partial
+// rows+cols
 template bool RunPutRingPingPong<float, 65, 104, 16, 32>(int n_ranks, int n_devices, int first_rank_id,
                                                          int first_device_id);

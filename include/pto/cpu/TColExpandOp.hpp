@@ -1,19 +1,22 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TCOLEXPANDOP_HPP
 #define TCOLEXPANDOP_HPP
 
-#include "pto/cpu/tile_offsets.hpp"
-#include "pto/cpu/parallel.hpp"
 #include <pto/common/pto_tile.hpp>
+
+#include "pto/cpu/parallel.hpp"
+#include "pto/cpu/tile_offsets.hpp"
 
 namespace pto {
 
@@ -24,7 +27,8 @@ PTO_INTERNAL void CheckColExtendTiles()
     static_assert(std::is_same_v<T, typename TileSrc0::DType> && std::is_same_v<T, typename TileSrc1::DType>,
                   "TColExpandOp: The data type of dst must be consistent with src0, src1.");
     static_assert(std::is_same_v<T, float> || std::is_same_v<T, half>,
-                  "TColExpandOp: The data type of dst, src0, src1 must be one of: `half`, `float`");
+                  "TColExpandOp: The data type of dst, src0, src1 must be one "
+                  "of: `half`, `float`");
 
     static_assert(TileDst::isRowMajor && TileSrc0::isRowMajor && TileSrc1::isRowMajor,
                   "TColExpandOp: TileType of src and dst tiles must be Row Major.");

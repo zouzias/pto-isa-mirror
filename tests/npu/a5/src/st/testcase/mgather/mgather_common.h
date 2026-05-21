@@ -12,13 +12,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define MGATHER_COMMON_H
 
 #include <cstdint>
+#include <pto/common/gather_scatter.hpp>
 
-enum class GatherOOB : uint8_t
-{
-    Undefined = 0,
-    Clamp = 1,
-    Wrap = 2,
-    Zero = 3
-};
+using ::GatherOOB = pto::GatherOOB;
 
 #endif // MGATHER_COMMON_H
