@@ -72,7 +72,7 @@ struct Event {
             }
         } else {
 #ifdef PTO_FLAG_TEST
-            __pto_wait_flag((pipe_t)srcPipe, (pipe_t)dstPipe, token);
+            pto_wait_flag((pipe_t)srcPipe, (pipe_t)dstPipe, token);
 #else
             wait_flag((pipe_t)srcPipe, (pipe_t)dstPipe, token);
 #endif
@@ -87,7 +87,7 @@ struct Event {
 #ifndef __PTO_AUTO__
         if constexpr (!isSamePipe) {
 #ifdef PTO_FLAG_TEST
-            token = __pto_set_flag((pipe_t)srcPipe, (pipe_t)dstPipe);
+            token = pto_set_flag((pipe_t)srcPipe, (pipe_t)dstPipe);
 #else
             set_flag((pipe_t)srcPipe, (pipe_t)dstPipe, token);
 #endif
