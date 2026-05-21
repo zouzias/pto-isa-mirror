@@ -518,8 +518,8 @@ DEFINE_ELEM2D_PAD(elem2d_int32_scalar_1x1_in_1x8_8size, int32_t, int32_t, int32_
 DEFINE_ROW_PAD(row_int32_unaligned_3x8_8rows, int32_t, int32_t, int32_t, 3, 8, 8, 8, None, Undefined, Last)
 DEFINE_ROW_PAD(row_int32_unaligned_9x16_16rows, int32_t, int32_t, int32_t, 9, 16, 16, 16, None, Undefined, Last)
 
-DEFINE_ELEM2D(elem2d_float_2720x8_last_256size, float, float, int32_t, 2720, 8, 256, None, Undefined, Last)
-DEFINE_ELEM2D(elem2d_float_2720x8_default_21760size, float, float, int32_t, 2720, 8, 21760, None, Undefined, Default)
+DEFINE_ELEM2D(elem2d_float_2048x8_last_256size, float, float, int32_t, 2048, 8, 256, None, Undefined, Last)
+DEFINE_ELEM2D(elem2d_float_2048x8_default_16384size, float, float, int32_t, 2048, 8, 16384, None, Undefined, Default)
 
 DEFINE_ELEM2D_DYN(elem2d_dyn_user_float_1x9_in_1x16_3x10, float, float, int32_t, 1, 16, 1, 9, 3, 10, None, Skip, Last)
 DEFINE_ELEM2D_DYN(elem2d_dyn_int32_4x8_in_4x8_64size, int32_t, int32_t, int32_t, 4, 8, 4, 8, 8, 8, None, Undefined,

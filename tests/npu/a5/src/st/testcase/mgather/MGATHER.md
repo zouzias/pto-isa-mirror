@@ -349,31 +349,30 @@ AICORE void example_row_colidx(__gm__ half* tablePtr, __gm__ int32_t* idxPtr)
 | Vector-fragment (VF) stack     | 8 KB                             | `--cce-vf-stack-size` default (`8192` bytes from `ccec -mllvm --print-all-options`)                          |
 | Per-thread SIMT stack          | 4 KB                             | `--cce-simt-stack-size` default (`4096` bytes from `ccec -mllvm --print-all-options`)                        |
 
-The `MGATHER` call chain is `runMGATHER_* → MGATHER<...> → MGather{Row,Elem}Impl → cce::async_invoke<simt_mgather_*_kernel>`. The `Impl` layer is marked `__tf__ + PTO_INLINE`, so the compiler typically inlines it into the scalar entry, giving a scalar call-depth of **1**. When the inliner keeps the impl as a separate frame, the depth grows to **2**. The SIMT-VF kernel launched by `async_invoke` runs in its own VF + per-thread context whose stacks are counted separately and do not extend the scalar chain.
+The `MGATHER` call chain is `runMGATHER_* → MGATHER<...> → MGather{Row,Elem}Impl → cce::async_invoke<simt_mgather_*_kernel>`. The `Impl` layer is marked `__tf__ + PTO_INLINE`, but on-board testing of the matching `MSCATTER` SIMT path has shown the compiler retains it as a separate scalar frame in this configuration, so the effective scalar call-depth is **2**. The SIMT-VF kernel launched by `async_invoke` runs in its own VF + per-thread context whose stacks are counted separately and do not extend the scalar chain.
 
-Adding up both cases:
+Plugging depth = 2 into the table:
 
 ```
-                                   depth = 1     depth = 2
-256 KB  physical UB                256 KB        256 KB
-−  8 KB  D-cache scratch          − 8 KB        − 8 KB
-−  2 KB  AscendC / TBE reserved   − 2 KB        − 2 KB
-− 32 KB  scalar main stack        −32 KB        −32 KB
-−        function stack frames    −32 KB        −64 KB   (32 KB × depth)
-−  8 KB  VF stack                 − 8 KB        − 8 KB
-−  4 KB  per-thread SIMT stack    − 4 KB        − 4 KB
-=                                 170 KB        138 KB
+256 KB  physical UB
+−  8 KB  D-cache scratch
+−  2 KB  AscendC / TBE reservation
+− 32 KB  scalar main stack
+− 64 KB  function stack  (2 frames × 32 KB)
+−  8 KB  VF stack
+−  4 KB  per-thread SIMT stack
+= 138 KB  user-addressable UB
 ```
 
-The **170 KB** figure is the per-launch upper bound under the current compile flags. The **138 KB** figure is what the budget collapses to if a future refactor introduces a second scalar frame; designs that must survive that refactor without re-validation should stay below it.
+A depth-1 path would lift the budget to 170 KB, but on a5 with the current flag set the inliner does not deliver it (empirically confirmed on the matching `MSCATTER` cases: tile footprints of 170 KB fall back to silent zeroed output on-board even though they pass the CPU simulator). All designs should therefore size against the **138 KB depth-2 ceiling**.
 
 When sizing a workload, account for both the **destination** tile (`R * C * sizeof(T)`, padded up to the 32-byte burst alignment) and the **index** tile (`R * C * sizeof(TIdx)`, same padding rule). `MGATHER` itself does not allocate any UB scratch — every read flows GM → register → UB.
 
-Overflowing the ceiling is **silent**. The compiler does not error, the simulator does not flag it, and small overruns may even appear to work on hardware. When the overflow reaches the stack region, however, the first spilled value from any SIMT thread corrupts a tile byte and the kernel returns all-zero (or otherwise undefined) output on-board while still passing the CPU simulator.
+Overflowing the ceiling is **silent**. The compiler does not error, the simulator does not flag it, and small overruns may even appear to work on hardware. Once the overflow reaches the stack region, however, the first spilled value from any SIMT thread corrupts a tile byte and the kernel returns all-zero (or otherwise undefined) output on-board while still passing the CPU simulator.
 
 ### Large-Workload Tiling
 
-A single `TSTORE` after the gather is bounded by the same UB window. When the destination + index tile pair approaches the 170 KB depth-1 ceiling (or 128 KB if you want headroom for a possible depth-2 future refactor), split the work across multiple iterations: invoke `MGATHER` for a slice of indices, `TSTORE` that slice to its GM region, then advance to the next slice. `MGATHER` has no cross-element ordering semantics, so slice order is unconstrained.
+A single `TSTORE` after the gather is bounded by the same UB window. When the destination + index tile pair approaches the 138 KB on-board ceiling, split the work across multiple iterations: invoke `MGATHER` for a slice of indices, `TSTORE` that slice to its GM region, then advance to the next slice. A combined footprint of **≤ 128 KB** per iteration (for example `2048 × 8` with `float` and `int32_t`) keeps a 10 KB safety margin against the ceiling. `MGATHER` has no cross-element ordering semantics, so slice order is unconstrained.
 
 ## Runtime Dispatch Requirement
 

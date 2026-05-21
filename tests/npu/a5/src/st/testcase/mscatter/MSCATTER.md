@@ -419,31 +419,30 @@ AICORE void example_last_deterministic(__gm__ half* tablePtr)
 | Vector-fragment (VF) stack     | 8 KB                             | `--cce-vf-stack-size` default (`8192` bytes from `ccec -mllvm --print-all-options`)                          |
 | Per-thread SIMT stack          | 4 KB                             | `--cce-simt-stack-size` default (`4096` bytes from `ccec -mllvm --print-all-options`)                        |
 
-The `MSCATTER` call chain is `runMSCATTER_* → MSCATTER<...> → MScatter{Row,Elem}Impl → cce::async_invoke<simt_mscatter_*_kernel>`. The `Impl` layer is marked `__tf__ + PTO_INLINE`, so the compiler typically inlines it into the scalar entry, giving a scalar call-depth of **1**. When the inliner keeps the impl as a separate frame, the depth grows to **2**. The SIMT-VF kernel launched by `async_invoke` runs in its own VF + per-thread context whose stacks are counted separately and do not extend the scalar chain.
+The `MSCATTER` call chain is `runMSCATTER_* → MSCATTER<...> → MScatter{Row,Elem}Impl → cce::async_invoke<simt_mscatter_*_kernel>`. The `Impl` layer is marked `__tf__ + PTO_INLINE`, but on-board testing has shown the compiler retains it as a separate scalar frame in this configuration, so the effective scalar call-depth is **2**. The SIMT-VF kernel launched by `async_invoke` runs in its own VF + per-thread context whose stacks are counted separately and do not extend the scalar chain.
 
-Adding up both cases:
+Plugging depth = 2 into the table:
 
 ```
-                                   depth = 1     depth = 2
-256 KB  physical UB                256 KB        256 KB
-−  8 KB  D-cache scratch          − 8 KB        − 8 KB
-−  2 KB  AscendC / TBE reserved   − 2 KB        − 2 KB
-− 32 KB  scalar main stack        −32 KB        −32 KB
-−        function stack frames    −32 KB        −64 KB   (32 KB × depth)
-−  8 KB  VF stack                 − 8 KB        − 8 KB
-−  4 KB  per-thread SIMT stack    − 4 KB        − 4 KB
-=                                 170 KB        138 KB
+256 KB  physical UB
+−  8 KB  D-cache scratch
+−  2 KB  AscendC / TBE reservation
+− 32 KB  scalar main stack
+− 64 KB  function stack  (2 frames × 32 KB)
+−  8 KB  VF stack
+−  4 KB  per-thread SIMT stack
+= 138 KB  user-addressable UB
 ```
 
-The **170 KB** figure is the per-launch upper bound under the current compile flags and is what the ST suite targets. The **138 KB** figure is what the budget collapses to if a future refactor introduces a second scalar frame; designs that must survive that refactor without re-validation should stay below it.
+A depth-1 path would lift the budget to 170 KB, but on a5 with the current flag set the inliner does not deliver it (empirically confirmed: tile footprints of 170 KB fall back to silent zeroed output on-board even though they pass the CPU simulator). All designs should therefore size against the **138 KB depth-2 ceiling**.
 
 When sizing a workload, account for both the **source** tile (`R * C * sizeof(T)`, padded up to the 32-byte burst alignment) and the **index** tile (`R * C * sizeof(TIdx)`, same padding rule). For `Conflict::Last` the destination side adds no extra UB pressure — the slot-centric scan operates directly out of the same `src` / `idx` UB tiles and stores straight to GM.
 
-Overflowing the ceiling is **silent**. The compiler does not error, the simulator does not flag it, and small overruns may even appear to work on hardware. When the overflow reaches the stack region, however, the first spilled value from any SIMT thread corrupts a tile byte and the kernel returns all-zero (or otherwise undefined) output on-board while still passing the CPU simulator.
+Overflowing the ceiling is **silent**. The compiler does not error, the simulator does not flag it, and small overruns may even appear to work on hardware. Once the overflow reaches the stack region, however, the first spilled value from any SIMT thread corrupts a tile byte and the kernel returns all-zero (or otherwise undefined) output on-board while still passing the CPU simulator.
 
 ### Largest Verified Shape
 
-The two `case_elem2d_float_2720x8_*` ST cases sit at the 170 KB ceiling. With `float` source and `int32_t` index (both 4 bytes), each tile occupies `2720 × 8 × 4 = 87 040 B = 85 KB` (already 32-byte burst aligned), and the combined footprint is `85 + 85 = 170 KB` — exactly the depth-1 user-UB budget derived above. Going beyond this shape collides with the stack region and reproduces the silent on-board failure described in the previous paragraph (for example, the rejected `3072 × 8` ≈ 192 KB attempt). Larger source tensors must be processed in tiled iterations whose per-iteration `src + idx` footprint stays under 170 KB; halve it to 128 KB (e.g. `2048 × 8`) to retain headroom against a possible depth-2 future refactor.
+The two `case_elem2d_float_2048x8_*` ST cases sit just under the 138 KB on-board ceiling. With `float` source and `int32_t` index (both 4 bytes), each tile occupies `2048 × 8 × 4 = 65 536 B = 64 KB` (already 32-byte burst aligned), and the combined footprint is `64 + 64 = 128 KB` — leaving 10 KB of headroom against the depth-2 budget derived above. Going beyond this shape (for example, the rejected `2720 × 8` = 170 KB and `3072 × 8` = 192 KB attempts) collides with the stack region and reproduces the silent on-board failure described in the previous paragraph. Larger source tensors must be processed in tiled iterations whose per-iteration `src + idx` footprint stays under 128 KB.
 
 ### Cache-Coherence Flush
 
@@ -549,8 +548,8 @@ In dependency order (cheapest first): Note - We will try to resolve this issue a
 | case_elem2d_float_8x32_random_256size       | float | 8×32     | 256   | None | Undefined | Last    | random |
 | case_elem2d_int32_8x16_random_256size       | int32 | 8×16     | 256   | None | Undefined | Last    | random |
 | case_elem2d_half_4x32_random_256size        | half  | 4×32     | 256   | None | Undefined | Last    | random |
-| case_elem2d_float_2720x8_last_256size       | float | 2720×8   | 256   | None | Undefined | Last    | random |
-| case_elem2d_float_2720x8_default_21760size  | float | 2720×8   | 21760 | None | Undefined | Default | seq    |
+| case_elem2d_float_2048x8_last_256size       | float | 2048×8   | 256   | None | Undefined | Last    | random |
+| case_elem2d_float_2048x8_default_16384size  | float | 2048×8   | 16384 | None | Undefined | Default | seq    |
 
 ### Unaligned / Odd-Dimension Tiles
 
