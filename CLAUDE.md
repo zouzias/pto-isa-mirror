@@ -37,7 +37,7 @@ Always read the relevant file(s) before generating or modifying code:
 - `docs_for_ai/a3_a5_differences.md` — for any cross-arch question (`TileLeft` BLayout split, `BiasTile` divergence, `TMATMUL_MX` / `MGATHER` / `MSCATTER` / `*_Custom`/`Hp` A5-only, etc.).
 - `docs_for_ai/assumptions_to_verify.md` — open questions; check before assuming.
 - `docs_for_ai/compile_error_logbook.md` — structured log of compiler errors with likely causes and fix patterns.
-- `docs_for_ai/external_context/pr_852_notes.md` — PR-852 notes (NOT merged into this branch).
+- `docs_for_ai/external_context/pr_852_notes.md` — historical PR-852 notes; useful for why several auto-mode review rules exist.
 
 When updating these files: include exact file paths for source-grounded claims; keep `Known` / `Inferred` / `Assumption` / `Unknown` labels; remove duplicated or stale notes; do not summarize the whole repo.
 
@@ -54,7 +54,60 @@ If source code and PR/MR discussion conflict, trust the source unless the user s
 
 ## PR-852 handling
 
-PR-852 is **not merged** into this branch (verified at the source lines it modifies — see `external_context/pr_852_notes.md` "Branch state"). Treat its recipes as supporting context and forward-looking guidance. The current source still has the bugs. Cite `external_context/pr_852_notes.md`; do not claim a PR-852 fix is in tree.
+PR-852 has been merged into the current branch. Treat `docs_for_ai/external_context/pr_852_notes.md` as historical context explaining why certain auto-mode rules exist, not as evidence that the current source is still broken.
+
+The PR-852 patterns remain important review rules:
+- do pointer arithmetic after `__cce_get_tile_ptr(...)`, not before;
+- do not use `PtoSetWaitFlag` inside `__tf__` bodies in auto mode;
+- migrate raw-CCE helpers to `__tf__` with `TileDType __in__` / `__out__`;
+- avoid `Tile::data()` pointer casts in auto mode;
+- use the fixed `TRESHAPE` / `ConvTile` behavior as current source behavior.
+
+Before claiming a PR-852-related bug still exists, inspect the current source. If the fixed pattern is present, mark the issue as `Resolved` / `Known fixed`. If the same symptom appears again, treat it as a regression or a newly introduced instance of the old anti-pattern.
+
+## Cube-layout warning
+
+For GEMM/cube kernels, always reason in terms of 16x16 fractal blocks in L0A/L0B/L0C. A larger matrix tile is a grid of 16x16 fractals. Do not treat `TileLeft`, `TileRight`, or `TileAcc` as flat row-major matrices.
+
+## Memory-budget-first kernel planning
+
+Before generating any nontrivial kernel, especially GEMM, FA, MoE, TopK, reduction, or fused kernels, produce a memory-budget and operation-granularity plan before writing code.
+
+Required pre-code output:
+
+```text
+Memory budgets:
+- L1 custom budget:
+- L0A custom budget:
+- L0B custom budget:
+- L0C custom budget:
+- UB custom budget:
+
+Live tiles by memory level:
+- L1:
+- L0A:
+- L0B:
+- L0C:
+- UB:
+
+Smallest hardware operation:
+- cube operation shape, if any:
+- vector operation shape, if any:
+
+Loop tiling plan:
+- tile-and-loop dimensions:
+- inferred tile sizes:
+- compile-time unroll/peel strategy, if any:
+- tail handling only where needed:
+
+Test-shape plan:
+- tiny debug shape:
+- medium tiling shape:
+- model-inspired realistic shape:
+- tail shape, if supported:
+```
+
+Use `docs_for_ai/pto_auto_mode_hw_optimization_guide.md` as the detailed source. Do not write the kernel first and reason about memory later.
 
 ## Workflow before generating or modifying code
 

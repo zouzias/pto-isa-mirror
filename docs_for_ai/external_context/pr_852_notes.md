@@ -1,16 +1,35 @@
-# PR 852 Notes — A3 ST testcase fixes for PTO Auto Mode
+# PR 852 Notes — Historical A3 ST testcase fixes for PTO Auto Mode
 
 URL: https://gitcode.com/cann/pto-isa/pull/852
 
 The PR page is JS-rendered and the gitcode API requires a `private-token`, so I
 could not retrieve it via tools. **All content here comes from the user-pasted
-PR description and diff.** Treat everything below as supporting context, not as
-truth grounded in this branch.
+PR description and diff.** Treat everything below as supporting context. Current
+source should be inspected before claiming any specific PR-852-era bug still
+exists.
 
-## Branch state
+## Current status
 
-**PR 852 is NOT merged into this branch.** Verified by reading the current
-source at the lines the diff modifies:
+PR-852 is merged into the current branch.
+
+This file is retained as historical/debugging context. Older unmerged-status
+phrasing describes the old source state before PR-852 merged and must not be
+treated as current.
+
+Current source spot-checks show the merged shapes are present:
+
+- [include/pto/npu/a2a3/TQuant.hpp](../../include/pto/npu/a2a3/TQuant.hpp) has `TQuantBuffersOverlap` guarded by `#ifndef __PTO_AUTO__` and `TQuantCvtS32ToFp16` as a `__tf__` helper taking `TileDType __in__` / `__out__`.
+- [include/pto/npu/a2a3/TReshape.hpp](../../include/pto/npu/a2a3/TReshape.hpp) keeps the `is_tile_data_v` and `Loc == NewLoc` assertions inside `#ifndef __PTO_AUTO__`.
+- [tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp](../../tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp) passes `elementSize` to `ConvTile<...>` and calls the `TSTORE_MAT2GM_CONVTILE(..., MatTile.data())` helper shape.
+- [include/pto/npu/a2a3/TTrans.hpp](../../include/pto/npu/a2a3/TTrans.hpp) uses separate `TileDataDst`, `TileDataSrc`, and `TileDataTmp` template parameters in the conv-tile paths.
+
+If the same symptom appears again, treat it as a regression or a newly introduced
+instance of the old anti-pattern.
+
+## Historical branch state before merge
+
+The notes below were written before PR-852 merged. They describe the old source
+state and should not be treated as current:
 
 - [include/pto/npu/a2a3/TCI.hpp:59](../../include/pto/npu/a2a3/TCI.hpp#L59) still has the buggy `__cce_get_tile_ptr(tmp + 128)` form.
 - [include/pto/npu/a2a3/TQuant.hpp:29-34](../../include/pto/npu/a2a3/TQuant.hpp#L29-L34) still has `TQuantBuffersOverlap` doing `reinterpret_cast<uintptr_t>(a.data())` (pre-fix form).
@@ -19,7 +38,7 @@ source at the lines the diff modifies:
 - [tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp:20](../../tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp#L20) still has the old helper signature `(GlobalData &dst, TileData &src)`.
 - [tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp:63](../../tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp#L63) still passes `bufferSizeA` (= byte size) to `ConvTile<...>`.
 
-So the bad-pattern entries in [auto_mode_bad_patterns.md](../auto_mode_bad_patterns.md) and the other `docs_for_ai/` files describe the **current** (pre-PR) source state. The PR is a planned fix.
+Those bullets are preserved only as the historical "before" state.
 
 ## Scope
 
@@ -113,7 +132,7 @@ Three coupled changes:
 - **Why** — Per PR description: *"`TRESHAPE` cannot work with `ConvTile`. There are asserts inside `TRESHAPE` that stops this. Fix: Added macro guards to only run the asserts for manual mode."* So in auto mode `TRESHAPE_IMPL` permits `ConvTile` aliasing, while in manual mode it still enforces `Tile`-only.
 - **Why for auto mode** — `ttrans_conv` test (and likely others) needs to alias a `ConvTile` view onto a base tile in auto mode. The is_tile_data_v assertions reject `ConvTile`, so the test fails to compile; auto mode handles aliasing differently anyway (it is a hint, not a runtime instruction — see [Kernel rules §2.4](../../docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md)).
 - **Arch** — A3.
-- **Reconciliation** — Refines [auto_mode_bad_patterns.md §1.1, §1.3](../auto_mode_bad_patterns.md): the recommendation "use `TRESHAPE`/`TSUBVIEW` for aliasing" must be qualified — *for `ConvTile`, the current TReshape rejects in manual mode but PR-852 will allow it in auto mode*. Also new: in the post-PR world, `TRESHAPE` with mismatched `TileType` between dst and src is silently allowed in auto mode (no `Loc == NewLoc` check). Worth flagging as a new soft gotcha.
+- **Reconciliation** — Refines [auto_mode_bad_patterns.md §1.1, §1.3](../auto_mode_bad_patterns.md): the recommendation "use `TRESHAPE`/`TSUBVIEW` for aliasing" must be qualified — after the merged PR, `ConvTile` aliasing is allowed in auto mode while manual mode keeps stricter assertions. Also new: in the current merged behavior, `TRESHAPE` with mismatched `TileType` between dst and src is silently allowed in auto mode (no `Loc == NewLoc` check). Worth flagging as a soft gotcha.
 - **Confidence** — High.
 
 ### L6. [include/pto/npu/a2a3/TRowReduceIdxOps.hpp](../../include/pto/npu/a2a3/TRowReduceIdxOps.hpp) — same `PtoSetWaitFlag` wraps as L2
@@ -173,7 +192,7 @@ Two coupled changes:
   3. Wrap raw `set_flag`/`wait_flag` blocks with `#ifndef __PTO_AUTO__`.
 - **Why for auto mode** — In manual mode the two `TASSIGN(..., same_addr)` calls alias the tiles. In auto mode `TASSIGN` is a no-op and the alias is lost — the two tiles get independent addresses and the kernel computes wrong results. The fix is to add `TRESHAPE(b, a)` so the auto-mode compiler binds `b` to the same address as `a`. Manual mode also accepts `TRESHAPE` (it executes the address binding); both modes now do the right thing.
 - **Arch** — A3.
-- **Reconciliation** — **Confirms and refines** [auto_mode_bad_patterns.md §1.1](../auto_mode_bad_patterns.md). The bad-pattern entry warned against `TASSIGN(a, X); TASSIGN(b, X);` overlapping aliasing without a fix. PR-852 gives the canonical fix shape: keep both `TASSIGN`s (manual-mode aliasing) AND add `TRESHAPE(b, a)` immediately after (auto-mode aliasing hint). This is the **dual-mode aliasing recipe**. Worth promoting to a positive pattern in [known_good_kernel_examples.md](../known_good_kernel_examples.md) once merged.
+- **Reconciliation** — **Confirms and refines** [auto_mode_bad_patterns.md §1.1](../auto_mode_bad_patterns.md). The bad-pattern entry warned against `TASSIGN(a, X); TASSIGN(b, X);` overlapping aliasing without a fix. PR-852 gives the canonical fix shape: keep both `TASSIGN`s (manual-mode aliasing) AND add `TRESHAPE(b, a)` immediately after (auto-mode aliasing hint). This is the **dual-mode aliasing recipe** and is now current-source guidance for A3 paths that match this pattern.
 - **Confidence** — High.
 
 ### T4. [tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp](../../tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp)
@@ -220,19 +239,19 @@ The user-pasted text was truncated mid-`trowargmin` and may include additional t
 
 ## Reconciliation summary against existing `docs_for_ai/`
 
-| existing entry | PR-852 effect | action when PR merges |
+| existing entry | PR-852 effect | current-doc action |
 |---|---|---|
 | [auto_mode_bad_patterns.md §1.1](../auto_mode_bad_patterns.md) (TASSIGN aliasing) | Confirmed; canonical dual-mode fix shown | Add positive recipe: keep both `TASSIGN(a, X); TASSIGN(b, X);` and **also** add `TRESHAPE(b, a);` |
-| [auto_mode_bad_patterns.md §1.3](../auto_mode_bad_patterns.md) (`reinterpret_cast<uintptr_t>(tile.data())`) | Confirmed | Mark resolved-by-PR-852 in `TQuant.hpp` |
+| [auto_mode_bad_patterns.md §1.3](../auto_mode_bad_patterns.md) (`reinterpret_cast<uintptr_t>(tile.data())`) | Confirmed | Mark fixed in current source where PR-852 touched `TQuant.hpp`; keep as a review rule |
 | [auto_mode_bad_patterns.md §1.5](../auto_mode_bad_patterns.md) (TLOAD on dst) | Possibly contradicted by tcolargmax — **Unknown** | Investigate `TCOLARGMAX` / `TColReduceIdx32` semantics before generalizing |
-| [auto_mode_bad_patterns.md §2.1](../auto_mode_bad_patterns.md) (kernel-level set_flag/wait_flag) | Confirmed | Mark resolved-by-PR-852 for the listed test kernels |
+| [auto_mode_bad_patterns.md §2.1](../auto_mode_bad_patterns.md) (kernel-level set_flag/wait_flag) | Confirmed | Mark fixed in the listed PR-852 test kernels; keep as a review rule |
 | [auto_mode_bad_patterns.md §2.1 → §2.7 (NEW)](../auto_mode_bad_patterns.md) | Refined: `PtoSetWaitFlag` is wrong **inside** `__tf__` in auto mode | Add new entry |
 | [auto_mode_bad_patterns.md §3.2](../auto_mode_bad_patterns.md) (`__cce_get_tile_ptr(tile.data())`) | Refined with new sub-pattern: `__cce_get_tile_ptr(x + N)` is wrong; must be `__cce_get_tile_ptr(x) + N` | Add as §3.2.1 |
 | [auto_mode_bad_patterns.md §3.4](../auto_mode_bad_patterns.md) (`_IMPL` from kernel) | NOT addressed by PR — `tconcatidx_kernel.cpp` still calls `TCONCAT_IMPL` | Keep entry |
 | [auto_mode_bad_patterns.md §5.x (NEW)](../auto_mode_bad_patterns.md) | Two new template hazards: (a) reusing one TileData template across dst/src/tmp of different `TileType`; (b) `ConvTile`'s `BufferSize_` template param accepts elements, not bytes | Add as §5.5 and §5.6 |
 | [qualifier_reference.md §3.1, §3.2, §3.3](../qualifier_reference.md) (`__tf__`, `__in__`/`__out__`, `__cce_get_tile_ptr`) | Confirmed by `TQuantCvtS32ToFp16` and `TSTORE_MAT2GM_CONVTILE` migrations | Cite PR as the canonical "before/after" example |
-| [known_good_kernel_examples.md §D2](../known_good_kernel_examples.md) (TQuant library) | Refined — the dispatch pattern around the new `__tf__` is the recommended shape | Update once merged |
-| [known_good_kernel_examples.md §D3](../known_good_kernel_examples.md) (tquant ST kernel) | Should be re-verified post-merge — the helper's `__tf__` form may actually make tquant produce correct output in auto mode | Re-verify |
+| [known_good_kernel_examples.md §D2](../known_good_kernel_examples.md) (TQuant library) | Refined — the dispatch pattern around the new `__tf__` is the recommended shape | Current source can cite the merged pattern |
+| [known_good_kernel_examples.md §D3](../known_good_kernel_examples.md) (tquant ST kernel) | Should be re-verified after merge — the helper's `__tf__` form may make tquant produce correct output in auto mode | Re-verify with runtime output before promoting |
 
 ## New patterns introduced by PR-852 (worth adopting)
 

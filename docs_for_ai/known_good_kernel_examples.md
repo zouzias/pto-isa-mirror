@@ -118,9 +118,9 @@ harness (Known: enumerated in `ALL_TESTCASES` of
 6. **Do not copy** — Manual-mode side of the diff (the `TASSIGN(...)` calls and `Event<...> e0; e0 = TLOAD(...)` chains).
 7. **Confidence** — High.
 
-### A10. Dual-mode aliasing recipe — `TASSIGN(...) + TRESHAPE(other, base)` (PR-852, NOT yet merged)
+### A10. Dual-mode aliasing recipe — `TASSIGN(...) + TRESHAPE(other, base)` (merged PR-852)
 
-1. **File** — [tests/npu/a2a3/src/st/testcase/tcvt/tcvt_kernel.cpp](../tests/npu/a2a3/src/st/testcase/tcvt/tcvt_kernel.cpp) **after PR-852 lands**. The current source still has the bug pattern; see [external_context/pr_852_notes.md §T3](external_context/pr_852_notes.md) for the full diff.
+1. **File** — [tests/npu/a2a3/src/st/testcase/tcvt/tcvt_kernel.cpp](../tests/npu/a2a3/src/st/testcase/tcvt/tcvt_kernel.cpp) in the current branch. See [external_context/pr_852_notes.md §T3](external_context/pr_852_notes.md) for the historical diff context.
 2. **Why** — Canonical answer to [auto_mode_bad_patterns.md §1.1](auto_mode_bad_patterns.md): how to write a kernel that aliases two tiles correctly in **both** modes. Manual mode honors the `TASSIGN(a, X); TASSIGN(b, X);` pair; auto mode no-ops both `TASSIGN`s but honors the explicit `TRESHAPE(b, a)` hint.
 3. **Pattern** —
    ```cpp
@@ -132,10 +132,10 @@ harness (Known: enumerated in `ALL_TESTCASES` of
    TRESHAPE(dstTile, dstTileFull);                  // aliases in auto mode
    ```
    Place the `TRESHAPE` calls **immediately after** the `TASSIGN` block (per kernel rules §2.4: a tile cannot be the destination of multiple `TRESHAPE`/`TSUBVIEW`, so do it once at declaration).
-4. **Auto-mode compatibility** — Yes (post-merge). The same shape lands in five `runTCVT*` kernels in PR-852 across `runTCVT`, `runTCVT_fp16_to_s4`, `runTCVT_s4_to_fp16`, `runTCVTNonSatTorch`.
+4. **Auto-mode compatibility** — Yes as a current-source recipe. The same shape is present in five `runTCVT*` kernels from merged PR-852 across `runTCVT`, `runTCVT_fp16_to_s4`, `runTCVT_s4_to_fp16`, `runTCVTNonSatTorch`.
 5. **Copy** — The `TASSIGN(...) + TRESHAPE(...)` pair pattern; the order (TASSIGN block first, then TRESHAPE block); use for any layout-swap aliasing (e.g., `srcS4Tile` aliased onto `srcBytesTile` for in-place type re-views).
 6. **Do not copy** — Do not omit either side. Auto-only kernels can drop the `TASSIGN`s; cross-mode kernels need both. Do not move `TRESHAPE` into a loop — see kernel rules §2.4.
-7. **Confidence** — High (the recipe is consistent with the existing `TQuant.hpp` library pattern at lines 108-114). Low for "this is in the current branch" (it is not; PR-852 not merged).
+7. **Confidence** — High (the recipe is current-source behavior and is consistent with the existing `TQuant.hpp` library pattern).
 
 ### A11. add_tile_array — first confirmed-built auto-mode kernel with an in-kernel serial loop (A3)
 
@@ -653,7 +653,7 @@ harness (Known: enumerated in `ALL_TESTCASES` of
 | Softmax | A19 FA softmax macro (auto, inline) | B1 row-softmax, B3 fa_softmax math | — |
 | Attention | A19 flash_atten (auto, cube+vec SPMD) | B3 fa_softmax, B4 cpu FA | C2 common FA, C3 A5 FA, C4 tfa ST |
 | Quant / Dequant | D2 TQuant library auto branch | — | D3 tquant ST aliasing trick, D4 tdequant TLOAD-on-dst |
-| Aliasing recipes | A10 dual-mode `TASSIGN`+`TRESHAPE` (PR-852, not yet merged) | — | — |
+| Aliasing recipes | A10 dual-mode `TASSIGN`+`TRESHAPE` (merged PR-852) | — | — |
 
 ---
 
@@ -663,9 +663,9 @@ harness (Known: enumerated in `ALL_TESTCASES` of
 - **Direct `TPUSH` / `TPOP` via the old `TPipe` abstraction are not safe in auto mode** ([tests/npu/a2a3/src/st/testcase/CMakeLists.txt:213-220](../tests/npu/a2a3/src/st/testcase/CMakeLists.txt#L213-L220), [docs/auto_mode/Library_Developer_Rules_And_Limitations.md §4](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md)). However, `TMPipe<FlagId, FIFOType::GM_FIFO, ...>` (from `<pto/npu/a2a3/custom/TSync_Custom.hpp>`) uses a different internal mechanism and appears auto-mode-safe — confirmed via hardware run in [§A19 flash_atten](known_good_kernel_examples.md#a19-flash_atten). Do not use the raw `TPipe` form; use `TMPipe` with the setter API (`prod.setTileId`, `prod.setAllocateStatus`, etc.).
 - **Double buffering is not supported for kernel devs today** ([docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md §1.4](../docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md)). Do not transplant ping-pong buffer logic from C1/C2/C3.
 - **`set_flag` / `wait_flag` / `Event<>` from manual kernels** must be either dropped or wrapped in `#ifndef __PTO_AUTO__` (canonical guard pattern: A4, A6, A7, D3).
-- **Aliasing**: in auto mode, `TASSIGN(a, addr)` followed by `TASSIGN(b, addr)` does NOT alias `a` and `b`. Use `TRESHAPE(b, a)` (same base) or `TSUBVIEW(b, a, row, col)` (offset). Examples: A4 (`TRESHAPE`), D2 (auto branch), A10 (dual-mode recipe from PR-852, not yet merged).
+- **Aliasing**: in auto mode, `TASSIGN(a, addr)` followed by `TASSIGN(b, addr)` does NOT alias `a` and `b`. Use `TRESHAPE(b, a)` (same base) or `TSUBVIEW(b, a, row, col)` (offset). Examples: A4 (`TRESHAPE`), D2 (auto branch), A10 (dual-mode recipe from merged PR-852).
 - **Inside `__tf__` bodies, sync rules invert** — use raw `set_flag`/`wait_flag`/`pipe_barrier` (or guard `PtoSetWaitFlag` with `#ifndef __PTO_AUTO__` and emit raw flags in the `#else`). Auto-sync does NOT walk into tile functions, so `PtoSetWaitFlag` becoming a no-op silently drops sync. See [auto_mode_bad_patterns.md §2.7](auto_mode_bad_patterns.md) and [external_context/pr_852_notes.md](external_context/pr_852_notes.md).
-- **Several existing-source bug patterns are scheduled for fix in PR-852** (not yet merged). See [external_context/pr_852_notes.md](external_context/pr_852_notes.md) for the per-file mapping. Until then, the current source still has the bugs and the entries in [auto_mode_bad_patterns.md](auto_mode_bad_patterns.md) still apply.
+- **Several historical bug patterns were fixed in merged PR-852.** See [external_context/pr_852_notes.md](external_context/pr_852_notes.md) for the per-file mapping and rationale. Keep the entries in [auto_mode_bad_patterns.md](auto_mode_bad_patterns.md) as review rules; inspect current source before claiming a PR-852-era bug still exists.
 
 ---
 

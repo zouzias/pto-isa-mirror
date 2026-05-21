@@ -135,16 +135,16 @@ Always reach for these when triaging a compile error:
 - [known_good_kernel_examples.md](known_good_kernel_examples.md) — clean references to copy syntax from.
 - [repo_kernel_map.md](repo_kernel_map.md) — which kernels exist and which build mode they target.
 - [assumptions_to_verify.md](assumptions_to_verify.md) — open questions; check whether a new error is already on the watchlist.
-- [external_context/pr_852_notes.md](external_context/pr_852_notes.md) — A3 ST testcase fixes (NOT yet merged into this branch).
+- [external_context/pr_852_notes.md](external_context/pr_852_notes.md) — historical A3 ST testcase fixes from merged PR-852.
 
 ---
 
 ## 7. Caveats
 
-- **PR-852 is not merged.** The current source still has the bugs the PR
-  fixes. Entries E1–E5 below describe the **current** broken state; their
-  "Fix pattern" describes the PR-852 recipe but does not imply the fix is
-  in tree. ([external_context/pr_852_notes.md "Branch state"](external_context/pr_852_notes.md))
+- **PR-852 is merged.** Entries related to PR-852 are retained as historical
+  debugging patterns and review rules. If the same symptom appears again,
+  treat it as either a regression or a newly introduced instance of the old
+  anti-pattern. ([external_context/pr_852_notes.md "Current status"](external_context/pr_852_notes.md))
 - **Inclusion in `ALL_TESTCASES` is build-coverage evidence, not correctness
   evidence.** Several seed entries below cite testcases that are in the
   build list but still carry the offending pattern. The mere fact that they
@@ -194,7 +194,7 @@ occurrence has somewhere to land.
   ```
   Use the extracted pointer (`dstPtr` style) for downstream `vadds` /
   `vmuls` / `vconv_*` calls instead of feeding the `TileDType` value.
-- **Status** — `Known` anti-pattern; resolved-by-PR-852 (not yet merged).
+- **Status** — Historical `Known` anti-pattern; fixed in the current branch by merged PR-852. Keep as a review rule to avoid reintroducing the bug.
 - **Confidence** — High.
 - **Related docs** —
   [auto_mode_bad_patterns.md §3.2.1](auto_mode_bad_patterns.md),
@@ -230,7 +230,7 @@ occurrence has somewhere to land.
 - **Affected platform** — A3. A5 spot-check found no `PtoSetWaitFlag` inside
   tile-function bodies in the corresponding A5 headers; full audit
   pending. ([a3_a5_differences.md §11](a3_a5_differences.md))
-- **Source evidence** — pre-PR-852 sites:
+- **Source evidence** — historical sites before the PR-852 fix:
   [include/pto/npu/a2a3/TConcat.hpp:124,137,153,157,158](../include/pto/npu/a2a3/TConcat.hpp#L124),
   [include/pto/npu/a2a3/TFillPad.hpp:56](../include/pto/npu/a2a3/TFillPad.hpp#L56),
   [include/pto/npu/a2a3/TRowReduceIdxOps.hpp](../include/pto/npu/a2a3/TRowReduceIdxOps.hpp)
@@ -248,7 +248,7 @@ occurrence has somewhere to land.
   ```
   Manual mode keeps the `PtoSetWaitFlag` shape (it expands to real
   `set_flag`/`wait_flag`); auto mode emits the raw CCE intrinsics directly.
-- **Status** — `Known` anti-pattern; resolved-by-PR-852 (not yet merged).
+- **Status** — Historical `Known` anti-pattern; fixed in the current branch by merged PR-852. Keep as a review rule to avoid reintroducing the bug.
 - **Confidence** — High for the rule; the runtime symptom shape is `Inferred`.
 - **Related docs** —
   [auto_mode_bad_patterns.md §2.7, §2.1 cross-cutting note](auto_mode_bad_patterns.md),
@@ -291,8 +291,7 @@ occurrence has somewhere to land.
                             Layout::NC1HWC0,
                             pto::ConvTileShape<N, C1, H, W, C0>>;
   ```
-- **Status** — `Known` anti-pattern; resolved-by-PR-852 in `texpands_mat`
-  only. Other call sites — `Unknown`.
+- **Status** — Historical `Known` anti-pattern; fixed in `texpands_mat` by merged PR-852. Other call sites — `Unknown`.
 - **Confidence** — High for the rule; element-count semantics of
   `tile_size(N)` is `Inferred` (see
   [assumptions_to_verify.md §1.1, §4.1](assumptions_to_verify.md)).
@@ -307,7 +306,7 @@ occurrence has somewhere to land.
 
 ---
 
-### E4. `TRESHAPE` static_assert rejects `ConvTile` (pre-PR-852)
+### E4. `TRESHAPE` static_assert rejects `ConvTile` (historical before PR-852)
 
 - **Class** — `aliasing`, `tile-shape`, `template`.
 - **Likely symptom** — Compile-time `static_assert` failure of the form
@@ -320,7 +319,7 @@ occurrence has somewhere to land.
   `is_conv_tile_v`). The asserts sit **outside** the `#ifndef __PTO_AUTO__`
   guard, so they fire even in auto mode where aliasing is a hint, not a
   runtime instruction.
-- **Affected platform** — A3 (current source state, pre-PR-852). A5
+- **Affected platform** — A3 historical pre-merge source. Current A3 source has the merged PR-852 guard shape. A5
   [TReshape.hpp](../include/pto/npu/a5/TReshape.hpp) status — `Unknown`,
   not yet inspected end-to-end. ([a3_a5_differences.md §11](a3_a5_differences.md))
 - **Source evidence** —
@@ -329,19 +328,17 @@ occurrence has somewhere to land.
   the `#ifndef __PTO_AUTO__` block.
   `is_tile_data_v` vs `is_conv_tile_v` traits at
   [pto_tile.hpp:1738, 1758-1762](../include/pto/common/pto_tile.hpp#L1738).
-- **Fix pattern (manual workaround until PR-852 merges)** — Avoid
-  `TRESHAPE` on `ConvTile` in this branch. Restructure the kernel so the
-  alias is between two `Tile` views, or wait for the PR. Post-merge, the
-  call becomes valid in auto mode (and remains rejected in manual mode).
-- **Status** — `Known` anti-pattern in current source; resolved-by-PR-852
-  (not yet merged).
+- **Fix pattern** — In current A3 auto mode, the merged PR-852 guard shape
+  allows the fixed `ConvTile` aliasing cases. For manual mode or other archs,
+  inspect the current source before relying on `TRESHAPE` with `ConvTile`.
+- **Status** — Historical `Known` anti-pattern; fixed in the current A3 branch by merged PR-852. Keep as a review rule to avoid reintroducing the bug.
 - **Confidence** — High.
 - **Related docs** —
   [auto_mode_bad_patterns.md §1.1](auto_mode_bad_patterns.md),
   [tile_type_reference.md §10.1](tile_type_reference.md),
   [external_context/pr_852_notes.md §L5](external_context/pr_852_notes.md),
-  [assumptions_to_verify.md §3.5](assumptions_to_verify.md) (post-merge
-  soft gotcha: `Loc == NewLoc` check is also dropped in auto mode).
+  [assumptions_to_verify.md §3.5](assumptions_to_verify.md) (current merged
+  soft gotcha: `Loc == NewLoc` check is dropped in A3 auto mode).
 - **Notes for future verification** — capture the exact `static_assert`
   message text the first time this is hit; confirm A5 `TReshape.hpp`
   carries the same shape.
@@ -372,7 +369,7 @@ occurrence has somewhere to land.
   - Pre-auto pattern preserved under guard:
     [include/pto/npu/a2a3/TQuant.hpp:108-114](../include/pto/npu/a2a3/TQuant.hpp#L108-L114)
     (`#ifndef __PTO_AUTO__` branch using `reinterpret_cast<uintptr_t>(...)`).
-  - Pre-PR-852 broken site:
+  - Historical broken site:
     [include/pto/npu/a2a3/TQuant.hpp:29-34](../include/pto/npu/a2a3/TQuant.hpp#L29-L34)
     (`TQuantBuffersOverlap` does the cast outside any guard).
   - Kernel-side violations (in `ALL_TESTCASES`, status under auto mode
@@ -392,7 +389,7 @@ occurrence has somewhere to land.
   - Library: refactor the helper to be `__tf__`, take parameters typed
     `typename TileData::TileDType` **by value** with `__in__`/`__out__`,
     and use `__cce_get_tile_ptr(arg)` directly inside the body. Caller
-    passes `tile.data()` at the kernel/library boundary. PR-852's
+    passes `tile.data()` at the kernel/library boundary. The merged PR-852
     `TQuantCvtS32ToFp16` and `TSTORE_MAT2GM_CONVTILE` migrations are the
     canonical examples
     ([external_context/pr_852_notes.md §L4b, §T4a](external_context/pr_852_notes.md)).

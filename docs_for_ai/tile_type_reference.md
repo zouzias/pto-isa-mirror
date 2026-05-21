@@ -265,6 +265,41 @@ static constexpr int fractalMxSize   = 32;     // MX scale fractal block (bytes)
 
 Inner box (fractal) shape is computed by `getInnerRow()`/`getInnerCol()` at [pto_tile.hpp:1389-1413](../include/pto/common/pto_tile.hpp#L1389-L1413). For `SFractalSize = fractalCSize` it is fixed `16x16`; for `fractalMxSize` it is fixed `16x2`; otherwise it depends on `BLayout`/`SLayout`/`alignedSize/sizeof(DType)`.
 
+### 4.1 Cube fractal layout: 16x16 blocks
+
+For cube-side GEMM, A, B, and C/Acc tiles are not simple flat matrices. The cube
+engine expects L0A, L0B, and L0C data to be arranged as 16x16 fractal blocks.
+
+Conceptually, a larger logical matrix tile is represented as a grid of 16x16
+blocks:
+
+```text
+[16x16][16x16][16x16]...
+[16x16][16x16][16x16]...
+[16x16][16x16][16x16]...
+```
+
+For the common FP16 x FP16 -> FP32 GEMM case:
+
+- A/B fractal block: `16 x 16 x sizeof(half) = 512 bytes`
+- C/L0C accumulator fractal block: `16 x 16 x sizeof(float) = 1024 bytes`
+
+This matches the PTO constants:
+
+- `TileConfig::fractalABSize = 512`
+- `TileConfig::fractalCSize = 1024`
+
+In PTO tile types, this is represented through:
+
+- `BLayout` — outer/base ordering of the fractal blocks
+- `SLayout` — inner boxed/fractal layout
+- `SFractalSize` — byte size of each fractal block
+
+Do not reason about `TileLeft`, `TileRight`, or `TileAcc` as ordinary flat
+row-major matrices after `TMOV`. `TMOV` is the bridge that moves/formats L1
+matrix tiles into cube-friendly L0A/L0B layout, and `TSTORE` handles the
+accumulator/output side.
+
 The `Tile` template asserts at compile time (Known: [pto_tile.hpp:1505-1524](../include/pto/common/pto_tile.hpp#L1505-L1524)):
 1. `Cols % InnerCols == 0`.
 2. For non-Vec, non-MX, non-`Rows==1` tiles: `Rows % InnerRows == 0`.
@@ -351,7 +386,7 @@ What `data()` returns, by mode (Known + Inferred):
 Implications (drawn together in [auto_mode_bad_patterns.md §3.3, §1.3, §3.2.1, §3.2](auto_mode_bad_patterns.md) and [qualifier_reference.md §3.3](qualifier_reference.md)):
 - `reinterpret_cast<uintptr_t>(tile.data())` is meaningless in auto mode.
 - `__cce_get_tile_ptr(tile.data())` from kernel code is wrong: kernel-level is forbidden by Kernel rules §3.2.
-- Inside a `__tf__` body, the canonical shape is to receive `TileDType` **by value** (not `Tile&`) and call `__cce_get_tile_ptr(param)` directly — see PR-852's `TQuantCvtS32ToFp16` migration ([external_context/pr_852_notes.md §L4b](external_context/pr_852_notes.md), not yet merged).
+- Inside a `__tf__` body, the canonical shape is to receive `TileDType` **by value** (not `Tile&`) and call `__cce_get_tile_ptr(param)` directly — see the merged PR-852 `TQuantCvtS32ToFp16` migration ([external_context/pr_852_notes.md §L4b](external_context/pr_852_notes.md)).
 - `__cce_get_tile_ptr(tmp + N)` is wrong because the `+ N` applies arithmetic to a vector value before extraction; use `__cce_get_tile_ptr(tmp) + N` (PR-852 §L1).
 
 `GlobalTensor::data()` is **not** the same — it returns a raw `__gm__ T *` pointer in all modes ([pto_tile.hpp:549](../include/pto/common/pto_tile.hpp#L549)) and is safe to call from kernel code (e.g., `out = dstGlobal.data();`).
@@ -364,14 +399,14 @@ Kernel-template recipes (elementwise vec, cube GEMM, A5 MX GEMM, ND/DN row reduc
 
 ### 8.5 ConvTile (A3) — `tload_gm2mat` / `texpands_mat`
 
-[tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp:57-63](../tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp#L57-L63). (Known — current source state, pre-PR-852)
+[tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp:57-64](../tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp#L57-L64). (Known — current source after merged PR-852)
 
 ```cpp
 constexpr int elementSize = N * C1 * H * W * C0;
-constexpr int bufferSizeA = elementSize * sizeof(T);   // BUG (PR-852)
+constexpr int bufferSizeA = elementSize * sizeof(T);   // byte count retained as local, not used for ConvTile sizing
 using GlobalData = GlobalTensor<T, pto::Shape<1, 1, 1, 1, elementSize>,
                                 pto::Stride<elementSize, elementSize, elementSize, elementSize, 1>>;
-using TileData   = ConvTile<TileType::Mat, T, bufferSizeA,    // BAD — bytes (PR-852 fixes to elementSize)
+using TileData   = ConvTile<TileType::Mat, T, elementSize,    // GOOD — element count
                             Layout::NC1HWC0,
                             pto::ConvTileShape<N, C1, H, W, C0>>;
 ```
@@ -410,19 +445,19 @@ Quick index back to [auto_mode_bad_patterns.md](auto_mode_bad_patterns.md):
 
 ---
 
-## 10. PR-852 tile-related supporting context (NOT yet merged into this branch)
+## 10. PR-852 tile-related supporting context (merged)
 
-PR 852 is described in [external_context/pr_852_notes.md](external_context/pr_852_notes.md). Scope per the PR is **A3 only**; A5 has independent files and is not modified. The current source still has the bugs.
+PR 852 is described in [external_context/pr_852_notes.md](external_context/pr_852_notes.md). Scope per the PR is **A3 only**; A5 has independent files and is not modified. The current A3 source has the merged PR-852 shapes. Keep this section as historical context and review guidance; inspect current source before claiming a PR-852-era bug still exists.
 
 ### 10.1 `TRESHAPE` is the auto-mode aliasing hint; it must accept `ConvTile` in auto mode
 
-Current source: [include/pto/npu/a2a3/TReshape.hpp:23-28](../include/pto/npu/a2a3/TReshape.hpp#L23-L28) has `static_assert(is_tile_data_v<TileDataIn>, ...)` and `static_assert(Loc == NewLoc, ...)` **outside** the `#ifndef __PTO_AUTO__` guard. That rejects `ConvTile` (which `is_tile_data_v` returns false for; instead `is_conv_tile_v` is the trait). PR-852 moves these asserts inside the `__PTO_AUTO__` guard so `ConvTile` aliasing works in auto mode.
+Current A3 source: [include/pto/npu/a2a3/TReshape.hpp:22-48](../include/pto/npu/a2a3/TReshape.hpp#L22) has the `static_assert(is_tile_data_v<...>)`, byte-size, layout, and `Loc == NewLoc` checks inside `#ifndef __PTO_AUTO__`; the auto-mode branch uses `__cce_alias(dst.data(), src.data(), 0)`. This is the merged PR-852 behavior.
 
 Effect on tile usage (Inferred):
-- **Pre-PR (current)**: `TRESHAPE(convTileView, convTileBase)` does not compile.
-- **Post-PR**: It will compile under auto mode (and only auto mode; manual mode keeps the asserts).
+- **Current A3 auto mode**: fixed `ConvTile` aliasing cases compile under the auto-mode `__cce_alias` branch.
+- **Manual mode**: keeps the stricter assertions.
 
-PR-852 also drops the `Loc == NewLoc` assert in auto mode. **Soft gotcha**: post-merge, mismatched `TileType` between dst and src in `TRESHAPE` is silently accepted in auto mode — verify intent at call sites. (See [auto_mode_bad_patterns.md §1.1](../docs_for_ai/auto_mode_bad_patterns.md) note.)
+Merged PR-852 also drops the `Loc == NewLoc` assert in auto mode. **Soft gotcha**: mismatched `TileType` between dst and src in `TRESHAPE` is silently accepted in A3 auto mode — verify intent at call sites. (See [auto_mode_bad_patterns.md §1.1](auto_mode_bad_patterns.md) note.)
 
 ### 10.2 `ConvTile<..., BufferSize_, ...>` accepts element count, not bytes
 
@@ -435,11 +470,11 @@ using TileDType = typename MemoryQualifier<Loc_, DType>::type tile_size(bufferSi
 
 `tile_size(N)` is the bisheng-CCE allocator marker (§1.1) and consumes an element count. Passing bytes (e.g., `elementSize * sizeof(T)`) inflates the UB allocation by `sizeof(T)`. The misleading name is a documented long-term TODO in PR-852 (rename to `NumElems_`).
 
-[texpands_mat_kernel.cpp:58, 63](../tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp#L58) is the visible bug site; PR-852 fixes the call site, not the template name.
+[texpands_mat_kernel.cpp:58, 64](../tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp#L58) is the historical bug site; merged PR-852 fixes the call site, not the template name.
 
 ### 10.3 Decouple template parameters across dst/src/tmp tile-function arguments
 
-Current `__tf__ PTO_INTERNAL TTransConv*<TileData, blockSizeElem>(...)` family in [include/pto/npu/a2a3/TTrans.hpp](../include/pto/npu/a2a3/TTrans.hpp) takes ONE `TileData` template parameter for tiles that may have different `TileType` (e.g., dst/src as `ConvTile<Mat>`, tmp as `Tile<Vec>`). PR-852 splits to `<TileDataDst, TileDataSrc, TileDataTmp, blockSizeElem>` and derives `Tdst`/`Tsrc`/`Ttmp` from `::DType` per role. See [auto_mode_bad_patterns.md §5.5](auto_mode_bad_patterns.md).
+Historical `__tf__ PTO_INTERNAL TTransConv*<TileData, blockSizeElem>(...)` helpers in [include/pto/npu/a2a3/TTrans.hpp](../include/pto/npu/a2a3/TTrans.hpp) took ONE `TileData` template parameter for tiles that may have different `TileType` (e.g., dst/src as `ConvTile<Mat>`, tmp as `Tile<Vec>`). Merged PR-852 splits to `<TileDataDst, TileDataSrc, TileDataTmp, blockSizeElem>` and derives `Tdst`/`Tsrc`/`Ttmp` from `::DType` per role. See [auto_mode_bad_patterns.md §5.5](auto_mode_bad_patterns.md).
 
 ### 10.4 PR scope: A3 only
 
@@ -479,7 +514,7 @@ Anti-pattern: using `TRESHAPE(a, b)` for memory reuse where `a` and `b` both hol
 - **`SFractalSize = 512` for non-FP16 element types on A5** — the in-tree A5 MX matmul uses `512` for both AB Mat tiles regardless of element width ([tmatmul_mx_kernel.cpp:95-97](../tests/npu/a5/src/st/testcase/tmatmul_mx/tmatmul_mx_kernel.cpp#L95-L97)). Whether that is intentional or a leftover from FP16 — Unknown.
 - **Dynamic-region `SetValidShape` interaction with auto-sync** inside `__tf__` — Unknown. The header comment says PIPE_S sync is required ([pto_tile.hpp:1608](../include/pto/common/pto_tile.hpp#L1608)).
 - **`ConvTile` dynamic-shape support** — auto mode's `GetShape` returns `staticShape` only ([pto_tile.hpp:1124-1129](../include/pto/common/pto_tile.hpp#L1124-L1129)). Some manual-mode tests (e.g., dynamic `srcG`/`srcN` in TTrans) appear to rely on the runtime branch — Unknown whether the same kernels are auto-mode-eligible without rewriting the shape to static.
-- **`is_tile_data_v` vs `is_conv_tile_v`** — separate traits ([pto_tile.hpp:1738, 1759](../include/pto/common/pto_tile.hpp#L1738)). The current `TRESHAPE_IMPL` only accepts the former, blocking `ConvTile` aliasing pre-PR-852 (§10.1).
+- **`is_tile_data_v` vs `is_conv_tile_v`** — separate traits ([pto_tile.hpp:1738, 1759](../include/pto/common/pto_tile.hpp#L1738)). Current A3 `TRESHAPE_IMPL` keeps the stricter `is_tile_data_v` checks in manual mode and uses the merged auto-mode `__cce_alias` branch for fixed `ConvTile` aliasing cases (§10.1).
 - **Whether the A5 file mirrors of the PR-852-fixed A3 headers contain the same bugs** — full audit Unknown (spot-checks negative; see [external_context/pr_852_notes.md "Scope"](external_context/pr_852_notes.md)).
 - **`tload_gm2mat` (A3) and `tload_shape2d` (A5) tests** use raw `__cce_get_tile_ptr(tile.data())` chains and ARE in `ALL_TESTCASES`. Whether they actually compile under `--cce-enable-pto-passes` — Unknown (carried from [auto_mode_bad_patterns.md §3.2, §6.3](auto_mode_bad_patterns.md)).
 

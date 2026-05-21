@@ -171,15 +171,15 @@ Each entry uses:
 6. Next action — confirm via a small build with cube macro undefined; document the right `#if` guard for kernels.
 7. Status — Inferred.
 
-### 3.5 Post-PR-852 `TRESHAPE` silently allows mismatched `TileType`
+### 3.5 Merged PR-852 `TRESHAPE` silently allows mismatched `TileType` in A3 auto mode
 
-1. Assumption — after PR-852 merges, `TRESHAPE_IMPL` drops the `Loc == NewLoc` assert in auto mode ([external_context/pr_852_notes.md §L5](external_context/pr_852_notes.md)). Mismatched dst/src `TileType` then compiles silently.
+1. Assumption — after merged PR-852, A3 `TRESHAPE_IMPL` keeps the `Loc == NewLoc` assert only in manual mode ([external_context/pr_852_notes.md §L5](external_context/pr_852_notes.md), [include/pto/npu/a2a3/TReshape.hpp](../include/pto/npu/a2a3/TReshape.hpp)). Mismatched dst/src `TileType` then compiles silently in A3 auto mode.
 2. Why — a soft gotcha for any kernel that uses `TRESHAPE` to alias between storage classes.
 3. Evidence — PR-852 description and [auto_mode_bad_patterns.md §1.1 note](auto_mode_bad_patterns.md), [tile_type_reference.md §10.1](tile_type_reference.md).
-4. Platform — A3 (post-merge); A5 mirror Unknown.
-5. Priority — low (only matters once PR-852 lands).
-6. Next action — once merged, add a check in code review for `TRESHAPE(a, b)` where `a.Loc != b.Loc`.
-7. Status — Inferred (post-merge).
+4. Platform — A3 current branch; A5 mirror Unknown.
+5. Priority — low.
+6. Next action — add a check in code review for `TRESHAPE(a, b)` where `a.Loc != b.Loc`.
+7. Status — Inferred current merged behavior.
 
 ### 3.6 A3 GM total size
 
@@ -221,7 +221,7 @@ See 1.1. Reiterated here because it is the load-bearing assumption behind the `C
 
 ### 4.2 `__cce_get_tile_ptr` accepts only the bare `TileDType` (not vector arithmetic on it)
 
-Rule and full evidence: [auto_mode_bad_patterns.md §3.2.1](auto_mode_bad_patterns.md) (anti-pattern + fix) and [compile_error_logbook.md §E1](compile_error_logbook.md) (symptom). Open part: A5 full audit pending (A5 spot-check negative — see [a3_a5_differences.md §11](a3_a5_differences.md)). Status — Inferred (very strong); pending PR-852 merge to become Known.
+Rule and full evidence: [auto_mode_bad_patterns.md §3.2.1](auto_mode_bad_patterns.md) (anti-pattern + fix) and [compile_error_logbook.md §E1](compile_error_logbook.md) (symptom). A3 fixed by merged PR-852; keep the rule as a regression check. Open part: A5 full audit pending (A5 spot-check negative — see [a3_a5_differences.md §11](a3_a5_differences.md)). Status — Known for A3; Unknown full A5 audit.
 
 ### 4.3 Canonical `__tf__` migration shape: pass `TileDType` by value with `__in__`/`__out__`
 
@@ -233,8 +233,8 @@ Rule and full evidence: [auto_mode_bad_patterns.md §3.2.1](auto_mode_bad_patter
 3. Evidence — [external_context/pr_852_notes.md §L4b, §T4a](external_context/pr_852_notes.md); [auto_mode_bad_patterns.md §3.3 fix](auto_mode_bad_patterns.md).
 4. Platform — both.
 5. Priority — high (this is the recipe for any future `_IMPL`-to-`__tf__` migration).
-6. Next action — once PR-852 merges, cite as canonical example in `qualifier_reference.md`.
-7. Status — Inferred (will be Known post-merge).
+6. Next action — cite the merged source shape as a canonical example in `qualifier_reference.md` and future migration recipes.
+7. Status — Known for current A3 merged source; Inferred as the general migration recipe.
 
 ### 4.4 Inside a `__tf__` body, `set_flag`/`wait_flag`/`pipe_barrier` are required even in auto mode
 
@@ -450,15 +450,15 @@ See 7.5. Specifically PR-852 [§T1](external_context/pr_852_notes.md).
 6. Next action — request the missing diff hunks; re-run extraction.
 7. Status — Unknown.
 
-### 9.5 Post-merge re-verification of `tquant` ST kernel correctness
+### 9.5 Post-PR-852 re-verification of `tquant` ST kernel correctness
 
-1. Question — once PR-852 merges, the `__tf__`-migrated `TQuantCvtS32ToFp16` plus the dispatch hoist may make `tquant_kernel.cpp` numerically correct in auto mode, even with the existing `TASSIGN(...0x0; ...0x0)` overlap.
+1. Question — now that PR-852 is merged, does the `__tf__`-migrated `TQuantCvtS32ToFp16` plus the dispatch hoist make `tquant_kernel.cpp` numerically correct in auto mode, even with the existing `TASSIGN(...0x0; ...0x0)` overlap?
 2. Why — `tquant` could become a clean auto-mode reference instead of "mixed".
 3. Evidence — [external_context/pr_852_notes.md "Reconciliation summary"](external_context/pr_852_notes.md) and §L4 chain.
 4. Platform — A3.
-5. Priority — low (post-merge cleanup).
+5. Priority — low.
 6. Next action — re-verify after merge.
-7. Status — Inferred (post-merge).
+7. Status — Inferred until runtime output is provided.
 
 ---
 
@@ -618,6 +618,29 @@ the audit trail is useful when something later regresses.
   - End-to-end glue chaining all five stages in one host driver.
 - Driver for the remaining sweep: [kernels/automode/a2a3/MoE/sweep_all.sh](../kernels/automode/a2a3/MoE/sweep_all.sh) walks a 20-config matrix and writes `sweep_all.log` + `sweep_all.summary`.
 
+### 11.11 Merged PR-852 resolves the tracked A3 auto-mode fix patterns
+
+- Resolved: current branch · A3 source inspection · PR-852 is merged. Reference:
+  [external_context/pr_852_notes.md](external_context/pr_852_notes.md).
+- Resolved patterns:
+  - `__cce_get_tile_ptr(x + N)` was fixed by extracting the pointer first:
+    `__cce_get_tile_ptr(x) + N`.
+  - `PtoSetWaitFlag` inside `__tf__` bodies was fixed in the affected A3
+    headers by emitting raw `set_flag` / `wait_flag` under `__PTO_AUTO__`.
+  - Raw-CCE helpers such as `TQuantCvtS32ToFp16` were migrated to `__tf__`
+    `TileDType __in__` / `__out__` signatures.
+  - The affected `ConvTile` buffer-size misuse in `texpands_mat` was fixed to
+    use element count rather than byte count.
+  - A3 `TRESHAPE_IMPL` auto-mode assertions were adjusted so fixed `ConvTile`
+    aliasing cases use the auto-mode `__cce_alias` branch while manual mode
+    keeps stricter assertions.
+- Still Unknown:
+  - A5 mirror audit of independent A5 headers.
+  - Runtime correctness of `tquant` / `tdequant` auto-mode testcases without
+    user-provided run logs.
+  - Whether the `tcolargmax` destination `TLOAD` is a required reduction-style
+    exception or a workaround.
+
 ---
 
 ## Cross-references
@@ -625,6 +648,6 @@ the audit trail is useful when something later regresses.
 - [auto_mode_bad_patterns.md](auto_mode_bad_patterns.md) — bad-pattern catalog and the source of most "is this silently broken" entries here.
 - [tile_type_reference.md](tile_type_reference.md) — `Tile`/`ConvTile`/`TileDType` open items (§12).
 - [a3_a5_differences.md](a3_a5_differences.md) — the §12 "Open assumptions and items to verify" list is the source for Group 2 here.
-- [external_context/pr_852_notes.md](external_context/pr_852_notes.md) — the source for Group 9 and several "post-merge" entries.
+- [external_context/pr_852_notes.md](external_context/pr_852_notes.md) — the source for Group 9 and several merged-PR historical entries.
 - [known_good_kernel_examples.md §A11, §A12, §A13, §A14, §A15, §A16, §A17](known_good_kernel_examples.md) — the in-tree confirmed-built references produced by §11.1, §11.3, §11.4, §11.5, §11.6, §11.7, §11.8.
 - [compile_error_logbook.md §E8, §E9, §E13](compile_error_logbook.md) — the real compile-error occurrences from §11.2 / §11.7.

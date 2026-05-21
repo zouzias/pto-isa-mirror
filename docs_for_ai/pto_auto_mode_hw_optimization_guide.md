@@ -68,11 +68,30 @@ This separation matters because memory allocation, auto-sync, and available inst
 
 **Rule:** Do not write one mixed blob and hope auto mode finds the hardware structure. Explicitly separate cube stages and vector stages.
 
-### 1.3 A3 (Ascend 910B1 / `dav-c220`) concrete capacities and data flow
+### 1.3 A3 / Ascend 910B1 hardware facts and data flow
 
 Source: user-provided architecture briefing (2026-05). A5 (`dav-c310`) capacities are **Unknown** — see [a3_a5_differences.md §10](a3_a5_differences.md). GM total size is **Unknown** — see [assumptions_to_verify.md §6.1](assumptions_to_verify.md).
 
-**Per-chip totals (A3 / Ascend 910B1):** 25 AI cores, 50 vec cores, 4 AICPUs. Cube is matmul/GEMM-only; everything non-matmul (TMAXS / ReLU, casts, element-wise math, reductions, gather/scatter) runs on vector. (Known: user briefing.)
+**User-provided hardware briefing (A3 / Ascend 910B1):**
+
+```text
+AI cores: 25
+Vector cores: 50 total, 2 vector subblocks per AI core
+AICPUs: 4
+Cube frequency: 1850 MHz
+
+Per-AI-core local memory:
+- L1:  512 KB
+- L0A: 64 KB
+- L0B: 64 KB
+- L0C: 128 KB
+- UB:  192 KB
+```
+
+These are physical capacities. Kernel generation should use custom usable
+budgets below these physical limits.
+
+Cube is matmul/GEMM-only; everything non-matmul (TMAXS / ReLU, casts, element-wise math, reductions, gather/scatter) runs on vector. (Known: user briefing.)
 
 **Per-AI-core buffer capacities (A3):**
 
@@ -122,6 +141,153 @@ The element-count-vs-byte distinction for `tile_size(N)` is documented in [tile_
 - UB holds at most `192 KB` for vector-side staging — divide by element size and by the number of simultaneously-live tiles.
 
 For Split-K/Split-N inside one cube TU, use the [§A6 Split-K pattern](known_good_kernel_examples.md#L81) (`if (i == 0) TMATMUL else TMATMUL_ACC`).
+
+## Memory-budget-first kernel generation
+
+Before generating any nontrivial auto-mode kernel, define an explicit memory
+budget for each local memory level used by the kernel.
+
+| Memory level | Physical capacity on A3 / Ascend 910B1 | Custom usable budget |
+|---|---:|---:|
+| L1  | 512 KB | kernel-specific |
+| L0A | 64 KB  | kernel-specific |
+| L0B | 64 KB  | kernel-specific |
+| L0C | 128 KB | kernel-specific |
+| UB  | 192 KB | kernel-specific |
+
+Do not plan tile shapes using the full physical capacity by default. Use a
+custom usable limit per level to leave room for compiler allocation, temporary
+tiles, alignment/padding, FIFOs, and future scheduling changes.
+
+For each kernel, list all tiles that are live together at each memory level.
+The budget must include input tiles, output tiles, accumulator tiles, temporary
+tiles, scratch tiles, and FIFO staging tiles that can overlap in lifetime.
+
+Example checklist:
+
+```text
+L1 live set:
+- A L1 tile: ...
+- B L1 tile: ...
+- optional scratch / staging: ...
+- total <= custom L1 budget
+
+L0A live set:
+- A operand tile(s): ...
+- total <= custom L0A budget
+
+L0B live set:
+- B operand tile(s): ...
+- total <= custom L0B budget
+
+L0C live set:
+- accumulator tile(s): ...
+- total <= custom L0C budget
+
+UB live set:
+- vector input/output/temp tiles: ...
+- reduction scratch: ...
+- gather/scatter scratch: ...
+- total <= custom UB budget
+```
+
+The budget should be based on bytes, not only element counts:
+
+```text
+bytes = rows x cols x sizeof(dtype) x number_of_live_tiles
+```
+
+For cube GEMM, also account for 16x16 fractal blocks in L0A/L0B/L0C. For the
+common FP16 x FP16 -> FP32 case:
+
+```text
+A/B fractal: 16 x 16 x sizeof(half)  = 512 bytes
+C fractal:   16 x 16 x sizeof(float) = 1024 bytes
+```
+
+A larger matrix tile is a grid of these 16x16 fractal blocks. Cube tile sizes
+should be chosen as multiples of the cube-friendly block structure unless there
+is explicit tail handling. See [tile_type_reference.md §4.1](tile_type_reference.md)
+for the tile-type view of `BLayout`, `SLayout`, and `SFractalSize`.
+
+## Operation granularity and loop tiling
+
+For each kernel, define the smallest compute operation that is fed to the
+hardware engine.
+
+Examples:
+
+```text
+Cube:
+- smallest TMATMUL / TMATMUL_ACC operation:
+  M_tile x N_tile x K_tile
+- accumulator tile:
+  M_tile x N_tile
+- Split-K / Split-N / Split-M strategy:
+  ...
+
+Vector:
+- smallest vector tile operation:
+  rows x cols
+- row-slice or subblock split:
+  ...
+- reduction/gather/scatter granularity:
+  ...
+```
+
+Every loop in the kernel should be explainable as tiling one logical dimension:
+
+```text
+for m_tile in M:
+  for n_tile in N:
+    for k_tile in K:
+      feed one cube operation M_tile x N_tile x K_tile
+```
+
+or, for vector work:
+
+```text
+for token_tile in T:
+  for hidden_tile in H:
+    feed one vector operation token_tile x hidden_tile
+```
+
+When generating a kernel, write the loop nest first as a logical tiling plan.
+For large/general kernels, prefer to tile-and-loop over most logical dimensions
+rather than making tile sizes equal to the full input sizes. Input dimensions
+such as `M`, `N`, `K`, `T`, `H`, `E`, `TopK`, `S0`, or `S1` should usually drive
+loop bounds and GM offset progression. Tile sizes should be inferred from memory
+budgets, operation granularity, cube fractal constraints, alignment, and the
+tail strategy.
+
+This distinction is important for generalizability:
+
+```text
+input shape:  large/model-specific
+tile shape:   hardware-budget-specific
+loop nest:    maps input shape onto repeated tile operations
+```
+
+Then map each loop level to:
+
+1. GM offset progression,
+2. tile shape,
+3. memory level used,
+4. live-tile budget impact,
+5. whether the loop can be unrolled, peeled, or split,
+6. tail handling strategy.
+
+Use compile-time unrolling/peeling only when it helps the compiler see a stable
+dependency pattern or when the loop bound is naturally small/fixed. Do not
+confuse this with the broader rule above: the default is tile-and-loop over
+dimensions, not hard-code one full-shape tile.
+
+Default shape assumption for planning: most major dense dimensions can be
+treated as multiples of 32 unless the kernel family says otherwise. Do not spend
+the first design pass optimizing for unusual non-divisible dense shapes. The
+main exceptions to plan for early are data-dependent MoE token counts per expert
+and `TopK` / `kTopK`-style axes, where tails or non-divisible logical counts are
+natural.
 
 ---
 
@@ -903,6 +1069,44 @@ CV_FIFO_CONS_SYNC_PERIOD >= 1
 ```
 
 First support a narrow shape set. Add dynamic tails only after the fixed-shape kernel is correct.
+
+## Model-shape-driven test selection
+
+Kernel tests should not only use arbitrary toy sizes. For each kernel family,
+include at least one test shape inspired by real model configurations.
+
+For MoE kernels, inspect representative SOTA model configurations such as
+DeepSeek-style MoE shapes before choosing tests. The test plan should include:
+
+1. a tiny debug shape,
+2. a medium shape that exercises tiling,
+3. a realistic model-inspired shape,
+4. a tail/non-divisible shape if the kernel claims tail support.
+
+For the first design pass, it is acceptable to choose major dense dimensions as
+multiples of 32. Do not treat every odd/non-divisible dense shape as a primary
+requirement unless the kernel explicitly claims broad tail support. Prioritize
+natural irregular axes first: MoE per-expert token counts, routing capacity,
+`TopK` / `kTopK`, packed widths after sort/gather transforms, and other
+data-dependent loop bounds.
+
+For each test, document:
+
+```text
+T / token count:
+H / hidden size:
+E / number of experts:
+TopK:
+intermediate FFN size:
+dtype:
+expected routing shape:
+expected input/output GM buffers:
+```
+
+Do not claim support for a model-scale shape unless the kernel has a memory
+budget and loop tiling plan for that shape. Do not hard-code exact model
+configuration numbers unless they are already present in repo docs or verified
+from source material.
 
 ---
 

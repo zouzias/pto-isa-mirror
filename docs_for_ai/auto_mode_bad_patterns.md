@@ -19,7 +19,7 @@ Conventions used below:
 - "Auto-mode rules" = [docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md](../docs/auto_mode/Kernel_Developer_Rules_And_Limitations.md) and [docs/auto_mode/Library_Developer_Rules_And_Limitations.md](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md).
 - "Auto mode" = compiled with `--cce-enable-pto-passes -O2` and `__PTO_AUTO__` defined.
 
-Several entries below are clarified or scheduled for fix by **PR-852** (A3 ST testcase fixes; **not yet merged into this branch**). Cross-references point to [external_context/pr_852_notes.md](external_context/pr_852_notes.md). Treat the PR's recipes as forward-looking guidance until merge — current source still has the bugs.
+Several entries below were clarified by **PR-852** (A3 ST testcase fixes), which is merged into the current branch. Cross-references point to [external_context/pr_852_notes.md](external_context/pr_852_notes.md). Keep these entries as review rules and historical debugging context. Do not claim a PR-852-era bug still exists unless current source inspection proves it; if the same symptom appears again, treat it as a regression or a newly introduced instance of the old anti-pattern.
 
 ---
 
@@ -157,9 +157,9 @@ Several entries below are clarified or scheduled for fix by **PR-852** (A3 ST te
 
 1. **Pattern** — A library helper is `__tf__ PTO_INTERNAL` (a tile function) and uses `PtoSetWaitFlag<PIPE_X, PIPE_Y>()` for sync between PTO operations *inside* its body, with no `__PTO_AUTO__` guard.
 2. **Why risky** — `PtoSetWaitFlag` is intentionally a no-op in auto mode (it exists so kernel-level code can be written once and let the auto-sync compiler insert real sync). But the auto-sync compiler **does not look inside tile functions** ([docs/auto_mode/Auto_Mode_Overview.md](../docs/auto_mode/Auto_Mode_Overview.md): *"the tile function is a complete black-box to PTO compiler"*). So inside a `__tf__` body, `PtoSetWaitFlag` becomes a no-op AND the compiler does not insert sync to compensate — the function ships with no sync at all. This is **exactly opposite** to the kernel-level rule that prefers `PtoSetWaitFlag` over raw `set_flag`/`wait_flag`. The library spec ([docs/auto_mode/Library_Developer_Rules_And_Limitations.md §3](../docs/auto_mode/Library_Developer_Rules_And_Limitations.md)) says it directly: *"Use `set_flag`, `wait_flag` or `pipe_barrier` explicitly in tile functions and all of their callees. Use `PtoSetWaitFlag` or `TSYNC` anywhere else."*
-3. **Where, symptom, fix code, and pre-PR-852 source-evidence list** — [compile_error_logbook.md §E2](compile_error_logbook.md). PR-852 applies the `#ifndef __PTO_AUTO__`-guarded wrap across the affected headers; see [external_context/pr_852_notes.md §L2, §L3, §L6, §L7b](external_context/pr_852_notes.md).
+3. **Where, symptom, fix code, and historical source-evidence list** — [compile_error_logbook.md §E2](compile_error_logbook.md). Merged PR-852 applies the `#ifndef __PTO_AUTO__`-guarded wrap across the affected headers; see [external_context/pr_852_notes.md §L2, §L3, §L6, §L7b](external_context/pr_852_notes.md).
 4. **Confidence** — High.
-5. **Status** — Known anti-pattern; resolved-by-PR-852 (not yet merged).
+5. **Status** — Historical Known anti-pattern; fixed in the current branch by merged PR-852. Keep as a review rule to avoid reintroducing the bug.
 
 > Cross-cutting note (refines §2.1): the kernel rule "prefer `PtoSetWaitFlag`/`TSYNC` over `set_flag`/`wait_flag`" applies **only at kernel level**. Inside a `__tf__` body the polarity is reversed: real `set_flag`/`wait_flag`/`pipe_barrier` are required, and `PtoSetWaitFlag` is wrong.
 
@@ -201,12 +201,12 @@ Several entries below are clarified or scheduled for fix by **PR-852** (A3 ST te
    __ubuf__ float *tmp1 = (__ubuf__ T *)__cce_get_tile_ptr(tmp) + 128; // GOOD
    ```
 2. **Why risky** — `tmp` here is the tile's `TileDType` parameter, which in auto mode is a vector type (per [include/pto/common/memory.hpp:29-44](../include/pto/common/memory.hpp#L29-L44)). Doing `tmp + 128` first applies arithmetic to a vector value; the libexpand compiler pass then crashes during RAUW (reported in PR-852). Doing `__cce_get_tile_ptr(tmp) + 128` first lowers `tmp` to a typed `__ubuf__ T *` and then advances that pointer — pointer arithmetic on a real pointer.
-3. **Where** (current source — to be fixed by PR-852)
-   - [include/pto/npu/a2a3/TCI.hpp:59,108,147,149,151,203](../include/pto/npu/a2a3/TCI.hpp#L59) — eight occurrences across `TCI_b32_repeat`, `TCI_b32_normal`, `TCI_b16_repeat`, `TCI_b16_normal`. Offsets `+128`, `+256`, `+384`.
+3. **Where** (historical pre-merge source)
+   - [include/pto/npu/a2a3/TCI.hpp:59,108,147,149,151,203](../include/pto/npu/a2a3/TCI.hpp#L59) — eight historical occurrences across `TCI_b32_repeat`, `TCI_b32_normal`, `TCI_b16_repeat`, `TCI_b16_normal`. Offsets `+128`, `+256`, `+384`.
    - A5 spot-check — [include/pto/npu/a5/Tci.hpp](../include/pto/npu/a5/Tci.hpp) does NOT contain this pattern. **Inferred A3-only.**
 4. **Fix** — Always extract first, then offset: `__cce_get_tile_ptr(tmp) + N`. Equivalent corrections for all `(__ubuf__ TmpT *)__cce_get_tile_ptr(tmp + N)` shapes. PR-852 applies this rewrite to all eight TCI sites; in the same diff several `vadds`/`vmuls`/`vconv_*` calls are also corrected to use `dstPtr` (the extracted pointer) rather than the `dst` `TileDType` directly. See [external_context/pr_852_notes.md §L1](external_context/pr_852_notes.md).
 5. **Confidence** — High.
-6. **Status** — Known anti-pattern; resolved-by-PR-852 (not yet merged).
+6. **Status** — Historical Known anti-pattern; fixed in the current branch by merged PR-852. Keep as a review rule to avoid reintroducing the bug.
 
 ### 3.3 Calling `Tile::data()` directly from kernel code
 
@@ -336,11 +336,11 @@ Several entries below are clarified or scheduled for fix by **PR-852** (A3 ST te
 
 1. **Pattern** — A `__tf__` helper takes a single `TileData` template parameter and uses it for all of `dst`, `src`, and `tmp` arguments — even though those tiles have different `TileType` (e.g., `Mat` vs `Vec`, or `ConvTile` vs plain `Tile`) or different element types.
 2. **Why risky** — Instantiating one template parameter forces all three roles to share the same type. When dst is a `ConvTile<Mat>`, src is a `ConvTile<Mat>`, and tmp is a `Tile<Vec>` (the actual `ttrans_conv` shape per PR-852), there is no type that satisfies all three. Caller-side instantiation produces either a compile error or silently picks the wrong storage class. Auto mode amplifies the risk because `TileDType` (vector vs pointer) depends on `TileType`, so getting the wrong tile type mis-types the `__cce_get_tile_ptr` extractions.
-3. **Where** (current source — to be fixed by PR-852)
-   - [include/pto/npu/a2a3/TTrans.hpp](../include/pto/npu/a2a3/TTrans.hpp) — `TTransConvNCHW2NC1HWC0`, `TTransConvNC1HWC02C1HWNC0`, `TTransConvGNCHW2GNC1HWC0`, `TTransConvGNC1HWC02GC1HWNC0`. Each takes one `TileData` template; PR-852 splits into `TileDataDst`, `TileDataSrc`, `TileDataTmp`.
+3. **Where** (historical pre-merge source)
+   - [include/pto/npu/a2a3/TTrans.hpp](../include/pto/npu/a2a3/TTrans.hpp) — `TTransConvNCHW2NC1HWC0`, `TTransConvNC1HWC02C1HWNC0`, `TTransConvGNCHW2GNC1HWC0`, `TTransConvGNC1HWC02GC1HWNC0` historically used one `TileData` template. Merged PR-852 split this into `TileDataDst`, `TileDataSrc`, `TileDataTmp`.
 4. **Fix** — Decouple the template parameters per role: `template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, ...>`. Inside, derive `using Tdst = typename TileDataDst::DType; using Tsrc = typename TileDataSrc::DType; using Ttmp = typename TileDataTmp::DType;`. Use the per-role type for all pointer extractions and casts. Update callers to pass three template arguments. See PR-852 [external_context/pr_852_notes.md §L7a](external_context/pr_852_notes.md).
 5. **Confidence** — High.
-6. **Status** — Known anti-pattern; resolved-by-PR-852 (not yet merged).
+6. **Status** — Historical Known anti-pattern; fixed in the current branch by merged PR-852. Keep as a review rule to avoid reintroducing the bug.
 
 ### 5.6 `ConvTile<Loc, T, BufferSize_, Layout, Shape>` — `BufferSize_` is element count, not bytes
 
@@ -352,12 +352,12 @@ Several entries below are clarified or scheduled for fix by **PR-852** (A3 ST te
    ```
    despite the parameter being named "BufferSize", `ConvTile` interprets it as **element count** (Inferred from PR-852 description and from the `static constexpr int bufferSize = BufferSize_;` member visible in the PR-quoted struct definition).
 2. **Why risky** — Passing `elementSize * sizeof(T)` allocates `sizeof(T)`× the intended UB region. PR-852 description: *"Allocated tiles were bigger than the UB. ... Fix: Used the correct variable, numElems, for ConvTile Construction. Long-term Fix (TODO): Modify the template variable's name, which is misleading."*
-3. **Where** (current source — to be fixed by PR-852)
-   - [tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp:58, 63](../tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp#L58): `bufferSizeA = elementSize * sizeof(T); ConvTile<TileType::Mat, T, bufferSizeA, ...>`.
-   - The current `ConvTile` definition is referenced by PR-852 (template signature: `template <TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, typename Shape_> struct ConvTile { ...; static constexpr int bufferSize = BufferSize_; };`). Exact source location of `ConvTile` in this branch — Unknown, would need to grep `include/pto/common/`.
+3. **Where** (historical pre-merge source)
+   - [tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp:58, 63](../tests/npu/a2a3/src/st/testcase/texpands_mat/texpands_mat_kernel.cpp#L58) historically used `bufferSizeA = elementSize * sizeof(T); ConvTile<TileType::Mat, T, bufferSizeA, ...>`. Current source passes `elementSize`.
+   - `ConvTile` is defined at [include/pto/common/pto_tile.hpp:1096](../include/pto/common/pto_tile.hpp#L1096) with `static constexpr int bufferSize = BufferSize_;`.
 4. **Fix** — Pass element count: `ConvTile<TileType::Mat, T, elementSize, Layout::NC1HWC0, ...>`. Long-term: rename the template parameter to `NumElems_` (TODO from PR-852). See [external_context/pr_852_notes.md §T4b](external_context/pr_852_notes.md).
 5. **Confidence** — High.
-6. **Status** — Known anti-pattern; resolved-by-PR-852 (not yet merged).
+6. **Status** — Historical Known anti-pattern; fixed in the current branch by merged PR-852. Keep as a review rule to avoid reintroducing the bug.
 
 ### 5.7 Using source-element widths for post-TSORT32 merge logic (packed-width mismatch)
 
