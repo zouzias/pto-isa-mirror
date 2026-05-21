@@ -24,6 +24,7 @@ class DataFormat(Enum):
     GNCHW2GNC1HWC0 = 3
     GNC1HWC02C1HWN1N0C0 = 4
     NC1HWC02NC1C0HW = 5
+    GNC1HWC02GNC1C0HW = 6
 
 
 def nchw_to_nc1hwc0(nchw_tensor: np.ndarray, c0: int) -> np.ndarray:
@@ -201,6 +202,34 @@ def _golden_nc1hwc0_to_nc1c0hw(g_info):
     return input_arr, output_arr
 
 
+def _golden_gnc1hwc0_to_gnc1c0hw(g_info):
+    """[G, N, C1, H, W, C0] -> [G, N, C1, C0, H, W]; pads ??? when needed."""
+    dtype = g_info.data_type
+    src_g = g_info.g_whole_shape0
+    src_n = g_info.g_whole_shape1
+    src_c1 = g_info.g_whole_shape2
+    src_h = g_info.g_whole_shape3
+    src_w = g_info.g_whole_shape4
+    src_c0 = g_info.g_whole_shape5
+
+    input_arr = np.zeros(dtype=dtype, shape=(src_g, src_n, src_c1, src_h, src_w, src_c0))
+    for g in range(src_g):
+        for n in range(src_n):
+            for c1 in range(src_c1):
+                for h in range(src_h):
+                    for w in range(src_w):
+                        for c0 in range(src_c0):
+                            input_arr[g, n, c1, h, w, c0] = 1 + c0 + w * src_c0 + h * src_c0 * src_w +\
+                                c1 * src_c0 * src_w * src_h + n * src_c0 * src_w * src_h * src_c1 +\
+                                g * src_c0 * src_w * src_h * src_c1 * src_n
+
+    # GNC1HWC0 → GNC1C0HW
+    # origin index：0(g),1(n),2(c1),3(h),4(w),5(C0) → new index ：0,1,2,5,3,4
+    output_arr = np.transpose(input_arr, axes=(0, 1, 2, 5, 3, 4))
+    output_arr = np.reshape(output_arr, (src_g, src_n, src_c1 * src_c0, src_h, src_w))
+    return input_arr, output_arr
+
+
 def gen_golden_data(g_info):
     shape1 = g_info.shape
     if shape1 == DataFormat["NCHW2NC1HWC0"].value:
@@ -213,6 +242,8 @@ def gen_golden_data(g_info):
         input_arr, output_arr = _golden_gnc1hwc0_to_c1hwn1n0c0(g_info)
     elif shape1 == DataFormat["NC1HWC02NC1C0HW"].value:
         input_arr, output_arr = _golden_nc1hwc0_to_nc1c0hw(g_info)
+    elif shape1 == DataFormat["GNC1HWC02GNC1C0HW"].value:
+        input_arr, output_arr = _golden_gnc1hwc0_to_gnc1c0hw(g_info)
     else:
         data_type = g_info.data_type
         g_shape3 = g_info.g_shape3
@@ -774,6 +805,24 @@ if __name__ == "__main__":
             8  #g_whole_shape4
             #g_shape6=1
             #g_whole_shape5=1
+        ),
+        TTRANSParams(
+            "TTRANSConvTest.float32_GNC1HWC02GNC1C0HW_0",
+            np.float32,
+            DataFormat["GNC1HWC02GNC1C0HW"].value,
+            1, #g_shape0
+            1, #g_shape1
+            1, #g_shape2
+            2, #g_shape3
+            4, #g_shape4
+            8, #g_shape5
+            1, #g_whole_shape0
+            1, #g_whole_shape1
+            1, #g_whole_shape2
+            2, #g_whole_shape3
+            4,  #g_whole_shape4
+            1, #g_shape6
+            8  #g_whole_shape5
         ),
     ]
 
