@@ -111,7 +111,7 @@ Writes `sweep_all.log` (streaming) and `sweep_all.summary` (final matrix). Cover
 
 ## Constraints inherited across all sub-folders
 
-- Single AICORE per `__global__` (no `block_idx` work split anywhere yet).
+- `expert_ffn` launches `kE` blocks (`get_block_idx() == expert index`); all other kernels remain single AICORE for now.
 - Static tile shapes; auto-mode requires compile-time tile dims, which is why each sweep is a full rebuild.
 - fp16 inputs / weights, fp32 accumulators on cube paths ([known_good_kernel_examples.md §A6](../../../../docs_for_ai/known_good_kernel_examples.md)).
 - ReLU fused into TSTORE FixPipe inside `expert_ffn` ([§A17 / §11.8](../../../../docs_for_ai/assumptions_to_verify.md)) — no vector hop between GEMM1 and GEMM2.
@@ -121,7 +121,7 @@ Writes `sweep_all.log` (streaming) and `sweep_all.summary` (final matrix). Cover
 
 - **End-to-end glue** chaining all 5 stages in one host driver. Each stage is currently validated independently against its own golden.
 - **Split-K / Split-N inside expert_ffn** for `kH=kF ≥ 256` (L0B = 64 KB ceiling).
-- **Multi-AICORE** parallelism (per-expert or per-tile).
+- **Intra-expert token-level parallelism** inside `expert_ffn` (M-tile split across cores).
 - **kTopK > 1 on real hardware** — code is in place; only sweep_all.sh will confirm.
 
 ## Pointers

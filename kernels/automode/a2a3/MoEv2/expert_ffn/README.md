@@ -41,7 +41,7 @@ TU; one `__global__ AICORE` function (`runExpertFfn`) launched by
 
 ## Auto-mode constraints honored
 
-- Single AICORE; no `block_idx` work split.
+- `kE` AI cores in parallel: `block_idx == expert index` (`get_block_idx()`). Each block handles one expert's token slice independently. Pattern confirmed in `kernels/automode/a2a3/flash_atten/fa_performance_kernel.cpp`.
 - Static tile maxima with dynamic valid rows for the per-expert tail.
 - `A_s` loads full logical rows but may panel the aligned `H` dimension as
   `H_l1`; `W1_t` loads the matching `H_l1 x F_l1` panel; `W2_t` loads the
@@ -94,6 +94,6 @@ panel sizes must still divide the aligned dimensions.
   M-alignment rule, but un-tested at this exact size. The local-budget chooser
   may shrink from larger requested tile heights.
 - Larger shapes are tiled over `N_l1`, `H_l1`, `H_l0`, `F_l1`, and `F_l0`.
-- Single AICORE; no block_idx parallelism (per-expert parallelism or per-tile parallelism is a separate milestone).
+- No intra-expert token-level parallelism yet; each block serializes over its expert's M-tiles.
 - Only `ReluPreMode::NormalRelu` (no GELU/SiLU/LeakyReLU — the enum on this layer is `NoRelu` / `NormalRelu`).
 - fp16 inputs / weights, fp32 accumulator; no other dtype paths.
