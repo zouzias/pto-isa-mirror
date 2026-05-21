@@ -24,7 +24,6 @@ using namespace AscendC;
 
 #include "utils/dispatch_policy_custom.hpp"
 
-#include "utils/select_helper.hpp"
 #include "utils/const_args.hpp"
 #include "dispatch_ffn_combine_kernel.hpp"
 #include "moe_init_routing_quant_v2/moe_init_routing_quant_v2_tiling.h"
@@ -34,6 +33,25 @@ namespace DispatchFFNCombineImpl {
 #define TemplateMMA2ACFunc AType_, BType_, CType_, TB_, Nz_
 
 using namespace AscendC;
+
+template <typename Layout, typename ElementType, typename = void>
+struct LayoutBInitializer {
+    PTO_DEVICE
+    static Layout create(uint32_t k, uint32_t n)
+    {
+        return Layout{k, n};
+    }
+};
+
+template <typename Layout, typename ElementType>
+struct LayoutBInitializer<Layout, ElementType, std::enable_if_t<Layout::kTileLayout == pto::TileLayoutCustom::ZN>> {
+    PTO_DEVICE
+    static Layout create(uint32_t k, uint32_t n)
+    {
+        return Layout::template MakeLayout<ElementType>(k, n);
+    }
+};
+
 template <TemplateMMA2AClass>
 class DispatchFFNCombine {
 public:

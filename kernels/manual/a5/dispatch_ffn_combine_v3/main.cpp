@@ -14,11 +14,11 @@
 #include "acl/acl.h"
 #include "hccl/hccl_types.h"
 
-#include "comm_mpi.h"
-#include "data_utils.hpp"
 #include "kernel_launch.hpp"
-#include "runtime_context.hpp"
-#include "tiling_builder.hpp"
+#include "op_host/comm_mpi.h"
+#include "op_host/data_utils.hpp"
+#include "op_host/runtime_context.hpp"
+#include "op_host/tiling_builder.hpp"
 
 extern "C" rtError_t rtSetDevice(int32_t device);
 

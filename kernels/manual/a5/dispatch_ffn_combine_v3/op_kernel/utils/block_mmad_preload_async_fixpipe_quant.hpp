@@ -12,7 +12,7 @@
 #define PTO_EXT_GEMM_BLOCK_MMAD_PRELOAD_FIXPIPE_QUANT_HPP
 
 #include "dispatch_policy_custom.hpp"
-#include "pto_global_view.hpp"
+#include "pto_vector_ops.hpp"
 #include "pto/common/pto_tile.hpp"
 #include "pto/pto-inst.hpp"
 

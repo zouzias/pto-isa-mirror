@@ -1,11 +1,37 @@
 #ifndef PTO_EXT_DISPATCH_FFN_COMBINE_V3_PTO_VECTOR_OPS_HPP
 #define PTO_EXT_DISPATCH_FFN_COMBINE_V3_PTO_VECTOR_OPS_HPP
 
-#include "pto_global_view.hpp"
+#include "kernel_operator.h"
+
+#include <pto/common/pto_tile.hpp>
+#include <pto/pto-inst.hpp>
 
 #include <type_traits>
 
 namespace pto_ext::dispatch_ffn_combine_v3::pto_bridge {
+
+using PtoShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+using PtoStrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+
+template <typename Element>
+using PtoGlobalNd = pto::GlobalTensor<Element, PtoShapeDyn, PtoStrideDyn, pto::Layout::ND>;
+
+template <typename Element>
+PTO_INTERNAL PtoGlobalNd<Element> MakeContiguousGlobalFromPtr(__gm__ Element *ptr, uint32_t elemNum)
+{
+    PtoShapeDyn shape(1, 1, 1, 1, elemNum);
+    PtoStrideDyn stride(elemNum, elemNum, elemNum, elemNum, 1);
+    return PtoGlobalNd<Element>(ptr, shape, stride);
+}
+
+template <typename Element>
+PTO_INTERNAL PtoGlobalNd<Element> MakeGlobalFromPtr(__gm__ Element *ptr, int64_t validRow, int64_t validCol,
+                                                    int64_t leadingDim)
+{
+    PtoShapeDyn shape(1, 1, 1, validRow, validCol);
+    PtoStrideDyn stride(validRow * leadingDim, validRow * leadingDim, validRow * leadingDim, leadingDim, 1);
+    return PtoGlobalNd<Element>(ptr, shape, stride);
+}
 
 template <typename Element, int TileElems = 1024>
 using PtoVecTile = pto::Tile<pto::TileType::Vec, Element, 1, TileElems, pto::BLayout::RowMajor, -1, -1>;

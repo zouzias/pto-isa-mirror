@@ -20,7 +20,6 @@
 #include "utils/pto_vector_ops.hpp"
 
 #include "utils/block_mmad_preload_async_fixpipe_quant.hpp"
-#include "utils/copy_gm_to_l1_custom.hpp"
 #include "utils/block_epilogue_pertoken_row.hpp"
 #include "utils/block_epilogue_pertoken_v2.hpp"
 #include "utils/block_epilogue_pertoken_swiglu.hpp"
@@ -31,14 +30,6 @@
 #include "moe_init_routing_quant_v2/moe_init_routing_quant_v2.cpp"
 #include "moe_init_routing_quant_v2/moe_v2_fullload_dynamic_quant.h"
 #include "unpermute/moe_token_unpermute.h"
-#include "utils/get_tensor_addr.hpp"
-#include "stages/kernel_context.hpp"
-#include "stages/routing_stage.hpp"
-#include "stages/dispatch_gather_stage.hpp"
-#include "stages/gmm_stage.hpp"
-#include "stages/swiglu_stage.hpp"
-#include "stages/combine_stage.hpp"
-#include "stages/restore_stage.hpp"
 
 inline __gm__ struct OpSystemRunCfg g_opSystemRunCfg {
     pto_ext::support::kL2Offset
@@ -48,6 +39,19 @@ using namespace AscendC;
 
 namespace pto_ext::Gemm::Kernel {
 namespace kernel_detail {
+
+#define FORCE_INLINE_AICORE inline __attribute__((always_inline)) __aicore__
+
+template <typename T>
+FORCE_INLINE_AICORE __gm__ T *GetTensorAddr(uint32_t index, GM_ADDR tensorPtr)
+{
+    __gm__ uint64_t *dataAddr = reinterpret_cast<__gm__ uint64_t *>(tensorPtr);
+    uint64_t tensorPtrOffset = *dataAddr;
+    __gm__ uint64_t *retPtr = dataAddr + (tensorPtrOffset >> 3);
+    return reinterpret_cast<__gm__ T *>(*(retPtr + index));
+}
+
+#undef FORCE_INLINE_AICORE
 
 template <auto Pipe>
 PTO_DEVICE void PtoPipeBarrier()
@@ -242,53 +246,19 @@ public:
     template <>
     PTO_DEVICE void operator()<AscendC::AIC>(Params const &params)
     {
-        stages::RunAicMain(*this, params);
+        RunGmm1Impl(params);
+        RunGmmInterlockImpl(params);
+        RunGmm2Impl(params);
     }
 
     template <>
     PTO_DEVICE void operator()<AscendC::AIV>(Params const &params)
     {
-        stages::RunAivMain(*this, params);
-    }
-
-    PTO_DEVICE void RunGmm1Stage(Params const &params)
-    {
-        stages::RunGmm1Stage(*this, params);
-    }
-
-    PTO_DEVICE void RunGmmInterlockStage(Params const &params)
-    {
-        stages::RunGmmInterlockStage(*this, params);
-    }
-
-    PTO_DEVICE void RunGmm2Stage(Params const &params)
-    {
-        stages::RunGmm2Stage(*this, params);
-    }
-
-    PTO_DEVICE void RunRoutingStage(Params const &params)
-    {
-        stages::RunRoutingStage(*this, params);
-    }
-
-    PTO_DEVICE void RunDispatchGatherStage(Params const &params)
-    {
-        stages::RunDispatchGatherStage(*this, params);
-    }
-
-    PTO_DEVICE void RunSwigluStage(Params const &params)
-    {
-        stages::RunSwigluStage(*this, params);
-    }
-
-    PTO_DEVICE void RunCombineStage(Params const &params)
-    {
-        stages::RunCombineStage(*this, params);
-    }
-
-    PTO_DEVICE void RunRestoreStage(Params const &params)
-    {
-        stages::RunRestoreStage(*this, params);
+        RunRoutingImpl(params);
+        RunDispatchGatherImpl(params);
+        RunSwigluImpl(params);
+        RunCombineImpl(params);
+        RunRestoreImpl(params);
     }
 
     PTO_DEVICE void RunGmm1Impl(Params const &params)
@@ -880,9 +850,9 @@ private:
             }
             int32_t arrayGroupIdx = params.listLen == 1 ? 0 : groupIdx;
             __gm__ ElementB *gmB1Ptr =
-                reinterpret_cast<__gm__ ElementB *>(GetTensorAddr<int8_t>(arrayGroupIdx, params.ptrB1));
+                reinterpret_cast<__gm__ ElementB *>(kernel_detail::GetTensorAddr<int8_t>(arrayGroupIdx, params.ptrB1));
             __gm__ ElementScale *gmSPtr =
-                reinterpret_cast<__gm__ ElementScale *>(GetTensorAddr<int64_t>(arrayGroupIdx, params.ptrScale1));
+                reinterpret_cast<__gm__ ElementScale *>(kernel_detail::GetTensorAddr<int64_t>(arrayGroupIdx, params.ptrScale1));
             PtoShape3D inGroupProblemShape =
                 MakePtoShape3D(currentM, GetPtoShapeN(params.problemShape), GetPtoShapeK(params.problemShape));
             LayoutA layoutA = params.layoutA.GetTileLayout(GetPtoShapeMK(inGroupProblemShape));
@@ -985,9 +955,9 @@ private:
             }
             int32_t arrayGroupIdx = params.listLen == 1 ? 0 : groupIdx;
             __gm__ ElementB *gmB2Ptr =
-                reinterpret_cast<__gm__ ElementB *>(GetTensorAddr<int8_t>(arrayGroupIdx, params.ptrB2));
+                reinterpret_cast<__gm__ ElementB *>(kernel_detail::GetTensorAddr<int8_t>(arrayGroupIdx, params.ptrB2));
             __gm__ ElementScale *gmS2Ptr =
-                reinterpret_cast<__gm__ ElementScale *>(GetTensorAddr<int64_t>(arrayGroupIdx, params.ptrScale2));
+                reinterpret_cast<__gm__ ElementScale *>(kernel_detail::GetTensorAddr<int64_t>(arrayGroupIdx, params.ptrScale2));
             PtoShape3D inGroupProblemShape = MakePtoShape3D(currentM, n2, k2); // M N K
 
             LayoutA layoutA = params.layoutA2.GetTileLayout(GetPtoShapeMK(inGroupProblemShape));

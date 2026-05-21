@@ -101,6 +101,7 @@ set(KERNEL_INCLUDE_DIRS
 set(HOST_INCLUDE_DIRS
     ${PTO_ROOT}/include
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/op_host
     ${CMAKE_CURRENT_SOURCE_DIR}/op_kernel
     ${CMAKE_CURRENT_SOURCE_DIR}/op_kernel/utils
     ${CMAKE_CURRENT_SOURCE_DIR}/op_kernel/moe_init_routing_quant_v2
@@ -144,9 +145,9 @@ target_link_options(dispatch_ffn_combine_v3_kernel PRIVATE --cce-fatobj-link)
 
 add_executable(dispatch_ffn_combine_v3
     main.cpp
-    runtime_context.cpp
-    tiling_builder.cpp
-    data_utils.cpp
+    op_host/runtime_context.cpp
+    op_host/tiling_builder.cpp
+    op_host/data_utils.cpp
 )
 target_compile_options(dispatch_ffn_combine_v3 PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
 target_include_directories(dispatch_ffn_combine_v3 PRIVATE ${HOST_INCLUDE_DIRS})
