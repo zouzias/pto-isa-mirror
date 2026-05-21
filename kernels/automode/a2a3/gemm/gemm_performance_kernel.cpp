@@ -80,6 +80,14 @@ AICORE inline void RunGemmE2E(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
     using RightTile = TileRight<S, baseK, baseN, baseK, baseN>;
     using ResTile = TileAcc<T, baseM, baseN, baseM, baseN>;
 
+    using NDValidShapeA = TileShape2D<U, baseM, baseK * stepKa, Layout::ND>;
+    using NDsingleCoreShapeA = BaseShape2D<U, m, k, Layout::ND>;
+    using GlobalDataSrcA = GlobalTensor<U, NDValidShapeA, NDsingleCoreShapeA, Layout::ND>;
+
+    using NDValidShapeB = TileShape2D<U, baseK * stepKb, baseN, Layout::DN>;
+    using NDsingleCoreShapeB = BaseShape2D<U, k, n, Layout::DN>;
+    using GlobalDataSrcB = GlobalTensor<U, NDValidShapeB, NDsingleCoreShapeB, Layout::DN>;
+
     ResTile cTile;
 
     constexpr uint32_t mLoop = singleCoreM / baseM;
@@ -97,8 +105,8 @@ AICORE inline void RunGemmE2E(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
 
                 TileMatA aMatTile;
                 TileMatB bMatTile;
-                GlobalDataSrcA gmA(currentSrc0 + i * singleCoreK * baseM + kIter * stepKa * baseK);
-                GlobalDataSrcB gmB(currentSrc1 + j * singleCoreK * baseN + kIter * stepKa * baseK);
+                GlobalDataSrcA gmA(currentSrc0 + i * singleCoreK * baseM + outer_iter * stepKa * baseK);
+                GlobalDataSrcB gmB(currentSrc1 + j * singleCoreK * baseN + outer_iter * stepKa * baseK);
 
                 TLOAD(aMatTile, gmA);
                 TLOAD(bMatTile, gmB);
@@ -108,7 +116,7 @@ AICORE inline void RunGemmE2E(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
                 inner_db.loop<Range<stepKa>>([&](auto inner_ctx) {
                     LeftTile aTile;
                     RightTile bTile;
-                    TEXTRACT(aTile, aMatTile, 0, kModstepKa * baseK);
+                    TEXTRACT(aTile, aMatTile, 0, (outer_iter % stepKa) * baseK);
                     TEXTRACT(bTile, bMatTile, (outer_iter % stepKb) * baseK, 0);
                     int inner_iter = inner_ctx.iter;
                     int inner_buf = inner_ctx.bufferId;
@@ -119,7 +127,6 @@ AICORE inline void RunGemmE2E(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
                     } else {
                         TMATMUL_ACC(cTile, cTile, aTile, bTile);
                     }
-
                 });
             });
 
