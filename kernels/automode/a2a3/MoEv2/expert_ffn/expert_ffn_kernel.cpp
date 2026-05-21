@@ -254,84 +254,83 @@ __global__ AICORE void runExpertFfn(
     W2RightTile w2Tile(N_l1);
     BAccTile    bAccTile(M, N_l1);
 
-    for (unsigned e = 0; e < kE; ++e) {
-        const int32_t start = expert_start[e];
-        const int32_t count = expert_count[e];
+    const unsigned e = static_cast<unsigned>(get_block_idx());
+    const int32_t start = expert_start[e];
+    const int32_t count = expert_count[e];
 
-        for (int32_t m0 = 0; m0 < count; m0 += M) {
-            const unsigned remaining = static_cast<unsigned>(count - m0);
-            const unsigned currentM = (remaining < static_cast<unsigned>(M)) ? remaining : static_cast<unsigned>(M);
-            const size_t row = static_cast<size_t>(start) + static_cast<size_t>(m0);
+    for (int32_t m0 = 0; m0 < count; m0 += M) {
+        const unsigned remaining = static_cast<unsigned>(count - m0);
+        const unsigned currentM = (remaining < static_cast<unsigned>(M)) ? remaining : static_cast<unsigned>(M);
+        const size_t row = static_cast<size_t>(start) + static_cast<size_t>(m0);
 
-            aMatTile.SetValidRow(currentM);
-            yMatTile.SetValidRow(currentM);
-            aTile.SetValidRow(currentM);
-            yAccTile.SetValidRow(currentM);
-            yTile.SetValidRow(currentM);
+        aMatTile.SetValidRow(currentM);
+        yMatTile.SetValidRow(currentM);
+        aTile.SetValidRow(currentM);
+        yAccTile.SetValidRow(currentM);
+        yTile.SetValidRow(currentM);
 
-            for (unsigned n0 = 0; n0 < static_cast<unsigned>(H); n0 += N_l1) {
-                const unsigned remainingN = static_cast<unsigned>(H) - n0;
-                const unsigned currentN =
-                    (remainingN < static_cast<unsigned>(N_l1)) ? remainingN : static_cast<unsigned>(N_l1);
-                const unsigned storeN =
-                    (n0 < kH) ? ((kH - n0 < currentN) ? (kH - n0) : currentN) : 0;
-                w2MatTile.SetValidCol(currentN);
-                w2Tile.SetValidCol(currentN);
-                bAccTile.SetValidShape(currentM, currentN);
+        for (unsigned n0 = 0; n0 < static_cast<unsigned>(H); n0 += N_l1) {
+            const unsigned remainingN = static_cast<unsigned>(H) - n0;
+            const unsigned currentN =
+                (remainingN < static_cast<unsigned>(N_l1)) ? remainingN : static_cast<unsigned>(N_l1);
+            const unsigned storeN =
+                (n0 < kH) ? ((kH - n0 < currentN) ? (kH - n0) : currentN) : 0;
+            w2MatTile.SetValidCol(currentN);
+            w2Tile.SetValidCol(currentN);
+            bAccTile.SetValidShape(currentM, currentN);
 
-                for (int f1 = 0; f1 < F_l1_blocks; ++f1) {
-                    const size_t fBase = static_cast<size_t>(f1) * F_l1;
+            for (int f1 = 0; f1 < F_l1_blocks; ++f1) {
+                const size_t fBase = static_cast<size_t>(f1) * F_l1;
 
-                    for (int h1 = 0; h1 < H_l1_blocks; ++h1) {
-                        const size_t hBase = static_cast<size_t>(h1) * H_l1;
-                        const size_t aOff = row * H + hBase;
-                        const size_t w1Off = static_cast<size_t>(e) * H * F + hBase * F + fBase;
+                for (int h1 = 0; h1 < H_l1_blocks; ++h1) {
+                    const size_t hBase = static_cast<size_t>(h1) * H_l1;
+                    const size_t aOff = row * H + hBase;
+                    const size_t w1Off = static_cast<size_t>(e) * H * F + hBase * F + fBase;
 
-                        GlobalShapeA aShape(currentM);
-                        GlobalDataA aGlobal(A + aOff, aShape);
-                        GlobalDataW1 w1Global(W1 + w1Off);
+                    GlobalShapeA aShape(currentM);
+                    GlobalDataA aGlobal(A + aOff, aShape);
+                    GlobalDataW1 w1Global(W1 + w1Off);
 
-                        TLOAD(aMatTile, aGlobal);
-                        TLOAD(w1MatTile, w1Global);
+                    TLOAD(aMatTile, aGlobal);
+                    TLOAD(w1MatTile, w1Global);
 
-                        for (int h0 = 0; h0 < H_l0_segments; ++h0) {
-                            const uint16_t hOff = static_cast<uint16_t>(h0 * H_l0);
-                            TEXTRACT(aTile,  aMatTile,  0, hOff);
-                            TEXTRACT(w1Tile, w1MatTile, hOff, 0);
-                            if (h1 == 0 && h0 == 0) {
-                                TMATMUL(yAccTile, aTile, w1Tile);
-                            } else {
-                                TMATMUL_ACC(yAccTile, aTile, w1Tile);
-                            }
-                        }
-                    }
-
-                    TMOV<TileMatYData, YAccTile, ReluPreMode::NormalRelu>(yMatTile, yAccTile);
-
-                    const size_t w2Off = static_cast<size_t>(e) * F * H + fBase * H + n0;
-                    GlobalShapeW2 w2Shape(currentN);
-                    GlobalDataW2 w2Global(W2 + w2Off, w2Shape);
-                    TLOAD(w2MatTile, w2Global);
-
-                    for (int f0 = 0; f0 < F_l0_segments; ++f0) {
-                        const uint16_t fOff = static_cast<uint16_t>(f0 * F_l0);
-                        TEXTRACT(yTile,  yMatTile,  0, fOff);
-                        TEXTRACT(w2Tile, w2MatTile, fOff, 0);
-                        if (f1 == 0 && f0 == 0) {
-                            TMATMUL(bAccTile, yTile, w2Tile);
+                    for (int h0 = 0; h0 < H_l0_segments; ++h0) {
+                        const uint16_t hOff = static_cast<uint16_t>(h0 * H_l0);
+                        TEXTRACT(aTile,  aMatTile,  0, hOff);
+                        TEXTRACT(w1Tile, w1MatTile, hOff, 0);
+                        if (h1 == 0 && h0 == 0) {
+                            TMATMUL(yAccTile, aTile, w1Tile);
                         } else {
-                            TMATMUL_ACC(bAccTile, yTile, w2Tile);
+                            TMATMUL_ACC(yAccTile, aTile, w1Tile);
                         }
                     }
                 }
 
-                if (storeN > 0) {
-                    bAccTile.SetValidShape(currentM, storeN);
-                    size_t bOff = row * kH + n0;
-                    GlobalShapeB bShape(currentM, storeN);
-                    GlobalDataB bGlobal(B + bOff, bShape);
-                    TSTORE(bGlobal, bAccTile);
+                TMOV<TileMatYData, YAccTile, ReluPreMode::NormalRelu>(yMatTile, yAccTile);
+
+                const size_t w2Off = static_cast<size_t>(e) * F * H + fBase * H + n0;
+                GlobalShapeW2 w2Shape(currentN);
+                GlobalDataW2 w2Global(W2 + w2Off, w2Shape);
+                TLOAD(w2MatTile, w2Global);
+
+                for (int f0 = 0; f0 < F_l0_segments; ++f0) {
+                    const uint16_t fOff = static_cast<uint16_t>(f0 * F_l0);
+                    TEXTRACT(yTile,  yMatTile,  0, fOff);
+                    TEXTRACT(w2Tile, w2MatTile, fOff, 0);
+                    if (f1 == 0 && f0 == 0) {
+                        TMATMUL(bAccTile, yTile, w2Tile);
+                    } else {
+                        TMATMUL_ACC(bAccTile, yTile, w2Tile);
+                    }
                 }
+            }
+
+            if (storeN > 0) {
+                bAccTile.SetValidShape(currentM, storeN);
+                size_t bOff = row * kH + n0;
+                GlobalShapeB bShape(currentM, storeN);
+                GlobalDataB bGlobal(B + bOff, bShape);
+                TSTORE(bGlobal, bAccTile);
             }
         }
     }
@@ -346,7 +345,7 @@ void launchExpertFfn(uint8_t *B,
                      uint8_t *W2,
                      void    *stream)
 {
-    runExpertFfn<TOut, TIn, TWeight, TScratch><<<1, nullptr, stream>>>(
+    runExpertFfn<TOut, TIn, TWeight, TScratch><<<expert_ffn_cfg::kE, nullptr, stream>>>(
         B, A, expert_count, expert_start, W1, W2);
 }
 
