@@ -46,6 +46,7 @@ inline void TTRANS_NCHW_TO_NC1HWC0_CORE(DstTileData &dst, SrcTileData &src)
     int64_t W = src.GetShape(3);
     int64_t size = N * C * H * W;
     int64_t C1 = (C + C0 - 1) / C0;
+    // assert(C1 * C0 == C);
 
     for (int64_t n = 0; n < N; ++n) {
         for (int64_t c = 0; c < C; ++c) {
@@ -54,7 +55,7 @@ inline void TTRANS_NCHW_TO_NC1HWC0_CORE(DstTileData &dst, SrcTileData &src)
             for (int64_t h = 0; h < H; ++h) {
                 for (int64_t w = 0; w < W; ++w) {
                         size_t srcIndex = w + W*h + W*H*c + W*H*C*n;
-                        size_t dstIndex = W*H*C*n + C0*H*W*r + C0*W*h + C0*w + cl;
+                        size_t dstIndex = W*H*C1*C0*n + C0*H*W*r + C0*W*h + C0*w + cl;
                         dst_ptr[dstIndex] = src_ptr[srcIndex];
                 }
             }
