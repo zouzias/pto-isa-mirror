@@ -294,10 +294,15 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter
             vexpdif(vreg_x_exp_even_1, vreg_x_f32_1_a, max_0a, preg_134, PART_ODD);
             vexpdif(vreg_x_exp_odd_1, vreg_x_f32_1_b, max_0a, preg_134, PART_ODD);
 
+            // change from vmulscvt to vcvt performance not better in this case
             vmulscvt(vreg_x_exp_even_f16, vreg_x_exp_even, 1.0f, preg_100, PART_EVEN);
             vmulscvt(vreg_x_exp_odd_f16, vreg_x_exp_odd, 1.0f, preg_101, PART_EVEN);
             vmulscvt(vreg_x_exp_even_f16_1, vreg_x_exp_even_1, 1.0f, preg_135, PART_EVEN);
             vmulscvt(vreg_x_exp_odd_f16_1, vreg_x_exp_odd_1, 1.0f, preg_136, PART_EVEN);
+            // vcvt(vreg_x_exp_even_f16, vreg_x_exp_even, preg_108, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
+            // vcvt(vreg_x_exp_odd_f16, vreg_x_exp_odd, preg_108, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
+            // vcvt(vreg_x_exp_even_f16_1, vreg_x_exp_even_1, preg_108, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
+            // vcvt(vreg_x_exp_odd_f16_1, vreg_x_exp_odd_1, preg_108, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
 
             
             // vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg_x_exp_even_f16, vreg_x_exp_odd_f16);
@@ -496,16 +501,14 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_asc_impl(int tile_id, int sync_
         // 128,64 -> 1,64
 
         for (uint16_t iter_m = 0; iter_m < uint16_t(ubN / 4) ; ++iter_m) {
-            vlds(src_00a, src0_ub,        256, NORM, POST_UPDATE);
-            vmax(max_0a, max_0a, src_00a, preg_108);
-
+            vlds(src_00a, src0_ub,       256, NORM, POST_UPDATE);
             vlds(src_01a, src0_ub1,      256, NORM, POST_UPDATE);
-            vmax(max_1a, max_1a, src_01a, preg_108);
-            
             vlds(src_02a, src0_ub2,      256, NORM, POST_UPDATE);
-            vmax(max_2a, max_2a, src_02a, preg_108);
-            
             vlds(src_03a, src0_ub3,      256, NORM, POST_UPDATE);
+
+            vmax(max_0a, max_0a, src_00a, preg_108);
+            vmax(max_1a, max_1a, src_01a, preg_108);            
+            vmax(max_2a, max_2a, src_02a, preg_108);
             vmax(max_3a, max_3a, src_03a, preg_108);
         }
 
@@ -520,27 +523,46 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_asc_impl(int tile_id, int sync_
         vdup(vreg_x_sum_1_even, 0, preg_134, MODE_ZEROING);
         vdup(vreg_x_sum_1_odd, 0, preg_134, MODE_ZEROING);
 
+        // __ubuf__ float *input_x_Ptr1 = input_x_Ptr + ubN*ubM/2;
+        // __ubuf__ float *input_x_Ptr2 = input_x_Ptr + ubN*ubM/4;
+        // __ubuf__ float *input_x_Ptr3 = input_x_Ptr + ubN*ubM/2 + ubN*ubM/4;
+
         for (uint16_t i0 = 0; i0 < uint16_t(ubN / 4) ; ++i0) { //128,64
             vld(vreg_x_f32_a, input_x_Ptr, vag_b32(64), NORM);
             vld(vreg_x_f32_b, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2), vag_b32(64), NORM);
             vld(vreg_x_f32_1_a, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/4), vag_b32(64), NORM);
             vld(vreg_x_f32_1_b, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2 + ubN*ubM/4), vag_b32(64), NORM);
+            // worse performance
+            // vlds(vreg_x_f32_a,   input_x_Ptr,    64, NORM, POST_UPDATE);
+            // vlds(vreg_x_f32_b,   input_x_Ptr1,   64, NORM, POST_UPDATE);
+            // vlds(vreg_x_f32_1_a, input_x_Ptr2,   64, NORM, POST_UPDATE);
+            // vlds(vreg_x_f32_1_b, input_x_Ptr3,   64, NORM, POST_UPDATE);
 
             vmuls(vreg_x_f32_a, vreg_x_f32_a, scale, preg_108);
             vmuls(vreg_x_f32_b, vreg_x_f32_b, scale, preg_108);
-            vexpdif(vreg_x_exp_even, vreg_x_f32_a, max_0a, preg_134, PART_ODD);
-            vexpdif(vreg_x_exp_odd, vreg_x_f32_b, max_0a, preg_134, PART_ODD);
-
             vmuls(vreg_x_f32_1_a, vreg_x_f32_1_a, scale, preg_108);
             vmuls(vreg_x_f32_1_b, vreg_x_f32_1_b, scale, preg_108);
+            // vexpdif(vreg_x_exp_even, vreg_x_f32_a, max_0a, preg_134, PART_ODD);
+            // vexpdif(vreg_x_exp_odd, vreg_x_f32_b, max_0a, preg_134, PART_ODD);
+
+            // vmuls(vreg_x_f32_1_a, vreg_x_f32_1_a, scale, preg_108);
+            // vmuls(vreg_x_f32_1_b, vreg_x_f32_1_b, scale, preg_108);
+            vexpdif(vreg_x_exp_even, vreg_x_f32_a, max_0a, preg_134, PART_ODD);
+            vexpdif(vreg_x_exp_odd, vreg_x_f32_b, max_0a, preg_134, PART_ODD);
             vexpdif(vreg_x_exp_even_1, vreg_x_f32_1_a, max_0a, preg_134, PART_ODD);
             vexpdif(vreg_x_exp_odd_1, vreg_x_f32_1_b, max_0a, preg_134, PART_ODD);
 
-            vmulscvt(vreg_x_exp_even_f16, vreg_x_exp_even, 1.0f, preg_100, PART_EVEN);
-            vmulscvt(vreg_x_exp_odd_f16, vreg_x_exp_odd, 1.0f, preg_101, PART_EVEN);
-            vmulscvt(vreg_x_exp_even_f16_1, vreg_x_exp_even_1, 1.0f, preg_135, PART_EVEN);
-            vmulscvt(vreg_x_exp_odd_f16_1, vreg_x_exp_odd_1, 1.0f, preg_136, PART_EVEN);
+            // vmulscvt change to vcvt has performance gain
+            // vmulscvt(vreg_x_exp_even_f16, vreg_x_exp_even, 1.0f, preg_100, PART_EVEN);
+            // vmulscvt(vreg_x_exp_odd_f16, vreg_x_exp_odd, 1.0f, preg_101, PART_EVEN);
+            // vmulscvt(vreg_x_exp_even_f16_1, vreg_x_exp_even_1, 1.0f, preg_135, PART_EVEN);
+            // vmulscvt(vreg_x_exp_odd_f16_1, vreg_x_exp_odd_1, 1.0f, preg_136, PART_EVEN);
+            vcvt(vreg_x_exp_even_f16, vreg_x_exp_even, preg_108, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
+            vcvt(vreg_x_exp_odd_f16, vreg_x_exp_odd, preg_108, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
+            vcvt(vreg_x_exp_even_f16_1, vreg_x_exp_even_1, preg_108, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
+            vcvt(vreg_x_exp_odd_f16_1, vreg_x_exp_odd_1, preg_108, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
             
+            // change to ASC position performance even worse
             vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg_x_exp_even_f16, vreg_x_exp_odd_f16);
             vdintlv(vreg_x_exp_f16_1_pack, vreg_x_exp_f16_1_packa, vreg_x_exp_even_f16_1, vreg_x_exp_odd_f16_1);
             vsstb(vreg_x_exp_f16_pack, ((__ubuf__ half *&) nz_buffer_Ptr), 0x410001, preg_108, POST_UPDATE);
@@ -556,7 +578,7 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_asc_impl(int tile_id, int sync_
         vadd(vreg_x_sum0, vreg_x_sum_odd, vreg_x_sum_even, preg_134, MODE_ZEROING);
         vadd(vreg_x_sum1, vreg_x_sum_1_odd, vreg_x_sum_1_even, preg_134, MODE_ZEROING);
         vadd(vreg_x_sum0, vreg_x_sum0, vreg_x_sum1, preg_134, MODE_ZEROING);
-        vsts(vreg_x_sum0, ((__ubuf__ float *&) local_sum_Ptr), 0, NORM_B32, preg_134);  //TODO: ASC no write out local_sum
+        vsts(vreg_x_sum0, ((__ubuf__ float *&) local_sum_Ptr), 0, NORM_B32, preg_134);  //ASC no write out local_sum, just 1 cycle increase
         
         vsts(vreg_x_sum0, ((__ubuf__ float *&) new_global_sum_Ptr), 0, NORM_B32, preg_134);
     }
@@ -882,13 +904,14 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
         vector_f32 vreg_exp;
         vector_f32 vreg_l0;
         vector_f32 vreg_l1;
-        for (uint16_t ii = 0; ii < 1; ++ii) { // 128/64=2
-            vlds(vreg_exp_max, ((__ubuf__ float *) exp_max_Ptr + ii*64), 0, NORM);
-            vlds(vreg_l0, ((__ubuf__ float *) new_global_sum_Ptr + ii*64), 0, NORM);
-            vmul(vreg_l0, vreg_exp_max, vreg_l0, preg_134, MODE_ZEROING);
-            vadd(vreg_l0, vreg_l0, vreg_x_sum0, preg_134, MODE_ZEROING);
-            vsts(vreg_l0, ((__ubuf__ float *) new_global_sum_Ptr+ ii*64), 0, NORM_B32, preg_134);
-        }
+        
+        vlds(vreg_exp_max, ((__ubuf__ float *) exp_max_Ptr), 0, NORM);
+        vlds(vreg_l0, ((__ubuf__ float *) new_global_sum_Ptr), 0, NORM);
+        vmul(vreg_l0, vreg_exp_max, vreg_l0, preg_134, MODE_ZEROING);
+        // vmul(vreg_l0, vreg_x_max_f32_b, vreg_l0, preg_134, MODE_ZEROING);
+        vadd(vreg_l0, vreg_l0, vreg_x_sum0, preg_134, MODE_ZEROING);
+        vsts(vreg_l0, ((__ubuf__ float *) new_global_sum_Ptr), 0, NORM_B32, preg_134);
+        
     }
 #if skip_rescale
     constexpr int SYNC_PERIOD = kFaCvFifoConsSyncPeriod;
@@ -1133,15 +1156,13 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_asc_impl(
 
         for (uint16_t iter_m = 0; iter_m < uint16_t(ubN / 4) ; ++iter_m) {
             vlds(src_00a, src0_ub,        256, NORM, POST_UPDATE);
-            vmax(max_0a, max_0a, src_00a, preg_108);
-
             vlds(src_01a, src0_ub1,      256, NORM, POST_UPDATE);
-            vmax(max_1a, max_1a, src_01a, preg_108);
-            
             vlds(src_02a, src0_ub2,      256, NORM, POST_UPDATE);
-            vmax(max_2a, max_2a, src_02a, preg_108);
-            
             vlds(src_03a, src0_ub3,      256, NORM, POST_UPDATE);
+
+            vmax(max_0a, max_0a, src_00a, preg_108);
+            vmax(max_1a, max_1a, src_01a, preg_108);
+            vmax(max_2a, max_2a, src_02a, preg_108);
             vmax(max_3a, max_3a, src_03a, preg_108);
         }
 
@@ -1179,18 +1200,27 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_asc_impl(
 
             vmuls(vreg_x_f32_a, vreg_x_f32_a, scale, preg_108);
             vmuls(vreg_x_f32_b, vreg_x_f32_b, scale, preg_108);
-            vexpdif(vreg_x_exp_even, vreg_x_f32_a, max_0a, preg_134, PART_ODD);
-            vexpdif(vreg_x_exp_odd, vreg_x_f32_b, max_0a, preg_134, PART_ODD);
-
             vmuls(vreg_x_f32_1_a, vreg_x_f32_1_a, scale, preg_108);
             vmuls(vreg_x_f32_1_b, vreg_x_f32_1_b, scale, preg_108);
+            // vexpdif(vreg_x_exp_even, vreg_x_f32_a, max_0a, preg_134, PART_ODD);
+            // vexpdif(vreg_x_exp_odd, vreg_x_f32_b, max_0a, preg_134, PART_ODD);
+
+            // vmuls(vreg_x_f32_1_a, vreg_x_f32_1_a, scale, preg_108);
+            // vmuls(vreg_x_f32_1_b, vreg_x_f32_1_b, scale, preg_108);
+            vexpdif(vreg_x_exp_even, vreg_x_f32_a, max_0a, preg_134, PART_ODD);
+            vexpdif(vreg_x_exp_odd, vreg_x_f32_b, max_0a, preg_134, PART_ODD);
             vexpdif(vreg_x_exp_even_1, vreg_x_f32_1_a, max_0a, preg_134, PART_ODD);
             vexpdif(vreg_x_exp_odd_1, vreg_x_f32_1_b, max_0a, preg_134, PART_ODD);
 
-            vmulscvt(vreg_x_exp_even_f16, vreg_x_exp_even, 1.0f, preg_100, PART_EVEN);
-            vmulscvt(vreg_x_exp_odd_f16, vreg_x_exp_odd, 1.0f, preg_101, PART_EVEN);
-            vmulscvt(vreg_x_exp_even_f16_1, vreg_x_exp_even_1, 1.0f, preg_135, PART_EVEN);
-            vmulscvt(vreg_x_exp_odd_f16_1, vreg_x_exp_odd_1, 1.0f, preg_136, PART_EVEN);
+            // vmulscvt change to vcvt has performance gain
+            // vmulscvt(vreg_x_exp_even_f16, vreg_x_exp_even, 1.0f, preg_100, PART_EVEN);
+            // vmulscvt(vreg_x_exp_odd_f16, vreg_x_exp_odd, 1.0f, preg_101, PART_EVEN);
+            // vmulscvt(vreg_x_exp_even_f16_1, vreg_x_exp_even_1, 1.0f, preg_135, PART_EVEN);
+            // vmulscvt(vreg_x_exp_odd_f16_1, vreg_x_exp_odd_1, 1.0f, preg_136, PART_EVEN);
+            vcvt(vreg_x_exp_even_f16, vreg_x_exp_even, preg_108, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
+            vcvt(vreg_x_exp_odd_f16, vreg_x_exp_odd, preg_108, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
+            vcvt(vreg_x_exp_even_f16_1, vreg_x_exp_even_1, preg_108, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
+            vcvt(vreg_x_exp_odd_f16_1, vreg_x_exp_odd_1, preg_108, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
         
             vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg_x_exp_even_f16, vreg_x_exp_odd_f16);
             vdintlv(vreg_x_exp_f16_1_pack, vreg_x_exp_f16_1_packa, vreg_x_exp_even_f16_1, vreg_x_exp_odd_f16_1);
@@ -1216,13 +1246,13 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_asc_impl(
         vector_f32 vreg_exp;
         vector_f32 vreg_l0;
         vector_f32 vreg_l1;
-        for (uint16_t ii = 0; ii < 1; ++ii) { // 128/64=2
-            vlds(vreg_exp_max, ((__ubuf__ float *) exp_max_Ptr + ii*64), 0, NORM);    //TODO: ASC directly use vreg_x_max_f32_b
-            vlds(vreg_l0, ((__ubuf__ float *) new_global_sum_Ptr + ii*64), 0, NORM);
-            vmul(vreg_l0, vreg_exp_max, vreg_l0, preg_134, MODE_ZEROING);
-            vadd(vreg_l0, vreg_l0, vreg_x_sum0, preg_134, MODE_ZEROING);
-            vsts(vreg_l0, ((__ubuf__ float *) new_global_sum_Ptr+ ii*64), 0, NORM_B32, preg_134);
-        }
+        
+        vlds(vreg_exp_max, ((__ubuf__ float *) exp_max_Ptr), 0, NORM);    //ASC directly use vreg_x_max_f32_b, worse performance because of long dependency
+        vlds(vreg_l0, ((__ubuf__ float *) new_global_sum_Ptr), 0, NORM);
+        vmul(vreg_l0, vreg_exp_max, vreg_l0, preg_134, MODE_ZEROING);
+        // vmul(vreg_l0, vreg_x_max_f32_b, vreg_l0, preg_134, MODE_ZEROING);
+        vadd(vreg_l0, vreg_l0, vreg_x_sum0, preg_134, MODE_ZEROING);
+        vsts(vreg_l0, ((__ubuf__ float *) new_global_sum_Ptr), 0, NORM_B32, preg_134);
     }
 #if skip_rescale
     constexpr int SYNC_PERIOD = kFaCvFifoConsSyncPeriod;
