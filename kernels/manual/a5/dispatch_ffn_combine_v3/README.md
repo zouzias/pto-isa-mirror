@@ -25,9 +25,9 @@ Only the following A5 deltas are carried on top of the A3 committed tree:
    - The generic PTO vector cast path remains PTO-based.
    - A5 `TCVT` is only emitted in `__DAV_VEC__` compilation.
    - `int32_t -> half` uses a PTO two-step path through `float`, because A5 `TCvt.hpp` does not provide a direct overload for that conversion.
-6. Soft-flag GM↔A1 copy
-   - `AscendC::LocalTensor<TPosition::A1>` plus `DataCopy` is limited to `PtoLoadSoftFlagL1` / `PtoStoreSoftFlagL1` in `block_mmad_preload_async_fixpipe_quant.hpp`.
-   - This is compile-proven necessary on A5: `include/pto/npu/a5/TStore.hpp` statically rejects Mat tile sources for GM `TSTORE`.
+6. Soft-flag protocol cleanup
+   - The stale `PtoLoadSoftFlagL1` / `PtoStoreSoftFlagL1` GM↔L1 bridge was removed after confirming no `BlockMmad` call passes a soft-flag GM pointer.
+   - The active synchronization path uses cross-core flags; production source no longer keeps `AscendC::LocalTensor<TPosition::A1>` / `DataCopy` for this path.
 7. HCCL remote window padding / platform runtime
    - Host tiling validates the A5 remote-window layout with padded per-token-scale, dispatch-output, token-count, and signal regions.
    - Runtime SoC selection is passed through `DISPATCH_FFN_COMBINE_V3_SOC_VERSION` when supplied by `run.sh`.

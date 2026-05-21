@@ -79,50 +79,6 @@ PTO_DEVICE void PtoTileMmad(uint64_t l0COffset,
     }
 }
 
-template <uint32_t TileElems = FLAGSTRIDE>
-PTO_DEVICE void PtoLoadSoftFlagL1(uint64_t dstOffset,
-                                  __gm__ int32_t *src,
-                                  uint32_t elemNum)
-{
-    AscendC::GlobalTensor<int32_t> srcGlobal;
-    srcGlobal.SetGlobalBuffer(src);
-    for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
-        const uint32_t cur = (elemNum - offset > TileElems) ? TileElems : (elemNum - offset);
-        AscendC::LocalTensor<int32_t> dstTensor(
-            AscendC::TPosition::A1,
-            static_cast<uint32_t>(dstOffset + static_cast<uint64_t>(offset) * sizeof(int32_t)),
-            cur);
-        AscendC::DataCopyParams params;
-        params.blockCount = 1;
-        params.blockLen = (cur * sizeof(int32_t) + BYTE_PER_BLK - 1) / BYTE_PER_BLK;
-        params.srcStride = 0;
-        params.dstStride = 0;
-        AscendC::DataCopy(dstTensor, srcGlobal[offset], params);
-    }
-}
-
-template <uint32_t TileElems = FLAGSTRIDE>
-PTO_DEVICE void PtoStoreSoftFlagL1(__gm__ int32_t *dst,
-                                   uint64_t srcOffset,
-                                   uint32_t elemNum)
-{
-    AscendC::GlobalTensor<int32_t> dstGlobal;
-    dstGlobal.SetGlobalBuffer(dst);
-    for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
-        const uint32_t cur = (elemNum - offset > TileElems) ? TileElems : (elemNum - offset);
-        AscendC::LocalTensor<int32_t> srcTensor(
-            AscendC::TPosition::A1,
-            static_cast<uint32_t>(srcOffset + static_cast<uint64_t>(offset) * sizeof(int32_t)),
-            cur);
-        AscendC::DataCopyParams params;
-        params.blockCount = 1;
-        params.blockLen = (cur * sizeof(int32_t) + BYTE_PER_BLK - 1) / BYTE_PER_BLK;
-        params.srcStride = 0;
-        params.dstStride = 0;
-        AscendC::DataCopy(dstGlobal[offset], srcTensor, params);
-    }
-}
-
 template <typename Element, class L0TileShape>
 PTO_DEVICE void PtoMoveL1ToL0A(uint64_t dstL0Offset,
                                uint64_t srcL1Offset,
@@ -521,12 +477,9 @@ public:
     }
 
     PTO_DEVICE
-    BlockMmad(Arch::Resource<ArchTag> &resource, __gm__ int32_t* flagPtr = nullptr, int32_t expertPerRank = 0, 
-                uint32_t l1BufAddrStart = 0, uint32_t FpAddrStart = 0)
+    BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0, uint32_t FpAddrStart = 0)
     {
         syncGroupIdx = 0;
-        ptrSoftFlagBase_ = flagPtr;
-        expertPerRank_ = expertPerRank;
         InitL1(resource, l1BufAddrStart);
         InitFpBuf(resource, FpAddrStart);
         InitL0A(resource);
@@ -649,21 +602,9 @@ public:
     PTO_DEVICE
     void Finalize(int32_t target, int32_t flag = 0)
     {
-        if (ptrSoftFlagBase_ != nullptr) {
-            if (target < 0) {
-                return;
-            }
-            AscendC::SetFlag<AscendC::HardEvent::FIX_MTE3>(EVENT_ID0);
-            AscendC::WaitFlag<AscendC::HardEvent::FIX_MTE3>(EVENT_ID0);
-            __gm__ int32_t *flagPtr = reinterpret_cast<__gm__ int32_t*>(ptrSoftFlagBase_) +
-                                      (expertPerRank_ + AscendC::GetBlockIdx()) * FLAGSTRIDE;
-            detail::PtoStoreSoftFlagL1(flagPtr, l1FBaseOffset + static_cast<uint64_t>(target * 16) * sizeof(int32_t), FLAGSTRIDE);
-        }
-        else {
-            for(;syncGroupIdx <= target; syncGroupIdx++) {
-                int32_t flagId = syncGroupIdx / 15 + flag;
-                AscendC::CrossCoreSetFlag<0x2, PIPE_FIX>(flagId);
-            }
+        for(;syncGroupIdx <= target; syncGroupIdx++) {
+            int32_t flagId = syncGroupIdx / 15 + flag;
+            AscendC::CrossCoreSetFlag<0x2, PIPE_FIX>(flagId);
         }
     }
 private:
@@ -702,18 +643,6 @@ private:
         if constexpr (std::is_same_v<ElementA, int8_t>) {
             l1SBaseOffset = resource.l1Buf.GetBufferAddrByByte(l1SOffset);
             AscendC::SetFlag<AscendC::HardEvent::FIX_MTE2>(0);
-        }
-        if (ptrSoftFlagBase_ != nullptr) {
-            // Initialize the flag matrix (structure as below):
-            // 1 0 0 0 0 0 0 0
-            // 2 0 0 0 0 0 0 0
-            // ...
-            // 16 0 0 0 0 0 0 0
-            // Then move it to L1
-            uint32_t l1FOffset = l1SOffset + L1S_TILE_SIZE;
-            l1FBaseOffset = resource.l1Buf.GetBufferAddrByByte(l1FOffset);
-            __gm__ int32_t *flagBase = reinterpret_cast<__gm__ int32_t*>(ptrSoftFlagBase_);
-            detail::PtoLoadSoftFlagL1(l1FBaseOffset, flagBase, expertPerRank_ * FLAGSTRIDE);
         }
     }
 
@@ -890,7 +819,6 @@ private:
     uint64_t l1AOffsetList[L1_STAGES];
     uint64_t l1BOffsetList[L1_STAGES];
     uint64_t l1SBaseOffset{0};
-    uint64_t l1FBaseOffset{0};
     int32_t syncGroupIdx;
     int32_t l1AEventList[L1_STAGES];
     int32_t l1BEventList[L1_STAGES];
@@ -913,9 +841,6 @@ private:
     uint32_t preloadCount{0};
 
     TileMmad tileMmad;
-
-    __gm__ int32_t* ptrSoftFlagBase_ = nullptr;
-    int32_t expertPerRank_;
 };
 
 }  // namespace pto_ext::Gemm::Block
