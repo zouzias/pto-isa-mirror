@@ -43,7 +43,6 @@ std::string GetGoldenDir()
 
 template <typename T, int format, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gShape5,
           int gWholeShape0, int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
-          <float, 0, 5, 4, 4, 16, 16, 1, 1, 5, 57, 4, 16>
 void test_ttrans()
 {
     size_t srcFileSize = gShape0 * gShape1 * gShape2 * gShape3 * gShape4 * gShape5 * sizeof(T);

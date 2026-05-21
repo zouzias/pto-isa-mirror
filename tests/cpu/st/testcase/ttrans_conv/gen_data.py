@@ -74,29 +74,50 @@ def gnchw_to_gnc1hwc0(gnchw_tensor: np.ndarray, c0: int) -> np.ndarray:
 
 
 def _golden_nchw2_nc1hwc0(g_info):
-    """NCHW -> NC1HWC0 golden; pads channel on full tensor when needed."""
+    """NCHW -> NC1HWC0 golden; correctly pads and aligns with C++ template requirements."""
     data_type = g_info.data_type
-    g_shape0 = g_info.g_shape0
-    g_shape1 = g_info.g_shape1
-    g_shape2 = g_info.g_shape2
-    g_shape3 = g_info.g_shape3
-    g_shape4 = g_info.g_shape4
-    g_whole_shape1 = g_info.g_whole_shape1
-    g_whole_shape2 = g_info.g_whole_shape2
-    g_whole_shape3 = g_info.g_whole_shape3
-    g_whole_shape4 = g_info.g_whole_shape4
+    
+    # Map the target padded dimensions from your C++ launch parameters
+    dst_n = g_info.g_shape0        # equivalent to dstN
+    dst_c1 = g_info.g_shape1       # equivalent to dstC1
+    dst_h = g_info.g_shape2        # equivalent to dstH
+    dst_w = g_info.g_shape3        # equivalent to dstW
+    dst_c0 = g_info.g_shape4       # equivalent to dstC0
+    
+    padded_c = dst_c1 * dst_c0
 
-    input_arr = np.random.randint(1, 5, size=(g_whole_shape1, g_whole_shape2, g_whole_shape3, g_whole_shape4)).astype(
-        data_type
-    )
-    g_shape_new = g_shape1 * g_shape4
-    golden_nchw = np.zeros(shape=(g_shape0, g_shape_new, g_shape2, g_shape3), dtype=data_type)
-    golden_nchw = input_arr[0:g_shape0, 0:g_shape_new, 0:g_shape2, 0:g_shape3]
-    pad_c = g_shape1 * g_shape4 - g_whole_shape2
-    if pad_c > 0:
-        pad_width = ((0, 0), (0, pad_c), (0, 0), (0, 0))
-        input_arr = np.pad(input_arr, pad_width, mode="constant", constant_values=0)
-    output_arr = nchw_to_nc1hwc0(golden_nchw, g_shape4)
+    # 1. Create the base random tensor matching the true unpadded global shape
+    #    Note: mapped to your test list ordering: (N=1, C=g_whole_shape2, H=g_whole_shape3, W=g_whole_shape4)
+    raw_input = np.random.randint(
+        1, 5, 
+        size=(g_info.g_whole_shape1, g_info.g_whole_shape2, g_info.g_whole_shape3, g_info.g_whole_shape4)
+    ).astype(data_type)
+    
+    # 2. Slice/Extract the exact valid sub-region matching the required runtime footprint 
+    #    before applying structural vector padding constraints
+    valid_n = min(raw_input.shape[0], dst_n)
+    valid_c = min(raw_input.shape[1], padded_c)
+    valid_h = min(raw_input.shape[2], dst_h)
+    valid_w = min(raw_input.shape[3], dst_w)
+    
+    truncated_nchw = raw_input[0:valid_n, 0:valid_c, 0:valid_h, 0:valid_w]
+    
+    # 3. Apply structural macro-block padding up to full dst layout dimensions
+    pad_n = dst_n - valid_n
+    pad_c = padded_c - valid_c
+    pad_h = dst_h - valid_h
+    pad_w = dst_w - valid_w
+    
+    pad_width = ((0, pad_n), (0, pad_c), (0, pad_h), (0, pad_w))
+    
+    # This is your final, correctly ordered, fully-padded NCHW matrix block
+    input_arr = np.pad(truncated_nchw, pad_width, mode="constant", constant_values=0)
+    
+    # 4. Transpose to NC1HWC0 using the shared padded configuration block
+    output_arr = nchw_to_nc1hwc0(input_arr, dst_c0)
+    
+    # input_arr -> written directly to input.bin as flat NCHW
+    # output_arr -> written directly to golden.bin as flat NC1HWC0
     return input_arr, output_arr
 
 
