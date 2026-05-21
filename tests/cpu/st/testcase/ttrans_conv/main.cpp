@@ -157,7 +157,7 @@ TEST_F(TTRANSConvTest, int32_1_8_1_8)
 
 TEST_F(TTRANSConvTest, float32_5_57_4_16)
 {
-    test_ttrans<float, 0, 5, 4, 4, 16, 16, 1, 1, 5, 57, 4, 16>();
+    test_ttrans<float, 0, 5, 4, 4, 16, 16, 1, 1, 5, 64, 4, 16>();
 }
 
 TEST_F(TTRANSConvTest, half_1_30_2_16)

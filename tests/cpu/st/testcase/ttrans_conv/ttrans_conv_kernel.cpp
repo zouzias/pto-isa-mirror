@@ -60,7 +60,7 @@ __global__ AICORE void runTTRANSConv1(__gm__ T __out__ *out, __gm__ T __in__ *sr
     constexpr int tmpTileW = (dstC0 + yTileSizeElem - 1) / yTileSizeElem * yTileSizeElem;
     using TmpTileData = Tile<TileType::Vec, T, tmpTileH, tmpTileW, BLayout::RowMajor, tmpTileH, tmpTileW>;
     TmpTileData tmpTile;
-    TASSIGN(tmpTile, 0x0 + dstN * dstC1 * dstH * dstW * dstC0 * sizeof(T) * 2);
+    // TASSIGN(tmpTile, 0x0 + dstN * dstC1 * dstH * dstW * dstC0 * sizeof(T) * 2);
 
     GlobalDataIn srcGlobal(src);
     GlobalDataIn dstGlobal(out);
@@ -167,7 +167,7 @@ void LaunchTTRANSConv(T *out, T *src, void *stream)
 // NCHW -> NC1HWC0
 template void LaunchTTRANSConv<float, 0, 1, 4, 6, 56, 8, 1, 1, 1, 32, 6, 56>(float *out, float *src, void *stream);
 template void LaunchTTRANSConv<int32_t, 0, 1, 1, 1, 8, 8, 1, 1, 1, 8, 1, 8>(int32_t *out, int32_t *src, void *stream);
-template void LaunchTTRANSConv<float, 0, 5, 4, 4, 16, 16, 1, 1, 5, 57, 4, 16>(float *out, float *src, void *stream);
+template void LaunchTTRANSConv<float, 0, 5, 4, 4, 16, 16, 1, 1, 5, 64, 4, 16>(float *out, float *src, void *stream);
 template void LaunchTTRANSConv<aclFloat16, 0, 1, 2, 2, 16, 16, 1, 1, 1, 30, 2, 16>(aclFloat16 *out, aclFloat16 *src,
                                                                                    void *stream);
 template void LaunchTTRANSConv<int16_t, 0, 7, 4, 6, 16, 16, 1, 1, 7, 53, 6, 16>(int16_t *out, int16_t *src,
