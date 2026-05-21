@@ -90,13 +90,6 @@ PTO_INTERNAL void TSCATTER_IMPL(DstTile &dst, SrcTile &src, IdxTile &idx)
     TScatterImpl<DstTile, SrcTile, IdxTile>(dst.data(), src.data(), idx.data(), validRow, validCol);
 }
 
-constexpr uint16_t PTO_TSCATTER_TIME_1 = 1;
-constexpr uint16_t PTO_TSCATTER_TIME_2 = 2;
-constexpr uint16_t PTO_TSCATTER_TIME_4 = 4;
-constexpr uint16_t PTO_TSCATTER_IDX_0 = 0;
-constexpr uint16_t PTO_TSCATTER_IDX_1 = 1;
-constexpr uint16_t PTO_TSCATTER_IDX_2 = 2;
-constexpr uint16_t PTO_TSCATTER_IDX_3 = 3;
 template <MaskPattern mask>
 PTO_INTERNAL constexpr int GetTimesByMask()
 {
