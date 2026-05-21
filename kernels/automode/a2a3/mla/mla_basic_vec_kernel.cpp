@@ -54,49 +54,76 @@ constexpr unsigned kLatent   = 64;
 constexpr unsigned kRopeDim  = 64;
 constexpr unsigned kRopeHalf = kRopeDim / 2;  // 32
 
+// Vec-side M-chunk sizes. Per-row softmax / RoPE / cache copy are independent
+// along M (sequence axis), so we process the S rows in fixed-size sub-tiles.
+// This keeps UB usage independent of kSeqLen — increasing kSeqLen just adds
+// more inner-loop iterations, not bigger tiles.
+//
+//   UB budget at kSeqLen=128 / 512 / 1024 (FP16):
+//   softmax: 5 tiles [TileM, S] + 2 row-reduce [TileM, 16]
+//     TileM=16:  20 KB / 82 KB / 164 KB
+//   rope: 7 half-tiles [TileM, 32]
+//     TileM=64:  28 KB independent of S
+//   cache:  1 tile [TileM, 64]
+//     TileM=64:   8 KB independent of S
+constexpr unsigned kSoftmaxTileM = 16;
+constexpr unsigned kRopeTileM    = 64;
+constexpr unsigned kCacheTileM   = 64;
+static_assert(kSeqLen % kSoftmaxTileM == 0, "kSeqLen must be a multiple of kSoftmaxTileM");
+static_assert(kSeqLen % kRopeTileM    == 0, "kSeqLen must be a multiple of kRopeTileM");
+static_assert(kSeqLen % kCacheTileM   == 0, "kSeqLen must be a multiple of kCacheTileM");
+
 }  // namespace mla_basic_cfg_vec
 
 // =============================================================================
 // Stage 3 -- KV cache store: C_cache = C_kv  (prefill-only v1, no append).
 //
-// Pure tile copy: TLOAD a Vec tile from C_kv, TSTORE it to C_cache. One
-// iteration since [kSeqLen, kLatent] = [128, 64] FP16 = 16 KB fits in a
-// single tile. Same shape as §A11 add_tile_array minus the TADD.
+// Chunked along M (sequence) to keep UB usage independent of kSeqLen. Each
+// inner iter copies a [kCacheTileM, kLatent] sub-tile.
 // =============================================================================
 template <typename T>
 __global__ AICORE void runKVCacheStore(__gm__ T *c_cache, __gm__ T *c_kv)
 {
     using namespace mla_basic_cfg_vec;
 
-    using TileShape  = Shape <1, 1, 1, kSeqLen, kLatent>;
+    using TileShape  = Shape <1, 1, 1, kCacheTileM, kLatent>;
     using TileStride = Stride<1, 1, 1, kLatent, 1>;
     using GlobalData = GlobalTensor<T, TileShape, TileStride>;
 
     using TileData = Tile<TileType::Vec, T,
-                          kSeqLen, kLatent,
+                          kCacheTileM, kLatent,
                           BLayout::RowMajor,
-                          kSeqLen, kLatent>;
+                          kCacheTileM, kLatent>;
 
     TileData buf;
 
-    GlobalData srcGlobal(c_kv);
-    GlobalData dstGlobal(c_cache);
+    for (unsigned m0 = 0; m0 < kSeqLen; m0 += kCacheTileM) {
+        const size_t rowOffset = static_cast<size_t>(m0) * kLatent;
 
-    TLOAD (buf, srcGlobal);
-    TSTORE(dstGlobal, buf);
+        GlobalData srcGlobal(c_kv    + rowOffset);
+        GlobalData dstGlobal(c_cache + rowOffset);
+
+        TLOAD (buf, srcGlobal);
+        TSTORE(dstGlobal, buf);
+    }
 }
 
 // =============================================================================
 // Stage 5g (NEW) -- RoPE half-rotation.
 //
 //   For each block b in [0, numBlocks):
-//     for s in [0, S):
-//       x1 = x[b, s, :half],  x2 = x[b, s, half:]
-//       y[b, s, :half] = x1 * cos[s] - x2 * sin[s]
-//       y[b, s, half:] = x1 * sin[s] + x2 * cos[s]
+//     for m-chunk (kRopeTileM rows at a time):
+//       x1 = x[b, m..m+TileM, :half],  x2 = x[b, m..m+TileM, half:]
+//       y[b, m..m+TileM, :half] = x1 * cos[m..] - x2 * sin[m..]
+//       y[b, m..m+TileM, half:] = x1 * sin[m..] + x2 * cos[m..]
 //
 //   x, y     : [numBlocks, S, kRopeDim]   half
-//   cos, sin : [S, kRopeHalf]             half  (shared, host-precomputed)
+//   cos, sin : [S, kRopeHalf]             half  (shared across blocks)
+//
+// Chunked along M so UB usage doesn't grow with kSeqLen. cos/sin are
+// re-loaded per m-chunk; the inner-loop ordering (b outer, m inner) keeps
+// the kernel simple at the cost of redundant cos/sin DMA — negligible for
+// a correctness kernel.
 //
 // numBlocks is a runtime argument: for Q_rope it is kNumHeads (32 head-major
 // blocks); for K_rope it is 1 (shared across heads).
@@ -108,69 +135,77 @@ __global__ AICORE void runRoPE(__gm__ T *y, __gm__ T *x,
 {
     using namespace mla_basic_cfg_vec;
 
-    // Half-tile shape: [S, kRopeHalf] = [128, 32]. For FP16: 32 * 2 = 64
-    // bytes per row -> 32-byte aligned. OK.
-    using HalfShape       = Shape <1, 1, 1, kSeqLen, kRopeHalf>;
-    using HalfStrideX     = Stride<1, 1, 1, kRopeDim, 1>;   // x has row stride kRopeDim
-    using HalfStrideTable = Stride<1, 1, 1, kRopeHalf, 1>;  // cos/sin tightly packed
+    using HalfShape       = Shape <1, 1, 1, kRopeTileM, kRopeHalf>;
+    using HalfStrideX     = Stride<1, 1, 1, kRopeDim,  1>;   // x has row stride kRopeDim
+    using HalfStrideTable = Stride<1, 1, 1, kRopeHalf, 1>;   // cos/sin tightly packed
 
     using GlobalDataHalfX     = GlobalTensor<T, HalfShape, HalfStrideX>;
     using GlobalDataHalfTable = GlobalTensor<T, HalfShape, HalfStrideTable>;
 
     using HalfTile = Tile<TileType::Vec, T,
-                          kSeqLen, kRopeHalf,
+                          kRopeTileM, kRopeHalf,
                           BLayout::RowMajor,
-                          kSeqLen, kRopeHalf>;
+                          kRopeTileM, kRopeHalf>;
 
-    HalfTile x1Tile;      // x[b, :, :half]
-    HalfTile x2Tile;      // x[b, :, half:]
-    HalfTile cosTile;     // cos[:, :]
-    HalfTile sinTile;     // sin[:, :]
+    HalfTile x1Tile;      // x[b, m..m+TileM, :half]
+    HalfTile x2Tile;      // x[b, m..m+TileM, half:]
+    HalfTile cosTile;     // cos[m..m+TileM, :]
+    HalfTile sinTile;     // sin[m..m+TileM, :]
     HalfTile productTile; // scratch for one TMUL result
-    HalfTile y1Tile;      // y[b, :, :half] before TSTORE
-    HalfTile y2Tile;      // y[b, :, half:] before TSTORE
-
-    // cos/sin are block-invariant. Load once before the loop.
-    GlobalDataHalfTable cosGlobal(cos);
-    GlobalDataHalfTable sinGlobal(sin);
-    TLOAD(cosTile, cosGlobal);
-    TLOAD(sinTile, sinGlobal);
+    HalfTile y1Tile;      // y[b, m..m+TileM, :half] before TSTORE
+    HalfTile y2Tile;      // y[b, m..m+TileM, half:] before TSTORE
 
     for (unsigned b = 0; b < numBlocks; ++b) {
         const size_t blockOffset = static_cast<size_t>(b) * kSeqLen * kRopeDim;
 
-        GlobalDataHalfX x1Global(x + blockOffset);                 // first half
-        GlobalDataHalfX x2Global(x + blockOffset + kRopeHalf);     // second half
-        GlobalDataHalfX y1Global(y + blockOffset);
-        GlobalDataHalfX y2Global(y + blockOffset + kRopeHalf);
+        for (unsigned m0 = 0; m0 < kSeqLen; m0 += kRopeTileM) {
+            const size_t xRowOffset  = static_cast<size_t>(m0) * kRopeDim;
+            const size_t tableOffset = static_cast<size_t>(m0) * kRopeHalf;
 
-        TLOAD(x1Tile, x1Global);
-        TLOAD(x2Tile, x2Global);
+            GlobalDataHalfX     x1Global (x + blockOffset + xRowOffset);
+            GlobalDataHalfX     x2Global (x + blockOffset + xRowOffset + kRopeHalf);
+            GlobalDataHalfX     y1Global (y + blockOffset + xRowOffset);
+            GlobalDataHalfX     y2Global (y + blockOffset + xRowOffset + kRopeHalf);
+            GlobalDataHalfTable cosGlobal(cos + tableOffset);
+            GlobalDataHalfTable sinGlobal(sin + tableOffset);
 
-        // y1 = x1 * cos - x2 * sin
-        TMUL(y1Tile,      x1Tile, cosTile);
-        TMUL(productTile, x2Tile, sinTile);
-        TSUB(y1Tile,      y1Tile, productTile);
+            TLOAD(x1Tile,  x1Global);
+            TLOAD(x2Tile,  x2Global);
+            TLOAD(cosTile, cosGlobal);
+            TLOAD(sinTile, sinGlobal);
 
-        // y2 = x1 * sin + x2 * cos
-        TMUL(y2Tile,      x1Tile, sinTile);
-        TMUL(productTile, x2Tile, cosTile);
-        TADD(y2Tile,      y2Tile, productTile);
+            // y1 = x1 * cos - x2 * sin
+            TMUL(y1Tile,      x1Tile, cosTile);
+            TMUL(productTile, x2Tile, sinTile);
+            TSUB(y1Tile,      y1Tile, productTile);
 
-        TSTORE(y1Global, y1Tile);
-        TSTORE(y2Global, y2Tile);
+            // y2 = x1 * sin + x2 * cos
+            TMUL(y2Tile,      x1Tile, sinTile);
+            TMUL(productTile, x2Tile, cosTile);
+            TADD(y2Tile,      y2Tile, productTile);
+
+            TSTORE(y1Global, y1Tile);
+            TSTORE(y2Global, y2Tile);
+        }
     }
 }
 
 // =============================================================================
 // Stage 5b -- Attention softmax:
-//   For each head h in [0, kNumHeads):
-//     scoresSum[h] = scores_nope[h] + scores_rope[h]
-//     probs[h]     = softmax(scale * scoresSum[h])
+//   For each head h, for each m-chunk of kSoftmaxTileM rows:
+//     scoresSum = scores_nope[h, m..m+TileM, :] + scores_rope[h, m..m+TileM, :]
+//     probs[h, m..m+TileM, :] = softmax(scale * scoresSum)
+//
+// Softmax is row-independent, so chunking M is exact (no online-softmax
+// needed). UB usage at runtime:
+//   5 tiles [kSoftmaxTileM, kSeqLen] + 2 row-reduce [kSoftmaxTileM, 16]
+// which scales linearly with kSeqLen but is divided by kSoftmaxTileM relative
+// to a full-row tile, so a kSoftmaxTileM=16 chunk keeps the kernel in UB for
+// kSeqLen up to ~1024.
 //
 //   scores_nope, scores_rope : [kNumHeads, kSeqLen, kSeqLen]  half
 //   probs                    : [kNumHeads, kSeqLen, kSeqLen]  half
-//   scale                    : 1/sqrt(kHeadDim + kRopeDim), supplied by host.
+//   scale                    : 1/sqrt(kHeadDim), supplied by host.
 //
 // The nope+rope add happens INSIDE this kernel via TADD on the loaded
 // scoresTile (avoids needing a separate combine kernel / atomic-add TSTORE).
@@ -182,20 +217,20 @@ __global__ AICORE void runAttnSoftmax(__gm__ T *probs,
 {
     using namespace mla_basic_cfg_vec;
 
-    using TileShape  = Shape <1, 1, 1, kSeqLen, kSeqLen>;
+    using TileShape  = Shape <1, 1, 1, kSoftmaxTileM, kSeqLen>;
     using TileStride = Stride<1, 1, 1, kSeqLen, 1>;
     using GlobalData = GlobalTensor<T, TileShape, TileStride>;
 
     using ScoresTile = Tile<TileType::Vec, T,
-                            kSeqLen, kSeqLen,
+                            kSoftmaxTileM, kSeqLen,
                             BLayout::RowMajor,
-                            kSeqLen, kSeqLen>;
+                            kSoftmaxTileM, kSeqLen>;
 
     // Row-reduction output tile: storage width 16 cols (32-byte aligned for
     // FP16 per Tile constexpr asserts), valid width 1 col. Pattern from
     // tests/npu/a2a3/src/st/testcase/trowsum/trowsum_kernel.cpp:30.
     using RowReduceTile = Tile<TileType::Vec, T,
-                               kSeqLen, 16,
+                               kSoftmaxTileM, 16,
                                BLayout::RowMajor,
                                -1, -1>;
 
@@ -204,45 +239,49 @@ __global__ AICORE void runAttnSoftmax(__gm__ T *probs,
     ScoresTile     scaledTile;     // role 1: scaled scores;  role 2: exp
     ScoresTile     broadcastTile;  // role 1: broadcast(max); role 2: broadcast(sum)
     ScoresTile     tmpTile;        // TROWMAX / TROWSUM scratch (shape == src)
-    RowReduceTile  rowMaxTile(kSeqLen, 1);
-    RowReduceTile  rowSumTile(kSeqLen, 1);
+    RowReduceTile  rowMaxTile(kSoftmaxTileM, 1);
+    RowReduceTile  rowSumTile(kSoftmaxTileM, 1);
 
     for (unsigned h = 0; h < kNumHeads; ++h) {
         const size_t headOffset = static_cast<size_t>(h) * kSeqLen * kSeqLen;
 
-        GlobalData srcNopeGlobal(scores_nope + headOffset);
-        GlobalData srcRopeGlobal(scores_rope + headOffset);
-        GlobalData dstGlobal    (probs       + headOffset);
+        for (unsigned m0 = 0; m0 < kSeqLen; m0 += kSoftmaxTileM) {
+            const size_t rowOffset = static_cast<size_t>(m0) * kSeqLen;
 
-        TLOAD(scoresTile,     srcNopeGlobal);
-        TLOAD(scoresRopeTile, srcRopeGlobal);
-        TADD (scoresTile, scoresTile, scoresRopeTile);  // combined scores
+            GlobalData srcNopeGlobal(scores_nope + headOffset + rowOffset);
+            GlobalData srcRopeGlobal(scores_rope + headOffset + rowOffset);
+            GlobalData dstGlobal    (probs       + headOffset + rowOffset);
 
-        // 1. Scale by 1/sqrt(headDim).
-        TMULS(scaledTile, scoresTile, scale);
+            TLOAD(scoresTile,     srcNopeGlobal);
+            TLOAD(scoresRopeTile, srcRopeGlobal);
+            TADD (scoresTile, scoresTile, scoresRopeTile);  // combined scores
 
-        // 2. Row max (numerical stability).
-        TROWMAX(rowMaxTile, scaledTile, tmpTile);
+            // 1. Scale by 1/sqrt(headDim).
+            TMULS(scaledTile, scoresTile, scale);
 
-        // 3. Broadcast row max to [S, S].
-        TROWEXPAND(broadcastTile, rowMaxTile);
+            // 2. Row max (numerical stability).
+            TROWMAX(rowMaxTile, scaledTile, tmpTile);
 
-        // 4. shifted = scaled - broadcast(max).      (reuse scoresTile)
-        TSUB(scoresTile, scaledTile, broadcastTile);
+            // 3. Broadcast row max to [TileM, kSeqLen].
+            TROWEXPAND(broadcastTile, rowMaxTile);
 
-        // 5. exp(shifted).                            (reuse scaledTile)
-        TEXP(scaledTile, scoresTile);
+            // 4. shifted = scaled - broadcast(max).      (reuse scoresTile)
+            TSUB(scoresTile, scaledTile, broadcastTile);
 
-        // 6. Row sum of exp.
-        TROWSUM(rowSumTile, scaledTile, tmpTile);
+            // 5. exp(shifted).                            (reuse scaledTile)
+            TEXP(scaledTile, scoresTile);
 
-        // 7. Broadcast row sum.                       (reuse broadcastTile)
-        TROWEXPAND(broadcastTile, rowSumTile);
+            // 6. Row sum of exp.
+            TROWSUM(rowSumTile, scaledTile, tmpTile);
 
-        // 8. probs = exp / broadcast(sum).            (reuse scoresTile)
-        TDIV(scoresTile, scaledTile, broadcastTile);
+            // 7. Broadcast row sum.                       (reuse broadcastTile)
+            TROWEXPAND(broadcastTile, rowSumTile);
 
-        TSTORE(dstGlobal, scoresTile);
+            // 8. probs = exp / broadcast(sum).            (reuse scoresTile)
+            TDIV(scoresTile, scaledTile, broadcastTile);
+
+            TSTORE(dstGlobal, scoresTile);
+        }
     }
 }
 
