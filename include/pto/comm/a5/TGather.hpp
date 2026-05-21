@@ -31,13 +31,30 @@ namespace comm {
 // callers write `TGATHER_CCU_IMPL<engine>(...)`, which turns the qualified
 // template-id into a dependent name so the discarded `if constexpr (engine ==
 // CCU)` branch in pto_comm_inst.hpp performs no lookup on non-A5 builds.
+// Common logic: flush tileData to parallelGroup[selfIdx] (if AivStored) then trigger CKE.
+template <typename ParallelGroupType, typename TileData, typename... WaitEvents>
+PTO_INTERNAL void GatherCcuStoreTrigger(ParallelGroupType &parallelGroup, TileData &tileData,
+                                        const CcuTriggerContext &ctx, WaitEvents &...events)
+{
+    WaitAllEvents(events...);
+
+    if (ctx.inputSource == CcuInputSource::AivStored) {
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        TSTORE(parallelGroup[static_cast<int>(ctx.selfIdx)], tileData);
+        pipe_barrier(PIPE_MTE3);
+    }
+
+    CkeTriggerFromTile(ctx.ckeSlotVA, ctx.mask, tileData);
+}
+
 template <CollEngine = CollEngine::CCU, typename ParallelGroupType, typename GlobalDstData, typename TileData,
           typename... WaitEvents>
 PTO_INTERNAL void TGATHER_CCU_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
                                    TileData &stagingTileData, const CcuTriggerContext &ctx, WaitEvents &...events)
 {
-    WaitAllEvents(events...);
-    pto::comm::ccu::CkeTriggerFromTile(ctx.ckeSlotVA, ctx.mask, stagingTileData);
+    GatherCcuStoreTrigger(parallelGroup, stagingTileData, ctx, events...);
+    (void)dstGlobalData;
 }
 
 template <CollEngine = CollEngine::CCU, typename ParallelGroupType, typename GlobalDstData, typename TileData,
@@ -45,8 +62,9 @@ template <CollEngine = CollEngine::CCU, typename ParallelGroupType, typename Glo
 PTO_INTERNAL void TGATHER_CCU_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &pingTile,
                                    TileData &pongTile, const CcuTriggerContext &ctx, WaitEvents &...events)
 {
-    WaitAllEvents(events...);
-    pto::comm::ccu::CkeTriggerFromTile(ctx.ckeSlotVA, ctx.mask, pingTile);
+    GatherCcuStoreTrigger(parallelGroup, pingTile, ctx, events...);
+    (void)dstGlobalData;
+    (void)pongTile;
 }
 
 } // namespace comm
