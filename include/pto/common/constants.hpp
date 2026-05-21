@@ -44,6 +44,13 @@ constexpr const int MAD_ROUND_MODE_BIT = 47;
 constexpr const int TROW_PROD_LOOP_B16 = 7;
 constexpr const int TROW_PROD_LOOP_B32 = 6;
 constexpr const int PAD_SHIFT_LENGTH = 32;
+constexpr uint16_t PTO_TSCATTER_TIME_1 = 1;
+constexpr uint16_t PTO_TSCATTER_TIME_2 = 2;
+constexpr uint16_t PTO_TSCATTER_TIME_4 = 4;
+constexpr uint16_t PTO_TSCATTER_IDX_0 = 0;
+constexpr uint16_t PTO_TSCATTER_IDX_1 = 1;
+constexpr uint16_t PTO_TSCATTER_IDX_2 = 2;
+constexpr uint16_t PTO_TSCATTER_IDX_3 = 3;
 
 // ============================================================================
 // Custom pad value helpers for uint64_t-based PadValue enum
