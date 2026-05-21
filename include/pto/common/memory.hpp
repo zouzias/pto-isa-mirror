@@ -1,28 +1,29 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_MEMORY_HPP
 #define PTO_MEMORY_HPP
 
 #include <stdint.h>
-#include <type_traits>
+
 #include <pto/common/arch_macro.hpp>
 #include <pto/common/type.hpp>
-#include <pto/common/arch_macro.hpp>
+#include <type_traits>
 
 namespace pto {
 // returns the memory qualifier for a given TileType and data type.
 // compilation errors occur if the TileType does not have a specialized version.
 template <TileType L, typename DType>
-struct MemoryQualifier {
-};
+struct MemoryQualifier {};
 
 template <typename DType>
 struct MemoryQualifier<TileType::Vec, DType> {
@@ -114,7 +115,13 @@ struct MemoryQualifier<TileType::Ctrl, DType> {
     using type = uint64_t;
 };
 
-PTO_INTERNAL constexpr const __gm__ char *GetLayoutName(BLayout bType, SLayout sType) noexcept
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
+using PtoStringName = const char *;
+#else
+using PtoStringName = const __gm__ char *;
+#endif
+
+PTO_INTERNAL constexpr PtoStringName GetLayoutName(BLayout bType, SLayout sType) noexcept
 {
     switch (sType) {
         case SLayout::NoneBox:
@@ -129,7 +136,7 @@ PTO_INTERNAL constexpr const __gm__ char *GetLayoutName(BLayout bType, SLayout s
 }
 
 template <TileType type>
-PTO_INTERNAL constexpr const __gm__ char *GetTileTypeName() noexcept
+PTO_INTERNAL constexpr PtoStringName GetTileTypeName() noexcept
 {
     switch (type) {
         case TileType::Vec:

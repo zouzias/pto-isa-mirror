@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TCOLEXPAND_HPP
@@ -13,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
+
 #include "common.hpp"
 #include "utils.hpp"
 
@@ -21,7 +24,8 @@ template <typename TileDataDst, typename TileDataSrc>
 PTO_INTERNAL void TColExpandCheck(unsigned srcValidRow, unsigned srcValidCol, unsigned dstValidCol)
 {
     static_assert(std::is_same_v<typename TileDataDst::DType, typename TileDataSrc::DType>,
-                  "Fix: TCOLEXPAND input data type must be consistent with the output data type.");
+                  "Fix: TCOLEXPAND input data type must be consistent with the output data "
+                  "type.");
     static_assert((sizeof(typename TileDataSrc::DType) == 1) || (sizeof(typename TileDataSrc::DType) == 2) ||
                       (sizeof(typename TileDataSrc::DType) == 4),
                   "Fix: TCOLEXPAND data type must be b8/b16/b32");
@@ -31,7 +35,9 @@ PTO_INTERNAL void TColExpandCheck(unsigned srcValidRow, unsigned srcValidCol, un
                   "Fix: TCOLEXPAND only support Nd fractal Tile.");
     static_assert(TileDataSrc::isRowMajor && TileDataSrc::SFractal == SLayout::NoneBox,
                   "Fix: TCOLEXPAND only support Nd fractal Tile.");
-    PTO_ASSERT(srcValidCol == dstValidCol, "Fix: TCOLEXPAND input valid col must be consistent with output valid col.");
+    PTO_ASSERT(srcValidCol == dstValidCol,
+               "Fix: TCOLEXPAND input valid col must be consistent with output "
+               "valid col.");
     PTO_ASSERT(srcValidRow != 0 && srcValidCol != 0,
                "Fix: TCOLEXPAND input shape in invalid, validCol or validRow is 0.");
 }

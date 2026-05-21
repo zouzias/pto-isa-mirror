@@ -46,6 +46,7 @@ tadd
 taddc
 tadds
 taddsc
+tassign_alias
 tand
 tands
 targreduceop
@@ -58,6 +59,8 @@ tcolexpand
 tcolexpandop
 tcolmax
 tcolmin
+tcolprod
+tcolreduceidx
 tcolsum
 tconcat
 tcvt
@@ -77,6 +80,7 @@ tgatherb
 tget
 tget_async
 tget_scale_addr
+tgetscaleaddr
 thistogram
 timg2col
 tinsert
@@ -102,6 +106,7 @@ tnotify
 tor
 tors
 tpartadd
+tpartmul
 tpartmax
 tpartmin
 tprefetch
@@ -121,8 +126,9 @@ trowexpand
 trowexpandop
 trowmax
 trowmin
-trowsum
 trowprod
+trowreduceidx
+trowsum
 trsqrt
 tscatter
 tsel
@@ -136,16 +142,19 @@ tsqrt
 tstore
 tstore_quant
 tsub
+tsubview
 tsubc
 tsubs
 tsubsc
-tsubview
 ttest
 ttrans
 ttri
 twait
 txor
 txors
+tpushpop_cv_nosplit
+tpushpop_cv
+tpushpop_vc_nosplit
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})

@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TDIV754_HPP
@@ -78,7 +80,8 @@ PTO_INTERNAL void DivIEEE754FloatImpl(RegTensor<float> &dst, RegTensor<float> &s
     nan.i = 0x7fc00000; // NaN: sign=0, exp=0xFF, mant!=0
 
     FloatUnion min_denormal;
-    min_denormal.i = 0x1; // Minimum denormal value detection (smallest positive float32 = 2^-149)
+    min_denormal.i = 0x1; // Minimum denormal value detection (smallest positive
+                          // float32 = 2^-149)
 
     // Scaling factors for denormal normalization:
     // normalizeScaleEnlarge = 2^23: shifts denormals into normal range
@@ -127,8 +130,8 @@ PTO_INTERNAL void DivIEEE754FloatImpl(RegTensor<float> &dst, RegTensor<float> &s
     RegTensor<uint32_t> dstExponent;
     RegTensor<uint32_t> dstSign;
 
-    // ========== Implementation: SIMD-optimized IEEE 754 float32 division ==========
-    // subnormal threshold
+    // ========== Implementation: SIMD-optimized IEEE 754 float32 division
+    // ========== subnormal threshold
     vdup(maxSubnormal, subnormalThreshold.f, mask, MODE_ZEROING);
     // Extract absolute values of operands
     vabs(src0Abs, src0, mask, MODE_ZEROING); // Absolute value of dividend
@@ -226,7 +229,8 @@ PTO_INTERNAL void DivIEEE754FloatImpl(RegTensor<float> &dst, RegTensor<float> &s
     // ===========================================================
     // exception handling
     // ===========================================================
-    // overflow (exponent over 255) underflow (exponent under 0) detection // FP32:1S + 8E + 23M
+    // overflow (exponent over 255) underflow (exponent under 0) detection //
+    // FP32:1S + 8E + 23M
     vdup(tmp1, -23, mask, MODE_ZEROING);
     // True if underflow/overflow
     vcmp_eq(mask0, scale, (RegTensor<int32_t> &)tmp1, mask);
@@ -440,7 +444,8 @@ PTO_INTERNAL void DivIEEE754HalfImpl(RegTensor<half> &dst, RegTensor<half> &src0
     // ===========================================================
     // exception handling
     // ===========================================================
-    // overflow (exponent over 31) underflow (exponent under -9) detection // FP16:1S + 5E + 9M
+    // overflow (exponent over 31) underflow (exponent under -9) detection //
+    // FP16:1S + 5E + 9M
     vdup(tmp1, -9, mask, MODE_ZEROING);
     vcmp_eq(mask0, scale, (RegTensor<int16_t> &)tmp1, mask);
     pand(mask0, mask0, maskValid, mask);

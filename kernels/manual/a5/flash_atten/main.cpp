@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 /*
@@ -13,22 +15,23 @@ See LICENSE in the root of the software repository for the full text of the Lice
  */
 
 #include <acl/acl.h>
+
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
-#include <functional>
 #include <fstream>
+#include <functional>
 #include <iomanip>
 #include <limits>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
-#include <set>
 
-#include "test_common.h"
-#include "runtime/rt.h"
 #include "fa_performance_kernel.h"
 #include "generated_cases.h"
+#include "runtime/rt.h"
+#include "test_common.h"
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -95,7 +98,8 @@ static void AppendReportRow(const std::string &case_name, int head, int s0, int 
         return;
     }
     if (!exists) {
-        ofs << "case,HEAD,S0,S1,CUBE_S0,CUBE_S1,TILE_S1,start_time,end_time,duration_us,avg_block_us,GOPS,TFLOPS,"
+        ofs << "case,HEAD,S0,S1,CUBE_S0,CUBE_S1,TILE_S1,start_time,end_time,"
+               "duration_us,avg_block_us,GOPS,TFLOPS,"
                "result\n";
     }
     ofs << case_name << ',' << head << ',' << s0 << ',' << s1 << ',' << cube_s0 << ',' << cube_s1 << ',' << tile_s1
@@ -167,14 +171,16 @@ void run_tfa()
     T *out2Device; // pv_out
     T *out2Host;
 
-    aclrtMallocHost((void **)(&outHost), qk_fifo_bytes); // Allocate qk FIFO buffer
+    aclrtMallocHost((void **)(&outHost),
+                    qk_fifo_bytes); // Allocate qk FIFO buffer
     aclrtMallocHost((void **)(&qHost), qSize);
     aclrtMallocHost((void **)(&kHost), kSize);
 
     aclrtMalloc((void **)&outDevice, qk_fifo_bytes, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&qDevice, qSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&kDevice, kSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&xexpDevice, p_fifo_bytes_half, ACL_MEM_MALLOC_HUGE_FIRST); // p_out (half) FIFO layout
+    aclrtMalloc((void **)&xexpDevice, p_fifo_bytes_half,
+                ACL_MEM_MALLOC_HUGE_FIRST); // p_out (half) FIFO layout
     void *expMaxIfifoDevice = nullptr;
     aclrtMalloc((void **)&expMaxIfifoDevice, p_fifo_bytes_float,
                 ACL_MEM_MALLOC_HUGE_FIRST); // exp_max ififo (float) FIFO layout
@@ -201,7 +207,8 @@ void run_tfa()
     T *oDevice = nullptr;
     size_t oSize = pvPartSize; // S0 * HEAD_SIZE * sizeof(T)
     aclrtMalloc((void **)&oDevice, oSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    // allocate per-iteration running output snapshots (num_tiles * S0 * HEAD_SIZE)
+    // allocate per-iteration running output snapshots (num_tiles * S0 *
+    // HEAD_SIZE)
     T *oPartsDevice = nullptr;
     size_t oPartsTotalSize = pvPartSize * num_tiles;
     aclrtMalloc((void **)&oPartsDevice, oPartsTotalSize, ACL_MEM_MALLOC_HUGE_FIRST);
@@ -249,7 +256,8 @@ void run_tfa()
         std::cout << "[INFO] Intermediate checking is disabled" << std::endl;
     }
 
-    // Launch kernel, pass ffts ctrl addr and device-side log buffer, and xexp/tmp_float_exp device ptrs
+    // Launch kernel, pass ffts ctrl addr and device-side log buffer, and
+    // xexp/tmp_float_exp device ptrs
     LaunchTFA<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, kFaCvFifoSize, INTERMEDIATE_CHECK, CAUSAL_MASK,
               kFaCvFifoConsSyncPeriod>(
         (uint16_t *)ffts, (aclFloat16 *)qDevice, (aclFloat16 *)kDevice, (aclFloat16 *)vDevice, (aclFloat16 *)xexpDevice,
@@ -301,7 +309,8 @@ void run_tfa()
     if constexpr (INTERMEDIATE_CHECK) {
         const size_t qk_fifo_stride = static_cast<size_t>(kFaCvFifoSize) * static_cast<size_t>(CUBE_S0) *
                                       static_cast<size_t>(tile_factor) * static_cast<size_t>(CUBE_S1);
-        const size_t p_fifo_stride = qk_fifo_stride; // same dimensions as qk (Cube_S0 x kTileFactor x Cube_S1)
+        const size_t p_fifo_stride = qk_fifo_stride; // same dimensions as qk (Cube_S0 x kTileFactor x
+                                                     // Cube_S1)
         const size_t p_max_fifo_stride = static_cast<size_t>(kFaCvFifoSize) * static_cast<size_t>(CUBE_S0);
         const size_t pv_fifo_stride =
             static_cast<size_t>(kFaCvFifoSize) * static_cast<size_t>(CUBE_S0) * static_cast<size_t>(HEAD_SIZE);
@@ -346,7 +355,8 @@ void run_tfa()
     }
 
     if constexpr (INTERMEDIATE_CHECK) {
-        // Build expected FIFO contents from golden tensors and compare against device dumps
+        // Build expected FIFO contents from golden tensors and compare against
+        // device dumps
         const int block_rows = S0 / CUBE_S0;
         const size_t qk_fifo_stride =
             static_cast<size_t>(kFaCvFifoSize) * static_cast<size_t>(CUBE_S0) * static_cast<size_t>(TILE_S1);
@@ -427,7 +437,8 @@ void run_tfa()
 
                 const int c0 = ti * TILE_S1;
 
-                // DN builds dump qk/p subtiles as (Cube_S1 x Cube_S0); ND builds dump them as (Cube_S0 x Cube_S1).
+                // DN builds dump qk/p subtiles as (Cube_S1 x Cube_S0); ND builds dump
+                // them as (Cube_S0 x Cube_S1).
 #ifdef MODE_DN
                 for (int sub_col = 0; sub_col < tile_factor; ++sub_col) {
                     const size_t subtile_off = qk_off + static_cast<size_t>(sub_col) * static_cast<size_t>(CUBE_S0) *
@@ -458,7 +469,8 @@ void run_tfa()
                     }
                 }
 
-                // Copy p tile (converted to float) with new layout: contiguous sub-tiles of width CUBE_S1
+                // Copy p tile (converted to float) with new layout: contiguous
+                // sub-tiles of width CUBE_S1
                 for (int r = 0; r < CUBE_S0; ++r) {
                     const int global_r = b * CUBE_S0 + r;
                     for (int sub_col = 0; sub_col < tile_factor; ++sub_col) {
@@ -609,7 +621,9 @@ void run_tfa()
 
         std::cout << (all_ok ? "[CHECK] FIFO intermediate ok" : "[CHECK] FIFO intermediate FAILED") << std::endl;
     } else {
-        std::cout << "[INFO] Intermediate checking skipped; proceeding to final compare only" << std::endl;
+        std::cout << "[INFO] Intermediate checking skipped; proceeding to final "
+                     "compare only"
+                  << std::endl;
     }
 
     aclrtFree(outDevice);
@@ -729,11 +743,14 @@ int main(int argc, char **argv)
     };
 
     std::vector<CaseEntry> cases = {
-#define TFA_CASE_ENTRY(S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, CAUSAL_MASK)                           \
-    {"case_float_H_" #HEAD "_S0_" #S0 "_S1_" #S1, []() {                                                           \
-         run_case<float, S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, CAUSAL_MASK>("case_float_H_" #HEAD   \
-                                                                                           "_S0_" #S0 "_S1_" #S1); \
-     }},
+#define TFA_CASE_ENTRY(S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, CAUSAL_MASK)                              \
+    {                                                                                                                 \
+        "case_float_H_" #HEAD "_S0_" #S0 "_S1_" #S1, []() {                                                           \
+            run_case<float, S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, CAUSAL_MASK>("case_float_H_" #HEAD   \
+                                                                                              "_S0_" #S0 "_S1_" #S1); \
+        }                                                                                                             \
+    }                                                                                                                 \
+    ,
         TFA_FOR_EACH_CASE(TFA_CASE_ENTRY)
 #undef TFA_CASE_ENTRY
     };
@@ -799,7 +816,8 @@ int main(int argc, char **argv)
         // Split multiple cases by ';' only to preserve comma-separated tuple tokens
         std::vector<std::string> raw_filters = Split(filter_arg, ';');
         auto normalize_filter = [](const std::string &f) {
-            // Accept either canonical case name or numeric tuple HEAD,S0,S1[,CUBE_S0[,TILE_S1]]
+            // Accept either canonical case name or numeric tuple
+            // HEAD,S0,S1[,CUBE_S0[,TILE_S1]]
             const std::string trimmed = Trim(f);
             if (trimmed.rfind("case_float", 0) == 0)
                 return trimmed;

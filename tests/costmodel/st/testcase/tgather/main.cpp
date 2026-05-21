@@ -1,17 +1,20 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
+
 #include <cstdint>
+#include <pto/common/constants.hpp>
+#include <pto/pto-inst.hpp>
 #include <vector>
 
 #include "cost_check.hpp"
@@ -266,25 +269,30 @@ TEST(TGather, case_1D_half_16x16_32x32)
 
 TEST(TGather, case1_float_topk)
 {
-    GTEST_SKIP() << "TGATHER top-k compare path truncates scratch addresses to uint32_t on host costmodel.";
+    GTEST_SKIP() << "TGATHER top-k compare path truncates scratch addresses to "
+                    "uint32_t on host costmodel.";
 }
 
 TEST(TGather, case2_s32_topk)
 {
-    GTEST_SKIP() << "TGATHER top-k compare path truncates scratch addresses to uint32_t on host costmodel.";
+    GTEST_SKIP() << "TGATHER top-k compare path truncates scratch addresses to "
+                    "uint32_t on host costmodel.";
 }
 
 TEST(TGather, case3_float_topk)
 {
-    GTEST_SKIP() << "TGATHER top-k compare path truncates scratch addresses to uint32_t on host costmodel.";
+    GTEST_SKIP() << "TGATHER top-k compare path truncates scratch addresses to "
+                    "uint32_t on host costmodel.";
 }
 
 TEST(TGather, case4_half_topk)
 {
-    GTEST_SKIP() << "TGATHER top-k compare path truncates scratch addresses to uint32_t on host costmodel.";
+    GTEST_SKIP() << "TGATHER top-k compare path truncates scratch addresses to "
+                    "uint32_t on host costmodel.";
 }
 
 TEST(TGather, case5_half_topk)
 {
-    GTEST_SKIP() << "TGATHER top-k compare path truncates scratch addresses to uint32_t on host costmodel.";
+    GTEST_SKIP() << "TGATHER top-k compare path truncates scratch addresses to "
+                    "uint32_t on host costmodel.";
 }

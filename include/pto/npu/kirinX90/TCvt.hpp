@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 /**
@@ -19,9 +21,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
  *
  * 2. 1D Helper Templates (lines ~103-466)
  *    - Optimized for contiguous data without padding
- *    - castS64to32_1D_NoPostUpdate, cast32to16_1D_NoPostUpdate, cast32to32_1D_NoPostUpdate, cast32toS64_1D_NoPostUpdate
- *    - cast16to16_1D_NoPostUpdate, cast16to32_1D_NoPostUpdate, cast16to8_1D_NoPostUpdate
- *    - cast8to16_1D_NoPostUpdate, cast8to32_1D_NoPostUpdate, cast32to8_1D_NoPostUpdate
+ *    - castS64to32_1D_NoPostUpdate, cast32to16_1D_NoPostUpdate,
+ * cast32to32_1D_NoPostUpdate, cast32toS64_1D_NoPostUpdate
+ *    - cast16to16_1D_NoPostUpdate, cast16to32_1D_NoPostUpdate,
+ * cast16to8_1D_NoPostUpdate
+ *    - cast8to16_1D_NoPostUpdate, cast8to32_1D_NoPostUpdate,
+ * cast32to8_1D_NoPostUpdate
  *
  * 3. 2D Helper Templates (lines ~467-855)
  *    - For data with row/column layout and potential padding
@@ -44,8 +49,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
  *    - implTCVT: Main template function
  *    - TCVT_IMPL: Rounding mode dispatcher
  *
- * QUICK FIND: To find a specific conversion, search for the source type section header,
- * e.g., "Source: FP32" or "Source: I16", then look for the destination type.
+ * QUICK FIND: To find a specific conversion, search for the source type section
+ * header, e.g., "Source: FP32" or "Source: I16", then look for the destination
+ * type.
  */
 
 #ifndef TCVT_HPP
@@ -62,7 +68,8 @@ namespace pto {
  * - Used in combination with CTRL[59] to control saturation mode
  * - CTRL[60]=1, CTRL[59]=1: SaturationMode::ON
  * - CTRL[60]=1, CTRL[59]=0: SaturationMode::OFF
- * - Used for: float→integer, integer→integer, float→float (wider→narrower, dst≠fp32)
+ * - Used for: float→integer, integer→integer, float→float (wider→narrower,
+ * dst≠fp32)
  */
 constexpr const int SAT_MODE_BIT_60 = 60;
 
@@ -71,7 +78,8 @@ constexpr const int SAT_MODE_BIT_60 = 60;
  * - Used in combination with CTRL[60] to control saturation mode
  * - CTRL[60]=1, CTRL[59]=0: SaturationMode::ON
  * - CTRL[60]=1, CTRL[59]=1: SaturationMode::OFF
- * - Used for: float→integer, integer→integer, float→float (wider→narrower, dst≠fp32)
+ * - Used for: float→integer, integer→integer, float→float (wider→narrower,
+ * dst≠fp32)
  */
 constexpr const int SAT_MODE_BIT_59 = 59;
 
@@ -91,11 +99,16 @@ enum class CastMode
 {
     EXPAND,         // vcvt(..., PART_EVEN) - Type expansion only, no conversion
     ROUND,          // vcvt(..., R()) - Conversion with rounding only
-    ROUND_SAT,      // vcvt(..., R(), RS_DISABLE) - Conversion with rounding and saturation
-    ROUND_PART,     // vcvt(..., R(), PART_EVEN) - Conversion with rounding and part operation
-    ROUND_SAT_PART, // vcvt(..., R(), RS_DISABLE, PART_EVEN) - Rounding, saturation, and part
-    SAT_PART,       // vcvt(..., RS_DISABLE, PART_EVEN) - Saturation and part (no rounding)
-    SAT_ROUND       // vcvt(..., RS_DISABLE, R()) - Saturation then rounding (reversed order)
+    ROUND_SAT,      // vcvt(..., R(), RS_DISABLE) - Conversion with rounding and
+                    // saturation
+    ROUND_PART,     // vcvt(..., R(), PART_EVEN) - Conversion with rounding and part
+                    // operation
+    ROUND_SAT_PART, // vcvt(..., R(), RS_DISABLE, PART_EVEN) - Rounding,
+                    // saturation, and part
+    SAT_PART,       // vcvt(..., RS_DISABLE, PART_EVEN) - Saturation and part (no
+                    // rounding)
+    SAT_ROUND       // vcvt(..., RS_DISABLE, R()) - Saturation then rounding (reversed
+                    // order)
 };
 
 // PyTorch alignment for edge cases (inf, -inf, nan, overflow)
@@ -122,11 +135,13 @@ enum class CastMode
 //=============================================================================================
 // 1D Helper Templates - For contiguous data (optimized fast path)
 //=============================================================================================
-// These templates handle conversions when data is laid out contiguously in memory without
-// padding. They process data in a single pass without row/column iteration overhead.
+// These templates handle conversions when data is laid out contiguously in
+// memory without padding. They process data in a single pass without row/column
+// iteration overhead.
 //
-// PERFORMANCE NOTE: 1D versions are significantly faster than 2D versions when applicable,
-// as they avoid the FOR_ROWS/FOR_ELEMENTS loop overhead and process data in bulk.
+// PERFORMANCE NOTE: 1D versions are significantly faster than 2D versions when
+// applicable, as they avoid the FOR_ROWS/FOR_ELEMENTS loop overhead and process
+// data in bulk.
 
 /**
  * Cast 64-bit integer to 32-bit (signed/float) - 1D version
@@ -218,7 +233,8 @@ inline AICORE void cast32to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
 
 /**
  * Cast between 32-bit types - 1D version
- * Handles: f32 -> s32 #rnd #sat, s32 -> f32 #rnd, f32 -> f32 #rnd (same-type rounding)
+ * Handles: f32 -> s32 #rnd #sat, s32 -> f32 #rnd, f32 -> f32 #rnd (same-type
+ * rounding)
  */
 template <typename R, CastMode MODE, typename DST, typename SRC>
 inline AICORE void cast32to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows,
@@ -273,7 +289,8 @@ inline AICORE void cast32toS64_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ S
             // For type expansion s32->s64 without rounding, no saturation control
             vcvt(v_output, v_input_0, preg_b32, PART_EVEN);
         } else {
-            // For conversions with rounding (e.g., f32->s64), saturation mode is controllable
+            // For conversions with rounding (e.g., f32->s64), saturation mode is
+            // controllable
             vcvt(v_output, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
         }
         vsts(v_output, dst, i * ELE_CNT_B64, NORM_B32, preg_b64);
@@ -281,8 +298,9 @@ inline AICORE void cast32toS64_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ S
     }
 }
 
-// Float16 (half) to signed 16-bit integer conversion for non-saturation mode (PyTorch-aligned)
-// This version matches PyTorch behavior for inf/-inf and performs a two-step conversion:
+// Float16 (half) to signed 16-bit integer conversion for non-saturation mode
+// (PyTorch-aligned) This version matches PyTorch behavior for inf/-inf and
+// performs a two-step conversion:
 // 1. fp16 -> int32
 // 2. int32 -> int16
 template <typename R>
@@ -376,8 +394,9 @@ inline AICORE void cast16to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
     }
 }
 
-// Float16 (half) to signed 8-bit integer conversion for non-saturation mode (PyTorch-aligned)
-// This version matches PyTorch behavior for inf/-inf and performs a multi-step conversion:
+// Float16 (half) to signed 8-bit integer conversion for non-saturation mode
+// (PyTorch-aligned) This version matches PyTorch behavior for inf/-inf and
+// performs a multi-step conversion:
 // 1. fp16 -> int16 (direct conversion)
 // 2. bitwise AND with 255 using int16
 // 3. int16 -> fp16
@@ -393,7 +412,8 @@ inline AICORE void cast16to8_NonSatTorch_1D(__ubuf__ int8_t *dst, __ubuf__ half 
     MaskReg preg_b16 = CreatePredicate<half>(len16);
     MaskReg pg = pset_b16(PAT_ALL);
 
-    // Perform four-step conversion using registers (fp16 -> int16 -> AND -> fp16 -> int8)
+    // Perform four-step conversion using registers (fp16 -> int16 -> AND -> fp16
+    // -> int8)
     for (uint16_t i = 0; i < repeatTimes; ++i) {
         RegTensor<half> v_input_fp16, v_temp_fp16;
         RegTensor<int16_t> v_temp_int16, v_temp_and, v_mask;
@@ -516,8 +536,8 @@ inline AICORE void cast8to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
 /**
  * Cast 32-bit to 8-bit types - 1D version
  *
- * IMPLEMENTATION NOTE: Uses vselr with index vector to extract bytes from 32-bit words.
- * The conversion happens in two steps:
+ * IMPLEMENTATION NOTE: Uses vselr with index vector to extract bytes from
+ * 32-bit words. The conversion happens in two steps:
  *   1. vcvt: Convert 32-bit source to target type (PART_P0 extracts low byte)
  *   2. vselr: Gather bytes using index vector for proper byte packing
  */
@@ -551,7 +571,8 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
             vcvt(v_output_p0, v_input, preg_b32, RS_ENABLE, PART_P0);
         }
 
-        // Reuse v_input's preg for vselr output — guaranteed non-overlapping with v_output_p0
+        // Reuse v_input's preg for vselr output — guaranteed non-overlapping with
+        // v_output_p0
         vselr((RegTensor<uint8_t> &)v_input, (RegTensor<uint8_t> &)v_output_p0, (RegTensor<uint8_t> &)v_idx);
         vsts((RegTensor<uint8_t> &)v_input, (__ubuf__ uint8_t *)dst, i * ELE_CNT_B32, NORM_B8, preg_b8);
         // sReg is decremented by the first CreatePredicate with POST_UPDATE
@@ -565,8 +586,9 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
  * Cast 64-bit integer to 32-bit (signed/float) - 2D version
  * Handles: s64 -> s32 #sat #part, s64 -> f32 #rnd #part
  * Intrinsics:
- *   vcvt(output, input, preg, RS_DISABLE, PART_EVEN)  // s64 -> s32 with saturation
- *   vcvt(output, input, preg, R(), PART_EVEN)        // s64 -> f32 with rounding
+ *   vcvt(output, input, preg, RS_DISABLE, PART_EVEN)  // s64 -> s32 with
+ * saturation vcvt(output, input, preg, R(), PART_EVEN)        // s64 -> f32
+ * with rounding
  */
 template <typename R, typename DST, typename SRC>
 inline AICORE void castS64to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols,
@@ -602,8 +624,9 @@ inline AICORE void castS64to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t va
  * Cast 32-bit to 16-bit types
  * Handles: f32 -> f16 #rnd #sat #part, f32 -> s16 #rnd #sat #part
  * Intrinsics:
- *   vcvt(out_odd, in_1, preg, RS_DISABLE, PART_ODD/EVEN)       // No rounding mode (saturation only)
- *   vcvt(out_odd, in_1, preg, R(), RS_DISABLE, PART_ODD/EVEN)  // With rounding mode
+ *   vcvt(out_odd, in_1, preg, RS_DISABLE, PART_ODD/EVEN)       // No rounding
+ * mode (saturation only) vcvt(out_odd, in_1, preg, R(), RS_DISABLE,
+ * PART_ODD/EVEN)  // With rounding mode
  */
 template <typename R, typename DST, typename SRC>
 inline AICORE void cast32to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols,
@@ -639,8 +662,9 @@ inline AICORE void cast32to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
  * Cast 32-bit to 16-bit types 2D without interleave version for better fusion
  * Handles: f32 -> f16 #rnd #sat #part, f32 -> s16 #rnd #sat #part
  * Intrinsics:
- *   vcvt(out_odd, in_1, preg, RS_DISABLE, PART_ODD/EVEN)       // No rounding mode (saturation only)
- *   vcvt(out_odd, in_1, preg, R(), RS_DISABLE, PART_ODD/EVEN)  // With rounding mode
+ *   vcvt(out_odd, in_1, preg, RS_DISABLE, PART_ODD/EVEN)       // No rounding
+ * mode (saturation only) vcvt(out_odd, in_1, preg, R(), RS_DISABLE,
+ * PART_ODD/EVEN)  // With rounding mode
  */
 template <typename R, typename DST, typename SRC>
 inline AICORE void cast32to16_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows,
@@ -668,8 +692,9 @@ inline AICORE void cast32to16_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
     END_FOR_ROWS
 }
 
-// Float32 to signed 16-bit integer conversion for non-saturation mode (PyTorch-aligned) - 2D version
-// This version matches PyTorch behavior for inf/-inf and performs a two-step conversion:
+// Float32 to signed 16-bit integer conversion for non-saturation mode
+// (PyTorch-aligned) - 2D version This version matches PyTorch behavior for
+// inf/-inf and performs a two-step conversion:
 // 1. fp32 -> int32
 // 2. int32 -> int16
 template <typename R>
@@ -701,8 +726,8 @@ inline AICORE void cast32to16_NonSatTorch_2D(__ubuf__ int16_t *dst, __ubuf__ flo
 /**
  * Cast between 32-bit types (float <-> int)
  * Modes:
- *   ROUND_SAT: f32 -> s32 #rnd #sat → vcvt(output, input, preg, R(), RS_DISABLE)
- *   ROUND:     s32 -> f32 #rnd     → vcvt(output, input, preg, R())
+ *   ROUND_SAT: f32 -> s32 #rnd #sat → vcvt(output, input, preg, R(),
+ * RS_DISABLE) ROUND:     s32 -> f32 #rnd     → vcvt(output, input, preg, R())
  */
 template <typename R, CastMode MODE, typename DST, typename SRC>
 inline AICORE void cast32to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols,
@@ -729,8 +754,9 @@ inline AICORE void cast32to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
  * Cast 32-bit to 64-bit signed integer
  * Handles: s32 -> s64 #part, f32 -> s64 #rnd #sat #part
  * Intrinsics:
- *   vcvt(output, input, preg, PART_EVEN)                    // s32 -> s64 (type expansion)
- *   vcvt(output, input, preg, R(), RS_DISABLE, PART_EVEN)    // f32 -> s64 (with rounding and saturation)
+ *   vcvt(output, input, preg, PART_EVEN)                    // s32 -> s64 (type
+ * expansion) vcvt(output, input, preg, R(), RS_DISABLE, PART_EVEN)    // f32 ->
+ * s64 (with rounding and saturation)
  */
 template <typename R, typename SRC>
 inline AICORE void cast32toS64(__ubuf__ int64_t *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols,
@@ -752,7 +778,8 @@ inline AICORE void cast32toS64(__ubuf__ int64_t *dst, __ubuf__ SRC *src, uint32_
     if constexpr (std::is_same<R, void>::value) {
         vcvt(v_output, v_input_0, preg_b32, PART_EVEN);
     } else {
-        // For conversions with rounding (e.g., f32->s64), saturation mode controlled by CTRL register
+        // For conversions with rounding (e.g., f32->s64), saturation mode
+        // controlled by CTRL register
         vcvt(v_output, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
     }
     vsts(v_output, dst, dstOffset, NORM_B32, preg_b64);
@@ -763,8 +790,8 @@ inline AICORE void cast32toS64(__ubuf__ int64_t *dst, __ubuf__ SRC *src, uint32_
 /**
  * Cast between 16-bit types
  * Modes:
- *   ROUND_SAT:  f16 -> s16 #rnd #sat → vcvt(output, input, preg, R(), RS_DISABLE)
- *   ROUND:      s16 -> f16 #rnd      → vcvt(output, input, preg, R())
+ *   ROUND_SAT:  f16 -> s16 #rnd #sat → vcvt(output, input, preg, R(),
+ * RS_DISABLE) ROUND:      s16 -> f16 #rnd      → vcvt(output, input, preg, R())
  */
 template <typename R, CastMode MODE, typename DST, typename SRC>
 inline AICORE void cast16to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols,
@@ -787,8 +814,9 @@ inline AICORE void cast16to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
     END_FOR_ROWS
 }
 
-// Float16 (half) to signed 16-bit integer conversion for non-saturation mode (PyTorch-aligned) - 2D version
-// This version matches PyTorch behavior for inf/-inf and performs a two-step conversion:
+// Float16 (half) to signed 16-bit integer conversion for non-saturation mode
+// (PyTorch-aligned) - 2D version This version matches PyTorch behavior for
+// inf/-inf and performs a two-step conversion:
 // 1. fp16 -> int32
 // 2. int32 -> int16
 template <typename R>
@@ -822,8 +850,9 @@ inline AICORE void cast16to16_NonSatTorch_2D(__ubuf__ int16_t *dst, __ubuf__ hal
 /**
  * Cast 16-bit to 32-bit types
  * Modes:
- *   EXPAND:          Type expansion (f16/s16 -> f32/u32/s32 #part) → vcvt(output, input, preg, PART_EVEN)
- *   ROUND_PART:      f16 -> s32 #rnd #part                         → vcvt(output, input, preg, R(), PART_EVEN)
+ *   EXPAND:          Type expansion (f16/s16 -> f32/u32/s32 #part) →
+ * vcvt(output, input, preg, PART_EVEN) ROUND_PART:      f16 -> s32 #rnd #part
+ * → vcvt(output, input, preg, R(), PART_EVEN)
  */
 template <typename R, CastMode MODE, typename DST, typename SRC>
 inline AICORE void cast16to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols,
@@ -852,8 +881,9 @@ inline AICORE void cast16to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
 /**
  * Cast 16-bit to 8-bit types
  * Modes:
- *   ROUND_SAT_PART: f16 -> s8/u8 #rnd #sat #part → vcvt(..., R(), RS_DISABLE, PART_*)
- *   SAT_PART:       s16 -> u8 #sat #part         → vcvt(..., RS_DISABLE, PART_*)
+ *   ROUND_SAT_PART: f16 -> s8/u8 #rnd #sat #part → vcvt(..., R(), RS_DISABLE,
+ * PART_*) SAT_PART:       s16 -> u8 #sat #part         → vcvt(..., RS_DISABLE,
+ * PART_*)
  */
 template <typename R, CastMode MODE, typename DST_VEC, typename DST, typename SRC>
 inline AICORE void cast16to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols,
@@ -888,8 +918,9 @@ inline AICORE void cast16to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
 /**
  * Cast 16-bit to 8-bit types 2D without interleave version for better fusion
  * Modes:
- *   ROUND_SAT_PART: f16 -> s8/u8 #rnd #sat #part → vcvt(..., R(), RS_DISABLE, PART_EVEN)
- *   SAT_PART:       s16 -> u8 #sat #part         → vcvt(..., RS_DISABLE, PART_EVEN)
+ *   ROUND_SAT_PART: f16 -> s8/u8 #rnd #sat #part → vcvt(..., R(), RS_DISABLE,
+ * PART_EVEN) SAT_PART:       s16 -> u8 #sat #part         → vcvt(...,
+ * RS_DISABLE, PART_EVEN)
  */
 template <typename R, CastMode MODE, typename DST_VEC, typename DST, typename SRC>
 inline AICORE void cast16to8_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows,
@@ -918,8 +949,9 @@ inline AICORE void cast16to8_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
     END_FOR_ROWS
 }
 
-// Float16 (half) to signed 8-bit integer conversion for non-saturation mode (PyTorch-aligned) - 2D version
-// This version matches PyTorch behavior for inf/-inf and performs a multi-step conversion:
+// Float16 (half) to signed 8-bit integer conversion for non-saturation mode
+// (PyTorch-aligned) - 2D version This version matches PyTorch behavior for
+// inf/-inf and performs a multi-step conversion:
 // 1. fp16 -> int16 (direct conversion)
 // 2. bitwise AND with 255 using int16
 // 3. int16 -> fp16
@@ -932,7 +964,8 @@ inline AICORE void cast16to8_NonSatTorch_2D(__ubuf__ int8_t *dst, __ubuf__ half 
     MaskReg preg_b16 = CreatePredicate<half>(len16);
     MaskReg pg = pset_b16(PAT_ALL);
 
-    // Perform four-step conversion using registers (fp16 -> int16 -> AND -> fp16 -> int8)
+    // Perform four-step conversion using registers (fp16 -> int16 -> AND -> fp16
+    // -> int8)
     FOR_ROWS
     FOR_ELEMENTS(ELE_CNT_B16)
     RegTensor<half> v_input_fp16, v_temp_fp16;
@@ -1054,7 +1087,8 @@ inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
 
     vlds(v_input, src, srcOffset, NORM);
 
-    // Convert with or without rounding based on mode - saturation controlled by CTRL register
+    // Convert with or without rounding based on mode - saturation controlled by
+    // CTRL register
     if constexpr (MODE == CastMode::ROUND_SAT_PART) {
         vcvt(v_output_p0, v_input, preg_b32, ROUND_R, RS_DISABLE, PART_P0);
     } else {
@@ -1062,7 +1096,8 @@ inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
         vcvt(v_output_p0, v_input, preg_b32, RS_ENABLE, PART_P0);
     }
 
-    // Reuse v_input's preg for vselr output — guaranteed non-overlapping with v_output_p0
+    // Reuse v_input's preg for vselr output — guaranteed non-overlapping with
+    // v_output_p0
     vselr((RegTensor<uint8_t> &)v_input, (RegTensor<uint8_t> &)v_output_p0, (RegTensor<uint8_t> &)v_idx);
     vsts((RegTensor<uint8_t> &)v_input, (__ubuf__ uint8_t *)dst, dstOffset, NORM_B8, preg_b8);
     END_FOR_ELEMENTS
@@ -1072,12 +1107,14 @@ inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
 //=============================================================================================
 // castData Overloads (2D - with row/column iteration for non-contiguous data)
 //=============================================================================================
-// These are the main conversion functions organized by source type for easy navigation.
-// Each source type section contains conversions to all supported destination types.
+// These are the main conversion functions organized by source type for easy
+// navigation. Each source type section contains conversions to all supported
+// destination types.
 //
-// ORGANIZATION: Grouped by source type in ascending bit-width order (8→16→32→64-bit)
-// WHY: This ordering provides quick lookup - if you know the source type, you can
-// jump directly to its section and find all target conversions in one place.
+// ORGANIZATION: Grouped by source type in ascending bit-width order
+// (8→16→32→64-bit) WHY: This ordering provides quick lookup - if you know the
+// source type, you can jump directly to its section and find all target
+// conversions in one place.
 
 //---------------------------------------------------------------------------------------------
 // Source: FP32 (float) - 2D versions
@@ -1087,8 +1124,9 @@ inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
  * FP32 to FP32 - Applies rounding mode without type conversion
  * Intrinsic: vtrc(output, input, R(), preg)
  *
- * NOTE: Same-type conversions like FP32→FP32 are useful for applying rounding modes
- * to existing data without changing the underlying type (e.g., rounding to nearest even).
+ * NOTE: Same-type conversions like FP32→FP32 are useful for applying rounding
+ * modes to existing data without changing the underlying type (e.g., rounding
+ * to nearest even).
  */
 template <typename R>
 inline AICORE void castData(__ubuf__ float *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols,
@@ -1162,13 +1200,15 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ floa
 {
 #if EDGE_CASE_ALIGN_ENABLE
     if (satMode == SaturationMode::OFF) {
-        // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
+        // Use PyTorch-aligned implementation when saturation is OFF and edge case
+        // alignment is enabled
         cast32to16_NonSatTorch_2D<R>(dst, src, validRows, validCols, dstCols, srcCols);
     } else {
         cast32to16_2D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
     }
 #else
-    // Use default implementation when edge case alignment is disabled - saturation controlled by CTRL register
+    // Use default implementation when edge case alignment is disabled -
+    // saturation controlled by CTRL register
     cast32to16_2D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 #endif
 }
@@ -1217,7 +1257,8 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ floa
 // Source: FP16 (half) - 2D versions
 //---------------------------------------------------------------------------------------------
 
-/** FP16 -> FP32 #part (type expansion) → vcvt(output, input, preg, PART_EVEN) */
+/** FP16 -> FP32 #part (type expansion) → vcvt(output, input, preg, PART_EVEN)
+ */
 template <typename R>
 inline AICORE void castData(__ubuf__ float *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols,
                             uint32_t dstCols, uint32_t srcCols, SaturationMode satMode)
@@ -1264,7 +1305,8 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ half
 {
 #if EDGE_CASE_ALIGN_ENABLE
     if (satMode == SaturationMode::OFF) {
-        // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
+        // Use PyTorch-aligned implementation when saturation is OFF and edge case
+        // alignment is enabled
         cast16to16_NonSatTorch_2D<R>(dst, src, validRows, validCols, dstCols, srcCols);
     } else {
         cast16to16<R, CastMode::ROUND_SAT>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
@@ -1290,7 +1332,8 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int8_t *dst, __ubuf__ half 
 {
 #if EDGE_CASE_ALIGN_ENABLE
     if (satMode == SaturationMode::OFF) {
-        // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
+        // Use PyTorch-aligned implementation when saturation is OFF and edge case
+        // alignment is enabled
         cast16to8_NonSatTorch_2D<R>(dst, src, validRows, validCols, dstCols, srcCols);
     } else {
         cast16to8_2D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_s8>(dst, src, validRows, validCols, dstCols,
@@ -1661,10 +1704,12 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int6
 }
 
 //=============================================================================================
-// castData_1D_NoPostUpdate Overloads - Organized by Source Type (8→16→32→64-bit sources)
+// castData_1D_NoPostUpdate Overloads - Organized by Source Type (8→16→32→64-bit
+// sources)
 //=============================================================================================
 // Optimized 1D versions for contiguous data without padding
-// Each section contains conversions FROM a specific source type TO all supported destination types
+// Each section contains conversions FROM a specific source type TO all
+// supported destination types
 
 //---------------------------------------------------------------------------------------------
 // Source: 8-bit types (uint8_t, int8_t) - 1D versions
@@ -1715,8 +1760,10 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int8
 //---------------------------------------------------------------------------------------------
 // Source: 16-bit types (half/fp16, int16_t) - 1D versions
 //---------------------------------------------------------------------------------------------
-// 16-bit conversions are commonly used for mixed-precision training and inference:
-//   - FP16 (half): Standard IEEE 754 half-precision (1 sign, 5 exp, 10 mantissa)
+// 16-bit conversions are commonly used for mixed-precision training and
+// inference:
+//   - FP16 (half): Standard IEEE 754 half-precision (1 sign, 5 exp, 10
+//   mantissa)
 //   - I16: Signed 16-bit integer
 
 // Source: FP16 (half)
@@ -1743,7 +1790,8 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ half
 {
 #if EDGE_CASE_ALIGN_ENABLE
     if (satMode == SaturationMode::OFF) {
-        // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
+        // Use PyTorch-aligned implementation when saturation is OFF and edge case
+        // alignment is enabled
         cast16to16_NonSatTorch_1D<R>(dst, src, validRows, validCols, dstCols, srcCols);
     } else {
         cast16to16_1D_NoPostUpdate<R, CastMode::ROUND_SAT>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
@@ -1761,7 +1809,8 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int8_t *dst, __ubuf__ half 
 {
 #if EDGE_CASE_ALIGN_ENABLE
     if (satMode == SaturationMode::OFF) {
-        // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
+        // Use PyTorch-aligned implementation when saturation is OFF and edge case
+        // alignment is enabled
         cast16to8_NonSatTorch_1D<R>(dst, src, validRows, validCols, dstCols, srcCols);
     } else {
         cast16to8_1D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_s8>(dst, src, validRows, validCols, dstCols,
@@ -1828,7 +1877,8 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int1
 //---------------------------------------------------------------------------------------------
 // Source: 32-bit types (float, int32_t, uint32_t) - 1D versions
 //---------------------------------------------------------------------------------------------
-// Note: Keep FP32/I32/U32 together for quick lookup of all 32-bit source conversions.
+// Note: Keep FP32/I32/U32 together for quick lookup of all 32-bit source
+// conversions.
 
 // Source: FP32 (float)
 template <typename R>
@@ -1854,7 +1904,8 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ floa
 {
 #if EDGE_CASE_ALIGN_ENABLE
     if (satMode == SaturationMode::OFF) {
-        // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
+        // Use PyTorch-aligned implementation when saturation is OFF and edge case
+        // alignment is enabled
         cast32to16_NonSatTorch_1D<R>(dst, src, validRows, validCols, dstCols, srcCols);
     } else {
         cast32to16_1D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
@@ -1976,20 +2027,24 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int6
 
 /**
  * Main TCVT implementation function
- * Converts tile data from source type to destination type using specified rounding mode
- * Iterates over rows and calls appropriate castData specialization
+ * Converts tile data from source type to destination type using specified
+ * rounding mode Iterates over rows and calls appropriate castData
+ * specialization
  *
  * @param satMode: Saturation mode control (KirinX90-specific):
  *                 In KirinX90, saturation is controlled by both:
- *                 1. CTRL register bits [60] and [48] - set by TCVT_IMPL based on conversion type
+ *                 1. CTRL register bits [60] and [48] - set by TCVT_IMPL based
+ * on conversion type
  *                 2. RS_DISABLE/RS_DISABLE parameters in vcvt intrinsics
  *
  *                 The satMode parameter works in conjunction with CTRL bits:
- *                 - CTRL[60]: Used for float→int, int→int, float→float (wider→narrower, dst≠fp32)
- *                 - CTRL[48]: Used for float→float (narrower→wider, dst≠fp32), VTRC.fp16
+ *                 - CTRL[60]: Used for float→int, int→int, float→float
+ * (wider→narrower, dst≠fp32)
+ *                 - CTRL[48]: Used for float→float (narrower→wider, dst≠fp32),
+ * VTRC.fp16
  *
- *                 The actual saturation behavior is determined by both the CTRL bit setting
- *                 and the CastMode used in castData template instantiations.
+ *                 The actual saturation behavior is determined by both the CTRL
+ * bit setting and the CastMode used in castData template instantiations.
  */
 template <typename TileDataD, typename TileDataS, typename R>
 __tf__ PTO_INTERNAL OP_NAME(TCVT)
@@ -1999,10 +2054,12 @@ __tf__ PTO_INTERNAL OP_NAME(TCVT)
                                         VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
 {
     // Saturation is controlled by:
-    // 1. CTRL[60]/CTRL[48] register bits (set by caller TCVT_IMPL based on conversion type)
-    // 2. RS_DISABLE/RS_DISABLE in vcvt intrinsics (determined by CastMode in castData templates)
-    // The satMode parameter is passed through to castData functions which use it to select
-    // between RS_DISABLE and RS_DISABLE in the vcvt intrinsic calls.
+    // 1. CTRL[60]/CTRL[48] register bits (set by caller TCVT_IMPL based on
+    // conversion type)
+    // 2. RS_DISABLE/RS_DISABLE in vcvt intrinsics (determined by CastMode in
+    // castData templates) The satMode parameter is passed through to castData
+    // functions which use it to select between RS_DISABLE and RS_DISABLE in the
+    // vcvt intrinsic calls.
 
     using T1 = typename TileDataD::DType;
     using T2 = typename TileDataS::DType;
@@ -2090,7 +2147,8 @@ PTO_INTERNAL SaturationCtrlConfig determineSaturationCtrlBits(SaturationMode sat
 {
     SaturationCtrlConfig config = {false, false, false, false, false, false};
 
-    // Early return: dst=fp32 conversions don't support saturation (CTRL bits neglected)
+    // Early return: dst=fp32 conversions don't support saturation (CTRL bits
+    // neglected)
     if constexpr (std::is_same<DstType, float>::value) {
         return config;
     }
@@ -2139,7 +2197,8 @@ PTO_INTERNAL SaturationCtrlConfig determineSaturationCtrlBits(SaturationMode sat
 
     // Case 5: INTEGER → FLOAT conversions
     if constexpr (std::is_integral<SrcType>::value && is_any_float<DstType>::value) {
-        // Only set CTRL[60] and CTRL[59] if source is wider than or equal to destination
+        // Only set CTRL[60] and CTRL[59] if source is wider than or equal to
+        // destination
         if constexpr (sizeof(SrcType) >= sizeof(DstType)) {
             config.useCtrl60 = true;
             config.useCtrl59 = true;
@@ -2325,7 +2384,8 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
 template <typename TileDataD, typename TileDataS>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
 {
-    // Conversions that default to OFF for PyTorch compatibility or truncation behavior
+    // Conversions that default to OFF for PyTorch compatibility or truncation
+    // behavior
     if constexpr (
         // FP16→UINT8 (float→int: CTRL[60] controls saturation)
         (std::is_same<typename TileDataD::DType, uint8_t>::value &&
@@ -2353,7 +2413,8 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
 }
 
 // ============================================================================
-// TCVT_IMPL Overloads with tmp buffer (unused in KirinX90, for API compatibility)
+// TCVT_IMPL Overloads with tmp buffer (unused in KirinX90, for API
+// compatibility)
 // ============================================================================
 template <typename TileDataD, typename TileDataS, typename TmpTileData>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode, SaturationMode satMode)
