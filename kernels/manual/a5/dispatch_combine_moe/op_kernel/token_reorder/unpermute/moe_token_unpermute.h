@@ -24,7 +24,7 @@
 
 #include "kernel_operator.h"
 #include "moe_token_unpermute_tiling.h"
-#include "../moe_init_routing_quant/moe_pto_sort.h"
+#include "../routing/moe_pto_sort.h"
 using namespace AscendC;
 using pto_ext::dispatch_combine_moe::pto_bridge::PtoFillVector;
 using pto_ext::dispatch_combine_moe::pto_bridge::PtoGetValue;

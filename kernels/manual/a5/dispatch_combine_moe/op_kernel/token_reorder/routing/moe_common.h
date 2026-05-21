@@ -16,6 +16,7 @@
 #define INNER_MOE_COMMON_H
 
 #include "kernel_operator.h"
+#include "../../utils/moe_pto_utils.hpp"
 
 namespace MoeInitRoutingQuant {
 using namespace AscendC;
@@ -90,12 +91,8 @@ __aicore__ inline T Max(T a, T b)
     return a < b ? b : a;
 }
 
-template <HardEvent event>
-__aicore__ inline void SetWaitFlag(HardEvent evt)
-{
-    event_t eventId = static_cast<event_t>(GetTPipePtr()->FetchEventID(evt));
-    SetFlag<event>(eventId);
-    WaitFlag<event>(eventId);
+namespace pto_detail {
+using namespace pto_ext::dispatch_combine_moe::pto_detail;
 }
 
 template <typename T>

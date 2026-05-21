@@ -16,8 +16,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "moe_init_routing_quant/moe_init_routing_tiling.h"
-#include "moe_init_routing_quant/moe_init_routing_quant_tiling.h"
+#include "token_reorder/routing/moe_init_routing_tiling.h"
+#include "token_reorder/routing/moe_init_routing_quant_tiling.h"
 
 #ifndef ASCENDC_DISPATCH_FFN_COMBINE_TILING_H
 #define ASCENDC_DISPATCH_FFN_COMBINE_TILING_H

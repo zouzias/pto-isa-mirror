@@ -4,7 +4,7 @@
 #include <stdexcept>
 
 #include "op_kernel/utils/const_args.hpp"
-#include "moe_init_routing_quant/moe_init_routing_quant_tiling.h"
+#include "token_reorder/routing/moe_init_routing_quant_tiling.h"
 #include "tiling/platform/platform_ascendc.h"
 
 namespace {
@@ -50,19 +50,14 @@ uint32_t GetBlockDim(const CaseConfig &cfg, uint32_t aivNum)
     return platform->CalcTschBlockDim(aivNum, platform->GetCoreNumAic(), aivNum);
 }
 
-uint64_t AlignUpHost(uint64_t value, uint64_t align)
-{
-    return (value + align - 1) / align * align;
-}
-
 void ValidateRemoteWindowCapacity(const CaseConfig &cfg, const StandaloneRankRuntime &runtime)
 {
-    const uint64_t segmentBytes = runtime.hccl.WindowBytes();
+    const uint64_t segmentBytes = runtime.hccl.host_remote_window_ctx.windowBytes;
     if (segmentBytes <= 3 * MB_SIZE) {
         throw std::runtime_error("HCCL remote window is too small for dispatch_combine_moe layout");
     }
 
-    const uint64_t offsetPeerPerTokenScale = AlignUpHost(segmentBytes / 3, 512);
+    const uint64_t offsetPeerPerTokenScale = ((segmentBytes / 3) + 512 - 1) / 512 * 512;
     const uint64_t offsetD = offsetPeerPerTokenScale + MB_SIZE;
     const uint64_t offsetPeerTokenPerExpert = segmentBytes - 2 * MB_SIZE;
     const uint64_t peerPerTokenScaleBytes = static_cast<uint64_t>(cfg.max_output_size) * sizeof(float);
@@ -127,7 +122,7 @@ DispatchFFNCombineBuildResult BuildDispatchFFNCombineTiling(const CaseConfig &cf
     FillCoCTiling(result.tiling.cocTiling, cfg);
     FillInitRoutingTiling(result.tiling.cocTiling, cfg, info.aivNum);
 
-    result.tiling.runtimeInfo.remoteWindowContext = reinterpret_cast<uint64_t>(runtime.hccl.RemoteWindowContextPtr());
+    result.tiling.runtimeInfo.remoteWindowContext = reinterpret_cast<uint64_t>(runtime.hccl.remote_window_ctx);
     result.tiling.runtimeInfo.rank = static_cast<uint32_t>(runtime.hccl.rank_id);
     result.tiling.runtimeInfo.rankSize = static_cast<uint32_t>(runtime.hccl.world_size);
 

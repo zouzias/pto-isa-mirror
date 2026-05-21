@@ -22,11 +22,12 @@ using namespace AscendC;
 
 #include "dispatch_ffn_combine_tiling.h"
 
+#include "utils/moe_pto_utils.hpp"
 #include "utils/dispatch_policy_custom.hpp"
 
 #include "utils/const_args.hpp"
 #include "dispatch_ffn_combine_kernel.hpp"
-#include "moe_init_routing_quant/moe_init_routing_quant_tiling.h"
+#include "token_reorder/routing/moe_init_routing_quant_tiling.h"
 
 namespace DispatchFFNCombineImpl {
 #define TemplateMMA2AClass typename AType_, typename BType_, typename CType_, bool TB_, bool Nz_
@@ -36,7 +37,7 @@ using namespace AscendC;
 
 template <typename Layout, typename ElementType, typename = void>
 struct LayoutBInitializer {
-    PTO_DEVICE
+    __forceinline__ __aicore__
     static Layout create(uint32_t k, uint32_t n)
     {
         return Layout{k, n};
@@ -45,7 +46,7 @@ struct LayoutBInitializer {
 
 template <typename Layout, typename ElementType>
 struct LayoutBInitializer<Layout, ElementType, std::enable_if_t<Layout::kTileLayout == pto::TileLayoutCustom::ZN>> {
-    PTO_DEVICE
+    __forceinline__ __aicore__
     static Layout create(uint32_t k, uint32_t n)
     {
         return Layout::template MakeLayout<ElementType>(k, n);
@@ -361,7 +362,7 @@ __aicore__ inline void DispatchFFNCombine<TemplateMMA2ACFunc>::Process()
     // Prepare params
 
     pto_ext::PtoShape3D problemShape =
-        pto_ext::MakePtoShape3D(static_cast<uint32_t>(m), static_cast<uint32_t>(n), static_cast<uint32_t>(k));
+        pto_ext::PtoShape3D(static_cast<uint32_t>(m), static_cast<uint32_t>(n), static_cast<uint32_t>(k));
 
     uint32_t epilogueCoreNum = aivNum;
     uint32_t epilogueGranularity = expertPerRank - 3;

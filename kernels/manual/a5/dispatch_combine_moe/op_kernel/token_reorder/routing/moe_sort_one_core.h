@@ -45,7 +45,7 @@ __aicore__ inline void MoeSortOneCore::CopyIn()
 {
     pto_detail::PtoLoadVector<int32_t>(this->sortInputUb, expertIdxGm, this->totalLength);
     pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
-    pto_detail::PtoFillArithProgressionInt32(this->sortInputUb + static_cast<uint64_t>(this->sortNum) * sizeof(int32_t),
+    PtoFillArithProgressionInt32(this->sortInputUb + static_cast<uint64_t>(this->sortNum) * sizeof(int32_t),
                                              0, 1, this->sortNum);
 }
 
@@ -56,7 +56,7 @@ __aicore__ inline void MoeSortOneCore::SortCompute()
     const uint64_t sortedExpertUb = this->sortOutputUb;
     const uint64_t sortedRowUb = this->sortOutputUb + static_cast<uint64_t>(this->sortNum) * sizeof(int32_t);
 
-    pto_detail::PtoSortInt32AscendingUB(expertForSourceRowUb, sourceRowUb, sortedExpertUb, sortedRowUb,
+    PtoSortInt32AscendingUB(expertForSourceRowUb, sourceRowUb, sortedExpertUb, sortedRowUb,
                                         this->sortTempUb, this->sortMergeTmpUb, this->totalLength);
 }
 

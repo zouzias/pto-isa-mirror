@@ -95,7 +95,7 @@ __aicore__ inline void MoeSortMultiCore::VBSCopyIn(int64_t progress, int64_t siz
 
     int64_t startValue = this->blockIdx * this->vbsTilingData->perCoreElements + inOffset;
     pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
-    pto_detail::PtoFillArithProgressionInt32(this->sortInputUb + static_cast<uint64_t>(sortNum) * sizeof(int32_t),
+    PtoFillArithProgressionInt32(this->sortInputUb + static_cast<uint64_t>(sortNum) * sizeof(int32_t),
                                              static_cast<int32_t>(startValue), 1, size);
 }
 
@@ -104,7 +104,7 @@ __aicore__ inline void MoeSortMultiCore::UBSortCompute(int64_t progress, int64_t
     const uint64_t expertForSourceRowUb = this->sortInputUb;
     const uint64_t sourceRowUb = this->sortInputUb + static_cast<uint64_t>(sortNum) * sizeof(int32_t);
 
-    pto_detail::PtoSortInt32ToPackedUB(expertForSourceRowUb, sourceRowUb, this->sortOutputUb, this->sortMergeTmpUb,
+    PtoSortInt32ToPackedUB(expertForSourceRowUb, sourceRowUb, this->sortOutputUb, this->sortMergeTmpUb,
                                        size);
 }
 

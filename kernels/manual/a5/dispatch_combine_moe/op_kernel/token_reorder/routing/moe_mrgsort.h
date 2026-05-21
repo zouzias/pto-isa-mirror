@@ -132,7 +132,7 @@ __aicore__ inline void MoeMrgsort::MrgsortCompute()
 {
     pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
     if (this->remainListNum > 1) {
-        pto_detail::PtoMergePackedSortRecords(
+        PtoMergePackedSortRecords(
             this->ubOutput, this->tempBuffer, this->tmpUbInputs[0], this->tmpUbInputs[1],
             this->remainListNum >= MERGE_LIST_THREE ? this->tmpUbInputs[MERGE_LIST_IDX_TWO] : 0,
             this->remainListNum >= MERGE_LIST_FOUR ? this->tmpUbInputs[MERGE_LIST_IDX_THREE] : 0,

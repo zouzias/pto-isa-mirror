@@ -86,7 +86,7 @@ __aicore__ inline void MoeFullLoadDynamicQuant<T>::CopyIn()
 {
     pto_detail::PtoLoadVector<int32_t>(this->sortInputUb, expertIdxGm_, this->totalLength);
     pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
-    pto_detail::PtoFillArithProgressionInt32(
+    PtoFillArithProgressionInt32(
         this->sortInputUb + static_cast<uint64_t>(this->sortNum_) * sizeof(int32_t), 0, 1, this->totalLength);
 }
 
@@ -96,12 +96,12 @@ __aicore__ inline void MoeFullLoadDynamicQuant<T>::SortCompute()
     const uint64_t expertIdxUb = this->sortInputUb;
     const uint64_t rowIdxUb = this->sortInputUb + static_cast<uint64_t>(this->sortNum_) * sizeof(int32_t);
 
-    pto_detail::PtoSortInt32AscendingUB(expertIdxUb, rowIdxUb, this->expandedExpertIdxUb_, this->expandDstToSrcRowUb_,
+    PtoSortInt32AscendingUB(expertIdxUb, rowIdxUb, this->expandedExpertIdxUb_, this->expandDstToSrcRowUb_,
                                         this->sortTempUb, this->sortMergeTmpUb, this->totalLength);
 
-    pto_detail::PtoFillArithProgressionInt32(rowIdxUb, 0, 1, this->totalLength);
+    PtoFillArithProgressionInt32(rowIdxUb, 0, 1, this->totalLength);
     pto_detail::PtoPipeBarrier<PIPE_V>();
-    pto_detail::PtoSortInt32AscendingUB(this->expandDstToSrcRowUb_, rowIdxUb, expertIdxUb, this->expandedRowIdxUb_,
+    PtoSortInt32AscendingUB(this->expandDstToSrcRowUb_, rowIdxUb, expertIdxUb, this->expandedRowIdxUb_,
                                         this->sortTempUb, this->sortMergeTmpUb, this->totalLength);
 }
 

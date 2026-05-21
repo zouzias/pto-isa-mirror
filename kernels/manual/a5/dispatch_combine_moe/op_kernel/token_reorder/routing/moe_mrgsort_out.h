@@ -144,7 +144,7 @@ __aicore__ inline void MoeMrgsortOut::MrgsortCompute()
 {
     pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
     if (this->remainListNum > 1) {
-        pto_detail::PtoMergePackedSortRecords(
+        PtoMergePackedSortRecords(
             this->tempBuffer, this->mergeTmpBuffer, this->tmpUbInputs[0], this->tmpUbInputs[1],
             this->remainListNum >= MERGE_LIST_THREE ? this->tmpUbInputs[MERGE_LIST_IDX_TWO] : 0,
             this->remainListNum >= MERGE_LIST_FOUR ? this->tmpUbInputs[MERGE_LIST_IDX_THREE] : 0,
@@ -175,7 +175,7 @@ __aicore__ inline void MoeMrgsortOut::UpdateSortInfo()
 
 __aicore__ inline void MoeMrgsortOut::Extract()
 {
-    pto_detail::PtoExtractPackedSortResult(this->ubOutputInt1, this->ubOutput2, this->tempBuffer, curLoopSortedNum);
+    PtoExtractPackedSortResult(this->ubOutputInt1, this->ubOutput2, this->tempBuffer, curLoopSortedNum);
 }
 
 __aicore__ inline void MoeMrgsortOut::CopyOut()

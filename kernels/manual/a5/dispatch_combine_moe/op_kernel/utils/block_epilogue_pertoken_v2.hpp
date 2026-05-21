@@ -1,6 +1,7 @@
 #ifndef PTO_EXT_EPILOGUE_BLOCK_PER_TOKEN_V2_ONLY_HPP
 #define PTO_EXT_EPILOGUE_BLOCK_PER_TOKEN_V2_ONLY_HPP
 
+#include "moe_pto_utils.hpp"
 #include "dispatch_policy_custom.hpp"
 
 #include <pto/common/pto_tile.hpp>
@@ -13,34 +14,20 @@
 namespace pto_ext::Epilogue::Block {
 namespace detail {
 
-template <auto Pipe>
-PTO_DEVICE void PtoPipeBarrier()
-{
-    AscendC::PipeBarrier<Pipe>();
-}
-
-template <AscendC::HardEvent Event>
-PTO_DEVICE void PtoSetFlag(int32_t eventId)
-{
-    AscendC::SetFlag<Event>(eventId);
-}
-
-template <AscendC::HardEvent Event>
-PTO_DEVICE void PtoWaitFlag(int32_t eventId)
-{
-    AscendC::WaitFlag<Event>(eventId);
-}
+using pto_ext::PtoPipeBarrier;
+using pto_ext::PtoSetFlag;
+using pto_ext::PtoWaitFlag;
 
 using pto_ext::dispatch_combine_moe::pto_bridge::PtoElemOffsetBytes;
 
 template <typename Element>
-PTO_DEVICE __ubuf__ Element *PtoUbPtr(uint64_t ubOffsetBytes)
+__forceinline__ __aicore__ __ubuf__ Element *PtoUbPtr(uint64_t ubOffsetBytes)
 {
     return reinterpret_cast<__ubuf__ Element *>(ubOffsetBytes);
 }
 
 template <typename DstElement, typename SrcElement, int TileElems = 128>
-PTO_DEVICE void PtoCastVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum,
+__forceinline__ __aicore__ void PtoCastVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum,
                               pto::RoundMode mode)
 {
     pto_ext::dispatch_combine_moe::pto_bridge::PtoCastVector<DstElement, SrcElement, TileElems>(
@@ -48,26 +35,26 @@ PTO_DEVICE void PtoCastVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetByt
 }
 
 template <typename Element, int TileElems = 128>
-PTO_DEVICE void PtoMulVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum, Element scalar)
+__forceinline__ __aicore__ void PtoMulVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum, Element scalar)
 {
     pto_ext::dispatch_combine_moe::pto_bridge::PtoMulVector<Element, TileElems>(dstUbOffsetBytes, srcUbOffsetBytes,
                                                                                    elemNum, scalar);
 }
 
 template <typename Element, int TileElems = 128>
-PTO_DEVICE void PtoLoadVector(uint64_t dstUbOffsetBytes, __gm__ Element *src, uint32_t elemNum)
+__forceinline__ __aicore__ void PtoLoadVector(uint64_t dstUbOffsetBytes, __gm__ Element *src, uint32_t elemNum)
 {
     pto_ext::dispatch_combine_moe::pto_bridge::PtoLoadVector<Element, TileElems>(dstUbOffsetBytes, src, elemNum);
 }
 
 template <typename Element, int TileElems = 128>
-PTO_DEVICE void PtoStoreVector(__gm__ Element *dst, uint64_t srcUbOffsetBytes, uint32_t elemNum)
+__forceinline__ __aicore__ void PtoStoreVector(__gm__ Element *dst, uint64_t srcUbOffsetBytes, uint32_t elemNum)
 {
     pto_ext::dispatch_combine_moe::pto_bridge::PtoStoreVector<Element, TileElems>(dst, srcUbOffsetBytes, elemNum);
 }
 
 template <typename Element, int TileElems = 128>
-PTO_DEVICE void PtoLoadMatrixRows(uint64_t dstUbOffsetBytes, __gm__ Element *src, uint32_t rowNum, uint32_t colNum,
+__forceinline__ __aicore__ void PtoLoadMatrixRows(uint64_t dstUbOffsetBytes, __gm__ Element *src, uint32_t rowNum, uint32_t colNum,
                                   uint32_t dstStride, uint32_t srcStride)
 {
     pto_ext::dispatch_combine_moe::pto_bridge::PtoLoadMatrixRows<Element, TileElems>(dstUbOffsetBytes, src, rowNum,
@@ -75,7 +62,7 @@ PTO_DEVICE void PtoLoadMatrixRows(uint64_t dstUbOffsetBytes, __gm__ Element *src
 }
 
 template <typename Element, int TileElems = 128>
-PTO_DEVICE void PtoStoreMatrixRows(__gm__ Element *dst, uint64_t srcUbOffsetBytes, uint32_t rowNum, uint32_t colNum,
+__forceinline__ __aicore__ void PtoStoreMatrixRows(__gm__ Element *dst, uint64_t srcUbOffsetBytes, uint32_t rowNum, uint32_t colNum,
                                    uint32_t dstStride, uint32_t srcStride)
 {
     pto_ext::dispatch_combine_moe::pto_bridge::PtoStoreMatrixRows<Element, TileElems>(dst, srcUbOffsetBytes, rowNum,
@@ -112,9 +99,9 @@ public:
         int32_t offsetD;
         int32_t scratchOffset;
         Layout3D tokenPerExpertLayout;
-        PTO_DEVICE
+        __forceinline__ __aicore__
         Params(){};
-        PTO_DEVICE
+        __forceinline__ __aicore__
         Params(int32_t EP_, int32_t expertPerRank_, int32_t rank_, __gm__ int32_t *ptrTokenPerExpert_, LayoutC layoutC_,
                int32_t n2_, int32_t n0_, PtoRemoteWindow &remoteWindow_, int32_t offsetD_, int32_t scratchOffset_,
                Layout3D tokenPerExpertLayout_)
@@ -132,7 +119,7 @@ public:
         {}
     };
 
-    PTO_DEVICE
+    __forceinline__ __aicore__
     BlockEpilogue(Arch::Resource<ArchTag> const &resource, Params const &params = Params{}) : params(params)
     {
         // ub:192KB
@@ -153,7 +140,7 @@ public:
         tokenPerExpertLayout = params.tokenPerExpertLayout;
         is_ping = true;
     }
-    PTO_DEVICE
+    __forceinline__ __aicore__
     void SetFlag()
     {
         detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
@@ -166,7 +153,7 @@ public:
         detail::PtoSetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID1);
     }
 
-    PTO_DEVICE
+    __forceinline__ __aicore__
     void Finalize()
     {
         detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
@@ -178,10 +165,10 @@ public:
         detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
         detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID1);
     }
-    PTO_DEVICE
+    __forceinline__ __aicore__
     ~BlockEpilogue()
     {}
-    PTO_DEVICE
+    __forceinline__ __aicore__
     void operator()(__gm__ ElementC *gmCPtr, __gm__ ElementPerTokenScale *gmPerTokenScalePtr,
                     PtoCoord2D const &blockCoord, PtoShape2D const &actualBlockShape, int32_t groupIdx,
                     int32_t preSrcExpertSum, __gm__ int32_t *preSumBeforeRank)
@@ -279,7 +266,7 @@ public:
             }
             __gm__ void *dstPeermemPtr = params.remoteWindow(params.offsetD, dstEpIdx);
             __gm__ ElementD *gmRemotePeerPtr = reinterpret_cast<__gm__ ElementD *>(dstPeermemPtr);
-            auto dstOffset = MakePtoCoord2D(dstOffsetInExpert + dstExpertOffset, blockCol);
+            auto dstOffset = PtoCoord2D(dstOffsetInExpert + dstExpertOffset, blockCol);
             int64_t gmDstOffset = params.layoutC.GetOffset(dstOffset);
             __gm__ ElementD *gmTileD = gmRemotePeerPtr + gmDstOffset;
             if (dstEpIdx == params.rank) {

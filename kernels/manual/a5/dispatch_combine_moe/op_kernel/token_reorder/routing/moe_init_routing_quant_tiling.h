@@ -30,16 +30,6 @@ const static int64_t DYNAMIC_QUANT_SCALE_SIZE_128 = 128;
 const static int64_t OUTOUT_DYNAMIC_QUANT_SCALE = 4;
 const static int64_t FULLLOAD_H_LIMIT = 7168;
 
-inline static int64_t AlignOneBlockByte(int64_t x)
-{
-    return (x + ONE_BLOCK_BYTE - 1) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE;
-}
-
-inline static int64_t AlignOneBlockByteCeil(int64_t x)
-{
-    return x / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE;
-}
-
 struct MoeInitRoutingQuantTilingData {
     int64_t coreNum;
     int64_t n;
@@ -97,7 +87,7 @@ inline bool MoeInitRoutingQuantTilingBase::IsFullLoadQuant(int64_t space)
     int64_t remainder = moeInitRoutingTilingData.n % aivNum;
     // NUM_TWO is Max xRows need add 2 becauseof the left and right row may be another row.
     perCoreXRows = remainder <= 1 ? perCoreXRows + 1 : perCoreXRows + NUM_TWO;
-    int64_t quantBaseSpace = AlignOneBlockByte(moeInitRoutingTilingData.cols);
+    int64_t quantBaseSpace = CeilDiv(moeInitRoutingTilingData.cols, ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE;
     int64_t quantSpace =
         quantBaseSpace * (inuptXDtypeSize_ + sizeof(int8_t) + sizeof(float) + sizeof(int16_t)) * perCoreXRows;
     int64_t remainUbAfterSort = aicoreParams_.ubSize - space - quantSpace;
@@ -106,7 +96,7 @@ inline bool MoeInitRoutingQuantTilingBase::IsFullLoadQuant(int64_t space)
 
 inline bool MoeInitRoutingQuantTilingBase::IsFullLoadDynamicQuant(int64_t space)
 {
-    int64_t quantSpace = AlignOneBlockByte(moeInitRoutingTilingData.cols) * DYNAMIC_QUANT_FULLLOAD_COLS_BUFFER;
+    int64_t quantSpace = CeilDiv(moeInitRoutingTilingData.cols, ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * DYNAMIC_QUANT_FULLLOAD_COLS_BUFFER;
     int64_t scaleOutSpace = 64;
     int64_t remainUbAfterSort = aicoreParams_.ubSize - space - scaleOutSpace - quantSpace;
     return remainUbAfterSort > 0;
@@ -118,9 +108,9 @@ inline bool MoeInitRoutingQuantTilingBase::IsFullLoad()
         this->dropPadMode == 1) {
         return false;
     }
-    int64_t sortSpace = AlignOneBlockByte(this->totalLength) * sizeof(int32_t) * ONE_CORE_SORT_BUFFER;
-    int64_t otherSpace = AlignOneBlockByte(this->totalLength) * sizeof(int32_t) * NUM_THREE;
-    int64_t expertSpace = AlignOneBlockByte(this->expertNum * sizeof(int32_t));
+    int64_t sortSpace = CeilDiv(this->totalLength, ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * sizeof(int32_t) * ONE_CORE_SORT_BUFFER;
+    int64_t otherSpace = CeilDiv(this->totalLength, ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * sizeof(int32_t) * NUM_THREE;
+    int64_t expertSpace = CeilDiv(this->expertNum * static_cast<int64_t>(sizeof(int32_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE;
     if (quantMode == 0) {
         return IsFullLoadQuant(sortSpace + otherSpace + expertSpace);
     } else {
@@ -287,21 +277,21 @@ inline void MoeInitRoutingQuantTilingBase::Tiling4SrcToDstCapacityCompute()
     int64_t lastCoreRows = totalLength - perCoreRows * (tilingData->needCoreNum - 1);
     tilingData->lastCoreRows = lastCoreRows;
 
-    int64_t rowSize = AlignOneBlockByte(perCoreRows * sizeof(int32_t)) * NUM_FOUR;
-    int64_t colSize = AlignOneBlockByte(cols * sizeof(int8_t)) * DYNAMIC_QUANT_SRC_TO_DST_BUFFER;
+    int64_t rowSize = CeilDiv(perCoreRows * static_cast<int64_t>(sizeof(int32_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * NUM_FOUR;
+    int64_t colSize = CeilDiv(cols * static_cast<int64_t>(sizeof(int8_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * DYNAMIC_QUANT_SRC_TO_DST_BUFFER;
     int64_t scaleSize = DYNAMIC_QUANT_SCALE_SIZE_64;
     if (rowSize + colSize + scaleSize < static_cast<int64_t>(aicoreParams_.ubSize)) {
         SetGatherTilingData(tilingData, perCoreRows, lastCoreRows, cols);
     } else {
         int64_t baseMaxCols = MAX_COLS_DYNAMIC_QUANT;
-        int64_t totalColSize = AlignOneBlockByte(baseMaxCols * sizeof(int8_t)) * DYNAMIC_QUANT_SRC_TO_DST_BUFFER;
+        int64_t totalColSize = CeilDiv(baseMaxCols * static_cast<int64_t>(sizeof(int8_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * DYNAMIC_QUANT_SRC_TO_DST_BUFFER;
         int64_t ubSize = static_cast<int64_t>(aicoreParams_.ubSize);
         int64_t basePerLoopMaxRows =
-            AlignOneBlockByteCeil((ubSize - totalColSize - scaleSize) / sizeof(int32_t)) / NUM_FOUR;
+            (((ubSize - totalColSize - scaleSize) / sizeof(int32_t)) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE) / NUM_FOUR;
         if (cols < MAX_COLS_DYNAMIC_QUANT) {
-            basePerLoopMaxRows = AlignOneBlockByteCeil((ubSize - colSize - scaleSize) / sizeof(int32_t)) / NUM_FOUR;
+            basePerLoopMaxRows = (((ubSize - colSize - scaleSize) / sizeof(int32_t)) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE) / NUM_FOUR;
         } else if (perCoreRows < basePerLoopMaxRows) {
-            baseMaxCols = AlignOneBlockByteCeil(ubSize - rowSize - scaleSize) / DYNAMIC_QUANT_SRC_TO_DST_BUFFER;
+            baseMaxCols = ((ubSize - rowSize - scaleSize) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE) / DYNAMIC_QUANT_SRC_TO_DST_BUFFER;
         }
         SetGatherTilingDataCols(tilingData, baseMaxCols, cols);
         SetGatherTilingDataRows(tilingData, perCoreRows, lastCoreRows, basePerLoopMaxRows);
@@ -328,19 +318,19 @@ inline void MoeInitRoutingQuantTilingBase::Tiling4GatherQuant()
     int64_t lastCoreRows = totalLength - perCoreRows * (tilingData->needCoreNum - 1);
     tilingData->lastCoreRows = lastCoreRows;
     int64_t sizeOfCol = sizeof(int8_t) * NUM_TWO + sizeof(float) + sizeof(int16_t) + inuptXDtypeSize_ * NUM_TWO;
-    int64_t rowSize = AlignOneBlockByte((perCoreRows * sizeof(int32_t) * NUM_TWO));
-    int64_t colSize = AlignOneBlockByte(cols * sizeOfCol);
+    int64_t rowSize = CeilDiv(perCoreRows * static_cast<int64_t>(sizeof(int32_t)) * NUM_TWO, ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE;
+    int64_t colSize = CeilDiv(cols * sizeOfCol, ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE;
     if (rowSize + colSize < static_cast<int64_t>(aicoreParams_.ubSize) / NUM_TWO) {
         SetGatherTilingData(tilingData, perCoreRows, lastCoreRows, cols);
     } else {
         int64_t baseMaxCols = MAX_COLS_ONE_LOOP_QUANT;
-        int64_t baseMaxColsSize = AlignOneBlockByte(baseMaxCols * sizeOfCol);
+        int64_t baseMaxColsSize = CeilDiv(baseMaxCols * sizeOfCol, ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE;
         int64_t ubSize = static_cast<int64_t>(aicoreParams_.ubSize);
-        int64_t basePerLoopMaxRows = AlignOneBlockByteCeil((ubSize - baseMaxColsSize) / NUM_TWO / sizeof(int32_t));
+        int64_t basePerLoopMaxRows = (((ubSize - baseMaxColsSize) / NUM_TWO / sizeof(int32_t)) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE);
         if (cols < MAX_COLS_ONE_LOOP_QUANT) {
-            basePerLoopMaxRows = AlignOneBlockByteCeil((ubSize - colSize) / NUM_TWO / sizeof(int32_t));
+            basePerLoopMaxRows = (((ubSize - colSize) / NUM_TWO / sizeof(int32_t)) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE);
         } else if (perCoreRows < basePerLoopMaxRows) {
-            baseMaxCols = AlignOneBlockByteCeil((ubSize - rowSize) / sizeOfCol);
+            baseMaxCols = (((ubSize - rowSize) / sizeOfCol) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE);
         }
         SetGatherTilingDataCols(tilingData, baseMaxCols, cols);
         SetGatherTilingDataRows(tilingData, perCoreRows, lastCoreRows, basePerLoopMaxRows);
@@ -385,8 +375,8 @@ inline void MoeInitRoutingQuantTilingBase::Tiling4GatherDynamicQuant()
     int64_t lastCoreRows = totalLength - perCoreRows * (tilingData->needCoreNum - 1);
     tilingData->lastCoreRows = lastCoreRows;
 
-    int64_t rowSize = AlignOneBlockByte(perCoreRows * sizeof(int32_t)) * NUM_FOUR;
-    int64_t colSize = AlignOneBlockByte(cols * sizeof(int8_t)) * DYNAMIC_QUANT_COLS_BUFFER;
+    int64_t rowSize = CeilDiv(perCoreRows * static_cast<int64_t>(sizeof(int32_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * NUM_FOUR;
+    int64_t colSize = CeilDiv(cols * static_cast<int64_t>(sizeof(int8_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * DYNAMIC_QUANT_COLS_BUFFER;
     int64_t scaleSize = DYNAMIC_QUANT_SCALE_SIZE_64;
     int64_t onceRowSize =
         (static_cast<int64_t>(aicoreParams_.ubSize) - colSize - scaleSize - ONE_BLOCK_BYTE * NUM_FOUR * NUM_THREE) /
@@ -409,14 +399,14 @@ inline void MoeInitRoutingQuantTilingBase::Tiling4GatherDynamicQuant()
                                     lastCoreLastLoopRows, perCoreLoops, lastCoreLoops);
     } else {
         int64_t baseMaxCols = MAX_COLS_DYNAMIC_QUANT;
-        int64_t totalColSize = AlignOneBlockByte(baseMaxCols * sizeof(int8_t)) * DYNAMIC_QUANT_COLS_BUFFER;
+        int64_t totalColSize = CeilDiv(baseMaxCols * static_cast<int64_t>(sizeof(int8_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * DYNAMIC_QUANT_COLS_BUFFER;
         int64_t ubSize = static_cast<int64_t>(aicoreParams_.ubSize);
         int64_t basePerLoopMaxRows =
-            AlignOneBlockByteCeil((ubSize - totalColSize - scaleSize) / sizeof(int32_t)) / NUM_FOUR;
+            (((ubSize - totalColSize - scaleSize) / sizeof(int32_t)) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE) / NUM_FOUR;
         if (cols < MAX_COLS_DYNAMIC_QUANT) {
-            basePerLoopMaxRows = AlignOneBlockByteCeil((ubSize - colSize - scaleSize) / sizeof(int32_t)) / NUM_FOUR;
+            basePerLoopMaxRows = (((ubSize - colSize - scaleSize) / sizeof(int32_t)) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE) / NUM_FOUR;
         } else if (perCoreRows < basePerLoopMaxRows) {
-            baseMaxCols = AlignOneBlockByteCeil(ubSize - rowSize - scaleSize) / DYNAMIC_QUANT_COLS_BUFFER;
+            baseMaxCols = ((ubSize - rowSize - scaleSize) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE) / DYNAMIC_QUANT_COLS_BUFFER;
         }
         SetGatherTilingDataCols(tilingData, baseMaxCols, cols);
         SetGatherTilingDataRows(tilingData, perCoreRows, lastCoreRows, basePerLoopMaxRows);
