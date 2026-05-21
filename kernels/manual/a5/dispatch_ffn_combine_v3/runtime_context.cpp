@@ -209,6 +209,16 @@ struct RemoteResPtr {
     uint64_t nextDevicePtr = 0;
 };
 
+struct HcclDeviceContextA5 {
+    uint64_t workSpace = 0;
+    uint64_t workSpaceSize = 0;
+    uint32_t rankId = 0;
+    uint32_t rankNum = 0;
+    uint64_t winSize = 0;
+    uint64_t windowsIn[PTO_HCCL_MAX_RANKS] = {};
+    uint64_t windowsOut[PTO_HCCL_MAX_RANKS] = {};
+};
+
 struct HcclWorkspaceInfo {
     uint64_t workspace = 0;
     uint64_t workspaceSize = 0;
@@ -265,10 +275,27 @@ constexpr uint32_t COMM_IS_NOT_SET_DEVICE = 0;
 constexpr uint32_t COMM_TOPO_MESH = 0b1U;
 constexpr int32_t RT_STREAM_PRIORITY_DEFAULT = 0;
 
-bool LoadMeshRemoteWindowContext(StandaloneHcclContext &hccl, void *ctx_ptr)
+bool LoadA5RemoteWindowContext(StandaloneHcclContext &hccl, void *ctx_ptr)
 {
-    hccl.AttachExternalRemoteWindowContext(reinterpret_cast<PtoRemoteWindowContext *>(ctx_ptr));
-    return hccl.LoadHostRemoteWindowContextFromDevice();
+    pto_hccl_compat::HcclDeviceContextA5 host_ctx{};
+    if (aclrtMemcpy(&host_ctx, sizeof(host_ctx), ctx_ptr, sizeof(host_ctx), ACL_MEMCPY_DEVICE_TO_HOST) != ACL_SUCCESS) {
+        return false;
+    }
+    if (host_ctx.rankNum == 0 || host_ctx.rankNum > PTO_HCCL_MAX_RANKS || host_ctx.rankId >= host_ctx.rankNum ||
+        host_ctx.winSize == 0) {
+        return false;
+    }
+
+    hccl.ResetHostRemoteWindowContext();
+    hccl.SetHostContextWorkspace(host_ctx.workSpace, host_ctx.workSpaceSize);
+    hccl.SetHostRankInfo(host_ctx.rankId, host_ctx.rankNum, host_ctx.winSize);
+    for (uint32_t i = 0; i < host_ctx.rankNum; ++i) {
+        if (host_ctx.windowsIn[i] == 0 || host_ctx.windowsOut[i] == 0) {
+            return false;
+        }
+        hccl.SetHostWindow(i, host_ctx.windowsIn[i], host_ctx.windowsOut[i]);
+    }
+    return hccl.CopyHostRemoteWindowContextToDevice();
 }
 
 bool ReadRingParams(uint8_t *raw_ctx,
@@ -403,12 +430,12 @@ bool InitStandaloneRankRuntime(StandaloneRankRuntime &runtime, int rank_id, int 
     }
     DebugRuntimeLog(rank_id, "HcclAllocComResourceByTiling done");
 
-    if (topo == COMM_TOPO_MESH) {
-        DebugRuntimeLog(rank_id, "LoadMeshRemoteWindowContext begin");
-        const bool ok = LoadMeshRemoteWindowContext(runtime.hccl, ctx_ptr);
-        DebugRuntimeLog(rank_id, ok ? "LoadMeshRemoteWindowContext done" : "LoadMeshRemoteWindowContext failed");
-        return ok;
+    DebugRuntimeLog(rank_id, "LoadA5RemoteWindowContext begin");
+    if (LoadA5RemoteWindowContext(runtime.hccl, ctx_ptr)) {
+        DebugRuntimeLog(rank_id, "LoadA5RemoteWindowContext done");
+        return true;
     }
+    DebugRuntimeLog(rank_id, "LoadA5RemoteWindowContext failed, try ring parser");
 
     auto *raw_ctx = reinterpret_cast<uint8_t *>(ctx_ptr);
     pto_hccl_compat::HcclOpResParamHead head{};
