@@ -15,10 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace PtoTestCommon;
 
-template <int32_t testKey>
-void launchTEXPANDS_MAT(uint8_t *out, void *stream);
-
-class TEXPANDSTest : public testing::Test {
+class TAXPYTest : public testing::Test {
 protected:
     void SetUp() override
     {}
@@ -35,26 +32,40 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <int32_t testKey, typename T, typename... Dims>
-void texpands_test(Dims... dims)
+template <typename T, int kTRows_, int kTCols_, int vRows, int vCols>
+void LaunchTAxpy(T *out, T *src0, float scalar, void *stream);
+
+template <typename T, int kTRows_, int kTCols_, int vRows, int vCols>
+void test_taxpy()
 {
-    size_t totalElements = (1 * ... * dims);
-    size_t fileSize = totalElements * sizeof(T);
+    size_t fileSize = kTRows_ * kTCols_ * sizeof(T);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
-    uint8_t *dstHost;
-    uint8_t *dstDevice, *srcDevice;
+    T *dstHost, *src0Host;
+    T *dstDevice, *src0Device;
+    float scalar;
 
     aclrtMallocHost((void **)(&dstHost), fileSize);
+    aclrtMallocHost((void **)(&src0Host), fileSize);
 
     aclrtMalloc((void **)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&src0Device, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
+    ReadFile(GetGoldenDir() + "/input1.bin", fileSize, dstHost, fileSize);
+    ReadFile(GetGoldenDir() + "/input2.bin", fileSize, src0Host, fileSize);
+    std::string scalar_file = GetGoldenDir() + "/scalar.bin";
+    std::ifstream file(scalar_file, std::ios::binary);
+
+    file.read(reinterpret_cast<char *>(&scalar), 4);
+    file.close();
+
+    aclrtMemcpy(src0Device, fileSize, src0Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(dstDevice, fileSize, dstHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTEXPANDS_MAT<testKey>((uint8_t *)dstDevice, stream);
+    LaunchTAxpy<T, kTRows_, kTCols_, vRows, vCols>(dstDevice, src0Device, scalar, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -62,63 +73,50 @@ void texpands_test(Dims... dims)
     WriteFile(GetGoldenDir() + "/output.bin", dstHost, fileSize);
 
     aclrtFree(dstDevice);
+    aclrtFree(src0Device);
 
     aclrtFreeHost(dstHost);
+    aclrtFreeHost(src0Host);
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);
     aclFinalize();
 
     std::vector<T> golden(fileSize);
     std::vector<T> devFinal(fileSize);
-
     ReadFile(GetGoldenDir() + "/golden.bin", fileSize, golden.data(), fileSize);
     ReadFile(GetGoldenDir() + "/output.bin", fileSize, devFinal.data(), fileSize);
 
-    bool ret = ResultCmp(golden, devFinal, 0);
+    bool ret = ResultCmp<T>(golden, devFinal, 0.001f);
+
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TEXPANDSTest, case1)
+TEST_F(TAXPYTest, case1)
 {
-    texpands_test<1, uint16_t>(128, 128); // uint16_t represent half
+    test_taxpy<aclFloat16, 64, 64, 64, 64>();
 }
 
-TEST_F(TEXPANDSTest, case2)
+TEST_F(TAXPYTest, case2)
 {
-    texpands_test<2, int16_t>(32, 64);
+    test_taxpy<aclFloat16, 64, 64, 63, 63>();
 }
 
-// TEST_F(TEXPANDSTest, case3)
-// {
-//     texpands_test<3, float>(32, 32);
-// }
-
-// TEST_F(TEXPANDSTest, case4)
-// {
-//     texpands_test<4, int8_t>(32, 32);
-// }
-// 
-// TEST_F(TEXPANDSTest, case5)
-// {
-//     texpands_test<5, uint16_t>(256, 256);
-// }
-
-TEST_F(TEXPANDSTest, case6)
+TEST_F(TAXPYTest, case3)
 {
-    texpands_test<6, uint16_t>(1, 16, 7, 7, 16);
+    test_taxpy<aclFloat16, 1, 16384, 1, 16384>();
 }
 
-TEST_F(TEXPANDSTest, case7)
+TEST_F(TAXPYTest, case4)
 {
-    texpands_test<7, int16_t>(2, 5, 2, 3, 8);
+    test_taxpy<aclFloat16, 2048, 16, 2048, 16>();
 }
 
-// TEST_F(TEXPANDSTest, case8)
-// {
-//     texpands_test<8, int32_t>(2, 2, 3, 2, 1, 8);
-// }
-// 
-// TEST_F(TEXPANDSTest, case9)
-// {
-//     texpands_test<9, uint32_t>(2, 3, 4, 1, 2, 8);
-// }
+TEST_F(TAXPYTest, case5)
+{
+    test_taxpy<float, 8, 8, 8, 8>();
+}
+
+TEST_F(TAXPYTest, case6)
+{
+    test_taxpy<float, 16, 16, 15, 15>();
+}
