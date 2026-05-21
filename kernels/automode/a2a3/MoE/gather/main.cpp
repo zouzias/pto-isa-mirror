@@ -21,6 +21,7 @@
 #include "test_common.h"
 #include "acl/acl.h"
 #include "../../kernel_timing.h"
+#include "generated_cases.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -37,9 +38,9 @@ void launchGather(T *C, T *B,
 
 namespace {
 
-constexpr int kT    = 256;
-constexpr int kH    = 64;
-constexpr int kTopK = 1;
+constexpr int kT    = kMoeT;
+constexpr int kH    = kMoeH;
+constexpr int kTopK = kMoeTopK;
 
 constexpr int kPackedRows   = kT * kTopK;
 constexpr int kOverspillPad = 16;

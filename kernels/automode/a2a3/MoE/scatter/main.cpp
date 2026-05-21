@@ -19,6 +19,7 @@
 #include "test_common.h"
 #include "acl/acl.h"
 #include "../../kernel_timing.h"
+#include "generated_cases.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -35,10 +36,10 @@ extern "C" void launchScatterFp16(uint8_t *A, int32_t *A_id, int32_t *rank_id,
 
 namespace {
 
-constexpr int kT     = 256;
-constexpr int kH     = 64;
-constexpr int kE     = 32;
-constexpr int kTopK  = 1;
+constexpr int kT     = kMoeT;
+constexpr int kH     = kMoeH;
+constexpr int kE     = kMoeE;
+constexpr int kTopK  = kMoeTopK;
 
 constexpr int kPackedRows   = kT * kTopK;
 constexpr int kOverspillPad = 16;

@@ -38,6 +38,8 @@
 #include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
 
+#include "generated_cases.h"
+
 using namespace pto;
 
 template <typename T, int kRows, int kCols, int kTopK>
@@ -131,9 +133,9 @@ __global__ AICORE void RunMoeTopk(__gm__ uint8_t *outVal_raw, __gm__ uint8_t *ou
 template <typename T>
 void launchMoeTopk(uint8_t *outVal, uint8_t *outIdx, uint8_t *src, uint8_t *idx, void *stream)
 {
-    constexpr int kRows = 256;
-    constexpr int kCols = 32;
-    constexpr int kTopK = 2;
+    constexpr int kRows = kMoeT;
+    constexpr int kCols = kMoeE;
+    constexpr int kTopK = (kMoeTopK >= 2) ? kMoeTopK : 2;  // moe_topk standalone tests K >= 2
     RunMoeTopk<T, kRows, kCols, kTopK><<<1, nullptr, stream>>>(outVal, outIdx, src, idx);
 }
 

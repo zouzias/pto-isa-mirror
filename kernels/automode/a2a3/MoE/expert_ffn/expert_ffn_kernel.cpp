@@ -23,15 +23,17 @@
 
 using namespace pto;
 
+#include "generated_cases.h"
+
 namespace expert_ffn_cfg {
 
-// v1 shape - must match scripts/gen_data.py and main.cpp.
-constexpr unsigned kT     = 256;
-constexpr unsigned kH     = 64;  // GEMM1 K = GEMM2 N
-constexpr unsigned kF     = 64;  // GEMM1 N = GEMM2 K
-constexpr unsigned kE     = 32;
-constexpr unsigned kTopK  = 1;
-constexpr unsigned kTileM = 16;  // max expert-local token tile height
+// Input-shape constants pulled from generated_cases.h (single-case per binary).
+constexpr unsigned kT     = kMoeT;
+constexpr unsigned kH     = kMoeH;     // GEMM1 K = GEMM2 N
+constexpr unsigned kF     = kMoeF;     // GEMM1 N = GEMM2 K
+constexpr unsigned kE     = kMoeE;
+constexpr unsigned kTopK  = kMoeTopK;
+constexpr unsigned kTileM = 16;        // max expert-local token tile height - kernel-internal
 
 constexpr unsigned kPackedRows = kT * kTopK;
 

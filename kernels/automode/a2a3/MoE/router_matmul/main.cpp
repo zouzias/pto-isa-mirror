@@ -11,6 +11,7 @@
 #include "test_common.h"
 #include "acl/acl.h"
 #include "../../kernel_timing.h"
+#include "generated_cases.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -23,9 +24,9 @@ extern "C" void launchRouterMatmulFp16(uint8_t *logits, uint8_t *x, uint8_t *w_r
 
 int main()
 {
-    constexpr int kT = 256;
-    constexpr int kH = 64;
-    constexpr int kE = 32;
+    constexpr int kT = kMoeT;
+    constexpr int kH = kMoeH;
+    constexpr int kE = kMoeE;
     constexpr size_t halfBytes  = 2;
     constexpr size_t floatBytes = 4;
 

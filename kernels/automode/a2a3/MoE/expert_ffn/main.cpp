@@ -20,6 +20,7 @@
 #include "test_common.h"
 #include "acl/acl.h"
 #include "../../kernel_timing.h"
+#include "generated_cases.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -39,11 +40,11 @@ extern "C" void launchExpertFfnFp16(uint8_t *B,
 
 namespace {
 
-constexpr int kT     = 256;
-constexpr int kH     = 64;
-constexpr int kF     = 64;
-constexpr int kE     = 32;
-constexpr int kTopK  = 1;
+constexpr int kT     = kMoeT;
+constexpr int kH     = kMoeH;
+constexpr int kF     = kMoeF;
+constexpr int kE     = kMoeE;
+constexpr int kTopK  = kMoeTopK;
 constexpr int kTileM = 16;
 
 constexpr int kPackedRows   = kT * kTopK;

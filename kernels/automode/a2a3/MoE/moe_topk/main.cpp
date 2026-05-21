@@ -13,6 +13,7 @@
 #include "test_common.h"
 #include "acl/acl.h"
 #include "../../kernel_timing.h"
+#include "generated_cases.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -86,9 +87,9 @@ inline bool ValidateIndexResults(size_t outIdxSize)
 
 int main()
 {
-    constexpr int kRows = 256;
-    constexpr int kCols = 32;
-    constexpr int kTopK = 2;
+    constexpr int kRows = kMoeT;
+    constexpr int kCols = kMoeE;
+    constexpr int kTopK = (kMoeTopK >= 2) ? kMoeTopK : 2;
     using indexT = uint32_t;
 
     size_t srcSize    = static_cast<size_t>(kRows) * kCols * sizeof(float);

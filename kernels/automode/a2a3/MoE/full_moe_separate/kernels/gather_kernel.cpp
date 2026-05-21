@@ -125,14 +125,16 @@
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
 
+#include "generated_cases.h"
+
 using namespace pto;
 
 namespace gather_cfg {
 
-// v1 shape — must match scripts/gen_data.py and main.cpp.
-constexpr unsigned kT    = 256;
-constexpr unsigned kH    = 64;
-constexpr unsigned kTopK = 1;
+// Input-shape constants pulled from generated_cases.h (single-case per binary).
+constexpr unsigned kT    = kMoeT;
+constexpr unsigned kH    = kMoeH;
+constexpr unsigned kTopK = kMoeTopK;
 
 constexpr unsigned kPackedRows   = kT * kTopK;
 constexpr unsigned kOverspillPad = 16;

@@ -25,13 +25,15 @@
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
 
+#include "generated_cases.h"
+
 using namespace pto;
 
 namespace router_matmul_cfg {
-constexpr unsigned kH     = 64;   // d_model (input hidden dim)
-constexpr unsigned kE     = 32;   // num_experts
-constexpr unsigned kTileM = 128;  // max token tile height (cube M dimension)
-constexpr unsigned kT     = 256;  // total tokens; tail rows are handled dynamically.
+constexpr unsigned kH     = kMoeH;  // d_model (input hidden dim)
+constexpr unsigned kE     = kMoeE;  // num_experts
+constexpr unsigned kTileM = 128;    // max token tile height (cube M dimension) - kernel-internal
+constexpr unsigned kT     = kMoeT;  // total tokens; tail rows are handled dynamically.
 
 constexpr int kWorkingSetBudgetBytes = 1 << 16;  // X panel + full-row W_router panel + fp32 logits tile.
 constexpr int kL0ABudgetBytes    = 64 * 1024;
