@@ -10,26 +10,22 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_MOCKER_COMMON_RUNTIME_UTIL_HPP
 #define PTO_MOCKER_COMMON_RUNTIME_UTIL_HPP
 
-#include <cstdlib>
+#include <exception>
 #include <type_traits>
 
 #include <pto/costmodel/common/qualifiers.hpp>
 
-inline CceEventIdType __pto_set_flag(pipe_t, pipe_t)
+inline CceEventIdType pto_set_flag(pipe_t, pipe_t)
 {
     return EVENT_ID0;
 }
-inline void __pto_wait_flag(pipe_t, pipe_t, CceEventIdType)
+inline void pto_wait_flag(pipe_t, pipe_t, CceEventIdType)
 {}
-inline void trap()
+[[noreturn]] inline void trap()
 {
-    std::abort();
+    std::terminate();
 }
 
-inline int get_subblockid()
-{
-    return 0;
-}
 inline int get_rsvd_cnt()
 {
     return 0;
