@@ -8,12 +8,17 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#pragma once
+#ifndef TSEL_HPP
+#define TSEL_HPP
 
-#include <cstdint>
+#include "pto/costmodel/pto_isa_costmodel.hpp"
 
-void launchGemmCommAll(uint8_t *gemm_output, uint8_t *reduced_output, uint8_t *signal_matrix, uint8_t *queue_set,
-                       uint8_t *hcclCtx, int rank, int nranks, void *stream, int num_compute_blocks);
+namespace pto {
 
-void launchGemmCompute(uint8_t *gemm_output, uint8_t *src0, uint8_t *src1, uint8_t *queue_set, int rank, void *stream,
-                       int block_num, uint32_t k_per_rank);
+template <typename DstTile, typename MaskTile, typename Src0Tile, typename Src1Tile, typename TmpTile>
+PTO_INTERNAL void TSEL_IMPL(DstTile &dst, MaskTile &selMask, Src0Tile &src0, Src1Tile &src1, TmpTile &tmp)
+{
+    pto::CostModel::GetInstance().SelOpPredictCycle<DstTile, MaskTile, Src0Tile, Src1Tile, TmpTile>("TSEL", dst);
+}
+} // namespace pto
+#endif

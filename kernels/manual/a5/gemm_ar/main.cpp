@@ -1,55 +1,56 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 /**
  * GEMM AllReduce A5 FP16 - Main Entry Point with Integrated Data Generation
  * HCCL backend — launched via mpirun
  *
- * Generates random input matrices (fp16), computes golden reference (fp32 CPU GEMM),
- * then runs multi-card GEMM with AllReduce.
+ * Generates random input matrices (fp16), computes golden reference (fp32 CPU
+ * GEMM), then runs multi-card GEMM with AllReduce.
  *
  * Usage:
  *   mpirun -n <NRANKS> ./gemm_allreduce [--first-device ID]
  */
 
+#include <signal.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <cstdint>
-#include "securec.h"
-#include <cmath>
-#include <vector>
-#include <random>
-#include <thread>
-#include <chrono>
-#include <algorithm>
-#include <string>
-#include <iostream>
-#include <iomanip>
 #include <fstream>
-
-#include <sys/stat.h>
-#include <sys/wait.h>
-#include <signal.h>
-#include <unistd.h>
+#include <iomanip>
+#include <iostream>
+#include <random>
+#include <string>
+#include <thread>
+#include <vector>
 
 #include "acl/acl.h"
 #include "acl/error_codes/rt_error_codes.h"
+#include "comm_mpi.h"
 #include "hccl/hccl.h"
-#include "hccl/hccl_types.h"
 #include "hccl/hccl_comm.h"
 #include "hccl/hccl_tiling.h"
-#include "kernel_tiling/kernel_tiling.h"
-#include "comm_mpi.h"
-
+#include "hccl/hccl_types.h"
 #include "hccl_context.h"
+#include "kernel_tiling/kernel_tiling.h"
+#include "securec.h"
 
 #ifndef __CCE_KT_TEST__
 #define __CCE_KT_TEST__
@@ -362,7 +363,8 @@ struct GemmHcclContext {
 
         if (topoRet == COMM_TOPO_MESH) {
             std::cerr << "[WARN] Rank " << rankId
-                      << ": direct A5 HCCL context decode failed under mesh topology, falling back to mesh-compatible"
+                      << ": direct A5 HCCL context decode failed under mesh "
+                         "topology, falling back to mesh-compatible"
                          " memcpy path"
                       << std::endl;
             return InitMeshPath(rankId, ctxPtr);
@@ -473,9 +475,8 @@ private:
 
         deviceCtx = reinterpret_cast<HcclDeviceContext *>(ctxPtr);
         if (rankId == 0) {
-            std::cout << "[INFO] HCCL A5 direct context init OK"
-                      << " rankId=" << hostCtx.rankId << " rankNum=" << hostCtx.rankNum
-                      << " winSize=" << hostCtx.winSize << std::endl;
+            std::cout << "[INFO] HCCL A5 direct context init OK" << " rankId=" << hostCtx.rankId
+                      << " rankNum=" << hostCtx.rankNum << " winSize=" << hostCtx.winSize << std::endl;
         }
         return true;
     }
@@ -490,9 +491,8 @@ private:
             return false;
         }
         if (rankId == 0) {
-            std::cout << "[INFO] HCCL mesh-compatible fallback init OK"
-                      << " rankId=" << hostCtx.rankId << " rankNum=" << hostCtx.rankNum
-                      << " winSize=" << hostCtx.winSize << std::endl;
+            std::cout << "[INFO] HCCL mesh-compatible fallback init OK" << " rankId=" << hostCtx.rankId
+                      << " rankNum=" << hostCtx.rankNum << " winSize=" << hostCtx.winSize << std::endl;
         }
         return true;
     }
@@ -606,8 +606,7 @@ private:
             return false;
 
         if (rankId == 0) {
-            std::cout << "[INFO] HCCL RING init OK"
-                      << " rankId=" << hostCtx.rankId << " rankNum=" << hostCtx.rankNum
+            std::cout << "[INFO] HCCL RING init OK" << " rankId=" << hostCtx.rankId << " rankNum=" << hostCtx.rankNum
                       << " winSize=" << hostCtx.winSize << std::endl;
         }
         return true;
@@ -711,30 +710,29 @@ static void PrintTimingDetails(const PerfStats &comp_s, const PerfStats &seq_s, 
         return (us > 0) ? ((rs_bytes + ag_bytes) / (us * 1e-6) / (1024.0 * 1024.0 * 1024.0)) : 0.0;
     };
 
-    std::cout << "\n  Compute-only:   " << std::setprecision(1) << comp_s.avg << " us"
-              << "  (" << std::setprecision(0) << gflops(flops_per_rank, comp_s.avg) << " GFLOPS)" << std::endl;
+    std::cout << "\n  Compute-only:   " << std::setprecision(1) << comp_s.avg << " us" << "  (" << std::setprecision(0)
+              << gflops(flops_per_rank, comp_s.avg) << " GFLOPS)" << std::endl;
     std::cout << "\n  Sequential:     " << std::setprecision(1) << seq_s.avg << " us" << std::endl;
-    std::cout << "    compute:      " << seq_comp_s.avg << " us"
-              << "  (" << std::setprecision(0) << gflops(flops_per_rank, seq_comp_s.avg) << " GFLOPS)" << std::endl;
-    std::cout << "    comm:         " << std::setprecision(1) << seq_comm_s.avg << " us"
-              << "  (" << std::setprecision(1) << bw_gbs(seq_comm_s.avg) << " GB/s)" << std::endl;
+    std::cout << "    compute:      " << seq_comp_s.avg << " us" << "  (" << std::setprecision(0)
+              << gflops(flops_per_rank, seq_comp_s.avg) << " GFLOPS)" << std::endl;
+    std::cout << "    comm:         " << std::setprecision(1) << seq_comm_s.avg << " us" << "  ("
+              << std::setprecision(1) << bw_gbs(seq_comm_s.avg) << " GB/s)" << std::endl;
     std::cout << "\n  Pipelined:      " << std::setprecision(1) << pipe_s.avg << " us" << std::endl;
-    std::cout << "    compute done: " << pipe_comp_s.avg << " us"
-              << "  (" << std::setprecision(0) << gflops(flops_per_rank, pipe_comp_s.avg) << " GFLOPS, "
-              << std::setprecision(1)
+    std::cout << "    compute done: " << pipe_comp_s.avg << " us" << "  (" << std::setprecision(0)
+              << gflops(flops_per_rank, pipe_comp_s.avg) << " GFLOPS, " << std::setprecision(1)
               << (gflops(flops_per_rank, pipe_comp_s.avg) / gflops(flops_per_rank, comp_s.avg) * 100.0) << "% of pure)"
               << std::endl;
-    std::cout << "    comm done:    " << std::setprecision(1) << pipe_comm_s.avg << " us"
-              << "  (" << std::setprecision(1) << bw_gbs(pipe_comm_s.avg) << " GB/s)" << std::endl;
+    std::cout << "    comm done:    " << std::setprecision(1) << pipe_comm_s.avg << " us" << "  ("
+              << std::setprecision(1) << bw_gbs(pipe_comm_s.avg) << " GB/s)" << std::endl;
 
     double speedup = (pipe_s.avg > 0) ? (seq_s.avg / pipe_s.avg) : 0.0;
     double overlap_time = (seq_comp_s.avg + seq_comm_s.avg) - pipe_s.avg;
     double overlap_eff = (overlap_time > 0) ? (overlap_time / std::min(seq_comp_s.avg, seq_comm_s.avg) * 100.0) : 0.0;
 
     std::cout << "\n  Speedup:        " << std::setprecision(3) << speedup << "x" << std::endl;
-    std::cout << "  Time saved:     " << std::setprecision(1) << (seq_s.avg - pipe_s.avg) << " us"
-              << " (" << std::setprecision(1)
-              << ((seq_s.avg > 0) ? ((seq_s.avg - pipe_s.avg) / seq_s.avg * 100.0) : 0.0) << "%)" << std::endl;
+    std::cout << "  Time saved:     " << std::setprecision(1) << (seq_s.avg - pipe_s.avg) << " us" << " ("
+              << std::setprecision(1) << ((seq_s.avg > 0) ? ((seq_s.avg - pipe_s.avg) / seq_s.avg * 100.0) : 0.0)
+              << "%)" << std::endl;
     std::cout << "  Overlap eff:    " << std::setprecision(1) << overlap_eff << "%" << std::endl;
     std::cout << "  Throughput:     " << std::setprecision(0) << gflops(flops_total, pipe_s.avg) << " GFLOPS (total)"
               << std::endl;
@@ -1760,8 +1758,10 @@ static void padGoldenToAligned(const std::vector<float> &golden_orig, std::vecto
 static bool generateData(int nranks, std::vector<uint16_t> &a_parts, std::vector<uint16_t> &b_data,
                          std::vector<float> &golden)
 {
-    printf("Data Parallel: each rank has independent A[%d,%d], shared B[%d,%d], %d ranks\n", G_ORIG_M, G_K, G_K,
-           G_ORIG_N, nranks);
+    printf(
+        "Data Parallel: each rank has independent A[%d,%d], shared B[%d,%d], %d "
+        "ranks\n",
+        G_ORIG_M, G_K, G_K, G_ORIG_N, nranks);
 
     std::mt19937 gen(42);
     float scale = std::sqrt(65000.0f / ((float)G_K * nranks * 4.0f));
@@ -1866,7 +1866,9 @@ int main(int argc, char *argv[])
     InitCachedEnv();
 
     if (!CommMpiInit(&argc, &argv)) {
-        fprintf(stderr, "[ERROR] MPI_Init failed. Launch with: mpirun -n <NRANKS> ./gemm_allreduce\n");
+        fprintf(stderr,
+                "[ERROR] MPI_Init failed. Launch with: mpirun -n <NRANKS> "
+                "./gemm_allreduce\n");
         return 1;
     }
 

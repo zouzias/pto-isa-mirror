@@ -21,8 +21,7 @@ namespace pto {
 namespace detail {
 
 template <typename TileT, std::size_t Addr>
-struct tassign_static_check {
-};
+struct tassign_static_check {};
 
 } // namespace detail
 } // namespace pto
