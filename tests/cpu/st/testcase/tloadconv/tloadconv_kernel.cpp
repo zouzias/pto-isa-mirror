@@ -1,16 +1,18 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
-#include <pto/pto-inst.hpp>
-#include <pto/common/constants.hpp>
-#include <limits>
 #include <algorithm>
+#include <limits>
+#include <pto/common/constants.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace std;
 using namespace pto;
@@ -25,6 +27,8 @@ void runTloadDynamic(__gm__ T *out, __gm__ T *src)
     constexpr uint32_t totalElements = N * C1 * H * W * C0;
     constexpr uint32_t bufferSize = totalElements * sizeof(T);
 
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     // 1. Static Strides
     using StrideNC1HWC0 = Stride<(int64_t)C1 * H * W * C0, (int64_t)H * W * C0, (int64_t)W * C0, (int64_t)C0, 1>;
     using StrideFractalZ = Stride<(int64_t)H * W * N * C0, (int64_t)W * N * C0, (int64_t)N * C0, (int64_t)C0, 1>;
@@ -32,6 +36,8 @@ void runTloadDynamic(__gm__ T *out, __gm__ T *src)
 
     // 2. Global Shape
     using GShape = std::conditional_t<L == Layout::NC1HWC0, Shape<N, C1, H, W, C0>, Shape<C1, H, W, N, C0>>;
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 
     // 4. Initialize Global Tensor via CONSTRUCTOR (since SetAddr is private)
     GlobalTensor<T, GShape, SelectedStride, L> srcGlobal(src);
@@ -39,6 +45,8 @@ void runTloadDynamic(__gm__ T *out, __gm__ T *src)
     // 3. Dynamic Tile Shape (Keeping required statics [16, C0])
     using TShape = std::conditional_t<L == Layout::NC1HWC0, ConvTileShape<N, C1, H, W>,
                                       ConvTileShape<(C1 * H * W), (N / 16), 16, C0>>;
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 
     // 5. Initialize ConvTile
     using MyTile = ConvTile<TileType::Mat, T, bufferSize, L, TShape>;
@@ -46,6 +54,8 @@ void runTloadDynamic(__gm__ T *out, __gm__ T *src)
 
     // 5. Allocate and Manually Assign Dummy L1/UB Memory
     // We use a vector for automatic cleanup to prevent memory leaks in the sim
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     std::vector<T> localBuffer(totalElements);
 
     // Explicitly cast the RAM address to the expected TileDType
@@ -53,6 +63,8 @@ void runTloadDynamic(__gm__ T *out, __gm__ T *src)
 
     // 6. Execute
     TLOAD(convTile, srcGlobal);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 
     // 7. Verification Copy
     for (uint32_t i = 0; i < totalElements; i++) {
@@ -68,6 +80,8 @@ void runTloadFractalZ5D(__gm__ T *out, __gm__ T *src)
     constexpr int C0 = 32 / sizeof(T);
 
     // 2. Hardware and buffer constants
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     constexpr uint32_t totalElements = C1 * H * W * N * C0;
     constexpr uint32_t bufferSize = totalElements * sizeof(T);
     constexpr Layout L = Layout::FRACTAL_Z;
@@ -75,19 +89,26 @@ void runTloadFractalZ5D(__gm__ T *out, __gm__ T *src)
     // 3. Static Strides for Global Memory: [C1, H, W, N, C0]
     using StrideFractalZ = Stride<(int64_t)H * W * N * C0, // S0: Jump between C1 groups
                                   (int64_t)W * N * C0,     // S1: Jump between H rows
-                                  (int64_t)N * C0,         // S2: Jump between W columns
-                                  (int64_t)C0,             // S3: Jump between N fractals
-                                  1                        // S4: Contiguous C0
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
+                                  (int64_t)N * C0, // S2: Jump between W columns
+                                  (int64_t)C0,     // S3: Jump between N fractals
+                                  1                // S4: Contiguous C0
                                   >;
 
     // 4. Global Shape (5D)
     using GShape = Shape<C1, H, W, N, C0>;
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
 
     // 5. Initialize Global Tensor
     GlobalTensor<T, GShape, StrideFractalZ, L> srcGlobal(src);
 
     // 6. 5D Tile Shape for Fractal Z: [C1, H, W, N, C0]
-    // Matches your TLoad logic: dstShape0(C1), dstShape1(H), dstShape2(W), dstShape3(N)
+    // Matches your TLoad logic: dstShape0(C1), dstShape1(H), dstShape2(W),
+    // dstShape3(N)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     using TShape = ConvTileShape<C1, H, W, N, C0>;
 
     // 7. Initialize ConvTile
@@ -95,6 +116,8 @@ void runTloadFractalZ5D(__gm__ T *out, __gm__ T *src)
     MyTile convTile;
 
     // 8. Allocate and Manually Assign Dummy L1/UB Memory (CPU Simulation)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     std::vector<T> localBuffer(totalElements);
     convTile.data() = reinterpret_cast<typename MyTile::TileDType>(localBuffer.data());
 
@@ -102,6 +125,8 @@ void runTloadFractalZ5D(__gm__ T *out, __gm__ T *src)
     TLOAD_IMPL(convTile, srcGlobal);
 
     // 10. Verification Copy: Move from assigned memory to output GM
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
     for (uint32_t i = 0; i < totalElements; i++) {
         out[i] = convTile.data()[i];
     }
@@ -141,6 +166,8 @@ void launchTLOAD(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream)
     if constexpr (testKey == 1)
         launch_1(out, src);
     else if constexpr (testKey == 2)
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
         launch_2(out, src);
     else if constexpr (testKey == 3)
         launch_3(out, src);

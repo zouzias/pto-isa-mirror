@@ -1,16 +1,20 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #include <pto/pto-inst.hpp>
 
 using namespace pto;
+
+constexpr uint16_t BLOCK_CUBE_M_N = 16;
 
 template <typename T>
 AICORE constexpr inline T CeilAlign(T num_1, T num_2)
@@ -25,7 +29,7 @@ template <typename OutType, typename AType, typename BType, typename BiasType, i
           bool isBias>
 __global__ AICORE void RunTMATMUL(__gm__ OutType *out, __gm__ AType *src0, __gm__ BType *src1, __gm__ BiasType *src2)
 {
-    constexpr int blockAlign = 32;
+    constexpr int blockAlign = (sizeof(AType) == 1) ? 32 : 16;
     constexpr int M = CeilAlign<int>(validM, 16);
     constexpr int N = CeilAlign<int>(validN, blockAlign);
     constexpr int K = CeilAlign<int>(validK, blockAlign);
@@ -81,7 +85,8 @@ __global__ AICORE void RunTMATMUL(__gm__ OutType *out, __gm__ AType *src0, __gm_
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 
-    /**********************************TMOV && TEXTRACT**********************************/
+    /**********************************TMOV &&
+     * TEXTRACT**********************************/
 
     TMOV(aTile, aMatTile);
     TMOV(bTile, bMatTile);
@@ -165,7 +170,8 @@ __global__ AICORE void RunTMATMUL_SPLIT_K(__gm__ OutType *out, __gm__ AType *src
         set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 
-        /**********************************TMOV && TEXTRACT**********************************/
+        /**********************************TMOV &&
+         * TEXTRACT**********************************/
         TMOV(aTile, aMatTile);
         TMOV(bTile, bMatTile);
         if constexpr (isBias) {

@@ -1,16 +1,21 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include "test_common.h"
 #include <gtest/gtest.h>
+
+#include <pto/pto-inst.hpp>
+
+#include "cpu_tile_test_utils.h"
+#include "test_common.h"
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -152,4 +157,30 @@ TEST_F(TStoreTest, DN_int64_1_1_1_4_21_1_1_1_8_32)
 TEST_F(TStoreTest, DN_uint64_t_3_1_1_1_124_5_1_1_2_128)
 {
     test_tstore<1, uint64_t, 3, 1, 1, 1, 124, 5, 1, 1, 2, 128>();
+}
+
+TEST_F(TStoreTest, FpVariantStoresTileIntoGlobalTensor)
+{
+    using TileData = pto::Tile<pto::TileType::Vec, float, 2, 8>;
+    using FpTile = pto::Tile<pto::TileType::Vec, float, 1, 8>;
+    using GlobalData = pto::GlobalTensor<float, pto::Shape<1, 1, 1, 2, 8>, pto::Stride<16, 16, 16, 8, 1>>;
+
+    TileData src;
+    FpTile fp;
+    size_t addr = 0;
+    CpuTileTestUtils::AssignTileStorage(addr, src, fp);
+
+    std::vector<float> buffer(16, 0.0f);
+    GlobalData dst(buffer.data());
+
+    CpuTileTestUtils::FillLinear(src, 1.0f);
+    CpuTileTestUtils::FillAll(fp, 0.5f);
+    pto::TSTORE_FP(dst, src, fp);
+
+    for (int r = 0; r < src.GetValidRow(); ++r) {
+        for (int c = 0; c < src.GetValidCol(); ++c) {
+            CpuTileTestUtils::ExpectValueEquals(buffer[static_cast<size_t>(r) * src.GetValidCol() + c],
+                                                CpuTileTestUtils::GetValue(src, r, c));
+        }
+    }
 }
