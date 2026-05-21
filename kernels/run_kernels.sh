@@ -72,7 +72,6 @@ if [ "$ENABLE_A5" = "true" ]; then
   cd kernels/manual/a5/engram_simt
   bash run.sh -r $RUN_TYPE -v $CARD_NAME -c "ENGRAMSIMTTest.baseline_E128_B1_T64K"
   cd ../../../../
-  
+
   echo "run kernels success"
 fi
-

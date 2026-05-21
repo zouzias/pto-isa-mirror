@@ -1,15 +1,19 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TIMG2COL_HPP
 #define TIMG2COL_HPP
+
+#include <pto/common/utils.hpp>
 
 namespace pto {
 
@@ -67,7 +71,8 @@ PTO_INTERNAL void TIMG2COL_IMPL(TileData &dst, ConvTileData &src, uint16_t posM,
     static_assert((ConvTileData::layout == Layout::NC1HWC0) || (ConvTileData::layout == Layout::NDC1HWC0),
                   "TImg2col: Source layout only support NC1HWC0.");
     static_assert(TileData::SFractal == SLayout::RowMajor && TileData::isRowMajor,
-                  "TImg2col: Destination layout only support SLayout is RowMajor ang BLayout is RowMajor.");
+                  "TImg2col: Destination layout only support SLayout is RowMajor "
+                  "ang BLayout is RowMajor.");
     static_assert(std::is_same_v<typename ConvTileData::DType, typename TileData::DType>,
                   "TImg2col: Destination and Source tile data types must be the same.");
     static_assert(std::is_same_v<typename TileData::DType, int8_t> || std::is_same_v<typename TileData::DType, half> ||
