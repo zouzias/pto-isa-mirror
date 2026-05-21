@@ -26,10 +26,6 @@ inline void trap()
     std::abort();
 }
 
-inline int get_subblockid()
-{
-    return 0;
-}
 inline int get_rsvd_cnt()
 {
     return 0;

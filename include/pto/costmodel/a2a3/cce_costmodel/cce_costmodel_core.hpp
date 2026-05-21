@@ -48,7 +48,6 @@ enum QuantMode_t
 
 constexpr int DSB_UB = 0;
 constexpr int ONLY_VALUE = 0;
-constexpr int PIPE_FIX = 0;
 constexpr int VA0 = 0;
 constexpr int VA1 = 1;
 constexpr int VA2 = 2;
