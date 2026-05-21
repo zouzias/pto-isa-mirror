@@ -137,14 +137,16 @@ __global__ AICORE void runExpertFfn(
     __gm__ int32_t *expert_count,
     __gm__ int32_t *expert_start,
     __gm__ uint8_t *W1_raw,
-    __gm__ uint8_t *W2_raw)
+    __gm__ uint8_t *W2_raw,
+    __gm__ uint8_t *Y_scratch_raw)
 {
     using namespace expert_ffn_cfg;
 
-    __gm__ TOut    *B  = reinterpret_cast<__gm__ TOut    *>(B_raw);
-    __gm__ TIn     *A  = reinterpret_cast<__gm__ TIn     *>(A_raw);
-    __gm__ TWeight *W1 = reinterpret_cast<__gm__ TWeight *>(W1_raw);
-    __gm__ TWeight *W2 = reinterpret_cast<__gm__ TWeight *>(W2_raw);
+    __gm__ TOut    *B         = reinterpret_cast<__gm__ TOut    *>(B_raw);
+    __gm__ TIn     *A         = reinterpret_cast<__gm__ TIn     *>(A_raw);
+    __gm__ TWeight *W1        = reinterpret_cast<__gm__ TWeight *>(W1_raw);
+    __gm__ TWeight *W2        = reinterpret_cast<__gm__ TWeight *>(W2_raw);
+    __gm__ TScratch *Y_scratch = reinterpret_cast<__gm__ TScratch *>(Y_scratch_raw);
 
     constexpr int blockAlign = C0_SIZE_BYTE / sizeof(TIn);
     constexpr int mAlign = 16;
@@ -224,6 +226,12 @@ __global__ AICORE void runExpertFfn(
         GlobalTensor<TOut,    GlobalShapeB,
                      Stride<M * kH, M * kH, M * kH, kH, 1>>;
 
+    // Y_scratch: [kPackedRows, F] fp16, row stride = F.
+    using GlobalShapeYScratch = Shape<1, 1, 1, DYNAMIC, F_l1>;
+    using GlobalDataYScratch  =
+        GlobalTensor<TScratch, GlobalShapeYScratch,
+                     Stride<M * F, M * F, M * F, F, 1>>;
+
     using TileMatAData = Tile<TileType::Mat, TIn,     M, H_l1, BLayout::ColMajor,
                               DYNAMIC, H_l1, SLayout::RowMajor, 512>;
     using TileMatW1Data = Tile<TileType::Mat, TWeight, H_l1, F_l1, BLayout::ColMajor,
@@ -269,6 +277,43 @@ __global__ AICORE void runExpertFfn(
         yAccTile.SetValidRow(currentM);
         yTile.SetValidRow(currentM);
 
+        // Pass 1: compute Y[f1] = relu(A @ W1[f1]) once per f1, store to Y_scratch.
+        for (int f1 = 0; f1 < F_l1_blocks; ++f1) {
+            const size_t fBase = static_cast<size_t>(f1) * F_l1;
+
+            for (int h1 = 0; h1 < H_l1_blocks; ++h1) {
+                const size_t hBase = static_cast<size_t>(h1) * H_l1;
+                const size_t aOff = row * H + hBase;
+                const size_t w1Off = static_cast<size_t>(e) * H * F + hBase * F + fBase;
+
+                GlobalShapeA aShape(currentM);
+                GlobalDataA aGlobal(A + aOff, aShape);
+                GlobalDataW1 w1Global(W1 + w1Off);
+
+                TLOAD(aMatTile, aGlobal);
+                TLOAD(w1MatTile, w1Global);
+
+                for (int h0 = 0; h0 < H_l0_segments; ++h0) {
+                    const uint16_t hOff = static_cast<uint16_t>(h0 * H_l0);
+                    TEXTRACT(aTile,  aMatTile,  0, hOff);
+                    TEXTRACT(w1Tile, w1MatTile, hOff, 0);
+                    if (h1 == 0 && h0 == 0) {
+                        TMATMUL(yAccTile, aTile, w1Tile);
+                    } else {
+                        TMATMUL_ACC(yAccTile, aTile, w1Tile);
+                    }
+                }
+            }
+
+            TMOV<TileMatYData, YAccTile, ReluPreMode::NormalRelu>(yMatTile, yAccTile);
+
+            const size_t yScrOff = row * F + fBase;
+            GlobalShapeYScratch yScrShape(currentM);
+            GlobalDataYScratch yScrGlobal(Y_scratch + yScrOff, yScrShape);
+            TSTORE(yScrGlobal, yMatTile);
+        }
+
+        // Pass 2: for each output-column panel n0, load Y from scratch and accumulate B.
         for (unsigned n0 = 0; n0 < static_cast<unsigned>(H); n0 += N_l1) {
             const unsigned remainingN = static_cast<unsigned>(H) - n0;
             const unsigned currentN =
@@ -282,31 +327,10 @@ __global__ AICORE void runExpertFfn(
             for (int f1 = 0; f1 < F_l1_blocks; ++f1) {
                 const size_t fBase = static_cast<size_t>(f1) * F_l1;
 
-                for (int h1 = 0; h1 < H_l1_blocks; ++h1) {
-                    const size_t hBase = static_cast<size_t>(h1) * H_l1;
-                    const size_t aOff = row * H + hBase;
-                    const size_t w1Off = static_cast<size_t>(e) * H * F + hBase * F + fBase;
-
-                    GlobalShapeA aShape(currentM);
-                    GlobalDataA aGlobal(A + aOff, aShape);
-                    GlobalDataW1 w1Global(W1 + w1Off);
-
-                    TLOAD(aMatTile, aGlobal);
-                    TLOAD(w1MatTile, w1Global);
-
-                    for (int h0 = 0; h0 < H_l0_segments; ++h0) {
-                        const uint16_t hOff = static_cast<uint16_t>(h0 * H_l0);
-                        TEXTRACT(aTile,  aMatTile,  0, hOff);
-                        TEXTRACT(w1Tile, w1MatTile, hOff, 0);
-                        if (h1 == 0 && h0 == 0) {
-                            TMATMUL(yAccTile, aTile, w1Tile);
-                        } else {
-                            TMATMUL_ACC(yAccTile, aTile, w1Tile);
-                        }
-                    }
-                }
-
-                TMOV<TileMatYData, YAccTile, ReluPreMode::NormalRelu>(yMatTile, yAccTile);
+                const size_t yScrOff = row * F + fBase;
+                GlobalShapeYScratch yScrShape(currentM);
+                GlobalDataYScratch yScrGlobal(Y_scratch + yScrOff, yScrShape);
+                TLOAD(yMatTile, yScrGlobal);
 
                 const size_t w2Off = static_cast<size_t>(e) * F * H + fBase * H + n0;
                 GlobalShapeW2 w2Shape(currentN);
@@ -343,16 +367,17 @@ void launchExpertFfn(uint8_t *B,
                      int32_t *expert_start,
                      uint8_t *W1,
                      uint8_t *W2,
+                     uint8_t *Y_scratch,
                      void    *stream)
 {
     runExpertFfn<TOut, TIn, TWeight, TScratch><<<expert_ffn_cfg::kE, nullptr, stream>>>(
-        B, A, expert_count, expert_start, W1, W2);
+        B, A, expert_count, expert_start, W1, W2, Y_scratch);
 }
 
 template void launchExpertFfn<float, half, half, half>(
     uint8_t *B, uint8_t *A,
     int32_t *expert_count, int32_t *expert_start,
-    uint8_t *W1, uint8_t *W2, void *stream);
+    uint8_t *W1, uint8_t *W2, uint8_t *Y_scratch, void *stream);
 
 extern "C" void launchExpertFfnFp16(uint8_t *B,
                                     uint8_t *A,
@@ -363,7 +388,6 @@ extern "C" void launchExpertFfnFp16(uint8_t *B,
                                     uint8_t *Y_scratch,
                                     void    *stream)
 {
-    (void)Y_scratch;
     launchExpertFfn<float, half, half, half>(
-        B, A, expert_count, expert_start, W1, W2, stream);
+        B, A, expert_count, expert_start, W1, W2, Y_scratch, stream);
 }
