@@ -42,7 +42,7 @@ def gen_golden_data_tsel(param):
     for i in range(0, row):
         for j in range(0, maskCol):
             gen_golden_process_byte(mask, maskCol, i, j, col, golden, input0, input1)
-            
+
     input0.tofile("input0.bin")
     input1.tofile("input1.bin")
     mask.tofile("mask.bin")

@@ -1,11 +1,13 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef TADD_HPP
@@ -13,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
+
 #include "pto/npu/a2a3/TBinOp.hpp"
 
 namespace pto {
@@ -55,7 +58,8 @@ PTO_INTERNAL void TAddCheck(const TileDataDst &dst, const TileDataSrc0 &src0, co
 {
     static_assert(
         std::is_same<T, typename TileDataSrc0::DType>::value && std::is_same<T, typename TileDataSrc1::DType>::value,
-        "Fix: TADD the data type of dst must be consistent with of src0 and src1.");
+        "Fix: TADD the data type of dst must be consistent with of "
+        "src0 and src1.");
     static_assert(std::is_same<T, int32_t>::value || std::is_same<T, int>::value || std::is_same<T, int16_t>::value ||
                       std::is_same<T, half>::value || std::is_same<T, float16_t>::value ||
                       std::is_same<T, float>::value || std::is_same<T, float32_t>::value,
@@ -65,9 +69,11 @@ PTO_INTERNAL void TAddCheck(const TileDataDst &dst, const TileDataSrc0 &src0, co
     unsigned validRows = dst.GetValidRow();
     unsigned validCols = dst.GetValidCol();
     PTO_ASSERT(src0.GetValidRow() == validRows && src0.GetValidCol() == validCols,
-               "Fix: TADD input tile src0 valid shape mismatch with output tile dst shape.");
+               "Fix: TADD input tile src0 valid shape mismatch with output tile "
+               "dst shape.");
     PTO_ASSERT(src1.GetValidRow() == validRows && src1.GetValidCol() == validCols,
-               "Fix: TADD input tile src1 valid shape mismatch with output tile dst shape.");
+               "Fix: TADD input tile src1 valid shape mismatch with output tile "
+               "dst shape.");
 }
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>

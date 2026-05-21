@@ -1,25 +1,41 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_COMM_TGET_ASYNC_COMMON_DETAIL_HPP
 #define PTO_COMM_TGET_ASYNC_COMMON_DETAIL_HPP
 
-#include "pto/common/constants.hpp"
-#include "pto/common/type.hpp"
-#include "pto/common/debug.h"
+#include "pto/comm/async/async_types.hpp"
 #include "pto/comm/comm_types.hpp"
-#include "pto/comm/async_common/async_types.hpp"
+#include "pto/common/constants.hpp"
+#include "pto/common/debug.h"
+#include "pto/common/type.hpp"
 #include "pto/npu/comm/async/sdma/sdma_async_intrin.hpp"
+#ifdef PTO_URMA_SUPPORTED
+#include "pto/npu/comm/async/urma/urma_async_intrin.hpp"
+#endif
 
 namespace pto {
 namespace comm {
+
+// ============================================================================
+// TGET_ASYNC_IMPL: Asynchronous remote read operation implementation
+//
+// Directly transfers data from remote NPU's GM to local GM without UB staging.
+// Returns AsyncEvent for synchronization with TSYNC.
+//
+// Data flow: srcGlobalData (remote GM) -> DMA Engine -> dstGlobalData (local
+// GM)
+// ============================================================================
+
 namespace detail {
 
 template <typename GlobalData>
@@ -74,11 +90,15 @@ PTO_INTERNAL AsyncEvent TGET_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, Globa
                "TGET_ASYNC: src and dst tensor pointers must not be null.");
 
     PTO_ASSERT(TGetAsyncIsFlatContiguous1D(srcGlobalData),
-               "TGET_ASYNC: src tensor must be flat contiguous 1D (packed layout, single logical line). "
-               "Multi-dimensional or non-contiguous tensors are not supported by SDMA async path.");
+               "TGET_ASYNC: src tensor must be flat contiguous 1D (packed "
+               "layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported by "
+               "SDMA async path.");
     PTO_ASSERT(TGetAsyncIsFlatContiguous1D(dstGlobalData),
-               "TGET_ASYNC: dst tensor must be flat contiguous 1D (packed layout, single logical line). "
-               "Multi-dimensional or non-contiguous tensors are not supported by SDMA async path.");
+               "TGET_ASYNC: dst tensor must be flat contiguous 1D (packed "
+               "layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported by "
+               "SDMA async path.");
 
     const uint32_t srcElems = TGetAsyncGetTotalElemCount(srcGlobalData);
     const uint32_t dstElems = TGetAsyncGetTotalElemCount(dstGlobalData);
@@ -90,7 +110,80 @@ PTO_INTERNAL AsyncEvent TGET_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, Globa
     return AsyncEvent(eventHandle, DmaEngine::SDMA);
 }
 
+#ifdef PTO_URMA_SUPPORTED
+template <typename GlobalDstData, typename GlobalSrcData>
+PTO_INTERNAL AsyncEvent TGET_ASYNC_URMA_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                                             const urma::UrmaExecContext &execCtx)
+{
+    (void)TGetAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
+
+    PTO_ASSERT(TGetAsyncIsFlatContiguous1D(srcGlobalData),
+               "TGET_ASYNC URMA: src tensor must be flat contiguous 1D (packed "
+               "layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported by "
+               "URMA async path.");
+    PTO_ASSERT(TGetAsyncIsFlatContiguous1D(dstGlobalData),
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
+               "TGET_ASYNC URMA: dst tensor must be flat contiguous 1D (packed "
+               "layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported by "
+               "URMA async path.");
+
+    const uint32_t srcElems = TGetAsyncGetTotalElemCount(srcGlobalData);
+    const uint32_t dstElems = TGetAsyncGetTotalElemCount(dstGlobalData);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
+    PTO_ASSERT(dstElems >= srcElems, "TGET_ASYNC URMA: dst buffer too small for src data");
+
+    using T = typename GlobalSrcData::RawDType;
+    const uint64_t transferSize = static_cast<uint64_t>(srcElems) * sizeof(T);
+    PTO_ASSERT(transferSize <= UINT32_MAX, "TGET_ASYNC URMA: transfer size exceeds SGE length limit (4GB)");
+
+    const uint64_t eventHandle =
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
+        urma::__urma_get_async(reinterpret_cast<__gm__ uint8_t *>(dstGlobalData.data()),
+                               reinterpret_cast<__gm__ uint8_t *>(srcGlobalData.data()), transferSize, execCtx);
+    return AsyncEvent(eventHandle, DmaEngine::URMA);
+}
+#endif
+
 } // namespace detail
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
+
+// ============================================================================
+// Main TGET_ASYNC_IMPL with DmaEngine template parameter
+// ============================================================================
+
+template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData>
+PTO_INTERNAL AsyncEvent TGET_ASYNC_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
+                                        const AsyncSession &session)
+{
+    if constexpr (engine == DmaEngine::SDMA) {
+        return detail::TGET_ASYNC_SDMA_IMPL(dstGlobalData, srcGlobalData, session.sdmaSession.execCtx);
+    } else if constexpr (engine == DmaEngine::URMA) {
+#ifdef PTO_URMA_SUPPORTED
+        return detail::TGET_ASYNC_URMA_IMPL(dstGlobalData, srcGlobalData, session.urmaSession.execCtx);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
+#else
+        static_assert(engine != DmaEngine::URMA, "TGET_ASYNC: URMA engine requires NPU_ARCH 3510");
+        return AsyncEvent(0, engine);
+#endif
+    } else {
+        PTO_ASSERT(false, "TGET_ASYNC: unsupported engine");
+        return AsyncEvent(0, engine);
+#if defined(__cplusplus) && (__LINE__ >= 0)
+#endif
+    }
+}
+
 } // namespace comm
 } // namespace pto
 

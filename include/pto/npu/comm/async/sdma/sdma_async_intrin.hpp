@@ -1,22 +1,25 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_COMM_ASYNC_SDMA_SDMA_ASYNC_INTRIN_HPP
 #define PTO_COMM_ASYNC_SDMA_SDMA_ASYNC_INTRIN_HPP
 
-#include "pto/npu/comm/async/sdma/sdma_types.hpp"
-#include "pto/comm/comm_types.hpp"
-#include "pto/comm/async_common/async_types.hpp"
-#include "pto/pto-inst.hpp"
 #include <cstddef>
 #include <cstdint>
+
+#include "pto/comm/async_common/async_types.hpp"
+#include "pto/comm/comm_types.hpp"
+#include "pto/npu/comm/async/sdma/sdma_types.hpp"
+#include "pto/pto-inst.hpp"
 
 namespace pto {
 namespace comm {
@@ -90,7 +93,8 @@ PTO_INTERNAL T GetValue(__gm__ uint8_t *addr, UbTmpBuf &tmpBuf)
 
 PTO_INTERNAL __gm__ SdmaEventRecord *GetEventRecord(__gm__ uint8_t *recvWorkspace, uint32_t slotIdx)
 {
-    // Stride by 64 bytes (SDMA minimum transfer) so flag-SQE writes don't overlap.
+    // Stride by 64 bytes (SDMA minimum transfer) so flag-SQE writes don't
+    // overlap.
     constexpr uint32_t kRecordStride = 64U;
     return reinterpret_cast<__gm__ SdmaEventRecord *>(recvWorkspace + slotIdx * kRecordStride);
 }
@@ -230,7 +234,8 @@ PTO_INTERNAL void SubmitFlagTransferSqes(__gm__ BatchWriteChannelInfo *batchWrit
 
         __gm__ SdmaEventRecord *record = GetEventRecord(layout.recv_workspace, queueId);
 
-        // Clear both flag and sq_tail with a single 8-byte write (MTE3 min granularity).
+        // Clear both flag and sq_tail with a single 8-byte write (MTE3 min
+        // granularity).
         SetValue<uint64_t>((__gm__ uint8_t *)record, tmpBuf, syncId, 0ULL);
 
         __gm__ uint8_t *sendBuf = layout.send_workspace + queueId * kMinSdmaTransferBytes;
@@ -344,8 +349,8 @@ PTO_INTERNAL void HandleCompletedEventRecord(__gm__ SdmaEventRecord *record, UbT
     const uint32_t completedTail = GetValue<uint32_t>((__gm__ uint8_t *)&record->sq_tail, tmpBuf);
     const uint64_t channelInfoAddr = GetValue<uint64_t>((__gm__ uint8_t *)&record->channel_info, tmpBuf);
 
-    // MTE3 minimum transfer is 8 bytes: writing uint32_t zeroes the adjacent 4 bytes.
-    // Use uint64_t to write both flag(=0) and sq_tail(=0) atomically.
+    // MTE3 minimum transfer is 8 bytes: writing uint32_t zeroes the adjacent 4
+    // bytes. Use uint64_t to write both flag(=0) and sq_tail(=0) atomically.
     SetValue<uint64_t>((__gm__ uint8_t *)record, tmpBuf, syncId, 0ULL);
 
     if (channelInfoAddr != 0) {

@@ -13,8 +13,9 @@ full text of the License.
 #ifndef __PTO_GETSCALEADDR_A5__
 #define __PTO_GETSCALEADDR_A5__
 
-#include "pto/common/pto_tile.hpp"
 #include <type_traits>
+
+#include "pto/common/pto_tile.hpp"
 
 namespace pto {
 

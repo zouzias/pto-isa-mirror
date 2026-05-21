@@ -1,16 +1,18 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_tile.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace pto;
 
@@ -59,8 +61,8 @@ AICORE inline void runTIMG2COL(__gm__ T *out, __gm__ U *src0, __gm__ U *src1)
     GlobalDataSrc0 src0Global(src0);
     GlobalDataOut dstGlobal(out);
 
-    // for auto mode, bufferSize is a misleading variable name in convTile, it shouldn't be number of bytes it should be
-    // the number of elements
+    // for auto mode, bufferSize is a misleading variable name in convTile, it
+    // shouldn't be number of bytes it should be the number of elements
     constexpr int bufferSizeA = fmapN * fmapC1 * fmapH * fmapW * fmapC0; // * sizeof(U);
     using TileMatAData = ConvTile<TileType::Mat, U, bufferSizeA, Layout::NC1HWC0,
                                   pto::ConvTileShape<fmapN, fmapC1, fmapH, fmapW, fmapC0>>;
@@ -175,7 +177,8 @@ AICORE inline void runTIMG2COLSplitK(__gm__ T *out, __gm__ U *src0, __gm__ U *sr
     static_assert(bMatTile.totalDimCount == 5);
     TASSIGN(bMatTile, 0x40000);
 
-    using LeftTile = TileLeft<U, 2 * M, 2 * baseK, validM, baseK>; // test compact mode works properly
+    using LeftTile = TileLeft<U, 2 * M, 2 * baseK, validM,
+                              baseK>; // test compact mode works properly
     using RightTile = TileRight<U, 2 * baseK, 2 * N, baseK, validN>;
     using AccTile = TileAcc<T, M, N, validM, validN>;
     LeftTile aTile;
@@ -282,7 +285,8 @@ AICORE inline void runTIMG2COLFractalZ4D(__gm__ T *out, __gm__ U *src0, __gm__ U
     static_assert(bMatTile.totalDimCount == 4);
     TASSIGN(bMatTile, 0x40000);
 
-    using LeftTile = TileLeft<U, 2 * M, 2 * baseK, validM, baseK>; // test compact mode works properly
+    using LeftTile = TileLeft<U, 2 * M, 2 * baseK, validM,
+                              baseK>; // test compact mode works properly
     using RightTile = TileRight<U, 2 * baseK, 2 * N, baseK, validN>;
     using AccTile = TileAcc<T, M, N, validM, validN>;
     LeftTile aTile;

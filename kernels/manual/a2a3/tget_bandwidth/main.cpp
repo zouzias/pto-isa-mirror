@@ -1,27 +1,26 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
+#ifndef TCOLMAX_HPP
+#define TCOLMAX_HPP
 
-#include <cstdio>
+#include "pto/costmodel/pto_isa_costmodel.hpp"
 
-#include "tget_bandwidth_kernel.h"
-#include "comm_mpi.h"
+namespace pto {
 
-int main(int argc, char **argv)
+template <typename TileDataOut, typename TileDataIn>
+PTO_INTERNAL void TCOLMAX_IMPL(TileDataOut &dst, TileDataIn &src)
 {
-    CommMpiInit(&argc, &argv);
-    bool ok = RunTGetBandwidthSweep(2, 2, 0, 0);
-    CommMpiFinalize();
-    if (ok) {
-        printf("test success\n");
-    } else {
-        printf("test failed\n");
-    }
-    return ok ? 0 : 1;
+    pto::CostModel::GetInstance().ColReduceOpPredictCycle<COLMAXOp, TileDataOut, TileDataIn>("TCOLMAX", dst, src);
 }
+
+} // namespace pto
+#endif
