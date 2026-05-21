@@ -87,24 +87,24 @@ AICORE void runTAdd(__gm__ T *z, __gm__ T *x, __gm__ T *y, uint32_t totalLength)
         TASSIGN(yGlobal, y + iterOffset);
         TASSIGN(zGlobal, z + iterOffset);
 
-        wait_flag(PIPE_V, PIPE_MTE2, (event_t)(pingpong_flag));
+        wait_flag(PIPE_V, PIPE_MTE2, (int)(pingpong_flag));
         // load data from global memory to UB buffer
         TLOAD(xTiles[pingpong_flag], xGlobal);
         TLOAD(yTiles[pingpong_flag], yGlobal);
 
-        set_flag(PIPE_MTE2, PIPE_V, (event_t)(pingpong_flag));
-        wait_flag(PIPE_MTE2, PIPE_V, (event_t)(pingpong_flag));
+        set_flag(PIPE_MTE2, PIPE_V, (int)(pingpong_flag));
+        wait_flag(PIPE_MTE2, PIPE_V, (int)(pingpong_flag));
 
-        wait_flag(PIPE_MTE3, PIPE_V, (event_t)(pingpong_flag));
+        wait_flag(PIPE_MTE3, PIPE_V, (int)(pingpong_flag));
         // perform elementwise addition by vector core
         TADD(zTiles[pingpong_flag], xTiles[pingpong_flag], yTiles[pingpong_flag]);
-        set_flag(PIPE_V, PIPE_MTE2, (event_t)(pingpong_flag));
+        set_flag(PIPE_V, PIPE_MTE2, (int)(pingpong_flag));
 
-        set_flag(PIPE_V, PIPE_MTE3, (event_t)(pingpong_flag));
-        wait_flag(PIPE_V, PIPE_MTE3, (event_t)(pingpong_flag));
+        set_flag(PIPE_V, PIPE_MTE3, (int)(pingpong_flag));
+        wait_flag(PIPE_V, PIPE_MTE3, (int)(pingpong_flag));
         // store data from UB buffer to global memory
         TSTORE(zGlobal, zTiles[pingpong_flag]);
-        set_flag(PIPE_MTE3, PIPE_V, (event_t)(pingpong_flag));
+        set_flag(PIPE_MTE3, PIPE_V, (int)(pingpong_flag));
         pingpong_flag = (pingpong_flag == 0) ? 1 : 0;
     }
     wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);

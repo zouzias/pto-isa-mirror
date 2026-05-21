@@ -140,7 +140,7 @@ wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 // Template-based flag helpers
 template <pipe_t srcPipe, pipe_t dstPipe>
 AICORE inline void SetFlag(uint32_t id) {
-    set_flag(srcPipe, dstPipe, static_cast<event_t>(id));
+    set_flag(srcPipe, dstPipe, static_cast<int>(id));
 }
 ```
 

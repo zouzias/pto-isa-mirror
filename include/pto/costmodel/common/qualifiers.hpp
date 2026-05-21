@@ -39,8 +39,8 @@ inline constexpr pipe_t PIPE_MTE3 = 4;
 inline constexpr pipe_t PIPE_M = 5;
 inline constexpr pipe_t PIPE_ALL = 6;
 
-using event_t = int;
-using CceEventIdType = event_t;
+using int = int;
+using CceEventIdType = int;
 using pad_t = int;
 using addr_cal_mode_t = int;
 
@@ -48,7 +48,7 @@ namespace __cce_scalar {
 using addr_cal_mode_t = ::addr_cal_mode_t;
 }
 
-inline constexpr event_t EVENT_ID0 = 0;
+inline constexpr int EVENT_ID0 = 0;
 inline constexpr int ACL_MEM_MALLOC_HUGE_FIRST = 0;
 inline constexpr int ACL_MEMCPY_HOST_TO_DEVICE = 0;
 inline constexpr int ACL_MEMCPY_DEVICE_TO_HOST = 1;

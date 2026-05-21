@@ -181,15 +181,15 @@ template <typename T, typename GlobalData, typename DstDataGlobalData, typename 
 AICORE inline void ProcessSingleRow(int cur, GlobalData &srcGlobal, DstDataGlobalData &dstDataGlobal,
                                     DstIdxGlobalData &dstIdxGlobal, DstTileData *sort32DstTile, SrcTileData *srcTile,
                                     IndexTileData &indexTile, DstTileData *mrgDstTile, DstDataTileData *dTile,
-                                    DstIndexTileData *iTile, uint64_t tmpAddr, event_t loadEvent, event_t storeEvent)
+                                    DstIndexTileData *iTile, uint64_t tmpAddr, int loadEvent, int storeEvent)
 {
     constexpr int TYPE_COEF = sizeof(float) / sizeof(T);
     using SingleRowTileData = Tile<TileType::Vec, T, 1, dstCols, BLayout::RowMajor, -1, -1>;
     wait_flag(PIPE_V, PIPE_MTE2, loadEvent);
 
     TLOAD(srcTile[cur], srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, (event_t)cur);
-    wait_flag(PIPE_MTE2, PIPE_V, (event_t)cur);
+    set_flag(PIPE_MTE2, PIPE_V, (int)cur);
+    wait_flag(PIPE_MTE2, PIPE_V, (int)cur);
 
     SortEachGroup<T, DstTileData, SrcTileData, IndexTileData, SingleRowTileData, SINGLE_LOOP_ROW, validCol,
                   SINGLE_LOOP_ROW, validCol>(sort32DstTile[cur], srcTile[cur], indexTile);
@@ -206,11 +206,11 @@ AICORE inline void ProcessSingleRow(int cur, GlobalData &srcGlobal, DstDataGloba
 
     pipe_barrier(PIPE_V);
     ExtractDataOrIndex<T, DstIndexTileData, DstTileData, SingleRowTileData, 1>(iTile[cur], mrgDstTile[cur]);
-    set_flag(PIPE_V, PIPE_MTE3, (event_t)(storeEvent + 2));
+    set_flag(PIPE_V, PIPE_MTE3, (int)(storeEvent + 2));
     wait_flag(PIPE_V, PIPE_MTE3, storeEvent);
 
     TSTORE(dstDataGlobal, dTile[cur]);
-    wait_flag(PIPE_V, PIPE_MTE3, (event_t)(storeEvent + 2));
+    wait_flag(PIPE_V, PIPE_MTE3, (int)(storeEvent + 2));
     TSTORE(dstIdxGlobal, iTile[cur]);
 }
 
@@ -235,12 +235,12 @@ AICORE inline void ProcessIteration(__gm__ T *out, __gm__ T *src, __gm__ uint32_
     ProcessSingleRow<T, GlobalData, DstDataGlobalData, DstIdxGlobalData, DstTileData, DstDataTileData, DstIndexTileData,
                      SrcTileData, IndexTileData, SINGLE_LOOP_ROW, dstCols, validCol, topk>(
         0, src0Global, dst0DataGlobal, dst0IdxGlobal, sort32DstTile, srcTile, indexTile, mrgDstTile, dTile, iTile,
-        tmpAddr, EVENT_ID0, (event_t)0);
+        tmpAddr, EVENT_ID0, (int)0);
 
     ProcessSingleRow<T, GlobalData, DstDataGlobalData, DstIdxGlobalData, DstTileData, DstDataTileData, DstIndexTileData,
                      SrcTileData, IndexTileData, SINGLE_LOOP_ROW, dstCols, validCol, topk>(
         1, src1Global, dst1DataGlobal, dst1IdxGlobal, sort32DstTile, srcTile, indexTile, mrgDstTile, dTile, iTile,
-        nextTmpAddr, EVENT_ID1, (event_t)1);
+        nextTmpAddr, EVENT_ID1, (int)1);
 }
 
 template <typename T, int SINGLE_LOOP_ROW, int validCol, int dstCols, int topk, typename DstTileData,

@@ -244,7 +244,7 @@ PTO_INTERNAL void TscatterPingPongProcessChunk(ParallelGroupType &parallelGroup,
     constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
 
     TileData &loadTile = state.usePing ? pingTile : pongTile;
-    event_t curEvent = state.usePing ? EVENT_ID0 : EVENT_ID1;
+    int curEvent = state.usePing ? EVENT_ID0 : EVENT_ID1;
 
     if constexpr (isDynamicRow)
         loadTile.RowMaskInternal = currentRows;
@@ -256,7 +256,7 @@ PTO_INTERNAL void TscatterPingPongProcessChunk(ParallelGroupType &parallelGroup,
 
     if (state.hasPending) {
         TileData &storeTile = state.usePing ? pongTile : pingTile;
-        event_t prevEvent = state.usePing ? EVENT_ID1 : EVENT_ID0;
+        int prevEvent = state.usePing ? EVENT_ID1 : EVENT_ID0;
 
         wait_flag(PIPE_MTE2, PIPE_MTE3, prevEvent);
 
@@ -296,7 +296,7 @@ PTO_INTERNAL void TscatterPingPongEpilogue(ParallelGroupType &parallelGroup, Til
     using DstViewT = GlobalTensor<T, DynShape, DynStrideT, GlobalDstData::layout>;
 
     TileData &lastTile = state.usePing ? pongTile : pingTile;
-    event_t lastEvent = state.usePing ? EVENT_ID1 : EVENT_ID0;
+    int lastEvent = state.usePing ? EVENT_ID1 : EVENT_ID0;
 
     wait_flag(PIPE_MTE2, PIPE_MTE3, lastEvent);
     DynShape lastShape(1, 1, 1, state.pendingRows, state.pendingCols);

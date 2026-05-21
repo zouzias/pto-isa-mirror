@@ -47,7 +47,7 @@ PTO_INTERNAL uint16_t getFFTSMsg(uint16_t mode, uint16_t eventId, uint16_t baseC
             ((eventId & FFTS_EVENT_ID_WIDTH) << FFTS_EVENT_ID_OFFSET));
 }
 
-template <Op SrcOp, Op DstOp, bool AutoToken = true, event_t EventID = EVENT_ID0>
+template <Op SrcOp, Op DstOp, bool AutoToken = true, int EventID = EVENT_ID0>
 struct Event {
 #ifndef __PTO_AUTO__
     static constexpr Op srcOp = SrcOp;
@@ -71,7 +71,7 @@ struct Event {
 #ifdef PTO_FLAG_TEST
     CceEventIdType token = {};
 #else
-    const event_t token = AutoToken ? EventIdCounter<srcPipe, dstPipe>::GetNextId() : EventID;
+    const int token = AutoToken ? EventIdCounter<srcPipe, dstPipe>::GetNextId() : EventID;
 #endif
 #endif
 
@@ -144,7 +144,7 @@ template <typename T>
 struct is_event : std::false_type {
 };
 
-template <Op SrcOp, Op DstOp, bool AutoToken, event_t EventID>
+template <Op SrcOp, Op DstOp, bool AutoToken, int EventID>
 struct is_event<Event<SrcOp, DstOp, AutoToken, EventID>> : std::true_type {
 };
 

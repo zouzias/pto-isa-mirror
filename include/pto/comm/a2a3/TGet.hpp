@@ -291,7 +291,7 @@ PTO_INTERNAL void TgetPingPongProcessChunk(GlobalDstData &dstGlobalData, GlobalS
     using DstViewT = GlobalTensor<DType, DynShape, StrideT, GlobalDstData::layout>;
 
     TileData &loadTile = pp.usePing ? pingTile : pongTile;
-    event_t curEvent = pp.usePing ? EVENT_ID0 : EVENT_ID1;
+    int curEvent = pp.usePing ? EVENT_ID0 : EVENT_ID1;
     if constexpr (isDynamicRow)
         loadTile.RowMaskInternal = chunkRows;
     if constexpr (isDynamicCol)
@@ -302,7 +302,7 @@ PTO_INTERNAL void TgetPingPongProcessChunk(GlobalDstData &dstGlobalData, GlobalS
 
     if (pp.hasPending) {
         TileData &storeTile = pp.usePing ? pongTile : pingTile;
-        event_t prevEvent = pp.usePing ? EVENT_ID1 : EVENT_ID0;
+        int prevEvent = pp.usePing ? EVENT_ID1 : EVENT_ID0;
         wait_flag(PIPE_MTE2, PIPE_MTE3, prevEvent);
         DynShape pendShape(1, 1, 1, pp.pendingRows, pp.pendingCols);
         DstViewT pendView(dstGlobalData.data() + pp.pendingDstOffset, pendShape, localChunkStride);
@@ -336,7 +336,7 @@ PTO_INTERNAL void TgetPingPongFlush(GlobalDstData &dstGlobalData, TileData &ping
     using DstView = GlobalTensor<DType, ChunkShape, StrideT, GlobalDstData::layout>;
 
     TileData &finalTile = pp.usePing ? pongTile : pingTile;
-    event_t finalEvent = pp.usePing ? EVENT_ID1 : EVENT_ID0;
+    int finalEvent = pp.usePing ? EVENT_ID1 : EVENT_ID0;
     wait_flag(PIPE_MTE2, PIPE_MTE3, finalEvent);
     ChunkShape finalShape(1, 1, 1, pp.pendingRows, pp.pendingCols);
     DstView finalView(dstGlobalData.data() + pp.pendingDstOffset, finalShape, localChunkStride);

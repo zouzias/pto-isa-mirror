@@ -49,27 +49,27 @@ AICORE inline void ProcessKIteration(
     GlobalDataSrcA gmA(currentSrc0 + kIter * baseK);
     GlobalDataSrcB gmB(currentSrc1 + kIter * baseK);
 
-    wait_flag(PIPE_MTE1, PIPE_MTE2, (event_t)cur);
+    wait_flag(PIPE_MTE1, PIPE_MTE2, (int)cur);
     TLOAD(aMatTile[cur], gmA);
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     TLOAD(bMatTile[cur], gmB);
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
 
-    wait_flag(PIPE_M, PIPE_MTE1, (event_t)cur);
+    wait_flag(PIPE_M, PIPE_MTE1, (int)cur);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     TMOV(aTile[cur], aMatTile[cur]);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
     TMOV(bTile[cur], bMatTile[cur]);
-    set_flag(PIPE_MTE1, PIPE_MTE2, (event_t)cur);
+    set_flag(PIPE_MTE1, PIPE_MTE2, (int)cur);
 
-    set_flag(PIPE_MTE1, PIPE_M, (event_t)cur);
-    wait_flag(PIPE_MTE1, PIPE_M, (event_t)cur);
+    set_flag(PIPE_MTE1, PIPE_M, (int)cur);
+    wait_flag(PIPE_MTE1, PIPE_M, (int)cur);
     if (kIter == 0) {
         TMATMUL(cTile, aTile[cur], bTile[cur]);
     } else {
         TMATMUL_ACC(cTile, cTile, aTile[cur], bTile[cur]);
     }
-    set_flag(PIPE_M, PIPE_MTE1, (event_t)cur);
+    set_flag(PIPE_M, PIPE_MTE1, (int)cur);
 }
 
 template <typename T, typename U, typename S, int M, int K, int N, uint32_t singleCoreM, uint32_t singleCoreK,

@@ -72,7 +72,7 @@ AICORE inline void ProcessKIterationContinuous(
         GlobalDataSrcA gmA(currentSrc0 + localKIter * baseK);
         GlobalDataSrcB gmB(currentSrc1 + localKIter * baseK);
 
-        wait_flag(PIPE_MTE1, PIPE_MTE2, (event_t)mte2DBFlag);
+        wait_flag(PIPE_MTE1, PIPE_MTE2, (int)mte2DBFlag);
         TLOAD(aMatTile[mte2DBFlag], gmA);
         set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
         TLOAD(bMatTile[mte2DBFlag], gmB);
@@ -82,7 +82,7 @@ AICORE inline void ProcessKIterationContinuous(
 
     const uint32_t currMte2Idx = (mte2DBFlag == 0) ? 1 : 0;
 
-    wait_flag(PIPE_M, PIPE_MTE1, (event_t)mte1DBFlag);
+    wait_flag(PIPE_M, PIPE_MTE1, (int)mte1DBFlag);
 
     if (kModStepKa == 0) {
         wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
@@ -95,11 +95,11 @@ AICORE inline void ProcessKIterationContinuous(
     TEXTRACT(bTile[mte1DBFlag], bMatTile[currMte2Idx], (localKIter % stepKb) * baseK, 0);
 
     if ((localKIter + 1) % stepKa == 0) {
-        set_flag(PIPE_MTE1, PIPE_MTE2, (event_t)currMte2Idx);
+        set_flag(PIPE_MTE1, PIPE_MTE2, (int)currMte2Idx);
     }
 
-    set_flag(PIPE_MTE1, PIPE_M, (event_t)mte1DBFlag);
-    wait_flag(PIPE_MTE1, PIPE_M, (event_t)mte1DBFlag);
+    set_flag(PIPE_MTE1, PIPE_M, (int)mte1DBFlag);
+    wait_flag(PIPE_MTE1, PIPE_M, (int)mte1DBFlag);
 
     if (globalKIter == 0) {
         TMATMUL(cTile, aTile[mte1DBFlag], bTile[mte1DBFlag]);
@@ -107,7 +107,7 @@ AICORE inline void ProcessKIterationContinuous(
         TMATMUL_ACC(cTile, cTile, aTile[mte1DBFlag], bTile[mte1DBFlag]);
     }
 
-    set_flag(PIPE_M, PIPE_MTE1, (event_t)mte1DBFlag);
+    set_flag(PIPE_M, PIPE_MTE1, (int)mte1DBFlag);
     mte1DBFlag = (mte1DBFlag == 0) ? 1 : 0;
 }
 

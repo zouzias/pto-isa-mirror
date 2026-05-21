@@ -29,11 +29,11 @@ comm::TGET(dstG, srcG, pingTile, pongTile);
 for (int i = 0; i < num_chunks; i++) {
     bool use_ping = (i % 2 == 0);
     TileData &curTile = use_ping ? pingTile : pongTile;
-    event_t curEv = use_ping ? EVENT_ID0 : EVENT_ID1;
+    int curEv = use_ping ? EVENT_ID0 : EVENT_ID1;
 
     if (i > 0) {
         TileData &prevTile = use_ping ? pongTile : pingTile;
-        event_t prevEv = use_ping ? EVENT_ID1 : EVENT_ID0;
+        int prevEv = use_ping ? EVENT_ID1 : EVENT_ID0;
         wait_flag(PIPE_MTE2, PIPE_MTE3, prevEv);
         TSTORE_IMPL<...>(prevDst, prevTile);
         set_flag(PIPE_MTE3, PIPE_MTE2, prevEv);

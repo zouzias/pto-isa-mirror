@@ -354,8 +354,8 @@ PTO_INTERNAL void TreducePingPongLoop(ParallelGroupType &parallelGroup, TileData
         const bool currentIsPing = ((i & 1) == 0);
         TileData &currentTile = currentIsPing ? pingTile : pongTile;
         TileData &nextTile = currentIsPing ? pongTile : pingTile;
-        const event_t currentReady = currentIsPing ? EVENT_ID1 : EVENT_ID2;
-        const event_t nextReady = currentIsPing ? EVENT_ID2 : EVENT_ID1;
+        const int currentReady = currentIsPing ? EVENT_ID1 : EVENT_ID2;
+        const int nextReady = currentIsPing ? EVENT_ID2 : EVENT_ID1;
         if (scheduleNext) {
             const int nextRemoteRank = detail::GetRemoteRank(rootIdx, i + 1);
             SrcViewT nextView(parallelGroup[nextRemoteRank].data() + srcOffset, chunkShape, srcChunkStride);

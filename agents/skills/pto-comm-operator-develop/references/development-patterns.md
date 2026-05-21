@@ -98,7 +98,7 @@ AICORE inline void ReduceScatterManual(__gm__ half *src_addr, __gm__ half *dst_a
 {
     bool use_ping = (pp_count % 2 == 0);
     TileData &curTile = use_ping ? pingTile : pongTile;
-    event_t curEv = use_ping ? EVENT_ID0 : EVENT_ID1;
+    int curEv = use_ping ? EVENT_ID0 : EVENT_ID1;
 
     Global srcG(src_addr, shape, stride);
     Global dstG(dst_addr, shape, stride);

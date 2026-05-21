@@ -169,14 +169,14 @@ AICORE inline void RsPipelineStep(RsSubtileData &pingTile, RsSubtileData &pongTi
 {
     bool use_ping = (pp_count % 2 == 0);
     RsSubtileData &curTile = use_ping ? pingTile : pongTile;
-    event_t curEv = use_ping ? EVENT_ID0 : EVENT_ID1;
+    int curEv = use_ping ? EVENT_ID0 : EVENT_ID1;
 
     if (pp_count == 0) {
         TLOAD(curTile, srcG);
         set_flag(PIPE_MTE2, PIPE_MTE3, curEv);
     } else {
         RsSubtileData &prevTile = use_ping ? pongTile : pingTile;
-        event_t prevEv = use_ping ? EVENT_ID1 : EVENT_ID0;
+        int prevEv = use_ping ? EVENT_ID1 : EVENT_ID0;
 
         wait_flag(PIPE_MTE2, PIPE_MTE3, prevEv);
         TSTORE_IMPL<RsSubtileData, Global, pto::AtomicType::AtomicAdd>(pp_pending_dst, prevTile);
@@ -201,7 +201,7 @@ AICORE inline void RsFlushPipeline(RsSubtileData &pingTile, RsSubtileData &pongT
 
     bool last_was_ping = ((pp_count - 1) % 2 == 0);
     RsSubtileData &lastTile = last_was_ping ? pingTile : pongTile;
-    event_t lastEv = last_was_ping ? EVENT_ID0 : EVENT_ID1;
+    int lastEv = last_was_ping ? EVENT_ID0 : EVENT_ID1;
     wait_flag(PIPE_MTE2, PIPE_MTE3, lastEv);
     TSTORE_IMPL<RsSubtileData, Global, pto::AtomicType::AtomicAdd>(pp_pending_dst, lastTile);
     set_flag(PIPE_MTE3, PIPE_MTE2, lastEv);

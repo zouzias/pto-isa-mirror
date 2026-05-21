@@ -37,12 +37,12 @@ AICORE inline void MatmulAcc(OutTile cTile, LeftTile aTile, RightTile bTile, uin
 template <pipe_t srcPipe, pipe_t dstPipe>
 AICORE inline void SetFlag(uint32_t id)
 {
-    set_flag(srcPipe, dstPipe, static_cast<event_t>(id));
+    set_flag(srcPipe, dstPipe, static_cast<int>(id));
 }
 template <pipe_t srcPipe, pipe_t dstPipe>
 AICORE inline void WaitFlag(uint32_t id)
 {
-    wait_flag(srcPipe, dstPipe, static_cast<event_t>(id));
+    wait_flag(srcPipe, dstPipe, static_cast<int>(id));
 }
 
 template <typename T, typename U, typename S, int m, int k, int n, uint32_t singleCoreM, uint32_t singleCoreK,

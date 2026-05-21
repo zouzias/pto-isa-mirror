@@ -35,7 +35,7 @@ PTO_INTERNAL void TSYNC_IMPL()
 #endif
 }
 
-template <Op SrcOp, Op DstOp, bool AutoToken = true, event_t EventID = EVENT_ID0>
+template <Op SrcOp, Op DstOp, bool AutoToken = true, int EventID = EVENT_ID0>
 struct Event {
 #ifndef __PTO_AUTO__
     static constexpr Op dstOp = DstOp;
@@ -61,7 +61,7 @@ struct Event {
 #ifdef PTO_FLAG_TEST
     CceEventIdType token = {};
 #else
-    const event_t token = AutoToken ? EventIdCounter<srcPipe, dstPipe>::GetNextId() : EventID;
+    const int token = AutoToken ? EventIdCounter<srcPipe, dstPipe>::GetNextId() : EventID;
 #endif
 #endif
 
@@ -145,7 +145,7 @@ template <typename T>
 struct is_event : std::false_type {
 };
 
-template <Op SrcOp, Op DstOp, bool AutoToken, event_t EventID>
+template <Op SrcOp, Op DstOp, bool AutoToken, int EventID>
 struct is_event<Event<SrcOp, DstOp, AutoToken, EventID>> : std::true_type {
 };
 

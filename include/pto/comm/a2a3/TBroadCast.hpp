@@ -240,7 +240,7 @@ PTO_INTERNAL void TbroadcastPingPongProcessChunk(ParallelGroupType &parallelGrou
 
     const bool currentIsPing = state.usePing;
     TileData &loadTile = currentIsPing ? pingTile : pongTile;
-    event_t curEvent = currentIsPing ? EVENT_ID0 : EVENT_ID1;
+    int curEvent = currentIsPing ? EVENT_ID0 : EVENT_ID1;
 
     constexpr bool hasDynRow = (TileData::ValidRow == DYNAMIC);
     constexpr bool hasDynCol = (TileData::ValidCol == DYNAMIC);
@@ -254,7 +254,7 @@ PTO_INTERNAL void TbroadcastPingPongProcessChunk(ParallelGroupType &parallelGrou
 
     if (state.hasPending) {
         TileData &storeTile = currentIsPing ? pongTile : pingTile;
-        event_t prevEvent = currentIsPing ? EVENT_ID1 : EVENT_ID0;
+        int prevEvent = currentIsPing ? EVENT_ID1 : EVENT_ID0;
 
         wait_flag(PIPE_MTE2, PIPE_MTE3, prevEvent);
 
@@ -295,7 +295,7 @@ PTO_INTERNAL void TbroadcastPingPongEpilogue(ParallelGroupType &parallelGroup, T
 
     const bool finalInPong = state.usePing;
     TileData &lastTile = finalInPong ? pongTile : pingTile;
-    event_t lastEvent = finalInPong ? EVENT_ID1 : EVENT_ID0;
+    int lastEvent = finalInPong ? EVENT_ID1 : EVENT_ID0;
 
     wait_flag(PIPE_MTE2, PIPE_MTE3, lastEvent);
     ChunkShape lastShape(1, 1, 1, state.pendingRows, state.pendingCols);
