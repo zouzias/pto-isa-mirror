@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # coding=utf-8
 # --------------------------------------------------------------------------------
-# Copyright (c) 2025 Huawei Technologies Co., Ltd.
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -12,40 +12,32 @@
 
 import os
 import numpy as np
+import struct
 np.random.seed(19)
 
 
-def gen_golden_data_tfmod(case_name, param):
+def gen_golden_data_taxpy(case_name, param):
     dtype = param.dtype
 
     h_valid, w_valid = [param.valid_row, param.valid_col]
 
-    if np.issubdtype(dtype, np.integer):
-        value_max = np.iinfo(dtype).max
-        value_min = np.iinfo(dtype).min
-    else:
-        value_max = np.finfo(dtype).max / 100
-        value_min = np.finfo(dtype).min / 100
-
     # Generate random input arrays
-    input1 = np.random.uniform(low=value_min, high=value_max, size=(h_valid, w_valid)).astype(dtype)
-    input2 = np.random.uniform(low=value_min, high=value_max, size=(h_valid, w_valid)).astype(dtype)
+    input1 = np.random.uniform(-100, 100, size=h_valid * w_valid).astype(dtype)
+    input2 = np.random.uniform(-100, 100, size=h_valid * w_valid).astype(dtype)
+    scalar = np.random.uniform(low=-8, high=8, size=(1, 1)).astype(dtype)
 
     # Perform the andbtraction
-    golden = np.fmod(input1, input2)
-
-    # Apply valid region constraints
-    output = np.zeros(h_valid * w_valid).astype(dtype)
+    golden = (input1.astype(np.float64) + input2.astype(np.float64) * scalar).astype(dtype)
 
     # Save the input and golden data to binary files
     input1.tofile("input1.bin")
     input2.tofile("input2.bin")
+    with open("scalar.bin", 'wb') as f:
+        f.write(struct.pack('f', np.float32(scalar[0, 0])))
     golden.tofile("golden.bin")
 
-    return output, input1, input2, golden
 
-
-class TfmodParams:
+class TAxpyParams:
     def __init__(self, name, dtype, tile_row, tile_col, valid_row, valid_col):
         self.name = name
         self.dtype = dtype
@@ -64,18 +56,12 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TfmodParams("TFMODTest.case1", np.uint16, 64, 64, 64, 64),
-        TfmodParams("TFMODTest.case2", np.uint16, 64, 64, 63, 63),
-        TfmodParams("TFMODTest.case3", np.uint16, 1, 16384, 1, 16384),
-        TfmodParams("TFMODTest.case4", np.uint16, 512, 16, 512, 16),
-        TfmodParams("TFMODTest.case5", np.float32, 32, 32, 32, 32),
-        TfmodParams("TFMODTest.case6", np.uint32, 8, 8, 8, 8),
-        TfmodParams("TFMODTest.case7", np.float16, 32, 32, 31, 31),
-        TfmodParams("TFMODTest.case8", np.int16, 16, 16, 16, 16),
-        TfmodParams("TFMODTest.case9", np.int32, 8, 8, 8, 8),
-        TfmodParams("TFMODTest.case10", np.float32, 64, 64, 64, 64),
-        TfmodParams("TFMODTest.case11", np.float32, 64, 128, 55, 96),
-        TfmodParams("TFMODTest.case12", np.float32, 64, 128, 61, 97),
+        TAxpyParams("TAXPYTest.case1", np.float16, 64, 64, 64, 64),
+        TAxpyParams("TAXPYTest.case2", np.float16, 64, 64, 63, 63),
+        TAxpyParams("TAXPYTest.case3", np.float16, 1, 16384, 1, 16384),
+        TAxpyParams("TAXPYTest.case4", np.float16, 2048, 16, 2048, 16),
+        TAxpyParams("TAXPYTest.case5", np.float32, 8, 8, 8, 8),
+        TAxpyParams("TAXPYTest.case6", np.float32, 16, 16, 15, 15),
     ]
 
     for param in case_params_list:
@@ -84,5 +70,5 @@ if __name__ == "__main__":
             os.makedirs(case_name)
         original_dir = os.getcwd()
         os.chdir(case_name)
-        gen_golden_data_tfmod(case_name, param)
+        gen_golden_data_taxpy(case_name, param)
         os.chdir(original_dir)
