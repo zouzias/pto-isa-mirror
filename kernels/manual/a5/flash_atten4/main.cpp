@@ -132,7 +132,11 @@ void run_tfa()
     constexpr size_t p_max_fifo_stride = static_cast<size_t>(kFaCvFifoSize) * static_cast<size_t>(CUBE_S0);
     constexpr size_t pv_fifo_stride =
         static_cast<size_t>(kFaCvFifoSize) * static_cast<size_t>(CUBE_S0) * static_cast<size_t>(HEAD_SIZE);
-    const size_t block_rows = S0 / CUBE_S0;
+    constexpr size_t block_rows = static_cast<size_t>(S0) / static_cast<size_t>(CUBE_S0);
+    constexpr size_t launch_block_count =
+        (block_rows < static_cast<size_t>(kFaLaunchCoreCount)) ? block_rows : static_cast<size_t>(kFaLaunchCoreCount);
+    constexpr bool use_cv_comm = (!INTERMEDIATE_CHECK) && (launch_block_count >= kFaLaunchCoreCount);
+    constexpr size_t fifo_slots = use_cv_comm ? launch_block_count : block_rows;
     constexpr size_t cv_comm_slots = static_cast<size_t>(S0) / static_cast<size_t>(CUBE_S0);
     constexpr size_t cv_comm_bytes = cv_comm_slots * kFaCvCommSlotBytes;
     constexpr size_t profile_bytes_per_block = kFaProfileBytesPerBlock; // cube + two vec subblocks
@@ -143,10 +147,10 @@ void run_tfa()
     size_t qSize = S0 * HEAD_SIZE * sizeof(aclFloat16);
     size_t kSize = HEAD_SIZE * S1 * sizeof(aclFloat16);
 
-    const size_t qk_fifo_bytes = qk_fifo_stride * block_rows * sizeof(T);
-    const size_t p_fifo_bytes_half = p_fifo_stride * block_rows * sizeof(aclFloat16);
-    const size_t p_fifo_bytes_float = p_max_fifo_stride * block_rows * sizeof(float);
-    const size_t pv_fifo_bytes = pv_fifo_stride * block_rows * sizeof(T);
+    const size_t qk_fifo_bytes = qk_fifo_stride * fifo_slots * sizeof(T);
+    const size_t p_fifo_bytes_half = p_fifo_stride * fifo_slots * sizeof(aclFloat16);
+    const size_t p_fifo_bytes_float = p_max_fifo_stride * fifo_slots * sizeof(float);
+    const size_t pv_fifo_bytes = pv_fifo_stride * fifo_slots * sizeof(T);
 
     aclInit(nullptr);
     aclrtSetDevice(g_chip_id);
@@ -191,14 +195,6 @@ void run_tfa()
     aclrtMalloc((void **)&out2Device, out2TotalSize, ACL_MEM_MALLOC_HUGE_FIRST);
     T *out2PendDevice = nullptr;
     aclrtMalloc((void **)&out2PendDevice, out2TotalSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    // allocate global_sum buffer (per-tile S0 floats)
-    size_t gsumTotalElems = static_cast<size_t>(S0) * static_cast<size_t>(num_tiles);
-    size_t gsumSize = gsumTotalElems * sizeof(float);
-    float *gSumDevice = nullptr;
-    aclrtMalloc((void **)&gSumDevice, gsumSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    // allocate per-tile exp_max buffer (per-tile S0 floats)
-    float *expMaxDevice = nullptr;
-    aclrtMalloc((void **)&expMaxDevice, gsumSize, ACL_MEM_MALLOC_HUGE_FIRST);
     // allocate running output o (S0 x HEAD_SIZE)
     T *oDevice = nullptr;
     size_t oSize = pvPartSize; // S0 * HEAD_SIZE * sizeof(T)
@@ -256,8 +252,8 @@ void run_tfa()
     LaunchTFA<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, kFaCvFifoSize, INTERMEDIATE_CHECK, CAUSAL_MASK,
               kFaCvFifoConsSyncPeriod>(
         (uint16_t *)ffts, (aclFloat16 *)qDevice, (aclFloat16 *)kDevice, (aclFloat16 *)vDevice, (aclFloat16 *)xexpDevice,
-        (float *)expMaxIfifoDevice, (float *)gSumDevice, (float *)expMaxDevice, (float *)oDevice, (float *)oPartsDevice,
-        (float *)outDevice, (float *)out2Device, (float *)out2PendDevice, profileDevice, stream, cvCommDevice);
+        (float *)expMaxIfifoDevice, (float *)oDevice, (float *)oPartsDevice, (float *)outDevice, (float *)out2Device,
+        (float *)out2PendDevice, profileDevice, stream, cvCommDevice);
 
     aclrtSynchronizeStream(stream);
 
@@ -278,16 +274,6 @@ void run_tfa()
     uint8_t *profileHost = nullptr;
     aclrtMallocHost((void **)(&profileHost), profile_bytes);
     aclrtMemcpy(profileHost, profile_bytes, profileDevice, profile_bytes, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    // copy global_sum back
-    float *gSumHost = nullptr;
-    aclrtMallocHost((void **)(&gSumHost), gsumSize);
-    aclrtMemcpy(gSumHost, gsumSize, gSumDevice, gsumSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    // copy exp_max back
-    float *expMaxHost = nullptr;
-    aclrtMallocHost((void **)(&expMaxHost), gsumSize);
-    aclrtMemcpy(expMaxHost, gsumSize, expMaxDevice, gsumSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
     // copy running output o back
     T *oHost = nullptr;
@@ -332,18 +318,6 @@ void run_tfa()
                       reinterpret_cast<uint8_t *>(out2PendHost) + pv_off * sizeof(float),
                       pv_fifo_stride * sizeof(float));
         }
-    }
-    // write per-tile global_sum parts
-    for (int ti = 0; ti < num_tiles; ++ti) {
-        size_t partOffset = static_cast<size_t>(ti) * static_cast<size_t>(S0);
-        WriteFile(GetGoldenDir() + "/global_sum_part" + std::to_string(ti) + "_out.bin", gSumHost + partOffset,
-                  S0 * sizeof(float));
-    }
-    // write per-tile exp_max parts
-    for (int ti = 0; ti < num_tiles; ++ti) {
-        size_t partOffset = static_cast<size_t>(ti) * static_cast<size_t>(S0);
-        WriteFile(GetGoldenDir() + "/exp_max_part" + std::to_string(ti) + "_out.bin", expMaxHost + partOffset,
-                  S0 * sizeof(float));
     }
     // write running output
     WriteFile(GetGoldenDir() + "/o_out.bin", oHost, oSize);
@@ -629,8 +603,6 @@ void run_tfa()
     aclrtFree(vDevice);
     aclrtFree(out2Device);
     aclrtFree(out2PendDevice);
-    aclrtFree(gSumDevice);
-    aclrtFree(expMaxDevice);
     aclrtFree(profileDevice);
     aclrtFree(cvCommDevice);
 
@@ -709,8 +681,6 @@ void run_tfa()
     aclrtFreeHost(out2Host);
     aclrtFreeHost(oHost);
     aclrtFreeHost(oPartsHost);
-    aclrtFreeHost(gSumHost);
-    aclrtFreeHost(expMaxHost);
     aclrtFreeHost(profileHost);
     aclrtDestroyStream(stream);
     aclrtResetDevice(g_chip_id);

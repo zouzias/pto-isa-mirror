@@ -619,12 +619,12 @@ template <int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1, 
           typename TileDataF_T, typename TileDataH_T, typename TileDataH_NZ_T, typename ReduceTileF_T,
           typename TileMatPData, typename TSyncQK2SM, typename TSyncSM2PV, typename TSyncUBBuf>
 AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_fifo, __gm__ half *p_tile_fifo,
-                             __gm__ float *exp_max_ififo, __gm__ float *global_sum_out, __gm__ float *exp_max_out,
-                             TileDataF_T &qkVecTile, TileDataH_T &x_expT, TileDataF_T &input_reduce_tmp,
-                             ReduceTileF_T &m1_local_max, ReduceTileF_T &l1_local_sum, ReduceTileF_T &m2_global_max,
-                             ReduceTileF_T &l2_global_sum, ReduceTileF_T &l1_exp_max_ififo, TileMatPData &pMatTile,
-                             TileDataH_NZ_T &nzConvBuffer, uint64_t pTileEventId, TSyncQK2SM &qk2smSync,
-                             TSyncSM2PV sm2pvSync, TSyncUBBuf &ubBufSync, int blk_idx, int num_tiles)
+                             __gm__ float *exp_max_ififo, TileDataF_T &qkVecTile, TileDataH_T &x_expT,
+                             TileDataF_T &input_reduce_tmp, ReduceTileF_T &m1_local_max, ReduceTileF_T &l1_local_sum,
+                             ReduceTileF_T &m2_global_max, ReduceTileF_T &l2_global_sum,
+                             ReduceTileF_T &l1_exp_max_ififo, TileMatPData &pMatTile, TileDataH_NZ_T &nzConvBuffer,
+                             uint64_t pTileEventId, TSyncQK2SM &qk2smSync, TSyncSM2PV sm2pvSync,
+                             TSyncUBBuf &ubBufSync, int blk_idx, int num_tiles)
 {
     constexpr uint32_t Cube_S0 = CUBE_S0;
     constexpr uint32_t Cube_S1 = CUBE_S1;
@@ -731,9 +731,6 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
             uint16_t col_offset = static_cast<uint16_t>(Vec_S0 * static_cast<size_t>(get_subblockid()));
             TINSERT(pMatTile, nzConvBuffer, static_cast<uint16_t>(0), col_offset);
         }
-        (void)global_sum_out;
-        (void)exp_max_out;
-
         if constexpr (INTERMEDIATE_CHECK) {
             if (row_slice == static_cast<int>(kTileFactor) - 1) {
                 constexpr uint32_t SubblockRows = Cube_S0 / VEC_CORES;
@@ -850,10 +847,10 @@ AICORE inline void compute_gu(int tile_id, int num_tiles, __gm__ float *pv_tile_
 template <int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1, int QK_PRELOAD, int CV_FIFO_SIZE,
           bool INTERMEDIATE_CHECK, bool CAUSAL_MASK, int CV_FIFO_CONS_SYNC_PERIOD>
 __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__ half *k, __gm__ half *v,
-                              __gm__ half *p_tile_fifo, __gm__ float *exp_max_ififo, __gm__ float *global_sum_out,
-                              __gm__ float *exp_max_out, __gm__ float *o_out, __gm__ float *o_parts_out,
-                              __gm__ float *qk_tile_fifo, __gm__ float *pv_tile_fifo, __gm__ float *pv_pend_tile_fifo,
-                              __gm__ uint8_t *cv_comm_buf, __gm__ uint8_t *profile_buf)
+                              __gm__ half *p_tile_fifo, __gm__ float *exp_max_ififo, __gm__ float *o_out,
+                              __gm__ float *o_parts_out, __gm__ float *qk_tile_fifo, __gm__ float *pv_tile_fifo,
+                              __gm__ float *pv_pend_tile_fifo, __gm__ uint8_t *cv_comm_buf,
+                              __gm__ uint8_t *profile_buf)
 {
     set_ffts_base_addr((uint64_t)ffts_addr);
 
@@ -1044,8 +1041,6 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         __gm__ half *q_block = q + block_offset_rows * HEAD_SIZE;
         __gm__ half *p_tile_fifo_block = p_tile_fifo + static_cast<size_t>(comm_slot) * p_fifo_block_stride;
         __gm__ float *exp_max_ififo_block = exp_max_ififo + static_cast<size_t>(comm_slot) * p_max_fifo_block_stride;
-        __gm__ float *global_sum_block = global_sum_out + block_offset_rows;
-        __gm__ float *exp_max_block = exp_max_out + block_offset_rows;
         __gm__ float *o_out_block = o_out + static_cast<size_t>(block_offset_rows) * static_cast<size_t>(HEAD_SIZE);
         __gm__ float *o_parts_block =
             o_parts_out + static_cast<size_t>(block_offset_rows) * static_cast<size_t>(HEAD_SIZE);
@@ -1086,10 +1081,10 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                     compute_p<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size,
                               CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK, pMatTNBuffers>(
                         preload_tile, row_slice, qk_tile_fifo_block, p_tile_fifo_block, exp_max_ififo_block,
-                        global_sum_block, exp_max_block, qkVecTile[tile_buf_idx],
-                        x_expT[p_gu_src_pingpong_id % xexpVecTNBuffers], input_reduce_tmp, m1_local_max, l1_local_sum,
-                        m2_global_max, l2_global_sum, l1_exp_max_ififo[preload_tile % qkp_tile_fifo_size],
-                        pMatTile[preload_tile % pMatTNBuffers], nzConvBuffer[p_gu_src_pingpong_id % xexpVecTNBuffers],
+                        qkVecTile[tile_buf_idx], x_expT[p_gu_src_pingpong_id % xexpVecTNBuffers], input_reduce_tmp,
+                        m1_local_max, l1_local_sum, m2_global_max, l2_global_sum,
+                        l1_exp_max_ififo[preload_tile % qkp_tile_fifo_size], pMatTile[preload_tile % pMatTNBuffers],
+                        nzConvBuffer[p_gu_src_pingpong_id % xexpVecTNBuffers],
                         p_gu_src_pingpong_id % xexpVecTNBuffers, qk2smSync, sm2pvSync, ubBufSync, logical_block_idx,
                         num_tiles_s1);
                     p_gu_src_pingpong_id++;
@@ -1120,10 +1115,9 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                     compute_p<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size,
                               CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK, pMatTNBuffers>(
                         next_qk_tile, sub_tile, qk_tile_fifo_block, p_tile_fifo_block, exp_max_ififo_block,
-                        global_sum_block, exp_max_block, qkVecTile[tile_buf_idx],
-                        x_expT[p_gu_src_pingpong_id % xexpVecTNBuffers], input_reduce_tmp, m1_local_max, l1_local_sum,
-                        m2_global_max, l2_global_sum, l1_exp_max_ififo[next_qk_tile % qkp_tile_fifo_size],
-                        pMatTile[next_qk_tile % pMatTNBuffers],
+                        qkVecTile[tile_buf_idx], x_expT[p_gu_src_pingpong_id % xexpVecTNBuffers], input_reduce_tmp,
+                        m1_local_max, l1_local_sum, m2_global_max, l2_global_sum,
+                        l1_exp_max_ififo[next_qk_tile % qkp_tile_fifo_size], pMatTile[next_qk_tile % pMatTNBuffers],
                         nzConvBuffer[p_gu_src_pingpong_id % xexpVecTNBuffers], p_gu_src_pingpong_id % xexpVecTNBuffers,
                         qk2smSync, sm2pvSync, ubBufSync, logical_block_idx, num_tiles_s1);
                     p_gu_src_pingpong_id++;
@@ -1276,9 +1270,8 @@ __global__ AICORE __attribute__((aic)) void warmup_kernel()
 template <int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1, int QK_PRELOAD, int CV_FIFO_SIZE,
           bool INTERMEDIATE_CHECK, bool CAUSAL_MASK, int CV_FIFO_CONS_SYNC_PERIOD>
 void LaunchTFA(uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclFloat16 *p_tile_fifo,
-               float *exp_max_ififo, float *global_sum_out, float *exp_max_out, float *o_out, float *o_parts_out,
-               float *qk_tile_fifo, float *pv_tile_fifo, float *pv_pend_tile_fifo, uint8_t *profile_data,
-               aclrtStream stream, uint8_t *cv_comm_buf)
+               float *exp_max_ififo, float *o_out, float *o_parts_out, float *qk_tile_fifo, float *pv_tile_fifo,
+               float *pv_pend_tile_fifo, uint8_t *profile_data, aclrtStream stream, uint8_t *cv_comm_buf)
 {
     static_assert(S0 % CUBE_S0 == 0, "S0 must be divisible by CUBE_S0");
     constexpr uint32_t logical_block_count = S0 / CUBE_S0;
@@ -1306,22 +1299,20 @@ void LaunchTFA(uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclF
 
     runTFA<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, CV_FIFO_SIZE, INTERMEDIATE_CHECK, CAUSAL_MASK,
            CV_FIFO_CONS_SYNC_PERIOD><<<launch_block_count, nullptr, stream>>>(
-        (__gm__ uint64_t *)ffts, (half *)q, (half *)k, (half *)v, (half *)p_tile_fifo, exp_max_ififo, global_sum_out,
-        exp_max_out, o_out, o_parts_out, qk_tile_fifo, pv_tile_fifo, pv_pend_tile_fifo, cv_comm_buf, profile_data);
+        (__gm__ uint64_t *)ffts, (half *)q, (half *)k, (half *)v, (half *)p_tile_fifo, exp_max_ififo, o_out,
+        o_parts_out, qk_tile_fifo, pv_tile_fifo, pv_pend_tile_fifo, cv_comm_buf, profile_data);
 }
 
 // Backward-compatible overload without profiling buffer
 template <int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1, int QK_PRELOAD, int CV_FIFO_SIZE,
           bool INTERMEDIATE_CHECK, bool CAUSAL_MASK, int CV_FIFO_CONS_SYNC_PERIOD>
 void LaunchTFA(uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclFloat16 *p_tile_fifo,
-               float *exp_max_ififo, float *global_sum_out, float *exp_max_out, float *o_out, float *o_parts_out,
-               float *qk_tile_fifo, float *pv_tile_fifo, float *pv_pend_tile_fifo, aclrtStream stream,
-               uint8_t *cv_comm_buf)
+               float *exp_max_ififo, float *o_out, float *o_parts_out, float *qk_tile_fifo, float *pv_tile_fifo,
+               float *pv_pend_tile_fifo, aclrtStream stream, uint8_t *cv_comm_buf)
 {
     LaunchTFA<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, CV_FIFO_SIZE, INTERMEDIATE_CHECK, CAUSAL_MASK,
-              CV_FIFO_CONS_SYNC_PERIOD>(ffts, q, k, v, p_tile_fifo, exp_max_ififo, global_sum_out, exp_max_out, o_out,
-                                        o_parts_out, qk_tile_fifo, pv_tile_fifo, pv_pend_tile_fifo, nullptr, stream,
-                                        cv_comm_buf);
+              CV_FIFO_CONS_SYNC_PERIOD>(ffts, q, k, v, p_tile_fifo, exp_max_ififo, o_out, o_parts_out, qk_tile_fifo,
+                                        pv_tile_fifo, pv_pend_tile_fifo, nullptr, stream, cv_comm_buf);
 }
 
 #include "generated_cases.h"
@@ -1330,23 +1321,23 @@ void LaunchTFA(uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclF
     template void LaunchTFA<S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, kFaCvFifoSize, false, CAUSAL_MASK, \
                             kFaCvFifoConsSyncPeriod>(                                                               \
         uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclFloat16 *p_out, float *p_out_fp32,          \
-        float *global_sum_out, float *exp_max_out, float *o_out, float *o_parts_out, float *qk_out, float *pv_out,  \
-        float *pv_pend_out, uint8_t *profile_data, aclrtStream stream, uint8_t *cv_comm_buf);                       \
+        float *o_out, float *o_parts_out, float *qk_out, float *pv_out, float *pv_pend_out, uint8_t *profile_data,  \
+        aclrtStream stream, uint8_t *cv_comm_buf);                                                                   \
     template void LaunchTFA<S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, kFaCvFifoSize, false, CAUSAL_MASK, \
                             kFaCvFifoConsSyncPeriod>(                                                               \
         uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclFloat16 *p_out, float *p_out_fp32,          \
-        float *global_sum_out, float *exp_max_out, float *o_out, float *o_parts_out, float *qk_out, float *pv_out,  \
-        float *pv_pend_out, aclrtStream stream, uint8_t *cv_comm_buf);                                              \
+        float *o_out, float *o_parts_out, float *qk_out, float *pv_out, float *pv_pend_out, aclrtStream stream,     \
+        uint8_t *cv_comm_buf);                                                                                       \
     template void LaunchTFA<S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, kFaCvFifoSize, true, CAUSAL_MASK,  \
                             kFaCvFifoConsSyncPeriod>(                                                               \
         uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclFloat16 *p_out, float *p_out_fp32,          \
-        float *global_sum_out, float *exp_max_out, float *o_out, float *o_parts_out, float *qk_out, float *pv_out,  \
-        float *pv_pend_out, uint8_t *profile_data, aclrtStream stream, uint8_t *cv_comm_buf);                       \
+        float *o_out, float *o_parts_out, float *qk_out, float *pv_out, float *pv_pend_out, uint8_t *profile_data,  \
+        aclrtStream stream, uint8_t *cv_comm_buf);                                                                   \
     template void LaunchTFA<S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, kFaCvFifoSize, true, CAUSAL_MASK,  \
                             kFaCvFifoConsSyncPeriod>(                                                               \
         uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclFloat16 *p_out, float *p_out_fp32,          \
-        float *global_sum_out, float *exp_max_out, float *o_out, float *o_parts_out, float *qk_out, float *pv_out,  \
-        float *pv_pend_out, aclrtStream stream, uint8_t *cv_comm_buf);
+        float *o_out, float *o_parts_out, float *qk_out, float *pv_out, float *pv_pend_out, aclrtStream stream,     \
+        uint8_t *cv_comm_buf);
 
 TFA_FOR_EACH_CASE(INSTANTIATE_TFA)
 
