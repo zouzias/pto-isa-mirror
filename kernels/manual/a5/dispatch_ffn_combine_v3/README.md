@@ -4,12 +4,10 @@
 
 本示例演示一个面向 A5 / Ascend950 形态的 MoE `dispatch -> FFN -> combine` 融合 kernel。它把跨 rank token dispatch、两段 int8 GMM、SwiGLU、概率加权 combine 和最终 restore 放进一个混合 AIC/AIV kernel 中，通过 PTO 通信原语直接访问 HCCL RDMA window。
 
-当前目录是从 A3/A2A3 committed baseline 重建出来的 A5 版本，目标是保持原算法闭环，同时适配 A5 `dav-c310` 编译、A5 HCCL window 布局和 A5 PTO/AscendC API 差异。
-
 ## 支持的 AI 处理器
 
 - A5 / Ascend950 系列（kernel 编译目标：`dav-c310`）
-- 当前仓库所在机器按项目约定不是 A5 runtime 验证环境，本目录默认只做 A5 编译验证；端到端运行请在 A5-capable 环境执行。
+
 
 ## 目录结构
 
@@ -239,8 +237,17 @@ Host 侧 `ValidateRemoteWindowCapacity()` 会检查：
 在 A5-capable 环境执行：
 
 ```bash
-bash kernels/manual/a5/dispatch_ffn_combine_v3/run.sh \
-  --soc-version Ascend910_950 \
+export ASCEND_CANN_PATH=/home/XXX/Ascend/cann-9.0.0/set_env.sh
+export ASCEND_HOME_PATH=/home/XXX/Ascend/cann-9.0.0
+source /home/XXX/Ascend/cann-9.0.0/set_env.sh
+export PATH=/usr/local/mpich/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/mpich/lib:${LD_LIBRARY_PATH:-}
+export MPI_LIB_PATH=/usr/local/mpich/lib/libmpi.so
+export MPI_RUNNER=mpirun
+
+cd /home/zy/pto-isa_cann_zy/kernels/manual/a5/dispatch_ffn_combine_v3
+bash run.sh \
+  --soc Ascend950PR_958b \
   --world-size 2 \
   --m 16 \
   --k 128 \
@@ -250,7 +257,9 @@ bash kernels/manual/a5/dispatch_ffn_combine_v3/run.sh \
   --max-output-size 32
 ```
 
-如果目标环境的 CANN platform config 使用更具体 SoC 名称，可把 `--soc-version` 换成对应值，例如 `Ascend950PR_958b`。如果不传 `--soc-version`，host tiling 使用默认 `PlatformAscendCManager::GetInstance()`。
+`ASCEND_CANN_PATH` 供 `run.sh` 定位并 source CANN 环境入口；`ASCEND_HOME_PATH` 供 `CMakeLists.txt` 定位 CANN include/lib 与 kernel platform 目录。通常 `set_env.sh` 会设置 `ASCEND_HOME_PATH`，但实际环境中建议显式导出，避免 CMake 阶段报 `Cannot find ASCEND_HOME_PATH`。
+
+如果目标环境的 CANN platform config 使用更具体 SoC 名称，可把 `--soc` / `--soc-version` 换成对应值，例如 `Ascend950PR_958b`。如果不传 `--soc-version`，host tiling 使用默认 `PlatformAscendCManager::GetInstance()`。
 
 ### 只编译
 
