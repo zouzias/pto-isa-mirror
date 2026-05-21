@@ -9,6 +9,8 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 
+set -euo pipefail
+
 SHORT=r:,v:,
 LONG=run-mode:,soc-version:,
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
@@ -31,12 +33,19 @@ do
     esac
 done
 
+: "${RUN_MODE:=npu}"
+
+if [[ ! "${RUN_MODE}" =~ ^(sim|npu)$ ]]; then
+    echo "[ERROR] Unsupported RunMode: ${RUN_MODE}, must be sim or npu"
+    exit 1
+fi
+
 if [[ ! "${SOC_VERSION}" =~ ^Ascend ]]; then
     echo "[ERROR] Unsupported SocVersion: ${SOC_VERSION}"
     exit 1
 fi
 
-if [[ "${SOC_VERSION}" =~ ^Ascend910B4-1 ]] && [ "${RUN_MODE}" == "sim" ]; then
+if [[ "${SOC_VERSION}" =~ ^Ascend910B4-1$ ]] && [ "${RUN_MODE}" == "sim" ]; then
     echo "[ERROR] SocVersion: ${SOC_VERSION} can not support sim mode, please use Ascend910B4."
     exit 1
 fi
@@ -46,7 +55,6 @@ mkdir build
 cd build
 
 export LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib:$LD_LIBRARY_PATH
-set -euo pipefail
 
 cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} ..
 make -j16
