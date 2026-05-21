@@ -54,7 +54,7 @@ struct RegTensor {
     using RegType = typename TypeGet<T>::T;
     RegType reg;
 
-    PTO_INTERNAL RegTensor() {};
+    PTO_INTERNAL RegTensor(){};
     PTO_INTERNAL operator RegType &()
     {
         return reg;

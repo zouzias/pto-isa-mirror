@@ -9,6 +9,6 @@ PTO_DEVICE void RunRoutingStage(Kernel &kernel, typename Kernel::Params const &p
     kernel.RunRoutingImpl(params);
 }
 
-}  // namespace pto_ext::Gemm::Kernel::stages
+} // namespace pto_ext::Gemm::Kernel::stages
 
-#endif  // DISPATCH_FFN_COMBINE_V3_STAGES_ROUTING_STAGE_HPP
+#endif // DISPATCH_FFN_COMBINE_V3_STAGES_ROUTING_STAGE_HPP

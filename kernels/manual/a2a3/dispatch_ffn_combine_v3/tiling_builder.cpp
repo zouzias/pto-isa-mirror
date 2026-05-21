@@ -65,8 +65,7 @@ uint32_t GetBlockDim(uint32_t aivNum)
 }
 } // namespace
 
-DispatchFFNCombineBuildResult BuildDispatchFFNCombineTiling(const CaseConfig &cfg,
-                                                            const StandaloneRankRuntime &runtime)
+DispatchFFNCombineBuildResult BuildDispatchFFNCombineTiling(const CaseConfig &cfg, const StandaloneRankRuntime &runtime)
 {
     DispatchFFNCombineBuildResult result;
     auto &info = result.tiling.dispatchFFNCombineInfo;
@@ -86,22 +85,22 @@ DispatchFFNCombineBuildResult BuildDispatchFFNCombineTiling(const CaseConfig &cf
     FillCoCTiling(result.tiling.cocTiling, cfg);
     FillInitRoutingTiling(result.tiling.cocTiling, cfg);
 
-    result.tiling.runtimeInfo.remoteWindowContext =
-        reinterpret_cast<uint64_t>(runtime.hccl.RemoteWindowContextPtr());
+    result.tiling.runtimeInfo.remoteWindowContext = reinterpret_cast<uint64_t>(runtime.hccl.RemoteWindowContextPtr());
     result.tiling.runtimeInfo.rank = static_cast<uint32_t>(runtime.hccl.rank_id);
     result.tiling.runtimeInfo.rankSize = static_cast<uint32_t>(runtime.hccl.world_size);
 
     const uint32_t n2 = cfg.k;
     const uint32_t k2 = cfg.n / 2;
-    const uint64_t cocWorkspace = ((cfg.m + 255) / 256) * 256 * cfg.topk * sizeof(int32_t)
-        + static_cast<uint64_t>(cfg.world_size) * cfg.world_size * cfg.expert_per_rank * sizeof(int32_t) * 3
-        + static_cast<uint64_t>(cfg.max_output_size) * sizeof(float) * 2
-        + static_cast<uint64_t>(cfg.max_output_size) * cfg.n * sizeof(int16_t)
-        + static_cast<uint64_t>(cfg.max_output_size) * n2 * sizeof(int16_t)
-        + static_cast<uint64_t>(cfg.max_output_size) * cfg.k * sizeof(int8_t)
-        + static_cast<uint64_t>(cfg.max_output_size) * k2 * sizeof(int8_t)
-        + static_cast<uint64_t>(cfg.world_size) * sizeof(int32_t) * 16
-        + static_cast<uint64_t>(cfg.expert_per_rank + cfg.world_size) * sizeof(int32_t) * 16;
+    const uint64_t cocWorkspace =
+        ((cfg.m + 255) / 256) * 256 * cfg.topk * sizeof(int32_t) +
+        static_cast<uint64_t>(cfg.world_size) * cfg.world_size * cfg.expert_per_rank * sizeof(int32_t) * 3 +
+        static_cast<uint64_t>(cfg.max_output_size) * sizeof(float) * 2 +
+        static_cast<uint64_t>(cfg.max_output_size) * cfg.n * sizeof(int16_t) +
+        static_cast<uint64_t>(cfg.max_output_size) * n2 * sizeof(int16_t) +
+        static_cast<uint64_t>(cfg.max_output_size) * cfg.k * sizeof(int8_t) +
+        static_cast<uint64_t>(cfg.max_output_size) * k2 * sizeof(int8_t) +
+        static_cast<uint64_t>(cfg.world_size) * sizeof(int32_t) * 16 +
+        static_cast<uint64_t>(cfg.expert_per_rank + cfg.world_size) * sizeof(int32_t) * 16;
 
     result.block_dim = GetBlockDim(info.aivNum);
     result.workspace_bytes = SYSTEM_NEED_WORKSPACE + cocWorkspace;

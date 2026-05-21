@@ -121,10 +121,8 @@ void ZeroDeviceBuffer(const DeviceBuffer &buffer, const char *name)
     }
 }
 
-void PrepareIterationState(const StandaloneRankRuntime &runtime,
-                           const DeviceBuffer &out_dev,
-                           const DeviceBuffer &expert_token_nums_dev,
-                           const DeviceBuffer &workspace_dev)
+void PrepareIterationState(const StandaloneRankRuntime &runtime, const DeviceBuffer &out_dev,
+                           const DeviceBuffer &expert_token_nums_dev, const DeviceBuffer &workspace_dev)
 {
     if (!ZeroWindowMemory(runtime)) {
         throw std::runtime_error("failed to zero HCCL windows");
@@ -167,9 +165,7 @@ double ToGbs(double bytes, double us)
     return us > 0.0 ? bytes * kMicrosecondsPerSecond / us / kBytesPerGiB : 0.0;
 }
 
-std::vector<double> GatherMaxSamplesToRoot(const std::vector<double> &local_samples,
-                                           int rank_id,
-                                           int world_size)
+std::vector<double> GatherMaxSamplesToRoot(const std::vector<double> &local_samples, int rank_id, int world_size)
 {
     if (local_samples.empty()) {
         return {};
@@ -181,8 +177,7 @@ std::vector<double> GatherMaxSamplesToRoot(const std::vector<double> &local_samp
         gathered.resize(sample_count * static_cast<size_t>(world_size));
     }
     CommMpiGather(local_samples.data(), bytes_per_rank, COMM_MPI_CHAR,
-                  rank_id == 0 ? static_cast<void *>(gathered.data()) : nullptr,
-                  bytes_per_rank, COMM_MPI_CHAR, 0);
+                  rank_id == 0 ? static_cast<void *>(gathered.data()) : nullptr, bytes_per_rank, COMM_MPI_CHAR, 0);
     if (rank_id != 0) {
         return {};
     }
@@ -201,26 +196,15 @@ std::vector<double> GatherMaxSamplesToRoot(const std::vector<double> &local_samp
 std::string BuildAccuracyReportText(int rank_id, const AccuracyReport &report, double atol, double rtol)
 {
     std::ostringstream os;
-    os << std::fixed << std::setprecision(6)
-       << "rank=" << rank_id
-       << " compare(total=" << report.total_count
-       << ", mismatch=" << report.mismatch_count
-       << ", nan_or_inf=" << report.nan_or_inf_count
-       << ", max_abs_err=" << report.max_abs_err
-       << ", max_rel_err=" << report.max_rel_err
-       << ", mean_abs_err=" << report.mean_abs_err
-       << ", rmse=" << report.rmse
-       << ", atol=" << atol
-       << ", rtol=" << rtol
+    os << std::fixed << std::setprecision(6) << "rank=" << rank_id << " compare(total=" << report.total_count
+       << ", mismatch=" << report.mismatch_count << ", nan_or_inf=" << report.nan_or_inf_count
+       << ", max_abs_err=" << report.max_abs_err << ", max_rel_err=" << report.max_rel_err
+       << ", mean_abs_err=" << report.mean_abs_err << ", rmse=" << report.rmse << ", atol=" << atol << ", rtol=" << rtol
        << ")";
     if (report.has_first_bad) {
         os << '\n'
-           << std::fixed << std::setprecision(6)
-           << "rank=" << rank_id
-           << " first_bad(index=" << report.first_bad_index
-           << ", expected=" << report.first_expected
-           << ", actual=" << report.first_actual
-           << ")";
+           << std::fixed << std::setprecision(6) << "rank=" << rank_id << " first_bad(index=" << report.first_bad_index
+           << ", expected=" << report.first_expected << ", actual=" << report.first_actual << ")";
     }
     return os.str();
 }
@@ -236,11 +220,8 @@ void PrintOrderedByRank(int rank_id, int world_size, const std::string &text)
     CommMpiBarrier();
 }
 
-void PrintPerfSummary(const CaseConfig &cfg,
-                      int warmup_iters,
-                      int measure_iters,
-                      const std::vector<double> &kernel_samples_us,
-                      const std::vector<double> &e2e_samples_us)
+void PrintPerfSummary(const CaseConfig &cfg, int warmup_iters, int measure_iters,
+                      const std::vector<double> &kernel_samples_us, const std::vector<double> &e2e_samples_us)
 {
     if (kernel_samples_us.empty() || e2e_samples_us.empty()) {
         return;
@@ -251,19 +232,13 @@ void PrintPerfSummary(const CaseConfig &cfg,
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "\n===============================================================\n";
     std::cout << "[PROFILE] dispatch_ffn_combine_v3\n";
-    std::cout << "  shape: m=" << cfg.m
-              << " k=" << cfg.k
-              << " n=" << cfg.n
-              << " topk=" << cfg.topk
-              << " expert_per_rank=" << cfg.expert_per_rank
-              << " world_size=" << cfg.world_size << '\n';
-    std::cout << "  iters: warmup=" << warmup_iters
-              << " measure=" << measure_iters << '\n';
+    std::cout << "  shape: m=" << cfg.m << " k=" << cfg.k << " n=" << cfg.n << " topk=" << cfg.topk
+              << " expert_per_rank=" << cfg.expert_per_rank << " world_size=" << cfg.world_size << '\n';
+    std::cout << "  iters: warmup=" << warmup_iters << " measure=" << measure_iters << '\n';
     std::cout << "  logical work(all ranks): input_tokens=" << cfg.input_tokens_all_ranks
               << " routed_tokens=" << cfg.routed_tokens_all_ranks
               << " remote_routed_tokens=" << cfg.remote_routed_tokens_all_ranks
-              << " compute_flops=" << cfg.compute_flops_all_ranks
-              << " comm_bytes=" << cfg.comm_bytes_all_ranks << '\n';
+              << " compute_flops=" << cfg.compute_flops_all_ranks << " comm_bytes=" << cfg.comm_bytes_all_ranks << '\n';
     std::cout << "  kernel(max rank per iter): avg=" << kernel_stats.avg << " us"
               << " min=" << kernel_stats.min << " us"
               << " max=" << kernel_stats.max << " us"
@@ -280,7 +255,8 @@ void PrintPerfSummary(const CaseConfig &cfg,
               << " routed_tokens/s=" << ToTokensPerSecond(cfg.routed_tokens_all_ranks, e2e_stats.avg)
               << " eq_compute=" << ToTflops(cfg.compute_flops_all_ranks, e2e_stats.avg) << " TFLOPS"
               << " eq_comm=" << ToGbs(cfg.comm_bytes_all_ranks, e2e_stats.avg) << " GB/s\n";
-    std::cout << "  note: equivalent compute/comm are derived from case.json logical workload, not hardware counters.\n";
+    std::cout
+        << "  note: equivalent compute/comm are derived from case.json logical workload, not hardware counters.\n";
     std::cout << "===============================================================\n" << std::endl;
 }
 
@@ -323,7 +299,8 @@ bool RunOneRank(int rank_id, int world_size, const std::string &case_dir, const 
         DeviceBuffer probs_dev = MakeDeviceBuffer(probs.size(), probs.data());
         DeviceBuffer x_active_mask_dev = MakeDeviceBuffer(x_active_mask.size(), x_active_mask.data());
         DeviceBuffer out_dev = MakeDeviceBuffer(static_cast<size_t>(cfg.m) * cfg.k * sizeof(uint16_t));
-        DeviceBuffer expert_token_nums_dev = MakeDeviceBuffer(static_cast<size_t>(cfg.expert_per_rank) * sizeof(int32_t));
+        DeviceBuffer expert_token_nums_dev =
+            MakeDeviceBuffer(static_cast<size_t>(cfg.expert_per_rank) * sizeof(int32_t));
         DeviceBuffer workspace_dev = MakeDeviceBuffer(build.workspace_bytes);
         DeviceBuffer tiling_dev = MakeDeviceBuffer(sizeof(build.tiling), &build.tiling);
 
@@ -413,13 +390,13 @@ bool RunOneRank(int rank_id, int world_size, const std::string &case_dir, const 
             throw std::runtime_error("device->host output copy failed");
         }
 
-        WriteBinaryFile(case_dir + "/output_rank" + std::to_string(rank_id) + ".bin",
-                        actual_out.data(), actual_out.size() * sizeof(uint16_t));
+        WriteBinaryFile(case_dir + "/output_rank" + std::to_string(rank_id) + ".bin", actual_out.data(),
+                        actual_out.size() * sizeof(uint16_t));
         const AccuracyReport report = CompareFp16File(expected_out, actual_out, cfg.compare_atol, cfg.compare_rtol);
         ok = report.pass;
         PrintOrderedByRank(rank_id, world_size,
                            BuildAccuracyReportText(rank_id, report, cfg.compare_atol, cfg.compare_rtol) + "\n" +
-                           (ok ? "PASS" : "FAIL") + std::string(" rank=") + std::to_string(rank_id));
+                               (ok ? "PASS" : "FAIL") + std::string(" rank=") + std::to_string(rank_id));
     } catch (const std::exception &ex) {
         std::cerr << "rank=" << rank_id << " error: " << ex.what() << std::endl;
         ok = false;

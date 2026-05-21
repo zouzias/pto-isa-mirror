@@ -20,7 +20,7 @@ constexpr unsigned ElemPerRepeatB16 = 128; // REPEAT_BYTE / sizeof(uint16_t)
 
 using namespace pto;
 
-#define PTO_DIV_ROUNDUP(x, y) (((x) + (y) - 1) / (y))
+#define PTO_DIV_ROUNDUP(x, y) (((x) + (y)-1) / (y))
 #define PTO_CEIL(x, y) (PTO_DIV_ROUNDUP(x, y) * (y))
 
 // ---------------------------------------------------------------------------

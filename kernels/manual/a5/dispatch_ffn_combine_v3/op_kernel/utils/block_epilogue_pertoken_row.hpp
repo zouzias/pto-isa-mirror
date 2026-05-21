@@ -45,23 +45,12 @@ using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoLoadVector;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoMulVector;
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoStoreVector;
 
-}  // namespace row_detail
+} // namespace row_detail
 
 // float scale, dequant per expert
-template <
-    uint32_t UB_STAGES_,
-    class CType_,
-    class LayoutPerTokenScale_,
-    class DType_,
-    class TileCopy_
->
-class BlockEpilogue <
-    EpilogueAtlasA5PerTokenDequant<UB_STAGES_>,
-    CType_,
-    Gemm::GemmType<float, LayoutPerTokenScale_>,
-    DType_,
-    TileCopy_
-> {
+template <uint32_t UB_STAGES_, class CType_, class LayoutPerTokenScale_, class DType_, class TileCopy_>
+class BlockEpilogue<EpilogueAtlasA5PerTokenDequant<UB_STAGES_>, CType_, Gemm::GemmType<float, LayoutPerTokenScale_>,
+                    DType_, TileCopy_> {
 public:
     using DispatchPolicy = EpilogueAtlasA5PerTokenDequant<UB_STAGES_>;
     using ArchTag = typename DispatchPolicy::ArchTag;
@@ -76,16 +65,12 @@ public:
     using LayoutD = typename DType_::Layout;
 
     // Check data infos
-    static_assert(
-        std::is_same_v<ElementC, half> && (std::is_same_v<ElementD, half> || std::is_same_v<ElementD, bfloat16_t>),
-        "The element type template parameters of BlockEpilogue are wrong"
-    );
-    static_assert(
-        std::is_same_v<LayoutC, layout::ND> && 
-            std::is_same_v<LayoutPerTokenScale, layout::VectorLayout> && std::is_same_v<LayoutD, layout::ND>,
-        "The layout template parameters of BlockEpilogue are wrong"
-    );
-
+    static_assert(std::is_same_v<ElementC, half> &&
+                      (std::is_same_v<ElementD, half> || std::is_same_v<ElementD, bfloat16_t>),
+                  "The element type template parameters of BlockEpilogue are wrong");
+    static_assert(std::is_same_v<LayoutC, layout::ND> && std::is_same_v<LayoutPerTokenScale, layout::VectorLayout> &&
+                      std::is_same_v<LayoutD, layout::ND>,
+                  "The layout template parameters of BlockEpilogue are wrong");
 
     struct Params {
         __gm__ int32_t *ptrTokenPerExpert{nullptr};
@@ -97,11 +82,19 @@ public:
         int32_t scratchOffset;
 
         PTO_DEVICE
-        Params() {};
+        Params(){};
 
         PTO_DEVICE
-        Params(int32_t EP_, int32_t expertPerRank_, __gm__ int32_t *ptrTokenPerExpert_, int32_t n2_, int32_t rank_, PtoRemoteWindow &remoteWindow_, int32_t scratchOffset_) :
-            ptrTokenPerExpert(ptrTokenPerExpert_), EP(EP_), expertPerRank(expertPerRank_), n2(n2_), rank(rank_), remoteWindow(remoteWindow_), scratchOffset(scratchOffset_) {}
+        Params(int32_t EP_, int32_t expertPerRank_, __gm__ int32_t *ptrTokenPerExpert_, int32_t n2_, int32_t rank_,
+               PtoRemoteWindow &remoteWindow_, int32_t scratchOffset_)
+            : ptrTokenPerExpert(ptrTokenPerExpert_),
+              EP(EP_),
+              expertPerRank(expertPerRank_),
+              n2(n2_),
+              rank(rank_),
+              remoteWindow(remoteWindow_),
+              scratchOffset(scratchOffset_)
+        {}
     };
 
     PTO_DEVICE
@@ -124,20 +117,19 @@ public:
             eventUbDMTE3VList[i] = eventMTE3V++;
             eventUbDVMTE3List[i] = eventVMTE3++;
 
-
             ubCFp32OffsetList[i] = ubOffset;
             ubOffset += blockN * sizeof(float);
         }
     }
     PTO_DEVICE
-    void SetFlag() 
+    void SetFlag()
     {
         for (uint32_t i = 0; i < UB_STAGES; ++i) {
             row_detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[i]);
             row_detail::PtoSetFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[i]);
         }
     }
-    
+
     PTO_DEVICE
     void Finalize()
     {
@@ -148,9 +140,7 @@ public:
     }
     PTO_DEVICE
     ~BlockEpilogue()
-    {
-        
-    }
+    {}
 
     PTO_DEVICE
     void UpdateParams(Params const &params_)
@@ -159,13 +149,8 @@ public:
     }
 
     PTO_DEVICE
-    void operator() (
-        __gm__ ElementC *gmCPtr,
-        PtoShape2D const &shapeC,
-        __gm__ ElementPerTokenScale *gmPerTokenScalePtr,
-        __gm__ ElementD* ptrD,
-        int32_t dstRank
-    )
+    void operator()(__gm__ ElementC *gmCPtr, PtoShape2D const &shapeC, __gm__ ElementPerTokenScale *gmPerTokenScalePtr,
+                    __gm__ ElementD *ptrD, int32_t dstRank)
     {
         using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
         using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -177,10 +162,12 @@ public:
         uint32_t tileLoops = blockM;
         constexpr uint32_t scratchCols = 1024;
         int32_t logicalSubCoreIdx = get_block_idx() + get_subblockid() * get_block_num();
-        int64_t scratchOffsetBytes = params.scratchOffset + static_cast<int64_t>(logicalSubCoreIdx) * scratchCols * sizeof(ElementD);
-        __gm__ ElementD* localScratch = reinterpret_cast<__gm__ ElementD*>(params.remoteWindow(scratchOffsetBytes, params.rank));
+        int64_t scratchOffsetBytes =
+            params.scratchOffset + static_cast<int64_t>(logicalSubCoreIdx) * scratchCols * sizeof(ElementD);
+        __gm__ ElementD *localScratch =
+            reinterpret_cast<__gm__ ElementD *>(params.remoteWindow(scratchOffsetBytes, params.rank));
 
-        for (uint32_t loopIdx = 0; loopIdx < tileLoops; loopIdx ++) {
+        for (uint32_t loopIdx = 0; loopIdx < tileLoops; loopIdx++) {
             __gm__ ElementC *gmTileC = gmCPtr + loopIdx * blockN;
             uint64_t ubCOffset = ubCOffsetList[ubListId];
             uint64_t ubCFp32Offset = ubCFp32OffsetList[ubListId];
@@ -191,7 +178,8 @@ public:
             row_detail::PtoSetFlag<AscendC::HardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
 
             row_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
-            row_detail::PtoCastVector<ElementPerTokenScale, ElementC>(ubCFp32Offset, ubCOffset, blockN, pto::RoundMode::CAST_NONE);
+            row_detail::PtoCastVector<ElementPerTokenScale, ElementC>(ubCFp32Offset, ubCOffset, blockN,
+                                                                      pto::RoundMode::CAST_NONE);
             row_detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
 
             ElementPerTokenScale perTokenScale = gm_load(gmPerTokenScalePtr + loopIdx);
@@ -203,17 +191,19 @@ public:
             row_detail::PtoPipeBarrier<PIPE_V>();
 
             row_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[ubListId]);
-            row_detail::PtoCastVector<ElementD, ElementPerTokenScale>(ubDOffset, ubCFp32Offset, blockN, pto::RoundMode::CAST_RINT);
+            row_detail::PtoCastVector<ElementD, ElementPerTokenScale>(ubDOffset, ubCFp32Offset, blockN,
+                                                                      pto::RoundMode::CAST_RINT);
             row_detail::PtoSetFlag<AscendC::HardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
 
             row_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
-            __gm__ ElementD* dstRowBase = ptrD + loopIdx * blockN;
+            __gm__ ElementD *dstRowBase = ptrD + loopIdx * blockN;
             if (dstRank == params.rank) {
                 row_detail::PtoStoreVector(dstRowBase, ubDOffset, blockN);
             } else {
                 for (uint32_t colOffset = 0; colOffset < blockN; colOffset += scratchCols) {
                     uint32_t chunkCols = (blockN - colOffset < scratchCols) ? (blockN - colOffset) : scratchCols;
-                    row_detail::PtoStoreVector(localScratch, ubDOffset + static_cast<uint64_t>(colOffset) * sizeof(ElementD), chunkCols);
+                    row_detail::PtoStoreVector(
+                        localScratch, ubDOffset + static_cast<uint64_t>(colOffset) * sizeof(ElementD), chunkCols);
                     ShapeDyn rowShape(1, 1, 1, 1, chunkCols);
                     StrideDyn rowStride(chunkCols, chunkCols, chunkCols, chunkCols, 1);
                     TputTile tputTile(1, chunkCols < scratchCols ? chunkCols : scratchCols);
@@ -243,9 +233,8 @@ private:
     uint32_t ubListId{0};
 
     uint64_t ubCFp32OffsetList[UB_STAGES];
-
 };
 
-}  // namespace pto_ext::Epilogue::Block
+} // namespace pto_ext::Epilogue::Block
 
-#endif  // PTO_EXT_EPILOGUE_BLOCK_PER_TOKEN_ROW_HPP
+#endif // PTO_EXT_EPILOGUE_BLOCK_PER_TOKEN_ROW_HPP

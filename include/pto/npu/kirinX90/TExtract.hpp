@@ -268,7 +268,7 @@ __tf__ AICORE void TExtractAccToMat(typename DstTile::TileDType __out__ dst, typ
     using dstType = typename DstTile::DType;
     using srcType = typename SrcTile::DType;
     constexpr bool channelSplitEnable = (!DstTile::isRowMajor && (DstTile::SFractal == SLayout::RowMajor)) &&
-                                        (std::is_same_v<dstType, float>) && (DstTile::SFractalSize == CUBE_BLOCK_SIZE);
+                                        (std::is_same_v<dstType, float>)&&(DstTile::SFractalSize == CUBE_BLOCK_SIZE);
     constexpr int32_t c0Size = (!channelSplitEnable) && (DstTile::SFractalSize == 2 * CUBE_BLOCK_SIZE) ?
                                    2 * C0_SIZE_BYTE / sizeof(dstType) :
                                    C0_SIZE_BYTE / sizeof(dstType);

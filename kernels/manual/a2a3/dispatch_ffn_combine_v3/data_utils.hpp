@@ -39,7 +39,5 @@ RankFileSet BuildRankFileSet(const std::string &case_dir, int rank);
 std::vector<uint8_t> ReadBinaryFile(const std::string &path);
 void WriteBinaryFile(const std::string &path, const void *data, size_t bytes);
 float Fp16ToFloat(uint16_t value);
-AccuracyReport CompareFp16File(const std::vector<uint16_t> &expected,
-                               const std::vector<uint16_t> &actual,
-                               double atol,
+AccuracyReport CompareFp16File(const std::vector<uint16_t> &expected, const std::vector<uint16_t> &actual, double atol,
                                double rtol);

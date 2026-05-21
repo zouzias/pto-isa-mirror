@@ -11,7 +11,7 @@
 
 #define PTO_DEVICE __forceinline__ __aicore__
 #ifdef __CCE__
-#define PTO_HOST_DEVICE __forceinline__ [host, aicore]
+#define PTO_HOST_DEVICE __forceinline__[host, aicore]
 #else
 #define PTO_HOST_DEVICE
 #endif
@@ -99,7 +99,8 @@ PTO_HOST_DEVICE PtoShape2D GetPtoShapeKN(PtoShape3D const &shape)
     return PtoShape2D(shape.shape[2], shape.shape[1]);
 }
 
-class EmptyClass {};
+class EmptyClass {
+};
 
 template <uint32_t Align, class T>
 PTO_HOST_DEVICE constexpr T CeilDiv(T value)
@@ -130,10 +131,7 @@ PTO_HOST_DEVICE constexpr auto AlignUp(T value, U align)
     return CeilDiv(static_cast<Common>(value), alignValue) * alignValue;
 }
 
-template <
-    int RANK_,
-    class Index_ = uint32_t,
-    class LongIndex_ = int64_t>
+template <int RANK_, class Index_ = uint32_t, class LongIndex_ = int64_t>
 struct Coord {
     static constexpr int RANK = RANK_;
     using Index = Index_;
@@ -273,9 +271,8 @@ PTO_HOST_DEVICE constexpr auto MakeCoord(Ts... values)
 }
 
 template <int RANK, class Index, class LongIndex>
-PTO_HOST_DEVICE Coord<RANK, Index, LongIndex> CeilDiv(
-    Coord<RANK, Index, LongIndex> const &lhs,
-    Coord<RANK, Index, LongIndex> const &rhs)
+PTO_HOST_DEVICE Coord<RANK, Index, LongIndex> CeilDiv(Coord<RANK, Index, LongIndex> const &lhs,
+                                                      Coord<RANK, Index, LongIndex> const &rhs)
 {
     Coord<RANK, Index, LongIndex> out;
     for (int i = 0; i < RANK; ++i) {
@@ -310,15 +307,29 @@ struct MatrixCoord : public Coord<2, uint32_t> {
     static constexpr uint32_t COLUMN_INDEX = 1;
 
     PTO_HOST_DEVICE MatrixCoord() = default;
-    PTO_HOST_DEVICE MatrixCoord(Coord<2, Index> const &coord) : Base(coord) {}
-    PTO_HOST_DEVICE MatrixCoord(Index row, Index column) : Base(MakeCoord(row, column)) {}
-    PTO_HOST_DEVICE MatrixCoord(LongIndex row, LongIndex column)
-        : Base(MakeCoord(Index(row), Index(column))) {}
+    PTO_HOST_DEVICE MatrixCoord(Coord<2, Index> const &coord) : Base(coord)
+    {}
+    PTO_HOST_DEVICE MatrixCoord(Index row, Index column) : Base(MakeCoord(row, column))
+    {}
+    PTO_HOST_DEVICE MatrixCoord(LongIndex row, LongIndex column) : Base(MakeCoord(Index(row), Index(column)))
+    {}
 
-    PTO_HOST_DEVICE Index const &row() const { return this->At(ROW_INDEX); }
-    PTO_HOST_DEVICE Index &row() { return this->At(ROW_INDEX); }
-    PTO_HOST_DEVICE Index const &column() const { return this->At(COLUMN_INDEX); }
-    PTO_HOST_DEVICE Index &column() { return this->At(COLUMN_INDEX); }
+    PTO_HOST_DEVICE Index const &row() const
+    {
+        return this->At(ROW_INDEX);
+    }
+    PTO_HOST_DEVICE Index &row()
+    {
+        return this->At(ROW_INDEX);
+    }
+    PTO_HOST_DEVICE Index const &column() const
+    {
+        return this->At(COLUMN_INDEX);
+    }
+    PTO_HOST_DEVICE Index &column()
+    {
+        return this->At(COLUMN_INDEX);
+    }
 
     PTO_HOST_DEVICE MatrixCoord operator+(Base const &b) const
     {
@@ -344,9 +355,7 @@ PTO_HOST_DEVICE MatrixCoord CeilDiv(MatrixCoord const &lhs, MatrixCoord const &r
 
 PTO_HOST_DEVICE PtoShape2D CeilDiv(PtoShape2D const &lhs, PtoShape2D const &rhs)
 {
-    return PtoShape2D(
-        pto_ext::CeilDiv(lhs.shape[0], rhs.shape[0]),
-        pto_ext::CeilDiv(lhs.shape[1], rhs.shape[1]));
+    return PtoShape2D(pto_ext::CeilDiv(lhs.shape[0], rhs.shape[0]), pto_ext::CeilDiv(lhs.shape[1], rhs.shape[1]));
 }
 
 template <uint32_t M_ = 1, uint32_t N_ = 1, uint32_t K_ = 1>
@@ -360,17 +369,39 @@ struct GemmShape {
     static constexpr int64_t MNK = M * N * K;
     static constexpr int64_t COUNT = MNK;
 
-    PTO_HOST_DEVICE static Coord<3> ToCoord() { return MakeCoord(M, N, K); }
-    PTO_HOST_DEVICE static Coord<2> ToCoordMN() { return MakeCoord(M, N); }
-    PTO_HOST_DEVICE static Coord<2> ToCoordMK() { return MakeCoord(M, K); }
-    PTO_HOST_DEVICE static Coord<2> ToCoordKN() { return MakeCoord(K, N); }
-    PTO_HOST_DEVICE static PtoShape3D ToPtoShape() { return PtoShape3D(M, N, K); }
-    PTO_HOST_DEVICE static PtoShape2D ToPtoShapeMN() { return PtoShape2D(M, N); }
-    PTO_HOST_DEVICE static PtoShape2D ToPtoShapeMK() { return PtoShape2D(M, K); }
-    PTO_HOST_DEVICE static PtoShape2D ToPtoShapeKN() { return PtoShape2D(K, N); }
+    PTO_HOST_DEVICE static Coord<3> ToCoord()
+    {
+        return MakeCoord(M, N, K);
+    }
+    PTO_HOST_DEVICE static Coord<2> ToCoordMN()
+    {
+        return MakeCoord(M, N);
+    }
+    PTO_HOST_DEVICE static Coord<2> ToCoordMK()
+    {
+        return MakeCoord(M, K);
+    }
+    PTO_HOST_DEVICE static Coord<2> ToCoordKN()
+    {
+        return MakeCoord(K, N);
+    }
+    PTO_HOST_DEVICE static PtoShape3D ToPtoShape()
+    {
+        return PtoShape3D(M, N, K);
+    }
+    PTO_HOST_DEVICE static PtoShape2D ToPtoShapeMN()
+    {
+        return PtoShape2D(M, N);
+    }
+    PTO_HOST_DEVICE static PtoShape2D ToPtoShapeMK()
+    {
+        return PtoShape2D(M, K);
+    }
+    PTO_HOST_DEVICE static PtoShape2D ToPtoShapeKN()
+    {
+        return PtoShape2D(K, N);
+    }
 };
-
-
 
 namespace layout {
 
@@ -388,13 +419,14 @@ struct ND {
     Shape shape_{};
     Stride stride_{};
 
-    PTO_HOST_DEVICE ND(Index rows = 0, Index cols = 0)
-        : shape_(rows, cols), stride_(LongIndex(cols), LongIndex(1)) {}
+    PTO_HOST_DEVICE ND(Index rows = 0, Index cols = 0) : shape_(rows, cols), stride_(LongIndex(cols), LongIndex(1))
+    {}
 
-    PTO_HOST_DEVICE ND(Index rows, Index cols, LongIndex ldm)
-        : shape_(rows, cols), stride_(ldm, LongIndex(1)) {}
+    PTO_HOST_DEVICE ND(Index rows, Index cols, LongIndex ldm) : shape_(rows, cols), stride_(ldm, LongIndex(1))
+    {}
 
-    PTO_HOST_DEVICE ND(Shape shape, Stride stride) : shape_(shape), stride_(stride) {}
+    PTO_HOST_DEVICE ND(Shape shape, Stride stride) : shape_(shape), stride_(stride)
+    {}
 
     template <class Element>
     PTO_HOST_DEVICE static ND MakeLayout(Index rows, Index cols)
@@ -422,14 +454,38 @@ struct ND {
         return ND(tileShape, stride());
     }
 
-    PTO_HOST_DEVICE Shape shape() const { return shape_; }
-    PTO_HOST_DEVICE Shape &shape() { return shape_; }
-    PTO_HOST_DEVICE int64_t shape(int idx) const { return shape_.shape[idx]; }
-    PTO_HOST_DEVICE int64_t &shape(int idx) { return shape_.shape[idx]; }
-    PTO_HOST_DEVICE Stride stride() const { return stride_; }
-    PTO_HOST_DEVICE Stride &stride() { return stride_; }
-    PTO_HOST_DEVICE int64_t stride(int idx) const { return stride_.stride[idx]; }
-    PTO_HOST_DEVICE int64_t &stride(int idx) { return stride_.stride[idx]; }
+    PTO_HOST_DEVICE Shape shape() const
+    {
+        return shape_;
+    }
+    PTO_HOST_DEVICE Shape &shape()
+    {
+        return shape_;
+    }
+    PTO_HOST_DEVICE int64_t shape(int idx) const
+    {
+        return shape_.shape[idx];
+    }
+    PTO_HOST_DEVICE int64_t &shape(int idx)
+    {
+        return shape_.shape[idx];
+    }
+    PTO_HOST_DEVICE Stride stride() const
+    {
+        return stride_;
+    }
+    PTO_HOST_DEVICE Stride &stride()
+    {
+        return stride_;
+    }
+    PTO_HOST_DEVICE int64_t stride(int idx) const
+    {
+        return stride_.stride[idx];
+    }
+    PTO_HOST_DEVICE int64_t &stride(int idx)
+    {
+        return stride_.stride[idx];
+    }
 };
 
 struct DN {
@@ -446,13 +502,14 @@ struct DN {
     Shape shape_{};
     Stride stride_{};
 
-    PTO_HOST_DEVICE DN(Index rows = 0, Index cols = 0)
-        : shape_(rows, cols), stride_(LongIndex(1), LongIndex(rows)) {}
+    PTO_HOST_DEVICE DN(Index rows = 0, Index cols = 0) : shape_(rows, cols), stride_(LongIndex(1), LongIndex(rows))
+    {}
 
-    PTO_HOST_DEVICE DN(Index rows, Index cols, LongIndex ldm)
-        : shape_(rows, cols), stride_(LongIndex(1), ldm) {}
+    PTO_HOST_DEVICE DN(Index rows, Index cols, LongIndex ldm) : shape_(rows, cols), stride_(LongIndex(1), ldm)
+    {}
 
-    PTO_HOST_DEVICE DN(Shape shape, Stride stride) : shape_(shape), stride_(stride) {}
+    PTO_HOST_DEVICE DN(Shape shape, Stride stride) : shape_(shape), stride_(stride)
+    {}
 
     template <class Element>
     PTO_HOST_DEVICE static DN MakeLayout(Index rows, Index cols)
@@ -480,14 +537,38 @@ struct DN {
         return DN(tileShape, stride());
     }
 
-    PTO_HOST_DEVICE Shape shape() const { return shape_; }
-    PTO_HOST_DEVICE Shape &shape() { return shape_; }
-    PTO_HOST_DEVICE int64_t shape(int idx) const { return shape_.shape[idx]; }
-    PTO_HOST_DEVICE int64_t &shape(int idx) { return shape_.shape[idx]; }
-    PTO_HOST_DEVICE Stride stride() const { return stride_; }
-    PTO_HOST_DEVICE Stride &stride() { return stride_; }
-    PTO_HOST_DEVICE int64_t stride(int idx) const { return stride_.stride[idx]; }
-    PTO_HOST_DEVICE int64_t &stride(int idx) { return stride_.stride[idx]; }
+    PTO_HOST_DEVICE Shape shape() const
+    {
+        return shape_;
+    }
+    PTO_HOST_DEVICE Shape &shape()
+    {
+        return shape_;
+    }
+    PTO_HOST_DEVICE int64_t shape(int idx) const
+    {
+        return shape_.shape[idx];
+    }
+    PTO_HOST_DEVICE int64_t &shape(int idx)
+    {
+        return shape_.shape[idx];
+    }
+    PTO_HOST_DEVICE Stride stride() const
+    {
+        return stride_;
+    }
+    PTO_HOST_DEVICE Stride &stride()
+    {
+        return stride_;
+    }
+    PTO_HOST_DEVICE int64_t stride(int idx) const
+    {
+        return stride_.stride[idx];
+    }
+    PTO_HOST_DEVICE int64_t &stride(int idx)
+    {
+        return stride_.stride[idx];
+    }
 };
 
 struct VectorLayout {
@@ -505,10 +586,11 @@ struct VectorLayout {
     Shape shape_{};
     Stride stride_{};
 
-    PTO_HOST_DEVICE VectorLayout(Index size = 0)
-        : shape_(size), stride_(LongIndex(1)) {}
+    PTO_HOST_DEVICE VectorLayout(Index size = 0) : shape_(size), stride_(LongIndex(1))
+    {}
 
-    PTO_HOST_DEVICE VectorLayout(Shape shape, Stride stride) : shape_(shape), stride_(stride) {}
+    PTO_HOST_DEVICE VectorLayout(Shape shape, Stride stride) : shape_(shape), stride_(stride)
+    {}
 
     PTO_HOST_DEVICE LongIndex GetOffset(TensorCoord const &coord) const
     {
@@ -530,14 +612,38 @@ struct VectorLayout {
         return VectorLayout(tileShape, stride());
     }
 
-    PTO_HOST_DEVICE Shape shape() const { return shape_; }
-    PTO_HOST_DEVICE Shape &shape() { return shape_; }
-    PTO_HOST_DEVICE int64_t shape(int idx) const { return shape_.shape[idx]; }
-    PTO_HOST_DEVICE int64_t &shape(int idx) { return shape_.shape[idx]; }
-    PTO_HOST_DEVICE Stride stride() const { return stride_; }
-    PTO_HOST_DEVICE Stride &stride() { return stride_; }
-    PTO_HOST_DEVICE int64_t stride(int idx) const { return stride_.stride[idx]; }
-    PTO_HOST_DEVICE int64_t &stride(int idx) { return stride_.stride[idx]; }
+    PTO_HOST_DEVICE Shape shape() const
+    {
+        return shape_;
+    }
+    PTO_HOST_DEVICE Shape &shape()
+    {
+        return shape_;
+    }
+    PTO_HOST_DEVICE int64_t shape(int idx) const
+    {
+        return shape_.shape[idx];
+    }
+    PTO_HOST_DEVICE int64_t &shape(int idx)
+    {
+        return shape_.shape[idx];
+    }
+    PTO_HOST_DEVICE Stride stride() const
+    {
+        return stride_;
+    }
+    PTO_HOST_DEVICE Stride &stride()
+    {
+        return stride_;
+    }
+    PTO_HOST_DEVICE int64_t stride(int idx) const
+    {
+        return stride_.stride[idx];
+    }
+    PTO_HOST_DEVICE int64_t &stride(int idx)
+    {
+        return stride_.stride[idx];
+    }
 };
 
 struct Nz {
@@ -556,23 +662,18 @@ struct Nz {
     Shape shape_{};
     Stride stride_{};
 
-    PTO_HOST_DEVICE Nz(
-        Index orgRows = 0,
-        Index orgCols = 0,
-        Index rowsInFractal = 0,
-        Index rowsByFractal = 0,
-        Index colsInFractal = 0,
-        Index colsByFractal = 0,
-        LongIndex strideRowsInFractal = 0,
-        LongIndex strideRowsByFractal = 0,
-        LongIndex strideColsInFractal = 0,
-        LongIndex strideColsByFractal = 0)
+    PTO_HOST_DEVICE Nz(Index orgRows = 0, Index orgCols = 0, Index rowsInFractal = 0, Index rowsByFractal = 0,
+                       Index colsInFractal = 0, Index colsByFractal = 0, LongIndex strideRowsInFractal = 0,
+                       LongIndex strideRowsByFractal = 0, LongIndex strideColsInFractal = 0,
+                       LongIndex strideColsByFractal = 0)
         : orgShape_(orgRows, orgCols),
           shape_(rowsInFractal, rowsByFractal, colsInFractal, colsByFractal),
-          stride_(strideRowsInFractal, strideRowsByFractal, strideColsInFractal, strideColsByFractal) {}
+          stride_(strideRowsInFractal, strideRowsByFractal, strideColsInFractal, strideColsByFractal)
+    {}
 
     PTO_HOST_DEVICE Nz(OrgShape orgShape, Shape shape, Stride stride)
-        : orgShape_(orgShape), shape_(shape), stride_(stride) {}
+        : orgShape_(orgShape), shape_(shape), stride_(stride)
+    {}
 
     template <class Element>
     PTO_HOST_DEVICE static Nz MakeLayout(Index orgRows, Index orgCols)
@@ -580,43 +681,38 @@ struct Nz {
         constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
         Index rowsRound = RoundUp<ELE_NUM_PER_C0>(orgRows);
         Index colsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgCols);
-        return Nz(orgRows,
-                  orgCols,
-                  ELE_NUM_PER_C0,
-                  rowsRound / ELE_NUM_PER_C0,
-                  C0_NUM_PER_FRACTAL,
-                  colsRound / C0_NUM_PER_FRACTAL,
-                  1,
-                  colsRound * ELE_NUM_PER_C0,
-                  ELE_NUM_PER_C0,
+        return Nz(orgRows, orgCols, ELE_NUM_PER_C0, rowsRound / ELE_NUM_PER_C0, C0_NUM_PER_FRACTAL,
+                  colsRound / C0_NUM_PER_FRACTAL, 1, colsRound * ELE_NUM_PER_C0, ELE_NUM_PER_C0,
                   BYTE_PER_FRACTAL / sizeof(Element));
     }
 
     PTO_HOST_DEVICE LongIndex GetOffset(MatrixCoord const &coord) const
     {
         return LongIndex(coord.row()) / shape_.shape[0] * stride_.stride[1] +
-            LongIndex(coord.column()) / shape_.shape[2] * stride_.stride[3] +
-            (LongIndex(coord.row()) % shape_.shape[0]) * stride_.stride[0] +
-            (LongIndex(coord.column()) % shape_.shape[2]) * stride_.stride[2];
+               LongIndex(coord.column()) / shape_.shape[2] * stride_.stride[3] +
+               (LongIndex(coord.row()) % shape_.shape[0]) * stride_.stride[0] +
+               (LongIndex(coord.column()) % shape_.shape[2]) * stride_.stride[2];
     }
 
     PTO_HOST_DEVICE LongIndex GetOffset(PtoCoord2D const &coord) const
     {
         return LongIndex(coord.shape[0]) / shape_.shape[0] * stride_.stride[1] +
-            LongIndex(coord.shape[1]) / shape_.shape[2] * stride_.stride[3] +
-            (LongIndex(coord.shape[0]) % shape_.shape[0]) * stride_.stride[0] +
-            (LongIndex(coord.shape[1]) % shape_.shape[2]) * stride_.stride[2];
+               LongIndex(coord.shape[1]) / shape_.shape[2] * stride_.stride[3] +
+               (LongIndex(coord.shape[0]) % shape_.shape[0]) * stride_.stride[0] +
+               (LongIndex(coord.shape[1]) % shape_.shape[2]) * stride_.stride[2];
     }
 
     PTO_HOST_DEVICE Nz GetTileLayout(MatrixCoord const &tileOriShape) const
     {
-        Shape tileShape(shape(0), CeilDiv(tileOriShape.row(), shape(0)), shape(2), CeilDiv(tileOriShape.column(), shape(2)));
+        Shape tileShape(shape(0), CeilDiv(tileOriShape.row(), shape(0)), shape(2),
+                        CeilDiv(tileOriShape.column(), shape(2)));
         return Nz(tileOriShape.ToPtoShape(), tileShape, stride());
     }
 
     PTO_HOST_DEVICE Nz GetTileLayout(PtoShape2D const &tileOriShape) const
     {
-        Shape tileShape(shape(0), CeilDiv(tileOriShape.shape[0], shape(0)), shape(2), CeilDiv(tileOriShape.shape[1], shape(2)));
+        Shape tileShape(shape(0), CeilDiv(tileOriShape.shape[0], shape(0)), shape(2),
+                        CeilDiv(tileOriShape.shape[1], shape(2)));
         return Nz(tileOriShape, tileShape, stride());
     }
 
@@ -627,28 +723,52 @@ struct Nz {
 
     PTO_HOST_DEVICE static Nz MakeLayoutInL0C(PtoShape2D const &shape)
     {
-        return Nz(shape.shape[0],
-                  shape.shape[1],
-                  C0_NUM_PER_FRACTAL,
-                  CeilDiv<C0_NUM_PER_FRACTAL>(shape.shape[0]),
-                  C0_NUM_PER_FRACTAL,
-                  CeilDiv<C0_NUM_PER_FRACTAL>(shape.shape[1]),
-                  C0_NUM_PER_FRACTAL,
-                  C0_NUM_PER_FRACTAL * C0_NUM_PER_FRACTAL,
-                  1,
+        return Nz(shape.shape[0], shape.shape[1], C0_NUM_PER_FRACTAL, CeilDiv<C0_NUM_PER_FRACTAL>(shape.shape[0]),
+                  C0_NUM_PER_FRACTAL, CeilDiv<C0_NUM_PER_FRACTAL>(shape.shape[1]), C0_NUM_PER_FRACTAL,
+                  C0_NUM_PER_FRACTAL * C0_NUM_PER_FRACTAL, 1,
                   RoundUp<C0_NUM_PER_FRACTAL>(shape.shape[0]) * C0_NUM_PER_FRACTAL);
     }
 
-    PTO_HOST_DEVICE int64_t orgShape(int idx) const { return orgShape_.shape[idx]; }
-    PTO_HOST_DEVICE int64_t &orgShape(int idx) { return orgShape_.shape[idx]; }
-    PTO_HOST_DEVICE Shape shape() const { return shape_; }
-    PTO_HOST_DEVICE Shape &shape() { return shape_; }
-    PTO_HOST_DEVICE int64_t shape(int idx) const { return shape_.shape[idx]; }
-    PTO_HOST_DEVICE int64_t &shape(int idx) { return shape_.shape[idx]; }
-    PTO_HOST_DEVICE Stride stride() const { return stride_; }
-    PTO_HOST_DEVICE Stride &stride() { return stride_; }
-    PTO_HOST_DEVICE int64_t stride(int idx) const { return stride_.stride[idx]; }
-    PTO_HOST_DEVICE int64_t &stride(int idx) { return stride_.stride[idx]; }
+    PTO_HOST_DEVICE int64_t orgShape(int idx) const
+    {
+        return orgShape_.shape[idx];
+    }
+    PTO_HOST_DEVICE int64_t &orgShape(int idx)
+    {
+        return orgShape_.shape[idx];
+    }
+    PTO_HOST_DEVICE Shape shape() const
+    {
+        return shape_;
+    }
+    PTO_HOST_DEVICE Shape &shape()
+    {
+        return shape_;
+    }
+    PTO_HOST_DEVICE int64_t shape(int idx) const
+    {
+        return shape_.shape[idx];
+    }
+    PTO_HOST_DEVICE int64_t &shape(int idx)
+    {
+        return shape_.shape[idx];
+    }
+    PTO_HOST_DEVICE Stride stride() const
+    {
+        return stride_;
+    }
+    PTO_HOST_DEVICE Stride &stride()
+    {
+        return stride_;
+    }
+    PTO_HOST_DEVICE int64_t stride(int idx) const
+    {
+        return stride_.stride[idx];
+    }
+    PTO_HOST_DEVICE int64_t &stride(int idx)
+    {
+        return stride_.stride[idx];
+    }
 };
 
 struct Zn {
@@ -667,23 +787,18 @@ struct Zn {
     Shape shape_{};
     Stride stride_{};
 
-    PTO_HOST_DEVICE Zn(
-        Index orgRows = 0,
-        Index orgCols = 0,
-        Index rowsInFractal = 0,
-        Index rowsByFractal = 0,
-        Index colsInFractal = 0,
-        Index colsByFractal = 0,
-        LongIndex strideRowsInFractal = 0,
-        LongIndex strideRowsByFractal = 0,
-        LongIndex strideColsInFractal = 0,
-        LongIndex strideColsByFractal = 0)
+    PTO_HOST_DEVICE Zn(Index orgRows = 0, Index orgCols = 0, Index rowsInFractal = 0, Index rowsByFractal = 0,
+                       Index colsInFractal = 0, Index colsByFractal = 0, LongIndex strideRowsInFractal = 0,
+                       LongIndex strideRowsByFractal = 0, LongIndex strideColsInFractal = 0,
+                       LongIndex strideColsByFractal = 0)
         : orgShape_(orgRows, orgCols),
           shape_(rowsInFractal, rowsByFractal, colsInFractal, colsByFractal),
-          stride_(strideRowsInFractal, strideRowsByFractal, strideColsInFractal, strideColsByFractal) {}
+          stride_(strideRowsInFractal, strideRowsByFractal, strideColsInFractal, strideColsByFractal)
+    {}
 
     PTO_HOST_DEVICE Zn(OrgShape orgShape, Shape shape, Stride stride)
-        : orgShape_(orgShape), shape_(shape), stride_(stride) {}
+        : orgShape_(orgShape), shape_(shape), stride_(stride)
+    {}
 
     template <class Element>
     PTO_HOST_DEVICE static Zn MakeLayout(Index orgRows, Index orgCols)
@@ -691,15 +806,8 @@ struct Zn {
         constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
         Index rowsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgRows);
         Index colsRound = RoundUp<ELE_NUM_PER_C0>(orgCols);
-        return Zn(orgRows,
-                  orgCols,
-                  C0_NUM_PER_FRACTAL,
-                  rowsRound / C0_NUM_PER_FRACTAL,
-                  ELE_NUM_PER_C0,
-                  colsRound / ELE_NUM_PER_C0,
-                  ELE_NUM_PER_C0,
-                  BYTE_PER_FRACTAL / sizeof(Element),
-                  1,
+        return Zn(orgRows, orgCols, C0_NUM_PER_FRACTAL, rowsRound / C0_NUM_PER_FRACTAL, ELE_NUM_PER_C0,
+                  colsRound / ELE_NUM_PER_C0, ELE_NUM_PER_C0, BYTE_PER_FRACTAL / sizeof(Element), 1,
                   rowsRound * ELE_NUM_PER_C0);
     }
 
@@ -710,56 +818,82 @@ struct Zn {
 
     PTO_HOST_DEVICE static Zn MakeLayoutInL0C(PtoShape2D const &shape)
     {
-        return Zn(shape.shape[0],
-                  shape.shape[1],
-                  C0_NUM_PER_FRACTAL,
-                  CeilDiv<C0_NUM_PER_FRACTAL>(shape.shape[0]),
-                  C0_NUM_PER_FRACTAL,
-                  CeilDiv<C0_NUM_PER_FRACTAL>(shape.shape[1]),
-                  C0_NUM_PER_FRACTAL,
-                  C0_NUM_PER_FRACTAL * C0_NUM_PER_FRACTAL,
-                  1,
+        return Zn(shape.shape[0], shape.shape[1], C0_NUM_PER_FRACTAL, CeilDiv<C0_NUM_PER_FRACTAL>(shape.shape[0]),
+                  C0_NUM_PER_FRACTAL, CeilDiv<C0_NUM_PER_FRACTAL>(shape.shape[1]), C0_NUM_PER_FRACTAL,
+                  C0_NUM_PER_FRACTAL * C0_NUM_PER_FRACTAL, 1,
                   RoundUp<C0_NUM_PER_FRACTAL>(shape.shape[0]) * C0_NUM_PER_FRACTAL);
     }
 
     PTO_HOST_DEVICE LongIndex GetOffset(MatrixCoord const &coord) const
     {
         return LongIndex(coord.row()) / shape_.shape[0] * stride_.stride[1] +
-            LongIndex(coord.column()) / shape_.shape[2] * stride_.stride[3] +
-            (LongIndex(coord.row()) % shape_.shape[0]) * stride_.stride[0] +
-            (LongIndex(coord.column()) % shape_.shape[2]) * stride_.stride[2];
+               LongIndex(coord.column()) / shape_.shape[2] * stride_.stride[3] +
+               (LongIndex(coord.row()) % shape_.shape[0]) * stride_.stride[0] +
+               (LongIndex(coord.column()) % shape_.shape[2]) * stride_.stride[2];
     }
 
     PTO_HOST_DEVICE LongIndex GetOffset(PtoCoord2D const &coord) const
     {
         return LongIndex(coord.shape[0]) / shape_.shape[0] * stride_.stride[1] +
-            LongIndex(coord.shape[1]) / shape_.shape[2] * stride_.stride[3] +
-            (LongIndex(coord.shape[0]) % shape_.shape[0]) * stride_.stride[0] +
-            (LongIndex(coord.shape[1]) % shape_.shape[2]) * stride_.stride[2];
+               LongIndex(coord.shape[1]) / shape_.shape[2] * stride_.stride[3] +
+               (LongIndex(coord.shape[0]) % shape_.shape[0]) * stride_.stride[0] +
+               (LongIndex(coord.shape[1]) % shape_.shape[2]) * stride_.stride[2];
     }
 
     PTO_HOST_DEVICE Zn GetTileLayout(MatrixCoord const &tileOriShape) const
     {
-        Shape tileShape(shape(0), CeilDiv(tileOriShape.row(), shape(0)), shape(2), CeilDiv(tileOriShape.column(), shape(2)));
+        Shape tileShape(shape(0), CeilDiv(tileOriShape.row(), shape(0)), shape(2),
+                        CeilDiv(tileOriShape.column(), shape(2)));
         return Zn(tileOriShape.ToPtoShape(), tileShape, stride());
     }
 
     PTO_HOST_DEVICE Zn GetTileLayout(PtoShape2D const &tileOriShape) const
     {
-        Shape tileShape(shape(0), CeilDiv(tileOriShape.shape[0], shape(0)), shape(2), CeilDiv(tileOriShape.shape[1], shape(2)));
+        Shape tileShape(shape(0), CeilDiv(tileOriShape.shape[0], shape(0)), shape(2),
+                        CeilDiv(tileOriShape.shape[1], shape(2)));
         return Zn(tileOriShape, tileShape, stride());
     }
 
-    PTO_HOST_DEVICE int64_t orgShape(int idx) const { return orgShape_.shape[idx]; }
-    PTO_HOST_DEVICE int64_t &orgShape(int idx) { return orgShape_.shape[idx]; }
-    PTO_HOST_DEVICE Shape shape() const { return shape_; }
-    PTO_HOST_DEVICE Shape &shape() { return shape_; }
-    PTO_HOST_DEVICE int64_t shape(int idx) const { return shape_.shape[idx]; }
-    PTO_HOST_DEVICE int64_t &shape(int idx) { return shape_.shape[idx]; }
-    PTO_HOST_DEVICE Stride stride() const { return stride_; }
-    PTO_HOST_DEVICE Stride &stride() { return stride_; }
-    PTO_HOST_DEVICE int64_t stride(int idx) const { return stride_.stride[idx]; }
-    PTO_HOST_DEVICE int64_t &stride(int idx) { return stride_.stride[idx]; }
+    PTO_HOST_DEVICE int64_t orgShape(int idx) const
+    {
+        return orgShape_.shape[idx];
+    }
+    PTO_HOST_DEVICE int64_t &orgShape(int idx)
+    {
+        return orgShape_.shape[idx];
+    }
+    PTO_HOST_DEVICE Shape shape() const
+    {
+        return shape_;
+    }
+    PTO_HOST_DEVICE Shape &shape()
+    {
+        return shape_;
+    }
+    PTO_HOST_DEVICE int64_t shape(int idx) const
+    {
+        return shape_.shape[idx];
+    }
+    PTO_HOST_DEVICE int64_t &shape(int idx)
+    {
+        return shape_.shape[idx];
+    }
+    PTO_HOST_DEVICE Stride stride() const
+    {
+        return stride_;
+    }
+    PTO_HOST_DEVICE Stride &stride()
+    {
+        return stride_;
+    }
+    PTO_HOST_DEVICE int64_t stride(int idx) const
+    {
+        return stride_.stride[idx];
+    }
+    PTO_HOST_DEVICE int64_t &stride(int idx)
+    {
+        return stride_.stride[idx];
+    }
 };
 
 struct Zz {
@@ -778,23 +912,18 @@ struct Zz {
     Shape shape_{};
     Stride stride_{};
 
-    PTO_HOST_DEVICE Zz(
-        Index orgRows = 0,
-        Index orgCols = 0,
-        Index rowsInFractal = 0,
-        Index rowsByFractal = 0,
-        Index colsInFractal = 0,
-        Index colsByFractal = 0,
-        LongIndex strideRowsInFractal = 0,
-        LongIndex strideRowsByFractal = 0,
-        LongIndex strideColsInFractal = 0,
-        LongIndex strideColsByFractal = 0)
+    PTO_HOST_DEVICE Zz(Index orgRows = 0, Index orgCols = 0, Index rowsInFractal = 0, Index rowsByFractal = 0,
+                       Index colsInFractal = 0, Index colsByFractal = 0, LongIndex strideRowsInFractal = 0,
+                       LongIndex strideRowsByFractal = 0, LongIndex strideColsInFractal = 0,
+                       LongIndex strideColsByFractal = 0)
         : orgShape_(orgRows, orgCols),
           shape_(rowsInFractal, rowsByFractal, colsInFractal, colsByFractal),
-          stride_(strideRowsInFractal, strideRowsByFractal, strideColsInFractal, strideColsByFractal) {}
+          stride_(strideRowsInFractal, strideRowsByFractal, strideColsInFractal, strideColsByFractal)
+    {}
 
     PTO_HOST_DEVICE Zz(OrgShape orgShape, Shape shape, Stride stride)
-        : orgShape_(orgShape), shape_(shape), stride_(stride) {}
+        : orgShape_(orgShape), shape_(shape), stride_(stride)
+    {}
 
     template <class Element>
     PTO_HOST_DEVICE static Zz MakeLayout(Index orgRows, Index orgCols)
@@ -802,43 +931,66 @@ struct Zz {
         constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
         Index rowsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgRows);
         Index colsRound = RoundUp<ELE_NUM_PER_C0>(orgCols);
-        return Zz(orgRows,
-                  orgCols,
-                  C0_NUM_PER_FRACTAL,
-                  rowsRound / C0_NUM_PER_FRACTAL,
-                  ELE_NUM_PER_C0,
-                  colsRound / ELE_NUM_PER_C0,
-                  ELE_NUM_PER_C0,
-                  colsRound * C0_NUM_PER_FRACTAL,
-                  1,
+        return Zz(orgRows, orgCols, C0_NUM_PER_FRACTAL, rowsRound / C0_NUM_PER_FRACTAL, ELE_NUM_PER_C0,
+                  colsRound / ELE_NUM_PER_C0, ELE_NUM_PER_C0, colsRound * C0_NUM_PER_FRACTAL, 1,
                   BYTE_PER_FRACTAL / sizeof(Element));
     }
 
     PTO_HOST_DEVICE LongIndex GetOffset(MatrixCoord const &coord) const
     {
         return LongIndex(coord.row()) / shape_.shape[0] * stride_.stride[1] +
-            LongIndex(coord.column()) / shape_.shape[2] * stride_.stride[3];
+               LongIndex(coord.column()) / shape_.shape[2] * stride_.stride[3];
     }
 
     PTO_HOST_DEVICE LongIndex GetOffset(PtoCoord2D const &coord) const
     {
         return LongIndex(coord.shape[0]) / shape_.shape[0] * stride_.stride[1] +
-            LongIndex(coord.shape[1]) / shape_.shape[2] * stride_.stride[3];
+               LongIndex(coord.shape[1]) / shape_.shape[2] * stride_.stride[3];
     }
 
-    PTO_HOST_DEVICE int64_t orgShape(int idx) const { return orgShape_.shape[idx]; }
-    PTO_HOST_DEVICE int64_t &orgShape(int idx) { return orgShape_.shape[idx]; }
-    PTO_HOST_DEVICE Shape shape() const { return shape_; }
-    PTO_HOST_DEVICE Shape &shape() { return shape_; }
-    PTO_HOST_DEVICE int64_t shape(int idx) const { return shape_.shape[idx]; }
-    PTO_HOST_DEVICE int64_t &shape(int idx) { return shape_.shape[idx]; }
-    PTO_HOST_DEVICE Stride stride() const { return stride_; }
-    PTO_HOST_DEVICE Stride &stride() { return stride_; }
-    PTO_HOST_DEVICE int64_t stride(int idx) const { return stride_.stride[idx]; }
-    PTO_HOST_DEVICE int64_t &stride(int idx) { return stride_.stride[idx]; }
+    PTO_HOST_DEVICE int64_t orgShape(int idx) const
+    {
+        return orgShape_.shape[idx];
+    }
+    PTO_HOST_DEVICE int64_t &orgShape(int idx)
+    {
+        return orgShape_.shape[idx];
+    }
+    PTO_HOST_DEVICE Shape shape() const
+    {
+        return shape_;
+    }
+    PTO_HOST_DEVICE Shape &shape()
+    {
+        return shape_;
+    }
+    PTO_HOST_DEVICE int64_t shape(int idx) const
+    {
+        return shape_.shape[idx];
+    }
+    PTO_HOST_DEVICE int64_t &shape(int idx)
+    {
+        return shape_.shape[idx];
+    }
+    PTO_HOST_DEVICE Stride stride() const
+    {
+        return stride_;
+    }
+    PTO_HOST_DEVICE Stride &stride()
+    {
+        return stride_;
+    }
+    PTO_HOST_DEVICE int64_t stride(int idx) const
+    {
+        return stride_.stride[idx];
+    }
+    PTO_HOST_DEVICE int64_t &stride(int idx)
+    {
+        return stride_.stride[idx];
+    }
 };
 
-}  // namespace layout
+} // namespace layout
 
 namespace Arch {
 
@@ -880,7 +1032,7 @@ struct Resource {
     PTO_DEVICE Resource() = default;
 };
 
-}  // namespace Arch
+} // namespace Arch
 
 namespace Gemm {
 
@@ -921,7 +1073,8 @@ template <uint32_t PRELOAD_STAGES_, uint32_t L1_STAGES_, uint32_t L0A_STAGES_, u
           uint32_t L0C_STAGES_, bool ENABLE_UNIT_FLAG_, bool ENABLE_SHUFFLE_K_>
 struct MmadAtlasA2PreloadAsyncFixpipe
     : public MmadAtlasA2PreloadAsync<PRELOAD_STAGES_, L1_STAGES_, L0A_STAGES_, L0B_STAGES_, L0C_STAGES_,
-                                     ENABLE_UNIT_FLAG_, ENABLE_SHUFFLE_K_> {};
+                                     ENABLE_UNIT_FLAG_, ENABLE_SHUFFLE_K_> {
+};
 
 namespace helper {
 
@@ -1001,11 +1154,12 @@ struct L1BTypeSelector<GemmType<Element, layout::Zn>> {
     using L1BType = GemmType<Element, layout::Zn, pto::TileType::Mat>;
 };
 
-}  // namespace helper
+} // namespace helper
 
 namespace Tile {
 
-enum class ScaleGranularity {
+enum class ScaleGranularity
+{
     UNDEFINED = -1,
     NO_QUANT = 0,
     PER_TENSOR,
@@ -1065,9 +1219,7 @@ struct CopyGmToL1 {
 };
 
 template <class Element>
-struct CopyGmToL1<Arch::AtlasA2,
-                  GemmType<Element, layout::ND>,
-                  GemmType<Element, layout::Zn, pto::TileType::Mat>> {
+struct CopyGmToL1<Arch::AtlasA2, GemmType<Element, layout::ND>, GemmType<Element, layout::Zn, pto::TileType::Mat>> {
     using LayoutDst = layout::Zn;
     using LayoutSrc = layout::ND;
 
@@ -1075,9 +1227,7 @@ struct CopyGmToL1<Arch::AtlasA2,
 };
 
 template <class ArchTag, class Element>
-struct CopyGmToL1<ArchTag,
-                  GemmType<Element, layout::Zn>,
-                  GemmType<Element, layout::Zn, pto::TileType::Mat>> {
+struct CopyGmToL1<ArchTag, GemmType<Element, layout::Zn>, GemmType<Element, layout::Zn, pto::TileType::Mat>> {
     using LayoutDst = layout::Zn;
     using LayoutSrc = layout::Zn;
 
@@ -1085,8 +1235,7 @@ struct CopyGmToL1<ArchTag,
 };
 
 template <class ArchTag, class Element>
-struct CopyGmToL1<ArchTag,
-                  GemmType<Element, layout::VectorLayout>,
+struct CopyGmToL1<ArchTag, GemmType<Element, layout::VectorLayout>,
                   GemmType<Element, layout::VectorLayout, pto::TileType::Mat>> {
     using LayoutDst = layout::VectorLayout;
     using LayoutSrc = layout::VectorLayout;
@@ -1100,8 +1249,7 @@ struct CopyL1ToL0A {
 };
 
 template <class ArchTag, class Element>
-struct CopyL1ToL0A<ArchTag,
-                   GemmType<Element, layout::Zn, pto::TileType::Mat>,
+struct CopyL1ToL0A<ArchTag, GemmType<Element, layout::Zn, pto::TileType::Mat>,
                    GemmType<Element, layout::Zz, pto::TileType::Left>> {
     using LayoutDst = layout::Zz;
     using LayoutSrc = layout::Zn;
@@ -1112,9 +1260,9 @@ struct CopyL1ToL0A<ArchTag,
 
 template <class ArchTag, class Element>
 struct CopyL1ToL0A<ArchTag, GemmType<Element, layout::Zn, pto::TileType::Mat>>
-    : CopyL1ToL0A<ArchTag,
-                  GemmType<Element, layout::Zn, pto::TileType::Mat>,
-                  GemmType<Element, layout::Zz, pto::TileType::Left>> {};
+    : CopyL1ToL0A<ArchTag, GemmType<Element, layout::Zn, pto::TileType::Mat>,
+                  GemmType<Element, layout::Zz, pto::TileType::Left>> {
+};
 
 template <class ArchTag, class L1Type, class L0Type = void>
 struct CopyL1ToL0B {
@@ -1122,8 +1270,7 @@ struct CopyL1ToL0B {
 };
 
 template <class ArchTag>
-struct CopyL1ToL0B<ArchTag,
-                   GemmType<int8_t, layout::Zn, pto::TileType::Mat>,
+struct CopyL1ToL0B<ArchTag, GemmType<int8_t, layout::Zn, pto::TileType::Mat>,
                    GemmType<int8_t, layout::Nz, pto::TileType::Right>> {
     using Element = int8_t;
     using LayoutDst = layout::Nz;
@@ -1136,9 +1283,9 @@ struct CopyL1ToL0B<ArchTag,
 
 template <class ArchTag>
 struct CopyL1ToL0B<ArchTag, GemmType<int8_t, layout::Zn, pto::TileType::Mat>>
-    : CopyL1ToL0B<ArchTag,
-                  GemmType<int8_t, layout::Zn, pto::TileType::Mat>,
-                  GemmType<int8_t, layout::Nz, pto::TileType::Right>> {};
+    : CopyL1ToL0B<ArchTag, GemmType<int8_t, layout::Zn, pto::TileType::Mat>,
+                  GemmType<int8_t, layout::Nz, pto::TileType::Right>> {
+};
 
 template <class ArchTag, class L1Type, class L0Type = void>
 struct CopyL1ToFP {
@@ -1146,8 +1293,7 @@ struct CopyL1ToFP {
 };
 
 template <class ArchTag, class ElementSrc, class ElementDst>
-struct CopyL1ToFP<ArchTag,
-                  GemmType<ElementSrc, layout::VectorLayout, pto::TileType::Mat>,
+struct CopyL1ToFP<ArchTag, GemmType<ElementSrc, layout::VectorLayout, pto::TileType::Mat>,
                   GemmType<ElementDst, layout::VectorLayout, pto::TileType::Scaling>> {
     using LayoutDst = layout::VectorLayout;
     using LayoutSrc = layout::VectorLayout;
@@ -1157,18 +1303,13 @@ struct CopyL1ToFP<ArchTag,
 };
 
 template <class ArchTag, class ElementAccumulator, class GmType,
-          ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT,
-          bool ReluEnable = false>
+          ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT, bool ReluEnable = false>
 struct CopyL0CToGm {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l0c to gm");
 };
 
 template <class ElementAccumulator_, class ElementDst_, ScaleGranularity Granularity_, bool ReluEnable_>
-struct CopyL0CToGm<Arch::AtlasA2,
-                   ElementAccumulator_,
-                   GemmType<ElementDst_, layout::ND>,
-                   Granularity_,
-                   ReluEnable_> {
+struct CopyL0CToGm<Arch::AtlasA2, ElementAccumulator_, GemmType<ElementDst_, layout::ND>, Granularity_, ReluEnable_> {
     using ArchTag = Arch::AtlasA2;
     using ElementDst = ElementDst_;
     using ElementSrc = ElementAccumulator_;
@@ -1180,13 +1321,15 @@ struct CopyL0CToGm<Arch::AtlasA2,
     struct Params {
         float scale = 1.0f;
         PTO_HOST_DEVICE Params() = default;
-        PTO_HOST_DEVICE explicit Params(float scale_) : scale(scale_) {}
+        PTO_HOST_DEVICE explicit Params(float scale_) : scale(scale_)
+        {}
     };
 
     Params params;
 
     PTO_DEVICE CopyL0CToGm() = default;
-    PTO_DEVICE CopyL0CToGm(Params const &params_) : params(params_) {}
+    PTO_DEVICE CopyL0CToGm(Params const &params_) : params(params_)
+    {}
 };
 
 template <class ArchTag, class AType, class BType, class CType, class BiasType = void>
@@ -1207,15 +1350,15 @@ struct QuantTileCopy : public TileCopyGemm<ArchTag, AType, BType, CType, BiasTyp
     using Base = TileCopyGemm<ArchTag, AType, BType, CType, BiasType>;
     using ElementAccumulator = typename Base::ElementAccumulator;
     using CopyL0CToGm = Tile::CopyL0CToGm<ArchTag, ElementAccumulator, CType, SCALE_GRANU, false>;
-    using CopyL1ToFP = Tile::CopyL1ToFP<ArchTag,
-        GemmType<uint64_t, layout::VectorLayout, pto::TileType::Mat>,
-        GemmType<uint64_t, layout::VectorLayout, pto::TileType::Scaling>>;
+    using CopyL1ToFP = Tile::CopyL1ToFP<ArchTag, GemmType<uint64_t, layout::VectorLayout, pto::TileType::Mat>,
+                                        GemmType<uint64_t, layout::VectorLayout, pto::TileType::Scaling>>;
 };
 
 template <class ArchTag, class AType, class BType, class BiasType = void>
-struct TileMmad {};
+struct TileMmad {
+};
 
-}  // namespace Tile
+} // namespace Tile
 
 template <class ElementA, class ElementB>
 using PtoElementAccumulatorSelector = Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>;
@@ -1232,17 +1375,11 @@ using PtoCopyL1ToL0A = Gemm::Tile::CopyL1ToL0A<ArchTag, L1Type, L0Type>;
 template <class ArchTag, class L1Type, class L0Type = void>
 using PtoCopyL1ToL0B = Gemm::Tile::CopyL1ToL0B<ArchTag, L1Type, L0Type>;
 
-template <class ArchTag,
-          class AType,
-          class BType,
-          class CType,
-          class BiasType = void,
+template <class ArchTag, class AType, class BType, class CType, class BiasType = void,
           Gemm::Tile::ScaleGranularity SCALE_GRANU = Gemm::Tile::ScaleGranularity::PER_TENSOR>
 using PtoQuantTileCopy = Gemm::Tile::QuantTileCopy<ArchTag, AType, BType, CType, BiasType, SCALE_GRANU>;
 
-template <class ArchTag,
-          class ElementAccumulator,
-          class GmType,
+template <class ArchTag, class ElementAccumulator, class GmType,
           Gemm::Tile::ScaleGranularity DEQUANT_GRANULARITY = Gemm::Tile::ScaleGranularity::NO_QUANT,
           bool ReluEnable = false>
 using PtoCopyL0CToGm = Gemm::Tile::CopyL0CToGm<ArchTag, ElementAccumulator, GmType, DEQUANT_GRANULARITY, ReluEnable>;
@@ -1320,20 +1457,13 @@ struct GemmIdentityBlockSwizzle {
         uint32_t loopN = static_cast<uint32_t>(loopsMN.shape[1]);
         uint32_t blockM = static_cast<uint32_t>(blockCoord.shape[0]);
         uint32_t blockN = static_cast<uint32_t>(blockCoord.shape[1]);
-        uint32_t mActual = (blockM == (loopM - 1)) ?
-            (GetPtoShapeM(problemShape) - blockM * tileM) : tileM;
-        uint32_t nActual = (blockN == (loopN - 1)) ?
-            (GetPtoShapeN(problemShape) - blockN * tileN) : tileN;
+        uint32_t mActual = (blockM == (loopM - 1)) ? (GetPtoShapeM(problemShape) - blockM * tileM) : tileM;
+        uint32_t nActual = (blockN == (loopN - 1)) ? (GetPtoShapeN(problemShape) - blockN * tileN) : tileN;
         return PtoShape2D(mActual, nActual);
     }
 };
 
-template <class DispatchPolicy,
-          class L1TileShape,
-          class L0TileShape,
-          class AType,
-          class BType,
-          class CType,
+template <class DispatchPolicy, class L1TileShape, class L0TileShape, class AType, class BType, class CType,
           class BiasType = void,
           class TileCopy = Gemm::Tile::TileCopyGemm<typename DispatchPolicy::ArchTag, AType, BType, CType, BiasType>,
           class TileMmad = Gemm::Tile::TileMmad<typename DispatchPolicy::ArchTag, AType, BType, BiasType>>
@@ -1341,9 +1471,9 @@ struct BlockMmad {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmad is not implemented for this DispatchPolicy");
 };
 
-}  // namespace Block
+} // namespace Block
 
-}  // namespace Gemm
+} // namespace Gemm
 
 namespace Epilogue {
 
@@ -1374,12 +1504,14 @@ struct EpilogueAtlasA2PerTokenDequantV2 {
 namespace Tile {
 
 template <class ArchTag, class CType, class ScaleType, class PerTokenScaleType, class DType>
-struct TileCopy {};
+struct TileCopy {
+};
 
 template <class ArchTag, class ElementMulType, int Dummy = 0>
-struct TileElemWiseMuls {};
+struct TileElemWiseMuls {
+};
 
-}  // namespace Tile
+} // namespace Tile
 
 namespace Block {
 
@@ -1388,20 +1520,21 @@ class BlockEpilogue {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "Could not find an epilogue specialization");
 };
 
-}  // namespace Block
+} // namespace Block
 
-}  // namespace Epilogue
+} // namespace Epilogue
 
-}  // namespace pto_ext
+} // namespace pto_ext
 
 namespace pto_ext::support {
 
 constexpr uint64_t kL2Offset = pto_ext::L2_OFFSET;
 
 struct NoopCallback {
-    PTO_DEVICE void operator()() const {}
+    PTO_DEVICE void operator()() const
+    {}
 };
 
-}  // namespace pto_ext::support
+} // namespace pto_ext::support
 
 #endif // DISPATH_POLICY_CUSTOM_HPP

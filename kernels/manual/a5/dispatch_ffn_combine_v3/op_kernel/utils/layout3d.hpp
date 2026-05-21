@@ -13,8 +13,10 @@
 
 class Layout3D {
     int64_t strides[2];
+
 public:
-    DISPATCH_FFN_COMBINE_DEVICE Layout3D() {}
+    DISPATCH_FFN_COMBINE_DEVICE Layout3D()
+    {}
 
     DISPATCH_FFN_COMBINE_DEVICE Layout3D(int64_t stride0, int64_t stride1)
     {

@@ -206,7 +206,8 @@ constexpr pipe_t opPipeList[] = {
     PIPE_ALL /* OP_COUNT */,
 };
 
-struct RecordEvent {};
+struct RecordEvent {
+};
 
 template <pipe_t SrcPipe, pipe_t DstPipe>
 class EventIdCounter {

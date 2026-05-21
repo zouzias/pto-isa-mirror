@@ -21,6 +21,6 @@ PTO_DEVICE void RunGmm2Stage(Kernel &kernel, typename Kernel::Params const &para
     kernel.RunGmm2Impl(params);
 }
 
-}  // namespace pto_ext::Gemm::Kernel::stages
+} // namespace pto_ext::Gemm::Kernel::stages
 
-#endif  // DISPATCH_FFN_COMBINE_V3_STAGES_GMM_STAGE_HPP
+#endif // DISPATCH_FFN_COMBINE_V3_STAGES_GMM_STAGE_HPP

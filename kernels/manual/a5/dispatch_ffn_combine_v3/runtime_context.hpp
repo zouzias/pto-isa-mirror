@@ -12,7 +12,8 @@ using rtStream_t = void *;
 
 extern "C" rtError_t rtStreamCreate(rtStream_t *stream, int32_t priority);
 extern "C" rtError_t rtStreamDestroy(rtStream_t stream);
-extern "C" HcclResult HcclAllocComResourceByTiling(HcclComm comm, void *stream, void *resourceTiling, void **commContext);
+extern "C" HcclResult HcclAllocComResourceByTiling(HcclComm comm, void *stream, void *resourceTiling,
+                                                   void **commContext);
 extern "C" HcclResult HcomGetCommHandleByGroup(const char *group, HcclComm *commHandle);
 extern "C" HcclResult HcomGetL0TopoTypeEx(const char *group, uint32_t *topoType, uint32_t isSetDevice);
 
@@ -61,5 +62,6 @@ struct StandaloneRankRuntime {
     aclrtStream compute_stream = nullptr;
 };
 
-bool InitStandaloneRankRuntime(StandaloneRankRuntime &runtime, int rank_id, int world_size, const HcclRootInfo &root_info);
+bool InitStandaloneRankRuntime(StandaloneRankRuntime &runtime, int rank_id, int world_size,
+                               const HcclRootInfo &root_info);
 void DestroyStandaloneRankRuntime(StandaloneRankRuntime &runtime);

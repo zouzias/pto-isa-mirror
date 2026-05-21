@@ -27,6 +27,6 @@ PTO_DEVICE void RunAivMain(Kernel &kernel, KernelParams<Kernel> const &params)
     kernel.RunRestoreStage(params);
 }
 
-}  // namespace pto_ext::Gemm::Kernel::stages
+} // namespace pto_ext::Gemm::Kernel::stages
 
-#endif  // DISPATCH_FFN_COMBINE_V3_STAGES_KERNEL_CONTEXT_HPP
+#endif // DISPATCH_FFN_COMBINE_V3_STAGES_KERNEL_CONTEXT_HPP

@@ -103,13 +103,13 @@ CaseConfig LoadCaseConfig(const std::string &case_json_path)
     }
     cfg.compare_atol = ParseJsonDouble(text, "compare_atol", 1e-3);
     cfg.compare_rtol = ParseJsonDouble(text, "compare_rtol", 1e-3);
-    cfg.input_tokens_all_ranks = ParseJsonDouble(text, "input_tokens_all_ranks",
-                                                 static_cast<double>(cfg.m) * cfg.world_size);
-    cfg.routed_tokens_all_ranks = ParseJsonDouble(text, "routed_tokens_all_ranks",
-                                                  static_cast<double>(cfg.m) * cfg.topk * cfg.world_size);
+    cfg.input_tokens_all_ranks =
+        ParseJsonDouble(text, "input_tokens_all_ranks", static_cast<double>(cfg.m) * cfg.world_size);
+    cfg.routed_tokens_all_ranks =
+        ParseJsonDouble(text, "routed_tokens_all_ranks", static_cast<double>(cfg.m) * cfg.topk * cfg.world_size);
     cfg.remote_routed_tokens_all_ranks = ParseJsonDouble(text, "remote_routed_tokens_all_ranks", 0.0);
-    cfg.compute_flops_all_ranks = ParseJsonDouble(text, "compute_flops_all_ranks",
-                                                  cfg.routed_tokens_all_ranks * 3.0 * cfg.k * cfg.n);
+    cfg.compute_flops_all_ranks =
+        ParseJsonDouble(text, "compute_flops_all_ranks", cfg.routed_tokens_all_ranks * 3.0 * cfg.k * cfg.n);
     cfg.comm_bytes_all_ranks = ParseJsonDouble(text, "comm_bytes_all_ranks", 0.0);
     return cfg;
 }
@@ -118,15 +118,9 @@ RankFileSet BuildRankFileSet(const std::string &case_dir, int rank)
 {
     const std::string prefix = case_dir + "/rank" + std::to_string(rank) + "_";
     return RankFileSet{
-        prefix + "x.bin",
-        prefix + "weight1.bin",
-        prefix + "weight2.bin",
-        prefix + "expert_idx.bin",
-        prefix + "scale1.bin",
-        prefix + "scale2.bin",
-        prefix + "probs.bin",
-        prefix + "x_active_mask.bin",
-        prefix + "expected_out.bin",
+        prefix + "x.bin",          prefix + "weight1.bin",       prefix + "weight2.bin",
+        prefix + "expert_idx.bin", prefix + "scale1.bin",        prefix + "scale2.bin",
+        prefix + "probs.bin",      prefix + "x_active_mask.bin", prefix + "expected_out.bin",
     };
 }
 
@@ -147,13 +141,11 @@ float Fp16ToFloat(uint16_t value)
         }
         return std::numeric_limits<float>::quiet_NaN();
     }
-    return static_cast<float>(sign * std::ldexp(static_cast<double>(1024U + mantissa),
-                                                static_cast<int>(exponent) - 25));
+    return static_cast<float>(sign *
+                              std::ldexp(static_cast<double>(1024U + mantissa), static_cast<int>(exponent) - 25));
 }
 
-AccuracyReport CompareFp16File(const std::vector<uint16_t> &expected,
-                               const std::vector<uint16_t> &actual,
-                               double atol,
+AccuracyReport CompareFp16File(const std::vector<uint16_t> &expected, const std::vector<uint16_t> &actual, double atol,
                                double rtol)
 {
     AccuracyReport report;
@@ -169,10 +161,10 @@ AccuracyReport CompareFp16File(const std::vector<uint16_t> &expected,
     for (size_t i = 0; i < expected.size(); ++i) {
         const float expected_value = Fp16ToFloat(expected[i]);
         const float actual_value = Fp16ToFloat(actual[i]);
-        const bool invalid = std::isnan(actual_value) || std::isinf(actual_value) ||
-                             std::isnan(expected_value) || std::isinf(expected_value);
-        const double abs_err = invalid ? std::numeric_limits<double>::infinity()
-                                       : std::fabs(static_cast<double>(actual_value) - expected_value);
+        const bool invalid = std::isnan(actual_value) || std::isinf(actual_value) || std::isnan(expected_value) ||
+                             std::isinf(expected_value);
+        const double abs_err = invalid ? std::numeric_limits<double>::infinity() :
+                                         std::fabs(static_cast<double>(actual_value) - expected_value);
         const double tolerance = atol + rtol * std::max(1.0, std::fabs(static_cast<double>(expected_value)));
         const double rel_denom = std::max(std::fabs(static_cast<double>(expected_value)), 1e-7);
         const double rel_err = invalid ? std::numeric_limits<double>::infinity() : abs_err / rel_denom;

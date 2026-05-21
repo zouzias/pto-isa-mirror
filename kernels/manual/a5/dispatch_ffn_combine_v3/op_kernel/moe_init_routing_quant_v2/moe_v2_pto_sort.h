@@ -23,7 +23,6 @@ using PtoV2PackedSortTile =
 using PtoV2PackedPayloadTile =
     pto::Tile<pto::TileType::Vec, uint32_t, 1, MAX_V3_SORT_ELEMS * 2, pto::BLayout::RowMajor, -1, -1>;
 
-
 template <auto Pipe>
 PTO_INTERNAL void PtoPipeBarrier()
 {
@@ -101,10 +100,8 @@ PTO_INTERNAL int32_t FillTailMergeArray(int32_t *mrgArray, int32_t validCols, in
     return arrayCount;
 }
 
-PTO_INTERNAL void MergeTailPackedSortRecords(PtoV2PackedSortTile &packedSortTile,
-                                             PtoV2PackedSortTile &mergeTmpTile,
-                                             uint32_t validCols,
-                                             uint32_t blockLen)
+PTO_INTERNAL void MergeTailPackedSortRecords(PtoV2PackedSortTile &packedSortTile, PtoV2PackedSortTile &mergeTmpTile,
+                                             uint32_t validCols, uint32_t blockLen)
 {
     int32_t mergePlan[15] = {0};
     const int32_t mergePlanCount =
@@ -133,8 +130,7 @@ PTO_INTERNAL void MergeTailPackedSortRecords(PtoV2PackedSortTile &packedSortTile
     }
 }
 
-PTO_INTERNAL void MergePackedSortRecords(PtoV2PackedSortTile &packedSortTile,
-                                         PtoV2PackedSortTile &mergeTmpTile,
+PTO_INTERNAL void MergePackedSortRecords(PtoV2PackedSortTile &packedSortTile, PtoV2PackedSortTile &mergeTmpTile,
                                          uint32_t validCols)
 {
     uint32_t blockLen = PTO_PACKED_SORT_BLOCK_ELEMS;
@@ -161,24 +157,17 @@ PTO_INTERNAL void MergePackedSortRecords(PtoV2PackedSortTile &packedSortTile,
     }
 }
 
-PTO_INTERNAL void PtoMergePackedSortRecords(uint64_t dstUb,
-                                            uint64_t tmpUb,
-                                            uint64_t src0Ub,
-                                            uint64_t src1Ub,
-                                            uint64_t src2Ub,
-                                            uint64_t src3Ub,
-                                            const uint16_t *elementCountList,
-                                            uint32_t remainListNum,
-                                            uint32_t *listSortedNums)
+PTO_INTERNAL void PtoMergePackedSortRecords(uint64_t dstUb, uint64_t tmpUb, uint64_t src0Ub, uint64_t src1Ub,
+                                            uint64_t src2Ub, uint64_t src3Ub, const uint16_t *elementCountList,
+                                            uint32_t remainListNum, uint32_t *listSortedNums)
 {
     const uint32_t src0Cols = GetSortLen<float>(elementCountList[0]);
     const uint32_t src1Cols = (remainListNum >= 2) ? GetSortLen<float>(elementCountList[1]) : 0;
     const uint32_t src2Cols = (remainListNum >= 3) ? GetSortLen<float>(elementCountList[2]) : 0;
     const uint32_t src3Cols = (remainListNum >= 4) ? GetSortLen<float>(elementCountList[3]) : 0;
     const uint32_t dstCols = src0Cols + src1Cols + src2Cols + src3Cols;
-    ASCENDC_ASSERT((dstCols <= MAX_V3_SORT_ELEMS * 2), {
-        KERNEL_LOG(KERNEL_ERROR, "dstCols exceeds PTO merge capacity");
-    });
+    ASCENDC_ASSERT((dstCols <= MAX_V3_SORT_ELEMS * 2),
+                   { KERNEL_LOG(KERNEL_ERROR, "dstCols exceeds PTO merge capacity"); });
 
     PtoV2PackedSortTile dstTile(1, dstCols);
     PtoV2PackedSortTile tmpTile(1, dstCols);
@@ -206,13 +195,8 @@ PTO_INTERNAL void PtoMergePackedSortRecords(uint64_t dstUb,
                       PtoV2PackedSortTile, true>(dstTile, executedNumList, tmpTile, src0Tile, src1Tile, src2Tile);
     } else {
         pto::TMRGSORT<PtoV2PackedSortTile, PtoV2PackedSortTile, PtoV2PackedSortTile, PtoV2PackedSortTile,
-                      PtoV2PackedSortTile, PtoV2PackedSortTile, true>(dstTile,
-                                                                      executedNumList,
-                                                                      tmpTile,
-                                                                      src0Tile,
-                                                                      src1Tile,
-                                                                      src2Tile,
-                                                                      src3Tile);
+                      PtoV2PackedSortTile, PtoV2PackedSortTile, true>(dstTile, executedNumList, tmpTile, src0Tile,
+                                                                      src1Tile, src2Tile, src3Tile);
     }
 
     listSortedNums[0] = executedNumList.mrgSortList0;
@@ -221,20 +205,16 @@ PTO_INTERNAL void PtoMergePackedSortRecords(uint64_t dstUb,
     listSortedNums[3] = executedNumList.mrgSortList3;
 }
 
-PTO_INTERNAL void PtoSortInt32ToPackedUB(uint64_t inputValueUb,
-                                        uint64_t inputPayloadUb,
-                                        uint64_t packedSortUb,
-                                        uint64_t mergeTmpUb,
-                                        uint32_t elemNum)
+PTO_INTERNAL void PtoSortInt32ToPackedUB(uint64_t inputValueUb, uint64_t inputPayloadUb, uint64_t packedSortUb,
+                                         uint64_t mergeTmpUb, uint32_t elemNum)
 {
     if (elemNum == 0) {
         return;
     }
 
     const uint32_t alignedElemNum = AlignUpSortBlock(elemNum);
-    ASCENDC_ASSERT((alignedElemNum <= MAX_V3_SORT_ELEMS), {
-        KERNEL_LOG(KERNEL_ERROR, "alignedElemNum exceeds PTO sort capacity");
-    });
+    ASCENDC_ASSERT((alignedElemNum <= MAX_V3_SORT_ELEMS),
+                   { KERNEL_LOG(KERNEL_ERROR, "alignedElemNum exceeds PTO sort capacity"); });
 
     const uint64_t sortKeyUb = mergeTmpUb;
     PtoCastVector<float, int32_t>(sortKeyUb, inputValueUb, elemNum, pto::RoundMode::CAST_CEIL);
@@ -261,9 +241,7 @@ PTO_INTERNAL void PtoSortInt32ToPackedUB(uint64_t inputValueUb,
     MergePackedSortRecords(packedTile, mergeTmpTile, alignedElemNum * 2);
 }
 
-PTO_INTERNAL void PtoExtractPackedSortResult(uint64_t sortedValueUb,
-                                             uint64_t sortedPayloadUb,
-                                             uint64_t packedSortUb,
+PTO_INTERNAL void PtoExtractPackedSortResult(uint64_t sortedValueUb, uint64_t sortedPayloadUb, uint64_t packedSortUb,
                                              uint32_t elemNum)
 {
     if (elemNum == 0) {
@@ -285,7 +263,7 @@ PTO_INTERNAL void PtoExtractPackedSortResult(uint64_t sortedValueUb,
     pto::TASSIGN(packedPayloadTile, packedSortUb);
     pto::TASSIGN(sortedPayloadTile, sortedPayloadUb);
     pto::TGATHER<PtoV2SortPayloadTile, PtoV2PackedPayloadTile, pto::MaskPattern::P1010>(sortedPayloadTile,
-                                                                                          packedPayloadTile);
+                                                                                        packedPayloadTile);
     AscendC::PipeBarrier<PIPE_V>();
 
     PtoV2SortKeyTile sortedKeyTile(1, elemNum);
@@ -299,12 +277,8 @@ PTO_INTERNAL void PtoExtractPackedSortResult(uint64_t sortedValueUb,
     PtoCastVector<int32_t, float>(sortedValueUb, sortedValueScratchUb, elemNum, pto::RoundMode::CAST_CEIL);
 }
 
-PTO_INTERNAL void PtoSortInt32AscendingUB(uint64_t inputValueUb,
-                                          uint64_t inputPayloadUb,
-                                          uint64_t sortedValueUb,
-                                          uint64_t sortedPayloadUb,
-                                          uint64_t packedSortUb,
-                                          uint64_t mergeTmpUb,
+PTO_INTERNAL void PtoSortInt32AscendingUB(uint64_t inputValueUb, uint64_t inputPayloadUb, uint64_t sortedValueUb,
+                                          uint64_t sortedPayloadUb, uint64_t packedSortUb, uint64_t mergeTmpUb,
                                           uint32_t elemNum)
 {
     if (elemNum == 0) {
@@ -324,7 +298,7 @@ PTO_INTERNAL void PtoSortInt32AscendingUB(uint64_t inputValueUb,
     PtoExtractPackedSortResult(sortedValueUb, sortedPayloadUb, packedSortUb, elemNum);
 }
 
-}  // namespace pto_detail
-}  // namespace MoeInitRoutingQuantV2
+} // namespace pto_detail
+} // namespace MoeInitRoutingQuantV2
 
-#endif  // INNER_MOE_V2_PTO_SORT_H
+#endif // INNER_MOE_V2_PTO_SORT_H

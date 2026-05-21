@@ -22,46 +22,47 @@ namespace MoeInitRoutingQuantV2 {
 using namespace AscendC;
 using namespace optiling;
 class MoeV2SortBase {
- public:
-  __aicore__ inline MoeV2SortBase(){};
+public:
+    __aicore__ inline MoeV2SortBase(){};
 
- protected:
-  __aicore__ inline void SyncAll();
+protected:
+    __aicore__ inline void SyncAll();
 
- protected:
-  uint64_t sortInputUb;
-  uint64_t sortOutputUb;
-  uint64_t sortTempUb;
-  uint64_t sortMergeTmpUb;
+protected:
+    uint64_t sortInputUb;
+    uint64_t sortOutputUb;
+    uint64_t sortTempUb;
+    uint64_t sortMergeTmpUb;
 
-  __gm__ int32_t *expertIdxGm;
-  __gm__ int32_t *sortedexpertIdxGm;
-  __gm__ int32_t *expandDstToSrcRowGm;
-  __gm__ int32_t *expertTokensCountOrCumsumGm;
-  __gm__ int32_t *expertTokensBeforeCapacityGm;
+    __gm__ int32_t *expertIdxGm;
+    __gm__ int32_t *sortedexpertIdxGm;
+    __gm__ int32_t *expandDstToSrcRowGm;
+    __gm__ int32_t *expertTokensCountOrCumsumGm;
+    __gm__ int32_t *expertTokensBeforeCapacityGm;
 
-  int64_t tileLength;
-  int64_t totalLength;
-  int64_t coreNum;
-  int64_t n;
-  int64_t k;
-  int64_t existRowIdx;
-  int64_t expertNum;
-  int64_t expertTokensCountOrCumsumFlag = 0;
-  int64_t expertTokensBeforeCapacityFlag = 0;
+    int64_t tileLength;
+    int64_t totalLength;
+    int64_t coreNum;
+    int64_t n;
+    int64_t k;
+    int64_t existRowIdx;
+    int64_t expertNum;
+    int64_t expertTokensCountOrCumsumFlag = 0;
+    int64_t expertTokensBeforeCapacityFlag = 0;
 
-  static constexpr int64_t SYNC_GM_NUM = 2;
-  static constexpr int64_t WORK_GM_NUM = 2;
-  static constexpr int64_t DST_BLK_STRIDE = 1;
-  static constexpr int64_t DST_REP_STRIDE = 8;
+    static constexpr int64_t SYNC_GM_NUM = 2;
+    static constexpr int64_t WORK_GM_NUM = 2;
+    static constexpr int64_t DST_BLK_STRIDE = 1;
+    static constexpr int64_t DST_REP_STRIDE = 8;
 };
 
-__aicore__ inline void MoeV2SortBase::SyncAll() {
-  if (coreNum == 1) {
-    return;
-  }
-  pto_detail::PtoSyncAll();
+__aicore__ inline void MoeV2SortBase::SyncAll()
+{
+    if (coreNum == 1) {
+        return;
+    }
+    pto_detail::PtoSyncAll();
 }
 
-}  // namespace MoeInitRoutingQuantV2
-#endif  // INNER_MOE_V2_SORT_BASE_H
+} // namespace MoeInitRoutingQuantV2
+#endif // INNER_MOE_V2_SORT_BASE_H

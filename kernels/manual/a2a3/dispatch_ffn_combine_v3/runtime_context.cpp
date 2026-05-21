@@ -46,11 +46,8 @@ void StandaloneHcclContext::SetHostWindow(uint32_t rank, uint64_t windowIn, uint
 
 bool StandaloneHcclContext::LoadHostRemoteWindowContextFromDevice()
 {
-    return aclrtMemcpy(&host_remote_window_ctx,
-                       sizeof(host_remote_window_ctx),
-                       remote_window_ctx,
-                       sizeof(host_remote_window_ctx),
-                       ACL_MEMCPY_DEVICE_TO_HOST) == ACL_SUCCESS;
+    return aclrtMemcpy(&host_remote_window_ctx, sizeof(host_remote_window_ctx), remote_window_ctx,
+                       sizeof(host_remote_window_ctx), ACL_MEMCPY_DEVICE_TO_HOST) == ACL_SUCCESS;
 }
 
 bool StandaloneHcclContext::CopyHostRemoteWindowContextToDevice()
@@ -61,11 +58,8 @@ bool StandaloneHcclContext::CopyHostRemoteWindowContextToDevice()
         return false;
     }
 
-    if (aclrtMemcpy(new_dev_mem,
-                    sizeof(PtoRemoteWindowContext),
-                    &host_remote_window_ctx,
-                    sizeof(PtoRemoteWindowContext),
-                    ACL_MEMCPY_HOST_TO_DEVICE) != ACL_SUCCESS) {
+    if (aclrtMemcpy(new_dev_mem, sizeof(PtoRemoteWindowContext), &host_remote_window_ctx,
+                    sizeof(PtoRemoteWindowContext), ACL_MEMCPY_HOST_TO_DEVICE) != ACL_SUCCESS) {
         aclrtFree(new_dev_mem);
         return false;
     }
@@ -264,12 +258,12 @@ bool LoadMeshRemoteWindowContext(StandaloneHcclContext &hccl, void *ctx_ptr)
     return hccl.LoadHostRemoteWindowContextFromDevice();
 }
 
-bool ReadRingParams(uint8_t *raw_ctx,
-                    pto_hccl_compat::HcclOpResParamHead &head,
+bool ReadRingParams(uint8_t *raw_ctx, pto_hccl_compat::HcclOpResParamHead &head,
                     std::vector<pto_hccl_compat::RemoteResPtr> &remote_res_arr)
 {
     const size_t head_offset = offsetof(pto_hccl_compat::HcclOpResParam, localUsrRankId);
-    if (aclrtMemcpy(&head, sizeof(head), raw_ctx + head_offset, sizeof(head), ACL_MEMCPY_DEVICE_TO_HOST) != ACL_SUCCESS) {
+    if (aclrtMemcpy(&head, sizeof(head), raw_ctx + head_offset, sizeof(head), ACL_MEMCPY_DEVICE_TO_HOST) !=
+        ACL_SUCCESS) {
         return false;
     }
 
@@ -287,8 +281,7 @@ bool ReadRingParams(uint8_t *raw_ctx,
     return true;
 }
 
-bool BuildRingHostRemoteWindowContext(StandaloneHcclContext &hccl,
-                                      uint8_t *raw_ctx,
+bool BuildRingHostRemoteWindowContext(StandaloneHcclContext &hccl, uint8_t *raw_ctx,
                                       const pto_hccl_compat::HcclOpResParamHead &head,
                                       const std::vector<pto_hccl_compat::RemoteResPtr> &remote_res_arr)
 {
@@ -325,7 +318,8 @@ bool BuildRingHostRemoteWindowContext(StandaloneHcclContext &hccl,
 }
 } // namespace
 
-bool InitStandaloneRankRuntime(StandaloneRankRuntime &runtime, int rank_id, int world_size, const HcclRootInfo &root_info)
+bool InitStandaloneRankRuntime(StandaloneRankRuntime &runtime, int rank_id, int world_size,
+                               const HcclRootInfo &root_info)
 {
     runtime.hccl.rank_id = rank_id;
     runtime.hccl.world_size = world_size;
@@ -365,8 +359,8 @@ bool InitStandaloneRankRuntime(StandaloneRankRuntime &runtime, int rank_id, int 
     tiling.init.hcommCount = 1U;
     tiling.init.commBlockNum = 48U;
     tiling.init.devType = 4U;
-    tiling.init.offset[0] = static_cast<uint32_t>(reinterpret_cast<uint64_t>(&tiling.inner) -
-                                                  reinterpret_cast<uint64_t>(&tiling.init));
+    tiling.init.offset[0] =
+        static_cast<uint32_t>(reinterpret_cast<uint64_t>(&tiling.inner) - reinterpret_cast<uint64_t>(&tiling.init));
     tiling.inner.opType = 18U;
     tiling.inner.commEngine = 3U;
     tiling.inner.version = 1U;

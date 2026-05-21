@@ -20,7 +20,6 @@ using namespace AscendC;
 
 #include "kernel_operator.h"
 
-
 #include "dispatch_ffn_combine_tiling.h"
 
 #include "utils/dispatch_policy_custom.hpp"
@@ -30,7 +29,6 @@ using namespace AscendC;
 #include "dispatch_ffn_combine_kernel.hpp"
 #include "moe_init_routing_quant_v2/moe_init_routing_quant_v2_tiling.h"
 
-
 namespace DispatchFFNCombineImpl {
 #define TemplateMMA2AClass typename AType_, typename BType_, typename CType_, bool TB_, bool Nz_
 #define TemplateMMA2ACFunc AType_, BType_, CType_, TB_, Nz_
@@ -39,12 +37,12 @@ using namespace AscendC;
 template <TemplateMMA2AClass>
 class DispatchFFNCombine {
 public:
-    __aicore__ inline DispatchFFNCombine() {};
-    __aicore__ inline void Init(GM_ADDR xGM, GM_ADDR weight1GM, GM_ADDR weight2GM, GM_ADDR expertIdGM, GM_ADDR scale1GM, GM_ADDR scale2GM,
-                                GM_ADDR probs, GM_ADDR xActiveMaskGM, GM_ADDR outGM, GM_ADDR expertTokenNums, GM_ADDR workspaceGM,
+    __aicore__ inline DispatchFFNCombine(){};
+    __aicore__ inline void Init(GM_ADDR xGM, GM_ADDR weight1GM, GM_ADDR weight2GM, GM_ADDR expertIdGM, GM_ADDR scale1GM,
+                                GM_ADDR scale2GM, GM_ADDR probs, GM_ADDR xActiveMaskGM, GM_ADDR outGM,
+                                GM_ADDR expertTokenNums, GM_ADDR workspaceGM,
                                 const __gm__ DispatchFFNCombineTilingData *tilingData);
     __aicore__ inline void Process();
-
 
 private:
     GM_ADDR xGM_;
@@ -62,7 +60,6 @@ private:
     GM_ADDR moeInitRoutingQuantV2Scale = nullptr;
     GM_ADDR moeInitRoutingQuantV2Offset = nullptr;
     GM_ADDR expertTokensBeforeCapacity = nullptr;
-
 
     int32_t rank;
     int32_t rankSize;
@@ -94,16 +91,14 @@ private:
     uint64_t initRoutingQuantTilingKey;
 
     // Hccl<HCCL_SERVER_TYPE_AICPU> hccl_;
-
 };
 
-
 template <TemplateMMA2AClass>
-__aicore__ inline void DispatchFFNCombine<TemplateMMA2ACFunc>::Init(GM_ADDR xGM, GM_ADDR weight1GM, GM_ADDR weight2GM, GM_ADDR expertIdGM, GM_ADDR scale1GM, GM_ADDR scale2GM,
-                                                                    GM_ADDR probs, GM_ADDR xActiveMaskGM, GM_ADDR outGM, GM_ADDR expertTokenNums, GM_ADDR workspaceGM,
-                                                                    const __gm__ DispatchFFNCombineTilingData *tilingData)
+__aicore__ inline void DispatchFFNCombine<TemplateMMA2ACFunc>::Init(
+    GM_ADDR xGM, GM_ADDR weight1GM, GM_ADDR weight2GM, GM_ADDR expertIdGM, GM_ADDR scale1GM, GM_ADDR scale2GM,
+    GM_ADDR probs, GM_ADDR xActiveMaskGM, GM_ADDR outGM, GM_ADDR expertTokenNums, GM_ADDR workspaceGM,
+    const __gm__ DispatchFFNCombineTilingData *tilingData)
 {
-
     xGM_ = xGM;
     weight1GM_ = weight1GM;
     weight2GM_ = weight2GM;
@@ -123,7 +118,7 @@ __aicore__ inline void DispatchFFNCombine<TemplateMMA2ACFunc>::Init(GM_ADDR xGM,
     m = tilingData->dispatchFFNCombineInfo.M;
     k = tilingData->dispatchFFNCombineInfo.K;
     n = tilingData->dispatchFFNCombineInfo.N;
-    EP =  tilingData->dispatchFFNCombineInfo.worldSize;
+    EP = tilingData->dispatchFFNCombineInfo.worldSize;
     topK = tilingData->dispatchFFNCombineInfo.topK;
     expertPerRank = tilingData->dispatchFFNCombineInfo.expertPerRank;
     maxOutputSize = tilingData->dispatchFFNCombineInfo.maxOutputSize;
@@ -143,7 +138,8 @@ __aicore__ inline void DispatchFFNCombine<TemplateMMA2ACFunc>::Init(GM_ADDR xGM,
     moeInitRoutingQuantV2TilingData.n = tilingData->cocTiling.moeInitRoutingQuantV2TilingData.n;
     moeInitRoutingQuantV2TilingData.cols = tilingData->cocTiling.moeInitRoutingQuantV2TilingData.cols;
     moeInitRoutingQuantV2TilingData.k = tilingData->cocTiling.moeInitRoutingQuantV2TilingData.k;
-    moeInitRoutingQuantV2TilingData.expertCapacity = tilingData->cocTiling.moeInitRoutingQuantV2TilingData.expertCapacity;
+    moeInitRoutingQuantV2TilingData.expertCapacity =
+        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.expertCapacity;
     moeInitRoutingQuantV2TilingData.expertNum = tilingData->cocTiling.moeInitRoutingQuantV2TilingData.expertNum;
     moeInitRoutingQuantV2TilingData.dropPadMode = tilingData->cocTiling.moeInitRoutingQuantV2TilingData.dropPadMode;
     moeInitRoutingQuantV2TilingData.expertTokensCountOrCumsumFlag =
@@ -268,7 +264,7 @@ __aicore__ inline void DispatchFFNCombine<TemplateMMA2ACFunc>::Process()
     constexpr bool enableUnitFlag = false;
     constexpr bool enableShuffleK = true;
 
-    uint32_t k2 = n/2;
+    uint32_t k2 = n / 2;
     uint32_t n2 = k;
 
     int64_t activeNum = 0;
@@ -280,16 +276,14 @@ __aicore__ inline void DispatchFFNCombine<TemplateMMA2ACFunc>::Process()
     int64_t quantMode = 1;
 
     using LayoutA = pto_ext::layout::ND;
-    using LayoutB = typename std::conditional<
-        Nz_,
-        pto_ext::layout::Zn,
-        typename std::conditional<TB_, pto_ext::layout::DN, pto_ext::layout::ND>::type
-    >::type;
+    using LayoutB =
+        typename std::conditional<Nz_, pto_ext::layout::Zn,
+                                  typename std::conditional<TB_, pto_ext::layout::DN, pto_ext::layout::ND>::type>::type;
 
     LayoutB layoutB1 = LayoutBInitializer<LayoutB, BType_>::create(k, n);
     LayoutB layoutB2 = LayoutBInitializer<LayoutB, BType_>::create(k2, n2);
     using LayoutC = pto_ext::layout::ND;
-    using L1TileShape = pto_ext::GemmShape<128, 256, 512>;   // M, N, K
+    using L1TileShape = pto_ext::GemmShape<128, 256, 512>; // M, N, K
 
     constexpr uint32_t workspaceStages = 2;
     constexpr uint32_t preloadStages = 1;
@@ -298,11 +292,8 @@ __aicore__ inline void DispatchFFNCombine<TemplateMMA2ACFunc>::Process()
     constexpr uint32_t l0BStages = 2;
     constexpr uint32_t l0CStages = 1;
 
-    using DispatchPolicy = pto_ext::Gemm::MmadAtlasA5PreloadAsyncFixpipe<
-        preloadStages,
-        l1Stages, l0AStages, l0BStages, l0CStages,
-        enableUnitFlag, enableShuffleK
-    >;
+    using DispatchPolicy = pto_ext::Gemm::MmadAtlasA5PreloadAsyncFixpipe<preloadStages, l1Stages, l0AStages, l0BStages,
+                                                                         l0CStages, enableUnitFlag, enableShuffleK>;
 
     using L0TileShape = pto_ext::GemmShape<128, 256, 128>;
     using AType = pto_ext::Gemm::GemmType<int8_t, pto_ext::layout::ND>;
@@ -310,17 +301,15 @@ __aicore__ inline void DispatchFFNCombine<TemplateMMA2ACFunc>::Process()
     using CType = pto_ext::Gemm::GemmType<float16_t, pto_ext::layout::ND>;
     using D1Type = pto_ext::Gemm::GemmType<int8_t, pto_ext::layout::ND>;
 
-    using D2Type = typename std::conditional<
-        std::is_same_v<CType_, bfloat16_t>, 
-        pto_ext::Gemm::GemmType<bfloat16_t, pto_ext::layout::ND>,
-        pto_ext::Gemm::GemmType<CType_, pto_ext::layout::ND>
-        >::type;
+    using D2Type = typename std::conditional<std::is_same_v<CType_, bfloat16_t>,
+                                             pto_ext::Gemm::GemmType<bfloat16_t, pto_ext::layout::ND>,
+                                             pto_ext::Gemm::GemmType<CType_, pto_ext::layout::ND> >::type;
 
     using BlockMmad = pto_ext::Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     constexpr uint32_t ubStages = 2;
 
     using EpilogueDispatchPolicy1 = pto_ext::Epilogue::EpilogueAtlasA5PerTokenDequantSwigluQuant<ubStages>;
-    
+
     using ScaleType = pto_ext::Gemm::GemmType<uint64_t, pto_ext::layout::VectorLayout>;
     using PerTokenScaleType = pto_ext::Gemm::GemmType<float, pto_ext::layout::VectorLayout>;
     using ElementMulType = pto_ext::Gemm::GemmType<float, pto_ext::layout::ND>;
@@ -328,57 +317,79 @@ __aicore__ inline void DispatchFFNCombine<TemplateMMA2ACFunc>::Process()
 
     using TileCopy1 = pto_ext::Epilogue::Tile::TileCopy<ArchTag, CType, ScaleType, PerTokenScaleType, D1Type>;
     using BlockEpilogue1 = pto_ext::Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy1, CType, PerTokenScaleType,
-        D1Type, TileElemWiseMuls, TileCopy1>;
+                                                                   D1Type, TileElemWiseMuls, TileCopy1>;
 
     using EpilogueDispatchPolicy2 = pto_ext::Epilogue::EpilogueAtlasA5PerTokenDequant<ubStages>;
-    using EpilogueDispatchPolicy3 =  pto_ext::Epilogue::EpilogueAtlasA5PerTokenDequantV2<ubStages>;
-    
-    using TileCopy2 = pto_ext::Epilogue::Tile::TileCopy<ArchTag, CType, ScaleType, PerTokenScaleType, D2Type>;
-    using BlockEpilogue2 = pto_ext::Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy2, CType,PerTokenScaleType,
-        D2Type, TileCopy2>;
-    using BlockEpilogue3 = pto_ext::Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy3, CType,PerTokenScaleType,
-        D2Type, TileCopy2>;
+    using EpilogueDispatchPolicy3 = pto_ext::Epilogue::EpilogueAtlasA5PerTokenDequantV2<ubStages>;
 
+    using TileCopy2 = pto_ext::Epilogue::Tile::TileCopy<ArchTag, CType, ScaleType, PerTokenScaleType, D2Type>;
+    using BlockEpilogue2 =
+        pto_ext::Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy2, CType, PerTokenScaleType, D2Type, TileCopy2>;
+    using BlockEpilogue3 =
+        pto_ext::Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy3, CType, PerTokenScaleType, D2Type, TileCopy2>;
 
     using BlockScheduler = typename pto_ext::Gemm::Block::GemmIdentityBlockSwizzle<9, 1>;
     using ElementGroupList = int64_t;
-    using MatmulKernel = pto_ext::Gemm::Kernel::DispatchFFNCombineKernel<BlockMmad,
-        BlockScheduler, ElementGroupList, BlockEpilogue1, BlockEpilogue2, BlockEpilogue3>;
+    using MatmulKernel =
+        pto_ext::Gemm::Kernel::DispatchFFNCombineKernel<BlockMmad, BlockScheduler, ElementGroupList, BlockEpilogue1,
+                                                        BlockEpilogue2, BlockEpilogue3>;
 
     LayoutA layoutA1{static_cast<uint32_t>(m), static_cast<uint32_t>(k)};
     LayoutA layoutA2{static_cast<uint32_t>(m), static_cast<uint32_t>(k2)};
     pto_ext::layout::VectorLayout layoutScale1{static_cast<uint32_t>(n)};
     pto_ext::layout::VectorLayout layoutScale2{static_cast<uint32_t>(n2)};
     pto_ext::layout::ND layoutD1{static_cast<uint32_t>(maxOutputSize), static_cast<uint32_t>(k2)};
-    pto_ext::layout::ND layoutD2{static_cast<uint32_t>(m*topK), static_cast<uint32_t>(n2)};
+    pto_ext::layout::ND layoutD2{static_cast<uint32_t>(m * topK), static_cast<uint32_t>(n2)};
     // Prepare params
 
-    pto_ext::PtoShape3D problemShape = pto_ext::MakePtoShape3D(
-        static_cast<uint32_t>(m), static_cast<uint32_t>(n), static_cast<uint32_t>(k));
+    pto_ext::PtoShape3D problemShape =
+        pto_ext::MakePtoShape3D(static_cast<uint32_t>(m), static_cast<uint32_t>(n), static_cast<uint32_t>(k));
 
     uint32_t epilogueCoreNum = aivNum;
     uint32_t epilogueGranularity = expertPerRank - 3;
     if (expertPerRank <= 4) {
         epilogueGranularity = expertPerRank - 1;
     }
-    typename MatmulKernel::Params params{
-        problemShape, static_cast<uint32_t>(EP), static_cast<uint32_t>(listLen), static_cast<uint32_t>(expertPerRank), static_cast<uint32_t>(maxOutputSize),
-        static_cast<uint32_t>(rank), static_cast<uint32_t>(rankSize), ubMoveNum, remoteWindowContext_,
-        static_cast<uint32_t>(topK), initRoutingQuantTilingKey,
-        epilogueCoreNum, epilogueGranularity,
-        xGM_, layoutA1, layoutA2,
-        weight1GM_, layoutB1,
-        weight2GM_, layoutB2,
-        scale1GM_, layoutScale1,
-        scale2GM_, layoutScale2,
-        outGM_, layoutD1, layoutD2,
-        expertIdGM_, moeInitRoutingQuantV2Scale, moeInitRoutingQuantV2Offset,
-        expertTokensBeforeCapacity, probs_,
-        workspaceGM_, gmExpertTokenNums_, xActiveMaskGM_, moeInitRoutingQuantV2TilingData};
-    //Call kernel
+    typename MatmulKernel::Params params{problemShape,
+                                         static_cast<uint32_t>(EP),
+                                         static_cast<uint32_t>(listLen),
+                                         static_cast<uint32_t>(expertPerRank),
+                                         static_cast<uint32_t>(maxOutputSize),
+                                         static_cast<uint32_t>(rank),
+                                         static_cast<uint32_t>(rankSize),
+                                         ubMoveNum,
+                                         remoteWindowContext_,
+                                         static_cast<uint32_t>(topK),
+                                         initRoutingQuantTilingKey,
+                                         epilogueCoreNum,
+                                         epilogueGranularity,
+                                         xGM_,
+                                         layoutA1,
+                                         layoutA2,
+                                         weight1GM_,
+                                         layoutB1,
+                                         weight2GM_,
+                                         layoutB2,
+                                         scale1GM_,
+                                         layoutScale1,
+                                         scale2GM_,
+                                         layoutScale2,
+                                         outGM_,
+                                         layoutD1,
+                                         layoutD2,
+                                         expertIdGM_,
+                                         moeInitRoutingQuantV2Scale,
+                                         moeInitRoutingQuantV2Offset,
+                                         expertTokensBeforeCapacity,
+                                         probs_,
+                                         workspaceGM_,
+                                         gmExpertTokenNums_,
+                                         xActiveMaskGM_,
+                                         moeInitRoutingQuantV2TilingData};
+    // Call kernel
     MatmulKernel kernel(params);
     kernel(params);
 }
 
-} // DispatchFFNCombineImpl
+} // namespace DispatchFFNCombineImpl
 #endif // DISPATCH_FFN_COMBINE_H

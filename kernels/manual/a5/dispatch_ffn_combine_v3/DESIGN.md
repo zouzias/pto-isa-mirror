@@ -1,196 +1,618 @@
-# dispatch_ffn_combine_v3 V4 PTO Showcase Design
+# dispatch_ffn_combine_v3 A5 设计说明
 
-## 0. 定位与边界
+## 1. 这份文档解决什么问题
 
-`dispatch_ffn_combine_v3` 当前已经是生产级 PTO 化实现：主链路使用 PTO `GlobalTensor` / `Tile` / `TASSIGN` / `TLOAD` / `TSTORE` / `TCVT` / `TEXPANDS` / vector arithmetic / `TMATMUL` / `TMATMUL_ACC` / `TSTORE_FP` / `TGET` / `TPUT` / `TNOTIFY` / `TWAIT`。V4 整改的目标不是把项目改成“纯 PTO”，也不是删除所有 AscendC/CANN substrate，而是让代码本身更清楚地展示 Parallel Tiling Operation 的编程模型优势。
+本文面向第一次阅读 `kernels/manual/a5/dispatch_ffn_combine_v3` 的开发者，目标是把三个问题讲清楚：
 
-V4 目标：
+1. 这个项目要解决什么 MoE 场景问题。
+2. MegaMoE / MC2 背景里的算法思想，如何落到当前 A5 PTO 项目里。
+3. 当前代码从 host 到 device 的主要调用链、数据布局、同步关系和关键文件在哪里。
 
-1. **数据流可读**：routing → remote gather → GMM1 → SwiGLU → GMM2 → combine → unpermute 的主链路在文件和函数边界上可见。
-2. **任务流可读**：AIC 负责 GMM1/GMM2，AIV 负责 routing/dispatch/combine/restore 的角色边界清晰。
-3. **同步流可读**：PTO comm signal 与 AscendC 本地 pipe/cross-core/cache substrate 的边界清晰。
-4. **PTO seam 集中**：AscendC tensor/buffer 到 PTO global/tile view 的转换集中在少数 helper 中。
-5. **保留项有归因**：未替换的 AscendC 接口明确属于 boundary adapter、coordination shell 或 substrate。
+本文描述的是当前 A5 standalone 项目，不展开其他代码仓的工程结构。MegaMoE 算法资料和 `megamoe理解.md` 只作为背景材料；当前仓内事实以本目录代码为准。
 
-V4 不做：
+## 2. 背景：MoE 的 dispatch、FFN、combine 是什么
 
-- 不新建 `dispatch_ffn_combine_v4` 目录；先在当前 v3 项目内完成 showcase 整改。
-- 不重写算法、tiling key、kernel ABI、host runtime、HCCL/ACL/MPI bootstrap。
-- 不替换 `TQue/TBuf/TPipe` 生命周期。
-- 不用 PTO event/comm primitive 强行替换 HardEvent、cross-core、cache coherence。
-- 不恢复已清零的业务 `DataCopyPad` / `Duplicate`；可安全表达的 tail、stride、padded count、atomic store 和 UB fill 均走 PTO helper。
-
-## 1. 文档分工
-
-| 文档 | 职责 | 维护原则 |
-| --- | --- | --- |
-| `DESIGN.md` | V4 设计真值：PTO 数据流、任务流、同步流、primitive 映射、保留边界 | 设计或边界变化先更新这里 |
-| `IMPLEMENTATION_PLAN.md` | 实施路线：阶段顺序、涉及文件、准出条件、验证节奏 | 只回答怎么做和何时验收 |
-| `task.md` | 执行跟踪：V4 任务状态、验证结果、grep 台账、残留项 | 随开发进度更新 |
-| `api_interface.md` | 非 PTO 直接依赖台账：boundary adapter / coordination shell / substrate | 保持与当前活树一致 |
-
-## 2. V4 主链路
-
-### 2.1 数据流
+MoE 模型里，每个 token 不会经过所有专家，而是先由 gating/top-k 算出它要去哪些 expert：
 
 ```text
-input tokens / experts / probs
-  -> routing + active mask
-  -> token count / prefix / pre-rank sum
-  -> PTO remote gather: TGET packed source payload into local expert-major input
-  -> GMM1: PTO TMATMUL / TMATMUL_ACC
-  -> SwiGLU / dequant / quant epilogue: PTO vector ops + TSTORE/TPUT where applicable
-  -> GMM2: PTO TMATMUL / TMATMUL_ACC + TSTORE_FP
-  -> combine return: local store or PTO TPUT to owner rank
-  -> unpermute / weighted restore
-  -> output
+expert_idx[token, k] = token 的第 k 个目标专家
+probs[token, k]      = 这个专家输出在最终结果里的权重
 ```
 
-### 2.2 任务流
+随后 routed expert 路径大致分成三段：
 
-| Role | 当前入口 | V4 stage facade | 职责 |
-| --- | --- | --- | --- |
-| AIC | `GMM1`, `GMM2` | `RunGmm1Stage`, `RunGmm2Stage` | 专家维度 tile matmul、fixpipe store、GMM 间同步 |
-| AIV | `DispatchAndCombine` | `RunRoutingStage`, `RunDispatchGatherStage`, `RunSwigluStage`, `RunCombineStage`, `RunRestoreStage` | routing/count、remote gather、SwiGLU、combine、restore |
-| Remote window | `PtoRemoteWindow` | `PtoRemoteWindow` / stage context | remote signal、rank window、payload scratch |
+```text
+1. dispatch：把 token 发送到目标 expert 所在 rank
+2. FFN：目标 rank 上执行专家前馈网络，通常是 GMM1 -> SwiGLU -> GMM2
+3. combine：把专家结果送回 token 原始 rank，按 probs 做加权求和并恢复原 token 顺序
+```
 
-### 2.3 同步流
+如果这三段拆成多个算子或多个通信步骤，会有几个成本：
 
-| 同步类别 | PTO / AscendC 表达 | V4 边界 |
+- 通信和计算之间有多次全局同步。
+- 中间结果频繁落到 GM，workspace 和 remote window 压力大。
+- token routing、量化、GMM、SwiGLU、combine/unpermute 很难形成流水。
+- AIC 计算核和 AIV 搬运/通信核的职责不清晰，容易互相等待。
+
+`dispatch_ffn_combine_v3` 的目标就是把这些步骤收进一个 mixed AIC/AIV kernel，用 PTO 通信和计算原语显式表达跨 rank 搬运、GMM、vector epilogue 和同步，让通信、GMM 和后处理尽量贴在一起执行。
+
+## 3. 先分清几个容易混淆的概念
+
+### 3.1 gating 和 routing 不是一回事
+
+- **gating**：模型已经算好的选择结果，告诉每个 token 去哪些 expert，以及每个 expert 的权重。
+- **routing**：kernel 内根据 `expert_idx` 和 `probs` 把 token 重新组织成 dispatch / GMM 可以消费的布局。
+
+当前项目里的 routing 会做这些事：
+
+1. 按 `topK` 把 token 展开成多份。
+2. 按 global expert id 排列展开后的 token。
+3. 记录每个展开行来自哪个原始 token，也就是 `expandedRowIdx`。
+4. 统计每个 expert 收到多少 token，也就是 `localTokenPerExpert`。
+5. 在 int8 路径里顺便做 per-token 动态量化，生成 per-token scale。
+
+一句话：**gating 决定去哪个 expert，routing 决定 token 在内存里怎么摆，才能给通信和 GMM 用。**
+
+### 3.2 “通信后重排”不是恢复原始 token 顺序
+
+以 `EP=2`、每卡 2 个 expert 为例：
+
+```text
+rank0 experts: A, B
+rank1 experts: C, D
+```
+
+普通 AlltoAllV 收到的数据常常是 source-rank-major：
+
+```text
+rank1 recv buffer:
+  来自 rank0: C0, D0
+  来自 rank1: C1, D1
+
+内存里可能是: C0, D0, C1, D1
+```
+
+但 GMM 希望同一个 local expert 的 token 连续：
+
+```text
+expert-major:
+  C: C0, C1
+  D: D0, D1
+
+内存里希望是: C0, C1, D0, D1
+```
+
+所以这里的“通信后重排”指的是：**把 source-rank-major 或稀疏接收布局，压紧成 expert-major 的 dense GMM 输入矩阵。**
+
+它不是为了恢复 token 的语义顺序。真正关心原始 token index 和 top-k 权重的是最后的 restore/combine 阶段，所以 kernel 需要保存 `expandedRowIdx` 和 `probs`。
+
+### 3.3 MegaMoE 的核心优化不是“不做重排”
+
+更准确地说，MegaMoE 的思路是：
+
+> 保留通信前的本地 routing / quant / count，但把通信后的“稀疏到密排重排”改写成通信地址计算的一部分。
+
+流程可以理解为：
+
+```text
+本地 routing/quant/count
+  -> 交换每个 source rank、每个目标 expert 的 token 数
+  -> 每个目标 rank 算 cumsum，知道每段 token 的最终落点
+  -> 通信直接写/读到 expert-major 的最终位置
+  -> 某个 expert 的连续 token 到齐后，对应 GMM 就能开始
+```
+
+也就是说，通信不是先乱放再整理，而是借助 `tokenPerExpert` 和 `cumsum` 直接落到 GMM 能消费的位置。
+
+当前 A5 PTO 项目对应该思想的代码入口是：
+
+- routing / quant：`moe_init_routing_quant_v2(...)`
+- 全局 token count 同步：`CrossRankSyncAndlocalTokenPerExpertAllGatherAndGetSumPreRankV2(...)`
+- cumsum 地址表：`GetCumsumForMMAIV(...)`
+- remote gather 到 GMM 输入：`CopyGMToGMPerToken(...)`
+
+### 3.4 Data / Count / Flag 和 DataAsFlag
+
+在 dispatch 通信里，发送方通常要告诉目标方三类信息：
+
+```text
+Data  = token payload
+Count = 每个 expert 实际收到多少 token
+Flag  = 数据已经写完、可以读取的同步信号
+```
+
+DataAsFlag 的背景思想是把 Data、Count、Flag 尽量合并成一次投递：目标端看到 Flag 时，Data 和 Count 也已经可见，从而减少额外往返同步。
+
+当前 A5 项目没有一个叫 `DataAsFlag` 的独立模块；它更直接可见的机制是：
+
+- `tokenPerExpert` 保存 token count。
+- `TNOTIFY/TWAIT` 做跨 rank ready/wait。
+- `CrossRankSync()` 做跨 rank barrier。
+- `TGET/TPUT` 做 remote window 数据搬运。
+
+因此，本文把 DataAsFlag 当作算法背景，不把它写成当前代码里的同名实现。
+
+## 4. 为什么要区分远端读和远端写
+
+跨卡通信可以按两个维度拆开看：
+
+1. 数据依赖方向
+   - Dispatch-GMM：先通信，后 GMM。
+   - GMM-Combine：先 GMM，后通信。
+2. 通信发起方式
+   - 远端读：我去别的 rank 的 window 读数据。
+   - 远端写：我把数据写到别的 rank 的 window。
+
+于是会有四种组合：
+
+| 场景 | 远端读 | 远端写 |
 | --- | --- | --- |
-| 跨 rank readiness | `pto::comm::TNOTIFY/TWAIT/TTEST` | 保留并作为 PTO comm 示例 |
-| remote payload get/put | `pto::comm::TGET/TPUT` | 保留并显式标注为 PTO data movement |
-| 本地 MTE/V/M/FIX pipe | `SetFlag/WaitFlag/PipeBarrier` thin bridge | 不改语义，只集中命名为 substrate bridge |
-| cross-core 协作 | `CrossCoreSetFlag/CrossCoreWaitFlag` | 不替换，归类 coordination shell |
-| cache coherence | `DataCacheCleanAndInvalid`, `dsb(DSB_DDR)`, `SyncAll` | 不替换，归类 remote-window substrate |
+| Dispatch-GMM | 目标 expert rank 主动读取源 rank token，然后本 rank AIC 计算 | 源 rank 主动写 token 到目标 rank，目标 rank 等数据再计算 |
+| GMM-Combine | 原 token rank 主动读取 expert rank 的输出 | expert rank 算完后主动写回原 token rank |
 
-## 3. PTO primitive 映射
+MegaMoE 文章强调的关键不是机械列举四种模式，而是让通信发起者尽量和计算消费者/生产者在同一张卡上：
 
-| PTO 模型 | 当前/目标代码位置 | 作用 |
-| --- | --- | --- |
-| `pto::GlobalTensor` + shape/stride | `op_kernel/utils/pto_global_view.hpp` | 统一 GM view，隐藏 AscendC `GlobalTensor` boundary seam |
-| `pto::Tile` + `TASSIGN` | vector helper / epilogue / matmul helper | 把 AscendC local memory 地址绑定为 PTO tile |
-| `TLOAD/TSTORE` | `pto_vector_ops.hpp`、soft-flag helper 和调用方 | 连续 GM↔UB 搬运，以及 soft-flag GM↔L1 Mat tile 搬运 |
-| `TEXPANDS` | `pto_vector_ops.hpp` 和调用方 | UB tile 标量填充 / broadcast |
-| `TCVT` | vector helper / epilogue | 类型转换 |
-| `TADD/TADDS/TMUL/TMULS/TDIV/TABS/TEXP/TROWMAX` | epilogue / swiglu helper | vector compute |
-| `TMATMUL/TMATMUL_ACC` | `block_mmad_preload_async_fixpipe_quant.hpp` | L0/L1 tile matmul |
-| `TSTORE_FP` | `block_mmad_preload_async_fixpipe_quant.hpp` | int8 path accumulator fixpipe store |
-| `TGET` | dispatch gather stage | remote read source payload |
-| `TPUT` | combine/epilogue stage | remote write owner output |
-| `TNOTIFY/TWAIT/TTEST` | `hccl_window.hpp` and stage sync | remote rank signal |
+- Dispatch-GMM 更适合目标 rank 主动远端读：目标 rank 的 AIV 读数据，本 rank 的 AIC 消费数据。
+- GMM-Combine 更适合 expert rank 主动远端写：expert rank 的 AIC 产出数据，本 rank 的 AIV 负责写回。
 
-## 4. V4 结构整改
+这样细粒度流水主要变成卡内 AIV/AIC 同步，而不是每个 tile 都做跨卡握手。
 
-### 4.1 PTO helper 层
+当前 A5 PTO 项目中，dispatch gather 侧主要通过 `TGET` 从 peer window 拉数据到本 rank，combine 侧通过 `TPUT` 把结果写回 owner rank。
 
-V4 将 PTO seam 分成三层：
+## 5. 项目目录和文件分工
+
+```text
+kernels/manual/a5/dispatch_ffn_combine_v3/
+├── run.sh                               # 生成数据、构建、mpirun 启动
+├── main.cpp                             # Host 主程序：MPI/ACL/HCCL 初始化、launch、计时、校验
+├── runtime_context.{hpp,cpp}            # HCCL comm/resource/window context 初始化
+├── tiling_builder.{hpp,cpp}             # Host tiling、workspace bytes、block_dim、window 容量检查
+├── data_utils.{hpp,cpp}                 # case.json、rank 文件路径、FP16 compare
+├── kernel_launch.hpp                    # Host launch 参数结构
+├── comm_mpi.h                           # dlopen MPI，避免硬链接 MPI
+├── scripts/gen_data.py                  # 随机输入和 CPU golden 生成
+├── op_kernel/
+│   ├── dispatch_ffn_combine.cpp         # device kernel 入口 + host launch stub
+│   ├── dispatch_ffn_combine.h           # device 参数整理、A5 policy 和 kernel params 构造
+│   ├── dispatch_ffn_combine_kernel.hpp  # 主 kernel 类，真实 stage 实现集中在这里
+│   ├── dispatch_ffn_combine_tiling.h    # tiling/runtime/launch config 结构
+│   ├── stages/                          # AIC/AIV 主流程 facade
+│   ├── utils/                           # PTO helper、HCCL window、layout、MMAD/epilogue policy
+│   ├── moe_init_routing_quant_v2/        # routing、sort、gather、dynamic quant
+│   └── unpermute/                       # restore/unpermute
+└── DESIGN.md                            # 本文档
+```
+
+读代码时建议先按这个顺序：
+
+1. `run.sh` 和 `main.cpp`：理解这个 standalone 程序怎么跑。
+2. `runtime_context.cpp`：理解 HCCL remote window 怎么变成 device 可读 context。
+3. `tiling_builder.cpp`：理解 shape、workspace 和 tiling 怎么传给 device。
+4. `op_kernel/dispatch_ffn_combine.cpp`：理解 kernel 入口。
+5. `op_kernel/dispatch_ffn_combine.h`：理解 A5 policy 和 params 怎么组装。
+6. `op_kernel/stages/kernel_context.hpp`：先看 AIC/AIV 大流程。
+7. `op_kernel/dispatch_ffn_combine_kernel.hpp`：再下钻每个 stage 的实现。
+
+## 6. Host 侧执行流程
+
+Host 侧每个 MPI rank 对应一张 NPU。整体流程如下：
+
+```text
+run.sh
+  -> scripts/gen_data.py 生成 out/case.json 和 rank*.bin
+  -> cmake 构建 host exe 和 kernel so
+  -> mpirun 启动 dispatch_ffn_combine_v3
+
+main.cpp
+  -> CommMpiInit
+  -> aclInit / rtSetDevice / aclrtSetDevice
+  -> rank0 HcclGetRootInfo，广播 root_info
+  -> InitStandaloneRankRuntime
+  -> LoadCaseConfig / BuildRankFileSet
+  -> BuildDispatchFFNCombineTiling
+  -> 分配 x/weight/scale/probs/output/workspace/tiling device buffer
+  -> warmup loop
+  -> measure loop
+  -> verify loop
+  -> D2H 拷回 out，与 expected_out 比较
+```
+
+几个关键点：
+
+- `main.cpp` 每轮 launch 前都会清零 HCCL window、输出、`expert_token_nums` 和 workspace，避免上一轮残留影响结果。
+- measure 使用 ACL event 统计 kernel 时间，再用 MPI gather 汇总每轮最大 rank 时间。
+- verify 会再跑一轮，把 `out` 拷回 host，写 `output_rank*.bin`，并与 CPU golden 做 FP16 误差比较。
+
+## 7. HCCL remote window 初始化
+
+跨 rank 数据放在 HCCL 分配的 remote window 中，但 device kernel 不直接吃 HCCL 原始结构，而是使用项目自己的简化 context：
+
+```cpp
+struct PtoRemoteWindowContext {
+    uint64_t workspaceBase;
+    uint64_t workspaceBytes;
+    uint32_t rank;
+    uint32_t rankSize;
+    uint64_t windowBytes;
+    uint64_t windowIn[PTO_HCCL_MAX_RANKS];
+    uint64_t windowOut[PTO_HCCL_MAX_RANKS];
+};
+```
+
+`runtime_context.cpp` 的职责是：
+
+1. 初始化 ACL stream 和 HCCL stream。
+2. 通过 `HcclCommInitRootInfo` 建立 HCCL comm。
+3. 通过 `HcclAllocComResourceByTiling` 分配通信资源。
+4. 优先按 A5 direct context 解析 HCCL 返回的 `ctx_ptr`。
+5. 解析成功后，把 `rank/rankSize/windowBytes/windowIn/windowOut` 规整成 `PtoRemoteWindowContext`。
+6. 把这个 context 拷到 device，tiling 里只传 device pointer。
+7. 如果 A5 direct context 解析失败，再 fallback 到 ring-style resource parser。
+
+这里最近修复过的关键点是：A5 上 `HcclAllocComResourceByTiling` 返回的 `ctx_ptr` 不能直接当作 `PtoRemoteWindowContext` 使用，需要先按 A5 HCCL context layout 解析，再生成自己的 PTO context。
+
+## 8. Tiling 和 workspace
+
+Host tiling 由 `tiling_builder.cpp` 完成，核心输出是 `DispatchFFNCombineTilingData`，包含：
+
+- shape：`M/K/N/topK/expertPerRank/worldSize/maxOutputSize`
+- CoC tiling：`m0/k0/n0/ubMoveNum/commNpuSplit/...`
+- routing quant tiling：来自 `MoeInitRoutingQuantV2TilingBase::DoTiling(...)`
+- runtimeInfo：`remoteWindowContext`、`rank`、`rankSize`
+- launchConfig：`blockDim`、`tilingKey`、`workspaceBytes`
+
+Host 还会校验 HCCL remote window 是否够放这些区域：
+
+```text
+offsetA                   = 0
+offsetPeerPerTokenScale   = AlignUp(windowBytes / 3, 512)
+offsetD                   = offsetPeerPerTokenScale + 1 MiB
+offsetPeerTokenPerExpert  = windowBytes - 2 MiB
+signalBase                = windowBytes - 1 MiB
+```
+
+这些区域含义是：
+
+| 区域 | 用途 |
+| --- | --- |
+| `offsetA` 起始区域 | dispatch/gather token payload |
+| `offsetPeerPerTokenScale` | peer per-token scale 和部分 scratch |
+| `offsetD` | dispatch output / GMM2 output / combine return payload |
+| `offsetPeerTokenPerExpert` | 跨 rank token count 矩阵 |
+| 最后 1 MiB | barrier counter、token-ready counter、PTO notify/wait signal |
+
+普通输入、输出、tiling、workspace 仍然由 `aclrtMalloc` 分配；只有跨 rank 可见的数据和信号使用 HCCL remote window。
+
+Device 侧 `WorkspaceInfo` 会把普通 workspace 切成这些逻辑区：
+
+```text
+expandedRowIdx
+ptrcumsumMM
+ptrPerTokenScale
+ptrPerTokenScale2
+ptrTokenPerExpert       # 结构里有字段，但 live path 会绑定到 remote window token-count 区域
+ptrC                    # GMM1 output / SwiGLU input
+ptrC2                   # GMM2 output
+ptrA                    # dispatch gather 后的 GMM1 输入
+ptrPermutedToken        # restore 前的 token buffer
+ptrSumBeforeRank
+ptrSoftFlagBase
+```
+
+## 9. Device kernel 入口
+
+device 入口在 `op_kernel/dispatch_ffn_combine.cpp`：
+
+```text
+dispatch_ffn_combine<<<blockDim, nullptr, stream>>>(...)
+  -> GET_TILING_DATA
+  -> TILING_KEY_IS(1000010)
+  -> KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2)
+  -> DispatchFFNCombine<int8_t, DTYPE_W1, DTYPE_OUT, false, true>
+```
+
+当前主路径固定为：
+
+- int8 weight
+- `transB=false`
+- `weightNz=true`
+- tiling key `1000010`
+- mixed AIC/AIV task type
+- A5 compile arch `dav-c310`
+
+`op_kernel/dispatch_ffn_combine.h` 是 device wrapper：
+
+1. `Init()` 从参数和 tiling 中取出 GM pointer、shape、rank、remoteWindowContext、CoC tiling、routing tiling。
+2. `Process()` 选择 A5 policy、layout、GMM tile shape、epilogue policy。
+3. 构造 `DispatchFFNCombineKernel::Params`。
+4. 调用 `DispatchFFNCombineKernel`。
+
+## 10. AIC / AIV 分工
+
+这个 kernel 是 mixed AIC/AIV。可以把两类 core 理解成：
+
+- AIC：更适合矩阵乘，主要跑 GMM1 和 GMM2。
+- AIV：更适合搬运、routing、量化、通信、SwiGLU、combine、restore。
+
+stage facade 在 `op_kernel/stages/kernel_context.hpp`，非常薄，但很适合作为阅读入口：
+
+```text
+AIC:
+  RunGmm1Stage
+  RunGmmInterlockStage
+  RunGmm2Stage
+
+AIV:
+  RunRoutingStage
+  RunDispatchGatherStage
+  RunSwigluStage
+  RunCombineStage
+  RunRestoreStage
+```
+
+真实实现仍主要在 `op_kernel/dispatch_ffn_combine_kernel.hpp`。
+
+## 11. AIV 主流程详解
+
+### 11.1 Routing：本地展开、排序、量化、计数
+
+入口：`RunRoutingImpl(...)`
+
+主要动作：
+
+1. `remoteWindow.Init(params.remoteWindowContext)` 初始化 remote window helper。
+2. `ApplyXActiveMask(...)` 把 inactive token 的 expert id 改成 sentinel，避免参与真实 expert 计算。
+3. 调用 `moe_init_routing_quant_v2(...)`：
+   - 读取 `x`、`expert_idx`、`x_active_mask`。
+   - 按 expert 排序/分组。
+   - 写出 `expandedRowIdx`。
+   - 写出本地 token count。
+   - 生成动态量化后的 int8 token 和 per-token scale。
+4. `CrossRankSyncAndlocalTokenPerExpertAllGatherAndGetSumPreRankV2(...)` 同步各 rank 的 token count。
+5. `GetCumsumForMMAIV(...)` 生成 `cumsumMM`，用于后续 GMM 知道每个 expert 的 token row 范围。
+6. 写出 `expert_token_nums` 给 host 校验/观察。
+7. 通过 cross-core flag 通知 AIC：GMM1 可以开始消费部分 expert 数据。
+
+### 11.2 Dispatch gather：把远端 token 拉成本地 expert-major GMM 输入
+
+入口：`RunDispatchGatherImpl(...)`
+
+它会遍历本地 expert 和各个 source rank，根据 `tokenPerExpert` / `cumsumMM` 算出：
+
+- 从 peer remote window 的哪里读 token 和 per-token scale。
+- 写到本 rank workspace 的 `ptrA` / `ptrPerTokenScale` 哪一段。
+
+核心 helper 是 `CopyGMToGMPerToken(...)`，它使用 PTO `TGET` 做 remote read。读回来后，本地 workspace 中的 token 按 expert 连续排列，GMM1 可以直接按 expert 分组消费。
+
+这个阶段体现了 MegaMoE 思路：不是通信完再密排，而是通信地址本身就按 expert-major 目标位置计算。
+
+### 11.3 SwiGLU：GMM1 后处理和 GMM2 输入量化
+
+入口：`RunSwigluImpl(...)`
+
+GMM1 产出的是中间隐藏层，SwiGLU 会把 `N` 维拆成两半：
+
+```text
+x1 = first N/2
+x2 = second N/2
+SwiGLU(x) = silu(x1) * x2
+```
+
+当前 int8 路径里，SwiGLU epilogue 还会做：
+
+- GMM1 dequant。
+- per-token/per-channel scale 应用。
+- SwiGLU vector 计算。
+- 为 GMM2 重新做 per-token int8 quant。
+- 生成 `ptrPerTokenScale2`。
+
+实现主要在 `utils/block_epilogue_pertoken_swiglu.hpp`。
+
+### 11.4 Combine：把 expert 输出送回 owner rank
+
+入口：`RunCombineImpl(...)`
+
+GMM2 完成后，每个 expert 的输出需要回到原 token 所在 rank。当前有两条 combine path：
+
+- `CombineV1(...)`：按 expert group 做 row-wise return。
+- `CombineV2(...)`：按 tile 做更细粒度的 return。
+
+底层 epilogue 在：
+
+- `utils/block_epilogue_pertoken_row.hpp`
+- `utils/block_epilogue_pertoken_v2.hpp`
+
+combine 阶段会根据 `preSumBeforeRank`、`tokenPerExpert`、`rank` 等信息算出结果应该写回哪个 owner rank 的 remote window 位置，并用 PTO `TPUT` 执行 remote write。
+
+### 11.5 Restore：按原 token 顺序和 topK 权重聚合
+
+入口：`RunRestoreImpl(...)`
+
+restore 阶段做最后一步：
+
+1. 等跨 rank combine 数据可见。
+2. 根据 `expandedRowIdx` 找到每个输出 token 对应的多个 expert 输出。
+3. 读取 `probs`。
+4. 对 topK 专家输出做加权累加。
+5. 写回最终 `out[M, K]`。
+
+实现主要在 `unpermute/moe_token_unpermute.h`。
+
+## 12. AIC 主流程详解
+
+AIC 路径只管 GMM 主链：
+
+```text
+GMM1
+  -> interlock
+  -> GMM2
+```
+
+### 12.1 GMM1
+
+入口：`GMM1(...)`
+
+它等待 AIV 准备好 `cumsumMM` 和 dispatch gather 的 token 数据后，按 local expert 遍历：
+
+```text
+expert group -> 当前 expert 的 M 范围 -> BlockScheduler 切 tile -> BlockMmad 执行
+```
+
+GMM1 输入来自 `ptrA`，权重来自 `weight1`，输出写到 `ptrC`。执行完对应阶段后，通过 cross-core flag 通知 AIV 的 SwiGLU 阶段。
+
+### 12.2 GMM2
+
+入口：`GMM2(...)`
+
+它等待 AIV 的 SwiGLU/quant 输出后，消费 `ptrPermutedToken` 和 `weight2`，输出写到 `ptrC2`。之后 combine 阶段会从 `ptrC2` 读取结果并发回 owner rank。
+
+### 12.3 MMAD / epilogue policy
+
+当前 A5 主路径使用：
+
+- `ArchTag = pto_ext::Arch::AtlasA5`
+- `MmadAtlasA5PreloadAsyncFixpipe`
+- `EpilogueAtlasA5PerTokenDequantSwigluQuant`
+- `EpilogueAtlasA5PerTokenDequant`
+- `EpilogueAtlasA5PerTokenDequantV2`
+
+PTO 化的重点不是把所有 AscendC substrate 都删除，而是把主计算表达成 PTO 视角：
+
+- `TMATMUL` / `TMATMUL_ACC` 表达 matmul。
+- `TSTORE_FP` / `TSTORE` 表达 accumulator/fixpipe store。
+- `TLOAD` / `TSTORE` 表达规整 GM/UB 搬运。
+- 无法安全替换的本地 pipe、buffer 生命周期、L1/L0/FIX substrate 继续保留。
+
+## 13. PTO helper 和保留的 AscendC 边界
+
+当前项目中 PTO 相关 helper 主要分三层：
 
 | 文件 | 职责 |
 | --- | --- |
-| `op_kernel/utils/pto_global_view.hpp` | 只负责 PTO dynamic GM view adapter |
-| `op_kernel/utils/pto_vector_ops.hpp` | 负责通用 PTO vector / matrix-row helper |
-| `op_kernel/utils/pto_sync_bridge.hpp` | 负责命名化 AscendC local pipe bridge，不宣称纯 PTO |
+| `utils/pto_global_view.hpp` | 把 raw GM pointer 组织成 PTO `GlobalTensor` view |
+| `utils/pto_vector_ops.hpp` | 统一 vector load/store/cast/fill/add/mul/div/exp/reduce 等 PTO helper |
+| `utils/hccl_window.hpp` | 把 HCCL remote window 包成 rank-aware PTO comm 地址和 signal helper |
 
-### 4.2 Routing PTO adapter
+常见 PTO primitive：
 
-`moe_v2_pto_sort.h` 中的本地 `PtoV2GlobalNd` / `MakeContiguousGlobal` / 通用 vector helper 需要收口到 V4 统一 helper。sort 专属 tile alias、常量和算法保留在 routing 内。
-
-### 4.3 Stage facade
-
-V4 使用 `op_kernel/stages/` 组织主链路 facade。每个 stage 是 header-only，保持 `PTO_DEVICE` inline，不改变 kernel ABI：
-
-| Stage header | 职责 |
+| 类型 | primitive |
 | --- | --- |
-| `kernel_context.hpp` | 汇总执行上下文、阶段参数传递约定 |
-| `routing_stage.hpp` | active mask、routing、local count |
-| `dispatch_gather_stage.hpp` | count sync、remote gather、`TGET` |
-| `gmm_stage.hpp` | GMM1/GMM2 high-level facade |
-| `swiglu_stage.hpp` | GMM1 epilogue、SwiGLU、quant/dequant seam |
-| `combine_stage.hpp` | CombineV1/V2 facade、local/remote return |
-| `restore_stage.hpp` | unpermute / restore facade |
+| tile/view | `TASSIGN`, `pto::Tile`, `pto::GlobalTensor` |
+| vector load/store | `TLOAD`, `TSTORE` |
+| vector compute | `TCVT`, `TADD`, `TADDS`, `TMUL`, `TMULS`, `TDIV`, `TABS`, `TEXP`, `TROWMAX/TMAX` |
+| matmul | `TMATMUL`, `TMATMUL_ACC` |
+| remote data | `TGET`, `TPUT` |
+| remote sync | `TNOTIFY`, `TWAIT` |
+| sort/gather | `TSORT32`, `TMRGSORT`, `TGATHER` |
 
-## 5. 未替换项与原因
+仍然保留的 AscendC / CANN substrate：
 
-| 未替换项 | 分类 | 原因 |
-| --- | --- | --- |
-| `kernel_operator.h`, `__aicore__`, `__gm__`, `GM_ADDR` | substrate | CANN kernel ABI 与编译属性，PTO 不替代这一层 |
-| `LocalTensor`, `GlobalTensor` | substrate seam | PTO helper 通过它们获得地址/生命周期，不能一刀切删除 |
-| `TPipe/TQue/TBuf` | substrate | PTO `Tile` 不是 queue/buffer allocator |
-| `DataCopyPad` tail/pad/atomic | boundary adapter | 业务残留已清零；可安全展开的 tail、stride、padded count 和 atomic store 已走 `PtoLoadVector/PtoStoreVector/PtoStoreAtomicAddVector` |
-| `SetFlag/WaitFlag/PipeBarrier/SyncAll` | local pipe substrate | HardEvent 生命周期不等价 PTO comm/event |
-| `CrossCoreSetFlag/WaitFlag` | coordination shell | 本地跨核同步，不等价 remote signal |
-| `DataCacheCleanAndInvalid`, `dsb` | cache substrate | remote window 可见性边界 |
-| `GetBlockIdx/GetBlockNum/GetTaskRation` | runtime identity | PTO 不负责 runtime identity |
-| `LoadData/Fixpipe/Gemm::helper::*` | matmul/fixpipe substrate | L1/L0/FIX 执行骨架，不能普通 `TLOAD/TSTORE` drop-in；`dispatch_policy_custom.hpp` 调用面已集中到 `substrate_bridge` |
-| `dispatch_policy_custom.hpp` / `block_mmad_preload_async_fixpipe_quant.hpp` 中的 copy/fixpipe 壳 | matmul/fixpipe substrate | `dispatch_policy_custom.hpp` 的 `DataCopy/LoadData/LoadDataWithTranspose/Fixpipe` 仅保留在 PTO 命名 bridge body；`block_mmad_preload_async_fixpipe_quant.hpp` 的 soft-flag GM↔L1 copy 已走 PTO Mat `TLOAD/TSTORE`，其余 `PipeBarrier/CrossCoreSetFlag` 维持 coordination 归类 |
+- `kernel_operator.h`, `__aicore__`, `__gm__`, `GM_ADDR`
+- `TPipe`, `TQue`, `TBuf`, `LocalTensor` 生命周期
+- `SetFlag`, `WaitFlag`, `PipeBarrier`, `SyncAll`
+- `CrossCoreSetFlag`, `CrossCoreWaitFlag`
+- `DataCacheCleanAndInvalid`, `dsb`
+- 部分 L1/L0/FIX 执行骨架中的 `LoadData` / `Fixpipe` 类语义
 
-## 6. 通信与计算 PTO 化差距总表
+这些保留项不是“没改完”的业务路径，而是 PTO 目前不替代的 kernel ABI、buffer 生命周期、本地 pipe 同步、cache 可见性和硬件执行 substrate。
 
-### 6.1 通信相关
+## 14. 当前实现和 MegaMoE 理想形态的差距
 
-| 场景 | 当前状态 | PTO 覆盖情况 | 结论 / 后续动作 |
-| --- | --- | --- | --- |
-| remote data movement | dispatch gather / combine return 已走 `TGET/TPUT` | PTO 覆盖 | 已 PTO 化；当前未发现跨 rank payload 搬运绕过 PTO 的主路径 |
-| remote signal / counter | token-ready / barrier counter 已走 `TNOTIFY/TWAIT` | PTO 覆盖 | 已 PTO 化；当前协议未用 `TTEST`，但不是缺口 |
-| host ACL/HCCL/MPI bootstrap | host 侧仍负责 device/runtime、comm handle、remote window resource | PTO 不覆盖 host resource management | 保留 host runtime；不作为 kernel PTO 化缺口 |
-| remote window 地址壳 | kernel 内仍有 `remoteWindow(...)` 地址计算和 context 传递 | PTO comm primitive 需要地址/view 输入 | 合理保留；不是实际 remote copy API |
-| local cross-core sync | `CrossCoreSetFlag/CrossCoreWaitFlag` 保留 | 无清晰 PTO 1:1 替代；不等价 `TNOTIFY/TWAIT` | 保留为 coordination shell |
-| cache coherence / visibility | `DataCacheCleanAndInvalid` / `dsb` 类语义保留 | 无清晰 PTO 1:1 替代 | 保留为 cache substrate |
-| local pipe event | `SetFlag/WaitFlag/PipeBarrier/SyncAll` 仍在 helper body 内 | `TSYNC` 不能覆盖全部 HardEvent/pipe 生命周期 | 保留为 local pipe substrate；可做命名集中，不改语义 |
+这份代码已经具备 MegaMoE 风格的核心数据流：
 
-通信侧结论：跨 rank 数据搬运和 remote signal/counter 主链路已经 PTO 化；剩余项属于 host 建链、本地协调、cache 可见性或 pipe substrate。
+```text
+routing/quant/count
+  -> token count sync
+  -> cumsum
+  -> remote gather 直接形成 expert-major GMM 输入
+  -> GMM1
+  -> SwiGLU/quant
+  -> GMM2
+  -> remote combine return
+  -> restore/unpermute
+```
 
-### 6.2 计算相关
+但也要明确：MegaMoE 微信文章描述的是更完整的算法目标，当前 A5 PTO 项目是手写 kernel 示例，不应把文章里的所有设计点都说成已完全实现。当前实现里仍能看到较保守的同步方式，例如：
 
-| 场景 | 当前状态 | PTO 覆盖情况 | 结论 / 后续动作 |
-| --- | --- | --- | --- |
-| vector compute / fill | `Cast/Add/Mul/Div/Abs/Exp/ReduceMax/Duplicate` 等已集中到 `pto_vector_ops.hpp` | PTO 覆盖 | 已 PTO 化；fill 走 `PtoFillVector/TEXPANDS` |
-| regular GM-facing copy | 规整 GM↔UB vector load/store 已走 `TLOAD/TSTORE` helper；soft-flag GM↔L1 copy 已走 PTO Mat `TLOAD/TSTORE` helper | PTO 覆盖 | 已 PTO 化 |
-| routing sort/gather | `moe_v2_pto_sort.h` 使用 PTO sort/gather/vector helper | PTO 覆盖 | 主要已 PTO 化 |
-| matmul primitive | `PtoTileMmad` 使用 `TMATMUL/TMATMUL_ACC` | PTO 覆盖展示面 | PTO 化展示面已具备 |
-| fixpipe store 展示面 | accumulator store path 使用 `TSTORE_FP` | PTO 部分覆盖 | 展示面已 PTO 化；底层 fixpipe 壳仍保留 |
-| matmul/fixpipe substrate | `DataCopy/LoadData/LoadDataWithTranspose/Fixpipe/Gemm::*` 集中在 substrate 文件，其中 `dispatch_policy_custom.hpp` 调用面已收口到 `substrate_bridge` | PTO 只有部分方向，不是 drop-in | 当前不机械替换；保留 AscendC substrate body，但调用边界 PTO 命名化 |
-| tail/pad boundary copy | `moe_v2_src_to_dst_and_gather.h`、`moe_token_unpermute.h`、`moe_v2_fullload_quant.h`、`dispatch_ffn_combine_kernel.hpp` 中可安全展开的连续/逐行 tail、stride、padded count copy 已改走 `PtoLoadVector/PtoStoreVector`；`op_kernel/` 下 `DataCopyPad/DataCopyExtParams/DataCopyPadExtParams` 已清零 | PTO 覆盖 | 通过显式 row stride 保持原 padding/stride 语义；build + small/large PASS |
-| local atomic writeback | `moe_v2_expert_token_out.h` 的 expert count/cumsum 原子写回已改为 `TSTORE<AtomicAdd>` helper | PTO 覆盖 | 已验证 build + small/large PASS；后续同类规整 atomic store 可复用 helper |
-| routing/quant buffer pipeline | `TQue/TBuf/TPipe/LocalTensor` 生命周期保留 | PTO `Tile` 不是 allocator/queue 替代 | 保留 AscendC substrate |
-| kernel ABI/runtime identity | `kernel_operator.h/__aicore__/GM_ADDR/GetBlockIdx` 保留 | PTO 不覆盖 ABI/runtime identity | 合理保留 |
+- 多处 `SyncAll<true>()`。
+- AIC/AIV 之间主要通过 `CrossCoreSetFlag/WaitFlag` 协调。
+- 部分 scoreboard / soft flag 思路不是最主要的 live path。
+- 当前本机验证边界主要是 A5 compile-only；A5 runtime PASS 需要在 A5 环境运行确认。
 
-计算侧结论：vector/fill、规整 copy、soft-flag GM↔L1 copy、routing PTO helper、matmul primitive 展示面已经 PTO 化；local atomic writeback、连续单行 tail copy、unpermute tail、fullload row load/store、per-token row/scale store 与 expert-count padded copy 均已完成 PTO 收口；主要剩余差距集中在 matmul/fixpipe substrate body 和 AscendC buffer lifecycle。
+因此阅读代码时可以这样理解：
 
-### 6.3 后续推进优先级
+- **算法方向**来自 MegaMoE：让通信直接服务 GMM 输入布局，减少通信后重排，并让通信/计算/后处理更容易流水。
+- **工程骨架**来自 MC2 dispatch_ffn_combine：routing、GMM1、SwiGLU、GMM2、combine、unpermute 的大结构保留。
+- **当前实现形态**是 A5 standalone PTO 示例：更强调 PTO primitive、HCCL remote window context、A5 policy 和可独立运行验证。
 
-| 优先级 | 候选点 | 原因 | 风险 |
-| --- | --- | --- | --- |
-| 1 | `moe_v2_expert_token_out.h` 的 `SetAtomicAdd/DataCopyPad/SetAtomicNone` | 已用 `TSTORE<AtomicAdd>` helper 收口规整 atomic store | 已完成；build + small/large PASS |
-| 2 | `moe_v2_src_to_dst_and_gather.h` 的连续 tail load/store fallback | 已改走统一 `PtoLoadVector/PtoStoreVector`，覆盖非 32B 单行连续 copy | 已完成；build + small/large PASS |
-| 3 | `moe_token_unpermute.h` / `moe_v2_fullload_quant.h` / `dispatch_ffn_combine_kernel.hpp` 中剩余 `DataCopyPad` boundary adapter | 已按连续/逐行语义展开为 PTO `PtoLoadVector/PtoStoreVector`；`op_kernel/` 下 `DataCopyPad/DataCopyExtParams/DataCopyPadExtParams` grep 清零 | 已完成；build + small/large PASS |
-| 4 | 剩余 `Duplicate` fill | 已用 `PtoFillVector/TEXPANDS` 收口 | 已完成；build + small/large PASS |
-| 5 | soft-flag GM↔L1 copy | 已用 PTO Mat `TLOAD/TSTORE` helper 收口 | 已完成；build + small/large PASS |
-| 6 | `dispatch_policy_custom.hpp` substrate 调用面 | 已集中到 PTO 命名 `substrate_bridge`，不改变 L1/L0/FIX 语义 | 已完成；build + small/large PASS |
-| 7 | local sync wrapper 集中到 `pto_sync_bridge.hpp` | 只改善命名和边界，不改变 HardEvent 语义 | 中低 |
-| 8 | matmul/fixpipe substrate body 设计 | 残留最多，但牵涉 L1/L0/FIX 执行骨架 | 高；不建议机械替换 |
-| 9 | `TPipe/TQue/TBuf/LocalTensor/GlobalTensor` 全替换 | 看似纯 PTO，但实际是运行 substrate | 很高；不建议作为目标 |
+## 15. 关键文件速查
 
-## 7. 正确性与性能策略
+| 想看什么 | 入口文件 |
+| --- | --- |
+| 一键构建运行 | `run.sh` |
+| host 主流程 | `main.cpp` |
+| HCCL context / remote window 初始化 | `runtime_context.cpp`, `runtime_context.hpp` |
+| tiling / workspace bytes / remote window 容量校验 | `tiling_builder.cpp`, `dispatch_ffn_combine_tiling.h` |
+| host launch 参数 | `kernel_launch.hpp` |
+| device kernel 入口 | `op_kernel/dispatch_ffn_combine.cpp` |
+| device wrapper / A5 policy / params | `op_kernel/dispatch_ffn_combine.h` |
+| AIC/AIV stage 总览 | `op_kernel/stages/kernel_context.hpp` |
+| routing/count/cumsum/gather/GMM/combine/restore 主实现 | `op_kernel/dispatch_ffn_combine_kernel.hpp` |
+| HCCL remote window device helper | `op_kernel/utils/hccl_window.hpp`, `op_kernel/utils/hccl_context.hpp` |
+| PTO vector helper | `op_kernel/utils/pto_vector_ops.hpp` |
+| PTO global view helper | `op_kernel/utils/pto_global_view.hpp` |
+| routing/sort/quant 子模块 | `op_kernel/moe_init_routing_quant_v2/` |
+| restore/unpermute 子模块 | `op_kernel/unpermute/` |
+| GMM/SwiGLU/combine epilogue | `op_kernel/utils/block_*` |
+| MC2 到 PTO 转换说明 | `mc2_2_pto.md` |
+| MegaMoE 阅读笔记 | `megamoe理解.md` |
 
-V4 是结构化整改，不做性能优化。所有阶段必须满足：
+## 16. 阅读建议
 
-- build PASS；
-- small case rank0/rank1 PASS；
-- 关键阶段 large case rank0/rank1 PASS；
-- 记录 kernel/e2e avg/min/max/std；
-- 如出现 hang、mismatch 或异常回退，回退当前阶段，不扩散修改。
+如果只是想快速理解项目，可以按下面路线读：
 
-标准验证命令见 `IMPLEMENTATION_PLAN.md`。
+```text
+README.md
+  -> DESIGN.md 第 2~4 节，理解算法背景
+  -> main.cpp，理解 standalone 怎么跑
+  -> runtime_context.cpp，理解 A5 HCCL window 修复和 context 传递
+  -> tiling_builder.cpp，理解 shape/workspace/remote window 校验
+  -> stages/kernel_context.hpp，理解 AIC/AIV 大流程
+  -> dispatch_ffn_combine_kernel.hpp，按 stage 下钻
+```
 
-## 8. 完成定义
+如果要调试 runtime 初始化，优先看 `runtime_context.cpp`。
 
-V4 完成时应满足：
+如果要调试精度，优先看：
 
-- PTO 数据流、任务流、同步流可从 stage 文件和函数名直接看出；
-- 通用 PTO GM view/vector helper 不再分散复制；
-- routing 的 PTO adapter 已接入统一 helper；
-- 主 kernel 文件成为高层编排入口，而不是承载所有实现细节；
-- 非 PTO 依赖全部落入明确边界并记录在 `api_interface.md`；
-- small/large case 均 PASS。 
+```text
+scripts/gen_data.py CPU golden
+main.cpp CompareFp16File
+RunRoutingImpl
+RunDispatchGatherImpl
+GMM1 / RunSwigluImpl / GMM2
+RunCombineImpl
+RunRestoreImpl
+```
+
+如果要调试 hang，优先区分：
+
+1. 是否卡在 host HCCL init / remote window context。
+2. 是否卡在跨 rank token-ready / barrier。
+3. 是否卡在 AIC/AIV cross-core flag。
+4. 是否卡在 stream sync 后的 device kernel 内部。
+
+## 17. 当前验证边界
+
+当前仓库所在机器按项目约定不是 A5 runtime 验证环境。本项目可在本机做 A5 compile-only 验证：
+
+```bash
+source /home/ntlab/liulei/can/cann-9.0.0-beta.1/set_env.sh
+export PATH=/home/ntlab/miniconda3/envs/ltr_pto/bin:$PATH
+export LD_LIBRARY_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib:${LD_LIBRARY_PATH:-}
+export MPI_LIB_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib/libmpi.so
+cmake -S kernels/manual/a5/dispatch_ffn_combine_v3 -B /tmp/dispatch_ffn_combine_v3_a5_build -DCMAKE_BUILD_TYPE=Release
+cmake --build /tmp/dispatch_ffn_combine_v3_a5_build --target dispatch_ffn_combine_v3 -j1
+```
+
+A5 端到端正确性需要在 A5-capable 环境运行 `run.sh`，并看到每个 rank 输出 `PASS rank=<id>`。

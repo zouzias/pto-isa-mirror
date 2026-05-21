@@ -9,6 +9,6 @@ PTO_DEVICE void RunDispatchGatherStage(Kernel &kernel, typename Kernel::Params c
     kernel.RunDispatchGatherImpl(params);
 }
 
-}  // namespace pto_ext::Gemm::Kernel::stages
+} // namespace pto_ext::Gemm::Kernel::stages
 
-#endif  // DISPATCH_FFN_COMBINE_V3_STAGES_DISPATCH_GATHER_STAGE_HPP
+#endif // DISPATCH_FFN_COMBINE_V3_STAGES_DISPATCH_GATHER_STAGE_HPP

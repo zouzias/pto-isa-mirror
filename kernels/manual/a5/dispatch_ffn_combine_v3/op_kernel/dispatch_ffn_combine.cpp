@@ -26,9 +26,11 @@ using namespace DispatchFFNCombineImpl;
 #endif
 
 extern "C" __global__ __aicore__ void dispatch_ffn_combine(__gm__ uint8_t *x, __gm__ uint8_t *w1, __gm__ uint8_t *w2,
-    __gm__ uint8_t *expertId, __gm__ uint8_t *scale1, __gm__ uint8_t *scale2, __gm__ uint8_t *probs,
-    __gm__ uint8_t *xActiveMask, __gm__ uint8_t *c, __gm__ uint8_t *expertTokenNums, __gm__ uint8_t *workspaceGM,
-    __gm__ uint8_t *tilingGM)
+                                                           __gm__ uint8_t *expertId, __gm__ uint8_t *scale1,
+                                                           __gm__ uint8_t *scale2, __gm__ uint8_t *probs,
+                                                           __gm__ uint8_t *xActiveMask, __gm__ uint8_t *c,
+                                                           __gm__ uint8_t *expertTokenNums, __gm__ uint8_t *workspaceGM,
+                                                           __gm__ uint8_t *tilingGM)
 {
 #if defined(__CCE_AICORE__)
     REGISTER_TILING_DEFAULT(DispatchFFNCombineTilingData);
@@ -59,16 +61,10 @@ extern "C" __global__ __aicore__ void dispatch_ffn_combine(__gm__ uint8_t *x, __
 void launchDispatchFFNCombine(const DispatchFFNCombineLaunchArgs &args, void *stream)
 {
     dispatch_ffn_combine<<<args.block_dim, nullptr, stream>>>(
-        static_cast<uint8_t *>(args.x),
-        static_cast<uint8_t *>(args.weight1),
-        static_cast<uint8_t *>(args.weight2),
-        static_cast<uint8_t *>(args.expert_idx),
-        static_cast<uint8_t *>(args.scale1),
-        static_cast<uint8_t *>(args.scale2),
-        static_cast<uint8_t *>(args.probs),
-        static_cast<uint8_t *>(args.x_active_mask),
-        static_cast<uint8_t *>(args.out),
-        static_cast<uint8_t *>(args.expert_token_nums),
-        static_cast<uint8_t *>(args.workspace),
+        static_cast<uint8_t *>(args.x), static_cast<uint8_t *>(args.weight1), static_cast<uint8_t *>(args.weight2),
+        static_cast<uint8_t *>(args.expert_idx), static_cast<uint8_t *>(args.scale1),
+        static_cast<uint8_t *>(args.scale2), static_cast<uint8_t *>(args.probs),
+        static_cast<uint8_t *>(args.x_active_mask), static_cast<uint8_t *>(args.out),
+        static_cast<uint8_t *>(args.expert_token_nums), static_cast<uint8_t *>(args.workspace),
         static_cast<uint8_t *>(args.tiling));
 }

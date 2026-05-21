@@ -120,8 +120,8 @@ inline void CommMpiBcast(void *buf, int count, MPI_Datatype dt, int root)
     }
 }
 
-inline void CommMpiGather(const void *sendbuf, int sendcount, MPI_Datatype sendtype,
-                          void *recvbuf, int recvcount, MPI_Datatype recvtype, int root)
+inline void CommMpiGather(const void *sendbuf, int sendcount, MPI_Datatype sendtype, void *recvbuf, int recvcount,
+                          MPI_Datatype recvtype, int root)
 {
     auto fn = comm_mpi::GetFunc<MpiGatherFunc>("MPI_Gather");
     if (fn != nullptr) {

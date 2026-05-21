@@ -85,9 +85,9 @@ PTO_INTERNAL constexpr uint32_t GetTmovAccDstStride()
     } else if constexpr (!DstTile::isRowMajor && DstTile::SFractal == SLayout::NoneBox) {
         return DstTile::Rows;
     }
-    constexpr bool channelSplitEnable = (!DstTile::isRowMajor && (DstTile::SFractal == SLayout::RowMajor)) &&
-                                        (std::is_same_v<typename DstTile::DType, float>) &&
-                                        (DstTile::SFractalSize == 512);
+    constexpr bool channelSplitEnable =
+        (!DstTile::isRowMajor && (DstTile::SFractal == SLayout::RowMajor)) &&
+        (std::is_same_v<typename DstTile::DType, float>)&&(DstTile::SFractalSize == 512);
     constexpr uint32_t c0Size = (!channelSplitEnable) &&
                                         (!DstTile::isRowMajor && (DstTile::SFractal == SLayout::RowMajor)) &&
                                         (DstTile::SFractalSize == 1024) ?
@@ -109,9 +109,9 @@ __tf__ AICORE void TMovCcToCb(typename DstTile::TileDType __out__ dst, typename 
             Dst Tile Cols * sizeof(dstType) must be multiples of 32 and not 0 when nz2nz.");
     constexpr int32_t c0Size = BLOCK_BYTE_SIZE / sizeof(dstType);
     constexpr bool enableNz2Nz = (!DstTile::isRowMajor && DstTile::SFractal == SLayout::RowMajor);
-    constexpr bool channelSplitEnable = (!DstTile::isRowMajor && (DstTile::SFractal == SLayout::RowMajor)) &&
-                                        (std::is_same_v<typename DstTile::DType, float>) &&
-                                        (DstTile::SFractalSize == 512);
+    constexpr bool channelSplitEnable =
+        (!DstTile::isRowMajor && (DstTile::SFractal == SLayout::RowMajor)) &&
+        (std::is_same_v<typename DstTile::DType, float>)&&(DstTile::SFractalSize == 512);
     if constexpr (enableNz2Nz) {
         validRow = SrcTile::Rows;
         if constexpr (std::is_same_v<typename DstTile::DType, float>) {
@@ -152,9 +152,9 @@ __tf__ AICORE void TMovCcToUb(typename DstTile::TileDType __out__ dst, typename 
     constexpr bool enableNz2Nd = (DstTile::isRowMajor && DstTile::SFractal == SLayout::NoneBox);
     constexpr bool enableNz2Dn = (!DstTile::isRowMajor && DstTile::SFractal == SLayout::NoneBox);
     constexpr bool enableNz2Nz = (!DstTile::isRowMajor && DstTile::SFractal == SLayout::RowMajor);
-    constexpr bool channelSplitEnable = (!DstTile::isRowMajor && (DstTile::SFractal == SLayout::RowMajor)) &&
-                                        (std::is_same_v<typename DstTile::DType, float>) &&
-                                        (DstTile::SFractalSize == 512);
+    constexpr bool channelSplitEnable =
+        (!DstTile::isRowMajor && (DstTile::SFractal == SLayout::RowMajor)) &&
+        (std::is_same_v<typename DstTile::DType, float>)&&(DstTile::SFractalSize == 512);
     constexpr uint32_t dstStride = GetTmovAccDstStride<DstTile, SrcTile>();
     static_assert(((dstStride * sizeof(dstType) % C0_SIZE_BYTE == 0) && ((dstStride) > 0)),
                   "Dst Tile Cols * sizeof(dstT) must be multiples of 32 and not 0 when nz2nd. \

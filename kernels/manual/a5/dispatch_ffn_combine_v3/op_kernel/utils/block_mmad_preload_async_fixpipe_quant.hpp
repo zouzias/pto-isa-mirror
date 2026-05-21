@@ -22,8 +22,7 @@ namespace detail {
 using pto_ext::dispatch_ffn_combine_v3::pto_bridge::PtoGlobalNd;
 
 template <typename TileAcc, typename TileLeft, typename TileRight>
-PTO_DEVICE void LaunchPtoMatmul(TileAcc &cTile, TileLeft &aTile, TileRight &bTile, bool initC,
-                                           uint8_t unitFlag)
+PTO_DEVICE void LaunchPtoMatmul(TileAcc &cTile, TileLeft &aTile, TileRight &bTile, bool initC, uint8_t unitFlag)
 {
     const bool isFinal = (unitFlag == 0b11);
     const bool isPartial = (unitFlag == 0b10);
@@ -48,19 +47,12 @@ PTO_DEVICE void LaunchPtoMatmul(TileAcc &cTile, TileLeft &aTile, TileRight &bTil
 }
 
 template <typename ElementAccumulator, typename ElementA, typename ElementB, class L0TileShape>
-PTO_DEVICE void PtoTileMmad(uint64_t l0COffset,
-                            uint64_t l0AOffset,
-                            uint64_t l0BOffset,
-                            uint32_t m,
-                            uint32_t n,
-                            uint32_t k,
-                            bool initC = true,
-                            uint8_t unitFlag = 0)
+PTO_DEVICE void PtoTileMmad(uint64_t l0COffset, uint64_t l0AOffset, uint64_t l0BOffset, uint32_t m, uint32_t n,
+                            uint32_t k, bool initC = true, uint8_t unitFlag = 0)
 {
     using LeftTile = pto::TileLeft<ElementA, L0TileShape::M, L0TileShape::K, pto::DYNAMIC, pto::DYNAMIC>;
     using RightTile = pto::TileRight<ElementB, L0TileShape::K, L0TileShape::N, pto::DYNAMIC, pto::DYNAMIC>;
-    using AccTile = pto::TileAccCompact<ElementAccumulator, L0TileShape::M, L0TileShape::N, pto::DYNAMIC,
-                                        pto::DYNAMIC>;
+    using AccTile = pto::TileAccCompact<ElementAccumulator, L0TileShape::M, L0TileShape::N, pto::DYNAMIC, pto::DYNAMIC>;
 
     LeftTile aTile(m, k);
     RightTile bTile(k, n);
@@ -80,10 +72,7 @@ PTO_DEVICE void PtoTileMmad(uint64_t l0COffset,
 }
 
 template <typename Element, class L0TileShape>
-PTO_DEVICE void PtoMoveL1ToL0A(uint64_t dstL0Offset,
-                               uint64_t srcL1Offset,
-                               uint32_t m,
-                               uint32_t k)
+PTO_DEVICE void PtoMoveL1ToL0A(uint64_t dstL0Offset, uint64_t srcL1Offset, uint32_t m, uint32_t k)
 {
     using SrcTile = pto::Tile<pto::TileType::Mat, Element, L0TileShape::M, L0TileShape::K, pto::BLayout::RowMajor,
                               pto::DYNAMIC, pto::DYNAMIC, pto::SLayout::ColMajor>;
@@ -97,10 +86,7 @@ PTO_DEVICE void PtoMoveL1ToL0A(uint64_t dstL0Offset,
 }
 
 template <typename Element, class L0TileShape>
-PTO_DEVICE void PtoMoveL1ToL0B(uint64_t dstL0Offset,
-                               uint64_t srcL1Offset,
-                               uint32_t k,
-                               uint32_t n)
+PTO_DEVICE void PtoMoveL1ToL0B(uint64_t dstL0Offset, uint64_t srcL1Offset, uint32_t k, uint32_t n)
 {
     using SrcTile = pto::Tile<pto::TileType::Mat, Element, L0TileShape::K, L0TileShape::N, pto::BLayout::RowMajor,
                               pto::DYNAMIC, pto::DYNAMIC, pto::SLayout::ColMajor>;
@@ -114,12 +100,10 @@ PTO_DEVICE void PtoMoveL1ToL0B(uint64_t dstL0Offset,
 }
 
 template <typename Element, int Rows, int Cols>
-PTO_DEVICE void PtoLoadNdGmToNzL1(uint64_t dstL1Offset,
-                                  __gm__ Element *src,
-                                  layout::ND const &layoutSrc)
+PTO_DEVICE void PtoLoadNdGmToNzL1(uint64_t dstL1Offset, __gm__ Element *src, layout::ND const &layoutSrc)
 {
-    using L1Tile = pto::Tile<pto::TileType::Mat, Element, Rows, Cols, pto::BLayout::ColMajor,
-                             pto::DYNAMIC, pto::DYNAMIC, pto::SLayout::RowMajor>;
+    using L1Tile = pto::Tile<pto::TileType::Mat, Element, Rows, Cols, pto::BLayout::ColMajor, pto::DYNAMIC,
+                             pto::DYNAMIC, pto::SLayout::RowMajor>;
     using SrcShape = pto::Shape<1, 1, 1, pto::DYNAMIC, pto::DYNAMIC>;
     using SrcStride = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, 1>;
     using SrcGlobal = pto::GlobalTensor<Element, SrcShape, SrcStride, pto::Layout::ND>;
@@ -130,10 +114,8 @@ PTO_DEVICE void PtoLoadNdGmToNzL1(uint64_t dstL1Offset,
 
     if (leadingDim < STRIDE_LIMIT) {
         SrcShape srcShape(rows, cols);
-        SrcStride srcStride(static_cast<int64_t>(rows) * leadingDim,
-                            static_cast<int64_t>(rows) * leadingDim,
-                            static_cast<int64_t>(rows) * leadingDim,
-                            leadingDim);
+        SrcStride srcStride(static_cast<int64_t>(rows) * leadingDim, static_cast<int64_t>(rows) * leadingDim,
+                            static_cast<int64_t>(rows) * leadingDim, leadingDim);
         SrcGlobal srcGlobal(src, srcShape, srcStride);
         L1Tile dstTile(rows, cols);
         pto::TASSIGN(dstTile, dstL1Offset);
@@ -151,14 +133,12 @@ PTO_DEVICE void PtoLoadNdGmToNzL1(uint64_t dstL1Offset,
 }
 
 template <typename Element, int Rows, int Cols>
-PTO_DEVICE void PtoLoadNzGmToNzL1(uint64_t dstL1Offset,
-                                  __gm__ Element *src,
-                                  layout::Zn const &layoutDst,
+PTO_DEVICE void PtoLoadNzGmToNzL1(uint64_t dstL1Offset, __gm__ Element *src, layout::Zn const &layoutDst,
                                   layout::Zn const &layoutSrc)
 {
     constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-    using L1Tile = pto::Tile<pto::TileType::Mat, Element, Rows, Cols, pto::BLayout::ColMajor,
-                             pto::DYNAMIC, pto::DYNAMIC, pto::SLayout::RowMajor>;
+    using L1Tile = pto::Tile<pto::TileType::Mat, Element, Rows, Cols, pto::BLayout::ColMajor, pto::DYNAMIC,
+                             pto::DYNAMIC, pto::SLayout::RowMajor>;
     using SrcShape = pto::Shape<1, pto::DYNAMIC, pto::DYNAMIC, C0_NUM_PER_FRACTAL, ELE_NUM_PER_C0>;
     using SrcStride = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, ELE_NUM_PER_C0, 1>;
     using SrcGlobal = pto::GlobalTensor<Element, SrcShape, SrcStride, pto::Layout::NZ>;
@@ -173,9 +153,7 @@ PTO_DEVICE void PtoLoadNzGmToNzL1(uint64_t dstL1Offset,
 
     if (srcColBlockStride / ELE_NUM_PER_C0 < STRIDE_LIMIT) {
         SrcShape srcShape(colBlocks, rowBlocks);
-        SrcStride srcStride(static_cast<int64_t>(srcColBlockStride) * colBlocks,
-                            srcColBlockStride,
-                            rowBlockStride);
+        SrcStride srcStride(static_cast<int64_t>(srcColBlockStride) * colBlocks, srcColBlockStride, rowBlockStride);
         SrcGlobal srcGlobal(src, srcShape, srcStride);
         L1Tile dstTile(validRows, validCols);
         pto::TASSIGN(dstTile, dstL1Offset);
@@ -183,8 +161,7 @@ PTO_DEVICE void PtoLoadNzGmToNzL1(uint64_t dstL1Offset,
     } else {
         for (uint32_t colBlock = 0; colBlock < colBlocks; ++colBlock) {
             SrcShape srcShape(1, rowBlocks);
-            SrcStride srcStride(static_cast<int64_t>(rowBlockStride) * rowBlocks,
-                                rowBlockStride * rowBlocks,
+            SrcStride srcStride(static_cast<int64_t>(rowBlockStride) * rowBlocks, rowBlockStride * rowBlocks,
                                 rowBlockStride);
             SrcGlobal srcGlobal(src + static_cast<uint64_t>(colBlock) * srcColBlockStride, srcShape, srcStride);
             L1Tile dstTile(validRows, ELE_NUM_PER_C0);
@@ -200,11 +177,11 @@ PTO_DEVICE void PtoStoreAccTileToGm(GlobalDataOut &dstGlobal, AccTile &accTile, 
     if constexpr (ReluEnable) {
         constexpr auto reluMode = pto::ReluPreMode::NormalRelu;
         if (unitFlag == 0b11) {
-            pto::TSTORE<pto::STPhase::Final, AccTile, GlobalDataOut, pto::AtomicType::AtomicNone, reluMode>(
-                dstGlobal, accTile);
+            pto::TSTORE<pto::STPhase::Final, AccTile, GlobalDataOut, pto::AtomicType::AtomicNone, reluMode>(dstGlobal,
+                                                                                                            accTile);
         } else if (unitFlag == 0b10) {
-            pto::TSTORE<pto::STPhase::Partial, AccTile, GlobalDataOut, pto::AtomicType::AtomicNone, reluMode>(
-                dstGlobal, accTile);
+            pto::TSTORE<pto::STPhase::Partial, AccTile, GlobalDataOut, pto::AtomicType::AtomicNone, reluMode>(dstGlobal,
+                                                                                                              accTile);
         } else {
             pto::TSTORE<AccTile, GlobalDataOut, pto::AtomicType::AtomicNone, reluMode>(dstGlobal, accTile);
         }
@@ -220,22 +197,20 @@ PTO_DEVICE void PtoStoreAccTileToGm(GlobalDataOut &dstGlobal, AccTile &accTile, 
 }
 
 template <typename ElementDst, typename ElementAccumulator, int Rows, int Cols, bool ReluEnable = false>
-PTO_DEVICE void PtoStoreAccToGm(__gm__ ElementDst *dst,
-                                uint64_t accOffset,
-                                uint64_t scaleOffset,
+PTO_DEVICE void PtoStoreAccToGm(__gm__ ElementDst *dst, uint64_t accOffset, uint64_t scaleOffset,
                                 layout::ND const &dstLayout)
 {
     using GlobalDataOut = PtoGlobalNd<ElementDst>;
     using AccTile = pto::TileAccCompact<ElementAccumulator, Rows, Cols, pto::DYNAMIC, pto::DYNAMIC>;
-    using ScalingTile = pto::Tile<pto::TileType::Scaling, uint64_t, 1, Cols, pto::BLayout::RowMajor, 1,
-                                  pto::DYNAMIC, pto::SLayout::NoneBox>;
+    using ScalingTile = pto::Tile<pto::TileType::Scaling, uint64_t, 1, Cols, pto::BLayout::RowMajor, 1, pto::DYNAMIC,
+                                  pto::SLayout::NoneBox>;
 
     const int validRow = static_cast<int>(dstLayout.shape(0));
     const int validCol = static_cast<int>(dstLayout.shape(1));
     const int64_t leadingDim = static_cast<int64_t>(dstLayout.stride(0));
 
-    GlobalDataOut dstGlobal = pto_ext::dispatch_ffn_combine_v3::pto_bridge::MakeGlobalFromPtr(
-        dst, validRow, validCol, leadingDim);
+    GlobalDataOut dstGlobal =
+        pto_ext::dispatch_ffn_combine_v3::pto_bridge::MakeGlobalFromPtr(dst, validRow, validCol, leadingDim);
     AccTile accTile(validRow, validCol);
     ScalingTile scalingTile(validCol);
 
@@ -244,17 +219,15 @@ PTO_DEVICE void PtoStoreAccToGm(__gm__ ElementDst *dst,
 
     if constexpr (ReluEnable) {
         constexpr auto reluMode = pto::ReluPreMode::NormalRelu;
-        pto::TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, pto::AtomicType::AtomicNone, reluMode>(
-            dstGlobal, accTile, scalingTile);
+        pto::TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, pto::AtomicType::AtomicNone, reluMode>(dstGlobal, accTile,
+                                                                                                   scalingTile);
     } else {
         pto::TSTORE_FP<AccTile, GlobalDataOut, ScalingTile>(dstGlobal, accTile, scalingTile);
     }
 }
 
 template <typename ElementDst, typename ElementAccumulator, int Rows, int Cols, bool ReluEnable = false>
-PTO_DEVICE void PtoStoreAccToGm(__gm__ ElementDst *dst,
-                                uint64_t accOffset,
-                                layout::ND const &dstLayout,
+PTO_DEVICE void PtoStoreAccToGm(__gm__ ElementDst *dst, uint64_t accOffset, layout::ND const &dstLayout,
                                 uint8_t unitFlag = 0)
 {
     using GlobalDataOut = PtoGlobalNd<ElementDst>;
@@ -264,8 +237,8 @@ PTO_DEVICE void PtoStoreAccToGm(__gm__ ElementDst *dst,
     const int validCol = static_cast<int>(dstLayout.shape(1));
     const int64_t leadingDim = static_cast<int64_t>(dstLayout.stride(0));
 
-    GlobalDataOut dstGlobal = pto_ext::dispatch_ffn_combine_v3::pto_bridge::MakeGlobalFromPtr(
-        dst, validRow, validCol, leadingDim);
+    GlobalDataOut dstGlobal =
+        pto_ext::dispatch_ffn_combine_v3::pto_bridge::MakeGlobalFromPtr(dst, validRow, validCol, leadingDim);
     AccTile accTile(validRow, validCol);
 
     pto::TASSIGN(accTile, accOffset);
@@ -273,16 +246,13 @@ PTO_DEVICE void PtoStoreAccToGm(__gm__ ElementDst *dst,
 }
 
 template <int Cols>
-PTO_DEVICE void StagePerChannelScale(uint64_t l1SOffset,
-                                     uint64_t fixpipeOffset,
-                                     __gm__ uint64_t *gmBlockS,
-                                     layout::VectorLayout const &layoutScale,
-                                     uint32_t cols)
+PTO_DEVICE void StagePerChannelScale(uint64_t l1SOffset, uint64_t fixpipeOffset, __gm__ uint64_t *gmBlockS,
+                                     layout::VectorLayout const &layoutScale, uint32_t cols)
 {
-    using ScaleMatTile = pto::Tile<pto::TileType::Mat, uint64_t, 1, Cols, pto::BLayout::RowMajor, 1,
-                                   pto::DYNAMIC, pto::SLayout::NoneBox>;
-    using ScalingTile = pto::Tile<pto::TileType::Scaling, uint64_t, 1, Cols, pto::BLayout::RowMajor, 1,
-                                  pto::DYNAMIC, pto::SLayout::NoneBox>;
+    using ScaleMatTile = pto::Tile<pto::TileType::Mat, uint64_t, 1, Cols, pto::BLayout::RowMajor, 1, pto::DYNAMIC,
+                                   pto::SLayout::NoneBox>;
+    using ScalingTile = pto::Tile<pto::TileType::Scaling, uint64_t, 1, Cols, pto::BLayout::RowMajor, 1, pto::DYNAMIC,
+                                  pto::SLayout::NoneBox>;
 
     auto layoutTileS = layoutScale.GetTileLayout(MakePtoCoord1D(cols));
     uint32_t validCols = static_cast<uint32_t>(layoutTileS.shape(0));
@@ -304,11 +274,8 @@ PTO_DEVICE void StagePerChannelScale(uint64_t l1SOffset,
 }
 
 template <typename ElementA, typename ElementC, typename ElementAccumulator, int Rows, int Cols>
-PTO_DEVICE void StoreAccumulator(__gm__ ElementC *dst,
-                                 uint64_t accOffset,
-                                 uint64_t scaleOffset,
-                                 layout::ND const &dstLayout,
-                                 uint8_t unitFlag = 0)
+PTO_DEVICE void StoreAccumulator(__gm__ ElementC *dst, uint64_t accOffset, uint64_t scaleOffset,
+                                 layout::ND const &dstLayout, uint8_t unitFlag = 0)
 {
     if constexpr (std::is_same_v<ElementA, int8_t>) {
         PtoStoreAccToGm<ElementC, ElementAccumulator, Rows, Cols>(dst, accOffset, scaleOffset, dstLayout);
@@ -325,16 +292,13 @@ struct MatmulShell {
     using LayoutB = typename BType_::Layout;
     using ElementC = typename CType_::Element;
 
-    using CopyL1ToFP = typename pto_ext::Gemm::PtoQuantTileCopy<
-        ArchTag,
-        AType_,
-        BType_,
-        CType_,
-        void,
-        pto_ext::Gemm::Tile::ScaleGranularity::PER_CHANNEL>::CopyL1ToFP;
+    using CopyL1ToFP =
+        typename pto_ext::Gemm::PtoQuantTileCopy<ArchTag, AType_, BType_, CType_, void,
+                                                 pto_ext::Gemm::Tile::ScaleGranularity::PER_CHANNEL>::CopyL1ToFP;
     using CopyL1ToL0A = typename TileCopy_::CopyL1ToL0A;
     using CopyL1ToL0B = typename TileCopy_::CopyL1ToL0B;
-    using ElementAccumulator = typename pto_ext::Gemm::PtoElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
+    using ElementAccumulator =
+        typename pto_ext::Gemm::PtoElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
     using CopyL0CToGm = typename std::conditional<
         std::is_same_v<ElementA, int8_t>,
         pto_ext::Gemm::PtoCopyL0CToGm<ArchTag, ElementAccumulator, CType_, Gemm::Tile::ScaleGranularity::PER_CHANNEL>,
@@ -347,63 +311,25 @@ struct MatmulShell {
     using L1BAlignHelper = pto_ext::Gemm::PtoL1AlignHelper<ElementB, LayoutB>;
 };
 
-}  // namespace detail
+} // namespace detail
 
-
-template<AscendC::HardEvent event>
+template <AscendC::HardEvent event>
 __aicore__ inline void SyncFlagFunc(int32_t eventID)
 {
     AscendC::SetFlag<event>(eventID);
     AscendC::WaitFlag<event>(eventID);
 }
 
-template <
-    uint32_t PRELOAD_STAGES_,
-    uint32_t L1_STAGES_,
-    uint32_t L0A_STAGES_,
-    uint32_t L0B_STAGES_,
-    uint32_t L0C_STAGES_,
-    bool ENABLE_UNIT_FLAG_,
-    bool ENABLE_SHUFFLE_K_,
-    class L1TileShape_,
-    class L0TileShape_,
-    class AType_,
-    class BType_,
-    class CType_,
-    class BiasType_,
-    class TileCopy_,
-    class TileMmad_
->
-struct BlockMmad <
-    MmadAtlasA5PreloadAsyncFixpipe<
-        PRELOAD_STAGES_,
-        L1_STAGES_,
-        L0A_STAGES_,
-        L0B_STAGES_,
-        L0C_STAGES_,
-        ENABLE_UNIT_FLAG_,
-        ENABLE_SHUFFLE_K_
-    >,
-    L1TileShape_,
-    L0TileShape_,
-    AType_,
-    BType_,
-    CType_,
-    BiasType_,
-    TileCopy_,
-    TileMmad_
-> {
+template <uint32_t PRELOAD_STAGES_, uint32_t L1_STAGES_, uint32_t L0A_STAGES_, uint32_t L0B_STAGES_,
+          uint32_t L0C_STAGES_, bool ENABLE_UNIT_FLAG_, bool ENABLE_SHUFFLE_K_, class L1TileShape_, class L0TileShape_,
+          class AType_, class BType_, class CType_, class BiasType_, class TileCopy_, class TileMmad_>
+struct BlockMmad<MmadAtlasA5PreloadAsyncFixpipe<PRELOAD_STAGES_, L1_STAGES_, L0A_STAGES_, L0B_STAGES_, L0C_STAGES_,
+                                                ENABLE_UNIT_FLAG_, ENABLE_SHUFFLE_K_>,
+                 L1TileShape_, L0TileShape_, AType_, BType_, CType_, BiasType_, TileCopy_, TileMmad_> {
 public:
     // Type Aliases
-    using DispatchPolicy = MmadAtlasA5PreloadAsyncFixpipe<
-        PRELOAD_STAGES_,
-        L1_STAGES_,
-        L0A_STAGES_,
-        L0B_STAGES_,
-        L0C_STAGES_,
-        ENABLE_UNIT_FLAG_,
-        ENABLE_SHUFFLE_K_
-    >;
+    using DispatchPolicy = MmadAtlasA5PreloadAsyncFixpipe<PRELOAD_STAGES_, L1_STAGES_, L0A_STAGES_, L0B_STAGES_,
+                                                          L0C_STAGES_, ENABLE_UNIT_FLAG_, ENABLE_SHUFFLE_K_>;
     using ArchTag = typename DispatchPolicy::ArchTag;
     using L1TileShape = L1TileShape_;
     using L0TileShape = L0TileShape_;
@@ -451,12 +377,10 @@ public:
     static_assert(std::is_same_v<LayoutC, layout::ND>, "LayoutC only supports ND.");
 
     // Check L1TileShape
-    static_assert(
-        (std::is_same_v<ElementA, int8_t> 
-            ? (L1A_TILE_SIZE + L1B_TILE_SIZE + L1S_TILE_SIZE) * L1_STAGES <= ArchTag::L1_SIZE
-            : (L1A_TILE_SIZE + L1B_TILE_SIZE) * L1_STAGES <= ArchTag::L1_SIZE),
-        "L1TileShape exceeding the L1 space for the given data type"
-    );
+    static_assert((std::is_same_v<ElementA, int8_t> ?
+                       (L1A_TILE_SIZE + L1B_TILE_SIZE + L1S_TILE_SIZE) * L1_STAGES <= ArchTag::L1_SIZE :
+                       (L1A_TILE_SIZE + L1B_TILE_SIZE) * L1_STAGES <= ArchTag::L1_SIZE),
+                  "L1TileShape exceeding the L1 space for the given data type");
 
     // Check L0TileShape
     static_assert(L0A_TILE_SIZE * L0A_STAGES <= ArchTag::L0A_SIZE, "L0TileShape exceeding the L0A space!");
@@ -464,7 +388,7 @@ public:
     static_assert(L0C_TILE_SIZE * L0C_STAGES <= ArchTag::L0C_SIZE, "L0TileShape exceeding the L0C space!");
 
     static_assert(L1TileShape::M == L0TileShape::M && L1TileShape::N == L0TileShape::N,
-        "The situation where the basic blocks of L1 and L0 differ on the m and n axes is not supported yet");
+                  "The situation where the basic blocks of L1 and L0 differ on the m and n axes is not supported yet");
 
     PTO_DEVICE static LayoutAInL1 MakeL1ALayout()
     {
@@ -510,13 +434,10 @@ public:
     }
 
     PTO_DEVICE
-    void operator()(
-        __gm__ ElementA *gmBlockAPtr, LayoutA const &layoutA,
-        __gm__ ElementB *gmBlockBPtr, LayoutB const &layoutB,
-        __gm__ ElementC *gmBlockCPtr, LayoutC const &layoutC,
-        __gm__ uint64_t *gmBlockSPtr, layout::VectorLayout const &layoutScale,
-        PtoShape3D const &actualShape, int32_t syncLoopIdx = -1, int32_t flag = 0
-    )
+    void operator()(__gm__ ElementA *gmBlockAPtr, LayoutA const &layoutA, __gm__ ElementB *gmBlockBPtr,
+                    LayoutB const &layoutB, __gm__ ElementC *gmBlockCPtr, LayoutC const &layoutC,
+                    __gm__ uint64_t *gmBlockSPtr, layout::VectorLayout const &layoutScale,
+                    PtoShape3D const &actualShape, int32_t syncLoopIdx = -1, int32_t flag = 0)
     {
         uint32_t actualM = GetPtoShapeM(actualShape);
         uint32_t actualN = GetPtoShapeN(actualShape);
@@ -532,11 +453,10 @@ public:
         }
 
         for (uint32_t kLoopIdx = 0; kLoopIdx < kTileCount; ++kLoopIdx) {
-            uint32_t kTileIdx = (startTileIdx + kLoopIdx < kTileCount) ?
-                (startTileIdx + kLoopIdx) : (startTileIdx + kLoopIdx - kTileCount);
+            uint32_t kTileIdx = (startTileIdx + kLoopIdx < kTileCount) ? (startTileIdx + kLoopIdx) :
+                                                                         (startTileIdx + kLoopIdx - kTileCount);
 
-            uint32_t kActual = (kTileIdx < kTileCount - 1) ?
-                L1TileShape::K : (actualK - kTileIdx * L1TileShape::K);
+            uint32_t kActual = (kTileIdx < kTileCount - 1) ? L1TileShape::K : (actualK - kTileIdx * L1TileShape::K);
 
             // Emission load instruction from GM to L1
             auto gmTileAOffset = MakePtoCoord2D(0, kTileIdx * L1TileShape::K);
@@ -546,14 +466,14 @@ public:
             // Load first matrix A tile from GM to L1
             AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
             auto layoutTileA = layoutA.GetTileLayout(MakePtoCoord2D(actualM, kActual));
-            detail::PtoLoadNdGmToNzL1<ElementA, L1TileShape::M, L1TileShape::K>(
-                l1AOffsetList[l1ListId], gmTileA, layoutTileA);
+            detail::PtoLoadNdGmToNzL1<ElementA, L1TileShape::M, L1TileShape::K>(l1AOffsetList[l1ListId], gmTileA,
+                                                                                layoutTileA);
             AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
             // Load first matrix B tile from GM to L1
             AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
             auto layoutTileB = layoutB.GetTileLayout(MakePtoCoord2D(kActual, actualN));
-            detail::PtoLoadNzGmToNzL1<ElementB, L1TileShape::K, L1TileShape::N>(
-                l1BOffsetList[l1ListId], gmTileB, MakeL1BLayout(), layoutTileB);
+            detail::PtoLoadNzGmToNzL1<ElementB, L1TileShape::K, L1TileShape::N>(l1BOffsetList[l1ListId], gmTileB,
+                                                                                MakeL1BLayout(), layoutTileB);
             AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
 
             // If the number of preload instructions reaches the upper limit, perform an mmad calculation on L1 tile
@@ -563,7 +483,8 @@ public:
 
             // Store the current load status
             uint32_t preloadL1TileMmadParamsId = (l1TileMmadParamsId + preloadCount < PRELOAD_STAGES) ?
-                (l1TileMmadParamsId + preloadCount) : (l1TileMmadParamsId + preloadCount - PRELOAD_STAGES);
+                                                     (l1TileMmadParamsId + preloadCount) :
+                                                     (l1TileMmadParamsId + preloadCount - PRELOAD_STAGES);
             auto &l1TileMmadParams = l1TileMmadParamsList[preloadL1TileMmadParamsId];
             l1TileMmadParams.l1ListId = l1ListId;
             l1TileMmadParams.mRound = mRound;
@@ -602,11 +523,12 @@ public:
     PTO_DEVICE
     void Finalize(int32_t target, int32_t flag = 0)
     {
-        for(;syncGroupIdx <= target; syncGroupIdx++) {
+        for (; syncGroupIdx <= target; syncGroupIdx++) {
             int32_t flagId = syncGroupIdx / 15 + flag;
             AscendC::CrossCoreSetFlag<0x2, PIPE_FIX>(flagId);
         }
     }
+
 private:
     struct L1TileMmadParams {
         uint32_t l1ListId;
@@ -698,45 +620,51 @@ private:
         }
 
         for (uint32_t mPartIdx = 0; mPartIdx < mPartLoop; ++mPartIdx) {
-            uint32_t mPartActual = (mPartIdx < mPartLoop - 1) ?
-                L0TileShape::M : (params.mRound - mPartIdx * L0TileShape::M);
+            uint32_t mPartActual =
+                (mPartIdx < mPartLoop - 1) ? L0TileShape::M : (params.mRound - mPartIdx * L0TileShape::M);
 
             for (uint32_t kPartIdx = 0; kPartIdx < kPartLoop; ++kPartIdx) {
-                uint32_t kPartActual = (kPartIdx < kPartLoop - 1) ?
-                    L0TileShape::K : (params.kActual - kPartIdx * L0TileShape::K);
+                uint32_t kPartActual =
+                    (kPartIdx < kPartLoop - 1) ? L0TileShape::K : (params.kActual - kPartIdx * L0TileShape::K);
 
                 auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(mPartActual, kPartActual);
                 auto l1AOffset = MulPtoCoord2D(MakePtoCoord2D(mPartIdx, kPartIdx), L0TileShape::ToPtoShapeMK());
-                const uint64_t l1AOffsetBytes = l1AOffsetList[params.l1ListId] +
+                const uint64_t l1AOffsetBytes =
+                    l1AOffsetList[params.l1ListId] +
                     static_cast<uint64_t>(MakeL1ALayout().GetOffset(l1AOffset)) * sizeof(ElementA);
-                const uint64_t l0AStagingOffsetBytes = l0AOffsetList[l0AListId] +
+                const uint64_t l0AStagingOffsetBytes =
+                    l0AOffsetList[l0AListId] +
                     static_cast<uint64_t>(layoutAInL0.GetOffset(MakePtoCoord2D(0, 0))) * sizeof(ElementA);
 
                 AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
                 if ((mPartIdx == 0) && (kPartIdx == 0)) {
                     AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[params.l1ListId]);
                 }
-                detail::PtoMoveL1ToL0A<ElementA, L0TileShape>(l0AStagingOffsetBytes, l1AOffsetBytes, mPartActual, kPartActual);
+                detail::PtoMoveL1ToL0A<ElementA, L0TileShape>(l0AStagingOffsetBytes, l1AOffsetBytes, mPartActual,
+                                                              kPartActual);
                 if ((mPartIdx == mPartLoop - 1) && (kPartIdx == kPartLoop - 1)) {
                     AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[params.l1ListId]);
                 }
 
                 for (uint32_t nPartIdx = 0; nPartIdx < nPartLoop; ++nPartIdx) {
-                    uint32_t nPartActual = (nPartIdx < nPartLoop - 1) ?
-                        L0TileShape::N : (params.nRound - nPartIdx * L0TileShape::N);
+                    uint32_t nPartActual =
+                        (nPartIdx < nPartLoop - 1) ? L0TileShape::N : (params.nRound - nPartIdx * L0TileShape::N);
 
                     auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(kPartActual, nPartActual);
                     auto l1BOffset = MulPtoCoord2D(MakePtoCoord2D(kPartIdx, nPartIdx), L0TileShape::ToPtoShapeKN());
-                    const uint64_t l1BOffsetBytes = l1BOffsetList[params.l1ListId] +
+                    const uint64_t l1BOffsetBytes =
+                        l1BOffsetList[params.l1ListId] +
                         static_cast<uint64_t>(MakeL1BLayout().GetOffset(l1BOffset)) * sizeof(ElementB);
-                    const uint64_t l0BStagingOffsetBytes = l0BOffsetList[l0BListId] +
+                    const uint64_t l0BStagingOffsetBytes =
+                        l0BOffsetList[l0BListId] +
                         static_cast<uint64_t>(layoutBInL0.GetOffset(MakePtoCoord2D(0, 0))) * sizeof(ElementB);
 
                     AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
                     if ((kPartIdx == 0) && (nPartIdx == 0)) {
                         AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[params.l1ListId]);
                     }
-                    detail::PtoMoveL1ToL0B<ElementB, L0TileShape>(l0BStagingOffsetBytes, l1BOffsetBytes, kPartActual, nPartActual);
+                    detail::PtoMoveL1ToL0B<ElementB, L0TileShape>(l0BStagingOffsetBytes, l1BOffsetBytes, kPartActual,
+                                                                  nPartActual);
                     if ((kPartIdx == kPartLoop - 1) && (nPartIdx == nPartLoop - 1)) {
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[params.l1ListId]);
                     }
@@ -751,21 +679,25 @@ private:
                     // If the unit flag is enabled, the unit flag is set according to the calculation progress
                     uint8_t unitFlag = 0b00;
                     if constexpr (ENABLE_UNIT_FLAG) {
-                        if (params.isKLoopLast &&
-                            (mPartIdx == mPartLoop - 1) && (kPartIdx == kPartLoop - 1) && (nPartIdx == nPartLoop - 1)) {
+                        if (params.isKLoopLast && (mPartIdx == mPartLoop - 1) && (kPartIdx == kPartLoop - 1) &&
+                            (nPartIdx == nPartLoop - 1)) {
                             unitFlag = 0b11;
                         } else {
                             unitFlag = 0b10;
                         }
                     }
-                    const uint64_t l0AOffsetBytes = l0AOffsetList[l0AListId] +
+                    const uint64_t l0AOffsetBytes =
+                        l0AOffsetList[l0AListId] +
                         static_cast<uint64_t>(layoutAInL0.GetOffset(MakePtoCoord2D(0, 0))) * sizeof(ElementA);
-                    const uint64_t l0BOffsetBytes = l0BOffsetList[l0BListId] +
+                    const uint64_t l0BOffsetBytes =
+                        l0BOffsetList[l0BListId] +
                         static_cast<uint64_t>(layoutBInL0.GetOffset(MakePtoCoord2D(0, 0))) * sizeof(ElementB);
-                    const uint64_t l0COffsetBytes = l0COffsetList[l0CListId] +
+                    const uint64_t l0COffsetBytes =
+                        l0COffsetList[l0CListId] +
                         static_cast<uint64_t>(layoutCInL0.GetOffset(l0COffset)) * sizeof(ElementAccumulator);
                     detail::PtoTileMmad<ElementAccumulator, ElementA, ElementB, L0TileShape>(
-                        l0COffsetBytes, l0AOffsetBytes, l0BOffsetBytes, mPartActual, nPartActual, kPartActual, initC, unitFlag);
+                        l0COffsetBytes, l0AOffsetBytes, l0BOffsetBytes, mPartActual, nPartActual, kPartActual, initC,
+                        unitFlag);
 
                     AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
                     l0BListId = (l0BListId + 1 < L0B_STAGES) ? (l0BListId + 1) : 0;
@@ -779,12 +711,8 @@ private:
             auto layoutCInGm = params.layoutCInGm;
             if constexpr (std::is_same_v<ElementA, int8_t>) {
                 AscendC::WaitFlag<AscendC::HardEvent::FIX_MTE2>(0);
-                detail::StagePerChannelScale<L1TileShape::N>(
-                    l1SBaseOffset,
-                    fixpipeBaseOffset,
-                    params.gmBlockS,
-                    params.layoutScale,
-                    layoutCInGm.shape(1));
+                detail::StagePerChannelScale<L1TileShape::N>(l1SBaseOffset, fixpipeBaseOffset, params.gmBlockS,
+                                                             params.layoutScale, layoutCInGm.shape(1));
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_FIX>(0);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_FIX>(0);
                 AscendC::PipeBarrier<PIPE_FIX>();
@@ -803,14 +731,14 @@ private:
             if constexpr (std::is_same_v<ElementA, int8_t>) {
                 AscendC::SetFlag<AscendC::HardEvent::FIX_MTE2>(0);
             }
-            #ifdef __TILE_SYNC__
+#ifdef __TILE_SYNC__
             if (params.flag > 0) {
                 int32_t flagId = params.flag + params.syncLoopIdx / 8;
                 AscendC::CrossCoreSetFlag<0x2, PIPE_FIX>(flagId);
             }
-            #else
+#else
             Finalize(params.syncLoopIdx, params.flag);
-            #endif
+#endif
         }
     }
 
@@ -843,6 +771,6 @@ private:
     TileMmad tileMmad;
 };
 
-}  // namespace pto_ext::Gemm::Block
+} // namespace pto_ext::Gemm::Block
 
-#endif  // PTO_EXT_GEMM_BLOCK_MMAD_PRELOAD_FIXPIPE_QUANT_HPP
+#endif // PTO_EXT_GEMM_BLOCK_MMAD_PRELOAD_FIXPIPE_QUANT_HPP

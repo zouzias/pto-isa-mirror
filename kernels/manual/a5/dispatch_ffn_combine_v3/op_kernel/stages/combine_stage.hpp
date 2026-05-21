@@ -9,6 +9,6 @@ PTO_DEVICE void RunCombineStage(Kernel &kernel, typename Kernel::Params const &p
     kernel.RunCombineImpl(params);
 }
 
-}  // namespace pto_ext::Gemm::Kernel::stages
+} // namespace pto_ext::Gemm::Kernel::stages
 
-#endif  // DISPATCH_FFN_COMBINE_V3_STAGES_COMBINE_STAGE_HPP
+#endif // DISPATCH_FFN_COMBINE_V3_STAGES_COMBINE_STAGE_HPP

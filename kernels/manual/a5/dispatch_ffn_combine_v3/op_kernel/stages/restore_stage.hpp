@@ -9,6 +9,6 @@ PTO_DEVICE void RunRestoreStage(Kernel &kernel, typename Kernel::Params const &p
     kernel.RunRestoreImpl(params);
 }
 
-}  // namespace pto_ext::Gemm::Kernel::stages
+} // namespace pto_ext::Gemm::Kernel::stages
 
-#endif  // DISPATCH_FFN_COMBINE_V3_STAGES_RESTORE_STAGE_HPP
+#endif // DISPATCH_FFN_COMBINE_V3_STAGES_RESTORE_STAGE_HPP

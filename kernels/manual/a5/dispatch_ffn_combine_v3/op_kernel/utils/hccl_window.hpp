@@ -54,7 +54,10 @@ FORCE_INLINE_AICORE void pto_sync_all()
 
 class PtoRemoteWindow {
 public:
-    FORCE_INLINE_AICORE PtoRemoteWindow() { segmentBytes_ = PTO_REMOTE_WINDOW_MEM; }
+    FORCE_INLINE_AICORE PtoRemoteWindow()
+    {
+        segmentBytes_ = PTO_REMOTE_WINDOW_MEM;
+    }
 
     FORCE_INLINE_AICORE void Init(GM_ADDR remoteWindowContext)
     {

@@ -664,7 +664,7 @@ struct TMPipe {
                 }
             }
         } // end of store
-    }; // end of Producer
+    };    // end of Producer
 
     struct Consumer {
         int tile_id = 0;

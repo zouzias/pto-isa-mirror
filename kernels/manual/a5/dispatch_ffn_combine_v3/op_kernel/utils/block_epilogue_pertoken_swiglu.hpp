@@ -55,26 +55,13 @@ PTO_DEVICE void PtoWaitFlag(int32_t eventId)
     AscendC::WaitFlag<Event>(eventId);
 }
 
-}  // namespace swiglu_detail
-
+} // namespace swiglu_detail
 
 // float scale, dequant per expert
-template <
-    uint32_t UB_STAGES_,
-    class CType_,
-    class LayoutPerTokenScale_,
-    class DType_,
-    class TileElemWiseMuls_,
-    class TileCopy_
->
-class BlockEpilogue <
-    EpilogueAtlasA5PerTokenDequantSwigluQuant<UB_STAGES_>,
-    CType_,
-    Gemm::GemmType<float, LayoutPerTokenScale_>,
-    DType_,
-    TileElemWiseMuls_,
-    TileCopy_
-> {
+template <uint32_t UB_STAGES_, class CType_, class LayoutPerTokenScale_, class DType_, class TileElemWiseMuls_,
+          class TileCopy_>
+class BlockEpilogue<EpilogueAtlasA5PerTokenDequantSwigluQuant<UB_STAGES_>, CType_,
+                    Gemm::GemmType<float, LayoutPerTokenScale_>, DType_, TileElemWiseMuls_, TileCopy_> {
 public:
     using DispatchPolicy = EpilogueAtlasA5PerTokenDequantSwigluQuant<UB_STAGES_>;
     using ArchTag = typename DispatchPolicy::ArchTag;
@@ -89,15 +76,12 @@ public:
     using LayoutD = typename DType_::Layout;
 
     // Check data infos
-    static_assert(
-        std::is_same_v<ElementC, half> && (std::is_same_v<ElementD, float> || std::is_same_v<ElementD, int8_t>),
-        "The element type template parameters of BlockEpilogue are wrong"
-    );
-    static_assert(
-        std::is_same_v<LayoutC, layout::ND> &&
-            std::is_same_v<LayoutPerTokenScale, layout::VectorLayout> && std::is_same_v<LayoutD, layout::ND>,
-        "The layout template parameters of BlockEpilogue are wrong"
-    );
+    static_assert(std::is_same_v<ElementC, half> &&
+                      (std::is_same_v<ElementD, float> || std::is_same_v<ElementD, int8_t>),
+                  "The element type template parameters of BlockEpilogue are wrong");
+    static_assert(std::is_same_v<LayoutC, layout::ND> && std::is_same_v<LayoutPerTokenScale, layout::VectorLayout> &&
+                      std::is_same_v<LayoutD, layout::ND>,
+                  "The layout template parameters of BlockEpilogue are wrong");
 
     struct Params {
         __gm__ ElementPerTokenScale *ptrPerTokenScale{nullptr};
@@ -106,13 +90,16 @@ public:
         LayoutD layoutD{};
 
         PTO_DEVICE
-        Params() {};
+        Params(){};
 
         PTO_DEVICE
         Params(__gm__ ElementPerTokenScale *ptrPerTokenScale_, LayoutPerTokenScale const &layoutPerTokenScale_,
-            __gm__ ElementD *ptrD_, LayoutD const &layoutD_
-        ) : ptrPerTokenScale(ptrPerTokenScale_), layoutPerTokenScale(layoutPerTokenScale_),
-            ptrD(ptrD_), layoutD(layoutD_) {}
+               __gm__ ElementD *ptrD_, LayoutD const &layoutD_)
+            : ptrPerTokenScale(ptrPerTokenScale_),
+              layoutPerTokenScale(layoutPerTokenScale_),
+              ptrD(ptrD_),
+              layoutD(layoutD_)
+        {}
     };
 
     PTO_DEVICE
@@ -162,8 +149,7 @@ public:
     }
     PTO_DEVICE
     ~BlockEpilogue()
-    {
-    }
+    {}
 
     PTO_DEVICE
     void UpdateParams(Params const &params_)
@@ -172,17 +158,11 @@ public:
     }
     // Each tile is 1x7168, and each block covers all tokens for one expert = [group[i], 7168]
     template <typename CallbackT = pto_ext::support::NoopCallback>
-    PTO_DEVICE
-    void operator() (
-        __gm__ ElementC *gmCPtr,
-        PtoShape2D const &shapeC,
-        __gm__ ElementPerTokenScale *gmPerTokenScale1Ptr,
-        __gm__ ElementD *gmDPtr,
-        __gm__ ElementPerTokenScale *gmPerTokenScale2Ptr,
+    PTO_DEVICE void operator()(__gm__ ElementC *gmCPtr, PtoShape2D const &shapeC,
+                               __gm__ ElementPerTokenScale *gmPerTokenScale1Ptr, __gm__ ElementD *gmDPtr,
+                               __gm__ ElementPerTokenScale *gmPerTokenScale2Ptr,
 
-        uint32_t epilogueCoreNum = 40,
-        CallbackT &&callback = CallbackT{}
-    )
+                               uint32_t epilogueCoreNum = 40, CallbackT &&callback = CallbackT{})
     {
         callback();
         uint32_t blockM = static_cast<uint32_t>(shapeC.shape[0]);
@@ -199,20 +179,19 @@ public:
         }
         uint32_t epilogueCoreIdx = subblockIdx - moveDataCoreNum;
 
-        uint32_t perCoreData =  blockM / epilogueCoreNum;
+        uint32_t perCoreData = blockM / epilogueCoreNum;
         uint32_t remainderData = blockM % epilogueCoreNum;
 
-        uint32_t tasksForIdx  = epilogueCoreIdx < remainderData ? perCoreData + 1 : perCoreData;
-        uint32_t loopStartIdx = epilogueCoreIdx * perCoreData + (epilogueCoreIdx < remainderData? epilogueCoreIdx : remainderData);
+        uint32_t tasksForIdx = epilogueCoreIdx < remainderData ? perCoreData + 1 : perCoreData;
+        uint32_t loopStartIdx =
+            epilogueCoreIdx * perCoreData + (epilogueCoreIdx < remainderData ? epilogueCoreIdx : remainderData);
 
         uint32_t alignedPerCoreData = RoundUp<BYTE_PER_BLK / sizeof(ElementPerTokenScale)>(perCoreData + 1);
 
         uint32_t ChunkTileLen = blockN / 2;
         uint32_t HalfChunkTileLen = ChunkTileLen / 2;
 
-
         for (uint32_t loopIdx = loopStartIdx; loopIdx < loopStartIdx + tasksForIdx; ++loopIdx) {
-
             __gm__ ElementC *gmTileC = gmCPtr + loopIdx * blockN;
 
             auto ubCOffset = ubCOffsetList[ubListId];
@@ -254,7 +233,9 @@ public:
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
             swiglu_detail::PtoDivVector<float>(ubCFp32ChunkNOffset, ubCFp32Offset, ubCFp32ChunkNOffset, ChunkTileLen);
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
-            swiglu_detail::PtoMulElementwiseVector<float>(ubCFp32ChunkNOffset, ubCFp32ChunkNOffset, ubCFp32Offset + static_cast<uint64_t>(ChunkTileLen) * sizeof(float), ChunkTileLen);
+            swiglu_detail::PtoMulElementwiseVector<float>(
+                ubCFp32ChunkNOffset, ubCFp32ChunkNOffset,
+                ubCFp32Offset + static_cast<uint64_t>(ChunkTileLen) * sizeof(float), ChunkTileLen);
 
             // Quantization process; difference between the two approaches
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
@@ -267,24 +248,29 @@ public:
             swiglu_detail::PtoSetFlag<AscendC::HardEvent::V_S>(0);
             swiglu_detail::PtoWaitFlag<AscendC::HardEvent::V_S>(0);
 
-            ElementPerTokenScale GMubDequantScale = swiglu_detail::PtoGetValue<ElementPerTokenScale>(ubReduceMaxOffset, 0);
+            ElementPerTokenScale GMubDequantScale =
+                swiglu_detail::PtoGetValue<ElementPerTokenScale>(ubReduceMaxOffset, 0);
             swiglu_detail::PtoSetFlag<AscendC::HardEvent::S_V>(0);
 
             auto ubPerTokenScaleOutputElemOffset = loopIdx - loopStartIdx;
-            swiglu_detail::PtoSetValue<ElementPerTokenScale>(ubPerTokenScaleOutputOffset, ubPerTokenScaleOutputElemOffset, GMubDequantScale / 127.f);
+            swiglu_detail::PtoSetValue<ElementPerTokenScale>(ubPerTokenScaleOutputOffset,
+                                                             ubPerTokenScaleOutputElemOffset, GMubDequantScale / 127.f);
 
             swiglu_detail::PtoWaitFlag<AscendC::HardEvent::S_V>(0);
             swiglu_detail::PtoMulVector(ubOutputTmpOffset, ubCFp32ChunkNOffset, ChunkTileLen, 127.f / GMubDequantScale);
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
 
-            swiglu_detail::PtoCastVector<int32_t, float>(ubQuantScratchOffset, ubOutputTmpOffset, ChunkTileLen, pto::RoundMode::CAST_RINT);
+            swiglu_detail::PtoCastVector<int32_t, float>(ubQuantScratchOffset, ubOutputTmpOffset, ChunkTileLen,
+                                                         pto::RoundMode::CAST_RINT);
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
             AscendC::SetDeqScale(static_cast<half>(1.0));
-            swiglu_detail::PtoCastVector<half, int32_t>(ubQuantScratchOffset, ubQuantScratchOffset, ChunkTileLen, pto::RoundMode::CAST_RINT);
+            swiglu_detail::PtoCastVector<half, int32_t>(ubQuantScratchOffset, ubQuantScratchOffset, ChunkTileLen,
+                                                        pto::RoundMode::CAST_RINT);
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
 
             swiglu_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(eventUbDVMTE3List[ubListId]);
-            swiglu_detail::PtoCastVector<ElementD, half>(ubDOffset, ubQuantScratchOffset, ChunkTileLen, pto::RoundMode::CAST_RINT);
+            swiglu_detail::PtoCastVector<ElementD, half>(ubDOffset, ubQuantScratchOffset, ChunkTileLen,
+                                                         pto::RoundMode::CAST_RINT);
             swiglu_detail::PtoSetFlag<AscendC::HardEvent::V_MTE3>(eventUbDMTE3VList[ubListId]);
 
             swiglu_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
@@ -293,14 +279,13 @@ public:
             ubListId = (ubListId + 1 < UB_STAGES) ? (ubListId + 1) : 0;
         }
 
-        if(tasksForIdx > 0){
+        if (tasksForIdx > 0) {
             swiglu_detail::PtoSetFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
             swiglu_detail::PtoWaitFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
 
-            swiglu_detail::PtoStoreVector<ElementPerTokenScale>(gmPerTokenScale2Ptr + loopStartIdx, ubPerTokenScaleOutputOffset, tasksForIdx);
+            swiglu_detail::PtoStoreVector<ElementPerTokenScale>(gmPerTokenScale2Ptr + loopStartIdx,
+                                                                ubPerTokenScaleOutputOffset, tasksForIdx);
         }
-
-
     }
 
 private:
@@ -321,9 +306,8 @@ private:
     uint64_t ubCFp32ChunkNAbsOffsetList[UB_STAGES];
     uint64_t ubCFp32ChunkNMaxOffsetList[UB_STAGES];
     uint64_t ubPerTokenScaleOutputOffset{0};
-
 };
 
-}  // namespace pto_ext::Epilogue::Block
+} // namespace pto_ext::Epilogue::Block
 
-#endif  // PTO_EXT_EPILOGUE_BLOCK_PER_TOKEN_SWIGLU_HPP
+#endif // PTO_EXT_EPILOGUE_BLOCK_PER_TOKEN_SWIGLU_HPP

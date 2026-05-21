@@ -23,17 +23,14 @@ PTO_INTERNAL PtoGlobalNd<Element> MakeContiguousGlobalFromPtr(__gm__ Element *pt
 }
 
 template <typename Element>
-PTO_INTERNAL PtoGlobalNd<Element> MakeGlobalFromPtr(__gm__ Element *ptr,
-                                                 int64_t validRow,
-                                                 int64_t validCol,
-                                                 int64_t leadingDim)
+PTO_INTERNAL PtoGlobalNd<Element> MakeGlobalFromPtr(__gm__ Element *ptr, int64_t validRow, int64_t validCol,
+                                                    int64_t leadingDim)
 {
     PtoShapeDyn shape(1, 1, 1, validRow, validCol);
     PtoStrideDyn stride(validRow * leadingDim, validRow * leadingDim, validRow * leadingDim, leadingDim, 1);
     return PtoGlobalNd<Element>(ptr, shape, stride);
 }
 
+} // namespace pto_ext::dispatch_ffn_combine_v3::pto_bridge
 
-}  // namespace pto_ext::dispatch_ffn_combine_v3::pto_bridge
-
-#endif  // PTO_EXT_DISPATCH_FFN_COMBINE_V3_PTO_GLOBAL_VIEW_HPP
+#endif // PTO_EXT_DISPATCH_FFN_COMBINE_V3_PTO_GLOBAL_VIEW_HPP
