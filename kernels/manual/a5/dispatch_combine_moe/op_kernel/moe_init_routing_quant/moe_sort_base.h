@@ -9,21 +9,21 @@
  */
 
 /*!
- * \file moe_v2_sort_base.h
+ * \file moe_sort_base.h
  * \brief
  */
-#ifndef INNER_MOE_V2_SORT_BASE_H
-#define INNER_MOE_V2_SORT_BASE_H
+#ifndef INNER_MOE_SORT_BASE_H
+#define INNER_MOE_SORT_BASE_H
 
 #include "kernel_operator.h"
-#include "moe_v2_pto_sort.h"
+#include "moe_pto_sort.h"
 
-namespace MoeInitRoutingQuantV2 {
+namespace MoeInitRoutingQuant {
 using namespace AscendC;
 using namespace optiling;
-class MoeV2SortBase {
+class MoeSortBase {
 public:
-    __aicore__ inline MoeV2SortBase(){};
+    __aicore__ inline MoeSortBase(){};
 
 protected:
     __aicore__ inline void SyncAll();
@@ -56,7 +56,7 @@ protected:
     static constexpr int64_t DST_REP_STRIDE = 8;
 };
 
-__aicore__ inline void MoeV2SortBase::SyncAll()
+__aicore__ inline void MoeSortBase::SyncAll()
 {
     if (coreNum == 1) {
         return;
@@ -64,5 +64,5 @@ __aicore__ inline void MoeV2SortBase::SyncAll()
     pto_detail::PtoSyncAll();
 }
 
-} // namespace MoeInitRoutingQuantV2
-#endif // INNER_MOE_V2_SORT_BASE_H
+} // namespace MoeInitRoutingQuant
+#endif // INNER_MOE_SORT_BASE_H

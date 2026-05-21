@@ -4,7 +4,7 @@
 #include <stdexcept>
 
 #include "op_kernel/utils/const_args.hpp"
-#include "moe_init_routing_quant_v2/moe_init_routing_quant_v2_tiling.h"
+#include "moe_init_routing_quant/moe_init_routing_quant_tiling.h"
 #include "tiling/platform/platform_ascendc.h"
 
 namespace {
@@ -84,7 +84,7 @@ void ValidateRemoteWindowCapacity(const CaseConfig &cfg, const StandaloneRankRun
 
 void FillInitRoutingTiling(CoCTiling &coc, const CaseConfig &cfg, uint32_t aivNum)
 {
-    optiling::MoeInitRoutingQuantV2TilingBase tilingBase;
+    optiling::MoeInitRoutingQuantTilingBase tilingBase;
     const int64_t inputXDtypeSize = sizeof(int16_t);
     const int64_t scaleDim0 = 0;
     const int64_t ubSize = 196352;
@@ -99,10 +99,10 @@ void FillInitRoutingTiling(CoCTiling &coc, const CaseConfig &cfg, uint32_t aivNu
     if (!tilingBase.DoTiling(cfg.m, cfg.k, cfg.topk, expertCapacity, expertNum, activeNum, dropPadMode,
                              expertTokensCountOrCumsumFlag, expertTokensBeforeCapacityFlag, inputXDtypeSize, quantMode,
                              scaleDim0, aivNumInitRouting, ubSize)) {
-        throw std::runtime_error("MoeInitRoutingQuantV2TilingBase::DoTiling failed");
+        throw std::runtime_error("MoeInitRoutingQuantTilingBase::DoTiling failed");
     }
     coc.initRoutingQuantTilingKey = tilingBase.tilingKey_;
-    coc.moeInitRoutingQuantV2TilingData = tilingBase.quantTilingData;
+    coc.moeInitRoutingQuantTilingData = tilingBase.quantTilingData;
 }
 } // namespace
 

@@ -26,9 +26,9 @@
 #include "utils/hccl_window.hpp"
 #include "utils/const_args.hpp"
 #include "utils/layout3d.hpp"
-#include "moe_init_routing_quant_v2/moe_init_routing_quant_v2_tiling.h"
-#include "moe_init_routing_quant_v2/moe_init_routing_quant_v2.cpp"
-#include "moe_init_routing_quant_v2/moe_v2_fullload_dynamic_quant.h"
+#include "moe_init_routing_quant/moe_init_routing_quant_tiling.h"
+#include "moe_init_routing_quant/moe_init_routing_quant.cpp"
+#include "moe_init_routing_quant/moe_fullload_dynamic_quant.h"
 #include "unpermute/moe_token_unpermute.h"
 
 inline __gm__ struct OpSystemRunCfg g_opSystemRunCfg {
@@ -148,8 +148,8 @@ public:
         GM_ADDR remoteWindowContext;
         //--------------
         GM_ADDR expertIdx;
-        GM_ADDR moeInitRoutingQuantV2Scale;
-        GM_ADDR moeInitRoutingQuantV2Offset;
+        GM_ADDR moeInitRoutingQuantScale;
+        GM_ADDR moeInitRoutingQuantOffset;
         GM_ADDR expandedX;
         GM_ADDR expandedRowIdx;
         GM_ADDR expertTokensCountOrCumsum;
@@ -161,7 +161,7 @@ public:
         uint64_t initRoutingQuantTilingKey;
         uint32_t epilogueCoreNum;
         uint32_t epilogueGranularity;
-        optiling::MoeInitRoutingQuantV2TilingData moeInitRoutingQuantV2TilingData;
+        optiling::MoeInitRoutingQuantTilingData moeInitRoutingQuantTilingData;
         //--------------
 
         // Methods
@@ -177,9 +177,9 @@ public:
                LayoutA layoutA2_, GM_ADDR ptrB1_, LayoutB layoutB1_, GM_ADDR ptrB2_, LayoutB layoutB2_,
                GM_ADDR ptrScale1_, LayoutScale layoutScale1_, GM_ADDR ptrScale2_, LayoutScale layoutScale2_,
                GM_ADDR ptrOutput_, LayoutD2 layoutD1_, LayoutD2 layoutD2_, GM_ADDR expertIdx_,
-               GM_ADDR moeInitRoutingQuantV2Scale_, GM_ADDR moeInitRoutingQuantV2Offset_,
+               GM_ADDR moeInitRoutingQuantScale_, GM_ADDR moeInitRoutingQuantOffset_,
                GM_ADDR expertTokensBeforeCapacity_, GM_ADDR probs_, GM_ADDR ptrWorkspace_, GM_ADDR gmExpertTokenNums_,
-               GM_ADDR ptrXActiveMask_, optiling::MoeInitRoutingQuantV2TilingData moeInitRoutingQuantV2TilingData_)
+               GM_ADDR ptrXActiveMask_, optiling::MoeInitRoutingQuantTilingData moeInitRoutingQuantTilingData_)
             : problemShape(problemShape_),
               EP(EP_),
               listLen(listLen_),
@@ -208,14 +208,14 @@ public:
               layoutD1(layoutD1_),
               layoutD2(layoutD2_),
               expertIdx(expertIdx_),
-              moeInitRoutingQuantV2Scale(moeInitRoutingQuantV2Scale_),
-              moeInitRoutingQuantV2Offset(moeInitRoutingQuantV2Offset_),
+              moeInitRoutingQuantScale(moeInitRoutingQuantScale_),
+              moeInitRoutingQuantOffset(moeInitRoutingQuantOffset_),
               expertTokensBeforeCapacity(expertTokensBeforeCapacity_),
               probs(probs_),
               ptrWorkspace(ptrWorkspace_),
               ptrExpertTokenNums(gmExpertTokenNums_),
               ptrXActiveMask(ptrXActiveMask_),
-              moeInitRoutingQuantV2TilingData(moeInitRoutingQuantV2TilingData_)
+              moeInitRoutingQuantTilingData(moeInitRoutingQuantTilingData_)
         {}
     };
 
@@ -285,12 +285,12 @@ public:
         uint32_t expandedRowIdxOffset = AlignUp(GetPtoShapeM(params.problemShape), 256) * params.topK * sizeof(int32_t);
 
         ApplyXActiveMask(params);
-        moe_init_routing_quant_v2<ElementD2>(
-            reinterpret_cast<GM_ADDR>(params.ptrA), params.expertIdx, params.moeInitRoutingQuantV2Scale,
-            params.moeInitRoutingQuantV2Offset, remoteWindow() + peerMemoryLayout.offsetA, workspaceInfo.expandedRowIdx,
+        moe_init_routing_quant<ElementD2>(
+            reinterpret_cast<GM_ADDR>(params.ptrA), params.expertIdx, params.moeInitRoutingQuantScale,
+            params.moeInitRoutingQuantOffset, remoteWindow() + peerMemoryLayout.offsetA, workspaceInfo.expandedRowIdx,
             localTokenPerExpert, params.expertTokensBeforeCapacity,
             remoteWindow() + peerMemoryLayout.offsetPeerPerTokenScale, params.ptrWorkspace + expandedRowIdxOffset,
-            &params.moeInitRoutingQuantV2TilingData, params.initRoutingQuantTilingKey);
+            &params.moeInitRoutingQuantTilingData, params.initRoutingQuantTilingKey);
 
         kernel_detail::PtoSyncAll<true>();
         CrossRankSyncAndlocalTokenPerExpertAllGatherAndGetSumPreRankV2(params, localTokenPerExpertOffset);

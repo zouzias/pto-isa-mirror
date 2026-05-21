@@ -9,22 +9,22 @@
  */
 
 /*!
- * \file moe_v2_sort_one_core.h
+ * \file moe_sort_one_core.h
  * \brief
  */
-#ifndef INNER_MOE_V2_SORT_ONE_CORE_H
-#define INNER_MOE_V2_SORT_ONE_CORE_H
+#ifndef INNER_MOE_SORT_ONE_CORE_H
+#define INNER_MOE_SORT_ONE_CORE_H
 
-#include "moe_v2_mrgsort.h"
-#include "moe_v2_pto_sort.h"
-#include "moe_v2_sort_base.h"
+#include "moe_mrgsort.h"
+#include "moe_pto_sort.h"
+#include "moe_sort_base.h"
 
-namespace MoeInitRoutingQuantV2 {
+namespace MoeInitRoutingQuant {
 using namespace AscendC;
 using namespace optiling;
-class MoeV2SortOneCore : public MoeV2SortBase {
+class MoeSortOneCore : public MoeSortBase {
 public:
-    __aicore__ inline MoeV2SortOneCore(){};
+    __aicore__ inline MoeSortOneCore(){};
     template <typename TilingData>
     __aicore__ inline void Init(GM_ADDR expertIdx, GM_ADDR expertTokensCountOrCumsum,
                                 GM_ADDR expertTokensBeforeCapacity, GM_ADDR workspace, const TilingData *tilingData,
@@ -41,7 +41,7 @@ private:
     int64_t blockIdx;
 };
 
-__aicore__ inline void MoeV2SortOneCore::CopyIn()
+__aicore__ inline void MoeSortOneCore::CopyIn()
 {
     pto_detail::PtoLoadVector<int32_t>(this->sortInputUb, expertIdxGm, this->totalLength);
     pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
@@ -49,7 +49,7 @@ __aicore__ inline void MoeV2SortOneCore::CopyIn()
                                              0, 1, this->sortNum);
 }
 
-__aicore__ inline void MoeV2SortOneCore::SortCompute()
+__aicore__ inline void MoeSortOneCore::SortCompute()
 {
     const uint64_t expertForSourceRowUb = this->sortInputUb;
     const uint64_t sourceRowUb = this->sortInputUb + static_cast<uint64_t>(this->sortNum) * sizeof(int32_t);
@@ -60,7 +60,7 @@ __aicore__ inline void MoeV2SortOneCore::SortCompute()
                                         this->sortTempUb, this->sortMergeTmpUb, this->totalLength);
 }
 
-__aicore__ inline void MoeV2SortOneCore::CopyOut()
+__aicore__ inline void MoeSortOneCore::CopyOut()
 {
     pto_detail::PtoStoreVector<int32_t>(sortedexpertIdxGm, this->sortOutputUb, this->totalLength);
     pto_detail::PtoStoreVector<int32_t>(expandDstToSrcRowGm,
@@ -69,7 +69,7 @@ __aicore__ inline void MoeV2SortOneCore::CopyOut()
 }
 
 template <typename TilingData>
-__aicore__ inline void MoeV2SortOneCore::Init(GM_ADDR expertIdx, GM_ADDR expertTokensCountOrCumsum,
+__aicore__ inline void MoeSortOneCore::Init(GM_ADDR expertIdx, GM_ADDR expertTokensCountOrCumsum,
                                               GM_ADDR expertTokensBeforeCapacity, GM_ADDR workspace,
                                               const TilingData *tilingData, AscendC::TPipe *tPipe)
 {
@@ -107,7 +107,7 @@ __aicore__ inline void MoeV2SortOneCore::Init(GM_ADDR expertIdx, GM_ADDR expertT
     this->sortMergeTmpUb = this->sortTempUb + scratchBytes;
 }
 
-__aicore__ inline void MoeV2SortOneCore::Process()
+__aicore__ inline void MoeSortOneCore::Process()
 {
     if (get_block_idx() + get_subblockid() * get_block_num() < 1) {
         CopyIn();
@@ -116,5 +116,5 @@ __aicore__ inline void MoeV2SortOneCore::Process()
     }
     this->SyncAll();
 }
-} // namespace MoeInitRoutingQuantV2
-#endif // INNER_MOE_V2_SORT_ONE_CORE_H
+} // namespace MoeInitRoutingQuant
+#endif // INNER_MOE_SORT_ONE_CORE_H

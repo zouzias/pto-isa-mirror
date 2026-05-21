@@ -9,21 +9,21 @@
  */
 
 /*!
- * \file moe_v2_src_to_dst_op.h
+ * \file moe_src_to_dst_op.h
  * \brief
  */
-#ifndef INNER_MOE_V2_SRC_TO_DST_H
-#define INNER_MOE_V2_SRC_TO_DST_H
+#ifndef INNER_MOE_SRC_TO_DST_H
+#define INNER_MOE_SRC_TO_DST_H
 
-#include "moe_v2_common.h"
-#include "moe_v2_pto_sort.h"
+#include "moe_common.h"
+#include "moe_pto_sort.h"
 
-namespace MoeInitRoutingQuantV2 {
+namespace MoeInitRoutingQuant {
 using namespace AscendC;
 using namespace optiling;
-class MoeV2SrcToDstOp {
+class MoeSrcToDstOp {
 public:
-    __aicore__ inline MoeV2SrcToDstOp(){};
+    __aicore__ inline MoeSrcToDstOp(){};
     template <typename TilingData>
     __aicore__ inline void Init(GM_ADDR expandSrcToDstRow, GM_ADDR workspace, const TilingData *tilingData,
                                 AscendC::TPipe *tPipe);
@@ -45,7 +45,7 @@ private:
     __gm__ int32_t *expandSrcToDstRowGm;
     __gm__ int32_t *assistGm;
 
-    const InnerMoeV2GatherOutComputeTilingData *srcToDstTilingData;
+    const InnerMoeGatherOutComputeTilingData *srcToDstTilingData;
 
     int64_t coreNum;
     int64_t blockIdx;
@@ -56,7 +56,7 @@ private:
     int64_t lastLoopRows;
 };
 
-__aicore__ inline void MoeV2SrcToDstOp::AssistInit()
+__aicore__ inline void MoeSrcToDstOp::AssistInit()
 {
 #if defined(ASCENDC_OOM) && ASCENDC_OOM == 1
     OOMCheckAddrRange(assistGm, ASSIST_NUM * sizeof(int32_t));
@@ -68,13 +68,13 @@ __aicore__ inline void MoeV2SrcToDstOp::AssistInit()
         static_cast<int32_t>(this->blockIdx * this->srcToDstTilingData->perCoreRows));
 }
 
-__aicore__ inline void MoeV2SrcToDstOp::CopyIn(int64_t progress)
+__aicore__ inline void MoeSrcToDstOp::CopyIn(int64_t progress)
 {
     pto_detail::PtoLoadVector<int32_t>(this->inputDstToSrcUb, expandDstToSrcRowGm + progress * perLoopRows,
                                        currentLoopRows);
 }
 
-__aicore__ inline void MoeV2SrcToDstOp::Compute(int64_t progress)
+__aicore__ inline void MoeSrcToDstOp::Compute(int64_t progress)
 {
     pto_detail::PtoWaitFlag<HardEvent::MTE3_V>(EVENT_ID0);
     pto_detail::PtoPipeBarrier<PIPE_V>();
@@ -88,7 +88,7 @@ __aicore__ inline void MoeV2SrcToDstOp::Compute(int64_t progress)
     pto_detail::PtoSetFlag<HardEvent::V_MTE3>(EVENT_ID0);
 }
 
-__aicore__ inline void MoeV2SrcToDstOp::CopyOut()
+__aicore__ inline void MoeSrcToDstOp::CopyOut()
 {
     pto_detail::PtoWaitFlag<HardEvent::V_MTE3>(EVENT_ID0);
     pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
@@ -102,7 +102,7 @@ __aicore__ inline void MoeV2SrcToDstOp::CopyOut()
     pto_detail::PtoSetFlag<HardEvent::MTE3_V>(EVENT_ID0);
 }
 
-__aicore__ inline void MoeV2SrcToDstOp::SyncAll()
+__aicore__ inline void MoeSrcToDstOp::SyncAll()
 {
     if (coreNum == 1) {
         return;
@@ -111,7 +111,7 @@ __aicore__ inline void MoeV2SrcToDstOp::SyncAll()
 }
 
 template <typename TilingData>
-__aicore__ inline void MoeV2SrcToDstOp::Init(GM_ADDR expandSrcToDstRow, GM_ADDR workspace, const TilingData *tilingData,
+__aicore__ inline void MoeSrcToDstOp::Init(GM_ADDR expandSrcToDstRow, GM_ADDR workspace, const TilingData *tilingData,
                                              AscendC::TPipe *tPipe)
 {
     this->blockIdx = get_block_idx() + get_subblockid() * get_block_num();
@@ -141,7 +141,7 @@ __aicore__ inline void MoeV2SrcToDstOp::Init(GM_ADDR expandSrcToDstRow, GM_ADDR 
     pto_detail::PtoSetFlag<HardEvent::MTE3_V>(EVENT_ID0);
 }
 
-__aicore__ inline void MoeV2SrcToDstOp::Process()
+__aicore__ inline void MoeSrcToDstOp::Process()
 {
     if (this->blockIdx < this->srcToDstTilingData->needCoreNum) {
         int64_t loops = (coreRows + perLoopRows - 1) / perLoopRows;
@@ -159,5 +159,5 @@ __aicore__ inline void MoeV2SrcToDstOp::Process()
     }
     this->SyncAll();
 }
-} // namespace MoeInitRoutingQuantV2
-#endif // INNER_MOE_V2_SRC_TO_DST_H
+} // namespace MoeInitRoutingQuant
+#endif // INNER_MOE_SRC_TO_DST_H

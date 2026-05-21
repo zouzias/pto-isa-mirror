@@ -9,25 +9,25 @@
  */
 
 /*!
- * \file moe_v2_gather_dynamic_quant.h
+ * \file moe_gather_dynamic_quant.h
  * \brief
  */
-#ifndef MOE_V2_GATHER_DYNAMIC_QUANT_H
-#define MOE_V2_GATHER_DYNAMIC_QUANT_H
+#ifndef MOE_GATHER_DYNAMIC_QUANT_H
+#define MOE_GATHER_DYNAMIC_QUANT_H
 
-#include "moe_v2_common.h"
-#include "moe_v2_pto_sort.h"
+#include "moe_common.h"
+#include "moe_pto_sort.h"
 
-namespace MoeInitRoutingQuantV2 {
+namespace MoeInitRoutingQuant {
 using namespace AscendC;
 using namespace optiling;
 template <typename T>
-class MoeV2GatherDynamicQuant {
+class MoeGatherDynamicQuant {
 public:
-    __aicore__ inline MoeV2GatherDynamicQuant(){};
+    __aicore__ inline MoeGatherDynamicQuant(){};
     __aicore__ inline void Init(GM_ADDR inputX, GM_ADDR quantSmooth, GM_ADDR expandedRowIdx, GM_ADDR expandedX,
                                 GM_ADDR dynamicQuantScale, GM_ADDR workspace,
-                                const MoeInitRoutingQuantV2TilingData *tilingData, AscendC::TPipe *tPipe);
+                                const MoeInitRoutingQuantTilingData *tilingData, AscendC::TPipe *tPipe);
     __aicore__ inline void Process();
 
 private:
@@ -61,7 +61,7 @@ private:
     __gm__ int32_t *expandedExpertIdxGm;
     __gm__ int32_t *sortedRowIdxGm;
 
-    const InnerMoeV2GatherOutComputeTilingData *gatherOutTilingData;
+    const InnerMoeGatherOutComputeTilingData *gatherOutTilingData;
 
     int64_t needCoreNum;
     int64_t blockIdx;
@@ -91,14 +91,14 @@ private:
 };
 
 template <typename T>
-__aicore__ inline void MoeV2GatherDynamicQuant<T>::CopyInExpandedRowIdx(int64_t progress)
+__aicore__ inline void MoeGatherDynamicQuant<T>::CopyInExpandedRowIdx(int64_t progress)
 {
     this->indicesOffset = progress * this->perLoopRows;
     pto_detail::PtoLoadVector<int32_t>(this->indicesUb, expandedRowIdxGm + indicesOffset, this->currentLoopRows);
 }
 
 template <typename T>
-__aicore__ inline void MoeV2GatherDynamicQuant<T>::CopyInExpandedExpertIdx(int64_t progress)
+__aicore__ inline void MoeGatherDynamicQuant<T>::CopyInExpandedExpertIdx(int64_t progress)
 {
     this->indicesOffset = progress * this->perLoopRows;
     pto_detail::PtoLoadVector<int32_t>(this->indicesUb, sortedRowIdxGm + indicesOffset, this->currentLoopRows);
@@ -107,7 +107,7 @@ __aicore__ inline void MoeV2GatherDynamicQuant<T>::CopyInExpandedExpertIdx(int64
 }
 
 template <typename T>
-__aicore__ inline void MoeV2GatherDynamicQuant<T>::Compute(uint64_t smoothUb)
+__aicore__ inline void MoeGatherDynamicQuant<T>::Compute(uint64_t smoothUb)
 {
     const uint64_t inUb = this->inputXUb;
     const uint64_t tempUb = this->tempUb;
@@ -141,7 +141,7 @@ __aicore__ inline void MoeV2GatherDynamicQuant<T>::Compute(uint64_t smoothUb)
 }
 
 template <typename T>
-__aicore__ inline void MoeV2GatherDynamicQuant<T>::LoadInputTile(uint64_t inUb, int64_t srcOffset, int64_t elemNum)
+__aicore__ inline void MoeGatherDynamicQuant<T>::LoadInputTile(uint64_t inUb, int64_t srcOffset, int64_t elemNum)
 {
     if constexpr (IsSameType<T, float>::value) {
         pto_detail::PtoLoadVector<float>(inUb, inputXGm + srcOffset, elemNum);
@@ -152,14 +152,14 @@ __aicore__ inline void MoeV2GatherDynamicQuant<T>::LoadInputTile(uint64_t inUb, 
 }
 
 template <typename T>
-__aicore__ inline void MoeV2GatherDynamicQuant<T>::StoreExpandedXTile(int64_t dstOffset, uint64_t outUb,
+__aicore__ inline void MoeGatherDynamicQuant<T>::StoreExpandedXTile(int64_t dstOffset, uint64_t outUb,
                                                                       int64_t elemNum)
 {
     pto_detail::PtoStoreVector(expandedXGm + dstOffset, outUb, elemNum);
 }
 
 template <typename T>
-__aicore__ inline void MoeV2GatherDynamicQuant<T>::CopyOutXQuant1H(int64_t progress)
+__aicore__ inline void MoeGatherDynamicQuant<T>::CopyOutXQuant1H(int64_t progress)
 {
     int64_t initialRow = this->gatherOutTilingData->perCoreRows * this->blockIdx + this->perLoopRows * progress;
     int64_t curLoopRow = 0;
@@ -190,7 +190,7 @@ __aicore__ inline void MoeV2GatherDynamicQuant<T>::CopyOutXQuant1H(int64_t progr
 }
 
 template <typename T>
-__aicore__ inline void MoeV2GatherDynamicQuant<T>::CopyOutXQuantEH(int64_t progress)
+__aicore__ inline void MoeGatherDynamicQuant<T>::CopyOutXQuantEH(int64_t progress)
 {
     pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
 
@@ -223,7 +223,7 @@ __aicore__ inline void MoeV2GatherDynamicQuant<T>::CopyOutXQuantEH(int64_t progr
 }
 
 template <typename T>
-__aicore__ inline float MoeV2GatherDynamicQuant<T>::ComputeMax(uint64_t inUb, uint64_t tempUb,
+__aicore__ inline float MoeGatherDynamicQuant<T>::ComputeMax(uint64_t inUb, uint64_t tempUb,
                                                                uint64_t dynamicQuantScaleUb, int32_t srcIdx,
                                                                int32_t expertIdx, int64_t j)
 {
@@ -256,7 +256,7 @@ __aicore__ inline float MoeV2GatherDynamicQuant<T>::ComputeMax(uint64_t inUb, ui
 }
 
 template <typename T>
-__aicore__ inline void MoeV2GatherDynamicQuant<T>::ComputeScale(uint64_t inUb, uint64_t tempUb, float scaleTemp,
+__aicore__ inline void MoeGatherDynamicQuant<T>::ComputeScale(uint64_t inUb, uint64_t tempUb, float scaleTemp,
                                                                 int64_t dstIndex, int64_t j)
 {
     pto_detail::PtoLoadVector<float>(inUb, quantSrcGm + j * this->perLoopCols, colsTileLength);
@@ -276,7 +276,7 @@ __aicore__ inline void MoeV2GatherDynamicQuant<T>::ComputeScale(uint64_t inUb, u
 }
 
 template <typename T>
-__aicore__ inline void MoeV2GatherDynamicQuant<T>::CopyOutPartialXQuantEH(int64_t progress)
+__aicore__ inline void MoeGatherDynamicQuant<T>::CopyOutPartialXQuantEH(int64_t progress)
 {
     pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
 
@@ -316,7 +316,7 @@ __aicore__ inline void MoeV2GatherDynamicQuant<T>::CopyOutPartialXQuantEH(int64_
 }
 
 template <typename T>
-__aicore__ inline void MoeV2GatherDynamicQuant<T>::CopyOutPartialXQuant1H(int64_t progress)
+__aicore__ inline void MoeGatherDynamicQuant<T>::CopyOutPartialXQuant1H(int64_t progress)
 {
     int64_t initialRow = this->gatherOutTilingData->perCoreRows * this->blockIdx + this->perLoopRows * progress;
     int64_t curLoopRow = 0;
@@ -362,9 +362,9 @@ __aicore__ inline void MoeV2GatherDynamicQuant<T>::CopyOutPartialXQuant1H(int64_
 }
 
 template <typename T>
-__aicore__ inline void MoeV2GatherDynamicQuant<T>::Init(GM_ADDR inputX, GM_ADDR quantSmooth, GM_ADDR expandedRowIdx,
+__aicore__ inline void MoeGatherDynamicQuant<T>::Init(GM_ADDR inputX, GM_ADDR quantSmooth, GM_ADDR expandedRowIdx,
                                                         GM_ADDR expandedX, GM_ADDR dynamicQuantScale, GM_ADDR workspace,
-                                                        const MoeInitRoutingQuantV2TilingData *tilingData,
+                                                        const MoeInitRoutingQuantTilingData *tilingData,
                                                         AscendC::TPipe *tPipe)
 {
     (void)tPipe;
@@ -428,7 +428,7 @@ __aicore__ inline void MoeV2GatherDynamicQuant<T>::Init(GM_ADDR inputX, GM_ADDR 
 }
 
 template <typename T>
-__aicore__ inline void MoeV2GatherDynamicQuant<T>::Process()
+__aicore__ inline void MoeGatherDynamicQuant<T>::Process()
 {
     if (this->blockIdx < this->needCoreNum) {
         currentLoopRows = perLoopRows;
@@ -455,5 +455,5 @@ __aicore__ inline void MoeV2GatherDynamicQuant<T>::Process()
         }
     }
 }
-} // namespace MoeInitRoutingQuantV2
-#endif // MOE_V2_GATHER_DYNAMIC_QUANT_H
+} // namespace MoeInitRoutingQuant
+#endif // MOE_GATHER_DYNAMIC_QUANT_H

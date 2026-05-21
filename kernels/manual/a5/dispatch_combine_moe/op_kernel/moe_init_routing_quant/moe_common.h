@@ -9,15 +9,15 @@
  */
 
 /*!
- * \file moe_v2_common.h
+ * \file moe_common.h
  * \brief
  */
-#ifndef INNER_MOE_V2_COMMON_H
-#define INNER_MOE_V2_COMMON_H
+#ifndef INNER_MOE_COMMON_H
+#define INNER_MOE_COMMON_H
 
 #include "kernel_operator.h"
 
-namespace MoeInitRoutingQuantV2 {
+namespace MoeInitRoutingQuant {
 using namespace AscendC;
 using namespace optiling;
 constexpr int64_t SPLIT_N = 0;
@@ -106,5 +106,5 @@ __aicore__ inline void InitGlobalMemory(__gm__ T *gm, int64_t elementNum, T valu
     }
 }
 
-} // namespace MoeInitRoutingQuantV2
-#endif // INNER_MOE_V2_COMMON_H
+} // namespace MoeInitRoutingQuant
+#endif // INNER_MOE_COMMON_H

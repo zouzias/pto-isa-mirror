@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-#include "moe_init_routing_v2_tiling.h"
+#include "moe_init_routing_tiling.h"
 
 namespace optiling {
 
@@ -40,7 +40,7 @@ inline static int64_t AlignOneBlockByteCeil(int64_t x)
     return x / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE;
 }
 
-struct MoeInitRoutingQuantV2TilingData {
+struct MoeInitRoutingQuantTilingData {
     int64_t coreNum;
     int64_t n;
     int64_t cols;
@@ -51,15 +51,15 @@ struct MoeInitRoutingQuantV2TilingData {
     int64_t expertTokensCountOrCumsumFlag;
     int64_t expertTokensBeforeCapacityFlag;
     int64_t smoothType;
-    InnerMoeV2VBSComputeTilingData vbsComputeParamsOp;
-    InnerMoeV2VMSMiddleComputeTilingData vmsMiddleComputeParamsOp;
-    InnerMoeV2SortOutComputeTilingData sortOutComputeParamsOp;
-    InnerMoeV2GatherOutComputeTilingData srcToDstComputeParamsOp;
-    InnerMoeV2GatherOutComputeTilingData srcToDstCapacityComputeParamsOp;
-    InnerMoeV2GatherOutComputeTilingData gatherOutComputeParamsOp;
+    InnerMoeVBSComputeTilingData vbsComputeParamsOp;
+    InnerMoeVMSMiddleComputeTilingData vmsMiddleComputeParamsOp;
+    InnerMoeSortOutComputeTilingData sortOutComputeParamsOp;
+    InnerMoeGatherOutComputeTilingData srcToDstComputeParamsOp;
+    InnerMoeGatherOutComputeTilingData srcToDstCapacityComputeParamsOp;
+    InnerMoeGatherOutComputeTilingData gatherOutComputeParamsOp;
 };
 
-class MoeInitRoutingQuantV2TilingBase : public InnerMoeInitRoutingV2TilingBase {
+class MoeInitRoutingQuantTilingBase : public InnerMoeInitRoutingTilingBase {
 public:
 protected:
     bool GetShapeAttrsInfo(int64_t m, int64_t cols, int64_t topK, int64_t expertCapacity, int64_t expertNum,
@@ -75,23 +75,23 @@ public:
     bool IsFullLoadQuant(int64_t space);
     bool IsFullLoadDynamicQuant(int64_t space);
     bool IsFullLoad() override;
-    void SetGatherTilingData(InnerMoeV2GatherOutComputeTilingData *tilingData, int64_t perCoreRows,
+    void SetGatherTilingData(InnerMoeGatherOutComputeTilingData *tilingData, int64_t perCoreRows,
                              int64_t lastCoreRows, int64_t cols);
-    void SetGatherTilingDataCols(InnerMoeV2GatherOutComputeTilingData *tilingData, int64_t baseMaxCols, int64_t cols);
-    void SetGatherTilingDataRows(InnerMoeV2GatherOutComputeTilingData *tilingData, int64_t perCoreRows,
+    void SetGatherTilingDataCols(InnerMoeGatherOutComputeTilingData *tilingData, int64_t baseMaxCols, int64_t cols);
+    void SetGatherTilingDataRows(InnerMoeGatherOutComputeTilingData *tilingData, int64_t perCoreRows,
                                  int64_t lastCoreRows, int64_t basePerLoopMaxRows);
     void Tiling4GatherQuant();
     void Tiling4GatherDynamicQuant();
     void Tiling4SrcToDstCapacityCompute() override;
     void Tiling4GatherOutCompute() override;
-    void CopyGatherOutTiling(InnerMoeV2GatherOutComputeTilingData &dst, InnerMoeV2GatherOutComputeTilingData &src);
+    void CopyGatherOutTiling(InnerMoeGatherOutComputeTilingData &dst, InnerMoeGatherOutComputeTilingData &src);
     void CopyTilingData();
 
     int64_t quantMode;
-    MoeInitRoutingQuantV2TilingData quantTilingData;
+    MoeInitRoutingQuantTilingData quantTilingData;
 };
 
-inline bool MoeInitRoutingQuantV2TilingBase::IsFullLoadQuant(int64_t space)
+inline bool MoeInitRoutingQuantTilingBase::IsFullLoadQuant(int64_t space)
 {
     int64_t perCoreXRows = moeInitRoutingTilingData.n / aivNum;
     int64_t remainder = moeInitRoutingTilingData.n % aivNum;
@@ -104,7 +104,7 @@ inline bool MoeInitRoutingQuantV2TilingBase::IsFullLoadQuant(int64_t space)
     return remainUbAfterSort > 0;
 }
 
-inline bool MoeInitRoutingQuantV2TilingBase::IsFullLoadDynamicQuant(int64_t space)
+inline bool MoeInitRoutingQuantTilingBase::IsFullLoadDynamicQuant(int64_t space)
 {
     int64_t quantSpace = AlignOneBlockByte(moeInitRoutingTilingData.cols) * DYNAMIC_QUANT_FULLLOAD_COLS_BUFFER;
     int64_t scaleOutSpace = 64;
@@ -112,7 +112,7 @@ inline bool MoeInitRoutingQuantV2TilingBase::IsFullLoadDynamicQuant(int64_t spac
     return remainUbAfterSort > 0;
 }
 
-inline bool MoeInitRoutingQuantV2TilingBase::IsFullLoad()
+inline bool MoeInitRoutingQuantTilingBase::IsFullLoad()
 {
     if (totalLength > sortLoopMaxElement || moeInitRoutingTilingData.cols > MAX_COLS_ONE_LOOP_QUANT ||
         this->dropPadMode == 1) {
@@ -128,12 +128,12 @@ inline bool MoeInitRoutingQuantV2TilingBase::IsFullLoad()
     }
 }
 
-inline bool MoeInitRoutingQuantV2TilingBase::GetShapeAttrsInfo(
+inline bool MoeInitRoutingQuantTilingBase::GetShapeAttrsInfo(
     int64_t m, int64_t cols, int64_t topK, int64_t expertCapacity, int64_t expertNum, int64_t activeNum,
     int64_t dropPadMode, int64_t expertTokensCountOrCumsumFlag, bool expertTokensBeforeCapacityFlag,
     int64_t inuptXDtypeSize, int64_t quantMode, int64_t scaleDim0)
 {
-    InnerMoeInitRoutingV2TilingBase::GetShapeAttrsInfo(m, cols, topK, expertCapacity, expertNum, activeNum, dropPadMode,
+    InnerMoeInitRoutingTilingBase::GetShapeAttrsInfo(m, cols, topK, expertCapacity, expertNum, activeNum, dropPadMode,
                                                        expertTokensCountOrCumsumFlag, expertTokensBeforeCapacityFlag,
                                                        inuptXDtypeSize, quantMode, scaleDim0);
     this->quantMode = quantMode;
@@ -148,7 +148,7 @@ inline bool MoeInitRoutingQuantV2TilingBase::GetShapeAttrsInfo(
     return true;
 }
 
-inline uint64_t MoeInitRoutingQuantV2TilingBase::GetTilingKey() const
+inline uint64_t MoeInitRoutingQuantTilingBase::GetTilingKey() const
 {
     if (isFullLoad) {
         return TILING_KEY_PERF_BASE + quantMode * TILING_KEY_QUANT_BASE;
@@ -157,13 +157,13 @@ inline uint64_t MoeInitRoutingQuantV2TilingBase::GetTilingKey() const
            (totalLength > sortLoopMaxElement) * TILING_KEY_SORT_BASE;
 }
 
-inline bool MoeInitRoutingQuantV2TilingBase::PostTiling()
+inline bool MoeInitRoutingQuantTilingBase::PostTiling()
 {
     CopyTilingData();
     return true;
 }
-inline void MoeInitRoutingQuantV2TilingBase::CopyGatherOutTiling(InnerMoeV2GatherOutComputeTilingData &dst,
-                                                                 InnerMoeV2GatherOutComputeTilingData &src)
+inline void MoeInitRoutingQuantTilingBase::CopyGatherOutTiling(InnerMoeGatherOutComputeTilingData &dst,
+                                                                 InnerMoeGatherOutComputeTilingData &src)
 {
     dst.needCoreNum = (src.needCoreNum);
     dst.activateRows = (src.activateRows);
@@ -180,21 +180,21 @@ inline void MoeInitRoutingQuantV2TilingBase::CopyGatherOutTiling(InnerMoeV2Gathe
     dst.colLoops = (src.colLoops);
 }
 
-inline void MoeInitRoutingQuantV2TilingBase::CopyTilingData()
+inline void MoeInitRoutingQuantTilingBase::CopyTilingData()
 {
-    quantTilingData.coreNum = (InnerMoeInitRoutingV2TilingBase::moeInitRoutingTilingData.coreNum);
-    quantTilingData.n = (InnerMoeInitRoutingV2TilingBase::moeInitRoutingTilingData.n);
-    quantTilingData.cols = (InnerMoeInitRoutingV2TilingBase::moeInitRoutingTilingData.cols);
-    quantTilingData.k = (InnerMoeInitRoutingV2TilingBase::moeInitRoutingTilingData.k);
-    quantTilingData.expertCapacity = (InnerMoeInitRoutingV2TilingBase::moeInitRoutingTilingData.expertCapacity);
-    quantTilingData.expertNum = (InnerMoeInitRoutingV2TilingBase::moeInitRoutingTilingData.expertNum);
-    quantTilingData.dropPadMode = (InnerMoeInitRoutingV2TilingBase::moeInitRoutingTilingData.dropPadMode);
+    quantTilingData.coreNum = (InnerMoeInitRoutingTilingBase::moeInitRoutingTilingData.coreNum);
+    quantTilingData.n = (InnerMoeInitRoutingTilingBase::moeInitRoutingTilingData.n);
+    quantTilingData.cols = (InnerMoeInitRoutingTilingBase::moeInitRoutingTilingData.cols);
+    quantTilingData.k = (InnerMoeInitRoutingTilingBase::moeInitRoutingTilingData.k);
+    quantTilingData.expertCapacity = (InnerMoeInitRoutingTilingBase::moeInitRoutingTilingData.expertCapacity);
+    quantTilingData.expertNum = (InnerMoeInitRoutingTilingBase::moeInitRoutingTilingData.expertNum);
+    quantTilingData.dropPadMode = (InnerMoeInitRoutingTilingBase::moeInitRoutingTilingData.dropPadMode);
     quantTilingData.expertTokensCountOrCumsumFlag =
-        (InnerMoeInitRoutingV2TilingBase::moeInitRoutingTilingData.expertTokensCountOrCumsumFlag);
+        (InnerMoeInitRoutingTilingBase::moeInitRoutingTilingData.expertTokensCountOrCumsumFlag);
     quantTilingData.expertTokensBeforeCapacityFlag =
-        (InnerMoeInitRoutingV2TilingBase::moeInitRoutingTilingData.expertTokensBeforeCapacityFlag);
+        (InnerMoeInitRoutingTilingBase::moeInitRoutingTilingData.expertTokensBeforeCapacityFlag);
 
-    auto vbsTilingData = &InnerMoeInitRoutingV2TilingBase::moeInitRoutingTilingData.vbsComputeParamsOp;
+    auto vbsTilingData = &InnerMoeInitRoutingTilingBase::moeInitRoutingTilingData.vbsComputeParamsOp;
     quantTilingData.vbsComputeParamsOp.needCoreNum = (vbsTilingData->needCoreNum);
     quantTilingData.vbsComputeParamsOp.perCoreElements = (vbsTilingData->perCoreElements);
     quantTilingData.vbsComputeParamsOp.perCoreLoops = (vbsTilingData->perCoreLoops);
@@ -207,30 +207,30 @@ inline void MoeInitRoutingQuantV2TilingBase::CopyTilingData()
     quantTilingData.vbsComputeParamsOp.oneLoopMaxElements = (vbsTilingData->oneLoopMaxElements);
 
     quantTilingData.vmsMiddleComputeParamsOp.needCoreNum =
-        (InnerMoeInitRoutingV2TilingBase::moeInitRoutingTilingData.vmsMiddleComputeParamsOp.needCoreNum);
+        (InnerMoeInitRoutingTilingBase::moeInitRoutingTilingData.vmsMiddleComputeParamsOp.needCoreNum);
     quantTilingData.sortOutComputeParamsOp.oneLoopMaxElements =
-        (InnerMoeInitRoutingV2TilingBase::moeInitRoutingTilingData.sortOutComputeParamsOp.oneLoopMaxElements);
+        (InnerMoeInitRoutingTilingBase::moeInitRoutingTilingData.sortOutComputeParamsOp.oneLoopMaxElements);
 
     CopyGatherOutTiling(quantTilingData.srcToDstComputeParamsOp,
-                        InnerMoeInitRoutingV2TilingBase::moeInitRoutingTilingData.srcToDstComputeParamsOp);
+                        InnerMoeInitRoutingTilingBase::moeInitRoutingTilingData.srcToDstComputeParamsOp);
     CopyGatherOutTiling(quantTilingData.srcToDstCapacityComputeParamsOp,
-                        InnerMoeInitRoutingV2TilingBase::moeInitRoutingTilingData.srcToDstCapacityComputeParamsOp);
+                        InnerMoeInitRoutingTilingBase::moeInitRoutingTilingData.srcToDstCapacityComputeParamsOp);
 }
 
-inline bool MoeInitRoutingQuantV2TilingBase::GetWorkspaceSize()
+inline bool MoeInitRoutingQuantTilingBase::GetWorkspaceSize()
 {
-    InnerMoeInitRoutingV2TilingBase::GetWorkspaceSize();
+    InnerMoeInitRoutingTilingBase::GetWorkspaceSize();
     bool useCols =
         (dropPadMode == 0 && quantTilingData.gatherOutComputeParamsOp.colLoops > 1) ||
         (dropPadMode == 1 &&
-         InnerMoeInitRoutingV2TilingBase::moeInitRoutingTilingData.srcToDstCapacityComputeParamsOp.colLoops > 1);
+         InnerMoeInitRoutingTilingBase::moeInitRoutingTilingData.srcToDstCapacityComputeParamsOp.colLoops > 1);
     if (quantMode == 1 && useCols) {
-        workspaceSize_ += aivNum * InnerMoeInitRoutingV2TilingBase::moeInitRoutingTilingData.cols * sizeof(float);
+        workspaceSize_ += aivNum * InnerMoeInitRoutingTilingBase::moeInitRoutingTilingData.cols * sizeof(float);
     }
     return true;
 }
 
-inline void MoeInitRoutingQuantV2TilingBase::SetGatherTilingData(InnerMoeV2GatherOutComputeTilingData *tilingData,
+inline void MoeInitRoutingQuantTilingBase::SetGatherTilingData(InnerMoeGatherOutComputeTilingData *tilingData,
                                                                  int64_t perCoreRows, int64_t lastCoreRows,
                                                                  int64_t cols)
 {
@@ -245,7 +245,7 @@ inline void MoeInitRoutingQuantV2TilingBase::SetGatherTilingData(InnerMoeV2Gathe
     tilingData->colLoops = 1;
 }
 
-inline void MoeInitRoutingQuantV2TilingBase::SetGatherTilingDataCols(InnerMoeV2GatherOutComputeTilingData *tilingData,
+inline void MoeInitRoutingQuantTilingBase::SetGatherTilingDataCols(InnerMoeGatherOutComputeTilingData *tilingData,
                                                                      int64_t baseMaxCols, int64_t cols)
 {
     tilingData->perLoopCols = (std::min(baseMaxCols, cols));
@@ -253,7 +253,7 @@ inline void MoeInitRoutingQuantV2TilingBase::SetGatherTilingDataCols(InnerMoeV2G
     tilingData->colLoops = (baseMaxCols == 0 ? 0 : (cols + baseMaxCols - 1) / baseMaxCols);
 }
 
-inline void MoeInitRoutingQuantV2TilingBase::SetGatherTilingDataRows(InnerMoeV2GatherOutComputeTilingData *tilingData,
+inline void MoeInitRoutingQuantTilingBase::SetGatherTilingDataRows(InnerMoeGatherOutComputeTilingData *tilingData,
                                                                      int64_t perCoreRows, int64_t lastCoreRows,
                                                                      int64_t basePerLoopMaxRows)
 {
@@ -267,10 +267,10 @@ inline void MoeInitRoutingQuantV2TilingBase::SetGatherTilingDataRows(InnerMoeV2G
         (basePerLoopMaxRows == 0 ? 0 : (lastCoreRows + basePerLoopMaxRows - 1) / basePerLoopMaxRows);
 }
 
-inline void MoeInitRoutingQuantV2TilingBase::Tiling4SrcToDstCapacityCompute()
+inline void MoeInitRoutingQuantTilingBase::Tiling4SrcToDstCapacityCompute()
 {
     if (quantMode == 0 || dropPadMode == 0) {
-        InnerMoeInitRoutingV2TilingBase::Tiling4SrcToDstCapacityCompute();
+        InnerMoeInitRoutingTilingBase::Tiling4SrcToDstCapacityCompute();
         return;
     }
 
@@ -308,7 +308,7 @@ inline void MoeInitRoutingQuantV2TilingBase::Tiling4SrcToDstCapacityCompute()
     }
 }
 
-inline void MoeInitRoutingQuantV2TilingBase::Tiling4GatherQuant()
+inline void MoeInitRoutingQuantTilingBase::Tiling4GatherQuant()
 {
     auto tilingData = &quantTilingData.gatherOutComputeParamsOp;
     tilingData->activateRows = totalLength;
@@ -347,7 +347,7 @@ inline void MoeInitRoutingQuantV2TilingBase::Tiling4GatherQuant()
     }
 }
 
-inline void SetGatherTilingDatawithloop(InnerMoeV2GatherOutComputeTilingData *tilingData, int64_t perCorePerLoopRows,
+inline void SetGatherTilingDatawithloop(InnerMoeGatherOutComputeTilingData *tilingData, int64_t perCorePerLoopRows,
                                         int64_t lastCorePerLoopRows, int64_t cols, int64_t perCoreLastLoopRows = 1,
                                         int64_t lastCoreLastLoopRows = 1, int64_t perCoreLoops = 1,
                                         int64_t lastCoreLoops = 1)
@@ -363,7 +363,7 @@ inline void SetGatherTilingDatawithloop(InnerMoeV2GatherOutComputeTilingData *ti
     tilingData->colLoops = 1;
 }
 
-inline void MoeInitRoutingQuantV2TilingBase::Tiling4GatherDynamicQuant()
+inline void MoeInitRoutingQuantTilingBase::Tiling4GatherDynamicQuant()
 {
     auto tilingData = &quantTilingData.gatherOutComputeParamsOp;
     tilingData->activateRows = totalLength;
@@ -379,7 +379,7 @@ inline void MoeInitRoutingQuantV2TilingBase::Tiling4GatherDynamicQuant()
 
     tilingData->needCoreNum = (CeilDiv(totalLength, perCoreRows));
 
-    int64_t cols = InnerMoeInitRoutingV2TilingBase::moeInitRoutingTilingData.cols;
+    int64_t cols = InnerMoeInitRoutingTilingBase::moeInitRoutingTilingData.cols;
 
     tilingData->perCoreRows = perCoreRows;
     int64_t lastCoreRows = totalLength - perCoreRows * (tilingData->needCoreNum - 1);
@@ -423,7 +423,7 @@ inline void MoeInitRoutingQuantV2TilingBase::Tiling4GatherDynamicQuant()
     }
 }
 
-inline void MoeInitRoutingQuantV2TilingBase::Tiling4GatherOutCompute()
+inline void MoeInitRoutingQuantTilingBase::Tiling4GatherOutCompute()
 {
     if (quantMode == 0) {
         Tiling4GatherQuant();

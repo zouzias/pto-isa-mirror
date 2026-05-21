@@ -1,13 +1,13 @@
-#ifndef INNER_MOE_V2_PTO_SORT_H
-#define INNER_MOE_V2_PTO_SORT_H
+#ifndef INNER_MOE_PTO_SORT_H
+#define INNER_MOE_PTO_SORT_H
 
 #include <pto/common/pto_tile.hpp>
 #include <pto/pto-inst.hpp>
 
-#include "moe_v2_common.h"
+#include "moe_common.h"
 #include "../utils/pto_vector_ops.hpp"
 
-namespace MoeInitRoutingQuantV2 {
+namespace MoeInitRoutingQuant {
 namespace pto_detail {
 
 constexpr uint32_t PTO_SORT_BLOCK_ELEMS = 32;
@@ -299,6 +299,6 @@ PTO_INTERNAL void PtoSortInt32AscendingUB(uint64_t inputValueUb, uint64_t inputP
 }
 
 } // namespace pto_detail
-} // namespace MoeInitRoutingQuantV2
+} // namespace MoeInitRoutingQuant
 
-#endif // INNER_MOE_V2_PTO_SORT_H
+#endif // INNER_MOE_PTO_SORT_H

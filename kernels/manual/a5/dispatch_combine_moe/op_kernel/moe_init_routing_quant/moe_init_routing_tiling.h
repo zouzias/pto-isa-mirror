@@ -62,7 +62,7 @@ constexpr T CeilDiv(const T dividend, const T divisor)
     return (dividend + divisor - 1) / divisor;
 }
 
-struct InnerMoeV2VBSComputeTilingData {
+struct InnerMoeVBSComputeTilingData {
     int64_t needCoreNum = 0;
     int64_t perCoreElements = 0;
     int64_t perCoreLoops = 0;
@@ -75,15 +75,15 @@ struct InnerMoeV2VBSComputeTilingData {
     int64_t oneLoopMaxElements = 0;
 };
 
-struct InnerMoeV2VMSMiddleComputeTilingData {
+struct InnerMoeVMSMiddleComputeTilingData {
     int64_t needCoreNum = 0;
 };
 
-struct InnerMoeV2SortOutComputeTilingData {
+struct InnerMoeSortOutComputeTilingData {
     int64_t oneLoopMaxElements = 0;
 };
 
-struct InnerMoeV2GatherOutComputeTilingData {
+struct InnerMoeGatherOutComputeTilingData {
     int64_t needCoreNum = 0;
     int64_t activateRows = 0;
     int64_t perCoreRows = 0;
@@ -99,7 +99,7 @@ struct InnerMoeV2GatherOutComputeTilingData {
     int64_t colLoops = 0;
 };
 
-struct InnerMoeInitRoutingV2TilingData {
+struct InnerMoeInitRoutingTilingData {
     int64_t coreNum;
     int64_t n;
     int64_t cols;
@@ -109,15 +109,15 @@ struct InnerMoeInitRoutingV2TilingData {
     int64_t dropPadMode;
     int64_t expertTokensCountOrCumsumFlag;
     int64_t expertTokensBeforeCapacityFlag;
-    InnerMoeV2VBSComputeTilingData vbsComputeParamsOp;
-    InnerMoeV2VMSMiddleComputeTilingData vmsMiddleComputeParamsOp;
-    InnerMoeV2SortOutComputeTilingData sortOutComputeParamsOp;
-    InnerMoeV2GatherOutComputeTilingData srcToDstComputeParamsOp;
-    InnerMoeV2GatherOutComputeTilingData srcToDstCapacityComputeParamsOp;
-    InnerMoeV2GatherOutComputeTilingData gatherOutComputeParamsOp;
+    InnerMoeVBSComputeTilingData vbsComputeParamsOp;
+    InnerMoeVMSMiddleComputeTilingData vmsMiddleComputeParamsOp;
+    InnerMoeSortOutComputeTilingData sortOutComputeParamsOp;
+    InnerMoeGatherOutComputeTilingData srcToDstComputeParamsOp;
+    InnerMoeGatherOutComputeTilingData srcToDstCapacityComputeParamsOp;
+    InnerMoeGatherOutComputeTilingData gatherOutComputeParamsOp;
 };
 
-class InnerMoeInitRoutingV2TilingBase : public TilingBaseClass {
+class InnerMoeInitRoutingTilingBase : public TilingBaseClass {
 protected:
     bool GetPlatformInfo(int64_t aivCoreNum, int64_t ubSizePlatForm) override;
     bool GetShapeAttrsInfo(int64_t m, int64_t cols, int64_t topK, int64_t expertCapacity, int64_t expertNum,
@@ -139,8 +139,8 @@ protected:
     void Tiling4VMSMiddleCompute();
     void Tiling4VBSCompute();
     void ShowTilingData();
-    void Tiling4VBSMultiCoreCompute(InnerMoeV2VBSComputeTilingData *tilingData);
-    void Tiling4VBSOneCoreCompute(InnerMoeV2VBSComputeTilingData *tilingData);
+    void Tiling4VBSMultiCoreCompute(InnerMoeVBSComputeTilingData *tilingData);
+    void Tiling4VBSOneCoreCompute(InnerMoeVBSComputeTilingData *tilingData);
     virtual bool IsFullLoad() = 0;
 
     int64_t aivNum = 0;
@@ -156,10 +156,10 @@ protected:
     int64_t inuptXDtypeSize_ = 0;
     bool isFullLoad = false;
 
-    InnerMoeInitRoutingV2TilingData moeInitRoutingTilingData;
+    InnerMoeInitRoutingTilingData moeInitRoutingTilingData;
 };
 
-inline bool InnerMoeInitRoutingV2TilingBase::DoOpTiling()
+inline bool InnerMoeInitRoutingTilingBase::DoOpTiling()
 {
     sortLoopMaxElement =
         (aicoreParams_.ubSize) / (sizeof(int32_t) * NUM_TWO * NUM_FOUR) / SORT32_ALIGN_ELEMENT * SORT32_ALIGN_ELEMENT;
@@ -173,7 +173,7 @@ inline bool InnerMoeInitRoutingV2TilingBase::DoOpTiling()
     return true;
 };
 
-inline uint64_t InnerMoeInitRoutingV2TilingBase::GetTilingKey() const
+inline uint64_t InnerMoeInitRoutingTilingBase::GetTilingKey() const
 {
     if (isFullLoad) {
         return TILING_KEY_HIGH_PERFORMANCE;
@@ -194,7 +194,7 @@ inline uint64_t InnerMoeInitRoutingV2TilingBase::GetTilingKey() const
     return tilingKey_;
 }
 
-inline bool InnerMoeInitRoutingV2TilingBase::GetShapeAttrsInfo(
+inline bool InnerMoeInitRoutingTilingBase::GetShapeAttrsInfo(
     int64_t m, int64_t cols, int64_t topK, int64_t expertCapacity, int64_t expertNum, int64_t activateNum,
     int64_t dropPadMode, int64_t expertTokensCountOrCumsumFlag, bool expertTokensBeforeCapacityFlag,
     int64_t inuptXDtypeSize, int64_t quantMode, int64_t scaleDim0)
@@ -225,7 +225,7 @@ inline bool InnerMoeInitRoutingV2TilingBase::GetShapeAttrsInfo(
     return true;
 }
 
-inline bool InnerMoeInitRoutingV2TilingBase::GetPlatformInfo(int64_t aivCoreNum, int64_t ubSizePlatForm)
+inline bool InnerMoeInitRoutingTilingBase::GetPlatformInfo(int64_t aivCoreNum, int64_t ubSizePlatForm)
 {
     aivNum = aivCoreNum;
     aicoreParams_.blockDim = aivCoreNum;
@@ -234,7 +234,7 @@ inline bool InnerMoeInitRoutingV2TilingBase::GetPlatformInfo(int64_t aivCoreNum,
     return true;
 }
 
-inline bool InnerMoeInitRoutingV2TilingBase::GetWorkspaceSize()
+inline bool InnerMoeInitRoutingTilingBase::GetWorkspaceSize()
 {
     // Calculate workspace size
     size_t sortWorkspaceSize = totalLength * sizeof(float) * NUM_TWO * NUM_THREE; // Space needed for sorting
@@ -245,7 +245,7 @@ inline bool InnerMoeInitRoutingV2TilingBase::GetWorkspaceSize()
     return true;
 }
 
-inline void InnerMoeInitRoutingV2TilingBase::Tiling4VBSOneCoreCompute(InnerMoeV2VBSComputeTilingData *tilingData)
+inline void InnerMoeInitRoutingTilingBase::Tiling4VBSOneCoreCompute(InnerMoeVBSComputeTilingData *tilingData)
 {
     tilingData->needCoreNum = 1;
     tilingData->perCoreElements = totalLength;
@@ -258,7 +258,7 @@ inline void InnerMoeInitRoutingV2TilingBase::Tiling4VBSOneCoreCompute(InnerMoeV2
     tilingData->lastCoreLastLoopElements = tilingData->perCoreElements;
 }
 
-inline void InnerMoeInitRoutingV2TilingBase::Tiling4VBSMultiCoreCompute(InnerMoeV2VBSComputeTilingData *tilingData)
+inline void InnerMoeInitRoutingTilingBase::Tiling4VBSMultiCoreCompute(InnerMoeVBSComputeTilingData *tilingData)
 {
     // Tiling4VBSMultiCoreCompute
     int64_t needCoreNum = CeilDiv(totalLength, sortLoopMaxElement); // Round up
@@ -298,7 +298,7 @@ inline void InnerMoeInitRoutingV2TilingBase::Tiling4VBSMultiCoreCompute(InnerMoe
     }
 }
 
-inline void InnerMoeInitRoutingV2TilingBase::Tiling4VBSCompute()
+inline void InnerMoeInitRoutingTilingBase::Tiling4VBSCompute()
 {
     auto tilingData = &moeInitRoutingTilingData.vbsComputeParamsOp;
     tilingData->oneLoopMaxElements = sortLoopMaxElement;
@@ -309,7 +309,7 @@ inline void InnerMoeInitRoutingV2TilingBase::Tiling4VBSCompute()
     Tiling4VBSMultiCoreCompute(tilingData);
 }
 
-inline void InnerMoeInitRoutingV2TilingBase::Tiling4VMSMiddleCompute()
+inline void InnerMoeInitRoutingTilingBase::Tiling4VMSMiddleCompute()
 {
     auto vbsComputeTilingData = &moeInitRoutingTilingData.vbsComputeParamsOp;
     auto tilingData = &moeInitRoutingTilingData.vmsMiddleComputeParamsOp;
@@ -321,13 +321,13 @@ inline void InnerMoeInitRoutingV2TilingBase::Tiling4VMSMiddleCompute()
     }
 }
 
-inline void InnerMoeInitRoutingV2TilingBase::Tiling4SortOutCompute()
+inline void InnerMoeInitRoutingTilingBase::Tiling4SortOutCompute()
 {
     auto tilingData = &moeInitRoutingTilingData.sortOutComputeParamsOp;
     tilingData->oneLoopMaxElements = mrgSortListMaxElement;
 }
 
-inline void InnerMoeInitRoutingV2TilingBase::Tiling4SrcToDstCompute()
+inline void InnerMoeInitRoutingTilingBase::Tiling4SrcToDstCompute()
 {
     auto tilingData = &moeInitRoutingTilingData.srcToDstComputeParamsOp;
 
@@ -362,7 +362,7 @@ inline void InnerMoeInitRoutingV2TilingBase::Tiling4SrcToDstCompute()
     }
 }
 
-inline void InnerMoeInitRoutingV2TilingBase::Tiling4SrcToDstCapacityCompute()
+inline void InnerMoeInitRoutingTilingBase::Tiling4SrcToDstCapacityCompute()
 {
     auto tilingData = &moeInitRoutingTilingData.srcToDstCapacityComputeParamsOp;
     int64_t perCoreRows = CeilDiv(totalLength, aivNum);
