@@ -229,17 +229,6 @@ public:
     {
     }
 
-    PTO_DEVICE void DebugStage(uint32_t coreType, uint32_t stage, Params const &params) const
-    {
-        if (coreIdx == 0) {
-            printf("[DEBUG-a5hang] device core_type=%u stage=%u rank=%u core=%u\n",
-                   coreType,
-                   stage,
-                   static_cast<uint32_t>(params.rank),
-                   coreIdx);
-        }
-    }
-
     template <int32_t CORE_TYPE = g_coreType>
     PTO_DEVICE
     void operator()(Params const &params);

@@ -28,12 +28,6 @@ constexpr int kDefaultWarmupIters = 3;
 constexpr int kDefaultMeasureIters = 5;
 constexpr double kMicrosecondsPerSecond = 1000.0 * 1000.0;
 constexpr double kBytesPerGiB = 1024.0 * 1024.0 * 1024.0;
-constexpr const char *kDebugHangTag = "[DEBUG-a5hang]";
-
-void DebugHangLog(int rank_id, const std::string &message)
-{
-    std::cerr << kDebugHangTag << " rank=" << rank_id << ' ' << message << std::endl;
-}
 
 struct DeviceBuffer {
     void *ptr = nullptr;
@@ -293,12 +287,9 @@ void PrintPerfSummary(const CaseConfig &cfg,
 bool RunOneRank(int rank_id, int world_size, const std::string &case_dir, const HcclRootInfo &root_info)
 {
     StandaloneRankRuntime runtime;
-    DebugHangLog(rank_id, "runtime_init begin");
     if (!InitStandaloneRankRuntime(runtime, rank_id, world_size, root_info)) {
-        DebugHangLog(rank_id, "runtime_init failed");
         return false;
     }
-    DebugHangLog(rank_id, "runtime_init done window_bytes=" + std::to_string(runtime.hccl.WindowBytes()));
 
     bool ok = false;
     try {
@@ -308,13 +299,9 @@ bool RunOneRank(int rank_id, int world_size, const std::string &case_dir, const 
             throw std::runtime_error("warmup/measure iters must be non-negative");
         }
 
-        DebugHangLog(rank_id, "load_case begin case_dir=" + case_dir);
         const CaseConfig cfg = LoadCaseConfig(case_dir + "/case.json");
         const RankFileSet files = BuildRankFileSet(case_dir, rank_id);
-        DebugHangLog(rank_id, "build_tiling begin");
         const DispatchFFNCombineBuildResult build = BuildDispatchFFNCombineTiling(cfg, runtime);
-        DebugHangLog(rank_id, "build_tiling done block_dim=" + std::to_string(build.block_dim) +
-                                 " workspace_bytes=" + std::to_string(build.workspace_bytes));
 
         const std::vector<uint8_t> x = ReadBinaryFile(files.x);
         const std::vector<uint8_t> weight1 = ReadBinaryFile(files.weight1);
@@ -364,21 +351,11 @@ bool RunOneRank(int rank_id, int world_size, const std::string &case_dir, const 
         args.out = out_dev.ptr;
         args.expert_token_nums = expert_token_nums_dev.ptr;
 
-        int launch_seq = 0;
-        auto launch_once = [&](const char *phase, int iter) {
-            const int seq = launch_seq++;
-            DebugHangLog(rank_id, std::string("launch begin phase=") + phase + " iter=" + std::to_string(iter) +
-                                      " seq=" + std::to_string(seq));
+        auto launch_once = [&]() {
             launchDispatchFFNCombine(args, runtime.compute_stream);
-            DebugHangLog(rank_id, std::string("stream_sync begin phase=") + phase + " iter=" + std::to_string(iter) +
-                                      " seq=" + std::to_string(seq));
             if (aclrtSynchronizeStream(runtime.compute_stream) != ACL_SUCCESS) {
-                DebugHangLog(rank_id, std::string("stream_sync failed phase=") + phase + " iter=" + std::to_string(iter) +
-                                          " seq=" + std::to_string(seq));
                 throw std::runtime_error("stream sync failed");
             }
-            DebugHangLog(rank_id, std::string("stream_sync done phase=") + phase + " iter=" + std::to_string(iter) +
-                                      " seq=" + std::to_string(seq));
         };
 
         std::vector<double> kernel_times_us;
@@ -386,49 +363,29 @@ bool RunOneRank(int rank_id, int world_size, const std::string &case_dir, const 
         kernel_times_us.reserve(static_cast<size_t>(measure_iters));
         e2e_times_us.reserve(static_cast<size_t>(measure_iters));
 
-        DebugHangLog(rank_id, "barrier before_warmup begin");
         CommMpiBarrier();
-        DebugHangLog(rank_id, "barrier before_warmup done");
         for (int iter = 0; iter < warmup_iters; ++iter) {
-            DebugHangLog(rank_id, "prepare begin phase=warmup iter=" + std::to_string(iter));
             PrepareIterationState(runtime, out_dev, expert_token_nums_dev, workspace_dev);
-            DebugHangLog(rank_id, "prepare done phase=warmup iter=" + std::to_string(iter));
-            DebugHangLog(rank_id, "barrier pre_launch begin phase=warmup iter=" + std::to_string(iter));
             CommMpiBarrier();
-            DebugHangLog(rank_id, "barrier pre_launch done phase=warmup iter=" + std::to_string(iter));
-            launch_once("warmup", iter);
-            DebugHangLog(rank_id, "barrier post_launch begin phase=warmup iter=" + std::to_string(iter));
+            launch_once();
             CommMpiBarrier();
-            DebugHangLog(rank_id, "barrier post_launch done phase=warmup iter=" + std::to_string(iter));
         }
 
         for (int iter = 0; iter < measure_iters; ++iter) {
-            DebugHangLog(rank_id, "prepare begin phase=measure iter=" + std::to_string(iter));
             PrepareIterationState(runtime, out_dev, expert_token_nums_dev, workspace_dev);
-            DebugHangLog(rank_id, "prepare done phase=measure iter=" + std::to_string(iter));
-            DebugHangLog(rank_id, "barrier pre_launch begin phase=measure iter=" + std::to_string(iter));
             CommMpiBarrier();
-            DebugHangLog(rank_id, "barrier pre_launch done phase=measure iter=" + std::to_string(iter));
             const auto host_start = std::chrono::high_resolution_clock::now();
             if (aclrtRecordEvent(kernel_start.event, runtime.compute_stream) != ACL_SUCCESS) {
                 throw std::runtime_error("failed to record kernel start event");
             }
-            DebugHangLog(rank_id, "launch begin phase=measure iter=" + std::to_string(iter) + " seq=" + std::to_string(launch_seq));
             launchDispatchFFNCombine(args, runtime.compute_stream);
-            DebugHangLog(rank_id, "record_end begin phase=measure iter=" + std::to_string(iter) + " seq=" + std::to_string(launch_seq));
             if (aclrtRecordEvent(kernel_end.event, runtime.compute_stream) != ACL_SUCCESS) {
                 throw std::runtime_error("failed to record kernel end event");
             }
-            DebugHangLog(rank_id, "stream_sync begin phase=measure iter=" + std::to_string(iter) + " seq=" + std::to_string(launch_seq));
             if (aclrtSynchronizeStream(runtime.compute_stream) != ACL_SUCCESS) {
-                DebugHangLog(rank_id, "stream_sync failed phase=measure iter=" + std::to_string(iter) + " seq=" + std::to_string(launch_seq));
                 throw std::runtime_error("stream sync failed");
             }
-            DebugHangLog(rank_id, "stream_sync done phase=measure iter=" + std::to_string(iter) + " seq=" + std::to_string(launch_seq));
-            launch_seq++;
-            DebugHangLog(rank_id, "barrier post_launch begin phase=measure iter=" + std::to_string(iter));
             CommMpiBarrier();
-            DebugHangLog(rank_id, "barrier post_launch done phase=measure iter=" + std::to_string(iter));
             const auto host_end = std::chrono::high_resolution_clock::now();
 
             float kernel_ms = 0.0f;
@@ -445,16 +402,10 @@ bool RunOneRank(int rank_id, int world_size, const std::string &case_dir, const 
             PrintPerfSummary(cfg, warmup_iters, measure_iters, kernel_max_samples, e2e_max_samples);
         }
 
-        DebugHangLog(rank_id, "prepare begin phase=verify iter=0");
         PrepareIterationState(runtime, out_dev, expert_token_nums_dev, workspace_dev);
-        DebugHangLog(rank_id, "prepare done phase=verify iter=0");
-        DebugHangLog(rank_id, "barrier pre_launch begin phase=verify iter=0");
         CommMpiBarrier();
-        DebugHangLog(rank_id, "barrier pre_launch done phase=verify iter=0");
-        launch_once("verify", 0);
-        DebugHangLog(rank_id, "barrier post_launch begin phase=verify iter=0");
+        launch_once();
         CommMpiBarrier();
-        DebugHangLog(rank_id, "barrier post_launch done phase=verify iter=0");
 
         std::vector<uint16_t> actual_out(static_cast<size_t>(cfg.m) * cfg.k);
         if (aclrtMemcpy(actual_out.data(), actual_out.size() * sizeof(uint16_t), out_dev.ptr,
@@ -518,13 +469,8 @@ int main(int argc, char **argv)
 
     const bool ok = RunOneRank(rank_id, world_size, case_dir, root_info);
 
-    DebugHangLog(rank_id, "final_barrier begin ok=" + std::to_string(ok ? 1 : 0));
     CommMpiBarrier();
-    DebugHangLog(rank_id, "final_barrier done");
-    DebugHangLog(rank_id, "aclFinalize begin");
     aclFinalize();
-    DebugHangLog(rank_id, "aclFinalize done");
-    DebugHangLog(rank_id, "CommMpiFinalize begin");
     CommMpiFinalize();
     return ok ? 0 : 1;
 }
