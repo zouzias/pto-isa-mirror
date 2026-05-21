@@ -305,12 +305,12 @@ __global__ AICORE void runExpertFfn(
                 }
             }
 
-            TMOV<TileMatYData, YAccTile, ReluPreMode::NormalRelu>(yMatTile, yAccTile);
-
             const size_t yScrOff = row * F + fBase;
             GlobalShapeYScratch yScrShape(currentM);
             GlobalDataYScratch yScrGlobal(Y_scratch + yScrOff, yScrShape);
-            TSTORE(yScrGlobal, yMatTile);
+            TSTORE<YAccTile, GlobalDataYScratch,
+                   AtomicType::AtomicNone,
+                   ReluPreMode::NormalRelu>(yScrGlobal, yAccTile);
         }
 
         // Pass 2: for each output-column panel n0, load Y from scratch and accumulate B.
