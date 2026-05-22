@@ -17,16 +17,16 @@ Five independently buildable kernels that together implement a top-`kTopK` MoE f
                        └────────────────┘                                  │
                                 │                                          │
                                 ▼                                          │
-              X  ───►  ┌────────────────┐  ──► A             [kT·kTopK+16, kH] fp16
-                       │   scatter      │  ──► A_id          [kT·kTopK+16]     int32
-                       │    (vec)       │  ──► rank_id       [kT·kTopK+16]     int32
+              X  ───►  ┌────────────────┐  ──► A             [kT·kTopK+64, kH] fp16
+                       │   scatter      │  ──► A_id          [kT·kTopK+64]     int32
+                       │    (vec)       │  ──► rank_id       [kT·kTopK+64]     int32
                        │                │  ──► expert_count  [kE]              int32
                        │                │  ──► expert_start  [kE]              int32
                        └────────────────┘
                                 │
                                 ▼
               W1, W2 ──►┌────────────────┐
-                       │  expert_ffn    │──► B               [kT·kTopK+16, kH] fp32
+                       │  expert_ffn    │──► B               [kT·kTopK+64, kH] fp32
                        │ (cube + cube,  │
                        │  Stage1+Stage2)│
                        └────────────────┘
@@ -43,7 +43,7 @@ Five independently buildable kernels that together implement a top-`kTopK` MoE f
                                 C  [kT, kH] fp32
 ```
 
-The +16 trailing rows on `A`, `A_id`, `rank_id`, `B`, and `Y_scratch` are the **overspill landing pad** for `expert_ffn`'s last-tile writes; `gather` ignores them.
+The +64 trailing rows on `A`, `A_id`, `rank_id`, `B`, and `Y_scratch` are the **overspill landing pad** for `expert_ffn`'s last-tile writes; `gather` ignores them.
 
 For `kTopK == 1` softmax is degenerate (single-value softmax = 1.0), so `gather` takes a **fast path** that skips Pass 1 entirely and reduces to the unweighted v1 permute / accumulation.
 

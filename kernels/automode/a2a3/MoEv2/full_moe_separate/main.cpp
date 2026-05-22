@@ -78,7 +78,7 @@ constexpr int kE     = 32;
 constexpr int kTopK  = 1;
 
 constexpr int kPackedRows   = kT * kTopK;
-constexpr int kOverspillPad = 16;
+constexpr int kOverspillPad = 64;
 constexpr int kAlloc        = kPackedRows + kOverspillPad;
 
 // Softmax tile column padding for 32-byte UB alignment in gather.

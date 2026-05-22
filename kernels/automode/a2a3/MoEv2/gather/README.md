@@ -19,9 +19,9 @@ For `kTopK == 1` the softmax is degenerate (single-element softmax = 1.0), and e
 
 | Buffer | Shape | dtype | Notes |
 |---|---|---|---|
-| `B` (input)         | `(kT·kTopK + 16, kH)` | fp32 | first `kT·kTopK` rows consulted |
-| `A_id` (input)      | `(kT·kTopK + 16)`     | int32 | first `kT·kTopK` consulted |
-| `rank_id` (input)   | `(kT·kTopK + 16)`     | int32 | only used when `kTopK > 1` |
+| `B` (input)         | `(kT·kTopK + 64, kH)` | fp32 | first `kT·kTopK` rows consulted |
+| `A_id` (input)      | `(kT·kTopK + 64)`     | int32 | first `kT·kTopK` consulted |
+| `rank_id` (input)   | `(kT·kTopK + 64)`     | int32 | only used when `kTopK > 1` |
 | `outVal` (input)    | `(kT, kPadded)`       | fp32 | cols `kTopK..kPadded-1` host-padded with `-1e30` |
 | `weights_scratch` (GM scratch) | `(kT, kPadded)` | fp32 | written by pass 1, read by pass 2 |
 | `C` (output)        | `(kT, kH)`            | fp32 | zero-initialized by host before launch; only required for `kTopK > 1` |

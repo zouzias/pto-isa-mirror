@@ -29,7 +29,7 @@
 #   - kF is only used by expert_ffn; the other folders are unaffected by it.
 #   - kE in gather/gen_data.py is used only to synthesize a valid A_id and
 #     is harmless to vary.
-#   - kTileM in expert_ffn is held fixed at 16 (not patched by this script).
+#   - kTileM in expert_ffn is held fixed at 64 (not patched by this script).
 #   - Per-folder run.sh has set -euo pipefail; on build error, that folder
 #     fails and the script continues with the next folder.
 

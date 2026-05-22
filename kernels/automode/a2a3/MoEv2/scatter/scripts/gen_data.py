@@ -11,9 +11,9 @@
 # Output files (raw little-endian, contiguous, no header):
 #   ./input/input_X.bin                  kT * kH            half (fp16)
 #   ./input/input_expert_id.bin          kT * kTopK         int32
-#   ./output/golden_A.bin                (kT*kTopK + 16) * kH  half  (trailing 16 rows zero)
-#   ./output/golden_A_id.bin             (kT*kTopK + 16)       int32 (trailing 16 = -1)
-#   ./output/golden_rank_id.bin          (kT*kTopK + 16)       int32 (trailing 16 = -1)
+#   ./output/golden_A.bin                (kT*kTopK + 64) * kH  half  (trailing 64 rows zero)
+#   ./output/golden_A_id.bin             (kT*kTopK + 64)       int32 (trailing 64 = -1)
+#   ./output/golden_rank_id.bin          (kT*kTopK + 64)       int32 (trailing 64 = -1)
 #   ./output/golden_expert_count.bin     kE                    int32
 #   ./output/golden_expert_start.bin     kE                    int32
 # --------------------------------------------------------------------------------
@@ -30,7 +30,7 @@ kE     = 32
 kTopK  = 1
 
 kPackedRows   = kT * kTopK
-kOverspillPad = 16
+kOverspillPad = 64
 kAlloc        = kPackedRows + kOverspillPad
 
 
