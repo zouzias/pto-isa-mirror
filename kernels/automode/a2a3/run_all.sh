@@ -51,6 +51,7 @@ KERNEL_FILTER=""
 MOE_SUBKERNEL_FILTER=""
 CASES_MOE=""
 CASES_FLASH_ATTEN=""
+RUN_LOG_DIR="${HERE}/run_log"
 
 # ----- Arg parsing ----------------------------------------------------------
 
@@ -155,14 +156,26 @@ run_one() {
     echo "[run_all] ${label}"
     echo "[run_all]   dir : ${dir}"
     echo "[run_all]   cmd : ${cmd[*]}"
+    echo "[run_all]   logs: ${RUN_LOG_DIR}/${label//\//_}_<start_ts>.out  ${RUN_LOG_DIR}/${label//\//_}_<start_ts>.err"
     echo "============================================================================"
 
     local start_ts end_ts
     start_ts=$(date +%s)
-    ( cd "${dir}" && "${cmd[@]}" )
+    # ensure run_log dir exists
+    mkdir -p "${RUN_LOG_DIR}"
+    # safe label for filenames: replace non-alnum with underscore
+    local safe_label
+    safe_label=$(echo "${label}" | sed 's#[^A-Za-z0-9._-]#_##g')
+    local out_log="${RUN_LOG_DIR}/${safe_label}_${start_ts}.out"
+    local err_log="${RUN_LOG_DIR}/${safe_label}_${start_ts}.err"
+
+    # Run the kernel, capturing stdout/stderr to separate files
+    ( cd "${dir}" && "${cmd[@]}" ) > "${out_log}" 2> "${err_log}"
     local rc=$?
     end_ts=$(date +%s)
     local elapsed=$((end_ts - start_ts))
+
+    echo "[run_all] logs saved: stdout=${out_log} stderr=${err_log}"
 
     RESULT_NAMES+=("${label}")
     RESULT_TIME+=("${elapsed}s")
