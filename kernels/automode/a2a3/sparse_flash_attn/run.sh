@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-SHORT=r:,v:,n:,b:,m:,s:,h:,d:,k:
-LONG=run-mode:,soc-version:,npu:,batch:,m-seq:,n-seq:,heads:,head-dim:,topk:
+SHORT=r:,v:,C:,n:,b:,m:,s:,h:,d:,k:
+LONG=run-mode:,soc-version:,compiler:,npu:,batch:,m-seq:,n-seq:,heads:,head-dim:,topk:
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 
@@ -24,6 +24,9 @@ do
             shift 2;;
         (-v | --soc-version )
             SOC_VERSION="$2"
+            shift 2;;
+        (-C | --compiler )
+            CMAKE_COMPILER="$2"
             shift 2;;
         (-n | --npu )
             NPU_ID="$2"
@@ -55,11 +58,13 @@ do
     esac
 done
 
+: "${CMAKE_COMPILER:=bisheng}"
+
 rm -rf build
 mkdir -p build
 cd build
 
-cmake -DRUN_MODE="${RUN_MODE}" -DSOC_VERSION="${SOC_VERSION}" ..
+cmake -DRUN_MODE="${RUN_MODE}" -DSOC_VERSION="${SOC_VERSION}" -DCMAKE_COMPILER="${CMAKE_COMPILER}" ..
 make -j
 
 cd ..

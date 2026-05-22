@@ -8,8 +8,8 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # ======================================================================================================================
 
-SHORT=r:,v:,n:,c:,a:,p:,i,d,k
-LONG=run-mode:,soc-version:,npu:,case:,cases:,qk-preload:,intermediate,debug,mask
+SHORT=r:,v:,C:,n:,c:,a:,p:,i,d,k
+LONG=run-mode:,soc-version:,compiler:,npu:,case:,cases:,qk-preload:,intermediate,debug,mask
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 while :
@@ -20,6 +20,9 @@ do
             shift 2;;
         (-v | --soc-version )
             SOC_VERSION="$2"
+            shift 2;;
+        (-C | --compiler )
+            CMAKE_COMPILER="$2"
             shift 2;;
         (-n | --npu )
             NPU_ID="$2"
@@ -50,6 +53,8 @@ do
             break;;
     esac
 done
+
+: "${CMAKE_COMPILER:=bisheng}"
 
 pattern="^Ascend910B|^Ascend910_9599"
 if [[ ! "$SOC_VERSION" =~ $pattern ]]; then
@@ -108,7 +113,7 @@ if [[ -n "${DEBUG_BUILD:-}" ]]; then
     CMAKE_EXTRA+=(-DDEBUG_MODE=ON)
 fi
 
-cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} "${CMAKE_EXTRA[@]}" ..
+cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} -DCMAKE_COMPILER="${CMAKE_COMPILER}" "${CMAKE_EXTRA[@]}" ..
 make -j16
 
 EXTRA_BIN_ARGS=()

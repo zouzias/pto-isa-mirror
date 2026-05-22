@@ -38,7 +38,7 @@ endif()
 
 set(ASCEND_DRIVER_PATH /usr/local/Ascend/driver)
 
-set(CMAKE_COMPILER bisheng)
+set(CMAKE_COMPILER bisheng CACHE STRING "Compiler used for auto-mode kernel builds")
 set(CMAKE_C_COMPILER ${CMAKE_COMPILER})
 set(CMAKE_CXX_COMPILER ${CMAKE_COMPILER})
 

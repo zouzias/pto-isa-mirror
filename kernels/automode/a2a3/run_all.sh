@@ -11,10 +11,10 @@
 #
 # run_all.sh - unified runner for every auto-mode kernel under
 # kernels/automode/a2a3/. Selects which kernels to run, then cd-s into each
-# kernel directory and invokes its run.sh with -r/-v/-n forwarded.
+# kernel directory and invokes its run.sh with -r/-v/-C/-n forwarded.
 #
 # Usage:
-#   bash run_all.sh -r npu -v Ascend910B1
+#   bash run_all.sh -r npu -v Ascend910B1 -C bisheng
 #   bash run_all.sh -r npu -v Ascend910B1 --kernels add_tile_array,topk
 #   bash run_all.sh -r npu -v Ascend910B1 --kernels MoE --moe-subkernels expert_ffn,gather
 #   bash run_all.sh -r npu -v Ascend910B1 --cases-moe "512,128,128,32,1"
@@ -46,6 +46,7 @@ MOE_SUBKERNELS=(router_matmul moe_topk moe_topk_padded scatter expert_ffn gather
 
 RUN_MODE=""
 SOC_VERSION=""
+CMAKE_COMPILER="bisheng"
 NPU_ID=""
 KERNEL_FILTER=""
 MOE_SUBKERNEL_FILTER=""
@@ -63,6 +64,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -r|--run-mode)        RUN_MODE="$2"; shift 2;;
         -v|--soc-version)     SOC_VERSION="$2"; shift 2;;
+        -C|--compiler)        CMAKE_COMPILER="$2"; shift 2;;
         -n|--npu)             NPU_ID="$2"; shift 2;;
         --kernels)            KERNEL_FILTER="$2"; shift 2;;
         --kernels=*)          KERNEL_FILTER="${1#*=}"; shift;;
@@ -143,7 +145,7 @@ run_one() {
     shift 2
     local extra_args=("$@")  # any extra args (e.g. -a "...")
 
-    local cmd=(bash run.sh -r "${RUN_MODE}" -v "${SOC_VERSION}")
+    local cmd=(bash run.sh -r "${RUN_MODE}" -v "${SOC_VERSION}" -C "${CMAKE_COMPILER}")
     if [[ -n "${NPU_ID}" ]]; then
         cmd+=(-n "${NPU_ID}")
     fi

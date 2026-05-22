@@ -5,8 +5,8 @@
 #   bash run.sh -r npu -v Ascend910B1                       # default case
 #   bash run.sh -r npu -v Ascend910B1 -a "256,64,64,32,1"   # custom shape
 
-SHORT=r:,v:,n:,a:
-LONG=run-mode:,soc-version:,npu:,cases:
+SHORT=r:,v:,C:,n:,a:
+LONG=run-mode:,soc-version:,compiler:,npu:,cases:
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 while :
@@ -17,6 +17,9 @@ do
             shift 2;;
         (-v | --soc-version )
             SOC_VERSION="$2"
+            shift 2;;
+        (-C | --compiler )
+            CMAKE_COMPILER="$2"
             shift 2;;
         (-n | --npu )
             NPU_ID="$2"
@@ -32,6 +35,8 @@ do
             break;;
     esac
 done
+
+: "${CMAKE_COMPILER:=bisheng}"
 
 if [[ ! "${SOC_VERSION}" =~ ^Ascend ]]; then
     echo "[ERROR] Unsupported SocVersion: ${SOC_VERSION}"
@@ -62,7 +67,7 @@ cd build
 export LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib:$LD_LIBRARY_PATH
 set -euo pipefail
 
-cmake  -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} ..
+cmake  -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} -DCMAKE_COMPILER=${CMAKE_COMPILER} ..
 make -j16
 
 ./router_matmul

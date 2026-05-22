@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 
-set(CMAKE_C_COMPILER bisheng)
-set(CMAKE_CXX_COMPILER bisheng)
+set(CMAKE_COMPILER bisheng CACHE STRING "Compiler used for auto-mode kernel builds")
+set(CMAKE_C_COMPILER ${CMAKE_COMPILER})
+set(CMAKE_CXX_COMPILER ${CMAKE_COMPILER})
 
 project(sparse_flash_attention_example)
 

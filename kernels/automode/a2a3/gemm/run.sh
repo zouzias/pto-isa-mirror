@@ -10,8 +10,8 @@
 # --------------------------------------------------------------------------------
 
 
-SHORT=r:,v:,
-LONG=run-mode:,soc-version:,
+SHORT=r:,v:,C:,
+LONG=run-mode:,soc-version:,compiler:,
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 while :
@@ -23,6 +23,9 @@ do
         (-v | --soc-version )
             SOC_VERSION="$2"
             shift 2;;
+        (-C | --compiler )
+            CMAKE_COMPILER="$2"
+            shift 2;;
         (--)
             shift;
             break;;
@@ -31,6 +34,8 @@ do
             break;;
     esac
 done
+
+: "${CMAKE_COMPILER:=bisheng}"
 
 if [[ ! "${SOC_VERSION}" =~ ^Ascend ]]; then
     echo "[ERROR] Unsupported SocVersion: ${SOC_VERSION}"
@@ -49,7 +54,7 @@ cd build
 export LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib:$LD_LIBRARY_PATH
 set -euo pipefail
 
-cmake  -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} ..
+cmake  -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} -DCMAKE_COMPILER=${CMAKE_COMPILER} ..
 make -j16
 
 ./gemm_performance
