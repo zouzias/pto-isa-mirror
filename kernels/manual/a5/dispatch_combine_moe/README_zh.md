@@ -4,54 +4,57 @@
 
 本目录实现面向 A5 / Ascend950 形态的 MoE `dispatch -> FFN -> combine` 融合 kernel。它把跨 rank token dispatch、两段 int8 grouped matmul、GMM1 后的 SwiGLU、GMM2 后的概率加权 combine、以及最终 token restore 放进一个混合 AIC/AIV kernel 中，通过 PTO tile / vector / comm 原语和 HCCL RDMA window 显式组织计算通信流水。
 
-当前项目的顶层 target、host 可执行文件、运行脚本和输出 profile 名称均为 `dispatch_combine_moe`。当前 device 编译单元和 kernel symbol 仍使用 `dispatch_combine_moe.*` / `dispatch_combine_moe` 这一组源码符号；README 中出现这些名字时仅指当前目录内的实际代码文件或 device symbol。
-
 ## 支持的 AI 处理器
 
 - A5 / Ascend950 系列，kernel 编译目标为 `dav-c310`。
-- 当前仓库所在机器按项目约定不是 A5 runtime 验证环境，本目录默认可做 A5 compile-only 验证；端到端运行需要在 A5-capable 环境执行。
 
 ## 当前目录结构
 
-生成目录如 `build/`、`out/`、`.cache/` 不属于源码分层，下面只列当前手写代码和脚本：
-
 ```text
 kernels/manual/a5/dispatch_combine_moe/
-├── CMakeLists.txt                         # A5 kernel shared lib + standalone host exe 构建入口
-├── run.sh                                 # 生成数据、构建、MPI 多 rank 运行的一键脚本
-├── main.cpp                               # Host runner：MPI/ACL/HCCL 初始化、launch、计时、校验
-├── kernel_launch.hpp                      # host launch 参数结构与 launchDispatchCombineMoe 声明
+├── CMakeLists.txt                         # kernel shared lib 与 standalone host 可执行文件构建
+├── run.sh                                 # 生成 case、配置构建目录，并通过 MPI 启动多 rank smoke case
+├── main.cpp                               # standalone host runner：MPI/ACL/HCCL 初始化、kernel launch、计时与校验
+├── kernel_launch.hpp                      # launch 参数结构与 launchDispatchCombineMoe host 接口声明
 ├── op_host/
-│   ├── comm_mpi.h                         # dlopen/dlsym 加载 MPI，避免 host 二进制硬链接 MPI
-│   ├── data_utils.{hpp,cpp}               # case.json、rank 输入输出文件、FP16 compare
-│   ├── runtime_context.{hpp,cpp}          # ACL/HCCL runtime、remote-window context 解析
-│   └── tiling_builder.{hpp,cpp}           # Host tiling、block_dim、workspace、window 容量校验
+│   ├── comm_mpi.h                         # 运行时加载 MPI 符号，避免编译期绑定固定 MPI 实现
+│   ├── data_utils.{hpp,cpp}               # case/rank 二进制输入输出读写与 FP16 结果对比
+│   ├── runtime_context.{hpp,cpp}          # ACL/HCCL stream、communicator、remote window 生命周期管理
+│   └── tiling_builder.{hpp,cpp}           # 构造 tiling、workspace/blockDim，并检查 remote-window 布局
 ├── op_kernel/
-│   ├── dispatch_combine_moe.cpp           # device kernel symbol 与 host launch stub
-│   ├── dispatch_combine_moe.h             # op Init/Process，A5 policy、layout、params 装配
-│   ├── dispatch_combine_moe_kernel.hpp    # AIC/AIV 主 orchestrator 与融合流水实现
-│   ├── dispatch_combine_moe_tiling.h      # tiling/runtime/launch config 结构
+│   ├── dispatch_combine_moe.cpp           # device kernel symbol、tiling 注册与 host launch stub
+│   ├── dispatch_combine_moe.h             # 将 host tiling 装配成 A5 policy、layout 与 kernel params
+│   ├── dispatch_combine_moe_kernel.hpp    # 混合 AIC/AIV 主控：routing、dispatch、GMM、epilogue、restore
+│   ├── dispatch_combine_moe_tiling.h      # host/device 共用的 tiling、runtime、launch config 结构
 │   ├── token_reorder/
-│   │   ├── routing/                       # routing / sort / expand / quant / expert count
-│   │   └── unpermute/                     # top-k 概率加权 restore / unpermute
+│   │   ├── routing/
+│   │   │   ├── moe_init_routing_quant.cpp                 # routing 入口，按 tiling 结果调度 full-load/sort/gather quant 路径
+│   │   │   ├── moe_init_routing_quant_tiling.h            # routing quant tiling、分支选择与 workspace 计算
+│   │   │   ├── moe_init_routing_tiling_common.h           # routing 子阶段共享 tiling 结构与 tiling base
+│   │   │   ├── moe_init_routing_sort.h                    # one-core/multi-core routing sort 编排
+│   │   │   ├── moe_packed_sort_merge.h                    # packed sort record merge 与输出拆解
+│   │   │   ├── moe_pto_sort.h                             # PTO UB sort、packed sort 与 vector/sync helper
+│   │   │   ├── moe_init_routing_expert_tokens.h           # expert token count/cumsum 与 expandedRowIdx/src-to-dst 映射
+│   │   │   ├── moe_init_routing_fullload_dynamic_quant.h  # full-load 路径的排序、统计、gather、逐行 dynamic quant
+│   │   │   ├── moe_init_routing_gather_dynamic_quant.h    # gather 路径按 expandedRowIdx 取 token 并输出 int8 payload/scale
+│   │   │   └── moe_common.h                               # routing 常量、对齐与 GM 初始化工具
+│   │   └── unpermute/
+│   │       ├── moe_token_unpermute.h                      # 按 expandedRowIdx/probs 把 expanded 输出累加回原 token 顺序
+│   │       └── moe_token_unpermute_tiling.h               # restore/unpermute 的 token/core 与 hidden chunk tiling
 │   └── utils/
-│       ├── block_mmad_preload_async_fixpipe_quant.hpp # AIC MMAD 多级流水
-│       ├── block_epilogue_pertoken_swiglu.hpp         # GMM1 后 dequant + SwiGLU + quant
-│       ├── block_epilogue_pertoken_row.hpp            # CombineV1 row 级 dequant + 回写/TPUT
-│       ├── block_epilogue_pertoken_v2.hpp             # CombineV2 tile 级 dequant + 分 rank 回写/TPUT
-│       ├── pto_mmad_ops.hpp               # PTO matmul / GM-L1 / L1-L0 / fixpipe store 封装
-│       ├── pto_vector_ops.hpp             # PTO vector TLOAD/TSTORE/TCVT/算术桥接
-│       ├── moe_pto_utils.hpp              # shape/layout/arch/resource/sync 公共封装
-│       ├── hccl_context.hpp               # device 侧 HCCL context 结构解析
-│       ├── hccl_window.hpp                # PtoRemoteWindow 与跨 rank notify/wait
-│       ├── layout3d.hpp                   # tokenPerExpert 三维布局辅助
-│       ├── const_args.hpp                 # 常量、对齐、flag stride、window 单位
-│       └── dispatch_policy_custom.hpp     # A5 MMAD / epilogue policy tag
-├── scripts/gen_data.py                    # CPU golden 与 rank 输入文件生成器
-├── DESIGN.md                              # 设计说明
-├── mc2_2_pto.md                           # PTO 化过程中的本地笔记
-├── megamoe理解.md                         # MegaMoE 流水理解笔记
-├── pto_tile_programming_report.md         # 当前 PTO tile 化改写报告
+│       ├── block_mmad_preload_async_fixpipe_quant.hpp # AIC 侧 GM-L1-L0-MMAD-fixpipe staged pipeline
+│       ├── block_epilogue_pertoken_swiglu.hpp         # GMM1 输出 dequant、SwiGLU、再 per-token quant
+│       ├── block_epilogue_pertoken_row.hpp            # CombineV1：按 row dequant 并本地 store 或远端 TPUT
+│       ├── block_epilogue_pertoken_v2.hpp             # CombineV2：按 GMM tile 切分目标 rank 并回写 offsetD
+│       ├── pto_mmad_ops.hpp               # AIC matmul 相关 PTO tile wrapper 与 scale/fixpipe store helper
+│       ├── pto_vector_ops.hpp             # UB/Vec tile 搬运、cast、算术、reduce 等 PTO vector helper
+│       ├── moe_pto_utils.hpp              # shape/layout、arch resource、workspace、同步与拷贝公共工具
+│       ├── hccl_context.hpp               # device 侧 HCCL remote-window context 数据结构
+│       ├── hccl_window.hpp                # remote-window 地址映射、跨 rank TGET/TPUT notify/wait 封装
+│       ├── layout3d.hpp                   # tokenPerExpert[dst][src][expert] 三维索引布局
+│       ├── const_args.hpp                 # 对齐、flag、remote-window offset 等公共常量
+│       └── dispatch_policy_custom.hpp     # A5 MMAD policy 与三类 epilogue policy tag
+├── scripts/gen_data.py                    # 生成 rank 输入、CPU golden、case.json 与校验数据
 ├── README.md                              # 英文 README
 └── README_zh.md                           # 中文 README
 ```
@@ -93,7 +96,6 @@ BF16 X
 | Kernel shared target | `dispatch_combine_moe_kernel` |
 | Device kernel symbol | `dispatch_combine_moe` |
 | Kernel 类型 | `KERNEL_TYPE_MIX_AIC_1_2` |
-| Tiling key | `1000010` |
 | 输入 `x` | `M×K`, BF16 bits，以 `uint16_t` 文件表示 |
 | 输入 `weight1` | `expert_per_rank×K×N`, `int8`, Zn packed |
 | 输入 `weight2` | `expert_per_rank×(N/2)×K`, `int8`, Zn packed |
@@ -139,10 +141,10 @@ run.sh
 
 `op_host/tiling_builder.cpp` 的顶层函数是 `BuildDispatchCombineMoeTiling()`，主要填四类信息：
 
-1. `DispatchCombineMoeInfo`：`M/K/N/topK/expertPerRank/worldSize/maxOutputSize/listLen/aivNum`。
+1. `DispatchCombineMoeInfo`：`M/K/N/topK/expertPerRank/worldSize/maxOutputSize/aivNum`。
 2. `CoCTiling`：`m0=128`、`k0=256`、`n0=256`、`ubMoveNum=16KiB`、`commNpuSplit=world_size`、routing quant tiling 等。
 3. `DispatchCombineMoeRuntimeInfo`：rank id、rank size、device 侧 remote-window context 地址。
-4. `DispatchCombineMoeLaunchConfig`：`blockDim`、`tilingKey=1000010`、`workspaceBytes`。
+4. `DispatchCombineMoeLaunchConfig`：`blockDim`、kernel 分支 key、`workspaceBytes`。
 
 它还会在 host 侧提前校验 HCCL window 布局是否足够容纳 per-token scale、dispatch output 和 token-count 区域，避免 kernel 内访问越界。
 
@@ -155,8 +157,8 @@ run.sh
 ```text
 dispatch_combine_moe(..., workspaceGM, tilingGM)
   -> REGISTER_TILING_DEFAULT(DispatchCombineMoeTilingData)
-  -> TILING_KEY_IS(1000010)
-  -> KERNEL_TASK_TYPE(1000010, KERNEL_TYPE_MIX_AIC_1_2)
+  -> match the fixed kernel branch key
+  -> KERNEL_TYPE_MIX_AIC_1_2
   -> DispatchCombineMoe<int8_t, DTYPE_W1, DTYPE_OUT, false, true>
   -> op.Init(...)
   -> op.Process()
@@ -220,7 +222,7 @@ x / expert_idx / probs / x_active_mask
 1. `op_kernel/dispatch_combine_moe.cpp`：确认 device kernel symbol、tiling key、mixed AIC/AIV task type 和 host launch stub。
 2. `op_kernel/dispatch_combine_moe.h`：看 `DispatchCombineMoe::Init()` 如何从 tiling 取 shape/rank/window 信息，再看 `Process()` 如何装配 A5 policy、GMM layout、epilogue policy 和 `DispatchCombineMoeKernel::Params`。
 3. `op_kernel/dispatch_combine_moe_kernel.hpp`：先看 `operator()<AIC/AIV>()` 和五个 AIV `Run*Impl()` / 三个 AIC `Run*Impl()`，这是当前算子的主线。
-4. `op_kernel/token_reorder/routing/moe_init_routing_quant.cpp`：看 routing 子系统如何根据 tilingKey 选择 sort/count/gather/quant 分支。
+4. `op_kernel/token_reorder/routing/moe_init_routing_quant.cpp`：看 routing 子系统如何根据 tiling 结果选择 sort/count/gather/quant 分支。
 5. `op_kernel/utils/block_mmad_preload_async_fixpipe_quant.hpp`：看 AIC GMM 如何把 A/B/scale 从 GM 送进 L1/L0，并用 `Finalize()` 给 AIV 发同步点。
 6. `op_kernel/utils/block_epilogue_pertoken_swiglu.hpp`：看 GMM1 输出如何变成 GMM2 输入。
 7. `op_kernel/utils/block_epilogue_pertoken_row.hpp` 和 `op_kernel/utils/block_epilogue_pertoken_v2.hpp`：看 GMM2 输出如何按 row 或 tile 粒度写回各 source rank。
@@ -248,7 +250,7 @@ x / expert_idx / probs / x_active_mask
 
 ### Workspace 分层
 
-`WorkspaceInfo` 在 `ptrWorkspace` 内按顺序切出以下主要区域：
+`WorkspaceInfo` 在 kernel launch 传入的 GM workspace（`ptrWorkspace`）内按顺序切出以下主要区域：
 
 | 区域 | 用途 |
 | ---- | ---- |
@@ -277,7 +279,7 @@ Routing 子系统的入口是 `token_reorder/routing/moe_init_routing_quant.cpp`
 - `expertIdx`：`M×topK` global expert id。
 - `scale` / `offset`：dynamic quant 可选平滑参数入口；当前主链传入 scale，offset 保留。
 - `workspace`：routing 内部排序、临时索引用 workspace。
-- `tilingData` / `tilingKey`：host 侧 `MoeInitRoutingQuantTilingBase::DoTiling()` 生成。
+- routing tiling：host 侧 `MoeInitRoutingQuantTilingBase::DoTiling()` 生成，决定 full-load、one-core sort 或 multi-core sort 路径。
 
 输出：
 
@@ -286,20 +288,20 @@ Routing 子系统的入口是 `token_reorder/routing/moe_init_routing_quant.cpp`
 - `expertTokensCountOrCumsum`：本 rank token-per-expert 统计，当前主链写到 remote-window token-count 区域。
 - `dynamicQuantScale`：每个 expanded row 的 per-token scale，当前主链写到 `remoteWindow + offsetPeerPerTokenScale`。
 
-### Routing tilingKey 分支
+### Routing 分支
 
 ```text
 moe_init_routing_quant()
-├── tilingKey == 21000
+├── full-load path
 │   └── RunFullLoadDynamicQuant()
 │       └── MoeFullLoadDynamicQuant
 │           sort + count/cumsum + gather/quant 在 full-load 路径内完成
-├── tilingKey == 11000
+├── one-core sort path
 │   ├── RunSortStage<MoeSortOneCore>()
 │   ├── RunExpertTokenOut()
 │   ├── RunSrcToDst()
 │   └── RunGatherDynamicQuant()
-└── tilingKey == 11010
+└── multi-core sort path
     ├── RunSortStage<MoeSortMultiCore>()
     ├── RunExpertTokenOut()
     ├── RunSrcToDst()
@@ -311,7 +313,7 @@ moe_init_routing_quant()
 | Helper | 包装的实现 | 职责 |
 | ------ | ---------- | ---- |
 | `RunFullLoadDynamicQuant()` | `MoeFullLoadDynamicQuant` | full-load 一体路径；内部完成 sort、expert 统计、src-to-dst 映射、gather 和逐行量化 |
-| `RunSortStage<SortOp>()` | `MoeSortOneCore` / `MoeSortMultiCore` | 根据 tilingKey 选择单核或多核 sort，实现 routing record 有序化 |
+| `RunSortStage<SortOp>()` | `MoeSortOneCore` / `MoeSortMultiCore` | 执行 host tiling 选中的单核或多核 sort，实现 routing record 有序化 |
 | `RunExpertTokenOut()` | `MoeExpertTokenOut` | 当 `expertTokensCountOrCumsumFlag` 要求输出时，生成 expert token count/cumsum |
 | `RunSrcToDst()` | `MoeSrcToDstOp` | 把排序后的 routing record 转成 `expandedRowIdx` source-to-destination 行映射 |
 | `RunGatherDynamicQuant()` | `MoeGatherDynamicQuant` | 按 `expandedRowIdx` gather 原 token 行，计算 per-token abs-max scale，并写 int8 payload 与 scale |
@@ -320,8 +322,8 @@ moe_init_routing_quant()
 
 | 文件 | 职责 |
 | ---- | ---- |
-| `moe_init_routing_quant.cpp` | routing 子系统入口，根据 tilingKey 选择 full-load、one-core sort 或 multi-core sort 路径 |
-| `moe_init_routing_quant_tiling.h` | quant routing tiling：生成 `tilingKey`、workspace size、full-load/gather 分支参数 |
+| `moe_init_routing_quant.cpp` | routing 子系统入口，根据 host tiling 选择 full-load、one-core sort 或 multi-core sort 路径 |
+| `moe_init_routing_quant_tiling.h` | quant routing tiling：生成 workspace size 与 full-load/gather 分支参数 |
 | `moe_init_routing_tiling_common.h` | common routing tiling：`AiCoreParams`、`TilingBaseClass`、VBS/VMS/sort-out/src-to-dst/gather 子 tiling |
 | `moe_init_routing_sort.h` | 本卡内 routing sort 编排，集中定义 `MoeSortBase`、`MoeSortOneCore`、`MoeSortMultiCore` |
 | `moe_packed_sort_merge.h` | packed sort record 的 merge/extract：`MoeMrgsort`、`MoeMrgsortOut`、`PtoMergePackedSortRecords` |

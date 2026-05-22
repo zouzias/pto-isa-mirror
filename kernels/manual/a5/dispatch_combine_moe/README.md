@@ -6,54 +6,57 @@
 
 This directory implements an A5 / Ascend950-oriented fused MoE kernel for the `dispatch -> FFN -> combine` path. The kernel fuses cross-rank token dispatch, two int8 grouped matmuls, the post-GMM1 SwiGLU path, the post-GMM2 probability-weighted combine path, and final token restore into one mixed AIC/AIV kernel. The implementation explicitly builds the compute-communication pipeline with PTO tile/vector/communication primitives and HCCL RDMA remote windows.
 
-The top-level project target, host executable, run script, and profile label are named `dispatch_combine_moe`. The device compilation unit and device kernel symbol still use the current source-level names `dispatch_combine_moe.*` / `dispatch_combine_moe`; in this document those names only refer to the actual source files and device symbol inside this directory.
-
 ## Supported AI Processors
 
 - A5 / Ascend950 family, with device compilation target `dav-c310`.
-- Per the project convention, the current repository machine is not treated as an A5 runtime validation target. This directory can be compile-verified for A5 locally; end-to-end execution must be done on an A5-capable environment.
 
 ## Source Layout
 
-Generated directories such as `build/`, `out/`, and `.cache/` are intentionally omitted.
-
 ```text
 kernels/manual/a5/dispatch_combine_moe/
-├── CMakeLists.txt                         # A5 kernel shared library + standalone host executable
-├── run.sh                                 # data generation, build, and MPI multi-rank run script
-├── main.cpp                               # host runner: MPI/ACL/HCCL init, launch, timing, verification
-├── kernel_launch.hpp                      # host launch argument structure and launchDispatchCombineMoe declaration
+├── CMakeLists.txt                         # builds the kernel shared library and standalone host executable
+├── run.sh                                 # generates the case, configures the build directory, and starts multi-rank smoke runs with MPI
+├── main.cpp                               # standalone host runner: MPI/ACL/HCCL init, kernel launch, timing, and verification
+├── kernel_launch.hpp                      # launch argument structure and launchDispatchCombineMoe host interface declaration
 ├── op_host/
-│   ├── comm_mpi.h                         # dlopen/dlsym MPI shim to avoid hard-linking MPI
-│   ├── data_utils.{hpp,cpp}               # case.json, rank files, FP16 comparison
-│   ├── runtime_context.{hpp,cpp}          # ACL/HCCL runtime and remote-window context parsing
-│   └── tiling_builder.{hpp,cpp}           # host tiling, block_dim, workspace, remote-window capacity checks
+│   ├── comm_mpi.h                         # loads MPI symbols at runtime instead of binding to one MPI implementation at link time
+│   ├── data_utils.{hpp,cpp}               # reads/writes case and rank binary files and compares FP16 outputs
+│   ├── runtime_context.{hpp,cpp}          # manages ACL/HCCL streams, communicator, and remote-window lifetime
+│   └── tiling_builder.{hpp,cpp}           # builds tiling/workspace/blockDim and checks the remote-window layout
 ├── op_kernel/
-│   ├── dispatch_combine_moe.cpp           # device kernel symbol and host launch stub
-│   ├── dispatch_combine_moe.h             # op Init/Process, A5 policy, layouts, parameter assembly
-│   ├── dispatch_combine_moe_kernel.hpp    # mixed AIC/AIV orchestrator and fused pipeline
-│   ├── dispatch_combine_moe_tiling.h      # tiling/runtime/launch config structures
+│   ├── dispatch_combine_moe.cpp           # device kernel symbol, tiling registration, and host launch stub
+│   ├── dispatch_combine_moe.h             # turns host tiling into A5 policies, layouts, and kernel params
+│   ├── dispatch_combine_moe_kernel.hpp    # mixed AIC/AIV orchestrator for routing, dispatch, GMM, epilogue, and restore
+│   ├── dispatch_combine_moe_tiling.h      # host/device shared tiling, runtime, and launch config structures
 │   ├── token_reorder/
-│   │   ├── routing/                       # routing / sort / expand / quant / expert count
-│   │   └── unpermute/                     # top-k weighted restore / unpermute
+│   │   ├── routing/
+│   │   │   ├── moe_init_routing_quant.cpp                 # routing entry, dispatching full-load/sort/gather-quant paths from tiling results
+│   │   │   ├── moe_init_routing_quant_tiling.h            # routing quant tiling, branch selection, and workspace calculation
+│   │   │   ├── moe_init_routing_tiling_common.h           # shared routing sub-stage tiling structures and tiling base
+│   │   │   ├── moe_init_routing_sort.h                    # one-core/multi-core routing sort orchestration
+│   │   │   ├── moe_packed_sort_merge.h                    # packed sort-record merge and output extraction
+│   │   │   ├── moe_pto_sort.h                             # PTO UB sort, packed sort, vector helpers, and sync bridge
+│   │   │   ├── moe_init_routing_expert_tokens.h           # expert token count/cumsum and expandedRowIdx/src-to-dst mapping
+│   │   │   ├── moe_init_routing_fullload_dynamic_quant.h  # full-load path for sort, statistics, gather, and row-wise dynamic quant
+│   │   │   ├── moe_init_routing_gather_dynamic_quant.h    # gather path that reads tokens by expandedRowIdx and writes int8 payload/scale
+│   │   │   └── moe_common.h                               # routing constants, alignment helpers, and GM initialization utilities
+│   │   └── unpermute/
+│   │       ├── moe_token_unpermute.h                      # accumulates expanded outputs back to original token order using expandedRowIdx/probs
+│   │       └── moe_token_unpermute_tiling.h               # token/core and hidden-chunk tiling for restore/unpermute
 │   └── utils/
-│       ├── block_mmad_preload_async_fixpipe_quant.hpp # AIC MMAD staged pipeline
-│       ├── block_epilogue_pertoken_swiglu.hpp         # post-GMM1 dequant + SwiGLU + quant
-│       ├── block_epilogue_pertoken_row.hpp            # CombineV1 row-level dequant + store/TPUT
-│       ├── block_epilogue_pertoken_v2.hpp             # CombineV2 tile-level dequant + per-rank store/TPUT
-│       ├── pto_mmad_ops.hpp               # PTO matmul / GM-L1 / L1-L0 / fixpipe-store wrappers
-│       ├── pto_vector_ops.hpp             # PTO vector TLOAD/TSTORE/TCVT/arithmetic wrappers
-│       ├── moe_pto_utils.hpp              # shared shape/layout/arch/resource/sync helpers
-│       ├── hccl_context.hpp               # device-side HCCL context parsing
-│       ├── hccl_window.hpp                # PtoRemoteWindow and cross-rank notify/wait
-│       ├── layout3d.hpp                   # 3D tokenPerExpert layout helper
-│       ├── const_args.hpp                 # constants, alignment, flag stride, window units
-│       └── dispatch_policy_custom.hpp     # A5 MMAD and epilogue policy tags
-├── scripts/gen_data.py                    # CPU golden and rank input generator
-├── DESIGN.md                              # design notes
-├── mc2_2_pto.md                           # local notes from PTO migration
-├── megamoe理解.md                         # MegaMoE pipeline notes
-├── pto_tile_programming_report.md         # current PTO tile programming report
+│       ├── block_mmad_preload_async_fixpipe_quant.hpp # AIC-side GM-L1-L0-MMAD-fixpipe staged pipeline
+│       ├── block_epilogue_pertoken_swiglu.hpp         # dequantizes GMM1 output, applies SwiGLU, then per-token requantizes
+│       ├── block_epilogue_pertoken_row.hpp            # CombineV1: row-wise dequant and local store or remote TPUT
+│       ├── block_epilogue_pertoken_v2.hpp             # CombineV2: splits GMM tiles by destination rank and writes back to offsetD
+│       ├── pto_mmad_ops.hpp               # AIC matmul PTO tile wrappers plus scale/fixpipe-store helpers
+│       ├── pto_vector_ops.hpp             # UB/Vec tile movement, cast, arithmetic, and reduce PTO helpers
+│       ├── moe_pto_utils.hpp              # shared shape/layout, arch resource, workspace, sync, and copy helpers
+│       ├── hccl_context.hpp               # device-side HCCL remote-window context data structures
+│       ├── hccl_window.hpp                # remote-window address mapping plus cross-rank TGET/TPUT notify/wait wrappers
+│       ├── layout3d.hpp                   # tokenPerExpert[dst][src][expert] 3D index layout
+│       ├── const_args.hpp                 # common constants for alignment, flags, and remote-window offsets
+│       └── dispatch_policy_custom.hpp     # A5 MMAD policy and the three epilogue policy tags
+├── scripts/gen_data.py                    # generates rank inputs, CPU golden outputs, case.json, and verification data
 ├── README_zh.md                           # Chinese README
 └── README.md                              # English README
 ```
@@ -95,7 +98,6 @@ BF16 X
 | Kernel shared target | `dispatch_combine_moe_kernel` |
 | Device kernel symbol | `dispatch_combine_moe` |
 | Kernel type | `KERNEL_TYPE_MIX_AIC_1_2` |
-| Tiling key | `1000010` |
 | Input `x` | `M×K`, BF16 bits represented as `uint16_t` files |
 | Input `weight1` | `expert_per_rank×K×N`, `int8`, Zn packed |
 | Input `weight2` | `expert_per_rank×(N/2)×K`, `int8`, Zn packed |
@@ -141,10 +143,10 @@ run.sh
 
 `op_host/tiling_builder.cpp` exposes `BuildDispatchCombineMoeTiling()`. It fills four categories of data:
 
-1. `DispatchCombineMoeInfo`: `M/K/N/topK/expertPerRank/worldSize/maxOutputSize/listLen/aivNum`.
+1. `DispatchCombineMoeInfo`: `M/K/N/topK/expertPerRank/worldSize/maxOutputSize/aivNum`.
 2. `CoCTiling`: `m0=128`, `k0=256`, `n0=256`, `ubMoveNum=16KiB`, `commNpuSplit=world_size`, routing quant tiling, and related parameters.
 3. `DispatchCombineMoeRuntimeInfo`: rank id, rank size, and device-side remote-window context address.
-4. `DispatchCombineMoeLaunchConfig`: `blockDim`, `tilingKey=1000010`, and `workspaceBytes`.
+4. `DispatchCombineMoeLaunchConfig`: `blockDim`, kernel branch key, and `workspaceBytes`.
 
 It also validates the remote-window capacity on host before kernel launch.
 
@@ -155,8 +157,8 @@ It also validates the remote-window capacity on host before kernel launch.
 ```text
 dispatch_combine_moe(..., workspaceGM, tilingGM)
   -> REGISTER_TILING_DEFAULT(DispatchCombineMoeTilingData)
-  -> TILING_KEY_IS(1000010)
-  -> KERNEL_TASK_TYPE(1000010, KERNEL_TYPE_MIX_AIC_1_2)
+  -> match the fixed kernel branch key
+  -> KERNEL_TYPE_MIX_AIC_1_2
   -> DispatchCombineMoe<int8_t, DTYPE_W1, DTYPE_OUT, false, true>
   -> op.Init(...)
   -> op.Process()
@@ -248,7 +250,7 @@ x / expert_idx / probs / x_active_mask
 
 ### Workspace layout
 
-`WorkspaceInfo` slices `ptrWorkspace` into these major regions:
+`WorkspaceInfo` slices the GM workspace passed to the kernel launch (`ptrWorkspace`) into these major regions:
 
 | Region | Purpose |
 | ------ | ------- |
@@ -277,7 +279,7 @@ Inputs:
 - `expertIdx`: `M×topK` global expert ids.
 - `scale` / `offset`: optional dynamic-quant smoothing inputs; the main path passes scale and keeps offset reserved.
 - `workspace`: routing-internal sort and temporary-index workspace.
-- `tilingData` / `tilingKey`: generated by `MoeInitRoutingQuantTilingBase::DoTiling()`.
+- routing tiling: generated by `MoeInitRoutingQuantTilingBase::DoTiling()`; selects the full-load, one-core sort, or multi-core sort path.
 
 Outputs:
 
@@ -286,20 +288,20 @@ Outputs:
 - `expertTokensCountOrCumsum`: local token-per-expert statistics; the main path stores it in the remote-window token-count region.
 - `dynamicQuantScale`: per-expanded-row scale; the main path stores it in `remoteWindow + offsetPeerPerTokenScale`.
 
-### Routing tiling-key branches
+### Routing branches
 
 ```text
 moe_init_routing_quant()
-├── tilingKey == 21000
+├── full-load path
 │   └── RunFullLoadDynamicQuant()
 │       └── MoeFullLoadDynamicQuant
 │           sort + count/cumsum + gather/quant in the full-load path
-├── tilingKey == 11000
+├── one-core sort path
 │   ├── RunSortStage<MoeSortOneCore>()
 │   ├── RunExpertTokenOut()
 │   ├── RunSrcToDst()
 │   └── RunGatherDynamicQuant()
-└── tilingKey == 11010
+└── multi-core sort path
     ├── RunSortStage<MoeSortMultiCore>()
     ├── RunExpertTokenOut()
     ├── RunSrcToDst()
@@ -311,7 +313,7 @@ Static-check refactoring split the entry into small helpers, so each routing sta
 | Helper | Wrapped implementation | Role |
 | ------ | ---------------------- | ---- |
 | `RunFullLoadDynamicQuant()` | `MoeFullLoadDynamicQuant` | one-pass full-load routing path; owns sort, expert statistics, source-to-destination mapping, gather, and per-row quantization |
-| `RunSortStage<SortOp>()` | `MoeSortOneCore` / `MoeSortMultiCore` | selects the one-core or multi-core sort implementation and materializes ordered routing records |
+| `RunSortStage<SortOp>()` | `MoeSortOneCore` / `MoeSortMultiCore` | runs the one-core or multi-core sort selected by host tiling and materializes ordered routing records |
 | `RunExpertTokenOut()` | `MoeExpertTokenOut` | emits expert token count/cumsum output when `expertTokensCountOrCumsumFlag` requests it |
 | `RunSrcToDst()` | `MoeSrcToDstOp` | converts sorted routing records into `expandedRowIdx` source-to-destination rows |
 | `RunGatherDynamicQuant()` | `MoeGatherDynamicQuant` | gathers original token rows by `expandedRowIdx`, computes per-token abs-max scale, and writes int8 payload plus scale |
@@ -320,8 +322,8 @@ Static-check refactoring split the entry into small helpers, so each routing sta
 
 | File | Responsibility |
 | ---- | -------------- |
-| `moe_init_routing_quant.cpp` | routing subsystem entry; selects full-load, one-core sort, or multi-core sort by tiling key |
-| `moe_init_routing_quant_tiling.h` | quant routing tiling: `tilingKey`, workspace size, full-load/gather branch parameters |
+| `moe_init_routing_quant.cpp` | routing subsystem entry; selects full-load, one-core sort, or multi-core sort from host tiling |
+| `moe_init_routing_quant_tiling.h` | quant routing tiling: workspace size and full-load/gather branch parameters |
 | `moe_init_routing_tiling_common.h` | common routing tiling: `AiCoreParams`, `TilingBaseClass`, VBS/VMS/sort-out/src-to-dst/gather sub-tiling |
 | `moe_init_routing_sort.h` | local routing-sort orchestration; defines `MoeSortBase`, `MoeSortOneCore`, and `MoeSortMultiCore` |
 | `moe_packed_sort_merge.h` | packed sort-record merge/extract: `MoeMrgsort`, `MoeMrgsortOut`, `PtoMergePackedSortRecords` |
