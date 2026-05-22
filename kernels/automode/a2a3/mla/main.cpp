@@ -42,6 +42,7 @@
 #include "test_common.h"
 #include "acl/acl.h"
 
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -285,6 +286,24 @@ static bool ValidateStage(const char *name,
     return ok;
 }
 
+// Time a kernel launch: sync the stream after it and measure host wall-clock
+// around launch+sync. This SERIALIZES the stream (production code would let
+// back-to-back launches overlap), but gives a clean per-kernel number. The
+// reported time includes launch overhead and stream sync, not only on-device
+// execution; for purely device-side timing use aclrtRecordEvent +
+// aclrtEventElapsedTime instead.
+template <typename LaunchFn>
+static double TimeKernelMs(const char *name, aclrtStream stream, LaunchFn &&launch)
+{
+    auto t0 = std::chrono::high_resolution_clock::now();
+    launch();
+    aclrtSynchronizeStream(stream);
+    auto t1 = std::chrono::high_resolution_clock::now();
+    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+    printf("[timing] %-24s %10.3f ms\n", name, ms);
+    return ms;
+}
+
 int main()
 {
     printf("[main] MLA DeepSeek-V2: B=%d S=%d H=%d Nh=%d Hd=%d (nope=%d rope=%d) L=%d qL=%d\n",
@@ -441,27 +460,28 @@ int main()
     const float scale = 1.0f / std::sqrt(static_cast<float>(kHeadDim));
     printf("[main] softmax scale = 1/sqrt(%d) = %.6f\n", kHeadDim, scale);
 
-    // ---- Pipeline launches (all on the same stream; ACL stream-order) ----
+    // ---- Pipeline launches (timed per-kernel; each launch is followed by a
+    //      stream sync so the wall-clock measurement covers that kernel only).
+    printf("\n[main] ===== per-kernel timing =====\n");
+    double total = 0.0;
     // nope path (Q compressed -> reconstructed; K via KV cache)
-    launchMlaQCompressionFp16   (cQDev, xDev, wdqDev, stream);
-    launchMlaQReconstructionFp16(qDev, cQDev, wuqDev, stream);
-    launchMlaKVCompressionFp16  (ckvDev, xDev, wdkvDev, stream);
-    launchMlaKVCacheStoreFp16   (ccacheDev, ckvDev, stream);
-    launchMlaKVReconstructionFp16(kDev, vDev, ccacheDev, wukDev, wuvDev, stream);
-    launchMlaAttnQKFp16         (scoresDev, qDev, kDev, stream);
+    total += TimeKernelMs("Q_compression",     stream, [&]{ launchMlaQCompressionFp16   (cQDev, xDev, wdqDev, stream); });
+    total += TimeKernelMs("Q_reconstruction",  stream, [&]{ launchMlaQReconstructionFp16(qDev, cQDev, wuqDev, stream); });
+    total += TimeKernelMs("KV_compression",    stream, [&]{ launchMlaKVCompressionFp16  (ckvDev, xDev, wdkvDev, stream); });
+    total += TimeKernelMs("KV_cache_store",    stream, [&]{ launchMlaKVCacheStoreFp16   (ccacheDev, ckvDev, stream); });
+    total += TimeKernelMs("KV_reconstruction", stream, [&]{ launchMlaKVReconstructionFp16(kDev, vDev, ccacheDev, wukDev, wuvDev, stream); });
+    total += TimeKernelMs("Attn_QK",           stream, [&]{ launchMlaAttnQKFp16         (scoresDev, qDev, kDev, stream); });
     // rope path
-    launchMlaQRopeProjectionFp16(qRopeDev, xDev, wqRopeDev, stream);
-    launchMlaKRopeProjectionFp16(kRopeDev, xDev, wkRopeDev, stream);
-    launchMlaRoPEFp16           (qRopeRotDev, qRopeDev, cosDev, sinDev, kNumHeads, stream);
-    launchMlaRoPEFp16           (kRopeRotDev, kRopeDev, cosDev, sinDev, 1,         stream);
-    launchMlaAttnQKRopeFp16     (scoresRopeDev, qRopeRotDev, kRopeRotDev, stream);
+    total += TimeKernelMs("Q_rope_projection", stream, [&]{ launchMlaQRopeProjectionFp16(qRopeDev, xDev, wqRopeDev, stream); });
+    total += TimeKernelMs("K_rope_projection", stream, [&]{ launchMlaKRopeProjectionFp16(kRopeDev, xDev, wkRopeDev, stream); });
+    total += TimeKernelMs("RoPE_Q",            stream, [&]{ launchMlaRoPEFp16           (qRopeRotDev, qRopeDev, cosDev, sinDev, kNumHeads, stream); });
+    total += TimeKernelMs("RoPE_K",            stream, [&]{ launchMlaRoPEFp16           (kRopeRotDev, kRopeDev, cosDev, sinDev, 1,         stream); });
+    total += TimeKernelMs("Attn_QK_rope",      stream, [&]{ launchMlaAttnQKRopeFp16     (scoresRopeDev, qRopeRotDev, kRopeRotDev, stream); });
     // combine + softmax + PV
-    launchMlaAttnSoftmaxFp16    (probsDev, scoresDev, scoresRopeDev, scale, stream);
-    launchMlaAttnPVFp16         (outDev, probsDev, vDev, stream);
-
-    if (!CheckAcl(aclrtSynchronizeStream(stream), "SynchronizeStream")) {
-        std::cerr << "[main] stream sync failed — kernel likely crashed or never ran.\n";
-    }
+    total += TimeKernelMs("Attn_softmax",      stream, [&]{ launchMlaAttnSoftmaxFp16    (probsDev, scoresDev, scoresRopeDev, scale, stream); });
+    total += TimeKernelMs("Attn_PV",           stream, [&]{ launchMlaAttnPVFp16         (outDev, probsDev, vDev, stream); });
+    printf("[timing] %-24s %10.3f ms (sum of per-kernel times)\n", "TOTAL", total);
+    printf("[main] ===== end timing =====\n\n");
 
     // ---- Copy every output back for debug + main validation ---------------
     CheckAcl(aclrtMemcpy(cQHost,     kCQBytes,     cQDev,     kCQBytes,     ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(c_q)");
