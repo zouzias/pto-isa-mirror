@@ -65,8 +65,8 @@ public:
     bool IsFullLoadQuant(int64_t space);
     bool IsFullLoadDynamicQuant(int64_t space);
     bool IsFullLoad() override;
-    void SetGatherTilingData(InnerMoeGatherOutComputeTilingData *tilingData, int64_t perCoreRows,
-                             int64_t lastCoreRows, int64_t cols);
+    void SetGatherTilingData(InnerMoeGatherOutComputeTilingData *tilingData, int64_t perCoreRows, int64_t lastCoreRows,
+                             int64_t cols);
     void SetGatherTilingDataCols(InnerMoeGatherOutComputeTilingData *tilingData, int64_t baseMaxCols, int64_t cols);
     void SetGatherTilingDataRows(InnerMoeGatherOutComputeTilingData *tilingData, int64_t perCoreRows,
                                  int64_t lastCoreRows, int64_t basePerLoopMaxRows);
@@ -96,7 +96,8 @@ inline bool MoeInitRoutingQuantTilingBase::IsFullLoadQuant(int64_t space)
 
 inline bool MoeInitRoutingQuantTilingBase::IsFullLoadDynamicQuant(int64_t space)
 {
-    int64_t quantSpace = CeilDiv(moeInitRoutingTilingData.cols, ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * DYNAMIC_QUANT_FULLLOAD_COLS_BUFFER;
+    int64_t quantSpace =
+        CeilDiv(moeInitRoutingTilingData.cols, ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * DYNAMIC_QUANT_FULLLOAD_COLS_BUFFER;
     int64_t scaleOutSpace = 64;
     int64_t remainUbAfterSort = aicoreParams_.ubSize - space - scaleOutSpace - quantSpace;
     return remainUbAfterSort > 0;
@@ -108,9 +109,11 @@ inline bool MoeInitRoutingQuantTilingBase::IsFullLoad()
         this->dropPadMode == 1) {
         return false;
     }
-    int64_t sortSpace = CeilDiv(this->totalLength, ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * sizeof(int32_t) * ONE_CORE_SORT_BUFFER;
+    int64_t sortSpace =
+        CeilDiv(this->totalLength, ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * sizeof(int32_t) * ONE_CORE_SORT_BUFFER;
     int64_t otherSpace = CeilDiv(this->totalLength, ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * sizeof(int32_t) * NUM_THREE;
-    int64_t expertSpace = CeilDiv(this->expertNum * static_cast<int64_t>(sizeof(int32_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE;
+    int64_t expertSpace =
+        CeilDiv(this->expertNum * static_cast<int64_t>(sizeof(int32_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE;
     if (quantMode == 0) {
         return IsFullLoadQuant(sortSpace + otherSpace + expertSpace);
     } else {
@@ -124,8 +127,8 @@ inline bool MoeInitRoutingQuantTilingBase::GetShapeAttrsInfo(
     int64_t inuptXDtypeSize, int64_t quantMode, int64_t scaleDim0)
 {
     InnerMoeInitRoutingTilingBase::GetShapeAttrsInfo(m, cols, topK, expertCapacity, expertNum, activeNum, dropPadMode,
-                                                       expertTokensCountOrCumsumFlag, expertTokensBeforeCapacityFlag,
-                                                       inuptXDtypeSize, quantMode, scaleDim0);
+                                                     expertTokensCountOrCumsumFlag, expertTokensBeforeCapacityFlag,
+                                                     inuptXDtypeSize, quantMode, scaleDim0);
     this->quantMode = quantMode;
     if (quantMode == 0) {
     } else {
@@ -153,7 +156,7 @@ inline bool MoeInitRoutingQuantTilingBase::PostTiling()
     return true;
 }
 inline void MoeInitRoutingQuantTilingBase::CopyGatherOutTiling(InnerMoeGatherOutComputeTilingData &dst,
-                                                                 InnerMoeGatherOutComputeTilingData &src)
+                                                               InnerMoeGatherOutComputeTilingData &src)
 {
     dst.needCoreNum = (src.needCoreNum);
     dst.activateRows = (src.activateRows);
@@ -221,8 +224,7 @@ inline bool MoeInitRoutingQuantTilingBase::GetWorkspaceSize()
 }
 
 inline void MoeInitRoutingQuantTilingBase::SetGatherTilingData(InnerMoeGatherOutComputeTilingData *tilingData,
-                                                                 int64_t perCoreRows, int64_t lastCoreRows,
-                                                                 int64_t cols)
+                                                               int64_t perCoreRows, int64_t lastCoreRows, int64_t cols)
 {
     tilingData->perCorePerLoopRows = perCoreRows;
     tilingData->perCoreLastLoopRows = perCoreRows;
@@ -236,7 +238,7 @@ inline void MoeInitRoutingQuantTilingBase::SetGatherTilingData(InnerMoeGatherOut
 }
 
 inline void MoeInitRoutingQuantTilingBase::SetGatherTilingDataCols(InnerMoeGatherOutComputeTilingData *tilingData,
-                                                                     int64_t baseMaxCols, int64_t cols)
+                                                                   int64_t baseMaxCols, int64_t cols)
 {
     tilingData->perLoopCols = (std::min(baseMaxCols, cols));
     tilingData->lastLoopCols = (GetPerOrLastValue(cols, baseMaxCols));
@@ -244,8 +246,8 @@ inline void MoeInitRoutingQuantTilingBase::SetGatherTilingDataCols(InnerMoeGathe
 }
 
 inline void MoeInitRoutingQuantTilingBase::SetGatherTilingDataRows(InnerMoeGatherOutComputeTilingData *tilingData,
-                                                                     int64_t perCoreRows, int64_t lastCoreRows,
-                                                                     int64_t basePerLoopMaxRows)
+                                                                   int64_t perCoreRows, int64_t lastCoreRows,
+                                                                   int64_t basePerLoopMaxRows)
 {
     tilingData->perCorePerLoopRows = (std::min(perCoreRows, basePerLoopMaxRows));
     tilingData->perCoreLastLoopRows = (GetPerOrLastValue(perCoreRows, basePerLoopMaxRows));
@@ -277,21 +279,26 @@ inline void MoeInitRoutingQuantTilingBase::Tiling4SrcToDstCapacityCompute()
     int64_t lastCoreRows = totalLength - perCoreRows * (tilingData->needCoreNum - 1);
     tilingData->lastCoreRows = lastCoreRows;
 
-    int64_t rowSize = CeilDiv(perCoreRows * static_cast<int64_t>(sizeof(int32_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * NUM_FOUR;
-    int64_t colSize = CeilDiv(cols * static_cast<int64_t>(sizeof(int8_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * DYNAMIC_QUANT_SRC_TO_DST_BUFFER;
+    int64_t rowSize =
+        CeilDiv(perCoreRows * static_cast<int64_t>(sizeof(int32_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * NUM_FOUR;
+    int64_t colSize = CeilDiv(cols * static_cast<int64_t>(sizeof(int8_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE *
+                      DYNAMIC_QUANT_SRC_TO_DST_BUFFER;
     int64_t scaleSize = DYNAMIC_QUANT_SCALE_SIZE_64;
     if (rowSize + colSize + scaleSize < static_cast<int64_t>(aicoreParams_.ubSize)) {
         SetGatherTilingData(tilingData, perCoreRows, lastCoreRows, cols);
     } else {
         int64_t baseMaxCols = MAX_COLS_DYNAMIC_QUANT;
-        int64_t totalColSize = CeilDiv(baseMaxCols * static_cast<int64_t>(sizeof(int8_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * DYNAMIC_QUANT_SRC_TO_DST_BUFFER;
+        int64_t totalColSize = CeilDiv(baseMaxCols * static_cast<int64_t>(sizeof(int8_t)), ONE_BLOCK_BYTE) *
+                               ONE_BLOCK_BYTE * DYNAMIC_QUANT_SRC_TO_DST_BUFFER;
         int64_t ubSize = static_cast<int64_t>(aicoreParams_.ubSize);
         int64_t basePerLoopMaxRows =
             (((ubSize - totalColSize - scaleSize) / sizeof(int32_t)) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE) / NUM_FOUR;
         if (cols < MAX_COLS_DYNAMIC_QUANT) {
-            basePerLoopMaxRows = (((ubSize - colSize - scaleSize) / sizeof(int32_t)) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE) / NUM_FOUR;
+            basePerLoopMaxRows =
+                (((ubSize - colSize - scaleSize) / sizeof(int32_t)) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE) / NUM_FOUR;
         } else if (perCoreRows < basePerLoopMaxRows) {
-            baseMaxCols = ((ubSize - rowSize - scaleSize) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE) / DYNAMIC_QUANT_SRC_TO_DST_BUFFER;
+            baseMaxCols =
+                ((ubSize - rowSize - scaleSize) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE) / DYNAMIC_QUANT_SRC_TO_DST_BUFFER;
         }
         SetGatherTilingDataCols(tilingData, baseMaxCols, cols);
         SetGatherTilingDataRows(tilingData, perCoreRows, lastCoreRows, basePerLoopMaxRows);
@@ -318,7 +325,8 @@ inline void MoeInitRoutingQuantTilingBase::Tiling4GatherQuant()
     int64_t lastCoreRows = totalLength - perCoreRows * (tilingData->needCoreNum - 1);
     tilingData->lastCoreRows = lastCoreRows;
     int64_t sizeOfCol = sizeof(int8_t) * NUM_TWO + sizeof(float) + sizeof(int16_t) + inuptXDtypeSize_ * NUM_TWO;
-    int64_t rowSize = CeilDiv(perCoreRows * static_cast<int64_t>(sizeof(int32_t)) * NUM_TWO, ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE;
+    int64_t rowSize =
+        CeilDiv(perCoreRows * static_cast<int64_t>(sizeof(int32_t)) * NUM_TWO, ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE;
     int64_t colSize = CeilDiv(cols * sizeOfCol, ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE;
     if (rowSize + colSize < static_cast<int64_t>(aicoreParams_.ubSize) / NUM_TWO) {
         SetGatherTilingData(tilingData, perCoreRows, lastCoreRows, cols);
@@ -326,7 +334,8 @@ inline void MoeInitRoutingQuantTilingBase::Tiling4GatherQuant()
         int64_t baseMaxCols = MAX_COLS_ONE_LOOP_QUANT;
         int64_t baseMaxColsSize = CeilDiv(baseMaxCols * sizeOfCol, ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE;
         int64_t ubSize = static_cast<int64_t>(aicoreParams_.ubSize);
-        int64_t basePerLoopMaxRows = (((ubSize - baseMaxColsSize) / NUM_TWO / sizeof(int32_t)) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE);
+        int64_t basePerLoopMaxRows =
+            (((ubSize - baseMaxColsSize) / NUM_TWO / sizeof(int32_t)) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE);
         if (cols < MAX_COLS_ONE_LOOP_QUANT) {
             basePerLoopMaxRows = (((ubSize - colSize) / NUM_TWO / sizeof(int32_t)) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE);
         } else if (perCoreRows < basePerLoopMaxRows) {
@@ -375,8 +384,10 @@ inline void MoeInitRoutingQuantTilingBase::Tiling4GatherDynamicQuant()
     int64_t lastCoreRows = totalLength - perCoreRows * (tilingData->needCoreNum - 1);
     tilingData->lastCoreRows = lastCoreRows;
 
-    int64_t rowSize = CeilDiv(perCoreRows * static_cast<int64_t>(sizeof(int32_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * NUM_FOUR;
-    int64_t colSize = CeilDiv(cols * static_cast<int64_t>(sizeof(int8_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * DYNAMIC_QUANT_COLS_BUFFER;
+    int64_t rowSize =
+        CeilDiv(perCoreRows * static_cast<int64_t>(sizeof(int32_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * NUM_FOUR;
+    int64_t colSize = CeilDiv(cols * static_cast<int64_t>(sizeof(int8_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE *
+                      DYNAMIC_QUANT_COLS_BUFFER;
     int64_t scaleSize = DYNAMIC_QUANT_SCALE_SIZE_64;
     int64_t onceRowSize =
         (static_cast<int64_t>(aicoreParams_.ubSize) - colSize - scaleSize - ONE_BLOCK_BYTE * NUM_FOUR * NUM_THREE) /
@@ -399,14 +410,17 @@ inline void MoeInitRoutingQuantTilingBase::Tiling4GatherDynamicQuant()
                                     lastCoreLastLoopRows, perCoreLoops, lastCoreLoops);
     } else {
         int64_t baseMaxCols = MAX_COLS_DYNAMIC_QUANT;
-        int64_t totalColSize = CeilDiv(baseMaxCols * static_cast<int64_t>(sizeof(int8_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * DYNAMIC_QUANT_COLS_BUFFER;
+        int64_t totalColSize = CeilDiv(baseMaxCols * static_cast<int64_t>(sizeof(int8_t)), ONE_BLOCK_BYTE) *
+                               ONE_BLOCK_BYTE * DYNAMIC_QUANT_COLS_BUFFER;
         int64_t ubSize = static_cast<int64_t>(aicoreParams_.ubSize);
         int64_t basePerLoopMaxRows =
             (((ubSize - totalColSize - scaleSize) / sizeof(int32_t)) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE) / NUM_FOUR;
         if (cols < MAX_COLS_DYNAMIC_QUANT) {
-            basePerLoopMaxRows = (((ubSize - colSize - scaleSize) / sizeof(int32_t)) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE) / NUM_FOUR;
+            basePerLoopMaxRows =
+                (((ubSize - colSize - scaleSize) / sizeof(int32_t)) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE) / NUM_FOUR;
         } else if (perCoreRows < basePerLoopMaxRows) {
-            baseMaxCols = ((ubSize - rowSize - scaleSize) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE) / DYNAMIC_QUANT_COLS_BUFFER;
+            baseMaxCols =
+                ((ubSize - rowSize - scaleSize) / ONE_BLOCK_BYTE * ONE_BLOCK_BYTE) / DYNAMIC_QUANT_COLS_BUFFER;
         }
         SetGatherTilingDataCols(tilingData, baseMaxCols, cols);
         SetGatherTilingDataRows(tilingData, perCoreRows, lastCoreRows, basePerLoopMaxRows);

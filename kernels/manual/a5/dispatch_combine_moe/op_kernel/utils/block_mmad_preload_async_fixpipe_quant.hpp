@@ -105,8 +105,8 @@ public:
         return LayoutBInL1::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
     }
 
-    __forceinline__ __aicore__
-    BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0, uint32_t FpAddrStart = 0)
+    __forceinline__ __aicore__ BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0,
+                                         uint32_t FpAddrStart = 0)
     {
         syncGroupIdx = 0;
         InitL1(resource, l1BufAddrStart);
@@ -116,8 +116,7 @@ public:
         InitL0C(resource);
     }
 
-    __forceinline__ __aicore__
-    ~BlockMmad()
+    __forceinline__ __aicore__ ~BlockMmad()
     {
         SynchronizeBlock();
         for (uint32_t i = 0; i < L1_STAGES; ++i) {
@@ -138,11 +137,12 @@ public:
         }
     }
 
-    __forceinline__ __aicore__
-    void operator()(__gm__ ElementA *gmBlockAPtr, LayoutA const &layoutA, __gm__ ElementB *gmBlockBPtr,
-                    LayoutB const &layoutB, __gm__ ElementC *gmBlockCPtr, LayoutC const &layoutC,
-                    __gm__ uint64_t *gmBlockSPtr, layout::VectorLayout const &layoutScale,
-                    PtoShape3D const &actualShape, int32_t syncLoopIdx = -1, int32_t flag = 0)
+    __forceinline__ __aicore__ void operator()(__gm__ ElementA *gmBlockAPtr, LayoutA const &layoutA,
+                                               __gm__ ElementB *gmBlockBPtr, LayoutB const &layoutB,
+                                               __gm__ ElementC *gmBlockCPtr, LayoutC const &layoutC,
+                                               __gm__ uint64_t *gmBlockSPtr, layout::VectorLayout const &layoutScale,
+                                               PtoShape3D const &actualShape, int32_t syncLoopIdx = -1,
+                                               int32_t flag = 0)
     {
         uint32_t actualM = static_cast<uint32_t>(actualShape.shape[0]);
         uint32_t actualN = static_cast<uint32_t>(actualShape.shape[1]);
@@ -201,7 +201,8 @@ public:
             if (kLoopIdx == kTileCount - 1) {
                 l1TileMmadParams.gmBlockC = gmBlockCPtr;
                 l1TileMmadParams.gmBlockS = gmBlockSPtr;
-                l1TileMmadParams.layoutCInGm = layoutC.GetTileLayout(PtoShape2D(actualShape.shape[0], actualShape.shape[1]));
+                l1TileMmadParams.layoutCInGm =
+                    layoutC.GetTileLayout(PtoShape2D(actualShape.shape[0], actualShape.shape[1]));
                 l1TileMmadParams.layoutScale = layoutScale;
                 l1TileMmadParams.syncLoopIdx = syncLoopIdx;
             }
@@ -215,8 +216,7 @@ public:
         }
     }
 
-    __forceinline__ __aicore__
-    void SynchronizeBlock()
+    __forceinline__ __aicore__ void SynchronizeBlock()
     {
         while (preloadCount > 0) {
             L1TileMmad(l1TileMmadParamsList[l1TileMmadParamsId]);
@@ -225,8 +225,7 @@ public:
         }
     }
 
-    __forceinline__ __aicore__
-    void Finalize(int32_t target, int32_t flag = 0)
+    __forceinline__ __aicore__ void Finalize(int32_t target, int32_t flag = 0)
     {
         for (; syncGroupIdx <= target; syncGroupIdx++) {
             int32_t flagId = syncGroupIdx / 15 + flag;
@@ -248,12 +247,10 @@ private:
         layout::VectorLayout layoutScale;
         int32_t syncLoopIdx;
         int32_t flag;
-        __forceinline__ __aicore__
-        L1TileMmadParams() = default;
+        __forceinline__ __aicore__ L1TileMmadParams() = default;
     };
 
-    __forceinline__ __aicore__
-    void InitL1(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart)
+    __forceinline__ __aicore__ void InitL1(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart)
     {
         uint32_t l1AOffset = l1BufAddrStart;
         uint32_t l1BOffset = l1BufAddrStart + L1A_TILE_SIZE * L1_STAGES;
@@ -273,15 +270,13 @@ private:
         }
     }
 
-    __forceinline__ __aicore__
-    void InitFpBuf(Arch::Resource<ArchTag> &resource, uint32_t FpAddrStart)
+    __forceinline__ __aicore__ void InitFpBuf(Arch::Resource<ArchTag> &resource, uint32_t FpAddrStart)
     {
         uint32_t FpOffset = FpAddrStart;
         fixpipeBaseOffset = resource.fpBuf.GetBufferAddrByByte(FpOffset);
     }
 
-    __forceinline__ __aicore__
-    void InitL0A(Arch::Resource<ArchTag> &resource)
+    __forceinline__ __aicore__ void InitL0A(Arch::Resource<ArchTag> &resource)
     {
         for (uint32_t i = 0; i < L0A_STAGES; ++i) {
             l0AOffsetList[i] = resource.l0ABuf.GetBufferAddrByByte(L0A_TILE_SIZE * i);
@@ -290,8 +285,7 @@ private:
         }
     }
 
-    __forceinline__ __aicore__
-    void InitL0B(Arch::Resource<ArchTag> &resource)
+    __forceinline__ __aicore__ void InitL0B(Arch::Resource<ArchTag> &resource)
     {
         for (uint32_t i = 0; i < L0B_STAGES; ++i) {
             l0BOffsetList[i] = resource.l0BBuf.GetBufferAddrByByte(L0B_TILE_SIZE * i);
@@ -300,8 +294,7 @@ private:
         }
     }
 
-    __forceinline__ __aicore__
-    void InitL0C(Arch::Resource<ArchTag> &resource)
+    __forceinline__ __aicore__ void InitL0C(Arch::Resource<ArchTag> &resource)
     {
         for (uint32_t i = 0; i < L0C_STAGES; ++i) {
             l0COffsetList[i] = resource.l0CBuf.GetBufferAddrByByte(L0C_TILE_SIZE * i);
@@ -310,8 +303,7 @@ private:
         }
     }
 
-    __forceinline__ __aicore__
-    void L1TileMmad(L1TileMmadParams const &params)
+    __forceinline__ __aicore__ void L1TileMmad(L1TileMmadParams const &params)
     {
         uint32_t mPartLoop = CeilDiv<L0TileShape::M>(params.mRound);
         uint32_t nPartLoop = CeilDiv<L0TileShape::N>(params.nRound);

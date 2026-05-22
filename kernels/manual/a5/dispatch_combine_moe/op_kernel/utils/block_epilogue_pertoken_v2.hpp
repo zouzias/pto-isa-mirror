@@ -28,17 +28,18 @@ __forceinline__ __aicore__ __ubuf__ Element *PtoUbPtr(uint64_t ubOffsetBytes)
 
 template <typename DstElement, typename SrcElement, int TileElems = 128>
 __forceinline__ __aicore__ void PtoCastVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum,
-                              pto::RoundMode mode)
+                                              pto::RoundMode mode)
 {
     pto_ext::dispatch_combine_moe::pto_bridge::PtoCastVector<DstElement, SrcElement, TileElems>(
         dstUbOffsetBytes, srcUbOffsetBytes, elemNum, mode);
 }
 
 template <typename Element, int TileElems = 128>
-__forceinline__ __aicore__ void PtoMulVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum, Element scalar)
+__forceinline__ __aicore__ void PtoMulVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum,
+                                             Element scalar)
 {
     pto_ext::dispatch_combine_moe::pto_bridge::PtoMulVector<Element, TileElems>(dstUbOffsetBytes, srcUbOffsetBytes,
-                                                                                   elemNum, scalar);
+                                                                                elemNum, scalar);
 }
 
 template <typename Element, int TileElems = 128>
@@ -54,19 +55,19 @@ __forceinline__ __aicore__ void PtoStoreVector(__gm__ Element *dst, uint64_t src
 }
 
 template <typename Element, int TileElems = 128>
-__forceinline__ __aicore__ void PtoLoadMatrixRows(uint64_t dstUbOffsetBytes, __gm__ Element *src, uint32_t rowNum, uint32_t colNum,
-                                  uint32_t dstStride, uint32_t srcStride)
+__forceinline__ __aicore__ void PtoLoadMatrixRows(uint64_t dstUbOffsetBytes, __gm__ Element *src, uint32_t rowNum,
+                                                  uint32_t colNum, uint32_t dstStride, uint32_t srcStride)
 {
     pto_ext::dispatch_combine_moe::pto_bridge::PtoLoadMatrixRows<Element, TileElems>(dstUbOffsetBytes, src, rowNum,
-                                                                                        colNum, dstStride, srcStride);
+                                                                                     colNum, dstStride, srcStride);
 }
 
 template <typename Element, int TileElems = 128>
-__forceinline__ __aicore__ void PtoStoreMatrixRows(__gm__ Element *dst, uint64_t srcUbOffsetBytes, uint32_t rowNum, uint32_t colNum,
-                                   uint32_t dstStride, uint32_t srcStride)
+__forceinline__ __aicore__ void PtoStoreMatrixRows(__gm__ Element *dst, uint64_t srcUbOffsetBytes, uint32_t rowNum,
+                                                   uint32_t colNum, uint32_t dstStride, uint32_t srcStride)
 {
     pto_ext::dispatch_combine_moe::pto_bridge::PtoStoreMatrixRows<Element, TileElems>(dst, srcUbOffsetBytes, rowNum,
-                                                                                         colNum, dstStride, srcStride);
+                                                                                      colNum, dstStride, srcStride);
 }
 
 } // namespace detail
@@ -99,12 +100,11 @@ public:
         int32_t offsetD;
         int32_t scratchOffset;
         Layout3D tokenPerExpertLayout;
-        __forceinline__ __aicore__
-        Params(){};
-        __forceinline__ __aicore__
-        Params(int32_t EP_, int32_t expertPerRank_, int32_t rank_, __gm__ int32_t *ptrTokenPerExpert_, LayoutC layoutC_,
-               int32_t n2_, int32_t n0_, PtoRemoteWindow &remoteWindow_, int32_t offsetD_, int32_t scratchOffset_,
-               Layout3D tokenPerExpertLayout_)
+        __forceinline__ __aicore__ Params(){};
+        __forceinline__ __aicore__ Params(int32_t EP_, int32_t expertPerRank_, int32_t rank_,
+                                          __gm__ int32_t *ptrTokenPerExpert_, LayoutC layoutC_, int32_t n2_,
+                                          int32_t n0_, PtoRemoteWindow &remoteWindow_, int32_t offsetD_,
+                                          int32_t scratchOffset_, Layout3D tokenPerExpertLayout_)
             : ptrTokenPerExpert(ptrTokenPerExpert_),
               EP(EP_),
               expertPerRank(expertPerRank_),
@@ -119,8 +119,8 @@ public:
         {}
     };
 
-    __forceinline__ __aicore__
-    BlockEpilogue(Arch::Resource<ArchTag> const &resource, Params const &params = Params{}) : params(params)
+    __forceinline__ __aicore__ BlockEpilogue(Arch::Resource<ArchTag> const &resource, Params const &params = Params{})
+        : params(params)
     {
         // ub:192KB
         n0 = params.n0;
@@ -140,8 +140,7 @@ public:
         tokenPerExpertLayout = params.tokenPerExpertLayout;
         is_ping = true;
     }
-    __forceinline__ __aicore__
-    void SetFlag()
+    __forceinline__ __aicore__ void SetFlag()
     {
         detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
         detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
@@ -153,8 +152,7 @@ public:
         detail::PtoSetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID1);
     }
 
-    __forceinline__ __aicore__
-    void Finalize()
+    __forceinline__ __aicore__ void Finalize()
     {
         detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
         detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
@@ -165,13 +163,12 @@ public:
         detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
         detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID1);
     }
-    __forceinline__ __aicore__
-    ~BlockEpilogue()
+    __forceinline__ __aicore__ ~BlockEpilogue()
     {}
-    __forceinline__ __aicore__
-    void operator()(__gm__ ElementC *gmCPtr, __gm__ ElementPerTokenScale *gmPerTokenScalePtr,
-                    PtoCoord2D const &blockCoord, PtoShape2D const &actualBlockShape, int32_t groupIdx,
-                    int32_t preSrcExpertSum, __gm__ int32_t *preSumBeforeRank)
+    __forceinline__ __aicore__ void operator()(__gm__ ElementC *gmCPtr, __gm__ ElementPerTokenScale *gmPerTokenScalePtr,
+                                               PtoCoord2D const &blockCoord, PtoShape2D const &actualBlockShape,
+                                               int32_t groupIdx, int32_t preSrcExpertSum,
+                                               __gm__ int32_t *preSumBeforeRank)
     {
         is_ping = !is_ping;
         auto event_id = is_ping ? EVENT_ID0 : EVENT_ID1;

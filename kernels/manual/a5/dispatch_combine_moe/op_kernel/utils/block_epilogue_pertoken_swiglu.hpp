@@ -42,7 +42,6 @@ using pto_ext::dispatch_combine_moe::pto_bridge::PtoReduceMaxVector;
 using pto_ext::dispatch_combine_moe::pto_bridge::PtoSetValue;
 using pto_ext::dispatch_combine_moe::pto_bridge::PtoStoreVector;
 
-
 } // namespace swiglu_detail
 
 // float scale, dequant per expert
@@ -77,12 +76,11 @@ public:
         __gm__ ElementD *ptrD{nullptr};
         LayoutD layoutD{};
 
-        __forceinline__ __aicore__
-        Params(){};
+        __forceinline__ __aicore__ Params(){};
 
-        __forceinline__ __aicore__
-        Params(__gm__ ElementPerTokenScale *ptrPerTokenScale_, LayoutPerTokenScale const &layoutPerTokenScale_,
-               __gm__ ElementD *ptrD_, LayoutD const &layoutD_)
+        __forceinline__ __aicore__ Params(__gm__ ElementPerTokenScale *ptrPerTokenScale_,
+                                          LayoutPerTokenScale const &layoutPerTokenScale_, __gm__ ElementD *ptrD_,
+                                          LayoutD const &layoutD_)
             : ptrPerTokenScale(ptrPerTokenScale_),
               layoutPerTokenScale(layoutPerTokenScale_),
               ptrD(ptrD_),
@@ -90,8 +88,9 @@ public:
         {}
     };
 
-    __forceinline__ __aicore__
-    BlockEpilogue(Arch::Resource<ArchTag> const &resource, int32_t n, Params const &params = Params{}) : params(params)
+    __forceinline__ __aicore__ BlockEpilogue(Arch::Resource<ArchTag> const &resource, int32_t n,
+                                             Params const &params = Params{})
+        : params(params)
     {
         size_t ubOffset = 0;
         int32_t eventVMTE2 = 0;
@@ -127,30 +126,28 @@ public:
 
         ubPerTokenScaleOutputOffset = resource.ubBuf.GetBufferAddrByByte(ubOffset);
     }
-    __forceinline__ __aicore__
-    void Finalize()
+    __forceinline__ __aicore__ void Finalize()
     {
         for (uint32_t i = 0; i < UB_STAGES; ++i) {
             swiglu_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[i]);
             swiglu_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[i]);
         }
     }
-    __forceinline__ __aicore__
-    ~BlockEpilogue()
+    __forceinline__ __aicore__ ~BlockEpilogue()
     {}
 
-    __forceinline__ __aicore__
-    void UpdateParams(Params const &params_)
+    __forceinline__ __aicore__ void UpdateParams(Params const &params_)
     {
         params = params_;
     }
     // Each tile is 1x7168, and each block covers all tokens for one expert = [group[i], 7168]
     template <typename CallbackT = pto_ext::support::NoopCallback>
     __forceinline__ __aicore__ void operator()(__gm__ ElementC *gmCPtr, PtoShape2D const &shapeC,
-                               __gm__ ElementPerTokenScale *gmPerTokenScale1Ptr, __gm__ ElementD *gmDPtr,
-                               __gm__ ElementPerTokenScale *gmPerTokenScale2Ptr,
+                                               __gm__ ElementPerTokenScale *gmPerTokenScale1Ptr,
+                                               __gm__ ElementD *gmDPtr,
+                                               __gm__ ElementPerTokenScale *gmPerTokenScale2Ptr,
 
-                               uint32_t epilogueCoreNum = 40, CallbackT &&callback = CallbackT{})
+                                               uint32_t epilogueCoreNum = 40, CallbackT &&callback = CallbackT{})
     {
         callback();
         uint32_t blockM = static_cast<uint32_t>(shapeC.shape[0]);

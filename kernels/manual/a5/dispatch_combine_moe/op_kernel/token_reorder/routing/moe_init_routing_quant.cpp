@@ -23,10 +23,10 @@ using namespace optiling;
 
 template <class DTYPE_X = bfloat16_t>
 __aicore__ inline void moe_init_routing_quant(GM_ADDR x, GM_ADDR expertIdx, GM_ADDR scale, GM_ADDR offset,
-                                                 GM_ADDR expandedX, GM_ADDR expandedRowIdx,
-                                                 GM_ADDR expertTokensCountOrCumsum, GM_ADDR expertTokensBeforeCapacity,
-                                                 GM_ADDR dynamicQuantScale, GM_ADDR workspace,
-                                                 const MoeInitRoutingQuantTilingData *tilingData, uint64_t tilingKey)
+                                              GM_ADDR expandedX, GM_ADDR expandedRowIdx,
+                                              GM_ADDR expertTokensCountOrCumsum, GM_ADDR expertTokensBeforeCapacity,
+                                              GM_ADDR dynamicQuantScale, GM_ADDR workspace,
+                                              const MoeInitRoutingQuantTilingData *tilingData, uint64_t tilingKey)
 {
     if (g_coreType == AIC) {
         return;
@@ -50,14 +50,14 @@ __aicore__ inline void moe_init_routing_quant(GM_ADDR x, GM_ADDR expertIdx, GM_A
         AscendC::TPipe sortPipe;
         MoeSortOneCore op;
         op.Init<MoeInitRoutingQuantTilingData>(expertIdx, expertTokensCountOrCumsum, expertTokensBeforeCapacity,
-                                                 workspace, tilingData, &sortPipe);
+                                               workspace, tilingData, &sortPipe);
         op.Process();
         sortPipe.Destroy();
     } else if (tilingKey == 11010) {
         AscendC::TPipe sortPipe;
         MoeSortMultiCore op;
         op.Init<MoeInitRoutingQuantTilingData>(expertIdx, expertTokensCountOrCumsum, expertTokensBeforeCapacity,
-                                                 workspace, tilingData, &sortPipe);
+                                               workspace, tilingData, &sortPipe);
         op.Process();
         sortPipe.Destroy();
     } else {
@@ -68,8 +68,8 @@ __aicore__ inline void moe_init_routing_quant(GM_ADDR x, GM_ADDR expertIdx, GM_A
         AscendC::TPipe expertTokenOutPipe;
         MoeExpertTokenOut expertTokenOutOp;
         expertTokenOutOp.Init<MoeInitRoutingQuantTilingData>(expertTokensCountOrCumsum, expertTokensBeforeCapacity,
-                                                               expandedRowIdx, workspace, tilingData,
-                                                               &expertTokenOutPipe);
+                                                             expandedRowIdx, workspace, tilingData,
+                                                             &expertTokenOutPipe);
         expertTokenOutOp.Process();
         expertTokenOutPipe.Destroy();
     }
@@ -82,7 +82,8 @@ __aicore__ inline void moe_init_routing_quant(GM_ADDR x, GM_ADDR expertIdx, GM_A
 
     AscendC::TPipe gatherPipe;
     MoeGatherDynamicQuant<DTYPE_X> gatherDynamicQuantOp;
-    gatherDynamicQuantOp.Init(x, scale, expandedRowIdx, expandedX, dynamicQuantScale, workspace, tilingData, &gatherPipe);
+    gatherDynamicQuantOp.Init(x, scale, expandedRowIdx, expandedX, dynamicQuantScale, workspace, tilingData,
+                              &gatherPipe);
     gatherDynamicQuantOp.Process();
     gatherPipe.Destroy();
 }

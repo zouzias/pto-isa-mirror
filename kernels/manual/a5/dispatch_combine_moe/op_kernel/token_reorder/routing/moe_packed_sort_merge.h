@@ -132,11 +132,10 @@ __aicore__ inline void MoeMrgsort::MrgsortCompute()
 {
     pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
     if (this->remainListNum > 1) {
-        PtoMergePackedSortRecords(
-            this->ubOutput, this->tempBuffer, this->tmpUbInputs[0], this->tmpUbInputs[1],
-            this->remainListNum >= MERGE_LIST_THREE ? this->tmpUbInputs[MERGE_LIST_IDX_TWO] : 0,
-            this->remainListNum >= MERGE_LIST_FOUR ? this->tmpUbInputs[MERGE_LIST_IDX_THREE] : 0,
-            this->elementCountListTail, this->remainListNum, this->listSortedNums);
+        PtoMergePackedSortRecords(this->ubOutput, this->tempBuffer, this->tmpUbInputs[0], this->tmpUbInputs[1],
+                                  this->remainListNum >= MERGE_LIST_THREE ? this->tmpUbInputs[MERGE_LIST_IDX_TWO] : 0,
+                                  this->remainListNum >= MERGE_LIST_FOUR ? this->tmpUbInputs[MERGE_LIST_IDX_THREE] : 0,
+                                  this->elementCountListTail, this->remainListNum, this->listSortedNums);
     } else {
         pto_detail::PtoMoveVector<float>(this->ubOutput, this->tmpUbInputs[0],
                                          GetSortLen<float>(elementCountListTail[0]));
@@ -266,7 +265,7 @@ __aicore__ inline void MoeMrgsortOut::SetInput(__gm__ float *gmInput, uint64_t u
 }
 
 __aicore__ inline void MoeMrgsortOut::SetOutput(__gm__ int32_t *gmOutput1, __gm__ int32_t *gmOutput2,
-                                                  uint64_t ubOutput1, uint64_t ubOutput2)
+                                                uint64_t ubOutput1, uint64_t ubOutput2)
 {
     this->gmOutput1 = gmOutput1;
     this->ubOutput1 = ubOutput1;
@@ -319,11 +318,10 @@ __aicore__ inline void MoeMrgsortOut::MrgsortCompute()
 {
     pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
     if (this->remainListNum > 1) {
-        PtoMergePackedSortRecords(
-            this->tempBuffer, this->mergeTmpBuffer, this->tmpUbInputs[0], this->tmpUbInputs[1],
-            this->remainListNum >= MERGE_LIST_THREE ? this->tmpUbInputs[MERGE_LIST_IDX_TWO] : 0,
-            this->remainListNum >= MERGE_LIST_FOUR ? this->tmpUbInputs[MERGE_LIST_IDX_THREE] : 0,
-            this->elementCountListTail, this->remainListNum, this->listSortedNums);
+        PtoMergePackedSortRecords(this->tempBuffer, this->mergeTmpBuffer, this->tmpUbInputs[0], this->tmpUbInputs[1],
+                                  this->remainListNum >= MERGE_LIST_THREE ? this->tmpUbInputs[MERGE_LIST_IDX_TWO] : 0,
+                                  this->remainListNum >= MERGE_LIST_FOUR ? this->tmpUbInputs[MERGE_LIST_IDX_THREE] : 0,
+                                  this->elementCountListTail, this->remainListNum, this->listSortedNums);
     } else {
         pto_detail::PtoMoveVector<float>(this->tempBuffer, this->tmpUbInputs[0],
                                          GetSortLen<float>(elementCountListTail[0]));

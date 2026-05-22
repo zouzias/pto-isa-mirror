@@ -27,7 +27,6 @@ constexpr uint64_t L2_OFFSET = 0;
 constexpr uint32_t STRIDE_LIMIT = 65536;
 constexpr uint32_t BYTE_PER_BLK_FP = 128;
 
-
 template <auto Pipe>
 __forceinline__ __aicore__ void PtoPipeBarrier()
 {
@@ -270,9 +269,7 @@ struct GemmShape {
     }
 };
 
-
 } // namespace pto_ext
-
 
 namespace pto_ext {
 namespace layout {
@@ -291,10 +288,12 @@ struct ND {
     Shape shape_{};
     Stride stride_{};
 
-    __forceinline__[host, aicore] ND(Index rows = 0, Index cols = 0) : shape_(rows, cols), stride_(LongIndex(cols), LongIndex(1))
+    __forceinline__[host, aicore] ND(Index rows = 0, Index cols = 0)
+        : shape_(rows, cols), stride_(LongIndex(cols), LongIndex(1))
     {}
 
-    __forceinline__[host, aicore] ND(Index rows, Index cols, LongIndex ldm) : shape_(rows, cols), stride_(ldm, LongIndex(1))
+    __forceinline__[host, aicore] ND(Index rows, Index cols, LongIndex ldm)
+        : shape_(rows, cols), stride_(ldm, LongIndex(1))
     {}
 
     __forceinline__[host, aicore] ND(Shape shape, Stride stride) : shape_(shape), stride_(stride)
@@ -364,10 +363,12 @@ struct DN {
     Shape shape_{};
     Stride stride_{};
 
-    __forceinline__[host, aicore] DN(Index rows = 0, Index cols = 0) : shape_(rows, cols), stride_(LongIndex(1), LongIndex(rows))
+    __forceinline__[host, aicore] DN(Index rows = 0, Index cols = 0)
+        : shape_(rows, cols), stride_(LongIndex(1), LongIndex(rows))
     {}
 
-    __forceinline__[host, aicore] DN(Index rows, Index cols, LongIndex ldm) : shape_(rows, cols), stride_(LongIndex(1), ldm)
+    __forceinline__[host, aicore] DN(Index rows, Index cols, LongIndex ldm)
+        : shape_(rows, cols), stride_(LongIndex(1), ldm)
     {}
 
     __forceinline__[host, aicore] DN(Shape shape, Stride stride) : shape_(shape), stride_(stride)
@@ -514,10 +515,10 @@ struct Nz {
     Shape shape_{};
     Stride stride_{};
 
-    __forceinline__[host, aicore] Nz(Index orgRows = 0, Index orgCols = 0, Index rowsInFractal = 0, Index rowsByFractal = 0,
-                       Index colsInFractal = 0, Index colsByFractal = 0, LongIndex strideRowsInFractal = 0,
-                       LongIndex strideRowsByFractal = 0, LongIndex strideColsInFractal = 0,
-                       LongIndex strideColsByFractal = 0)
+    __forceinline__[host, aicore] Nz(Index orgRows = 0, Index orgCols = 0, Index rowsInFractal = 0,
+                                     Index rowsByFractal = 0, Index colsInFractal = 0, Index colsByFractal = 0,
+                                     LongIndex strideRowsInFractal = 0, LongIndex strideRowsByFractal = 0,
+                                     LongIndex strideColsInFractal = 0, LongIndex strideColsByFractal = 0)
         : orgShape_(orgRows, orgCols),
           shape_(rowsInFractal, rowsByFractal, colsInFractal, colsByFractal),
           stride_(strideRowsInFractal, strideRowsByFractal, strideColsInFractal, strideColsByFractal)
@@ -619,10 +620,10 @@ struct Zn {
     Shape shape_{};
     Stride stride_{};
 
-    __forceinline__[host, aicore] Zn(Index orgRows = 0, Index orgCols = 0, Index rowsInFractal = 0, Index rowsByFractal = 0,
-                       Index colsInFractal = 0, Index colsByFractal = 0, LongIndex strideRowsInFractal = 0,
-                       LongIndex strideRowsByFractal = 0, LongIndex strideColsInFractal = 0,
-                       LongIndex strideColsByFractal = 0)
+    __forceinline__[host, aicore] Zn(Index orgRows = 0, Index orgCols = 0, Index rowsInFractal = 0,
+                                     Index rowsByFractal = 0, Index colsInFractal = 0, Index colsByFractal = 0,
+                                     LongIndex strideRowsInFractal = 0, LongIndex strideRowsByFractal = 0,
+                                     LongIndex strideColsInFractal = 0, LongIndex strideColsByFractal = 0)
         : orgShape_(orgRows, orgCols),
           shape_(rowsInFractal, rowsByFractal, colsInFractal, colsByFractal),
           stride_(strideRowsInFractal, strideRowsByFractal, strideColsInFractal, strideColsByFractal)
@@ -724,10 +725,10 @@ struct Zz {
     Shape shape_{};
     Stride stride_{};
 
-    __forceinline__[host, aicore] Zz(Index orgRows = 0, Index orgCols = 0, Index rowsInFractal = 0, Index rowsByFractal = 0,
-                       Index colsInFractal = 0, Index colsByFractal = 0, LongIndex strideRowsInFractal = 0,
-                       LongIndex strideRowsByFractal = 0, LongIndex strideColsInFractal = 0,
-                       LongIndex strideColsByFractal = 0)
+    __forceinline__[host, aicore] Zz(Index orgRows = 0, Index orgCols = 0, Index rowsInFractal = 0,
+                                     Index rowsByFractal = 0, Index colsInFractal = 0, Index colsByFractal = 0,
+                                     LongIndex strideRowsInFractal = 0, LongIndex strideRowsByFractal = 0,
+                                     LongIndex strideColsInFractal = 0, LongIndex strideColsByFractal = 0)
         : orgShape_(orgRows, orgCols),
           shape_(rowsInFractal, rowsByFractal, colsInFractal, colsByFractal),
           stride_(strideRowsInFractal, strideRowsByFractal, strideColsInFractal, strideColsByFractal)
@@ -1007,14 +1008,16 @@ struct CopyGmToL1Traits {
 };
 
 template <class Element>
-struct CopyGmToL1Traits<Arch::AtlasA2, GemmType<Element, layout::ND>, GemmType<Element, layout::Zn, pto::TileType::Mat>> {
+struct CopyGmToL1Traits<Arch::AtlasA2, GemmType<Element, layout::ND>,
+                        GemmType<Element, layout::Zn, pto::TileType::Mat>> {
     using LayoutDst = layout::Zn;
     using LayoutSrc = layout::ND;
 };
 
 template <class Element>
 struct CopyGmToL1Traits<Arch::AtlasA5, GemmType<Element, layout::ND>, GemmType<Element, layout::Zn, pto::TileType::Mat>>
-    : CopyGmToL1Traits<Arch::AtlasA2, GemmType<Element, layout::ND>, GemmType<Element, layout::Zn, pto::TileType::Mat>> {
+    : CopyGmToL1Traits<Arch::AtlasA2, GemmType<Element, layout::ND>,
+                       GemmType<Element, layout::Zn, pto::TileType::Mat>> {
 };
 
 template <class ArchTag, class Element>
@@ -1025,7 +1028,7 @@ struct CopyGmToL1Traits<ArchTag, GemmType<Element, layout::Zn>, GemmType<Element
 
 template <class ArchTag, class Element>
 struct CopyGmToL1Traits<ArchTag, GemmType<Element, layout::VectorLayout>,
-                         GemmType<Element, layout::VectorLayout, pto::TileType::Mat>> {
+                        GemmType<Element, layout::VectorLayout, pto::TileType::Mat>> {
     using LayoutDst = layout::VectorLayout;
     using LayoutSrc = layout::VectorLayout;
 };
@@ -1037,7 +1040,7 @@ struct CopyL1ToL0ATraits {
 
 template <class ArchTag, class Element>
 struct CopyL1ToL0ATraits<ArchTag, GemmType<Element, layout::Zn, pto::TileType::Mat>,
-                          GemmType<Element, layout::Zz, pto::TileType::Left>> {
+                         GemmType<Element, layout::Zz, pto::TileType::Left>> {
     using LayoutDst = layout::Zz;
     using LayoutSrc = layout::Zn;
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
@@ -1046,7 +1049,7 @@ struct CopyL1ToL0ATraits<ArchTag, GemmType<Element, layout::Zn, pto::TileType::M
 template <class ArchTag, class Element>
 struct CopyL1ToL0ATraits<ArchTag, GemmType<Element, layout::Zn, pto::TileType::Mat>>
     : CopyL1ToL0ATraits<ArchTag, GemmType<Element, layout::Zn, pto::TileType::Mat>,
-                          GemmType<Element, layout::Zz, pto::TileType::Left>> {
+                        GemmType<Element, layout::Zz, pto::TileType::Left>> {
 };
 
 template <class ArchTag, class L1Type, class L0Type = void>
@@ -1056,7 +1059,7 @@ struct CopyL1ToL0BTraits {
 
 template <class ArchTag>
 struct CopyL1ToL0BTraits<ArchTag, GemmType<int8_t, layout::Zn, pto::TileType::Mat>,
-                          GemmType<int8_t, layout::Nz, pto::TileType::Right>> {
+                         GemmType<int8_t, layout::Nz, pto::TileType::Right>> {
     using Element = int8_t;
     using LayoutDst = layout::Nz;
     using LayoutSrc = layout::Zn;
@@ -1067,7 +1070,7 @@ struct CopyL1ToL0BTraits<ArchTag, GemmType<int8_t, layout::Zn, pto::TileType::Ma
 template <class ArchTag>
 struct CopyL1ToL0BTraits<ArchTag, GemmType<int8_t, layout::Zn, pto::TileType::Mat>>
     : CopyL1ToL0BTraits<ArchTag, GemmType<int8_t, layout::Zn, pto::TileType::Mat>,
-                          GemmType<int8_t, layout::Nz, pto::TileType::Right>> {
+                        GemmType<int8_t, layout::Nz, pto::TileType::Right>> {
 };
 
 template <class ArchTag, class L1Type, class L0Type = void>
@@ -1090,7 +1093,8 @@ struct CopyL0CToGmTraits {
 };
 
 template <class ElementAccumulator_, class ElementDst_, ScaleGranularity Granularity_, bool ReluEnable_>
-struct CopyL0CToGmTraits<Arch::AtlasA2, ElementAccumulator_, GemmType<ElementDst_, layout::ND>, Granularity_, ReluEnable_> {
+struct CopyL0CToGmTraits<Arch::AtlasA2, ElementAccumulator_, GemmType<ElementDst_, layout::ND>, Granularity_,
+                         ReluEnable_> {
     using ArchTag = Arch::AtlasA2;
     using ElementDst = ElementDst_;
     using ElementSrc = ElementAccumulator_;
@@ -1114,11 +1118,13 @@ struct CopyL0CToGmTraits<Arch::AtlasA2, ElementAccumulator_, GemmType<ElementDst
 };
 
 template <class ElementAccumulator_, class ElementDst_, ScaleGranularity Granularity_, bool ReluEnable_>
-struct CopyL0CToGmTraits<Arch::AtlasA5, ElementAccumulator_, GemmType<ElementDst_, layout::ND>, Granularity_, ReluEnable_>
-    : CopyL0CToGmTraits<Arch::AtlasA2, ElementAccumulator_, GemmType<ElementDst_, layout::ND>, Granularity_, ReluEnable_> {
+struct CopyL0CToGmTraits<Arch::AtlasA5, ElementAccumulator_, GemmType<ElementDst_, layout::ND>, Granularity_,
+                         ReluEnable_>
+    : CopyL0CToGmTraits<Arch::AtlasA2, ElementAccumulator_, GemmType<ElementDst_, layout::ND>, Granularity_,
+                        ReluEnable_> {
     using ArchTag = Arch::AtlasA5;
-    using Base =
-        CopyL0CToGmTraits<Arch::AtlasA2, ElementAccumulator_, GemmType<ElementDst_, layout::ND>, Granularity_, ReluEnable_>;
+    using Base = CopyL0CToGmTraits<Arch::AtlasA2, ElementAccumulator_, GemmType<ElementDst_, layout::ND>, Granularity_,
+                                   ReluEnable_>;
     using Base::Base;
 };
 
@@ -1140,8 +1146,9 @@ struct QuantTileCopy : public TileCopyGemm<ArchTag, AType, BType, CType, BiasTyp
     using Base = TileCopyGemm<ArchTag, AType, BType, CType, BiasType>;
     using ElementAccumulator = typename Base::ElementAccumulator;
     using CopyL0CToGmTraits = Tile::CopyL0CToGmTraits<ArchTag, ElementAccumulator, CType, SCALE_GRANU, false>;
-    using CopyL1ToFPTraits = Tile::CopyL1ToFPTraits<ArchTag, GemmType<uint64_t, layout::VectorLayout, pto::TileType::Mat>,
-                                                   GemmType<uint64_t, layout::VectorLayout, pto::TileType::Scaling>>;
+    using CopyL1ToFPTraits =
+        Tile::CopyL1ToFPTraits<ArchTag, GemmType<uint64_t, layout::VectorLayout, pto::TileType::Mat>,
+                               GemmType<uint64_t, layout::VectorLayout, pto::TileType::Scaling>>;
 };
 
 template <class ArchTag, class AType, class BType, class BiasType = void>
@@ -1223,8 +1230,10 @@ struct GemmIdentityBlockSwizzle {
         uint32_t loopN = static_cast<uint32_t>(loopsMN.shape[1]);
         uint32_t blockM = static_cast<uint32_t>(blockCoord.shape[0]);
         uint32_t blockN = static_cast<uint32_t>(blockCoord.shape[1]);
-        uint32_t mActual = (blockM == (loopM - 1)) ? (static_cast<uint32_t>(problemShape.shape[0]) - blockM * tileM) : tileM;
-        uint32_t nActual = (blockN == (loopN - 1)) ? (static_cast<uint32_t>(problemShape.shape[1]) - blockN * tileN) : tileN;
+        uint32_t mActual =
+            (blockM == (loopM - 1)) ? (static_cast<uint32_t>(problemShape.shape[0]) - blockM * tileM) : tileM;
+        uint32_t nActual =
+            (blockN == (loopN - 1)) ? (static_cast<uint32_t>(problemShape.shape[1]) - blockN * tileN) : tileN;
         return PtoShape2D(mActual, nActual);
     }
 };

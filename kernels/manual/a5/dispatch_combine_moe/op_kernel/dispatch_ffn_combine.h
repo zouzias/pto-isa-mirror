@@ -37,8 +37,7 @@ using namespace AscendC;
 
 template <typename Layout, typename ElementType, typename = void>
 struct LayoutBInitializer {
-    __forceinline__ __aicore__
-    static Layout create(uint32_t k, uint32_t n)
+    __forceinline__ __aicore__ static Layout create(uint32_t k, uint32_t n)
     {
         return Layout{k, n};
     }
@@ -46,8 +45,7 @@ struct LayoutBInitializer {
 
 template <typename Layout, typename ElementType>
 struct LayoutBInitializer<Layout, ElementType, std::enable_if_t<Layout::kTileLayout == pto::TileLayoutCustom::ZN>> {
-    __forceinline__ __aicore__
-    static Layout create(uint32_t k, uint32_t n)
+    __forceinline__ __aicore__ static Layout create(uint32_t k, uint32_t n)
     {
         return Layout::template MakeLayout<ElementType>(k, n);
     }
@@ -157,8 +155,7 @@ __aicore__ inline void DispatchFFNCombine<TemplateMMA2ACFunc>::Init(
     moeInitRoutingQuantTilingData.n = tilingData->cocTiling.moeInitRoutingQuantTilingData.n;
     moeInitRoutingQuantTilingData.cols = tilingData->cocTiling.moeInitRoutingQuantTilingData.cols;
     moeInitRoutingQuantTilingData.k = tilingData->cocTiling.moeInitRoutingQuantTilingData.k;
-    moeInitRoutingQuantTilingData.expertCapacity =
-        tilingData->cocTiling.moeInitRoutingQuantTilingData.expertCapacity;
+    moeInitRoutingQuantTilingData.expertCapacity = tilingData->cocTiling.moeInitRoutingQuantTilingData.expertCapacity;
     moeInitRoutingQuantTilingData.expertNum = tilingData->cocTiling.moeInitRoutingQuantTilingData.expertNum;
     moeInitRoutingQuantTilingData.dropPadMode = tilingData->cocTiling.moeInitRoutingQuantTilingData.dropPadMode;
     moeInitRoutingQuantTilingData.expertTokensCountOrCumsumFlag =
@@ -322,7 +319,7 @@ __aicore__ inline void DispatchFFNCombine<TemplateMMA2ACFunc>::Process()
 
     using D2Type = typename std::conditional<std::is_same_v<CType_, bfloat16_t>,
                                              pto_ext::Gemm::GemmType<bfloat16_t, pto_ext::layout::ND>,
-                                             pto_ext::Gemm::GemmType<CType_, pto_ext::layout::ND> >::type;
+                                             pto_ext::Gemm::GemmType<CType_, pto_ext::layout::ND>>::type;
 
     using BlockMmad = pto_ext::Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     constexpr uint32_t ubStages = 2;

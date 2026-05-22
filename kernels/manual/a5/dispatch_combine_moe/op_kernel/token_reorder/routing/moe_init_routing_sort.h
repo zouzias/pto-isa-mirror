@@ -89,8 +89,8 @@ __aicore__ inline void MoeSortOneCore::CopyIn()
 {
     pto_detail::PtoLoadVector<int32_t>(this->sortInputUb, expertIdxGm, this->totalLength);
     pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
-    PtoFillArithProgressionInt32(this->sortInputUb + static_cast<uint64_t>(this->sortNum) * sizeof(int32_t),
-                                             0, 1, this->sortNum);
+    PtoFillArithProgressionInt32(this->sortInputUb + static_cast<uint64_t>(this->sortNum) * sizeof(int32_t), 0, 1,
+                                 this->sortNum);
 }
 
 __aicore__ inline void MoeSortOneCore::SortCompute()
@@ -100,8 +100,8 @@ __aicore__ inline void MoeSortOneCore::SortCompute()
     const uint64_t sortedExpertUb = this->sortOutputUb;
     const uint64_t sortedRowUb = this->sortOutputUb + static_cast<uint64_t>(this->sortNum) * sizeof(int32_t);
 
-    PtoSortInt32AscendingUB(expertForSourceRowUb, sourceRowUb, sortedExpertUb, sortedRowUb,
-                                        this->sortTempUb, this->sortMergeTmpUb, this->totalLength);
+    PtoSortInt32AscendingUB(expertForSourceRowUb, sourceRowUb, sortedExpertUb, sortedRowUb, this->sortTempUb,
+                            this->sortMergeTmpUb, this->totalLength);
 }
 
 __aicore__ inline void MoeSortOneCore::CopyOut()
@@ -114,8 +114,8 @@ __aicore__ inline void MoeSortOneCore::CopyOut()
 
 template <typename TilingData>
 __aicore__ inline void MoeSortOneCore::Init(GM_ADDR expertIdx, GM_ADDR expertTokensCountOrCumsum,
-                                              GM_ADDR expertTokensBeforeCapacity, GM_ADDR workspace,
-                                              const TilingData *tilingData, AscendC::TPipe *tPipe)
+                                            GM_ADDR expertTokensBeforeCapacity, GM_ADDR workspace,
+                                            const TilingData *tilingData, AscendC::TPipe *tPipe)
 {
     this->blockIdx = get_block_idx() + get_subblockid() * get_block_num();
     this->tileLength = Align(tilingData->vbsComputeParamsOp.lastCorePerLoopElements, sizeof(int32_t));
@@ -234,7 +234,7 @@ __aicore__ inline void MoeSortMultiCore::VBSCopyIn(int64_t progress, int64_t siz
     int64_t startValue = this->blockIdx * this->vbsTilingData->perCoreElements + inOffset;
     pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
     PtoFillArithProgressionInt32(this->sortInputUb + static_cast<uint64_t>(sortNum) * sizeof(int32_t),
-                                             static_cast<int32_t>(startValue), 1, size);
+                                 static_cast<int32_t>(startValue), 1, size);
 }
 
 __aicore__ inline void MoeSortMultiCore::UBSortCompute(int64_t progress, int64_t size, int64_t sortNum)
@@ -242,8 +242,7 @@ __aicore__ inline void MoeSortMultiCore::UBSortCompute(int64_t progress, int64_t
     const uint64_t expertForSourceRowUb = this->sortInputUb;
     const uint64_t sourceRowUb = this->sortInputUb + static_cast<uint64_t>(sortNum) * sizeof(int32_t);
 
-    PtoSortInt32ToPackedUB(expertForSourceRowUb, sourceRowUb, this->sortOutputUb, this->sortMergeTmpUb,
-                                       size);
+    PtoSortInt32ToPackedUB(expertForSourceRowUb, sourceRowUb, this->sortOutputUb, this->sortMergeTmpUb, size);
 }
 
 __aicore__ inline void MoeSortMultiCore::VBSCopyOut(int64_t progress, int64_t size, int64_t sortNum)
@@ -255,7 +254,7 @@ __aicore__ inline void MoeSortMultiCore::VBSCopyOut(int64_t progress, int64_t si
 }
 
 __aicore__ inline void MoeSortMultiCore::RunMoeMrgSort(MoeMrgsort *sorter, int64_t listNum, int64_t coreOffset,
-                                                         int64_t loopOffset)
+                                                       int64_t loopOffset)
 {
     __gm__ float *srcWsGm = workspaceGms[srcWsIndex] + blockIdx * coreOffset + loopOffset;
     const uint64_t listStrideBytes =
@@ -270,8 +269,7 @@ __aicore__ inline void MoeSortMultiCore::RunMoeMrgSort(MoeMrgsort *sorter, int64
     sorter->Process();
 }
 
-__aicore__ inline void MoeSortMultiCore::RunMoeMrgSortOut(MoeMrgsortOut *sorter, int64_t listNum,
-                                                            int64_t coreOffset)
+__aicore__ inline void MoeSortMultiCore::RunMoeMrgSortOut(MoeMrgsortOut *sorter, int64_t listNum, int64_t coreOffset)
 {
     __gm__ float *srcWsGm = workspaceGms[srcWsIndex];
 
@@ -292,7 +290,7 @@ __aicore__ inline void MoeSortMultiCore::RunMoeMrgSortOut(MoeMrgsortOut *sorter,
 }
 
 __aicore__ inline void MoeSortMultiCore::OneCoreVMSProcess(int64_t listNum, int64_t perListElements,
-                                                             int64_t lastListElements)
+                                                           int64_t lastListElements)
 {
     int64_t coreOffset = GetSortLen<float>(this->vbsTilingData->perCoreElements);
     mrgsortParam.oneLoopMaxElements = this->sortOutTilingData->oneLoopMaxElements;
@@ -396,8 +394,8 @@ __aicore__ inline void MoeSortMultiCore::SortOutProcess()
 
 template <typename TilingData>
 __aicore__ inline void MoeSortMultiCore::Init(GM_ADDR expertIdx, GM_ADDR expertTokensCountOrCumsum,
-                                                GM_ADDR expertTokensBeforeCapacity, GM_ADDR workspace,
-                                                const TilingData *tilingData, AscendC::TPipe *tPipe)
+                                              GM_ADDR expertTokensBeforeCapacity, GM_ADDR workspace,
+                                              const TilingData *tilingData, AscendC::TPipe *tPipe)
 {
     this->totalLength = tilingData->n * tilingData->k;
     this->coreNum = tilingData->coreNum;

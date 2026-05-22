@@ -181,11 +181,11 @@ __aicore__ inline void KernelMoeTokenUnpermute<T1, T2, T3, PROBS>::CalMultiOutTo
 {
     int64_t in_offset = out_offset * this->top_k;
     MoeInitRoutingQuant::pto_detail::PtoLoadVector<T2>(this->indicesUb, this->indicesGM + in_offset,
-                                                         out_tokens_number * this->top_k);
+                                                       out_tokens_number * this->top_k);
 
     if constexpr (PROBS) {
         MoeInitRoutingQuant::pto_detail::PtoLoadVector<T3>(this->probsInputUb, this->probsGM + in_offset,
-                                                             out_tokens_number * this->top_k);
+                                                           out_tokens_number * this->top_k);
         pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
         if constexpr (!IsSameType<T3, float>::value) {
             MoeInitRoutingQuant::pto_detail::PtoCastVector<float, T3>(
@@ -193,7 +193,7 @@ __aicore__ inline void KernelMoeTokenUnpermute<T1, T2, T3, PROBS>::CalMultiOutTo
             MoeInitRoutingQuant::pto_detail::PtoPipeBarrier<PIPE_V>();
         } else {
             MoeInitRoutingQuant::pto_detail::PtoMoveVector<float>(this->probsUb, this->probsInputUb,
-                                                                    out_tokens_number * this->top_k);
+                                                                  out_tokens_number * this->top_k);
             MoeInitRoutingQuant::pto_detail::PtoPipeBarrier<PIPE_V>();
         }
     } else {
@@ -293,7 +293,7 @@ __aicore__ inline void KernelMoeTokenUnpermute<T1, T2, T3, PROBS>::CalFirstToken
 {
     if constexpr (!IsSameType<T1, float>::value) {
         MoeInitRoutingQuant::pto_detail::PtoCastVector<float, T1>(this->tokenTensor0Ub, this->tokensUb, h_length,
-                                                                    pto::RoundMode::CAST_NONE);
+                                                                  pto::RoundMode::CAST_NONE);
     } else {
         MoeInitRoutingQuant::pto_detail::PtoMoveVector<T1>(this->tokenTensor0Ub, this->tokensUb, h_length);
     }
@@ -301,7 +301,7 @@ __aicore__ inline void KernelMoeTokenUnpermute<T1, T2, T3, PROBS>::CalFirstToken
     if constexpr (PROBS) {
         MoeInitRoutingQuant::pto_detail::PtoPipeBarrier<PIPE_V>();
         MoeInitRoutingQuant::pto_detail::PtoMulVector<float>(this->tokenTensor0Ub, this->tokenTensor0Ub, h_length,
-                                                               prob_value);
+                                                             prob_value);
     }
 }
 
@@ -311,22 +311,22 @@ __aicore__ inline void KernelMoeTokenUnpermute<T1, T2, T3, PROBS>::CalToken(cons
 {
     if constexpr (!IsSameType<T1, float>::value) {
         MoeInitRoutingQuant::pto_detail::PtoCastVector<float, T1>(this->tokenTensor1Ub, this->tokensUb, h_length,
-                                                                    pto::RoundMode::CAST_NONE);
+                                                                  pto::RoundMode::CAST_NONE);
         if constexpr (PROBS) {
             MoeInitRoutingQuant::pto_detail::PtoPipeBarrier<PIPE_V>();
             MoeInitRoutingQuant::pto_detail::PtoMulVector<float>(this->tokenTensor1Ub, this->tokenTensor1Ub, h_length,
-                                                                   prob_value);
+                                                                 prob_value);
         }
         MoeInitRoutingQuant::pto_detail::PtoPipeBarrier<PIPE_V>();
         MoeInitRoutingQuant::pto_detail::PtoAddVector<float>(this->tokenTensor0Ub, this->tokenTensor0Ub,
-                                                               this->tokenTensor1Ub, h_length);
+                                                             this->tokenTensor1Ub, h_length);
     } else {
         if constexpr (PROBS) {
             MoeInitRoutingQuant::pto_detail::PtoMulVector<T1>(this->tokensUb, this->tokensUb, h_length, prob_value);
             MoeInitRoutingQuant::pto_detail::PtoPipeBarrier<PIPE_V>();
         }
         MoeInitRoutingQuant::pto_detail::PtoAddVector<T1>(this->tokenTensor0Ub, this->tokenTensor0Ub, this->tokensUb,
-                                                            h_length);
+                                                          h_length);
     }
 }
 
@@ -339,7 +339,7 @@ __aicore__ inline void KernelMoeTokenUnpermute<T1, T2, T3, PROBS>::CopyOut(const
     if constexpr (!IsSameType<T1, float>::value) {
         MoeInitRoutingQuant::pto_detail::PtoPipeBarrier<PIPE_V>();
         MoeInitRoutingQuant::pto_detail::PtoCastVector<T1, float>(this->outUb, this->tokenTensor0Ub, h_length,
-                                                                    pto::RoundMode::CAST_RINT);
+                                                                  pto::RoundMode::CAST_RINT);
         outUb = this->outUb;
     }
 

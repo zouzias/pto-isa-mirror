@@ -143,7 +143,7 @@ __aicore__ inline void MoeExpertTokenOut::Compute(int64_t progress)
 }
 
 __aicore__ inline void MoeExpertTokenOut::AtomicStoreCountSlice(__gm__ int32_t *dstGm, int64_t offset,
-                                                                  int64_t copyLength)
+                                                                int64_t copyLength)
 {
     pto_detail::PtoStoreAtomicAddVector(dstGm + offset, this->expertTokenIdxOutUb, static_cast<uint32_t>(copyLength));
 }
@@ -227,8 +227,8 @@ __aicore__ inline void MoeExpertTokenOut::SyncAll()
 
 template <typename TilingData>
 __aicore__ inline void MoeExpertTokenOut::Init(GM_ADDR expertTokensCountOrCumsum, GM_ADDR expertTokensBeforeCapacity,
-                                                 GM_ADDR expandedRowIdx, GM_ADDR workspace,
-                                                 const TilingData *tilingData, AscendC::TPipe *tPipe)
+                                               GM_ADDR expandedRowIdx, GM_ADDR workspace, const TilingData *tilingData,
+                                               AscendC::TPipe *tPipe)
 {
     this->blockIdx = get_block_idx() + get_subblockid() * get_block_num();
     this->coreNum = tilingData->coreNum;
@@ -376,7 +376,7 @@ __aicore__ inline void MoeSrcToDstOp::SyncAll()
 
 template <typename TilingData>
 __aicore__ inline void MoeSrcToDstOp::Init(GM_ADDR expandSrcToDstRow, GM_ADDR workspace, const TilingData *tilingData,
-                                             AscendC::TPipe *tPipe)
+                                           AscendC::TPipe *tPipe)
 {
     this->blockIdx = get_block_idx() + get_subblockid() * get_block_num();
 

@@ -14,10 +14,8 @@ constexpr uint32_t MAX_SORT_ELEMS = 8192;
 constexpr float PTO_SORT_NEG_INF = -3.4028235e38F;
 
 using PtoSortKeyTile = pto::Tile<pto::TileType::Vec, float, 1, MAX_SORT_ELEMS, pto::BLayout::RowMajor, -1, -1>;
-using PtoSortPayloadTile =
-    pto::Tile<pto::TileType::Vec, uint32_t, 1, MAX_SORT_ELEMS, pto::BLayout::RowMajor, -1, -1>;
-using PtoPackedSortTile =
-    pto::Tile<pto::TileType::Vec, float, 1, MAX_SORT_ELEMS * 2, pto::BLayout::RowMajor, -1, -1>;
+using PtoSortPayloadTile = pto::Tile<pto::TileType::Vec, uint32_t, 1, MAX_SORT_ELEMS, pto::BLayout::RowMajor, -1, -1>;
+using PtoPackedSortTile = pto::Tile<pto::TileType::Vec, float, 1, MAX_SORT_ELEMS * 2, pto::BLayout::RowMajor, -1, -1>;
 using PtoPackedPayloadTile =
     pto::Tile<pto::TileType::Vec, uint32_t, 1, MAX_SORT_ELEMS * 2, pto::BLayout::RowMajor, -1, -1>;
 
@@ -139,12 +137,12 @@ PTO_INTERNAL void PtoMergePackedSortRecords(uint64_t dstUb, uint64_t tmpUb, uint
         pto::TMRGSORT<PtoPackedSortTile, PtoPackedSortTile, PtoPackedSortTile, PtoPackedSortTile, true>(
             dstTile, executedNumList, tmpTile, src0Tile, src1Tile);
     } else if (remainListNum == MERGE_LIST_THREE) {
-        pto::TMRGSORT<PtoPackedSortTile, PtoPackedSortTile, PtoPackedSortTile, PtoPackedSortTile,
-                      PtoPackedSortTile, true>(dstTile, executedNumList, tmpTile, src0Tile, src1Tile, src2Tile);
+        pto::TMRGSORT<PtoPackedSortTile, PtoPackedSortTile, PtoPackedSortTile, PtoPackedSortTile, PtoPackedSortTile,
+                      true>(dstTile, executedNumList, tmpTile, src0Tile, src1Tile, src2Tile);
     } else {
-        pto::TMRGSORT<PtoPackedSortTile, PtoPackedSortTile, PtoPackedSortTile, PtoPackedSortTile,
-                      PtoPackedSortTile, PtoPackedSortTile, true>(dstTile, executedNumList, tmpTile, src0Tile,
-                                                                      src1Tile, src2Tile, src3Tile);
+        pto::TMRGSORT<PtoPackedSortTile, PtoPackedSortTile, PtoPackedSortTile, PtoPackedSortTile, PtoPackedSortTile,
+                      PtoPackedSortTile, true>(dstTile, executedNumList, tmpTile, src0Tile, src1Tile, src2Tile,
+                                               src3Tile);
     }
 
     listSortedNums[0] = executedNumList.mrgSortList0;
@@ -160,7 +158,8 @@ PTO_INTERNAL void PtoSortInt32ToPackedUB(uint64_t inputValueUb, uint64_t inputPa
         return;
     }
 
-    const uint32_t alignedElemNum = ((elemNum + PTO_SORT_BLOCK_ELEMS - 1) / PTO_SORT_BLOCK_ELEMS) * PTO_SORT_BLOCK_ELEMS;
+    const uint32_t alignedElemNum =
+        ((elemNum + PTO_SORT_BLOCK_ELEMS - 1) / PTO_SORT_BLOCK_ELEMS) * PTO_SORT_BLOCK_ELEMS;
     ASCENDC_ASSERT((alignedElemNum <= MAX_SORT_ELEMS),
                    { KERNEL_LOG(KERNEL_ERROR, "alignedElemNum exceeds PTO sort capacity"); });
 
@@ -211,7 +210,7 @@ PTO_INTERNAL void PtoExtractPackedSortResult(uint64_t sortedValueUb, uint64_t so
     pto::TASSIGN(packedPayloadTile, packedSortUb);
     pto::TASSIGN(sortedPayloadTile, sortedPayloadUb);
     pto::TGATHER<PtoSortPayloadTile, PtoPackedPayloadTile, pto::MaskPattern::P1010>(sortedPayloadTile,
-                                                                                        packedPayloadTile);
+                                                                                    packedPayloadTile);
     AscendC::PipeBarrier<PIPE_V>();
 
     PtoSortKeyTile sortedKeyTile(1, elemNum);

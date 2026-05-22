@@ -12,7 +12,8 @@ namespace pto_ext::Gemm::Block::detail {
 using pto_ext::dispatch_combine_moe::pto_bridge::PtoGlobalNd;
 
 template <typename TileAcc, typename TileLeft, typename TileRight>
-__forceinline__ __aicore__ void LaunchPtoMatmul(TileAcc &cTile, TileLeft &aTile, TileRight &bTile, bool initC, uint8_t unitFlag)
+__forceinline__ __aicore__ void LaunchPtoMatmul(TileAcc &cTile, TileLeft &aTile, TileRight &bTile, bool initC,
+                                                uint8_t unitFlag)
 {
     const bool isFinal = (unitFlag == 0b11);
     const bool isPartial = (unitFlag == 0b10);
@@ -37,8 +38,8 @@ __forceinline__ __aicore__ void LaunchPtoMatmul(TileAcc &cTile, TileLeft &aTile,
 }
 
 template <typename ElementAccumulator, typename ElementA, typename ElementB, class L0TileShape>
-__forceinline__ __aicore__ void PtoTileMmad(uint64_t l0COffset, uint64_t l0AOffset, uint64_t l0BOffset, uint32_t m, uint32_t n,
-                            uint32_t k, bool initC = true, uint8_t unitFlag = 0)
+__forceinline__ __aicore__ void PtoTileMmad(uint64_t l0COffset, uint64_t l0AOffset, uint64_t l0BOffset, uint32_t m,
+                                            uint32_t n, uint32_t k, bool initC = true, uint8_t unitFlag = 0)
 {
     using LeftTile = pto::TileLeft<ElementA, L0TileShape::M, L0TileShape::K, pto::DYNAMIC, pto::DYNAMIC>;
     using RightTile = pto::TileRight<ElementB, L0TileShape::K, L0TileShape::N, pto::DYNAMIC, pto::DYNAMIC>;
@@ -90,7 +91,8 @@ __forceinline__ __aicore__ void PtoMoveL1ToL0B(uint64_t dstL0Offset, uint64_t sr
 }
 
 template <typename Element, int Rows, int Cols>
-__forceinline__ __aicore__ void PtoLoadNdGmToNzL1(uint64_t dstL1Offset, __gm__ Element *src, layout::ND const &layoutSrc)
+__forceinline__ __aicore__ void PtoLoadNdGmToNzL1(uint64_t dstL1Offset, __gm__ Element *src,
+                                                  layout::ND const &layoutSrc)
 {
     using L1Tile = pto::Tile<pto::TileType::Mat, Element, Rows, Cols, pto::BLayout::ColMajor, pto::DYNAMIC,
                              pto::DYNAMIC, pto::SLayout::RowMajor>;
@@ -123,8 +125,8 @@ __forceinline__ __aicore__ void PtoLoadNdGmToNzL1(uint64_t dstL1Offset, __gm__ E
 }
 
 template <typename Element, int Rows, int Cols>
-__forceinline__ __aicore__ void PtoLoadNzGmToNzL1(uint64_t dstL1Offset, __gm__ Element *src, layout::Zn const &layoutDst,
-                                  layout::Zn const &layoutSrc)
+__forceinline__ __aicore__ void PtoLoadNzGmToNzL1(uint64_t dstL1Offset, __gm__ Element *src,
+                                                  layout::Zn const &layoutDst, layout::Zn const &layoutSrc)
 {
     constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
     using L1Tile = pto::Tile<pto::TileType::Mat, Element, Rows, Cols, pto::BLayout::ColMajor, pto::DYNAMIC,
@@ -188,7 +190,7 @@ __forceinline__ __aicore__ void PtoStoreAccTileToGm(GlobalDataOut &dstGlobal, Ac
 
 template <typename ElementDst, typename ElementAccumulator, int Rows, int Cols, bool ReluEnable = false>
 __forceinline__ __aicore__ void PtoStoreAccToGm(__gm__ ElementDst *dst, uint64_t accOffset, uint64_t scaleOffset,
-                                layout::ND const &dstLayout)
+                                                layout::ND const &dstLayout)
 {
     using GlobalDataOut = PtoGlobalNd<ElementDst>;
     using AccTile = pto::TileAccCompact<ElementAccumulator, Rows, Cols, pto::DYNAMIC, pto::DYNAMIC>;
@@ -218,7 +220,7 @@ __forceinline__ __aicore__ void PtoStoreAccToGm(__gm__ ElementDst *dst, uint64_t
 
 template <typename ElementDst, typename ElementAccumulator, int Rows, int Cols, bool ReluEnable = false>
 __forceinline__ __aicore__ void PtoStoreAccToGm(__gm__ ElementDst *dst, uint64_t accOffset, layout::ND const &dstLayout,
-                                uint8_t unitFlag = 0)
+                                                uint8_t unitFlag = 0)
 {
     using GlobalDataOut = PtoGlobalNd<ElementDst>;
     using AccTile = pto::TileAccCompact<ElementAccumulator, Rows, Cols, pto::DYNAMIC, pto::DYNAMIC>;
@@ -236,8 +238,9 @@ __forceinline__ __aicore__ void PtoStoreAccToGm(__gm__ ElementDst *dst, uint64_t
 }
 
 template <int Cols>
-__forceinline__ __aicore__ void StagePerChannelScale(uint64_t l1SOffset, uint64_t fixpipeOffset, __gm__ uint64_t *gmBlockS,
-                                     layout::VectorLayout const &layoutScale, uint32_t cols)
+__forceinline__ __aicore__ void StagePerChannelScale(uint64_t l1SOffset, uint64_t fixpipeOffset,
+                                                     __gm__ uint64_t *gmBlockS, layout::VectorLayout const &layoutScale,
+                                                     uint32_t cols)
 {
     using ScaleMatTile = pto::Tile<pto::TileType::Mat, uint64_t, 1, Cols, pto::BLayout::RowMajor, 1, pto::DYNAMIC,
                                    pto::SLayout::NoneBox>;
@@ -265,7 +268,7 @@ __forceinline__ __aicore__ void StagePerChannelScale(uint64_t l1SOffset, uint64_
 
 template <typename ElementA, typename ElementC, typename ElementAccumulator, int Rows, int Cols>
 __forceinline__ __aicore__ void StoreAccumulator(__gm__ ElementC *dst, uint64_t accOffset, uint64_t scaleOffset,
-                                 layout::ND const &dstLayout, uint8_t unitFlag = 0)
+                                                 layout::ND const &dstLayout, uint8_t unitFlag = 0)
 {
     if constexpr (std::is_same_v<ElementA, int8_t>) {
         PtoStoreAccToGm<ElementC, ElementAccumulator, Rows, Cols>(dst, accOffset, scaleOffset, dstLayout);
@@ -282,18 +285,17 @@ struct MatmulShell {
     using LayoutB = typename BType_::Layout;
     using ElementC = typename CType_::Element;
 
-    using CopyL1ToFPTraits =
-        typename pto_ext::Gemm::Tile::QuantTileCopy<ArchTag, AType_, BType_, CType_, void,
-                                                   pto_ext::Gemm::Tile::ScaleGranularity::PER_CHANNEL>::CopyL1ToFPTraits;
+    using CopyL1ToFPTraits = typename pto_ext::Gemm::Tile::QuantTileCopy<
+        ArchTag, AType_, BType_, CType_, void, pto_ext::Gemm::Tile::ScaleGranularity::PER_CHANNEL>::CopyL1ToFPTraits;
     using CopyL1ToL0ATraits = typename TileCopy_::CopyL1ToL0ATraits;
     using CopyL1ToL0BTraits = typename TileCopy_::CopyL1ToL0BTraits;
     using ElementAccumulator =
         typename pto_ext::Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
-    using CopyL0CToGmTraits = typename std::conditional<
-        std::is_same_v<ElementA, int8_t>,
-        pto_ext::Gemm::Tile::CopyL0CToGmTraits<ArchTag, ElementAccumulator, CType_,
-                                               Gemm::Tile::ScaleGranularity::PER_CHANNEL>,
-        typename TileCopy_::CopyL0CToGmTraits>::type;
+    using CopyL0CToGmTraits =
+        typename std::conditional<std::is_same_v<ElementA, int8_t>,
+                                  pto_ext::Gemm::Tile::CopyL0CToGmTraits<ArchTag, ElementAccumulator, CType_,
+                                                                         Gemm::Tile::ScaleGranularity::PER_CHANNEL>,
+                                  typename TileCopy_::CopyL0CToGmTraits>::type;
     using LayoutAInL1 = typename CopyL1ToL0ATraits::LayoutSrc;
     using LayoutBInL1 = typename CopyL1ToL0BTraits::LayoutSrc;
     using LayoutAInL0 = typename CopyL1ToL0ATraits::LayoutDst;

@@ -152,8 +152,7 @@ __aicore__ inline void MoeGatherDynamicQuant<T>::LoadInputTile(uint64_t inUb, in
 }
 
 template <typename T>
-__aicore__ inline void MoeGatherDynamicQuant<T>::StoreExpandedXTile(int64_t dstOffset, uint64_t outUb,
-                                                                      int64_t elemNum)
+__aicore__ inline void MoeGatherDynamicQuant<T>::StoreExpandedXTile(int64_t dstOffset, uint64_t outUb, int64_t elemNum)
 {
     pto_detail::PtoStoreVector(expandedXGm + dstOffset, outUb, elemNum);
 }
@@ -224,8 +223,8 @@ __aicore__ inline void MoeGatherDynamicQuant<T>::CopyOutXQuantEH(int64_t progres
 
 template <typename T>
 __aicore__ inline float MoeGatherDynamicQuant<T>::ComputeMax(uint64_t inUb, uint64_t tempUb,
-                                                               uint64_t dynamicQuantScaleUb, int32_t srcIdx,
-                                                               int32_t expertIdx, int64_t j)
+                                                             uint64_t dynamicQuantScaleUb, int32_t srcIdx,
+                                                             int32_t expertIdx, int64_t j)
 {
     LoadInputTile(inUb, srcIdx * this->cols + j * this->perLoopCols, colsTileLength);
     pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
@@ -257,7 +256,7 @@ __aicore__ inline float MoeGatherDynamicQuant<T>::ComputeMax(uint64_t inUb, uint
 
 template <typename T>
 __aicore__ inline void MoeGatherDynamicQuant<T>::ComputeScale(uint64_t inUb, uint64_t tempUb, float scaleTemp,
-                                                                int64_t dstIndex, int64_t j)
+                                                              int64_t dstIndex, int64_t j)
 {
     pto_detail::PtoLoadVector<float>(inUb, quantSrcGm + j * this->perLoopCols, colsTileLength);
     pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
@@ -363,9 +362,9 @@ __aicore__ inline void MoeGatherDynamicQuant<T>::CopyOutPartialXQuant1H(int64_t 
 
 template <typename T>
 __aicore__ inline void MoeGatherDynamicQuant<T>::Init(GM_ADDR inputX, GM_ADDR quantSmooth, GM_ADDR expandedRowIdx,
-                                                        GM_ADDR expandedX, GM_ADDR dynamicQuantScale, GM_ADDR workspace,
-                                                        const MoeInitRoutingQuantTilingData *tilingData,
-                                                        AscendC::TPipe *tPipe)
+                                                      GM_ADDR expandedX, GM_ADDR dynamicQuantScale, GM_ADDR workspace,
+                                                      const MoeInitRoutingQuantTilingData *tilingData,
+                                                      AscendC::TPipe *tPipe)
 {
     (void)tPipe;
     this->blockIdx = get_block_idx() + get_subblockid() * get_block_num();

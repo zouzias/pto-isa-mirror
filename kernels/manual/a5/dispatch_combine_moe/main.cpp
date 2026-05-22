@@ -213,30 +213,23 @@ void PrintPerfSummary(const CaseConfig &cfg, int warmup_iters, int measure_iters
     }
     const PerfStats kernel_stats = CalcStats(kernel_samples_us);
     const PerfStats e2e_stats = CalcStats(e2e_samples_us);
-    const double kernel_input_tokens_per_s = kernel_stats.avg > 0.0
-                                                ? cfg.input_tokens_all_ranks * kMicrosecondsPerSecond / kernel_stats.avg
-                                                : 0.0;
-    const double kernel_routed_tokens_per_s = kernel_stats.avg > 0.0
-                                                 ? cfg.routed_tokens_all_ranks * kMicrosecondsPerSecond / kernel_stats.avg
-                                                 : 0.0;
-    const double kernel_tflops = kernel_stats.avg > 0.0
-                                    ? cfg.compute_flops_all_ranks * kMicrosecondsPerSecond / kernel_stats.avg / 1e12
-                                    : 0.0;
-    const double kernel_gbs = kernel_stats.avg > 0.0
-                                  ? cfg.comm_bytes_all_ranks * kMicrosecondsPerSecond / kernel_stats.avg / kBytesPerGiB
-                                  : 0.0;
-    const double e2e_input_tokens_per_s = e2e_stats.avg > 0.0
-                                              ? cfg.input_tokens_all_ranks * kMicrosecondsPerSecond / e2e_stats.avg
-                                              : 0.0;
-    const double e2e_routed_tokens_per_s = e2e_stats.avg > 0.0
-                                               ? cfg.routed_tokens_all_ranks * kMicrosecondsPerSecond / e2e_stats.avg
-                                               : 0.0;
-    const double e2e_tflops = e2e_stats.avg > 0.0
-                                  ? cfg.compute_flops_all_ranks * kMicrosecondsPerSecond / e2e_stats.avg / 1e12
-                                  : 0.0;
-    const double e2e_gbs = e2e_stats.avg > 0.0
-                               ? cfg.comm_bytes_all_ranks * kMicrosecondsPerSecond / e2e_stats.avg / kBytesPerGiB
-                               : 0.0;
+    const double kernel_input_tokens_per_s =
+        kernel_stats.avg > 0.0 ? cfg.input_tokens_all_ranks * kMicrosecondsPerSecond / kernel_stats.avg : 0.0;
+    const double kernel_routed_tokens_per_s =
+        kernel_stats.avg > 0.0 ? cfg.routed_tokens_all_ranks * kMicrosecondsPerSecond / kernel_stats.avg : 0.0;
+    const double kernel_tflops =
+        kernel_stats.avg > 0.0 ? cfg.compute_flops_all_ranks * kMicrosecondsPerSecond / kernel_stats.avg / 1e12 : 0.0;
+    const double kernel_gbs = kernel_stats.avg > 0.0 ?
+                                  cfg.comm_bytes_all_ranks * kMicrosecondsPerSecond / kernel_stats.avg / kBytesPerGiB :
+                                  0.0;
+    const double e2e_input_tokens_per_s =
+        e2e_stats.avg > 0.0 ? cfg.input_tokens_all_ranks * kMicrosecondsPerSecond / e2e_stats.avg : 0.0;
+    const double e2e_routed_tokens_per_s =
+        e2e_stats.avg > 0.0 ? cfg.routed_tokens_all_ranks * kMicrosecondsPerSecond / e2e_stats.avg : 0.0;
+    const double e2e_tflops =
+        e2e_stats.avg > 0.0 ? cfg.compute_flops_all_ranks * kMicrosecondsPerSecond / e2e_stats.avg / 1e12 : 0.0;
+    const double e2e_gbs =
+        e2e_stats.avg > 0.0 ? cfg.comm_bytes_all_ranks * kMicrosecondsPerSecond / e2e_stats.avg / kBytesPerGiB : 0.0;
 
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "\n===============================================================\n";
@@ -252,16 +245,14 @@ void PrintPerfSummary(const CaseConfig &cfg, int warmup_iters, int measure_iters
               << " min=" << kernel_stats.min << " us"
               << " max=" << kernel_stats.max << " us"
               << " std=" << kernel_stats.stddev << " us\n";
-    std::cout << "    input_tokens/s=" << kernel_input_tokens_per_s
-              << " routed_tokens/s=" << kernel_routed_tokens_per_s
+    std::cout << "    input_tokens/s=" << kernel_input_tokens_per_s << " routed_tokens/s=" << kernel_routed_tokens_per_s
               << " eq_compute=" << kernel_tflops << " TFLOPS"
               << " eq_comm=" << kernel_gbs << " GB/s\n";
     std::cout << "  e2e(max rank per iter):    avg=" << e2e_stats.avg << " us"
               << " min=" << e2e_stats.min << " us"
               << " max=" << e2e_stats.max << " us"
               << " std=" << e2e_stats.stddev << " us\n";
-    std::cout << "    input_tokens/s=" << e2e_input_tokens_per_s
-              << " routed_tokens/s=" << e2e_routed_tokens_per_s
+    std::cout << "    input_tokens/s=" << e2e_input_tokens_per_s << " routed_tokens/s=" << e2e_routed_tokens_per_s
               << " eq_compute=" << e2e_tflops << " TFLOPS"
               << " eq_comm=" << e2e_gbs << " GB/s\n";
     std::cout
