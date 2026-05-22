@@ -578,5 +578,5 @@ int main()
         printf("test data failed\n");
         printf("test failed\n");
     }
-    return 0;
+    return allOk ? 0 : 1;
 }

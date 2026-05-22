@@ -167,3 +167,17 @@ When documenting a newly added kernel test harness in `docs_for_ai/`, record:
 4. Any runner wiring added to [kernels/automode/a2a3/run_all.sh](../kernels/automode/a2a3/run_all.sh).
 
 This keeps the doc useful for future kernel authors and avoids repeating trial-and-error.
+
+## 7. Exit codes
+
+Exit-code contract:
+
+1. Host drivers (`main.cpp`) MUST return non-zero when any validation fails. `run_all.sh` treats a child `run.sh` exit code of `0` as PASS and any non-zero as FAIL, so returning `1` (or another non-zero) on failure is required for reliable aggregation.
+
+## 8. `default_cases` guidance:
+
+1. Provide a small, representative `default_cases` set that `run.sh` and `run_all.sh` will run when no `--case`/`--cases` args are supplied. This ensures the broad CI-style `run_all.sh` exercises a meaningful baseline without per-developer arguments.
+2. Document the `default_cases` in your kernel's `README.md` and wire `run.sh` so it falls back to the `default_cases` when no cases are provided on the CLI.
+3. Keep `default_cases` small (1–3 cases) but representative (covering important tile sizes / edge tails) to keep aggregate runs fast while still exercising important code paths.
+
+Add both requirements to the PR description when proposing new kernels so reviewers can verify `main.cpp` exit behavior and `run.sh` default case behavior quickly.

@@ -108,7 +108,7 @@ inline bool ValidateIndexResults(size_t outIdxSize)
 }
 
 template <typename T, int kRows, int kCols, int kTopK>
-void TopkKernel()
+bool TopkKernel()
 {
     using indexT = uint32_t;
     // 2D layout: src is (kRows, kCols), outputs are (kRows, kTopK). idx stays
@@ -166,11 +166,13 @@ void TopkKernel()
 
     bool valOk = ValidateValueResults<T, kRows, kTopK>(outValSize);
     bool idxOk = ValidateIndexResults<kRows, kTopK>(outIdxSize);
-    if (valOk && idxOk) {
+    bool ok = (valOk && idxOk);
+    if (ok) {
         printf("test success\n");
     } else {
         printf("test failed\n");
     }
+    return ok;
 }
 
 int main()
@@ -178,6 +180,6 @@ int main()
     constexpr int kRows = 4;
     constexpr int kCols = 1280;
     constexpr int kTopK = 512;
-    TopkKernel<float, kRows, kCols, kTopK>();
-    return 0;
+    bool ok = TopkKernel<float, kRows, kCols, kTopK>();
+    return ok ? 0 : 1;
 }

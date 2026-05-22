@@ -123,7 +123,7 @@ std::string GetGoldenDir()
  */
 template <typename T, int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1, int QK_PRELOAD,
           bool INTERMEDIATE_CHECK, bool CAUSAL_MASK>
-void run_tfa()
+bool run_tfa()
 {
     constexpr int tile_factor = TILE_S1 / CUBE_S1;
     constexpr size_t qk_fifo_stride = static_cast<size_t>(kFaCvFifoSize) * static_cast<size_t>(CUBE_S0) *
@@ -667,6 +667,7 @@ void run_tfa()
     if (!g_fifo_summary.empty()) {
         std::cout << g_fifo_summary << std::endl;
     }
+
     std::cout << "[SUMMARY] o_out status: " << (o_ok ? "OK" : "FAIL") << std::endl;
 
     aclrtFreeHost(outHost); // Free host memory
@@ -684,17 +685,18 @@ void run_tfa()
     aclrtDestroyStream(stream);
     aclrtResetDevice(g_chip_id);
     aclFinalize();
+    return o_ok;
 }
 
 template <typename T, int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1, int QK_PRELOAD,
           bool CAUSAL_MASK>
-void run_case(const std::string &case_name)
+bool run_case(const std::string &case_name)
 {
     g_case_name = case_name;
     if (g_enable_intermediate) {
-        run_tfa<T, S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, true, CAUSAL_MASK>();
+        return run_tfa<T, S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, true, CAUSAL_MASK>();
     } else {
-        run_tfa<T, S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, false, CAUSAL_MASK>();
+        return run_tfa<T, S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, false, CAUSAL_MASK>();
     }
 }
 
@@ -702,15 +704,15 @@ int main(int argc, char **argv)
 {
     struct CaseEntry {
         std::string name;
-        std::function<void()> run;
+        std::function<bool()> run;
     };
 
     std::vector<CaseEntry> cases = {
 #define TFA_CASE_ENTRY(S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, CAUSAL_MASK)                           \
-    {"case_float_H_" #HEAD "_S0_" #S0 "_S1_" #S1, []() {                                                           \
-         run_case<float, S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, CAUSAL_MASK>("case_float_H_" #HEAD   \
-                                                                                           "_S0_" #S0 "_S1_" #S1); \
-     }},
+    {"case_float_H_" #HEAD "_S0_" #S0 "_S1_" #S1, []() -> bool {                                                   \
+        return run_case<float, S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, CAUSAL_MASK>("case_float_H_" #HEAD   \
+                                                                         "_S0_" #S0 "_S1_" #S1); \
+    }},
         TFA_FOR_EACH_CASE(TFA_CASE_ENTRY)
 #undef TFA_CASE_ENTRY
     };
@@ -851,11 +853,13 @@ int main(int argc, char **argv)
     }
     std::cout << std::endl;
 
+    bool allOk = true;
     for (const auto &c : cases) {
         if (should_run(c.name)) {
-            c.run();
+            bool ok = c.run();
+            allOk &= ok;
         }
     }
 
-    return 0;
+    return allOk ? 0 : 1;
 }

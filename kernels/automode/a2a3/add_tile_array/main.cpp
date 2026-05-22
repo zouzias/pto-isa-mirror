@@ -49,7 +49,7 @@ inline bool ValidateDataResults(size_t outFileSize)
 }
 
 template <typename T, int NUM_TILES_, int TILE_ROWS_, int TILE_COLS_>
-void AddTileArray()
+bool AddTileArray()
 {
     constexpr int totalRows = NUM_TILES_ * TILE_ROWS_;
     constexpr int cols      = TILE_COLS_;
@@ -101,6 +101,7 @@ void AddTileArray()
     } else {
         printf("test failed\n");
     }
+    return dataSuccess;
 }
 
 int main()
@@ -108,6 +109,6 @@ int main()
     constexpr int NUM_TILES = 4;
     constexpr int TILE_ROWS = 64;
     constexpr int TILE_COLS = 64;
-    AddTileArray<float, NUM_TILES, TILE_ROWS, TILE_COLS>();
-    return 0;
+    bool ok = AddTileArray<float, NUM_TILES, TILE_ROWS, TILE_COLS>();
+    return ok ? 0 : 1;
 }

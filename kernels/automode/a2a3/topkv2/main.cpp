@@ -54,7 +54,7 @@ inline bool ValidateIndexResults(size_t indexFileSize)
 
 template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
           int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4, int topk>
-void Topk()
+bool Topk()
 {
     constexpr int rows = gWholeShape0 * gWholeShape1 * gWholeShape2 * gWholeShape3;
     constexpr int cols = gWholeShape4;
@@ -113,11 +113,13 @@ void Topk()
 
     bool dataSuccess = ValidateDataResults<T>(outFileSize);
     bool indexSuccess = ValidateIndexResults(indexFileSize);
-    if (dataSuccess && indexSuccess) {
+    bool ok = (dataSuccess && indexSuccess);
+    if (ok) {
         printf("All tests passed!\n");
     } else {
         printf("Some tests failed!\n");
     }
+    return ok;
 }
 
 int main()
@@ -127,5 +129,6 @@ int main()
     constexpr int gWholeShape3 = 4800;
     constexpr int gWholeShape4 = 1280;
     constexpr int topk = 1000;
-    Topk<float, 1, 1, 1, gShape3, gShape4, 1, 1, 1, gWholeShape3, gWholeShape4, topk>();
+    bool ok = Topk<float, 1, 1, 1, gShape3, gShape4, 1, 1, 1, gWholeShape3, gWholeShape4, topk>();
+    return ok ? 0 : 1;
 }
