@@ -239,16 +239,25 @@ PerfStats CalcStats(const std::vector<double> &samples)
     return stats;
 }
 
+double GetPositiveDenominator(double value)
+{
+    if (!std::isfinite(value) || value <= 0.0) {
+        return 1.0;
+    }
+    return value;
+}
+
 PerfThroughput CalcThroughput(const CaseConfig &cfg, double avg_us)
 {
     PerfThroughput throughput;
-    if (avg_us <= 0.0) {
+    const double safe_avg_us = GetPositiveDenominator(avg_us);
+    if (safe_avg_us != avg_us) {
         return throughput;
     }
-    throughput.input_tokens_per_s = cfg.input_tokens_all_ranks * kMicrosecondsPerSecond / avg_us;
-    throughput.routed_tokens_per_s = cfg.routed_tokens_all_ranks * kMicrosecondsPerSecond / avg_us;
-    throughput.tflops = cfg.compute_flops_all_ranks * kMicrosecondsPerSecond / avg_us / 1e12;
-    throughput.gbs = cfg.comm_bytes_all_ranks * kMicrosecondsPerSecond / avg_us / kBytesPerGiB;
+    throughput.input_tokens_per_s = cfg.input_tokens_all_ranks * kMicrosecondsPerSecond / safe_avg_us;
+    throughput.routed_tokens_per_s = cfg.routed_tokens_all_ranks * kMicrosecondsPerSecond / safe_avg_us;
+    throughput.tflops = cfg.compute_flops_all_ranks * kMicrosecondsPerSecond / safe_avg_us * 1e-12;
+    throughput.gbs = cfg.comm_bytes_all_ranks * kMicrosecondsPerSecond / safe_avg_us / kBytesPerGiB;
     return throughput;
 }
 

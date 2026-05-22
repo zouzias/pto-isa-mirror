@@ -685,7 +685,18 @@ private:
     __forceinline__ __aicore__ uint32_t GetStartLoopIdx(uint32_t startCoreIdx, uint32_t currentCoreIdx,
                                                         uint32_t currentCoreNum)
     {
+        if (currentCoreNum == 0) {
+            return 0;
+        }
         return ((currentCoreIdx < startCoreIdx) ? (currentCoreIdx + currentCoreNum) : currentCoreIdx) - startCoreIdx;
+    }
+
+    __forceinline__ __aicore__ uint32_t AddModulo(uint32_t value, uint32_t increment, uint32_t modulus)
+    {
+        if (modulus == 0) {
+            return 0;
+        }
+        return (value + increment) % modulus;
     }
 
     __forceinline__ __aicore__ void AdvanceGmmGroupOffsets(const PtoShape3D &shape, uint32_t listLen,
@@ -698,7 +709,7 @@ private:
             gmGroupOffsetB += static_cast<uint32_t>(shape.shape[2]) * static_cast<uint32_t>(shape.shape[1]);
         }
         gmGroupOffsetC += static_cast<uint32_t>(shape.shape[0]) * static_cast<uint32_t>(shape.shape[1]);
-        startCoreIdx = (startCoreIdx + coreLoops) % currentCoreNum;
+        startCoreIdx = AddModulo(startCoreIdx, coreLoops, currentCoreNum);
     }
 
     __forceinline__ __aicore__ void GMM1(Params const &params)
@@ -1086,9 +1097,17 @@ private:
         return currentExpertM;
     }
 
+    __forceinline__ __aicore__ int32_t CeilDivPositive(uint32_t value, int32_t divisor)
+    {
+        if (divisor <= 0) {
+            return 0;
+        }
+        return static_cast<int32_t>((value + static_cast<uint32_t>(divisor) - 1) / static_cast<uint32_t>(divisor));
+    }
+
     __forceinline__ __aicore__ int32_t CalcAivMRows(uint32_t blockM, int32_t m0, uint32_t aivSubCoreIdx)
     {
-        int32_t mRows = (blockM + m0 - 1) / m0;
+        int32_t mRows = CeilDivPositive(blockM, m0);
         int32_t aivMRows = mRows / 2;
         if (aivSubCoreIdx == 1 && aivMRows * 2 < mRows) {
             aivMRows += 1;
@@ -1101,7 +1120,7 @@ private:
     {
         uint32_t mOffset = static_cast<uint32_t>(blockCoordMN.shape[0]) * L1TileShape::M;
         if (aivSubCoreIdx == 1) {
-            mOffset += (mRows / 2) * m0;
+            mOffset += (mRows / 2) * static_cast<uint32_t>(m0);
         }
         return mOffset;
     }
@@ -1135,7 +1154,7 @@ private:
                 uint32_t blockM = static_cast<uint32_t>(actualBlockShapeMN.shape[0]);
                 uint32_t blockN = static_cast<uint32_t>(actualBlockShapeMN.shape[1]);
                 //  Block count, the shape of each block is (m0, blockN)
-                int32_t m_rows = (blockM + m0 - 1) / m0;
+                int32_t m_rows = CeilDivPositive(blockM, m0);
                 int32_t aiv_m_rows = CalcAivMRows(blockM, m0, aivSubCoreIdx);
                 uint32_t m_offset = CalcAivMOffset(blockCoordMN, m0, aivSubCoreIdx, static_cast<uint32_t>(m_rows));
 
