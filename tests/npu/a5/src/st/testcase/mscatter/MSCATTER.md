@@ -407,42 +407,26 @@ AICORE void example_last_deterministic(__gm__ half* tablePtr)
 
 ## SIMT Usage Restrictions
 
-`MSCATTER` is a SIMT launch on the AIV vector core. Every byte the runtime, the compiler, and the user store in UB must coexist inside the single 256 KB Unified Buffer that the AIV exposes. The following table itemises every region the toolchain carves out before user tiles are allocated, with the source of each value so the budget is reproducible:
+`MSCATTER` is a SIMT launch on the AIV vector core. Every byte the runtime, the compiler, and the user store in UB must coexist inside the single 256 KB Unified Buffer that the AIV exposes. The on-board ceiling is fixed by two top-of-UB reservations the toolchain installs before any user tile is allocated:
 
-| Region                         | Size on a5 (V310)               | Source                                                                                                       |
-|--------------------------------|----------------------------------|--------------------------------------------------------------------------------------------------------------|
-| Physical UB                    | 256 KB                           | Hardware                                                                                                     |
-| Hardware D-cache scratch       | 8 KB (top of UB)                 | `TOTAL_UB_SIZE = 248 * 1024` for `__NPU_ARCH__ == 3510` in `kernel_utils_constants.h` (256 − 248)             |
-| AscendC / TBE reserved         | 2 KB                             | `--user-reserved-ub-size` default (`2048` bytes from `ccec -mllvm --print-all-options`)                      |
-| Scalar main stack              | 32 KB                            | `--cce-aicore-stack-size=0x8000` set in `tests/npu/a5/src/st/CMakeLists.txt`                                  |
-| Per-call-depth scalar stack    | 32 KB × depth                    | `--cce-aicore-function-stack-size=0x8000` set in `tests/npu/a5/src/st/CMakeLists.txt`                        |
-| Vector-fragment (VF) stack     | 8 KB                             | `--cce-vf-stack-size` default (`8192` bytes from `ccec -mllvm --print-all-options`)                          |
-| Per-thread SIMT stack          | 4 KB                             | `--cce-simt-stack-size` default (`4096` bytes from `ccec -mllvm --print-all-options`)                        |
+| Region                  | Size on a5 (V310) | Source                                                                                              |
+|-------------------------|-------------------|-----------------------------------------------------------------------------------------------------|
+| Physical UB             | 256 KB            | Hardware                                                                                            |
+| Hardware D-cache        | 32 KB             | Top of UB, scalar/SIMT D-cache working set                                                          |
+| Compiler stack (scalar + VF + SIMT) | 8 KB              | All scalar, vector-fragment, and per-thread SIMT spill traffic for the `MSCATTER` call chain        |
 
-The `MSCATTER` call chain is `runMSCATTER_* → MSCATTER<...> → MScatter{Row,Elem}Impl → cce::async_invoke<simt_mscatter_*_kernel>`. The `Impl` layer is marked `__tf__ + PTO_INLINE`, but on-board testing has shown the compiler retains it as a separate scalar frame in this configuration, so the effective scalar call-depth is **2**. The SIMT-VF kernel launched by `async_invoke` runs in its own VF + per-thread context whose stacks are counted separately and do not extend the scalar chain.
-
-Plugging depth = 2 into the table:
-
-```
-256 KB  physical UB
-−  8 KB  D-cache scratch
-−  2 KB  AscendC / TBE reservation
-− 32 KB  scalar main stack
-− 64 KB  function stack  (2 frames × 32 KB)
-−  8 KB  VF stack
-−  4 KB  per-thread SIMT stack
-= 138 KB  user-addressable UB
-```
-
-A depth-1 path would lift the budget to 170 KB, but on a5 with the current flag set the inliner does not deliver it (empirically confirmed: tile footprints of 170 KB fall back to silent zeroed output on-board even though they pass the CPU simulator). All designs should therefore size against the **138 KB depth-2 ceiling**.
+The remaining `256 − 32 − 8 = 216 KB` is what user tiles can address. In practice the **safe per-call budget for `src + idx` in UB is `≤ 128 KB`** — at that point both tiles are already at the 64 KB-each comfort line and any further growth starts to push the SIMT spill region into the user-tile band, which the compiler does not flag and which surfaces on-board as a silent all-zero output (the CPU simulator does not model the spill, so it still passes).
 
 When sizing a workload, account for both the **source** tile (`R * C * sizeof(T)`, padded up to the 32-byte burst alignment) and the **index** tile (`R * C * sizeof(TIdx)`, same padding rule). For `Conflict::Last` the destination side adds no extra UB pressure — the slot-centric scan operates directly out of the same `src` / `idx` UB tiles and stores straight to GM.
 
-Overflowing the ceiling is **silent**. The compiler does not error, the simulator does not flag it, and small overruns may even appear to work on hardware. Once the overflow reaches the stack region, however, the first spilled value from any SIMT thread corrupts a tile byte and the kernel returns all-zero (or otherwise undefined) output on-board while still passing the CPU simulator.
+### Tiled-Iteration Pattern for Large Inputs
 
-### Largest Verified Shape
+Once a single `src + idx` footprint exceeds the safe budget, the caller must process the input in **chunks** that each fit comfortably under the ceiling. Each chunk does its own `TLOAD → MSCATTER` round-trip into the same destination GM tensor; semantics are preserved because:
 
-The two `case_elem2d_float_2048x8_*` ST cases sit just under the 138 KB on-board ceiling. With `float` source and `int32_t` index (both 4 bytes), each tile occupies `2048 × 8 × 4 = 65 536 B = 64 KB` (already 32-byte burst aligned), and the combined footprint is `64 + 64 = 128 KB` — leaving 10 KB of headroom against the depth-2 budget derived above. Going beyond this shape (for example, the rejected `2720 × 8` = 170 KB and `3072 × 8` = 192 KB attempts) collides with the stack region and reproduces the silent on-board failure described in the previous paragraph. Larger source tensors must be processed in tiled iterations whose per-iteration `src + idx` footprint stays under 128 KB.
+- **`Conflict::Last`**: each chunk writes its in-chunk last-writer to GM; later chunks overwrite earlier ones for any shared slot, so the surviving value is the global largest source index targeting that slot.
+- **`Conflict::Default`** / atomic modes: writes from later chunks naturally compose with writes from earlier chunks (overwrite, add, max, min) into the same GM table.
+
+The `case_elem2d_float_2048x8_*` ST cases use this pattern: a `2048 × 8` `float` source plus matching `int32_t` index would total `128 KB` in a single shot, so the wrapper splits it into **16 chunks of `128 × 8`** (`4 KB src + 4 KB idx = 8 KB UB per iteration`) and re-issues `MSCATTER` per chunk. The same shape with no chunking failed silently on-board while passing the CPU simulator — a textbook example of the over-budget mode described above.
 
 ### Cache-Coherence Flush
 
@@ -456,7 +440,7 @@ AICORE PTO_INLINE void FlushScatterOutput()
 }
 ```
 
-`dcci(0, ENTIRE_DATA_CACHE)` invalidates the AIV scalar D-cache so any GM writes still buffered in the cache are forced down to HBM, and `dsb(DSB_DDR)` waits until the writes are observable at the DDR boundary. On a5/V310 the compiler default `--cce-no-dcache-flush=0` already emits a similar flush before kernel exit, but `MSCATTER` issues its GM writes from inside an `async_invoke` SIMT VF call (depth 2), so adding the explicit flush guarantees the writes are committed regardless of where the compiler decides to insert the implicit one.
+`dcci(0, ENTIRE_DATA_CACHE)` invalidates the AIV scalar D-cache so any GM writes still buffered in the cache are forced down to HBM, and `dsb(DSB_DDR)` waits until the writes are observable at the DDR boundary. On a5/V310 the compiler default `--cce-no-dcache-flush=0` already emits a similar flush before kernel exit, but `MSCATTER` issues its GM writes from inside an `async_invoke` SIMT VF call, so adding the explicit flush guarantees the writes are committed regardless of where the compiler decides to insert the implicit one.
 
 ## Runtime Dispatch Requirement
 
@@ -548,8 +532,15 @@ In dependency order (cheapest first): Note - We will try to resolve this issue a
 | case_elem2d_float_8x32_random_256size       | float | 8×32     | 256   | None | Undefined | Last    | random |
 | case_elem2d_int32_8x16_random_256size       | int32 | 8×16     | 256   | None | Undefined | Last    | random |
 | case_elem2d_half_4x32_random_256size        | half  | 4×32     | 256   | None | Undefined | Last    | random |
-| case_elem2d_float_2048x8_last_256size       | float | 2048×8   | 256   | None | Undefined | Last    | random |
-| case_elem2d_float_2048x8_default_16384size  | float | 2048×8   | 16384 | None | Undefined | Default | seq    |
+
+### Element Coalesce — Tiled Iteration
+
+These cases would exceed the safe `src + idx` UB budget if loaded in one shot, so the wrapper drives `MSCATTER` per-chunk and lets later chunks overwrite earlier ones to compose the final result (see [Tiled-Iteration Pattern for Large Inputs](#tiled-iteration-pattern-for-large-inputs)).
+
+| Case | Data Type | Total Src | Chunk | UB per Chunk | TableSize | Atomic | OOB Mode | Conflict | Idx Pattern |
+|------|-----------|-----------|-------|--------------|-----------|--------|----------|----------|-------------|
+| case_elem2d_float_2048x8_last_256size       | float | 2048×8 | 128×8 (16 iters) | 4 KB src + 4 KB idx | 256   | None | Undefined | Last    | random |
+| case_elem2d_float_2048x8_default_16384size  | float | 2048×8 | 128×8 (16 iters) | 4 KB src + 4 KB idx | 16384 | None | Undefined | Default | seq    |
 
 ### Unaligned / Odd-Dimension Tiles
 

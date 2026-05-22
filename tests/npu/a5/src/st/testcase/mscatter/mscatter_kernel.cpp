@@ -372,6 +372,60 @@ inline AICORE void runElem2D(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__
 #endif
 }
 
+template <pto::ScatterAtomicOp Atomic, pto::ScatterOOB Oob, pto::ScatterConflict Conflict, typename T, typename TIdx,
+          int kTotalRows, int kSrcCols, int kChunkRows, int kTableSize>
+inline AICORE void runElem2DChunked(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ TIdx __in__ *indices)
+{
+    static_assert(kTotalRows % kChunkRows == 0, "kTotalRows must be a whole multiple of kChunkRows.");
+
+    using ChunkSrcShape = pto::Shape<1, 1, 1, kChunkRows, kSrcCols>;
+    using ChunkSrcStride = pto::Stride<1, 1, 1, kSrcCols, 1>;
+    using ChunkIdxShape = pto::Shape<1, 1, 1, kChunkRows, kSrcCols>;
+    using ChunkIdxStride = pto::Stride<1, 1, 1, kSrcCols, 1>;
+    using OutShape = pto::Shape<1, 1, 1, 1, kTableSize>;
+    using OutStride = pto::Stride<1, 1, 1, kTableSize, 1>;
+
+    GlobalTensor<T, OutShape, OutStride> outGlobal(out);
+
+    using SrcTile = Tile<TileType::Vec, T, kChunkRows, kSrcCols, BLayout::RowMajor, kChunkRows, kSrcCols>;
+    using IdxTile = Tile<TileType::Vec, TIdx, kChunkRows, kSrcCols, BLayout::RowMajor, kChunkRows, kSrcCols>;
+
+    SrcTile srcTile;
+    IdxTile idxTile;
+
+    constexpr int idxBytes = ((kChunkRows * kSrcCols * (int)sizeof(TIdx) + 31) / 32) * 32;
+    constexpr int srcBytes = ((kChunkRows * kSrcCols * (int)sizeof(T) + 31) / 32) * 32;
+    TASSIGN(idxTile, 0x0);
+    TASSIGN(srcTile, idxBytes);
+
+    constexpr int kChunkElems = kChunkRows * kSrcCols;
+    constexpr int kNumChunks = kTotalRows / kChunkRows;
+
+    for (int chunk = 0; chunk < kNumChunks; ++chunk) {
+        GlobalTensor<T, ChunkSrcShape, ChunkSrcStride> srcGlobal(src + chunk * kChunkElems);
+        GlobalTensor<TIdx, ChunkIdxShape, ChunkIdxStride> idxGlobal(indices + chunk * kChunkElems);
+
+        TLOAD(idxTile, idxGlobal);
+        TLOAD(srcTile, srcGlobal);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+        MSCATTER<Coalesce::Elem, Atomic, Oob, Conflict>(outGlobal, srcTile, idxTile);
+#ifndef __PTO_AUTO__
+        pipe_barrier(PIPE_ALL);
+        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+#endif
+    }
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    FlushScatterOutput();
+#endif
+    (void)srcBytes;
+}
+
 #define DEFINE_ROW(NAME, THOST, T, TIDX, R, C, TR, ATOMIC, OOB, CONFLICT)                                              \
     extern "C" __global__ AICORE void runMSCATTER_##NAME(__gm__ T *out, __gm__ T *src, __gm__ TIDX *indices)           \
     {                                                                                                                  \
@@ -468,6 +522,18 @@ inline AICORE void runElem2D(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__
         runMSCATTER_##NAME<<<1, nullptr, stream>>>(reinterpret_cast<T *>(out), reinterpret_cast<T *>(src), indices);   \
     }
 
+#define DEFINE_ELEM2D_CHUNKED(NAME, THOST, T, TIDX, R, C, CR, TS, ATOMIC, OOB, CONFLICT)                              \
+    extern "C" __global__ AICORE void runMSCATTER_##NAME(__gm__ T *out, __gm__ T *src, __gm__ TIDX *indices)          \
+    {                                                                                                                 \
+        runElem2DChunked<pto::ScatterAtomicOp::ATOMIC, pto::ScatterOOB::OOB, pto::ScatterConflict::CONFLICT, T, TIDX, \
+                         R, C, CR, TS>(out, src, indices);                                                            \
+    }                                                                                                                 \
+    void Launch_##NAME(THOST *out, THOST *src, TIDX *indices, void *stream)                                           \
+    {                                                                                                                 \
+        mscatter_warmup_kernel<<<64, nullptr, stream>>>();                                                            \
+        runMSCATTER_##NAME<<<1, nullptr, stream>>>(reinterpret_cast<T *>(out), reinterpret_cast<T *>(src), indices);  \
+    }
+
 DEFINE_ROW(row_float_random_8x32_64rows, float, float, int32_t, 8, 32, 64, None, Undefined, Last)
 DEFINE_ROW(row_float_same_8x32_16rows, float, float, int32_t, 8, 32, 16, None, Undefined, Last)
 DEFINE_ROW(row_half_random_16x64_64rows, aclFloat16, half, int32_t, 16, 64, 64, None, Undefined, Last)
@@ -518,8 +584,9 @@ DEFINE_ELEM2D_PAD(elem2d_int32_scalar_1x1_in_1x8_8size, int32_t, int32_t, int32_
 DEFINE_ROW_PAD(row_int32_unaligned_3x8_8rows, int32_t, int32_t, int32_t, 3, 8, 8, 8, None, Undefined, Last)
 DEFINE_ROW_PAD(row_int32_unaligned_9x16_16rows, int32_t, int32_t, int32_t, 9, 16, 16, 16, None, Undefined, Last)
 
-DEFINE_ELEM2D(elem2d_float_2048x8_last_256size, float, float, int32_t, 2048, 8, 256, None, Undefined, Last)
-DEFINE_ELEM2D(elem2d_float_2048x8_default_16384size, float, float, int32_t, 2048, 8, 16384, None, Undefined, Default)
+DEFINE_ELEM2D_CHUNKED(elem2d_float_2048x8_last_256size, float, float, int32_t, 2048, 8, 128, 256, None, Undefined, Last)
+DEFINE_ELEM2D_CHUNKED(elem2d_float_2048x8_default_16384size, float, float, int32_t, 2048, 8, 128, 16384, None,
+                      Undefined, Default)
 
 DEFINE_ELEM2D_DYN(elem2d_dyn_user_float_1x9_in_1x16_3x10, float, float, int32_t, 1, 16, 1, 9, 3, 10, None, Skip, Last)
 DEFINE_ELEM2D_DYN(elem2d_dyn_int32_4x8_in_4x8_64size, int32_t, int32_t, int32_t, 4, 8, 4, 8, 8, 8, None, Undefined,
