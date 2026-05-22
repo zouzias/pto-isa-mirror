@@ -12,12 +12,10 @@
  * \file moe_init_routing_quant.cpp
  * \brief
  */
-#include "moe_expert_token_out.h"
-#include "moe_fullload_dynamic_quant.h"
-#include "moe_gather_dynamic_quant.h"
-#include "moe_sort_multi_core.h"
-#include "moe_sort_one_core.h"
-#include "moe_src_to_dst_op.h"
+#include "moe_init_routing_expert_tokens.h"
+#include "moe_init_routing_fullload_dynamic_quant.h"
+#include "moe_init_routing_gather_dynamic_quant.h"
+#include "moe_init_routing_sort.h"
 
 using namespace AscendC;
 using namespace MoeInitRoutingQuant;

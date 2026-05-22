@@ -236,97 +236,6 @@ struct Coord {
     }
 };
 
-template <class... Ts>
-__forceinline__[host, aicore] constexpr auto MakeCoord(Ts... values)
-{
-    using Index = std::common_type_t<Ts...>;
-    Index data[sizeof...(Ts)]{static_cast<Index>(values)...};
-    return Coord<sizeof...(Ts), Index>{data};
-}
-
-template <int RANK, class Index, class LongIndex>
-__forceinline__[host, aicore] Coord<RANK, Index, LongIndex> CeilDiv(Coord<RANK, Index, LongIndex> const &lhs,
-                                                      Coord<RANK, Index, LongIndex> const &rhs)
-{
-    Coord<RANK, Index, LongIndex> out;
-    for (int i = 0; i < RANK; ++i) {
-        out[i] = pto_ext::CeilDiv(lhs[i], rhs[i]);
-    }
-    return out;
-}
-
-template <uint32_t ROW_ = 1, uint32_t COLUMN_ = 1>
-struct MatrixShape {
-    static constexpr uint32_t ROW = ROW_;
-    static constexpr uint32_t COLUMN = COLUMN_;
-    static constexpr int64_t COUNT = ROW * COLUMN;
-
-    __forceinline__[host, aicore] static Coord<2> ToCoord()
-    {
-        return MakeCoord(ROW, COLUMN);
-    }
-
-    __forceinline__[host, aicore] static PtoShape2D ToPtoShape()
-    {
-        return PtoShape2D(ROW, COLUMN);
-    }
-};
-
-struct MatrixCoord : public Coord<2, uint32_t> {
-    using Index = uint32_t;
-    using Base = Coord<2, Index>;
-    using LongIndex = typename Base::LongIndex;
-
-    static constexpr uint32_t ROW_INDEX = 0;
-    static constexpr uint32_t COLUMN_INDEX = 1;
-
-    __forceinline__[host, aicore] MatrixCoord() = default;
-    __forceinline__[host, aicore] MatrixCoord(Coord<2, Index> const &coord) : Base(coord)
-    {}
-    __forceinline__[host, aicore] MatrixCoord(Index row, Index column) : Base(MakeCoord(row, column))
-    {}
-    __forceinline__[host, aicore] MatrixCoord(LongIndex row, LongIndex column) : Base(MakeCoord(Index(row), Index(column)))
-    {}
-
-    __forceinline__[host, aicore] Index const &row() const
-    {
-        return this->At(ROW_INDEX);
-    }
-    __forceinline__[host, aicore] Index &row()
-    {
-        return this->At(ROW_INDEX);
-    }
-    __forceinline__[host, aicore] Index const &column() const
-    {
-        return this->At(COLUMN_INDEX);
-    }
-    __forceinline__[host, aicore] Index &column()
-    {
-        return this->At(COLUMN_INDEX);
-    }
-
-    __forceinline__[host, aicore] MatrixCoord operator+(Base const &b) const
-    {
-        return MatrixCoord(Base::operator+(b));
-    }
-
-    __forceinline__[host, aicore] MatrixCoord &operator+=(Base const &b)
-    {
-        Base::operator+=(b);
-        return *this;
-    }
-
-    __forceinline__[host, aicore] PtoShape2D ToPtoShape() const
-    {
-        return PtoShape2D(row(), column());
-    }
-};
-
-__forceinline__[host, aicore] MatrixCoord CeilDiv(MatrixCoord const &lhs, MatrixCoord const &rhs)
-{
-    return MatrixCoord(pto_ext::CeilDiv(lhs.row(), rhs.row()), pto_ext::CeilDiv(lhs.column(), rhs.column()));
-}
-
 __forceinline__[host, aicore] PtoShape2D CeilDiv(PtoShape2D const &lhs, PtoShape2D const &rhs)
 {
     return PtoShape2D(pto_ext::CeilDiv(lhs.shape[0], rhs.shape[0]), pto_ext::CeilDiv(lhs.shape[1], rhs.shape[1]));
@@ -343,22 +252,6 @@ struct GemmShape {
     static constexpr int64_t MNK = M * N * K;
     static constexpr int64_t COUNT = MNK;
 
-    __forceinline__[host, aicore] static Coord<3> ToCoord()
-    {
-        return MakeCoord(M, N, K);
-    }
-    __forceinline__[host, aicore] static Coord<2> ToCoordMN()
-    {
-        return MakeCoord(M, N);
-    }
-    __forceinline__[host, aicore] static Coord<2> ToCoordMK()
-    {
-        return MakeCoord(M, K);
-    }
-    __forceinline__[host, aicore] static Coord<2> ToCoordKN()
-    {
-        return MakeCoord(K, N);
-    }
     __forceinline__[host, aicore] static PtoShape3D ToPtoShape()
     {
         return PtoShape3D(M, N, K);
@@ -413,19 +306,9 @@ struct ND {
         return ND(rows, cols);
     }
 
-    __forceinline__[host, aicore] LongIndex GetOffset(MatrixCoord const &coord) const
-    {
-        return LongIndex(coord.row()) * stride_.stride[0] + LongIndex(coord.column());
-    }
-
     __forceinline__[host, aicore] LongIndex GetOffset(PtoCoord2D const &coord) const
     {
         return LongIndex(coord.shape[0]) * stride_.stride[0] + LongIndex(coord.shape[1]);
-    }
-
-    __forceinline__[host, aicore] ND GetTileLayout(MatrixCoord const &tileShape) const
-    {
-        return ND(tileShape.ToPtoShape(), stride());
     }
 
     __forceinline__[host, aicore] ND GetTileLayout(PtoShape2D const &tileShape) const
@@ -496,19 +379,9 @@ struct DN {
         return DN(rows, cols);
     }
 
-    __forceinline__[host, aicore] LongIndex GetOffset(MatrixCoord const &coord) const
-    {
-        return LongIndex(coord.row()) + LongIndex(coord.column()) * stride_.stride[1];
-    }
-
     __forceinline__[host, aicore] LongIndex GetOffset(PtoCoord2D const &coord) const
     {
         return LongIndex(coord.shape[0]) + LongIndex(coord.shape[1]) * stride_.stride[1];
-    }
-
-    __forceinline__[host, aicore] DN GetTileLayout(MatrixCoord const &tileShape) const
-    {
-        return DN(tileShape.ToPtoShape(), stride());
     }
 
     __forceinline__[host, aicore] DN GetTileLayout(PtoShape2D const &tileShape) const
@@ -665,14 +538,6 @@ struct Nz {
                   BYTE_PER_FRACTAL / sizeof(Element));
     }
 
-    __forceinline__[host, aicore] LongIndex GetOffset(MatrixCoord const &coord) const
-    {
-        return LongIndex(coord.row()) / shape_.shape[0] * stride_.stride[1] +
-               LongIndex(coord.column()) / shape_.shape[2] * stride_.stride[3] +
-               (LongIndex(coord.row()) % shape_.shape[0]) * stride_.stride[0] +
-               (LongIndex(coord.column()) % shape_.shape[2]) * stride_.stride[2];
-    }
-
     __forceinline__[host, aicore] LongIndex GetOffset(PtoCoord2D const &coord) const
     {
         return LongIndex(coord.shape[0]) / shape_.shape[0] * stride_.stride[1] +
@@ -681,23 +546,11 @@ struct Nz {
                (LongIndex(coord.shape[1]) % shape_.shape[2]) * stride_.stride[2];
     }
 
-    __forceinline__[host, aicore] Nz GetTileLayout(MatrixCoord const &tileOriShape) const
-    {
-        Shape tileShape(shape(0), CeilDiv(tileOriShape.row(), shape(0)), shape(2),
-                        CeilDiv(tileOriShape.column(), shape(2)));
-        return Nz(tileOriShape.ToPtoShape(), tileShape, stride());
-    }
-
     __forceinline__[host, aicore] Nz GetTileLayout(PtoShape2D const &tileOriShape) const
     {
         Shape tileShape(shape(0), CeilDiv(tileOriShape.shape[0], shape(0)), shape(2),
                         CeilDiv(tileOriShape.shape[1], shape(2)));
         return Nz(tileOriShape, tileShape, stride());
-    }
-
-    __forceinline__[host, aicore] static Nz MakeLayoutInL0C(MatrixCoord const &shape)
-    {
-        return MakeLayoutInL0C(shape.ToPtoShape());
     }
 
     __forceinline__[host, aicore] static Nz MakeLayoutInL0C(PtoShape2D const &shape)
@@ -790,11 +643,6 @@ struct Zn {
                   rowsRound * ELE_NUM_PER_C0);
     }
 
-    __forceinline__[host, aicore] static Zn MakeLayoutInL0C(MatrixCoord const &shape)
-    {
-        return MakeLayoutInL0C(shape.ToPtoShape());
-    }
-
     __forceinline__[host, aicore] static Zn MakeLayoutInL0C(PtoShape2D const &shape)
     {
         return Zn(shape.shape[0], shape.shape[1], C0_NUM_PER_FRACTAL, CeilDiv<C0_NUM_PER_FRACTAL>(shape.shape[0]),
@@ -803,27 +651,12 @@ struct Zn {
                   RoundUp<C0_NUM_PER_FRACTAL>(shape.shape[0]) * C0_NUM_PER_FRACTAL);
     }
 
-    __forceinline__[host, aicore] LongIndex GetOffset(MatrixCoord const &coord) const
-    {
-        return LongIndex(coord.row()) / shape_.shape[0] * stride_.stride[1] +
-               LongIndex(coord.column()) / shape_.shape[2] * stride_.stride[3] +
-               (LongIndex(coord.row()) % shape_.shape[0]) * stride_.stride[0] +
-               (LongIndex(coord.column()) % shape_.shape[2]) * stride_.stride[2];
-    }
-
     __forceinline__[host, aicore] LongIndex GetOffset(PtoCoord2D const &coord) const
     {
         return LongIndex(coord.shape[0]) / shape_.shape[0] * stride_.stride[1] +
                LongIndex(coord.shape[1]) / shape_.shape[2] * stride_.stride[3] +
                (LongIndex(coord.shape[0]) % shape_.shape[0]) * stride_.stride[0] +
                (LongIndex(coord.shape[1]) % shape_.shape[2]) * stride_.stride[2];
-    }
-
-    __forceinline__[host, aicore] Zn GetTileLayout(MatrixCoord const &tileOriShape) const
-    {
-        Shape tileShape(shape(0), CeilDiv(tileOriShape.row(), shape(0)), shape(2),
-                        CeilDiv(tileOriShape.column(), shape(2)));
-        return Zn(tileOriShape.ToPtoShape(), tileShape, stride());
     }
 
     __forceinline__[host, aicore] Zn GetTileLayout(PtoShape2D const &tileOriShape) const
@@ -913,12 +746,6 @@ struct Zz {
         return Zz(orgRows, orgCols, C0_NUM_PER_FRACTAL, rowsRound / C0_NUM_PER_FRACTAL, ELE_NUM_PER_C0,
                   colsRound / ELE_NUM_PER_C0, ELE_NUM_PER_C0, colsRound * C0_NUM_PER_FRACTAL, 1,
                   BYTE_PER_FRACTAL / sizeof(Element));
-    }
-
-    __forceinline__[host, aicore] LongIndex GetOffset(MatrixCoord const &coord) const
-    {
-        return LongIndex(coord.row()) / shape_.shape[0] * stride_.stride[1] +
-               LongIndex(coord.column()) / shape_.shape[2] * stride_.stride[3];
     }
 
     __forceinline__[host, aicore] LongIndex GetOffset(PtoCoord2D const &coord) const

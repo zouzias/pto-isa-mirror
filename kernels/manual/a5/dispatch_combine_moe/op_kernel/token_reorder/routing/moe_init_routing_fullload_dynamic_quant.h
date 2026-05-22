@@ -9,15 +9,13 @@
  */
 
 /* !
- * \file moe_fullload_dynamic_quant.h
+ * \file moe_init_routing_fullload_dynamic_quant.h
  * \brief
  */
-#ifndef MOE_FULL_LOAD_DYNAMIC_QUANT_H
-#define MOE_FULL_LOAD_DYNAMIC_QUANT_H
+#ifndef MOE_INIT_ROUTING_FULLLOAD_DYNAMIC_QUANT_H
+#define MOE_INIT_ROUTING_FULLLOAD_DYNAMIC_QUANT_H
 
-#include "moe_mrgsort.h"
-#include "moe_pto_sort.h"
-#include "moe_sort_base.h"
+#include "moe_init_routing_sort.h"
 namespace MoeInitRoutingQuant {
 using namespace AscendC;
 using namespace optiling;

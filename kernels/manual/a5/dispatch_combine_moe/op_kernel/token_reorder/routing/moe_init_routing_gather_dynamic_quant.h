@@ -9,11 +9,11 @@
  */
 
 /*!
- * \file moe_gather_dynamic_quant.h
+ * \file moe_init_routing_gather_dynamic_quant.h
  * \brief
  */
-#ifndef MOE_GATHER_DYNAMIC_QUANT_H
-#define MOE_GATHER_DYNAMIC_QUANT_H
+#ifndef MOE_INIT_ROUTING_GATHER_DYNAMIC_QUANT_H
+#define MOE_INIT_ROUTING_GATHER_DYNAMIC_QUANT_H
 
 #include "moe_common.h"
 #include "moe_pto_sort.h"
@@ -456,4 +456,4 @@ __aicore__ inline void MoeGatherDynamicQuant<T>::Process()
     }
 }
 } // namespace MoeInitRoutingQuant
-#endif // MOE_GATHER_DYNAMIC_QUANT_H
+#endif // MOE_INIT_ROUTING_GATHER_DYNAMIC_QUANT_H

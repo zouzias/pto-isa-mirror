@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-#include "moe_init_routing_tiling.h"
+#include "moe_init_routing_tiling_common.h"
 
 namespace optiling {
 

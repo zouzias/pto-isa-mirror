@@ -311,17 +311,14 @@ moe_init_routing_quant()
 | ---- | ---- |
 | `moe_init_routing_quant.cpp` | routing 子系统入口，根据 tilingKey 选择 full-load、one-core sort 或 multi-core sort 路径 |
 | `moe_init_routing_quant_tiling.h` | quant routing tiling：tilingKey、workspace、full-load/gather 分支参数 |
-| `moe_init_routing_tiling.h` | base routing tiling：VBS、VMS、sort-out、src-to-dst、gather 参数 |
-| `moe_sort_one_core.h` | 单核排序路径，处理小规模 routing 排序 |
-| `moe_sort_multi_core.h` | 多核排序路径，拆成 VBS/VMS/sort-out，并调用 merge sort 子模块 |
-| `moe_mrgsort.h` | 多核 merge sort 主过程 |
-| `moe_mrgsort_out.h` | merge sort 输出提取与排序结果整理 |
-| `moe_expert_token_out.h` | 根据排序结果生成 expert token count 或 cumsum，并输出 expandedRowIdx |
-| `moe_src_to_dst_op.h` | 生成 source row 到 destination row 的映射，供 gather 使用 |
-| `moe_fullload_dynamic_quant.h` | full-load 路径：排序、count/cumsum、逐行 quant、输出 int8 payload 和 scale |
-| `moe_gather_dynamic_quant.h` | gather 路径：按 expandedRowIdx 读取原 token，逐行 dynamic quant，写 expandedX 和 scale |
+| `moe_init_routing_tiling_common.h` | common routing tiling：tiling base、VBS、VMS、sort-out、src-to-dst、gather 参数 |
+| `moe_init_routing_sort.h` | 本卡内 routing sort 编排，包含 one-core 和 multi-core 排序路径 |
+| `moe_packed_sort_merge.h` | 本卡内部 packed sorted-list merge 与最终结果提取，不涉及多卡 merge |
+| `moe_init_routing_expert_tokens.h` | 根据排序结果生成 expert token count/cumsum、expandedRowIdx 和 source-to-destination row 映射 |
+| `moe_init_routing_fullload_dynamic_quant.h` | full-load 路径：排序、count/cumsum、逐行 quant、输出 int8 payload 和 scale |
+| `moe_init_routing_gather_dynamic_quant.h` | gather 路径：按 expandedRowIdx 读取原 token，逐行 dynamic quant，写 expandedX 和 scale |
 | `moe_pto_sort.h` | PTO UB 内 int32 sort、packed sort、vector helper 和 AscendC sync bridge |
-| `moe_common.h` / `tiling_base.h` | 常量、对齐、tiling base、全局 memory init 等公共基础 |
+| `moe_common.h` | 常量、对齐、全局 memory init 等公共基础 |
 
 ### Routing 的关键数据语义
 

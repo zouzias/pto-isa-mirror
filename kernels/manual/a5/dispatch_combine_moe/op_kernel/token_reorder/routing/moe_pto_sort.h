@@ -33,11 +33,6 @@ PTO_INTERNAL void PtoFillArithProgressionInt32(uint64_t dstUb, int32_t firstValu
     pto_detail::PtoWaitFlag<AscendC::HardEvent::S_V>(0);
 }
 
-PTO_INTERNAL uint32_t AlignUpSortBlock(uint32_t elemNum)
-{
-    return ((elemNum + PTO_SORT_BLOCK_ELEMS - 1) / PTO_SORT_BLOCK_ELEMS) * PTO_SORT_BLOCK_ELEMS;
-}
-
 PTO_INTERNAL int32_t FillTailMergeArray(int32_t *mrgArray, int32_t validCols, int32_t blockLen)
 {
     int32_t arrayCount = 0;
@@ -165,7 +160,7 @@ PTO_INTERNAL void PtoSortInt32ToPackedUB(uint64_t inputValueUb, uint64_t inputPa
         return;
     }
 
-    const uint32_t alignedElemNum = AlignUpSortBlock(elemNum);
+    const uint32_t alignedElemNum = ((elemNum + PTO_SORT_BLOCK_ELEMS - 1) / PTO_SORT_BLOCK_ELEMS) * PTO_SORT_BLOCK_ELEMS;
     ASCENDC_ASSERT((alignedElemNum <= MAX_SORT_ELEMS),
                    { KERNEL_LOG(KERNEL_ERROR, "alignedElemNum exceeds PTO sort capacity"); });
 

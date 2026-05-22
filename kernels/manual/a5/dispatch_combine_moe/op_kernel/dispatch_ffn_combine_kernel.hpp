@@ -28,7 +28,7 @@
 #include "utils/layout3d.hpp"
 #include "token_reorder/routing/moe_init_routing_quant_tiling.h"
 #include "token_reorder/routing/moe_init_routing_quant.cpp"
-#include "token_reorder/routing/moe_fullload_dynamic_quant.h"
+#include "token_reorder/routing/moe_init_routing_fullload_dynamic_quant.h"
 #include "token_reorder/unpermute/moe_token_unpermute.h"
 
 inline __gm__ struct OpSystemRunCfg g_opSystemRunCfg {
