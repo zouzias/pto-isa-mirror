@@ -12,45 +12,59 @@ class DataFormat(Enum):
 import numpy as np
 
 def golden_NCHW2NC1HWC0(g_info):
+    n = g_info.g_shape0
+    c = g_info.g_shape1
+    h = g_info.g_shape2
+    w = g_info.g_shape3
+    
+    dtype_size = np.dtype(g_info.data_type).itemsize
+    c0 = 32 // dtype_size
+    
+    input_arr = np.random.randint(1, 5, size=(n, c, h, w)).astype(g_info.data_type)
+    input_arr.tofile("./input.bin")
+    
+    c1 = (c + c0 - 1) // c0
+    
+    padded_c = c1 * c0
+    padding = padded_c - c
+    if padding > 0:
+        input_arr = np.pad(input_arr, ((0, 0), (0, padding), (0, 0), (0, 0)), mode='constant')
+        
+    output_arr = input_arr.reshape(n, c1, c0, h, w).transpose(0, 1, 3, 4, 2)
+    
+    output_arr.tofile("./golden.bin")
+    print(f"Golden - {output_arr.shape}")
+    
+    return input_arr, output_arr
+
+def golden_NC1HWC02C1HWN1N0C0(g_info):
     """
     Generates golden data for Mode 1: NCHW -> NC1HWC0
     Maps g_info shapes to [N, H, W, C] and computes C0 from data type.
     """
-    # 1. Map g_info shapes to standard NCHW
-    # Assuming mapping: shape0=N, shape1=H, shape2=W, shape3=C
+
     n = g_info.g_shape0
-    h = g_info.g_shape1
-    w = g_info.g_shape2
-    c = g_info.g_shape3
+    c1 = g_info.g_shape1
+    h = g_info.g_shape2
+    w = g_info.g_shape3
+    n0 = g_info.g_shape4
     
-    # 2. Calculate C0 based on data type size
-    # Assuming 32-byte hardware alignment as discussed
     dtype_size = np.dtype(g_info.data_type).itemsize
     c0 = 32 // dtype_size
     
-    # 3. Generate random input for NCHW
-    input_arr = np.random.randint(1, 5, size=(n, c, h, w)).astype(g_info.data_type)
+    input_arr = np.random.randint(1, 5, size=(n, c1, h, w, c0)).astype(g_info.data_type)
     input_arr.tofile("./input.bin")
     
-    # 4. Transform to NC1HWC0
-    # The transformation function logic:
-    # C is split into C1 and C0.
-    c1 = (c + c0 - 1) // c0
-    
-    # Pad channel dimension to be multiple of C0
-    padded_c = c1 * c0
-    padding = padded_c - c
+    n1 = (n + n0 - 1) // n0    
+    padded_c = n1 * n0
+    padding = padded_c - n
     if padding > 0:
-        # Pad only the C dimension (axis 1)
-        input_arr = np.pad(input_arr, ((0, 0), (0, padding), (0, 0), (0, 0)), mode='constant')
+        input_arr = np.pad(input_arr, ((0, padding), (0, 0), (0, 0), (0, 0), (0, 0)), mode='constant')
         
-    # Reshape and Permute
-    # Current: [N, Padded_C, H, W] -> Reshape: [N, C1, C0, H, W]
-    # Permute to: [N, C1, H, W, C0]
-    output_arr = input_arr.reshape(n, c1, c0, h, w).transpose(0, 1, 3, 4, 2)
+    output_arr = input_arr.reshape(n1, n0, c1, h, w, c0).transpose(2, 3, 4, 0, 1, 5)
     
-    # 5. Dump to disk
     output_arr.tofile("./golden.bin")
+    print(f"Golden - {output_arr.shape}")
     
     return input_arr, output_arr
 
@@ -72,7 +86,7 @@ def gen_golden_data(g_info):
     # MODE 2: NC1HWC0 -> C1HWN1N0C0
     # -------------------------------------------------------------
     elif mode == DataFormat.NC1HWC02C1HWN1N0C0.value:
-        pass
+        golden_NC1HWC02C1HWN1N0C0(g_info)
 
     # -------------------------------------------------------------
     # MODE 3: GNCHW -> GNC1HWC0
@@ -120,6 +134,12 @@ test_cases_registry = [
     TTRANSParams("NCHW2NC1HWC0_3", np.uint16, DataFormat.NCHW2NC1HWC0.value, 1, 11, 13, 16),
     TTRANSParams("NCHW2NC1HWC0_4", np.int32, DataFormat.NCHW2NC1HWC0.value, 4, 32, 3, 7),
     TTRANSParams("NCHW2NC1HWC0_5", np.int8, DataFormat.NCHW2NC1HWC0.value, 4, 32, 3, 7),
+
+    TTRANSParams("NC1HWC02C1HWN1N0C0_1", np.float32, DataFormat.NC1HWC02C1HWN1N0C0.value, 25, 4, 3, 8, 16),
+    TTRANSParams("NC1HWC02C1HWN1N0C0_2", np.int32, DataFormat.NC1HWC02C1HWN1N0C0.value, 15, 14, 13, 16, 8),
+    TTRANSParams("NC1HWC02C1HWN1N0C0_3", np.uint16, DataFormat.NC1HWC02C1HWN1N0C0.value, 11, 11, 13, 16, 8),
+    TTRANSParams("NC1HWC02C1HWN1N0C0_4", np.int32, DataFormat.NC1HWC02C1HWN1N0C0.value, 4, 32, 3, 7, 4),
+    TTRANSParams("NC1HWC02C1HWN1N0C0_5", np.int8, DataFormat.NC1HWC02C1HWN1N0C0.value, 4, 32, 3, 7, 8),
 ]
 
 SUITE_NAME = "TTRANSConvTest"

@@ -5,9 +5,10 @@
 using namespace std;
 using namespace PtoTestCommon;
 
-// Updated Launch Signatures: gWholeShape tracking parameters completely removed
-template <typename T, int gShape0, int gShape1, int gShape2, int gShape3>
-void LaunchTTRANSConv_NCHW2NC1HWC0(T *out, T *src, void *stream);
+template <typename T, int format, 
+int srcShape0, int srcShape1, int srcShape2, int srcShape3, int srcShape4,
+int dstShape0, int dstShape1, int dstShape2, int dstShape3, int dstShape4, int dstShape5>
+void LaunchTTRANSConv(T *out, T *src, void *stream);
 
 class TTRANSConvTest : public testing::Test {
 protected:
@@ -25,13 +26,13 @@ std::string GetGoldenDir()
 }
 
 // Updated Test Wrapper for Conv: Direct execution shape allocation and launching
-template <typename T, int gShape0, int gShape1, int gShape2, int gShape3>
-void test_ttrans_NCHW2NC1HWC0()
+template <typename T, int format, 
+int srcShape0, int srcShape1, int srcShape2, int srcShape3, int srcShape4,
+int dstShape0, int dstShape1, int dstShape2, int dstShape3, int dstShape4, int dstShape5 = 1>
+void test_ttrans()
 {
-    size_t srcFileSize = gShape0 * gShape1 * gShape2 * gShape3 * sizeof(T);
-    size_t C0 = 32 / sizeof(T);
-    size_t C1 = (gShape1 + C0 - 1 ) / C0;
-    size_t dstFileSize = gShape0 * C1 * gShape2 * gShape3 * C0 * sizeof(T);
+    size_t srcFileSize = srcShape0 * srcShape1 * srcShape2 * srcShape3 * srcShape4 * sizeof(T);
+    size_t dstFileSize = dstShape0 * dstShape1 * dstShape2 * dstShape3 * dstShape4 * dstShape5 * sizeof(T);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -51,7 +52,8 @@ void test_ttrans_NCHW2NC1HWC0()
 
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     
-    LaunchTTRANSConv_NCHW2NC1HWC0<T, gShape0, gShape1, gShape2, gShape3>(dstDevice, srcDevice, stream);
+    LaunchTTRANSConv<T, format, srcShape0, srcShape1, srcShape2, srcShape3, srcShape4,
+                        dstShape0, dstShape1, dstShape2, dstShape3, dstShape4, dstShape5>(dstDevice, srcDevice, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -72,7 +74,7 @@ void test_ttrans_NCHW2NC1HWC0()
     ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstFileSize, result.data(), dstFileSize);
 
-    bool ret = ResultCmp(golden, result, 0.001f);
+    bool ret = ResultCmp<T>(golden, result, 0.001f);
 
     EXPECT_TRUE(ret);
 }
@@ -80,25 +82,72 @@ void test_ttrans_NCHW2NC1HWC0()
 
 TEST_F(TTRANSConvTest, NCHW2NC1HWC0_1)
 {
-    test_ttrans_NCHW2NC1HWC0<float, 5, 4, 3, 8>();
+    test_ttrans<float, 0, 
+        5, 4, 3, 8, 1,    
+        5, 1, 3, 8, 8>();
 }
 
 TEST_F(TTRANSConvTest, NCHW2NC1HWC0_2)
 {
-    test_ttrans_NCHW2NC1HWC0<int32_t, 5, 14, 13, 16>();
+    test_ttrans<int32_t, 0,
+        5, 14, 13, 16, 1,
+        5, 2, 13, 16, 8>();
 }
 
 TEST_F(TTRANSConvTest, NCHW2NC1HWC0_3)
 {
-    test_ttrans_NCHW2NC1HWC0<uint16_t, 1, 11, 13, 16>();
+    test_ttrans<uint16_t, 0,
+        1, 11, 13, 16, 1,
+        1, 1, 13, 16, 16>();
 }
 
 TEST_F(TTRANSConvTest, NCHW2NC1HWC0_4)
 {
-    test_ttrans_NCHW2NC1HWC0<int32_t, 4, 32, 3, 7>();
+    test_ttrans<int32_t, 0,
+        4, 32, 3, 7, 1,
+        4, 4, 3, 7, 8>();
 }
 
 TEST_F(TTRANSConvTest, NCHW2NC1HWC0_5)
 {
-    test_ttrans_NCHW2NC1HWC0<int8_t, 4, 32, 3, 7>();
+    test_ttrans<int8_t, 0,
+        4, 32, 3, 7, 1,
+        4, 1, 3, 7, 32>();
+}
+
+/*------------------------------------------------*/
+
+TEST_F(TTRANSConvTest, NC1HWC02C1HWN1N0C0_1)
+{
+    test_ttrans<float, 1,
+        25, 4, 3, 8, 8,
+        4, 3, 8, 2, 16, 8>();
+}
+
+TEST_F(TTRANSConvTest, NC1HWC02C1HWN1N0C0_2)
+{
+    test_ttrans<int32_t, 1,
+        15, 14, 13, 16, 8,
+        14, 13, 16, 2, 8, 8>();
+}
+
+TEST_F(TTRANSConvTest, NC1HWC02C1HWN1N0C0_3)
+{
+    test_ttrans<uint16_t, 1,
+        11, 11, 13, 16, 16,
+        11, 13, 16, 2, 8, 16>();
+}
+
+TEST_F(TTRANSConvTest, NC1HWC02C1HWN1N0C0_4)
+{
+    test_ttrans<int32_t, 1,
+        4, 32, 3, 7, 8,
+        32, 3, 7, 1, 4, 8>();
+}
+
+TEST_F(TTRANSConvTest, NC1HWC02C1HWN1N0C0_5)
+{
+    test_ttrans<int8_t, 1,
+        4, 32, 3, 7, 32,
+        32, 3, 7, 1, 8, 32>();
 }
