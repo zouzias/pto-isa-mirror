@@ -11,6 +11,7 @@
 #ifndef PTO_EXT_EPILOGUE_BLOCK_PER_TOKEN_ROW_HPP
 #define PTO_EXT_EPILOGUE_BLOCK_PER_TOKEN_ROW_HPP
 
+#include "moe_pto_utils.hpp"
 #include "dispatch_policy_custom.hpp"
 
 #include <pto/common/pto_tile.hpp>
@@ -22,23 +23,9 @@
 namespace pto_ext::Epilogue::Block {
 namespace row_detail {
 
-template <auto Pipe>
-PTO_DEVICE void PtoPipeBarrier()
-{
-    AscendC::PipeBarrier<Pipe>();
-}
-
-template <AscendC::HardEvent Event>
-PTO_DEVICE void PtoSetFlag(int32_t eventId)
-{
-    AscendC::SetFlag<Event>(eventId);
-}
-
-template <AscendC::HardEvent Event>
-PTO_DEVICE void PtoWaitFlag(int32_t eventId)
-{
-    AscendC::WaitFlag<Event>(eventId);
-}
+using pto_ext::PtoPipeBarrier;
+using pto_ext::PtoSetFlag;
+using pto_ext::PtoWaitFlag;
 
 using pto_ext::dispatch_combine_moe::pto_bridge::PtoCastVector;
 using pto_ext::dispatch_combine_moe::pto_bridge::PtoLoadVector;
@@ -81,12 +68,11 @@ public:
         PtoRemoteWindow remoteWindow;
         int32_t scratchOffset;
 
-        PTO_DEVICE
-        Params(){};
+        __forceinline__ __aicore__ Params(){};
 
-        PTO_DEVICE
-        Params(int32_t EP_, int32_t expertPerRank_, __gm__ int32_t *ptrTokenPerExpert_, int32_t n2_, int32_t rank_,
-               PtoRemoteWindow &remoteWindow_, int32_t scratchOffset_)
+        __forceinline__ __aicore__ Params(int32_t EP_, int32_t expertPerRank_, __gm__ int32_t *ptrTokenPerExpert_,
+                                          int32_t n2_, int32_t rank_, PtoRemoteWindow &remoteWindow_,
+                                          int32_t scratchOffset_)
             : ptrTokenPerExpert(ptrTokenPerExpert_),
               EP(EP_),
               expertPerRank(expertPerRank_),
@@ -97,8 +83,8 @@ public:
         {}
     };
 
-    PTO_DEVICE
-    BlockEpilogue(Arch::Resource<ArchTag> const &resource, Params const &params = Params{}) : params(params)
+    __forceinline__ __aicore__ BlockEpilogue(Arch::Resource<ArchTag> const &resource, Params const &params = Params{})
+        : params(params)
     {
         size_t ubOffset = 0;
         int32_t eventVMTE2 = 0;
@@ -121,8 +107,7 @@ public:
             ubOffset += blockN * sizeof(float);
         }
     }
-    PTO_DEVICE
-    void SetFlag()
+    __forceinline__ __aicore__ void SetFlag()
     {
         for (uint32_t i = 0; i < UB_STAGES; ++i) {
             row_detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[i]);
@@ -130,27 +115,24 @@ public:
         }
     }
 
-    PTO_DEVICE
-    void Finalize()
+    __forceinline__ __aicore__ void Finalize()
     {
         for (uint32_t i = 0; i < UB_STAGES; ++i) {
             row_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[i]);
             row_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[i]);
         }
     }
-    PTO_DEVICE
-    ~BlockEpilogue()
+    __forceinline__ __aicore__ ~BlockEpilogue()
     {}
 
-    PTO_DEVICE
-    void UpdateParams(Params const &params_)
+    __forceinline__ __aicore__ void UpdateParams(Params const &params_)
     {
         params = params_;
     }
 
-    PTO_DEVICE
-    void operator()(__gm__ ElementC *gmCPtr, PtoShape2D const &shapeC, __gm__ ElementPerTokenScale *gmPerTokenScalePtr,
-                    __gm__ ElementD *ptrD, int32_t dstRank)
+    __forceinline__ __aicore__ void operator()(__gm__ ElementC *gmCPtr, PtoShape2D const &shapeC,
+                                               __gm__ ElementPerTokenScale *gmPerTokenScalePtr, __gm__ ElementD *ptrD,
+                                               int32_t dstRank)
     {
         using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
         using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;

@@ -45,11 +45,6 @@ bool TryGetJsonScalar(const std::string &text, const std::string &key, std::stri
     }
 }
 
-uint32_t ParseJsonUInt(const std::string &text, const std::string &key)
-{
-    return static_cast<uint32_t>(std::stoul(GetJsonScalar(text, key)));
-}
-
 double ParseJsonDouble(const std::string &text, const std::string &key, double default_value)
 {
     std::string value;
@@ -89,13 +84,13 @@ CaseConfig LoadCaseConfig(const std::string &case_json_path)
     const std::vector<uint8_t> raw = ReadBinaryFile(case_json_path);
     const std::string text(raw.begin(), raw.end());
     CaseConfig cfg;
-    cfg.m = ParseJsonUInt(text, "m");
-    cfg.k = ParseJsonUInt(text, "k");
-    cfg.n = ParseJsonUInt(text, "n");
-    cfg.topk = ParseJsonUInt(text, "topk");
-    cfg.expert_per_rank = ParseJsonUInt(text, "expert_per_rank");
-    cfg.world_size = ParseJsonUInt(text, "world_size");
-    cfg.max_output_size = ParseJsonUInt(text, "max_output_size");
+    cfg.m = static_cast<uint32_t>(std::stoul(GetJsonScalar(text, "m")));
+    cfg.k = static_cast<uint32_t>(std::stoul(GetJsonScalar(text, "k")));
+    cfg.n = static_cast<uint32_t>(std::stoul(GetJsonScalar(text, "n")));
+    cfg.topk = static_cast<uint32_t>(std::stoul(GetJsonScalar(text, "topk")));
+    cfg.expert_per_rank = static_cast<uint32_t>(std::stoul(GetJsonScalar(text, "expert_per_rank")));
+    cfg.world_size = static_cast<uint32_t>(std::stoul(GetJsonScalar(text, "world_size")));
+    cfg.max_output_size = static_cast<uint32_t>(std::stoul(GetJsonScalar(text, "max_output_size")));
     cfg.list_len = 1;
     const char *soc_env = std::getenv("DISPATCH_COMBINE_MOE_SOC_VERSION");
     if (soc_env != nullptr && soc_env[0] != '\0') {

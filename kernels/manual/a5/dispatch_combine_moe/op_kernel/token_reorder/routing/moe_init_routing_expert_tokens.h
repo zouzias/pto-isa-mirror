@@ -9,23 +9,23 @@
  */
 
 /*!
- * \file moe_v2_expert_token_out.h
+ * \file moe_init_routing_expert_tokens.h
  * \brief
  */
-#ifndef INNER_MOE_V2_EXPERT_TOKEN_OUT_H
-#define INNER_MOE_V2_EXPERT_TOKEN_OUT_H
+#ifndef INNER_MOE_INIT_ROUTING_EXPERT_TOKENS_H
+#define INNER_MOE_INIT_ROUTING_EXPERT_TOKENS_H
 
-#include "moe_v2_common.h"
-#include "moe_v2_pto_sort.h"
+#include "moe_common.h"
+#include "moe_pto_sort.h"
 
-namespace MoeInitRoutingQuantV2 {
+namespace MoeInitRoutingQuant {
 using namespace AscendC;
 using namespace optiling;
 constexpr int64_t EXPERT_ID_VALUE_NUM = 2;
 
-class MoeV2ExpertTokenOut {
+class MoeExpertTokenOut {
 public:
-    __aicore__ inline MoeV2ExpertTokenOut(){};
+    __aicore__ inline MoeExpertTokenOut(){};
     template <typename TilingData>
     __aicore__ inline void Init(GM_ADDR expertTokensCountOrCumsum, GM_ADDR expertTokensBeforeCapacity,
                                 GM_ADDR expandedRowIdx, GM_ADDR workspace, const TilingData *tilingData,
@@ -54,7 +54,7 @@ private:
     __gm__ int32_t *expertIdxValueGm;
     __gm__ int32_t *expandedRowIdxGm;
 
-    const InnerMoeV2GatherOutComputeTilingData *srcToDstTilingData;
+    const InnerMoeGatherOutComputeTilingData *srcToDstTilingData;
 
     int64_t coreNum;
     int64_t blockIdx;
@@ -77,7 +77,7 @@ private:
     int32_t expertTokenValue = 0;
 };
 
-__aicore__ inline void MoeV2ExpertTokenOut::InitLocal()
+__aicore__ inline void MoeExpertTokenOut::InitLocal()
 {
     pto_detail::PtoFillVector(this->expertTokenIdxOutUb, static_cast<int32_t>(0), this->expertNumUbAlign);
 
@@ -101,13 +101,13 @@ __aicore__ inline void MoeV2ExpertTokenOut::InitLocal()
     pto_detail::PtoSetWaitFlag<HardEvent::MTE3_MTE2>(HardEvent::MTE3_MTE2);
 }
 
-__aicore__ inline void MoeV2ExpertTokenOut::CopyIn(int64_t progress)
+__aicore__ inline void MoeExpertTokenOut::CopyIn(int64_t progress)
 {
     pto_detail::PtoLoadVector<int32_t>(this->inputExpertIdxUb, expandedExpertIdxGm + progress * perLoopRows,
                                        currentLoopRows);
 }
 
-__aicore__ inline void MoeV2ExpertTokenOut::GetExpertTokenCount(int32_t curExpertId)
+__aicore__ inline void MoeExpertTokenOut::GetExpertTokenCount(int32_t curExpertId)
 {
     this->tokenCount++;
     if (this->lastExpertId < curExpertId) {
@@ -128,7 +128,7 @@ __aicore__ inline void MoeV2ExpertTokenOut::GetExpertTokenCount(int32_t curExper
     }
 }
 
-__aicore__ inline void MoeV2ExpertTokenOut::Compute(int64_t progress)
+__aicore__ inline void MoeExpertTokenOut::Compute(int64_t progress)
 {
     pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
     if (this->lastExpertId == -1) {
@@ -142,13 +142,13 @@ __aicore__ inline void MoeV2ExpertTokenOut::Compute(int64_t progress)
     pto_detail::PtoSetValue<int32_t>(this->expertTokenIdxOutUb, this->expertIdx, this->tokenCount);
 }
 
-__aicore__ inline void MoeV2ExpertTokenOut::AtomicStoreCountSlice(__gm__ int32_t *dstGm, int64_t offset,
-                                                                  int64_t copyLength)
+__aicore__ inline void MoeExpertTokenOut::AtomicStoreCountSlice(__gm__ int32_t *dstGm, int64_t offset,
+                                                                int64_t copyLength)
 {
     pto_detail::PtoStoreAtomicAddVector(dstGm + offset, this->expertTokenIdxOutUb, static_cast<uint32_t>(copyLength));
 }
 
-__aicore__ inline void MoeV2ExpertTokenOut::CopyOutExpertTokensCumsum(bool isTail)
+__aicore__ inline void MoeExpertTokenOut::CopyOutExpertTokensCumsum(bool isTail)
 {
     if (this->dropPadMode != DROPLESS_MODE || expertTokensCountOrCumsumFlag != EXERPT_TOKENS_CUMSUM) {
         return;
@@ -188,7 +188,7 @@ __aicore__ inline void MoeV2ExpertTokenOut::CopyOutExpertTokensCumsum(bool isTai
     }
 }
 
-__aicore__ inline void MoeV2ExpertTokenOut::CopyOutExpertTokensCount(bool isTail)
+__aicore__ inline void MoeExpertTokenOut::CopyOutExpertTokensCount(bool isTail)
 {
     int64_t copyLength = isTail ? this->lastExpertId - this->firstExpertId + 1 : this->expertNumUbAlign;
     if (this->dropPadMode == DROP_PAD_MODE && expertTokensBeforeCapacityFlag > EXERPT_TOKENS_NONE) {
@@ -199,7 +199,7 @@ __aicore__ inline void MoeV2ExpertTokenOut::CopyOutExpertTokensCount(bool isTail
     }
 }
 
-__aicore__ inline void MoeV2ExpertTokenOut::CopyOutTokenGm()
+__aicore__ inline void MoeExpertTokenOut::CopyOutTokenGm()
 {
     if (this->dropPadMode == DROPLESS_MODE) {
         pto_detail::PtoSetWaitFlag<HardEvent::S_MTE3>(HardEvent::S_MTE3);
@@ -217,7 +217,7 @@ __aicore__ inline void MoeV2ExpertTokenOut::CopyOutTokenGm()
     CopyOutExpertTokensCount(true);
 }
 
-__aicore__ inline void MoeV2ExpertTokenOut::SyncAll()
+__aicore__ inline void MoeExpertTokenOut::SyncAll()
 {
     if (coreNum == 1) {
         return;
@@ -226,9 +226,9 @@ __aicore__ inline void MoeV2ExpertTokenOut::SyncAll()
 }
 
 template <typename TilingData>
-__aicore__ inline void MoeV2ExpertTokenOut::Init(GM_ADDR expertTokensCountOrCumsum, GM_ADDR expertTokensBeforeCapacity,
-                                                 GM_ADDR expandedRowIdx, GM_ADDR workspace,
-                                                 const TilingData *tilingData, AscendC::TPipe *tPipe)
+__aicore__ inline void MoeExpertTokenOut::Init(GM_ADDR expertTokensCountOrCumsum, GM_ADDR expertTokensBeforeCapacity,
+                                               GM_ADDR expandedRowIdx, GM_ADDR workspace, const TilingData *tilingData,
+                                               AscendC::TPipe *tPipe)
 {
     this->blockIdx = get_block_idx() + get_subblockid() * get_block_num();
     this->coreNum = tilingData->coreNum;
@@ -267,7 +267,7 @@ __aicore__ inline void MoeV2ExpertTokenOut::Init(GM_ADDR expertTokensCountOrCums
         this->expertTokenIdxOutUb + AlignBytes(this->expertNumUbAlign + EXPERT_ID_VALUE_NUM, sizeof(int32_t));
 }
 
-__aicore__ inline void MoeV2ExpertTokenOut::Process()
+__aicore__ inline void MoeExpertTokenOut::Process()
 {
     if (this->blockIdx < this->srcToDstTilingData->needCoreNum) {
         int64_t loops = (coreRows + perLoopRows - 1) / perLoopRows;
@@ -285,5 +285,144 @@ __aicore__ inline void MoeV2ExpertTokenOut::Process()
     this->SyncAll();
 }
 
-} // namespace MoeInitRoutingQuantV2
-#endif // INNER_MOE_V2_EXPERT_TOKEN_OUT_H
+class MoeSrcToDstOp {
+public:
+    __aicore__ inline MoeSrcToDstOp(){};
+    template <typename TilingData>
+    __aicore__ inline void Init(GM_ADDR expandSrcToDstRow, GM_ADDR workspace, const TilingData *tilingData,
+                                AscendC::TPipe *tPipe);
+    __aicore__ inline void Process();
+
+private:
+    __aicore__ inline void CopyIn(int64_t progress);
+    __aicore__ inline void Compute(int64_t progress);
+    __aicore__ inline void CopyOut();
+    __aicore__ inline void SyncAll();
+    __aicore__ inline void AssistInit();
+
+private:
+    uint64_t inputDstToSrcUb;
+    uint64_t outputSrcToDstUb;
+    uint64_t assistUb;
+
+    __gm__ int32_t *expandDstToSrcRowGm;
+    __gm__ int32_t *expandSrcToDstRowGm;
+    __gm__ int32_t *assistGm;
+
+    const InnerMoeGatherOutComputeTilingData *srcToDstTilingData;
+
+    int64_t coreNum;
+    int64_t blockIdx;
+    int64_t totalLength;
+    int64_t currentLoopRows;
+    int64_t coreRows;
+    int64_t perLoopRows;
+    int64_t lastLoopRows;
+};
+
+__aicore__ inline void MoeSrcToDstOp::AssistInit()
+{
+#if defined(ASCENDC_OOM) && ASCENDC_OOM == 1
+    OOMCheckAddrRange(assistGm, ASSIST_NUM * sizeof(int32_t));
+#endif
+    pto_detail::PtoLoadVector<int32_t>(this->assistUb, assistGm, ASSIST_NUM);
+    pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
+    pto_detail::PtoAddScalarVector<int32_t>(
+        this->assistUb, this->assistUb, ASSIST_NUM,
+        static_cast<int32_t>(this->blockIdx * this->srcToDstTilingData->perCoreRows));
+}
+
+__aicore__ inline void MoeSrcToDstOp::CopyIn(int64_t progress)
+{
+    pto_detail::PtoLoadVector<int32_t>(this->inputDstToSrcUb, expandDstToSrcRowGm + progress * perLoopRows,
+                                       currentLoopRows);
+}
+
+__aicore__ inline void MoeSrcToDstOp::Compute(int64_t progress)
+{
+    pto_detail::PtoWaitFlag<HardEvent::MTE3_V>(EVENT_ID0);
+    pto_detail::PtoPipeBarrier<PIPE_V>();
+    int64_t loops = Ceil(currentLoopRows, ASSIST_INDEX_NUM);
+    for (int64_t i = 0; i < loops; i++) {
+        pto_detail::PtoAddScalarVector<int32_t>(
+            this->outputSrcToDstUb + static_cast<uint64_t>(i * ASSIST_NUM) * sizeof(int32_t), this->assistUb,
+            ASSIST_NUM, static_cast<int32_t>(this->perLoopRows * progress + i * ASSIST_INDEX_NUM));
+    }
+    pto_detail::PtoPipeBarrier<PIPE_V>();
+    pto_detail::PtoSetFlag<HardEvent::V_MTE3>(EVENT_ID0);
+}
+
+__aicore__ inline void MoeSrcToDstOp::CopyOut()
+{
+    pto_detail::PtoWaitFlag<HardEvent::V_MTE3>(EVENT_ID0);
+    pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
+    uint32_t outOffset;
+    for (int64_t idx = 0; idx < currentLoopRows; idx++) {
+        outOffset = pto_detail::PtoGetValue<int32_t>(this->inputDstToSrcUb, idx);
+        pto_detail::PtoStoreVector<int32_t>(
+            expandSrcToDstRowGm + outOffset,
+            this->outputSrcToDstUb + static_cast<uint64_t>(idx * INT32_ONE_BLOCK_NUM) * sizeof(int32_t), 1);
+    }
+    pto_detail::PtoSetFlag<HardEvent::MTE3_V>(EVENT_ID0);
+}
+
+__aicore__ inline void MoeSrcToDstOp::SyncAll()
+{
+    if (coreNum == 1) {
+        return;
+    }
+    pto_detail::PtoSyncAll();
+}
+
+template <typename TilingData>
+__aicore__ inline void MoeSrcToDstOp::Init(GM_ADDR expandSrcToDstRow, GM_ADDR workspace, const TilingData *tilingData,
+                                           AscendC::TPipe *tPipe)
+{
+    this->blockIdx = get_block_idx() + get_subblockid() * get_block_num();
+
+    this->coreNum = tilingData->coreNum;
+    this->totalLength = tilingData->n * tilingData->k;
+    this->srcToDstTilingData = &(tilingData->srcToDstComputeParamsOp);
+
+    if (this->blockIdx == this->srcToDstTilingData->needCoreNum - 1) {
+        this->coreRows = this->srcToDstTilingData->lastCoreRows;
+        this->perLoopRows = this->srcToDstTilingData->lastCorePerLoopRows;
+        this->lastLoopRows = this->srcToDstTilingData->lastCoreLastLoopRows;
+    } else {
+        this->coreRows = this->srcToDstTilingData->perCoreRows;
+        this->perLoopRows = this->srcToDstTilingData->perCorePerLoopRows;
+        this->lastLoopRows = this->srcToDstTilingData->perCoreLastLoopRows;
+    }
+
+    expandSrcToDstRowGm = (__gm__ int32_t *)expandSrcToDstRow;
+    expandDstToSrcRowGm = (__gm__ int32_t *)workspace + Align(this->totalLength, sizeof(int32_t)) +
+                          this->blockIdx * this->srcToDstTilingData->perCoreRows;
+    assistGm = (__gm__ int32_t *)assist;
+
+    this->inputDstToSrcUb = 0;
+    this->outputSrcToDstUb = AlignBytes(this->perLoopRows, sizeof(int32_t));
+    this->assistUb = this->outputSrcToDstUb + Ceil(this->perLoopRows, ASSIST_NUM) * ASSIST_NUM * BLOCK_BYTES;
+    pto_detail::PtoSetFlag<HardEvent::MTE3_V>(EVENT_ID0);
+}
+
+__aicore__ inline void MoeSrcToDstOp::Process()
+{
+    if (this->blockIdx < this->srcToDstTilingData->needCoreNum) {
+        int64_t loops = (coreRows + perLoopRows - 1) / perLoopRows;
+        currentLoopRows = perLoopRows;
+        AssistInit();
+        for (int64_t loop = 0; loop < loops - 1; loop++) {
+            CopyIn(loop);
+            Compute(loop);
+            CopyOut();
+        }
+        currentLoopRows = lastLoopRows;
+        CopyIn(loops - 1);
+        Compute(loops - 1);
+        CopyOut();
+    }
+    this->SyncAll();
+}
+
+} // namespace MoeInitRoutingQuant
+#endif // INNER_MOE_INIT_ROUTING_EXPERT_TOKENS_H

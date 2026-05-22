@@ -2,6 +2,7 @@
 #define PTO_EXT_DISPATCH_COMBINE_MOE_PTO_VECTOR_OPS_HPP
 
 #include "kernel_operator.h"
+#include "const_args.hpp"
 
 #include <pto/common/pto_tile.hpp>
 #include <pto/pto-inst.hpp>
@@ -37,26 +38,26 @@ template <typename Element, int TileElems = 1024>
 using PtoVecTile = pto::Tile<pto::TileType::Vec, Element, 1, TileElems, pto::BLayout::RowMajor, -1, -1>;
 
 template <typename UbTensor>
-PTO_DEVICE uint64_t PtoUbBaseAddr(UbTensor const &tensor)
+__forceinline__ __aicore__ uint64_t PtoUbBaseAddr(UbTensor const &tensor)
 {
     auto base = tensor[0];
     return reinterpret_cast<uint64_t>(base.GetPhyAddr());
 }
 
 template <typename Element>
-PTO_DEVICE uint64_t PtoElemOffsetBytes(uint32_t offset)
+__forceinline__ __aicore__ uint64_t PtoElemOffsetBytes(uint32_t offset)
 {
     return static_cast<uint64_t>(offset) * sizeof(Element);
 }
 
 template <typename Tile, typename Element>
-PTO_DEVICE void PtoAssignUbTile(Tile &tile, uint64_t baseOffsetBytes, uint32_t elemOffset)
+__forceinline__ __aicore__ void PtoAssignUbTile(Tile &tile, uint64_t baseOffsetBytes, uint32_t elemOffset)
 {
     pto::TASSIGN(tile, baseOffsetBytes + PtoElemOffsetBytes<Element>(elemOffset));
 }
 
 template <typename Element, int TileElems = 1024>
-PTO_DEVICE void PtoLoadVector(uint64_t dstUbOffsetBytes, __gm__ Element *src, uint32_t elemNum)
+__forceinline__ __aicore__ void PtoLoadVector(uint64_t dstUbOffsetBytes, __gm__ Element *src, uint32_t elemNum)
 {
     using Tile = PtoVecTile<Element, TileElems>;
     for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
@@ -69,7 +70,7 @@ PTO_DEVICE void PtoLoadVector(uint64_t dstUbOffsetBytes, __gm__ Element *src, ui
 }
 
 template <typename Element, int TileElems = 1024>
-PTO_DEVICE void PtoStoreVector(__gm__ Element *dst, uint64_t srcUbOffsetBytes, uint32_t elemNum)
+__forceinline__ __aicore__ void PtoStoreVector(__gm__ Element *dst, uint64_t srcUbOffsetBytes, uint32_t elemNum)
 {
     using Tile = PtoVecTile<Element, TileElems>;
     for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
@@ -82,7 +83,8 @@ PTO_DEVICE void PtoStoreVector(__gm__ Element *dst, uint64_t srcUbOffsetBytes, u
 }
 
 template <typename Element, int TileElems = 1024>
-PTO_DEVICE void PtoStoreAtomicAddVector(__gm__ Element *dst, uint64_t srcUbOffsetBytes, uint32_t elemNum)
+__forceinline__ __aicore__ void PtoStoreAtomicAddVector(__gm__ Element *dst, uint64_t srcUbOffsetBytes,
+                                                        uint32_t elemNum)
 {
     using Tile = PtoVecTile<Element, TileElems>;
     for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
@@ -95,8 +97,8 @@ PTO_DEVICE void PtoStoreAtomicAddVector(__gm__ Element *dst, uint64_t srcUbOffse
 }
 
 template <typename DstElement, typename SrcElement, int TileElems = 1024>
-PTO_DEVICE void PtoCastVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum,
-                              pto::RoundMode mode)
+__forceinline__ __aicore__ void PtoCastVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum,
+                                              pto::RoundMode mode)
 {
 #if defined(__DAV_VEC__)
     if constexpr (std::is_same_v<DstElement, half> && std::is_same_v<SrcElement, int32_t>) {
@@ -124,7 +126,7 @@ PTO_DEVICE void PtoCastVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetByt
 }
 
 template <typename Element, int TileElems = 1024>
-PTO_DEVICE void PtoMoveVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum)
+__forceinline__ __aicore__ void PtoMoveVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum)
 {
     using Tile = PtoVecTile<Element, TileElems>;
     for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
@@ -138,7 +140,7 @@ PTO_DEVICE void PtoMoveVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetByt
 }
 
 template <typename Element, int TileElems = 1024>
-PTO_DEVICE void PtoFillVector(uint64_t dstUbOffsetBytes, Element scalar, uint32_t elemNum)
+__forceinline__ __aicore__ void PtoFillVector(uint64_t dstUbOffsetBytes, Element scalar, uint32_t elemNum)
 {
     using Tile = PtoVecTile<Element, TileElems>;
     for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
@@ -150,7 +152,7 @@ PTO_DEVICE void PtoFillVector(uint64_t dstUbOffsetBytes, Element scalar, uint32_
 }
 
 template <typename Element, int TileElems = 1024>
-PTO_DEVICE Element PtoGetValue(uint64_t ubOffsetBytes, uint32_t elemOffset)
+__forceinline__ __aicore__ Element PtoGetValue(uint64_t ubOffsetBytes, uint32_t elemOffset)
 {
     using Tile = PtoVecTile<Element, TileElems>;
     uint64_t tileOffsetBytes =
@@ -161,7 +163,7 @@ PTO_DEVICE Element PtoGetValue(uint64_t ubOffsetBytes, uint32_t elemOffset)
 }
 
 template <typename Element, int TileElems = 1024>
-PTO_DEVICE void PtoSetValue(uint64_t ubOffsetBytes, uint32_t elemOffset, Element value)
+__forceinline__ __aicore__ void PtoSetValue(uint64_t ubOffsetBytes, uint32_t elemOffset, Element value)
 {
     using Tile = PtoVecTile<Element, TileElems>;
     uint64_t tileOffsetBytes =
@@ -172,19 +174,20 @@ PTO_DEVICE void PtoSetValue(uint64_t ubOffsetBytes, uint32_t elemOffset, Element
 }
 
 template <typename Element, int TileElems = 1024, typename UbTensor>
-PTO_DEVICE Element PtoGetValue(UbTensor const &src, uint32_t elemOffset)
+__forceinline__ __aicore__ Element PtoGetValue(UbTensor const &src, uint32_t elemOffset)
 {
     return PtoGetValue<Element, TileElems>(PtoUbBaseAddr(src), elemOffset);
 }
 
 template <typename Element, int TileElems = 1024, typename UbTensor>
-PTO_DEVICE void PtoSetValue(UbTensor const &dst, uint32_t elemOffset, Element value)
+__forceinline__ __aicore__ void PtoSetValue(UbTensor const &dst, uint32_t elemOffset, Element value)
 {
     PtoSetValue<Element, TileElems>(PtoUbBaseAddr(dst), elemOffset, value);
 }
 
 template <typename Element, int TileElems = 1024>
-PTO_DEVICE void PtoMulVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum, Element scalar)
+__forceinline__ __aicore__ void PtoMulVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum,
+                                             Element scalar)
 {
     using Tile = PtoVecTile<Element, TileElems>;
     for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
@@ -198,8 +201,8 @@ PTO_DEVICE void PtoMulVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetByte
 }
 
 template <typename Element, int TileElems = 1024>
-PTO_DEVICE void PtoAddVector(uint64_t dstUbOffsetBytes, uint64_t src0UbOffsetBytes, uint64_t src1UbOffsetBytes,
-                             uint32_t elemNum)
+__forceinline__ __aicore__ void PtoAddVector(uint64_t dstUbOffsetBytes, uint64_t src0UbOffsetBytes,
+                                             uint64_t src1UbOffsetBytes, uint32_t elemNum)
 {
     using Tile = PtoVecTile<Element, TileElems>;
     for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
@@ -215,8 +218,8 @@ PTO_DEVICE void PtoAddVector(uint64_t dstUbOffsetBytes, uint64_t src0UbOffsetByt
 }
 
 template <typename Element, int TileElems = 1024>
-PTO_DEVICE void PtoAddScalarVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum,
-                                   Element scalar)
+__forceinline__ __aicore__ void PtoAddScalarVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes,
+                                                   uint32_t elemNum, Element scalar)
 {
     using Tile = PtoVecTile<Element, TileElems>;
     for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
@@ -230,8 +233,8 @@ PTO_DEVICE void PtoAddScalarVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffs
 }
 
 template <typename Element, int TileElems = 1024>
-PTO_DEVICE void PtoMulElementwiseVector(uint64_t dstUbOffsetBytes, uint64_t src0UbOffsetBytes,
-                                        uint64_t src1UbOffsetBytes, uint32_t elemNum)
+__forceinline__ __aicore__ void PtoMulElementwiseVector(uint64_t dstUbOffsetBytes, uint64_t src0UbOffsetBytes,
+                                                        uint64_t src1UbOffsetBytes, uint32_t elemNum)
 {
     using Tile = PtoVecTile<Element, TileElems>;
     for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
@@ -247,8 +250,8 @@ PTO_DEVICE void PtoMulElementwiseVector(uint64_t dstUbOffsetBytes, uint64_t src0
 }
 
 template <typename Element, int TileElems = 1024>
-PTO_DEVICE void PtoDivVector(uint64_t dstUbOffsetBytes, uint64_t src0UbOffsetBytes, uint64_t src1UbOffsetBytes,
-                             uint32_t elemNum)
+__forceinline__ __aicore__ void PtoDivVector(uint64_t dstUbOffsetBytes, uint64_t src0UbOffsetBytes,
+                                             uint64_t src1UbOffsetBytes, uint32_t elemNum)
 {
     using Tile = PtoVecTile<Element, TileElems>;
     for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
@@ -264,7 +267,7 @@ PTO_DEVICE void PtoDivVector(uint64_t dstUbOffsetBytes, uint64_t src0UbOffsetByt
 }
 
 template <typename Element, int TileElems = 1024>
-PTO_DEVICE void PtoAbsVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum)
+__forceinline__ __aicore__ void PtoAbsVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum)
 {
     using Tile = PtoVecTile<Element, TileElems>;
     for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
@@ -278,7 +281,7 @@ PTO_DEVICE void PtoAbsVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetByte
 }
 
 template <typename Element, int TileElems = 1024>
-PTO_DEVICE void PtoExpVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum)
+__forceinline__ __aicore__ void PtoExpVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum)
 {
     using Tile = PtoVecTile<Element, TileElems>;
     for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
@@ -292,8 +295,8 @@ PTO_DEVICE void PtoExpVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetByte
 }
 
 template <int TileElems = 1024>
-PTO_DEVICE void PtoReduceMaxVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint64_t tmpUbOffsetBytes,
-                                   uint32_t elemNum)
+__forceinline__ __aicore__ void PtoReduceMaxVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes,
+                                                   uint64_t tmpUbOffsetBytes, uint32_t elemNum)
 {
     using SrcTile = PtoVecTile<float, TileElems>;
     using TmpTile = PtoVecTile<float, TileElems>;
@@ -327,8 +330,8 @@ PTO_DEVICE void PtoReduceMaxVector(uint64_t dstUbOffsetBytes, uint64_t srcUbOffs
 }
 
 template <typename Element, int TileElems = 1024>
-PTO_DEVICE void PtoLoadMatrixRows(uint64_t dstUbOffsetBytes, __gm__ Element *src, uint32_t rowNum, uint32_t colNum,
-                                  uint32_t dstStride, uint32_t srcStride)
+__forceinline__ __aicore__ void PtoLoadMatrixRows(uint64_t dstUbOffsetBytes, __gm__ Element *src, uint32_t rowNum,
+                                                  uint32_t colNum, uint32_t dstStride, uint32_t srcStride)
 {
     for (uint32_t rowIdx = 0; rowIdx < rowNum; ++rowIdx) {
         PtoLoadVector<Element, TileElems>(dstUbOffsetBytes + PtoElemOffsetBytes<Element>(rowIdx * dstStride),
@@ -337,8 +340,8 @@ PTO_DEVICE void PtoLoadMatrixRows(uint64_t dstUbOffsetBytes, __gm__ Element *src
 }
 
 template <typename Element, int TileElems = 1024>
-PTO_DEVICE void PtoStoreMatrixRows(__gm__ Element *dst, uint64_t srcUbOffsetBytes, uint32_t rowNum, uint32_t colNum,
-                                   uint32_t dstStride, uint32_t srcStride)
+__forceinline__ __aicore__ void PtoStoreMatrixRows(__gm__ Element *dst, uint64_t srcUbOffsetBytes, uint32_t rowNum,
+                                                   uint32_t colNum, uint32_t dstStride, uint32_t srcStride)
 {
     for (uint32_t rowIdx = 0; rowIdx < rowNum; ++rowIdx) {
         PtoStoreVector<Element, TileElems>(dst + rowIdx * dstStride,
@@ -347,182 +350,169 @@ PTO_DEVICE void PtoStoreMatrixRows(__gm__ Element *dst, uint64_t srcUbOffsetByte
 }
 
 template <typename Element, int TileElems = 1024, typename UbTensor>
-PTO_DEVICE void PtoLoadVector(UbTensor const &dst, __gm__ Element *src, uint32_t elemNum)
+__forceinline__ __aicore__ void PtoLoadVector(UbTensor const &dst, __gm__ Element *src, uint32_t elemNum)
 {
     PtoLoadVector<Element, TileElems>(PtoUbBaseAddr(dst), src, elemNum);
 }
 
 template <typename Element, int TileElems = 1024, typename UbTensor>
-PTO_DEVICE void PtoStoreVector(__gm__ Element *dst, UbTensor const &src, uint32_t elemNum)
+__forceinline__ __aicore__ void PtoStoreVector(__gm__ Element *dst, UbTensor const &src, uint32_t elemNum)
 {
     PtoStoreVector<Element, TileElems>(dst, PtoUbBaseAddr(src), elemNum);
 }
 
 template <typename Element, int TileElems = 1024, typename UbTensor>
-PTO_DEVICE void PtoStoreAtomicAddVector(__gm__ Element *dst, UbTensor const &src, uint32_t elemNum)
+__forceinline__ __aicore__ void PtoStoreAtomicAddVector(__gm__ Element *dst, UbTensor const &src, uint32_t elemNum)
 {
     PtoStoreAtomicAddVector<Element, TileElems>(dst, PtoUbBaseAddr(src), elemNum);
 }
 
 template <typename DstElement, typename SrcElement, int TileElems = 1024, typename DstUbTensor, typename SrcUbTensor>
-PTO_DEVICE void PtoCastVector(DstUbTensor const &dst, SrcUbTensor const &src, uint32_t elemNum, pto::RoundMode mode)
+__forceinline__ __aicore__ void PtoCastVector(DstUbTensor const &dst, SrcUbTensor const &src, uint32_t elemNum,
+                                              pto::RoundMode mode)
 {
     PtoCastVector<DstElement, SrcElement, TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src), elemNum, mode);
 }
 
 template <typename Element, int TileElems = 1024, typename DstUbTensor, typename SrcUbTensor>
-PTO_DEVICE void PtoMoveVector(DstUbTensor const &dst, SrcUbTensor const &src, uint32_t elemNum)
+__forceinline__ __aicore__ void PtoMoveVector(DstUbTensor const &dst, SrcUbTensor const &src, uint32_t elemNum)
 {
     PtoMoveVector<Element, TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src), elemNum);
 }
 
 template <typename Element, int TileElems = 1024, typename UbTensor>
-PTO_DEVICE void PtoFillVector(UbTensor const &dst, Element scalar, uint32_t elemNum)
+__forceinline__ __aicore__ void PtoFillVector(UbTensor const &dst, Element scalar, uint32_t elemNum)
 {
     PtoFillVector<Element, TileElems>(PtoUbBaseAddr(dst), scalar, elemNum);
 }
 
 template <typename Element, int TileElems = 1024, typename DstUbTensor, typename SrcUbTensor>
-PTO_DEVICE void PtoMulVector(DstUbTensor const &dst, SrcUbTensor const &src, uint32_t elemNum, Element scalar)
+__forceinline__ __aicore__ void PtoMulVector(DstUbTensor const &dst, SrcUbTensor const &src, uint32_t elemNum,
+                                             Element scalar)
 {
     PtoMulVector<Element, TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src), elemNum, scalar);
 }
 
 template <typename Element, int TileElems = 1024, typename DstUbTensor, typename Src0UbTensor, typename Src1UbTensor>
-PTO_DEVICE void PtoAddVector(DstUbTensor const &dst, Src0UbTensor const &src0, Src1UbTensor const &src1,
-                             uint32_t elemNum)
+__forceinline__ __aicore__ void PtoAddVector(DstUbTensor const &dst, Src0UbTensor const &src0, Src1UbTensor const &src1,
+                                             uint32_t elemNum)
 {
     PtoAddVector<Element, TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src0), PtoUbBaseAddr(src1), elemNum);
 }
 
 template <typename Element, int TileElems = 1024, typename DstUbTensor, typename SrcUbTensor>
-PTO_DEVICE void PtoAddScalarVector(DstUbTensor const &dst, SrcUbTensor const &src, uint32_t elemNum, Element scalar)
+__forceinline__ __aicore__ void PtoAddScalarVector(DstUbTensor const &dst, SrcUbTensor const &src, uint32_t elemNum,
+                                                   Element scalar)
 {
     PtoAddScalarVector<Element, TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src), elemNum, scalar);
 }
 
 template <typename Element, int TileElems = 1024, typename DstUbTensor, typename Src0UbTensor, typename Src1UbTensor>
-PTO_DEVICE void PtoMulElementwiseVector(DstUbTensor const &dst, Src0UbTensor const &src0, Src1UbTensor const &src1,
-                                        uint32_t elemNum)
+__forceinline__ __aicore__ void PtoMulElementwiseVector(DstUbTensor const &dst, Src0UbTensor const &src0,
+                                                        Src1UbTensor const &src1, uint32_t elemNum)
 {
     PtoMulElementwiseVector<Element, TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src0), PtoUbBaseAddr(src1), elemNum);
 }
 
 template <typename Element, int TileElems = 1024, typename DstUbTensor, typename Src0UbTensor, typename Src1UbTensor>
-PTO_DEVICE void PtoDivVector(DstUbTensor const &dst, Src0UbTensor const &src0, Src1UbTensor const &src1,
-                             uint32_t elemNum)
+__forceinline__ __aicore__ void PtoDivVector(DstUbTensor const &dst, Src0UbTensor const &src0, Src1UbTensor const &src1,
+                                             uint32_t elemNum)
 {
     PtoDivVector<Element, TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src0), PtoUbBaseAddr(src1), elemNum);
 }
 
 template <typename Element, int TileElems = 1024, typename DstUbTensor, typename SrcUbTensor>
-PTO_DEVICE void PtoAbsVector(DstUbTensor const &dst, SrcUbTensor const &src, uint32_t elemNum)
+__forceinline__ __aicore__ void PtoAbsVector(DstUbTensor const &dst, SrcUbTensor const &src, uint32_t elemNum)
 {
     PtoAbsVector<Element, TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src), elemNum);
 }
 
 template <typename Element, int TileElems = 1024, typename DstUbTensor, typename SrcUbTensor>
-PTO_DEVICE void PtoExpVector(DstUbTensor const &dst, SrcUbTensor const &src, uint32_t elemNum)
+__forceinline__ __aicore__ void PtoExpVector(DstUbTensor const &dst, SrcUbTensor const &src, uint32_t elemNum)
 {
     PtoExpVector<Element, TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src), elemNum);
 }
 
 template <int TileElems = 1024, typename DstUbTensor, typename SrcUbTensor, typename TmpUbTensor>
-PTO_DEVICE void PtoReduceMaxVector(DstUbTensor const &dst, SrcUbTensor const &src, TmpUbTensor const &tmp,
-                                   uint32_t elemNum)
+__forceinline__ __aicore__ void PtoReduceMaxVector(DstUbTensor const &dst, SrcUbTensor const &src,
+                                                   TmpUbTensor const &tmp, uint32_t elemNum)
 {
     PtoReduceMaxVector<TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src), PtoUbBaseAddr(tmp), elemNum);
 }
 
 template <typename Element, int TileElems = 1024, typename UbTensor>
-PTO_DEVICE void PtoLoadMatrixRows(UbTensor const &dst, __gm__ Element *src, uint32_t rowNum, uint32_t colNum,
-                                  uint32_t dstStride, uint32_t srcStride)
+__forceinline__ __aicore__ void PtoLoadMatrixRows(UbTensor const &dst, __gm__ Element *src, uint32_t rowNum,
+                                                  uint32_t colNum, uint32_t dstStride, uint32_t srcStride)
 {
     PtoLoadMatrixRows<Element, TileElems>(PtoUbBaseAddr(dst), src, rowNum, colNum, dstStride, srcStride);
 }
 
 template <typename Element, int TileElems = 1024, typename UbTensor>
-PTO_DEVICE void PtoStoreMatrixRows(__gm__ Element *dst, UbTensor const &src, uint32_t rowNum, uint32_t colNum,
-                                   uint32_t dstStride, uint32_t srcStride)
+__forceinline__ __aicore__ void PtoStoreMatrixRows(__gm__ Element *dst, UbTensor const &src, uint32_t rowNum,
+                                                   uint32_t colNum, uint32_t dstStride, uint32_t srcStride)
 {
     PtoStoreMatrixRows<Element, TileElems>(dst, PtoUbBaseAddr(src), rowNum, colNum, dstStride, srcStride);
 }
 
-template <template <typename> class DstUbTensor, typename DstElement, template <typename> class SrcUbTensor,
-          typename SrcElement, int TileElems = 1024>
-PTO_DEVICE void PtoCastVector(DstUbTensor<DstElement> const &dst, SrcUbTensor<SrcElement> const &src, uint32_t elemNum,
-                              pto::RoundMode mode)
+template <typename T, int TileElems = 1024>
+__forceinline__ __aicore__ void StoreZeroPtoUbToGm(__gm__ T *dst, uint64_t ubOffsetBytes, uint32_t elemNum)
 {
-    PtoCastVector<DstElement, SrcElement, TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src), elemNum, mode);
+    using Tile = pto::Tile<pto::TileType::Vec, T, 1, TileElems, pto::BLayout::RowMajor, -1, -1>;
+    for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
+        uint32_t cur = (elemNum - offset > TileElems) ? TileElems : (elemNum - offset);
+        auto dstGlobal = pto_ext::dispatch_combine_moe::pto_bridge::MakeContiguousGlobalFromPtr(dst + offset, cur);
+        Tile tile(1, cur);
+        pto::TASSIGN(tile, ubOffsetBytes);
+        for (uint32_t i = 0; i < cur; ++i) {
+            tile.SetValue(i, static_cast<T>(0));
+        }
+        pto::TSTORE(dstGlobal, tile);
+    }
 }
 
-template <template <typename> class DstUbTensor, template <typename> class SrcUbTensor, typename Element,
-          int TileElems = 1024>
-PTO_DEVICE void PtoMoveVector(DstUbTensor<Element> const &dst, SrcUbTensor<Element> const &src, uint32_t elemNum)
+template <typename T>
+__forceinline__ __aicore__ void StorePerTokenRows(__gm__ T *dstPtr, uint64_t ubOffsetBytes, uint32_t outputOffset,
+                                                  uint16_t rowNum, uint16_t hiddenSize)
 {
-    PtoMoveVector<Element, TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src), elemNum);
+    uint32_t srcRowStride = static_cast<uint32_t>(hiddenSize + UB_ALIGN);
+    for (uint16_t row = 0; row < rowNum; ++row) {
+        PtoStoreVector(dstPtr + outputOffset + row * hiddenSize,
+                       ubOffsetBytes + static_cast<uint64_t>(row) * srcRowStride * sizeof(T), hiddenSize);
+    }
 }
 
-template <template <typename> class DstUbTensor, template <typename> class SrcUbTensor, typename Element,
-          int TileElems = 1024>
-PTO_DEVICE void PtoMulVector(DstUbTensor<Element> const &dst, SrcUbTensor<Element> const &src, uint32_t elemNum,
-                             Element scalar)
+__forceinline__ __aicore__ void StorePerTokenScales(__gm__ float *dstScalePtr, uint64_t ubOffsetBytes,
+                                                    uint32_t outputOffset, uint16_t rowNum, uint16_t hiddenSize)
 {
-    PtoMulVector<Element, TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src), elemNum, scalar);
+    uint32_t srcRowStrideBytes = static_cast<uint32_t>(hiddenSize + UB_ALIGN);
+    for (uint16_t row = 0; row < rowNum; ++row) {
+        PtoStoreVector(dstScalePtr + outputOffset + row,
+                       ubOffsetBytes + static_cast<uint64_t>(row) * srcRowStrideBytes + hiddenSize, 1);
+    }
 }
 
-template <template <typename> class DstUbTensor, template <typename> class Src0UbTensor,
-          template <typename> class Src1UbTensor, typename Element, int TileElems = 1024>
-PTO_DEVICE void PtoAddVector(DstUbTensor<Element> const &dst, Src0UbTensor<Element> const &src0,
-                             Src1UbTensor<Element> const &src1, uint32_t elemNum)
+__forceinline__ __aicore__ void LoadExpertCountsPadded(uint64_t dstUbOffsetBytes, __gm__ int32_t *src,
+                                                       uint32_t srcOffset, uint16_t rowNum, uint16_t copyBytes,
+                                                       uint16_t padBytes)
 {
-    PtoAddVector<Element, TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src0), PtoUbBaseAddr(src1), elemNum);
+    uint16_t copyElems = static_cast<uint16_t>(copyBytes / sizeof(int32_t));
+    uint16_t srcRowStride = static_cast<uint16_t>(copyElems + padBytes / sizeof(int32_t));
+    uint16_t dstRowStride = static_cast<uint16_t>(((copyElems + 7) / 8) * 8);
+    for (uint16_t row = 0; row < rowNum; ++row) {
+        PtoLoadVector(dstUbOffsetBytes + static_cast<uint64_t>(row) * dstRowStride * sizeof(int32_t),
+                      src + srcOffset + row * srcRowStride, copyElems);
+    }
 }
 
-template <template <typename> class DstUbTensor, template <typename> class SrcUbTensor, typename Element,
-          int TileElems = 1024>
-PTO_DEVICE void PtoAddScalarVector(DstUbTensor<Element> const &dst, SrcUbTensor<Element> const &src, uint32_t elemNum,
-                                   Element scalar)
+__forceinline__ __aicore__ void StoreExpertCountsPadded(__gm__ int32_t *dst, uint64_t srcUbOffsetBytes, uint16_t rowNum,
+                                                        uint16_t copyBytes)
 {
-    PtoAddScalarVector<Element, TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src), elemNum, scalar);
-}
-
-template <template <typename> class DstUbTensor, template <typename> class Src0UbTensor,
-          template <typename> class Src1UbTensor, typename Element, int TileElems = 1024>
-PTO_DEVICE void PtoMulElementwiseVector(DstUbTensor<Element> const &dst, Src0UbTensor<Element> const &src0,
-                                        Src1UbTensor<Element> const &src1, uint32_t elemNum)
-{
-    PtoMulElementwiseVector<Element, TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src0), PtoUbBaseAddr(src1), elemNum);
-}
-
-template <template <typename> class DstUbTensor, template <typename> class Src0UbTensor,
-          template <typename> class Src1UbTensor, typename Element, int TileElems = 1024>
-PTO_DEVICE void PtoDivVector(DstUbTensor<Element> const &dst, Src0UbTensor<Element> const &src0,
-                             Src1UbTensor<Element> const &src1, uint32_t elemNum)
-{
-    PtoDivVector<Element, TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src0), PtoUbBaseAddr(src1), elemNum);
-}
-
-template <template <typename> class DstUbTensor, template <typename> class SrcUbTensor, typename Element,
-          int TileElems = 1024>
-PTO_DEVICE void PtoAbsVector(DstUbTensor<Element> const &dst, SrcUbTensor<Element> const &src, uint32_t elemNum)
-{
-    PtoAbsVector<Element, TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src), elemNum);
-}
-
-template <template <typename> class DstUbTensor, template <typename> class SrcUbTensor, typename Element,
-          int TileElems = 1024>
-PTO_DEVICE void PtoExpVector(DstUbTensor<Element> const &dst, SrcUbTensor<Element> const &src, uint32_t elemNum)
-{
-    PtoExpVector<Element, TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src), elemNum);
-}
-
-template <template <typename> class DstUbTensor, template <typename> class SrcUbTensor,
-          template <typename> class TmpUbTensor, int TileElems = 1024>
-PTO_DEVICE void PtoReduceMaxVector(DstUbTensor<float> const &dst, SrcUbTensor<float> const &src,
-                                   TmpUbTensor<float> const &tmp, uint32_t elemNum)
-{
-    PtoReduceMaxVector<TileElems>(PtoUbBaseAddr(dst), PtoUbBaseAddr(src), PtoUbBaseAddr(tmp), elemNum);
+    uint16_t copyElems = static_cast<uint16_t>(copyBytes / sizeof(int32_t));
+    uint16_t srcRowStride = static_cast<uint16_t>(((copyElems + 7) / 8) * 8);
+    for (uint16_t row = 0; row < rowNum; ++row) {
+        PtoStoreVector(dst + row * copyElems,
+                       srcUbOffsetBytes + static_cast<uint64_t>(row) * srcRowStride * sizeof(int32_t), copyElems);
+    }
 }
 
 } // namespace pto_ext::dispatch_combine_moe::pto_bridge

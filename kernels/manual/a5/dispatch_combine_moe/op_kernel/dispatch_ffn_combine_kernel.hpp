@@ -16,7 +16,7 @@
 #include <pto/common/pto_tile.hpp>
 #include <pto/pto-inst.hpp>
 
-#include "utils/dispatch_policy_custom.hpp"
+#include "utils/moe_pto_utils.hpp"
 #include "utils/pto_vector_ops.hpp"
 
 #include "utils/block_mmad_preload_async_fixpipe_quant.hpp"
@@ -26,10 +26,10 @@
 #include "utils/hccl_window.hpp"
 #include "utils/const_args.hpp"
 #include "utils/layout3d.hpp"
-#include "moe_init_routing_quant_v2/moe_init_routing_quant_v2_tiling.h"
-#include "moe_init_routing_quant_v2/moe_init_routing_quant_v2.cpp"
-#include "moe_init_routing_quant_v2/moe_v2_fullload_dynamic_quant.h"
-#include "unpermute/moe_token_unpermute.h"
+#include "token_reorder/routing/moe_init_routing_quant_tiling.h"
+#include "token_reorder/routing/moe_init_routing_quant.cpp"
+#include "token_reorder/routing/moe_init_routing_fullload_dynamic_quant.h"
+#include "token_reorder/unpermute/moe_token_unpermute.h"
 
 inline __gm__ struct OpSystemRunCfg g_opSystemRunCfg {
     pto_ext::support::kL2Offset
@@ -38,6 +38,7 @@ inline __gm__ struct OpSystemRunCfg g_opSystemRunCfg {
 using namespace AscendC;
 
 namespace pto_ext::Gemm::Kernel {
+namespace pto_bridge = pto_ext::dispatch_combine_moe::pto_bridge;
 namespace kernel_detail {
 
 #define FORCE_INLINE_AICORE inline __attribute__((always_inline)) __aicore__
@@ -53,35 +54,16 @@ FORCE_INLINE_AICORE __gm__ T *GetTensorAddr(uint32_t index, GM_ADDR tensorPtr)
 
 #undef FORCE_INLINE_AICORE
 
-template <auto Pipe>
-PTO_DEVICE void PtoPipeBarrier()
-{
-    AscendC::PipeBarrier<Pipe>();
-}
+using pto_ext::PtoPipeBarrier;
+using pto_ext::PtoSetFlag;
+using pto_ext::PtoSyncAll;
+using pto_ext::PtoWaitFlag;
 
-template <AscendC::HardEvent Event>
-PTO_DEVICE void PtoSetFlag(int32_t eventId)
-{
-    AscendC::SetFlag<Event>(eventId);
-}
-
-template <AscendC::HardEvent Event>
-PTO_DEVICE void PtoWaitFlag(int32_t eventId)
-{
-    AscendC::WaitFlag<Event>(eventId);
-}
-
-template <bool NeedWait>
-PTO_DEVICE void PtoSyncAll()
-{
-    AscendC::SyncAll<NeedWait>();
-}
-
-using pto_ext::dispatch_combine_moe::pto_bridge::PtoAddScalarVector;
-using pto_ext::dispatch_combine_moe::pto_bridge::PtoAddVector;
-using pto_ext::dispatch_combine_moe::pto_bridge::PtoFillVector;
-using pto_ext::dispatch_combine_moe::pto_bridge::PtoLoadVector;
-using pto_ext::dispatch_combine_moe::pto_bridge::PtoStoreVector;
+using pto_bridge::PtoAddScalarVector;
+using pto_bridge::PtoAddVector;
+using pto_bridge::PtoFillVector;
+using pto_bridge::PtoLoadVector;
+using pto_bridge::PtoStoreVector;
 
 } // namespace kernel_detail
 
@@ -111,7 +93,7 @@ public:
     using BlockEpilogue1 = BlockEpilogue1_;
     using BlockEpilogue2 = BlockEpilogue2_;
     using BlockEpilogue3 = BlockEpilogue3_;
-    using IntPtoGlobal = pto_ext::dispatch_combine_moe::pto_bridge::PtoGlobalNd<int32_t>;
+    using IntPtoGlobal = pto_bridge::PtoGlobalNd<int32_t>;
 
     using ElementD1 = typename BlockEpilogue1::ElementD;
     using LayoutD1 = typename BlockEpilogue1::LayoutD;
@@ -148,8 +130,8 @@ public:
         GM_ADDR remoteWindowContext;
         //--------------
         GM_ADDR expertIdx;
-        GM_ADDR moeInitRoutingQuantV2Scale;
-        GM_ADDR moeInitRoutingQuantV2Offset;
+        GM_ADDR moeInitRoutingQuantScale;
+        GM_ADDR moeInitRoutingQuantOffset;
         GM_ADDR expandedX;
         GM_ADDR expandedRowIdx;
         GM_ADDR expertTokensCountOrCumsum;
@@ -161,25 +143,23 @@ public:
         uint64_t initRoutingQuantTilingKey;
         uint32_t epilogueCoreNum;
         uint32_t epilogueGranularity;
-        optiling::MoeInitRoutingQuantV2TilingData moeInitRoutingQuantV2TilingData;
+        optiling::MoeInitRoutingQuantTilingData moeInitRoutingQuantTilingData;
         //--------------
 
         // Methods
-        PTO_HOST_DEVICE
-        Params()
+        __forceinline__[host, aicore] Params()
         {}
 
-        PTO_HOST_DEVICE
-        Params(PtoShape3D problemShape_, uint32_t EP_, uint32_t listLen_, uint32_t expertPerRank_,
-               uint32_t maxOutputSize_, uint32_t rank_, uint32_t rankSize_, int32_t ubMoveNum_,
-               GM_ADDR remoteWindowContext_, int64_t topK_, uint64_t initRoutingQuantTilingKey_,
-               uint32_t epilogueCoreNum_, uint32_t epilogueGranularity_, GM_ADDR ptrA_, LayoutA layoutA_,
-               LayoutA layoutA2_, GM_ADDR ptrB1_, LayoutB layoutB1_, GM_ADDR ptrB2_, LayoutB layoutB2_,
-               GM_ADDR ptrScale1_, LayoutScale layoutScale1_, GM_ADDR ptrScale2_, LayoutScale layoutScale2_,
-               GM_ADDR ptrOutput_, LayoutD2 layoutD1_, LayoutD2 layoutD2_, GM_ADDR expertIdx_,
-               GM_ADDR moeInitRoutingQuantV2Scale_, GM_ADDR moeInitRoutingQuantV2Offset_,
-               GM_ADDR expertTokensBeforeCapacity_, GM_ADDR probs_, GM_ADDR ptrWorkspace_, GM_ADDR gmExpertTokenNums_,
-               GM_ADDR ptrXActiveMask_, optiling::MoeInitRoutingQuantV2TilingData moeInitRoutingQuantV2TilingData_)
+        __forceinline__[host, aicore] Params(
+            PtoShape3D problemShape_, uint32_t EP_, uint32_t listLen_, uint32_t expertPerRank_, uint32_t maxOutputSize_,
+            uint32_t rank_, uint32_t rankSize_, int32_t ubMoveNum_, GM_ADDR remoteWindowContext_, int64_t topK_,
+            uint64_t initRoutingQuantTilingKey_, uint32_t epilogueCoreNum_, uint32_t epilogueGranularity_,
+            GM_ADDR ptrA_, LayoutA layoutA_, LayoutA layoutA2_, GM_ADDR ptrB1_, LayoutB layoutB1_, GM_ADDR ptrB2_,
+            LayoutB layoutB2_, GM_ADDR ptrScale1_, LayoutScale layoutScale1_, GM_ADDR ptrScale2_,
+            LayoutScale layoutScale2_, GM_ADDR ptrOutput_, LayoutD2 layoutD1_, LayoutD2 layoutD2_, GM_ADDR expertIdx_,
+            GM_ADDR moeInitRoutingQuantScale_, GM_ADDR moeInitRoutingQuantOffset_, GM_ADDR expertTokensBeforeCapacity_,
+            GM_ADDR probs_, GM_ADDR ptrWorkspace_, GM_ADDR gmExpertTokenNums_, GM_ADDR ptrXActiveMask_,
+            optiling::MoeInitRoutingQuantTilingData moeInitRoutingQuantTilingData_)
             : problemShape(problemShape_),
               EP(EP_),
               listLen(listLen_),
@@ -208,20 +188,19 @@ public:
               layoutD1(layoutD1_),
               layoutD2(layoutD2_),
               expertIdx(expertIdx_),
-              moeInitRoutingQuantV2Scale(moeInitRoutingQuantV2Scale_),
-              moeInitRoutingQuantV2Offset(moeInitRoutingQuantV2Offset_),
+              moeInitRoutingQuantScale(moeInitRoutingQuantScale_),
+              moeInitRoutingQuantOffset(moeInitRoutingQuantOffset_),
               expertTokensBeforeCapacity(expertTokensBeforeCapacity_),
               probs(probs_),
               ptrWorkspace(ptrWorkspace_),
               ptrExpertTokenNums(gmExpertTokenNums_),
               ptrXActiveMask(ptrXActiveMask_),
-              moeInitRoutingQuantV2TilingData(moeInitRoutingQuantV2TilingData_)
+              moeInitRoutingQuantTilingData(moeInitRoutingQuantTilingData_)
         {}
     };
 
     // Methods
-    PTO_DEVICE
-    DispatchFFNCombineKernel(Params const &params)
+    __forceinline__ __aicore__ DispatchFFNCombineKernel(Params const &params)
     {
         if ASCEND_IS_AIC {
             coreIdx = AscendC::GetBlockIdx();
@@ -236,15 +215,14 @@ public:
         initBuffer(params);
     }
 
-    PTO_DEVICE
-    ~DispatchFFNCombineKernel()
+    __forceinline__ __aicore__ ~DispatchFFNCombineKernel()
     {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    PTO_DEVICE void operator()(Params const &params);
+    __forceinline__ __aicore__ void operator()(Params const &params);
 
     template <>
-    PTO_DEVICE void operator()<AscendC::AIC>(Params const &params)
+    __forceinline__ __aicore__ void operator()<AscendC::AIC>(Params const &params)
     {
         RunGmm1Impl(params);
         RunGmmInterlockImpl(params);
@@ -252,7 +230,7 @@ public:
     }
 
     template <>
-    PTO_DEVICE void operator()<AscendC::AIV>(Params const &params)
+    __forceinline__ __aicore__ void operator()<AscendC::AIV>(Params const &params)
     {
         RunRoutingImpl(params);
         RunDispatchGatherImpl(params);
@@ -261,36 +239,37 @@ public:
         RunRestoreImpl(params);
     }
 
-    PTO_DEVICE void RunGmm1Impl(Params const &params)
+    __forceinline__ __aicore__ void RunGmm1Impl(Params const &params)
     {
         GMM1(params);
     }
 
-    PTO_DEVICE void RunGmmInterlockImpl(Params const &)
+    __forceinline__ __aicore__ void RunGmmInterlockImpl(Params const &)
     {
         AscendC::CrossCoreWaitFlag<0x2>(SYNCFLAGV2C);
     }
 
-    PTO_DEVICE void RunGmm2Impl(Params const &params)
+    __forceinline__ __aicore__ void RunGmm2Impl(Params const &params)
     {
         GMM2(params);
     }
 
-    PTO_DEVICE void RunRoutingImpl(Params const &params)
+    __forceinline__ __aicore__ void RunRoutingImpl(Params const &params)
     {
         icache_preload(8);
         int64_t localTokenPerExpertOffset =
             peerMemoryLayout.offsetPeerTokenPerExpert + tokenPerExpertLayout(params.rank, 0, 0) * sizeof(int32_t);
         GM_ADDR localTokenPerExpert = remoteWindow() + localTokenPerExpertOffset;
-        uint32_t expandedRowIdxOffset = AlignUp(GetPtoShapeM(params.problemShape), 256) * params.topK * sizeof(int32_t);
+        uint32_t expandedRowIdxOffset =
+            AlignUp(static_cast<uint32_t>(params.problemShape.shape[0]), 256) * params.topK * sizeof(int32_t);
 
         ApplyXActiveMask(params);
-        moe_init_routing_quant_v2<ElementD2>(
-            reinterpret_cast<GM_ADDR>(params.ptrA), params.expertIdx, params.moeInitRoutingQuantV2Scale,
-            params.moeInitRoutingQuantV2Offset, remoteWindow() + peerMemoryLayout.offsetA, workspaceInfo.expandedRowIdx,
+        moe_init_routing_quant<ElementD2>(
+            reinterpret_cast<GM_ADDR>(params.ptrA), params.expertIdx, params.moeInitRoutingQuantScale,
+            params.moeInitRoutingQuantOffset, remoteWindow() + peerMemoryLayout.offsetA, workspaceInfo.expandedRowIdx,
             localTokenPerExpert, params.expertTokensBeforeCapacity,
             remoteWindow() + peerMemoryLayout.offsetPeerPerTokenScale, params.ptrWorkspace + expandedRowIdxOffset,
-            &params.moeInitRoutingQuantV2TilingData, params.initRoutingQuantTilingKey);
+            &params.moeInitRoutingQuantTilingData, params.initRoutingQuantTilingKey);
 
         kernel_detail::PtoSyncAll<true>();
         CrossRankSyncAndlocalTokenPerExpertAllGatherAndGetSumPreRankV2(params, localTokenPerExpertOffset);
@@ -308,7 +287,7 @@ public:
         AscendC::CrossCoreSetFlag<0x2, PIPE_MTE3>(0);
     }
 
-    PTO_DEVICE void RunDispatchGatherImpl(Params const &params)
+    __forceinline__ __aicore__ void RunDispatchGatherImpl(Params const &params)
     {
         uint16_t syncgmm1Idx = 1;
         uint32_t prevGroupSum1 = 0;
@@ -339,13 +318,13 @@ public:
                     GM_ADDR otherRankPtr = remoteWindow(0, dstEpIdx);
                     __gm__ ElementA *remotePackedRows =
                         reinterpret_cast<__gm__ ElementA *>(otherRankPtr + peerMemoryLayout.offsetA);
-                    auto offsetA = MakePtoCoord2D(rowStart, 0);
+                    auto offsetA = PtoCoord2D(rowStart, 0);
                     int64_t gmOffsetA = params.layoutA.GetOffset(offsetA);
-                    int64_t gmOffsetPeer = rowSrc * (GetPtoShapeK(params.problemShape) + UB_ALIGN);
+                    int64_t gmOffsetPeer = rowSrc * (static_cast<uint32_t>(params.problemShape.shape[2]) + UB_ALIGN);
                     int32_t ubMoveNum = 2;
                     CopyGMToGMPerToken(gmAPtr + gmOffsetA, gmPerTokenScale1Ptr + rowStart,
-                                       remotePackedRows + gmOffsetPeer, rows, GetPtoShapeK(params.problemShape),
-                                       ubMoveNum, pingpongIdx);
+                                       remotePackedRows + gmOffsetPeer, rows,
+                                       static_cast<uint32_t>(params.problemShape.shape[2]), ubMoveNum, pingpongIdx);
                 }
             }
             kernel_detail::PtoSyncAll<true>();
@@ -376,18 +355,18 @@ public:
         stageDequantSum2 = dequantSum2;
     }
 
-    PTO_DEVICE void RunSwigluImpl(Params const &params)
+    __forceinline__ __aicore__ void RunSwigluImpl(Params const &params)
     {
-        uint32_t n = GetPtoShapeN(params.problemShape);
+        uint32_t n = static_cast<uint32_t>(params.problemShape.shape[1]);
         BlockEpilogue1 blockEpilogue1(resource, n);
 
         AscendC::CrossCoreWaitFlag<0x2>(SYNCFLAGC2V);
         kernel_detail::PtoSyncAll<true>();
         if (stageDequantSum1 > 0) {
             uint32_t rowStartThisCore = 0;
-            auto offsetC = MakePtoCoord2D(0U, 0);
-            PtoShape2D shapeC(stageDequantSum1, GetPtoShapeN(params.problemShape));
-            LayoutC layoutC{stageDequantSum1, GetPtoShapeN(params.problemShape)};
+            auto offsetC = PtoCoord2D(0U, 0);
+            PtoShape2D shapeC(stageDequantSum1, static_cast<uint32_t>(params.problemShape.shape[1]));
+            LayoutC layoutC{stageDequantSum1, static_cast<uint32_t>(params.problemShape.shape[1])};
             int64_t gmOffsetC = layoutC.GetOffset(offsetC);
             int64_t gmOffsetD = params.layoutD1.GetOffset(offsetC);
             blockEpilogue1(gmCPtr + gmOffsetC, shapeC, gmPerTokenScale1Ptr + rowStartThisCore,
@@ -402,9 +381,9 @@ public:
             kernel_detail::PtoSyncAll<true>();
             if (stageDequantSum2 > 0) {
                 uint32_t rowStartThisCore = stageDequantSum1;
-                auto offsetC = MakePtoCoord2D(rowStartThisCore, 0);
-                PtoShape2D shapeC(stageDequantSum2, GetPtoShapeN(params.problemShape));
-                LayoutC layoutC{stageDequantSum2, GetPtoShapeN(params.problemShape)};
+                auto offsetC = PtoCoord2D(rowStartThisCore, 0);
+                PtoShape2D shapeC(stageDequantSum2, static_cast<uint32_t>(params.problemShape.shape[1]));
+                LayoutC layoutC{stageDequantSum2, static_cast<uint32_t>(params.problemShape.shape[1])};
                 int64_t gmOffsetC = layoutC.GetOffset(offsetC);
                 int64_t gmOffsetD = params.layoutD1.GetOffset(offsetC);
                 blockEpilogue1(gmCPtr + gmOffsetC, shapeC, gmPerTokenScale1Ptr + rowStartThisCore,
@@ -417,9 +396,9 @@ public:
         blockEpilogue1.Finalize();
     }
 
-    PTO_DEVICE void RunCombineImpl(Params const &params)
+    __forceinline__ __aicore__ void RunCombineImpl(Params const &params)
     {
-        uint32_t n2 = GetPtoShapeK(params.problemShape);
+        uint32_t n2 = static_cast<uint32_t>(params.problemShape.shape[2]);
         typename BlockEpilogue2::Params epilogueParams2{
             static_cast<int32_t>(params.EP),
             static_cast<int32_t>(params.expertPerRank),
@@ -453,15 +432,16 @@ public:
         }
     }
 
-    PTO_DEVICE void RunRestoreImpl(Params const &params)
+    __forceinline__ __aicore__ void RunRestoreImpl(Params const &params)
     {
-        uint32_t n2 = GetPtoShapeK(params.problemShape);
+        uint32_t n2 = static_cast<uint32_t>(params.problemShape.shape[2]);
         kernel_detail::PtoSyncAll<true>();
         ResetTokenPerExpert(params.EP * paddedExpertNumAligned);
         remoteWindow.CrossRankSync();
 
         MoeTokenUnpermuteTilingData tilingData;
-        MoeTokenUnpermuteTiling(GetPtoShapeM(params.problemShape) * params.topK, n2, params.topK, tilingData, coreNum);
+        MoeTokenUnpermuteTiling(static_cast<uint32_t>(params.problemShape.shape[0]) * params.topK, n2, params.topK,
+                                tilingData, coreNum);
         KernelMoeTokenUnpermute<ElementD2, int32_t, float, true> kernelMoeTokenUnpermuteOp;
         kernelMoeTokenUnpermuteOp.Init(remoteWindow() + peerMemoryLayout.offsetD, workspaceInfo.expandedRowIdx,
                                        params.probs, reinterpret_cast<GM_ADDR>(params.ptrOutput), &tilingData);
@@ -469,7 +449,7 @@ public:
     }
 
 private:
-    PTO_DEVICE void initBuffer(Params const &params)
+    __forceinline__ __aicore__ void initBuffer(Params const &params)
     {
         remoteWindow.Init(params.remoteWindowContext);
         workspaceInfo = WorkspaceInfo(params);
@@ -490,13 +470,13 @@ private:
         stageDequantSum1 = 0;
         stageDequantSum2 = 0;
         isCombineV1 = true;
-        if (GetPtoShapeM(params.problemShape) * params.topK <= 4096) {
+        if (static_cast<uint32_t>(params.problemShape.shape[0]) * params.topK <= 4096) {
             isCombineV1 = false;
         }
     }
 
     template <typename T>
-    PTO_DEVICE void CopyGMToGM(__gm__ T *dstPtr, __gm__ T *srcPtr, int32_t elemNum, int32_t ubMoveNum)
+    __forceinline__ __aicore__ void CopyGMToGM(__gm__ T *dstPtr, __gm__ T *srcPtr, int32_t elemNum, int32_t ubMoveNum)
     {
         kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
         kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
@@ -520,10 +500,10 @@ private:
             // [ReduceScatter] 2. Pre Interface Sync
             kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID);
             // [ReduceScatter] 3. Start shmem_mte_get_mem_nbi
-            LoadGmToPtoUb(ubOffsetBytes, srcPtr + inputOffset, curProcessNum);
+            pto_bridge::PtoLoadVector(ubOffsetBytes, srcPtr + inputOffset, curProcessNum);
             kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE2_MTE3>(EVENT_ID);
             kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_MTE3>(EVENT_ID);
-            StorePtoUbToGm(dstPtr + outputOffset, ubOffsetBytes, curProcessNum);
+            pto_bridge::PtoStoreVector(dstPtr + outputOffset, ubOffsetBytes, curProcessNum);
 
             // [ReduceScatter] 4. Post Interface Sync
             kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID);
@@ -535,160 +515,10 @@ private:
         kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
     }
 
-    template <typename T, int TileElems = 1024>
-    PTO_DEVICE void LoadGmToPtoUb(uint64_t ubOffsetBytes, __gm__ T *src, uint32_t elemNum)
-    {
-        using Tile = pto::Tile<pto::TileType::Vec, T, 1, TileElems, pto::BLayout::RowMajor, -1, -1>;
-        for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
-            uint32_t cur = (elemNum - offset > TileElems) ? TileElems : (elemNum - offset);
-            auto srcGlobal =
-                pto_ext::dispatch_combine_moe::pto_bridge::MakeContiguousGlobalFromPtr(src + offset, cur);
-            Tile tile(1, cur);
-            pto::TASSIGN(tile, ubOffsetBytes + static_cast<uint64_t>(offset) * sizeof(T));
-            pto::TLOAD(tile, srcGlobal);
-        }
-    }
-
-    template <typename T, int TileElems = 1024>
-    PTO_DEVICE void StorePtoUbToGm(__gm__ T *dst, uint64_t ubOffsetBytes, uint32_t elemNum)
-    {
-        using Tile = pto::Tile<pto::TileType::Vec, T, 1, TileElems, pto::BLayout::RowMajor, -1, -1>;
-        for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
-            uint32_t cur = (elemNum - offset > TileElems) ? TileElems : (elemNum - offset);
-            auto dstGlobal =
-                pto_ext::dispatch_combine_moe::pto_bridge::MakeContiguousGlobalFromPtr(dst + offset, cur);
-            Tile tile(1, cur);
-            pto::TASSIGN(tile, ubOffsetBytes + static_cast<uint64_t>(offset) * sizeof(T));
-            pto::TSTORE(dstGlobal, tile);
-        }
-    }
-
-    template <typename T, int TileElems = 1024>
-    PTO_DEVICE void StoreZeroPtoUbToGm(__gm__ T *dst, uint64_t ubOffsetBytes, uint32_t elemNum)
-    {
-        using Tile = pto::Tile<pto::TileType::Vec, T, 1, TileElems, pto::BLayout::RowMajor, -1, -1>;
-        for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
-            uint32_t cur = (elemNum - offset > TileElems) ? TileElems : (elemNum - offset);
-            auto dstGlobal =
-                pto_ext::dispatch_combine_moe::pto_bridge::MakeContiguousGlobalFromPtr(dst + offset, cur);
-            Tile tile(1, cur);
-            pto::TASSIGN(tile, ubOffsetBytes);
-            for (uint32_t i = 0; i < cur; ++i) {
-                tile.SetValue(i, static_cast<T>(0));
-            }
-            pto::TSTORE(dstGlobal, tile);
-        }
-    }
-
     template <typename T>
-    PTO_DEVICE void LoadPackedScratchToPtoUb(uint64_t ubOffsetBytes, __gm__ T *src, uint32_t elemNum)
-    {
-        LoadGmToPtoUb(ubOffsetBytes, src, elemNum);
-    }
-
-    template <typename T>
-    PTO_DEVICE void StorePerTokenRows(__gm__ T *dstPtr, uint64_t ubOffsetBytes, uint32_t outputOffset, uint16_t rowNum,
-                                      uint16_t hiddenSize)
-    {
-        uint32_t srcRowStride = static_cast<uint32_t>(hiddenSize + UB_ALIGN);
-        for (uint16_t row = 0; row < rowNum; ++row) {
-            StorePtoUbToGm(dstPtr + outputOffset + row * hiddenSize,
-                           ubOffsetBytes + static_cast<uint64_t>(row) * srcRowStride * sizeof(T), hiddenSize);
-        }
-    }
-
-    PTO_DEVICE void StorePerTokenScales(__gm__ float *dstScalePtr, uint64_t ubOffsetBytes, uint32_t outputOffset,
-                                        uint16_t rowNum, uint16_t hiddenSize)
-    {
-        uint32_t srcRowStrideBytes = static_cast<uint32_t>(hiddenSize + UB_ALIGN);
-        for (uint16_t row = 0; row < rowNum; ++row) {
-            StorePtoUbToGm(dstScalePtr + outputOffset + row,
-                           ubOffsetBytes + static_cast<uint64_t>(row) * srcRowStrideBytes + hiddenSize, 1);
-        }
-    }
-
-    PTO_DEVICE void LoadExpertCountsPadded(uint64_t dstUbOffsetBytes, __gm__ int32_t *src, uint32_t srcOffset,
-                                           uint16_t rowNum, uint16_t copyBytes, uint16_t padBytes)
-    {
-        uint16_t copyElems = static_cast<uint16_t>(copyBytes / sizeof(int32_t));
-        uint16_t srcRowStride = static_cast<uint16_t>(copyElems + padBytes / sizeof(int32_t));
-        uint16_t dstRowStride = static_cast<uint16_t>(((copyElems + 7) / 8) * 8);
-        for (uint16_t row = 0; row < rowNum; ++row) {
-            LoadGmToPtoUb(dstUbOffsetBytes + static_cast<uint64_t>(row) * dstRowStride * sizeof(int32_t),
-                          src + srcOffset + row * srcRowStride, copyElems);
-        }
-    }
-
-    PTO_DEVICE void StoreExpertCountsPadded(__gm__ int32_t *dst, uint64_t srcUbOffsetBytes, uint16_t rowNum,
-                                            uint16_t copyBytes)
-    {
-        uint16_t copyElems = static_cast<uint16_t>(copyBytes / sizeof(int32_t));
-        uint16_t srcRowStride = static_cast<uint16_t>(((copyElems + 7) / 8) * 8);
-        for (uint16_t row = 0; row < rowNum; ++row) {
-            StorePtoUbToGm(dst + row * copyElems,
-                           srcUbOffsetBytes + static_cast<uint64_t>(row) * srcRowStride * sizeof(int32_t), copyElems);
-        }
-    }
-
-    PTO_DEVICE void AddExpertCountsRow(uint64_t dstUbOffsetBytes, uint64_t src0UbOffsetBytes,
-                                       uint64_t src1UbOffsetBytes, uint32_t elemNum)
-    {
-        using Tile = pto::Tile<pto::TileType::Vec, int32_t, 1, 1024, pto::BLayout::RowMajor, -1, -1>;
-        constexpr uint32_t TileElems = 1024;
-        for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
-            uint32_t cur = (elemNum - offset > TileElems) ? TileElems : (elemNum - offset);
-            Tile dstTile(1, cur);
-            Tile src0Tile(1, cur);
-            Tile src1Tile(1, cur);
-            uint64_t offsetBytes = static_cast<uint64_t>(offset) * sizeof(int32_t);
-            pto::TASSIGN(dstTile, dstUbOffsetBytes + offsetBytes);
-            pto::TASSIGN(src0Tile, src0UbOffsetBytes + offsetBytes);
-            pto::TASSIGN(src1Tile, src1UbOffsetBytes + offsetBytes);
-            pto::TADD(dstTile, src0Tile, src1Tile);
-        }
-    }
-
-    PTO_DEVICE void AddScalarPtoUbInt32(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum,
-                                        int32_t scalar)
-    {
-        using Tile = pto::Tile<pto::TileType::Vec, int32_t, 1, 1024, pto::BLayout::RowMajor, -1, -1>;
-        constexpr uint32_t TileElems = 1024;
-        for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
-            uint32_t cur = (elemNum - offset > TileElems) ? TileElems : (elemNum - offset);
-            Tile dstTile(1, cur);
-            Tile srcTile(1, cur);
-            uint64_t offsetBytes = static_cast<uint64_t>(offset) * sizeof(int32_t);
-            pto::TASSIGN(dstTile, dstUbOffsetBytes + offsetBytes);
-            pto::TASSIGN(srcTile, srcUbOffsetBytes + offsetBytes);
-            pto::TADDS(dstTile, srcTile, scalar);
-        }
-    }
-
-    PTO_DEVICE int32_t GetPtoUbInt32(uint64_t ubOffsetBytes, uint32_t elemOffset)
-    {
-        using Tile = pto::Tile<pto::TileType::Vec, int32_t, 1, 1024, pto::BLayout::RowMajor, -1, -1>;
-        constexpr uint32_t TileElems = 1024;
-        uint64_t tileOffsetBytes =
-            ubOffsetBytes + static_cast<uint64_t>(elemOffset / TileElems) * TileElems * sizeof(int32_t);
-        Tile tile(1, TileElems);
-        pto::TASSIGN(tile, tileOffsetBytes);
-        return tile.GetValue(elemOffset % TileElems);
-    }
-
-    PTO_DEVICE void SetPtoUbInt32(uint64_t ubOffsetBytes, uint32_t elemOffset, int32_t value)
-    {
-        using Tile = pto::Tile<pto::TileType::Vec, int32_t, 1, 1024, pto::BLayout::RowMajor, -1, -1>;
-        constexpr uint32_t TileElems = 1024;
-        uint64_t tileOffsetBytes =
-            ubOffsetBytes + static_cast<uint64_t>(elemOffset / TileElems) * TileElems * sizeof(int32_t);
-        Tile tile(1, TileElems);
-        pto::TASSIGN(tile, tileOffsetBytes);
-        tile.SetValue(elemOffset % TileElems, value);
-    }
-
-    template <typename T>
-    PTO_DEVICE void CopyGMToGMPerToken(__gm__ T *dst, __gm__ float *dstScale, __gm__ T *src, int32_t rows,
-                                       int32_t hiddenSize, int32_t ubMoveNum, int32_t &pingpongId)
+    __forceinline__ __aicore__ void CopyGMToGMPerToken(__gm__ T *dst, __gm__ float *dstScale, __gm__ T *src,
+                                                       int32_t rows, int32_t hiddenSize, int32_t ubMoveNum,
+                                                       int32_t &pingpongId)
     {
         static_assert(sizeof(T) == 1, "CopyGMToGMPerToken expects byte-packed per-token rows");
         using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -727,26 +557,25 @@ private:
 
             kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID);
             uint32_t dataLen = rowNum * copyInNum;
-            LoadPackedScratchToPtoUb(ubOffsetBytes, localPackedScratch, dataLen);
+            pto_bridge::PtoLoadVector(ubOffsetBytes, localPackedScratch, dataLen);
 
             kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE2_MTE3>(EVENT_ID);
             kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_MTE3>(EVENT_ID);
             auto outputOffset = processIndex * ubMoveNum * hiddenSize;
-            StorePerTokenRows(dst, ubOffsetBytes, outputOffset, static_cast<uint16_t>(rowNum),
-                              static_cast<uint16_t>(hiddenSize));
-            StorePerTokenScales(dstScale, ubOffsetBytes, processIndex * ubMoveNum, static_cast<uint16_t>(rowNum),
-                                static_cast<uint16_t>(hiddenSize));
+            pto_bridge::StorePerTokenRows(dst, ubOffsetBytes, outputOffset, static_cast<uint16_t>(rowNum),
+                                          static_cast<uint16_t>(hiddenSize));
+            pto_bridge::StorePerTokenScales(dstScale, ubOffsetBytes, processIndex * ubMoveNum,
+                                            static_cast<uint16_t>(rowNum), static_cast<uint16_t>(hiddenSize));
             kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID);
         }
     }
 
-    PTO_DEVICE
-    void ApplyXActiveMask(Params const &params)
+    __forceinline__ __aicore__ void ApplyXActiveMask(Params const &params)
     {
         if (params.ptrXActiveMask == nullptr) {
             return;
         }
-        int32_t m = GetPtoShapeM(params.problemShape);
+        int32_t m = static_cast<int32_t>(params.problemShape.shape[0]);
         int32_t topK = params.topK;
         int32_t expertNum = params.expertPerRank * params.EP;
         auto *expertIdxPtr = reinterpret_cast<__gm__ int32_t *>(params.expertIdx);
@@ -767,8 +596,7 @@ private:
         constexpr uint64_t tmpUbOffset = 0;
         for (int32_t offset = 0; offset < copySize; offset += TileElems) {
             uint32_t cur = static_cast<uint32_t>((copySize - offset > TileElems) ? TileElems : (copySize - offset));
-            auto expertIdxGlobal = pto_ext::dispatch_combine_moe::pto_bridge::MakeContiguousGlobalFromPtr(
-                expertIdxPtr + startIdx + offset, cur);
+            auto expertIdxGlobal = pto_bridge::MakeContiguousGlobalFromPtr(expertIdxPtr + startIdx + offset, cur);
             Tile tile(1, cur);
             pto::TASSIGN(tile, tmpUbOffset);
             pto::TLOAD(tile, expertIdxGlobal);
@@ -791,15 +619,15 @@ private:
         kernel_detail::PtoSyncAll<true>();
     }
 
-    PTO_DEVICE
-    void GetCumsumForMMAIV(__gm__ int32_t *tokenPerExpert, __gm__ int32_t *result, uint32_t expertPerRank,
-                           uint32_t rankId, uint32_t EP)
+    __forceinline__ __aicore__ void GetCumsumForMMAIV(__gm__ int32_t *tokenPerExpert, __gm__ int32_t *result,
+                                                      uint32_t expertPerRank, uint32_t rankId, uint32_t EP)
     {
         int32_t expertPerRankAligned = (expertPerRank + 8 - 1) / 8 * 8;
         constexpr uint64_t tmpBufferUbOffset = 0;
-        LoadExpertCountsPadded(tmpBufferUbOffset, tokenPerExpert, rankId * expertPerRank, static_cast<uint16_t>(EP),
-                               static_cast<uint16_t>(expertPerRank * sizeof(int32_t)),
-                               static_cast<uint16_t>((paddedExpertNumAligned - expertPerRank) * sizeof(int32_t)));
+        pto_bridge::LoadExpertCountsPadded(
+            tmpBufferUbOffset, tokenPerExpert, rankId * expertPerRank, static_cast<uint16_t>(EP),
+            static_cast<uint16_t>(expertPerRank * sizeof(int32_t)),
+            static_cast<uint16_t>((paddedExpertNumAligned - expertPerRank) * sizeof(int32_t)));
 
         kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
         kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
@@ -808,19 +636,18 @@ private:
             uint64_t rowOffset = tmpBufferUbOffset + static_cast<uint64_t>(i) * expertPerRankAligned * sizeof(int32_t);
             uint64_t prevRowOffset =
                 tmpBufferUbOffset + static_cast<uint64_t>(i - 1) * expertPerRankAligned * sizeof(int32_t);
-            AddExpertCountsRow(rowOffset, rowOffset, prevRowOffset, expertPerRank);
+            pto_bridge::PtoAddVector<int32_t>(rowOffset, rowOffset, prevRowOffset, expertPerRank);
             kernel_detail::PtoPipeBarrier<PIPE_V>();
         }
 
         kernel_detail::PtoSetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
         kernel_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
 
-        StoreExpertCountsPadded(result, tmpBufferUbOffset, static_cast<uint16_t>(EP),
-                                static_cast<uint16_t>(expertPerRank * sizeof(int32_t)));
+        pto_bridge::StoreExpertCountsPadded(result, tmpBufferUbOffset, static_cast<uint16_t>(EP),
+                                            static_cast<uint16_t>(expertPerRank * sizeof(int32_t)));
     }
 
-    PTO_DEVICE
-    void GMM1(Params const &params)
+    __forceinline__ __aicore__ void GMM1(Params const &params)
     {
         icache_preload(8);
         BlockScheduler blockScheduler;
@@ -851,14 +678,16 @@ private:
             int32_t arrayGroupIdx = params.listLen == 1 ? 0 : groupIdx;
             __gm__ ElementB *gmB1Ptr =
                 reinterpret_cast<__gm__ ElementB *>(kernel_detail::GetTensorAddr<int8_t>(arrayGroupIdx, params.ptrB1));
-            __gm__ ElementScale *gmSPtr =
-                reinterpret_cast<__gm__ ElementScale *>(kernel_detail::GetTensorAddr<int64_t>(arrayGroupIdx, params.ptrScale1));
-            PtoShape3D inGroupProblemShape =
-                MakePtoShape3D(currentM, GetPtoShapeN(params.problemShape), GetPtoShapeK(params.problemShape));
-            LayoutA layoutA = params.layoutA.GetTileLayout(GetPtoShapeMK(inGroupProblemShape));
+            __gm__ ElementScale *gmSPtr = reinterpret_cast<__gm__ ElementScale *>(
+                kernel_detail::GetTensorAddr<int64_t>(arrayGroupIdx, params.ptrScale1));
+            PtoShape3D inGroupProblemShape = PtoShape3D(currentM, static_cast<uint32_t>(params.problemShape.shape[1]),
+                                                        static_cast<uint32_t>(params.problemShape.shape[2]));
+            LayoutA layoutA =
+                params.layoutA.GetTileLayout(PtoShape2D(inGroupProblemShape.shape[0], inGroupProblemShape.shape[2]));
             LayoutB layoutB1 = params.layoutB1;
             LayoutScale layoutScale = params.layoutScale1;
-            LayoutC layoutC = LayoutC(GetPtoShapeM(inGroupProblemShape), GetPtoShapeN(inGroupProblemShape));
+            LayoutC layoutC = LayoutC(static_cast<uint32_t>(inGroupProblemShape.shape[0]),
+                                      static_cast<uint32_t>(inGroupProblemShape.shape[1]));
             blockScheduler.Update(inGroupProblemShape, L1TileShape::ToPtoShapeMN());
             uint32_t coreLoops = blockScheduler.GetCoreLoops();
             // Determine the starting loopIdx of the current core under the current groupIdx
@@ -875,17 +704,18 @@ private:
                 auto actualBlockShapeMN = blockScheduler.GetActualBlockShapeMN(blockCoordMN);
                 uint32_t blockM = static_cast<uint32_t>(blockCoordMN.shape[0]);
                 uint32_t blockN = static_cast<uint32_t>(blockCoordMN.shape[1]);
-                auto offsetA = MakePtoCoord2D(blockM * L1TileShape::M, 0);
-                auto offsetB = MakePtoCoord2D(0, blockN * L1TileShape::N);
-                auto offsetC = MakePtoCoord2D(blockM * L1TileShape::M, blockN * L1TileShape::N);
+                auto offsetA = PtoCoord2D(blockM * L1TileShape::M, 0);
+                auto offsetB = PtoCoord2D(0, blockN * L1TileShape::N);
+                auto offsetC = PtoCoord2D(blockM * L1TileShape::M, blockN * L1TileShape::N);
                 int64_t gmOffsetA = layoutA.GetOffset(offsetA);
                 int64_t gmOffsetB = layoutB1.GetOffset(offsetB);
                 int64_t gmOffsetC = layoutC.GetOffset(offsetC);
                 int64_t gmOffsetS =
-                    blockN * L1TileShape::N + (params.listLen == 1 ? groupIdx * GetPtoShapeN(params.problemShape) : 0);
+                    blockN * L1TileShape::N +
+                    (params.listLen == 1 ? groupIdx * static_cast<uint32_t>(params.problemShape.shape[1]) : 0);
                 if (currentM > 0) {
-                    PtoShape3D actualBlockShape = MakePtoShape3D(
-                        actualBlockShapeMN.shape[0], actualBlockShapeMN.shape[1], GetPtoShapeK(inGroupProblemShape));
+                    PtoShape3D actualBlockShape = PtoShape3D(actualBlockShapeMN.shape[0], actualBlockShapeMN.shape[1],
+                                                             static_cast<uint32_t>(inGroupProblemShape.shape[2]));
                     blockMmad(gmAPtr + gmGroupOffsetA + gmOffsetA, layoutA, gmB1Ptr + gmGroupOffsetB + gmOffsetB,
                               layoutB1, gmCPtr + gmGroupOffsetC + gmOffsetC, layoutC, gmSPtr + gmOffsetS, layoutScale,
                               actualBlockShape);
@@ -902,11 +732,14 @@ private:
             }
 
             preCurrentmSum += currentM;
-            gmGroupOffsetA += GetPtoShapeM(inGroupProblemShape) * GetPtoShapeK(inGroupProblemShape);
+            gmGroupOffsetA += static_cast<uint32_t>(inGroupProblemShape.shape[0]) *
+                              static_cast<uint32_t>(inGroupProblemShape.shape[2]);
             if (params.listLen == 1) {
-                gmGroupOffsetB += GetPtoShapeK(inGroupProblemShape) * GetPtoShapeN(inGroupProblemShape);
+                gmGroupOffsetB += static_cast<uint32_t>(inGroupProblemShape.shape[2]) *
+                                  static_cast<uint32_t>(inGroupProblemShape.shape[1]);
             }
-            gmGroupOffsetC += GetPtoShapeM(inGroupProblemShape) * GetPtoShapeN(inGroupProblemShape);
+            gmGroupOffsetC += static_cast<uint32_t>(inGroupProblemShape.shape[0]) *
+                              static_cast<uint32_t>(inGroupProblemShape.shape[1]);
             startCoreIdx = (startCoreIdx + coreLoops) % coreNum;
         }
 
@@ -922,15 +755,14 @@ private:
         blockMmad.Finalize(syncLoopIdx + 1, SYNCFLAGC2V);
     }
 
-    PTO_DEVICE
-    void GMM2(Params const &params)
+    __forceinline__ __aicore__ void GMM2(Params const &params)
     {
         icache_preload(8);
         BlockScheduler blockScheduler;
         BlockMmad blockMmad(resource);
 
-        uint32_t n2 = GetPtoShapeK(params.problemShape);
-        uint32_t k2 = GetPtoShapeN(params.problemShape) / 2;
+        uint32_t n2 = static_cast<uint32_t>(params.problemShape.shape[2]);
+        uint32_t k2 = static_cast<uint32_t>(params.problemShape.shape[1]) / 2;
 
         int64_t gmGroupOffsetA = 0;
         int64_t gmGroupOffsetB = 0;
@@ -956,14 +788,16 @@ private:
             int32_t arrayGroupIdx = params.listLen == 1 ? 0 : groupIdx;
             __gm__ ElementB *gmB2Ptr =
                 reinterpret_cast<__gm__ ElementB *>(kernel_detail::GetTensorAddr<int8_t>(arrayGroupIdx, params.ptrB2));
-            __gm__ ElementScale *gmS2Ptr =
-                reinterpret_cast<__gm__ ElementScale *>(kernel_detail::GetTensorAddr<int64_t>(arrayGroupIdx, params.ptrScale2));
-            PtoShape3D inGroupProblemShape = MakePtoShape3D(currentM, n2, k2); // M N K
+            __gm__ ElementScale *gmS2Ptr = reinterpret_cast<__gm__ ElementScale *>(
+                kernel_detail::GetTensorAddr<int64_t>(arrayGroupIdx, params.ptrScale2));
+            PtoShape3D inGroupProblemShape = PtoShape3D(currentM, n2, k2); // M N K
 
-            LayoutA layoutA = params.layoutA2.GetTileLayout(GetPtoShapeMK(inGroupProblemShape));
+            LayoutA layoutA =
+                params.layoutA2.GetTileLayout(PtoShape2D(inGroupProblemShape.shape[0], inGroupProblemShape.shape[2]));
             LayoutB layoutB2 = params.layoutB2;
             LayoutScale layoutScale = params.layoutScale2;
-            LayoutC layoutC = LayoutC(GetPtoShapeM(inGroupProblemShape), GetPtoShapeN(inGroupProblemShape));
+            LayoutC layoutC = LayoutC(static_cast<uint32_t>(inGroupProblemShape.shape[0]),
+                                      static_cast<uint32_t>(inGroupProblemShape.shape[1]));
 
             blockScheduler.Update(inGroupProblemShape, L1TileShape::ToPtoShapeMN());
             uint32_t coreLoops = blockScheduler.GetCoreLoops();
@@ -985,9 +819,9 @@ private:
                 auto actualBlockShapeMN = blockScheduler.GetActualBlockShapeMN(blockCoordMN);
                 uint32_t blockM = static_cast<uint32_t>(blockCoordMN.shape[0]);
                 uint32_t blockN = static_cast<uint32_t>(blockCoordMN.shape[1]);
-                auto offsetA = MakePtoCoord2D(blockM * L1TileShape::M, 0);
-                auto offsetB = MakePtoCoord2D(0, blockN * L1TileShape::N);
-                auto offsetC = MakePtoCoord2D(blockM * L1TileShape::M, blockN * L1TileShape::N);
+                auto offsetA = PtoCoord2D(blockM * L1TileShape::M, 0);
+                auto offsetB = PtoCoord2D(0, blockN * L1TileShape::N);
+                auto offsetC = PtoCoord2D(blockM * L1TileShape::M, blockN * L1TileShape::N);
 
                 int64_t gmOffsetA = layoutA.GetOffset(offsetA);
                 int64_t gmOffsetB = layoutB2.GetOffset(offsetB);
@@ -995,19 +829,22 @@ private:
                 int64_t gmOffsetS =
                     blockN * L1TileShape::N + (params.listLen == 1 ? groupIdx * n2 : 0); // One scale group per expert
                 if (currentM > 0) {
-                    PtoShape3D actualBlockShape = MakePtoShape3D(
-                        actualBlockShapeMN.shape[0], actualBlockShapeMN.shape[1], GetPtoShapeK(inGroupProblemShape));
+                    PtoShape3D actualBlockShape = PtoShape3D(actualBlockShapeMN.shape[0], actualBlockShapeMN.shape[1],
+                                                             static_cast<uint32_t>(inGroupProblemShape.shape[2]));
                     blockMmad(gmPermutedTokenPtr + gmGroupOffsetA + gmOffsetA, layoutA,
                               gmB2Ptr + gmGroupOffsetB + gmOffsetB, layoutB2, gmC2Ptr + gmGroupOffsetC + gmOffsetC,
                               layoutC, gmS2Ptr + gmOffsetS, layoutScale, actualBlockShape, syncLoopIdx, 0);
                 }
             }
             preCurrentmSum += currentM;
-            gmGroupOffsetA += GetPtoShapeM(inGroupProblemShape) * GetPtoShapeK(inGroupProblemShape);
+            gmGroupOffsetA += static_cast<uint32_t>(inGroupProblemShape.shape[0]) *
+                              static_cast<uint32_t>(inGroupProblemShape.shape[2]);
             if (params.listLen == 1) {
-                gmGroupOffsetB += GetPtoShapeK(inGroupProblemShape) * GetPtoShapeN(inGroupProblemShape);
+                gmGroupOffsetB += static_cast<uint32_t>(inGroupProblemShape.shape[2]) *
+                                  static_cast<uint32_t>(inGroupProblemShape.shape[1]);
             }
-            gmGroupOffsetC += GetPtoShapeM(inGroupProblemShape) * GetPtoShapeN(inGroupProblemShape);
+            gmGroupOffsetC += static_cast<uint32_t>(inGroupProblemShape.shape[0]) *
+                              static_cast<uint32_t>(inGroupProblemShape.shape[1]);
 
             startCoreIdx = (startCoreIdx + coreLoops) % coreNum;
         }
@@ -1019,20 +856,18 @@ private:
         }
     }
 
-    PTO_DEVICE
-    void InitArithProgress(Params const &params)
+    __forceinline__ __aicore__ void InitArithProgress(Params const &params)
     {
         kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE3_S>(EVENT_ID0);
         kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_S>(EVENT_ID0);
-        StoreZeroPtoUbToGm<float>(workspaceInfo.ptrSoftFlagBase, 0,
-                                  static_cast<uint32_t>((params.EP + 1) * FLAGSTRIDE));
+        pto_bridge::StoreZeroPtoUbToGm<float>(workspaceInfo.ptrSoftFlagBase, 0,
+                                              static_cast<uint32_t>((params.EP + 1) * FLAGSTRIDE));
         kernel_detail::PtoSetFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
         kernel_detail::PtoWaitFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
     }
 
-    PTO_DEVICE
-    void CrossRankSyncAndlocalTokenPerExpertAllGatherAndGetSumPreRankV2(Params const &params,
-                                                                        int64_t localTokenPerExpertOffset)
+    __forceinline__ __aicore__ void CrossRankSyncAndlocalTokenPerExpertAllGatherAndGetSumPreRankV2(
+        Params const &params, int64_t localTokenPerExpertOffset)
     {
         uint32_t numPerCore = paddedExpertNumAligned;
         constexpr uint64_t tmpBufferUbOffset = 0;
@@ -1064,14 +899,15 @@ private:
 
             kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
 
-            LoadGmToPtoUb(tmpBufferUbOffset, srcAddress, numPerCore);
+            pto_bridge::PtoLoadVector(tmpBufferUbOffset, srcAddress, numPerCore);
 
             kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
             kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
-            AddScalarPtoUbInt32(tmpBufferUbOffset, tmpBufferUbOffset, numPerCore, static_cast<int32_t>(0x800000));
+            pto_bridge::PtoAddScalarVector<int32_t>(tmpBufferUbOffset, tmpBufferUbOffset, numPerCore,
+                                                    static_cast<int32_t>(0x800000));
             kernel_detail::PtoSetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
             kernel_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
-            StorePtoUbToGm(localScratch, tmpBufferUbOffset, numPerCore);
+            pto_bridge::PtoStoreVector(localScratch, tmpBufferUbOffset, numPerCore);
             TputGlobal localPackedG(localScratch, tputShape, tputStride);
             TputGlobal remotePackedG(reinterpret_cast<__gm__ int32_t *>(dstPeermemPtr), tputShape, tputStride);
             pto::comm::TPUT(remotePackedG, localPackedG, tputTile);
@@ -1083,16 +919,18 @@ private:
             if (dstEpIdx != params.rank) {
                 remoteWindow.WaitTokenReady(dstEpIdx);
                 __gm__ int32_t *tokenBase = tokenPerExpertPtr + tokenPerExpertLayout(dstEpIdx, 0, 0);
-                LoadGmToPtoUb(tmpBufferUbOffset, tokenBase, numPerCore);
+                pto_bridge::PtoLoadVector(tmpBufferUbOffset, tokenBase, numPerCore);
                 kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
                 kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
-                AddScalarPtoUbInt32(tmpBufferUbOffset, tmpBufferUbOffset, numPerCore, static_cast<int32_t>(-0x800000));
+                pto_bridge::PtoAddScalarVector<int32_t>(tmpBufferUbOffset, tmpBufferUbOffset, numPerCore,
+                                                        static_cast<int32_t>(-0x800000));
                 kernel_detail::PtoPipeBarrier<PIPE_V>();
                 kernel_detail::PtoSetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
                 kernel_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
-                StorePtoUbToGm(tokenBase, tmpBufferUbOffset, numPerCore);
+                pto_bridge::PtoStoreVector(tokenBase, tmpBufferUbOffset, numPerCore);
             } else {
-                LoadGmToPtoUb(tmpBufferUbOffset, tokenPerExpertPtr + tokenPerExpertLayout(dstEpIdx, 0, 0), numPerCore);
+                pto_bridge::PtoLoadVector(tmpBufferUbOffset, tokenPerExpertPtr + tokenPerExpertLayout(dstEpIdx, 0, 0),
+                                          numPerCore);
                 kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
                 kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
             }
@@ -1101,35 +939,33 @@ private:
             int32_t j = 0;
             for (int32_t i = 0; i < (params.rank + 1) * params.expertPerRank; i++) {
                 if (i >= params.rank * params.expertPerRank) {
-                    SetPtoUbInt32(prevSumUbOffset, static_cast<uint32_t>(j), prevSum);
+                    pto_bridge::PtoSetValue<int32_t>(prevSumUbOffset, static_cast<uint32_t>(j), prevSum);
                     j++;
                 }
-                prevSum += GetPtoUbInt32(tmpBufferUbOffset, static_cast<uint32_t>(i));
+                prevSum += pto_bridge::PtoGetValue<int32_t>(tmpBufferUbOffset, static_cast<uint32_t>(i));
             }
             kernel_detail::PtoSetFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
             kernel_detail::PtoWaitFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
-            StorePtoUbToGm(preSumBeforeRankPtr + dstEpIdx * params.expertPerRank, prevSumUbOffset,
-                           params.expertPerRank);
+            pto_bridge::PtoStoreVector(preSumBeforeRankPtr + dstEpIdx * params.expertPerRank, prevSumUbOffset,
+                                       params.expertPerRank);
         }
 
         kernel_detail::PtoSyncAll<true>();
     }
 
-    PTO_DEVICE
-    void ResetTokenPerExpert(int32_t num)
+    __forceinline__ __aicore__ void ResetTokenPerExpert(int32_t num)
     {
         if (coreIdx != coreNum - 1) {
             return;
         }
         kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE3_S>(EVENT_ID0);
         kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_S>(EVENT_ID0);
-        StoreZeroPtoUbToGm<int32_t>(tokenPerExpertPtr, 0, static_cast<uint32_t>(num));
+        pto_bridge::StoreZeroPtoUbToGm<int32_t>(tokenPerExpertPtr, 0, static_cast<uint32_t>(num));
         kernel_detail::PtoSetFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
         kernel_detail::PtoWaitFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
     }
 
-    PTO_DEVICE
-    void UpdateAicFlags(const Params &params)
+    __forceinline__ __aicore__ void UpdateAicFlags(const Params &params)
     {
         float flagBase = 1.0f * params.expertPerRank;
         __gm__ float *aicFinishPtr = workspaceInfo.ptrSoftFlagBase + params.EP * FLAGSTRIDE;
@@ -1142,7 +978,7 @@ private:
         uint32_t flagElemNum = static_cast<uint32_t>(params.EP * FLAGSTRIDE);
         while (flag < flagBase) {
             flag = flagBase;
-            LoadGmToPtoUb<float, TileElems>(tmpUbOffset, flagPtr, flagElemNum);
+            pto_bridge::PtoLoadVector<float, TileElems>(tmpUbOffset, flagPtr, flagElemNum);
             kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE2_S>(EVENT_ID0);
             kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_S>(EVENT_ID0);
 
@@ -1163,10 +999,9 @@ private:
         }
     }
 
-    PTO_DEVICE
-    void CombineV1(Params const &params, BlockEpilogue2 &blockEpilogue)
+    __forceinline__ __aicore__ void CombineV1(Params const &params, BlockEpilogue2 &blockEpilogue)
     {
-        uint32_t n2 = GetPtoShapeK(params.problemShape);
+        uint32_t n2 = static_cast<uint32_t>(params.problemShape.shape[2]);
         int32_t prevGroupSum2 = 0;
 
         icache_preload(8);
@@ -1189,8 +1024,8 @@ private:
                         dataRows = params.maxOutputSize - srcRowOffset;
                     }
                     uint32_t dstRowOffset = gm_load(preSumBeforeRankPtr + dstEpIdx * params.expertPerRank + groupIdx);
-                    auto offsetC = MakePtoCoord2D(srcRowOffset, 0);
-                    auto offsetPeer = MakePtoCoord2D(dstRowOffset, 0);
+                    auto offsetC = PtoCoord2D(srcRowOffset, 0);
+                    auto offsetPeer = PtoCoord2D(dstRowOffset, 0);
                     PtoShape2D shapeC(dataRows, n2);
                     int64_t gmOffsetC = params.layoutD2.GetOffset(offsetC);
                     int64_t gmOffsetPeer = params.layoutD2.GetOffset(offsetPeer);
@@ -1208,8 +1043,7 @@ private:
         blockEpilogue.Finalize();
     }
 
-    PTO_DEVICE
-    void CombineV2(Params const &params, BlockEpilogue3 &blockEpilogue)
+    __forceinline__ __aicore__ void CombineV2(Params const &params, BlockEpilogue3 &blockEpilogue)
     {
         BlockScheduler blockScheduler;
         int32_t syncLoopIdx = 0;
@@ -1218,8 +1052,8 @@ private:
         uint32_t aicCoreIdx = get_block_idx();
         uint32_t aivSubCoreIdx = get_subblockid();
         uint32_t preSrcExpertSum = 0;
-        uint32_t n2 = GetPtoShapeK(params.problemShape);
-        uint32_t k2 = GetPtoShapeN(params.problemShape) / 2;
+        uint32_t n2 = static_cast<uint32_t>(params.problemShape.shape[2]);
+        uint32_t k2 = static_cast<uint32_t>(params.problemShape.shape[1]) / 2;
         icache_preload(8);
         for (uint32_t groupIdx = 0; groupIdx < params.expertPerRank; ++groupIdx) {
             uint32_t currentExpertM = gm_load(cumsumMMPtr + (params.EP - 1) * params.expertPerRank + groupIdx);
@@ -1228,7 +1062,7 @@ private:
             } else if (preSrcExpertSum + currentExpertM > params.maxOutputSize) {
                 currentExpertM = params.maxOutputSize - preSrcExpertSum;
             }
-            PtoShape3D inGroupProblemShape = MakePtoShape3D(currentExpertM, n2, k2); // M N K
+            PtoShape3D inGroupProblemShape = PtoShape3D(currentExpertM, n2, k2); // M N K
             blockScheduler.Update(inGroupProblemShape, L1TileShape::ToPtoShapeMN());
             uint32_t coreLoops = blockScheduler.GetCoreLoops();
             uint32_t startLoopIdx =
@@ -1258,7 +1092,7 @@ private:
 
                 for (int32_t cur_row = 0; cur_row < aiv_m_rows; cur_row++) {
                     auto realTileCoord =
-                        MakePtoCoord2D(m_offset, static_cast<uint32_t>(blockCoordMN.shape[1]) * L1TileShape::N);
+                        PtoCoord2D(m_offset, static_cast<uint32_t>(blockCoordMN.shape[1]) * L1TileShape::N);
                     uint32_t actualm = m0;
                     if (aivSubCoreIdx == 1 && cur_row == aiv_m_rows - 1) {
                         actualm = blockM - (m_rows / 2) * m0 - cur_row * m0;
@@ -1289,19 +1123,18 @@ private:
         GM_ADDR ptrSumBeforeRank;
         __gm__ float *ptrSoftFlagBase;
 
-        PTO_DEVICE
-        WorkspaceInfo()
+        __forceinline__ __aicore__ WorkspaceInfo()
         {}
 
-        PTO_DEVICE
-        WorkspaceInfo(const Params &params)
+        __forceinline__ __aicore__ WorkspaceInfo(const Params &params)
         {
-            uint32_t k2 = GetPtoShapeN(params.problemShape) / 2;
-            uint32_t n2 = GetPtoShapeK(params.problemShape);
+            uint32_t k2 = static_cast<uint32_t>(params.problemShape.shape[1]) / 2;
+            uint32_t n2 = static_cast<uint32_t>(params.problemShape.shape[2]);
             int64_t workspaceOffset = 0;
             expandedRowIdx = params.ptrWorkspace;
 
-            workspaceOffset += AlignUp(GetPtoShapeM(params.problemShape), 256) * params.topK * sizeof(int32_t);
+            workspaceOffset +=
+                AlignUp(static_cast<uint32_t>(params.problemShape.shape[0]), 256) * params.topK * sizeof(int32_t);
             ptrcumsumMM = params.ptrWorkspace + workspaceOffset;
 
             workspaceOffset += (params.EP * params.EP * params.expertPerRank) * sizeof(int32_t);
@@ -1318,13 +1151,15 @@ private:
             workspaceOffset += (params.EP * params.EP * params.expertPerRank) * sizeof(int32_t);
             ptrC = params.ptrWorkspace + workspaceOffset;
 
-            workspaceOffset += params.maxOutputSize * GetPtoShapeN(params.problemShape) * sizeof(ElementC);
+            workspaceOffset +=
+                params.maxOutputSize * static_cast<uint32_t>(params.problemShape.shape[1]) * sizeof(ElementC);
             ptrC2 = params.ptrWorkspace + workspaceOffset;
 
             workspaceOffset += params.maxOutputSize * n2 * sizeof(ElementC);
             ptrA = params.ptrWorkspace + workspaceOffset;
 
-            workspaceOffset += params.maxOutputSize * GetPtoShapeK(params.problemShape) * sizeof(ElementA);
+            workspaceOffset +=
+                params.maxOutputSize * static_cast<uint32_t>(params.problemShape.shape[2]) * sizeof(ElementA);
             ptrPermutedToken = params.ptrWorkspace + workspaceOffset;
 
             workspaceOffset += params.maxOutputSize * k2 * sizeof(ElementA);
@@ -1341,12 +1176,10 @@ private:
         int64_t offsetPeerTokenPerExpert;
         int64_t offsetD;
 
-        PTO_DEVICE
-        PeerMemoryLayout()
+        __forceinline__ __aicore__ PeerMemoryLayout()
         {}
 
-        PTO_DEVICE
-        PeerMemoryLayout(const Params &params, const PtoRemoteWindow &remoteWindow)
+        __forceinline__ __aicore__ PeerMemoryLayout(const Params &params, const PtoRemoteWindow &remoteWindow)
         {
             offsetA = 0; // Occupies one third of BUFFSIZE
             offsetPeerPerTokenScale = offsetA + AlignUp(remoteWindow.SegmentSize() / 3, 512); // Occupies 1 MB
