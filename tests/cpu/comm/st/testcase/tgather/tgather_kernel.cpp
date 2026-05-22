@@ -1,22 +1,24 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
-
-#include "pto/pto-inst.hpp"
-#include "pto/common/pto_tile.hpp"
-#include "pto/common/cpu_stub.hpp"
-#include "../common.hpp"
 #include <pto/pto-inst.hpp>
+
+#include "../common.hpp"
+#include "pto/common/cpu_stub.hpp"
+#include "pto/common/pto_tile.hpp"
+#include "pto/pto-inst.hpp"
 
 #define ENABLE_DEBUG_PRINT 1
 
@@ -66,7 +68,8 @@ __global__ AICORE void TGatherKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ Hc
     StrideDyn dstStride(nranks * count, nranks * count, nranks * count, count, 1);
     Global dstG(dst, dstShape, dstStride);
 
-    // Create ParallelGroup: each tensor in the group is the source buffer on that rank
+    // Create ParallelGroup: each tensor in the group is the source buffer on that
+    // rank
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
@@ -185,7 +188,9 @@ bool RunGatherKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
 
 #if ENABLE_DEBUG_PRINT
         if (is_ok) {
-            std::cout << "\n================================================================" << std::endl;
+            std::cout << "\n========================================================="
+                         "======="
+                      << std::endl;
             std::cout << "[DEBUG] Rank " << root << ": TGATHER SUCCESSFUL!" << std::endl;
             std::cout << "Summary: Gathered " << n_ranks << " segments, each with " << count << " elements."
                       << std::endl;
@@ -199,7 +204,9 @@ bool RunGatherKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
                     std::cout << "... ";
                 std::cout << "]" << std::endl;
             }
-            std::cout << "================================================================\n" << std::endl;
+            std::cout << "==========================================================="
+                         "=====\n"
+                      << std::endl;
         }
 #endif
     }
@@ -529,11 +536,15 @@ bool RunGatherLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
 
 #if ENABLE_DEBUG_PRINT
         if (is_ok) {
-            std::cout << "\n================================================================" << std::endl;
+            std::cout << "\n========================================================="
+                         "======="
+                      << std::endl;
             std::cout << "[DEBUG] Rank 0: TGATHER LargeShape SUCCESSFUL! (" << total_rows << "x" << cols
                       << ", tile=" << tile_rows << "x" << cols << ", chunks=" << (total_rows / tile_rows)
                       << ", ranks=" << n_ranks << ")" << std::endl;
-            std::cout << "================================================================\n" << std::endl;
+            std::cout << "==========================================================="
+                         "=====\n"
+                      << std::endl;
         }
 #endif
     } else {
@@ -720,11 +731,15 @@ bool RunGatherPingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
 
 #if ENABLE_DEBUG_PRINT
         if (is_ok) {
-            std::cout << "\n================================================================" << std::endl;
+            std::cout << "\n========================================================="
+                         "======="
+                      << std::endl;
             std::cout << "[DEBUG] Rank 0: TGATHER PingPong SUCCESSFUL! (" << total_rows << "x" << cols
                       << ", tile=" << tile_rows << "x" << cols << ", chunks=" << (total_rows / tile_rows)
                       << ", ranks=" << n_ranks << ")" << std::endl;
-            std::cout << "================================================================\n" << std::endl;
+            std::cout << "==========================================================="
+                         "=====\n"
+                      << std::endl;
         }
 #endif
     } else {

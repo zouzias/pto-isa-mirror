@@ -1,16 +1,18 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
-#include <pto/common/constants.hpp>
 #include <iostream>
+#include <pto/common/constants.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace std;
 using namespace pto;
@@ -34,9 +36,6 @@ __tf__ PTO_INTERNAL void tf_copy_cbuf_to_gm(__gm__ T __out__ *dst, typename Tile
 template <typename GlobalData, typename TileData>
 AICORE inline void TSTORE_MAT2GM(GlobalData &dst, TileData &src)
 {
-    // __cbuf__ typename TileData::DType *srcAddr = (__cbuf__ typename TileData::DType *)src.data();
-    // typename GlobalData::DType *dstAddr = dst.data();
-
     constexpr uint32_t blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
 
     uint32_t validRow = src.GetValidRow();
@@ -249,8 +248,8 @@ AICORE inline void RunTLoad5HD(__gm__ T __out__ *out, __gm__ T __in__ *src)
                                 gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4,
                                 1};
     constexpr int blockSize = 32 / sizeof(T);
-    // for auto mode, bufferSize is a misleading variable name in convTile, it shouldn't be number of bytes it should be
-    // the number of elements
+    // for auto mode, bufferSize is a misleading variable name in convTile, it
+    // shouldn't be number of bytes it should be the number of elements
     constexpr int bufferSize = dstN * dstC1 * dstH * dstW * dstC0; // * sizeof(T);
     constexpr int validRow = dstN * dstC1 * dstH * dstW;
     constexpr int validCol = dstC0;
@@ -277,7 +276,8 @@ AICORE inline void RunTLoad5HD(__gm__ T __out__ *out, __gm__ T __in__ *src)
     using OutTileData = Tile<TileType::Mat, T, Rows, Cols, BLayout::RowMajor, validRow, validCol>;
     OutTileData outTile;
     TASSIGN(outTile, 0x0);
-    // __cbuf__ typename TileData::DType *srcAddr = (__cbuf__ typename TileData::DType *)outTile.data();
+    // __cbuf__ typename TileData::DType *srcAddr = (__cbuf__ typename
+    // TileData::DType *)outTile.data();
     tf_copy_cbuf_to_gm<T, OutTileData>(out, outTile.data(), (uint8_t)0, 1, validRow, 0, 0);
 }
 
@@ -331,8 +331,8 @@ AICORE inline void RunTLoadFractalZ5D(__gm__ T __out__ *out, __gm__ T __in__ *sr
                                 gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4,
                                 1};
     constexpr int blockSize = 32 / sizeof(T);
-    // for auto mode, bufferSize is a misleading variable name in convTile, it shouldn't be number of bytes it should be
-    // the number of elements
+    // for auto mode, bufferSize is a misleading variable name in convTile, it
+    // shouldn't be number of bytes it should be the number of elements
     constexpr int bufferSize = dstN * dstC1 * dstH * dstW * dstC0; // * sizeof(T);
     constexpr int validRow = dstN * dstC1 * dstH * dstW;
     constexpr int validCol = dstC0;
@@ -359,7 +359,8 @@ AICORE inline void RunTLoadFractalZ5D(__gm__ T __out__ *out, __gm__ T __in__ *sr
     OutTileData outTile;
     TASSIGN(outTile, 0x0);
 
-    // __cbuf__ typename TileData::DType *srcAddr = (__cbuf__ typename TileData::DType *)outTile.data();
+    // __cbuf__ typename TileData::DType *srcAddr = (__cbuf__ typename
+    // TileData::DType *)outTile.data();
     tf_copy_cbuf_to_gm<T, OutTileData>(out, outTile.data(), (uint8_t)0, 1, validRow, 0, 0);
 }
 // [C1HW, N/16, 16, C0]
@@ -371,8 +372,8 @@ AICORE inline void RunTLoadFractalZ4D(__gm__ T __out__ *out, __gm__ T __in__ *sr
                                 gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4,
                                 1};
     constexpr int blockSize = 32 / sizeof(T);
-    // for auto mode, bufferSize is a misleading variable name in convTile, it shouldn't be number of bytes it should be
-    // the number of elements
+    // for auto mode, bufferSize is a misleading variable name in convTile, it
+    // shouldn't be number of bytes it should be the number of elements
     constexpr int bufferSize = dstC1HW * dstShape2 * dstShape3 * dstC0; // * sizeof(T);
     constexpr int validRow = dstC1HW * dstShape2 * dstShape3;
     constexpr int validCol = dstC0;
@@ -399,7 +400,8 @@ AICORE inline void RunTLoadFractalZ4D(__gm__ T __out__ *out, __gm__ T __in__ *sr
     OutTileData outTile;
     TASSIGN(outTile, 0x0);
 
-    // __cbuf__ typename TileData::DType *srcAddr = (__cbuf__ typename TileData::DType *)outTile.data();
+    // __cbuf__ typename TileData::DType *srcAddr = (__cbuf__ typename
+    // TileData::DType *)outTile.data();
     tf_copy_cbuf_to_gm<T, OutTileData>(out, outTile.data(), (uint8_t)0, 1, validRow, 0, 0);
 }
 

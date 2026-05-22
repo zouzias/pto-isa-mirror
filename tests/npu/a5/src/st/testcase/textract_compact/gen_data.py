@@ -110,9 +110,9 @@ def get_hif8_golden(x1_gm, x2_gm, start_m, start_k, start_n, dst_type):
 
 
 def create_padded_tensors(
-    x1_gm, x2_gm, m, n, k, base_m, base_n, base_k, src_type=np.int8, 
-    rand_range_right=(1, 5), 
-    rand_range_down=(1, 5), 
+    x1_gm, x2_gm, m, n, k, base_m, base_n, base_k, src_type=np.int8,
+    rand_range_right=(1, 5),
+    rand_range_down=(1, 5),
     rand_range_corner=(1, 5)):
     assert base_m >= m, f"base_m ({base_m}) mast be >= m ({m})"
     assert base_n >= n, f"base_n ({base_n}) mast be >= n ({n})"

@@ -69,6 +69,9 @@ add_link_options(
     -Wl,-z,now
     )
 
+# Expose A5 architecture macro to all subdirectories (ensures headers/constants compile)
+add_compile_definitions(PTO_NPU_ARCH_A5)
+
 set(CMAKE_CCE_COMPILE_OPTIONS
     -xcce
     -Xhost-start -Xhost-end
@@ -97,7 +100,7 @@ set(CMAKE_CPP_COMPILE_OPTIONS
 )
 
 include_directories(
-    ${PROJECT_SOURCE_DIR}/../../../../../include 
+    ${PROJECT_SOURCE_DIR}/../../../../../include
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_DRIVER_PATH}/kernel/inc
 )

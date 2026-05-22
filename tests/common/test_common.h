@@ -128,6 +128,20 @@ bool WriteFile(const std::string &filePath, const void *buffer, size_t size)
 }
 
 template <typename T>
+bool VerifyProfilingAccuracy(T cycle, float profiling, float accuracy)
+{
+    const float costResult = static_cast<float>(cycle);
+    const float epsilon = std::numeric_limits<float>::epsilon();
+    if (std::fabs(profiling) <= epsilon) {
+        return std::fabs(costResult) <= epsilon;
+    }
+    const float delta = std::fabs(profiling - costResult);
+    const float absProfiling = std::fabs(profiling);
+    return delta <= (1.0f - accuracy) * absProfiling || delta <= epsilon ||
+           delta + accuracy * absProfiling <= absProfiling;
+}
+
+template <typename T>
 void DoPrintData(const T *data, size_t count, size_t elementsPerRow)
 {
     assert(elementsPerRow != 0);
