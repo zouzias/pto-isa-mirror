@@ -76,6 +76,12 @@ constexpr unsigned kTileM    = 128;
 constexpr unsigned kInnerK   = 64;
 constexpr unsigned kInnerN   = 64;
 
+// Multi-core launch dimension. A3 (Ascend 910B1) has 24 cube AI cores;
+// gemm/flash_atten use 24 too. Each kernel uses `get_block_idx()` to claim a
+// stride-`kBlockDim` slice of its output work items. Kernels with fewer than
+// `kBlockDim` work items leave the remaining cores idle (cheap).
+constexpr unsigned kBlockDim = 24;
+
 // Derived
 constexpr unsigned kQKVHidden   = kNumHeads * kHeadDim;   // 4096  (V row stride; Out row stride)
 constexpr unsigned kQNopeWidth  = kNumHeads * kNopeDim;   // 2048  (Q_nope, K_nope row stride)
@@ -140,6 +146,11 @@ __global__ AICORE void runQCompression(__gm__ uint8_t *c_q_raw,
     LeftTile     aTile;
     RightTile    bTile;
     AccTile      cTile;
+
+    // Single output tile (M=128, N=kQLatent=64). Only core 0 does the work;
+    // splitting the K-axis would require atomic-add TSTORE which we skip
+    // here.
+    if (get_block_idx() != 0) return;
 
     for (unsigned kIter = 0; kIter < kHiddenKIter; ++kIter) {
         const size_t kOffset = static_cast<size_t>(kIter) * kInnerK;
@@ -208,12 +219,16 @@ __global__ AICORE void runQReconstruction(__gm__ uint8_t *q_nope_raw,
     RightTile    bTile;
     AccTile      cTile;
 
-    // A is the full C_q tile, K-dim invariant across the N-loop.
+    // Multi-core: each core takes a strided slice of the N output tiles.
+    // A (C_q) is K-invariant across nIter; each core loads it once into its
+    // own L0A so they don't contend.
+    const unsigned core_id = get_block_idx();
+
     GlobalDataA aGlobal(c_q);
     TLOAD(aMatTile, aGlobal);
     TMOV (aTile, aMatTile);
 
-    for (unsigned nIter = 0; nIter < kQNopeNIter; ++nIter) {
+    for (unsigned nIter = core_id; nIter < kQNopeNIter; nIter += kBlockDim) {
         const size_t nOffset = static_cast<size_t>(nIter) * kInnerN;
 
         GlobalDataB bGlobal(w_uq + nOffset);
@@ -274,6 +289,9 @@ __global__ AICORE void runKVCompression(__gm__ uint8_t *c_kv_raw,
     LeftTile     aTile;
     RightTile    bTile;
     AccTile      cTile;
+
+    // Single output tile (M=128, N=kLatent=64). Only core 0.
+    if (get_block_idx() != 0) return;
 
     for (unsigned kIter = 0; kIter < kHiddenKIter; ++kIter) {
         const size_t kOffset = static_cast<size_t>(kIter) * kInnerK;
@@ -353,6 +371,14 @@ __global__ AICORE void runKVReconstruction(__gm__ uint8_t *k_raw,
     RightTile    bTile;
     AccTile      cTile;
 
+    // Multi-core: each core takes a strided slice of N tiles in BOTH branches.
+    // A (c_cache) is loaded once per core into its own L0A.
+    const unsigned core_id = get_block_idx();
+
+    GlobalDataA aGlobal(c_cache);
+    TLOAD(aMatTile, aGlobal);
+    TMOV (aTile, aMatTile);
+
     // --- GEMM 1 : K_nope = C_cache @ W_uk  (output width kQNopeWidth=2048) --
     {
         using GlobalDataB_K = GlobalTensor<TWeight, Shape<1, 1, 1, kLatent, kInnerN>,
@@ -360,11 +386,7 @@ __global__ AICORE void runKVReconstruction(__gm__ uint8_t *k_raw,
         using GlobalDataC_K = GlobalTensor<TOut,    Shape<1, 1, 1, kTileM,  kInnerN>,
                                            Stride<1, 1, 1, kQNopeWidth, 1>>;
 
-        GlobalDataA aGlobal(c_cache);
-        TLOAD(aMatTile, aGlobal);
-        TMOV (aTile, aMatTile);
-
-        for (unsigned nIter = 0; nIter < kQNopeNIter; ++nIter) {
+        for (unsigned nIter = core_id; nIter < kQNopeNIter; nIter += kBlockDim) {
             const size_t nOffset = static_cast<size_t>(nIter) * kInnerN;
 
             GlobalDataB_K bGlobal(w_uk + nOffset);
@@ -387,8 +409,8 @@ __global__ AICORE void runKVReconstruction(__gm__ uint8_t *k_raw,
         using GlobalDataC_V = GlobalTensor<TOut,    Shape<1, 1, 1, kTileM,  kInnerN>,
                                            Stride<1, 1, 1, kQKVHidden, 1>>;
 
-        // A (c_cache) is unchanged; reuse aMatTile / aTile contents.
-        for (unsigned nIter = 0; nIter < kQKVNIter; ++nIter) {
+        // A (c_cache) is unchanged; aMatTile / aTile contents preserved.
+        for (unsigned nIter = core_id; nIter < kQKVNIter; nIter += kBlockDim) {
             const size_t nOffset = static_cast<size_t>(nIter) * kInnerN;
 
             GlobalDataB_V bGlobal(w_uv + nOffset);
@@ -468,30 +490,35 @@ __global__ AICORE void runAttnQK(__gm__ uint8_t *scores_raw,
     RightTile    bTile;
     AccTile      cTile;
 
-    for (unsigned h = 0; h < kNumHeads; ++h) {
+    // Multi-core: flatten the (h, nIter) work-item space and stride across
+    // cores. Each work item is one [kTileM, kInnerN] score output tile.
+    const unsigned core_id   = get_block_idx();
+    constexpr unsigned kWork = kNumHeads * kSeqNIter;   // 32 * 2 = 64
+
+    for (unsigned w = core_id; w < kWork; w += kBlockDim) {
+        const unsigned h     = w / kSeqNIter;
+        const unsigned nIter = w % kSeqNIter;
+
         const size_t qBase      = static_cast<size_t>(h) * kNopeDim;
         const size_t kBase      = static_cast<size_t>(h) * kNopeDim;
         const size_t scoresBase = static_cast<size_t>(h) * kSeqLen * kSeqLen;
+        const size_t nOffset    = static_cast<size_t>(nIter) * kInnerN;
 
-        for (unsigned nIter = 0; nIter < kSeqNIter; ++nIter) {
-            const size_t nOffset = static_cast<size_t>(nIter) * kInnerN;
+        // Single K iter: kNopeDim == kInnerK == 64.
+        GlobalDataA  aGlobal(q + qBase);
+        GlobalDataBT bGlobal(k + kBase + nOffset * kQNopeWidth);
 
-            // Single K iter: kNopeDim == kInnerK == 64.
-            GlobalDataA  aGlobal(q + qBase);
-            GlobalDataBT bGlobal(k + kBase + nOffset * kQNopeWidth);
+        TLOAD(aMatTile, aGlobal);
+        TLOAD(bMatTile, bGlobal);
+        TMOV (aTile, aMatTile);
+        TMOV (bTile, bMatTile);
 
-            TLOAD(aMatTile, aGlobal);
-            TLOAD(bMatTile, bGlobal);
-            TMOV (aTile, aMatTile);
-            TMOV (bTile, bMatTile);
+        TMATMUL(cTile, aTile, bTile);
 
-            TMATMUL(cTile, aTile, bTile);
-
-            GlobalDataC cGlobal(scores + scoresBase + nOffset);
-            TSTORE<AccTile, GlobalDataC,
-                   AtomicType::AtomicNone,
-                   ReluPreMode::NoRelu>(cGlobal, cTile);
-        }
+        GlobalDataC cGlobal(scores + scoresBase + nOffset);
+        TSTORE<AccTile, GlobalDataC,
+               AtomicType::AtomicNone,
+               ReluPreMode::NoRelu>(cGlobal, cTile);
     }
 }
 
@@ -546,39 +573,45 @@ __global__ AICORE void runAttnPV(__gm__ uint8_t *out_raw,
     RightTile    bTile;
     AccTile      cTile;
 
-    for (unsigned h = 0; h < kNumHeads; ++h) {
+    // Multi-core: flatten (h, nIter) — each work item is one [kTileM, kInnerN]
+    // output tile (still has an inner K-iter loop with TMATMUL_ACC since
+    // K=kSeqLen requires 2 inner-K steps).
+    const unsigned core_id   = get_block_idx();
+    constexpr unsigned kWork = kNumHeads * kHeadDimNIter;   // 32 * 2 = 64
+
+    for (unsigned w = core_id; w < kWork; w += kBlockDim) {
+        const unsigned h     = w / kHeadDimNIter;
+        const unsigned nIter = w % kHeadDimNIter;
+
         const size_t probsBase = static_cast<size_t>(h) * kSeqLen * kSeqLen;
         const size_t vBase     = static_cast<size_t>(h) * kHeadDim;
         const size_t outBase   = static_cast<size_t>(h) * kHeadDim;
+        const size_t nOffset   = static_cast<size_t>(nIter) * kInnerN;
 
-        for (unsigned nIter = 0; nIter < kHeadDimNIter; ++nIter) {
-            const size_t nOffset = static_cast<size_t>(nIter) * kInnerN;
+        for (unsigned kIter = 0; kIter < kSeqKIter; ++kIter) {
+            const size_t kOffset = static_cast<size_t>(kIter) * kInnerK;
 
-            for (unsigned kIter = 0; kIter < kSeqKIter; ++kIter) {
-                const size_t kOffset = static_cast<size_t>(kIter) * kInnerK;
+            GlobalDataA aGlobal(probs + probsBase + kOffset);
+            GlobalDataB bGlobal(v     + vBase
+                                      + kOffset * kQKVHidden
+                                      + nOffset);
 
-                GlobalDataA aGlobal(probs + probsBase + kOffset);
-                GlobalDataB bGlobal(v     + vBase
-                                          + kOffset * kQKVHidden
-                                          + nOffset);
+            TLOAD(aMatTile, aGlobal);
+            TLOAD(bMatTile, bGlobal);
+            TMOV (aTile, aMatTile);
+            TMOV (bTile, bMatTile);
 
-                TLOAD(aMatTile, aGlobal);
-                TLOAD(bMatTile, bGlobal);
-                TMOV (aTile, aMatTile);
-                TMOV (bTile, bMatTile);
-
-                if (kIter == 0) {
-                    TMATMUL    (cTile, aTile, bTile);
-                } else {
-                    TMATMUL_ACC(cTile, aTile, bTile);
-                }
+            if (kIter == 0) {
+                TMATMUL    (cTile, aTile, bTile);
+            } else {
+                TMATMUL_ACC(cTile, aTile, bTile);
             }
-
-            GlobalDataC cGlobal(out + outBase + nOffset);
-            TSTORE<AccTile, GlobalDataC,
-                   AtomicType::AtomicNone,
-                   ReluPreMode::NoRelu>(cGlobal, cTile);
         }
+
+        GlobalDataC cGlobal(out + outBase + nOffset);
+        TSTORE<AccTile, GlobalDataC,
+               AtomicType::AtomicNone,
+               ReluPreMode::NoRelu>(cGlobal, cTile);
     }
 }
 
@@ -634,8 +667,10 @@ __global__ AICORE void runQRopeProjection(__gm__ uint8_t *q_rope_raw,
     RightTile    bTile;
     AccTile      cTile;
 
-    // nIter == head index (each iter contributes one full [S, kRopeDim] head tile).
-    for (unsigned nIter = 0; nIter < kQRopeNIter; ++nIter) {
+    // Multi-core: strided over nIter (each iter == one head). nIter == h.
+    const unsigned core_id = get_block_idx();
+
+    for (unsigned nIter = core_id; nIter < kQRopeNIter; nIter += kBlockDim) {
         const size_t nOffset = static_cast<size_t>(nIter) * kInnerN;
 
         for (unsigned kIter = 0; kIter < kHiddenKIter; ++kIter) {
@@ -708,6 +743,9 @@ __global__ AICORE void runKRopeProjection(__gm__ uint8_t *k_rope_raw,
     LeftTile     aTile;
     RightTile    bTile;
     AccTile      cTile;
+
+    // Single output tile (M=128, N=kRopeDim=64, K shared with all heads). Only core 0.
+    if (get_block_idx() != 0) return;
 
     for (unsigned kIter = 0; kIter < kHiddenKIter; ++kIter) {
         const size_t kOffset = static_cast<size_t>(kIter) * kInnerK;
@@ -785,29 +823,33 @@ __global__ AICORE void runAttnQKRope(__gm__ uint8_t *scores_raw,
     RightTile    bTile;
     AccTile      cTile;
 
-    for (unsigned h = 0; h < kNumHeads; ++h) {
+    // Multi-core: flatten (h, nIter) — each work item is one score_rope tile.
+    const unsigned core_id   = get_block_idx();
+    constexpr unsigned kWork = kNumHeads * kSeqNIter;   // 32 * 2 = 64
+
+    for (unsigned w = core_id; w < kWork; w += kBlockDim) {
+        const unsigned h     = w / kSeqNIter;
+        const unsigned nIter = w % kSeqNIter;
+
         const size_t qBase      = static_cast<size_t>(h) * kSeqLen * kRopeDim;
         const size_t scoresBase = static_cast<size_t>(h) * kSeqLen * kSeqLen;
+        const size_t nOffset    = static_cast<size_t>(nIter) * kInnerN;
 
-        for (unsigned nIter = 0; nIter < kSeqNIter; ++nIter) {
-            const size_t nOffset = static_cast<size_t>(nIter) * kInnerN;
+        // Single K iter (kRopeDim == kInnerN == 64).
+        GlobalDataA  aGlobal(q_rope + qBase);
+        GlobalDataBT bGlobal(k_rope + nOffset * kRopeDim);
 
-            // Single K iter (kRopeDim == kInnerN == 64).
-            GlobalDataA  aGlobal(q_rope + qBase);
-            GlobalDataBT bGlobal(k_rope + nOffset * kRopeDim);
+        TLOAD(aMatTile, aGlobal);
+        TLOAD(bMatTile, bGlobal);
+        TMOV (aTile, aMatTile);
+        TMOV (bTile, bMatTile);
 
-            TLOAD(aMatTile, aGlobal);
-            TLOAD(bMatTile, bGlobal);
-            TMOV (aTile, aMatTile);
-            TMOV (bTile, bMatTile);
+        TMATMUL(cTile, aTile, bTile);
 
-            TMATMUL(cTile, aTile, bTile);
-
-            GlobalDataC cGlobal(scores + scoresBase + nOffset);
-            TSTORE<AccTile, GlobalDataC,
-                   AtomicType::AtomicNone,
-                   ReluPreMode::NoRelu>(cGlobal, cTile);
-        }
+        GlobalDataC cGlobal(scores + scoresBase + nOffset);
+        TSTORE<AccTile, GlobalDataC,
+               AtomicType::AtomicNone,
+               ReluPreMode::NoRelu>(cGlobal, cTile);
     }
 }
 
@@ -822,19 +864,19 @@ __global__ AICORE void runAttnQKRope(__gm__ uint8_t *scores_raw,
 template <typename TIn, typename TWeight, typename TOut>
 void launchQCompression(uint8_t *c_q, uint8_t *x, uint8_t *w_dq, void *stream)
 {
-    runQCompression<TIn, TWeight, TOut><<<1, nullptr, stream>>>(c_q, x, w_dq);
+    runQCompression<TIn, TWeight, TOut><<<mla_basic_cfg::kBlockDim, nullptr, stream>>>(c_q, x, w_dq);
 }
 
 template <typename TIn, typename TWeight, typename TOut>
 void launchQReconstruction(uint8_t *q_nope, uint8_t *c_q, uint8_t *w_uq, void *stream)
 {
-    runQReconstruction<TIn, TWeight, TOut><<<1, nullptr, stream>>>(q_nope, c_q, w_uq);
+    runQReconstruction<TIn, TWeight, TOut><<<mla_basic_cfg::kBlockDim, nullptr, stream>>>(q_nope, c_q, w_uq);
 }
 
 template <typename TIn, typename TWeight, typename TOut>
 void launchKVCompression(uint8_t *c_kv, uint8_t *x, uint8_t *w_dkv, void *stream)
 {
-    runKVCompression<TIn, TWeight, TOut><<<1, nullptr, stream>>>(c_kv, x, w_dkv);
+    runKVCompression<TIn, TWeight, TOut><<<mla_basic_cfg::kBlockDim, nullptr, stream>>>(c_kv, x, w_dkv);
 }
 
 template <typename TIn, typename TWeight, typename TOut>
@@ -842,38 +884,38 @@ void launchKVReconstruction(uint8_t *k, uint8_t *v,
                             uint8_t *c_cache, uint8_t *w_uk, uint8_t *w_uv,
                             void *stream)
 {
-    runKVReconstruction<TIn, TWeight, TOut><<<1, nullptr, stream>>>(
+    runKVReconstruction<TIn, TWeight, TOut><<<mla_basic_cfg::kBlockDim, nullptr, stream>>>(
         k, v, c_cache, w_uk, w_uv);
 }
 
 template <typename TIn, typename TOut>
 void launchAttnQK(uint8_t *scores, uint8_t *q, uint8_t *k, void *stream)
 {
-    runAttnQK<TIn, TOut><<<1, nullptr, stream>>>(scores, q, k);
+    runAttnQK<TIn, TOut><<<mla_basic_cfg::kBlockDim, nullptr, stream>>>(scores, q, k);
 }
 
 template <typename TIn, typename TOut>
 void launchAttnPV(uint8_t *out, uint8_t *probs, uint8_t *v, void *stream)
 {
-    runAttnPV<TIn, TOut><<<1, nullptr, stream>>>(out, probs, v);
+    runAttnPV<TIn, TOut><<<mla_basic_cfg::kBlockDim, nullptr, stream>>>(out, probs, v);
 }
 
 template <typename TIn, typename TWeight, typename TOut>
 void launchQRopeProjection(uint8_t *q_rope, uint8_t *x, uint8_t *w_q_rope, void *stream)
 {
-    runQRopeProjection<TIn, TWeight, TOut><<<1, nullptr, stream>>>(q_rope, x, w_q_rope);
+    runQRopeProjection<TIn, TWeight, TOut><<<mla_basic_cfg::kBlockDim, nullptr, stream>>>(q_rope, x, w_q_rope);
 }
 
 template <typename TIn, typename TWeight, typename TOut>
 void launchKRopeProjection(uint8_t *k_rope, uint8_t *x, uint8_t *w_k_rope, void *stream)
 {
-    runKRopeProjection<TIn, TWeight, TOut><<<1, nullptr, stream>>>(k_rope, x, w_k_rope);
+    runKRopeProjection<TIn, TWeight, TOut><<<mla_basic_cfg::kBlockDim, nullptr, stream>>>(k_rope, x, w_k_rope);
 }
 
 template <typename TIn, typename TOut>
 void launchAttnQKRope(uint8_t *scores_rope, uint8_t *q_rope, uint8_t *k_rope, void *stream)
 {
-    runAttnQKRope<TIn, TOut><<<1, nullptr, stream>>>(scores_rope, q_rope, k_rope);
+    runAttnQKRope<TIn, TOut><<<mla_basic_cfg::kBlockDim, nullptr, stream>>>(scores_rope, q_rope, k_rope);
 }
 
 template void launchQCompression<half, half, half>(uint8_t *, uint8_t *, uint8_t *, void *);

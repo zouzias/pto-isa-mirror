@@ -74,6 +74,10 @@ static_assert(kSeqLen % kSoftmaxTileM == 0, "kSeqLen must be a multiple of kSoft
 static_assert(kSeqLen % kRopeTileM    == 0, "kSeqLen must be a multiple of kRopeTileM");
 static_assert(kSeqLen % kCacheTileM   == 0, "kSeqLen must be a multiple of kCacheTileM");
 
+// Multi-core launch dimension; mirrors the cube TU. Each kernel uses
+// `get_block_idx()` to claim a strided slice of its output work items.
+constexpr unsigned kBlockDim = 24;
+
 }  // namespace mla_basic_cfg_vec
 
 // =============================================================================
@@ -98,7 +102,11 @@ __global__ AICORE void runKVCacheStore(__gm__ T *c_cache, __gm__ T *c_kv)
 
     TileData buf;
 
-    for (unsigned m0 = 0; m0 < kSeqLen; m0 += kCacheTileM) {
+    // Multi-core: each core takes a strided slice of m-chunks.
+    const unsigned core_id   = get_block_idx();
+    const unsigned chunkStep = kCacheTileM * kBlockDim;
+
+    for (unsigned m0 = core_id * kCacheTileM; m0 < kSeqLen; m0 += chunkStep) {
         const size_t rowOffset = static_cast<size_t>(m0) * kLatent;
 
         GlobalData srcGlobal(c_kv    + rowOffset);
@@ -156,38 +164,43 @@ __global__ AICORE void runRoPE(__gm__ T *y, __gm__ T *x,
     HalfTile y1Tile;      // y[b, m..m+TileM, :half] before TSTORE
     HalfTile y2Tile;      // y[b, m..m+TileM, half:] before TSTORE
 
-    for (unsigned b = 0; b < numBlocks; ++b) {
-        const size_t blockOffset = static_cast<size_t>(b) * kSeqLen * kRopeDim;
+    // Multi-core: flatten (b, m-chunk) work-item space and stride across cores.
+    constexpr unsigned mIters = kSeqLen / kRopeTileM;
+    const unsigned core_id    = get_block_idx();
+    const unsigned totalWork  = numBlocks * mIters;
 
-        for (unsigned m0 = 0; m0 < kSeqLen; m0 += kRopeTileM) {
-            const size_t xRowOffset  = static_cast<size_t>(m0) * kRopeDim;
-            const size_t tableOffset = static_cast<size_t>(m0) * kRopeHalf;
+    for (unsigned w = core_id; w < totalWork; w += kBlockDim) {
+        const unsigned b           = w / mIters;
+        const unsigned m_chunk     = w % mIters;
+        const size_t blockOffset   = static_cast<size_t>(b) * kSeqLen * kRopeDim;
+        const size_t m0            = static_cast<size_t>(m_chunk) * kRopeTileM;
+        const size_t xRowOffset    = m0 * kRopeDim;
+        const size_t tableOffset   = m0 * kRopeHalf;
 
-            GlobalDataHalfX     x1Global (x + blockOffset + xRowOffset);
-            GlobalDataHalfX     x2Global (x + blockOffset + xRowOffset + kRopeHalf);
-            GlobalDataHalfX     y1Global (y + blockOffset + xRowOffset);
-            GlobalDataHalfX     y2Global (y + blockOffset + xRowOffset + kRopeHalf);
-            GlobalDataHalfTable cosGlobal(cos + tableOffset);
-            GlobalDataHalfTable sinGlobal(sin + tableOffset);
+        GlobalDataHalfX     x1Global (x + blockOffset + xRowOffset);
+        GlobalDataHalfX     x2Global (x + blockOffset + xRowOffset + kRopeHalf);
+        GlobalDataHalfX     y1Global (y + blockOffset + xRowOffset);
+        GlobalDataHalfX     y2Global (y + blockOffset + xRowOffset + kRopeHalf);
+        GlobalDataHalfTable cosGlobal(cos + tableOffset);
+        GlobalDataHalfTable sinGlobal(sin + tableOffset);
 
-            TLOAD(x1Tile,  x1Global);
-            TLOAD(x2Tile,  x2Global);
-            TLOAD(cosTile, cosGlobal);
-            TLOAD(sinTile, sinGlobal);
+        TLOAD(x1Tile,  x1Global);
+        TLOAD(x2Tile,  x2Global);
+        TLOAD(cosTile, cosGlobal);
+        TLOAD(sinTile, sinGlobal);
 
-            // y1 = x1 * cos - x2 * sin
-            TMUL(y1Tile,      x1Tile, cosTile);
-            TMUL(productTile, x2Tile, sinTile);
-            TSUB(y1Tile,      y1Tile, productTile);
+        // y1 = x1 * cos - x2 * sin
+        TMUL(y1Tile,      x1Tile, cosTile);
+        TMUL(productTile, x2Tile, sinTile);
+        TSUB(y1Tile,      y1Tile, productTile);
 
-            // y2 = x1 * sin + x2 * cos
-            TMUL(y2Tile,      x1Tile, sinTile);
-            TMUL(productTile, x2Tile, cosTile);
-            TADD(y2Tile,      y2Tile, productTile);
+        // y2 = x1 * sin + x2 * cos
+        TMUL(y2Tile,      x1Tile, sinTile);
+        TMUL(productTile, x2Tile, cosTile);
+        TADD(y2Tile,      y2Tile, productTile);
 
-            TSTORE(y1Global, y1Tile);
-            TSTORE(y2Global, y2Tile);
-        }
+        TSTORE(y1Global, y1Tile);
+        TSTORE(y2Global, y2Tile);
     }
 }
 
@@ -243,46 +256,53 @@ __global__ AICORE void runAttnSoftmax(__gm__ T *probs,
     RowReduceTile  rowMaxTile(kSoftmaxTileM, 1);
     RowReduceTile  rowSumTile(kSoftmaxTileM, 1);
 
-    for (unsigned h = 0; h < kNumHeads; ++h) {
-        const size_t headOffset = static_cast<size_t>(h) * kSeqLen * kSeqLen;
+    // Multi-core: flatten (h, m-chunk) work-item space. Each work item is one
+    // [kSoftmaxTileM, kSeqLen] probs tile; softmax is row-independent so
+    // chunking M is exact (no online softmax needed).
+    constexpr unsigned mIters    = kSeqLen / kSoftmaxTileM;
+    constexpr unsigned totalWork = kNumHeads * mIters;
+    const unsigned core_id       = get_block_idx();
 
-        for (unsigned m0 = 0; m0 < kSeqLen; m0 += kSoftmaxTileM) {
-            const size_t rowOffset = static_cast<size_t>(m0) * kSeqLen;
+    for (unsigned w = core_id; w < totalWork; w += kBlockDim) {
+        const unsigned h           = w / mIters;
+        const unsigned m_chunk     = w % mIters;
+        const size_t headOffset    = static_cast<size_t>(h) * kSeqLen * kSeqLen;
+        const size_t m0            = static_cast<size_t>(m_chunk) * kSoftmaxTileM;
+        const size_t rowOffset     = m0 * kSeqLen;
 
-            GlobalData srcNopeGlobal(scores_nope + headOffset + rowOffset);
-            GlobalData srcRopeGlobal(scores_rope + headOffset + rowOffset);
-            GlobalData dstGlobal    (probs       + headOffset + rowOffset);
+        GlobalData srcNopeGlobal(scores_nope + headOffset + rowOffset);
+        GlobalData srcRopeGlobal(scores_rope + headOffset + rowOffset);
+        GlobalData dstGlobal    (probs       + headOffset + rowOffset);
 
-            TLOAD(scoresTile,     srcNopeGlobal);
-            TLOAD(scoresRopeTile, srcRopeGlobal);
-            TADD (scoresTile, scoresTile, scoresRopeTile);  // combined scores
+        TLOAD(scoresTile,     srcNopeGlobal);
+        TLOAD(scoresRopeTile, srcRopeGlobal);
+        TADD (scoresTile, scoresTile, scoresRopeTile);  // combined scores
 
-            // 1. Scale by 1/sqrt(headDim).
-            TMULS(scaledTile, scoresTile, scale);
+        // 1. Scale by 1/sqrt(headDim).
+        TMULS(scaledTile, scoresTile, scale);
 
-            // 2. Row max (numerical stability).
-            TROWMAX(rowMaxTile, scaledTile, tmpTile);
+        // 2. Row max (numerical stability).
+        TROWMAX(rowMaxTile, scaledTile, tmpTile);
 
-            // 3. Broadcast row max to [TileM, kSeqLen].
-            TROWEXPAND(broadcastTile, rowMaxTile);
+        // 3. Broadcast row max to [TileM, kSeqLen].
+        TROWEXPAND(broadcastTile, rowMaxTile);
 
-            // 4. shifted = scaled - broadcast(max).      (reuse scoresTile)
-            TSUB(scoresTile, scaledTile, broadcastTile);
+        // 4. shifted = scaled - broadcast(max).      (reuse scoresTile)
+        TSUB(scoresTile, scaledTile, broadcastTile);
 
-            // 5. exp(shifted).                            (reuse scaledTile)
-            TEXP(scaledTile, scoresTile);
+        // 5. exp(shifted).                            (reuse scaledTile)
+        TEXP(scaledTile, scoresTile);
 
-            // 6. Row sum of exp.
-            TROWSUM(rowSumTile, scaledTile, tmpTile);
+        // 6. Row sum of exp.
+        TROWSUM(rowSumTile, scaledTile, tmpTile);
 
-            // 7. Broadcast row sum.                       (reuse broadcastTile)
-            TROWEXPAND(broadcastTile, rowSumTile);
+        // 7. Broadcast row sum.                       (reuse broadcastTile)
+        TROWEXPAND(broadcastTile, rowSumTile);
 
-            // 8. probs = exp / broadcast(sum).            (reuse scoresTile)
-            TDIV(scoresTile, scaledTile, broadcastTile);
+        // 8. probs = exp / broadcast(sum).            (reuse scoresTile)
+        TDIV(scoresTile, scaledTile, broadcastTile);
 
-            TSTORE(dstGlobal, scoresTile);
-        }
+        TSTORE(dstGlobal, scoresTile);
     }
 }
 
@@ -294,19 +314,19 @@ __global__ AICORE void runAttnSoftmax(__gm__ T *probs,
 template <typename T>
 void launchKVCacheStore(T *c_cache, T *c_kv, void *stream)
 {
-    runKVCacheStore<T><<<1, nullptr, stream>>>(c_cache, c_kv);
+    runKVCacheStore<T><<<mla_basic_cfg_vec::kBlockDim, nullptr, stream>>>(c_cache, c_kv);
 }
 
 template <typename T>
 void launchAttnSoftmax(T *probs, T *scores_nope, T *scores_rope, T scale, void *stream)
 {
-    runAttnSoftmax<T><<<1, nullptr, stream>>>(probs, scores_nope, scores_rope, scale);
+    runAttnSoftmax<T><<<mla_basic_cfg_vec::kBlockDim, nullptr, stream>>>(probs, scores_nope, scores_rope, scale);
 }
 
 template <typename T>
 void launchRoPE(T *y, T *x, T *cos, T *sin, unsigned numBlocks, void *stream)
 {
-    runRoPE<T><<<1, nullptr, stream>>>(y, x, cos, sin, numBlocks);
+    runRoPE<T><<<mla_basic_cfg_vec::kBlockDim, nullptr, stream>>>(y, x, cos, sin, numBlocks);
 }
 
 template void launchKVCacheStore<half>(half *, half *, void *);
