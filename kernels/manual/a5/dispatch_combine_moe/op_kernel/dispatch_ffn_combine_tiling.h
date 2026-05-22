@@ -16,8 +16,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "moe_init_routing_quant_v2/moe_init_routing_v2_tiling.h"
-#include "moe_init_routing_quant_v2/moe_init_routing_quant_v2_tiling.h"
+#include "token_reorder/routing/moe_init_routing_tiling_common.h"
+#include "token_reorder/routing/moe_init_routing_quant_tiling.h"
 
 #ifndef ASCENDC_DISPATCH_FFN_COMBINE_TILING_H
 #define ASCENDC_DISPATCH_FFN_COMBINE_TILING_H
@@ -48,7 +48,7 @@ struct CoCTiling {
     int32_t commDataSplit = -1;
     int32_t lenPerLoop = -1;
     uint64_t initRoutingQuantTilingKey;
-    optiling::MoeInitRoutingQuantV2TilingData moeInitRoutingQuantV2TilingData;
+    optiling::MoeInitRoutingQuantTilingData moeInitRoutingQuantTilingData;
 };
 
 struct DispatchFFNCombineRuntimeInfo {

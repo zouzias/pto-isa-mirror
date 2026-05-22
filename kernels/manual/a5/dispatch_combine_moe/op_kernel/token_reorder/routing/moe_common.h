@@ -9,20 +9,18 @@
  */
 
 /*!
- * \file moe_v2_common.h
+ * \file moe_common.h
  * \brief
  */
-#ifndef INNER_MOE_V2_COMMON_H
-#define INNER_MOE_V2_COMMON_H
+#ifndef INNER_MOE_COMMON_H
+#define INNER_MOE_COMMON_H
 
 #include "kernel_operator.h"
+#include "../../utils/moe_pto_utils.hpp"
 
-namespace MoeInitRoutingQuantV2 {
+namespace MoeInitRoutingQuant {
 using namespace AscendC;
 using namespace optiling;
-constexpr int64_t SPLIT_N = 0;
-constexpr int64_t SPLIT_K = 1;
-constexpr float MIN_FP32 = -3.4e38;
 constexpr int64_t ONE_REPEAT_SORT_NUM = 32;
 constexpr int64_t BLOCK_BYTES = 32;
 constexpr int64_t INT32_ONE_BLOCK_NUM = 8;
@@ -90,12 +88,8 @@ __aicore__ inline T Max(T a, T b)
     return a < b ? b : a;
 }
 
-template <HardEvent event>
-__aicore__ inline void SetWaitFlag(HardEvent evt)
-{
-    event_t eventId = static_cast<event_t>(GetTPipePtr()->FetchEventID(evt));
-    SetFlag<event>(eventId);
-    WaitFlag<event>(eventId);
+namespace pto_detail {
+using namespace pto_ext::dispatch_combine_moe::pto_detail;
 }
 
 template <typename T>
@@ -106,5 +100,5 @@ __aicore__ inline void InitGlobalMemory(__gm__ T *gm, int64_t elementNum, T valu
     }
 }
 
-} // namespace MoeInitRoutingQuantV2
-#endif // INNER_MOE_V2_COMMON_H
+} // namespace MoeInitRoutingQuant
+#endif // INNER_MOE_COMMON_H

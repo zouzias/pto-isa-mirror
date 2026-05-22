@@ -1,63 +1,78 @@
-# Dispatch FFN Combine V3 A5 融合算子示例
+# Dispatch Combine MoE A5 融合算子示例
 
 ## 概览
 
-本示例演示一个面向 A5 / Ascend950 形态的 MoE `dispatch -> FFN -> combine` 融合 kernel。它把跨 rank token dispatch、两段 int8 GMM、SwiGLU、概率加权 combine 和最终 restore 放进一个混合 AIC/AIV kernel 中，通过 PTO 通信原语直接访问 HCCL RDMA window。
+本目录实现面向 A5 / Ascend950 形态的 MoE `dispatch -> FFN -> combine` 融合 kernel。它把跨 rank token dispatch、两段 int8 grouped matmul、GMM1 后的 SwiGLU、GMM2 后的概率加权 combine、以及最终 token restore 放进一个混合 AIC/AIV kernel 中，通过 PTO tile / vector / comm 原语和 HCCL RDMA window 显式组织计算通信流水。
+
+当前项目的顶层 target、host 可执行文件、运行脚本和输出 profile 名称均为 `dispatch_combine_moe`。当前 device 编译单元和 kernel symbol 仍使用 `dispatch_ffn_combine.*` / `dispatch_ffn_combine` 这一组源码符号；README 中出现这些名字时仅指当前目录内的实际代码文件或 device symbol。
 
 ## 支持的 AI 处理器
 
-- A5 / Ascend950 系列（kernel 编译目标：`dav-c310`）
-- 当前仓库所在机器按项目约定不是 A5 runtime 验证环境，本目录默认只做 A5 编译验证；端到端运行请在 A5-capable 环境执行。
+- A5 / Ascend950 系列，kernel 编译目标为 `dav-c310`。
+- 当前仓库所在机器按项目约定不是 A5 runtime 验证环境，本目录默认可做 A5 compile-only 验证；端到端运行需要在 A5-capable 环境执行。
 
-## 目录结构
+## 当前目录结构
+
+生成目录如 `build/`、`out/`、`.cache/` 不属于源码分层，下面只列当前手写代码和脚本：
 
 ```text
 kernels/manual/a5/dispatch_combine_moe/
-├── CMakeLists.txt                       # A5 构建配置：kernel shared lib + host exe
-├── run.sh                               # 数据生成、构建、MPI 运行一键脚本
-├── main.cpp                             # Host 入口：MPI/ACL/HCCL 初始化、launch、计时、精度校验
-├── runtime_context.{hpp,cpp}            # standalone HCCL/ACL runtime 与 remote-window context 解析
-├── tiling_builder.{hpp,cpp}             # Host tiling 构造、block_dim 计算、HCCL window 容量校验
-├── data_utils.{hpp,cpp}                 # case.json 解析、rank 文件路径、FP16 精度比较
-├── kernel_launch.hpp                    # Host launcher 参数结构
-├── comm_mpi.h                           # dlopen/dlsym 方式加载 MPI，避免硬链接 MPI
-├── scripts/gen_data.py                  # CPU golden 数据生成器
+├── CMakeLists.txt                         # A5 kernel shared lib + standalone host exe 构建入口
+├── run.sh                                 # 生成数据、构建、MPI 多 rank 运行的一键脚本
+├── main.cpp                               # Host runner：MPI/ACL/HCCL 初始化、launch、计时、校验
+├── kernel_launch.hpp                      # host launch 参数结构与 launchDispatchFFNCombine 声明
+├── op_host/
+│   ├── comm_mpi.h                         # dlopen/dlsym 加载 MPI，避免 host 二进制硬链接 MPI
+│   ├── data_utils.{hpp,cpp}               # case.json、rank 输入输出文件、FP16 compare
+│   ├── runtime_context.{hpp,cpp}          # ACL/HCCL runtime、remote-window context 解析
+│   └── tiling_builder.{hpp,cpp}           # Host tiling、block_dim、workspace、window 容量校验
 ├── op_kernel/
-│   ├── dispatch_ffn_combine.cpp         # device kernel 入口与 host launch stub
-│   ├── dispatch_ffn_combine.h           # op Init/Process、A5 policy 与 kernel params 装配
-│   ├── dispatch_ffn_combine_kernel.hpp  # 主 device orchestrator 与各 stage 实现
-│   ├── dispatch_ffn_combine_tiling.h    # tiling/runtime/launch config 结构
-│   ├── stages/                          # routing/gather/GMM/SwiGLU/combine/restore stage facade
-│   ├── utils/                           # PTO bridge、HCCL window、layout、MMAD/epilogue policy
-│   ├── moe_init_routing_quant_v2/        # routing/sort/gather/quant 子流程
-│   └── unpermute/                       # token restore/unpermute 子流程
-├── DESIGN.md                            # 设计背景文档
-├── IMPLEMENTATION_PLAN.md               # V4 staged implementation plan
-├── api_interface.md                     # 非 PTO 依赖清单
-└── out/                                 # 生成的 case.json、rank 输入、expected/output 文件
+│   ├── dispatch_ffn_combine.cpp           # device kernel symbol 与 host launch stub
+│   ├── dispatch_ffn_combine.h             # op Init/Process，A5 policy、layout、params 装配
+│   ├── dispatch_ffn_combine_kernel.hpp    # AIC/AIV 主 orchestrator 与融合流水实现
+│   ├── dispatch_ffn_combine_tiling.h      # tiling/runtime/launch config 结构
+│   ├── token_reorder/
+│   │   ├── routing/                       # routing / sort / expand / quant / expert count
+│   │   └── unpermute/                     # top-k 概率加权 restore / unpermute
+│   └── utils/
+│       ├── block_mmad_preload_async_fixpipe_quant.hpp # AIC MMAD 多级流水
+│       ├── block_epilogue_pertoken_swiglu.hpp         # GMM1 后 dequant + SwiGLU + quant
+│       ├── block_epilogue_pertoken_row.hpp            # CombineV1 row 级 dequant + 回写/TPUT
+│       ├── block_epilogue_pertoken_v2.hpp             # CombineV2 tile 级 dequant + 分 rank 回写/TPUT
+│       ├── pto_mmad_ops.hpp               # PTO matmul / GM-L1 / L1-L0 / fixpipe store 封装
+│       ├── pto_vector_ops.hpp             # PTO vector TLOAD/TSTORE/TCVT/算术桥接
+│       ├── moe_pto_utils.hpp              # shape/layout/arch/resource/sync 公共封装
+│       ├── hccl_context.hpp               # device 侧 HCCL context 结构解析
+│       ├── hccl_window.hpp                # PtoRemoteWindow 与跨 rank notify/wait
+│       ├── layout3d.hpp                   # tokenPerExpert 三维布局辅助
+│       ├── const_args.hpp                 # 常量、对齐、flag stride、window 单位
+│       └── dispatch_policy_custom.hpp     # A5 MMAD / epilogue policy tag
+├── scripts/gen_data.py                    # CPU golden 与 rank 输入文件生成器
+├── DESIGN.md                              # 设计说明
+├── mc2_2_pto.md                           # PTO 化过程中的本地笔记
+├── megamoe理解.md                         # MegaMoE 流水理解笔记
+└── README.md
 ```
 
-## 算子说明
+## 算子功能
 
-### 计算功能
-
-每个 rank 持有本 rank 的输入 token、专家权重和 scale。`expert_idx` 决定 token 的 top-k 目标专家，专家按 rank 分片：
+每个 rank 持有本 rank 的输入 token、本地 expert 权重和 scale。`expert_idx` 使用全局 expert id，专家按 rank 分片：
 
 ```text
 global_expert = dst_rank * expert_per_rank + local_expert
 ```
 
-对每个 active token 和每个 top-k expert，kernel 完成：
+对每个 active token 和每个 top-k expert，kernel 计算：
 
 $$
 Y_i = \sum_{j=0}^{topK-1} prob_{i,j} \cdot FFN_{expert_{i,j}}(X_i)
 $$
 
-其中 FFN 当前路径为：
+当前 FFN 数据路径为：
 
 ```text
 BF16 X
-  -> per-token quantize to int8
+  -> routing / expand / per-token quantize to int8
   -> GMM1: int8 X @ int8 W1
   -> per-token/per-channel dequant
   -> SwiGLU: split N into N/2 + N/2
@@ -68,30 +83,543 @@ BF16 X
   -> restore to original token order
 ```
 
-### 规格
+## 规格与约束
 
-| 项目 | 值 |
-| ---- | ---- |
-| OpType | `Dispatch + FFN + Combine` |
-| Kernel 名称 | `dispatch_ffn_combine` |
+| 项目 | 当前值 |
+| ---- | ------ |
+| Project / host target | `dispatch_combine_moe` |
+| Kernel shared target | `dispatch_combine_moe_kernel` |
+| Device kernel symbol | `dispatch_ffn_combine` |
 | Kernel 类型 | `KERNEL_TYPE_MIX_AIC_1_2` |
 | Tiling key | `1000010` |
-| 输入 `x` | `M×K`, BF16 bits (`uint16_t` 文件表示) |
+| 输入 `x` | `M×K`, BF16 bits，以 `uint16_t` 文件表示 |
 | 输入 `weight1` | `expert_per_rank×K×N`, `int8`, Zn packed |
 | 输入 `weight2` | `expert_per_rank×(N/2)×K`, `int8`, Zn packed |
-| 输入 `expert_idx` | `M×topK`, `int32`，全局 expert id |
-| 输入 `scale1/scale2` | FP32 scale 以 `int64` packing 形式存放 |
+| 输入 `expert_idx` | `M×topK`, `int32`, global expert id |
+| 输入 `scale1/scale2` | FP32 scale packed into `int64` view |
 | 输入 `probs` | `M×topK`, `float32` |
 | 输入 `x_active_mask` | `M`, `uint8` |
 | 输出 `out` | `M×K`, `float16` |
 | 输出 `expert_token_nums` | `expert_per_rank`, `int32` |
 
-### 形状约束
+约束：
 
-- `N` 必须是偶数，因为 SwiGLU 会把 GMM1 输出最后一维拆成 `N/2 + N/2`。
-- `expert_idx` 使用全局 expert id，合法范围是 `[0, world_size * expert_per_rank)`。
-- `max_output_size` 限制单 rank 聚合后的 routed token workspace 容量；过小会截断 CPU golden 和 device 路径中的 routed token。
-- `PTO_HCCL_MAX_RANKS` 当前为 64，A5 HCCL context 解析按该上限保存 `windowIn/windowOut`。
+- `N` 必须是偶数，因为 GMM1 输出会被 SwiGLU 拆成 `N/2 + N/2`。
+- `expert_idx` 合法范围为 `[0, world_size * expert_per_rank)`；inactive token 会被 `ApplyXActiveMask()` 改写到哨兵 expert id。
+- `max_output_size` 是单 rank routed token workspace 上限；过小会截断 CPU golden 和 device 路径中的 routed token。
+- 当前 HCCL context 解析按 `PTO_HCCL_MAX_RANKS` 保存 `windowIn/windowOut`。
+
+## Host 层分工
+
+### Host 启动闭环
+
+```text
+run.sh
+  -> scripts/gen_data.py 生成 case.json 与 rank*.bin
+  -> cmake -S dispatch_combine_moe -B build_dir
+  -> cmake --build build_dir --target dispatch_combine_moe
+  -> mpirun -n world_size build_dir/dispatch_combine_moe
+```
+
+`main.cpp` 负责 standalone 运行闭环：
+
+1. 通过 `comm_mpi.h` 初始化 MPI，并把每个 rank 绑定到同编号 NPU device。
+2. Rank 0 生成 `HcclRootInfo`，广播给全部 rank。
+3. `InitStandaloneRankRuntime()` 创建 ACL stream、HCCL stream、HCCL comm，并分配 HCCL remote window。
+4. `LoadCaseConfig()` 读取 `case.json`，`BuildRankFileSet()` 定位每个 rank 的输入/golden 文件。
+5. `BuildDispatchFFNCombineTiling()` 生成 `DispatchFFNCombineTilingData`、workspace bytes 和 block dim。
+6. 每轮 warmup / measure 前清理 HCCL window、workspace、`out`、`expert_token_nums`。
+7. 通过 `launchDispatchFFNCombine()` launch device kernel。
+8. measure 阶段用 ACL event 计时，rank 0 汇总 max-rank latency 并打印 `[PROFILE] dispatch_combine_moe`。
+9. verify 阶段 D2H 拷回 `out`，写 `output_rank*.bin`，与 `expected_out` 做 FP16 compare。
+
+### Host tiling builder
+
+`op_host/tiling_builder.cpp` 的顶层函数是 `BuildDispatchFFNCombineTiling()`，主要填四类信息：
+
+1. `DispatchFFNCombineInfo`：`M/K/N/topK/expertPerRank/worldSize/maxOutputSize/listLen/aivNum`。
+2. `CoCTiling`：`m0=128`、`k0=256`、`n0=256`、`ubMoveNum=16KiB`、`commNpuSplit=world_size`、routing quant tiling 等。
+3. `DispatchFFNCombineRuntimeInfo`：rank id、rank size、device 侧 remote-window context 地址。
+4. `DispatchFFNCombineLaunchConfig`：`blockDim`、`tilingKey=1000010`、`workspaceBytes`。
+
+它还会在 host 侧提前校验 HCCL window 布局是否足够容纳 per-token scale、dispatch output 和 token-count 区域，避免 kernel 内访问越界。
+
+## Device 顶层入口
+
+### Kernel symbol 与 Process 装配
+
+`op_kernel/dispatch_ffn_combine.cpp` 定义 device kernel symbol：
+
+```text
+dispatch_ffn_combine(..., workspaceGM, tilingGM)
+  -> REGISTER_TILING_DEFAULT(DispatchFFNCombineTilingData)
+  -> TILING_KEY_IS(1000010)
+  -> KERNEL_TASK_TYPE(1000010, KERNEL_TYPE_MIX_AIC_1_2)
+  -> DispatchFFNCombine<int8_t, DTYPE_W1, DTYPE_OUT, false, true>
+  -> op.Init(...)
+  -> op.Process()
+```
+
+`op_kernel/dispatch_ffn_combine.h` 的 `DispatchFFNCombine::Process()` 负责把 host tiling 转成真正的 A5 执行策略：
+
+- `ArchTag = pto_ext::Arch::AtlasA5`
+- `L1TileShape = GemmShape<128, 256, 512>`
+- `L0TileShape = GemmShape<128, 256, 128>`
+- `MmadAtlasA5PreloadAsyncFixpipe<preloadStages=1, l1Stages=2, l0AStages=2, l0BStages=2, l0CStages=1, enableShuffleK=true>`
+- `BlockEpilogue1 = EpilogueAtlasA5PerTokenDequantSwigluQuant`
+- `BlockEpilogue2 = EpilogueAtlasA5PerTokenDequant`
+- `BlockEpilogue3 = EpilogueAtlasA5PerTokenDequantV2`
+- `BlockScheduler = GemmIdentityBlockSwizzle<9, 1>`
+
+最后构造 `DispatchFFNCombineKernel::Params`，再交给 `DispatchFFNCombineKernel` 按 `g_coreType` 分发到 AIC 或 AIV。
+
+## Kernel 主链分层
+
+`op_kernel/dispatch_ffn_combine_kernel.hpp` 是当前 device 侧主 orchestrator。它不是简单调用几个独立 op，而是把 AIV 数据组织、remote-window 通信、AIC grouped matmul、epilogue 和 restore 拉成一个融合流水。
+
+### 顶层 AIC/AIV 分发
+
+```text
+DispatchFFNCombineKernel::operator()
+├── AIC: RunGmm1Impl()
+│        -> RunGmmInterlockImpl()
+│        -> RunGmm2Impl()
+└── AIV: RunRoutingImpl()
+         -> RunDispatchGatherImpl()
+         -> RunSwigluImpl()
+         -> RunCombineImpl()
+         -> RunRestoreImpl()
+```
+
+### 主数据流
+
+```text
+x / expert_idx / probs / x_active_mask
+  -> AIV RunRoutingImpl
+       ApplyXActiveMask
+       moe_init_routing_quant
+       token-count all-gather + preSumBeforeRank + cumsumMM
+  -> AIV RunDispatchGatherImpl
+       peer window packed rows -> local gmA expert-major input
+  -> AIC RunGmm1Impl
+       grouped matmul by local expert
+  -> AIV RunSwigluImpl
+       GMM1 C -> dequant -> SwiGLU -> dynamic quant -> gmPermutedToken
+  -> AIC RunGmm2Impl
+       grouped matmul by local expert
+  -> AIV RunCombineImpl
+       GMM2 C2 -> dequant -> local/remote offsetD
+  -> AIV RunRestoreImpl
+       unpermute + top-k weighted accumulation -> out[M, K]
+```
+
+### 从 README 到代码的阅读路线
+
+如果第一次接手这个目录，不建议从 `utils/` 里任意打开文件开始看。按下面顺序读，能把顶层设计和代码实现对齐起来：
+
+1. `op_kernel/dispatch_ffn_combine.cpp`：确认 device kernel symbol、tiling key、mixed AIC/AIV task type 和 host launch stub。
+2. `op_kernel/dispatch_ffn_combine.h`：看 `DispatchFFNCombine::Init()` 如何从 tiling 取 shape/rank/window 信息，再看 `Process()` 如何装配 A5 policy、GMM layout、epilogue policy 和 `DispatchFFNCombineKernel::Params`。
+3. `op_kernel/dispatch_ffn_combine_kernel.hpp`：先看 `operator()<AIC/AIV>()` 和五个 AIV `Run*Impl()` / 三个 AIC `Run*Impl()`，这是当前算子的主线。
+4. `op_kernel/token_reorder/routing/moe_init_routing_quant.cpp`：看 routing 子系统如何根据 tilingKey 选择 sort/count/gather/quant 分支。
+5. `op_kernel/utils/block_mmad_preload_async_fixpipe_quant.hpp`：看 AIC GMM 如何把 A/B/scale 从 GM 送进 L1/L0，并用 `Finalize()` 给 AIV 发同步点。
+6. `op_kernel/utils/block_epilogue_pertoken_swiglu.hpp`：看 GMM1 输出如何变成 GMM2 输入。
+7. `op_kernel/utils/block_epilogue_pertoken_row.hpp` 和 `op_kernel/utils/block_epilogue_pertoken_v2.hpp`：看 GMM2 输出如何按 row 或 tile 粒度写回各 source rank。
+8. `op_kernel/token_reorder/unpermute/moe_token_unpermute.h`：看最终如何用 `expandedRowIdx` 和 `probs` 累加回 `out[M, K]`。
+
+### 核心变量字典
+
+| 变量 / 区域 | 语义 | 主要生产者 | 主要消费者 |
+| ----------- | ---- | ---------- | ---------- |
+| `problemShape = [M, N, K]` | `M` 是本 rank token 数，`N` 是 GMM1 输出/SwiGLU 前维度，`K` 是输入和最终输出 hidden size | host tiling | GMM1/GMM2/epilogue |
+| `EP` | world size / expert parallel rank 数 | host tiling | count exchange、dispatch、combine |
+| `expertPerRank` | 每 rank 本地 expert 数 | host tiling | groupIdx 循环、tokenPerExpert layout |
+| `topK` | 每 token 路由 expert 数 | host tiling / input | routing、restore |
+| `expandedRowIdx` | expanded/top-k 行到原 token/top-k 槽位的映射，restore 依赖它恢复语义顺序 | routing | unpermute/restore |
+| `tokenPerExpert[dst][src][expert]` | 每个目标 rank、源 rank、本地 expert 的 routed token 数 | routing count exchange | dispatch-gather、combine |
+| `preSumBeforeRank[dst][expert]` | 当前 source rank 在某个 dst/expert 段内的起始偏移 | count exchange | dispatch-gather、CombineV2 |
+| `cumsumMM` | 沿 source rank 累加后的 expert-major GMM 行边界 | `GetCumsumForMMAIV()` | AIC GMM、dispatch-gather、combine |
+| `gmA` | dispatch-gather 后的本地 expert-major int8 GMM1 输入 | `RunDispatchGatherImpl()` | `GMM1()` |
+| `gmPerTokenScale1` | GMM1 输入的 per-token scale | routing / dispatch-gather | SwiGLU epilogue |
+| `gmC` | GMM1 输出 workspace | `GMM1()` | `RunSwigluImpl()` |
+| `gmPermutedToken` | SwiGLU 后重新 quant 的 int8 GMM2 输入 | `RunSwigluImpl()` | `GMM2()` |
+| `gmPerTokenScale2` | GMM2 输入的 per-token scale | `RunSwigluImpl()` | combine epilogue |
+| `gmC2` | GMM2 输出 workspace | `GMM2()` | `CombineV1()` / `CombineV2()` |
+| remote `offsetD` | combine 后按 source rank 回传的 expanded output | combine epilogue | unpermute/restore |
+
+### Workspace 分层
+
+`WorkspaceInfo` 在 `ptrWorkspace` 内按顺序切出以下主要区域：
+
+| 区域 | 用途 |
+| ---- | ---- |
+| `expandedRowIdx` | routing 后的 expanded row index，restore 阶段按它回到原 token |
+| `ptrcumsumMM` | `tokenPerExpert` 沿 source rank 累加后的 GMM 行边界 |
+| `ptrPerTokenScale` | dispatch/routing quant 后的 GMM1 per-token scale |
+| `ptrPerTokenScale2` | SwiGLU 后重新 quant 得到的 GMM2 per-token scale |
+| `ptrC` | GMM1 FP16/fixpipe 输出 workspace |
+| `ptrC2` | GMM2 FP16/fixpipe 输出 workspace |
+| `ptrA` | dispatch-gather 后本 rank expert-major GMM1 int8 输入 |
+| `ptrPermutedToken` | SwiGLU 后 GMM2 int8 输入 |
+| `ptrSumBeforeRank` | combine/restore 需要的 peer rank 前缀和 |
+| `ptrSoftFlagBase` | soft-progress helper 使用的进度区 |
+
+跨 rank 可见的数据不放在普通 workspace，而放在 HCCL remote window 中。
+
+## Routing 子系统：`token_reorder/routing`
+
+Routing 子系统的入口是 `token_reorder/routing/moe_init_routing_quant.cpp` 中的 `moe_init_routing_quant()`。它只在 AIV 路径执行；AIC 进入该函数会直接返回。
+
+### Routing 输入输出
+
+输入：
+
+- `x`：原始 BF16 token。
+- `expertIdx`：`M×topK` global expert id。
+- `scale` / `offset`：dynamic quant 可选平滑参数入口；当前主链传入 scale，offset 保留。
+- `workspace`：routing 内部排序、临时索引用 workspace。
+- `tilingData` / `tilingKey`：host 侧 `MoeInitRoutingQuantTilingBase::DoTiling()` 生成。
+
+输出：
+
+- `expandedX`：按 routing 顺序展开并 per-token quant 后的 int8 payload，当前主链写到 `remoteWindow + offsetA`。
+- `expandedRowIdx`：记录每个 expanded row 对应的原始 token/top-k 位置，当前主链写到 ordinary workspace。
+- `expertTokensCountOrCumsum`：本 rank token-per-expert 统计，当前主链写到 remote-window token-count 区域。
+- `dynamicQuantScale`：每个 expanded row 的 per-token scale，当前主链写到 `remoteWindow + offsetPeerPerTokenScale`。
+
+### Routing tilingKey 分支
+
+```text
+moe_init_routing_quant()
+├── tilingKey == 21000
+│   └── MoeFullLoadDynamicQuant
+│       sort + count/cumsum + gather/quant 在 full-load 路径内完成
+├── tilingKey == 11000
+│   ├── MoeSortOneCore
+│   ├── MoeExpertTokenOut
+│   ├── MoeSrcToDstOp
+│   └── MoeGatherDynamicQuant
+└── tilingKey == 11010
+    ├── MoeSortMultiCore
+    ├── MoeExpertTokenOut
+    ├── MoeSrcToDstOp
+    └── MoeGatherDynamicQuant
+```
+
+### Routing 文件职责
+
+| 文件 | 职责 |
+| ---- | ---- |
+| `moe_init_routing_quant.cpp` | routing 子系统入口，根据 tilingKey 选择 full-load、one-core sort 或 multi-core sort 路径 |
+| `moe_init_routing_quant_tiling.h` | quant routing tiling：tilingKey、workspace、full-load/gather 分支参数 |
+| `moe_init_routing_tiling_common.h` | common routing tiling：tiling base、VBS、VMS、sort-out、src-to-dst、gather 参数 |
+| `moe_init_routing_sort.h` | 本卡内 routing sort 编排，包含 one-core 和 multi-core 排序路径 |
+| `moe_packed_sort_merge.h` | 本卡内部 packed sorted-list merge 与最终结果提取，不涉及多卡 merge |
+| `moe_init_routing_expert_tokens.h` | 根据排序结果生成 expert token count/cumsum、expandedRowIdx 和 source-to-destination row 映射 |
+| `moe_init_routing_fullload_dynamic_quant.h` | full-load 路径：排序、count/cumsum、逐行 quant、输出 int8 payload 和 scale |
+| `moe_init_routing_gather_dynamic_quant.h` | gather 路径：按 expandedRowIdx 读取原 token，逐行 dynamic quant，写 expandedX 和 scale |
+| `moe_pto_sort.h` | PTO UB 内 int32 sort、packed sort、vector helper 和 AscendC sync bridge |
+| `moe_common.h` | 常量、对齐、全局 memory init 等公共基础 |
+
+### Routing 的关键数据语义
+
+1. `ApplyXActiveMask()` 在 routing 前把 inactive token 的 expert id 改成哨兵值 `expertNum`，这样后续排序/count 不把它当作真实 expert。
+2. 排序按 expert id 把 expanded token 聚到一起，同时保留 `expandedRowIdx`，用于最终 restore。
+3. dynamic quant 对每个 token row 计算 abs max，得到 per-token scale，并把 BF16/FP 输入量化到 int8 payload。
+4. `expertTokensCountOrCumsum` 先描述本 rank 的本地 expert token 分布，随后主 kernel 会把它 all-gather 到各 rank 可见的 `tokenPerExpert[dst_rank][src_rank][local_expert]` 视图。
+
+## Dispatch-gather 与跨 rank count 同步
+
+`RunRoutingImpl()` 在 routing 结束后做两件事：
+
+1. `CrossRankSyncAndlocalTokenPerExpertAllGatherAndGetSumPreRankV2()`：
+   - 把本 rank 的 local token count 发布到 peer window。
+   - 对 peer 执行 `TPUT`，并用 remote-window token-ready signal 做 notify/wait。
+   - 读取完整 `tokenPerExpert[dst_rank][src_rank][local_expert]`。
+   - 计算每个 dst rank 在当前 source rank 之前的 `preSumBeforeRank`。
+2. `GetCumsumForMMAIV()`：
+   - 对 `tokenPerExpert` 沿 source rank 做 cumsum。
+   - 生成 AIV dispatch-gather 和 AIC GMM 都使用的 `cumsumMM`。
+
+`RunDispatchGatherImpl()` 再按 `groupIdx` 遍历 local expert：
+
+```text
+for each local expert groupIdx:
+  for each dstEpIdx assigned to this AIV core:
+    rows = tokenPerExpert[dstEpIdx][rank][groupIdx]
+    rowStart = cumsumMM prefix + previous expert-group sum
+    rowSrc = preSumBeforeRank prefix
+    TGET peer offsetA packed rows
+    strip UB_ALIGN payload metadata
+    write gmA[rowStart, :]
+    write gmPerTokenScale1[rowStart]
+  SyncAll
+  CrossCoreSetFlag -> AIC GMM1 can consume this expert group
+```
+
+这里的底层抓手是 `CopyGMToGMPerToken()`：它用 `pto::comm::TGET` 从 peer window 拉取 packed token rows 到本 rank scratch，再用 vector load/store 把 token payload 和 per-token scale 拆到本地 GMM workspace。
+
+## AIC GMM 子系统：`block_mmad_preload_async_fixpipe_quant.hpp`
+
+AIC 侧 GMM1/GMM2 都走 `BlockMmad<MmadAtlasA5PreloadAsyncFixpipe<...>>`。它负责把 GM 中的 A/B/scale 分块送入 L1/L0，并通过 PTO matmul / fixpipe 输出到 GM workspace。
+
+### MMAD 分层流水
+
+```text
+GM A/B/Scale
+  -> TLOAD GM -> L1(Mat)
+  -> TMOV L1(Mat) -> L0A(Left) / L0B(Right)
+  -> TMATMUL / TMATMUL_ACC
+  -> TSTORE_FP L0C/Scale -> GM C
+```
+
+对应文件分工：
+
+| 文件 | 职责 |
+| ---- | ---- |
+| `block_mmad_preload_async_fixpipe_quant.hpp` | 管理 L1/L0A/L0B/L0C 多 stage buffer、k-loop preload、CrossCoreSetFlag finalize |
+| `pto_mmad_ops.hpp` | 封装具体 PTO primitive：`TLOAD` GM→L1、`TMOV` L1→L0A/L0B、`TMATMUL`、`TSTORE_FP` |
+| `dispatch_policy_custom.hpp` | 定义 `MmadAtlasA5PreloadAsyncFixpipe` 和 epilogue policy tag |
+| `moe_pto_utils.hpp` | 定义 arch resource、layout helper、tile copy traits、公共 shape/coord 工具 |
+
+### GMM1 与 GMM2 的差异
+
+- `GMM1` 输入是 `RunDispatchGatherImpl()` 生成的 `gmA`，B 是 `weight1`，输出到 `gmC`，scale 是 `scale1`。
+- `GMM2` 输入是 `RunSwigluImpl()` 生成的 `gmPermutedToken`，B 是 `weight2`，输出到 `gmC2`，scale 是 `scale2`。
+- 两者都按 local expert `groupIdx` 遍历，`BlockScheduler` 把每个 expert 的 `[M, N, K]` 问题切成 block/tile 分给 AIC core。
+
+### AIC/AIV interlock
+
+- `GMM1` 在每个 expert group 前等待 AIV dispatch-gather 的 `CrossCoreSetFlag`。
+- `GMM1` 在 `epilogueGranularity` 边界 `Finalize(..., SYNCFLAGC2V)`，通知 AIV 可以开始前半段 SwiGLU。
+- `RunGmmInterlockImpl()` 等待 AIV 的 `SYNCFLAGV2C`，避免 GMM2 早于 SwiGLU/quant 消费数据。
+- `GMM2` 在分段边界继续等待 `SYNCFLAGV2C`，最后在 CombineV1 场景下发出 combine 可消费的 flag。
+
+## Epilogue 子系统：三个 `block_epilogue_*` 文件的分工
+
+Epilogue 层是当前代码里最容易混淆的部分。三个文件不是重复实现，而是服务不同阶段和不同 combine 粒度。
+
+### `block_epilogue_pertoken_swiglu.hpp`：GMM1 后处理
+
+使用场景：`RunSwigluImpl()`。
+
+输入输出：
+
+```text
+gmC: GMM1 输出 half [routed_rows, N]
+gmPerTokenScale1: routing quant 产生的 per-token scale
+  -> dequant to fp32
+  -> split N into N/2 + N/2
+  -> x0 * sigmoid(x0) * gate
+  -> dynamic quant to int8
+gmPermutedToken: GMM2 输入 int8 [routed_rows, N/2]
+gmPerTokenScale2: GMM2 per-token scale
+```
+
+关键实现点：
+
+- 按 row 处理 GMM1 输出，每个 row 的 `N` 被拆成 `ChunkTileLen = N/2`。
+- 先把 `half` C cast 到 FP32，再乘 `gmPerTokenScale1[row]` 完成 per-token dequant。
+- SwiGLU 由 PTO vector primitive 组合完成：`TMULS`、`TEXP`、`TADDS`、`TDIV`、`TMUL`。
+- 再对 SwiGLU 输出做 abs max / reduce max，得到 `gmPerTokenScale2[row]`，并把结果 cast/quant 成 int8 写入 `gmPermutedToken`。
+- `RunSwigluImpl()` 会按 `stageDequantSum1` / `stageDequantSum2` 两段调用它，对齐 GMM1 的分段 finalize。
+
+### `block_epilogue_pertoken_row.hpp`：CombineV1 row 级后处理
+
+使用场景：`RunCombineImpl()` 选择 `CombineV1` 时。
+
+输入输出：
+
+```text
+gmC2: GMM2 输出 half [routed_rows, K]
+gmPerTokenScale2: SwiGLU quant 产生的 per-token scale
+  -> dequant to fp32
+  -> cast to output dtype
+  -> local store or remote TPUT to peer offsetD
+```
+
+关键实现点：
+
+- 以 row 为单位处理 GMM2 输出，每次处理一行 `K`。
+- 对每行执行：GM→UB load、half→float cast、乘 per-token scale、float→输出 dtype cast。
+- 如果目标 rank 是本 rank，直接 `TSTORE` 到 `offsetD` 对应位置。
+- 如果目标 rank 是 peer rank，先写本地 remote-window scratch，再用 `pto::comm::TPUT` 推到 peer 的 `offsetD`。
+- 适合 row 级直接回写路径，逻辑简单，但跨 rank 写回粒度较细。
+
+### `block_epilogue_pertoken_v2.hpp`：CombineV2 tile 级后处理
+
+使用场景：`RunCombineImpl()` 选择 `CombineV2` 时。当前 `initBuffer()` 中的选择逻辑是：
+
+```text
+isCombineV1 = true
+if M * topK <= 4096:
+  isCombineV1 = false   # 小规模默认走 CombineV2
+```
+
+输入输出：
+
+```text
+gmC2: GMM2 输出 half tile
+blockCoord / actualBlockShape: BlockScheduler 生成的 GMM tile 坐标
+preSrcExpertSum: 当前 expert 在 gmC2 中的起始行
+preSumBeforeRank: 当前 source rank 在各 dst rank expert 段内的前缀
+  -> tile 内 dequant
+  -> 按 tokenPerExpert / preSumBeforeRank 切分给不同 dst rank
+  -> local matrix rows store or remote per-row TPUT
+```
+
+关键实现点：
+
+- 以 GMM tile/block 为单位处理 `gmC2`，而不是逐完整 row 顺序扫描。
+- tile 内按 `m0 = 16` 行块拆给两个 AIV sub-core，形成更细的 AIV 并行粒度。
+- 读取 `tokenPerExpert[dst_rank][src_rank][groupIdx]` 和 `preSumBeforeRank[dst_rank][groupIdx]`，判断当前 tile 的哪些 row 属于哪个目标 rank。
+- 本地目标直接 `PtoStoreMatrixRows()`；远端目标先写 scratch，再逐 row `TPUT` 到 peer `offsetD`。
+- 这个文件的职责是把 GMM tile 坐标、expert 内 row 区间、rank 内/跨 rank 写回三件事合并起来。
+
+## Combine 与 restore 层
+
+### CombineV1 / CombineV2 选择
+
+`RunCombineImpl()` 会构造两个 epilogue：
+
+- `BlockEpilogue2 = EpilogueAtlasA5PerTokenDequant`，对应 `CombineV1()`。
+- `BlockEpilogue3 = EpilogueAtlasA5PerTokenDequantV2`，对应 `CombineV2()`。
+
+两条路径的共同目标都是把 `gmC2` 中 expert-major 的 GMM2 输出写回各 source rank 的 remote-window `offsetD`，区别是粒度：
+
+| 路径 | 粒度 | 主要文件 | 适用特点 |
+| ---- | ---- | -------- | -------- |
+| CombineV1 | expert group + row | `block_epilogue_pertoken_row.hpp` | 逐行逻辑直观，按 group 等待 AIC flag 后写回 |
+| CombineV2 | GMM block/tile + sub-core rows | `block_epilogue_pertoken_v2.hpp` | 利用 BlockScheduler 的 tile 坐标，按 rank 区间切 tile，AIV sub-core 并行更细 |
+
+### Restore / unpermute：`token_reorder/unpermute`
+
+`RunRestoreImpl()` 是 AIV 主链最后一段：
+
+```text
+SyncAll
+ResetTokenPerExpert
+remoteWindow.CrossRankSync()
+MoeTokenUnpermuteTiling(M * topK, K, topK, ...)
+KernelMoeTokenUnpermute<ElementD2, int32_t, float, true>
+  input: remoteWindow + offsetD
+  index: expandedRowIdx
+  prob: probs
+  output: out
+```
+
+`token_reorder/unpermute/moe_token_unpermute.h` 的职责是把 combine 后仍处于 expanded/top-k 顺序的 token 输出累加回原 token 顺序：
+
+1. 每个 AIV core 负责一段 output token。
+2. 每个 output token 内部遍历 `topK` 个 expanded row。
+3. 从 `expandedRowIdx` 读取原 token 映射。
+4. 从 `remoteWindow + offsetD` 读取 expert 输出切片。
+5. 如果 `PROBS=true`，读取 `probs` 并做概率加权。
+6. 对 hidden 维按 chunk 处理，避免 UB 超限。
+7. 将累加结果写到最终 `out[M, K]`。
+
+`moe_token_unpermute_tiling.h` 只负责把 `M*topK`、`K`、`topK` 和 core 数切成 token/core 维度与 hidden chunk 维度。
+
+## Remote window 布局
+
+只有跨 rank 可见的数据和信号放在 HCCL RDMA window 中；普通输入、输出、workspace 和 tiling 仍由 `aclrtMalloc` 分配。
+
+每个 rank 的 remote-window payload 布局如下：
+
+```text
+offsetA                  = 0
+offsetPeerPerTokenScale  = AlignUp(windowBytes / 3, 512)
+offsetD                  = offsetPeerPerTokenScale + 1 MiB
+offsetPeerTokenPerExpert = windowBytes - 2 MiB
+signalBase               = windowBytes - 1 MiB
+```
+
+| 区域 | 生产者 | 消费者 | 用途 |
+| ---- | ------ | ------ | ---- |
+| `offsetA` | routing / dynamic quant | dispatch-gather | expanded int8 token payload |
+| `offsetPeerPerTokenScale` | routing / dispatch-gather / combine scratch | GMM1 epilogue / TGET/TPUT scratch | per-token scale 与临时 scratch |
+| `offsetD` | combine | restore/unpermute | GMM2 dequant 后、按 source rank 回传的 expanded output |
+| `offsetPeerTokenPerExpert` | routing count exchange | dispatch-gather / combine | `tokenPerExpert[dst][src][expert]` |
+| signal region | `PtoRemoteWindow` | `PtoRemoteWindow` | barrier、token-ready、notify/wait signal |
+
+## 计算通信 overlap
+
+当前流水的核心不是把通信和 GMM 完全串行化，而是在 expert 维度形成错位执行：
+
+```text
+Dispatch phase:  Comm(i + 1)  ||  GMM(i)
+Combine phase:   GMM(i)       ||  Comm(i - 1)
+```
+
+这里的 `Comm` 不是单独调用一个 op 级 AlltoAllV，而是由 remote-window 上的 `TGET/TPUT`、token-ready signal、rank 内 cross-core flag 组合出来。理解 overlap 要抓三条依赖链：
+
+1. GMM1 只依赖“当前 expert group 的输入行已经 dispatch-gather 到 `gmA`”，不需要等所有 expert 都 gather 完。
+2. SwiGLU 只依赖“GMM1 的前一段输出已经 finalize”，不需要等所有 GMM1 group 都结束。
+3. Combine 只依赖“GMM2 对应 group/tile 已经可见”，不需要等 restore 阶段开始。
+
+分阶段看：
+
+```text
+时间  ───────────────────────────────────────────────────────────────>
+
+AIV : routing/count/quant -> token-count exchange -> cumsumMM
+AIV : | dispatch gather expert0 | dispatch gather expert1 | dispatch gather expert2 | ...
+AIC :                         | GMM1 expert0            | GMM1 expert1            | ...
+AIV :                                      | dequant + SwiGLU + quant segment0 |
+AIC :                                                         | GMM2 expert0 | GMM2 expert1 | ...
+AIV :                                                  | combine tile/row expert-1 | combine expert0 | ...
+AIV : restore / unpermute / probability accumulation
+```
+
+### Producer / consumer / signal 对照
+
+| 生产者 | 消费者 | 数据 | 同步抓手 | 代码位置 |
+| ------ | ------ | ---- | -------- | -------- |
+| routing count exchange | dispatch-gather / GMM planning | `tokenPerExpert`, `preSumBeforeRank`, `cumsumMM` | `remoteWindow.NotifyRemoteTokenReady()` / `WaitTokenReady()` + `PtoSyncAll` | `CrossRankSyncAndlocalTokenPerExpertAllGatherAndGetSumPreRankV2()`、`GetCumsumForMMAIV()` |
+| AIV dispatch-gather | AIC GMM1 | `gmA`, `gmPerTokenScale1` | `CrossCoreSetFlag<0x2, PIPE_MTE3>`，AIC 侧 `CrossCoreWaitFlag` | `RunDispatchGatherImpl()`、`GMM1()` |
+| AIC GMM1 | AIV SwiGLU | `gmC` | `blockMmad.Finalize(..., SYNCFLAGC2V)`，AIV 侧 `CrossCoreWaitFlag(SYNCFLAGC2V)` | `GMM1()`、`RunSwigluImpl()` |
+| AIV SwiGLU | AIC GMM2 | `gmPermutedToken`, `gmPerTokenScale2` | `CrossCoreSetFlag(SYNCFLAGV2C)`，AIC 侧 `RunGmmInterlockImpl()` / `GMM2()` wait | `RunSwigluImpl()`、`RunGmmInterlockImpl()`、`GMM2()` |
+| AIC GMM2 | AIV combine | `gmC2` | AIC finalize flag；CombineV1/CombineV2 按 group/tile wait | `GMM2()`、`CombineV1()`、`CombineV2()` |
+| AIV combine | AIV restore | remote `offsetD` | `ResetTokenPerExpert()` + `remoteWindow.CrossRankSync()` | `RunCombineImpl()`、`RunRestoreImpl()` |
+
+### `epilogueGranularity` 如何形成两段 SwiGLU/GMM2 overlap
+
+`epilogueGranularity` 把 local experts 分成前后两段：
+
+```text
+front groups: [0, epilogueGranularity)
+back groups : [epilogueGranularity, expertPerRank)
+```
+
+- `RunDispatchGatherImpl()` 统计 `stageDequantSum1` / `stageDequantSum2`，分别表示前后两段需要做 SwiGLU 的 routed rows。
+- `GMM1()` 当 `groupIdx + 1 == epilogueGranularity` 时先 `Finalize(..., SYNCFLAGC2V)`，释放 AIV 处理前半段 `gmC`。
+- `RunSwigluImpl()` 处理完前半段后发 `SYNCFLAGV2C`，AIC 的 `GMM2()` 可以先消费前半段 `gmPermutedToken`。
+- `GMM1()` 完成剩余 group 后再次 `Finalize(..., SYNCFLAGC2V)`，AIV 再处理后半段，并再次发 `SYNCFLAGV2C`。
+
+这就是 README 图里 `GMM1 -> SwiGLU -> GMM2` 不是全局大 barrier 串行，而是按 expert 段拆开的底层逻辑。
+
+## PTO 原语分层
+
+当前代码没有直接把所有逻辑压到裸 AscendC API，而是在几个文件里形成了 PTO bridge 分层：
+
+| 层级 | 文件 | 典型原语 | 说明 |
+| ---- | ---- | -------- | ---- |
+| Vector bridge | `pto_vector_ops.hpp` | `TLOAD`, `TSTORE`, `TCVT`, `TMOV`, `TEXPANDS`, `TMULS`, `TADD`, `TDIV`, `TREDUCE` | 面向 UB/Vec tile 的连续向量搬运和算术封装 |
+| MMAD bridge | `pto_mmad_ops.hpp` | `TLOAD`, `TMOV`, `TMATMUL`, `TMATMUL_ACC`, `TSTORE_FP` | 面向 AIC 的 GM→L1、L1→L0A/L0B、L0C→GM 封装 |
+| Comm bridge | `hccl_window.hpp` + `pto::comm` | `TGET`, `TPUT`, notify/wait | remote-window 上的跨 rank 数据搬运和信号同步 |
+| Sync wrapper | `moe_pto_utils.hpp` / routing helpers | `SetFlag`, `WaitFlag`, `SyncAll`, `PipeBarrier` wrappers | 当前仍有 AscendC/CCE 同步封装，用于补齐 PTO primitive 间的 pipeline 依赖 |
+
+常见数据搬运语义：
+
+```text
+GM -> UB(Vec):       pto::TLOAD(Vec tile, GlobalTensor)
+UB(Vec) -> GM:       pto::TSTORE(GlobalTensor, Vec tile)
+GM -> L1(Mat):       pto::TLOAD(Mat tile, GlobalTensor)
+L1(Mat) -> L0A:      pto::TMOV(TileLeft, Mat tile)
+L1(Mat) -> L0B:      pto::TMOV(TileRight, Mat tile)
+L0A/L0B -> L0C:      pto::TMATMUL / pto::TMATMUL_ACC
+L0C/FIXPIPE -> GM:   pto::TSTORE_FP(...)
+Rank A -> Rank B:    pto::comm::TPUT / pto::comm::TGET over remote window
+```
 
 ## 默认参数与 Tiling
 
@@ -121,220 +649,12 @@ Host tiling 中固定或派生的关键参数：
 | `swizzleOffset` | 7 |
 | `ubMoveNum` | 16 KiB |
 | `commNpuSplit` | `world_size` |
+| `commDataSplit` | 1 |
+| `lenPerLoop` | `m0 * n0 / 2` |
 | `totalUbSize` | 196352 |
-| `SYSTEM_NEED_WORKSPACE` | 16 MiB |
-| `aivNum` | 来自 `PlatformAscendCManager::GetCoreNumAiv()` |
+| system workspace | 16 MiB |
+| `aivNum` | `PlatformAscendCManager::GetCoreNumAiv()` |
 | `block_dim` | `CalcTschBlockDim(aivNum, aicNum, aivNum)` |
-
-## 整体架构
-
-```text
-                         Host / MPI / HCCL
-┌─────────────────────────────────────────────────────────────────────────┐
-│ gen_data.py -> case.json + rank*.bin                                    │
-│ main.cpp: MPI init -> ACL set device -> HCCL root info broadcast         │
-│ runtime_context.cpp: HcclAllocComResourceByTiling -> remote window ctx   │
-│ tiling_builder.cpp: BuildDispatchFFNCombineTiling -> launch args         │
-└───────────────────────────────┬─────────────────────────────────────────┘
-                                │ launchDispatchFFNCombine
-                                ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│ dispatch_ffn_combine mixed AIC/AIV kernel                               │
-│                                                                         │
-│ AIC path:                                                               │
-│   GMM1 -> CrossCoreWaitFlag interlock -> GMM2                            │
-│                                                                         │
-│ AIV path:                                                               │
-│   routing -> dispatch_gather -> swiglu -> combine -> restore             │
-│                                                                         │
-│ Cross-rank data path:                                                   │
-│   PTO TNOTIFY/TWAIT + HCCL RDMA window payload/signal regions            │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-## Host 流程
-
-1. `run.sh` 生成 `out/case.json` 与每个 rank 的输入/golden 文件。
-2. CMake 构建 `dispatch_combine_moe_kernel` 和 host 可执行文件 `dispatch_combine_moe`。
-3. Host 进程由 MPI 启动，每个 rank 使用同编号 NPU 设备。
-4. Rank 0 生成 `HcclRootInfo` 并广播给所有 rank。
-5. `InitStandaloneRankRuntime()` 创建 compute stream、HCCL stream 和 HCCL comm，并通过 `HcclAllocComResourceByTiling()` 分配通信资源。
-6. Runtime 优先按 A5 direct context 解析 `HcclDeviceContextA5`，失败时回退到 ring 参数解析。
-7. `BuildDispatchFFNCombineTiling()` 校验 HCCL window 容量，填充 tiling、workspace bytes 与 block dim。
-8. warmup 和 measure 每轮都会清零 HCCL windows、`out`、`expert_token_nums` 和 workspace。
-9. measure 使用 ACL event 统计 kernel 时间，并在 rank 0 汇总每轮 max-rank 样本。
-10. verify 再 launch 一轮，D2H 拷回 `out`，写出 `output_rank*.bin`，与 `expected_out` 做 FP16 比较。
-
-成功时每个 rank 输出 `PASS rank=<id>`；rank 0 额外输出 `[PROFILE] dispatch_combine_moe` 性能摘要。
-
-## Kernel 流程
-
-### 计算链路总览
-
-这个 kernel 不是把 `dispatch`、`GMM`、`combine` 简单串起来，而是按 MegaMoE 风格把 MoE FFN 的数据组织、跨 rank 通信和两段 GMM 放进同一个混合 AIC/AIV kernel 中：
-
-```text
-x / expert_idx / probs
-  -> routing / expand / quant / count
-  -> token count exchange + cumsum address planning
-  -> dispatch-gather directly into expert-major GMM input
-  -> GMM1
-  -> per-token dequant + SwiGLU + quant
-  -> GMM2
-  -> combine / remote result exchange
-  -> unpermute + top-k probability accumulation
-  -> out[M, K]
-```
-
-关键点是：GMM 需要的不是原始 token 顺序，而是每个 local expert 的 token 连续排列。原始 token 位置和 top-k 权重通过 `expandedRowIdx`、`expert_idx`、`probs` 等 bookkeeping 信息保留到 restore/combine 阶段。
-
-### MegaMoE 式布局优化
-
-传统 `AlltoAllV` 路径常见形态是：通信前本地重排，通信后接收端得到 source-rank-major buffer，再根据 count 把数据密排成 expert-major，最后交给 GMM。这个“通信后密排”会引入额外 GM 搬运和同步边界。
-
-MegaMoE 风格的核心改法不是取消 routing，而是把重排位置前移和地址化：
-
-1. 本 rank 先根据 gating 输出执行 routing / expand / quant / count。
-2. 通过跨 rank token count 同步得到 `tokenPerExpert[dst_rank][src_rank][local_expert]` 视图。
-3. 对 count 做 cumsum，提前算出每个 source rank 的 token 在目标 expert 连续矩阵中的落点。
-4. dispatch 通信时直接写入或读取到 expert-major 的最终位置。
-5. 某个 expert 或 expert block 的连续输入一旦 ready，就具备启动对应 GMM tile 的条件。
-
-因此这里的优化本质是：
-
-```text
-通信后再密排
-  -> 通信地址计算时直接落到 GMM 可消费的 expert-major 布局
-```
-
-在原 MC2 设计文档中，这条主线的抓手是 `tokenPerExpert`、`cumsumMM`、`CopyGMToGMPerToken`；在当前 A5 PTO 版本中，对应落在 routing/count、remote-window layout、`dispatch_gather` stage 和 GMM input workspace 的协作上。
-
-### AIC / AIV 分工
-
-`dispatch_ffn_combine` 是 `KERNEL_TYPE_MIX_AIC_1_2` 混合 kernel。主 kernel 构造 `MatmulKernel` 后调用 `kernel(params)`，再由 `g_coreType` 分发到 AIC 或 AIV 特化：
-
-```text
-DispatchFFNCombine::Process()
-  -> MatmulKernel kernel(params)
-  -> kernel(params)
-       AIC: operator()<AscendC::AIC>() -> RunAicMain()
-       AIV: operator()<AscendC::AIV>() -> RunAivMain()
-```
-
-AIC 负责重计算链路，AIV 负责数据组织、通信搬运、量化/反量化 epilogue、combine 和 restore。
-
-### AIC 路径
-
-AIC 侧执行两段 grouped matmul 主链：
-
-```text
-RunGmm1Stage()
-  -> RunGmmInterlockStage()
-  -> RunGmm2Stage()
-```
-
-`GMM1` 消费 dispatch-gather 后按 local expert 连续排布的 int8 token 矩阵和本 rank expert 的 `weight1`。`GMM2` 消费 AIV 侧 SwiGLU 后重新量化得到的 hidden token 和 `weight2`。两段 GMM 中间通过 interlock 与 AIV 的 epilogue/activation 阶段对齐，而不是完全串行地等所有 GMM1 完成后再启动后处理。
-
-当前 A5 policy 使用：
-
-- `ArchTag = pto_ext::Arch::AtlasA5`
-- `MmadAtlasA5PreloadAsyncFixpipe`
-- `EpilogueAtlasA5PerTokenDequantSwigluQuant`
-- `EpilogueAtlasA5PerTokenDequant`
-- `EpilogueAtlasA5PerTokenDequantV2`
-
-### AIV 路径
-
-AIV 侧贯穿整个融合流水，不只是前处理和后处理：
-
-```text
-RunRoutingStage()
-  -> RunDispatchGatherStage()
-  -> RunSwigluStage()
-  -> RunCombineStage()
-  -> RunRestoreStage()
-```
-
-各 stage 的职责可以按数据流理解：
-
-1. `routing`：读取 `expert_idx`、`x_active_mask` 和 `x`，按 top-k 展开 token，按 expert 分组，生成 `expandedRowIdx`、本地 expert token count，并在量化路径中生成 per-token scale。
-2. `dispatch_gather`：拉通本地 token count 与 peer rank 的 count/cumsum 信息，把跨 rank token payload 和 scale 放到 GMM 可消费的位置，减少通信后的二次密排。
-3. `swiglu`：等待 GMM1 的分段结果，对 `N` 维结果做 per-token/per-channel dequant，拆成 `N/2 + N/2`，执行 SwiGLU，再重新量化为 GMM2 输入。
-4. `combine`：消费 GMM2 输出，根据 token 所属原 rank / original row / top-k slot，把 expert 输出写回本地或 peer window 中的 combine 区域。
-5. `restore`：按 `expandedRowIdx` 和 `probs` 把 top-k expert 输出累加回原 token 顺序，生成最终 `out[M, K]`。
-
-`dispatch_gather` 和 combine 相关路径会通过 `PtoRemoteWindow` 访问本 rank 与 peer rank 的 HCCL window，并使用 PTO `TNOTIFY/TWAIT` 做跨 rank ready / wait 同步。
-
-### 计算通信 overlap
-
-MegaMoE 背景里的 overlap 可以拆成两个方向：
-
-- `Dispatch -> GMM`：通信先产出 expert 输入，GMM 消费输入。Dispatch 阶段可以让第 `i` 个 expert 的 `GMM` 与第 `i+1` 个 expert 的跨 rank dispatch/all-to-all 数据搬运并行。
-- `GMM -> Combine`：GMM 先产出 expert 输出，通信或 combine 消费输出。Combine 阶段可以让第 `i` 个 expert 的 `GMM` 与第 `i-1` 个 expert 的结果回传/all-to-all 搬运并行。
-
-整体流水可以按下图理解：本地 routing 和最终 unpermute 仍保留，变化是把中间通信输入/输出放到 remote window，并在专家维度上做计算通信错位执行。
-
-```text
-时间  ───────────────────────────────────────────────────────────────>
-
-AIV : InitRouting / local reorder / HBM->window
-      | dispatch expert0 | dispatch expert1 | dispatch expert2 | ...
-AIC :                    |   GMM1 expert0   |   GMM1 expert1   | ...
-AIV :                                      | dequant + SwiGLU + quant |
-AIC :                                                    | GMM2 expert0 | GMM2 expert1 | ...
-AIV :                                         | combine expert-1 | combine expert0 | combine expert1 |
-      window->HBM / Unpermute / local inverse reorder
-```
-
-更抽象地说，稳态时希望形成：
-
-```text
-Dispatch phase:  Comm(i + 1)  ||  GMM(i)
-Combine phase:   GMM(i)       ||  Comm(i - 1)
-```
-
-这里的 `Comm` 在当前 A5 PTO 版本里不是普通 op 级 `AlltoAllV` 调用，而是通过 `PtoRemoteWindow`、HCCL window payload 和 PTO `TNOTIFY/TWAIT` 显式完成的跨 rank ready/wait 与数据搬运。再叠加通信发起方式，就有远端读和远端写两类取舍。当前 A5 PTO 版本更关注 remote-window 上的显式地址计算和 ready/wait，同步尽量压缩到 rank 内 AIC/AIV 协同和 window signal，而不是把每个小块都做成跨 rank 往返握手。
-
-当前实现中的 overlap 逻辑可以按下面几个实现点展开：
-
-1. **routing / quant / count 前置**：`RunRoutingStage()` 调用 `moe_init_routing_quant_v2`，根据 `expert_idx` 展开 token、生成 `expandedRowIdx`、统计本 rank 的 `localTokenPerExpert`，并把 dispatch payload 与 per-token scale 写入 remote window 的固定区域。后续阶段不再把 gating 输出当作随机索引逐 token 处理，而是消费这批已经按 expert 组织过的数据和计数。
-2. **count exchange 与 cumsum 地址规划**：`CrossRankSyncAndlocalTokenPerExpertAllGatherAndGetSumPreRankV2()` 先把本 rank 的 `localTokenPerExpert` 发布到 peer window，再等待 peer token-ready；随后读取 `tokenPerExpert[dst_rank][src_rank][local_expert]`，计算 `preSumBeforeRank`。`GetCumsumForMMAIV()` 生成 `cumsumMM`，让每个 local expert 的输入行区间在 GMM workspace 中有确定落点。
-3. **dispatch-gather 直接落到 GMM 输入布局**：`RunDispatchGatherImpl()` 按 `groupIdx` 遍历 local expert，根据 `cumsumMM` 算 `rowStart`，根据 `preSumBeforeRank` 算 peer 源行 `rowSrc`，再用 `CopyGMToGMPerToken()` 把 peer window 的 token 行拷到 `gmA[rowStart, :]`，同时写 `gmPerTokenScale1[rowStart]`。这一步把“通信后密排”折进了通信地址计算。
-4. **GMM1 与 SwiGLU 分段 interlock**：dispatch-gather 每完成一个 expert group 后通过 `CrossCoreSetFlag` 通知 AIC；`GMM1` 按 `groupIdx` 等待这些 flag 后执行对应 expert 的 grouped matmul。当 `groupIdx + 1 == epilogueGranularity` 时，`GMM1` finalize 并发出 `SYNCFLAGC2V`，AIV 的 `RunSwigluImpl()` 先处理 `stageDequantSum1` 对应的前半段，再等待第二次 `SYNCFLAGC2V` 处理 `stageDequantSum2`。SwiGLU 完成每段后用 `SYNCFLAGV2C` 通知 `GMM2`。
-5. **GMM2 与 combine 分段消费**：`GMM2` 同样按 expert group 遍历，等待 AIV 的 `SYNCFLAGV2C` 后消费 `gmPermutedToken`。后续 `CombineV1` 按 expert group 等待 AIC flag 后写回 peer window；`CombineV2` 则用 `BlockScheduler` 生成 GMM block/tile 坐标，再把每个 tile 按 `m0 = 16` 行块拆给两个 AIV sub-core 处理。
-6. **restore / unpermute 保留语义顺序**：GMM 和 combine 阶段始终以 expert-major 连续布局优先，最终由 restore 根据 `expandedRowIdx`、`probs` 和 top-k slot 把 expert 输出加权累加回原 token 行。这样 GMM 不需要为了原始 token 顺序牺牲连续专家矩阵布局。
-7. **soft-progress helper**：原始项目和当前 A5 PTO 目录都保留了 `ptrSoftFlagBase`、`InitArithProgress()`、`UpdateAicFlags()` 这类 helper。它们的逻辑是清零进度区、读取各 EP/AIC flag 并取最小完成进度，再写回 `aicFinishPtr`。当前主链路的推进仍以 `SyncAll`、`CrossCoreSetFlag/WaitFlag`、remote-window ready/wait 为主；这些 helper 记录了可用于汇总进度的实现形态。
-
-因此当前 A5 PTO 目录继承的是原始 `dispatch_ffn_combine` 的专家级流水和 block/tile combine 逻辑：dispatch 阶段按 `groupIdx` 形成 `Comm(i+1) || GMM(i)` 的错位执行条件，combine 阶段按 AIC flag 和 tile 坐标形成 `GMM(i) || Comm(i-1)` 的消费条件。
-
-## HCCL Remote Window 布局
-
-只有跨 rank 可见的数据和信号放在 HCCL RDMA window 中；普通输入、输出、workspace 和 tiling 仍由 `aclrtMalloc` 分配。
-
-每个 rank 的 remote window payload 布局如下：
-
-```text
-offsetA                   = 0
-offsetPeerPerTokenScale   = AlignUp(windowBytes / 3, 512)
-offsetD                   = offsetPeerPerTokenScale + 1 MiB
-offsetPeerTokenPerExpert  = windowBytes - 2 MiB
-signalBase                = windowBytes - 1 MiB
-```
-
-| 区域 | 用途 |
-| ---- | ---- |
-| `offsetA` 起始区域 | dispatch/gather token payload |
-| `offsetPeerPerTokenScale` | peer per-token scale |
-| `offsetD` | dispatch output / intermediate payload |
-| `offsetPeerTokenPerExpert` | peer token-per-expert 计数 |
-| 最后 1 MiB signal region | barrier counter、token-ready counter、PTO notify/wait signal |
-
-Host 侧 `ValidateRemoteWindowCapacity()` 会检查：
-
-- `windowBytes > 3 MiB`
-- per-token-scale 区域能容纳 `max_output_size * sizeof(float)`
-- dispatch output 区域能容纳 `max_output_size * K * sizeof(int16_t)`
-- token-count 区域不会覆盖最后 1 MiB signal region
 
 ## 构建与运行
 
@@ -344,7 +664,7 @@ Host 侧 `ValidateRemoteWindowCapacity()` 会检查：
 
 ```bash
 bash kernels/manual/a5/dispatch_combine_moe/run.sh \
-  --soc-version Ascend910_950 \
+  --soc Ascend950PR_958b \
   --world-size 2 \
   --m 16 \
   --k 128 \
@@ -354,8 +674,7 @@ bash kernels/manual/a5/dispatch_combine_moe/run.sh \
   --max-output-size 32
 ```
 
-如果目标环境的 CANN platform config 使用更具体 SoC 名称，可把 `--soc-version` 换成对应值，例如 `Ascend950PR_958b`。如果不传 `--soc-version`，host tiling 使用默认 `PlatformAscendCManager::GetInstance()`。
-
+如果目标环境的 CANN platform config 使用其他 SoC 名称，可把 `--soc` / `--soc-version` 换成对应值。若不传 `--soc`，host tiling 使用默认 `PlatformAscendCManager::GetInstance()`。
 
 ### `run.sh` 参数
 
@@ -380,13 +699,16 @@ bash kernels/manual/a5/dispatch_combine_moe/run.sh \
 | 环境变量 | 用途 | 默认行为 |
 | -------- | ---- | -------- |
 | `ASCEND_CANN_PATH` | CANN install 目录或 `set_env.sh` 路径 | 自动查找 `/usr/local/Ascend/cann-*/set_env.sh` 的最新版 |
+| `ASCEND_HOME_PATH` | CMake 查找 CANN include/lib/platform 根目录 | 通常由 `set_env.sh` 设置；未设置时 CMake 报错 |
+| `ASCEND_DRIVER_PATH` | driver kernel include 根目录 | 默认 `/usr/local/Ascend/driver` |
 | `MPI_ENV_BIN` | 指定包含 `mpirun` 的目录 | 未设置时按 `MPI_SEARCH_DIRS` 查找 |
 | `MPI_ENV_LIB` | 指定 MPI lib 目录 | 设置后补到 `LD_LIBRARY_PATH` 并推导 `MPI_LIB_PATH` |
 | `MPI_SEARCH_DIRS` | MPI 搜索目录列表 | 包含 conda `ltr_pto`、常见 MPICH 路径 |
 | `MPI_LIB_PATH` | `libmpi.so` 绝对路径 | 由 `run.sh` 根据 MPI 路径推导 |
+| `MPI_RUNNER` | 可选 MPI runner 覆盖 | 未设置时使用 `mpirun` |
 | `DISPATCH_COMBINE_MOE_BUILD_DIR` | CMake build 目录 | `/tmp/dispatch_combine_moe_a5_run_build` |
 | `DISPATCH_COMBINE_MOE_CASE_DIR` | host 读取 case 的目录 | `run.sh` 设置为本目录 `out/`；host 默认 `../out` |
-| `DISPATCH_COMBINE_MOE_SOC_VERSION` | host tiling 使用的 SoC version | 由 `--soc-version` 设置 |
+| `DISPATCH_COMBINE_MOE_SOC_VERSION` | host tiling 使用的 SoC version | 由 `--soc` / `--soc-version` 设置 |
 | `DISPATCH_COMBINE_MOE_WARMUP_ITERS` | host warmup 次数 | 3 |
 | `DISPATCH_COMBINE_MOE_MEASURE_ITERS` | host measure 次数 | 5 |
 
@@ -396,7 +718,7 @@ bash kernels/manual/a5/dispatch_combine_moe/run.sh \
 
 | 文件 | 内容 |
 | ---- | ---- |
-| `case.json` | shape、topk、expert 数、compare 容差、逻辑 workload 统计 |
+| `case.json` | shape、topK、expert 数、compare 容差、逻辑 workload 统计 |
 | `rank{r}_x.bin` | `M×K` BF16 bits |
 | `rank{r}_weight1.bin` | 本 rank experts 的 W1，int8 Zn packed |
 | `rank{r}_weight2.bin` | 本 rank experts 的 W2，int8 Zn packed |
@@ -408,12 +730,15 @@ bash kernels/manual/a5/dispatch_combine_moe/run.sh \
 | `rank{r}_expected_out.bin` | CPU golden FP16 output |
 | `output_rank{r}.bin` | host verify 阶段写出的 device output |
 
+CPU golden 的计算顺序与 device 语义对齐：按 dst rank / local expert / src rank / token / topK 遍历 routed token，超过 `max_output_size` 的 routed token 会被截断。
+
 ## 常见问题
 
 | 问题 | 原因与解决 |
 | ---- | ---------- |
 | `Cannot find CANN set_env.sh` | 设置 `ASCEND_CANN_PATH` 到 CANN install 目录或 `set_env.sh`。 |
-| `Unsupported A5 SOC_VERSION` | `run.sh` 要求 `--soc-version` 以 `Ascend` 开头；检查是否传入了平台配置中的 SoC 名称。 |
+| `Cannot find ASCEND_HOME_PATH` | 先 source CANN `set_env.sh`，或显式导出 `ASCEND_HOME_PATH=<cann-install>`。 |
+| `Unsupported A5 SOC_VERSION` | `run.sh` 要求 `--soc` / `--soc-version` 以 `Ascend` 开头；检查平台配置中的 SoC 名称。 |
 | `per-token-scale region is too small` | `max_output_size` 太大或 window 太小，导致 scale 区域超过 `offsetD`。 |
 | `dispatch output region is too small` | `max_output_size * K * sizeof(int16_t)` 超过 dispatch output 区域。 |
 | `token-count region overlaps signal region` | token-count 区域侵入最后 1 MiB signal region，需要更大的 window 或更小的 `world_size/expert_per_rank`。 |
@@ -429,26 +754,39 @@ bash kernels/manual/a5/dispatch_combine_moe/run.sh \
 - Host target：`dispatch_combine_moe`
 - Kernel 编译目标：`--cce-aicore-arch=dav-c310`
 - Kernel 数据类型宏：`DTYPE_W1=int8_t`，`DTYPE_OUT=half`
+- Kernel source：`op_kernel/dispatch_ffn_combine.cpp`
+- Host sources：`main.cpp`、`op_host/runtime_context.cpp`、`op_host/tiling_builder.cpp`、`op_host/data_utils.cpp`
 - 关键链接库：`runtime`、`ascendcl`、`hcomm`、`tiling_api`、`nnopbase`
 - PTO include 路径放在 CANN include 前面，确保使用仓内 PTO 头文件。
 
 ## 当前验证状态
 
-当前机器可编译 A5 `dav-c310` 代码，但不作为 A5 runtime validation target。本文档中的运行路径来自代码解析；端到端 PASS/性能需要在 A5-capable 环境重新验证。
+当前机器可编译 A5 `dav-c310` 代码，但不作为 A5 runtime validation target。端到端 PASS/性能需要在 A5-capable 环境重新验证。
 
-最近一次已记录的 compile-only 证据为：
+README 本身的正确性检查应至少包含：
 
 ```bash
-source /home/ntlab/liulei/can/cann-9.0.0-beta.1/set_env.sh
-export PATH=/home/ntlab/miniconda3/envs/ltr_pto/bin:$PATH
-export LD_LIBRARY_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib:${LD_LIBRARY_PATH:-}
-export MPI_LIB_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib/libmpi.so
-cmake -S kernels/manual/a5/dispatch_combine_moe -B /tmp/dispatch_combine_moe_a5_readme_verify -DCMAKE_BUILD_TYPE=Release
-cmake --build /tmp/dispatch_combine_moe_a5_readme_verify --target dispatch_combine_moe -j1
+git diff --check -- kernels/manual/a5/dispatch_combine_moe/README.md
+python3 - <<'PY'
+from pathlib import Path
+s = Path('kernels/manual/a5/dispatch_combine_moe/README.md').read_text(encoding='utf-8')
+required = [
+    '从 README 到代码的阅读路线',
+    '核心变量字典',
+    'Producer / consumer / signal 对照',
+    '`epilogueGranularity` 如何形成两段 SwiGLU/GMM2 overlap',
+    'token_reorder/routing',
+    'token_reorder/unpermute',
+    'block_epilogue_pertoken_swiglu.hpp',
+    'block_epilogue_pertoken_row.hpp',
+    'block_epilogue_pertoken_v2.hpp',
+    'block_mmad_preload_async_fixpipe_quant.hpp',
+    'RunDispatchGatherImpl',
+    'RunRestoreImpl',
+]
+missing = [marker for marker in required if marker not in s]
+raise SystemExit(f'missing README markers: {missing}' if missing else 0)
+PY
 ```
 
-Observed result:
-
-```text
-[100%] Built target dispatch_combine_moe
-```
+两条命令都应无输出。

@@ -22,11 +22,12 @@ using namespace AscendC;
 
 #include "dispatch_ffn_combine_tiling.h"
 
+#include "utils/moe_pto_utils.hpp"
 #include "utils/dispatch_policy_custom.hpp"
 
 #include "utils/const_args.hpp"
 #include "dispatch_ffn_combine_kernel.hpp"
-#include "moe_init_routing_quant_v2/moe_init_routing_quant_v2_tiling.h"
+#include "token_reorder/routing/moe_init_routing_quant_tiling.h"
 
 namespace DispatchFFNCombineImpl {
 #define TemplateMMA2AClass typename AType_, typename BType_, typename CType_, bool TB_, bool Nz_
@@ -36,7 +37,7 @@ using namespace AscendC;
 
 template <typename Layout, typename ElementType, typename = void>
 struct LayoutBInitializer {
-    PTO_DEVICE
+    __forceinline__ __aicore__
     static Layout create(uint32_t k, uint32_t n)
     {
         return Layout{k, n};
@@ -45,7 +46,7 @@ struct LayoutBInitializer {
 
 template <typename Layout, typename ElementType>
 struct LayoutBInitializer<Layout, ElementType, std::enable_if_t<Layout::kTileLayout == pto::TileLayoutCustom::ZN>> {
-    PTO_DEVICE
+    __forceinline__ __aicore__
     static Layout create(uint32_t k, uint32_t n)
     {
         return Layout::template MakeLayout<ElementType>(k, n);
@@ -75,8 +76,8 @@ private:
     GM_ADDR gmExpertTokenNums_;
     GM_ADDR workspaceGM_;
 
-    GM_ADDR moeInitRoutingQuantV2Scale = nullptr;
-    GM_ADDR moeInitRoutingQuantV2Offset = nullptr;
+    GM_ADDR moeInitRoutingQuantScale = nullptr;
+    GM_ADDR moeInitRoutingQuantOffset = nullptr;
     GM_ADDR expertTokensBeforeCapacity = nullptr;
 
     int32_t rank;
@@ -105,7 +106,7 @@ private:
     int32_t EP;
     int32_t listLen;
 
-    optiling::MoeInitRoutingQuantV2TilingData moeInitRoutingQuantV2TilingData;
+    optiling::MoeInitRoutingQuantTilingData moeInitRoutingQuantTilingData;
     uint64_t initRoutingQuantTilingKey;
 
     // Hccl<HCCL_SERVER_TYPE_AICPU> hccl_;
@@ -152,121 +153,121 @@ __aicore__ inline void DispatchFFNCombine<TemplateMMA2ACFunc>::Init(
     commNpuSplit = tilingData->cocTiling.commNpuSplit;
     commDataSplit = tilingData->cocTiling.commDataSplit;
     lenPerLoop = tilingData->cocTiling.lenPerLoop;
-    moeInitRoutingQuantV2TilingData.coreNum = tilingData->cocTiling.moeInitRoutingQuantV2TilingData.coreNum;
-    moeInitRoutingQuantV2TilingData.n = tilingData->cocTiling.moeInitRoutingQuantV2TilingData.n;
-    moeInitRoutingQuantV2TilingData.cols = tilingData->cocTiling.moeInitRoutingQuantV2TilingData.cols;
-    moeInitRoutingQuantV2TilingData.k = tilingData->cocTiling.moeInitRoutingQuantV2TilingData.k;
-    moeInitRoutingQuantV2TilingData.expertCapacity =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.expertCapacity;
-    moeInitRoutingQuantV2TilingData.expertNum = tilingData->cocTiling.moeInitRoutingQuantV2TilingData.expertNum;
-    moeInitRoutingQuantV2TilingData.dropPadMode = tilingData->cocTiling.moeInitRoutingQuantV2TilingData.dropPadMode;
-    moeInitRoutingQuantV2TilingData.expertTokensCountOrCumsumFlag =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.expertTokensCountOrCumsumFlag;
-    moeInitRoutingQuantV2TilingData.expertTokensBeforeCapacityFlag =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.expertTokensBeforeCapacityFlag;
-    moeInitRoutingQuantV2TilingData.smoothType = tilingData->cocTiling.moeInitRoutingQuantV2TilingData.smoothType;
-    moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.needCoreNum =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.needCoreNum;
-    moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.perCoreElements =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.perCoreElements;
-    moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.perCoreLoops =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.perCoreLoops;
-    moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.perCorePerLoopElements =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.perCorePerLoopElements;
-    moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.perCoreLastLoopElements =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.perCoreLastLoopElements;
-    moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.lastCoreElements =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.lastCoreElements;
-    moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.lastCoreLoops =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.lastCoreLoops;
-    moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.lastCorePerLoopElements =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.lastCorePerLoopElements;
-    moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.lastCoreLastLoopElements =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.lastCoreLastLoopElements;
-    moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.oneLoopMaxElements =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.vbsComputeParamsOp.oneLoopMaxElements;
-    moeInitRoutingQuantV2TilingData.vmsMiddleComputeParamsOp.needCoreNum =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.vmsMiddleComputeParamsOp.needCoreNum;
-    moeInitRoutingQuantV2TilingData.sortOutComputeParamsOp.oneLoopMaxElements =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.sortOutComputeParamsOp.oneLoopMaxElements;
-    moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.needCoreNum =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.needCoreNum;
-    moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.activateRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.activateRows;
-    moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.perCoreRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.perCoreRows;
-    moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.perCorePerLoopRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.perCorePerLoopRows;
-    moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.perCoreLastLoopRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.perCoreLastLoopRows;
-    moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.lastCoreRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.lastCoreRows;
-    moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.lastCorePerLoopRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.lastCorePerLoopRows;
-    moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.lastCoreLastLoopRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.lastCoreLastLoopRows;
-    moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.perCoreLoops =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.perCoreLoops;
-    moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.lastCoreLoops =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.lastCoreLoops;
-    moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.perLoopCols =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.perLoopCols;
-    moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.lastLoopCols =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.lastLoopCols;
-    moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.colLoops =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstComputeParamsOp.colLoops;
-    moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.needCoreNum =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.needCoreNum;
-    moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.activateRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.activateRows;
-    moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.perCoreRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.perCoreRows;
-    moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.perCorePerLoopRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.perCorePerLoopRows;
-    moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.perCoreLastLoopRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.perCoreLastLoopRows;
-    moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.lastCoreRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.lastCoreRows;
-    moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.lastCorePerLoopRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.lastCorePerLoopRows;
-    moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.lastCoreLastLoopRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.lastCoreLastLoopRows;
-    moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.perCoreLoops =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.perCoreLoops;
-    moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.lastCoreLoops =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.lastCoreLoops;
-    moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.perLoopCols =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.perLoopCols;
-    moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.lastLoopCols =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.lastLoopCols;
-    moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.colLoops =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.srcToDstCapacityComputeParamsOp.colLoops;
-    moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.needCoreNum =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.needCoreNum;
-    moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.activateRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.activateRows;
-    moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.perCoreRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.perCoreRows;
-    moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.perCorePerLoopRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.perCorePerLoopRows;
-    moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.perCoreLastLoopRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.perCoreLastLoopRows;
-    moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.lastCoreRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.lastCoreRows;
-    moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.lastCorePerLoopRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.lastCorePerLoopRows;
-    moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.lastCoreLastLoopRows =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.lastCoreLastLoopRows;
-    moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.perCoreLoops =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.perCoreLoops;
-    moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.lastCoreLoops =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.lastCoreLoops;
-    moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.perLoopCols =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.perLoopCols;
-    moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.lastLoopCols =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.lastLoopCols;
-    moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.colLoops =
-        tilingData->cocTiling.moeInitRoutingQuantV2TilingData.gatherOutComputeParamsOp.colLoops;
+    moeInitRoutingQuantTilingData.coreNum = tilingData->cocTiling.moeInitRoutingQuantTilingData.coreNum;
+    moeInitRoutingQuantTilingData.n = tilingData->cocTiling.moeInitRoutingQuantTilingData.n;
+    moeInitRoutingQuantTilingData.cols = tilingData->cocTiling.moeInitRoutingQuantTilingData.cols;
+    moeInitRoutingQuantTilingData.k = tilingData->cocTiling.moeInitRoutingQuantTilingData.k;
+    moeInitRoutingQuantTilingData.expertCapacity =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.expertCapacity;
+    moeInitRoutingQuantTilingData.expertNum = tilingData->cocTiling.moeInitRoutingQuantTilingData.expertNum;
+    moeInitRoutingQuantTilingData.dropPadMode = tilingData->cocTiling.moeInitRoutingQuantTilingData.dropPadMode;
+    moeInitRoutingQuantTilingData.expertTokensCountOrCumsumFlag =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.expertTokensCountOrCumsumFlag;
+    moeInitRoutingQuantTilingData.expertTokensBeforeCapacityFlag =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.expertTokensBeforeCapacityFlag;
+    moeInitRoutingQuantTilingData.smoothType = tilingData->cocTiling.moeInitRoutingQuantTilingData.smoothType;
+    moeInitRoutingQuantTilingData.vbsComputeParamsOp.needCoreNum =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.vbsComputeParamsOp.needCoreNum;
+    moeInitRoutingQuantTilingData.vbsComputeParamsOp.perCoreElements =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.vbsComputeParamsOp.perCoreElements;
+    moeInitRoutingQuantTilingData.vbsComputeParamsOp.perCoreLoops =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.vbsComputeParamsOp.perCoreLoops;
+    moeInitRoutingQuantTilingData.vbsComputeParamsOp.perCorePerLoopElements =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.vbsComputeParamsOp.perCorePerLoopElements;
+    moeInitRoutingQuantTilingData.vbsComputeParamsOp.perCoreLastLoopElements =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.vbsComputeParamsOp.perCoreLastLoopElements;
+    moeInitRoutingQuantTilingData.vbsComputeParamsOp.lastCoreElements =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.vbsComputeParamsOp.lastCoreElements;
+    moeInitRoutingQuantTilingData.vbsComputeParamsOp.lastCoreLoops =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.vbsComputeParamsOp.lastCoreLoops;
+    moeInitRoutingQuantTilingData.vbsComputeParamsOp.lastCorePerLoopElements =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.vbsComputeParamsOp.lastCorePerLoopElements;
+    moeInitRoutingQuantTilingData.vbsComputeParamsOp.lastCoreLastLoopElements =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.vbsComputeParamsOp.lastCoreLastLoopElements;
+    moeInitRoutingQuantTilingData.vbsComputeParamsOp.oneLoopMaxElements =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.vbsComputeParamsOp.oneLoopMaxElements;
+    moeInitRoutingQuantTilingData.vmsMiddleComputeParamsOp.needCoreNum =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.vmsMiddleComputeParamsOp.needCoreNum;
+    moeInitRoutingQuantTilingData.sortOutComputeParamsOp.oneLoopMaxElements =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.sortOutComputeParamsOp.oneLoopMaxElements;
+    moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.needCoreNum =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.needCoreNum;
+    moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.activateRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.activateRows;
+    moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.perCoreRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.perCoreRows;
+    moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.perCorePerLoopRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.perCorePerLoopRows;
+    moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.perCoreLastLoopRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.perCoreLastLoopRows;
+    moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.lastCoreRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.lastCoreRows;
+    moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.lastCorePerLoopRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.lastCorePerLoopRows;
+    moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.lastCoreLastLoopRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.lastCoreLastLoopRows;
+    moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.perCoreLoops =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.perCoreLoops;
+    moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.lastCoreLoops =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.lastCoreLoops;
+    moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.perLoopCols =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.perLoopCols;
+    moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.lastLoopCols =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.lastLoopCols;
+    moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.colLoops =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstComputeParamsOp.colLoops;
+    moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.needCoreNum =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.needCoreNum;
+    moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.activateRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.activateRows;
+    moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.perCoreRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.perCoreRows;
+    moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.perCorePerLoopRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.perCorePerLoopRows;
+    moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.perCoreLastLoopRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.perCoreLastLoopRows;
+    moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.lastCoreRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.lastCoreRows;
+    moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.lastCorePerLoopRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.lastCorePerLoopRows;
+    moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.lastCoreLastLoopRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.lastCoreLastLoopRows;
+    moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.perCoreLoops =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.perCoreLoops;
+    moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.lastCoreLoops =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.lastCoreLoops;
+    moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.perLoopCols =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.perLoopCols;
+    moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.lastLoopCols =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.lastLoopCols;
+    moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.colLoops =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.srcToDstCapacityComputeParamsOp.colLoops;
+    moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.needCoreNum =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.needCoreNum;
+    moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.activateRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.activateRows;
+    moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.perCoreRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.perCoreRows;
+    moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.perCorePerLoopRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.perCorePerLoopRows;
+    moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.perCoreLastLoopRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.perCoreLastLoopRows;
+    moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.lastCoreRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.lastCoreRows;
+    moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.lastCorePerLoopRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.lastCorePerLoopRows;
+    moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.lastCoreLastLoopRows =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.lastCoreLastLoopRows;
+    moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.perCoreLoops =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.perCoreLoops;
+    moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.lastCoreLoops =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.lastCoreLoops;
+    moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.perLoopCols =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.perLoopCols;
+    moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.lastLoopCols =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.lastLoopCols;
+    moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.colLoops =
+        tilingData->cocTiling.moeInitRoutingQuantTilingData.gatherOutComputeParamsOp.colLoops;
     initRoutingQuantTilingKey = tilingData->cocTiling.initRoutingQuantTilingKey;
 
     rank = static_cast<int32_t>(tilingData->runtimeInfo.rank);
@@ -361,7 +362,7 @@ __aicore__ inline void DispatchFFNCombine<TemplateMMA2ACFunc>::Process()
     // Prepare params
 
     pto_ext::PtoShape3D problemShape =
-        pto_ext::MakePtoShape3D(static_cast<uint32_t>(m), static_cast<uint32_t>(n), static_cast<uint32_t>(k));
+        pto_ext::PtoShape3D(static_cast<uint32_t>(m), static_cast<uint32_t>(n), static_cast<uint32_t>(k));
 
     uint32_t epilogueCoreNum = aivNum;
     uint32_t epilogueGranularity = expertPerRank - 3;
@@ -396,14 +397,14 @@ __aicore__ inline void DispatchFFNCombine<TemplateMMA2ACFunc>::Process()
                                          layoutD1,
                                          layoutD2,
                                          expertIdGM_,
-                                         moeInitRoutingQuantV2Scale,
-                                         moeInitRoutingQuantV2Offset,
+                                         moeInitRoutingQuantScale,
+                                         moeInitRoutingQuantOffset,
                                          expertTokensBeforeCapacity,
                                          probs_,
                                          workspaceGM_,
                                          gmExpertTokenNums_,
                                          xActiveMaskGM_,
-                                         moeInitRoutingQuantV2TilingData};
+                                         moeInitRoutingQuantTilingData};
     // Call kernel
     MatmulKernel kernel(params);
     kernel(params);

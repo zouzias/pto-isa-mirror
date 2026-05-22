@@ -9,23 +9,161 @@
  */
 
 /*!
- * \file moe_v2_sort_multi_core.h
+ * \file moe_init_routing_sort.h
  * \brief
  */
-#ifndef INNER_MOE_V2_VBS_ONE_CORE_H
-#define INNER_MOE_V2_VBS_ONE_CORE_H
+#ifndef INNER_MOE_INIT_ROUTING_SORT_H
+#define INNER_MOE_INIT_ROUTING_SORT_H
 
-#include "moe_v2_sort_base.h"
-#include "moe_v2_pto_sort.h"
-#include "moe_v2_mrgsort.h"
-#include "moe_v2_mrgsort_out.h"
+#include "kernel_operator.h"
+#include "moe_packed_sort_merge.h"
+#include "moe_pto_sort.h"
 
-namespace MoeInitRoutingQuantV2 {
+namespace MoeInitRoutingQuant {
 using namespace AscendC;
 using namespace optiling;
-class MoeV2SortMultiCore : public MoeV2SortBase {
+
+class MoeSortBase {
 public:
-    __aicore__ inline MoeV2SortMultiCore(){};
+    __aicore__ inline MoeSortBase(){};
+
+protected:
+    __aicore__ inline void SyncAll();
+
+protected:
+    uint64_t sortInputUb;
+    uint64_t sortOutputUb;
+    uint64_t sortTempUb;
+    uint64_t sortMergeTmpUb;
+
+    __gm__ int32_t *expertIdxGm;
+    __gm__ int32_t *sortedexpertIdxGm;
+    __gm__ int32_t *expandDstToSrcRowGm;
+    __gm__ int32_t *expertTokensCountOrCumsumGm;
+    __gm__ int32_t *expertTokensBeforeCapacityGm;
+
+    int64_t tileLength;
+    int64_t totalLength;
+    int64_t coreNum;
+    int64_t n;
+    int64_t k;
+    int64_t existRowIdx;
+    int64_t expertNum;
+    int64_t expertTokensCountOrCumsumFlag = 0;
+    int64_t expertTokensBeforeCapacityFlag = 0;
+
+    static constexpr int64_t SYNC_GM_NUM = 2;
+    static constexpr int64_t WORK_GM_NUM = 2;
+    static constexpr int64_t DST_BLK_STRIDE = 1;
+    static constexpr int64_t DST_REP_STRIDE = 8;
+};
+
+__aicore__ inline void MoeSortBase::SyncAll()
+{
+    if (coreNum == 1) {
+        return;
+    }
+    pto_detail::PtoSyncAll();
+}
+
+class MoeSortOneCore : public MoeSortBase {
+public:
+    __aicore__ inline MoeSortOneCore(){};
+    template <typename TilingData>
+    __aicore__ inline void Init(GM_ADDR expertIdx, GM_ADDR expertTokensCountOrCumsum,
+                                GM_ADDR expertTokensBeforeCapacity, GM_ADDR workspace, const TilingData *tilingData,
+                                AscendC::TPipe *tPipe);
+    __aicore__ inline void Process();
+
+private:
+    __aicore__ inline void CopyIn();
+    __aicore__ inline void SortCompute();
+    __aicore__ inline void CopyOut();
+
+private:
+    int64_t sortNum;
+    int64_t blockIdx;
+};
+
+__aicore__ inline void MoeSortOneCore::CopyIn()
+{
+    pto_detail::PtoLoadVector<int32_t>(this->sortInputUb, expertIdxGm, this->totalLength);
+    pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
+    PtoFillArithProgressionInt32(this->sortInputUb + static_cast<uint64_t>(this->sortNum) * sizeof(int32_t),
+                                             0, 1, this->sortNum);
+}
+
+__aicore__ inline void MoeSortOneCore::SortCompute()
+{
+    const uint64_t expertForSourceRowUb = this->sortInputUb;
+    const uint64_t sourceRowUb = this->sortInputUb + static_cast<uint64_t>(this->sortNum) * sizeof(int32_t);
+    const uint64_t sortedExpertUb = this->sortOutputUb;
+    const uint64_t sortedRowUb = this->sortOutputUb + static_cast<uint64_t>(this->sortNum) * sizeof(int32_t);
+
+    PtoSortInt32AscendingUB(expertForSourceRowUb, sourceRowUb, sortedExpertUb, sortedRowUb,
+                                        this->sortTempUb, this->sortMergeTmpUb, this->totalLength);
+}
+
+__aicore__ inline void MoeSortOneCore::CopyOut()
+{
+    pto_detail::PtoStoreVector<int32_t>(sortedexpertIdxGm, this->sortOutputUb, this->totalLength);
+    pto_detail::PtoStoreVector<int32_t>(expandDstToSrcRowGm,
+                                        this->sortOutputUb + static_cast<uint64_t>(this->sortNum) * sizeof(int32_t),
+                                        this->totalLength);
+}
+
+template <typename TilingData>
+__aicore__ inline void MoeSortOneCore::Init(GM_ADDR expertIdx, GM_ADDR expertTokensCountOrCumsum,
+                                              GM_ADDR expertTokensBeforeCapacity, GM_ADDR workspace,
+                                              const TilingData *tilingData, AscendC::TPipe *tPipe)
+{
+    this->blockIdx = get_block_idx() + get_subblockid() * get_block_num();
+    this->tileLength = Align(tilingData->vbsComputeParamsOp.lastCorePerLoopElements, sizeof(int32_t));
+    this->sortNum = Ceil(this->tileLength, ONE_REPEAT_SORT_NUM) * ONE_REPEAT_SORT_NUM;
+    this->totalLength = tilingData->n * tilingData->k;
+    this->coreNum = tilingData->coreNum;
+    this->n = tilingData->n;
+    this->k = tilingData->k;
+    this->expertNum = tilingData->expertNum;
+    this->expertTokensCountOrCumsumFlag = tilingData->expertTokensCountOrCumsumFlag;
+    this->expertTokensBeforeCapacityFlag = tilingData->expertTokensBeforeCapacityFlag;
+
+    expertIdxGm = (__gm__ int32_t *)expertIdx;
+    sortedexpertIdxGm = reinterpret_cast<__gm__ int32_t *>(workspace);
+    expandDstToSrcRowGm = reinterpret_cast<__gm__ int32_t *>(workspace) + this->tileLength;
+
+    if (this->blockIdx == this->coreNum - 1) {
+        if (this->expertTokensCountOrCumsumFlag > 0) {
+            expertTokensCountOrCumsumGm = (__gm__ int32_t *)expertTokensCountOrCumsum;
+            InitGlobalMemory(expertTokensCountOrCumsumGm, this->expertNum, 0);
+        }
+        if (this->expertTokensBeforeCapacityFlag == 1) {
+            expertTokensBeforeCapacityGm = (__gm__ int32_t *)expertTokensBeforeCapacity;
+            InitGlobalMemory(expertTokensBeforeCapacityGm, this->expertNum, 0);
+        }
+    }
+    int64_t kvFactor = 2;
+    int64_t sortBytes = this->sortNum * sizeof(int32_t) * kvFactor;
+    int64_t scratchBytes = GetSortLen<float>(this->sortNum) * sizeof(float);
+    this->sortInputUb = 0;
+    this->sortOutputUb = this->sortInputUb + sortBytes;
+    this->sortTempUb = this->sortOutputUb + sortBytes;
+    this->sortMergeTmpUb = this->sortTempUb + scratchBytes;
+}
+
+__aicore__ inline void MoeSortOneCore::Process()
+{
+    if (get_block_idx() + get_subblockid() * get_block_num() < 1) {
+        CopyIn();
+        SortCompute();
+        CopyOut();
+    }
+    this->SyncAll();
+}
+
+class MoeSortMultiCore : public MoeSortBase {
+public:
+    __aicore__ inline MoeSortMultiCore(){};
     template <typename TilingData>
     __aicore__ inline void Init(GM_ADDR expertIdx, GM_ADDR expertTokensCountOrCumsum,
                                 GM_ADDR expertTokensBeforeCapacity, GM_ADDR workspace, const TilingData *tilingData,
@@ -41,20 +179,20 @@ private:
     __aicore__ inline void VBSCopyIn(int64_t progress, int64_t size, int64_t sortNum);
     __aicore__ inline void UBSortCompute(int64_t progress, int64_t size, int64_t sortNum);
     __aicore__ inline void VBSCopyOut(int64_t progress, int64_t size, int64_t sortNum);
-    __aicore__ inline void RunMoeMrgSort(MoeV2Mrgsort *sorter, int64_t listNum, int64_t coreOffset, int64_t loopOffset);
-    __aicore__ inline void RunMoeMrgSortOut(MoeV2MrgsortOut *sorter, int64_t listNum, int64_t coreOffset);
+    __aicore__ inline void RunMoeMrgSort(MoeMrgsort *sorter, int64_t listNum, int64_t coreOffset, int64_t loopOffset);
+    __aicore__ inline void RunMoeMrgSortOut(MoeMrgsortOut *sorter, int64_t listNum, int64_t coreOffset);
     __aicore__ inline void InitExpertTokensGlobalMemory();
 
 private:
     __gm__ float *workspaceGms[2];
 
-    const InnerMoeV2VBSComputeTilingData *vbsTilingData;
-    const InnerMoeV2VMSMiddleComputeTilingData *vmsTilingData;
-    const InnerMoeV2SortOutComputeTilingData *sortOutTilingData;
+    const InnerMoeVBSComputeTilingData *vbsTilingData;
+    const InnerMoeVMSMiddleComputeTilingData *vmsTilingData;
+    const InnerMoeSortOutComputeTilingData *sortOutTilingData;
 
     // for MoeMrgsort
-    MoeV2Mrgsort mrgsorter;
-    MoeV2MrgsortParam mrgsortParam;
+    MoeMrgsort mrgsorter;
+    MoeMrgsortParam mrgsortParam;
 
     int64_t coreNum;
     int64_t blockIdx;
@@ -76,7 +214,7 @@ private:
     static constexpr int64_t MAX_MRGSORT_LIST = 4;
 };
 
-__aicore__ inline void MoeV2SortMultiCore::InitExpertTokensGlobalMemory()
+__aicore__ inline void MoeSortMultiCore::InitExpertTokensGlobalMemory()
 {
     if (this->blockIdx < this->needInitExpertCore) {
         if (this->expertTokensCountOrCumsumFlag > EXERPT_TOKENS_NONE) {
@@ -88,27 +226,27 @@ __aicore__ inline void MoeV2SortMultiCore::InitExpertTokensGlobalMemory()
     }
 }
 
-__aicore__ inline void MoeV2SortMultiCore::VBSCopyIn(int64_t progress, int64_t size, int64_t sortNum)
+__aicore__ inline void MoeSortMultiCore::VBSCopyIn(int64_t progress, int64_t size, int64_t sortNum)
 {
     int64_t inOffset = progress * sortCoreLoopElements;
     pto_detail::PtoLoadVector<int32_t>(this->sortInputUb, expertIdxGm + inOffset, size);
 
     int64_t startValue = this->blockIdx * this->vbsTilingData->perCoreElements + inOffset;
     pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
-    pto_detail::PtoFillArithProgressionInt32(this->sortInputUb + static_cast<uint64_t>(sortNum) * sizeof(int32_t),
+    PtoFillArithProgressionInt32(this->sortInputUb + static_cast<uint64_t>(sortNum) * sizeof(int32_t),
                                              static_cast<int32_t>(startValue), 1, size);
 }
 
-__aicore__ inline void MoeV2SortMultiCore::UBSortCompute(int64_t progress, int64_t size, int64_t sortNum)
+__aicore__ inline void MoeSortMultiCore::UBSortCompute(int64_t progress, int64_t size, int64_t sortNum)
 {
     const uint64_t expertForSourceRowUb = this->sortInputUb;
     const uint64_t sourceRowUb = this->sortInputUb + static_cast<uint64_t>(sortNum) * sizeof(int32_t);
 
-    pto_detail::PtoSortInt32ToPackedUB(expertForSourceRowUb, sourceRowUb, this->sortOutputUb, this->sortMergeTmpUb,
+    PtoSortInt32ToPackedUB(expertForSourceRowUb, sourceRowUb, this->sortOutputUb, this->sortMergeTmpUb,
                                        size);
 }
 
-__aicore__ inline void MoeV2SortMultiCore::VBSCopyOut(int64_t progress, int64_t size, int64_t sortNum)
+__aicore__ inline void MoeSortMultiCore::VBSCopyOut(int64_t progress, int64_t size, int64_t sortNum)
 {
     pto_detail::PtoStoreVector<float>(workspaceGms[0] +
                                           this->blockIdx * GetSortLen<float>(this->vbsTilingData->perCoreElements) +
@@ -116,7 +254,7 @@ __aicore__ inline void MoeV2SortMultiCore::VBSCopyOut(int64_t progress, int64_t 
                                       this->sortOutputUb, GetSortLen<float>(size));
 }
 
-__aicore__ inline void MoeV2SortMultiCore::RunMoeMrgSort(MoeV2Mrgsort *sorter, int64_t listNum, int64_t coreOffset,
+__aicore__ inline void MoeSortMultiCore::RunMoeMrgSort(MoeMrgsort *sorter, int64_t listNum, int64_t coreOffset,
                                                          int64_t loopOffset)
 {
     __gm__ float *srcWsGm = workspaceGms[srcWsIndex] + blockIdx * coreOffset + loopOffset;
@@ -132,7 +270,7 @@ __aicore__ inline void MoeV2SortMultiCore::RunMoeMrgSort(MoeV2Mrgsort *sorter, i
     sorter->Process();
 }
 
-__aicore__ inline void MoeV2SortMultiCore::RunMoeMrgSortOut(MoeV2MrgsortOut *sorter, int64_t listNum,
+__aicore__ inline void MoeSortMultiCore::RunMoeMrgSortOut(MoeMrgsortOut *sorter, int64_t listNum,
                                                             int64_t coreOffset)
 {
     __gm__ float *srcWsGm = workspaceGms[srcWsIndex];
@@ -153,7 +291,7 @@ __aicore__ inline void MoeV2SortMultiCore::RunMoeMrgSortOut(MoeV2MrgsortOut *sor
     sorter->Process();
 }
 
-__aicore__ inline void MoeV2SortMultiCore::OneCoreVMSProcess(int64_t listNum, int64_t perListElements,
+__aicore__ inline void MoeSortMultiCore::OneCoreVMSProcess(int64_t listNum, int64_t perListElements,
                                                              int64_t lastListElements)
 {
     int64_t coreOffset = GetSortLen<float>(this->vbsTilingData->perCoreElements);
@@ -186,14 +324,14 @@ __aicore__ inline void MoeV2SortMultiCore::OneCoreVMSProcess(int64_t listNum, in
     }
 }
 
-__aicore__ inline void MoeV2SortMultiCore::UBSortProcess(int64_t progress, int64_t size, int64_t sortNum)
+__aicore__ inline void MoeSortMultiCore::UBSortProcess(int64_t progress, int64_t size, int64_t sortNum)
 {
     VBSCopyIn(progress, size, sortNum);
     UBSortCompute(progress, size, sortNum);
     VBSCopyOut(progress, size, sortNum);
 }
 
-__aicore__ inline void MoeV2SortMultiCore::VBSProcess()
+__aicore__ inline void MoeSortMultiCore::VBSProcess()
 {
     if (this->blockIdx < this->vbsTilingData->needCoreNum) {
         int64_t sortNum = Ceil(sortCoreLoopElements, ONE_REPEAT_SORT_NUM) * ONE_REPEAT_SORT_NUM;
@@ -210,7 +348,7 @@ __aicore__ inline void MoeV2SortMultiCore::VBSProcess()
     pto_detail::PtoSyncAll();
 }
 
-__aicore__ inline void MoeV2SortMultiCore::VMSProcess()
+__aicore__ inline void MoeSortMultiCore::VMSProcess()
 {
     int64_t currentStageNeedCoreNum = this->vmsTilingData->needCoreNum;
     perListElements = this->vbsTilingData->perCoreElements;
@@ -243,21 +381,21 @@ __aicore__ inline void MoeV2SortMultiCore::VMSProcess()
     }
 }
 
-__aicore__ inline void MoeV2SortMultiCore::SortOutProcess()
+__aicore__ inline void MoeSortMultiCore::SortOutProcess()
 {
     if (this->blockIdx < 1) {
         mrgsortParam.perListElements = perListElements;
         mrgsortParam.lastListElements = lastListElements;
         mrgsortParam.oneLoopMaxElements = this->sortOutTilingData->oneLoopMaxElements;
 
-        MoeV2MrgsortOut sorter;
+        MoeMrgsortOut sorter;
         RunMoeMrgSortOut(&sorter, listNum, GetSortLen<float>(perListElements));
     }
     pto_detail::PtoSyncAll();
 }
 
 template <typename TilingData>
-__aicore__ inline void MoeV2SortMultiCore::Init(GM_ADDR expertIdx, GM_ADDR expertTokensCountOrCumsum,
+__aicore__ inline void MoeSortMultiCore::Init(GM_ADDR expertIdx, GM_ADDR expertTokensCountOrCumsum,
                                                 GM_ADDR expertTokensBeforeCapacity, GM_ADDR workspace,
                                                 const TilingData *tilingData, AscendC::TPipe *tPipe)
 {
@@ -324,12 +462,12 @@ __aicore__ inline void MoeV2SortMultiCore::Init(GM_ADDR expertIdx, GM_ADDR exper
     this->sortMergeTmpUb = this->sortTempUb;
 }
 
-__aicore__ inline void MoeV2SortMultiCore::Process()
+__aicore__ inline void MoeSortMultiCore::Process()
 {
     InitExpertTokensGlobalMemory();
     VBSProcess();
     VMSProcess();
     SortOutProcess();
 }
-} // namespace MoeInitRoutingQuantV2
-#endif // INNER_MOE_V2_VBS_ONE_CORE_H
+} // namespace MoeInitRoutingQuant
+#endif // INNER_MOE_INIT_ROUTING_SORT_H
