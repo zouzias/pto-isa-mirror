@@ -145,6 +145,7 @@ set(ALL_TESTCASES
 # txor
 # txors
 ttrans_conv
+ttrans_n
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})
