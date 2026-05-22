@@ -44,6 +44,9 @@ inline void TTRANS_NCHW_TO_NC1HWC0_CORE(DstTileData &dst, SrcTileData &src)
     int64_t H = src.GetShape(2);
     int64_t W = src.GetShape(3);
     int64_t C1 = (C + C0 - 1) / C0;
+    size_t Size = N * C1 * H * W * C0;
+
+    std::fill(dst.data(), dst.data() + Size, 0);
 
     for (int64_t n = 0; n < N; ++n) {
         for (int64_t c = 0; c < C; ++c) {
