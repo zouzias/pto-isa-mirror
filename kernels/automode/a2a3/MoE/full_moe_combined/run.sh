@@ -12,6 +12,10 @@ do
     case "$1" in
         (-r | --run-mode )   RUN_MODE="$2"; shift 2;;
         (-v | --soc-version )SOC_VERSION="$2"; shift 2;;
+        (-C | --compiler )
+            CMAKE_COMPILER="$2"
+            shift 2;;
+
         (-n | --npu )        NPU_ID="$2"; shift 2;;
         (-a | --cases )      CASES_RAW="$2"; shift 2;;
         (--) shift; break;;
