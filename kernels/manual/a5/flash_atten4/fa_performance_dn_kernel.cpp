@@ -27,6 +27,19 @@ using namespace pto;
 #define skip_rescale 0
 #endif
 
+#ifndef MARK_STAMP
+// #define MARK_STAMP
+
+enum StageStamp : uint16_t
+{
+    QK_DONE,
+    P_DONE,
+    PV_DONE,
+    GU_DONE,
+};
+
+#endif
+
 #ifndef FFTS_BUFFER_FLAG_ENUM
 #define FFTS_BUFFER_FLAG_ENUM
 // -----------------------------------------------------------------------------
@@ -365,6 +378,9 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm
         wait_flag(PIPE_FIX, PIPE_M, accTileEvtID);
 
         pto_macro_matmul<Cube_S1, Cube_HEAD, Cube_S0>(kMatTile, qMatTile, qkAccTile, AccMode::Init);
+#if defined MARK_STAMP
+        bisheng::cce::mark_stamp<PIPE_M>(QK_DONE * 1000 + tile_id);
+#endif
 
         set_flag(PIPE_MTE1, PIPE_MTE2, qkMatTileEventId);
         set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
@@ -512,6 +528,9 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
         const AccMode accMode = (sub_tile_id == 0) ? AccMode::Init : AccMode::Acc;
         Sm2PvFreeHook<TSyncSM2PV> sm2pvFreeHook{sm2pvSync, sub_tile_id == static_cast<int>(kTileFactor) - 1};
         pto_macro_matmul<Cube_S0, Cube_S1, Cube_HEAD>(pMatTile, vMatTile, pvAccTile, accMode, sm2pvFreeHook);
+#endif
+#if defined MARK_STAMP
+        bisheng::cce::mark_stamp<PIPE_M>(PV_DONE * 1000 + tile_id);
 #endif
         set_flag(PIPE_MTE1, PIPE_MTE2, svMatTileEventId);
 
@@ -691,6 +710,9 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
                 l1_exp_max_slice, input_reduce_tmp, qkVecTile, input_reduce_tmp, nzConvBuffer, s0_index, s1_index,
                 tile_id, sync_iter, last_tile);
         }
+#if defined MARK_STAMP
+        bisheng::cce::mark_stamp<PIPE_V>(P_DONE * 1000 + tile_id);
+#endif
 
         if (row_slice == static_cast<int>(kTileFactor) - 1) {
             ubBufSync.free();
@@ -825,6 +847,9 @@ AICORE inline void compute_gu(int tile_id, int num_tiles, __gm__ float *pv_tile_
                     pto_macro_fa_gu_single_and_last_tile(runningOTile, l2_global_sum);
             }
         }
+#if defined MARK_STAMP
+        bisheng::cce::mark_stamp<PIPE_V>(GU_DONE * 1000 + tile_id);
+#endif
 
         pvUbBufSync.free();
 
