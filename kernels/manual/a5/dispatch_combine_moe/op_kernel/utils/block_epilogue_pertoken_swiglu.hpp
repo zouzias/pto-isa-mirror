@@ -1,3 +1,13 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
 /*
  * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
@@ -11,6 +21,7 @@
 #ifndef PTO_EXT_EPILOGUE_BLOCK_PER_TOKEN_SWIGLU_HPP
 #define PTO_EXT_EPILOGUE_BLOCK_PER_TOKEN_SWIGLU_HPP
 
+#include "moe_pto_utils.hpp"
 #include "dispatch_policy_custom.hpp"
 
 #include <pto/common/pto_tile.hpp>
@@ -20,6 +31,10 @@
 
 namespace pto_ext::Epilogue::Block {
 namespace swiglu_detail {
+
+using pto_ext::PtoPipeBarrier;
+using pto_ext::PtoSetFlag;
+using pto_ext::PtoWaitFlag;
 
 template <typename Element, int TileElems = 1024>
 using PtoVecTile = pto_ext::dispatch_combine_moe::pto_bridge::PtoVecTile<Element, TileElems>;
@@ -36,24 +51,6 @@ using pto_ext::dispatch_combine_moe::pto_bridge::PtoMulVector;
 using pto_ext::dispatch_combine_moe::pto_bridge::PtoReduceMaxVector;
 using pto_ext::dispatch_combine_moe::pto_bridge::PtoSetValue;
 using pto_ext::dispatch_combine_moe::pto_bridge::PtoStoreVector;
-
-template <auto Pipe>
-PTO_DEVICE void PtoPipeBarrier()
-{
-    AscendC::PipeBarrier<Pipe>();
-}
-
-template <AscendC::HardEvent Event>
-PTO_DEVICE void PtoSetFlag(int32_t eventId)
-{
-    AscendC::SetFlag<Event>(eventId);
-}
-
-template <AscendC::HardEvent Event>
-PTO_DEVICE void PtoWaitFlag(int32_t eventId)
-{
-    AscendC::WaitFlag<Event>(eventId);
-}
 
 } // namespace swiglu_detail
 
@@ -89,12 +86,11 @@ public:
         __gm__ ElementD *ptrD{nullptr};
         LayoutD layoutD{};
 
-        PTO_DEVICE
-        Params(){};
+        __forceinline__ __aicore__ Params(){};
 
-        PTO_DEVICE
-        Params(__gm__ ElementPerTokenScale *ptrPerTokenScale_, LayoutPerTokenScale const &layoutPerTokenScale_,
-               __gm__ ElementD *ptrD_, LayoutD const &layoutD_)
+        __forceinline__ __aicore__ Params(__gm__ ElementPerTokenScale *ptrPerTokenScale_,
+                                          LayoutPerTokenScale const &layoutPerTokenScale_, __gm__ ElementD *ptrD_,
+                                          LayoutD const &layoutD_)
             : ptrPerTokenScale(ptrPerTokenScale_),
               layoutPerTokenScale(layoutPerTokenScale_),
               ptrD(ptrD_),
@@ -102,8 +98,9 @@ public:
         {}
     };
 
-    PTO_DEVICE
-    BlockEpilogue(Arch::Resource<ArchTag> const &resource, int32_t n, Params const &params = Params{}) : params(params)
+    __forceinline__ __aicore__ BlockEpilogue(Arch::Resource<ArchTag> const &resource, int32_t n,
+                                             Params const &params = Params{})
+        : params(params)
     {
         size_t ubOffset = 0;
         int32_t eventVMTE2 = 0;
@@ -139,30 +136,28 @@ public:
 
         ubPerTokenScaleOutputOffset = resource.ubBuf.GetBufferAddrByByte(ubOffset);
     }
-    PTO_DEVICE
-    void Finalize()
+    __forceinline__ __aicore__ void Finalize()
     {
         for (uint32_t i = 0; i < UB_STAGES; ++i) {
             swiglu_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[i]);
             swiglu_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[i]);
         }
     }
-    PTO_DEVICE
-    ~BlockEpilogue()
+    __forceinline__ __aicore__ ~BlockEpilogue()
     {}
 
-    PTO_DEVICE
-    void UpdateParams(Params const &params_)
+    __forceinline__ __aicore__ void UpdateParams(Params const &params_)
     {
         params = params_;
     }
     // Each tile is 1x7168, and each block covers all tokens for one expert = [group[i], 7168]
     template <typename CallbackT = pto_ext::support::NoopCallback>
-    PTO_DEVICE void operator()(__gm__ ElementC *gmCPtr, PtoShape2D const &shapeC,
-                               __gm__ ElementPerTokenScale *gmPerTokenScale1Ptr, __gm__ ElementD *gmDPtr,
-                               __gm__ ElementPerTokenScale *gmPerTokenScale2Ptr,
+    __forceinline__ __aicore__ void operator()(__gm__ ElementC *gmCPtr, PtoShape2D const &shapeC,
+                                               __gm__ ElementPerTokenScale *gmPerTokenScale1Ptr,
+                                               __gm__ ElementD *gmDPtr,
+                                               __gm__ ElementPerTokenScale *gmPerTokenScale2Ptr,
 
-                               uint32_t epilogueCoreNum = 40, CallbackT &&callback = CallbackT{})
+                                               uint32_t epilogueCoreNum = 40, CallbackT &&callback = CallbackT{})
     {
         callback();
         uint32_t blockM = static_cast<uint32_t>(shapeC.shape[0]);

@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+# coding=utf-8
+# -----------------------------------------------------------------------------------------------------------
+# Copyright (c) 2025 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+# -----------------------------------------------------------------------------------------------------------
 import argparse
 import json
 from pathlib import Path
@@ -86,7 +96,9 @@ def make_expert_idx(rank: int, args: argparse.Namespace) -> np.ndarray:
     total_experts = args.world_size * args.experts
     if total_experts <= 0:
         raise ValueError("total_experts must be positive")
-    base = (np.arange(args.m, dtype=np.int32)[:, None] * args.topk + rank + np.arange(args.topk, dtype=np.int32)[None, :])
+    token_base = np.arange(args.m, dtype=np.int32)[:, None] * args.topk
+    topk_base = np.arange(args.topk, dtype=np.int32)[None, :]
+    base = token_base + rank + topk_base
     return (base % total_experts).astype(np.int32)
 
 
@@ -108,7 +120,9 @@ def make_weight1(rank: int, args: argparse.Namespace, case_mode: str) -> np.ndar
 def make_weight2(rank: int, args: argparse.Namespace, case_mode: str) -> np.ndarray:
     if case_mode == "zero":
         return np.zeros((args.experts, args.n // 2, args.k), dtype=np.int8)
-    base = np.arange(args.experts * (args.n // 2) * args.k, dtype=np.int32).reshape(args.experts, args.n // 2, args.k)
+    base = np.arange(args.experts * (args.n // 2) * args.k, dtype=np.int32).reshape(
+        args.experts, args.n // 2, args.k
+    )
     weight = ((base + rank * 19 + 11) % 9) - 4
     return weight.astype(np.int8)
 
@@ -166,7 +180,11 @@ def compute_outputs_and_workload(
         "routed_tokens_all_ranks": total_routed_tokens,
         "remote_routed_tokens_all_ranks": total_remote_routed_tokens,
         "compute_flops_all_ranks": total_routed_tokens * 3.0 * args.k * args.n,
-        "comm_bytes_all_ranks": total_remote_routed_tokens * (args.k * (np.dtype(np.int8).itemsize + np.dtype(np.float16).itemsize) + np.dtype(np.float32).itemsize),
+        "comm_bytes_all_ranks": total_remote_routed_tokens
+        * (
+            args.k * (np.dtype(np.int8).itemsize + np.dtype(np.float16).itemsize)
+            + np.dtype(np.float32).itemsize
+        ),
     }
     return outputs, workload
 
@@ -227,8 +245,14 @@ def main() -> None:
     x_active_mask_list = [np.ones((args.m,), dtype=np.uint8) for _ in range(args.world_size)]
     weight1_nd = [make_weight1(rank, args, args.case_mode) for rank in range(args.world_size)]
     weight2_nd = [make_weight2(rank, args, args.case_mode) for rank in range(args.world_size)]
-    scale1_origin = [make_scale_origin(args.experts, args.n, rank * 17, args.case_mode) for rank in range(args.world_size)]
-    scale2_origin = [make_scale_origin(args.experts, args.k, rank * 23, args.case_mode) for rank in range(args.world_size)]
+    scale1_origin = [
+        make_scale_origin(args.experts, args.n, rank * 17, args.case_mode)
+        for rank in range(args.world_size)
+    ]
+    scale2_origin = [
+        make_scale_origin(args.experts, args.k, rank * 23, args.case_mode)
+        for rank in range(args.world_size)
+    ]
 
     xs = [fp32_to_bf16_value(x) for x in xs]
     expected_out_list, workload = compute_outputs_and_workload(

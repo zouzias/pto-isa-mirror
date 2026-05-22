@@ -1,3 +1,13 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -101,9 +111,9 @@ int ParseEnvInt(const char *name, int default_value)
 
 bool ZeroWindowMemory(const StandaloneRankRuntime &runtime)
 {
-    const uint64_t window_bytes = runtime.hccl.WindowBytes();
-    for (uint32_t i = 0; i < runtime.hccl.RankCount(); ++i) {
-        void *window_ptr = runtime.hccl.WindowIn(i);
+    const uint64_t window_bytes = runtime.hccl.host_remote_window_ctx.windowBytes;
+    for (uint32_t i = 0; i < runtime.hccl.host_remote_window_ctx.rankSize; ++i) {
+        void *window_ptr = reinterpret_cast<void *>(runtime.hccl.host_remote_window_ctx.windowIn[i]);
         if (aclrtMemset(window_ptr, window_bytes, 0, window_bytes) != ACL_SUCCESS) {
             return false;
         }
@@ -148,21 +158,6 @@ PerfStats CalcStats(const std::vector<double> &samples)
     }
     stats.stddev = std::sqrt(variance / static_cast<double>(samples.size()));
     return stats;
-}
-
-double ToTokensPerSecond(double tokens, double us)
-{
-    return us > 0.0 ? tokens * kMicrosecondsPerSecond / us : 0.0;
-}
-
-double ToTflops(double flops, double us)
-{
-    return us > 0.0 ? flops * kMicrosecondsPerSecond / us / 1e12 : 0.0;
-}
-
-double ToGbs(double bytes, double us)
-{
-    return us > 0.0 ? bytes * kMicrosecondsPerSecond / us / kBytesPerGiB : 0.0;
 }
 
 std::vector<double> GatherMaxSamplesToRoot(const std::vector<double> &local_samples, int rank_id, int world_size)
@@ -228,6 +223,23 @@ void PrintPerfSummary(const CaseConfig &cfg, int warmup_iters, int measure_iters
     }
     const PerfStats kernel_stats = CalcStats(kernel_samples_us);
     const PerfStats e2e_stats = CalcStats(e2e_samples_us);
+    const double kernel_input_tokens_per_s =
+        kernel_stats.avg > 0.0 ? cfg.input_tokens_all_ranks * kMicrosecondsPerSecond / kernel_stats.avg : 0.0;
+    const double kernel_routed_tokens_per_s =
+        kernel_stats.avg > 0.0 ? cfg.routed_tokens_all_ranks * kMicrosecondsPerSecond / kernel_stats.avg : 0.0;
+    const double kernel_tflops =
+        kernel_stats.avg > 0.0 ? cfg.compute_flops_all_ranks * kMicrosecondsPerSecond / kernel_stats.avg / 1e12 : 0.0;
+    const double kernel_gbs = kernel_stats.avg > 0.0 ?
+                                  cfg.comm_bytes_all_ranks * kMicrosecondsPerSecond / kernel_stats.avg / kBytesPerGiB :
+                                  0.0;
+    const double e2e_input_tokens_per_s =
+        e2e_stats.avg > 0.0 ? cfg.input_tokens_all_ranks * kMicrosecondsPerSecond / e2e_stats.avg : 0.0;
+    const double e2e_routed_tokens_per_s =
+        e2e_stats.avg > 0.0 ? cfg.routed_tokens_all_ranks * kMicrosecondsPerSecond / e2e_stats.avg : 0.0;
+    const double e2e_tflops =
+        e2e_stats.avg > 0.0 ? cfg.compute_flops_all_ranks * kMicrosecondsPerSecond / e2e_stats.avg / 1e12 : 0.0;
+    const double e2e_gbs =
+        e2e_stats.avg > 0.0 ? cfg.comm_bytes_all_ranks * kMicrosecondsPerSecond / e2e_stats.avg / kBytesPerGiB : 0.0;
 
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "\n===============================================================\n";
@@ -243,18 +255,16 @@ void PrintPerfSummary(const CaseConfig &cfg, int warmup_iters, int measure_iters
               << " min=" << kernel_stats.min << " us"
               << " max=" << kernel_stats.max << " us"
               << " std=" << kernel_stats.stddev << " us\n";
-    std::cout << "    input_tokens/s=" << ToTokensPerSecond(cfg.input_tokens_all_ranks, kernel_stats.avg)
-              << " routed_tokens/s=" << ToTokensPerSecond(cfg.routed_tokens_all_ranks, kernel_stats.avg)
-              << " eq_compute=" << ToTflops(cfg.compute_flops_all_ranks, kernel_stats.avg) << " TFLOPS"
-              << " eq_comm=" << ToGbs(cfg.comm_bytes_all_ranks, kernel_stats.avg) << " GB/s\n";
+    std::cout << "    input_tokens/s=" << kernel_input_tokens_per_s << " routed_tokens/s=" << kernel_routed_tokens_per_s
+              << " eq_compute=" << kernel_tflops << " TFLOPS"
+              << " eq_comm=" << kernel_gbs << " GB/s\n";
     std::cout << "  e2e(max rank per iter):    avg=" << e2e_stats.avg << " us"
               << " min=" << e2e_stats.min << " us"
               << " max=" << e2e_stats.max << " us"
               << " std=" << e2e_stats.stddev << " us\n";
-    std::cout << "    input_tokens/s=" << ToTokensPerSecond(cfg.input_tokens_all_ranks, e2e_stats.avg)
-              << " routed_tokens/s=" << ToTokensPerSecond(cfg.routed_tokens_all_ranks, e2e_stats.avg)
-              << " eq_compute=" << ToTflops(cfg.compute_flops_all_ranks, e2e_stats.avg) << " TFLOPS"
-              << " eq_comm=" << ToGbs(cfg.comm_bytes_all_ranks, e2e_stats.avg) << " GB/s\n";
+    std::cout << "    input_tokens/s=" << e2e_input_tokens_per_s << " routed_tokens/s=" << e2e_routed_tokens_per_s
+              << " eq_compute=" << e2e_tflops << " TFLOPS"
+              << " eq_comm=" << e2e_gbs << " GB/s\n";
     std::cout
         << "  note: equivalent compute/comm are derived from case.json logical workload, not hardware counters.\n";
     std::cout << "===============================================================\n" << std::endl;

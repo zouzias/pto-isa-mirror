@@ -1,3 +1,13 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
 #ifndef LAYOUT_3D_HPP
 #define LAYOUT_3D_HPP
 
@@ -11,10 +21,7 @@
 #define DISPATCH_FFN_COMBINE_DEVICE inline
 #endif
 
-class Layout3D {
-    int64_t strides[2];
-
-public:
+struct Layout3D {
     DISPATCH_FFN_COMBINE_DEVICE Layout3D()
     {}
 
@@ -28,6 +35,9 @@ public:
     {
         return dim0 * strides[0] + dim1 * strides[1] + dim2;
     }
+
+private:
+    int64_t strides[2];
 };
 
 #undef DISPATCH_FFN_COMBINE_DEVICE

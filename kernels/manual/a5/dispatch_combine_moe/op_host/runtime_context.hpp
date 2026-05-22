@@ -1,3 +1,13 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
 #pragma once
 
 #include <cstdint>
@@ -27,32 +37,8 @@ struct StandaloneHcclContext {
     PtoRemoteWindowContext host_remote_window_ctx{};
     bool owns_remote_window_ctx = false;
 
-    PtoRemoteWindowContext *RemoteWindowContextPtr() const
-    {
-        return remote_window_ctx;
-    }
-
-    uint64_t WindowBytes() const
-    {
-        return host_remote_window_ctx.windowBytes;
-    }
-
-    uint32_t RankCount() const
-    {
-        return host_remote_window_ctx.rankSize;
-    }
-
-    void *WindowIn(uint32_t rank) const
-    {
-        return reinterpret_cast<void *>(host_remote_window_ctx.windowIn[rank]);
-    }
-
     void AttachExternalRemoteWindowContext(PtoRemoteWindowContext *remoteWindowCtx);
     void ReleaseRemoteWindowContext();
-    void ResetHostRemoteWindowContext();
-    void SetHostContextWorkspace(uint64_t workspaceBase, uint64_t workspaceBytes);
-    void SetHostRankInfo(uint32_t rank, uint32_t rankCount, uint64_t windowBytes);
-    void SetHostWindow(uint32_t rank, uint64_t windowIn, uint64_t windowOut);
     bool LoadHostRemoteWindowContextFromDevice();
     bool CopyHostRemoteWindowContextToDevice();
 };

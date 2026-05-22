@@ -1,3 +1,13 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
 #include "runtime_context.hpp"
 
 #include <cstddef>
@@ -18,30 +28,6 @@ void StandaloneHcclContext::ReleaseRemoteWindowContext()
     }
     remote_window_ctx = nullptr;
     owns_remote_window_ctx = false;
-}
-
-void StandaloneHcclContext::ResetHostRemoteWindowContext()
-{
-    host_remote_window_ctx = {};
-}
-
-void StandaloneHcclContext::SetHostContextWorkspace(uint64_t workspaceBase, uint64_t workspaceBytes)
-{
-    host_remote_window_ctx.workspaceBase = workspaceBase;
-    host_remote_window_ctx.workspaceBytes = workspaceBytes;
-}
-
-void StandaloneHcclContext::SetHostRankInfo(uint32_t rank, uint32_t rankCount, uint64_t windowBytes)
-{
-    host_remote_window_ctx.rank = rank;
-    host_remote_window_ctx.rankSize = rankCount;
-    host_remote_window_ctx.windowBytes = windowBytes;
-}
-
-void StandaloneHcclContext::SetHostWindow(uint32_t rank, uint64_t windowIn, uint64_t windowOut)
-{
-    host_remote_window_ctx.windowIn[rank] = windowIn;
-    host_remote_window_ctx.windowOut[rank] = windowOut;
 }
 
 bool StandaloneHcclContext::LoadHostRemoteWindowContextFromDevice()
@@ -273,14 +259,18 @@ bool LoadA5RemoteWindowContext(StandaloneHcclContext &hccl, void *ctx_ptr)
         return false;
     }
 
-    hccl.ResetHostRemoteWindowContext();
-    hccl.SetHostContextWorkspace(host_ctx.workSpace, host_ctx.workSpaceSize);
-    hccl.SetHostRankInfo(host_ctx.rankId, host_ctx.rankNum, host_ctx.winSize);
+    hccl.host_remote_window_ctx = {};
+    hccl.host_remote_window_ctx.workspaceBase = host_ctx.workSpace;
+    hccl.host_remote_window_ctx.workspaceBytes = host_ctx.workSpaceSize;
+    hccl.host_remote_window_ctx.rank = host_ctx.rankId;
+    hccl.host_remote_window_ctx.rankSize = host_ctx.rankNum;
+    hccl.host_remote_window_ctx.windowBytes = host_ctx.winSize;
     for (uint32_t i = 0; i < host_ctx.rankNum; ++i) {
         if (host_ctx.windowsIn[i] == 0 || host_ctx.windowsOut[i] == 0) {
             return false;
         }
-        hccl.SetHostWindow(i, host_ctx.windowsIn[i], host_ctx.windowsOut[i]);
+        hccl.host_remote_window_ctx.windowIn[i] = host_ctx.windowsIn[i];
+        hccl.host_remote_window_ctx.windowOut[i] = host_ctx.windowsOut[i];
     }
     return hccl.CopyHostRemoteWindowContextToDevice();
 }
@@ -312,19 +302,23 @@ bool BuildRingHostRemoteWindowContext(StandaloneHcclContext &hccl, uint8_t *raw_
                                       const pto_hccl_compat::HcclOpResParamHead &head,
                                       const std::vector<pto_hccl_compat::RemoteResPtr> &remote_res_arr)
 {
-    hccl.ResetHostRemoteWindowContext();
+    hccl.host_remote_window_ctx = {};
 
     uint64_t workspace_fields[2] = {0, 0};
     if (aclrtMemcpy(workspace_fields, sizeof(workspace_fields), raw_ctx, sizeof(workspace_fields),
                     ACL_MEMCPY_DEVICE_TO_HOST) == ACL_SUCCESS) {
-        hccl.SetHostContextWorkspace(workspace_fields[0], workspace_fields[1]);
+        hccl.host_remote_window_ctx.workspaceBase = workspace_fields[0];
+        hccl.host_remote_window_ctx.workspaceBytes = workspace_fields[1];
     }
 
-    hccl.SetHostRankInfo(head.localUsrRankId, head.rankSize, head.winSize);
+    hccl.host_remote_window_ctx.rank = head.localUsrRankId;
+    hccl.host_remote_window_ctx.rankSize = head.rankSize;
+    hccl.host_remote_window_ctx.windowBytes = head.winSize;
 
     for (uint32_t i = 0; i < head.rankSize; ++i) {
         if (i == head.localUsrRankId) {
-            hccl.SetHostWindow(i, head.localWindowsIn, head.localWindowsOut);
+            hccl.host_remote_window_ctx.windowIn[i] = head.localWindowsIn;
+            hccl.host_remote_window_ctx.windowOut[i] = head.localWindowsOut;
             continue;
         }
 
@@ -339,7 +333,8 @@ bool BuildRingHostRemoteWindowContext(StandaloneHcclContext &hccl, uint8_t *raw_
             return false;
         }
 
-        hccl.SetHostWindow(i, remote_info.windowsIn, remote_info.windowsOut);
+        hccl.host_remote_window_ctx.windowIn[i] = remote_info.windowsIn;
+        hccl.host_remote_window_ctx.windowOut[i] = remote_info.windowsOut;
     }
     return true;
 }
@@ -420,7 +415,7 @@ bool InitStandaloneRankRuntime(StandaloneRankRuntime &runtime, int rank_id, int 
 void DestroyStandaloneRankRuntime(StandaloneRankRuntime &runtime)
 {
     runtime.hccl.ReleaseRemoteWindowContext();
-    runtime.hccl.ResetHostRemoteWindowContext();
+    runtime.hccl.host_remote_window_ctx = {};
 
     if (runtime.hccl.comm != nullptr) {
         HcclCommDestroy(runtime.hccl.comm);

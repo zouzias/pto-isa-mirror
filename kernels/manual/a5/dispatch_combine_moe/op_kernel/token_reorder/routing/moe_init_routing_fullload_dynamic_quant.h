@@ -1,33 +1,30 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
- * This file is a part of the CANN Open Software.
- * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
- */
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
 
 /* !
- * \file moe_v2_fullload_dynamic_quant.h
+ * \file moe_init_routing_fullload_dynamic_quant.h
  * \brief
  */
-#ifndef MOE_V2_FULL_LOAD_DYNAMIC_QUANT_H
-#define MOE_V2_FULL_LOAD_DYNAMIC_QUANT_H
+#ifndef MOE_INIT_ROUTING_FULLLOAD_DYNAMIC_QUANT_H
+#define MOE_INIT_ROUTING_FULLLOAD_DYNAMIC_QUANT_H
 
-#include "moe_v2_mrgsort.h"
-#include "moe_v2_pto_sort.h"
-#include "moe_v2_sort_base.h"
-namespace MoeInitRoutingQuantV2 {
+#include "moe_init_routing_sort.h"
+namespace MoeInitRoutingQuant {
 using namespace AscendC;
 using namespace optiling;
 template <typename T>
-class MoeV2FullLoadDynamicQuant : public MoeV2SortBase {
-public:
-    __aicore__ inline MoeV2FullLoadDynamicQuant(){};
+struct MoeFullLoadDynamicQuant : public MoeSortBase {
+    __aicore__ inline MoeFullLoadDynamicQuant(){};
     __aicore__ inline void Init(GM_ADDR x, GM_ADDR expertIdx, GM_ADDR expandedX, GM_ADDR expandedRowIdx,
                                 GM_ADDR expertTokensCountOrCumsum, GM_ADDR quantSmooth, GM_ADDR dynamicQuantScale,
-                                GM_ADDR workspace, const MoeInitRoutingQuantV2TilingData *tilingData,
+                                GM_ADDR workspace, const MoeInitRoutingQuantTilingData *tilingData,
                                 AscendC::TPipe *tPipe);
     __aicore__ inline void Process();
 
@@ -46,7 +43,7 @@ private:
 
 private:
     int64_t sortNum_;
-    const InnerMoeV2GatherOutComputeTilingData *gatherOutTilingData_;
+    const InnerMoeGatherOutComputeTilingData *gatherOutTilingData_;
     int64_t blockIdx_;
     int64_t needCoreNum_;
     int64_t coreRows_;
@@ -82,37 +79,37 @@ private:
 };
 
 template <typename T>
-__aicore__ inline void MoeV2FullLoadDynamicQuant<T>::CopyIn()
+__aicore__ inline void MoeFullLoadDynamicQuant<T>::CopyIn()
 {
     pto_detail::PtoLoadVector<int32_t>(this->sortInputUb, expertIdxGm_, this->totalLength);
     pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
-    pto_detail::PtoFillArithProgressionInt32(
-        this->sortInputUb + static_cast<uint64_t>(this->sortNum_) * sizeof(int32_t), 0, 1, this->totalLength);
+    PtoFillArithProgressionInt32(this->sortInputUb + static_cast<uint64_t>(this->sortNum_) * sizeof(int32_t), 0, 1,
+                                 this->totalLength);
 }
 
 template <typename T>
-__aicore__ inline void MoeV2FullLoadDynamicQuant<T>::SortCompute()
+__aicore__ inline void MoeFullLoadDynamicQuant<T>::SortCompute()
 {
     const uint64_t expertIdxUb = this->sortInputUb;
     const uint64_t rowIdxUb = this->sortInputUb + static_cast<uint64_t>(this->sortNum_) * sizeof(int32_t);
 
-    pto_detail::PtoSortInt32AscendingUB(expertIdxUb, rowIdxUb, this->expandedExpertIdxUb_, this->expandDstToSrcRowUb_,
-                                        this->sortTempUb, this->sortMergeTmpUb, this->totalLength);
+    PtoSortInt32AscendingUB(expertIdxUb, rowIdxUb, this->expandedExpertIdxUb_, this->expandDstToSrcRowUb_,
+                            this->sortTempUb, this->sortMergeTmpUb, this->totalLength);
 
-    pto_detail::PtoFillArithProgressionInt32(rowIdxUb, 0, 1, this->totalLength);
+    PtoFillArithProgressionInt32(rowIdxUb, 0, 1, this->totalLength);
     pto_detail::PtoPipeBarrier<PIPE_V>();
-    pto_detail::PtoSortInt32AscendingUB(this->expandDstToSrcRowUb_, rowIdxUb, expertIdxUb, this->expandedRowIdxUb_,
-                                        this->sortTempUb, this->sortMergeTmpUb, this->totalLength);
+    PtoSortInt32AscendingUB(this->expandDstToSrcRowUb_, rowIdxUb, expertIdxUb, this->expandedRowIdxUb_,
+                            this->sortTempUb, this->sortMergeTmpUb, this->totalLength);
 }
 
 template <typename T>
-__aicore__ inline void MoeV2FullLoadDynamicQuant<T>::CopyOutIdx()
+__aicore__ inline void MoeFullLoadDynamicQuant<T>::CopyOutIdx()
 {
     pto_detail::PtoStoreVector<int32_t>(expandedRowIdxGm_, this->expandedRowIdxUb_, this->totalLength);
 }
 
 template <typename T>
-__aicore__ inline void MoeV2FullLoadDynamicQuant<T>::ComputeExpertTokenCountOrCumsum()
+__aicore__ inline void MoeFullLoadDynamicQuant<T>::ComputeExpertTokenCountOrCumsum()
 {
     int64_t expertNumAlign = Align(this->expertNum, sizeof(int32_t));
     pto_detail::PtoFillVector<int32_t>(this->expertTokensUb_, static_cast<int32_t>(0), expertNumAlign);
@@ -145,11 +142,11 @@ __aicore__ inline void MoeV2FullLoadDynamicQuant<T>::ComputeExpertTokenCountOrCu
 }
 
 template <typename T>
-__aicore__ inline void MoeV2FullLoadDynamicQuant<T>::CopyOutEmpty()
+__aicore__ inline void MoeFullLoadDynamicQuant<T>::CopyOutEmpty()
 {}
 
 template <typename T>
-__aicore__ inline void MoeV2FullLoadDynamicQuant<T>::LoadInputRow(uint64_t inUb, int64_t row)
+__aicore__ inline void MoeFullLoadDynamicQuant<T>::LoadInputRow(uint64_t inUb, int64_t row)
 {
     if constexpr (IsSameType<T, float>::value) {
         pto_detail::PtoLoadVector<float>(inUb, xGm_ + row * this->cols_, this->cols_);
@@ -160,15 +157,15 @@ __aicore__ inline void MoeV2FullLoadDynamicQuant<T>::LoadInputRow(uint64_t inUb,
 }
 
 template <typename T>
-__aicore__ inline void MoeV2FullLoadDynamicQuant<T>::StoreExpandedXRow(int64_t outIndex, uint64_t outUb)
+__aicore__ inline void MoeFullLoadDynamicQuant<T>::StoreExpandedXRow(int64_t outIndex, uint64_t outUb)
 {
     pto_detail::PtoStoreVector(expandedXGm_ + outIndex * this->cols_scale_, outUb, this->cols_scale_);
 }
 
 template <typename T>
-__aicore__ inline void MoeV2FullLoadDynamicQuant<T>::QuantizeTile(uint64_t inUb, uint64_t tempUb,
-                                                                  uint64_t outputPayloadUb,
-                                                                  uint64_t dynamicQuantScaleUb, uint64_t smoothUb)
+__aicore__ inline void MoeFullLoadDynamicQuant<T>::QuantizeTile(uint64_t inUb, uint64_t tempUb,
+                                                                uint64_t outputPayloadUb, uint64_t dynamicQuantScaleUb,
+                                                                uint64_t smoothUb)
 {
     if constexpr (!IsSameType<T, float>::value) {
         const uint64_t rawInputUb = inUb + static_cast<uint64_t>(colsAlign) * sizeof(T);
@@ -197,14 +194,14 @@ __aicore__ inline void MoeV2FullLoadDynamicQuant<T>::QuantizeTile(uint64_t inUb,
 }
 
 template <typename T>
-__aicore__ inline void MoeV2FullLoadDynamicQuant<T>::Compute(uint64_t smoothUb)
+__aicore__ inline void MoeFullLoadDynamicQuant<T>::Compute(uint64_t smoothUb)
 {
     const uint64_t dynamicQuantScaleUb = this->outputXUb_ + static_cast<uint64_t>(this->cols_) * sizeof(int8_t);
     QuantizeTile(this->inputXUb_, this->tempUb_, this->outputXUb_, dynamicQuantScaleUb, smoothUb);
 }
 
 template <typename T>
-__aicore__ inline void MoeV2FullLoadDynamicQuant<T>::CopyOutXQuant1H()
+__aicore__ inline void MoeFullLoadDynamicQuant<T>::CopyOutXQuant1H()
 {
     int64_t curRowsStart = this->blockIdx_ * this->perCoreRows_;
     int64_t curRowsEnd = curRowsStart + this->coreRows_ - 1;
@@ -234,12 +231,12 @@ __aicore__ inline void MoeV2FullLoadDynamicQuant<T>::CopyOutXQuant1H()
 }
 
 template <typename T>
-__aicore__ inline void MoeV2FullLoadDynamicQuant<T>::Init(GM_ADDR x, GM_ADDR expertIdx, GM_ADDR expandedX,
-                                                          GM_ADDR expandedRowIdx, GM_ADDR expertTokensCountOrCumsum,
-                                                          GM_ADDR quantSmooth, GM_ADDR dynamicQuantScale,
-                                                          GM_ADDR workspace,
-                                                          const MoeInitRoutingQuantV2TilingData *tilingData,
-                                                          AscendC::TPipe *tPipe)
+__aicore__ inline void MoeFullLoadDynamicQuant<T>::Init(GM_ADDR x, GM_ADDR expertIdx, GM_ADDR expandedX,
+                                                        GM_ADDR expandedRowIdx, GM_ADDR expertTokensCountOrCumsum,
+                                                        GM_ADDR quantSmooth, GM_ADDR dynamicQuantScale,
+                                                        GM_ADDR workspace,
+                                                        const MoeInitRoutingQuantTilingData *tilingData,
+                                                        AscendC::TPipe *tPipe)
 {
     this->gatherOutTilingData_ = &(tilingData->gatherOutComputeParamsOp);
     // this->blockIdx_ = GetBlockIdx();
@@ -300,7 +297,7 @@ __aicore__ inline void MoeV2FullLoadDynamicQuant<T>::Init(GM_ADDR x, GM_ADDR exp
 }
 
 template <typename T>
-__aicore__ inline void MoeV2FullLoadDynamicQuant<T>::Process()
+__aicore__ inline void MoeFullLoadDynamicQuant<T>::Process()
 {
     if (this->blockIdx_ < this->needCoreNum_) {
         CopyIn();
@@ -316,5 +313,5 @@ __aicore__ inline void MoeV2FullLoadDynamicQuant<T>::Process()
         CopyOutXQuant1H();
     }
 }
-} // namespace MoeInitRoutingQuantV2
-#endif // MOE_V2_DYNAMIC_QUANT_FULL_LOAD_H
+} // namespace MoeInitRoutingQuant
+#endif // MOE_DYNAMIC_QUANT_FULL_LOAD_H
