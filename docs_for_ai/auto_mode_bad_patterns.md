@@ -163,6 +163,15 @@ Several entries below were clarified by **PR-852** (A3 ST testcase fixes), which
 
 > Cross-cutting note (refines §2.1): the kernel rule "prefer `PtoSetWaitFlag`/`TSYNC` over `set_flag`/`wait_flag`" applies **only at kernel level**. Inside a `__tf__` body the polarity is reversed: real `set_flag`/`wait_flag`/`pipe_barrier` are required, and `PtoSetWaitFlag` is wrong.
 
+### 2.8 Mismatched unit-flag phases between MMAD and L0C readers
+
+1. **Pattern** — A Split-K / Split-F cube accumulation uses phase-less `TMATMUL` / `TMATMUL_ACC` while the L0C result is consumed by a unit-flag-aware reader, or marks a non-final accumulation slice as `AccPhase::Final`, or never marks the true final slice as `AccPhase::Final`.
+2. **Why risky** — The MMAD producer and FixPipe/MTE reader coordinate at L0C block granularity through the unit-flag bits. The public source maps `AccPhase::{Unspecified, Partial, Final}` to `{0x0, 0x2, 0x3}` ([include/pto/common/type.hpp:233-239](../include/pto/common/type.hpp#L233-L239)) and passes the value into `mad(...)` ([include/pto/npu/a2a3/TMatmul.hpp:37-52](../include/pto/npu/a2a3/TMatmul.hpp#L37-L52)). The reader side has the same `STPhase` encoding ([type.hpp:224-230](../include/pto/common/type.hpp#L224-L230)) and writes it into `copy_matrix_cc_to_gm`'s `Xt[33:32]` unit-flag control field ([include/pto/npu/a2a3/TStore.hpp:318-335](../include/pto/npu/a2a3/TStore.hpp#L318-L335)). If the producer never publishes `Final`, a `STPhase::Final` reader can wait forever. If the producer publishes `Final` before all K/F slices are accumulated, the reader can observe an incomplete accumulator block.
+3. **Where** — Pattern to scan for in any cube kernel that performs Split-K / Split-F and consumes `TileAcc` through `TSTORE` Acc→GM or a UF-aware FIFO path. A known-good selection helper exists in [kernels/automode/a2a3/flash_atten/pto_macro_matmul.hpp:101-123](../kernels/automode/a2a3/flash_atten/pto_macro_matmul.hpp#L101-L123), with phase-specific calls at [pto_macro_matmul.hpp:154-171](../kernels/automode/a2a3/flash_atten/pto_macro_matmul.hpp#L154-L171).
+4. **Fix** — Use `TMATMUL<AccPhase::Partial>` for the first non-final slice, `TMATMUL_ACC<AccPhase::Partial>` for middle slices, and `TMATMUL_ACC<AccPhase::Final>` for the final slice. If there is only one slice, use `TMATMUL<AccPhase::Final>`. Pair with the corresponding reader phase, e.g. `TSTORE<STPhase::Final, AccTile, GlobalData, AtomicType::AtomicNone>(dst, accTile)`. See [pto_auto_mode_hw_optimization_guide.md §22.3](pto_auto_mode_hw_optimization_guide.md#223-unit-flag-phases-for-tmatmul--tmatmul_acc-and-l0c-readers).
+5. **Confidence** — High for the public API / enum plumbing; Medium for the exact hardware stall semantics because they come from user-provided internal docs rather than repo source.
+6. **Status** — Known API rule; hardware behavior source is external/user-provided.
+
 ---
 
 ## Group 3 — Calls into CCE / library internals from kernel code

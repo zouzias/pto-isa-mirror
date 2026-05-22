@@ -140,7 +140,7 @@ The element-count-vs-byte distinction for `tile_size(N)` is documented in [tile_
 - L0C holds at most `128 KB / 4 = 32K` fp32 elements → M·N ≤ 32768 for the accumulator.
 - UB holds at most `192 KB` for vector-side staging — divide by element size and by the number of simultaneously-live tiles.
 
-For Split-K/Split-N inside one cube TU, use the [§A6 Split-K pattern](known_good_kernel_examples.md#L81) (`if (i == 0) TMATMUL else TMATMUL_ACC`).
+For Split-K/Split-N inside one cube TU, use the [§A6 Split-K pattern](known_good_kernel_examples.md#L81) (`if (i == 0) TMATMUL else TMATMUL_ACC`). When the accumulator is consumed by FixPipe (`TSTORE` / Acc→GM, or a UF-aware FIFO path), also reason about the unit-flag phase; see [§22.3](#223-unit-flag-phases-for-tmatmul--tmatmul_acc-and-l0c-readers).
 
 ## Memory-budget-first kernel generation
 
@@ -1256,14 +1256,34 @@ TEXTRACT(bl0Tiles, bMatTile, k * Cube_K, 0);   // row k*Cube_K, col 0
 
 Extracts a `Cube_K`-wide sub-panel from an L1 `TileType::Mat` tile into an `L0A` `TileLeft` or `L0B` `TileRight`. Used inside `pto_macro_matmul` for K-split; the macro auto-selects `Cube_K` via `calculateFittingCubeK(M, N)`. (Inferred — part of the hardware-confirmed FA build.)
 
-### 22.3 AccPhase in TMATMUL / TMATMUL_ACC
+### 22.3 Unit-flag phases for TMATMUL / TMATMUL_ACC and L0C readers
 
 ```cpp
-TMATMUL<AccPhase::Final>(cAccTile, al0Tiles, bl0Tiles);
+// First K slice: initialize the L0C accumulator.
+TMATMUL<AccPhase::Partial>(cAccTile, al0Tiles, bl0Tiles);
+
+// Middle K slices: accumulate, but do not publish the L0C blocks as complete.
 TMATMUL_ACC<AccPhase::Partial>(cAccTile, al0Tiles, bl0Tiles);
+
+// Last K slice: finish accumulation and mark each completed L0C block ready.
+TMATMUL_ACC<AccPhase::Final>(cAccTile, al0Tiles, bl0Tiles);
+
+// Reader side: wait on ready L0C blocks and clear/free them after read.
+TSTORE<STPhase::Final, AccTile, GlobalDataC, AtomicType::AtomicNone>(cGlobal, cAccTile);
 ```
 
-`AccPhase::Final` triggers the FixPipe drain of L0C to GM; `AccPhase::Partial` suppresses it. The `pto_macro_matmul<M, K, N>()` wrapper resolves the correct phase from the `AccMode` enum argument. (Inferred — part of the hardware-confirmed FA build.)
+`AccPhase` is the public PTO hook for the MMAD-side unit-flag control. The enum is defined at [include/pto/common/type.hpp:233-239](../include/pto/common/type.hpp#L233-L239): `Unspecified = 0x0`, `Partial = 0x2`, `Final = 0x3`. The public overloads are in [include/pto/common/pto_instr.hpp:641-675](../include/pto/common/pto_instr.hpp#L641-L675), and A2/A3 lowers the template value into the `mad(...)` phase argument at [include/pto/npu/a2a3/TMatmul.hpp:37-52](../include/pto/npu/a2a3/TMatmul.hpp#L37-L52). (Known.)
+
+`STPhase` is the matching L0C-reader side. It has the same bit encoding at [include/pto/common/type.hpp:224-230](../include/pto/common/type.hpp#L224-L230), the public `TSTORE<STPhase::...>` overloads are at [include/pto/common/pto_instr.hpp:351-374](../include/pto/common/pto_instr.hpp#L351-L374), and A2/A3 writes the phase into `copy_matrix_cc_to_gm`'s `Xt[33:32]` unit-flag field at [include/pto/npu/a2a3/TStore.hpp:318-335](../include/pto/npu/a2a3/TStore.hpp#L318-L335) and [TStore.hpp:374-394](../include/pto/npu/a2a3/TStore.hpp#L374-L394). (Known.)
+
+Interpretation for kernel planning (Known for enum values and source plumbing; hardware semantics from user-provided internal docs, not in this repo):
+- `0x0` / `Unspecified` disables the unit-flag mechanism.
+- `0x2` / `Partial` enables unit-flag checks without post-update. For MMAD writes this means "wait until the L0C block is writable, write partial data, but do not mark it ready for the reader." Use this for every non-final K/F accumulation slice.
+- `0x3` / `Final` enables check-and-update. For MMAD writes this means "wait until writable, write the final data, then mark the L0C block ready." For FixPipe/MTE reads this means "wait until ready, read, then clear/free it."
+
+Rule of thumb: pair `AccPhase::Partial` on all non-final accumulation slices with exactly one `AccPhase::Final` on the final slice that completes the accumulator, then consume the accumulator with a matching reader phase such as `TSTORE<STPhase::Final, ...>`. If a GEMM has only one K slice, use `TMATMUL<AccPhase::Final>`. If a GEMM has multiple K slices, use `TMATMUL<AccPhase::Partial>` for the first slice, `TMATMUL_ACC<AccPhase::Partial>` for middle slices, and `TMATMUL_ACC<AccPhase::Final>` for the last slice.
+
+The `pto_macro_matmul<M, K, N>()` wrapper in [kernels/automode/a2a3/flash_atten/pto_macro_matmul.hpp:101-123](../kernels/automode/a2a3/flash_atten/pto_macro_matmul.hpp#L101-L123) resolves this through its `AccMode` enum and emits the phase-specific calls at [pto_macro_matmul.hpp:154-171](../kernels/automode/a2a3/flash_atten/pto_macro_matmul.hpp#L154-L171). (Known; the surrounding Flash Attention kernel is hardware-confirmed per [known_good_kernel_examples.md §A19](known_good_kernel_examples.md#A19-flash_atten-auto-mode-a3-full-flash-attention-20-with-cubevector-spmd-pipeline--hardware-confirmed-optimized-prototype).)
 
 ### 22.4 Vector subblock SPMD: `get_subblockid()`
 
