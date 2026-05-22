@@ -16,8 +16,24 @@
  *       logits[m0:min(m0+kTileM,kT), :] =
  *           X[m0:min(m0+kTileM,kT), :] @ W_router
  *
- * Limitations (v1):
- *   - Single AICORE; no block_idx work split.
+ * Parallelism (v2):
+ *   - Multi-AICORE SPMD via `block_idx`, partitioned on the M (token) axis.
+ *     The M-tile index space [0, kNumMTiles) is split into contiguous,
+ *     even-sized ranges using `bid * kNumMTiles / kBlockDim`. Each core writes
+ *     a disjoint row range of `logits`, so no cross-core sync is required.
+ *   - kBlockDim = min(kNumMTiles, kMaxCubeCores) is chosen at compile time,
+ *     so when kT yields fewer M-tiles than cube cores we launch only as many
+ *     cores as there is work for (no idle cores).
+ *   - The N (expert) axis is NOT split: kE is typically much smaller than kT
+ *     and a full row of W_router already fits in the working-set budget.
+ *   - K accumulation stays on one core per M-tile (no Split-K across cores).
+ *
+ * Host/AICORE separation: the launcher needs the same M / kBlockDim values
+ * the kernel computes, but the kernel-side helpers carry AICORE qualifiers
+ * and are not host-callable. router_matmul_host_cfg holds a duplicate of the
+ * formulas with no AICORE attribute for use by launchRouterMatmul.
+ *
+ * Limitations (v2):
  *   - No ReLU / softmax (raw logits only).
  *   - No double-buffering, no TPipe / TPUSH / TPOP.
  */
@@ -35,10 +51,14 @@ constexpr unsigned kE     = kMoeE;  // num_experts
 constexpr unsigned kTileM = 128;    // max token tile height (cube M dimension) - kernel-internal
 constexpr unsigned kT     = kMoeT;  // total tokens; tail rows are handled dynamically.
 
-constexpr int kWorkingSetBudgetBytes = 1 << 16;  // X panel + full-row W_router panel + fp32 logits tile.
+constexpr int kWorkingSetBudgetBytes = 1 << 19;  // X panel + full-row W_router panel + fp32 logits tile.
 constexpr int kL0ABudgetBytes    = 64 * 1024;
 constexpr int kL0BBudgetBytes    = 64 * 1024;
 constexpr int kL0CBudgetBytes    = 128 * 1024;
+
+// A3 cube core count. Matches kernels/manual/a2a3/gemm_performance L246
+// (`constexpr uint32_t blockDim = 24;`).
+constexpr unsigned kMaxCubeCores = 24;
 
 AICORE inline constexpr int minInt(int lhs, int rhs)
 {
@@ -86,6 +106,33 @@ AICORE inline constexpr int chooseKPanel(int totalK, int m, int n, int inBytes, 
 }
 }  // namespace router_matmul_cfg
 
+// Host-callable mirror of the M / blockDim math. Identical formulas, no
+// AICORE attribute, so launchRouterMatmul can use them. Kept structurally
+// 1:1 with router_matmul_cfg so updates stay in lock-step.
+namespace router_matmul_host_cfg {
+inline constexpr int minInt(int lhs, int rhs)
+{
+    return lhs < rhs ? lhs : rhs;
+}
+
+inline constexpr int alignDownTo(int value, int align)
+{
+    return (value / align) * align;
+}
+
+inline constexpr int chooseMBlock(int maxM, int n, int kMin, int inBytes, int weightBytes, int outBytes,
+                                  int budget, int align)
+{
+    const int minWeightBytes = kMin * n * weightBytes;
+    if (minWeightBytes >= budget) {
+        return 0;
+    }
+    const int maxByBudget = (budget - minWeightBytes) / (kMin * inBytes + n * outBytes);
+    const int block = alignDownTo(minInt(maxM, maxByBudget), align);
+    return block >= align ? block : 0;
+}
+}  // namespace router_matmul_host_cfg
+
 // Two-level K tiling:
 //   GM -> L1: load K_l1 panels while X + full-row W_router + logits tile is <= 2^16 bytes.
 //   L1 -> L0: TEXTRACT K_l0 slices into L0A/L0B, then accumulate into one L0C tile.
@@ -114,7 +161,7 @@ __global__ AICORE void runRouterMatmul(
                                        static_cast<int>(sizeof(TWeight)), static_cast<int>(sizeof(TOut)),
                                        kWorkingSetBudgetBytes, mAlign);
     static_assert(M_raw >= mAlign,
-                  "No valid M tile: full-row W_router plus one aligned X/logits tile exceeds the 2^16-byte cap.");
+                  "No valid M tile: full-row W_router plus one aligned X/logits tile exceeds the budget.");
     constexpr int M = (M_raw >= mAlign) ? M_raw : mAlign;
     static_assert(static_cast<size_t>(M) * N * sizeof(TOut) <= kL0CBudgetBytes,
                   "Accumulator tile exceeds L0C; reduce kTileM or kE.");
@@ -123,12 +170,12 @@ __global__ AICORE void runRouterMatmul(
         chooseKPanel(K, M, N, static_cast<int>(sizeof(TIn)), static_cast<int>(sizeof(TWeight)),
                      static_cast<int>(sizeof(TOut)), kWorkingSetBudgetBytes, blockAlign);
     static_assert(K_l1_raw >= blockAlign,
-                  "No valid K_l1: X panel + full-row W_router panel + logits tile exceeds the 2^16-byte cap.");
+                  "No valid K_l1: X panel + full-row W_router panel + logits tile exceeds the budget.");
     constexpr int K_l1 = (K_l1_raw >= blockAlign) ? K_l1_raw : blockAlign;
     static_assert((static_cast<size_t>(M) * K_l1 * sizeof(TIn) +
                    static_cast<size_t>(K_l1) * N * sizeof(TWeight) +
                    static_cast<size_t>(M) * N * sizeof(TOut)) <= kWorkingSetBudgetBytes,
-                  "Working-set budget exceeded: X + full-row W_router + logits must be <= 2^16 bytes.");
+                  "Working-set budget exceeded: X + full-row W_router + logits must fit in budget.");
 
     constexpr int K_l0_max_L0A = kL0ABudgetBytes / (M * static_cast<int>(sizeof(TIn)));
     constexpr int K_l0_max_L0B = kL0BBudgetBytes / (N * static_cast<int>(sizeof(TWeight)));
@@ -140,6 +187,13 @@ __global__ AICORE void runRouterMatmul(
     static_assert(K_l1 % K_l0 == 0, "K_l1 must be divisible by K_l0 for L1-to-L0 extraction.");
     constexpr int K_l1_blocks = K / K_l1;
     constexpr int K_l0_segments = K_l1 / K_l0;
+
+    // SPMD M-axis split. kNumMTiles covers all kT rows; kBlockDim is capped at
+    // kMaxCubeCores so when kT is small we don't request idle cores. Each core
+    // computes a contiguous slice [tStart, tEnd) of the M-tile index space.
+    constexpr unsigned kNumMTiles = (kT + static_cast<unsigned>(M) - 1) / static_cast<unsigned>(M);
+    constexpr unsigned kBlockDim  = (kNumMTiles < kMaxCubeCores) ? kNumMTiles : kMaxCubeCores;
+    static_assert(kBlockDim >= 1, "kBlockDim must be at least 1 (kT must be > 0).");
 
     // GlobalDataA: shape (currentM, K_l1), row stride kH (full row width in GM).
     // GlobalDataB: shape (K_l1, kE), stride kE; this always loads full rows of W_router.
@@ -171,7 +225,15 @@ __global__ AICORE void runRouterMatmul(
     RightTile    bTile;
     AccTile      cTile(M);
 
-    for (unsigned m0 = 0; m0 < kT; m0 += M) {
+    // Even integer-split of [0, kNumMTiles) across kBlockDim cores. Pattern:
+    // each core's range = [bid*N/D, (bid+1)*N/D); remainders fall in the last
+    // few cores. Matches gemm_performance / MoE-manual-opt router_matmul.
+    const unsigned bid    = static_cast<unsigned>(get_block_idx());
+    const unsigned tStart = (bid * kNumMTiles) / kBlockDim;
+    const unsigned tEnd   = ((bid + 1) * kNumMTiles) / kBlockDim;
+
+    for (unsigned tIdx = tStart; tIdx < tEnd; ++tIdx) {
+        const unsigned m0 = tIdx * static_cast<unsigned>(M);
         const unsigned currentM = ((m0 + M) <= kT) ? M : (kT - m0);
         aMatTile.SetValidRow(currentM);
         aTile.SetValidRow(currentM);
@@ -211,7 +273,25 @@ __global__ AICORE void runRouterMatmul(
 template <typename TOut, typename TIn, typename TWeight>
 void launchRouterMatmul(uint8_t *logits, uint8_t *x, uint8_t *w_router, void *stream)
 {
-    runRouterMatmul<TOut, TIn, TWeight><<<1, nullptr, stream>>>(logits, x, w_router);
+    // Recompute M / kNumMTiles / kBlockDim with the host-side mirror of the
+    // kernel's formulas. Cannot call the AICORE-qualified helpers from host.
+    constexpr int blockAlign = C0_SIZE_BYTE / sizeof(TIn);
+    constexpr int mAlign = 16;
+    constexpr int M_max = ((router_matmul_cfg::kTileM + mAlign - 1) / mAlign) * mAlign;
+    constexpr int N = ((router_matmul_cfg::kE + blockAlign - 1) / blockAlign) * blockAlign;
+    constexpr int M_raw = router_matmul_host_cfg::chooseMBlock(
+        M_max, N, blockAlign,
+        static_cast<int>(sizeof(TIn)),
+        static_cast<int>(sizeof(TWeight)),
+        static_cast<int>(sizeof(TOut)),
+        router_matmul_cfg::kWorkingSetBudgetBytes, mAlign);
+    constexpr int M = (M_raw >= mAlign) ? M_raw : mAlign;
+    constexpr unsigned kNumMTiles =
+        (router_matmul_cfg::kT + static_cast<unsigned>(M) - 1) / static_cast<unsigned>(M);
+    constexpr unsigned kBlockDim =
+        (kNumMTiles < router_matmul_cfg::kMaxCubeCores) ? kNumMTiles : router_matmul_cfg::kMaxCubeCores;
+
+    runRouterMatmul<TOut, TIn, TWeight><<<kBlockDim, nullptr, stream>>>(logits, x, w_router);
 }
 
 template void launchRouterMatmul<float, half, half>(
