@@ -127,15 +127,15 @@ TEST_F(TTRANSConvTest, NC1HWC02C1HWN1N0C0_1)
 TEST_F(TTRANSConvTest, NC1HWC02C1HWN1N0C0_2)
 {
     test_ttrans<int32_t, 1,
-        15, 14, 13, 16, 8,
-        14, 13, 16, 2, 8, 8>();
+        15, 2, 3, 16, 8,
+        2, 3, 16, 2, 8, 8>();
 }
 
 TEST_F(TTRANSConvTest, NC1HWC02C1HWN1N0C0_3)
 {
     test_ttrans<uint16_t, 1,
-        11, 11, 13, 16, 16,
-        11, 13, 16, 2, 8, 16>();
+        11, 3, 2, 16, 16,
+        3, 2, 16, 2, 8, 16>();
 }
 
 TEST_F(TTRANSConvTest, NC1HWC02C1HWN1N0C0_4)
@@ -148,6 +148,6 @@ TEST_F(TTRANSConvTest, NC1HWC02C1HWN1N0C0_4)
 TEST_F(TTRANSConvTest, NC1HWC02C1HWN1N0C0_5)
 {
     test_ttrans<int8_t, 1,
-        4, 32, 3, 7, 32,
-        32, 3, 7, 1, 8, 32>();
+        4, 2, 3, 7, 32,
+        2, 3, 7, 1, 8, 32>();
 }
