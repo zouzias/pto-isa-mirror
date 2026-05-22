@@ -60,7 +60,7 @@ PTO_INTERNAL MaskReg CreatePredicate(uint32_t &scalar)
 
 template <typename T>
 struct RegTensor {
-    PTO_INTERNAL RegTensor(){};
+    PTO_INTERNAL RegTensor() {};
     using RegType = typename TypeGet<T>::T;
     RegType reg;
 

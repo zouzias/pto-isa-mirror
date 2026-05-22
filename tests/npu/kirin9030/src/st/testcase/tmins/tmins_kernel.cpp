@@ -1,15 +1,18 @@
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <type_traits>
 #include <pto/pto-inst.hpp>
+#include <type_traits>
+
 #include "acl/acl.h"
 
 #define PAD_VALUE_NULL (-100)
@@ -20,7 +23,6 @@ using namespace pto;
 template <typename T, int dstRow, int dstCol, int srcRow, int srcCol, int kVRows_, int kVCols_, int kPadValue_>
 struct GenericDataSelector {};
 
-#ifdef __CCE_AICORE__
 template <typename T, int dstRow, int dstCol, int srcRow, int srcCol, int kVRows_, int kVCols_>
 struct GenericDataSelector<T, dstRow, dstCol, srcRow, srcCol, kVRows_, kVCols_, PAD_VALUE_NULL> {
     using srcTileType = Tile<TileType::Vec, T, srcRow, srcCol, BLayout::RowMajor, kVRows_, kVCols_, SLayout::NoneBox,
@@ -36,7 +38,6 @@ struct GenericDataSelector<T, dstRow, dstCol, srcRow, srcCol, kVRows_, kVCols_, 
     using dstTileType = Tile<TileType::Vec, T, dstRow, dstCol, BLayout::RowMajor, kVRows_, kVCols_, SLayout::NoneBox,
                              512, PadValue::Max>;
 };
-#endif
 
 template <typename T, int dstRow, int dstCol, int srcRow, int srcCol, int kVRows_, int kVCols_, int kPadValue_>
 __global__ AICORE void runTMINS(__gm__ T *out, __gm__ T *src0, __gm__ T *scalar)
@@ -55,11 +56,12 @@ __global__ AICORE void runTMINS(__gm__ T *out, __gm__ T *src0, __gm__ T *scalar)
     using srcTileData = typename GDS::srcTileType;
     srcTileData src0Tile;
     dstTileData dstTile;
-    TASSIGN<0x0>(src0Tile);
-    TASSIGN<srcTileData::Numel * sizeof(T)>(dstTile);
+    TASSIGN<0x0 + 0x400 * block_idx>(src0Tile);
+    TASSIGN<0x8000 + 0x400 * block_idx>(dstTile);
 
-    srcGlobalType src0Global(src0);
-    dstGlobalType dstGlobal(out);
+    int offset = 0;
+    srcGlobalType src0Global(src0 + offset);
+    dstGlobalType dstGlobal(out + offset);
 
     TLOAD(src0Tile, src0Global);
     TLOAD(dstTile, dstGlobal);
@@ -69,6 +71,7 @@ __global__ AICORE void runTMINS(__gm__ T *out, __gm__ T *src0, __gm__ T *scalar)
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstTile);
+    out = dstGlobal.data();
 }
 
 template <typename T, int dstRow, int dstCol, int srcRow, int srcCol, int kVRows_, int kVCols_, int kPadValue_>

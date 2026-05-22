@@ -1,15 +1,17 @@
 /**
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
-#include <pto/pto-inst.hpp>
 #include <pto/common/fifo.hpp>
+#include <pto/pto-inst.hpp>
 
 using namespace pto;
 
@@ -82,7 +84,8 @@ __global__ AICORE void runTPushPopVCMatmul(__gm__ OutT *out, __gm__ InT *srcA, _
     using AccTile = TileAcc<OutT, TOTAL_M, TILE_N, TOTAL_M, TILE_N>;
 
     using QuantTile = Tile<TileType::Vec, QuantT, PROD_K, PROD_N, BLayout::RowMajor, PROD_K, PROD_N>;
-    // For TILE_LEFT_RIGHT both vector cores work on the same K rows, so each needs all PROD_K scale/offset values
+    // For TILE_LEFT_RIGHT both vector cores work on the same K rows, so each
+    // needs all PROD_K scale/offset values
     using ScaleTile = Tile<TileType::Vec, OutT, PROD_K, 8, BLayout::RowMajor, -1, -1>;
     using OffsetTile = Tile<TileType::Vec, OutT, PROD_K, 8, BLayout::RowMajor, -1, -1>;
 
@@ -101,7 +104,8 @@ __global__ AICORE void runTPushPopVCMatmul(__gm__ OutT *out, __gm__ InT *srcA, _
         set_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
         set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
 
-        // Row stride is always TILE_N so TILE_LEFT_RIGHT sub-tiles (non-contiguous cols) are loaded correctly
+        // Row stride is always TILE_N so TILE_LEFT_RIGHT sub-tiles (non-contiguous
+        // cols) are loaded correctly
         using GlobalQuantB = GlobalTensor<QuantT, pto::Shape<1, 1, 1, PROD_K, PROD_N>,
                                           pto::Stride<TOTAL_K * TILE_N, TOTAL_K * TILE_N, PROD_K * TILE_N, TILE_N, 1>>;
         using GlobalScaleOffset =
@@ -117,7 +121,8 @@ __global__ AICORE void runTPushPopVCMatmul(__gm__ OutT *out, __gm__ InT *srcA, _
                 quantBOffset = static_cast<size_t>(k_tile * TILE_K + subBlockIdx * PROD_K) * TILE_N;
                 scaleOffsetOffset = static_cast<size_t>(k_tile * TILE_K + subBlockIdx * PROD_K);
             } else {
-                // each subblock handles a different column range; scale/offset are shared (same K rows)
+                // each subblock handles a different column range; scale/offset are
+                // shared (same K rows)
                 quantBOffset = static_cast<size_t>(k_tile * TILE_K) * TILE_N + subBlockIdx * PROD_N;
                 scaleOffsetOffset = static_cast<size_t>(k_tile * TILE_K);
             }
@@ -248,7 +253,8 @@ void LaunchTPushPopVCMatmul(uint8_t *out, uint8_t *srcA, uint8_t *quantB, uint8_
         LaunchTPushPopVCMatmulImpl<int16_t, float, float, 16, 256, 32, 64, TileSplitAxis::TILE_UP_DOWN>(
             out, srcA, quantB, scale, offset, stream);
         // Keys 7-12: TILE_LEFT_RIGHT (split along N columns)
-        // int8 cases use N=64 so PROD_N=32, satisfying 32*sizeof(int8_t)=32 bytes alignment
+        // int8 cases use N=64 so PROD_N=32, satisfying 32*sizeof(int8_t)=32 bytes
+        // alignment
     } else if constexpr (tilingKey == 7) {
         LaunchTPushPopVCMatmulImpl<int8_t, float, float, 16, 64, 64, 64, TileSplitAxis::TILE_LEFT_RIGHT>(
             out, srcA, quantB, scale, offset, stream);

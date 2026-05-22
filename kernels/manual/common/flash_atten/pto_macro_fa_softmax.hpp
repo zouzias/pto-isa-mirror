@@ -1,11 +1,13 @@
 /*
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
+This program is free software, you can redistribute it and/or modify it under
+the terms and conditions of CANN Open Software License Agreement Version 2.0
+(the "License"). Please refer to the License for details. You may not use this
+file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON AN "AS
+IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
+full text of the License.
 */
 
 #ifndef PTO_MACRO_FA_SOFTMAX_HPP
@@ -18,14 +20,16 @@ namespace pto {
 // -----------------------------------------------------------------------------
 // FlashAttention streaming softmax (tile-level)
 //
-// Given one QK tile X (fp32), compute x_exp = exp(scale * (X - new_global_max)).
-// This function maintains per-row running state (global_max, global_sum) so that we can
-// stream over S1 tiles without materializing the full attention matrix.
+// Given one QK tile X (fp32), compute x_exp = exp(scale * (X -
+// new_global_max)). This function maintains per-row running state (global_max,
+// global_sum) so that we can stream over S1 tiles without materializing the
+// full attention matrix.
 //
 // Performance notes:
 // - Keep intermediate computations in fp32 for numerical stability.
 // - The `init` specialization initializes running state for the first S1 tile.
-// - The 2D->1D reshape for TCVT is used to avoid layout constraints and keep the cast fast.
+// - The 2D->1D reshape for TCVT is used to avoid layout constraints and keep
+// the cast fast.
 // -----------------------------------------------------------------------------
 
 constexpr PTO_INTERNAL float constexpr_sqrt(float x)
@@ -138,7 +142,8 @@ AICORE inline void softmax_opt_fa_not_init_impl(TileDataD2 __out__ x_exp, TileDa
 #endif
         }
     }
-    // FA2.0 streaming mode (not first tile): update (global_max, global_sum) and rescale old sums.
+    // FA2.0 streaming mode (not first tile): update (global_max, global_sum) and
+    // rescale old sums.
     TROWMAX(local_max, input_x, tmp_float);
 #if defined(__DAV_C220_VEC__)
     pipe_barrier(PIPE_V);
