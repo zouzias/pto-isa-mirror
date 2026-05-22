@@ -64,6 +64,56 @@ inline void TTRANS_NCHW_TO_NC1HWC0_CORE(DstTileData &dst, SrcTileData &src)
 }
 
 template <typename DstTileData, typename SrcTileData>
+inline void TTRANS_NC1HWC02C1HWN1N0C0(DstTileData &dst, SrcTileData &src)
+{
+    using SrcDType = typename SrcTileData::DType;
+    using DstDType = typename DstTileData::DType;
+
+    const auto* src_ptr = reinterpret_cast<const SrcDType*>(src.data());
+    auto* dst_ptr = reinterpret_cast<DstDType*>(dst.data());
+
+    int64_t C1HW = dst.GetShape(0);
+    int64_t N1 = dst.GetShape(1);
+    int64_t N0 = dst.GetShape(2);
+    int64_t C0 = dst.GetShape(3);
+
+    int64_t N = src.GetShape(0);
+    int64_t C1 = src.GetShape(1);
+    int64_t H = src.GetShape(2);
+    int64_t W = src.GetShape(3);
+
+    size_t Size = C1HW * N1 * N0 * C0;
+
+    std::fill(dst.data(), dst.data() + Size, 0);
+
+    for (int64_t n = 0; n < N; ++n) {
+        for (int64_t c1 = 0; c1 < C1; ++c1) {
+            for (int64_t h = 0; h < H; ++h) {
+                for (int64_t w = 0; w < W; ++w) {
+                    for (size_t c0 = 0; c0 < C0; c0++)
+                    {
+                        size_t srcIndex = c0 + C0*w + C0*W*h + C0*W*H*c1 + C0*W*H*C1*n;
+                        // ... inside your loops
+                        // c1hw_idx effectively flattens the C1, H, and W dimensions
+                        size_t c1hw_idx = c1 * (H * W) + h * W + w;
+
+                        // Split n into n1 (outer) and n0 (inner/remainder)
+                        size_t n1 = n / N0;
+                        size_t n0 = n % N0;
+
+                        // Mapping [C1HW, N1, N0, C0] -> [c1hw_idx, n1, n0, c0]
+                        // dstIndex = c0 + C0 * (n0 + N0 * (n1 + N1 * c1hw_idx))
+                        size_t dstIndex = c0 + C0 * n0 + C0 * N0 * n1 + C0 * N0 * N1 * c1hw_idx;
+
+                        dst_ptr[dstIndex] = src_ptr[srcIndex];
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <typename DstTileData, typename SrcTileData>
 void TTrans_Impl(typename DstTileData::TileDType dst, typename SrcTileData::TileDType src, unsigned validRow,
                  unsigned validCol)
 {
@@ -108,9 +158,9 @@ PTO_INTERNAL void TTRANS_IMPL(DstTileData &dst, SrcTileData &src, TmpTileData &t
     // Mode 1: NCHW -> NC1HWC0
     if constexpr (src_layout == Layout::NCHW && dst_layout == Layout::NC1HWC0) {
         TTRANS_NCHW_TO_NC1HWC0_CORE(dst, src);
-    }
-    
-    else if constexpr (is_tile_data_v<SrcTileData>) {
+    } else if (src_layout == Layout::NC1HWC0 && dst_layout == Layout::FRACTAL_Z) {
+        TTRANS_NC1HWC02C1HWN1N0C0(dst, src);
+    } else if constexpr (is_tile_data_v<SrcTileData>) {
         static_assert(SrcTileData::ValidRow == DstTileData::ValidCol && SrcTileData::ValidCol == DstTileData::ValidRow,
                       "Hardware matrix tiles transpose dimension sizes must mirror match.");
         unsigned validRow = src.GetValidRow();
