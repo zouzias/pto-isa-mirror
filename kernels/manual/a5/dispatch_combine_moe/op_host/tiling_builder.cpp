@@ -115,7 +115,7 @@ DispatchCombineMoeBuildResult BuildDispatchCombineMoeTiling(const CaseConfig &cf
 {
     ValidateRemoteWindowCapacity(cfg, runtime);
     DispatchCombineMoeBuildResult result;
-    auto &info = result.tiling.dispatchFFNCombineInfo;
+    auto &info = result.tiling.dispatchCombineMoeInfo;
     info.M = cfg.m;
     info.K = cfg.k;
     info.N = cfg.n;

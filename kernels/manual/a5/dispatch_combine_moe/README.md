@@ -215,7 +215,7 @@ x / expert_idx / probs / x_active_mask
        unpermute + top-k weighted accumulation -> out[M, K]
 ```
 
-### Recommended code reading order
+### Key code reading order
 
 1. `op_kernel/dispatch_combine_moe.cpp`: device symbol, tiling key, mixed AIC/AIV task type, host launch stub.
 2. `op_kernel/dispatch_combine_moe.h`: `Init()` for shape/rank/window state and `Process()` for policy and parameter assembly.
@@ -291,19 +291,30 @@ Outputs:
 ```text
 moe_init_routing_quant()
 ├── tilingKey == 21000
-│   └── MoeFullLoadDynamicQuant
-│       sort + count/cumsum + gather/quant in the full-load path
+│   └── RunFullLoadDynamicQuant()
+│       └── MoeFullLoadDynamicQuant
+│           sort + count/cumsum + gather/quant in the full-load path
 ├── tilingKey == 11000
-│   ├── MoeSortOneCore
-│   ├── MoeExpertTokenOut
-│   ├── MoeSrcToDstOp
-│   └── MoeGatherDynamicQuant
+│   ├── RunSortStage<MoeSortOneCore>()
+│   ├── RunExpertTokenOut()
+│   ├── RunSrcToDst()
+│   └── RunGatherDynamicQuant()
 └── tilingKey == 11010
-    ├── MoeSortMultiCore
-    ├── MoeExpertTokenOut
-    ├── MoeSrcToDstOp
-    └── MoeGatherDynamicQuant
+    ├── RunSortStage<MoeSortMultiCore>()
+    ├── RunExpertTokenOut()
+    ├── RunSrcToDst()
+    └── RunGatherDynamicQuant()
 ```
+
+Static-check refactoring split the entry into small helpers, so each routing stage now has one clear call boundary:
+
+| Helper | Wrapped implementation | Role |
+| ------ | ---------------------- | ---- |
+| `RunFullLoadDynamicQuant()` | `MoeFullLoadDynamicQuant` | one-pass full-load routing path; owns sort, expert statistics, source-to-destination mapping, gather, and per-row quantization |
+| `RunSortStage<SortOp>()` | `MoeSortOneCore` / `MoeSortMultiCore` | selects the one-core or multi-core sort implementation and materializes ordered routing records |
+| `RunExpertTokenOut()` | `MoeExpertTokenOut` | emits expert token count/cumsum output when `expertTokensCountOrCumsumFlag` requests it |
+| `RunSrcToDst()` | `MoeSrcToDstOp` | converts sorted routing records into `expandedRowIdx` source-to-destination rows |
+| `RunGatherDynamicQuant()` | `MoeGatherDynamicQuant` | gathers original token rows by `expandedRowIdx`, computes per-token abs-max scale, and writes int8 payload plus scale |
 
 ### Routing file responsibilities
 
@@ -344,19 +355,29 @@ After routing, `RunRoutingImpl()` does two things:
 
 ```text
 for each local expert groupIdx:
+  currentM = cumsumMM[last_src_rank, groupIdx]
   for each dstEpIdx assigned to this AIV core:
-    rows = tokenPerExpert[dstEpIdx][rank][groupIdx]
-    rowStart = cumsumMM prefix + previous expert-group sum
-    rowSrc = preSumBeforeRank prefix
-    TGET peer offsetA packed rows
-    strip UB_ALIGN payload metadata
-    write gmA[rowStart, :]
-    write gmPerTokenScale1[rowStart]
+    CopyDispatchRowsForPeer(dstEpIdx, groupIdx)
+      rows = tokenPerExpert[dstEpIdx][rank][groupIdx]
+      rowStart = cumsumMM prefix + previous expert-group sum
+      rowSrc = preSumBeforeRank prefix carried across dst ranks
+      TGET peer offsetA packed rows
+      strip UB_ALIGN payload metadata
+      write gmA[rowStart, :]
+      write gmPerTokenScale1[rowStart]
   SyncAll
   CrossCoreSetFlag -> AIC GMM1 can consume this expert group
+  UpdateDispatchDequantSums(groupIdx, currentM)
 ```
 
-The low-level helper is `CopyGMToGMPerToken()`: it uses `pto::comm::TGET` to pull packed token rows from a peer window into local scratch, then vector load/store helpers split token payload and per-token scale into the local GMM workspace.
+The dispatch-gather stage is split into three layers:
+
+| Layer | Code | Responsibility |
+| ----- | ---- | -------------- |
+| Expert loop orchestration | `RunDispatchGatherImpl()` | walks local experts, publishes the per-group GMM1 readiness flag, and records the two SwiGLU segment sizes |
+| Peer-row copy | `CopyDispatchRowsForPeer()` | maps `dstEpIdx/groupIdx` into local `gmA` row offsets, clamps by `maxOutputSize`, and calls the packed-row copy helper |
+| Packed payload transfer | `CopyGMToGMPerToken()` | issues `pto::comm::TGET` from peer `offsetA`, then splits the packed `[int8 payload | UB_ALIGN metadata]` row into `gmA` and `gmPerTokenScale1` |
+| SwiGLU segment accounting | `UpdateDispatchDequantSums()` | accumulates `stageDequantSum1` before `epilogueGranularity` and `stageDequantSum2` after it, with the same `maxOutputSize` cap as GMM |
 
 ## AIC GMM Subsystem
 
@@ -377,9 +398,20 @@ File responsibilities:
 | File | Responsibility |
 | ---- | -------------- |
 | `block_mmad_preload_async_fixpipe_quant.hpp` | manage L1/L0A/L0B/L0C staged buffers, k-loop preload, and `CrossCoreSetFlag` finalize |
-| `pto_mmad_ops.hpp` | wrap PTO primitives: `PtoLoadNdGmToNzL1` / `PtoLoadNzGmToNzL1` for GM→L1, `PtoMoveL1ToL0A` / `PtoMoveL1ToL0B` for L1→L0A/L0B, `PtoTileMmad` for matmul, `PtoStoreAccTileToGm` / `PtoStoreAccToGm` for fixpipe store |
+| `pto_mmad_ops.hpp` | wrap PTO primitives: `PtoLoadNdGmToNzL1` / `PtoLoadNzGmToNzL1` for GM→L1, `PtoMoveL1ToL0A` / `PtoMoveL1ToL0B` for L1→L0A/L0B, `PtoTileMmad` for matmul, `StagePerChannelScale` for per-channel scale staging, and `StoreAccumulator` / `PtoStoreAccToGm` for fixpipe store |
 | `dispatch_policy_custom.hpp` | define `MmadAtlasA5PreloadAsyncFixpipe` and epilogue policy tags |
 | `moe_pto_utils.hpp` | shared arch resource, shape/layout helpers, tile copy traits, and sync wrappers |
+
+`pto_mmad_ops.hpp` now separates primitive wrappers from type-policy selection:
+
+| Helper | Role |
+| ------ | ---- |
+| `LaunchPtoMatmul()` | chooses `TMATMUL` versus `TMATMUL_ACC` and maps `unitFlag` to normal / partial / final accumulation phases |
+| `PtoTileMmad()` | binds L0A/L0B/L0C tile offsets and launches one matmul tile |
+| `PtoMoveL1ToL0A()` / `PtoMoveL1ToL0B()` | perform `TMOV(Mat -> Left/Right)` after GM data has been staged into L1 Mat tiles |
+| `StagePerChannelScale()` | loads per-channel scale from GM into an L1 Mat tile and moves it into a FIXPIPE Scaling tile |
+| `StoreAccumulator()` | dispatches fixpipe store by input type: int8 uses per-channel scaling, half uses the non-scale accumulator store path |
+| `MatmulShell` | centralizes derived element/layout/trait aliases used by `BlockMmad`, so the staged kernel code does not repeat type plumbing |
 
 GMM differences:
 
@@ -447,7 +479,10 @@ Key points:
 - Processes GMM tile/block coordinates instead of scanning complete rows in order.
 - Splits each tile into `m0 = 16` row blocks and distributes them across two AIV sub-cores.
 - Uses `tokenPerExpert[dst_rank][src_rank][groupIdx]` and `preSumBeforeRank[dst_rank][groupIdx]` to decide which rows in the tile belong to which destination rank.
-- Stores local rows with `PtoStoreMatrixRows()` and sends remote rows with per-row `TPUT`.
+- `LoadTileC()` loads a non-contiguous `gmC2` tile into UB and casts half output to FP32 row by row.
+- `ScaleAndCastTile()` caches per-token scales in UB, multiplies each FP32 row by its scale, then casts to the output dtype.
+- `StoreTileD()` walks destination ranks, intersects the current tile row interval with each rank-owned expert interval, and advances a tile-local row offset.
+- Local rows are stored with `PtoStoreMatrixRows()`; remote rows go through `StoreRemoteRows()`, which stores one row into a per-sub-core scratch row and issues `pto::comm::TPUT` to the peer `offsetD` slice.
 
 ## Combine and Restore
 
@@ -563,28 +598,6 @@ back groups : [epilogueGranularity, expertPerRank)
 
 This is why the `GMM1 -> SwiGLU -> GMM2` path is not a single global barrier chain.
 
-## PTO Primitive Layers
-
-| Layer | Files | Typical primitives | Purpose |
-| ----- | ----- | ------------------ | ------- |
-| Vector bridge | `pto_vector_ops.hpp` | `TLOAD`, `TSTORE`, `TCVT`, `TMOV`, `TEXPANDS`, `TMULS`, `TADD`, `TDIV`, `TREDUCE` | contiguous UB/Vec-tile movement and vector arithmetic |
-| MMAD bridge | `pto_mmad_ops.hpp` | `TLOAD`, `TMOV`, `TMATMUL`, `TMATMUL_ACC`, `TSTORE_FP` | AIC GM→L1, L1→L0A/L0B, L0C→GM wrappers |
-| Communication bridge | `hccl_window.hpp` + `pto::comm` | `TGET`, `TPUT`, notify/wait | cross-rank transfer and signaling over HCCL remote windows |
-| Sync wrappers | `moe_pto_utils.hpp` / routing helpers | `SetFlag`, `WaitFlag`, `SyncAll`, `PipeBarrier` wrappers | pipeline dependencies around PTO primitives |
-
-Common movement semantics:
-
-```text
-GM -> UB(Vec):       pto::TLOAD(Vec tile, GlobalTensor)
-UB(Vec) -> GM:       pto::TSTORE(GlobalTensor, Vec tile)
-GM -> L1(Mat):       pto::TLOAD(Mat tile, GlobalTensor)
-L1(Mat) -> L0A:      pto::TMOV(TileLeft, Mat tile)
-L1(Mat) -> L0B:      pto::TMOV(TileRight, Mat tile)
-L0A/L0B -> L0C:      pto::TMATMUL / pto::TMATMUL_ACC
-L0C/FIXPIPE -> GM:   pto::TSTORE_FP(...)
-Rank A -> Rank B:    pto::comm::TPUT / pto::comm::TGET over remote window
-```
-
 ## Defaults and Tiling
 
 `run.sh` generates a small smoke case by default:
@@ -624,7 +637,18 @@ Important host-tiling constants and derived values:
 
 ### Smoke run
 
-Run on an A5-capable environment:
+Set the CANN and MPI environment before running on an A5-capable environment:
+
+```bash
+export ASCEND_CANN_PATH=/home/XXX/Ascend/cann-9.0.0/set_env.sh
+export ASCEND_HOME_PATH=/home/XXX/Ascend/cann-9.0.0
+source /home/XXX/Ascend/cann-9.0.0/set_env.sh
+export PATH=/usr/local/mpich/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/mpich/lib:$LD_LIBRARY_PATH
+export MPI_LIB_PATH=/usr/local/mpich/lib/libmpi.so
+```
+
+Then run the smoke case:
 
 ```bash
 bash kernels/manual/a5/dispatch_combine_moe/run.sh \
@@ -637,6 +661,8 @@ bash kernels/manual/a5/dispatch_combine_moe/run.sh \
   --experts 2 \
   --max-output-size 32
 ```
+
+`ASCEND_CANN_PATH` lets `run.sh` locate and source the CANN environment. `ASCEND_HOME_PATH` is the CANN include/lib/platform root used by CMake; `set_env.sh` normally sets it, but export it explicitly if the target environment does not.
 
 If the platform config uses a different SoC name, replace `--soc` / `--soc-version` accordingly. If omitted, host tiling uses the default `PlatformAscendCManager::GetInstance()` platform.
 
@@ -722,33 +748,3 @@ The CPU golden follows the device semantics: iterate routed tokens by destinatio
 - Host sources: `main.cpp`, `op_host/runtime_context.cpp`, `op_host/tiling_builder.cpp`, `op_host/data_utils.cpp`
 - Main linked libraries: `runtime`, `ascendcl`, `hcomm`, `tiling_api`, `nnopbase`
 - PTO include directories are placed before CANN include directories so the in-repo PTO headers are used.
-
-## Current Verification Status
-
-The current machine can compile A5 `dav-c310` code, but it is not treated as the A5 runtime validation target. End-to-end PASS and performance numbers must be validated on an A5-capable environment.
-
-Recommended README checks:
-
-```bash
-git diff --check -- kernels/manual/a5/dispatch_combine_moe/README.md \
-  kernels/manual/a5/dispatch_combine_moe/README_zh.md
-python3 - <<'PY'
-from pathlib import Path
-for name in ['README.md', 'README_zh.md']:
-    s = Path('kernels/manual/a5/dispatch_combine_moe', name).read_text(encoding='utf-8')
-    required = [
-        'token_reorder/routing',
-        'token_reorder/unpermute',
-        'block_epilogue_pertoken_swiglu.hpp',
-        'block_epilogue_pertoken_row.hpp',
-        'block_epilogue_pertoken_v2.hpp',
-        'block_mmad_preload_async_fixpipe_quant.hpp',
-        'RunDispatchGatherImpl',
-        'RunRestoreImpl',
-    ]
-    missing = [marker for marker in required if marker not in s]
-    raise SystemExit(f'{name} missing README markers: {missing}' if missing else 0)
-PY
-```
-
-Both commands should finish without output.

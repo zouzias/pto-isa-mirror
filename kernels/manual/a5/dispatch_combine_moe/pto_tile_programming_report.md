@@ -41,13 +41,13 @@ PTO 编程在这个算子中的核心价值，是把这些路径统一到 **Tile
 | GM → UB 向量搬入 | `pto::TLOAD` | `PtoLoadVector`，`op_kernel/utils/pto_vector_ops.hpp` | token、scale、flag buffer 等向量数据搬入 UB |
 | UB → GM 向量搬出 | `pto::TSTORE` | `PtoStoreVector`，`op_kernel/utils/pto_vector_ops.hpp` | 中间结果、token count、epilogue 输出写回 GM |
 | UB → GM 原子累加 | `pto::TSTORE<AtomicAdd>` | `PtoStoreAtomicAddVector`，`op_kernel/utils/pto_vector_ops.hpp` | expert token count 这类计数更新 |
-| UB 内向量 gather / sort | `TGATHER`、`TSORT32` | `op_kernel/token_reorder/routing/moe_pto_sort.h` | routing 阶段的本地 UB 内排序与字段抽取 |
+| UB 内向量 gather / sort | `TGATHER`、`TSORT32` | `op_kernel/token_reorder/routing/moe_pto_sort.h`、`op_kernel/token_reorder/routing/moe_packed_sort_merge.h` | routing 阶段的本地 UB 内排序、归并和字段抽取 |
 | GM → L1 矩阵搬入 | `TLOAD` + `GlobalTensor` + `Tile<Mat>` | `PtoLoadNdGmToNzL1`、`PtoLoadNzGmToNzL1`，`op_kernel/utils/pto_mmad_ops.hpp` | GMM 输入矩阵从 GM 装入 L1 |
 | L1 → L0A/L0B | `TMOV` | `PtoMoveL1ToL0A`、`PtoMoveL1ToL0B`，`op_kernel/utils/pto_mmad_ops.hpp` | cube 计算前的 L0 staging |
 | L0A/L0B → L0C | `TMATMUL`、`TMATMUL_ACC` | `PtoTileMmad`，`op_kernel/utils/pto_mmad_ops.hpp` | GMM tile 计算 |
 | L0C / Acc → GM | `TSTORE`、`TSTORE_FP` | `PtoStoreAccToGm`、`StoreAccumulator`，`op_kernel/utils/pto_mmad_ops.hpp` | 累加结果写回，含 fixpipe/量化输出 |
 | GM scale → L1/fixpipe | `TLOAD` + `TMOV` | `StagePerChannelScale`，`op_kernel/utils/pto_mmad_ops.hpp` | per-channel scale 进入 fixpipe 路径 |
-| 远端 GM → 本地 | `pto::comm::TGET` | `CopyGMToGMPerToken`，`op_kernel/dispatch_ffn_combine_kernel.hpp` | dispatch 阶段从 peer window 拉 token |
+| 远端 GM → 本地 | `pto::comm::TGET` | `CopyGMToGMPerToken`，`op_kernel/dispatch_combine_moe_kernel.hpp` | dispatch 阶段从 peer window 拉 token |
 | 本地 → 远端 GM | `pto::comm::TPUT` | combine epilogue、token all-gather | combine 阶段把结果写回 owner rank |
 | 跨 rank 同步 | `TNOTIFY`、`TWAIT` | `PtoRemoteWindow`，`op_kernel/utils/hccl_window.hpp` | remote window 上的 ready / barrier 协同 |
 | Tile 绑定 | `TASSIGN` | vector、matmul、comm tile path 均使用 | 把 tile 与 UB/L1/L0/fixpipe offset 绑定 |
@@ -130,13 +130,13 @@ PTO 并不是替代所有底层机制。它更像是在 Ascend C 之上增加了
 
 ## 6. 本项目当前 PTO 化效果与边界
 
-基于当前代码检视，`dispatch_combine_moe` 的 PTO 化效果可以概括为：
+`dispatch_combine_moe` 的 PTO 化效果可以概括为：
 
 1. **矩阵 bulk 路径已 PTO 化**  
-   GMM 输入搬入、L1 到 L0、matmul、acc/fixpipe 输出都已经通过 PTO wrapper 表达。
+   GMM 输入搬入、L1 到 L0、matmul、acc/fixpipe 输出都通过 PTO wrapper 表达，代表入口是 `op_kernel/utils/pto_mmad_ops.hpp` 和 `op_kernel/utils/block_mmad_preload_async_fixpipe_quant.hpp`。
 
 2. **向量 bulk 路径已 PTO 化**  
-   token reorder、epilogue、scale、quant 前后处理等主要向量搬移和计算都使用 PTO vector wrapper 或 PTO 原语。
+   token reorder、epilogue、scale、quant 前后处理等主要向量搬移和计算都使用 PTO vector wrapper 或 PTO 原语。routing 路径由 `moe_init_routing_sort.h`、`moe_init_routing_gather_dynamic_quant.h`、`moe_init_routing_fullload_dynamic_quant.h`、`moe_init_routing_expert_tokens.h`、`moe_packed_sort_merge.h` 等文件承载。
 
 3. **跨卡 payload 路径已 PTO 化**  
    dispatch 拉取 peer token、combine 写回 owner rank、token count all-gather 等 payload 搬移使用 `TGET/TPUT`。
@@ -144,10 +144,7 @@ PTO 并不是替代所有底层机制。它更像是在 Ascend C 之上增加了
 4. **跨 rank signal 部分 PTO 化**  
    remote token ready 和 barrier wait 使用 `TNOTIFY/TWAIT`，但 host 侧 HCCL/MPI 仍负责 root info、comm resource、remote window 初始化。
 
-5. **仍有 native 残留**  
-   标量 GM 控制读写、cache clean/invalidate、cross-core flag、pipe event/barrier 仍使用 Ascend C/native 接口。例如 `gm_load/gm_store`、`CrossCoreWaitFlag/CrossCoreSetFlag`、`SetFlag/WaitFlag/PipeBarrier/SyncAll`。
-
-这意味着当前项目可以说“**主数据搬移和计算 payload 已经 PTO 化**”，但不宜说“所有控制路径和同步路径都已经完全 PTO 化”。
+按源码口径看，排除 `build/`、`.cache/`、`out/` 后，业务侧没有 `DataCopy/DataCopyPad/LoadData/Fixpipe/Mmad` 这类 native bulk 搬移调用；主链路使用 PTO bulk/comm 搬移，native 调用集中在同步、标量控制和 substrate 边界。因此可以说“**主数据搬移和计算 payload 已经 PTO 化**”，但不宜说“所有控制路径和同步路径都已经完全 PTO 化”。
 
 ## 7. 代码例子：tile 编程优势在本算子中的体现
 
@@ -155,7 +152,7 @@ PTO 并不是替代所有底层机制。它更像是在 Ascend C 之上增加了
 
 dispatch 阶段的关键动作，是把 peer window 中属于当前 rank expert 的 token 拉到本地。代码中先把远端地址包装成 `GlobalTensor`，再把 UB tile 绑定到临时 buffer，最后用 `pto::comm::TGET` 完成远端搬移。
 
-代表代码：`op_kernel/dispatch_ffn_combine_kernel.hpp` 中 `CopyGMToGMPerToken`：
+代表代码：`op_kernel/dispatch_combine_moe_kernel.hpp` 中 `CopyGMToGMPerToken`：
 
 ```cpp
 using PackedGlobal = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
@@ -205,13 +202,17 @@ combine 阶段需要根据 token owner 决定写回本 rank 还是远端 rank。
 代表代码：`op_kernel/utils/block_epilogue_pertoken_row.hpp`：
 
 ```cpp
-if (dstRank == params.rank) {
-    row_detail::PtoStoreVector(dstRowBase, ubDOffset, blockN);
-} else {
+void StoreRemoteRow(...) {
     row_detail::PtoStoreVector(localScratch, ubDOffset + colOffsetBytes, chunkCols);
     TputGlobal localRowG(localScratch, rowShape, rowStride);
     TputGlobal remoteRowG(dstRowBase + colOffset, rowShape, rowStride);
     pto::comm::TPUT(remoteRowG, localRowG, tputTile);
+}
+
+if (dstRank == params.rank) {
+    row_detail::PtoStoreVector(dstRowBase, ubDOffset, blockN);
+} else {
+    StoreRemoteRow(dstRowBase, localScratch, blockN, ubDOffset);
 }
 ```
 
@@ -223,13 +224,15 @@ if (dstRank == params.rank) {
 
 这对 MoE combine 很重要，因为结果回写天然是不规则的：不同 token 的 owner rank 不同，每个 rank 的行数也不同。PTO 的 shape/stride/tile 写法比手写 offset 更容易维护。
 
-### 7.4 例子四：token reorder 中用 `TGATHER` 表达 UB 内字段抽取
+### 7.4 例子四：token reorder 中用 `TSORT32/TGATHER` 表达 UB 内排序和字段抽取
 
-routing 阶段有排序和 payload 提取逻辑。PTO 里可以用 `TGATHER` 从 packed sort 结果中抽取 key 或 payload 字段。
+routing 阶段包含排序、归并和 payload 提取逻辑：`moe_init_routing_sort.h` 负责 routing sort 主流程，`moe_packed_sort_merge.h` 负责分段排序结果归并，`moe_pto_sort.h` 提供 packed sort 和字段抽取原语封装。其中 `moe_pto_sort.h` 用 `TSORT32` 做 packed sort，用 `TGATHER` 从 packed sort 结果中抽取 key 或 payload 字段。
 
 代表代码：`op_kernel/token_reorder/routing/moe_pto_sort.h`：
 
 ```cpp
+pto::TSORT32(packedTile, srcTile, payloadTile);
+
 pto::TGATHER<PtoSortPayloadTile, PtoPackedPayloadTile, pto::MaskPattern::P1010>(
     sortedPayloadTile, packedPayloadTile);
 
@@ -239,7 +242,7 @@ pto::TGATHER<PtoSortKeyTile, PtoPackedSortTile, pto::MaskPattern::P0101>(
 
 这体现的优势是：
 
-- UB 内 packed 数据结构的字段抽取由 mask pattern 表达，语义比手写地址步进更明确。
+- UB 内排序由 `TSORT32` 表达，packed 数据结构的字段抽取由 mask pattern 表达，语义比手写地址步进更明确。
 - `sortedPayloadTile`、`packedPayloadTile`、`sortedKeyTile` 这些 tile 名称直接表达了数据角色。
 - token reorder 这种 vector-only 路径也纳入 PTO，而不是只让 PTO 覆盖 GEMM。
 
@@ -263,27 +266,8 @@ pto::TSTORE_FP(dstGlobal, accTile, scalingTile);
 
 这对于 dispatch_combine_moe 很关键，因为 GMM 输出后紧接 epilogue/quant/combine，scale 生命周期如果不清晰，很容易在纯 Ascend C 写法中变成多个 buffer、多个 event、多个 offset 的组合。
 
-## 8. 对算子开发者的建议
 
-1. **新增 bulk 搬移优先走 PTO wrapper**  
-   向量数据优先找 `pto_vector_ops.hpp`；矩阵数据优先找 `pto_mmad_ops.hpp`。不要在主路径重新引入裸 `DataCopy/LoadData/Fixpipe/Mmad`。
-
-2. **先确认 tile 类型，再写搬移**  
-   数据如果是 UB 向量工作集，按 `Tile<Vec>` 思考；如果是矩阵 staging，按 `Tile<Mat/Left/Right/Acc>` 思考；如果是 remote window payload，按 `GlobalTensor + comm primitive` 思考。
-
-3. **把 shape/stride/valid region 写进接口，而不是藏在 offset 里**  
-   MoE 的 token 分布不规则，动态 tile 比手写 copy length 更容易维护。
-
-4. **通信 payload 和通信 signal 分开建模**  
-   payload 用 `TGET/TPUT`，signal 用 `TNOTIFY/TWAIT`。不要把 host 侧 HCCL 初始化误判成 device payload 搬移。
-
-5. **同步 wrapper 不等于同步完全 PTO 化**  
-   当前 `PtoSetFlag/PtoWaitFlag/PtoSyncAll` 仍是 Ascend C wrapper。后续如果要进一步 PTO 化，需要明确 PTO 是否提供对应同步语义，而不是只改函数名。
-
-6. **量化输出路径要关注 fixpipe / scale tile**  
-   `CopyL0CToGmQuantMode` 这类 trait 说明不同芯片和不同 scale granularity 会映射到不同量化输出模式；在 PTO 路径中，应优先通过 `TSTORE_FP`、`ScalingTile` 和 `StagePerChannelScale` 表达，而不是回退到手写 fixpipe 搬移。
-
-## 9. 小结
+## 8. 小结
 
 PTO tile 编程在 `dispatch_combine_moe` 中的优势，核心不是“API 名字更统一”，而是把复杂 MoE 算子的多层数据流重写成更接近硬件层级和算子语义的 tile pipeline。
 

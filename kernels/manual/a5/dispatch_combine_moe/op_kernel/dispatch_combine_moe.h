@@ -207,15 +207,15 @@ template <TemplateMMA2AClass>
 __aicore__ inline void DispatchCombineMoe<TemplateMMA2ACFunc>::AssignDispatchInfo(
     const __gm__ DispatchCombineMoeTilingData *tilingData)
 {
-    aivNum = tilingData->dispatchFFNCombineInfo.aivNum;
-    m = tilingData->dispatchFFNCombineInfo.M;
-    k = tilingData->dispatchFFNCombineInfo.K;
-    n = tilingData->dispatchFFNCombineInfo.N;
-    EP = tilingData->dispatchFFNCombineInfo.worldSize;
-    topK = tilingData->dispatchFFNCombineInfo.topK;
-    expertPerRank = tilingData->dispatchFFNCombineInfo.expertPerRank;
-    maxOutputSize = tilingData->dispatchFFNCombineInfo.maxOutputSize;
-    listLen = tilingData->dispatchFFNCombineInfo.listLen;
+    aivNum = tilingData->dispatchCombineMoeInfo.aivNum;
+    m = tilingData->dispatchCombineMoeInfo.M;
+    k = tilingData->dispatchCombineMoeInfo.K;
+    n = tilingData->dispatchCombineMoeInfo.N;
+    EP = tilingData->dispatchCombineMoeInfo.worldSize;
+    topK = tilingData->dispatchCombineMoeInfo.topK;
+    expertPerRank = tilingData->dispatchCombineMoeInfo.expertPerRank;
+    maxOutputSize = tilingData->dispatchCombineMoeInfo.maxOutputSize;
+    listLen = tilingData->dispatchCombineMoeInfo.listLen;
 }
 
 template <TemplateMMA2AClass>

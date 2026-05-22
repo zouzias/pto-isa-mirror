@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 
 namespace optiling {
 struct AiCoreParams {
@@ -128,10 +129,14 @@ inline static int64_t GetPerOrLastValue(int64_t x, int64_t y)
 template <class T>
 constexpr T CeilDiv(const T dividend, const T divisor)
 {
+#if defined(__CCE_AICORE__)
+    return (dividend + divisor - 1) / divisor;
+#else
     if (divisor == 0) {
-        return 0;
+        throw std::invalid_argument("CeilDiv divisor must be non-zero");
     }
     return (dividend + divisor - 1) / divisor;
+#endif
 }
 
 struct InnerMoeVBSComputeTilingData {

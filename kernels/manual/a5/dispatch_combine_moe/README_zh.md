@@ -215,9 +215,7 @@ x / expert_idx / probs / x_active_mask
        unpermute + top-k weighted accumulation -> out[M, K]
 ```
 
-### 从 README 到代码的阅读路线
-
-如果第一次接手这个目录，不建议从 `utils/` 里任意打开文件开始看。按下面顺序读，能把顶层设计和代码实现对齐起来：
+### 关键代码的阅读路线
 
 1. `op_kernel/dispatch_combine_moe.cpp`：确认 device kernel symbol、tiling key、mixed AIC/AIV task type 和 host launch stub。
 2. `op_kernel/dispatch_combine_moe.h`：看 `DispatchCombineMoe::Init()` 如何从 tiling 取 shape/rank/window 信息，再看 `Process()` 如何装配 A5 policy、GMM layout、epilogue policy 和 `DispatchCombineMoeKernel::Params`。
@@ -293,19 +291,30 @@ Routing 子系统的入口是 `token_reorder/routing/moe_init_routing_quant.cpp`
 ```text
 moe_init_routing_quant()
 ├── tilingKey == 21000
-│   └── MoeFullLoadDynamicQuant
-│       sort + count/cumsum + gather/quant 在 full-load 路径内完成
+│   └── RunFullLoadDynamicQuant()
+│       └── MoeFullLoadDynamicQuant
+│           sort + count/cumsum + gather/quant 在 full-load 路径内完成
 ├── tilingKey == 11000
-│   ├── MoeSortOneCore
-│   ├── MoeExpertTokenOut
-│   ├── MoeSrcToDstOp
-│   └── MoeGatherDynamicQuant
+│   ├── RunSortStage<MoeSortOneCore>()
+│   ├── RunExpertTokenOut()
+│   ├── RunSrcToDst()
+│   └── RunGatherDynamicQuant()
 └── tilingKey == 11010
-    ├── MoeSortMultiCore
-    ├── MoeExpertTokenOut
-    ├── MoeSrcToDstOp
-    └── MoeGatherDynamicQuant
+    ├── RunSortStage<MoeSortMultiCore>()
+    ├── RunExpertTokenOut()
+    ├── RunSrcToDst()
+    └── RunGatherDynamicQuant()
 ```
+
+静态检查后的重构把入口拆成更小的 helper，每个 routing 阶段都有明确调用边界：
+
+| Helper | 包装的实现 | 职责 |
+| ------ | ---------- | ---- |
+| `RunFullLoadDynamicQuant()` | `MoeFullLoadDynamicQuant` | full-load 一体路径；内部完成 sort、expert 统计、src-to-dst 映射、gather 和逐行量化 |
+| `RunSortStage<SortOp>()` | `MoeSortOneCore` / `MoeSortMultiCore` | 根据 tilingKey 选择单核或多核 sort，实现 routing record 有序化 |
+| `RunExpertTokenOut()` | `MoeExpertTokenOut` | 当 `expertTokensCountOrCumsumFlag` 要求输出时，生成 expert token count/cumsum |
+| `RunSrcToDst()` | `MoeSrcToDstOp` | 把排序后的 routing record 转成 `expandedRowIdx` source-to-destination 行映射 |
+| `RunGatherDynamicQuant()` | `MoeGatherDynamicQuant` | 按 `expandedRowIdx` gather 原 token 行，计算 per-token abs-max scale，并写 int8 payload 与 scale |
 
 ### Routing 文件职责
 
@@ -346,19 +355,29 @@ moe_init_routing_quant()
 
 ```text
 for each local expert groupIdx:
+  currentM = cumsumMM[last_src_rank, groupIdx]
   for each dstEpIdx assigned to this AIV core:
-    rows = tokenPerExpert[dstEpIdx][rank][groupIdx]
-    rowStart = cumsumMM prefix + previous expert-group sum
-    rowSrc = preSumBeforeRank prefix
-    TGET peer offsetA packed rows
-    strip UB_ALIGN payload metadata
-    write gmA[rowStart, :]
-    write gmPerTokenScale1[rowStart]
+    CopyDispatchRowsForPeer(dstEpIdx, groupIdx)
+      rows = tokenPerExpert[dstEpIdx][rank][groupIdx]
+      rowStart = cumsumMM prefix + previous expert-group sum
+      rowSrc = preSumBeforeRank prefix carried across dst ranks
+      TGET peer offsetA packed rows
+      strip UB_ALIGN payload metadata
+      write gmA[rowStart, :]
+      write gmPerTokenScale1[rowStart]
   SyncAll
   CrossCoreSetFlag -> AIC GMM1 can consume this expert group
+  UpdateDispatchDequantSums(groupIdx, currentM)
 ```
 
-这里的底层抓手是 `CopyGMToGMPerToken()`：它用 `pto::comm::TGET` 从 peer window 拉取 packed token rows 到本 rank scratch，再用 vector load/store 把 token payload 和 per-token scale 拆到本地 GMM workspace。
+Dispatch-gather 阶段分成三层抓手：
+
+| 层级 | 代码 | 职责 |
+| ---- | ---- | ---- |
+| expert 循环编排 | `RunDispatchGatherImpl()` | 遍历 local expert，给 AIC 发布每个 group 的 GMM1 ready flag，并记录两段 SwiGLU 的行数 |
+| peer 行拷贝 | `CopyDispatchRowsForPeer()` | 把 `dstEpIdx/groupIdx` 映射到本地 `gmA` 行偏移，按 `maxOutputSize` 截断，并调用 packed-row copy helper |
+| packed payload 搬运 | `CopyGMToGMPerToken()` | 从 peer `offsetA` 执行 `pto::comm::TGET`，再把 packed `[int8 payload | UB_ALIGN metadata]` 拆成 `gmA` 与 `gmPerTokenScale1` |
+| SwiGLU 分段统计 | `UpdateDispatchDequantSums()` | 在 `epilogueGranularity` 前累加 `stageDequantSum1`，之后累加 `stageDequantSum2`，并与 GMM 一样受 `maxOutputSize` 约束 |
 
 ## AIC GMM 子系统：`block_mmad_preload_async_fixpipe_quant.hpp`
 
@@ -379,9 +398,20 @@ GM A/B/Scale
 | 文件 | 职责 |
 | ---- | ---- |
 | `block_mmad_preload_async_fixpipe_quant.hpp` | 管理 L1/L0A/L0B/L0C 多 stage buffer、k-loop preload、CrossCoreSetFlag finalize |
-| `pto_mmad_ops.hpp` | 封装具体 PTO primitive：`PtoLoadNdGmToNzL1` / `PtoLoadNzGmToNzL1` 做 GM→L1，`PtoMoveL1ToL0A` / `PtoMoveL1ToL0B` 做 L1→L0A/L0B，`PtoTileMmad` 做 matmul，`PtoStoreAccTileToGm` / `PtoStoreAccToGm` 做 fixpipe store |
+| `pto_mmad_ops.hpp` | 封装具体 PTO primitive：`PtoLoadNdGmToNzL1` / `PtoLoadNzGmToNzL1` 做 GM→L1，`PtoMoveL1ToL0A` / `PtoMoveL1ToL0B` 做 L1→L0A/L0B，`PtoTileMmad` 做 matmul，`StagePerChannelScale` 做 per-channel scale staging，`StoreAccumulator` / `PtoStoreAccToGm` 做 fixpipe store |
 | `dispatch_policy_custom.hpp` | 定义 `MmadAtlasA5PreloadAsyncFixpipe` 和 epilogue policy tag |
 | `moe_pto_utils.hpp` | 定义 arch resource、layout helper、tile copy traits、公共 shape/coord 工具 |
+
+`pto_mmad_ops.hpp` 现在把 PTO primitive wrapper 和类型策略选择拆开：
+
+| Helper | 职责 |
+| ------ | ---- |
+| `LaunchPtoMatmul()` | 在 `TMATMUL` / `TMATMUL_ACC` 间选择，并把 `unitFlag` 映射到 normal / partial / final 累加阶段 |
+| `PtoTileMmad()` | 绑定 L0A/L0B/L0C tile offset，并发起一个 matmul tile |
+| `PtoMoveL1ToL0A()` / `PtoMoveL1ToL0B()` | GM 数据进 L1 Mat tile 后，执行 `TMOV(Mat -> Left/Right)` |
+| `StagePerChannelScale()` | 从 GM 读取 per-channel scale 到 L1 Mat tile，再搬到 FIXPIPE Scaling tile |
+| `StoreAccumulator()` | 按输入类型分发 fixpipe store：int8 路径使用 per-channel scaling，half 路径使用非 scale accumulator store |
+| `MatmulShell` | 集中派生 `BlockMmad` 需要的 element/layout/trait alias，避免 staged kernel 主体重复类型装配 |
 
 ### GMM1 与 GMM2 的差异
 
@@ -474,7 +504,10 @@ preSumBeforeRank: 当前 source rank 在各 dst rank expert 段内的前缀
 - 以 GMM tile/block 为单位处理 `gmC2`，而不是逐完整 row 顺序扫描。
 - tile 内按 `m0 = 16` 行块拆给两个 AIV sub-core，形成更细的 AIV 并行粒度。
 - 读取 `tokenPerExpert[dst_rank][src_rank][groupIdx]` 和 `preSumBeforeRank[dst_rank][groupIdx]`，判断当前 tile 的哪些 row 属于哪个目标 rank。
-- 本地目标直接 `PtoStoreMatrixRows()`；远端目标先写 scratch，再逐 row `TPUT` 到 peer `offsetD`。
+- `LoadTileC()` 把非连续的 `gmC2` tile 读到 UB，并按 row 把 half 输出 cast 到 FP32。
+- `ScaleAndCastTile()` 在 UB 中缓存 per-token scale，对每个 FP32 row 乘 scale，再 cast 成输出 dtype。
+- `StoreTileD()` 遍历 dst rank，把当前 tile row 区间与每个 rank 拥有的 expert row 区间求交，并推进 tile-local row offset。
+- 本地目标直接 `PtoStoreMatrixRows()`；远端目标走 `StoreRemoteRows()`，后者先把一行写到每个 sub-core 独占 scratch，再用 `pto::comm::TPUT` 推到 peer `offsetD`。
 - 这个文件的职责是把 GMM tile 坐标、expert 内 row 区间、rank 内/跨 rank 写回三件事合并起来。
 
 ## Combine 与 restore 层
@@ -599,30 +632,6 @@ back groups : [epilogueGranularity, expertPerRank)
 
 这就是 README 图里 `GMM1 -> SwiGLU -> GMM2` 不是全局大 barrier 串行，而是按 expert 段拆开的底层逻辑。
 
-## PTO 原语分层
-
-当前代码没有直接把所有逻辑压到裸 AscendC API，而是在几个文件里形成了 PTO bridge 分层：
-
-| 层级 | 文件 | 典型原语 | 说明 |
-| ---- | ---- | -------- | ---- |
-| Vector bridge | `pto_vector_ops.hpp` | `TLOAD`, `TSTORE`, `TCVT`, `TMOV`, `TEXPANDS`, `TMULS`, `TADD`, `TDIV`, `TREDUCE` | 面向 UB/Vec tile 的连续向量搬运和算术封装 |
-| MMAD bridge | `pto_mmad_ops.hpp` | `TLOAD`, `TMOV`, `TMATMUL`, `TMATMUL_ACC`, `TSTORE_FP` | 面向 AIC 的 GM→L1、L1→L0A/L0B、L0C→GM 封装 |
-| Comm bridge | `hccl_window.hpp` + `pto::comm` | `TGET`, `TPUT`, notify/wait | remote-window 上的跨 rank 数据搬运和信号同步 |
-| Sync wrapper | `moe_pto_utils.hpp` / routing helpers | `SetFlag`, `WaitFlag`, `SyncAll`, `PipeBarrier` wrappers | 当前仍有 AscendC/CCE 同步封装，用于补齐 PTO primitive 间的 pipeline 依赖 |
-
-常见数据搬运语义：
-
-```text
-GM -> UB(Vec):       pto::TLOAD(Vec tile, GlobalTensor)
-UB(Vec) -> GM:       pto::TSTORE(GlobalTensor, Vec tile)
-GM -> L1(Mat):       pto::TLOAD(Mat tile, GlobalTensor)
-L1(Mat) -> L0A:      pto::TMOV(TileLeft, Mat tile)
-L1(Mat) -> L0B:      pto::TMOV(TileRight, Mat tile)
-L0A/L0B -> L0C:      pto::TMATMUL / pto::TMATMUL_ACC
-L0C/FIXPIPE -> GM:   pto::TSTORE_FP(...)
-Rank A -> Rank B:    pto::comm::TPUT / pto::comm::TGET over remote window
-```
-
 ## 默认参数与 Tiling
 
 `run.sh` 默认生成一个小形状 smoke case：
@@ -662,7 +671,18 @@ Host tiling 中固定或派生的关键参数：
 
 ### 一键 smoke 运行
 
-在 A5-capable 环境执行：
+在 A5-capable 环境执行前先设置 CANN 和 MPI 环境：
+
+```bash
+export ASCEND_CANN_PATH=/home/XXX/Ascend/cann-9.0.0/set_env.sh
+export ASCEND_HOME_PATH=/home/XXX/Ascend/cann-9.0.0
+source /home/XXX/Ascend/cann-9.0.0/set_env.sh
+export PATH=/usr/local/mpich/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/mpich/lib:$LD_LIBRARY_PATH
+export MPI_LIB_PATH=/usr/local/mpich/lib/libmpi.so
+```
+
+然后运行 smoke case：
 
 ```bash
 bash kernels/manual/a5/dispatch_combine_moe/run.sh \
@@ -675,6 +695,8 @@ bash kernels/manual/a5/dispatch_combine_moe/run.sh \
   --experts 2 \
   --max-output-size 32
 ```
+
+`ASCEND_CANN_PATH` 用于让 `run.sh` 定位并 source CANN 环境；`ASCEND_HOME_PATH` 是 CMake 查找 CANN include/lib/platform 的根目录，通常由 `set_env.sh` 设置，若目标环境未自动设置则需要显式导出。
 
 如果目标环境的 CANN platform config 使用其他 SoC 名称，可把 `--soc` / `--soc-version` 换成对应值。若不传 `--soc`，host tiling 使用默认 `PlatformAscendCManager::GetInstance()`。
 
@@ -760,35 +782,3 @@ CPU golden 的计算顺序与 device 语义对齐：按 dst rank / local expert 
 - Host sources：`main.cpp`、`op_host/runtime_context.cpp`、`op_host/tiling_builder.cpp`、`op_host/data_utils.cpp`
 - 关键链接库：`runtime`、`ascendcl`、`hcomm`、`tiling_api`、`nnopbase`
 - PTO include 路径放在 CANN include 前面，确保使用仓内 PTO 头文件。
-
-## 当前验证状态
-
-当前机器可编译 A5 `dav-c310` 代码，但不作为 A5 runtime validation target。端到端 PASS/性能需要在 A5-capable 环境重新验证。
-
-README 本身的正确性检查应至少包含：
-
-```bash
-git diff --check -- kernels/manual/a5/dispatch_combine_moe/README_zh.md
-python3 - <<'PY'
-from pathlib import Path
-s = Path('kernels/manual/a5/dispatch_combine_moe/README_zh.md').read_text(encoding='utf-8')
-required = [
-    '从 README 到代码的阅读路线',
-    '核心变量字典',
-    'Producer / consumer / signal 对照',
-    '`epilogueGranularity` 如何形成两段 SwiGLU/GMM2 overlap',
-    'token_reorder/routing',
-    'token_reorder/unpermute',
-    'block_epilogue_pertoken_swiglu.hpp',
-    'block_epilogue_pertoken_row.hpp',
-    'block_epilogue_pertoken_v2.hpp',
-    'block_mmad_preload_async_fixpipe_quant.hpp',
-    'RunDispatchGatherImpl',
-    'RunRestoreImpl',
-]
-missing = [marker for marker in required if marker not in s]
-raise SystemExit(f'missing README markers: {missing}' if missing else 0)
-PY
-```
-
-两条命令都应无输出。

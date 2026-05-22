@@ -64,7 +64,7 @@ struct DispatchCombineMoeLaunchConfig {
 };
 
 struct DispatchCombineMoeTilingData {
-    DispatchCombineMoeInfo dispatchFFNCombineInfo;
+    DispatchCombineMoeInfo dispatchCombineMoeInfo;
     CoCTiling cocTiling;
     DispatchCombineMoeRuntimeInfo runtimeInfo;
     DispatchCombineMoeLaunchConfig launchConfig;
