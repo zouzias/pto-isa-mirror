@@ -9,7 +9,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 /*!
- * \file dispatch_ffn_combine_tiling.h
+ * \file dispatch_combine_moe_tiling.h
  * \brief
  */
 
@@ -19,9 +19,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "token_reorder/routing/moe_init_routing_tiling_common.h"
 #include "token_reorder/routing/moe_init_routing_quant_tiling.h"
 
-#ifndef ASCENDC_DISPATCH_FFN_COMBINE_TILING_H
-#define ASCENDC_DISPATCH_FFN_COMBINE_TILING_H
-struct DispatchFFNCombineInfo {
+#ifndef ASCENDC_DISPATCH_COMBINE_MOE_TILING_H
+#define ASCENDC_DISPATCH_COMBINE_MOE_TILING_H
+struct DispatchCombineMoeInfo {
     uint32_t M;
     uint32_t K;
     uint32_t N;
@@ -51,22 +51,22 @@ struct CoCTiling {
     optiling::MoeInitRoutingQuantTilingData moeInitRoutingQuantTilingData;
 };
 
-struct DispatchFFNCombineRuntimeInfo {
+struct DispatchCombineMoeRuntimeInfo {
     uint64_t remoteWindowContext = 0;
     uint32_t rank = 0;
     uint32_t rankSize = 0;
 };
 
-struct DispatchFFNCombineLaunchConfig {
+struct DispatchCombineMoeLaunchConfig {
     uint32_t blockDim = 1;
     uint32_t tilingKey = 0;
     uint64_t workspaceBytes = 0;
 };
 
-struct DispatchFFNCombineTilingData {
-    DispatchFFNCombineInfo dispatchFFNCombineInfo;
+struct DispatchCombineMoeTilingData {
+    DispatchCombineMoeInfo dispatchFFNCombineInfo;
     CoCTiling cocTiling;
-    DispatchFFNCombineRuntimeInfo runtimeInfo;
-    DispatchFFNCombineLaunchConfig launchConfig;
+    DispatchCombineMoeRuntimeInfo runtimeInfo;
+    DispatchCombineMoeLaunchConfig launchConfig;
 };
 #endif

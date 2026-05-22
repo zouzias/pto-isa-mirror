@@ -1,3 +1,13 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
 /*
  * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
@@ -11,6 +21,7 @@
 #ifndef PTO_EXT_EPILOGUE_BLOCK_PER_TOKEN_ROW_HPP
 #define PTO_EXT_EPILOGUE_BLOCK_PER_TOKEN_ROW_HPP
 
+#include "moe_pto_utils.hpp"
 #include "dispatch_policy_custom.hpp"
 
 #include <pto/common/pto_tile.hpp>
@@ -22,23 +33,9 @@
 namespace pto_ext::Epilogue::Block {
 namespace row_detail {
 
-template <auto Pipe>
-PTO_DEVICE void PtoPipeBarrier()
-{
-    AscendC::PipeBarrier<Pipe>();
-}
-
-template <AscendC::HardEvent Event>
-PTO_DEVICE void PtoSetFlag(int32_t eventId)
-{
-    AscendC::SetFlag<Event>(eventId);
-}
-
-template <AscendC::HardEvent Event>
-PTO_DEVICE void PtoWaitFlag(int32_t eventId)
-{
-    AscendC::WaitFlag<Event>(eventId);
-}
+using pto_ext::PtoPipeBarrier;
+using pto_ext::PtoSetFlag;
+using pto_ext::PtoWaitFlag;
 
 using pto_ext::dispatch_combine_moe::pto_bridge::PtoCastVector;
 using pto_ext::dispatch_combine_moe::pto_bridge::PtoLoadVector;
@@ -81,12 +78,11 @@ public:
         PtoRemoteWindow remoteWindow;
         int32_t scratchOffset;
 
-        PTO_DEVICE
-        Params(){};
+        __forceinline__ __aicore__ Params(){};
 
-        PTO_DEVICE
-        Params(int32_t EP_, int32_t expertPerRank_, __gm__ int32_t *ptrTokenPerExpert_, int32_t n2_, int32_t rank_,
-               PtoRemoteWindow &remoteWindow_, int32_t scratchOffset_)
+        __forceinline__ __aicore__ Params(int32_t EP_, int32_t expertPerRank_, __gm__ int32_t *ptrTokenPerExpert_,
+                                          int32_t n2_, int32_t rank_, PtoRemoteWindow &remoteWindow_,
+                                          int32_t scratchOffset_)
             : ptrTokenPerExpert(ptrTokenPerExpert_),
               EP(EP_),
               expertPerRank(expertPerRank_),
@@ -97,8 +93,8 @@ public:
         {}
     };
 
-    PTO_DEVICE
-    BlockEpilogue(Arch::Resource<ArchTag> const &resource, Params const &params = Params{}) : params(params)
+    __forceinline__ __aicore__ BlockEpilogue(Arch::Resource<ArchTag> const &resource, Params const &params = Params{})
+        : params(params)
     {
         size_t ubOffset = 0;
         int32_t eventVMTE2 = 0;
@@ -121,8 +117,7 @@ public:
             ubOffset += blockN * sizeof(float);
         }
     }
-    PTO_DEVICE
-    void SetFlag()
+    __forceinline__ __aicore__ void SetFlag()
     {
         for (uint32_t i = 0; i < UB_STAGES; ++i) {
             row_detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[i]);
@@ -130,109 +125,112 @@ public:
         }
     }
 
-    PTO_DEVICE
-    void Finalize()
+    __forceinline__ __aicore__ void Finalize()
     {
         for (uint32_t i = 0; i < UB_STAGES; ++i) {
             row_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[i]);
             row_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[i]);
         }
     }
-    PTO_DEVICE
-    ~BlockEpilogue()
+    __forceinline__ __aicore__ ~BlockEpilogue()
     {}
 
-    PTO_DEVICE
-    void UpdateParams(Params const &params_)
+    __forceinline__ __aicore__ void UpdateParams(Params const &params_)
     {
         params = params_;
     }
 
-    PTO_DEVICE
-    void operator()(__gm__ ElementC *gmCPtr, PtoShape2D const &shapeC, __gm__ ElementPerTokenScale *gmPerTokenScalePtr,
-                    __gm__ ElementD *ptrD, int32_t dstRank)
+    __forceinline__ __aicore__ void operator()(__gm__ ElementC *gmCPtr, PtoShape2D const &shapeC,
+                                               __gm__ ElementPerTokenScale *gmPerTokenScalePtr, __gm__ ElementD *ptrD,
+                                               int32_t dstRank)
     {
-        using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-        using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-        using TputGlobal = pto::GlobalTensor<ElementD, ShapeDyn, StrideDyn, pto::Layout::ND>;
-        using TputTile = pto::Tile<pto::TileType::Vec, ElementD, 1, 1024, pto::BLayout::RowMajor, -1, -1>;
-
         uint32_t blockM = static_cast<uint32_t>(shapeC.shape[0]);
         uint32_t blockN = static_cast<uint32_t>(shapeC.shape[1]);
-        uint32_t tileLoops = blockM;
-        constexpr uint32_t scratchCols = 1024;
-        int32_t logicalSubCoreIdx = get_block_idx() + get_subblockid() * get_block_num();
-        int64_t scratchOffsetBytes =
-            params.scratchOffset + static_cast<int64_t>(logicalSubCoreIdx) * scratchCols * sizeof(ElementD);
-        __gm__ ElementD *localScratch =
-            reinterpret_cast<__gm__ ElementD *>(params.remoteWindow(scratchOffsetBytes, params.rank));
+        __gm__ ElementD *localScratch = GetLocalScratch();
 
-        for (uint32_t loopIdx = 0; loopIdx < tileLoops; loopIdx++) {
-            __gm__ ElementC *gmTileC = gmCPtr + loopIdx * blockN;
+        for (uint32_t loopIdx = 0; loopIdx < blockM; loopIdx++) {
             uint64_t ubCOffset = ubCOffsetList[ubListId];
             uint64_t ubCFp32Offset = ubCFp32OffsetList[ubListId];
             uint64_t ubDOffset = ubDOffsetList[ubListId];
-
-            row_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
-            row_detail::PtoLoadVector(ubCOffset, gmTileC, blockN);
-            row_detail::PtoSetFlag<AscendC::HardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
-
-            row_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
-            row_detail::PtoCastVector<ElementPerTokenScale, ElementC>(ubCFp32Offset, ubCOffset, blockN,
-                                                                      pto::RoundMode::CAST_NONE);
-            row_detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
-
-            ElementPerTokenScale perTokenScale = gm_load(gmPerTokenScalePtr + loopIdx);
-
-            row_detail::PtoSetFlag<AscendC::HardEvent::S_V>(0);
-            row_detail::PtoWaitFlag<AscendC::HardEvent::S_V>(0);
-            row_detail::PtoPipeBarrier<PIPE_V>();
-            row_detail::PtoMulVector(ubCFp32Offset, ubCFp32Offset, blockN, perTokenScale);
-            row_detail::PtoPipeBarrier<PIPE_V>();
-
-            row_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[ubListId]);
-            row_detail::PtoCastVector<ElementD, ElementPerTokenScale>(ubDOffset, ubCFp32Offset, blockN,
-                                                                      pto::RoundMode::CAST_RINT);
-            row_detail::PtoSetFlag<AscendC::HardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
-
-            row_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
-            __gm__ ElementD *dstRowBase = ptrD + loopIdx * blockN;
-            if (dstRank == params.rank) {
-                row_detail::PtoStoreVector(dstRowBase, ubDOffset, blockN);
-            } else {
-                for (uint32_t colOffset = 0; colOffset < blockN; colOffset += scratchCols) {
-                    uint32_t chunkCols = (blockN - colOffset < scratchCols) ? (blockN - colOffset) : scratchCols;
-                    row_detail::PtoStoreVector(
-                        localScratch, ubDOffset + static_cast<uint64_t>(colOffset) * sizeof(ElementD), chunkCols);
-                    ShapeDyn rowShape(1, 1, 1, 1, chunkCols);
-                    StrideDyn rowStride(chunkCols, chunkCols, chunkCols, chunkCols, 1);
-                    TputTile tputTile(1, chunkCols < scratchCols ? chunkCols : scratchCols);
-                    TputGlobal localRowG(localScratch, rowShape, rowStride);
-                    TputGlobal remoteRowG(dstRowBase + colOffset, rowShape, rowStride);
-                    pto::comm::TPUT(remoteRowG, localRowG, tputTile);
-                    row_detail::PtoPipeBarrier<PIPE_ALL>();
-                }
-            }
-            row_detail::PtoSetFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[ubListId]);
-
+            LoadAndScaleRow(gmCPtr + loopIdx * blockN, gmPerTokenScalePtr + loopIdx, blockN, ubCOffset, ubCFp32Offset);
+            StoreRow(ptrD + loopIdx * blockN, localScratch, dstRank, blockN, ubDOffset, ubCFp32Offset);
             ubListId = (ubListId + 1 < UB_STAGES) ? (ubListId + 1) : 0;
         }
     }
 
 private:
-    Params params;
+    __forceinline__ __aicore__ __gm__ ElementD *GetLocalScratch()
+    {
+        constexpr uint32_t scratchCols = 1024;
+        int32_t logicalSubCoreIdx = get_block_idx() + get_subblockid() * get_block_num();
+        int64_t scratchOffsetBytes =
+            params.scratchOffset + static_cast<int64_t>(logicalSubCoreIdx) * scratchCols * sizeof(ElementD);
+        return reinterpret_cast<__gm__ ElementD *>(params.remoteWindow(scratchOffsetBytes, params.rank));
+    }
 
-    uint64_t ubCOffsetList[UB_STAGES];
-    uint64_t ubDOffsetList[UB_STAGES];
+    __forceinline__ __aicore__ void LoadAndScaleRow(__gm__ ElementC *gmTileC,
+                                                    __gm__ ElementPerTokenScale *gmPerTokenScalePtr, uint32_t blockN,
+                                                    uint64_t ubCOffset, uint64_t ubCFp32Offset)
+    {
+        row_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
+        row_detail::PtoLoadVector(ubCOffset, gmTileC, blockN);
+        row_detail::PtoSetFlag<AscendC::HardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
 
-    int32_t eventUbCVMTE2List[UB_STAGES];
-    int32_t eventUbCMTE2VList[UB_STAGES];
-    int32_t eventUbDMTE3VList[UB_STAGES];
-    int32_t eventUbDVMTE3List[UB_STAGES];
+        row_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
+        row_detail::PtoCastVector<ElementPerTokenScale, ElementC>(ubCFp32Offset, ubCOffset, blockN,
+                                                                  pto::RoundMode::CAST_NONE);
+        row_detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
 
-    uint32_t ubListId{0};
+        ElementPerTokenScale perTokenScale = gm_load(gmPerTokenScalePtr);
+        row_detail::PtoSetFlag<AscendC::HardEvent::S_V>(0);
+        row_detail::PtoWaitFlag<AscendC::HardEvent::S_V>(0);
+        row_detail::PtoPipeBarrier<PIPE_V>();
+        row_detail::PtoMulVector(ubCFp32Offset, ubCFp32Offset, blockN, perTokenScale);
+        row_detail::PtoPipeBarrier<PIPE_V>();
+    }
 
-    uint64_t ubCFp32OffsetList[UB_STAGES];
+    __forceinline__ __aicore__ void StoreRemoteRow(__gm__ ElementD *dstRowBase, __gm__ ElementD *localScratch,
+                                                   uint32_t blockN, uint64_t ubDOffset)
+    {
+        using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+        using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+        using TputGlobal = pto::GlobalTensor<ElementD, ShapeDyn, StrideDyn, pto::Layout::ND>;
+        using TputTile = pto::Tile<pto::TileType::Vec, ElementD, 1, 1024, pto::BLayout::RowMajor, -1, -1>;
+        constexpr uint32_t scratchCols = 1024;
+
+        for (uint32_t colOffset = 0; colOffset < blockN; colOffset += scratchCols) {
+            uint32_t chunkCols = (blockN - colOffset < scratchCols) ? (blockN - colOffset) : scratchCols;
+            row_detail::PtoStoreVector(localScratch, ubDOffset + static_cast<uint64_t>(colOffset) * sizeof(ElementD),
+                                       chunkCols);
+            ShapeDyn rowShape(1, 1, 1, 1, chunkCols);
+            StrideDyn rowStride(chunkCols, chunkCols, chunkCols, chunkCols, 1);
+            TputTile tputTile(1, chunkCols < scratchCols ? chunkCols : scratchCols);
+            TputGlobal localRowG(localScratch, rowShape, rowStride);
+            TputGlobal remoteRowG(dstRowBase + colOffset, rowShape, rowStride);
+            pto::comm::TPUT(remoteRowG, localRowG, tputTile);
+            row_detail::PtoPipeBarrier<PIPE_ALL>();
+        }
+    }
+
+    __forceinline__ __aicore__ void StoreRow(__gm__ ElementD *dstRowBase, __gm__ ElementD *localScratch,
+                                             int32_t dstRank, uint32_t blockN, uint64_t ubDOffset,
+                                             uint64_t ubCFp32Offset)
+    {
+        row_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[ubListId]);
+        row_detail::PtoCastVector<ElementD, ElementPerTokenScale>(ubDOffset, ubCFp32Offset, blockN,
+                                                                  pto::RoundMode::CAST_RINT);
+        row_detail::PtoSetFlag<AscendC::HardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
+
+        row_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
+        if (dstRank == params.rank) {
+            row_detail::PtoStoreVector(dstRowBase, ubDOffset, blockN);
+        } else {
+            StoreRemoteRow(dstRowBase, localScratch, blockN, ubDOffset);
+        }
+        row_detail::PtoSetFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[ubListId]);
+    }
+
+    PTO_EPILOGUE_COMMON_UB_STATE()
 };
 
 } // namespace pto_ext::Epilogue::Block

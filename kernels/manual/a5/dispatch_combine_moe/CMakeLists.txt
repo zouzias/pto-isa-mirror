@@ -84,7 +84,7 @@ set(KERNEL_INCLUDE_DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/op_kernel
     ${CMAKE_CURRENT_SOURCE_DIR}/op_kernel/utils
-    ${CMAKE_CURRENT_SOURCE_DIR}/op_kernel/moe_init_routing_quant_v2
+    ${CMAKE_CURRENT_SOURCE_DIR}/op_kernel/token_reorder/routing
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_HOME_PATH}/include/hccl
     ${ASCEND_DRIVER_PATH}/kernel/inc
@@ -104,7 +104,7 @@ set(HOST_INCLUDE_DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/op_host
     ${CMAKE_CURRENT_SOURCE_DIR}/op_kernel
     ${CMAKE_CURRENT_SOURCE_DIR}/op_kernel/utils
-    ${CMAKE_CURRENT_SOURCE_DIR}/op_kernel/moe_init_routing_quant_v2
+    ${CMAKE_CURRENT_SOURCE_DIR}/op_kernel/token_reorder/routing
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_HOME_PATH}/include/hccl
     ${ASCEND_DRIVER_PATH}/kernel/inc
@@ -130,7 +130,7 @@ set(HOST_LINK_DIRS
     ${ASCEND_HOME_PATH}/lib64
 )
 
-add_library(dispatch_combine_moe_kernel SHARED op_kernel/dispatch_ffn_combine.cpp)
+add_library(dispatch_combine_moe_kernel SHARED op_kernel/dispatch_combine_moe.cpp)
 target_compile_options(dispatch_combine_moe_kernel PRIVATE
     ${CMAKE_CCE_COMPILE_OPTIONS}
     --cce-aicore-arch=dav-c310

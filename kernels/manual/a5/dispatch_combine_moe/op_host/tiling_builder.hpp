@@ -1,9 +1,19 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
 #pragma once
 
 #include <cstdint>
 #include <string>
 
-#include "op_kernel/dispatch_ffn_combine_tiling.h"
+#include "op_kernel/dispatch_combine_moe_tiling.h"
 #include "runtime_context.hpp"
 
 struct CaseConfig {
@@ -25,11 +35,11 @@ struct CaseConfig {
     double comm_bytes_all_ranks = 0.0;
 };
 
-struct DispatchFFNCombineBuildResult {
-    DispatchFFNCombineTilingData tiling{};
+struct DispatchCombineMoeBuildResult {
+    DispatchCombineMoeTilingData tiling{};
     uint32_t block_dim = 1;
     uint64_t workspace_bytes = 0;
 };
 
-DispatchFFNCombineBuildResult BuildDispatchFFNCombineTiling(const CaseConfig &cfg,
+DispatchCombineMoeBuildResult BuildDispatchCombineMoeTiling(const CaseConfig &cfg,
                                                             const StandaloneRankRuntime &runtime);
