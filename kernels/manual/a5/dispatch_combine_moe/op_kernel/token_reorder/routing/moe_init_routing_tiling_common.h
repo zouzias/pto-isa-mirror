@@ -1,7 +1,17 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
 #pragma once
 
-#ifndef ASCENDC_DISPATCH_FFN_COMBINE_INIT_ROUTING_TILING_COMMON_H
-#define ASCENDC_DISPATCH_FFN_COMBINE_INIT_ROUTING_TILING_COMMON_H
+#ifndef ASCENDC_DISPATCH_COMBINE_MOE_INIT_ROUTING_TILING_COMMON_H
+#define ASCENDC_DISPATCH_COMBINE_MOE_INIT_ROUTING_TILING_COMMON_H
 
 #include <algorithm>
 #include <cmath>
@@ -28,7 +38,6 @@ public:
         bool ret = GetShapeAttrsInfo(m, cols, topK, expertCapacity, expertNum, activeNum, dropPadMode,
                                      expertTokensCountOrCumsumFlag, expertTokensBeforeCapacityFlag, inuptXDtypeSize,
                                      quantMode, scaleDim0);
-
         if (!ret) {
             return ret;
         }
@@ -119,6 +128,9 @@ inline static int64_t GetPerOrLastValue(int64_t x, int64_t y)
 template <class T>
 constexpr T CeilDiv(const T dividend, const T divisor)
 {
+    if (divisor == 0) {
+        return 0;
+    }
     return (dividend + divisor - 1) / divisor;
 }
 
@@ -426,7 +438,6 @@ inline void InnerMoeInitRoutingTilingBase::Tiling4SrcToDstCapacityCompute()
 {
     auto tilingData = &moeInitRoutingTilingData.srcToDstCapacityComputeParamsOp;
     int64_t perCoreRows = CeilDiv(totalLength, aivNum);
-
     if (perCoreRows <= 0) {
         tilingData->needCoreNum = 0;
         return;
@@ -453,7 +464,6 @@ inline void InnerMoeInitRoutingTilingBase::Tiling4SrcToDstCapacityCompute()
         tilingData->perLoopCols = cols;
         tilingData->lastLoopCols = cols;
         tilingData->colLoops = 1;
-
     } else {
         int64_t baseMaxCols = MAX_COLS_ONE_LOOP;
         int64_t baseMaxColsSize =

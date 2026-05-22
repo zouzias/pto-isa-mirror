@@ -1,12 +1,12 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
- * This file is a part of the CANN Open Software.
- * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
- */
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
 
 /* !
  * \file moe_init_routing_fullload_dynamic_quant.h
@@ -20,8 +20,7 @@ namespace MoeInitRoutingQuant {
 using namespace AscendC;
 using namespace optiling;
 template <typename T>
-class MoeFullLoadDynamicQuant : public MoeSortBase {
-public:
+struct MoeFullLoadDynamicQuant : public MoeSortBase {
     __aicore__ inline MoeFullLoadDynamicQuant(){};
     __aicore__ inline void Init(GM_ADDR x, GM_ADDR expertIdx, GM_ADDR expandedX, GM_ADDR expandedRowIdx,
                                 GM_ADDR expertTokensCountOrCumsum, GM_ADDR quantSmooth, GM_ADDR dynamicQuantScale,
@@ -41,6 +40,10 @@ private:
     __aicore__ inline void StoreExpandedXRow(int64_t outIndex, uint64_t outUb);
     __aicore__ inline void QuantizeTile(uint64_t inUb, uint64_t tempUb, uint64_t outputPayloadUb,
                                         uint64_t dynamicQuantScaleUb, uint64_t smoothUb);
+    __aicore__ inline void InitTilingState(const MoeInitRoutingQuantTilingData *tilingData);
+    __aicore__ inline void InitGlobalTensors(GM_ADDR x, GM_ADDR expertIdx, GM_ADDR expandedX, GM_ADDR expandedRowIdx,
+                                             GM_ADDR expertTokensCountOrCumsum, GM_ADDR quantSmooth);
+    __aicore__ inline void InitUbOffsets();
 
 private:
     int64_t sortNum_;
@@ -232,15 +235,9 @@ __aicore__ inline void MoeFullLoadDynamicQuant<T>::CopyOutXQuant1H()
 }
 
 template <typename T>
-__aicore__ inline void MoeFullLoadDynamicQuant<T>::Init(GM_ADDR x, GM_ADDR expertIdx, GM_ADDR expandedX,
-                                                        GM_ADDR expandedRowIdx, GM_ADDR expertTokensCountOrCumsum,
-                                                        GM_ADDR quantSmooth, GM_ADDR dynamicQuantScale,
-                                                        GM_ADDR workspace,
-                                                        const MoeInitRoutingQuantTilingData *tilingData,
-                                                        AscendC::TPipe *tPipe)
+__aicore__ inline void MoeFullLoadDynamicQuant<T>::InitTilingState(const MoeInitRoutingQuantTilingData *tilingData)
 {
     this->gatherOutTilingData_ = &(tilingData->gatherOutComputeParamsOp);
-    // this->blockIdx_ = GetBlockIdx();
     this->blockIdx_ = get_block_idx() + get_subblockid() * get_block_num();
     this->k_ = tilingData->k;
     this->n_ = tilingData->n;
@@ -249,32 +246,38 @@ __aicore__ inline void MoeFullLoadDynamicQuant<T>::Init(GM_ADDR x, GM_ADDR exper
     this->needCoreNum_ = this->gatherOutTilingData_->needCoreNum;
     this->perCoreRows_ = this->gatherOutTilingData_->perCoreRows;
     this->activateRows_ = this->gatherOutTilingData_->activateRows;
-    if (this->blockIdx_ == this->gatherOutTilingData_->needCoreNum - 1) {
-        this->coreRows_ = this->gatherOutTilingData_->lastCoreRows;
-    } else {
-        this->coreRows_ = this->gatherOutTilingData_->perCoreRows;
-    }
+    this->coreRows_ = (this->blockIdx_ == this->gatherOutTilingData_->needCoreNum - 1) ?
+                          this->gatherOutTilingData_->lastCoreRows :
+                          this->gatherOutTilingData_->perCoreRows;
     this->expertNum = tilingData->expertNum;
     this->dropPadMode = tilingData->dropPadMode;
     this->expertTokensCountOrCumsumFlag = tilingData->expertTokensCountOrCumsumFlag;
-
     this->tileLength = Align(tilingData->vbsComputeParamsOp.lastCorePerLoopElements, sizeof(int32_t));
     this->sortNum_ = Ceil(this->tileLength, ONE_REPEAT_SORT_NUM) * ONE_REPEAT_SORT_NUM;
     this->totalLength = tilingData->n * tilingData->k;
     this->smoothType = tilingData->smoothType;
     this->colsAlign = Align(this->cols_, sizeof(T));
+}
 
+template <typename T>
+__aicore__ inline void MoeFullLoadDynamicQuant<T>::InitGlobalTensors(GM_ADDR x, GM_ADDR expertIdx, GM_ADDR expandedX,
+                                                                     GM_ADDR expandedRowIdx,
+                                                                     GM_ADDR expertTokensCountOrCumsum,
+                                                                     GM_ADDR quantSmooth)
+{
     xGm_ = (__gm__ T *)x;
     expertIdxGm_ = (__gm__ int32_t *)expertIdx;
-
     expandedXGm_ = (__gm__ int8_t *)expandedX;
     expandedRowIdxGm_ = (__gm__ int32_t *)expandedRowIdx;
     if (this->expertTokensCountOrCumsumFlag > 0) {
-        // dropless
         expertTokensCountOrCumsumGm = (__gm__ int32_t *)expertTokensCountOrCumsum;
     }
     quantSmoothGm = (__gm__ float *)quantSmooth;
+}
 
+template <typename T>
+__aicore__ inline void MoeFullLoadDynamicQuant<T>::InitUbOffsets()
+{
     int64_t kvFactor = 2;
     int64_t sortBytes = this->sortNum_ * sizeof(int32_t) * kvFactor;
     int64_t sortScratchBytes = GetSortLen<float>(this->sortNum_) * sizeof(float);
@@ -286,8 +289,7 @@ __aicore__ inline void MoeFullLoadDynamicQuant<T>::Init(GM_ADDR x, GM_ADDR exper
     this->sortTempUb = this->expertTokensUb_ + AlignBytes(this->expertNum, sizeof(int32_t));
     this->sortMergeTmpUb = this->sortTempUb + sortScratchBytes;
 
-    uint64_t baseUb = this->sortMergeTmpUb + sortScratchBytes;
-    this->inputXUb_ = baseUb;
+    this->inputXUb_ = this->sortMergeTmpUb + sortScratchBytes;
     if constexpr (IsSameType<T, float>::value) {
         this->smoothUb_ = this->inputXUb_ + AlignBytes(this->cols_, sizeof(float));
     } else {
@@ -295,6 +297,19 @@ __aicore__ inline void MoeFullLoadDynamicQuant<T>::Init(GM_ADDR x, GM_ADDR exper
     }
     this->tempUb_ = this->smoothUb_ + AlignBytes(this->cols_, sizeof(float));
     this->outputXUb_ = this->tempUb_ + AlignBytes(this->cols_, sizeof(float));
+}
+
+template <typename T>
+__aicore__ inline void MoeFullLoadDynamicQuant<T>::Init(GM_ADDR x, GM_ADDR expertIdx, GM_ADDR expandedX,
+                                                        GM_ADDR expandedRowIdx, GM_ADDR expertTokensCountOrCumsum,
+                                                        GM_ADDR quantSmooth, GM_ADDR dynamicQuantScale,
+                                                        GM_ADDR workspace,
+                                                        const MoeInitRoutingQuantTilingData *tilingData,
+                                                        AscendC::TPipe *tPipe)
+{
+    InitTilingState(tilingData);
+    InitGlobalTensors(x, expertIdx, expandedX, expandedRowIdx, expertTokensCountOrCumsum, quantSmooth);
+    InitUbOffsets();
 }
 
 template <typename T>

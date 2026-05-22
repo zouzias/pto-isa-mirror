@@ -1,15 +1,15 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
- * This file is a part of the CANN Open Software.
- * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
- */
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
 
 /*!
- * \file dispatch_ffn_combine_tiling.h
+ * \file dispatch_combine_moe_tiling.h
  * \brief
  */
 
@@ -19,9 +19,9 @@
 #include "token_reorder/routing/moe_init_routing_tiling_common.h"
 #include "token_reorder/routing/moe_init_routing_quant_tiling.h"
 
-#ifndef ASCENDC_DISPATCH_FFN_COMBINE_TILING_H
-#define ASCENDC_DISPATCH_FFN_COMBINE_TILING_H
-struct DispatchFFNCombineInfo {
+#ifndef ASCENDC_DISPATCH_COMBINE_MOE_TILING_H
+#define ASCENDC_DISPATCH_COMBINE_MOE_TILING_H
+struct DispatchCombineMoeInfo {
     uint32_t M;
     uint32_t K;
     uint32_t N;
@@ -51,22 +51,22 @@ struct CoCTiling {
     optiling::MoeInitRoutingQuantTilingData moeInitRoutingQuantTilingData;
 };
 
-struct DispatchFFNCombineRuntimeInfo {
+struct DispatchCombineMoeRuntimeInfo {
     uint64_t remoteWindowContext = 0;
     uint32_t rank = 0;
     uint32_t rankSize = 0;
 };
 
-struct DispatchFFNCombineLaunchConfig {
+struct DispatchCombineMoeLaunchConfig {
     uint32_t blockDim = 1;
     uint32_t tilingKey = 0;
     uint64_t workspaceBytes = 0;
 };
 
-struct DispatchFFNCombineTilingData {
-    DispatchFFNCombineInfo dispatchFFNCombineInfo;
+struct DispatchCombineMoeTilingData {
+    DispatchCombineMoeInfo dispatchFFNCombineInfo;
     CoCTiling cocTiling;
-    DispatchFFNCombineRuntimeInfo runtimeInfo;
-    DispatchFFNCombineLaunchConfig launchConfig;
+    DispatchCombineMoeRuntimeInfo runtimeInfo;
+    DispatchCombineMoeLaunchConfig launchConfig;
 };
 #endif

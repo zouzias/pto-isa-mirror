@@ -1,3 +1,13 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
 #ifndef PTO_EXT_DISPATCH_COMBINE_MOE_PTO_VECTOR_OPS_HPP
 #define PTO_EXT_DISPATCH_COMBINE_MOE_PTO_VECTOR_OPS_HPP
 
@@ -200,9 +210,16 @@ __forceinline__ __aicore__ void PtoMulVector(uint64_t dstUbOffsetBytes, uint64_t
     }
 }
 
-template <typename Element, int TileElems = 1024>
-__forceinline__ __aicore__ void PtoAddVector(uint64_t dstUbOffsetBytes, uint64_t src0UbOffsetBytes,
-                                             uint64_t src1UbOffsetBytes, uint32_t elemNum)
+enum class PtoBinaryVectorOp
+{
+    Add,
+    Mul,
+    Div,
+};
+
+template <PtoBinaryVectorOp Op, typename Element, int TileElems = 1024>
+__forceinline__ __aicore__ void PtoBinaryVector(uint64_t dstUbOffsetBytes, uint64_t src0UbOffsetBytes,
+                                                uint64_t src1UbOffsetBytes, uint32_t elemNum)
 {
     using Tile = PtoVecTile<Element, TileElems>;
     for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
@@ -213,8 +230,22 @@ __forceinline__ __aicore__ void PtoAddVector(uint64_t dstUbOffsetBytes, uint64_t
         PtoAssignUbTile<Tile, Element>(dstTile, dstUbOffsetBytes, offset);
         PtoAssignUbTile<Tile, Element>(src0Tile, src0UbOffsetBytes, offset);
         PtoAssignUbTile<Tile, Element>(src1Tile, src1UbOffsetBytes, offset);
-        pto::TADD(dstTile, src0Tile, src1Tile);
+        if constexpr (Op == PtoBinaryVectorOp::Add) {
+            pto::TADD(dstTile, src0Tile, src1Tile);
+        } else if constexpr (Op == PtoBinaryVectorOp::Mul) {
+            pto::TMUL(dstTile, src0Tile, src1Tile);
+        } else {
+            pto::TDIV(dstTile, src0Tile, src1Tile);
+        }
     }
+}
+
+template <typename Element, int TileElems = 1024>
+__forceinline__ __aicore__ void PtoAddVector(uint64_t dstUbOffsetBytes, uint64_t src0UbOffsetBytes,
+                                             uint64_t src1UbOffsetBytes, uint32_t elemNum)
+{
+    PtoBinaryVector<PtoBinaryVectorOp::Add, Element, TileElems>(dstUbOffsetBytes, src0UbOffsetBytes, src1UbOffsetBytes,
+                                                                elemNum);
 }
 
 template <typename Element, int TileElems = 1024>
@@ -236,34 +267,16 @@ template <typename Element, int TileElems = 1024>
 __forceinline__ __aicore__ void PtoMulElementwiseVector(uint64_t dstUbOffsetBytes, uint64_t src0UbOffsetBytes,
                                                         uint64_t src1UbOffsetBytes, uint32_t elemNum)
 {
-    using Tile = PtoVecTile<Element, TileElems>;
-    for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
-        const uint32_t cur = (elemNum - offset > TileElems) ? TileElems : (elemNum - offset);
-        Tile dstTile(1, cur);
-        Tile src0Tile(1, cur);
-        Tile src1Tile(1, cur);
-        PtoAssignUbTile<Tile, Element>(dstTile, dstUbOffsetBytes, offset);
-        PtoAssignUbTile<Tile, Element>(src0Tile, src0UbOffsetBytes, offset);
-        PtoAssignUbTile<Tile, Element>(src1Tile, src1UbOffsetBytes, offset);
-        pto::TMUL(dstTile, src0Tile, src1Tile);
-    }
+    PtoBinaryVector<PtoBinaryVectorOp::Mul, Element, TileElems>(dstUbOffsetBytes, src0UbOffsetBytes, src1UbOffsetBytes,
+                                                                elemNum);
 }
 
 template <typename Element, int TileElems = 1024>
 __forceinline__ __aicore__ void PtoDivVector(uint64_t dstUbOffsetBytes, uint64_t src0UbOffsetBytes,
                                              uint64_t src1UbOffsetBytes, uint32_t elemNum)
 {
-    using Tile = PtoVecTile<Element, TileElems>;
-    for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
-        const uint32_t cur = (elemNum - offset > TileElems) ? TileElems : (elemNum - offset);
-        Tile dstTile(1, cur);
-        Tile src0Tile(1, cur);
-        Tile src1Tile(1, cur);
-        PtoAssignUbTile<Tile, Element>(dstTile, dstUbOffsetBytes, offset);
-        PtoAssignUbTile<Tile, Element>(src0Tile, src0UbOffsetBytes, offset);
-        PtoAssignUbTile<Tile, Element>(src1Tile, src1UbOffsetBytes, offset);
-        pto::TDIV(dstTile, src0Tile, src1Tile);
-    }
+    PtoBinaryVector<PtoBinaryVectorOp::Div, Element, TileElems>(dstUbOffsetBytes, src0UbOffsetBytes, src1UbOffsetBytes,
+                                                                elemNum);
 }
 
 template <typename Element, int TileElems = 1024>

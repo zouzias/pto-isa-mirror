@@ -1,6 +1,16 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
 #pragma once
-#ifndef ASCENDC_DISPATCH_FFN_COMBINE_INIT_ROUTING_QUANT_TILING_H
-#define ASCENDC_DISPATCH_FFN_COMBINE_INIT_ROUTING_QUANT_TILING_H
+#ifndef ASCENDC_DISPATCH_COMBINE_MOE_INIT_ROUTING_QUANT_TILING_H
+#define ASCENDC_DISPATCH_COMBINE_MOE_INIT_ROUTING_QUANT_TILING_H
 
 #include <algorithm>
 
@@ -49,18 +59,7 @@ struct MoeInitRoutingQuantTilingData {
     InnerMoeGatherOutComputeTilingData gatherOutComputeParamsOp;
 };
 
-class MoeInitRoutingQuantTilingBase : public InnerMoeInitRoutingTilingBase {
-public:
-protected:
-    bool GetShapeAttrsInfo(int64_t m, int64_t cols, int64_t topK, int64_t expertCapacity, int64_t expertNum,
-                           int64_t activeNum, int64_t dropPadMode, int64_t expertTokensCountOrCumsumFlag,
-                           bool expertTokensBeforeCapacityFlag, int64_t inuptXDtypeSize, int64_t quantMode,
-                           int64_t scaleDim0) override;
-    uint64_t GetTilingKey() const override;
-    bool GetWorkspaceSize() override;
-    bool PostTiling() override;
-
-public:
+struct MoeInitRoutingQuantTilingBase : public InnerMoeInitRoutingTilingBase {
     // bool CheckOutShape() override;
     bool IsFullLoadQuant(int64_t space);
     bool IsFullLoadDynamicQuant(int64_t space);
@@ -70,6 +69,8 @@ public:
     void SetGatherTilingDataCols(InnerMoeGatherOutComputeTilingData *tilingData, int64_t baseMaxCols, int64_t cols);
     void SetGatherTilingDataRows(InnerMoeGatherOutComputeTilingData *tilingData, int64_t perCoreRows,
                                  int64_t lastCoreRows, int64_t basePerLoopMaxRows);
+    bool InitGatherRows(InnerMoeGatherOutComputeTilingData *tilingData, int64_t &perCoreRows, int64_t &lastCoreRows,
+                        int64_t &cols);
     void Tiling4GatherQuant();
     void Tiling4GatherDynamicQuant();
     void Tiling4SrcToDstCapacityCompute() override;
@@ -79,6 +80,15 @@ public:
 
     int64_t quantMode;
     MoeInitRoutingQuantTilingData quantTilingData;
+
+protected:
+    bool GetShapeAttrsInfo(int64_t m, int64_t cols, int64_t topK, int64_t expertCapacity, int64_t expertNum,
+                           int64_t activeNum, int64_t dropPadMode, int64_t expertTokensCountOrCumsumFlag,
+                           bool expertTokensBeforeCapacityFlag, int64_t inuptXDtypeSize, int64_t quantMode,
+                           int64_t scaleDim0) override;
+    uint64_t GetTilingKey() const override;
+    bool GetWorkspaceSize() override;
+    bool PostTiling() override;
 };
 
 inline bool MoeInitRoutingQuantTilingBase::IsFullLoadQuant(int64_t space)
@@ -259,6 +269,27 @@ inline void MoeInitRoutingQuantTilingBase::SetGatherTilingDataRows(InnerMoeGathe
         (basePerLoopMaxRows == 0 ? 0 : (lastCoreRows + basePerLoopMaxRows - 1) / basePerLoopMaxRows);
 }
 
+inline bool MoeInitRoutingQuantTilingBase::InitGatherRows(InnerMoeGatherOutComputeTilingData *tilingData,
+                                                          int64_t &perCoreRows, int64_t &lastCoreRows, int64_t &cols)
+{
+    tilingData->activateRows = totalLength;
+    if (dropPadMode == 0 && activateNum > 0) {
+        tilingData->activateRows = (std::min(activateNum, totalLength));
+    }
+    perCoreRows = CeilDiv(totalLength, aivNum);
+    if (perCoreRows <= 0) {
+        tilingData->needCoreNum = 0;
+        return false;
+    }
+
+    tilingData->needCoreNum = (CeilDiv(totalLength, perCoreRows));
+    cols = moeInitRoutingTilingData.cols;
+    tilingData->perCoreRows = perCoreRows;
+    lastCoreRows = totalLength - perCoreRows * (tilingData->needCoreNum - 1);
+    tilingData->lastCoreRows = lastCoreRows;
+    return true;
+}
+
 inline void MoeInitRoutingQuantTilingBase::Tiling4SrcToDstCapacityCompute()
 {
     if (quantMode == 0 || dropPadMode == 0) {
@@ -308,22 +339,12 @@ inline void MoeInitRoutingQuantTilingBase::Tiling4SrcToDstCapacityCompute()
 inline void MoeInitRoutingQuantTilingBase::Tiling4GatherQuant()
 {
     auto tilingData = &quantTilingData.gatherOutComputeParamsOp;
-    tilingData->activateRows = totalLength;
-    if (dropPadMode == 0 && activateNum > 0) {
-        tilingData->activateRows = (std::min(activateNum, totalLength));
-    }
-    int64_t perCoreRows = CeilDiv(totalLength, aivNum);
-
-    if (perCoreRows <= 0) {
-        tilingData->needCoreNum = 0;
+    int64_t perCoreRows = 0;
+    int64_t lastCoreRows = 0;
+    int64_t cols = 0;
+    if (!InitGatherRows(tilingData, perCoreRows, lastCoreRows, cols)) {
         return;
     }
-
-    tilingData->needCoreNum = (CeilDiv(totalLength, perCoreRows));
-    int64_t cols = moeInitRoutingTilingData.cols;
-    tilingData->perCoreRows = perCoreRows;
-    int64_t lastCoreRows = totalLength - perCoreRows * (tilingData->needCoreNum - 1);
-    tilingData->lastCoreRows = lastCoreRows;
     int64_t sizeOfCol = sizeof(int8_t) * NUM_TWO + sizeof(float) + sizeof(int16_t) + inuptXDtypeSize_ * NUM_TWO;
     int64_t rowSize =
         CeilDiv(perCoreRows * static_cast<int64_t>(sizeof(int32_t)) * NUM_TWO, ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE;
@@ -365,24 +386,12 @@ inline void SetGatherTilingDatawithloop(InnerMoeGatherOutComputeTilingData *tili
 inline void MoeInitRoutingQuantTilingBase::Tiling4GatherDynamicQuant()
 {
     auto tilingData = &quantTilingData.gatherOutComputeParamsOp;
-    tilingData->activateRows = totalLength;
-    if (dropPadMode == 0 && activateNum > 0) {
-        tilingData->activateRows = (std::min(activateNum, totalLength));
-    }
-    int64_t perCoreRows = CeilDiv(totalLength, aivNum);
-
-    if (perCoreRows <= 0) {
-        tilingData->needCoreNum = 0;
+    int64_t perCoreRows = 0;
+    int64_t lastCoreRows = 0;
+    int64_t cols = 0;
+    if (!InitGatherRows(tilingData, perCoreRows, lastCoreRows, cols)) {
         return;
     }
-
-    tilingData->needCoreNum = (CeilDiv(totalLength, perCoreRows));
-
-    int64_t cols = InnerMoeInitRoutingTilingBase::moeInitRoutingTilingData.cols;
-
-    tilingData->perCoreRows = perCoreRows;
-    int64_t lastCoreRows = totalLength - perCoreRows * (tilingData->needCoreNum - 1);
-    tilingData->lastCoreRows = lastCoreRows;
 
     int64_t rowSize =
         CeilDiv(perCoreRows * static_cast<int64_t>(sizeof(int32_t)), ONE_BLOCK_BYTE) * ONE_BLOCK_BYTE * NUM_FOUR;

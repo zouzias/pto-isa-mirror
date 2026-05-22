@@ -130,7 +130,7 @@ set(HOST_LINK_DIRS
     ${ASCEND_HOME_PATH}/lib64
 )
 
-add_library(dispatch_combine_moe_kernel SHARED op_kernel/dispatch_ffn_combine.cpp)
+add_library(dispatch_combine_moe_kernel SHARED op_kernel/dispatch_combine_moe.cpp)
 target_compile_options(dispatch_combine_moe_kernel PRIVATE
     ${CMAKE_CCE_COMPILE_OPTIONS}
     --cce-aicore-arch=dav-c310

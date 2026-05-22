@@ -1,3 +1,13 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
 #ifndef MOE_PTO_UTILS_HPP
 #define MOE_PTO_UTILS_HPP
 
@@ -26,6 +36,17 @@ constexpr uint32_t BYTE_PER_VECTOR_FRACTAL = BYTE_PER_BLK * BLK_NUM_PER_VECTOR_F
 constexpr uint64_t L2_OFFSET = 0;
 constexpr uint32_t STRIDE_LIMIT = 65536;
 constexpr uint32_t BYTE_PER_BLK_FP = 128;
+
+#define PTO_EPILOGUE_COMMON_UB_STATE()    \
+    Params params;                        \
+    uint64_t ubCOffsetList[UB_STAGES];    \
+    uint64_t ubDOffsetList[UB_STAGES];    \
+    int32_t eventUbCVMTE2List[UB_STAGES]; \
+    int32_t eventUbCMTE2VList[UB_STAGES]; \
+    int32_t eventUbDMTE3VList[UB_STAGES]; \
+    int32_t eventUbDVMTE3List[UB_STAGES]; \
+    uint32_t ubListId{0};                 \
+    uint64_t ubCFp32OffsetList[UB_STAGES];
 
 template <auto Pipe>
 __forceinline__ __aicore__ void PtoPipeBarrier()
@@ -274,6 +295,50 @@ struct GemmShape {
 namespace pto_ext {
 namespace layout {
 
+#define PTO_SHAPE_STRIDE_ACCESSORS()                            \
+    __forceinline__[host, aicore] Shape shape() const           \
+    {                                                           \
+        return shape_;                                          \
+    }                                                           \
+    __forceinline__[host, aicore] Shape &shape()                \
+    {                                                           \
+        return shape_;                                          \
+    }                                                           \
+    __forceinline__[host, aicore] int64_t shape(int idx) const  \
+    {                                                           \
+        return shape_.shape[idx];                               \
+    }                                                           \
+    __forceinline__[host, aicore] int64_t &shape(int idx)       \
+    {                                                           \
+        return shape_.shape[idx];                               \
+    }                                                           \
+    __forceinline__[host, aicore] Stride stride() const         \
+    {                                                           \
+        return stride_;                                         \
+    }                                                           \
+    __forceinline__[host, aicore] Stride &stride()              \
+    {                                                           \
+        return stride_;                                         \
+    }                                                           \
+    __forceinline__[host, aicore] int64_t stride(int idx) const \
+    {                                                           \
+        return stride_.stride[idx];                             \
+    }                                                           \
+    __forceinline__[host, aicore] int64_t &stride(int idx)      \
+    {                                                           \
+        return stride_.stride[idx];                             \
+    }
+
+#define PTO_ORG_SHAPE_ACCESSORS()                                 \
+    __forceinline__[host, aicore] int64_t orgShape(int idx) const \
+    {                                                             \
+        return orgShape_.shape[idx];                              \
+    }                                                             \
+    __forceinline__[host, aicore] int64_t &orgShape(int idx)      \
+    {                                                             \
+        return orgShape_.shape[idx];                              \
+    }
+
 struct ND {
     static constexpr int RANK = 2;
     static constexpr pto::Layout kPtoLayout = pto::Layout::ND;
@@ -315,38 +380,7 @@ struct ND {
         return ND(tileShape, stride());
     }
 
-    __forceinline__[host, aicore] Shape shape() const
-    {
-        return shape_;
-    }
-    __forceinline__[host, aicore] Shape &shape()
-    {
-        return shape_;
-    }
-    __forceinline__[host, aicore] int64_t shape(int idx) const
-    {
-        return shape_.shape[idx];
-    }
-    __forceinline__[host, aicore] int64_t &shape(int idx)
-    {
-        return shape_.shape[idx];
-    }
-    __forceinline__[host, aicore] Stride stride() const
-    {
-        return stride_;
-    }
-    __forceinline__[host, aicore] Stride &stride()
-    {
-        return stride_;
-    }
-    __forceinline__[host, aicore] int64_t stride(int idx) const
-    {
-        return stride_.stride[idx];
-    }
-    __forceinline__[host, aicore] int64_t &stride(int idx)
-    {
-        return stride_.stride[idx];
-    }
+    PTO_SHAPE_STRIDE_ACCESSORS()
 };
 
 struct DN {
@@ -390,38 +424,7 @@ struct DN {
         return DN(tileShape, stride());
     }
 
-    __forceinline__[host, aicore] Shape shape() const
-    {
-        return shape_;
-    }
-    __forceinline__[host, aicore] Shape &shape()
-    {
-        return shape_;
-    }
-    __forceinline__[host, aicore] int64_t shape(int idx) const
-    {
-        return shape_.shape[idx];
-    }
-    __forceinline__[host, aicore] int64_t &shape(int idx)
-    {
-        return shape_.shape[idx];
-    }
-    __forceinline__[host, aicore] Stride stride() const
-    {
-        return stride_;
-    }
-    __forceinline__[host, aicore] Stride &stride()
-    {
-        return stride_;
-    }
-    __forceinline__[host, aicore] int64_t stride(int idx) const
-    {
-        return stride_.stride[idx];
-    }
-    __forceinline__[host, aicore] int64_t &stride(int idx)
-    {
-        return stride_.stride[idx];
-    }
+    PTO_SHAPE_STRIDE_ACCESSORS()
 };
 
 struct VectorLayout {
@@ -465,38 +468,7 @@ struct VectorLayout {
         return VectorLayout(tileShape, stride());
     }
 
-    __forceinline__[host, aicore] Shape shape() const
-    {
-        return shape_;
-    }
-    __forceinline__[host, aicore] Shape &shape()
-    {
-        return shape_;
-    }
-    __forceinline__[host, aicore] int64_t shape(int idx) const
-    {
-        return shape_.shape[idx];
-    }
-    __forceinline__[host, aicore] int64_t &shape(int idx)
-    {
-        return shape_.shape[idx];
-    }
-    __forceinline__[host, aicore] Stride stride() const
-    {
-        return stride_;
-    }
-    __forceinline__[host, aicore] Stride &stride()
-    {
-        return stride_;
-    }
-    __forceinline__[host, aicore] int64_t stride(int idx) const
-    {
-        return stride_.stride[idx];
-    }
-    __forceinline__[host, aicore] int64_t &stride(int idx)
-    {
-        return stride_.stride[idx];
-    }
+    PTO_SHAPE_STRIDE_ACCESSORS()
 };
 
 struct Nz {
@@ -562,46 +534,8 @@ struct Nz {
                   RoundUp<C0_NUM_PER_FRACTAL>(shape.shape[0]) * C0_NUM_PER_FRACTAL);
     }
 
-    __forceinline__[host, aicore] int64_t orgShape(int idx) const
-    {
-        return orgShape_.shape[idx];
-    }
-    __forceinline__[host, aicore] int64_t &orgShape(int idx)
-    {
-        return orgShape_.shape[idx];
-    }
-    __forceinline__[host, aicore] Shape shape() const
-    {
-        return shape_;
-    }
-    __forceinline__[host, aicore] Shape &shape()
-    {
-        return shape_;
-    }
-    __forceinline__[host, aicore] int64_t shape(int idx) const
-    {
-        return shape_.shape[idx];
-    }
-    __forceinline__[host, aicore] int64_t &shape(int idx)
-    {
-        return shape_.shape[idx];
-    }
-    __forceinline__[host, aicore] Stride stride() const
-    {
-        return stride_;
-    }
-    __forceinline__[host, aicore] Stride &stride()
-    {
-        return stride_;
-    }
-    __forceinline__[host, aicore] int64_t stride(int idx) const
-    {
-        return stride_.stride[idx];
-    }
-    __forceinline__[host, aicore] int64_t &stride(int idx)
-    {
-        return stride_.stride[idx];
-    }
+    PTO_ORG_SHAPE_ACCESSORS()
+    PTO_SHAPE_STRIDE_ACCESSORS()
 };
 
 struct Zn {
@@ -667,46 +601,8 @@ struct Zn {
         return Zn(tileOriShape, tileShape, stride());
     }
 
-    __forceinline__[host, aicore] int64_t orgShape(int idx) const
-    {
-        return orgShape_.shape[idx];
-    }
-    __forceinline__[host, aicore] int64_t &orgShape(int idx)
-    {
-        return orgShape_.shape[idx];
-    }
-    __forceinline__[host, aicore] Shape shape() const
-    {
-        return shape_;
-    }
-    __forceinline__[host, aicore] Shape &shape()
-    {
-        return shape_;
-    }
-    __forceinline__[host, aicore] int64_t shape(int idx) const
-    {
-        return shape_.shape[idx];
-    }
-    __forceinline__[host, aicore] int64_t &shape(int idx)
-    {
-        return shape_.shape[idx];
-    }
-    __forceinline__[host, aicore] Stride stride() const
-    {
-        return stride_;
-    }
-    __forceinline__[host, aicore] Stride &stride()
-    {
-        return stride_;
-    }
-    __forceinline__[host, aicore] int64_t stride(int idx) const
-    {
-        return stride_.stride[idx];
-    }
-    __forceinline__[host, aicore] int64_t &stride(int idx)
-    {
-        return stride_.stride[idx];
-    }
+    PTO_ORG_SHAPE_ACCESSORS()
+    PTO_SHAPE_STRIDE_ACCESSORS()
 };
 
 struct Zz {
@@ -755,46 +651,8 @@ struct Zz {
                LongIndex(coord.shape[1]) / shape_.shape[2] * stride_.stride[3];
     }
 
-    __forceinline__[host, aicore] int64_t orgShape(int idx) const
-    {
-        return orgShape_.shape[idx];
-    }
-    __forceinline__[host, aicore] int64_t &orgShape(int idx)
-    {
-        return orgShape_.shape[idx];
-    }
-    __forceinline__[host, aicore] Shape shape() const
-    {
-        return shape_;
-    }
-    __forceinline__[host, aicore] Shape &shape()
-    {
-        return shape_;
-    }
-    __forceinline__[host, aicore] int64_t shape(int idx) const
-    {
-        return shape_.shape[idx];
-    }
-    __forceinline__[host, aicore] int64_t &shape(int idx)
-    {
-        return shape_.shape[idx];
-    }
-    __forceinline__[host, aicore] Stride stride() const
-    {
-        return stride_;
-    }
-    __forceinline__[host, aicore] Stride &stride()
-    {
-        return stride_;
-    }
-    __forceinline__[host, aicore] int64_t stride(int idx) const
-    {
-        return stride_.stride[idx];
-    }
-    __forceinline__[host, aicore] int64_t &stride(int idx)
-    {
-        return stride_.stride[idx];
-    }
+    PTO_ORG_SHAPE_ACCESSORS()
+    PTO_SHAPE_STRIDE_ACCESSORS()
 };
 
 } // namespace layout
@@ -942,14 +800,15 @@ struct L1BTypeSelector<GemmType<Element, layout::Zn>> {
 
 namespace Tile {
 
-enum class ScaleGranularity
-{
+// clang-format off
+enum class ScaleGranularity {
     UNDEFINED = -1,
     NO_QUANT = 0,
     PER_TENSOR,
     PER_CHANNEL,
     PER_GROUP
 };
+// clang-format on
 
 template <class ArchTag, class ElementSrc, class ElementDst,
           ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT>
@@ -1266,7 +1125,7 @@ struct TileElemWiseMuls {
 namespace Block {
 
 template <class DispatchPolicy, class... Args>
-class BlockEpilogue {
+struct BlockEpilogue {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "Could not find an epilogue specialization");
 };
 

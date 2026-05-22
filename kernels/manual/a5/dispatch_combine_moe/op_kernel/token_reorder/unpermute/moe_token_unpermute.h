@@ -30,8 +30,7 @@ using pto_ext::dispatch_combine_moe::pto_bridge::PtoFillVector;
 using pto_ext::dispatch_combine_moe::pto_bridge::PtoGetValue;
 
 template <typename T1, typename T2, typename T3, bool PROBS>
-class KernelMoeTokenUnpermute {
-public:
+struct KernelMoeTokenUnpermute : private MoeTokenUnpermuteTilingData {
     __aicore__ inline KernelMoeTokenUnpermute()
     {}
 
@@ -39,7 +38,7 @@ public:
                                 GM_ADDR unpermuted_tokens, const MoeTokenUnpermuteTilingData *__restrict tiling_data);
     __aicore__ inline void Process();
 
-protected:
+private:
     __aicore__ inline void CalMultiOutToken(const int64_t out_offset, const int64_t out_tokens_number);
     __aicore__ inline void CalSingleOutToken(const int64_t start_token, const int64_t out_token_idx);
     __aicore__ inline void CalPartOutToken(const int64_t start_token, const int64_t h_index, const int64_t h_length,
@@ -65,17 +64,6 @@ protected:
     constexpr static uint32_t BLOCK_SIZE = 32;
     constexpr static uint32_t ALIGN_512 = 512;
 
-    int64_t hidden_size;
-    int64_t top_k;
-    int64_t num_out_tokens;
-    int64_t hidden_splited_length;
-    int64_t hidden_splited_num;
-    int64_t hidden_splited_remain;
-    int64_t tokens_core_length;
-    int64_t tokens_core_remain;
-    int64_t tokens_splited_length;
-    int64_t tokens_splited_num;
-    int64_t tokens_splited_remain;
     int32_t blockIdx;
     int32_t blockNum;
 };

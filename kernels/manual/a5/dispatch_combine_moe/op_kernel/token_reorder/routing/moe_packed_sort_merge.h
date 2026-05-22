@@ -1,12 +1,12 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
- * This file is a part of the CANN Open Software.
- * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
- */
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
 
 /*!
  * \file moe_packed_sort_merge.h
@@ -27,6 +27,76 @@ struct MoeMrgsortParam {
     int64_t lastListElements;
     int64_t oneLoopMaxElements;
 };
+
+__aicore__ inline void UpdatePackedMrgTail(int64_t remainListNum, uint16_t elementCountListTail[4],
+                                           uint16_t &validBitTail)
+{
+    if (remainListNum == MERGE_LIST_TWO) {
+        elementCountListTail[MERGE_LIST_IDX_TWO] = 0;
+        elementCountListTail[MERGE_LIST_IDX_THREE] = 0;
+        validBitTail = 0b0011;
+    } else if (remainListNum == MERGE_LIST_THREE) {
+        elementCountListTail[MERGE_LIST_IDX_THREE] = 0;
+        validBitTail = 0b0111;
+    } else if (remainListNum == MERGE_LIST_FOUR) {
+        validBitTail = 0b1111;
+    } else {
+        validBitTail = 0b0001;
+    }
+}
+
+__aicore__ inline void CopyPackedMrgInputs(__gm__ float *gmInputs[4], uint64_t ubInputs[4], int64_t offsets[4],
+                                           int64_t listRemainElements[4], int64_t lengths[4], int64_t listNum,
+                                           int64_t oneLoopMaxElements, uint64_t tmpUbInputs[4],
+                                           uint16_t elementCountListTail[4], int64_t &remainListNum)
+{
+    remainListNum = 0;
+    pto_detail::PtoSetWaitFlag<HardEvent::MTE3_MTE2>(HardEvent::MTE3_MTE2);
+    for (int64_t i = 0, j = 0; i < listNum; i++) {
+        lengths[i] = Min(oneLoopMaxElements, listRemainElements[i]);
+        if (lengths[i] > 0) {
+            pto_detail::PtoLoadVector(ubInputs[i], gmInputs[i] + offsets[i], GetSortLen<float>(lengths[i]));
+            tmpUbInputs[j] = ubInputs[i];
+            elementCountListTail[j] = lengths[i];
+            remainListNum += 1;
+            j++;
+        }
+    }
+}
+
+__aicore__ inline void UpdatePackedMrgSortInfo(int64_t listNum, int64_t lengths[4], int64_t listRemainElements[4],
+                                               int64_t offsets[4], uint32_t listSortedNums[4],
+                                               int64_t &allRemainElements, int64_t &curLoopSortedNum)
+{
+    curLoopSortedNum = 0;
+    for (int64_t i = 0, j = 0; i < listNum; i++) {
+        if (lengths[i] > 0) {
+            listRemainElements[i] -= listSortedNums[j];
+            allRemainElements -= listSortedNums[j];
+            offsets[i] += GetSortOffset<float>(listSortedNums[j]);
+            curLoopSortedNum += listSortedNums[j];
+            j += 1;
+        }
+    }
+}
+
+__aicore__ inline void InitPackedMrgListState(MoeMrgsortParam *param, int64_t listNum, int64_t offsets[4],
+                                              int64_t listRemainElements[4], int64_t &allRemainElements,
+                                              bool resetAllRemainElements)
+{
+    if (resetAllRemainElements) {
+        allRemainElements = 0;
+    }
+    for (int64_t i = 0; i < listNum; i++) {
+        offsets[i] = GetSortOffset<float>(param->perListElements * i);
+        if (i == listNum - 1) {
+            listRemainElements[i] = param->lastListElements;
+        } else {
+            listRemainElements[i] = param->perListElements;
+        }
+        allRemainElements += listRemainElements[i];
+    }
+}
 
 class MoeMrgsort {
 public:
@@ -98,34 +168,13 @@ __aicore__ inline void MoeMrgsort::SetBuffer(uint64_t tempBuffer)
 
 __aicore__ inline void MoeMrgsort::UpdateMrgParam()
 {
-    if (this->remainListNum == MERGE_LIST_TWO) {
-        elementCountListTail[MERGE_LIST_IDX_TWO] = 0;
-        elementCountListTail[MERGE_LIST_IDX_THREE] = 0;
-        validBitTail = 0b0011;
-    } else if (this->remainListNum == MERGE_LIST_THREE) {
-        elementCountListTail[MERGE_LIST_IDX_THREE] = 0;
-        validBitTail = 0b0111;
-    } else if (this->remainListNum == MERGE_LIST_FOUR) {
-        validBitTail = 0b1111;
-    } else {
-        validBitTail = 0b0001;
-    }
+    UpdatePackedMrgTail(this->remainListNum, elementCountListTail, validBitTail);
 }
 
 __aicore__ inline void MoeMrgsort::CopyIn()
 {
-    this->remainListNum = 0;
-    pto_detail::PtoSetWaitFlag<HardEvent::MTE3_MTE2>(HardEvent::MTE3_MTE2);
-    for (int64_t i = 0, j = 0; i < listNum; i++) {
-        lengths[i] = Min(param->oneLoopMaxElements, listRemainElements[i]);
-        if (lengths[i] > 0) {
-            pto_detail::PtoLoadVector(this->ubInputs[i], this->gmInputs[i] + offsets[i], GetSortLen<float>(lengths[i]));
-            tmpUbInputs[j] = this->ubInputs[i];
-            elementCountListTail[j] = lengths[i];
-            this->remainListNum += 1;
-            j++;
-        }
-    }
+    CopyPackedMrgInputs(this->gmInputs, this->ubInputs, offsets, listRemainElements, lengths, listNum,
+                        param->oneLoopMaxElements, tmpUbInputs, elementCountListTail, this->remainListNum);
 }
 
 __aicore__ inline void MoeMrgsort::MrgsortCompute()
@@ -145,19 +194,8 @@ __aicore__ inline void MoeMrgsort::MrgsortCompute()
 
 __aicore__ inline void MoeMrgsort::UpdateSortInfo()
 {
-    curLoopSortedNum = 0;
-    for (int64_t i = 0, j = 0; i < listNum; i++) {
-        if (lengths[i] > 0) {
-            // update remain size
-            listRemainElements[i] -= listSortedNums[j];
-            allRemainElements -= listSortedNums[j];
-            // update offset
-            offsets[i] += GetSortOffset<float>(listSortedNums[j]);
-            // update current loop sorted nums
-            curLoopSortedNum += listSortedNums[j];
-            j += 1;
-        }
-    }
+    UpdatePackedMrgSortInfo(listNum, lengths, listRemainElements, offsets, listSortedNums, allRemainElements,
+                            curLoopSortedNum);
 }
 
 __aicore__ inline void MoeMrgsort::CopyOut()
@@ -171,16 +209,7 @@ __aicore__ inline void MoeMrgsort::Init(MoeMrgsortParam *param)
 {
     this->param = param;
     this->remainListNum = listNum;
-
-    for (int64_t i = 0; i < listNum; i++) {
-        offsets[i] = GetSortOffset<float>(param->perListElements * i);
-        if (i == listNum - 1) {
-            listRemainElements[i] = param->lastListElements;
-        } else {
-            listRemainElements[i] = param->perListElements;
-        }
-        allRemainElements += listRemainElements[i];
-    }
+    InitPackedMrgListState(param, listNum, offsets, listRemainElements, allRemainElements, false);
 }
 
 __aicore__ inline void MoeMrgsort::Process()
@@ -284,34 +313,13 @@ __aicore__ inline void MoeMrgsortOut::SetBuffer(uint64_t tempBuffer, uint64_t me
 
 __aicore__ inline void MoeMrgsortOut::UpdateMrgParam()
 {
-    if (this->remainListNum == MERGE_LIST_TWO) {
-        elementCountListTail[MERGE_LIST_IDX_TWO] = 0;
-        elementCountListTail[MERGE_LIST_IDX_THREE] = 0;
-        validBitTail = 0b0011;
-    } else if (this->remainListNum == MERGE_LIST_THREE) {
-        elementCountListTail[MERGE_LIST_IDX_THREE] = 0;
-        validBitTail = 0b0111;
-    } else if (this->remainListNum == MERGE_LIST_FOUR) {
-        validBitTail = 0b1111;
-    } else {
-        validBitTail = 0b0001;
-    }
+    UpdatePackedMrgTail(this->remainListNum, elementCountListTail, validBitTail);
 }
 
 __aicore__ inline void MoeMrgsortOut::CopyIn()
 {
-    this->remainListNum = 0;
-    pto_detail::PtoSetWaitFlag<HardEvent::MTE3_MTE2>(HardEvent::MTE3_MTE2);
-    for (int64_t i = 0, j = 0; i < listNum; i++) {
-        lengths[i] = Min(param->oneLoopMaxElements, listRemainElements[i]);
-        if (lengths[i] > 0) {
-            pto_detail::PtoLoadVector(this->ubInputs[i], this->gmInputs[i] + offsets[i], GetSortLen<float>(lengths[i]));
-            tmpUbInputs[j] = this->ubInputs[i];
-            elementCountListTail[j] = lengths[i];
-            this->remainListNum += 1;
-            j++;
-        }
-    }
+    CopyPackedMrgInputs(this->gmInputs, this->ubInputs, offsets, listRemainElements, lengths, listNum,
+                        param->oneLoopMaxElements, tmpUbInputs, elementCountListTail, this->remainListNum);
 }
 
 __aicore__ inline void MoeMrgsortOut::MrgsortCompute()
@@ -331,19 +339,8 @@ __aicore__ inline void MoeMrgsortOut::MrgsortCompute()
 
 __aicore__ inline void MoeMrgsortOut::UpdateSortInfo()
 {
-    curLoopSortedNum = 0;
-    for (int64_t i = 0, j = 0; i < listNum; i++) {
-        if (lengths[i] > 0) {
-            // update remain size
-            listRemainElements[i] -= listSortedNums[j];
-            allRemainElements -= listSortedNums[j];
-            // update offset
-            offsets[i] += GetSortOffset<float>(listSortedNums[j]);
-            // update current loop sorted nums
-            curLoopSortedNum += listSortedNums[j];
-            j += 1;
-        }
-    }
+    UpdatePackedMrgSortInfo(listNum, lengths, listRemainElements, offsets, listSortedNums, allRemainElements,
+                            curLoopSortedNum);
 }
 
 __aicore__ inline void MoeMrgsortOut::Extract()
@@ -362,16 +359,7 @@ __aicore__ inline void MoeMrgsortOut::CopyOut()
 __aicore__ inline void MoeMrgsortOut::Init(MoeMrgsortParam *param)
 {
     this->param = param;
-    this->allRemainElements = 0;
-    for (int64_t i = 0; i < listNum; i++) {
-        offsets[i] = GetSortOffset<float>(param->perListElements * i);
-        if (i == listNum - 1) {
-            listRemainElements[i] = param->lastListElements;
-        } else {
-            listRemainElements[i] = param->perListElements;
-        }
-        allRemainElements += listRemainElements[i];
-    }
+    InitPackedMrgListState(param, listNum, offsets, listRemainElements, allRemainElements, true);
 }
 
 __aicore__ inline void MoeMrgsortOut::Process()

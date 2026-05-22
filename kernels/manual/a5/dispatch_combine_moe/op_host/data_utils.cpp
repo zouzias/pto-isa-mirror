@@ -1,3 +1,13 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
 #include "data_utils.hpp"
 
 #include <algorithm>
@@ -162,7 +172,9 @@ AccuracyReport CompareFp16File(const std::vector<uint16_t> &expected, const std:
                                          std::fabs(static_cast<double>(actual_value) - expected_value);
         const double tolerance = atol + rtol * std::max(1.0, std::fabs(static_cast<double>(expected_value)));
         const double rel_denom = std::max(std::fabs(static_cast<double>(expected_value)), 1e-7);
-        const double rel_err = invalid ? std::numeric_limits<double>::infinity() : abs_err / rel_denom;
+        const double rel_err = invalid ?
+                                   std::numeric_limits<double>::infinity() :
+                                   (rel_denom > 0.0 ? abs_err / rel_denom : std::numeric_limits<double>::infinity());
 
         if (invalid) {
             report.nan_or_inf_count += 1;

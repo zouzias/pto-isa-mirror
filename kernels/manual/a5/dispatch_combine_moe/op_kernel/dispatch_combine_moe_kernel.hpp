@@ -1,3 +1,13 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
 /*
  * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
@@ -8,8 +18,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef DISPATCH_FFN_COMBINE_KERNEL_HPP
-#define DISPATCH_FFN_COMBINE_KERNEL_HPP
+#ifndef DISPATCH_COMBINE_MOE_KERNEL_HPP
+#define DISPATCH_COMBINE_MOE_KERNEL_HPP
 
 #include "kernel_operator.h"
 
@@ -72,7 +82,7 @@ constexpr uint16_t SYNCFLAGV2C = 10;
 
 template <class BlockMmad_, class BlockScheduler_, class ElementGroupList_, class BlockEpilogue1_,
           class BlockEpilogue2_, class BlockEpilogue3_>
-class DispatchFFNCombineKernel {
+class DispatchCombineMoeKernel {
 public:
     using BlockMmad = BlockMmad_;
     using ArchTag = typename BlockMmad::ArchTag;
@@ -200,7 +210,7 @@ public:
     };
 
     // Methods
-    __forceinline__ __aicore__ DispatchFFNCombineKernel(Params const &params)
+    __forceinline__ __aicore__ DispatchCombineMoeKernel(Params const &params)
     {
         if ASCEND_IS_AIC {
             coreIdx = AscendC::GetBlockIdx();
@@ -215,7 +225,7 @@ public:
         initBuffer(params);
     }
 
-    __forceinline__ __aicore__ ~DispatchFFNCombineKernel()
+    __forceinline__ __aicore__ ~DispatchCombineMoeKernel()
     {}
 
     template <int32_t CORE_TYPE = g_coreType>
@@ -287,6 +297,54 @@ public:
         AscendC::CrossCoreSetFlag<0x2, PIPE_MTE3>(0);
     }
 
+    __forceinline__ __aicore__ void CopyDispatchRowsForPeer(Params const &params, int32_t dstEpIdx, int32_t groupIdx,
+                                                            uint32_t prevGroupSum, int32_t &prevSum,
+                                                            int32_t &pingpongIdx)
+    {
+        uint32_t rowStart =
+            (dstEpIdx == 0 ? 0 : gm_load(cumsumMMPtr + (dstEpIdx - 1) * params.expertPerRank + groupIdx)) +
+            prevGroupSum;
+        if (rowStart >= params.maxOutputSize) {
+            return;
+        }
+
+        uint32_t rows = gm_load(tokenPerExpertPtr + tokenPerExpertLayout(dstEpIdx, params.rank, groupIdx));
+        if (rowStart + rows > params.maxOutputSize) {
+            rows = params.maxOutputSize - rowStart;
+        }
+        uint32_t rowSrc = prevSum;
+        prevSum += rows;
+        GM_ADDR otherRankPtr = remoteWindow(0, dstEpIdx);
+        __gm__ ElementA *remotePackedRows =
+            reinterpret_cast<__gm__ ElementA *>(otherRankPtr + peerMemoryLayout.offsetA);
+        auto offsetA = PtoCoord2D(rowStart, 0);
+        int64_t gmOffsetA = params.layoutA.GetOffset(offsetA);
+        int64_t gmOffsetPeer = rowSrc * (static_cast<uint32_t>(params.problemShape.shape[2]) + UB_ALIGN);
+        int32_t ubMoveNum = 2;
+        CopyGMToGMPerToken(gmAPtr + gmOffsetA, gmPerTokenScale1Ptr + rowStart, remotePackedRows + gmOffsetPeer, rows,
+                           static_cast<uint32_t>(params.problemShape.shape[2]), ubMoveNum, pingpongIdx);
+    }
+
+    __forceinline__ __aicore__ void UpdateDispatchDequantSums(Params const &params, int32_t groupIdx, uint32_t currentM,
+                                                              uint32_t &dequantSum1, uint32_t &dequantSum2)
+    {
+        if (groupIdx + 1 <= params.epilogueGranularity) {
+            if (dequantSum1 + currentM <= params.maxOutputSize) {
+                dequantSum1 += currentM;
+            } else if (dequantSum1 < params.maxOutputSize) {
+                dequantSum1 = params.maxOutputSize;
+            }
+        }
+
+        if (groupIdx + 1 > params.epilogueGranularity && dequantSum1 < params.maxOutputSize) {
+            if (dequantSum1 + dequantSum2 + currentM <= params.maxOutputSize) {
+                dequantSum2 += currentM;
+            } else if (dequantSum1 + dequantSum2 < params.maxOutputSize) {
+                dequantSum2 += params.maxOutputSize - dequantSum1 - dequantSum2;
+            }
+        }
+    }
+
     __forceinline__ __aicore__ void RunDispatchGatherImpl(Params const &params)
     {
         uint16_t syncgmm1Idx = 1;
@@ -305,27 +363,7 @@ public:
         for (int32_t groupIdx = 0; groupIdx < params.expertPerRank; ++groupIdx) {
             uint32_t currentM = gm_load(cumsumMMPtr + (params.EP - 1) * params.expertPerRank + groupIdx);
             for (int32_t dstEpIdx = coreIdx; dstEpIdx < params.EP; dstEpIdx += coreNum) {
-                uint32_t rowStart =
-                    (dstEpIdx == 0 ? 0 : gm_load(cumsumMMPtr + (dstEpIdx - 1) * params.expertPerRank + groupIdx)) +
-                    prevGroupSum1;
-                if (rowStart < params.maxOutputSize) {
-                    uint32_t rows = gm_load(tokenPerExpertPtr + tokenPerExpertLayout(dstEpIdx, params.rank, groupIdx));
-                    if (rowStart + rows > params.maxOutputSize) {
-                        rows = params.maxOutputSize - rowStart;
-                    }
-                    uint32_t rowSrc = prevSum;
-                    prevSum += rows;
-                    GM_ADDR otherRankPtr = remoteWindow(0, dstEpIdx);
-                    __gm__ ElementA *remotePackedRows =
-                        reinterpret_cast<__gm__ ElementA *>(otherRankPtr + peerMemoryLayout.offsetA);
-                    auto offsetA = PtoCoord2D(rowStart, 0);
-                    int64_t gmOffsetA = params.layoutA.GetOffset(offsetA);
-                    int64_t gmOffsetPeer = rowSrc * (static_cast<uint32_t>(params.problemShape.shape[2]) + UB_ALIGN);
-                    int32_t ubMoveNum = 2;
-                    CopyGMToGMPerToken(gmAPtr + gmOffsetA, gmPerTokenScale1Ptr + rowStart,
-                                       remotePackedRows + gmOffsetPeer, rows,
-                                       static_cast<uint32_t>(params.problemShape.shape[2]), ubMoveNum, pingpongIdx);
-                }
+                CopyDispatchRowsForPeer(params, dstEpIdx, groupIdx, prevGroupSum1, prevSum, pingpongIdx);
             }
             kernel_detail::PtoSyncAll<true>();
             AscendC::CrossCoreSetFlag<0x2, PIPE_MTE3>(syncgmm1Idx / CROSS_CORE_FLAG_MAX_SET_COUNT);
@@ -333,21 +371,7 @@ public:
 
             prevGroupSum1 += currentM;
 
-            if (groupIdx + 1 <= params.epilogueGranularity) {
-                if (dequantSum1 + currentM <= params.maxOutputSize) {
-                    dequantSum1 += currentM;
-                } else if (dequantSum1 < params.maxOutputSize) {
-                    dequantSum1 = params.maxOutputSize;
-                }
-            }
-
-            if (groupIdx + 1 > params.epilogueGranularity && dequantSum1 < params.maxOutputSize) {
-                if (dequantSum1 + dequantSum2 + currentM <= params.maxOutputSize) {
-                    dequantSum2 += currentM;
-                } else if (dequantSum1 + dequantSum2 < params.maxOutputSize) {
-                    dequantSum2 += params.maxOutputSize - dequantSum1 - dequantSum2;
-                }
-            }
+            UpdateDispatchDequantSums(params, groupIdx, currentM, dequantSum1, dequantSum2);
         }
         kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
         kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
@@ -647,6 +671,36 @@ private:
                                             static_cast<uint16_t>(expertPerRank * sizeof(int32_t)));
     }
 
+    __forceinline__ __aicore__ uint32_t ClampGroupM(uint32_t currentM, int64_t preCurrentmSum, uint32_t maxOutputSize)
+    {
+        if (preCurrentmSum >= maxOutputSize) {
+            return 0;
+        }
+        if (preCurrentmSum + currentM > maxOutputSize) {
+            return maxOutputSize - preCurrentmSum;
+        }
+        return currentM;
+    }
+
+    __forceinline__ __aicore__ uint32_t GetStartLoopIdx(uint32_t startCoreIdx, uint32_t currentCoreIdx,
+                                                        uint32_t currentCoreNum)
+    {
+        return ((currentCoreIdx < startCoreIdx) ? (currentCoreIdx + currentCoreNum) : currentCoreIdx) - startCoreIdx;
+    }
+
+    __forceinline__ __aicore__ void AdvanceGmmGroupOffsets(const PtoShape3D &shape, uint32_t listLen,
+                                                           int64_t &gmGroupOffsetA, int64_t &gmGroupOffsetB,
+                                                           int64_t &gmGroupOffsetC, uint32_t &startCoreIdx,
+                                                           uint32_t coreLoops, uint32_t currentCoreNum)
+    {
+        gmGroupOffsetA += static_cast<uint32_t>(shape.shape[0]) * static_cast<uint32_t>(shape.shape[2]);
+        if (listLen == 1) {
+            gmGroupOffsetB += static_cast<uint32_t>(shape.shape[2]) * static_cast<uint32_t>(shape.shape[1]);
+        }
+        gmGroupOffsetC += static_cast<uint32_t>(shape.shape[0]) * static_cast<uint32_t>(shape.shape[1]);
+        startCoreIdx = (startCoreIdx + coreLoops) % currentCoreNum;
+    }
+
     __forceinline__ __aicore__ void GMM1(Params const &params)
     {
         icache_preload(8);
@@ -669,12 +723,8 @@ private:
         syncgmmIdx++;
 
         for (uint32_t groupIdx = 0; groupIdx < params.expertPerRank; ++groupIdx) {
-            uint32_t currentM = gm_load(cumsumMMPtr + (params.EP - 1) * params.expertPerRank + groupIdx);
-            if (preCurrentmSum >= params.maxOutputSize) {
-                currentM = 0;
-            } else if (preCurrentmSum + currentM >= params.maxOutputSize) {
-                currentM = params.maxOutputSize - preCurrentmSum;
-            }
+            uint32_t currentM = ClampGroupM(gm_load(cumsumMMPtr + (params.EP - 1) * params.expertPerRank + groupIdx),
+                                            preCurrentmSum, params.maxOutputSize);
             int32_t arrayGroupIdx = params.listLen == 1 ? 0 : groupIdx;
             __gm__ ElementB *gmB1Ptr =
                 reinterpret_cast<__gm__ ElementB *>(kernel_detail::GetTensorAddr<int8_t>(arrayGroupIdx, params.ptrB1));
@@ -691,7 +741,7 @@ private:
             blockScheduler.Update(inGroupProblemShape, L1TileShape::ToPtoShapeMN());
             uint32_t coreLoops = blockScheduler.GetCoreLoops();
             // Determine the starting loopIdx of the current core under the current groupIdx
-            uint32_t startLoopIdx = ((coreIdx < startCoreIdx) ? (coreIdx + coreNum) : coreIdx) - startCoreIdx;
+            uint32_t startLoopIdx = GetStartLoopIdx(startCoreIdx, coreIdx, coreNum);
             // Loop through the matmul of each groupIdx
 
             for (uint32_t loopIdx = startLoopIdx; loopIdx < coreLoops; loopIdx += coreNum) {
@@ -732,15 +782,8 @@ private:
             }
 
             preCurrentmSum += currentM;
-            gmGroupOffsetA += static_cast<uint32_t>(inGroupProblemShape.shape[0]) *
-                              static_cast<uint32_t>(inGroupProblemShape.shape[2]);
-            if (params.listLen == 1) {
-                gmGroupOffsetB += static_cast<uint32_t>(inGroupProblemShape.shape[2]) *
-                                  static_cast<uint32_t>(inGroupProblemShape.shape[1]);
-            }
-            gmGroupOffsetC += static_cast<uint32_t>(inGroupProblemShape.shape[0]) *
-                              static_cast<uint32_t>(inGroupProblemShape.shape[1]);
-            startCoreIdx = (startCoreIdx + coreLoops) % coreNum;
+            AdvanceGmmGroupOffsets(inGroupProblemShape, params.listLen, gmGroupOffsetA, gmGroupOffsetB, gmGroupOffsetC,
+                                   startCoreIdx, coreLoops, coreNum);
         }
 
         for (; syncGroupIdx < params.expertPerRank; syncGroupIdx++) {
@@ -779,12 +822,8 @@ private:
         }
 
         for (uint32_t groupIdx = 0; groupIdx < params.expertPerRank; ++groupIdx) {
-            uint32_t currentM = gm_load(cumsumMMPtr + (params.EP - 1) * params.expertPerRank + groupIdx);
-            if (preCurrentmSum >= params.maxOutputSize) {
-                currentM = 0;
-            } else if (preCurrentmSum + currentM > params.maxOutputSize) {
-                currentM = params.maxOutputSize - preCurrentmSum;
-            }
+            uint32_t currentM = ClampGroupM(gm_load(cumsumMMPtr + (params.EP - 1) * params.expertPerRank + groupIdx),
+                                            preCurrentmSum, params.maxOutputSize);
             int32_t arrayGroupIdx = params.listLen == 1 ? 0 : groupIdx;
             __gm__ ElementB *gmB2Ptr =
                 reinterpret_cast<__gm__ ElementB *>(kernel_detail::GetTensorAddr<int8_t>(arrayGroupIdx, params.ptrB2));
@@ -803,7 +842,7 @@ private:
             uint32_t coreLoops = blockScheduler.GetCoreLoops();
 
             // Determine the starting loopIdx of the current core under the current groupIdx
-            uint32_t startLoopIdx = ((coreIdx < startCoreIdx) ? (coreIdx + coreNum) : coreIdx) - startCoreIdx;
+            uint32_t startLoopIdx = GetStartLoopIdx(startCoreIdx, coreIdx, coreNum);
             // Loop through the matmul of each groupIdx
             if (params.expertPerRank > lastDequantExpertNum &&
                 groupIdx + 1 == params.expertPerRank - lastDequantExpertNum) {
@@ -837,16 +876,8 @@ private:
                 }
             }
             preCurrentmSum += currentM;
-            gmGroupOffsetA += static_cast<uint32_t>(inGroupProblemShape.shape[0]) *
-                              static_cast<uint32_t>(inGroupProblemShape.shape[2]);
-            if (params.listLen == 1) {
-                gmGroupOffsetB += static_cast<uint32_t>(inGroupProblemShape.shape[2]) *
-                                  static_cast<uint32_t>(inGroupProblemShape.shape[1]);
-            }
-            gmGroupOffsetC += static_cast<uint32_t>(inGroupProblemShape.shape[0]) *
-                              static_cast<uint32_t>(inGroupProblemShape.shape[1]);
-
-            startCoreIdx = (startCoreIdx + coreLoops) % coreNum;
+            AdvanceGmmGroupOffsets(inGroupProblemShape, params.listLen, gmGroupOffsetA, gmGroupOffsetB, gmGroupOffsetC,
+                                   startCoreIdx, coreLoops, coreNum);
         }
         if constexpr (BlockMmad::DispatchPolicy::ASYNC) {
             blockMmad.SynchronizeBlock();
@@ -1043,6 +1074,38 @@ private:
         blockEpilogue.Finalize();
     }
 
+    __forceinline__ __aicore__ uint32_t ClampCurrentExpertM(uint32_t currentExpertM, uint32_t preSrcExpertSum,
+                                                            uint32_t maxOutputSize)
+    {
+        if (preSrcExpertSum >= maxOutputSize) {
+            return 0;
+        }
+        if (preSrcExpertSum + currentExpertM > maxOutputSize) {
+            return maxOutputSize - preSrcExpertSum;
+        }
+        return currentExpertM;
+    }
+
+    __forceinline__ __aicore__ int32_t CalcAivMRows(uint32_t blockM, int32_t m0, uint32_t aivSubCoreIdx)
+    {
+        int32_t mRows = (blockM + m0 - 1) / m0;
+        int32_t aivMRows = mRows / 2;
+        if (aivSubCoreIdx == 1 && aivMRows * 2 < mRows) {
+            aivMRows += 1;
+        }
+        return aivMRows;
+    }
+
+    __forceinline__ __aicore__ uint32_t CalcAivMOffset(const PtoShape2D &blockCoordMN, int32_t m0,
+                                                       uint32_t aivSubCoreIdx, uint32_t mRows)
+    {
+        uint32_t mOffset = static_cast<uint32_t>(blockCoordMN.shape[0]) * L1TileShape::M;
+        if (aivSubCoreIdx == 1) {
+            mOffset += (mRows / 2) * m0;
+        }
+        return mOffset;
+    }
+
     __forceinline__ __aicore__ void CombineV2(Params const &params, BlockEpilogue3 &blockEpilogue)
     {
         BlockScheduler blockScheduler;
@@ -1056,12 +1119,9 @@ private:
         uint32_t k2 = static_cast<uint32_t>(params.problemShape.shape[1]) / 2;
         icache_preload(8);
         for (uint32_t groupIdx = 0; groupIdx < params.expertPerRank; ++groupIdx) {
-            uint32_t currentExpertM = gm_load(cumsumMMPtr + (params.EP - 1) * params.expertPerRank + groupIdx);
-            if (preSrcExpertSum >= params.maxOutputSize) {
-                currentExpertM = 0;
-            } else if (preSrcExpertSum + currentExpertM > params.maxOutputSize) {
-                currentExpertM = params.maxOutputSize - preSrcExpertSum;
-            }
+            uint32_t currentExpertM =
+                ClampCurrentExpertM(gm_load(cumsumMMPtr + (params.EP - 1) * params.expertPerRank + groupIdx),
+                                    preSrcExpertSum, params.maxOutputSize);
             PtoShape3D inGroupProblemShape = PtoShape3D(currentExpertM, n2, k2); // M N K
             blockScheduler.Update(inGroupProblemShape, L1TileShape::ToPtoShapeMN());
             uint32_t coreLoops = blockScheduler.GetCoreLoops();
@@ -1076,14 +1136,8 @@ private:
                 uint32_t blockN = static_cast<uint32_t>(actualBlockShapeMN.shape[1]);
                 //  Block count, the shape of each block is (m0, blockN)
                 int32_t m_rows = (blockM + m0 - 1) / m0;
-                int32_t aiv_m_rows = m_rows / 2;
-                if (aivSubCoreIdx == 1 && aiv_m_rows * 2 < m_rows) {
-                    aiv_m_rows += 1;
-                }
-                uint32_t m_offset = static_cast<uint32_t>(blockCoordMN.shape[0]) * L1TileShape::M;
-                if (aivSubCoreIdx == 1) {
-                    m_offset += (m_rows / 2) * m0;
-                }
+                int32_t aiv_m_rows = CalcAivMRows(blockM, m0, aivSubCoreIdx);
+                uint32_t m_offset = CalcAivMOffset(blockCoordMN, m0, aivSubCoreIdx, static_cast<uint32_t>(m_rows));
 
                 for (; syncLoopIdx <= groupIdx; syncLoopIdx++) {
                     int32_t flag_id = syncLoopIdx / CROSS_CORE_FLAG_MAX_SET_COUNT;
@@ -1218,4 +1272,4 @@ private:
 
 } // namespace pto_ext::Gemm::Kernel
 
-#endif // DISPATCH_FFN_COMBINE_KERNEL_HPP
+#endif // DISPATCH_COMBINE_MOE_KERNEL_HPP

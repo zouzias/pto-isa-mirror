@@ -1,12 +1,12 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
- * This file is a part of the CANN Open Software.
- * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
- */
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
 
 /*!
  * \file moe_init_routing_gather_dynamic_quant.h
@@ -22,8 +22,7 @@ namespace MoeInitRoutingQuant {
 using namespace AscendC;
 using namespace optiling;
 template <typename T>
-class MoeGatherDynamicQuant {
-public:
+struct MoeGatherDynamicQuant {
     __aicore__ inline MoeGatherDynamicQuant(){};
     __aicore__ inline void Init(GM_ADDR inputX, GM_ADDR quantSmooth, GM_ADDR expandedRowIdx, GM_ADDR expandedX,
                                 GM_ADDR dynamicQuantScale, GM_ADDR workspace,
@@ -36,6 +35,8 @@ private:
     __aicore__ inline void CopyOutXQuant1H(int64_t progress);
     __aicore__ inline void CopyOutXQuantEH(int64_t progress);
     __aicore__ inline void Compute(uint64_t smoothUb);
+    __aicore__ inline void AssignCoreRows();
+    __aicore__ inline void AssignUbOffsets(GM_ADDR workspace);
     __aicore__ inline void LoadInputTile(uint64_t inUb, int64_t srcOffset, int64_t elemNum);
     __aicore__ inline void StoreExpandedXTile(int64_t dstOffset, uint64_t outUb, int64_t elemNum);
     __aicore__ inline void CopyOutPartialXQuantEH(int64_t progress);
@@ -138,6 +139,45 @@ __aicore__ inline void MoeGatherDynamicQuant<T>::Compute(uint64_t smoothUb)
 
     pto_detail::PtoCastVector<half, float>(tempUb, tempUb, this->cols, pto::RoundMode::CAST_TRUNC);
     pto_detail::PtoCastVector<int8_t, half>(outputPayloadUb, tempUb, this->cols, pto::RoundMode::CAST_ROUND);
+}
+
+template <typename T>
+__aicore__ inline void MoeGatherDynamicQuant<T>::AssignCoreRows()
+{
+    if (this->blockIdx == this->gatherOutTilingData->needCoreNum - 1) {
+        this->coreRows = this->gatherOutTilingData->lastCoreRows;
+        this->perLoopRows = this->gatherOutTilingData->lastCorePerLoopRows;
+        this->lastLoopRows = this->gatherOutTilingData->lastCoreLastLoopRows;
+        this->rowLoops = this->gatherOutTilingData->lastCoreLoops;
+    } else {
+        this->coreRows = this->gatherOutTilingData->perCoreRows;
+        this->perLoopRows = this->gatherOutTilingData->perCorePerLoopRows;
+        this->lastLoopRows = this->gatherOutTilingData->perCoreLastLoopRows;
+        this->rowLoops = this->gatherOutTilingData->perCoreLoops;
+    }
+}
+
+template <typename T>
+__aicore__ inline void MoeGatherDynamicQuant<T>::AssignUbOffsets(GM_ADDR workspace)
+{
+    int64_t perLoopColsAlignBytes = AlignBytes(this->perLoopCols, sizeof(T));
+    perLoopColsAlignBytes =
+        Max(int64_t(perLoopColsAlignBytes * sizeof(float) / sizeof(T)), int64_t(BLOCK_BYTES + BLOCK_BYTES));
+
+    this->indicesUb = 0;
+    this->inputXUb = this->indicesUb + 2 * AlignBytes(this->perLoopRows, sizeof(int32_t));
+    this->smoothUb_ = this->inputXUb + perLoopColsAlignBytes;
+    this->tempUb = this->smoothUb_ + AlignBytes(this->perLoopCols, sizeof(float));
+    this->outputXUb = this->tempUb + AlignBytes(this->perLoopCols, sizeof(float));
+    this->scaleUb = this->outputXUb + AlignBytes(this->cols_scale_, sizeof(int8_t));
+
+    expandedExpertIdxGm = (__gm__ int32_t *)workspace + this->blockIdx * this->gatherOutTilingData->perCoreRows;
+    sortedRowIdxGm = (__gm__ int32_t *)workspace + Align(this->totalLength, sizeof(int32_t)) +
+                     this->blockIdx * this->gatherOutTilingData->perCoreRows;
+    if (this->cols > 1) {
+        quantSrcGm =
+            (__gm__ float *)workspace + Align(this->totalLength, sizeof(int32_t)) * 2 + this->blockIdx * this->cols;
+    }
 }
 
 template <typename T>
@@ -380,17 +420,7 @@ __aicore__ inline void MoeGatherDynamicQuant<T>::Init(GM_ADDR inputX, GM_ADDR qu
     this->dropPadMode = tilingData->dropPadMode;
     this->smoothType = tilingData->smoothType;
 
-    if (this->blockIdx == this->gatherOutTilingData->needCoreNum - 1) {
-        this->coreRows = this->gatherOutTilingData->lastCoreRows;
-        this->perLoopRows = this->gatherOutTilingData->lastCorePerLoopRows;
-        this->lastLoopRows = this->gatherOutTilingData->lastCoreLastLoopRows;
-        this->rowLoops = this->gatherOutTilingData->lastCoreLoops;
-    } else {
-        this->coreRows = this->gatherOutTilingData->perCoreRows;
-        this->perLoopRows = this->gatherOutTilingData->perCorePerLoopRows;
-        this->lastLoopRows = this->gatherOutTilingData->perCoreLastLoopRows;
-        this->rowLoops = this->gatherOutTilingData->perCoreLoops;
-    }
+    AssignCoreRows();
     this->perLoopCols = this->gatherOutTilingData->perLoopCols;
     this->lastLoopCols = this->gatherOutTilingData->lastLoopCols;
     this->colLoops = this->gatherOutTilingData->colLoops;
@@ -403,27 +433,8 @@ __aicore__ inline void MoeGatherDynamicQuant<T>::Init(GM_ADDR inputX, GM_ADDR qu
 
     quantSmoothGm = (__gm__ float *)quantSmooth;
     dynamicQuantScaleGm = (__gm__ float *)dynamicQuantScale;
-
-    expandedExpertIdxGm = (__gm__ int32_t *)workspace + this->blockIdx * this->gatherOutTilingData->perCoreRows;
-    sortedRowIdxGm = (__gm__ int32_t *)workspace + Align(this->totalLength, sizeof(int32_t)) +
-                     this->blockIdx * this->gatherOutTilingData->perCoreRows;
-    if (this->cols > 1) {
-        quantSrcGm =
-            (__gm__ float *)workspace + Align(this->totalLength, sizeof(int32_t)) * 2 + this->blockIdx * this->cols;
-    }
-
     this->currentLoopRowsAlign = Align(this->perLoopRows, sizeof(int32_t));
-
-    int64_t perLoopColsAlignBytes = AlignBytes(this->perLoopCols, sizeof(T));
-    perLoopColsAlignBytes =
-        Max(int64_t(perLoopColsAlignBytes * sizeof(float) / sizeof(T)), int64_t(BLOCK_BYTES + BLOCK_BYTES));
-
-    this->indicesUb = 0;
-    this->inputXUb = this->indicesUb + 2 * AlignBytes(this->perLoopRows, sizeof(int32_t));
-    this->smoothUb_ = this->inputXUb + perLoopColsAlignBytes;
-    this->tempUb = this->smoothUb_ + AlignBytes(this->perLoopCols, sizeof(float));
-    this->outputXUb = this->tempUb + AlignBytes(this->perLoopCols, sizeof(float));
-    this->scaleUb = this->outputXUb + AlignBytes(this->cols_scale_, sizeof(int8_t));
+    AssignUbOffsets(workspace);
 }
 
 template <typename T>

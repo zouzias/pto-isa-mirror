@@ -1,3 +1,13 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
 /*
  * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
@@ -274,19 +284,7 @@ public:
     }
 
 private:
-    Params params;
-
-    uint64_t ubCOffsetList[UB_STAGES];
-    uint64_t ubDOffsetList[UB_STAGES];
-
-    int32_t eventUbCVMTE2List[UB_STAGES];
-    int32_t eventUbCMTE2VList[UB_STAGES];
-    int32_t eventUbDMTE3VList[UB_STAGES];
-    int32_t eventUbDVMTE3List[UB_STAGES];
-
-    uint32_t ubListId{0};
-
-    uint64_t ubCFp32OffsetList[UB_STAGES];
+    PTO_EPILOGUE_COMMON_UB_STATE()
     uint64_t ubCFp32ChunkNOffsetList[UB_STAGES];
     uint64_t ubCFp32ChunkNAbsOffsetList[UB_STAGES];
     uint64_t ubCFp32ChunkNMaxOffsetList[UB_STAGES];
