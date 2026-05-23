@@ -33,7 +33,7 @@ treduce %group, %dst {op = #pto.reduce_op<Max>} : (!pto.group<...>, !pto.memref<
 
 - `engine`：
     - `CollEngine::AIV`（默认）
-    - `CollEngine::CCU`（Ascend950，仅 NPU_ARCH 3510）
+    - `CollEngine::CCU`（Ascend A5，仅 NPU_ARCH 3510）
 
 ## C++ 内建接口
 

@@ -82,7 +82,7 @@ DMA backend selection for `TPUT_ASYNC` and `TGET_ASYNC`:
 | Value | Description |
 |-------|-------------|
 | `DmaEngine::SDMA` | SDMA engine (supports 1D transfer) |
-| `DmaEngine::URMA` | URMA engine (supports 1D transfer, Ascend950 / NPU_ARCH 3510 only) |
+| `DmaEngine::URMA` | URMA engine (supports 1D transfer, Ascend A5 / NPU_ARCH 3510 only) |
 
 ### AsyncEvent
 
