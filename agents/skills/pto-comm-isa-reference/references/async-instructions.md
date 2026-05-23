@@ -45,7 +45,7 @@ bool BuildAsyncSession(ScratchTile &scratchTile, __gm__ uint8_t *workspace,
 | `baseConfig` | `{block_bytes, comm_block_offset, queue_num}`，默认适用于单队列场景 |
 | `channelGroupIdx` | SDMA 通道组索引，默认使用 `get_block_idx()` 映射 |
 
-### URMA 构建（仅 Ascend950 / NPU_ARCH 3510）
+### URMA 构建（仅 Ascend A5 / NPU_ARCH 3510）
 
 ```cpp
 bool BuildAsyncSession(__gm__ uint8_t *workspace, uint32_t destRankId, AsyncSession &session);

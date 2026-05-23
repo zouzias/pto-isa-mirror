@@ -33,7 +33,7 @@ Lowering introduces internal accumulator and receive tiles for the reduce pipeli
 
 - `engine`:
     - `CollEngine::AIV` (default)
-    - `CollEngine::CCU` (Ascend950, NPU_ARCH 3510 only)
+    - `CollEngine::CCU` (Ascend A5, NPU_ARCH 3510 only)
 
 ## C++ Intrinsic
 

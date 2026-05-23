@@ -328,7 +328,7 @@ L1 使用量：`2×64KB(A) + 2×128KB(B) = 384KB ≤ 1024KB`（L1 总容量）�
 
 `COMM_BLOCK_NUM` 控制通信 kernel 的 AIV 并行度。通过 `--comm-blocks` 参数调整。
 
-注意：在 **Ascend910B** 上实测发现，将 `COMM_BLOCK_NUM` 从 24 提升到 48（使用更多 AIV 参与通信）会导致 AIC 计算时间显著增加（约 +24%），原因是 HBM 带宽争用和 TSCH 调度开销；当时更稳妥的默认是 24。迁移到 **Ascend950PR** 后，应以对应 `.ini` 的 `**vector_core_cnt`** 为上限重新权衡（例如 **958b 为 64**、**9599 为 72**），是否仍适用「24 最优、48 回退」需结合目标 SoC 与 `platform_config` 重新 profiling，不宜照搬。
+注意：在 **Ascend A2** 上实测发现，将 `COMM_BLOCK_NUM` 从 24 提升到 48（使用更多 AIV 参与通信）会导致 AIC 计算时间显著增加（约 +24%），原因是 HBM 带宽争用和 TSCH 调度开销；当时更稳妥的默认是 24。迁移到 **Ascend950PR** 后，应以对应 `.ini` 的 `**vector_core_cnt`** 为上限重新权衡（例如 **958b 为 64**、**9599 为 72**），是否仍适用「24 最优、48 回退」需结合目标 SoC 与 `platform_config` 重新 profiling，不宜照搬。
 
 ### 6) 约束条件
 

@@ -143,9 +143,9 @@ Host 侧标准初始化流程、CMakeLists 模板、SOC_VERSION 映射、kernel 
 
 | SOC_VERSION | 架构 | Cube Arch | Vec Arch |
 |-------------|------|-----------|----------|
-| Ascend910B | A2A3 | dav-c220-cube | dav-c220-vec |
-| Ascend910C | A2A3 | dav-c220-cube | dav-c220-vec |
-| Ascend950 | A5 | dav-c350-cube | dav-c350-vec |
+| Ascend A2 | A2A3 | dav-c220-cube | dav-c220-vec |
+| Ascend A3 | A2A3 | dav-c220-cube | dav-c220-vec |
+| Ascend A5 | A5 | dav-c350-cube | dav-c350-vec |
 
 ---
 
