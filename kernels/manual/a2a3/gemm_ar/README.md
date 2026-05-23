@@ -42,7 +42,7 @@ Where:
 - `C_i` is the local GEMM result of shape `M x N`
 - `C_final` is the final `M x N` output after AllReduce
 
-The default matrix configuration in `gemm_ar_config.h` is `M=5416`, `K=6144`, `N=1408`. The performance section below uses 8-card Ascend 910B as the reference platform.
+The default matrix configuration in `gemm_ar_config.h` is `M=5416`, `K=6144`, `N=1408`. The performance section below uses 8-card Ascend A2 as the reference platform.
 
 ### Specification
 
@@ -56,7 +56,7 @@ The default matrix configuration in `gemm_ar_config.h` is `M=5416`, `K=6144`, `N
 
 ## Optimization Notes
 
-This example uses 8-card Ascend 910B as the main performance-validation target. On this platform, the reference setup uses 24 AIC blocks for compute and 24 AIV blocks for communication.
+This example uses 8-card Ascend A2 as the main performance-validation target. On this platform, the reference setup uses 24 AIC blocks for compute and 24 AIV blocks for communication.
 
 - **Dual-stream overlap**: the compute kernel runs on the Compute Stream and the communication kernel runs on the Comm Stream. Tile-level signaling allows communication and computation to run concurrently.
 - **Logical RS + AG in one mixed loop**: RS reduces into the owner rank and AG broadcasts owner-local results, with both roles executing inside one subtile-driven loop and handing off through ready counters.
@@ -235,7 +235,7 @@ pad(M, G_BASE_M) x pad(N, G_BASE_N) x 2 / 1MB + 64MB
 
 ## Measured Performance (Reference)
 
-The following numbers were collected from the current `subtile-ready / AG-summary overlap` implementation on 8-card Ascend 910B with `M=5416`, `K=6144`, `N=1408` (padded to `5504 x 1536`), `258 tiles (43 x 6)`, `compute_blocks=24`, and `comm_blocks=24`. Each rank computes a full GEMM `C_i = A_i x B`, and AllReduce sums the eight `C_i` tensors.
+The following numbers were collected from the current `subtile-ready / AG-summary overlap` implementation on 8-card Ascend A2 with `M=5416`, `K=6144`, `N=1408` (padded to `5504 x 1536`), `258 tiles (43 x 6)`, `compute_blocks=24`, and `comm_blocks=24`. Each rank computes a full GEMM `C_i = A_i x B`, and AllReduce sums the eight `C_i` tensors.
 
 | Metric | Value |
 | --- | --- |
@@ -324,7 +324,7 @@ When you observe:
 
 `COMM_BLOCK_NUM` controls AIV parallelism in the communication kernel and can be adjusted via `--comm-blocks`.
 
-On **Ascend910B**, measurements showed that increasing `COMM_BLOCK_NUM` from 24 to 48 caused a significant increase in AIC compute time (about `+24%`) because of HBM bandwidth contention and TSCH scheduling overhead. A more stable default was therefore 24.
+On **Ascend A2**, measurements showed that increasing `COMM_BLOCK_NUM` from 24 to 48 caused a significant increase in AIC compute time (about `+24%`) because of HBM bandwidth contention and TSCH scheduling overhead. A more stable default was therefore 24.
 
 ### 6. Constraints
 

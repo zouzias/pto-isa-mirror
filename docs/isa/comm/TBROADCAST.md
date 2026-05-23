@@ -31,7 +31,7 @@ Lowering introduces UB staging tile(s) for the GM→UB→GM data path; the C++ i
 
 - `engine`:
     - `CollEngine::AIV` (default)
-    - `CollEngine::CCU` (Ascend950, NPU_ARCH 3510 only)
+    - `CollEngine::CCU` (Ascend A5, NPU_ARCH 3510 only)
 
 ## C++ Intrinsic
 

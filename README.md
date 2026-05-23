@@ -138,7 +138,7 @@ This repository also demonstrates how standard tile operations can be mapped to 
 - S0: query sequence length (number of rows in Q/O)
 - S1: key/value sequence length (number of rows in K/V)
 
-Ascend 910B2 multi-core comparison, using `torch_npu` as the baseline:
+Ascend A2 multi-core comparison, using `torch_npu` as the baseline:
 
 | Sequence length | PTO time (us) | torch_npu time (us) | PTO TFLOPS | torch_npu TFLOPS | PTO speedup |
 | --- | --- | --- | --- | --- | --- |
@@ -149,7 +149,7 @@ Ascend 910B2 multi-core comparison, using `torch_npu` as the baseline:
 | 16384 | 909.058 | 1118.462 | 151.19 | 122.88 | 1.23x |
 | 32768 | 3262.645 | 3646.173 | 168.50 | 150.78 | 1.12x |
 
-![Flash Attention 910B2 PTO vs torch_npu](docs/figures/performance/fa_910b2_pto_vs_torch_npu.png)
+![Flash Attention A2 PTO vs torch_npu](docs/figures/performance/fa_910b2_pto_vs_torch_npu.png)
 
 ### Communication Instruction Bandwidth
 
@@ -167,9 +167,9 @@ This example shows how PTO communication primitives can be fused with compute ke
 
 ## 🖥️ Platform Support
 
-- Ascend A2 (Ascend 910B)
-- Ascend A3 (Ascend 910C)
-- Ascend A5 (Ascend 950)
+- Ascend A2
+- Ascend A3
+- Ascend A5
 - CPU (x86_64 / AArch64)
 
 For more details, see [include/README.md](include/README.md).
