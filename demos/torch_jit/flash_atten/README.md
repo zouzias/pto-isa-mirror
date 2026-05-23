@@ -23,7 +23,7 @@ Which produces a CSV file containing one row per `(sq, sk, kernel)` configuratio
 
 ## Attention Performance Benchmarks
 
-All benchmarks were run on 910B2 after:
+All benchmarks were run on A2 after:
 
 - **10 warm-up iterations**
 - **50 timed iterations (average reported)**

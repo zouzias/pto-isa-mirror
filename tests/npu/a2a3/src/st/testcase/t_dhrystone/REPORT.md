@@ -31,10 +31,10 @@ python3 tests/script/run_st.py -r npu -v a5 -t t_dhrystone -g TDHRYSTONETest.cas
 
 ---
 
-## A2 Platform Test Results (Ascend910B @ 1800MHz)
+## A2 Platform Test Results (Ascend A2 @ 1800MHz)
 
 ### Test Environment
-- **Processor**: Ascend910B
+- **Processor**: Ascend A2
 - **Frequency**: 1800 MHz
 
 ### Test Data

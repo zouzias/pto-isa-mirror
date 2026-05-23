@@ -33,17 +33,17 @@ source ${ASCEND_INSTALL_PATH}/bin/setenv.bash
 cd ${git_clone_path}/kernels/manual/common/flash_atten
 
 # 运行默认 case（与 generated_cases.* 中内置集合一致）
-bash run.sh -r npu -v Ascend910B1
+bash run.sh -r npu -v Ascend910B
 
 # 从内置集合中只运行一个 case
-bash run.sh -r npu -v Ascend910B1 -c case_float_H_128_S0_128_S1_1024
+bash run.sh -r npu -v Ascend910B -c case_float_H_128_S0_128_S1_1024
 
 # 提供自定义 case（用分号分隔：HEAD_SIZE,S0,S1,CUBE_S0,TILE_S1）
 # TILE_S1：支持 128（=CUBE_S1）、256、512
-bash run.sh -r npu -v Ascend910B1 --cases "128,128,1024,128,128;128,2048,2048,128,512"
+bash run.sh -r npu -v Ascend910B --cases "128,128,1024,128,128;128,2048,2048,128,512"
 
 # 提供自定义 case，并只运行其中一个
-bash run.sh -r npu -v Ascend910B1 --cases "128,128,1024,128,128;128,512,2048,128,128" \
+bash run.sh -r npu -v Ascend910B --cases "128,128,1024,128,128;128,512,2048,128,128" \
   -c case_float_H_128_S0_128_S1_1024
 
 ```

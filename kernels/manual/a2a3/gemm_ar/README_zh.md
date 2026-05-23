@@ -42,7 +42,7 @@ $$
 - `C_i` 为 `M×N`（每 rank 本地 GEMM 结果）
 - `C_final` 为 `M×N`（AllReduce 归约后的最终输出）
 
-`gemm_ar_config.h` 中默认的参考矩阵配置为 `M=5416, K=6144, N=1408`。下文性能数据使用 8 卡 Ascend 910B 作为参考平台。
+`gemm_ar_config.h` 中默认的参考矩阵配置为 `M=5416, K=6144, N=1408`。下文性能数据使用 8 卡 Ascend A2 作为参考平台。
 
 ### 规格
 
@@ -58,7 +58,7 @@ $$
 
 ## 优化说明
 
-本示例以 8 卡 Ascend 910B（A2/A3）平台作为性能验证平台。910B 采用分离模式架构：24 个 AIC（Cube Core）负责矩阵计算，24 个 AIV（Vector Core）负责通信传输，AIC 与 AIV 物理独立、可完全并行。
+本示例以 8 卡 Ascend A2（A2/A3）平台作为性能验证平台。A2 采用分离模式架构：24 个 AIC（Cube Core）负责矩阵计算，24 个 AIV（Vector Core）负责通信传输，AIC 与 AIV 物理独立、可完全并行。
 
 - **双流计算通信重叠**：计算 kernel 运行在 Compute Stream（24 AIC），通信 kernel 运行在 Comm Stream（24 AIV），通过逐 tile 信号机制实现计算与通信并行。
 - **逻辑上仍是 RS + AG，执行上改成单循环 overlap**：RS 负责把数据归约到 owner rank，AG 负责把 owner-local 结果广播到其它 rank，两者通过 ready counter 在一个 subtile 粒度的混合循环里衔接。
@@ -241,7 +241,7 @@ pad(M, G_BASE_M) × pad(N, G_BASE_N) × 2 / 1MB + 64MB
 
 ## 实测性能（参考）
 
-以下数据基于当前 `subtile-ready / AG-summary overlap` 实现，在 `8` 卡 Ascend 910B 上测得，参数 `M=5416, K=6144, N=1408`（padded `5504×1536`），`258 tiles (43×6)`，`compute_blocks=24`，`comm_blocks=24`。每 rank 计算完整 GEMM `C_i = A_i × B`，AllReduce 对 `8` 个 `C_i` 求和。
+以下数据基于当前 `subtile-ready / AG-summary overlap` 实现，在 `8` 卡 Ascend A2 上测得，参数 `M=5416, K=6144, N=1408`（padded `5504×1536`），`258 tiles (43×6)`，`compute_blocks=24`，`comm_blocks=24`。每 rank 计算完整 GEMM `C_i = A_i × B`，AllReduce 对 `8` 个 `C_i` 求和。
 
 
 | 指标 | 值 |
@@ -323,7 +323,7 @@ L1 使用量：`2×64KB(A) + 2×128KB(B) = 384KB ≤ 1024KB`（L1 总容量）�
 
 `COMM_BLOCK_NUM` 控制通信 kernel 的 AIV 并行度。通过 `--comm-blocks` 参数调整。
 
-注意：在 910B 上实测发现，将 `COMM_BLOCK_NUM` 从 24 提升到 48（使用全部 AIV）会导致 AIC 计算时间显著增加（+24%），原因是 HBM 带宽争用和 TSCH 调度开销。当前最优配置为 24 AIV。
+注意：在 A2 上实测发现，将 `COMM_BLOCK_NUM` 从 24 提升到 48（使用全部 AIV）会导致 AIC 计算时间显著增加（+24%），原因是 HBM 带宽争用和 TSCH 调度开销。当前最优配置为 24 AIV。
 
 ### 6) 约束条件
 

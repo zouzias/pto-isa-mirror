@@ -329,7 +329,7 @@ When you observe:
 
 `COMM_BLOCK_NUM` controls AIV parallelism in the communication kernel and can be adjusted via `--comm-blocks`.
 
-On **Ascend910B**, measurements showed that increasing `COMM_BLOCK_NUM` from 24 to 48 caused a significant increase in AIC compute time (about `+24%`) because of HBM bandwidth contention and TSCH scheduling overhead. A more stable default was therefore 24. After moving to **Ascend950PR**, the upper bound should be reconsidered based on the SoC-specific `vector_core_cnt` in the corresponding `.ini` file, for example **64 on 958b** and **72 on 9599**. Do not assume the old "24 best, 48 worse" conclusion still holds without profiling on the target SoC.
+On **Ascend A2**, measurements showed that increasing `COMM_BLOCK_NUM` from 24 to 48 caused a significant increase in AIC compute time (about `+24%`) because of HBM bandwidth contention and TSCH scheduling overhead. A more stable default was therefore 24. After moving to **Ascend950PR**, the upper bound should be reconsidered based on the SoC-specific `vector_core_cnt` in the corresponding `.ini` file, for example **64 on 958b** and **72 on 9599**. Do not assume the old "24 best, 48 worse" conclusion still holds without profiling on the target SoC.
 
 ### 6. Constraints
 
