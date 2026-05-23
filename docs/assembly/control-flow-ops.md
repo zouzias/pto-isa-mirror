@@ -13,12 +13,13 @@ This document describes structured control flow operations from the MLIR `scf` (
 **Description:** For loop with lower bound, upper bound, and step. Supports loop-carried variables and signed/unsigned comparison.
 
 **Syntax:**
+
 ```mlir
 scf.for %iv = %lb to %ub step %step {
   // loop body
 }
 
-scf.for %iv = %lb to %ub step %step 
+scf.for %iv = %lb to %ub step %step
     iter_args(%arg = %init) -> (type) {
   // loop body with loop-carried variable
   scf.yield %new_value : type
@@ -30,15 +31,18 @@ scf.for unsigned %iv = %lb to %ub step %step : i32 {
 ```
 
 **Operands:**
+
 - `lb`: Lower bound (index or integer)
 - `ub`: Upper bound (exclusive)
 - `step`: Step value (must be positive)
 - `iter_args`: Initial values for loop-carried variables (optional)
 
 **Results:**
+
 - Final values of loop-carried variables (if any)
 
 **Example:**
+
 ```mlir
 // Simple loop
 scf.for %i = %c0 to %c100 step %c1 {
@@ -46,7 +50,7 @@ scf.for %i = %c0 to %c100 step %c1 {
 }
 
 // Loop with accumulator
-%sum = scf.for %i = %c0 to %c100 step %c1 
+%sum = scf.for %i = %c0 to %c100 step %c1
     iter_args(%acc = %c0_i32) -> (i32) {
   %val = memref.load %array[%i] : memref<?xi32>
   %new_acc = arith.addi %acc, %val : i32
@@ -66,6 +70,7 @@ scf.for unsigned %i = %lb to %ub step %step : i32 {
 **Description:** While loop with condition check in "before" region and loop body in "after" region.
 
 **Syntax:**
+
 ```mlir
 %result = scf.while (%arg = %init) : (type) -> type {
   // before region: condition check
@@ -80,10 +85,12 @@ scf.for unsigned %i = %lb to %ub step %step : i32 {
 ```
 
 **Regions:**
+
 - `before`: Condition check region (terminates with `scf.condition`)
 - `after`: Loop body region (terminates with `scf.yield`)
 
 **Example:**
+
 ```mlir
 %result = scf.while (%arg = %init) : (i32) -> i32 {
   %condition = arith.cmpi slt, %arg, %limit : i32
@@ -104,6 +111,7 @@ scf.for unsigned %i = %lb to %ub step %step : i32 {
 **Description:** Conditional branch with optional else block and optional results.
 
 **Syntax:**
+
 ```mlir
 scf.if %condition {
   // then block
@@ -125,12 +133,15 @@ scf.if %condition {
 ```
 
 **Operands:**
+
 - `condition`: Boolean condition (i1)
 
 **Results:**
+
 - Values yielded from branches (if any)
 
 **Example:**
+
 ```mlir
 // Simple if
 scf.if %condition {
@@ -161,6 +172,7 @@ scf.if %condition {
 **Description:** Switch statement based on an index value with multiple cases and a default case.
 
 **Syntax:**
+
 ```mlir
 %result = scf.index_switch %arg -> type
   case 0 {
@@ -178,12 +190,15 @@ scf.if %condition {
 ```
 
 **Operands:**
+
 - `arg`: Index value to switch on
 
 **Attributes:**
+
 - `cases`: Array of case values
 
 **Example:**
+
 ```mlir
 %result = scf.index_switch %idx -> i32
   case 0 {
@@ -213,6 +228,7 @@ scf.if %condition {
 **Description:** Execute a region exactly once. Allows multiple blocks within single-block contexts.
 
 **Syntax:**
+
 ```mlir
 %result = scf.execute_region -> type {
   // region body (can have multiple blocks)
@@ -226,12 +242,14 @@ scf.if %condition {
 ```
 
 **Attributes:**
+
 - `no_inline`: Optional flag to prevent inlining
 
 **Semantics:**
 Executes the region exactly once. Useful for creating multi-block regions within operations that normally allow only single blocks.
 
 **Example:**
+
 ```mlir
 // Simple execute region
 %result = scf.execute_region -> i32 {
@@ -268,6 +286,7 @@ Executes the region exactly once. Useful for creating multi-block regions within
 **Description:** Terminates regions within SCF operations and yields values to parent operation.
 
 **Syntax:**
+
 ```mlir
 scf.yield
 scf.yield %value : type
@@ -286,6 +305,7 @@ Used to terminate:
 - Switch cases (`scf.index_switch`)
 
 **Example:**
+
 ```mlir
 // Yield single value
 scf.yield %value : i32
@@ -304,19 +324,23 @@ scf.yield
 **Description:** Terminates the "before" region of `scf.while`. If condition is true, continues to "after" region; otherwise exits loop.
 
 **Syntax:**
+
 ```mlir
 scf.condition(%condition) %args... : types...
 ```
 
 **Operands:**
+
 - `condition`: Boolean condition (i1)
 - `args`: Values to pass to "after" region or return from loop
 
 **Semantics:**
+
 - If `condition` is true: execute "after" region with `args`
 - If `condition` is false: exit loop and return `args`
 
 **Example:**
+
 ```mlir
 // In scf.while before region
 %keep_going = arith.cmpi slt, %i, %limit : i32
@@ -332,6 +356,7 @@ scf.condition(%cond) %i, %sum : i32, i32
 ## Common Patterns
 
 ### Pattern 1: Simple Loop
+
 ```mlir
 scf.for %i = %c0 to %c100 step %c1 {
   // loop body
@@ -339,8 +364,9 @@ scf.for %i = %c0 to %c100 step %c1 {
 ```
 
 ### Pattern 2: Loop with Accumulator
+
 ```mlir
-%sum = scf.for %i = %c0 to %c100 step %c1 
+%sum = scf.for %i = %c0 to %c100 step %c1
     iter_args(%acc = %c0) -> (i32) {
   %val = memref.load %array[%i] : memref<?xi32>
   %new_acc = arith.addi %acc, %val : i32
@@ -349,6 +375,7 @@ scf.for %i = %c0 to %c100 step %c1 {
 ```
 
 ### Pattern 3: Conditional with Results
+
 ```mlir
 %result = scf.if %cond -> i32 {
   scf.yield %true_val : i32
@@ -358,6 +385,7 @@ scf.for %i = %c0 to %c100 step %c1 {
 ```
 
 ### Pattern 4: While Loop
+
 ```mlir
 %final = scf.while (%arg = %init) : (i32) -> i32 {
   %keep_going = arith.cmpi slt, %arg, %limit : i32
@@ -370,6 +398,7 @@ scf.for %i = %c0 to %c100 step %c1 {
 ```
 
 ### Pattern 5: Nested Loops
+
 ```mlir
 scf.for %i = %c0 to %M step %c1 {
   scf.for %j = %c0 to %N step %c1 {
@@ -379,8 +408,9 @@ scf.for %i = %c0 to %M step %c1 {
 ```
 
 ### Pattern 6: Loop with Multiple Accumulators
+
 ```mlir
-%sum, %prod = scf.for %i = %c0 to %c100 step %c1 
+%sum, %prod = scf.for %i = %c0 to %c100 step %c1
     iter_args(%acc_sum = %c0, %acc_prod = %c1) -> (i32, i32) {
   %val = memref.load %array[%i] : memref<?xi32>
   %new_sum = arith.addi %acc_sum, %val : i32
@@ -390,4 +420,3 @@ scf.for %i = %c0 to %M step %c1 {
 ```
 
 ---
-
