@@ -102,7 +102,7 @@ Host 依次下发两个 kernel 后等待二者完成。
 
 ## 实测性能（参考）
 
-以下数据在 Ascend A3（910B1）上测得，fp16 输入 → fp32 输出，使用 `aclrtEvent` 计时（5 次 warmup + 10 次计时取平均）。TFLOPS 计算公式：`2 × M × K × N / time`。
+以下数据在 Ascend A3 上测得，fp16 输入 → fp32 输出，使用 `aclrtEvent` 计时（5 次 warmup + 10 次计时取平均）。TFLOPS 计算公式：`2 × M × K × N / time`。
 
 ### 2 卡
 

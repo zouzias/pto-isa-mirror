@@ -102,7 +102,7 @@ The compute kernel operates in two phases:
 
 ## Measured Performance (Reference)
 
-The following measurements were collected on Ascend A3 (910B1) with fp16 inputs → fp32 output, using `aclrtEvent` timing (5 warmup + 10 timed iterations, average reported). TFLOPS is computed as `2 × M × K × N / time`.
+The following measurements were collected on Ascend A3 with fp16 inputs → fp32 output, using `aclrtEvent` timing (5 warmup + 10 timed iterations, average reported). TFLOPS is computed as `2 × M × K × N / time`.
 
 ### 2-rank
 

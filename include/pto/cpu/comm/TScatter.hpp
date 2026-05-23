@@ -45,8 +45,8 @@ namespace comm {
 // ============================================================================
 
 template <typename GlobalDataDst, typename GlobalDataSrc>
-void Scatter(typename GlobalDataDst::DType *dst, typename GlobalDataSrc::DType *src, long int dstShape[],
-             long int dstStride[], long int srcStride[], long int srcOffset)
+void Scatter(typename GlobalDataDst::DType *dst, typename GlobalDataSrc::DType *src, int64_t dstShape[],
+             int64_t dstStride[], int64_t srcStride[], int64_t srcOffset)
 {
     for (size_t i = 0; i < dstShape[0]; i++) {
         for (size_t j = 0; j < dstShape[1]; j++) {
@@ -85,15 +85,15 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
 
     constexpr size_t numDims = 5;
 
-    long int srcStride[numDims] = {srcGlobalData.GetStride(0), srcGlobalData.GetStride(1), srcGlobalData.GetStride(2),
+    int64_t srcStride[numDims] = {srcGlobalData.GetStride(0), srcGlobalData.GetStride(1), srcGlobalData.GetStride(2),
                                    srcGlobalData.GetStride(3), srcGlobalData.GetStride(4)};
 
     GlobalDstData &dstTensor = parallelGroup[0];
-    long int dstShape[numDims] = {dstTensor.GetShape(0), dstTensor.GetShape(1), dstTensor.GetShape(2),
+    int64_t dstShape[numDims] = {dstTensor.GetShape(0), dstTensor.GetShape(1), dstTensor.GetShape(2),
                                   dstTensor.GetShape(3), dstTensor.GetShape(4)};
-    long int dstStride[numDims] = {dstTensor.GetStride(0), dstTensor.GetStride(1), dstTensor.GetStride(2),
+    int64_t dstStride[numDims] = {dstTensor.GetStride(0), dstTensor.GetStride(1), dstTensor.GetStride(2),
                                    dstTensor.GetStride(3), dstTensor.GetStride(4)};
-    long int DST_DIM_3 = dstTensor.GetShape(3);
+    int64_t DST_DIM_3 = dstTensor.GetShape(3);
 
     PTO_ASSERT(srcGlobalData.GetShape(0) == dstTensor.GetShape(0), "TSCATTER: src DIM0 must equal dst DIM0!");
     PTO_ASSERT(srcGlobalData.GetShape(1) == dstTensor.GetShape(1), "TSCATTER: src DIM1 must equal dst DIM1!");
@@ -104,7 +104,7 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
 
     for (int r = 0; r < nranks; ++r) {
         GlobalDstData &dstGlobalData = parallelGroup[r];
-        long int currentSrcOffset = r * DST_DIM_3;
+        int64_t currentSrcOffset = r * DST_DIM_3;
         Scatter<GlobalDstData, GlobalSrcData>(dstGlobalData.data(), srcGlobalData.data(), dstShape, dstStride,
                                               srcStride, currentSrcOffset);
     }
