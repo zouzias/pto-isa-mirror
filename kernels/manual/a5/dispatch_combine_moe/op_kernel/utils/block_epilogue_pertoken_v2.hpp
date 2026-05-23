@@ -152,26 +152,26 @@ public:
     }
     __forceinline__ __aicore__ void SetFlag()
     {
-        detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
-        detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
-        detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID2);
-        detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID3);
-        detail::PtoSetFlag<AscendC::HardEvent::S_MTE2>(EVENT_ID2);
-        detail::PtoSetFlag<AscendC::HardEvent::S_MTE2>(EVENT_ID3);
-        detail::PtoSetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
-        detail::PtoSetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID1);
+        detail::PtoSetFlag<pto_ext::PtoHardEvent::V_MTE2>(EVENT_ID0);
+        detail::PtoSetFlag<pto_ext::PtoHardEvent::V_MTE2>(EVENT_ID1);
+        detail::PtoSetFlag<pto_ext::PtoHardEvent::V_MTE2>(EVENT_ID2);
+        detail::PtoSetFlag<pto_ext::PtoHardEvent::V_MTE2>(EVENT_ID3);
+        detail::PtoSetFlag<pto_ext::PtoHardEvent::S_MTE2>(EVENT_ID2);
+        detail::PtoSetFlag<pto_ext::PtoHardEvent::S_MTE2>(EVENT_ID3);
+        detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE3_V>(EVENT_ID0);
+        detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE3_V>(EVENT_ID1);
     }
 
     __forceinline__ __aicore__ void Finalize()
     {
-        detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
-        detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
-        detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID2);
-        detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID3);
-        detail::PtoWaitFlag<AscendC::HardEvent::S_MTE2>(EVENT_ID2);
-        detail::PtoWaitFlag<AscendC::HardEvent::S_MTE2>(EVENT_ID3);
-        detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
-        detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID1);
+        detail::PtoWaitFlag<pto_ext::PtoHardEvent::V_MTE2>(EVENT_ID0);
+        detail::PtoWaitFlag<pto_ext::PtoHardEvent::V_MTE2>(EVENT_ID1);
+        detail::PtoWaitFlag<pto_ext::PtoHardEvent::V_MTE2>(EVENT_ID2);
+        detail::PtoWaitFlag<pto_ext::PtoHardEvent::V_MTE2>(EVENT_ID3);
+        detail::PtoWaitFlag<pto_ext::PtoHardEvent::S_MTE2>(EVENT_ID2);
+        detail::PtoWaitFlag<pto_ext::PtoHardEvent::S_MTE2>(EVENT_ID3);
+        detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE3_V>(EVENT_ID0);
+        detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE3_V>(EVENT_ID1);
     }
     __forceinline__ __aicore__ ~BlockEpilogue()
     {}
@@ -204,17 +204,17 @@ private:
     __forceinline__ __aicore__ void LoadTileC(__gm__ ElementC *gmTileC, uint32_t actualM, uint32_t actualN,
                                               int32_t eventId, uint64_t ubCOffset, uint64_t ubCFp32Offset)
     {
-        detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(eventId);
+        detail::PtoWaitFlag<pto_ext::PtoHardEvent::V_MTE2>(eventId);
         detail::PtoLoadMatrixRows(ubCOffset, gmTileC, actualM, actualN, n0, params.n2);
-        detail::PtoSetFlag<AscendC::HardEvent::MTE2_V>(eventId);
+        detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE2_V>(eventId);
 
-        detail::PtoWaitFlag<AscendC::HardEvent::MTE2_V>(eventId);
+        detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(eventId);
         for (uint32_t row = 0; row < actualM; ++row) {
             detail::PtoCastVector<float, ElementC>(ubCFp32Offset + detail::PtoElemOffsetBytes<float>(n0 * row),
                                                    ubCOffset + detail::PtoElemOffsetBytes<ElementC>(n0 * row), actualN,
                                                    pto::RoundMode::CAST_NONE);
         }
-        detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(eventId);
+        detail::PtoSetFlag<pto_ext::PtoHardEvent::V_MTE2>(eventId);
     }
 
     __forceinline__ __aicore__ void ScaleAndCastTile(__gm__ ElementPerTokenScale *gmPerTokenScalePtr,
@@ -222,17 +222,17 @@ private:
                                                      int32_t eventId, int32_t eventId2, uint64_t scaleUbOffset,
                                                      uint64_t ubCFp32Offset, uint64_t ubDOffset)
     {
-        detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(eventId2);
-        detail::PtoWaitFlag<AscendC::HardEvent::S_MTE2>(eventId2);
+        detail::PtoWaitFlag<pto_ext::PtoHardEvent::V_MTE2>(eventId2);
+        detail::PtoWaitFlag<pto_ext::PtoHardEvent::S_MTE2>(eventId2);
         if (source_scale_offset[eventId] != gmScaleOffset) {
             source_scale_offset[eventId] = gmScaleOffset;
             detail::PtoLoadVector(scaleUbOffset, gmPerTokenScalePtr + gmScaleOffset, actualM);
         }
-        detail::PtoSetFlag<AscendC::HardEvent::MTE2_S>(eventId2);
-        detail::PtoSetFlag<AscendC::HardEvent::MTE2_V>(eventId2);
+        detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE2_S>(eventId2);
+        detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE2_V>(eventId2);
 
-        detail::PtoWaitFlag<AscendC::HardEvent::MTE2_V>(eventId2);
-        detail::PtoWaitFlag<AscendC::HardEvent::MTE2_S>(eventId2);
+        detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(eventId2);
+        detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE2_S>(eventId2);
         detail::PtoPipeBarrier<PIPE_V>();
         __ubuf__ float *scaleUbPtr = detail::PtoUbPtr<float>(scaleUbOffset);
         for (uint32_t row = 0; row < actualM; ++row) {
@@ -241,15 +241,15 @@ private:
             detail::PtoMulVector<float>(rowFp32Offset, rowFp32Offset, actualN, scale);
         }
         detail::PtoPipeBarrier<PIPE_V>();
-        detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(eventId);
+        detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE3_V>(eventId);
         for (uint32_t row = 0; row < actualM; ++row) {
             detail::PtoCastVector<ElementD, float>(ubDOffset + detail::PtoElemOffsetBytes<ElementD>(n0 * row),
                                                    ubCFp32Offset + detail::PtoElemOffsetBytes<float>(n0 * row), actualN,
                                                    pto::RoundMode::CAST_RINT);
         }
-        detail::PtoSetFlag<AscendC::HardEvent::S_MTE2>(eventId2);
-        detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(eventId2);
-        detail::PtoSetFlag<AscendC::HardEvent::V_MTE3>(eventId);
+        detail::PtoSetFlag<pto_ext::PtoHardEvent::S_MTE2>(eventId2);
+        detail::PtoSetFlag<pto_ext::PtoHardEvent::V_MTE2>(eventId2);
+        detail::PtoSetFlag<pto_ext::PtoHardEvent::V_MTE3>(eventId);
     }
 
     __forceinline__ __aicore__ void StoreRemoteRows(__gm__ void *dstPeermemPtr, int64_t gmDstOffset, uint32_t lenData,
@@ -260,7 +260,7 @@ private:
         using TputGlobal = pto::GlobalTensor<ElementD, ShapeDyn, StrideDyn, pto::Layout::ND>;
         using TputTile = pto::Tile<pto::TileType::Vec, ElementD, 1, 128, pto::BLayout::RowMajor, -1, -1>;
 
-        int32_t logicalSubCoreIdx = get_block_idx() + get_subblockid() * get_block_num();
+        int32_t logicalSubCoreIdx = pto_ext::PtoAivLogicalIdx();
         int64_t scratchOffsetBytes =
             params.scratchOffset + static_cast<int64_t>(logicalSubCoreIdx) * n0 * sizeof(ElementD);
         __gm__ ElementD *localScratch =
@@ -290,7 +290,7 @@ private:
         int32_t preSumRankInExpert = 0;
         int32_t tileOffset = 0;
 
-        detail::PtoWaitFlag<AscendC::HardEvent::V_MTE3>(eventId);
+        detail::PtoWaitFlag<pto_ext::PtoHardEvent::V_MTE3>(eventId);
         for (int32_t dstEpIdx = 0; dstEpIdx < params.EP; dstEpIdx++) {
             int32_t lenRankInExpert =
                 gm_load(tokenPerExpertPtr + tokenPerExpertLayout(dstEpIdx, params.rank, groupIdx));
@@ -323,7 +323,7 @@ private:
             }
             tileOffset += lenData;
         }
-        detail::PtoSetFlag<AscendC::HardEvent::MTE3_V>(eventId);
+        detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE3_V>(eventId);
     }
 
     Params params;

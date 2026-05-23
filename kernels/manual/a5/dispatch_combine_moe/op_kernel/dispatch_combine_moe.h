@@ -16,7 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef DISPATCH_COMBINE_MOE_H
 #define DISPATCH_COMBINE_MOE_H
 
-#include "kernel_operator.h"
+#include <pto/pto-inst.hpp>
 
 #include "dispatch_combine_moe_tiling.h"
 

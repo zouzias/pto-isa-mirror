@@ -11,7 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_EXT_DISPATCH_COMBINE_MOE_PTO_VECTOR_OPS_HPP
 #define PTO_EXT_DISPATCH_COMBINE_MOE_PTO_VECTOR_OPS_HPP
 
-#include "kernel_operator.h"
+#include <pto/pto-inst.hpp>
 #include "const_args.hpp"
 
 #include <pto/common/pto_tile.hpp>
@@ -326,7 +326,7 @@ __forceinline__ __aicore__ void PtoReduceMaxVector(uint64_t dstUbOffsetBytes, ui
         PtoAssignUbTile<TmpTile, float>(tmpTile, tmpUbOffsetBytes, offset);
         pto::TASSIGN(rowMaxTile, firstChunk ? dstUbOffsetBytes : tmpUbOffsetBytes);
         pto::TROWMAX(rowMaxTile, srcTile, tmpTile);
-        AscendC::PipeBarrier<PIPE_V>();
+        pto::PtoSetWaitFlag<PIPE_V, PIPE_S>(EVENT_ID0, EVENT_ID0);
 
         if (!firstChunk) {
             ScalarTile accTile(1, 1);
@@ -336,7 +336,7 @@ __forceinline__ __aicore__ void PtoReduceMaxVector(uint64_t dstUbOffsetBytes, ui
             pto::TASSIGN(newTile, tmpUbOffsetBytes);
             pto::TASSIGN(dstTile, dstUbOffsetBytes);
             pto::TMAX(dstTile, accTile, newTile);
-            AscendC::PipeBarrier<PIPE_V>();
+            pto::PtoSetWaitFlag<PIPE_V, PIPE_S>(EVENT_ID0, EVENT_ID0);
         }
         firstChunk = false;
     }

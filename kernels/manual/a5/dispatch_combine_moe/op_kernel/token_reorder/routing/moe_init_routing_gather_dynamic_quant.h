@@ -19,14 +19,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "moe_pto_sort.h"
 
 namespace MoeInitRoutingQuant {
-using namespace AscendC;
 using namespace optiling;
 template <typename T>
 struct MoeGatherDynamicQuant {
     __aicore__ inline MoeGatherDynamicQuant(){};
     __aicore__ inline void Init(GM_ADDR inputX, GM_ADDR quantSmooth, GM_ADDR expandedRowIdx, GM_ADDR expandedX,
                                 GM_ADDR dynamicQuantScale, GM_ADDR workspace,
-                                const MoeInitRoutingQuantTilingData *tilingData, AscendC::TPipe *tPipe);
+                                const MoeInitRoutingQuantTilingData *tilingData);
     __aicore__ inline void Process();
 
 private:
@@ -115,7 +114,7 @@ __aicore__ inline void MoeGatherDynamicQuant<T>::Compute(uint64_t smoothUb)
     const uint64_t outputPayloadUb = this->outputXUb;
     const uint64_t dynamicQuantScaleUb = outputPayloadUb + static_cast<uint64_t>(this->cols) * sizeof(int8_t);
 
-    if constexpr (!IsSameType<T, float>::value) {
+    if constexpr (!std::is_same<T, float>::value) {
         const uint64_t rawInputUb = inUb + static_cast<uint64_t>(perLoopColsAlign) * sizeof(T);
         pto_detail::PtoCastVector<float, T>(inUb, rawInputUb, this->cols, pto::RoundMode::CAST_NONE);
     }
@@ -183,7 +182,7 @@ __aicore__ inline void MoeGatherDynamicQuant<T>::AssignUbOffsets(GM_ADDR workspa
 template <typename T>
 __aicore__ inline void MoeGatherDynamicQuant<T>::LoadInputTile(uint64_t inUb, int64_t srcOffset, int64_t elemNum)
 {
-    if constexpr (IsSameType<T, float>::value) {
+    if constexpr (std::is_same<T, float>::value) {
         pto_detail::PtoLoadVector<float>(inUb, inputXGm + srcOffset, elemNum);
     } else {
         pto_detail::PtoLoadVector<T>(inUb + static_cast<uint64_t>(perLoopColsAlign) * sizeof(T), inputXGm + srcOffset,
@@ -206,14 +205,14 @@ __aicore__ inline void MoeGatherDynamicQuant<T>::CopyOutXQuant1H(int64_t progres
     int64_t currentLoopLastRow = (initialRow + this->currentLoopRows - 1) / this->k;
     if (smoothType == 1) {
         pto_detail::PtoLoadVector<float>(this->smoothUb_, quantSmoothGm, this->cols);
-        pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
+        pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(pto_ext::PtoHardEvent::MTE2_V);
     }
 
     for (int64_t row = currentLoopStartRow; row <= currentLoopLastRow; row++) {
         LoadInputTile(this->inputXUb, row * this->cols, this->cols);
-        pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
+        pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(pto_ext::PtoHardEvent::MTE2_V);
         Compute(this->smoothUb_);
-        pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
+        pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::V_MTE3>(pto_ext::PtoHardEvent::V_MTE3);
 
         while (curLoopRow < this->currentLoopRows && initialRow / this->k == row) {
             int32_t outIndex = pto_detail::PtoGetValue<int32_t>(this->indicesUb, curLoopRow);
@@ -224,14 +223,14 @@ __aicore__ inline void MoeGatherDynamicQuant<T>::CopyOutXQuant1H(int64_t progres
             }
             StoreExpandedXTile(outIndex * cols_scale_, this->outputXUb, cols_scale_);
         }
-        pto_detail::PtoSetWaitFlag<HardEvent::MTE3_V>(HardEvent::MTE3_V);
+        pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE3_V>(pto_ext::PtoHardEvent::MTE3_V);
     }
 }
 
 template <typename T>
 __aicore__ inline void MoeGatherDynamicQuant<T>::CopyOutXQuantEH(int64_t progress)
 {
-    pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
+    pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE2_S>(pto_ext::PtoHardEvent::MTE2_S);
 
     int32_t lastExpertIdx = -1;
     for (int64_t i = 0; i < this->currentLoopRows; i++) {
@@ -243,21 +242,21 @@ __aicore__ inline void MoeGatherDynamicQuant<T>::CopyOutXQuantEH(int64_t progres
         int32_t expertIdx = pto_detail::PtoGetValue<int32_t>(this->indicesUb, currentLoopRowsAlign + i);
 
         LoadInputTile(this->inputXUb, srcIdx / this->k * this->cols, this->perLoopCols);
-        pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
+        pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(pto_ext::PtoHardEvent::MTE2_V);
         if (expertIdx != lastExpertIdx) {
             pto_detail::PtoLoadVector<float>(this->smoothUb_, quantSmoothGm + expertIdx * this->cols,
                                              this->perLoopCols);
-            pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
+            pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(pto_ext::PtoHardEvent::MTE2_V);
             lastExpertIdx = expertIdx;
         }
 
         Compute(this->smoothUb_);
-        pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
+        pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::V_MTE3>(pto_ext::PtoHardEvent::V_MTE3);
 
         pto_detail::PtoStoreVector<float>(dynamicQuantScaleGm + (rowOffset + i),
                                           this->outputXUb + static_cast<uint64_t>(this->cols) * sizeof(int8_t), 1);
         StoreExpandedXTile((rowOffset + i) * this->cols, this->outputXUb, this->perLoopCols);
-        pto_detail::PtoSetWaitFlag<HardEvent::MTE3_V>(HardEvent::MTE3_V);
+        pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE3_V>(pto_ext::PtoHardEvent::MTE3_V);
     }
 }
 
@@ -267,15 +266,15 @@ __aicore__ inline float MoeGatherDynamicQuant<T>::ComputeMax(uint64_t inUb, uint
                                                              int32_t expertIdx, int64_t j)
 {
     LoadInputTile(inUb, srcIdx * this->cols + j * this->perLoopCols, colsTileLength);
-    pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
+    pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(pto_ext::PtoHardEvent::MTE2_V);
 
     if (smoothType != 0) {
         pto_detail::PtoLoadVector<float>(
             this->smoothUb_, quantSmoothGm + expertIdx * this->cols + j * this->perLoopCols, colsTileLength);
-        pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
+        pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(pto_ext::PtoHardEvent::MTE2_V);
     }
 
-    if constexpr (!IsSameType<T, float>::value) {
+    if constexpr (!std::is_same<T, float>::value) {
         pto_detail::PtoCastVector<float, T>(inUb, inUb + static_cast<uint64_t>(perLoopColsAlign) * sizeof(T),
                                             colsTileLength, pto::RoundMode::CAST_NONE);
     }
@@ -289,7 +288,7 @@ __aicore__ inline float MoeGatherDynamicQuant<T>::ComputeMax(uint64_t inUb, uint
     pto_detail::PtoReduceMaxVector(dynamicQuantScaleUb + 8 * sizeof(float), tempUb, tempUb, colsTileLength);
 
     pto_detail::PtoStoreVector<float>(quantSrcGm + j * this->perLoopCols, inUb, colsTileLength);
-    pto_detail::PtoSetWaitFlag<HardEvent::MTE3_MTE2>(HardEvent::MTE3_MTE2);
+    pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(pto_ext::PtoHardEvent::MTE3_MTE2);
 
     return pto_detail::PtoGetValue<float>(dynamicQuantScaleUb, 8);
 }
@@ -299,7 +298,7 @@ __aicore__ inline void MoeGatherDynamicQuant<T>::ComputeScale(uint64_t inUb, uin
                                                               int64_t dstIndex, int64_t j)
 {
     pto_detail::PtoLoadVector<float>(inUb, quantSrcGm + j * this->perLoopCols, colsTileLength);
-    pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
+    pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(pto_ext::PtoHardEvent::MTE2_V);
 
     pto_detail::PtoFillVector<float>(tempUb, scaleTemp, colsTileLength);
     pto_detail::PtoPipeBarrier<PIPE_V>();
@@ -309,15 +308,15 @@ __aicore__ inline void MoeGatherDynamicQuant<T>::ComputeScale(uint64_t inUb, uin
     pto_detail::PtoCastVector<half, float>(tempUb, tempUb, colsTileLength, pto::RoundMode::CAST_TRUNC);
     pto_detail::PtoCastVector<int8_t, half>(this->outputXUb, tempUb, colsTileLength, pto::RoundMode::CAST_ROUND);
 
-    pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
+    pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::V_MTE3>(pto_ext::PtoHardEvent::V_MTE3);
     StoreExpandedXTile(dstIndex * this->cols + j * this->perLoopCols, this->outputXUb, colsTileLength);
-    pto_detail::PtoSetWaitFlag<HardEvent::MTE3_MTE2>(HardEvent::MTE3_MTE2);
+    pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(pto_ext::PtoHardEvent::MTE3_MTE2);
 }
 
 template <typename T>
 __aicore__ inline void MoeGatherDynamicQuant<T>::CopyOutPartialXQuantEH(int64_t progress)
 {
-    pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
+    pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE2_S>(pto_ext::PtoHardEvent::MTE2_S);
 
     for (int64_t i = 0; i < this->currentLoopRows; i++) {
         int64_t rowOffset = this->gatherOutTilingData->perCoreRows * this->blockIdx + this->perLoopRows * progress;
@@ -340,7 +339,7 @@ __aicore__ inline void MoeGatherDynamicQuant<T>::CopyOutPartialXQuantEH(int64_t 
 
         float scaleTemp = reduceMax / 127.0f;
         pto_detail::PtoFillVector<float>(this->scaleUb, scaleTemp, 8);
-        pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
+        pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::V_MTE3>(pto_ext::PtoHardEvent::V_MTE3);
         pto_detail::PtoStoreVector<float>(dynamicQuantScaleGm + (rowOffset + i), this->scaleUb, 1);
 
         for (int64_t j = 0; j < this->colLoops; j++) {
@@ -378,7 +377,7 @@ __aicore__ inline void MoeGatherDynamicQuant<T>::CopyOutPartialXQuant1H(int64_t 
 
         float scaleTemp = reduceMax / 127.0f;
         pto_detail::PtoFillVector<float>(this->scaleUb, scaleTemp, 8);
-        pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
+        pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::V_MTE3>(pto_ext::PtoHardEvent::V_MTE3);
 
         while (curLoopRow < this->currentLoopRows && initialRow / this->k == row) {
             int32_t outIndex = pto_detail::PtoGetValue<int32_t>(this->indicesUb, curLoopRow);
@@ -403,11 +402,10 @@ __aicore__ inline void MoeGatherDynamicQuant<T>::CopyOutPartialXQuant1H(int64_t 
 template <typename T>
 __aicore__ inline void MoeGatherDynamicQuant<T>::Init(GM_ADDR inputX, GM_ADDR quantSmooth, GM_ADDR expandedRowIdx,
                                                       GM_ADDR expandedX, GM_ADDR dynamicQuantScale, GM_ADDR workspace,
-                                                      const MoeInitRoutingQuantTilingData *tilingData,
-                                                      AscendC::TPipe *tPipe)
+                                                      const MoeInitRoutingQuantTilingData *tilingData
+                                                      )
 {
-    (void)tPipe;
-    this->blockIdx = get_block_idx() + get_subblockid() * get_block_num();
+    this->blockIdx = pto_ext::PtoAivLogicalIdx();
     this->gatherOutTilingData = &(tilingData->gatherOutComputeParamsOp);
 
     this->needCoreNum = this->gatherOutTilingData->needCoreNum;

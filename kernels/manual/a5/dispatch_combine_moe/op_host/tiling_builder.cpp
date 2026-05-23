@@ -14,8 +14,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <stdexcept>
 
 #include "op_kernel/utils/const_args.hpp"
+#include "pto_resource_config.hpp"
 #include "token_reorder/routing/moe_init_routing_quant_tiling.h"
-#include "tiling/platform/platform_ascendc.h"
 
 namespace {
 constexpr uint32_t SYSTEM_NEED_WORKSPACE = 16U * 1024U * 1024U;
@@ -34,30 +34,14 @@ void FillCoCTiling(CoCTiling &coc, const CaseConfig &cfg)
     coc.lenPerLoop = coc.m0 * coc.n0 / 2;
 }
 
-auto *GetPlatform(const CaseConfig &cfg)
+uint32_t GetAivNum(const DispatchCombineMoeResourceConfig &resource)
 {
-    if (cfg.soc_version.empty()) {
-        return platform_ascendc::PlatformAscendCManager::GetInstance();
-    }
-    return platform_ascendc::PlatformAscendCManager::GetInstance(cfg.soc_version.c_str());
+    return resource.aivNum;
 }
 
-uint32_t GetAivNum(const CaseConfig &cfg)
+uint32_t GetBlockDim(const DispatchCombineMoeResourceConfig &resource)
 {
-    auto *platform = GetPlatform(cfg);
-    if (platform == nullptr) {
-        throw std::runtime_error("PlatformAscendCManager::GetInstance failed for " + cfg.soc_version);
-    }
-    return platform->GetCoreNumAiv();
-}
-
-uint32_t GetBlockDim(const CaseConfig &cfg, uint32_t aivNum)
-{
-    auto *platform = GetPlatform(cfg);
-    if (platform == nullptr) {
-        throw std::runtime_error("PlatformAscendCManager::GetInstance failed for " + cfg.soc_version);
-    }
-    return platform->CalcTschBlockDim(aivNum, platform->GetCoreNumAic(), aivNum);
+    return resource.blockDim;
 }
 
 void ValidateRemoteWindowCapacity(const CaseConfig &cfg, const StandaloneRankRuntime &runtime)
@@ -115,6 +99,7 @@ DispatchCombineMoeBuildResult BuildDispatchCombineMoeTiling(const CaseConfig &cf
 {
     ValidateRemoteWindowCapacity(cfg, runtime);
     DispatchCombineMoeBuildResult result;
+    const DispatchCombineMoeResourceConfig resource = GetDispatchCombineMoeResourceConfig(cfg.soc_version);
     auto &info = result.tiling.dispatchCombineMoeInfo;
     info.M = cfg.m;
     info.K = cfg.k;
@@ -126,7 +111,7 @@ DispatchCombineMoeBuildResult BuildDispatchCombineMoeTiling(const CaseConfig &cf
     info.isTransposeB = 0;
     info.isWeightNz = 1;
     info.listLen = cfg.list_len;
-    info.aivNum = GetAivNum(cfg);
+    info.aivNum = GetAivNum(resource);
     info.totalUbSize = 196352;
 
     FillCoCTiling(result.tiling.cocTiling, cfg);
@@ -149,7 +134,7 @@ DispatchCombineMoeBuildResult BuildDispatchCombineMoeTiling(const CaseConfig &cf
         static_cast<uint64_t>(cfg.world_size) * sizeof(int32_t) * 16 +
         static_cast<uint64_t>(cfg.expert_per_rank + cfg.world_size) * sizeof(int32_t) * 16;
 
-    result.block_dim = GetBlockDim(cfg, info.aivNum);
+    result.block_dim = GetBlockDim(resource);
     result.workspace_bytes = SYSTEM_NEED_WORKSPACE + cocWorkspace;
     result.tiling.launchConfig.blockDim = result.block_dim;
     result.tiling.launchConfig.tilingKey = 1000010;

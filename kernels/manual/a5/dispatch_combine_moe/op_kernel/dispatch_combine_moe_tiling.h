@@ -19,8 +19,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "token_reorder/routing/moe_init_routing_tiling_common.h"
 #include "token_reorder/routing/moe_init_routing_quant_tiling.h"
 
-#ifndef ASCENDC_DISPATCH_COMBINE_MOE_TILING_H
-#define ASCENDC_DISPATCH_COMBINE_MOE_TILING_H
+#ifndef PTO_DISPATCH_COMBINE_MOE_TILING_H
+#define PTO_DISPATCH_COMBINE_MOE_TILING_H
 struct DispatchCombineMoeInfo {
     uint32_t M;
     uint32_t K;

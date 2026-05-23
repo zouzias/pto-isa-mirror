@@ -21,7 +21,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef DISPATCH_COMBINE_MOE_KERNEL_HPP
 #define DISPATCH_COMBINE_MOE_KERNEL_HPP
 
-#include "kernel_operator.h"
+#include <pto/pto-inst.hpp>
 
 #include <pto/common/pto_tile.hpp>
 #include <pto/pto-inst.hpp>
@@ -45,7 +45,6 @@ inline __gm__ struct OpSystemRunCfg g_opSystemRunCfg {
     pto_ext::support::kL2Offset
 };
 
-using namespace AscendC;
 
 namespace pto_ext::Gemm::Kernel {
 namespace pto_bridge = pto_ext::dispatch_combine_moe::pto_bridge;
@@ -64,6 +63,8 @@ FORCE_INLINE_AICORE __gm__ T *GetTensorAddr(uint32_t index, GM_ADDR tensorPtr)
 
 #undef FORCE_INLINE_AICORE
 
+using pto_ext::PtoCrossCoreRecord;
+using pto_ext::PtoCrossCoreWait;
 using pto_ext::PtoPipeBarrier;
 using pto_ext::PtoSetFlag;
 using pto_ext::PtoSyncAll;
@@ -213,13 +214,13 @@ public:
     __forceinline__ __aicore__ DispatchCombineMoeKernel(Params const &params)
     {
         if ASCEND_IS_AIC {
-            coreIdx = AscendC::GetBlockIdx();
-            coreNum = AscendC::GetBlockNum();
+            coreIdx = pto_ext::PtoAicLogicalIdx();
+            coreNum = pto_ext::PtoAicLogicalCount();
         }
 
         if ASCEND_IS_AIV {
-            coreIdx = get_block_idx() + get_subblockid() * get_block_num();
-            coreNum = get_block_num() * get_subblockdim();
+            coreIdx = pto_ext::PtoAivLogicalIdx();
+            coreNum = pto_ext::PtoAivLogicalCount();
         }
 
         initBuffer(params);
@@ -232,7 +233,7 @@ public:
     __forceinline__ __aicore__ void operator()(Params const &params);
 
     template <>
-    __forceinline__ __aicore__ void operator()<AscendC::AIC>(Params const &params)
+    __forceinline__ __aicore__ void operator()<pto_ext::PTO_AIC>(Params const &params)
     {
         RunGmm1Impl(params);
         RunGmmInterlockImpl(params);
@@ -240,7 +241,7 @@ public:
     }
 
     template <>
-    __forceinline__ __aicore__ void operator()<AscendC::AIV>(Params const &params)
+    __forceinline__ __aicore__ void operator()<pto_ext::PTO_AIV>(Params const &params)
     {
         RunRoutingImpl(params);
         RunDispatchGatherImpl(params);
@@ -256,7 +257,7 @@ public:
 
     __forceinline__ __aicore__ void RunGmmInterlockImpl(Params const &)
     {
-        AscendC::CrossCoreWaitFlag<0x2>(SYNCFLAGV2C);
+        kernel_detail::PtoCrossCoreWait<pto::SyncOpType::TSTORE_V2GM, pto::SyncOpType::TLOAD>(SYNCFLAGV2C);
     }
 
     __forceinline__ __aicore__ void RunGmm2Impl(Params const &params)
@@ -266,7 +267,6 @@ public:
 
     __forceinline__ __aicore__ void RunRoutingImpl(Params const &params)
     {
-        icache_preload(8);
         int64_t localTokenPerExpertOffset =
             peerMemoryLayout.offsetPeerTokenPerExpert + tokenPerExpertLayout(params.rank, 0, 0) * sizeof(int32_t);
         GM_ADDR localTokenPerExpert = remoteWindow() + localTokenPerExpertOffset;
@@ -294,7 +294,7 @@ public:
             CopyGMToGM(expertTokenNumsPtr, cumsumMMPtr + (params.EP - 1) * params.expertPerRank, params.expertPerRank,
                        params.ubMoveNum);
         }
-        AscendC::CrossCoreSetFlag<0x2, PIPE_MTE3>(0);
+        kernel_detail::PtoCrossCoreRecord<pto::SyncOpType::TSTORE_V2GM, pto::SyncOpType::TLOAD>(0);
     }
 
     __forceinline__ __aicore__ void CopyDispatchRowsForPeer(Params const &params, int32_t dstEpIdx, int32_t groupIdx,
@@ -356,9 +356,8 @@ public:
             prevSum = gm_load(preSumBeforeRankPtr + coreIdx * params.expertPerRank);
         }
 
-        icache_preload(8);
-        kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
-        kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
+        kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(EVENT_ID0);
+        kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(EVENT_ID1);
         int32_t pingpongIdx = 0;
         for (int32_t groupIdx = 0; groupIdx < params.expertPerRank; ++groupIdx) {
             uint32_t currentM = gm_load(cumsumMMPtr + (params.EP - 1) * params.expertPerRank + groupIdx);
@@ -366,15 +365,15 @@ public:
                 CopyDispatchRowsForPeer(params, dstEpIdx, groupIdx, prevGroupSum1, prevSum, pingpongIdx);
             }
             kernel_detail::PtoSyncAll<true>();
-            AscendC::CrossCoreSetFlag<0x2, PIPE_MTE3>(syncgmm1Idx / CROSS_CORE_FLAG_MAX_SET_COUNT);
+            kernel_detail::PtoCrossCoreRecord<pto::SyncOpType::TSTORE_V2GM, pto::SyncOpType::TLOAD>(syncgmm1Idx / CROSS_CORE_FLAG_MAX_SET_COUNT);
             syncgmm1Idx++;
 
             prevGroupSum1 += currentM;
 
             UpdateDispatchDequantSums(params, groupIdx, currentM, dequantSum1, dequantSum2);
         }
-        kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
-        kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
+        kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(EVENT_ID0);
+        kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(EVENT_ID1);
         stageDequantSum1 = dequantSum1;
         stageDequantSum2 = dequantSum2;
     }
@@ -384,7 +383,7 @@ public:
         uint32_t n = static_cast<uint32_t>(params.problemShape.shape[1]);
         BlockEpilogue1 blockEpilogue1(resource, n);
 
-        AscendC::CrossCoreWaitFlag<0x2>(SYNCFLAGC2V);
+        kernel_detail::PtoCrossCoreWait<pto::SyncOpType::TSTORE_C2GM, pto::SyncOpType::TLOAD>(SYNCFLAGC2V);
         kernel_detail::PtoSyncAll<true>();
         if (stageDequantSum1 > 0) {
             uint32_t rowStartThisCore = 0;
@@ -398,10 +397,10 @@ public:
                            params.epilogueCoreNum);
         }
         kernel_detail::PtoSyncAll<true>();
-        AscendC::CrossCoreSetFlag<0x2, PIPE_MTE3>(SYNCFLAGV2C);
+        kernel_detail::PtoCrossCoreRecord<pto::SyncOpType::TSTORE_V2GM, pto::SyncOpType::TLOAD>(SYNCFLAGV2C);
 
         if ((params.epilogueGranularity < params.expertPerRank && params.epilogueGranularity > 0)) {
-            AscendC::CrossCoreWaitFlag<0x2>(SYNCFLAGC2V);
+            kernel_detail::PtoCrossCoreWait<pto::SyncOpType::TSTORE_C2GM, pto::SyncOpType::TLOAD>(SYNCFLAGC2V);
             kernel_detail::PtoSyncAll<true>();
             if (stageDequantSum2 > 0) {
                 uint32_t rowStartThisCore = stageDequantSum1;
@@ -414,7 +413,7 @@ public:
                                gmPermutedTokenPtr + gmOffsetD, gmPerTokenScale2Ptr + rowStartThisCore, coreNum);
             }
             kernel_detail::PtoSyncAll<true>();
-            AscendC::CrossCoreSetFlag<0x2, PIPE_MTE3>(SYNCFLAGV2C);
+            kernel_detail::PtoCrossCoreRecord<pto::SyncOpType::TSTORE_V2GM, pto::SyncOpType::TLOAD>(SYNCFLAGV2C);
         }
 
         blockEpilogue1.Finalize();
@@ -502,8 +501,8 @@ private:
     template <typename T>
     __forceinline__ __aicore__ void CopyGMToGM(__gm__ T *dstPtr, __gm__ T *srcPtr, int32_t elemNum, int32_t ubMoveNum)
     {
-        kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
-        kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
+        kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(EVENT_ID0);
+        kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(EVENT_ID1);
 
         constexpr int32_t BufferNum = 2;
         constexpr uint64_t tmpBufferOffsetPing = 0;
@@ -515,28 +514,28 @@ private:
         for (uint32_t processIndex = 0; processIndex < processCount; ++processIndex) {
             uint32_t curProcessNum =
                 (processIndex == processCount - 1) ? elemNum - ubMoveNum * (processCount - 1) : ubMoveNum;
-            AscendC::TEventID EVENT_ID = pingpongId == 0 ? EVENT_ID0 : EVENT_ID1;
+            event_t EVENT_ID = pingpongId == 0 ? EVENT_ID0 : EVENT_ID1;
             uint64_t ubOffsetBytes = pingpongId == 0 ? tmpBufferOffsetPing : tmpBufferOffsetPong;
             auto processOffset = processIndex * ubMoveNum;
 
             auto inputOffset = processOffset;
             auto outputOffset = processOffset;
             // [ReduceScatter] 2. Pre Interface Sync
-            kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID);
+            kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(EVENT_ID);
             // [ReduceScatter] 3. Start shmem_mte_get_mem_nbi
             pto_bridge::PtoLoadVector(ubOffsetBytes, srcPtr + inputOffset, curProcessNum);
-            kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE2_MTE3>(EVENT_ID);
-            kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_MTE3>(EVENT_ID);
+            kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE2_MTE3>(EVENT_ID);
+            kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE2_MTE3>(EVENT_ID);
             pto_bridge::PtoStoreVector(dstPtr + outputOffset, ubOffsetBytes, curProcessNum);
 
             // [ReduceScatter] 4. Post Interface Sync
-            kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID);
+            kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(EVENT_ID);
             pingpongId = (pingpongId + 1) % BufferNum;
         }
         // [ReduceScatter] 4. Post Interface Sync
 
-        kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
-        kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
+        kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(EVENT_ID0);
+        kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(EVENT_ID1);
     }
 
     template <typename T>
@@ -561,7 +560,7 @@ private:
 
         for (uint32_t processIndex = 0; processIndex < processCount; ++processIndex) {
             pingpongId = (pingpongId + 1) % BufferNum;
-            AscendC::TEventID EVENT_ID = pingpongId == 0 ? EVENT_ID0 : EVENT_ID1;
+            event_t EVENT_ID = pingpongId == 0 ? EVENT_ID0 : EVENT_ID1;
             uint64_t ubOffsetBytes = pingpongId == 0 ? tmpBufferOffsetPing : tmpBufferOffsetPong;
             auto inputOffset = processIndex * ubMoveNum * copyInNum;
 
@@ -579,18 +578,18 @@ private:
             pto::comm::TGET(localPackedG, remotePackedG, packedTile);
             kernel_detail::PtoPipeBarrier<PIPE_ALL>();
 
-            kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID);
+            kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(EVENT_ID);
             uint32_t dataLen = rowNum * copyInNum;
             pto_bridge::PtoLoadVector(ubOffsetBytes, localPackedScratch, dataLen);
 
-            kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE2_MTE3>(EVENT_ID);
-            kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_MTE3>(EVENT_ID);
+            kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE2_MTE3>(EVENT_ID);
+            kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE2_MTE3>(EVENT_ID);
             auto outputOffset = processIndex * ubMoveNum * hiddenSize;
             pto_bridge::StorePerTokenRows(dst, ubOffsetBytes, outputOffset, static_cast<uint16_t>(rowNum),
                                           static_cast<uint16_t>(hiddenSize));
             pto_bridge::StorePerTokenScales(dstScale, ubOffsetBytes, processIndex * ubMoveNum,
                                             static_cast<uint16_t>(rowNum), static_cast<uint16_t>(hiddenSize));
-            kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID);
+            kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(EVENT_ID);
         }
     }
 
@@ -625,8 +624,8 @@ private:
             pto::TASSIGN(tile, tmpUbOffset);
             pto::TLOAD(tile, expertIdxGlobal);
 
-            kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE2_S>(EVENT_ID0);
-            kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_S>(EVENT_ID0);
+            kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE2_S>(EVENT_ID0);
+            kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE2_S>(EVENT_ID0);
 
             for (uint32_t i = 0; i < cur; ++i) {
                 int32_t tokenIdx = (startIdx + offset + i) / topK;
@@ -636,8 +635,8 @@ private:
                 }
             }
 
-            kernel_detail::PtoSetFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
-            kernel_detail::PtoWaitFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
+            kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::S_MTE3>(EVENT_ID0);
+            kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::S_MTE3>(EVENT_ID0);
             pto::TSTORE(expertIdxGlobal, tile);
         }
         kernel_detail::PtoSyncAll<true>();
@@ -653,8 +652,8 @@ private:
             static_cast<uint16_t>(expertPerRank * sizeof(int32_t)),
             static_cast<uint16_t>((paddedExpertNumAligned - expertPerRank) * sizeof(int32_t)));
 
-        kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
-        kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
+        kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE2_V>(EVENT_ID0);
+        kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(EVENT_ID0);
 
         for (uint32_t i = 1; i < EP; ++i) {
             uint64_t rowOffset = tmpBufferUbOffset + static_cast<uint64_t>(i) * expertPerRankAligned * sizeof(int32_t);
@@ -664,8 +663,8 @@ private:
             kernel_detail::PtoPipeBarrier<PIPE_V>();
         }
 
-        kernel_detail::PtoSetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
-        kernel_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+        kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::V_MTE3>(EVENT_ID0);
+        kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::V_MTE3>(EVENT_ID0);
 
         pto_bridge::StoreExpertCountsPadded(result, tmpBufferUbOffset, static_cast<uint16_t>(EP),
                                             static_cast<uint16_t>(expertPerRank * sizeof(int32_t)));
@@ -714,7 +713,6 @@ private:
 
     __forceinline__ __aicore__ void GMM1(Params const &params)
     {
-        icache_preload(8);
         BlockScheduler blockScheduler;
         BlockMmad blockMmad(resource);
         float aivFinishGroups = 0.0f;
@@ -729,8 +727,8 @@ private:
         int32_t syncLoopIdx = -1;
 
         uint16_t syncgmmIdx = 0;
-        AscendC::CrossCoreWaitFlag<0x2>(syncgmmIdx /
-                                        CROSS_CORE_FLAG_MAX_SET_COUNT); // Wait for AIV to finish cumsum for matmul
+        kernel_detail::PtoCrossCoreWait<pto::SyncOpType::TSTORE_V2GM, pto::SyncOpType::TLOAD>(
+            syncgmmIdx / CROSS_CORE_FLAG_MAX_SET_COUNT);
         syncgmmIdx++;
 
         for (uint32_t groupIdx = 0; groupIdx < params.expertPerRank; ++groupIdx) {
@@ -757,7 +755,7 @@ private:
 
             for (uint32_t loopIdx = startLoopIdx; loopIdx < coreLoops; loopIdx += coreNum) {
                 for (; syncGroupIdx <= groupIdx; syncGroupIdx++) {
-                    AscendC::CrossCoreWaitFlag<0x2>(syncgmmIdx / CROSS_CORE_FLAG_MAX_SET_COUNT);
+                    kernel_detail::PtoCrossCoreWait<pto::SyncOpType::TSTORE_V2GM, pto::SyncOpType::TLOAD>(syncgmmIdx / CROSS_CORE_FLAG_MAX_SET_COUNT);
                     syncgmmIdx++;
                 }
 
@@ -798,7 +796,7 @@ private:
         }
 
         for (; syncGroupIdx < params.expertPerRank; syncGroupIdx++) {
-            AscendC::CrossCoreWaitFlag<0x2>(syncgmmIdx / CROSS_CORE_FLAG_MAX_SET_COUNT);
+            kernel_detail::PtoCrossCoreWait<pto::SyncOpType::TSTORE_V2GM, pto::SyncOpType::TLOAD>(syncgmmIdx / CROSS_CORE_FLAG_MAX_SET_COUNT);
             syncgmmIdx++;
         }
 
@@ -811,7 +809,6 @@ private:
 
     __forceinline__ __aicore__ void GMM2(Params const &params)
     {
-        icache_preload(8);
         BlockScheduler blockScheduler;
         BlockMmad blockMmad(resource);
 
@@ -857,7 +854,7 @@ private:
             // Loop through the matmul of each groupIdx
             if (params.expertPerRank > lastDequantExpertNum &&
                 groupIdx + 1 == params.expertPerRank - lastDequantExpertNum) {
-                AscendC::CrossCoreWaitFlag<0x2>(SYNCFLAGV2C);
+                kernel_detail::PtoCrossCoreWait<pto::SyncOpType::TSTORE_V2GM, pto::SyncOpType::TLOAD>(SYNCFLAGV2C);
             }
 
             for (uint32_t loopIdx = startLoopIdx; loopIdx < coreLoops; loopIdx += coreNum) {
@@ -900,12 +897,12 @@ private:
 
     __forceinline__ __aicore__ void InitArithProgress(Params const &params)
     {
-        kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE3_S>(EVENT_ID0);
-        kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_S>(EVENT_ID0);
+        kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE3_S>(EVENT_ID0);
+        kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE3_S>(EVENT_ID0);
         pto_bridge::StoreZeroPtoUbToGm<float>(workspaceInfo.ptrSoftFlagBase, 0,
                                               static_cast<uint32_t>((params.EP + 1) * FLAGSTRIDE));
-        kernel_detail::PtoSetFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
-        kernel_detail::PtoWaitFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
+        kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::S_MTE3>(EVENT_ID0);
+        kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::S_MTE3>(EVENT_ID0);
     }
 
     __forceinline__ __aicore__ void CrossRankSyncAndlocalTokenPerExpertAllGatherAndGetSumPreRankV2(
@@ -926,7 +923,7 @@ private:
             __gm__ int32_t *srcAddress = reinterpret_cast<__gm__ int32_t *>(remoteWindow() + localTokenPerExpertOffset);
             __gm__ void *dstPeermemPtr = remoteWindow(localTokenPerExpertOffset, dstEpIdx);
 
-            kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
+            kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(EVENT_ID0);
             using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
             using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
             using TputGlobal = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
@@ -939,22 +936,22 @@ private:
             StrideDyn tputStride(numPerCore, numPerCore, numPerCore, numPerCore, 1);
             TputTile tputTile(1, numPerCore);
 
-            kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
+            kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(EVENT_ID0);
 
             pto_bridge::PtoLoadVector(tmpBufferUbOffset, srcAddress, numPerCore);
 
-            kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
-            kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
+            kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE2_V>(EVENT_ID0);
+            kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(EVENT_ID0);
             pto_bridge::PtoAddScalarVector<int32_t>(tmpBufferUbOffset, tmpBufferUbOffset, numPerCore,
                                                     static_cast<int32_t>(0x800000));
-            kernel_detail::PtoSetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
-            kernel_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+            kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::V_MTE3>(EVENT_ID0);
+            kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::V_MTE3>(EVENT_ID0);
             pto_bridge::PtoStoreVector(localScratch, tmpBufferUbOffset, numPerCore);
             TputGlobal localPackedG(localScratch, tputShape, tputStride);
             TputGlobal remotePackedG(reinterpret_cast<__gm__ int32_t *>(dstPeermemPtr), tputShape, tputStride);
             pto::comm::TPUT(remotePackedG, localPackedG, tputTile);
-            kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
-            kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
+            kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(EVENT_ID0);
+            kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(EVENT_ID0);
             remoteWindow.NotifyRemoteTokenReady(dstEpIdx);
         }
         for (int32_t dstEpIdx = coreIdx; dstEpIdx < params.EP; dstEpIdx += coreNum) {
@@ -962,19 +959,19 @@ private:
                 remoteWindow.WaitTokenReady(dstEpIdx);
                 __gm__ int32_t *tokenBase = tokenPerExpertPtr + tokenPerExpertLayout(dstEpIdx, 0, 0);
                 pto_bridge::PtoLoadVector(tmpBufferUbOffset, tokenBase, numPerCore);
-                kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
-                kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
+                kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE2_V>(EVENT_ID0);
+                kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(EVENT_ID0);
                 pto_bridge::PtoAddScalarVector<int32_t>(tmpBufferUbOffset, tmpBufferUbOffset, numPerCore,
                                                         static_cast<int32_t>(-0x800000));
                 kernel_detail::PtoPipeBarrier<PIPE_V>();
-                kernel_detail::PtoSetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
-                kernel_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+                kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::V_MTE3>(EVENT_ID0);
+                kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::V_MTE3>(EVENT_ID0);
                 pto_bridge::PtoStoreVector(tokenBase, tmpBufferUbOffset, numPerCore);
             } else {
                 pto_bridge::PtoLoadVector(tmpBufferUbOffset, tokenPerExpertPtr + tokenPerExpertLayout(dstEpIdx, 0, 0),
                                           numPerCore);
-                kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
-                kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
+                kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE2_V>(EVENT_ID0);
+                kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(EVENT_ID0);
             }
             kernel_detail::PtoPipeBarrier<PIPE_ALL>();
             int32_t prevSum = 0;
@@ -986,8 +983,8 @@ private:
                 }
                 prevSum += pto_bridge::PtoGetValue<int32_t>(tmpBufferUbOffset, static_cast<uint32_t>(i));
             }
-            kernel_detail::PtoSetFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
-            kernel_detail::PtoWaitFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
+            kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::S_MTE3>(EVENT_ID0);
+            kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::S_MTE3>(EVENT_ID0);
             pto_bridge::PtoStoreVector(preSumBeforeRankPtr + dstEpIdx * params.expertPerRank, prevSumUbOffset,
                                        params.expertPerRank);
         }
@@ -1000,11 +997,11 @@ private:
         if (coreIdx != coreNum - 1) {
             return;
         }
-        kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE3_S>(EVENT_ID0);
-        kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_S>(EVENT_ID0);
+        kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE3_S>(EVENT_ID0);
+        kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE3_S>(EVENT_ID0);
         pto_bridge::StoreZeroPtoUbToGm<int32_t>(tokenPerExpertPtr, 0, static_cast<uint32_t>(num));
-        kernel_detail::PtoSetFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
-        kernel_detail::PtoWaitFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
+        kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::S_MTE3>(EVENT_ID0);
+        kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::S_MTE3>(EVENT_ID0);
     }
 
     __forceinline__ __aicore__ void UpdateAicFlags(const Params &params)
@@ -1021,8 +1018,8 @@ private:
         while (flag < flagBase) {
             flag = flagBase;
             pto_bridge::PtoLoadVector<float, TileElems>(tmpUbOffset, flagPtr, flagElemNum);
-            kernel_detail::PtoSetFlag<AscendC::HardEvent::MTE2_S>(EVENT_ID0);
-            kernel_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_S>(EVENT_ID0);
+            kernel_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE2_S>(EVENT_ID0);
+            kernel_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE2_S>(EVENT_ID0);
 
             for (int32_t ep = 0; ep < params.EP; ++ep) {
                 uint32_t elemOffset = static_cast<uint32_t>(ep * FLAGSTRIDE);
@@ -1046,10 +1043,9 @@ private:
         uint32_t n2 = static_cast<uint32_t>(params.problemShape.shape[2]);
         int32_t prevGroupSum2 = 0;
 
-        icache_preload(8);
         for (uint32_t t_groupIdx = 0; t_groupIdx < params.expertPerRank; ++t_groupIdx) {
             int32_t flagId = t_groupIdx / CROSS_CORE_FLAG_MAX_SET_COUNT;
-            AscendC::CrossCoreWaitFlag<0x2>(flagId);
+            kernel_detail::PtoCrossCoreWait<pto::SyncOpType::TSTORE_V2GM, pto::SyncOpType::TLOAD>(flagId);
             kernel_detail::PtoSyncAll<true>();
 
             uint32_t groupIdx = t_groupIdx;
@@ -1130,13 +1126,12 @@ private:
         BlockScheduler blockScheduler;
         int32_t syncLoopIdx = 0;
         uint32_t startCoreIdx = 0;
-        uint32_t aicCoreNum = coreNum / 2;
-        uint32_t aicCoreIdx = get_block_idx();
-        uint32_t aivSubCoreIdx = get_subblockid();
+        uint32_t aicCoreNum = pto_ext::PtoAicLogicalCount();
+        uint32_t aicCoreIdx = pto_ext::PtoAivPairedAicIdx();
+        uint32_t aivSubCoreIdx = pto_ext::PtoAivSubCoreIdx();
         uint32_t preSrcExpertSum = 0;
         uint32_t n2 = static_cast<uint32_t>(params.problemShape.shape[2]);
         uint32_t k2 = static_cast<uint32_t>(params.problemShape.shape[1]) / 2;
-        icache_preload(8);
         for (uint32_t groupIdx = 0; groupIdx < params.expertPerRank; ++groupIdx) {
             uint32_t currentExpertM =
                 ClampCurrentExpertM(gm_load(cumsumMMPtr + (params.EP - 1) * params.expertPerRank + groupIdx),
@@ -1160,7 +1155,7 @@ private:
 
                 for (; syncLoopIdx <= groupIdx; syncLoopIdx++) {
                     int32_t flag_id = syncLoopIdx / CROSS_CORE_FLAG_MAX_SET_COUNT;
-                    AscendC::CrossCoreWaitFlag<0x2>(flag_id);
+                    kernel_detail::PtoCrossCoreWait<pto::SyncOpType::TSTORE_V2GM, pto::SyncOpType::TLOAD>(flag_id);
                 }
 
                 for (int32_t cur_row = 0; cur_row < aiv_m_rows; cur_row++) {

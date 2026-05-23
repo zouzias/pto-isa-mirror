@@ -68,7 +68,7 @@ __forceinline__ __aicore__ void PtoTileMmad(uint64_t l0COffset, uint64_t l0AOffs
     constexpr uint32_t kPipeBarrierThreshold = 10;
     constexpr uint32_t kFractalEdge = 16;
     if ((m / kFractalEdge) * (n / kFractalEdge) < kPipeBarrierThreshold) {
-        AscendC::PipeBarrier<PIPE_M>();
+        pto::PtoSetWaitFlag<PIPE_M, PIPE_FIX>(EVENT_ID0, EVENT_ID0);
     }
 }
 
@@ -271,8 +271,7 @@ __forceinline__ __aicore__ void StagePerChannelScale(uint64_t l1SOffset, uint64_
     pto::TASSIGN(scaleMatTile, l1SOffset);
     pto::TASSIGN(scalingTile, fixpipeOffset);
     pto::TLOAD(scaleMatTile, gmBlockSGlobal);
-    AscendC::SetFlag<AscendC::HardEvent::MTE2_FIX>(0);
-    AscendC::WaitFlag<AscendC::HardEvent::MTE2_FIX>(0);
+    pto::PtoSetWaitFlag<PIPE_MTE2, PIPE_FIX>(EVENT_ID0, EVENT_ID0);
     pto::TMOV(scalingTile, scaleMatTile);
 }
 

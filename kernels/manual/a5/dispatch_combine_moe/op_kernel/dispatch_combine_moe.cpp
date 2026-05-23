@@ -12,7 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
  * \file dispatch_combine_moe.cpp
  * \brief
  */
-#include "kernel_operator.h"
+#include <pto/pto-inst.hpp>
 #if defined(__CCE_AICORE__)
 #include "lib/matmul_intf.h"
 #include "dispatch_combine_moe_tiling.h"
@@ -21,27 +21,24 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "../kernel_launch.hpp"
 
 #if defined(__CCE_AICORE__)
-using namespace AscendC;
-using namespace DispatchCombineMoeImpl;
+using DispatchCombineMoeImpl::DispatchCombineMoe;
 #endif
 
-extern "C" __global__ __aicore__ void dispatch_combine_moe(__gm__ uint8_t *x, __gm__ uint8_t *w1, __gm__ uint8_t *w2,
-                                                           __gm__ uint8_t *expertId, __gm__ uint8_t *scale1,
-                                                           __gm__ uint8_t *scale2, __gm__ uint8_t *probs,
-                                                           __gm__ uint8_t *xActiveMask, __gm__ uint8_t *c,
-                                                           __gm__ uint8_t *expertTokenNums, __gm__ uint8_t *workspaceGM,
-                                                           __gm__ uint8_t *tilingGM)
+PTO_SYNCALL_MIX_AIC_KERNEL_META(dispatch_combine_moe, 1, 2);
+
+extern "C" __global__ AICORE void dispatch_combine_moe(__gm__ uint8_t *x, __gm__ uint8_t *w1, __gm__ uint8_t *w2,
+                                                       __gm__ uint8_t *expertId, __gm__ uint8_t *scale1,
+                                                       __gm__ uint8_t *scale2, __gm__ uint8_t *probs,
+                                                       __gm__ uint8_t *xActiveMask, __gm__ uint8_t *c,
+                                                       __gm__ uint8_t *expertTokenNums, __gm__ uint8_t *workspaceGM,
+                                                       __gm__ uint8_t *tilingGM)
 {
 #if defined(__CCE_AICORE__)
-    REGISTER_TILING_DEFAULT(DispatchCombineMoeTilingData);
-    if (TILING_KEY_IS(1000010)) {
-        KERNEL_TASK_TYPE(1000010, KERNEL_TYPE_MIX_AIC_1_2);
-        const __gm__ DispatchCombineMoeTilingData *tilingData =
-            reinterpret_cast<__gm__ DispatchCombineMoeTilingData *>(tilingGM);
-        DispatchCombineMoe<int8_t, DTYPE_W1, DTYPE_OUT, false, true> op;
-        op.Init(x, w1, w2, expertId, scale1, scale2, probs, xActiveMask, c, expertTokenNums, workspaceGM, tilingData);
-        op.Process();
-    }
+    const __gm__ DispatchCombineMoeTilingData *tilingData =
+        reinterpret_cast<__gm__ DispatchCombineMoeTilingData *>(tilingGM);
+    DispatchCombineMoe<int8_t, DTYPE_W1, DTYPE_OUT, false, true> op;
+    op.Init(x, w1, w2, expertId, scale1, scale2, probs, xActiveMask, c, expertTokenNums, workspaceGM, tilingData);
+    op.Process();
 #else
     (void)x;
     (void)w1;

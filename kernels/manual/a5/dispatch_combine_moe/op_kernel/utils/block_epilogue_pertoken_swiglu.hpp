@@ -130,8 +130,8 @@ public:
             eventUbDMTE3VList[i] = eventMTE3V++;
             eventUbDVMTE3List[i] = eventVMTE3++;
 
-            swiglu_detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[i]);
-            swiglu_detail::PtoSetFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[i]);
+            swiglu_detail::PtoSetFlag<pto_ext::PtoHardEvent::V_MTE2>(eventUbCVMTE2List[i]);
+            swiglu_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE3_V>(eventUbDMTE3VList[i]);
         }
 
         ubPerTokenScaleOutputOffset = resource.ubBuf.GetBufferAddrByByte(ubOffset);
@@ -139,8 +139,8 @@ public:
     __forceinline__ __aicore__ void Finalize()
     {
         for (uint32_t i = 0; i < UB_STAGES; ++i) {
-            swiglu_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[i]);
-            swiglu_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[i]);
+            swiglu_detail::PtoWaitFlag<pto_ext::PtoHardEvent::V_MTE2>(eventUbCVMTE2List[i]);
+            swiglu_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE3_V>(eventUbDMTE3VList[i]);
         }
     }
     __forceinline__ __aicore__ ~BlockEpilogue()
@@ -164,9 +164,9 @@ public:
         uint32_t blockN = static_cast<uint32_t>(shapeC.shape[1]);
 
         uint32_t tileLoops = blockM;
-        uint32_t subblockIdx = get_block_idx() + get_subblockid() * get_block_num();
+        uint32_t subblockIdx = pto_ext::PtoAivLogicalIdx();
 
-        uint32_t subblockNum = get_block_num() * 2;
+        uint32_t subblockNum = pto_ext::PtoAivLogicalCount();
         uint32_t moveDataCoreNum = subblockNum - epilogueCoreNum;
 
         if (subblockIdx < moveDataCoreNum) {
@@ -200,20 +200,20 @@ public:
 
             __gm__ ElementD *gmTileD = gmDPtr + loopIdx * ChunkTileLen;
             // Move C from GM workspace to UB
-            swiglu_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
+            swiglu_detail::PtoWaitFlag<pto_ext::PtoHardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
             swiglu_detail::PtoLoadVector<ElementC>(ubCOffset, gmTileC, blockN);
-            swiglu_detail::PtoSetFlag<AscendC::HardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
+            swiglu_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
 
             // Cast C to FP32 in UB
-            swiglu_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
+            swiglu_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
             swiglu_detail::PtoCastVector<float, ElementC>(ubCFp32Offset, ubCOffset, blockN, pto::RoundMode::CAST_NONE);
-            swiglu_detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
+            swiglu_detail::PtoSetFlag<pto_ext::PtoHardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
 
             // Get per-token scale from row loopIdx of gmPerTokenScale
             ElementPerTokenScale perTokenScale = gm_load(gmPerTokenScale1Ptr + loopIdx);
 
-            swiglu_detail::PtoSetFlag<AscendC::HardEvent::S_V>(0);
-            swiglu_detail::PtoWaitFlag<AscendC::HardEvent::S_V>(0);
+            swiglu_detail::PtoSetFlag<pto_ext::PtoHardEvent::S_V>(0);
+            swiglu_detail::PtoWaitFlag<pto_ext::PtoHardEvent::S_V>(0);
             // Multiply FP32 C by the per-token scale
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
             swiglu_detail::PtoMulVector(ubCFp32Offset, ubCFp32Offset, blockN, perTokenScale);
@@ -240,43 +240,42 @@ public:
             swiglu_detail::PtoReduceMaxVector(ubReduceMaxOffset, ubAbsOffset, ubAbsOffset, ChunkTileLen);
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
 
-            swiglu_detail::PtoSetFlag<AscendC::HardEvent::V_S>(0);
-            swiglu_detail::PtoWaitFlag<AscendC::HardEvent::V_S>(0);
+            swiglu_detail::PtoSetFlag<pto_ext::PtoHardEvent::V_S>(0);
+            swiglu_detail::PtoWaitFlag<pto_ext::PtoHardEvent::V_S>(0);
 
             ElementPerTokenScale GMubDequantScale =
                 swiglu_detail::PtoGetValue<ElementPerTokenScale>(ubReduceMaxOffset, 0);
-            swiglu_detail::PtoSetFlag<AscendC::HardEvent::S_V>(0);
+            swiglu_detail::PtoSetFlag<pto_ext::PtoHardEvent::S_V>(0);
 
             auto ubPerTokenScaleOutputElemOffset = loopIdx - loopStartIdx;
             swiglu_detail::PtoSetValue<ElementPerTokenScale>(ubPerTokenScaleOutputOffset,
                                                              ubPerTokenScaleOutputElemOffset, GMubDequantScale / 127.f);
 
-            swiglu_detail::PtoWaitFlag<AscendC::HardEvent::S_V>(0);
+            swiglu_detail::PtoWaitFlag<pto_ext::PtoHardEvent::S_V>(0);
             swiglu_detail::PtoMulVector(ubOutputTmpOffset, ubCFp32ChunkNOffset, ChunkTileLen, 127.f / GMubDequantScale);
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
 
             swiglu_detail::PtoCastVector<int32_t, float>(ubQuantScratchOffset, ubOutputTmpOffset, ChunkTileLen,
                                                          pto::RoundMode::CAST_RINT);
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
-            AscendC::SetDeqScale(static_cast<half>(1.0));
             swiglu_detail::PtoCastVector<half, int32_t>(ubQuantScratchOffset, ubQuantScratchOffset, ChunkTileLen,
                                                         pto::RoundMode::CAST_RINT);
             swiglu_detail::PtoPipeBarrier<PIPE_V>();
 
-            swiglu_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(eventUbDVMTE3List[ubListId]);
+            swiglu_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE3_V>(eventUbDVMTE3List[ubListId]);
             swiglu_detail::PtoCastVector<ElementD, half>(ubDOffset, ubQuantScratchOffset, ChunkTileLen,
                                                          pto::RoundMode::CAST_RINT);
-            swiglu_detail::PtoSetFlag<AscendC::HardEvent::V_MTE3>(eventUbDMTE3VList[ubListId]);
+            swiglu_detail::PtoSetFlag<pto_ext::PtoHardEvent::V_MTE3>(eventUbDMTE3VList[ubListId]);
 
-            swiglu_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
+            swiglu_detail::PtoWaitFlag<pto_ext::PtoHardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
             swiglu_detail::PtoStoreVector<ElementD>(gmTileD, ubDOffset, ChunkTileLen);
-            swiglu_detail::PtoSetFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[ubListId]);
+            swiglu_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE3_V>(eventUbDMTE3VList[ubListId]);
             ubListId = (ubListId + 1 < UB_STAGES) ? (ubListId + 1) : 0;
         }
 
         if (tasksForIdx > 0) {
-            swiglu_detail::PtoSetFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
-            swiglu_detail::PtoWaitFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID0);
+            swiglu_detail::PtoSetFlag<pto_ext::PtoHardEvent::S_MTE3>(EVENT_ID0);
+            swiglu_detail::PtoWaitFlag<pto_ext::PtoHardEvent::S_MTE3>(EVENT_ID0);
 
             swiglu_detail::PtoStoreVector<ElementPerTokenScale>(gmPerTokenScale2Ptr + loopStartIdx,
                                                                 ubPerTokenScaleOutputOffset, tasksForIdx);
