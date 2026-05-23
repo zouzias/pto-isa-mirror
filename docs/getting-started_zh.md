@@ -7,7 +7,7 @@
 本指南帮助您设置和运行 PTO ISA 项目。它涵盖两种主要场景：
 
 1. **CPU 模拟器**（推荐新手）- 跨平台支持 macOS、Linux 和 Windows
-2. **NPU 环境**（高级）- Linux 上的 Ascend A2/A3(910B/910C) 与 CANN toolkit
+2. **NPU 环境**（高级）- Linux 上的 Ascend A2/A3 与 CANN toolkit
 
 请选择符合您需求的部分。大多数用户应该从 CPU 模拟器开始。
 
@@ -184,7 +184,7 @@ Windows 特定选项（如需要）：
 
 ---
 
-## 第二部分：NPU 环境（Ascend 910B/910C，仅限 Linux）
+## 第二部分：NPU 环境（Ascend A2/A3，仅限 Linux）
 
 本部分适用于需要在 Ascend NPU 硬件或模拟器上运行的用户。它需要 Linux 环境和 Ascend CANN toolkit。
 

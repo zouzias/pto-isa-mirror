@@ -33,17 +33,17 @@ source ${ASCEND_INSTALL_PATH}/bin/setenv.bash
 cd ${git_clone_path}/kernels/manual/common/flash_atten
 
 # Run default cases (same set baked into generated_cases.*)
-bash run.sh -r npu -v Ascend910B1
+bash run.sh -r npu -v Ascend910B
 
 # Run a single case from the generated set
-bash run.sh -r npu -v Ascend910B1 -c case_float_H_128_S0_128_S1_1024
+bash run.sh -r npu -v Ascend910B -c case_float_H_128_S0_128_S1_1024
 
 # Provide custom cases (semicolon separated: HEAD_SIZE,S0,S1,CUBE_S0,TILE_S1)
 # TILE_S1: supports 128 (=CUBE_S1),256,512
-bash run.sh -r npu -v Ascend910B1 --cases "128,128,1024,128,128;128,2048,2048,128,512"
+bash run.sh -r npu -v Ascend910B --cases "128,128,1024,128,128;128,2048,2048,128,512"
 
 # Provide custom cases and run just one of them
-bash run.sh -r npu -v Ascend910B1 --cases "128,128,1024,128,128;128,512,2048,128,128" \
+bash run.sh -r npu -v Ascend910B --cases "128,128,1024,128,128;128,512,2048,128,128" \
   -c case_float_H_128_S0_128_S1_1024
 
 ```
@@ -159,7 +159,7 @@ Compare against simulator sweep data:
 
 ```bash
 python3 scripts/fa_cost_model.py \
-  --mode sim --soc Ascend910B1 \
+  --mode sim --soc Ascend910B \
   --check-calibration profiling_results/sim_pattern_sweep/summary.csv
 ```
 

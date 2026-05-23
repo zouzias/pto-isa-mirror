@@ -7,7 +7,7 @@
 This guide helps you set up and run the PTO ISA project. It covers two main scenarios:
 
 1. **CPU Simulator** (Recommended for beginners) - Cross-platform support for macOS, Linux, and Windows
-2. **NPU Environment** (Advanced) - Ascend A2/A3(910B/910C) on Linux with CANN toolkit
+2. **NPU Environment** (Advanced) - Ascend A2/A3 on Linux with CANN toolkit
 
 Choose the section that matches your needs. Most users should start with the CPU simulator.
 
@@ -184,7 +184,7 @@ Set library path (Linux):
 
 ---
 
-## Part 2: NPU Environment (Ascend 910B/910C, Linux Only)
+## Part 2: NPU Environment (Ascend A2/A3, Linux Only)
 
 This section is for users who need to run on Ascend NPU hardware or simulator. It requires a Linux environment and the Ascend CANN toolkit.
 

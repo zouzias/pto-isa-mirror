@@ -13,7 +13,7 @@ Data flow:
 
 - `engine`:
     - `DmaEngine::SDMA` (default)
-    - `DmaEngine::URMA` (Ascend950, NPU_ARCH 3510 only)
+    - `DmaEngine::URMA` (Ascend A5, NPU_ARCH 3510 only)
 
 > **Important (SDMA path)**  
 > `TPUT_ASYNC` with `DmaEngine::SDMA` currently supports **only flat contiguous logical 1D tensors**.  
@@ -64,7 +64,7 @@ PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile,
 
 ### URMA Construction (NPU_ARCH 3510 only)
 
-> URMA (User-level RDMA Memory Access) is a hardware-accelerated RDMA transport available on Ascend950 (NPU_ARCH 3510).
+> URMA (User-level RDMA Memory Access) is a hardware-accelerated RDMA transport available on Ascend A5 (NPU_ARCH 3510).
 
 ```cpp
 #ifdef PTO_URMA_SUPPORTED
@@ -90,7 +90,7 @@ URMA does not require `scratchTile` — polling uses `ld_dev`/`st_dev` hardware 
 - Both SDMA and URMA paths require source tensor to be **flat contiguous logical 1D only**
 - SDMA workspace must be a valid GM pointer allocated by host-side `SdmaWorkspaceManager`
 - URMA workspace must be a valid GM pointer allocated by host-side `UrmaWorkspaceManager`
-- URMA is only available on NPU_ARCH 3510 (Ascend950)
+- URMA is only available on NPU_ARCH 3510 (Ascend A5)
 - The symmetric data buffer passed to `UrmaWorkspaceManager::Init()` must be backed by huge-page memory (allocate with `ACL_MEM_MALLOC_HUGE_ONLY`). The underlying MR registration requires huge-page backing; `ACL_MEM_MALLOC_HUGE_FIRST` may silently fall back to 4KB pages for small allocations, causing registration to fail
 
 If the 1D contiguous requirement is not met, current implementation returns an invalid async event (`handle == 0`).

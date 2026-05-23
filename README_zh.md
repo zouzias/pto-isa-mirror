@@ -135,7 +135,7 @@ python3 tests/script/run_st.py -r sim -v a3 -t tadd -g TADDTest.case_float_64x64
 - S0：query 序列长度（Q/O 的行数）
 - S1：key/value 序列长度（K/V 的行数）
 
-Ascend 910B2 多核对比，基线为 `torch_npu`：
+Ascend A2 多核对比，基线为 `torch_npu`：
 
 | 序列长度 | PTO 时间 (us) | torch_npu 时间 (us) | PTO TFLOPS | torch_npu TFLOPS | PTO 加速比 |
 | --- | --- | --- | --- | --- | --- |
@@ -146,7 +146,7 @@ Ascend 910B2 多核对比，基线为 `torch_npu`：
 | 16384 | 909.058 | 1118.462 | 151.19 | 122.88 | 1.23x |
 | 32768 | 3262.645 | 3646.173 | 168.50 | 150.78 | 1.12x |
 
-![Flash Attention 910B2 PTO vs torch_npu](docs/figures/performance/fa_910b2_pto_vs_torch_npu.png)
+![Flash Attention A2 PTO vs torch_npu](docs/figures/performance/fa_910b2_pto_vs_torch_npu.png)
 
 ### 通信指令带宽
 
@@ -164,9 +164,9 @@ Ascend 910B2 多核对比，基线为 `torch_npu`：
 
 ## 🖥️ 平台支持
 
-- Ascend A2（Ascend 910B）
-- Ascend A3（Ascend 910C）
-- Ascend A5（Ascend 950）
+- Ascend A2
+- Ascend A3
+- Ascend A5
 - CPU（x86_64 / AArch64）
 
 更多细节请参考 [include/README_zh.md](include/README_zh.md)。

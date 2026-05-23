@@ -19,7 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 namespace comm {
 template <typename GlobalData>
-void Copy(typename GlobalData::DType *dst, typename GlobalData::DType *src, long int shape[], long int stride[],
+void Copy(typename GlobalData::DType *dst, typename GlobalData::DType *src, int64_t shape[], int64_t stride[],
           size_t size)
 {
     for (size_t i = 0; i < shape[0]; i++) {
@@ -40,8 +40,8 @@ template <typename ParallelGroupType, typename GlobalData>
 PTO_INTERNAL void TBroadcast_Impl(ParallelGroupType &parallelGroup, GlobalData &src)
 {
     constexpr size_t numDims = 5;
-    long int shape[numDims] = {src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3), src.GetShape(4)};
-    long int stride[numDims] = {src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3),
+    int64_t shape[numDims] = {src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3), src.GetShape(4)};
+    int64_t stride[numDims] = {src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3),
                                 src.GetStride(4)};
     int groupSize = parallelGroup.GetSize();
     for (unsigned n = 0; n < groupSize; ++n) {
