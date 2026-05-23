@@ -3,11 +3,13 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <sys/time.h>
 #include <vector>
 
 namespace {
@@ -38,6 +40,8 @@ struct HostData {
     std::vector<int32_t> active;
 };
 
+constexpr int kSegmentFieldCount = 7;
+
 struct GoldenData {
     std::vector<float> out;
     std::vector<int32_t> count;
@@ -46,6 +50,9 @@ struct GoldenData {
     std::vector<float> src_packed_x;
     std::vector<float> dispatch_x;
     std::vector<float> return_y;
+    std::vector<int32_t> segment_desc;
+    std::vector<int32_t> segment_ready;
+    std::vector<int32_t> return_ready;
 };
 
 class DeviceBuffer {
@@ -116,6 +123,46 @@ void CheckAcl(aclError ret, const char *op)
     }
 }
 
+constexpr size_t kSizeTMax = static_cast<size_t>(-1);
+constexpr size_t kIntMax = 2147483647ULL;
+
+size_t CheckedMul(size_t a, size_t b, const char *label)
+{
+    if (a != 0 && b > kSizeTMax / a) {
+        throw std::invalid_argument(std::string(label) + " overflows size_t");
+    }
+    return a * b;
+}
+
+size_t CheckedBytes(size_t elems, size_t elem_size, const char *label)
+{
+    return CheckedMul(elems, elem_size, label);
+}
+
+void EnsureIntProduct(size_t value, const char *label)
+{
+    if (value > kIntMax) {
+        throw std::invalid_argument(std::string(label) + " exceeds int index range");
+    }
+}
+
+uint64_t NowUs()
+{
+    timeval tv{};
+    gettimeofday(&tv, nullptr);
+    return static_cast<uint64_t>(tv.tv_sec) * 1000000ULL + static_cast<uint64_t>(tv.tv_usec);
+}
+
+int SegmentId(int dst, int local_expert, int src, int experts_per_rank, int ranks)
+{
+    return (dst * experts_per_rank + local_expert) * ranks + src;
+}
+
+int SegmentOffset(int segment_id, int field)
+{
+    return segment_id * kSegmentFieldCount + field;
+}
+
 int XOffset(int rank, int token, int h, int tokens, int hidden)
 {
     return (rank * tokens + token) * hidden + h;
@@ -182,29 +229,47 @@ void ValidateSpec(const CaseSpec &spec)
     if (spec.ranks <= 0 || spec.experts_per_rank <= 0 || spec.tokens <= 0 || spec.hidden <= 0 || spec.topk <= 0) {
         throw std::invalid_argument("all dimensions must be positive");
     }
-    if (!(spec.hidden == 1 || spec.hidden == 4 || spec.hidden == 8 || spec.hidden == 16 || spec.hidden == 32 ||
-          spec.hidden == 64)) {
-        throw std::invalid_argument("hidden must be one of 1, 4, 8, 16, 32, 64");
-    }
-    if (spec.ranks > 8 || spec.experts_per_rank > 8 || spec.tokens > 64 || spec.topk > 8) {
-        throw std::invalid_argument("case is larger than this correctness scaffold allows");
-    }
 
-    const size_t float_bytes = sizeof(float);
-    const size_t x_bytes = static_cast<size_t>(spec.ranks) * spec.tokens * spec.hidden * float_bytes;
-    const size_t packed_bytes = static_cast<size_t>(spec.ranks) * spec.tokens * spec.topk * spec.hidden * float_bytes;
-    const size_t dispatch_bytes = static_cast<size_t>(spec.ranks) * spec.ranks * spec.tokens * spec.topk * spec.hidden * float_bytes;
-    constexpr size_t kXUb = 0x00000;
-    constexpr size_t kPackedUb = 0x04000;
-    constexpr size_t kDispatchUb = 0x0C000;
-    constexpr size_t kReturnUb = 0x1C000;
-    constexpr size_t kOutUb = 0x24000;
-    constexpr size_t kUbLimit = 0x28000;
-    if (kXUb + x_bytes > kPackedUb || kPackedUb + packed_bytes > kDispatchUb ||
-        kDispatchUb + dispatch_bytes > kReturnUb || kReturnUb + packed_bytes > kOutUb ||
-        kOutUb + x_bytes > kUbLimit) {
-        throw std::invalid_argument("case exceeds fixed UB workspace layout");
-    }
+    const size_t ranks = static_cast<size_t>(spec.ranks);
+    const size_t experts_per_rank = static_cast<size_t>(spec.experts_per_rank);
+    const size_t tokens = static_cast<size_t>(spec.tokens);
+    const size_t hidden = static_cast<size_t>(spec.hidden);
+    const size_t topk = static_cast<size_t>(spec.topk);
+
+    const size_t global_experts = CheckedMul(ranks, experts_per_rank, "global experts");
+    const size_t max_rows = CheckedMul(tokens, topk, "expanded rows per rank");
+    const size_t max_dispatch_rows = CheckedMul(ranks, max_rows, "dispatch rows per rank");
+
+    EnsureIntProduct(global_experts, "global experts");
+    EnsureIntProduct(max_rows, "expanded rows per rank");
+    EnsureIntProduct(max_dispatch_rows, "dispatch rows per rank");
+
+    const size_t x_elems = CheckedMul(CheckedMul(ranks, tokens, "x rank-token elements"), hidden, "x elements");
+    const size_t route_elems = CheckedMul(CheckedMul(ranks, tokens, "route rank-token elements"), topk, "route elements");
+    const size_t count_elems = CheckedMul(ranks, global_experts, "count elements");
+    const size_t packed_elems = CheckedMul(CheckedMul(ranks, max_rows, "packed row elements"), hidden, "packed elements");
+    const size_t dispatch_elems = CheckedMul(CheckedMul(ranks, max_dispatch_rows, "dispatch row elements"), hidden,
+                                             "dispatch elements");
+    const size_t segment_count = CheckedMul(CheckedMul(ranks, experts_per_rank, "segment expert elements"), ranks,
+                                            "segment count");
+    const size_t segment_desc_elems = CheckedMul(segment_count, static_cast<size_t>(kSegmentFieldCount),
+                                                 "segment descriptor elements");
+
+    EnsureIntProduct(x_elems, "x elements");
+    EnsureIntProduct(route_elems, "route elements");
+    EnsureIntProduct(count_elems, "count elements");
+    EnsureIntProduct(packed_elems, "packed elements");
+    EnsureIntProduct(dispatch_elems, "dispatch elements");
+    EnsureIntProduct(segment_count, "segment count");
+    EnsureIntProduct(segment_desc_elems, "segment descriptor elements");
+
+    CheckedBytes(x_elems, sizeof(float), "x bytes");
+    CheckedBytes(route_elems, sizeof(int32_t), "route bytes");
+    CheckedBytes(count_elems, sizeof(int32_t), "count bytes");
+    CheckedBytes(packed_elems, sizeof(float), "packed bytes");
+    CheckedBytes(dispatch_elems, sizeof(float), "dispatch bytes");
+    CheckedBytes(segment_desc_elems, sizeof(int32_t), "segment descriptor bytes");
+    CheckedBytes(segment_count, sizeof(int32_t), "segment ready bytes");
 }
 
 HostData MakeInput(const CaseSpec &spec)
@@ -278,6 +343,10 @@ GoldenData ComputeGolden(const CaseSpec &spec, const HostData &data)
     golden.src_packed_x.assign(static_cast<size_t>(spec.ranks) * max_rows * spec.hidden, 0.0f);
     golden.dispatch_x.assign(static_cast<size_t>(spec.ranks) * max_dispatch_rows * spec.hidden, 0.0f);
     golden.return_y.assign(static_cast<size_t>(spec.ranks) * max_rows * spec.hidden, 0.0f);
+    const int segment_count = spec.ranks * spec.experts_per_rank * spec.ranks;
+    golden.segment_desc.assign(static_cast<size_t>(segment_count) * kSegmentFieldCount, 0);
+    golden.segment_ready.assign(static_cast<size_t>(segment_count), 1);
+    golden.return_ready.assign(static_cast<size_t>(segment_count), 1);
 
     auto valid = [&](int src, int token, int slot) {
         if (data.active[src * spec.tokens + token] == 0) {
@@ -336,6 +405,14 @@ GoldenData ComputeGolden(const CaseSpec &spec, const HostData &data)
             for (int src = 0; src < spec.ranks; ++src) {
                 int rows = golden.count[CountOffset(src, expert, global_experts)];
                 int read_base = golden.src_expert_offset[CountOffset(src, expert, global_experts)];
+                int segment_id = SegmentId(dst, e, src, spec.experts_per_rank, spec.ranks);
+                golden.segment_desc[SegmentOffset(segment_id, 0)] = src;
+                golden.segment_desc[SegmentOffset(segment_id, 1)] = dst;
+                golden.segment_desc[SegmentOffset(segment_id, 2)] = e;
+                golden.segment_desc[SegmentOffset(segment_id, 3)] = expert;
+                golden.segment_desc[SegmentOffset(segment_id, 4)] = read_base;
+                golden.segment_desc[SegmentOffset(segment_id, 5)] = dispatch_cursor;
+                golden.segment_desc[SegmentOffset(segment_id, 6)] = rows;
                 for (int r = 0; r < rows; ++r) {
                     for (int h = 0; h < spec.hidden; ++h) {
                         golden.dispatch_x[DispatchOffset(dst, dispatch_cursor + r, h, max_dispatch_rows, spec.hidden)] =
@@ -460,6 +537,8 @@ bool RunOneCase(const CaseSpec &spec, int device)
     const size_t expanded_count = static_cast<size_t>(spec.ranks) * max_rows;
     const size_t packed_count = static_cast<size_t>(spec.ranks) * max_rows * spec.hidden;
     const size_t dispatch_count = static_cast<size_t>(spec.ranks) * max_dispatch_rows * spec.hidden;
+    const size_t segment_count = static_cast<size_t>(spec.ranks) * spec.experts_per_rank * spec.ranks;
+    const size_t segment_desc_count = segment_count * kSegmentFieldCount;
 
     DeviceBuffer out_dev(x_count * sizeof(float));
     DeviceBuffer x_dev(x_count * sizeof(float));
@@ -472,6 +551,9 @@ bool RunOneCase(const CaseSpec &spec, int device)
     DeviceBuffer packed_dev(packed_count * sizeof(float));
     DeviceBuffer dispatch_dev(dispatch_count * sizeof(float));
     DeviceBuffer return_dev(packed_count * sizeof(float));
+    DeviceBuffer segment_desc_dev(segment_desc_count * sizeof(int32_t));
+    DeviceBuffer segment_ready_dev(segment_count * sizeof(int32_t));
+    DeviceBuffer return_ready_dev(segment_count * sizeof(int32_t));
 
     CopyHostToDevice(x_dev, input.x, "copy x host->device");
     CopyHostToDevice(expert_dev, input.expert_idx, "copy expert host->device");
@@ -480,15 +562,20 @@ bool RunOneCase(const CaseSpec &spec, int device)
 
     aclrtStream stream = nullptr;
     CheckAcl(aclrtCreateStream(&stream), "aclrtCreateStream");
+    uint64_t launch_start_us = NowUs();
+    uint64_t launch_elapsed_us = 0;
     try {
         launchDispatchCombine(static_cast<float *>(out_dev.ptr()), static_cast<float *>(x_dev.ptr()),
                               static_cast<int32_t *>(expert_dev.ptr()), static_cast<float *>(probs_dev.ptr()),
                               static_cast<int32_t *>(active_dev.ptr()), static_cast<int32_t *>(count_dev.ptr()),
                               static_cast<int32_t *>(offset_dev.ptr()), static_cast<int32_t *>(expanded_dev.ptr()),
                               static_cast<float *>(packed_dev.ptr()), static_cast<float *>(dispatch_dev.ptr()),
-                              static_cast<float *>(return_dev.ptr()), spec.ranks, spec.experts_per_rank, spec.tokens,
-                              spec.hidden, spec.topk, stream);
+                              static_cast<float *>(return_dev.ptr()), static_cast<int32_t *>(segment_desc_dev.ptr()),
+                              static_cast<int32_t *>(segment_ready_dev.ptr()),
+                              static_cast<int32_t *>(return_ready_dev.ptr()), spec.ranks, spec.experts_per_rank,
+                              spec.tokens, spec.hidden, spec.topk, stream);
         CheckAcl(aclrtSynchronizeStream(stream), "aclrtSynchronizeStream");
+        launch_elapsed_us = NowUs() - launch_start_us;
     } catch (...) {
         aclrtDestroyStream(stream);
         throw;
@@ -502,14 +589,25 @@ bool RunOneCase(const CaseSpec &spec, int device)
     auto actual_packed = CopyDeviceToHost<float>(packed_dev, packed_count, "copy packed device->host");
     auto actual_dispatch = CopyDeviceToHost<float>(dispatch_dev, dispatch_count, "copy dispatch device->host");
     auto actual_return = CopyDeviceToHost<float>(return_dev, packed_count, "copy return device->host");
+    auto actual_segment_desc = CopyDeviceToHost<int32_t>(segment_desc_dev, segment_desc_count,
+                                                        "copy segmentDesc device->host");
+    auto actual_segment_ready = CopyDeviceToHost<int32_t>(segment_ready_dev, segment_count,
+                                                         "copy segmentReady device->host");
+    auto actual_return_ready = CopyDeviceToHost<int32_t>(return_ready_dev, segment_count,
+                                                        "copy returnReady device->host");
 
     std::cout << "[CASE] " << spec.name << " R=" << spec.ranks << " E=" << spec.experts_per_rank
               << " M=" << spec.tokens << " H=" << spec.hidden << " topK=" << spec.topk << " device=" << device
               << "\n";
+    std::cout << "[PERF] " << spec.name << " launch_elapsed_us=" << launch_elapsed_us
+              << " segmentCount=" << segment_count << " tokenBlocks=" << spec.ranks * spec.tokens << "\n";
     bool ok = true;
     ok = CompareIntVector(spec.name, "count", golden.count, actual_count) && ok;
     ok = CompareIntVector(spec.name, "srcExpertOffset", golden.src_expert_offset, actual_offset) && ok;
     ok = CompareIntVector(spec.name, "expandedRowIdx", golden.expanded_row_idx, actual_expanded) && ok;
+    ok = CompareIntVector(spec.name, "segmentDesc", golden.segment_desc, actual_segment_desc) && ok;
+    ok = CompareIntVector(spec.name, "segmentReady", golden.segment_ready, actual_segment_ready) && ok;
+    ok = CompareIntVector(spec.name, "returnReady", golden.return_ready, actual_return_ready) && ok;
     ok = CompareFloatVector(spec.name, "srcPackedX", golden.src_packed_x, actual_packed, 1e-4f) && ok;
     ok = CompareFloatVector(spec.name, "dispatchX", golden.dispatch_x, actual_dispatch, 1e-4f) && ok;
     ok = CompareFloatVector(spec.name, "returnY", golden.return_y, actual_return, 1e-4f) && ok;
@@ -521,17 +619,19 @@ bool RunOneCase(const CaseSpec &spec, int device)
 std::vector<CaseSpec> BuildCases(const Options &opt)
 {
     if (opt.case_name == "all") {
-        return {CaseSpec{"minimal", 1, 1, 2, 4, 1}, CaseSpec{"cross", 2, 2, 4, 8, 2},
-                CaseSpec{"edge", 3, 2, 5, 8, 2}};
+        return {CaseSpec{"minimal", 1, 1, 2, 1, 1},       CaseSpec{"hidden_small", 1, 2, 3, 3, 2},
+                CaseSpec{"hidden_odd", 2, 2, 4, 7, 2},    CaseSpec{"hidden_65", 2, 2, 4, 65, 2},
+                CaseSpec{"hidden_large", 2, 2, 4, 257, 2}, CaseSpec{"topk4", 2, 4, 8, 128, 4},
+                CaseSpec{"edge", 3, 2, 5, 17, 2}};
     }
     if (opt.case_name == "minimal") {
-        return {CaseSpec{"minimal", 1, 1, 2, 4, 1}};
+        return {CaseSpec{"minimal", 1, 1, 2, 1, 1}};
     }
     if (opt.case_name == "cross") {
-        return {CaseSpec{"cross", 2, 2, 4, 8, 2}};
+        return {CaseSpec{"cross", 2, 2, 4, 7, 2}};
     }
     if (opt.case_name == "edge") {
-        return {CaseSpec{"edge", 3, 2, 5, 8, 2}};
+        return {CaseSpec{"edge", 3, 2, 5, 17, 2}};
     }
     if (opt.case_name == "smoke") {
         return {CaseSpec{"smoke", opt.ranks, opt.experts_per_rank, opt.tokens, opt.hidden, opt.topk}};
