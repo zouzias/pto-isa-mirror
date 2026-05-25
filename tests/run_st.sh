@@ -731,6 +731,14 @@ fi
 if [ "$ENABLE_310p3" = "true" ]; then
   python3 tests/script/build_st.py $ARGS  -v 310p3 -t all
   python3 tests/script/run_st.py $ARGS -w -v 310p3 -t tadd
+  python3 tests/script/run_st.py $ARGS -w -v 310p3 -t tadds
+  python3 tests/script/run_st.py $ARGS -w -v 310p3 -t tdiv
+  python3 tests/script/run_st.py $ARGS -w -v 310p3 -t tdivs
+  python3 tests/script/run_st.py $ARGS -w -v 310p3 -t tload
+  python3 tests/script/run_st.py $ARGS -w -v 310p3 -t tload_gm2mat
+  python3 tests/script/run_st.py $ARGS -w -v 310p3 -t tmul
+  python3 tests/script/run_st.py $ARGS -w -v 310p3 -t tstore
+  python3 tests/script/run_st.py $ARGS -w -v 310p3 -t tsub
 fi
 
 if [ "$ENABLE_COMM" = "true" ]; then
