@@ -84,6 +84,7 @@ set(CMAKE_CCE_COMPILE_OPTIONS
     #"SHELL:--enable-pto-tile-fusion"
     #"SHELL:-mllvm -tile-fusion-skip-reduceop-fusion=true"
     #"SHELL:-mllvm -tile-fusion-skip-legality-check=false"
+    #"SHELL:-mllvm --cce-vf-auto-sync-off"
 )
 
 if(DEBUG_MODE)
