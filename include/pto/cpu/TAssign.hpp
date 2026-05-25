@@ -26,6 +26,8 @@ PTO_INTERNAL void TASSIGN_IMPL(T &obj, AddrType addr)
         static_assert(std::is_integral_v<AddrType>, "Tile can only be assigned with address of int type.");
 
         obj.assignData(NPUMemoryModel::Instance().ResolveAssignedAddress<T>(static_cast<std::uintptr_t>(addr)));
+    } else if constexpr (is_conv_tile_v<T>) {
+        obj.assignData(reinterpret_cast<typename T::TileDType>(static_cast<std::uintptr_t>(addr)));
     } else {
         static_assert(is_global_data_v<T>, "Only Tile and GlobalTensor data types are supported.");
         static_assert(std::is_pointer_v<AddrType>, "GlobalTensor can only be assigned with address of pointer type.");
