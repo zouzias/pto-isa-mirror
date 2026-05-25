@@ -20,6 +20,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto::mocker::lightweight::a5 {
 
+inline constexpr uint64_t kEvenModulo = 2;
+inline constexpr uint64_t kElementsPerRepeatB32 = 64;
+inline constexpr uint64_t kElementsPerRepeatB16 = 128;
+inline constexpr uint64_t kElementsPerRepeatB8 = 256;
+
 inline uint64_t CeilDivU64(uint64_t x, uint64_t y)
 {
     return y == 0 ? 0 : (x + y - 1) / y;
@@ -95,24 +100,24 @@ inline std::string_view DTypeToKey(DType dtype)
 inline bool TryGetA5ElementsPerRepeatByDTypeKey(std::string_view dtype_key, uint64_t &elements_per_repeat)
 {
     if (dtype_key == "fp4_e1m2" || dtype_key == "fp4_e2m1") {
-        elements_per_repeat = 256;
+        elements_per_repeat = kElementsPerRepeatB8;
         return true;
     }
     if (dtype_key == "fp16" || dtype_key == "bf16") {
-        elements_per_repeat = 128;
+        elements_per_repeat = kElementsPerRepeatB16;
         return true;
     }
     if (dtype_key == "fp32" || dtype_key == "int32" || dtype_key == "uint32" || dtype_key == "fp8_e4m3" ||
         dtype_key == "fp8_e5m2" || dtype_key == "hif8") {
-        elements_per_repeat = 64;
+        elements_per_repeat = kElementsPerRepeatB32;
         return true;
     }
     if (dtype_key == "int8" || dtype_key == "uint8") {
-        elements_per_repeat = 256;
+        elements_per_repeat = kElementsPerRepeatB8;
         return true;
     }
     if (dtype_key == "int16" || dtype_key == "uint16") {
-        elements_per_repeat = 128;
+        elements_per_repeat = kElementsPerRepeatB16;
         return true;
     }
     return false;
@@ -127,7 +132,7 @@ inline bool TryGetA5CvtElementsPerRepeat(std::string_view src_dtype, std::string
                                          fit::ShapePath shape_path, uint64_t &elements_per_repeat)
 {
     if ((src_dtype == "fp16" || src_dtype == "bf16") && dst_dtype == "fp32") {
-        elements_per_repeat = 64;
+        elements_per_repeat = kElementsPerRepeatB32;
         return true;
     }
     if (shape_path == fit::ShapePath::Path1D) {
@@ -137,7 +142,7 @@ inline bool TryGetA5CvtElementsPerRepeat(std::string_view src_dtype, std::string
                                  dst_dtype == "fp8_e5m2" || dst_dtype == "hif8")) ||
         ((src_dtype == "fp16" || src_dtype == "bf16") &&
          (dst_dtype == "fp16" || dst_dtype == "fp4_e1m2" || dst_dtype == "fp4_e2m1" || dst_dtype == "hif8"))) {
-        elements_per_repeat = 128;
+        elements_per_repeat = kElementsPerRepeatB16;
         return true;
     }
     return TryGetA5ElementsPerRepeatByDTypeKey(src_dtype, elements_per_repeat);
@@ -147,7 +152,7 @@ inline std::string_view TselOpParams(DType dtype, fit::ShapePath shape_path, uin
 {
     if (dtype == DType::Float) {
         if (shape_path == fit::ShapePath::Path1D) {
-            return (inner_iter % 2 == 0) ? "TSel_b32_even" : "TSel_b32_odd";
+            return (inner_iter % kEvenModulo == 0) ? "TSel_b32_even" : "TSel_b32_odd";
         }
         return "TSel_b32";
     }
