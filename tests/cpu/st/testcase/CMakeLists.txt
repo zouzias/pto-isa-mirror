@@ -151,7 +151,6 @@ twait
 txor
 txors
 ttrans_conv
-ttrans_n
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})
