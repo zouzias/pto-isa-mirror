@@ -108,8 +108,8 @@ AICORE inline void RunTLoadND2ND(__gm__ T __out__ *out, __gm__ T __in__ *src)
 
     TLOAD(srcTile, srcGlobal);
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 #endif
     TSTORE_MAT2GM<GlobalData, TileData>(dstGlobal, srcTile);
     out = dstGlobal.data();
@@ -143,8 +143,8 @@ AICORE inline void RunTLoadDN2DN(__gm__ T __out__ *out, __gm__ T __in__ *src)
 
     TLOAD(srcTile, srcGlobal);
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 #endif
     TSTORE_MAT2GM(dstGlobal, srcTile);
     out = dstGlobal.data();
@@ -176,8 +176,8 @@ AICORE inline void RunTLoadNZ2NZ(__gm__ T __out__ *out, __gm__ T __in__ *src)
 
     TLOAD(srcTile, srcGlobal);
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 #endif
     TSTORE_MAT2GM(dstGlobal, srcTile);
     out = dstGlobal.data();
@@ -210,8 +210,8 @@ AICORE inline void RunTLoadND2NZ(__gm__ T __out__ *out, __gm__ T __in__ *src)
 
     TLOAD(srcTile, srcGlobal);
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 #endif
     TSTORE_MAT2GM(dstGlobal, srcTile);
     out = dstGlobal.data();
@@ -244,8 +244,8 @@ AICORE inline void RunTLoadDN2ZN(__gm__ T __out__ *out, __gm__ T __in__ *src)
 
     TLOAD(srcTile, srcGlobal);
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 #endif
     TSTORE_MAT2GM(dstGlobal, srcTile);
     out = dstGlobal.data();
@@ -280,8 +280,8 @@ AICORE inline void RunTLoad5HD(__gm__ T __out__ *out, __gm__ T __in__ *src)
     GlobalDataIn srcGlobal(src);
     TLOAD(srcTile, srcGlobal);
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 #endif
 
     using OutTileData = Tile<TileType::Mat, T, Rows, Cols, BLayout::RowMajor, validRow, validCol>;
@@ -321,8 +321,8 @@ AICORE inline void RunTLoadFractalZ5D(__gm__ T __out__ *out, __gm__ T __in__ *sr
     TLOAD(srcTile, srcGlobal);
 
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 #endif
     using OutTileData = Tile<TileType::Mat, T, Rows, Cols, BLayout::RowMajor, validRow, validCol>;
     OutTileData outTile;
@@ -361,8 +361,8 @@ AICORE inline void RunTLoadFractalZ4D(__gm__ T __out__ *out, __gm__ T __in__ *sr
     TLOAD(srcTile, srcGlobal);
 
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 #endif
     using OutTileData = Tile<TileType::Mat, T, Rows, Cols, BLayout::RowMajor, validRow, validCol>;
     OutTileData outTile;
@@ -526,7 +526,7 @@ template void LaunchTLoad<3, uint16_t, 1, 1, 1, 1023, 51, 1, 1, 1, 1024, 1024>(u
                                                                                void *stream);
 template void LaunchTLoad<0, uint16_t, 1, 1, 1, 128, 128, 1, 1, 1, 256, 256>(uint16_t *out, uint16_t *src,
                                                                              void *stream);
-template void LaunchTLoad<1, uint16_t, 1, 2, 2, 128, 311, 4, 3, 3, 256, 400>(uint16_t *out, uint16_t *src,
+template void LaunchTLoad<1, uint16_t, 1, 2, 2, 64, 311, 4, 3, 3, 256, 400>(uint16_t *out, uint16_t *src,
                                                                              void *stream);
 template void LaunchTLoad<2, uint16_t, 2, 4, 5, 16, 16, 7, 7, 7, 16, 16>(uint16_t *out, uint16_t *src, void *stream);
 template void LaunchTLoad<3, uint16_t, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1>(uint16_t *out, uint16_t *src, void *stream);

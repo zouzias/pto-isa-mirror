@@ -189,17 +189,17 @@ TEST_F(TLoadGM2L1Test, ND2NZ_bfloat16_t_1_1_1_1023_51_1_1_1_1024_1024)
     TestTload<3, uint16_t, 1, 1, 1, 1023, 51, 1, 1, 1, 1024, 1024>();
 }
 
-TEST_F(TLoadGM2L1Test, ND_bfloat16_t_1_1_1_128_128_1_1_1_256_256)
+TEST_F(TLoadGM2L1Test, ND_float16_t_1_1_1_128_128_1_1_1_256_256)
 {
     TestTload<0, uint16_t, 1, 1, 1, 128, 128, 1, 1, 1, 256, 256>();
 }
 
-TEST_F(TLoadGM2L1Test, DN_bfloat16_t_1_2_2_128_311_4_3_3_256_400)
+TEST_F(TLoadGM2L1Test, DN_float16_t_1_2_2_64_311_4_3_3_256_400)
 {
-    TestTload<1, uint16_t, 1, 2, 2, 128, 311, 4, 3, 3, 256, 400>();
+    TestTload<1, uint16_t, 1, 2, 2, 64, 311, 4, 3, 3, 256, 400>();
 }
 
-TEST_F(TLoadGM2L1Test, NZ_bfloat16_t_2_4_5_16_16_7_7_7_16_16)
+TEST_F(TLoadGM2L1Test, NZ_float16_t_2_4_5_16_16_7_7_7_16_16)
 {
     TestTload<2, uint16_t, 2, 4, 5, 16, 16, 7, 7, 7, 16, 16>();
 }
