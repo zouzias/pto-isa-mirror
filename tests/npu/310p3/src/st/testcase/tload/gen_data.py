@@ -13,24 +13,24 @@
 import os
 import numpy as np
 
-if __name__ == "__main__":
-    # 用例名称
-    case_name_list = [
-        "TFILLPADTest.case_float_GT_128_127_VT_128_128_BLK1_PADMAX_PADMAX",
-        "TFILLPADTest.case_float_GT_128_127_VT_128_160_BLK1_PADMAX_PADMAX",
-        "TFILLPADTest.case_float_GT_128_127_VT_128_160_BLK1_PADMIN_PADMAX",
-        "TFILLPADTest.case_float_GT_260_7_VT_260_16_BLK1_PADMIN_PADMAX",
-        "TFILLPADTest.case_float_GT_260_7_VT_260_16_BLK1_PADMIN_PADMAX_INPLACE",
-        "TFILLPADTest.case_u16_GT_260_7_VT_260_32_BLK1_PADMIN_PADMAX",
-        "TFILLPADTest.case_s8_GT_260_7_VT_260_64_BLK1_PADMIN_PADMAX",
-        "TFILLPADTest.case_u16_GT_259_7_VT_260_32_BLK1_PADMIN_PADMAX_EXPAND",
-        "TFILLPADTest.case_s8_GT_259_7_VT_260_64_BLK1_PADMIN_PADMAX_EXPAND",
-        "TFILLPADTest.case_s16_GT_260_7_VT_260_32_BLK1_PADMIN_PADMIN",
-        "TFILLPADTest.case_s32_GT_260_7_VT_260_32_BLK1_PADMIN_PADMIN",
-        "TFILLPADTest.case_float_GT_128_64_VT_128_128_PADCUSTOM_NEG1",
-        "TFILLPADTest.case_float_GT_128_127_VT_128_160_BLK1_PADCUSTOM_NEG1_PADCUSTOM_NEG1",               
-    ]
 
+if __name__ == "__main__":
+   # 用例名称
+    case_name_list = [
+        "TLOADTest.case_float_GT_128_128_VT_128_128_BLK1", # 此名称需要和 TEST_F(TMATMULTest, xxxx)定义的名称一致
+        "TLOADTest.case_float_GT_2_2_2_256_64_VT_256_64_BLK8", 
+        "TLOADTest.case_float_GT_128_127_VT_128_128_BLK1_PADMAX", 
+        "TLOADTest.case_s16_GT_128_127_VT_128_128_BLK1_PADMAX", 
+        "TLOADTest.case_u8_GT_128_127_VT_128_128_BLK1_PADMIN", 
+        "TLOADTest.case_float_GT_32_64_128_VT_64_128_BLK32_DYN", 
+        "TLOADTest.case_float_GT_32_64_128_VT_64_128_BLK32_STC", 
+        "TLOADTest.case_float_GT_2_2_2_256_60_VT_256_64_BLK8_PADMAX", 
+        "TLOADTest.case_int64_GT_128_128_VT_128_128_BLK1",
+        "TLOADTest.case_uint64_GT_128_125_VT_128_128_BLK1_PADZERO",
+        "TLOADTest.case_int64_GT_2_2_2_256_62_VT_256_64_BLK8_PADZERO",
+        "TLOADTest.case_uint64_GT_2_2_2_256_64_VT_256_64_BLK8",
+    ]
+    
     for i, case_name in enumerate(case_name_list):
         if not os.path.exists(case_name):
             os.makedirs(case_name)
@@ -40,3 +40,4 @@ if __name__ == "__main__":
         os.chdir(original_dir)
 
     pass
+    
