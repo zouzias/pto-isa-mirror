@@ -55,14 +55,14 @@ __global__ AICORE void TGetAsyncUrmaKernelImpl(__gm__ T *localBuf, int nranks, i
             if (target_peer == my_peer) {
                 continue;
             }
-            uint64_t peerBase = pto::comm::urma::UrmaPeerMrBaseAddr(urmaWorkspace, static_cast<uint32_t>(target_peer));
+            uint64_t peerBase = UrmaPeerMrBaseAddr(urmaWorkspace, static_cast<uint32_t>(target_peer));
             __gm__ T *remoteSendBuf = reinterpret_cast<__gm__ T *>(peerBase + kDataOffset) + elem_offset;
             __gm__ T *localRecvBuf = recvBuf + target_peer * count + elem_offset;
             Global remoteSendG(remoteSendBuf, shape, stride);
             Global localRecvG(localRecvBuf, shape, stride);
 
             pto::comm::AsyncSession session;
-            pto::comm::BuildAsyncSession<pto::comm::DmaEngine::URMA>(urmaWorkspace, static_cast<uint32_t>(target_peer),
+            BuildAsyncSession<pto::comm::DmaEngine::URMA>(urmaWorkspace, static_cast<uint32_t>(target_peer),
                                                                      session);
             auto event = pto::comm::TGET_ASYNC<pto::comm::DmaEngine::URMA>(localRecvG, remoteSendG, session);
             event.Wait(session);

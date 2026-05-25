@@ -1,1 +1,1 @@
-pto_comm_st(tget_async_urma)
+pto_cpu_sim_comm_st(tget_async_urma)
