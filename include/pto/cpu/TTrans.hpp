@@ -18,24 +18,21 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 
 // Target layout formats defined in your system architecture
-template<bool ignored = true> enum class Layout {
+template <bool ignored = true>
+enum class Layout {
     NCHW,
     NC1HWC0,
     FRACTAL_Z
 };
 
-// ============================================================================
-// Independent Layout Implementation Workers
-// ============================================================================
-
 template <typename DstTileData, typename SrcTileData>
-inline void TTRANS_NCHW_TO_NC1HWC0_CORE(DstTileData &dst, SrcTileData &src)
+inline void TTRANS_NCHW2NC1HWC0(DstTileData &dst, SrcTileData &src)
 {
     using SrcDType = typename SrcTileData::DType;
     using DstDType = typename DstTileData::DType;
 
-    const auto* src_ptr = reinterpret_cast<const SrcDType*>(src.data());
-    auto* dst_ptr = reinterpret_cast<DstDType*>(dst.data());
+    const auto *src_ptr = reinterpret_cast<const SrcDType *>(src.data());
+    auto *dst_ptr = reinterpret_cast<DstDType *>(dst.data());
 
     constexpr int64_t C0 = 32 / sizeof(SrcDType);
 
@@ -54,9 +51,48 @@ inline void TTRANS_NCHW_TO_NC1HWC0_CORE(DstTileData &dst, SrcTileData &src)
             size_t cl = c % C0;
             for (int64_t h = 0; h < H; ++h) {
                 for (int64_t w = 0; w < W; ++w) {
-                    size_t srcIndex = w + W*h + W*H*c + W*H*C*n;
-                    size_t dstIndex = W*H*C1*C0*n + C0*H*W*r + C0*W*h + C0*w + cl;
+                    size_t srcIndex = w + W * h + W * H * c + W * H * C * n;
+                    size_t dstIndex = W * H * C1 * C0 * n + C0 * H * W * r + C0 * W * h + C0 * w + cl;
                     dst_ptr[dstIndex] = src_ptr[srcIndex];
+                }
+            }
+        }
+    }
+}
+
+template <typename DstTileData, typename SrcTileData>
+inline void TTRANS_GNCHW2NC1HWC0(DstTileData &dst, SrcTileData &src)
+{
+    using SrcDType = typename SrcTileData::DType;
+    using DstDType = typename DstTileData::DType;
+
+    const auto *src_ptr = reinterpret_cast<const SrcDType *>(src.data());
+    auto *dst_ptr = reinterpret_cast<DstDType *>(dst.data());
+
+    constexpr int64_t C0 = 32 / sizeof(SrcDType);
+
+    int64_t G = src.GetShape(0);
+    int64_t N = src.GetShape(1);
+    int64_t C = src.GetShape(2);
+    int64_t H = src.GetShape(3);
+    int64_t W = src.GetShape(4);
+    int64_t C1 = (C + C0 - 1) / C0;
+    size_t Size = G * N * C1 * H * W * C0;
+
+    std::fill(dst.data(), dst.data() + Size, 0);
+
+    for (int64_t g = 0; g < G; ++g) {
+        for (int64_t n = 0; n < N; ++n) {
+            for (int64_t c = 0; c < C; ++c) {
+                size_t r = c / C0;
+                size_t cl = c % C0;
+                for (int64_t h = 0; h < H; ++h) {
+                    for (int64_t w = 0; w < W; ++w) {
+                        size_t srcIndex = w + W * h + W * H * c + W * H * C * n + W * H * C * N * g;
+                        size_t dstIndex =
+                            W * H * C1 * C0 * N * g + W * H * C1 * C0 * n + C0 * H * W * r + C0 * W * h + C0 * w + cl;
+                        dst_ptr[dstIndex] = src_ptr[srcIndex];
+                    }
                 }
             }
         }
@@ -69,8 +105,8 @@ inline void TTRANS_NC1HWC02C1HWN1N0C0(DstTileData &dst, SrcTileData &src)
     using SrcDType = typename SrcTileData::DType;
     using DstDType = typename DstTileData::DType;
 
-    const auto* src_ptr = reinterpret_cast<const SrcDType*>(src.data());
-    auto* dst_ptr = reinterpret_cast<DstDType*>(dst.data());
+    const auto *src_ptr = reinterpret_cast<const SrcDType *>(src.data());
+    auto *dst_ptr = reinterpret_cast<DstDType *>(dst.data());
 
     int64_t C1HW = dst.GetShape(0);
     int64_t N1 = dst.GetShape(1);
@@ -90,22 +126,60 @@ inline void TTRANS_NC1HWC02C1HWN1N0C0(DstTileData &dst, SrcTileData &src)
         for (int64_t c1 = 0; c1 < C1; ++c1) {
             for (int64_t h = 0; h < H; ++h) {
                 for (int64_t w = 0; w < W; ++w) {
-                    for (size_t c0 = 0; c0 < C0; c0++)
-                    {
-                        size_t srcIndex = c0 + C0*w + C0*W*h + C0*W*H*c1 + C0*W*H*C1*n;
-                        // ... inside your loops
-                        // c1hw_idx effectively flattens the C1, H, and W dimensions
+                    for (size_t c0 = 0; c0 < C0; c0++) {
+                        size_t srcIndex = c0 + C0 * w + C0 * W * h + C0 * W * H * c1 + C0 * W * H * C1 * n;
                         size_t c1hw_idx = c1 * (H * W) + h * W + w;
-
-                        // Split n into n1 (outer) and n0 (inner/remainder)
                         size_t n1 = n / N0;
                         size_t n0 = n % N0;
-
-                        // Mapping [C1HW, N1, N0, C0] -> [c1hw_idx, n1, n0, c0]
-                        // dstIndex = c0 + C0 * (n0 + N0 * (n1 + N1 * c1hw_idx))
                         size_t dstIndex = c0 + C0 * n0 + C0 * N0 * n1 + C0 * N0 * N1 * c1hw_idx;
 
                         dst_ptr[dstIndex] = src_ptr[srcIndex];
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <typename DstTileData, typename SrcTileData>
+inline void TTRANS_GNC1HWC02C1HWN1N0C0(DstTileData &dst, SrcTileData &src)
+{
+    using SrcDType = typename SrcTileData::DType;
+    using DstDType = typename DstTileData::DType;
+
+    const auto *src_ptr = reinterpret_cast<const SrcDType *>(src.data());
+    auto *dst_ptr = reinterpret_cast<DstDType *>(dst.data());
+
+    int64_t GC1HW = dst.GetShape(0);
+    int64_t N1 = dst.GetShape(1);
+    int64_t N0 = dst.GetShape(2);
+    int64_t C0 = dst.GetShape(3);
+
+    int64_t G = src.GetShape(0);
+    int64_t N = src.GetShape(1);
+    int64_t C1 = src.GetShape(2);
+    int64_t H = src.GetShape(3);
+    int64_t W = src.GetShape(4);
+
+    size_t Size = GC1HW * N1 * N0 * C0;
+
+    std::fill(dst.data(), dst.data() + Size, 0);
+
+    for (int64_t g = 0; g < G; ++g) {
+        for (int64_t n = 0; n < N; ++n) {
+            for (int64_t c1 = 0; c1 < C1; ++c1) {
+                for (int64_t h = 0; h < H; ++h) {
+                    for (int64_t w = 0; w < W; ++w) {
+                        for (size_t c0 = 0; c0 < C0; c0++) {
+                            size_t srcIndex = c0 + C0 * w + C0 * W * h + C0 * W * H * c1 + C0 * W * H * C1 * n +
+                                              C0 * W * H * C1 * N * g;
+                            size_t c1hw_idx = g * C1 * H * W + c1 * (H * W) + h * W + w;
+                            size_t n1 = n / N0;
+                            size_t n0 = n % N0;
+                            size_t dstIndex = c0 + C0 * n0 + C0 * N0 * n1 + C0 * N0 * N1 * c1hw_idx;
+
+                            dst_ptr[dstIndex] = src_ptr[srcIndex];
+                        }
                     }
                 }
             }
@@ -149,24 +223,27 @@ template <typename DstTileData, typename SrcTileData, typename TmpTileData>
 PTO_INTERNAL void TTRANS_IMPL(DstTileData &dst, SrcTileData &src, TmpTileData &tmp)
 {
     // Validate matching element widths at compilation
-    static_assert(sizeof(typename SrcTileData::DType) == sizeof(typename DstTileData::DType), 
+    static_assert(sizeof(typename SrcTileData::DType) == sizeof(typename DstTileData::DType),
                   "Data type sizes between source and destination tiles must match.");
 
     constexpr Layout src_layout = SrcTileData::layout;
     constexpr Layout dst_layout = DstTileData::layout;
 
-    // Mode 1: NCHW -> NC1HWC0
     if constexpr (src_layout == Layout::NCHW && dst_layout == Layout::NC1HWC0) {
-        TTRANS_NCHW_TO_NC1HWC0_CORE(dst, src);
+        TTRANS_NCHW2NC1HWC0(dst, src);
     } else if (src_layout == Layout::NC1HWC0 && dst_layout == Layout::FRACTAL_Z) {
         TTRANS_NC1HWC02C1HWN1N0C0(dst, src);
+    } else if constexpr (src_layout == Layout::GNCHW && dst_layout == Layout::GNC1HWC0) {
+        TTRANS_GNCHW2NC1HWC0(dst, src);
+    } else if (src_layout == Layout::GNC1HWC0 && dst_layout == Layout::FRACTAL_Z) {
+        TTRANS_GNC1HWC02C1HWN1N0C0(dst, src);
     } else if constexpr (is_tile_data_v<SrcTileData>) {
         static_assert(SrcTileData::ValidRow == DstTileData::ValidCol && SrcTileData::ValidCol == DstTileData::ValidRow,
                       "Hardware matrix tiles transpose dimension sizes must mirror match.");
         unsigned validRow = src.GetValidRow();
         unsigned validCol = src.GetValidCol();
         TTrans_Impl<DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol);
-    }   
+    }
 }
 
 } // namespace pto
