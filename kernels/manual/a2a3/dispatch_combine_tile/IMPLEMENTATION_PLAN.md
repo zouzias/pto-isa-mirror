@@ -1,0 +1,779 @@
+# dispatch_combine_tile Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Build a runnable PTO-style, HCCL-backed, multi-process/multi-card MoE dispatch/combine example with exactly two
+device compute kernels.
+
+**Architecture:** Host code follows `kernels/manual/a2a3/gemm_ar` for MPI/HCCL bootstrap and continuous rank-to-device
+mapping. Device code uses PTO tile and comm primitives only: dispatch packs local tokens, publishes count rows, pulls owner
+expert payload by `TGET`; combine pushes expert rows back by `TPUT`, waits for peer completion, then restores local output.
+
+**Tech Stack:** C++17 host, Bisheng CCE kernel build, PTO `TLOAD/TSTORE/TGET/TPUT/TNOTIFY/TWAIT`, ACL/HCCL/MPI runtime,
+shell `run.sh` orchestration.
+
+---
+
+## Status And Feedback Tracking
+
+This file is also the task tracker. Do not create a separate `TODO.md` unless the project scope changes.
+
+Use the task checkboxes below as the source of truth:
+
+- `[ ]` not started
+- `[~]` in progress
+- `[x]` completed and locally verified
+- `[!]` blocked or needs user decision
+
+When a task finishes, add one short feedback note under that task:
+
+```text
+Feedback:
+- YYYY-MM-DD: result, verification command/log, remaining risk if any.
+```
+
+Current task status:
+
+| Task | Status | Notes |
+| --- | --- | --- |
+| Task 0: PTO Project Initialization | `[x]` | Initialization contract files created and locally verified |
+| Task 1: Buildable Project Scaffold | `[x]` | Buildable scaffold verified |
+| Task 2: Explicit Parameters and Layout Calculation | `[ ]` | Not started |
+| Task 3: MPI/HCCL Runtime and Continuous Card Mapping | `[ ]` | Not started |
+| Task 4: Deterministic Data and CPU Golden | `[ ]` | Not started |
+| Task 5: PTO Kernel Views, Remote Pointer Helper, and Signal Helpers | `[ ]` | Not started |
+| Task 6: Dispatch Metadata and Count Publication | `[ ]` | Not started |
+| Task 7: Dispatch Pack and Payload Gather | `[ ]` | Not started |
+| Task 8: Host Expert Output Preparation and Dispatch Timing | `[ ]` | Not started |
+| Task 9: Combine Return Path | `[ ]` | Not started |
+| Task 10: Combine Restore and Output Verification | `[ ]` | Not started |
+| Task 11: E2E Timing, Debug Dumps, and Run Matrix | `[ ]` | Not started |
+| Task 12: Hardening and Final Review | `[ ]` | Not started |
+
+## Validation Rules
+
+Apply these rules to every task unless the task says otherwise:
+
+- Every run command must finish without hang. Use a local timeout wrapper during manual execution. Small/debug communication
+  commands should use `timeout 60s`; default-shape commands should start with `timeout 90s`. If the timeout fires, mark the
+  task `[!]`, record the last rank log, and diagnose the last completed stage before retrying. Do not increase timeout until
+  logs prove the command is making progress rather than waiting on a missing signal.
+- A task is not complete just because it builds. If hardware execution is unavailable, record that explicitly in the task
+  `Feedback` and complete only the build/static/code-review checks listed for that task.
+- Debug comparisons must print the compared buffer name, element count, mismatch count, and first mismatch tuple:
+  `rank, buffer, index/row/col, actual, expected`.
+- For head dumps, compare at least the first `min(16, rows)` rows and `min(64, K)` columns, plus the last row of each non-empty
+  segment when the segment metadata is available.
+- Multi-rank commands must print one start line and one completion line per rank. Missing completion from any rank is a failure.
+- Stage-gated runs must print rank-scoped stage markers before and after each blocking region, for example
+  `rank=1 stage=wait_count begin` and `rank=1 stage=wait_count done`. A timeout is diagnosed from the last missing `done`
+  marker, not by re-running with a longer timeout.
+- Static forbidden-API grep is part of completion for every task that touches kernel code.
+- After completing or blocking a task, update the task status table and add a `Feedback` note under that task.
+
+## Design Review Result
+
+The current `DESIGN.md` is implementable as the first version. It has the important boundaries fixed:
+
+- exactly two device compute kernels: `DispatchCombineTileDispatch` and `DispatchCombineTileCombine`;
+- real multi-process/multi-card acceptance path, no single-process multi-rank simulation;
+- continuous device mapping only: `device = deviceBase + rank`;
+- no SHMEM in host or device code;
+- kernel side has no AscendC/Catlass/SHMEM dependency and uses PTO public headers only;
+- HCCL window is the only cross-rank memory substrate;
+- dispatch/combine are separate CPU-launched operators, so overlap requirements are intra-kernel only.
+
+Two implementation cautions should stay visible during coding:
+
+- `GlobalTensor`/`Tile` exact template signatures must be verified against local PTO headers before writing the final kernel
+  helpers. Treat the aliases in `DESIGN.md` as intent, not as blindly copyable code.
+- Several communication stages are hard to validate with black-box e2e alone. Each task below includes an observation path:
+  compile, forbidden-API grep, deterministic debug dumps, per-rank logs, or focused code review.
+
+## File Structure
+
+Create these project files:
+
+- `kernels/manual/a2a3/dispatch_combine_tile/CMakeLists.txt`  
+  Build host binary and one vector-only kernel shared library.
+- `kernels/manual/a2a3/dispatch_combine_tile/run.sh`  
+  Parse explicit parameters, set CANN/MPI/HCCL env, build, and launch `mpirun -n ${pes}`.
+- `kernels/manual/a2a3/dispatch_combine_tile/common.h`  
+  Shared shape, layout, parameter, alignment, and small POD structs used by host and kernel.
+- `kernels/manual/a2a3/dispatch_combine_tile/args.h`  
+  Host command-line parsing and validation helpers.
+- `kernels/manual/a2a3/dispatch_combine_tile/layout.h`  
+  Host-side layout byte calculation matching the POD layout structs.
+- `kernels/manual/a2a3/dispatch_combine_tile/golden.h`  
+  Deterministic data generation and CPU reference dispatch/combine logic.
+- `kernels/manual/a2a3/dispatch_combine_tile/hccl_context.h`  
+  Copy/adapt `gemm_ar` `HcclDeviceContext` and host extraction helpers without SHMEM.
+- `kernels/manual/a2a3/dispatch_combine_tile/comm_mpi.h`  
+  Copy/adapt MPI wrapper from `gemm_ar`.
+- `kernels/manual/a2a3/dispatch_combine_tile/kernel_launchers.h`  
+  Kernel declarations and host launch wrappers.
+- `kernels/manual/a2a3/dispatch_combine_tile/dispatch_combine_tile_kernel.cpp`  
+  PTO-only device helpers plus the two kernels.
+- `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`  
+  Runtime orchestration, memory allocation, HCCL setup, kernel launches, timing, debug dump, verification.
+
+Do not create additional device compute kernel source files for this first version.
+
+## Task 0: PTO Project Initialization
+
+**Files:**
+
+- Verify/Create directory: `kernels/manual/a2a3/dispatch_combine_tile/`
+- Keep: `kernels/manual/a2a3/dispatch_combine_tile/DESIGN.md`
+- Keep: `kernels/manual/a2a3/dispatch_combine_tile/IMPLEMENTATION_PLAN.md`
+- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/CMakeLists.txt`
+- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/run.sh`
+- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/common.h`
+- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/args.h`
+- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/layout.h`
+- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/golden.h`
+- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/hccl_context.h`
+- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/comm_mpi.h`
+- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/kernel_launchers.h`
+- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/dispatch_combine_tile_kernel.cpp`
+- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
+
+**Scope:**
+
+- [x] Create the project directory under `kernels/manual/a2a3/`, matching the `gemm_ar` manual PTO project location.
+- [x] Keep `DESIGN.md` as the design baseline and `IMPLEMENTATION_PLAN.md` as the task/status tracker.
+- [x] Initialize the file layout from `DESIGN.md` section 14.1, not from the original SHMEM project layout:
+  - root-level `CMakeLists.txt`, `run.sh`, `main.cpp`;
+  - root-level host/kernel interface headers;
+  - no `include/`, `utils/`, `scripts/`, `out/`, or `build/` directories at initialization time.
+- [x] Record in `CMakeLists.txt` comments that Task 1 will follow `gemm_ar`: Bisheng, PTO include first, host executable,
+  one vector-only kernel shared library, HCCL/ACL host link.
+- [x] Record in `run.sh` comments that Task 1/2 will follow `gemm_ar`: CANN env search, MPI search, `mpirun -n ${PES}`,
+  `HCCL_BUFFSIZE` auto sizing, explicit shape args only.
+- [x] Record in `common.h` the shared ABI names that all later tasks must use:
+  `DispatchCombineTileShape`, `WorkspaceLayout`, `PeerWindowLayout`, and `DispatchCombineTileRuntimeConfig`.
+- [x] In `common.h`, predeclare the exact `DispatchCombineTileShape` fields from `DESIGN.md` section 11:
+  `ep`, `m`, `k`, `topK`, `expertPerRank`, `expertNum`, `maxOutputSize`, `aivBlocks`, `tileCols`, `rowChunk`,
+  and `metadataPad`.
+- [x] In `common.h`, predeclare the exact layout field names from `DESIGN.md` section 12.0.1:
+  `localTokenPerExpert`, `blockTokenPerExpert`, `blockPrefixPerExpert`, `cumsumPerExpert`, `dispatchOffset`,
+  `prevSumBeforeRank`, `localSync`, `floatScratch`, `dispatchedA`, `ptrDLocal`, `peerTokenPerExpert`,
+  `expandedRowIdx`, `packedA`, `ptrD`, `countReadySignal`, `combineDoneSignal`, and `totalBytes`.
+- [x] Record in `layout.h` the exported layout entry points that Task 2 must implement:
+  `ComputeWorkspaceLayout`, `ComputePeerWindowLayout`, and `EstimateHcclBuffSizeMb`.
+- [x] Record in `args.h` the exported parser/validator entry points that Task 2 must implement:
+  `ParseArgs`, `ValidateArgs`, and `PrintRunSummary`.
+- [x] Record in `golden.h` the exported data/golden entry points that Task 4 must implement:
+  `GenerateOrLoadInputs`, `ComputeCpuGolden`, and `CompareOutputs`.
+- [x] Record in `hccl_context.h` that Task 3 must adapt `gemm_ar` `HcclDeviceContext`, MESH/RING `windowsIn[]`
+  extraction, and fixed-offset `peerWindow` slicing.
+- [x] Record in `comm_mpi.h` that Task 3 must adapt `gemm_ar` dlopen MPI wrapper.
+- [x] Record in `kernel_launchers.h` the fixed launch wrapper names that later host code must call:
+  `LaunchDispatchCombineTileDispatch` and `LaunchDispatchCombineTileCombine`.
+- [x] In `kernel_launchers.h`, predeclare launch wrapper parameters in the same order as the kernel ABI:
+  shape, rank, input/output pointers, `peerWindow`, `hcclCtx`, `workspace`, stream, and launch block count.
+- [x] Record in `dispatch_combine_tile_kernel.cpp` the only two device kernel names:
+  `DispatchCombineTileDispatch` and `DispatchCombineTileCombine`.
+- [x] In `dispatch_combine_tile_kernel.cpp`, predeclare the two kernel ABI parameter lists from `DESIGN.md` section 11 so
+  Task 1 can fill empty bodies without changing the host/device contract.
+- [x] Record in `main.cpp` the staged host flow that later tasks must fill:
+  `ParseArgs -> InitMpiAndRank -> BindDeviceContinuous -> InitHcclWindowContext -> ComputeLayouts ->
+  AllocateLocalBuffers -> SlicePeerWindow -> GenerateOrLoadData -> RunDispatch -> PrepareExpertOutputIdentity ->
+  RunCombine -> VerifyAndDump -> Cleanup`.
+- [x] In host placeholders, record that host may use ACL/HCCL/MPI but no SHMEM.
+- [x] In kernel placeholder, record that kernel may include only PTO/C++ headers and must not include AscendC/Catlass/SHMEM
+  headers.
+- [x] Preserve the original `dispatch_gmm_combine` semantics only as interface requirements: `-pes/-M/-K/-expertPerPe`,
+  `data-dir/out` style files, per-rank output verification, warmup/iters/profile logs.
+- [x] Do not copy code from `dispatch_gmm_combine_v2` or `dispatch_ffn_combine_v3`.
+- [x] Do not copy original `dispatch_gmm_combine` SHMEM bootstrap, Catlass/GMM/SwiGLU/quant code, or Python data generation
+  scripts.
+- [x] Do not introduce build products, generated data, or a `TODO.md`.
+
+**Observation/Validation:**
+
+- [x] Run:
+
+  ```bash
+  find kernels/manual/a2a3/dispatch_combine_tile -maxdepth 1 -type f | sort
+  ```
+
+  Expected: the output contains exactly the planned md/source/script files and no build/data/generated files.
+
+- [x] Run:
+
+  ```bash
+  rg -n "aclshmem|shmem_|symmetricPtr|dispatch_gmm_combine_v2|dispatch_ffn_combine_v3|kernel_operator|AscendC::|Catlass" \
+    kernels/manual/a2a3/dispatch_combine_tile
+  ```
+
+  Expected: matches are allowed only in `DESIGN.md`/`IMPLEMENTATION_PLAN.md` as forbidden/reference text, not in source
+  placeholders.
+
+- [x] Run:
+
+  ```bash
+  rg -n "DispatchCombineTileShape|WorkspaceLayout|PeerWindowLayout|DispatchCombineTileRuntimeConfig|\
+LaunchDispatchCombineTileDispatch|LaunchDispatchCombineTileCombine|DispatchCombineTileDispatch|DispatchCombineTileCombine|\
+ComputeWorkspaceLayout|ComputePeerWindowLayout|EstimateHcclBuffSizeMb|ParseArgs|ValidateArgs|PrintRunSummary|\
+GenerateOrLoadInputs|ComputeCpuGolden|CompareOutputs|InitMpiAndRank|BindDeviceContinuous|InitHcclWindowContext|\
+PrepareExpertOutputIdentity" \
+    kernels/manual/a2a3/dispatch_combine_tile/CMakeLists.txt \
+    kernels/manual/a2a3/dispatch_combine_tile/run.sh \
+    kernels/manual/a2a3/dispatch_combine_tile/common.h \
+    kernels/manual/a2a3/dispatch_combine_tile/args.h \
+    kernels/manual/a2a3/dispatch_combine_tile/layout.h \
+    kernels/manual/a2a3/dispatch_combine_tile/golden.h \
+    kernels/manual/a2a3/dispatch_combine_tile/hccl_context.h \
+    kernels/manual/a2a3/dispatch_combine_tile/comm_mpi.h \
+    kernels/manual/a2a3/dispatch_combine_tile/kernel_launchers.h \
+    kernels/manual/a2a3/dispatch_combine_tile/dispatch_combine_tile_kernel.cpp \
+    kernels/manual/a2a3/dispatch_combine_tile/main.cpp
+  ```
+
+  Expected: source placeholders mention all required ABI/stage names so Task 1-12 can fill implementation without renaming
+  entry points.
+
+- [x] Run:
+
+  ```bash
+  test ! -f kernels/manual/a2a3/dispatch_combine_tile/TODO.md
+  ```
+
+  Expected: command exits with status 0.
+
+- [x] Update the status table: mark Task 0 `[x]` only after placeholders exist and the grep checks pass.
+
+Feedback:
+- 2026-05-25: Created Task0 initialization contract files at the project root, preserved DESIGN.md/IMPLEMENTATION_PLAN.md,
+  and verified with `find kernels/manual/a2a3/dispatch_combine_tile -maxdepth 1 -type f | sort`,
+  forbidden-reference grep, ABI/stage-name grep, and `test ! -f kernels/manual/a2a3/dispatch_combine_tile/TODO.md`.
+  Remaining risk: Task0 intentionally does not validate CMake/build execution; that starts in Task1.
+
+## Task 1: Buildable Project Scaffold
+
+**Files:**
+
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/CMakeLists.txt`
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/run.sh`
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/common.h`
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/kernel_launchers.h`
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/dispatch_combine_tile_kernel.cpp`
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
+
+**Scope:**
+
+- [x] Preserve standard copyright headers from Task 0.
+- [x] Add CMake target `dispatch_combine_tile_kernel` compiled for `dav-c220-vec`.
+- [x] Add host executable `dispatch_combine_tile`.
+- [x] Define `DispatchCombineTileShape`, `WorkspaceLayout`, and `PeerWindowLayout` PODs in `common.h`.
+- [x] Add two empty PTO kernel entry points with the exact names from `DESIGN.md`.
+- [x] Add host launch wrappers that compile and call the two kernel symbols.
+- [x] Add `main.cpp` skeleton that parses no real args yet and prints `dispatch_combine_tile scaffold`.
+- [x] Add `run.sh` skeleton with explicit defaults and no `--case all`.
+
+**Observation/Validation:**
+
+- [x] Run:
+
+  ```bash
+  cd kernels/manual/a2a3/dispatch_combine_tile
+  bash run.sh --skip-run 1
+  ```
+
+  Expected: CMake and `make` produce `build/dispatch_combine_tile`, `build/libdispatch_combine_tile_kernel.so`,
+  and `run.sh` prints `skip_run=1`.
+
+- [x] Run:
+
+  ```bash
+  rg -n "DispatchCombineTile[A-Za-z0-9_]*\\(" dispatch_combine_tile_kernel.cpp
+  ```
+
+  Expected: exactly the two public kernel entry points plus local helper calls, no extra `__global__ AICORE` compute kernels.
+
+- [x] Run:
+
+  ```bash
+  rg -n "kernel_operator|AscendC::|LocalTensor|DataCopy|Catlass|aclshmem|shmem_|symmetricPtr" .
+  ```
+
+  Expected: no matches outside `DESIGN.md`/`IMPLEMENTATION_PLAN.md`.
+
+Feedback:
+- 2026-05-25: `bash run.sh --skip-run 1` passed after loading the CANN 8.5/ltr_pto environment from `CLAUDE.md`;
+  produced `build/dispatch_combine_tile` and `build/libdispatch_combine_tile_kernel.so`. `./build/dispatch_combine_tile`
+  prints `dispatch_combine_tile scaffold`. Static greps confirmed only the two public kernel entries plus launcher calls,
+  and forbidden API matches are confined to `DESIGN.md`/`IMPLEMENTATION_PLAN.md`; source-only forbidden grep has no matches.
+  Remaining risk: kernel bodies are intentionally empty until later tasks.
+
+## Task 2: Explicit Parameters and Layout Calculation
+
+**Files:**
+
+- Create: `kernels/manual/a2a3/dispatch_combine_tile/args.h`
+- Create: `kernels/manual/a2a3/dispatch_combine_tile/layout.h`
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/run.sh`
+
+**Scope:**
+
+- [ ] Implement command-line parsing for all parameters in `DESIGN.md` sections 5.1-5.4.
+- [ ] Support short aliases: `-pes`, `-M`, `-K`, `-topK`, `-expertPerPe`, `-debug`, `-iters`, `-warmup`,
+  `-device-base`, `-aivBlocks`, `-tileCols`.
+- [ ] Add explicit observability gates used by this plan: `--skip-run`, `--skip-kernels`, `--host-golden-only`,
+  `--dispatch-metadata-only`, `--dispatch-only`, and `--combine-return-only`. These gates must not select hidden shapes;
+  they only stop after a named stage for compile/debug/code-review validation.
+- [ ] Reject `--case`, `--case-all`, and `--case all` with a clear error.
+- [ ] Implement continuous mapping validation: `deviceBase + pes <= ndevices`.
+- [ ] Implement `AlignUp`, `expertNumPadded`, workspace bytes, peer window bytes, and `HCCL_BUFFSIZE` estimate.
+- [ ] Print a complete parameter summary from both `run.sh` and `main.cpp`.
+- [ ] Keep `maxOutputSize == 0` mapped to `EP * M * topK`.
+- [ ] Enforce first-version constraints: `run-mode == npu`, `K % tileCols == 0`, nonzero shape fields, no capacity/drop.
+
+**Observation/Validation:**
+
+- [ ] Run:
+
+  ```bash
+  bash run.sh -pes 3 -M 8 -K 64 -topK 2 -expertPerPe 1 --device-base 1 --ndevices 8 --skip-run 1
+  ```
+
+  Expected logs include `PES=3`, `DEVICE_BASE=1`, `NDEVICES=8`, `M=8`, `K=64`, `TOPK=2`, and computed
+  `peer_window_bytes`, `workspace_bytes`, `MAX_OUTPUT_SIZE=48`, and an auto `HCCL_BUFFSIZE` value.
+
+- [ ] Run:
+
+  ```bash
+  bash run.sh --case all
+  ```
+
+  Expected: nonzero exit with an error saying case presets are unsupported.
+
+- [ ] Code-review checkpoint: confirm `run.sh` uses only explicit shape parameters and has no hidden shape list.
+- [ ] Run invalid-shape checks:
+
+  ```bash
+  bash run.sh -pes 2 -M 8 -K 128 -topK 2 -expertPerPe 1 --tile-cols 64 --skip-run 1
+  bash run.sh -pes 4 -M 8 -K 64 -topK 2 -expertPerPe 1 --device-base 6 --ndevices 8 --skip-run 1
+  ```
+
+  Expected: first command passes `K % tileCols == 0`; second command fails with `deviceBase + pes > ndevices`.
+
+## Task 3: MPI/HCCL Runtime and Continuous Card Mapping
+
+**Files:**
+
+- Create: `kernels/manual/a2a3/dispatch_combine_tile/comm_mpi.h`
+- Create: `kernels/manual/a2a3/dispatch_combine_tile/hccl_context.h`
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/run.sh`
+
+**Scope:**
+
+- [ ] Copy/adapt `gemm_ar/comm_mpi.h` for MPI init, rank, size, barrier, broadcast, and finalize.
+- [ ] Copy/adapt `gemm_ar/hccl_context.h` `HcclDeviceContext`.
+- [ ] Implement host ACL init, `aclrtSetDevice(deviceBase + rank)`, stream creation, and teardown.
+- [ ] Implement HCCL root-info broadcast through MPI.
+- [ ] Allocate/extract HCCL window resources following `gemm_ar`; expose device-visible `HcclDeviceContext`.
+- [ ] Slice `peerWindow = windowsIn[rank] + peerWindowOffset` with identical offset on all ranks.
+- [ ] Verify `peerWindowOffset + peerWindowBytes <= hcclCtx.winSize`.
+- [ ] Add rank logs:
+
+  ```text
+  rank=... size=... device=... window_base=... peer_window=... win_size=...
+  ```
+
+**Observation/Validation:**
+
+- [ ] Run small multi-process scaffold:
+
+  ```bash
+  timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 1 --skip-kernels 1
+  ```
+
+  Expected: two MPI ranks start and finish; rank 0 binds device base; rank 1 binds `deviceBase + 1`; HCCL context logs print
+  nonzero `window_base`, `peer_window`, and `win_size`; every rank prints `skip_kernels_done`.
+
+- [ ] For 3-card and 4-card mapping:
+
+  ```bash
+  timeout 60s bash run.sh -pes 3 -M 8 -K 64 -topK 2 -expertPerPe 1 --device-base 0 --ndevices 8 --debug 1 --skip-kernels 1
+  timeout 60s bash run.sh -pes 4 -M 8 -K 64 -topK 2 -expertPerPe 1 --device-base 0 --ndevices 8 --debug 1 --skip-kernels 1
+  ```
+
+  Expected: devices are exactly `0,1,2` and `0,1,2,3`; no rank reports a non-contiguous device id.
+
+- [ ] Run forbidden API grep:
+
+  ```bash
+  rg -n "aclshmem|shmem_|symmetricPtr" .
+  ```
+
+  Expected: no matches outside docs/plans.
+
+## Task 4: Deterministic Data and CPU Golden
+
+**Files:**
+
+- Create: `kernels/manual/a2a3/dispatch_combine_tile/golden.h`
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
+
+**Scope:**
+
+- [ ] Generate deterministic per-rank `inputA`, `expertIdx`, and `probs` from `seed + rank`.
+- [ ] Generate expert ids across all `EP * expertPerRank` experts so every rank receives at least some rows in small tests.
+- [ ] Support `--gen-data 0` loading the documented `data-dir` files.
+- [ ] Implement CPU reference:
+  - route local rank tokens by global expert;
+  - build `peerTokenPerExpert[src, expert]`;
+  - build packed row ids;
+  - build owner-rank `dispatchedA`;
+  - use identity `expertOutput = dispatchedA`;
+  - return rows to owner `ptrD`;
+  - restore `outputC[token, col] = sum_slot probs[token, slot] * ptrD[row, col]`.
+- [ ] Write documented binary files when `--debug > 0`.
+- [ ] Add host-only `--host-golden-only 1` path for validating data/golden without launching kernels.
+
+**Observation/Validation:**
+
+- [ ] Run:
+
+  ```bash
+  timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2 --host-golden-only 1
+  ```
+
+  Expected: rank files are generated under `data-dir`; logs show nonzero counts for both owner ranks; CPU golden prints
+  `golden_total_routes=32`, `golden_invalid_routes=0`, and one `golden_rank_done` line per rank.
+
+- [ ] Code-review checkpoint: CPU golden must use the same row-layout formulas as `DESIGN.md` sections 9 and 10.
+
+## Task 5: PTO Kernel Views, Remote Pointer Helper, and Signal Helpers
+
+**Files:**
+
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/dispatch_combine_tile_kernel.cpp`
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/common.h`
+
+**Scope:**
+
+- [ ] Add kernel-side view structs for workspace and peer window fields.
+- [ ] Add `RemotePtr(ctx, localPeerWindowBase, peerRank)` that only computes `windowsIn[peer] + offset`.
+- [ ] Add `GlobalTensor` construction helpers for 1D/2D half, int32, and float views.
+- [ ] Add local row copy helper using `TLOAD/TSTORE` and ping-pong Vec tiles.
+- [ ] Add remote row helpers using `pto::comm::TGET` and `pto::comm::TPUT` ping-pong overloads.
+- [ ] Add `TNOTIFY/TWAIT` signal helpers for count and combine-done signals.
+- [ ] Keep metadata scalar reads/writes inside helper functions only.
+
+**Observation/Validation:**
+
+- [ ] Build:
+
+  ```bash
+  bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --skip-run 1
+  ```
+
+  Expected: kernel compiles with PTO headers.
+
+- [ ] Run:
+
+  ```bash
+  rg -n "#include|AscendC::|kernel_operator|LocalTensor|GlobalTensor<|TQue|TBuf|TPipe|DataCopy|Catlass|aclshmem|shmem_" dispatch_combine_tile_kernel.cpp
+  ```
+
+  Expected: includes are PTO/C++ only; `GlobalTensor<` references are PTO namespace or imported PTO aliases.
+
+- [ ] Code-review checkpoint: `RemotePtr` has no communication, sync, runtime query, or non-window pointer handling.
+
+## Task 6: Dispatch Metadata and Count Publication
+
+**Files:**
+
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/dispatch_combine_tile_kernel.cpp`
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/golden.h`
+
+**Scope:**
+
+- [ ] Implement dispatch state clearing for metadata and signals.
+- [ ] Implement contiguous token-shard local count into `blockTokenPerExpert[block, expert]`.
+- [ ] Implement block-prefix scan and `localTokenPerExpert`.
+- [ ] Implement packed expert offsets from `localTokenPerExpert`.
+- [ ] Publish count rows to every peer with `TPUT(remote.peerTokenPerExpert[myRank, :])`.
+- [ ] Notify `remote.countReadySignal[myRank]` only after count row publication.
+- [ ] Wait on local `countReadySignal[src]` with `TWAIT`.
+- [ ] Build `cumsumPerExpert`, `dispatchOffset`, and `prevSumBeforeRank`.
+- [ ] Add debug dump and rank logs:
+
+  ```text
+  rank=... dispatch_counts local_total=... owner_rows=...
+  rank=... count_wait_done peers=...
+  ```
+
+**Observation/Validation:**
+
+- [ ] Run:
+
+  ```bash
+  timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 1 --dispatch-metadata-only 1
+  ```
+
+  Expected: no hang; every rank prints `dispatch_metadata_done`; `peerTokenPerExpert`, `cumsumPerExpert`,
+  `dispatchOffset`, and `prevSumBeforeRank` match CPU golden with zero mismatches.
+
+- [ ] If hardware execution is unavailable, build plus code-review is acceptable for this task:
+  - `TPUT` is used for count row exchange;
+  - `TNOTIFY` happens after count row `TPUT`;
+  - `TWAIT` is device-side, not replaced by host barrier.
+  - count wait loops cover all `src in [0, EP)`, including `src == myRank`.
+
+## Task 7: Dispatch Pack and Payload Gather
+
+**Files:**
+
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/dispatch_combine_tile_kernel.cpp`
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
+
+**Scope:**
+
+- [ ] Implement stable local pack:
+  - contiguous token shard;
+  - per-block cursor initialized from `blockPrefixPerExpert`;
+  - write `expandedRowIdx[token * topK + slot]`;
+  - copy `inputA[token, :]` into `peerWindow.packedA[packedRow, :]` through PTO row copy helper.
+- [ ] Implement payload gather for `ownerRank == myRank` local experts only.
+- [ ] Use peer rank round-robin assignment: `src = blockId + n * blockNum`.
+- [ ] Use `TGET(remote(src).packedA segment -> workspace.dispatchedA segment)` with ping-pong staging.
+- [ ] Skip zero-row segments.
+- [ ] Add debug logs:
+
+  ```text
+  rank=... dispatch_gather local_expert=... src=... rows=... dst_start=...
+  ```
+
+**Observation/Validation:**
+
+- [ ] Run:
+
+  ```bash
+  timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2 --dispatch-only 1
+  ```
+
+  Expected: every rank prints `dispatch_pack_done` and `dispatch_gather_done`; `expandedRowIdx`, `packedA_head`,
+  and `dispatchedA_head` match CPU golden with zero mismatches for the dumped rows.
+
+- [ ] Run:
+
+  ```bash
+  rg -n "TGET|TLOAD|TSTORE|expandedRowIdx|blockPrefixPerExpert" dispatch_combine_tile_kernel.cpp
+  ```
+
+  Expected: pack uses `TLOAD/TSTORE`, gather uses `TGET`, and row order is based on `blockPrefixPerExpert`.
+
+## Task 8: Host Expert Output Preparation and Dispatch Timing
+
+**Files:**
+
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
+
+**Scope:**
+
+- [ ] After dispatch stream sync, copy `workspace.dispatchedA` to `expertOutput`.
+- [ ] Keep this as host verification helper, not a third device kernel.
+- [ ] Time and print `dispatch_e2e_us` and `prepare_host_us`.
+- [ ] Add option to compare `workspace.dispatchedA` against CPU golden before combine when `--debug >= 2`.
+- [ ] Ensure host barrier is used only for process-level iteration alignment and window reuse protection.
+
+**Observation/Validation:**
+
+- [ ] Run:
+
+  ```bash
+  timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2 --dispatch-only 1
+  ```
+
+  Expected logs include positive `dispatch_e2e_us` and `prepare_host_us`; debug compare reports `expertOutput` equals
+  `dispatchedA` for the copied row range.
+
+- [ ] Code-review checkpoint: no `PrepareExpertOutput` device kernel exists.
+
+## Task 9: Combine Return Path
+
+**Files:**
+
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/dispatch_combine_tile_kernel.cpp`
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
+
+**Scope:**
+
+- [ ] Implement combine state clearing for `combineDoneSignal` and relevant output rows.
+- [ ] Implement peer rank round-robin return loop: `src = blockId + n * blockNum`.
+- [ ] For each source peer, iterate local experts in order and compute:
+  - `rows = peerTokenPerExpert[src, globalExpert]`;
+  - `srcStart = dispatchOffset[localExpert] + prevSumBeforeRank[src, localExpert]`;
+  - `dstStart = cumsumPerExpert[src, globalExpert - 1]` or zero.
+- [ ] Use `TPUT(remote(src).ptrD segment <- expertOutput segment)` with ping-pong staging.
+- [ ] Notify `remote(src).combineDoneSignal[myRank]` once after all local expert segments for that peer are written.
+- [ ] Wait on local `combineDoneSignal[peer]` with `TWAIT`.
+- [ ] Add debug logs:
+
+  ```text
+  rank=... combine_return dst=... local_expert=... rows=... src_start=... dst_start=...
+  rank=... combine_wait_done peers=...
+  ```
+
+**Observation/Validation:**
+
+- [ ] Run:
+
+  ```bash
+  timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2 --combine-return-only 1
+  ```
+
+  Expected: no hang; every rank prints `combine_return_done` and `combine_wait_done`; dumped `ptrD_head` matches CPU
+  golden with zero mismatches for returned rows.
+
+- [ ] If black-box execution hangs, use logs to identify the last peer/rank signal and inspect the `TNOTIFY/TWAIT` pairing before
+  changing data movement.
+
+## Task 10: Combine Restore and Output Verification
+
+**Files:**
+
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/dispatch_combine_tile_kernel.cpp`
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
+
+**Scope:**
+
+- [ ] Restore output by contiguous token shard; each block owns disjoint token rows.
+- [ ] For each token row, clear `outputC[token, :]`.
+- [ ] For each `topK` slot, read `expandedRowIdx`; skip `-1`.
+- [ ] Implement `outputC += probs[token, slot] * peerWindow.ptrD[row, :]` with PTO Vec tile operations.
+- [ ] Use `floatScratch` if direct half-by-float accumulation is not supported cleanly by available PTO instructions.
+- [ ] Copy `outputC` to host and compare against CPU golden with `rtol/atol`.
+- [ ] Print mismatch count and first mismatch details when verification fails.
+
+**Observation/Validation:**
+
+- [ ] Run:
+
+  ```bash
+  timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2
+  ```
+
+  Expected: every rank prints `restore_done`; `outputC` compare prints `verify=PASS`, `mismatch_count=0`.
+
+- [ ] Run:
+
+  ```bash
+  timeout 60s bash run.sh -pes 2 -M 128 -K 256 -topK 2 -expertPerPe 2 --debug 1
+  ```
+
+  Expected: `verify=PASS`, positive timing fields, and no debug-level-2 payload dump unless `debug=2`.
+
+## Task 11: E2E Timing, Debug Dumps, and Run Matrix
+
+**Files:**
+
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/run.sh`
+- Modify: `kernels/manual/a2a3/dispatch_combine_tile/README.md` if a README is added during implementation
+
+**Scope:**
+
+- [ ] Implement warmup/iters loop.
+- [ ] Print required timing fields:
+  - `dispatch_e2e_us`;
+  - `prepare_host_us`;
+  - `combine_e2e_us`;
+  - `total_e2e_us`.
+- [ ] Print required performance config fields:
+  - `aiv_blocks`;
+  - `tile_cols`;
+  - `peer_window_bytes`;
+  - `workspace_bytes`;
+  - `dispatch_peer_shards`;
+  - `combine_peer_shards`.
+- [ ] Implement debug levels 0, 1, and 2 exactly as described in `DESIGN.md`.
+- [ ] Ensure `run.sh` can run 2, 3, and 4 ranks through continuous mapping.
+- [ ] Ensure `--hccl-buffsize-mb 0` auto-raises `HCCL_BUFFSIZE` based on peer window bytes.
+
+**Observation/Validation:**
+
+- [ ] Run acceptance matrix:
+
+  ```bash
+  timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 -debug 2
+  timeout 60s bash run.sh -pes 2 -M 128 -K 256 -topK 2 -expertPerPe 2 -debug 1
+  timeout 60s bash run.sh -pes 2 -M 128 -K 256 -topK 4 -expertPerPe 2 -debug 1
+  timeout 90s bash run.sh -pes 2 -M 64 -K 7168 -topK 8 -expertPerPe 2 -debug 0
+  ```
+
+  Expected: all pass verification; all print positive timing fields; default-shape run prints `debug=0` logs only and no
+  head payload dump.
+
+- [ ] Run multi-card mapping if hardware is available:
+
+  ```bash
+  timeout 60s bash run.sh -pes 3 -M 8 -K 64 -topK 2 -expertPerPe 1 --device-base 0 --ndevices 8 -debug 1
+  timeout 60s bash run.sh -pes 4 -M 8 -K 64 -topK 2 -expertPerPe 1 --device-base 0 --ndevices 8 -debug 1
+  ```
+
+  Expected: all ranks bind continuous devices, all ranks print completion lines, and verification passes.
+
+## Task 12: Hardening and Final Review
+
+**Files:**
+
+- Modify as needed under `kernels/manual/a2a3/dispatch_combine_tile/`
+
+**Scope:**
+
+- [ ] Run `clang-format -i -style=file` on C++ headers and sources.
+- [ ] Run `shellcheck run.sh` if available; otherwise manually review `set -euo pipefail`, quoting, and getopt handling.
+- [ ] Confirm only two device compute kernel entry points exist.
+- [ ] Confirm no SHMEM/AscendC/Catlass device dependency appears in kernel code.
+- [ ] Confirm all expected command-line parameters are visible and documented through `run.sh --help`.
+- [ ] Confirm host barriers do not replace device-side `TWAIT` readiness.
+- [ ] Confirm debug logs are guarded by `debug` level and not too noisy at `debug=0`.
+- [ ] Record any hardware-only limitations or unverified paths in final notes.
+
+**Observation/Validation:**
+
+- [ ] Run final static checks:
+
+  ```bash
+  rg -n "kernel_operator|AscendC::|LocalTensor|DataCopy|Catlass|aclshmem|shmem_|symmetricPtr" .
+  rg -n "__global__ AICORE void" dispatch_combine_tile_kernel.cpp
+  rg -n "case all|case-all|--case" run.sh main.cpp args.h
+  ```
+
+  Expected: forbidden API matches only in docs/plans; exactly two kernel entry points; `--case` only appears in rejection/help
+  logic.
+
+- [ ] Run task-state check:
+
+  ```bash
+  awk '/Current task status:/,/## Validation Rules/' IMPLEMENTATION_PLAN.md | rg -n "\\[ \\]|\\[~\\]|\\[!\\]"
+  ```
+
+  Expected: no output from the status table. Unchecked substeps may remain only if they document optional hardware paths not run
+  in the current environment and are called out in final notes.
+
+- [ ] Run final default:
+
+  ```bash
+  timeout 90s bash run.sh -pes 2 -M 64 -K 7168 -topK 8 -expertPerPe 2 -debug 0 -iters 5 -warmup 3
+  ```
+
+  Expected: build succeeds, multi-process run succeeds, verification passes, and timing fields print.
+
+## Execution Notes
+
+- Prefer one task per implementation session. Tasks 6, 7, 9, and 10 are the riskiest and should each end with a code-review
+  checkpoint even if hardware execution is available.
+- When a black-box run hangs, do not immediately rewrite the algorithm. First use the rank logs to identify whether the issue is
+  count publication, count wait, combine return, or combine wait.
+- Keep task commits focused. Do not refactor unrelated `gemm_ar` code.
+- Do not add a third device kernel to make validation easier. Use host debug paths, D2H dumps, and CPU golden instead.
