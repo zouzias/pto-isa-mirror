@@ -122,6 +122,31 @@ PTO_INTERNAL void TColReduceIdxImpl(TileDst &dstIdx, TileSrc &src)
     });
 }
 
+template <typename TileDstVal, typename TileDstIdx, typename TileSrc, ElementCmp cmp>
+PTO_INTERNAL void TColReduceValImpl(TileDstVal &dstVal, TileDstIdx &dstIdx, TileSrc &src)
+{
+    CheckRowArgTiles(dstVal, dstIdx, src);
+    using T = typename TileSrc::DType;
+    using TIdx = typename TileDstIdx::DType;
+
+    const std::size_t rows = src.GetValidRow();
+    const std::size_t cols = src.GetValidCol();
+
+    cpu::parallel_for_1d(0, cols, rows * cols, [&](std::size_t c) {
+        std::size_t bestIdx = 0;
+        T bestVal = src.data()[GetTileElementOffset<TileSrc>(0, c)];
+        for (std::size_t r = 1; r < rows; ++r) {
+            auto value = src.data()[GetTileElementOffset<TileSrc>(r, c)];
+            if (ElementCmpCal<T, cmp>::apply(value, bestVal)) {
+                bestIdx = r;
+                bestVal = value;
+            }
+        }
+        dstIdx.data()[GetTileElementOffset<TileDstIdx>(0, c)] = static_cast<TIdx>(bestIdx);
+        dstVal.data()[GetTileElementOffset<TileDstVal>(0, c)] = static_cast<T>(bestVal);
+    });
+}
+
 template <typename TileDst, typename TileSrc, ElementCmp cmp>
 PTO_INTERNAL void TRowReduceIdxImpl(TileDst &dstIdx, TileSrc &src)
 {
@@ -211,6 +236,20 @@ PTO_INTERNAL void TROWARGMAX_IMPL(TileDstVal &dstVal, TileDstIdx &dstIdx, TileSr
 {
     (void)tmp;
     TRowReduceValImpl<TileDstVal, TileDstIdx, TileSrc, ElementCmp::CMP_BT>(dstVal, dstIdx, src);
+}
+
+template <typename TileDstVal, typename TileDstIdx, typename TileSrc, typename TileTmp>
+PTO_INTERNAL void TCOLARGMIN_IMPL(TileDstVal &dstVal, TileDstIdx &dstIdx, TileSrc &src, TileTmp &tmp)
+{
+    (void)tmp;
+    TColReduceValImpl<TileDstVal, TileDstIdx, TileSrc, ElementCmp::CMP_LT>(dstVal, dstIdx, src);
+}
+
+template <typename TileDstVal, typename TileDstIdx, typename TileSrc, typename TileTmp>
+PTO_INTERNAL void TCOLARGMAX_IMPL(TileDstVal &dstVal, TileDstIdx &dstIdx, TileSrc &src, TileTmp &tmp)
+{
+    (void)tmp;
+    TColReduceValImpl<TileDstVal, TileDstIdx, TileSrc, ElementCmp::CMP_BT>(dstVal, dstIdx, src);
 }
 } // namespace pto
 
