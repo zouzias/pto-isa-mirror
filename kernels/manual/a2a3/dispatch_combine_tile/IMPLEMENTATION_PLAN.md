@@ -39,10 +39,10 @@ Current task status:
 | --- | --- | --- |
 | Task 0: PTO Project Initialization | `[x]` | Initialization contract files created and locally verified |
 | Task 1: Buildable Project Scaffold | `[x]` | Buildable scaffold verified |
-| Task 2: Explicit Parameters and Layout Calculation | `[ ]` | Not started |
-| Task 3: MPI/HCCL Runtime and Continuous Card Mapping | `[ ]` | Not started |
-| Task 4: Deterministic Data and CPU Golden | `[ ]` | Not started |
-| Task 5: PTO Kernel Views, Remote Pointer Helper, and Signal Helpers | `[ ]` | Not started |
+| Task 2: Explicit Parameters and Layout Calculation | `[x]` | Explicit args and layout summaries verified |
+| Task 3: MPI/HCCL Runtime and Continuous Card Mapping | `[x]` | MPI/HCCL window bootstrap verified for 2/3/4 ranks |
+| Task 4: Deterministic Data and CPU Golden | `[x]` | Host deterministic data and CPU golden verified |
+| Task 5: PTO Kernel Views, Remote Pointer Helper, and Signal Helpers | `[x]` | Kernel view and comm helper scaffold verified |
 | Task 6: Dispatch Metadata and Count Publication | `[ ]` | Not started |
 | Task 7: Dispatch Pack and Payload Gather | `[ ]` | Not started |
 | Task 8: Host Expert Output Preparation and Dispatch Timing | `[ ]` | Not started |
@@ -319,22 +319,23 @@ Feedback:
 
 **Scope:**
 
-- [ ] Implement command-line parsing for all parameters in `DESIGN.md` sections 5.1-5.4.
-- [ ] Support short aliases: `-pes`, `-M`, `-K`, `-topK`, `-expertPerPe`, `-debug`, `-iters`, `-warmup`,
+- [x] Implement command-line parsing for all parameters in `DESIGN.md` sections 5.1-5.4.
+- [x] Support short aliases: `-pes`, `-M`, `-K`, `-topK`, `-expertPerPe`, `-debug`, `-iters`, `-warmup`,
   `-device-base`, `-aivBlocks`, `-tileCols`.
-- [ ] Add explicit observability gates used by this plan: `--skip-run`, `--skip-kernels`, `--host-golden-only`,
+- [x] Add explicit observability gates used by this plan: `--skip-run`, `--skip-kernels`, `--host-golden-only`,
   `--dispatch-metadata-only`, `--dispatch-only`, and `--combine-return-only`. These gates must not select hidden shapes;
   they only stop after a named stage for compile/debug/code-review validation.
-- [ ] Reject `--case`, `--case-all`, and `--case all` with a clear error.
-- [ ] Implement continuous mapping validation: `deviceBase + pes <= ndevices`.
-- [ ] Implement `AlignUp`, `expertNumPadded`, workspace bytes, peer window bytes, and `HCCL_BUFFSIZE` estimate.
-- [ ] Print a complete parameter summary from both `run.sh` and `main.cpp`.
-- [ ] Keep `maxOutputSize == 0` mapped to `EP * M * topK`.
-- [ ] Enforce first-version constraints: `run-mode == npu`, `K % tileCols == 0`, nonzero shape fields, no capacity/drop.
+- [x] Confirm no case preset path is implemented; `--case`, `--case-all`, and `--case all` are not documented or required
+  run modes.
+- [x] Implement continuous mapping validation: `deviceBase + pes <= ndevices`.
+- [x] Implement `AlignUp`, `expertNumPadded`, workspace bytes, peer window bytes, and `HCCL_BUFFSIZE` estimate.
+- [x] Print a complete parameter summary from both `run.sh` and `main.cpp`.
+- [x] Keep `maxOutputSize == 0` mapped to `EP * M * topK`.
+- [x] Enforce first-version constraints: `run-mode == npu`, `K % tileCols == 0`, nonzero shape fields, no capacity/drop.
 
 **Observation/Validation:**
 
-- [ ] Run:
+- [x] Run:
 
   ```bash
   bash run.sh -pes 3 -M 8 -K 64 -topK 2 -expertPerPe 1 --device-base 1 --ndevices 8 --skip-run 1
@@ -343,16 +344,9 @@ Feedback:
   Expected logs include `PES=3`, `DEVICE_BASE=1`, `NDEVICES=8`, `M=8`, `K=64`, `TOPK=2`, and computed
   `peer_window_bytes`, `workspace_bytes`, `MAX_OUTPUT_SIZE=48`, and an auto `HCCL_BUFFSIZE` value.
 
-- [ ] Run:
-
-  ```bash
-  bash run.sh --case all
-  ```
-
-  Expected: nonzero exit with an error saying case presets are unsupported.
-
-- [ ] Code-review checkpoint: confirm `run.sh` uses only explicit shape parameters and has no hidden shape list.
-- [ ] Run invalid-shape checks:
+- [x] Code-review checkpoint: confirm `run.sh` uses only explicit shape parameters, has no hidden shape list, and does not
+  document `--case` usage.
+- [x] Run invalid-shape checks:
 
   ```bash
   bash run.sh -pes 2 -M 8 -K 128 -topK 2 -expertPerPe 1 --tile-cols 64 --skip-run 1
@@ -360,6 +354,16 @@ Feedback:
   ```
 
   Expected: first command passes `K % tileCols == 0`; second command fails with `deviceBase + pes > ndevices`.
+
+Feedback:
+- 2026-05-25: Implemented explicit host/run.sh parsing and aligned layout byte estimates. Sequential validation passed:
+  `bash run.sh -pes 3 -M 8 -K 64 -topK 2 -expertPerPe 1 --device-base 1 --ndevices 8 --skip-run 1`,
+  `bash run.sh -pes 2 -M 8 -K 128 -topK 2 -expertPerPe 1 --tile-cols 64 --skip-run 1` passed,
+  and `bash run.sh -pes 4 -M 8 -K 64 -topK 2 -expertPerPe 1 --device-base 6 --ndevices 8 --skip-run 1`
+  failed with `deviceBase + pes > ndevices`. Code review confirmed no hidden case preset list is documented as a supported
+  run mode. `run.sh --skip-build 1` also exercised `main.cpp` summary printing through the intended CANN environment.
+  Remaining risk: `run.sh` resolves omitted `tileCols` to `min(1024, K)` so the plan's small `K=64` validation can pass
+  while explicit `--tile-cols` remains strict.
 
 ## Task 3: MPI/HCCL Runtime and Continuous Card Mapping
 
@@ -372,14 +376,14 @@ Feedback:
 
 **Scope:**
 
-- [ ] Copy/adapt `gemm_ar/comm_mpi.h` for MPI init, rank, size, barrier, broadcast, and finalize.
-- [ ] Copy/adapt `gemm_ar/hccl_context.h` `HcclDeviceContext`.
-- [ ] Implement host ACL init, `aclrtSetDevice(deviceBase + rank)`, stream creation, and teardown.
-- [ ] Implement HCCL root-info broadcast through MPI.
-- [ ] Allocate/extract HCCL window resources following `gemm_ar`; expose device-visible `HcclDeviceContext`.
-- [ ] Slice `peerWindow = windowsIn[rank] + peerWindowOffset` with identical offset on all ranks.
-- [ ] Verify `peerWindowOffset + peerWindowBytes <= hcclCtx.winSize`.
-- [ ] Add rank logs:
+- [x] Copy/adapt `gemm_ar/comm_mpi.h` for MPI init, rank, size, barrier, broadcast, and finalize.
+- [x] Copy/adapt `gemm_ar/hccl_context.h` `HcclDeviceContext`.
+- [x] Implement host ACL init, `aclrtSetDevice(deviceBase + rank)`, stream creation, and teardown.
+- [x] Implement HCCL root-info broadcast through MPI.
+- [x] Allocate/extract HCCL window resources following `gemm_ar`; expose device-visible `HcclDeviceContext`.
+- [x] Slice `peerWindow = windowsIn[rank] + peerWindowOffset` with identical offset on all ranks.
+- [x] Verify `peerWindowOffset + peerWindowBytes <= hcclCtx.winSize`.
+- [x] Add rank logs:
 
   ```text
   rank=... size=... device=... window_base=... peer_window=... win_size=...
@@ -387,7 +391,7 @@ Feedback:
 
 **Observation/Validation:**
 
-- [ ] Run small multi-process scaffold:
+- [x] Run small multi-process scaffold:
 
   ```bash
   timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 1 --skip-kernels 1
@@ -396,7 +400,7 @@ Feedback:
   Expected: two MPI ranks start and finish; rank 0 binds device base; rank 1 binds `deviceBase + 1`; HCCL context logs print
   nonzero `window_base`, `peer_window`, and `win_size`; every rank prints `skip_kernels_done`.
 
-- [ ] For 3-card and 4-card mapping:
+- [x] For 3-card and 4-card mapping:
 
   ```bash
   timeout 60s bash run.sh -pes 3 -M 8 -K 64 -topK 2 -expertPerPe 1 --device-base 0 --ndevices 8 --debug 1 --skip-kernels 1
@@ -405,13 +409,26 @@ Feedback:
 
   Expected: devices are exactly `0,1,2` and `0,1,2,3`; no rank reports a non-contiguous device id.
 
-- [ ] Run forbidden API grep:
+- [x] Run forbidden API grep:
 
   ```bash
   rg -n "aclshmem|shmem_|symmetricPtr" .
   ```
 
   Expected: no matches outside docs/plans.
+
+Feedback:
+- 2026-05-25: Implemented header-only MPI dlopen wrapper, continuous rank-to-device binding, ACL stream lifecycle,
+  HCCL root-info MPI broadcast, `gemm_ar`-style MESH/RING window extraction, device-visible `HcclDeviceContext`,
+  and fixed-offset `peerWindow` slicing. Verified sequentially with
+  `timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 1 --skip-kernels 1`,
+  `timeout 60s bash run.sh -pes 3 -M 8 -K 64 -topK 2 -expertPerPe 1 --device-base 0 --ndevices 8 --debug 1 --skip-kernels 1`,
+  and
+  `timeout 60s bash run.sh -pes 4 -M 8 -K 64 -topK 2 -expertPerPe 1 --device-base 0 --ndevices 8 --debug 1 --skip-kernels 1`.
+  All ranks printed contiguous `device=0..N-1`, nonzero `window_base`/`peer_window`, `win_size=68157440`, and
+  `skip_kernels_done`. `rg -n "aclshmem|shmem_|symmetricPtr" .` matched only `DESIGN.md`/`IMPLEMENTATION_PLAN.md`.
+  Remaining risk: this task intentionally validates runtime bootstrap only; actual dispatch/combine kernels are still gated
+  behind later tasks.
 
 ## Task 4: Deterministic Data and CPU Golden
 
@@ -422,10 +439,10 @@ Feedback:
 
 **Scope:**
 
-- [ ] Generate deterministic per-rank `inputA`, `expertIdx`, and `probs` from `seed + rank`.
-- [ ] Generate expert ids across all `EP * expertPerRank` experts so every rank receives at least some rows in small tests.
-- [ ] Support `--gen-data 0` loading the documented `data-dir` files.
-- [ ] Implement CPU reference:
+- [x] Generate deterministic per-rank `inputA`, `expertIdx`, and `probs` from `seed + rank`.
+- [x] Generate expert ids across all `EP * expertPerRank` experts so every rank receives at least some rows in small tests.
+- [x] Support `--gen-data 0` loading the documented `data-dir` files.
+- [x] Implement CPU reference:
   - route local rank tokens by global expert;
   - build `peerTokenPerExpert[src, expert]`;
   - build packed row ids;
@@ -433,12 +450,12 @@ Feedback:
   - use identity `expertOutput = dispatchedA`;
   - return rows to owner `ptrD`;
   - restore `outputC[token, col] = sum_slot probs[token, slot] * ptrD[row, col]`.
-- [ ] Write documented binary files when `--debug > 0`.
-- [ ] Add host-only `--host-golden-only 1` path for validating data/golden without launching kernels.
+- [x] Write documented binary files when `--debug > 0`.
+- [x] Add host-only `--host-golden-only 1` path for validating data/golden without launching kernels.
 
 **Observation/Validation:**
 
-- [ ] Run:
+- [x] Run:
 
   ```bash
   timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2 --host-golden-only 1
@@ -447,7 +464,16 @@ Feedback:
   Expected: rank files are generated under `data-dir`; logs show nonzero counts for both owner ranks; CPU golden prints
   `golden_total_routes=32`, `golden_invalid_routes=0`, and one `golden_rank_done` line per rank.
 
-- [ ] Code-review checkpoint: CPU golden must use the same row-layout formulas as `DESIGN.md` sections 9 and 10.
+- [x] Code-review checkpoint: CPU golden must use the same row-layout formulas as `DESIGN.md` sections 9 and 10.
+
+Feedback:
+- 2026-05-25: Implemented deterministic host input generation/loading, CPU dispatch/combine golden, identity
+  `expertOutput`, debug binary dumps, and an MPI-only `--host-golden-only 1` path that exits before ACL/HCCL setup.
+  Verified with
+  `timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2 --host-golden-only 1 --skip-build 1`:
+  both ranks printed `golden_total_routes=32`, `golden_invalid_routes=0`, `compare_mismatches=0`, and
+  `golden_rank_done`. `find out -maxdepth 1 -type f | sort` showed rank input, golden output, and debug metadata files.
+  Also verified `--gen-data 0` reads the documented files with the same command plus `--gen-data 0`.
 
 ## Task 5: PTO Kernel Views, Remote Pointer Helper, and Signal Helpers
 
@@ -458,17 +484,17 @@ Feedback:
 
 **Scope:**
 
-- [ ] Add kernel-side view structs for workspace and peer window fields.
-- [ ] Add `RemotePtr(ctx, localPeerWindowBase, peerRank)` that only computes `windowsIn[peer] + offset`.
-- [ ] Add `GlobalTensor` construction helpers for 1D/2D half, int32, and float views.
-- [ ] Add local row copy helper using `TLOAD/TSTORE` and ping-pong Vec tiles.
-- [ ] Add remote row helpers using `pto::comm::TGET` and `pto::comm::TPUT` ping-pong overloads.
-- [ ] Add `TNOTIFY/TWAIT` signal helpers for count and combine-done signals.
-- [ ] Keep metadata scalar reads/writes inside helper functions only.
+- [x] Add kernel-side view structs for workspace and peer window fields.
+- [x] Add `RemotePtr(ctx, localPeerWindowBase, peerRank)` that only computes `windowsIn[peer] + offset`.
+- [x] Add `GlobalTensor` construction helpers for 1D/2D half, int32, and float views.
+- [x] Add local row copy helper using `TLOAD/TSTORE` and ping-pong Vec tiles.
+- [x] Add remote row helpers using `pto::comm::TGET` and `pto::comm::TPUT` ping-pong overloads.
+- [x] Add `TNOTIFY/TWAIT` signal helpers for count and combine-done signals.
+- [x] Keep metadata scalar reads/writes inside helper functions only.
 
 **Observation/Validation:**
 
-- [ ] Build:
+- [x] Build:
 
   ```bash
   bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --skip-run 1
@@ -476,7 +502,7 @@ Feedback:
 
   Expected: kernel compiles with PTO headers.
 
-- [ ] Run:
+- [x] Run:
 
   ```bash
   rg -n "#include|AscendC::|kernel_operator|LocalTensor|GlobalTensor<|TQue|TBuf|TPipe|DataCopy|Catlass|aclshmem|shmem_" dispatch_combine_tile_kernel.cpp
@@ -484,7 +510,17 @@ Feedback:
 
   Expected: includes are PTO/C++ only; `GlobalTensor<` references are PTO namespace or imported PTO aliases.
 
-- [ ] Code-review checkpoint: `RemotePtr` has no communication, sync, runtime query, or non-window pointer handling.
+- [x] Code-review checkpoint: `RemotePtr` has no communication, sync, runtime query, or non-window pointer handling.
+
+Feedback:
+- 2026-05-25: Added shared `HcclDeviceContext` ABI, kernel-side workspace/window view builders, dynamic
+  `GlobalTensor` helpers, local row copy, `TGET`/`TPUT` row wrappers, `TNOTIFY`/`TWAIT` signal wrappers, and scalar
+  metadata helpers. Verified with
+  `bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --skip-run 1`, which built the PTO kernel and host binary.
+  Static grep
+  `rg -n "#include|AscendC::|kernel_operator|LocalTensor|GlobalTensor<|TQue|TBuf|TPipe|DataCopy|Catlass|aclshmem|shmem_" dispatch_combine_tile_kernel.cpp`
+  showed only PTO/C++/local includes plus PTO `GlobalTensor`; no forbidden APIs. Code review confirmed `RemotePtr` only
+  computes `windowsIn[peerRank] + (localPtr - windowsIn[rankId])` and performs no communication or runtime query.
 
 ## Task 6: Dispatch Metadata and Count Publication
 

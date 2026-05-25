@@ -15,6 +15,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace dispatch_combine_tile {
 
+constexpr uint32_t kMaxDispatchCombineTileRanks = 64;
+
 // Shared ABI names. Later tasks may add helper methods, but these struct names
 // and field names are the host/kernel contract for the first PTO version.
 struct DispatchCombineTileShape {
@@ -55,6 +57,16 @@ struct PeerWindowLayout {
     uint64_t totalBytes;
 };
 
+struct HcclDeviceContext {
+    uint64_t workSpace;
+    uint64_t workSpaceSize;
+    uint32_t rankId;
+    uint32_t rankNum;
+    uint64_t winSize;
+    uint64_t windowsIn[kMaxDispatchCombineTileRanks];
+    uint64_t windowsOut[kMaxDispatchCombineTileRanks];
+};
+
 struct DispatchCombineTileRuntimeConfig {
     uint32_t runMode;
     uint32_t socVersion;
@@ -71,6 +83,7 @@ struct DispatchCombineTileRuntimeConfig {
     uint32_t verify;
     uint32_t skipRun;
     uint32_t skipBuild;
+    uint32_t cleanBuild;
     uint32_t skipKernels;
     uint32_t hostGoldenOnly;
     uint32_t dispatchMetadataOnly;
