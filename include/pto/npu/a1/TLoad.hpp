@@ -103,28 +103,7 @@ PTO_INTERNAL void TLoadNd2nzInstr(__cbuf__ typename TileData::DType *dst, typena
         }
         return;
     }
-    __ubuf__ typename TileData::DType *tmpUB = (__ubuf__ typename TileData::DType *)get_imm(0);
-    uint32_t lenByteBurst = dValue * sizeof(T);
-    uint32_t gmByteGap = (srcDValue - dValue) * sizeof(T);
-    uint32_t ubPadDValue = (lenByteBurst + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE * BLOCK_BYTE_SIZE;
-    uint32_t ubGapElement = (ubPadDValue - dValue);
-    uint32_t ubGap = ubGapElement / ELEMS_PER_BLOCK;
-    uint32_t ubPad = 0;
-    if constexpr (TileData::PadVal != PadValue::Null) {
-        ubPad = ubGapElement % ELEMS_PER_BLOCK;
-    }
-    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7);
-    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7);
-    TLoadInstrGm2ub<TileData, GlobalData>(tmpUB, src, nValue, lenByteBurst, gmByteGap, ubGap, ubPad);
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID7);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID7);
-    uint32_t nBurst = ((ubPadDValue + ELEMS_PER_BLOCK - 1) / ELEMS_PER_BLOCK);
-    for (size_t i = 0; i < nValue; i++) {
-        copy_ubuf_to_cbuf(dst + i * dstNzNStride * ELEMS_PER_BLOCK, tmpUB + i * ubPadDValue, 0, 
-            nBurst, 1, 0, dstNzC0Stride - 1);
-    }
-    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7);
-    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7);
+    PTO_ASSERT(false, "Padding of ND2NZ is unsupported for L1 on A1.");
 }
 
 template <typename TileData, typename GlobalData>
@@ -643,76 +622,7 @@ __tf__ PTO_INTERNAL void TLoadNCHW(typename TileData::TileDType __out__ dst, typ
                                    int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int dstShape0,
                                    int dstShape1, int dstShape2, int dstShape3)
 {
-    /* Loading Process: [GM]NCHW -> [UB]NCH_align(W) -> [UB]NCHW -> [UB]NC1HWC0 -> [L1]NC1HWC0 */
-    __cbuf__ typename TileData::DType *dstAddr = (__cbuf__ typename TileData::DType *)__cce_get_tile_ptr(dst);
-    typename GlobalData::DType *srcAddr = src;
-    constexpr uint16_t c0ElemCount      = C0_SIZE_BYTE / sizeof(typename TileData::DType);
-    constexpr uint16_t ELEMS_PER_BLOCK  = BLOCK_BYTE_SIZE / sizeof(typename GlobalData::DType);
-    constexpr uint16_t REPEAT_N_ELEMS   = REPEAT_BYTE / sizeof(typename GlobalData::DType);
-
-    // ConvTile layout is [N,C1,H,W,C0] = [dstShape0, dstShape1, dstShape2, dstShape3, c0ElemCount]
-    // GlobalTensor layout is [1,N,C,H,W] = [1, srcShape1, srcShape2, srcShape3, srcShape4]
-    PTO_ASSERT(srcShape1 == dstShape0 && srcShape3 == dstShape2 && srcShape4 == dstShape3,
-               "Fix: src layout is [1,N,C,H,W],dst layout [N,C1,H,W,C0], srcShape dstShape should be same!");
-    PTO_ASSERT(srcShape2 <= dstShape1 * c0ElemCount,
-               "Fix: src layout is [1,N,C,H,W],dst layout [N,C1,H,W,C0], srcC should <= dstC1 * dstC0!");
-
-    ///////////////////////////////////
-    // AscendC API
-    const auto cDstShape1 = dstShape1 * c0ElemCount;
-    const uint16_t alignedW = (dstShape3 + ELEMS_PER_BLOCK - 1) / ELEMS_PER_BLOCK * ELEMS_PER_BLOCK;
-    const uint16_t hwSize = dstShape2 * dstShape3;
-    const uint16_t tileNumel = dstShape0 * cDstShape1 * hwSize;
-    const uint16_t tileAlignedNumel = dstShape0 * cDstShape1 * dstShape2 * alignedW;
-    PTO_ASSERT(tileAlignedNumel * 2 * sizeof(typename TileData::DType) < 256 * 1024,
-               "Fix: Fix: Twice the tileAlignedNumel must be smaller than the size of UB(256KB)");
-
-    AscendC::GlobalTensor<typename GlobalData::DType> ascGM;
-    ascGM.SetGlobalBuffer(srcAddr);
-    AscendC::LocalTensor<typename TileData::DType> ascA1(
-        AscendC::TPosition::A1, (uint32_t)((uint64_t)dstAddr), tileNumel);
-    AscendC::LocalTensor<typename GlobalData::DType> ascTmpUB(
-        AscendC::TPosition::VECIN, 0, (TMP_UB_OFFSET + TMP_UB_SIZE) / sizeof(typename GlobalData::DType));
-    auto ascA1UB = ascTmpUB[0], ascUB = ascTmpUB[tileAlignedNumel]; // Both given aligned size.
-
-    // 0.From GM to UB (Copy with W aliged.)
-    if (dstShape3 == gStride3 && gStride3 % ELEMS_PER_BLOCK == 0) {
-        for (uint32_t i = 0; i < dstShape0; i++) {
-            AscendC::DataCopyParams intriParams(
-                cDstShape1, hwSize / ELEMS_PER_BLOCK,  (gStride2 - hwSize) / ELEMS_PER_BLOCK, 0);
-            AscendC::DataCopy(ascA1UB[i * cDstShape1 * hwSize], ascGM[i * gStride1], intriParams);
-        }
-    } else {
-        for (uint32_t i = 0; i < dstShape0; i++) {
-            for (uint32_t j = 0; j < cDstShape1; j++) {
-                for (uint32_t k = 0; k < dstShape2; k++) {
-                    auto dstOffset = ((i * cDstShape1 + j) * dstShape2 + k) * alignedW;
-                    auto srcOffset = i * gStride1 + j * gStride2 + k * gStride3;
-                    AscendC::DataCopy(
-                        ascA1UB[dstOffset], ascGM[srcOffset], {1, (uint16_t)(alignedW / ELEMS_PER_BLOCK), 0, 0});
-                }
-            }
-        }
-    }
-    // 1.MEM@UB NCH_alignW -> NC1H_alignWC0
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID3);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID3);
-    AscendC::LocalTensor<uint8_t> ascDummy; // not used
-    AscendC::Transpose(ascUB, ascA1UB, ascDummy,
-        {(uint16_t)(dstShape0 * dstShape1), (uint16_t)c0ElemCount, (uint16_t)1, (uint16_t)(dstShape2 * alignedW),
-        AscendC::TransposeType::TRANSPOSE_NCHW2NHWC});
-    // 2.MEM@UB NC1HW_alignWC0 -> NC1HWC0
-    pipe_barrier(PIPE_V);
-    AscendC::DataCopy(ascA1UB, ascUB, {(uint16_t)(dstShape0 * dstShape1 * dstShape2), (uint16_t)dstShape3, (uint16_t)(alignedW - dstShape3), 0});
-    // 3.From UB to A1 (Copy as-is.)
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID3);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID3);
-    // AscendC函数会失败，原因是嵌套模板参数认为类型不一致
-    copy_ubuf_to_cbuf((__cbuf__ void*)ascA1.GetPhyAddr(), (__ubuf__ void *)(ascA1UB.GetPhyAddr()), 
-        0, (uint16_t)1, (uint16_t)((tileNumel + ELEMS_PER_BLOCK - 1) / ELEMS_PER_BLOCK), 0, 0);
-    // Keep Consistency while from MTE2, to MTE2.
-    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID3);
-    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID3);
+    PTO_ASSERT(false, "TLoadNCHW is unsupported on A1.");
 }
 
 template <typename TileData, typename GlobalData>
@@ -722,58 +632,7 @@ __tf__ PTO_INTERNAL void TLoadNCHW2FractalZ(typename TileData::TileDType __out__
                                             int gStride2, int gStride3, int gStride4, int dstShape0, int dstShape1,
                                             int dstShape2, int dstShape3)
 {
-    /*
-    kn: align16(N)_align16(C)(HW) -> C1HW*N/16*16*C0, C0=32/sizeof(T)
-     */
-    __cbuf__ typename TileData::DType *dstAddr = (__cbuf__ typename TileData::DType *)__cce_get_tile_ptr(dst);
-    typename GlobalData::DType *srcAddr = src;
-    const uint16_t typeSize = sizeof(typename TileData::DType);
-    constexpr uint32_t c0ElemCount = C0_SIZE_BYTE / typeSize;
-    typename GlobalData::DType *srcAddrP = srcAddr;
-    __cbuf__ typename TileData::DType *dstAddrP = dstAddr;
-
-    // ConvTile layout is [C1HW,N/16,16,C0] = [dstShape0, dstShape1, dstShape2, dstShape3]
-    // GlobalTensor layout is [1,N,C,H,W] = [1, srcShape1, srcShape2, srcShape3, srcShape4]
-    PTO_ASSERT(gStride2 == srcShape3 * srcShape4,
-               "Fix: src layout is [1,N,C,H,W],dst layout [C1HW,N/16,16,C0], H*W should be all load");
-    PTO_ASSERT(srcShape2 % c0ElemCount == 0, "Fix: expect align 32 bytes for C");
-    PTO_ASSERT(srcShape1 % 16 == 0, "Fix: expect align 16 for N");
-    PTO_ASSERT(TileData::bufferSize * 2 <= 256 * 1024, "Fix: Twice the bufferSize must be smaller than the size of UB(256KB)");
-
-    ///////////////////////////////////
-    // AscendC API
-    const uint32_t dstNumel = TileData::bufferSize / typeSize;
-    uint32_t numsOfElemInOneBlk = BLOCK_BYTE_SIZE / typeSize;
-    AscendC::GlobalTensor<typename GlobalData::DType> ascGM;
-    ascGM.SetGlobalBuffer(srcAddr);
-    AscendC::LocalTensor<typename GlobalData::DType> ascTmpUB(AscendC::TPosition::VECOUT, 0, (TMP_UB_OFFSET + TMP_UB_SIZE) / typeSize);  // 总的临时UB的缓存
-    auto ascUB0= ascTmpUB[0];  // 用以gm->ub copy, ub->ub,transpose
-    auto ascUB1 = ascTmpUB[dstNumel];  // 用以ub->ub,transpose
-    // GM->UB (copy as-is)
-    AscendC::DataCopyParams gm2ubParams(1, srcShape2 * gStride2 / numsOfElemInOneBlk, 0, 0);
-    for (int i = 0; i < srcShape1; ++i) {
-        AscendC::DataCopy(ascUB0[i * srcShape2 * gStride2], ascGM[i * gStride1], gm2ubParams);
-    }
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID3);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID3);
-    // NCHW->CHWN (transpose NCHW->NHWC, when N=1,C=N,HW=CHW)
-    AscendC::LocalTensor<uint8_t> ascDummy; // not used
-    AscendC::Transpose(ascUB1, ascUB0, ascDummy,
-        {1, (uint16_t)srcShape1, (uint16_t)1, (uint16_t)(srcShape2 * gStride2),
-        AscendC::TransposeType::TRANSPOSE_NCHW2NHWC});
-    pipe_barrier(PIPE_V);
-    // CHWN->C1HW,N/16,16,C0 (transpose, NCHW->NHWC, when N=1*C1,C=C0,HW=HWN)
-    int Ci1 = srcShape2 / c0ElemCount;
-    int hwSize = srcShape3 * srcShape4;  // HW->real H, N->real W
-    AscendC::Transpose(ascUB0, ascUB1, ascDummy,
-        {(uint16_t)Ci1, (uint16_t)c0ElemCount, (uint16_t)hwSize, (uint16_t)srcShape1,
-        AscendC::TransposeType::TRANSPOSE_NCHW2NHWC});
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID3);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID3);
-    // ub->l1, (C1,HWN,C0)=>(C1HW,N/16,16,C0), copy as-is
-    copy_ubuf_to_cbuf((__cbuf__ void*)dstAddr, (__ubuf__ void *)(ascUB0.GetPhyAddr()), 0, (uint16_t)(dstShape0 * dstShape1), (uint16_t)(dstShape2 * dstShape3 / numsOfElemInOneBlk), 0, 0);
-    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID3);
-    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID3);
+    PTO_ASSERT(false, "TLoadNCHW is unsupported on A1.");
 }
 
 template <typename TileData, typename GlobalData>

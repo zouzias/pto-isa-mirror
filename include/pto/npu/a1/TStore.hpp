@@ -461,67 +461,7 @@ PTO_INTERNAL void TStoreAccNCHW(typename GlobalData::DType *dstAddr, __cc__ type
                                 int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride1,
                                 int gStride2, int validRow, int validCol)
 {
-// note: W must not be tiled because only CStride given.
-    if constexpr (GlobalData::layout == pto::Layout::NCHW) {
-        PTO_ASSERT(validRow == gShape1 * gShape3 * gShape4,
-                   "The validRow of TileData must be equal to Shape1 * Shape3 * Shape4 of NCHW shape!");
-        PTO_ASSERT(validCol == gShape2, "The validCol of TileData must be equal to Shape2 of NCHW shape!");
-    } else { // NCDHW
-        PTO_ASSERT(validRow == gShape0 * gShape3 * gShape4,
-                   "The validRow of TileData must be equal to Shape0 * Shape3 * Shape4 of NCDHW shape!");
-        PTO_ASSERT(validCol == gShape1, "The validCol of TileData must be equal to Shape1 of NCDHW shape!");
-    }
-    using Tile_DType    = typename TileData::DType;
-    using Global_DType  = typename GlobalData::DType;
-
-    uint16_t mSize = validRow;
-    uint16_t nSize = validCol;
-    uint16_t whSize = mSize / gShape1;
-    uint16_t alignWH = TileData::Rows / gShape1;
-    constexpr uint16_t DSTTYPE_BYTESIZE = sizeof(Global_DType);
-    constexpr uint16_t ELEMS_PER_BLOCK = BLOCK_BYTE_SIZE / DSTTYPE_BYTESIZE;
-    uint32_t dstStride = (GlobalData::layout == pto::Layout::NCDHW) ? gStride1 : gStride2;
-
-    ///////////////////////////////////
-    // AscendC API
-    AscendC::GlobalTensor<Global_DType> ascGM;
-    ascGM.SetGlobalBuffer(dstAddr);
-    AscendC::LocalTensor<Tile_DType> ascCO1(
-        AscendC::TPosition::CO1, (uint32_t)((uint64_t)srcAddr), TileData::Numel);
-    AscendC::LocalTensor<Global_DType> ascTmpUB(
-        AscendC::TPosition::VECOUT, 0, (TMP_UB_OFFSET + TMP_UB_SIZE) / DSTTYPE_BYTESIZE);
-    auto ascUB1= ascTmpUB[0], ascUB2 = ascTmpUB[TileData::Numel];
-    AscendC::LocalTensor<uint32_t> offsetUB(
-        AscendC::TPosition::VECOUT, 2 * TileData::Numel * DSTTYPE_BYTESIZE, ELEMS_PER_BLOCK);
-    // 0.From L0C to UB (Copy as-is.)
-    AscendC::DataCopyParams intriParams(1, TileData::Numel / FRACTAL_NZ_ROW / ACC_C0_SIZE, 0, 0);
-    AscendC::DataCopyEnhancedParams enhancedParams;
-    enhancedParams.blockMode = AscendC::BlockMode::BLOCK_MODE_MATRIX;
-    AscendC::DataCopy(ascUB1 , ascCO1, intriParams, enhancedParams);
-    // 1.MEM@UB NZ->ND(NHWC)(Here HW is align32 bytes.)
-    pipe_barrier(PIPE_V);
-    constexpr uint16_t C0_N_ELEMS = ACC_C0_SIZE;
-    for (int i = 0; i < TileData::Cols / C0_N_ELEMS; i++) {
-        AscendC::DataCopy(
-            ascUB2[C0_N_ELEMS * i], ascUB1[C0_N_ELEMS * TileData::Rows * i], 
-            {TileData::Rows, 1, 0, TileData::Cols / C0_N_ELEMS - 1});
-    }
-    // 2.MEM@UB NHWC->NCHW(HW aligned)
-    pipe_barrier(PIPE_V);     // why not pipe_v barrier
-    AscendC::LocalTensor<uint8_t> ascDummy; // not used
-    AscendC::Transpose(ascUB1, ascUB2, ascDummy, {
-        (uint16_t)gShape1, (uint16_t)TileData::Cols, 1, TileData::Rows, AscendC::TransposeType::TRANSPOSE_NHWC2NCHW});
-    // 3.From UB to GM (Copy with unAligned HW)
-    using UBTileData = 
-        pto::Tile<pto::TileType::Vec, typename decltype(ascUB1)::PrimType, TileData::Rows, TileData::Cols>;
-    uint32_t lenByteBurst   = whSize * sizeof(Global_DType);
-    uint32_t gmByteGap      = dstStride * sizeof(Global_DType) - lenByteBurst;
-    uint32_t ubGap          = (alignWH - whSize) * sizeof(Global_DType) >> SHIFT_BLOCK_BYTE;
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID7);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID7);
-    TStoreUb2gmInstr<GlobalData, UBTileData>(
-        ascGM.GetPhyAddr(0), (__ubuf__ typename decltype(ascUB1)::PrimType *)ascUB1.GetPhyAddr(), 
-        nSize, lenByteBurst, gmByteGap, ubGap);
+    PTO_ASSERT(false, "TStoreAccNCHW is unsupported on A1.");
 }
 
 template <typename GlobalData, typename TileData, QuantMode_t quantizationMode = QuantMode_t::NoQuant,
