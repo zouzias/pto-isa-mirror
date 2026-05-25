@@ -84,6 +84,7 @@ void TestTload()
     aclrtMallocHost((void **)(&srcHost), srcDataSize);
 
     aclrtMalloc((void **)&dstDevice, dstDataSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, dstDataSize, 0, dstDataSize);
     aclrtMalloc((void **)&srcDevice, srcDataSize, ACL_MEM_MALLOC_HUGE_FIRST);
     ReadFile(GetGoldenDir() + "/input.bin", srcDataSize, srcHost, srcDataSize);
     aclrtMemcpy(srcDevice, srcDataSize, srcHost, srcDataSize, ACL_MEMCPY_HOST_TO_DEVICE);

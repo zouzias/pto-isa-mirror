@@ -65,8 +65,9 @@ void tload_test()
     aclrtMallocHost((void **)(&dstHost), out_byteSize);
     aclrtMallocHost((void **)(&goldHost), out_byteSize);
 
-    aclrtMalloc((void **)&dstDevice, in_byteSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, out_byteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&dstDevice, out_byteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, out_byteSize, 0, out_byteSize);
+    aclrtMalloc((void **)&srcDevice, in_byteSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     int actual_out_byteSize = 0;
     actual_out_byteSize = get_input_golden<testKey>((uint8_t *)srcHost, (uint8_t *)goldHost);
