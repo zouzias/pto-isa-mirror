@@ -70,6 +70,20 @@ Common multi-shape pattern:
 2. Support filtered generation for one case (`--case`) when debugging.
 3. Keep shape tuples in one canonical source (`generated_cases.*` or equivalent) consumed by both data generation and executable launch.
 
+### 2.1. Shape-source pitfall: `gen_data.py` must read the case manifest
+
+**Failure mode (observed in the MoE family):** `run.sh` invokes `generate_cases.py` with `--cases "..."` to rewrite `build/generated_cases.{h,json}`, then invokes `gen_data.py`. The C++ binary picks up the new shape via the regenerated header, but `gen_data.py` had its own hardcoded `kT/kH/...` constants and silently ignored the manifest. Result: input/golden files are still at the default shape while the binary expects the override shape — bytes-vs-shape mismatch, validator fails or (worse) reads stale bytes from a previous run.
+
+Rules to prevent this:
+
+1. **Single source of truth.** `gen_data.py` MUST read shape constants from the same manifest the C++ side consumes (`build/generated_cases.json` or equivalent). Do not duplicate the default shape as a Python literal that can drift.
+2. **First-case wins, mirroring the header.** When the header exposes single-case aliases (e.g. `kMoeT = kGeneratedMoeCases[0].t`), `gen_data.py` must use the first JSON entry too, applying any same-named transforms the header applies (e.g. `kTopK = max(2, _kTopK)` for TSORT32-floored kernels — keep this rule next to the load, with a comment pointing at the matching `main.cpp` line).
+3. **Fallback is allowed but must match the header default.** If the JSON is missing, fall back to the hardcoded defaults — but those defaults MUST equal the `DEFAULT_CASES` in `generate_cases.py`. Drift between the two is the bug class this rule prevents.
+4. **Path convention.** `gen_data.py` lives at `<kernel>/scripts/gen_data.py`; the family manifest lives at `<family>/build/generated_cases.json`. Resolve with `Path(__file__).resolve().parents[2] / "build" / "generated_cases.json"` for family-style layouts, or `parents[1] / "generated_cases.json"` for self-contained layouts (flash_atten).
+5. **Order in `run.sh`.** `generate_cases.py` MUST run before `gen_data.py`; `gen_data.py` MUST run before `rm -rf build` of the per-kernel build dir (or the per-kernel `rm` must target a different dir than the manifest). The MoE family avoids the collision because `<family>/build/` ≠ `<kernel>/build/` — preserve that distinction in new families.
+
+Reference fix: each MoE `gen_data.py` (e.g. [kernels/automode/a2a3/MoE/router_matmul/scripts/gen_data.py](../kernels/automode/a2a3/MoE/router_matmul/scripts/gen_data.py)) now loads the first JSON entry into `kT/kH/kF/kE/kTopK` and falls back to the historical hardcoded defaults only when the JSON is absent.
+
 ## 3. `main.cpp` contract (what to validate)
 
 Minimum behavior:

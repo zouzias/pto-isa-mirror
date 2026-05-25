@@ -51,6 +51,25 @@ Override the compiler (default is `bisheng`):
 bash run_all.sh -r npu -v Ascend910B1 -C bisheng
 ```
 
+Profile every kernel through `msopprof` (forwards `-p` to each kernel's
+`run.sh`):
+
+```bash
+bash run_all.sh -r npu -v Ascend910B1 -p
+```
+
+With `-p`, each kernel binary is launched as
+`msopprof --output=<kernel_dir>/prof <bin>`, so artifacts land in a per-kernel
+`prof/` directory (e.g. `add_tile_array/prof/`, `MoE/router_matmul/prof/`).
+The flag is wired through [`common.sh`](common.sh) — any kernel whose
+`run.sh` sources `common.sh` and launches via `run_bin` picks it up
+automatically. `-p` can be combined with `--kernels`, `--moe-subkernels`,
+`--cases-moe`, and `--cases-flash-atten`.
+
+`msopprof` must be on `PATH` (it ships with CANN). Profile mode only makes
+sense for `-r npu`; under `-r sim` `msopprof` will not collect device
+counters.
+
 ## What it runs
 
 The default kernel set (top of [`run_all.sh`](run_all.sh#L44)):
@@ -137,6 +156,11 @@ a bug in that kernel's host code, not in `run_all.sh`.
 
 `run_all.sh` itself exits 0 only when **every** selected kernel passed.
 
+When invoked with `-p`, profile artifacts are written under each kernel's
+own `prof/` directory (`<kernel>/prof/`), not under `run_log/`. The
+`[RUN.SH] profile mode: writing to <path>` line in each kernel's `.out` log
+records the exact destination.
+
 ## Common pitfalls
 
 - **CSV must have no spaces**: `--kernels add_tile_array,topk` works,
@@ -147,7 +171,10 @@ a bug in that kernel's host code, not in `run_all.sh`.
   fails on `-r sim`, that's expected for now; check the kernel's own
   README before filing it as a bug.
 - **`run_log/` is not auto-cleaned**. Old logs accumulate. Delete it
-  yourself between large sweeps if disk usage matters.
+  yourself between large sweeps if disk usage matters. The same applies to
+  the per-kernel `prof/` directories created by `-p`. Use
+  [`clean_workspace.sh`](clean_workspace.sh) (supports `--dry-run`) to
+  remove both in one shot.
 - **MoE single-case-per-binary**: each MoE sub-kernel is rebuilt for the
   first `--cases` shape (see comment in
   [MoE/scripts/generate_cases.py](MoE/scripts/generate_cases.py)). Passing
