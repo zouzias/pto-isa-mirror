@@ -23,17 +23,37 @@
 #   ./output/golden_C.bin         kT * kH            float32  (final MoE output)
 # --------------------------------------------------------------------------------
 
+import json
 import os
+from pathlib import Path
+
 import numpy as np
 
 np.random.seed(101)
 
-# v1 shape — must match the C++ side. Patched by sweep.sh.
-kT     = 256
-kH     = 64
-kF     = 64
-kE     = 32
-kTopK  = 1
+
+def _load_case_from_json():
+    # Mirror generated_cases.h: first JSON entry drives the build.
+    json_path = Path(__file__).resolve().parents[2] / "build" / "generated_cases.json"
+    if not json_path.exists():
+        return None
+    payload = json.loads(json_path.read_text())
+    if not payload:
+        return None
+    c = payload[0]
+    return int(c["t"]), int(c["h"]), int(c["f"]), int(c["e"]), int(c["topk"])
+
+
+_case = _load_case_from_json()
+if _case is not None:
+    kT, kH, kF, kE, kTopK = _case
+else:
+    # v1 shape — must match the C++ side. Patched by sweep.sh.
+    kT     = 256
+    kH     = 64
+    kF     = 64
+    kE     = 32
+    kTopK  = 1
 
 # Cube blockAlign for fp16 = 16. W1 and W2 are zero-padded to aligned dims
 # so the GEMM MatTile K/N padding columns read zeros, not garbage.

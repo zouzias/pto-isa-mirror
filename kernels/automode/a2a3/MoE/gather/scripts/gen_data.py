@@ -22,15 +22,36 @@
 # scatter-add.
 # --------------------------------------------------------------------------------
 
+import json
 import os
+from pathlib import Path
+
 import numpy as np
 
 np.random.seed(37)
 
-# v1 shape — must match the C++ side.
-kT    = 256
-kH    = 64
-kTopK = 1
+
+def _load_case_from_json():
+    # Mirror generated_cases.h: first JSON entry drives the build.
+    json_path = Path(__file__).resolve().parents[2] / "build" / "generated_cases.json"
+    if not json_path.exists():
+        return None
+    payload = json.loads(json_path.read_text())
+    if not payload:
+        return None
+    c = payload[0]
+    return int(c["t"]), int(c["h"]), int(c["f"]), int(c["e"]), int(c["topk"])
+
+
+_case = _load_case_from_json()
+if _case is not None:
+    kT, kH, _kF, kE, kTopK = _case
+else:
+    # v1 shape — must match the C++ side.
+    kT    = 256
+    kH    = 64
+    kE    = 32
+    kTopK = 1
 
 kPackedRows   = kT * kTopK
 kOverspillPad = 16
@@ -51,7 +72,7 @@ def gen_golden_data():
     # is what makes the kTopK > 1 weighted accumulation meaningful.
     expert_id = np.zeros((kT, kTopK), dtype=np.int32)
     for t in range(kT):
-        expert_id[t] = np.random.choice(32, size=kTopK, replace=False).astype(np.int32)
+        expert_id[t] = np.random.choice(kE, size=kTopK, replace=False).astype(np.int32)
     expert_id_flat     = expert_id.flatten()
     token_ids_per_pair = np.repeat(np.arange(kT, dtype=np.int32), kTopK)
     ranks_per_pair     = np.tile  (np.arange(kTopK, dtype=np.int32), kT)

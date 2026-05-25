@@ -26,7 +26,8 @@
 # its profile artifacts under its own prof/ subdirectory.
 #
 # Available top-level kernels (default = all):
-#   add_tile_array, topk, router_topk_small, mla, flash_atten, MoE, MoEv2
+#   add_tile_array, topk, topkv2, router_topk_small, gemm, mla,
+#   flash_atten, sparse_flash_attn, MoE, MoEv2
 #
 # For MoE / MoEv2 families, all 8 sub-kernels are run unless filtered via
 # --moe-subkernels (applied to BOTH families when both are selected).
@@ -46,7 +47,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ----- Defaults -------------------------------------------------------------
 
-ALL_KERNELS=(add_tile_array topk router_topk_small mla flash_atten MoE MoEv2)
+ALL_KERNELS=(add_tile_array topk topkv2 router_topk_small gemm mla flash_atten sparse_flash_attn MoE MoEv2)
 MOE_SUBKERNELS=(router_matmul moe_topk moe_topk_padded scatter expert_ffn gather full_moe_separate full_moe_combined)
 
 RUN_MODE=""
