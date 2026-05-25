@@ -58,12 +58,9 @@ void test_tpows()
 
     ReadFile(GetGoldenDir() + "/base.bin", fileSize, baseHost, fileSize);
     ReadFile(GetGoldenDir() + "/exp.bin", expSize, expHost, expSize);
-<<<<<<< HEAD
     aclrtMemset(dstHost, fileSize, 0, fileSize);
 
     aclrtMemcpy(dstDevice, fileSize, dstHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-=======
->>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
     aclrtMemcpy(baseDevice, fileSize, baseHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(expDevice, expSize, expHost, expSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LaunchTPows<T, Row, Col, validRow, validCol, isHighPrecision>(dstDevice, baseDevice, expDevice, stream);

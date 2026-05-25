@@ -58,12 +58,7 @@ void test_tfmod()
 
     ReadFile(GetGoldenDir() + "/input1.bin", fileSize, src0Host, fileSize);
     ReadFile(GetGoldenDir() + "/input2.bin", fileSize, src1Host, fileSize);
-<<<<<<< HEAD
-    aclrtMemset(dstHost, fileSize, 0, fileSize);
-    aclrtMemcpy(dstDevice, fileSize, dstHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-=======
 
->>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
     aclrtMemcpy(src0Device, fileSize, src0Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, fileSize, src1Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LaunchTFMod<T, kTRows_, kTCols_, vRows, vCols, isHalf, highPrecision>(dstDevice, src0Device, src1Device, stream);
@@ -84,13 +79,8 @@ void test_tfmod()
     aclrtResetDevice(0);
     aclFinalize();
 
-<<<<<<< HEAD
     std::vector<T> golden(kTRows_ * kTCols_);
     std::vector<T> devFinal(kTRows_ * kTCols_);
-=======
-    std::vector<T> golden(fileSize);
-    std::vector<T> devFinal(fileSize);
->>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
     ReadFile(GetGoldenDir() + "/golden.bin", fileSize, golden.data(), fileSize);
     ReadFile(GetGoldenDir() + "/output.bin", fileSize, devFinal.data(), fileSize);
 
@@ -119,14 +109,11 @@ TEST_F(TFMODTest, case3)
     test_tfmod<uint16_t, 1, 16384, 1, 16384, false>();
 }
 
-<<<<<<< HEAD
 TEST_F(TFMODTest, case4)
 {
     test_tfmod<uint16_t, 512, 16, 512, 16, false>();
 }
 
-=======
->>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 TEST_F(TFMODTest, case5)
 {
     test_tfmod<float, 32, 32, 32, 32, false, true>();
@@ -156,7 +143,6 @@ TEST_F(TFMODTest, case10)
 {
     test_tfmod<float, 64, 64, 64, 64, false, true>();
 }
-<<<<<<< HEAD
 
 TEST_F(TFMODTest, case11)
 {
@@ -167,5 +153,3 @@ TEST_F(TFMODTest, case12)
 {
     test_tfmod<float, 64, 128, 61, 97, false, true>();
 }
-=======
->>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)

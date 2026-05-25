@@ -12,11 +12,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define ARCH_CCE_INTRINSIC_HPP
 #include <pto/common/arch_macro.hpp>
 #ifndef __CPU_SIM
-<<<<<<< HEAD
-
-namespace pto {
-=======
->>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 
 PTO_INTERNAL void pto_copy_ubuf_to_ubuf(__ubuf__ void *dst, __ubuf__ void *src, uint16_t nBurst, uint16_t lenBurst,
                                         uint16_t srcGap, uint16_t dstGap)
@@ -72,15 +67,11 @@ template <typename T, typename U>
 PTO_INTERNAL void pto_create_cbuf_matrix(__cbuf__ T *dst, int64_t repeatConfig, U value)
 {
 #if defined(PTO_NPU_ARCH_KIRIN9030)
-<<<<<<< HEAD
     if constexpr (std::is_integral_v<U>) {
         set_l0_set_value_ui(value);
     } else if (std::is_same_v<U, half>) {
         set_l0_set_value_h(value);
     }
-=======
-    set_l0_set_value_ui((uint32_t)value);
->>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
     set_l1_2d(dst, repeatConfig);
 #else
     if constexpr (std::is_same<T, bfloat16_t>::value) {
@@ -90,7 +81,6 @@ PTO_INTERNAL void pto_create_cbuf_matrix(__cbuf__ T *dst, int64_t repeatConfig, 
     }
 #endif
 }
-<<<<<<< HEAD
 
 #if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
 template <typename T, typename U, typename S>
@@ -122,119 +112,5 @@ PTO_INTERNAL void pto_copy_gm_to_ubuf_align_v2(__ubuf__ T *dst, __gm__ T *src, u
 }
 #endif
 
-template <TileType type>
-PTO_INTERNAL void pto_set_tload_pad_val(uint64_t config)
-{
-    if constexpr (type == TileType::Vec) {
-#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRINX90)
-        set_mov_pad_val(config);
-#elif defined(PTO_NPU_ARCH_KIRIN9030)
-        set_pad_val_outtoub(config);
-#endif
-    } else if constexpr (type == TileType::Mat) {
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030)
-        set_pad_val_outtol1(config);
-#endif
-    }
-}
-
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030)
-template <typename T>
-PTO_INTERNAL void pto_copy_gm_to_cbuf_multi_nd2nz(__cbuf__ T *dst, __gm__ T *src, uint8_t sid, uint64_t loop1SrcStride,
-                                                  uint8_t l2CacheCtl, uint16_t nValue, uint32_t dValue,
-                                                  uint64_t loop4SrcStride, bool smallc0En = false)
-{
-    using U = std::conditional_t<sizeof(T) == sizeof(uint8_t), uint8_t,
-                                 std::conditional_t<sizeof(T) == sizeof(uint16_t), uint16_t, uint32_t>>;
-#if defined(PTO_NPU_ARCH_A5)
-    copy_gm_to_cbuf_multi_nd2nz(reinterpret_cast<__cbuf__ U *>(dst), reinterpret_cast<__gm__ U *>(src), sid,
-                                loop1SrcStride, l2CacheCtl, nValue, dValue, loop4SrcStride, smallc0En);
-#elif defined(PTO_NPU_ARCH_KIRIN9030)
-    copy_gm_to_cbuf_multi_nd2nz(reinterpret_cast<__cbuf__ U *>(dst), reinterpret_cast<__gm__ U *>(src), sid,
-                                loop1SrcStride, nValue, dValue, loop4SrcStride, smallc0En, false /* antiq_en */);
-#endif
-}
-#elif defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_KIRINX90)
-template <typename T>
-PTO_INTERNAL void pto_copy_gm_to_cbuf_multi_nd2nz(__cbuf__ T *dst, __gm__ T *src, uint8_t sid, uint16_t ndNum,
-                                                  uint16_t nValue, uint16_t dValue, uint16_t srcNdMatrixStride,
-                                                  uint16_t srcDValue, uint16_t dstNzC0Stride, uint16_t dstNzNStride,
-                                                  uint16_t dstNzMatrixStride)
-{
-    if constexpr (sizeof(T) == sizeof(uint8_t)) {
-        copy_gm_to_cbuf_multi_nd2nz_b8(dst, src, sid, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue,
-                                       dstNzC0Stride, dstNzNStride, dstNzMatrixStride);
-    } else if constexpr (sizeof(T) == sizeof(uint16_t)) {
-        copy_gm_to_cbuf_multi_nd2nz_b16(dst, src, sid, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue,
-                                        dstNzC0Stride, dstNzNStride, dstNzMatrixStride);
-    }
-#if defined(PTO_NPU_ARCH_A2A3)
-    if constexpr (sizeof(T) == sizeof(uint32_t)) {
-        copy_gm_to_cbuf_multi_nd2nz_b32s(dst, src, sid, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue,
-                                         dstNzC0Stride, dstNzNStride, dstNzMatrixStride);
-    } else if constexpr (sizeof(T) == sizeof(uint64_t)) {
-        uint16_t dValueb64 = dValue * sizeof(T) / sizeof(uint32_t);
-        uint16_t srcDValueb64 = srcDValue * sizeof(T) / sizeof(uint32_t);
-        copy_gm_to_cbuf_multi_nd2nz_b32s(
-            reinterpret_cast<__cbuf__ uint32_t *>(dst), reinterpret_cast<__gm__ uint32_t *>(src), sid, ndNum, nValue,
-            dValueb64, srcNdMatrixStride, srcDValueb64, dstNzC0Stride, dstNzNStride, dstNzMatrixStride);
-    }
-#elif defined(PTO_NPU_ARCH_KIRINX90)
-    if constexpr (sizeof(T) == sizeof(uint32_t)) {
-        uint16_t dValueb32 = dValue * sizeof(T) / sizeof(uint16_t);
-        uint16_t srcDValueb32 = srcDValue * sizeof(T) / sizeof(uint16_t);
-        copy_gm_to_cbuf_multi_nd2nz_b16(
-            reinterpret_cast<__cbuf__ uint16_t *>(dst), reinterpret_cast<__gm__ uint16_t *>(src), sid, ndNum, nValue,
-            dValueb32, srcNdMatrixStride, srcDValueb32, dstNzC0Stride, dstNzNStride, dstNzMatrixStride);
-    } else if constexpr (sizeof(T) == sizeof(uint64_t)) {
-        uint16_t dValueb64 = dValue * sizeof(T) / sizeof(uint64_t);
-        uint16_t srcDValueb64 = srcDValue * sizeof(T) / sizeof(uint64_t);
-        copy_gm_to_cbuf_multi_nd2nz_b16(
-            reinterpret_cast<__cbuf__ uint16_t *>(dst), reinterpret_cast<__gm__ uint16_t *>(src), sid, ndNum, nValue,
-            dValueb64, srcNdMatrixStride, srcDValueb64, dstNzC0Stride, dstNzNStride, dstNzMatrixStride);
-    }
-#endif
-}
-#endif
-
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030)
-template <typename T>
-PTO_INTERNAL void pto_copy_gm_to_cbuf_align_v2(__cbuf__ T *dst, __gm__ T *src, uint8_t sid, uint32_t nBurst,
-                                               uint32_t lenBurst, uint8_t leftPaddingCount, uint8_t rightPaddingCount,
-                                               bool dataSelectBit, uint8_t l2CacheCtl, uint64_t burstSrcStride,
-                                               uint32_t burstDstStride)
-{
-    using U = std::conditional_t<sizeof(T) == sizeof(uint8_t), uint8_t,
-                                 std::conditional_t<sizeof(T) == sizeof(uint16_t), uint16_t, uint32_t>>;
-#if defined(PTO_NPU_ARCH_A5)
-    copy_gm_to_cbuf_align_v2(reinterpret_cast<__cbuf__ U *>(dst), reinterpret_cast<__gm__ U *>(src), sid, nBurst,
-                             lenBurst, leftPaddingCount, rightPaddingCount, dataSelectBit, l2CacheCtl, burstSrcStride,
-                             burstDstStride);
-#elif defined(PTO_NPU_ARCH_KIRIN9030)
-    copy_gm_to_cbuf_align_v2(reinterpret_cast<__cbuf__ U *>(dst), reinterpret_cast<__gm__ U *>(src), sid, nBurst,
-                             lenBurst, leftPaddingCount, rightPaddingCount, dataSelectBit, burstSrcStride,
-                             burstDstStride);
-#endif
-}
-#endif
-
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030)
-template <typename T>
-PTO_INTERNAL void pto_copy_ubuf_to_gm_align_v2(__gm__ T *dst, __ubuf__ T *src, uint8_t sid, uint32_t nBurst,
-                                               uint32_t lenBurst, uint8_t l2CacheCtl, uint64_t burstDstStride,
-                                               uint32_t burstSrcStride)
-{
-#if defined(PTO_NPU_ARCH_A5)
-    copy_ubuf_to_gm_align_v2(dst, src, sid, nBurst, lenBurst, l2CacheCtl, burstDstStride, burstSrcStride);
-#elif defined(PTO_NPU_ARCH_KIRIN9030)
-    copy_ubuf_to_gm_align_v2(dst, src, sid, nBurst, lenBurst, burstDstStride, burstSrcStride);
-#endif
-}
-#endif
-
-} // namespace pto
-
-=======
->>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 #endif // __CPU_SIM
 #endif // ARCH_CCE_INTRINSIC_HPP
