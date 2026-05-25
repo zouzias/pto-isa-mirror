@@ -8,64 +8,73 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TLOAD_HPP_310P3
-#define TLOAD_HPP_310P3
-
-#include "TFillPad.hpp"
+#ifndef TLOAD_HPP_A1
+#define TLOAD_HPP_A1
 
 namespace pto {
 
-template <typename TileData>
-PTO_INTERNAL void T32BAlignedPadInstr(__ubuf__ typename TileData::DType *tail, uint16_t validRow, uint32_t validCol, 
-                                      decltype(GetPadValue<TileData>()) padValue)
+template <typename T, typename U>
+PTO_INTERNAL void TAlign32BPadInstr(__ubuf__ T *dst, uint32_t validRow, uint32_t validCol, 
+    uint32_t dstStride, uint32_t ubPad, U padValue)
 {
-    constexpr uint32_t ELEMS_PER_BLOCK = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
-    if constexpr (sizeof(typename TileData::DType) == 1) {
+    constexpr uint32_t ELEMS_PER_BLOCK  = BLOCK_BYTE_SIZE / sizeof(T);
+    constexpr uint32_t ELEMS_PER_REPEAT = REPEAT_BYTE / sizeof(T);
+    const uint32_t paddedCol = validCol + ubPad;
+    if constexpr (sizeof(T) == 1) {
+        __ubuf__ U *dstPadPtr = (__ubuf__ U *)dst;
         set_flag(PIPE_V, PIPE_S, EVENT_ID7);
         wait_flag(PIPE_V, PIPE_S, EVENT_ID7);
-        Handle32BAlignedPad_Byte<TileData, TileData>((decltype(getCopyNullPtr<TileData>()))(tail), 
-            validRow, validCol, ELEMS_PER_BLOCK, padValue);
+        for (uint64_t r = 0; r < validRow; ++r) {
+            for (uint64_t c = validCol; c < paddedCol; ++c) {
+                dstPadPtr[r * dstStride + c] = padValue;
+            }
+        }
         // 对外保持整个指令的结束流水是 PIPE_V
         set_flag(PIPE_S, PIPE_V, EVENT_ID7);
         wait_flag(PIPE_S, PIPE_V, EVENT_ID7);
-    } else if constexpr (sizeof(typename TileData::DType) == 8) {
-        PTO_ASSERT((padValue == PadValueMap<uint64_t, PadValue::Min>::value || 
-            padValue == PadValueMap<uint64_t, PadValue::Max>::value), 
-            "Only support padding with uint64_t while sizeof(T) == 8.");
-        set_mask_norm();
-        set_vector_mask(0, (1 << (ELEMS_PER_BLOCK * 2)) - (1 << (validCol * 2)));
-        vector_dup((__ubuf__ int32_t*)tail, 0, validRow, 0, 0, TileData::Cols / ELEMS_PER_BLOCK, 0);
-        set_mask_norm();
-        set_vector_mask(-1, -1);
-    } else {
-        Handle32BAlignedPad_Other<TileData, TileData>((decltype(getCopyNullPtr<TileData>()))(tail),
-            validRow, validCol, ELEMS_PER_BLOCK, padValue);
+        return;
     }
+    const uint64_t maskFactor = sizeof(T) == 8 ? 2 : 1;
+    set_mask_norm();
+    set_vector_mask(0, (1 << (paddedCol * maskFactor)) - (1 << (validCol * maskFactor)));
+    for (int r = 0; r < validRow; r += REPEAT_MAX) {
+        __ubuf__ U *dstPadPtr = (__ubuf__ U *)(dst + r * dstStride);
+        auto fillRow = min((uint32_t)REPEAT_MAX, (uint32_t)(validRow - r));
+        if constexpr (sizeof(T) == 8) {
+            PTO_ASSERT((padValue == PadValueMap<uint64_t, PadValue::Min>::value || 
+                        padValue == PadValueMap<uint64_t, PadValue::Max>::value), 
+                "Only support padding with uint64_t while sizeof(T) == 8.");
+            vector_dup((__ubuf__ uint32_t*)dstPadPtr, (uint32_t)padValue, fillRow, 1, 1, dstStride / ELEMS_PER_BLOCK, 0);
+        } else {
+            vector_dup(dstPadPtr, padValue, fillRow, 1, 1, dstStride / ELEMS_PER_BLOCK, 0);
+        }
+    }
+    set_vector_mask(-1, -1);
 }
 
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadInstrGm2ub(__ubuf__ typename TileData::DType *dst, typename GlobalData::DType *src,
-                                  uint16_t nBurst, uint32_t lenByteBurst, uint32_t gmByteGap, uint32_t ubGap,
-                                  uint32_t ubPad)
+                                  uint16_t nBurst, uint32_t lenByteBurst, uint32_t gmByteGap, uint32_t ubGap, uint32_t ubPad)
 {
-    constexpr uint32_t ELEMS_PER_BLOCK = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
+    using T = typename TileData::DType;
+    constexpr uint32_t ELEMS_PER_BLOCK = BLOCK_BYTE_SIZE / sizeof(T);
     uint32_t lenBurst = (lenByteBurst + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
     uint32_t dstStride = (ubGap + lenBurst) * ELEMS_PER_BLOCK;
-    uint32_t srcStride = (gmByteGap + lenByteBurst) / sizeof(typename TileData::DType);
+    uint32_t srcStride = (gmByteGap + lenByteBurst) / sizeof(T);
 
     if (srcStride % ELEMS_PER_BLOCK == 0) {
-        copy_gm_to_ubuf(dst, src, 0, nBurst, lenBurst, srcStride / ELEMS_PER_BLOCK - lenBurst, ubGap);
+        copy_gm_to_ubuf(dst, src, 0, (uint32_t)nBurst, lenBurst, srcStride / ELEMS_PER_BLOCK - lenBurst, ubGap);
     } else {
         for (int i = 0; i < nBurst; ++i) {
             copy_gm_to_ubuf(dst + i * dstStride, src + i * srcStride, 0, 1, lenBurst, 0, 0);
         }
     }
     if (ubPad != 0) {
-        uint32_t validCol = lenByteBurst / sizeof(typename TileData::DType);
+        uint32_t validCol = lenByteBurst / sizeof(T);
         uint32_t remains = validCol % ELEMS_PER_BLOCK;
         set_flag(PIPE_MTE2, PIPE_V, EVENT_ID7);
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID7);
-        T32BAlignedPadInstr<TileData>(dst + validCol - remains, nBurst, remains, GetPadValue<TileData>());
+        TAlign32BPadInstr(dst + validCol - remains, nBurst, remains, dstStride, ubPad, GetPadValue<TileData>());
         // 对外保持整个指令的结束流水是 PIPE_MTE2
         set_flag(PIPE_V, PIPE_MTE2, EVENT_ID7);
         wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID7);
@@ -81,15 +90,41 @@ PTO_INTERNAL void TLoadNd2nzInstr(__cbuf__ typename TileData::DType *dst, typena
     // Parameter list:
     // dst, src, sid, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue,
     // dstNzC0Stride, dstNzNStride, dstNzMatrixStride
-    PTO_ASSERT(ndNum == 1, "The ndNum must be 1 for 310P3 now.");
+    PTO_ASSERT(ndNum == 1, "The ndNum must be 1 for A1 now.");
     (void)srcNdMatrixStride;
     (void)dstNzMatrixStride;
+    using T = typename TileData::DType;
     constexpr uint32_t ELEMS_PER_BLOCK = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
-    uint32_t nBurst = ((dValue + ELEMS_PER_BLOCK - 1) / ELEMS_PER_BLOCK);
-    for (size_t i = 0; i < nValue; i++) {
-        copy_gm_to_cbuf(dst + i * dstNzNStride * ELEMS_PER_BLOCK, src + i * srcDValue, 0, 
-            nBurst, 1, 0, dstNzC0Stride - 1, (pad_t)0);
+    if (((dValue * sizeof(T)) % 32 == 0) && ((srcDValue * sizeof(T)) % 32 == 0)) {
+        uint32_t nBurst = ((dValue + ELEMS_PER_BLOCK - 1) / ELEMS_PER_BLOCK);
+        for (size_t i = 0; i < nValue; i++) {
+            copy_gm_to_cbuf(dst + i * dstNzNStride * ELEMS_PER_BLOCK, src + i * srcDValue, 0, 
+                nBurst, 1, 0, dstNzC0Stride - 1, (pad_t)0);
+        }
+        return;
     }
+    __ubuf__ typename TileData::DType *tmpUB = (__ubuf__ typename TileData::DType *)get_imm(0);
+    uint32_t lenByteBurst = dValue * sizeof(T);
+    uint32_t gmByteGap = (srcDValue - dValue) * sizeof(T);
+    uint32_t ubPadDValue = (lenByteBurst + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE * BLOCK_BYTE_SIZE;
+    uint32_t ubGapElement = (ubPadDValue - dValue);
+    uint32_t ubGap = ubGapElement / ELEMS_PER_BLOCK;
+    uint32_t ubPad = 0;
+    if constexpr (TileData::PadVal != PadValue::Null) {
+        ubPad = ubGapElement % ELEMS_PER_BLOCK;
+    }
+    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7);
+    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7);
+    TLoadInstrGm2ub<TileData, GlobalData>(tmpUB, src, nValue, lenByteBurst, gmByteGap, ubGap, ubPad);
+    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID7);
+    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID7);
+    uint32_t nBurst = ((ubPadDValue + ELEMS_PER_BLOCK - 1) / ELEMS_PER_BLOCK);
+    for (size_t i = 0; i < nValue; i++) {
+        copy_ubuf_to_cbuf(dst + i * dstNzNStride * ELEMS_PER_BLOCK, tmpUB + i * ubPadDValue, 0, 
+            nBurst, 1, 0, dstNzC0Stride - 1);
+    }
+    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7);
+    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7);
 }
 
 template <typename TileData, typename GlobalData>
@@ -100,29 +135,25 @@ PTO_INTERNAL void TLoadInstrGm2L1(__cbuf__ typename TileData::DType *dst, typena
 }
 
 template <typename TileData, typename GlobalData>
-PTO_INTERNAL void TLoadGm2ubNd2nd(__ubuf__ typename TileData::DType *dstAddr, typename GlobalData::DType *srcAddr,
-                                  int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
-                                  int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
+PTO_INTERNAL void TLoadGm2ubGeneral(__ubuf__ typename TileData::DType *dstAddr, typename GlobalData::DType *srcAddr,
+                                int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0, 
+                                int gStride1, int gStride2, int gStride3, int gStride4, int ubPadShape4)
 {
-    static_assert(TileData::Rows < 4096, "Fix: TLOAD Rows>=4095 not supported in 310P3");
-    PTO_ASSERT(validCol == gShape4, "The validCol of TileData must be equal to the 5th dim(Shape4) of ND shape!");
-    PTO_ASSERT(validRow == gShape0 * gShape1 * gShape2 * gShape3,
-               "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape3) of ND shape!");
-    PTO_ASSERT(gShape3 < 4096, "The gshape3 (which equals nBurst) must be less than 4096 for 310P3");
-    constexpr uint32_t blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
+    using TileType = typename TileData::DType;
+    constexpr uint32_t ELEMS_PER_BLOCK = BLOCK_BYTE_SIZE / sizeof(TileType);
     uint16_t nBurst = gShape3;
-    uint32_t lenBurst = validCol * sizeof(typename TileData::DType);
-    uint64_t gmGapValue = (gStride3 - gShape4) * sizeof(typename TileData::DType);
+    uint32_t lenBurst = gShape4 * sizeof(TileType);
+    uint64_t gmGapValue = (gStride3 - gShape4) * sizeof(TileType);
     uint32_t gmGap = (uint32_t)gmGapValue;
-    uint32_t ubGapElement = (TileData::Cols - validCol);
-    uint32_t ubGap = (ubGapElement * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE;
+    uint32_t ubGapElement = (ubPadShape4 - gShape4);
+    uint32_t ubGap = (ubGapElement * sizeof(TileType)) >> SHIFT_BLOCK_BYTE;
     uint32_t ubPad = 0;
     if constexpr (TileData::PadVal != PadValue::Null) {
-        ubPad = ubGapElement % blockSizeElem;
+        ubPad = ubGapElement % ELEMS_PER_BLOCK;
     }
-    __ubuf__ typename TileData::DType *dstAddrP = dstAddr;
+    __ubuf__ TileType *dstAddrP = dstAddr;
     typename GlobalData::DType *srcAddrP = srcAddr;
-    int64_t dstStride2 = gShape3 * TileData::Cols;
+    int64_t dstStride2 = gShape3 * ubPadShape4;
     int64_t dstStride1 = gShape2 * dstStride2;
     int64_t dstStride0 = gShape1 * dstStride1;
 
@@ -142,6 +173,20 @@ PTO_INTERNAL void TLoadGm2ubNd2nd(__ubuf__ typename TileData::DType *dstAddr, ty
 }
 
 template <typename TileData, typename GlobalData>
+PTO_INTERNAL void TLoadGm2ubNd2nd(__ubuf__ typename TileData::DType *dstAddr, typename GlobalData::DType *srcAddr,
+                                  int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
+                                  int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
+{
+    static_assert(TileData::Rows < 4096, "Fix: TLOAD Rows>=4095 not supported in A1");
+    PTO_ASSERT(validCol == gShape4, "The validCol of TileData must be equal to the 5th dim(Shape4) of ND shape!");
+    PTO_ASSERT(validRow == gShape0 * gShape1 * gShape2 * gShape3,
+               "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape3) of ND shape!");
+    PTO_ASSERT(gShape3 < 4096, "The gshape3 (which equals nBurst) must be less than 4096 for A1");
+    TLoadGm2ubGeneral<TileData, GlobalData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, 
+        gStride0, gStride1, gStride2, gStride3, gStride4, TileData::Cols);
+}
+
+template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadGm2ubDn2dn(__ubuf__ typename TileData::DType *dstAddr, typename GlobalData::DType *srcAddr,
                                   int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
                                   int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
@@ -149,38 +194,9 @@ PTO_INTERNAL void TLoadGm2ubDn2dn(__ubuf__ typename TileData::DType *dstAddr, ty
     PTO_ASSERT(validRow == gShape3, "The validCol of TileData must be equal to the 4th dim(Shape3) of DN shape!");
     PTO_ASSERT(validCol == gShape0 * gShape1 * gShape2 * gShape4,
                "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape4) of DN shape!");
-    PTO_ASSERT(gShape4 < 4096, "The gshape4 (which equals nBurst) must be less than 4096 for 310P3");
-    constexpr uint32_t blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
-    uint16_t nBurst = gShape4;
-    uint32_t lenBurst = validRow * sizeof(typename TileData::DType);
-    uint64_t gmGapValue = (gStride4 - gShape3) * sizeof(typename TileData::DType);
-    uint32_t gmGap = (uint32_t)gmGapValue;
-    uint32_t ubGapElement = (TileData::Rows - gShape3);
-    uint32_t ubGap = (ubGapElement * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE;
-    uint32_t ubPad = 0;
-    if constexpr (TileData::PadVal != PadValue::Null) {
-        ubPad = ubGapElement % blockSizeElem;
-        set_mov_pad_val(GetPadValue<TileData>());
-    }
-    typename GlobalData::DType *srcAddrP = srcAddr;
-    __ubuf__ typename TileData::DType *dstAddrP = dstAddr;
-
-    int64_t dstStride2 = gShape4 * TileData::Rows;
-    int64_t dstStride1 = gShape2 * dstStride2;
-    int64_t dstStride0 = gShape1 * dstStride1;
-    for (uint32_t i = 0; i < gShape0; i++) {
-        int64_t dstAddr0 = i * dstStride0;
-        int64_t srcAddr0 = i * gStride0;
-        for (uint32_t j = 0; j < gShape1; j++) {
-            int64_t dstAddr1 = j * dstStride1;
-            int64_t srcAddr1 = j * gStride1;
-            for (uint32_t k = 0; k < gShape2; k++) {
-                dstAddrP = dstAddr + dstAddr0 + dstAddr1 + k * dstStride2;
-                srcAddrP = srcAddr + srcAddr0 + srcAddr1 + k * gStride2;
-                TLoadInstrGm2ub<TileData, GlobalData>(dstAddrP, srcAddrP, nBurst, lenBurst, gmGap, ubGap, ubPad);
-            }
-        }
-    }
+    PTO_ASSERT(gShape4 < 4096, "The gshape4 (which equals nBurst) must be less than 4096 for A1");
+    TLoadGm2ubGeneral<TileData, GlobalData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape4, gShape3, 
+        gStride0, gStride1, gStride2, gStride4, gStride3, TileData::Rows);
 }
 
 template <typename TileData, typename GlobalData>
@@ -194,7 +210,7 @@ PTO_INTERNAL void CheckNzFormat(int gShape0, int gShape1, int gShape2, int gShap
     PTO_ASSERT(validRow == gShape2 * gShape3, "The validRow of TileData must be equal to Shape2 * Shape3 of NZ shape!");
     PTO_ASSERT(validCol == gShape0 * gShape1 * gShape4,
                "The validCol of TileData must be equal to Shape0 * Shape1 * Shape4 of NZ shape!");
-    PTO_ASSERT(gShape1 < 4096, "The gshape1 (which equals nBurst) must be less than 4096 for 310P3");
+    PTO_ASSERT(gShape1 < 4096, "The gshape1 (which equals nBurst) must be less than 4096 for A1");
 }
 
 template <typename TileData, typename GlobalData>
@@ -203,18 +219,11 @@ PTO_INTERNAL void TLoadGm2ubNz2nz(__ubuf__ typename TileData::DType *dstAddr, ty
                                   int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
 {
     CheckNzFormat<TileData, GlobalData>(gShape0, gShape1, gShape2, gShape3, gShape4, validRow, validCol);
-    uint16_t nBurst = gShape1;
-    uint32_t lenBurst = validRow * C0_SIZE_BYTE;
-    uint32_t gmGap = (gStride1 - gShape2 * gShape3 * gShape4) * sizeof(typename TileData::DType);
-    uint32_t ubGap = TileData::Rows - validRow;
-    typename GlobalData::DType *srcAddrP = srcAddr;
-    __ubuf__ typename TileData::DType *dstAddrP = dstAddr;
-    int64_t tileStride = TileData::Rows * gShape1 * gShape4;
-    for (uint32_t i = 0; i < gShape0; i++) {
-        srcAddrP = srcAddr + i * gStride0;
-        dstAddrP = dstAddr + i * tileStride;
-        TLoadInstrGm2ub<TileData, GlobalData>(dstAddrP, srcAddrP, nBurst, lenBurst, gmGap, ubGap, 0);
-    }
+    constexpr uint32_t C0_ELEMS = C0_SIZE_BYTE / sizeof(typename TileData::DType);
+    uint32_t newGShape4 = validRow * C0_ELEMS;
+    uint32_t ubPadShape4 = TileData::Rows * C0_ELEMS;
+    TLoadGm2ubGeneral<TileData, GlobalData>(dstAddr, srcAddr, 1, 1, gShape0, gShape1, newGShape4, 
+        gStride0, gStride0, gStride0, gStride1, gStride4, ubPadShape4);    
 }
 
 template <typename TileData, typename GlobalData>
@@ -246,7 +255,7 @@ PTO_INTERNAL void TLoadGm2L1Nd2nd(__cbuf__ typename TileData::DType *dstAddr, ty
     PTO_ASSERT(validCol == gShape4, "The validCol of TileData must be equal to the 5th dim(Shape4) of ND shape!");
     PTO_ASSERT(validRow == gShape0 * gShape1 * gShape2 * gShape3,
                "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape3) of ND shape!");
-    PTO_ASSERT(gShape3 < 4096, "The gshape3 (which equals nBurst) must be less than 4096 for 310P3");
+    PTO_ASSERT(gShape3 < 4096, "The gshape3 (which equals nBurst) must be less than 4096 for A1");
     uint16_t nBurst = gShape3;
     uint16_t lenBurst = (validCol * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE;
     uint16_t gmGap = ((gStride3 - gShape4) * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE;
@@ -282,7 +291,7 @@ PTO_INTERNAL void TLoadGm2L1Dn2dn(__cbuf__ typename TileData::DType *dstAddr, ty
     PTO_ASSERT(validRow == gShape3, "The validCol of TileData must be equal to the 4th dim(Shape3) of DN shape!");
     PTO_ASSERT(validCol == gShape0 * gShape1 * gShape2 * gShape4,
                "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape4) of DN shape!");
-    PTO_ASSERT(gShape4 < 4096, "The gshape4 (which equals nBurst) must be less than 4096 for 310P3");
+    PTO_ASSERT(gShape4 < 4096, "The gshape4 (which equals nBurst) must be less than 4096 for A1");
     uint16_t nBurst = gShape4;
     uint16_t lenBurst = (validRow * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE;
     uint16_t gmGap = ((gStride4 - gShape3) * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE;
@@ -827,4 +836,4 @@ PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src)
     }
 }
 } // namespace pto
-#endif // TLOAD_HPP_310P3
+#endif
