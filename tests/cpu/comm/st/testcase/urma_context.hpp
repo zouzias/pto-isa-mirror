@@ -25,30 +25,6 @@ public:
     void *urmaInfoDevice_{nullptr};
 };
 
-
-struct UrmaInfo {
-    uint32_t qpNum;
-    uint32_t localTokenId;
-    uint32_t rankCount;
-    uint64_t sqPtr;
-    uint64_t rqPtr;
-    uint64_t scqPtr;
-    uint64_t rcqPtr;
-    uint64_t memPtr;
-};
-
-struct UrmaMemInfo {
-    bool tokenValueValid;
-    uint32_t rmtJettyType : 2;
-    uint8_t targetHint;
-    uint32_t tpn;
-    uint32_t tid;
-    uint32_t rmtTokenValue;
-    uint32_t len;
-    uint64_t addr;
-    uint64_t eidAddr;
-};
-
 struct UrmaTestContext {
     int deviceId{-1};
     void *devBuf{nullptr};
@@ -76,10 +52,7 @@ struct UrmaTestContext {
 
 AICORE inline uint64_t UrmaPeerMrBaseAddr(__gm__ uint8_t *urmaWorkspace, uint32_t peerRank)
 {
-    __gm__ UrmaInfo *info = (__gm__ UrmaInfo *)urmaWorkspace;
-    PTO_ASSERT(peerRank < info->rankCount, "UrmaPeerMrBaseAddr: peerRank out of range");
-    __gm__ UrmaMemInfo *memRow = reinterpret_cast<__gm__ UrmaMemInfo *>(info->memPtr) + peerRank;
-    return memRow->addr;
+    return 0;
 }
 
 
