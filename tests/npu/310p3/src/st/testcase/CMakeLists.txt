@@ -98,6 +98,7 @@ set(ALL_TESTCASES
     tload
     tload_gm2mat
     tmul
+    tstore 
     tsub
 )
 if (NOT AUTO_MODE)
