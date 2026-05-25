@@ -4,9 +4,9 @@
  * Unpack-and-accumulate per-expert FFN outputs back into per-token rows, with
  * softmax routing weights for kTopK > 1. Generic over kTopK in {1, 2, 4, 8, 16}.
  *
- * Inputs   (GM): B                [kT*kTopK + 16, kH] fp32  (first kT*kTopK rows consulted)
- *                A_id             [kT*kTopK + 16]     int32 (first kT*kTopK consulted)
- *                rank_id          [kT*kTopK + 16]     int32 (only used when kTopK > 1)
+ * Inputs   (GM): B                [kT*kTopK + 64, kH] fp32  (first kT*kTopK rows consulted)
+ *                A_id             [kT*kTopK + 64]     int32 (first kT*kTopK consulted)
+ *                rank_id          [kT*kTopK + 64]     int32 (only used when kTopK > 1)
  *                outVal           [kT, kPadded]       fp32  (only used when kTopK > 1;
  *                                                            cols kTopK..kPadded-1 host-padded
  *                                                            with -1e30 so exp() underflows to 0)
@@ -135,7 +135,7 @@ constexpr unsigned kH    = 64;
 constexpr unsigned kTopK = 1;
 
 constexpr unsigned kPackedRows   = kT * kTopK;
-constexpr unsigned kOverspillPad = 16;
+constexpr unsigned kOverspillPad = 64;
 constexpr unsigned kAlloc        = kPackedRows + kOverspillPad;
 
 // Softmax tile column padding for 32-byte UB alignment.

@@ -5,9 +5,9 @@
  *
  * Inputs   (GM): X         [kT, kH]            fp16
  *                expert_id [kT, kTopK]         int32
- * Outputs  (GM): A         [kT*kTopK + 16, kH] fp16  (kT*kTopK rows valid, +16 overspill pad)
- *                A_id      [kT*kTopK + 16]     int32 (kT*kTopK rows valid, +16 ignored)
- *                rank_id   [kT*kTopK + 16]     int32 (kT*kTopK rows valid, +16 ignored)
+ * Outputs  (GM): A         [kT*kTopK + 64, kH] fp16  (kT*kTopK rows valid, +64 overspill pad)
+ *                A_id      [kT*kTopK + 64]     int32 (kT*kTopK rows valid, +64 ignored)
+ *                rank_id   [kT*kTopK + 64]     int32 (kT*kTopK rows valid, +64 ignored)
  *                expert_count [kE]             int32
  *                expert_start [kE]             int32
  *
@@ -28,7 +28,7 @@
  *                          rank_id[packed_pos] = k;
  *                          A[packed_pos, :]    = X[t, :];
  *
- * The trailing 16 rows of A and A_id are NOT written here. They are the
+ * The trailing 64 rows of A and A_id are NOT written here. They are the
  * overspill landing pad for the downstream expert_ffn kernel and contain
  * undefined contents — the FFN's per-expert outer loop overwrites them
  * (or they remain as scratch beyond the gather's valid range).
@@ -67,7 +67,7 @@ constexpr unsigned kE     = 32;
 constexpr unsigned kTopK  = 1;
 
 constexpr unsigned kPackedRows    = kT * kTopK;
-constexpr unsigned kOverspillPad  = 16;
+constexpr unsigned kOverspillPad  = 64;
 constexpr unsigned kAlloc         = kPackedRows + kOverspillPad;
 
 }  // namespace scatter_cfg

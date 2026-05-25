@@ -5,15 +5,15 @@
  * relu(A_s @ W1_t) @ W2_t and store B_s to GM before moving to the next A_s.
  *
  * I/O contract (all little-endian, contiguous, no header):
- *   ../input/input_A.bin             (kT*kTopK + 16) * kH        half (fp16)
+ *   ../input/input_A.bin             (kT*kTopK + kTileM) * kH    half (fp16)
  *   ../input/input_expert_count.bin   kE                          int32
  *   ../input/input_expert_start.bin   kE                          int32
  *   ../input/input_W1.bin             kE * kH * kF                half
  *   ../input/input_W2.bin             kE * kF * kH                half
- *   ../output/golden_B.bin            (kT*kTopK + 16) * kH        float32
- *   ../output/output_B.bin            (kT*kTopK + 16) * kH        float32  (kernel-emitted)
+ *   ../output/golden_B.bin            (kT*kTopK + kTileM) * kH    float32
+ *   ../output/output_B.bin            (kT*kTopK + kTileM) * kH    float32  (kernel-emitted)
  *
- * Validation compares only the first kT*kTopK rows of B; the trailing 16-row
+ * Validation compares only the first kT*kTopK rows of B; the trailing kTileM-row
  * ABI pad is ignored.
  */
 
@@ -44,7 +44,7 @@ constexpr int kH     = 64;
 constexpr int kF     = 64;
 constexpr int kE     = 32;
 constexpr int kTopK  = 1;
-constexpr int kTileM = 16;
+constexpr int kTileM = 64;
 
 constexpr int kPackedRows   = kT * kTopK;
 constexpr int kOverspillPad = kTileM;

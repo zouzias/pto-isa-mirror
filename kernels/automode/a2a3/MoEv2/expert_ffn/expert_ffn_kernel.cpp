@@ -6,13 +6,13 @@
  *   B_s[:, n:n+N_l1] += relu(A_s @ W1[e, h:h+H_l1, f:f+F_l1])
  *                       @ W2[e, f:f+F_l1, n:n+N_l1]
  *
- * for each expert-local row tile A_s.  The first GEMM materializes the
- * post-ReLU fp16 intermediate in L1 with TMOV Acc->Mat + NormalRelu, then the
- * second GEMM consumes that tile immediately.  Each B_s column panel is kept
- * in L0C across F_l1 panels and stored to GM before moving to the next panel.
+ * for each expert-local row tile A_s.  The first GEMM stores the post-ReLU
+ * fp16 intermediate to GM Y_scratch with NormalRelu, then the second GEMM
+ * reloads that tile. Each B_s column panel is kept in L0C across F_l1 panels
+ * and stored to GM before moving to the next panel.
  *
  * Working-set cap:
- *   A_s + W1_t + W2_t + relu(A_s @ W1_t) + B_s <= 2^17 bytes
+ *   A_s + W1_t + W2_t + relu(A_s @ W1_t) + B_s <= 2^18 bytes
  *
  * B_s is physically the fp32 L0C accumulator until TSTORE, but its footprint is
  * included in the cap so the tile choice remains conservative for local memory.
@@ -31,12 +31,12 @@ constexpr unsigned kH     = 64;  // GEMM1 K = GEMM2 N
 constexpr unsigned kF     = 64;  // GEMM1 N = GEMM2 K
 constexpr unsigned kE     = 32;
 constexpr unsigned kTopK  = 1;
-constexpr unsigned kTileM = 16;  // max expert-local token tile height
+constexpr unsigned kTileM = 64;  // max expert-local token tile height
 
 constexpr unsigned kPackedRows = kT * kTopK;
 
-constexpr int kWorkingSetBudgetBytes = 1 << 17;
-constexpr int kL0BudgetBytes         = 1 << 14;
+constexpr int kWorkingSetBudgetBytes = 1 << 18;
+constexpr int kL0BudgetBytes         = 1 << 15;
 
 AICORE inline constexpr int minInt(int lhs, int rhs)
 {
@@ -157,7 +157,7 @@ __global__ AICORE void runExpertFfn(
     constexpr int N_l1_raw =
         chooseNPanel(H, M, blockAlign, sizeof(float), static_cast<int>(sizeof(TOut)), kL0BudgetBytes, blockAlign);
     static_assert(N_l1_raw >= blockAlign,
-                  "No valid N_l1 tile: minimal Y accumulator plus B panel exceeds the 2^14-byte L0C cap.");
+                  "No valid N_l1 tile: minimal Y accumulator plus B panel exceeds the 2^15-byte L0C cap.");
     constexpr int N_l1 = (N_l1_raw >= blockAlign) ? N_l1_raw : blockAlign;
     static_assert(H % N_l1 == 0, "H must be divisible by N_l1.");
 
@@ -166,14 +166,14 @@ __global__ AICORE void runExpertFfn(
         static_cast<int>(sizeof(TScratch)), static_cast<int>(sizeof(TOut)), sizeof(float), kWorkingSetBudgetBytes,
         kL0BudgetBytes, blockAlign);
     static_assert(F_l1_raw >= blockAlign,
-                  "No valid F_l1 tile: A_s + W1_t + W2_t + Y_t + B_s exceeds the 2^17-byte cap.");
+                  "No valid F_l1 tile: A_s + W1_t + W2_t + Y_t + B_s exceeds the 2^18-byte cap.");
     constexpr int F_l1 = (F_l1_raw >= blockAlign) ? F_l1_raw : blockAlign;
 
     constexpr int H_l1_raw = chooseHPanel(
         H, M, F_l1, N_l1, static_cast<int>(sizeof(TIn)), static_cast<int>(sizeof(TWeight)),
         static_cast<int>(sizeof(TScratch)), static_cast<int>(sizeof(TOut)), kWorkingSetBudgetBytes, blockAlign);
     static_assert(H_l1_raw >= blockAlign,
-                  "No valid H_l1 tile: minimal A_s/W1_t/W2_t/Y_t/B_s exceeds the 2^17-byte cap.");
+                  "No valid H_l1 tile: minimal A_s/W1_t/W2_t/Y_t/B_s exceeds the 2^18-byte cap.");
     constexpr int H_l1 = (H_l1_raw >= blockAlign) ? H_l1_raw : blockAlign;
 
     constexpr int F_l0 = blockAlign;
@@ -194,7 +194,7 @@ __global__ AICORE void runExpertFfn(
                    static_cast<size_t>(F_l1) * N_l1 * sizeof(TWeight) +
                    static_cast<size_t>(M) * F_l1 * sizeof(TScratch) +
                    static_cast<size_t>(M) * N_l1 * sizeof(TOut)) <= kWorkingSetBudgetBytes,
-                  "Working-set budget exceeded: A_s + W1_t + W2_t + Y_t + B_s must be <= 2^17 bytes.");
+                  "Working-set budget exceeded: A_s + W1_t + W2_t + Y_t + B_s must be <= 2^18 bytes.");
     static_assert((static_cast<size_t>(M) * F_l1 * sizeof(float) +
                    static_cast<size_t>(M) * N_l1 * sizeof(TOut)) <= kL0BudgetBytes,
                   "Combined Y/B accumulators exceed L0C.");

@@ -6,14 +6,14 @@
  * I/O contract (all little-endian, contiguous, no header):
  *   ../input/input_X.bin             kT * kH                      half  (fp16)
  *   ../input/input_expert_id.bin     kT * kTopK                   int32
- *   ../output/golden_A.bin           (kT*kTopK + 16) * kH         half  (last 16 rows = zeros)
- *   ../output/golden_A_id.bin        (kT*kTopK + 16)              int32 (last 16 = -1)
+ *   ../output/golden_A.bin           (kT*kTopK + 64) * kH         half  (last 64 rows = zeros)
+ *   ../output/golden_A_id.bin        (kT*kTopK + 64)              int32 (last 64 = -1)
  *   ../output/golden_expert_count.bin kE                          int32
  *   ../output/golden_expert_start.bin kE                          int32
  *   ../output/output_*.bin            (kernel-emitted; same shapes)
  *
  * Validation compares only the first kT*kTopK rows of A and A_id; the
- * trailing 16-row overspill pad is ignored.
+ * trailing 64-row overspill pad is ignored.
  */
 
 #include "test_common.h"
@@ -41,7 +41,7 @@ constexpr int kE     = 32;
 constexpr int kTopK  = 1;
 
 constexpr int kPackedRows   = kT * kTopK;
-constexpr int kOverspillPad = 16;
+constexpr int kOverspillPad = 64;
 constexpr int kAlloc        = kPackedRows + kOverspillPad;
 
 constexpr size_t kHalfBytes = 2;

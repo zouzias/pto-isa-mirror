@@ -5,9 +5,9 @@
  * For kTopK == 1 the kernel takes the fast path (no softmax, no TMULS).
  *
  * I/O contract (all little-endian, contiguous, no header):
- *   ../input/input_B.bin       (kT*kTopK + 16) * kH    float32
- *   ../input/input_A_id.bin    (kT*kTopK + 16)         int32 (trailing 16 = -1)
- *   ../input/input_rank_id.bin (kT*kTopK + 16)         int32 (trailing 16 = -1, only consulted when kTopK > 1)
+ *   ../input/input_B.bin       (kT*kTopK + 64) * kH    float32
+ *   ../input/input_A_id.bin    (kT*kTopK + 64)         int32 (trailing 64 = -1)
+ *   ../input/input_rank_id.bin (kT*kTopK + 64)         int32 (trailing 64 = -1, only consulted when kTopK > 1)
  *   ../input/input_outVal.bin  kT * kPadded            float32 (cols kTopK..kPadded-1 host-padded with -1e30)
  *   ../output/golden_C.bin     kT * kH                 float32
  *   ../output/output_C.bin     kT * kH                 float32 (kernel-emitted)
@@ -42,7 +42,7 @@ constexpr int kH    = 64;
 constexpr int kTopK = 1;
 
 constexpr int kPackedRows   = kT * kTopK;
-constexpr int kOverspillPad = 16;
+constexpr int kOverspillPad = 64;
 constexpr int kAlloc        = kPackedRows + kOverspillPad;
 
 constexpr int kPadded = (kTopK < 8) ? 8 : kTopK;

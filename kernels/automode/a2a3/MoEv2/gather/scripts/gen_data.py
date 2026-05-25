@@ -8,9 +8,9 @@
 # dependency on scatter / expert_ffn / moe_topk_padded.
 #
 # Output files (raw little-endian, contiguous, no header):
-#   ./input/input_B.bin       (kT*kTopK + 16) * kH    float32
-#   ./input/input_A_id.bin    (kT*kTopK + 16)         int32   (trailing 16 = -1)
-#   ./input/input_rank_id.bin (kT*kTopK + 16)         int32   (trailing 16 = -1, only consulted when kTopK > 1)
+#   ./input/input_B.bin       (kT*kTopK + 64) * kH    float32
+#   ./input/input_A_id.bin    (kT*kTopK + 64)         int32   (trailing 64 = -1)
+#   ./input/input_rank_id.bin (kT*kTopK + 64)         int32   (trailing 64 = -1, only consulted when kTopK > 1)
 #   ./input/input_outVal.bin   kT * kPadded           float32 (cols kTopK..kPadded-1 = -1e30)
 #   ./output/golden_C.bin     kT * kH                 float32
 #
@@ -33,7 +33,7 @@ kH    = 64
 kTopK = 1
 
 kPackedRows   = kT * kTopK
-kOverspillPad = 16
+kOverspillPad = 64
 kAlloc        = kPackedRows + kOverspillPad
 kPadded       = max(8, kTopK)
 

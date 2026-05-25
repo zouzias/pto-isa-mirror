@@ -9,12 +9,12 @@
 # then compute the per-expert FFN reference.
 #
 # Output files (raw little-endian, contiguous, no header):
-#   ./input/input_A.bin             (kT*kTopK + 16) * kH        half (fp16)
+#   ./input/input_A.bin             (kT*kTopK + kTileM) * kH    half (fp16)
 #   ./input/input_expert_count.bin   kE                          int32
 #   ./input/input_expert_start.bin   kE                          int32
 #   ./input/input_W1.bin             kE * kH_aligned * kF_aligned half (zero-padded to blockAlign)
 #   ./input/input_W2.bin             kE * kF_aligned * kH_aligned half (zero-padded to blockAlign)
-#   ./output/golden_B.bin            (kT*kTopK + 16) * kH        float32  (trailing 16 rows = 0)
+#   ./output/golden_B.bin            (kT*kTopK + kTileM) * kH    float32  (trailing kTileM rows = 0)
 # --------------------------------------------------------------------------------
 
 import os
@@ -28,7 +28,7 @@ kH     = 64
 kF     = 64
 kE     = 32
 kTopK  = 1
-kTileM = 16
+kTileM = 64
 
 kPackedRows   = kT * kTopK
 kOverspillPad = kTileM
