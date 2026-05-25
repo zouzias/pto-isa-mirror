@@ -43,10 +43,10 @@ Current task status:
 | Task 3: MPI/HCCL Runtime and Continuous Card Mapping | `[x]` | MPI/HCCL window bootstrap verified for 2/3/4 ranks |
 | Task 4: Deterministic Data and CPU Golden | `[x]` | Host deterministic data and CPU golden verified |
 | Task 5: PTO Kernel Views, Remote Pointer Helper, and Signal Helpers | `[x]` | Kernel view and comm helper scaffold verified |
-| Task 6: Dispatch Metadata and Count Publication | `[ ]` | Not started |
-| Task 7: Dispatch Pack and Payload Gather | `[ ]` | Not started |
-| Task 8: Host Expert Output Preparation and Dispatch Timing | `[ ]` | Not started |
-| Task 9: Combine Return Path | `[ ]` | Not started |
+| Task 6: Dispatch Metadata and Count Publication | `[x]` | Dispatch metadata and count publication verified |
+| Task 7: Dispatch Pack and Payload Gather | `[x]` | Dispatch pack and TGET gather verified |
+| Task 8: Host Expert Output Preparation and Dispatch Timing | `[x]` | Host identity expert output and dispatch timing verified |
+| Task 9: Combine Return Path | `[x]` | TPUT combine return path verified |
 | Task 10: Combine Restore and Output Verification | `[ ]` | Not started |
 | Task 11: E2E Timing, Debug Dumps, and Run Matrix | `[ ]` | Not started |
 | Task 12: Hardening and Final Review | `[ ]` | Not started |
@@ -532,15 +532,15 @@ Feedback:
 
 **Scope:**
 
-- [ ] Implement dispatch state clearing for metadata and signals.
-- [ ] Implement contiguous token-shard local count into `blockTokenPerExpert[block, expert]`.
-- [ ] Implement block-prefix scan and `localTokenPerExpert`.
-- [ ] Implement packed expert offsets from `localTokenPerExpert`.
-- [ ] Publish count rows to every peer with `TPUT(remote.peerTokenPerExpert[myRank, :])`.
-- [ ] Notify `remote.countReadySignal[myRank]` only after count row publication.
-- [ ] Wait on local `countReadySignal[src]` with `TWAIT`.
-- [ ] Build `cumsumPerExpert`, `dispatchOffset`, and `prevSumBeforeRank`.
-- [ ] Add debug dump and rank logs:
+- [x] Implement dispatch state clearing for metadata and signals.
+- [x] Implement contiguous token-shard local count into `blockTokenPerExpert[block, expert]`.
+- [x] Implement block-prefix scan and `localTokenPerExpert`.
+- [x] Implement packed expert offsets from `localTokenPerExpert`.
+- [x] Publish count rows to every peer with `TPUT(remote.peerTokenPerExpert[myRank, :])`.
+- [x] Notify `remote.countReadySignal[myRank]` only after count row publication.
+- [x] Wait on local `countReadySignal[src]` with `TWAIT`.
+- [x] Build `cumsumPerExpert`, `dispatchOffset`, and `prevSumBeforeRank`.
+- [x] Add debug dump and rank logs:
 
   ```text
   rank=... dispatch_counts local_total=... owner_rows=...
@@ -549,7 +549,7 @@ Feedback:
 
 **Observation/Validation:**
 
-- [ ] Run:
+- [x] Run:
 
   ```bash
   timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 1 --dispatch-metadata-only 1
@@ -558,11 +558,21 @@ Feedback:
   Expected: no hang; every rank prints `dispatch_metadata_done`; `peerTokenPerExpert`, `cumsumPerExpert`,
   `dispatchOffset`, and `prevSumBeforeRank` match CPU golden with zero mismatches.
 
-- [ ] If hardware execution is unavailable, build plus code-review is acceptable for this task:
+- [x] If hardware execution is unavailable, build plus code-review is acceptable for this task:
   - `TPUT` is used for count row exchange;
   - `TNOTIFY` happens after count row `TPUT`;
   - `TWAIT` is device-side, not replaced by host barrier.
   - count wait loops cover all `src in [0, EP)`, including `src == myRank`.
+
+Feedback:
+- 2026-05-26: Implemented dispatch metadata/count exchange in the PTO dispatch kernel and host
+  `--dispatch-metadata-only` verification. Verified with
+  `timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 1 --dispatch-metadata-only 1 --skip-build 1`:
+  both ranks printed `dispatch_metadata_done`; `localTokenPerExpert`, `peerTokenPerExpert`, `cumsumPerExpert`,
+  `dispatchOffset`, and `prevSumBeforeRank` all reported zero mismatches. Static forbidden API grep over source files
+  had no matches. Debugging note: the kernel must not clear remote-visible `peerTokenPerExpert/countReadySignal` while peer
+  ranks may publish into them; host clears `peerWindow` before launch, and kernel clears only local workspace metadata plus
+  local owner-only fields. `SoftSyncAiv` uses an explicit UB address for its sync tile.
 
 ## Task 7: Dispatch Pack and Payload Gather
 
@@ -573,16 +583,16 @@ Feedback:
 
 **Scope:**
 
-- [ ] Implement stable local pack:
+- [x] Implement stable local pack:
   - contiguous token shard;
   - per-block cursor initialized from `blockPrefixPerExpert`;
   - write `expandedRowIdx[token * topK + slot]`;
   - copy `inputA[token, :]` into `peerWindow.packedA[packedRow, :]` through PTO row copy helper.
-- [ ] Implement payload gather for `ownerRank == myRank` local experts only.
-- [ ] Use peer rank round-robin assignment: `src = blockId + n * blockNum`.
-- [ ] Use `TGET(remote(src).packedA segment -> workspace.dispatchedA segment)` with ping-pong staging.
-- [ ] Skip zero-row segments.
-- [ ] Add debug logs:
+- [x] Implement payload gather for `ownerRank == myRank` local experts only.
+- [x] Use peer rank round-robin assignment: `src = blockId + n * blockNum`.
+- [x] Use `TGET(remote(src).packedA segment -> workspace.dispatchedA segment)` with ping-pong staging.
+- [x] Skip zero-row segments.
+- [x] Add debug logs:
 
   ```text
   rank=... dispatch_gather local_expert=... src=... rows=... dst_start=...
@@ -590,7 +600,7 @@ Feedback:
 
 **Observation/Validation:**
 
-- [ ] Run:
+- [x] Run:
 
   ```bash
   timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2 --dispatch-only 1
@@ -599,13 +609,21 @@ Feedback:
   Expected: every rank prints `dispatch_pack_done` and `dispatch_gather_done`; `expandedRowIdx`, `packedA_head`,
   and `dispatchedA_head` match CPU golden with zero mismatches for the dumped rows.
 
-- [ ] Run:
+- [x] Run:
 
   ```bash
   rg -n "TGET|TLOAD|TSTORE|expandedRowIdx|blockPrefixPerExpert" dispatch_combine_tile_kernel.cpp
   ```
 
   Expected: pack uses `TLOAD/TSTORE`, gather uses `TGET`, and row order is based on `blockPrefixPerExpert`.
+
+Feedback:
+- 2026-05-26: Implemented stable local payload pack and owner-rank dispatch gather. Verified with
+  `timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2 --dispatch-only 1`:
+  both ranks printed `dispatch_pack_done` and `dispatch_gather_done`; `expandedRowIdx`, `packedA`, and `dispatchedA`
+  all reported zero mismatches. Static grep confirmed pack uses `TLOAD/TSTORE`, gather uses `TGET`, and row ordering uses
+  `blockPrefixPerExpert`. Debugging note: the local PTO row copy must synchronize MTE2 -> MTE3 between `TLOAD` and
+  `TSTORE`; otherwise `packedA` is corrupted even when routing metadata is correct.
 
 ## Task 8: Host Expert Output Preparation and Dispatch Timing
 
@@ -615,15 +633,15 @@ Feedback:
 
 **Scope:**
 
-- [ ] After dispatch stream sync, copy `workspace.dispatchedA` to `expertOutput`.
-- [ ] Keep this as host verification helper, not a third device kernel.
-- [ ] Time and print `dispatch_e2e_us` and `prepare_host_us`.
-- [ ] Add option to compare `workspace.dispatchedA` against CPU golden before combine when `--debug >= 2`.
-- [ ] Ensure host barrier is used only for process-level iteration alignment and window reuse protection.
+- [x] After dispatch stream sync, copy `workspace.dispatchedA` to `expertOutput`.
+- [x] Keep this as host verification helper, not a third device kernel.
+- [x] Time and print `dispatch_e2e_us` and `prepare_host_us`.
+- [x] Add option to compare `workspace.dispatchedA` against CPU golden before combine when `--debug >= 2`.
+- [x] Ensure host barrier is used only for process-level iteration alignment and window reuse protection.
 
 **Observation/Validation:**
 
-- [ ] Run:
+- [x] Run:
 
   ```bash
   timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2 --dispatch-only 1
@@ -632,7 +650,15 @@ Feedback:
   Expected logs include positive `dispatch_e2e_us` and `prepare_host_us`; debug compare reports `expertOutput` equals
   `dispatchedA` for the copied row range.
 
-- [ ] Code-review checkpoint: no `PrepareExpertOutput` device kernel exists.
+- [x] Code-review checkpoint: no `PrepareExpertOutput` device kernel exists.
+
+Feedback:
+- 2026-05-26: Implemented host-side identity expert output preparation by copying `workspace.dispatchedA` to
+  `expertOutput`, with `dispatch_e2e_us` and `prepare_host_us` logs. Verified with
+  `timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2 --dispatch-only 1`: both ranks printed
+  positive timing values, `expertOutput_vs_dispatchedA` zero mismatches, and `expertOutput` vs CPU golden zero
+  mismatches. Code review/static grep confirmed there is no `PrepareExpertOutput` device kernel; this remains a host
+  verification helper.
 
 ## Task 9: Combine Return Path
 
@@ -643,16 +669,16 @@ Feedback:
 
 **Scope:**
 
-- [ ] Implement combine state clearing for `combineDoneSignal` and relevant output rows.
-- [ ] Implement peer rank round-robin return loop: `src = blockId + n * blockNum`.
-- [ ] For each source peer, iterate local experts in order and compute:
+- [x] Implement combine state clearing for `combineDoneSignal` and relevant output rows.
+- [x] Implement peer rank round-robin return loop: `src = blockId + n * blockNum`.
+- [x] For each source peer, iterate local experts in order and compute:
   - `rows = peerTokenPerExpert[src, globalExpert]`;
   - `srcStart = dispatchOffset[localExpert] + prevSumBeforeRank[src, localExpert]`;
   - `dstStart = cumsumPerExpert[src, globalExpert - 1]` or zero.
-- [ ] Use `TPUT(remote(src).ptrD segment <- expertOutput segment)` with ping-pong staging.
-- [ ] Notify `remote(src).combineDoneSignal[myRank]` once after all local expert segments for that peer are written.
-- [ ] Wait on local `combineDoneSignal[peer]` with `TWAIT`.
-- [ ] Add debug logs:
+- [x] Use `TPUT(remote(src).ptrD segment <- expertOutput segment)` with ping-pong staging.
+- [x] Notify `remote(src).combineDoneSignal[myRank]` once after all local expert segments for that peer are written.
+- [x] Wait on local `combineDoneSignal[peer]` with `TWAIT`.
+- [x] Add debug logs:
 
   ```text
   rank=... combine_return dst=... local_expert=... rows=... src_start=... dst_start=...
@@ -661,7 +687,7 @@ Feedback:
 
 **Observation/Validation:**
 
-- [ ] Run:
+- [x] Run:
 
   ```bash
   timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2 --combine-return-only 1
@@ -670,8 +696,17 @@ Feedback:
   Expected: no hang; every rank prints `combine_return_done` and `combine_wait_done`; dumped `ptrD_head` matches CPU
   golden with zero mismatches for returned rows.
 
-- [ ] If black-box execution hangs, use logs to identify the last peer/rank signal and inspect the `TNOTIFY/TWAIT` pairing before
+- [x] If black-box execution hangs, use logs to identify the last peer/rank signal and inspect the `TNOTIFY/TWAIT` pairing before
   changing data movement.
+
+Feedback:
+- 2026-05-26: Implemented combine return path in the existing `DispatchCombineTileCombine` kernel with peer-sharded
+  `TPUT` into owner `ptrD`, one `combineDoneSignal[myRank]` notify per destination peer, and device-side `TWAIT` for peer
+  completion. Verified with
+  `timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2 --combine-return-only 1`: no hang; both
+  ranks printed `combine_return_done`, `combine_wait_done`, `combineDoneSignal=2,2`, and `ptrD` zero mismatches.
+  State clearing for `ptrD`, `combineDoneSignal`, and `outputC` is done on host before launch to avoid device-side
+  remote-visible signal races.
 
 ## Task 10: Combine Restore and Output Verification
 

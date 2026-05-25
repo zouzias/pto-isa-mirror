@@ -39,6 +39,7 @@ struct CpuGoldenData {
     std::vector<float> expertOutput;
     std::vector<float> outputC;
     std::vector<float> ptrD;
+    std::vector<float> packedA;
     std::vector<int32_t> localTokenPerExpert;
     std::vector<int32_t> peerTokenPerExpert;
     std::vector<int32_t> expandedRowIdx;
@@ -236,6 +237,7 @@ inline void WriteDebugFiles(const DispatchCombineTileArgs &args, uint32_t rank, 
     WriteBinary(RankFile(args, rank, "peerTokenPerExpert"), golden.peerTokenPerExpert);
     WriteBinary(RankFile(args, rank, "cumsumPerExpert"), golden.cumsumPerExpert);
     WriteBinary(RankFile(args, rank, "expandedRowIdx"), golden.expandedRowIdx);
+    WriteBinary(RankFile(args, rank, "packedA_head"), FloatVectorToHalf(golden.packedA));
     WriteBinary(RankFile(args, rank, "dispatchedA_head"), FloatVectorToHalf(golden.dispatchedA));
     WriteBinary(RankFile(args, rank, "ptrD_head"), FloatVectorToHalf(golden.ptrD));
 }
@@ -319,6 +321,27 @@ inline void GenerateAllInputFiles(const DispatchCombineTileArgs &args)
     }
 }
 
+inline std::string RankBinaryFile(const DispatchCombineTileArgs &args, uint32_t rank, const char *name)
+{
+    return golden_detail::RankFile(args, rank, name);
+}
+
+template <typename T>
+inline void WriteBinaryFile(const std::string &path, const std::vector<T> &data)
+{
+    golden_detail::WriteBinary(path, data);
+}
+
+inline std::vector<uint16_t> FloatVectorToHalfBits(const std::vector<float> &src)
+{
+    return golden_detail::FloatVectorToHalf(src);
+}
+
+inline std::vector<float> HalfBitsToFloatVector(const std::vector<uint16_t> &src)
+{
+    return golden_detail::HalfVectorToFloat(src);
+}
+
 inline CpuGoldenData ComputeCpuGolden(const DispatchCombineTileArgs &args, const HostInputData &inputs, uint32_t myRank)
 {
     (void)inputs;
@@ -341,6 +364,7 @@ inline CpuGoldenData ComputeCpuGolden(const DispatchCombineTileArgs &args, const
             golden.peerTokenPerExpert[static_cast<size_t>(myRank) * expertNumPadded + expert];
     }
     golden.expandedRowIdx = expandedBySrc[myRank];
+    golden.packedA = packedBySrc[myRank];
     golden.cumsumPerExpert.assign(static_cast<size_t>(shape.ep) * expertNumPadded, 0);
     for (uint32_t src = 0; src < shape.ep; ++src) {
         int32_t sum = 0;

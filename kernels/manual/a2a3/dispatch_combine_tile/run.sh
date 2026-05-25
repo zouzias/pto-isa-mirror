@@ -181,7 +181,7 @@ append_workspace_field $(( EFFECTIVE_AIV_BLOCKS * EXPERT_NUM_PADDED * 4 ))
 append_workspace_field $(( PES * EXPERT_NUM_PADDED * 4 ))
 append_workspace_field $(( EXPERT_PER_PE * 4 ))
 append_workspace_field $(( PES * EXPERT_PER_PE * 4 ))
-SYNC_SLOTS=$(( EFFECTIVE_AIV_BLOCKS * 16 ))
+SYNC_SLOTS=$(( EFFECTIVE_AIV_BLOCKS * (8 + EXPERT_NUM_PADDED) ))
 if [ "${SYNC_SLOTS}" -lt 64 ]; then
     SYNC_SLOTS=64
 fi

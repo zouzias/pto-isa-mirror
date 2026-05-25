@@ -20,6 +20,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace dispatch_combine_tile {
 
+constexpr uint64_t kSyncSoftSlotInt32 = 8;
+
 inline uint64_t AlignUp(uint64_t value, uint64_t alignment)
 {
     if (alignment == 0) {
@@ -89,7 +91,10 @@ inline WorkspaceLayout ComputeWorkspaceLayout(const DispatchCombineTileShape &sh
     layout.prevSumBeforeRank =
         AppendField(&offset, CheckedMul(CheckedMul(shape.ep, shape.expertPerRank, "prevSumBeforeRank elems"), kI32,
                                         "prevSumBeforeRank bytes"));
-    uint64_t syncSlots = aivBlocks * 16 < 64 ? 64 : aivBlocks * 16;
+    uint64_t syncSlots = CheckedMul(aivBlocks, kSyncSoftSlotInt32 + expertNumPadded, "localSync slots");
+    if (syncSlots < 64) {
+        syncSlots = 64;
+    }
     layout.localSync = AppendField(&offset, CheckedMul(syncSlots, kI32, "localSync"));
     layout.floatScratch = AppendField(
         &offset, CheckedMul(CheckedMul(aivBlocks, shape.tileCols, "floatScratch elems"), kFloat, "floatScratch bytes"));
