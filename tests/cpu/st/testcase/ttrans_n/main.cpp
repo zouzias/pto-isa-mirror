@@ -7,7 +7,7 @@ using namespace PtoTestCommon;
 
 template <typename T, int format, 
 int srcShape0, int srcShape1, int srcShape2, int srcShape3, int srcShape4,
-int dstShape0, int dstShape1, int dstShape2, int dstShape3, int dstShape4, int dstShape5>
+int dstShape0, int dstShape1, int dstShape2, int dstShape3, int dstShape4, int dstShape5, int groupN>
 void LaunchTTRANSConv(T *out, T *src, void *stream);
 
 class TTRANSConvTest : public testing::Test {
@@ -25,14 +25,13 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-// Updated Test Wrapper for Conv: Direct execution shape allocation and launching
 template <typename T, int format, 
 int srcShape0, int srcShape1, int srcShape2, int srcShape3, int srcShape4,
-int dstShape0, int dstShape1, int dstShape2, int dstShape3, int dstShape4, int dstShape5 = 1>
+int dstShape0, int dstShape1, int dstShape2, int dstShape3, int dstShape4, int dstShape5 = 1, int groupN = 1>
 void test_ttrans()
 {
-    size_t srcFileSize = srcShape0 * srcShape1 * srcShape2 * srcShape3 * srcShape4 * sizeof(T);
-    size_t dstFileSize = dstShape0 * dstShape1 * dstShape2 * dstShape3 * dstShape4 * dstShape5 * sizeof(T);
+    size_t srcFileSize = srcShape0 * srcShape1 * srcShape2 * srcShape3 * srcShape4 * groupN * sizeof(T);
+    size_t dstFileSize = dstShape0 * dstShape1 * dstShape2 * dstShape3 * dstShape4 * dstShape5 * groupN * sizeof(T);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -53,7 +52,7 @@ void test_ttrans()
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     
     LaunchTTRANSConv<T, format, srcShape0, srcShape1, srcShape2, srcShape3, srcShape4,
-                        dstShape0, dstShape1, dstShape2, dstShape3, dstShape4, dstShape5>(dstDevice, srcDevice, stream);
+                        dstShape0, dstShape1, dstShape2, dstShape3, dstShape4, dstShape5, groupN>(dstDevice, srcDevice, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -150,4 +149,78 @@ TEST_F(TTRANSConvTest, NC1HWC02C1HWN1N0C0_5)
     test_ttrans<int8_t, 1,
         4, 2, 3, 7, 32,
         2, 3, 7, 1, 8, 32>();
+}
+
+/*------------------------------------------------*/
+
+TEST_F(TTRANSConvTest, GNCHW2GNC1HWC0_1)
+{
+    test_ttrans<float, 2, 
+        5, 4, 3, 8, 1,    
+        5, 1, 3, 8, 8, 1, 4>();
+}
+
+TEST_F(TTRANSConvTest, GNCHW2GNC1HWC0_2)
+{
+    test_ttrans<int32_t, 2,
+        5, 14, 13, 8, 1,
+        5, 2, 13, 8, 8, 1, 2>();
+}
+
+TEST_F(TTRANSConvTest, GNCHW2GNC1HWC0_3)
+{
+    test_ttrans<uint16_t, 2,
+        1, 11, 13, 16, 1,
+        1, 1, 13, 16, 16, 1, 3>();
+}
+
+TEST_F(TTRANSConvTest, GNCHW2GNC1HWC0_4)
+{
+    test_ttrans<int32_t, 2,
+        4, 32, 3, 7, 1,
+        4, 4, 3, 7, 8, 1, 1>();
+}
+
+TEST_F(TTRANSConvTest, GNCHW2GNC1HWC0_5)
+{
+    test_ttrans<int8_t, 2,
+        4, 32, 3, 7, 1,
+        4, 1, 3, 7, 32, 1, 3>();
+}
+
+/*------------------------------------------*/
+
+TEST_F(TTRANSConvTest, GNC1HWC02C1HWN1N0C0_1)
+{
+    test_ttrans<float, 3,
+        25, 4, 3, 4, 8,
+        4, 3, 4, 2, 16, 8, 2>();
+}
+
+TEST_F(TTRANSConvTest, GNC1HWC02C1HWN1N0C0_2)
+{
+    test_ttrans<int32_t, 3,
+        15, 2, 3, 4, 8,
+        2, 3, 4, 2, 8, 8, 3>();
+}
+
+TEST_F(TTRANSConvTest, GNC1HWC02C1HWN1N0C0_3)
+{
+    test_ttrans<uint16_t, 3,
+        11, 3, 2, 16, 16,
+        3, 2, 16, 2, 8, 16, 2>();
+}
+
+TEST_F(TTRANSConvTest, GNC1HWC02C1HWN1N0C0_4)
+{
+    test_ttrans<int32_t, 3,
+        4, 8, 3, 7, 8,
+        8, 3, 7, 1, 4, 8, 3>();
+}
+
+TEST_F(TTRANSConvTest, GNC1HWC02C1HWN1N0C0_5)
+{
+    test_ttrans<int8_t, 3,
+        4, 2, 3, 7, 32,
+        2, 3, 7, 1, 8, 32, 1>();
 }
