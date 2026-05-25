@@ -1,5 +1,4 @@
 #include "kernel_operator.h"
-#include "pto/comm/pto_comm_inst.hpp"
 #include "../../kernel_launch.hpp"
 #include "../dispatch_ffn_combine_tiling.h"
 #include "../protocol/remote_window.hpp"
