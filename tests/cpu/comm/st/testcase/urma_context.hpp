@@ -37,6 +37,8 @@ struct UrmaTestContext {
 
     bool Setup(int rank_id, int n_ranks, int n_devices, int first_device_id, int root_rank, size_t commBytesNeeded)
     {
+        devBuf = malloc(commBytesNeeded);
+        urmaMgr.urmaInfoDevice_ = devBuf;
         return true;
     }
 
@@ -52,7 +54,7 @@ struct UrmaTestContext {
 
 AICORE inline uint64_t UrmaPeerMrBaseAddr(__gm__ uint8_t *urmaWorkspace, uint32_t peerRank)
 {
-    return 0;
+    return reinterpret_cast<uint64_t>(urmaWorkspace);
 }
 
 
