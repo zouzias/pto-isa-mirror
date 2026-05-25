@@ -50,16 +50,16 @@ inline void TTRANS_NCHW2NC1HWC0(DstTileData &dst, SrcTileData &src)
         size_t nOffset_dst = n * (C1 * H * W * C0);
 
         for (int64_t c = 0; c < C; ++c) {
-            size_t r  = c / C0;
+            size_t r = c / C0;
             size_t cl = c % C0;
-            
+
             size_t cOffset_src = c * (H * W);
             size_t cOffset_dst = (r * (H * W * C0)) + cl;
 
             for (int64_t h = 0; h < H; ++h) {
                 size_t hOffset_src = h * W;
                 size_t hOffset_dst = h * (W * C0);
-                
+
                 // Hoist the constant part for this h-iteration
                 size_t base_src = nOffset_src + cOffset_src + hOffset_src;
                 size_t base_dst = nOffset_dst + cOffset_dst + hOffset_dst;
@@ -97,27 +97,27 @@ inline void TTRANS_GNCHW2NC1HWC0(DstTileData &dst, SrcTileData &src)
     for (int64_t g = 0; g < G; ++g) {
         size_t gOffset_src = g * (N * C * H * W);
         size_t gOffset_dst = g * (N * C1 * H * W * C0);
-        
+
         for (int64_t n = 0; n < N; ++n) {
             size_t nOffset_src = n * (C * H * W);
             size_t nOffset_dst = n * (C1 * H * W * C0);
-            
+
             for (int64_t c = 0; c < C; ++c) {
-                size_t r  = c / C0;
+                size_t r = c / C0;
                 size_t cl = c % C0;
-                
+
                 size_t cOffset_src = c * (H * W);
                 // This is the base offset for this channel in the destination
-                size_t cOffset_dst = (r * (H * W * C0)) + cl; 
-                
+                size_t cOffset_dst = (r * (H * W * C0)) + cl;
+
                 for (int64_t h = 0; h < H; ++h) {
                     size_t hOffset_src = h * W;
                     size_t hOffset_dst = h * (W * C0);
-                    
+
                     // Final combined base for the innermost loop
                     size_t base_src = gOffset_src + nOffset_src + cOffset_src + hOffset_src;
                     size_t base_dst = gOffset_dst + nOffset_dst + cOffset_dst + hOffset_dst;
-                    
+
                     for (int64_t w = 0; w < W; ++w) {
                         // Now the inner loop is just a simple increment
                         dst_ptr[base_dst + w * C0] = src_ptr[base_src + w];
@@ -156,7 +156,7 @@ inline void TTRANS_NC1HWC02C1HWN1N0C0(DstTileData &dst, SrcTileData &src)
     for (int64_t n = 0; n < N; ++n) {
         size_t n1 = n / N0;
         size_t n0 = n % N0;
-        
+
         // Pre-calculate n-level offsets
         size_t nOffset = n * (C0 * W * H * C1);
         size_t n0_Offset = n0 * C0;
@@ -164,16 +164,16 @@ inline void TTRANS_NC1HWC02C1HWN1N0C0(DstTileData &dst, SrcTileData &src)
 
         for (int64_t c1 = 0; c1 < C1; ++c1) {
             size_t c1Offset = c1 * (C0 * W * H);
-            
+
             for (int64_t h = 0; h < H; ++h) {
                 size_t hOffset = h * (C0 * W);
-                
+
                 for (int64_t w = 0; w < W; ++w) {
                     size_t wOffset = w * C0;
-                    
+
                     // Base for current (n, c1, h, w)
                     size_t src_base = nOffset + c1Offset + hOffset + wOffset;
-                    
+
                     // Calculate destination base:
                     // Combining the static factors and current h/w/c1 indices
                     size_t c1hw_offset = (c1 * (H * W) + h * W + w) * (C0 * N0 * N1);
@@ -223,11 +223,11 @@ inline void TTRANS_GNC1HWC02C1HWN1N0C0(DstTileData &dst, SrcTileData &src)
 
     for (int64_t g = 0; g < G; ++g) {
         const size_t g_base = g * C1HW * N;
-        
+
         for (int64_t n = 0; n < N; ++n) {
             const size_t n1 = n / N0;
             const size_t n0 = n % N0;
-            
+
             // Base offsets for this n
             const size_t n_base = (g_base + n * C1HW) * C0;
             const size_t n0_base = n0 * C0;
@@ -239,7 +239,7 @@ inline void TTRANS_GNC1HWC02C1HWN1N0C0(DstTileData &dst, SrcTileData &src)
 
                 for (int64_t h = 0; h < H; ++h) {
                     const size_t h_base = h * W * C0;
-                    
+
                     for (int64_t w = 0; w < W; ++w) {
                         // Final calculated destination base
                         size_t dst_base = n0_base + n1_base + c1hw_stride + (h * W + w) * C0_N0_N1;
