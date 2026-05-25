@@ -6,12 +6,15 @@
 # (or -r sim for the simulator).
 # --------------------------------------------------------------------------------
 
+KERNEL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 python ./scripts/gen_data.py
 
-SHORT=r:,v:,C:,
-LONG=run-mode:,soc-version:,compiler:,
+SHORT=r:,v:,C:,p
+LONG=run-mode:,soc-version:,compiler:,profile
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
+PROFILE_MODE=0
 while :
 do
     case "$1" in
@@ -24,6 +27,9 @@ do
         (-C | --compiler )
             CMAKE_COMPILER="$2"
             shift 2;;
+        (-p | --profile )
+            PROFILE_MODE=1
+            shift 1;;
         (--)
             shift;
             break;;
@@ -34,6 +40,8 @@ do
 done
 
 : "${CMAKE_COMPILER:=bisheng}"
+
+source "${KERNEL_DIR}/../common.sh"
 
 if [[ ! "${SOC_VERSION}" =~ ^Ascend ]]; then
     echo "[ERROR] Unsupported SocVersion: ${SOC_VERSION}"
@@ -55,4 +63,4 @@ set -euo pipefail
 cmake  -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} -DCMAKE_COMPILER=${CMAKE_COMPILER} ..
 make -j16
 
-./topk
+run_bin ./topk

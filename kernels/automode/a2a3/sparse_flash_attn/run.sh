@@ -1,8 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-SHORT=r:,v:,C:,n:,b:,m:,s:,h:,d:,k:
-LONG=run-mode:,soc-version:,compiler:,npu:,batch:,m-seq:,n-seq:,heads:,head-dim:,topk:
+KERNEL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+SHORT=r:,v:,C:,n:,b:,m:,s:,h:,d:,k:,p
+LONG=run-mode:,soc-version:,compiler:,npu:,batch:,m-seq:,n-seq:,heads:,head-dim:,topk:,profile
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 
@@ -15,6 +17,7 @@ N=6
 H=16
 D=256
 K=6
+PROFILE_MODE=0
 
 while :
 do
@@ -49,6 +52,9 @@ do
         (-k | --topk )
             TOPK="$2"
             shift 2;;
+        (-p | --profile )
+            PROFILE_MODE=1
+            shift 1;;
         (--)
             shift
             break;;
@@ -57,6 +63,8 @@ do
             exit 1;;
     esac
 done
+
+source "${KERNEL_DIR}/../common.sh"
 
 : "${CMAKE_COMPILER:=bisheng}"
 
@@ -70,7 +78,7 @@ make -j
 cd ..
 
 python3 gen.py --out_dir data --b "${B}" --m "${M}" --n "${N}" --h "${H}" --d "${D}" --topk "${K}"
-./build/main data "${NPU_ID}"
+run_bin ./build/main data "${NPU_ID}"
 python3 verify.py --data_dir data
 
 echo "[DONE] sparse flash attention run_mode=${RUN_MODE}"
