@@ -40,9 +40,6 @@ function(pto_st_npu NAME)
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} -std=c++17)
     target_include_directories(${NAME}_kernel PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../../include
-        ${ASCEND_HOME_PATH}/include/ascendc
-        ${ASCEND_HOME_PATH}/include/ascendc/basic_api
-        ${ASCEND_HOME_PATH}/include/ascendc/highlevel_api
         ${ASCEND_HOME_PATH}/pkg_inc/
         ${ASCEND_HOME_PATH}/pkg_inc/profiling/
         ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime

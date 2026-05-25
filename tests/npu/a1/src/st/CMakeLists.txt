@@ -62,8 +62,6 @@ add_compile_options(
     -O2 -std=c++17
     -Wno-macro-redefined -Wno-ignored-attributes
     -fstack-protector-strong
-    # [AscendC Supported] Avoid redefinition of g_tilingKey
-    -DTILING_KEY_VAR=0
 )
 add_link_options(
     -s
@@ -105,11 +103,6 @@ include_directories(
     ${ASCEND_HOME_PATH}/pkg_inc
     ${ASCEND_HOME_PATH}/pkg_inc/profiling
     ${ASCEND_HOME_PATH}/pkg_inc/runtime
-    # [AscendC Supported] Add AscendC Head Path.
-    ${ASCEND_HOME_PATH}/include/ascendc/basic_api
-    ${ASCEND_HOME_PATH}/include/ascendc/basic_api/interface
-    ${ASCEND_HOME_PATH}/aarch64-linux/asc/impl/basic_api
-    ${ASCEND_HOME_PATH}/aarch64-linux/tikcpp/tikcfw/
 )
 
 if (DEFINED ENV{ACCURATE_RECIP})
