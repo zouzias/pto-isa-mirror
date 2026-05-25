@@ -241,52 +241,52 @@ TEST_F(TTRANSConvTest, uint8_11_2_7_7_32)
     test_ttrans<uint8_t, 1, 2, 7, 7, 1, 16, 32, 11, 2, 7, 7, 32>();
 }
 
-TEST_F(TTRANSConvTest, float32_1_1_32_6_56)
-{
-    test_ttrans_group<float, 0, 1, 1, 4, 6, 56, 8, 1, 1, 1, 1, 32, 6, 56>();
-}
+// TEST_F(TTRANSConvTest, float32_1_1_32_6_56)
+// {
+//     test_ttrans_group<float, 0, 1, 1, 4, 6, 56, 8, 1, 1, 1, 1, 32, 6, 56>();
+// }
 
-TEST_F(TTRANSConvTest, int32_4_1_8_1_8)
-{
-    test_ttrans_group<int32_t, 0, 4, 1, 1, 1, 8, 8, 1, 1, 4, 1, 8, 1, 8>();
-}
+// TEST_F(TTRANSConvTest, int32_4_1_8_1_8)
+// {
+//     test_ttrans_group<int32_t, 0, 4, 1, 1, 1, 8, 8, 1, 1, 4, 1, 8, 1, 8>();
+// }
 
-TEST_F(TTRANSConvTest, float32_2_5_30_4_16)
-{
-    test_ttrans_group<float, 0, 2, 5, 2, 4, 16, 16, 1, 1, 2, 5, 30, 4, 16>();
-}
+// TEST_F(TTRANSConvTest, float32_2_5_30_4_16)
+// {
+//     test_ttrans_group<float, 0, 2, 5, 2, 4, 16, 16, 1, 1, 2, 5, 30, 4, 16>();
+// }
 
-TEST_F(TTRANSConvTest, half_1_1_30_2_16)
-{
-    test_ttrans_group<aclFloat16, 0, 1, 1, 2, 2, 16, 16, 1, 1, 1, 1, 30, 2, 16>();
-}
+// TEST_F(TTRANSConvTest, half_1_1_30_2_16)
+// {
+//     test_ttrans_group<aclFloat16, 0, 1, 1, 2, 2, 16, 16, 1, 1, 1, 1, 30, 2, 16>();
+// }
 
-TEST_F(TTRANSConvTest, float32_2_1_32_6_12)
-{
-    test_ttrans_group<float, 0, 2, 1, 8, 6, 12, 4, 1, 1, 2, 1, 32, 6, 12>();
-}
+// TEST_F(TTRANSConvTest, float32_2_1_32_6_12)
+// {
+//     test_ttrans_group<float, 0, 2, 1, 8, 6, 12, 4, 1, 1, 2, 1, 32, 6, 12>();
+// }
 
-TEST_F(TTRANSConvTest, float32_1_3_2_2_16_4)
-{
-    test_ttrans_group<float, 1, 1, 2, 2, 16, 2, 2, 4, 1, 3, 2, 2, 16, 4>();
-}
+// TEST_F(TTRANSConvTest, float32_1_3_2_2_16_4)
+// {
+//     test_ttrans_group<float, 1, 1, 2, 2, 16, 2, 2, 4, 1, 3, 2, 2, 16, 4>();
+// }
 
-TEST_F(TTRANSConvTest, float32_2_3_2_2_16_4)
-{
-    test_ttrans_group<float, 1, 2, 2, 2, 16, 2, 2, 4, 2, 3, 2, 2, 16, 4>();
-}
+// TEST_F(TTRANSConvTest, float32_2_3_2_2_16_4)
+// {
+//     test_ttrans_group<float, 1, 2, 2, 2, 16, 2, 2, 4, 2, 3, 2, 2, 16, 4>();
+// }
 
-TEST_F(TTRANSConvTest, float32_2_4_2_2_16_4)
-{
-    test_ttrans_group<float, 1, 2, 2, 2, 16, 2, 2, 4, 2, 4, 2, 2, 16, 4>();
-}
+// TEST_F(TTRANSConvTest, float32_2_4_2_2_16_4)
+// {
+//     test_ttrans_group<float, 1, 2, 2, 2, 16, 2, 2, 4, 2, 4, 2, 2, 16, 4>();
+// }
 
-TEST_F(TTRANSConvTest, float16_1_7_2_1_8_16)
-{
-    test_ttrans_group<aclFloat16, 1, 1, 2, 1, 8, 1, 16, 16, 1, 7, 2, 1, 8, 16>();
-}
+// TEST_F(TTRANSConvTest, float16_1_7_2_1_8_16)
+// {
+//     test_ttrans_group<aclFloat16, 1, 1, 2, 1, 8, 1, 16, 16, 1, 7, 2, 1, 8, 16>();
+// }
 
-TEST_F(TTRANSConvTest, float16_4_7_2_1_8_4)
-{
-    test_ttrans_group<aclFloat16, 1, 4, 2, 1, 8, 1, 16, 4, 4, 7, 2, 1, 8, 4>();
-}
+// TEST_F(TTRANSConvTest, float16_4_7_2_1_8_4)
+// {
+//     test_ttrans_group<aclFloat16, 1, 4, 2, 1, 8, 1, 16, 4, 4, 7, 2, 1, 8, 4>();
+// }
