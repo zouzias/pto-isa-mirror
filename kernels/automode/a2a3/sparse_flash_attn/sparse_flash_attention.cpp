@@ -3,6 +3,7 @@
 #include "acl/acl.h"
 #include <runtime/rt_ffts.h>
 #include <cmath>
+#include "generated_cases.h"
 using namespace pto;
 
 template <int H, int D, int BLOCK = 64>
@@ -436,7 +437,7 @@ void call(uint8_t *q_handle,
 //     void *stream
 // );
 
-template void call<16, 256, 64>(
+template void call<kSparseFaH, kSparseFaD, kSparseFaBlock>(
     uint8_t *q_handle,
     uint8_t *kv_handle,
     uint8_t *output_handle,

@@ -18,13 +18,20 @@
 #   ./output/golden_logits.bin    kT * kE  float32
 
 import os
+import sys
+from pathlib import Path
+
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+from case_utils import load_moe_case
 
 np.random.seed(42)
 
-kT = 256  # num_tokens
-kH = 64   # d_model
-kE = 32   # num_experts
+_case = load_moe_case()
+kT = _case["t"]  # num_tokens
+kH = _case["h"]  # d_model
+kE = _case["e"]  # num_experts
 
 
 def gen_golden_data():

@@ -35,6 +35,7 @@
  */
 
 #include <pto/pto-inst.hpp>
+#include "generated_cases.h"
 #include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
 
@@ -133,7 +134,7 @@ void launchMoeTopk(uint8_t *outVal, uint8_t *outIdx, uint8_t *src, uint8_t *idx,
 {
     constexpr int kRows = 256;
     constexpr int kCols = 32;
-    constexpr int kTopK = 2;
+    constexpr int kTopK = (kMoeTopK >= 2) ? kMoeTopK : 2;
     RunMoeTopk<T, kRows, kCols, kTopK><<<1, nullptr, stream>>>(outVal, outIdx, src, idx);
 }
 

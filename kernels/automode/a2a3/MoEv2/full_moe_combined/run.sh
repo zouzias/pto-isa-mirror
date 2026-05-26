@@ -6,10 +6,8 @@
 
 KERNEL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-python ./scripts/gen_data.py
-
-SHORT=r:,v:,C:,p
-LONG=run-mode:,soc-version:,compiler:,profile
+SHORT=r:,v:,C:,n:,a:,p
+LONG=run-mode:,soc-version:,compiler:,npu:,cases:,profile
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 PROFILE_MODE=0
@@ -25,6 +23,12 @@ do
         (-C | --compiler )
             CMAKE_COMPILER="$2"
             shift 2;;
+        (-n | --npu )
+            NPU_ID="$2"
+            shift 2;;
+        (-a | --cases )
+            CASES_RAW="$2"
+            shift 2;;
         (-p | --profile )
             PROFILE_MODE=1
             shift 1;;
@@ -37,7 +41,9 @@ do
     esac
 done
 
+
 : "${CMAKE_COMPILER:=bisheng}"
+: "${NPU_ID:=0}"
 
 source "${KERNEL_DIR}/../../common.sh"
 
@@ -50,6 +56,13 @@ if [[ "${SOC_VERSION}" =~ ^Ascend910B4-1 ]] && [ "${RUN_MODE}" == "sim" ]; then
     echo "[ERROR] SocVersion: ${SOC_VERSION} can not support sim mode, please use Ascend910B4."
     exit 1
 fi
+
+GEN_CASE_ARGS=()
+if [[ -n "${CASES_RAW:-}" ]]; then
+    GEN_CASE_ARGS+=(--cases "${CASES_RAW}")
+fi
+python3 ../scripts/generate_cases.py "${GEN_CASE_ARGS[@]}" || exit 1
+python ./scripts/gen_data.py || exit 1
 
 rm -rf build
 mkdir build

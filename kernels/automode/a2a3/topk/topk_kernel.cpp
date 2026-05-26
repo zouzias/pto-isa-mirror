@@ -39,6 +39,7 @@
 #include <pto/pto-inst.hpp>
 #include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
+#include "generated_cases.h"
 
 using namespace pto;
 
@@ -262,12 +263,9 @@ __global__ AICORE void RunTopk(__gm__ uint8_t *outVal_raw, __gm__ uint8_t *outId
 template <typename T>
 void launchTopk(uint8_t *outVal, uint8_t *outIdx, uint8_t *src, uint8_t *idx, void *stream)
 {
-    constexpr int kRows = 4;
-    constexpr int kCols = 1280;
-    constexpr int kTopK = 512;
     // Pass raw uint8_t* directly. The kernel applies __gm__ + reinterpret
     // internally; host-side casts to __gm__ pointers are rejected by bisheng (E11).
-    RunTopk<T, kRows, kCols, kTopK><<<1, nullptr, stream>>>(outVal, outIdx, src, idx);
+    RunTopk<T, kTopkRows, kTopkCols, kTopkTopK><<<1, nullptr, stream>>>(outVal, outIdx, src, idx);
 }
 
 template void launchTopk<float>(uint8_t *outVal, uint8_t *outIdx, uint8_t *src, uint8_t *idx, void *stream);

@@ -10,6 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "acl/acl.h"
 #include "test_common.h"
+#include "generated_cases.h"
 using namespace std;
 using namespace PtoTestCommon;
 
@@ -41,8 +42,8 @@ bool GemmE2E()
     aclrtMalloc((void **)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    ReadFile("./input/x1_gm.bin", aFileSize, src0Host, aFileSize);
-    ReadFile("./input/x2_gm.bin", bFileSize, src1Host, bFileSize);
+    ReadFile("../input/x1_gm.bin", aFileSize, src0Host, aFileSize);
+    ReadFile("../input/x2_gm.bin", bFileSize, src1Host, bFileSize);
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -51,7 +52,7 @@ bool GemmE2E()
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
-    WriteFile("./output/output_z.bin", dstHost, cFileSize);
+    WriteFile("../output/output_z.bin", dstHost, cFileSize);
 
     aclrtFree(dstDevice);
     aclrtFree(src0Device);
@@ -66,8 +67,8 @@ bool GemmE2E()
 
     std::vector<float> golden(cFileSize);
     std::vector<float> devFinal(cFileSize);
-    ReadFile("./output/golden.bin", cFileSize, golden.data(), cFileSize);
-    ReadFile("./output/output_z.bin", cFileSize, devFinal.data(), cFileSize);
+    ReadFile("../output/golden.bin", cFileSize, golden.data(), cFileSize);
+    ReadFile("../output/output_z.bin", cFileSize, devFinal.data(), cFileSize);
 
     bool ret = ResultCmp(golden, devFinal, 0.001f);
     if (ret) {
@@ -80,21 +81,8 @@ bool GemmE2E()
 
 int main()
 {
-    constexpr uint32_t m = 6144;
-    constexpr uint32_t k = 6144;
-    constexpr uint32_t n = 6144;
-    constexpr uint32_t singleCoreM = 1536;
-    constexpr uint32_t singleCoreK = 6144;
-    constexpr uint32_t singleCoreN = 1024;
-    constexpr uint32_t blockDim = 24;
-    constexpr uint32_t baseM = 128;
-    constexpr uint32_t baseK = 64;
-    constexpr uint32_t baseN = 128;
-    constexpr uint32_t stepM = 1;
-    constexpr uint32_t stepKa = 4;
-    constexpr uint32_t stepKb = 4;
-    constexpr uint32_t stepN = 1;
-
-    return !GemmE2E<float, uint16_t, uint16_t, blockDim, m, k, n, singleCoreM, singleCoreK, singleCoreN, baseM, baseK, baseN,
-                    stepM, stepKa, stepKb, stepN>();
+    bool ok = GemmE2E<float, uint16_t, uint16_t, kGemmBlockDim, kGemmM, kGemmK, kGemmN, kGemmSingleCoreM,
+                      kGemmSingleCoreK, kGemmSingleCoreN, kGemmBaseM, kGemmBaseK, kGemmBaseN, kGemmStepM,
+                      kGemmStepKa, kGemmStepKb, kGemmStepN>();
+    return ok ? 0 : 1;
 }

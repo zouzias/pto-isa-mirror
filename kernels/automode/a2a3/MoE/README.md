@@ -1,6 +1,6 @@
 # MoE — auto-mode A3 kernel stack
 
-Five independently buildable kernels that together implement a top-`kTopK` MoE forward pass on Ascend 910B1 in auto mode. Each sub-folder runs standalone via `bash run.sh -r npu -v Ascend910B1`; `sweep.sh` patches shape constants and runs all five at one shape; `sweep_all.sh` walks a curated 20-config matrix.
+Five independently buildable kernels that together implement a top-`kTopK` MoE forward pass on Ascend 910B1 in auto mode. Each sub-folder runs standalone via `bash run.sh -r npu -v Ascend910B1`, and the top-level A3 runner can run the family with a generated shape via `--cases-moe`.
 
 ## Pipeline
 
@@ -86,28 +86,18 @@ cd <folder>
 bash run.sh -r npu -v Ascend910B1
 ```
 
-Each folder has its own `scripts/gen_data.py` (writes inputs + golden), `main.cpp` (loads inputs, fires the kernel, writes outputs, validates), and prints `test data success` / `test data failed`.
+Each folder has its own `scripts/gen_data.py` (writes inputs + golden), `main.cpp` (loads inputs, fires the kernel, writes outputs, validates), and prints `test data success` / `test data failed`. The leaf `run.sh` delegates to the shared MoE case generator so shape parsing stays in one place.
 
-### All 5 folders at one shape
+### All folders at one shape
 
 ```bash
-cd MoE
-bash sweep.sh <kT> <kH> <kF> <kE> <kTopK> <RUN_MODE> <SOC_VERSION>
+cd ..
+bash run_all.sh -r <RUN_MODE> -v <SOC_VERSION> --kernels MoE --cases-moe "<kT>,<kH>,<kF>,<kE>,<kTopK>"
 # e.g.:
-bash sweep.sh 256 64 64 32 1 npu Ascend910B1
+bash run_all.sh -r npu -v Ascend910B1 --kernels MoE --cases-moe "256,64,64,32,1"
 ```
 
-`sweep.sh` patches the shape constants in-place across all 5 folders (`gen_data.py`, `main.cpp`, `<name>_kernel.cpp`), then loops: build → run → record PASS/FAIL. Constants stay patched after the run — `git checkout -- .` reverts.
-
-### Overnight matrix (20 configs)
-
-```bash
-cd MoE
-bash sweep_all.sh -r npu -v Ascend910B1
-# or just: bash sweep_all.sh   (defaults to npu / Ascend910B1)
-```
-
-Writes `sweep_all.log` (streaming) and `sweep_all.summary` (final matrix). Covers `kTopK ∈ {1,2,4,8,16}`, `kE ∈ {16,32}`, `kT ∈ {128,256,512}`, `kH=kF ∈ {64,128}`, and a handful of cross-axis combinations. `kH=kF=256` is **skipped** — that needs Split-K, postponed.
+`run_all.sh` forwards the tuple to each MoE leaf `run.sh`; each leaf calls the shared family-level `scripts/generate_cases.py` before generating data and building.
 
 ## Constraints inherited across all sub-folders
 

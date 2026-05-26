@@ -65,8 +65,9 @@ set(CMAKE_CPP_COMPILE_OPTIONS
 )
 
 include_directories(
-    /home/m50048152/pto-isa/include  # pto-isa
-    /home/m50048152/pto-isa/include/pto
+    ${PROJECT_SOURCE_DIR}/../../../../include
+    ${PROJECT_SOURCE_DIR}/../../../../include/pto
+    ${PROJECT_BINARY_DIR}
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_HOME_PATH}/pkg_inc/runtime
     ${ASCEND_DRIVER_PATH}/kernel/inc

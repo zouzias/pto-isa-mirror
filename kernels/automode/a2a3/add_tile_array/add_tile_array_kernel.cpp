@@ -25,6 +25,7 @@
 
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
+#include "generated_cases.h"
 
 using namespace pto;
 
@@ -32,10 +33,10 @@ namespace add_tile_array_cfg {
 
 // Static configuration. Total array shape: (NUM_TILES * TILE_ROWS, TILE_COLS).
 // Total elements: 4 * 64 * 64 = 16384. Must match scripts/gen_data.py / main.cpp.
-constexpr unsigned TILE_ROWS  = 64;
-constexpr unsigned TILE_COLS  = 64;
-constexpr unsigned NUM_TILES  = 4;
-constexpr unsigned TOTAL_ROWS = NUM_TILES * TILE_ROWS;  // 256
+constexpr unsigned TILE_ROWS  = kAddTileArrayTileRows;
+constexpr unsigned TILE_COLS  = kAddTileArrayTileCols;
+constexpr unsigned NUM_TILES  = kAddTileArrayNumTiles;
+constexpr unsigned TOTAL_ROWS = NUM_TILES * TILE_ROWS;
 
 }  // namespace add_tile_array_cfg
 

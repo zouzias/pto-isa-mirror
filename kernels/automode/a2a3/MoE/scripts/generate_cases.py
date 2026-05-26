@@ -46,6 +46,10 @@ def _parse_case_entry(raw: str) -> Dict[str, int]:
     if len(parts) != 5:
         raise ValueError(f"Expected 5 comma-separated values (kT,kH,kF,kE,kTopK), got '{raw}'")
     t, h, f, e, topk = map(int, parts)
+    if min(t, h, f, e, topk) <= 0:
+        raise ValueError("All MoE case values must be positive")
+    if topk > e:
+        raise ValueError("kTopK cannot exceed kE")
     return {"t": t, "h": h, "f": f, "e": e, "topk": topk}
 
 

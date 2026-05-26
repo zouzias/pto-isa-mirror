@@ -11,8 +11,25 @@
 # --------------------------------------------------------------------------------
 
 import os
+import json
+from pathlib import Path
 import numpy as np
 np.random.seed(19)
+
+
+def load_generated_case():
+    case_path = Path(__file__).resolve().parent.parent / "build" / "generated_cases.json"
+    if not case_path.exists():
+        return {
+            "g_shape3": 4800,
+            "g_shape4": 1024,
+            "g_whole_shape3": 4800,
+            "g_whole_shape4": 1280,
+            "topk": 1000,
+        }
+    with case_path.open("r", encoding="utf-8") as f:
+        cases = json.load(f)
+    return cases[0]
 
 
 def gen_golden_data(param):
@@ -87,8 +104,10 @@ class TopkParams:
         self.topk = topk
 
 if __name__ == "__main__":
+    case = load_generated_case()
 
     case_params_list = [
-        TopkParams(np.float32, np.int32, 1, 1, 1, 4800, 1024, 1, 1, 1, 4800, 1280, 1000)
+        TopkParams(np.float32, np.int32, 1, 1, 1, case["g_shape3"], case["g_shape4"], 1, 1, 1,
+                   case["g_whole_shape3"], case["g_whole_shape4"], case["topk"])
     ]
     gen_golden_data(case_params_list[0])

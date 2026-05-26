@@ -14,16 +14,23 @@
 # --------------------------------------------------------------------------------
 
 import os
+import json
+from pathlib import Path
 import numpy as np
 
 np.random.seed(19)
 
-kRows = 4
-kCols = 1280
-kTopK = 512
+
+def load_generated_case():
+    case_path = Path(__file__).resolve().parent.parent / "build" / "generated_cases.json"
+    if not case_path.exists():
+        return {"rows": 4, "cols": 1280, "topk": 512}
+    with case_path.open("r", encoding="utf-8") as f:
+        cases = json.load(f)
+    return cases[0]
 
 
-def gen_golden_data():
+def gen_golden_data(kRows, kCols, kTopK):
     src = np.random.uniform(-1000.0, 1000.0, size=(kRows, kCols)).astype(np.float32)
     # idx is the same identity row for every input row; kernel TLOADs it once
     # per row from a shared (kCols,) GM region. Keep file size at kCols.
@@ -43,4 +50,5 @@ def gen_golden_data():
 
 
 if __name__ == "__main__":
-    gen_golden_data()
+    case = load_generated_case()
+    gen_golden_data(case["rows"], case["cols"], case["topk"])

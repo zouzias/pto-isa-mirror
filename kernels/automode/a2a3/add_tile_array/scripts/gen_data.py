@@ -17,8 +17,19 @@
 # --------------------------------------------------------------------------------
 
 import os
+import json
+from pathlib import Path
 import numpy as np
 np.random.seed(19)
+
+
+def load_generated_case():
+    case_path = Path(__file__).resolve().parent.parent / "build" / "generated_cases.json"
+    if not case_path.exists():
+        return {"num_tiles": 4, "tile_rows": 64, "tile_cols": 64}
+    with case_path.open("r", encoding="utf-8") as f:
+        cases = json.load(f)
+    return cases[0]
 
 
 def gen_golden_data(param):
@@ -50,7 +61,8 @@ class AddTileArrayParams:
 
 
 if __name__ == "__main__":
+    case = load_generated_case()
     case_params_list = [
-        AddTileArrayParams(np.float32, 4, 64, 64),
+        AddTileArrayParams(np.float32, case["num_tiles"], case["tile_rows"], case["tile_cols"]),
     ]
     gen_golden_data(case_params_list[0])

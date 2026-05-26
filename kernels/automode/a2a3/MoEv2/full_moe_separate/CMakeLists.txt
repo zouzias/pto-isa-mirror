@@ -87,6 +87,7 @@ function(pto_kernel_lib LIBNAME SRC ARCH_FLAG)
     )
     target_include_directories(${LIBNAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../../include/
+        ${PROJECT_SOURCE_DIR}/../build
     )
     target_link_options(${LIBNAME} PRIVATE --cce-fatobj-link)
 endfunction()
@@ -118,6 +119,7 @@ add_executable(full_moe_separate main.cpp)
 target_compile_options(full_moe_separate PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
 target_include_directories(full_moe_separate PRIVATE
     ${PROJECT_SOURCE_DIR}/../../../../../include/
+        ${PROJECT_SOURCE_DIR}/../build
     ${PROJECT_SOURCE_DIR}/../../../../../tests/common
 )
 target_link_directories(full_moe_separate PUBLIC
