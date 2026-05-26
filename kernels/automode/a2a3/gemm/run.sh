@@ -65,5 +65,5 @@ set -euo pipefail
 cmake  -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} -DCMAKE_COMPILER=${CMAKE_COMPILER} ..
 make -j16
 
-python3 scripts/gen_data.py
+python3 ../scripts/gen_data.py
 run_bin ./gemm_performance

@@ -41,8 +41,8 @@ bool GemmE2E()
     aclrtMalloc((void **)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    ReadFile("../input/x1_gm.bin", aFileSize, src0Host, aFileSize);
-    ReadFile("../input/x2_gm.bin", bFileSize, src1Host, bFileSize);
+    ReadFile("./input/x1_gm.bin", aFileSize, src0Host, aFileSize);
+    ReadFile("./input/x2_gm.bin", bFileSize, src1Host, bFileSize);
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -51,7 +51,7 @@ bool GemmE2E()
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
-    WriteFile("../output/output_z.bin", dstHost, cFileSize);
+    WriteFile("./output/output_z.bin", dstHost, cFileSize);
 
     aclrtFree(dstDevice);
     aclrtFree(src0Device);
@@ -66,8 +66,8 @@ bool GemmE2E()
 
     std::vector<float> golden(cFileSize);
     std::vector<float> devFinal(cFileSize);
-    ReadFile("../output/golden.bin", cFileSize, golden.data(), cFileSize);
-    ReadFile("../output/output_z.bin", cFileSize, devFinal.data(), cFileSize);
+    ReadFile("./output/golden.bin", cFileSize, golden.data(), cFileSize);
+    ReadFile("./output/output_z.bin", cFileSize, devFinal.data(), cFileSize);
 
     bool ret = ResultCmp(golden, devFinal, 0.001f);
     if (ret) {
