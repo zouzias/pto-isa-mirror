@@ -257,8 +257,11 @@ AICORE inline void TPutRows(GlobalNd<T> &remoteDst, GlobalNd<T> &src)
 
 AICORE inline void NotifySignal(__gm__ int32_t *signal, int32_t value)
 {
+    pipe_barrier(PIPE_ALL);
+    dsb(DSB_DDR);
     pto::comm::Signal sig = MakeSignal(signal);
-    pto::comm::TNOTIFY(sig, value, pto::comm::NotifyOp::Set);
+    (void)value;
+    pto::comm::TNOTIFY(sig, 1, pto::comm::NotifyOp::AtomicAdd);
 }
 
 AICORE inline void WaitSignal(__gm__ int32_t *signal, int32_t value)
@@ -358,9 +361,7 @@ AICORE inline void ClearDispatchState(DispatchCombineTileShape shape, LocalWorks
         StoreScalarI32(workspaceView.prevSumBeforeRank + idx, 0);
     }
     (void)expandedRows;
-    for (uint32_t idx = blockId; idx < shape.ep; idx += blockNum) {
-        StoreScalarI32(localPeer.combineDoneSignal + idx, 0);
-    }
+    (void)localPeer;
 }
 
 AICORE inline void InitPackCursors(DispatchCombineTileShape shape, LocalWorkspaceView workspaceView, uint32_t blockId,

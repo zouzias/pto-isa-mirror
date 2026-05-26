@@ -263,8 +263,11 @@ void ClearDeviceState(const DispatchCombineTileArgs &args, const WorkspaceLayout
     PrintStage(state->rank, "clear_device_state", "begin");
     CheckAcl(aclrtMemset(state->buffers.workspace, workspaceLayout.totalBytes, 0, workspaceLayout.totalBytes),
              "rank " + std::to_string(state->rank) + " clear workspace");
-    CheckAcl(aclrtMemset(state->hccl.peerWindow, peerWindowLayout.totalBytes, 0, peerWindowLayout.totalBytes),
-             "rank " + std::to_string(state->rank) + " clear peerWindow");
+    size_t peerWindowDataBytes = state->currentSignalValue == 1 ?
+                                     static_cast<size_t>(peerWindowLayout.totalBytes) :
+                                     static_cast<size_t>(peerWindowLayout.countReadySignal);
+    CheckAcl(aclrtMemset(state->hccl.peerWindow, peerWindowDataBytes, 0, peerWindowDataBytes),
+             "rank " + std::to_string(state->rank) + " clear peerWindow data");
     CheckAcl(aclrtSynchronizeStream(state->computeStream), "rank " + std::to_string(state->rank) + " sync clear");
     PrintStage(state->rank, "clear_device_state", "done");
 }
@@ -667,9 +670,6 @@ void ClearCombineReturnState(const DispatchCombineTileArgs &args, const PeerWind
     CheckAcl(aclrtMemset(peerBase + peerWindowLayout.ptrD, BytesOfHalfVector(expandedRows * shape.k), 0,
                          BytesOfHalfVector(expandedRows * shape.k)),
              "rank " + std::to_string(state->rank) + " clear ptrD");
-    CheckAcl(aclrtMemset(peerBase + peerWindowLayout.combineDoneSignal, BytesOfI32Vector(shape.ep), 0,
-                         BytesOfI32Vector(shape.ep)),
-             "rank " + std::to_string(state->rank) + " clear combineDoneSignal");
     CheckAcl(aclrtMemset(state->buffers.outputC, BytesOfHalfVector(static_cast<size_t>(shape.m) * shape.k), 0,
                          BytesOfHalfVector(static_cast<size_t>(shape.m) * shape.k)),
              "rank " + std::to_string(state->rank) + " clear combine outputC");
