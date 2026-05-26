@@ -35,7 +35,7 @@ General flow:
 
 Example case-generation pattern from MoE:
 
-1. `kernels/automode/a2a3/MoE/scripts/generate_cases.py` accepts repeated `--cases` values.
+1. Each MoE/MoEv2 leaf `run.sh` delegates to its family-level `scripts/generate_cases.py`, which accepts repeated `--cases` values.
 2. Each case is passed as `kT,kH,kF,kE,kTopK`.
 3. The script writes `build/generated_cases.h` and `build/generated_cases.json`.
 4. The generated header defines `MOE_FOR_EACH_CASE(...)` and convenience aliases like `kMoeT`, `kMoeH`, `kMoeF`, `kMoeE`, and `kMoeTopK`.
