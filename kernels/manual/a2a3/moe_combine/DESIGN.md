@@ -1,8 +1,8 @@
-# combine_tile 设计文档
+# moe_combine 设计文档
 
 ## 1. 项目定位
 
-`combine_tile` 是从 `dispatch_combine_tile` 拆出来的独立 combine 项目，目标只覆盖 MoE combine
+`moe_combine` 是从 `moe_combine` 拆出来的独立 combine 项目，目标只覆盖 MoE combine
 返回和 restore 链路：
 
 ```text
@@ -15,7 +15,7 @@ expertOutput[local experts, source-rank-major]
     -> outputC[local M, K]
 ```
 
-当前目录已从 `kernels/manual/a2a3/dispatch_combine_tile` 初始化拷贝，保留源码、脚本、设计/计划文档和
+当前目录已从 `kernels/manual/a2a3/moe_combine` 初始化拷贝，保留源码、脚本、设计/计划文档和
 `out/` 校验 dump，未拷贝 `build/` 产物。后续清理只删除 dispatch kernel 和 dispatch-only host 路径。
 
 ## 2. 拆分边界
@@ -23,14 +23,14 @@ expertOutput[local experts, source-rank-major]
 ### 保留内容
 
 - HCCL/MPI 多进程初始化、rank/device 绑定、HCCL window 分配和 remote pointer helper。
-- `DispatchCombineTileShape`、workspace/window layout 中 combine 必需字段。
+- `MoeCombineShape`、workspace/window layout 中 combine 必需字段。
 - CPU golden 中 combine restore 所需的数据生成、debug dump 和 `CompareOutputs`。
 - host 侧 combine e2e 计时、`actual_ptrD_head` dump、`outputC` dump、verify 日志。
 - `out/` 下已有二进制校验材料，作为拆分前基线保留。
 
 ### 删除内容
 
-- device 侧 `DispatchCombineTileDispatch` kernel 入口和 launcher。
+- device 侧 `MoeCombineDispatch` kernel 入口和 launcher。
 - dispatch-only helper：本地 routing count、pack、expandedRowIdx rebuild、count row publish/wait、
   dispatch gather 等只服务 dispatch kernel 的函数。
 - host 侧 `RunDispatch`、`PrepareExpertOutputIdentity` 中作为 dispatch 后处理的强绑定流程。
@@ -60,11 +60,11 @@ combine kernel 运行前必须满足：
 目标文件保持和原项目相近，降低拆分风险：
 
 ```text
-combine_tile/
+moe_combine/
   CMakeLists.txt
   run.sh
   main.cpp
-  dispatch_combine_tile_kernel.cpp   # 下一步改名为 combine_tile_kernel.cpp
+  moe_combine_kernel.cpp   # 下一步改名为 moe_combine_kernel.cpp
   kernel_launchers.h
   common.h
   args.h
@@ -79,11 +79,11 @@ combine_tile/
 
 | 当前符号 | combine 项目目标 |
 | --- | --- |
-| `project(pto_dispatch_combine_tile)` | `project(pto_combine_tile)` |
-| `dispatch_combine_tile_kernel` | `combine_tile_kernel` |
-| `dispatch_combine_tile` executable | `combine_tile` |
-| `DispatchCombineTileCombine` | `CombineTileKernel` 或保留旧名到二轮统一改名 |
-| `LaunchDispatchCombineTileCombine` | `LaunchCombineTile` |
+| `project(pto_moe_combine)` | `project(pto_moe_combine)` |
+| `moe_combine_kernel` | `moe_combine_kernel` |
+| `moe_combine` executable | `moe_combine` |
+| `MoeCombineKernel` | `CombineTileKernel` 或保留旧名到二轮统一改名 |
+| `LaunchMoeCombineKernel` | `LaunchCombineTile` |
 
 命名重构分两步做：先删掉不需要的 dispatch 代码保证可编译，再统一 namespace/文件名，避免同时大改导致定位困难。
 
@@ -120,7 +120,7 @@ rank_<r>_expandedRowIdx.bin
 
 ## 6. 实施顺序
 
-1. 重命名 CMake target 和 run binary：`combine_tile` / `combine_tile_kernel`。
+1. 重命名 CMake target 和 run binary：`moe_combine` / `moe_combine_kernel`。
 2. 将 `kernel_launchers.h` 缩减为单一 combine launcher。
 3. 在 kernel 文件中删除 dispatch global kernel 和 dispatch-only helper；保留 combine 所需的 remote pointer、
    TPUT、TWAIT、restore helper。
@@ -141,10 +141,10 @@ rank_<r>_expandedRowIdx.bin
 
 ### Kernel 删除范围
 
-从 `combine_tile_kernel.cpp` 删除：
+从 `moe_combine_kernel.cpp` 删除：
 
-- `DispatchCombineTileDispatch` global kernel；
-- `LaunchDispatchCombineTileDispatch` launcher；
+- `MoeCombineDispatch` global kernel；
+- `LaunchMoeCombineDispatch` launcher；
 - dispatch pack/count/prefix/gather helper：
   `ClearDispatchState`、`InitPackCursors`、`PackedExpertOffset`、`PackLocalRowsToWindow`、
   `CountLocalRoutes`、`RebuildExpandedRowIdx`、`BuildBlockPrefixAndLocalCounts`、
@@ -190,7 +190,7 @@ VerifyAndDump
 
 ## 7. 验收标准
 
-- 项目可独立构建出 `combine_tile` 和 `libcombine_tile_kernel.so`。
+- 项目可独立构建出 `moe_combine` 和 `libmoe_combine_kernel.so`。
 - kernel 文件中没有 dispatch kernel 入口和 launcher。
 - `run.sh` 默认 `--data-dir` 指向本目录 `out/`。
 - `--debug 2 --verify 1` 能输出 combine return、restore、verify 和 e2e 日志。

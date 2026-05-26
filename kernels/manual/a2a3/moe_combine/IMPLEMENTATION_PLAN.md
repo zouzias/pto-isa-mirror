@@ -1,4 +1,4 @@
-# dispatch_combine_tile Implementation Plan
+# moe_combine Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -76,7 +76,7 @@ Apply these rules to every task unless the task says otherwise:
 
 The current `DESIGN.md` is implementable as the first version. It has the important boundaries fixed:
 
-- exactly two device compute kernels: `DispatchCombineTileDispatch` and `DispatchCombineTileCombine`;
+- exactly two device compute kernels: `MoeCombineDispatch` and `MoeCombineKernel`;
 - real multi-process/multi-card acceptance path, no single-process multi-rank simulation;
 - continuous device mapping only: `device = deviceBase + rank`;
 - no SHMEM in host or device code;
@@ -95,27 +95,27 @@ Two implementation cautions should stay visible during coding:
 
 Create these project files:
 
-- `kernels/manual/a2a3/dispatch_combine_tile/CMakeLists.txt`  
+- `kernels/manual/a2a3/moe_combine/CMakeLists.txt`  
   Build host binary and one vector-only kernel shared library.
-- `kernels/manual/a2a3/dispatch_combine_tile/run.sh`  
+- `kernels/manual/a2a3/moe_combine/run.sh`  
   Parse explicit parameters, set CANN/MPI/HCCL env, build, and launch `mpirun -n ${pes}`.
-- `kernels/manual/a2a3/dispatch_combine_tile/common.h`  
+- `kernels/manual/a2a3/moe_combine/common.h`  
   Shared shape, layout, parameter, alignment, and small POD structs used by host and kernel.
-- `kernels/manual/a2a3/dispatch_combine_tile/args.h`  
+- `kernels/manual/a2a3/moe_combine/args.h`  
   Host command-line parsing and validation helpers.
-- `kernels/manual/a2a3/dispatch_combine_tile/layout.h`  
+- `kernels/manual/a2a3/moe_combine/layout.h`  
   Host-side layout byte calculation matching the POD layout structs.
-- `kernels/manual/a2a3/dispatch_combine_tile/golden.h`  
+- `kernels/manual/a2a3/moe_combine/golden.h`  
   Deterministic data generation and CPU reference dispatch/combine logic.
-- `kernels/manual/a2a3/dispatch_combine_tile/hccl_context.h`  
+- `kernels/manual/a2a3/moe_combine/hccl_context.h`  
   Copy/adapt `gemm_ar` `HcclDeviceContext` and host extraction helpers without SHMEM.
-- `kernels/manual/a2a3/dispatch_combine_tile/comm_mpi.h`  
+- `kernels/manual/a2a3/moe_combine/comm_mpi.h`  
   Copy/adapt MPI wrapper from `gemm_ar`.
-- `kernels/manual/a2a3/dispatch_combine_tile/kernel_launchers.h`  
+- `kernels/manual/a2a3/moe_combine/kernel_launchers.h`  
   Kernel declarations and host launch wrappers.
-- `kernels/manual/a2a3/dispatch_combine_tile/dispatch_combine_tile_kernel.cpp`  
+- `kernels/manual/a2a3/moe_combine/moe_combine_kernel.cpp`  
   PTO-only device helpers plus the two kernels.
-- `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`  
+- `kernels/manual/a2a3/moe_combine/main.cpp`  
   Runtime orchestration, memory allocation, HCCL setup, kernel launches, timing, debug dump, verification.
 
 Do not create additional device compute kernel source files for this first version.
@@ -124,20 +124,20 @@ Do not create additional device compute kernel source files for this first versi
 
 **Files:**
 
-- Verify/Create directory: `kernels/manual/a2a3/dispatch_combine_tile/`
-- Keep: `kernels/manual/a2a3/dispatch_combine_tile/DESIGN.md`
-- Keep: `kernels/manual/a2a3/dispatch_combine_tile/IMPLEMENTATION_PLAN.md`
-- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/CMakeLists.txt`
-- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/run.sh`
-- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/common.h`
-- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/args.h`
-- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/layout.h`
-- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/golden.h`
-- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/hccl_context.h`
-- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/comm_mpi.h`
-- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/kernel_launchers.h`
-- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/dispatch_combine_tile_kernel.cpp`
-- Create placeholder: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
+- Verify/Create directory: `kernels/manual/a2a3/moe_combine/`
+- Keep: `kernels/manual/a2a3/moe_combine/DESIGN.md`
+- Keep: `kernels/manual/a2a3/moe_combine/IMPLEMENTATION_PLAN.md`
+- Create placeholder: `kernels/manual/a2a3/moe_combine/CMakeLists.txt`
+- Create placeholder: `kernels/manual/a2a3/moe_combine/run.sh`
+- Create placeholder: `kernels/manual/a2a3/moe_combine/common.h`
+- Create placeholder: `kernels/manual/a2a3/moe_combine/args.h`
+- Create placeholder: `kernels/manual/a2a3/moe_combine/layout.h`
+- Create placeholder: `kernels/manual/a2a3/moe_combine/golden.h`
+- Create placeholder: `kernels/manual/a2a3/moe_combine/hccl_context.h`
+- Create placeholder: `kernels/manual/a2a3/moe_combine/comm_mpi.h`
+- Create placeholder: `kernels/manual/a2a3/moe_combine/kernel_launchers.h`
+- Create placeholder: `kernels/manual/a2a3/moe_combine/moe_combine_kernel.cpp`
+- Create placeholder: `kernels/manual/a2a3/moe_combine/main.cpp`
 
 **Scope:**
 
@@ -152,8 +152,8 @@ Do not create additional device compute kernel source files for this first versi
 - [x] Record in `run.sh` comments that Task 1/2 will follow `gemm_ar`: CANN env search, MPI search, `mpirun -n ${PES}`,
   `HCCL_BUFFSIZE` auto sizing, explicit shape args only.
 - [x] Record in `common.h` the shared ABI names that all later tasks must use:
-  `DispatchCombineTileShape`, `WorkspaceLayout`, `PeerWindowLayout`, and `DispatchCombineTileRuntimeConfig`.
-- [x] In `common.h`, predeclare the exact `DispatchCombineTileShape` fields from `DESIGN.md` section 11:
+  `MoeCombineShape`, `WorkspaceLayout`, `PeerWindowLayout`, and `MoeCombineRuntimeConfig`.
+- [x] In `common.h`, predeclare the exact `MoeCombineShape` fields from `DESIGN.md` section 11:
   `ep`, `m`, `k`, `topK`, `expertPerRank`, `expertNum`, `maxOutputSize`, `aivBlocks`, `tileCols`, `rowChunk`,
   and `metadataPad`.
 - [x] In `common.h`, predeclare the exact layout field names from `DESIGN.md` section 12.0.1:
@@ -170,12 +170,12 @@ Do not create additional device compute kernel source files for this first versi
   extraction, and fixed-offset `peerWindow` slicing.
 - [x] Record in `comm_mpi.h` that Task 3 must adapt `gemm_ar` dlopen MPI wrapper.
 - [x] Record in `kernel_launchers.h` the fixed launch wrapper names that later host code must call:
-  `LaunchDispatchCombineTileDispatch` and `LaunchDispatchCombineTileCombine`.
+  `LaunchMoeCombineDispatch` and `LaunchMoeCombineKernel`.
 - [x] In `kernel_launchers.h`, predeclare launch wrapper parameters in the same order as the kernel ABI:
   shape, rank, input/output pointers, `peerWindow`, `hcclCtx`, `workspace`, stream, and launch block count.
-- [x] Record in `dispatch_combine_tile_kernel.cpp` the only two device kernel names:
-  `DispatchCombineTileDispatch` and `DispatchCombineTileCombine`.
-- [x] In `dispatch_combine_tile_kernel.cpp`, predeclare the two kernel ABI parameter lists from `DESIGN.md` section 11 so
+- [x] Record in `moe_combine_kernel.cpp` the only two device kernel names:
+  `MoeCombineDispatch` and `MoeCombineKernel`.
+- [x] In `moe_combine_kernel.cpp`, predeclare the two kernel ABI parameter lists from `DESIGN.md` section 11 so
   Task 1 can fill empty bodies without changing the host/device contract.
 - [x] Record in `main.cpp` the staged host flow that later tasks must fill:
   `ParseArgs -> InitMpiAndRank -> BindDeviceContinuous -> InitHcclWindowContext -> ComputeLayouts ->
@@ -196,7 +196,7 @@ Do not create additional device compute kernel source files for this first versi
 - [x] Run:
 
   ```bash
-  find kernels/manual/a2a3/dispatch_combine_tile -maxdepth 1 -type f | sort
+  find kernels/manual/a2a3/moe_combine -maxdepth 1 -type f | sort
   ```
 
   Expected: the output contains exactly the planned md/source/script files and no build/data/generated files.
@@ -205,7 +205,7 @@ Do not create additional device compute kernel source files for this first versi
 
   ```bash
   rg -n "aclshmem|shmem_|symmetricPtr|dispatch_gmm_combine_v2|dispatch_ffn_combine_v3|kernel_operator|AscendC::|Catlass" \
-    kernels/manual/a2a3/dispatch_combine_tile
+    kernels/manual/a2a3/moe_combine
   ```
 
   Expected: matches are allowed only in `DESIGN.md`/`IMPLEMENTATION_PLAN.md` as forbidden/reference text, not in source
@@ -214,22 +214,22 @@ Do not create additional device compute kernel source files for this first versi
 - [x] Run:
 
   ```bash
-  rg -n "DispatchCombineTileShape|WorkspaceLayout|PeerWindowLayout|DispatchCombineTileRuntimeConfig|\
-LaunchDispatchCombineTileDispatch|LaunchDispatchCombineTileCombine|DispatchCombineTileDispatch|DispatchCombineTileCombine|\
+  rg -n "MoeCombineShape|WorkspaceLayout|PeerWindowLayout|MoeCombineRuntimeConfig|\
+LaunchMoeCombineDispatch|LaunchMoeCombineKernel|MoeCombineDispatch|MoeCombineKernel|\
 ComputeWorkspaceLayout|ComputePeerWindowLayout|EstimateHcclBuffSizeMb|ParseArgs|ValidateArgs|PrintRunSummary|\
 GenerateOrLoadInputs|ComputeCpuGolden|CompareOutputs|InitMpiAndRank|BindDeviceContinuous|InitHcclWindowContext|\
 PrepareExpertOutputIdentity" \
-    kernels/manual/a2a3/dispatch_combine_tile/CMakeLists.txt \
-    kernels/manual/a2a3/dispatch_combine_tile/run.sh \
-    kernels/manual/a2a3/dispatch_combine_tile/common.h \
-    kernels/manual/a2a3/dispatch_combine_tile/args.h \
-    kernels/manual/a2a3/dispatch_combine_tile/layout.h \
-    kernels/manual/a2a3/dispatch_combine_tile/golden.h \
-    kernels/manual/a2a3/dispatch_combine_tile/hccl_context.h \
-    kernels/manual/a2a3/dispatch_combine_tile/comm_mpi.h \
-    kernels/manual/a2a3/dispatch_combine_tile/kernel_launchers.h \
-    kernels/manual/a2a3/dispatch_combine_tile/dispatch_combine_tile_kernel.cpp \
-    kernels/manual/a2a3/dispatch_combine_tile/main.cpp
+    kernels/manual/a2a3/moe_combine/CMakeLists.txt \
+    kernels/manual/a2a3/moe_combine/run.sh \
+    kernels/manual/a2a3/moe_combine/common.h \
+    kernels/manual/a2a3/moe_combine/args.h \
+    kernels/manual/a2a3/moe_combine/layout.h \
+    kernels/manual/a2a3/moe_combine/golden.h \
+    kernels/manual/a2a3/moe_combine/hccl_context.h \
+    kernels/manual/a2a3/moe_combine/comm_mpi.h \
+    kernels/manual/a2a3/moe_combine/kernel_launchers.h \
+    kernels/manual/a2a3/moe_combine/moe_combine_kernel.cpp \
+    kernels/manual/a2a3/moe_combine/main.cpp
   ```
 
   Expected: source placeholders mention all required ABI/stage names so Task 1-12 can fill implementation without renaming
@@ -238,7 +238,7 @@ PrepareExpertOutputIdentity" \
 - [x] Run:
 
   ```bash
-  test ! -f kernels/manual/a2a3/dispatch_combine_tile/TODO.md
+  test ! -f kernels/manual/a2a3/moe_combine/TODO.md
   ```
 
   Expected: command exits with status 0.
@@ -247,30 +247,30 @@ PrepareExpertOutputIdentity" \
 
 Feedback:
 - 2026-05-25: Created Task0 initialization contract files at the project root, preserved DESIGN.md/IMPLEMENTATION_PLAN.md,
-  and verified with `find kernels/manual/a2a3/dispatch_combine_tile -maxdepth 1 -type f | sort`,
-  forbidden-reference grep, ABI/stage-name grep, and `test ! -f kernels/manual/a2a3/dispatch_combine_tile/TODO.md`.
+  and verified with `find kernels/manual/a2a3/moe_combine -maxdepth 1 -type f | sort`,
+  forbidden-reference grep, ABI/stage-name grep, and `test ! -f kernels/manual/a2a3/moe_combine/TODO.md`.
   Remaining risk: Task0 intentionally does not validate CMake/build execution; that starts in Task1.
 
 ## Task 1: Buildable Project Scaffold
 
 **Files:**
 
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/CMakeLists.txt`
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/run.sh`
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/common.h`
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/kernel_launchers.h`
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/dispatch_combine_tile_kernel.cpp`
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
+- Modify: `kernels/manual/a2a3/moe_combine/CMakeLists.txt`
+- Modify: `kernels/manual/a2a3/moe_combine/run.sh`
+- Modify: `kernels/manual/a2a3/moe_combine/common.h`
+- Modify: `kernels/manual/a2a3/moe_combine/kernel_launchers.h`
+- Modify: `kernels/manual/a2a3/moe_combine/moe_combine_kernel.cpp`
+- Modify: `kernels/manual/a2a3/moe_combine/main.cpp`
 
 **Scope:**
 
 - [x] Preserve standard copyright headers from Task 0.
-- [x] Add CMake target `dispatch_combine_tile_kernel` compiled for `dav-c220-vec`.
-- [x] Add host executable `dispatch_combine_tile`.
-- [x] Define `DispatchCombineTileShape`, `WorkspaceLayout`, and `PeerWindowLayout` PODs in `common.h`.
+- [x] Add CMake target `moe_combine_kernel` compiled for `dav-c220-vec`.
+- [x] Add host executable `moe_combine`.
+- [x] Define `MoeCombineShape`, `WorkspaceLayout`, and `PeerWindowLayout` PODs in `common.h`.
 - [x] Add two empty PTO kernel entry points with the exact names from `DESIGN.md`.
 - [x] Add host launch wrappers that compile and call the two kernel symbols.
-- [x] Add `main.cpp` skeleton that parses no real args yet and prints `dispatch_combine_tile scaffold`.
+- [x] Add `main.cpp` skeleton that parses no real args yet and prints `moe_combine scaffold`.
 - [x] Add `run.sh` skeleton with explicit defaults and no `--case all`.
 
 **Observation/Validation:**
@@ -278,17 +278,17 @@ Feedback:
 - [x] Run:
 
   ```bash
-  cd kernels/manual/a2a3/dispatch_combine_tile
+  cd kernels/manual/a2a3/moe_combine
   bash run.sh --skip-run 1
   ```
 
-  Expected: CMake and `make` produce `build/dispatch_combine_tile`, `build/libdispatch_combine_tile_kernel.so`,
+  Expected: CMake and `make` produce `build/moe_combine`, `build/libmoe_combine_kernel.so`,
   and `run.sh` prints `skip_run=1`.
 
 - [x] Run:
 
   ```bash
-  rg -n "DispatchCombineTile[A-Za-z0-9_]*\\(" dispatch_combine_tile_kernel.cpp
+  rg -n "MoeCombine[A-Za-z0-9_]*\\(" moe_combine_kernel.cpp
   ```
 
   Expected: exactly the two public kernel entry points plus local helper calls, no extra `__global__ AICORE` compute kernels.
@@ -303,8 +303,8 @@ Feedback:
 
 Feedback:
 - 2026-05-25: `bash run.sh --skip-run 1` passed after loading the CANN 8.5/ltr_pto environment from `CLAUDE.md`;
-  produced `build/dispatch_combine_tile` and `build/libdispatch_combine_tile_kernel.so`. `./build/dispatch_combine_tile`
-  prints `dispatch_combine_tile scaffold`. Static greps confirmed only the two public kernel entries plus launcher calls,
+  produced `build/moe_combine` and `build/libmoe_combine_kernel.so`. `./build/moe_combine`
+  prints `moe_combine scaffold`. Static greps confirmed only the two public kernel entries plus launcher calls,
   and forbidden API matches are confined to `DESIGN.md`/`IMPLEMENTATION_PLAN.md`; source-only forbidden grep has no matches.
   Remaining risk: kernel bodies are intentionally empty until later tasks.
 
@@ -312,10 +312,10 @@ Feedback:
 
 **Files:**
 
-- Create: `kernels/manual/a2a3/dispatch_combine_tile/args.h`
-- Create: `kernels/manual/a2a3/dispatch_combine_tile/layout.h`
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/run.sh`
+- Create: `kernels/manual/a2a3/moe_combine/args.h`
+- Create: `kernels/manual/a2a3/moe_combine/layout.h`
+- Modify: `kernels/manual/a2a3/moe_combine/main.cpp`
+- Modify: `kernels/manual/a2a3/moe_combine/run.sh`
 
 **Scope:**
 
@@ -369,10 +369,10 @@ Feedback:
 
 **Files:**
 
-- Create: `kernels/manual/a2a3/dispatch_combine_tile/comm_mpi.h`
-- Create: `kernels/manual/a2a3/dispatch_combine_tile/hccl_context.h`
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/run.sh`
+- Create: `kernels/manual/a2a3/moe_combine/comm_mpi.h`
+- Create: `kernels/manual/a2a3/moe_combine/hccl_context.h`
+- Modify: `kernels/manual/a2a3/moe_combine/main.cpp`
+- Modify: `kernels/manual/a2a3/moe_combine/run.sh`
 
 **Scope:**
 
@@ -434,8 +434,8 @@ Feedback:
 
 **Files:**
 
-- Create: `kernels/manual/a2a3/dispatch_combine_tile/golden.h`
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
+- Create: `kernels/manual/a2a3/moe_combine/golden.h`
+- Modify: `kernels/manual/a2a3/moe_combine/main.cpp`
 
 **Scope:**
 
@@ -479,8 +479,8 @@ Feedback:
 
 **Files:**
 
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/dispatch_combine_tile_kernel.cpp`
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/common.h`
+- Modify: `kernels/manual/a2a3/moe_combine/moe_combine_kernel.cpp`
+- Modify: `kernels/manual/a2a3/moe_combine/common.h`
 
 **Scope:**
 
@@ -505,7 +505,7 @@ Feedback:
 - [x] Run:
 
   ```bash
-  rg -n "#include|AscendC::|kernel_operator|LocalTensor|GlobalTensor<|TQue|TBuf|TPipe|DataCopy|Catlass|aclshmem|shmem_" dispatch_combine_tile_kernel.cpp
+  rg -n "#include|AscendC::|kernel_operator|LocalTensor|GlobalTensor<|TQue|TBuf|TPipe|DataCopy|Catlass|aclshmem|shmem_" moe_combine_kernel.cpp
   ```
 
   Expected: includes are PTO/C++ only; `GlobalTensor<` references are PTO namespace or imported PTO aliases.
@@ -518,7 +518,7 @@ Feedback:
   metadata helpers. Verified with
   `bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --skip-run 1`, which built the PTO kernel and host binary.
   Static grep
-  `rg -n "#include|AscendC::|kernel_operator|LocalTensor|GlobalTensor<|TQue|TBuf|TPipe|DataCopy|Catlass|aclshmem|shmem_" dispatch_combine_tile_kernel.cpp`
+  `rg -n "#include|AscendC::|kernel_operator|LocalTensor|GlobalTensor<|TQue|TBuf|TPipe|DataCopy|Catlass|aclshmem|shmem_" moe_combine_kernel.cpp`
   showed only PTO/C++/local includes plus PTO `GlobalTensor`; no forbidden APIs. Code review confirmed `RemotePtr` only
   computes `windowsIn[peerRank] + (localPtr - windowsIn[rankId])` and performs no communication or runtime query.
 
@@ -526,9 +526,9 @@ Feedback:
 
 **Files:**
 
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/dispatch_combine_tile_kernel.cpp`
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/golden.h`
+- Modify: `kernels/manual/a2a3/moe_combine/moe_combine_kernel.cpp`
+- Modify: `kernels/manual/a2a3/moe_combine/main.cpp`
+- Modify: `kernels/manual/a2a3/moe_combine/golden.h`
 
 **Scope:**
 
@@ -578,8 +578,8 @@ Feedback:
 
 **Files:**
 
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/dispatch_combine_tile_kernel.cpp`
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
+- Modify: `kernels/manual/a2a3/moe_combine/moe_combine_kernel.cpp`
+- Modify: `kernels/manual/a2a3/moe_combine/main.cpp`
 
 **Scope:**
 
@@ -612,7 +612,7 @@ Feedback:
 - [x] Run:
 
   ```bash
-  rg -n "TGET|TLOAD|TSTORE|expandedRowIdx|blockPrefixPerExpert" dispatch_combine_tile_kernel.cpp
+  rg -n "TGET|TLOAD|TSTORE|expandedRowIdx|blockPrefixPerExpert" moe_combine_kernel.cpp
   ```
 
   Expected: pack uses `TLOAD/TSTORE`, gather uses `TGET`, and row order is based on `blockPrefixPerExpert`.
@@ -629,7 +629,7 @@ Feedback:
 
 **Files:**
 
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
+- Modify: `kernels/manual/a2a3/moe_combine/main.cpp`
 
 **Scope:**
 
@@ -664,8 +664,8 @@ Feedback:
 
 **Files:**
 
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/dispatch_combine_tile_kernel.cpp`
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
+- Modify: `kernels/manual/a2a3/moe_combine/moe_combine_kernel.cpp`
+- Modify: `kernels/manual/a2a3/moe_combine/main.cpp`
 
 **Scope:**
 
@@ -700,7 +700,7 @@ Feedback:
   changing data movement.
 
 Feedback:
-- 2026-05-26: Implemented combine return path in the existing `DispatchCombineTileCombine` kernel with peer-sharded
+- 2026-05-26: Implemented combine return path in the existing `MoeCombineKernel` kernel with peer-sharded
   `TPUT` into owner `ptrD`, one `combineDoneSignal[myRank]` notify per destination peer, and device-side `TWAIT` for peer
   completion. Verified with
   `timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2 --combine-return-only 1`: no hang; both
@@ -712,8 +712,8 @@ Feedback:
 
 **Files:**
 
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/dispatch_combine_tile_kernel.cpp`
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
+- Modify: `kernels/manual/a2a3/moe_combine/moe_combine_kernel.cpp`
+- Modify: `kernels/manual/a2a3/moe_combine/main.cpp`
 
 **Scope:**
 
@@ -744,7 +744,7 @@ Feedback:
   Expected: `verify=PASS`, positive timing fields, and no debug-level-2 payload dump unless `debug=2`.
 
 Feedback:
-- 2026-05-26: Implemented combine restore in `DispatchCombineTileCombine`: return rows are written to `ptrD`, peers are
+- 2026-05-26: Implemented combine restore in `MoeCombineKernel`: return rows are written to `ptrD`, peers are
   waited with device-side `TWAIT`, then each AIV block restores a disjoint contiguous token shard with PTO Vec
   `TEXPANDS/TLOAD/TAXPY/TSTORE`. Verified with
   `timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2 --clean-build 0 --keep-hccl-shm 1`
@@ -758,9 +758,9 @@ Feedback:
 
 **Files:**
 
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/main.cpp`
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/run.sh`
-- Modify: `kernels/manual/a2a3/dispatch_combine_tile/README.md` if a README is added during implementation
+- Modify: `kernels/manual/a2a3/moe_combine/main.cpp`
+- Modify: `kernels/manual/a2a3/moe_combine/run.sh`
+- Modify: `kernels/manual/a2a3/moe_combine/README.md` if a README is added during implementation
 
 **Scope:**
 
@@ -829,7 +829,7 @@ Feedback:
 
 **Files:**
 
-- Modify as needed under `kernels/manual/a2a3/dispatch_combine_tile/`
+- Modify as needed under `kernels/manual/a2a3/moe_combine/`
 
 **Scope:**
 
@@ -848,7 +848,7 @@ Feedback:
 
   ```bash
   rg -n "kernel_operator|AscendC::|LocalTensor|DataCopy|Catlass|aclshmem|shmem_|symmetricPtr" .
-  rg -n "__global__ AICORE void" dispatch_combine_tile_kernel.cpp
+  rg -n "__global__ AICORE void" moe_combine_kernel.cpp
   rg -n "case all|case-all|--case" run.sh main.cpp args.h
   ```
 
@@ -874,11 +874,11 @@ Feedback:
 
 Feedback:
 - 2026-05-26: Ran `clang-format -i -style=file` on modified C++ files and final static checks:
-  source-only forbidden API grep had no matches, `rg -n "__global__ AICORE void" dispatch_combine_tile_kernel.cpp`
-  reported exactly `DispatchCombineTileDispatch` and `DispatchCombineTileCombine`,
+  source-only forbidden API grep had no matches, `rg -n "__global__ AICORE void" moe_combine_kernel.cpp`
+  reported exactly `MoeCombineDispatch` and `MoeCombineKernel`,
   `rg -n "case all|case-all|--case" run.sh main.cpp args.h` showed only rejection/help logic,
   `bash -n run.sh` passed, `bash run.sh --help` documented the explicit parameters, and
-  `git diff --check -- kernels/manual/a2a3/dispatch_combine_tile` passed. `shellcheck` is not installed in this
+  `git diff --check -- kernels/manual/a2a3/moe_combine` passed. `shellcheck` is not installed in this
   environment, so `run.sh` was reviewed manually for `set -euo pipefail`, quoting, and option handling. Final default
   `timeout 90s bash run.sh -pes 2 -M 64 -K 7168 -topK 8 -expertPerPe 2 -debug 0 -iters 5 -warmup 3 --clean-build 0 --keep-hccl-shm 1`
   passed within timeout after rebuilding unchanged targets; both ranks completed three warmup iterations and five measured

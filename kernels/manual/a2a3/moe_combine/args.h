@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef DISPATCH_COMBINE_TILE_ARGS_H_
-#define DISPATCH_COMBINE_TILE_ARGS_H_
+#ifndef MOE_COMBINE_ARGS_H_
+#define MOE_COMBINE_ARGS_H_
 
 #include "common.h"
 
@@ -18,11 +18,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <stdexcept>
 #include <string>
 
-namespace dispatch_combine_tile {
+namespace moe_combine {
 
-struct DispatchCombineTileArgs {
-    DispatchCombineTileShape shape;
-    DispatchCombineTileRuntimeConfig runtime;
+struct MoeCombineArgs {
+    MoeCombineShape shape;
+    MoeCombineRuntimeConfig runtime;
     std::string runMode = "npu";
     std::string socVersion = "Ascend910B1";
     std::string mpiBin;
@@ -33,7 +33,7 @@ struct DispatchCombineTileArgs {
     bool nranksSet = false;
 };
 
-inline uint32_t ChooseDefaultAivBlocks(const DispatchCombineTileShape &)
+inline uint32_t ChooseDefaultAivBlocks(const MoeCombineShape &)
 {
     return 8;
 }
@@ -67,9 +67,9 @@ inline const char *RequireValue(int argc, char **argv, int *index, const char *n
     return argv[*index];
 }
 
-inline DispatchCombineTileArgs DefaultArgs()
+inline MoeCombineArgs DefaultArgs()
 {
-    DispatchCombineTileArgs args;
+    MoeCombineArgs args;
     args.shape.ep = 2;
     args.shape.m = 64;
     args.shape.k = 7168;
@@ -104,9 +104,9 @@ inline DispatchCombineTileArgs DefaultArgs()
     return args;
 }
 
-inline DispatchCombineTileArgs ParseArgs(int argc, char **argv)
+inline MoeCombineArgs ParseArgs(int argc, char **argv)
 {
-    DispatchCombineTileArgs args = DefaultArgs();
+    MoeCombineArgs args = DefaultArgs();
     bool ndevicesSet = false;
     for (int i = 1; i < argc; ++i) {
         std::string key = argv[i];
@@ -207,9 +207,9 @@ inline DispatchCombineTileArgs ParseArgs(int argc, char **argv)
     return args;
 }
 
-inline void ValidateArgs(const DispatchCombineTileArgs &args)
+inline void ValidateArgs(const MoeCombineArgs &args)
 {
-    const DispatchCombineTileShape &shape = args.shape;
+    const MoeCombineShape &shape = args.shape;
     if (args.runMode != "npu") {
         throw std::invalid_argument("run-mode must be npu for the first version");
     }
@@ -229,9 +229,9 @@ inline void ValidateArgs(const DispatchCombineTileArgs &args)
     }
 }
 
-inline void PrintRunSummary(const DispatchCombineTileArgs &args)
+inline void PrintRunSummary(const MoeCombineArgs &args)
 {
-    const DispatchCombineTileShape &shape = args.shape;
+    const MoeCombineShape &shape = args.shape;
     std::cout << "RUN_MODE=" << args.runMode << "\n";
     std::cout << "SOC_VERSION=" << args.socVersion << "\n";
     std::cout << "PES=" << shape.ep << " DEVICE_BASE=" << args.runtime.deviceBase
@@ -245,6 +245,6 @@ inline void PrintRunSummary(const DispatchCombineTileArgs &args)
               << " VERIFY=" << args.runtime.verify << " DEBUG=" << args.runtime.debug << "\n";
 }
 
-} // namespace dispatch_combine_tile
+} // namespace moe_combine
 
-#endif // DISPATCH_COMBINE_TILE_ARGS_H_
+#endif // MOE_COMBINE_ARGS_H_

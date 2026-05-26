@@ -45,7 +45,6 @@ TOPK=8
 EXPERT_PER_PE=2
 AIV_BLOCKS=0
 TILE_COLS=1024
-TILE_COLS_SET=0
 ROW_CHUNK=0
 METADATA_PAD=16
 MAX_OUTPUT_SIZE=0
@@ -62,15 +61,10 @@ WARMUP=1
 SEED=1234
 DATA_DIR="${SCRIPT_DIR}/out"
 GEN_DATA=1
-VERIFY=1
 RTOL=1e-2
 ATOL=1e-2
-SKIP_RUN=0
 SKIP_BUILD=0
 CLEAN_BUILD=1
-SKIP_KERNELS=0
-HOST_GOLDEN_ONLY=0
-COMBINE_RETURN_ONLY=0
 
 print_help() {
     cat <<'EOF'
@@ -88,7 +82,6 @@ Kernel/runtime:
   -r, --run-mode npu
   -v, --soc-version NAME
   -aivBlocks, --aiv-blocks N
-  -tileCols, --tile-cols N
   --row-chunk N
   --metadata-pad N
   -device-base, --device-base, --first-device N
@@ -106,17 +99,12 @@ Data/debug:
   --seed N
   --data-dir DIR
   --gen-data 0|1
-  --verify 0|1
   --rtol FLOAT
   --atol FLOAT
 
-Build/stage gates:
-  --skip-run 0|1
+Build:
   --skip-build 0|1
   --clean-build 0|1
-  --skip-kernels 0|1
-  --host-golden-only 0|1
-  --combine-return-only 0|1
 
 This project does not support --case presets; pass explicit shape parameters.
 EOF
@@ -140,7 +128,6 @@ while [[ $# -gt 0 ]]; do
         -expertPerPe|--experts-per-rank) EXPERT_PER_PE="$2"; shift 2 ;;
         --max-output-size) MAX_OUTPUT_SIZE="$2"; shift 2 ;;
         -aivBlocks|--aiv-blocks) AIV_BLOCKS="$2"; shift 2 ;;
-        -tileCols|--tile-cols) TILE_COLS="$2"; TILE_COLS_SET=1; shift 2 ;;
         --row-chunk) ROW_CHUNK="$2"; shift 2 ;;
         --metadata-pad) METADATA_PAD="$2"; shift 2 ;;
         -device-base|--device-base|--first-device) DEVICE_BASE="$2"; shift 2 ;;
@@ -156,15 +143,10 @@ while [[ $# -gt 0 ]]; do
         --seed) SEED="$2"; shift 2 ;;
         --data-dir) DATA_DIR="$2"; shift 2 ;;
         --gen-data) GEN_DATA="$2"; shift 2 ;;
-        --verify) VERIFY="$2"; shift 2 ;;
         --rtol) RTOL="$2"; shift 2 ;;
         --atol) ATOL="$2"; shift 2 ;;
-        --skip-run) SKIP_RUN="$2"; shift 2 ;;
         --skip-build) SKIP_BUILD="$2"; shift 2 ;;
         --clean-build) CLEAN_BUILD="$2"; shift 2 ;;
-        --skip-kernels) SKIP_KERNELS="$2"; shift 2 ;;
-        --host-golden-only) HOST_GOLDEN_ONLY="$2"; shift 2 ;;
-        --combine-return-only) COMBINE_RETURN_ONLY="$2"; shift 2 ;;
         --case|--case-all)
             echo "[ERROR] case presets are unsupported; pass explicit shape parameters"
             exit 1
@@ -180,7 +162,7 @@ if [ "${RUN_MODE}" != "npu" ]; then
     echo "[ERROR] run-mode must be npu for the first version"
     exit 1
 fi
-if [ "${TILE_COLS_SET}" -eq 0 ] && [ "${K}" -lt "${TILE_COLS}" ]; then
+if [ "${K}" -lt "${TILE_COLS}" ]; then
     TILE_COLS="${K}"
 fi
 if [ "${PES}" -le 0 ] || [ "${M}" -le 0 ] || [ "${K}" -le 0 ] || [ "${TOPK}" -le 0 ] || \
@@ -211,7 +193,7 @@ if [ "${MAX_OUTPUT_SIZE}" -lt "${REQUIRED_ROWS}" ]; then
 fi
 EFFECTIVE_AIV_BLOCKS="${AIV_BLOCKS}"
 if [ "${EFFECTIVE_AIV_BLOCKS}" -eq 0 ]; then
-    EFFECTIVE_AIV_BLOCKS=8
+    EFFECTIVE_AIV_BLOCKS=24
 fi
 AIV_BLOCKS="${EFFECTIVE_AIV_BLOCKS}"
 EXPERT_NUM_PADDED=$(align_up "${EXPERT_NUM}" "${METADATA_PAD}")
@@ -300,7 +282,7 @@ if [ "${KEEP_HCCL_SHM}" != "1" ]; then
     ipcrm -a 2>/dev/null || true
 fi
 
-echo "=== combine_tile scaffold build ==="
+echo "=== moe_combine scaffold build ==="
 echo "RUN_MODE=${RUN_MODE}"
 echo "SOC_VERSION=${SOC_VERSION}"
 echo "PES=${PES} DEVICE_BASE=${DEVICE_BASE} NDEVICES=${NDEVICES}"
@@ -310,8 +292,7 @@ echo "workspace_bytes=${WORKSPACE_BYTES}"
 echo "peer_window_bytes=${PEER_WINDOW_BYTES}"
 echo "HCCL_BUFFSIZE=${HCCL_BUFFSIZE}"
 echo "DATA_DIR=${DATA_DIR}"
-echo "WARMUP=${WARMUP} ITERS=${ITERS} VERIFY=${VERIFY} DEBUG=${DEBUG}"
-echo "skip_run=${SKIP_RUN}"
+echo "WARMUP=${WARMUP} ITERS=${ITERS} DEBUG=${DEBUG}"
 echo "MPI_LIB_PATH=${MPI_LIB_PATH}"
 
 if [ "${CLEAN_BUILD}" = "1" ] && [ "${SKIP_BUILD}" != "1" ]; then
@@ -327,9 +308,6 @@ if [ "${SKIP_BUILD}" != "1" ]; then
     make -j16
 fi
 
-if [ "${SKIP_RUN}" = "1" ]; then
-    exit 0
-fi
 
 HOST_ARGS=(
     --run-mode "${RUN_MODE}"
@@ -355,16 +333,13 @@ HOST_ARGS=(
     --seed "${SEED}"
     --data-dir "${DATA_DIR}"
     --gen-data "${GEN_DATA}"
-    --verify "${VERIFY}"
+    --verify "1"
     --rtol "${RTOL}"
     --atol "${ATOL}"
-    --skip-kernels "${SKIP_KERNELS}"
-    --host-golden-only "${HOST_GOLDEN_ONLY}"
-    --combine-return-only "${COMBINE_RETURN_ONLY}"
 )
 if [ -n "${RANK}" ]; then
     HOST_ARGS+=(--rank "${RANK}")
 fi
 
-echo "=== Running combine_tile (HCCL, mpirun) ==="
-mpirun -n "${PES}" ./combine_tile "${HOST_ARGS[@]}"
+echo "=== Running moe_combine (HCCL, mpirun) ==="
+mpirun -n "${PES}" ./moe_combine "${HOST_ARGS[@]}"

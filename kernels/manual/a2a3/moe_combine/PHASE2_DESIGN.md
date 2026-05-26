@@ -1,8 +1,8 @@
-# combine_tile Phase 2 Design
+# moe_combine Phase 2 Design
 
 ## 目标
 
-Phase 2 的目标是把当前 `combine_tile` kernel 调整为更清晰的 PTO 范式实现：
+Phase 2 的目标是把当前 `moe_combine` kernel 调整为更清晰的 PTO 范式实现：
 
 ```text
 批量数据 / SIMD / tensor payload -> PTO Tile + GlobalTensor + primitive
@@ -10,7 +10,7 @@ Phase 2 的目标是把当前 `combine_tile` kernel 调整为更清晰的 PTO �
 PTO primitive 调用 -> 在 stage 主流程中自然直接出现，不再被纯转发 helper 包起来
 ```
 
-这份设计只描述下一阶段代码整理方向，不改变当前项目的计算边界。`combine_tile` 仍然只覆盖 MoE combine：
+这份设计只描述下一阶段代码整理方向，不改变当前项目的计算边界。`moe_combine` 仍然只覆盖 MoE combine：
 
 ```text
 expertOutput -> all2allv-like return -> ptrD -> probs weighted restore -> outputC
@@ -33,10 +33,10 @@ expertOutput -> all2allv-like return -> ptrD -> probs weighted restore -> output
 
 ## 当前 Kernel 分层
 
-当前 `combine_tile_kernel.cpp` 的实际阶段是：
+当前 `moe_combine_kernel.cpp` 的实际阶段是：
 
 ```text
-DispatchCombineTileCombine
+MoeCombineKernel
   -> ReturnExpertRowsToOwners
   -> WaitCombinePhase
   -> RestoreOutputRows
@@ -311,7 +311,7 @@ for token assigned to this block:
 
 ## 文件级改造计划
 
-### `combine_tile_kernel.cpp`
+### `moe_combine_kernel.cpp`
 
 1. 保留当前 ABI 和 kernel 入口。
 2. 在文件顶部明确三类对象：
@@ -335,7 +335,7 @@ README 可保留当前项目说明，只需在后续实现完成后补充 Phase 
 
 静态验收：
 
-- `combine_tile_kernel.cpp` 中 `TLOAD`、`TSTORE`、`TPUT`、`TWAIT`、`TAXPY` 在 stage 主流程中可见。
+- `moe_combine_kernel.cpp` 中 `TLOAD`、`TSTORE`、`TPUT`、`TWAIT`、`TAXPY` 在 stage 主流程中可见。
 - 不再存在只包 primitive 的 `CopyRowHalf`、`TPutRowsHalf`、`AddWeightedRowHalf`、`StoreZeroRowHalf`。
 - scalar metadata 没有新增 `Tile` staging。
 - signal wait 没有被包装成隐藏 `TWAIT` 的多层 helper。

@@ -8,18 +8,18 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef DISPATCH_COMBINE_TILE_COMMON_H_
-#define DISPATCH_COMBINE_TILE_COMMON_H_
+#ifndef MOE_COMBINE_COMMON_H_
+#define MOE_COMBINE_COMMON_H_
 
 #include <cstdint>
 
-namespace dispatch_combine_tile {
+namespace moe_combine {
 
-constexpr uint32_t kMaxDispatchCombineTileRanks = 64;
+constexpr uint32_t kMaxMoeCombineRanks = 64;
 
 // Shared ABI names. Later tasks may add helper methods, but these struct names
 // and field names are the host/kernel contract for the first PTO version.
-struct DispatchCombineTileShape {
+struct MoeCombineShape {
     uint32_t ep;
     uint32_t m;
     uint32_t k;
@@ -64,11 +64,11 @@ struct HcclDeviceContext {
     uint32_t rankId;
     uint32_t rankNum;
     uint64_t winSize;
-    uint64_t windowsIn[kMaxDispatchCombineTileRanks];
-    uint64_t windowsOut[kMaxDispatchCombineTileRanks];
+    uint64_t windowsIn[kMaxMoeCombineRanks];
+    uint64_t windowsOut[kMaxMoeCombineRanks];
 };
 
-struct DispatchCombineTileRuntimeConfig {
+struct MoeCombineRuntimeConfig {
     uint32_t runMode;
     uint32_t socVersion;
     uint32_t deviceBase;
@@ -92,6 +92,6 @@ struct DispatchCombineTileRuntimeConfig {
     uint64_t hcclBuffSizeMb;
 };
 
-} // namespace dispatch_combine_tile
+} // namespace moe_combine
 
-#endif // DISPATCH_COMBINE_TILE_COMMON_H_
+#endif // MOE_COMBINE_COMMON_H_

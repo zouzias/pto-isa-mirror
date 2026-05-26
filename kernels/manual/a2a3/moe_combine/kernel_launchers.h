@@ -8,20 +8,19 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef DISPATCH_COMBINE_TILE_KERNEL_LAUNCHERS_H_
-#define DISPATCH_COMBINE_TILE_KERNEL_LAUNCHERS_H_
+#ifndef MOE_COMBINE_KERNEL_LAUNCHERS_H_
+#define MOE_COMBINE_KERNEL_LAUNCHERS_H_
 
 #include "common.h"
 
 #include <cstdint>
 
-namespace dispatch_combine_tile {
+namespace moe_combine {
 
-void LaunchDispatchCombineTileCombine(DispatchCombineTileShape shape, uint32_t myRank, uint8_t *expertOutput,
+void LaunchMoeCombineKernel(MoeCombineShape shape, uint32_t myRank, uint8_t *expertOutput,
                                       uint8_t *probs, uint8_t *outputC, uint8_t *peerWindow, uint8_t *hcclCtx,
-                                      uint8_t *workspace, uint8_t *sdmaWorkspace, void *stream,
-                                      uint32_t launchBlockCount);
+                                      uint8_t *workspace, void *stream, uint32_t launchBlockCount);
 
-} // namespace dispatch_combine_tile
+} // namespace moe_combine
 
-#endif // DISPATCH_COMBINE_TILE_KERNEL_LAUNCHERS_H_
+#endif // MOE_COMBINE_KERNEL_LAUNCHERS_H_

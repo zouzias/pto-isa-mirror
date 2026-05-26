@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef DISPATCH_COMBINE_TILE_HCCL_CONTEXT_H_
-#define DISPATCH_COMBINE_TILE_HCCL_CONTEXT_H_
+#ifndef MOE_COMBINE_HCCL_CONTEXT_H_
+#define MOE_COMBINE_HCCL_CONTEXT_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -29,7 +29,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "common.h"
 #include "layout.h"
 
-namespace dispatch_combine_tile {
+namespace moe_combine {
 
 struct HcclWindowContext {
     HcclDeviceContext hostDeviceContext;
@@ -319,7 +319,7 @@ inline void ReadRingParams(uint32_t rank, uint8_t *rawCtx, HcclOpResParamHead *h
     const size_t headOffset = offsetof(HcclOpResParam, localUsrRankId);
     CheckAcl(aclrtMemcpy(head, sizeof(*head), rawCtx + headOffset, sizeof(*head), ACL_MEMCPY_DEVICE_TO_HOST),
              "Rank " + std::to_string(rank) + ": read HcclOpResParam head");
-    if (head->rankSize == 0 || head->rankSize > kMaxDispatchCombineTileRanks) {
+    if (head->rankSize == 0 || head->rankSize > kMaxMoeCombineRanks) {
         throw std::runtime_error("Rank " + std::to_string(rank) +
                                  ": invalid HCCL rankSize=" + std::to_string(head->rankSize));
     }
@@ -415,11 +415,11 @@ inline bool InitHcclRootInfo(HcclRootInfo *rootInfo)
     return hccl_runtime_detail::InitHcclRootInfoWithRetry(rootInfo);
 }
 
-inline HcclWindowContext InitHcclWindowContext(const DispatchCombineTileShape &shape, const PeerWindowLayout &layout,
+inline HcclWindowContext InitHcclWindowContext(const MoeCombineShape &shape, const PeerWindowLayout &layout,
                                                uint32_t myRank, uint32_t rankCount, const HcclRootInfo *rootInfo,
                                                rtStream_t hcclStream)
 {
-    if (rankCount == 0 || rankCount > kMaxDispatchCombineTileRanks) {
+    if (rankCount == 0 || rankCount > kMaxMoeCombineRanks) {
         throw std::invalid_argument("rankCount exceeds HcclDeviceContext capacity");
     }
 
@@ -495,6 +495,6 @@ inline void DestroyHcclWindowContext(HcclWindowContext *context)
     *context = HcclWindowContext{};
 }
 
-} // namespace dispatch_combine_tile
+} // namespace moe_combine
 
-#endif // DISPATCH_COMBINE_TILE_HCCL_CONTEXT_H_
+#endif // MOE_COMBINE_HCCL_CONTEXT_H_

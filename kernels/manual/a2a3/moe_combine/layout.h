@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef DISPATCH_COMBINE_TILE_LAYOUT_H_
-#define DISPATCH_COMBINE_TILE_LAYOUT_H_
+#ifndef MOE_COMBINE_LAYOUT_H_
+#define MOE_COMBINE_LAYOUT_H_
 
 #include "common.h"
 
@@ -18,7 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <stdexcept>
 #include <string>
 
-namespace dispatch_combine_tile {
+namespace moe_combine {
 
 constexpr uint64_t kSyncSoftSlotInt32 = 8;
 
@@ -46,12 +46,12 @@ inline uint64_t CheckedMul(uint64_t a, uint64_t b, const char *label)
     return a * b;
 }
 
-inline uint64_t EffectiveAivBlocks(const DispatchCombineTileShape &shape)
+inline uint64_t EffectiveAivBlocks(const MoeCombineShape &shape)
 {
     return shape.aivBlocks == 0 ? 1 : shape.aivBlocks;
 }
 
-inline uint64_t ExpertNumPadded(const DispatchCombineTileShape &shape)
+inline uint64_t ExpertNumPadded(const MoeCombineShape &shape)
 {
     return AlignUp(shape.expertNum, shape.metadataPad);
 }
@@ -67,7 +67,7 @@ inline uint64_t AppendField(uint64_t *offset, uint64_t bytes)
     return fieldOffset;
 }
 
-inline WorkspaceLayout ComputeWorkspaceLayout(const DispatchCombineTileShape &shape)
+inline WorkspaceLayout ComputeWorkspaceLayout(const MoeCombineShape &shape)
 {
     constexpr uint64_t kI32 = 4;
     constexpr uint64_t kFloat = 4;
@@ -106,7 +106,7 @@ inline WorkspaceLayout ComputeWorkspaceLayout(const DispatchCombineTileShape &sh
     return layout;
 }
 
-inline PeerWindowLayout ComputePeerWindowLayout(const DispatchCombineTileShape &shape)
+inline PeerWindowLayout ComputePeerWindowLayout(const MoeCombineShape &shape)
 {
     constexpr uint64_t kI32 = 4;
     constexpr uint64_t kHalf = 2;
@@ -128,7 +128,7 @@ inline PeerWindowLayout ComputePeerWindowLayout(const DispatchCombineTileShape &
     return layout;
 }
 
-inline uint64_t EstimateHcclBuffSizeMb(const DispatchCombineTileShape &, const PeerWindowLayout &peerWindowLayout)
+inline uint64_t EstimateHcclBuffSizeMb(const MoeCombineShape &, const PeerWindowLayout &peerWindowLayout)
 {
     constexpr uint64_t kMiB = 1024ULL * 1024ULL;
     constexpr uint64_t kSafetyMargin = 64ULL * kMiB;
@@ -136,6 +136,6 @@ inline uint64_t EstimateHcclBuffSizeMb(const DispatchCombineTileShape &, const P
     return AlignUp(bytes, kMiB) / kMiB;
 }
 
-} // namespace dispatch_combine_tile
+} // namespace moe_combine
 
-#endif // DISPATCH_COMBINE_TILE_LAYOUT_H_
+#endif // MOE_COMBINE_LAYOUT_H_

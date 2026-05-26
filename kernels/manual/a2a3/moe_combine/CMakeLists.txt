@@ -12,7 +12,7 @@ set(CMAKE_COMPILER bisheng)
 set(CMAKE_C_COMPILER ${CMAKE_COMPILER})
 set(CMAKE_CXX_COMPILER ${CMAKE_COMPILER})
 
-project(pto_combine_tile)
+project(pto_moe_combine)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -99,23 +99,23 @@ set(HOST_LINK_DIRS
     ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
 )
 
-add_library(combine_tile_kernel SHARED combine_tile_kernel.cpp)
-target_compile_options(combine_tile_kernel PRIVATE
+add_library(moe_combine_kernel SHARED moe_combine_kernel.cpp)
+target_compile_options(moe_combine_kernel PRIVATE
     ${CMAKE_CCE_COMPILE_OPTIONS}
     --cce-aicore-arch=dav-c220-vec
     -DMEMORY_BASE -std=c++17
 )
-target_include_directories(combine_tile_kernel PRIVATE ${KERNEL_INCLUDE_DIRS})
-target_link_directories(combine_tile_kernel PRIVATE ${ASCEND_HOME_PATH}/lib64)
-target_link_libraries(combine_tile_kernel PRIVATE runtime)
-target_link_options(combine_tile_kernel PRIVATE --cce-fatobj-link)
+target_include_directories(moe_combine_kernel PRIVATE ${KERNEL_INCLUDE_DIRS})
+target_link_directories(moe_combine_kernel PRIVATE ${ASCEND_HOME_PATH}/lib64)
+target_link_libraries(moe_combine_kernel PRIVATE runtime)
+target_link_options(moe_combine_kernel PRIVATE --cce-fatobj-link)
 
-add_executable(combine_tile main.cpp)
-target_compile_options(combine_tile PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
-target_include_directories(combine_tile PRIVATE ${HOST_INCLUDE_DIRS})
-target_link_directories(combine_tile PUBLIC ${HOST_LINK_DIRS})
-target_link_libraries(combine_tile PRIVATE
-    combine_tile_kernel
+add_executable(moe_combine main.cpp)
+target_compile_options(moe_combine PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
+target_include_directories(moe_combine PRIVATE ${HOST_INCLUDE_DIRS})
+target_link_directories(moe_combine PUBLIC ${HOST_LINK_DIRS})
+target_link_libraries(moe_combine PRIVATE
+    moe_combine_kernel
     $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
     $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
     stdc++ ascendcl hcomm m tiling_api platform c_sec dl nnopbase pthread

@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef DISPATCH_COMBINE_TILE_COMM_MPI_H_
-#define DISPATCH_COMBINE_TILE_COMM_MPI_H_
+#ifndef MOE_COMBINE_COMM_MPI_H_
+#define MOE_COMBINE_COMM_MPI_H_
 
 #include <cstdlib>
 #include <cstring>
@@ -20,7 +20,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstddef>
 #include <cstdint>
 
-namespace dispatch_combine_tile {
+namespace moe_combine {
 
 struct MpiContext {
     int rank = 0;
@@ -193,6 +193,6 @@ inline void FinalizeMpi(MpiContext *context)
     context->initialized = false;
 }
 
-} // namespace dispatch_combine_tile
+} // namespace moe_combine
 
-#endif // DISPATCH_COMBINE_TILE_COMM_MPI_H_
+#endif // MOE_COMBINE_COMM_MPI_H_

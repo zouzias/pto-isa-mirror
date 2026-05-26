@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef DISPATCH_COMBINE_TILE_GOLDEN_H_
-#define DISPATCH_COMBINE_TILE_GOLDEN_H_
+#ifndef MOE_COMBINE_GOLDEN_H_
+#define MOE_COMBINE_GOLDEN_H_
 
 #include "args.h"
 #include "layout.h"
@@ -26,7 +26,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <sys/types.h>
 #include <vector>
 
-namespace dispatch_combine_tile {
+namespace moe_combine {
 
 struct HostInputData {
     std::vector<float> inputA;
@@ -69,7 +69,7 @@ struct RouteRef {
     uint32_t packedRow = 0;
 };
 
-inline std::string RankFile(const DispatchCombineTileArgs &args, uint32_t rank, const char *name)
+inline std::string RankFile(const MoeCombineArgs &args, uint32_t rank, const char *name)
 {
     return args.dataDir + "/rank_" + std::to_string(rank) + "_" + name + ".bin";
 }
@@ -169,9 +169,9 @@ inline std::vector<float> HalfVectorToFloat(const std::vector<uint16_t> &src)
     return dst;
 }
 
-inline HostInputData GenerateDeterministicInputs(const DispatchCombineTileArgs &args, uint32_t rank)
+inline HostInputData GenerateDeterministicInputs(const MoeCombineArgs &args, uint32_t rank)
 {
-    const DispatchCombineTileShape &shape = args.shape;
+    const MoeCombineShape &shape = args.shape;
     HostInputData data;
     data.inputA.resize(static_cast<size_t>(shape.m) * shape.k);
     data.expertIdx.resize(static_cast<size_t>(shape.m) * shape.topK);
@@ -198,9 +198,9 @@ inline HostInputData GenerateDeterministicInputs(const DispatchCombineTileArgs &
     return data;
 }
 
-inline HostInputData LoadInputs(const DispatchCombineTileArgs &args, uint32_t rank)
+inline HostInputData LoadInputs(const MoeCombineArgs &args, uint32_t rank)
 {
-    const DispatchCombineTileShape &shape = args.shape;
+    const MoeCombineShape &shape = args.shape;
     size_t inputElems = static_cast<size_t>(shape.m) * shape.k;
     size_t routeElems = static_cast<size_t>(shape.m) * shape.topK;
     HostInputData data;
@@ -210,7 +210,7 @@ inline HostInputData LoadInputs(const DispatchCombineTileArgs &args, uint32_t ra
     return data;
 }
 
-inline void WriteInputs(const DispatchCombineTileArgs &args, uint32_t rank, const HostInputData &data)
+inline void WriteInputs(const MoeCombineArgs &args, uint32_t rank, const HostInputData &data)
 {
     EnsureDataDir(args.dataDir);
     WriteBinary(RankFile(args, rank, "inputA"), FloatVectorToHalf(data.inputA));
@@ -218,7 +218,7 @@ inline void WriteInputs(const DispatchCombineTileArgs &args, uint32_t rank, cons
     WriteBinary(RankFile(args, rank, "probs"), data.probs);
 }
 
-inline std::vector<HostInputData> LoadOrGenerateWorldInputs(const DispatchCombineTileArgs &args)
+inline std::vector<HostInputData> LoadOrGenerateWorldInputs(const MoeCombineArgs &args)
 {
     std::vector<HostInputData> world(args.shape.ep);
     for (uint32_t rank = 0; rank < args.shape.ep; ++rank) {
@@ -227,7 +227,7 @@ inline std::vector<HostInputData> LoadOrGenerateWorldInputs(const DispatchCombin
     return world;
 }
 
-inline void WriteDebugFiles(const DispatchCombineTileArgs &args, uint32_t rank, const CpuGoldenData &golden)
+inline void WriteDebugFiles(const MoeCombineArgs &args, uint32_t rank, const CpuGoldenData &golden)
 {
     if (args.runtime.debug == 0) {
         return;
@@ -242,12 +242,12 @@ inline void WriteDebugFiles(const DispatchCombineTileArgs &args, uint32_t rank, 
     WriteBinary(RankFile(args, rank, "ptrD_head"), FloatVectorToHalf(golden.ptrD));
 }
 
-inline void BuildRoutes(const DispatchCombineTileArgs &args, const std::vector<HostInputData> &worldInputs,
+inline void BuildRoutes(const MoeCombineArgs &args, const std::vector<HostInputData> &worldInputs,
                         std::vector<std::vector<std::vector<RouteRef>>> *routesBySrcExpert,
                         std::vector<std::vector<float>> *packedBySrc, std::vector<std::vector<int32_t>> *expandedBySrc,
                         std::vector<int32_t> *peerTokenPerExpert, uint64_t *totalRoutes, uint64_t *invalidRoutes)
 {
-    const DispatchCombineTileShape &shape = args.shape;
+    const MoeCombineShape &shape = args.shape;
     uint32_t expertNumPadded = static_cast<uint32_t>(ExpertNumPadded(shape));
     uint32_t expandedRows = shape.m * shape.topK;
     routesBySrcExpert->assign(shape.ep, std::vector<std::vector<RouteRef>>(shape.expertNum));
@@ -304,7 +304,7 @@ inline void BuildRoutes(const DispatchCombineTileArgs &args, const std::vector<H
 
 } // namespace golden_detail
 
-inline HostInputData GenerateOrLoadInputs(const DispatchCombineTileArgs &args, uint32_t myRank)
+inline HostInputData GenerateOrLoadInputs(const MoeCombineArgs &args, uint32_t myRank)
 {
     HostInputData inputs = args.runtime.genData != 0 ? golden_detail::GenerateDeterministicInputs(args, myRank) :
                                                        golden_detail::LoadInputs(args, myRank);
@@ -314,14 +314,14 @@ inline HostInputData GenerateOrLoadInputs(const DispatchCombineTileArgs &args, u
     return inputs;
 }
 
-inline void GenerateAllInputFiles(const DispatchCombineTileArgs &args)
+inline void GenerateAllInputFiles(const MoeCombineArgs &args)
 {
     for (uint32_t rank = 0; rank < args.shape.ep; ++rank) {
         golden_detail::WriteInputs(args, rank, golden_detail::GenerateDeterministicInputs(args, rank));
     }
 }
 
-inline std::string RankBinaryFile(const DispatchCombineTileArgs &args, uint32_t rank, const char *name)
+inline std::string RankBinaryFile(const MoeCombineArgs &args, uint32_t rank, const char *name)
 {
     return golden_detail::RankFile(args, rank, name);
 }
@@ -342,10 +342,10 @@ inline std::vector<float> HalfBitsToFloatVector(const std::vector<uint16_t> &src
     return golden_detail::HalfVectorToFloat(src);
 }
 
-inline CpuGoldenData ComputeCpuGolden(const DispatchCombineTileArgs &args, const HostInputData &inputs, uint32_t myRank)
+inline CpuGoldenData ComputeCpuGolden(const MoeCombineArgs &args, const HostInputData &inputs, uint32_t myRank)
 {
     (void)inputs;
-    const DispatchCombineTileShape &shape = args.shape;
+    const MoeCombineShape &shape = args.shape;
     uint32_t expertNumPadded = static_cast<uint32_t>(ExpertNumPadded(shape));
     uint32_t expandedRows = shape.m * shape.topK;
 
@@ -479,7 +479,7 @@ inline CpuGoldenData ComputeCpuGolden(const DispatchCombineTileArgs &args, const
     return golden;
 }
 
-inline CompareResult CompareOutputs(const DispatchCombineTileArgs &args, const CpuGoldenData &golden,
+inline CompareResult CompareOutputs(const MoeCombineArgs &args, const CpuGoldenData &golden,
                                     const std::vector<float> &actualOutputC, uint32_t myRank)
 {
     (void)myRank;
@@ -510,6 +510,6 @@ inline CompareResult CompareOutputs(const DispatchCombineTileArgs &args, const C
     return result;
 }
 
-} // namespace dispatch_combine_tile
+} // namespace moe_combine
 
-#endif // DISPATCH_COMBINE_TILE_GOLDEN_H_
+#endif // MOE_COMBINE_GOLDEN_H_
