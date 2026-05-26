@@ -92,6 +92,22 @@ AICORE void MoeDispatchDirect(
     TASSIGN(tokenView, PING_OFFSET);
     TASSIGN(scaleView, PING_OFFSET + HIDDEN_SIZE);
 
+    // Warmup: prime the MTE2 DMA engine with a dummy TLOAD
+    // to avoid potential "cold start" issue on first burst
+    {
+        interleavedTile.RowMaskInternal = 1;
+        interleavedTile.ColMaskInternal = TILE_COLS;
+
+        __gm__ int8_t *warmupSrc = reinterpret_cast<__gm__ int8_t *>(shmemBase);
+        int64_t warmupLen = static_cast<int64_t>(TILE_COLS);
+        ShapeDyn warmupShape(1, 1, 1, 1, static_cast<size_t>(TILE_COLS));
+        StrideDyn warmupStride(warmupLen, warmupLen, warmupLen, TILE_COLS, 1);
+        Global warmupG(warmupSrc, warmupShape, warmupStride);
+
+        TLOAD(interleavedTile, warmupG);
+        pipe_barrier(PIPE_ALL);
+    }
+
     uint32_t prevGroupSum = 0;
 
     for (int32_t groupIdx = 0; groupIdx < expertPerRank; ++groupIdx) {
@@ -241,6 +257,23 @@ AICORE void MoeDispatchViaGM(
                                 pto::BLayout::RowMajor, -1, -1>;
 
     constexpr int32_t SPLIT_PING_OFFSET = 0;
+
+    // Warmup: prime MTE2 DMA with a dummy TLOAD (same as Direct path)
+    {
+        SplitTile warmupTile(1, TILE_COLS);
+        TASSIGN(warmupTile, SPLIT_PING_OFFSET);
+        warmupTile.RowMaskInternal = 1;
+        warmupTile.ColMaskInternal = TILE_COLS;
+
+        __gm__ int8_t *warmupSrc = reinterpret_cast<__gm__ int8_t *>(shmemBase);
+        int64_t warmupLen = static_cast<int64_t>(TILE_COLS);
+        ShapeDyn warmupShape(1, 1, 1, 1, static_cast<size_t>(TILE_COLS));
+        StrideDyn warmupStride(warmupLen, warmupLen, warmupLen, TILE_COLS, 1);
+        Global warmupG(warmupSrc, warmupShape, warmupStride);
+
+        TLOAD(warmupTile, warmupG);
+        pipe_barrier(PIPE_ALL);
+    }
 
     uint32_t prevGroupSum = 0;
 
