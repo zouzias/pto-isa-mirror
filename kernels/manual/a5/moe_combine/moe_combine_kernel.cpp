@@ -38,6 +38,7 @@ using moe_combine::WorkspaceLayout;
 namespace {
 
 constexpr int kDefaultTileCols = 1024;
+constexpr uint32_t kRouteCacheMax = 16;
 constexpr uint64_t kPingUbAddr = 0x0;
 constexpr uint64_t kPongUbAddr = 0x1000;
 constexpr uint64_t kSoftSyncUbAddr = 0x5000;
@@ -210,7 +211,7 @@ AICORE inline void WaitStoreTileReusable()
     wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
 }
 
-AICORE inline void DcciGmRange(__gm__ void *ptr, uint64_t bytes)
+AICORE inline void DcciGmRangeNoFence(__gm__ void *ptr, uint64_t bytes)
 {
     if (bytes == 0) {
         return;
@@ -221,6 +222,14 @@ AICORE inline void DcciGmRange(__gm__ void *ptr, uint64_t bytes)
     for (uint64_t addr = start; addr < end; addr += cacheLineBytes) {
         dcci(reinterpret_cast<__gm__ void *>(addr), SINGLE_CACHE_LINE);
     }
+}
+
+AICORE inline void DcciGmRange(__gm__ void *ptr, uint64_t bytes)
+{
+    if (bytes == 0) {
+        return;
+    }
+    DcciGmRangeNoFence(ptr, bytes);
     dsb(DSB_DDR);
 }
 
@@ -378,7 +387,11 @@ AICORE inline void RestoreOutputRows(MoeCombineShape shape, LocalPeerWindowView 
     __gm__ half *output = reinterpret_cast<__gm__ half *>(outputC);
     uint32_t tokenBegin = TokenShardBegin(shape.m, blockId, blockNum);
     uint32_t tokenEnd = TokenShardEnd(shape.m, blockId, blockNum);
+    bool routeCacheEnabled = shape.topK <= kRouteCacheMax;
     for (uint32_t token = tokenBegin; token < tokenEnd; ++token) {
+        int32_t routeRows[kRouteCacheMax];
+        float routeProbs[kRouteCacheMax];
+        uint32_t routeCount = 0;
         for (uint32_t slot = 0; slot < shape.topK; ++slot) {
             uint32_t routeIndex = token * shape.topK + slot;
             int32_t ptrDRow = *(localPeer.expandedRowIdx + routeIndex);
@@ -386,7 +399,20 @@ AICORE inline void RestoreOutputRows(MoeCombineShape shape, LocalPeerWindowView 
                 continue;
             }
             __gm__ half *ptrRow = localPeer.ptrD + static_cast<int64_t>(ptrDRow) * static_cast<int32_t>(shape.k);
-            AcquireGmRangeBeforeRead(ptrRow, static_cast<uint64_t>(shape.k) * sizeof(half));
+            if (!routeCacheEnabled) {
+                AcquireGmRangeBeforeRead(ptrRow, static_cast<uint64_t>(shape.k) * sizeof(half));
+                continue;
+            }
+            if (routeCount == 0) {
+                pipe_barrier(PIPE_ALL);
+            }
+            routeRows[routeCount] = ptrDRow;
+            routeProbs[routeCount] = probValues[routeIndex];
+            ++routeCount;
+            DcciGmRangeNoFence(ptrRow, static_cast<uint64_t>(shape.k) * sizeof(half));
+        }
+        if (routeCount != 0) {
+            dsb(DSB_DDR);
         }
         for (int32_t col = 0; col < static_cast<int32_t>(shape.k); col += kDefaultTileCols) {
             int32_t cols = static_cast<int32_t>(shape.k) - col < kDefaultTileCols ?
@@ -401,17 +427,18 @@ AICORE inline void RestoreOutputRows(MoeCombineShape shape, LocalPeerWindowView 
                              static_cast<int32_t>(shape.k));
             TEXPANDS(outTile, static_cast<half>(0.0));
             pipe_barrier(PIPE_ALL);
-            for (uint32_t slot = 0; slot < shape.topK; ++slot) {
-                uint32_t routeIndex = token * shape.topK + slot;
-                int32_t ptrDRow = *(localPeer.expandedRowIdx + routeIndex);
+            uint32_t combineCount = routeCacheEnabled ? routeCount : shape.topK;
+            for (uint32_t route = 0; route < combineCount; ++route) {
+                uint32_t routeIndex = token * shape.topK + route;
+                int32_t ptrDRow = routeCacheEnabled ? routeRows[route] : *(localPeer.expandedRowIdx + routeIndex);
                 if (ptrDRow < 0) {
                     continue;
                 }
+                float prob = routeCacheEnabled ? routeProbs[route] : probValues[routeIndex];
                 __gm__ half *ptrRow = localPeer.ptrD + static_cast<int64_t>(ptrDRow) * static_cast<int32_t>(shape.k);
                 __gm__ half *ptrChunk = ptrRow + col;
                 GlobalNd<half> ptrGlobal = MakeGlobal2D(ptrChunk, 1, cols, static_cast<int32_t>(shape.k));
                 pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> loadToAxpy;
-                float prob = probValues[routeIndex];
                 loadToAxpy = TLOAD(ptrTile, ptrGlobal);
                 TAXPY(outTile, ptrTile, static_cast<half>(prob), loadToAxpy);
                 pipe_barrier(PIPE_ALL);
