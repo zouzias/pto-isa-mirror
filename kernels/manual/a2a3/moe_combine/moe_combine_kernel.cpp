@@ -310,48 +310,22 @@ AICORE inline void ReturnExpertRowsToOwners(MoeCombineShape shape, LocalWorkspac
             uint32_t rowBegin = chunk * rowChunk;
             uint32_t rowsThisChunk = static_cast<uint32_t>(rows) - rowBegin;
             rowsThisChunk = rowsThisChunk < rowChunk ? rowsThisChunk : rowChunk;
-            if (src == myRank) {
-                for (uint32_t row = 0; row < rowsThisChunk; ++row) {
-                    int32_t dstRow = dstStart + static_cast<int32_t>(rowBegin + row);
-                    int32_t srcRow = srcStart + static_cast<int32_t>(rowBegin + row);
-                    for (int32_t col = 0; col < static_cast<int32_t>(shape.k); col += kDefaultTileCols) {
-                        int32_t cols = static_cast<int32_t>(shape.k) - col < kDefaultTileCols ?
-                                           static_cast<int32_t>(shape.k) - col :
-                                           kDefaultTileCols;
-                        VecTile<half, kDefaultTileCols> ping(1, cols);
-                        VecTile<half, kDefaultTileCols> pong(1, cols);
-                        TASSIGN(ping, kPingUbAddr);
-                        TASSIGN(pong, kPongUbAddr);
-                        VecTile<half, kDefaultTileCols> &tile = ((col / kDefaultTileCols) & 1) == 0 ? ping : pong;
-                        event_t event = ((col / kDefaultTileCols) & 1) == 0 ? EVENT_ID0 : EVENT_ID1;
-                        GlobalNd<half> srcGlobal = MakeGlobal2D(
-                            localExpertOutput + static_cast<int64_t>(srcRow) * static_cast<int32_t>(shape.k) + col, 1,
-                            cols, static_cast<int32_t>(shape.k));
-                        GlobalNd<half> dstGlobal = MakeGlobal2D(
-                            localPeer.ptrD + static_cast<int64_t>(dstRow) * static_cast<int32_t>(shape.k) + col, 1,
-                            cols, static_cast<int32_t>(shape.k));
-                        TLOAD(tile, srcGlobal);
-                        set_flag(PIPE_MTE2, PIPE_MTE3, event);
-                        wait_flag(PIPE_MTE2, PIPE_MTE3, event);
-                        TSTORE(dstGlobal, tile);
-                        WaitStoreTileReusable();
-                    }
-                }
-            } else {
-                GlobalNd<half> remoteDst = MakeGlobal2D(
-                    remotePeer.ptrD +
-                        static_cast<int64_t>(dstStart + static_cast<int32_t>(rowBegin)) * static_cast<int32_t>(shape.k),
-                    static_cast<int32_t>(rowsThisChunk), static_cast<int32_t>(shape.k), static_cast<int32_t>(shape.k));
-                GlobalNd<half> localSrc = MakeGlobal2D(
-                    localExpertOutput +
-                        static_cast<int64_t>(srcStart + static_cast<int32_t>(rowBegin)) * static_cast<int32_t>(shape.k),
-                    static_cast<int32_t>(rowsThisChunk), static_cast<int32_t>(shape.k), static_cast<int32_t>(shape.k));
-                VecTile<half, kDefaultTileCols> ping(1, kDefaultTileCols);
-                VecTile<half, kDefaultTileCols> pong(1, kDefaultTileCols);
-                TASSIGN(ping, kPingUbAddr);
-                TASSIGN(pong, kPongUbAddr);
-                pto::comm::TPUT(remoteDst, localSrc, ping, pong);
-            }
+            int32_t kCols = static_cast<int32_t>(shape.k);
+            int64_t dstOffset =
+                static_cast<int64_t>(dstStart + static_cast<int32_t>(rowBegin)) * kCols;
+            int64_t srcOffset =
+                static_cast<int64_t>(srcStart + static_cast<int32_t>(rowBegin)) * kCols;
+            GlobalNd<half> dstGlobal = MakeGlobal2D(
+                (src == myRank ? localPeer.ptrD : remotePeer.ptrD) + dstOffset,
+                static_cast<int32_t>(rowsThisChunk), kCols, kCols);
+            GlobalNd<half> srcGlobal = MakeGlobal2D(
+                localExpertOutput + srcOffset,
+                static_cast<int32_t>(rowsThisChunk), kCols, kCols);
+            VecTile<half, kDefaultTileCols> ping(1, kDefaultTileCols);
+            VecTile<half, kDefaultTileCols> pong(1, kDefaultTileCols);
+            TASSIGN(ping, kPingUbAddr);
+            TASSIGN(pong, kPongUbAddr);
+            pto::comm::TPUT(dstGlobal, srcGlobal, ping, pong);
         }
         chunkBase += chunkCount;
     }
