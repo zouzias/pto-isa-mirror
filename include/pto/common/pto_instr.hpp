@@ -1875,12 +1875,12 @@ PTO_INST RecordEvent TSCATTER(TileDataD &dst, TileDataS &src, TileDataI &indexes
     return {};
 }
 
-template <MaskPattern maskPattern = MaskPattern::P1111, typename DstTileData, typename SrcTileData,
-          typename... WaitEvents>
+template <MaskPattern maskPattern = MaskPattern::P1111, auto ScatterType = ScatterAxis::SCATTER_ROW,
+          typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TSCATTER(DstTileData &dst, SrcTileData &src, WaitEvents &...events)
 {
     TSYNC(events...);
-    TSCATTER_IMPL<maskPattern>(dst, src);
+    TSCATTER_IMPL<maskPattern, ScatterType>(dst, src);
     return {};
 }
 
