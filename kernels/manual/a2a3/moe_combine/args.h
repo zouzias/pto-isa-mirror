@@ -35,7 +35,7 @@ struct MoeCombineArgs {
 
 inline uint32_t ChooseDefaultAivBlocks(const MoeCombineShape &)
 {
-    return 24;
+    return 8;
 }
 
 inline uint32_t ParseU32(const std::string &value, const char *name)
