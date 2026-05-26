@@ -45,6 +45,13 @@ constexpr const int MAD_ROUND_MODE_BIT = 47;
 constexpr const int TROW_PROD_LOOP_B16 = 7;
 constexpr const int TROW_PROD_LOOP_B32 = 6;
 constexpr const int PAD_SHIFT_LENGTH = 32;
+constexpr uint16_t PTO_TSCATTER_TIME_1 = 1;
+constexpr uint16_t PTO_TSCATTER_TIME_2 = 2;
+constexpr uint16_t PTO_TSCATTER_TIME_4 = 4;
+constexpr uint16_t PTO_TSCATTER_IDX_0 = 0;
+constexpr uint16_t PTO_TSCATTER_IDX_1 = 1;
+constexpr uint16_t PTO_TSCATTER_IDX_2 = 2;
+constexpr uint16_t PTO_TSCATTER_IDX_3 = 3;
 
 // ============================================================================
 // Custom pad value helpers for uint64_t-based PadValue enum
@@ -481,6 +488,42 @@ PTO_INTERNAL constexpr TileLayoutCustom GetTileLayoutCustom()
         return TileLayoutCustom::ZZ;
     } else {
         return TileLayoutCustom::NONE;
+    }
+}
+
+template <MaskPattern mask>
+PTO_INTERNAL constexpr int GetScatterTimesByMask()
+{
+    switch (mask) {
+        case MaskPattern::P1111:
+            return PTO_TSCATTER_TIME_1;
+        case MaskPattern::P1010:
+            return PTO_TSCATTER_TIME_2;
+        case MaskPattern::P0101:
+            return PTO_TSCATTER_TIME_2;
+        default:
+            return PTO_TSCATTER_TIME_4;
+    }
+}
+
+template <MaskPattern mask, uint16_t RowStride>
+PTO_INTERNAL constexpr int GetScatterStrideByMask(int i)
+{
+    switch (mask) {
+        case MaskPattern::P0101:
+            return PTO_TSCATTER_TIME_2 * i * RowStride;
+        case MaskPattern::P1010:
+            return (PTO_TSCATTER_TIME_2 * i + PTO_TSCATTER_IDX_1) * RowStride;
+        case MaskPattern::P0001:
+            return PTO_TSCATTER_TIME_4 * i * RowStride;
+        case MaskPattern::P0010:
+            return (PTO_TSCATTER_TIME_4 * i + PTO_TSCATTER_IDX_1) * RowStride;
+        case MaskPattern::P0100:
+            return (PTO_TSCATTER_TIME_4 * i + PTO_TSCATTER_IDX_2) * RowStride;
+        case MaskPattern::P1000:
+            return (PTO_TSCATTER_TIME_4 * i + PTO_TSCATTER_IDX_3) * RowStride;
+        default:
+            return i * RowStride;
     }
 }
 } // namespace pto
