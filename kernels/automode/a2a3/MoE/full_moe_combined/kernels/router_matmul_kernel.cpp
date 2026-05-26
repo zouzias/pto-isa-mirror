@@ -51,7 +51,7 @@ constexpr unsigned kE     = kMoeE;  // num_experts
 constexpr unsigned kTileM = 128;    // max token tile height (cube M dimension) - kernel-internal
 constexpr unsigned kT     = kMoeT;  // total tokens; tail rows are handled dynamically.
 
-constexpr int kWorkingSetBudgetBytes = 1 << 16;  // X panel + full-row W_router panel + fp32 logits tile.
+constexpr int kWorkingSetBudgetBytes = 1 << 19;  // X panel + full-row W_router panel + fp32 logits tile.
 constexpr int kL0ABudgetBytes    = 64 * 1024;
 constexpr int kL0BBudgetBytes    = 64 * 1024;
 constexpr int kL0CBudgetBytes    = 128 * 1024;

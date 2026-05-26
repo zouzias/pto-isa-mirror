@@ -33,17 +33,33 @@
  * and are not host-callable. router_matmul_host_cfg holds a duplicate of the
  * formulas with no AICORE attribute for use by launchRouterMatmul.
  *
- * Limitations (v2):
+ * Pipeline (v3 — MultiBuffered):
+ *   - GM->L1 panel loads (aMatTile/bMatTile) ping-pong across the outer K loop
+ *     via `MultiBuffered<2>::loop<Range<K_l1_blocks>>`.
+ *   - L1->L0 extracts (aTile/bTile) ping-pong across the inner K loop via
+ *     `MultiBuffered<2>::loop<Range<K_l0_segments>>`.
+ *   - cTile (L0C accumulator) stays single-buffered; it must persist across
+ *     all (k1, k0) iterations until TSTORE.
+ *   - No TPipe / TPUSH / TPOP; the v_loop_barrier pragmas are emitted by the
+ *     MultiBuffered helper, not by hand.
+ *
+ * Limitations (v3):
  *   - No ReLU / softmax (raw logits only).
- *   - No double-buffering, no TPipe / TPUSH / TPOP.
  */
 
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
 
 #include "generated_cases.h"
+#include "multiBuffer.hpp"
 
 using namespace pto;
+using namespace pto_auto;
+
+// Number of pipeline lanes for the L1 (GM->L1) and L0 (L1->L0) buffered loops.
+// 2 = ping-pong; the MultiBuffered helper emits a #pragma pto v_loop_barrier
+// between lanes so the auto-mode compiler allocates one buffer per lane.
+constexpr int kNumBuffers = 2;
 
 namespace router_matmul_cfg {
 constexpr unsigned kH     = kMoeH;  // d_model (input hidden dim)
@@ -219,11 +235,14 @@ __global__ AICORE void runRouterMatmul(
     using RightTile = TileRight<TWeight, K_l0, N, K_l0, kE>;
     using AccTile   = TileAcc  <TOut,    M, N, DYNAMIC, kE>;  // valid kE cols -> logits
 
-    TileMatAData aMatTile(M);
-    TileMatBData bMatTile;
-    LeftTile     aTile(M);
-    RightTile    bTile;
-    AccTile      cTile(M);
+    // cTile is the L0C accumulator and must persist across every (k1, k0)
+    // iteration of the K reduction, so it stays as a single tile at function
+    // scope (NOT multi-buffered). aMatTile/bMatTile (L1) and aTile/bTile (L0A/B)
+    // are declared inside the MultiBuffered lambdas below so each lane gets
+    // its own buffer.
+    AccTile cTile(M);
+
+    MultiBuffered<kNumBuffers> outer_db;
 
     // Even integer-split of [0, kNumMTiles) across kBlockDim cores. Pattern:
     // each core's range = [bid*N/D, (bid+1)*N/D); remainders fall in the last
@@ -235,18 +254,24 @@ __global__ AICORE void runRouterMatmul(
     for (unsigned tIdx = tStart; tIdx < tEnd; ++tIdx) {
         const unsigned m0 = tIdx * static_cast<unsigned>(M);
         const unsigned currentM = ((m0 + M) <= kT) ? M : (kT - m0);
-        aMatTile.SetValidRow(currentM);
-        aTile.SetValidRow(currentM);
         cTile.SetValidRow(currentM);
 
         size_t cOff = static_cast<size_t>(m0) * kE;
         GlobalShapeC cShape(currentM);
         GlobalDataC cGlobal(logits + cOff, cShape);
 
-        for (int k1 = 0; k1 < K_l1_blocks; ++k1) {
+        // Outer K-panel loop: GM -> L1 ping-pong. Each unrolled lane owns its
+        // own aMatTile / bMatTile in L1, so MTE2 (TLOAD) of lane N+1 can
+        // overlap the cube work on lane N's panel.
+        outer_db.loop<Range<K_l1_blocks>>([&](auto outerCtx) {
+            const int k1 = outerCtx.iter;
             size_t kBase = static_cast<size_t>(k1) * K_l1;
             size_t aOff = static_cast<size_t>(m0) * kH + kBase;
             size_t bOff = kBase * kE;
+
+            TileMatAData aMatTile(M);
+            TileMatBData bMatTile;
+            aMatTile.SetValidRow(currentM);
 
             GlobalShapeA aShape(currentM);
             GlobalDataA aGlobal(x        + aOff, aShape);
@@ -255,8 +280,18 @@ __global__ AICORE void runRouterMatmul(
             TLOAD(aMatTile, aGlobal);
             TLOAD(bMatTile, bGlobal);
 
-            for (int k0 = 0; k0 < K_l0_segments; ++k0) {
+            // Inner K-segment loop: L1 -> L0A/L0B ping-pong. Each unrolled
+            // lane owns its own aTile / bTile in L0, so MTE1 (TEXTRACT) of
+            // segment N+1 can overlap the TMATMUL on segment N.
+            MultiBuffered<kNumBuffers> inner_db;
+            inner_db.loop<Range<K_l0_segments>>([&](auto innerCtx) {
+                const int k0 = innerCtx.iter;
                 const uint16_t kOff = static_cast<uint16_t>(k0 * K_l0);
+
+                LeftTile  aTile(M);
+                RightTile bTile;
+                aTile.SetValidRow(currentM);
+
                 TEXTRACT(aTile, aMatTile, 0, kOff);
                 TEXTRACT(bTile, bMatTile, kOff, 0);
                 if (k1 == 0 && k0 == 0) {
@@ -264,8 +299,9 @@ __global__ AICORE void runRouterMatmul(
                 } else {
                     TMATMUL_ACC(cTile, aTile, bTile);
                 }
-            }
-        }
+            });
+        });
+
         TSTORE(cGlobal, cTile);
     }
 }
