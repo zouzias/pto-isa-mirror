@@ -32,10 +32,6 @@ if [ ${SET_ENV_STATUS} -ne 0 ]; then
     exit ${SET_ENV_STATUS}
 fi
 
-export PATH=/home/ntlab/miniconda3/envs/ltr_pto/bin:${PATH}
-export LD_LIBRARY_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib:${LD_LIBRARY_PATH:-}
-export MPI_LIB_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib/libmpi.so
-
 RUN_MODE=npu
 SOC_VERSION=Ascend950PR_958b
 PES=2
@@ -50,7 +46,6 @@ METADATA_PAD=16
 MAX_OUTPUT_SIZE=0
 DEVICE_BASE=0
 NDEVICES=""
-MPI_BIN=""
 HCCL_BUFFSIZE_MB=0
 KEEP_HCCL_SHM=0
 RANK_FROM_MPI=1
@@ -88,7 +83,6 @@ Kernel/runtime:
   --metadata-pad N
   -device-base, --device-base, --first-device N
   --ndevices N
-  --mpi-bin DIR
   --hccl-buffsize-mb N
   --keep-hccl-shm 0|1
   --rank-from-mpi 0|1
@@ -136,7 +130,6 @@ while [[ $# -gt 0 ]]; do
         --metadata-pad) METADATA_PAD="$2"; shift 2 ;;
         -device-base|--device-base|--first-device) DEVICE_BASE="$2"; shift 2 ;;
         --ndevices) NDEVICES="$2"; shift 2 ;;
-        --mpi-bin) MPI_BIN="$2"; shift 2 ;;
         --hccl-buffsize-mb) HCCL_BUFFSIZE_MB="$2"; shift 2 ;;
         --keep-hccl-shm) KEEP_HCCL_SHM="$2"; shift 2 ;;
         --rank-from-mpi) RANK_FROM_MPI="$2"; shift 2 ;;
@@ -249,38 +242,8 @@ else
     export HCCL_BUFFSIZE="${HCCL_BUFFSIZE_MB}"
 fi
 
-if [ -n "${MPI_BIN}" ]; then
-    if [ ! -x "${MPI_BIN}/mpirun" ]; then
-        echo "[ERROR] --mpi-bin does not contain executable mpirun: ${MPI_BIN}"
-        exit 1
-    fi
-    export PATH="${MPI_BIN}:${PATH}"
-    MPI_LIB_DIR="$(cd "${MPI_BIN}/.." && pwd)/lib"
-    export LD_LIBRARY_PATH="${MPI_LIB_DIR}:${LD_LIBRARY_PATH:-}"
-    if [ -f "${MPI_LIB_DIR}/libmpi.so" ]; then
-        export MPI_LIB_PATH="${MPI_LIB_DIR}/libmpi.so"
-    fi
-else
-    if ! command -v mpirun >/dev/null 2>&1; then
-        MPI_SEARCH_DIRS="/usr/local/mpich/bin /home/mpich/bin"
-        for candidate in /home/*/mpich/bin /home/*/*/mpich/bin; do
-            [ -d "$candidate" ] && MPI_SEARCH_DIRS="${MPI_SEARCH_DIRS} ${candidate}"
-        done
-        for d in ${MPI_SEARCH_DIRS}; do
-            if [ -x "$d/mpirun" ]; then
-                export PATH="$d:${PATH}"
-                MPI_LIB_DIR="$(cd "$d/.." && pwd)/lib"
-                export LD_LIBRARY_PATH="${MPI_LIB_DIR}:${LD_LIBRARY_PATH:-}"
-                if [ -f "${MPI_LIB_DIR}/libmpi.so" ]; then
-                    export MPI_LIB_PATH="${MPI_LIB_DIR}/libmpi.so"
-                fi
-                break
-            fi
-        done
-    fi
-fi
 if ! command -v mpirun >/dev/null 2>&1; then
-    echo "[ERROR] Cannot find mpirun. Pass --mpi-bin <dir> or set PATH"
+    echo "[ERROR] Cannot find mpirun. Configure MPI in the shell before running this script."
     exit 1
 fi
 
@@ -302,7 +265,6 @@ echo "peer_window_bytes=${PEER_WINDOW_BYTES}"
 echo "HCCL_BUFFSIZE=${HCCL_BUFFSIZE}"
 echo "DATA_DIR=${DATA_DIR}"
 echo "WARMUP=${WARMUP} ITERS=${ITERS} DEBUG=${DEBUG} VERIFY=${VERIFY}"
-echo "MPI_LIB_PATH=${MPI_LIB_PATH}"
 
 if [ "${CLEAN_BUILD}" = "1" ] && [ "${SKIP_BUILD}" != "1" ]; then
     rm -rf "${SCRIPT_DIR}/build"
