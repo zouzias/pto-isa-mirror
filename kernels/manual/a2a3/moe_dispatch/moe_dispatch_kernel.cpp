@@ -211,75 +211,6 @@ AICORE inline void WaitStoreTileReusable()
     wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
 }
 
-template <int kCols = kDefaultTileCols>
-AICORE inline void CopyRowHalf(__gm__ half *dstBase, int32_t dstRowStride, int32_t dstRow, __gm__ half *srcBase,
-                               int32_t srcRowStride, int32_t srcRow, int32_t rowLen)
-{
-    for (int32_t col = 0; col < rowLen; col += kCols) {
-        int32_t cols = rowLen - col < kCols ? rowLen - col : kCols;
-        VecTile<half, kCols> ping(1, cols);
-        VecTile<half, kCols> pong(1, cols);
-        TASSIGN(ping, kPingUbAddr);
-        TASSIGN(pong, kPongUbAddr);
-        VecTile<half, kCols> &tile = ((col / kCols) & 1) == 0 ? ping : pong;
-        event_t event = ((col / kCols) & 1) == 0 ? EVENT_ID0 : EVENT_ID1;
-        GlobalNd<half> src =
-            MakeGlobal2D(srcBase + static_cast<int64_t>(srcRow) * srcRowStride + col, 1, cols, srcRowStride);
-        GlobalNd<half> dst =
-            MakeGlobal2D(dstBase + static_cast<int64_t>(dstRow) * dstRowStride + col, 1, cols, dstRowStride);
-        TLOAD(tile, src);
-        set_flag(PIPE_MTE2, PIPE_MTE3, event);
-        wait_flag(PIPE_MTE2, PIPE_MTE3, event);
-        TSTORE(dst, tile);
-        WaitStoreTileReusable();
-    }
-}
-
-template <typename T, int kCols = kDefaultTileCols>
-AICORE inline void TGetRows(GlobalNd<T> &dst, GlobalNd<T> &remoteSrc)
-{
-    VecTile<T, kCols> ping(1, kCols);
-    VecTile<T, kCols> pong(1, kCols);
-    TASSIGN(ping, kPingUbAddr);
-    TASSIGN(pong, kPongUbAddr);
-    pto::comm::TGET(dst, remoteSrc, ping, pong);
-}
-
-template <typename T, int kCols = kDefaultTileCols>
-AICORE inline void TPutRows(GlobalNd<T> &remoteDst, GlobalNd<T> &src)
-{
-    VecTile<T, kCols> ping(1, kCols);
-    VecTile<T, kCols> pong(1, kCols);
-    TASSIGN(ping, kPingUbAddr);
-    TASSIGN(pong, kPongUbAddr);
-    pto::comm::TPUT(remoteDst, src, ping, pong);
-}
-
-AICORE inline void NotifySignal(__gm__ int32_t *signal, int32_t value)
-{
-    pipe_barrier(PIPE_ALL);
-    dsb(DSB_DDR);
-    pto::comm::Signal sig = MakeSignal(signal);
-    (void)value;
-    pto::comm::TNOTIFY(sig, 1, pto::comm::NotifyOp::AtomicAdd);
-}
-
-AICORE inline void WaitSignal(__gm__ int32_t *signal, int32_t value)
-{
-    pto::comm::Signal sig = MakeSignal(signal);
-    pto::comm::TWAIT(sig, value, pto::comm::WaitCmp::GE);
-}
-
-AICORE inline int32_t LoadScalarI32(__gm__ int32_t *ptr)
-{
-    return *ptr;
-}
-
-AICORE inline void StoreScalarI32(__gm__ int32_t *ptr, int32_t value)
-{
-    *ptr = value;
-}
-
 AICORE inline void InvalidateGmCacheLines(__gm__ void *ptr, uint32_t bytes)
 {
     pipe_barrier(PIPE_ALL);
@@ -345,20 +276,20 @@ AICORE inline void ClearDispatchState(MoeDispatchShape shape, LocalWorkspaceView
     uint32_t expertNumPadded = ExpertNumPaddedDevice(shape);
     uint32_t expandedRows = shape.m * shape.topK;
     for (uint32_t idx = blockId; idx < expertNumPadded; idx += blockNum) {
-        StoreScalarI32(workspaceView.localTokenPerExpert + idx, 0);
+        *(workspaceView.localTokenPerExpert + idx) = 0;
     }
     for (uint32_t idx = blockId; idx < blockNum * expertNumPadded; idx += blockNum) {
-        StoreScalarI32(workspaceView.blockTokenPerExpert + idx, 0);
-        StoreScalarI32(workspaceView.blockPrefixPerExpert + idx, 0);
+        *(workspaceView.blockTokenPerExpert + idx) = 0;
+        *(workspaceView.blockPrefixPerExpert + idx) = 0;
     }
     for (uint32_t idx = blockId; idx < shape.ep * expertNumPadded; idx += blockNum) {
-        StoreScalarI32(workspaceView.cumsumPerExpert + idx, 0);
+        *(workspaceView.cumsumPerExpert + idx) = 0;
     }
     for (uint32_t idx = blockId; idx < shape.expertPerRank; idx += blockNum) {
-        StoreScalarI32(workspaceView.dispatchOffset + idx, 0);
+        *(workspaceView.dispatchOffset + idx) = 0;
     }
     for (uint32_t idx = blockId; idx < shape.ep * shape.expertPerRank; idx += blockNum) {
-        StoreScalarI32(workspaceView.prevSumBeforeRank + idx, 0);
+        *(workspaceView.prevSumBeforeRank + idx) = 0;
     }
     (void)expandedRows;
     (void)localPeer;
@@ -372,9 +303,9 @@ AICORE inline void InitPackCursors(MoeDispatchShape shape, LocalWorkspaceView wo
                            static_cast<uint32_t>(blockNum * expertNumPadded * sizeof(int32_t)));
     __gm__ int32_t *cursorBase = PackCursorBase(workspaceView, blockNum) + blockId * expertNumPadded;
     for (uint32_t expert = 0; expert < expertNumPadded; ++expert) {
-        int32_t prefix = LoadScalarI32(workspaceView.blockPrefixPerExpert +
-                                       static_cast<uint64_t>(blockId) * expertNumPadded + expert);
-        StoreScalarI32(cursorBase + expert, prefix);
+        int32_t prefix =
+            *(workspaceView.blockPrefixPerExpert + static_cast<uint64_t>(blockId) * expertNumPadded + expert);
+        *(cursorBase + expert) = prefix;
     }
 }
 
@@ -382,7 +313,7 @@ AICORE inline int32_t PackedExpertOffset(MoeDispatchShape shape, LocalWorkspaceV
                                          uint32_t expert)
 {
     uint32_t expertNumPadded = ExpertNumPaddedDevice(shape);
-    return LoadScalarI32(workspaceView.cumsumPerExpert + static_cast<uint64_t>(myRank) * expertNumPadded + expert);
+    return *(workspaceView.cumsumPerExpert + static_cast<uint64_t>(myRank) * expertNumPadded + expert);
 }
 
 AICORE inline void PackLocalRowsToWindow(MoeDispatchShape shape, LocalWorkspaceView workspaceView,
@@ -400,16 +331,34 @@ AICORE inline void PackLocalRowsToWindow(MoeDispatchShape shape, LocalWorkspaceV
     for (uint32_t token = tokenBegin; token < tokenEnd; ++token) {
         for (uint32_t slot = 0; slot < shape.topK; ++slot) {
             uint32_t routeIndex = token * shape.topK + slot;
-            int32_t expert = LoadScalarI32(expertIds + routeIndex);
+            int32_t expert = *(expertIds + routeIndex);
             if (expert < 0 || static_cast<uint32_t>(expert) >= shape.expertNum) {
                 continue;
             }
             uint32_t expertId = static_cast<uint32_t>(expert);
-            int32_t cursor = LoadScalarI32(cursorBase + expertId);
-            StoreScalarI32(cursorBase + expertId, cursor + 1);
+            int32_t cursor = *(cursorBase + expertId);
+            *(cursorBase + expertId) = cursor + 1;
             int32_t packedRow = PackedExpertOffset(shape, workspaceView, myRank, expertId) + cursor;
-            CopyRowHalf(localPeer.packedA, static_cast<int32_t>(shape.k), packedRow, input,
-                        static_cast<int32_t>(shape.k), static_cast<int32_t>(token), static_cast<int32_t>(shape.k));
+            for (int32_t col = 0; col < static_cast<int32_t>(shape.k); col += kDefaultTileCols) {
+                int32_t cols = static_cast<int32_t>(shape.k) - col < kDefaultTileCols ?
+                                   static_cast<int32_t>(shape.k) - col :
+                                   kDefaultTileCols;
+                VecTile<half> ping(1, cols);
+                VecTile<half> pong(1, cols);
+                TASSIGN(ping, kPingUbAddr);
+                TASSIGN(pong, kPongUbAddr);
+                VecTile<half> &tile = ((col / kDefaultTileCols) & 1) == 0 ? ping : pong;
+                event_t event = ((col / kDefaultTileCols) & 1) == 0 ? EVENT_ID0 : EVENT_ID1;
+                GlobalNd<half> src = MakeGlobal2D(input + static_cast<int64_t>(token) * shape.k + col, 1, cols,
+                                                  static_cast<int32_t>(shape.k));
+                GlobalNd<half> dst = MakeGlobal2D(localPeer.packedA + static_cast<int64_t>(packedRow) * shape.k + col,
+                                                  1, cols, static_cast<int32_t>(shape.k));
+                TLOAD(tile, src);
+                set_flag(PIPE_MTE2, PIPE_MTE3, event);
+                wait_flag(PIPE_MTE2, PIPE_MTE3, event);
+                TSTORE(dst, tile);
+                WaitStoreTileReusable();
+            }
         }
     }
 }
@@ -426,12 +375,12 @@ AICORE inline void CountLocalRoutes(MoeDispatchShape shape, LocalWorkspaceView w
     for (uint32_t token = tokenBegin; token < tokenEnd; ++token) {
         for (uint32_t slot = 0; slot < shape.topK; ++slot) {
             uint32_t routeIndex = token * shape.topK + slot;
-            int32_t expert = LoadScalarI32(expertIds + routeIndex);
+            int32_t expert = *(expertIds + routeIndex);
             if (expert < 0 || static_cast<uint32_t>(expert) >= shape.expertNum) {
                 continue;
             }
             __gm__ int32_t *count = blockCounts + static_cast<uint32_t>(expert);
-            StoreScalarI32(count, LoadScalarI32(count) + 1);
+            *count = *count + 1;
         }
     }
     InvalidateGmCacheLines(blockCounts, static_cast<uint32_t>(expertNumPadded * sizeof(int32_t)));
@@ -457,9 +406,9 @@ AICORE inline void RebuildExpandedRowIdx(MoeDispatchShape shape, LocalWorkspaceV
             end = routeCount;
         }
         for (uint32_t routeIndex = begin; routeIndex < end; ++routeIndex) {
-            int32_t expert = LoadScalarI32(expertIds + routeIndex);
+            int32_t expert = *(expertIds + routeIndex);
             if (expert < 0 || static_cast<uint32_t>(expert) >= shape.expertNum) {
-                StoreScalarI32(localPeer.expandedRowIdx + routeIndex, -1);
+                *(localPeer.expandedRowIdx + routeIndex) = -1;
                 continue;
             }
             uint32_t expertId = static_cast<uint32_t>(expert);
@@ -468,15 +417,15 @@ AICORE inline void RebuildExpandedRowIdx(MoeDispatchShape shape, LocalWorkspaceV
             uint32_t localBegin = TokenShardBegin(shape.m, sourceBlock, blockNum) * shape.topK;
             int32_t localOrdinal = 0;
             for (uint32_t prev = localBegin; prev < routeIndex; ++prev) {
-                int32_t prevExpert = LoadScalarI32(expertIds + prev);
+                int32_t prevExpert = *(expertIds + prev);
                 if (prevExpert == expert) {
                     ++localOrdinal;
                 }
             }
-            int32_t blockPrefix = LoadScalarI32(workspaceView.blockPrefixPerExpert +
-                                                static_cast<uint64_t>(sourceBlock) * expertNumPadded + expertId);
+            int32_t blockPrefix =
+                *(workspaceView.blockPrefixPerExpert + static_cast<uint64_t>(sourceBlock) * expertNumPadded + expertId);
             int32_t packedRow = PackedExpertOffset(shape, workspaceView, myRank, expertId) + blockPrefix + localOrdinal;
-            StoreScalarI32(localPeer.expandedRowIdx + routeIndex, packedRow);
+            *(localPeer.expandedRowIdx + routeIndex) = packedRow;
         }
         InvalidateGmCacheLines(localPeer.expandedRowIdx + begin,
                                static_cast<uint32_t>((end - begin) * sizeof(int32_t)));
@@ -496,12 +445,12 @@ AICORE inline void BuildBlockPrefixAndLocalCounts(MoeDispatchShape shape, LocalW
         int32_t sum = 0;
         for (uint32_t block = 0; block < blockNum; ++block) {
             uint32_t idx = block * expertNumPadded + expert;
-            StoreScalarI32(workspaceView.blockPrefixPerExpert + idx, sum);
+            *(workspaceView.blockPrefixPerExpert + idx) = sum;
             if (expert < shape.expertNum) {
-                sum += LoadScalarI32(workspaceView.blockTokenPerExpert + idx);
+                sum += *(workspaceView.blockTokenPerExpert + idx);
             }
         }
-        StoreScalarI32(workspaceView.localTokenPerExpert + expert, expert < shape.expertNum ? sum : 0);
+        *(workspaceView.localTokenPerExpert + expert) = expert < shape.expertNum ? sum : 0;
     }
     InvalidateGmCacheLines(workspaceView.blockPrefixPerExpert,
                            static_cast<uint32_t>(blockNum * expertNumPadded * sizeof(int32_t)));
@@ -518,8 +467,8 @@ AICORE inline void BuildPackedExpertOffset(MoeDispatchShape shape, LocalWorkspac
     InvalidateGmCacheLines(workspaceView.localTokenPerExpert, static_cast<uint32_t>(expertNumPadded * sizeof(int32_t)));
     int32_t sum = 0;
     for (uint32_t expert = 0; expert < expertNumPadded; ++expert) {
-        int32_t count = LoadScalarI32(workspaceView.localTokenPerExpert + expert);
-        StoreScalarI32(workspaceView.cumsumPerExpert + static_cast<uint64_t>(myRank) * expertNumPadded + expert, sum);
+        int32_t count = *(workspaceView.localTokenPerExpert + expert);
+        *(workspaceView.cumsumPerExpert + static_cast<uint64_t>(myRank) * expertNumPadded + expert) = sum;
         if (expert < shape.expertNum) {
             sum += count;
         }
@@ -544,8 +493,15 @@ AICORE inline void PublishCountRows(MoeDispatchShape shape, LocalWorkspaceView w
         GlobalNd<int32_t> remoteCount =
             MakeGlobal2D(remotePeer.peerTokenPerExpert + static_cast<uint64_t>(myRank) * expertNumPadded, 1,
                          static_cast<int32_t>(expertNumPadded), static_cast<int32_t>(expertNumPadded));
-        TPutRows<int32_t, kMetaTileCols>(remoteCount, localCount);
-        NotifySignal(remotePeer.countReadySignal + myRank, static_cast<int32_t>(shape.signalValue));
+        VecTile<int32_t, kMetaTileCols> ping(1, kMetaTileCols);
+        VecTile<int32_t, kMetaTileCols> pong(1, kMetaTileCols);
+        TASSIGN(ping, kPingUbAddr);
+        TASSIGN(pong, kPongUbAddr);
+        pto::comm::TPUT(remoteCount, localCount, ping, pong);
+        pipe_barrier(PIPE_ALL);
+        dsb(DSB_DDR);
+        pto::comm::Signal signal = MakeSignal(remotePeer.countReadySignal + myRank);
+        pto::comm::TNOTIFY(signal, 1, pto::comm::NotifyOp::AtomicAdd);
     }
 }
 
@@ -553,7 +509,8 @@ AICORE inline void WaitCountRows(MoeDispatchShape shape, LocalPeerWindowView loc
                                  uint32_t blockNum)
 {
     for (uint32_t src = blockId; src < shape.ep; src += blockNum) {
-        WaitSignal(localPeer.countReadySignal + src, static_cast<int32_t>(shape.signalValue));
+        pto::comm::Signal signal = MakeSignal(localPeer.countReadySignal + src);
+        pto::comm::TWAIT(signal, static_cast<int32_t>(shape.signalValue), pto::comm::WaitCmp::GE);
     }
 }
 
@@ -567,8 +524,8 @@ AICORE inline void BuildPrefixMetadata(MoeDispatchShape shape, LocalWorkspaceVie
     for (uint32_t src = blockId; src < shape.ep; src += blockNum) {
         int32_t sum = 0;
         for (uint32_t expert = 0; expert < expertNumPadded; ++expert) {
-            sum += LoadScalarI32(localPeer.peerTokenPerExpert + static_cast<uint64_t>(src) * expertNumPadded + expert);
-            StoreScalarI32(workspaceView.cumsumPerExpert + static_cast<uint64_t>(src) * expertNumPadded + expert, sum);
+            sum += *(localPeer.peerTokenPerExpert + static_cast<uint64_t>(src) * expertNumPadded + expert);
+            *(workspaceView.cumsumPerExpert + static_cast<uint64_t>(src) * expertNumPadded + expert) = sum;
         }
         InvalidateGmCacheLines(workspaceView.cumsumPerExpert + static_cast<uint64_t>(src) * expertNumPadded,
                                static_cast<uint32_t>(expertNumPadded * sizeof(int32_t)));
@@ -578,14 +535,13 @@ AICORE inline void BuildPrefixMetadata(MoeDispatchShape shape, LocalWorkspaceVie
         int32_t dispatchCursor = 0;
         for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
             uint32_t globalExpert = myRank * shape.expertPerRank + localExpert;
-            StoreScalarI32(workspaceView.dispatchOffset + localExpert, dispatchCursor);
+            *(workspaceView.dispatchOffset + localExpert) = dispatchCursor;
             int32_t beforeRank = 0;
             for (uint32_t src = 0; src < shape.ep; ++src) {
-                StoreScalarI32(
-                    workspaceView.prevSumBeforeRank + static_cast<uint64_t>(src) * shape.expertPerRank + localExpert,
-                    beforeRank);
-                int32_t rows = LoadScalarI32(localPeer.peerTokenPerExpert +
-                                             static_cast<uint64_t>(src) * expertNumPadded + globalExpert);
+                *(workspaceView.prevSumBeforeRank + static_cast<uint64_t>(src) * shape.expertPerRank + localExpert) =
+                    beforeRank;
+                int32_t rows =
+                    *(localPeer.peerTokenPerExpert + static_cast<uint64_t>(src) * expertNumPadded + globalExpert);
                 beforeRank += rows;
                 dispatchCursor += rows;
             }
@@ -595,18 +551,6 @@ AICORE inline void BuildPrefixMetadata(MoeDispatchShape shape, LocalWorkspaceVie
         InvalidateGmCacheLines(workspaceView.prevSumBeforeRank,
                                static_cast<uint32_t>(shape.ep * shape.expertPerRank * sizeof(int32_t)));
     }
-}
-
-AICORE inline void TGetRowsHalf(__gm__ half *dstBase, int32_t dstRowStride, int32_t dstRow, __gm__ half *remoteSrcBase,
-                                int32_t srcRowStride, int32_t srcRow, int32_t rows, int32_t cols)
-{
-    if (rows <= 0 || cols <= 0) {
-        return;
-    }
-    GlobalNd<half> dst = MakeGlobal2D(dstBase + static_cast<int64_t>(dstRow) * dstRowStride, rows, cols, dstRowStride);
-    GlobalNd<half> src =
-        MakeGlobal2D(remoteSrcBase + static_cast<int64_t>(srcRow) * srcRowStride, rows, cols, srcRowStride);
-    TGetRows<half, kDefaultTileCols>(dst, src);
 }
 
 AICORE inline void GatherLocalExpertPayload(MoeDispatchShape shape, LocalWorkspaceView workspaceView,
@@ -625,21 +569,30 @@ AICORE inline void GatherLocalExpertPayload(MoeDispatchShape shape, LocalWorkspa
     for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
         uint32_t globalExpert = myRank * shape.expertPerRank + localExpert;
         for (uint32_t src = blockId; src < shape.ep; src += blockNum) {
-            int32_t rows = LoadScalarI32(localPeer.peerTokenPerExpert + static_cast<uint64_t>(src) * expertNumPadded +
-                                         globalExpert);
+            int32_t rows =
+                *(localPeer.peerTokenPerExpert + static_cast<uint64_t>(src) * expertNumPadded + globalExpert);
             if (rows <= 0) {
                 continue;
             }
             int32_t srcStart = globalExpert == 0 ?
                                    0 :
-                                   LoadScalarI32(workspaceView.cumsumPerExpert +
-                                                 static_cast<uint64_t>(src) * expertNumPadded + globalExpert - 1);
-            int32_t dstStart = LoadScalarI32(workspaceView.dispatchOffset + localExpert) +
-                               LoadScalarI32(workspaceView.prevSumBeforeRank +
-                                             static_cast<uint64_t>(src) * shape.expertPerRank + localExpert);
+                                   *(workspaceView.cumsumPerExpert +
+                                     static_cast<uint64_t>(src) * expertNumPadded + globalExpert - 1);
+            int32_t dstStart = *(workspaceView.dispatchOffset + localExpert) +
+                               *(workspaceView.prevSumBeforeRank +
+                                 static_cast<uint64_t>(src) * shape.expertPerRank + localExpert);
             LocalPeerWindowView remotePeer = MakeRemotePeerWindowView(ctx, peerWindow, src, peerWindowLayout);
-            TGetRowsHalf(workspaceView.dispatchedA, static_cast<int32_t>(shape.k), dstStart, remotePeer.packedA,
-                         static_cast<int32_t>(shape.k), srcStart, rows, static_cast<int32_t>(shape.k));
+            GlobalNd<half> dstGlobal =
+                MakeGlobal2D(workspaceView.dispatchedA + static_cast<int64_t>(dstStart) * shape.k, rows,
+                             static_cast<int32_t>(shape.k), static_cast<int32_t>(shape.k));
+            GlobalNd<half> remoteSrcGlobal =
+                MakeGlobal2D(remotePeer.packedA + static_cast<int64_t>(srcStart) * shape.k, rows,
+                             static_cast<int32_t>(shape.k), static_cast<int32_t>(shape.k));
+            VecTile<half> ping(1, kDefaultTileCols);
+            VecTile<half> pong(1, kDefaultTileCols);
+            TASSIGN(ping, kPingUbAddr);
+            TASSIGN(pong, kPongUbAddr);
+            pto::comm::TGET(dstGlobal, remoteSrcGlobal, ping, pong);
         }
     }
 }
