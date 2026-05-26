@@ -130,7 +130,8 @@ Execution order (known-good):
 2. Generate cases/data (if used).
 3. Configure environment (`LD_LIBRARY_PATH` for simulator path).
 4. Configure/build (`cmake`, `make`).
-5. Run binary with forwarded selectors (`--case`/`--cases`/etc).
+5. Generate input and golden data if needed (`gen_data.py`).
+6. Run binary with forwarded selectors (`--case`/`--cases`/etc).
 
 Source examples:
 
@@ -186,7 +187,7 @@ This keeps the doc useful for future kernel authors and avoids repeating trial-a
 
 Exit-code contract:
 
-1. Host drivers (`main.cpp`) MUST return non-zero when any validation fails. `run_all.sh` treats a child `run.sh` exit code of `0` as PASS and any non-zero as FAIL, so returning `1` (or another non-zero) on failure is required for reliable aggregation.
+1. Host run scripts (`run.sh`) MUST return non-zero when the kernel or validation fails. `run_all.sh` treats a child `run.sh` exit code of `0` as PASS and any non-zero as FAIL, so returning `1` (or another non-zero) on failure is required for reliable aggregation.
 
 ## 8. `default_cases` guidance:
 

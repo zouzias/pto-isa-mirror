@@ -19,7 +19,7 @@ void LaunchGEMME2E(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template <typename T, typename U, typename S, uint32_t blockDim, uint32_t m, uint32_t k, uint32_t n,
           uint32_t singleCoreM, uint32_t singleCoreK, uint32_t singleCoreN, uint32_t baseM, uint32_t baseK,
           uint32_t baseN, uint32_t stepM, uint32_t stepKa, uint32_t stepKb, uint32_t stepN>
-void GemmE2E()
+bool GemmE2E()
 {
     size_t aFileSize = m * k * sizeof(U); // uint16_t represent half
     size_t bFileSize = k * n * sizeof(S); // uint16_t represent half
@@ -75,6 +75,7 @@ void GemmE2E()
     } else {
         printf("test failed\n");
     }
+    return ret;
 }
 
 int main()
@@ -94,6 +95,6 @@ int main()
     constexpr uint32_t stepKb = 4;
     constexpr uint32_t stepN = 1;
 
-    GemmE2E<float, uint16_t, uint16_t, blockDim, m, k, n, singleCoreM, singleCoreK, singleCoreN, baseM, baseK, baseN,
-            stepM, stepKa, stepKb, stepN>();
+    return !GemmE2E<float, uint16_t, uint16_t, blockDim, m, k, n, singleCoreM, singleCoreK, singleCoreN, baseM, baseK, baseN,
+                    stepM, stepKa, stepKb, stepN>();
 }
