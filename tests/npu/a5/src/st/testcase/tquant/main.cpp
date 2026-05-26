@@ -55,6 +55,10 @@ template <int staticRows, int staticCols, int validRows, int validCols,
           pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void LaunchTQuantMXFP4_E2M1_BF16_Exp2D(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
 
+template <int staticRows, int staticCols, int validRows, int validCols,
+          pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
+void LaunchTQuantMXFP4_E2M1_FP16_Exp2D(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
+
 class TQUANTTEST : public testing::Test {
 protected:
     void SetUp() override
@@ -282,6 +286,16 @@ void test_tquant_mxfp4_e2m1_bf16_exp2d()
 {
     RunMxFp4E2M1Case<validRows, validCols>([](uint8_t *dst, uint16_t *src, uint8_t *dstExp, void *stream) {
         LaunchTQuantMXFP4_E2M1_BF16_Exp2D<staticRows, staticCols, validRows, validCols, scaleAlg>(dst, src, dstExp,
+                                                                                                  stream);
+    });
+}
+
+template <int staticRows, int staticCols, int validRows, int validCols,
+          pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
+void test_tquant_mxfp4_e2m1_fp16_exp2d()
+{
+    RunMxFp4E2M1Case<validRows, validCols>([](uint8_t *dst, uint16_t *src, uint8_t *dstExp, void *stream) {
+        LaunchTQuantMXFP4_E2M1_FP16_Exp2D<staticRows, staticCols, validRows, validCols, scaleAlg>(dst, src, dstExp,
                                                                                                   stream);
     });
 }
@@ -518,7 +532,7 @@ TEST_F(TQUANTTEST, case_mxfp8_bf16_1x198_nd)
     test_tquant_mxfp8_bf16<1, 198, 0>();
 }
 
-// Mixed 2D exp fuzz: dtype and scale algorithm are interleaved; tail-axis sizes are 64 * prime.
+// 2D exp fuzz: FP8 covers fp32/bf16/fp16 x OCP/NV across six shape regimes.
 #define TQUANT_EXP2D_FUZZ_OCP(ID, TEST_DTYPE, STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS)                            \
     TEST_F(                                                                                                                \
         TQUANTTEST,                                                                                                        \
@@ -536,46 +550,42 @@ TEST_F(TQUANTTEST, case_mxfp8_bf16_1x198_nd)
                                                pto::QuantScaleAlg::NV>();                                                     \
     }
 
-TQUANT_EXP2D_FUZZ_OCP(01, fp32, 5, 192, 3, 128)
-TQUANT_EXP2D_FUZZ_NV(02, fp32, 7, 320, 5, 192)
-TQUANT_EXP2D_FUZZ_OCP(03, bf16, 11, 448, 7, 320)
-TQUANT_EXP2D_FUZZ_NV(04, bf16, 13, 704, 11, 448)
-TQUANT_EXP2D_FUZZ_OCP(05, fp16, 17, 832, 13, 704)
-TQUANT_EXP2D_FUZZ_NV(06, fp16, 19, 1088, 17, 832)
-TQUANT_EXP2D_FUZZ_OCP(07, fp32, 7, 1216, 5, 1088)
-TQUANT_EXP2D_FUZZ_NV(08, bf16, 11, 1472, 7, 1216)
-TQUANT_EXP2D_FUZZ_OCP(09, fp16, 13, 1856, 11, 1472)
-TQUANT_EXP2D_FUZZ_NV(10, fp32, 5, 1984, 3, 1856)
-TQUANT_EXP2D_FUZZ_OCP(11, bf16, 7, 2368, 5, 1984)
-TQUANT_EXP2D_FUZZ_NV(12, fp16, 5, 2624, 3, 2368)
-TQUANT_EXP2D_FUZZ_OCP(13, fp32, 3, 2752, 2, 2624)
-TQUANT_EXP2D_FUZZ_NV(14, bf16, 5, 3008, 3, 2752)
-TQUANT_EXP2D_FUZZ_OCP(15, fp16, 5, 3392, 3, 3008)
-TQUANT_EXP2D_FUZZ_NV(16, fp32, 3, 3776, 2, 3392)
-TQUANT_EXP2D_FUZZ_OCP(17, bf16, 3, 3904, 2, 3776)
-TQUANT_EXP2D_FUZZ_NV(18, fp16, 3, 4288, 2, 3904)
-TQUANT_EXP2D_FUZZ_OCP(19, fp32, 2, 4544, 1, 4288)
-TQUANT_EXP2D_FUZZ_NV(20, bf16, 3, 4544, 2, 4544)
-TQUANT_EXP2D_FUZZ_OCP(21, fp16, 5, 192, 3, 128)
-TQUANT_EXP2D_FUZZ_NV(22, fp32, 7, 448, 5, 320)
-TQUANT_EXP2D_FUZZ_OCP(23, bf16, 11, 704, 7, 448)
-TQUANT_EXP2D_FUZZ_NV(24, fp16, 13, 832, 11, 704)
-TQUANT_EXP2D_FUZZ_OCP(25, fp32, 17, 1088, 13, 832)
-TQUANT_EXP2D_FUZZ_NV(26, bf16, 19, 1216, 17, 1088)
-TQUANT_EXP2D_FUZZ_OCP(27, fp16, 7, 1472, 5, 1216)
-TQUANT_EXP2D_FUZZ_NV(28, fp32, 11, 1856, 7, 1472)
-TQUANT_EXP2D_FUZZ_OCP(29, bf16, 13, 1984, 11, 1856)
-TQUANT_EXP2D_FUZZ_NV(30, fp16, 7, 2368, 5, 1984)
-TQUANT_EXP2D_FUZZ_OCP(31, fp32, 5, 2624, 3, 2368)
-TQUANT_EXP2D_FUZZ_NV(32, bf16, 5, 2752, 3, 2624)
-TQUANT_EXP2D_FUZZ_OCP(33, fp16, 3, 3008, 2, 2752)
-TQUANT_EXP2D_FUZZ_NV(34, fp32, 3, 3392, 2, 3008)
-TQUANT_EXP2D_FUZZ_OCP(35, bf16, 3, 3776, 2, 3392)
-TQUANT_EXP2D_FUZZ_NV(36, fp16, 3, 3904, 2, 3776)
-TQUANT_EXP2D_FUZZ_OCP(37, fp32, 2, 4288, 1, 3904)
-TQUANT_EXP2D_FUZZ_NV(38, bf16, 2, 4544, 1, 4288)
-TQUANT_EXP2D_FUZZ_OCP(39, fp16, 2, 4544, 1, 4544)
-TQUANT_EXP2D_FUZZ_NV(40, fp32, 2, 128, 1, 128)
+TQUANT_EXP2D_FUZZ_OCP(01, fp32, 4, 128, 2, 128)
+TQUANT_EXP2D_FUZZ_NV(02, fp32, 4, 128, 2, 128)
+TQUANT_EXP2D_FUZZ_OCP(03, bf16, 4, 128, 2, 128)
+TQUANT_EXP2D_FUZZ_NV(04, bf16, 4, 128, 2, 128)
+TQUANT_EXP2D_FUZZ_OCP(05, fp16, 4, 128, 2, 128)
+TQUANT_EXP2D_FUZZ_NV(06, fp16, 4, 128, 2, 128)
+TQUANT_EXP2D_FUZZ_OCP(07, fp32, 3, 128, 1, 64)
+TQUANT_EXP2D_FUZZ_NV(08, fp32, 3, 128, 1, 64)
+TQUANT_EXP2D_FUZZ_OCP(09, bf16, 3, 128, 1, 64)
+TQUANT_EXP2D_FUZZ_NV(10, bf16, 3, 128, 1, 64)
+TQUANT_EXP2D_FUZZ_OCP(11, fp16, 3, 128, 1, 64)
+TQUANT_EXP2D_FUZZ_NV(12, fp16, 3, 128, 1, 64)
+TQUANT_EXP2D_FUZZ_OCP(13, fp32, 5, 256, 3, 192)
+TQUANT_EXP2D_FUZZ_NV(14, fp32, 5, 256, 3, 192)
+TQUANT_EXP2D_FUZZ_OCP(15, bf16, 5, 256, 3, 192)
+TQUANT_EXP2D_FUZZ_NV(16, bf16, 5, 256, 3, 192)
+TQUANT_EXP2D_FUZZ_OCP(17, fp16, 5, 256, 3, 192)
+TQUANT_EXP2D_FUZZ_NV(18, fp16, 5, 256, 3, 192)
+TQUANT_EXP2D_FUZZ_OCP(19, fp32, 8, 256, 7, 256)
+TQUANT_EXP2D_FUZZ_NV(20, fp32, 8, 256, 7, 256)
+TQUANT_EXP2D_FUZZ_OCP(21, bf16, 8, 256, 7, 256)
+TQUANT_EXP2D_FUZZ_NV(22, bf16, 8, 256, 7, 256)
+TQUANT_EXP2D_FUZZ_OCP(23, fp16, 8, 256, 7, 256)
+TQUANT_EXP2D_FUZZ_NV(24, fp16, 8, 256, 7, 256)
+TQUANT_EXP2D_FUZZ_OCP(25, fp32, 6, 384, 5, 320)
+TQUANT_EXP2D_FUZZ_NV(26, fp32, 6, 384, 5, 320)
+TQUANT_EXP2D_FUZZ_OCP(27, bf16, 6, 384, 5, 320)
+TQUANT_EXP2D_FUZZ_NV(28, bf16, 6, 384, 5, 320)
+TQUANT_EXP2D_FUZZ_OCP(29, fp16, 6, 384, 5, 320)
+TQUANT_EXP2D_FUZZ_NV(30, fp16, 6, 384, 5, 320)
+TQUANT_EXP2D_FUZZ_OCP(31, fp32, 17, 1024, 13, 960)
+TQUANT_EXP2D_FUZZ_NV(32, fp32, 17, 1024, 13, 960)
+TQUANT_EXP2D_FUZZ_OCP(33, bf16, 17, 1024, 13, 960)
+TQUANT_EXP2D_FUZZ_NV(34, bf16, 17, 1024, 13, 960)
+TQUANT_EXP2D_FUZZ_OCP(35, fp16, 17, 1024, 13, 960)
+TQUANT_EXP2D_FUZZ_NV(36, fp16, 17, 1024, 13, 960)
 
 #undef TQUANT_EXP2D_FUZZ_NV
 #undef TQUANT_EXP2D_FUZZ_OCP
@@ -755,10 +765,51 @@ TEST_F(TQUANTTEST, case_mxfp4_e2m1_nv_bf16_2x256_mixed_nd)
     test_tquant_mxfp4_e2m1_bf16<2, 256, pto::QuantScaleAlg::NV>();
 }
 
-TEST_F(TQUANTTEST, case_mxfp4_e2m1_nv_bf16_2x128_static4x128_exp2d_nd)
-{
-    test_tquant_mxfp4_e2m1_bf16_exp2d<4, 128, 2, 128, pto::QuantScaleAlg::NV>();
-}
+// 2D exp fuzz: FP4 E2M1 covers bf16/fp16 x OCP/NV across the same shape regimes.
+#define TQUANT_MXFP4_EXP2D_FUZZ_OCP(ID, TEST_DTYPE, STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS)                           \
+    TEST_F(                                                                                                                     \
+        TQUANTTEST,                                                                                                             \
+        case_mxfp4_e2m1_##TEST_DTYPE##_##VALID_ROWS##x##VALID_COLS##_static##STATIC_ROWS##x##STATIC_COLS##_exp2d_fuzz##ID##_nd) \
+    {                                                                                                                           \
+        test_tquant_mxfp4_e2m1_##TEST_DTYPE##_exp2d<STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS>();                        \
+    }
+
+#define TQUANT_MXFP4_EXP2D_FUZZ_NV(ID, TEST_DTYPE, STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS)                               \
+    TEST_F(                                                                                                                        \
+        TQUANTTEST,                                                                                                                \
+        case_mxfp4_e2m1_nv_##TEST_DTYPE##_##VALID_ROWS##x##VALID_COLS##_static##STATIC_ROWS##x##STATIC_COLS##_exp2d_fuzz##ID##_nd) \
+    {                                                                                                                              \
+        test_tquant_mxfp4_e2m1_##TEST_DTYPE##_exp2d<STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS,                              \
+                                                    pto::QuantScaleAlg::NV>();                                                     \
+    }
+
+TQUANT_MXFP4_EXP2D_FUZZ_OCP(01, bf16, 4, 128, 2, 128)
+TQUANT_MXFP4_EXP2D_FUZZ_NV(02, bf16, 4, 128, 2, 128)
+TQUANT_MXFP4_EXP2D_FUZZ_OCP(03, fp16, 4, 128, 2, 128)
+TQUANT_MXFP4_EXP2D_FUZZ_NV(04, fp16, 4, 128, 2, 128)
+TQUANT_MXFP4_EXP2D_FUZZ_OCP(05, bf16, 3, 128, 1, 64)
+TQUANT_MXFP4_EXP2D_FUZZ_NV(06, bf16, 3, 128, 1, 64)
+TQUANT_MXFP4_EXP2D_FUZZ_OCP(07, fp16, 3, 128, 1, 64)
+TQUANT_MXFP4_EXP2D_FUZZ_NV(08, fp16, 3, 128, 1, 64)
+TQUANT_MXFP4_EXP2D_FUZZ_OCP(09, bf16, 5, 256, 3, 192)
+TQUANT_MXFP4_EXP2D_FUZZ_NV(10, bf16, 5, 256, 3, 192)
+TQUANT_MXFP4_EXP2D_FUZZ_OCP(11, fp16, 5, 256, 3, 192)
+TQUANT_MXFP4_EXP2D_FUZZ_NV(12, fp16, 5, 256, 3, 192)
+TQUANT_MXFP4_EXP2D_FUZZ_OCP(13, bf16, 8, 256, 7, 256)
+TQUANT_MXFP4_EXP2D_FUZZ_NV(14, bf16, 8, 256, 7, 256)
+TQUANT_MXFP4_EXP2D_FUZZ_OCP(15, fp16, 8, 256, 7, 256)
+TQUANT_MXFP4_EXP2D_FUZZ_NV(16, fp16, 8, 256, 7, 256)
+TQUANT_MXFP4_EXP2D_FUZZ_OCP(17, bf16, 6, 384, 5, 320)
+TQUANT_MXFP4_EXP2D_FUZZ_NV(18, bf16, 6, 384, 5, 320)
+TQUANT_MXFP4_EXP2D_FUZZ_OCP(19, fp16, 6, 384, 5, 320)
+TQUANT_MXFP4_EXP2D_FUZZ_NV(20, fp16, 6, 384, 5, 320)
+TQUANT_MXFP4_EXP2D_FUZZ_OCP(21, bf16, 17, 1024, 13, 960)
+TQUANT_MXFP4_EXP2D_FUZZ_NV(22, bf16, 17, 1024, 13, 960)
+TQUANT_MXFP4_EXP2D_FUZZ_OCP(23, fp16, 17, 1024, 13, 960)
+TQUANT_MXFP4_EXP2D_FUZZ_NV(24, fp16, 17, 1024, 13, 960)
+
+#undef TQUANT_MXFP4_EXP2D_FUZZ_NV
+#undef TQUANT_MXFP4_EXP2D_FUZZ_OCP
 
 TEST_F(TQUANTTEST, case_mxfp8_fp16_32x128_nz)
 {

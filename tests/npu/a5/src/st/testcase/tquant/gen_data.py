@@ -545,6 +545,10 @@ def fp16_to_mxfp8(valid_rows, valid_cols, mode, scale_alg="ocp", case_suffix=Non
 
     if case_suffix == "boundary":
         src_fp16 = make_mxfp8_boundary_values(valid_rows, valid_cols, np.float16, scale_alg=scale_alg)
+    elif case_suffix is not None and "_exp2d_fuzz" in case_suffix:
+        src_fp16 = make_mx_exp2d_fuzz_values(
+            valid_rows, valid_cols, np.float16, get_exp2d_fuzz_seed(case_suffix), max_abs=448.0
+        )
     else:
         mags = np.random.lognormal(mean=0.0, sigma=2.0, size=(valid_rows, valid_cols))
         signs = np.where(np.random.rand(valid_rows, valid_cols) < 0.5, -1.0, 1.0)
@@ -675,9 +679,14 @@ def make_mxfp4_nv_boundary_values(total, dtype, patterns):
     return values
 
 
-def make_mxfp4_static4x128_exp2d_values(dtype):
-    group_maxes = np.array([6.0, 12.0, 24.0, 48.0, 96.0, 192.0, 384.0, 768.0], dtype=np.float32)
-    scaled_pattern = np.array(
+def get_exp2d_fuzz_seed(case_suffix):
+    return 20260600 + int(case_suffix.rsplit("fuzz", 1)[1])
+
+
+def make_mx_exp2d_fuzz_values(valid_rows, valid_cols, dtype, seed, max_abs):
+    rng = np.random.default_rng(seed)
+    groups_per_row = valid_cols // MX_BOUNDARY_GROUP_SIZE
+    base_pattern = np.array(
         [
             6.0,
             -6.0,
@@ -714,11 +723,26 @@ def make_mxfp4_static4x128_exp2d_values(dtype):
         ],
         dtype=np.float32,
     )
-    values = np.zeros((2, 128), dtype=np.float32)
-    for group, group_max in enumerate(group_maxes):
-        row = group // 4
-        col = (group % 4) * MX_BOUNDARY_GROUP_SIZE
-        values[row, col : col + MX_BOUNDARY_GROUP_SIZE] = scaled_pattern * (group_max / 6.0)
+
+    values = np.zeros((valid_rows, valid_cols), dtype=np.float32)
+    for row in range(valid_rows):
+        for col_group in range(groups_per_row):
+            group = row * groups_per_row + col_group
+            col = col_group * MX_BOUNDARY_GROUP_SIZE
+            scale = np.ldexp(np.float32(1.0), int((group % 17) - 8))
+            pattern = base_pattern * scale
+            if group % 5 == 0:
+                pattern[:8] = np.array(
+                    [0.0, -0.0, max_abs, -max_abs, max_abs / 2.0, -max_abs / 2.0, 1.0, -1.0], dtype=np.float32
+                )
+            if group % 7 == 0:
+                mags = rng.lognormal(mean=0.0, sigma=2.0, size=8).astype(np.float32)
+                signs = np.where(rng.random(8) < 0.5, -1.0, 1.0).astype(np.float32)
+                pattern[16:24] = mags * signs
+            values[row, col : col + MX_BOUNDARY_GROUP_SIZE] = pattern
+
+    clip_abs = 60000.0 if dtype == np.float16 else max_abs
+    values = np.clip(values, -clip_abs, clip_abs)
     return values.astype(dtype)
 
 
@@ -758,8 +782,10 @@ def make_mxfp4_e2m1_data(config, patterns):
             end = min(begin + 32, total)
             pattern = group_patterns[group % len(group_patterns)]
             values[begin:end] = np.resize(pattern, end - begin)
-    elif case_suffix == "static4x128_exp2d":
-        values = make_mxfp4_static4x128_exp2d_values(dtype).reshape(-1)
+    elif case_suffix is not None and "_exp2d_fuzz" in case_suffix:
+        values = make_mx_exp2d_fuzz_values(
+            config.valid_rows, config.valid_cols, dtype, get_exp2d_fuzz_seed(case_suffix), max_abs=768.0
+        ).reshape(-1)
     else:
         values = exp_random_func(total, seed=20260511)
 
@@ -913,6 +939,10 @@ def bf16_to_mxfp8(valid_rows, valid_cols, mode, scale_alg="ocp", case_suffix=Non
 
     if case_suffix == "boundary":
         src_bf16 = make_mxfp8_boundary_values(valid_rows, valid_cols, bfloat16, scale_alg=scale_alg)
+    elif case_suffix is not None and "_exp2d_fuzz" in case_suffix:
+        src_bf16 = make_mx_exp2d_fuzz_values(
+            valid_rows, valid_cols, bfloat16, get_exp2d_fuzz_seed(case_suffix), max_abs=448.0
+        )
     else:
         mags = np.random.lognormal(mean=0.0, sigma=2.0, size=(valid_rows, valid_cols))
         signs = np.where(np.random.rand(valid_rows, valid_cols) < 0.5, -1.0, 1.0)
@@ -980,6 +1010,10 @@ def fp32_to_mxfp8(valid_rows, valid_cols, mode, scale_alg="ocp", case_suffix=Non
 
     if case_suffix == "boundary":
         src_fp32 = make_mxfp8_boundary_values(valid_rows, valid_cols, np.float32, scale_alg=scale_alg)
+    elif case_suffix is not None and "_exp2d_fuzz" in case_suffix:
+        src_fp32 = make_mx_exp2d_fuzz_values(
+            valid_rows, valid_cols, np.float32, get_exp2d_fuzz_seed(case_suffix), max_abs=448.0
+        )
     else:
         mags = np.random.lognormal(mean=0.0, sigma=2.0, size=(valid_rows, valid_cols))
         signs = np.where(np.random.rand(valid_rows, valid_cols) < 0.5, -1.0, 1.0)
@@ -1050,61 +1084,57 @@ def generate_case_name(param):
     )
 
 
-EXP2D_FUZZ_CASES = [
-    ("fp32", "ocp", 5, 192, 3, 128, "fuzz01"),
-    ("fp32", "nv", 7, 320, 5, 192, "fuzz02"),
-    ("bf16", "ocp", 11, 448, 7, 320, "fuzz03"),
-    ("bf16", "nv", 13, 704, 11, 448, "fuzz04"),
-    ("fp16", "ocp", 17, 832, 13, 704, "fuzz05"),
-    ("fp16", "nv", 19, 1088, 17, 832, "fuzz06"),
-    ("fp32", "ocp", 7, 1216, 5, 1088, "fuzz07"),
-    ("bf16", "nv", 11, 1472, 7, 1216, "fuzz08"),
-    ("fp16", "ocp", 13, 1856, 11, 1472, "fuzz09"),
-    ("fp32", "nv", 5, 1984, 3, 1856, "fuzz10"),
-    ("bf16", "ocp", 7, 2368, 5, 1984, "fuzz11"),
-    ("fp16", "nv", 5, 2624, 3, 2368, "fuzz12"),
-    ("fp32", "ocp", 3, 2752, 2, 2624, "fuzz13"),
-    ("bf16", "nv", 5, 3008, 3, 2752, "fuzz14"),
-    ("fp16", "ocp", 5, 3392, 3, 3008, "fuzz15"),
-    ("fp32", "nv", 3, 3776, 2, 3392, "fuzz16"),
-    ("bf16", "ocp", 3, 3904, 2, 3776, "fuzz17"),
-    ("fp16", "nv", 3, 4288, 2, 3904, "fuzz18"),
-    ("fp32", "ocp", 2, 4544, 1, 4288, "fuzz19"),
-    ("bf16", "nv", 3, 4544, 2, 4544, "fuzz20"),
-    ("fp16", "ocp", 5, 192, 3, 128, "fuzz21"),
-    ("fp32", "nv", 7, 448, 5, 320, "fuzz22"),
-    ("bf16", "ocp", 11, 704, 7, 448, "fuzz23"),
-    ("fp16", "nv", 13, 832, 11, 704, "fuzz24"),
-    ("fp32", "ocp", 17, 1088, 13, 832, "fuzz25"),
-    ("bf16", "nv", 19, 1216, 17, 1088, "fuzz26"),
-    ("fp16", "ocp", 7, 1472, 5, 1216, "fuzz27"),
-    ("fp32", "nv", 11, 1856, 7, 1472, "fuzz28"),
-    ("bf16", "ocp", 13, 1984, 11, 1856, "fuzz29"),
-    ("fp16", "nv", 7, 2368, 5, 1984, "fuzz30"),
-    ("fp32", "ocp", 5, 2624, 3, 2368, "fuzz31"),
-    ("bf16", "nv", 5, 2752, 3, 2624, "fuzz32"),
-    ("fp16", "ocp", 3, 3008, 2, 2752, "fuzz33"),
-    ("fp32", "nv", 3, 3392, 2, 3008, "fuzz34"),
-    ("bf16", "ocp", 3, 3776, 2, 3392, "fuzz35"),
-    ("fp16", "nv", 3, 3904, 2, 3776, "fuzz36"),
-    ("fp32", "ocp", 2, 4288, 1, 3904, "fuzz37"),
-    ("bf16", "nv", 2, 4544, 1, 4288, "fuzz38"),
-    ("fp16", "ocp", 2, 4544, 1, 4544, "fuzz39"),
-    ("fp32", "nv", 2, 128, 1, 128, "fuzz40"),
+EXP2D_FUZZ_SHAPES = [
+    (4, 128, 2, 128),
+    (3, 128, 1, 64),
+    (5, 256, 3, 192),
+    (8, 256, 7, 256),
+    (6, 384, 5, 320),
+    (17, 1024, 13, 960),
 ]
+EXP2D_SCALE_ALGS = ("ocp", "nv")
+EXP2D_FP8_DTYPES = ("fp32", "bf16", "fp16")
+EXP2D_FP4_DTYPES = ("bf16", "fp16")
 
 
 def make_exp2d_fuzz_params():
     params = []
     dtype_map = {"fp32": np.float32, "bf16": bfloat16, "fp16": np.float16}
-    for dtype_str, scale_alg, static_rows, static_cols, valid_rows, valid_cols, suffix in EXP2D_FUZZ_CASES:
-        dtype = dtype_map[dtype_str]
-        case_suffix = f"static{static_rows}x{static_cols}_exp2d_{suffix}"
-        params.append(
-            TQuantParams(
-                "mxfp8", valid_rows, valid_cols, mode="nd", dtype=dtype, case_suffix=case_suffix, scale_alg=scale_alg
-            )
-        )
+    case_id = 1
+    for static_rows, static_cols, valid_rows, valid_cols in EXP2D_FUZZ_SHAPES:
+        for dtype_str in EXP2D_FP8_DTYPES:
+            for scale_alg in EXP2D_SCALE_ALGS:
+                case_suffix = f"static{static_rows}x{static_cols}_exp2d_fuzz{case_id:02d}"
+                params.append(
+                    TQuantParams(
+                        "mxfp8",
+                        valid_rows,
+                        valid_cols,
+                        mode="nd",
+                        dtype=dtype_map[dtype_str],
+                        case_suffix=case_suffix,
+                        scale_alg=scale_alg,
+                    )
+                )
+                case_id += 1
+    case_id = 1
+    for static_rows, static_cols, valid_rows, valid_cols in EXP2D_FUZZ_SHAPES:
+        for dtype_str in EXP2D_FP4_DTYPES:
+            for scale_alg in EXP2D_SCALE_ALGS:
+                case_suffix = f"static{static_rows}x{static_cols}_exp2d_fuzz{case_id:02d}"
+                params.append(
+                    TQuantParams(
+                        "mxfp4_e2m1",
+                        valid_rows,
+                        valid_cols,
+                        mode="nd",
+                        dtype=dtype_map[dtype_str],
+                        case_suffix=case_suffix,
+                        scale_alg=scale_alg,
+                    )
+                )
+                case_id += 1
+    assert len(params) == 60
     return params
 
 
@@ -1205,7 +1235,6 @@ if __name__ == "__main__":
         TQuantParams("mxfp4_e2m1", 2, 256, mode="nd", dtype=bfloat16, case_suffix="boundary", scale_alg="nv"),
         TQuantParams("mxfp4_e2m1", 2, 256, mode="nd", dtype=bfloat16, case_suffix="rounding", scale_alg="nv"),
         TQuantParams("mxfp4_e2m1", 2, 256, mode="nd", dtype=bfloat16, case_suffix="mixed", scale_alg="nv"),
-        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=bfloat16, case_suffix="static4x128_exp2d", scale_alg="nv"),
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=np.float16),

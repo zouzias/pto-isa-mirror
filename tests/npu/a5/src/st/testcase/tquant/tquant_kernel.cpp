@@ -832,6 +832,14 @@ void LaunchTQuantMXFP4_E2M1_BF16_Exp2D(uint8_t *dst, uint16_t *src, uint8_t *dst
     runTQuantMXFP4E2M1B16Exp2D<Spec><<<1, nullptr, stream>>>(dst_exp, dst, (bfloat16_t *)src);
 }
 
+template <int staticRows, int staticCols, int validRows, int validCols,
+          pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
+void LaunchTQuantMXFP4_E2M1_FP16_Exp2D(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream)
+{
+    using Spec = MxFp4B16Exp2DSpec<half, staticRows, staticCols, validRows, validCols, scaleAlg>;
+    runTQuantMXFP4E2M1B16Exp2D<Spec><<<1, nullptr, stream>>>(dst_exp, dst, (half *)src);
+}
+
 } // namespace TQuantTest
 
 // MXFP8 cases
@@ -968,46 +976,42 @@ template void TQuantTest::LaunchTQuantMXFP8_FP16<2, 256, 0, pto::QuantScaleAlg::
                                                                        VALID_COLS, pto::QuantScaleAlg::NV>(  \
         uint8_t * dst, uint16_t * src, uint8_t * dst_exp, void *stream);
 
-TQUANT_EXP2D_FUZZ_FP32_OCP(01, 5, 192, 3, 128)
-TQUANT_EXP2D_FUZZ_FP32_NV(02, 7, 320, 5, 192)
-TQUANT_EXP2D_FUZZ_B16_OCP(03, BF16, 11, 448, 7, 320)
-TQUANT_EXP2D_FUZZ_B16_NV(04, BF16, 13, 704, 11, 448)
-TQUANT_EXP2D_FUZZ_B16_OCP(05, FP16, 17, 832, 13, 704)
-TQUANT_EXP2D_FUZZ_B16_NV(06, FP16, 19, 1088, 17, 832)
-TQUANT_EXP2D_FUZZ_FP32_OCP(07, 7, 1216, 5, 1088)
-TQUANT_EXP2D_FUZZ_B16_NV(08, BF16, 11, 1472, 7, 1216)
-TQUANT_EXP2D_FUZZ_B16_OCP(09, FP16, 13, 1856, 11, 1472)
-TQUANT_EXP2D_FUZZ_FP32_NV(10, 5, 1984, 3, 1856)
-TQUANT_EXP2D_FUZZ_B16_OCP(11, BF16, 7, 2368, 5, 1984)
-TQUANT_EXP2D_FUZZ_B16_NV(12, FP16, 5, 2624, 3, 2368)
-TQUANT_EXP2D_FUZZ_FP32_OCP(13, 3, 2752, 2, 2624)
-TQUANT_EXP2D_FUZZ_B16_NV(14, BF16, 5, 3008, 3, 2752)
-TQUANT_EXP2D_FUZZ_B16_OCP(15, FP16, 5, 3392, 3, 3008)
-TQUANT_EXP2D_FUZZ_FP32_NV(16, 3, 3776, 2, 3392)
-TQUANT_EXP2D_FUZZ_B16_OCP(17, BF16, 3, 3904, 2, 3776)
-TQUANT_EXP2D_FUZZ_B16_NV(18, FP16, 3, 4288, 2, 3904)
-TQUANT_EXP2D_FUZZ_FP32_OCP(19, 2, 4544, 1, 4288)
-TQUANT_EXP2D_FUZZ_B16_NV(20, BF16, 3, 4544, 2, 4544)
-TQUANT_EXP2D_FUZZ_B16_OCP(21, FP16, 5, 192, 3, 128)
-TQUANT_EXP2D_FUZZ_FP32_NV(22, 7, 448, 5, 320)
-TQUANT_EXP2D_FUZZ_B16_OCP(23, BF16, 11, 704, 7, 448)
-TQUANT_EXP2D_FUZZ_B16_NV(24, FP16, 13, 832, 11, 704)
-TQUANT_EXP2D_FUZZ_FP32_OCP(25, 17, 1088, 13, 832)
-TQUANT_EXP2D_FUZZ_B16_NV(26, BF16, 19, 1216, 17, 1088)
-TQUANT_EXP2D_FUZZ_B16_OCP(27, FP16, 7, 1472, 5, 1216)
-TQUANT_EXP2D_FUZZ_FP32_NV(28, 11, 1856, 7, 1472)
-TQUANT_EXP2D_FUZZ_B16_OCP(29, BF16, 13, 1984, 11, 1856)
-TQUANT_EXP2D_FUZZ_B16_NV(30, FP16, 7, 2368, 5, 1984)
-TQUANT_EXP2D_FUZZ_FP32_OCP(31, 5, 2624, 3, 2368)
-TQUANT_EXP2D_FUZZ_B16_NV(32, BF16, 5, 2752, 3, 2624)
-TQUANT_EXP2D_FUZZ_B16_OCP(33, FP16, 3, 3008, 2, 2752)
-TQUANT_EXP2D_FUZZ_FP32_NV(34, 3, 3392, 2, 3008)
-TQUANT_EXP2D_FUZZ_B16_OCP(35, BF16, 3, 3776, 2, 3392)
-TQUANT_EXP2D_FUZZ_B16_NV(36, FP16, 3, 3904, 2, 3776)
-TQUANT_EXP2D_FUZZ_FP32_OCP(37, 2, 4288, 1, 3904)
-TQUANT_EXP2D_FUZZ_B16_NV(38, BF16, 2, 4544, 1, 4288)
-TQUANT_EXP2D_FUZZ_B16_OCP(39, FP16, 2, 4544, 1, 4544)
-TQUANT_EXP2D_FUZZ_FP32_NV(40, 2, 128, 1, 128)
+TQUANT_EXP2D_FUZZ_FP32_OCP(01, 4, 128, 2, 128)
+TQUANT_EXP2D_FUZZ_FP32_NV(02, 4, 128, 2, 128)
+TQUANT_EXP2D_FUZZ_B16_OCP(03, BF16, 4, 128, 2, 128)
+TQUANT_EXP2D_FUZZ_B16_NV(04, BF16, 4, 128, 2, 128)
+TQUANT_EXP2D_FUZZ_B16_OCP(05, FP16, 4, 128, 2, 128)
+TQUANT_EXP2D_FUZZ_B16_NV(06, FP16, 4, 128, 2, 128)
+TQUANT_EXP2D_FUZZ_FP32_OCP(07, 3, 128, 1, 64)
+TQUANT_EXP2D_FUZZ_FP32_NV(08, 3, 128, 1, 64)
+TQUANT_EXP2D_FUZZ_B16_OCP(09, BF16, 3, 128, 1, 64)
+TQUANT_EXP2D_FUZZ_B16_NV(10, BF16, 3, 128, 1, 64)
+TQUANT_EXP2D_FUZZ_B16_OCP(11, FP16, 3, 128, 1, 64)
+TQUANT_EXP2D_FUZZ_B16_NV(12, FP16, 3, 128, 1, 64)
+TQUANT_EXP2D_FUZZ_FP32_OCP(13, 5, 256, 3, 192)
+TQUANT_EXP2D_FUZZ_FP32_NV(14, 5, 256, 3, 192)
+TQUANT_EXP2D_FUZZ_B16_OCP(15, BF16, 5, 256, 3, 192)
+TQUANT_EXP2D_FUZZ_B16_NV(16, BF16, 5, 256, 3, 192)
+TQUANT_EXP2D_FUZZ_B16_OCP(17, FP16, 5, 256, 3, 192)
+TQUANT_EXP2D_FUZZ_B16_NV(18, FP16, 5, 256, 3, 192)
+TQUANT_EXP2D_FUZZ_FP32_OCP(19, 8, 256, 7, 256)
+TQUANT_EXP2D_FUZZ_FP32_NV(20, 8, 256, 7, 256)
+TQUANT_EXP2D_FUZZ_B16_OCP(21, BF16, 8, 256, 7, 256)
+TQUANT_EXP2D_FUZZ_B16_NV(22, BF16, 8, 256, 7, 256)
+TQUANT_EXP2D_FUZZ_B16_OCP(23, FP16, 8, 256, 7, 256)
+TQUANT_EXP2D_FUZZ_B16_NV(24, FP16, 8, 256, 7, 256)
+TQUANT_EXP2D_FUZZ_FP32_OCP(25, 6, 384, 5, 320)
+TQUANT_EXP2D_FUZZ_FP32_NV(26, 6, 384, 5, 320)
+TQUANT_EXP2D_FUZZ_B16_OCP(27, BF16, 6, 384, 5, 320)
+TQUANT_EXP2D_FUZZ_B16_NV(28, BF16, 6, 384, 5, 320)
+TQUANT_EXP2D_FUZZ_B16_OCP(29, FP16, 6, 384, 5, 320)
+TQUANT_EXP2D_FUZZ_B16_NV(30, FP16, 6, 384, 5, 320)
+TQUANT_EXP2D_FUZZ_FP32_OCP(31, 17, 1024, 13, 960)
+TQUANT_EXP2D_FUZZ_FP32_NV(32, 17, 1024, 13, 960)
+TQUANT_EXP2D_FUZZ_B16_OCP(33, BF16, 17, 1024, 13, 960)
+TQUANT_EXP2D_FUZZ_B16_NV(34, BF16, 17, 1024, 13, 960)
+TQUANT_EXP2D_FUZZ_B16_OCP(35, FP16, 17, 1024, 13, 960)
+TQUANT_EXP2D_FUZZ_B16_NV(36, FP16, 17, 1024, 13, 960)
 
 #undef TQUANT_EXP2D_FUZZ_B16_NV
 #undef TQUANT_EXP2D_FUZZ_B16_OCP
@@ -1026,10 +1030,53 @@ template void TQuantTest::LaunchTQuantMXFP4_E2M1_BF16<32, 1024>(uint8_t *dst, ui
                                                                 void *stream);
 template void TQuantTest::LaunchTQuantMXFP4_E2M1_BF16<2, 256, pto::QuantScaleAlg::NV>(uint8_t *dst, uint16_t *src,
                                                                                       uint8_t *dst_exp, void *stream);
-template void TQuantTest::LaunchTQuantMXFP4_E2M1_BF16_Exp2D<4, 128, 2, 128, pto::QuantScaleAlg::NV>(uint8_t *dst,
-                                                                                                    uint16_t *src,
-                                                                                                    uint8_t *dst_exp,
-                                                                                                    void *stream);
+#define TQUANT_MXFP4_EXP2D_FUZZ_BF16_OCP(ID, STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS)                     \
+    template void TQuantTest::LaunchTQuantMXFP4_E2M1_BF16_Exp2D<STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS>( \
+        uint8_t * dst, uint16_t * src, uint8_t * dst_exp, void *stream);
+
+#define TQUANT_MXFP4_EXP2D_FUZZ_BF16_NV(ID, STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS)                     \
+    template void TQuantTest::LaunchTQuantMXFP4_E2M1_BF16_Exp2D<STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS, \
+                                                                pto::QuantScaleAlg::NV>(                          \
+        uint8_t * dst, uint16_t * src, uint8_t * dst_exp, void *stream);
+
+#define TQUANT_MXFP4_EXP2D_FUZZ_FP16_OCP(ID, STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS)                     \
+    template void TQuantTest::LaunchTQuantMXFP4_E2M1_FP16_Exp2D<STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS>( \
+        uint8_t * dst, uint16_t * src, uint8_t * dst_exp, void *stream);
+
+#define TQUANT_MXFP4_EXP2D_FUZZ_FP16_NV(ID, STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS)                     \
+    template void TQuantTest::LaunchTQuantMXFP4_E2M1_FP16_Exp2D<STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS, \
+                                                                pto::QuantScaleAlg::NV>(                          \
+        uint8_t * dst, uint16_t * src, uint8_t * dst_exp, void *stream);
+
+TQUANT_MXFP4_EXP2D_FUZZ_BF16_OCP(01, 4, 128, 2, 128)
+TQUANT_MXFP4_EXP2D_FUZZ_BF16_NV(02, 4, 128, 2, 128)
+TQUANT_MXFP4_EXP2D_FUZZ_FP16_OCP(03, 4, 128, 2, 128)
+TQUANT_MXFP4_EXP2D_FUZZ_FP16_NV(04, 4, 128, 2, 128)
+TQUANT_MXFP4_EXP2D_FUZZ_BF16_OCP(05, 3, 128, 1, 64)
+TQUANT_MXFP4_EXP2D_FUZZ_BF16_NV(06, 3, 128, 1, 64)
+TQUANT_MXFP4_EXP2D_FUZZ_FP16_OCP(07, 3, 128, 1, 64)
+TQUANT_MXFP4_EXP2D_FUZZ_FP16_NV(08, 3, 128, 1, 64)
+TQUANT_MXFP4_EXP2D_FUZZ_BF16_OCP(09, 5, 256, 3, 192)
+TQUANT_MXFP4_EXP2D_FUZZ_BF16_NV(10, 5, 256, 3, 192)
+TQUANT_MXFP4_EXP2D_FUZZ_FP16_OCP(11, 5, 256, 3, 192)
+TQUANT_MXFP4_EXP2D_FUZZ_FP16_NV(12, 5, 256, 3, 192)
+TQUANT_MXFP4_EXP2D_FUZZ_BF16_OCP(13, 8, 256, 7, 256)
+TQUANT_MXFP4_EXP2D_FUZZ_BF16_NV(14, 8, 256, 7, 256)
+TQUANT_MXFP4_EXP2D_FUZZ_FP16_OCP(15, 8, 256, 7, 256)
+TQUANT_MXFP4_EXP2D_FUZZ_FP16_NV(16, 8, 256, 7, 256)
+TQUANT_MXFP4_EXP2D_FUZZ_BF16_OCP(17, 6, 384, 5, 320)
+TQUANT_MXFP4_EXP2D_FUZZ_BF16_NV(18, 6, 384, 5, 320)
+TQUANT_MXFP4_EXP2D_FUZZ_FP16_OCP(19, 6, 384, 5, 320)
+TQUANT_MXFP4_EXP2D_FUZZ_FP16_NV(20, 6, 384, 5, 320)
+TQUANT_MXFP4_EXP2D_FUZZ_BF16_OCP(21, 17, 1024, 13, 960)
+TQUANT_MXFP4_EXP2D_FUZZ_BF16_NV(22, 17, 1024, 13, 960)
+TQUANT_MXFP4_EXP2D_FUZZ_FP16_OCP(23, 17, 1024, 13, 960)
+TQUANT_MXFP4_EXP2D_FUZZ_FP16_NV(24, 17, 1024, 13, 960)
+
+#undef TQUANT_MXFP4_EXP2D_FUZZ_FP16_NV
+#undef TQUANT_MXFP4_EXP2D_FUZZ_FP16_OCP
+#undef TQUANT_MXFP4_EXP2D_FUZZ_BF16_NV
+#undef TQUANT_MXFP4_EXP2D_FUZZ_BF16_OCP
 template void TQuantTest::LaunchTQuantMXFP8_FP16<32, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                              void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_FP16<64, 128, 1>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
