@@ -285,6 +285,12 @@ AICORE inline void ReturnExpertRowsToOwners(MoeCombineShape shape, LocalWorkspac
     AcquireGmRangeBeforeRead(workspaceView.prevSumBeforeRank,
                              static_cast<uint32_t>(shape.ep * shape.expertPerRank * sizeof(int32_t)));
 
+    int32_t kCols = static_cast<int32_t>(shape.k);
+    VecTile<half, kDefaultTileCols> ping(1, kDefaultTileCols);
+    VecTile<half, kDefaultTileCols> pong(1, kDefaultTileCols);
+    TASSIGN(ping, kPingUbAddr);
+    TASSIGN(pong, kPongUbAddr);
+
     uint32_t chunkBase = 0;
     for (uint32_t segment = 0; segment < segmentCount; ++segment) {
         uint32_t src = segment / shape.expertPerRank;
@@ -300,9 +306,9 @@ AICORE inline void ReturnExpertRowsToOwners(MoeCombineShape shape, LocalWorkspac
             *(workspaceView.dispatchOffset + localExpert) +
             *(workspaceView.prevSumBeforeRank + static_cast<uint64_t>(src) * shape.expertPerRank + localExpert);
         int32_t dstStart =
-            globalExpert == 0 ?
-                0 :
-                *(workspaceView.cumsumPerExpert + static_cast<uint64_t>(src) * expertNumPadded + globalExpert - 1);
+            globalExpert == 0
+                ? 0
+                : *(workspaceView.cumsumPerExpert + static_cast<uint64_t>(src) * expertNumPadded + globalExpert - 1);
         for (uint32_t chunk = 0; chunk < chunkCount; ++chunk) {
             if (((chunkBase + chunk) % blockNum) != blockId) {
                 continue;
@@ -310,21 +316,13 @@ AICORE inline void ReturnExpertRowsToOwners(MoeCombineShape shape, LocalWorkspac
             uint32_t rowBegin = chunk * rowChunk;
             uint32_t rowsThisChunk = static_cast<uint32_t>(rows) - rowBegin;
             rowsThisChunk = rowsThisChunk < rowChunk ? rowsThisChunk : rowChunk;
-            int32_t kCols = static_cast<int32_t>(shape.k);
-            int64_t dstOffset =
-                static_cast<int64_t>(dstStart + static_cast<int32_t>(rowBegin)) * kCols;
-            int64_t srcOffset =
-                static_cast<int64_t>(srcStart + static_cast<int32_t>(rowBegin)) * kCols;
+            int64_t dstOffset = static_cast<int64_t>(dstStart + static_cast<int32_t>(rowBegin)) * kCols;
+            int64_t srcOffset = static_cast<int64_t>(srcStart + static_cast<int32_t>(rowBegin)) * kCols;
             GlobalNd<half> dstGlobal = MakeGlobal2D(
                 (src == myRank ? localPeer.ptrD : remotePeer.ptrD) + dstOffset,
                 static_cast<int32_t>(rowsThisChunk), kCols, kCols);
             GlobalNd<half> srcGlobal = MakeGlobal2D(
-                localExpertOutput + srcOffset,
-                static_cast<int32_t>(rowsThisChunk), kCols, kCols);
-            VecTile<half, kDefaultTileCols> ping(1, kDefaultTileCols);
-            VecTile<half, kDefaultTileCols> pong(1, kDefaultTileCols);
-            TASSIGN(ping, kPingUbAddr);
-            TASSIGN(pong, kPongUbAddr);
+                localExpertOutput + srcOffset, static_cast<int32_t>(rowsThisChunk), kCols, kCols);
             pto::comm::TPUT(dstGlobal, srcGlobal, ping, pong);
         }
         chunkBase += chunkCount;
@@ -335,7 +333,6 @@ AICORE inline void ReturnExpertRowsToOwners(MoeCombineShape shape, LocalWorkspac
         pipe_barrier(PIPE_ALL);
         pto::SYNCALL_SOFT_DCCI_RANGE(remotePeer.combineDoneSignal + myRank, 1);
         pto::comm::Signal sig = MakeSignal(remotePeer.combineDoneSignal + myRank);
-        (void)shape.signalValue;
         pto::comm::TNOTIFY(sig, 1, pto::comm::NotifyOp::AtomicAdd);
     }
 }
@@ -345,18 +342,16 @@ AICORE inline void RestoreOutputRows(MoeCombineShape shape, LocalPeerWindowView 
 {
     __gm__ float *probValues = reinterpret_cast<__gm__ float *>(probs);
     __gm__ half *output = reinterpret_cast<__gm__ half *>(outputC);
+    int32_t kCols = static_cast<int32_t>(shape.k);
     uint32_t tokenBegin = TokenShardBegin(shape.m, blockId, blockNum);
     uint32_t tokenEnd = TokenShardEnd(shape.m, blockId, blockNum);
     for (uint32_t token = tokenBegin; token < tokenEnd; ++token) {
-        for (int32_t col = 0; col < static_cast<int32_t>(shape.k); col += kDefaultTileCols) {
-            int32_t cols = static_cast<int32_t>(shape.k) - col < kDefaultTileCols ?
-                               static_cast<int32_t>(shape.k) - col :
-                               kDefaultTileCols;
+        int64_t tokenOffset = static_cast<int64_t>(token) * kCols;
+        for (int32_t col = 0; col < kCols; col += kDefaultTileCols) {
+            int32_t cols = kCols - col < kDefaultTileCols ? kCols - col : kDefaultTileCols;
             VecTile<half, kDefaultTileCols> zeroTile(1, cols);
             TASSIGN(zeroTile, kPingUbAddr);
-            GlobalNd<half> outputGlobal =
-                MakeGlobal2D(output + static_cast<int64_t>(token) * static_cast<int32_t>(shape.k) + col, 1, cols,
-                             static_cast<int32_t>(shape.k));
+            GlobalNd<half> outputGlobal = MakeGlobal2D(output + tokenOffset + col, 1, cols, kCols);
             TEXPANDS(zeroTile, static_cast<half>(0.0));
             set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -370,28 +365,25 @@ AICORE inline void RestoreOutputRows(MoeCombineShape shape, LocalPeerWindowView 
                 continue;
             }
             float prob = probValues[routeIndex];
-            for (int32_t col = 0; col < static_cast<int32_t>(shape.k); col += kDefaultTileCols) {
-                int32_t cols = static_cast<int32_t>(shape.k) - col < kDefaultTileCols ?
-                                   static_cast<int32_t>(shape.k) - col :
-                                   kDefaultTileCols;
+            int64_t ptrDOffset = static_cast<int64_t>(ptrDRow) * kCols;
+            for (int32_t col = 0; col < kCols; col += kDefaultTileCols) {
+                int32_t cols = kCols - col < kDefaultTileCols ? kCols - col : kDefaultTileCols;
                 VecTile<half, kDefaultTileCols> outTile(1, cols);
                 VecTile<half, kDefaultTileCols> ptrTile(1, cols);
                 TASSIGN(outTile, kPingUbAddr);
                 TASSIGN(ptrTile, kPongUbAddr);
-                GlobalNd<half> outGlobal =
-                    MakeGlobal2D(output + static_cast<int64_t>(token) * static_cast<int32_t>(shape.k) + col, 1, cols,
-                                 static_cast<int32_t>(shape.k));
-                __gm__ half *ptrChunk =
-                    localPeer.ptrD + static_cast<int64_t>(ptrDRow) * static_cast<int32_t>(shape.k) + col;
+                GlobalNd<half> outGlobal = MakeGlobal2D(output + tokenOffset + col, 1, cols, kCols);
+                __gm__ half *ptrChunk = localPeer.ptrD + ptrDOffset + col;
                 AcquireGmRangeBeforeRead(ptrChunk, static_cast<uint32_t>(cols) * sizeof(half));
-                GlobalNd<half> ptrGlobal = MakeGlobal2D(ptrChunk, 1, cols, static_cast<int32_t>(shape.k));
+                GlobalNd<half> ptrGlobal = MakeGlobal2D(ptrChunk, 1, cols, kCols);
                 pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> loadToAxpy;
                 pto::Event<pto::Op::TAXPY, pto::Op::TSTORE_VEC> axpyToStore;
                 TLOAD(ptrTile, ptrGlobal);
                 loadToAxpy = TLOAD(outTile, outGlobal);
                 axpyToStore = TAXPY(outTile, ptrTile, static_cast<half>(prob), loadToAxpy);
                 TSTORE(outGlobal, outTile, axpyToStore);
-                WaitStoreTileReusable();
+                set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+                wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
             }
         }
     }
