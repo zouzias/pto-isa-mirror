@@ -8,8 +8,6 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-// [AscendC Supported] Add AscendC Header.
-#include "kernel_operator.h"
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
 #include <iostream>
@@ -371,27 +369,6 @@ __global__ AICORE void TLoadKernel(__gm__ T *out, __gm__ T *src)
     } else if constexpr (format == 2) { // format = 2: NZ2NZ
         RunTLoadNZ2NZ<T, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
                       gWholeShape3, gWholeShape4>(out, src);
-    } else if constexpr (format == 3) { // format = 3: ND2NZ
-        RunTLoadND2NZ<T, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
-                      gWholeShape3, gWholeShape4>(out, src);
-    } else if constexpr (format == 4) { // format = 4: DN2NZ
-        RunTLoadDN2ZN<T, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
-                      gWholeShape3, gWholeShape4>(out, src);
-    } else if constexpr (format == 5) { // format = 5: NC1HWC02NC1HWC0
-        RunTLoad5HD<T, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
-                    gWholeShape3, gWholeShape4>(out, src);
-    } else if constexpr (format == 6) { // format = 6: C1HWNC02C1HWNC0
-        RunTLoadFractalZ5D<T, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
-                           gWholeShape3, gWholeShape4>(out, src);
-    } else if constexpr (format == 7) { // format = 7: FRACTALZ4D2FRACTALZ4D
-        RunTLoadFractalZ4D<T, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
-                           gWholeShape3, gWholeShape4>(out, src);
-    } else if constexpr (format == 8) { // format = 8: NCHW2NC1HWC0
-        RunTLoadNCHW2NC1HWC0<T, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
-                             gWholeShape3, gWholeShape4>(out, src);
-    } else if constexpr (format == 9) { // format = 9: NCHW2FZ
-        RunTLoadNCHW2FZ<T, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
-                        gWholeShape3, gWholeShape4>(out, src);
     }
 }
 
@@ -417,74 +394,24 @@ template void LaunchTLoad<0, float, 1, 1, 1, 3, 128, 3, 3, 3, 32, 128>(float *ou
 template void LaunchTLoad<0, int16_t, 2, 2, 1, 2, 32, 3, 3, 3, 111, 64>(int16_t *out, int16_t *src, void *stream);
 template void LaunchTLoad<0, int8_t, 1, 2, 1, 11, 32, 1, 3, 2, 93, 32>(int8_t *out, int8_t *src, void *stream);
 template void LaunchTLoad<0, int8_t, 1, 1, 1, 1, 201, 1, 1, 1, 1, 201>(int8_t *out, int8_t *src, void *stream);
+template void LaunchTLoad<0, int64_t, 1, 1, 1, 3, 128, 3, 3, 3, 32, 128>(int64_t *out, int64_t *src, void *stream);
+template void LaunchTLoad<0, uint64_t, 2, 2, 1, 2, 32, 3, 3, 3, 111, 64>(uint64_t *out, uint64_t *src, void *stream);
+template void LaunchTLoad<0, int64_t, 1, 2, 1, 11, 32, 1, 3, 2, 93, 32>(int64_t *out, int64_t *src, void *stream);
+template void LaunchTLoad<0, uint16_t, 1, 1, 1, 128, 128, 1, 1, 1, 256, 256>(uint16_t *out, uint16_t *src,
+                                                                             void *stream);
+
 template void LaunchTLoad<1, float, 1, 1, 1, 128, 3, 3, 3, 3, 128, 32>(float *out, float *src, void *stream);
 template void LaunchTLoad<1, int16_t, 2, 2, 1, 32, 2, 3, 3, 3, 64, 111>(int16_t *out, int16_t *src, void *stream);
 template void LaunchTLoad<1, int8_t, 1, 2, 1, 32, 11, 1, 3, 2, 32, 93>(int8_t *out, int8_t *src, void *stream);
 template void LaunchTLoad<1, float, 1, 1, 1, 156, 1, 1, 1, 1, 156, 1>(float *out, float *src, void *stream);
-template void LaunchTLoad<2, float, 1, 5, 21, 16, 8, 1, 5, 21, 16, 8>(float *out, float *src, void *stream);
-template void LaunchTLoad<2, int16_t, 2, 15, 11, 16, 16, 3, 23, 13, 16, 16>(int16_t *out, int16_t *src, void *stream);
-template void LaunchTLoad<2, int8_t, 1, 16, 32, 16, 32, 1, 32, 32, 16, 32>(int8_t *out, int8_t *src, void *stream);
-template void LaunchTLoad<3, float, 1, 1, 1, 49, 35, 1, 1, 1, 49, 35>(float *out, float *src, void *stream);
-template void LaunchTLoad<3, int16_t, 1, 1, 1, 155, 250, 1, 1, 1, 752, 1000>(int16_t *out, int16_t *src, void *stream);
-template void LaunchTLoad<3, int8_t, 1, 1, 1, 1023, 511, 1, 1, 1, 1024, 1024>(int8_t *out, int8_t *src, void *stream);
-template void LaunchTLoad<3, uint16_t, 1, 1, 1, 1023, 51, 1, 1, 1, 1024, 1024>(uint16_t *out, uint16_t *src,
-                                                                               void *stream);
-template void LaunchTLoad<0, uint16_t, 1, 1, 1, 128, 128, 1, 1, 1, 256, 256>(uint16_t *out, uint16_t *src,
-                                                                             void *stream);
-template void LaunchTLoad<1, uint16_t, 1, 2, 2, 64, 311, 4, 3, 3, 256, 400>(uint16_t *out, uint16_t *src,
-                                                                             void *stream);
-template void LaunchTLoad<2, uint16_t, 2, 4, 5, 16, 16, 7, 7, 7, 16, 16>(uint16_t *out, uint16_t *src, void *stream);
-template void LaunchTLoad<3, uint16_t, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1>(uint16_t *out, uint16_t *src, void *stream);
-template void LaunchTLoad<3, uint16_t, 1, 1, 1, 1, 1, 1, 1, 1, 16, 16>(uint16_t *out, uint16_t *src, void *stream);
-template void LaunchTLoad<3, uint16_t, 1, 1, 1, 256, 1024, 1, 1, 1, 256, 1024>(uint16_t *out, uint16_t *src,
-                                                                               void *stream);
-template void LaunchTLoad<0, int64_t, 1, 1, 1, 3, 128, 3, 3, 3, 32, 128>(int64_t *out, int64_t *src, void *stream);
-template void LaunchTLoad<0, uint64_t, 2, 2, 1, 2, 32, 3, 3, 3, 111, 64>(uint64_t *out, uint64_t *src, void *stream);
-template void LaunchTLoad<0, int64_t, 1, 2, 1, 11, 32, 1, 3, 2, 93, 32>(int64_t *out, int64_t *src, void *stream);
 template void LaunchTLoad<1, uint64_t, 1, 1, 1, 128, 3, 3, 3, 3, 128, 32>(uint64_t *out, uint64_t *src, void *stream);
 template void LaunchTLoad<1, int64_t, 2, 2, 1, 32, 2, 3, 3, 3, 64, 111>(int64_t *out, int64_t *src, void *stream);
 template void LaunchTLoad<1, uint64_t, 1, 2, 1, 32, 11, 1, 3, 2, 32, 93>(uint64_t *out, uint64_t *src, void *stream);
-template void LaunchTLoad<4, uint16_t, 1, 1, 1, 256, 1024, 1, 1, 1, 256, 1024>(uint16_t *out, uint16_t *src,
-                                                                               void *stream);
-template void LaunchTLoad<4, float, 1, 1, 1, 49, 35, 1, 1, 1, 49, 35>(float *out, float *src, void *stream);
-template void LaunchTLoad<4, int16_t, 1, 1, 1, 155, 250, 1, 1, 1, 752, 1000>(int16_t *out, int16_t *src, void *stream);
-template void LaunchTLoad<4, int8_t, 1, 1, 1, 1023, 511, 1, 1, 1, 1024, 1024>(int8_t *out, int8_t *src, void *stream);
+template void LaunchTLoad<1, uint16_t, 1, 2, 2, 64, 311, 4, 3, 3, 256, 400>(uint16_t *out, uint16_t *src,
+                                                                             void *stream);
 
-template void LaunchTLoad<5, int8_t, 2, 3, 16, 128, 32, 3, 4, 1024, 1024, 32>(int8_t *out, int8_t *src, void *stream);
-template void LaunchTLoad<5, int8_t, 3, 4, 128, 8, 32, 3, 4, 128, 128, 32>(int8_t *out, int8_t *src, void *stream);
-template void LaunchTLoad<5, int8_t, 3, 4, 8, 128, 32, 3, 8, 8, 128, 32>(int8_t *out, int8_t *src, void *stream);
-template void LaunchTLoad<5, uint16_t, 1, 16, 10, 100, 16, 1, 16, 100, 100, 16>(uint16_t *out, uint16_t *src,
-                                                                                void *stream);
-template void LaunchTLoad<5, uint16_t, 10, 16, 16, 2, 16, 256, 16, 100, 16, 16>(uint16_t *out, uint16_t *src,
-                                                                                void *stream);
-template void LaunchTLoad<5, uint16_t, 1, 1, 1, 8192, 16, 8, 16, 16, 8192, 16>(uint16_t *out, uint16_t *src,
-                                                                               void *stream);
-template void LaunchTLoad<5, float, 1, 1, 112, 112, 8, 2, 3, 224, 224, 8>(float *out, float *src, void *stream);
+template void LaunchTLoad<2, float, 1, 5, 21, 16, 8, 1, 5, 21, 16, 8>(float *out, float *src, void *stream);
+template void LaunchTLoad<2, int16_t, 2, 15, 11, 16, 16, 3, 23, 13, 16, 16>(int16_t *out, int16_t *src, void *stream);
+template void LaunchTLoad<2, int8_t, 1, 16, 32, 16, 32, 1, 32, 32, 16, 32>(int8_t *out, int8_t *src, void *stream);
+template void LaunchTLoad<2, uint16_t, 2, 4, 5, 16, 16, 7, 7, 7, 16, 16>(uint16_t *out, uint16_t *src, void *stream);
 
-template void LaunchTLoad<6, uint16_t, 1, 7, 7, 20, 16, 3, 7, 7, 100, 16>(uint16_t *out, uint16_t *src, void *stream);
-template void LaunchTLoad<6, uint16_t, 128, 7, 7, 2, 16, 256, 7, 7, 16, 16>(uint16_t *out, uint16_t *src, void *stream);
-template void LaunchTLoad<6, uint16_t, 192, 3, 3, 8, 16, 256, 3, 3, 8, 16>(uint16_t *out, uint16_t *src, void *stream);
-template void LaunchTLoad<6, int8_t, 2, 3, 3, 64, 32, 3, 3, 3, 128, 32>(int8_t *out, int8_t *src, void *stream);
-template void LaunchTLoad<6, int8_t, 3, 5, 5, 128, 32, 8, 5, 5, 128, 32>(int8_t *out, int8_t *src, void *stream);
-template void LaunchTLoad<6, float, 96, 7, 7, 2, 8, 256, 7, 7, 256, 8>(float *out, float *src, void *stream);
-
-template void LaunchTLoad<7, uint16_t, 1, 49, 7, 16, 16, 1, 980, 32, 16, 16>(uint16_t *out, uint16_t *src,
-                                                                              void *stream);
-template void LaunchTLoad<7, uint16_t, 1, 81, 3, 16, 16, 1, 90, 3, 16, 16>(uint16_t *out, uint16_t *src, void *stream);
-template void LaunchTLoad<7, int8_t, 1, 63, 3, 16, 32, 1, 63, 9, 16, 32>(int8_t *out, int8_t *src, void *stream);
-template void LaunchTLoad<7, int8_t, 1, 125, 3, 16, 32, 1, 250, 5, 16, 32>(int8_t *out, int8_t *src, void *stream);
-template void LaunchTLoad<7, float, 1, 256, 3, 16, 8, 1, 4704, 7, 16, 8>(float *out, float *src, void *stream);
-
-template void LaunchTLoad<8, uint16_t, 1, 1, 16, 2, 16, 1, 1, 16, 2, 16>(uint16_t *out, uint16_t *src, void *stream);
-template void LaunchTLoad<8, int8_t, 1, 1, 32, 2, 32, 1, 1, 32, 2, 32>(int8_t *out, int8_t *src, void *stream);
-template void LaunchTLoad<8, float, 1, 1, 8, 2, 8, 1, 1, 8, 2, 8>(float *out, float *src, void *stream);
-template void LaunchTLoad<8, uint16_t, 1, 1, 32, 28, 28, 1, 1, 64, 56, 56>(uint16_t *out, uint16_t *src, void *stream);
-template void LaunchTLoad<8, uint16_t, 1, 1, 256, 14, 8, 1, 1, 256, 14, 14>(uint16_t *out, uint16_t *src, void *stream);
-template void LaunchTLoad<8, uint16_t, 1, 1, 256, 7, 7, 1, 1, 512, 7, 7>(uint16_t *out, uint16_t *src, void *stream);
-
-template void LaunchTLoad<9, uint16_t, 1, 16, 16, 3, 3, 1, 16, 16, 3, 3>(uint16_t *out, uint16_t *src, void *stream);
-template void LaunchTLoad<9, int8_t, 1, 32, 32, 3, 3, 1, 32, 32, 3, 3>(int8_t *out, int8_t *src, void *stream);
-template void LaunchTLoad<9, float, 1, 16, 8, 3, 3, 1, 16, 8, 3, 3>(float *out, float *src, void *stream);
-template void LaunchTLoad<9, uint16_t, 1, 32, 64, 3, 3, 1, 64, 64, 3, 3>(uint16_t *out, uint16_t *src, void *stream);
-template void LaunchTLoad<9, uint16_t, 1, 256, 256, 1, 1, 1, 512, 256, 1, 1>(uint16_t *out, uint16_t *src, void *stream);
-template void LaunchTLoad<9, uint16_t, 1, 32, 128, 3, 3, 1, 512, 512, 3, 3>(uint16_t *out, uint16_t *src, void *stream);
