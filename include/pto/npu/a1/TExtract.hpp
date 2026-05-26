@@ -353,11 +353,6 @@ PTO_INTERNAL void TExtractToBTransposeCompact(__cb__ DstType *dstAddr, __cbuf__ 
         uint16_t startIdx0 = (indexRow >> (SHIFT_BLOCK_LEN + fractNum - 1)) +
                              (indexCol * sizeof(SrcType) * srcRowNum >> SHIFT_BLOCK_BYTE);
         uint16_t dstAddrStride = CeilDivision(dstValidCol, FRACTAL_NZ_ROW) * CUBE_BLOCK_SIZE;
-        // 暂不支持
-        // for (uint16_t i = 0; i < dstRowNum; i++) {
-        //     load_cbuf_to_cb_transpose(dstAddr, srcAddr, startIdx0 + i, dstColNum, srcRowNum, dstGap, false, 0);
-        //     dstAddr += dstAddrStride;
-        // }
     } else {
         // b16&b32 Load3DV2
         constexpr int config = srcRow | (1u << 16);
