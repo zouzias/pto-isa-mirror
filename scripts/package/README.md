@@ -4,11 +4,13 @@ Packaging and release scripts/templates for PTO Tile Lib. This directory is used
 
 ## Layout (High Level)
 
-- `package.py`: Main packaging entry script
 - `pto_isa/`: Package templates and helper scripts specific to PTO Tile Lib
-- `latest_manager/`: Helpers for managing “latest” package versions
 - `module/`: Module-level packaging descriptors
-- `common/`: Shared helpers and configuration fragments
+
+Common helpers (`package.py`, `install_common_parser.sh`, install/cleanup
+fragments, etc.) are reused from the CANN engineering cmake repo
+(`https://gitcode.com/cann/cmake`) and pulled in at configure time via
+`cmake/fetch_cann_cmake.cmake`.
 
 ## Build and Install
 
