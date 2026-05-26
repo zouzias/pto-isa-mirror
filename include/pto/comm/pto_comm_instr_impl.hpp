@@ -15,10 +15,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Each instruction is implemented directly using Ascend intrinsics
 #if defined(__CCE_AICORE__) && !(defined(__CPU_SIM) || defined(__COSTMODEL))
 
-#ifdef PTO_NPU_ARCH_310P3
+#ifdef PTO_NPU_ARCH_A1
 // Point-to-Point Communication (Synchronous)
-#include "pto/comm/310p3/TPut.hpp"
-#include "pto/comm/310p3/TGet.hpp"
+#include "pto/comm/a1/TPut.hpp"
+#include "pto/comm/a1/TGet.hpp"
 #endif
 
 #ifdef PTO_NPU_ARCH_A2A3

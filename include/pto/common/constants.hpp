@@ -161,7 +161,7 @@ AICORE constexpr PadValue PadValueCustom(half value)
                                  static_cast<uint64_t>(__builtin_bit_cast(uint16_t, value)));
 }
 
-#if !defined(PTO_NPU_ARCH_310P3)
+#if !defined(PTO_NPU_ARCH_A1)
 // NPU aicore compiler has bfloat16_t as built-in type
 AICORE constexpr PadValue PadValueCustom(bfloat16_t value)
 {

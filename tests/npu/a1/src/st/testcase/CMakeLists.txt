@@ -7,32 +7,32 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
-function(pto_st NAME)	 
-    add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)	 
-    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} -std=c++17)	 
-    target_include_directories(${NAME}_kernel PRIVATE 	 
-        ${ASCEND_HOME_PATH}/pkg_inc/	 
-        ${ASCEND_HOME_PATH}/pkg_inc/profiling/	 
-        ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime	 
-    )	 
-    target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)	 
-      
-    add_executable(${NAME} main.cpp)	 
-    target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})	 
-    target_include_directories(${NAME} PRIVATE	 
-        ${PROJECT_SOURCE_DIR}/../../../../common	 
-    )	 
-    target_link_directories(${NAME} PUBLIC	 
-        ${ASCEND_HOME_PATH}/lib64	 
-        ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib	 
-    )	 
-    target_link_libraries(${NAME} PRIVATE	 
-        ${NAME}_kernel	 
-        $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>	 
-        $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:ai_runtime>>	 
-        $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>	 
-        stdc++ ascendcl m tiling_api platform c_sec dl nnopbase GTest::gtest GTest::gtest_main pthread 
-    ) 
+function(pto_st NAME)
+    add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
+    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} -std=c++17)
+    target_include_directories(${NAME}_kernel PRIVATE
+        ${ASCEND_HOME_PATH}/pkg_inc/
+        ${ASCEND_HOME_PATH}/pkg_inc/profiling/
+        ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
+    )
+    target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
+
+    add_executable(${NAME} main.cpp)
+    target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
+    target_include_directories(${NAME} PRIVATE
+        ${PROJECT_SOURCE_DIR}/../../../../common
+    )
+    target_link_directories(${NAME} PUBLIC
+        ${ASCEND_HOME_PATH}/lib64
+        ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
+    )
+    target_link_libraries(${NAME} PRIVATE
+        ${NAME}_kernel
+        $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
+        $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:ai_runtime>>
+        $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
+        stdc++ ascendcl m tiling_api platform c_sec dl nnopbase GTest::gtest GTest::gtest_main pthread
+    )
 endfunction()
 
 function(pto_st_npu NAME)
@@ -69,7 +69,7 @@ function(pto_st_npu NAME)
     )
 endfunction()
 
-function(pto_test NAME)	
+function(pto_test NAME)
     if(RUN_MODE STREQUAL "npu")
         pto_st_npu(${NAME})
     else()
@@ -98,14 +98,14 @@ set(ALL_TESTCASES
     tload
     tload_gm2mat
     tmul
-    tstore 
+    tstore
     tsub
 )
 if (NOT AUTO_MODE)
   # TPUSH and TPOP currently directly use TASSIGN inside their implementations,
-  # which doesn't work for auto mode. They need to be disabled for auto mode 
+  # which doesn't work for auto mode. They need to be disabled for auto mode
   # until rewritten to adapt to auto mode
-  list(APPEND ALL_TESTCASES tpushpop_cv tpushpop_vc)
+  list(APPEND ALL_TESTCASES)
 endif()
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))

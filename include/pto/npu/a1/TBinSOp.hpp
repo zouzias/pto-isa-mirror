@@ -8,7 +8,7 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TBINS_HPP_310P3
-#define TBINS_HPP_310P3
+#ifndef TBINS_HPP_A1
+#define TBINS_HPP_A1
 #include "pto/npu/a2a3/TBinSOp.hpp"
 #endif
