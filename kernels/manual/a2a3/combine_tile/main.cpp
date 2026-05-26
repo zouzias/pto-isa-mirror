@@ -123,6 +123,7 @@ struct DeviceBuffers {
     void *outputC = nullptr;
     void *workspace = nullptr;
     void *expertOutput = nullptr;
+    void *sdmaWorkspace = nullptr;
 };
 
 struct RuntimeState {
@@ -359,6 +360,9 @@ void AllocateLocalBuffers(const DispatchCombineTileArgs &args, const WorkspaceLa
              "rank " + std::to_string(state->rank) + " aclrtMalloc workspace");
     CheckAcl(aclrtMalloc(&state->buffers.expertOutput, expertOutputBytes, ACL_MEM_MALLOC_HUGE_FIRST),
              "rank " + std::to_string(state->rank) + " aclrtMalloc expertOutput");
+    constexpr size_t kSdmaWorkspaceBytes = 4 * 1024;
+    CheckAcl(aclrtMalloc(&state->buffers.sdmaWorkspace, kSdmaWorkspaceBytes, ACL_MEM_MALLOC_HUGE_FIRST),
+             "rank " + std::to_string(state->rank) + " aclrtMalloc sdmaWorkspace");
     state->buffersAllocated = true;
     if (verbose) {
         PrintStage(state->rank, "allocate_buffers", "done");
@@ -621,7 +625,8 @@ void RunCombine(const DispatchCombineTileArgs &args, const PeerWindowLayout &pee
         launchShape, state->rank, reinterpret_cast<uint8_t *>(state->buffers.expertOutput),
         reinterpret_cast<uint8_t *>(state->buffers.probs), reinterpret_cast<uint8_t *>(state->buffers.outputC),
         reinterpret_cast<uint8_t *>(state->hccl.peerWindow), reinterpret_cast<uint8_t *>(state->hccl.deviceContext),
-        reinterpret_cast<uint8_t *>(state->buffers.workspace), state->computeStream, launchBlocks);
+        reinterpret_cast<uint8_t *>(state->buffers.workspace), reinterpret_cast<uint8_t *>(state->buffers.sdmaWorkspace),
+        state->computeStream, launchBlocks);
     CheckAcl(aclrtSynchronizeStream(state->computeStream),
              "rank " + std::to_string(state->rank) + " combine stream sync");
     MpiBarrier(&state->mpi);
@@ -750,6 +755,9 @@ void Cleanup(RuntimeState *state)
         }
         if (state->buffers.expertOutput != nullptr) {
             aclrtFree(state->buffers.expertOutput);
+        }
+        if (state->buffers.sdmaWorkspace != nullptr) {
+            aclrtFree(state->buffers.sdmaWorkspace);
         }
         state->buffers = DeviceBuffers{};
         state->buffersAllocated = false;

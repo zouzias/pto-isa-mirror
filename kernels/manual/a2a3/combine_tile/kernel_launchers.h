@@ -19,7 +19,8 @@ namespace dispatch_combine_tile {
 
 void LaunchDispatchCombineTileCombine(DispatchCombineTileShape shape, uint32_t myRank, uint8_t *expertOutput,
                                       uint8_t *probs, uint8_t *outputC, uint8_t *peerWindow, uint8_t *hcclCtx,
-                                      uint8_t *workspace, void *stream, uint32_t launchBlockCount);
+                                      uint8_t *workspace, uint8_t *sdmaWorkspace, void *stream,
+                                      uint32_t launchBlockCount);
 
 } // namespace dispatch_combine_tile
 
