@@ -345,7 +345,7 @@ void run_tfa()
 
         std::vector<aclFloat16> golden_p_half(S0 * S1);
         size_t p_file_size = 0;
-        ReadFile(GetGoldenDir() + "/p.bin", p_file_size, golden_p_half.data(),
+        ReadFile(GetGoldenDir() + "/p_nz.bin", p_file_size, golden_p_half.data(),
                  golden_p_half.size() * sizeof(aclFloat16));
 
         std::vector<float> golden_p(golden_p_half.size());

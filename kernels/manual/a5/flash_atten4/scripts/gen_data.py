@@ -36,11 +36,62 @@ NUM_VEC_CORES = 2
 VEC_CORE_SIZE = WARP_SIZE // NUM_VEC_CORES
 
 
+def nd_to_nzplus1_readback(nd_fp16: np.ndarray) -> np.ndarray:
+    """Mimic reading an ND tile back from NZ+1 raw memory."""
+    rows, cols = nd_fp16.shape
+    assert cols % 16 == 0, "Vec width must be 16-aligned for NZ packing"
+    blocks_per_row = cols // 16
+    nd_blocks = nd_fp16.reshape(rows, blocks_per_row, 16)
+    nz_logical = nd_blocks.transpose(1, 0, 2)  # [blocks_per_row, rows, 16]
+    pad = np.zeros((blocks_per_row, 1, 16), dtype=nd_fp16.dtype)
+    nz_plus_one = np.concatenate([nz_logical, pad], axis=1)
+    raw = nz_plus_one.reshape(-1)
+    return raw[: rows * cols].reshape(rows, cols)
+
+
+def build_p_nz(
+    soft_fp16: np.ndarray, s0: int, s1: int, cube_s0: int, cube_s1: int, tile_s1: int, vec_cores: int
+) -> np.ndarray:
+    """Build p_nz with the same logical [S0, S1] indexing used by host checks."""
+    assert s0 % cube_s0 == 0, "S0 must be divisible by CUBE_S0"
+    assert s1 % tile_s1 == 0, "S1 must be divisible by TILE_S1"
+    assert tile_s1 % cube_s1 == 0, "TILE_S1 must be divisible by CUBE_S1"
+    tile_factor = tile_s1 // cube_s1
+    vec_s0 = cube_s0 // vec_cores // tile_factor
+    assert cube_s0 % (vec_cores * tile_factor) == 0, "Vec rows must divide CUBE_S0"
+
+    p_nz = np.zeros_like(soft_fp16, dtype=np.float16)
+    num_blocks = s0 // cube_s0
+    num_tiles = s1 // tile_s1
+
+    for b in range(num_blocks):
+        block_base = b * cube_s0
+        for ti in range(num_tiles):
+            tile_base = ti * tile_s1
+            for sub_col in range(tile_factor):
+                c_base = tile_base + sub_col * cube_s1
+                for vec_core in range(vec_cores):
+                    for row_slice in range(tile_factor):
+                        row_off = vec_core * (cube_s0 // vec_cores) + row_slice * vec_s0
+                        src = soft_fp16[
+                            block_base + row_off : block_base + row_off + vec_s0,
+                            c_base : c_base + cube_s1,
+                        ].T.copy()
+                        nz_readback = nd_to_nzplus1_readback(src)
+                        p_nz[
+                            block_base + row_off : block_base + row_off + vec_s0,
+                            c_base : c_base + cube_s1,
+                        ] = nz_readback.T
+
+    return p_nz
+
+
 def gen_case(
     path,
     s0,
     s1,
     head_size=HEAD_SIZE,
+    cube_s0=None,
     cube_s1=128,
     tile_s1=TILE_S1_DEFAULT,
     is_causal=False,
@@ -48,6 +99,8 @@ def gen_case(
     rescale_threshold=RESCALE_THRESHOLD,
 ):
     # generate inputs in FP16, compute golden in FP32
+    if cube_s0 is None:
+        cube_s0 = s0
     q_fp32 = (np.random.randn(s0, head_size).astype(np.float16) * 1.5).astype(np.float32)
     k_fp32 = (np.random.randn(head_size, s1).astype(np.float16) * 1.5).astype(np.float32)
     q = q_fp32.astype(np.float16)
@@ -141,6 +194,8 @@ def gen_case(
     # p saved as FP16 (store raw exponentials per tile as half)
     soft = (full_exp).astype(np.float16)
     soft.tofile(os.path.join(path, 'p.bin'))
+    p_nz = build_p_nz(soft, s0, s1, cube_s0, cube_s1, tile_s1, NUM_VEC_CORES)
+    p_nz.tofile(os.path.join(path, 'p_nz.bin'))
     tmp_float_exp.tofile(os.path.join(path, 'p_fp32.bin'))
 
     # generate random V (S1 x HEAD_SIZE) and compute y = soft (S0 x S1) dot V (S1 x HEAD_SIZE)
@@ -292,34 +347,55 @@ if __name__ == '__main__':
         if len(parts) < 3:
             raise ValueError("Case entry must be HEAD_SIZE,S0,S1 or HEAD_SIZE,S0,S1,CUBE_S0[,TILE_S1]")
         head, s0, s1 = map(int, parts[:3])
-        # optional CUBE_S0 (ignored for data layout but validated) and optional TILE_S1; CUBE_S1 is fixed to 128
+        # optional CUBE_S0 and optional CUBE_S1/TILE_S1
         cube_s0 = int(parts[3]) if len(parts) >= 4 else s0
         if s0 % cube_s0 != 0:
             raise ValueError("S0 must be divisible by CUBE_S0")
-        tile_s1 = int(parts[4]) if len(parts) >= 5 else TILE_S1_DEFAULT
-        cube_s1 = 128
-        return head, s0, s1, cube_s1, tile_s1
+        if len(parts) >= 6:
+            cube_s1 = int(parts[4])
+            tile_s1 = int(parts[5])
+        else:
+            tile_s1 = int(parts[4]) if len(parts) >= 5 else TILE_S1_DEFAULT
+            cube_s1 = 128
+        return head, s0, s1, cube_s0, cube_s1, tile_s1
 
     cases = []
     if args.cases:
         for entry in args.cases:
-            head, s0, s1, cube_s1, tile_s1 = parse_case_entry(entry)
-            cases.append((f"case_float_H_{head}_S0_{s0}_S1_{s1}", (s0, head, s1, cube_s1, tile_s1)))
+            head, s0, s1, cube_s0, cube_s1, tile_s1 = parse_case_entry(entry)
+            cases.append((f"case_float_H_{head}_S0_{s0}_S1_{s1}", (s0, head, s1, cube_s0, cube_s1, tile_s1)))
     elif args.head_size and args.s0 and args.s1:
-        cases.append((f"case_float_H_{args.head_size}_S0_{args.s0}_S1_{args.s1}", (args.s0, args.head_size, args.s1, 128, TILE_S1_DEFAULT)))
+        cases.append(
+            (
+                f"case_float_H_{args.head_size}_S0_{args.s0}_S1_{args.s1}",
+                (args.s0, args.head_size, args.s1, args.s0, 128, TILE_S1_DEFAULT),
+            )
+        )
     elif args.cases_json or default_json.exists():
         json_path = Path(args.cases_json) if args.cases_json else default_json
         payload = json.loads(json_path.read_text())
         for entry in payload:
-            cases.append((entry["name"], (entry["s0"], entry["head_size"], entry["s1"], entry.get("cube_s1", 128), entry.get("tile_s1", TILE_S1_DEFAULT))))
+            cases.append(
+                (
+                    entry["name"],
+                    (
+                        entry["s0"],
+                        entry["head_size"],
+                        entry["s1"],
+                        entry.get("cube_s0", entry["s0"]),
+                        entry.get("cube_s1", 128),
+                        entry.get("tile_s1", TILE_S1_DEFAULT),
+                    ),
+                )
+            )
     else:
         cases = [
-            ('case_float_H_128_S0_128_S1_1024', (128, HEAD_SIZE, 1024, 128, TILE_S1_DEFAULT)),
-            ('case_float_H_128_S0_128_S1_2048', (128, HEAD_SIZE, 2048, 128, TILE_S1_DEFAULT)),
-            ('case_float_H_128_S0_128_S1_8192', (128, HEAD_SIZE, 8192, 128, TILE_S1_DEFAULT)),
-            ('case_float_H_128_S0_512_S1_1024', (512, HEAD_SIZE, 1024, 128, TILE_S1_DEFAULT)),
-            ('case_float_H_128_S0_512_S1_2048', (512, HEAD_SIZE, 2048, 128, TILE_S1_DEFAULT)),
-            ('case_float_H_128_S0_512_S1_8192', (512, HEAD_SIZE, 8192, 128, TILE_S1_DEFAULT)),
+            ('case_float_H_128_S0_128_S1_1024', (128, HEAD_SIZE, 1024, 128, 128, TILE_S1_DEFAULT)),
+            ('case_float_H_128_S0_128_S1_2048', (128, HEAD_SIZE, 2048, 128, 128, TILE_S1_DEFAULT)),
+            ('case_float_H_128_S0_128_S1_8192', (128, HEAD_SIZE, 8192, 128, 128, TILE_S1_DEFAULT)),
+            ('case_float_H_128_S0_512_S1_1024', (512, HEAD_SIZE, 1024, 512, 128, TILE_S1_DEFAULT)),
+            ('case_float_H_128_S0_512_S1_2048', (512, HEAD_SIZE, 2048, 512, 128, TILE_S1_DEFAULT)),
+            ('case_float_H_128_S0_512_S1_8192', (512, HEAD_SIZE, 8192, 512, 128, TILE_S1_DEFAULT)),
         ]
 
     if args.case_name:
@@ -331,14 +407,14 @@ if __name__ == '__main__':
             cases = filtered
         else:
             try:
-                head, s0, s1, cube_s1, tile_s1 = parse_case_entry(target)
+                head, s0, s1, cube_s0, cube_s1, tile_s1 = parse_case_entry(target)
                 synthetic_name = f"case_float_H_{head}_S0_{s0}_S1_{s1}"
-                cases = [(synthetic_name, (s0, head, s1, cube_s1, tile_s1))]
+                cases = [(synthetic_name, (s0, head, s1, cube_s0, cube_s1, tile_s1))]
             except Exception:
                 raise ValueError(f"Requested case '{args.case_name}' not found in configured cases")
 
     build_dir = script_root / "build"
-    for name, (s0, head_size, s1, cube_s1, tile_s1) in cases:
+    for name, (s0, head_size, s1, cube_s0, cube_s1, tile_s1) in cases:
         case_dir = build_dir / name
         os.makedirs(case_dir, exist_ok=True)
         gen_case(
@@ -346,6 +422,7 @@ if __name__ == '__main__':
             s0,
             s1,
             head_size,
+            cube_s0,
             cube_s1,
             tile_s1,
             bool(args.causal_mask),

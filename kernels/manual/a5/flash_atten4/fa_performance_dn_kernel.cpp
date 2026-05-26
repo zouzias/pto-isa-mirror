@@ -779,19 +779,15 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         __gm__ half *p_ptr = p_tile_fifo + base_elems + row_offset;
 
         for (int sub_col = 0; sub_col < static_cast<int>(kTileFactor); ++sub_col) {
-            // using TileDataH_Sub_ND = Tile<TileType::Vec, half, Vec_S0, Cube_S1, BLayout::RowMajor, Vec_S0, Cube_S1>;
-            using TileDataH_Sub_ND = Tile<TileType::Vec, half, Cube_S1, Vec_S0, BLayout::RowMajor, Cube_S1, Vec_S0>;
-            TileDataH_Sub_ND xExpSubND;
-            // const uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * Cube_S1 * sizeof(half));
-            const uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * Cube_S1 * Vec_S0 * sizeof(half));
-            TASSIGN(xExpSubND, (uint64_t)x_expT.data() + col_byte_offset);
-
             if constexpr (INTERMEDIATE_CHECK) {
+                constexpr uint32_t NzBufRows = Cube_S1 + 1;
+                // nzConvBuffer is NZ+1 (row-plus-one). Move by NzBufRows to dump each sub-col correctly.
+                const uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * NzBufRows * Vec_S0 * sizeof(half));
                 __gm__ half *p_ptr_sub =
                     p_ptr + static_cast<size_t>(sub_col) * static_cast<size_t>(Cube_S1) * static_cast<size_t>(Cube_S0);
                 GlobalPTileHalfSub pTileHalfSub((__gm__ half *)(p_ptr_sub));
                 TileDataH_Sub xExpSub;
-                TASSIGN(xExpSub, (uint64_t)x_expT.data() + col_byte_offset);
+                TASSIGN(xExpSub, (uint64_t)nzConvBuffer.data() + col_byte_offset);
                 TSTORE(pTileHalfSub, xExpSub);
                 set_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
                 wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
@@ -800,9 +796,10 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
             // Softmax vsstb already filled nzConvBuffer (NZ+1); skip ND->NZ TMOV before TINSERT.
             set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-
+            
+            uint16_t row_offset = static_cast<uint16_t>(sub_col * Cube_S1);
             uint16_t col_offset = static_cast<uint16_t>(Vec_S0 * static_cast<size_t>(get_subblockid()));
-            TINSERT(pMatTile, nzConvBuffer, static_cast<uint16_t>(0), col_offset);
+            TINSERT(pMatTile, nzConvBuffer, row_offset, col_offset);
         }
 #if defined MARK_STAMP_DATA_PIPE
         bisheng::cce::mark_stamp<PIPE_MTE3>(P_DONE * 1000 + tile_id);
