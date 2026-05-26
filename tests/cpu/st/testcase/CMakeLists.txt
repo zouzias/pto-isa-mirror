@@ -110,6 +110,7 @@ tpow
 tpows
 tprefetch
 tprelu
+tprint
 tpushpop
 tput
 tput_async
