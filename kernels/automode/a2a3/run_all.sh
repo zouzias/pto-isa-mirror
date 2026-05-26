@@ -19,6 +19,7 @@
 #   bash run_all.sh -r npu -v Ascend910B1 --kernels MoE --moe-subkernels expert_ffn,gather
 #   bash run_all.sh -r npu -v Ascend910B1 --cases-moe "512,128,128,32,1"
 #   bash run_all.sh -r npu -v Ascend910B1 --cases-flash-atten "128,128,1024,128,256"
+#   bash run_all.sh -r npu -v Ascend910B1 --kernels flash_atten --msopprof
 #
 # Available top-level kernels (default = all):
 #   add_tile_array, topk, router_topk_small, mla, flash_atten, MoE, MoEv2
@@ -27,9 +28,7 @@
 # --moe-subkernels (applied to BOTH families when both are selected).
 #
 # Notes:
-#   - --cases-moe is passed to each MoE sub-kernel via -a (only the MoE family
-#     supports per-shape overrides today; the other kernels run their default
-#     hardcoded shape).
+#   - --cases-moe is passed to each MoE and MoEv2 sub-kernel via -a.
 #   - --cases-flash-atten is passed only to flash_atten's -a.
 #   - Each kernel writes its own report; this script aggregates pass/fail at
 #     the end (a kernel "passes" if its run.sh exits with status 0).
@@ -52,6 +51,7 @@ KERNEL_FILTER=""
 MOE_SUBKERNEL_FILTER=""
 CASES_MOE=""
 CASES_FLASH_ATTEN=""
+MSOPPROF=0
 RUN_LOG_DIR="${HERE}/run_log"
 
 # ----- Arg parsing ----------------------------------------------------------
@@ -74,6 +74,7 @@ while [[ $# -gt 0 ]]; do
         --cases-moe=*)        CASES_MOE="${1#*=}"; shift;;
         --cases-flash-atten)  CASES_FLASH_ATTEN="$2"; shift 2;;
         --cases-flash-atten=*) CASES_FLASH_ATTEN="${1#*=}"; shift;;
+        --msopprof)           MSOPPROF=1; shift;;
         -h|--help)            print_usage; exit 0;;
         *) echo "[ERROR] Unknown argument: $1"; print_usage; exit 1;;
     esac
@@ -149,6 +150,9 @@ run_one() {
     if [[ -n "${NPU_ID}" ]]; then
         cmd+=(-n "${NPU_ID}")
     fi
+    if [[ "${MSOPPROF}" -eq 1 ]]; then
+        cmd+=(--msopprof)
+    fi
     if [[ ${#extra_args[@]} -gt 0 ]]; then
         cmd+=("${extra_args[@]}")
     fi
@@ -208,10 +212,7 @@ run_moe_family() {
             continue
         fi
         local label="${family}/${sub}"
-        # Only the MoE family supports -a today; MoEv2 sub-kernels' run.sh
-        # ignores unknown args, so we forward -a unconditionally if --cases-moe
-        # was supplied (it's a no-op for MoEv2).
-        if [[ -n "${CASES_MOE}" && "${family}" == "MoE" ]]; then
+        if [[ -n "${CASES_MOE}" ]]; then
             run_one "${label}" "${sub_dir}" -a "${CASES_MOE}"
         else
             run_one "${label}" "${sub_dir}"

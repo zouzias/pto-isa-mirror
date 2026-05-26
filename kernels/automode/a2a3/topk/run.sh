@@ -7,7 +7,7 @@
 # --------------------------------------------------------------------------------
 
 SHORT=r:,v:,C:,a:,
-LONG=run-mode:,soc-version:,compiler:,cases:,
+LONG=run-mode:,soc-version:,compiler:,cases:,msopprof,
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 while :
@@ -25,6 +25,9 @@ do
         (-a | --cases )
             CASES_RAW="$2"
             shift 2;;
+        (--msopprof )
+            MSOPPROF=1
+            shift 1;;
         (--)
             shift;
             break;;
@@ -33,6 +36,15 @@ do
             break;;
     esac
 done
+
+run_msopprof() {
+    if [[ "${MSOPPROF:-0}" == "1" ]]; then
+        mkdir -p msopprof_data
+        msopprof --output=msopprof_data "$@"
+    else
+        "$@"
+    fi
+}
 
 : "${CMAKE_COMPILER:=bisheng}"
 
@@ -65,4 +77,4 @@ set -euo pipefail
 cmake  -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} -DCMAKE_COMPILER=${CMAKE_COMPILER} ..
 make -j16
 
-./topk
+run_msopprof ./topk

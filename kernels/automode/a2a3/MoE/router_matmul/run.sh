@@ -6,7 +6,7 @@
 #   bash run.sh -r npu -v Ascend910B1 -a "256,64,64,32,1"   # custom shape
 
 SHORT=r:,v:,C:,n:,a:
-LONG=run-mode:,soc-version:,compiler:,npu:,cases:
+LONG=run-mode:,soc-version:,compiler:,npu:,cases:,msopprof
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 while :
@@ -27,6 +27,9 @@ do
         (-a | --cases )
             CASES_RAW="$2"
             shift 2;;
+        (--msopprof )
+            MSOPPROF=1
+            shift 1;;
         (--)
             shift;
             break;;
@@ -35,6 +38,15 @@ do
             break;;
     esac
 done
+
+run_msopprof() {
+    if [[ "${MSOPPROF:-0}" == "1" ]]; then
+        mkdir -p msopprof_data
+        msopprof --output=msopprof_data "$@"
+    else
+        "$@"
+    fi
+}
 
 : "${CMAKE_COMPILER:=bisheng}"
 
@@ -56,9 +68,9 @@ GEN_CASE_ARGS=()
 if [[ -n "${CASES_RAW:-}" ]]; then
     GEN_CASE_ARGS+=(--cases "${CASES_RAW}")
 fi
-python3 ./scripts/generate_cases.py "${GEN_CASE_ARGS[@]}"
+python3 ../scripts/generate_cases.py "${GEN_CASE_ARGS[@]}" || exit 1
 
-python ./scripts/gen_data.py
+python ./scripts/gen_data.py || exit 1
 
 rm -rf build
 mkdir build
@@ -70,4 +82,4 @@ set -euo pipefail
 cmake  -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} -DCMAKE_COMPILER=${CMAKE_COMPILER} ..
 make -j16
 
-./router_matmul
+run_msopprof ./router_matmul

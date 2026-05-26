@@ -51,6 +51,16 @@ Override the compiler (default is `bisheng`):
 bash run_all.sh -r npu -v Ascend910B1 -C bisheng
 ```
 
+Collect operator profiling for the selected kernel binaries:
+
+```bash
+bash run_all.sh -r npu -v Ascend910B1 --kernels flash_atten --msopprof
+```
+
+`--msopprof` is forwarded to each selected kernel's `run.sh`. The kernel
+still generates cases/data and builds normally; only the final executable is
+wrapped with `msopprof --output=msopprof_data ...`.
+
 ## What it runs
 
 The default kernel set (top of [`run_all.sh`](run_all.sh#L44)):
@@ -92,8 +102,7 @@ bash run_all.sh -r npu -v Ascend910B1 --kernels MoE \
     --cases-moe "512,128,128,32,1"
 ```
 
-`--cases-moe` is only forwarded to the `MoE` family. `MoEv2` sub-kernels
-ignore unknown args, so it's a no-op there.
+`--cases-moe` is forwarded to both `MoE` and `MoEv2` leaf sub-kernels.
 
 **flash_atten** — tuple is `HEAD_SIZE,S0,S1[,CUBE_S0[,TILE_S1]]`
 (CUBE_S1 is fixed at 128 — see
@@ -164,9 +173,9 @@ a bug in that kernel's host code, not in `run_all.sh`.
   README before filing it as a bug.
 - **`run_log/` is not auto-cleaned**. Old logs accumulate. Delete it
   yourself between large sweeps if disk usage matters.
-- **MoE single-case-per-binary**: each MoE sub-kernel is rebuilt for the
-  first `--cases` shape. Leaf folders expose `scripts/generate_cases.py`
-  wrappers that delegate to the shared
+- **MoE single-case-per-binary**: each MoE/MoEv2 sub-kernel is rebuilt for
+  the first `--cases` shape. Leaf `run.sh` scripts delegate to the shared
+  family-level generator, for example
   [MoE/scripts/generate_cases.py](MoE/scripts/generate_cases.py). Passing
   multiple `--cases-moe` tuples to `run_all.sh` is not supported — it
   forwards one string.
@@ -176,8 +185,8 @@ a bug in that kernel's host code, not in `run_all.sh`.
 ## Adding a new kernel to `run_all.sh`
 
 1. Drop the kernel project under `kernels/automode/a2a3/<name>/` with its
-   own `run.sh` that accepts at least `-r` / `-v` / `-C` and exits non-zero
-   on failure.
+   own `run.sh` that accepts at least `-r` / `-v` / `-C` / `--msopprof` and
+   exits non-zero on failure.
 2. Add `<name>` to `ALL_KERNELS` at the top of [`run_all.sh`](run_all.sh#L44).
 3. If the kernel needs an `-a` shape override forwarded, add a
    `--cases-<name>` arg and a `case` branch in the dispatch loop, mirroring

@@ -15,14 +15,20 @@
 # --------------------------------------------------------------------------------
 
 import os
+import sys
+from pathlib import Path
+
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+from case_utils import load_moe_case
 
 np.random.seed(19)
 
-# v1 shape — must match the C++ side.
-kT    = 256
-kE    = 32
-kTopK = 1
+_case = load_moe_case()
+kT = _case["t"]
+kE = _case["e"]
+kTopK = _case["topk"]
 
 
 def gen_golden_data():

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SHORT=r:,v:,C:,n:,b:,m:,s:,h:,d:,k:,a:
-LONG=run-mode:,soc-version:,compiler:,npu:,batch:,m-seq:,n-seq:,heads:,head-dim:,topk:,cases:
+LONG=run-mode:,soc-version:,compiler:,npu:,batch:,m-seq:,n-seq:,heads:,head-dim:,topk:,cases:,msopprof
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 
@@ -52,6 +52,9 @@ do
         (-a | --cases )
             CASES_RAW="$2"
             shift 2;;
+        (--msopprof )
+            MSOPPROF=1
+            shift 1;;
         (--)
             shift
             break;;
@@ -60,6 +63,15 @@ do
             exit 1;;
     esac
 done
+
+run_msopprof() {
+    if [[ "${MSOPPROF:-0}" == "1" ]]; then
+        mkdir -p msopprof_data
+        msopprof --output=msopprof_data "$@"
+    else
+        "$@"
+    fi
+}
 
 : "${CMAKE_COMPILER:=bisheng}"
 
@@ -84,7 +96,7 @@ make -j
 cd ..
 
 python3 gen.py --out_dir data --b "${B}" --m "${M}" --n "${N}" --h "${H}" --d "${D}" --topk "${K}"
-./build/main data "${NPU_ID}"
+run_msopprof ./build/main data "${NPU_ID}"
 python3 verify.py --data_dir data
 
 echo "[DONE] sparse flash attention run_mode=${RUN_MODE}"

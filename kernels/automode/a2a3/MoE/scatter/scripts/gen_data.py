@@ -19,15 +19,21 @@
 # --------------------------------------------------------------------------------
 
 import os
+import sys
+from pathlib import Path
+
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+from case_utils import load_moe_case
 
 np.random.seed(23)
 
-# v1 shape — must match the C++ side.
-kT     = 256
-kH     = 64
-kE     = 32
-kTopK  = 1
+_case = load_moe_case()
+kT = _case["t"]
+kH = _case["h"]
+kE = _case["e"]
+kTopK = _case["topk"]
 
 kPackedRows   = kT * kTopK
 kOverspillPad = 16

@@ -9,7 +9,7 @@
 # ======================================================================================================================
 
 SHORT=r:,v:,C:,n:,c:,a:,p:,i,d,k
-LONG=run-mode:,soc-version:,compiler:,npu:,case:,cases:,qk-preload:,intermediate,debug,mask
+LONG=run-mode:,soc-version:,compiler:,npu:,case:,cases:,qk-preload:,intermediate,debug,mask,msopprof
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 while :
@@ -45,6 +45,9 @@ do
         (-k | --mask )
             CAUSAL_MASK=1
             shift 1;;
+        (--msopprof )
+            MSOPPROF=1
+            shift 1;;
         (--)
             shift;
             break;;
@@ -53,6 +56,15 @@ do
             break;;
     esac
 done
+
+run_msopprof() {
+    if [[ "${MSOPPROF:-0}" == "1" ]]; then
+        mkdir -p msopprof_data
+        msopprof --output=msopprof_data "$@"
+    else
+        "$@"
+    fi
+}
 
 : "${CMAKE_COMPILER:=bisheng}"
 
@@ -126,11 +138,11 @@ fi
 
 if [[ -n "${CASE_FILTER:-}" ]]; then
     python3 ../scripts/gen_data.py --case="${CASE_FILTER}" "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}"
-    time ./fa_performance --npu="${NPU_ID}" --case="${CASE_FILTER}" "${EXTRA_BIN_ARGS[@]}"
+    time run_msopprof ./fa_performance --npu="${NPU_ID}" --case="${CASE_FILTER}" "${EXTRA_BIN_ARGS[@]}"
 elif [[ -n "${CASES_RAW:-}" ]]; then
     python3 ../scripts/gen_data.py "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}"
-    time ./fa_performance --npu="${NPU_ID}" --cases="${CASES_RAW}" "${EXTRA_BIN_ARGS[@]}"
+    time run_msopprof ./fa_performance --npu="${NPU_ID}" --cases="${CASES_RAW}" "${EXTRA_BIN_ARGS[@]}"
 else
     python3 ../scripts/gen_data.py "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}"
-    time ./fa_performance --npu="${NPU_ID}" "${EXTRA_BIN_ARGS[@]}"
+    time run_msopprof ./fa_performance --npu="${NPU_ID}" "${EXTRA_BIN_ARGS[@]}"
 fi

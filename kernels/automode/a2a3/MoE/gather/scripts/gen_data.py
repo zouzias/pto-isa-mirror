@@ -23,14 +23,21 @@
 # --------------------------------------------------------------------------------
 
 import os
+import sys
+from pathlib import Path
+
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+from case_utils import load_moe_case
 
 np.random.seed(37)
 
-# v1 shape — must match the C++ side.
-kT    = 256
-kH    = 64
-kTopK = 1
+_case = load_moe_case()
+kT = _case["t"]
+kH = _case["h"]
+kE = _case["e"]
+kTopK = _case["topk"]
 
 kPackedRows   = kT * kTopK
 kOverspillPad = 16
@@ -51,7 +58,7 @@ def gen_golden_data():
     # is what makes the kTopK > 1 weighted accumulation meaningful.
     expert_id = np.zeros((kT, kTopK), dtype=np.int32)
     for t in range(kT):
-        expert_id[t] = np.random.choice(32, size=kTopK, replace=False).astype(np.int32)
+        expert_id[t] = np.random.choice(kE, size=kTopK, replace=False).astype(np.int32)
     expert_id_flat     = expert_id.flatten()
     token_ids_per_pair = np.repeat(np.arange(kT, dtype=np.int32), kTopK)
     ranks_per_pair     = np.tile  (np.arange(kTopK, dtype=np.int32), kT)

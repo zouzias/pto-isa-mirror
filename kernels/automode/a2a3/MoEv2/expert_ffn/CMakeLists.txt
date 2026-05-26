@@ -78,6 +78,7 @@ function(pto_example_cube_auto NAME)
     )
     target_include_directories(${NAME}_kernel PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../../include/
+        ${PROJECT_SOURCE_DIR}/../build
     )
     target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
 
@@ -85,6 +86,7 @@ function(pto_example_cube_auto NAME)
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
     target_include_directories(${NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../../include/
+        ${PROJECT_SOURCE_DIR}/../build
         ${PROJECT_SOURCE_DIR}/../../../../../tests/common
     )
 

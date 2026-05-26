@@ -19,13 +19,20 @@
 #   ./output/golden_idx.bin     kRows * kTopK  uint32
 
 import os
+import sys
+from pathlib import Path
+
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+from case_utils import load_moe_case
 
 np.random.seed(42)
 
-kRows = 256  # num_tokens
-kCols = 32   # num_experts
-kTopK = 2    # top-k
+_case = load_moe_case()
+kRows = _case["t"]  # num_tokens
+kCols = _case["e"]  # num_experts
+kTopK = max(_case["topk"], 2)  # standalone moe_topk keeps at least top-2
 
 
 def gen_golden_data():

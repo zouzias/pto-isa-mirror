@@ -17,6 +17,7 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "generated_cases.h"
 #include "../../kernel_timing.h"
 
 #include <cstdint>
@@ -94,9 +95,9 @@ inline bool ValidateIndexResults(size_t outIdxSize)
 int main()
 {
     // v1 shape — must match moe_topk_padded_kernel.cpp and gen_data.py.
-    constexpr int kT    = 256;
-    constexpr int kE    = 32;
-    constexpr int kTopK = 1;
+    constexpr int kT    = kMoeT;
+    constexpr int kE    = kMoeE;
+    constexpr int kTopK = kMoeTopK;
     using indexT = uint32_t;
 
     size_t srcSize    = static_cast<size_t>(kT) * kE    * sizeof(float);

@@ -3,10 +3,8 @@
 #   bash run.sh -r npu -v Ascend910B1
 # (or -r sim for the simulator).
 
-python ./scripts/gen_data.py
-
-SHORT=r:,v:,C:,
-LONG=run-mode:,soc-version:,compiler:,
+SHORT=r:,v:,C:,n:,a:,
+LONG=run-mode:,soc-version:,compiler:,npu:,cases:,msopprof,
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 while :
@@ -21,6 +19,15 @@ do
         (-C | --compiler )
             CMAKE_COMPILER="$2"
             shift 2;;
+        (-n | --npu )
+            NPU_ID="$2"
+            shift 2;;
+        (-a | --cases )
+            CASES_RAW="$2"
+            shift 2;;
+        (--msopprof )
+            MSOPPROF=1
+            shift 1;;
         (--)
             shift;
             break;;
@@ -30,7 +37,17 @@ do
     esac
 done
 
+run_msopprof() {
+    if [[ "${MSOPPROF:-0}" == "1" ]]; then
+        mkdir -p msopprof_data
+        msopprof --output=msopprof_data "$@"
+    else
+        "$@"
+    fi
+}
+
 : "${CMAKE_COMPILER:=bisheng}"
+: "${NPU_ID:=0}"
 
 if [[ ! "${SOC_VERSION}" =~ ^Ascend ]]; then
     echo "[ERROR] Unsupported SocVersion: ${SOC_VERSION}"
@@ -42,6 +59,13 @@ if [[ "${SOC_VERSION}" =~ ^Ascend910B4-1 ]] && [ "${RUN_MODE}" == "sim" ]; then
     exit 1
 fi
 
+GEN_CASE_ARGS=()
+if [[ -n "${CASES_RAW:-}" ]]; then
+    GEN_CASE_ARGS+=(--cases "${CASES_RAW}")
+fi
+python3 ../scripts/generate_cases.py "${GEN_CASE_ARGS[@]}" || exit 1
+python ./scripts/gen_data.py || exit 1
+
 rm -rf build
 mkdir build
 cd build
@@ -52,4 +76,4 @@ set -euo pipefail
 cmake  -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} -DCMAKE_COMPILER=${CMAKE_COMPILER} ..
 make -j16
 
-./expert_ffn
+run_msopprof ./expert_ffn
