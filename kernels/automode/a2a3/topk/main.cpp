@@ -16,6 +16,7 @@
 #include "test_common.h"
 #include "acl/acl.h"
 #include "../kernel_timing.h"
+#include "generated_cases.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -177,9 +178,6 @@ bool TopkKernel()
 
 int main()
 {
-    constexpr int kRows = 4;
-    constexpr int kCols = 1280;
-    constexpr int kTopK = 512;
-    bool ok = TopkKernel<float, kRows, kCols, kTopK>();
+    bool ok = TopkKernel<float, kTopkRows, kTopkCols, kTopkTopK>();
     return ok ? 0 : 1;
 }

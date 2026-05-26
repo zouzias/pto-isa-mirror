@@ -97,8 +97,11 @@ bash run_all.sh -r npu -v Ascend910B1 \
 
 ## Per-shape overrides
 
-Most kernels run a single hardcoded default shape. Two kernels accept a
-shape override; both are forwarded via the kernel's `-a` flag.
+Most standalone kernels now run a single generated default shape. Their
+`run.sh` calls `scripts/generate_cases.py` before `cmake`, writes
+`build/generated_cases.h/json`, and then `scripts/gen_data.py` uses the same
+JSON for inputs/goldens. The default behavior is still one known-good case;
+`-a|--cases` is available when debugging a shape locally.
 
 **MoE family** — tuple is `T,H,F,E,TopK`
 (tokens, hidden, ffn-intermediate, experts, top-k):
@@ -120,8 +123,21 @@ bash run_all.sh -r npu -v Ascend910B1 --kernels flash_atten \
     --cases-flash-atten "128,128,1024,128,256"
 ```
 
-For per-shape sweeps inside a single kernel (FA, MoE), prefer running that
-kernel's own `run.sh` directly — `run_all.sh` only forwards one `-a` value.
+Standalone generated cases, when running from the kernel directory:
+
+```
+add_tile_array      -a "NUM_TILES,TILE_ROWS,TILE_COLS"                 default 4,64,64
+topk                -a "ROWS,COLS,TOPK"                                default 4,1280,512
+router_topk_small   -a "T,E,K"                                         default 256,16,4
+mla                 -a "BATCH,SEQ_LEN,HIDDEN,NUM_HEADS,HEAD_DIM,LATENT,ROPE_DIM"
+gemm                -a "M,K,N" or full compile-time tiling tuple        default 6144,6144,6144
+topkv2              -a "G_SHAPE3,G_SHAPE4,G_WHOLE_SHAPE3,G_WHOLE_SHAPE4,TOPK"
+sparse_flash_attn   -a "B,M,N,H,D,TOPK"                                default 1,6,6,16,256,6
+```
+
+For per-shape sweeps inside a single kernel, prefer running that kernel's
+own `run.sh` directly — `run_all.sh` only forwards dedicated family options
+today.
 
 ## Output, logs, results
 
@@ -180,8 +196,8 @@ records the exact destination.
   [MoE/scripts/generate_cases.py](MoE/scripts/generate_cases.py)). Passing
   multiple `--cases-moe` tuples to `run_all.sh` is not supported — it
   forwards one string.
-- **Per-kernel shape sweeps** (multiple shapes in one go) belong in that
-  kernel's own `run.sh` invocation, not `run_all.sh`.
+- **Per-kernel shape sweeps** belong in that kernel's own `run.sh`
+  invocation, not `run_all.sh`.
 
 ## Adding a new kernel to `run_all.sh`
 

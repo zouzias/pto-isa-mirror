@@ -40,9 +40,20 @@
 # --------------------------------------------------------------------------------
 
 import os
+import json
+from pathlib import Path
 import numpy as np
 
 np.random.seed(23)
+
+
+def load_generated_case():
+    case_path = Path(__file__).resolve().parent.parent / "build" / "generated_cases.json"
+    if not case_path.exists():
+        return {"t": 256, "e": 16, "k": 4}
+    with case_path.open("r", encoding="utf-8") as f:
+        cases = json.load(f)
+    return cases[0]
 
 
 def gen_golden_data(kT, kE, kK):
@@ -75,7 +86,5 @@ def gen_golden_data(kT, kE, kK):
 
 
 if __name__ == "__main__":
-    kT = 256
-    kE = 16
-    kK = 4
-    gen_golden_data(kT, kE, kK)
+    case = load_generated_case()
+    gen_golden_data(case["t"], case["e"], case["k"])

@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "generated_cases.h"
+
 template <int H, int D, int BLOCK>
 void call(uint8_t *q_handle,
           uint8_t *kv_handle,
@@ -33,12 +35,12 @@ namespace {
 //     int64_t topk = 128;
 // };
 struct ShapeConfig {
-    int64_t b = 1;
-    int64_t m = 6;
-    int64_t n = 6;
-    int64_t h = 16;
-    int64_t d = 256;
-    int64_t topk = 6;
+    int64_t b = kSparseFaB;
+    int64_t m = kSparseFaM;
+    int64_t n = kSparseFaN;
+    int64_t h = kSparseFaH;
+    int64_t d = kSparseFaD;
+    int64_t topk = kSparseFaTopK;
 };
 
 // Updated to a constexpr variadic template using C++17 fold expressions
@@ -210,7 +212,7 @@ int main(int argc, char **argv) {
     }
 
     // Now valid because cfg.h and cfg.d are evaluated at compile time
-    call<cfg.h, cfg.d, 64>(reinterpret_cast<uint8_t *>(q_dev),
+    call<cfg.h, cfg.d, kSparseFaBlock>(reinterpret_cast<uint8_t *>(q_dev),
                            reinterpret_cast<uint8_t *>(kv_dev),
                            reinterpret_cast<uint8_t *>(out_dev),
                            reinterpret_cast<uint8_t *>(sink_dev),

@@ -41,6 +41,7 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "generated_cases.h"
 
 #include <cmath>
 #include <cstdint>
@@ -75,17 +76,17 @@ extern "C" void launchMlaAttnQKRopeFp16     (uint8_t *scores_rope, uint8_t *q_ro
                                              uint8_t *k_rope_rot, void *stream);
 
 // ----- MLA shapes; must match scripts/gen_data.py and the kernel namespaces.
-static constexpr int kBatch    = 1;
-static constexpr int kSeqLen   = 128;
-static constexpr int kHidden   = 4096;
-static constexpr int kNumHeads = 32;
-static constexpr int kHeadDim  = 128;
-static constexpr int kLatent   = 64;
-static constexpr int kRopeDim  = 64;
-static constexpr int kRopeHalf = kRopeDim / 2;
-static constexpr int kQKVHidden  = kNumHeads * kHeadDim;   // 4096
-static constexpr int kQRopeWidth = kNumHeads * kRopeDim;   // 2048
-static constexpr int kHeadDimTotal = kHeadDim + kRopeDim;  // 192 — for softmax scale
+static constexpr int kBatch    = kMlaBatch;
+static constexpr int kSeqLen   = kMlaSeqLen;
+static constexpr int kHidden   = kMlaHidden;
+static constexpr int kNumHeads = kMlaNumHeads;
+static constexpr int kHeadDim  = kMlaHeadDim;
+static constexpr int kLatent   = kMlaLatent;
+static constexpr int kRopeDim  = kMlaRopeDim;
+static constexpr int kRopeHalf = kMlaRopeHalf;
+static constexpr int kQKVHidden  = kMlaQKVHidden;
+static constexpr int kQRopeWidth = kMlaQRopeWidth;
+static constexpr int kHeadDimTotal = kMlaHeadDimTotal;
 
 static constexpr size_t kHalfBytes = 2;
 

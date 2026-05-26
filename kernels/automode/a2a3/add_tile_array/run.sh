@@ -8,10 +8,8 @@
 
 KERNEL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-python ./scripts/gen_data.py
-
-SHORT=r:,v:,C:,p
-LONG=run-mode:,soc-version:,compiler:,profile
+SHORT=r:,v:,C:,a:,p
+LONG=run-mode:,soc-version:,compiler:,cases:,profile
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 PROFILE_MODE=0
@@ -30,6 +28,9 @@ do
         (-p | --profile )
             PROFILE_MODE=1
             shift 1;;
+        (-a | --cases )
+            CASES_RAW="$2"
+            shift 2;;
         (--)
             shift;
             break;;
@@ -55,6 +56,15 @@ fi
 
 rm -rf build
 mkdir build
+
+GEN_CASE_ARGS=()
+if [[ -n "${CASES_RAW:-}" ]]; then
+    GEN_CASE_ARGS+=(--cases "${CASES_RAW}")
+fi
+
+python3 ./scripts/generate_cases.py "${GEN_CASE_ARGS[@]}"
+python3 ./scripts/gen_data.py
+
 cd build
 
 export LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib:$LD_LIBRARY_PATH

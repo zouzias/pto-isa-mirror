@@ -25,6 +25,7 @@
 #include "test_common.h"
 #include "acl/acl.h"
 #include "../kernel_timing.h"
+#include "generated_cases.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -37,7 +38,7 @@ using namespace std;
 using namespace PtoTestCommon;
 
 // Static configuration. Must match kernel.cpp constants and scripts/gen_data.py.
-constexpr int kE = 16;
+constexpr int kE = kRouterTopkSmallE;
 
 // Non-template host-boundary wrapper exposed by the kernel TU. The kernel
 // internally uses `float` (FP32) for scores/values and `uint32_t` for indices.

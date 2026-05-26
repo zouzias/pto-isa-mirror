@@ -51,15 +51,16 @@
 
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
+#include "generated_cases.h"
 
 using namespace pto;
 
 namespace router_topk_small_cfg {
 
 // Static configuration. Must match scripts/gen_data.py and main.cpp.
-constexpr unsigned kT = 256;    // rows
-constexpr unsigned kE = 16;     // columns (experts)
-constexpr unsigned kK = 4;      // top-K (compile-time; ≤ 10 by design)
+constexpr unsigned kT = kRouterTopkSmallT;    // rows
+constexpr unsigned kE = kRouterTopkSmallE;    // columns (experts)
+constexpr unsigned kK = kRouterTopkSmallK;    // top-K (compile-time; <= 10 by design)
 
 static_assert(kK <= 10, "router_topk_small is specialised for small K (≤ 10).");
 static_assert(kK <= kE, "K cannot exceed E.");

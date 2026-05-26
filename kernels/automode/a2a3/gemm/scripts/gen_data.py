@@ -11,9 +11,20 @@
 # --------------------------------------------------------------------------------
 
 import os
+import json
+from pathlib import Path
 
 import numpy as np
 np.random.seed(19)
+
+
+def load_generated_case():
+    case_path = Path(__file__).resolve().parent.parent / "build" / "generated_cases.json"
+    if not case_path.exists():
+        return {"m": 6144, "k": 6144, "n": 6144}
+    with case_path.open("r", encoding="utf-8") as f:
+        cases = json.load(f)
+    return cases[0]
 
 
 def gen_golden_data(param):
@@ -60,7 +71,8 @@ class GemmParams:
             self.bias_type = ctype
 
 if __name__ == "__main__":
+    case = load_generated_case()
     case_params_list = [
-        GemmParams(np.float16, np.float16, np.float32, 6144, 6144, 6144, False, np.float32),
+        GemmParams(np.float16, np.float16, np.float32, case["m"], case["k"], case["n"], False, np.float32),
     ]
     gen_golden_data(case_params_list[0])
