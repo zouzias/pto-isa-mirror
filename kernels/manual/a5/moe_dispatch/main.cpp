@@ -57,7 +57,7 @@ static DispatchMode g_dispatchMode = DispatchMode::Direct;
 #ifndef __gm__
 #define __gm__
 #endif
-#include "../../../../tests/npu/a2a3/comm/st/testcase/common.hpp"
+#include "../../../../tests/npu/a5/comm/st/testcase/common.hpp"
 
 // ============================================================================
 // Routing Table Generation
