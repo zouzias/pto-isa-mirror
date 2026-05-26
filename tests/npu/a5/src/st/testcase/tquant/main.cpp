@@ -51,6 +51,10 @@ void LaunchTQuantMXFP4_E2M1_FP16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, 
 template <int validRows, int validCols, pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void LaunchTQuantMXFP4_E2M1_BF16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
 
+template <int staticRows, int staticCols, int validRows, int validCols,
+          pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
+void LaunchTQuantMXFP4_E2M1_BF16_Exp2D(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
+
 class TQUANTTEST : public testing::Test {
 protected:
     void SetUp() override
@@ -269,6 +273,16 @@ void test_tquant_mxfp4_e2m1_bf16()
 {
     RunMxFp4E2M1Case<validRows, validCols>([](uint8_t *dst, uint16_t *src, uint8_t *dstExp, void *stream) {
         LaunchTQuantMXFP4_E2M1_BF16<validRows, validCols, scaleAlg>(dst, src, dstExp, stream);
+    });
+}
+
+template <int staticRows, int staticCols, int validRows, int validCols,
+          pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
+void test_tquant_mxfp4_e2m1_bf16_exp2d()
+{
+    RunMxFp4E2M1Case<validRows, validCols>([](uint8_t *dst, uint16_t *src, uint8_t *dstExp, void *stream) {
+        LaunchTQuantMXFP4_E2M1_BF16_Exp2D<staticRows, staticCols, validRows, validCols, scaleAlg>(dst, src, dstExp,
+                                                                                                  stream);
     });
 }
 
@@ -739,6 +753,11 @@ TEST_F(TQUANTTEST, case_mxfp4_e2m1_nv_bf16_2x256_rounding_nd)
 TEST_F(TQUANTTEST, case_mxfp4_e2m1_nv_bf16_2x256_mixed_nd)
 {
     test_tquant_mxfp4_e2m1_bf16<2, 256, pto::QuantScaleAlg::NV>();
+}
+
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_nv_bf16_2x128_static4x128_exp2d_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16_exp2d<4, 128, 2, 128, pto::QuantScaleAlg::NV>();
 }
 
 TEST_F(TQUANTTEST, case_mxfp8_fp16_32x128_nz)

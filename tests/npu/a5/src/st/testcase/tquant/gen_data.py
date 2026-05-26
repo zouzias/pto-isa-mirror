@@ -675,6 +675,53 @@ def make_mxfp4_nv_boundary_values(total, dtype, patterns):
     return values
 
 
+def make_mxfp4_static4x128_exp2d_values(dtype):
+    group_maxes = np.array([6.0, 12.0, 24.0, 48.0, 96.0, 192.0, 384.0, 768.0], dtype=np.float32)
+    scaled_pattern = np.array(
+        [
+            6.0,
+            -6.0,
+            4.0,
+            -4.0,
+            3.0,
+            -3.0,
+            2.5,
+            -2.5,
+            2.0,
+            -2.0,
+            1.5,
+            -1.5,
+            1.0,
+            -1.0,
+            0.75,
+            -0.75,
+            0.5,
+            -0.5,
+            0.375,
+            -0.375,
+            0.25,
+            -0.25,
+            0.125,
+            -0.125,
+            0.0,
+            -0.0,
+            3.75,
+            -3.75,
+            2.25,
+            -2.25,
+            1.25,
+            -1.25,
+        ],
+        dtype=np.float32,
+    )
+    values = np.zeros((2, 128), dtype=np.float32)
+    for group, group_max in enumerate(group_maxes):
+        row = group // 4
+        col = (group % 4) * MX_BOUNDARY_GROUP_SIZE
+        values[row, col : col + MX_BOUNDARY_GROUP_SIZE] = scaled_pattern * (group_max / 6.0)
+    return values.astype(dtype)
+
+
 def make_mxfp4_e2m1_data(config, patterns):
     total = config.valid_rows * config.valid_cols
     dtype = config.dtype
@@ -711,6 +758,8 @@ def make_mxfp4_e2m1_data(config, patterns):
             end = min(begin + 32, total)
             pattern = group_patterns[group % len(group_patterns)]
             values[begin:end] = np.resize(pattern, end - begin)
+    elif case_suffix == "static4x128_exp2d":
+        values = make_mxfp4_static4x128_exp2d_values(dtype).reshape(-1)
     else:
         values = exp_random_func(total, seed=20260511)
 
@@ -1156,6 +1205,7 @@ if __name__ == "__main__":
         TQuantParams("mxfp4_e2m1", 2, 256, mode="nd", dtype=bfloat16, case_suffix="boundary", scale_alg="nv"),
         TQuantParams("mxfp4_e2m1", 2, 256, mode="nd", dtype=bfloat16, case_suffix="rounding", scale_alg="nv"),
         TQuantParams("mxfp4_e2m1", 2, 256, mode="nd", dtype=bfloat16, case_suffix="mixed", scale_alg="nv"),
+        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=bfloat16, case_suffix="static4x128_exp2d", scale_alg="nv"),
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=np.float16),
