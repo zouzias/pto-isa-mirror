@@ -454,6 +454,226 @@ AICORE void MoeDispatchViaGM(
 }
 
 // ============================================================================
+// PATH 3: MoeDispatchWithSync — CrossRankSync + Direct dispatch
+//
+// Integrates CrossRankSync (Module 2) as a kernel-internal preamble:
+//   Phase A: AllGather localTokenPerExpert via DataAsFlag (TSTORE remote + TWAIT)
+//   Phase B: Restore values, compute cumsumMM and preSumBeforeRank
+//   Phase C: SYNCALL then proceed with standard Direct dispatch loop
+// ============================================================================
+
+template <int HIDDEN_SIZE, int TILE_COLS, int MOVE_NUM>
+AICORE void MoeDispatchWithSync(
+    __gm__ int8_t *gmA,
+    __gm__ float *gmPerTokenScale,
+    __gm__ uint8_t *shmemBase,
+    __gm__ HcclDeviceContext *hcclCtx,
+    __gm__ int32_t *workspace,
+    __gm__ int32_t *syncGmWorkspace,
+    int32_t EP,
+    int32_t expertPerRank,
+    int32_t maxOutputSize,
+    int64_t offsetA,
+    int64_t offsetTPE)
+{
+    int32_t myRank = static_cast<int32_t>(hcclCtx->rankId);
+    int32_t coreIdx = get_block_idx();
+    int32_t coreNum = get_block_num();
+
+    int32_t paddedExpNum = ((EP * expertPerRank) + 7) & ~7;
+    int32_t expNum = EP * expertPerRank;
+
+    // UB workspace for software SYNCALL (needs coreNum * 32 bytes)
+    constexpr int32_t SYNC_UB_ELEMS = 32;
+    using SyncUbTile = pto::Tile<pto::TileType::Vec, int32_t, 1, SYNC_UB_ELEMS,
+                                 pto::BLayout::RowMajor, -1, -1>;
+    SyncUbTile syncUbTile(1, SYNC_UB_ELEMS);
+    TASSIGN(syncUbTile, 0);
+
+    using SyncShape = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+    using SyncStride = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+    using SyncGlobal = pto::GlobalTensor<int32_t, SyncShape, SyncStride, pto::Layout::ND>;
+    int32_t syncElems = coreNum * SYNCALL_SOFT_SLOT_INT32;
+    SyncShape syncGmShape(1, 1, 1, 1, static_cast<size_t>(syncElems));
+    SyncStride syncGmStride(syncElems, syncElems, syncElems, syncElems, 1);
+    SyncGlobal syncGmG(syncGmWorkspace, syncGmShape, syncGmStride);
+
+    // Workspace layout:
+    //   [0 .. EP*expertPerRank)                                    : cumsumMM
+    //   [EP*expertPerRank .. 2*EP*expertPerRank)                   : preSumBeforeRank
+    //   [2*EP*expertPerRank .. 2*EP*expertPerRank + EP*EP*expertPerRank) : tokenPerExpert
+    __gm__ int32_t *wsCumsumMM = workspace;
+    __gm__ int32_t *wsPSBR = workspace + EP * expertPerRank;
+    __gm__ int32_t *wsTPE = workspace + 2 * EP * expertPerRank;
+
+    // Pointers into this rank's shmem TPE exchange area
+    __gm__ int32_t *localTPEBase = reinterpret_cast<__gm__ int32_t *>(shmemBase + offsetTPE);
+
+    // ========================================================================
+    // Phase A: Write localTokenPerExpert + DataAsFlag to all remote ranks
+    // ========================================================================
+    {
+        using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+        using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+        using GlobalI32 = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
+
+        using TPETile = pto::Tile<pto::TileType::Vec, int32_t, 1, 64,
+                                  pto::BLayout::RowMajor, -1, -1>;
+        TPETile tpeTile(1, paddedExpNum);
+        TASSIGN(tpeTile, 0);
+
+        tpeTile.RowMaskInternal = 1;
+        tpeTile.ColMaskInternal = paddedExpNum;
+
+        int64_t tpeRowBytes = static_cast<int64_t>(paddedExpNum) * sizeof(int32_t);
+        ShapeDyn tpeShape(1, 1, 1, 1, static_cast<size_t>(paddedExpNum));
+        StrideDyn tpeStride(tpeRowBytes / 4, tpeRowBytes / 4, tpeRowBytes / 4, tpeRowBytes / 4, 1);
+
+        // Load my localTokenPerExpert from shmem (row myRank in the TPE area)
+        __gm__ int32_t *myTPEAddr = localTPEBase + myRank * paddedExpNum;
+        GlobalI32 myTPEG(myTPEAddr, tpeShape, tpeStride);
+        TLOAD(tpeTile, myTPEG);
+
+        // Add DataAsFlag offset
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        TADDS(tpeTile, tpeTile, static_cast<int32_t>(DATA_AS_FLAG_OFFSET));
+
+        // Write to each remote rank's TPE area at row[myRank]
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        for (int32_t dstRank = coreIdx; dstRank < EP; dstRank += coreNum) {
+            if (dstRank == myRank) continue;
+            __gm__ int32_t *remoteTPEBase = reinterpret_cast<__gm__ int32_t *>(
+                HcclRemotePtr(hcclCtx, shmemBase, dstRank) + offsetTPE);
+            __gm__ int32_t *remoteDst = remoteTPEBase + myRank * paddedExpNum;
+            GlobalI32 remoteDstG(remoteDst, tpeShape, tpeStride);
+            TSTORE(remoteDstG, tpeTile);
+            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+        }
+    }
+
+    // ========================================================================
+    // Phase B: Wait for all remote ranks' data, restore, compute routing tables
+    // ========================================================================
+#ifdef PHASE_A_ONLY_TEST
+    // Phase A only — skip B and C
+    (void)wsCumsumMM; (void)wsPSBR; (void)wsTPE; (void)syncGmWorkspace;
+#else
+    {
+        using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+        using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+        using GlobalI32 = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
+
+        // Signal shape for TWAIT (check first element of each row)
+        ShapeDyn signalShape(1, 1, 1, 1, 1);
+        StrideDyn signalStride(1, 1, 1, 1, 1);
+
+#ifndef PHASE_B_SYNCALL_ONLY_TEST
+        // Wait for all remote ranks
+        for (int32_t srcRank = coreIdx; srcRank < EP; srcRank += coreNum) {
+            if (srcRank == myRank) continue;
+            __gm__ int32_t *signalAddr = localTPEBase + srcRank * paddedExpNum;
+            GlobalI32 signalG(signalAddr, signalShape, signalStride);
+            pto::comm::TWAIT(signalG, 0, pto::comm::WaitCmp::NE);
+        }
+#endif
+
+        // All data arrived. Now restore values and compute routing tables.
+        // Only core 0 computes cumsumMM and preSumBeforeRank (small data, sequential).
+        pto::SYNCALL<pto::SyncAllMode::Soft>(syncGmG, syncUbTile);
+
+#ifdef PHASE_B_SYNCALL_ONLY_TEST
+        // SYNCALL-only test: skip B.1-B.3 computation
+        (void)signalShape; (void)signalStride;
+    }
+#else
+
+        if (coreIdx == 0) {
+            // Phase B.1: Read all TPE rows from shmem, restore (subtract flag),
+            // write to workspace TPE using scalar GM access (avoids 32B DMA alignment issue)
+            pipe_barrier(PIPE_ALL);
+            for (int32_t srcRank = 0; srcRank < EP; ++srcRank) {
+                for (int32_t j = 0; j < expNum; ++j) {
+                    volatile __gm__ int32_t *srcAddr = reinterpret_cast<volatile __gm__ int32_t *>(
+                        localTPEBase + srcRank * paddedExpNum + j);
+                    __asm__ __volatile__("");
+                    dcci((__gm__ void *)srcAddr, SINGLE_CACHE_LINE);
+                    __asm__ __volatile__("");
+                    int32_t val = *srcAddr;
+                    if (srcRank != myRank) {
+                        val -= DATA_AS_FLAG_OFFSET;
+                    }
+                    volatile __gm__ int32_t *dstAddr = reinterpret_cast<volatile __gm__ int32_t *>(
+                        wsTPE + srcRank * expNum + j);
+                    *dstAddr = val;
+                }
+            }
+
+            // Phase B.2: Compute cumsumMM
+            // cumsumMM[rankIdx * expertPerRank + g] = cumulative sum of tokens
+            // from rank 0..rankIdx destined for myRank's expert g
+            pipe_barrier(PIPE_ALL);
+            for (int32_t g = 0; g < expertPerRank; ++g) {
+                int32_t cumSum = 0;
+                for (int32_t srcRank = 0; srcRank < EP; ++srcRank) {
+                    int32_t tpeIdx = srcRank * expNum + myRank * expertPerRank + g;
+                    // Read from workspace TPE (already in GM)
+                    // Use scalar GM access
+                    volatile __gm__ int32_t *tpePtr = reinterpret_cast<volatile __gm__ int32_t *>(wsTPE + tpeIdx);
+                    __asm__ __volatile__("");
+                    dcci((__gm__ void *)tpePtr, SINGLE_CACHE_LINE);
+                    __asm__ __volatile__("");
+                    cumSum += *tpePtr;
+                    volatile __gm__ int32_t *cumsumPtr = reinterpret_cast<volatile __gm__ int32_t *>(
+                        wsCumsumMM + srcRank * expertPerRank + g);
+                    *cumsumPtr = cumSum;
+                }
+            }
+
+            // Phase B.3: Compute preSumBeforeRank
+            // preSumBeforeRank[srcRank * expertPerRank + g] = sum of all tokens that
+            // srcRank sends to (dst < myRank) and (dst == myRank, expert < g)
+            for (int32_t srcRank = 0; srcRank < EP; ++srcRank) {
+                int32_t offset = 0;
+                for (int32_t dst = 0; dst < EP; ++dst) {
+                    for (int32_t g = 0; g < expertPerRank; ++g) {
+                        if (dst == myRank) {
+                            volatile __gm__ int32_t *psbrPtr = reinterpret_cast<volatile __gm__ int32_t *>(
+                                wsPSBR + srcRank * expertPerRank + g);
+                            *psbrPtr = offset;
+                        }
+                        int32_t tpeIdx = srcRank * expNum + dst * expertPerRank + g;
+                        volatile __gm__ int32_t *tpePtr = reinterpret_cast<volatile __gm__ int32_t *>(wsTPE + tpeIdx);
+                        __asm__ __volatile__("");
+                        dcci((__gm__ void *)tpePtr, SINGLE_CACHE_LINE);
+                        __asm__ __volatile__("");
+                        offset += *tpePtr;
+                    }
+                }
+            }
+
+            // Flush writes
+            pipe_barrier(PIPE_ALL);
+        }
+    }
+#endif // PHASE_B_SYNCALL_ONLY_TEST
+
+    // ========================================================================
+    // Phase C: SYNCALL then dispatch using computed routing tables
+    // ========================================================================
+#ifndef PHASE_AB_TEST
+    pto::SYNCALL<pto::SyncAllMode::Soft>(syncGmG, syncUbTile);
+
+    MoeDispatchDirect<HIDDEN_SIZE, TILE_COLS, MOVE_NUM>(
+        gmA, gmPerTokenScale, wsCumsumMM, wsTPE, wsPSBR,
+        shmemBase, hcclCtx, EP, expertPerRank, maxOutputSize, offsetA);
+#endif
+#endif // PHASE_A_ONLY_TEST
+}
+
+// ============================================================================
 // __global__ Entry Points — Direct Path
 // ============================================================================
 #define DIRECT_KERNEL_PARAMS \
@@ -500,6 +720,24 @@ extern "C" __global__ AICORE void MoeDispatchViaGM_K128(VIAGM_KERNEL_PARAMS)
 }
 
 // ============================================================================
+// __global__ Entry Points — WithSync Path (CrossRankSync + Direct)
+// ============================================================================
+#define WITHSYNC_KERNEL_PARAMS \
+    __gm__ int8_t *gmA, __gm__ float *gmPerTokenScale, \
+    __gm__ uint8_t *shmemBase, __gm__ HcclDeviceContext *hcclCtx, \
+    __gm__ int32_t *workspace, __gm__ int32_t *syncGmWorkspace, \
+    int32_t EP, int32_t expertPerRank, int32_t maxOutputSize, \
+    int64_t offsetA, int64_t offsetTPE
+
+extern "C" __global__ AICORE void MoeDispatchWithSync_K128(WITHSYNC_KERNEL_PARAMS)
+{
+    MoeDispatchWithSync<128, 160, DispatchTraits<160>::MOVE_NUM>(
+        gmA, gmPerTokenScale, shmemBase, hcclCtx,
+        workspace, syncGmWorkspace,
+        EP, expertPerRank, maxOutputSize, offsetA, offsetTPE);
+}
+
+// ============================================================================
 // Host-callable launch wrappers
 // ============================================================================
 #include "acl/acl.h"
@@ -543,6 +781,26 @@ bool LaunchMoeDispatchViaGM_K128(
         (__gm__ uint8_t *)shmemBase, (__gm__ HcclDeviceContext *)hcclCtx,
         (__gm__ int32_t *)syncWorkspace,
         EP, expertPerRank, maxOutputSize, offsetA);
+    aclError err = aclrtSynchronizeStream((aclrtStream)stream);
+    fprintf(stderr, "[KERNEL] aclrtSynchronizeStream returned: %d\n", (int)err);
+    return (err == ACL_SUCCESS);
+}
+
+bool LaunchMoeDispatchWithSync_K128(
+    int32_t blockNum, void *stream,
+    void *gmA, void *gmPerTokenScale,
+    void *shmemBase, void *hcclCtx,
+    void *workspace, void *syncGmWorkspace,
+    int32_t EP, int32_t expertPerRank, int32_t maxOutputSize,
+    int64_t offsetA, int64_t offsetTPE)
+{
+    fprintf(stderr, "[KERNEL] LaunchMoeDispatchWithSync_K128: blockNum=%d EP=%d expertPerRank=%d maxOutput=%d\n",
+            blockNum, EP, expertPerRank, maxOutputSize);
+    MoeDispatchWithSync_K128<<<blockNum, nullptr, stream>>>(
+        (__gm__ int8_t *)gmA, (__gm__ float *)gmPerTokenScale,
+        (__gm__ uint8_t *)shmemBase, (__gm__ HcclDeviceContext *)hcclCtx,
+        (__gm__ int32_t *)workspace, (__gm__ int32_t *)syncGmWorkspace,
+        EP, expertPerRank, maxOutputSize, offsetA, offsetTPE);
     aclError err = aclrtSynchronizeStream((aclrtStream)stream);
     fprintf(stderr, "[KERNEL] aclrtSynchronizeStream returned: %d\n", (int)err);
     return (err == ACL_SUCCESS);

@@ -33,6 +33,9 @@ DEBUG_MODE=""
 CLEAN=""
 ACTION="all"
 DISPATCH_MODE="direct"
+PHASE_A_TEST=""
+PHASE_AB_TEST=""
+SYNCALL_TEST=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -46,6 +49,9 @@ while [[ $# -gt 0 ]]; do
         --first-device) FIRST_DEVICE=$2; shift 2 ;;
         --mode) DISPATCH_MODE=$2; shift 2 ;;
         --debug) DEBUG_MODE="-DDEBUG_MODE=ON"; shift ;;
+        --phase-a-test) PHASE_A_TEST="-DPHASE_A_ONLY_TEST=ON"; shift ;;
+        --phase-ab-test) PHASE_AB_TEST="-DPHASE_AB_TEST=ON"; shift ;;
+        --syncall-test) SYNCALL_TEST="-DPHASE_B_SYNCALL_ONLY_TEST=ON -DPHASE_AB_TEST=ON"; shift ;;
         --clean) CLEAN=1; shift ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
@@ -80,7 +86,10 @@ do_build() {
         -DCONFIG_MAX_TOKENS_PER_RANK=${MAX_TOKENS} \
         -DCONFIG_MAX_OUTPUT_SIZE=${MAX_OUTPUT} \
         -DCONFIG_FIRST_DEVICE_ID=${FIRST_DEVICE} \
-        ${DEBUG_MODE}
+        ${DEBUG_MODE} \
+        ${PHASE_A_TEST} \
+        ${PHASE_AB_TEST} \
+        ${SYNCALL_TEST}
 
     make -j$(nproc)
 

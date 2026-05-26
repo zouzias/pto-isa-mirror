@@ -57,7 +57,46 @@ inline constexpr int32_t ShmemRowStride(int32_t hiddenSize)
     return hiddenSize + UB_ALIGN;
 }
 
+// ============================================================================
+// CrossRankSync — shmem layout and DataAsFlag constants
+// ============================================================================
+
+static constexpr int32_t DATA_AS_FLAG_OFFSET = 0x800000;
+
+// Alignment for tokenPerExpert exchange area (int32 elements, must be multiple of 8 for DMA)
+inline constexpr int32_t PaddedExpertNum(int32_t EP, int32_t expertPerRank)
+{
+    int32_t raw = EP * expertPerRank;
+    return (raw + 7) & ~7;
+}
+
+// Total bytes for the tokenPerExpert exchange area in shmem
+// Layout: [EP rows] x [paddedExpertNum columns] of int32_t
+// Each srcRank writes its localTPE into row[srcRank] of every remote rank's area
+inline constexpr int64_t TPEAreaBytes(int32_t EP, int32_t expertPerRank)
+{
+    return static_cast<int64_t>(EP) * PaddedExpertNum(EP, expertPerRank) * sizeof(int32_t);
+}
+
+// Workspace layout for CrossRankSync computed routing tables:
+//   [0 .. EP*expertPerRank)              : cumsumMM     (int32)
+//   [EP*expertPerRank .. 2*EP*expertPerRank) : preSumBeforeRank (int32)
+//   [2*EP*expertPerRank .. 2*EP*expertPerRank + EP*EP*expertPerRank) : tokenPerExpert (int32)
+inline constexpr int64_t SyncWorkspaceBytes(int32_t EP, int32_t expertPerRank)
+{
+    int32_t cumsumSize = EP * expertPerRank;
+    int32_t psbrSize = EP * expertPerRank;
+    int32_t tpeSize = EP * EP * expertPerRank;
+    return static_cast<int64_t>(cumsumSize + psbrSize + tpeSize) * sizeof(int32_t);
+}
+
+// SYNCALL soft barrier workspace: each core needs 8 int32 slots
+static constexpr int32_t SYNCALL_SOFT_SLOT_INT32 = 8;
+
+// ============================================================================
 // Dispatch kernel launch parameters
+// ============================================================================
+
 struct MoeDispatchParams {
     int32_t EP;
     int32_t expertPerRank;

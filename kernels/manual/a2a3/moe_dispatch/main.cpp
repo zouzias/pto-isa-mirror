@@ -46,7 +46,15 @@ extern bool LaunchMoeDispatchViaGM_K128(
     void *shmemBase, void *hcclCtx, void *syncWorkspace,
     int32_t EP, int32_t expertPerRank, int32_t maxOutputSize, int64_t offsetA);
 
-enum class DispatchMode { Direct, ViaGM };
+extern bool LaunchMoeDispatchWithSync_K128(
+    int32_t blockNum, void *stream,
+    void *gmA, void *gmPerTokenScale,
+    void *shmemBase, void *hcclCtx,
+    void *workspace, void *syncGmWorkspace,
+    int32_t EP, int32_t expertPerRank, int32_t maxOutputSize,
+    int64_t offsetA, int64_t offsetTPE);
+
+enum class DispatchMode { Direct, ViaGM, WithSync };
 static DispatchMode g_dispatchMode = DispatchMode::Direct;
 
 // HCCL & comm test framework (reused from comm ST testcase directory)
@@ -334,33 +342,79 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
     // Soft SYNCALL workspace: each core needs SYNCALL_SOFT_SLOT_INT32 (=8) int32_t slots
     // Use EP as blockNum for multi-core parallel dispatch
     int32_t blockNum = EP;
-    constexpr int32_t SYNCALL_SOFT_SLOT_INT32 = 8;
     size_t syncWsSize = static_cast<size_t>(blockNum) * SYNCALL_SOFT_SLOT_INT32 * sizeof(int32_t);
 
-    // Allocate in HCCL window (shmem)
+    // For WithSync mode: TPE exchange area in shmem + routing workspace
+    // offsetTPE must be uniform across all ranks so remote writes land correctly.
+    // Use maxTokensPerRank * rowStride as the fixed base (same on every rank).
+    size_t tpeAreaSize = 0;
+    int64_t offsetTPE = 0;
+    size_t routingWsSize = 0;
+    size_t uniformShmemBase = static_cast<size_t>(params.maxTokensPerRank) * rowStride;
+    if (g_dispatchMode == DispatchMode::WithSync) {
+        tpeAreaSize = static_cast<size_t>(TPEAreaBytes(EP, expertPerRank));
+        offsetTPE = static_cast<int64_t>(uniformShmemBase);
+        routingWsSize = static_cast<size_t>(SyncWorkspaceBytes(EP, expertPerRank));
+    }
+
+    // Allocate in HCCL window (shmem): token data + optional TPE area
     size_t winOffset = 0;
-    void *devShmem = WindowAlloc(ctx.hostCtx.windowsIn[rankId], winOffset, shmemSize);
+    size_t totalShmemAlloc = (g_dispatchMode == DispatchMode::WithSync)
+        ? uniformShmemBase + tpeAreaSize
+        : shmemSize;
+    void *devShmem = WindowAlloc(ctx.hostCtx.windowsIn[rankId], winOffset, totalShmemAlloc);
 
     // Allocate regular device memory for outputs and routing tables
     void *devGmA = nullptr, *devGmScale = nullptr;
     void *devCumsumMM = nullptr, *devTPE = nullptr, *devPSBR = nullptr;
     void *devSyncWs = nullptr;
+    void *devRoutingWs = nullptr;
 
     aclrtMalloc(&devGmA, gmASize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc(&devGmScale, gmScaleSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc(&devCumsumMM, cumsumSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc(&devTPE, tpeSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc(&devPSBR, psbSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc(&devSyncWs, syncWsSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    if (g_dispatchMode != DispatchMode::WithSync) {
+        aclrtMalloc(&devCumsumMM, cumsumSize, ACL_MEM_MALLOC_HUGE_FIRST);
+        aclrtMalloc(&devTPE, tpeSize, ACL_MEM_MALLOC_HUGE_FIRST);
+        aclrtMalloc(&devPSBR, psbSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    } else {
+        aclrtMalloc(&devRoutingWs, routingWsSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    }
 
     // Copy data to device
     aclrtMemcpy(devShmem, shmemSize, localShmemData.data(), shmemSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemset(devGmA, gmASize, 0, gmASize);
     aclrtMemset(devGmScale, gmScaleSize, 0, gmScaleSize);
     aclrtMemset(devSyncWs, syncWsSize, 0, syncWsSize);
-    aclrtMemcpy(devCumsumMM, cumsumSize, routing.cumsumMM.data(), cumsumSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(devTPE, tpeSize, routing.tokenPerExpert.data(), tpeSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(devPSBR, psbSize, routing.preSumBeforeRank.data(), psbSize, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    if (g_dispatchMode == DispatchMode::WithSync) {
+        // Write localTokenPerExpert into TPE area at row[myRank]
+        // The TPE area starts at devShmem + uniformShmemBase (= offsetTPE)
+        int32_t paddedExpNum = PaddedExpertNum(EP, expertPerRank);
+        size_t tpeRowBytes = static_cast<size_t>(paddedExpNum) * sizeof(int32_t);
+        std::vector<int32_t> localTPEPadded(paddedExpNum, 0);
+        // localTokenPerExpert = tokenPerExpert[myRank * EP * expertPerRank .. (myRank+1) * EP * expertPerRank)
+        // This is the row in tokenPerExpert for srcRank==myRank (what myRank sends to each dst)
+        for (int dst = 0; dst < EP; ++dst) {
+            for (int g = 0; g < expertPerRank; ++g) {
+                localTPEPadded[dst * expertPerRank + g] =
+                    routing.tokenPerExpert[rankId * EP * expertPerRank + dst * expertPerRank + g];
+            }
+        }
+        // Zero the entire TPE area first
+        uint8_t *tpeAreaPtr = reinterpret_cast<uint8_t *>(devShmem) + uniformShmemBase;
+        aclrtMemset(tpeAreaPtr, tpeAreaSize, 0, tpeAreaSize);
+        // Write local TPE to row[myRank]
+        uint8_t *myRowPtr = tpeAreaPtr + static_cast<size_t>(rankId) * tpeRowBytes;
+        aclrtMemcpy(myRowPtr, tpeRowBytes, localTPEPadded.data(), tpeRowBytes, ACL_MEMCPY_HOST_TO_DEVICE);
+        // Zero routing workspace
+        aclrtMemset(devRoutingWs, routingWsSize, 0, routingWsSize);
+    } else {
+        aclrtMemcpy(devCumsumMM, cumsumSize, routing.cumsumMM.data(), cumsumSize, ACL_MEMCPY_HOST_TO_DEVICE);
+        aclrtMemcpy(devTPE, tpeSize, routing.tokenPerExpert.data(), tpeSize, ACL_MEMCPY_HOST_TO_DEVICE);
+        aclrtMemcpy(devPSBR, psbSize, routing.preSumBeforeRank.data(), psbSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    }
 
     // Host barrier: ensure all ranks have written their shmem
     HcclHostBarrier(ctx.comm, ctx.stream);
@@ -385,29 +439,171 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
             devCumsumMM, devTPE, devPSBR,
             devShmem, ctx.deviceCtx, devSyncWs,
             EP, expertPerRank, maxOutputSize, offsetA);
-    } else {
+    } else if (g_dispatchMode == DispatchMode::ViaGM) {
         kernelOk = LaunchMoeDispatchViaGM_K128(
             blockNum, ctx.stream,
             devGmA, devGmScale, devTempGm,
             devCumsumMM, devTPE, devPSBR,
             devShmem, ctx.deviceCtx, devSyncWs,
             EP, expertPerRank, maxOutputSize, offsetA);
+    } else {
+        kernelOk = LaunchMoeDispatchWithSync_K128(
+            blockNum, ctx.stream,
+            devGmA, devGmScale,
+            devShmem, ctx.deviceCtx,
+            devRoutingWs, devSyncWs,
+            EP, expertPerRank, maxOutputSize, offsetA, offsetTPE);
     }
 
     if (!kernelOk) {
         std::cerr << "[ERROR] Rank " << rankId << ": kernel execution failed\n";
         aclrtFree(devGmA);
         aclrtFree(devGmScale);
-        aclrtFree(devCumsumMM);
-        aclrtFree(devTPE);
-        aclrtFree(devPSBR);
+        if (devCumsumMM) aclrtFree(devCumsumMM);
+        if (devTPE) aclrtFree(devTPE);
+        if (devPSBR) aclrtFree(devPSBR);
         aclrtFree(devSyncWs);
+        if (devRoutingWs) aclrtFree(devRoutingWs);
         if (devTempGm) aclrtFree(devTempGm);
         ctx.Finalize();
         return false;
     }
 
     std::cout << "[INFO] Rank " << rankId << ": kernel execution completed\n";
+
+#ifdef PHASE_A_ONLY_TEST
+    if (g_dispatchMode == DispatchMode::WithSync) {
+        // Barrier to ensure all ranks' remote writes have landed
+        HcclHostBarrier(ctx.comm, ctx.stream);
+
+        // Phase A verification: check that remote ranks received our TPE data
+        // Each rank wrote its localTPEPadded + DATA_AS_FLAG_OFFSET to all OTHER ranks'
+        // TPE area at row[myRank].
+        // So on this rank, row[otherRank] in our TPE area should contain
+        // otherRank's localTokenPerExpert + 0x800000
+        int32_t paddedExpNum = PaddedExpertNum(EP, expertPerRank);
+        size_t tpeRowBytes = static_cast<size_t>(paddedExpNum) * sizeof(int32_t);
+        size_t totalTPEBytes = static_cast<size_t>(EP) * tpeRowBytes;
+        std::vector<int32_t> tpeReadback(EP * paddedExpNum, 0);
+        uint8_t *tpeDevPtr = reinterpret_cast<uint8_t *>(devShmem) + uniformShmemBase;
+        aclrtMemcpy(tpeReadback.data(), totalTPEBytes, tpeDevPtr, totalTPEBytes, ACL_MEMCPY_DEVICE_TO_HOST);
+
+        bool phaseAPass = true;
+        for (int srcRank = 0; srcRank < EP; ++srcRank) {
+            if (srcRank == rankId) {
+                // Our own row: should have original values (no flag added in shmem)
+                for (int j = 0; j < EP * expertPerRank; ++j) {
+                    int32_t expected = routing.tokenPerExpert[rankId * EP * expertPerRank + j];
+                    int32_t actual = tpeReadback[srcRank * paddedExpNum + j];
+                    if (actual != expected) {
+                        std::cerr << "[PHASE-A FAIL] Rank " << rankId
+                                  << ": own row[" << srcRank << "][" << j
+                                  << "] actual=" << actual << " expected=" << expected << "\n";
+                        phaseAPass = false;
+                    }
+                }
+            } else {
+                // Remote rank's row: should have value + DATA_AS_FLAG_OFFSET
+                for (int j = 0; j < EP * expertPerRank; ++j) {
+                    int32_t baseVal = routing.tokenPerExpert[srcRank * EP * expertPerRank + j];
+                    int32_t expected = baseVal + 0x800000;  // DATA_AS_FLAG_OFFSET
+                    int32_t actual = tpeReadback[srcRank * paddedExpNum + j];
+                    if (actual != expected) {
+                        std::cerr << "[PHASE-A FAIL] Rank " << rankId
+                                  << ": remote row[" << srcRank << "][" << j
+                                  << "] actual=" << actual << " expected=" << expected << "\n";
+                        phaseAPass = false;
+                    }
+                }
+            }
+        }
+        if (phaseAPass) {
+            std::cout << "[PHASE-A PASS] Rank " << rankId
+                      << ": all TPE rows verified (own + remote with DataAsFlag)\n";
+        }
+        // Cleanup and exit (no further verification needed)
+        aclrtFree(devGmA);
+        aclrtFree(devGmScale);
+        aclrtFree(devSyncWs);
+        if (devRoutingWs) aclrtFree(devRoutingWs);
+        ctx.Finalize();
+        return phaseAPass;
+    }
+#endif
+
+#ifdef PHASE_AB_TEST
+    if (g_dispatchMode == DispatchMode::WithSync) {
+        // Phase AB verification: check that computed routing tables match golden
+        // Read back workspace: cumsumMM, TPE (tokenPerExpert), preSumBeforeRank
+        int32_t paddedExpNum = PaddedExpertNum(EP, expertPerRank);
+        int32_t expNum = EP * expertPerRank;
+        // Workspace layout: [cumsumMM | PSBR | TPE]
+        size_t cumsumElems = static_cast<size_t>(EP * expertPerRank);
+        size_t psbrElems = static_cast<size_t>(EP * expertPerRank);
+        size_t tpeElems = static_cast<size_t>(EP * expNum);
+        size_t totalElems = cumsumElems + psbrElems + tpeElems;
+
+        std::vector<int32_t> wsReadback(totalElems, 0);
+        aclrtMemcpy(wsReadback.data(), totalElems * sizeof(int32_t),
+                    devRoutingWs, totalElems * sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
+
+        int32_t *actualCumsumMM = wsReadback.data();
+        int32_t *actualPSBR = wsReadback.data() + cumsumElems;
+        int32_t *actualTPE = wsReadback.data() + cumsumElems + psbrElems;
+
+        bool phaseBPass = true;
+
+        // Verify tokenPerExpert
+        for (int src = 0; src < EP && phaseBPass; ++src) {
+            for (int j = 0; j < expNum && phaseBPass; ++j) {
+                int32_t expected = routing.tokenPerExpert[src * expNum + j];
+                int32_t actual = actualTPE[src * expNum + j];
+                if (actual != expected) {
+                    std::cerr << "[PHASE-B FAIL] Rank " << rankId
+                              << ": TPE[" << src << "][" << j
+                              << "] actual=" << actual << " expected=" << expected << "\n";
+                    phaseBPass = false;
+                }
+            }
+        }
+
+        // Verify cumsumMM
+        for (size_t i = 0; i < cumsumElems && phaseBPass; ++i) {
+            int32_t expected = routing.cumsumMM[i];
+            int32_t actual = actualCumsumMM[i];
+            if (actual != expected) {
+                std::cerr << "[PHASE-B FAIL] Rank " << rankId
+                          << ": cumsumMM[" << i << "] actual=" << actual
+                          << " expected=" << expected << "\n";
+                phaseBPass = false;
+            }
+        }
+
+        // Verify preSumBeforeRank
+        for (size_t i = 0; i < psbrElems && phaseBPass; ++i) {
+            int32_t expected = routing.preSumBeforeRank[i];
+            int32_t actual = actualPSBR[i];
+            if (actual != expected) {
+                std::cerr << "[PHASE-B FAIL] Rank " << rankId
+                          << ": preSumBeforeRank[" << i << "] actual=" << actual
+                          << " expected=" << expected << "\n";
+                phaseBPass = false;
+            }
+        }
+
+        if (phaseBPass) {
+            std::cout << "[PHASE-B PASS] Rank " << rankId
+                      << ": all routing tables verified (cumsumMM + TPE + preSumBeforeRank)\n";
+        }
+        // Cleanup and exit
+        aclrtFree(devGmA);
+        aclrtFree(devGmScale);
+        aclrtFree(devSyncWs);
+        if (devRoutingWs) aclrtFree(devRoutingWs);
+        ctx.Finalize();
+        return phaseBPass;
+    }
+#endif
 
     // ========================================================================
     // Verification: compare device output with golden (compact token + scale)
@@ -458,10 +654,11 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
     // Cleanup
     aclrtFree(devGmA);
     aclrtFree(devGmScale);
-    aclrtFree(devCumsumMM);
-    aclrtFree(devTPE);
-    aclrtFree(devPSBR);
+    if (devCumsumMM) aclrtFree(devCumsumMM);
+    if (devTPE) aclrtFree(devTPE);
+    if (devPSBR) aclrtFree(devPSBR);
     aclrtFree(devSyncWs);
+    if (devRoutingWs) aclrtFree(devRoutingWs);
     if (devTempGm) aclrtFree(devTempGm);
 
     ctx.Finalize();
@@ -479,6 +676,8 @@ int main(int argc, char *argv[])
     const char *modeEnv = std::getenv("DISPATCH_MODE");
     if (modeEnv && std::string(modeEnv) == "viagm") {
         g_dispatchMode = DispatchMode::ViaGM;
+    } else if (modeEnv && std::string(modeEnv) == "sync") {
+        g_dispatchMode = DispatchMode::WithSync;
     }
 
     MoeDispatchParams params;
@@ -499,7 +698,8 @@ int main(int argc, char *argv[])
               << " hiddenSize=" << params.hiddenSize
               << " maxOutput=" << params.maxOutputSize
               << " maxTokens/rank=" << params.maxTokensPerRank
-              << " mode=" << (g_dispatchMode == DispatchMode::ViaGM ? "viagm" : "direct")
+              << " mode=" << (g_dispatchMode == DispatchMode::ViaGM ? "viagm" :
+                             g_dispatchMode == DispatchMode::WithSync ? "sync" : "direct")
               << std::endl;
 
     bool success = ForkAndRunWithHcclRootInfo(nRanks, 0, firstDeviceId,
