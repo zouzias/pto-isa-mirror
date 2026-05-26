@@ -116,6 +116,7 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter
     __ubuf__ half *nz_buffer_Ptr2 = nz_buffer_Ptr + 16;
     __ubuf__ half *nz_buffer_Ptr3 = nz_buffer_Ptr + ubM*ubN/2/4;
     __ubuf__ half *nz_buffer_Ptr4 = nz_buffer_Ptr + ubM*ubN/2/4 + 16;
+    uint64_t VSSTB_CONFIG = ((ubN + 1) << 16) | 2u;
 
     __VEC_SCOPE__{
         vector_f32 vreg_x_even;
@@ -316,10 +317,10 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter
             vpack((vector_u16&)vreg_x_exp_even_f16_1, (vector_u32&)vreg_x_exp_even_f16_1, LOWER);
             vpack((vector_u16&)vreg_x_exp_odd_f16_1, (vector_u32&)vreg_x_exp_odd_f16_1, LOWER);
 
-            vsstb(vreg_x_exp_even_f16, ((__ubuf__ half *&) nz_buffer_Ptr), 0x810002, preg_low_half, POST_UPDATE);
-            vsstb(vreg_x_exp_odd_f16, ((__ubuf__ half *&) nz_buffer_Ptr2), 0x810002, preg_low_half, POST_UPDATE);
-            vsstb(vreg_x_exp_even_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr3), 0x810002, preg_low_half, POST_UPDATE);
-            vsstb(vreg_x_exp_odd_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr4), 0x810002, preg_low_half, POST_UPDATE);
+            vsstb(vreg_x_exp_even_f16, ((__ubuf__ half *&) nz_buffer_Ptr), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
+            vsstb(vreg_x_exp_odd_f16, ((__ubuf__ half *&) nz_buffer_Ptr2), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
+            vsstb(vreg_x_exp_even_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr3), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
+            vsstb(vreg_x_exp_odd_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr4), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
             
 
             vadd(vreg_x_sum_even, vreg_x_exp_even, vreg_x_sum_even, preg_134, MODE_ZEROING);
@@ -670,6 +671,7 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
     __ubuf__ half *nz_buffer_Ptr2 = nz_buffer_Ptr + 16;
     __ubuf__ half *nz_buffer_Ptr3 = nz_buffer_Ptr + ubM*ubN/2/4;
     __ubuf__ half *nz_buffer_Ptr4 = nz_buffer_Ptr + ubM*ubN/2/4 + 16;
+    uint64_t VSSTB_CONFIG = ((ubN + 1)<< 16) | 2u;
 
     __VEC_SCOPE__{
         vector_f32 vreg_x_even;
@@ -879,10 +881,10 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
             vpack((vector_u16&)vreg_x_exp_even_f16_1, (vector_u32&)vreg_x_exp_even_f16_1, LOWER);
             vpack((vector_u16&)vreg_x_exp_odd_f16_1, (vector_u32&)vreg_x_exp_odd_f16_1, LOWER);
 
-            vsstb(vreg_x_exp_even_f16, ((__ubuf__ half *&) nz_buffer_Ptr), 0x810002, preg_low_half, POST_UPDATE);
-            vsstb(vreg_x_exp_odd_f16, ((__ubuf__ half *&) nz_buffer_Ptr2), 0x810002, preg_low_half, POST_UPDATE);
-            vsstb(vreg_x_exp_even_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr3), 0x810002, preg_low_half, POST_UPDATE);
-            vsstb(vreg_x_exp_odd_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr4), 0x810002, preg_low_half, POST_UPDATE);
+            vsstb(vreg_x_exp_even_f16, ((__ubuf__ half *&) nz_buffer_Ptr), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
+            vsstb(vreg_x_exp_odd_f16, ((__ubuf__ half *&) nz_buffer_Ptr2), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
+            vsstb(vreg_x_exp_even_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr3), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
+            vsstb(vreg_x_exp_odd_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr4), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
             
 
             vadd(vreg_x_sum_even, vreg_x_exp_even, vreg_x_sum_even, preg_134, MODE_ZEROING);
