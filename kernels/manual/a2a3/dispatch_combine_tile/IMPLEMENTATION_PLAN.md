@@ -47,9 +47,9 @@ Current task status:
 | Task 7: Dispatch Pack and Payload Gather | `[x]` | Dispatch pack and TGET gather verified |
 | Task 8: Host Expert Output Preparation and Dispatch Timing | `[x]` | Host identity expert output and dispatch timing verified |
 | Task 9: Combine Return Path | `[x]` | TPUT combine return path verified |
-| Task 10: Combine Restore and Output Verification | `[ ]` | Not started |
-| Task 11: E2E Timing, Debug Dumps, and Run Matrix | `[ ]` | Not started |
-| Task 12: Hardening and Final Review | `[ ]` | Not started |
+| Task 10: Combine Restore and Output Verification | `[x]` | Restore and output verification passed for 2-rank acceptance shapes |
+| Task 11: E2E Timing, Debug Dumps, and Run Matrix | `[x]` | 2/3/4-rank matrix passed after per-iteration signal epoch fix |
+| Task 12: Hardening and Final Review | `[x]` | Static checks and final default 2-rank run passed |
 
 ## Validation Rules
 
@@ -717,17 +717,17 @@ Feedback:
 
 **Scope:**
 
-- [ ] Restore output by contiguous token shard; each block owns disjoint token rows.
-- [ ] For each token row, clear `outputC[token, :]`.
-- [ ] For each `topK` slot, read `expandedRowIdx`; skip `-1`.
-- [ ] Implement `outputC += probs[token, slot] * peerWindow.ptrD[row, :]` with PTO Vec tile operations.
-- [ ] Use `floatScratch` if direct half-by-float accumulation is not supported cleanly by available PTO instructions.
-- [ ] Copy `outputC` to host and compare against CPU golden with `rtol/atol`.
-- [ ] Print mismatch count and first mismatch details when verification fails.
+- [x] Restore output by contiguous token shard; each block owns disjoint token rows.
+- [x] For each token row, clear `outputC[token, :]`.
+- [x] For each `topK` slot, read `expandedRowIdx`; skip `-1`.
+- [x] Implement `outputC += probs[token, slot] * peerWindow.ptrD[row, :]` with PTO Vec tile operations.
+- [x] Use `floatScratch` if direct half-by-float accumulation is not supported cleanly by available PTO instructions.
+- [x] Copy `outputC` to host and compare against CPU golden with `rtol/atol`.
+- [x] Print mismatch count and first mismatch details when verification fails.
 
 **Observation/Validation:**
 
-- [ ] Run:
+- [x] Run:
 
   ```bash
   timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2
@@ -735,13 +735,24 @@ Feedback:
 
   Expected: every rank prints `restore_done`; `outputC` compare prints `verify=PASS`, `mismatch_count=0`.
 
-- [ ] Run:
+- [x] Run:
 
   ```bash
   timeout 60s bash run.sh -pes 2 -M 128 -K 256 -topK 2 -expertPerPe 2 --debug 1
   ```
 
   Expected: `verify=PASS`, positive timing fields, and no debug-level-2 payload dump unless `debug=2`.
+
+Feedback:
+- 2026-05-26: Implemented combine restore in `DispatchCombineTileCombine`: return rows are written to `ptrD`, peers are
+  waited with device-side `TWAIT`, then each AIV block restores a disjoint contiguous token shard with PTO Vec
+  `TEXPANDS/TLOAD/TAXPY/TSTORE`. Verified with
+  `timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2 --clean-build 0 --keep-hccl-shm 1`
+  and
+  `timeout 60s bash run.sh -pes 2 -M 128 -K 256 -topK 2 -expertPerPe 2 --debug 1 --clean-build 0 --keep-hccl-shm 1`;
+  both ranks printed `restore_done`, `verify=PASS`, and `mismatch_count=0`. During validation, the medium shape initially
+  timed out in restore; root cause was a hand-written flag sequence around two `TLOAD`s and `TAXPY`. Switching restore to
+  PTO `Event<Op::TLOAD, Op::TAXPY>` and `Event<Op::TAXPY, Op::TSTORE_VEC>` dependency chaining fixed the hang.
 
 ## Task 11: E2E Timing, Debug Dumps, and Run Matrix
 
@@ -753,26 +764,26 @@ Feedback:
 
 **Scope:**
 
-- [ ] Implement warmup/iters loop.
-- [ ] Print required timing fields:
+- [x] Implement warmup/iters loop.
+- [x] Print required timing fields:
   - `dispatch_e2e_us`;
   - `prepare_host_us`;
   - `combine_e2e_us`;
   - `total_e2e_us`.
-- [ ] Print required performance config fields:
+- [x] Print required performance config fields:
   - `aiv_blocks`;
   - `tile_cols`;
   - `peer_window_bytes`;
   - `workspace_bytes`;
   - `dispatch_peer_shards`;
   - `combine_peer_shards`.
-- [ ] Implement debug levels 0, 1, and 2 exactly as described in `DESIGN.md`.
-- [ ] Ensure `run.sh` can run 2, 3, and 4 ranks through continuous mapping.
-- [ ] Ensure `--hccl-buffsize-mb 0` auto-raises `HCCL_BUFFSIZE` based on peer window bytes.
+- [x] Implement debug levels 0, 1, and 2 exactly as described in `DESIGN.md`.
+- [x] Ensure `run.sh` can run 2, 3, and 4 ranks through continuous mapping.
+- [x] Ensure `--hccl-buffsize-mb 0` auto-raises `HCCL_BUFFSIZE` based on peer window bytes.
 
 **Observation/Validation:**
 
-- [ ] Run acceptance matrix:
+- [x] Run acceptance matrix:
 
   ```bash
   timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 -debug 2
@@ -784,7 +795,7 @@ Feedback:
   Expected: all pass verification; all print positive timing fields; default-shape run prints `debug=0` logs only and no
   head payload dump.
 
-- [ ] Run multi-card mapping if hardware is available:
+- [x] Run multi-card mapping if hardware is available:
 
   ```bash
   timeout 60s bash run.sh -pes 3 -M 8 -K 64 -topK 2 -expertPerPe 1 --device-base 0 --ndevices 8 -debug 1
@@ -792,6 +803,27 @@ Feedback:
   ```
 
   Expected: all ranks bind continuous devices, all ranks print completion lines, and verification passes.
+
+Feedback:
+- 2026-05-26: Implemented warmup/iters measurement loop, rank-scoped timing, performance config logging, debug gating, and
+  auto `HCCL_BUFFSIZE` sizing. The 2-rank acceptance matrix passed:
+  `timeout 60s bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 -debug 2 --clean-build 0 --keep-hccl-shm 1`,
+  `timeout 60s bash run.sh -pes 2 -M 128 -K 256 -topK 2 -expertPerPe 2 -debug 1 --clean-build 0 --keep-hccl-shm 1`,
+  `timeout 60s bash run.sh -pes 2 -M 128 -K 256 -topK 4 -expertPerPe 2 -debug 1 --skip-build 1 --clean-build 0 --keep-hccl-shm 1`,
+  and
+  `timeout 90s bash run.sh -pes 2 -M 64 -K 7168 -topK 8 -expertPerPe 2 -debug 0 --skip-build 1 --clean-build 0 --keep-hccl-shm 1`.
+  All printed positive `dispatch_e2e_us`, `prepare_host_us`, `combine_e2e_us`, `total_e2e_us`, and
+  `verify=PASS mismatch_count=0`; default debug=0 produced no payload head dump and printed `HCCL_BUFFSIZE=79`.
+  Multi-rank E2E initially exposed a stale-signal/window-reuse issue because all iterations reused fixed device signal
+  values. The fix adds `shape.signalValue = iter + 1` at host launch and uses that value for both dispatch count
+  `TNOTIFY/TWAIT` and combine-done `TNOTIFY/TWAIT`; second-iteration debug logs now show `count_ready_signal=2,...`
+  instead of reusing `1`. After the fix,
+  `timeout 60s bash run.sh -pes 3 -M 8 -K 64 -topK 2 -expertPerPe 1 --device-base 0 --ndevices 8 -debug 1 --clean-build 0 --keep-hccl-shm 1`
+  passed, and
+  `timeout 60s bash run.sh -pes 4 -M 8 -K 64 -topK 2 -expertPerPe 1 --device-base 0 --ndevices 8 -debug 1 --skip-build 1 --clean-build 0 --keep-hccl-shm 1`
+  passed; all ranks bound continuous devices, completed warmup and measure iterations, and printed
+  `verify=PASS mismatch_count=0`. Focused 4-rank diagnostics also passed for `--dispatch-metadata-only`,
+  `--dispatch-only`, and `--combine-return-only`.
 
 ## Task 12: Hardening and Final Review
 
@@ -801,18 +833,18 @@ Feedback:
 
 **Scope:**
 
-- [ ] Run `clang-format -i -style=file` on C++ headers and sources.
-- [ ] Run `shellcheck run.sh` if available; otherwise manually review `set -euo pipefail`, quoting, and getopt handling.
-- [ ] Confirm only two device compute kernel entry points exist.
-- [ ] Confirm no SHMEM/AscendC/Catlass device dependency appears in kernel code.
-- [ ] Confirm all expected command-line parameters are visible and documented through `run.sh --help`.
-- [ ] Confirm host barriers do not replace device-side `TWAIT` readiness.
-- [ ] Confirm debug logs are guarded by `debug` level and not too noisy at `debug=0`.
-- [ ] Record any hardware-only limitations or unverified paths in final notes.
+- [x] Run `clang-format -i -style=file` on C++ headers and sources.
+- [x] Run `shellcheck run.sh` if available; otherwise manually review `set -euo pipefail`, quoting, and getopt handling.
+- [x] Confirm only two device compute kernel entry points exist.
+- [x] Confirm no SHMEM/AscendC/Catlass device dependency appears in kernel code.
+- [x] Confirm all expected command-line parameters are visible and documented through `run.sh --help`.
+- [x] Confirm host barriers do not replace device-side `TWAIT` readiness.
+- [x] Confirm debug logs are guarded by `debug` level and not too noisy at `debug=0`.
+- [x] Record any hardware-only limitations or unverified paths in final notes.
 
 **Observation/Validation:**
 
-- [ ] Run final static checks:
+- [x] Run final static checks:
 
   ```bash
   rg -n "kernel_operator|AscendC::|LocalTensor|DataCopy|Catlass|aclshmem|shmem_|symmetricPtr" .
@@ -823,7 +855,7 @@ Feedback:
   Expected: forbidden API matches only in docs/plans; exactly two kernel entry points; `--case` only appears in rejection/help
   logic.
 
-- [ ] Run task-state check:
+- [x] Run task-state check:
 
   ```bash
   awk '/Current task status:/,/## Validation Rules/' IMPLEMENTATION_PLAN.md | rg -n "\\[ \\]|\\[~\\]|\\[!\\]"
@@ -832,13 +864,26 @@ Feedback:
   Expected: no output from the status table. Unchecked substeps may remain only if they document optional hardware paths not run
   in the current environment and are called out in final notes.
 
-- [ ] Run final default:
+- [x] Run final default:
 
   ```bash
   timeout 90s bash run.sh -pes 2 -M 64 -K 7168 -topK 8 -expertPerPe 2 -debug 0 -iters 5 -warmup 3
   ```
 
   Expected: build succeeds, multi-process run succeeds, verification passes, and timing fields print.
+
+Feedback:
+- 2026-05-26: Ran `clang-format -i -style=file` on modified C++ files and final static checks:
+  source-only forbidden API grep had no matches, `rg -n "__global__ AICORE void" dispatch_combine_tile_kernel.cpp`
+  reported exactly `DispatchCombineTileDispatch` and `DispatchCombineTileCombine`,
+  `rg -n "case all|case-all|--case" run.sh main.cpp args.h` showed only rejection/help logic,
+  `bash -n run.sh` passed, `bash run.sh --help` documented the explicit parameters, and
+  `git diff --check -- kernels/manual/a2a3/dispatch_combine_tile` passed. `shellcheck` is not installed in this
+  environment, so `run.sh` was reviewed manually for `set -euo pipefail`, quoting, and option handling. Final default
+  `timeout 90s bash run.sh -pes 2 -M 64 -K 7168 -topK 8 -expertPerPe 2 -debug 0 -iters 5 -warmup 3 --clean-build 0 --keep-hccl-shm 1`
+  passed within timeout after rebuilding unchanged targets; both ranks completed three warmup iterations and five measured
+  iterations with `verify=PASS mismatch_count=0` and timing fields. After the per-iteration signal epoch fix and 3/4-rank
+  reruns, task-state check reports no unfinished or blocked status-table entries.
 
 ## Execution Notes
 

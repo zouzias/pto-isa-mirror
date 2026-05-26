@@ -41,7 +41,7 @@ constexpr int kDefaultTileCols = 1024;
 constexpr int kMetaTileCols = 16;
 constexpr uint64_t kPingUbAddr = 0x0;
 constexpr uint64_t kPongUbAddr = 0x1000;
-constexpr uint64_t kSoftSyncUbAddr = 0x3000;
+constexpr uint64_t kSoftSyncUbAddr = 0x5000;
 
 using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
 using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -203,6 +203,14 @@ AICORE inline pto::comm::Signal MakeSignal(__gm__ int32_t *ptr)
     return pto::comm::Signal(ptr);
 }
 
+AICORE inline void WaitStoreTileReusable()
+{
+    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+    set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+    wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+}
+
 template <int kCols = kDefaultTileCols>
 AICORE inline void CopyRowHalf(__gm__ half *dstBase, int32_t dstRowStride, int32_t dstRow, __gm__ half *srcBase,
                                int32_t srcRowStride, int32_t srcRow, int32_t rowLen)
@@ -223,8 +231,7 @@ AICORE inline void CopyRowHalf(__gm__ half *dstBase, int32_t dstRowStride, int32
         set_flag(PIPE_MTE2, PIPE_MTE3, event);
         wait_flag(PIPE_MTE2, PIPE_MTE3, event);
         TSTORE(dst, tile);
-        set_flag(PIPE_MTE3, PIPE_MTE2, event);
-        wait_flag(PIPE_MTE3, PIPE_MTE2, event);
+        WaitStoreTileReusable();
     }
 }
 
@@ -270,6 +277,17 @@ AICORE inline void StoreScalarI32(__gm__ int32_t *ptr, int32_t value)
     *ptr = value;
 }
 
+AICORE inline void InvalidateGmCacheLines(__gm__ void *ptr, uint32_t bytes)
+{
+    pipe_barrier(PIPE_ALL);
+    uint64_t start = reinterpret_cast<uint64_t>(ptr) & ~static_cast<uint64_t>(63);
+    uint64_t end = (reinterpret_cast<uint64_t>(ptr) + bytes + 63) & ~static_cast<uint64_t>(63);
+    for (uint64_t addr = start; addr < end; addr += 64) {
+        dcci(reinterpret_cast<__gm__ void *>(addr), SINGLE_CACHE_LINE);
+    }
+    dsb(DSB_DDR);
+}
+
 AICORE inline uint32_t ExpertNumPaddedDevice(DispatchCombineTileShape shape)
 {
     return ((shape.expertNum + shape.metadataPad - 1) / shape.metadataPad) * shape.metadataPad;
@@ -287,10 +305,24 @@ AICORE inline uint32_t TokenShardEnd(uint32_t totalTokens, uint32_t blockId, uin
     return TokenShardBegin(totalTokens, blockId + 1, blockNum);
 }
 
+AICORE inline uint32_t TokenShardBlockForToken(uint32_t totalTokens, uint32_t token, uint32_t blockNum)
+{
+    uint32_t base = totalTokens / blockNum;
+    uint32_t rem = totalTokens % blockNum;
+    uint32_t largeShardTokens = (base + 1) * rem;
+    if (token < largeShardTokens) {
+        return token / (base + 1);
+    }
+    if (base == 0) {
+        return token;
+    }
+    return rem + (token - largeShardTokens) / base;
+}
+
 AICORE inline void SoftSyncAiv(__gm__ int32_t *gmWorkspace, uint32_t blockNum)
 {
-    pto::Tile<pto::TileType::Vec, int32_t, 1, pto::SYNCALL_SOFT_SLOT_INT32, pto::BLayout::RowMajor, -1, -1>
-        syncTile(1, pto::SYNCALL_SOFT_SLOT_INT32);
+    pto::Tile<pto::TileType::Vec, int32_t, 1, pto::SYNCALL_SOFT_SLOT_INT32, pto::BLayout::RowMajor, -1, -1> syncTile(
+        1, pto::SYNCALL_SOFT_SLOT_INT32);
 #ifndef __PTO_AUTO__
     syncTile.data() = reinterpret_cast<__ubuf__ int32_t *>(kSoftSyncUbAddr);
 #endif
@@ -325,9 +357,7 @@ AICORE inline void ClearDispatchState(DispatchCombineTileShape shape, LocalWorks
     for (uint32_t idx = blockId; idx < shape.ep * shape.expertPerRank; idx += blockNum) {
         StoreScalarI32(workspaceView.prevSumBeforeRank + idx, 0);
     }
-    for (uint32_t idx = blockId; idx < expandedRows; idx += blockNum) {
-        StoreScalarI32(localPeer.expandedRowIdx + idx, -1);
-    }
+    (void)expandedRows;
     for (uint32_t idx = blockId; idx < shape.ep; idx += blockNum) {
         StoreScalarI32(localPeer.combineDoneSignal + idx, 0);
     }
@@ -337,11 +367,12 @@ AICORE inline void InitPackCursors(DispatchCombineTileShape shape, LocalWorkspac
                                    uint32_t blockNum)
 {
     uint32_t expertNumPadded = ExpertNumPaddedDevice(shape);
+    InvalidateGmCacheLines(workspaceView.blockPrefixPerExpert,
+                           static_cast<uint32_t>(blockNum * expertNumPadded * sizeof(int32_t)));
     __gm__ int32_t *cursorBase = PackCursorBase(workspaceView, blockNum) + blockId * expertNumPadded;
     for (uint32_t expert = 0; expert < expertNumPadded; ++expert) {
-        int32_t prefix =
-            LoadScalarI32(workspaceView.blockPrefixPerExpert + static_cast<uint64_t>(blockId) * expertNumPadded +
-                          expert);
+        int32_t prefix = LoadScalarI32(workspaceView.blockPrefixPerExpert +
+                                       static_cast<uint64_t>(blockId) * expertNumPadded + expert);
         StoreScalarI32(cursorBase + expert, prefix);
     }
 }
@@ -361,6 +392,8 @@ AICORE inline void PackLocalRowsToWindow(DispatchCombineTileShape shape, LocalWo
     __gm__ int32_t *cursorBase = PackCursorBase(workspaceView, blockNum) + blockId * expertNumPadded;
     __gm__ int32_t *expertIds = reinterpret_cast<__gm__ int32_t *>(expertIdx);
     __gm__ half *input = reinterpret_cast<__gm__ half *>(inputA);
+    InvalidateGmCacheLines(workspaceView.cumsumPerExpert + static_cast<uint64_t>(myRank) * expertNumPadded,
+                           static_cast<uint32_t>(expertNumPadded * sizeof(int32_t)));
     uint32_t tokenBegin = TokenShardBegin(shape.m, blockId, blockNum);
     uint32_t tokenEnd = TokenShardEnd(shape.m, blockId, blockNum);
     for (uint32_t token = tokenBegin; token < tokenEnd; ++token) {
@@ -368,16 +401,14 @@ AICORE inline void PackLocalRowsToWindow(DispatchCombineTileShape shape, LocalWo
             uint32_t routeIndex = token * shape.topK + slot;
             int32_t expert = LoadScalarI32(expertIds + routeIndex);
             if (expert < 0 || static_cast<uint32_t>(expert) >= shape.expertNum) {
-                StoreScalarI32(localPeer.expandedRowIdx + routeIndex, -1);
                 continue;
             }
             uint32_t expertId = static_cast<uint32_t>(expert);
             int32_t cursor = LoadScalarI32(cursorBase + expertId);
             StoreScalarI32(cursorBase + expertId, cursor + 1);
             int32_t packedRow = PackedExpertOffset(shape, workspaceView, myRank, expertId) + cursor;
-            StoreScalarI32(localPeer.expandedRowIdx + routeIndex, packedRow);
-            CopyRowHalf(localPeer.packedA, static_cast<int32_t>(shape.k), packedRow, input, static_cast<int32_t>(shape.k),
-                        static_cast<int32_t>(token), static_cast<int32_t>(shape.k));
+            CopyRowHalf(localPeer.packedA, static_cast<int32_t>(shape.k), packedRow, input,
+                        static_cast<int32_t>(shape.k), static_cast<int32_t>(token), static_cast<int32_t>(shape.k));
         }
     }
 }
@@ -396,20 +427,71 @@ AICORE inline void CountLocalRoutes(DispatchCombineTileShape shape, LocalWorkspa
             uint32_t routeIndex = token * shape.topK + slot;
             int32_t expert = LoadScalarI32(expertIds + routeIndex);
             if (expert < 0 || static_cast<uint32_t>(expert) >= shape.expertNum) {
-                StoreScalarI32(localPeer.expandedRowIdx + routeIndex, -1);
                 continue;
             }
             __gm__ int32_t *count = blockCounts + static_cast<uint32_t>(expert);
             StoreScalarI32(count, LoadScalarI32(count) + 1);
         }
     }
+    InvalidateGmCacheLines(blockCounts, static_cast<uint32_t>(expertNumPadded * sizeof(int32_t)));
+}
+
+AICORE inline void RebuildExpandedRowIdx(DispatchCombineTileShape shape, LocalWorkspaceView workspaceView,
+                                         LocalPeerWindowView localPeer, GM_ADDR expertIdx, uint32_t myRank,
+                                         uint32_t blockId, uint32_t blockNum)
+{
+    constexpr uint32_t kI32PerCacheLine = 16;
+    uint32_t expertNumPadded = ExpertNumPaddedDevice(shape);
+    uint32_t routeCount = shape.m * shape.topK;
+    uint32_t lineCount = (routeCount + kI32PerCacheLine - 1) / kI32PerCacheLine;
+    __gm__ int32_t *expertIds = reinterpret_cast<__gm__ int32_t *>(expertIdx);
+    InvalidateGmCacheLines(workspaceView.blockPrefixPerExpert,
+                           static_cast<uint32_t>(blockNum * expertNumPadded * sizeof(int32_t)));
+    InvalidateGmCacheLines(workspaceView.cumsumPerExpert + static_cast<uint64_t>(myRank) * expertNumPadded,
+                           static_cast<uint32_t>(expertNumPadded * sizeof(int32_t)));
+    for (uint32_t line = blockId; line < lineCount; line += blockNum) {
+        uint32_t begin = line * kI32PerCacheLine;
+        uint32_t end = begin + kI32PerCacheLine;
+        if (end > routeCount) {
+            end = routeCount;
+        }
+        for (uint32_t routeIndex = begin; routeIndex < end; ++routeIndex) {
+            int32_t expert = LoadScalarI32(expertIds + routeIndex);
+            if (expert < 0 || static_cast<uint32_t>(expert) >= shape.expertNum) {
+                StoreScalarI32(localPeer.expandedRowIdx + routeIndex, -1);
+                continue;
+            }
+            uint32_t expertId = static_cast<uint32_t>(expert);
+            uint32_t token = routeIndex / shape.topK;
+            uint32_t sourceBlock = TokenShardBlockForToken(shape.m, token, blockNum);
+            uint32_t localBegin = TokenShardBegin(shape.m, sourceBlock, blockNum) * shape.topK;
+            int32_t localOrdinal = 0;
+            for (uint32_t prev = localBegin; prev < routeIndex; ++prev) {
+                int32_t prevExpert = LoadScalarI32(expertIds + prev);
+                if (prevExpert == expert) {
+                    ++localOrdinal;
+                }
+            }
+            int32_t blockPrefix = LoadScalarI32(workspaceView.blockPrefixPerExpert +
+                                                static_cast<uint64_t>(sourceBlock) * expertNumPadded + expertId);
+            int32_t packedRow = PackedExpertOffset(shape, workspaceView, myRank, expertId) + blockPrefix + localOrdinal;
+            StoreScalarI32(localPeer.expandedRowIdx + routeIndex, packedRow);
+        }
+        InvalidateGmCacheLines(localPeer.expandedRowIdx + begin,
+                               static_cast<uint32_t>((end - begin) * sizeof(int32_t)));
+    }
 }
 
 AICORE inline void BuildBlockPrefixAndLocalCounts(DispatchCombineTileShape shape, LocalWorkspaceView workspaceView,
                                                   uint32_t blockId, uint32_t blockNum)
 {
+    if (blockId != 0) {
+        return;
+    }
     uint32_t expertNumPadded = ExpertNumPaddedDevice(shape);
-    for (uint32_t expert = blockId; expert < expertNumPadded; expert += blockNum) {
+    InvalidateGmCacheLines(workspaceView.blockTokenPerExpert,
+                           static_cast<uint32_t>(blockNum * expertNumPadded * sizeof(int32_t)));
+    for (uint32_t expert = 0; expert < expertNumPadded; ++expert) {
         int32_t sum = 0;
         for (uint32_t block = 0; block < blockNum; ++block) {
             uint32_t idx = block * expertNumPadded + expert;
@@ -420,6 +502,9 @@ AICORE inline void BuildBlockPrefixAndLocalCounts(DispatchCombineTileShape shape
         }
         StoreScalarI32(workspaceView.localTokenPerExpert + expert, expert < shape.expertNum ? sum : 0);
     }
+    InvalidateGmCacheLines(workspaceView.blockPrefixPerExpert,
+                           static_cast<uint32_t>(blockNum * expertNumPadded * sizeof(int32_t)));
+    InvalidateGmCacheLines(workspaceView.localTokenPerExpert, static_cast<uint32_t>(expertNumPadded * sizeof(int32_t)));
 }
 
 AICORE inline void BuildPackedExpertOffset(DispatchCombineTileShape shape, LocalWorkspaceView workspaceView,
@@ -429,6 +514,7 @@ AICORE inline void BuildPackedExpertOffset(DispatchCombineTileShape shape, Local
         return;
     }
     uint32_t expertNumPadded = ExpertNumPaddedDevice(shape);
+    InvalidateGmCacheLines(workspaceView.localTokenPerExpert, static_cast<uint32_t>(expertNumPadded * sizeof(int32_t)));
     int32_t sum = 0;
     for (uint32_t expert = 0; expert < expertNumPadded; ++expert) {
         int32_t count = LoadScalarI32(workspaceView.localTokenPerExpert + expert);
@@ -437,6 +523,8 @@ AICORE inline void BuildPackedExpertOffset(DispatchCombineTileShape shape, Local
             sum += count;
         }
     }
+    InvalidateGmCacheLines(workspaceView.cumsumPerExpert + static_cast<uint64_t>(myRank) * expertNumPadded,
+                           static_cast<uint32_t>(expertNumPadded * sizeof(int32_t)));
 }
 
 AICORE inline void PublishCountRows(DispatchCombineTileShape shape, LocalWorkspaceView workspaceView,
@@ -447,14 +535,16 @@ AICORE inline void PublishCountRows(DispatchCombineTileShape shape, LocalWorkspa
     uint32_t expertNumPadded = ExpertNumPaddedDevice(shape);
     for (uint32_t dst = blockId; dst < shape.ep; dst += blockNum) {
         LocalPeerWindowView remotePeer = MakeRemotePeerWindowView(ctx, peerWindow, dst, peerWindowLayout);
-        GlobalNd<int32_t> localCount = MakeGlobal2D(workspaceView.localTokenPerExpert, 1,
-                                                    static_cast<int32_t>(expertNumPadded),
-                                                    static_cast<int32_t>(expertNumPadded));
+        InvalidateGmCacheLines(workspaceView.localTokenPerExpert,
+                               static_cast<uint32_t>(expertNumPadded * sizeof(int32_t)));
+        GlobalNd<int32_t> localCount =
+            MakeGlobal2D(workspaceView.localTokenPerExpert, 1, static_cast<int32_t>(expertNumPadded),
+                         static_cast<int32_t>(expertNumPadded));
         GlobalNd<int32_t> remoteCount =
             MakeGlobal2D(remotePeer.peerTokenPerExpert + static_cast<uint64_t>(myRank) * expertNumPadded, 1,
                          static_cast<int32_t>(expertNumPadded), static_cast<int32_t>(expertNumPadded));
         TPutRows<int32_t, kMetaTileCols>(remoteCount, localCount);
-        NotifySignal(remotePeer.countReadySignal + myRank, 1);
+        NotifySignal(remotePeer.countReadySignal + myRank, static_cast<int32_t>(shape.signalValue));
     }
 }
 
@@ -462,7 +552,7 @@ AICORE inline void WaitCountRows(DispatchCombineTileShape shape, LocalPeerWindow
                                  uint32_t blockNum)
 {
     for (uint32_t src = blockId; src < shape.ep; src += blockNum) {
-        WaitSignal(localPeer.countReadySignal + src, 1);
+        WaitSignal(localPeer.countReadySignal + src, static_cast<int32_t>(shape.signalValue));
     }
 }
 
@@ -471,12 +561,16 @@ AICORE inline void BuildPrefixMetadata(DispatchCombineTileShape shape, LocalWork
                                        uint32_t blockNum)
 {
     uint32_t expertNumPadded = ExpertNumPaddedDevice(shape);
+    InvalidateGmCacheLines(localPeer.peerTokenPerExpert,
+                           static_cast<uint32_t>(shape.ep * expertNumPadded * sizeof(int32_t)));
     for (uint32_t src = blockId; src < shape.ep; src += blockNum) {
         int32_t sum = 0;
         for (uint32_t expert = 0; expert < expertNumPadded; ++expert) {
             sum += LoadScalarI32(localPeer.peerTokenPerExpert + static_cast<uint64_t>(src) * expertNumPadded + expert);
             StoreScalarI32(workspaceView.cumsumPerExpert + static_cast<uint64_t>(src) * expertNumPadded + expert, sum);
         }
+        InvalidateGmCacheLines(workspaceView.cumsumPerExpert + static_cast<uint64_t>(src) * expertNumPadded,
+                               static_cast<uint32_t>(expertNumPadded * sizeof(int32_t)));
     }
 
     if (blockId == 0) {
@@ -486,16 +580,19 @@ AICORE inline void BuildPrefixMetadata(DispatchCombineTileShape shape, LocalWork
             StoreScalarI32(workspaceView.dispatchOffset + localExpert, dispatchCursor);
             int32_t beforeRank = 0;
             for (uint32_t src = 0; src < shape.ep; ++src) {
-                StoreScalarI32(workspaceView.prevSumBeforeRank + static_cast<uint64_t>(src) * shape.expertPerRank +
-                                   localExpert,
-                               beforeRank);
-                int32_t rows =
-                    LoadScalarI32(localPeer.peerTokenPerExpert + static_cast<uint64_t>(src) * expertNumPadded +
-                                  globalExpert);
+                StoreScalarI32(
+                    workspaceView.prevSumBeforeRank + static_cast<uint64_t>(src) * shape.expertPerRank + localExpert,
+                    beforeRank);
+                int32_t rows = LoadScalarI32(localPeer.peerTokenPerExpert +
+                                             static_cast<uint64_t>(src) * expertNumPadded + globalExpert);
                 beforeRank += rows;
                 dispatchCursor += rows;
             }
         }
+        InvalidateGmCacheLines(workspaceView.dispatchOffset,
+                               static_cast<uint32_t>(shape.expertPerRank * sizeof(int32_t)));
+        InvalidateGmCacheLines(workspaceView.prevSumBeforeRank,
+                               static_cast<uint32_t>(shape.ep * shape.expertPerRank * sizeof(int32_t)));
     }
 }
 
@@ -529,23 +626,28 @@ AICORE inline void GatherLocalExpertPayload(DispatchCombineTileShape shape, Loca
                                             const PeerWindowLayout &peerWindowLayout)
 {
     uint32_t expertNumPadded = ExpertNumPaddedDevice(shape);
+    InvalidateGmCacheLines(localPeer.peerTokenPerExpert,
+                           static_cast<uint32_t>(shape.ep * expertNumPadded * sizeof(int32_t)));
+    InvalidateGmCacheLines(workspaceView.cumsumPerExpert,
+                           static_cast<uint32_t>(shape.ep * expertNumPadded * sizeof(int32_t)));
+    InvalidateGmCacheLines(workspaceView.dispatchOffset, static_cast<uint32_t>(shape.expertPerRank * sizeof(int32_t)));
+    InvalidateGmCacheLines(workspaceView.prevSumBeforeRank,
+                           static_cast<uint32_t>(shape.ep * shape.expertPerRank * sizeof(int32_t)));
     for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
         uint32_t globalExpert = myRank * shape.expertPerRank + localExpert;
         for (uint32_t src = blockId; src < shape.ep; src += blockNum) {
-            int32_t rows =
-                LoadScalarI32(localPeer.peerTokenPerExpert + static_cast<uint64_t>(src) * expertNumPadded +
-                              globalExpert);
+            int32_t rows = LoadScalarI32(localPeer.peerTokenPerExpert + static_cast<uint64_t>(src) * expertNumPadded +
+                                         globalExpert);
             if (rows <= 0) {
                 continue;
             }
             int32_t srcStart = globalExpert == 0 ?
                                    0 :
-                                   LoadScalarI32(workspaceView.cumsumPerExpert + static_cast<uint64_t>(src) *
-                                                                              expertNumPadded + globalExpert - 1);
-            int32_t dstStart =
-                LoadScalarI32(workspaceView.dispatchOffset + localExpert) +
-                LoadScalarI32(workspaceView.prevSumBeforeRank + static_cast<uint64_t>(src) * shape.expertPerRank +
-                              localExpert);
+                                   LoadScalarI32(workspaceView.cumsumPerExpert +
+                                                 static_cast<uint64_t>(src) * expertNumPadded + globalExpert - 1);
+            int32_t dstStart = LoadScalarI32(workspaceView.dispatchOffset + localExpert) +
+                               LoadScalarI32(workspaceView.prevSumBeforeRank +
+                                             static_cast<uint64_t>(src) * shape.expertPerRank + localExpert);
             LocalPeerWindowView remotePeer = MakeRemotePeerWindowView(ctx, peerWindow, src, peerWindowLayout);
             TGetRowsHalf(workspaceView.dispatchedA, static_cast<int32_t>(shape.k), dstStart, remotePeer.packedA,
                          static_cast<int32_t>(shape.k), srcStart, rows, static_cast<int32_t>(shape.k));
@@ -563,34 +665,108 @@ AICORE inline void WaitCombinePhase(DispatchCombineTileShape shape, LocalPeerWin
 
 AICORE inline void ReturnExpertRowsToOwners(DispatchCombineTileShape shape, LocalWorkspaceView workspaceView,
                                             LocalPeerWindowView localPeer, __gm__ HcclDeviceContext *ctx,
-                                            GM_ADDR peerWindow, GM_ADDR expertOutput, uint32_t myRank,
-                                            uint32_t blockId, uint32_t blockNum,
-                                            const PeerWindowLayout &peerWindowLayout)
+                                            GM_ADDR peerWindow, GM_ADDR expertOutput, uint32_t myRank, uint32_t blockId,
+                                            uint32_t blockNum, const PeerWindowLayout &peerWindowLayout)
 {
     uint32_t expertNumPadded = ExpertNumPaddedDevice(shape);
     __gm__ half *localExpertOutput = reinterpret_cast<__gm__ half *>(expertOutput);
+    InvalidateGmCacheLines(localPeer.peerTokenPerExpert,
+                           static_cast<uint32_t>(shape.ep * expertNumPadded * sizeof(int32_t)));
+    InvalidateGmCacheLines(workspaceView.cumsumPerExpert,
+                           static_cast<uint32_t>(shape.ep * expertNumPadded * sizeof(int32_t)));
+    InvalidateGmCacheLines(workspaceView.dispatchOffset, static_cast<uint32_t>(shape.expertPerRank * sizeof(int32_t)));
+    InvalidateGmCacheLines(workspaceView.prevSumBeforeRank,
+                           static_cast<uint32_t>(shape.ep * shape.expertPerRank * sizeof(int32_t)));
     for (uint32_t src = blockId; src < shape.ep; src += blockNum) {
         LocalPeerWindowView remotePeer = MakeRemotePeerWindowView(ctx, peerWindow, src, peerWindowLayout);
         for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
             uint32_t globalExpert = myRank * shape.expertPerRank + localExpert;
-            int32_t rows =
-                LoadScalarI32(localPeer.peerTokenPerExpert + static_cast<uint64_t>(src) * expertNumPadded +
-                              globalExpert);
+            int32_t rows = LoadScalarI32(localPeer.peerTokenPerExpert + static_cast<uint64_t>(src) * expertNumPadded +
+                                         globalExpert);
             if (rows <= 0) {
                 continue;
             }
-            int32_t srcStart =
-                LoadScalarI32(workspaceView.dispatchOffset + localExpert) +
-                LoadScalarI32(workspaceView.prevSumBeforeRank + static_cast<uint64_t>(src) * shape.expertPerRank +
-                              localExpert);
+            int32_t srcStart = LoadScalarI32(workspaceView.dispatchOffset + localExpert) +
+                               LoadScalarI32(workspaceView.prevSumBeforeRank +
+                                             static_cast<uint64_t>(src) * shape.expertPerRank + localExpert);
             int32_t dstStart = globalExpert == 0 ?
                                    0 :
-                                   LoadScalarI32(workspaceView.cumsumPerExpert + static_cast<uint64_t>(src) *
-                                                                              expertNumPadded + globalExpert - 1);
-            TPutRowsHalf(remotePeer.ptrD, static_cast<int32_t>(shape.k), dstStart, localExpertOutput,
-                         static_cast<int32_t>(shape.k), srcStart, rows, static_cast<int32_t>(shape.k));
+                                   LoadScalarI32(workspaceView.cumsumPerExpert +
+                                                 static_cast<uint64_t>(src) * expertNumPadded + globalExpert - 1);
+            if (src == myRank) {
+                for (int32_t row = 0; row < rows; ++row) {
+                    CopyRowHalf(localPeer.ptrD, static_cast<int32_t>(shape.k), dstStart + row, localExpertOutput,
+                                static_cast<int32_t>(shape.k), srcStart + row, static_cast<int32_t>(shape.k));
+                }
+            } else {
+                TPutRowsHalf(remotePeer.ptrD, static_cast<int32_t>(shape.k), dstStart, localExpertOutput,
+                             static_cast<int32_t>(shape.k), srcStart, rows, static_cast<int32_t>(shape.k));
+            }
         }
-        NotifySignal(remotePeer.combineDoneSignal + myRank, 2);
+        NotifySignal(remotePeer.combineDoneSignal + myRank, static_cast<int32_t>(shape.signalValue));
+    }
+}
+
+AICORE inline void StoreZeroRowHalf(__gm__ half *dstBase, int32_t dstRowStride, int32_t dstRow, int32_t rowLen)
+{
+    for (int32_t col = 0; col < rowLen; col += kDefaultTileCols) {
+        int32_t cols = rowLen - col < kDefaultTileCols ? rowLen - col : kDefaultTileCols;
+        VecTile<half, kDefaultTileCols> zeroTile(1, cols);
+        TASSIGN(zeroTile, kPingUbAddr);
+        GlobalNd<half> dst =
+            MakeGlobal2D(dstBase + static_cast<int64_t>(dstRow) * dstRowStride + col, 1, cols, dstRowStride);
+        TEXPANDS(zeroTile, static_cast<half>(0.0));
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        TSTORE(dst, zeroTile);
+        WaitStoreTileReusable();
+    }
+}
+
+AICORE inline void AddWeightedRowHalf(__gm__ half *outputBase, __gm__ half *ptrDBase, int32_t rowStride,
+                                      int32_t outputRow, int32_t ptrDRow, int32_t rowLen, half prob)
+{
+    for (int32_t col = 0; col < rowLen; col += kDefaultTileCols) {
+        int32_t cols = rowLen - col < kDefaultTileCols ? rowLen - col : kDefaultTileCols;
+        VecTile<half, kDefaultTileCols> outTile(1, cols);
+        VecTile<half, kDefaultTileCols> ptrTile(1, cols);
+        TASSIGN(outTile, kPingUbAddr);
+        TASSIGN(ptrTile, kPongUbAddr);
+        GlobalNd<half> outGlobal =
+            MakeGlobal2D(outputBase + static_cast<int64_t>(outputRow) * rowStride + col, 1, cols, rowStride);
+        __gm__ half *ptrChunk = ptrDBase + static_cast<int64_t>(ptrDRow) * rowStride + col;
+        InvalidateGmCacheLines(ptrChunk, static_cast<uint32_t>(cols) * sizeof(half));
+        GlobalNd<half> ptrGlobal = MakeGlobal2D(ptrChunk, 1, cols, rowStride);
+        pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> loadToAxpy;
+        pto::Event<pto::Op::TAXPY, pto::Op::TSTORE_VEC> axpyToStore;
+        TLOAD(ptrTile, ptrGlobal);
+        loadToAxpy = TLOAD(outTile, outGlobal);
+        axpyToStore = TAXPY(outTile, ptrTile, prob, loadToAxpy);
+        TSTORE(outGlobal, outTile, axpyToStore);
+        WaitStoreTileReusable();
+    }
+}
+
+AICORE inline void RestoreOutputRows(DispatchCombineTileShape shape, LocalPeerWindowView localPeer, GM_ADDR probs,
+                                     GM_ADDR outputC, uint32_t blockId, uint32_t blockNum)
+{
+    __gm__ float *probValues = reinterpret_cast<__gm__ float *>(probs);
+    __gm__ half *output = reinterpret_cast<__gm__ half *>(outputC);
+    uint32_t tokenBegin = TokenShardBegin(shape.m, blockId, blockNum);
+    uint32_t tokenEnd = TokenShardEnd(shape.m, blockId, blockNum);
+    for (uint32_t token = tokenBegin; token < tokenEnd; ++token) {
+        StoreZeroRowHalf(output, static_cast<int32_t>(shape.k), static_cast<int32_t>(token),
+                         static_cast<int32_t>(shape.k));
+        for (uint32_t slot = 0; slot < shape.topK; ++slot) {
+            uint32_t routeIndex = token * shape.topK + slot;
+            int32_t ptrDRow = LoadScalarI32(localPeer.expandedRowIdx + routeIndex);
+            if (ptrDRow < 0) {
+                continue;
+            }
+            float prob = probValues[routeIndex];
+            AddWeightedRowHalf(output, localPeer.ptrD, static_cast<int32_t>(shape.k), static_cast<int32_t>(token),
+                               ptrDRow, static_cast<int32_t>(shape.k), static_cast<half>(prob));
+        }
     }
 }
 
@@ -624,6 +800,8 @@ __global__ AICORE void DispatchCombineTileDispatch(DispatchCombineTileShape shap
     SoftSyncAiv(workspaceView.localSync, blockNum);
     PackLocalRowsToWindow(shape, workspaceView, localPeer, inputA, expertIdx, myRank, blockId, blockNum);
     SoftSyncAiv(workspaceView.localSync, blockNum);
+    RebuildExpandedRowIdx(shape, workspaceView, localPeer, expertIdx, myRank, blockId, blockNum);
+    SoftSyncAiv(workspaceView.localSync, blockNum);
     PublishCountRows(shape, workspaceView, localPeer, ctx, peerWindow, myRank, blockId, blockNum, peerWindowLayout);
     SoftSyncAiv(workspaceView.localSync, blockNum);
     WaitCountRows(shape, localPeer, blockId, blockNum);
@@ -633,7 +811,6 @@ __global__ AICORE void DispatchCombineTileDispatch(DispatchCombineTileShape shap
     GatherLocalExpertPayload(shape, workspaceView, localPeer, ctx, peerWindow, myRank, blockId, blockNum,
                              peerWindowLayout);
     SoftSyncAiv(workspaceView.localSync, blockNum);
-
 }
 
 __global__ AICORE void DispatchCombineTileCombine(DispatchCombineTileShape shape, uint32_t myRank, GM_ADDR expertOutput,
@@ -647,18 +824,17 @@ __global__ AICORE void DispatchCombineTileCombine(DispatchCombineTileShape shape
     __gm__ HcclDeviceContext *ctx = reinterpret_cast<__gm__ HcclDeviceContext *>(hcclCtx);
     uint32_t blockId = static_cast<uint32_t>(get_block_idx());
     uint32_t blockNum = shape.aivBlocks == 0 ? 1 : shape.aivBlocks;
-    if (shape.ep == 0 || shape.k == 0 || shape.expertPerRank == 0 || shape.expertNum == 0 || shape.metadataPad == 0 ||
-        blockId >= blockNum) {
+    if (shape.ep == 0 || shape.m == 0 || shape.k == 0 || shape.topK == 0 || shape.expertPerRank == 0 ||
+        shape.expertNum == 0 || shape.metadataPad == 0 || blockId >= blockNum) {
         return;
     }
-
-    (void)probs;
-    (void)outputC;
 
     ReturnExpertRowsToOwners(shape, workspaceView, localPeer, ctx, peerWindow, expertOutput, myRank, blockId, blockNum,
                              peerWindowLayout);
     SoftSyncAiv(workspaceView.localSync, blockNum);
-    WaitCombinePhase(shape, localPeer, blockId, blockNum, 2);
+    WaitCombinePhase(shape, localPeer, blockId, blockNum, static_cast<int32_t>(shape.signalValue));
+    SoftSyncAiv(workspaceView.localSync, blockNum);
+    RestoreOutputRows(shape, localPeer, probs, outputC, blockId, blockNum);
     SoftSyncAiv(workspaceView.localSync, blockNum);
 }
 

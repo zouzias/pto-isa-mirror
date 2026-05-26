@@ -33,6 +33,11 @@ struct DispatchCombineTileArgs {
     bool nranksSet = false;
 };
 
+inline uint32_t ChooseDefaultAivBlocks(const DispatchCombineTileShape &)
+{
+    return 8;
+}
+
 inline uint32_t ParseU32(const std::string &value, const char *name)
 {
     size_t parsed = 0;
@@ -76,6 +81,7 @@ inline DispatchCombineTileArgs DefaultArgs()
     args.shape.tileCols = 1024;
     args.shape.rowChunk = 0;
     args.shape.metadataPad = 16;
+    args.shape.signalValue = 1;
     args.runtime.deviceBase = 0;
     args.runtime.ndevices = args.shape.ep;
     args.runtime.rankFromMpi = 1;
@@ -200,6 +206,9 @@ inline DispatchCombineTileArgs ParseArgs(int argc, char **argv)
     }
     if (!args.nranksSet) {
         args.runtime.nranks = args.shape.ep;
+    }
+    if (args.shape.aivBlocks == 0) {
+        args.shape.aivBlocks = ChooseDefaultAivBlocks(args.shape);
     }
     return args;
 }

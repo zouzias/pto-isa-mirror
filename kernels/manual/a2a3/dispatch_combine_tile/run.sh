@@ -74,6 +74,58 @@ DISPATCH_METADATA_ONLY=0
 DISPATCH_ONLY=0
 COMBINE_RETURN_ONLY=0
 
+print_help() {
+    cat <<'EOF'
+Usage: bash run.sh [options]
+
+Shape:
+  -pes, --pes, --nranks N
+  -M, --tokens N
+  -K, --hidden N
+  -topK, --topk N
+  -expertPerPe, --experts-per-rank N
+  --max-output-size N
+
+Kernel/runtime:
+  -r, --run-mode npu
+  -v, --soc-version NAME
+  -aivBlocks, --aiv-blocks N
+  -tileCols, --tile-cols N
+  --row-chunk N
+  --metadata-pad N
+  -device-base, --device-base, --first-device N
+  --ndevices N
+  --mpi-bin DIR
+  --hccl-buffsize-mb N
+  --keep-hccl-shm 0|1
+  --rank-from-mpi 0|1
+  --rank N
+
+Data/debug:
+  -debug, --debug 0|1|2
+  -iters, --iters N
+  -warmup, --warmup N
+  --seed N
+  --data-dir DIR
+  --gen-data 0|1
+  --verify 0|1
+  --rtol FLOAT
+  --atol FLOAT
+
+Build/stage gates:
+  --skip-run 0|1
+  --skip-build 0|1
+  --clean-build 0|1
+  --skip-kernels 0|1
+  --host-golden-only 0|1
+  --dispatch-metadata-only 0|1
+  --dispatch-only 0|1
+  --combine-return-only 0|1
+
+This project does not support --case presets; pass explicit shape parameters.
+EOF
+}
+
 align_up() {
     local value=$1
     local alignment=$2
@@ -82,6 +134,7 @@ align_up() {
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -h|--help) print_help; exit 0 ;;
         -r|--run-mode) RUN_MODE="$2"; shift 2 ;;
         -v|--soc-version) SOC_VERSION="$2"; shift 2 ;;
         -pes|--pes|--nranks) PES="$2"; shift 2 ;;
@@ -164,8 +217,9 @@ if [ "${MAX_OUTPUT_SIZE}" -lt "${REQUIRED_ROWS}" ]; then
 fi
 EFFECTIVE_AIV_BLOCKS="${AIV_BLOCKS}"
 if [ "${EFFECTIVE_AIV_BLOCKS}" -eq 0 ]; then
-    EFFECTIVE_AIV_BLOCKS=1
+    EFFECTIVE_AIV_BLOCKS=8
 fi
+AIV_BLOCKS="${EFFECTIVE_AIV_BLOCKS}"
 EXPERT_NUM_PADDED=$(align_up "${EXPERT_NUM}" "${METADATA_PAD}")
 EXPANDED_ROWS=$(( M * TOPK ))
 

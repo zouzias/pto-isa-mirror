@@ -31,6 +31,7 @@ struct DispatchCombineTileShape {
     uint32_t tileCols;
     uint32_t rowChunk;
     uint32_t metadataPad;
+    uint32_t signalValue;
 };
 
 struct WorkspaceLayout {
