@@ -32,6 +32,7 @@ FIRST_DEVICE=0
 DEBUG_MODE=""
 CLEAN=""
 ACTION="all"
+DISPATCH_MODE="direct"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -43,6 +44,7 @@ while [[ $# -gt 0 ]]; do
         --tokens) MAX_TOKENS=$2; shift 2 ;;
         --max-output) MAX_OUTPUT=$2; shift 2 ;;
         --first-device) FIRST_DEVICE=$2; shift 2 ;;
+        --mode) DISPATCH_MODE=$2; shift 2 ;;
         --debug) DEBUG_MODE="-DDEBUG_MODE=ON"; shift ;;
         --clean) CLEAN=1; shift ;;
         *) echo "Unknown option: $1"; exit 1 ;;
@@ -51,7 +53,7 @@ done
 
 echo "=== MoE Dispatch PTO-ISA Operator ==="
 echo "EP=${EP}, expertPerRank=${EXPERT_PER_RANK}, hiddenSize=${HIDDEN_SIZE}"
-echo "maxTokens=${MAX_TOKENS}, maxOutput=${MAX_OUTPUT}, firstDevice=${FIRST_DEVICE}"
+echo "maxTokens=${MAX_TOKENS}, maxOutput=${MAX_OUTPUT}, firstDevice=${FIRST_DEVICE}, mode=${DISPATCH_MODE}"
 echo ""
 
 # Check environment
@@ -86,7 +88,7 @@ do_build() {
 }
 
 do_run() {
-    echo "[RUN] Launching with mpirun -n ${EP}..."
+    echo "[RUN] Launching with mpirun -n ${EP} (mode=${DISPATCH_MODE})..."
 
     if [[ ! -f "${BUILD_DIR}/moe_dispatch" ]]; then
         echo "[ERROR] Binary not found. Run with 'build' first."
@@ -94,7 +96,7 @@ do_run() {
     fi
 
     cd "${BUILD_DIR}"
-    mpirun -n ${EP} ./moe_dispatch
+    DISPATCH_MODE=${DISPATCH_MODE} mpirun -n ${EP} ./moe_dispatch
 
     echo "[RUN] Done."
 }

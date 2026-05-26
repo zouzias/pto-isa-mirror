@@ -39,6 +39,16 @@ extern bool LaunchMoeDispatchK128(
     void *shmemBase, void *hcclCtx, void *syncWorkspace,
     int32_t EP, int32_t expertPerRank, int32_t maxOutputSize, int64_t offsetA);
 
+extern bool LaunchMoeDispatchViaGM_K128(
+    int32_t blockNum, void *stream,
+    void *gmA, void *gmPerTokenScale, void *tempGmBuffer,
+    void *cumsumMM, void *tokenPerExpert, void *preSumBeforeRank,
+    void *shmemBase, void *hcclCtx, void *syncWorkspace,
+    int32_t EP, int32_t expertPerRank, int32_t maxOutputSize, int64_t offsetA);
+
+enum class DispatchMode { Direct, ViaGM };
+static DispatchMode g_dispatchMode = DispatchMode::Direct;
+
 // HCCL & comm test framework (reused from comm ST testcase directory)
 // Host-side compilation: define device attributes as empty
 #ifndef AICORE
@@ -315,7 +325,7 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
     // Device memory allocation
     // ========================================================================
     size_t shmemSize = static_cast<size_t>(totalSrcTokens) * rowStride;
-    size_t gmASize = static_cast<size_t>(maxOutputSize) * rowStride;  // keeps interleaved size for TGET temp
+    size_t gmASize = static_cast<size_t>(maxOutputSize) * hiddenSize;  // compact token only (no interleaved temp)
     size_t gmScaleSize = static_cast<size_t>(maxOutputSize) * UB_ALIGN;  // 32 bytes per scale row
     size_t cumsumSize = EP * expertPerRank * sizeof(int32_t);
     size_t tpeSize = EP * EP * expertPerRank * sizeof(int32_t);
@@ -360,12 +370,30 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
     // ========================================================================
     int64_t offsetA = 0;
 
-    bool kernelOk = LaunchMoeDispatchK128(
-        blockNum, ctx.stream,
-        devGmA, devGmScale,
-        devCumsumMM, devTPE, devPSBR,
-        devShmem, ctx.deviceCtx, devSyncWs,
-        EP, expertPerRank, maxOutputSize, offsetA);
+    void *devTempGm = nullptr;
+    if (g_dispatchMode == DispatchMode::ViaGM) {
+        size_t tempGmSize = static_cast<size_t>(maxOutputSize) * rowStride;
+        aclrtMalloc(&devTempGm, tempGmSize, ACL_MEM_MALLOC_HUGE_FIRST);
+        aclrtMemset(devTempGm, tempGmSize, 0, tempGmSize);
+    }
+
+    bool kernelOk = false;
+    if (g_dispatchMode == DispatchMode::Direct) {
+        kernelOk = LaunchMoeDispatchK128(
+            blockNum, ctx.stream,
+            devGmA, devGmScale,
+            devCumsumMM, devTPE, devPSBR,
+            devShmem, ctx.deviceCtx, devSyncWs,
+            EP, expertPerRank, maxOutputSize, offsetA);
+    } else {
+        kernelOk = LaunchMoeDispatchViaGM_K128(
+            blockNum, ctx.stream,
+            devGmA, devGmScale, devTempGm,
+            devCumsumMM, devTPE, devPSBR,
+            devShmem, ctx.deviceCtx, devSyncWs,
+            EP, expertPerRank, maxOutputSize, offsetA);
+    }
+
     if (!kernelOk) {
         std::cerr << "[ERROR] Rank " << rankId << ": kernel execution failed\n";
         aclrtFree(devGmA);
@@ -374,6 +402,7 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
         aclrtFree(devTPE);
         aclrtFree(devPSBR);
         aclrtFree(devSyncWs);
+        if (devTempGm) aclrtFree(devTempGm);
         ctx.Finalize();
         return false;
     }
@@ -433,6 +462,7 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
     aclrtFree(devTPE);
     aclrtFree(devPSBR);
     aclrtFree(devSyncWs);
+    if (devTempGm) aclrtFree(devTempGm);
 
     ctx.Finalize();
     return pass;
@@ -444,6 +474,12 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
 int main(int argc, char *argv[])
 {
     CommMpiInit(&argc, &argv);
+
+    // Parse dispatch mode from environment variable DISPATCH_MODE
+    const char *modeEnv = std::getenv("DISPATCH_MODE");
+    if (modeEnv && std::string(modeEnv) == "viagm") {
+        g_dispatchMode = DispatchMode::ViaGM;
+    }
 
     MoeDispatchParams params;
     params.EP = CONFIG_EP;
@@ -463,6 +499,7 @@ int main(int argc, char *argv[])
               << " hiddenSize=" << params.hiddenSize
               << " maxOutput=" << params.maxOutputSize
               << " maxTokens/rank=" << params.maxTokensPerRank
+              << " mode=" << (g_dispatchMode == DispatchMode::ViaGM ? "viagm" : "direct")
               << std::endl;
 
     bool success = ForkAndRunWithHcclRootInfo(nRanks, 0, firstDeviceId,
