@@ -105,10 +105,6 @@ if __name__ == "__main__":
     case_name_list = [
         "TEXTRACTTest.case11",
         "TEXTRACTTest.case12",
-<<<<<<< HEAD
-=======
-        "TEXTRACTTest.case13",
->>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
         "TEXTRACTTest.case14",
         "TEXTRACTTest.case21",
         "TEXTRACTTest.case22",
