@@ -17,6 +17,7 @@ import numpy as np
 
 np.random.seed(19)
 
+
 def nchw_to_nc1hwc0(nchw_tensor: np.ndarray, c0: int = 16) -> np.ndarray:
     if nchw_tensor.ndim != 4:
         raise ValueError(f"The input must be a 4-dimensional NCHW tensor, current dim : {nchw_tensor.ndim}")
@@ -92,24 +93,24 @@ def gen_golden_data(case_name, gInfo):
         input_arr = np.random.randint(-5, 5, size=(gWholeShape0, gWholeShape1,
                                     gWholeShape2, gWholeShape3, gWholeShape4)).astype(data_type)
         c0_size = 32 // np.dtype(data_type).itemsize
-        gShape4Align = (gShape4 + c0_size - 1) // c0_size * c0_size
+        g_shape4_align = (gShape4 + c0_size - 1) // c0_size * c0_size
         output_arr = np.zeros(
-            shape=(gShape0, gShape1, gShape2, gShape3, gShape4Align), dtype=data_type)
+            shape=(gShape0, gShape1, gShape2, gShape3, g_shape4_align), dtype=data_type)
         output_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape3,
                    0:gShape4] = input_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape3, 0:gShape4]
         output_arr = output_arr.reshape(gShape0, gShape1, gShape2, gShape3,
-            gShape4Align // c0_size, c0_size).transpose(4, 0, 1, 2, 3, 5)
+            g_shape4_align // c0_size, c0_size).transpose(4, 0, 1, 2, 3, 5)
     elif gInfo.format == "DN2ZN":
         input_arr = np.random.randint(-5, 5, size=(gWholeShape0, gWholeShape1,
                                     gWholeShape2, gWholeShape4, gWholeShape3)).astype(data_type)
         c0_size = 32 // np.dtype(data_type).itemsize
-        gShape3Align = (gShape3 + c0_size - 1) // c0_size * c0_size
+        g_shape3_align = (gShape3 + c0_size - 1) // c0_size * c0_size
         output_arr = np.zeros(
-            shape=(gShape0, gShape1, gShape2, gShape4, gShape3Align), dtype=data_type)
+            shape=(gShape0, gShape1, gShape2, gShape4, g_shape3_align), dtype=data_type)
         output_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape4,
                    0:gShape3] = input_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape4, 0:gShape3]
         output_arr = output_arr.reshape(gShape0, gShape1, gShape2, gShape4,
-            gShape3Align // c0_size, c0_size).transpose(0, 1, 2, 4, 3, 5)
+            g_shape3_align // c0_size, c0_size).transpose(0, 1, 2, 4, 3, 5)
     elif gInfo.format == "NCHW2NC1HWC0":
         input_arr = np.random.randint(-5, 5, size=(gWholeShape1,
                                     gWholeShape2, gWholeShape3, gWholeShape4)).astype(data_type)

@@ -14,6 +14,7 @@ import os
 import numpy as np
 np.random.seed(19)
 
+
 def gen_golden_data_tsub(case_name, param):
     dtype = param.dtype
 
@@ -61,7 +62,10 @@ def generate_case_name(param):
         np.int32: 'int32',
         np.int16: 'int16'
     }[param.dtype]
-    return f"TSUBTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}"
+    return (
+        f"TSUBTest.case_{dtype_str}_{param.global_row}x{param.global_col}"
+        f"_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}"
+    )
 
 
 if __name__ == "__main__":

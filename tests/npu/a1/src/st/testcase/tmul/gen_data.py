@@ -14,10 +14,11 @@ import os
 import numpy as np
 np.random.seed(19)
 
+
 def gen_golden_data_tmul(case_name, param):
     dtype = param.dtype
 
-    H, W = [param.tile_row, param.tile_col]
+    h_tile, w_tile = [param.tile_row, param.tile_col]
     h_valid, w_valid = [param.valid_row, param.valid_col]
 
     # Generate random input arrays
@@ -33,7 +34,7 @@ def gen_golden_data_tmul(case_name, param):
 
     return input1, input2, golden
 
-class tmulParams:
+class TmulParams:
     def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
         self.dtype = dtype
         self.global_row = global_row
@@ -51,7 +52,10 @@ def generate_case_name(param):
         np.int32: 'int32',
         np.int16: 'int16'
     }[param.dtype]
-    return f"TMULTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}"
+    return (
+        f"TMULTest.case_{dtype_str}_{param.global_row}x{param.global_col}"
+        f"_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}"
+    )
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -63,13 +67,13 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        tmulParams(np.float32, 64, 64, 64, 64, 64, 64),
-        tmulParams(np.int32, 64, 64, 64, 64, 64, 64),
-        tmulParams(np.float16, 16, 16, 16, 16, 16, 16),
-        tmulParams(np.int16, 64, 64, 64, 64, 64, 64),
-        tmulParams(np.float16, 61, 61, 64, 64, 61, 61),
-        tmulParams(np.int32, 60, 30, 64, 32, 60, 30),
-        tmulParams(np.int32, 32, 32, 32, 32, 32, 32),
+        TmulParams(np.float32, 64, 64, 64, 64, 64, 64),
+        TmulParams(np.int32, 64, 64, 64, 64, 64, 64),
+        TmulParams(np.float16, 16, 16, 16, 16, 16, 16),
+        TmulParams(np.int16, 64, 64, 64, 64, 64, 64),
+        TmulParams(np.float16, 61, 61, 64, 64, 61, 61),
+        TmulParams(np.int32, 60, 30, 64, 32, 60, 30),
+        TmulParams(np.int32, 32, 32, 32, 32, 32, 32),
     ]
 
     for i, param in enumerate(case_params_list):

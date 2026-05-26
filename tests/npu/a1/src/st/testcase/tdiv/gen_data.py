@@ -14,10 +14,11 @@ import os
 import numpy as np
 np.random.seed(19)
 
+
 def gen_golden_data_tdiv(case_name, param):
     dtype = param.dtype
 
-    H, W = [param.tile_row, param.tile_col]
+    h_tile, w_tile = [param.tile_row, param.tile_col]
     h_valid, w_valid = [param.valid_row, param.valid_col]
 
     # Generate random input arrays
@@ -33,7 +34,7 @@ def gen_golden_data_tdiv(case_name, param):
 
     return input1, input2, golden
 
-class tdivParams:
+class TdivParams:
     def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
         self.dtype = dtype
         self.global_row = global_row
@@ -48,7 +49,10 @@ def generate_case_name(param):
         np.float32: 'float',
         np.float16: 'half',
     }[param.dtype]
-    return f"TDIVTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}"
+    return (
+        f"TDIVTest.case_{dtype_str}_{param.global_row}x{param.global_col}"
+        f"_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}"
+    )
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -60,11 +64,11 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        tdivParams(np.float32, 64, 64, 64, 64, 64, 64),
-        tdivParams(np.float16, 64, 64, 64, 64, 64, 64),
-        tdivParams(np.float16, 61, 61, 64, 64, 61, 61),
-        tdivParams(np.float32, 60, 30, 64, 32, 60, 30),
-        tdivParams(np.float32, 32, 32, 32, 32, 32, 32)
+        TdivParams(np.float32, 64, 64, 64, 64, 64, 64),
+        TdivParams(np.float16, 64, 64, 64, 64, 64, 64),
+        TdivParams(np.float16, 61, 61, 64, 64, 61, 61),
+        TdivParams(np.float32, 60, 30, 64, 32, 60, 30),
+        TdivParams(np.float32, 32, 32, 32, 32, 32, 32)
     ]
 
     for i, param in enumerate(case_params_list):

@@ -80,6 +80,43 @@ AICORE inline void TSTORE_MAT2GM(GlobalData &dst, TileData &src)
     }
 }
 
+template <typename GlobalData, typename TileData>
+AICORE inline void RunTLoadMatAndStore(__gm__ typename GlobalData::DType __out__ *out,
+                                        __gm__ typename GlobalData::DType __in__ *src, int validRow, int validCol)
+{
+    TileData srcTile(validRow, validCol);
+    TASSIGN(srcTile, 0x0);
+    GlobalData srcGlobal(src);
+    GlobalData dstGlobal(out);
+    TLOAD(srcTile, srcGlobal);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
+    TSTORE_MAT2GM(dstGlobal, srcTile);
+    out = dstGlobal.data();
+}
+
+template <typename T, typename GlobalDataIn, typename ConvTileData, typename OutTileData, int kTotalDimCount = -1,
+          int kNBurst>
+AICORE inline void RunTLoadConvAndCopy(__gm__ T __out__ *out, __gm__ T __in__ *src)
+{
+    ConvTileData srcTile;
+    if constexpr (kTotalDimCount >= 0) {
+        static_assert(srcTile.totalDimCount == kTotalDimCount);
+    }
+    TASSIGN(srcTile, 0x0);
+    GlobalDataIn srcGlobal(src);
+    TLOAD(srcTile, srcGlobal);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
+    OutTileData outTile;
+    TASSIGN(outTile, 0x0);
+    tf_copy_cbuf_to_gm<T, OutTileData>(out, outTile.data(), (uint8_t)0, 1, kNBurst, 0, 0);
+}
+
 template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
           int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
 AICORE inline void RunTLoadND2ND(__gm__ T __out__ *out, __gm__ T __in__ *src)
@@ -98,21 +135,7 @@ AICORE inline void RunTLoadND2ND(__gm__ T __out__ *out, __gm__ T __in__ *src)
     using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
     using TileData = Tile<TileType::Mat, T, Rows, Cols, BLayout::RowMajor, -1, -1>;
 
-    TileData srcTile(validRow, validCol);
-
-    TASSIGN(srcTile, 0x0);
-
-    int offset = 0;
-    GlobalData srcGlobal(src);
-    GlobalData dstGlobal(out);
-
-    TLOAD(srcTile, srcGlobal);
-#ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-#endif
-    TSTORE_MAT2GM<GlobalData, TileData>(dstGlobal, srcTile);
-    out = dstGlobal.data();
+    RunTLoadMatAndStore<GlobalData, TileData>(out, src, validRow, validCol);
 }
 template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
           int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
@@ -133,21 +156,7 @@ AICORE inline void RunTLoadDN2DN(__gm__ T __out__ *out, __gm__ T __in__ *src)
     using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5, Layout::DN>;
     using TileData = Tile<TileType::Mat, T, Rows, Cols, BLayout::ColMajor, -1, -1>;
 
-    TileData srcTile(validRow, validCol);
-
-    TASSIGN(srcTile, 0x0);
-
-    int offset = 0;
-    GlobalData srcGlobal(src);
-    GlobalData dstGlobal(out);
-
-    TLOAD(srcTile, srcGlobal);
-#ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-#endif
-    TSTORE_MAT2GM(dstGlobal, srcTile);
-    out = dstGlobal.data();
+    RunTLoadMatAndStore<GlobalData, TileData>(out, src, validRow, validCol);
 }
 
 template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
@@ -167,20 +176,7 @@ AICORE inline void RunTLoadNZ2NZ(__gm__ T __out__ *out, __gm__ T __in__ *src)
 
     int validRow = gShape2 * gShape3;
     int validCol = gShape0 * gShape1 * gShape4;
-    TileData srcTile(validRow, validCol);
-
-    TASSIGN(srcTile, 0x0);
-
-    GlobalData srcGlobal(src);
-    GlobalData dstGlobal(out);
-
-    TLOAD(srcTile, srcGlobal);
-#ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-#endif
-    TSTORE_MAT2GM(dstGlobal, srcTile);
-    out = dstGlobal.data();
+    RunTLoadMatAndStore<GlobalData, TileData>(out, src, validRow, validCol);
 }
 
 template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
@@ -201,20 +197,7 @@ AICORE inline void RunTLoadND2NZ(__gm__ T __out__ *out, __gm__ T __in__ *src)
 
     int validRow = gShape0 * gShape1 * gShape2 * gShape3;
     int validCol = gShape4;
-    TileData srcTile(validRow, validCol);
-
-    TASSIGN(srcTile, 0x0);
-
-    GlobalData srcGlobal(src);
-    GlobalData dstGlobal(out);
-
-    TLOAD(srcTile, srcGlobal);
-#ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-#endif
-    TSTORE_MAT2GM(dstGlobal, srcTile);
-    out = dstGlobal.data();
+    RunTLoadMatAndStore<GlobalData, TileData>(out, src, validRow, validCol);
 }
 
 template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
@@ -235,20 +218,7 @@ AICORE inline void RunTLoadDN2ZN(__gm__ T __out__ *out, __gm__ T __in__ *src)
 
     int validRow = gShape3;
     int validCol = gShape4;
-    TileData srcTile(validRow, validCol);
-
-    TASSIGN(srcTile, 0x0);
-
-    GlobalData srcGlobal(src);
-    GlobalData dstGlobal(out);
-
-    TLOAD(srcTile, srcGlobal);
-#ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-#endif
-    TSTORE_MAT2GM(dstGlobal, srcTile);
-    out = dstGlobal.data();
+    RunTLoadMatAndStore<GlobalData, TileData>(out, src, validRow, validCol);
 }
 
 template <typename T, int dstN, int dstC1, int dstH, int dstW, int dstC0, int gWholeShape0, int gWholeShape1,
@@ -271,24 +241,11 @@ AICORE inline void RunTLoad5HD(__gm__ T __out__ *out, __gm__ T __in__ *src)
     using StridDim5 = pto::Stride<gStride[0], gStride[1], gStride[2], gStride[3], gStride[4]>;
     using GlobalDataIn = GlobalTensor<T, ShapeDim5, StridDim5, Layout::NC1HWC0>;
 
-    using TileData =
+    using ConvTileData =
         ConvTile<TileType::Mat, T, bufferSize, Layout::NC1HWC0, pto::ConvTileShape<dstN, dstC1, dstH, dstW, dstC0>>;
-    TileData srcTile;
-    static_assert(srcTile.totalDimCount == 5);
-    TASSIGN(srcTile, 0x0);
-
-    GlobalDataIn srcGlobal(src);
-    TLOAD(srcTile, srcGlobal);
-#ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-#endif
-
     using OutTileData = Tile<TileType::Mat, T, Rows, Cols, BLayout::RowMajor, validRow, validCol>;
-    OutTileData outTile;
-    TASSIGN(outTile, 0x0);
-    // __cbuf__ typename TileData::DType *srcAddr = (__cbuf__ typename TileData::DType *)outTile.data();
-    tf_copy_cbuf_to_gm<T, OutTileData>(out, outTile.data(), (uint8_t)0, 1, validRow, 0, 0);
+
+    RunTLoadConvAndCopy<T, GlobalDataIn, ConvTileData, OutTileData, 5, validRow>(out, src);
 }
 
 // C1HWNC0
@@ -312,24 +269,11 @@ AICORE inline void RunTLoadFractalZ5D(__gm__ T __out__ *out, __gm__ T __in__ *sr
     using StridDim5 = pto::Stride<gStride[0], gStride[1], gStride[2], gStride[3], gStride[4]>;
     using GlobalDataIn = GlobalTensor<T, ShapeDim5, StridDim5, Layout::FRACTAL_Z>;
 
-    using TileData =
+    using ConvTileData =
         ConvTile<TileType::Mat, T, bufferSize, Layout::FRACTAL_Z, pto::ConvTileShape<dstC1, dstH, dstW, dstN, dstC0>>;
-    TileData srcTile;
-    static_assert(srcTile.totalDimCount == 5);
-    TASSIGN(srcTile, 0x0);
-    GlobalDataIn srcGlobal(src);
-    TLOAD(srcTile, srcGlobal);
-
-#ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-#endif
     using OutTileData = Tile<TileType::Mat, T, Rows, Cols, BLayout::RowMajor, validRow, validCol>;
-    OutTileData outTile;
-    TASSIGN(outTile, 0x0);
 
-    // __cbuf__ typename TileData::DType *srcAddr = (__cbuf__ typename TileData::DType *)outTile.data();
-    tf_copy_cbuf_to_gm<T, OutTileData>(out, outTile.data(), (uint8_t)0, 1, validRow, 0, 0);
+    RunTLoadConvAndCopy<T, GlobalDataIn, ConvTileData, OutTileData, 5, validRow>(out, src);
 }
 // [C1HW, N/16, 16, C0]
 template <typename T, int dstShape0, int dstC1HW, int dstShape2, int dstShape3, int dstC0, int gWholeShape0,
@@ -352,24 +296,11 @@ AICORE inline void RunTLoadFractalZ4D(__gm__ T __out__ *out, __gm__ T __in__ *sr
     using StridDim5 = pto::Stride<gStride[0], gStride[1], gStride[2], gStride[3], gStride[4]>;
     using GlobalDataIn = GlobalTensor<T, ShapeDim5, StridDim5, Layout::FRACTAL_Z>;
 
-    using TileData = ConvTile<TileType::Mat, T, bufferSize, Layout::FRACTAL_Z,
+    using ConvTileData = ConvTile<TileType::Mat, T, bufferSize, Layout::FRACTAL_Z,
                               pto::ConvTileShape<dstC1HW, dstShape2, dstShape3, dstC0>>;
-    TileData srcTile;
-    static_assert(srcTile.totalDimCount == 4);
-    TASSIGN(srcTile, 0x0);
-    GlobalDataIn srcGlobal(src);
-    TLOAD(srcTile, srcGlobal);
-
-#ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-#endif
     using OutTileData = Tile<TileType::Mat, T, Rows, Cols, BLayout::RowMajor, validRow, validCol>;
-    OutTileData outTile;
-    TASSIGN(outTile, 0x0);
-    
-    // __cbuf__ typename TileData::DType *srcAddr = (__cbuf__ typename TileData::DType *)outTile.data();
-    tf_copy_cbuf_to_gm<T, OutTileData>(out, outTile.data(), (uint8_t)0, 1, validRow, 0, 0);
+
+    RunTLoadConvAndCopy<T, GlobalDataIn, ConvTileData, OutTileData, 4, validRow>(out, src);
 }
 
 template <typename T, int gShape0, int gShapeN, int gShapeC, int gShapeH, int gShapeW, int gWholeShape0,
@@ -391,24 +322,11 @@ AICORE inline void RunTLoadNCHW2NC1HWC0(__gm__ T __out__ *out, __gm__ T __in__ *
     using StridDim5 = pto::Stride<gStride[0], gStride[1], gStride[2], gStride[3], gStride[4]>;
     using GlobalDataIn = GlobalTensor<T, ShapeDim5, StridDim5, Layout::NCHW>;
 
-    using TileData = ConvTile<TileType::Mat, T, bufferSize, Layout::NC1HWC0,
+    using ConvTileData = ConvTile<TileType::Mat, T, bufferSize, Layout::NC1HWC0,
                               pto::ConvTileShape<gShapeN, C1, gShapeH, gShapeW, C0>>;
-    TileData srcTile;
-    TASSIGN(srcTile, 0x0);
-
-    GlobalDataIn srcGlobal(src);
-    TLOAD(srcTile, srcGlobal);
-
-#ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-#endif
-
     using OutTileData = Tile<TileType::Mat, T, Rows, Cols, BLayout::RowMajor, validRow, validCol>;
-    OutTileData outTile;
-    TASSIGN(outTile, 0x0);
-    tf_copy_cbuf_to_gm<T, OutTileData>(out, outTile.data(), (uint8_t)0, 1, Rows * Cols / blockSize, 0, 0);
 
+    RunTLoadConvAndCopy<T, GlobalDataIn, ConvTileData, OutTileData, -1, Rows * Cols / blockSize>(out, src);
 }
 
 template <typename T, int gShape0, int gShapeN, int gShapeC, int gShapeH, int gShapeW, int gWholeShape0,
@@ -433,24 +351,11 @@ AICORE inline void RunTLoadNCHW2FZ(__gm__ T __out__ *out, __gm__ T __in__ *src)
     using StridDim5 = pto::Stride<gStride[0], gStride[1], gStride[2], gStride[3], gStride[4]>;
     using GlobalDataIn = GlobalTensor<T, ShapeDim5, StridDim5, Layout::NCHW>;
 
-    using TileData = ConvTile<TileType::Mat, T, bufferSize, Layout::FRACTAL_Z,
+    using ConvTileData = ConvTile<TileType::Mat, T, bufferSize, Layout::FRACTAL_Z,
                               pto::ConvTileShape<C1HW, NDiv16, 16, C0>>;
-    TileData srcTile;
-    static_assert(srcTile.totalDimCount == 4);
-    TASSIGN(srcTile, 0x0);
-
-    GlobalDataIn srcGlobal(src);
-    TLOAD(srcTile, srcGlobal);
-
-#ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-#endif
-
     using OutTileData = Tile<TileType::Mat, T, Rows, Cols, BLayout::RowMajor, validRow, validCol>;
-    OutTileData outTile;
-    TASSIGN(outTile, 0x0);
-    tf_copy_cbuf_to_gm<T, OutTileData>(out, outTile.data(), (uint8_t)0, 1, Rows * Cols / blockSize, 0, 0);
+
+    RunTLoadConvAndCopy<T, GlobalDataIn, ConvTileData, OutTileData, 4, Rows * Cols / blockSize>(out, src);
 }
 
 template <typename T, int format, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
