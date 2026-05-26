@@ -8,34 +8,73 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef MOE_COMBINE_ARGS_H_
-#define MOE_COMBINE_ARGS_H_
+#ifndef MOE_DISPATCH_ARGS_H_
+#define MOE_DISPATCH_ARGS_H_
 
 #include "common.h"
+#include "layout.h"
 
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 
-namespace moe_combine {
+namespace moe_dispatch {
 
-struct MoeCombineArgs {
-    MoeCombineShape shape;
-    MoeCombineRuntimeConfig runtime;
+#ifndef CONFIG_MOE_DISPATCH_MIX_AIC_BLOCKS
+#define CONFIG_MOE_DISPATCH_MIX_AIC_BLOCKS 20U
+#endif
+
+#ifndef CONFIG_MOE_DISPATCH_MIX_AIV_RATIO
+#define CONFIG_MOE_DISPATCH_MIX_AIV_RATIO 2U
+#endif
+
+#ifndef CONFIG_MOE_DISPATCH_AIV_NUM
+#define CONFIG_MOE_DISPATCH_AIV_NUM (CONFIG_MOE_DISPATCH_MIX_AIC_BLOCKS * CONFIG_MOE_DISPATCH_MIX_AIV_RATIO)
+#endif
+
+#ifndef CONFIG_MOE_DISPATCH_MAX_AIV_NUM
+#define CONFIG_MOE_DISPATCH_MAX_AIV_NUM 128U
+#endif
+
+struct MoeDispatchArgs {
+    MoeDispatchShape shape;
+    MoeDispatchRuntimeConfig runtime;
     std::string runMode = "npu";
-    std::string socVersion = "Ascend910B1";
+    std::string socVersion = "Ascend950PR_958b";
     std::string mpiBin;
     std::string dataDir = "./out";
     double rtol = 1e-2;
     double atol = 1e-2;
     bool rankSet = false;
     bool nranksSet = false;
+    bool aivBlocksSet = false;
 };
 
-inline uint32_t ChooseDefaultAivBlocks(const MoeCombineShape &)
+inline bool StartsWith(const std::string &value, const char *prefix)
 {
-    return 24;
+    return value.rfind(prefix, 0) == 0;
+}
+
+inline bool IsA5Soc(const std::string &socVersion)
+{
+    return socVersion.empty() || socVersion == "Ascend950" || StartsWith(socVersion, "Ascend950DT_") ||
+           StartsWith(socVersion, "Ascend950PR_");
+}
+
+inline MoeDispatchResourceConfig GetResourceConfig(const std::string &socVersion)
+{
+    if (!IsA5Soc(socVersion)) {
+        throw std::runtime_error("unsupported moe_dispatch A5 resource config for soc: " + socVersion);
+    }
+    return MoeDispatchResourceConfig{CONFIG_MOE_DISPATCH_MIX_AIC_BLOCKS, CONFIG_MOE_DISPATCH_MIX_AIV_RATIO,
+                                     CONFIG_MOE_DISPATCH_AIV_NUM, CONFIG_MOE_DISPATCH_MAX_AIV_NUM,
+                                     CONFIG_MOE_DISPATCH_AIV_NUM};
+}
+
+inline uint32_t ChooseDefaultAivBlocks(const std::string &socVersion, const MoeDispatchShape &)
+{
+    return GetResourceConfig(socVersion).defaultAivBlocks;
 }
 
 inline uint32_t ParseU32(const std::string &value, const char *name)
@@ -67,9 +106,9 @@ inline const char *RequireValue(int argc, char **argv, int *index, const char *n
     return argv[*index];
 }
 
-inline MoeCombineArgs DefaultArgs()
+inline MoeDispatchArgs DefaultArgs()
 {
-    MoeCombineArgs args;
+    MoeDispatchArgs args;
     args.shape.ep = 2;
     args.shape.m = 64;
     args.shape.k = 7168;
@@ -79,7 +118,6 @@ inline MoeCombineArgs DefaultArgs()
     args.shape.maxOutputSize = 0;
     args.shape.aivBlocks = 0;
     args.shape.tileCols = 1024;
-    args.shape.rowChunk = 0;
     args.shape.metadataPad = 16;
     args.shape.signalValue = 1;
     args.runtime.deviceBase = 0;
@@ -89,31 +127,27 @@ inline MoeCombineArgs DefaultArgs()
     args.runtime.nranks = args.shape.ep;
     args.runtime.debug = 0;
     args.runtime.iters = 1;
-    args.runtime.warmup = 1;
+    args.runtime.warmup = 0;
     args.runtime.seed = 1234;
     args.runtime.genData = 1;
     args.runtime.verify = 1;
     args.runtime.skipRun = 0;
     args.runtime.skipBuild = 0;
     args.runtime.cleanBuild = 1;
-    args.runtime.skipKernels = 0;
     args.runtime.hostGoldenOnly = 0;
-    args.runtime.combineReturnOnly = 0;
     args.runtime.keepHcclShm = 0;
     args.runtime.hcclBuffSizeMb = 0;
     return args;
 }
 
-inline MoeCombineArgs ParseArgs(int argc, char **argv)
+inline MoeDispatchArgs ParseArgs(int argc, char **argv)
 {
-    MoeCombineArgs args = DefaultArgs();
+    MoeDispatchArgs args = DefaultArgs();
     bool ndevicesSet = false;
     for (int i = 1; i < argc; ++i) {
         std::string key = argv[i];
         auto value = [&](const char *name) { return std::string(RequireValue(argc, argv, &i, name)); };
-        if (key == "--case" || key == "--case-all") {
-            throw std::invalid_argument("case presets are unsupported; pass explicit shape parameters");
-        } else if (key == "-r" || key == "--run-mode") {
+        if (key == "-r" || key == "--run-mode") {
             args.runMode = value(key.c_str());
         } else if (key == "-v" || key == "--soc-version") {
             args.socVersion = value(key.c_str());
@@ -135,10 +169,9 @@ inline MoeCombineArgs ParseArgs(int argc, char **argv)
             args.shape.maxOutputSize = ParseU32(value(key.c_str()), key.c_str());
         } else if (key == "-aivBlocks" || key == "--aiv-blocks") {
             args.shape.aivBlocks = ParseU32(value(key.c_str()), key.c_str());
+            args.aivBlocksSet = true;
         } else if (key == "-tileCols" || key == "--tile-cols") {
             args.shape.tileCols = ParseU32(value(key.c_str()), key.c_str());
-        } else if (key == "--row-chunk") {
-            args.shape.rowChunk = ParseU32(value(key.c_str()), key.c_str());
         } else if (key == "--metadata-pad") {
             args.shape.metadataPad = ParseU32(value(key.c_str()), key.c_str());
         } else if (key == "-device-base" || key == "--device-base" || key == "--first-device") {
@@ -181,12 +214,8 @@ inline MoeCombineArgs ParseArgs(int argc, char **argv)
             args.runtime.skipBuild = ParseU32(value(key.c_str()), key.c_str());
         } else if (key == "--clean-build") {
             args.runtime.cleanBuild = ParseU32(value(key.c_str()), key.c_str());
-        } else if (key == "--skip-kernels") {
-            args.runtime.skipKernels = ParseU32(value(key.c_str()), key.c_str());
         } else if (key == "--host-golden-only") {
             args.runtime.hostGoldenOnly = ParseU32(value(key.c_str()), key.c_str());
-        } else if (key == "--combine-return-only") {
-            args.runtime.combineReturnOnly = ParseU32(value(key.c_str()), key.c_str());
         } else {
             throw std::invalid_argument("unknown option: " + key);
         }
@@ -202,49 +231,54 @@ inline MoeCombineArgs ParseArgs(int argc, char **argv)
         args.runtime.nranks = args.shape.ep;
     }
     if (args.shape.aivBlocks == 0) {
-        args.shape.aivBlocks = ChooseDefaultAivBlocks(args.shape);
+        args.shape.aivBlocks = ChooseDefaultAivBlocks(args.socVersion, args.shape);
     }
     return args;
 }
 
-inline void ValidateArgs(const MoeCombineArgs &args)
+inline void ValidateArgs(const MoeDispatchArgs &args)
 {
-    const MoeCombineShape &shape = args.shape;
+    const MoeDispatchShape &shape = args.shape;
+    const MoeDispatchResourceConfig resource = GetResourceConfig(args.socVersion);
     if (args.runMode != "npu") {
-        throw std::invalid_argument("run-mode must be npu for the first version");
+        throw std::invalid_argument("run-mode must be npu for moe_dispatch");
     }
     if (shape.ep == 0 || shape.m == 0 || shape.k == 0 || shape.topK == 0 || shape.expertPerRank == 0 ||
-        shape.tileCols == 0 || shape.metadataPad == 0) {
-        throw std::invalid_argument("shape fields, tileCols, and metadataPad must be nonzero");
+        shape.tileCols == 0 || shape.metadataPad == 0 || shape.aivBlocks == 0) {
+        throw std::invalid_argument("shape fields, tileCols, metadataPad, and aivBlocks must be nonzero");
     }
     if (shape.k % shape.tileCols != 0) {
-        throw std::invalid_argument("K % tileCols must be 0");
+        throw std::invalid_argument("K must be divisible by tileCols for the first PTO dispatch version");
     }
-    uint64_t requiredRows = static_cast<uint64_t>(shape.ep) * shape.m * shape.topK;
-    if (shape.maxOutputSize < requiredRows) {
-        throw std::invalid_argument("maxOutputSize is smaller than EP * M * topK; capacity/drop is unsupported");
+    if (shape.aivBlocks > resource.maxAivBlocks) {
+        throw std::invalid_argument("aivBlocks exceeds moe_dispatch resource max");
     }
-    if (static_cast<uint64_t>(args.runtime.deviceBase) + shape.ep > args.runtime.ndevices) {
-        throw std::invalid_argument("deviceBase + pes > ndevices");
+    if (args.runtime.nranks != shape.ep) {
+        throw std::invalid_argument("runtime.nranks must match ep");
+    }
+    if (args.runtime.ndevices < shape.ep) {
+        throw std::invalid_argument("ndevices must be >= ep");
     }
 }
 
-inline void PrintRunSummary(const MoeCombineArgs &args)
+inline void DumpArgs(const MoeDispatchArgs &args)
 {
-    const MoeCombineShape &shape = args.shape;
-    std::cout << "RUN_MODE=" << args.runMode << "\n";
-    std::cout << "SOC_VERSION=" << args.socVersion << "\n";
-    std::cout << "PES=" << shape.ep << " DEVICE_BASE=" << args.runtime.deviceBase
-              << " NDEVICES=" << args.runtime.ndevices << "\n";
-    std::cout << "M=" << shape.m << " K=" << shape.k << " TOPK=" << shape.topK
-              << " EXPERT_PER_PE=" << shape.expertPerRank << " MAX_OUTPUT_SIZE=" << shape.maxOutputSize << "\n";
-    std::cout << "AIV_BLOCKS=" << shape.aivBlocks << " TILE_COLS=" << shape.tileCols << " ROW_CHUNK=" << shape.rowChunk
-              << " METADATA_PAD=" << shape.metadataPad << "\n";
-    std::cout << "DATA_DIR=" << args.dataDir << " SEED=" << args.runtime.seed << "\n";
-    std::cout << "WARMUP=" << args.runtime.warmup << " ITERS=" << args.runtime.iters
-              << " VERIFY=" << args.runtime.verify << " DEBUG=" << args.runtime.debug << "\n";
+    const MoeDispatchShape &shape = args.shape;
+    const MoeDispatchRuntimeConfig &runtime = args.runtime;
+    const MoeDispatchResourceConfig resource = GetResourceConfig(args.socVersion);
+    std::cout << "MOE_DISPATCH shape: EP=" << shape.ep << " M=" << shape.m << " K=" << shape.k << " TOPK=" << shape.topK
+              << " EXPERT_PER_RANK=" << shape.expertPerRank << " EXPERT_NUM=" << shape.expertNum
+              << " MAX_OUTPUT_SIZE=" << shape.maxOutputSize << '\n';
+    std::cout << "AIV_BLOCKS=" << shape.aivBlocks << " TILE_COLS=" << shape.tileCols
+              << " METADATA_PAD=" << shape.metadataPad << " SIGNAL_VALUE=" << shape.signalValue << '\n';
+    std::cout << "RESOURCE defaultAicBlocks=" << resource.defaultAicBlocks
+              << " defaultAivRatio=" << resource.defaultAivRatio << " defaultAivBlocks=" << resource.defaultAivBlocks
+              << " blockDim=" << resource.blockDim << '\n';
+    std::cout << "RUNTIME runMode=" << args.runMode << " socVersion=" << args.socVersion << " rank=" << runtime.rank
+              << " nranks=" << runtime.nranks << " ndevices=" << runtime.ndevices
+              << " deviceBase=" << runtime.deviceBase << " hostGoldenOnly=" << runtime.hostGoldenOnly << '\n';
 }
 
-} // namespace moe_combine
+} // namespace moe_dispatch
 
-#endif // MOE_COMBINE_ARGS_H_
+#endif // MOE_DISPATCH_ARGS_H_
