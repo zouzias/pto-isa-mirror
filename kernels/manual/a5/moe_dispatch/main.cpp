@@ -325,7 +325,11 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
     // Device memory allocation
     // ========================================================================
     size_t shmemSize = static_cast<size_t>(totalSrcTokens) * rowStride;
+#ifdef DIAG_ECHO_TEST
+    size_t gmASize = static_cast<size_t>(maxOutputSize) * rowStride;  // full 160 bytes/row for echo test
+#else
     size_t gmASize = static_cast<size_t>(maxOutputSize) * hiddenSize;  // compact token only (no interleaved temp)
+#endif
     size_t gmScaleSize = static_cast<size_t>(maxOutputSize) * UB_ALIGN;  // 32 bytes per scale row
     size_t cumsumSize = EP * expertPerRank * sizeof(int32_t);
     size_t tpeSize = EP * EP * expertPerRank * sizeof(int32_t);
@@ -443,6 +447,102 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
     // ========================================================================
     // Verification: compare device output with golden (compact token + scale)
     // ========================================================================
+#ifdef DIAG_ECHO_TEST
+    // Echo test: gmA contains full 160-byte interleaved rows
+    size_t echoRowStride = static_cast<size_t>(rowStride);
+    size_t echoOutputSize = static_cast<size_t>(maxOutputSize) * echoRowStride;
+    std::vector<int8_t> actualGmA(echoOutputSize);
+    aclrtMemcpy(actualGmA.data(), echoOutputSize, devGmA, echoOutputSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    // Print first 160 bytes (first row) for diagnosis
+    {
+        std::cerr << "[DIAG-ECHO] Rank " << rankId << ": gmA row0 actual 160B:\n  ";
+        for (int i = 0; i < 160 && i < (int)echoOutputSize; ++i) {
+            std::cerr << (int)(uint8_t)actualGmA[i] << " ";
+            if ((i+1) % 32 == 0) std::cerr << "\n  ";
+        }
+        std::cerr << "\n";
+    }
+
+    // Verify full interleaved rows against allShmemData
+    // Re-compute golden for echo mode: gmA[row] = full shmem row (160 bytes)
+    bool pass = true;
+    int32_t checkedRows = std::min(totalDstTokens, maxOutputSize);
+
+    // Recompute golden in echo mode: each output row = full interleaved shmem row
+    std::vector<int8_t> echoExpected(echoOutputSize, 0);
+    {
+        uint32_t prevGS = 0;
+        std::vector<int32_t> prevSPR(EP, 0);
+        for (int r = 0; r < EP; ++r) {
+            prevSPR[r] = routing.preSumBeforeRank[r * expertPerRank];
+        }
+        for (int32_t groupIdx = 0; groupIdx < expertPerRank; ++groupIdx) {
+            uint32_t currentM = static_cast<uint32_t>(routing.cumsumMM[(EP - 1) * expertPerRank + groupIdx]);
+            for (int32_t dstEpIdx = 0; dstEpIdx < EP; ++dstEpIdx) {
+                uint32_t rowStart2;
+                if (dstEpIdx == 0) {
+                    rowStart2 = prevGS;
+                } else {
+                    rowStart2 = static_cast<uint32_t>(routing.cumsumMM[(dstEpIdx - 1) * expertPerRank + groupIdx]) + prevGS;
+                }
+                if (rowStart2 >= static_cast<uint32_t>(maxOutputSize)) continue;
+                int32_t tpeIdx2 = dstEpIdx * EP * expertPerRank + rankId * expertPerRank + groupIdx;
+                uint32_t rows2 = static_cast<uint32_t>(routing.tokenPerExpert[tpeIdx2]);
+                if (rowStart2 + rows2 > static_cast<uint32_t>(maxOutputSize)) {
+                    rows2 = static_cast<uint32_t>(maxOutputSize) - rowStart2;
+                }
+                if (rows2 == 0) continue;
+                uint32_t rowSrc2 = static_cast<uint32_t>(prevSPR[dstEpIdx]);
+                prevSPR[dstEpIdx] += static_cast<int32_t>(rows2);
+                const int8_t *srcShmem = allShmemData[dstEpIdx].data();
+                for (uint32_t r = 0; r < rows2; ++r) {
+                    const int8_t *srcRow = srcShmem + static_cast<size_t>(rowSrc2 + r) * rowStride;
+                    int8_t *dstRow = echoExpected.data() + static_cast<size_t>(rowStart2 + r) * echoRowStride;
+                    memcpy(dstRow, srcRow, rowStride);
+                }
+            }
+            prevGS += currentM;
+        }
+    }
+
+    // Print first expected row for echo
+    std::cerr << "[DIAG-ECHO] Rank " << rankId << ": echo expected row0 first 160B:\n  ";
+    for (int i = 0; i < 160 && i < (int)echoExpected.size(); ++i) {
+        std::cerr << (int)(uint8_t)echoExpected[i] << " ";
+        if ((i+1) % 32 == 0) std::cerr << "\n  ";
+    }
+    std::cerr << "\n";
+
+    // Byte-by-byte comparison
+    for (int32_t i = 0; i < checkedRows && pass; ++i) {
+        for (int32_t j = 0; j < rowStride && pass; ++j) {
+            int8_t actual = actualGmA[static_cast<size_t>(i) * echoRowStride + j];
+            int8_t expected = echoExpected[static_cast<size_t>(i) * echoRowStride + j];
+            if (actual != expected) {
+                std::cerr << "[FAIL-ECHO] Rank " << rankId << ": mismatch at row " << i
+                          << " col " << j << " actual=" << (int)(uint8_t)actual
+                          << " expected=" << (int)(uint8_t)expected << "\n";
+                // Print the full actual and expected rows for this failing row
+                std::cerr << "[FAIL-ECHO] Rank " << rankId << ": actual row " << i << ":";
+                for (int k = 0; k < rowStride; ++k)
+                    std::cerr << " " << (int)(uint8_t)actualGmA[static_cast<size_t>(i) * echoRowStride + k];
+                std::cerr << "\n";
+                std::cerr << "[FAIL-ECHO] Rank " << rankId << ": expect row " << i << ":";
+                for (int k = 0; k < rowStride; ++k)
+                    std::cerr << " " << (int)(uint8_t)echoExpected[static_cast<size_t>(i) * echoRowStride + k];
+                std::cerr << "\n";
+                pass = false;
+            }
+        }
+    }
+
+    if (pass) {
+        std::cout << "[PASS-ECHO] Rank " << rankId << ": verified " << checkedRows
+                  << " rows (full " << rowStride << "B/row echo)\n";
+    }
+
+#else
     // Read back compact token area (maxOutputSize * hiddenSize bytes)
     size_t compactTokenSize = static_cast<size_t>(maxOutputSize) * hiddenSize;
     std::vector<int8_t> actualGmA(compactTokenSize);
@@ -498,6 +598,7 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
         std::cout << "[PASS] Rank " << rankId << ": verified " << checkedRows
                   << " rows (compact token " << hiddenSize << "B/row + scale)\n";
     }
+#endif
 
     // Cleanup
     aclrtFree(devGmA);
