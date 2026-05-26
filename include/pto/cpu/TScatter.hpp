@@ -65,7 +65,8 @@ PTO_INTERNAL void TScatter(typename DstTileData::TileDType dst, typename SrcTile
     }
 }
 
-template <MaskPattern maskPattern, typename DstTileData, typename SrcTileData>
+template <MaskPattern maskPattern, auto ScatterType = ScatterAxis::SCATTER_ROW, typename DstTileData,
+          typename SrcTileData>
 PTO_INTERNAL void TSCATTER_IMPL(DstTileData &dst, SrcTileData &src)
 {
     if constexpr (maskPattern == MaskPattern::P1111) {

@@ -185,6 +185,7 @@ tcolprod
 tcmp
 tassign
 tstore_mat2gm
+tcolscatter
 tscatter
 tcolexpand
 ttri
