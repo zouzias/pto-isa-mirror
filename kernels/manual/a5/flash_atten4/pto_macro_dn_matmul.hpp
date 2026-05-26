@@ -143,10 +143,10 @@ AICORE inline MatmulCallConfig resolve_acc_mode(AccMode mode, bool isFirstSlice,
     return MatmulCallConfig{!isFirstSlice, AccPhase::Partial};
 }
 
-template <unsigned Cube_M, unsigned Tile_K, unsigned Cube_N, layout_t LAYOUT = layout_t::NONE, typename TileDataA,
-          typename TileDataB, typename TileDataC, typename OpHook = NoOpMatmulHook>
+template <unsigned Cube_M, unsigned Tile_K, unsigned Cube_N, bool L1LoadBFirst = false, layout_t LAYOUT = layout_t::NONE, typename TileDataA,
+          typename TileDataB, typename TileDataC, typename OpHook = NoOpMatmulHook, typename OpHook2 = NoOpMatmulHook, typename OpHook3 = NoOpMatmulHook>
 AICORE inline void pto_macro_matmul(TileDataA &aMatTile, TileDataB &bMatTile, TileDataC &cAccTile,
-                                    AccMode accMode = AccMode::Init, OpHook opHook = OpHook())
+                                    AccMode accMode = AccMode::Init, int stamp_id = 0, OpHook preATExtOpHook = OpHook(), OpHook2 preBTExtOpHook = OpHook2(), OpHook3 postTExtOpHook = OpHook3())
 {
     constexpr layout_t layout = deduce_layout<TileDataA, TileDataB>();
 
@@ -183,15 +183,32 @@ AICORE inline void pto_macro_matmul(TileDataA &aMatTile, TileDataB &bMatTile, Ti
         }
 
         // TEXTRACT slices the current Cube_K panel into L0A/L0B.
-        TEXTRACT(al0Tiles[pingpong], aMatTile, 0, 0);
-        TEXTRACT(bl0Tiles[pingpong], bMatTile, 0, 0);
+        if constexpr (L1LoadBFirst) {
+            if (k == 0)
+                preBTExtOpHook();
+            TEXTRACT(bl0Tiles[pingpong], bMatTile, 0, 0);
+            if (k == 0)
+                preATExtOpHook();
+            TEXTRACT(al0Tiles[pingpong], aMatTile, 0, 0);
+        } else {
+            if (k == 0)
+                preATExtOpHook();
+            TEXTRACT(al0Tiles[pingpong], aMatTile, 0, 0);
+            if (k == 0)
+                preBTExtOpHook();
+            TEXTRACT(bl0Tiles[pingpong], bMatTile, 0, 0);
+        }
+
+#if defined MARK_STAMP_DATA_PIPE
+        bisheng::cce::mark_stamp<PIPE_MTE1>(stamp_id);
+#endif
 
         set_flag(PIPE_MTE1, PIPE_M, pingpong);
         wait_flag(PIPE_MTE1, PIPE_M, pingpong);
 
         const bool isLast = (k + 1 == kSegments);
         if (isLast) {
-            opHook();
+            postTExtOpHook();
         }
         MatmulCallConfig cfg = resolve_acc_mode(accMode, k == 0, isLast);
         if (cfg.useAcc) {

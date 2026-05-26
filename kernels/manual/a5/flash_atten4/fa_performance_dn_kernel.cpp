@@ -329,6 +329,44 @@ struct Sm2PvFreeHook {
     }
 };
 
+struct PreATExtOpReadyHook {
+    AICORE inline void operator()() const
+    {
+        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    }
+};
+
+struct PreBTExtOpReadyHook {
+    AICORE inline void operator()() const
+    {
+        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
+    }
+};
+
+template <typename TSyncSM2PV>
+struct PReadyHook {
+    TSyncSM2PV &sync;
+    bool enable;
+
+    AICORE inline void operator()() const
+    {
+        if (enable) {
+            sync.wait();
+        }
+    }
+};
+
+struct QReadyHook {
+    bool enable;
+
+    AICORE inline void operator()() const
+    {
+        if (enable) {
+            wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
+        }
+    }
+};
+
 template <int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1, int QKP_CV_FIFO,
           int CV_FIFO_CONS_SYNC_PERIOD, bool INTERMEDIATE_CHECK, bool CAUSAL_MASK, int SRC_VEC_TN_BUFFERS,
           typename TileMatQData, typename TileMatKData, typename TileQKData, typename TileQKVecData,
@@ -372,16 +410,21 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm
 
         if (tile_id == 0 && sub_tile_id == 0) {
             TLOAD(qMatTile, qGlobal);
+            set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
         }
 
         TLOAD(kMatTile, kGlobal);
+#if defined MARK_STAMP_DATA_PIPE
+        bisheng::cce::mark_stamp<PIPE_MTE2>(QK_DONE * 1000 + tile_id);
+#endif
 
         set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        QReadyHook qReadyHook{tile_id == 0 && sub_tile_id == 0};
+        PreATExtOpReadyHook preATExtOpReadyHook;
 
         wait_flag(PIPE_FIX, PIPE_M, accTileEvtID);
 
-        pto_macro_matmul<Cube_S1, Cube_HEAD, Cube_S0>(kMatTile, qMatTile, qkAccTile, AccMode::Init);
+        pto_macro_matmul<Cube_S1, Cube_HEAD, Cube_S0, true>(kMatTile, qMatTile, qkAccTile, AccMode::Init, QK_DONE * 1000 + tile_id, preATExtOpReadyHook, qReadyHook);
 #if defined MARK_STAMP
         bisheng::cce::mark_stamp<PIPE_M>(QK_DONE * 1000 + tile_id);
 #endif
@@ -425,6 +468,9 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm
         }
 
         TMOV<TileDataF_Sub, TileQKData, AccToVecMode::DualModeSplitN>(qkVecTileSubDN, qkAccTile);
+#if defined MARK_STAMP_DATA_PIPE
+        bisheng::cce::mark_stamp<PIPE_FIX>(QK_DONE * 1000 + tile_id);
+#endif
 
         set_flag(PIPE_FIX, PIPE_M, accTileEvtID);
 
@@ -510,16 +556,19 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
 
         GlobalVT vLoad((__gm__ half *)(v + s1_index * HEAD_SIZE));
         TLOAD(vMatTile, vLoad);
+#if defined MARK_STAMP_DATA_PIPE
+        bisheng::cce::mark_stamp<PIPE_MTE2>(PV_DONE * 1000 + tile_id);
+#endif
 
-        if (sub_tile_id == 0)
-            sm2pvSync.wait(); // wait for softmax produce data
+        PReadyHook<TSyncSM2PV> pReadyHook{sm2pvSync, sub_tile_id == 0};
 
-        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
 
         if (sub_tile_id == 0) {
             wait_flag(PIPE_FIX, PIPE_M, accTileEvtID);
         }
+
+        PreBTExtOpReadyHook preBTExtOpReadyHook;
 
 #if skip_rescale
         AccMode accMode;
@@ -529,11 +578,11 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
             accMode = (sub_tile_id == 0) ? AccMode::Init : AccMode::Acc;
         }
         Sm2PvFreeHook<TSyncSM2PV> sm2pvFreeHook{sm2pvSync, sub_tile_id == static_cast<int>(kTileFactor) - 1};
-        pto_macro_matmul<Cube_S0, Cube_S1, Cube_HEAD>(pMatTile, vMatTile, dstTile, accMode, sm2pvFreeHook);
+        pto_macro_matmul<Cube_S0, Cube_S1, Cube_HEAD>(pMatTile, vMatTile, dstTile, accMode, PV_DONE * 1000 + tile_id, pReadyHook, preBTExtOpReadyHook, sm2pvFreeHook);
 #else
         const AccMode accMode = (sub_tile_id == 0) ? AccMode::Init : AccMode::Acc;
         Sm2PvFreeHook<TSyncSM2PV> sm2pvFreeHook{sm2pvSync, sub_tile_id == static_cast<int>(kTileFactor) - 1};
-        pto_macro_matmul<Cube_S0, Cube_S1, Cube_HEAD>(pMatTile, vMatTile, pvAccTile, accMode, sm2pvFreeHook);
+        pto_macro_matmul<Cube_S0, Cube_S1, Cube_HEAD>(pMatTile, vMatTile, pvAccTile, accMode, PV_DONE * 1000 + tile_id, pReadyHook, preBTExtOpReadyHook, sm2pvFreeHook);
 #endif
 #if defined MARK_STAMP
         bisheng::cce::mark_stamp<PIPE_M>(PV_DONE * 1000 + tile_id);
@@ -587,6 +636,9 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
                     TMOV<TileOutT, TilePVData, AccToVecMode::DualModeSplitM>(pvVecTile[pv_ub_buf_idx], pvAccTile);
                 }
                 pvUbBufSync.record();
+#if defined MARK_STAMP_DATA_PIPE
+                bisheng::cce::mark_stamp<PIPE_FIX>(PV_DONE * 1000 + tile_id);
+#endif
 
                 if constexpr (INTERMEDIATE_CHECK) {
                     using GlobalDataPV = GlobalTensor<float, pto::Shape<1, 1, 1, Cube_S0, HEAD_SIZE>,
@@ -620,6 +672,9 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
                 TMOV<TileOutT, TilePVData, AccToVecMode::DualModeSplitM>(pvVecTile[pv_ub_buf_idx], pvAccTile);
             }
             pvUbBufSync.record();
+#if defined MARK_STAMP_DATA_PIPE
+            bisheng::cce::mark_stamp<PIPE_FIX>(PV_DONE * 1000 + tile_id);
+#endif
 
             if constexpr (INTERMEDIATE_CHECK) {
                 using GlobalDataPV =
@@ -762,6 +817,9 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
             uint16_t col_offset = static_cast<uint16_t>(Vec_S0 * static_cast<size_t>(get_subblockid()));
             TINSERT(pMatTile, nzConvBuffer, static_cast<uint16_t>(0), col_offset);
         }
+#if defined MARK_STAMP_DATA_PIPE
+        bisheng::cce::mark_stamp<PIPE_MTE3>(P_DONE * 1000 + tile_id);
+#endif
         if constexpr (INTERMEDIATE_CHECK) {
             if (row_slice == static_cast<int>(kTileFactor) - 1) {
                 constexpr uint32_t SubblockRows = Cube_S0 / VEC_CORES;
@@ -874,6 +932,9 @@ AICORE inline void compute_gu(int tile_id, int num_tiles, __gm__ float *pv_tile_
             GlobalOutT outGlobal((__gm__ float *)(o_out + subblock_base_rows * HEAD_SIZE));
             TSTORE(outGlobal, runningOTile);
             set_intra_block(PIPE_MTE3, RUNNING_O_AVALIABLE);
+#if defined MARK_STAMP_DATA_PIPE
+        bisheng::cce::mark_stamp<PIPE_MTE3>(GU_DONE * 1000 + tile_id);
+#endif
         }
     }
 }

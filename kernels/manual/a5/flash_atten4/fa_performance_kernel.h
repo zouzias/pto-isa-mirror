@@ -52,6 +52,20 @@ enum FftsBufferFlag : uint32_t
 };
 #endif
 
+#ifndef MARK_STAMP
+// #define MARK_STAMP
+// #define MARK_STAMP_DATA_PIPE
+
+enum StageStamp : uint16_t
+{
+    QK_DONE,
+    P_DONE,
+    PV_DONE,
+    GU_DONE,
+};
+
+#endif
+
 template <int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1 = kFaCubeS1, int TILE_S1 = kFaTileS1,
           int QK_PRELOAD = kFaQkPreload, int CV_FIFO_SIZE = kFaCvFifoSize, bool INTERMEDIATE_CHECK = false,
           bool CAUSAL_MASK = false, int CV_FIFO_CONS_SYNC_PERIOD = kFaCvFifoConsSyncPeriod>
