@@ -86,7 +86,7 @@ cd <folder>
 bash run.sh -r npu -v Ascend910B1
 ```
 
-Each folder has its own `scripts/generate_cases.py` wrapper, `scripts/gen_data.py` (writes inputs + golden), `main.cpp` (loads inputs, fires the kernel, writes outputs, validates), and prints `test data success` / `test data failed`. The leaf-level generator wrapper delegates to the shared MoE case generator so shape parsing stays in one place.
+Each folder has its own `scripts/gen_data.py` (writes inputs + golden), `main.cpp` (loads inputs, fires the kernel, writes outputs, validates), and prints `test data success` / `test data failed`. The leaf `run.sh` delegates to the shared MoE case generator so shape parsing stays in one place.
 
 ### All folders at one shape
 
@@ -97,7 +97,7 @@ bash run_all.sh -r <RUN_MODE> -v <SOC_VERSION> --kernels MoE --cases-moe "<kT>,<
 bash run_all.sh -r npu -v Ascend910B1 --kernels MoE --cases-moe "256,64,64,32,1"
 ```
 
-`run_all.sh` forwards the tuple to each MoE leaf `run.sh`; each leaf calls its own `scripts/generate_cases.py` wrapper before generating data and building.
+`run_all.sh` forwards the tuple to each MoE leaf `run.sh`; each leaf calls the shared family-level `scripts/generate_cases.py` before generating data and building.
 
 ## Constraints inherited across all sub-folders
 

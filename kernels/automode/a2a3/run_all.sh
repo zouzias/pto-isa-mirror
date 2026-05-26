@@ -33,9 +33,7 @@
 # --moe-subkernels (applied to BOTH families when both are selected).
 #
 # Notes:
-#   - --cases-moe is passed to each MoE sub-kernel via -a (only the MoE family
-#     supports per-shape overrides today; the other kernels run their default
-#     hardcoded shape).
+#   - --cases-moe is passed to each MoE and MoEv2 sub-kernel via -a.
 #   - --cases-flash-atten is passed only to flash_atten's -a.
 #   - Each kernel writes its own report; this script aggregates pass/fail at
 #     the end (a kernel "passes" if its run.sh exits with status 0).
@@ -219,10 +217,7 @@ run_moe_family() {
             continue
         fi
         local label="${family}/${sub}"
-        # Only the MoE family supports -a today; MoEv2 sub-kernels' run.sh
-        # ignores unknown args, so we forward -a unconditionally if --cases-moe
-        # was supplied (it's a no-op for MoEv2).
-        if [[ -n "${CASES_MOE}" && "${family}" == "MoE" ]]; then
+        if [[ -n "${CASES_MOE}" ]]; then
             run_one "${label}" "${sub_dir}" -a "${CASES_MOE}"
         else
             run_one "${label}" "${sub_dir}"

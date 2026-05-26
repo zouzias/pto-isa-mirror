@@ -19,33 +19,20 @@
 
 import json
 import os
+import sys
 from pathlib import Path
 
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+from case_utils import load_moe_case
+
 np.random.seed(42)
 
-
-def _load_case_from_json():
-    # Mirror generated_cases.h: first JSON entry drives the build.
-    # Path: <MoE>/build/generated_cases.json (parents[2] = <MoE>).
-    json_path = Path(__file__).resolve().parents[2] / "build" / "generated_cases.json"
-    if not json_path.exists():
-        return None
-    payload = json.loads(json_path.read_text())
-    if not payload:
-        return None
-    c = payload[0]
-    return int(c["t"]), int(c["h"]), int(c["f"]), int(c["e"]), int(c["topk"])
-
-
-_case = _load_case_from_json()
-if _case is not None:
-    kT, kH, _kF, kE, _kTopK = _case
-else:
-    kT = 256  # num_tokens
-    kH = 64   # d_model
-    kE = 32   # num_experts
+_case = load_moe_case()
+kT = _case["t"]  # num_tokens
+kH = _case["h"]  # d_model
+kE = _case["e"]  # num_experts
 
 
 def gen_golden_data():

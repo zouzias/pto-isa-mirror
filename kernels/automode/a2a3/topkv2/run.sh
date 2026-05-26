@@ -43,6 +43,7 @@ do
     esac
 done
 
+
 : "${CMAKE_COMPILER:=bisheng}"
 
 source "${KERNEL_DIR}/../common.sh"

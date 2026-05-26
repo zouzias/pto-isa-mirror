@@ -27,6 +27,7 @@ do
     esac
 done
 
+
 : "${CMAKE_COMPILER:=bisheng}"
 
 source "${KERNEL_DIR}/../../common.sh"
@@ -47,9 +48,9 @@ GEN_CASE_ARGS=()
 if [[ -n "${CASES_RAW:-}" ]]; then
     GEN_CASE_ARGS+=(--cases "${CASES_RAW}")
 fi
-python3 ./scripts/generate_cases.py "${GEN_CASE_ARGS[@]}"
+python3 ../scripts/generate_cases.py "${GEN_CASE_ARGS[@]}" || exit 1
 
-python ./scripts/gen_data.py
+python ./scripts/gen_data.py || exit 1
 
 rm -rf build
 mkdir build

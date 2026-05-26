@@ -40,6 +40,7 @@
  */
 
 #include <pto/pto-inst.hpp>
+#include "generated_cases.h"
 #include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
 
@@ -156,9 +157,9 @@ void launchMoeTopkPadded(uint8_t *outVal, uint8_t *outIdx,
                          void *stream)
 {
     // Compile-time shape constants — must match main.cpp and gen_data.py.
-    constexpr int kT    = 256;
-    constexpr int kE    = 32;
-    constexpr int kTopK = 1;   // v1: kTopK = 1; change to 2/4/8/16 for sweep.
+    constexpr int kT    = kMoeT;
+    constexpr int kE    = kMoeE;
+    constexpr int kTopK = kMoeTopK;   // v1: kTopK = 1; change to 2/4/8/16 for sweep.
     RunMoeTopkPadded<T, kT, kE, kTopK><<<1, nullptr, stream>>>(outVal, outIdx, src, idx);
 }
 
