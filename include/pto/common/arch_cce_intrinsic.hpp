@@ -73,7 +73,7 @@ PTO_INTERNAL void pto_create_cbuf_matrix(__cbuf__ T *dst, int64_t repeatConfig, 
         set_l0_set_value_h(value);
     }
     set_l1_2d(dst, repeatConfig);
-#else
+#elif !defined(PTO_NPU_ARCH_A1)
     if constexpr (std::is_same<T, bfloat16_t>::value) {
         create_cbuf_matrix_bf16(dst, repeatConfig, value);
     } else {
