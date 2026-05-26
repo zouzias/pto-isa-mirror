@@ -44,9 +44,6 @@ K=7168
 TOPK=8
 EXPERT_PER_PE=2
 AIV_BLOCKS=0
-TILE_COLS=1024
-TILE_COLS_SET=0
-ROW_CHUNK=0
 METADATA_PAD=16
 MAX_OUTPUT_SIZE=0
 DEVICE_BASE=0
@@ -57,8 +54,8 @@ KEEP_HCCL_SHM=0
 RANK_FROM_MPI=1
 RANK=""
 DEBUG=0
-ITERS=1
-WARMUP=1
+ITERS=5
+WARMUP=3
 SEED=1234
 DATA_DIR="${SCRIPT_DIR}/out"
 GEN_DATA=1
@@ -89,8 +86,6 @@ Kernel/runtime:
   -r, --run-mode npu
   -v, --soc-version NAME
   -aivBlocks, --aiv-blocks N
-  -tileCols, --tile-cols N
-  --row-chunk N
   --metadata-pad N
   -device-base, --device-base, --first-device N
   --ndevices N
@@ -142,8 +137,6 @@ while [[ $# -gt 0 ]]; do
         -expertPerPe|--experts-per-rank) EXPERT_PER_PE="$2"; shift 2 ;;
         --max-output-size) MAX_OUTPUT_SIZE="$2"; shift 2 ;;
         -aivBlocks|--aiv-blocks) AIV_BLOCKS="$2"; shift 2 ;;
-        -tileCols|--tile-cols) TILE_COLS="$2"; TILE_COLS_SET=1; shift 2 ;;
-        --row-chunk) ROW_CHUNK="$2"; shift 2 ;;
         --metadata-pad) METADATA_PAD="$2"; shift 2 ;;
         -device-base|--device-base|--first-device) DEVICE_BASE="$2"; shift 2 ;;
         --ndevices) NDEVICES="$2"; shift 2 ;;
@@ -183,16 +176,9 @@ if [ "${RUN_MODE}" != "npu" ]; then
     echo "[ERROR] run-mode must be npu for the first version"
     exit 1
 fi
-if [ "${TILE_COLS_SET}" -eq 0 ] && [ "${K}" -lt "${TILE_COLS}" ]; then
-    TILE_COLS="${K}"
-fi
 if [ "${PES}" -le 0 ] || [ "${M}" -le 0 ] || [ "${K}" -le 0 ] || [ "${TOPK}" -le 0 ] || \
-   [ "${EXPERT_PER_PE}" -le 0 ] || [ "${TILE_COLS}" -le 0 ] || [ "${METADATA_PAD}" -le 0 ]; then
-    echo "[ERROR] shape fields, TILE_COLS, and METADATA_PAD must be nonzero"
-    exit 1
-fi
-if [ $(( K % TILE_COLS )) -ne 0 ]; then
-    echo "[ERROR] K % tileCols must be 0"
+   [ "${EXPERT_PER_PE}" -le 0 ] || [ "${METADATA_PAD}" -le 0 ]; then
+    echo "[ERROR] shape fields and METADATA_PAD must be nonzero"
     exit 1
 fi
 if [ -z "${NDEVICES}" ]; then
@@ -237,9 +223,7 @@ if [ "${SYNC_SLOTS}" -lt 64 ]; then
     SYNC_SLOTS=64
 fi
 append_workspace_field $(( SYNC_SLOTS * 4 ))
-append_workspace_field $(( EFFECTIVE_AIV_BLOCKS * TILE_COLS * 4 ))
 append_workspace_field $(( MAX_OUTPUT_SIZE * K * 2 ))
-append_workspace_field $(( EXPANDED_ROWS * K * 2 ))
 WORKSPACE_BYTES=$(align_up "${workspace_offset}" 64)
 
 peer_offset=0
@@ -308,7 +292,7 @@ echo "RUN_MODE=${RUN_MODE}"
 echo "SOC_VERSION=${SOC_VERSION}"
 echo "PES=${PES} DEVICE_BASE=${DEVICE_BASE} NDEVICES=${NDEVICES}"
 echo "M=${M} K=${K} TOPK=${TOPK} EXPERT_PER_PE=${EXPERT_PER_PE} MAX_OUTPUT_SIZE=${MAX_OUTPUT_SIZE}"
-echo "AIV_BLOCKS=${AIV_BLOCKS} TILE_COLS=${TILE_COLS} ROW_CHUNK=${ROW_CHUNK} METADATA_PAD=${METADATA_PAD}"
+echo "AIV_BLOCKS=${AIV_BLOCKS} METADATA_PAD=${METADATA_PAD}"
 echo "workspace_bytes=${WORKSPACE_BYTES}"
 echo "peer_window_bytes=${PEER_WINDOW_BYTES}"
 echo "HCCL_BUFFSIZE=${HCCL_BUFFSIZE}"
@@ -344,8 +328,6 @@ HOST_ARGS=(
     --experts-per-rank "${EXPERT_PER_PE}"
     --max-output-size "${MAX_OUTPUT_SIZE}"
     --aiv-blocks "${AIV_BLOCKS}"
-    --tile-cols "${TILE_COLS}"
-    --row-chunk "${ROW_CHUNK}"
     --metadata-pad "${METADATA_PAD}"
     --device-base "${DEVICE_BASE}"
     --ndevices "${NDEVICES}"

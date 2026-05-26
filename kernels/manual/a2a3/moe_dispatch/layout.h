@@ -70,11 +70,9 @@ inline uint64_t AppendField(uint64_t *offset, uint64_t bytes)
 inline WorkspaceLayout ComputeWorkspaceLayout(const MoeDispatchShape &shape)
 {
     constexpr uint64_t kI32 = 4;
-    constexpr uint64_t kFloat = 4;
     constexpr uint64_t kHalf = 2;
     uint64_t aivBlocks = EffectiveAivBlocks(shape);
     uint64_t expertNumPadded = ExpertNumPadded(shape);
-    uint64_t expandedRows = CheckedMul(shape.m, shape.topK, "expanded rows");
     uint64_t offset = 0;
     WorkspaceLayout layout{};
     layout.localTokenPerExpert = AppendField(&offset, CheckedMul(expertNumPadded, kI32, "localTokenPerExpert"));
@@ -96,12 +94,8 @@ inline WorkspaceLayout ComputeWorkspaceLayout(const MoeDispatchShape &shape)
         syncSlots = 64;
     }
     layout.localSync = AppendField(&offset, CheckedMul(syncSlots, kI32, "localSync"));
-    layout.floatScratch = AppendField(
-        &offset, CheckedMul(CheckedMul(aivBlocks, shape.tileCols, "floatScratch elems"), kFloat, "floatScratch bytes"));
     layout.dispatchedA = AppendField(
         &offset, CheckedMul(CheckedMul(shape.maxOutputSize, shape.k, "dispatchedA elems"), kHalf, "dispatchedA bytes"));
-    layout.ptrDLocal = AppendField(
-        &offset, CheckedMul(CheckedMul(expandedRows, shape.k, "ptrDLocal elems"), kHalf, "ptrDLocal bytes"));
     layout.totalBytes = AlignUp(offset, 64);
     return layout;
 }

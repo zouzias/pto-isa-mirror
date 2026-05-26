@@ -28,8 +28,6 @@ struct MoeDispatchShape {
     uint32_t expertNum;
     uint32_t maxOutputSize;
     uint32_t aivBlocks;
-    uint32_t tileCols;
-    uint32_t rowChunk;
     uint32_t metadataPad;
     uint32_t signalValue;
 };
@@ -42,9 +40,7 @@ struct WorkspaceLayout {
     uint64_t dispatchOffset;
     uint64_t prevSumBeforeRank;
     uint64_t localSync;
-    uint64_t floatScratch;
     uint64_t dispatchedA;
-    uint64_t ptrDLocal;
     uint64_t totalBytes;
 };
 

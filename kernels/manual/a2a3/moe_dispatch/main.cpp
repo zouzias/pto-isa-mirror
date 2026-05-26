@@ -547,13 +547,23 @@ uint64_t VerifyDispatchMetadata(const MoeDispatchArgs &args, RuntimeState *state
         size_t aivBlocks = static_cast<size_t>(EffectiveAivBlocks(shape));
         std::vector<int32_t> expectedBlockToken(aivBlocks * expertNumPadded, 0);
         std::vector<int32_t> expectedBlockPrefix(aivBlocks * expertNumPadded, 0);
-        for (uint32_t token = 0; token < shape.m; ++token) {
-            uint32_t block = static_cast<uint32_t>((static_cast<uint64_t>(token) * aivBlocks) / shape.m);
-            if (block >= aivBlocks) {
-                block = static_cast<uint32_t>(aivBlocks - 1);
+        constexpr uint32_t kI32PerCacheLine = 16;
+        size_t routeCount = static_cast<size_t>(shape.m) * shape.topK;
+        size_t routeLineCount = (routeCount + kI32PerCacheLine - 1) / kI32PerCacheLine;
+        auto shardBegin = [](size_t totalItems, size_t block, size_t blockCount) {
+            size_t base = totalItems / blockCount;
+            size_t rem = totalItems % blockCount;
+            return block * base + (block < rem ? block : rem);
+        };
+        for (uint32_t block = 0; block < aivBlocks; ++block) {
+            size_t lineBegin = shardBegin(routeLineCount, block, aivBlocks);
+            size_t lineEnd = shardBegin(routeLineCount, block + 1, aivBlocks);
+            size_t routeBegin = lineBegin * kI32PerCacheLine;
+            size_t routeEnd = lineEnd * kI32PerCacheLine;
+            if (routeEnd > routeCount) {
+                routeEnd = routeCount;
             }
-            for (uint32_t slot = 0; slot < shape.topK; ++slot) {
-                size_t routeIndex = static_cast<size_t>(token) * shape.topK + slot;
+            for (size_t routeIndex = routeBegin; routeIndex < routeEnd; ++routeIndex) {
                 int32_t expert = state->inputs.expertIdx[routeIndex];
                 if (expert < 0 || static_cast<uint32_t>(expert) >= shape.expertNum) {
                     continue;
@@ -717,8 +727,7 @@ void PrintPerformanceConfig(const MoeDispatchArgs &args, const WorkspaceLayout &
     }
     uint32_t aivBlocks = args.shape.aivBlocks == 0 ? 1 : args.shape.aivBlocks;
     uint32_t peerShards = args.shape.ep < aivBlocks ? args.shape.ep : aivBlocks;
-    std::cout << "rank=" << rank << " aiv_blocks=" << aivBlocks << " tile_cols=" << args.shape.tileCols
-              << " peer_window_bytes=" << peerWindowLayout.totalBytes
+    std::cout << "rank=" << rank << " aiv_blocks=" << aivBlocks << " peer_window_bytes=" << peerWindowLayout.totalBytes
               << " workspace_bytes=" << workspaceLayout.totalBytes << " dispatch_peer_shards=" << peerShards
               << std::endl;
 }
