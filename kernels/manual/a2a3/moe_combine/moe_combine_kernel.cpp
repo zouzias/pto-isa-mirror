@@ -210,18 +210,24 @@ AICORE inline void WaitStoreTileReusable()
     wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
 }
 
-AICORE inline void AcquireGmRangeBeforeRead(__gm__ void *ptr, uint32_t bytes)
+AICORE inline void DcciGmRange(__gm__ void *ptr, uint64_t bytes)
 {
     if (bytes == 0) {
         return;
     }
-    pipe_barrier(PIPE_ALL);
     constexpr uint64_t cacheLineBytes = 64;
-    constexpr uint64_t dcciStepBytes = static_cast<uint64_t>(pto::SYNCALL_SOFT_SLOT_INT32) * sizeof(int32_t);
     uint64_t start = reinterpret_cast<uint64_t>(ptr) & ~(cacheLineBytes - 1);
     uint64_t end = (reinterpret_cast<uint64_t>(ptr) + bytes + cacheLineBytes - 1) & ~(cacheLineBytes - 1);
-    uint64_t dcciSteps = (end - start + dcciStepBytes - 1) / dcciStepBytes;
-    pto::SYNCALL_SOFT_DCCI_RANGE(reinterpret_cast<__gm__ int32_t *>(start), static_cast<int32_t>(dcciSteps));
+    for (uint64_t addr = start; addr < end; addr += cacheLineBytes) {
+        dcci(reinterpret_cast<__gm__ void *>(addr), SINGLE_CACHE_LINE);
+    }
+    dsb(DSB_DDR);
+}
+
+AICORE inline void AcquireGmRangeBeforeRead(__gm__ void *ptr, uint64_t bytes)
+{
+    pipe_barrier(PIPE_ALL);
+    DcciGmRange(ptr, bytes);
 }
 
 AICORE inline uint32_t ExpertNumPaddedDevice(MoeCombineShape shape)
@@ -359,7 +365,6 @@ AICORE inline void ReturnExpertRowsToOwners(MoeCombineShape shape, LocalWorkspac
     for (uint32_t src = blockId; src < shape.ep; src += blockNum) {
         LocalPeerWindowView remotePeer = MakeRemotePeerWindowView(ctx, peerWindow, src, peerWindowLayout);
         pipe_barrier(PIPE_ALL);
-        pto::SYNCALL_SOFT_DCCI_RANGE(remotePeer.combineDoneSignal + myRank, 1);
         pto::comm::Signal sig = MakeSignal(remotePeer.combineDoneSignal + myRank);
         (void)shape.signalValue;
         pto::comm::TNOTIFY(sig, 1, pto::comm::NotifyOp::AtomicAdd);
@@ -395,6 +400,8 @@ AICORE inline void RestoreOutputRows(MoeCombineShape shape, LocalPeerWindowView 
             if (ptrDRow < 0) {
                 continue;
             }
+            __gm__ half *ptrRow = localPeer.ptrD + static_cast<int64_t>(ptrDRow) * static_cast<int32_t>(shape.k);
+            AcquireGmRangeBeforeRead(ptrRow, static_cast<uint64_t>(shape.k) * sizeof(half));
             float prob = probValues[routeIndex];
             for (int32_t col = 0; col < static_cast<int32_t>(shape.k); col += kDefaultTileCols) {
                 int32_t cols = static_cast<int32_t>(shape.k) - col < kDefaultTileCols ?
@@ -407,9 +414,7 @@ AICORE inline void RestoreOutputRows(MoeCombineShape shape, LocalPeerWindowView 
                 GlobalNd<half> outGlobal =
                     MakeGlobal2D(output + static_cast<int64_t>(token) * static_cast<int32_t>(shape.k) + col, 1, cols,
                                  static_cast<int32_t>(shape.k));
-                __gm__ half *ptrChunk =
-                    localPeer.ptrD + static_cast<int64_t>(ptrDRow) * static_cast<int32_t>(shape.k) + col;
-                AcquireGmRangeBeforeRead(ptrChunk, static_cast<uint32_t>(cols) * sizeof(half));
+                __gm__ half *ptrChunk = ptrRow + col;
                 GlobalNd<half> ptrGlobal = MakeGlobal2D(ptrChunk, 1, cols, static_cast<int32_t>(shape.k));
                 pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> loadToAxpy;
                 pto::Event<pto::Op::TAXPY, pto::Op::TSTORE_VEC> axpyToStore;
