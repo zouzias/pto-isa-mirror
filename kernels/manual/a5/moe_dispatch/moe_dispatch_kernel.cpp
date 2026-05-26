@@ -147,23 +147,6 @@ AICORE void MoeDispatchDirect(
                 TLOAD(interleavedTile, remoteSrcG);
                 pipe_barrier(PIPE_ALL);
 
-#ifdef DIAG_ECHO_TEST
-                // Diagnostic: TSTORE full 160-byte rows (no split) to gmA
-                // gmA is treated as 160 bytes/row in echo mode
-                interleavedTile.RowMaskInternal = curRows;
-                interleavedTile.ColMaskInternal = TILE_COLS;
-
-                uint32_t dstRow = rowStart + static_cast<uint32_t>(p * MOVE_NUM);
-                __gm__ int8_t *echoDstPtr = gmA + static_cast<int64_t>(dstRow) * TILE_COLS;
-
-                int64_t echoBytes = static_cast<int64_t>(curRows) * TILE_COLS;
-                ShapeDyn echoShape(1, 1, 1, static_cast<size_t>(curRows), static_cast<size_t>(TILE_COLS));
-                StrideDyn echoStride(echoBytes, echoBytes, echoBytes, TILE_COLS, 1);
-                Global echoDstG(echoDstPtr, echoShape, echoStride);
-
-                TSTORE(echoDstG, interleavedTile);
-                pipe_barrier(PIPE_ALL);
-#else
                 tokenView.RowMaskInternal = curRows;
                 tokenView.ColMaskInternal = HIDDEN_SIZE;
                 scaleView.RowMaskInternal = curRows;
@@ -187,7 +170,6 @@ AICORE void MoeDispatchDirect(
                 TSTORE(tokenDstG, tokenView);
                 TSTORE(scaleDstG, scaleView);
                 pipe_barrier(PIPE_ALL);
-#endif
             }
         }
 
@@ -315,21 +297,6 @@ AICORE void MoeDispatchViaGM(
                 TLOAD(splitTile, localSrcG);
                 pipe_barrier(PIPE_ALL);
 
-#ifdef DIAG_ECHO_TEST
-                splitTile.RowMaskInternal = curRows;
-                splitTile.ColMaskInternal = TILE_COLS;
-
-                uint32_t dstRow = rowStart + static_cast<uint32_t>(p * MOVE_NUM);
-                __gm__ int8_t *echoDstPtr = gmA + static_cast<int64_t>(dstRow) * TILE_COLS;
-
-                int64_t echoBytes = static_cast<int64_t>(curRows) * TILE_COLS;
-                ShapeDyn echoShape(1, 1, 1, static_cast<size_t>(curRows), static_cast<size_t>(TILE_COLS));
-                StrideDyn echoStride(echoBytes, echoBytes, echoBytes, TILE_COLS, 1);
-                Global echoDstG(echoDstPtr, echoShape, echoStride);
-
-                TSTORE(echoDstG, splitTile);
-                pipe_barrier(PIPE_ALL);
-#else
                 splitToken.RowMaskInternal = curRows;
                 splitToken.ColMaskInternal = HIDDEN_SIZE;
                 splitScale.RowMaskInternal = curRows;
@@ -353,7 +320,6 @@ AICORE void MoeDispatchViaGM(
                 TSTORE(tokenDstG, splitToken);
                 TSTORE(scaleDstG, splitScale);
                 pipe_barrier(PIPE_ALL);
-#endif
             }
         }
 

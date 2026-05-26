@@ -30,7 +30,6 @@ MAX_TOKENS=64
 MAX_OUTPUT=512
 FIRST_DEVICE=0
 DEBUG_MODE=""
-ECHO_MODE=""
 CLEAN=""
 ACTION="all"
 DISPATCH_MODE="direct"
@@ -47,7 +46,6 @@ while [[ $# -gt 0 ]]; do
         --first-device) FIRST_DEVICE=$2; shift 2 ;;
         --mode) DISPATCH_MODE=$2; shift 2 ;;
         --debug) DEBUG_MODE="-DDEBUG_MODE=ON"; shift ;;
-        --echo) ECHO_MODE="-DDIAG_ECHO_TEST=ON"; shift ;;
         --clean) CLEAN=1; shift ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
@@ -82,7 +80,7 @@ do_build() {
         -DCONFIG_MAX_TOKENS_PER_RANK=${MAX_TOKENS} \
         -DCONFIG_MAX_OUTPUT_SIZE=${MAX_OUTPUT} \
         -DCONFIG_FIRST_DEVICE_ID=${FIRST_DEVICE} \
-        ${DEBUG_MODE} ${ECHO_MODE}
+        ${DEBUG_MODE}
 
     make -j$(nproc)
 

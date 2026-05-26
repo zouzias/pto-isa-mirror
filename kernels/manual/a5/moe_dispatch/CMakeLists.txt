@@ -94,11 +94,6 @@ if(DEBUG_MODE)
     set(CMAKE_CCE_COMPILE_OPTIONS "${CMAKE_CCE_COMPILE_OPTIONS} --cce-enable-print")
 endif()
 
-if(DIAG_ECHO_TEST)
-    message(STATUS "DIAG_ECHO_TEST: kernel will TSTORE full 160-byte rows (no split)")
-    add_compile_definitions(DIAG_ECHO_TEST)
-endif()
-
 set(CMAKE_CPP_COMPILE_OPTIONS
     -xc++
     "SHELL:-include stdint.h"
