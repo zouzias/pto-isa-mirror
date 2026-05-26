@@ -165,8 +165,9 @@ a bug in that kernel's host code, not in `run_all.sh`.
 - **`run_log/` is not auto-cleaned**. Old logs accumulate. Delete it
   yourself between large sweeps if disk usage matters.
 - **MoE single-case-per-binary**: each MoE sub-kernel is rebuilt for the
-  first `--cases` shape (see comment in
-  [MoE/scripts/generate_cases.py](MoE/scripts/generate_cases.py)). Passing
+  first `--cases` shape. Leaf folders expose `scripts/generate_cases.py`
+  wrappers that delegate to the shared
+  [MoE/scripts/generate_cases.py](MoE/scripts/generate_cases.py). Passing
   multiple `--cases-moe` tuples to `run_all.sh` is not supported — it
   forwards one string.
 - **Per-kernel shape sweeps** belong in that kernel's own `run.sh`
