@@ -53,7 +53,8 @@ AICORE inline __gm__ T *HcclRemotePtr(__gm__ HcclDeviceContext *ctx, __gm__ T *l
 //
 // TLOAD interleaved rows from remote GM directly into UB, then TSTORE to split
 // token and scale to separate compact GM destinations.
-// Cross-rank continuous pipeline with event-driven ping-pong.
+// A5 version: sequential TLOAD→barrier→TSTORE per chunk (no ping-pong)
+// to ensure correct MTE2/MTE3 pipeline synchronization.
 // ============================================================================
 template <int HIDDEN_SIZE, int TILE_COLS, int MOVE_NUM>
 AICORE void MoeDispatchDirect(
@@ -82,35 +83,19 @@ AICORE void MoeDispatchDirect(
     using ViewTile = pto::Tile<pto::TileType::Vec, int8_t, MOVE_NUM, TILE_COLS,
                                pto::BLayout::RowMajor, -1, -1>;
 
-    constexpr int32_t INTERLEAVED_TILE_BYTES = MOVE_NUM * TILE_COLS;
     constexpr int32_t PING_OFFSET = 0;
-    constexpr int32_t PONG_OFFSET = (INTERLEAVED_TILE_BYTES + 31) & ~31;
 
-    ViewTile interleavedPing(MOVE_NUM, TILE_COLS);
-    ViewTile tokenViewPing(MOVE_NUM, HIDDEN_SIZE);
-    ViewTile scaleViewPing(MOVE_NUM, UB_ALIGN);
-    TASSIGN(interleavedPing, PING_OFFSET);
-    TASSIGN(tokenViewPing, PING_OFFSET);
-    TASSIGN(scaleViewPing, PING_OFFSET + HIDDEN_SIZE);
-
-    ViewTile interleavedPong(MOVE_NUM, TILE_COLS);
-    ViewTile tokenViewPong(MOVE_NUM, HIDDEN_SIZE);
-    ViewTile scaleViewPong(MOVE_NUM, UB_ALIGN);
-    TASSIGN(interleavedPong, PONG_OFFSET);
-    TASSIGN(tokenViewPong, PONG_OFFSET);
-    TASSIGN(scaleViewPong, PONG_OFFSET + HIDDEN_SIZE);
+    ViewTile interleavedTile(MOVE_NUM, TILE_COLS);
+    ViewTile tokenView(MOVE_NUM, HIDDEN_SIZE);
+    ViewTile scaleView(MOVE_NUM, UB_ALIGN);
+    TASSIGN(interleavedTile, PING_OFFSET);
+    TASSIGN(tokenView, PING_OFFSET);
+    TASSIGN(scaleView, PING_OFFSET + HIDDEN_SIZE);
 
     uint32_t prevGroupSum = 0;
 
     for (int32_t groupIdx = 0; groupIdx < expertPerRank; ++groupIdx) {
         uint32_t currentM = static_cast<uint32_t>(cumsumMM[(EP - 1) * expertPerRank + groupIdx]);
-
-        bool hasPending = false;
-        int32_t pendingPP = 0;
-        int32_t pendingRows = 0;
-        __gm__ int8_t *pendTokenDstPtr = nullptr;
-        __gm__ int8_t *pendScaleDstPtr = nullptr;
-        int32_t globalChunkIdx = 0;
 
         for (int32_t dstEpIdx = coreIdx; dstEpIdx < EP; dstEpIdx += coreNum) {
             uint32_t rowStart;
@@ -150,89 +135,42 @@ AICORE void MoeDispatchDirect(
                     if (rem < MOVE_NUM) curRows = rem;
                 }
 
-                int32_t curPP = globalChunkIdx & 1;
-                event_t curEvent = curPP ? EVENT_ID1 : EVENT_ID0;
-                auto &loadTile = curPP ? interleavedPong : interleavedPing;
-
                 __gm__ int8_t *chunkSrc = remoteSrcPtr + static_cast<int64_t>(p) * MOVE_NUM * copyInNum;
                 int64_t srcTotalBytes = static_cast<int64_t>(curRows) * copyInNum;
                 ShapeDyn srcShape(1, 1, 1, static_cast<size_t>(curRows), static_cast<size_t>(copyInNum));
                 StrideDyn srcStride(srcTotalBytes, srcTotalBytes, srcTotalBytes, copyInNum, 1);
                 Global remoteSrcG(chunkSrc, srcShape, srcStride);
 
-                loadTile.RowMaskInternal = curRows;
-                loadTile.ColMaskInternal = TILE_COLS;
+                interleavedTile.RowMaskInternal = curRows;
+                interleavedTile.ColMaskInternal = TILE_COLS;
 
-                if (hasPending) {
-                    event_t prevEvent = pendingPP ? EVENT_ID1 : EVENT_ID0;
-                    wait_flag(PIPE_MTE2, PIPE_MTE3, prevEvent);
+                TLOAD(interleavedTile, remoteSrcG);
+                pipe_barrier(PIPE_ALL);
 
-                    auto &prevTokenView = pendingPP ? tokenViewPong : tokenViewPing;
-                    auto &prevScaleView = pendingPP ? scaleViewPong : scaleViewPing;
-                    prevTokenView.RowMaskInternal = pendingRows;
-                    prevTokenView.ColMaskInternal = HIDDEN_SIZE;
-                    prevScaleView.RowMaskInternal = pendingRows;
-                    prevScaleView.ColMaskInternal = UB_ALIGN;
+                tokenView.RowMaskInternal = curRows;
+                tokenView.ColMaskInternal = HIDDEN_SIZE;
+                scaleView.RowMaskInternal = curRows;
+                scaleView.ColMaskInternal = UB_ALIGN;
 
-                    int64_t pendTokenBytes = static_cast<int64_t>(pendingRows) * HIDDEN_SIZE;
-                    ShapeDyn pendTokenShape(1, 1, 1, static_cast<size_t>(pendingRows), static_cast<size_t>(HIDDEN_SIZE));
-                    StrideDyn pendTokenStride(pendTokenBytes, pendTokenBytes, pendTokenBytes, HIDDEN_SIZE, 1);
-                    Global pendTokenDstG(pendTokenDstPtr, pendTokenShape, pendTokenStride);
-
-                    int64_t pendScaleBytes = static_cast<int64_t>(pendingRows) * UB_ALIGN;
-                    ShapeDyn pendScaleShape(1, 1, 1, static_cast<size_t>(pendingRows), static_cast<size_t>(UB_ALIGN));
-                    StrideDyn pendScaleStride(pendScaleBytes, pendScaleBytes, pendScaleBytes, UB_ALIGN, 1);
-                    Global pendScaleDstG(pendScaleDstPtr, pendScaleShape, pendScaleStride);
-
-                    TSTORE(pendTokenDstG, prevTokenView);
-                    TSTORE(pendScaleDstG, prevScaleView);
-                    TLOAD(loadTile, remoteSrcG);
-
-                    set_flag(PIPE_MTE3, PIPE_MTE2, prevEvent);
-                    set_flag(PIPE_MTE2, PIPE_MTE3, curEvent);
-                    wait_flag(PIPE_MTE3, PIPE_MTE2, prevEvent);
-                } else {
-                    TLOAD(loadTile, remoteSrcG);
-                    set_flag(PIPE_MTE2, PIPE_MTE3, curEvent);
-                }
-
-                hasPending = true;
-                pendingPP = curPP;
-                pendingRows = curRows;
                 uint32_t dstRow = rowStart + static_cast<uint32_t>(p * MOVE_NUM);
-                pendTokenDstPtr = gmA + static_cast<int64_t>(dstRow) * HIDDEN_SIZE;
-                pendScaleDstPtr = reinterpret_cast<__gm__ int8_t *>(gmPerTokenScale)
-                                  + static_cast<int64_t>(dstRow) * UB_ALIGN;
-                globalChunkIdx++;
+                __gm__ int8_t *tokenDstPtr = gmA + static_cast<int64_t>(dstRow) * HIDDEN_SIZE;
+                __gm__ int8_t *scaleDstPtr = reinterpret_cast<__gm__ int8_t *>(gmPerTokenScale)
+                                             + static_cast<int64_t>(dstRow) * UB_ALIGN;
+
+                int64_t tokenBytes = static_cast<int64_t>(curRows) * HIDDEN_SIZE;
+                ShapeDyn tokenShape(1, 1, 1, static_cast<size_t>(curRows), static_cast<size_t>(HIDDEN_SIZE));
+                StrideDyn tokenStride(tokenBytes, tokenBytes, tokenBytes, HIDDEN_SIZE, 1);
+                Global tokenDstG(tokenDstPtr, tokenShape, tokenStride);
+
+                int64_t scaleBytes = static_cast<int64_t>(curRows) * UB_ALIGN;
+                ShapeDyn scaleShape(1, 1, 1, static_cast<size_t>(curRows), static_cast<size_t>(UB_ALIGN));
+                StrideDyn scaleStride(scaleBytes, scaleBytes, scaleBytes, UB_ALIGN, 1);
+                Global scaleDstG(scaleDstPtr, scaleShape, scaleStride);
+
+                TSTORE(tokenDstG, tokenView);
+                TSTORE(scaleDstG, scaleView);
+                pipe_barrier(PIPE_ALL);
             }
-        }
-
-        if (hasPending) {
-            event_t lastEvent = pendingPP ? EVENT_ID1 : EVENT_ID0;
-            wait_flag(PIPE_MTE2, PIPE_MTE3, lastEvent);
-
-            auto &lastTokenView = pendingPP ? tokenViewPong : tokenViewPing;
-            auto &lastScaleView = pendingPP ? scaleViewPong : scaleViewPing;
-            lastTokenView.RowMaskInternal = pendingRows;
-            lastTokenView.ColMaskInternal = HIDDEN_SIZE;
-            lastScaleView.RowMaskInternal = pendingRows;
-            lastScaleView.ColMaskInternal = UB_ALIGN;
-
-            int64_t lastTokenBytes = static_cast<int64_t>(pendingRows) * HIDDEN_SIZE;
-            ShapeDyn lastTokenShape(1, 1, 1, static_cast<size_t>(pendingRows), static_cast<size_t>(HIDDEN_SIZE));
-            StrideDyn lastTokenStride(lastTokenBytes, lastTokenBytes, lastTokenBytes, HIDDEN_SIZE, 1);
-            Global lastTokenDstG(pendTokenDstPtr, lastTokenShape, lastTokenStride);
-
-            int64_t lastScaleBytes = static_cast<int64_t>(pendingRows) * UB_ALIGN;
-            ShapeDyn lastScaleShape(1, 1, 1, static_cast<size_t>(pendingRows), static_cast<size_t>(UB_ALIGN));
-            StrideDyn lastScaleStride(lastScaleBytes, lastScaleBytes, lastScaleBytes, UB_ALIGN, 1);
-            Global lastScaleDstG(pendScaleDstPtr, lastScaleShape, lastScaleStride);
-
-            TSTORE(lastTokenDstG, lastTokenView);
-            TSTORE(lastScaleDstG, lastScaleView);
-
-            set_flag(PIPE_MTE3, PIPE_MTE2, lastEvent);
-            wait_flag(PIPE_MTE3, PIPE_MTE2, lastEvent);
         }
 
         prevGroupSum += currentM;
@@ -284,9 +222,7 @@ AICORE void MoeDispatchViaGM(
     using SplitTile = pto::Tile<pto::TileType::Vec, int8_t, MOVE_NUM, TILE_COLS,
                                 pto::BLayout::RowMajor, -1, -1>;
 
-    constexpr int32_t SPLIT_TILE_BYTES = MOVE_NUM * TILE_COLS;
     constexpr int32_t SPLIT_PING_OFFSET = 0;
-    constexpr int32_t SPLIT_PONG_OFFSET = (SPLIT_TILE_BYTES + 31) & ~31;
 
     uint32_t prevGroupSum = 0;
 
@@ -332,28 +268,15 @@ AICORE void MoeDispatchViaGM(
 
             pto::comm::TGET(tempDstG, remoteSrcG, tgetPing, tgetPong);
 
-            // Phase 2: TLOAD tempGmBuffer → UB → TSTORE split (event-driven ping-pong)
-            SplitTile splitInterleavedPing(MOVE_NUM, TILE_COLS);
-            SplitTile splitTokenPing(MOVE_NUM, HIDDEN_SIZE);
-            SplitTile splitScalePing(MOVE_NUM, UB_ALIGN);
-            TASSIGN(splitInterleavedPing, SPLIT_PING_OFFSET);
-            TASSIGN(splitTokenPing, SPLIT_PING_OFFSET);
-            TASSIGN(splitScalePing, SPLIT_PING_OFFSET + HIDDEN_SIZE);
-
-            SplitTile splitInterleavedPong(MOVE_NUM, TILE_COLS);
-            SplitTile splitTokenPong(MOVE_NUM, HIDDEN_SIZE);
-            SplitTile splitScalePong(MOVE_NUM, UB_ALIGN);
-            TASSIGN(splitInterleavedPong, SPLIT_PONG_OFFSET);
-            TASSIGN(splitTokenPong, SPLIT_PONG_OFFSET);
-            TASSIGN(splitScalePong, SPLIT_PONG_OFFSET + HIDDEN_SIZE);
+            // Phase 2: TLOAD tempGmBuffer → UB → TSTORE split (sequential with barrier)
+            SplitTile splitTile(MOVE_NUM, TILE_COLS);
+            SplitTile splitToken(MOVE_NUM, HIDDEN_SIZE);
+            SplitTile splitScale(MOVE_NUM, UB_ALIGN);
+            TASSIGN(splitTile, SPLIT_PING_OFFSET);
+            TASSIGN(splitToken, SPLIT_PING_OFFSET);
+            TASSIGN(splitScale, SPLIT_PING_OFFSET + HIDDEN_SIZE);
 
             int32_t processCount = (static_cast<int32_t>(rows) + MOVE_NUM - 1) / MOVE_NUM;
-
-            bool hasPending = false;
-            int32_t pendingPP = 0;
-            int32_t pendingRows = 0;
-            __gm__ int8_t *pendTokenDstPtr = nullptr;
-            __gm__ int8_t *pendScaleDstPtr = nullptr;
 
             for (int32_t p = 0; p < processCount; ++p) {
                 int32_t curRows = MOVE_NUM;
@@ -362,87 +285,41 @@ AICORE void MoeDispatchViaGM(
                     if (rem < MOVE_NUM) curRows = rem;
                 }
 
-                int32_t curPP = p & 1;
-                event_t curEvent = curPP ? EVENT_ID1 : EVENT_ID0;
-                auto &loadTile = curPP ? splitInterleavedPong : splitInterleavedPing;
-
                 __gm__ int8_t *chunkSrc = tempDst + static_cast<int64_t>(p) * MOVE_NUM * copyInNum;
                 int64_t chunkBytes = static_cast<int64_t>(curRows) * copyInNum;
                 ShapeDyn chunkShape(1, 1, 1, static_cast<size_t>(curRows), static_cast<size_t>(copyInNum));
                 StrideDyn chunkStride(chunkBytes, chunkBytes, chunkBytes, copyInNum, 1);
                 Global localSrcG(chunkSrc, chunkShape, chunkStride);
 
-                loadTile.RowMaskInternal = curRows;
-                loadTile.ColMaskInternal = TILE_COLS;
+                splitTile.RowMaskInternal = curRows;
+                splitTile.ColMaskInternal = TILE_COLS;
 
-                if (hasPending) {
-                    event_t prevEvent = pendingPP ? EVENT_ID1 : EVENT_ID0;
-                    wait_flag(PIPE_MTE2, PIPE_MTE3, prevEvent);
+                TLOAD(splitTile, localSrcG);
+                pipe_barrier(PIPE_ALL);
 
-                    auto &prevTokenView = pendingPP ? splitTokenPong : splitTokenPing;
-                    auto &prevScaleView = pendingPP ? splitScalePong : splitScalePing;
-                    prevTokenView.RowMaskInternal = pendingRows;
-                    prevTokenView.ColMaskInternal = HIDDEN_SIZE;
-                    prevScaleView.RowMaskInternal = pendingRows;
-                    prevScaleView.ColMaskInternal = UB_ALIGN;
+                splitToken.RowMaskInternal = curRows;
+                splitToken.ColMaskInternal = HIDDEN_SIZE;
+                splitScale.RowMaskInternal = curRows;
+                splitScale.ColMaskInternal = UB_ALIGN;
 
-                    int64_t pendTokenBytes = static_cast<int64_t>(pendingRows) * HIDDEN_SIZE;
-                    ShapeDyn pendTokenShape(1, 1, 1, static_cast<size_t>(pendingRows), static_cast<size_t>(HIDDEN_SIZE));
-                    StrideDyn pendTokenStride(pendTokenBytes, pendTokenBytes, pendTokenBytes, HIDDEN_SIZE, 1);
-                    Global pendTokenDstG(pendTokenDstPtr, pendTokenShape, pendTokenStride);
-
-                    int64_t pendScaleBytes = static_cast<int64_t>(pendingRows) * UB_ALIGN;
-                    ShapeDyn pendScaleShape(1, 1, 1, static_cast<size_t>(pendingRows), static_cast<size_t>(UB_ALIGN));
-                    StrideDyn pendScaleStride(pendScaleBytes, pendScaleBytes, pendScaleBytes, UB_ALIGN, 1);
-                    Global pendScaleDstG(pendScaleDstPtr, pendScaleShape, pendScaleStride);
-
-                    TSTORE(pendTokenDstG, prevTokenView);
-                    TSTORE(pendScaleDstG, prevScaleView);
-                    TLOAD(loadTile, localSrcG);
-
-                    set_flag(PIPE_MTE3, PIPE_MTE2, prevEvent);
-                    set_flag(PIPE_MTE2, PIPE_MTE3, curEvent);
-                    wait_flag(PIPE_MTE3, PIPE_MTE2, prevEvent);
-                } else {
-                    TLOAD(loadTile, localSrcG);
-                    set_flag(PIPE_MTE2, PIPE_MTE3, curEvent);
-                }
-
-                hasPending = true;
-                pendingPP = curPP;
-                pendingRows = curRows;
                 uint32_t dstRow = rowStart + static_cast<uint32_t>(p * MOVE_NUM);
-                pendTokenDstPtr = gmA + static_cast<int64_t>(dstRow) * HIDDEN_SIZE;
-                pendScaleDstPtr = reinterpret_cast<__gm__ int8_t *>(gmPerTokenScale)
-                                  + static_cast<int64_t>(dstRow) * UB_ALIGN;
-            }
+                __gm__ int8_t *tokenDstPtr = gmA + static_cast<int64_t>(dstRow) * HIDDEN_SIZE;
+                __gm__ int8_t *scaleDstPtr = reinterpret_cast<__gm__ int8_t *>(gmPerTokenScale)
+                                             + static_cast<int64_t>(dstRow) * UB_ALIGN;
 
-            if (hasPending) {
-                event_t lastEvent = pendingPP ? EVENT_ID1 : EVENT_ID0;
-                wait_flag(PIPE_MTE2, PIPE_MTE3, lastEvent);
+                int64_t tokenBytes = static_cast<int64_t>(curRows) * HIDDEN_SIZE;
+                ShapeDyn tokenShape(1, 1, 1, static_cast<size_t>(curRows), static_cast<size_t>(HIDDEN_SIZE));
+                StrideDyn tokenStride(tokenBytes, tokenBytes, tokenBytes, HIDDEN_SIZE, 1);
+                Global tokenDstG(tokenDstPtr, tokenShape, tokenStride);
 
-                auto &lastTokenView = pendingPP ? splitTokenPong : splitTokenPing;
-                auto &lastScaleView = pendingPP ? splitScalePong : splitScalePing;
-                lastTokenView.RowMaskInternal = pendingRows;
-                lastTokenView.ColMaskInternal = HIDDEN_SIZE;
-                lastScaleView.RowMaskInternal = pendingRows;
-                lastScaleView.ColMaskInternal = UB_ALIGN;
+                int64_t scaleBytes = static_cast<int64_t>(curRows) * UB_ALIGN;
+                ShapeDyn scaleShape(1, 1, 1, static_cast<size_t>(curRows), static_cast<size_t>(UB_ALIGN));
+                StrideDyn scaleStride(scaleBytes, scaleBytes, scaleBytes, UB_ALIGN, 1);
+                Global scaleDstG(scaleDstPtr, scaleShape, scaleStride);
 
-                int64_t lastTokenBytes = static_cast<int64_t>(pendingRows) * HIDDEN_SIZE;
-                ShapeDyn lastTokenShape(1, 1, 1, static_cast<size_t>(pendingRows), static_cast<size_t>(HIDDEN_SIZE));
-                StrideDyn lastTokenStride(lastTokenBytes, lastTokenBytes, lastTokenBytes, HIDDEN_SIZE, 1);
-                Global lastTokenDstG(pendTokenDstPtr, lastTokenShape, lastTokenStride);
-
-                int64_t lastScaleBytes = static_cast<int64_t>(pendingRows) * UB_ALIGN;
-                ShapeDyn lastScaleShape(1, 1, 1, static_cast<size_t>(pendingRows), static_cast<size_t>(UB_ALIGN));
-                StrideDyn lastScaleStride(lastScaleBytes, lastScaleBytes, lastScaleBytes, UB_ALIGN, 1);
-                Global lastScaleDstG(pendScaleDstPtr, lastScaleShape, lastScaleStride);
-
-                TSTORE(lastTokenDstG, lastTokenView);
-                TSTORE(lastScaleDstG, lastScaleView);
-
-                set_flag(PIPE_MTE3, PIPE_MTE2, lastEvent);
-                wait_flag(PIPE_MTE3, PIPE_MTE2, lastEvent);
+                TSTORE(tokenDstG, splitToken);
+                TSTORE(scaleDstG, splitScale);
+                pipe_barrier(PIPE_ALL);
             }
         }
 
