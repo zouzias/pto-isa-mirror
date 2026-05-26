@@ -74,7 +74,7 @@ include_directories(
 
 function(pto_example_cube NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
-    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220-cube -std=c++17)
+    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220-cube --cce-enable-pto-passes -std=c++17)
     target_include_directories(${NAME}_kernel PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../include/
     )
