@@ -31,19 +31,6 @@ using namespace pto;
 #define FIFO_MODE 1
 #endif
 
-#ifndef MARK_STAMP
-// #define MARK_STAMP
-
-enum StageStamp : uint16_t
-{
-    QK_DONE,
-    P_DONE,
-    PV_DONE,
-    GU_DONE,
-};
-
-#endif
-
 #ifndef FFTS_BUFFER_FLAG_ENUM
 #define FFTS_BUFFER_FLAG_ENUM
 // -----------------------------------------------------------------------------
