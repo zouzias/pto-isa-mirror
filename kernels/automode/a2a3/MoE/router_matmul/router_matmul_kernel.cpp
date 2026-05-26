@@ -179,8 +179,8 @@ __global__ AICORE void runRouterMatmul(
     // by kNumBuffers. cTile (L0C) is single-buffered, so kL0CBudgetBytes is
     // NOT divided.
     constexpr int kPerLaneWorkingSetBytes = kWorkingSetBudgetBytes / kNumBuffers;
-    constexpr int kPerLaneL0ABytes        = kL0ABudgetBytes        / kNumBuffers;
-    constexpr int kPerLaneL0BBytes        = kL0BBudgetBytes        / kNumBuffers;
+    constexpr int kPerLaneL0ABytes        = kL0ABudgetBytes        / kNumBuffers / kNumBuffers;
+    constexpr int kPerLaneL0BBytes        = kL0BBudgetBytes        / kNumBuffers / kNumBuffers;
 
     constexpr int M_raw = chooseMBlock(M_max, N, blockAlign, static_cast<int>(sizeof(TIn)),
                                        static_cast<int>(sizeof(TWeight)), static_cast<int>(sizeof(TOut)),
