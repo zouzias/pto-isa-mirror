@@ -559,10 +559,6 @@ AICORE void MoeDispatchWithSync(
     // ========================================================================
     // Phase B: Wait for all remote ranks' data, restore, compute routing tables
     // ========================================================================
-#ifdef PHASE_A_ONLY_TEST
-    // Phase A only — skip B and C
-    (void)wsCumsumMM; (void)wsPSBR; (void)wsTPE; (void)syncGmWorkspace;
-#else
     {
         using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
         using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -572,7 +568,6 @@ AICORE void MoeDispatchWithSync(
         ShapeDyn signalShape(1, 1, 1, 1, 1);
         StrideDyn signalStride(1, 1, 1, 1, 1);
 
-#ifndef PHASE_B_SYNCALL_ONLY_TEST
         // Wait for all remote ranks
         for (int32_t srcRank = coreIdx; srcRank < EP; srcRank += coreNum) {
             if (srcRank == myRank) continue;
@@ -580,17 +575,10 @@ AICORE void MoeDispatchWithSync(
             GlobalI32 signalG(signalAddr, signalShape, signalStride);
             pto::comm::TWAIT(signalG, 0, pto::comm::WaitCmp::NE);
         }
-#endif
 
         // All data arrived. Now restore values and compute routing tables.
         // Only core 0 computes cumsumMM and preSumBeforeRank (small data, sequential).
         pto::SYNCALL<pto::SyncAllMode::Soft>(syncGmG, syncUbTile);
-
-#ifdef PHASE_B_SYNCALL_ONLY_TEST
-        // SYNCALL-only test: skip B.1-B.3 computation
-        (void)signalShape; (void)signalStride;
-    }
-#else
 
         if (coreIdx == 0) {
             // Phase B.1: Read all TPE rows from shmem, restore (subtract flag),
@@ -681,19 +669,15 @@ AICORE void MoeDispatchWithSync(
             pipe_barrier(PIPE_ALL);
         }
     }
-#endif // PHASE_B_SYNCALL_ONLY_TEST
 
     // ========================================================================
     // Phase C: SYNCALL then dispatch using computed routing tables
     // ========================================================================
-#ifndef PHASE_AB_TEST
     pto::SYNCALL<pto::SyncAllMode::Soft>(syncGmG, syncUbTile);
 
     MoeDispatchDirect<HIDDEN_SIZE, TILE_COLS, MOVE_NUM>(
         gmA, gmPerTokenScale, wsCumsumMM, wsTPE, wsPSBR,
         shmemBase, hcclCtx, EP, expertPerRank, maxOutputSize, offsetA, paddedExpNum);
-#endif
-#endif // PHASE_A_ONLY_TEST
 }
 
 // ============================================================================
@@ -707,15 +691,6 @@ AICORE void MoeDispatchWithSync(
     int32_t EP, int32_t expertPerRank, int32_t maxOutputSize, int64_t offsetA
 
 extern "C" __global__ AICORE void MoeDispatchDirect_K128(DIRECT_KERNEL_PARAMS)
-{
-    MoeDispatchDirect<128, 160, DispatchTraits<160>::MOVE_NUM>(
-        gmA, gmPerTokenScale, cumsumMM, tokenPerExpert,
-        preSumBeforeRank, shmemBase, hcclCtx,
-        EP, expertPerRank, maxOutputSize, offsetA);
-}
-
-// Backward compat alias
-extern "C" __global__ AICORE void MoeDispatchKernel_K128(DIRECT_KERNEL_PARAMS)
 {
     MoeDispatchDirect<128, 160, DispatchTraits<160>::MOVE_NUM>(
         gmA, gmPerTokenScale, cumsumMM, tokenPerExpert,

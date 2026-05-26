@@ -149,15 +149,6 @@ target_compile_options(moe_dispatch_kernel PRIVATE
     --cce-aicore-arch=dav-c220-vec
     -DMEMORY_BASE -std=c++17
 )
-if(PHASE_A_ONLY_TEST)
-    target_compile_definitions(moe_dispatch_kernel PRIVATE PHASE_A_ONLY_TEST)
-endif()
-if(PHASE_AB_TEST)
-    target_compile_definitions(moe_dispatch_kernel PRIVATE PHASE_AB_TEST)
-endif()
-if(PHASE_B_SYNCALL_ONLY_TEST)
-    target_compile_definitions(moe_dispatch_kernel PRIVATE PHASE_B_SYNCALL_ONLY_TEST)
-endif()
 target_include_directories(moe_dispatch_kernel PRIVATE ${KERNEL_INCLUDE_DIRS})
 target_link_directories(moe_dispatch_kernel PRIVATE ${ASCEND_HOME_PATH}/lib64)
 target_link_libraries(moe_dispatch_kernel PRIVATE runtime)
@@ -169,12 +160,6 @@ target_link_options(moe_dispatch_kernel PRIVATE --cce-fatobj-link)
 add_executable(moe_dispatch main.cpp)
 target_compile_options(moe_dispatch PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
 target_include_directories(moe_dispatch PRIVATE ${HOST_INCLUDE_DIRS})
-if(PHASE_A_ONLY_TEST)
-    target_compile_definitions(moe_dispatch PRIVATE PHASE_A_ONLY_TEST)
-endif()
-if(PHASE_AB_TEST)
-    target_compile_definitions(moe_dispatch PRIVATE PHASE_AB_TEST)
-endif()
 target_link_directories(moe_dispatch PUBLIC ${HOST_LINK_DIRS})
 target_link_libraries(moe_dispatch PRIVATE
     moe_dispatch_kernel
