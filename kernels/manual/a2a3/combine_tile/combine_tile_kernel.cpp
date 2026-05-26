@@ -1,0 +1,502 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
+#include <cstdint>
+
+#ifndef PIPE_FIX
+#define PIPE_FIX static_cast<pipe_t>(10)
+#endif
+
+#include <pto/comm/pto_comm_inst.hpp>
+#include <pto/pto-inst.hpp>
+
+#include "common.h"
+#include "kernel_launchers.h"
+
+using dispatch_combine_tile::DispatchCombineTileShape;
+using dispatch_combine_tile::HcclDeviceContext;
+using dispatch_combine_tile::PeerWindowLayout;
+using dispatch_combine_tile::WorkspaceLayout;
+
+#ifndef GM_ADDR
+#define GM_ADDR __gm__ uint8_t *
+#endif
+
+// Kernel source contract for later tasks:
+//   - Only PTO and C/C++ headers are allowed in this file.
+//   - Device payload movement will use pto::GlobalTensor and pto::Tile views.
+//   - Cross-rank movement/readiness will use PTO comm primitives.
+//   - There are exactly two public device kernel names in this project.
+
+namespace {
+
+constexpr int kDefaultTileCols = 1024;
+constexpr uint64_t kPingUbAddr = 0x0;
+constexpr uint64_t kPongUbAddr = 0x1000;
+constexpr uint64_t kSoftSyncUbAddr = 0x5000;
+
+using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+
+template <typename T>
+using GlobalNd = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
+
+template <typename T, int kCols = kDefaultTileCols>
+using VecTile = pto::Tile<pto::TileType::Vec, T, 1, kCols, pto::BLayout::RowMajor, -1, -1>;
+
+AICORE inline uint64_t Align64Device(uint64_t value)
+{
+    return ((value + 63) / 64) * 64;
+}
+
+AICORE inline uint64_t AppendFieldDevice(uint64_t &offset, uint64_t bytes)
+{
+    offset = Align64Device(offset);
+    uint64_t fieldOffset = offset;
+    offset += bytes;
+    return fieldOffset;
+}
+
+struct LocalWorkspaceView {
+    GM_ADDR base;
+    __gm__ int32_t *localTokenPerExpert;
+    __gm__ int32_t *blockTokenPerExpert;
+    __gm__ int32_t *blockPrefixPerExpert;
+    __gm__ int32_t *cumsumPerExpert;
+    __gm__ int32_t *dispatchOffset;
+    __gm__ int32_t *prevSumBeforeRank;
+    __gm__ int32_t *localSync;
+    __gm__ float *floatScratch;
+    __gm__ half *dispatchedA;
+    __gm__ half *ptrDLocal;
+};
+
+struct LocalPeerWindowView {
+    GM_ADDR base;
+    __gm__ int32_t *peerTokenPerExpert;
+    __gm__ int32_t *expandedRowIdx;
+    __gm__ half *packedA;
+    __gm__ half *ptrD;
+    __gm__ int32_t *countReadySignal;
+    __gm__ int32_t *combineDoneSignal;
+};
+
+AICORE inline WorkspaceLayout MakeWorkspaceLayout(DispatchCombineTileShape shape)
+{
+    const uint64_t i32 = 4;
+    const uint64_t f32 = 4;
+    const uint64_t f16 = 2;
+    uint64_t expertNumPadded =
+        ((static_cast<uint64_t>(shape.expertNum) + shape.metadataPad - 1) / shape.metadataPad) * shape.metadataPad;
+    uint64_t aivBlocks = shape.aivBlocks == 0 ? 1 : shape.aivBlocks;
+    uint64_t expandedRows = static_cast<uint64_t>(shape.m) * shape.topK;
+    uint64_t offset = 0;
+
+    WorkspaceLayout layout{};
+    layout.localTokenPerExpert = AppendFieldDevice(offset, expertNumPadded * i32);
+    layout.blockTokenPerExpert = AppendFieldDevice(offset, aivBlocks * expertNumPadded * i32);
+    layout.blockPrefixPerExpert = AppendFieldDevice(offset, aivBlocks * expertNumPadded * i32);
+    layout.cumsumPerExpert = AppendFieldDevice(offset, static_cast<uint64_t>(shape.ep) * expertNumPadded * i32);
+    layout.dispatchOffset = AppendFieldDevice(offset, static_cast<uint64_t>(shape.expertPerRank) * i32);
+    layout.prevSumBeforeRank = AppendFieldDevice(offset, static_cast<uint64_t>(shape.ep) * shape.expertPerRank * i32);
+    uint64_t syncSlots = aivBlocks * (8 + expertNumPadded);
+    syncSlots = syncSlots < 64 ? 64 : syncSlots;
+    layout.localSync = AppendFieldDevice(offset, syncSlots * i32);
+    layout.floatScratch = AppendFieldDevice(offset, aivBlocks * shape.tileCols * f32);
+    layout.dispatchedA = AppendFieldDevice(offset, static_cast<uint64_t>(shape.maxOutputSize) * shape.k * f16);
+    layout.ptrDLocal = AppendFieldDevice(offset, expandedRows * shape.k * f16);
+    layout.totalBytes = Align64Device(offset);
+    return layout;
+}
+
+AICORE inline PeerWindowLayout MakePeerWindowLayout(DispatchCombineTileShape shape)
+{
+    const uint64_t i32 = 4;
+    const uint64_t f16 = 2;
+    uint64_t expertNumPadded =
+        ((static_cast<uint64_t>(shape.expertNum) + shape.metadataPad - 1) / shape.metadataPad) * shape.metadataPad;
+    uint64_t expandedRows = static_cast<uint64_t>(shape.m) * shape.topK;
+    uint64_t offset = 0;
+
+    PeerWindowLayout layout{};
+    layout.peerTokenPerExpert = AppendFieldDevice(offset, static_cast<uint64_t>(shape.ep) * expertNumPadded * i32);
+    layout.expandedRowIdx = AppendFieldDevice(offset, expandedRows * i32);
+    layout.packedA = AppendFieldDevice(offset, expandedRows * shape.k * f16);
+    layout.ptrD = AppendFieldDevice(offset, expandedRows * shape.k * f16);
+    layout.countReadySignal = AppendFieldDevice(offset, static_cast<uint64_t>(shape.ep) * i32);
+    layout.combineDoneSignal = AppendFieldDevice(offset, static_cast<uint64_t>(shape.ep) * i32);
+    layout.totalBytes = Align64Device(offset);
+    return layout;
+}
+
+AICORE inline LocalWorkspaceView MakeLocalWorkspaceView(GM_ADDR workspaceBase, const WorkspaceLayout &layout)
+{
+    LocalWorkspaceView view{};
+    view.base = workspaceBase;
+    view.localTokenPerExpert = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.localTokenPerExpert);
+    view.blockTokenPerExpert = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.blockTokenPerExpert);
+    view.blockPrefixPerExpert = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.blockPrefixPerExpert);
+    view.cumsumPerExpert = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.cumsumPerExpert);
+    view.dispatchOffset = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.dispatchOffset);
+    view.prevSumBeforeRank = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.prevSumBeforeRank);
+    view.localSync = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.localSync);
+    view.floatScratch = reinterpret_cast<__gm__ float *>(workspaceBase + layout.floatScratch);
+    view.dispatchedA = reinterpret_cast<__gm__ half *>(workspaceBase + layout.dispatchedA);
+    view.ptrDLocal = reinterpret_cast<__gm__ half *>(workspaceBase + layout.ptrDLocal);
+    return view;
+}
+
+AICORE inline LocalPeerWindowView MakeLocalPeerWindowView(GM_ADDR peerWindowBase, const PeerWindowLayout &layout)
+{
+    LocalPeerWindowView view{};
+    view.base = peerWindowBase;
+    view.peerTokenPerExpert = reinterpret_cast<__gm__ int32_t *>(peerWindowBase + layout.peerTokenPerExpert);
+    view.expandedRowIdx = reinterpret_cast<__gm__ int32_t *>(peerWindowBase + layout.expandedRowIdx);
+    view.packedA = reinterpret_cast<__gm__ half *>(peerWindowBase + layout.packedA);
+    view.ptrD = reinterpret_cast<__gm__ half *>(peerWindowBase + layout.ptrD);
+    view.countReadySignal = reinterpret_cast<__gm__ int32_t *>(peerWindowBase + layout.countReadySignal);
+    view.combineDoneSignal = reinterpret_cast<__gm__ int32_t *>(peerWindowBase + layout.combineDoneSignal);
+    return view;
+}
+
+template <typename T>
+AICORE inline __gm__ T *RemotePtr(__gm__ HcclDeviceContext *ctx, __gm__ T *localPtr, uint32_t peerRank)
+{
+    uint64_t localBase = ctx->windowsIn[ctx->rankId];
+    uint64_t offset = reinterpret_cast<uint64_t>(localPtr) - localBase;
+    return reinterpret_cast<__gm__ T *>(ctx->windowsIn[peerRank] + offset);
+}
+
+AICORE inline LocalPeerWindowView MakeRemotePeerWindowView(__gm__ HcclDeviceContext *ctx, GM_ADDR localPeerWindowBase,
+                                                           uint32_t peerRank, const PeerWindowLayout &layout)
+{
+    GM_ADDR remoteBase = RemotePtr<uint8_t>(ctx, localPeerWindowBase, peerRank);
+    return MakeLocalPeerWindowView(remoteBase, layout);
+}
+
+template <typename T>
+AICORE inline GlobalNd<T> MakeGlobal1D(__gm__ T *ptr, int32_t elems)
+{
+    ShapeDyn shape(1, 1, 1, 1, elems);
+    StrideDyn stride(elems, elems, elems, elems, 1);
+    return GlobalNd<T>(ptr, shape, stride);
+}
+
+template <typename T>
+AICORE inline GlobalNd<T> MakeGlobal2D(__gm__ T *ptr, int32_t rows, int32_t cols, int32_t rowStride)
+{
+    ShapeDyn shape(1, 1, 1, rows, cols);
+    StrideDyn stride(rowStride * rows, rowStride * rows, rowStride * rows, rowStride, 1);
+    return GlobalNd<T>(ptr, shape, stride);
+}
+
+AICORE inline pto::comm::Signal MakeSignal(__gm__ int32_t *ptr)
+{
+    return pto::comm::Signal(ptr);
+}
+
+AICORE inline void WaitStoreTileReusable()
+{
+    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+    set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+    wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+}
+
+template <int kCols = kDefaultTileCols>
+AICORE inline void CopyRowHalf(__gm__ half *dstBase, int32_t dstRowStride, int32_t dstRow, __gm__ half *srcBase,
+                               int32_t srcRowStride, int32_t srcRow, int32_t rowLen)
+{
+    for (int32_t col = 0; col < rowLen; col += kCols) {
+        int32_t cols = rowLen - col < kCols ? rowLen - col : kCols;
+        VecTile<half, kCols> ping(1, cols);
+        VecTile<half, kCols> pong(1, cols);
+        TASSIGN(ping, kPingUbAddr);
+        TASSIGN(pong, kPongUbAddr);
+        VecTile<half, kCols> &tile = ((col / kCols) & 1) == 0 ? ping : pong;
+        event_t event = ((col / kCols) & 1) == 0 ? EVENT_ID0 : EVENT_ID1;
+        GlobalNd<half> src =
+            MakeGlobal2D(srcBase + static_cast<int64_t>(srcRow) * srcRowStride + col, 1, cols, srcRowStride);
+        GlobalNd<half> dst =
+            MakeGlobal2D(dstBase + static_cast<int64_t>(dstRow) * dstRowStride + col, 1, cols, dstRowStride);
+        TLOAD(tile, src);
+        set_flag(PIPE_MTE2, PIPE_MTE3, event);
+        wait_flag(PIPE_MTE2, PIPE_MTE3, event);
+        TSTORE(dst, tile);
+        WaitStoreTileReusable();
+    }
+}
+
+template <typename T, int kCols = kDefaultTileCols>
+AICORE inline void TPutRows(GlobalNd<T> &remoteDst, GlobalNd<T> &src)
+{
+    VecTile<T, kCols> ping(1, kCols);
+    VecTile<T, kCols> pong(1, kCols);
+    TASSIGN(ping, kPingUbAddr);
+    TASSIGN(pong, kPongUbAddr);
+    pto::comm::TPUT(remoteDst, src, ping, pong);
+}
+
+AICORE inline void NotifySignal(__gm__ int32_t *signal, int32_t value)
+{
+    pipe_barrier(PIPE_ALL);
+    dsb(DSB_DDR);
+    pto::comm::Signal sig = MakeSignal(signal);
+    (void)value;
+    pto::comm::TNOTIFY(sig, 1, pto::comm::NotifyOp::AtomicAdd);
+}
+
+AICORE inline void WaitSignal(__gm__ int32_t *signal, int32_t value)
+{
+    pto::comm::Signal sig = MakeSignal(signal);
+    pto::comm::TWAIT(sig, value, pto::comm::WaitCmp::GE);
+}
+
+AICORE inline int32_t LoadScalarI32(__gm__ int32_t *ptr)
+{
+    return *ptr;
+}
+
+AICORE inline void StoreScalarI32(__gm__ int32_t *ptr, int32_t value)
+{
+    *ptr = value;
+}
+
+AICORE inline void InvalidateGmCacheLines(__gm__ void *ptr, uint32_t bytes)
+{
+    pipe_barrier(PIPE_ALL);
+    uint64_t start = reinterpret_cast<uint64_t>(ptr) & ~static_cast<uint64_t>(63);
+    uint64_t end = (reinterpret_cast<uint64_t>(ptr) + bytes + 63) & ~static_cast<uint64_t>(63);
+    for (uint64_t addr = start; addr < end; addr += 64) {
+        dcci(reinterpret_cast<__gm__ void *>(addr), SINGLE_CACHE_LINE);
+    }
+    dsb(DSB_DDR);
+}
+
+AICORE inline uint32_t ExpertNumPaddedDevice(DispatchCombineTileShape shape)
+{
+    return ((shape.expertNum + shape.metadataPad - 1) / shape.metadataPad) * shape.metadataPad;
+}
+
+AICORE inline uint32_t TokenShardBegin(uint32_t totalTokens, uint32_t blockId, uint32_t blockNum)
+{
+    uint32_t base = totalTokens / blockNum;
+    uint32_t rem = totalTokens % blockNum;
+    return blockId * base + (blockId < rem ? blockId : rem);
+}
+
+AICORE inline uint32_t TokenShardEnd(uint32_t totalTokens, uint32_t blockId, uint32_t blockNum)
+{
+    return TokenShardBegin(totalTokens, blockId + 1, blockNum);
+}
+
+AICORE inline void SoftSyncAiv(__gm__ int32_t *gmWorkspace, uint32_t blockNum)
+{
+    pto::Tile<pto::TileType::Vec, int32_t, 1, pto::SYNCALL_SOFT_SLOT_INT32, pto::BLayout::RowMajor, -1, -1> syncTile(
+        1, pto::SYNCALL_SOFT_SLOT_INT32);
+#ifndef __PTO_AUTO__
+    syncTile.data() = reinterpret_cast<__ubuf__ int32_t *>(kSoftSyncUbAddr);
+#endif
+    GlobalNd<int32_t> syncGlobal =
+        MakeGlobal1D(gmWorkspace, static_cast<int32_t>(blockNum * pto::SYNCALL_SOFT_SLOT_INT32));
+    pto::SYNCALL<pto::SyncAllMode::Soft>(syncGlobal, syncTile, static_cast<int32_t>(blockNum));
+}
+
+AICORE inline void TPutRowsHalf(__gm__ half *remoteDstBase, int32_t dstRowStride, int32_t dstRow, __gm__ half *srcBase,
+                                int32_t srcRowStride, int32_t srcRow, int32_t rows, int32_t cols)
+{
+    if (rows <= 0 || cols <= 0) {
+        return;
+    }
+    GlobalNd<half> dst =
+        MakeGlobal2D(remoteDstBase + static_cast<int64_t>(dstRow) * dstRowStride, rows, cols, dstRowStride);
+    GlobalNd<half> src = MakeGlobal2D(srcBase + static_cast<int64_t>(srcRow) * srcRowStride, rows, cols, srcRowStride);
+    TPutRows<half, kDefaultTileCols>(dst, src);
+}
+
+AICORE inline uint32_t EffectiveRowChunk(DispatchCombineTileShape shape)
+{
+    return shape.rowChunk == 0 ? 8 : shape.rowChunk;
+}
+
+AICORE inline void WaitCombinePhase(DispatchCombineTileShape shape, LocalPeerWindowView localPeer, uint32_t blockId,
+                                    uint32_t blockNum, int32_t value)
+{
+    for (uint32_t peer = blockId; peer < shape.ep; peer += blockNum) {
+        WaitSignal(localPeer.combineDoneSignal + peer, value);
+    }
+}
+
+AICORE inline void ReturnExpertRowsToOwners(DispatchCombineTileShape shape, LocalWorkspaceView workspaceView,
+                                            LocalPeerWindowView localPeer, __gm__ HcclDeviceContext *ctx,
+                                            GM_ADDR peerWindow, GM_ADDR expertOutput, uint32_t myRank, uint32_t blockId,
+                                            uint32_t blockNum, const PeerWindowLayout &peerWindowLayout)
+{
+    uint32_t expertNumPadded = ExpertNumPaddedDevice(shape);
+    __gm__ half *localExpertOutput = reinterpret_cast<__gm__ half *>(expertOutput);
+    uint32_t rowChunk = EffectiveRowChunk(shape);
+    uint32_t segmentCount = shape.ep * shape.expertPerRank;
+    InvalidateGmCacheLines(localPeer.peerTokenPerExpert,
+                           static_cast<uint32_t>(shape.ep * expertNumPadded * sizeof(int32_t)));
+    InvalidateGmCacheLines(workspaceView.cumsumPerExpert,
+                           static_cast<uint32_t>(shape.ep * expertNumPadded * sizeof(int32_t)));
+    InvalidateGmCacheLines(workspaceView.dispatchOffset, static_cast<uint32_t>(shape.expertPerRank * sizeof(int32_t)));
+    InvalidateGmCacheLines(workspaceView.prevSumBeforeRank,
+                           static_cast<uint32_t>(shape.ep * shape.expertPerRank * sizeof(int32_t)));
+
+    uint32_t chunkBase = 0;
+    for (uint32_t segment = 0; segment < segmentCount; ++segment) {
+        uint32_t src = segment / shape.expertPerRank;
+        uint32_t localExpert = segment % shape.expertPerRank;
+        uint32_t globalExpert = myRank * shape.expertPerRank + localExpert;
+        int32_t rows =
+            LoadScalarI32(localPeer.peerTokenPerExpert + static_cast<uint64_t>(src) * expertNumPadded + globalExpert);
+        if (rows <= 0) {
+            continue;
+        }
+        uint32_t chunkCount = (static_cast<uint32_t>(rows) + rowChunk - 1) / rowChunk;
+        LocalPeerWindowView remotePeer = MakeRemotePeerWindowView(ctx, peerWindow, src, peerWindowLayout);
+        int32_t srcStart = LoadScalarI32(workspaceView.dispatchOffset + localExpert) +
+                           LoadScalarI32(workspaceView.prevSumBeforeRank +
+                                         static_cast<uint64_t>(src) * shape.expertPerRank + localExpert);
+        int32_t dstStart = globalExpert == 0 ?
+                               0 :
+                               LoadScalarI32(workspaceView.cumsumPerExpert +
+                                             static_cast<uint64_t>(src) * expertNumPadded + globalExpert - 1);
+        for (uint32_t chunk = 0; chunk < chunkCount; ++chunk) {
+            if (((chunkBase + chunk) % blockNum) != blockId) {
+                continue;
+            }
+            uint32_t rowBegin = chunk * rowChunk;
+            uint32_t rowsThisChunk = static_cast<uint32_t>(rows) - rowBegin;
+            rowsThisChunk = rowsThisChunk < rowChunk ? rowsThisChunk : rowChunk;
+            if (src == myRank) {
+                for (uint32_t row = 0; row < rowsThisChunk; ++row) {
+                    CopyRowHalf(localPeer.ptrD, static_cast<int32_t>(shape.k),
+                                dstStart + static_cast<int32_t>(rowBegin + row), localExpertOutput,
+                                static_cast<int32_t>(shape.k), srcStart + static_cast<int32_t>(rowBegin + row),
+                                static_cast<int32_t>(shape.k));
+                }
+            } else {
+                TPutRowsHalf(remotePeer.ptrD, static_cast<int32_t>(shape.k), dstStart + static_cast<int32_t>(rowBegin),
+                             localExpertOutput, static_cast<int32_t>(shape.k),
+                             srcStart + static_cast<int32_t>(rowBegin), static_cast<int32_t>(rowsThisChunk),
+                             static_cast<int32_t>(shape.k));
+            }
+        }
+        chunkBase += chunkCount;
+    }
+    SoftSyncAiv(workspaceView.localSync, blockNum);
+    for (uint32_t src = blockId; src < shape.ep; src += blockNum) {
+        LocalPeerWindowView remotePeer = MakeRemotePeerWindowView(ctx, peerWindow, src, peerWindowLayout);
+        NotifySignal(remotePeer.combineDoneSignal + myRank, static_cast<int32_t>(shape.signalValue));
+    }
+}
+
+AICORE inline void StoreZeroRowHalf(__gm__ half *dstBase, int32_t dstRowStride, int32_t dstRow, int32_t rowLen)
+{
+    for (int32_t col = 0; col < rowLen; col += kDefaultTileCols) {
+        int32_t cols = rowLen - col < kDefaultTileCols ? rowLen - col : kDefaultTileCols;
+        VecTile<half, kDefaultTileCols> zeroTile(1, cols);
+        TASSIGN(zeroTile, kPingUbAddr);
+        GlobalNd<half> dst =
+            MakeGlobal2D(dstBase + static_cast<int64_t>(dstRow) * dstRowStride + col, 1, cols, dstRowStride);
+        TEXPANDS(zeroTile, static_cast<half>(0.0));
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        TSTORE(dst, zeroTile);
+        WaitStoreTileReusable();
+    }
+}
+
+AICORE inline void AddWeightedRowHalf(__gm__ half *outputBase, __gm__ half *ptrDBase, int32_t rowStride,
+                                      int32_t outputRow, int32_t ptrDRow, int32_t rowLen, half prob)
+{
+    for (int32_t col = 0; col < rowLen; col += kDefaultTileCols) {
+        int32_t cols = rowLen - col < kDefaultTileCols ? rowLen - col : kDefaultTileCols;
+        VecTile<half, kDefaultTileCols> outTile(1, cols);
+        VecTile<half, kDefaultTileCols> ptrTile(1, cols);
+        TASSIGN(outTile, kPingUbAddr);
+        TASSIGN(ptrTile, kPongUbAddr);
+        GlobalNd<half> outGlobal =
+            MakeGlobal2D(outputBase + static_cast<int64_t>(outputRow) * rowStride + col, 1, cols, rowStride);
+        __gm__ half *ptrChunk = ptrDBase + static_cast<int64_t>(ptrDRow) * rowStride + col;
+        InvalidateGmCacheLines(ptrChunk, static_cast<uint32_t>(cols) * sizeof(half));
+        GlobalNd<half> ptrGlobal = MakeGlobal2D(ptrChunk, 1, cols, rowStride);
+        pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> loadToAxpy;
+        pto::Event<pto::Op::TAXPY, pto::Op::TSTORE_VEC> axpyToStore;
+        TLOAD(ptrTile, ptrGlobal);
+        loadToAxpy = TLOAD(outTile, outGlobal);
+        axpyToStore = TAXPY(outTile, ptrTile, prob, loadToAxpy);
+        TSTORE(outGlobal, outTile, axpyToStore);
+        WaitStoreTileReusable();
+    }
+}
+
+AICORE inline void RestoreOutputRows(DispatchCombineTileShape shape, LocalPeerWindowView localPeer, GM_ADDR probs,
+                                     GM_ADDR outputC, uint32_t blockId, uint32_t blockNum)
+{
+    __gm__ float *probValues = reinterpret_cast<__gm__ float *>(probs);
+    __gm__ half *output = reinterpret_cast<__gm__ half *>(outputC);
+    uint32_t tokenBegin = TokenShardBegin(shape.m, blockId, blockNum);
+    uint32_t tokenEnd = TokenShardEnd(shape.m, blockId, blockNum);
+    for (uint32_t token = tokenBegin; token < tokenEnd; ++token) {
+        StoreZeroRowHalf(output, static_cast<int32_t>(shape.k), static_cast<int32_t>(token),
+                         static_cast<int32_t>(shape.k));
+        for (uint32_t slot = 0; slot < shape.topK; ++slot) {
+            uint32_t routeIndex = token * shape.topK + slot;
+            int32_t ptrDRow = LoadScalarI32(localPeer.expandedRowIdx + routeIndex);
+            if (ptrDRow < 0) {
+                continue;
+            }
+            float prob = probValues[routeIndex];
+            AddWeightedRowHalf(output, localPeer.ptrD, static_cast<int32_t>(shape.k), static_cast<int32_t>(token),
+                               ptrDRow, static_cast<int32_t>(shape.k), static_cast<half>(prob));
+        }
+    }
+}
+
+} // namespace
+
+__global__ AICORE void DispatchCombineTileCombine(DispatchCombineTileShape shape, uint32_t myRank, GM_ADDR expertOutput,
+                                                  GM_ADDR probs, GM_ADDR outputC, GM_ADDR peerWindow, GM_ADDR hcclCtx,
+                                                  GM_ADDR workspace)
+{
+    WorkspaceLayout workspaceLayout = MakeWorkspaceLayout(shape);
+    PeerWindowLayout peerWindowLayout = MakePeerWindowLayout(shape);
+    LocalWorkspaceView workspaceView = MakeLocalWorkspaceView(workspace, workspaceLayout);
+    LocalPeerWindowView localPeer = MakeLocalPeerWindowView(peerWindow, peerWindowLayout);
+    __gm__ HcclDeviceContext *ctx = reinterpret_cast<__gm__ HcclDeviceContext *>(hcclCtx);
+    uint32_t blockId = static_cast<uint32_t>(get_block_idx());
+    uint32_t blockNum = shape.aivBlocks == 0 ? 1 : shape.aivBlocks;
+    if (shape.ep == 0 || shape.m == 0 || shape.k == 0 || shape.topK == 0 || shape.expertPerRank == 0 ||
+        shape.expertNum == 0 || shape.metadataPad == 0 || blockId >= blockNum) {
+        return;
+    }
+
+    ReturnExpertRowsToOwners(shape, workspaceView, localPeer, ctx, peerWindow, expertOutput, myRank, blockId, blockNum,
+                             peerWindowLayout);
+    WaitCombinePhase(shape, localPeer, blockId, blockNum, static_cast<int32_t>(shape.signalValue));
+    SoftSyncAiv(workspaceView.localSync, blockNum);
+    RestoreOutputRows(shape, localPeer, probs, outputC, blockId, blockNum);
+    SoftSyncAiv(workspaceView.localSync, blockNum);
+}
+
+namespace dispatch_combine_tile {
+
+void LaunchDispatchCombineTileCombine(DispatchCombineTileShape shape, uint32_t myRank, uint8_t *expertOutput,
+                                      uint8_t *probs, uint8_t *outputC, uint8_t *peerWindow, uint8_t *hcclCtx,
+                                      uint8_t *workspace, void *stream, uint32_t launchBlockCount)
+{
+    DispatchCombineTileCombine<<<launchBlockCount, nullptr, stream>>>(shape, myRank, expertOutput, probs, outputC,
+                                                                      peerWindow, hcclCtx, workspace);
+}
+
+} // namespace dispatch_combine_tile
