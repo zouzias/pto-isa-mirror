@@ -15,10 +15,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "kernel_launchers.h"
 #include "layout.h"
 
+#include <algorithm>
 #include <chrono>
-#include <cstdlib>
-#include <iostream>
 #include <cmath>
+#include <cstdlib>
+#include <iomanip>
+#include <iostream>
+#include <numeric>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -58,6 +61,65 @@ double UsSince(std::chrono::steady_clock::time_point start, std::chrono::steady_
 
 } // namespace
 
+struct PerfStats {
+    double avg = 0.0;
+    double min = 0.0;
+    double max = 0.0;
+    double stddev = 0.0;
+};
+
+struct IterationTiming {
+    double dispatchE2eUs = 0.0;
+    double prepareHostUs = 0.0;
+    double combineE2eUs = 0.0;
+    double totalE2eUs = 0.0;
+};
+
+PerfStats CalcStats(const std::vector<double> &samples)
+{
+    PerfStats stats;
+    if (samples.empty()) {
+        return stats;
+    }
+
+    stats.min = *std::min_element(samples.begin(), samples.end());
+    stats.max = *std::max_element(samples.begin(), samples.end());
+    stats.avg = std::accumulate(samples.begin(), samples.end(), 0.0) / static_cast<double>(samples.size());
+    double variance = 0.0;
+    for (double sample : samples) {
+        double delta = sample - stats.avg;
+        variance += delta * delta;
+    }
+    stats.stddev = std::sqrt(variance / static_cast<double>(samples.size()));
+    return stats;
+}
+
+std::vector<double> ExtractTimingSamples(const std::vector<IterationTiming> &timings,
+                                         double IterationTiming::*field)
+{
+    std::vector<double> samples;
+    samples.reserve(timings.size());
+    for (const IterationTiming &timing : timings) {
+        samples.push_back(timing.*field);
+    }
+    return samples;
+}
+
+void PrintOneTimingStats(const char *label, const std::vector<IterationTiming> &timings,
+                         double IterationTiming::*field)
+{
+    PerfStats stats = CalcStats(ExtractTimingSamples(timings, field));
+    std::cout << "  " << label << ": avg=" << stats.avg << " us"
+              << " max=" << stats.max << " us" << std::endl;
+}
+
+bool VerboseRuntimeLogs(const DispatchCombineTileArgs &args)
+{
+    return args.runtime.debug != 0 || args.runtime.hostGoldenOnly != 0 || args.runtime.skipKernels != 0 ||
+           args.runtime.dispatchMetadataOnly != 0 || args.runtime.dispatchOnly != 0 ||
+           args.runtime.combineReturnOnly != 0;
+}
+
 struct DeviceBuffers {
     void *inputA = nullptr;
     void *expertIdx = nullptr;
@@ -89,6 +151,57 @@ struct RuntimeState {
     double totalE2eUs = 0.0;
     uint32_t currentSignalValue = 1;
 };
+
+void PrintProfileSummary(const DispatchCombineTileArgs &args, RuntimeState *state,
+                         const std::vector<IterationTiming> &localTimings)
+{
+    if (args.runtime.iters == 0) {
+        return;
+    }
+
+    std::vector<IterationTiming> allTimings;
+    size_t measuredIters = localTimings.size();
+    if (state->rank == 0) {
+        allTimings.resize(static_cast<size_t>(state->size) * localTimings.size());
+    }
+    MpiGatherBytes(&state->mpi, localTimings.data(), localTimings.size() * sizeof(IterationTiming),
+                   state->rank == 0 ? allTimings.data() : nullptr, 0);
+
+    if (state->rank != 0) {
+        return;
+    }
+
+    std::vector<IterationTiming> globalTimings(measuredIters);
+    for (size_t iter = 0; iter < measuredIters; ++iter) {
+        IterationTiming timing;
+        for (uint32_t rank = 0; rank < state->size; ++rank) {
+            const IterationTiming &rankTiming = allTimings[static_cast<size_t>(rank) * measuredIters + iter];
+            timing.dispatchE2eUs = std::max(timing.dispatchE2eUs, rankTiming.dispatchE2eUs);
+            timing.prepareHostUs = std::max(timing.prepareHostUs, rankTiming.prepareHostUs);
+            timing.combineE2eUs = std::max(timing.combineE2eUs, rankTiming.combineE2eUs);
+            timing.totalE2eUs = std::max(timing.totalE2eUs, rankTiming.totalE2eUs);
+        }
+        globalTimings[iter] = timing;
+    }
+
+    std::cout << std::fixed << std::setprecision(1);
+    std::cout << "\n================================================================" << std::endl;
+    std::cout << "[PROFILE] DispatchCombineTile" << std::endl;
+    std::cout << "  M=" << args.shape.m << " K=" << args.shape.k << " ranks=" << args.shape.ep
+              << " topK=" << args.shape.topK << " expertPerPe=" << args.shape.expertPerRank
+              << " warmup=" << args.runtime.warmup << " measured=" << args.runtime.iters
+              << " samples=" << globalTimings.size() << std::endl;
+    std::cout << "  logical work: input tokens(all ranks)=" << static_cast<uint64_t>(args.shape.ep) * args.shape.m
+              << " routed tokens(all ranks)="
+              << static_cast<uint64_t>(args.shape.ep) * args.shape.m * args.shape.topK << std::endl;
+    PrintOneTimingStats("dispatch_e2e", globalTimings, &IterationTiming::dispatchE2eUs);
+    PrintOneTimingStats("prepare_host", globalTimings, &IterationTiming::prepareHostUs);
+    PrintOneTimingStats("combine_e2e", globalTimings, &IterationTiming::combineE2eUs);
+    PrintOneTimingStats("total_e2e", globalTimings, &IterationTiming::totalE2eUs);
+    std::cout << "  verify=" << (args.runtime.verify == 0 ? "SKIP" : "PASS") << std::endl;
+    std::cout << "  note: warmup iterations are excluded; each measured sample is the max across ranks." << std::endl;
+    std::cout << "================================================================\n" << std::endl;
+}
 
 void PrintStage(uint32_t rank, const char *stage, const char *state)
 {
@@ -146,7 +259,10 @@ void RunHostGoldenOnly(const DispatchCombineTileArgs &args, RuntimeState *state)
 
 void PrepareHostData(const DispatchCombineTileArgs &args, RuntimeState *state)
 {
-    PrintStage(state->rank, "host_data", "begin");
+    bool verbose = VerboseRuntimeLogs(args);
+    if (verbose) {
+        PrintStage(state->rank, "host_data", "begin");
+    }
     if (args.runtime.genData != 0 && state->rank == 0) {
         GenerateAllInputFiles(args);
     }
@@ -154,61 +270,84 @@ void PrepareHostData(const DispatchCombineTileArgs &args, RuntimeState *state)
     state->inputs = GenerateOrLoadInputs(args, state->rank);
     state->golden = ComputeCpuGolden(args, state->inputs, state->rank);
     state->dataReady = true;
-    std::cout << "rank=" << state->rank << " golden_total_routes=" << state->golden.totalRoutes
-              << " golden_invalid_routes=" << state->golden.invalidRoutes << std::endl;
-    PrintStage(state->rank, "host_data", "done");
+    if (verbose) {
+        std::cout << "rank=" << state->rank << " golden_total_routes=" << state->golden.totalRoutes
+                  << " golden_invalid_routes=" << state->golden.invalidRoutes << std::endl;
+        PrintStage(state->rank, "host_data", "done");
+    }
 }
 
 void BindDeviceContinuous(const DispatchCombineTileArgs &args, RuntimeState *state)
 {
-    (void)args;
-    PrintStage(state->rank, "bind_device", "begin");
+    bool verbose = VerboseRuntimeLogs(args);
+    if (verbose) {
+        PrintStage(state->rank, "bind_device", "begin");
+    }
     if (!InitAclAndBindDevice(state->rank, state->device)) {
         throw std::runtime_error("rank " + std::to_string(state->rank) + " failed to bind device " +
                                  std::to_string(state->device));
     }
     state->aclActive = true;
-    PrintStage(state->rank, "bind_device", "done");
+    if (verbose) {
+        PrintStage(state->rank, "bind_device", "done");
+    }
 }
 
-void CreateStreams(RuntimeState *state)
+void CreateStreams(const DispatchCombineTileArgs &args, RuntimeState *state)
 {
-    PrintStage(state->rank, "create_streams", "begin");
+    bool verbose = VerboseRuntimeLogs(args);
+    if (verbose) {
+        PrintStage(state->rank, "create_streams", "begin");
+    }
     if (aclrtCreateStream(&state->computeStream) != ACL_SUCCESS) {
         throw std::runtime_error("rank " + std::to_string(state->rank) + " aclrtCreateStream failed");
     }
     if (rtStreamCreate(&state->hcclStream, kRtStreamPriorityDefault) != 0) {
         throw std::runtime_error("rank " + std::to_string(state->rank) + " rtStreamCreate failed");
     }
-    PrintStage(state->rank, "create_streams", "done");
+    if (verbose) {
+        PrintStage(state->rank, "create_streams", "done");
+    }
 }
 
 void InitHccl(RuntimeState *state, const DispatchCombineTileArgs &args, const PeerWindowLayout &peerWindowLayout)
 {
-    PrintStage(state->rank, "hccl_root_info", "begin");
+    bool verbose = VerboseRuntimeLogs(args);
+    if (verbose) {
+        PrintStage(state->rank, "hccl_root_info", "begin");
+    }
     HcclRootInfo rootInfo{};
     if (state->rank == 0 && !InitHcclRootInfo(&rootInfo)) {
         throw std::runtime_error("rank 0 failed to get HCCL root info");
     }
     MpiBroadcast(&state->mpi, &rootInfo, HCCL_ROOT_INFO_BYTES, 0);
     MpiBarrier(&state->mpi);
-    PrintStage(state->rank, "hccl_root_info", "done");
+    if (verbose) {
+        PrintStage(state->rank, "hccl_root_info", "done");
+    }
 
-    PrintStage(state->rank, "hccl_window", "begin");
+    if (verbose) {
+        PrintStage(state->rank, "hccl_window", "begin");
+    }
     state->hccl =
         InitHcclWindowContext(args.shape, peerWindowLayout, state->rank, state->size, &rootInfo, state->hcclStream);
     state->hcclActive = true;
-    std::cout << "rank=" << state->rank << " size=" << state->size << " device=" << state->device
-              << " window_base=" << state->hccl.hostDeviceContext.windowsIn[state->rank]
-              << " peer_window=" << reinterpret_cast<uint64_t>(state->hccl.peerWindow)
-              << " win_size=" << state->hccl.hostDeviceContext.winSize << std::endl;
-    PrintStage(state->rank, "hccl_window", "done");
+    if (verbose) {
+        std::cout << "rank=" << state->rank << " size=" << state->size << " device=" << state->device
+                  << " window_base=" << state->hccl.hostDeviceContext.windowsIn[state->rank]
+                  << " peer_window=" << reinterpret_cast<uint64_t>(state->hccl.peerWindow)
+                  << " win_size=" << state->hccl.hostDeviceContext.winSize << std::endl;
+        PrintStage(state->rank, "hccl_window", "done");
+    }
 }
 
 void AllocateLocalBuffers(const DispatchCombineTileArgs &args, const WorkspaceLayout &workspaceLayout,
                           RuntimeState *state)
 {
-    PrintStage(state->rank, "allocate_buffers", "begin");
+    bool verbose = VerboseRuntimeLogs(args);
+    if (verbose) {
+        PrintStage(state->rank, "allocate_buffers", "begin");
+    }
     const DispatchCombineTileShape &shape = args.shape;
     size_t inputBytes = BytesOfHalfVector(static_cast<size_t>(shape.m) * shape.k);
     size_t expertIdxBytes = BytesOfI32Vector(static_cast<size_t>(shape.m) * shape.topK);
@@ -228,7 +367,9 @@ void AllocateLocalBuffers(const DispatchCombineTileArgs &args, const WorkspaceLa
     CheckAcl(aclrtMalloc(&state->buffers.expertOutput, expertOutputBytes, ACL_MEM_MALLOC_HUGE_FIRST),
              "rank " + std::to_string(state->rank) + " aclrtMalloc expertOutput");
     state->buffersAllocated = true;
-    PrintStage(state->rank, "allocate_buffers", "done");
+    if (verbose) {
+        PrintStage(state->rank, "allocate_buffers", "done");
+    }
 }
 
 void CopyInputsToDevice(const DispatchCombineTileArgs &args, RuntimeState *state)
@@ -236,7 +377,10 @@ void CopyInputsToDevice(const DispatchCombineTileArgs &args, RuntimeState *state
     if (!state->dataReady) {
         throw std::runtime_error("host data is not ready before device copy");
     }
-    PrintStage(state->rank, "copy_inputs", "begin");
+    bool verbose = VerboseRuntimeLogs(args);
+    if (verbose) {
+        PrintStage(state->rank, "copy_inputs", "begin");
+    }
     const DispatchCombineTileShape &shape = args.shape;
     std::vector<uint16_t> inputHalf = FloatVectorToHalfBits(state->inputs.inputA);
     size_t inputBytes = BytesOfHalfVector(inputHalf.size());
@@ -253,14 +397,18 @@ void CopyInputsToDevice(const DispatchCombineTileArgs &args, RuntimeState *state
     CheckAcl(aclrtMemset(state->buffers.outputC, BytesOfHalfVector(static_cast<size_t>(shape.m) * shape.k), 0,
                          BytesOfHalfVector(static_cast<size_t>(shape.m) * shape.k)),
              "rank " + std::to_string(state->rank) + " clear outputC");
-    PrintStage(state->rank, "copy_inputs", "done");
+    if (verbose) {
+        PrintStage(state->rank, "copy_inputs", "done");
+    }
 }
 
 void ClearDeviceState(const DispatchCombineTileArgs &args, const WorkspaceLayout &workspaceLayout,
                       const PeerWindowLayout &peerWindowLayout, RuntimeState *state)
 {
-    (void)args;
-    PrintStage(state->rank, "clear_device_state", "begin");
+    bool verbose = VerboseRuntimeLogs(args);
+    if (verbose) {
+        PrintStage(state->rank, "clear_device_state", "begin");
+    }
     CheckAcl(aclrtMemset(state->buffers.workspace, workspaceLayout.totalBytes, 0, workspaceLayout.totalBytes),
              "rank " + std::to_string(state->rank) + " clear workspace");
     size_t peerWindowDataBytes = state->currentSignalValue == 1 ?
@@ -269,7 +417,9 @@ void ClearDeviceState(const DispatchCombineTileArgs &args, const WorkspaceLayout
     CheckAcl(aclrtMemset(state->hccl.peerWindow, peerWindowDataBytes, 0, peerWindowDataBytes),
              "rank " + std::to_string(state->rank) + " clear peerWindow data");
     CheckAcl(aclrtSynchronizeStream(state->computeStream), "rank " + std::to_string(state->rank) + " sync clear");
-    PrintStage(state->rank, "clear_device_state", "done");
+    if (verbose) {
+        PrintStage(state->rank, "clear_device_state", "done");
+    }
 }
 
 struct DispatchMetadataDump {
@@ -546,7 +696,10 @@ void PrintDispatchGatherSegments(const DispatchCombineTileArgs &args, RuntimeSta
 void RunDispatch(const DispatchCombineTileArgs &args, const WorkspaceLayout &workspaceLayout,
                  const PeerWindowLayout &peerWindowLayout, RuntimeState *state)
 {
-    PrintStage(state->rank, "dispatch", "begin");
+    bool verbose = VerboseRuntimeLogs(args);
+    if (verbose) {
+        PrintStage(state->rank, "dispatch", "begin");
+    }
     uint32_t launchBlocks = args.shape.aivBlocks == 0 ? 1 : args.shape.aivBlocks;
     DispatchCombineTileShape launchShape = args.shape;
     launchShape.signalValue = state->currentSignalValue;
@@ -562,7 +715,6 @@ void RunDispatch(const DispatchCombineTileArgs &args, const WorkspaceLayout &wor
     MpiBarrier(&state->mpi);
     auto dispatchEnd = std::chrono::steady_clock::now();
     state->dispatchE2eUs = UsSince(dispatchStart, dispatchEnd);
-    std::cout << "rank=" << state->rank << " dispatch_e2e_us=" << state->dispatchE2eUs << std::endl;
 
     if (args.runtime.debug != 0 || args.runtime.dispatchMetadataOnly != 0 || args.runtime.dispatchOnly != 0) {
         DispatchMetadataDump dump;
@@ -588,7 +740,9 @@ void RunDispatch(const DispatchCombineTileArgs &args, const WorkspaceLayout &wor
         }
         std::cout << "rank=" << state->rank << " dispatch_metadata_done" << std::endl;
         if (args.runtime.dispatchOnly == 0) {
-            PrintStage(state->rank, "dispatch", "done");
+            if (verbose) {
+                PrintStage(state->rank, "dispatch", "done");
+            }
             return;
         }
         PrintDispatchGatherSegments(args, state);
@@ -600,13 +754,18 @@ void RunDispatch(const DispatchCombineTileArgs &args, const WorkspaceLayout &wor
         std::cout << "rank=" << state->rank << " dispatch_pack_done" << std::endl;
         std::cout << "rank=" << state->rank << " dispatch_gather_done" << std::endl;
     }
-    PrintStage(state->rank, "dispatch", "done");
+    if (verbose) {
+        PrintStage(state->rank, "dispatch", "done");
+    }
 }
 
 void PrepareExpertOutputIdentity(const DispatchCombineTileArgs &args, const WorkspaceLayout &workspaceLayout,
                                  RuntimeState *state)
 {
-    PrintStage(state->rank, "prepare_expert_output", "begin");
+    bool verbose = VerboseRuntimeLogs(args);
+    if (verbose) {
+        PrintStage(state->rank, "prepare_expert_output", "begin");
+    }
     const DispatchCombineTileShape &shape = args.shape;
     size_t elements = static_cast<size_t>(shape.maxOutputSize) * shape.k;
     size_t bytes = BytesOfHalfVector(elements);
@@ -617,7 +776,6 @@ void PrepareExpertOutputIdentity(const DispatchCombineTileArgs &args, const Work
              "rank " + std::to_string(state->rank) + " prepare expertOutput");
     auto prepareEnd = std::chrono::steady_clock::now();
     state->prepareHostUs = UsSince(prepareStart, prepareEnd);
-    std::cout << "rank=" << state->rank << " prepare_host_us=" << state->prepareHostUs << std::endl;
 
     if (args.runtime.debug >= 2) {
         std::vector<float> dispatched =
@@ -633,7 +791,9 @@ void PrepareExpertOutputIdentity(const DispatchCombineTileArgs &args, const Work
         }
     }
     MpiBarrier(&state->mpi);
-    PrintStage(state->rank, "prepare_expert_output", "done");
+    if (verbose) {
+        PrintStage(state->rank, "prepare_expert_output", "done");
+    }
 }
 
 struct CombineReturnDump {
@@ -663,7 +823,10 @@ void CopyCombineReturnToHost(const DispatchCombineTileArgs &args, const PeerWind
 void ClearCombineReturnState(const DispatchCombineTileArgs &args, const PeerWindowLayout &peerWindowLayout,
                              RuntimeState *state)
 {
-    PrintStage(state->rank, "clear_combine_state", "begin");
+    bool verbose = VerboseRuntimeLogs(args);
+    if (verbose) {
+        PrintStage(state->rank, "clear_combine_state", "begin");
+    }
     const DispatchCombineTileShape &shape = args.shape;
     size_t expandedRows = static_cast<size_t>(shape.m) * shape.topK;
     auto *peerBase = reinterpret_cast<uint8_t *>(state->hccl.peerWindow);
@@ -675,7 +838,9 @@ void ClearCombineReturnState(const DispatchCombineTileArgs &args, const PeerWind
              "rank " + std::to_string(state->rank) + " clear combine outputC");
     CheckAcl(aclrtSynchronizeStream(state->computeStream),
              "rank " + std::to_string(state->rank) + " sync clear combine state");
-    PrintStage(state->rank, "clear_combine_state", "done");
+    if (verbose) {
+        PrintStage(state->rank, "clear_combine_state", "done");
+    }
 }
 
 void PrintCombineReturnSegments(const DispatchCombineTileArgs &args, RuntimeState *state)
@@ -707,7 +872,10 @@ void PrintCombineReturnSegments(const DispatchCombineTileArgs &args, RuntimeStat
 
 void RunCombine(const DispatchCombineTileArgs &args, const PeerWindowLayout &peerWindowLayout, RuntimeState *state)
 {
-    PrintStage(state->rank, "combine", "begin");
+    bool verbose = VerboseRuntimeLogs(args);
+    if (verbose) {
+        PrintStage(state->rank, "combine", "begin");
+    }
     ClearCombineReturnState(args, peerWindowLayout, state);
     PrintCombineReturnSegments(args, state);
     uint32_t launchBlocks = args.shape.aivBlocks == 0 ? 1 : args.shape.aivBlocks;
@@ -725,7 +893,6 @@ void RunCombine(const DispatchCombineTileArgs &args, const PeerWindowLayout &pee
     MpiBarrier(&state->mpi);
     auto combineEnd = std::chrono::steady_clock::now();
     state->combineE2eUs = UsSince(combineStart, combineEnd);
-    std::cout << "rank=" << state->rank << " combine_e2e_us=" << state->combineE2eUs << std::endl;
 
     if (args.runtime.combineReturnOnly != 0 || args.runtime.debug >= 2) {
         CombineReturnDump dump;
@@ -746,51 +913,67 @@ void RunCombine(const DispatchCombineTileArgs &args, const PeerWindowLayout &pee
             throw std::runtime_error("rank " + std::to_string(state->rank) + " combine return mismatch");
         }
     }
-    if (args.runtime.combineReturnOnly != 0) {
+    if (verbose && args.runtime.combineReturnOnly != 0) {
         std::cout << "rank=" << state->rank << " combine_return_done" << std::endl;
         std::cout << "rank=" << state->rank << " combine_wait_done peers=" << args.shape.ep << std::endl;
-    } else {
+    } else if (verbose) {
         std::cout << "rank=" << state->rank << " combine_return_done" << std::endl;
         std::cout << "rank=" << state->rank << " combine_wait_done peers=" << args.shape.ep << std::endl;
         std::cout << "rank=" << state->rank << " restore_done" << std::endl;
     }
-    PrintStage(state->rank, "combine", "done");
+    if (verbose) {
+        PrintStage(state->rank, "combine", "done");
+    }
 }
 
 void VerifyAndDump(const DispatchCombineTileArgs &args, RuntimeState *state)
 {
-    PrintStage(state->rank, "verify", "begin");
+    bool verbose = VerboseRuntimeLogs(args);
+    if (verbose) {
+        PrintStage(state->rank, "verify", "begin");
+    }
     size_t elements = static_cast<size_t>(args.shape.m) * args.shape.k;
     std::vector<float> actualOutputC = CopyDeviceHalfToFloat(state->buffers.outputC, elements, state->rank, "outputC");
     if (args.runtime.verify == 0) {
-        std::cout << "rank=" << state->rank << " verify=SKIP mismatch_count=0" << std::endl;
-        PrintStage(state->rank, "verify", "done");
+        if (verbose) {
+            std::cout << "rank=" << state->rank << " verify=SKIP mismatch_count=0" << std::endl;
+            PrintStage(state->rank, "verify", "done");
+        }
         return;
     }
     if (args.runtime.debug != 0) {
         WriteBinaryFile(RankBinaryFile(args, state->rank, "outputC"), FloatVectorToHalfBits(actualOutputC));
     }
     CompareResult compare = CompareOutputs(args, state->golden, actualOutputC, state->rank);
-    std::cout << "rank=" << state->rank << " buffer=outputC elements=" << compare.elementCount
-              << " mismatch_count=" << compare.mismatchCount;
+    if (verbose || compare.mismatchCount != 0) {
+        std::cout << "rank=" << state->rank << " buffer=outputC elements=" << compare.elementCount
+                  << " mismatch_count=" << compare.mismatchCount;
+    }
     if (compare.mismatchCount != 0) {
         uint64_t row = compare.firstMismatchIndex / args.shape.k;
         uint64_t col = compare.firstMismatchIndex % args.shape.k;
         std::cout << " first_index=" << compare.firstMismatchIndex << " row=" << row << " col=" << col
                   << " actual=" << compare.actual << " expected=" << compare.expected;
     }
-    std::cout << std::endl;
+    if (verbose || compare.mismatchCount != 0) {
+        std::cout << std::endl;
+    }
     if (compare.mismatchCount != 0) {
         std::cout << "rank=" << state->rank << " verify=FAIL mismatch_count=" << compare.mismatchCount << std::endl;
         throw std::runtime_error("rank " + std::to_string(state->rank) + " outputC mismatch");
     }
-    std::cout << "rank=" << state->rank << " verify=PASS mismatch_count=0" << std::endl;
-    PrintStage(state->rank, "verify", "done");
+    if (verbose) {
+        std::cout << "rank=" << state->rank << " verify=PASS mismatch_count=0" << std::endl;
+        PrintStage(state->rank, "verify", "done");
+    }
 }
 
 void PrintPerformanceConfig(const DispatchCombineTileArgs &args, const WorkspaceLayout &workspaceLayout,
                             const PeerWindowLayout &peerWindowLayout, uint32_t rank)
 {
+    if (!VerboseRuntimeLogs(args)) {
+        return;
+    }
     uint32_t aivBlocks = args.shape.aivBlocks == 0 ? 1 : args.shape.aivBlocks;
     uint32_t peerShards = args.shape.ep < aivBlocks ? args.shape.ep : aivBlocks;
     std::cout << "rank=" << rank << " aiv_blocks=" << aivBlocks << " tile_cols=" << args.shape.tileCols
@@ -877,8 +1060,11 @@ int main(int argc, char **argv)
         std::cout << "HCCL_BUFFSIZE=" << hcclBuffSizeMb << std::endl;
 
         dispatch_combine_tile::InitRankInfo(args, &argc, &argv, &state);
-        std::cout << "rank=" << state.rank << " size=" << state.size << " device=" << state.device << " start"
-                  << std::endl;
+        bool verbose = dispatch_combine_tile::VerboseRuntimeLogs(args);
+        if (verbose) {
+            std::cout << "rank=" << state.rank << " size=" << state.size << " device=" << state.device << " start"
+                      << std::endl;
+        }
 
         if (args.runtime.hostGoldenOnly != 0) {
             dispatch_combine_tile::RunHostGoldenOnly(args, &state);
@@ -889,7 +1075,7 @@ int main(int argc, char **argv)
         dispatch_combine_tile::PrepareHostData(args, &state);
 
         dispatch_combine_tile::BindDeviceContinuous(args, &state);
-        dispatch_combine_tile::CreateStreams(&state);
+        dispatch_combine_tile::CreateStreams(args, &state);
         dispatch_combine_tile::InitHccl(&state, args, peerWindowLayout);
         dispatch_combine_tile::AllocateLocalBuffers(args, workspaceLayout, &state);
         dispatch_combine_tile::CopyInputsToDevice(args, &state);
@@ -903,11 +1089,15 @@ int main(int argc, char **argv)
 
         dispatch_combine_tile::PrintPerformanceConfig(args, workspaceLayout, peerWindowLayout, state.rank);
         uint32_t totalIterations = args.runtime.warmup + args.runtime.iters;
+        std::vector<dispatch_combine_tile::IterationTiming> measureTimings;
+        measureTimings.reserve(args.runtime.iters);
         for (uint32_t iter = 0; iter < totalIterations; ++iter) {
             bool isWarmup = iter < args.runtime.warmup;
             state.currentSignalValue = iter + 1;
-            std::cout << "rank=" << state.rank << " iteration=" << iter
-                      << " phase=" << (isWarmup ? "warmup" : "measure") << " begin" << std::endl;
+            if (verbose && !isWarmup) {
+                std::cout << "rank=" << state.rank << " iteration=" << (iter - args.runtime.warmup)
+                          << " phase=measure begin" << std::endl;
+            }
             auto totalStart = std::chrono::steady_clock::now();
             dispatch_combine_tile::ClearDeviceState(args, workspaceLayout, peerWindowLayout, &state);
             dispatch_combine_tile::RunDispatch(args, workspaceLayout, peerWindowLayout, &state);
@@ -935,16 +1125,23 @@ int main(int argc, char **argv)
             auto totalEnd = std::chrono::steady_clock::now();
             state.totalE2eUs = dispatch_combine_tile::UsSince(totalStart, totalEnd);
             if (!isWarmup) {
-                std::cout << "rank=" << state.rank << " iteration=" << (iter - args.runtime.warmup)
-                          << " dispatch_e2e_us=" << state.dispatchE2eUs << " prepare_host_us=" << state.prepareHostUs
-                          << " combine_e2e_us=" << state.combineE2eUs << " total_e2e_us=" << state.totalE2eUs
-                          << std::endl;
+                dispatch_combine_tile::IterationTiming timing;
+                timing.dispatchE2eUs = state.dispatchE2eUs;
+                timing.prepareHostUs = state.prepareHostUs;
+                timing.combineE2eUs = state.combineE2eUs;
+                timing.totalE2eUs = state.totalE2eUs;
+                measureTimings.push_back(timing);
+                if (verbose) {
+                    std::cout << "rank=" << state.rank << " iteration=" << (iter - args.runtime.warmup)
+                              << " phase=measure done" << std::endl;
+                }
             }
-            std::cout << "rank=" << state.rank << " iteration=" << iter
-                      << " phase=" << (isWarmup ? "warmup" : "measure") << " done" << std::endl;
         }
+        dispatch_combine_tile::PrintProfileSummary(args, &state, measureTimings);
         dispatch_combine_tile::MpiBarrier(&state.mpi);
-        std::cout << "rank=" << state.rank << " run_done" << std::endl;
+        if (verbose) {
+            std::cout << "rank=" << state.rank << " run_done" << std::endl;
+        }
         dispatch_combine_tile::Cleanup(&state);
         return 0;
     } catch (const std::exception &ex) {

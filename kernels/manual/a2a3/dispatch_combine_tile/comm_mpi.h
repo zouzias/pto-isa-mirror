@@ -38,6 +38,8 @@ using MpiInitFunc = int (*)(int *, char ***);
 using MpiCommSizeFunc = int (*)(DispatchTileMpiComm, int *);
 using MpiCommRankFunc = int (*)(DispatchTileMpiComm, int *);
 using MpiBcastFunc = int (*)(void *, int, DispatchTileMpiDatatype, int, DispatchTileMpiComm);
+using MpiGatherFunc = int (*)(const void *, int, DispatchTileMpiDatatype, void *, int, DispatchTileMpiDatatype, int,
+                              DispatchTileMpiComm);
 using MpiBarrierFunc = int (*)(DispatchTileMpiComm);
 using MpiFinalizeFunc = int (*)();
 
@@ -147,6 +149,25 @@ inline void MpiBroadcast(MpiContext *context, void *data, size_t bytes, int root
     int ret = bcast(data, static_cast<int>(bytes), kDispatchTileMpiChar, root, kDispatchTileMpiCommWorld);
     if (ret != 0) {
         throw std::runtime_error("MPI_Bcast failed: " + std::to_string(ret));
+    }
+}
+
+inline void MpiGatherBytes(MpiContext *context, const void *sendData, size_t bytes, void *recvData, int root)
+{
+    if (context == nullptr || !context->initialized) {
+        if (recvData != nullptr && sendData != recvData && bytes != 0) {
+            std::memcpy(recvData, sendData, bytes);
+        }
+        return;
+    }
+    if (bytes > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        throw std::invalid_argument("MPI gather payload is too large");
+    }
+    auto gather = GetMpiFunc<MpiGatherFunc>("MPI_Gather");
+    int ret = gather(sendData, static_cast<int>(bytes), kDispatchTileMpiChar, recvData, static_cast<int>(bytes),
+                     kDispatchTileMpiChar, root, kDispatchTileMpiCommWorld);
+    if (ret != 0) {
+        throw std::runtime_error("MPI_Gather failed: " + std::to_string(ret));
     }
 }
 
