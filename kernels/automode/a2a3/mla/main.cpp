@@ -195,6 +195,12 @@ static size_t ReadFilePlain(const char *path, void *buf, size_t size)
     return n;
 }
 
+static bool ReadSizedFile(const std::string &path, size_t expectedSize, void *buffer)
+{
+    size_t fileSize = expectedSize;
+    return ReadFile(path, fileSize, buffer, expectedSize);
+}
+
 // Per-stage result checker. Reads golden and device output files from disk,
 // checks for poison (kernel never wrote), then compares FP16 element-by-element.
 // Returns true = pass; false = fail / poisoned / missing output.
@@ -380,15 +386,15 @@ int main()
     CheckAcl(aclrtMalloc((void **)&scoresRopeDev,kScoresRopeBytes, ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(scores_rope)");
 
     // ---- Read inputs from disk -------------------------------------------
-    ReadFile("../input/input_x.bin",        kXBytes,     xHost,      kXBytes);
-    ReadFile("../input/input_w_q.bin",      kWqBytes,    wqHost,     kWqBytes);
-    ReadFile("../input/input_w_dkv.bin",    kWdkvBytes,  wdkvHost,   kWdkvBytes);
-    ReadFile("../input/input_w_uk.bin",     kWukBytes,   wukHost,    kWukBytes);
-    ReadFile("../input/input_w_uv.bin",     kWuvBytes,   wuvHost,    kWuvBytes);
-    ReadFile("../input/input_w_q_rope.bin", kWqRopeBytes,wqRopeHost, kWqRopeBytes);
-    ReadFile("../input/input_w_k_rope.bin", kWkRopeBytes,wkRopeHost, kWkRopeBytes);
-    ReadFile("../input/input_cos.bin",      kCosBytes,   cosHost,    kCosBytes);
-    ReadFile("../input/input_sin.bin",      kSinBytes,   sinHost,    kSinBytes);
+    ReadSizedFile("../input/input_x.bin",        kXBytes,      xHost);
+    ReadSizedFile("../input/input_w_q.bin",      kWqBytes,     wqHost);
+    ReadSizedFile("../input/input_w_dkv.bin",    kWdkvBytes,   wdkvHost);
+    ReadSizedFile("../input/input_w_uk.bin",     kWukBytes,    wukHost);
+    ReadSizedFile("../input/input_w_uv.bin",     kWuvBytes,    wuvHost);
+    ReadSizedFile("../input/input_w_q_rope.bin", kWqRopeBytes, wqRopeHost);
+    ReadSizedFile("../input/input_w_k_rope.bin", kWkRopeBytes, wkRopeHost);
+    ReadSizedFile("../input/input_cos.bin",      kCosBytes,    cosHost);
+    ReadSizedFile("../input/input_sin.bin",      kSinBytes,    sinHost);
 
     // ---- Upload inputs ----------------------------------------------------
     CheckAcl(aclrtMemcpy(xDev,        kXBytes,      xHost,      kXBytes,      ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(x)");
