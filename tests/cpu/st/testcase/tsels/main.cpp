@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "test_common.h"
 #include <pto/pto-inst.hpp>
 #include <gtest/gtest.h>
+#include <climits>
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -41,8 +42,13 @@ void LaunchTSelS(T *out, T scalar, uint32_t *src0, T *src1, void *stream);
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void test_tsels()
 {
-    size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
-    size_t maskSize = kGRows_ * kGCols_ * sizeof(uint32_t);
+    size_t totalElements = kGRows_ * kGCols_;
+    size_t fileSize = totalElements * sizeof(T);
+    
+    // --- UPDATED: Calculate memory footprint for the 1-bit packed mask ---
+    constexpr size_t bitsPerWord = sizeof(uint32_t) * CHAR_BIT; // 32 bits
+    size_t totalMaskWords = (totalElements + bitsPerWord - 1) / bitsPerWord;
+    size_t maskSize = totalMaskWords * sizeof(uint32_t);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -87,8 +93,8 @@ void test_tsels()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(fileSize);
-    std::vector<T> devFinal(fileSize);
+    std::vector<T> golden(totalElements);
+    std::vector<T> devFinal(totalElements);
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", fileSize, golden.data(), fileSize));
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/output.bin", fileSize, devFinal.data(), fileSize));
 
