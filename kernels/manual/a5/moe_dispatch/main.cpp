@@ -362,6 +362,37 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
     aclrtMemcpy(devTPE, tpeSize, routing.tokenPerExpert.data(), tpeSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(devPSBR, psbSize, routing.preSumBeforeRank.data(), psbSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
+    // --- DIAGNOSTIC: verify shmem data was written correctly ---
+    {
+        std::vector<uint8_t> readback(shmemSize);
+        aclrtMemcpy(readback.data(), shmemSize, devShmem, shmemSize, ACL_MEMCPY_DEVICE_TO_HOST);
+        bool shmemOk = (memcmp(readback.data(), localShmemData.data(), shmemSize) == 0);
+        std::cerr << "[DIAG] Rank " << rankId << ": shmem write-readback "
+                  << (shmemOk ? "OK" : "MISMATCH") << " (size=" << shmemSize << ")\n";
+        if (!shmemOk) {
+            for (size_t i = 0; i < shmemSize && i < 320; ++i) {
+                if (readback[i] != localShmemData[i]) {
+                    std::cerr << "[DIAG] Rank " << rankId << ": first diff at byte " << i
+                              << " got=" << (int)readback[i] << " expected=" << (int)localShmemData[i] << "\n";
+                    break;
+                }
+            }
+        }
+        std::cerr << "[DIAG] Rank " << rankId << ": shmem first 32B:";
+        for (int i = 0; i < 32 && i < (int)shmemSize; ++i)
+            std::cerr << " " << (int)readback[i];
+        std::cerr << "\n";
+        std::cerr << "[DIAG] Rank " << rankId << ": expected first 32B:";
+        for (int i = 0; i < 32 && i < (int)localShmemData.size(); ++i)
+            std::cerr << " " << (int)(uint8_t)localShmemData[i];
+        std::cerr << "\n";
+        std::cerr << "[DIAG] Rank " << rankId << ": windowsIn[" << rankId << "]=0x"
+                  << std::hex << ctx.hostCtx.windowsIn[rankId] << std::dec
+                  << " winSize=" << ctx.hostCtx.winSize
+                  << " devShmem=" << devShmem << "\n";
+    }
+    // --- END DIAGNOSTIC ---
+
     // Host barrier: ensure all ranks have written their shmem
     HcclHostBarrier(ctx.comm, ctx.stream);
 
@@ -416,6 +447,19 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
     size_t compactTokenSize = static_cast<size_t>(maxOutputSize) * hiddenSize;
     std::vector<int8_t> actualGmA(compactTokenSize);
     aclrtMemcpy(actualGmA.data(), compactTokenSize, devGmA, compactTokenSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    // --- DIAGNOSTIC: print first 32 bytes of output and expected ---
+    {
+        std::cerr << "[DIAG] Rank " << rankId << ": gmA output first 32B:";
+        for (int i = 0; i < 32 && i < (int)compactTokenSize; ++i)
+            std::cerr << " " << (int)(uint8_t)actualGmA[i];
+        std::cerr << "\n";
+        std::cerr << "[DIAG] Rank " << rankId << ": gmA expect first 32B:";
+        for (int i = 0; i < 32 && i < (int)expectedGmA.size(); ++i)
+            std::cerr << " " << (int)(uint8_t)expectedGmA[i];
+        std::cerr << "\n";
+    }
+    // --- END DIAGNOSTIC ---
 
     // Read back scale (padded layout: 32 bytes per row, float at offset 0)
     std::vector<uint8_t> actualScaleRaw(gmScaleSize);
