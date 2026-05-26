@@ -67,7 +67,7 @@ template <typename DstTileData, typename SrcTileData, bool Transpose>
 __tf__ AICORE void TExtractToA(typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src,
                                uint16_t indexRow, uint16_t indexCol)
 {
-    PTO_ASSERT(false, "TExtractToA not supported in 310P3");
+    PTO_ASSERT(false, "TExtractToA not supported in A1");
     using SrcType = std::conditional_t<(sizeof(typename SrcTileData::DType) == 2), half, typename SrcTileData::DType>;
     using DstType = std::conditional_t<(sizeof(typename DstTileData::DType) == 2), half, typename DstTileData::DType>;
     __cbuf__ SrcType *srcAddr = (__cbuf__ SrcType *)__cce_get_tile_ptr(src);

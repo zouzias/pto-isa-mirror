@@ -1,6 +1,6 @@
-# include/pto/npu/310p3/
+# include/pto/npu/a1/
 
-Ascend 310P 系列 PTO 指令实现头文件。
+Ascend A1 系列 PTO 指令实现头文件。
 
 ## 概览
 
@@ -10,4 +10,4 @@ Ascend 310P 系列 PTO 指令实现头文件。
 ## 相关内容
 
 - ISA 语义与示例：`docs/isa/`
-- 310P NPU ST 测试：`tests/npu/310p3/src/st/`
+- A1 NPU ST 测试：`tests/npu/a1/src/st/`

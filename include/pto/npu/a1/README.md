@@ -1,6 +1,6 @@
-# include/pto/npu/310p3/
+# include/pto/npu/a1/
 
-Ascend 310P series PTO instruction implementation headers.
+Ascend A1 series PTO instruction implementation headers.
 
 ## Overview
 
@@ -10,4 +10,4 @@ Ascend 310P series PTO instruction implementation headers.
 ## Related
 
 - ISA semantics and examples: `docs/isa/`
-- 310P NPU ST tests: `tests/npu/310p3/src/st/`
+- A1 NPU ST tests: `tests/npu/a1/src/st/`

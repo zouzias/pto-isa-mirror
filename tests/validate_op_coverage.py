@@ -33,7 +33,7 @@ VERSION_PATHS = {
     "a3": "tests/npu/a2a3/src/st/testcase",
     "a5": "tests/npu/a5/src/st/testcase",
     "kirin9030": "tests/npu/kirin9030/src/st/testcase",
-    "310p3": "tests/npu/310p3/src/st/testcase",
+    "a1": "tests/npu/a1/src/st/testcase",
 }
 
 
