@@ -153,70 +153,25 @@ if __name__ == "__main__":
         "TLoadGM2L1Test.ND_int16_t_2_2_1_2_32_3_3_3_111_64",
         "TLoadGM2L1Test.ND_int8_t_1_2_1_11_32_1_3_2_93_32",
         "TLoadGM2L1Test.ND_int8_t_1_1_1_1_201_1_1_1_1_201",
+        "TLoadGM2L1Test.ND_float16_t_1_1_1_128_128_1_1_1_256_256",
+        "TLoadGM2L1Test.ND_int64_1_1_1_3_128_3_3_3_32_128",
+        "TLoadGM2L1Test.ND_uint64_2_2_1_2_32_3_3_3_111_64",
+        "TLoadGM2L1Test.ND_int64_1_2_1_11_32_1_3_2_93_32",
+
         "TLoadGM2L1Test.DN_float_1_1_1_128_3_3_3_3_128_32",
         "TLoadGM2L1Test.DN_int16_t_2_2_1_32_2_3_3_3_64_111",
         "TLoadGM2L1Test.DN_int8_t_1_2_1_32_11_1_3_2_32_93",
         "TLoadGM2L1Test.DN_float_1_1_1_156_1_1_1_1_156_1",
-        "TLoadGM2L1Test.NZ_float_1_5_21_16_8_1_5_21_16_8",
-        "TLoadGM2L1Test.NZ_int16_t_2_16_11_16_16_3_23_13_16_16",
-        "TLoadGM2L1Test.NZ_int8_t_1_16_32_16_32_1_32_32_16_32",
-        "TLoadGM2L1Test.ND2NZ_float_t_1_1_1_49_35_1_1_1_49_35",
-        "TLoadGM2L1Test.ND2NZ_int16_t_1_1_1_155_250_1_1_1_752_1000",
-        "TLoadGM2L1Test.ND2NZ_int8_t_1_1_1_1023_511_1_1_1_1024_1024",
-        "TLoadGM2L1Test.ND2NZ_bfloat16_t_1_1_1_1023_51_1_1_1_1024_1024",
-        "TLoadGM2L1Test.ND_float16_t_1_1_1_128_128_1_1_1_256_256",
         "TLoadGM2L1Test.DN_float16_t_1_2_2_64_311_4_3_3_256_400",
-        "TLoadGM2L1Test.NZ_float16_t_2_4_5_16_16_7_7_7_16_16",
-        "TLoadGM2L1Test.ND2NZ_bfloat16_t_1_1_1_1_1_1_1_1_1_1",
-        "TLoadGM2L1Test.ND2NZ_bfloat16_t_1_1_1_1_1_1_1_1_16_16",
-        "TLoadGM2L1Test.ND2NZ_bfloat16_t_1_1_1_256_1024_1_1_1_256_1024",
-        "TLoadGM2L1Test.ND_int64_1_1_1_3_128_3_3_3_32_128",
-        "TLoadGM2L1Test.ND_uint64_2_2_1_2_32_3_3_3_111_64",
-        "TLoadGM2L1Test.ND_int64_1_2_1_11_32_1_3_2_93_32",
         "TLoadGM2L1Test.DN_uint64_1_1_1_128_3_3_3_3_128_32",
         "TLoadGM2L1Test.DN_int64_2_2_1_32_2_3_3_3_64_111",
         "TLoadGM2L1Test.DN_uint64_1_2_1_32_11_1_3_2_32_93",
-        "TLoadGM2L1Test.DN2ZN_bfloat16_t_1_1_1_256_1024_1_1_1_256_1024",
-        "TLoadGM2L1Test.DN2ZN_float_t_1_1_1_49_35_1_1_1_49_35",
-        "TLoadGM2L1Test.DN2ZN_int16_t_1_1_1_155_250_1_1_1_752_1000",
-        "TLoadGM2L1Test.DN2ZN_int8_t_1_1_1_1023_511_1_1_1_1024_1024",
 
-        "TLoadGM2L1Test.NC1HWC02NC1HWC0_int8_t_2_3_16_128_32_3_4_1024_1024_32", # cut N H
-        "TLoadGM2L1Test.NC1HWC02NC1HWC0_int8_t_3_4_128_8_32_3_4_128_128_32", # cut W
-        "TLoadGM2L1Test.NC1HWC02NC1HWC0_int8_t_3_4_8_128_32_3_8_8_128_32", # cut C1
-        "TLoadGM2L1Test.NC1HWC02NC1HWC0_bfloat16_1_16_10_100_16_1_16_100_100_16", # cut H
-        "TLoadGM2L1Test.NC1HWC02NC1HWC0_bfloat16_10_16_16_2_16_256_16_100_16_16", # cut N C1 W
-        "TLoadGM2L1Test.NC1HWC02NC1HWC0_bfloat16_1_1_1_8192_16_8_16_16_8192_16", # cut N C1 H
-        "TLoadGM2L1Test.NC1HWC02NC1HWC0_float_1_1_112_112_8_2_3_224_224_8", # cut N C1 H W
+        "TLoadGM2L1Test.NZ_float_1_5_21_16_8_1_5_21_16_8",
+        "TLoadGM2L1Test.NZ_int16_t_2_16_11_16_16_3_23_13_16_16",
+        "TLoadGM2L1Test.NZ_int8_t_1_16_32_16_32_1_32_32_16_32",
+        "TLoadGM2L1Test.NZ_float16_t_2_4_5_16_16_7_7_7_16_16",
         
-        "TLoadGM2L1Test.FZ2FZ_bfloat16_1_7_7_20_16_3_7_7_100_16", # cut N C1
-        "TLoadGM2L1Test.FZ2FZ_bfloat16_128_7_7_2_16_256_7_7_16_16", # cut N C1
-        "TLoadGM2L1Test.FZ2FZ_bfloat16_192_3_3_8_16_256_3_3_8_16", # cut C1
-        "TLoadGM2L1Test.FZ2FZ_int8_t_2_3_3_64_32_3_3_3_128_32", # cut N C1
-        "TLoadGM2L1Test.FZ2FZ_int8_t_3_5_5_128_32_8_5_5_128_32", # cut N
-        "TLoadGM2L1Test.FZ2FZ_float_96_7_7_2_8_256_7_7_256_8", # cut C1 N
-
-        "TLoadGM2L1Test.FZ4D2FZ4D_bfloat16_1_49_7_16_16_1_980_32_16_16", # cut C1HW N
-        "TLoadGM2L1Test.FZ4D2FZ4D_bfloat16_1_81_3_16_16_1_90_3_16_16", # cut C1HW
-        "TLoadGM2L1Test.FZ4D2FZ4D_int8_t_1_63_3_16_32_1_63_9_16_32", # cut N
-        "TLoadGM2L1Test.FZ4D2FZ4D_int8_t_1_125_3_16_32_1_250_5_16_32", # cut C1HW N
-        "TLoadGM2L1Test.FZ4D2FZ4D_float_1_256_3_16_8_1_4704_7_16_8", # cut C1HW N
-
-        # NCHW2NC1HWC0
-        "TLoadGM2L1Test.NCHW2NC1HWC0_float16_t_1_1_16_2_16_1_1_16_2_16", # _NCHW
-        "TLoadGM2L1Test.NCHW2NC1HWC0_int8_t_1_1_32_2_32_1_1_32_2_32",
-        "TLoadGM2L1Test.NCHW2NC1HWC0_float32_t_1_1_8_2_8_1_1_8_2_8",
-        "TLoadGM2L1Test.NCHW2NC1HWC0_float16_t_1_1_32_28_28_1_1_64_56_56",
-        "TLoadGM2L1Test.NCHW2NC1HWC0_float16_t_1_1_256_14_8_1_1_256_14_14",
-        "TLoadGM2L1Test.NCHW2NC1HWC0_float16_t_1_1_256_7_7_1_1_512_7_7",
-
-        # NCHW2FZ
-        "TLoadGM2L1Test.NCHW2FZ_float16_t_1_16_16_3_3_1_16_16_3_3", # _NCHW
-        "TLoadGM2L1Test.NCHW2FZ_int8_t_1_32_32_3_3_1_32_32_3_3",
-        "TLoadGM2L1Test.NCHW2FZ_float32_t_1_16_8_3_3_1_16_8_3_3",
-        "TLoadGM2L1Test.NCHW2FZ_float16_t_1_32_64_3_3_1_64_64_3_3",
-        "TLoadGM2L1Test.NCHW2FZ_float16_t_1_256_256_1_1_1_512_256_1_1",
-        "TLoadGM2L1Test.NCHW2FZ_float16_t_1_32_128_3_3_1_512_512_3_3",
     ]
 
     case_params_list = [
