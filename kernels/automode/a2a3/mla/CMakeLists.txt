@@ -96,6 +96,7 @@ function(pto_kernel_arch_auto NAME ARCH)
     )
     target_include_directories(${NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../include/
+        ${PROJECT_BINARY_DIR}
     )
     target_link_options(${NAME} PRIVATE --cce-fatobj-link)
 endfunction()
@@ -109,6 +110,7 @@ target_compile_options(mla_basic PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
 target_include_directories(mla_basic PRIVATE
     ${PROJECT_SOURCE_DIR}/../../../../include/
     ${PROJECT_SOURCE_DIR}/../../../../tests/common
+    ${PROJECT_BINARY_DIR}
 )
 
 target_link_directories(mla_basic PUBLIC

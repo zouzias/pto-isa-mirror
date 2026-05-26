@@ -19,6 +19,7 @@
 #include "test_common.h"
 #include "acl/acl.h"
 #include "../kernel_timing.h"
+#include "generated_cases.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -106,9 +107,9 @@ bool AddTileArray()
 
 int main()
 {
-    constexpr int NUM_TILES = 4;
-    constexpr int TILE_ROWS = 64;
-    constexpr int TILE_COLS = 64;
+    constexpr int NUM_TILES = kAddTileArrayNumTiles;
+    constexpr int TILE_ROWS = kAddTileArrayTileRows;
+    constexpr int TILE_COLS = kAddTileArrayTileCols;
     bool ok = AddTileArray<float, NUM_TILES, TILE_ROWS, TILE_COLS>();
     return ok ? 0 : 1;
 }

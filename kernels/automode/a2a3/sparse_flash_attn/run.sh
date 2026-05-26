@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-SHORT=r:,v:,C:,n:,b:,m:,s:,h:,d:,k:
-LONG=run-mode:,soc-version:,compiler:,npu:,batch:,m-seq:,n-seq:,heads:,head-dim:,topk:
+SHORT=r:,v:,C:,n:,b:,m:,s:,h:,d:,k:,a:
+LONG=run-mode:,soc-version:,compiler:,npu:,batch:,m-seq:,n-seq:,heads:,head-dim:,topk:,cases:
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 
@@ -47,7 +47,10 @@ do
             D="$2"
             shift 2;;
         (-k | --topk )
-            TOPK="$2"
+            K="$2"
+            shift 2;;
+        (-a | --cases )
+            CASES_RAW="$2"
             shift 2;;
         (--)
             shift
@@ -62,6 +65,17 @@ done
 
 rm -rf build
 mkdir -p build
+
+GEN_CASE_ARGS=()
+if [[ -n "${CASES_RAW:-}" ]]; then
+    GEN_CASE_ARGS+=(--cases "${CASES_RAW}")
+    IFS=',' read -r B M N H D K <<< "${CASES_RAW}"
+else
+    GEN_CASE_ARGS+=(--cases "${B},${M},${N},${H},${D},${K}")
+fi
+
+python3 generate_cases.py "${GEN_CASE_ARGS[@]}"
+
 cd build
 
 cmake -DRUN_MODE="${RUN_MODE}" -DSOC_VERSION="${SOC_VERSION}" -DCMAKE_COMPILER="${CMAKE_COMPILER}" ..

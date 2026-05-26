@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
 #include "multiBuffer.hpp"
+#include "generated_cases.h"
 
 using namespace pto;
 using namespace pto_auto;
@@ -299,14 +300,8 @@ __global__ AICORE void Topk(__gm__ uint8_t *out, __gm__ uint8_t *index, __gm__ u
 template <typename T>
 void launchTopk(uint8_t *out, uint8_t *index, uint8_t *src, uint8_t *inIdx, void *stream)
 {
-    constexpr int blockDim = 48;
-    constexpr int gShape3 = 4800;
-    constexpr int gShape4 = 1024;
-    constexpr int gWholeShape3 = 4800;
-    constexpr int gWholeShape4 = 1280;
-    constexpr int topk = 1000;
-    Topk<T, 1, 1, 1, gShape3, gShape4, 1, 1, 1, gWholeShape3, gWholeShape4, topk, blockDim>
-        <<<blockDim, nullptr, stream>>>(out, index, src, inIdx);
+    Topk<T, 1, 1, 1, kTopkv2GShape3, kTopkv2GShape4, 1, 1, 1, kTopkv2GWholeShape3, kTopkv2GWholeShape4,
+         kTopkv2TopK, kTopkv2BlockDim><<<kTopkv2BlockDim, nullptr, stream>>>(out, index, src, inIdx);
 }
 
 template void launchTopk<float>(uint8_t *out, uint8_t *index, uint8_t *src, uint8_t *inIdx, void *stream);

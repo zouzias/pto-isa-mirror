@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
 #include "multiBuffer.hpp"
+#include "generated_cases.h"
 
 using namespace pto;
 using namespace pto_auto;
@@ -149,22 +150,9 @@ __global__ AICORE void GemmPerformance(__gm__ uint8_t *out, __gm__ uint8_t *src0
 template <typename T>
 void LaunchGEMME2E(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
 {
-    constexpr uint32_t blockDim = 24;
-    constexpr uint32_t m = 6144;
-    constexpr uint32_t n = 6144;
-    constexpr uint32_t k = 6144;
-    constexpr uint32_t singleCoreM = 1536;
-    constexpr uint32_t singleCoreN = 1024;
-    constexpr uint32_t singleCoreK = 6144;
-    constexpr uint32_t baseM = 128;
-    constexpr uint32_t baseN = 128;
-    constexpr uint32_t baseK = 64;
-    constexpr uint32_t stepM = 1;
-    constexpr uint32_t stepKa = 4;
-    constexpr uint32_t stepKb = 4;
-    constexpr uint32_t stepN = 1;
-    GemmPerformance<T, blockDim, m, k, n, singleCoreM, singleCoreK, singleCoreN, baseM, baseK, baseN, stepM, stepKa,
-                    stepKb, stepN><<<blockDim, nullptr, stream>>>(out, src0, src1);
+    GemmPerformance<T, kGemmBlockDim, kGemmM, kGemmK, kGemmN, kGemmSingleCoreM, kGemmSingleCoreK, kGemmSingleCoreN,
+                    kGemmBaseM, kGemmBaseK, kGemmBaseN, kGemmStepM, kGemmStepKa, kGemmStepKb, kGemmStepN>
+        <<<kGemmBlockDim, nullptr, stream>>>(out, src0, src1);
 }
 
 template void LaunchGEMME2E<uint16_t>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);

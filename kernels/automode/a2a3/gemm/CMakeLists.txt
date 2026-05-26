@@ -77,6 +77,7 @@ function(pto_example_cube NAME)
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220-cube -std=c++17)
     target_include_directories(${NAME}_kernel PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../include/
+        ${PROJECT_BINARY_DIR}
     )
     target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
 
@@ -85,6 +86,7 @@ function(pto_example_cube NAME)
     target_include_directories(${NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../include/
         ${PROJECT_SOURCE_DIR}/../../../../tests/common
+        ${PROJECT_BINARY_DIR}
     )
 
     target_link_directories(${NAME} PUBLIC

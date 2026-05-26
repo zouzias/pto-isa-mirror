@@ -10,6 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "acl/acl.h"
 #include "test_common.h"
+#include "generated_cases.h"
 using namespace std;
 using namespace PtoTestCommon;
 
@@ -19,7 +20,7 @@ void LaunchGEMME2E(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template <typename T, typename U, typename S, uint32_t blockDim, uint32_t m, uint32_t k, uint32_t n,
           uint32_t singleCoreM, uint32_t singleCoreK, uint32_t singleCoreN, uint32_t baseM, uint32_t baseK,
           uint32_t baseN, uint32_t stepM, uint32_t stepKa, uint32_t stepKb, uint32_t stepN>
-void GemmE2E()
+bool GemmE2E()
 {
     size_t aFileSize = m * k * sizeof(U); // uint16_t represent half
     size_t bFileSize = k * n * sizeof(S); // uint16_t represent half
@@ -75,25 +76,13 @@ void GemmE2E()
     } else {
         printf("test failed\n");
     }
+    return ret;
 }
 
 int main()
 {
-    constexpr uint32_t m = 6144;
-    constexpr uint32_t k = 6144;
-    constexpr uint32_t n = 6144;
-    constexpr uint32_t singleCoreM = 1536;
-    constexpr uint32_t singleCoreK = 6144;
-    constexpr uint32_t singleCoreN = 1024;
-    constexpr uint32_t blockDim = 24;
-    constexpr uint32_t baseM = 128;
-    constexpr uint32_t baseK = 64;
-    constexpr uint32_t baseN = 128;
-    constexpr uint32_t stepM = 1;
-    constexpr uint32_t stepKa = 4;
-    constexpr uint32_t stepKb = 4;
-    constexpr uint32_t stepN = 1;
-
-    GemmE2E<float, uint16_t, uint16_t, blockDim, m, k, n, singleCoreM, singleCoreK, singleCoreN, baseM, baseK, baseN,
-            stepM, stepKa, stepKb, stepN>();
+    bool ok = GemmE2E<float, uint16_t, uint16_t, kGemmBlockDim, kGemmM, kGemmK, kGemmN, kGemmSingleCoreM,
+                      kGemmSingleCoreK, kGemmSingleCoreN, kGemmBaseM, kGemmBaseK, kGemmBaseN, kGemmStepM,
+                      kGemmStepKa, kGemmStepKb, kGemmStepN>();
+    return ok ? 0 : 1;
 }

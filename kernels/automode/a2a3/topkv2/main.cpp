@@ -10,6 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include "generated_cases.h"
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -124,11 +125,7 @@ bool Topk()
 
 int main()
 {
-    constexpr int gShape3 = 4800;
-    constexpr int gShape4 = 1024;
-    constexpr int gWholeShape3 = 4800;
-    constexpr int gWholeShape4 = 1280;
-    constexpr int topk = 1000;
-    bool ok = Topk<float, 1, 1, 1, gShape3, gShape4, 1, 1, 1, gWholeShape3, gWholeShape4, topk>();
+    bool ok = Topk<float, 1, 1, 1, kTopkv2GShape3, kTopkv2GShape4, 1, 1, 1, kTopkv2GWholeShape3,
+                    kTopkv2GWholeShape4, kTopkv2TopK>();
     return ok ? 0 : 1;
 }

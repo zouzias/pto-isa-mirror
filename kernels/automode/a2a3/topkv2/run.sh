@@ -9,10 +9,8 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 
-python ./scripts/gen_data.py
-
-SHORT=r:,v:,C:,
-LONG=run-mode:,soc-version:,compiler:,
+SHORT=r:,v:,C:,a:,
+LONG=run-mode:,soc-version:,compiler:,cases:,
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 while :
@@ -26,6 +24,9 @@ do
             shift 2;;
         (-C | --compiler )
             CMAKE_COMPILER="$2"
+            shift 2;;
+        (-a | --cases )
+            CASES_RAW="$2"
             shift 2;;
         (--)
             shift;
@@ -50,6 +51,15 @@ fi
 
 rm -rf build
 mkdir build
+
+GEN_CASE_ARGS=()
+if [[ -n "${CASES_RAW:-}" ]]; then
+    GEN_CASE_ARGS+=(--cases "${CASES_RAW}")
+fi
+
+python3 ./scripts/generate_cases.py "${GEN_CASE_ARGS[@]}"
+python3 ./scripts/gen_data.py
+
 cd build
 
 export LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib:$LD_LIBRARY_PATH

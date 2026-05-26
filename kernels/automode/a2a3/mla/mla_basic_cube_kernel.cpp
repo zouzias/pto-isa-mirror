@@ -50,19 +50,20 @@
 
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
+#include "generated_cases.h"
 
 using namespace pto;
 
 namespace mla_basic_cfg {
 
 // Static configuration. Must match scripts/gen_data.py and main.cpp.
-constexpr unsigned kBatch    = 1;
-constexpr unsigned kSeqLen   = 128;   // matches kTileM exactly -> single M tile
-constexpr unsigned kHidden   = 4096;
-constexpr unsigned kNumHeads = 32;
-constexpr unsigned kHeadDim  = 128;
-constexpr unsigned kLatent   = 64;
-constexpr unsigned kRopeDim  = 64;    // DeepSeek-V2 decoupled rope dim
+constexpr unsigned kBatch    = kMlaBatch;
+constexpr unsigned kSeqLen   = kMlaSeqLen;   // matches kTileM exactly -> single M tile
+constexpr unsigned kHidden   = kMlaHidden;
+constexpr unsigned kNumHeads = kMlaNumHeads;
+constexpr unsigned kHeadDim  = kMlaHeadDim;
+constexpr unsigned kLatent   = kMlaLatent;
+constexpr unsigned kRopeDim  = kMlaRopeDim;    // DeepSeek-V2 decoupled rope dim
 
 constexpr unsigned kTileM    = 128;
 constexpr unsigned kInnerK   = 64;

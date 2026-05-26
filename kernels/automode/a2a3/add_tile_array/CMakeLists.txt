@@ -81,6 +81,7 @@ function(pto_example_vec_auto NAME)
     )
     target_include_directories(${NAME}_kernel PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../include/
+        ${PROJECT_BINARY_DIR}
     )
     target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
 
@@ -89,6 +90,7 @@ function(pto_example_vec_auto NAME)
     target_include_directories(${NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../include/
         ${PROJECT_SOURCE_DIR}/../../../../tests/common
+        ${PROJECT_BINARY_DIR}
     )
 
     target_link_directories(${NAME} PUBLIC
