@@ -117,8 +117,6 @@ bool VerboseRuntimeLogs(const MoeCombineArgs &args)
 }
 
 struct DeviceBuffers {
-    void *inputA = nullptr;
-    void *expertIdx = nullptr;
     void *probs = nullptr;
     void *outputC = nullptr;
     void *workspace = nullptr;
@@ -342,15 +340,9 @@ void AllocateLocalBuffers(const MoeCombineArgs &args, const WorkspaceLayout &wor
         PrintStage(state->rank, "allocate_buffers", "begin");
     }
     const MoeCombineShape &shape = args.shape;
-    size_t inputBytes = BytesOfHalfVector(static_cast<size_t>(shape.m) * shape.k);
-    size_t expertIdxBytes = BytesOfI32Vector(static_cast<size_t>(shape.m) * shape.topK);
     size_t probsBytes = BytesOfFloatVector(static_cast<size_t>(shape.m) * shape.topK);
     size_t outputBytes = BytesOfHalfVector(static_cast<size_t>(shape.m) * shape.k);
     size_t expertOutputBytes = BytesOfHalfVector(static_cast<size_t>(shape.maxOutputSize) * shape.k);
-    CheckAcl(aclrtMalloc(&state->buffers.inputA, inputBytes, ACL_MEM_MALLOC_HUGE_FIRST),
-             "rank " + std::to_string(state->rank) + " aclrtMalloc inputA");
-    CheckAcl(aclrtMalloc(&state->buffers.expertIdx, expertIdxBytes, ACL_MEM_MALLOC_HUGE_FIRST),
-             "rank " + std::to_string(state->rank) + " aclrtMalloc expertIdx");
     CheckAcl(aclrtMalloc(&state->buffers.probs, probsBytes, ACL_MEM_MALLOC_HUGE_FIRST),
              "rank " + std::to_string(state->rank) + " aclrtMalloc probs");
     CheckAcl(aclrtMalloc(&state->buffers.outputC, outputBytes, ACL_MEM_MALLOC_HUGE_FIRST),
@@ -375,15 +367,7 @@ void CopyInputsToDevice(const MoeCombineArgs &args, RuntimeState *state)
         PrintStage(state->rank, "copy_inputs", "begin");
     }
     const MoeCombineShape &shape = args.shape;
-    std::vector<uint16_t> inputHalf = FloatVectorToHalfBits(state->inputs.inputA);
-    size_t inputBytes = BytesOfHalfVector(inputHalf.size());
-    size_t expertIdxBytes = BytesOfI32Vector(state->inputs.expertIdx.size());
     size_t probsBytes = BytesOfFloatVector(state->inputs.probs.size());
-    CheckAcl(aclrtMemcpy(state->buffers.inputA, inputBytes, inputHalf.data(), inputBytes, ACL_MEMCPY_HOST_TO_DEVICE),
-             "rank " + std::to_string(state->rank) + " copy inputA");
-    CheckAcl(aclrtMemcpy(state->buffers.expertIdx, expertIdxBytes, state->inputs.expertIdx.data(), expertIdxBytes,
-                         ACL_MEMCPY_HOST_TO_DEVICE),
-             "rank " + std::to_string(state->rank) + " copy expertIdx");
     CheckAcl(aclrtMemcpy(state->buffers.probs, probsBytes, state->inputs.probs.data(), probsBytes,
                          ACL_MEMCPY_HOST_TO_DEVICE),
              "rank " + std::to_string(state->rank) + " copy probs");
@@ -733,12 +717,6 @@ void Cleanup(RuntimeState *state)
         state->hcclActive = false;
     }
     if (state->buffersAllocated) {
-        if (state->buffers.inputA != nullptr) {
-            aclrtFree(state->buffers.inputA);
-        }
-        if (state->buffers.expertIdx != nullptr) {
-            aclrtFree(state->buffers.expertIdx);
-        }
         if (state->buffers.probs != nullptr) {
             aclrtFree(state->buffers.probs);
         }
