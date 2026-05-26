@@ -342,7 +342,9 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
     size_t syncWsSize = static_cast<size_t>(blockNum) * SYNCALL_SOFT_SLOT_INT32 * sizeof(int32_t);
 
     // Allocate in HCCL window (shmem)
-    size_t winOffset = 0;
+    // Skip first 256 bytes of window to avoid potential hardware issue
+    // at window base address (observed: MTE2 reads zeros at base+16..31)
+    size_t winOffset = 256;
     void *devShmem = WindowAlloc(ctx.hostCtx.windowsIn[rankId], winOffset, shmemSize);
 
     // Allocate regular device memory for outputs and routing tables
@@ -359,7 +361,7 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
 
     // Copy data to device
     aclrtMemcpy(devShmem, shmemSize, localShmemData.data(), shmemSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemset(devGmA, gmASize, 0xAA, gmASize);  // fill with 0xAA to detect cache vs TSTORE issues
+    aclrtMemset(devGmA, gmASize, 0, gmASize);  // restore to 0 for clean verification
     aclrtMemset(devGmScale, gmScaleSize, 0, gmScaleSize);
     aclrtMemset(devSyncWs, syncWsSize, 0, syncWsSize);
     aclrtMemcpy(devCumsumMM, cumsumSize, routing.cumsumMM.data(), cumsumSize, ACL_MEMCPY_HOST_TO_DEVICE);
