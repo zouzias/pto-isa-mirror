@@ -202,6 +202,7 @@ set(ALL_TESTCASES
     trowexpand_tdiv
     trems
     tfmods
+    tcolscatter
     tscatter
     tneg
     tcolexpandadd
