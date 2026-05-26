@@ -173,28 +173,40 @@ __global__ AICORE void runRouterMatmul(
 
     static_assert(kH % blockAlign == 0, "router_matmul currently requires kH to be block-aligned.");
 
+    // Double-buffering budget adjustment: L1 (aMatTile/bMatTile) and L0A/L0B
+    // (aTile/bTile) each need `kNumBuffers` lanes, so the per-lane budget
+    // available to the choose* helpers is the total memory-level budget divided
+    // by kNumBuffers. cTile (L0C) is single-buffered, so kL0CBudgetBytes is
+    // NOT divided.
+    constexpr int kPerLaneWorkingSetBytes = kWorkingSetBudgetBytes / kNumBuffers;
+    constexpr int kPerLaneL0ABytes        = kL0ABudgetBytes        / kNumBuffers;
+    constexpr int kPerLaneL0BBytes        = kL0BBudgetBytes        / kNumBuffers;
+
     constexpr int M_raw = chooseMBlock(M_max, N, blockAlign, static_cast<int>(sizeof(TIn)),
                                        static_cast<int>(sizeof(TWeight)), static_cast<int>(sizeof(TOut)),
-                                       kWorkingSetBudgetBytes, mAlign);
+                                       kPerLaneWorkingSetBytes, mAlign);
     static_assert(M_raw >= mAlign,
-                  "No valid M tile: full-row W_router plus one aligned X/logits tile exceeds the budget.");
+                  "No valid M tile: full-row W_router plus one aligned X/logits tile exceeds the per-lane budget "
+                  "(kWorkingSetBudgetBytes / kNumBuffers).");
     constexpr int M = (M_raw >= mAlign) ? M_raw : mAlign;
     static_assert(static_cast<size_t>(M) * N * sizeof(TOut) <= kL0CBudgetBytes,
                   "Accumulator tile exceeds L0C; reduce kTileM or kE.");
 
     constexpr int K_l1_raw =
         chooseKPanel(K, M, N, static_cast<int>(sizeof(TIn)), static_cast<int>(sizeof(TWeight)),
-                     static_cast<int>(sizeof(TOut)), kWorkingSetBudgetBytes, blockAlign);
+                     static_cast<int>(sizeof(TOut)), kPerLaneWorkingSetBytes, blockAlign);
     static_assert(K_l1_raw >= blockAlign,
-                  "No valid K_l1: X panel + full-row W_router panel + logits tile exceeds the budget.");
+                  "No valid K_l1: X panel + full-row W_router panel + logits tile exceeds the per-lane budget "
+                  "(kWorkingSetBudgetBytes / kNumBuffers).");
     constexpr int K_l1 = (K_l1_raw >= blockAlign) ? K_l1_raw : blockAlign;
     static_assert((static_cast<size_t>(M) * K_l1 * sizeof(TIn) +
                    static_cast<size_t>(K_l1) * N * sizeof(TWeight) +
-                   static_cast<size_t>(M) * N * sizeof(TOut)) <= kWorkingSetBudgetBytes,
-                  "Working-set budget exceeded: X + full-row W_router + logits must fit in budget.");
+                   static_cast<size_t>(M) * N * sizeof(TOut)) <= kPerLaneWorkingSetBytes,
+                  "Per-lane working-set budget exceeded: X + full-row W_router + logits must fit in "
+                  "kWorkingSetBudgetBytes / kNumBuffers.");
 
-    constexpr int K_l0_max_L0A = kL0ABudgetBytes / (M * static_cast<int>(sizeof(TIn)));
-    constexpr int K_l0_max_L0B = kL0BBudgetBytes / (N * static_cast<int>(sizeof(TWeight)));
+    constexpr int K_l0_max_L0A = kPerLaneL0ABytes / (M * static_cast<int>(sizeof(TIn)));
+    constexpr int K_l0_max_L0B = kPerLaneL0BBytes / (N * static_cast<int>(sizeof(TWeight)));
     constexpr int K_l0_max = minInt(K_l0_max_L0A, K_l0_max_L0B);
     constexpr int K_l0_raw = chooseDivisibleKBlock(K_l1, K_l0_max, blockAlign);
     static_assert(K_l0_raw >= blockAlign,
@@ -315,12 +327,14 @@ void launchRouterMatmul(uint8_t *logits, uint8_t *x, uint8_t *w_router, void *st
     constexpr int mAlign = 16;
     constexpr int M_max = ((router_matmul_cfg::kTileM + mAlign - 1) / mAlign) * mAlign;
     constexpr int N = ((router_matmul_cfg::kE + blockAlign - 1) / blockAlign) * blockAlign;
+    // Must match the per-lane budget in runRouterMatmul: with kNumBuffers L1
+    // lanes, each lane gets kWorkingSetBudgetBytes / kNumBuffers.
     constexpr int M_raw = router_matmul_host_cfg::chooseMBlock(
         M_max, N, blockAlign,
         static_cast<int>(sizeof(TIn)),
         static_cast<int>(sizeof(TWeight)),
         static_cast<int>(sizeof(TOut)),
-        router_matmul_cfg::kWorkingSetBudgetBytes, mAlign);
+        router_matmul_cfg::kWorkingSetBudgetBytes / kNumBuffers, mAlign);
     constexpr int M = (M_raw >= mAlign) ? M_raw : mAlign;
     constexpr unsigned kNumMTiles =
         (router_matmul_cfg::kT + static_cast<unsigned>(M) - 1) / static_cast<unsigned>(M);
