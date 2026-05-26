@@ -765,6 +765,11 @@ TEST_F(TQUANTTEST, case_mxfp4_e2m1_nv_bf16_2x256_mixed_nd)
     test_tquant_mxfp4_e2m1_bf16<2, 256, pto::QuantScaleAlg::NV>();
 }
 
+TEST_F(TQUANTTEST, case_mxfp4_e2m1_nv_bf16_2x128_static4x128_exp2d_nd)
+{
+    test_tquant_mxfp4_e2m1_bf16_exp2d<4, 128, 2, 128, pto::QuantScaleAlg::NV>();
+}
+
 // 2D exp fuzz: FP4 E2M1 covers bf16/fp16 x OCP/NV across the same shape regimes.
 #define TQUANT_MXFP4_EXP2D_FUZZ_OCP(ID, TEST_DTYPE, STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS)                           \
     TEST_F(                                                                                                                     \

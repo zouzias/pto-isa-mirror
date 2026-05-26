@@ -782,6 +782,10 @@ def make_mxfp4_e2m1_data(config, patterns):
             end = min(begin + 32, total)
             pattern = group_patterns[group % len(group_patterns)]
             values[begin:end] = np.resize(pattern, end - begin)
+    elif case_suffix == "static4x128_exp2d":
+        values = make_mx_exp2d_fuzz_values(
+            config.valid_rows, config.valid_cols, dtype, seed=20260602, max_abs=768.0
+        ).reshape(-1)
     elif case_suffix is not None and "_exp2d_fuzz" in case_suffix:
         values = make_mx_exp2d_fuzz_values(
             config.valid_rows, config.valid_cols, dtype, get_exp2d_fuzz_seed(case_suffix), max_abs=768.0
@@ -1235,6 +1239,7 @@ if __name__ == "__main__":
         TQuantParams("mxfp4_e2m1", 2, 256, mode="nd", dtype=bfloat16, case_suffix="boundary", scale_alg="nv"),
         TQuantParams("mxfp4_e2m1", 2, 256, mode="nd", dtype=bfloat16, case_suffix="rounding", scale_alg="nv"),
         TQuantParams("mxfp4_e2m1", 2, 256, mode="nd", dtype=bfloat16, case_suffix="mixed", scale_alg="nv"),
+        TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=bfloat16, case_suffix="static4x128_exp2d", scale_alg="nv"),
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=np.float16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=np.float16),
