@@ -192,7 +192,6 @@ PTO_INTERNAL void TColReduceIdxChunk16_32(__ubuf__ typename TileDataOutVal::DTyp
     using TIN = typename TileDataIn::DType;
     using TIDX = typename TileDataOutIdx::DType;
     using IdxRegT = std::conditional_t<sizeof(TIN) == 2, vector_s16, RegTensor<TIDX>>;
-
     IdxRegT vregIndexOld;
     IdxRegT vregIndexNew;
     RegTensor<TIN> vregOld;
@@ -200,19 +199,21 @@ PTO_INTERNAL void TColReduceIdxChunk16_32(__ubuf__ typename TileDataOutVal::DTyp
     MaskReg pregSelect;
 
     constexpr auto distValue =
-        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<TIDX, DistVST::DIST_ONEPT>())>();
+        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<TIDX, DistVST::DIST_NORM>())>();
 
     for (uint16_t j = 0; j < repeatTimes; j++) {
         MaskReg pregCmp;
         MaskReg pregStore0;
         MaskReg pregStore1;
 
-        if constexpr (sizeof(TIN) == 2) {
+        if constexpr (sizeof(TIN) == 2 && !WithVal) {
             pregStore0 = plt_b32(sregValidCol, POST_UPDATE);
             pregStore1 = plt_b32(sregValidCol, POST_UPDATE);
             pregCmp = pregAll;
-        } else {
+        } else if constexpr (sizeof(TIN) == 4) {
             pregCmp = plt_b32(sregValidCol, POST_UPDATE);
+        } else {
+            pregCmp = plt_b16(sregValidCol, POST_UPDATE);
         }
 
         vdup(vregIndexOld, 0, pregCmp, MODE_ZEROING);
@@ -228,11 +229,11 @@ PTO_INTERNAL void TColReduceIdxChunk16_32(__ubuf__ typename TileDataOutVal::DTyp
         if constexpr (sizeof(TIN) == 2 && !WithVal) {
             TColReduceIdxStoreParts(vregIndexOld, dstIdxPtr, j * elementsPerRepeat, pregStore0, pregStore1, pregAll);
         } else {
-            vsts(vregIndexOld, dstIdxPtr, j * elementsPerRepeat, NORM_B32, pregCmp);
+            vsts(vregIndexOld, dstIdxPtr, j * elementsPerRepeat, distValue, pregCmp);
         }
 
         if constexpr (WithVal) {
-            vsts(vregOld, dstValPtr, j * elementsPerRepeat, NORM_B32, pregCmp);
+            vsts(vregOld, dstValPtr, j * elementsPerRepeat, distValue, pregCmp);
         }
     }
 }
