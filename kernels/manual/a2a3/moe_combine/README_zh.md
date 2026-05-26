@@ -75,37 +75,56 @@ expertOutput[本地 experts × 来源 rank 行, K]
 | `signalValue`   | 当前迭代信号 epoch                      |
 
 
+## Kernel 参数语义
+
+```cpp
+MoeCombineKernel(shape, myRank, expertOutput, probs, outputC, peerWindow, hcclCtx, workspace)
+```
+
+| 参数 | 方向 | 类型 | Shape | 说明 |
+|------|------|------|-------|------|
+| `shape` | 入参 | 值传递 | — | 形状描述结构体，见"核心参数"表 |
+| `myRank` | 入参 | uint32 | — | 当前 rank ID（0..ep-1） |
+| `expertOutput` | 入参 | half* | [maxOutputSize, K] | 本 rank 所有 expert 处理完的输出，由 dispatch+FFN 阶段产出 |
+| `probs` | 入参 | float* | [M, topK] | 每个 token 对各 expert 的路由概率 |
+| `outputC` | **出参** | half* | [M, K] | 最终 combine 结果：各 expert 加权和 |
+| `peerWindow` | 入参/中间态 | uint8* | 见下方 layout | HCCL 分配的跨 rank 共享内存窗口 |
+| `hcclCtx` | 入参 | uint8* | — | HCCL 设备上下文，含各 rank 的 window 基地址映射 |
+| `workspace` | 入参/中间态 | uint8* | 见下方 layout | rank 本地工作空间 |
+
+**数据生命周期**：`peerWindow` 中的路由元数据（peerTokenPerExpert、expandedRowIdx）由 dispatch 阶段写入，combine 阶段只读。`ptrD` 区域在 combine 阶段由各 rank 互相写入（Return），然后本地读取（Restore）。
+
 ## 内存布局
 
 ### Workspace（rank 本地）
 
+由 `MakeWorkspaceLayout(shape)` 计算偏移，所有字段 64 字节对齐，顺序排列。
 
-| 字段                     | 类型    | 说明                             |
-| ---------------------- | ----- | ------------------------------ |
-| `localTokenPerExpert`  | int32 | 每 expert token 计数              |
-| `blockTokenPerExpert`  | int32 | 每 block 的 token 分配             |
-| `blockPrefixPerExpert` | int32 | 每 block 前缀和                    |
-| `cumsumPerExpert`      | int32 | 跨 rank 的累积和                    |
-| `dispatchOffset`       | int32 | 本地 expert dispatch 基偏移         |
-| `prevSumBeforeRank`    | int32 | 本 rank 之前的累积 token 数           |
-| `localSync`            | int32 | Soft sync 工作区                  |
-| `floatScratch`         | float | 临时缓冲                           |
-| `dispatchedA`          | half  | dispatch 后的输入（combine fixture） |
-| `ptrDLocal`            | half  | 本地 ptrD 镜像                     |
+| 字段 | 类型 | 元素数 | 说明 |
+|------|------|--------|------|
+| `localTokenPerExpert` | int32 | expertNumPadded | 本 rank 路由到各 expert 的 token 数 |
+| `blockTokenPerExpert` | int32 | aivBlocks × expertNumPadded | 每 AIV block 分配的 token 数 |
+| `blockPrefixPerExpert` | int32 | aivBlocks × expertNumPadded | 每 block 的前缀和（dispatch 用） |
+| `cumsumPerExpert` | int32 | ep × expertNumPadded | 各 src rank 发给各 expert 的累积 token 数，用于计算 ptrD 写入偏移 |
+| `dispatchOffset` | int32 | expertPerRank | 每个本地 expert 在 expertOutput 中的起始行偏移 |
+| `prevSumBeforeRank` | int32 | ep × expertPerRank | 对于每个 (src, localExpert) 对，本 rank 之前所有 rank 的累积行数 |
+| `localSync` | int32 | max(64, aivBlocks × (8 + expertNumPadded)) | SoftSyncAiv 的 GM polling 工作区 |
+| `floatScratch` | float | aivBlocks × tileCols | 临时 float 缓冲（预留） |
+| `dispatchedA` | half | maxOutputSize × K | dispatch 后的 expert 输入（测试 fixture 用） |
+| `ptrDLocal` | half | M × topK × K | 本地 ptrD 镜像（预留） |
 
+### Peer Window（HCCL 共享，每 rank 一份）
 
-### Peer Window（HCCL 共享，每 rank）
+由 `MakePeerWindowLayout(shape)` 计算偏移。每个 rank 拥有一份，其他 rank 通过 `hcclCtx->windowsIn[rank]` 获取远端地址。
 
-
-| 字段                   | 类型    | 说明                    |
-| -------------------- | ----- | --------------------- |
-| `peerTokenPerExpert` | int32 | 路由元数据（ep × expertNum） |
-| `expandedRowIdx`     | int32 | token → ptrD 行映射      |
-| `packedA`            | half  | dispatch 打包数据         |
-| `ptrD`               | half  | return 目标缓冲区          |
-| `countReadySignal`   | int32 | dispatch 就绪信号         |
-| `combineDoneSignal`  | int32 | combine 完成信号          |
-
+| 字段 | 类型 | 元素数 | 写入方 | 读取方 | 说明 |
+|------|------|--------|--------|--------|------|
+| `peerTokenPerExpert` | int32 | ep × expertNumPadded | dispatch 阶段 | combine Return | 各 src rank 发给各 expert 的 token 数（路由表） |
+| `expandedRowIdx` | int32 | M × topK | dispatch 阶段 | combine Restore | 每个 (token, slot) 在 ptrD 中的行号（-1 表示无效路由） |
+| `packedA` | half | M × topK × K | dispatch 阶段 | — | dispatch 打包数据（combine 不使用） |
+| `ptrD` | half | M × topK × K | combine Return | combine Restore | 各 expert 处理后的结果写回区，按 expandedRowIdx 索引 |
+| `countReadySignal` | int32 | ep | dispatch 阶段 | dispatch 阶段 | dispatch 就绪信号（combine 不使用） |
+| `combineDoneSignal` | int32 | ep | combine Return | combine Wait | 跨 rank 完成信号：rank i 写 peer[j].combineDoneSignal[i]，rank j 等待所有 signal |
 
 所有字段 64 字节对齐。host（`layout.h`）和 device 使用相同计算逻辑。
 
