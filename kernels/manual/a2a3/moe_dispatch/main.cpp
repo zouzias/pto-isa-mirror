@@ -65,7 +65,6 @@ struct PerfStats {
 
 struct IterationTiming {
     double dispatchE2eUs = 0.0;
-    double totalE2eUs = 0.0;
 };
 
 PerfStats CalcStats(const std::vector<double> &samples)
@@ -133,7 +132,6 @@ struct RuntimeState {
     DeviceBuffers buffers;
     bool buffersAllocated = false;
     double dispatchE2eUs = 0.0;
-    double totalE2eUs = 0.0;
     uint32_t currentSignalValue = 1;
 };
 
@@ -162,7 +160,6 @@ void PrintProfileSummary(const MoeDispatchArgs &args, RuntimeState *state,
         for (uint32_t rank = 0; rank < state->size; ++rank) {
             const IterationTiming &rankTiming = allTimings[static_cast<size_t>(rank) * measuredIters + iter];
             timing.dispatchE2eUs = std::max(timing.dispatchE2eUs, rankTiming.dispatchE2eUs);
-            timing.totalE2eUs = std::max(timing.totalE2eUs, rankTiming.totalE2eUs);
         }
         globalTimings[iter] = timing;
     }
@@ -178,7 +175,6 @@ void PrintProfileSummary(const MoeDispatchArgs &args, RuntimeState *state,
               << " routed tokens(all ranks)=" << static_cast<uint64_t>(args.shape.ep) * args.shape.m * args.shape.topK
               << std::endl;
     PrintOneTimingStats("dispatch_e2e", globalTimings, &IterationTiming::dispatchE2eUs);
-    PrintOneTimingStats("total_e2e", globalTimings, &IterationTiming::totalE2eUs);
     std::cout << "  verify=" << (args.runtime.verify == 0 ? "SKIP" : "PASS") << std::endl;
     std::cout << "  note: warmup iterations are excluded; each measured sample is the max across ranks." << std::endl;
     std::cout << "================================================================\n" << std::endl;
@@ -832,7 +828,6 @@ int main(int argc, char **argv)
                 std::cout << "rank=" << state.rank << " iteration=" << (iter - args.runtime.warmup)
                           << " phase=measure begin" << std::endl;
             }
-            auto totalStart = std::chrono::steady_clock::now();
             moe_dispatch::ClearDeviceState(args, workspaceLayout, peerWindowLayout, &state);
             moe_dispatch::RunDispatch(args, workspaceLayout, peerWindowLayout, &state);
             if (args.runtime.dispatchMetadataOnly != 0) {
@@ -841,12 +836,9 @@ int main(int argc, char **argv)
                 moe_dispatch::Cleanup(&state);
                 return 0;
             }
-            auto totalEnd = std::chrono::steady_clock::now();
-            state.totalE2eUs = moe_dispatch::UsSince(totalStart, totalEnd);
             if (!isWarmup) {
                 moe_dispatch::IterationTiming timing;
                 timing.dispatchE2eUs = state.dispatchE2eUs;
-                timing.totalE2eUs = state.totalE2eUs;
                 measureTimings.push_back(timing);
                 if (verbose) {
                     std::cout << "rank=" << state.rank << " iteration=" << (iter - args.runtime.warmup)
