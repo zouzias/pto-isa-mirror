@@ -17,6 +17,7 @@ import numpy as np
 
 np.random.seed(19)
 
+
 def gen_golden_data(case_name, gInfo):
     data_type = gInfo.datatype
     gShape0 = gInfo.gShape0
