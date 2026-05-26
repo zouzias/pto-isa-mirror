@@ -17,31 +17,23 @@ import argparse
 import fnmatch
 import re
 
+
 def run_command(command, cwd=None, check=True):
     try:
         print(f"run command: {' '.join(command)}")
-        result = subprocess.run(
-            command,
-            cwd=cwd,
-            check=check,
-            stdout=None,
-            stderr=None,
-            text=True
-        )
+        result = subprocess.run(command, cwd=cwd, check=check, stdout=None, stderr=None, text=True)
         return ""
     except subprocess.CalledProcessError as e:
         print(f"run command failed with return code {e.returncode}")
         raise
 
+
 def set_env_variables(run_mode, soc_version):
     if run_mode == "sim":
         ld_lib_path = os.environ.get("LD_LIBRARY_PATH", "")
         if ld_lib_path:
-            filtered_paths = [
-                path for path in ld_lib_path.split(':')
-                if '/runtime/lib64' not in path
-            ]
-            new_ld_lib = ':'.join(filtered_paths)
+            filtered_paths = [path for path in ld_lib_path.split(":") if "/runtime/lib64" not in path]
+            new_ld_lib = ":".join(filtered_paths)
             os.environ["LD_LIBRARY_PATH"] = new_ld_lib
 
         ascend_home = os.environ.get("ASCEND_HOME_PATH")
@@ -61,33 +53,41 @@ def set_env_variables(run_mode, soc_version):
                 executable=shutil.which("bash") or "bash",
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
             )
             for line in result.stdout.splitlines():
-                if '=' in line:
-                    key, value = line.split('=', 1)
+                if "=" in line:
+                    key, value = line.split("=", 1)
                     os.environ[key] = value
         else:
             print(f"warning: not found {setenv_path}")
 
-        _, simulator_lib_path = get_simulator_info(ascend_home, soc_version)
+        resolved_soc, resolved_dir = resolve_simulator_dir(ascend_home, soc_version)
+        if resolved_dir:
+            simulator_lib_path = os.path.join(resolved_dir, "lib")
+        else:
+            simulator_lib_path = os.path.join(ascend_home, "tools", "simulator", soc_version, "lib")
         os.environ["LD_LIBRARY_PATH"] = f"{simulator_lib_path}:{os.environ.get('LD_LIBRARY_PATH', '')}"
 
 
-def get_simulator_info(ascend_home, soc_version):
-    simulator_home = os.path.join(ascend_home, "tools", "simulator")
+def get_simulator_roots(ascend_home):
+    return [
+        os.path.join(ascend_home, "tools", "simulator"),
+        os.path.join(ascend_home, "x86_64-linux", "simulator"),
+        os.path.join(ascend_home, "aarch64-linux", "simulator"),
+    ]
+
+
+def resolve_simulator_dir(ascend_home, soc_version):
     soc_candidates = [soc_version]
     if soc_version == "Ascend950PR_9599":
-        soc_candidates.extend(["Ascend910_9599"])
-    for candidate in soc_candidates:
-        candidate_dir = os.path.join(simulator_home, candidate)
-        if os.path.isdir(candidate_dir):
-            if candidate == "Ascend950PR_9599":
-                candidate_dir = os.path.join(candidate_dir, "camodel")
-            else:
-                candidate_dir = os.path.join(candidate_dir, "lib")
-            return candidate, candidate_dir
-    return soc_version, os.path.join(simulator_home, soc_version, "lib")
+        soc_candidates.extend(["Ascend910_9599", "Ascend910B1"])
+    for simulator_root in get_simulator_roots(ascend_home):
+        for candidate in soc_candidates:
+            candidate_dir = os.path.join(simulator_root, candidate)
+            if os.path.isdir(candidate_dir):
+                return candidate, candidate_dir
+    return soc_version, ""
 
 
 def build_project(run_mode, soc_version, testcase="all", debug_enable=False, auto_enable=False):
@@ -101,45 +101,30 @@ def build_project(run_mode, soc_version, testcase="all", debug_enable=False, aut
 
     # Resolve SOC_VERSION for simulator path (e.g. Ascend950PR_9599 -> Ascend910_9599)
     ascend_home = os.environ.get("ASCEND_HOME_PATH", "")
+    cmake_soc = soc_version
     if run_mode == "sim" and ascend_home:
-        cmake_soc, _ = get_simulator_info(ascend_home, soc_version)
-    else:
-        cmake_soc = soc_version
+        resolved_soc, resolved_dir = resolve_simulator_dir(ascend_home, soc_version)
+        if resolved_dir:
+            cmake_soc = resolved_soc
 
     try:
-        cmake_cmd = [
-            "cmake",
-            f"-DRUN_MODE={run_mode}",
-            f"-DSOC_VERSION={cmake_soc}",
-            f"-DTEST_CASE={testcase}",
-            ".."
-        ]
-        if debug_enable :
+        cmake_cmd = ["cmake", f"-DRUN_MODE={run_mode}", f"-DSOC_VERSION={cmake_soc}", f"-DTEST_CASE={testcase}", ".."]
+        if debug_enable:
             cmake_cmd.append("-DDEBUG_MODE=ON")
         if auto_enable:
             cmake_cmd.append("-DAUTO_MODE=ON")
 
         subprocess.run(
-            cmake_cmd,
-            cwd=build_dir,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True
+            cmake_cmd, cwd=build_dir, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
         )
 
-        make_cmd = ["make", "VERBOSE=1"] # print compile log for debug
+        make_cmd = ["make", "VERBOSE=1"]  # print compile log for debug
         # make_cmd = ["make"]
         cpu_count = os.cpu_count() or 4
         make_cmd.extend(["-j", str(cpu_count)])
 
         result = subprocess.run(
-            make_cmd,
-            cwd=build_dir,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True
+            make_cmd, cwd=build_dir, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
         )
         print("compile process:\n", result.stdout)
 
@@ -148,6 +133,7 @@ def build_project(run_mode, soc_version, testcase="all", debug_enable=False, aut
         raise
     finally:
         os.chdir(original_dir)
+
 
 def run_gen_data(golden_path):
     original_dir = os.getcwd()
@@ -186,12 +172,10 @@ def list_gtest_cases(testcase_dir, gtest_filter="*"):
     if "-" in gtest_filter:
         pos, neg = gtest_filter.split("-", 1)
         neg_patterns = [p for p in neg.split(":") if p]
-        tests = [t for t in tests
-                 if not any(fnmatch.fnmatch(t, p) for p in neg_patterns)]
+        tests = [t for t in tests if not any(fnmatch.fnmatch(t, p) for p in neg_patterns)]
     elif gtest_filter != "*":
         patterns = [p for p in gtest_filter.split(":") if p]
-        tests = [t for t in tests
-                 if any(fnmatch.fnmatch(t, p) for p in patterns)]
+        tests = [t for t in tests if any(fnmatch.fnmatch(t, p) for p in patterns)]
     return tests
 
 
@@ -206,6 +190,7 @@ def detect_npu_count():
     running on a host without NPUs — let downstream checks decide).
     """
     import glob
+
     pattern = re.compile(r"^/dev/davinci(\d+)$")
     devs = [p for p in glob.glob("/dev/davinci*") if pattern.match(p)]
     if not devs:
@@ -223,6 +208,7 @@ def get_gtest_filter_for_nranks(nranks):
         return "*8Ranks*:*8ranks*"
     return "*"
 
+
 def find_mpirun():
     """Find mpirun executable, checking MPI_HOME and common paths."""
     mpi_home = os.environ.get("MPI_HOME", "")
@@ -231,11 +217,7 @@ def find_mpirun():
         if os.path.isfile(candidate):
             return candidate
 
-    candidates = [
-        "/usr/local/mpich/bin/mpirun",
-        "/usr/local/bin/mpirun",
-        "/usr/bin/mpirun",
-    ]
+    candidates = ["/usr/local/mpich/bin/mpirun", "/usr/local/bin/mpirun", "/usr/bin/mpirun"]
     for c in candidates:
         if os.path.isfile(c):
             return c
@@ -245,6 +227,7 @@ def find_mpirun():
         return result
 
     return None
+
 
 def run_binary(testcase, run_mode, args="all", is_comm=False, nranks=2):
     original_dir = os.getcwd()
@@ -259,6 +242,10 @@ def run_binary(testcase, run_mode, args="all", is_comm=False, nranks=2):
 
         cmd = ["./" + testcase]
         if args != "all":
+            if run_mode == "sim":
+                camodel_log_path = get_camodel_log_path(args)
+                os.makedirs(camodel_log_path, exist_ok=True)
+                os.environ["CAMODEL_LOG_PATH"] = camodel_log_path
             cmd.append("--gtest_filter=" + args)
 
         if is_comm:
@@ -266,7 +253,8 @@ def run_binary(testcase, run_mode, args="all", is_comm=False, nranks=2):
             if not mpirun:
                 raise RuntimeError(
                     "mpirun not found. Install MPICH/OpenMPI or set MPI_HOME env.\n"
-                    "Also set MPI_LIB_PATH to point to libmpi.so for runtime loading.")
+                    "Also set MPI_LIB_PATH to point to libmpi.so for runtime loading."
+                )
             mpi_cmd = [mpirun, "-n", str(nranks)]
             try:
                 ver = subprocess.run([mpirun, "--version"], capture_output=True, text=True)
@@ -290,6 +278,7 @@ def run_binary(testcase, run_mode, args="all", is_comm=False, nranks=2):
     finally:
         os.chdir(original_dir)
 
+
 def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description="执行st脚本")
@@ -297,10 +286,12 @@ def main():
     parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 / a5 / kirin9030 / kirinX90")
     parser.add_argument("-t", "--testcase", required=True, help="需要执行的用例")
     parser.add_argument("-g", "--gtest_filter", required=False, help="可选 需要执行的具体case名")
-    parser.add_argument("-d", "--debug-enable", action='store_true', help="开启debug检查")
-    parser.add_argument("-a", "--auto-mode-enable", action='store_true', help="开启auto模式")
-    parser.add_argument("-w", "--without-build", action='store_true', help="关闭编译（需要预先编译）")
-    parser.add_argument("-n", "--nranks", type=int, default=8, help="comm测试的最大MPI rank数量（默认8，自动按2/4/8分轮执行）")
+    parser.add_argument("-d", "--debug-enable", action="store_true", help="开启debug检查")
+    parser.add_argument("-a", "--auto-mode-enable", action="store_true", help="开启auto模式")
+    parser.add_argument("-w", "--without-build", action="store_true", help="关闭编译（需要预先编译）")
+    parser.add_argument(
+        "-n", "--nranks", type=int, default=8, help="comm测试的最大MPI rank数量（默认8，自动按2/4/8分轮执行）"
+    )
 
     args = parser.parse_args()
     default_soc_version = "Ascend910B1"
@@ -316,7 +307,7 @@ def main():
     testcase = args.testcase
     is_comm = testcase.startswith("comm/")
     if is_comm:
-        testcase = testcase[len("comm/"):]
+        testcase = testcase[len("comm/") :]
         if not testcase:
             raise ValueError("comm/ 后必须指定用例名")
 
@@ -332,9 +323,9 @@ def main():
             target_dir = target_dir + "/npu/a2a3/comm/st"
         elif args.soc_version == "a3":
             target_dir = target_dir + "/npu/a2a3/src/st"
-        elif args.soc_version == "kirin9030" or args.soc_version == "kirinX90": # kirin9030 与 kirinX90 共享代码
+        elif args.soc_version == "kirin9030" or args.soc_version == "kirinX90":  # kirin9030 与 kirinX90 共享代码
             target_dir = target_dir + "/npu/kirin9030/src/st"
-        else : # a5
+        else:  # a5
             target_dir = target_dir + "/npu/a5/src/st"
 
         print(f"target_dir: {target_dir}")
@@ -345,9 +336,7 @@ def main():
 
         # 执行构建
         if args.without_build:
-            subprocess.run(["rm", "-rf", "build/T*"],
-                cwd=original_dir,
-                check=True)
+            subprocess.run(["rm", "-rf", "build/T*"], cwd=original_dir, check=True)
         else:
             build_project(args.run_mode, default_soc_version, testcase, args.debug_enable, args.auto_mode_enable)
 
@@ -365,8 +354,7 @@ def main():
                 if nranks > args.nranks:
                     continue
                 if available_npus is not None and nranks > available_npus:
-                    print(f"[SKIP] {testcase} (nranks={nranks}): "
-                          f"only {available_npus} NPU(s) available")
+                    print(f"[SKIP] {testcase} (nranks={nranks}): only {available_npus} NPU(s) available")
                     continue
                 gtest_filter = get_gtest_filter_for_nranks(nranks)
 
@@ -383,8 +371,7 @@ def main():
                         print(f"============================================================")
                         total_runs += 1
                         try:
-                            run_binary(testcase, args.run_mode, case,
-                                       is_comm=True, nranks=nranks)
+                            run_binary(testcase, args.run_mode, case, is_comm=True, nranks=nranks)
                         except Exception as e:
                             print(f"[ERROR] Testcase failed: {testcase}/{case} (nranks={nranks})")
                             fail_count += 1
@@ -395,8 +382,7 @@ def main():
                     os.environ["GTEST_FILTER"] = gtest_filter
                     total_runs += 1
                     try:
-                        run_binary(testcase, args.run_mode, default_cases,
-                                   is_comm=True, nranks=nranks)
+                        run_binary(testcase, args.run_mode, default_cases, is_comm=True, nranks=nranks)
                     except Exception as e:
                         print(f"[ERROR] Testcase failed: {testcase} (nranks={nranks})")
                         fail_count += 1
@@ -408,13 +394,13 @@ def main():
                 print(f"[ERROR] {fail_count}/{total_runs} run(s) failed.")
                 sys.exit(1)
         else:
-            run_binary(testcase, args.run_mode, default_cases,
-                       is_comm=is_comm, nranks=args.nranks)
+            run_binary(testcase, args.run_mode, default_cases, is_comm=is_comm, nranks=args.nranks)
 
     except Exception as e:
         print(f"run failed: {str(e)}", file=sys.stderr)
         sys.exit(1)
     os.chdir(original_dir)
+
 
 if __name__ == "__main__":
     main()

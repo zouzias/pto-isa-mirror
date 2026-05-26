@@ -1001,6 +1001,59 @@ def generate_case_name(param):
     )
 
 
+EXP2D_FUZZ_CASES = [
+    ("bf16", 17, 64, 17, 64, "fuzz01"),
+    ("bf16", 19, 128, 17, 64, "fuzz02"),
+    ("bf16", 11, 192, 9, 128, "fuzz03"),
+    ("bf16", 19, 256, 17, 64, "fuzz04"),
+    ("bf16", 23, 320, 13, 256, "fuzz05"),
+    ("bf16", 31, 512, 29, 448, "fuzz06"),
+    ("bf16", 37, 768, 31, 640, "fuzz07"),
+    ("bf16", 41, 1024, 39, 960, "fuzz08"),
+    ("bf16", 7, 2048, 5, 1984, "fuzz09"),
+    ("bf16", 3, 4096, 3, 4032, "fuzz10"),
+    ("bf16", 2, 8192, 1, 8192, "fuzz11"),
+    ("bf16", 127, 64, 113, 64, "fuzz12"),
+    ("bf16", 509, 64, 503, 64, "fuzz13"),
+    ("bf16", 257, 128, 251, 64, "fuzz14"),
+    ("bf16", 129, 256, 127, 192, "fuzz15"),
+    ("bf16", 95, 512, 93, 64, "fuzz16"),
+    ("bf16", 71, 768, 67, 704, "fuzz17"),
+    ("bf16", 63, 1024, 61, 128, "fuzz18"),
+    ("bf16", 17, 1536, 15, 1472, "fuzz19"),
+    ("bf16", 33, 2048, 31, 1856, "fuzz20"),
+    ("fp16", 17, 64, 17, 64, "fuzz21"),
+    ("fp16", 19, 192, 17, 128, "fuzz22"),
+    ("fp16", 15, 256, 13, 192, "fuzz23"),
+    ("fp16", 21, 384, 19, 320, "fuzz24"),
+    ("fp16", 27, 512, 25, 448, "fuzz25"),
+    ("fp16", 35, 640, 33, 576, "fuzz26"),
+    ("fp16", 43, 896, 41, 832, "fuzz27"),
+    ("fp16", 55, 1024, 53, 960, "fuzz28"),
+    ("fp16", 8, 2048, 7, 1024, "fuzz29"),
+    ("fp16", 4, 4096, 1, 4096, "fuzz30"),
+    ("fp16", 1, 8192, 1, 8128, "fuzz31"),
+    ("fp16", 191, 64, 181, 64, "fuzz32"),
+    ("fp16", 383, 64, 379, 64, "fuzz33"),
+    ("fp16", 191, 128, 189, 128, "fuzz34"),
+    ("fp16", 127, 256, 125, 64, "fuzz35"),
+    ("fp16", 79, 512, 77, 384, "fuzz36"),
+    ("fp16", 47, 1024, 43, 512, "fuzz37"),
+    ("fp16", 25, 1536, 23, 64, "fuzz38"),
+    ("fp16", 13, 3072, 11, 3008, "fuzz39"),
+    ("fp16", 2, 8192, 2, 4096, "fuzz40"),
+]
+
+
+def make_exp2d_fuzz_params():
+    params = []
+    for dtype_str, static_rows, static_cols, valid_rows, valid_cols, suffix in EXP2D_FUZZ_CASES:
+        dtype = bfloat16 if dtype_str == "bf16" else np.float16
+        case_suffix = f"static{static_rows}x{static_cols}_exp2d_{suffix}"
+        params.append(TQuantParams("mxfp8", valid_rows, valid_cols, mode="nd", dtype=dtype, case_suffix=case_suffix))
+    return params
+
+
 if __name__ == "__main__":
     # Get the absolute path of the script
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1056,6 +1109,10 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 18, 138, mode="nd", dtype=bfloat16),  # padded 18x160 = 2880 -> loop_num=12
         TQuantParams("mxfp8", 1, 192, mode="nd", dtype=bfloat16),  # no pad, 192 elems -> loop_num=1
         TQuantParams("mxfp8", 1, 198, mode="nd", dtype=bfloat16),  # padded 1x224 = 224 -> loop_num=1
+        TQuantParams("mxfp8", 55, 128, mode="nd", dtype=bfloat16, case_suffix="static100x192_exp2d"),
+        TQuantParams("mxfp8", 1, 64, mode="nd", dtype=bfloat16, case_suffix="static16x64_exp2d"),
+        TQuantParams("mxfp8", 17, 192, mode="nd", dtype=bfloat16, case_suffix="static17x256_exp2d"),
+        TQuantParams("mxfp8", 3, 512, mode="nd", dtype=bfloat16, case_suffix="static3x512_exp2d"),
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=bfloat16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=bfloat16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=bfloat16),
@@ -1073,6 +1130,9 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 64, 128, mode="nd", dtype=np.float16, scale_alg="nv"),
         TQuantParams("mxfp8", 128, 128, mode="nd", dtype=np.float16, scale_alg="nv"),
         TQuantParams("mxfp8", 2, 256, mode="nd", dtype=np.float16, case_suffix="boundary", scale_alg="nv"),
+        TQuantParams("mxfp8", 55, 128, mode="nd", dtype=np.float16, case_suffix="static100x192_exp2d"),
+        TQuantParams("mxfp8", 1, 64, mode="nd", dtype=np.float16, case_suffix="static16x64_exp2d"),
+        *make_exp2d_fuzz_params(),
         TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="special"),
         TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="inf_only"),
         TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="subnormal"),
