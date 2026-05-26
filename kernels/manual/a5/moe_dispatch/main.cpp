@@ -359,7 +359,7 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
 
     // Copy data to device
     aclrtMemcpy(devShmem, shmemSize, localShmemData.data(), shmemSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemset(devGmA, gmASize, 0, gmASize);
+    aclrtMemset(devGmA, gmASize, 0xAA, gmASize);  // fill with 0xAA to detect cache vs TSTORE issues
     aclrtMemset(devGmScale, gmScaleSize, 0, gmScaleSize);
     aclrtMemset(devSyncWs, syncWsSize, 0, syncWsSize);
     aclrtMemcpy(devCumsumMM, cumsumSize, routing.cumsumMM.data(), cumsumSize, ACL_MEMCPY_HOST_TO_DEVICE);
