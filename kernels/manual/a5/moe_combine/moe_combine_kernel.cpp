@@ -379,21 +379,6 @@ AICORE inline void RestoreOutputRows(MoeCombineShape shape, LocalPeerWindowView 
     uint32_t tokenBegin = TokenShardBegin(shape.m, blockId, blockNum);
     uint32_t tokenEnd = TokenShardEnd(shape.m, blockId, blockNum);
     for (uint32_t token = tokenBegin; token < tokenEnd; ++token) {
-        for (int32_t col = 0; col < static_cast<int32_t>(shape.k); col += kDefaultTileCols) {
-            int32_t cols = static_cast<int32_t>(shape.k) - col < kDefaultTileCols ?
-                               static_cast<int32_t>(shape.k) - col :
-                               kDefaultTileCols;
-            VecTile<half, kDefaultTileCols> zeroTile(1, cols);
-            TASSIGN(zeroTile, kPingUbAddr);
-            GlobalNd<half> outputGlobal =
-                MakeGlobal2D(output + static_cast<int64_t>(token) * static_cast<int32_t>(shape.k) + col, 1, cols,
-                             static_cast<int32_t>(shape.k));
-            TEXPANDS(zeroTile, static_cast<half>(0.0));
-            set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-            wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-            TSTORE(outputGlobal, zeroTile);
-            WaitStoreTileReusable();
-        }
         for (uint32_t slot = 0; slot < shape.topK; ++slot) {
             uint32_t routeIndex = token * shape.topK + slot;
             int32_t ptrDRow = *(localPeer.expandedRowIdx + routeIndex);
@@ -402,28 +387,39 @@ AICORE inline void RestoreOutputRows(MoeCombineShape shape, LocalPeerWindowView 
             }
             __gm__ half *ptrRow = localPeer.ptrD + static_cast<int64_t>(ptrDRow) * static_cast<int32_t>(shape.k);
             AcquireGmRangeBeforeRead(ptrRow, static_cast<uint64_t>(shape.k) * sizeof(half));
-            float prob = probValues[routeIndex];
-            for (int32_t col = 0; col < static_cast<int32_t>(shape.k); col += kDefaultTileCols) {
-                int32_t cols = static_cast<int32_t>(shape.k) - col < kDefaultTileCols ?
-                                   static_cast<int32_t>(shape.k) - col :
-                                   kDefaultTileCols;
-                VecTile<half, kDefaultTileCols> outTile(1, cols);
-                VecTile<half, kDefaultTileCols> ptrTile(1, cols);
-                TASSIGN(outTile, kPingUbAddr);
-                TASSIGN(ptrTile, kPongUbAddr);
-                GlobalNd<half> outGlobal =
-                    MakeGlobal2D(output + static_cast<int64_t>(token) * static_cast<int32_t>(shape.k) + col, 1, cols,
-                                 static_cast<int32_t>(shape.k));
+        }
+        for (int32_t col = 0; col < static_cast<int32_t>(shape.k); col += kDefaultTileCols) {
+            int32_t cols = static_cast<int32_t>(shape.k) - col < kDefaultTileCols ?
+                               static_cast<int32_t>(shape.k) - col :
+                               kDefaultTileCols;
+            VecTile<half, kDefaultTileCols> outTile(1, cols);
+            VecTile<half, kDefaultTileCols> ptrTile(1, cols);
+            TASSIGN(outTile, kPingUbAddr);
+            TASSIGN(ptrTile, kPongUbAddr);
+            GlobalNd<half> outGlobal =
+                MakeGlobal2D(output + static_cast<int64_t>(token) * static_cast<int32_t>(shape.k) + col, 1, cols,
+                             static_cast<int32_t>(shape.k));
+            TEXPANDS(outTile, static_cast<half>(0.0));
+            pipe_barrier(PIPE_ALL);
+            for (uint32_t slot = 0; slot < shape.topK; ++slot) {
+                uint32_t routeIndex = token * shape.topK + slot;
+                int32_t ptrDRow = *(localPeer.expandedRowIdx + routeIndex);
+                if (ptrDRow < 0) {
+                    continue;
+                }
+                __gm__ half *ptrRow = localPeer.ptrD + static_cast<int64_t>(ptrDRow) * static_cast<int32_t>(shape.k);
                 __gm__ half *ptrChunk = ptrRow + col;
                 GlobalNd<half> ptrGlobal = MakeGlobal2D(ptrChunk, 1, cols, static_cast<int32_t>(shape.k));
                 pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> loadToAxpy;
-                pto::Event<pto::Op::TAXPY, pto::Op::TSTORE_VEC> axpyToStore;
-                TLOAD(ptrTile, ptrGlobal);
-                loadToAxpy = TLOAD(outTile, outGlobal);
-                axpyToStore = TAXPY(outTile, ptrTile, static_cast<half>(prob), loadToAxpy);
-                TSTORE(outGlobal, outTile, axpyToStore);
-                WaitStoreTileReusable();
+                float prob = probValues[routeIndex];
+                loadToAxpy = TLOAD(ptrTile, ptrGlobal);
+                TAXPY(outTile, ptrTile, static_cast<half>(prob), loadToAxpy);
+                pipe_barrier(PIPE_ALL);
             }
+            set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+            wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+            TSTORE(outGlobal, outTile);
+            WaitStoreTileReusable();
         }
     }
 }
