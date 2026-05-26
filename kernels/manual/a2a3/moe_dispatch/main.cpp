@@ -537,10 +537,10 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
         // Read back workspace: cumsumMM, TPE (tokenPerExpert), preSumBeforeRank
         int32_t paddedExpNum = PaddedExpertNum(EP, expertPerRank);
         int32_t expNum = EP * expertPerRank;
-        // Workspace layout: [cumsumMM | PSBR | TPE]
+        // Workspace layout: [cumsumMM | PSBR | TPE(padded)]
         size_t cumsumElems = static_cast<size_t>(EP * expertPerRank);
         size_t psbrElems = static_cast<size_t>(EP * expertPerRank);
-        size_t tpeElems = static_cast<size_t>(EP * expNum);
+        size_t tpeElems = static_cast<size_t>(EP * paddedExpNum);
         size_t totalElems = cumsumElems + psbrElems + tpeElems;
 
         std::vector<int32_t> wsReadback(totalElems, 0);
@@ -553,11 +553,11 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
 
         bool phaseBPass = true;
 
-        // Verify tokenPerExpert
+        // Verify tokenPerExpert (only first expNum elements per row are valid)
         for (int src = 0; src < EP && phaseBPass; ++src) {
             for (int j = 0; j < expNum && phaseBPass; ++j) {
                 int32_t expected = routing.tokenPerExpert[src * expNum + j];
-                int32_t actual = actualTPE[src * expNum + j];
+                int32_t actual = actualTPE[src * paddedExpNum + j];
                 if (actual != expected) {
                     std::cerr << "[PHASE-B FAIL] Rank " << rankId
                               << ": TPE[" << src << "][" << j

@@ -70,11 +70,13 @@ AICORE void MoeDispatchDirect(
     int32_t EP,
     int32_t expertPerRank,
     int32_t maxOutputSize,
-    int64_t offsetA)
+    int64_t offsetA,
+    int32_t tpeRowStride = 0)
 {
     int32_t myRank = static_cast<int32_t>(hcclCtx->rankId);
     int32_t coreIdx = get_block_idx();
     int32_t coreNum = get_block_num();
+    int32_t expNum = (tpeRowStride > 0) ? tpeRowStride : EP * expertPerRank;
 
     constexpr int32_t copyInNum = HIDDEN_SIZE + UB_ALIGN;
 
@@ -127,7 +129,7 @@ AICORE void MoeDispatchDirect(
                 continue;
             }
 
-            int32_t tpeIdx = dstEpIdx * EP * expertPerRank + myRank * expertPerRank + groupIdx;
+            int32_t tpeIdx = dstEpIdx * expNum + myRank * expertPerRank + groupIdx;
             uint32_t rows = static_cast<uint32_t>(tokenPerExpert[tpeIdx]);
 
             if (rowStart + rows > static_cast<uint32_t>(maxOutputSize)) {
@@ -266,6 +268,7 @@ AICORE void MoeDispatchViaGM(
     int32_t myRank = static_cast<int32_t>(hcclCtx->rankId);
     int32_t coreIdx = get_block_idx();
     int32_t coreNum = get_block_num();
+    int32_t expNum = EP * expertPerRank;
 
     constexpr int32_t copyInNum = HIDDEN_SIZE + UB_ALIGN;
     constexpr int32_t TGET_TILE_ROWS = 2;
@@ -308,7 +311,7 @@ AICORE void MoeDispatchViaGM(
                 continue;
             }
 
-            int32_t tpeIdx = dstEpIdx * EP * expertPerRank + myRank * expertPerRank + groupIdx;
+            int32_t tpeIdx = dstEpIdx * expNum + myRank * expertPerRank + groupIdx;
             uint32_t rows = static_cast<uint32_t>(tokenPerExpert[tpeIdx]);
 
             if (rowStart + rows > static_cast<uint32_t>(maxOutputSize)) {
@@ -481,7 +484,6 @@ AICORE void MoeDispatchWithSync(
     int32_t coreNum = get_block_num();
 
     int32_t paddedExpNum = ((EP * expertPerRank) + 7) & ~7;
-    int32_t expNum = EP * expertPerRank;
 
     // UB workspace for software SYNCALL (needs coreNum * 32 bytes)
     constexpr int32_t SYNC_UB_ELEMS = 32;
@@ -500,8 +502,8 @@ AICORE void MoeDispatchWithSync(
 
     // Workspace layout:
     //   [0 .. EP*expertPerRank)                                    : cumsumMM
-    //   [EP*expertPerRank .. 2*EP*expertPerRank)                   : preSumBeforeRank
-    //   [2*EP*expertPerRank .. 2*EP*expertPerRank + EP*EP*expertPerRank) : tokenPerExpert
+    //   [EP*expertPerRank .. 2*EP*expertPerRank)                       : preSumBeforeRank
+    //   [2*EP*expertPerRank .. 2*EP*expertPerRank + EP*paddedExpNum)   : tokenPerExpert (padded)
     __gm__ int32_t *wsCumsumMM = workspace;
     __gm__ int32_t *wsPSBR = workspace + EP * expertPerRank;
     __gm__ int32_t *wsTPE = workspace + 2 * EP * expertPerRank;
@@ -592,23 +594,46 @@ AICORE void MoeDispatchWithSync(
 
         if (coreIdx == 0) {
             // Phase B.1: Read all TPE rows from shmem, restore (subtract flag),
-            // write to workspace TPE using scalar GM access (avoids 32B DMA alignment issue)
+            // write to workspace TPE using TLOAD/TADDS/TSTORE (padded layout)
             pipe_barrier(PIPE_ALL);
+
+            using TPEShape = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+            using TPEStride = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+            using TPEGlobal = pto::GlobalTensor<int32_t, TPEShape, TPEStride, pto::Layout::ND>;
+            using TPETile = pto::Tile<pto::TileType::Vec, int32_t, 1, 64,
+                                      pto::BLayout::RowMajor, -1, -1>;
+
+            TPETile tpeRowTile(1, paddedExpNum);
+            constexpr int32_t TPE_UB_OFFSET = SYNC_UB_ELEMS * static_cast<int32_t>(sizeof(int32_t));
+            TASSIGN(tpeRowTile, TPE_UB_OFFSET);
+            tpeRowTile.RowMaskInternal = 1;
+            tpeRowTile.ColMaskInternal = paddedExpNum;
+
+            int64_t tpeRowBytes = static_cast<int64_t>(paddedExpNum) * sizeof(int32_t);
+            TPEShape rowShape(1, 1, 1, 1, static_cast<size_t>(paddedExpNum));
+            TPEStride rowStride(tpeRowBytes / 4, tpeRowBytes / 4, tpeRowBytes / 4, tpeRowBytes / 4, 1);
+
             for (int32_t srcRank = 0; srcRank < EP; ++srcRank) {
-                for (int32_t j = 0; j < expNum; ++j) {
-                    volatile __gm__ int32_t *srcAddr = reinterpret_cast<volatile __gm__ int32_t *>(
-                        localTPEBase + srcRank * paddedExpNum + j);
-                    __asm__ __volatile__("");
-                    dcci((__gm__ void *)srcAddr, SINGLE_CACHE_LINE);
-                    __asm__ __volatile__("");
-                    int32_t val = *srcAddr;
-                    if (srcRank != myRank) {
-                        val -= DATA_AS_FLAG_OFFSET;
-                    }
-                    volatile __gm__ int32_t *dstAddr = reinterpret_cast<volatile __gm__ int32_t *>(
-                        wsTPE + srcRank * expNum + j);
-                    *dstAddr = val;
+                __gm__ int32_t *srcAddr = localTPEBase + srcRank * paddedExpNum;
+                TPEGlobal srcG(srcAddr, rowShape, rowStride);
+                TLOAD(tpeRowTile, srcG);
+
+                if (srcRank != myRank) {
+                    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+                    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+                    TADDS(tpeRowTile, tpeRowTile, -static_cast<int32_t>(DATA_AS_FLAG_OFFSET));
+                    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                } else {
+                    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+                    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
                 }
+
+                __gm__ int32_t *dstAddr = wsTPE + srcRank * paddedExpNum;
+                TPEGlobal dstG(dstAddr, rowShape, rowStride);
+                TSTORE(dstG, tpeRowTile);
+                set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+                wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
             }
 
             // Phase B.2: Compute cumsumMM
@@ -618,9 +643,7 @@ AICORE void MoeDispatchWithSync(
             for (int32_t g = 0; g < expertPerRank; ++g) {
                 int32_t cumSum = 0;
                 for (int32_t srcRank = 0; srcRank < EP; ++srcRank) {
-                    int32_t tpeIdx = srcRank * expNum + myRank * expertPerRank + g;
-                    // Read from workspace TPE (already in GM)
-                    // Use scalar GM access
+                    int32_t tpeIdx = srcRank * paddedExpNum + myRank * expertPerRank + g;
                     volatile __gm__ int32_t *tpePtr = reinterpret_cast<volatile __gm__ int32_t *>(wsTPE + tpeIdx);
                     __asm__ __volatile__("");
                     dcci((__gm__ void *)tpePtr, SINGLE_CACHE_LINE);
@@ -644,7 +667,7 @@ AICORE void MoeDispatchWithSync(
                                 wsPSBR + srcRank * expertPerRank + g);
                             *psbrPtr = offset;
                         }
-                        int32_t tpeIdx = srcRank * expNum + dst * expertPerRank + g;
+                        int32_t tpeIdx = srcRank * paddedExpNum + dst * expertPerRank + g;
                         volatile __gm__ int32_t *tpePtr = reinterpret_cast<volatile __gm__ int32_t *>(wsTPE + tpeIdx);
                         __asm__ __volatile__("");
                         dcci((__gm__ void *)tpePtr, SINGLE_CACHE_LINE);
@@ -668,7 +691,7 @@ AICORE void MoeDispatchWithSync(
 
     MoeDispatchDirect<HIDDEN_SIZE, TILE_COLS, MOVE_NUM>(
         gmA, gmPerTokenScale, wsCumsumMM, wsTPE, wsPSBR,
-        shmemBase, hcclCtx, EP, expertPerRank, maxOutputSize, offsetA);
+        shmemBase, hcclCtx, EP, expertPerRank, maxOutputSize, offsetA, paddedExpNum);
 #endif
 #endif // PHASE_A_ONLY_TEST
 }
