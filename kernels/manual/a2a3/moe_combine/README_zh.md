@@ -75,6 +75,66 @@ expertOutput[本地 experts × 来源 rank 行, K]
 | `signalValue`   | 当前迭代信号 epoch                      |
 
 
+## 计算链路与数据 Shape 流
+
+```
+输入:
+  expertOutput [maxOutputSize, K]  ← 本 rank 所有 expert 处理后的结果（行按 expert×src 排列）
+  probs        [M, topK]           ← 路由概率
+  peerTokenPerExpert [ep, expertNumPadded]  ← 每个 (src, expert) 对的 token 行数
+  expandedRowIdx     [M × topK]             ← 每个 (token, slot) 在 ptrD 中的目标行号
+  cumsumPerExpert    [ep, expertNumPadded]  ← 累积行数，确定 ptrD 写入位置
+  dispatchOffset     [expertPerRank]         ← 每个本地 expert 在 expertOutput 中的起始行
+  prevSumBeforeRank  [ep, expertPerRank]     ← 本 rank 之前的累积行数
+
+阶段 1: ReturnExpertRowsToOwners
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │ for each (src, localExpert):                                        │
+  │   rows = peerTokenPerExpert[src, globalExpert]                      │
+  │   srcStart = dispatchOffset[localExpert]                            │
+  │            + prevSumBeforeRank[src, localExpert]                    │
+  │   dstStart = cumsumPerExpert[src, globalExpert - 1]  (或 0)         │
+  │                                                                     │
+  │   expertOutput[srcStart : srcStart+rows, 0:K]                       │
+  │        ──TPUT──→  peer[src].ptrD[dstStart : dstStart+rows, 0:K]    │
+  │                                                                     │
+  │   shape: [rows, K] per chunk                                        │
+  └─────────────────────────────────────────────────────────────────────┘
+  数据流: expertOutput[maxOutputSize, K] → ptrD[M×topK, K] (跨 rank 写入)
+
+阶段 2: WaitCombinePhase
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │ TWAIT(combineDoneSignal[peer] >= signalValue)  ∀ peer               │
+  │ 确保所有 rank 的 Return 完成，ptrD 数据可见                           │
+  └─────────────────────────────────────────────────────────────────────┘
+
+阶段 3: RestoreOutputRows
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │ for each token in [tokenBegin, tokenEnd):                           │
+  │   outputC[token, 0:K] = 0                                          │
+  │   for slot in [0, topK):                                            │
+  │     row = expandedRowIdx[token × topK + slot]                       │
+  │     if row < 0: skip                                                │
+  │     prob = probs[token × topK + slot]                               │
+  │     outputC[token, 0:K] += prob × ptrD[row, 0:K]   ← TAXPY        │
+  └─────────────────────────────────────────────────────────────────────┘
+  数据流: ptrD[M×topK, K] × probs[M, topK] → outputC[M, K]
+
+输出:
+  outputC [M, K]  ← 每个 token 的加权 expert 结果之和
+```
+
+### Shape 总结
+
+| 数据 | Shape | dtype | 说明 |
+|------|-------|-------|------|
+| expertOutput | [maxOutputSize, K] | half | 本 rank expert 输出，按 (expert, src) 分段排列 |
+| probs | [M, topK] | float | 路由概率 |
+| outputC | [M, K] | half | 最终输出 |
+| ptrD | [M × topK, K] | half | combine return 缓冲区（peerWindow 内） |
+| expandedRowIdx | [M × topK] | int32 | (token, slot) → ptrD 行号映射 |
+| peerTokenPerExpert | [ep, expertNumPadded] | int32 | 路由行数表 |
+
 ## Kernel 参数语义
 
 ```cpp
