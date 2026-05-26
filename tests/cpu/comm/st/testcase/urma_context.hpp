@@ -14,8 +14,7 @@ public:
     }
 
     void Finalize()
-    {
-    }
+    {}
 
     void *GetWorkspaceAddr() const
     {
@@ -56,7 +55,6 @@ AICORE inline uint64_t UrmaPeerMrBaseAddr(__gm__ uint8_t *urmaWorkspace, uint32_
 {
     return reinterpret_cast<uint64_t>(urmaWorkspace);
 }
-
 
 template <pto::comm::DmaEngine engine>
 PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace, uint32_t destRankId, pto::comm::AsyncSession &session)

@@ -33,9 +33,8 @@ inline void *WindowAlloc(uint64_t windowBase, size_t &offset, size_t bytes)
     return ptr;
 }
 
-inline void CommMpiBarrier(){
-    
-}
+inline void CommMpiBarrier()
+{}
 
 template <typename T, size_t count>
 struct TestContext {
