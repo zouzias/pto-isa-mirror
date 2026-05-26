@@ -19,8 +19,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdio>
 #include <type_traits>
 #include <dlfcn.h>
-#include "pto/common/type.hpp"
 #include <string>
+#include "type.hpp"
 
 #define __global__
 #define AICORE
@@ -54,7 +54,7 @@ inline void pipe_barrier(pipe_t pipe)
 
 constexpr pipe_t opPipeList[] = {};
 
-#define aclFloat16ToFloat(x) ((float)(x)
+#define aclFloat16ToFloat(x) (float)(x)
 #define aclInit(x)
 #define aclrtSetDevice(x)
 
