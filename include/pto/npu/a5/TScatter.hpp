@@ -33,7 +33,6 @@ PTO_INTERNAL void InitUBBuffer(__ubuf__ T *dst)
         preg = CreatePredicate<T>(num);
         vsts(v_zeros, dst, i * nElemPerVL, distValue, preg);
     }
-    mem_bar(VST_VLD);
     mem_bar(VST_VST);
 }
 
@@ -47,6 +46,10 @@ __tf__ PTO_INTERNAL void TScatterImpl(typename DstTile::TileDType __out__ dstDat
     __ubuf__ T *dst = (__ubuf__ T *)__cce_get_tile_ptr(dstData);
     __ubuf__ T *src = (__ubuf__ T *)__cce_get_tile_ptr(src0Data);
     __ubuf__ U *index = (__ubuf__ U *)__cce_get_tile_ptr(src1Data);
+    constexpr uint16_t batchSize = CCE_VL / sizeof(U);
+    uint16_t repeat = CeilDivision(validCol, batchSize);
+    using VldsType = std::conditional_t<sizeof(T) == 1, decltype(UNPK_B8), decltype(NORM)>;
+
     __VEC_SCOPE__
     {
         // Initialize dst UB buffer
@@ -56,9 +59,6 @@ __tf__ PTO_INTERNAL void TScatterImpl(typename DstTile::TileDType __out__ dstDat
         MaskReg pReg;
         RegTensor<U> idxReg;
         RegTensor<T> v_src;
-        constexpr uint16_t batchSize = CCE_VL / sizeof(U);
-        uint16_t repeat = CeilDivision(validCol, batchSize);
-        using VldsType = std::conditional_t<sizeof(T) == 1, decltype(UNPK_B8), decltype(NORM)>;
         constexpr VldsType vldsValue{};
 
         for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
@@ -137,27 +137,27 @@ PTO_INTERNAL void ScatterMask(__ubuf__ T *src, __ubuf__ T *dstPtr, RegTensor<T> 
     if constexpr (Times == PTO_TSCATTER_TIME_2) {
         if constexpr (mask == MaskPattern::P1010) {
             vintlv(dstReg0, dstReg1, zeros, srcReg);
-        } else if (mask == MaskPattern::P0101) {
+        } else if constexpr (mask == MaskPattern::P0101) {
             vintlv(dstReg0, dstReg1, srcReg, zeros);
         }
         pReg = CreatePredicate<T>(sReg);
         vsts(dstReg0, dstPtr, i * DstRowStride + (Times * j + 0) * nElemPerVL, distValue, pReg);
         pReg = CreatePredicate<T>(sReg);
         vsts(dstReg1, dstPtr, i * DstRowStride + (Times * j + 1) * nElemPerVL, distValue, pReg);
-    } else if (Times == PTO_TSCATTER_TIME_4) {
+    } else if constexpr (Times == PTO_TSCATTER_TIME_4) {
         if constexpr (mask == MaskPattern::P1000) {
             vintlv(tmpReg0, tmpReg1, zeros, srcReg);
             vintlv(dstReg0, dstReg1, zeros, tmpReg0);
             vintlv(dstReg2, dstReg3, zeros, tmpReg1);
-        } else if (mask == MaskPattern::P0100) {
+        } else if constexpr (mask == MaskPattern::P0100) {
             vintlv(tmpReg0, tmpReg1, zeros, srcReg);
             vintlv(dstReg0, dstReg1, tmpReg0, zeros);
             vintlv(dstReg2, dstReg3, tmpReg1, zeros);
-        } else if (mask == MaskPattern::P0010) {
+        } else if constexpr (mask == MaskPattern::P0010) {
             vintlv(tmpReg0, tmpReg1, srcReg, zeros);
             vintlv(dstReg0, dstReg1, zeros, tmpReg0);
             vintlv(dstReg2, dstReg3, zeros, tmpReg1);
-        } else if (mask == MaskPattern::P0001) {
+        } else if constexpr (mask == MaskPattern::P0001) {
             vintlv(tmpReg0, tmpReg1, srcReg, zeros);
             vintlv(dstReg0, dstReg1, tmpReg0, zeros);
             vintlv(dstReg2, dstReg3, tmpReg1, zeros);
@@ -183,6 +183,8 @@ __tf__ PTO_INTERNAL void TScatterMaskImpl(typename DstTile::TileDType __out__ ds
     __ubuf__ T *src = (__ubuf__ T *)__cce_get_tile_ptr(srcData);
     constexpr uint16_t nElemPerVL = CCE_VL / sizeof(T);
     constexpr uint16_t times = GetTimesByMask<mask>();
+    uint32_t dstValidCol = validCol * times;
+    uint16_t repeatTimes = CeilDivision(validCol, nElemPerVL);
 
     __VEC_SCOPE__
     {
@@ -191,8 +193,6 @@ __tf__ PTO_INTERNAL void TScatterMaskImpl(typename DstTile::TileDType __out__ ds
         RegTensor<T> zeros;
         vbr(zeros, (T)0);
         uint32_t sReg;
-        uint32_t dstValidCol = validCol * times;
-        uint16_t repeatTimes = CeilDivision(validCol, nElemPerVL);
         for (uint16_t i = 0; i < (uint16_t)(validRow); ++i) {
             sReg = dstValidCol;
             for (uint16_t j = 0; j < repeatTimes; ++j) {
