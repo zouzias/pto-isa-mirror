@@ -103,7 +103,28 @@ PTO_INTERNAL void TLoadNd2nzInstr(__cbuf__ typename TileData::DType *dst, typena
         }
         return;
     }
-    PTO_ASSERT(false, "Padding of ND2NZ is unsupported for L1 on A1.");
+    __ubuf__ typename TileData::DType *tmpUB = (__ubuf__ typename TileData::DType *)get_imm(0);	 
+     uint32_t lenByteBurst = dValue * sizeof(T); 
+     uint32_t gmByteGap = (srcDValue - dValue) * sizeof(T); 
+     uint32_t ubPadDValue = (lenByteBurst + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE * BLOCK_BYTE_SIZE; 
+     uint32_t ubGapElement = (ubPadDValue - dValue); 
+     uint32_t ubGap = ubGapElement / ELEMS_PER_BLOCK; 
+     uint32_t ubPad = 0; 
+     if constexpr (TileData::PadVal != PadValue::Null) { 
+         ubPad = ubGapElement % ELEMS_PER_BLOCK; 
+     } 
+     set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7); 
+     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7); 
+     TLoadInstrGm2ub<TileData, GlobalData>(tmpUB, src, nValue, lenByteBurst, gmByteGap, ubGap, ubPad); 
+     set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID7); 
+     wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID7); 
+     uint32_t nBurst = ((ubPadDValue + ELEMS_PER_BLOCK - 1) / ELEMS_PER_BLOCK); 
+     for (size_t i = 0; i < nValue; i++) { 
+         copy_ubuf_to_cbuf(dst + i * dstNzNStride * ELEMS_PER_BLOCK, tmpUB + i * ubPadDValue, 0,  
+             nBurst, 1, 0, dstNzC0Stride - 1); 
+     } 
+     set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7); 
+     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7);
 }
 
 template <typename TileData, typename GlobalData>
@@ -632,7 +653,7 @@ __tf__ PTO_INTERNAL void TLoadNCHW2FractalZ(typename TileData::TileDType __out__
                                             int gStride2, int gStride3, int gStride4, int dstShape0, int dstShape1,
                                             int dstShape2, int dstShape3)
 {
-    PTO_ASSERT(false, "TLoadNCHW is unsupported on A1.");
+    PTO_ASSERT(false, "TLoadNCHW2FractalZ is unsupported on A1.");
 }
 
 template <typename TileData, typename GlobalData>

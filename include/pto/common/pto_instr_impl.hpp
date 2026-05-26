@@ -17,33 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/arch_cce_intrinsic.hpp>
 
 #ifdef PTO_NPU_ARCH_A1
-#include "pto/npu/a1/TAssign.hpp"
-#include "pto/npu/a1/TSync.hpp"
-#include "pto/npu/a1/TAdd.hpp"
-#include "pto/npu/a1/TAddS.hpp"
-#include "pto/npu/a1/TDivS.hpp"
-#include "pto/npu/a1/TSub.hpp"
-#include "pto/npu/a1/TExpandS.hpp"
-#include "pto/npu/a1/TLoad.hpp"
-#include "pto/npu/a1/TCvt.hpp"
-#include "pto/npu/a1/TStore.hpp"
-#include "pto/npu/a1/TTrans.hpp"
-#include "pto/npu/a1/TFillPad.hpp"
-#include "pto/npu/a1/TColMax.hpp"
-#include "pto/npu/a1/TMatmul.hpp"
-#include "pto/npu/a1/TMrgSort.hpp"
-#include "pto/npu/a1/TExtract.hpp"
-#include "pto/npu/a1/TMov.hpp"
-#include "pto/npu/a1/TMul.hpp"
-#include "pto/npu/a1/TDiv.hpp"
-#include "pto/npu/a1/TPartAdd.hpp"
-#include "pto/npu/a1/TPartMax.hpp"
-#include "pto/npu/a1/TImg2col.hpp"
-#include "pto/npu/a1/SetFmatrix.hpp"
-#include "pto/npu/a1/TRowExpand.hpp"
-#include "pto/npu/a1/TColSum.hpp"
-#include "pto/npu/a1/TUnaryOp.hpp"
-#include "pto/npu/a1/TColExpand.hpp"
+#include "pto/npu/a1/header.hpp"
 #endif
 
 #ifdef PTO_NPU_ARCH_A2A3
