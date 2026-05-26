@@ -33,10 +33,16 @@ void LaunchTQuantMXFP8_BF16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void 
 template <int validRows, int validCols, int mode, pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void LaunchTQuantMXFP8_FP16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
 
-template <int staticRows, int staticCols, int validRows, int validCols>
+template <int staticRows, int staticCols, int validRows, int validCols,
+          pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
+void LaunchTQuantMXFP8_FP32_Exp2D(uint8_t *dst, float *src, uint8_t *dst_exp, void *stream);
+
+template <int staticRows, int staticCols, int validRows, int validCols,
+          pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void LaunchTQuantMXFP8_BF16_Exp2D(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
 
-template <int staticRows, int staticCols, int validRows, int validCols>
+template <int staticRows, int staticCols, int validRows, int validCols,
+          pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void LaunchTQuantMXFP8_FP16_Exp2D(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream);
 
 template <int validRows, int validCols, pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
@@ -223,19 +229,30 @@ void test_tquant_mxfp8_fp16()
     });
 }
 
-template <int staticRows, int staticCols, int validRows, int validCols>
-void test_tquant_mxfp8_bf16_exp2d()
+template <int staticRows, int staticCols, int validRows, int validCols,
+          pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
+void test_tquant_mxfp8_fp32_exp2d()
 {
-    RunMxFp8Case<validRows, validCols, 0, uint16_t>([](uint8_t *dst, uint16_t *src, uint8_t *dstExp, void *stream) {
-        LaunchTQuantMXFP8_BF16_Exp2D<staticRows, staticCols, validRows, validCols>(dst, src, dstExp, stream);
+    RunMxFp8Case<validRows, validCols, 0, float>([](uint8_t *dst, float *src, uint8_t *dstExp, void *stream) {
+        LaunchTQuantMXFP8_FP32_Exp2D<staticRows, staticCols, validRows, validCols, scaleAlg>(dst, src, dstExp, stream);
     });
 }
 
-template <int staticRows, int staticCols, int validRows, int validCols>
+template <int staticRows, int staticCols, int validRows, int validCols,
+          pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
+void test_tquant_mxfp8_bf16_exp2d()
+{
+    RunMxFp8Case<validRows, validCols, 0, uint16_t>([](uint8_t *dst, uint16_t *src, uint8_t *dstExp, void *stream) {
+        LaunchTQuantMXFP8_BF16_Exp2D<staticRows, staticCols, validRows, validCols, scaleAlg>(dst, src, dstExp, stream);
+    });
+}
+
+template <int staticRows, int staticCols, int validRows, int validCols,
+          pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void test_tquant_mxfp8_fp16_exp2d()
 {
     RunMxFp8Case<validRows, validCols, 0, uint16_t>([](uint8_t *dst, uint16_t *src, uint8_t *dstExp, void *stream) {
-        LaunchTQuantMXFP8_FP16_Exp2D<staticRows, staticCols, validRows, validCols>(dst, src, dstExp, stream);
+        LaunchTQuantMXFP8_FP16_Exp2D<staticRows, staticCols, validRows, validCols, scaleAlg>(dst, src, dstExp, stream);
     });
 }
 
@@ -487,77 +504,67 @@ TEST_F(TQUANTTEST, case_mxfp8_bf16_1x198_nd)
     test_tquant_mxfp8_bf16<1, 198, 0>();
 }
 
-// 2D exp tile with packed max/scaling scratch. Static tile tail and valid tail are both 64-aligned.
-TEST_F(TQUANTTEST, case_mxfp8_bf16_55x128_static100x192_exp2d_nd)
-{
-    test_tquant_mxfp8_bf16_exp2d<100, 192, 55, 128>();
-}
-TEST_F(TQUANTTEST, case_mxfp8_bf16_1x64_static16x64_exp2d_nd)
-{
-    test_tquant_mxfp8_bf16_exp2d<16, 64, 1, 64>();
-}
-TEST_F(TQUANTTEST, case_mxfp8_bf16_17x192_static17x256_exp2d_nd)
-{
-    test_tquant_mxfp8_bf16_exp2d<17, 256, 17, 192>();
-}
-TEST_F(TQUANTTEST, case_mxfp8_bf16_3x512_static3x512_exp2d_nd)
-{
-    test_tquant_mxfp8_bf16_exp2d<3, 512, 3, 512>();
-}
-
-#define TQUANT_EXP2D_FUZZ_NAME(ID, TEST_DTYPE, STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS) \
-    case_mxfp8_##TEST_DTYPE##_##VALID_ROWS##x##VALID_COLS##_static##STATIC_ROWS##x##STATIC_COLS##_exp2d_fuzz##ID##_nd
-
-#define TQUANT_EXP2D_FUZZ_TEST(ID, TEST_DTYPE, STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS)      \
-    TEST_F(TQUANTTEST, TQUANT_EXP2D_FUZZ_NAME(ID, TEST_DTYPE, STATIC_ROWS, STATIC_COLS, VALID_ROWS,   \
-                                              VALID_COLS))                                            \
-    {                                                                                                 \
-        test_tquant_mxfp8_##TEST_DTYPE##_exp2d<STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS>();   \
+// Mixed 2D exp fuzz: dtype and scale algorithm are interleaved; tail-axis sizes are 64 * prime.
+#define TQUANT_EXP2D_FUZZ_OCP(ID, TEST_DTYPE, STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS)                            \
+    TEST_F(                                                                                                                \
+        TQUANTTEST,                                                                                                        \
+        case_mxfp8_##TEST_DTYPE##_##VALID_ROWS##x##VALID_COLS##_static##STATIC_ROWS##x##STATIC_COLS##_exp2d_fuzz##ID##_nd) \
+    {                                                                                                                      \
+        test_tquant_mxfp8_##TEST_DTYPE##_exp2d<STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS>();                        \
     }
 
-TQUANT_EXP2D_FUZZ_TEST(01, bf16, 17, 64, 17, 64)
-TQUANT_EXP2D_FUZZ_TEST(02, bf16, 19, 128, 17, 64)
-TQUANT_EXP2D_FUZZ_TEST(03, bf16, 11, 192, 9, 128)
-TQUANT_EXP2D_FUZZ_TEST(04, bf16, 19, 256, 17, 64)
-TQUANT_EXP2D_FUZZ_TEST(05, bf16, 23, 320, 13, 256)
-TQUANT_EXP2D_FUZZ_TEST(06, bf16, 31, 512, 29, 448)
-TQUANT_EXP2D_FUZZ_TEST(07, bf16, 37, 768, 31, 640)
-TQUANT_EXP2D_FUZZ_TEST(08, bf16, 41, 1024, 39, 960)
-TQUANT_EXP2D_FUZZ_TEST(09, bf16, 7, 2048, 5, 1984)
-TQUANT_EXP2D_FUZZ_TEST(10, bf16, 3, 4096, 3, 4032)
-TQUANT_EXP2D_FUZZ_TEST(11, bf16, 2, 8192, 1, 8192)
-TQUANT_EXP2D_FUZZ_TEST(12, bf16, 127, 64, 113, 64)
-TQUANT_EXP2D_FUZZ_TEST(13, bf16, 509, 64, 503, 64)
-TQUANT_EXP2D_FUZZ_TEST(14, bf16, 257, 128, 251, 64)
-TQUANT_EXP2D_FUZZ_TEST(15, bf16, 129, 256, 127, 192)
-TQUANT_EXP2D_FUZZ_TEST(16, bf16, 95, 512, 93, 64)
-TQUANT_EXP2D_FUZZ_TEST(17, bf16, 71, 768, 67, 704)
-TQUANT_EXP2D_FUZZ_TEST(18, bf16, 63, 1024, 61, 128)
-TQUANT_EXP2D_FUZZ_TEST(19, bf16, 17, 1536, 15, 1472)
-TQUANT_EXP2D_FUZZ_TEST(20, bf16, 33, 2048, 31, 1856)
-TQUANT_EXP2D_FUZZ_TEST(21, fp16, 17, 64, 17, 64)
-TQUANT_EXP2D_FUZZ_TEST(22, fp16, 19, 192, 17, 128)
-TQUANT_EXP2D_FUZZ_TEST(23, fp16, 15, 256, 13, 192)
-TQUANT_EXP2D_FUZZ_TEST(24, fp16, 21, 384, 19, 320)
-TQUANT_EXP2D_FUZZ_TEST(25, fp16, 27, 512, 25, 448)
-TQUANT_EXP2D_FUZZ_TEST(26, fp16, 35, 640, 33, 576)
-TQUANT_EXP2D_FUZZ_TEST(27, fp16, 43, 896, 41, 832)
-TQUANT_EXP2D_FUZZ_TEST(28, fp16, 55, 1024, 53, 960)
-TQUANT_EXP2D_FUZZ_TEST(29, fp16, 8, 2048, 7, 1024)
-TQUANT_EXP2D_FUZZ_TEST(30, fp16, 4, 4096, 1, 4096)
-TQUANT_EXP2D_FUZZ_TEST(31, fp16, 1, 8192, 1, 8128)
-TQUANT_EXP2D_FUZZ_TEST(32, fp16, 191, 64, 181, 64)
-TQUANT_EXP2D_FUZZ_TEST(33, fp16, 383, 64, 379, 64)
-TQUANT_EXP2D_FUZZ_TEST(34, fp16, 191, 128, 189, 128)
-TQUANT_EXP2D_FUZZ_TEST(35, fp16, 127, 256, 125, 64)
-TQUANT_EXP2D_FUZZ_TEST(36, fp16, 79, 512, 77, 384)
-TQUANT_EXP2D_FUZZ_TEST(37, fp16, 47, 1024, 43, 512)
-TQUANT_EXP2D_FUZZ_TEST(38, fp16, 25, 1536, 23, 64)
-TQUANT_EXP2D_FUZZ_TEST(39, fp16, 13, 3072, 11, 3008)
-TQUANT_EXP2D_FUZZ_TEST(40, fp16, 2, 8192, 2, 4096)
+#define TQUANT_EXP2D_FUZZ_NV(ID, TEST_DTYPE, STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS)                                \
+    TEST_F(                                                                                                                   \
+        TQUANTTEST,                                                                                                           \
+        case_mxfp8_nv_##TEST_DTYPE##_##VALID_ROWS##x##VALID_COLS##_static##STATIC_ROWS##x##STATIC_COLS##_exp2d_fuzz##ID##_nd) \
+    {                                                                                                                         \
+        test_tquant_mxfp8_##TEST_DTYPE##_exp2d<STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS,                              \
+                                               pto::QuantScaleAlg::NV>();                                                     \
+    }
 
-#undef TQUANT_EXP2D_FUZZ_TEST
-#undef TQUANT_EXP2D_FUZZ_NAME
+TQUANT_EXP2D_FUZZ_OCP(01, fp32, 5, 192, 3, 128)
+TQUANT_EXP2D_FUZZ_NV(02, fp32, 7, 320, 5, 192)
+TQUANT_EXP2D_FUZZ_OCP(03, bf16, 11, 448, 7, 320)
+TQUANT_EXP2D_FUZZ_NV(04, bf16, 13, 704, 11, 448)
+TQUANT_EXP2D_FUZZ_OCP(05, fp16, 17, 832, 13, 704)
+TQUANT_EXP2D_FUZZ_NV(06, fp16, 19, 1088, 17, 832)
+TQUANT_EXP2D_FUZZ_OCP(07, fp32, 7, 1216, 5, 1088)
+TQUANT_EXP2D_FUZZ_NV(08, bf16, 11, 1472, 7, 1216)
+TQUANT_EXP2D_FUZZ_OCP(09, fp16, 13, 1856, 11, 1472)
+TQUANT_EXP2D_FUZZ_NV(10, fp32, 5, 1984, 3, 1856)
+TQUANT_EXP2D_FUZZ_OCP(11, bf16, 7, 2368, 5, 1984)
+TQUANT_EXP2D_FUZZ_NV(12, fp16, 5, 2624, 3, 2368)
+TQUANT_EXP2D_FUZZ_OCP(13, fp32, 3, 2752, 2, 2624)
+TQUANT_EXP2D_FUZZ_NV(14, bf16, 5, 3008, 3, 2752)
+TQUANT_EXP2D_FUZZ_OCP(15, fp16, 5, 3392, 3, 3008)
+TQUANT_EXP2D_FUZZ_NV(16, fp32, 3, 3776, 2, 3392)
+TQUANT_EXP2D_FUZZ_OCP(17, bf16, 3, 3904, 2, 3776)
+TQUANT_EXP2D_FUZZ_NV(18, fp16, 3, 4288, 2, 3904)
+TQUANT_EXP2D_FUZZ_OCP(19, fp32, 2, 4544, 1, 4288)
+TQUANT_EXP2D_FUZZ_NV(20, bf16, 3, 4544, 2, 4544)
+TQUANT_EXP2D_FUZZ_OCP(21, fp16, 5, 192, 3, 128)
+TQUANT_EXP2D_FUZZ_NV(22, fp32, 7, 448, 5, 320)
+TQUANT_EXP2D_FUZZ_OCP(23, bf16, 11, 704, 7, 448)
+TQUANT_EXP2D_FUZZ_NV(24, fp16, 13, 832, 11, 704)
+TQUANT_EXP2D_FUZZ_OCP(25, fp32, 17, 1088, 13, 832)
+TQUANT_EXP2D_FUZZ_NV(26, bf16, 19, 1216, 17, 1088)
+TQUANT_EXP2D_FUZZ_OCP(27, fp16, 7, 1472, 5, 1216)
+TQUANT_EXP2D_FUZZ_NV(28, fp32, 11, 1856, 7, 1472)
+TQUANT_EXP2D_FUZZ_OCP(29, bf16, 13, 1984, 11, 1856)
+TQUANT_EXP2D_FUZZ_NV(30, fp16, 7, 2368, 5, 1984)
+TQUANT_EXP2D_FUZZ_OCP(31, fp32, 5, 2624, 3, 2368)
+TQUANT_EXP2D_FUZZ_NV(32, bf16, 5, 2752, 3, 2624)
+TQUANT_EXP2D_FUZZ_OCP(33, fp16, 3, 3008, 2, 2752)
+TQUANT_EXP2D_FUZZ_NV(34, fp32, 3, 3392, 2, 3008)
+TQUANT_EXP2D_FUZZ_OCP(35, bf16, 3, 3776, 2, 3392)
+TQUANT_EXP2D_FUZZ_NV(36, fp16, 3, 3904, 2, 3776)
+TQUANT_EXP2D_FUZZ_OCP(37, fp32, 2, 4288, 1, 3904)
+TQUANT_EXP2D_FUZZ_NV(38, bf16, 2, 4544, 1, 4288)
+TQUANT_EXP2D_FUZZ_OCP(39, fp16, 2, 4544, 1, 4544)
+TQUANT_EXP2D_FUZZ_NV(40, fp32, 2, 128, 1, 128)
+
+#undef TQUANT_EXP2D_FUZZ_NV
+#undef TQUANT_EXP2D_FUZZ_OCP
 
 TEST_F(TQUANTTEST, case_mxfp8_bf16_32x128_nz)
 {
@@ -628,15 +635,6 @@ TEST_F(TQUANTTEST, case_mxfp8_nv_fp16_2x256_boundary_nd)
 {
     test_tquant_mxfp8_fp16<2, 256, 0, pto::QuantScaleAlg::NV>();
 }
-TEST_F(TQUANTTEST, case_mxfp8_fp16_55x128_static100x192_exp2d_nd)
-{
-    test_tquant_mxfp8_fp16_exp2d<100, 192, 55, 128>();
-}
-TEST_F(TQUANTTEST, case_mxfp8_fp16_1x64_static16x64_exp2d_nd)
-{
-    test_tquant_mxfp8_fp16_exp2d<16, 64, 1, 64>();
-}
-
 // MXFP4 E2M1 FP16 ND
 TEST_F(TQUANTTEST, case_mxfp4_e2m1_fp16_2x128_special_nd)
 {

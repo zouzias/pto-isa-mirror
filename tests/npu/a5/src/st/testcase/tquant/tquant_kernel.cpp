@@ -485,13 +485,15 @@ void LaunchTQuantMXFP8_FP16(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void 
     runTQuantFP16<validRows, validCols, mode, scaleAlg><<<1, nullptr, stream>>>(dst_exp, dst, (half *)src);
 }
 
-template <typename SrcT, int staticRows, int staticCols, int validRows, int validCols>
-struct MxFp8B16Exp2DSpec {
+template <typename SrcT, int staticRows, int staticCols, int validRows, int validCols,
+          pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
+struct MxFp8Exp2DSpec {
     static_assert(staticCols % 64 == 0, "static tail axis must be 64-aligned");
     static_assert(validCols % 64 == 0, "valid tail axis must be 64-aligned");
     static_assert(validRows <= staticRows && validCols <= staticCols, "valid shape must fit in static tile shape");
     static constexpr int rows = validRows;
     static constexpr int cols = validCols;
+    static constexpr pto::QuantScaleAlg scaleAlgValue = scaleAlg;
     static constexpr int validGroups = validCols / 32;
     static constexpr int expCols = PTO_CEIL(staticCols / 32, 32);
     static constexpr int packedGroups = validRows * validGroups;
@@ -524,8 +526,8 @@ struct MxFp8B16Exp2DSpec {
 };
 
 template <typename Spec>
-__global__ AICORE void runTQuantB16Exp2D(__gm__ uint8_t __out__ *out_e8m0, __gm__ uint8_t __out__ *out_fp8,
-                                         __gm__ typename Spec::SrcGlobal::RawDType __in__ *src)
+__global__ AICORE void runTQuantExp2D(__gm__ uint8_t __out__ *out_e8m0, __gm__ uint8_t __out__ *out_fp8,
+                                      __gm__ typename Spec::SrcGlobal::RawDType __in__ *src)
 {
     typename Spec::SrcTile srcTile(Spec::rows, Spec::cols);
     typename Spec::ScalingTile scalingTile(1, Spec::packedGroups);
@@ -550,7 +552,8 @@ __global__ AICORE void runTQuantB16Exp2D(__gm__ uint8_t __out__ *out_e8m0, __gm_
 #endif
 
     TQUANT<pto::QuantType::MXFP8, typename Spec::DstFP8Tile, typename Spec::SrcTile, typename Spec::DstE8Tile,
-           typename Spec::MaxTile>(fp8Tile, srcTile, &e8Tile, &maxPerGpTile, &scalingTile);
+           typename Spec::MaxTile, typename Spec::ScalingTile, Spec::scaleAlgValue>(fp8Tile, srcTile, &e8Tile,
+                                                                                    &maxPerGpTile, &scalingTile);
 
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -561,18 +564,28 @@ __global__ AICORE void runTQuantB16Exp2D(__gm__ uint8_t __out__ *out_e8m0, __gm_
     TSTORE(fp8Global, fp8Tile);
 }
 
-template <int staticRows, int staticCols, int validRows, int validCols>
-void LaunchTQuantMXFP8_BF16_Exp2D(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream)
+template <int staticRows, int staticCols, int validRows, int validCols,
+          pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
+void LaunchTQuantMXFP8_FP32_Exp2D(uint8_t *dst, float *src, uint8_t *dst_exp, void *stream)
 {
-    using Spec = MxFp8B16Exp2DSpec<bfloat16_t, staticRows, staticCols, validRows, validCols>;
-    runTQuantB16Exp2D<Spec><<<1, nullptr, stream>>>(dst_exp, dst, (bfloat16_t *)src);
+    using Spec = MxFp8Exp2DSpec<float, staticRows, staticCols, validRows, validCols, scaleAlg>;
+    runTQuantExp2D<Spec><<<1, nullptr, stream>>>(dst_exp, dst, src);
 }
 
-template <int staticRows, int staticCols, int validRows, int validCols>
+template <int staticRows, int staticCols, int validRows, int validCols,
+          pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
+void LaunchTQuantMXFP8_BF16_Exp2D(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream)
+{
+    using Spec = MxFp8Exp2DSpec<bfloat16_t, staticRows, staticCols, validRows, validCols, scaleAlg>;
+    runTQuantExp2D<Spec><<<1, nullptr, stream>>>(dst_exp, dst, (bfloat16_t *)src);
+}
+
+template <int staticRows, int staticCols, int validRows, int validCols,
+          pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
 void LaunchTQuantMXFP8_FP16_Exp2D(uint8_t *dst, uint16_t *src, uint8_t *dst_exp, void *stream)
 {
-    using Spec = MxFp8B16Exp2DSpec<half, staticRows, staticCols, validRows, validCols>;
-    runTQuantB16Exp2D<Spec><<<1, nullptr, stream>>>(dst_exp, dst, (half *)src);
+    using Spec = MxFp8Exp2DSpec<half, staticRows, staticCols, validRows, validCols, scaleAlg>;
+    runTQuantExp2D<Spec><<<1, nullptr, stream>>>(dst_exp, dst, (half *)src);
 }
 
 PTO_INTERNAL void CompactFp4PackedRows(__ubuf__ uint8_t *dstPtr, __ubuf__ uint8_t *srcPtr, uint32_t rows,
@@ -609,11 +622,12 @@ struct MxFp4B16Spec {
     static constexpr int groupedColsE8Static = PTO_CEIL(groupedColsValid, 32);
     static constexpr int groupedColsB16Static = PTO_CEIL(groupedColsValid, 16);
     static constexpr int groupedColsFlatAligned = PTO_CEIL(groupedColsFlattened, 32);
+    static constexpr int groupedColsB16FlatAligned = PTO_CEIL(groupedColsFlattened, 16);
     static constexpr int fp4FlatAligned = PTO_CEIL(validRows * packedCols, 32);
     static constexpr int validPackedColsAligned = PTO_CEIL(validPackedCols, 32);
     static constexpr int ubAlign = TQUANT_A5_UB_ALIGN_BYTES;
     static constexpr int srcBytes = validRows * paddedCols * sizeof(SrcT);
-    static constexpr int maxBytes = validRows * groupedColsB16Static * sizeof(SrcT);
+    static constexpr int maxBytes = groupedColsB16FlatAligned * sizeof(SrcT);
     static constexpr int scalingBytes = maxBytes;
     static constexpr int e8Bytes = validRows * groupedColsE8Static * sizeof(uint8_t);
     static constexpr int fp4Bytes = validRows * packedCols * sizeof(uint8_t);
@@ -626,7 +640,7 @@ struct MxFp4B16Spec {
 
     using SrcGlobal = GlobalTensor<SrcT, Shape<1, 1, 1, validRows, validCols>, pto::Stride<1, 1, 1, validCols, 1>>;
     using DstE8Global =
-        GlobalTensor<uint8_t, Shape<1, 1, 1, 1, groupedColsFlattened>, pto::Stride<1, 1, 1, validCols, 1>>;
+        GlobalTensor<uint8_t, Shape<1, 1, 1, validRows, groupedColsValid>, pto::Stride<1, 1, 1, groupedColsValid, 1>>;
     using DstFP4Global =
         GlobalTensor<uint8_t, Shape<1, 1, 1, validRows, validPackedCols>, pto::Stride<1, 1, 1, validPackedCols, 1>>;
     using SrcTile = Tile<TileType::Vec, SrcT, validRows, paddedCols, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512,
@@ -637,10 +651,8 @@ struct MxFp4B16Spec {
                             SLayout::NoneBox, 512, PadValue::Zero>;
     using DstBytesTile = Tile<TileType::Vec, uint8_t, validRows, validPackedColsAligned, BLayout::RowMajor, -1, -1,
                               SLayout::NoneBox, 512, PadValue::Zero>;
-    using MaxTile = Tile<TileType::Vec, SrcT, validRows, groupedColsB16Static, BLayout::RowMajor, -1, -1>;
-    using ScalingTile = Tile<TileType::Vec, SrcT, validRows, groupedColsB16Static, BLayout::RowMajor, -1, -1>;
-    using E8StoreND = Tile<TileType::Vec, uint8_t, 1, groupedColsFlatAligned, BLayout::RowMajor, -1, -1,
-                           SLayout::NoneBox, 512, PadValue::Zero>;
+    using MaxTile = Tile<TileType::Vec, SrcT, 1, groupedColsB16FlatAligned, BLayout::RowMajor, -1, -1>;
+    using ScalingTile = Tile<TileType::Vec, SrcT, 1, groupedColsB16FlatAligned, BLayout::RowMajor, -1, -1>;
 };
 
 template <typename Spec>
@@ -658,7 +670,8 @@ PTO_INTERNAL void AssignMxFp4B16Tiles(typename Spec::SrcTile &srcTile, typename 
 
 template <typename Spec>
 PTO_INTERNAL void StoreMxFp4B16Result(typename Spec::DstFP4Tile &fp4Tile, typename Spec::DstBytesTile &fp4BytesTile,
-                                      typename Spec::DstE8Global &e8Global, typename Spec::DstFP4Global &fp4Global)
+                                      typename Spec::DstE8Tile &e8Tile, typename Spec::DstE8Global &e8Global,
+                                      typename Spec::DstFP4Global &fp4Global)
 {
     __VEC_SCOPE__
     {
@@ -673,9 +686,7 @@ PTO_INTERNAL void StoreMxFp4B16Result(typename Spec::DstFP4Tile &fp4Tile, typena
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 #endif
 
-    typename Spec::E8StoreND e8StoreND(1, Spec::groupedColsFlattened);
-    TASSIGN(e8StoreND, Spec::e8Offset);
-    TSTORE(e8Global, e8StoreND);
+    TSTORE(e8Global, e8Tile);
     TSTORE(fp4Global, fp4BytesTile);
 }
 
@@ -690,8 +701,8 @@ __global__ AICORE void runTQuantMXFP4E2M1B16(__gm__ uint8_t __out__ *out_e8m0, _
     typename Spec::DstFP4Tile fp4Tile(1, Spec::fp4Bytes);
     typename Spec::DstBytesTile fp4BytesTile(validRows, Spec::validPackedCols);
     typename Spec::DstE8Tile e8Tile(validRows, Spec::groupedColsValid);
-    typename Spec::MaxTile maxPerGpTile(validRows, Spec::groupedColsValid);
-    typename Spec::ScalingTile scalingTile(validRows, Spec::groupedColsValid);
+    typename Spec::MaxTile maxPerGpTile(1, Spec::groupedColsFlattened);
+    typename Spec::ScalingTile scalingTile(1, Spec::groupedColsFlattened);
 
     typename Spec::SrcGlobal srcGlobal(src);
     typename Spec::DstE8Global e8Global(out_e8m0);
@@ -713,7 +724,7 @@ __global__ AICORE void runTQuantMXFP4E2M1B16(__gm__ uint8_t __out__ *out_e8m0, _
                typename Spec::MaxTile, typename Spec::ScalingTile, scaleAlg>(fp4Tile, srcTile, &e8Tile, &maxPerGpTile,
                                                                              &scalingTile);
     }
-    StoreMxFp4B16Result<Spec>(fp4Tile, fp4BytesTile, e8Global, fp4Global);
+    StoreMxFp4B16Result<Spec>(fp4Tile, fp4BytesTile, e8Tile, e8Global, fp4Global);
 }
 
 template <int validRows, int validCols, pto::QuantScaleAlg scaleAlg = pto::QuantScaleAlg::OCP>
@@ -846,58 +857,70 @@ template void TQuantTest::LaunchTQuantMXFP8_FP16<128, 128, 0, pto::QuantScaleAlg
                                                                                       uint8_t *dst_exp, void *stream);
 template void TQuantTest::LaunchTQuantMXFP8_FP16<2, 256, 0, pto::QuantScaleAlg::NV>(uint8_t *dst, uint16_t *src,
                                                                                     uint8_t *dst_exp, void *stream);
-template void TQuantTest::LaunchTQuantMXFP8_FP16_Exp2D<100, 192, 55, 128>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
-                                                                          void *stream);
-template void TQuantTest::LaunchTQuantMXFP8_FP16_Exp2D<16, 64, 1, 64>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
-                                                                      void *stream);
+#define TQUANT_EXP2D_FUZZ_FP32_OCP(ID, STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS)                      \
+    template void TQuantTest::LaunchTQuantMXFP8_FP32_Exp2D<STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS>( \
+        uint8_t * dst, float *src, uint8_t *dst_exp, void *stream);
 
-#define TQUANT_EXP2D_FUZZ_INSTANTIATE(ID, LAUNCH_DTYPE, TEST_DTYPE, STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS) \
-    template void TQuantTest::LaunchTQuantMXFP8_##LAUNCH_DTYPE##_Exp2D<STATIC_ROWS, STATIC_COLS, VALID_ROWS,         \
-                                                                        VALID_COLS>(uint8_t *dst, uint16_t *src,      \
-                                                                                    uint8_t *dst_exp, void *stream);
+#define TQUANT_EXP2D_FUZZ_FP32_NV(ID, STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS)                       \
+    template void TQuantTest::LaunchTQuantMXFP8_FP32_Exp2D<STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS,  \
+                                                           pto::QuantScaleAlg::NV>(uint8_t * dst, float *src, \
+                                                                                   uint8_t *dst_exp, void *stream);
 
-TQUANT_EXP2D_FUZZ_INSTANTIATE(01, BF16, bf16, 17, 64, 17, 64)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(02, BF16, bf16, 19, 128, 17, 64)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(03, BF16, bf16, 11, 192, 9, 128)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(04, BF16, bf16, 19, 256, 17, 64)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(05, BF16, bf16, 23, 320, 13, 256)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(06, BF16, bf16, 31, 512, 29, 448)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(07, BF16, bf16, 37, 768, 31, 640)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(08, BF16, bf16, 41, 1024, 39, 960)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(09, BF16, bf16, 7, 2048, 5, 1984)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(10, BF16, bf16, 3, 4096, 3, 4032)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(11, BF16, bf16, 2, 8192, 1, 8192)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(12, BF16, bf16, 127, 64, 113, 64)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(13, BF16, bf16, 509, 64, 503, 64)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(14, BF16, bf16, 257, 128, 251, 64)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(15, BF16, bf16, 129, 256, 127, 192)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(16, BF16, bf16, 95, 512, 93, 64)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(17, BF16, bf16, 71, 768, 67, 704)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(18, BF16, bf16, 63, 1024, 61, 128)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(19, BF16, bf16, 17, 1536, 15, 1472)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(20, BF16, bf16, 33, 2048, 31, 1856)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(21, FP16, fp16, 17, 64, 17, 64)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(22, FP16, fp16, 19, 192, 17, 128)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(23, FP16, fp16, 15, 256, 13, 192)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(24, FP16, fp16, 21, 384, 19, 320)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(25, FP16, fp16, 27, 512, 25, 448)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(26, FP16, fp16, 35, 640, 33, 576)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(27, FP16, fp16, 43, 896, 41, 832)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(28, FP16, fp16, 55, 1024, 53, 960)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(29, FP16, fp16, 8, 2048, 7, 1024)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(30, FP16, fp16, 4, 4096, 1, 4096)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(31, FP16, fp16, 1, 8192, 1, 8128)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(32, FP16, fp16, 191, 64, 181, 64)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(33, FP16, fp16, 383, 64, 379, 64)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(34, FP16, fp16, 191, 128, 189, 128)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(35, FP16, fp16, 127, 256, 125, 64)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(36, FP16, fp16, 79, 512, 77, 384)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(37, FP16, fp16, 47, 1024, 43, 512)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(38, FP16, fp16, 25, 1536, 23, 64)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(39, FP16, fp16, 13, 3072, 11, 3008)
-TQUANT_EXP2D_FUZZ_INSTANTIATE(40, FP16, fp16, 2, 8192, 2, 4096)
+#define TQUANT_EXP2D_FUZZ_B16_OCP(ID, LAUNCH_DTYPE, STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS)           \
+    template void                                                                                               \
+        TQuantTest::LaunchTQuantMXFP8_##LAUNCH_DTYPE##_Exp2D<STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS>( \
+            uint8_t * dst, uint16_t * src, uint8_t * dst_exp, void *stream);
 
-#undef TQUANT_EXP2D_FUZZ_INSTANTIATE
+#define TQUANT_EXP2D_FUZZ_B16_NV(ID, LAUNCH_DTYPE, STATIC_ROWS, STATIC_COLS, VALID_ROWS, VALID_COLS)         \
+    template void TQuantTest::LaunchTQuantMXFP8_##LAUNCH_DTYPE##_Exp2D<STATIC_ROWS, STATIC_COLS, VALID_ROWS, \
+                                                                       VALID_COLS, pto::QuantScaleAlg::NV>(  \
+        uint8_t * dst, uint16_t * src, uint8_t * dst_exp, void *stream);
+
+TQUANT_EXP2D_FUZZ_FP32_OCP(01, 5, 192, 3, 128)
+TQUANT_EXP2D_FUZZ_FP32_NV(02, 7, 320, 5, 192)
+TQUANT_EXP2D_FUZZ_B16_OCP(03, BF16, 11, 448, 7, 320)
+TQUANT_EXP2D_FUZZ_B16_NV(04, BF16, 13, 704, 11, 448)
+TQUANT_EXP2D_FUZZ_B16_OCP(05, FP16, 17, 832, 13, 704)
+TQUANT_EXP2D_FUZZ_B16_NV(06, FP16, 19, 1088, 17, 832)
+TQUANT_EXP2D_FUZZ_FP32_OCP(07, 7, 1216, 5, 1088)
+TQUANT_EXP2D_FUZZ_B16_NV(08, BF16, 11, 1472, 7, 1216)
+TQUANT_EXP2D_FUZZ_B16_OCP(09, FP16, 13, 1856, 11, 1472)
+TQUANT_EXP2D_FUZZ_FP32_NV(10, 5, 1984, 3, 1856)
+TQUANT_EXP2D_FUZZ_B16_OCP(11, BF16, 7, 2368, 5, 1984)
+TQUANT_EXP2D_FUZZ_B16_NV(12, FP16, 5, 2624, 3, 2368)
+TQUANT_EXP2D_FUZZ_FP32_OCP(13, 3, 2752, 2, 2624)
+TQUANT_EXP2D_FUZZ_B16_NV(14, BF16, 5, 3008, 3, 2752)
+TQUANT_EXP2D_FUZZ_B16_OCP(15, FP16, 5, 3392, 3, 3008)
+TQUANT_EXP2D_FUZZ_FP32_NV(16, 3, 3776, 2, 3392)
+TQUANT_EXP2D_FUZZ_B16_OCP(17, BF16, 3, 3904, 2, 3776)
+TQUANT_EXP2D_FUZZ_B16_NV(18, FP16, 3, 4288, 2, 3904)
+TQUANT_EXP2D_FUZZ_FP32_OCP(19, 2, 4544, 1, 4288)
+TQUANT_EXP2D_FUZZ_B16_NV(20, BF16, 3, 4544, 2, 4544)
+TQUANT_EXP2D_FUZZ_B16_OCP(21, FP16, 5, 192, 3, 128)
+TQUANT_EXP2D_FUZZ_FP32_NV(22, 7, 448, 5, 320)
+TQUANT_EXP2D_FUZZ_B16_OCP(23, BF16, 11, 704, 7, 448)
+TQUANT_EXP2D_FUZZ_B16_NV(24, FP16, 13, 832, 11, 704)
+TQUANT_EXP2D_FUZZ_FP32_OCP(25, 17, 1088, 13, 832)
+TQUANT_EXP2D_FUZZ_B16_NV(26, BF16, 19, 1216, 17, 1088)
+TQUANT_EXP2D_FUZZ_B16_OCP(27, FP16, 7, 1472, 5, 1216)
+TQUANT_EXP2D_FUZZ_FP32_NV(28, 11, 1856, 7, 1472)
+TQUANT_EXP2D_FUZZ_B16_OCP(29, BF16, 13, 1984, 11, 1856)
+TQUANT_EXP2D_FUZZ_B16_NV(30, FP16, 7, 2368, 5, 1984)
+TQUANT_EXP2D_FUZZ_FP32_OCP(31, 5, 2624, 3, 2368)
+TQUANT_EXP2D_FUZZ_B16_NV(32, BF16, 5, 2752, 3, 2624)
+TQUANT_EXP2D_FUZZ_B16_OCP(33, FP16, 3, 3008, 2, 2752)
+TQUANT_EXP2D_FUZZ_FP32_NV(34, 3, 3392, 2, 3008)
+TQUANT_EXP2D_FUZZ_B16_OCP(35, BF16, 3, 3776, 2, 3392)
+TQUANT_EXP2D_FUZZ_B16_NV(36, FP16, 3, 3904, 2, 3776)
+TQUANT_EXP2D_FUZZ_FP32_OCP(37, 2, 4288, 1, 3904)
+TQUANT_EXP2D_FUZZ_B16_NV(38, BF16, 2, 4544, 1, 4288)
+TQUANT_EXP2D_FUZZ_B16_OCP(39, FP16, 2, 4544, 1, 4544)
+TQUANT_EXP2D_FUZZ_FP32_NV(40, 2, 128, 1, 128)
+
+#undef TQUANT_EXP2D_FUZZ_B16_NV
+#undef TQUANT_EXP2D_FUZZ_B16_OCP
+#undef TQUANT_EXP2D_FUZZ_FP32_NV
+#undef TQUANT_EXP2D_FUZZ_FP32_OCP
 
 template void TQuantTest::LaunchTQuantMXFP4_E2M1_FP16<2, 128>(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
                                                               void *stream);

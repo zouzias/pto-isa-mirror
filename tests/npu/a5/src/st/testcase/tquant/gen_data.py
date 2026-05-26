@@ -1002,55 +1002,60 @@ def generate_case_name(param):
 
 
 EXP2D_FUZZ_CASES = [
-    ("bf16", 17, 64, 17, 64, "fuzz01"),
-    ("bf16", 19, 128, 17, 64, "fuzz02"),
-    ("bf16", 11, 192, 9, 128, "fuzz03"),
-    ("bf16", 19, 256, 17, 64, "fuzz04"),
-    ("bf16", 23, 320, 13, 256, "fuzz05"),
-    ("bf16", 31, 512, 29, 448, "fuzz06"),
-    ("bf16", 37, 768, 31, 640, "fuzz07"),
-    ("bf16", 41, 1024, 39, 960, "fuzz08"),
-    ("bf16", 7, 2048, 5, 1984, "fuzz09"),
-    ("bf16", 3, 4096, 3, 4032, "fuzz10"),
-    ("bf16", 2, 8192, 1, 8192, "fuzz11"),
-    ("bf16", 127, 64, 113, 64, "fuzz12"),
-    ("bf16", 509, 64, 503, 64, "fuzz13"),
-    ("bf16", 257, 128, 251, 64, "fuzz14"),
-    ("bf16", 129, 256, 127, 192, "fuzz15"),
-    ("bf16", 95, 512, 93, 64, "fuzz16"),
-    ("bf16", 71, 768, 67, 704, "fuzz17"),
-    ("bf16", 63, 1024, 61, 128, "fuzz18"),
-    ("bf16", 17, 1536, 15, 1472, "fuzz19"),
-    ("bf16", 33, 2048, 31, 1856, "fuzz20"),
-    ("fp16", 17, 64, 17, 64, "fuzz21"),
-    ("fp16", 19, 192, 17, 128, "fuzz22"),
-    ("fp16", 15, 256, 13, 192, "fuzz23"),
-    ("fp16", 21, 384, 19, 320, "fuzz24"),
-    ("fp16", 27, 512, 25, 448, "fuzz25"),
-    ("fp16", 35, 640, 33, 576, "fuzz26"),
-    ("fp16", 43, 896, 41, 832, "fuzz27"),
-    ("fp16", 55, 1024, 53, 960, "fuzz28"),
-    ("fp16", 8, 2048, 7, 1024, "fuzz29"),
-    ("fp16", 4, 4096, 1, 4096, "fuzz30"),
-    ("fp16", 1, 8192, 1, 8128, "fuzz31"),
-    ("fp16", 191, 64, 181, 64, "fuzz32"),
-    ("fp16", 383, 64, 379, 64, "fuzz33"),
-    ("fp16", 191, 128, 189, 128, "fuzz34"),
-    ("fp16", 127, 256, 125, 64, "fuzz35"),
-    ("fp16", 79, 512, 77, 384, "fuzz36"),
-    ("fp16", 47, 1024, 43, 512, "fuzz37"),
-    ("fp16", 25, 1536, 23, 64, "fuzz38"),
-    ("fp16", 13, 3072, 11, 3008, "fuzz39"),
-    ("fp16", 2, 8192, 2, 4096, "fuzz40"),
+    ("fp32", "ocp", 5, 192, 3, 128, "fuzz01"),
+    ("fp32", "nv", 7, 320, 5, 192, "fuzz02"),
+    ("bf16", "ocp", 11, 448, 7, 320, "fuzz03"),
+    ("bf16", "nv", 13, 704, 11, 448, "fuzz04"),
+    ("fp16", "ocp", 17, 832, 13, 704, "fuzz05"),
+    ("fp16", "nv", 19, 1088, 17, 832, "fuzz06"),
+    ("fp32", "ocp", 7, 1216, 5, 1088, "fuzz07"),
+    ("bf16", "nv", 11, 1472, 7, 1216, "fuzz08"),
+    ("fp16", "ocp", 13, 1856, 11, 1472, "fuzz09"),
+    ("fp32", "nv", 5, 1984, 3, 1856, "fuzz10"),
+    ("bf16", "ocp", 7, 2368, 5, 1984, "fuzz11"),
+    ("fp16", "nv", 5, 2624, 3, 2368, "fuzz12"),
+    ("fp32", "ocp", 3, 2752, 2, 2624, "fuzz13"),
+    ("bf16", "nv", 5, 3008, 3, 2752, "fuzz14"),
+    ("fp16", "ocp", 5, 3392, 3, 3008, "fuzz15"),
+    ("fp32", "nv", 3, 3776, 2, 3392, "fuzz16"),
+    ("bf16", "ocp", 3, 3904, 2, 3776, "fuzz17"),
+    ("fp16", "nv", 3, 4288, 2, 3904, "fuzz18"),
+    ("fp32", "ocp", 2, 4544, 1, 4288, "fuzz19"),
+    ("bf16", "nv", 3, 4544, 2, 4544, "fuzz20"),
+    ("fp16", "ocp", 5, 192, 3, 128, "fuzz21"),
+    ("fp32", "nv", 7, 448, 5, 320, "fuzz22"),
+    ("bf16", "ocp", 11, 704, 7, 448, "fuzz23"),
+    ("fp16", "nv", 13, 832, 11, 704, "fuzz24"),
+    ("fp32", "ocp", 17, 1088, 13, 832, "fuzz25"),
+    ("bf16", "nv", 19, 1216, 17, 1088, "fuzz26"),
+    ("fp16", "ocp", 7, 1472, 5, 1216, "fuzz27"),
+    ("fp32", "nv", 11, 1856, 7, 1472, "fuzz28"),
+    ("bf16", "ocp", 13, 1984, 11, 1856, "fuzz29"),
+    ("fp16", "nv", 7, 2368, 5, 1984, "fuzz30"),
+    ("fp32", "ocp", 5, 2624, 3, 2368, "fuzz31"),
+    ("bf16", "nv", 5, 2752, 3, 2624, "fuzz32"),
+    ("fp16", "ocp", 3, 3008, 2, 2752, "fuzz33"),
+    ("fp32", "nv", 3, 3392, 2, 3008, "fuzz34"),
+    ("bf16", "ocp", 3, 3776, 2, 3392, "fuzz35"),
+    ("fp16", "nv", 3, 3904, 2, 3776, "fuzz36"),
+    ("fp32", "ocp", 2, 4288, 1, 3904, "fuzz37"),
+    ("bf16", "nv", 2, 4544, 1, 4288, "fuzz38"),
+    ("fp16", "ocp", 2, 4544, 1, 4544, "fuzz39"),
+    ("fp32", "nv", 2, 128, 1, 128, "fuzz40"),
 ]
 
 
 def make_exp2d_fuzz_params():
     params = []
-    for dtype_str, static_rows, static_cols, valid_rows, valid_cols, suffix in EXP2D_FUZZ_CASES:
-        dtype = bfloat16 if dtype_str == "bf16" else np.float16
+    dtype_map = {"fp32": np.float32, "bf16": bfloat16, "fp16": np.float16}
+    for dtype_str, scale_alg, static_rows, static_cols, valid_rows, valid_cols, suffix in EXP2D_FUZZ_CASES:
+        dtype = dtype_map[dtype_str]
         case_suffix = f"static{static_rows}x{static_cols}_exp2d_{suffix}"
-        params.append(TQuantParams("mxfp8", valid_rows, valid_cols, mode="nd", dtype=dtype, case_suffix=case_suffix))
+        params.append(
+            TQuantParams(
+                "mxfp8", valid_rows, valid_cols, mode="nd", dtype=dtype, case_suffix=case_suffix, scale_alg=scale_alg
+            )
+        )
     return params
 
 
@@ -1109,10 +1114,6 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 18, 138, mode="nd", dtype=bfloat16),  # padded 18x160 = 2880 -> loop_num=12
         TQuantParams("mxfp8", 1, 192, mode="nd", dtype=bfloat16),  # no pad, 192 elems -> loop_num=1
         TQuantParams("mxfp8", 1, 198, mode="nd", dtype=bfloat16),  # padded 1x224 = 224 -> loop_num=1
-        TQuantParams("mxfp8", 55, 128, mode="nd", dtype=bfloat16, case_suffix="static100x192_exp2d"),
-        TQuantParams("mxfp8", 1, 64, mode="nd", dtype=bfloat16, case_suffix="static16x64_exp2d"),
-        TQuantParams("mxfp8", 17, 192, mode="nd", dtype=bfloat16, case_suffix="static17x256_exp2d"),
-        TQuantParams("mxfp8", 3, 512, mode="nd", dtype=bfloat16, case_suffix="static3x512_exp2d"),
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=bfloat16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=bfloat16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=bfloat16),
@@ -1130,8 +1131,6 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 64, 128, mode="nd", dtype=np.float16, scale_alg="nv"),
         TQuantParams("mxfp8", 128, 128, mode="nd", dtype=np.float16, scale_alg="nv"),
         TQuantParams("mxfp8", 2, 256, mode="nd", dtype=np.float16, case_suffix="boundary", scale_alg="nv"),
-        TQuantParams("mxfp8", 55, 128, mode="nd", dtype=np.float16, case_suffix="static100x192_exp2d"),
-        TQuantParams("mxfp8", 1, 64, mode="nd", dtype=np.float16, case_suffix="static16x64_exp2d"),
         *make_exp2d_fuzz_params(),
         TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="special"),
         TQuantParams("mxfp4_e2m1", 2, 128, mode="nd", dtype=np.float16, case_suffix="inf_only"),
