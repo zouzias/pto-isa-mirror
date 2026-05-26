@@ -201,13 +201,12 @@ void ComputeGolden(
     int32_t expertPerRank = routing.expertPerRank;
     int32_t rowStride = hiddenSize + UB_ALIGN;
 
-    // V1 layout: gmA stores interleaved data (rowStride per row)
-    expectedGmA.resize(static_cast<size_t>(maxOutputSize) * rowStride, 0);
+    // Compact layout: gmA stores token only (hiddenSize bytes/row)
+    expectedGmA.resize(static_cast<size_t>(maxOutputSize) * hiddenSize, 0);
     expectedGmScale.resize(maxOutputSize, 0.0f);
 
     uint32_t prevGroupSum = 0;
 
-    // Simulate single-core execution (coreIdx=0, coreNum=1) for golden
     std::vector<int32_t> prevSumPerRank(EP, 0);
     for (int r = 0; r < EP; ++r) {
         prevSumPerRank[r] = routing.preSumBeforeRank[r * expertPerRank];
@@ -239,14 +238,15 @@ void ComputeGolden(
             uint32_t rowSrc = static_cast<uint32_t>(prevSumPerRank[dstEpIdx]);
             prevSumPerRank[dstEpIdx] += static_cast<int32_t>(rows);
 
-            // Copy full interleaved rows from remote shmem to expected gmA
             const int8_t *srcShmem = allShmemData[dstEpIdx].data();
             for (uint32_t r = 0; r < rows; ++r) {
                 const int8_t *srcRow = srcShmem + static_cast<size_t>(rowSrc + r) * rowStride;
-                int8_t *dstRow = expectedGmA.data() + static_cast<size_t>(rowStart + r) * rowStride;
-                memcpy(dstRow, srcRow, rowStride);
 
-                // Also extract scale for separate verification
+                // Token: compact K bytes/row into expectedGmA
+                int8_t *dstToken = expectedGmA.data() + static_cast<size_t>(rowStart + r) * hiddenSize;
+                memcpy(dstToken, srcRow, hiddenSize);
+
+                // Scale: extract float at offset hiddenSize in interleaved row
                 float scale;
                 memcpy(&scale, srcRow + hiddenSize, sizeof(float));
                 expectedGmScale[rowStart + r] = scale;
@@ -315,8 +315,8 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
     // Device memory allocation
     // ========================================================================
     size_t shmemSize = static_cast<size_t>(totalSrcTokens) * rowStride;
-    size_t gmASize = static_cast<size_t>(maxOutputSize) * rowStride;  // V1: interleaved layout
-    size_t gmScaleSize = static_cast<size_t>(maxOutputSize) * sizeof(float);
+    size_t gmASize = static_cast<size_t>(maxOutputSize) * rowStride;  // keeps interleaved size for TGET temp
+    size_t gmScaleSize = static_cast<size_t>(maxOutputSize) * UB_ALIGN;  // 32 bytes per scale row
     size_t cumsumSize = EP * expertPerRank * sizeof(int32_t);
     size_t tpeSize = EP * EP * expertPerRank * sizeof(int32_t);
     size_t psbSize = EP * expertPerRank * sizeof(int32_t);
@@ -381,21 +381,27 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
     std::cout << "[INFO] Rank " << rankId << ": kernel execution completed\n";
 
     // ========================================================================
-    // Verification: compare device output with golden
+    // Verification: compare device output with golden (compact token + scale)
     // ========================================================================
-    std::vector<int8_t> actualGmA(gmASize);
-    aclrtMemcpy(actualGmA.data(), gmASize, devGmA, gmASize, ACL_MEMCPY_DEVICE_TO_HOST);
+    // Read back compact token area (maxOutputSize * hiddenSize bytes)
+    size_t compactTokenSize = static_cast<size_t>(maxOutputSize) * hiddenSize;
+    std::vector<int8_t> actualGmA(compactTokenSize);
+    aclrtMemcpy(actualGmA.data(), compactTokenSize, devGmA, compactTokenSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    // Read back scale (padded layout: 32 bytes per row, float at offset 0)
+    std::vector<uint8_t> actualScaleRaw(gmScaleSize);
+    aclrtMemcpy(actualScaleRaw.data(), gmScaleSize, devGmScale, gmScaleSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
     bool pass = true;
-    int32_t rowStride2 = rowStride;
     int32_t checkedRows = std::min(totalDstTokens, maxOutputSize);
 
+    // Verify compact token data
     for (int32_t i = 0; i < checkedRows && pass; ++i) {
-        for (int32_t j = 0; j < rowStride2 && pass; ++j) {
-            int8_t actual = actualGmA[static_cast<size_t>(i) * rowStride2 + j];
-            int8_t expected = expectedGmA[static_cast<size_t>(i) * rowStride2 + j];
+        for (int32_t j = 0; j < hiddenSize && pass; ++j) {
+            int8_t actual = actualGmA[static_cast<size_t>(i) * hiddenSize + j];
+            int8_t expected = expectedGmA[static_cast<size_t>(i) * hiddenSize + j];
             if (actual != expected) {
-                std::cerr << "[FAIL] Rank " << rankId << ": gmA mismatch at row " << i
+                std::cerr << "[FAIL] Rank " << rankId << ": token mismatch at row " << i
                           << " col " << j << " actual=" << (int)actual
                           << " expected=" << (int)expected << "\n";
                 pass = false;
@@ -403,9 +409,21 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
         }
     }
 
+    // Verify scale data (first 4 bytes of each 32-byte row = float scale)
+    for (int32_t i = 0; i < checkedRows && pass; ++i) {
+        float actual;
+        memcpy(&actual, actualScaleRaw.data() + static_cast<size_t>(i) * UB_ALIGN, sizeof(float));
+        if (actual != expectedGmScale[i]) {
+            std::cerr << "[FAIL] Rank " << rankId << ": scale mismatch at row " << i
+                      << " actual=" << actual
+                      << " expected=" << expectedGmScale[i] << "\n";
+            pass = false;
+        }
+    }
+
     if (pass) {
         std::cout << "[PASS] Rank " << rankId << ": verified " << checkedRows
-                  << " rows x " << rowStride2 << " bytes correctly\n";
+                  << " rows (compact token " << hiddenSize << "B/row + scale)\n";
     }
 
     // Cleanup
