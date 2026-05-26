@@ -53,8 +53,8 @@ protected:
     template <typename T>
     bool CompareGolden(size_t dstByteSize, bool printAllEn = false)
     {
-        std::vector<T> golden(dstByteSize);
-        std::vector<T> result(dstByteSize);
+        std::vector<T> golden(dstByteSize / sizeof(T));
+        std::vector<T> result(dstByteSize / sizeof(T));
         float eps = sizeof(T) == 4 ? 0.001f : 0.005f;
         ReadFile(GetGoldenDir() + "/golden.bin", dstByteSize, golden.data(), dstByteSize);
         ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, result.data(), dstByteSize);
@@ -209,5 +209,65 @@ TEST_F(TROWSUMTest, case19)
 TEST_F(TROWSUMTest, case20)
 {
     bool ret = TRowSumTestFramework<20, int16_t, 8, 8, 448, 448, 1>();
+    EXPECT_TRUE(ret);
+}
+
+void launchTROWSUMTestCase21(float *out_val, float *src_val, int32_t *out_idx, int32_t *src_idx, aclrtStream stream);
+TEST_F(TROWSUMTest, case21)
+{
+    using T = float;
+    void *dstIdxHost;
+    void *srcIdxHost;
+    void *dstIdxDevice;
+    void *srcIdxDevice;
+    int32_t row = 32;
+    int32_t dstCol = 1;
+    int32_t srcCol = 8;
+    size_t dstByteSize = row * dstCol * sizeof(T);
+    size_t srcByteSize = row * srcCol * sizeof(T);
+    aclrtMallocHost(&dstHost, dstByteSize);
+    aclrtMallocHost(&srcHost, srcByteSize);
+    aclrtMallocHost(&dstIdxHost, dstByteSize);
+    aclrtMallocHost(&srcIdxHost, srcByteSize);
+    aclrtMalloc(&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc(&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc(&dstIdxDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc(&srcIdxDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/input.bin", srcByteSize, srcHost, srcByteSize);
+    ReadFile(GetGoldenDir() + "/input_idx.bin", srcByteSize, srcIdxHost, srcByteSize);
+    aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(srcIdxDevice, srcByteSize, srcIdxHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    launchTROWSUMTestCase21((float *)dstDevice, (float *)srcDevice, (int32_t *)dstIdxDevice, (int32_t *)srcIdxDevice, stream);
+    aclrtSynchronizeStream(stream);
+
+    aclrtMemcpy(dstHost, dstByteSize, dstDevice, dstByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(dstIdxHost, dstByteSize, dstIdxDevice, dstByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    WriteFile(GetGoldenDir() + "/output.bin", dstHost, dstByteSize);
+    WriteFile(GetGoldenDir() + "/output_idx.bin", dstIdxHost, dstByteSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(srcDevice);
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(srcHost);
+    aclrtFree(dstIdxDevice);
+    aclrtFree(srcIdxDevice);
+    aclrtFreeHost(dstIdxHost);
+    aclrtFreeHost(srcIdxHost);
+
+    
+    float eps = 0.001f;
+
+    std::vector<T> golden(dstByteSize / sizeof(T));
+    std::vector<T> result(dstByteSize / sizeof(T));
+    std::vector<int32_t> golden_idx(dstByteSize / sizeof(T));
+    std::vector<int32_t> result_idx(dstByteSize / sizeof(T));
+    ReadFile(GetGoldenDir() + "/golden.bin", dstByteSize, golden.data(), dstByteSize);
+    ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, result.data(), dstByteSize);
+    ReadFile(GetGoldenDir() + "/golden_idx.bin", dstByteSize, golden_idx.data(), dstByteSize);
+    ReadFile(GetGoldenDir() + "/output_idx.bin", dstByteSize, result_idx.data(), dstByteSize);
+    bool ret = ResultCmp(golden, result, eps, 0, 1000, false, true);
+    ret |= ResultCmp(golden_idx, result_idx, eps, 0, 1000, false, true);
     EXPECT_TRUE(ret);
 }

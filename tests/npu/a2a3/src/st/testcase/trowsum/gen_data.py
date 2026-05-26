@@ -15,8 +15,31 @@ import numpy as np
 
 np.random.seed(42)
 
+def gen_golden_data_case21():
+    dtype = np.float32
+    itype = np.int32
+    row = 32
+    col = 8
+
+    input_arr = np.random.uniform(low=-1, high=1, size=(row, col)).astype(dtype)
+    input_idx_arr = np.random.randint(low=-100, high=100, size=(row, col)).astype(itype)
+
+    output_arr = np.zeros((row)).astype(dtype)
+    output_idx_arr = np.zeros((row)).astype(itype)
+    for i in range(row):
+        for j in range(col):
+            output_arr[i] += input_arr[i, j]
+            output_idx_arr[i] += input_idx_arr[i, j]
+
+    input_arr.tofile("input.bin")
+    output_arr.tofile("golden.bin")
+    input_idx_arr.tofile("input_idx.bin")
+    output_idx_arr.tofile("golden_idx.bin")
+
 
 def gen_golden_data(param):
+    if param.name == "TROWSUMTest.case21":
+        return gen_golden_data_case21()
     data_type = param.data_type
     row = param.row
     valid_row = param.valid_row
@@ -81,6 +104,7 @@ if __name__ == "__main__":
         TRowSumParams("TROWSUMTest.case18", np.int16, 32, 32, 128, 128),
         TRowSumParams("TROWSUMTest.case19", np.int16, 16, 16, 192, 192),
         TRowSumParams("TROWSUMTest.case20", np.int16, 8, 8, 448, 448),
+        TRowSumParams("TROWSUMTest.case21", np.int16, 32, 32, 8, 8),
     ]
 
     for _, case in enumerate(case_params_list):
