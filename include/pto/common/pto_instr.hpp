@@ -876,7 +876,7 @@ PTO_INST RecordEvent SETFMATRIX(ConvTileData &src, WaitEvents &...events)
     return {};
 }
 
-#if (defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_310P3))
+#if (defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A1))
 template <typename ConvTileData, typename... WaitEvents>
 PTO_INST RecordEvent SET_IMG2COL_RPT(ConvTileData &src, WaitEvents &...events)
 {

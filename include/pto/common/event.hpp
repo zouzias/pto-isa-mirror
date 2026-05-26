@@ -176,7 +176,7 @@ constexpr pipe_t opPipeList[] = {
     PIPE_V /* TLRELU */,
     PIPE_V /* TPRELU */,
     PIPE_V /* TMOV_V2V */,
-#if !defined(PTO_NPU_ARCH_310P3)
+#if !defined(PTO_NPU_ARCH_A1)
     PIPE_FIX /* TMOV_V2M */,
     PIPE_FIX /* TEXTRACT_V2M */,
 #else
@@ -186,7 +186,7 @@ constexpr pipe_t opPipeList[] = {
     PIPE_MTE1 /* TMOV_M2B */,
     PIPE_MTE1 /* TMOV_M2L */,
     PIPE_MTE1 /* TMOV_M2R */,
-#if !defined(PTO_NPU_ARCH_310P3)
+#if !defined(PTO_NPU_ARCH_A1)
     PIPE_FIX /* TMOV_M2S */,
     PIPE_FIX /* TMOV_A2V */,
     PIPE_FIX /* TMOV_A2M */,
@@ -208,7 +208,7 @@ constexpr pipe_t opPipeList[] = {
     PIPE_V /* TSHRS */,
     PIPE_V /* TXOR */,
     PIPE_V /* TXORS */,
-#if !defined(PTO_NPU_ARCH_310P3)
+#if !defined(PTO_NPU_ARCH_A1)
     PIPE_FIX /* TEXTRACT_A2M */,
     PIPE_FIX /* TINSERT_A2M */,
 #else

@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TDIV_HPP_310P3
-#define TDIV_HPP_310P3
-#include "pto/npu/310p3/TBinOp.hpp"
-#include "pto/npu/a2a3/TDiv.hpp"
+#ifndef TADDS_HPP_A1
+#define TADDS_HPP_A1
+#include "pto/npu/a1/TBinSOp.hpp"
+#include "pto/npu/a2a3/TAddS.hpp"
 #endif

@@ -1641,7 +1641,7 @@ public:
     {
         isKAligned_ = isKAligned;
     }
-#if (defined(__DAV_CUBE__) || defined(PTO_NPU_ARCH_310P3))
+#if (defined(__DAV_CUBE__) || defined(PTO_NPU_ARCH_A1))
     /*
         TF32 precision implementation varies across different chips:
         - a2/a3 : e8m11(1 sign bits, 8 exponent bits, 11 mantissa bits)
@@ -1678,7 +1678,7 @@ private:
 #endif
 };
 
-#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_310P3)
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_A1)
 template <typename Element_, const int Rows_, const int Cols_, const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileLeft = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::RowMajor, RowValid_, ColValid_,
                       SLayout::RowMajor, TileConfig::fractalABSize>;
@@ -1688,7 +1688,7 @@ using TileLeftCompact = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::Ro
                              SLayout::RowMajor, TileConfig::fractalABSize, PadValue::Null, CompactMode::Normal>;
 #endif
 
-#if (!defined(PTO_NPU_ARCH_A2A3) && !defined(PTO_NPU_ARCH_KIRINX90) && !defined(PTO_NPU_ARCH_310P3)) || defined(__CPU_SIM)
+#if (!defined(PTO_NPU_ARCH_A2A3) && !defined(PTO_NPU_ARCH_KIRINX90) && !defined(PTO_NPU_ARCH_A1)) || defined(__CPU_SIM)
 template <typename Element_, const int Rows_, const int Cols_, const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileLeft = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::ColMajor, RowValid_, ColValid_,
                       SLayout::RowMajor, TileConfig::fractalABSize>;
