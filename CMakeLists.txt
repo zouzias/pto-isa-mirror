@@ -13,6 +13,7 @@ include(cmake/fetch_cann_cmake.cmake)
 project(pto-isa)
 
 init_cann_project()
+add_cann_target_options()
 
 include(cmake/package.cmake)
 include(cmake/func.cmake)
