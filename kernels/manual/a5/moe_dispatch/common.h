@@ -61,7 +61,6 @@ struct MoeDispatchRuntimeConfig {
     uint32_t skipRun;
     uint32_t skipBuild;
     uint32_t cleanBuild;
-    uint32_t hostGoldenOnly;
     uint32_t keepHcclShm;
     uint64_t hcclBuffSizeMb;
 };

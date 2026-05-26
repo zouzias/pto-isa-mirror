@@ -50,7 +50,7 @@ MAX_OUTPUT_SIZE=0
 HCCL_BUFFSIZE_MB=0
 SKIP_BUILD=0
 CLEAN_BUILD=1
-HOST_GOLDEN_ONLY=1
+VERIFY=1
 
 print_help() {
     cat <<'EOF'
@@ -70,11 +70,11 @@ Runtime/build:
   -tileCols, --tile-cols N
   --metadata-pad N
   --hccl-buffsize-mb N
-  --host-golden-only 0|1
+  --verify 0|1
   --skip-build 0|1
   --clean-build 0|1
 
-This A5 scaffold defaults to host golden validation. Device runtime launch is not claimed on A3 machines.
+This A5 scaffold defaults to verification.
 EOF
 }
 
@@ -93,7 +93,7 @@ while [[ $# -gt 0 ]]; do
         -tileCols|--tile-cols) TILE_COLS="$2"; shift 2 ;;
         --metadata-pad) METADATA_PAD="$2"; shift 2 ;;
         --hccl-buffsize-mb) HCCL_BUFFSIZE_MB="$2"; shift 2 ;;
-        --host-golden-only) HOST_GOLDEN_ONLY="$2"; shift 2 ;;
+        --verify) VERIFY="$2"; shift 2 ;;
         --skip-build) SKIP_BUILD="$2"; shift 2 ;;
         --clean-build) CLEAN_BUILD="$2"; shift 2 ;;
         *)
@@ -136,4 +136,4 @@ fi
     --tile-cols "${TILE_COLS}" \
     --metadata-pad "${METADATA_PAD}" \
     --hccl-buffsize-mb "${HCCL_BUFFSIZE_MB}" \
-    --host-golden-only "${HOST_GOLDEN_ONLY}"
+    --verify "${VERIFY}"

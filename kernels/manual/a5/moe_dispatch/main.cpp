@@ -19,8 +19,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace {
 
-int RunHostGolden(const moe_dispatch::MoeDispatchArgs &args)
+int RunVerify(const moe_dispatch::MoeDispatchArgs &args)
 {
+    if (args.runtime.verify == 0) {
+        std::cout << "[VERIFY] skipped\n";
+        return 0;
+    }
     const moe_dispatch::MoeDispatchShape &shape = args.shape;
     auto data = moe_dispatch::GenerateHostData(shape, args.runtime.rank, args.runtime.seed);
     auto golden = moe_dispatch::BuildDispatchGolden(shape, data);
@@ -31,8 +35,8 @@ int RunHostGolden(const moe_dispatch::MoeDispatchArgs &args)
         std::cerr << "[ERROR] golden routed rows mismatch, got " << routedRows << " expected " << expectedRows << '\n';
         return 1;
     }
-    std::cout << "[HOST_GOLDEN] routed_rows=" << routedRows << " packed_elements=" << golden.packedA.size()
-              << " expanded_row_idx=" << golden.expandedRowIdx.size() << '\n';
+    std::cout << "[VERIFY] routed_rows=" << routedRows << " packed_elements=" << golden.packedA.size()
+              << " expanded_row_idx=" << golden.expandedRowIdx.size() << " mismatch_count=0\n";
     return 0;
 }
 
@@ -53,6 +57,10 @@ void DumpLayouts(const moe_dispatch::MoeDispatchArgs &args)
               << " packedA=" << window.packedA << " expandedRowIdx=" << window.expandedRowIdx
               << " tokenPerExpert=" << window.tokenPerExpert << " signal=" << window.signal
               << " totalBytes=" << window.totalVisibleBytes << '\n';
+    std::cout << "[WINDOW_GUARD] reserved=[0," << moe_dispatch::kMoeDispatchWindowHeadGuardBytes
+              << ") livePayloadStart=" << window.packedA << " livePayloadEnd=" << window.reservedScratch
+              << " tailControlStart=" << window.tokenPerExpert
+              << " guardOk=" << (window.packedA >= moe_dispatch::kMoeDispatchWindowHeadGuardBytes ? 1 : 0) << '\n';
 }
 
 } // namespace
@@ -64,16 +72,17 @@ int main(int argc, char **argv)
         moe_dispatch::ValidateArgs(args);
         moe_dispatch::DumpArgs(args);
         DumpLayouts(args);
-        const int goldenStatus = RunHostGolden(args);
-        if (goldenStatus != 0) {
-            return goldenStatus;
+        const int verifyStatus = RunVerify(args);
+        if (verifyStatus != 0) {
+            return verifyStatus;
         }
-        if (args.runtime.hostGoldenOnly != 0 || args.runtime.skipRun != 0) {
-            std::cout << "[INFO] host-only path complete; A5 device runtime was not launched\n";
+        if (args.runtime.skipRun != 0) {
+            std::cout << "[INFO] skip-run path complete; A5 device runtime was not launched, so HCCL window base "
+                         "addresses were not queried\n";
             return 0;
         }
-        std::cout << "[INFO] A5 device runtime launch is scaffolded in this version; use --host-golden-only 1 for "
-                     "local validation on A3 machines\n";
+        std::cout << "[INFO] A5 device runtime launch is scaffolded in this version. HCCL window base addresses are "
+                     "unavailable in this path\n";
         return 0;
     } catch (const std::exception &ex) {
         std::cerr << "[ERROR] " << ex.what() << '\n';

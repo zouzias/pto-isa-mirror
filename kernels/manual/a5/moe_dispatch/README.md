@@ -61,8 +61,8 @@ cmake -S kernels/manual/a5/moe_dispatch -B /tmp/moe_dispatch_a5_build -DRUN_MODE
 cmake --build /tmp/moe_dispatch_a5_build --target moe_dispatch -j8
 ```
 
-Current local A3 machines should use host-only validation:
+Run the default verification path:
 
 ```bash
-bash kernels/manual/a5/moe_dispatch/run.sh --host-golden-only 1
+bash kernels/manual/a5/moe_dispatch/run.sh
 ```

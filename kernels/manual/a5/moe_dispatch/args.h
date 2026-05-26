@@ -134,7 +134,6 @@ inline MoeDispatchArgs DefaultArgs()
     args.runtime.skipRun = 0;
     args.runtime.skipBuild = 0;
     args.runtime.cleanBuild = 1;
-    args.runtime.hostGoldenOnly = 0;
     args.runtime.keepHcclShm = 0;
     args.runtime.hcclBuffSizeMb = 0;
     return args;
@@ -214,8 +213,6 @@ inline MoeDispatchArgs ParseArgs(int argc, char **argv)
             args.runtime.skipBuild = ParseU32(value(key.c_str()), key.c_str());
         } else if (key == "--clean-build") {
             args.runtime.cleanBuild = ParseU32(value(key.c_str()), key.c_str());
-        } else if (key == "--host-golden-only") {
-            args.runtime.hostGoldenOnly = ParseU32(value(key.c_str()), key.c_str());
         } else {
             throw std::invalid_argument("unknown option: " + key);
         }
@@ -276,7 +273,7 @@ inline void DumpArgs(const MoeDispatchArgs &args)
               << " blockDim=" << resource.blockDim << '\n';
     std::cout << "RUNTIME runMode=" << args.runMode << " socVersion=" << args.socVersion << " rank=" << runtime.rank
               << " nranks=" << runtime.nranks << " ndevices=" << runtime.ndevices
-              << " deviceBase=" << runtime.deviceBase << " hostGoldenOnly=" << runtime.hostGoldenOnly << '\n';
+              << " deviceBase=" << runtime.deviceBase << " verify=" << runtime.verify << '\n';
 }
 
 } // namespace moe_dispatch
