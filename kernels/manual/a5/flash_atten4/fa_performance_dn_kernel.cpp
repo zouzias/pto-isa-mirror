@@ -27,6 +27,10 @@ using namespace pto;
 #define skip_rescale 0
 #endif
 
+#ifndef FIFO_MODE
+#define FIFO_MODE 1
+#endif
+
 #ifndef MARK_STAMP
 // #define MARK_STAMP
 
@@ -357,7 +361,7 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm
             }
         }
         using GlobalDataQ =
-            GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, 1, HEAD_SIZE>, Layout::DN>;
+            GlobalTensor<half, pto::Shape<1, 1, 1, HEAD_SIZE, Cube_S0>, pto::Stride<1, 1, 1, 1, HEAD_SIZE>, Layout::DN>;
         using GlobalDataK =
             GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
 
@@ -404,6 +408,8 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm
                 GlobalTensor<float, pto::Shape<1, 1, 1, Cube_S1, Cube_S0>, pto::Stride<1, 1, 1, Cube_S0, 1>>;
             GlobalDataQK qkGlobalTile(qk_tile_fifo + base_elems);
             TSTORE(qkGlobalTile, qkAccTile);
+            set_flag(PIPE_FIX, PIPE_M, accTileEvtID);
+            wait_flag(PIPE_FIX, PIPE_M, accTileEvtID);
         }
 
         constexpr uint32_t Vec_S0 = Cube_S0 / VEC_CORES / kTileFactor;
@@ -745,8 +751,11 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
                 TileDataH_Sub xExpSub;
                 TASSIGN(xExpSub, (uint64_t)x_expT.data() + col_byte_offset);
                 TSTORE(pTileHalfSub, xExpSub);
+                set_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
+                wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
             }
 
+            // Softmax vsstb already filled nzConvBuffer (NZ+1); skip ND->NZ TMOV before TINSERT.
             set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
@@ -1006,7 +1015,9 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     constexpr size_t pv_fifo_block_stride =
         static_cast<size_t>(pv_tile_fifo_size) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(HEAD_SIZE);
 
-    constexpr TSync_Custom<SyncOpType::TSTORE_C2GM, SyncOpType::TLOAD> qk2smSync = {BUF0_QK_READY};
+
+    // QK uses L0C->UB (TMOV); Vec must wait PIPE_V, not PIPE_MTE2 (GM path).
+    constexpr TSync_Custom<SyncOpType::TMOV_C2UB, SyncOpType::TLOAD> qk2smSync = {BUF0_QK_READY};
     constexpr TSync_Custom<SyncOpType::TINSERT_V2L1, SyncOpType::TLOAD> sm2pvSync = {BUF1_SM_READY};
     constexpr TSync_Custom<SyncOpType::TMOV_C2UB, SyncOpType::TLOAD> pv2guSync = {UPDATE_READY};
     constexpr TSync_Custom<SyncOpType::TMOV_C2UB, SyncOpType::TLOAD> ubBufSync = {UB_BUF_READY};

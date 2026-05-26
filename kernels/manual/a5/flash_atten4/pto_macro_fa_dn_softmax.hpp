@@ -255,7 +255,7 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter
         vlds(max_3a, src0_ub, 3 * 64, NORM);
 
         RegTensor<float> v_row;
-        for (uint16_t row = 4; row < 128; row += 4) {
+        for (uint16_t row = 4; row < uint16_t(ubN); row += 4) {
             vlds(v_row, p0, 4 * 64, NORM, POST_UPDATE);
             vmax(max_0a, max_0a, v_row, preg_108, MODE_ZEROING);
             vlds(v_row, p1, 4 * 64, NORM, POST_UPDATE);
@@ -671,7 +671,7 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
     __ubuf__ half *nz_buffer_Ptr2 = nz_buffer_Ptr + 16;
     __ubuf__ half *nz_buffer_Ptr3 = nz_buffer_Ptr + ubM*ubN/2/4;
     __ubuf__ half *nz_buffer_Ptr4 = nz_buffer_Ptr + ubM*ubN/2/4 + 16;
-    uint64_t VSSTB_CONFIG = ((ubN + 1)<< 16) | 2u;
+    uint64_t VSSTB_CONFIG = ((ubN + 1) << 16) | 2u;
 
     __VEC_SCOPE__{
         vector_f32 vreg_x_even;
@@ -812,7 +812,7 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
         vlds(max_3a, src0_ub, 3 * 64, NORM);
 
         RegTensor<float> v_row;
-        for (uint16_t row = 4; row < 128; row += 4) {
+        for (uint16_t row = 4; row < uint16_t(ubN); row += 4) {
             vlds(v_row, p0, 4 * 64, NORM, POST_UPDATE);
             vmax(max_0a, max_0a, v_row, preg_108, MODE_ZEROING);
             vlds(v_row, p1, 4 * 64, NORM, POST_UPDATE);
