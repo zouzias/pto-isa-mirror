@@ -20,6 +20,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstddef>
 #include <cstdint>
 
+#include "securec.h"
+
 namespace moe_combine {
 
 struct MpiContext {
@@ -156,7 +158,9 @@ inline void MpiGatherBytes(MpiContext *context, const void *sendData, size_t byt
 {
     if (context == nullptr || !context->initialized) {
         if (recvData != nullptr && sendData != recvData && bytes != 0) {
-            std::memcpy(recvData, sendData, bytes);
+            if (memcpy_s(recvData, bytes, sendData, bytes) != EOK) {
+                throw std::runtime_error("local MPI gather copy failed");
+            }
         }
         return;
     }
