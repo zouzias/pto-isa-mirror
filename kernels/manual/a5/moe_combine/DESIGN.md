@@ -3,8 +3,9 @@
 ## 目标
 
 `kernels/manual/a5/moe_combine` 是 `kernels/manual/a2a3/moe_combine` 的 A5 / Ascend950 翻译版本。主体流程、
-host fixture、CPU golden、kernel 入口、workspace 语义和 combine return 行为都保持 A3 版本一致；只改 A5
-必须不同的编译、资源默认值、HCCL context 和 HCCL window padding。
+host fixture、CPU golden、kernel 入口和 combine return 行为都保持 A3 版本一致；只改 A5 必须不同的编译、
+资源默认值、HCCL context 和 HCCL window padding。A5 workspace 只保留当前 kernel 实际使用的本地 AIV
+soft sync 区。
 
 ## 主体保持一致
 
@@ -76,9 +77,6 @@ A3 的 `peerWindowOffset = 0`，live payload 从 HCCL window 起始地址开始�
 ```text
 window + 0
   [headGuard]        4096 bytes, only zeroed, no live payload
-  [peerTokenPerExpert]
-  [expandedRowIdx]
-  [packedA]
   [ptrD]
   [countReadySignal]
   [combineDoneSignal]

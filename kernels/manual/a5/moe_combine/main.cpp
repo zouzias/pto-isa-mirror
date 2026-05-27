@@ -447,8 +447,39 @@ uint64_t CompareFloatBuffer(const MoeCombineArgs &args, const std::string &name,
     return mismatches;
 }
 
-void CopyRouteMetaToDevice(const CombineRouteMetaLayout &layout, RuntimeState *state)
+void ValidateRouteMetaCumsum(const MoeCombineShape &shape, const CpuGoldenData &golden, uint32_t rank)
 {
+    size_t expertNumPadded = static_cast<size_t>(ExpertNumPadded(shape));
+    size_t expectedElems = static_cast<size_t>(shape.ep) * expertNumPadded;
+    if (golden.peerTokenPerExpert.size() != expectedElems) {
+        throw std::runtime_error(
+            "rank " + std::to_string(rank) + " routeMeta peerTokenPerExpert size mismatch: actual=" +
+            std::to_string(golden.peerTokenPerExpert.size()) + " expected=" + std::to_string(expectedElems));
+    }
+    if (golden.cumsumPerExpert.size() != expectedElems) {
+        throw std::runtime_error("rank " + std::to_string(rank) + " routeMeta cumsumPerExpert size mismatch: actual=" +
+                                 std::to_string(golden.cumsumPerExpert.size()) +
+                                 " expected=" + std::to_string(expectedElems));
+    }
+    for (uint32_t src = 0; src < shape.ep; ++src) {
+        int32_t running = 0;
+        size_t base = static_cast<size_t>(src) * expertNumPadded;
+        for (size_t expert = 0; expert < expertNumPadded; ++expert) {
+            running += golden.peerTokenPerExpert[base + expert];
+            int32_t actual = golden.cumsumPerExpert[base + expert];
+            if (actual != running) {
+                throw std::runtime_error("rank " + std::to_string(rank) +
+                                         " routeMeta cumsumPerExpert must be inclusive prefix: src=" +
+                                         std::to_string(src) + " expert=" + std::to_string(expert) +
+                                         " actual=" + std::to_string(actual) + " expected=" + std::to_string(running));
+            }
+        }
+    }
+}
+
+void CopyRouteMetaToDevice(const MoeCombineShape &shape, const CombineRouteMetaLayout &layout, RuntimeState *state)
+{
+    ValidateRouteMetaCumsum(shape, state->golden, state->rank);
     auto *routeMetaBase = reinterpret_cast<uint8_t *>(state->buffers.routeMeta);
     CheckAcl(aclrtMemcpy(routeMetaBase + layout.cumsumPerExpert, BytesOfI32Vector(state->golden.cumsumPerExpert.size()),
                          state->golden.cumsumPerExpert.data(), BytesOfI32Vector(state->golden.cumsumPerExpert.size()),
@@ -474,57 +505,46 @@ void CopyRouteMetaToDevice(const CombineRouteMetaLayout &layout, RuntimeState *s
              "rank " + std::to_string(state->rank) + " copy fixture expandedRowIdx");
 }
 
-std::vector<uint16_t> CopyExpertFixtureToDevice(const MoeCombineShape &shape, const WorkspaceLayout &workspaceLayout,
-                                                RuntimeState *state)
+std::vector<uint16_t> CopyExpertFixtureToDevice(const MoeCombineShape &shape, RuntimeState *state)
 {
-    auto *workspaceBase = reinterpret_cast<uint8_t *>(state->buffers.workspace);
     size_t expertElements = static_cast<size_t>(shape.maxOutputSize) * shape.k;
     std::vector<uint16_t> dispatchedHalf = FloatVectorToHalfBits(state->golden.dispatchedA);
-    size_t dispatchedBytes = BytesOfHalfVector(dispatchedHalf.size());
-    CheckAcl(aclrtMemcpy(workspaceBase + workspaceLayout.dispatchedA, dispatchedBytes, dispatchedHalf.data(),
-                         dispatchedBytes, ACL_MEMCPY_HOST_TO_DEVICE),
-             "rank " + std::to_string(state->rank) + " copy fixture dispatchedA");
     CheckAcl(aclrtMemcpy(state->buffers.expertOutput, BytesOfHalfVector(expertElements), dispatchedHalf.data(),
                          BytesOfHalfVector(expertElements), ACL_MEMCPY_HOST_TO_DEVICE),
              "rank " + std::to_string(state->rank) + " copy fixture expertOutput");
     return dispatchedHalf;
 }
 
-void VerifyCombineFixtureCopy(const MoeCombineArgs &args, const WorkspaceLayout &workspaceLayout,
-                              const std::vector<uint16_t> &dispatchedHalf, RuntimeState *state)
+void VerifyCombineFixtureCopy(const MoeCombineArgs &args, const std::vector<uint16_t> &dispatchedHalf,
+                              RuntimeState *state)
 {
     if (args.runtime.debug < 2) {
         return;
     }
     size_t expertElements = static_cast<size_t>(args.shape.maxOutputSize) * args.shape.k;
-    auto *workspaceBase = reinterpret_cast<uint8_t *>(state->buffers.workspace);
-    std::vector<float> dispatched =
-        CopyDeviceHalfToFloat(workspaceBase + workspaceLayout.dispatchedA, expertElements, state->rank, "dispatchedA");
     std::vector<float> expertOutput =
         CopyDeviceHalfToFloat(state->buffers.expertOutput, expertElements, state->rank, "expertOutput");
-    uint64_t copyMismatches =
-        CompareFloatBuffer(args, "expertOutput_vs_dispatchedA", expertOutput, dispatched, state->rank);
     uint64_t goldenMismatches =
         CompareFloatBuffer(args, "expertOutput", expertOutput, state->golden.dispatchedA, state->rank);
-    if (copyMismatches != 0 || goldenMismatches != 0) {
+    if (goldenMismatches != 0) {
         throw std::runtime_error("rank " + std::to_string(state->rank) + " combine fixture mismatch");
     }
     WriteBinaryFile(RankBinaryFile(args, state->rank, "actual_dispatchedA_head"), dispatchedHalf);
 }
 
-void PrepareCombineFixture(const MoeCombineArgs &args, const WorkspaceLayout &workspaceLayout,
-                           const CombineRouteMetaLayout &routeMetaLayout, RuntimeState *state)
+void PrepareCombineFixture(const MoeCombineArgs &args, const CombineRouteMetaLayout &routeMetaLayout,
+                           RuntimeState *state)
 {
     bool verbose = VerboseRuntimeLogs(args);
     if (verbose) {
         PrintStage(state->rank, "prepare_combine_fixture", "begin");
     }
     auto prepareStart = std::chrono::steady_clock::now();
-    CopyRouteMetaToDevice(routeMetaLayout, state);
-    std::vector<uint16_t> dispatchedHalf = CopyExpertFixtureToDevice(args.shape, workspaceLayout, state);
+    CopyRouteMetaToDevice(args.shape, routeMetaLayout, state);
+    std::vector<uint16_t> dispatchedHalf = CopyExpertFixtureToDevice(args.shape, state);
     auto prepareEnd = std::chrono::steady_clock::now();
     state->prepareHostUs = UsSince(prepareStart, prepareEnd);
-    VerifyCombineFixtureCopy(args, workspaceLayout, dispatchedHalf, state);
+    VerifyCombineFixtureCopy(args, dispatchedHalf, state);
     MpiBarrier(&state->mpi);
     if (verbose) {
         PrintStage(state->rank, "prepare_combine_fixture", "done");
@@ -857,7 +877,7 @@ bool RunOneIteration(const MoeCombineArgs &args, const WorkspaceLayout &workspac
                      bool isWarmup, RuntimeState *state, std::vector<IterationTiming> *measureTimings)
 {
     ClearDeviceState(args, workspaceLayout, routeMetaLayout, peerWindowLayout, state);
-    PrepareCombineFixture(args, workspaceLayout, routeMetaLayout, state);
+    PrepareCombineFixture(args, routeMetaLayout, state);
     RunCombine(args, peerWindowLayout, state);
     if (args.runtime.combineReturnOnly != 0) {
         MpiBarrier(&state->mpi);

@@ -63,9 +63,6 @@ AICORE inline uint64_t AppendFieldDevice(uint64_t &offset, uint64_t bytes)
 struct LocalWorkspaceView {
     GM_ADDR base;
     __gm__ int32_t *localSync;
-    __gm__ float *floatScratch;
-    __gm__ half *dispatchedA;
-    __gm__ half *ptrDLocal;
 };
 
 struct LocalRouteMetaView {
@@ -87,22 +84,16 @@ struct LocalPeerWindowView {
 AICORE inline WorkspaceLayout MakeWorkspaceLayout(MoeCombineShape shape)
 {
     const uint64_t i32 = 4;
-    const uint64_t f32 = 4;
-    const uint64_t f16 = 2;
     uint64_t expertNumPadded = ((static_cast<uint64_t>(shape.expertNum) + moe_combine::kMoeCombineMetadataPad - 1) /
                                 moe_combine::kMoeCombineMetadataPad) *
                                moe_combine::kMoeCombineMetadataPad;
     uint64_t aivBlocks = shape.aivBlocks == 0 ? 1 : shape.aivBlocks;
-    uint64_t expandedRows = static_cast<uint64_t>(shape.m) * shape.topK;
     uint64_t offset = 0;
 
     WorkspaceLayout layout{};
     uint64_t syncSlots = aivBlocks * (8 + expertNumPadded);
     syncSlots = syncSlots < 64 ? 64 : syncSlots;
     layout.localSync = AppendFieldDevice(offset, syncSlots * i32);
-    layout.floatScratch = AppendFieldDevice(offset, aivBlocks * moe_combine::kMoeCombineTileCols * f32);
-    layout.dispatchedA = AppendFieldDevice(offset, static_cast<uint64_t>(shape.maxOutputSize) * shape.k * f16);
-    layout.ptrDLocal = AppendFieldDevice(offset, expandedRows * shape.k * f16);
     layout.totalBytes = Align64Device(offset);
     return layout;
 }
@@ -146,9 +137,6 @@ AICORE inline LocalWorkspaceView MakeLocalWorkspaceView(GM_ADDR workspaceBase, c
     LocalWorkspaceView view{};
     view.base = workspaceBase;
     view.localSync = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.localSync);
-    view.floatScratch = reinterpret_cast<__gm__ float *>(workspaceBase + layout.floatScratch);
-    view.dispatchedA = reinterpret_cast<__gm__ half *>(workspaceBase + layout.dispatchedA);
-    view.ptrDLocal = reinterpret_cast<__gm__ half *>(workspaceBase + layout.ptrDLocal);
     return view;
 }
 

@@ -109,7 +109,7 @@ void LaunchMoeCombineKernel(MoeCombineShape shape, uint32_t myRank,
 | `routeMeta` | input | `aclrtMalloc` GM | Explicit combine routing ledger |
 | `peerWindow` | input/output | HCCL RDMA window | Remote-visible `ptrD` return buffer and signal counters |
 | `hcclCtx` | input | `aclrtMalloc` GM | Device-side HCCL window addresses and A5 direct-context fields |
-| `workspace` | scratch | `aclrtMalloc` GM | Local sync and scratch buffers |
+| `workspace` | temporary | `aclrtMalloc` GM | Local AIV soft-sync area |
 | `stream` | input | ACL stream | Kernel launch stream |
 | `launchBlockCount` | input | value | AIV block count for the kernel launch |
 
@@ -154,7 +154,7 @@ A5 localWindowBase
 | --- | --- | --- |
 | `peerTokenPerExpert` | `[ep, expertNumPadded]` int32 | Number of rows owned by each source rank for each global expert |
 | `expandedRowIdx` | `[M * topK]` int32 | Token route to `peerWindow.ptrD` row mapping; `-1` means invalid route |
-| `cumsumPerExpert` | `[ep, expertNumPadded]` int32 | Inclusive prefix by global expert for each source rank |
+| `cumsumPerExpert` | `[ep, expertNumPadded]` int32 | Inclusive prefix by global expert for each source rank: `cumsum[src,e] = sum(peerTokenPerExpert[src,0..e])` |
 | `dispatchOffset` | `[expertPerRank]` int32 | Base row in `expertOutput` for each local expert |
 | `prevSumBeforeRank` | `[ep, expertPerRank]` int32 | Per-source offset inside a local expert's rows |
 
@@ -165,7 +165,7 @@ row is 14 KiB. The main optimization goal is to keep GM/HCCL-window movement str
 overhead.
 
 - **Explicit routeMeta**: routing metadata is passed as a separate GM buffer. `peerWindow` is reserved for remote-visible
-  return data and signals, and `workspace` is reserved for local scratch.
+  return data and signals, and `workspace` only keeps the local AIV soft-sync area.
 - **Chunked return sharding**: the return phase iterates `src_rank x local_expert` segments and shards row chunks across
   AIV blocks with `chunkBase % blockNum`.
 - **PTO `TPUT` ping/pong path**: remote return uses `TPUT(remoteDst, localSrc, ping, pong)`, allowing MTE2 load and MTE3
@@ -198,7 +198,7 @@ For the common debug command `--aiv-blocks 24` with `PES=2, M=64, K=7168, topK=8
 
 | Layout | Bytes |
 | --- | --- |
-| `workspace` | `22120704` |
+| `workspace` | `2304` |
 | `routeMeta` | `2432` |
 | `peerWindow` live payload | `7340160` |
 | A5 HCCL head guard | `4096` |
@@ -247,7 +247,7 @@ rows = routeMeta.peerTokenPerExpert[src_rank, globalExpert]
 For each non-empty segment:
 
 1. `srcStart` is computed from `dispatchOffset[localExpert] + prevSumBeforeRank[src_rank, localExpert]`.
-2. `dstStart` is computed from the previous expert prefix in `cumsumPerExpert`.
+2. `dstStart` is computed from `cumsumPerExpert[src_rank, globalExpert - 1]`; it is `0` when `globalExpert == 0`.
 3. If `src_rank == myRank`, the row is copied locally into local `peerWindow.ptrD`.
 4. Otherwise, PTO `TPUT` writes the row chunk into the source rank's remote peer window.
 

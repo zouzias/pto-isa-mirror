@@ -174,9 +174,6 @@ if [ "${SYNC_SLOTS}" -lt 64 ]; then
     SYNC_SLOTS=64
 fi
 append_workspace_field $(( SYNC_SLOTS * 4 ))
-append_workspace_field $(( EFFECTIVE_AIV_BLOCKS * TILE_COLS * 4 ))
-append_workspace_field $(( MAX_OUTPUT_SIZE * K * 2 ))
-append_workspace_field $(( EXPANDED_ROWS * K * 2 ))
 WORKSPACE_BYTES=$(align_up "${workspace_offset}" 64)
 
 route_meta_offset=0

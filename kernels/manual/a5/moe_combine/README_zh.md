@@ -107,7 +107,7 @@ void LaunchMoeCombineKernel(MoeCombineShape shape, uint32_t myRank,
 | `routeMeta` | 输入 | `aclrtMalloc` GM | 显式 combine 路由账本 |
 | `peerWindow` | 输入/输出 | HCCL RDMA window | 远端可见的 `ptrD` return buffer 和 signal |
 | `hcclCtx` | 输入 | `aclrtMalloc` GM | 设备侧 HCCL window 地址和 A5 direct-context 字段 |
-| `workspace` | 临时 | `aclrtMalloc` GM | 本地同步区和 scratch |
+| `workspace` | 临时 | `aclrtMalloc` GM | 本地 AIV soft sync 区 |
 | `stream` | 输入 | ACL stream | kernel launch stream |
 | `launchBlockCount` | 输入 | 值传递 | kernel 使用的 AIV block 数 |
 
@@ -152,7 +152,7 @@ A5 localWindowBase
 | --- | --- | --- |
 | `peerTokenPerExpert` | `[ep, expertNumPadded]` int32 | 每个 source rank 到每个 global expert 的行数 |
 | `expandedRowIdx` | `[M * topK]` int32 | token route 到 `peerWindow.ptrD` 的行映射；`-1` 表示无效 route |
-| `cumsumPerExpert` | `[ep, expertNumPadded]` int32 | 每个 source rank 内按 global expert 的 inclusive prefix |
+| `cumsumPerExpert` | `[ep, expertNumPadded]` int32 | 每个 source rank 内按 global expert 的 inclusive prefix：`cumsum[src,e] = sum(peerTokenPerExpert[src,0..e])` |
 | `dispatchOffset` | `[expertPerRank]` int32 | 每个本地 expert 在 `expertOutput` 中的基地址行 |
 | `prevSumBeforeRank` | `[ep, expertPerRank]` int32 | 某 source rank 在本地 expert 行段中的前缀偏移 |
 
@@ -162,7 +162,7 @@ A5 localWindowBase
 GM/HCCL window 搬运带宽影响。优化目标是让数据搬运尽量流式化，同时降低控制面元数据开销。
 
 - **显式 routeMeta**：路由元数据作为独立 GM buffer 传入。`peerWindow` 只保留远端可见 return 数据和信号，
-  `workspace` 只保留本地 scratch。
+  `workspace` 只保留本地 AIV soft sync 区。
 - **chunk 化 return 分片**：return 阶段遍历 `src_rank x local_expert` segment，并按
   `chunkBase % blockNum` 把行 chunk 分给 AIV block。
 - **PTO `TPUT` ping/pong 路径**：远端 return 使用 `TPUT(remoteDst, localSrc, ping, pong)`，通过 UB 双缓冲
@@ -195,7 +195,7 @@ GM/HCCL window 搬运带宽影响。优化目标是让数据搬运尽量流式�
 
 | Layout | 字节数 |
 | --- | --- |
-| `workspace` | `22120704` |
+| `workspace` | `2304` |
 | `routeMeta` | `2432` |
 | `peerWindow` live payload | `7340160` |
 | A5 HCCL head guard | `4096` |
@@ -244,7 +244,7 @@ rows = routeMeta.peerTokenPerExpert[src_rank, globalExpert]
 对每个非空 segment：
 
 1. `srcStart` 由 `dispatchOffset[localExpert] + prevSumBeforeRank[src_rank, localExpert]` 计算。
-2. `dstStart` 由 `cumsumPerExpert` 中上一个 expert 的 prefix 计算。
+2. `dstStart` 由 `cumsumPerExpert[src_rank, globalExpert - 1]` 计算；`globalExpert == 0` 时为 `0`。
 3. 如果 `src_rank == myRank`，行被本地复制到本 rank 的 `peerWindow.ptrD`。
 4. 否则，PTO `TPUT` 把行 chunk 写入 source rank 的远端 peer window。
 
