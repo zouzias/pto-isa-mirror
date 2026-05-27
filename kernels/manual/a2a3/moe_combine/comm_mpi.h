@@ -113,7 +113,7 @@ inline Func GetMpiFunc(const char *name)
     return reinterpret_cast<Func>(func);
 }
 
-// Header-only adaptation of kernels/manual/a2a3/gemm_ar/comm_mpi.h.
+// Header-only MPI dynamic-loading helper for the standalone moe_combine runner.
 inline MpiContext InitMpiAndRank(int *argc, char ***argv)
 {
     auto init = GetMpiFunc<MpiInitFunc>("MPI_Init");

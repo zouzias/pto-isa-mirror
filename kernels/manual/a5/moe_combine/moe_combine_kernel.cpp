@@ -30,12 +30,6 @@ using moe_combine::WorkspaceLayout;
 #define GM_ADDR __gm__ uint8_t *
 #endif
 
-// Kernel source contract for later tasks:
-//   - Only PTO and C/C++ headers are allowed in this file.
-//   - Device payload movement will use pto::GlobalTensor and pto::Tile views.
-//   - Cross-rank movement/readiness will use PTO comm primitives.
-//   - There are exactly two public device kernel names in this project.
-
 namespace {
 
 constexpr int kDefaultTileCols = static_cast<int>(moe_combine::kMoeCombineTileCols);

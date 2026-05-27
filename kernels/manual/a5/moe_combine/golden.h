@@ -547,62 +547,10 @@ inline void WriteGoldenOutputFiles(const MoeCombineArgs &args, uint32_t myRank, 
     golden_detail::WriteDebugFiles(args, myRank, golden);
 }
 
-inline CpuGoldenData ComputeCpuGolden(const MoeCombineArgs &args, const HostInputData &inputs, uint32_t myRank)
-{
-    (void)inputs;
-    const MoeCombineShape &shape = args.shape;
-    uint32_t expertNumPadded = static_cast<uint32_t>(ExpertNumPadded(shape));
+CpuGoldenData ComputeCpuGolden(const MoeCombineArgs &args, const HostInputData &inputs, uint32_t myRank);
 
-    std::vector<HostInputData> worldInputs = golden_detail::LoadOrGenerateWorldInputs(args);
-    RouteTable routesBySrcExpert;
-    std::vector<std::vector<float>> packedBySrc;
-    std::vector<std::vector<int32_t>> expandedBySrc;
-
-    CpuGoldenData golden;
-    golden_detail::BuildRoutes(args, worldInputs, &routesBySrcExpert, &packedBySrc, &expandedBySrc,
-                               &golden.peerTokenPerExpert, &golden.totalRoutes, &golden.invalidRoutes);
-
-    InitGoldenLocalData(shape, myRank, expertNumPadded, packedBySrc, expandedBySrc, &golden);
-    BuildCumsumPerExpert(shape, expertNumPadded, &golden);
-    BuildOwnerRows(shape, routesBySrcExpert, &golden);
-    BuildDispatchPlan(shape, myRank, routesBySrcExpert, &golden);
-    FillDispatchedA(shape, myRank, routesBySrcExpert, packedBySrc, &golden);
-    BuildPtrD(shape, myRank, routesBySrcExpert, expandedBySrc, packedBySrc, &golden);
-    RestoreOutputC(shape, worldInputs[myRank], &golden);
-    WriteGoldenOutputFiles(args, myRank, golden);
-    return golden;
-}
-
-inline CompareResult CompareOutputs(const MoeCombineArgs &args, const CpuGoldenData &golden,
-                                    const std::vector<float> &actualOutputC, uint32_t myRank)
-{
-    (void)myRank;
-    CompareResult result{};
-    result.elementCount = static_cast<uint64_t>(golden.outputC.size());
-    result.firstMismatchIndex = result.elementCount;
-    result.actual = 0.0f;
-    result.expected = 0.0f;
-    if (actualOutputC.size() != golden.outputC.size()) {
-        result.mismatchCount = result.elementCount;
-        result.firstMismatchIndex = 0;
-        return result;
-    }
-    for (size_t i = 0; i < golden.outputC.size(); ++i) {
-        float actual = actualOutputC[i];
-        float expected = golden.outputC[i];
-        float diff = std::fabs(actual - expected);
-        float tol = static_cast<float>(args.atol + args.rtol * std::fabs(expected));
-        if (diff > tol) {
-            if (result.mismatchCount == 0) {
-                result.firstMismatchIndex = i;
-                result.actual = actual;
-                result.expected = expected;
-            }
-            ++result.mismatchCount;
-        }
-    }
-    return result;
-}
+CompareResult CompareOutputs(const MoeCombineArgs &args, const CpuGoldenData &golden,
+                             const std::vector<float> &actualOutputC, uint32_t myRank);
 
 } // namespace moe_combine
 

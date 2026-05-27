@@ -21,8 +21,8 @@ constexpr uint32_t kMoeCombineRowChunk = 8;
 constexpr uint32_t kMoeCombineMetadataPad = 16;
 constexpr uint32_t kMoeCombineSignalValue = 1;
 
-// Shared ABI names. Later tasks may add helper methods, but these struct names
-// and field names are the host/kernel contract for the first PTO version.
+// Shared host/kernel ABI. Keep these struct and field names aligned between
+// host layout calculation and device-side views.
 struct MoeCombineShape {
     uint32_t ep;
     uint32_t m;
