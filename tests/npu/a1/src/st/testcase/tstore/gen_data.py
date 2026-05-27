@@ -49,6 +49,7 @@ def gen_golden_data(case_name, gInfo):
     input_arr.tofile("./input.bin")
     output_arr.tofile("./golden.bin")
 
+
 class GlobalTensorInfo:
     def __init__(self, datatype, format, gShape0, gShape1, gShape2, gShape3, gShape4,
                 gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape3, gWholeShape4):
