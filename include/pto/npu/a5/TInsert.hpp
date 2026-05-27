@@ -35,9 +35,9 @@ __tf__ PTO_INTERNAL void TInsertAccToMat(typename DstTileData::TileDType __out__
                                          uint16_t validCol, uint16_t indexRow, uint16_t indexCol)
 {
     using dstType = typename DstTileData::DType;
-    constexpr bool channelSplitEnable = (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor)) &&
-                                        (std::is_same_v<dstType, float>) &&
-                                        (DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
+    constexpr bool channelSplitEnable =
+        (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor)) &&
+        (std::is_same_v<dstType, float>)&&(DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
     constexpr int32_t c0Size = (!channelSplitEnable) && (DstTileData::SFractalSize == 2 * CUBE_BLOCK_SIZE) ?
                                    2 * C0_SIZE_BYTE / sizeof(dstType) :
                                    C0_SIZE_BYTE / sizeof(dstType);
@@ -63,7 +63,7 @@ __tf__ PTO_INTERNAL void TInsertAccToVec(typename DstTileData::TileDType __out__
     constexpr bool enableNz2Dn = (!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::NoneBox);
     constexpr bool enableNz2Nz = (!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor);
     constexpr bool channelSplitEnable =
-        enableNz2Nz && (std::is_same_v<dstType, float>) && (DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
+        enableNz2Nz && (std::is_same_v<dstType, float>)&&(DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
     constexpr uint32_t dstStride = GetTmovAccDstStride<DstTileData, SrcTileData>();
 
     uint32_t dstOffset;
@@ -402,23 +402,52 @@ __tf__ PTO_INTERNAL OP_NAME(TINSERT)
     constexpr uint32_t srcRowStride = SrcTileData::RowStride;
     constexpr uint32_t dstRowStride = DstTileData::RowStride;
     constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+    constexpr int32_t kStaticValidCol = SrcTileData::ValidCol;
+    constexpr bool kSingleChunkStatic =
+        (kStaticValidCol > 0) && (static_cast<uint32_t>(kStaticValidCol) <= elementsPerRepeat);
 
-    __VEC_SCOPE__
-    {
-        constexpr auto distValue =
-            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
-        RegTensor<T> vreg;
-        MaskReg preg;
+    if constexpr (kSingleChunkStatic) {
+        uint32_t kTail = static_cast<uint32_t>(kStaticValidCol);
+        __VEC_SCOPE__
+        {
+            constexpr auto distValue =
+                std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+            RegTensor<T> vreg;
+            MaskReg pregTail = CreatePredicate<T>(kTail);
+            for (uint16_t i = 0; i < validRow; ++i) {
+                uint32_t srcRowOff = static_cast<uint32_t>(i) * srcRowStride;
+                uint32_t dstRowOff = (indexRow + static_cast<uint32_t>(i)) * dstRowStride + indexCol;
+                vlds(vreg, srcAddr, srcRowOff, NORM);
+                vsts(vreg, dstAddr, dstRowOff, distValue, pregTail);
+            }
+        }
+    } else {
         uint16_t repeatTimes = CeilDivision(static_cast<uint32_t>(validCol), elementsPerRepeat);
+        uint32_t tailEleNum = static_cast<uint32_t>(validCol) % elementsPerRepeat;
+        if (tailEleNum == 0) {
+            tailEleNum = elementsPerRepeat;
+        }
+        uint32_t fullEleNum = elementsPerRepeat;
+        uint16_t lastRepeat = repeatTimes - 1;
 
-        for (uint16_t i = 0; i < validRow; ++i) {
-            uint32_t sreg = static_cast<uint32_t>(validCol);
-            uint32_t srcRowOff = static_cast<uint32_t>(i) * srcRowStride;
-            uint32_t dstRowOff = (indexRow + static_cast<uint32_t>(i)) * dstRowStride + indexCol;
-            for (uint16_t j = 0; j < repeatTimes; ++j) {
-                preg = CreatePredicate<T>(sreg);
-                vlds(vreg, srcAddr, srcRowOff + static_cast<uint32_t>(j) * elementsPerRepeat, NORM);
-                vsts(vreg, dstAddr, dstRowOff + static_cast<uint32_t>(j) * elementsPerRepeat, distValue, preg);
+        __VEC_SCOPE__
+        {
+            constexpr auto distValue =
+                std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+            RegTensor<T> vreg;
+            MaskReg pregFull = CreatePredicate<T>(fullEleNum);
+            MaskReg pregTail = CreatePredicate<T>(tailEleNum);
+
+            for (uint16_t i = 0; i < validRow; ++i) {
+                uint32_t srcRowOff = static_cast<uint32_t>(i) * srcRowStride;
+                uint32_t dstRowOff = (indexRow + static_cast<uint32_t>(i)) * dstRowStride + indexCol;
+                for (uint16_t j = 0; j < lastRepeat; ++j) {
+                    vlds(vreg, srcAddr, srcRowOff + static_cast<uint32_t>(j) * elementsPerRepeat, NORM);
+                    vsts(vreg, dstAddr, dstRowOff + static_cast<uint32_t>(j) * elementsPerRepeat, distValue, pregFull);
+                }
+                vlds(vreg, srcAddr, srcRowOff + static_cast<uint32_t>(lastRepeat) * elementsPerRepeat, NORM);
+                vsts(vreg, dstAddr, dstRowOff + static_cast<uint32_t>(lastRepeat) * elementsPerRepeat, distValue,
+                     pregTail);
             }
         }
     }
