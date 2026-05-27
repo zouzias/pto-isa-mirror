@@ -54,7 +54,7 @@ inline uint64_t EffectiveAivBlocks(const MoeCombineShape &shape)
 
 inline uint64_t ExpertNumPadded(const MoeCombineShape &shape)
 {
-    return AlignUp(shape.expertNum, shape.metadataPad);
+    return AlignUp(shape.expertNum, kMoeCombineMetadataPad);
 }
 
 inline uint64_t AppendField(uint64_t *offset, uint64_t bytes)
@@ -83,8 +83,9 @@ inline WorkspaceLayout ComputeWorkspaceLayout(const MoeCombineShape &shape)
         syncSlots = 64;
     }
     layout.localSync = AppendField(&offset, CheckedMul(syncSlots, kI32, "localSync"));
-    layout.floatScratch = AppendField(
-        &offset, CheckedMul(CheckedMul(aivBlocks, shape.tileCols, "floatScratch elems"), kFloat, "floatScratch bytes"));
+    layout.floatScratch = AppendField(&offset, CheckedMul(CheckedMul(aivBlocks, kMoeCombineTileCols,
+                                                                      "floatScratch elems"),
+                                                          kFloat, "floatScratch bytes"));
     layout.dispatchedA = AppendField(
         &offset, CheckedMul(CheckedMul(shape.maxOutputSize, shape.k, "dispatchedA elems"), kHalf, "dispatchedA bytes"));
     layout.ptrDLocal = AppendField(

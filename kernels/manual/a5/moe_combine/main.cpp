@@ -143,7 +143,6 @@ struct RuntimeState {
     double prepareHostUs = 0.0;
     double combineE2eUs = 0.0;
     double totalE2eUs = 0.0;
-    uint32_t currentSignalValue = 1;
 };
 
 void PrintProfileSummary(const MoeCombineArgs &args, RuntimeState *state,
@@ -395,12 +394,8 @@ void ClearDeviceState(const MoeCombineArgs &args, const WorkspaceLayout &workspa
              "rank " + std::to_string(state->rank) + " clear workspace");
     CheckAcl(aclrtMemset(state->buffers.routeMeta, routeMetaLayout.totalBytes, 0, routeMetaLayout.totalBytes),
              "rank " + std::to_string(state->rank) + " clear routeMeta");
-    void *peerWindowClearBase = state->hccl.peerWindow;
-    size_t peerWindowDataBytes = static_cast<size_t>(peerWindowLayout.countReadySignal);
-    if (state->currentSignalValue == 1) {
-        peerWindowClearBase = state->hccl.localWindowBase;
-        peerWindowDataBytes = static_cast<size_t>(state->hccl.peerWindowOffset + peerWindowLayout.totalBytes);
-    }
+    void *peerWindowClearBase = state->hccl.localWindowBase;
+    size_t peerWindowDataBytes = static_cast<size_t>(state->hccl.peerWindowOffset + peerWindowLayout.totalBytes);
     CheckAcl(aclrtMemset(peerWindowClearBase, peerWindowDataBytes, 0, peerWindowDataBytes),
              "rank " + std::to_string(state->rank) + " clear peerWindow data");
     CheckAcl(aclrtSynchronizeStream(state->computeStream), "rank " + std::to_string(state->rank) + " sync clear");
@@ -606,21 +601,19 @@ void RunCombine(const MoeCombineArgs &args, const PeerWindowLayout &peerWindowLa
     ClearCombineReturnState(args, peerWindowLayout, state);
     PrintCombineReturnSegments(args, state);
     uint32_t launchBlocks = args.shape.aivBlocks == 0 ? 1 : args.shape.aivBlocks;
-    MoeCombineShape launchShape = args.shape;
-    launchShape.signalValue = state->currentSignalValue;
     MpiBarrier(&state->mpi);
     auto combineStart = std::chrono::steady_clock::now();
     LaunchMoeCombineKernel(
-        launchShape, state->rank, reinterpret_cast<uint8_t *>(state->buffers.expertOutput),
+        args.shape, state->rank, reinterpret_cast<uint8_t *>(state->buffers.expertOutput),
         reinterpret_cast<uint8_t *>(state->buffers.probs), reinterpret_cast<uint8_t *>(state->buffers.outputC),
         reinterpret_cast<uint8_t *>(state->buffers.routeMeta), reinterpret_cast<uint8_t *>(state->hccl.peerWindow),
         reinterpret_cast<uint8_t *>(state->hccl.deviceContext), reinterpret_cast<uint8_t *>(state->buffers.workspace),
         state->computeStream, launchBlocks);
     CheckAcl(aclrtSynchronizeStream(state->computeStream),
              "rank " + std::to_string(state->rank) + " combine stream sync");
-    MpiBarrier(&state->mpi);
     auto combineEnd = std::chrono::steady_clock::now();
     state->combineE2eUs = UsSince(combineStart, combineEnd);
+    MpiBarrier(&state->mpi);
 
     if (args.runtime.combineReturnOnly != 0 || args.runtime.debug >= 2) {
         CombineReturnDump dump;
@@ -705,7 +698,7 @@ void PrintPerformanceConfig(const MoeCombineArgs &args, const WorkspaceLayout &w
     }
     uint32_t aivBlocks = args.shape.aivBlocks == 0 ? 1 : args.shape.aivBlocks;
     uint32_t peerShards = args.shape.ep < aivBlocks ? args.shape.ep : aivBlocks;
-    std::cout << "rank=" << rank << " aiv_blocks=" << aivBlocks << " tile_cols=" << args.shape.tileCols
+    std::cout << "rank=" << rank << " aiv_blocks=" << aivBlocks << " tile_cols=" << kMoeCombineTileCols
               << " peer_window_bytes=" << peerWindowLayout.totalBytes
               << " route_meta_bytes=" << routeMetaLayout.totalBytes << " workspace_bytes=" << workspaceLayout.totalBytes
               << " combine_peer_shards=" << peerShards << std::endl;
@@ -819,7 +812,6 @@ int main(int argc, char **argv)
         measureTimings.reserve(args.runtime.iters);
         for (uint32_t iter = 0; iter < totalIterations; ++iter) {
             bool isWarmup = iter < args.runtime.warmup;
-            state.currentSignalValue = iter + 1;
             if (verbose && !isWarmup) {
                 std::cout << "rank=" << state.rank << " iteration=" << (iter - args.runtime.warmup)
                           << " phase=measure begin" << std::endl;

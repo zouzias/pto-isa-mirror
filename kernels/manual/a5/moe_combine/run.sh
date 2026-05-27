@@ -11,27 +11,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-: "${ASCEND_CANN_PATH:=/home/ntlab/liulei/can/cann-9.0.0-beta.1/set_env.sh}"
-if [ ! -f "${ASCEND_CANN_PATH}" ]; then
-    ASCEND_CANN_PATH=$(ls -1d /usr/local/Ascend/cann-*/set_env.sh 2>/dev/null | sort -V | tail -1 || true)
-fi
-if [ -z "${ASCEND_CANN_PATH}" ] || [ ! -f "${ASCEND_CANN_PATH}" ]; then
-    echo "[ERROR] Cannot find CANN set_env.sh. Set ASCEND_CANN_PATH to <cann-install>/set_env.sh"
-    exit 1
-fi
-
-ORIG_ARGS=("$@")
-set +e +u
-set --
-source "${ASCEND_CANN_PATH}"
-SET_ENV_STATUS=$?
-set -- "${ORIG_ARGS[@]}"
-set -euo pipefail
-if [ ${SET_ENV_STATUS} -ne 0 ]; then
-    echo "[ERROR] source ${ASCEND_CANN_PATH} failed"
-    exit ${SET_ENV_STATUS}
-fi
-
 RUN_MODE=npu
 SOC_VERSION=Ascend950PR_958b
 PES=2
@@ -41,7 +20,7 @@ TOPK=8
 EXPERT_PER_PE=2
 AIV_BLOCKS=0
 TILE_COLS=1024
-ROW_CHUNK=0
+ROW_CHUNK=8
 METADATA_PAD=16
 MAX_OUTPUT_SIZE=0
 DEVICE_BASE=0
@@ -78,9 +57,6 @@ Kernel/runtime:
   -r, --run-mode npu
   -v, --soc-version NAME
   -aivBlocks, --aiv-blocks N
-  -tileCols, --tile-cols N
-  --row-chunk N
-  --metadata-pad N
   -device-base, --device-base, --first-device N
   --ndevices N
   --hccl-buffsize-mb N
@@ -125,9 +101,6 @@ while [[ $# -gt 0 ]]; do
         -expertPerPe|--experts-per-rank) EXPERT_PER_PE="$2"; shift 2 ;;
         --max-output-size) MAX_OUTPUT_SIZE="$2"; shift 2 ;;
         -aivBlocks|--aiv-blocks) AIV_BLOCKS="$2"; shift 2 ;;
-        -tileCols|--tile-cols) TILE_COLS="$2"; shift 2 ;;
-        --row-chunk) ROW_CHUNK="$2"; shift 2 ;;
-        --metadata-pad) METADATA_PAD="$2"; shift 2 ;;
         -device-base|--device-base|--first-device) DEVICE_BASE="$2"; shift 2 ;;
         --ndevices) NDEVICES="$2"; shift 2 ;;
         --hccl-buffsize-mb) HCCL_BUFFSIZE_MB="$2"; shift 2 ;;
@@ -160,16 +133,9 @@ if [ "${RUN_MODE}" != "npu" ]; then
     echo "[ERROR] run-mode must be npu for the first version"
     exit 1
 fi
-if [ "${K}" -lt "${TILE_COLS}" ]; then
-    TILE_COLS="${K}"
-fi
 if [ "${PES}" -le 0 ] || [ "${M}" -le 0 ] || [ "${K}" -le 0 ] || [ "${TOPK}" -le 0 ] || \
-   [ "${EXPERT_PER_PE}" -le 0 ] || [ "${TILE_COLS}" -le 0 ] || [ "${METADATA_PAD}" -le 0 ]; then
-    echo "[ERROR] shape fields, TILE_COLS, and METADATA_PAD must be nonzero"
-    exit 1
-fi
-if [ $(( K % TILE_COLS )) -ne 0 ]; then
-    echo "[ERROR] K % tileCols must be 0"
+   [ "${EXPERT_PER_PE}" -le 0 ]; then
+    echo "[ERROR] shape fields must be nonzero"
     exit 1
 fi
 if [ -z "${NDEVICES}" ]; then
@@ -295,9 +261,6 @@ HOST_ARGS=(
     --experts-per-rank "${EXPERT_PER_PE}"
     --max-output-size "${MAX_OUTPUT_SIZE}"
     --aiv-blocks "${AIV_BLOCKS}"
-    --tile-cols "${TILE_COLS}"
-    --row-chunk "${ROW_CHUNK}"
-    --metadata-pad "${METADATA_PAD}"
     --device-base "${DEVICE_BASE}"
     --ndevices "${NDEVICES}"
     --hccl-buffsize-mb "${HCCL_BUFFSIZE}"

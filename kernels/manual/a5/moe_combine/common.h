@@ -16,6 +16,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace moe_combine {
 
 constexpr uint32_t kMaxMoeCombineRanks = 64;
+constexpr uint32_t kMoeCombineTileCols = 1024;
+constexpr uint32_t kMoeCombineRowChunk = 8;
+constexpr uint32_t kMoeCombineMetadataPad = 16;
+constexpr uint32_t kMoeCombineSignalValue = 1;
 
 // Shared ABI names. Later tasks may add helper methods, but these struct names
 // and field names are the host/kernel contract for the first PTO version.
@@ -28,10 +32,6 @@ struct MoeCombineShape {
     uint32_t expertNum;
     uint32_t maxOutputSize;
     uint32_t aivBlocks;
-    uint32_t tileCols;
-    uint32_t rowChunk;
-    uint32_t metadataPad;
-    uint32_t signalValue;
 };
 
 struct WorkspaceLayout {

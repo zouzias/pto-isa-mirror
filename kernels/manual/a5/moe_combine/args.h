@@ -121,10 +121,6 @@ inline MoeCombineArgs DefaultArgs()
     args.shape.expertNum = args.shape.ep * args.shape.expertPerRank;
     args.shape.maxOutputSize = 0;
     args.shape.aivBlocks = 0;
-    args.shape.tileCols = 1024;
-    args.shape.rowChunk = 0;
-    args.shape.metadataPad = 16;
-    args.shape.signalValue = 1;
     args.runtime.deviceBase = 0;
     args.runtime.ndevices = args.shape.ep;
     args.runtime.rankFromMpi = 1;
@@ -178,12 +174,6 @@ inline MoeCombineArgs ParseArgs(int argc, char **argv)
             args.shape.maxOutputSize = ParseU32(value(key.c_str()), key.c_str());
         } else if (key == "-aivBlocks" || key == "--aiv-blocks") {
             args.shape.aivBlocks = ParseU32(value(key.c_str()), key.c_str());
-        } else if (key == "-tileCols" || key == "--tile-cols") {
-            args.shape.tileCols = ParseU32(value(key.c_str()), key.c_str());
-        } else if (key == "--row-chunk") {
-            args.shape.rowChunk = ParseU32(value(key.c_str()), key.c_str());
-        } else if (key == "--metadata-pad") {
-            args.shape.metadataPad = ParseU32(value(key.c_str()), key.c_str());
         } else if (key == "-device-base" || key == "--device-base" || key == "--first-device") {
             args.runtime.deviceBase = ParseU32(value(key.c_str()), key.c_str());
         } else if (key == "--ndevices") {
@@ -257,12 +247,8 @@ inline void ValidateArgs(const MoeCombineArgs &args)
     if (args.runMode != "npu") {
         throw std::invalid_argument("run-mode must be npu for the first version");
     }
-    if (shape.ep == 0 || shape.m == 0 || shape.k == 0 || shape.topK == 0 || shape.expertPerRank == 0 ||
-        shape.tileCols == 0 || shape.metadataPad == 0) {
-        throw std::invalid_argument("shape fields, tileCols, and metadataPad must be nonzero");
-    }
-    if (shape.k % shape.tileCols != 0) {
-        throw std::invalid_argument("K % tileCols must be 0");
+    if (shape.ep == 0 || shape.m == 0 || shape.k == 0 || shape.topK == 0 || shape.expertPerRank == 0) {
+        throw std::invalid_argument("shape fields must be nonzero");
     }
     if (shape.aivBlocks == 0 || shape.aivBlocks > resource.maxAivBlocks) {
         throw std::invalid_argument("aivBlocks must be in [1, maxAivBlocks]");
@@ -285,8 +271,8 @@ inline void PrintRunSummary(const MoeCombineArgs &args)
               << " NDEVICES=" << args.runtime.ndevices << "\n";
     std::cout << "M=" << shape.m << " K=" << shape.k << " TOPK=" << shape.topK
               << " EXPERT_PER_PE=" << shape.expertPerRank << " MAX_OUTPUT_SIZE=" << shape.maxOutputSize << "\n";
-    std::cout << "AIV_BLOCKS=" << shape.aivBlocks << " TILE_COLS=" << shape.tileCols << " ROW_CHUNK=" << shape.rowChunk
-              << " METADATA_PAD=" << shape.metadataPad << "\n";
+    std::cout << "AIV_BLOCKS=" << shape.aivBlocks << " TILE_COLS=" << kMoeCombineTileCols
+              << " ROW_CHUNK=" << kMoeCombineRowChunk << " METADATA_PAD=" << kMoeCombineMetadataPad << "\n";
     const MoeCombineResourceConfig resource = GetResourceConfig(args.socVersion);
     std::cout << "RESOURCE defaultAicBlocks=" << resource.defaultAicBlocks
               << " defaultAivRatio=" << resource.defaultAivRatio << " defaultAivBlocks=" << resource.defaultAivBlocks

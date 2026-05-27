@@ -579,6 +579,28 @@ Do not force collectives onto clearly irregular peer-to-peer exchange problems.
 6. Publish doorbells only after the producer-side data path is globally visible; in this repo that often appears as `pipe_barrier(PIPE_ALL) + dsb(DSB_DDR)` before `TNOTIFY`.
 7. Use ping-pong staging when bandwidth or overlap matters and the staging tiles can remain non-overlapping.
 
+### A5 HCCL window head guard
+
+Current A5 manual HCCL-window kernels reserve a small head guard before the live remote-visible payload instead of placing
+the first live buffer at the raw HCCL window base. This is an application layout rule in these samples, not something the
+HCCL runtime automatically skips for the kernel.
+
+Observed repo patterns:
+
+- [`../kernels/manual/a5/gemm_ar/main.cpp`](../kernels/manual/a5/gemm_ar/main.cpp) uses `WINDOW_GUARD_BYTES = 4096` and
+  allocates `reduced_output_head_pad` before `reduced_output` and `signal_matrix`.
+- [`../kernels/manual/a5/moe_combine/layout.h`](../kernels/manual/a5/moe_combine/layout.h) uses
+  `kMoeCombineWindowHeadGuardBytes = 4096`; host passes `windowBase + guard` as the live `peerWindow` base while sizing
+  and clearing `guard + liveWindowBytes`.
+
+Practical rule for A5 HCCL RDMA windows:
+
+- include the head guard in `HCCL_BUFFSIZE` estimation;
+- clear the guard together with the live window region during setup/reset;
+- pass the live payload base (`windowBase + guard`) to kernels whose device-side layout starts at offset 0;
+- do not assume A3 and A5 share the same peer-window base rule. A3 layouts can start live payload at `windowBase`, while
+  A5 samples may intentionally keep the first 4096 bytes unused.
+
 ## PTO-Manual pipeline and tiling
 
 This is the third main axis of this note after compute primitives and communication primitives. PTO-Manual is not just a list of instructions; it is a way to make placement, movement, compute, synchronization, and reuse explicit.
