@@ -38,7 +38,7 @@ using moe_combine::WorkspaceLayout;
 
 namespace {
 
-constexpr int kDefaultTileCols = 1024;
+constexpr int kDefaultTileCols = static_cast<int>(moe_combine::kMoeCombineTileCols);
 constexpr uint32_t kRouteCacheMax = 16;
 constexpr uint64_t kPingUbAddr = 0x0;
 constexpr uint64_t kPongUbAddr = 0x1000;
@@ -96,7 +96,9 @@ AICORE inline WorkspaceLayout MakeWorkspaceLayout(MoeCombineShape shape)
     const uint64_t f32 = 4;
     const uint64_t f16 = 2;
     uint64_t expertNumPadded =
-        ((static_cast<uint64_t>(shape.expertNum) + shape.metadataPad - 1) / shape.metadataPad) * shape.metadataPad;
+        ((static_cast<uint64_t>(shape.expertNum) + moe_combine::kMoeCombineMetadataPad - 1) /
+         moe_combine::kMoeCombineMetadataPad) *
+        moe_combine::kMoeCombineMetadataPad;
     uint64_t aivBlocks = shape.aivBlocks == 0 ? 1 : shape.aivBlocks;
     uint64_t expandedRows = static_cast<uint64_t>(shape.m) * shape.topK;
     uint64_t offset = 0;
@@ -105,7 +107,7 @@ AICORE inline WorkspaceLayout MakeWorkspaceLayout(MoeCombineShape shape)
     uint64_t syncSlots = aivBlocks * (8 + expertNumPadded);
     syncSlots = syncSlots < 64 ? 64 : syncSlots;
     layout.localSync = AppendFieldDevice(offset, syncSlots * i32);
-    layout.floatScratch = AppendFieldDevice(offset, aivBlocks * shape.tileCols * f32);
+    layout.floatScratch = AppendFieldDevice(offset, aivBlocks * moe_combine::kMoeCombineTileCols * f32);
     layout.dispatchedA = AppendFieldDevice(offset, static_cast<uint64_t>(shape.maxOutputSize) * shape.k * f16);
     layout.ptrDLocal = AppendFieldDevice(offset, expandedRows * shape.k * f16);
     layout.totalBytes = Align64Device(offset);
@@ -116,7 +118,9 @@ AICORE inline CombineRouteMetaLayout MakeCombineRouteMetaLayout(MoeCombineShape 
 {
     const uint64_t i32 = 4;
     uint64_t expertNumPadded =
-        ((static_cast<uint64_t>(shape.expertNum) + shape.metadataPad - 1) / shape.metadataPad) * shape.metadataPad;
+        ((static_cast<uint64_t>(shape.expertNum) + moe_combine::kMoeCombineMetadataPad - 1) /
+         moe_combine::kMoeCombineMetadataPad) *
+        moe_combine::kMoeCombineMetadataPad;
     uint64_t expandedRows = static_cast<uint64_t>(shape.m) * shape.topK;
     uint64_t offset = 0;
 
@@ -252,7 +256,8 @@ AICORE inline void AcquireGmRangeBeforeRead(__gm__ void *ptr, uint64_t bytes)
 
 AICORE inline uint32_t ExpertNumPaddedDevice(MoeCombineShape shape)
 {
-    return ((shape.expertNum + shape.metadataPad - 1) / shape.metadataPad) * shape.metadataPad;
+    return ((shape.expertNum + moe_combine::kMoeCombineMetadataPad - 1) / moe_combine::kMoeCombineMetadataPad) *
+           moe_combine::kMoeCombineMetadataPad;
 }
 
 AICORE inline uint32_t TokenShardBegin(uint32_t totalTokens, uint32_t blockId, uint32_t blockNum)
@@ -281,7 +286,8 @@ AICORE inline void SoftSyncAiv(__gm__ int32_t *gmWorkspace, uint32_t blockNum)
 
 AICORE inline uint32_t EffectiveRowChunk(MoeCombineShape shape)
 {
-    return shape.rowChunk == 0 ? 8 : shape.rowChunk;
+    (void)shape;
+    return moe_combine::kMoeCombineRowChunk;
 }
 
 AICORE inline void WaitCombinePhase(MoeCombineShape shape, LocalPeerWindowView localPeer, uint32_t blockId,
@@ -386,7 +392,6 @@ AICORE inline void ReturnExpertRowsToOwners(MoeCombineShape shape, LocalWorkspac
         LocalPeerWindowView remotePeer = MakeRemotePeerWindowView(ctx, peerWindow, src, peerWindowLayout);
         pipe_barrier(PIPE_ALL);
         pto::comm::Signal sig = MakeSignal(remotePeer.combineDoneSignal + myRank);
-        (void)shape.signalValue;
         pto::comm::TNOTIFY(sig, 1, pto::comm::NotifyOp::AtomicAdd);
     }
 }
@@ -478,13 +483,13 @@ __global__ AICORE void MoeCombineKernel(MoeCombineShape shape, uint32_t myRank, 
     uint32_t blockId = static_cast<uint32_t>(get_block_idx());
     uint32_t blockNum = shape.aivBlocks == 0 ? 1 : shape.aivBlocks;
     if (shape.ep == 0 || shape.m == 0 || shape.k == 0 || shape.topK == 0 || shape.expertPerRank == 0 ||
-        shape.expertNum == 0 || shape.metadataPad == 0 || blockId >= blockNum) {
+        shape.expertNum == 0 || blockId >= blockNum) {
         return;
     }
 
     ReturnExpertRowsToOwners(shape, workspaceView, localRouteMeta, localPeer, ctx, peerWindow, expertOutput, myRank,
                              blockId, blockNum, peerWindowLayout);
-    WaitCombinePhase(shape, localPeer, blockId, blockNum, static_cast<int32_t>(shape.signalValue));
+    WaitCombinePhase(shape, localPeer, blockId, blockNum, static_cast<int32_t>(moe_combine::kMoeCombineSignalValue));
     SoftSyncAiv(workspaceView.localSync, blockNum);
     RestoreOutputRows(shape, localRouteMeta, localPeer, probs, outputC, blockId, blockNum);
     SoftSyncAiv(workspaceView.localSync, blockNum);

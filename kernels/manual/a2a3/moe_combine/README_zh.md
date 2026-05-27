@@ -1,358 +1,330 @@
-# moe_combine — A2/A3 PTO MoE Combine Kernel
+# moe_combine - A2/A3 PTO MoE Combine Kernel
 
-基于 PTO 手写的 MoE **combine 阶段** device kernel，目标硬件为 Ascend A2/A3（Atlas 910B）。
-覆盖 expert 计算完成之后的完整 combine 数据通路：
+## 概览
 
-```
-expertOutput[本地 experts × 来源 rank 行, K]
-  ─── 变长 return (TPUT) ──→  token 归属 rank 的 peerWindow.ptrD
-  ─── 跨 rank 完成信号 (TNOTIFY/TWAIT) ──→  同步屏障
-  ─── 加权还原 (TAXPY) ──→  outputC[M, K]
-```
+本示例在 Ascend A2/A3 系列芯片上使用 PTO 实现 MoE combine 阶段。它对应
+dispatch-compute-combine 流水中的 return 半段：本地 expert 完成计算后，combine kernel 将 expert
+输出行按路由账本返还给原 token 所在 rank，并使用 gate 权重还原每个 token 的最终输出。
 
-## 架构总览
+当前 kernel 是一个独立 combine kernel，入口消费的是显式低层路由账本 `routeMeta`。它不直接接收
+MC2 风格的 `expert_ids`、`assist_info_for_combine`、`ep_send_counts` 等高层输入；这些字段需要在上游
+或 host 侧先降成 `routeMeta`。
 
-```
-┌─────────────────────────────── Device Kernel ────────────────────────────────┐
-│                                                                              │
-│  MoeCombineKernel(shape, myRank, expertOutput, probs, outputC,     │
-│                              peerWindow, hcclCtx, workspace)                │
-│                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────┐    │
-│  │ 阶段 1: ReturnExpertRowsToOwners                                     │    │
-│  │   • 按 segment 遍历: src_rank × expertPerRank                        │    │
-│  │   • 从 peerTokenPerExpert 读取变长行数                                │    │
-│  │   • 本地 return: TPUT（MTE2→MTE3，UB ping/pong 双缓冲）              │    │
-│  │   • 远端 return: TPUT（经 UB ping/pong 写入 peer window）            │    │
-│  │   • 按 chunk 在 AIV block 之间轮转分片                                │    │
-│  │   • 完成后: TNOTIFY 各 peer 的 combineDoneSignal[myRank]             │    │
-│  └──────────────────────────────────────────────────────────────────────┘    │
-│  ┌──────────────────────────────────────────────────────────────────────┐    │
-│  │ 阶段 2: WaitCombinePhase                                             │    │
-│  │   • TWAIT combineDoneSignal[peer] >= signalValue  ∀ peer             │    │
-│  └──────────────────────────────────────────────────────────────────────┘    │
-│  ┌──────────────────────────────────────────────────────────────────────┐    │
-│  │ 阶段 3: RestoreOutputRows                                            │    │
-│  │   • Token 按 block 范围分片                                           │    │
-│  │   • 每个 token: 先清零 outputC，再                                    │    │
-│  │     for slot in topK:                                                │    │
-│  │       outputC[token,:] += probs[token,slot] * ptrD[expandedRowIdx]   │    │
-│  │   • 使用 TEXPANDS(清零) / TLOAD / TAXPY / TSTORE                    │    │
-│  └──────────────────────────────────────────────────────────────────────┘    │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
+```text
+expertOutput[local expert rows, K]
+  -> 通过 HCCL peerWindow.ptrD 做变长 return
+  -> 通过 TNOTIFY/TWAIT 做跨 rank 完成同步
+  -> 加权还原: outputC[token, :] = sum(topK probs * returned rows)
 ```
 
-## 覆盖范围
+## 支持的 AI 处理器
+
+- A2/A3，已在 Atlas 910B1 验证
+
+## 目录结构
+
+```text
+kernels/manual/a2a3/moe_combine/
+├── CMakeLists.txt           # Bisheng CCE + host 构建配置
+├── run.sh                   # 一键构建和运行脚本，发现 MPI，估算 HCCL_BUFFSIZE
+├── common.h                 # 共享 ABI: shape, routeMeta layout, peerWindow layout, HCCL context
+├── layout.h                 # Host 侧 layout 计算和 HCCL_BUFFSIZE 估算
+├── kernel_launchers.h       # Host 侧 kernel launcher 声明
+├── moe_combine_kernel.cpp   # PTO AIV kernel: return + wait + weighted restore
+├── main.cpp                 # Host 编排: MPI, ACL, HCCL window, fixture, verify, profile
+├── golden.h                 # CPU golden 路由构造和输出校验
+├── hccl_context.h           # HCCL window 初始化和 peer-window 地址交换
+├── comm_mpi.h               # MPI 动态加载封装
+├── DESIGN.md                # 从 dispatch 拆分的设计说明
+├── PHASE2_DESIGN.md         # PTO 风格重构计划
+├── IMPLEMENTATION_PLAN.md   # 历史实现追踪
+├── README.md                # 英文 README
+└── README_zh.md             # 中文 README
+```
+
+## 算子说明
+
+### 计算功能
+
+对每个 rank，本算子消费已经按本地 expert 和来源 rank 排布好的 expert 输出。kernel 内部流程是：
+
+1. 读取 `routeMeta`，得到每个 source rank 给每个 expert 的行数，以及这些行在 `expertOutput` 中的位置。
+2. 使用 PTO `TPUT` 将每行 expert 输出返还到 token owner rank 的 HCCL peer window。
+3. 使用 `TNOTIFY` / `TWAIT` 等待所有 peer 完成 return 写入。
+4. 读取 `routeMeta.expandedRowIdx` 和 `probs`，还原 `outputC[M, K]`。
+
+对 token `t`：
+
+```text
+outputC[t, :] = sum_{slot=0..topK-1} probs[t, slot] * ptrD[expandedRowIdx[t, slot], :]
+```
+
+### 覆盖范围
 
 | 包含 | 不包含 |
-|------|--------|
-| 基于 HCCL window 的变长 return | Dispatch pack/gather |
-| 跨 rank 完成信号同步 | Expert FFN/GMM 计算 |
-| probs 加权还原 | HCCL AllToAllV 集合通信 |
-| 多 AIV block 并行 | 动态路由/门控 |
+| --- | --- |
+| EP 域内基于 HCCL window 的 combine return | Dispatch pack/gather kernel |
+| 使用 `TPUT` 实现变长 all-to-all-like return | HCCL collective `AllToAllV` API |
+| 使用 `probs` 做加权还原 | Expert FFN/GMM 计算 |
+| 显式低层 `routeMeta` 契约 | 量化、TP ReduceScatterV、shared/copy/const expert |
+| A2/A3 HCCL peer-window 路径 | MC2 公共 ABI 适配层 |
 
-## 核心参数
+## 入口契约
 
-定义在 `common.h` → `MoeCombineShape`：
+### Kernel Launcher ABI
+
+```cpp
+void LaunchMoeCombineKernel(MoeCombineShape shape, uint32_t myRank,
+                            uint8_t *expertOutput,
+                            uint8_t *probs,
+                            uint8_t *outputC,
+                            uint8_t *routeMeta,
+                            uint8_t *peerWindow,
+                            uint8_t *hcclCtx,
+                            uint8_t *workspace,
+                            void *stream,
+                            uint32_t launchBlockCount);
+```
+
+### 运行时输入
+
+| 参数 | 方向 | 存储 | 含义 |
+| --- | --- | --- | --- |
+| `shape` | 输入 | 值传递 | 静态 shape 和调优字段，如 `ep`, `m`, `k`, `topK`, `expertPerRank`, `aivBlocks` |
+| `myRank` | 输入 | 值传递 | EP 域内 rank id |
+| `expertOutput` | 输入 | `aclrtMalloc` GM | 本地 expert 输出行，形状 `[maxOutputSize, K]`，fp16 |
+| `probs` | 输入 | `aclrtMalloc` GM | gate 权重，形状 `[M, topK]`，fp32 |
+| `outputC` | 输出 | `aclrtMalloc` GM | 还原后的 token 输出，形状 `[M, K]`，fp16 |
+| `routeMeta` | 输入 | `aclrtMalloc` GM | 显式 combine 路由账本 |
+| `peerWindow` | 输入/输出 | HCCL RDMA window | 远端可见的 `ptrD` return buffer 和 signal |
+| `hcclCtx` | 输入 | `aclrtMalloc` GM | 设备侧所有 rank 的 HCCL window 地址 |
+| `workspace` | 临时 | `aclrtMalloc` GM | 本地同步区和 scratch |
+| `stream` | 输入 | ACL stream | kernel launch stream |
+| `launchBlockCount` | 输入 | 值传递 | kernel 使用的 AIV block 数 |
+
+### `MoeCombineShape`
 
 | 字段 | 含义 |
-|------|------|
-| `ep` | rank 数（endpoint 数） |
-| `m` | 本 rank token 数 |
+| --- | --- |
+| `ep` | EP rank 数 |
+| `m` | 每 rank token 数 |
 | `k` | hidden size |
 | `topK` | 每 token 的 expert 路由数 |
-| `expertPerRank` | 每 rank 的本地 expert 数 |
-| `expertNum` | 全局 expert 数（`ep × expertPerRank`） |
-| `maxOutputSize` | 每 rank expert output 最大行容量 |
-| `aivBlocks` | AIV block 并行度（0→24） |
-| `tileCols` | 向量操作列 tile 宽度（内部参数，固定 1024） |
-| `rowChunk` | return 阶段行 chunk 大小（0→8） |
-| `metadataPad` | expert metadata 对齐粒度 |
-| `signalValue` | 当前迭代信号 epoch |
+| `expertPerRank` | 每 rank 本地 expert 数 |
+| `expertNum` | 全局 expert 数，通常为 `ep * expertPerRank` |
+| `maxOutputSize` | 每 rank expert 输出最大行容量 |
+| `aivBlocks` | 逻辑 AIV block 数；A3 默认 `24`，可传参覆盖 |
 
-## 内存布局
+### `routeMeta` 布局
 
-### Workspace（rank 本地）
+`routeMeta` 是显式低层 combine 路由账本。它是本地 GM，不属于 HCCL window。
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `localTokenPerExpert` | int32 | 每 expert token 计数 |
-| `blockTokenPerExpert` | int32 | 每 block 的 token 分配 |
-| `blockPrefixPerExpert` | int32 | 每 block 前缀和 |
-| `cumsumPerExpert` | int32 | 跨 rank 的累积和 |
-| `dispatchOffset` | int32 | 本地 expert dispatch 基偏移 |
-| `prevSumBeforeRank` | int32 | 本 rank 之前的累积 token 数 |
-| `localSync` | int32 | Soft sync 工作区 |
-| `floatScratch` | float | 临时缓冲 |
-| `dispatchedA` | half | dispatch 后的输入（combine fixture） |
-| `ptrDLocal` | half | 本地 ptrD 镜像 |
+| 字段 | 形状 | 含义 |
+| --- | --- | --- |
+| `peerTokenPerExpert` | `[ep, expertNumPadded]` int32 | 每个 source rank 到每个 global expert 的行数 |
+| `expandedRowIdx` | `[M * topK]` int32 | token route 到 `peerWindow.ptrD` 的行映射；`-1` 表示无效 route |
+| `cumsumPerExpert` | `[ep, expertNumPadded]` int32 | 每个 source rank 内按 global expert 的 inclusive prefix |
+| `dispatchOffset` | `[expertPerRank]` int32 | 每个本地 expert 在 `expertOutput` 中的基地址行 |
+| `prevSumBeforeRank` | `[ep, expertPerRank]` int32 | 某 source rank 在本地 expert 行段中的前缀偏移 |
 
-### Peer Window（HCCL 共享，每 rank）
+显式 `routeMeta` 让 `moe_combine` 的入口不再依赖调用方理解内部 `workspace` 或 `peerWindow` offset。
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `peerTokenPerExpert` | int32 | 路由元数据（ep × expertNum） |
-| `expandedRowIdx` | int32 | token → ptrD 行映射 |
-| `packedA` | half | dispatch 打包数据 |
-| `ptrD` | half | return 目标缓冲区 |
-| `countReadySignal` | int32 | dispatch 就绪信号 |
-| `combineDoneSignal` | int32 | combine 完成信号 |
+## 优化说明
 
-所有字段 64 字节对齐。host（`layout.h`）和 device 使用相同计算逻辑。
+该 kernel 是 AIV-only combine kernel。对于 `K=7168` 这类 hidden size，一行 fp16 数据是 14 KiB，整体主要受
+GM/HCCL window 搬运带宽影响。优化目标是让数据搬运尽量流式化，同时降低控制面元数据开销。
 
-## UB 存储规划
+- **显式 routeMeta**：路由元数据作为独立 GM buffer 传入。`peerWindow` 只保留远端可见 return 数据和信号，
+  `workspace` 只保留本地 scratch。
+- **chunk 化 return 分片**：return 阶段遍历 `src_rank x local_expert` segment，并按
+  `chunkBase % blockNum` 把行 chunk 分给 AIV block。
+- **PTO `TPUT` ping/pong 路径**：远端 return 使用 `TPUT(remoteDst, localSrc, ping, pong)`，通过 UB 双缓冲
+  让 MTE2 load 和 MTE3 store 形成流水。
+- **Restore route cache**：当 `topK <= 16` 时，每个 token 的 route row 和 prob 会缓存到标量数组，减少内层
+  restore loop 对 route metadata 的重复读取。
+- **DCCI 批量 acquire**：每个 token 在消费返回的 `ptrD` 行前先刷新对应 GM range，然后对本轮 cached routes
+  做一次 `dsb(DSB_DDR)`。
+- **TLOAD 到 TAXPY event chain**：restore 阶段通过 PTO `TLOAD -> TAXPY` event 依赖完成加载和计算衔接。
+- **Soft AIV sync**：同一个 kernel 内用 `SoftSyncAiv` 分隔 return、wait、restore 阶段。
 
-| 区域 | 偏移 | 大小 | 用途 |
-|------|------|------|------|
-| Ping | 0x0000 | 4 KiB | 双缓冲 tile A |
-| Pong | 0x1000 | 4 KiB | 双缓冲 tile B |
-| Meta | 0x2000 | 4 KiB | 元数据 TLOAD tile |
-| Sync | 0x3000 | 256 B | SoftSyncAiv 工作区 |
-| **总计** | | **~12.25 KiB** | ≤ 192 KiB 预算 |
+## Tiling 与默认参数
 
-## 文件结构
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `PES` / `ep` | `2` | EP rank 数 |
+| `M` | `64` | 每 rank token 数 |
+| `K` | `7168` | hidden size |
+| `topK` | `8` | 每 token expert 路由数 |
+| `expertPerPe` | `2` | 每 rank 本地 expert 数 |
+| `expertNum` | `4` | `PES * expertPerPe` |
+| `maxOutputSize` | `PES * M * topK` | 默认容量；默认 shape 下为 `1024` |
+| `aivBlocks` | `24` | A3 默认逻辑 AIV block 数 |
+| 内部 Vector tile 列宽 | `1024` | 示例实现固定值 |
+| 内部 return chunk | `8 rows` | 固定的 return 阶段行 chunk |
+| 内部 metadata pad | `16` | expert metadata 对齐粒度 |
 
+使用 `PES=2, M=64, K=7168, topK=8, expertPerPe=2, aivBlocks=24` 时，各布局大小为：
+
+| Layout | 字节数 |
+| --- | --- |
+| `workspace` | `22120704` |
+| `routeMeta` | `2432` |
+| `peerWindow` | `7340160` |
+
+## 整体架构
+
+```text
+Host:
+  ParseArgs -> ComputeWorkspaceLayout / ComputeCombineRouteMetaLayout / ComputePeerWindowLayout
+    -> PrepareHostData and CPU golden
+    -> Init HCCL peer window
+    -> AllocateLocalBuffers(routeMeta/workspace/expertOutput/probs/outputC)
+    -> loop(warmup + measured):
+         ClearDeviceState
+         PrepareCombineFixture -> 写入 routeMeta + expertOutput
+         LaunchMoeCombineKernel
+         Verify outputC
+
+Device:
+  ReturnExpertRowsToOwners -> WaitCombinePhase -> RestoreOutputRows
 ```
-moe_combine/
-├── moe_combine_kernel.cpp  — PTO device kernel（return + wait + restore）
-├── main.cpp                 — Host 编排（MPI、HCCL、验证）
-├── common.h                 — 共享 ABI 结构体（Shape、Layout、Context）
-├── kernel_launchers.h       — Kernel launch 声明
-├── layout.h                 — Host 侧 layout 计算器
-├── args.h                   — 命令行解析与校验
-├── golden.h                 — CPU golden 参考实现与二进制 I/O
-├── hccl_context.h           — HCCL window 初始化（MESH/RING）
-├── comm_mpi.h               — dlopen MPI 封装
-├── CMakeLists.txt           — Bisheng CCE + host 构建配置
-├── run.sh                   — 构建/运行封装脚本（mpirun）
-├── DESIGN.md                — 从 dispatch 拆分的设计说明
-├── PHASE2_DESIGN.md         — PTO 风格重构计划
-└── IMPLEMENTATION_PLAN.md   — 原始任务追踪器
+
+```text
+Return phase:
+  routeMeta(peerToken/cumsum/offset) + expertOutput
+    -> local or remote peerWindow.ptrD
+    -> TNOTIFY peer combineDoneSignal[myRank]
+
+Restore phase:
+  routeMeta.expandedRowIdx + probs + peerWindow.ptrD
+    -> outputC
 ```
 
-## Host 流程
+## Kernel 细节
 
+### 阶段 1: ReturnExpertRowsToOwners
+
+kernel 遍历所有本地 expert segment：
+
+```text
+segment = src_rank * expertPerRank + localExpert
+globalExpert = myRank * expertPerRank + localExpert
+rows = routeMeta.peerTokenPerExpert[src_rank, globalExpert]
 ```
-ParseArgs → ValidateArgs → ComputeLayouts
-  → InitRankInfo（MPI）
-  → PrepareHostData（确定性生成 + CPU golden）
-  → BindDeviceContinuous → CreateStreams → InitHccl
-  → AllocateLocalBuffers → CopyInputsToDevice
-  → loop(warmup + 计时迭代):
-       ClearDeviceState
-       PrepareCombineFixture    ← 写入 metadata + expertOutput 到 device
-       RunCombine               ← kernel launch + stream sync
-       VerifyAndDump            ← 对比 outputC 与 CPU golden
-  → PrintProfileSummary → Cleanup
+
+对每个非空 segment：
+
+1. `srcStart` 由 `dispatchOffset[localExpert] + prevSumBeforeRank[src_rank, localExpert]` 计算。
+2. `dstStart` 由 `cumsumPerExpert` 中上一个 expert 的 prefix 计算。
+3. 如果 `src_rank == myRank`，行被本地复制到本 rank 的 `peerWindow.ptrD`。
+4. 否则，PTO `TPUT` 把行 chunk 写入 source rank 的远端 peer window。
+
+### 阶段 2: WaitCombinePhase
+
+return 写完后，每个 rank 通知所有 token-owner rank：
+
+```text
+TNOTIFY(remotePeer.combineDoneSignal[myRank], AtomicAdd)
+TWAIT(localPeer.combineDoneSignal[peer] >= 1)
 ```
+
+Host 会在每轮迭代前清零 `combineDoneSignal`，因此 kernel 固定等待每个 peer 的一次 notify。
+
+### 阶段 3: RestoreOutputRows
+
+每个 AIV block 负责一段连续 token。对每个 token 和每个列 tile：
+
+1. 使用 `TEXPANDS` 把输出 tile 清零。
+2. 对每个有效 route，加载 `ptrD[expandedRowIdx]`。
+3. 使用 `TAXPY(outTile, ptrTile, prob)` 累加。
+4. 将 fp16 tile 写回 `outputC`。
+
+## 内存布局与 HCCL Window
+
+只有会被远端 rank 写入的 buffer 需要放进 HCCL window。路由元数据和本地 scratch 都使用普通 GM buffer。
+
+| Buffer | 位置 | 内容 |
+| --- | --- | --- |
+| `routeMeta` | `aclrtMalloc` | `peerTokenPerExpert`, `expandedRowIdx`, `cumsumPerExpert`, `dispatchOffset`, `prevSumBeforeRank` |
+| `workspace` | `aclrtMalloc` | `localSync`, `floatScratch`, `dispatchedA`, `ptrDLocal` |
+| `expertOutput` | `aclrtMalloc` | 本地 expert 输出行 |
+| `probs` | `aclrtMalloc` | gate 权重 |
+| `outputC` | `aclrtMalloc` | 最终 token 输出 |
+| `peerWindow.ptrD` | HCCL window | return 目标行，被远端 `TPUT` 写入 |
+| `peerWindow.combineDoneSignal` | HCCL window | 完成计数器，被远端 `TNOTIFY` 写入 |
+
+在 A2/A3 上，live peer-window payload 从 HCCL window base 开始。本 layout 不额外保留 A5 那种 head guard。
+
+## 实测性能
+
+最近一次在本工作区使用 2 ranks Atlas 910B1 验证，参数为
+`M=64, K=7168, topK=8, expertPerPe=2, aivBlocks=24`，`warmup=3`，`iters=5`。
+
+| 指标 | 值 |
+| --- | --- |
+| `workspace` | `22120704 bytes` |
+| `routeMeta` | `2432 bytes` |
+| `peerWindow` | `7340160 bytes` |
+| `prepare_fixture` | `avg=70128.5 us`, `max=76100.4 us` |
+| `combine_e2e` | `avg=631.3 us`, `max=1866.4 us` |
+| 校验 | `verify=PASS` |
+
+`prepare_fixture` 是 host 侧 fixture 拷贝时间，不属于 device kernel 数据通路。`combine_e2e` 包含 kernel launch、
+return、wait、restore、stream sync 和 MPI rank max。
 
 ## 构建与运行
 
-### 前置条件
+### 环境
 
-- Ascend CANN 8.5+ 含 Bisheng 编译器
-- MPI 库（`MPI_LIB_PATH`）
-- PTO 头文件库位于 `../../../../include`
-- 硬件：Atlas 910B1（A3）或兼容
+```bash
+source /usr/local/Ascend/cann-8.5.0/set_env.sh
+export PATH=/home/ntlab/miniconda3/envs/ltr_pto/bin:$PATH
+export LD_LIBRARY_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib:$LD_LIBRARY_PATH
+export MPI_LIB_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib/libmpi.so
+```
 
 ### 仅编译
 
 ```bash
+cd kernels/manual/a2a3/moe_combine
 bash run.sh --skip-build 0 --clean-build 1
 ```
 
-### 快速验证（小 shape）
+### 快速验证
 
 ```bash
-bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2
+cd kernels/manual/a2a3/moe_combine
+bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --aiv-blocks 2
 ```
 
-### 生产规模运行
+### 默认 shape
 
 ```bash
+cd kernels/manual/a2a3/moe_combine
 bash run.sh -pes 2 -M 64 -K 7168 -topK 8 -expertPerPe 2 --aiv-blocks 24
 ```
 
-### 主要命令行选项
+### 主要命令行参数
 
-| 选项 | 默认值 | 说明 |
-|------|--------|------|
-| `-pes` | 2 | rank 数 |
-| `-M` | 64 | 每 rank token 数 |
-| `-K` | 7168 | hidden size |
-| `-topK` | 8 | 每 token expert 路由数 |
-| `-expertPerPe` | 2 | 每 rank expert 数 |
-| `--aiv-blocks` | 0（→24） | AIV block 并行度 |
-| `--row-chunk` | 0（→8） | return chunk 大小 |
-| `--debug` | 0 | 0=静默, 1=摘要, 2=详细 |
-| `--iters` | 1 | 计时迭代次数 |
-| `--warmup` | 1 | warmup 迭代次数 |
+| 参数 | 默认值 | 含义 |
+| --- | --- | --- |
+| `-pes` | `2` | rank 数 |
+| `-M` | `64` | 每 rank token 数 |
+| `-K` | `7168` | hidden size |
+| `-topK` | `8` | 每 token route 数 |
+| `-expertPerPe` | `2` | 每 rank expert 数 |
+| `--max-output-size` | `PES * M * topK` | expert output 行容量 |
+| `--aiv-blocks` | `0 -> 24` | 逻辑 AIV block 数，用于匹配不同硬件资源规划 |
+| `--device-base` | `0` | rank 到 device 映射使用的起始 device id |
+| `--ndevices` | `PES` | 示例 launcher 使用的可见 device 数 |
 
-验证默认始终开启，kernel 输出与 CPU golden 对比，容差 `rtol=1e-2, atol=1e-2`。
+## 验证
 
-### 检查设备可用性
+Host 会构造确定性的 CPU golden 路由账本，将其写入 `routeMeta`，拷贝 `expertOutput`，启动 kernel，
+并将 `outputC` 与 CPU golden 输出对比。默认开启验证。
 
-```bash
-npu-smi info
-```
+预期成功输出：
 
-## 验证方案
-
-测试框架使用 **identity fixture**（`expertOutput = dispatchedA`）来隔离验证 combine 正确性：
-
-1. **CPU Golden**：`golden.h` 在 host 计算完整 dispatch→combine 流水线
-2. **完整校验**：device `outputC` 与 golden 对比，容差 `rtol=1e-2, atol=1e-2`
-3. **二进制 dump**：保存到 `--data-dir` 供离线分析
-
-预期通过输出：
-
-```
+```text
 verify=PASS
 ```
-
-## 实现细节
-
-### 跨 Rank 通信
-
-- **本地 return**（`src == myRank`）：同步 `TPUT`，经 UB ping/pong tile
-- **远端 return**（`src != myRank`）：同步 `TPUT`，经 UB ping/pong tile 写入 peer window
-- **完成通知**：`TNOTIFY` + `AtomicAdd` 写 peer 的 `combineDoneSignal`
-- **等待屏障**：`TWAIT` + `GE` 比较，阈值为 epoch `signalValue`
-
-### 元数据访问
-
-使用 `LoadMetadataScalar`：通过 MTE2 将 256 元素 int32 tile 从 GM TLOAD 到 UB（绕过标量 D-cache），再从 UB 中提取目标索引值。
-
-### Block 分片策略
-
-- Return 阶段：chunk 轮转分片（`chunkBase % blockNum == blockId`）
-- Restore 阶段：token 范围分片（`TokenShardBegin/End`）
-- 同步：阶段间使用 `SoftSyncAiv`（SYNCALL Soft 模式）
-
-## 性能优化与 Overlap 分析
-
-### 当前流水线结构
-
-```
-Time ──────────────────────────────────────────────────────────────────────────→
-
-Block 0: ┃ Return chunk0 ┃ Return chunk2 ┃ ... ┃ Wait ┃ Restore tok0..N/B ┃
-Block 1: ┃ Return chunk1 ┃ Return chunk3 ┃ ... ┃ Wait ┃ Restore tokN/B..  ┃
-          ├─── 阶段 1: Return ────────────────┤sync├── 阶段 3: Restore ──┤
-                                               ↑
-                                          SoftSyncAiv
-```
-
-### 已实现的 Overlap 机制
-
-| 机制 | 位置 | 重叠效果 |
-|------|------|----------|
-| **Ping/Pong 双缓冲** | Return 阶段: `TPUT(dst, src, ping, pong)` | MTE2 加载下一 chunk 与 MTE3 写出当前 chunk 重叠 |
-| **Event 驱动 TAXPY 链** | Restore 阶段: `TLOAD → TAXPY → TSTORE` 带 `Event` | MTE2 加载、Vector 计算、MTE3 写回形成 3 级流水 |
-| **多 Block 并行** | 所有阶段 | 多个 AIV block 并行执行，通过 chunk/token 分片共享工作量 |
-
-### 关键调优参数
-
-| 参数 | 影响 | 建议 |
-|------|------|------|
-| `aivBlocks` | 核级并行度；更多 block = 更多并行工作量 | 24（默认）利用 910B 全部可用 AIV block |
-| `rowChunk` | Return 粒度；控制 overlap 粒度和负载均衡 | 较大 = 更少元数据读取、更低开销；较小 = 更好的 block 负载均衡 |
-| `K`（hidden size） | 决定每行数据量；主导带宽开销 | K=7168 fp16 = 14 KiB/行 → 带宽受限 |
-
-### 瓶颈分析
-
-#### 阶段 1: Return（通信受限）
-
-```
-┌───── AIV 标量路径 ─────────┐    ┌───── MTE2/MTE3 (ping/pong) ────────┐
-│ LoadMetadata(peerToken)    │    │                                      │
-│ LoadMetadata(dispatchOff)  │    │  ┌─ TPUT chunk N（经 UB）────────┐  │
-│ LoadMetadata(prevSum)      │    │  │  MTE2 加载 → MTE3 写出         │  │
-│ LoadMetadata(cumsum)       │    │  └──────────────────────────────────┘│
-│ ... 下一 segment ...       │    │  ┌─ TPUT chunk N+1 ─────────────┐  │
-│                            │    │  │  MTE2 加载 → MTE3 写出         │  │
-└────────────────────────────┘    │  └──────────────────────────────────┘│
-                                  └──────────────────────────────────────┘
-```
-
-- **主要开销**：远端写入的 MTE 传输延迟（`rowChunk × K × 2B` 每 chunk）
-- **次要开销**：元数据标量读取（每 segment 4 次 `LoadMetadataScalar` → 4 次 MTE2 TLOAD）
-- **优化杠杆**：增大 `rowChunk` 分摊元数据开销；`rowChunk=8, K=7168` 时每次传输 112 KiB
-
-#### 阶段 2: Wait（延迟受限）
-
-- 纯同步等待；开销 = max(各 peer return 延迟)
-- `TWAIT` 信号轮询 — 硬件等待，几乎零 AIV 周期消耗
-- **优化杠杆**：与 Stage 3 部分重叠（见下方 Future Optimizations）
-
-#### 阶段 3: Restore（计算 + 带宽受限）
-
-```
-每 token、每 slot、每 tile：
-  TLOAD(ptrTile, ptrD[row])     ← MTE2: 读取 ptrD 行 tile
-  TLOAD(outTile, outputC[tok])  ← MTE2: 读取当前累加器
-  TAXPY(outTile, ptrTile, prob) ← VEC:  融合乘加
-  TSTORE(outputGlobal, outTile) ← MTE3: 写回累加器
-
-每 tile 流水深度 = 3 级（MTE2 → VEC → MTE3）
-每 token 总迭代数 = topK × ceil(K / tileCols)
-```
-
-- **主要开销**：MTE2 带宽，每 token-tile 需 `2 × topK` 次加载（ptrD + outputC 回读）
-- **次要开销**：每 slot 后 MTE3 写回累加器
-- **优化杠杆**：增大 `tileCols` 减少循环开销；多 slot 合并后再写回
-
-### 未来优化方向
-
-| 优化项 | 预期收益 | 复杂度 |
-|--------|----------|--------|
-| **Return ↔ Restore 部分重叠** | 本地 return 完成的行可提前 restore，减少 Stage 2 空闲等待 | 高 — 需逐 peer 就绪跟踪和行级 restore 门控 |
-| **多 Slot 累加** | 在 UB 中累加多个 topK slot 后再 TSTORE，MTE3 写次数减少 topK 倍 | 中 — 需额外 UB 累加器 buffer；UB 预算允许约 4 个额外 tile |
-| **元数据预取** | Return 开始时批量加载所有 segment 元数据，消除逐 segment 的 TLOAD 停顿 | 低 — 分配专用 UB 区域存放完整元数据数组 |
-| **自适应 rowChunk** | 根据实际行数 vs block 数自动调优 chunk 大小 | 低 — 在 kernel prologue 添加运行时启发式 |
-| **TPUT_ASYNC\<SDMA\> 远端 return** | 远端写入与 MTE 流水解耦；多笔传输同时在途 | 中 — 需 CANN 9.0+ 及 `aclnnShmemSdmaStarsQuery` 支持 |
-| **Restore 行预取** | 计算当前 ptrD 行时预取下一行到 ping（当前正在用 pong） | 中 — 将 return 阶段的双缓冲扩展到 restore 阶段 |
-| **K 维度 Cube 切片** | 大 K 时使用 Cube（MTE1→Cube→MTE3）路径替代 VEC TAXPY | 高 — 需要 Cube tile reshape 和不同的 UB 预算分配 |
-
-### Overlap 理想流水（未来目标）
-
-```
-Time ──────────────────────────────────────────────────────────────────────────→
-
-MTE2 (加载):  ║ meta_seg0    ║ meta_seg1    ║ ... ║ ptrD_tok0 ║ out_tok0 ║ ...║
-VEC (计算):   ║              ║              ║     ║           ║ TAXPY_0  ║ ...║
-MTE3 (写回):  ║ chunk0→peer  ║ chunk1→peer  ║ ... ║           ║          ║ ST ║
-AIV (标量):   ║ addr_calc    ║ addr_calc    ║ ... ║ idx_read  ║ ...      ║   ║
-
-目标：让 MTE2、VEC、MTE3 同时保持繁忙，
-      在 return→restore 边界处尽可能重叠。
-```
-
-## 性能参考
-
-```
-[PROFILE] CombineTile
-  M=64 K=7168 ranks=2 topK=8 expertPerPe=2 warmup=1 measured=1 samples=1
-  logical work: input tokens(all ranks)=128 routed tokens(all ranks)=1024
-  combine_e2e: avg=963.7 us max=963.7 us
-  verify=PASS
-```
-
-运行环境：Atlas 910B1，2 ranks，AIV blocks=24。
-
-## 当前边界
-
-- 仅覆盖 MoE combine 阶段，不包含 dispatch 和 expert 计算
-- 使用 HCCL window + PTO TPUT/TWAIT 协议，非 HCCL collective API
-- Identity fixture（`expertOutput = dispatchedA`）用于正确性隔离验证
-- 远端 return 使用同步 TPUT（SDMA 异步需 CANN 9.0+）
-- 数据张量仅支持 half（fp16）精度
-
-## 后续方向
-
-1. 扩展 `expertOutput` 输入源，支持加载真实 expert 输出
-2. 升级到 CANN 9.0 后启用 `TPUT_ASYNC<SDMA>` 提升远端 return 性能
-3. 性能 sweep：`rowChunk`、`aivBlocks` 参数扫描
-4. 补充 `--gen-data 0` 模式的外部数据目录校验
-5. 清理未参与 combine 主路径的 layout 字段

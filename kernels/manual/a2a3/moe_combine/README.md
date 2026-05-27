@@ -1,350 +1,335 @@
-# moe_combine — A2/A3 PTO MoE Combine Kernel
+# moe_combine - A2/A3 PTO MoE Combine Kernel
 
-A hand-written PTO kernel implementing the **MoE combine** stage on Ascend A2/A3 (Atlas 910B).
-It covers the full combine datapath after expert computation is finished:
+## Overview
 
-```
-expertOutput[localExperts × sourcesPerExpert, K]
-  ─── variable-length return (TPUT) ──→  peerWindow.ptrD on token-owner rank
-  ─── cross-rank done signal (TNOTIFY/TWAIT) ──→  synchronization barrier
-  ─── weighted restore (TAXPY) ──→  outputC[M, K]
-```
+This example implements the MoE combine stage with PTO on Ascend A2/A3-class chips. It is the return half of a
+dispatch-compute-combine MoE pipeline: after local experts finish computing routed rows, the combine kernel returns those
+rows to the original token owner rank and restores each token output with the gate weights.
 
-## Architecture Overview
+The current kernel is a standalone combine kernel with an explicit low-level routing contract. It does not accept
+MC2-style high-level inputs such as `expert_ids`, `assist_info_for_combine`, or `ep_send_counts` directly. Those fields
+must already be lowered into `routeMeta`.
 
-```
-┌─────────────────────────────── Device Kernel ────────────────────────────────┐
-│                                                                              │
-│  MoeCombineKernel(shape, myRank, expertOutput, probs, outputC,     │
-│                              peerWindow, hcclCtx, workspace)                │
-│                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────┐    │
-│  │ Stage 1: ReturnExpertRowsToOwners                                    │    │
-│  │   • Iterate segments: src_rank × expertPerRank                       │    │
-│  │   • Compute variable row count from peerTokenPerExpert               │    │
-│  │   • Local return: TPUT (MTE2→MTE3 via UB ping/pong)                  │    │
-│  │   • Remote return: TPUT via UB ping/pong to peer window              │    │
-│  │   • Chunk-based sharding across AIV blocks                           │    │
-│  │   • Post-return: TNOTIFY combineDoneSignal[myRank] on each peer      │    │
-│  └──────────────────────────────────────────────────────────────────────┘    │
-│  ┌──────────────────────────────────────────────────────────────────────┐    │
-│  │ Stage 2: WaitCombinePhase                                            │    │
-│  │   • TWAIT combineDoneSignal[peer] >= signalValue  ∀ peer             │    │
-│  └──────────────────────────────────────────────────────────────────────┘    │
-│  ┌──────────────────────────────────────────────────────────────────────┐    │
-│  │ Stage 3: RestoreOutputRows                                           │    │
-│  │   • Token-parallel across AIV blocks                                 │    │
-│  │   • For each token: zero outputC, then                               │    │
-│  │     for slot in topK:                                                │    │
-│  │       outputC[token,:] += probs[token,slot] * ptrD[expandedRowIdx]   │    │
-│  │   • Uses TEXPANDS (zero) / TLOAD / TAXPY / TSTORE                   │    │
-│  └──────────────────────────────────────────────────────────────────────┘    │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
+```text
+expertOutput[local expert rows, K]
+  -> variable-length return through HCCL peerWindow.ptrD
+  -> cross-rank completion with TNOTIFY/TWAIT
+  -> weighted restore: outputC[token, :] = sum(topK probs * returned rows)
 ```
 
-## Scope
+## Supported AI Processors
 
-| Included | Not Included |
-|----------|--------------|
-| Variable-length return via HCCL window | Dispatch pack/gather |
-| Cross-rank signal synchronization | Expert FFN/GMM computation |
-| Weighted restore with probs | HCCL collective AllToAllV |
-| Multi-AIV-block parallelism | Dynamic routing / gating |
+- A2/A3, validated on Atlas 910B1
 
-## Key Parameters
+## Directory Layout
 
-Defined in `common.h` → `MoeCombineShape`:
+```text
+kernels/manual/a2a3/moe_combine/
+├── CMakeLists.txt           # Bisheng CCE + host build configuration
+├── run.sh                   # One-click build/run wrapper, MPI discovery, HCCL_BUFFSIZE estimate
+├── common.h                 # Shared ABI: shape, routeMeta layout, peerWindow layout, HCCL context
+├── layout.h                 # Host-side layout calculators and HCCL_BUFFSIZE estimator
+├── kernel_launchers.h       # Host-side kernel launcher declaration
+├── moe_combine_kernel.cpp   # PTO AIV kernel: return + wait + weighted restore
+├── main.cpp                 # Host orchestration: MPI, ACL, HCCL window, fixture, verify, profiling
+├── golden.h                 # CPU golden route construction and output verification
+├── hccl_context.h           # HCCL window bootstrap and peer-window address exchange
+├── comm_mpi.h               # MPI dynamic loading wrapper
+├── DESIGN.md                # Split-from-dispatch design notes
+├── PHASE2_DESIGN.md         # PTO style refactor plan
+├── IMPLEMENTATION_PLAN.md   # Historical implementation tracker
+├── README.md                # English README
+└── README_zh.md             # Chinese README
+```
 
-| Field | Description |
-|-------|-------------|
-| `ep` | Number of ranks (endpoint count) |
-| `m` | Token count per rank |
-| `k` | Hidden dimension |
+## Operator Description
+
+### Functionality
+
+For each rank, the operator consumes expert outputs that are already laid out by local expert and source rank. It then:
+
+1. Reads `routeMeta` to know how many rows each source rank sent to each expert and where those rows are located in
+   `expertOutput`.
+2. Uses PTO `TPUT` to return each expert row to the token owner rank's HCCL peer window.
+3. Uses `TNOTIFY` / `TWAIT` to wait until every peer has completed its return writes.
+4. Reads `routeMeta.expandedRowIdx` and `probs` to restore `outputC[M, K]`.
+
+For token `t`:
+
+```text
+outputC[t, :] = sum_{slot=0..topK-1} probs[t, slot] * ptrD[expandedRowIdx[t, slot], :]
+```
+
+### Scope
+
+| Included | Not included |
+| --- | --- |
+| EP-domain combine return through HCCL window | Dispatch pack/gather kernel |
+| Variable-length all-to-all-like return with `TPUT` | HCCL collective `AllToAllV` API |
+| Weighted restore with `probs` | Expert FFN/GMM compute |
+| Explicit low-level `routeMeta` contract | Quantization, TP ReduceScatterV, shared/copy/const experts |
+| A2/A3 HCCL peer-window path | MC2 public ABI adapter |
+
+## Entry Contract
+
+### Kernel Launcher ABI
+
+```cpp
+void LaunchMoeCombineKernel(MoeCombineShape shape, uint32_t myRank,
+                            uint8_t *expertOutput,
+                            uint8_t *probs,
+                            uint8_t *outputC,
+                            uint8_t *routeMeta,
+                            uint8_t *peerWindow,
+                            uint8_t *hcclCtx,
+                            uint8_t *workspace,
+                            void *stream,
+                            uint32_t launchBlockCount);
+```
+
+### Runtime Inputs
+
+| Argument | Direction | Storage | Meaning |
+| --- | --- | --- | --- |
+| `shape` | input | value | Static shape and tuning fields (`ep`, `m`, `k`, `topK`, `expertPerRank`, `aivBlocks`, etc.) |
+| `myRank` | input | value | Rank id in the EP domain |
+| `expertOutput` | input | `aclrtMalloc` GM | Local expert result rows, shape `[maxOutputSize, K]`, fp16 |
+| `probs` | input | `aclrtMalloc` GM | Gate weights, shape `[M, topK]`, fp32 |
+| `outputC` | output | `aclrtMalloc` GM | Restored token output, shape `[M, K]`, fp16 |
+| `routeMeta` | input | `aclrtMalloc` GM | Explicit combine routing ledger |
+| `peerWindow` | input/output | HCCL RDMA window | Remote-visible `ptrD` return buffer and signal counters |
+| `hcclCtx` | input | `aclrtMalloc` GM | Device-side HCCL window addresses for all ranks |
+| `workspace` | scratch | `aclrtMalloc` GM | Local sync and scratch buffers |
+| `stream` | input | ACL stream | Kernel launch stream |
+| `launchBlockCount` | input | value | AIV block count for the kernel launch |
+
+### `MoeCombineShape`
+
+| Field | Meaning |
+| --- | --- |
+| `ep` | EP rank count |
+| `m` | Tokens per rank |
+| `k` | Hidden size |
 | `topK` | Expert routes per token |
-| `expertPerRank` | Local experts per rank |
-| `expertNum` | Global expert count (`ep × expertPerRank`) |
-| `maxOutputSize` | Max expert output rows per rank |
-| `aivBlocks` | AIV block count for parallelism (0→24) |
-| `tileCols` | Column tile width for vector operations (internal, 1024) |
-| `rowChunk` | Return stage row chunk size (0→8) |
-| `metadataPad` | Expert metadata padding granularity |
-| `signalValue` | Current iteration signal epoch |
+| `expertPerRank` | Local expert count per rank |
+| `expertNum` | Global expert count, normally `ep * expertPerRank` |
+| `maxOutputSize` | Per-rank expert-output row capacity |
+| `aivBlocks` | Logical AIV block count; A3 default is `24`, can be overridden |
 
-## Memory Layout
+### `routeMeta` Layout
 
-### Workspace (per-rank local)
+`routeMeta` is the explicit low-level combine ledger. It is local GM, not part of the HCCL window.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `localTokenPerExpert` | int32 | Token count per expert |
-| `blockTokenPerExpert` | int32 | Per-block token assignments |
-| `blockPrefixPerExpert` | int32 | Per-block prefix sums |
-| `cumsumPerExpert` | int32 | Cross-rank cumulative sums |
-| `dispatchOffset` | int32 | Local expert dispatch base offset |
-| `prevSumBeforeRank` | int32 | Cumulative tokens before this rank |
-| `localSync` | int32 | Soft sync workspace |
-| `floatScratch` | float | Scratch buffer |
-| `dispatchedA` | half | Dispatched input (combine fixture) |
-| `ptrDLocal` | half | Local ptrD mirror |
+| Field | Shape | Meaning |
+| --- | --- | --- |
+| `peerTokenPerExpert` | `[ep, expertNumPadded]` int32 | Number of rows owned by each source rank for each global expert |
+| `expandedRowIdx` | `[M * topK]` int32 | Token route to `peerWindow.ptrD` row mapping; `-1` means invalid route |
+| `cumsumPerExpert` | `[ep, expertNumPadded]` int32 | Inclusive prefix by global expert for each source rank |
+| `dispatchOffset` | `[expertPerRank]` int32 | Base row in `expertOutput` for each local expert |
+| `prevSumBeforeRank` | `[ep, expertPerRank]` int32 | Per-source offset inside a local expert's rows |
 
-### Peer Window (HCCL shared, per-rank)
+This layout makes `moe_combine` independently callable without requiring callers to know the internal `workspace` or
+`peerWindow` offsets.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `peerTokenPerExpert` | int32 | Routing metadata (ep × expertNum) |
-| `expandedRowIdx` | int32 | Token→ptrD row mapping |
-| `packedA` | half | Packed dispatch data |
-| `ptrD` | half | Return destination buffer |
-| `countReadySignal` | int32 | Dispatch ready signals |
-| `combineDoneSignal` | int32 | Combine done signals |
+## Optimization Notes
 
-All fields are 64-byte aligned. Layout computed identically on host (`layout.h`) and device.
+This kernel is an AIV-only combine kernel. It is bandwidth-bound for large hidden sizes such as `K=7168`, where one fp16
+row is 14 KiB. The main optimization goal is to keep GM/HCCL-window movement streaming while minimizing control-path
+overhead.
 
-## UB Storage Plan
+- **Explicit routeMeta**: routing metadata is passed as a separate GM buffer. `peerWindow` is reserved for remote-visible
+  return data and signals, and `workspace` is reserved for local scratch.
+- **Chunked return sharding**: the return phase iterates `src_rank x local_expert` segments and shards row chunks across
+  AIV blocks with `chunkBase % blockNum`.
+- **PTO `TPUT` ping/pong path**: remote return uses `TPUT(remoteDst, localSrc, ping, pong)`, allowing MTE2 load and MTE3
+  store movement to pipeline through UB.
+- **Route cache for restore**: when `topK <= 16`, route rows and probabilities are cached in scalar arrays per token so
+  the inner restore loop does not reload route metadata.
+- **DCCI batched acquire before restore**: each token refreshes the returned `ptrD` rows before consuming them, then uses
+  one `dsb(DSB_DDR)` for the cached route batch.
+- **TLOAD to TAXPY event chain**: restore accumulates each returned row with a PTO `TLOAD -> TAXPY` event dependency.
+- **Soft AIV sync**: `SoftSyncAiv` separates return, wait, and restore stages within the same kernel launch.
 
-| Region | Offset | Size | Purpose |
-|--------|--------|------|---------|
-| Ping | 0x0000 | 4 KiB | Double-buffer tile A |
-| Pong | 0x1000 | 4 KiB | Double-buffer tile B |
-| Meta | 0x2000 | 4 KiB | Metadata TLOAD tile |
-| Sync | 0x3000 | 256 B | SoftSyncAiv workspace |
-| **Total** | | **~12.25 KiB** | ≤ 192 KiB budget |
+## Tiling and Default Parameters
 
-## File Structure
+| Parameter | Default | Notes |
+| --- | --- | --- |
+| `PES` / `ep` | `2` | EP rank count |
+| `M` | `64` | Tokens per rank |
+| `K` | `7168` | Hidden size |
+| `topK` | `8` | Expert routes per token |
+| `expertPerPe` | `2` | Local experts per rank |
+| `expertNum` | `4` | `PES * expertPerPe` |
+| `maxOutputSize` | `PES * M * topK` | Default capacity, `1024` for the default shape |
+| `aivBlocks` | `24` | A3 default logical AIV block count |
+| Internal vector tile columns | `1024` | Fixed by the sample implementation |
+| Internal return chunk | `8 rows` | Fixed return-stage row chunk |
+| Internal metadata pad | `16` | Pads expert metadata rows |
 
-```
-moe_combine/
-├── moe_combine_kernel.cpp  — PTO device kernel (return + wait + restore)
-├── main.cpp                 — Host orchestration (MPI, HCCL, verify)
-├── common.h                 — Shared ABI structs (Shape, Layout, Context)
-├── kernel_launchers.h       — Kernel launch declaration
-├── layout.h                 — Host-side layout calculators
-├── args.h                   — CLI parsing and validation
-├── golden.h                 — CPU golden reference and binary I/O
-├── hccl_context.h           — HCCL window bootstrap (MESH/RING)
-├── comm_mpi.h               — dlopen MPI wrapper
-├── CMakeLists.txt           — Bisheng CCE + host build
-├── run.sh                   — Build/run wrapper (mpirun)
-├── DESIGN.md                — Split-from-dispatch design notes
-├── PHASE2_DESIGN.md         — PTO style refactor plan
-└── IMPLEMENTATION_PLAN.md   — Original task tracker
-```
+For `PES=2, M=64, K=7168, topK=8, expertPerPe=2, aivBlocks=24`, the layouts are:
 
-## Host Flow
+| Layout | Bytes |
+| --- | --- |
+| `workspace` | `22120704` |
+| `routeMeta` | `2432` |
+| `peerWindow` | `7340160` |
 
-```
-ParseArgs → ValidateArgs → ComputeLayouts
-  → InitRankInfo (MPI)
-  → PrepareHostData (deterministic generate + CPU golden)
-  → BindDeviceContinuous → CreateStreams → InitHccl
-  → AllocateLocalBuffers → CopyInputsToDevice
-  → loop(warmup + timed iterations):
-       ClearDeviceState
-       PrepareCombineFixture    ← writes metadata + expertOutput to device
-       RunCombine               ← kernel launch + stream sync
-       VerifyAndDump            ← compare outputC vs CPU golden
-  → PrintProfileSummary → Cleanup
+## Overall Architecture
+
+```text
+Host:
+  ParseArgs -> ComputeWorkspaceLayout / ComputeCombineRouteMetaLayout / ComputePeerWindowLayout
+    -> PrepareHostData and CPU golden
+    -> Init HCCL peer window
+    -> AllocateLocalBuffers(routeMeta/workspace/expertOutput/probs/outputC)
+    -> loop(warmup + measured):
+         ClearDeviceState
+         PrepareCombineFixture -> writes routeMeta + expertOutput
+         LaunchMoeCombineKernel
+         Verify outputC
+
+Device:
+  ReturnExpertRowsToOwners -> WaitCombinePhase -> RestoreOutputRows
 ```
 
-## Build & Run
+```text
+Return phase:
+  routeMeta(peerToken/cumsum/offset) + expertOutput
+    -> local or remote peerWindow.ptrD
+    -> TNOTIFY peer combineDoneSignal[myRank]
 
-### Prerequisites
+Restore phase:
+  routeMeta.expandedRowIdx + probs + peerWindow.ptrD
+    -> outputC
+```
 
-- Ascend CANN 8.5+ with Bisheng compiler
-- MPI library (`MPI_LIB_PATH`)
-- PTO header library at `../../../../include`
-- Hardware: Atlas 910B1 (A3) or compatible
+## Kernel Details
+
+### Stage 1: ReturnExpertRowsToOwners
+
+The kernel walks all local expert segments:
+
+```text
+segment = src_rank * expertPerRank + localExpert
+globalExpert = myRank * expertPerRank + localExpert
+rows = routeMeta.peerTokenPerExpert[src_rank, globalExpert]
+```
+
+For each non-empty segment:
+
+1. `srcStart` is computed from `dispatchOffset[localExpert] + prevSumBeforeRank[src_rank, localExpert]`.
+2. `dstStart` is computed from the previous expert prefix in `cumsumPerExpert`.
+3. If `src_rank == myRank`, the row is copied locally into local `peerWindow.ptrD`.
+4. Otherwise, PTO `TPUT` writes the row chunk into the source rank's remote peer window.
+
+### Stage 2: WaitCombinePhase
+
+After return writes finish, each rank notifies every token-owner rank:
+
+```text
+TNOTIFY(remotePeer.combineDoneSignal[myRank], AtomicAdd)
+TWAIT(localPeer.combineDoneSignal[peer] >= 1)
+```
+
+The host clears `combineDoneSignal` before each iteration, so the kernel waits for one notify from every peer.
+
+### Stage 3: RestoreOutputRows
+
+Each AIV block owns a contiguous token shard. For each token and each column tile:
+
+1. Initialize the output tile to zero with `TEXPANDS`.
+2. For every valid route, load `ptrD[expandedRowIdx]`.
+3. Accumulate with `TAXPY(outTile, ptrTile, prob)`.
+4. Store the fp16 tile to `outputC`.
+
+## Memory Layout and HCCL Window
+
+Only buffers that remote ranks write must live in the HCCL window. Routing metadata and local scratch are ordinary GM
+buffers.
+
+| Buffer | Location | Contents |
+| --- | --- | --- |
+| `routeMeta` | `aclrtMalloc` | `peerTokenPerExpert`, `expandedRowIdx`, `cumsumPerExpert`, `dispatchOffset`, `prevSumBeforeRank` |
+| `workspace` | `aclrtMalloc` | `localSync`, `floatScratch`, `dispatchedA`, `ptrDLocal` |
+| `expertOutput` | `aclrtMalloc` | Local expert output rows |
+| `probs` | `aclrtMalloc` | Gate weights |
+| `outputC` | `aclrtMalloc` | Final token output |
+| `peerWindow.ptrD` | HCCL window | Return destination rows, remotely written by `TPUT` |
+| `peerWindow.combineDoneSignal` | HCCL window | Completion counters, remotely written by `TNOTIFY` |
+
+On A2/A3, the live peer-window payload starts at the HCCL window base. There is no extra A5-style head guard in this
+layout.
+
+## Measured Performance
+
+Latest validation in this workspace used 2 ranks on Atlas 910B1 with
+`M=64, K=7168, topK=8, expertPerPe=2, aivBlocks=24`, `warmup=3`, and `iters=5`.
+
+| Metric | Value |
+| --- | --- |
+| `workspace` | `22120704 bytes` |
+| `routeMeta` | `2432 bytes` |
+| `peerWindow` | `7340160 bytes` |
+| `prepare_fixture` | `avg=70128.5 us`, `max=76100.4 us` |
+| `combine_e2e` | `avg=631.3 us`, `max=1866.4 us` |
+| Verification | `verify=PASS` |
+
+`prepare_fixture` is host-side fixture copy time and is not part of the device kernel datapath. `combine_e2e` includes
+kernel launch, return, wait, restore, stream sync, and MPI rank max.
+
+## Build and Run
+
+### Environment
+
+```bash
+source /usr/local/Ascend/cann-8.5.0/set_env.sh
+export PATH=/home/ntlab/miniconda3/envs/ltr_pto/bin:$PATH
+export LD_LIBRARY_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib:$LD_LIBRARY_PATH
+export MPI_LIB_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib/libmpi.so
+```
 
 ### Build Only
 
 ```bash
+cd kernels/manual/a2a3/moe_combine
 bash run.sh --skip-build 0 --clean-build 1
 ```
 
-### Quick Verification (small shape)
+### Quick Verification
 
 ```bash
-bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --debug 2
+cd kernels/manual/a2a3/moe_combine
+bash run.sh -pes 2 -M 8 -K 64 -topK 2 -expertPerPe 1 --aiv-blocks 2
 ```
 
-### Production-Scale Run
+### Default Shape
 
 ```bash
+cd kernels/manual/a2a3/moe_combine
 bash run.sh -pes 2 -M 64 -K 7168 -topK 8 -expertPerPe 2 --aiv-blocks 24
 ```
 
 ### Key CLI Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `-pes` | 2 | Rank count |
-| `-M` | 64 | Tokens per rank |
-| `-K` | 7168 | Hidden dimension |
-| `-topK` | 8 | Expert routes per token |
-| `-expertPerPe` | 2 | Experts per rank |
-| `--aiv-blocks` | 0 (→24) | AIV block parallelism |
-| `--row-chunk` | 0 (→8) | Return chunk size |
-| `--debug` | 0 | 0=quiet, 1=summary, 2=verbose |
-| `--iters` | 1 | Measured iterations |
-| `--warmup` | 1 | Warmup iterations |
-
-Verification is always enabled; the kernel output is compared against a CPU golden reference with `rtol=1e-2, atol=1e-2`.
-
-### Check Device Availability
-
-```bash
-npu-smi info
-```
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `-pes` | `2` | Rank count |
+| `-M` | `64` | Tokens per rank |
+| `-K` | `7168` | Hidden size |
+| `-topK` | `8` | Routes per token |
+| `-expertPerPe` | `2` | Experts per rank |
+| `--max-output-size` | `PES * M * topK` | Expert output row capacity |
+| `--aiv-blocks` | `0 -> 24` | Logical AIV block count, override when matching a hardware resource plan |
+| `--device-base` | `0` | First device id used by rank-to-device mapping |
+| `--ndevices` | `PES` | Visible device count used by the sample launcher |
 
 ## Verification
 
-The test framework uses an **identity fixture** (`expertOutput = dispatchedA`) to isolate combine correctness:
+The host builds a deterministic CPU golden route ledger, writes it to `routeMeta`, copies `expertOutput`, launches the
+kernel, and compares `outputC` with the CPU golden output. Verification is enabled by default.
 
-1. **CPU Golden**: `golden.h` computes the full dispatch→combine pipeline on host
-2. **Full Verify**: compares device `outputC` against golden with `rtol=1e-2, atol=1e-2`
-3. **Binary Dumps**: saved to `--data-dir` for offline inspection
+Expected successful output:
 
-Expected pass output:
-
-```
+```text
 verify=PASS
 ```
-
-## Implementation Details
-
-### Cross-Rank Communication
-
-- **Local return** (`src == myRank`): synchronous `TPUT` through UB ping/pong tiles
-- **Remote return** (`src != myRank`): synchronous `TPUT` through UB ping/pong tiles to peer window
-- **Completion**: `TNOTIFY` with `AtomicAdd` on peer's `combineDoneSignal`
-- **Barrier**: `TWAIT` with `GE` comparison against epoch `signalValue`
-
-### Metadata Access
-
-Uses `LoadMetadataScalar`: TLOAD a 256-element int32 tile from GM (bypasses scalar D-cache via MTE2), then extracts the target index from UB.
-
-### Block Sharding
-
-- Return stage: chunk-interleaved across blocks (`chunkBase % blockNum == blockId`)
-- Restore stage: token-range partitioned (`TokenShardBegin/End`)
-- Sync: `SoftSyncAiv` (SYNCALL Soft mode) between stages
-
-## Performance Optimization & Overlap Analysis
-
-### Current Pipeline Structure
-
-```
-Time ──────────────────────────────────────────────────────────────────────────→
-
-Block 0: ┃ Return chunk0 ┃ Return chunk2 ┃ ... ┃ Wait ┃ Restore tok0..N/B ┃
-Block 1: ┃ Return chunk1 ┃ Return chunk3 ┃ ... ┃ Wait ┃ Restore tokN/B..  ┃
-          ├─── Stage 1: Return ───────────────┤sync├─ Stage 3: Restore ──┤
-                                               ↑
-                                          SoftSyncAiv
-```
-
-### Overlap Mechanisms Already Present
-
-| Mechanism | Location | Overlap Effect |
-|-----------|----------|----------------|
-| **Ping/Pong double buffer** | Return stage: `TPUT(dst, src, ping, pong)` | MTE2 load of next chunk overlaps with MTE3 store of current chunk |
-| **Event-driven TAXPY chain** | Restore stage: `TLOAD → TAXPY → TSTORE` with `Event` | MTE2 load, Vector compute, MTE3 store form a 3-stage pipeline within each tile iteration |
-| **Multi-block parallelism** | All stages | Multiple AIV blocks execute in parallel, sharing work via chunk/token sharding |
-
-### Key Performance Tuning Parameters
-
-| Parameter | Impact | Recommendation |
-|-----------|--------|----------------|
-| `aivBlocks` | Core-level parallelism; more blocks = more parallel work | 24 (default) utilizes all available AIV blocks on 910B |
-| `rowChunk` | Return granularity; controls overlap granularity and load balance | Larger = fewer metadata reads, less overhead; smaller = better block load balance |
-| `K` (hidden size) | Determines data volume per row; dominates bandwidth cost | At K=7168 fp16 = 14 KiB/row → bandwidth-bound |
-
-### Bottleneck Analysis
-
-#### Stage 1: Return (Communication-Bound)
-
-```
-┌───── AIV Scalar Path ─────┐    ┌───── MTE2/MTE3 (ping/pong) ────┐
-│ LoadMetadata(peerToken)    │    │                                  │
-│ LoadMetadata(dispatchOff)  │    │  ┌─ TPUT chunk N (via UB) ──┐   │
-│ LoadMetadata(prevSum)      │    │  │  MTE2 load → MTE3 store   │   │
-│ LoadMetadata(cumsum)       │    │  └────────────────────────────┘  │
-│ ... next segment ...       │    │  ┌─ TPUT chunk N+1 ─────────┐   │
-│                            │    │  │  MTE2 load → MTE3 store   │   │
-└────────────────────────────┘    │  └────────────────────────────┘  │
-                                  └──────────────────────────────────┘
-```
-
-- **Dominant cost**: MTE transfer latency for remote writes (`rowChunk × K × 2B` per chunk)
-- **Secondary cost**: Metadata scalar reads (4 × `LoadMetadataScalar` per segment → 4 × MTE2 TLOAD)
-- **Optimization lever**: Increase `rowChunk` to amortize metadata overhead; at `rowChunk=8, K=7168` each transfer is 112 KiB
-
-#### Stage 2: Wait (Latency-Bound)
-
-- Pure synchronization; cost = max(peer return latency)
-- Signal polling via `TWAIT` — hardware wait, near-zero AIV cycles
-- **Optimization lever**: Overlap with Stage 3 (see Future Optimizations below)
-
-#### Stage 3: Restore (Compute + Bandwidth-Bound)
-
-```
-Per token, per slot, per tile:
-  TLOAD(ptrTile, ptrD[row])     ← MTE2: read ptrD row tile
-  TLOAD(outTile, outputC[tok])  ← MTE2: read current accumulator
-  TAXPY(outTile, ptrTile, prob) ← VEC:  fused multiply-add
-  TSTORE(outputGlobal, outTile) ← MTE3: write back accumulator
-
-Pipeline depth per tile = 3 stages (MTE2 → VEC → MTE3)
-Total iterations per token = topK × ceil(K / tileCols)
-```
-
-- **Dominant cost**: MTE2 bandwidth for `2 × topK` loads per token-tile (ptrD + outputC read-back)
-- **Secondary cost**: MTE3 store-back of accumulator after each slot
-- **Optimization lever**: Increase `tileCols` to reduce loop overhead; fuse multiple slots before store-back
-
-### Future Optimization Opportunities
-
-| Optimization | Expected Gain | Complexity |
-|--------------|---------------|------------|
-| **Return ↔ Restore partial overlap** | Overlap local-return restore with remote-return wait; reduce Stage 2 idle | High — requires per-peer readiness tracking and row-level restore gating |
-| **Multi-slot accumulation** | Accumulate multiple topK slots in UB before final TSTORE, reducing MTE3 writes by topK× | Medium — needs additional UB buffer for accumulator; UB budget allows ~4 extra tiles |
-| **Metadata prefetch** | Batch-load all segment metadata at return start, eliminating per-segment TLOAD stalls | Low — allocate dedicated UB region for full metadata array |
-| **Adaptive rowChunk** | Auto-tune chunk size per segment based on actual row count vs. block count | Low — add runtime heuristic in kernel prologue |
-| **TPUT_ASYNC\<SDMA\> for remote return** | Decouple remote writes from MTE pipeline; multiple transfers in-flight | Medium — requires CANN 9.0+ with `aclnnShmemSdmaStarsQuery` support |
-| **Restore row prefetch** | Prefetch next ptrD row into ping while computing on pong | Medium — extend double-buffering from return stage into restore stage |
-| **K-dimension cube tiling** | For large K, use Cube (MTE1→Cube→MTE3) path for TAXPY equivalent | High — requires Cube tile reshape and different UB budget split |
-
-### Overlap Diagram: Ideal Pipeline (Future)
-
-```
-Time ──────────────────────────────────────────────────────────────────────────→
-
-MTE2 (load):  ║ meta_seg0    ║ meta_seg1    ║ ... ║ ptrD_tok0 ║ out_tok0 ║ ...║
-VEC (compute):║              ║              ║     ║           ║ TAXPY_0  ║ ...║
-MTE3 (store): ║ chunk0→peer  ║ chunk1→peer  ║ ... ║           ║          ║ ST ║
-AIV (scalar): ║ addr_calc    ║ addr_calc    ║ ... ║ idx_read  ║ ...      ║   ║
-
-Goal: Keep MTE2, VEC, MTE3 all busy simultaneously
-      across the return→restore boundary when possible.
-```
-
-## Performance Reference
-
-```
-[PROFILE] CombineTile
-  M=64 K=7168 ranks=2 topK=8 expertPerPe=2 warmup=1 measured=1 samples=1
-  logical work: input tokens(all ranks)=128 routed tokens(all ranks)=1024
-  combine_e2e: avg=963.7 us max=963.7 us
-  verify=PASS
-```
-
-Configuration: Atlas 910B1, 2 ranks, AIV blocks=24.
-
-## Current Limitations
-
-- Combine-only scope — does not cover dispatch or expert computation
-- Uses HCCL window + PTO TPUT/TWAIT protocol, not HCCL collective API
-- Identity fixture (`expertOutput = dispatchedA`) for correctness isolation
-- Remote return uses synchronous TPUT (SDMA async requires CANN 9.0+)
-- Half precision (fp16) only for data tensors
