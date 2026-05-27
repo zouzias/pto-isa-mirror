@@ -35,9 +35,9 @@ __tf__ PTO_INTERNAL void TInsertAccToMat(typename DstTileData::TileDType __out__
                                          uint16_t validCol, uint16_t indexRow, uint16_t indexCol)
 {
     using dstType = typename DstTileData::DType;
-    constexpr bool channelSplitEnable = (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor)) &&
-                                        (std::is_same_v<dstType, float>) &&
-                                        (DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
+    constexpr bool channelSplitEnable =
+        (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor)) &&
+        (std::is_same_v<dstType, float>)&&(DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
     constexpr int32_t c0Size = (!channelSplitEnable) && (DstTileData::SFractalSize == 2 * CUBE_BLOCK_SIZE) ?
                                    2 * C0_SIZE_BYTE / sizeof(dstType) :
                                    C0_SIZE_BYTE / sizeof(dstType);
@@ -63,7 +63,7 @@ __tf__ PTO_INTERNAL void TInsertAccToVec(typename DstTileData::TileDType __out__
     constexpr bool enableNz2Dn = (!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::NoneBox);
     constexpr bool enableNz2Nz = (!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor);
     constexpr bool channelSplitEnable =
-        enableNz2Nz && (std::is_same_v<dstType, float>) && (DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
+        enableNz2Nz && (std::is_same_v<dstType, float>)&&(DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
     constexpr uint32_t dstStride = GetTmovAccDstStride<DstTileData, SrcTileData>();
 
     uint32_t dstOffset;
