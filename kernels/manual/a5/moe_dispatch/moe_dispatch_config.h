@@ -47,8 +47,8 @@ static constexpr int32_t UB_MOVE_NUM = UB_MOVE_NUM_MAX;
 template <int TILE_COLS>
 struct DispatchTraits {
     static constexpr int32_t MAX_ROWS = UB_HALF_SIZE / TILE_COLS;
-    static constexpr int32_t MOVE_NUM = (MAX_ROWS >= UB_MOVE_NUM_MAX) ? UB_MOVE_NUM_MAX :
-                                         (MAX_ROWS >= 1 ? MAX_ROWS : 1);
+    static constexpr int32_t MOVE_NUM =
+        (MAX_ROWS >= UB_MOVE_NUM_MAX) ? UB_MOVE_NUM_MAX : (MAX_ROWS >= 1 ? MAX_ROWS : 1);
 };
 
 // Per-row byte stride in remote shmem: hiddenSize bytes of int8 data + UB_ALIGN padding (containing float scale)

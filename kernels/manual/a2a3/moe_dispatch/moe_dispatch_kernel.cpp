@@ -59,20 +59,11 @@ AICORE inline __gm__ T *HcclRemotePtr(__gm__ HcclDeviceContext *ctx, __gm__ T *l
 // Cross-rank continuous pipeline with event-driven ping-pong.
 // ============================================================================
 template <int HIDDEN_SIZE, int TILE_COLS, int MOVE_NUM>
-AICORE void MoeDispatchDirect(
-    __gm__ int8_t *gmA,
-    __gm__ float *gmPerTokenScale,
-    __gm__ int32_t *cumsumMM,
-    __gm__ int32_t *tokenPerExpert,
-    __gm__ int32_t *preSumBeforeRank,
-    __gm__ uint8_t *shmemBase,
-    __gm__ HcclDeviceContext *hcclCtx,
-    int32_t EP,
-    int32_t expertPerRank,
-    int32_t maxOutputSize,
-    int64_t offsetA,
-    int32_t tpeRowStride = 0,
-    int32_t cumsumStride = 0)
+AICORE void MoeDispatchDirect(__gm__ int8_t *gmA, __gm__ float *gmPerTokenScale, __gm__ int32_t *cumsumMM,
+                              __gm__ int32_t *tokenPerExpert, __gm__ int32_t *preSumBeforeRank,
+                              __gm__ uint8_t *shmemBase, __gm__ HcclDeviceContext *hcclCtx, int32_t EP,
+                              int32_t expertPerRank, int32_t maxOutputSize, int64_t offsetA, int32_t tpeRowStride = 0,
+                              int32_t cumsumStride = 0)
 {
     int32_t myRank = static_cast<int32_t>(hcclCtx->rankId);
     int32_t coreIdx = get_block_idx();
@@ -86,8 +77,7 @@ AICORE void MoeDispatchDirect(
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using Global = pto::GlobalTensor<int8_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
 
-    using ViewTile = pto::Tile<pto::TileType::Vec, int8_t, MOVE_NUM, TILE_COLS,
-                               pto::BLayout::RowMajor, -1, -1>;
+    using ViewTile = pto::Tile<pto::TileType::Vec, int8_t, MOVE_NUM, TILE_COLS, pto::BLayout::RowMajor, -1, -1>;
 
     constexpr int32_t INTERLEAVED_TILE_BYTES = MOVE_NUM * TILE_COLS;
     constexpr int32_t PING_OFFSET = 0;
@@ -145,8 +135,8 @@ AICORE void MoeDispatchDirect(
             int32_t rowSrc = preSumBeforeRank[dstEpIdx * expertPerRank + groupIdx];
 
             __gm__ uint8_t *otherRankBase = HcclRemotePtr(hcclCtx, shmemBase, dstEpIdx);
-            __gm__ int8_t *remoteSrcPtr = reinterpret_cast<__gm__ int8_t *>(
-                otherRankBase + offsetA + static_cast<int64_t>(rowSrc) * copyInNum);
+            __gm__ int8_t *remoteSrcPtr =
+                reinterpret_cast<__gm__ int8_t *>(otherRankBase + offsetA + static_cast<int64_t>(rowSrc) * copyInNum);
 
             int32_t processCount = (static_cast<int32_t>(rows) + MOVE_NUM - 1) / MOVE_NUM;
 
@@ -154,7 +144,8 @@ AICORE void MoeDispatchDirect(
                 int32_t curRows = MOVE_NUM;
                 if (p == processCount - 1) {
                     int32_t rem = static_cast<int32_t>(rows) - p * MOVE_NUM;
-                    if (rem < MOVE_NUM) curRows = rem;
+                    if (rem < MOVE_NUM)
+                        curRows = rem;
                 }
 
                 int32_t curPP = globalChunkIdx & 1;
@@ -182,7 +173,8 @@ AICORE void MoeDispatchDirect(
                     prevScaleView.ColMaskInternal = UB_ALIGN;
 
                     int64_t pendTokenBytes = static_cast<int64_t>(pendingRows) * HIDDEN_SIZE;
-                    ShapeDyn pendTokenShape(1, 1, 1, static_cast<size_t>(pendingRows), static_cast<size_t>(HIDDEN_SIZE));
+                    ShapeDyn pendTokenShape(1, 1, 1, static_cast<size_t>(pendingRows),
+                                            static_cast<size_t>(HIDDEN_SIZE));
                     StrideDyn pendTokenStride(pendTokenBytes, pendTokenBytes, pendTokenBytes, HIDDEN_SIZE, 1);
                     Global pendTokenDstG(pendTokenDstPtr, pendTokenShape, pendTokenStride);
 
@@ -208,8 +200,8 @@ AICORE void MoeDispatchDirect(
                 pendingRows = curRows;
                 uint32_t dstRow = rowStart + static_cast<uint32_t>(p * MOVE_NUM);
                 pendTokenDstPtr = gmA + static_cast<int64_t>(dstRow) * HIDDEN_SIZE;
-                pendScaleDstPtr = reinterpret_cast<__gm__ int8_t *>(gmPerTokenScale)
-                                  + static_cast<int64_t>(dstRow) * UB_ALIGN;
+                pendScaleDstPtr =
+                    reinterpret_cast<__gm__ int8_t *>(gmPerTokenScale) + static_cast<int64_t>(dstRow) * UB_ALIGN;
                 globalChunkIdx++;
             }
         }
@@ -253,19 +245,10 @@ AICORE void MoeDispatchDirect(
 // Phase 2: TLOAD tempGmBuffer → UB → TSTORE split to gmA + gmPerTokenScale
 // ============================================================================
 template <int HIDDEN_SIZE, int TILE_COLS, int MOVE_NUM>
-AICORE void MoeDispatchViaGM(
-    __gm__ int8_t *gmA,
-    __gm__ float *gmPerTokenScale,
-    __gm__ int8_t *tempGmBuffer,
-    __gm__ int32_t *cumsumMM,
-    __gm__ int32_t *tokenPerExpert,
-    __gm__ int32_t *preSumBeforeRank,
-    __gm__ uint8_t *shmemBase,
-    __gm__ HcclDeviceContext *hcclCtx,
-    int32_t EP,
-    int32_t expertPerRank,
-    int32_t maxOutputSize,
-    int64_t offsetA)
+AICORE void MoeDispatchViaGM(__gm__ int8_t *gmA, __gm__ float *gmPerTokenScale, __gm__ int8_t *tempGmBuffer,
+                             __gm__ int32_t *cumsumMM, __gm__ int32_t *tokenPerExpert, __gm__ int32_t *preSumBeforeRank,
+                             __gm__ uint8_t *shmemBase, __gm__ HcclDeviceContext *hcclCtx, int32_t EP,
+                             int32_t expertPerRank, int32_t maxOutputSize, int64_t offsetA)
 {
     int32_t myRank = static_cast<int32_t>(hcclCtx->rankId);
     int32_t coreIdx = get_block_idx();
@@ -280,8 +263,7 @@ AICORE void MoeDispatchViaGM(
     using Global = pto::GlobalTensor<int8_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
 
     // TGET staging tiles (small, just for remote→local GM transfer)
-    using TgetTile = pto::Tile<pto::TileType::Vec, int8_t, TGET_TILE_ROWS, TILE_COLS,
-                               pto::BLayout::RowMajor, -1, -1>;
+    using TgetTile = pto::Tile<pto::TileType::Vec, int8_t, TGET_TILE_ROWS, TILE_COLS, pto::BLayout::RowMajor, -1, -1>;
     TgetTile tgetPing(TGET_TILE_ROWS, TILE_COLS);
     TgetTile tgetPong(TGET_TILE_ROWS, TILE_COLS);
     constexpr int32_t TGET_TILE_BYTES = TGET_TILE_ROWS * TILE_COLS;
@@ -289,8 +271,7 @@ AICORE void MoeDispatchViaGM(
     TASSIGN(tgetPong, (TGET_TILE_BYTES + 31) & ~31);
 
     // Phase 2 split tiles (reuse UB after TGET completes for each rank)
-    using SplitTile = pto::Tile<pto::TileType::Vec, int8_t, MOVE_NUM, TILE_COLS,
-                                pto::BLayout::RowMajor, -1, -1>;
+    using SplitTile = pto::Tile<pto::TileType::Vec, int8_t, MOVE_NUM, TILE_COLS, pto::BLayout::RowMajor, -1, -1>;
 
     constexpr int32_t SPLIT_TILE_BYTES = MOVE_NUM * TILE_COLS;
     constexpr int32_t SPLIT_PING_OFFSET = 0;
@@ -327,8 +308,8 @@ AICORE void MoeDispatchViaGM(
             int32_t rowSrc = preSumBeforeRank[dstEpIdx * expertPerRank + groupIdx];
 
             __gm__ uint8_t *otherRankBase = HcclRemotePtr(hcclCtx, shmemBase, dstEpIdx);
-            __gm__ int8_t *remoteSrcPtr = reinterpret_cast<__gm__ int8_t *>(
-                otherRankBase + offsetA + static_cast<int64_t>(rowSrc) * copyInNum);
+            __gm__ int8_t *remoteSrcPtr =
+                reinterpret_cast<__gm__ int8_t *>(otherRankBase + offsetA + static_cast<int64_t>(rowSrc) * copyInNum);
 
             // Phase 1: TGET remote → tempGmBuffer (interleaved format preserved)
             __gm__ int8_t *tempDst = tempGmBuffer + static_cast<int64_t>(rowStart) * copyInNum;
@@ -367,7 +348,8 @@ AICORE void MoeDispatchViaGM(
                 int32_t curRows = MOVE_NUM;
                 if (p == processCount - 1) {
                     int32_t rem = static_cast<int32_t>(rows) - p * MOVE_NUM;
-                    if (rem < MOVE_NUM) curRows = rem;
+                    if (rem < MOVE_NUM)
+                        curRows = rem;
                 }
 
                 int32_t curPP = p & 1;
@@ -395,7 +377,8 @@ AICORE void MoeDispatchViaGM(
                     prevScaleView.ColMaskInternal = UB_ALIGN;
 
                     int64_t pendTokenBytes = static_cast<int64_t>(pendingRows) * HIDDEN_SIZE;
-                    ShapeDyn pendTokenShape(1, 1, 1, static_cast<size_t>(pendingRows), static_cast<size_t>(HIDDEN_SIZE));
+                    ShapeDyn pendTokenShape(1, 1, 1, static_cast<size_t>(pendingRows),
+                                            static_cast<size_t>(HIDDEN_SIZE));
                     StrideDyn pendTokenStride(pendTokenBytes, pendTokenBytes, pendTokenBytes, HIDDEN_SIZE, 1);
                     Global pendTokenDstG(pendTokenDstPtr, pendTokenShape, pendTokenStride);
 
@@ -421,8 +404,8 @@ AICORE void MoeDispatchViaGM(
                 pendingRows = curRows;
                 uint32_t dstRow = rowStart + static_cast<uint32_t>(p * MOVE_NUM);
                 pendTokenDstPtr = gmA + static_cast<int64_t>(dstRow) * HIDDEN_SIZE;
-                pendScaleDstPtr = reinterpret_cast<__gm__ int8_t *>(gmPerTokenScale)
-                                  + static_cast<int64_t>(dstRow) * UB_ALIGN;
+                pendScaleDstPtr =
+                    reinterpret_cast<__gm__ int8_t *>(gmPerTokenScale) + static_cast<int64_t>(dstRow) * UB_ALIGN;
             }
 
             if (hasPending) {
@@ -468,18 +451,10 @@ AICORE void MoeDispatchViaGM(
 // ============================================================================
 
 template <int HIDDEN_SIZE, int TILE_COLS, int MOVE_NUM>
-AICORE void MoeDispatchWithSync(
-    __gm__ int8_t *gmA,
-    __gm__ float *gmPerTokenScale,
-    __gm__ uint8_t *shmemBase,
-    __gm__ HcclDeviceContext *hcclCtx,
-    __gm__ int32_t *workspace,
-    __gm__ int32_t *syncGmWorkspace,
-    int32_t EP,
-    int32_t expertPerRank,
-    int32_t maxOutputSize,
-    int64_t offsetA,
-    int64_t offsetTPE)
+AICORE void MoeDispatchWithSync(__gm__ int8_t *gmA, __gm__ float *gmPerTokenScale, __gm__ uint8_t *shmemBase,
+                                __gm__ HcclDeviceContext *hcclCtx, __gm__ int32_t *workspace,
+                                __gm__ int32_t *syncGmWorkspace, int32_t EP, int32_t expertPerRank,
+                                int32_t maxOutputSize, int64_t offsetA, int64_t offsetTPE)
 {
     int32_t myRank = static_cast<int32_t>(hcclCtx->rankId);
     int32_t coreIdx = get_block_idx();
@@ -489,8 +464,7 @@ AICORE void MoeDispatchWithSync(
 
     // UB workspace for software SYNCALL (needs coreNum * 32 bytes)
     constexpr int32_t SYNC_UB_ELEMS = 32;
-    using SyncUbTile = pto::Tile<pto::TileType::Vec, int32_t, 1, SYNC_UB_ELEMS,
-                                 pto::BLayout::RowMajor, -1, -1>;
+    using SyncUbTile = pto::Tile<pto::TileType::Vec, int32_t, 1, SYNC_UB_ELEMS, pto::BLayout::RowMajor, -1, -1>;
     SyncUbTile syncUbTile(1, SYNC_UB_ELEMS);
     TASSIGN(syncUbTile, 0);
 
@@ -521,8 +495,7 @@ AICORE void MoeDispatchWithSync(
         using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
         using GlobalI32 = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
 
-        using TPETile = pto::Tile<pto::TileType::Vec, int32_t, 1, 64,
-                                  pto::BLayout::RowMajor, -1, -1>;
+        using TPETile = pto::Tile<pto::TileType::Vec, int32_t, 1, 64, pto::BLayout::RowMajor, -1, -1>;
         TPETile tpeTile(1, paddedExpNum);
         TASSIGN(tpeTile, 0);
 
@@ -547,9 +520,10 @@ AICORE void MoeDispatchWithSync(
         set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
         wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
         for (int32_t dstRank = coreIdx; dstRank < EP; dstRank += coreNum) {
-            if (dstRank == myRank) continue;
-            __gm__ int32_t *remoteTPEBase = reinterpret_cast<__gm__ int32_t *>(
-                HcclRemotePtr(hcclCtx, shmemBase, dstRank) + offsetTPE);
+            if (dstRank == myRank)
+                continue;
+            __gm__ int32_t *remoteTPEBase =
+                reinterpret_cast<__gm__ int32_t *>(HcclRemotePtr(hcclCtx, shmemBase, dstRank) + offsetTPE);
             __gm__ int32_t *remoteDst = remoteTPEBase + myRank * paddedExpNum;
             GlobalI32 remoteDstG(remoteDst, tpeShape, tpeStride);
             TSTORE(remoteDstG, tpeTile);
@@ -572,7 +546,8 @@ AICORE void MoeDispatchWithSync(
 
         // Wait for all remote ranks
         for (int32_t srcRank = coreIdx; srcRank < EP; srcRank += coreNum) {
-            if (srcRank == myRank) continue;
+            if (srcRank == myRank)
+                continue;
             __gm__ int32_t *signalAddr = localTPEBase + srcRank * paddedExpNum;
             GlobalI32 signalG(signalAddr, signalShape, signalStride);
             pto::comm::TWAIT(signalG, 0, pto::comm::WaitCmp::NE);
@@ -590,8 +565,7 @@ AICORE void MoeDispatchWithSync(
             using TPEShape = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
             using TPEStride = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
             using TPEGlobal = pto::GlobalTensor<int32_t, TPEShape, TPEStride, pto::Layout::ND>;
-            using TPETile = pto::Tile<pto::TileType::Vec, int32_t, 1, 64,
-                                      pto::BLayout::RowMajor, -1, -1>;
+            using TPETile = pto::Tile<pto::TileType::Vec, int32_t, 1, 64, pto::BLayout::RowMajor, -1, -1>;
 
             TPETile tpeRowTile(1, paddedExpNum);
             constexpr int32_t TPE_UB_OFFSET = SYNC_UB_ELEMS * static_cast<int32_t>(sizeof(int32_t));
@@ -674,8 +648,8 @@ AICORE void MoeDispatchWithSync(
                 for (int32_t dst = 0; dst < EP; ++dst) {
                     for (int32_t g = 0; g < expertPerRank; ++g) {
                         if (dst == myRank) {
-                            volatile __gm__ int32_t *psbrPtr = reinterpret_cast<volatile __gm__ int32_t *>(
-                                wsPSBR + srcRank * expertPerRank + g);
+                            volatile __gm__ int32_t *psbrPtr =
+                                reinterpret_cast<volatile __gm__ int32_t *>(wsPSBR + srcRank * expertPerRank + g);
                             *psbrPtr = offset;
                         }
                         int32_t tpeIdx = srcRank * paddedExpNum + dst * expertPerRank + g;
@@ -698,65 +672,55 @@ AICORE void MoeDispatchWithSync(
     // ========================================================================
     pto::SYNCALL<pto::SyncAllMode::Soft>(syncGmG, syncUbTile);
 
-    MoeDispatchDirect<HIDDEN_SIZE, TILE_COLS, MOVE_NUM>(
-        gmA, gmPerTokenScale, wsCumsumMM + myRank * expertPerRank, wsTPE, wsPSBR,
-        shmemBase, hcclCtx, EP, expertPerRank, maxOutputSize, offsetA,
-        paddedExpNum, paddedExpNum);
+    MoeDispatchDirect<HIDDEN_SIZE, TILE_COLS, MOVE_NUM>(gmA, gmPerTokenScale, wsCumsumMM + myRank * expertPerRank,
+                                                        wsTPE, wsPSBR, shmemBase, hcclCtx, EP, expertPerRank,
+                                                        maxOutputSize, offsetA, paddedExpNum, paddedExpNum);
 }
 
 // ============================================================================
 // __global__ Entry Points — Direct Path
 // ============================================================================
-#define DIRECT_KERNEL_PARAMS \
-    __gm__ int8_t *gmA, __gm__ float *gmPerTokenScale, \
-    __gm__ int32_t *cumsumMM, __gm__ int32_t *tokenPerExpert, \
-    __gm__ int32_t *preSumBeforeRank, __gm__ uint8_t *shmemBase, \
-    __gm__ HcclDeviceContext *hcclCtx, __gm__ int32_t *syncWorkspace, \
-    int32_t EP, int32_t expertPerRank, int32_t maxOutputSize, int64_t offsetA
+#define DIRECT_KERNEL_PARAMS                                                                                     \
+    __gm__ int8_t *gmA, __gm__ float *gmPerTokenScale, __gm__ int32_t *cumsumMM, __gm__ int32_t *tokenPerExpert, \
+        __gm__ int32_t *preSumBeforeRank, __gm__ uint8_t *shmemBase, __gm__ HcclDeviceContext *hcclCtx,          \
+        __gm__ int32_t *syncWorkspace, int32_t EP, int32_t expertPerRank, int32_t maxOutputSize, int64_t offsetA
 
 extern "C" __global__ AICORE void MoeDispatchDirect_K128(DIRECT_KERNEL_PARAMS)
 {
-    MoeDispatchDirect<128, 160, DispatchTraits<160>::MOVE_NUM>(
-        gmA, gmPerTokenScale, cumsumMM, tokenPerExpert,
-        preSumBeforeRank, shmemBase, hcclCtx,
-        EP, expertPerRank, maxOutputSize, offsetA);
+    MoeDispatchDirect<128, 160, DispatchTraits<160>::MOVE_NUM>(gmA, gmPerTokenScale, cumsumMM, tokenPerExpert,
+                                                               preSumBeforeRank, shmemBase, hcclCtx, EP, expertPerRank,
+                                                               maxOutputSize, offsetA);
 }
 
 // ============================================================================
 // __global__ Entry Points — ViaGM Path
 // ============================================================================
-#define VIAGM_KERNEL_PARAMS \
-    __gm__ int8_t *gmA, __gm__ float *gmPerTokenScale, \
-    __gm__ int8_t *tempGmBuffer, \
-    __gm__ int32_t *cumsumMM, __gm__ int32_t *tokenPerExpert, \
-    __gm__ int32_t *preSumBeforeRank, __gm__ uint8_t *shmemBase, \
-    __gm__ HcclDeviceContext *hcclCtx, __gm__ int32_t *syncWorkspace, \
-    int32_t EP, int32_t expertPerRank, int32_t maxOutputSize, int64_t offsetA
+#define VIAGM_KERNEL_PARAMS                                                                                   \
+    __gm__ int8_t *gmA, __gm__ float *gmPerTokenScale, __gm__ int8_t *tempGmBuffer, __gm__ int32_t *cumsumMM, \
+        __gm__ int32_t *tokenPerExpert, __gm__ int32_t *preSumBeforeRank, __gm__ uint8_t *shmemBase,          \
+        __gm__ HcclDeviceContext *hcclCtx, __gm__ int32_t *syncWorkspace, int32_t EP, int32_t expertPerRank,  \
+        int32_t maxOutputSize, int64_t offsetA
 
 extern "C" __global__ AICORE void MoeDispatchViaGM_K128(VIAGM_KERNEL_PARAMS)
 {
-    MoeDispatchViaGM<128, 160, DispatchTraits<160>::MOVE_NUM>(
-        gmA, gmPerTokenScale, tempGmBuffer, cumsumMM, tokenPerExpert,
-        preSumBeforeRank, shmemBase, hcclCtx,
-        EP, expertPerRank, maxOutputSize, offsetA);
+    MoeDispatchViaGM<128, 160, DispatchTraits<160>::MOVE_NUM>(gmA, gmPerTokenScale, tempGmBuffer, cumsumMM,
+                                                              tokenPerExpert, preSumBeforeRank, shmemBase, hcclCtx, EP,
+                                                              expertPerRank, maxOutputSize, offsetA);
 }
 
 // ============================================================================
 // __global__ Entry Points — WithSync Path (CrossRankSync + Direct)
 // ============================================================================
-#define WITHSYNC_KERNEL_PARAMS \
-    __gm__ int8_t *gmA, __gm__ float *gmPerTokenScale, \
-    __gm__ uint8_t *shmemBase, __gm__ HcclDeviceContext *hcclCtx, \
-    __gm__ int32_t *workspace, __gm__ int32_t *syncGmWorkspace, \
-    int32_t EP, int32_t expertPerRank, int32_t maxOutputSize, \
-    int64_t offsetA, int64_t offsetTPE
+#define WITHSYNC_KERNEL_PARAMS                                                                                       \
+    __gm__ int8_t *gmA, __gm__ float *gmPerTokenScale, __gm__ uint8_t *shmemBase, __gm__ HcclDeviceContext *hcclCtx, \
+        __gm__ int32_t *workspace, __gm__ int32_t *syncGmWorkspace, int32_t EP, int32_t expertPerRank,               \
+        int32_t maxOutputSize, int64_t offsetA, int64_t offsetTPE
 
 extern "C" __global__ AICORE void MoeDispatchWithSync_K128(WITHSYNC_KERNEL_PARAMS)
 {
-    MoeDispatchWithSync<128, 160, DispatchTraits<160>::MOVE_NUM>(
-        gmA, gmPerTokenScale, shmemBase, hcclCtx,
-        workspace, syncGmWorkspace,
-        EP, expertPerRank, maxOutputSize, offsetA, offsetTPE);
+    MoeDispatchWithSync<128, 160, DispatchTraits<160>::MOVE_NUM>(gmA, gmPerTokenScale, shmemBase, hcclCtx, workspace,
+                                                                 syncGmWorkspace, EP, expertPerRank, maxOutputSize,
+                                                                 offsetA, offsetTPE);
 }
 
 // ============================================================================
@@ -765,64 +729,50 @@ extern "C" __global__ AICORE void MoeDispatchWithSync_K128(WITHSYNC_KERNEL_PARAM
 #include "acl/acl.h"
 #include <cstdio>
 
-bool LaunchMoeDispatchK128(
-    int32_t blockNum, void *stream,
-    void *gmA, void *gmPerTokenScale,
-    void *cumsumMM, void *tokenPerExpert, void *preSumBeforeRank,
-    void *shmemBase, void *hcclCtx, void *syncWorkspace,
-    int32_t EP, int32_t expertPerRank, int32_t maxOutputSize, int64_t offsetA)
+bool LaunchMoeDispatchK128(int32_t blockNum, void *stream, void *gmA, void *gmPerTokenScale, void *cumsumMM,
+                           void *tokenPerExpert, void *preSumBeforeRank, void *shmemBase, void *hcclCtx,
+                           void *syncWorkspace, int32_t EP, int32_t expertPerRank, int32_t maxOutputSize,
+                           int64_t offsetA)
 {
     fprintf(stderr, "[KERNEL] LaunchMoeDispatchDirect_K128: blockNum=%d EP=%d expertPerRank=%d maxOutput=%d\n",
             blockNum, EP, expertPerRank, maxOutputSize);
     MoeDispatchDirect_K128<<<blockNum, nullptr, stream>>>(
-        (__gm__ int8_t *)gmA, (__gm__ float *)gmPerTokenScale,
-        (__gm__ int32_t *)cumsumMM, (__gm__ int32_t *)tokenPerExpert,
-        (__gm__ int32_t *)preSumBeforeRank,
-        (__gm__ uint8_t *)shmemBase, (__gm__ HcclDeviceContext *)hcclCtx,
-        (__gm__ int32_t *)syncWorkspace,
-        EP, expertPerRank, maxOutputSize, offsetA);
+        (__gm__ int8_t *)gmA, (__gm__ float *)gmPerTokenScale, (__gm__ int32_t *)cumsumMM,
+        (__gm__ int32_t *)tokenPerExpert, (__gm__ int32_t *)preSumBeforeRank, (__gm__ uint8_t *)shmemBase,
+        (__gm__ HcclDeviceContext *)hcclCtx, (__gm__ int32_t *)syncWorkspace, EP, expertPerRank, maxOutputSize,
+        offsetA);
     aclError err = aclrtSynchronizeStream((aclrtStream)stream);
     fprintf(stderr, "[KERNEL] aclrtSynchronizeStream returned: %d\n", (int)err);
     return (err == ACL_SUCCESS);
 }
 
-bool LaunchMoeDispatchViaGM_K128(
-    int32_t blockNum, void *stream,
-    void *gmA, void *gmPerTokenScale, void *tempGmBuffer,
-    void *cumsumMM, void *tokenPerExpert, void *preSumBeforeRank,
-    void *shmemBase, void *hcclCtx, void *syncWorkspace,
-    int32_t EP, int32_t expertPerRank, int32_t maxOutputSize, int64_t offsetA)
+bool LaunchMoeDispatchViaGM_K128(int32_t blockNum, void *stream, void *gmA, void *gmPerTokenScale, void *tempGmBuffer,
+                                 void *cumsumMM, void *tokenPerExpert, void *preSumBeforeRank, void *shmemBase,
+                                 void *hcclCtx, void *syncWorkspace, int32_t EP, int32_t expertPerRank,
+                                 int32_t maxOutputSize, int64_t offsetA)
 {
-    fprintf(stderr, "[KERNEL] LaunchMoeDispatchViaGM_K128: blockNum=%d EP=%d expertPerRank=%d maxOutput=%d\n",
-            blockNum, EP, expertPerRank, maxOutputSize);
+    fprintf(stderr, "[KERNEL] LaunchMoeDispatchViaGM_K128: blockNum=%d EP=%d expertPerRank=%d maxOutput=%d\n", blockNum,
+            EP, expertPerRank, maxOutputSize);
     MoeDispatchViaGM_K128<<<blockNum, nullptr, stream>>>(
-        (__gm__ int8_t *)gmA, (__gm__ float *)gmPerTokenScale,
-        (__gm__ int8_t *)tempGmBuffer,
-        (__gm__ int32_t *)cumsumMM, (__gm__ int32_t *)tokenPerExpert,
-        (__gm__ int32_t *)preSumBeforeRank,
-        (__gm__ uint8_t *)shmemBase, (__gm__ HcclDeviceContext *)hcclCtx,
-        (__gm__ int32_t *)syncWorkspace,
-        EP, expertPerRank, maxOutputSize, offsetA);
+        (__gm__ int8_t *)gmA, (__gm__ float *)gmPerTokenScale, (__gm__ int8_t *)tempGmBuffer,
+        (__gm__ int32_t *)cumsumMM, (__gm__ int32_t *)tokenPerExpert, (__gm__ int32_t *)preSumBeforeRank,
+        (__gm__ uint8_t *)shmemBase, (__gm__ HcclDeviceContext *)hcclCtx, (__gm__ int32_t *)syncWorkspace, EP,
+        expertPerRank, maxOutputSize, offsetA);
     aclError err = aclrtSynchronizeStream((aclrtStream)stream);
     fprintf(stderr, "[KERNEL] aclrtSynchronizeStream returned: %d\n", (int)err);
     return (err == ACL_SUCCESS);
 }
 
-bool LaunchMoeDispatchWithSync_K128(
-    int32_t blockNum, void *stream,
-    void *gmA, void *gmPerTokenScale,
-    void *shmemBase, void *hcclCtx,
-    void *workspace, void *syncGmWorkspace,
-    int32_t EP, int32_t expertPerRank, int32_t maxOutputSize,
-    int64_t offsetA, int64_t offsetTPE)
+bool LaunchMoeDispatchWithSync_K128(int32_t blockNum, void *stream, void *gmA, void *gmPerTokenScale, void *shmemBase,
+                                    void *hcclCtx, void *workspace, void *syncGmWorkspace, int32_t EP,
+                                    int32_t expertPerRank, int32_t maxOutputSize, int64_t offsetA, int64_t offsetTPE)
 {
     fprintf(stderr, "[KERNEL] LaunchMoeDispatchWithSync_K128: blockNum=%d EP=%d expertPerRank=%d maxOutput=%d\n",
             blockNum, EP, expertPerRank, maxOutputSize);
     MoeDispatchWithSync_K128<<<blockNum, nullptr, stream>>>(
-        (__gm__ int8_t *)gmA, (__gm__ float *)gmPerTokenScale,
-        (__gm__ uint8_t *)shmemBase, (__gm__ HcclDeviceContext *)hcclCtx,
-        (__gm__ int32_t *)workspace, (__gm__ int32_t *)syncGmWorkspace,
-        EP, expertPerRank, maxOutputSize, offsetA, offsetTPE);
+        (__gm__ int8_t *)gmA, (__gm__ float *)gmPerTokenScale, (__gm__ uint8_t *)shmemBase,
+        (__gm__ HcclDeviceContext *)hcclCtx, (__gm__ int32_t *)workspace, (__gm__ int32_t *)syncGmWorkspace, EP,
+        expertPerRank, maxOutputSize, offsetA, offsetTPE);
     aclError err = aclrtSynchronizeStream((aclrtStream)stream);
     fprintf(stderr, "[KERNEL] aclrtSynchronizeStream returned: %d\n", (int)err);
     return (err == ACL_SUCCESS);
