@@ -37,12 +37,12 @@ using moe_dispatch::WorkspaceLayout;
 
 namespace {
 
-constexpr int kDefaultTileCols = 1024;
+constexpr int kDefaultTileCols = 7168;
 constexpr int kMetaTileCols = 16;
 constexpr uint32_t kI32PerCacheLine = 16;
 constexpr uint64_t kPingUbAddr = 0x0;
-constexpr uint64_t kPongUbAddr = 0x1000;
-constexpr uint64_t kSoftSyncUbAddr = 0x5000;
+constexpr uint64_t kPongUbAddr = 0x4000;
+constexpr uint64_t kSoftSyncUbAddr = 0x8000;
 
 using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
 using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;

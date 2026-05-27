@@ -16,7 +16,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "layout.h"
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
@@ -49,11 +48,6 @@ size_t BytesOfI32Vector(size_t elements)
     return elements * sizeof(int32_t);
 }
 
-double UsSince(std::chrono::steady_clock::time_point start, std::chrono::steady_clock::time_point end)
-{
-    return std::chrono::duration<double, std::micro>(end - start).count();
-}
-
 } // namespace
 
 struct PerfStats {
@@ -64,7 +58,7 @@ struct PerfStats {
 };
 
 struct IterationTiming {
-    double dispatchE2eUs = 0.0;
+    double dispatchKernelUs = 0.0;
 };
 
 PerfStats CalcStats(const std::vector<double> &samples)
@@ -123,6 +117,8 @@ struct RuntimeState {
     uint32_t size = 1;
     uint32_t device = 0;
     aclrtStream computeStream = nullptr;
+    aclrtEvent dispatchStartEvent = nullptr;
+    aclrtEvent dispatchEndEvent = nullptr;
     rtStream_t hcclStream = nullptr;
     HcclWindowContext hccl;
     bool hcclActive = false;
@@ -131,7 +127,7 @@ struct RuntimeState {
     bool dataReady = false;
     DeviceBuffers buffers;
     bool buffersAllocated = false;
-    double dispatchE2eUs = 0.0;
+    double dispatchKernelUs = 0.0;
     uint32_t currentSignalValue = 1;
 };
 
@@ -159,7 +155,7 @@ void PrintProfileSummary(const MoeDispatchArgs &args, RuntimeState *state,
         IterationTiming timing;
         for (uint32_t rank = 0; rank < state->size; ++rank) {
             const IterationTiming &rankTiming = allTimings[static_cast<size_t>(rank) * measuredIters + iter];
-            timing.dispatchE2eUs = std::max(timing.dispatchE2eUs, rankTiming.dispatchE2eUs);
+            timing.dispatchKernelUs = std::max(timing.dispatchKernelUs, rankTiming.dispatchKernelUs);
         }
         globalTimings[iter] = timing;
     }
@@ -174,9 +170,10 @@ void PrintProfileSummary(const MoeDispatchArgs &args, RuntimeState *state,
     std::cout << "  logical work: input tokens(all ranks)=" << static_cast<uint64_t>(args.shape.ep) * args.shape.m
               << " routed tokens(all ranks)=" << static_cast<uint64_t>(args.shape.ep) * args.shape.m * args.shape.topK
               << std::endl;
-    PrintOneTimingStats("dispatch_e2e", globalTimings, &IterationTiming::dispatchE2eUs);
+    PrintOneTimingStats("dispatch_kernel", globalTimings, &IterationTiming::dispatchKernelUs);
     std::cout << "  verify=" << (args.runtime.verify == 0 ? "SKIP" : "PASS") << std::endl;
-    std::cout << "  note: warmup iterations are excluded; each measured sample is the max across ranks." << std::endl;
+    std::cout << "  note: warmup iterations are excluded; kernel samples use device events and max across ranks."
+              << std::endl;
     std::cout << "================================================================\n" << std::endl;
 }
 
@@ -277,6 +274,10 @@ void CreateStreams(const MoeDispatchArgs &args, RuntimeState *state)
     if (aclrtCreateStream(&state->computeStream) != ACL_SUCCESS) {
         throw std::runtime_error("rank " + std::to_string(state->rank) + " aclrtCreateStream failed");
     }
+    CheckAcl(aclrtCreateEvent(&state->dispatchStartEvent),
+             "rank " + std::to_string(state->rank) + " aclrtCreateEvent dispatch start");
+    CheckAcl(aclrtCreateEvent(&state->dispatchEndEvent),
+             "rank " + std::to_string(state->rank) + " aclrtCreateEvent dispatch end");
     if (rtStreamCreate(&state->hcclStream, kRtStreamPriorityDefault) != 0) {
         throw std::runtime_error("rank " + std::to_string(state->rank) + " rtStreamCreate failed");
     }
@@ -660,17 +661,22 @@ void RunDispatch(const MoeDispatchArgs &args, const WorkspaceLayout &workspaceLa
     MoeDispatchShape launchShape = args.shape;
     launchShape.signalValue = state->currentSignalValue;
     MpiBarrier(&state->mpi);
-    auto dispatchStart = std::chrono::steady_clock::now();
+    CheckAcl(aclrtRecordEvent(state->dispatchStartEvent, state->computeStream),
+             "rank " + std::to_string(state->rank) + " record dispatch start");
     LaunchMoeDispatchKernel(launchShape, state->rank, reinterpret_cast<uint8_t *>(state->buffers.inputA),
                             reinterpret_cast<uint8_t *>(state->buffers.expertIdx),
                             reinterpret_cast<uint8_t *>(state->hccl.peerWindow),
                             reinterpret_cast<uint8_t *>(state->hccl.deviceContext),
                             reinterpret_cast<uint8_t *>(state->buffers.workspace), state->computeStream, launchBlocks);
+    CheckAcl(aclrtRecordEvent(state->dispatchEndEvent, state->computeStream),
+             "rank " + std::to_string(state->rank) + " record dispatch end");
     CheckAcl(aclrtSynchronizeStream(state->computeStream),
              "rank " + std::to_string(state->rank) + " dispatch stream sync");
     MpiBarrier(&state->mpi);
-    auto dispatchEnd = std::chrono::steady_clock::now();
-    state->dispatchE2eUs = UsSince(dispatchStart, dispatchEnd);
+    float kernelMs = 0.0f;
+    CheckAcl(aclrtEventElapsedTime(&kernelMs, state->dispatchStartEvent, state->dispatchEndEvent),
+             "rank " + std::to_string(state->rank) + " dispatch kernel elapsed time");
+    state->dispatchKernelUs = static_cast<double>(kernelMs) * 1000.0;
 
     bool inspectDispatch = args.runtime.verify != 0 || args.runtime.debug != 0 ||
                            args.runtime.dispatchMetadataOnly != 0 || args.runtime.dispatchOnly != 0;
@@ -765,6 +771,14 @@ void Cleanup(RuntimeState *state)
         rtStreamDestroy(state->hcclStream);
         state->hcclStream = nullptr;
     }
+    if (state->dispatchEndEvent != nullptr) {
+        aclrtDestroyEvent(state->dispatchEndEvent);
+        state->dispatchEndEvent = nullptr;
+    }
+    if (state->dispatchStartEvent != nullptr) {
+        aclrtDestroyEvent(state->dispatchStartEvent);
+        state->dispatchStartEvent = nullptr;
+    }
     if (state->computeStream != nullptr) {
         aclrtDestroyStream(state->computeStream);
         state->computeStream = nullptr;
@@ -847,7 +861,7 @@ int main(int argc, char **argv)
             }
             if (!isWarmup) {
                 moe_dispatch::IterationTiming timing;
-                timing.dispatchE2eUs = state.dispatchE2eUs;
+                timing.dispatchKernelUs = state.dispatchKernelUs;
                 measureTimings.push_back(timing);
                 if (verbose) {
                     std::cout << "rank=" << state.rank << " iteration=" << (iter - args.runtime.warmup)
