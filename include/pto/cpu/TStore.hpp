@@ -208,7 +208,7 @@ __tf__ PTO_INLINE void StoreSubfractalMatrixNZ(
                     blockRow * numBlockCols *
                         innerRows * innerCols +
                     blockCol * innerRows * innerCols +
-                    innerRow * innerCols +
+                    innerR * innerCols +
                     innerC;
 
                 if constexpr (quantMode != QuantModeCPU_t::NoQuant) {
