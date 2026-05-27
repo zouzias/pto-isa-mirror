@@ -358,7 +358,9 @@ bool RunMoeDispatch(int rankId, int nRanks, int nDevices, int firstDeviceId, con
     }
 
     // Allocate in HCCL window (shmem): token data + optional TPE area
-    size_t winOffset = 0;
+    // A5 hardware errata: MTE2 DMA reads from HCCL window base bytes [16..31] return zeros.
+    // Skip the first 256 bytes of the window to avoid the defective region.
+    size_t winOffset = 256;
     size_t totalShmemAlloc = (g_dispatchMode == DispatchMode::WithSync)
         ? uniformShmemBase + tpeAreaSize
         : shmemSize;
