@@ -14,10 +14,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 
 template <typename T, typename U>
-PTO_INTERNAL void TAlign32BPadInstr(__ubuf__ T *dst, uint32_t validRow, uint32_t validCol, 
-    uint32_t dstStride, uint32_t ubPad, U padValue)
+PTO_INTERNAL void TAlign32BPadInstr(__ubuf__ T *dst, uint32_t validRow, uint32_t validCol, uint32_t dstStride,
+                                    uint32_t ubPad, U padValue)
 {
-    constexpr uint32_t ELEMS_PER_BLOCK  = BLOCK_BYTE_SIZE / sizeof(T);
+    constexpr uint32_t ELEMS_PER_BLOCK = BLOCK_BYTE_SIZE / sizeof(T);
     constexpr uint32_t ELEMS_PER_REPEAT = REPEAT_BYTE / sizeof(T);
     const uint32_t paddedCol = validCol + ubPad;
     if constexpr (sizeof(T) == 1) {
@@ -41,10 +41,11 @@ PTO_INTERNAL void TAlign32BPadInstr(__ubuf__ T *dst, uint32_t validRow, uint32_t
         __ubuf__ U *dstPadPtr = (__ubuf__ U *)(dst + r * dstStride);
         auto fillRow = min((uint32_t)REPEAT_MAX, (uint32_t)(validRow - r));
         if constexpr (sizeof(T) == 8) {
-            PTO_ASSERT((padValue == PadValueMap<uint64_t, PadValue::Min>::value || 
-                        padValue == PadValueMap<uint64_t, PadValue::Max>::value), 
-                "Only support padding with uint64_t while sizeof(T) == 8.");
-            vector_dup((__ubuf__ uint32_t*)dstPadPtr, (uint32_t)padValue, fillRow, 1, 1, dstStride / ELEMS_PER_BLOCK, 0);
+            PTO_ASSERT((padValue == PadValueMap<uint64_t, PadValue::Min>::value ||
+                        padValue == PadValueMap<uint64_t, PadValue::Max>::value),
+                       "Only support padding with uint64_t while sizeof(T) == 8.");
+            vector_dup((__ubuf__ uint32_t *)dstPadPtr, (uint32_t)padValue, fillRow, 1, 1, dstStride / ELEMS_PER_BLOCK,
+                       0);
         } else {
             vector_dup(dstPadPtr, padValue, fillRow, 1, 1, dstStride / ELEMS_PER_BLOCK, 0);
         }
@@ -54,7 +55,8 @@ PTO_INTERNAL void TAlign32BPadInstr(__ubuf__ T *dst, uint32_t validRow, uint32_t
 
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadInstrGm2ub(__ubuf__ typename TileData::DType *dst, typename GlobalData::DType *src,
-                                  uint16_t nBurst, uint32_t lenByteBurst, uint32_t gmByteGap, uint32_t ubGap, uint32_t ubPad)
+                                  uint16_t nBurst, uint32_t lenByteBurst, uint32_t gmByteGap, uint32_t ubGap,
+                                  uint32_t ubPad)
 {
     using T = typename TileData::DType;
     constexpr uint32_t ELEMS_PER_BLOCK = BLOCK_BYTE_SIZE / sizeof(T);
@@ -98,33 +100,33 @@ PTO_INTERNAL void TLoadNd2nzInstr(__cbuf__ typename TileData::DType *dst, typena
     if (((dValue * sizeof(T)) % 32 == 0) && ((srcDValue * sizeof(T)) % 32 == 0)) {
         uint32_t nBurst = ((dValue + ELEMS_PER_BLOCK - 1) / ELEMS_PER_BLOCK);
         for (size_t i = 0; i < nValue; i++) {
-            copy_gm_to_cbuf(dst + i * dstNzNStride * ELEMS_PER_BLOCK, src + i * srcDValue, 0, 
-                nBurst, 1, 0, dstNzC0Stride - 1, (pad_t)0);
+            copy_gm_to_cbuf(dst + i * dstNzNStride * ELEMS_PER_BLOCK, src + i * srcDValue, 0, nBurst, 1, 0,
+                            dstNzC0Stride - 1, (pad_t)0);
         }
         return;
     }
-    __ubuf__ typename TileData::DType *tmpUB = (__ubuf__ typename TileData::DType *)get_imm(0);	 
-     uint32_t lenByteBurst = dValue * sizeof(T); 
-     uint32_t gmByteGap = (srcDValue - dValue) * sizeof(T); 
-     uint32_t ubPadDValue = (lenByteBurst + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE * BLOCK_BYTE_SIZE; 
-     uint32_t ubGapElement = (ubPadDValue - dValue); 
-     uint32_t ubGap = ubGapElement / ELEMS_PER_BLOCK; 
-     uint32_t ubPad = 0; 
-     if constexpr (TileData::PadVal != PadValue::Null) { 
-         ubPad = ubGapElement % ELEMS_PER_BLOCK; 
-     } 
-     set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7); 
-     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7); 
-     TLoadInstrGm2ub<TileData, GlobalData>(tmpUB, src, nValue, lenByteBurst, gmByteGap, ubGap, ubPad); 
-     set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID7); 
-     wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID7); 
-     uint32_t nBurst = ((ubPadDValue + ELEMS_PER_BLOCK - 1) / ELEMS_PER_BLOCK); 
-     for (size_t i = 0; i < nValue; i++) { 
-         copy_ubuf_to_cbuf(dst + i * dstNzNStride * ELEMS_PER_BLOCK, tmpUB + i * ubPadDValue, 0,  
-             nBurst, 1, 0, dstNzC0Stride - 1); 
-     } 
-     set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7); 
-     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7);
+    __ubuf__ typename TileData::DType *tmpUB = (__ubuf__ typename TileData::DType *)get_imm(0);
+    uint32_t lenByteBurst = dValue * sizeof(T);
+    uint32_t gmByteGap = (srcDValue - dValue) * sizeof(T);
+    uint32_t ubPadDValue = (lenByteBurst + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE * BLOCK_BYTE_SIZE;
+    uint32_t ubGapElement = (ubPadDValue - dValue);
+    uint32_t ubGap = ubGapElement / ELEMS_PER_BLOCK;
+    uint32_t ubPad = 0;
+    if constexpr (TileData::PadVal != PadValue::Null) {
+        ubPad = ubGapElement % ELEMS_PER_BLOCK;
+    }
+    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7);
+    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7);
+    TLoadInstrGm2ub<TileData, GlobalData>(tmpUB, src, nValue, lenByteBurst, gmByteGap, ubGap, ubPad);
+    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID7);
+    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID7);
+    uint32_t nBurst = ((ubPadDValue + ELEMS_PER_BLOCK - 1) / ELEMS_PER_BLOCK);
+    for (size_t i = 0; i < nValue; i++) {
+        copy_ubuf_to_cbuf(dst + i * dstNzNStride * ELEMS_PER_BLOCK, tmpUB + i * ubPadDValue, 0, nBurst, 1, 0,
+                          dstNzC0Stride - 1);
+    }
+    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7);
+    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID7);
 }
 
 template <typename TileData, typename GlobalData>
@@ -136,8 +138,8 @@ PTO_INTERNAL void TLoadInstrGm2L1(__cbuf__ typename TileData::DType *dst, typena
 
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadGm2ubGeneral(__ubuf__ typename TileData::DType *dstAddr, typename GlobalData::DType *srcAddr,
-                                int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0, 
-                                int gStride1, int gStride2, int gStride3, int gStride4, int ubPadShape4)
+                                    int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
+                                    int gStride1, int gStride2, int gStride3, int gStride4, int ubPadShape4)
 {
     using TileType = typename TileData::DType;
     constexpr uint32_t ELEMS_PER_BLOCK = BLOCK_BYTE_SIZE / sizeof(TileType);
@@ -182,8 +184,8 @@ PTO_INTERNAL void TLoadGm2ubNd2nd(__ubuf__ typename TileData::DType *dstAddr, ty
     PTO_ASSERT(validRow == gShape0 * gShape1 * gShape2 * gShape3,
                "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape3) of ND shape!");
     PTO_ASSERT(gShape3 < 4096, "The gshape3 (which equals nBurst) must be less than 4096 for A1");
-    TLoadGm2ubGeneral<TileData, GlobalData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, 
-        gStride0, gStride1, gStride2, gStride3, gStride4, TileData::Cols);
+    TLoadGm2ubGeneral<TileData, GlobalData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
+                                            gStride1, gStride2, gStride3, gStride4, TileData::Cols);
 }
 
 template <typename TileData, typename GlobalData>
@@ -195,8 +197,8 @@ PTO_INTERNAL void TLoadGm2ubDn2dn(__ubuf__ typename TileData::DType *dstAddr, ty
     PTO_ASSERT(validCol == gShape0 * gShape1 * gShape2 * gShape4,
                "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape4) of DN shape!");
     PTO_ASSERT(gShape4 < 4096, "The gshape4 (which equals nBurst) must be less than 4096 for A1");
-    TLoadGm2ubGeneral<TileData, GlobalData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape4, gShape3, 
-        gStride0, gStride1, gStride2, gStride4, gStride3, TileData::Rows);
+    TLoadGm2ubGeneral<TileData, GlobalData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape4, gShape3, gStride0,
+                                            gStride1, gStride2, gStride4, gStride3, TileData::Rows);
 }
 
 template <typename TileData, typename GlobalData>
@@ -222,8 +224,8 @@ PTO_INTERNAL void TLoadGm2ubNz2nz(__ubuf__ typename TileData::DType *dstAddr, ty
     constexpr uint32_t C0_ELEMS = C0_SIZE_BYTE / sizeof(typename TileData::DType);
     uint32_t newGShape4 = validRow * C0_ELEMS;
     uint32_t ubPadShape4 = TileData::Rows * C0_ELEMS;
-    TLoadGm2ubGeneral<TileData, GlobalData>(dstAddr, srcAddr, 1, 1, gShape0, gShape1, newGShape4, 
-        gStride0, gStride0, gStride0, gStride1, gStride4, ubPadShape4);    
+    TLoadGm2ubGeneral<TileData, GlobalData>(dstAddr, srcAddr, 1, 1, gShape0, gShape1, newGShape4, gStride0, gStride0,
+                                            gStride0, gStride1, gStride4, ubPadShape4);
 }
 
 template <typename TileData, typename GlobalData>
@@ -674,7 +676,8 @@ PTO_INTERNAL void CheckConvTileData(TileData &dst, GlobalData &src)
         (GlobalData::layout == pto::Layout::FRACTAL_Z && TileData::layout == pto::Layout::FRACTAL_Z) ||
         (GlobalData::layout == pto::Layout::NCHW && TileData::layout == pto::Layout::NC1HWC0) ||
         (GlobalData::layout == pto::Layout::NCHW && TileData::layout == pto::Layout::FRACTAL_Z);
-    static_assert(isSameLayout == true, "Fix: Src layout must be NC1HWC0 or FRACTAL_Z or NCHW, and Dst layout must be NC1HWC0 or FRACTAL_Z!");
+    static_assert(isSameLayout == true,
+                  "Fix: Src layout must be NC1HWC0 or FRACTAL_Z or NCHW, and Dst layout must be NC1HWC0 or FRACTAL_Z!");
 }
 
 template <typename TileData, typename GlobalData>
@@ -703,7 +706,7 @@ PTO_INTERNAL void TLOAD_CONVTILE_IMPL(TileData &dst, GlobalData &src)
                                         src.GetShape(3), src.GetShape(4), src.GetStride(0), src.GetStride(1),
                                         src.GetStride(2), src.GetStride(3), src.GetStride(4), dst.GetShape(0),
                                         dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
-    } 
+    }
 }
 
 template <typename TileData, typename GlobalData>

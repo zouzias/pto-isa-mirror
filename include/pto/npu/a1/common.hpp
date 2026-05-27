@@ -21,7 +21,6 @@ PTO_INTERNAL uint32_t GetByteSize(const uint32_t value)
     return sizeof(T) * value;
 }
 
-
 template <typename SrcType, typename DstType>
 PTO_INTERNAL constexpr QuantMode_t GetCastPreQuantMode()
 {
@@ -99,8 +98,7 @@ PTO_INTERNAL void CheckTMovAccToMat()
                   "Src data type only support float or int32_t.");
     if constexpr (isCastQuant) {
         static_assert((std::is_same<SrcType, float>::value), "The src data type must be restricted to float.");
-        static_assert((std::is_same<DstType, half>::value),
-                      "The output data type must be restricted to half.");
+        static_assert((std::is_same<DstType, half>::value), "The output data type must be restricted to half.");
     } else {
         if constexpr (std::is_same<SrcType, float>::value) {
             static_assert((std::is_same<DstType, int8_t>::value), "The output data type must be restricted to int8_t.");

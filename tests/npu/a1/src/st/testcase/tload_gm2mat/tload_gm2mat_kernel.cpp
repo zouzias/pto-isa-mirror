@@ -80,7 +80,7 @@ AICORE inline void TSTORE_MAT2GM(GlobalData &dst, TileData &src)
 
 template <typename GlobalData, typename TileData>
 AICORE inline void RunTLoadMatAndStore(__gm__ typename GlobalData::DType __out__ *out,
-                                        __gm__ typename GlobalData::DType __in__ *src, int validRow, int validCol)
+                                       __gm__ typename GlobalData::DType __in__ *src, int validRow, int validCol)
 {
     TileData srcTile(validRow, validCol);
     TASSIGN(srcTile, 0x0);
@@ -295,7 +295,7 @@ AICORE inline void RunTLoadFractalZ4D(__gm__ T __out__ *out, __gm__ T __in__ *sr
     using GlobalDataIn = GlobalTensor<T, ShapeDim5, StridDim5, Layout::FRACTAL_Z>;
 
     using ConvTileData = ConvTile<TileType::Mat, T, bufferSize, Layout::FRACTAL_Z,
-                              pto::ConvTileShape<dstC1HW, dstShape2, dstShape3, dstC0>>;
+                                  pto::ConvTileShape<dstC1HW, dstShape2, dstShape3, dstC0>>;
     using OutTileData = Tile<TileType::Mat, T, Rows, Cols, BLayout::RowMajor, validRow, validCol>;
 
     RunTLoadConvAndCopy<T, GlobalDataIn, ConvTileData, OutTileData, 4, validRow>(out, src);
@@ -308,7 +308,8 @@ AICORE inline void RunTLoadNCHW2NC1HWC0(__gm__ T __out__ *out, __gm__ T __in__ *
     constexpr int C0 = 32 / sizeof(T);
     constexpr int C1 = (gShapeC + C0 - 1) / C0;
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
-                                gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4, 1};
+                                gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4,
+                                1};
     constexpr int blockSize = 32 / sizeof(T);
     constexpr int bufferSize = gShapeN * C1 * gShapeH * gShapeW * C0;
     constexpr int validRow = gShapeN * C1 * gShapeH * gShapeW;
@@ -320,8 +321,8 @@ AICORE inline void RunTLoadNCHW2NC1HWC0(__gm__ T __out__ *out, __gm__ T __in__ *
     using StridDim5 = pto::Stride<gStride[0], gStride[1], gStride[2], gStride[3], gStride[4]>;
     using GlobalDataIn = GlobalTensor<T, ShapeDim5, StridDim5, Layout::NCHW>;
 
-    using ConvTileData = ConvTile<TileType::Mat, T, bufferSize, Layout::NC1HWC0,
-                              pto::ConvTileShape<gShapeN, C1, gShapeH, gShapeW, C0>>;
+    using ConvTileData =
+        ConvTile<TileType::Mat, T, bufferSize, Layout::NC1HWC0, pto::ConvTileShape<gShapeN, C1, gShapeH, gShapeW, C0>>;
     using OutTileData = Tile<TileType::Mat, T, Rows, Cols, BLayout::RowMajor, validRow, validCol>;
 
     RunTLoadConvAndCopy<T, GlobalDataIn, ConvTileData, OutTileData, -1, Rows * Cols / blockSize>(out, src);
@@ -337,9 +338,10 @@ AICORE inline void RunTLoadNCHW2FZ(__gm__ T __out__ *out, __gm__ T __in__ *src)
     constexpr int NPad = ((gShapeN + 15) / 16) * 16;
     constexpr int NDiv16 = NPad / 16;
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
-                                gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4, 1};
+                                gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4,
+                                1};
     constexpr int blockSize = 32 / sizeof(T);
-    constexpr int bufferSize = C1HW * NDiv16 * 16 * C0 * sizeof(T);;
+    constexpr int bufferSize = C1HW * NDiv16 * 16 * C0 * sizeof(T);
     constexpr int validRow = C1HW * NDiv16 * 16;
     constexpr int validCol = C0;
     constexpr int Rows = C1HW * NDiv16 * 16;
@@ -349,8 +351,8 @@ AICORE inline void RunTLoadNCHW2FZ(__gm__ T __out__ *out, __gm__ T __in__ *src)
     using StridDim5 = pto::Stride<gStride[0], gStride[1], gStride[2], gStride[3], gStride[4]>;
     using GlobalDataIn = GlobalTensor<T, ShapeDim5, StridDim5, Layout::NCHW>;
 
-    using ConvTileData = ConvTile<TileType::Mat, T, bufferSize, Layout::FRACTAL_Z,
-                              pto::ConvTileShape<C1HW, NDiv16, 16, C0>>;
+    using ConvTileData =
+        ConvTile<TileType::Mat, T, bufferSize, Layout::FRACTAL_Z, pto::ConvTileShape<C1HW, NDiv16, 16, C0>>;
     using OutTileData = Tile<TileType::Mat, T, Rows, Cols, BLayout::RowMajor, validRow, validCol>;
 
     RunTLoadConvAndCopy<T, GlobalDataIn, ConvTileData, OutTileData, 4, Rows * Cols / blockSize>(out, src);
@@ -407,11 +409,9 @@ template void LaunchTLoad<1, float, 1, 1, 1, 156, 1, 1, 1, 1, 156, 1>(float *out
 template void LaunchTLoad<1, uint64_t, 1, 1, 1, 128, 3, 3, 3, 3, 128, 32>(uint64_t *out, uint64_t *src, void *stream);
 template void LaunchTLoad<1, int64_t, 2, 2, 1, 32, 2, 3, 3, 3, 64, 111>(int64_t *out, int64_t *src, void *stream);
 template void LaunchTLoad<1, uint64_t, 1, 2, 1, 32, 11, 1, 3, 2, 32, 93>(uint64_t *out, uint64_t *src, void *stream);
-template void LaunchTLoad<1, uint16_t, 1, 2, 2, 64, 311, 4, 3, 3, 256, 400>(uint16_t *out, uint16_t *src,
-                                                                             void *stream);
+template void LaunchTLoad<1, uint16_t, 1, 2, 2, 64, 311, 4, 3, 3, 256, 400>(uint16_t *out, uint16_t *src, void *stream);
 
 template void LaunchTLoad<2, float, 1, 5, 21, 16, 8, 1, 5, 21, 16, 8>(float *out, float *src, void *stream);
 template void LaunchTLoad<2, int16_t, 2, 15, 11, 16, 16, 3, 23, 13, 16, 16>(int16_t *out, int16_t *src, void *stream);
 template void LaunchTLoad<2, int8_t, 1, 16, 32, 16, 32, 1, 32, 32, 16, 32>(int8_t *out, int8_t *src, void *stream);
 template void LaunchTLoad<2, uint16_t, 2, 4, 5, 16, 16, 7, 7, 7, 16, 16>(uint16_t *out, uint16_t *src, void *stream);
-

@@ -20,28 +20,27 @@ PTO_INTERNAL void SetAtomicAdd();
 
 PTO_INTERNAL void SetAtomicNone();
 
-PTO_INTERNAL AtomicType& static_atomic_var()
+PTO_INTERNAL AtomicType &static_atomic_var()
 {
     static AtomicType atomic_add_ = AtomicType::AtomicNone;
     return atomic_add_;
 }
 
 template <typename T>
-PTO_INTERNAL void PrepareTailBlock(__ubuf__ T *tail, __ubuf__ T *src, __gm__ T *dst,
-    int validRow, int validCol, int srcStride, int dstStride)
+PTO_INTERNAL void PrepareTailBlock(__ubuf__ T *tail, __ubuf__ T *src, __gm__ T *dst, int validRow, int validCol,
+                                   int srcStride, int dstStride)
 {
-    constexpr uint32_t ELEMS_PER_BLOCK      = BLOCK_BYTE_SIZE / sizeof(T);
-    constexpr uint32_t ELEMS_PER_I16BLOCK   = BLOCK_BYTE_SIZE / sizeof(int16_t);
+    constexpr uint32_t ELEMS_PER_BLOCK = BLOCK_BYTE_SIZE / sizeof(T);
+    constexpr uint32_t ELEMS_PER_I16BLOCK = BLOCK_BYTE_SIZE / sizeof(int16_t);
     // 构造的 GlobalData 和 TileData 只有类型起作用
-    using GlobalData    = GlobalTensor<T, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>>;
-    using TileData      = pto::Tile<pto::TileType::Vec, T, 1, ELEMS_PER_BLOCK>;
+    using GlobalData = GlobalTensor<T, Shape<1, 1, 1, 1, 1>, Stride<1, 1, 1, 1, 1>>;
+    using TileData = pto::Tile<pto::TileType::Vec, T, 1, ELEMS_PER_BLOCK>;
 
-    uint32_t lenByteBurst   = validCol * sizeof(T);
-    uint32_t gmByteGap      = dstStride * sizeof(T) - lenByteBurst;
+    uint32_t lenByteBurst = validCol * sizeof(T);
+    uint32_t gmByteGap = dstStride * sizeof(T) - lenByteBurst;
     set_flag(PIPE_V, PIPE_MTE2, EVENT_ID7);
     wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID7);
-    TLoadInstrGm2ub<TileData, GlobalData>(tail, dst, validRow, lenByteBurst, 
-        gmByteGap, 0, ELEMS_PER_BLOCK - validCol);
+    TLoadInstrGm2ub<TileData, GlobalData>(tail, dst, validRow, lenByteBurst, gmByteGap, 0, ELEMS_PER_BLOCK - validCol);
 
     uint32_t validI16Col = (lenByteBurst + sizeof(int16_t) - 1) / sizeof(int16_t);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID7);
@@ -61,35 +60,35 @@ PTO_INTERNAL void PrepareTailBlock(__ubuf__ T *tail, __ubuf__ T *src, __gm__ T *
 }
 
 template <typename T, typename U>
-PTO_INTERNAL void CopyUbBlocks2Gm(__gm__ T *dst, __ubuf__ U *src,
-    uint32_t validRow, uint32_t validCol, uint32_t srcStride, uint32_t dstStride)
+PTO_INTERNAL void CopyUbBlocks2Gm(__gm__ T *dst, __ubuf__ U *src, uint32_t validRow, uint32_t validCol,
+                                  uint32_t srcStride, uint32_t dstStride)
 {
     static_assert(std::is_same<T, U>::value, "Types must match");
     constexpr uint32_t ELEMS_PER_BLOCK = BLOCK_BYTE_SIZE / sizeof(U);
     uint16_t lenBurst = validCol / ELEMS_PER_BLOCK;
     if (dstStride % ELEMS_PER_BLOCK == 0) {
-        copy_ubuf_to_gm((__gm__ void*)dst, (__ubuf__ void*)src, 0, 
-            validRow, lenBurst, srcStride / ELEMS_PER_BLOCK - lenBurst, dstStride / ELEMS_PER_BLOCK - lenBurst);
+        copy_ubuf_to_gm((__gm__ void *)dst, (__ubuf__ void *)src, 0, validRow, lenBurst,
+                        srcStride / ELEMS_PER_BLOCK - lenBurst, dstStride / ELEMS_PER_BLOCK - lenBurst);
         return;
     }
     for (int i = 0; i < validRow; ++i) {
-        copy_ubuf_to_gm(
-            (__gm__ void*)(dst + i * dstStride), (__ubuf__ void*)(src + i * srcStride), 0, 1, lenBurst, 0, 0);
+        copy_ubuf_to_gm((__gm__ void *)(dst + i * dstStride), (__ubuf__ void *)(src + i * srcStride), 0, 1, lenBurst, 0,
+                        0);
     }
 }
 
 template <typename GlobalData, typename TileData>
 PTO_INTERNAL void TStoreUb2gmInstr(typename GlobalData::DType *dst, __ubuf__ typename TileData::DType *src,
-                                  uint16_t nBurst, uint32_t lenByteBurst, uint32_t gmByteGap, uint32_t ubGap)
+                                   uint16_t nBurst, uint32_t lenByteBurst, uint32_t gmByteGap, uint32_t ubGap)
 {
-    using Tile_DType    = typename TileData::DType;
-    using Global_DType  = typename GlobalData::DType;
+    using Tile_DType = typename TileData::DType;
+    using Global_DType = typename GlobalData::DType;
     constexpr uint32_t ELEMS_PER_BLOCK = BLOCK_BYTE_SIZE / sizeof(Tile_DType);
 
-    uint32_t validCol   = lenByteBurst / sizeof(Tile_DType);
-    uint32_t remains    = validCol % ELEMS_PER_BLOCK;
-    uint32_t srcStride  = (ubGap + (validCol + ELEMS_PER_BLOCK - 1) / ELEMS_PER_BLOCK) * ELEMS_PER_BLOCK;
-    uint32_t dstStride  = (gmByteGap + lenByteBurst) / sizeof(Tile_DType);
+    uint32_t validCol = lenByteBurst / sizeof(Tile_DType);
+    uint32_t remains = validCol % ELEMS_PER_BLOCK;
+    uint32_t srcStride = (ubGap + (validCol + ELEMS_PER_BLOCK - 1) / ELEMS_PER_BLOCK) * ELEMS_PER_BLOCK;
+    uint32_t dstStride = (gmByteGap + lenByteBurst) / sizeof(Tile_DType);
 
     if (static_atomic_var() == AtomicType::AtomicAdd) {
         set_flag(PIPE_MTE3, PIPE_V, EVENT_ID7);
@@ -102,9 +101,9 @@ PTO_INTERNAL void TStoreUb2gmInstr(typename GlobalData::DType *dst, __ubuf__ typ
         return;
     }
 
-    auto tail       = (__ubuf__ Tile_DType *)get_imm(TMP_UB_OFFSET);
-    auto srcTail    = (__ubuf__ Tile_DType *)(src + validCol - remains);
-    auto dstTail    = (__gm__ Global_DType *)(dst + validCol - remains);
+    auto tail = (__ubuf__ Tile_DType *)get_imm(TMP_UB_OFFSET);
+    auto srcTail = (__ubuf__ Tile_DType *)(src + validCol - remains);
+    auto dstTail = (__gm__ Global_DType *)(dst + validCol - remains);
     if (remains != 0) {
         set_flag(PIPE_MTE3, PIPE_V, EVENT_ID7);
         wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID7);
@@ -115,30 +114,30 @@ PTO_INTERNAL void TStoreUb2gmInstr(typename GlobalData::DType *dst, __ubuf__ typ
         CopyUbBlocks2Gm(dst, src, nBurst, validCol - remains, srcStride, dstStride);
     }
     if (remains != 0) {
-        constexpr uint32_t ELEMS_PER_I16BLOCK      = BLOCK_BYTE_SIZE / sizeof(int16_t);
+        constexpr uint32_t ELEMS_PER_I16BLOCK = BLOCK_BYTE_SIZE / sizeof(int16_t);
         uint32_t i16DstStride = (gmByteGap + lenByteBurst) / sizeof(int16_t);
         wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID7);
         pipe_barrier(PIPE_MTE3);
         SetAtomicAdd<__gm__ int16_t>();
-        CopyUbBlocks2Gm((__gm__ int16_t*)dstTail, (__ubuf__ int16_t*)tail, nBurst, 
-            ELEMS_PER_I16BLOCK, ELEMS_PER_I16BLOCK, i16DstStride);
+        CopyUbBlocks2Gm((__gm__ int16_t *)dstTail, (__ubuf__ int16_t *)tail, nBurst, ELEMS_PER_I16BLOCK,
+                        ELEMS_PER_I16BLOCK, i16DstStride);
         SetAtomicNone();
     }
 }
 
 template <typename GlobalData, typename TileData>
 PTO_INTERNAL void TStoreUb2gmGeneral(typename GlobalData::DType *dstAddr, __ubuf__ typename TileData::DType *srcAddr,
-                                int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0, 
-                                int gStride1, int gStride2, int gStride3, int gStride4, int ubPadShape4)
+                                     int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
+                                     int gStride1, int gStride2, int gStride3, int gStride4, int ubPadShape4)
 {
-    using Tile_DType    = typename TileData::DType;
-    using GM_DType      = typename GlobalData::DType;
-    uint16_t nBurst     = gShape3;
-    uint32_t lenBurst   = gShape4 * sizeof(Tile_DType);
-    uint32_t gmGap      = (gStride3 - gShape4) * sizeof(Tile_DType);
-    uint32_t ubGap      = ((ubPadShape4 - gShape4) * sizeof(Tile_DType)) >> SHIFT_BLOCK_BYTE;
-    __gm__ GM_DType     *dstGlobalAddr  = dstAddr;
-    __ubuf__ Tile_DType *srcTileAddr    = srcAddr;
+    using Tile_DType = typename TileData::DType;
+    using GM_DType = typename GlobalData::DType;
+    uint16_t nBurst = gShape3;
+    uint32_t lenBurst = gShape4 * sizeof(Tile_DType);
+    uint32_t gmGap = (gStride3 - gShape4) * sizeof(Tile_DType);
+    uint32_t ubGap = ((ubPadShape4 - gShape4) * sizeof(Tile_DType)) >> SHIFT_BLOCK_BYTE;
+    __gm__ GM_DType *dstGlobalAddr = dstAddr;
+    __ubuf__ Tile_DType *srcTileAddr = srcAddr;
 
     int64_t srcStride2 = gShape3 * ubPadShape4;
     int64_t srcStride1 = gShape2 * srcStride2;
@@ -158,7 +157,6 @@ PTO_INTERNAL void TStoreUb2gmGeneral(typename GlobalData::DType *dstAddr, __ubuf
     }
 }
 
-
 template <typename GlobalData, typename TileData>
 PTO_INTERNAL void TStoreUb2gmNd2nd(typename GlobalData::DType *dstAddr, __ubuf__ typename TileData::DType *srcAddr,
                                    int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
@@ -168,8 +166,8 @@ PTO_INTERNAL void TStoreUb2gmNd2nd(typename GlobalData::DType *dstAddr, __ubuf__
     PTO_ASSERT(validRow == gShape0 * gShape1 * gShape2 * gShape3,
                "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape3) of ND shape!");
     PTO_ASSERT(gShape3 < 4096, "The gshape3 (which equals nBurst) must be less than 4096 for A1");
-    TStoreUb2gmGeneral<GlobalData, TileData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, 
-        gStride0, gStride1, gStride2, gStride3, gStride4, TileData::Cols);
+    TStoreUb2gmGeneral<GlobalData, TileData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
+                                             gStride1, gStride2, gStride3, gStride4, TileData::Cols);
 }
 
 template <typename GlobalData, typename TileData>
@@ -181,8 +179,8 @@ PTO_INTERNAL void TStoreUb2gmDn2dn(typename GlobalData::DType *dstAddr, __ubuf__
     PTO_ASSERT(validCol == gShape0 * gShape1 * gShape2 * gShape4,
                "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape4) of DN shape!");
     PTO_ASSERT(gShape4 < 4096, "The gshape4 (which equals nBurst) must be less than 4096 for A1");
-    TStoreUb2gmGeneral<GlobalData, TileData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape4, gShape3, 
-        gStride0, gStride1, gStride2, gStride4, gStride3, TileData::Rows);
+    TStoreUb2gmGeneral<GlobalData, TileData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape4, gShape3, gStride0,
+                                             gStride1, gStride2, gStride4, gStride3, TileData::Rows);
 }
 
 template <typename GlobalData, typename TileData>
@@ -198,10 +196,10 @@ PTO_INTERNAL void TStoreUb2gmNz2nz(typename GlobalData::DType *dstAddr, __ubuf__
                "The validCol of TileData must be equal to Shape0 * Shape1 * Shape4 of NZ shape!");
     PTO_ASSERT(gShape1 < 4096, "The gshape1 (which equals nBurst) must be less than 4096 for A1");
     constexpr uint32_t C0_ELEMS = C0_SIZE_BYTE / sizeof(typename TileData::DType);
-    uint32_t newGShape4         = validRow * C0_ELEMS;
-    uint32_t ubPadShape4        = TileData::Rows * C0_ELEMS;
-    TStoreUb2gmGeneral<GlobalData, TileData>(dstAddr, srcAddr, 1, 1, gShape0, gShape1, newGShape4, 
-        gStride0, gStride0, gStride0, gStride1, gStride4, ubPadShape4);    
+    uint32_t newGShape4 = validRow * C0_ELEMS;
+    uint32_t ubPadShape4 = TileData::Rows * C0_ELEMS;
+    TStoreUb2gmGeneral<GlobalData, TileData>(dstAddr, srcAddr, 1, 1, gShape0, gShape1, newGShape4, gStride0, gStride0,
+                                             gStride0, gStride1, gStride4, ubPadShape4);
 }
 
 template <typename GlobalData, typename TileData, AtomicType currentAtomicType = AtomicType::AtomicNone>
@@ -559,7 +557,7 @@ PTO_INTERNAL void CheckAcc2gm(GlobalData &dst, TileData &src)
     static_assert(TileData::Cols >= 1 && TileData::Cols <= 4095, "The range of Cols is [1, 4095].");
     static_assert((GlobalData::layout == pto::Layout::ND && TileData::Rows >= 1 && TileData::Rows <= 8192) ||
                       ((GlobalData::layout == pto::Layout::NZ || GlobalData::layout == pto::Layout::NC1HWC0 ||
-                      (GlobalData::layout == pto::Layout::NCHW)) &&
+                        (GlobalData::layout == pto::Layout::NCHW)) &&
                        TileData::Rows >= 1 && TileData::Rows <= 65535 && TileData::Cols % 16 == 0),
                   "When GlobalData is ND format, the range of Rows is [1, 8192]."
                   "When GlobalData is NZ/NC1HWC0/NCHW format, the range of Rows is [1, 65535] and Cols "
