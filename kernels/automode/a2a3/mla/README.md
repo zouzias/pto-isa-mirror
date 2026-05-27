@@ -15,8 +15,8 @@ compresses K and V into a low-rank latent (here `latent_dim = 64`, vs the
 naive `num_heads * head_dim = 4096`), which dramatically shrinks the KV
 cache. The "very basic" v1 here:
 
-- single AICORE per kernel,
-- no `block_idx` work split,
+- multi-core via `<<<kBlockDim=24, ...>>>` + `get_block_idx()`, strided
+  work-item partition (each work item = one output tile),
 - no double / multi buffering,
 - no `TPipe` / `TPUSH` / `TPOP`,
 - no manual `set_flag` / `wait_flag` / `pipe_barrier` in kernel code,
@@ -42,8 +42,10 @@ sync (same recipe as §A18
 | 5b | Attention softmax | vec  | `dav-c220-vec`  | `probs[h] = softmax(scale * scores[h])` per head | `[128, 128]` FP16 vec ops × 32 heads |
 | 5c | Attention PV | cube | `dav-c220-cube` | `out_h = probs[h] @ V_h` per head | `M=128 K=128 N=128` × 32 heads |
 
-The clear stage separation is the v1 design goal — performance comes later by
-fusing across stages and adding the multi-core / pipelining infrastructure.
+The clear stage separation is the v1 design goal — multi-core is in place
+(every kernel partitions output tiles across 24 cube cores via
+`get_block_idx()`); further performance comes from fusing across stages and
+adding pipelining infrastructure (double buffering, FIFO staging, etc).
 
 ### Q · K^T without a physical transpose
 
@@ -163,8 +165,6 @@ EOF
 
 ## Known limitations (v1)
 
-- **Single AICORE per kernel.** No `block_idx` work split. Production-quality
-  MLA splits Q-rows across cube cores and per-head work across vec cores.
 - **No KV cache append.** Stage 3 is a verbatim copy of the just-compressed
   latent. A decode-mode variant would index into `[S_max, latent_dim]` at
   `write_pos`.
@@ -222,8 +222,6 @@ per its §2 / §3 schema; cross-reference the assumption number above.
 This v1 is intended as the smallest correct MLA. Follow-up milestones
 already gated by other proven references:
 
-- multi-AICORE work split using `block_idx` (after §A11 → §A18 lineage adds
-  it for MoE),
 - KV cache append (decode mode),
 - causal mask,
 - output projection `W_o`,

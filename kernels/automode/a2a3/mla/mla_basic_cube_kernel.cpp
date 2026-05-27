@@ -2,8 +2,9 @@
  * mla_basic_cube_kernel.cpp - auto-mode A3 prototype, cube-arch stages.
  *
  * Multi-Head Latent Attention (DeepSeek V2/V3 style) v1 - correctness first,
- * NO double buffering, NO multi-core, NO block_idx, NO TPipe/TPUSH/TPOP,
- * NO TASSIGN, NO manual sync.
+ * NO double buffering, NO TPipe/TPUSH/TPOP, NO TASSIGN, NO manual sync.
+ * Multi-core via <<<kBlockDim, ...>>> + get_block_idx() with strided work-item
+ * partition across cores (kBlockDim = 24 = A3 cube AI core count).
  *
  * Cube-arch (`--cce-aicore-arch=dav-c220-cube`) translation unit. Five
  * `__global__ AICORE` entries, each launched independently by the host on the
