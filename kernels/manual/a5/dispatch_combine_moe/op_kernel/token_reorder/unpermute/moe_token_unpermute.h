@@ -22,9 +22,10 @@
 #ifndef MOE_TOKEN_UNPERMUTE
 #define MOE_TOKEN_UNPERMUTE
 
-#include <pto/pto-inst.hpp>
+#include "kernel_operator.h"
 #include "moe_token_unpermute_tiling.h"
 #include "../routing/moe_pto_sort.h"
+using namespace AscendC;
 using pto_ext::dispatch_combine_moe::pto_bridge::PtoFillVector;
 using pto_ext::dispatch_combine_moe::pto_bridge::PtoGetValue;
 
@@ -72,8 +73,8 @@ __aicore__ inline void KernelMoeTokenUnpermute<T1, T2, T3, PROBS>::Init(
     GM_ADDR permuted_tokens, GM_ADDR sorted_indices, GM_ADDR probs, GM_ADDR unpermuted_tokens,
     const MoeTokenUnpermuteTilingData *__restrict tiling_data)
 {
-    this->blockIdx = pto_ext::PtoAivLogicalIdx();
-    this->blockNum = pto_ext::PtoAivLogicalCount();
+    this->blockIdx = get_block_idx() + get_subblockid() * get_block_num();
+    this->blockNum = get_block_num() * get_subblockdim();
     if (blockIdx >= blockNum) {
         return;
     }
@@ -173,8 +174,8 @@ __aicore__ inline void KernelMoeTokenUnpermute<T1, T2, T3, PROBS>::CalMultiOutTo
     if constexpr (PROBS) {
         MoeInitRoutingQuant::pto_detail::PtoLoadVector<T3>(this->probsInputUb, this->probsGM + in_offset,
                                                            out_tokens_number * this->top_k);
-        pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(pto_ext::PtoHardEvent::MTE2_V);
-        if constexpr (!std::is_same<T3, float>::value) {
+        pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
+        if constexpr (!IsSameType<T3, float>::value) {
             MoeInitRoutingQuant::pto_detail::PtoCastVector<float, T3>(
                 this->probsUb, this->probsInputUb, out_tokens_number * this->top_k, pto::RoundMode::CAST_NONE);
             MoeInitRoutingQuant::pto_detail::PtoPipeBarrier<PIPE_V>();
@@ -184,7 +185,7 @@ __aicore__ inline void KernelMoeTokenUnpermute<T1, T2, T3, PROBS>::CalMultiOutTo
             MoeInitRoutingQuant::pto_detail::PtoPipeBarrier<PIPE_V>();
         }
     } else {
-        pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE2_S>(pto_ext::PtoHardEvent::MTE2_S);
+        pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
     }
 
     for (int64_t out_token_idx = 0; out_token_idx < out_tokens_number; ++out_token_idx) {
@@ -271,14 +272,14 @@ __aicore__ inline void KernelMoeTokenUnpermute<T1, T2, T3, PROBS>::CopyTokenIn(c
 {
     int64_t offset = in_token_index * this->hidden_size + h_index * this->hidden_splited_length;
     LoadTokenSlice(this->tokensUb, offset, h_length);
-    pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(pto_ext::PtoHardEvent::MTE2_V);
+    pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
 }
 
 template <typename T1, typename T2, typename T3, bool PROBS>
 __aicore__ inline void KernelMoeTokenUnpermute<T1, T2, T3, PROBS>::CalFirstToken(const float prob_value,
                                                                                  const int64_t h_length)
 {
-    if constexpr (!std::is_same<T1, float>::value) {
+    if constexpr (!IsSameType<T1, float>::value) {
         MoeInitRoutingQuant::pto_detail::PtoCastVector<float, T1>(this->tokenTensor0Ub, this->tokensUb, h_length,
                                                                   pto::RoundMode::CAST_NONE);
     } else {
@@ -296,7 +297,7 @@ template <typename T1, typename T2, typename T3, bool PROBS>
 __aicore__ inline void KernelMoeTokenUnpermute<T1, T2, T3, PROBS>::CalToken(const float prob_value,
                                                                             const int64_t h_length)
 {
-    if constexpr (!std::is_same<T1, float>::value) {
+    if constexpr (!IsSameType<T1, float>::value) {
         MoeInitRoutingQuant::pto_detail::PtoCastVector<float, T1>(this->tokenTensor1Ub, this->tokensUb, h_length,
                                                                   pto::RoundMode::CAST_NONE);
         if constexpr (PROBS) {
@@ -323,16 +324,16 @@ __aicore__ inline void KernelMoeTokenUnpermute<T1, T2, T3, PROBS>::CopyOut(const
                                                                            const int64_t h_length)
 {
     uint64_t outUb = this->tokenTensor0Ub;
-    if constexpr (!std::is_same<T1, float>::value) {
+    if constexpr (!IsSameType<T1, float>::value) {
         MoeInitRoutingQuant::pto_detail::PtoPipeBarrier<PIPE_V>();
         MoeInitRoutingQuant::pto_detail::PtoCastVector<T1, float>(this->outUb, this->tokenTensor0Ub, h_length,
                                                                   pto::RoundMode::CAST_RINT);
         outUb = this->outUb;
     }
 
-    MoeInitRoutingQuant::pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::V_MTE3>(pto_ext::PtoHardEvent::V_MTE3);
+    MoeInitRoutingQuant::pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
     int64_t offset = out_token_index * this->hidden_size + h_index * this->hidden_splited_length;
     StoreTokenSlice(offset, outUb, h_length);
-    MoeInitRoutingQuant::pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE3_V>(pto_ext::PtoHardEvent::MTE3_V);
+    MoeInitRoutingQuant::pto_detail::PtoSetWaitFlag<HardEvent::MTE3_V>(HardEvent::MTE3_V);
 }
 #endif // MOE_TOKEN_UNPERMUTE

@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "moe_init_routing_gather_dynamic_quant.h"
 #include "moe_init_routing_sort.h"
 
+using namespace AscendC;
 using namespace MoeInitRoutingQuant;
 using namespace optiling;
 
@@ -26,10 +27,12 @@ __aicore__ inline void RunFullLoadDynamicQuant(GM_ADDR x, GM_ADDR expertIdx, GM_
                                                GM_ADDR dynamicQuantScale, GM_ADDR workspace,
                                                const MoeInitRoutingQuantTilingData *tilingData)
 {
-        MoeFullLoadDynamicQuant<DTYPE_X> op;
+    AscendC::TPipe sortPipe;
+    MoeFullLoadDynamicQuant<DTYPE_X> op;
     op.Init(x, expertIdx, expandedX, expandedRowIdx, expertTokensCountOrCumsum, scale, dynamicQuantScale, workspace,
-            tilingData);
+            tilingData, &sortPipe);
     op.Process();
+    sortPipe.Destroy();
 }
 
 template <typename SortOp>
@@ -37,10 +40,12 @@ __aicore__ inline void RunSortStage(GM_ADDR expertIdx, GM_ADDR expertTokensCount
                                     GM_ADDR expertTokensBeforeCapacity, GM_ADDR workspace,
                                     const MoeInitRoutingQuantTilingData *tilingData)
 {
-        SortOp op;
+    AscendC::TPipe sortPipe;
+    SortOp op;
     op.template Init<MoeInitRoutingQuantTilingData>(expertIdx, expertTokensCountOrCumsum, expertTokensBeforeCapacity,
-                                                    workspace, tilingData);
+                                                    workspace, tilingData, &sortPipe);
     op.Process();
+    sortPipe.Destroy();
 }
 
 __aicore__ inline void RunExpertTokenOut(GM_ADDR expertTokensCountOrCumsum, GM_ADDR expertTokensBeforeCapacity,
@@ -50,18 +55,22 @@ __aicore__ inline void RunExpertTokenOut(GM_ADDR expertTokensCountOrCumsum, GM_A
     if (tilingData->expertTokensCountOrCumsumFlag == EXERPT_TOKENS_NONE) {
         return;
     }
-        MoeExpertTokenOut expertTokenOutOp;
+    AscendC::TPipe expertTokenOutPipe;
+    MoeExpertTokenOut expertTokenOutOp;
     expertTokenOutOp.Init<MoeInitRoutingQuantTilingData>(expertTokensCountOrCumsum, expertTokensBeforeCapacity,
-                                                         expandedRowIdx, workspace, tilingData);
+                                                         expandedRowIdx, workspace, tilingData, &expertTokenOutPipe);
     expertTokenOutOp.Process();
+    expertTokenOutPipe.Destroy();
 }
 
 __aicore__ inline void RunSrcToDst(GM_ADDR expandedRowIdx, GM_ADDR workspace,
                                    const MoeInitRoutingQuantTilingData *tilingData)
 {
-        MoeSrcToDstOp srcToDstOp;
-    srcToDstOp.Init<MoeInitRoutingQuantTilingData>(expandedRowIdx, workspace, tilingData);
+    AscendC::TPipe srcToDstPipe;
+    MoeSrcToDstOp srcToDstOp;
+    srcToDstOp.Init<MoeInitRoutingQuantTilingData>(expandedRowIdx, workspace, tilingData, &srcToDstPipe);
     srcToDstOp.Process();
+    srcToDstPipe.Destroy();
 }
 
 template <class DTYPE_X>
@@ -69,9 +78,12 @@ __aicore__ inline void RunGatherDynamicQuant(GM_ADDR x, GM_ADDR scale, GM_ADDR e
                                              GM_ADDR dynamicQuantScale, GM_ADDR workspace,
                                              const MoeInitRoutingQuantTilingData *tilingData)
 {
-        MoeGatherDynamicQuant<DTYPE_X> gatherDynamicQuantOp;
-    gatherDynamicQuantOp.Init(x, scale, expandedRowIdx, expandedX, dynamicQuantScale, workspace, tilingData);
+    AscendC::TPipe gatherPipe;
+    MoeGatherDynamicQuant<DTYPE_X> gatherDynamicQuantOp;
+    gatherDynamicQuantOp.Init(x, scale, expandedRowIdx, expandedX, dynamicQuantScale, workspace, tilingData,
+                              &gatherPipe);
     gatherDynamicQuantOp.Process();
+    gatherPipe.Destroy();
 }
 
 template <class DTYPE_X = bfloat16_t>
@@ -81,7 +93,7 @@ __aicore__ inline void moe_init_routing_quant(GM_ADDR x, GM_ADDR expertIdx, GM_A
                                               GM_ADDR dynamicQuantScale, GM_ADDR workspace,
                                               const MoeInitRoutingQuantTilingData *tilingData, uint64_t tilingKey)
 {
-    if (g_coreType == pto_ext::PTO_AIC || workspace == nullptr) {
+    if (g_coreType == AIC || workspace == nullptr) {
         return;
     }
 

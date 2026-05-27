@@ -28,11 +28,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/pto-inst.hpp"
 
 namespace pto_ext::Gemm::Block {
-template <pto_ext::PtoHardEvent event>
+template <AscendC::HardEvent event>
 __aicore__ inline void SyncFlagFunc(int32_t eventID)
 {
-    pto_ext::PtoSetFlag<event>(eventID);
-    pto_ext::PtoWaitFlag<event>(eventID);
+    AscendC::SetFlag<event>(eventID);
+    AscendC::WaitFlag<event>(eventID);
 }
 
 template <uint32_t PRELOAD_STAGES_, uint32_t L1_STAGES_, uint32_t L0A_STAGES_, uint32_t L0B_STAGES_,
@@ -130,20 +130,20 @@ public:
     {
         SynchronizeBlock();
         for (uint32_t i = 0; i < L1_STAGES; ++i) {
-            pto_ext::PtoWaitFlag<pto_ext::PtoHardEvent::MTE1_MTE2>(l1AEventList[i]);
-            pto_ext::PtoWaitFlag<pto_ext::PtoHardEvent::MTE1_MTE2>(l1BEventList[i]);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[i]);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[i]);
         }
         for (uint32_t i = 0; i < L0A_STAGES; ++i) {
-            pto_ext::PtoWaitFlag<pto_ext::PtoHardEvent::M_MTE1>(l0AEventList[i]);
+            AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[i]);
         }
         for (uint32_t i = 0; i < L0B_STAGES; ++i) {
-            pto_ext::PtoWaitFlag<pto_ext::PtoHardEvent::M_MTE1>(l0BEventList[i]);
+            AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[i]);
         }
         for (uint32_t i = 0; i < L0C_STAGES; ++i) {
-            pto_ext::PtoWaitFlag<pto_ext::PtoHardEvent::FIX_M>(l0CEventList[i]);
+            AscendC::WaitFlag<AscendC::HardEvent::FIX_M>(l0CEventList[i]);
         }
         if constexpr (std::is_same_v<ElementA, int8_t>) {
-            pto_ext::PtoWaitFlag<pto_ext::PtoHardEvent::FIX_MTE2>(0);
+            AscendC::WaitFlag<AscendC::HardEvent::FIX_MTE2>(0);
         }
     }
 
@@ -188,7 +188,7 @@ public:
     {
         for (; syncGroupIdx <= target; syncGroupIdx++) {
             int32_t flagId = syncGroupIdx / 15 + flag;
-            pto_ext::PtoCrossCoreRecord<pto::SyncOpType::TSTORE_C2GM, pto::SyncOpType::TLOAD>(flagId);
+            AscendC::CrossCoreSetFlag<0x2, PIPE_FIX>(flagId);
         }
     }
 
@@ -212,7 +212,7 @@ private:
     __forceinline__ __aicore__ uint32_t GetStartTileIdx(uint32_t kTileCount)
     {
         if constexpr (ENABLE_SHUFFLE_K) {
-            return pto_ext::PtoAicLogicalIdx() % kTileCount;
+            return AscendC::GetBlockIdx() % kTileCount;
         }
         return 0;
     }
@@ -232,17 +232,17 @@ private:
         __gm__ ElementA *gmTileA = gmBlockAPtr + layoutA.GetOffset(gmTileAOffset);
         __gm__ ElementB *gmTileB = gmBlockBPtr + layoutB.GetOffset(gmTileBOffset);
 
-        pto_ext::PtoWaitFlag<pto_ext::PtoHardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
         auto layoutTileA = layoutA.GetTileLayout(PtoCoord2D(actualM, kActual));
         detail::PtoLoadNdGmToNzL1<ElementA, L1TileShape::M, L1TileShape::K>(l1AOffsetList[l1ListId], gmTileA,
                                                                             layoutTileA);
-        pto_ext::PtoSetFlag<pto_ext::PtoHardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
+        AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
 
-        pto_ext::PtoWaitFlag<pto_ext::PtoHardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
         auto layoutTileB = layoutB.GetTileLayout(PtoCoord2D(kActual, actualN));
         detail::PtoLoadNzGmToNzL1<ElementB, L1TileShape::K, L1TileShape::N>(l1BOffsetList[l1ListId], gmTileB,
                                                                             MakeL1BLayout(), layoutTileB);
-        pto_ext::PtoSetFlag<pto_ext::PtoHardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
+        AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
     }
 
     __forceinline__ __aicore__ void RecordPreloadParams(LayoutC const &layoutC, layout::VectorLayout const &layoutScale,
@@ -291,13 +291,13 @@ private:
             l1BOffsetList[i] = resource.l1Buf.GetBufferAddrByByte(l1BOffset + L1B_TILE_SIZE * i);
             l1AEventList[i] = i;
             l1BEventList[i] = i + L1_STAGES;
-            pto_ext::PtoSetFlag<pto_ext::PtoHardEvent::MTE1_MTE2>(l1AEventList[i]);
-            pto_ext::PtoSetFlag<pto_ext::PtoHardEvent::MTE1_MTE2>(l1BEventList[i]);
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[i]);
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[i]);
         }
         uint32_t l1SOffset = l1BOffset + L1B_TILE_SIZE * L1_STAGES;
         if constexpr (std::is_same_v<ElementA, int8_t>) {
             l1SBaseOffset = resource.l1Buf.GetBufferAddrByByte(l1SOffset);
-            pto_ext::PtoSetFlag<pto_ext::PtoHardEvent::FIX_MTE2>(0);
+            AscendC::SetFlag<AscendC::HardEvent::FIX_MTE2>(0);
         }
     }
 
@@ -312,7 +312,7 @@ private:
         for (uint32_t i = 0; i < L0A_STAGES; ++i) {
             l0AOffsetList[i] = resource.l0ABuf.GetBufferAddrByByte(L0A_TILE_SIZE * i);
             l0AEventList[i] = i;
-            pto_ext::PtoSetFlag<pto_ext::PtoHardEvent::M_MTE1>(l0AEventList[i]);
+            AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[i]);
         }
     }
 
@@ -321,7 +321,7 @@ private:
         for (uint32_t i = 0; i < L0B_STAGES; ++i) {
             l0BOffsetList[i] = resource.l0BBuf.GetBufferAddrByByte(L0B_TILE_SIZE * i);
             l0BEventList[i] = i + L0A_STAGES;
-            pto_ext::PtoSetFlag<pto_ext::PtoHardEvent::M_MTE1>(l0BEventList[i]);
+            AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[i]);
         }
     }
 
@@ -330,7 +330,7 @@ private:
         for (uint32_t i = 0; i < L0C_STAGES; ++i) {
             l0COffsetList[i] = resource.l0CBuf.GetBufferAddrByByte(L0C_TILE_SIZE * i);
             l0CEventList[i] = i;
-            pto_ext::PtoSetFlag<pto_ext::PtoHardEvent::FIX_M>(l0CEventList[i]);
+            AscendC::SetFlag<AscendC::HardEvent::FIX_M>(l0CEventList[i]);
         }
     }
 
@@ -346,13 +346,13 @@ private:
             l0AOffsetList[l0AListId] +
             static_cast<uint64_t>(layoutAInL0.GetOffset(PtoCoord2D(0, 0))) * sizeof(ElementA);
 
-        pto_ext::PtoWaitFlag<pto_ext::PtoHardEvent::M_MTE1>(l0AEventList[l0AListId]);
+        AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
         if ((mPartIdx == 0) && (kPartIdx == 0)) {
-            pto_ext::PtoWaitFlag<pto_ext::PtoHardEvent::MTE2_MTE1>(l1AEventList[params.l1ListId]);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[params.l1ListId]);
         }
         detail::PtoMoveL1ToL0A<ElementA, L0TileShape>(l0AStagingOffsetBytes, l1AOffsetBytes, mPartActual, kPartActual);
         if ((mPartIdx == mPartLoop - 1) && (kPartIdx == kPartLoop - 1)) {
-            pto_ext::PtoSetFlag<pto_ext::PtoHardEvent::MTE1_MTE2>(l1AEventList[params.l1ListId]);
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[params.l1ListId]);
         }
     }
 
@@ -368,13 +368,13 @@ private:
             l0BOffsetList[l0BListId] +
             static_cast<uint64_t>(layoutBInL0.GetOffset(PtoCoord2D(0, 0))) * sizeof(ElementB);
 
-        pto_ext::PtoWaitFlag<pto_ext::PtoHardEvent::M_MTE1>(l0BEventList[l0BListId]);
+        AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
         if ((kPartIdx == 0) && (nPartIdx == 0)) {
-            pto_ext::PtoWaitFlag<pto_ext::PtoHardEvent::MTE2_MTE1>(l1BEventList[params.l1ListId]);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[params.l1ListId]);
         }
         detail::PtoMoveL1ToL0B<ElementB, L0TileShape>(l0BStagingOffsetBytes, l1BOffsetBytes, kPartActual, nPartActual);
         if ((kPartIdx == kPartLoop - 1) && (nPartIdx == nPartLoop - 1)) {
-            pto_ext::PtoSetFlag<pto_ext::PtoHardEvent::MTE1_MTE2>(l1BEventList[params.l1ListId]);
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[params.l1ListId]);
         }
     }
 
@@ -398,26 +398,26 @@ private:
     {
         auto layoutCInGm = params.layoutCInGm;
         if constexpr (std::is_same_v<ElementA, int8_t>) {
-            pto_ext::PtoWaitFlag<pto_ext::PtoHardEvent::FIX_MTE2>(0);
+            AscendC::WaitFlag<AscendC::HardEvent::FIX_MTE2>(0);
             detail::StagePerChannelScale<L1TileShape::N>(l1SBaseOffset, fixpipeBaseOffset, params.gmBlockS,
                                                          params.layoutScale, layoutCInGm.shape(1));
-            pto_ext::PtoSetFlag<pto_ext::PtoHardEvent::MTE2_FIX>(0);
-            pto_ext::PtoWaitFlag<pto_ext::PtoHardEvent::MTE2_FIX>(0);
-            pto_ext::PtoPipeBarrier<PIPE_FIX>();
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_FIX>(0);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_FIX>(0);
+            AscendC::PipeBarrier<PIPE_FIX>();
         }
         if constexpr (!ENABLE_UNIT_FLAG) {
-            pto_ext::PtoSetFlag<pto_ext::PtoHardEvent::M_FIX>(l0CEventList[l0CListId]);
-            pto_ext::PtoWaitFlag<pto_ext::PtoHardEvent::M_FIX>(l0CEventList[l0CListId]);
+            AscendC::SetFlag<AscendC::HardEvent::M_FIX>(l0CEventList[l0CListId]);
+            AscendC::WaitFlag<AscendC::HardEvent::M_FIX>(l0CEventList[l0CListId]);
             detail::StoreAccumulator<ElementA, ElementC, ElementAccumulator, L1TileShape::M, L1TileShape::N>(
                 params.gmBlockC, l0COffsetList[l0CListId], fixpipeBaseOffset, layoutCInGm);
-            pto_ext::PtoSetFlag<pto_ext::PtoHardEvent::FIX_M>(l0CEventList[l0CListId]);
+            AscendC::SetFlag<AscendC::HardEvent::FIX_M>(l0CEventList[l0CListId]);
         } else {
             detail::StoreAccumulator<ElementA, ElementC, ElementAccumulator, L1TileShape::M, L1TileShape::N>(
                 params.gmBlockC, l0COffsetList[l0CListId], fixpipeBaseOffset, layoutCInGm, 0b11);
         }
         l0CListId = (l0CListId + 1 < L0C_STAGES) ? (l0CListId + 1) : 0;
         if constexpr (std::is_same_v<ElementA, int8_t>) {
-            pto_ext::PtoSetFlag<pto_ext::PtoHardEvent::FIX_MTE2>(0);
+            AscendC::SetFlag<AscendC::HardEvent::FIX_MTE2>(0);
         }
     }
 
@@ -431,9 +431,9 @@ private:
                 (nPartIdx < nPartLoop - 1) ? L0TileShape::N : (params.nRound - nPartIdx * L0TileShape::N);
             auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(kPartActual, nPartActual);
             MoveL1BTileToL0(params, kPartIdx, nPartIdx, kPartLoop, nPartLoop, kPartActual, nPartActual, layoutBInL0);
-            pto_ext::PtoSetFlag<pto_ext::PtoHardEvent::MTE1_M>(EVENT_ID0);
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(EVENT_ID0);
             PtoCoord2D l0COffset(mPartIdx * L0TileShape::M, nPartIdx * L0TileShape::N);
-            pto_ext::PtoWaitFlag<pto_ext::PtoHardEvent::MTE1_M>(EVENT_ID0);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(EVENT_ID0);
             bool initC = (params.isKLoopFirst && (kPartIdx == 0));
             uint8_t unitFlag = GetUnitFlag(params, mPartIdx, kPartIdx, nPartIdx, mPartLoop, kPartLoop, nPartLoop);
             const uint64_t l0AOffsetBytes =
@@ -447,7 +447,7 @@ private:
                 static_cast<uint64_t>(layoutCInL0.GetOffset(l0COffset)) * sizeof(ElementAccumulator);
             detail::PtoTileMmad<ElementAccumulator, ElementA, ElementB, L0TileShape>(
                 l0COffsetBytes, l0AOffsetBytes, l0BOffsetBytes, mPartActual, nPartActual, kPartActual, initC, unitFlag);
-            pto_ext::PtoSetFlag<pto_ext::PtoHardEvent::M_MTE1>(l0BEventList[l0BListId]);
+            AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
             l0BListId = (l0BListId + 1 < L0B_STAGES) ? (l0BListId + 1) : 0;
         }
     }
@@ -461,7 +461,7 @@ private:
 
         if constexpr (!ENABLE_UNIT_FLAG) {
             if (params.isKLoopFirst) {
-                pto_ext::PtoWaitFlag<pto_ext::PtoHardEvent::FIX_M>(l0CEventList[l0CListId]);
+                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>(l0CEventList[l0CListId]);
             }
         }
 
@@ -479,7 +479,7 @@ private:
 
                 RunNPartLoop(params, layoutCInL0, layoutAInL0, mPartIdx, kPartIdx, mPartLoop, kPartLoop, nPartLoop,
                              mPartActual, kPartActual);
-                pto_ext::PtoSetFlag<pto_ext::PtoHardEvent::M_MTE1>(l0AEventList[l0AListId]);
+                AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
                 l0AListId = (l0AListId + 1 < L0A_STAGES) ? (l0AListId + 1) : 0;
             }
         }
@@ -489,7 +489,7 @@ private:
 #ifdef __TILE_SYNC__
             if (params.flag > 0) {
                 int32_t flagId = params.flag + params.syncLoopIdx / 8;
-                pto_ext::PtoCrossCoreRecord<pto::SyncOpType::TSTORE_C2GM, pto::SyncOpType::TLOAD>(flagId);
+                AscendC::CrossCoreSetFlag<0x2, PIPE_FIX>(flagId);
             }
 #else
             Finalize(params.syncLoopIdx, params.flag);

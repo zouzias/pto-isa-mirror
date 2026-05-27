@@ -11,7 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef HCCL_WINDOW_HPP
 #define HCCL_WINDOW_HPP
 
-#include <pto/pto-inst.hpp>
+#include "kernel_operator.h"
 #include "const_args.hpp"
 #include "hccl_context.hpp"
 
@@ -41,19 +41,25 @@ FORCE_INLINE_AICORE T gm_load(__gm__ T *cache)
 template <typename T>
 FORCE_INLINE_AICORE void gm_dcci(__gm__ T *addr)
 {
-    pto::SYNCALL_SOFT_DCCI(reinterpret_cast<__gm__ void *>(addr));
+    using namespace AscendC;
+    AscendC::GlobalTensor<uint8_t> global;
+    global.SetGlobalBuffer(reinterpret_cast<GM_ADDR>(addr));
+
+    __asm__ __volatile__("");
+    DataCacheCleanAndInvalid<uint8_t, CacheLine::SINGLE_CACHE_LINE, DcciDst::CACHELINE_OUT>(global);
+    __asm__ __volatile__("");
 }
 
 template <auto Pipe>
 FORCE_INLINE_AICORE void pto_pipe_barrier()
 {
-    pto_ext::PtoPipeBarrier<Pipe>();
+    AscendC::PipeBarrier<Pipe>();
 }
 
 template <bool NeedWait>
 FORCE_INLINE_AICORE void pto_sync_all()
 {
-    pto_ext::PtoSyncAll<NeedWait>();
+    AscendC::SyncAll<NeedWait>();
 }
 
 struct PtoRemoteWindow {
@@ -110,8 +116,8 @@ struct PtoRemoteWindow {
 
     FORCE_INLINE_AICORE void ResetLocalTokenReady()
     {
-        int vec_id = static_cast<int>(pto_ext::PtoAivLogicalIdx());
-        int vec_size = static_cast<int>(pto_ext::PtoAivLogicalCount());
+        int vec_id = AscendC::GetBlockIdx();
+        int vec_size = AscendC::GetBlockNum() * AscendC::GetTaskRation();
         for (int i = vec_id; i < rankSize_; i += vec_size) {
             gm_store(LocalTokenReadyCounter(i), 0);
         }
@@ -120,7 +126,7 @@ struct PtoRemoteWindow {
     FORCE_INLINE_AICORE void NotifyRemoteTokenReady(int32_t rankId)
     {
         pto_pipe_barrier<PIPE_ALL>();
-        pto::SYNCALL_SOFT_DCCI(reinterpret_cast<__gm__ void *>(LocalSignalBase()));
+        dsb(DSB_DDR);
         auto remoteTokenReady = RemoteTokenReadySignal(rankId, rank_);
         pto::comm::TNOTIFY(remoteTokenReady, 1, pto::comm::NotifyOp::AtomicAdd);
     }
@@ -135,10 +141,10 @@ struct PtoRemoteWindow {
     {
         __gm__ int32_t *sync_base = LocalBarrierEpoch();
         int count = gm_load(sync_base) + 1;
-        int vec_id = static_cast<int>(pto_ext::PtoAivLogicalIdx());
-        int vec_size = static_cast<int>(pto_ext::PtoAivLogicalCount());
+        int vec_id = AscendC::GetBlockIdx();
+        int vec_size = AscendC::GetBlockNum() * AscendC::GetTaskRation();
         pto_pipe_barrier<PIPE_ALL>();
-        pto::SYNCALL_SOFT_DCCI(reinterpret_cast<__gm__ void *>(LocalSignalBase()));
+        dsb(DSB_DDR);
         for (int i = vec_id; i < rankSize_; i += vec_size) {
             auto remoteBarrier = RemoteBarrierSignal(i, rank_);
             auto localBarrier = LocalBarrierSignal(i);

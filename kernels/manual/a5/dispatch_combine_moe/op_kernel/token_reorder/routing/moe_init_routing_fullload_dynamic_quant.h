@@ -17,14 +17,15 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "moe_init_routing_sort.h"
 namespace MoeInitRoutingQuant {
+using namespace AscendC;
 using namespace optiling;
 template <typename T>
 struct MoeFullLoadDynamicQuant : public MoeSortBase {
     __aicore__ inline MoeFullLoadDynamicQuant(){};
     __aicore__ inline void Init(GM_ADDR x, GM_ADDR expertIdx, GM_ADDR expandedX, GM_ADDR expandedRowIdx,
                                 GM_ADDR expertTokensCountOrCumsum, GM_ADDR quantSmooth, GM_ADDR dynamicQuantScale,
-                                GM_ADDR workspace, const MoeInitRoutingQuantTilingData *tilingData
-                                );
+                                GM_ADDR workspace, const MoeInitRoutingQuantTilingData *tilingData,
+                                AscendC::TPipe *tPipe);
     __aicore__ inline void Process();
 
 private:
@@ -85,7 +86,7 @@ template <typename T>
 __aicore__ inline void MoeFullLoadDynamicQuant<T>::CopyIn()
 {
     pto_detail::PtoLoadVector<int32_t>(this->sortInputUb, expertIdxGm_, this->totalLength);
-    pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE2_S>(pto_ext::PtoHardEvent::MTE2_S);
+    pto_detail::PtoSetWaitFlag<HardEvent::MTE2_S>(HardEvent::MTE2_S);
     PtoFillArithProgressionInt32(this->sortInputUb + static_cast<uint64_t>(this->sortNum_) * sizeof(int32_t), 0, 1,
                                  this->totalLength);
 }
@@ -116,7 +117,7 @@ __aicore__ inline void MoeFullLoadDynamicQuant<T>::ComputeExpertTokenCountOrCums
 {
     int64_t expertNumAlign = Align(this->expertNum, sizeof(int32_t));
     pto_detail::PtoFillVector<int32_t>(this->expertTokensUb_, static_cast<int32_t>(0), expertNumAlign);
-    pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::V_S>(pto_ext::PtoHardEvent::V_S);
+    pto_detail::PtoSetWaitFlag<HardEvent::V_S>(HardEvent::V_S);
 
     int32_t lastExpertId = pto_detail::PtoGetValue<int32_t>(this->expandedExpertIdxUb_, 0);
     int64_t tokenCount = 0;
@@ -151,7 +152,7 @@ __aicore__ inline void MoeFullLoadDynamicQuant<T>::CopyOutEmpty()
 template <typename T>
 __aicore__ inline void MoeFullLoadDynamicQuant<T>::LoadInputRow(uint64_t inUb, int64_t row)
 {
-    if constexpr (std::is_same<T, float>::value) {
+    if constexpr (IsSameType<T, float>::value) {
         pto_detail::PtoLoadVector<float>(inUb, xGm_ + row * this->cols_, this->cols_);
     } else {
         pto_detail::PtoLoadVector<T>(inUb + static_cast<uint64_t>(colsAlign) * sizeof(T), xGm_ + row * this->cols_,
@@ -170,7 +171,7 @@ __aicore__ inline void MoeFullLoadDynamicQuant<T>::QuantizeTile(uint64_t inUb, u
                                                                 uint64_t outputPayloadUb, uint64_t dynamicQuantScaleUb,
                                                                 uint64_t smoothUb)
 {
-    if constexpr (!std::is_same<T, float>::value) {
+    if constexpr (!IsSameType<T, float>::value) {
         const uint64_t rawInputUb = inUb + static_cast<uint64_t>(colsAlign) * sizeof(T);
         pto_detail::PtoCastVector<float, T>(inUb, rawInputUb, this->cols_, pto::RoundMode::CAST_NONE);
     }
@@ -213,13 +214,13 @@ __aicore__ inline void MoeFullLoadDynamicQuant<T>::CopyOutXQuant1H()
 
     if (smoothType == 1) {
         pto_detail::PtoLoadVector<float>(this->smoothUb_, quantSmoothGm, this->cols_);
-        pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(pto_ext::PtoHardEvent::MTE2_V);
+        pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
     }
     for (int64_t row = startXRow; row <= endXRow; row++) {
         LoadInputRow(this->inputXUb_, row);
-        pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(pto_ext::PtoHardEvent::MTE2_V);
+        pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
         Compute(this->smoothUb_);
-        pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::V_MTE3>(pto_ext::PtoHardEvent::V_MTE3);
+        pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
 
         while (curRowsStart <= curRowsEnd && curRowsStart / this->k_ == row) {
             int32_t outIndex = pto_detail::PtoGetValue<int32_t>(this->expandedRowIdxUb_, curRowsStart);
@@ -229,7 +230,7 @@ __aicore__ inline void MoeFullLoadDynamicQuant<T>::CopyOutXQuant1H()
             }
             StoreExpandedXRow(outIndex, this->outputXUb_);
         }
-        pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE3_V>(pto_ext::PtoHardEvent::MTE3_V);
+        pto_detail::PtoSetWaitFlag<HardEvent::MTE3_V>(HardEvent::MTE3_V);
     }
 }
 
@@ -237,7 +238,7 @@ template <typename T>
 __aicore__ inline void MoeFullLoadDynamicQuant<T>::InitTilingState(const MoeInitRoutingQuantTilingData *tilingData)
 {
     this->gatherOutTilingData_ = &(tilingData->gatherOutComputeParamsOp);
-    this->blockIdx_ = pto_ext::PtoAivLogicalIdx();
+    this->blockIdx_ = get_block_idx() + get_subblockid() * get_block_num();
     this->k_ = tilingData->k;
     this->n_ = tilingData->n;
     this->cols_ = tilingData->cols;
@@ -279,7 +280,7 @@ __aicore__ inline void MoeFullLoadDynamicQuant<T>::InitUbOffsets()
 {
     int64_t kvFactor = 2;
     int64_t sortBytes = this->sortNum_ * sizeof(int32_t) * kvFactor;
-    int64_t sortScratchBytes = PtoGetSortLen<float>(this->sortNum_) * sizeof(float);
+    int64_t sortScratchBytes = GetSortLen<float>(this->sortNum_) * sizeof(float);
     this->sortInputUb = 0;
     this->expandedExpertIdxUb_ = this->sortInputUb + sortBytes;
     this->expandDstToSrcRowUb_ = this->expandedExpertIdxUb_ + AlignBytes(this->sortNum_, sizeof(int32_t));
@@ -289,7 +290,7 @@ __aicore__ inline void MoeFullLoadDynamicQuant<T>::InitUbOffsets()
     this->sortMergeTmpUb = this->sortTempUb + sortScratchBytes;
 
     this->inputXUb_ = this->sortMergeTmpUb + sortScratchBytes;
-    if constexpr (std::is_same<T, float>::value) {
+    if constexpr (IsSameType<T, float>::value) {
         this->smoothUb_ = this->inputXUb_ + AlignBytes(this->cols_, sizeof(float));
     } else {
         this->smoothUb_ = this->inputXUb_ + 2 * AlignBytes(this->cols_, sizeof(T));
@@ -303,8 +304,8 @@ __aicore__ inline void MoeFullLoadDynamicQuant<T>::Init(GM_ADDR x, GM_ADDR exper
                                                         GM_ADDR expandedRowIdx, GM_ADDR expertTokensCountOrCumsum,
                                                         GM_ADDR quantSmooth, GM_ADDR dynamicQuantScale,
                                                         GM_ADDR workspace,
-                                                        const MoeInitRoutingQuantTilingData *tilingData
-                                                        )
+                                                        const MoeInitRoutingQuantTilingData *tilingData,
+                                                        AscendC::TPipe *tPipe)
 {
     InitTilingState(tilingData);
     InitGlobalTensors(x, expertIdx, expandedX, expandedRowIdx, expertTokensCountOrCumsum, quantSmooth);

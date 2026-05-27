@@ -120,16 +120,16 @@ public:
     __forceinline__ __aicore__ void SetFlag()
     {
         for (uint32_t i = 0; i < UB_STAGES; ++i) {
-            row_detail::PtoSetFlag<pto_ext::PtoHardEvent::V_MTE2>(eventUbCVMTE2List[i]);
-            row_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE3_V>(eventUbDMTE3VList[i]);
+            row_detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[i]);
+            row_detail::PtoSetFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[i]);
         }
     }
 
     __forceinline__ __aicore__ void Finalize()
     {
         for (uint32_t i = 0; i < UB_STAGES; ++i) {
-            row_detail::PtoWaitFlag<pto_ext::PtoHardEvent::V_MTE2>(eventUbCVMTE2List[i]);
-            row_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE3_V>(eventUbDMTE3VList[i]);
+            row_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[i]);
+            row_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[i]);
         }
     }
     __forceinline__ __aicore__ ~BlockEpilogue()
@@ -162,7 +162,7 @@ private:
     __forceinline__ __aicore__ __gm__ ElementD *GetLocalScratch()
     {
         constexpr uint32_t scratchCols = 1024;
-        int32_t logicalSubCoreIdx = pto_ext::PtoAivLogicalIdx();
+        int32_t logicalSubCoreIdx = get_block_idx() + get_subblockid() * get_block_num();
         int64_t scratchOffsetBytes =
             params.scratchOffset + static_cast<int64_t>(logicalSubCoreIdx) * scratchCols * sizeof(ElementD);
         return reinterpret_cast<__gm__ ElementD *>(params.remoteWindow(scratchOffsetBytes, params.rank));
@@ -172,18 +172,18 @@ private:
                                                     __gm__ ElementPerTokenScale *gmPerTokenScalePtr, uint32_t blockN,
                                                     uint64_t ubCOffset, uint64_t ubCFp32Offset)
     {
-        row_detail::PtoWaitFlag<pto_ext::PtoHardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
+        row_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
         row_detail::PtoLoadVector(ubCOffset, gmTileC, blockN);
-        row_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
+        row_detail::PtoSetFlag<AscendC::HardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
 
-        row_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
+        row_detail::PtoWaitFlag<AscendC::HardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
         row_detail::PtoCastVector<ElementPerTokenScale, ElementC>(ubCFp32Offset, ubCOffset, blockN,
                                                                   pto::RoundMode::CAST_NONE);
-        row_detail::PtoSetFlag<pto_ext::PtoHardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
+        row_detail::PtoSetFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
 
         ElementPerTokenScale perTokenScale = gm_load(gmPerTokenScalePtr);
-        row_detail::PtoSetFlag<pto_ext::PtoHardEvent::S_V>(0);
-        row_detail::PtoWaitFlag<pto_ext::PtoHardEvent::S_V>(0);
+        row_detail::PtoSetFlag<AscendC::HardEvent::S_V>(0);
+        row_detail::PtoWaitFlag<AscendC::HardEvent::S_V>(0);
         row_detail::PtoPipeBarrier<PIPE_V>();
         row_detail::PtoMulVector(ubCFp32Offset, ubCFp32Offset, blockN, perTokenScale);
         row_detail::PtoPipeBarrier<PIPE_V>();
@@ -216,18 +216,18 @@ private:
                                              int32_t dstRank, uint32_t blockN, uint64_t ubDOffset,
                                              uint64_t ubCFp32Offset)
     {
-        row_detail::PtoWaitFlag<pto_ext::PtoHardEvent::MTE3_V>(eventUbDMTE3VList[ubListId]);
+        row_detail::PtoWaitFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[ubListId]);
         row_detail::PtoCastVector<ElementD, ElementPerTokenScale>(ubDOffset, ubCFp32Offset, blockN,
                                                                   pto::RoundMode::CAST_RINT);
-        row_detail::PtoSetFlag<pto_ext::PtoHardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
+        row_detail::PtoSetFlag<AscendC::HardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
 
-        row_detail::PtoWaitFlag<pto_ext::PtoHardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
+        row_detail::PtoWaitFlag<AscendC::HardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
         if (dstRank == params.rank) {
             row_detail::PtoStoreVector(dstRowBase, ubDOffset, blockN);
         } else {
             StoreRemoteRow(dstRowBase, localScratch, blockN, ubDOffset);
         }
-        row_detail::PtoSetFlag<pto_ext::PtoHardEvent::MTE3_V>(eventUbDMTE3VList[ubListId]);
+        row_detail::PtoSetFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[ubListId]);
     }
 
     PTO_EPILOGUE_COMMON_UB_STATE()

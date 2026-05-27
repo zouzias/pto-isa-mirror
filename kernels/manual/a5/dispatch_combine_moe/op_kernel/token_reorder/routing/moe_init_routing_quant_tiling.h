@@ -9,8 +9,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 #pragma once
-#ifndef PTO_DISPATCH_COMBINE_MOE_INIT_ROUTING_QUANT_TILING_H
-#define PTO_DISPATCH_COMBINE_MOE_INIT_ROUTING_QUANT_TILING_H
+#ifndef ASCENDC_DISPATCH_COMBINE_MOE_INIT_ROUTING_QUANT_TILING_H
+#define ASCENDC_DISPATCH_COMBINE_MOE_INIT_ROUTING_QUANT_TILING_H
 
 #include <algorithm>
 

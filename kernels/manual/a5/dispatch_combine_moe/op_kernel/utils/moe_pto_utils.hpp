@@ -11,12 +11,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef MOE_PTO_UTILS_HPP
 #define MOE_PTO_UTILS_HPP
 
-#include <pto/pto-inst.hpp>
-#if defined(PTO_NPU_ARCH_A5)
-#include <pto/npu/a5/custom/TSync_Custom.hpp>
-#else
-#include <pto/npu/a2a3/custom/TSync_Custom.hpp>
-#endif
+#include "kernel_operator.h"
+
+#include <pto/common/pto_tile.hpp>
 
 #include <algorithm>
 #include <cstdint>
@@ -39,60 +36,6 @@ constexpr uint32_t BYTE_PER_VECTOR_FRACTAL = BYTE_PER_BLK * BLK_NUM_PER_VECTOR_F
 constexpr uint64_t L2_OFFSET = 0;
 constexpr uint32_t STRIDE_LIMIT = 65536;
 constexpr uint32_t BYTE_PER_BLK_FP = 128;
-constexpr int32_t PTO_AIC = 1;
-constexpr int32_t PTO_AIV = 2;
-
-__forceinline__ __aicore__ uint32_t PtoMixAicBlocks()
-{
-    return static_cast<uint32_t>(pto::SYNCALL_GET_MIX_AIC_BLOCKS());
-}
-
-__forceinline__ __aicore__ uint32_t PtoMixAivRatio()
-{
-    return static_cast<uint32_t>(pto::SYNCALL_GET_MIX_AIV_RATIO());
-}
-
-__forceinline__ __aicore__ uint32_t PtoMixParticipantIdx()
-{
-    return static_cast<uint32_t>(pto::SYNCALL_GET_MIX_PARTICIPANT_IDX());
-}
-
-__forceinline__ __aicore__ uint32_t PtoMixParticipantCount()
-{
-    return static_cast<uint32_t>(pto::SYNCALL_GET_MIX_PARTICIPANT_COUNT());
-}
-
-__forceinline__ __aicore__ uint32_t PtoAicLogicalIdx()
-{
-    return PtoMixParticipantIdx();
-}
-
-__forceinline__ __aicore__ uint32_t PtoAicLogicalCount()
-{
-    return PtoMixAicBlocks();
-}
-
-__forceinline__ __aicore__ uint32_t PtoAivLogicalIdx()
-{
-    return PtoMixParticipantIdx() - PtoMixAicBlocks();
-}
-
-__forceinline__ __aicore__ uint32_t PtoAivLogicalCount()
-{
-    return PtoMixAicBlocks() * PtoMixAivRatio();
-}
-
-__forceinline__ __aicore__ uint32_t PtoAivSubCoreIdx()
-{
-    const uint32_t ratio = PtoMixAivRatio();
-    return ratio == 0 ? 0 : PtoAivLogicalIdx() % ratio;
-}
-
-__forceinline__ __aicore__ uint32_t PtoAivPairedAicIdx()
-{
-    const uint32_t ratio = PtoMixAivRatio();
-    return ratio == 0 ? 0 : PtoAivLogicalIdx() / ratio;
-}
 
 #define PTO_EPILOGUE_COMMON_UB_STATE()    \
     Params params;                        \
@@ -105,237 +48,41 @@ __forceinline__ __aicore__ uint32_t PtoAivPairedAicIdx()
     uint32_t ubListId{0};                 \
     uint64_t ubCFp32OffsetList[UB_STAGES];
 
-enum class PtoHardEvent : uint8_t {
-    MTE2_MTE3,
-    MTE3_MTE2,
-    MTE2_V,
-    V_MTE2,
-    MTE3_V,
-    V_MTE3,
-    MTE2_S,
-    S_MTE2,
-    MTE3_S,
-    S_MTE3,
-    MTE1_MTE2,
-    MTE2_MTE1,
-    MTE2_FIX,
-    M_MTE1,
-    FIX_M,
-    FIX_MTE2,
-    M_FIX,
-    MTE1_M,
-    S_V,
-    V_S,
-};
-
-template <PtoHardEvent Event>
-struct PtoEventOps;
-
-#define PTO_DEFINE_EVENT_OPS(EVENT_NAME, SRC_OP_VALUE, DST_OP_VALUE) \
-    template <>                                                        \
-    struct PtoEventOps<PtoHardEvent::EVENT_NAME> {                                \
-        static constexpr pto::Op SRC_OP = pto::Op::SRC_OP_VALUE;      \
-        static constexpr pto::Op DST_OP = pto::Op::DST_OP_VALUE;      \
-    }
-
-PTO_DEFINE_EVENT_OPS(MTE2_MTE3, TLOAD, TSTORE_VEC);
-PTO_DEFINE_EVENT_OPS(MTE3_MTE2, TSTORE_VEC, TLOAD);
-PTO_DEFINE_EVENT_OPS(MTE2_V, TLOAD, VECTOR);
-PTO_DEFINE_EVENT_OPS(V_MTE2, VECTOR, TLOAD);
-PTO_DEFINE_EVENT_OPS(MTE3_V, TSTORE_VEC, VECTOR);
-PTO_DEFINE_EVENT_OPS(V_MTE3, VECTOR, TSTORE_VEC);
-PTO_DEFINE_EVENT_OPS(MTE2_S, TLOAD, SCALAR);
-PTO_DEFINE_EVENT_OPS(S_MTE2, SCALAR, TLOAD);
-PTO_DEFINE_EVENT_OPS(MTE3_S, TSTORE_VEC, SCALAR);
-PTO_DEFINE_EVENT_OPS(S_MTE3, SCALAR, TSTORE_VEC);
-PTO_DEFINE_EVENT_OPS(MTE1_MTE2, TMOV_M2L, TLOAD);
-PTO_DEFINE_EVENT_OPS(MTE2_MTE1, TLOAD, TMOV_M2L);
-PTO_DEFINE_EVENT_OPS(MTE2_FIX, TLOAD, TSTORE_ACC);
-PTO_DEFINE_EVENT_OPS(M_MTE1, TMATMUL, TMOV_M2L);
-PTO_DEFINE_EVENT_OPS(FIX_M, TSTORE_ACC, TMATMUL);
-PTO_DEFINE_EVENT_OPS(FIX_MTE2, TSTORE_ACC, TLOAD);
-PTO_DEFINE_EVENT_OPS(M_FIX, TMATMUL, TSTORE_ACC);
-PTO_DEFINE_EVENT_OPS(MTE1_M, TMOV_M2L, TMATMUL);
-PTO_DEFINE_EVENT_OPS(S_V, SCALAR, VECTOR);
-PTO_DEFINE_EVENT_OPS(V_S, VECTOR, SCALAR);
-
-#undef PTO_DEFINE_EVENT_OPS
-
-template <PtoHardEvent Event, event_t EventId>
-__forceinline__ __aicore__ void PtoRecordFlagById()
-{
-    pto::Event<PtoEventOps<Event>::SRC_OP, PtoEventOps<Event>::DST_OP, false, EventId> event;
-    event.Record();
-}
-
-template <PtoHardEvent Event, event_t EventId>
-__forceinline__ __aicore__ void PtoWaitFlagById()
-{
-    pto::Event<PtoEventOps<Event>::SRC_OP, PtoEventOps<Event>::DST_OP, false, EventId> event;
-    event.Wait();
-}
-
-template <PtoHardEvent Event>
-__forceinline__ __aicore__ void PtoRecordFlag(int32_t eventId)
-{
-    switch (eventId) {
-        case 0:
-            PtoRecordFlagById<Event, EVENT_ID0>();
-            break;
-        case 1:
-            PtoRecordFlagById<Event, EVENT_ID1>();
-            break;
-        case 2:
-            PtoRecordFlagById<Event, EVENT_ID2>();
-            break;
-        case 3:
-            PtoRecordFlagById<Event, EVENT_ID3>();
-            break;
-        case 4:
-            PtoRecordFlagById<Event, EVENT_ID4>();
-            break;
-        case 5:
-            PtoRecordFlagById<Event, EVENT_ID5>();
-            break;
-        case 6:
-            PtoRecordFlagById<Event, EVENT_ID6>();
-            break;
-        case 7:
-            PtoRecordFlagById<Event, EVENT_ID7>();
-            break;
-        default:
-            PtoRecordFlagById<Event, EVENT_ID0>();
-            break;
-    }
-}
-
-template <PtoHardEvent Event>
-__forceinline__ __aicore__ void PtoWaitEventFlag(int32_t eventId)
-{
-    switch (eventId) {
-        case 0:
-            PtoWaitFlagById<Event, EVENT_ID0>();
-            break;
-        case 1:
-            PtoWaitFlagById<Event, EVENT_ID1>();
-            break;
-        case 2:
-            PtoWaitFlagById<Event, EVENT_ID2>();
-            break;
-        case 3:
-            PtoWaitFlagById<Event, EVENT_ID3>();
-            break;
-        case 4:
-            PtoWaitFlagById<Event, EVENT_ID4>();
-            break;
-        case 5:
-            PtoWaitFlagById<Event, EVENT_ID5>();
-            break;
-        case 6:
-            PtoWaitFlagById<Event, EVENT_ID6>();
-            break;
-        case 7:
-            PtoWaitFlagById<Event, EVENT_ID7>();
-            break;
-        default:
-            PtoWaitFlagById<Event, EVENT_ID0>();
-            break;
-    }
-}
-
 template <auto Pipe>
 __forceinline__ __aicore__ void PtoPipeBarrier()
 {
-    if constexpr (Pipe == PIPE_MTE2) {
-        pto::TSYNC<pto::Op::TLOAD>();
-    } else if constexpr (Pipe == PIPE_MTE3) {
-        pto::TSYNC<pto::Op::TSTORE_VEC>();
-    } else if constexpr (Pipe == PIPE_ALL) {
-        pto::TSYNC<pto::Op::OP_COUNT>();
-    } else if constexpr (Pipe == PIPE_V) {
-        pto::PtoSetWaitFlag<PIPE_V, PIPE_S>(EVENT_ID0, EVENT_ID0);
-    } else if constexpr (Pipe == PIPE_M) {
-        pto::PtoSetWaitFlag<PIPE_M, PIPE_FIX>(EVENT_ID0, EVENT_ID0);
-    } else if constexpr (Pipe == PIPE_FIX) {
-        pto::PtoSetWaitFlag<PIPE_FIX, PIPE_S>(EVENT_ID0, EVENT_ID0);
-    } else if constexpr (Pipe == PIPE_MTE1) {
-        pto::PtoSetWaitFlag<PIPE_MTE1, PIPE_S>(EVENT_ID0, EVENT_ID0);
-    } else if constexpr (Pipe == PIPE_S) {
-        pto::PtoSetWaitFlag<PIPE_S, PIPE_V>(EVENT_ID0, EVENT_ID0);
-    }
+    AscendC::PipeBarrier<Pipe>();
 }
 
-template <PtoHardEvent Event>
+template <AscendC::HardEvent Event>
 __forceinline__ __aicore__ void PtoSetFlag(int32_t eventId)
 {
-    PtoRecordFlag<Event>(eventId);
+    AscendC::SetFlag<Event>(eventId);
 }
 
-template <PtoHardEvent Event>
+template <AscendC::HardEvent Event>
 __forceinline__ __aicore__ void PtoWaitFlag(int32_t eventId)
 {
-    PtoWaitEventFlag<Event>(eventId);
+    AscendC::WaitFlag<Event>(eventId);
 }
 
-__forceinline__ __aicore__ int32_t PtoDefaultEventId(PtoHardEvent eventId)
+template <AscendC::HardEvent Event>
+__forceinline__ __aicore__ void PtoSetWaitFlag(AscendC::HardEvent eventId)
 {
-    switch (eventId) {
-        case PtoHardEvent::MTE2_MTE3:
-        case PtoHardEvent::MTE3_MTE2:
-        case PtoHardEvent::MTE2_V:
-        case PtoHardEvent::V_MTE2:
-        case PtoHardEvent::MTE3_V:
-        case PtoHardEvent::V_MTE3:
-        case PtoHardEvent::MTE2_S:
-        case PtoHardEvent::S_MTE2:
-        case PtoHardEvent::MTE3_S:
-        case PtoHardEvent::S_MTE3:
-        case PtoHardEvent::MTE1_MTE2:
-        case PtoHardEvent::MTE2_MTE1:
-        case PtoHardEvent::MTE2_FIX:
-        case PtoHardEvent::M_MTE1:
-        case PtoHardEvent::FIX_M:
-        case PtoHardEvent::FIX_MTE2:
-        case PtoHardEvent::M_FIX:
-        case PtoHardEvent::MTE1_M:
-        case PtoHardEvent::S_V:
-        case PtoHardEvent::V_S:
-            return EVENT_ID0;
-        default:
-            return EVENT_ID0;
-    }
-}
-
-template <PtoHardEvent Event>
-__forceinline__ __aicore__ void PtoSetWaitFlag(PtoHardEvent eventId)
-{
-    const int32_t pipeEventId = PtoDefaultEventId(eventId);
-    PtoSetFlag<Event>(pipeEventId);
-    PtoWaitFlag<Event>(pipeEventId);
-}
-
-template <pto::SyncOpType ProducerOp, pto::SyncOpType ConsumerOp>
-__forceinline__ __aicore__ void PtoCrossCoreRecord(uint16_t flagId)
-{
-    pto::TSync_Custom<ProducerOp, ConsumerOp>{flagId}.record();
-}
-
-template <pto::SyncOpType ProducerOp, pto::SyncOpType ConsumerOp>
-__forceinline__ __aicore__ void PtoCrossCoreWait(uint16_t flagId)
-{
-    pto::TSync_Custom<ProducerOp, ConsumerOp>{flagId}.wait();
+    event_t pipeEventId = static_cast<event_t>(GetTPipePtr()->FetchEventID(eventId));
+    AscendC::SetFlag<Event>(pipeEventId);
+    AscendC::WaitFlag<Event>(pipeEventId);
 }
 
 template <bool NeedWait>
 __forceinline__ __aicore__ void PtoSyncAll()
 {
-    (void)NeedWait;
-    pto::SYNCALL<pto::SyncCoreType::Mix>();
+    AscendC::SyncAll<NeedWait>();
 }
 
 __forceinline__ __aicore__ void PtoSyncAll()
 {
-    pto::SYNCALL<pto::SyncCoreType::Mix>();
+    AscendC::SyncAll();
 }
 
 using PtoShape1D = pto::Shape<pto::DYNAMIC, 1, 1, 1, 1>;

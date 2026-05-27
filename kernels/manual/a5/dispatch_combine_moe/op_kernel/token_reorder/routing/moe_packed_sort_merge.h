@@ -17,9 +17,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "moe_common.h"
 #include "moe_pto_sort.h"
-#include <pto/pto-inst.hpp>
+#include "kernel_operator.h"
 
 namespace MoeInitRoutingQuant {
+using namespace AscendC;
 using namespace optiling;
 struct MoeMrgsortParam {
     int64_t perListElements;
@@ -50,11 +51,11 @@ __aicore__ inline void CopyPackedMrgInputs(__gm__ float *gmInputs[4], uint64_t u
                                            uint16_t elementCountListTail[4], int64_t &remainListNum)
 {
     remainListNum = 0;
-    pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE3_MTE2>(pto_ext::PtoHardEvent::MTE3_MTE2);
+    pto_detail::PtoSetWaitFlag<HardEvent::MTE3_MTE2>(HardEvent::MTE3_MTE2);
     for (int64_t i = 0, j = 0; i < listNum; i++) {
         lengths[i] = Min(oneLoopMaxElements, listRemainElements[i]);
         if (lengths[i] > 0) {
-            pto_detail::PtoLoadVector(ubInputs[i], gmInputs[i] + offsets[i], PtoGetSortLen<float>(lengths[i]));
+            pto_detail::PtoLoadVector(ubInputs[i], gmInputs[i] + offsets[i], GetSortLen<float>(lengths[i]));
             tmpUbInputs[j] = ubInputs[i];
             elementCountListTail[j] = lengths[i];
             remainListNum += 1;
@@ -72,7 +73,7 @@ __aicore__ inline void UpdatePackedMrgSortInfo(int64_t listNum, int64_t lengths[
         if (lengths[i] > 0) {
             listRemainElements[i] -= listSortedNums[j];
             allRemainElements -= listSortedNums[j];
-            offsets[i] += PtoGetSortOffset<float>(listSortedNums[j]);
+            offsets[i] += GetSortOffset<float>(listSortedNums[j]);
             curLoopSortedNum += listSortedNums[j];
             j += 1;
         }
@@ -87,7 +88,7 @@ __aicore__ inline void InitPackedMrgListState(MoeMrgsortParam *param, int64_t li
         allRemainElements = 0;
     }
     for (int64_t i = 0; i < listNum; i++) {
-        offsets[i] = PtoGetSortOffset<float>(param->perListElements * i);
+        offsets[i] = GetSortOffset<float>(param->perListElements * i);
         if (i == listNum - 1) {
             listRemainElements[i] = param->lastListElements;
         } else {
@@ -178,7 +179,7 @@ __aicore__ inline void MoeMrgsort::CopyIn()
 
 __aicore__ inline void MoeMrgsort::MrgsortCompute()
 {
-    pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(pto_ext::PtoHardEvent::MTE2_V);
+    pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
     if (this->remainListNum > 1) {
         PtoMergePackedSortRecords(this->ubOutput, this->tempBuffer, this->tmpUbInputs[0], this->tmpUbInputs[1],
                                   this->remainListNum >= MERGE_LIST_THREE ? this->tmpUbInputs[MERGE_LIST_IDX_TWO] : 0,
@@ -186,7 +187,7 @@ __aicore__ inline void MoeMrgsort::MrgsortCompute()
                                   this->elementCountListTail, this->remainListNum, this->listSortedNums);
     } else {
         pto_detail::PtoMoveVector<float>(this->ubOutput, this->tmpUbInputs[0],
-                                         PtoGetSortLen<float>(elementCountListTail[0]));
+                                         GetSortLen<float>(elementCountListTail[0]));
         listSortedNums[0] = elementCountListTail[0];
     }
 }
@@ -199,9 +200,9 @@ __aicore__ inline void MoeMrgsort::UpdateSortInfo()
 
 __aicore__ inline void MoeMrgsort::CopyOut()
 {
-    pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::V_MTE3>(pto_ext::PtoHardEvent::V_MTE3);
-    pto_detail::PtoStoreVector(this->gmOutput + outOffset, this->ubOutput, PtoGetSortLen<float>(curLoopSortedNum));
-    outOffset += PtoGetSortLen<float>(curLoopSortedNum);
+    pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
+    pto_detail::PtoStoreVector(this->gmOutput + outOffset, this->ubOutput, GetSortLen<float>(curLoopSortedNum));
+    outOffset += GetSortLen<float>(curLoopSortedNum);
 }
 
 __aicore__ inline void MoeMrgsort::Init(MoeMrgsortParam *param)
@@ -323,7 +324,7 @@ __aicore__ inline void MoeMrgsortOut::CopyIn()
 
 __aicore__ inline void MoeMrgsortOut::MrgsortCompute()
 {
-    pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::MTE2_V>(pto_ext::PtoHardEvent::MTE2_V);
+    pto_detail::PtoSetWaitFlag<HardEvent::MTE2_V>(HardEvent::MTE2_V);
     if (this->remainListNum > 1) {
         PtoMergePackedSortRecords(this->tempBuffer, this->mergeTmpBuffer, this->tmpUbInputs[0], this->tmpUbInputs[1],
                                   this->remainListNum >= MERGE_LIST_THREE ? this->tmpUbInputs[MERGE_LIST_IDX_TWO] : 0,
@@ -331,7 +332,7 @@ __aicore__ inline void MoeMrgsortOut::MrgsortCompute()
                                   this->elementCountListTail, this->remainListNum, this->listSortedNums);
     } else {
         pto_detail::PtoMoveVector<float>(this->tempBuffer, this->tmpUbInputs[0],
-                                         PtoGetSortLen<float>(elementCountListTail[0]));
+                                         GetSortLen<float>(elementCountListTail[0]));
         listSortedNums[0] = elementCountListTail[0];
     }
 }
@@ -349,7 +350,7 @@ __aicore__ inline void MoeMrgsortOut::Extract()
 
 __aicore__ inline void MoeMrgsortOut::CopyOut()
 {
-    pto_detail::PtoSetWaitFlag<pto_ext::PtoHardEvent::V_MTE3>(pto_ext::PtoHardEvent::V_MTE3);
+    pto_detail::PtoSetWaitFlag<HardEvent::V_MTE3>(HardEvent::V_MTE3);
     pto_detail::PtoStoreVector(this->gmOutput1 + outOffset, this->ubOutputInt1, curLoopSortedNum);
     pto_detail::PtoStoreVector(this->gmOutput2 + outOffset, this->ubOutputInt2, curLoopSortedNum);
     outOffset += curLoopSortedNum;

@@ -15,10 +15,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef INNER_MOE_COMMON_H
 #define INNER_MOE_COMMON_H
 
-#include <pto/pto-inst.hpp>
+#include "kernel_operator.h"
 #include "../../utils/moe_pto_utils.hpp"
 
 namespace MoeInitRoutingQuant {
+using namespace AscendC;
 using namespace optiling;
 constexpr int64_t ONE_REPEAT_SORT_NUM = 32;
 constexpr int64_t BLOCK_BYTES = 32;

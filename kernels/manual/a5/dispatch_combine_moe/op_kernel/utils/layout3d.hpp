@@ -11,7 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef LAYOUT_3D_HPP
 #define LAYOUT_3D_HPP
 
-#include <pto/pto-inst.hpp>
+#include "kernel_operator.h"
 
 #include <cstdint>
 
