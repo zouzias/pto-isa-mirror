@@ -6,9 +6,9 @@ This example implements the MoE combine stage with PTO on Ascend A2/A3-class chi
 dispatch-compute-combine MoE pipeline: after local experts finish computing routed rows, the combine kernel returns those
 rows to the original token owner rank and restores each token output with the gate weights.
 
-The current kernel is a standalone combine kernel with an explicit low-level routing contract. It does not accept
-MC2-style high-level inputs such as `expert_ids`, `assist_info_for_combine`, or `ep_send_counts` directly. Those fields
-must already be lowered into `routeMeta`.
+The current kernel is a standalone combine kernel with an explicit low-level routing contract. Route information such
+as `expert_ids`, `assist_info_for_combine`, and `ep_send_counts` is prepared by the upstream stage or host side and
+passed in through `routeMeta`.
 
 ```text
 expertOutput[local expert rows, K]
@@ -54,11 +54,22 @@ For each rank, the operator consumes expert outputs that are already laid out by
 3. Uses `TNOTIFY` / `TWAIT` to wait until every peer has completed its return writes.
 4. Reads `routeMeta.expandedRowIdx` and `probs` to restore `outputC[M, K]`.
 
-For token `t`:
+For token `t`, dispatch creates `topK` expert routes. After the combine return phase, the expert output rows for those
+routes have been written back to this rank's `peerWindow.ptrD`. `expandedRowIdx[t * topK + slot]` records the row index
+in `ptrD`, and `probs[t * topK + slot]` is the gate weight for that route.
+
+For each output column `c`, restore is:
 
 ```text
-outputC[t, :] = sum_{slot=0..topK-1} probs[t, slot] * ptrD[expandedRowIdx[t, slot], :]
+outputC[t, c] = 0
+for slot in 0..topK-1:
+    row = expandedRowIdx[t * topK + slot]
+    if row >= 0:
+        outputC[t, c] += probs[t * topK + slot] * peerWindow.ptrD[row, c]
 ```
+
+In other words, the kernel computes the gate-weighted sum of the `topK` expert rows for the same token and writes the
+final `outputC[t, :]`.
 
 ### Scope
 
@@ -68,7 +79,7 @@ outputC[t, :] = sum_{slot=0..topK-1} probs[t, slot] * ptrD[expandedRowIdx[t, slo
 | Variable-length all-to-all-like return with `TPUT` | HCCL collective `AllToAllV` API |
 | Weighted restore with `probs` | Expert FFN/GMM compute |
 | Explicit low-level `routeMeta` contract | Quantization, TP ReduceScatterV, shared/copy/const experts |
-| A2/A3 HCCL peer-window path | MC2 public ABI adapter |
+| A2/A3 HCCL peer-window path | Upper-level public ABI adapter |
 
 ## Entry Contract
 
@@ -91,7 +102,7 @@ void LaunchMoeCombineKernel(MoeCombineShape shape, uint32_t myRank,
 
 | Argument | Direction | Storage | Meaning |
 | --- | --- | --- | --- |
-| `shape` | input | value | Static shape and tuning fields (`ep`, `m`, `k`, `topK`, `expertPerRank`, `aivBlocks`, etc.) |
+| `shape` | input | value | Static shape and AIV block count, such as `ep`, `m`, `k`, `topK`, `expertPerRank`, `aivBlocks` |
 | `myRank` | input | value | Rank id in the EP domain |
 | `expertOutput` | input | `aclrtMalloc` GM | Local expert result rows, shape `[maxOutputSize, K]`, fp16 |
 | `probs` | input | `aclrtMalloc` GM | Gate weights, shape `[M, topK]`, fp32 |
@@ -102,6 +113,25 @@ void LaunchMoeCombineKernel(MoeCombineShape shape, uint32_t myRank,
 | `workspace` | scratch | `aclrtMalloc` GM | Local sync and scratch buffers |
 | `stream` | input | ACL stream | Kernel launch stream |
 | `launchBlockCount` | input | value | AIV block count for the kernel launch |
+
+### `peerWindow` Contents
+
+`localWindowBase` is the HCCL window base. On A2/A3, the `peerWindow` argument passed to the kernel points to the live
+payload at `localWindowBase`; this layout does not reserve the A5 4096B head guard.
+
+```text
+A2/A3 localWindowBase
+  peerWindow live payload:
+    ptrD
+    countReadySignal[ep]
+    combineDoneSignal[ep]
+```
+
+| Field | Location | Meaning |
+| --- | --- | --- |
+| `ptrD` | HCCL window live payload | Return destination rows, remotely written by `TPUT` |
+| `countReadySignal[ep]` | HCCL window live payload | Per-rank ready counter area |
+| `combineDoneSignal[ep]` | HCCL window live payload | Per-rank completion counters; remote ranks `TNOTIFY` the corresponding slot after writing this rank's `ptrD` |
 
 ### `MoeCombineShape`
 
@@ -127,9 +157,6 @@ void LaunchMoeCombineKernel(MoeCombineShape shape, uint32_t myRank,
 | `cumsumPerExpert` | `[ep, expertNumPadded]` int32 | Inclusive prefix by global expert for each source rank |
 | `dispatchOffset` | `[expertPerRank]` int32 | Base row in `expertOutput` for each local expert |
 | `prevSumBeforeRank` | `[ep, expertPerRank]` int32 | Per-source offset inside a local expert's rows |
-
-This layout makes `moe_combine` independently callable without requiring callers to know the internal `workspace` or
-`peerWindow` offsets.
 
 ## Optimization Notes
 
@@ -242,24 +269,6 @@ Each AIV block owns a contiguous token shard. For each token and each column til
 3. Accumulate with `TAXPY(outTile, ptrTile, prob)`.
 4. Store the fp16 tile to `outputC`.
 
-## Memory Layout and HCCL Window
-
-Only buffers that remote ranks write must live in the HCCL window. Routing metadata and local scratch are ordinary GM
-buffers.
-
-| Buffer | Location | Contents |
-| --- | --- | --- |
-| `routeMeta` | `aclrtMalloc` | `peerTokenPerExpert`, `expandedRowIdx`, `cumsumPerExpert`, `dispatchOffset`, `prevSumBeforeRank` |
-| `workspace` | `aclrtMalloc` | `localSync`, `floatScratch`, `dispatchedA`, `ptrDLocal` |
-| `expertOutput` | `aclrtMalloc` | Local expert output rows |
-| `probs` | `aclrtMalloc` | Gate weights |
-| `outputC` | `aclrtMalloc` | Final token output |
-| `peerWindow.ptrD` | HCCL window | Return destination rows, remotely written by `TPUT` |
-| `peerWindow.combineDoneSignal` | HCCL window | Completion counters, remotely written by `TNOTIFY` |
-
-On A2/A3, the live peer-window payload starts at the HCCL window base. There is no extra A5-style head guard in this
-layout.
-
 ## Measured Performance
 
 Latest validation in this workspace used 2 ranks on Atlas 910B1 with
@@ -270,13 +279,11 @@ Latest validation in this workspace used 2 ranks on Atlas 910B1 with
 | `workspace` | `22120704 bytes` |
 | `routeMeta` | `2432 bytes` |
 | `peerWindow` | `7340160 bytes` |
-| `prepare_fixture` | `avg=59338.1 us`, `max=84223.5 us` |
 | `combine_e2e` | `avg=637.7 us`, `max=1894.1 us` |
 | Verification | `verify=PASS` |
 
-`prepare_fixture` is host-side fixture copy time and is not part of the device kernel datapath. `combine_e2e` measures
-only the combine kernel launch through stream sync. It excludes clear, fixture preparation, verification, and MPI
-barriers outside the kernel launch window.
+`combine_e2e` measures only the combine kernel launch through stream sync. It excludes clear, fixture preparation,
+verification, and MPI barriers outside the kernel launch window.
 
 ## Build and Run
 
@@ -288,6 +295,8 @@ export PATH=/home/ntlab/miniconda3/envs/ltr_pto/bin:$PATH
 export LD_LIBRARY_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib:$LD_LIBRARY_PATH
 export MPI_LIB_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib/libmpi.so
 ```
+
+Load the CANN and MPI environment before invoking `run.sh`.
 
 ### Build Only
 

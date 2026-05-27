@@ -6,9 +6,9 @@
 dispatch-compute-combine 流水中的 return 半段：本地 expert 完成计算后，combine kernel 将 expert
 输出行按路由账本返还给原 token 所在 rank，并使用 gate 权重还原每个 token 的最终输出。
 
-当前 kernel 是一个独立 combine kernel，入口消费的是显式低层路由账本 `routeMeta`。它不直接接收
-MC2 风格的 `expert_ids`、`assist_info_for_combine`、`ep_send_counts` 等高层输入；这些字段需要在上游
-或 host 侧先降成 `routeMeta`。
+当前 kernel 是一个独立 combine kernel，入口消费的是显式低层路由账本 `routeMeta`。
+`expert_ids`、`assist_info_for_combine`、`ep_send_counts` 等路由信息由上游或 host 侧按本算子的账本布局整理后，
+显式写入 `routeMeta` 传入。
 
 ```text
 expertOutput[local expert rows, K]
@@ -53,11 +53,21 @@ kernels/manual/a2a3/moe_combine/
 3. 使用 `TNOTIFY` / `TWAIT` 等待所有 peer 完成 return 写入。
 4. 读取 `routeMeta.expandedRowIdx` 和 `probs`，还原 `outputC[M, K]`。
 
-对 token `t`：
+对本 rank 的第 `t` 个 token，dispatch 阶段会产生 `topK` 条 expert route。combine return 完成后，这些 route
+对应的 expert 输出行已经写回本 rank 的 `peerWindow.ptrD`。`expandedRowIdx[t * topK + slot]` 记录第 `slot`
+条 route 在 `ptrD` 中的行号，`probs[t * topK + slot]` 是这条 route 的 gate 权重。
+
+因此对输出的每一列 `c`，还原逻辑是：
 
 ```text
-outputC[t, :] = sum_{slot=0..topK-1} probs[t, slot] * ptrD[expandedRowIdx[t, slot], :]
+outputC[t, c] = 0
+for slot in 0..topK-1:
+    row = expandedRowIdx[t * topK + slot]
+    if row >= 0:
+        outputC[t, c] += probs[t * topK + slot] * peerWindow.ptrD[row, c]
 ```
+
+也就是把同一个 token 的 `topK` 路 expert 输出按 gate 权重加权求和，得到最终的 `outputC[t, :]`。
 
 ### 覆盖范围
 
@@ -67,7 +77,7 @@ outputC[t, :] = sum_{slot=0..topK-1} probs[t, slot] * ptrD[expandedRowIdx[t, slo
 | 使用 `TPUT` 实现变长 all-to-all-like return | HCCL collective `AllToAllV` API |
 | 使用 `probs` 做加权还原 | Expert FFN/GMM 计算 |
 | 显式低层 `routeMeta` 契约 | 量化、TP ReduceScatterV、shared/copy/const expert |
-| A2/A3 HCCL peer-window 路径 | MC2 公共 ABI 适配层 |
+| A2/A3 HCCL peer-window 路径 | 上层公共 ABI 适配层 |
 
 ## 入口契约
 
@@ -90,7 +100,7 @@ void LaunchMoeCombineKernel(MoeCombineShape shape, uint32_t myRank,
 
 | 参数 | 方向 | 存储 | 含义 |
 | --- | --- | --- | --- |
-| `shape` | 输入 | 值传递 | 静态 shape 和调优字段，如 `ep`, `m`, `k`, `topK`, `expertPerRank`, `aivBlocks` |
+| `shape` | 输入 | 值传递 | 静态 shape 和 AIV block 数，如 `ep`, `m`, `k`, `topK`, `expertPerRank`, `aivBlocks` |
 | `myRank` | 输入 | 值传递 | EP 域内 rank id |
 | `expertOutput` | 输入 | `aclrtMalloc` GM | 本地 expert 输出行，形状 `[maxOutputSize, K]`，fp16 |
 | `probs` | 输入 | `aclrtMalloc` GM | gate 权重，形状 `[M, topK]`，fp32 |
@@ -101,6 +111,25 @@ void LaunchMoeCombineKernel(MoeCombineShape shape, uint32_t myRank,
 | `workspace` | 临时 | `aclrtMalloc` GM | 本地同步区和 scratch |
 | `stream` | 输入 | ACL stream | kernel launch stream |
 | `launchBlockCount` | 输入 | 值传递 | kernel 使用的 AIV block 数 |
+
+### `peerWindow` 内容
+
+`localWindowBase` 是 HCCL window 的起始地址。A2/A3 上传给 kernel 的 `peerWindow` 指向
+`localWindowBase` 处的 live payload；本 layout 不额外保留 A5 的 4096B head guard。
+
+```text
+A2/A3 localWindowBase
+  peerWindow live payload:
+    ptrD
+    countReadySignal[ep]
+    combineDoneSignal[ep]
+```
+
+| 字段 | 位置 | 内容 |
+| --- | --- | --- |
+| `ptrD` | HCCL window live payload | return 目标行，被远端 `TPUT` 写入 |
+| `countReadySignal[ep]` | HCCL window live payload | per-rank ready 计数区 |
+| `combineDoneSignal[ep]` | HCCL window live payload | per-rank 完成计数器；远端 rank 完成写入本 rank `ptrD` 后 `TNOTIFY` 对应槽位 |
 
 ### `MoeCombineShape`
 
@@ -126,8 +155,6 @@ void LaunchMoeCombineKernel(MoeCombineShape shape, uint32_t myRank,
 | `cumsumPerExpert` | `[ep, expertNumPadded]` int32 | 每个 source rank 内按 global expert 的 inclusive prefix |
 | `dispatchOffset` | `[expertPerRank]` int32 | 每个本地 expert 在 `expertOutput` 中的基地址行 |
 | `prevSumBeforeRank` | `[ep, expertPerRank]` int32 | 某 source rank 在本地 expert 行段中的前缀偏移 |
-
-显式 `routeMeta` 让 `moe_combine` 的入口不再依赖调用方理解内部 `workspace` 或 `peerWindow` offset。
 
 ## 优化说明
 
@@ -239,22 +266,6 @@ Host 会在每轮迭代前清零 `combineDoneSignal`，因此 kernel 固定等�
 3. 使用 `TAXPY(outTile, ptrTile, prob)` 累加。
 4. 将 fp16 tile 写回 `outputC`。
 
-## 内存布局与 HCCL Window
-
-只有会被远端 rank 写入的 buffer 需要放进 HCCL window。路由元数据和本地 scratch 都使用普通 GM buffer。
-
-| Buffer | 位置 | 内容 |
-| --- | --- | --- |
-| `routeMeta` | `aclrtMalloc` | `peerTokenPerExpert`, `expandedRowIdx`, `cumsumPerExpert`, `dispatchOffset`, `prevSumBeforeRank` |
-| `workspace` | `aclrtMalloc` | `localSync`, `floatScratch`, `dispatchedA`, `ptrDLocal` |
-| `expertOutput` | `aclrtMalloc` | 本地 expert 输出行 |
-| `probs` | `aclrtMalloc` | gate 权重 |
-| `outputC` | `aclrtMalloc` | 最终 token 输出 |
-| `peerWindow.ptrD` | HCCL window | return 目标行，被远端 `TPUT` 写入 |
-| `peerWindow.combineDoneSignal` | HCCL window | 完成计数器，被远端 `TNOTIFY` 写入 |
-
-在 A2/A3 上，live peer-window payload 从 HCCL window base 开始。本 layout 不额外保留 A5 那种 head guard。
-
 ## 实测性能
 
 最近一次在本工作区使用 2 ranks Atlas 910B1 验证，参数为
@@ -265,13 +276,11 @@ Host 会在每轮迭代前清零 `combineDoneSignal`，因此 kernel 固定等�
 | `workspace` | `22120704 bytes` |
 | `routeMeta` | `2432 bytes` |
 | `peerWindow` | `7340160 bytes` |
-| `prepare_fixture` | `avg=59338.1 us`, `max=84223.5 us` |
 | `combine_e2e` | `avg=637.7 us`, `max=1894.1 us` |
 | 校验 | `verify=PASS` |
 
-`prepare_fixture` 是 host 侧 fixture 拷贝时间，不属于 device kernel 数据通路。`combine_e2e` 只统计 combine
-kernel launch 到 stream sync 这一段，不包含 clear、fixture 准备、verify，也不包含 kernel launch 窗口之外的
-MPI barrier。
+`combine_e2e` 只统计 combine kernel launch 到 stream sync 这一段，不包含 clear、fixture 准备、verify，
+也不包含 kernel launch 窗口之外的 MPI barrier。
 
 ## 构建与运行
 
@@ -283,6 +292,8 @@ export PATH=/home/ntlab/miniconda3/envs/ltr_pto/bin:$PATH
 export LD_LIBRARY_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib:$LD_LIBRARY_PATH
 export MPI_LIB_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib/libmpi.so
 ```
+
+执行 `run.sh` 前需要先在 shell 中加载 CANN 和 MPI 环境。
 
 ### 仅编译
 
