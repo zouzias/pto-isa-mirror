@@ -51,7 +51,7 @@ struct RowExpandDivOp2 {
 
 template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0,
           typename TileDataSrc1, unsigned elementsPerRepeat, unsigned blockSizeElem>
-__tf__ AICORE OP_NAME(TROWEXPANDDIV)
+__tf__ PTO_INTERNAL OP_NAME(TROWEXPANDDIV)
     OP_TYPE(broadcast) void TRowExpandDiv(typename TileDataDst::TileDType __out__ dst,
                                           typename TileDataSrc0::TileDType __in__ src0,
                                           typename TileDataSrc1::TileDType __in__ src1, bool src0eqdst,
