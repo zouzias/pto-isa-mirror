@@ -2907,6 +2907,55 @@ PTO_INTERNAL void restoreSaturationCtrlBits(bool originalCtrl60, bool originalCt
 // ============================================================================
 // High-Level Tile Conversion Interface with explicit SaturationMode
 // ============================================================================
+// Small dispatch helper to keep TCVT_IMPL compact (avoids repeating the
+// implTCVT<...>(dst.data(), src.data(), satMode, rows, cols) boilerplate).
+template <typename RoundT, typename TileDataD, typename TileDataS>
+PTO_INTERNAL void tcvtDispatch(TileDataD &dst, TileDataS &src, SaturationMode satMode)
+{
+    implTCVT<TileDataD, TileDataS, RoundT>(dst.data(), src.data(), satMode, dst.GetValidRow(), dst.GetValidCol());
+}
+
+// Dispatch on RoundMode -> concrete RoundType. Kept as a separate helper to
+// keep TCVT_IMPL under the NBNC line-count limit.
+template <typename TileDataD, typename TileDataS>
+PTO_INTERNAL void tcvtDispatchByRound(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode)
+{
+    using SrcType = typename TileDataS::DType;
+    using DstType = typename TileDataD::DType;
+    switch (mode) {
+        case RoundMode::CAST_RINT:
+            tcvtDispatch<RoundRType>(dst, src, satMode);
+            return;
+        case RoundMode::CAST_ROUND:
+            tcvtDispatch<RoundAType>(dst, src, satMode);
+            return;
+        case RoundMode::CAST_FLOOR:
+            tcvtDispatch<RoundFType>(dst, src, satMode);
+            return;
+        case RoundMode::CAST_CEIL:
+            tcvtDispatch<RoundCType>(dst, src, satMode);
+            return;
+        case RoundMode::CAST_TRUNC:
+            tcvtDispatch<RoundZType>(dst, src, satMode);
+            return;
+        case RoundMode::CAST_ODD:
+            if constexpr (std::is_same<DstType, half>::value && std::is_same<SrcType, float>::value) {
+                tcvtDispatch<RoundOType>(dst, src, satMode);
+                return;
+            }
+            break; // fall through to default
+        default:
+            break;
+    }
+    // PyTorch-compatible default rounding (also matches a2a3 per-(src,dst) defaults):
+    //   float -> integer : truncate toward zero (RoundZType)
+    //   everything else  : round-to-nearest-even (RoundRType)
+    if constexpr (is_any_float<SrcType>::value && std::is_integral<DstType>::value) {
+        tcvtDispatch<RoundZType>(dst, src, satMode);
+    } else {
+        tcvtDispatch<RoundRType>(dst, src, satMode);
+    }
+}
 /**
  * SATURATION MODE RULES:
  * ======================
@@ -2969,47 +3018,7 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
     }
 
     // Execute the conversion with appropriate rounding mode
-    switch (mode) {
-        case RoundMode::CAST_RINT:
-            implTCVT<TileDataD, TileDataS, RoundRType>(dst.data(), src.data(), satMode, dst.GetValidRow(),
-                                                       dst.GetValidCol());
-            break;
-        case RoundMode::CAST_ROUND:
-            implTCVT<TileDataD, TileDataS, RoundAType>(dst.data(), src.data(), satMode, dst.GetValidRow(),
-                                                       dst.GetValidCol());
-            break;
-        case RoundMode::CAST_FLOOR:
-            implTCVT<TileDataD, TileDataS, RoundFType>(dst.data(), src.data(), satMode, dst.GetValidRow(),
-                                                       dst.GetValidCol());
-            break;
-        case RoundMode::CAST_CEIL:
-            implTCVT<TileDataD, TileDataS, RoundCType>(dst.data(), src.data(), satMode, dst.GetValidRow(),
-                                                       dst.GetValidCol());
-            break;
-        case RoundMode::CAST_TRUNC:
-            implTCVT<TileDataD, TileDataS, RoundZType>(dst.data(), src.data(), satMode, dst.GetValidRow(),
-                                                       dst.GetValidCol());
-            break;
-        case RoundMode::CAST_ODD:
-            if constexpr (std::is_same<typename TileDataD::DType, half>::value &&
-                          std::is_same<typename TileDataS::DType, float>::value) {
-                implTCVT<TileDataD, TileDataS, RoundOType>(dst.data(), src.data(), satMode, dst.GetValidRow(),
-                                                           dst.GetValidCol());
-                break;
-            } // others will go to default case
-        default:
-            // PyTorch-compatible default rounding (also matches a2a3 per-(src,dst) defaults):
-            //   float -> integer : truncate toward zero (RoundZType)
-            //   everything else  : round-to-nearest-even (RoundRType)
-            if constexpr (is_any_float<SrcType>::value && std::is_integral<DstType>::value) {
-                implTCVT<TileDataD, TileDataS, RoundZType>(dst.data(), src.data(), satMode, dst.GetValidRow(),
-                                                           dst.GetValidCol());
-            } else {
-                implTCVT<TileDataD, TileDataS, RoundRType>(dst.data(), src.data(), satMode, dst.GetValidRow(),
-                                                           dst.GetValidCol());
-            }
-            break;
-    }
+    tcvtDispatchByRound(dst, src, mode, satMode);
 
     // Restore original CTRL bit states (compile-time elided when no bits used)
     if constexpr (Traits::any) {
