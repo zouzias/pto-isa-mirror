@@ -17,22 +17,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 
 namespace pto {
-template <typename T, typename U>
-PTO_INTERNAL static void CallAxpy(RegTensor<T> &reg_dst, RegTensor<U> &reg_src0, U scalar, MaskReg &preg)
-{
-    if constexpr (std::is_same_v<T, U>) {
-        vaxpy(reg_dst, reg_src0, scalar, preg);
-    } else {
-        // fp32 + fp16 * fp16
-        RegTensor<T> reg_src_tmp;
-        vcvt(reg_src_tmp, reg_src0, preg, PART_EVEN);
-        vaxpy(reg_dst, reg_src_tmp, (T)(scalar), preg);
-    }
-}
-
 template <typename T, typename U, unsigned elementsPerRepeat, unsigned dstRowStride, unsigned srcRowStride>
-PTO_INTERNAL void AxpyInstr(__ubuf__ T *dstPtr, __ubuf__ U *src0Ptr, U scalar, unsigned validRow, unsigned validCol,
-                            VFImplKind version)
+PTO_INTERNAL void AxpyInstrSame(__ubuf__ T *dstPtr, __ubuf__ U *src0Ptr, U scalar, unsigned validRow, unsigned validCol)
 {
     uint16_t repeatTimes = CeilDivision(validCol, elementsPerRepeat);
 
@@ -41,20 +27,42 @@ PTO_INTERNAL void AxpyInstr(__ubuf__ T *dstPtr, __ubuf__ U *src0Ptr, U scalar, u
         RegTensor<U> vreg0;
         RegTensor<T> vreg2;
         MaskReg preg;
-        uint32_t sreg;
         constexpr auto distValue =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
         for (uint16_t i = 0; i < (uint16_t)(validRow); ++i) {
-            sreg = validCol;
+            uint32_t sreg = validCol;
             for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
-                if constexpr (std::is_same_v<T, U>) {
-                    vlds(vreg0, src0Ptr, i * srcRowStride + j * elementsPerRepeat, NORM);
-                } else {
-                    vlds(vreg0, src0Ptr, i * srcRowStride + j * elementsPerRepeat, UNPK_B16);
-                }
+                vlds(vreg0, src0Ptr, i * srcRowStride + j * elementsPerRepeat, NORM);
                 vlds(vreg2, dstPtr, i * dstRowStride + j * elementsPerRepeat, NORM);
                 preg = CreatePredicate<T>(sreg);
-                CallAxpy<T, U>(vreg2, vreg0, scalar, preg);
+                vaxpy(vreg2, vreg0, scalar, preg);
+                vsts(vreg2, dstPtr, i * dstRowStride + j * elementsPerRepeat, distValue, preg);
+            }
+        }
+    }
+}
+
+template <typename T, typename U, unsigned elementsPerRepeat, unsigned dstRowStride, unsigned srcRowStride>
+PTO_INTERNAL void AxpyInstrDiff(__ubuf__ T *dstPtr, __ubuf__ U *src0Ptr, U scalar, unsigned validRow, unsigned validCol)
+{
+    uint16_t repeatTimes = CeilDivision(validCol, elementsPerRepeat);
+
+    __VEC_SCOPE__
+    {
+        RegTensor<U> vreg0;
+        RegTensor<T> vreg2;
+        RegTensor<T> reg_src_tmp;
+        MaskReg preg;
+        constexpr auto distValue =
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+        for (uint16_t i = 0; i < (uint16_t)(validRow); ++i) {
+            uint32_t sreg = validCol;
+            for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
+                vlds(vreg0, src0Ptr, i * srcRowStride + j * elementsPerRepeat, UNPK_B16);
+                vlds(vreg2, dstPtr, i * dstRowStride + j * elementsPerRepeat, NORM);
+                preg = CreatePredicate<T>(sreg);
+                vcvt(reg_src_tmp, vreg0, preg, PART_EVEN);
+                vaxpy(vreg2, reg_src_tmp, (T)(scalar), preg);
                 vsts(vreg2, dstPtr, i * dstRowStride + j * elementsPerRepeat, distValue, preg);
             }
         }
@@ -73,8 +81,13 @@ __tf__ PTO_INTERNAL OP_NAME(TAXPY)
     using U = typename TileDataSrc::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ U *src0Ptr = (__ubuf__ U *)__cce_get_tile_ptr(src0);
-    AxpyInstr<T, U, elementsPerRepeat, dstRowStride, src0RowStride>(dstPtr, src0Ptr, scalar, validRow, validCol,
-                                                                    version);
+    if constexpr (std::is_same_v<T, U>) {
+        AxpyInstrSame<T, U, elementsPerRepeat, dstRowStride, src0RowStride>(dstPtr, src0Ptr, scalar, validRow,
+                                                                            validCol);
+    } else {
+        AxpyInstrDiff<T, U, elementsPerRepeat, dstRowStride, src0RowStride>(dstPtr, src0Ptr, scalar, validRow,
+                                                                            validCol);
+    }
 }
 
 template <typename TileDataDst, typename TileDataSrc>
