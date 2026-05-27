@@ -131,23 +131,14 @@ __tf__ AICORE void TLoad(
     int gStride4,
     int validRow,
     int validCol)
-{
-    assert(
-        (gShape0 *
-         gShape1 *
-         gShape2 *
-         gShape3 ==
-             validRow &&
-         gShape4 == validCol &&
-         TileData::isRowMajor) ||
-
-        (gShape0 *
-         gShape1 *
-         gShape2 *
-         gShape4 ==
-             validCol &&
-         gShape3 == validRow &&
-         !TileData::isRowMajor));
+{   
+    if constexpr (GlobalData::layout == pto::Layout::NZ) {
+        size_t logicalRows = static_cast<size_t>(gShape0) * gShape1 * gShape2 * gShape3;
+        size_t logicalCols = static_cast<size_t>(gShape4);
+        assert((logicalRows == validRow && logicalCols == validCol && TileData::isRowMajor) || (logicalCols == validRow && logicalRows == validCol && !TileData::isRowMajor));
+    } else {
+        assert((gShape0 * gShape1 * gShape2 * gShape3 == validRow && gShape4 == validCol && TileData::isRowMajor) || (gShape0 * gShape1 * gShape2 * gShape4 == validCol && gShape3 == validRow && !TileData::isRowMajor));
+    }
 
     // Filling padding
     std::fill(

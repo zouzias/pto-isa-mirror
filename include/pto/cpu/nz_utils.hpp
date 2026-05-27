@@ -20,21 +20,21 @@ namespace pto {
 
 template <typename Dummy = void>
 PTO_INLINE size_t GetNZGlobalOffset(
-    size_t r,
-    size_t c,
-    int gShape4)
+    size_t linearRow,
+    size_t linearCol,
+    size_t logicalCols)
 {
-    constexpr size_t innerRows = 16;
-    constexpr size_t innerCols = 8;
+    constexpr size_t innerRows = FRACTAL_NZ_ROW; // 16
+    constexpr size_t innerCols = FRACTAL_NZ_COL; // 8
 
-    size_t blockRow = r / innerRows;
-    size_t innerRow = r % innerRows;
+    const size_t blockRow = linearRow / innerRows;
+    const size_t innerRow = linearRow % innerRows;
 
-    size_t blockCol = c / innerCols;
-    size_t innerCol = c % innerCols;
+    const size_t blockCol = linearCol / innerCols;
+    const size_t innerCol = linearCol % innerCols;
 
-    size_t numBlockCols =
-        (gShape4 + innerCols - 1) / innerCols;
+    const size_t numBlockCols =
+        (logicalCols + innerCols - 1) / innerCols;
 
     return
         blockRow * numBlockCols * innerRows * innerCols +
@@ -43,50 +43,111 @@ PTO_INLINE size_t GetNZGlobalOffset(
         innerCol;
 }
 
+/*
+ * Universal NZ traversal helper.
+ *
+ * Traverses logical tensor space:
+ *
+ * [gShape0][gShape1][gShape2][gShape3][gShape4]
+ *
+ * and maps it into:
+ *
+ * - Tile subfractal indices
+ * - NZ global tensor offset
+ *
+ * Callback signature:
+ *
+ * fn(
+ *     logicalRow,
+ *     logicalCol,
+ *     tile_idx,
+ *     nz_idx)
+ */
 template <typename TileData, typename Func>
-__tf__ PTO_INLINE void ForEachNZElement(
+__tf__ PTO_INLINE void ForEachNZTensorElement(
+    int gShape0,
+    int gShape1,
+    int gShape2,
     int gShape3,
     int gShape4,
     Func&& fn)
 {
+    constexpr size_t innerRows = FRACTAL_NZ_ROW;
+    constexpr size_t innerCols = FRACTAL_NZ_COL;
+
+    const size_t logicalRows =
+        static_cast<size_t>(gShape0) *
+        gShape1 *
+        gShape2 *
+        gShape3;
+
+    const size_t logicalCols =
+        static_cast<size_t>(gShape4);
+
     cpu::parallel_for_1d(
         0,
-        static_cast<std::size_t>(gShape4),
-        static_cast<std::size_t>(gShape3) * gShape4,
+        logicalCols,
+        logicalRows * logicalCols,
         [&](std::size_t c) {
 
-            size_t subTileC =
-                c / TileData::InnerCols;
+            const size_t subTileC =
+                c / innerCols;
 
-            size_t innerC =
-                c % TileData::InnerCols;
+            const size_t innerC =
+                c % innerCols;
 
             for (size_t r = 0;
-                 r < static_cast<std::size_t>(gShape3);
+                 r < logicalRows;
                  r++) {
 
-                size_t subTileR =
-                    r / TileData::InnerRows;
+                const size_t subTileR =
+                    r / innerRows;
 
-                size_t innerR =
-                    r % TileData::InnerRows;
+                const size_t innerR =
+                    r % innerRows;
 
-                size_t tile_idx =
-                    GetTileElementOffsetSubfractals<TileData>(
-                        subTileR,
-                        innerR,
-                        subTileC,
-                        innerC);
+                const size_t tile_idx =
+                    GetTileElementOffsetSubfractals<
+                        TileData>(
+                            subTileR,
+                            innerR,
+                            subTileC,
+                            innerC);
 
-                size_t nz_idx =
+                const size_t nz_idx =
                     GetNZGlobalOffset<>(
                         r,
                         c,
-                        gShape4);
+                        logicalCols);
 
-                fn(r, c, tile_idx, nz_idx);
+                fn(
+                    r,
+                    c,
+                    tile_idx,
+                    nz_idx);
             }
         });
+}
+
+template <typename TileData>
+PTO_INLINE size_t GetNZLogicalRows(
+    int gShape0,
+    int gShape1,
+    int gShape2,
+    int gShape3)
+{
+    return
+        static_cast<size_t>(gShape0) *
+        gShape1 *
+        gShape2 *
+        gShape3;
+}
+
+template <typename TileData>
+PTO_INLINE size_t GetNZLogicalCols(
+    int gShape4)
+{
+    return static_cast<size_t>(gShape4);
 }
 
 } // namespace pto
