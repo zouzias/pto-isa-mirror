@@ -88,8 +88,8 @@ __tf__ PTO_INTERNAL void TCopyPadOp(typename DstTileData::TileDType __out__ dst,
         uint16_t repeatTimes = CeilDivision(DstvalidCol, elementsPerRepeat);
         for (uint16_t i = 0; i < (uint16_t)DstvalidRow; ++i) {
             uint32_t dstSReg = DstvalidCol;
-            uint32_t src0SReg = i < Src0validRow ? Src0validCol : 0;
-            uint32_t src1SReg = i < Src1validRow ? Src1validCol : 0;
+            uint32_t src0SReg = static_cast<uint32_t>(i < Src0validRow) * Src0validCol;
+            uint32_t src1SReg = static_cast<uint32_t>(i < Src1validRow) * Src1validCol;
             for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
                 dstMask = CreatePredicate<T>(dstSReg);
                 src0Mask = CreatePredicate<T>(src0SReg);
