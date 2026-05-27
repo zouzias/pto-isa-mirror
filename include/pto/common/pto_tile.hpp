@@ -551,6 +551,11 @@ struct GlobalTensor {
         return data_;
     }
 
+    AICORE const DType *data() const
+    {
+        return data_;
+    }
+
 private:
     template <int64_t StaticShape>
     PTO_INTERNAL int64_t GetShapeSize(const int dim)
