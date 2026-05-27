@@ -36,9 +36,6 @@ struct MoeCombineShape {
 
 struct WorkspaceLayout {
     uint64_t localSync;
-    uint64_t floatScratch;
-    uint64_t dispatchedA;
-    uint64_t ptrDLocal;
     uint64_t totalBytes;
 };
 

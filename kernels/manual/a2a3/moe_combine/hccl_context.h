@@ -284,7 +284,7 @@ inline HcclComm InitHcclCommWithRetry(uint32_t rank, uint32_t rankCount, const H
 
 inline void BuildMc2Tiling(const char *group, Mc2CommConfigV2 *tiling)
 {
-    std::memset(tiling, 0, sizeof(*tiling));
+    *tiling = Mc2CommConfigV2{};
     tiling->init.version = 100U;
     tiling->init.mc2HcommCnt = 1U;
     tiling->init.commBlockNum = 48U;
@@ -335,7 +335,7 @@ inline void ReadRingParams(uint32_t rank, uint8_t *rawCtx, HcclOpResParamHead *h
 inline void BuildRingHostContext(uint32_t rank, uint8_t *rawCtx, const HcclOpResParamHead &head,
                                  const std::vector<RemoteResPtr> &remoteRes, HcclDeviceContext *hostContext)
 {
-    std::memset(hostContext, 0, sizeof(*hostContext));
+    *hostContext = HcclDeviceContext{};
 
     uint64_t workspaceFields[2] = {0, 0};
     aclError workspaceRet = aclrtMemcpy(workspaceFields, sizeof(workspaceFields), rawCtx, sizeof(workspaceFields),

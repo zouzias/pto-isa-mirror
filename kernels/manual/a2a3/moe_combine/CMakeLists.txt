@@ -110,7 +110,7 @@ target_link_directories(moe_combine_kernel PRIVATE ${ASCEND_HOME_PATH}/lib64)
 target_link_libraries(moe_combine_kernel PRIVATE runtime)
 target_link_options(moe_combine_kernel PRIVATE --cce-fatobj-link)
 
-add_executable(moe_combine main.cpp)
+add_executable(moe_combine main.cpp golden.cpp)
 target_compile_options(moe_combine PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
 target_include_directories(moe_combine PRIVATE ${HOST_INCLUDE_DIRS})
 target_link_directories(moe_combine PUBLIC ${HOST_LINK_DIRS})

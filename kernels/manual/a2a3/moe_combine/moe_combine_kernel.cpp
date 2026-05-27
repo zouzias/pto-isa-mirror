@@ -63,9 +63,6 @@ AICORE inline uint64_t AppendFieldDevice(uint64_t &offset, uint64_t bytes)
 struct LocalWorkspaceView {
     GM_ADDR base;
     __gm__ int32_t *localSync;
-    __gm__ float *floatScratch;
-    __gm__ half *dispatchedA;
-    __gm__ half *ptrDLocal;
 };
 
 struct LocalRouteMetaView {
@@ -87,23 +84,16 @@ struct LocalPeerWindowView {
 AICORE inline WorkspaceLayout MakeWorkspaceLayout(MoeCombineShape shape)
 {
     const uint64_t i32 = 4;
-    const uint64_t f32 = 4;
-    const uint64_t f16 = 2;
-    uint64_t expertNumPadded =
-        ((static_cast<uint64_t>(shape.expertNum) + moe_combine::kMoeCombineMetadataPad - 1) /
-         moe_combine::kMoeCombineMetadataPad) *
-        moe_combine::kMoeCombineMetadataPad;
+    uint64_t expertNumPadded = ((static_cast<uint64_t>(shape.expertNum) + moe_combine::kMoeCombineMetadataPad - 1) /
+                                moe_combine::kMoeCombineMetadataPad) *
+                               moe_combine::kMoeCombineMetadataPad;
     uint64_t aivBlocks = shape.aivBlocks == 0 ? 1 : shape.aivBlocks;
-    uint64_t expandedRows = static_cast<uint64_t>(shape.m) * shape.topK;
     uint64_t offset = 0;
 
     WorkspaceLayout layout{};
     uint64_t syncSlots = aivBlocks * (8 + expertNumPadded);
     syncSlots = syncSlots < 64 ? 64 : syncSlots;
     layout.localSync = AppendFieldDevice(offset, syncSlots * i32);
-    layout.floatScratch = AppendFieldDevice(offset, aivBlocks * moe_combine::kMoeCombineTileCols * f32);
-    layout.dispatchedA = AppendFieldDevice(offset, static_cast<uint64_t>(shape.maxOutputSize) * shape.k * f16);
-    layout.ptrDLocal = AppendFieldDevice(offset, expandedRows * shape.k * f16);
     layout.totalBytes = Align64Device(offset);
     return layout;
 }
@@ -111,10 +101,9 @@ AICORE inline WorkspaceLayout MakeWorkspaceLayout(MoeCombineShape shape)
 AICORE inline CombineRouteMetaLayout MakeCombineRouteMetaLayout(MoeCombineShape shape)
 {
     const uint64_t i32 = 4;
-    uint64_t expertNumPadded =
-        ((static_cast<uint64_t>(shape.expertNum) + moe_combine::kMoeCombineMetadataPad - 1) /
-         moe_combine::kMoeCombineMetadataPad) *
-        moe_combine::kMoeCombineMetadataPad;
+    uint64_t expertNumPadded = ((static_cast<uint64_t>(shape.expertNum) + moe_combine::kMoeCombineMetadataPad - 1) /
+                                moe_combine::kMoeCombineMetadataPad) *
+                               moe_combine::kMoeCombineMetadataPad;
     uint64_t expandedRows = static_cast<uint64_t>(shape.m) * shape.topK;
     uint64_t offset = 0;
 
@@ -148,9 +137,6 @@ AICORE inline LocalWorkspaceView MakeLocalWorkspaceView(GM_ADDR workspaceBase, c
     LocalWorkspaceView view{};
     view.base = workspaceBase;
     view.localSync = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.localSync);
-    view.floatScratch = reinterpret_cast<__gm__ float *>(workspaceBase + layout.floatScratch);
-    view.dispatchedA = reinterpret_cast<__gm__ half *>(workspaceBase + layout.dispatchedA);
-    view.ptrDLocal = reinterpret_cast<__gm__ half *>(workspaceBase + layout.ptrDLocal);
     return view;
 }
 
@@ -256,6 +242,9 @@ AICORE inline uint32_t ExpertNumPaddedDevice(MoeCombineShape shape)
 
 AICORE inline uint32_t TokenShardBegin(uint32_t totalTokens, uint32_t blockId, uint32_t blockNum)
 {
+    if (blockNum == 0) {
+        return 0;
+    }
     uint32_t base = totalTokens / blockNum;
     uint32_t rem = totalTokens % blockNum;
     return blockId * base + (blockId < rem ? blockId : rem);
@@ -287,9 +276,185 @@ AICORE inline uint32_t EffectiveRowChunk(MoeCombineShape shape)
 AICORE inline void WaitCombinePhase(MoeCombineShape shape, LocalPeerWindowView localPeer, uint32_t blockId,
                                     uint32_t blockNum, int32_t value)
 {
+    if (blockNum == 0) {
+        return;
+    }
     for (uint32_t peer = blockId; peer < shape.ep; peer += blockNum) {
         pto::comm::Signal sig = MakeSignal(localPeer.combineDoneSignal + peer);
         pto::comm::TWAIT(sig, value, pto::comm::WaitCmp::GE);
+    }
+}
+
+struct ReturnSegment {
+    uint32_t src;
+    uint32_t localExpert;
+    uint32_t globalExpert;
+    int32_t rows;
+    int32_t srcStart;
+    int32_t dstStart;
+    uint32_t chunkCount;
+};
+
+struct ReturnContext {
+    MoeCombineShape shape;
+    LocalRouteMetaView routeMeta;
+    LocalPeerWindowView localPeer;
+    __gm__ HcclDeviceContext *ctx;
+    GM_ADDR peerWindow;
+    __gm__ half *localExpertOutput;
+    uint32_t myRank;
+    uint32_t expertNumPadded;
+    uint32_t rowChunk;
+    const PeerWindowLayout *peerWindowLayout;
+};
+
+struct ReturnChunk {
+    uint32_t rowBegin;
+    uint32_t rowsThisChunk;
+};
+
+struct TileCopyRange {
+    int32_t srcRow;
+    int32_t dstRow;
+    int32_t col;
+    int32_t cols;
+};
+
+struct RestoreRouteCache {
+    int32_t rows[kRouteCacheMax];
+    float probs[kRouteCacheMax];
+    uint32_t count;
+    bool enabled;
+};
+
+struct RestoreTileContext {
+    MoeCombineShape shape;
+    LocalRouteMetaView routeMeta;
+    LocalPeerWindowView localPeer;
+    __gm__ float *probValues;
+    __gm__ half *output;
+    uint32_t token;
+    int32_t col;
+    int32_t cols;
+    const RestoreRouteCache *cache;
+};
+
+AICORE inline void AcquireReturnMetadata(const MoeCombineShape &shape, LocalRouteMetaView routeMeta,
+                                         uint32_t expertNumPadded)
+{
+    AcquireGmRangeBeforeRead(routeMeta.peerTokenPerExpert,
+                             static_cast<uint32_t>(shape.ep * expertNumPadded * sizeof(int32_t)));
+    AcquireGmRangeBeforeRead(routeMeta.cumsumPerExpert,
+                             static_cast<uint32_t>(shape.ep * expertNumPadded * sizeof(int32_t)));
+    AcquireGmRangeBeforeRead(routeMeta.dispatchOffset, static_cast<uint32_t>(shape.expertPerRank * sizeof(int32_t)));
+    AcquireGmRangeBeforeRead(routeMeta.prevSumBeforeRank,
+                             static_cast<uint32_t>(shape.ep * shape.expertPerRank * sizeof(int32_t)));
+}
+
+AICORE inline bool LoadReturnSegment(const ReturnContext &ctx, uint32_t segment, ReturnSegment *out)
+{
+    out->src = segment / ctx.shape.expertPerRank;
+    out->localExpert = segment % ctx.shape.expertPerRank;
+    out->globalExpert = ctx.myRank * ctx.shape.expertPerRank + out->localExpert;
+    out->rows =
+        *(ctx.routeMeta.peerTokenPerExpert + static_cast<uint64_t>(out->src) * ctx.expertNumPadded + out->globalExpert);
+    if (out->rows <= 0) {
+        return false;
+    }
+    out->srcStart = *(ctx.routeMeta.dispatchOffset + out->localExpert) +
+                    *(ctx.routeMeta.prevSumBeforeRank + static_cast<uint64_t>(out->src) * ctx.shape.expertPerRank +
+                      out->localExpert);
+    out->dstStart = out->globalExpert == 0 ?
+                        0 :
+                        *(ctx.routeMeta.cumsumPerExpert + static_cast<uint64_t>(out->src) * ctx.expertNumPadded +
+                          out->globalExpert - 1);
+    out->chunkCount = (static_cast<uint32_t>(out->rows) + ctx.rowChunk - 1) / ctx.rowChunk;
+    return true;
+}
+
+AICORE inline ReturnChunk MakeReturnChunk(const ReturnContext &ctx, const ReturnSegment &segment, uint32_t chunk)
+{
+    ReturnChunk out{};
+    out.rowBegin = chunk * ctx.rowChunk;
+    out.rowsThisChunk = static_cast<uint32_t>(segment.rows) - out.rowBegin;
+    out.rowsThisChunk = out.rowsThisChunk < ctx.rowChunk ? out.rowsThisChunk : ctx.rowChunk;
+    return out;
+}
+
+AICORE inline void CopyLocalTileToPeerWindow(const ReturnContext &ctx, const TileCopyRange &range)
+{
+    VecTile<half, kDefaultTileCols> ping(1, range.cols);
+    VecTile<half, kDefaultTileCols> pong(1, range.cols);
+    TASSIGN(ping, kPingUbAddr);
+    TASSIGN(pong, kPongUbAddr);
+    VecTile<half, kDefaultTileCols> &tile = ((range.col / kDefaultTileCols) & 1) == 0 ? ping : pong;
+    event_t event = ((range.col / kDefaultTileCols) & 1) == 0 ? EVENT_ID0 : EVENT_ID1;
+    GlobalNd<half> srcGlobal = MakeGlobal2D(
+        ctx.localExpertOutput + static_cast<int64_t>(range.srcRow) * static_cast<int32_t>(ctx.shape.k) + range.col, 1,
+        range.cols, static_cast<int32_t>(ctx.shape.k));
+    GlobalNd<half> dstGlobal = MakeGlobal2D(
+        ctx.localPeer.ptrD + static_cast<int64_t>(range.dstRow) * static_cast<int32_t>(ctx.shape.k) + range.col, 1,
+        range.cols, static_cast<int32_t>(ctx.shape.k));
+    TLOAD(tile, srcGlobal);
+    set_flag(PIPE_MTE2, PIPE_MTE3, event);
+    wait_flag(PIPE_MTE2, PIPE_MTE3, event);
+    TSTORE(dstGlobal, tile);
+    WaitStoreTileReusable();
+}
+
+AICORE inline void CopyLocalRowsToPeerWindow(const ReturnContext &ctx, const ReturnSegment &segment,
+                                             const ReturnChunk &chunk)
+{
+    for (uint32_t row = 0; row < chunk.rowsThisChunk; ++row) {
+        int32_t dstRow = segment.dstStart + static_cast<int32_t>(chunk.rowBegin + row);
+        int32_t srcRow = segment.srcStart + static_cast<int32_t>(chunk.rowBegin + row);
+        for (int32_t col = 0; col < static_cast<int32_t>(ctx.shape.k); col += kDefaultTileCols) {
+            int32_t cols = static_cast<int32_t>(ctx.shape.k) - col < kDefaultTileCols ?
+                               static_cast<int32_t>(ctx.shape.k) - col :
+                               kDefaultTileCols;
+            CopyLocalTileToPeerWindow(ctx, TileCopyRange{srcRow, dstRow, col, cols});
+        }
+    }
+}
+
+AICORE inline void PutRemoteRowsToOwner(const ReturnContext &ctx, const ReturnSegment &segment,
+                                        const ReturnChunk &chunk)
+{
+    LocalPeerWindowView remotePeer =
+        MakeRemotePeerWindowView(ctx.ctx, ctx.peerWindow, segment.src, *ctx.peerWindowLayout);
+    GlobalNd<half> remoteDst =
+        MakeGlobal2D(remotePeer.ptrD + static_cast<int64_t>(segment.dstStart + static_cast<int32_t>(chunk.rowBegin)) *
+                                           static_cast<int32_t>(ctx.shape.k),
+                     static_cast<int32_t>(chunk.rowsThisChunk), static_cast<int32_t>(ctx.shape.k),
+                     static_cast<int32_t>(ctx.shape.k));
+    GlobalNd<half> localSrc = MakeGlobal2D(
+        ctx.localExpertOutput + static_cast<int64_t>(segment.srcStart + static_cast<int32_t>(chunk.rowBegin)) *
+                                    static_cast<int32_t>(ctx.shape.k),
+        static_cast<int32_t>(chunk.rowsThisChunk), static_cast<int32_t>(ctx.shape.k),
+        static_cast<int32_t>(ctx.shape.k));
+    VecTile<half, kDefaultTileCols> ping(1, kDefaultTileCols);
+    VecTile<half, kDefaultTileCols> pong(1, kDefaultTileCols);
+    TASSIGN(ping, kPingUbAddr);
+    TASSIGN(pong, kPongUbAddr);
+    pto::comm::TPUT(remoteDst, localSrc, ping, pong);
+}
+
+AICORE inline void ReturnRowsChunk(const ReturnContext &ctx, const ReturnSegment &segment, const ReturnChunk &chunk)
+{
+    if (segment.src == ctx.myRank) {
+        CopyLocalRowsToPeerWindow(ctx, segment, chunk);
+        return;
+    }
+    PutRemoteRowsToOwner(ctx, segment, chunk);
+}
+
+AICORE inline void NotifyCombineOwners(const ReturnContext &ctx, uint32_t blockId, uint32_t blockNum)
+{
+    for (uint32_t src = blockId; src < ctx.shape.ep; src += blockNum) {
+        LocalPeerWindowView remotePeer = MakeRemotePeerWindowView(ctx.ctx, ctx.peerWindow, src, *ctx.peerWindowLayout);
+        pipe_barrier(PIPE_ALL);
+        pto::comm::Signal sig = MakeSignal(remotePeer.combineDoneSignal + ctx.myRank);
+        pto::comm::TNOTIFY(sig, 1, pto::comm::NotifyOp::AtomicAdd);
     }
 }
 
@@ -299,164 +464,150 @@ AICORE inline void ReturnExpertRowsToOwners(MoeCombineShape shape, LocalWorkspac
                                             uint32_t myRank, uint32_t blockId, uint32_t blockNum,
                                             const PeerWindowLayout &peerWindowLayout)
 {
-    uint32_t expertNumPadded = ExpertNumPaddedDevice(shape);
-    __gm__ half *localExpertOutput = reinterpret_cast<__gm__ half *>(expertOutput);
-    uint32_t rowChunk = EffectiveRowChunk(shape);
+    if (blockNum == 0) {
+        return;
+    }
+    ReturnContext returnCtx{shape,
+                            routeMeta,
+                            localPeer,
+                            ctx,
+                            peerWindow,
+                            reinterpret_cast<__gm__ half *>(expertOutput),
+                            myRank,
+                            ExpertNumPaddedDevice(shape),
+                            EffectiveRowChunk(shape),
+                            &peerWindowLayout};
     uint32_t segmentCount = shape.ep * shape.expertPerRank;
-    AcquireGmRangeBeforeRead(routeMeta.peerTokenPerExpert,
-                             static_cast<uint32_t>(shape.ep * expertNumPadded * sizeof(int32_t)));
-    AcquireGmRangeBeforeRead(routeMeta.cumsumPerExpert,
-                             static_cast<uint32_t>(shape.ep * expertNumPadded * sizeof(int32_t)));
-    AcquireGmRangeBeforeRead(routeMeta.dispatchOffset, static_cast<uint32_t>(shape.expertPerRank * sizeof(int32_t)));
-    AcquireGmRangeBeforeRead(routeMeta.prevSumBeforeRank,
-                             static_cast<uint32_t>(shape.ep * shape.expertPerRank * sizeof(int32_t)));
+    AcquireReturnMetadata(shape, routeMeta, returnCtx.expertNumPadded);
 
     uint32_t chunkBase = 0;
     for (uint32_t segment = 0; segment < segmentCount; ++segment) {
-        uint32_t src = segment / shape.expertPerRank;
-        uint32_t localExpert = segment % shape.expertPerRank;
-        uint32_t globalExpert = myRank * shape.expertPerRank + localExpert;
-        int32_t rows = *(routeMeta.peerTokenPerExpert + static_cast<uint64_t>(src) * expertNumPadded + globalExpert);
-        if (rows <= 0) {
+        ReturnSegment segmentInfo{};
+        if (!LoadReturnSegment(returnCtx, segment, &segmentInfo)) {
             continue;
         }
-        uint32_t chunkCount = (static_cast<uint32_t>(rows) + rowChunk - 1) / rowChunk;
-        LocalPeerWindowView remotePeer = MakeRemotePeerWindowView(ctx, peerWindow, src, peerWindowLayout);
-        int32_t srcStart =
-            *(routeMeta.dispatchOffset + localExpert) +
-            *(routeMeta.prevSumBeforeRank + static_cast<uint64_t>(src) * shape.expertPerRank + localExpert);
-        int32_t dstStart =
-            globalExpert == 0 ?
-                0 :
-                *(routeMeta.cumsumPerExpert + static_cast<uint64_t>(src) * expertNumPadded + globalExpert - 1);
-        for (uint32_t chunk = 0; chunk < chunkCount; ++chunk) {
+        for (uint32_t chunk = 0; chunk < segmentInfo.chunkCount; ++chunk) {
             if (((chunkBase + chunk) % blockNum) != blockId) {
                 continue;
             }
-            uint32_t rowBegin = chunk * rowChunk;
-            uint32_t rowsThisChunk = static_cast<uint32_t>(rows) - rowBegin;
-            rowsThisChunk = rowsThisChunk < rowChunk ? rowsThisChunk : rowChunk;
-            if (src == myRank) {
-                for (uint32_t row = 0; row < rowsThisChunk; ++row) {
-                    int32_t dstRow = dstStart + static_cast<int32_t>(rowBegin + row);
-                    int32_t srcRow = srcStart + static_cast<int32_t>(rowBegin + row);
-                    for (int32_t col = 0; col < static_cast<int32_t>(shape.k); col += kDefaultTileCols) {
-                        int32_t cols = static_cast<int32_t>(shape.k) - col < kDefaultTileCols ?
-                                           static_cast<int32_t>(shape.k) - col :
-                                           kDefaultTileCols;
-                        VecTile<half, kDefaultTileCols> ping(1, cols);
-                        VecTile<half, kDefaultTileCols> pong(1, cols);
-                        TASSIGN(ping, kPingUbAddr);
-                        TASSIGN(pong, kPongUbAddr);
-                        VecTile<half, kDefaultTileCols> &tile = ((col / kDefaultTileCols) & 1) == 0 ? ping : pong;
-                        event_t event = ((col / kDefaultTileCols) & 1) == 0 ? EVENT_ID0 : EVENT_ID1;
-                        GlobalNd<half> srcGlobal = MakeGlobal2D(
-                            localExpertOutput + static_cast<int64_t>(srcRow) * static_cast<int32_t>(shape.k) + col, 1,
-                            cols, static_cast<int32_t>(shape.k));
-                        GlobalNd<half> dstGlobal = MakeGlobal2D(
-                            localPeer.ptrD + static_cast<int64_t>(dstRow) * static_cast<int32_t>(shape.k) + col, 1,
-                            cols, static_cast<int32_t>(shape.k));
-                        TLOAD(tile, srcGlobal);
-                        set_flag(PIPE_MTE2, PIPE_MTE3, event);
-                        wait_flag(PIPE_MTE2, PIPE_MTE3, event);
-                        TSTORE(dstGlobal, tile);
-                        WaitStoreTileReusable();
-                    }
-                }
-            } else {
-                GlobalNd<half> remoteDst = MakeGlobal2D(
-                    remotePeer.ptrD +
-                        static_cast<int64_t>(dstStart + static_cast<int32_t>(rowBegin)) * static_cast<int32_t>(shape.k),
-                    static_cast<int32_t>(rowsThisChunk), static_cast<int32_t>(shape.k), static_cast<int32_t>(shape.k));
-                GlobalNd<half> localSrc = MakeGlobal2D(
-                    localExpertOutput +
-                        static_cast<int64_t>(srcStart + static_cast<int32_t>(rowBegin)) * static_cast<int32_t>(shape.k),
-                    static_cast<int32_t>(rowsThisChunk), static_cast<int32_t>(shape.k), static_cast<int32_t>(shape.k));
-                VecTile<half, kDefaultTileCols> ping(1, kDefaultTileCols);
-                VecTile<half, kDefaultTileCols> pong(1, kDefaultTileCols);
-                TASSIGN(ping, kPingUbAddr);
-                TASSIGN(pong, kPongUbAddr);
-                pto::comm::TPUT(remoteDst, localSrc, ping, pong);
-            }
+            ReturnRowsChunk(returnCtx, segmentInfo, MakeReturnChunk(returnCtx, segmentInfo, chunk));
         }
-        chunkBase += chunkCount;
+        chunkBase += segmentInfo.chunkCount;
     }
     SoftSyncAiv(workspaceView.localSync, blockNum);
-    for (uint32_t src = blockId; src < shape.ep; src += blockNum) {
-        LocalPeerWindowView remotePeer = MakeRemotePeerWindowView(ctx, peerWindow, src, peerWindowLayout);
-        pipe_barrier(PIPE_ALL);
-        pto::comm::Signal sig = MakeSignal(remotePeer.combineDoneSignal + myRank);
-        pto::comm::TNOTIFY(sig, 1, pto::comm::NotifyOp::AtomicAdd);
+    NotifyCombineOwners(returnCtx, blockId, blockNum);
+}
+
+AICORE inline void InitRestoreRouteCache(bool enabled, RestoreRouteCache *cache)
+{
+    cache->count = 0;
+    cache->enabled = enabled;
+}
+
+AICORE inline void PrepareRestoreRouteReads(MoeCombineShape shape, LocalRouteMetaView routeMeta,
+                                            LocalPeerWindowView localPeer, __gm__ float *probValues, uint32_t token,
+                                            RestoreRouteCache *cache)
+{
+    for (uint32_t slot = 0; slot < shape.topK; ++slot) {
+        uint32_t routeIndex = token * shape.topK + slot;
+        int32_t ptrDRow = *(routeMeta.expandedRowIdx + routeIndex);
+        if (ptrDRow < 0) {
+            continue;
+        }
+        __gm__ half *ptrRow = localPeer.ptrD + static_cast<int64_t>(ptrDRow) * static_cast<int32_t>(shape.k);
+        if (!cache->enabled) {
+            AcquireGmRangeBeforeRead(ptrRow, static_cast<uint64_t>(shape.k) * sizeof(half));
+            continue;
+        }
+        if (cache->count == 0) {
+            pipe_barrier(PIPE_ALL);
+        }
+        cache->rows[cache->count] = ptrDRow;
+        cache->probs[cache->count] = probValues[routeIndex];
+        ++cache->count;
+        DcciGmRangeNoFence(ptrRow, static_cast<uint64_t>(shape.k) * sizeof(half));
     }
+    if (cache->count != 0) {
+        dsb(DSB_DDR);
+    }
+}
+
+AICORE inline bool LoadRestoreRoute(const RestoreTileContext &ctx, uint32_t route, int32_t *ptrDRow, float *prob)
+{
+    uint32_t routeIndex = ctx.token * ctx.shape.topK + route;
+    *ptrDRow = ctx.cache->enabled ? ctx.cache->rows[route] : *(ctx.routeMeta.expandedRowIdx + routeIndex);
+    if (*ptrDRow < 0) {
+        return false;
+    }
+    *prob = ctx.cache->enabled ? ctx.cache->probs[route] : ctx.probValues[routeIndex];
+    return true;
+}
+
+AICORE inline void AccumulateRestoreTile(const RestoreTileContext &ctx, VecTile<half, kDefaultTileCols> *outTile,
+                                         VecTile<half, kDefaultTileCols> *ptrTile)
+{
+    uint32_t combineCount = ctx.cache->enabled ? ctx.cache->count : ctx.shape.topK;
+    pto::Event<pto::Op::TAXPY, pto::Op::TLOAD> axpyToNextLoad;
+    bool waitForPreviousAxpy = false;
+    for (uint32_t route = 0; route < combineCount; ++route) {
+        int32_t ptrDRow = 0;
+        float prob = 0.0f;
+        if (!LoadRestoreRoute(ctx, route, &ptrDRow, &prob)) {
+            continue;
+        }
+        __gm__ half *ptrRow = ctx.localPeer.ptrD + static_cast<int64_t>(ptrDRow) * static_cast<int32_t>(ctx.shape.k);
+        GlobalNd<half> ptrGlobal = MakeGlobal2D(ptrRow + ctx.col, 1, ctx.cols, static_cast<int32_t>(ctx.shape.k));
+        pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> loadToAxpy;
+        if (waitForPreviousAxpy) {
+            axpyToNextLoad.Wait();
+        }
+        loadToAxpy = TLOAD(*ptrTile, ptrGlobal);
+        axpyToNextLoad = TAXPY(*outTile, *ptrTile, static_cast<half>(prob), loadToAxpy);
+        waitForPreviousAxpy = true;
+    }
+    if (waitForPreviousAxpy) {
+        axpyToNextLoad.Wait();
+    }
+}
+
+AICORE inline void RestoreColumnTile(const RestoreTileContext &ctx)
+{
+    VecTile<half, kDefaultTileCols> outTile(1, ctx.cols);
+    VecTile<half, kDefaultTileCols> ptrTile(1, ctx.cols);
+    TASSIGN(outTile, kPingUbAddr);
+    TASSIGN(ptrTile, kPongUbAddr);
+    GlobalNd<half> outGlobal =
+        MakeGlobal2D(ctx.output + static_cast<int64_t>(ctx.token) * static_cast<int32_t>(ctx.shape.k) + ctx.col, 1,
+                     ctx.cols, static_cast<int32_t>(ctx.shape.k));
+    TEXPANDS(outTile, static_cast<half>(0.0));
+    pipe_barrier(PIPE_ALL);
+    AccumulateRestoreTile(ctx, &outTile, &ptrTile);
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    TSTORE(outGlobal, outTile);
+    WaitStoreTileReusable();
 }
 
 AICORE inline void RestoreOutputRows(MoeCombineShape shape, LocalRouteMetaView routeMeta, LocalPeerWindowView localPeer,
                                      GM_ADDR probs, GM_ADDR outputC, uint32_t blockId, uint32_t blockNum)
 {
+    if (blockNum == 0) {
+        return;
+    }
     __gm__ float *probValues = reinterpret_cast<__gm__ float *>(probs);
     __gm__ half *output = reinterpret_cast<__gm__ half *>(outputC);
     uint32_t tokenBegin = TokenShardBegin(shape.m, blockId, blockNum);
     uint32_t tokenEnd = TokenShardEnd(shape.m, blockId, blockNum);
-    bool routeCacheEnabled = shape.topK <= kRouteCacheMax;
     for (uint32_t token = tokenBegin; token < tokenEnd; ++token) {
-        int32_t routeRows[kRouteCacheMax];
-        float routeProbs[kRouteCacheMax];
-        uint32_t routeCount = 0;
-        for (uint32_t slot = 0; slot < shape.topK; ++slot) {
-            uint32_t routeIndex = token * shape.topK + slot;
-            int32_t ptrDRow = *(routeMeta.expandedRowIdx + routeIndex);
-            if (ptrDRow < 0) {
-                continue;
-            }
-            __gm__ half *ptrRow = localPeer.ptrD + static_cast<int64_t>(ptrDRow) * static_cast<int32_t>(shape.k);
-            if (!routeCacheEnabled) {
-                AcquireGmRangeBeforeRead(ptrRow, static_cast<uint64_t>(shape.k) * sizeof(half));
-                continue;
-            }
-            if (routeCount == 0) {
-                pipe_barrier(PIPE_ALL);
-            }
-            routeRows[routeCount] = ptrDRow;
-            routeProbs[routeCount] = probValues[routeIndex];
-            ++routeCount;
-            DcciGmRangeNoFence(ptrRow, static_cast<uint64_t>(shape.k) * sizeof(half));
-        }
-        if (routeCount != 0) {
-            dsb(DSB_DDR);
-        }
+        RestoreRouteCache cache{};
+        InitRestoreRouteCache(shape.topK <= kRouteCacheMax, &cache);
+        PrepareRestoreRouteReads(shape, routeMeta, localPeer, probValues, token, &cache);
         for (int32_t col = 0; col < static_cast<int32_t>(shape.k); col += kDefaultTileCols) {
             int32_t cols = static_cast<int32_t>(shape.k) - col < kDefaultTileCols ?
                                static_cast<int32_t>(shape.k) - col :
                                kDefaultTileCols;
-            VecTile<half, kDefaultTileCols> outTile(1, cols);
-            VecTile<half, kDefaultTileCols> ptrTile(1, cols);
-            TASSIGN(outTile, kPingUbAddr);
-            TASSIGN(ptrTile, kPongUbAddr);
-            GlobalNd<half> outGlobal =
-                MakeGlobal2D(output + static_cast<int64_t>(token) * static_cast<int32_t>(shape.k) + col, 1, cols,
-                             static_cast<int32_t>(shape.k));
-            TEXPANDS(outTile, static_cast<half>(0.0));
-            pipe_barrier(PIPE_V);
-            uint32_t combineCount = routeCacheEnabled ? routeCount : shape.topK;
-            for (uint32_t route = 0; route < combineCount; ++route) {
-                uint32_t routeIndex = token * shape.topK + route;
-                int32_t ptrDRow = routeCacheEnabled ? routeRows[route] : *(routeMeta.expandedRowIdx + routeIndex);
-                if (ptrDRow < 0) {
-                    continue;
-                }
-                float prob = routeCacheEnabled ? routeProbs[route] : probValues[routeIndex];
-                __gm__ half *ptrRow = localPeer.ptrD + static_cast<int64_t>(ptrDRow) * static_cast<int32_t>(shape.k);
-                __gm__ half *ptrChunk = ptrRow + col;
-                GlobalNd<half> ptrGlobal = MakeGlobal2D(ptrChunk, 1, cols, static_cast<int32_t>(shape.k));
-                pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> loadToAxpy;
-                loadToAxpy = TLOAD(ptrTile, ptrGlobal);
-                TAXPY(outTile, ptrTile, static_cast<half>(prob), loadToAxpy);
-                pipe_barrier(PIPE_V);
-            }
-            set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-            wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-            TSTORE(outGlobal, outTile);
-            WaitStoreTileReusable();
+            RestoreTileContext tileCtx{shape, routeMeta, localPeer, probValues, output, token, col, cols, &cache};
+            RestoreColumnTile(tileCtx);
         }
     }
 }

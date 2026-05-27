@@ -7,7 +7,7 @@
 
 ```text
 expertOutput[local experts, source-rank-major]
-  + dispatch 产出的 workspace/window metadata
+  + dispatch 产出的 routeMeta/window metadata
   + probs[local M, topK]
     -> PTO TPUT 写回 owner rank peerWindow.ptrD
     -> PTO TWAIT 等待所有 peer combine done
@@ -23,7 +23,7 @@ expertOutput[local experts, source-rank-major]
 ### 保留内容
 
 - HCCL/MPI 多进程初始化、rank/device 绑定、HCCL window 分配和 remote pointer helper。
-- `MoeCombineShape`、workspace/window layout 中 combine 必需字段。
+- `MoeCombineShape`、routeMeta/window layout 和本地 AIV soft sync workspace。
 - CPU golden 中 combine restore 所需的数据生成、debug dump 和 `CompareOutputs`。
 - host 侧 combine e2e 计时、`actual_ptrD_head` dump、`outputC` dump、verify 日志。
 - `out/` 下已有二进制校验材料，作为拆分前基线保留。
@@ -41,15 +41,15 @@ expertOutput[local experts, source-rank-major]
 
 combine 不能凭空运行，必须拿到 dispatch 阶段已经生成的状态。独立工程第一版支持两种来源：
 
-1. `--gen-data 1`：host 用 CPU golden 在本 rank 初始化 combine fixture，填充 workspace/window metadata，
+1. `--gen-data 1`：host 用 CPU golden 在本 rank 初始化 combine fixture，填充 routeMeta/window metadata，
    并生成 identity `expertOutput`。这是单项目自校验路径。
 2. `--gen-data 0 --data-dir <dispatch_tile/out>`：从 dispatch 项目产物读取输入和 metadata。第一版先复用当前
    rank 文件命名，后续再补 manifest。
 
 combine kernel 运行前必须满足：
 
-- `workspace.dispatchOffset` 和 `workspace.prevSumBeforeRank` 已有效；
-- `peerWindow.peerTokenPerExpert` 和 `peerWindow.expandedRowIdx` 已有效；
+- `routeMeta.dispatchOffset` 和 `routeMeta.prevSumBeforeRank` 已有效；
+- `routeMeta.peerTokenPerExpert`、`routeMeta.cumsumPerExpert` 和 `routeMeta.expandedRowIdx` 已有效；
 - `expertOutput` 已按 `localExpert -> sourceRank -> rows` 布局；
 - `probs` 与 `expandedRowIdx` 使用同一份 routing；
 - `peerWindow.ptrD` 和 `combineDoneSignal` 已清零；
@@ -126,12 +126,11 @@ rank_<r>_expandedRowIdx.bin
    TPUT、TWAIT、restore helper。
 4. 在 host 中改造流程为 `PrepareCombineFixture -> RunCombine -> VerifyAndDump`。
 5. `PrepareCombineFixture` 由 CPU golden 填充设备侧 combine 前置状态：
-   - `workspace.cumsumPerExpert`
-   - `workspace.dispatchOffset`
-   - `workspace.prevSumBeforeRank`
-   - `workspace.dispatchedA`
-   - `peerWindow.peerTokenPerExpert`
-   - `peerWindow.expandedRowIdx`
+   - `routeMeta.cumsumPerExpert`
+   - `routeMeta.dispatchOffset`
+   - `routeMeta.prevSumBeforeRank`
+   - `routeMeta.peerTokenPerExpert`
+   - `routeMeta.expandedRowIdx`
    - `expertOutput`
 6. 删除 dispatch-only 参数、run.sh gate 和 `RunDispatch` 调用。
 7. 用静态检查确认 combine 目录中不再有 dispatch kernel/launcher/host gate，再用
