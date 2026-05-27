@@ -24,11 +24,15 @@ __global__ AICORE void runTRowExpandMul(__gm__ T __out__ *out, __gm__ T __in__ *
     using TileDataSrc1 = Tile<TileType::Vec, T, src1Row, 1, BLayout::ColMajor, -1, -1>;
     TileDataDst src0Tile(validRow, validCol);
     TileDataSrc1 src1Tile(validRow, 1);
+    using TileDataTmp = Tile<TileType::Vec, T, (Row > src1Row ? Row : src1Row), Col, BLayout::ColMajor, -1, -1>;
+    TileDataTmp tmpTile(validRow, validCol);
     TileDataDst dstTile(validRow, validCol);
     size_t size = Row * Col * sizeof(T);
     TASSIGN(src0Tile, 0x0);
     TASSIGN(dstTile, 0x0);
     TASSIGN(src1Tile, size);
+    size_t size1_tmp = src1Row * sizeof(T) * 32;
+    TASSIGN(tmpTile, size + size1_tmp);
 
     GlobalDataDst src0Global(src0);
     GlobalDataSrc1 src1Global(src1);
@@ -41,9 +45,9 @@ __global__ AICORE void runTRowExpandMul(__gm__ T __out__ *out, __gm__ T __in__ *
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
     if constexpr (src0eqdst) {
-        TROWEXPANDMUL(dstTile, src0Tile, src1Tile);
+        TROWEXPANDMUL(dstTile, src0Tile, src1Tile, tmpTile);
     } else {
-        TROWEXPANDMUL(dstTile, src1Tile, src0Tile);
+        TROWEXPANDMUL(dstTile, src1Tile, src0Tile, tmpTile);
     }
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -69,10 +73,14 @@ __global__ AICORE void runTRowExpandMul2(__gm__ T __out__ *out, __gm__ T __in__ 
     TileDataDst src0Tile(validRow, validCol);
     TileDataDst dstTile(validRow, validCol);
     TileDataSrc1 src1Tile(validRow, src1Col);
+    using TileDataTmp = Tile<TileType::Vec, T, (Row > src1Row ? Row : src1Row), Col, BLayout::ColMajor, -1, -1>;
+    TileDataTmp tmpTile(validRow, validCol);
     size_t size = Row * Col * sizeof(T);
     TASSIGN(src0Tile, 0x0);
     TASSIGN(dstTile, 0x0);
     TASSIGN(src1Tile, size);
+    size_t size1_tmp = src1Row * sizeof(T) * 32;
+    TASSIGN(tmpTile, size + size1_tmp);
 
     GlobalDataDst src0Global(src0);
     GlobalDataDst dstGlobal(out);
@@ -85,9 +93,9 @@ __global__ AICORE void runTRowExpandMul2(__gm__ T __out__ *out, __gm__ T __in__ 
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
     if constexpr (src0eqdst) {
-        TROWEXPANDMUL(dstTile, src0Tile, src1Tile);
+        TROWEXPANDMUL(dstTile, src0Tile, src1Tile, tmpTile);
     } else {
-        TROWEXPANDMUL(dstTile, src1Tile, src0Tile);
+        TROWEXPANDMUL(dstTile, src1Tile, src0Tile, tmpTile);
     }
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -205,3 +213,4 @@ template void launchTRowExpandMul<int16_t, 16, 16, 16, 16, true>(int16_t *out, i
                                                                  void *stream);
 template void launchTRowExpandMul2<int16_t, 16, 16, 16, 16, true>(int16_t *out, int16_t *src0, int16_t *src1,
                                                                   void *stream);
+

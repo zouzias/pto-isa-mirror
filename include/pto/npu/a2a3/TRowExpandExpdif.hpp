@@ -16,13 +16,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a2a3/TRowExpandBinOp.hpp>
 
 namespace pto {
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
-PTO_INTERNAL void TROWEXPANDEXPDIF_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
-{
-    TROWEXPANDSUB_IMPL(dst, src0, src1);
-    pipe_barrier(PIPE_V);
-    TEXP_IMPL(dst, dst);
-}
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp>
 PTO_INTERNAL void TROWEXPANDEXPDIF_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp)
