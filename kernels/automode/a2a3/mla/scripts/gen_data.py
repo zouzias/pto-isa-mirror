@@ -109,22 +109,40 @@ def gen_golden_data(kSeqLen, kHidden, kNumHeads, kHeadDim, kLatent, kRopeDim,
 
     cos_table, sin_table = build_rope_tables(kSeqLen, kRopeDim)
 
-    # ---- Compressed Q path -----------------------------------------------
+    # ---- DeepSeek-V2 weight absorption (W_uq @ W_uk^T per head) ---------
+    # Rather than reconstruct Q_nope and K_nope and then form scores =
+    # Q_nope @ K_nope^T, we precompute  W_qk[h] = W_uq[h] @ W_uk[h]^T
+    # (shape [qL, L]) on the host. At inference time:
+    #   Q_absorbed = C_q @ W_qk_flat         (replaces Q reconstruction)
+    #   scores[h]  = Q_absorbed[h] @ C_kv^T  (no per-head K, C_kv shared)
+    # Mathematically identical to the original scores up to FP rounding.
+    w_uq_per_head = w_uq.astype(np.float32).reshape(kQLatent, kNumHeads, kNopeDim)
+    w_uk_per_head = w_uk.astype(np.float32).reshape(kLatent,  kNumHeads, kNopeDim)
+    # W_qk_per_head[h, q, l] = sum_d W_uq[q, h, d] * W_uk[l, h, d]
+    w_qk_per_head = np.einsum('qhd,lhd->hql', w_uq_per_head, w_uk_per_head)  # [Nh, qL, L]
+    # Flatten to [qL, Nh*L]  s.t.  flat[q, h*L + l] == W_qk_per_head[h, q, l]
+    w_qk = (w_qk_per_head.transpose(1, 0, 2)
+                          .reshape(kQLatent, kNumHeads * kLatent)
+                          .astype(np.float16))
+
+    # ---- Compressed Q path + absorbed up-projection ----------------------
     c_q_fp32 = x.astype(np.float32) @ w_dq.astype(np.float32)
     c_q      = c_q_fp32.astype(np.float16)
 
-    q_nope_fp32 = c_q.astype(np.float32) @ w_uq.astype(np.float32)
-    q_nope      = q_nope_fp32.astype(np.float16)                    # [S, Nh*nope_d]
+    # Q_absorbed = C_q @ W_qk   — same shape as the OLD Q_nope (Nh*L == Nh*Nope = 2048)
+    # but different values (W_uk^T has been folded in).
+    q_absorbed_fp32 = c_q.astype(np.float32) @ w_qk.astype(np.float32)
+    q_absorbed      = q_absorbed_fp32.astype(np.float16)            # [S, Nh*L]
 
-    # ---- KV compression / reconstruction --------------------------------
+    # ---- KV compression / V reconstruction ------------------------------
+    # K_nope is NO LONGER computed (its role is absorbed into W_qk above).
+    # V is still reconstructed since the attention output still needs it.
     c_kv_fp32 = x.astype(np.float32) @ w_dkv.astype(np.float32)
     c_kv      = c_kv_fp32.astype(np.float16)
     c_cache   = c_kv.copy()
 
-    k_nope_fp32 = c_cache.astype(np.float32) @ w_uk.astype(np.float32)
-    v_fp32      = c_cache.astype(np.float32) @ w_uv.astype(np.float32)
-    k_nope      = k_nope_fp32.astype(np.float16)                    # [S, Nh*nope_d]
-    v           = v_fp32.astype(np.float16)                          # [S, Nh*head_d]
+    v_fp32 = c_cache.astype(np.float32) @ w_uv.astype(np.float32)
+    v      = v_fp32.astype(np.float16)                               # [S, Nh*head_d]
 
     # ---- Q_rope (head-major), K_rope (shared) ---------------------------
     q_rope_flat_fp32 = x.astype(np.float32) @ w_q_rope.astype(np.float32)
@@ -147,18 +165,20 @@ def gen_golden_data(kSeqLen, kHidden, kNumHeads, kHeadDim, kLatent, kRopeDim,
     probs       = np.zeros((kNumHeads, kSeqLen, kSeqLen), dtype=np.float16)
     out         = np.zeros((kSeqLen, kVWidth),            dtype=np.float16)
 
-    q_nope_h = q_nope.reshape(kSeqLen, kNumHeads, kNopeDim)
-    k_nope_h = k_nope.reshape(kSeqLen, kNumHeads, kNopeDim)
-    v_h      = v.reshape    (kSeqLen, kNumHeads, kHeadDim)
+    # Use the absorbed Q for nope-side scores, against the shared C_cache.
+    # (Mathematically equivalent to q_nope_h @ k_nope_h^T but matches the
+    # kernel's order of operations for closer FP agreement.)
+    q_absorbed_h = q_absorbed.reshape(kSeqLen, kNumHeads, kLatent)
+    v_h          = v.reshape(kSeqLen, kNumHeads, kHeadDim)
 
     for h in range(kNumHeads):
-        Q_n = q_nope_h[:, h, :]              # [S, nope_d]
-        K_n = k_nope_h[:, h, :]              # [S, nope_d]
+        Q_a = q_absorbed_h[:, h, :]          # [S, L]
+        K_c = c_cache                        # [S, L]   shared across heads
         V_h = v_h[:,    h, :]                # [S, head_d]
         Q_r = q_rope_rot[h]                  # [S, rope_d]
         K_r = k_rope_rot                     # [S, rope_d]  shared
 
-        s_n_fp32 = Q_n.astype(np.float32) @ K_n.astype(np.float32).T
+        s_n_fp32 = Q_a.astype(np.float32) @ K_c.astype(np.float32).T
         s_r_fp32 = Q_r.astype(np.float32) @ K_r.astype(np.float32).T
         s_n_fp16 = s_n_fp32.astype(np.float16)
         s_r_fp16 = s_r_fp32.astype(np.float16)
@@ -185,9 +205,8 @@ def gen_golden_data(kSeqLen, kHidden, kNumHeads, kHeadDim, kLatent, kRopeDim,
 
     x.tofile        ("./input/input_x.bin")
     w_dq.tofile     ("./input/input_w_dq.bin")
-    w_uq.tofile     ("./input/input_w_uq.bin")
+    w_qk.tofile     ("./input/input_w_qk.bin")              # absorbed W_uq @ W_uk^T per head
     w_dkv.tofile    ("./input/input_w_dkv.bin")
-    w_uk.tofile     ("./input/input_w_uk.bin")
     w_uv.tofile     ("./input/input_w_uv.bin")
     w_q_rope.tofile ("./input/input_w_q_rope.bin")
     w_k_rope.tofile ("./input/input_w_k_rope.bin")
@@ -195,9 +214,8 @@ def gen_golden_data(kSeqLen, kHidden, kNumHeads, kHeadDim, kLatent, kRopeDim,
     sin_table.tofile("./input/input_sin.bin")
 
     c_q.tofile         ("./output/golden_c_q.bin")           # [S, kQLatent]
-    q_nope.tofile      ("./output/golden_q.bin")             # [S, Nh*nope_d]  (Q_nope)
+    q_absorbed.tofile  ("./output/golden_q.bin")             # [S, Nh*L]  (replaces Q_nope)
     c_kv.tofile        ("./output/golden_c_kv.bin")
-    k_nope.tofile      ("./output/golden_k.bin")             # [S, Nh*nope_d]  (K_nope)
     v.tofile           ("./output/golden_v.bin")             # [S, Nh*head_d]
     q_rope.tofile      ("./output/golden_q_rope.bin")
     k_rope.tofile      ("./output/golden_k_rope.bin")
@@ -223,13 +241,11 @@ def gen_golden_data(kSeqLen, kHidden, kNumHeads, kHeadDim, kLatent, kRopeDim,
 
     stats("x",            x)
     stats("w_dq",         w_dq)
-    stats("w_uq",         w_uq)
-    stats("w_uk",         w_uk)
+    stats("w_qk",         w_qk)        # absorbed W_uq @ W_uk^T (replaces w_uq+w_uk for the kernel)
     stats("w_uv",         w_uv)
     stats("c_q",          c_q)
-    stats("q_nope",       q_nope)
+    stats("q_absorbed",   q_absorbed)  # replaces q_nope (== Q_nope @ W_uk^T per head)
     stats("c_kv",         c_kv)
-    stats("k_nope",       k_nope)
     stats("v",            v)
     stats("q_rope",       q_rope)
     stats("k_rope",       k_rope)

@@ -19,16 +19,15 @@
  *
  * I/O contract (all raw little-endian, contiguous, no headers):
  *   ../input/input_x.bin       (S * H            FP16)
- *   ../input/input_w_q.bin     (H * Nh*Hd        FP16)
+ *   ../input/input_w_dq.bin    (H * qL           FP16)
+ *   ../input/input_w_qk.bin    (qL * Nh*L        FP16)  absorbed W_uq @ W_uk^T
  *   ../input/input_w_dkv.bin   (H * L            FP16)
- *   ../input/input_w_uk.bin    (L * Nh*Hd        FP16)
  *   ../input/input_w_uv.bin    (L * Nh*Hd        FP16)
  *   ../output/golden_out.bin   (S * Nh*Hd        FP16)
  *
- *   ../output/output_q.bin       (S * Nh*Hd      FP16)   debug
+ *   ../output/output_q.bin       (S * Nh*L       FP16)   debug — now Q_absorbed
  *   ../output/output_c_kv.bin    (S * L          FP16)   debug
  *   ../output/output_c_cache.bin (S * L          FP16)   debug
- *   ../output/output_k.bin       (S * Nh*Hd      FP16)   debug
  *   ../output/output_v.bin       (S * Nh*Hd      FP16)   debug
  *   ../output/output_scores.bin  (Nh * S * S     FP16)   debug
  *   ../output/output_probs.bin   (Nh * S * S     FP16)   debug
@@ -59,12 +58,13 @@ using namespace PtoTestCommon;
 // ----- Kernel launchers exposed by the two kernel TUs ----------------------
 
 extern "C" void launchMlaQCompressionFp16   (uint8_t *c_q, uint8_t *x, uint8_t *w_dq, void *stream);
-extern "C" void launchMlaQReconstructionFp16(uint8_t *q_nope, uint8_t *c_q, uint8_t *w_uq, void *stream);
+extern "C" void launchMlaQAbsorbFp16        (uint8_t *q_absorbed, uint8_t *c_q, uint8_t *w_qk, void *stream);
 extern "C" void launchMlaKVCompressionFp16  (uint8_t *c_kv, uint8_t *x, uint8_t *w_dkv, void *stream);
 extern "C" void launchMlaKVCacheStoreFp16   (uint8_t *c_cache, uint8_t *c_kv, void *stream);
-extern "C" void launchMlaKVReconstructionFp16(uint8_t *k, uint8_t *v, uint8_t *c_cache,
-                                              uint8_t *w_uk, uint8_t *w_uv, void *stream);
-extern "C" void launchMlaAttnQKFp16         (uint8_t *scores, uint8_t *q, uint8_t *k, void *stream);
+extern "C" void launchMlaVReconstructionFp16(uint8_t *v, uint8_t *c_cache,
+                                             uint8_t *w_uv, void *stream);
+// DeepSeek-V2 absorbed-weight attention: A=Q_absorbed (per-head), B=C_cache (shared).
+extern "C" void launchMlaAttnQKFp16         (uint8_t *scores, uint8_t *q_absorbed, uint8_t *c_cache, void *stream);
 extern "C" void launchMlaAttnSoftmaxFp16    (uint8_t *probs, uint8_t *scores_nope,
                                              uint8_t *scores_rope, float scale, void *stream);
 extern "C" void launchMlaAttnPVFp16         (uint8_t *out, uint8_t *probs, uint8_t *v, void *stream);
@@ -101,20 +101,22 @@ static_assert(kNopeDim + kRopeDim == kHeadDim,
 static constexpr size_t kHalfBytes = 2;
 
 // Per-buffer element counts.
-static constexpr size_t kXNumel        = static_cast<size_t>(kSeqLen) * kHidden;          // 128 * 4096
-static constexpr size_t kWdqNumel      = static_cast<size_t>(kHidden) * kQLatent;         // 4096 * 64   (NEW)
-static constexpr size_t kWuqNumel      = static_cast<size_t>(kQLatent) * kQNopeWidth;     // 64 * 2048   (NEW)
-static constexpr size_t kWdkvNumel     = static_cast<size_t>(kHidden) * kLatent;          // 4096 * 64
-static constexpr size_t kWukNumel      = static_cast<size_t>(kLatent) * kQNopeWidth;      // 64 * 2048   (HALVED)
-static constexpr size_t kWuvNumel      = static_cast<size_t>(kLatent) * kQKVHidden;       // 64 * 4096
-static constexpr size_t kCQNumel       = static_cast<size_t>(kSeqLen) * kQLatent;         // 128 * 64    (NEW)
-static constexpr size_t kQNumel        = static_cast<size_t>(kSeqLen) * kQNopeWidth;      // 128 * 2048  (Q_nope)
-static constexpr size_t kCKvNumel      = static_cast<size_t>(kSeqLen) * kLatent;          // 128 * 64
-static constexpr size_t kKNumel        = kQNumel;                                         //              (K_nope same shape)
-static constexpr size_t kVNumel        = static_cast<size_t>(kSeqLen) * kQKVHidden;       // 128 * 4096  (V unchanged)
+static constexpr size_t kXNumel        = static_cast<size_t>(kSeqLen) * kHidden;          // S * H
+static constexpr size_t kWdqNumel      = static_cast<size_t>(kHidden) * kQLatent;         // H * qL
+// DeepSeek-V2 absorbed weight: W_qk[h] = W_uq[h] @ W_uk[h]^T, flattened to [qL, Nh*L].
+// Replaces W_uq + W_uk for the kernel. Shape equals what W_uq used to be.
+static constexpr size_t kWqkNumel      = static_cast<size_t>(kQLatent) * kQNopeWidth;     // qL * Nh*L
+static constexpr size_t kWdkvNumel     = static_cast<size_t>(kHidden) * kLatent;          // H * L
+static constexpr size_t kWuvNumel      = static_cast<size_t>(kLatent) * kQKVHidden;       // L * Nh*Hd
+static constexpr size_t kCQNumel       = static_cast<size_t>(kSeqLen) * kQLatent;         // S * qL
+// Q_absorbed replaces Q_nope; same shape [S, Nh*L] (== [S, 2048] in current cfg).
+static constexpr size_t kQNumel        = static_cast<size_t>(kSeqLen) * kQNopeWidth;
+static constexpr size_t kCKvNumel      = static_cast<size_t>(kSeqLen) * kLatent;          // S * L  (cache; also "K" input to attention)
+// K_nope is GONE — its role is absorbed into W_qk; attention reads C_cache directly.
+static constexpr size_t kVNumel        = static_cast<size_t>(kSeqLen) * kQKVHidden;       // S * Nh*Hd  (V unchanged)
 static constexpr size_t kScoresNumel   = static_cast<size_t>(kNumHeads) * kSeqLen * kSeqLen;
 static constexpr size_t kProbsNumel    = kScoresNumel;
-static constexpr size_t kOutNumel      = kVNumel;                                         //              (Out has V shape)
+static constexpr size_t kOutNumel      = kVNumel;                                         // Out has V shape
 // RoPE buffers.
 static constexpr size_t kWqRopeNumel   = static_cast<size_t>(kHidden) * kQRopeWidth;  // 4096 * 2048
 static constexpr size_t kWkRopeNumel   = static_cast<size_t>(kHidden) * kRopeDim;     // 4096 * 64
@@ -127,14 +129,12 @@ static constexpr size_t kScoresRopeNumel = kScoresNumel;
 // Byte sizes.
 size_t kXBytes      = kXNumel      * kHalfBytes;
 size_t kWdqBytes    = kWdqNumel    * kHalfBytes;
-size_t kWuqBytes    = kWuqNumel    * kHalfBytes;
+size_t kWqkBytes    = kWqkNumel    * kHalfBytes;
 size_t kWdkvBytes   = kWdkvNumel   * kHalfBytes;
-size_t kWukBytes    = kWukNumel    * kHalfBytes;
 size_t kWuvBytes    = kWuvNumel    * kHalfBytes;
 static constexpr size_t kCQBytes     = kCQNumel     * kHalfBytes;
 static constexpr size_t kQBytes      = kQNumel      * kHalfBytes;
 static constexpr size_t kCKvBytes    = kCKvNumel    * kHalfBytes;
-static constexpr size_t kKBytes      = kKNumel      * kHalfBytes;
 static constexpr size_t kVBytes      = kVNumel      * kHalfBytes;
 static constexpr size_t kScoresBytes    = kScoresNumel    * kHalfBytes;
 static constexpr size_t kProbsBytes     = kProbsNumel     * kHalfBytes;
@@ -149,10 +149,10 @@ static constexpr size_t kScoresRopeBytes = kScoresRopeNumel * kHalfBytes;
 
 // Poison bytes (distinct per buffer so compare_outputs.py can name the
 // stage if a buffer is still poisoned post-launch).
-static constexpr uint8_t kPoisonQ        = 0xA1;
+static constexpr uint8_t kPoisonQ        = 0xA1;  // Q_absorbed
 static constexpr uint8_t kPoisonCKv      = 0xA2;
 static constexpr uint8_t kPoisonCCache   = 0xA3;
-static constexpr uint8_t kPoisonK        = 0xA4;
+// (no kPoisonK — K_nope is no longer reconstructed)
 static constexpr uint8_t kPoisonV        = 0xA5;
 static constexpr uint8_t kPoisonScores    = 0xA6;
 static constexpr uint8_t kPoisonProbs     = 0xA7;
@@ -366,10 +366,10 @@ int main(int argc, char **argv)
     printf("[main] active case: %s\n", kMlaCaseName);
     printf("[main] MLA DeepSeek-V2: B=%d S=%d H=%d Nh=%d Hd=%d (nope=%d rope=%d) L=%d qL=%d\n",
            kBatch, kSeqLen, kHidden, kNumHeads, kHeadDim, kNopeDim, kRopeDim, kLatent, kQLatent);
-    printf("[main] sizes (bytes): x=%zu  w_dq=%zu  w_uq=%zu  w_dkv=%zu  w_uk=%zu  w_uv=%zu\n",
-           kXBytes, kWdqBytes, kWuqBytes, kWdkvBytes, kWukBytes, kWuvBytes);
-    printf("[main]                 c_q=%zu  q_nope=%zu  c_kv=%zu  k_nope=%zu  v=%zu\n",
-           kCQBytes, kQBytes, kCKvBytes, kKBytes, kVBytes);
+    printf("[main] sizes (bytes): x=%zu  w_dq=%zu  w_qk=%zu  w_dkv=%zu  w_uv=%zu\n",
+           kXBytes, kWdqBytes, kWqkBytes, kWdkvBytes, kWuvBytes);
+    printf("[main]                 c_q=%zu  q_absorbed=%zu  c_kv=%zu  v=%zu\n",
+           kCQBytes, kQBytes, kCKvBytes, kVBytes);
     printf("[main]                 scores=%zu  probs=%zu  out=%zu\n",
            kScoresBytes, kProbsBytes, kOutBytes);
 
@@ -379,15 +379,14 @@ int main(int argc, char **argv)
     if (!CheckAcl(aclrtCreateStream(&stream), "aclrtCreateStream")) std::exit(3);
 
     // ---- Host allocations ------------------------------------------------
-    uint8_t *xHost = nullptr, *wdqHost = nullptr, *wuqHost = nullptr, *wdkvHost = nullptr;
-    uint8_t *wukHost = nullptr, *wuvHost = nullptr;
+    uint8_t *xHost = nullptr, *wdqHost = nullptr, *wqkHost = nullptr, *wdkvHost = nullptr;
+    uint8_t *wuvHost = nullptr;
     uint8_t *cQHost   = nullptr;
     uint8_t *outHost = nullptr;
     // (Debug stage outputs)
-    uint8_t *qHost      = nullptr;
+    uint8_t *qHost      = nullptr;   // Q_absorbed
     uint8_t *ckvHost    = nullptr;
     uint8_t *ccacheHost = nullptr;
-    uint8_t *kHost      = nullptr;
     uint8_t *vHost      = nullptr;
     uint8_t *scoresHost = nullptr;
     uint8_t *probsHost  = nullptr;
@@ -404,16 +403,14 @@ int main(int argc, char **argv)
 
     CheckAcl(aclrtMallocHost((void **)&xHost,      kXBytes),     "MallocHost(x)");
     CheckAcl(aclrtMallocHost((void **)&wdqHost,    kWdqBytes),   "MallocHost(w_dq)");
-    CheckAcl(aclrtMallocHost((void **)&wuqHost,    kWuqBytes),   "MallocHost(w_uq)");
+    CheckAcl(aclrtMallocHost((void **)&wqkHost,    kWqkBytes),   "MallocHost(w_qk)");
     CheckAcl(aclrtMallocHost((void **)&wdkvHost,   kWdkvBytes),  "MallocHost(w_dkv)");
-    CheckAcl(aclrtMallocHost((void **)&wukHost,    kWukBytes),   "MallocHost(w_uk)");
     CheckAcl(aclrtMallocHost((void **)&wuvHost,    kWuvBytes),   "MallocHost(w_uv)");
     CheckAcl(aclrtMallocHost((void **)&cQHost,     kCQBytes),    "MallocHost(c_q)");
     CheckAcl(aclrtMallocHost((void **)&outHost,    kOutBytes),   "MallocHost(out)");
     CheckAcl(aclrtMallocHost((void **)&qHost,      kQBytes),     "MallocHost(q)");
     CheckAcl(aclrtMallocHost((void **)&ckvHost,    kCKvBytes),   "MallocHost(c_kv)");
     CheckAcl(aclrtMallocHost((void **)&ccacheHost, kCKvBytes),   "MallocHost(c_cache)");
-    CheckAcl(aclrtMallocHost((void **)&kHost,      kKBytes),     "MallocHost(k)");
     CheckAcl(aclrtMallocHost((void **)&vHost,      kVBytes),     "MallocHost(v)");
     CheckAcl(aclrtMallocHost((void **)&scoresHost, kScoresBytes),"MallocHost(scores)");
     CheckAcl(aclrtMallocHost((void **)&probsHost,  kProbsBytes), "MallocHost(probs)");
@@ -428,11 +425,11 @@ int main(int argc, char **argv)
     CheckAcl(aclrtMallocHost((void **)&scoresRopeHost,kScoresRopeBytes), "MallocHost(scores_rope)");
 
     // ---- Device allocations ----------------------------------------------
-    uint8_t *xDev = nullptr, *wdqDev = nullptr, *wuqDev = nullptr, *wdkvDev = nullptr;
-    uint8_t *wukDev = nullptr, *wuvDev = nullptr;
+    uint8_t *xDev = nullptr, *wdqDev = nullptr, *wqkDev = nullptr, *wdkvDev = nullptr;
+    uint8_t *wuvDev = nullptr;
     uint8_t *cQDev = nullptr;
     uint8_t *qDev = nullptr, *ckvDev = nullptr, *ccacheDev = nullptr;
-    uint8_t *kDev = nullptr, *vDev = nullptr;
+    uint8_t *vDev = nullptr;
     uint8_t *scoresDev = nullptr, *probsDev = nullptr;
     uint8_t *outDev = nullptr;
     // RoPE device buffers.
@@ -448,15 +445,13 @@ int main(int argc, char **argv)
 
     CheckAcl(aclrtMalloc((void **)&xDev,      kXBytes,      ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(x)");
     CheckAcl(aclrtMalloc((void **)&wdqDev,    kWdqBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_dq)");
-    CheckAcl(aclrtMalloc((void **)&wuqDev,    kWuqBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_uq)");
+    CheckAcl(aclrtMalloc((void **)&wqkDev,    kWqkBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_qk)");
     CheckAcl(aclrtMalloc((void **)&wdkvDev,   kWdkvBytes,   ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_dkv)");
-    CheckAcl(aclrtMalloc((void **)&wukDev,    kWukBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_uk)");
     CheckAcl(aclrtMalloc((void **)&wuvDev,    kWuvBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_uv)");
     CheckAcl(aclrtMalloc((void **)&cQDev,     kCQBytes,     ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(c_q)");
     CheckAcl(aclrtMalloc((void **)&qDev,      kQBytes,      ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(q)");
     CheckAcl(aclrtMalloc((void **)&ckvDev,    kCKvBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(c_kv)");
     CheckAcl(aclrtMalloc((void **)&ccacheDev, kCKvBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(c_cache)");
-    CheckAcl(aclrtMalloc((void **)&kDev,      kKBytes,      ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(k)");
     CheckAcl(aclrtMalloc((void **)&vDev,      kVBytes,      ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(v)");
     CheckAcl(aclrtMalloc((void **)&scoresDev, kScoresBytes, ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(scores)");
     CheckAcl(aclrtMalloc((void **)&probsDev,  kProbsBytes,  ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(probs)");
@@ -477,9 +472,8 @@ int main(int argc, char **argv)
     size_t actualSize = 0;
     ReadFile("../input/input_x.bin",        actualSize, xHost,      kXBytes);
     ReadFile("../input/input_w_dq.bin",     actualSize, wdqHost,    kWdqBytes);
-    ReadFile("../input/input_w_uq.bin",     actualSize, wuqHost,    kWuqBytes);
+    ReadFile("../input/input_w_qk.bin",     actualSize, wqkHost,    kWqkBytes);
     ReadFile("../input/input_w_dkv.bin",    actualSize, wdkvHost,   kWdkvBytes);
-    ReadFile("../input/input_w_uk.bin",     actualSize, wukHost,    kWukBytes);
     ReadFile("../input/input_w_uv.bin",     actualSize, wuvHost,    kWuvBytes);
     ReadFile("../input/input_w_q_rope.bin", actualSize, wqRopeHost, kWqRopeBytes);
     ReadFile("../input/input_w_k_rope.bin", actualSize, wkRopeHost, kWkRopeBytes);
@@ -489,9 +483,8 @@ int main(int argc, char **argv)
     // ---- Upload inputs ----------------------------------------------------
     CheckAcl(aclrtMemcpy(xDev,        kXBytes,      xHost,      kXBytes,      ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(x)");
     CheckAcl(aclrtMemcpy(wdqDev,      kWdqBytes,    wdqHost,    kWdqBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_dq)");
-    CheckAcl(aclrtMemcpy(wuqDev,      kWuqBytes,    wuqHost,    kWuqBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_uq)");
+    CheckAcl(aclrtMemcpy(wqkDev,      kWqkBytes,    wqkHost,    kWqkBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_qk)");
     CheckAcl(aclrtMemcpy(wdkvDev,     kWdkvBytes,   wdkvHost,   kWdkvBytes,   ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_dkv)");
-    CheckAcl(aclrtMemcpy(wukDev,      kWukBytes,    wukHost,    kWukBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_uk)");
     CheckAcl(aclrtMemcpy(wuvDev,      kWuvBytes,    wuvHost,    kWuvBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_uv)");
     CheckAcl(aclrtMemcpy(wqRopeDev,   kWqRopeBytes, wqRopeHost, kWqRopeBytes, ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_q_rope)");
     CheckAcl(aclrtMemcpy(wkRopeDev,   kWkRopeBytes, wkRopeHost, kWkRopeBytes, ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_k_rope)");
@@ -503,7 +496,6 @@ int main(int argc, char **argv)
     CheckAcl(aclrtMemset(qDev,          kQBytes,         kPoisonQ,         kQBytes),         "Memset(q)");
     CheckAcl(aclrtMemset(ckvDev,        kCKvBytes,       kPoisonCKv,       kCKvBytes),       "Memset(c_kv)");
     CheckAcl(aclrtMemset(ccacheDev,     kCKvBytes,       kPoisonCCache,    kCKvBytes),       "Memset(c_cache)");
-    CheckAcl(aclrtMemset(kDev,          kKBytes,         kPoisonK,         kKBytes),         "Memset(k)");
     CheckAcl(aclrtMemset(vDev,          kVBytes,         kPoisonV,         kVBytes),         "Memset(v)");
     CheckAcl(aclrtMemset(scoresDev,     kScoresBytes,    kPoisonScores,    kScoresBytes),    "Memset(scores)");
     CheckAcl(aclrtMemset(probsDev,      kProbsBytes,     kPoisonProbs,     kProbsBytes),     "Memset(probs)");
@@ -524,11 +516,12 @@ int main(int argc, char **argv)
     double total = 0.0;
     // nope path (Q compressed -> reconstructed; K via KV cache)
     total += TimeKernelMs("Q_compression",     stream, [&]{ launchMlaQCompressionFp16   (cQDev, xDev, wdqDev, stream); });
-    total += TimeKernelMs("Q_reconstruction",  stream, [&]{ launchMlaQReconstructionFp16(qDev, cQDev, wuqDev, stream); });
+    total += TimeKernelMs("Q_absorb",          stream, [&]{ launchMlaQAbsorbFp16        (qDev, cQDev, wqkDev, stream); });
     total += TimeKernelMs("KV_compression",    stream, [&]{ launchMlaKVCompressionFp16  (ckvDev, xDev, wdkvDev, stream); });
     total += TimeKernelMs("KV_cache_store",    stream, [&]{ launchMlaKVCacheStoreFp16   (ccacheDev, ckvDev, stream); });
-    total += TimeKernelMs("KV_reconstruction", stream, [&]{ launchMlaKVReconstructionFp16(kDev, vDev, ccacheDev, wukDev, wuvDev, stream); });
-    total += TimeKernelMs("Attn_QK",           stream, [&]{ launchMlaAttnQKFp16         (scoresDev, qDev, kDev, stream); });
+    total += TimeKernelMs("V_reconstruction",  stream, [&]{ launchMlaVReconstructionFp16 (vDev, ccacheDev, wuvDev, stream); });
+    // Absorbed attention: A=Q_absorbed (per-head), B=C_cache (shared across heads).
+    total += TimeKernelMs("Attn_QK",           stream, [&]{ launchMlaAttnQKFp16          (scoresDev, qDev, ccacheDev, stream); });
     // rope path
     total += TimeKernelMs("Q_rope_projection", stream, [&]{ launchMlaQRopeProjectionFp16(qRopeDev, xDev, wqRopeDev, stream); });
     total += TimeKernelMs("K_rope_projection", stream, [&]{ launchMlaKRopeProjectionFp16(kRopeDev, xDev, wkRopeDev, stream); });
@@ -546,7 +539,6 @@ int main(int argc, char **argv)
     CheckAcl(aclrtMemcpy(qHost,      kQBytes,      qDev,      kQBytes,      ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(q_nope)");
     CheckAcl(aclrtMemcpy(ckvHost,    kCKvBytes,    ckvDev,    kCKvBytes,    ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(c_kv)");
     CheckAcl(aclrtMemcpy(ccacheHost, kCKvBytes,    ccacheDev, kCKvBytes,    ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(c_cache)");
-    CheckAcl(aclrtMemcpy(kHost,      kKBytes,      kDev,      kKBytes,      ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(k)");
     CheckAcl(aclrtMemcpy(vHost,      kVBytes,      vDev,      kVBytes,      ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(v)");
     CheckAcl(aclrtMemcpy(scoresHost, kScoresBytes, scoresDev, kScoresBytes, ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(scores)");
     CheckAcl(aclrtMemcpy(probsHost,  kProbsBytes,  probsDev,  kProbsBytes,  ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(probs)");
@@ -561,7 +553,6 @@ int main(int argc, char **argv)
     WriteFile("../output/output_q.bin",          qHost,          kQBytes);
     WriteFile("../output/output_c_kv.bin",       ckvHost,        kCKvBytes);
     WriteFile("../output/output_c_cache.bin",    ccacheHost,     kCKvBytes);
-    WriteFile("../output/output_k.bin",          kHost,          kKBytes);
     WriteFile("../output/output_q_rope.bin",     qRopeHost,      kQRopeBytes);
     WriteFile("../output/output_k_rope.bin",     kRopeHost,      kKRopeBytes);
     WriteFile("../output/output_q_rope_rot.bin", qRopeRotHost,   kQRopeBytes);
@@ -586,7 +577,7 @@ int main(int argc, char **argv)
     allOk &= ValidateStage("C_q",
         "../output/golden_c_q.bin",    "../output/output_c_q.bin",
         kCQBytes,     0.05f, 0.02f, kPoisonCQ);
-    allOk &= ValidateStage("Q_nope",
+    allOk &= ValidateStage("Q_absorbed",
         "../output/golden_q.bin",      "../output/output_q.bin",
         kQBytes,      0.1f, 0.02f, kPoisonQ);
     allOk &= ValidateStage("C_kv",
@@ -595,9 +586,7 @@ int main(int argc, char **argv)
     allOk &= ValidateStage("C_cache",
         "../output/golden_c_kv.bin",   "../output/output_c_cache.bin",
         kCKvBytes,    0.1f, 0.02f, kPoisonCCache);
-    allOk &= ValidateStage("K_nope",
-        "../output/golden_k.bin",      "../output/output_k.bin",
-        kKBytes,      0.1f, 0.02f, kPoisonK);
+    // K_nope is no longer reconstructed (absorbed into W_qk).
     allOk &= ValidateStage("V",
         "../output/golden_v.bin",      "../output/output_v.bin",
         kVBytes,      0.1f, 0.02f, kPoisonV);
@@ -643,15 +632,13 @@ int main(int argc, char **argv)
     aclrtFree(probsDev);
     aclrtFree(scoresDev);
     aclrtFree(vDev);
-    aclrtFree(kDev);
     aclrtFree(ccacheDev);
     aclrtFree(ckvDev);
     aclrtFree(qDev);
     aclrtFree(cQDev);
     aclrtFree(wuvDev);
-    aclrtFree(wukDev);
     aclrtFree(wdkvDev);
-    aclrtFree(wuqDev);
+    aclrtFree(wqkDev);
     aclrtFree(wdqDev);
     aclrtFree(xDev);
     aclrtFreeHost(scoresRopeHost);
@@ -666,16 +653,14 @@ int main(int argc, char **argv)
     aclrtFreeHost(probsHost);
     aclrtFreeHost(scoresHost);
     aclrtFreeHost(vHost);
-    aclrtFreeHost(kHost);
     aclrtFreeHost(ccacheHost);
     aclrtFreeHost(ckvHost);
     aclrtFreeHost(qHost);
     aclrtFreeHost(outHost);
     aclrtFreeHost(cQHost);
     aclrtFreeHost(wuvHost);
-    aclrtFreeHost(wukHost);
     aclrtFreeHost(wdkvHost);
-    aclrtFreeHost(wuqHost);
+    aclrtFreeHost(wqkHost);
     aclrtFreeHost(wdqHost);
     aclrtFreeHost(xHost);
     aclrtDestroyStream(stream);
