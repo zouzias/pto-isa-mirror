@@ -1379,9 +1379,8 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_2D_Packed(__ubuf__ T *srcPtr, __ubuf__ T *
     uint32_t groupsPerRow = CeilDivision((uint32_t)validCols, grp_size);
     uint32_t elemsPerRow = groupsPerRow * grp_size;
     uint16_t loopNumPerRow = (uint16_t)CeilDivision(elemsPerRow, elements_per_dintlv);
-    static constexpr auto distValue =
-        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
     if (loopNumPerRow == 1) {
+        __ubuf__ T *writePtr = maxPtr;
         for (uint16_t row = 0; row < (uint16_t)validRows; ++row) {
             uint32_t srcRowOff = (uint32_t)row * srcCols;
             if constexpr (scale_alg == QuantScaleAlg::NV && std::is_same<T, half>::value)
@@ -1389,9 +1388,15 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_2D_Packed(__ubuf__ T *srcPtr, __ubuf__ T *
             else
                 AbsReduceMax_b16_DintlvWindow<T>(srcPtr, srcRowOff, elemsPerRow, vb16_max);
             uint32_t outCount = groupsPerRow;
-            MaskReg pregOut = CreatePredicate<T>(outCount);
-            vsts(vb16_max, maxPtr, (uint32_t)row * groupsPerRow, distValue, pregOut);
+            vstus(ureg_max, outCount, vb16_max, writePtr, POST_UPDATE);
         }
+        uint32_t groupsWritten = (uint32_t)validRows * groupsPerRow;
+        uint32_t alignGroups = BLOCK_BYTE_SIZE / sizeof(T);
+        uint32_t paddedGroups = CeilDivision(groupsWritten, alignGroups) * alignGroups;
+        uint32_t padCount = paddedGroups - groupsWritten;
+        if (padCount > 0)
+            vstus(ureg_max, padCount, vb16_max, writePtr, POST_UPDATE);
+        vstas(ureg_max, writePtr, 0, POST_UPDATE);
         return;
     }
     __ubuf__ T *writePtr = maxPtr;
@@ -1600,19 +1605,6 @@ PTO_INTERNAL void BuildPackedScaleWindow(__ubuf__ T *packedScalingPtr, __ubuf__ 
         vstus(ureg_scale, 1, v_scale, writePtr, POST_UPDATE);
     }
     vstas(ureg_scale, writePtr, 0, POST_UPDATE);
-}
-
-template <typename T>
-PTO_INTERNAL void BuildPackedScaleWindowAligned(__ubuf__ T *packedScalingPtr, __ubuf__ T *scaleTmpPtr,
-                                                unsigned groupCount)
-{
-    RegTensor<T> vScale;
-    uint32_t one = 1;
-    MaskReg pregOne = CreatePredicate<T>(one);
-    for (uint16_t group = 0; group < (uint16_t)groupCount; ++group) {
-        vlds(vScale, packedScalingPtr + group, 0, BRC_B16);
-        vsts(vScale, scaleTmpPtr, group, NORM_B16, pregOne);
-    }
 }
 
 // Packed 2D quantization. scaling is read from tight [validRows, groupsPerRow]
@@ -1973,7 +1965,7 @@ PTO_INTERNAL void CalcQuantizedFP4E2M1Values_2D_Packed(__ubuf__ T *srcPtr, __ubu
             uint32_t groupsThisWindow = groupsPerRow - groupBase;
             if (groupsThisWindow > kGroupsPerWindow)
                 groupsThisWindow = kGroupsPerWindow;
-            BuildPackedScaleWindowAligned(scaleRow + groupBase, rowScaleTmp, groupsThisWindow);
+            BuildPackedScaleWindow(scaleRow + groupBase, rowScaleTmp, groupsThisWindow);
             mem_bar(VST_VLD);
             if constexpr (std::is_same<T, half>::value) {
                 CalcQuantizedFP4E2M1Values_Half(srcRow + groupBase * kGroupSize, rowScaleTmp,

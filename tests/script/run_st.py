@@ -40,7 +40,11 @@ def set_env_variables(run_mode, soc_version):
         if not ascend_home:
             raise EnvironmentError("ASCEND_HOME_PATH is not set")
 
-        os.environ["LD_LIBRARY_PATH"] = f"{ascend_home}/runtime/lib64/stub:{os.environ.get('LD_LIBRARY_PATH', '')}"
+        stub_paths = [
+            os.path.join(ascend_home, "runtime", "lib64", "stub"),
+            os.path.join(ascend_home, "x86_64-linux", "lib64", "stub"),
+        ]
+        append_existing_ld_paths(stub_paths)
         if soc_version == "Kirin9030" or soc_version == "KirinX90":
             setenv_path = os.path.join(ascend_home, "set_env.sh")
         else:
@@ -67,7 +71,7 @@ def set_env_variables(run_mode, soc_version):
             simulator_lib_path = os.path.join(resolved_dir, "lib")
         else:
             simulator_lib_path = os.path.join(ascend_home, "tools", "simulator", soc_version, "lib")
-        os.environ["LD_LIBRARY_PATH"] = f"{simulator_lib_path}:{os.environ.get('LD_LIBRARY_PATH', '')}"
+        append_existing_ld_paths([simulator_lib_path] + stub_paths)
 
 
 def get_simulator_roots(ascend_home):
@@ -88,6 +92,25 @@ def resolve_simulator_dir(ascend_home, soc_version):
             if os.path.isdir(candidate_dir):
                 return candidate, candidate_dir
     return soc_version, ""
+
+
+def get_camodel_log_path(gtest_filter):
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", gtest_filter).strip("_")
+    if not safe_name:
+        safe_name = "default"
+    return os.path.join("camodel_log", safe_name)
+
+
+def append_existing_ld_paths(paths):
+    existing_paths = [path for path in paths if path and os.path.isdir(path)]
+    if not existing_paths:
+        return
+    current_paths = [path for path in os.environ.get("LD_LIBRARY_PATH", "").split(":") if path]
+    merged = []
+    for path in existing_paths + current_paths:
+        if path not in merged:
+            merged.append(path)
+    os.environ["LD_LIBRARY_PATH"] = ":".join(merged)
 
 
 def build_project(run_mode, soc_version, testcase="all", debug_enable=False, auto_enable=False):

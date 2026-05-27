@@ -746,6 +746,53 @@ def make_mx_exp2d_fuzz_values(valid_rows, valid_cols, dtype, seed, max_abs):
     return values.astype(dtype)
 
 
+def make_mxfp4_static4x128_exp2d_values(dtype):
+    group_maxes = np.array([6.0, 12.0, 24.0, 48.0, 96.0, 192.0, 384.0, 768.0], dtype=np.float32)
+    scaled_pattern = np.array(
+        [
+            6.0,
+            -6.0,
+            4.0,
+            -4.0,
+            3.0,
+            -3.0,
+            2.5,
+            -2.5,
+            2.0,
+            -2.0,
+            1.5,
+            -1.5,
+            1.0,
+            -1.0,
+            0.75,
+            -0.75,
+            0.5,
+            -0.5,
+            0.375,
+            -0.375,
+            0.25,
+            -0.25,
+            0.125,
+            -0.125,
+            0.0,
+            -0.0,
+            3.75,
+            -3.75,
+            2.25,
+            -2.25,
+            1.25,
+            -1.25,
+        ],
+        dtype=np.float32,
+    )
+    values = np.zeros((2, 128), dtype=np.float32)
+    for group, group_max in enumerate(group_maxes):
+        row = group // 4
+        col = (group % 4) * MX_BOUNDARY_GROUP_SIZE
+        values[row, col : col + MX_BOUNDARY_GROUP_SIZE] = scaled_pattern * (group_max / 6.0)
+    return values.astype(dtype)
+
+
 def make_mxfp4_e2m1_data(config, patterns):
     total = config.valid_rows * config.valid_cols
     dtype = config.dtype
@@ -783,9 +830,7 @@ def make_mxfp4_e2m1_data(config, patterns):
             pattern = group_patterns[group % len(group_patterns)]
             values[begin:end] = np.resize(pattern, end - begin)
     elif case_suffix == "static4x128_exp2d":
-        values = make_mx_exp2d_fuzz_values(
-            config.valid_rows, config.valid_cols, dtype, seed=20260602, max_abs=768.0
-        ).reshape(-1)
+        values = make_mxfp4_static4x128_exp2d_values(dtype).reshape(-1)
     elif case_suffix is not None and "_exp2d_fuzz" in case_suffix:
         values = make_mx_exp2d_fuzz_values(
             config.valid_rows, config.valid_cols, dtype, get_exp2d_fuzz_seed(case_suffix), max_abs=768.0
