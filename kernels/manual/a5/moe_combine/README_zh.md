@@ -32,7 +32,8 @@ kernels/manual/a5/moe_combine/
 ├── kernel_launchers.h       # Host 侧 kernel launcher 声明
 ├── moe_combine_kernel.cpp   # PTO AIV kernel: return + wait + weighted restore
 ├── main.cpp                 # Host 编排: MPI, ACL, HCCL window, fixture, verify, profile
-├── golden.h                 # CPU golden 路由构造和输出校验
+├── golden.h                 # CPU golden 数据结构和公开接口声明
+├── golden.cpp               # CPU golden 路由构造和输出校验实现
 ├── hccl_context.h           # A5 HCCL direct context 与 peer window 初始化
 ├── comm_mpi.h               # MPI 动态加载封装
 ├── DESIGN.md                # A5 翻译和 HCCL window padding 设计

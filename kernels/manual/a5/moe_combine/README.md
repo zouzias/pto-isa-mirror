@@ -32,7 +32,8 @@ kernels/manual/a5/moe_combine/
 ├── kernel_launchers.h       # Host-side kernel launcher declaration
 ├── moe_combine_kernel.cpp   # PTO AIV kernel: return + wait + weighted restore
 ├── main.cpp                 # Host orchestration: MPI, ACL, HCCL window, fixture, verify, profiling
-├── golden.h                 # CPU golden route construction and output verification
+├── golden.h                 # CPU golden data structures and public interface declarations
+├── golden.cpp               # CPU golden route construction and output verification implementation
 ├── hccl_context.h           # A5 HCCL direct-context and peer-window bootstrap
 ├── comm_mpi.h               # MPI dynamic loading wrapper
 ├── DESIGN.md                # A5 translation notes and HCCL window padding design
