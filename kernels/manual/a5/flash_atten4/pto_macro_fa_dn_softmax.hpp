@@ -114,8 +114,8 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter
     unsigned ubN = TileDataD2::Rows;
 
     __ubuf__ half *nz_buffer_Ptr2 = nz_buffer_Ptr + 16;
-    __ubuf__ half *nz_buffer_Ptr3 = nz_buffer_Ptr + ubM*ubN/2/4;
-    __ubuf__ half *nz_buffer_Ptr4 = nz_buffer_Ptr + ubM*ubN/2/4 + 16;
+    __ubuf__ half *nz_buffer_Ptr3 = nz_buffer_Ptr + ubN/2*16;
+    __ubuf__ half *nz_buffer_Ptr4 = nz_buffer_Ptr + ubN/2*16 + 16;
     uint64_t VSSTB_CONFIG = ((ubN + 1) << 16) | 2u;
 
     __VEC_SCOPE__{
@@ -669,8 +669,8 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
     unsigned ubN = TileDataD2::Rows;
 
     __ubuf__ half *nz_buffer_Ptr2 = nz_buffer_Ptr + 16;
-    __ubuf__ half *nz_buffer_Ptr3 = nz_buffer_Ptr + ubM*ubN/2/4;
-    __ubuf__ half *nz_buffer_Ptr4 = nz_buffer_Ptr + ubM*ubN/2/4 + 16;
+    __ubuf__ half *nz_buffer_Ptr3 = nz_buffer_Ptr + ubN/2*16;
+    __ubuf__ half *nz_buffer_Ptr4 = nz_buffer_Ptr + ubN/2*16 + 16;
     uint64_t VSSTB_CONFIG = ((ubN + 1) << 16) | 2u;
 
     __VEC_SCOPE__{
