@@ -71,12 +71,14 @@ AICORE void MoeDispatchDirect(
     int32_t expertPerRank,
     int32_t maxOutputSize,
     int64_t offsetA,
-    int32_t tpeRowStride = 0)
+    int32_t tpeRowStride = 0,
+    int32_t cumsumStride = 0)
 {
     int32_t myRank = static_cast<int32_t>(hcclCtx->rankId);
     int32_t coreIdx = get_block_idx();
     int32_t coreNum = get_block_num();
     int32_t expNum = (tpeRowStride > 0) ? tpeRowStride : EP * expertPerRank;
+    int32_t csStride = (cumsumStride > 0) ? cumsumStride : expertPerRank;
 
     constexpr int32_t copyInNum = HIDDEN_SIZE + UB_ALIGN;
 
@@ -108,7 +110,7 @@ AICORE void MoeDispatchDirect(
     uint32_t prevGroupSum = 0;
 
     for (int32_t groupIdx = 0; groupIdx < expertPerRank; ++groupIdx) {
-        uint32_t currentM = static_cast<uint32_t>(cumsumMM[(EP - 1) * expertPerRank + groupIdx]);
+        uint32_t currentM = static_cast<uint32_t>(cumsumMM[(EP - 1) * csStride + groupIdx]);
 
         bool hasPending = false;
         int32_t pendingPP = 0;
@@ -122,7 +124,7 @@ AICORE void MoeDispatchDirect(
             if (dstEpIdx == 0) {
                 rowStart = prevGroupSum;
             } else {
-                rowStart = static_cast<uint32_t>(cumsumMM[(dstEpIdx - 1) * expertPerRank + groupIdx]) + prevGroupSum;
+                rowStart = static_cast<uint32_t>(cumsumMM[(dstEpIdx - 1) * csStride + groupIdx]) + prevGroupSum;
             }
 
             if (rowStart >= static_cast<uint32_t>(maxOutputSize)) {
@@ -500,13 +502,13 @@ AICORE void MoeDispatchWithSync(
     SyncStride syncGmStride(syncElems, syncElems, syncElems, syncElems, 1);
     SyncGlobal syncGmG(syncGmWorkspace, syncGmShape, syncGmStride);
 
-    // Workspace layout:
-    //   [0 .. EP*expertPerRank)                                    : cumsumMM
-    //   [EP*expertPerRank .. 2*EP*expertPerRank)                       : preSumBeforeRank
-    //   [2*EP*expertPerRank .. 2*EP*expertPerRank + EP*paddedExpNum)   : tokenPerExpert (padded)
+    // Workspace layout (padded cumsumMM for DMA-aligned TSTORE):
+    //   [0 .. EP*paddedExpNum)                                     : cumsumMM (full rows)
+    //   [EP*paddedExpNum .. EP*paddedExpNum + EP*expertPerRank)     : preSumBeforeRank
+    //   [EP*paddedExpNum + EP*expertPerRank .. end)                 : tokenPerExpert (padded)
     __gm__ int32_t *wsCumsumMM = workspace;
-    __gm__ int32_t *wsPSBR = workspace + EP * expertPerRank;
-    __gm__ int32_t *wsTPE = workspace + 2 * EP * expertPerRank;
+    __gm__ int32_t *wsPSBR = workspace + EP * paddedExpNum;
+    __gm__ int32_t *wsTPE = workspace + EP * paddedExpNum + EP * expertPerRank;
 
     // Pointers into this rank's shmem TPE exchange area
     __gm__ int32_t *localTPEBase = reinterpret_cast<__gm__ int32_t *>(shmemBase + offsetTPE);
@@ -624,23 +626,44 @@ AICORE void MoeDispatchWithSync(
                 wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
             }
 
-            // Phase B.2: Compute cumsumMM
-            // cumsumMM[rankIdx * expertPerRank + g] = cumulative sum of tokens
-            // from rank 0..rankIdx destined for myRank's expert g
+            // Phase B.2: Compute cumsumMM (vectorized prefix sum using TADD)
+            // Full-row TLOAD/TADD/TSTORE on paddedExpNum-wide rows for DMA alignment.
+            // Result layout: wsCumsumMM[i * paddedExpNum + col] = prefix sum over srcRank 0..i
             pipe_barrier(PIPE_ALL);
-            for (int32_t g = 0; g < expertPerRank; ++g) {
-                int32_t cumSum = 0;
-                for (int32_t srcRank = 0; srcRank < EP; ++srcRank) {
-                    int32_t tpeIdx = srcRank * paddedExpNum + myRank * expertPerRank + g;
-                    volatile __gm__ int32_t *tpePtr = reinterpret_cast<volatile __gm__ int32_t *>(wsTPE + tpeIdx);
-                    __asm__ __volatile__("");
-                    dcci((__gm__ void *)tpePtr, SINGLE_CACHE_LINE);
-                    __asm__ __volatile__("");
-                    cumSum += *tpePtr;
-                    volatile __gm__ int32_t *cumsumPtr = reinterpret_cast<volatile __gm__ int32_t *>(
-                        wsCumsumMM + srcRank * expertPerRank + g);
-                    *cumsumPtr = cumSum;
+
+            TPETile accumTile(1, paddedExpNum);
+            TPETile tmpTile(1, paddedExpNum);
+            constexpr int32_t ACCUM_UB_OFFSET = 0;
+            int32_t tmpUbOffset = paddedExpNum * static_cast<int32_t>(sizeof(int32_t));
+            TASSIGN(accumTile, ACCUM_UB_OFFSET);
+            TASSIGN(tmpTile, tmpUbOffset);
+            accumTile.RowMaskInternal = 1;
+            accumTile.ColMaskInternal = paddedExpNum;
+            tmpTile.RowMaskInternal = 1;
+            tmpTile.ColMaskInternal = paddedExpNum;
+
+            for (int32_t i = 0; i < EP; ++i) {
+                __gm__ int32_t *srcAddr = wsTPE + i * paddedExpNum;
+                TPEGlobal srcG(srcAddr, rowShape, rowStride);
+
+                if (i == 0) {
+                    TLOAD(accumTile, srcG);
+                    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+                    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+                } else {
+                    TLOAD(tmpTile, srcG);
+                    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+                    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+                    TADD(accumTile, accumTile, tmpTile);
+                    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
                 }
+
+                __gm__ int32_t *dstAddr = wsCumsumMM + i * paddedExpNum;
+                TPEGlobal dstG(dstAddr, rowShape, rowStride);
+                TSTORE(dstG, accumTile);
+                set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+                wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
             }
 
             // Phase B.3: Compute preSumBeforeRank
@@ -676,8 +699,9 @@ AICORE void MoeDispatchWithSync(
     pto::SYNCALL<pto::SyncAllMode::Soft>(syncGmG, syncUbTile);
 
     MoeDispatchDirect<HIDDEN_SIZE, TILE_COLS, MOVE_NUM>(
-        gmA, gmPerTokenScale, wsCumsumMM, wsTPE, wsPSBR,
-        shmemBase, hcclCtx, EP, expertPerRank, maxOutputSize, offsetA, paddedExpNum);
+        gmA, gmPerTokenScale, wsCumsumMM + myRank * expertPerRank, wsTPE, wsPSBR,
+        shmemBase, hcclCtx, EP, expertPerRank, maxOutputSize, offsetA,
+        paddedExpNum, paddedExpNum);
 }
 
 // ============================================================================

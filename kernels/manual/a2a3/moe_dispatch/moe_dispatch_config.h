@@ -79,14 +79,14 @@ inline constexpr int64_t TPEAreaBytes(int32_t EP, int32_t expertPerRank)
 }
 
 // Workspace layout for CrossRankSync computed routing tables:
-//   [0 .. EP*expertPerRank)              : cumsumMM     (int32)
-//   [EP*expertPerRank .. 2*EP*expertPerRank) : preSumBeforeRank (int32)
-//   [2*EP*expertPerRank .. 2*EP*expertPerRank + EP*EP*expertPerRank) : tokenPerExpert (int32)
+//   [0 .. EP*paddedExpNum)                               : cumsumMM (padded rows for DMA alignment)
+//   [EP*paddedExpNum .. EP*paddedExpNum + EP*expertPerRank) : preSumBeforeRank (int32)
+//   [EP*paddedExpNum + EP*expertPerRank .. end)           : tokenPerExpert (padded, int32)
 inline constexpr int64_t SyncWorkspaceBytes(int32_t EP, int32_t expertPerRank)
 {
-    int32_t cumsumSize = EP * expertPerRank;
-    int32_t psbrSize = EP * expertPerRank;
     int32_t paddedExpNum = ((EP * expertPerRank) + 7) & ~7;
+    int32_t cumsumSize = EP * paddedExpNum;
+    int32_t psbrSize = EP * expertPerRank;
     int32_t tpeSize = EP * paddedExpNum;
     return static_cast<int64_t>(cumsumSize + psbrSize + tpeSize) * sizeof(int32_t);
 }
