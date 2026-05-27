@@ -203,12 +203,6 @@ append_workspace_field() {
     workspace_offset=$(align_up "${workspace_offset}" 64)
     workspace_offset=$(( workspace_offset + bytes ))
 }
-append_workspace_field $(( EXPERT_NUM_PADDED * 4 ))
-append_workspace_field $(( EFFECTIVE_AIV_BLOCKS * EXPERT_NUM_PADDED * 4 ))
-append_workspace_field $(( EFFECTIVE_AIV_BLOCKS * EXPERT_NUM_PADDED * 4 ))
-append_workspace_field $(( PES * EXPERT_NUM_PADDED * 4 ))
-append_workspace_field $(( EXPERT_PER_PE * 4 ))
-append_workspace_field $(( PES * EXPERT_PER_PE * 4 ))
 SYNC_SLOTS=$(( EFFECTIVE_AIV_BLOCKS * (8 + EXPERT_NUM_PADDED) ))
 if [ "${SYNC_SLOTS}" -lt 64 ]; then
     SYNC_SLOTS=64
@@ -219,15 +213,25 @@ append_workspace_field $(( MAX_OUTPUT_SIZE * K * 2 ))
 append_workspace_field $(( EXPANDED_ROWS * K * 2 ))
 WORKSPACE_BYTES=$(align_up "${workspace_offset}" 64)
 
+route_meta_offset=0
+append_route_meta_field() {
+    local bytes=$1
+    route_meta_offset=$(align_up "${route_meta_offset}" 64)
+    route_meta_offset=$(( route_meta_offset + bytes ))
+}
+append_route_meta_field $(( PES * EXPERT_NUM_PADDED * 4 ))
+append_route_meta_field $(( EXPANDED_ROWS * 4 ))
+append_route_meta_field $(( PES * EXPERT_NUM_PADDED * 4 ))
+append_route_meta_field $(( EXPERT_PER_PE * 4 ))
+append_route_meta_field $(( PES * EXPERT_PER_PE * 4 ))
+ROUTE_META_BYTES=$(align_up "${route_meta_offset}" 64)
+
 peer_offset=0
 append_peer_field() {
     local bytes=$1
     peer_offset=$(align_up "${peer_offset}" 64)
     peer_offset=$(( peer_offset + bytes ))
 }
-append_peer_field $(( PES * EXPERT_NUM_PADDED * 4 ))
-append_peer_field $(( EXPANDED_ROWS * 4 ))
-append_peer_field $(( EXPANDED_ROWS * K * 2 ))
 append_peer_field $(( EXPANDED_ROWS * K * 2 ))
 append_peer_field $(( PES * 4 ))
 append_peer_field $(( PES * 4 ))
@@ -259,6 +263,7 @@ echo "PES=${PES} DEVICE_BASE=${DEVICE_BASE} NDEVICES=${NDEVICES}"
 echo "M=${M} K=${K} TOPK=${TOPK} EXPERT_PER_PE=${EXPERT_PER_PE} MAX_OUTPUT_SIZE=${MAX_OUTPUT_SIZE}"
 echo "AIV_BLOCKS=${AIV_BLOCKS} TILE_COLS=${TILE_COLS} ROW_CHUNK=${ROW_CHUNK} METADATA_PAD=${METADATA_PAD}"
 echo "workspace_bytes=${WORKSPACE_BYTES}"
+echo "route_meta_bytes=${ROUTE_META_BYTES}"
 echo "peer_window_head_guard_bytes=${HCCL_WINDOW_HEAD_GUARD_BYTES}"
 echo "peer_window_live_bytes=${PEER_WINDOW_LIVE_BYTES}"
 echo "peer_window_bytes=${PEER_WINDOW_BYTES}"

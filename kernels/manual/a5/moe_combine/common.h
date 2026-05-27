@@ -35,12 +35,6 @@ struct MoeCombineShape {
 };
 
 struct WorkspaceLayout {
-    uint64_t localTokenPerExpert;
-    uint64_t blockTokenPerExpert;
-    uint64_t blockPrefixPerExpert;
-    uint64_t cumsumPerExpert;
-    uint64_t dispatchOffset;
-    uint64_t prevSumBeforeRank;
     uint64_t localSync;
     uint64_t floatScratch;
     uint64_t dispatchedA;
@@ -48,10 +42,16 @@ struct WorkspaceLayout {
     uint64_t totalBytes;
 };
 
-struct PeerWindowLayout {
+struct CombineRouteMetaLayout {
     uint64_t peerTokenPerExpert;
     uint64_t expandedRowIdx;
-    uint64_t packedA;
+    uint64_t cumsumPerExpert;
+    uint64_t dispatchOffset;
+    uint64_t prevSumBeforeRank;
+    uint64_t totalBytes;
+};
+
+struct PeerWindowLayout {
     uint64_t ptrD;
     uint64_t countReadySignal;
     uint64_t combineDoneSignal;

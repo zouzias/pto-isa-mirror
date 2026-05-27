@@ -119,6 +119,7 @@ bool VerboseRuntimeLogs(const MoeCombineArgs &args)
 struct DeviceBuffers {
     void *probs = nullptr;
     void *outputC = nullptr;
+    void *routeMeta = nullptr;
     void *workspace = nullptr;
     void *expertOutput = nullptr;
 };
@@ -333,7 +334,7 @@ void InitHccl(RuntimeState *state, const MoeCombineArgs &args, const PeerWindowL
 }
 
 void AllocateLocalBuffers(const MoeCombineArgs &args, const WorkspaceLayout &workspaceLayout,
-                          RuntimeState *state)
+                          const CombineRouteMetaLayout &routeMetaLayout, RuntimeState *state)
 {
     bool verbose = VerboseRuntimeLogs(args);
     if (verbose) {
@@ -347,6 +348,8 @@ void AllocateLocalBuffers(const MoeCombineArgs &args, const WorkspaceLayout &wor
              "rank " + std::to_string(state->rank) + " aclrtMalloc probs");
     CheckAcl(aclrtMalloc(&state->buffers.outputC, outputBytes, ACL_MEM_MALLOC_HUGE_FIRST),
              "rank " + std::to_string(state->rank) + " aclrtMalloc outputC");
+    CheckAcl(aclrtMalloc(&state->buffers.routeMeta, routeMetaLayout.totalBytes, ACL_MEM_MALLOC_HUGE_FIRST),
+             "rank " + std::to_string(state->rank) + " aclrtMalloc routeMeta");
     CheckAcl(aclrtMalloc(&state->buffers.workspace, workspaceLayout.totalBytes, ACL_MEM_MALLOC_HUGE_FIRST),
              "rank " + std::to_string(state->rank) + " aclrtMalloc workspace");
     CheckAcl(aclrtMalloc(&state->buffers.expertOutput, expertOutputBytes, ACL_MEM_MALLOC_HUGE_FIRST),
@@ -380,7 +383,8 @@ void CopyInputsToDevice(const MoeCombineArgs &args, RuntimeState *state)
 }
 
 void ClearDeviceState(const MoeCombineArgs &args, const WorkspaceLayout &workspaceLayout,
-                      const PeerWindowLayout &peerWindowLayout, RuntimeState *state)
+                      const CombineRouteMetaLayout &routeMetaLayout, const PeerWindowLayout &peerWindowLayout,
+                      RuntimeState *state)
 {
     bool verbose = VerboseRuntimeLogs(args);
     if (verbose) {
@@ -388,6 +392,8 @@ void ClearDeviceState(const MoeCombineArgs &args, const WorkspaceLayout &workspa
     }
     CheckAcl(aclrtMemset(state->buffers.workspace, workspaceLayout.totalBytes, 0, workspaceLayout.totalBytes),
              "rank " + std::to_string(state->rank) + " clear workspace");
+    CheckAcl(aclrtMemset(state->buffers.routeMeta, routeMetaLayout.totalBytes, 0, routeMetaLayout.totalBytes),
+             "rank " + std::to_string(state->rank) + " clear routeMeta");
     size_t peerWindowDataBytes = state->currentSignalValue == 1 ?
                                      static_cast<size_t>(peerWindowLayout.totalBytes) :
                                      static_cast<size_t>(peerWindowLayout.countReadySignal);
@@ -408,8 +414,8 @@ std::vector<float> CopyDeviceHalfToFloat(void *devicePtr, size_t elementCount, u
     return HalfBitsToFloatVector(halfData);
 }
 
-uint64_t CompareFloatBuffer(const MoeCombineArgs &args, const std::string &name,
-                            const std::vector<float> &actual, const std::vector<float> &expected, uint32_t rank)
+uint64_t CompareFloatBuffer(const MoeCombineArgs &args, const std::string &name, const std::vector<float> &actual,
+                            const std::vector<float> &expected, uint32_t rank)
 {
     uint64_t mismatches = 0;
     size_t elementCount = actual.size() < expected.size() ? actual.size() : expected.size();
@@ -444,7 +450,7 @@ uint64_t CompareFloatBuffer(const MoeCombineArgs &args, const std::string &name,
 }
 
 void PrepareCombineFixture(const MoeCombineArgs &args, const WorkspaceLayout &workspaceLayout,
-                           const PeerWindowLayout &peerWindowLayout, RuntimeState *state)
+                           const CombineRouteMetaLayout &routeMetaLayout, RuntimeState *state)
 {
     bool verbose = VerboseRuntimeLogs(args);
     if (verbose) {
@@ -454,29 +460,29 @@ void PrepareCombineFixture(const MoeCombineArgs &args, const WorkspaceLayout &wo
     size_t expandedRows = static_cast<size_t>(shape.m) * shape.topK;
     size_t expertElements = static_cast<size_t>(shape.maxOutputSize) * shape.k;
     auto *workspaceBase = reinterpret_cast<uint8_t *>(state->buffers.workspace);
-    auto *peerBase = reinterpret_cast<uint8_t *>(state->hccl.peerWindow);
+    auto *routeMetaBase = reinterpret_cast<uint8_t *>(state->buffers.routeMeta);
 
     auto prepareStart = std::chrono::steady_clock::now();
 
-    CheckAcl(aclrtMemcpy(workspaceBase + workspaceLayout.cumsumPerExpert,
+    CheckAcl(aclrtMemcpy(routeMetaBase + routeMetaLayout.cumsumPerExpert,
                          BytesOfI32Vector(state->golden.cumsumPerExpert.size()), state->golden.cumsumPerExpert.data(),
                          BytesOfI32Vector(state->golden.cumsumPerExpert.size()), ACL_MEMCPY_HOST_TO_DEVICE),
              "rank " + std::to_string(state->rank) + " copy fixture cumsumPerExpert");
-    CheckAcl(aclrtMemcpy(workspaceBase + workspaceLayout.dispatchOffset,
+    CheckAcl(aclrtMemcpy(routeMetaBase + routeMetaLayout.dispatchOffset,
                          BytesOfI32Vector(state->golden.dispatchOffset.size()), state->golden.dispatchOffset.data(),
                          BytesOfI32Vector(state->golden.dispatchOffset.size()), ACL_MEMCPY_HOST_TO_DEVICE),
              "rank " + std::to_string(state->rank) + " copy fixture dispatchOffset");
     CheckAcl(
-        aclrtMemcpy(workspaceBase + workspaceLayout.prevSumBeforeRank,
+        aclrtMemcpy(routeMetaBase + routeMetaLayout.prevSumBeforeRank,
                     BytesOfI32Vector(state->golden.prevSumBeforeRank.size()), state->golden.prevSumBeforeRank.data(),
                     BytesOfI32Vector(state->golden.prevSumBeforeRank.size()), ACL_MEMCPY_HOST_TO_DEVICE),
         "rank " + std::to_string(state->rank) + " copy fixture prevSumBeforeRank");
     CheckAcl(
-        aclrtMemcpy(peerBase + peerWindowLayout.peerTokenPerExpert,
+        aclrtMemcpy(routeMetaBase + routeMetaLayout.peerTokenPerExpert,
                     BytesOfI32Vector(state->golden.peerTokenPerExpert.size()), state->golden.peerTokenPerExpert.data(),
                     BytesOfI32Vector(state->golden.peerTokenPerExpert.size()), ACL_MEMCPY_HOST_TO_DEVICE),
         "rank " + std::to_string(state->rank) + " copy fixture peerTokenPerExpert");
-    CheckAcl(aclrtMemcpy(peerBase + peerWindowLayout.expandedRowIdx,
+    CheckAcl(aclrtMemcpy(routeMetaBase + routeMetaLayout.expandedRowIdx,
                          BytesOfI32Vector(state->golden.expandedRowIdx.size()), state->golden.expandedRowIdx.data(),
                          BytesOfI32Vector(state->golden.expandedRowIdx.size()), ACL_MEMCPY_HOST_TO_DEVICE),
              "rank " + std::to_string(state->rank) + " copy fixture expandedRowIdx");
@@ -519,8 +525,8 @@ struct CombineReturnDump {
     std::vector<int32_t> combineDoneSignal;
 };
 
-void CopyCombineReturnToHost(const MoeCombineArgs &args, const PeerWindowLayout &peerWindowLayout,
-                             RuntimeState *state, CombineReturnDump *dump)
+void CopyCombineReturnToHost(const MoeCombineArgs &args, const PeerWindowLayout &peerWindowLayout, RuntimeState *state,
+                             CombineReturnDump *dump)
 {
     const MoeCombineShape &shape = args.shape;
     size_t expandedRows = static_cast<size_t>(shape.m) * shape.topK;
@@ -538,8 +544,7 @@ void CopyCombineReturnToHost(const MoeCombineArgs &args, const PeerWindowLayout 
     dump->ptrD = HalfBitsToFloatVector(ptrDHalf);
 }
 
-void ClearCombineReturnState(const MoeCombineArgs &args, const PeerWindowLayout &peerWindowLayout,
-                             RuntimeState *state)
+void ClearCombineReturnState(const MoeCombineArgs &args, const PeerWindowLayout &peerWindowLayout, RuntimeState *state)
 {
     bool verbose = VerboseRuntimeLogs(args);
     if (verbose) {
@@ -604,8 +609,9 @@ void RunCombine(const MoeCombineArgs &args, const PeerWindowLayout &peerWindowLa
     LaunchMoeCombineKernel(
         launchShape, state->rank, reinterpret_cast<uint8_t *>(state->buffers.expertOutput),
         reinterpret_cast<uint8_t *>(state->buffers.probs), reinterpret_cast<uint8_t *>(state->buffers.outputC),
-        reinterpret_cast<uint8_t *>(state->hccl.peerWindow), reinterpret_cast<uint8_t *>(state->hccl.deviceContext),
-        reinterpret_cast<uint8_t *>(state->buffers.workspace), state->computeStream, launchBlocks);
+        reinterpret_cast<uint8_t *>(state->buffers.routeMeta), reinterpret_cast<uint8_t *>(state->hccl.peerWindow),
+        reinterpret_cast<uint8_t *>(state->hccl.deviceContext), reinterpret_cast<uint8_t *>(state->buffers.workspace),
+        state->computeStream, launchBlocks);
     CheckAcl(aclrtSynchronizeStream(state->computeStream),
              "rank " + std::to_string(state->rank) + " combine stream sync");
     MpiBarrier(&state->mpi);
@@ -687,7 +693,8 @@ void VerifyAndDump(const MoeCombineArgs &args, RuntimeState *state)
 }
 
 void PrintPerformanceConfig(const MoeCombineArgs &args, const WorkspaceLayout &workspaceLayout,
-                            const PeerWindowLayout &peerWindowLayout, uint32_t rank)
+                            const CombineRouteMetaLayout &routeMetaLayout, const PeerWindowLayout &peerWindowLayout,
+                            uint32_t rank)
 {
     if (!VerboseRuntimeLogs(args)) {
         return;
@@ -696,8 +703,8 @@ void PrintPerformanceConfig(const MoeCombineArgs &args, const WorkspaceLayout &w
     uint32_t peerShards = args.shape.ep < aivBlocks ? args.shape.ep : aivBlocks;
     std::cout << "rank=" << rank << " aiv_blocks=" << aivBlocks << " tile_cols=" << args.shape.tileCols
               << " peer_window_bytes=" << peerWindowLayout.totalBytes
-              << " workspace_bytes=" << workspaceLayout.totalBytes << " combine_peer_shards=" << peerShards
-              << std::endl;
+              << " route_meta_bytes=" << routeMetaLayout.totalBytes << " workspace_bytes=" << workspaceLayout.totalBytes
+              << " combine_peer_shards=" << peerShards << std::endl;
 }
 
 void Cleanup(RuntimeState *state)
@@ -722,6 +729,9 @@ void Cleanup(RuntimeState *state)
         }
         if (state->buffers.outputC != nullptr) {
             aclrtFree(state->buffers.outputC);
+        }
+        if (state->buffers.routeMeta != nullptr) {
+            aclrtFree(state->buffers.routeMeta);
         }
         if (state->buffers.workspace != nullptr) {
             aclrtFree(state->buffers.workspace);
@@ -759,15 +769,15 @@ int main(int argc, char **argv)
     try {
         moe_combine::MoeCombineArgs args = moe_combine::ParseArgs(argc, argv);
         moe_combine::ValidateArgs(args);
-        moe_combine::WorkspaceLayout workspaceLayout =
-            moe_combine::ComputeWorkspaceLayout(args.shape);
-        moe_combine::PeerWindowLayout peerWindowLayout =
-            moe_combine::ComputePeerWindowLayout(args.shape);
+        moe_combine::WorkspaceLayout workspaceLayout = moe_combine::ComputeWorkspaceLayout(args.shape);
+        moe_combine::CombineRouteMetaLayout routeMetaLayout = moe_combine::ComputeCombineRouteMetaLayout(args.shape);
+        moe_combine::PeerWindowLayout peerWindowLayout = moe_combine::ComputePeerWindowLayout(args.shape);
         uint64_t hcclBuffSizeMb = args.runtime.hcclBuffSizeMb == 0 ?
                                       moe_combine::EstimateHcclBuffSizeMb(args.shape, peerWindowLayout) :
                                       args.runtime.hcclBuffSizeMb;
         moe_combine::PrintRunSummary(args);
         std::cout << "workspace_bytes=" << workspaceLayout.totalBytes << "\n";
+        std::cout << "route_meta_bytes=" << routeMetaLayout.totalBytes << "\n";
         std::cout << "peer_window_bytes=" << peerWindowLayout.totalBytes << "\n";
         std::cout << "HCCL_BUFFSIZE=" << hcclBuffSizeMb << std::endl;
 
@@ -789,7 +799,7 @@ int main(int argc, char **argv)
         moe_combine::BindDeviceContinuous(args, &state);
         moe_combine::CreateStreams(args, &state);
         moe_combine::InitHccl(&state, args, peerWindowLayout);
-        moe_combine::AllocateLocalBuffers(args, workspaceLayout, &state);
+        moe_combine::AllocateLocalBuffers(args, workspaceLayout, routeMetaLayout, &state);
         moe_combine::CopyInputsToDevice(args, &state);
 
         if (args.runtime.skipKernels != 0) {
@@ -799,7 +809,7 @@ int main(int argc, char **argv)
             return 0;
         }
 
-        moe_combine::PrintPerformanceConfig(args, workspaceLayout, peerWindowLayout, state.rank);
+        moe_combine::PrintPerformanceConfig(args, workspaceLayout, routeMetaLayout, peerWindowLayout, state.rank);
         uint32_t totalIterations = args.runtime.warmup + args.runtime.iters;
         std::vector<moe_combine::IterationTiming> measureTimings;
         measureTimings.reserve(args.runtime.iters);
@@ -810,8 +820,8 @@ int main(int argc, char **argv)
                 std::cout << "rank=" << state.rank << " iteration=" << (iter - args.runtime.warmup)
                           << " phase=measure begin" << std::endl;
             }
-            moe_combine::ClearDeviceState(args, workspaceLayout, peerWindowLayout, &state);
-            moe_combine::PrepareCombineFixture(args, workspaceLayout, peerWindowLayout, &state);
+            moe_combine::ClearDeviceState(args, workspaceLayout, routeMetaLayout, peerWindowLayout, &state);
+            moe_combine::PrepareCombineFixture(args, workspaceLayout, routeMetaLayout, &state);
             moe_combine::RunCombine(args, peerWindowLayout, &state);
             if (args.runtime.combineReturnOnly != 0) {
                 moe_combine::MpiBarrier(&state.mpi);
