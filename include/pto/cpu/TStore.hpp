@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cassert>
 #include "pto/cpu/parallel.hpp"
 #include "common.hpp"
+#include "nz_utils.hpp"
 
 namespace pto {
 
@@ -104,26 +105,6 @@ __tf__ PTO_INLINE void StorePlain(typename GlobalData::DType __out__ *dst, typen
     }
 }
 
-template <typename GlobalData>
-PTO_INLINE size_t GetNZGlobalOffset(size_t r, size_t c, int gShape3, int gShape4)
-{
-constexpr size_t innerRows = 16;
-constexpr size_t innerCols = 8;
-
-size_t blockRow = r / innerRows;
-size_t innerRow = r % innerRows;
-
-size_t blockCol = c / innerCols;
-size_t innerCol = c % innerCols;
-
-size_t numBlockCols = (gShape4 + innerCols - 1) / innerCols;
-
-return blockRow * numBlockCols * innerRows * innerCols +
-blockCol * innerRows * innerCols +
-innerRow * innerCols +
-innerCol;
-}
-
 template <typename GlobalData, typename TileData, QuantModeCPU_t quantMode, bool applyRelu>
 __tf__ PTO_INLINE void StoreSubfractalMatrix(typename GlobalData::DType __out__ *dst,
                                              typename TileData::TileDType __in__ src,
@@ -158,150 +139,67 @@ __tf__ PTO_INLINE void StoreSubfractalMatrix(typename GlobalData::DType __out__ 
         });
 }
 
-template <typename GlobalData, typename TileData,
-          QuantModeCPU_t quantMode, bool applyRelu>
-__tf__ PTO_INLINE void StoreSubfractalMatrixNZ(
+template <
+    typename GlobalData,
+    typename TileData,
+    QuantModeCPU_t quantMode,
+    bool applyRelu>
+__tf__ PTO_INLINE void TStore(
     typename GlobalData::DType __out__ *dst,
     typename TileData::TileDType __in__ src,
     const std::vector<uint64_t> &scalars,
+    int gShape0,
+    int gShape1,
+    int gShape2,
     int gShape3,
     int gShape4,
+    int gStride0,
+    int gStride1,
+    int gStride2,
+    int gStride3,
+    int gStride4,
     int validRow,
     int validCol)
 {
-    using D = typename GlobalData::DType;
-    using S = typename TileData::DType;
+    assert(
+        gShape0 *
+        gShape1 *
+        gShape2 *
+        gShape3 *
+        gShape4 >=
+        validRow * validCol);
 
-    constexpr size_t innerRows = 16;
-    constexpr size_t innerCols = 8;
-
-    cpu::parallel_for_1d(
-        0,
-        static_cast<std::size_t>(gShape4),
-        static_cast<std::size_t>(gShape3) * gShape4,
-        [&](std::size_t c) {
-
-            size_t subTileC = c / TileData::InnerCols;
-            size_t innerC = c % TileData::InnerCols;
-
-            for (size_t r = 0;
-                 r < static_cast<std::size_t>(gShape3);
-                 r++) {
-
-                size_t subTileR = r / TileData::InnerRows;
-                size_t innerR = r % TileData::InnerRows;
-
-                size_t tile_idx =
-                    GetTileElementOffsetSubfractals<TileData>(
-                        subTileR,
-                        innerR,
-                        subTileC,
-                        innerC);
-
-                size_t blockRow = r / innerRows;
-                size_t blockCol = c / innerCols;
-
-                size_t numBlockCols =
-                    (gShape4 + innerCols - 1) / innerCols;
-
-                size_t gd_idx =
-                    blockRow * numBlockCols *
-                        innerRows * innerCols +
-                    blockCol * innerRows * innerCols +
-                    innerR * innerCols +
-                    innerC;
-
-                if constexpr (quantMode != QuantModeCPU_t::NoQuant) {
-
-                    size_t scalarIndex =
-                        TileData::isRowMajor ? c : r;
-
-                    uint64_t scalar = scalars[scalarIndex];
-
-                    dst[gd_idx] =
-                        quantize_element<D,
-                                         S,
-                                         quantMode,
-                                         applyRelu>(
-                            src[tile_idx],
-                            scalar);
-
-                } else {
-
-                    S val = src[tile_idx];
-
-                    if constexpr (applyRelu) {
-                        val = ReLU(val);
-                    }
-
-                    dst[gd_idx] = static_cast<D>(val);
-                }
-            }
-        });
-}
-
-template <typename GlobalData, typename TileData, QuantModeCPU_t quantMode, bool applyRelu>
-__tf__ PTO_INLINE void TStore(typename GlobalData::DType __out__ *dst, typename TileData::TileDType __in__ src,
-                              const std::vector<uint64_t> &scalars, int gShape0, int gShape1, int gShape2, int gShape3,
-                              int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-                              int validRow, int validCol)
-{
-    assert(gShape0 * gShape1 * gShape2 * gShape3 * gShape4 >= validRow * validCol);
     if constexpr (GlobalData::layout == pto::Layout::NZ) {
         using D = typename GlobalData::DType;
         using S = typename TileData::DType;
-        constexpr size_t innerRows = 16;
-        constexpr size_t innerCols = 8;
-        cpu::parallel_for_1d(
-            0,
-            static_cast<std::size_t>(gShape4),
-            static_cast<std::size_t>(gShape3) * gShape4,
-            [&](std::size_t c) {
 
-            size_t subTileC = c / TileData::InnerCols;
-            size_t innerC = c % TileData::InnerCols;
+        ForEachNZElement<TileData>(
+            gShape3,
+            gShape4,
+            [&](size_t r,
+                size_t c,
+                size_t tile_idx,
+                size_t gd_idx) {
 
-            for (size_t r = 0;
-                 r < static_cast<std::size_t>(gShape3);
-                 r++) {
-
-                size_t subTileR = r / TileData::InnerRows;
-                size_t innerR = r % TileData::InnerRows;
-
-                size_t tile_idx =
-                    GetTileElementOffsetSubfractals<TileData>(
-                        subTileR,
-                        innerR,
-                        subTileC,
-                        innerC);
-
-                size_t blockRow = r / innerRows;
-                size_t blockCol = c / innerCols;
-
-                size_t numBlockCols =
-                    (gShape4 + innerCols - 1) / innerCols;
-
-                size_t gd_idx =
-                    blockRow * numBlockCols *
-                        innerRows * innerCols +
-                    blockCol * innerRows * innerCols +
-                    innerR * innerCols +
-                    innerC;
-
-                if constexpr (quantMode != QuantModeCPU_t::NoQuant) {
+                if constexpr (
+                    quantMode != QuantModeCPU_t::NoQuant) {
 
                     size_t scalarIndex =
-                        TileData::isRowMajor ? c : r;
+                        TileData::isRowMajor
+                            ? c
+                            : r;
 
-                    uint64_t scalar = scalars[scalarIndex];
+                    uint64_t scalar =
+                        scalars[scalarIndex];
 
                     dst[gd_idx] =
-                        quantize_element<D,
-                                         S,
-                                         quantMode,
-                                         applyRelu>(
-                            src[tile_idx],
-                            scalar);
+                        quantize_element<
+                            D,
+                            S,
+                            quantMode,
+                            applyRelu>(
+                                src[tile_idx],
+                                scalar);
 
                 } else {
 
@@ -311,12 +209,14 @@ __tf__ PTO_INLINE void TStore(typename GlobalData::DType __out__ *dst, typename 
                         val = ReLU(val);
                     }
 
-                    dst[gd_idx] = static_cast<D>(val);
+                    dst[gd_idx] =
+                        static_cast<D>(val);
                 }
-            }
-        });
+            });
 
-    } else if (TileData::SFractal == SLayout::NoneBox) {
+    } else if (
+        TileData::SFractal ==
+        SLayout::NoneBox) {
 
         StorePlain<
             GlobalData,
@@ -341,10 +241,12 @@ __tf__ PTO_INLINE void TStore(typename GlobalData::DType __out__ *dst, typename 
 
     } else {
 
-        assert(gShape0 == 1 &&
-               gShape1 == 1 &&
-               gShape2 == 1 &&
-               "Nz,Zn -> ND,DN convertion does support only 2D GMs");
+        assert(
+            gShape0 == 1 &&
+            gShape1 == 1 &&
+            gShape2 == 1 &&
+            "Nz,Zn -> ND,DN convertion "
+            "does support only 2D GMs");
 
         StoreSubfractalMatrix<
             GlobalData,
