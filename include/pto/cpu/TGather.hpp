@@ -99,7 +99,7 @@ PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS0 &src0, TileDataS1 &src
     TGather<TileDataD, TileDataS0, TileDataS1>(dst.data(), src0.data(), src1.data(), validCol, validRow);
 }
 
-template <typename DstTileData, typename SrcTileData, MaskPattern maskPattern>
+template <MaskPattern maskPattern, auto gatherType = GatherAxis::GATHER_ROW, typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TGather(typename DstTileData::TileDType dst, typename SrcTileData::TileDType src, unsigned validRow,
                           unsigned validCol)
 {
