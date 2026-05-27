@@ -386,7 +386,7 @@ PTO_INTERNAL void TMovNd2NzLoop(__ubuf__ WorkT *srcPtr, __ubuf__ WorkT *dstPtr, 
     MaskReg preg;
     uint32_t cols = validCol;
     for (uint16_t j = 0; j < repeatTimes; ++j) {
-        uint32_t count = cols > elementsPerRepeat ? elementsPerRepeat : cols;
+        uint32_t count = cols - static_cast<uint32_t>(cols > elementsPerRepeat) * (cols - elementsPerRepeat);
         preg = CreatePredicate<WorkT>(count);
         for (uint16_t i = 0; i < innerLoopNum; ++i) {
             vlds(vreg, srcPtr, SrcTileData::RowStride, NORM, POST_UPDATE);

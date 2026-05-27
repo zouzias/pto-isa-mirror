@@ -39,7 +39,7 @@ struct RowExpandSubOp2 {
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, unsigned elementsPerRepeat,
           unsigned blockSizeElem>
-__tf__ AICORE OP_NAME(TROWEXPANDSUB)
+__tf__ PTO_INTERNAL OP_NAME(TROWEXPANDSUB)
     OP_TYPE(broadcast) void TRowExpandSub(typename TileDataDst::TileDType __out__ dst,
                                           typename TileDataSrc0::TileDType __in__ src0,
                                           typename TileDataSrc1::TileDType __in__ src1, bool src0eqdst,

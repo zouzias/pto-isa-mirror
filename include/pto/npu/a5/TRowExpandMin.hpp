@@ -30,7 +30,7 @@ struct RowExpandMinOp {
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, unsigned elementsPerRepeat,
           unsigned blockSizeElem>
-__tf__ AICORE OP_NAME(TROWEXPANDMIN)
+__tf__ PTO_INTERNAL OP_NAME(TROWEXPANDMIN)
     OP_TYPE(broadcast) void TRowExpandMin(typename TileDataDst::TileDType __out__ dst,
                                           typename TileDataSrc0::TileDType __in__ src0,
                                           typename TileDataSrc1::TileDType __in__ src1, unsigned validRow,
