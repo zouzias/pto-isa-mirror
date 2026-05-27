@@ -38,8 +38,13 @@ endif()
 
 set(ASCEND_DRIVER_PATH /usr/local/Ascend/driver)
 
-set(CMAKE_COMPILER bisheng)
-set(CMAKE_C_COMPILER ${CMAKE_COMPILER})
+# Compiler: honour `-DCMAKE_COMPILER=/path/to/compiler` from the CLI / run.sh.
+# Fall back to plain `bisheng` (resolved from PATH) if nothing was passed.
+if(NOT DEFINED CMAKE_COMPILER OR CMAKE_COMPILER STREQUAL "")
+    set(CMAKE_COMPILER bisheng)
+endif()
+message(STATUS "Using compiler: ${CMAKE_COMPILER}")
+set(CMAKE_C_COMPILER   ${CMAKE_COMPILER})
 set(CMAKE_CXX_COMPILER ${CMAKE_COMPILER})
 
 add_compile_options(

@@ -47,15 +47,6 @@ import numpy as np
 np.random.seed(42)
 
 
-def load_generated_case():
-    case_path = Path(__file__).resolve().parent.parent / "build" / "generated_cases.json"
-    if not case_path.exists():
-        return {"seq_len": 128, "hidden": 4096, "num_heads": 32, "head_dim": 128, "latent": 64, "rope_dim": 64}
-    with case_path.open("r", encoding="utf-8") as f:
-        cases = json.load(f)
-    return cases[0]
-
-
 def small_uniform(shape, lo=-1.0, hi=1.0):
     return np.random.uniform(low=lo, high=hi, size=shape).astype(np.float16)
 

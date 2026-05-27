@@ -125,8 +125,13 @@ for CASE in "${CASE_LIST[@]}"; do
         continue
     fi
 
-    # Step 3: gen_data.py picks up the active case from build/generated_cases.json.
-    if ! python3 ../scripts/gen_data.py --case "${CASE}" ; then
+    # Step 3: gen_data.py writes inputs/goldens to ./input and ./output
+    # relative to its CWD. main.cpp reads from ../input/ and ../output/
+    # (one level up from build/), so we must run gen_data.py from mla/
+    # (parent of build/) — i.e. clear any stale files and write fresh ones
+    # into the directories main.cpp will read.
+    rm -rf ../input ../output
+    if ! ( cd .. && python3 scripts/gen_data.py --case "${CASE}" ) ; then
         echo "[RUN.SH] gen_data.py failed for ${CASE}"
         OVERALL_RC=1
         SUMMARY+=("${CASE}: GENDATA_FAIL")
@@ -154,6 +159,7 @@ for CASE in "${CASE_LIST[@]}"; do
     fi
 
     # Optional: post-mortem comparison (writes a richer report than main.cpp).
+    # compare_outputs.py reads ../output/, so it must be run from build/.
     python3 ../scripts/compare_outputs.py || true
 
     cd ..
