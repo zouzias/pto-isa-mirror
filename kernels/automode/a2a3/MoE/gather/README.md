@@ -61,12 +61,29 @@ exp(-inf)         =  0
 
 A3 / Ascend 910B1. Vec target (`--cce-aicore-arch=dav-c220-vec`).
 
+## Parallelism (v2): vec-subcore SPMD
+
+Vec arch on A3 hosts 2 independent vec subcores per AI core. The kernel launches `gather_cfg::kBlockDim` AI cores and uses `(get_block_idx(), get_subblockid())` to address up to `kBlockDim * 2 ≤ 48` work slices. The unique subcore id is
+
+```
+uid = block_idx * 2 + subblockid
+```
+
+- **kTopK == 1 fast path**: each subcore owns a disjoint slice of `[0, kPackedRows)`. `A_id` is a permutation when `kTopK == 1`, so output rows written by different subcores are also disjoint — no cross-subcore race on `C`.
+- **kTopK > 1 path**: each subcore owns a disjoint slice of the token axis `[0, kT)`.
+  - Pass 1 softmax operates only on its slice of `outVal` / `weights_scratch`.
+  - Pass 2 scans the full packed-rows axis but gates on `tStart ≤ A_id[r] < tEnd`, so `C[t]` writes are partitioned by `t`-range across subcores.
+
+## Pipeline (v2): multi-buffered row loop on the kTopK == 1 path
+
+The kTopK == 1 row body (`TLOAD(B[r]) → TSTORE(C[t])`) is wrapped in `MultiBuffered<2>::loop<Range<kRowsPerSubcoreMax>>`. `bTile` is declared inside the lambda so each ping-pong lane owns its own L1 buffer, letting MTE2 (TLOAD of iter N+1) overlap MTE3 (TSTORE of iter N). The `Range` upper bound is the worst-case per-subcore slice; shorter slices gate at `i >= myRows`.
+
+The kTopK > 1 pass-2 loop is **not** multi-buffered. Within one subcore the same `t` appears `kTopK` times across the scanned `r` iterations, and ping-ponging `(b, c)Tile` lanes would let iter N+1's TLOAD(C[t]) issue before iter N's TSTORE(C[t]) committed, racing the RMW when adjacent gated iterations alias on `t`. The single-buffered v1 chain is preserved.
+
 ## Auto-mode constraints honored
 
-- Single AICORE (`<<<1, nullptr, stream>>>`).
-- Static softmax tiles (pass 1) and static row tiles (pass 2), all declared once outside any loop; auto allocator pins their UB addresses.
-- `pipe_barrier(PIPE_ALL)` at the start of each pass-2 row iteration (hardware-confirmed cross-iter auto-sync guard).
-- No `TASSIGN` aliasing, no `Tile::data()` in kernel, no `*_IMPL` calls, no raw CCE intrinsics, no `Event<>`, no manual sync, no `TPipe`/`TPUSH`/`TPOP`, no double buffering.
+- Static row tile declared inside the multi-buffered lambda (one buffer per ping-pong lane); dynamic-valid softmax tiles sized for the worst-case per-subcore slice and constructed with the runtime row count.
+- No `TASSIGN` aliasing, no `Tile::data()` in kernel, no `*_IMPL` calls, no raw CCE intrinsics, no `Event<>`, no manual sync, no `TPipe`/`TPUSH`/`TPOP`. The only sanctioned pipeline construct is the `MultiBuffered` helper from [`multiBuffer.hpp`](multiBuffer.hpp).
 
 ## Initialization
 
@@ -102,15 +119,15 @@ Three places to update together:
 
 For `kT=512, kTopK=16` the auto allocator must reuse UB slots aggressively (e.g., alias `weightTile` onto `expTile` once the divide writes it). If the build fails there, the fix is to chunk pass 1 (e.g., process 256 tokens at a time across two outer iterations).
 
-## Known limitations (v1)
+## Known limitations
 
-- Single AICORE; no `block_idx` work split.
 - fp32 only (matches `expert_ffn`'s fp32 output; an fp16 path would need a different accumulator type).
-- For `kTopK > 1` the accumulation is serial and order-dependent in fp32 (catastrophic cancellation possible for adversarial inputs; not a concern for the v1 test distribution at this magnitude).
-- No double-buffering.
+- For `kTopK > 1` the per-token accumulation within one subcore is serial and order-dependent in fp32 (catastrophic cancellation possible for adversarial inputs; not a concern for the test distribution at this magnitude).
+- kTopK > 1 pass 2 is single-buffered (see the multi-buffer note above for the RMW reason).
 - The pass-1 chain `TROWMAX → TROWEXPANDSUB → TEXP → TROWSUM → TROWEXPANDDIV` is the same composition as the in-tree FA softmax macro **plus** the final divide. The macro is manual-mode and inserts `pipe_barrier(PIPE_V)` between phases; this auto-mode kernel relies on `__PTO_AUTO__` to insert the RAW edges. If outputs come back wrong, that's the first thing to suspect.
 
 ## Pattern sources
 
 - Softmax recipe: [tests/npu/a2a3/src/st/testcase/tfa/pto_macro_fa_softmax.hpp:54-60](../../../../tests/npu/a2a3/src/st/testcase/tfa/pto_macro_fa_softmax.hpp#L54-L60).
 - Pass-2 row TLOAD → TADD → TSTORE skeleton: [moe_top1_unpermute_kernel.cpp](../../../../kernels/automode/a2a3/moe_top1_unpermute/moe_top1_unpermute_kernel.cpp) (§A14 / §11.5).
+- `MultiBuffered<2>::loop<Range<N>>` + `block_idx` SPMD pattern: [router_matmul_kernel.cpp](../router_matmul/router_matmul_kernel.cpp) and its [multiBuffer.hpp](../router_matmul/multiBuffer.hpp).

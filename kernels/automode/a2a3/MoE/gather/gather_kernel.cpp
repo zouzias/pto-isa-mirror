@@ -21,7 +21,8 @@
  *
  *   if constexpr (kTopK == 1):
  *       // Fast path: softmax of a single value is always 1.0, and each token
- *       // has exactly one packed row. The gather degenerates to a row reorder.
+ *       // has exactly one packed row. The gather degenerates to a row reorder
+ *       // and A_id is a permutation of [0, kT) -> output rows are disjoint.
  *       for r in [0, kPackedRows):
  *           t = A_id[r]
  *           TLOAD bTile from B[r]
@@ -51,83 +52,98 @@
  *           TSTORE C[t]       = sumTile
  *
  * ===========================================================================
- * Tile-based softmax composition (kTopK > 1 only)
+ * Parallelism (v2): vec-subcore SPMD via (block_idx, subblockid)
  * ===========================================================================
  *
- * The five-instruction softmax recipe is lifted from the manual-mode Flash
- * Attention softmax macro [tests/npu/a2a3/src/st/testcase/tfa/
- * pto_macro_fa_softmax.hpp:54-60]. Differences:
- *   - We add the final TROWEXPANDDIV step (FA uses online-softmax rescaling).
- *   - No manual `pipe_barrier(PIPE_V)` between stages — auto-mode is expected
- *     to insert the RAW edges; if it doesn't, that's the first thing to suspect
- *     if the kernel produces wrong numbers.
+ * Vec arch on A3: each AI core hosts 2 independent vec subcores; we launch
+ * `kBlockDim` AI cores and use `get_subblockid()` to distinguish the two
+ * vec subcores inside one AI core. The unique subcore id is:
  *
- * The TROWEXPANDSUB / TROWEXPANDDIV broadcast-tile contract accepts a DN
- * scalar row-vector (`BLayout::ColMajor`, validCol == 1). TROWMAX/TROWSUM
- * produce exactly one scalar per row, so max/sum use that layout.
+ *     uid = block_idx * 2 + subblockid          // [0, kBlockDim*2)
  *
- * ===========================================================================
- * Why outVal cols kTopK..kPadded-1 are host-padded with -1e30
- * ===========================================================================
+ * `kTotalSubcores = kBlockDim * 2` and is the number of work slices. The
+ * launch dim is chosen so `kTotalSubcores <= min(kT, kMaxVecSubcores=48)`.
  *
- * For kTopK in {1, 2, 4}, kPadded = 8 (32-byte alignment for fp32 UB).
- * The valid softmax inputs are outVal[:, 0..kTopK). Cols kTopK..7 are
- * "padding" — but TROWMAX, TROWEXPANDSUB, TEXP, TROWSUM all read the full
- * tile width. If padding values were random, they'd corrupt the per-row
- * max (and through it, the softmax denominator and the weights).
+ *   - kTopK == 1: split the packed-rows axis [0, kPackedRows) across all
+ *     subcores. A_id is a permutation when kTopK==1, so output rows written
+ *     by different subcores are disjoint. No cross-subcore sync needed.
  *
- * Filling padding with -1e30 (a very large negative) makes the softmax
- * pipeline neutralize them automatically:
- *     -1e30 - real_max  ≈ -inf
- *     exp(-inf)         = 0
- *     0 contributes nothing to the row sum.
- *     0 / real_sum      = 0
- * So padding cols of weights_scratch end up at 0.0, which is what we want —
- * rank_id from scatter only takes values in [0, kTopK), so we never look up
- * a padding column at gather time.
- *
- * The host (scripts/gen_data.py for standalone, or a small pad step in the
- * end-to-end driver) is responsible for the -1e30 fill. Both pass the same
- * pre-padded outVal blob to this kernel.
+ *   - kTopK > 1: split the token axis [0, kT) across all subcores.
+ *       - Pass 1: each subcore computes softmax for its token slice and
+ *         writes the corresponding rows of weights_scratch. Slices are
+ *         disjoint, so weights_scratch writes don't race.
+ *       - Pass 2: each subcore scans all r in [0, kPackedRows) but gates
+ *         on `tStart <= A_id[r] < tEnd`. The full scan keeps the loop bound
+ *         compile-time and avoids needing a reverse (t -> r) map; for matched
+ *         iters it does the TLOAD/TMULS/TLOAD/TADD/TSTORE chain. C[t] writes
+ *         are partitioned by t-range across subcores, so no cross-subcore
+ *         race on C either.
  *
  * ===========================================================================
- * Auto-mode constraints honored (mirror moe_top1_unpermute / FA softmax macro)
+ * Pipeline (v2): MultiBuffered<2> on kTopK == 1 row loop
  * ===========================================================================
  *
- *   - Single AICORE (<<<1, nullptr, stream>>>).
- *   - Static row + softmax tiles declared once outside any loop.
- *   - pipe_barrier(PIPE_ALL) at the start of each row iteration in pass 2
- *     (same hardware-confirmed cross-iter auto-sync guard used in topk_kernel
- *     and the v1 gather).
+ * For the kTopK == 1 fast path, the per-row body is TLOAD(b) -> TSTORE(C[t]).
+ * Adjacent iterations have disjoint B source rows and disjoint C dest rows
+ * (A_id is a permutation), so we wrap the inner-row body in
+ * `MultiBuffered<2>::loop<Range<kRowsPerSubcoreMax>>` to ping-pong bTile across
+ * two L1 lanes. This overlaps MTE2 (TLOAD of iter N+1) with MTE3 (TSTORE of
+ * iter N). The Range upper bound is the worst-case subcore slice size; the
+ * lambda gates on `i >= myRows` for subcores with a shorter slice.
+ *
+ * The kTopK > 1 pass-2 loop is NOT multi-buffered: it does a read-modify-write
+ * on C[t] and within one subcore the same `t` appears `kTopK` times across
+ * the scanned `r` iterations. Ping-pong on (b, c)Tile would let iter N+1's
+ * TLOAD(C[t]) issue before iter N's TSTORE(C[t]) committed, racing the RMW
+ * when adjacent gated iterations alias on `t`. Keeping pass 2 single-buffered
+ * defers ordering to auto-mode's default per-tile dataflow analysis (the same
+ * behavior the v1 kernel relied on).
+ *
+ * ===========================================================================
+ * Host/AICORE separation
+ * ===========================================================================
+ *
+ * `gather_cfg::kBlockDim` is a plain `constexpr unsigned` (no AICORE-qualified
+ * helpers), so the host launchGather can read it directly to size the launch
+ * grid. The kernel uses the same constant — no duplicate host mirror needed.
+ *
+ * ===========================================================================
+ * Auto-mode constraints honored
+ * ===========================================================================
+ *
+ *   - Static row tile (Tile<Vec, T, 1, kH, RowMajor, 1, kH>) declared inside
+ *     the multi-buffered lambda (kTopK == 1) so each lane gets its own buffer.
+ *   - Dynamic-valid softmax tiles (kTopK > 1 pass 1) sized for the worst-case
+ *     per-subcore slice and constructed with the runtime row count.
  *   - GlobalTensor reconstructed per iteration with (base + runtime offset)
  *     for pass-2 row addresses.
  *   - No `TASSIGN`, no `Tile::data()` in kernel, no `*_IMPL` calls, no raw CCE
- *     intrinsics, no `Event<>`, no manual sync, no `TPipe`/`TPUSH`/`TPOP`,
- *     no double buffering, no A5-only ops.
+ *     intrinsics, no `Event<>`, no manual sync, no `TPipe`/`TPUSH`/`TPOP`.
+ *     The only sanctioned pipeline construct is the `MultiBuffered` helper.
  *
- * Limitations (v1):
- *   - Single AICORE; no block_idx parallelism.
+ * Limitations:
  *   - fp32 only.
- *   - Static (kT, kPadded) softmax tiles — UB budget is ~96 KB at kT=256
- *     kPadded=16 (well under 192 KB) but ~192 KB at kT=512 kPadded=16
- *     (right at the UB limit; if it fails there, we chunk).
- *   - Trusts auto-mode RAW dependency analysis through the
- *     TROWMAX -> TROWEXPANDSUB -> TEXP -> TROWSUM -> TROWEXPANDDIV chain.
- *     The manual-mode FA macro adds `pipe_barrier(PIPE_V)` between phases;
- *     if auto-mode mis-handles this, weights will be wrong.
+ *   - kT==0 is rejected by static_assert.
  *
  * Pattern sources:
  *   - tests/npu/a2a3/src/st/testcase/tfa/pto_macro_fa_softmax.hpp (softmax recipe)
- *   - kernels/automode/a2a3/moe_top1_unpermute/moe_top1_unpermute_kernel.cpp
- *     (row TLOAD->TSTORE skeleton, §11.5)
+ *   - kernels/automode/a2a3/MoE/router_matmul/router_matmul_kernel.cpp
+ *     (MultiBuffered<2>::loop + block_idx SPMD pattern)
  */
 
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
 
 #include "generated_cases.h"
+#include "multiBuffer.hpp"
 
 using namespace pto;
+using namespace pto_auto;
+
+// Number of pipeline lanes for the multi-buffered row loop on the kTopK==1
+// fast path. 2 = ping-pong; MultiBuffered emits a `#pragma pto v_loop_barrier`
+// between lanes so the auto-mode compiler allocates one buffer per lane.
+constexpr int kNumBuffers = 2;
 
 namespace gather_cfg {
 
@@ -136,6 +152,8 @@ constexpr unsigned kT    = kMoeT;
 constexpr unsigned kH    = kMoeH;
 constexpr unsigned kTopK = kMoeTopK;
 
+static_assert(kT > 0, "kT must be > 0.");
+
 constexpr unsigned kPackedRows   = kT * kTopK;
 constexpr unsigned kOverspillPad = 16;
 constexpr unsigned kAlloc        = kPackedRows + kOverspillPad;
@@ -143,6 +161,32 @@ constexpr unsigned kAlloc        = kPackedRows + kOverspillPad;
 // Softmax tile column padding for 32-byte UB alignment.
 // fp32 needs Cols * 4 % 32 == 0  ->  Cols % 8 == 0.
 constexpr unsigned kPadded = (kTopK < 8) ? 8 : kTopK;
+
+// A3 vec-subcore SPMD. Each AI core hosts 2 vec subcores; we launch
+// kBlockDim AI cores and use (block_idx, subblockid) to address the
+// kTotalSubcores work slices.
+constexpr unsigned kMaxAICores            = 24;
+constexpr unsigned kVecSubcoresPerAICore  = 2;
+constexpr unsigned kMaxVecSubcores        = kMaxAICores * kVecSubcoresPerAICore;  // 48
+
+// We split work along the token axis (or packed-rows axis for kTopK == 1).
+// Both reduce to "at most kT independent slices", so we cap at min(kT, 48)
+// and round up to a pair so kBlockDim is integral. If the rounding leaves an
+// extra (kTotalSubcores > kT), the trailing subcore's slice is empty and its
+// loop bodies are gated out at runtime.
+constexpr unsigned kDesiredSubcores =
+    (kT < kMaxVecSubcores) ? kT : kMaxVecSubcores;
+constexpr unsigned kBlockDim =
+    (kDesiredSubcores + kVecSubcoresPerAICore - 1) / kVecSubcoresPerAICore;
+constexpr unsigned kTotalSubcores = kBlockDim * kVecSubcoresPerAICore;
+
+// Worst-case per-subcore slice size — used as the compile-time upper bound
+// for the multi-buffered Range and for the static allocation of dynamic-valid
+// softmax tiles.
+constexpr unsigned kRowsPerSubcoreMax =
+    (kPackedRows + kTotalSubcores - 1) / kTotalSubcores;
+constexpr unsigned kTokensPerSubcoreMax =
+    (kT + kTotalSubcores - 1) / kTotalSubcores;
 
 }  // namespace gather_cfg
 
@@ -166,19 +210,37 @@ __global__ AICORE void runGather(
                          BLayout::RowMajor,
                          1, kH>;
 
+    // Unique vec-subcore id across the full launch. kBlockDim AI cores × 2
+    // vec subcores per core = kTotalSubcores slices.
+    const unsigned bid = static_cast<unsigned>(get_block_idx());
+    const unsigned vid = static_cast<unsigned>(get_subblockid());
+    const unsigned uid = bid * kVecSubcoresPerAICore + vid;
+
     if constexpr (kTopK == 1) {
         // ============================================================
         // Fast path: softmax(single value) = 1.0, and each token has exactly
         // one packed row. This is a pure row reorder; C does not need to be
-        // read because there is nothing to accumulate.
+        // read because there is nothing to accumulate. A_id is a permutation
+        // when kTopK == 1, so subcores writing disjoint r-ranges also write
+        // disjoint C[t] rows — no cross-subcore race on C.
         // ============================================================
         (void)rank_id;
         (void)outVal;
         (void)weights_scratch;
 
-        RowTile bTile;
-        for (unsigned r = 0; r < kPackedRows; ++r) {
-            pipe_barrier(PIPE_ALL);
+        const unsigned rStart = (uid * kPackedRows) / kTotalSubcores;
+        const unsigned rEnd   = ((uid + 1) * kPackedRows) / kTotalSubcores;
+        const unsigned myRows = rEnd - rStart;
+
+        // Multi-buffered row loop. bTile is declared inside the lambda so
+        // each ping-pong lane owns its own L1 buffer; MTE2 (TLOAD) of lane
+        // N+1 overlaps MTE3 (TSTORE) of lane N. Range upper bound is the
+        // worst-case per-subcore slice; shorter slices are gated out.
+        MultiBuffered<kNumBuffers> row_db;
+        row_db.loop<Range<kRowsPerSubcoreMax>>([&](auto ctx) {
+            const unsigned i = static_cast<unsigned>(ctx.iter);
+            if (i >= myRows) return;
+            const unsigned r = rStart + i;
 
             int32_t t = A_id[r];                              // GM scalar read
 
@@ -188,42 +250,68 @@ __global__ AICORE void runGather(
             RowGlobal bGlobal(B + src_off);
             RowGlobal cGlobal(C + dst_off);
 
+            RowTile bTile;
             TLOAD(bTile, bGlobal);
             TSTORE(cGlobal, bTile);
-        }
+        });
     } else {
         // ============================================================
-        // Pass 1: softmax(outVal) -> weights_scratch.
-        // Pure-tile recipe; see comment block at top of file for sourcing.
+        // kTopK > 1 path. SPMD split on the token axis kT:
+        //   Pass 1: each subcore computes softmax for tokens [tStart, tEnd)
+        //           and writes its slice of weights_scratch.
+        //   Pass 2: each subcore scans r in [0, kPackedRows) and processes
+        //           only the rows whose A_id falls in [tStart, tEnd).
+        // C[t] writes are partitioned by t-range across subcores, so cross-
+        // subcore C races do not occur. Pass 2 is NOT multi-buffered: within
+        // one subcore the same t appears kTopK times across r, and pinging
+        // the (b,c)Tile lanes would let iter N+1 issue TLOAD(C[t]) before
+        // iter N's TSTORE(C[t]) committed.
         // ============================================================
-        using SoftmaxShape  = Shape <1, 1, 1, kT, kPadded>;
+        const unsigned tStart = (uid * kT) / kTotalSubcores;
+        const unsigned tEnd   = ((uid + 1) * kT) / kTotalSubcores;
+        const unsigned myT    = tEnd - tStart;
+
+        // Per-subcore softmax tile: allocate for the worst-case slice size,
+        // use dynamic valid rows for the actual runtime count.
+        using SoftmaxShape  = Shape <1, 1, 1, DYNAMIC, kPadded>;
         using SoftmaxStride = Stride<kT * kPadded, kT * kPadded, kT * kPadded, kPadded, 1>;
         using SoftmaxGlobal = GlobalTensor<T, SoftmaxShape, SoftmaxStride>;
 
-        using ValTile   = Tile<TileType::Vec, T, kT, kPadded, BLayout::RowMajor, kT, kPadded>;
-        using BcastTile = Tile<TileType::Vec, T, kT, 1,       BLayout::ColMajor, kT, 1>;
+        using ValTile   = Tile<TileType::Vec, T, kTokensPerSubcoreMax, kPadded,
+                               BLayout::RowMajor, DYNAMIC, kPadded>;
+        using BcastTile = Tile<TileType::Vec, T, kTokensPerSubcoreMax, 1,
+                               BLayout::ColMajor, DYNAMIC, 1>;
 
-        ValTile   valTile;
-        BcastTile maxTile;
-        ValTile   tmpTile;
-        ValTile   expTile;
-        BcastTile sumTile;
-        ValTile   weightTile;
+        // Pass 1: softmax slice. Guarded by myT > 0 because the rounding-up
+        // of kBlockDim can leave a tail subcore with an empty slice.
+        if (myT > 0) {
+            ValTile   valTile(myT);
+            BcastTile maxTile(myT);
+            ValTile   tmpTile(myT);
+            ValTile   expTile(myT);
+            BcastTile sumTile(myT);
+            ValTile   weightTile(myT);
 
-        SoftmaxGlobal outValGlobal (outVal);
-        SoftmaxGlobal weightsGlobal(weights_scratch);
+            size_t softOff = static_cast<size_t>(tStart) * kPadded;
+            SoftmaxShape softShape(myT);
+            SoftmaxGlobal outValGlobal (outVal          + softOff, softShape);
+            SoftmaxGlobal weightsGlobal(weights_scratch + softOff, softShape);
 
-        TLOAD(valTile, outValGlobal);                  // (kT, kPadded) <- host-padded GM
-        TROWMAX(maxTile, valTile, tmpTile);            // (kT, 1) row max
-        TROWEXPANDSUB(tmpTile, valTile, maxTile);      // val - max
-        TEXP(expTile, tmpTile);                        // exp(val - max)
-        TROWSUM(sumTile, expTile, tmpTile);            // (kT, 1) row sum
-        TROWEXPANDDIV(weightTile, expTile, sumTile);   // exp(...) / sum
-        TSTORE(weightsGlobal, weightTile);             // -> GM scratch
+            TLOAD(valTile, outValGlobal);                  // (myT, kPadded) <- host-padded GM
+            TROWMAX(maxTile, valTile, tmpTile);            // (myT, 1) row max
+            TROWEXPANDSUB(tmpTile, valTile, maxTile);      // val - max
+            TEXP(expTile, tmpTile);                        // exp(val - max)
+            TROWSUM(sumTile, expTile, tmpTile);            // (myT, 1) row sum
+            TROWEXPANDDIV(weightTile, expTile, sumTile);   // exp(...) / sum
+            TSTORE(weightsGlobal, weightTile);             // -> GM scratch slice
+        }
 
         // ============================================================
-        // Pass 2: weighted scatter-add. Per packed row:
-        //   C[t] += weights_scratch[t * kPadded + k] * B[r]
+        // Pass 2: weighted scatter-add over the subcore's t-range.
+        // Each subcore scans the full packed-rows axis and gates on the
+        // runtime check `tStart <= A_id[r] < tEnd`. Matched rows do the
+        // TLOAD/TMULS/TLOAD/TADD/TSTORE chain into C[t]. No multi-buffer
+        // here — see comment block above on the cross-iter RMW hazard.
         // ============================================================
         RowTile bTile;
         RowTile cTile;
@@ -231,11 +319,12 @@ __global__ AICORE void runGather(
         RowTile sumRowTile;
 
         for (unsigned r = 0; r < kPackedRows; ++r) {
-            pipe_barrier(PIPE_ALL);
-
             int32_t t = A_id[r];                                   // GM scalar read
+            if (static_cast<unsigned>(t) < tStart || static_cast<unsigned>(t) >= tEnd) {
+                continue;
+            }
             int32_t k = rank_id[r];                                // GM scalar read
-            T       w = weights_scratch[t * kPadded + k];          // GM scalar read
+            T       w = weights_scratch[static_cast<size_t>(t) * kPadded + k];  // GM scalar read
 
             size_t src_off = static_cast<size_t>(r) * kH;
             size_t dst_off = static_cast<size_t>(t) * kH;
@@ -258,7 +347,8 @@ void launchGather(T *C, T *B,
                   T *outVal, T *weights_scratch,
                   void *stream)
 {
-    runGather<T><<<1, nullptr, stream>>>(C, B, A_id, rank_id, outVal, weights_scratch);
+    runGather<T><<<gather_cfg::kBlockDim, nullptr, stream>>>(
+        C, B, A_id, rank_id, outVal, weights_scratch);
 }
 
 template void launchGather<float>(float *C, float *B,

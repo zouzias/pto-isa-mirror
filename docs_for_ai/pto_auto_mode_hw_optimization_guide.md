@@ -517,6 +517,104 @@ More buffering can hurt performance. In the FA prototype, the main cube loop del
 
 **Rule:** Add `MultiBuffered` only when it is clear which resource bottleneck it improves.
 
+### 6.4 Simple single-axis form: `loop<Range<N>>` (MoE pattern)
+
+The FA-style nested `loop<Range<qkPreloadNum, kTileFactor>>(...)` is not the only shape `MultiBuffered` takes. For kernels with a single reduction or row axis, the flat 1-D form is enough and is much easier to reason about. Example from [kernels/automode/a2a3/MoE/router_matmul/router_matmul_kernel.cpp:278-315](../kernels/automode/a2a3/MoE/router_matmul/router_matmul_kernel.cpp#L278-L315):
+
+```cpp
+MultiBuffered<kNumBuffers> outer_db;
+outer_db.loop<Range<K_l1_blocks>>([&](auto outerCtx) {
+    const int k1 = outerCtx.iter;
+
+    TileMatAData aMatTile(M);     // per-lane: declared inside the lambda
+    TileMatBData bMatTile;        // per-lane
+    GlobalDataA  aGlobal(x + ..., aShape);
+    GlobalDataB  bGlobal(w + ...);
+
+    TLOAD(aMatTile, aGlobal);
+    TLOAD(bMatTile, bGlobal);
+
+    MultiBuffered<kNumBuffers> inner_db;
+    inner_db.loop<Range<K_l0_segments>>([&](auto innerCtx) {
+        const int k0 = innerCtx.iter;
+        LeftTile  aTile(M);       // per-lane (inner)
+        RightTile bTile;          // per-lane (inner)
+        TEXTRACT(aTile, aMatTile, 0, k0 * K_l0);
+        TEXTRACT(bTile, bMatTile, k0 * K_l0, 0);
+        if (k1 == 0 && k0 == 0) TMATMUL(cTile, aTile, bTile);
+        else                    TMATMUL_ACC(cTile, aTile, bTile);
+    });
+});
+```
+
+Two single-axis loops nested by hand (an outer GM→L1 ping-pong over K-panels, an inner L1→L0 ping-pong over K-segments) — same effect as the 2-D `Range<...>` invocation but easier to read and easier to mix with runtime-bounded outer loops (see §6.6 below). (Known: file present in tree per the path above; build/runtime confirmation not yet in [known_good_kernel_examples.md](known_good_kernel_examples.md).)
+
+### 6.5 Tile scope decides per-lane vs persistent
+
+The `MultiBuffered` helper interprets tile declarations differently based on where they appear:
+
+- **Declared inside the lambda body** → each ping-pong lane gets its own buffer. The compiler allocates `NumBuffs` independent backing buffers. This is the right place for *consumed/produced* tiles whose values are valid only for the current iteration (load → use → discard).
+- **Declared outside the lambda** → one buffer shared by all lanes. The compiler must serialize lane accesses (the `#pragma pto v_loop_barrier` between lanes enforces this). This is the right place for *accumulators or stationary operands* whose value must persist across every lane and iteration.
+
+In [router_matmul_kernel.cpp:255](../kernels/automode/a2a3/MoE/router_matmul/router_matmul_kernel.cpp#L255):
+
+```cpp
+AccTile cTile(M);            // L0C accumulator: declared OUTSIDE the lambdas
+                             // -> single buffer, persists across every (k1, k0)
+                             //    until TSTORE writes it out.
+
+outer_db.loop<Range<K_l1_blocks>>([&](auto outerCtx) {
+    TileMatAData aMatTile(M); // L1 panel: declared INSIDE
+                             // -> one per outer lane (GM->L1 ping-pong)
+    ...
+    inner_db.loop<Range<K_l0_segments>>([&](auto innerCtx) {
+        LeftTile aTile(M);    // L0A slice: declared INSIDE
+                             // -> one per inner lane (L1->L0 ping-pong)
+        ...
+        TMATMUL_ACC(cTile, aTile, bTile);  // cTile from outer scope: persistent
+    });
+});
+TSTORE(cGlobal, cTile);      // single read after full K reduction
+```
+
+**Rule:** declare a tile inside the deepest lambda that depends on it. Anything that must survive across iterations — accumulators, broadcast operands, FIFO heads — must live in the enclosing scope.
+
+### 6.6 When NOT to multi-buffer: cross-iteration GM aliasing
+
+`MultiBuffered` analyses dataflow through *tile* dependencies, not GM-address equality. If two adjacent iterations issue TLOAD/TSTORE to the same GM region but the addresses are computed at runtime, the compiler cannot see the alias and will overlap them.
+
+Common shapes where this is unsafe:
+
+- **Read-modify-write on a runtime-indexed output**: e.g. `C[t] += w * B[r]` where `t = A_id[r]` is a runtime GM read and the same `t` can reappear within a few iterations. Ping-pong on `cTile` allows iter N+1's `TLOAD(C[t])` to issue before iter N's `TSTORE(C[t])` retired, racing the RMW.
+- **Reductions into a shared accumulator GM scratch buffer** when multiple lanes update overlapping rows.
+- **Indirect scatter**: any `TSTORE(out[idx], …)` where `idx` is a runtime function of the loop counter and the index set is not provably disjoint per lane.
+
+Mitigations, in order of preference:
+
+1. Split the iteration space along a key that *is* provably disjoint per lane (e.g. partition by the output index `t`, not by the source index `r`). See gather kTopK > 1 path: [kernels/automode/a2a3/MoE/gather/gather_kernel.cpp](../kernels/automode/a2a3/MoE/gather/gather_kernel.cpp) splits on the token axis and accepts a scan over `r` with a runtime gate.
+2. Keep the RMW step single-buffered (declare the read-modified tile outside the lambda) and multi-buffer only the read-only producer side.
+3. If neither is feasible, leave the loop unbuffered and accept the serial schedule.
+
+**Rule:** before wrapping any loop in `MultiBuffered`, list the GM addresses every iteration writes. If any address is a runtime function of the loop counter (or a GM-loaded value), prove the per-lane index sets are disjoint — or don't multi-buffer it.
+
+### 6.7 Runtime outer + compile-time inner
+
+`MultiBuffered<N>::loop<Range<M>>` requires `M` to be a compile-time constant. When the per-block (or per-iteration) work count is runtime — for example, an SPMD split where each core owns `(bid+1)*N/D - bid*N/D` tiles — wrap the runtime loop *outside* the multi-buffered call and feed it a compile-time inner range. Pattern from [router_matmul_kernel.cpp:266-318](../kernels/automode/a2a3/MoE/router_matmul/router_matmul_kernel.cpp#L266-L318):
+
+```cpp
+const unsigned tStart = (bid * kNumMTiles) / kBlockDim;
+const unsigned tEnd   = ((bid + 1) * kNumMTiles) / kBlockDim;
+
+for (unsigned tIdx = tStart; tIdx < tEnd; ++tIdx) {        // runtime outer
+    // ... runtime offsets and current-row count ...
+    outer_db.loop<Range<K_l1_blocks>>([&](auto outerCtx) { // compile-time inner
+        ...
+    });
+}
+```
+
+When the runtime range itself is small (one tile per core) and the loop body is a single multi-buffered axis, an alternative is to size `Range<>` to the *worst-case* per-block slice and gate the lambda body on `if (ctx.iter >= myCount) return;`. See [gather_kernel.cpp kTopK == 1 path](../kernels/automode/a2a3/MoE/gather/gather_kernel.cpp) for that variant. Trade-off: simpler code, but every core unrolls bodies for the max-slice case even when its own slice is shorter.
+
 ---
 
 ## 7. MultiStaged pattern
@@ -823,6 +921,78 @@ For multi-core optimization:
 2. split work without cross-core reduction if possible,
 3. add cross-core synchronization only when the data dependency requires it,
 4. document whether the communication is auto-managed or explicit.
+
+### 11.5 Choosing `kBlockDim`: cap at hardware core count
+
+Each AI core on A3 hosts **1 cube subcore + 2 vector subcores** (24 AI cores total → 24 cube subcores, 48 vec subcores). Launch dim is the number of AI cores the kernel asks for, not the number of subcores:
+
+| Kernel arch | Subcores per AI core | A3 total | Used by |
+|---|---|---|---|
+| Cube (`dav-c220-cube`) | 1 cube | 24 | router_matmul, expert_ffn (cube path) |
+| Vec (`dav-c220-vec`)   | 2 vec  | 48 | gather, scatter, moe_topk, …          |
+| Mixed (`dav-c220`)     | 1 cube + 2 vec | 24 AI cores worth of each | flash_atten |
+
+The standard pattern (from [router_matmul_kernel.cpp:219-224](../kernels/automode/a2a3/MoE/router_matmul/router_matmul_kernel.cpp#L219-L224)) is:
+
+```cpp
+constexpr unsigned kMaxCubeCores = 24;                 // A3 cube
+constexpr unsigned kNumMTiles    = (kT + M - 1) / M;   // amount of work
+constexpr unsigned kBlockDim     = (kNumMTiles < kMaxCubeCores)
+                                       ? kNumMTiles : kMaxCubeCores;
+```
+
+Why cap rather than always launching the maximum: if `kNumMTiles < kMaxCubeCores`, the extra cores would be idle anyway; capping avoids paying their startup/teardown overhead and keeps `block_idx` ∈ `[0, kBlockDim)` so the integer-split formula below does not produce empty ranges.
+
+The standard even-split assignment of work tiles to cores:
+
+```cpp
+const unsigned bid    = static_cast<unsigned>(get_block_idx());
+const unsigned tStart = (bid * kNumMTiles) / kBlockDim;
+const unsigned tEnd   = ((bid + 1) * kNumMTiles) / kBlockDim;
+```
+
+This produces ranges that differ by at most one tile — the remainders fall on the last few cores. **Host and kernel must compute `kBlockDim` from the same formula**, otherwise the launch grid disagrees with `tEnd` on the last core. The router_matmul kernel duplicates the formula in [router_matmul_host_cfg](../kernels/automode/a2a3/MoE/router_matmul/router_matmul_kernel.cpp#L128-L150) because the kernel-side helpers carry `AICORE` qualifiers; a launcher that uses plain `constexpr unsigned` (gather pattern) can read the kernel's namespace directly. (Both forms are in tree.)
+
+### 11.6 Vec-subcore SPMD: `block_idx * 2 + get_subblockid()`
+
+For vec kernels that want to use all 48 subcores, the natural unique-id is the pair `(block_idx, subblockid)`:
+
+```cpp
+constexpr unsigned kMaxAICores           = 24;
+constexpr unsigned kVecSubcoresPerAICore = 2;
+constexpr unsigned kMaxVecSubcores       = kMaxAICores * kVecSubcoresPerAICore;  // 48
+
+constexpr unsigned kDesiredSubcores = (work < kMaxVecSubcores) ? work : kMaxVecSubcores;
+constexpr unsigned kBlockDim        = (kDesiredSubcores + kVecSubcoresPerAICore - 1)
+                                      / kVecSubcoresPerAICore;        // launch grid
+constexpr unsigned kTotalSubcores   = kBlockDim * kVecSubcoresPerAICore;
+
+const unsigned bid = static_cast<unsigned>(get_block_idx());
+const unsigned vid = static_cast<unsigned>(get_subblockid());
+const unsigned uid = bid * kVecSubcoresPerAICore + vid;               // [0, kTotalSubcores)
+```
+
+`get_subblockid()` returns `0` or `1` for the two vec subcores within the same AI core; both subcores execute the same kernel function in parallel. Used in [kernels/automode/a2a3/MoE/gather/gather_kernel.cpp](../kernels/automode/a2a3/MoE/gather/gather_kernel.cpp) to address up to 48 disjoint work slices.
+
+Subtlety: when `work` does not divide `kTotalSubcores` cleanly (e.g. `work = 3`, `kTotalSubcores = 4` because we rounded up `kBlockDim`), the formula above leaves the trailing subcore(s) with an empty range. Two options:
+
+1. Gate the body on the empty range (`if (myCount == 0) return;`) and accept one idle subcore.
+2. Round `kTotalSubcores` *down* to the largest even number ≤ `work` — costs one missing subcore of parallelism but no idle slots.
+
+This is different from §22.4's pattern. §22.4 covers vec subblock slicing **inside** one AI core (block_idx selects the cube/AI-core, get_subblockid() picks one half of its row slice); §11.6 covers vec subblock SPMD **across** all 48 subcores in the device. The former is the FA pattern, the latter is the MoE-vec pattern.
+
+### 11.7 Disjoint-output guarantees
+
+Cross-core synchronization in auto mode is expensive and brittle — prefer SPMD splits where each core writes a **disjoint output region** so no sync is needed. Audit checklist before settling on a split axis:
+
+- Are the *output* indices written by each core provably disjoint, or only the *input* indices read?
+- Does the kernel do any in-place RMW on a GM region that could alias across cores?
+- Are there atomics or accumulators that multiple cores would update?
+
+If any cross-core sync would be needed, prefer a different split axis. Two examples from the MoE kernels:
+
+- `router_matmul` splits on the M (token) axis. Each core writes a contiguous row range of `logits`; the K reduction stays inside one core. Disjoint outputs → no sync.
+- `gather` (kTopK > 1) cannot split on the packed-rows axis `r` because multiple `r` values can map to the same output token `t` (read-modify-write race on `C[t]`). It splits on the token axis `t` instead and accepts a redundant scan of `r` on every core, gated by `tStart ≤ A_id[r] < tEnd`. Slower per-core but no cross-core race.
 
 ---
 
