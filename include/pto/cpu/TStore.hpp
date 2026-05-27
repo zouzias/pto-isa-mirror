@@ -158,49 +158,86 @@ __tf__ PTO_INLINE void StoreSubfractalMatrix(typename GlobalData::DType __out__ 
         });
 }
 
-template <typename GlobalData, typename TileData, QuantModeCPU_t quantMode, bool applyRelu>
-__tf__ PTO_INLINE void StoreSubfractalMatrixNZ(typename GlobalData::DType out *dst, typename TileData::TileDType in src, const std::vector<uint64_t> &scalars,
-                                           int gShape3, int gShape4, int validRow, int validCol)
+template <typename GlobalData, typename TileData,
+          QuantModeCPU_t quantMode, bool applyRelu>
+__tf__ PTO_INLINE void StoreSubfractalMatrixNZ(
+    typename GlobalData::DType __out__ *dst,
+    typename TileData::TileDType __in__ src,
+    const std::vector<uint64_t> &scalars,
+    int gShape3,
+    int gShape4,
+    int validRow,
+    int validCol)
 {
-using D = typename GlobalData::DType;
-using S = typename TileData::DType;
+    using D = typename GlobalData::DType;
+    using S = typename TileData::DType;
 
-cpu::parallel_for_1d(
-0,
-static_cast<std::size_t>(gShape4),
-static_cast<std::size_t>(gShape3) * gShape4,
-[&](std::size_t c) {
+    constexpr size_t innerRows = 16;
+    constexpr size_t innerCols = 8;
 
-size_t subTileC = c / TileData::InnerCols;
-size_t innerC = c % TileData::InnerCols;
+    cpu::parallel_for_1d(
+        0,
+        static_cast<std::size_t>(gShape4),
+        static_cast<std::size_t>(gShape3) * gShape4,
+        [&](std::size_t c) {
 
-for (size_t r = 0; r < static_cast<std::size_t>(gShape3); r++) {
+            size_t subTileC = c / TileData::InnerCols;
+            size_t innerC = c % TileData::InnerCols;
 
-size_t subTileR = r / TileData::InnerRows;
-size_t innerR = r % TileData::InnerRows;
+            for (size_t r = 0;
+                 r < static_cast<std::size_t>(gShape3);
+                 r++) {
 
-size_t tile_idx = GetTileElementOffsetSubfractals<TileData>(subTileR, innerR, subTileC, innerC);
+                size_t subTileR = r / TileData::InnerRows;
+                size_t innerR = r % TileData::InnerRows;
 
-size_t gd_idx = GetNZGlobalOffset<GlobalData>(r, c, gShape3, gShape4);
+                size_t tile_idx =
+                    GetTileElementOffsetSubfractals<TileData>(
+                        subTileR,
+                        innerR,
+                        subTileC,
+                        innerC);
 
-if constexpr (quantMode != QuantModeCPU_t::NoQuant) {
+                size_t blockRow = r / innerRows;
+                size_t blockCol = c / innerCols;
 
-size_t scalarIndex =
-TileData::isRowMajor ? c : r;
-uint64_t scalar = scalars[scalarIndex];
+                size_t numBlockCols =
+                    (gShape4 + innerCols - 1) / innerCols;
 
-dst[gd_idx] = quantize_element<D, S, quantMode, applyRelu>(src[tile_idx], scalar);
-} else {
+                size_t gd_idx =
+                    blockRow * numBlockCols *
+                        innerRows * innerCols +
+                    blockCol * innerRows * innerCols +
+                    innerRow * innerCols +
+                    innerC;
 
-S val = src[tile_idx];
-if constexpr (applyRelu) {
-val = ReLU(val);
-}
+                if constexpr (quantMode != QuantModeCPU_t::NoQuant) {
 
-dst[gd_idx] = static_cast<D>(val);
-}
-}
-});
+                    size_t scalarIndex =
+                        TileData::isRowMajor ? c : r;
+
+                    uint64_t scalar = scalars[scalarIndex];
+
+                    dst[gd_idx] =
+                        quantize_element<D,
+                                         S,
+                                         quantMode,
+                                         applyRelu>(
+                            src[tile_idx],
+                            scalar);
+
+                } else {
+
+                    S val = src[tile_idx];
+
+                    if constexpr (applyRelu) {
+                        val = ReLU(val);
+                    }
+
+                    dst[gd_idx] = static_cast<D>(val);
+                }
+            }
+        });
 }
 
 template <typename GlobalData, typename TileData, QuantModeCPU_t quantMode, bool applyRelu>
