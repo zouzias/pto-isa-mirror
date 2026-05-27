@@ -54,7 +54,7 @@ inline void pipe_barrier(pipe_t pipe)
 
 constexpr pipe_t opPipeList[] = {};
 
-#define aclFloat16ToFloat(x) ((float)(x)
+#define aclFloat16ToFloat(x) ((float)(x))
 #define aclInit(x)
 #define aclrtSetDevice(x)
 
@@ -109,6 +109,9 @@ struct HcclDeviceContext {
 /* </Hccl> */
 
 #define EVENT_ID0 0
+#define EVENT_ID1 1
+#define EVENT_ID2 2
+#define EVENT_ID3 3
 
 #define F16_MAX 65504.0f
 
