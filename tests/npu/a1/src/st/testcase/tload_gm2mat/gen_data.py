@@ -41,6 +41,7 @@ def nchw_to_nc1hwc0(nchw_tensor: np.ndarray, c0: int = 16) -> np.ndarray:
 
     return nc1hwc0_tensor
 
+
 def nchw_to_c1hw_n16_16_c0(nchw_tensor: np.ndarray, c0: int = 16) -> np.ndarray:
     if nchw_tensor.ndim != 4:
         raise ValueError(f"The input must be a 4-dimensional NCHW tensor, current dim :{nchw_tensor.ndim}")
@@ -65,6 +66,7 @@ def nchw_to_c1hw_n16_16_c0(nchw_tensor: np.ndarray, c0: int = 16) -> np.ndarray:
     final_tensor = rearranged.reshape(c1hw, n_div_16, 16, c0)
 
     return final_tensor
+
 
 def gen_golden_data(case_name, gInfo):
     data_type = gInfo.datatype
@@ -129,6 +131,7 @@ def gen_golden_data(case_name, gInfo):
     input_arr.tofile("./input.bin")
     output_arr.tofile("./golden.bin")
 
+
 class GlobalTensorInfo:
     def __init__(self, datatype, format, gShape0, gShape1, gShape2, gShape3, gShape4,
                  gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape3, gWholeShape4):
@@ -171,7 +174,7 @@ if __name__ == "__main__":
         "TLoadGM2L1Test.NZ_int16_t_2_16_11_16_16_3_23_13_16_16",
         "TLoadGM2L1Test.NZ_int8_t_1_16_32_16_32_1_32_32_16_32",
         "TLoadGM2L1Test.NZ_float16_t_2_4_5_16_16_7_7_7_16_16",
-        
+
     ]
 
     case_params_list = [

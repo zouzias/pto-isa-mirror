@@ -34,6 +34,7 @@ def gen_golden_data_tdiv(case_name, param):
 
     return input1, input2, golden
 
+
 class TdivParams:
     def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
         self.dtype = dtype
