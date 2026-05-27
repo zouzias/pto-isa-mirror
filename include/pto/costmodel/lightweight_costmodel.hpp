@@ -70,6 +70,7 @@ enum class PtoOpcode
     TROWEXPAND,
     TCOLEXPAND,
     TLOADCONV,
+    TPREFETCH,
 };
 
 enum class DType : uint8_t
@@ -187,6 +188,103 @@ inline constexpr const char *DTypeToString(DType dtype)
     }
 }
 
+inline constexpr const char *PtoOpcodeToString(PtoOpcode op)
+{
+    switch (op) {
+        case PtoOpcode::TADD:
+            return "TADD";
+        case PtoOpcode::TSUB:
+            return "TSUB";
+        case PtoOpcode::TMUL:
+            return "TMUL";
+        case PtoOpcode::TDIV:
+            return "TDIV";
+        case PtoOpcode::TRECIP:
+            return "TRECIP";
+        case PtoOpcode::TADDS:
+            return "TADDS";
+        case PtoOpcode::TSUBS:
+            return "TSUBS";
+        case PtoOpcode::TMULS:
+            return "TMULS";
+        case PtoOpcode::TDIVS:
+            return "TDIVS";
+        case PtoOpcode::TMINS:
+            return "TMINS";
+        case PtoOpcode::TMAXS:
+            return "TMAXS";
+        case PtoOpcode::TABS:
+            return "TABS";
+        case PtoOpcode::TNEG:
+            return "TNEG";
+        case PtoOpcode::TEXP:
+            return "TEXP";
+        case PtoOpcode::TSQRT:
+            return "TSQRT";
+        case PtoOpcode::TRSQRT:
+            return "TRSQRT";
+        case PtoOpcode::TLOG:
+            return "TLOG";
+        case PtoOpcode::TRELU:
+            return "TRELU";
+        case PtoOpcode::TLRELU:
+            return "TLRELU";
+        case PtoOpcode::TNOT:
+            return "TNOT";
+        case PtoOpcode::TROWSUM:
+            return "TROWSUM";
+        case PtoOpcode::TROWMAX:
+            return "TROWMAX";
+        case PtoOpcode::TROWMIN:
+            return "TROWMIN";
+        case PtoOpcode::TROWPROD:
+            return "TROWPROD";
+        case PtoOpcode::TCOLSUM:
+            return "TCOLSUM";
+        case PtoOpcode::TCOLMAX:
+            return "TCOLMAX";
+        case PtoOpcode::TCOLMIN:
+            return "TCOLMIN";
+        case PtoOpcode::TCOLPROD:
+            return "TCOLPROD";
+        case PtoOpcode::TMATMUL:
+            return "TMATMUL";
+        case PtoOpcode::TGEMV:
+            return "TGEMV";
+        case PtoOpcode::TCVT:
+            return "TCVT";
+        case PtoOpcode::TMOV:
+            return "TMOV";
+        case PtoOpcode::TLOAD:
+            return "TLOAD";
+        case PtoOpcode::TSTORE:
+            return "TSTORE";
+        case PtoOpcode::TTRANS:
+            return "TTRANS";
+        case PtoOpcode::TSORT32:
+            return "TSORT32";
+        case PtoOpcode::TMRGSORT:
+            return "TMRGSORT";
+        case PtoOpcode::TSEL:
+            return "TSEL";
+        case PtoOpcode::TSCATTER:
+            return "TSCATTER";
+        case PtoOpcode::TEXTRACT:
+            return "TEXTRACT";
+        case PtoOpcode::TINSERT:
+            return "TINSERT";
+        case PtoOpcode::TROWEXPAND:
+            return "TROWEXPAND";
+        case PtoOpcode::TCOLEXPAND:
+            return "TCOLEXPAND";
+        case PtoOpcode::TLOADCONV:
+            return "TLOADCONV";
+        case PtoOpcode::TPREFETCH:
+            return "TPREFETCH";
+    }
+    return "Unknown";
+}
+
 inline constexpr const char *TransferTileTypeToString(TransferTileType tile_type)
 {
     switch (tile_type) {
@@ -216,7 +314,7 @@ inline bool WarnAndFallbackToZero(const CostModelInput &input, CostModelResult &
     result.cycles = 0.0;
     result.latency_us = 0.0L;
     std::cerr << "[WARN] lightweight::EstimateCycles fallback to 0 cycles: " << reason
-              << ", op=" << static_cast<int>(input.op) << ", dtype=" << DTypeToString(input.dtype)
+              << ", op=" << PtoOpcodeToString(input.op) << ", dtype=" << DTypeToString(input.dtype)
               << ", rows=" << input.rows << ", cols=" << input.cols
               << ", tile_type=" << TransferTileTypeToString(input.tile_type) << ", data_size=" << input.data_size
               << '\n';
