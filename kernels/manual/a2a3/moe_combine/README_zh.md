@@ -265,12 +265,13 @@ Host 会在每轮迭代前清零 `combineDoneSignal`，因此 kernel 固定等�
 | `workspace` | `22120704 bytes` |
 | `routeMeta` | `2432 bytes` |
 | `peerWindow` | `7340160 bytes` |
-| `prepare_fixture` | `avg=70128.5 us`, `max=76100.4 us` |
-| `combine_e2e` | `avg=631.3 us`, `max=1866.4 us` |
+| `prepare_fixture` | `avg=59338.1 us`, `max=84223.5 us` |
+| `combine_e2e` | `avg=637.7 us`, `max=1894.1 us` |
 | 校验 | `verify=PASS` |
 
-`prepare_fixture` 是 host 侧 fixture 拷贝时间，不属于 device kernel 数据通路。`combine_e2e` 包含 kernel launch、
-return、wait、restore、stream sync 和 MPI rank max。
+`prepare_fixture` 是 host 侧 fixture 拷贝时间，不属于 device kernel 数据通路。`combine_e2e` 只统计 combine
+kernel launch 到 stream sync 这一段，不包含 clear、fixture 准备、verify，也不包含 kernel launch 窗口之外的
+MPI barrier。
 
 ## 构建与运行
 

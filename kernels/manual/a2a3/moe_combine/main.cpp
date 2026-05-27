@@ -609,9 +609,9 @@ void RunCombine(const MoeCombineArgs &args, const PeerWindowLayout &peerWindowLa
         state->computeStream, launchBlocks);
     CheckAcl(aclrtSynchronizeStream(state->computeStream),
              "rank " + std::to_string(state->rank) + " combine stream sync");
-    MpiBarrier(&state->mpi);
     auto combineEnd = std::chrono::steady_clock::now();
     state->combineE2eUs = UsSince(combineStart, combineEnd);
+    MpiBarrier(&state->mpi);
 
     if (args.runtime.combineReturnOnly != 0 || args.runtime.debug >= 2) {
         CombineReturnDump dump;

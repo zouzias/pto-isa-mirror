@@ -270,12 +270,13 @@ Latest validation in this workspace used 2 ranks on Atlas 910B1 with
 | `workspace` | `22120704 bytes` |
 | `routeMeta` | `2432 bytes` |
 | `peerWindow` | `7340160 bytes` |
-| `prepare_fixture` | `avg=70128.5 us`, `max=76100.4 us` |
-| `combine_e2e` | `avg=631.3 us`, `max=1866.4 us` |
+| `prepare_fixture` | `avg=59338.1 us`, `max=84223.5 us` |
+| `combine_e2e` | `avg=637.7 us`, `max=1894.1 us` |
 | Verification | `verify=PASS` |
 
-`prepare_fixture` is host-side fixture copy time and is not part of the device kernel datapath. `combine_e2e` includes
-kernel launch, return, wait, restore, stream sync, and MPI rank max.
+`prepare_fixture` is host-side fixture copy time and is not part of the device kernel datapath. `combine_e2e` measures
+only the combine kernel launch through stream sync. It excludes clear, fixture preparation, verification, and MPI
+barriers outside the kernel launch window.
 
 ## Build and Run
 
