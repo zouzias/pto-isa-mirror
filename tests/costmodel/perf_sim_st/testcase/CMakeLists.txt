@@ -8,15 +8,13 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 
-function(pto_costmodel_a5_fit_sim_st NAME)
+function(pto_costmodel_sim_st NAME)
     add_executable(${NAME} main.cpp)
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS} -std=c++23)
     target_include_directories(${NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../include/pto/costmodel/stubs
         ${PROJECT_SOURCE_DIR}/../../../include/
         ${PROJECT_SOURCE_DIR}/../../../include/common
-        ${PROJECT_SOURCE_DIR}/common
-        ${PROJECT_SOURCE_DIR}/../st/common
     )
 
     target_link_libraries(${NAME} PRIVATE
@@ -34,18 +32,10 @@ endfunction()
 find_package(Threads REQUIRED)
 
 set(ALL_TESTCASES
-    tadd_fit
-    tmul_fit
-    tsub_fit
-    tcvt_fit
-    texp_fit
-    tsqrt_fit
-    trsqrt_fit
-    tdivs_fit
-    tmins_fit
-    tneg_fit
-    trecip_fit
-    tsel_fit
+    gemm_perf_sim
+    conv2d_perf_sim
+    topk_perf_sim
+    fa_perf_sim
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})
