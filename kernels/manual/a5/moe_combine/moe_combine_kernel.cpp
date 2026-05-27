@@ -428,6 +428,8 @@ AICORE inline void RestoreOutputRows(MoeCombineShape shape, LocalPeerWindowView 
             TEXPANDS(outTile, static_cast<half>(0.0));
             pipe_barrier(PIPE_ALL);
             uint32_t combineCount = routeCacheEnabled ? routeCount : shape.topK;
+            pto::Event<pto::Op::TAXPY, pto::Op::TLOAD> axpyToNextLoad;
+            bool waitForPreviousAxpy = false;
             for (uint32_t route = 0; route < combineCount; ++route) {
                 uint32_t routeIndex = token * shape.topK + route;
                 int32_t ptrDRow = routeCacheEnabled ? routeRows[route] : *(localPeer.expandedRowIdx + routeIndex);
@@ -439,9 +441,15 @@ AICORE inline void RestoreOutputRows(MoeCombineShape shape, LocalPeerWindowView 
                 __gm__ half *ptrChunk = ptrRow + col;
                 GlobalNd<half> ptrGlobal = MakeGlobal2D(ptrChunk, 1, cols, static_cast<int32_t>(shape.k));
                 pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> loadToAxpy;
+                if (waitForPreviousAxpy) {
+                    axpyToNextLoad.Wait();
+                }
                 loadToAxpy = TLOAD(ptrTile, ptrGlobal);
-                TAXPY(outTile, ptrTile, static_cast<half>(prob), loadToAxpy);
-                pipe_barrier(PIPE_ALL);
+                axpyToNextLoad = TAXPY(outTile, ptrTile, static_cast<half>(prob), loadToAxpy);
+                waitForPreviousAxpy = true;
+            }
+            if (waitForPreviousAxpy) {
+                axpyToNextLoad.Wait();
             }
             set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
