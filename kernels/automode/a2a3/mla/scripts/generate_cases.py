@@ -1,95 +1,206 @@
 #!/usr/bin/env python3
-# coding=utf-8
+# -*- coding: utf-8 -*-
+# --------------------------------------------------------------------------------
+# generate_cases.py - emit a shared header/JSON describing the MLA shape case
+# this build will compile against.
+#
+# Case tuple format (comma-separated, in this order):
+#   S,H,Nh,Hd,L,qL,Rd
+#   S   = sequence length (kSeqLen)
+#   H   = hidden dim (kHidden)
+#   Nh  = num heads (kNumHeads)
+#   Hd  = per-head dim total (kHeadDim)  -- must equal kNopeDim + kRopeDim
+#   L   = kv latent dim (kLatent)
+#   qL  = q latent dim (kQLatent)
+#   Rd  = rope per-head dim (kRopeDim)   -- kNopeDim derived as Hd - Rd
+#
+# Usage:
+#     python3 generate_cases.py                                     # default cases
+#     python3 generate_cases.py --cases "128,4096,32,128,64,64,64"  # single case
+#     python3 generate_cases.py --cases "128,4096,32,128,64,64,64" \
+#                               --cases "256,4096,32,128,64,64,64"  # multi-case manifest
+#
+# Behaviour:
+#   * Always emits the FIRST (after normalization) case into the generated
+#     header, since each MLA build compiles against exactly one case.
+#     run.sh loops over cases by re-invoking this script + rebuilding.
+#   * Writes the full normalized list to build/generated_cases.json so
+#     run.sh and main.cpp can pick it up later if needed.
+# --------------------------------------------------------------------------------
 
 import argparse
 import json
 from pathlib import Path
-
-DEFAULT_CASE = {
-    "batch": 1,
-    "seq_len": 128,
-    "hidden": 4096,
-    "num_heads": 32,
-    "head_dim": 128,
-    "latent": 64,
-    "rope_dim": 64,
-}
-
-FIELD_ORDER = ["batch", "seq_len", "hidden", "num_heads", "head_dim", "latent", "rope_dim"]
+from typing import Dict, List
 
 
-def parse_case(raw: str) -> dict:
+DEFAULT_CASES = [
+    # (S,   H,    Nh, Hd,  L,  qL, Rd)
+    (128,   4096, 32, 128, 64, 64, 64),
+    (256,   4096, 32, 128, 64, 64, 64),
+]
+
+
+def _parse_case_entry(raw: str) -> Dict[str, int]:
     parts = [p.strip() for p in raw.split(",") if p.strip()]
-    if len(parts) != len(FIELD_ORDER):
-        raise ValueError("Expected BATCH,SEQ_LEN,HIDDEN,NUM_HEADS,HEAD_DIM,LATENT,ROPE_DIM")
-    case = {key: int(value) for key, value in zip(FIELD_ORDER, parts)}
-    if min(case.values()) <= 0:
-        raise ValueError("All MLA case values must be positive")
-    if case["num_heads"] * case["head_dim"] != case["hidden"]:
-        raise ValueError("MLA v1 requires NUM_HEADS * HEAD_DIM == HIDDEN")
-    if case["rope_dim"] % 2 != 0:
-        raise ValueError("ROPE_DIM must be even")
-    if case["seq_len"] != 128 or case["latent"] != 64 or case["rope_dim"] != 64:
-        raise ValueError("MLA v1 currently keeps SEQ_LEN=128, LATENT=64, and ROPE_DIM=64 fixed")
+    if len(parts) != 7:
+        raise ValueError(
+            f"Expected 7 comma-separated values (S,H,Nh,Hd,L,qL,Rd), got '{raw}'"
+        )
+    s, h, nh, hd, lat, qlat, rd = map(int, parts)
+    return {"S": s, "H": h, "Nh": nh, "Hd": hd, "L": lat, "qL": qlat, "Rd": rd}
+
+
+def _default_cases() -> List[Dict[str, int]]:
+    return [
+        {"S": s, "H": h, "Nh": nh, "Hd": hd, "L": lat, "qL": qlat, "Rd": rd}
+        for (s, h, nh, hd, lat, qlat, rd) in DEFAULT_CASES
+    ]
+
+
+def _normalize_case(case: Dict[str, int]) -> Dict[str, int]:
+    # Tile sizes inside the kernel:
+    #   cube  : kTileM=128, kInnerK=64, kInnerN=64
+    #   vec   : kSoftmaxTileM=16, kRopeTileM=64, kCacheTileM=64
+    # Enforce the constraints those bake in.
+    if case["Nh"] * case["Hd"] != case["H"]:
+        raise ValueError(
+            f"Nh*Hd ({case['Nh']*case['Hd']}) must equal H ({case['H']})"
+        )
+    if case["Rd"] % 2 != 0 or case["Rd"] >= case["Hd"]:
+        raise ValueError(f"Rd must be even and < Hd; got Rd={case['Rd']} Hd={case['Hd']}")
+    nope = case["Hd"] - case["Rd"]
+    if nope != 64:
+        raise ValueError(
+            f"kNopeDim derived = Hd-Rd = {nope}; current kernel assumes 64 "
+            f"(kInnerK)."
+        )
+    if case["Rd"] != 64:
+        raise ValueError(
+            f"current kernel assumes Rd=64 (kInnerN). Got Rd={case['Rd']}."
+        )
+    if case["L"] != 64:
+        raise ValueError(f"current kernel assumes L=64. Got L={case['L']}.")
+    if case["qL"] != 64:
+        raise ValueError(f"current kernel assumes qL=64. Got qL={case['qL']}.")
+    if case["S"] % 128 != 0:
+        raise ValueError(
+            f"S must be a multiple of kTileM=128 (cube M-axis chunk size); "
+            f"the kernel loops over S/kTileM M-chunks. Got S={case['S']}."
+        )
+    if case["S"] % 16 != 0:
+        raise ValueError(
+            f"S must be a multiple of kSoftmaxTileM=16; got S={case['S']}."
+        )
+    if case["S"] % 64 != 0:
+        raise ValueError(
+            f"S must be a multiple of kRopeTileM=64 / kCacheTileM=64; got S={case['S']}."
+        )
+    if case["H"] % 64 != 0:
+        raise ValueError(f"H must be a multiple of kInnerK=64; got H={case['H']}.")
     return case
 
 
-def case_name(case: dict) -> str:
-    return (
-        f"case_B{case['batch']}_S{case['seq_len']}_H{case['hidden']}"
-        f"_NH{case['num_heads']}_HD{case['head_dim']}_L{case['latent']}_RD{case['rope_dim']}"
-    )
+def _case_name(case: Dict[str, int]) -> str:
+    return (f"case_S{case['S']}_H{case['H']}_Nh{case['Nh']}_Hd{case['Hd']}"
+            f"_L{case['L']}_qL{case['qL']}_Rd{case['Rd']}")
 
 
-def render_header(case: dict) -> str:
+def _render_header(case: Dict[str, int], all_cases: List[Dict[str, int]]) -> str:
+    nope = case["Hd"] - case["Rd"]
+    name = _case_name(case)
+    macro_lines = []
+    for c in all_cases:
+        macro_lines.append(
+            f"    MACRO({c['S']}, {c['H']}, {c['Nh']}, {c['Hd']}, "
+            f"{c['L']}, {c['qL']}, {c['Rd']}, \"{_case_name(c)}\")"
+        )
+    macro_block = " \\\n".join(macro_lines)
+
     return f"""#pragma once
 // Auto-generated by scripts/generate_cases.py. Do not edit manually.
 // clang-format off
 
-static constexpr unsigned kMlaBatch = {case["batch"]};
-static constexpr unsigned kMlaSeqLen = {case["seq_len"]};
-static constexpr unsigned kMlaHidden = {case["hidden"]};
-static constexpr unsigned kMlaNumHeads = {case["num_heads"]};
-static constexpr unsigned kMlaHeadDim = {case["head_dim"]};
-static constexpr unsigned kMlaLatent = {case["latent"]};
-static constexpr unsigned kMlaRopeDim = {case["rope_dim"]};
-static constexpr unsigned kMlaRopeHalf = kMlaRopeDim / 2;
-static constexpr unsigned kMlaQKVHidden = kMlaNumHeads * kMlaHeadDim;
-static constexpr unsigned kMlaQRopeWidth = kMlaNumHeads * kMlaRopeDim;
-static constexpr unsigned kMlaHeadDimTotal = kMlaHeadDim + kMlaRopeDim;
-static constexpr const char *kMlaCaseName = "{case_name(case)}";
+// ---- ACTIVE case (this build compiles against THIS one case) ---------------
+constexpr unsigned kMlaSeqLen     = {case['S']};
+constexpr unsigned kMlaHidden     = {case['H']};
+constexpr unsigned kMlaNumHeads   = {case['Nh']};
+constexpr unsigned kMlaHeadDim    = {case['Hd']};
+constexpr unsigned kMlaLatent     = {case['L']};
+constexpr unsigned kMlaQLatent    = {case['qL']};
+constexpr unsigned kMlaRopeDim    = {case['Rd']};
+constexpr unsigned kMlaNopeDim    = kMlaHeadDim - kMlaRopeDim;  // {nope}
 
+constexpr const char *kMlaCaseName = "{name}";
+
+// ---- Manifest of all cases supplied to generate_cases.py (informational). --
+#define MLA_FOR_EACH_CASE(MACRO) \\
+{macro_block}
 // clang-format on
 """
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate MLA case header/JSON")
-    parser.add_argument("--cases", default=None, help="Single case: BATCH,SEQ_LEN,HIDDEN,NUM_HEADS,HEAD_DIM,LATENT,ROPE_DIM")
+    parser.add_argument(
+        "--cases",
+        action="append",
+        default=None,
+        help="Case entry S,H,Nh,Hd,L,qL,Rd (repeat for multi-case manifests)",
+    )
+    parser.add_argument(
+        "--active-case",
+        type=int,
+        default=0,
+        help="Index into the case list to compile against this build (default 0)",
+    )
     parser.add_argument(
         "--output-header",
-        default=str(Path(__file__).resolve().parent.parent / "build" / "generated_cases.h"),
+        default=str((Path(__file__).resolve().parent.parent / "build" / "generated_cases.h")),
+        help="Output header path",
     )
     parser.add_argument(
         "--output-json",
-        default=str(Path(__file__).resolve().parent.parent / "build" / "generated_cases.json"),
+        default=str((Path(__file__).resolve().parent.parent / "build" / "generated_cases.json")),
+        help="Output JSON path",
     )
     args = parser.parse_args()
 
-    case = parse_case(args.cases) if args.cases else dict(DEFAULT_CASE)
-    payload = {"name": case_name(case), **case}
+    if args.cases:
+        cases = [_normalize_case(_parse_case_entry(entry)) for entry in args.cases]
+    else:
+        cases = [_normalize_case(c) for c in _default_cases()]
+
+    if args.active_case < 0 or args.active_case >= len(cases):
+        raise ValueError(
+            f"--active-case={args.active_case} out of range [0, {len(cases)})"
+        )
+    active = cases[args.active_case]
 
     header_path = Path(args.output_header)
     header_path.parent.mkdir(parents=True, exist_ok=True)
-    header_path.write_text(render_header(case))
+    header_path.write_text(_render_header(active, cases))
 
+    json_payload = [{"name": _case_name(c), **c} for c in cases]
     json_path = Path(args.output_json)
     json_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(json.dumps([payload], indent=2))
+    json_path.write_text(json.dumps({
+        "active_index": args.active_case,
+        "active_name": _case_name(active),
+        "cases": json_payload,
+    }, indent=2))
 
-    print(f"[INFO] Wrote {header_path}")
-    print(f"[INFO] Wrote {json_path}")
-    print(f"[INFO] Case: {payload}")
+    print(f"[generate_cases] Wrote {header_path}")
+    print(f"[generate_cases] Wrote {json_path}")
+    print(f"[generate_cases] Active case [{args.active_case}]: {_case_name(active)}")
+    print(f"[generate_cases]   S={active['S']}  H={active['H']}  Nh={active['Nh']}  "
+          f"Hd={active['Hd']}  L={active['L']}  qL={active['qL']}  "
+          f"Rd={active['Rd']}  (nope_dim={active['Hd']-active['Rd']})")
+    if len(cases) > 1:
+        print(f"[generate_cases] All cases in manifest:")
+        for i, c in enumerate(cases):
+            marker = " <-- active" if i == args.active_case else ""
+            print(f"  [{i}] {_case_name(c)}{marker}")
 
 
 if __name__ == "__main__":

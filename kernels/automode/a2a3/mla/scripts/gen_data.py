@@ -252,14 +252,68 @@ def gen_golden_data(kSeqLen, kHidden, kNumHeads, kHeadDim, kLatent, kRopeDim,
           f"{probs[0, 0, :].astype(np.float32).sum():.4f} (should be ~1.0)")
 
 
+def _parse_case_string(raw: str):
+    """Parse 'S,H,Nh,Hd,L,qL,Rd' into a dict matching the manifest format."""
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    if len(parts) != 7:
+        raise ValueError(
+            f"Expected 7 comma-separated values (S,H,Nh,Hd,L,qL,Rd), got '{raw}'"
+        )
+    s, h, nh, hd, lat, qlat, rd = map(int, parts)
+    return {"S": s, "H": h, "Nh": nh, "Hd": hd, "L": lat, "qL": qlat, "Rd": rd}
+
+
+def _load_active_case_from_manifest():
+    """Read build/generated_cases.json (written by generate_cases.py) and
+    return the active case dict. Returns None if the manifest is missing."""
+    import json
+    here = os.path.dirname(os.path.abspath(__file__))
+    manifest_path = os.path.normpath(
+        os.path.join(here, "..", "build", "generated_cases.json")
+    )
+    if not os.path.isfile(manifest_path):
+        return None
+    with open(manifest_path, "r") as f:
+        payload = json.load(f)
+    cases = payload.get("cases", [])
+    idx = payload.get("active_index", 0)
+    if not cases:
+        return None
+    return cases[idx]
+
+
 if __name__ == "__main__":
-    kSeqLen   = 128
-    kHidden   = 4096
-    kNumHeads = 32
-    kHeadDim  = 128
-    kLatent   = 64
-    kRopeDim  = 64
-    kNopeDim  = 64
-    kQLatent  = 64
+    import argparse
+    parser = argparse.ArgumentParser(description="Generate MLA inputs + golden")
+    parser.add_argument(
+        "--case",
+        default=None,
+        help="Case tuple S,H,Nh,Hd,L,qL,Rd. If omitted, read the active case "
+             "from build/generated_cases.json; if that is also missing, fall "
+             "back to the historical default 128,4096,32,128,64,64,64.",
+    )
+    args = parser.parse_args()
+
+    if args.case is not None:
+        case = _parse_case_string(args.case)
+    else:
+        case = _load_active_case_from_manifest()
+        if case is None:
+            print("[gen_data] no --case and no manifest found; using default "
+                  "128,4096,32,128,64,64,64")
+            case = {"S": 128, "H": 4096, "Nh": 32, "Hd": 128,
+                    "L": 64,  "qL": 64,  "Rd": 64}
+
+    kSeqLen   = case["S"]
+    kHidden   = case["H"]
+    kNumHeads = case["Nh"]
+    kHeadDim  = case["Hd"]
+    kLatent   = case["L"]
+    kRopeDim  = case["Rd"]
+    kQLatent  = case["qL"]
+    kNopeDim  = kHeadDim - kRopeDim
+    print(f"[gen_data] case = S={kSeqLen} H={kHidden} Nh={kNumHeads} "
+          f"Hd={kHeadDim} L={kLatent} qL={kQLatent} Rd={kRopeDim} "
+          f"(nope_dim={kNopeDim})")
     gen_golden_data(kSeqLen, kHidden, kNumHeads, kHeadDim, kLatent, kRopeDim,
                     kNopeDim, kQLatent)

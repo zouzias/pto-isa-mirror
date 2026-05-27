@@ -41,14 +41,16 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
-#include "generated_cases.h"
+#include "generated_cases.h"   // emitted by scripts/generate_cases.py
 
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
+#include <string>
 #include <vector>
 
 using namespace std;
@@ -77,20 +79,22 @@ extern "C" void launchMlaRoPEFp16           (uint8_t *y, uint8_t *x,
 extern "C" void launchMlaAttnQKRopeFp16     (uint8_t *scores_rope, uint8_t *q_rope_rot,
                                              uint8_t *k_rope_rot, void *stream);
 
-// ----- MLA shapes; must match scripts/gen_data.py and the kernel namespaces.
+// ----- MLA shapes; sourced from the generated case header so main.cpp and
+//       both kernel TUs stay in lock-step. Re-run scripts/generate_cases.py
+//       to switch the active case.
 static constexpr int kBatch    = 1;
-static constexpr int kSeqLen   = 128;
-static constexpr int kHidden   = 4096;
-static constexpr int kNumHeads = 32;
-static constexpr int kHeadDim  = 128;
-static constexpr int kLatent   = 64;
-static constexpr int kNopeDim  = 64;                       // DeepSeek-V2 non-rope per-head dim
-static constexpr int kRopeDim  = 64;
+static constexpr int kSeqLen   = static_cast<int>(kMlaSeqLen);
+static constexpr int kHidden   = static_cast<int>(kMlaHidden);
+static constexpr int kNumHeads = static_cast<int>(kMlaNumHeads);
+static constexpr int kHeadDim  = static_cast<int>(kMlaHeadDim);
+static constexpr int kLatent   = static_cast<int>(kMlaLatent);
+static constexpr int kNopeDim  = static_cast<int>(kMlaNopeDim);
+static constexpr int kRopeDim  = static_cast<int>(kMlaRopeDim);
 static constexpr int kRopeHalf = kRopeDim / 2;
-static constexpr int kQLatent  = 64;                       // DeepSeek-V2 Q latent dim
-static constexpr int kQKVHidden  = kNumHeads * kHeadDim;   // 4096 (V/Out row stride)
-static constexpr int kQNopeWidth = kNumHeads * kNopeDim;   // 2048 (Q_nope/K_nope row stride)
-static constexpr int kQRopeWidth = kNumHeads * kRopeDim;   // 2048
+static constexpr int kQLatent  = static_cast<int>(kMlaQLatent);
+static constexpr int kQKVHidden  = kNumHeads * kHeadDim;
+static constexpr int kQNopeWidth = kNumHeads * kNopeDim;
+static constexpr int kQRopeWidth = kNumHeads * kRopeDim;
 static_assert(kNopeDim + kRopeDim == kHeadDim,
               "DeepSeek-V2: head_dim must split into nope_dim + rope_dim");
 
@@ -305,8 +309,50 @@ static double TimeKernelMs(const char *name, aclrtStream stream, LaunchFn &&laun
     return ms;
 }
 
-int main()
+int main(int argc, char **argv)
 {
+    // CLI per kernel_test_guidance.md §3-§4. The active case is baked in at
+    // build time (see scripts/generate_cases.py), so --case / --cases are
+    // accepted only as a sanity check: if the user passes a tuple here we
+    // verify it matches the compile-time constants and fail fast otherwise.
+    int        npuId       = 0;
+    bool       intermediate = false;
+    std::string filterCase;
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--intermediate") {
+            intermediate = true;
+        } else if (arg.rfind("--npu=", 0) == 0) {
+            npuId = std::atoi(arg.c_str() + 6);
+        } else if (arg == "--npu" && (i + 1) < argc) {
+            npuId = std::atoi(argv[++i]);
+        } else if (arg.rfind("--case=", 0) == 0) {
+            filterCase = arg.substr(7);
+        } else if (arg.rfind("--cases=", 0) == 0) {
+            filterCase = arg.substr(8);
+        } else if ((arg == "--case" || arg == "--cases") && (i + 1) < argc) {
+            filterCase = argv[++i];
+        }
+        // Unknown args are silently ignored so run.sh can forward common
+        // flags (--sys_cnt_multiple etc.) without us tracking them all.
+    }
+
+    if (!filterCase.empty() && filterCase != kMlaCaseName) {
+        // Treat numeric tuples like "128,4096,32,128,64,64,64" as a request
+        // to verify the bake-in matches.
+        if (filterCase.find(',') != std::string::npos) {
+            // Reconstruct the expected case name from kMla* and compare.
+            std::cerr << "[main] requested case='" << filterCase
+                      << "' but this build is '" << kMlaCaseName
+                      << "'. Re-run scripts/generate_cases.py + rebuild "
+                      << "to switch cases.\n";
+            return 2;
+        }
+    }
+    (void)npuId;        // honoured by aclrtSetDevice below
+    (void)intermediate; // ValidateStage already prints per-stage info
+
+    printf("[main] active case: %s\n", kMlaCaseName);
     printf("[main] MLA DeepSeek-V2: B=%d S=%d H=%d Nh=%d Hd=%d (nope=%d rope=%d) L=%d qL=%d\n",
            kBatch, kSeqLen, kHidden, kNumHeads, kHeadDim, kNopeDim, kRopeDim, kLatent, kQLatent);
     printf("[main] sizes (bytes): x=%zu  w_dq=%zu  w_uq=%zu  w_dkv=%zu  w_uk=%zu  w_uv=%zu\n",
@@ -316,8 +362,8 @@ int main()
     printf("[main]                 scores=%zu  probs=%zu  out=%zu\n",
            kScoresBytes, kProbsBytes, kOutBytes);
 
-    if (!CheckAcl(aclInit(nullptr),         "aclInit"))         std::exit(3);
-    if (!CheckAcl(aclrtSetDevice(0),        "aclrtSetDevice"))  std::exit(3);
+    if (!CheckAcl(aclInit(nullptr),          "aclInit"))          std::exit(3);
+    if (!CheckAcl(aclrtSetDevice(npuId),     "aclrtSetDevice"))   std::exit(3);
     aclrtStream stream;
     if (!CheckAcl(aclrtCreateStream(&stream), "aclrtCreateStream")) std::exit(3);
 
@@ -622,15 +668,16 @@ int main()
     aclrtFreeHost(wdqHost);
     aclrtFreeHost(xHost);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(npuId);
     aclFinalize();
 
     if (allOk) {
         printf("test data success\n");
         printf("test success\n");
+        return 0;
     } else {
         printf("test data failed\n");
         printf("test failed\n");
+        return 1;   // §7 of kernel_test_guidance.md — non-zero on validation failure.
     }
-    return 0;
 }

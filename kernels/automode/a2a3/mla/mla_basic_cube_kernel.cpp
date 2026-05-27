@@ -57,20 +57,23 @@
 #include <pto/pto-inst.hpp>
 #include "generated_cases.h"
 
+#include "generated_cases.h"   // emitted by scripts/generate_cases.py
+
 using namespace pto;
 
 namespace mla_basic_cfg {
 
-// Static configuration. Must match scripts/gen_data.py and main.cpp.
+// Static configuration. Sourced from the case selected at build time;
+// generate_cases.py + run.sh control which case the binary is built against.
 constexpr unsigned kBatch    = 1;
-constexpr unsigned kSeqLen   = 128;   // matches kTileM exactly -> single M tile
-constexpr unsigned kHidden   = 4096;
-constexpr unsigned kNumHeads = 32;
-constexpr unsigned kHeadDim  = 128;   // total per-head dim (nope + rope) for V/Out
-constexpr unsigned kNopeDim  = 64;    // DeepSeek-V2 non-rope per-head dim for Q_nope/K_nope
-constexpr unsigned kRopeDim  = 64;    // DeepSeek-V2 rope per-head dim
-constexpr unsigned kLatent   = 64;    // kv latent dim
-constexpr unsigned kQLatent  = 64;    // q  latent dim (DeepSeek-V2 compresses Q too)
+constexpr unsigned kSeqLen   = kMlaSeqLen;
+constexpr unsigned kHidden   = kMlaHidden;
+constexpr unsigned kNumHeads = kMlaNumHeads;
+constexpr unsigned kHeadDim  = kMlaHeadDim;    // total per-head dim (nope + rope) for V/Out
+constexpr unsigned kNopeDim  = kMlaNopeDim;    // = kHeadDim - kRopeDim
+constexpr unsigned kRopeDim  = kMlaRopeDim;
+constexpr unsigned kLatent   = kMlaLatent;
+constexpr unsigned kQLatent  = kMlaQLatent;
 
 constexpr unsigned kTileM    = 128;
 constexpr unsigned kInnerK   = 64;
@@ -96,8 +99,11 @@ constexpr unsigned kQKVNIter      = kQKVHidden  / kInnerN;   // 64  (V-side N it
 constexpr unsigned kQNopeNIter    = kQNopeWidth / kInnerN;   // 32  (K_nope, Q_nope reconstruction)
 constexpr unsigned kQRopeNIter    = kQRopeWidth / kInnerN;   // 32  (== kNumHeads)
 constexpr unsigned kHeadDimNIter  = kHeadDim    / kInnerN;   // 2   (runAttnPV N iters)
-constexpr unsigned kSeqNIter      = kSeqLen     / kInnerN;   // 2
-constexpr unsigned kSeqKIter      = kSeqLen     / kInnerK;   // 2
+constexpr unsigned kSeqNIter      = kSeqLen     / kInnerN;   // S / 64
+constexpr unsigned kSeqKIter      = kSeqLen     / kInnerK;   // S / 64
+constexpr unsigned kSeqMIter      = kSeqLen     / kTileM;    // S / 128  (outer M-chunk loop)
+static_assert(kSeqLen % kTileM == 0,
+              "kSeqLen must be a multiple of kTileM (cube M-axis chunk size)");
 
 }  // namespace mla_basic_cfg
 
@@ -147,30 +153,34 @@ __global__ AICORE void runQCompression(__gm__ uint8_t *c_q_raw,
     RightTile    bTile;
     AccTile      cTile;
 
-    // Single output tile (M=128, N=kQLatent=64). Only core 0 does the work;
-    // splitting the K-axis would require atomic-add TSTORE which we skip
-    // here.
-    if (get_block_idx() != 0) return;
+    // Multi-core: each core takes a strided slice of the M-chunks
+    // (kSeqMIter chunks of kTileM rows each). Splitting the K-axis would
+    // require atomic-add TSTORE which we skip here.
+    const unsigned core_id = get_block_idx();
 
-    for (unsigned kIter = 0; kIter < kHiddenKIter; ++kIter) {
-        const size_t kOffset = static_cast<size_t>(kIter) * kInnerK;
+    for (unsigned mIter = core_id; mIter < kSeqMIter; mIter += kBlockDim) {
+        const size_t mOffset = static_cast<size_t>(mIter) * kTileM;
 
-        GlobalDataA aGlobal(x    + kOffset);
-        GlobalDataB bGlobal(w_dq + kOffset * kQLatent);
+        for (unsigned kIter = 0; kIter < kHiddenKIter; ++kIter) {
+            const size_t kOffset = static_cast<size_t>(kIter) * kInnerK;
 
-        TLOAD(aMatTile, aGlobal);
-        TLOAD(bMatTile, bGlobal);
-        TMOV (aTile, aMatTile);
-        TMOV (bTile, bMatTile);
+            GlobalDataA aGlobal(x    + mOffset * kHidden + kOffset);
+            GlobalDataB bGlobal(w_dq + kOffset * kQLatent);
 
-        if (kIter == 0) { TMATMUL    (cTile, aTile, bTile); }
-        else            { TMATMUL_ACC(cTile, aTile, bTile); }
+            TLOAD(aMatTile, aGlobal);
+            TLOAD(bMatTile, bGlobal);
+            TMOV (aTile, aMatTile);
+            TMOV (bTile, bMatTile);
+
+            if (kIter == 0) { TMATMUL    (cTile, aTile, bTile); }
+            else            { TMATMUL_ACC(cTile, aTile, bTile); }
+        }
+
+        GlobalDataC cGlobal(c_q + mOffset * kQLatent);
+        TSTORE<AccTile, GlobalDataC,
+               AtomicType::AtomicNone,
+               ReluPreMode::NoRelu>(cGlobal, cTile);
     }
-
-    GlobalDataC cGlobal(c_q);
-    TSTORE<AccTile, GlobalDataC,
-           AtomicType::AtomicNone,
-           ReluPreMode::NoRelu>(cGlobal, cTile);
 }
 
 // =============================================================================
@@ -219,17 +229,23 @@ __global__ AICORE void runQReconstruction(__gm__ uint8_t *q_nope_raw,
     RightTile    bTile;
     AccTile      cTile;
 
-    // Multi-core: each core takes a strided slice of the N output tiles.
-    // A (C_q) is K-invariant across nIter; each core loads it once into its
-    // own L0A so they don't contend.
-    const unsigned core_id = get_block_idx();
+    // Multi-core: each work item is one [kTileM, kInnerN] output tile at
+    // (m_chunk, nIter). Flatten (mIter, nIter) and stride across cores.
+    const unsigned core_id   = get_block_idx();
+    constexpr unsigned kWork = kSeqMIter * kQNopeNIter;
 
-    GlobalDataA aGlobal(c_q);
-    TLOAD(aMatTile, aGlobal);
-    TMOV (aTile, aMatTile);
-
-    for (unsigned nIter = core_id; nIter < kQNopeNIter; nIter += kBlockDim) {
+    for (unsigned w = core_id; w < kWork; w += kBlockDim) {
+        const unsigned mIter = w / kQNopeNIter;
+        const unsigned nIter = w % kQNopeNIter;
+        const size_t mOffset = static_cast<size_t>(mIter) * kTileM;
         const size_t nOffset = static_cast<size_t>(nIter) * kInnerN;
+
+        // Load this M-chunk's C_q slice into L0A. (K-invariant within this
+        // work item, but a different chunk may have ended up on another
+        // core.)
+        GlobalDataA aGlobal(c_q + mOffset * kQLatent);
+        TLOAD(aMatTile, aGlobal);
+        TMOV (aTile, aMatTile);
 
         GlobalDataB bGlobal(w_uq + nOffset);
         TLOAD(bMatTile, bGlobal);
@@ -237,7 +253,7 @@ __global__ AICORE void runQReconstruction(__gm__ uint8_t *q_nope_raw,
 
         TMATMUL(cTile, aTile, bTile);
 
-        GlobalDataC cGlobal(q_nope + nOffset);
+        GlobalDataC cGlobal(q_nope + mOffset * kQNopeWidth + nOffset);
         TSTORE<AccTile, GlobalDataC,
                AtomicType::AtomicNone,
                ReluPreMode::NoRelu>(cGlobal, cTile);
@@ -290,31 +306,35 @@ __global__ AICORE void runKVCompression(__gm__ uint8_t *c_kv_raw,
     RightTile    bTile;
     AccTile      cTile;
 
-    // Single output tile (M=128, N=kLatent=64). Only core 0.
-    if (get_block_idx() != 0) return;
+    // Multi-core: M-chunks of kTileM rows, strided across cores.
+    const unsigned core_id = get_block_idx();
 
-    for (unsigned kIter = 0; kIter < kHiddenKIter; ++kIter) {
-        const size_t kOffset = static_cast<size_t>(kIter) * kInnerK;
+    for (unsigned mIter = core_id; mIter < kSeqMIter; mIter += kBlockDim) {
+        const size_t mOffset = static_cast<size_t>(mIter) * kTileM;
 
-        GlobalDataA aGlobal(x     + kOffset);
-        GlobalDataB bGlobal(w_dkv + kOffset * kLatent);
+        for (unsigned kIter = 0; kIter < kHiddenKIter; ++kIter) {
+            const size_t kOffset = static_cast<size_t>(kIter) * kInnerK;
 
-        TLOAD(aMatTile, aGlobal);
-        TLOAD(bMatTile, bGlobal);
-        TMOV (aTile, aMatTile);
-        TMOV (bTile, bMatTile);
+            GlobalDataA aGlobal(x     + mOffset * kHidden + kOffset);
+            GlobalDataB bGlobal(w_dkv + kOffset * kLatent);
 
-        if (kIter == 0) {
-            TMATMUL    (cTile, aTile, bTile);
-        } else {
-            TMATMUL_ACC(cTile, aTile, bTile);
+            TLOAD(aMatTile, aGlobal);
+            TLOAD(bMatTile, bGlobal);
+            TMOV (aTile, aMatTile);
+            TMOV (bTile, bMatTile);
+
+            if (kIter == 0) {
+                TMATMUL    (cTile, aTile, bTile);
+            } else {
+                TMATMUL_ACC(cTile, aTile, bTile);
+            }
         }
-    }
 
-    GlobalDataC cGlobal(c_kv);
-    TSTORE<AccTile, GlobalDataC,
-           AtomicType::AtomicNone,
-           ReluPreMode::NoRelu>(cGlobal, cTile);
+        GlobalDataC cGlobal(c_kv + mOffset * kLatent);
+        TSTORE<AccTile, GlobalDataC,
+               AtomicType::AtomicNone,
+               ReluPreMode::NoRelu>(cGlobal, cTile);
+    }
 }
 
 // =============================================================================
@@ -371,13 +391,11 @@ __global__ AICORE void runKVReconstruction(__gm__ uint8_t *k_raw,
     RightTile    bTile;
     AccTile      cTile;
 
-    // Multi-core: each core takes a strided slice of N tiles in BOTH branches.
-    // A (c_cache) is loaded once per core into its own L0A.
+    // Multi-core: each work item is one [kTileM, kInnerN] output tile.
+    // K-branch has kSeqMIter*kQNopeNIter items; V-branch has kSeqMIter*kQKVNIter.
+    // Each branch is its own strided loop. We re-load the c_cache A panel
+    // per work item (different M-chunk each iter), so A no longer hoists.
     const unsigned core_id = get_block_idx();
-
-    GlobalDataA aGlobal(c_cache);
-    TLOAD(aMatTile, aGlobal);
-    TMOV (aTile, aMatTile);
 
     // --- GEMM 1 : K_nope = C_cache @ W_uk  (output width kQNopeWidth=2048) --
     {
@@ -386,8 +404,16 @@ __global__ AICORE void runKVReconstruction(__gm__ uint8_t *k_raw,
         using GlobalDataC_K = GlobalTensor<TOut,    Shape<1, 1, 1, kTileM,  kInnerN>,
                                            Stride<1, 1, 1, kQNopeWidth, 1>>;
 
-        for (unsigned nIter = core_id; nIter < kQNopeNIter; nIter += kBlockDim) {
+        constexpr unsigned kWorkK = kSeqMIter * kQNopeNIter;
+        for (unsigned w = core_id; w < kWorkK; w += kBlockDim) {
+            const unsigned mIter = w / kQNopeNIter;
+            const unsigned nIter = w % kQNopeNIter;
+            const size_t mOffset = static_cast<size_t>(mIter) * kTileM;
             const size_t nOffset = static_cast<size_t>(nIter) * kInnerN;
+
+            GlobalDataA aGlobal(c_cache + mOffset * kLatent);
+            TLOAD(aMatTile, aGlobal);
+            TMOV (aTile, aMatTile);
 
             GlobalDataB_K bGlobal(w_uk + nOffset);
             TLOAD(bMatTile, bGlobal);
@@ -395,7 +421,7 @@ __global__ AICORE void runKVReconstruction(__gm__ uint8_t *k_raw,
 
             TMATMUL(cTile, aTile, bTile);
 
-            GlobalDataC_K cGlobal(k + nOffset);
+            GlobalDataC_K cGlobal(k + mOffset * kQNopeWidth + nOffset);
             TSTORE<AccTile, GlobalDataC_K,
                    AtomicType::AtomicNone,
                    ReluPreMode::NoRelu>(cGlobal, cTile);
@@ -409,9 +435,16 @@ __global__ AICORE void runKVReconstruction(__gm__ uint8_t *k_raw,
         using GlobalDataC_V = GlobalTensor<TOut,    Shape<1, 1, 1, kTileM,  kInnerN>,
                                            Stride<1, 1, 1, kQKVHidden, 1>>;
 
-        // A (c_cache) is unchanged; aMatTile / aTile contents preserved.
-        for (unsigned nIter = core_id; nIter < kQKVNIter; nIter += kBlockDim) {
+        constexpr unsigned kWorkV = kSeqMIter * kQKVNIter;
+        for (unsigned w = core_id; w < kWorkV; w += kBlockDim) {
+            const unsigned mIter = w / kQKVNIter;
+            const unsigned nIter = w % kQKVNIter;
+            const size_t mOffset = static_cast<size_t>(mIter) * kTileM;
             const size_t nOffset = static_cast<size_t>(nIter) * kInnerN;
+
+            GlobalDataA aGlobal(c_cache + mOffset * kLatent);
+            TLOAD(aMatTile, aGlobal);
+            TMOV (aTile, aMatTile);
 
             GlobalDataB_V bGlobal(w_uv + nOffset);
             TLOAD(bMatTile, bGlobal);
@@ -419,7 +452,7 @@ __global__ AICORE void runKVReconstruction(__gm__ uint8_t *k_raw,
 
             TMATMUL(cTile, aTile, bTile);
 
-            GlobalDataC_V cGlobal(v + nOffset);
+            GlobalDataC_V cGlobal(v + mOffset * kQKVHidden + nOffset);
             TSTORE<AccTile, GlobalDataC_V,
                    AtomicType::AtomicNone,
                    ReluPreMode::NoRelu>(cGlobal, cTile);
@@ -490,22 +523,28 @@ __global__ AICORE void runAttnQK(__gm__ uint8_t *scores_raw,
     RightTile    bTile;
     AccTile      cTile;
 
-    // Multi-core: flatten the (h, nIter) work-item space and stride across
-    // cores. Each work item is one [kTileM, kInnerN] score output tile.
+    // Multi-core: flatten (h, mIter, nIter) work-item space and stride
+    // across cores. Each work item is one [kTileM, kInnerN] score output.
     const unsigned core_id   = get_block_idx();
-    constexpr unsigned kWork = kNumHeads * kSeqNIter;   // 32 * 2 = 64
+    constexpr unsigned kWork = kNumHeads * kSeqMIter * kSeqNIter;
 
     for (unsigned w = core_id; w < kWork; w += kBlockDim) {
-        const unsigned h     = w / kSeqNIter;
-        const unsigned nIter = w % kSeqNIter;
+        const unsigned h     = w / (kSeqMIter * kSeqNIter);
+        const unsigned rem   = w % (kSeqMIter * kSeqNIter);
+        const unsigned mIter = rem / kSeqNIter;
+        const unsigned nIter = rem % kSeqNIter;
 
         const size_t qBase      = static_cast<size_t>(h) * kNopeDim;
         const size_t kBase      = static_cast<size_t>(h) * kNopeDim;
         const size_t scoresBase = static_cast<size_t>(h) * kSeqLen * kSeqLen;
+        const size_t mOffset    = static_cast<size_t>(mIter) * kTileM;
         const size_t nOffset    = static_cast<size_t>(nIter) * kInnerN;
 
         // Single K iter: kNopeDim == kInnerK == 64.
-        GlobalDataA  aGlobal(q + qBase);
+        // A: Q_nope sub-tile starting at row mOffset of head h.
+        GlobalDataA  aGlobal(q + mOffset * kQNopeWidth + qBase);
+        // B: K_nope_h^T sub-tile, transposed view -> column index = j (seq);
+        //    starting at column nOffset within head h.
         GlobalDataBT bGlobal(k + kBase + nOffset * kQNopeWidth);
 
         TLOAD(aMatTile, aGlobal);
@@ -515,7 +554,8 @@ __global__ AICORE void runAttnQK(__gm__ uint8_t *scores_raw,
 
         TMATMUL(cTile, aTile, bTile);
 
-        GlobalDataC cGlobal(scores + scoresBase + nOffset);
+        // scores[h, mOffset:mOffset+M, nOffset:nOffset+N]; row stride kSeqLen.
+        GlobalDataC cGlobal(scores + scoresBase + mOffset * kSeqLen + nOffset);
         TSTORE<AccTile, GlobalDataC,
                AtomicType::AtomicNone,
                ReluPreMode::NoRelu>(cGlobal, cTile);
@@ -573,25 +613,30 @@ __global__ AICORE void runAttnPV(__gm__ uint8_t *out_raw,
     RightTile    bTile;
     AccTile      cTile;
 
-    // Multi-core: flatten (h, nIter) — each work item is one [kTileM, kInnerN]
-    // output tile (still has an inner K-iter loop with TMATMUL_ACC since
-    // K=kSeqLen requires 2 inner-K steps).
+    // Multi-core: flatten (h, mIter, nIter) — each work item is one
+    // [kTileM, kInnerN] output tile. Inner K-iter loop (kSeqKIter) still
+    // does TMATMUL + TMATMUL_ACC because K=kSeqLen > kInnerK.
     const unsigned core_id   = get_block_idx();
-    constexpr unsigned kWork = kNumHeads * kHeadDimNIter;   // 32 * 2 = 64
+    constexpr unsigned kWork = kNumHeads * kSeqMIter * kHeadDimNIter;
 
     for (unsigned w = core_id; w < kWork; w += kBlockDim) {
-        const unsigned h     = w / kHeadDimNIter;
-        const unsigned nIter = w % kHeadDimNIter;
+        const unsigned h     = w / (kSeqMIter * kHeadDimNIter);
+        const unsigned rem   = w % (kSeqMIter * kHeadDimNIter);
+        const unsigned mIter = rem / kHeadDimNIter;
+        const unsigned nIter = rem % kHeadDimNIter;
 
         const size_t probsBase = static_cast<size_t>(h) * kSeqLen * kSeqLen;
         const size_t vBase     = static_cast<size_t>(h) * kHeadDim;
         const size_t outBase   = static_cast<size_t>(h) * kHeadDim;
+        const size_t mOffset   = static_cast<size_t>(mIter) * kTileM;
         const size_t nOffset   = static_cast<size_t>(nIter) * kInnerN;
 
         for (unsigned kIter = 0; kIter < kSeqKIter; ++kIter) {
             const size_t kOffset = static_cast<size_t>(kIter) * kInnerK;
 
-            GlobalDataA aGlobal(probs + probsBase + kOffset);
+            // A: probs[h, mOffset:mOffset+M, kOffset:kOffset+K]
+            GlobalDataA aGlobal(probs + probsBase + mOffset * kSeqLen + kOffset);
+            // B: V[kOffset:kOffset+K, h, nOffset:nOffset+N]  (row stride kQKVHidden)
             GlobalDataB bGlobal(v     + vBase
                                       + kOffset * kQKVHidden
                                       + nOffset);
@@ -608,7 +653,7 @@ __global__ AICORE void runAttnPV(__gm__ uint8_t *out_raw,
             }
         }
 
-        GlobalDataC cGlobal(out + outBase + nOffset);
+        GlobalDataC cGlobal(out + outBase + mOffset * kQKVHidden + nOffset);
         TSTORE<AccTile, GlobalDataC,
                AtomicType::AtomicNone,
                ReluPreMode::NoRelu>(cGlobal, cTile);
@@ -667,16 +712,21 @@ __global__ AICORE void runQRopeProjection(__gm__ uint8_t *q_rope_raw,
     RightTile    bTile;
     AccTile      cTile;
 
-    // Multi-core: strided over nIter (each iter == one head). nIter == h.
-    const unsigned core_id = get_block_idx();
+    // Multi-core: flatten (mIter, nIter) — nIter == head index. Each work
+    // item is one [kTileM, kRopeDim] sub-tile of Q_rope (head-major).
+    const unsigned core_id   = get_block_idx();
+    constexpr unsigned kWork = kSeqMIter * kQRopeNIter;
 
-    for (unsigned nIter = core_id; nIter < kQRopeNIter; nIter += kBlockDim) {
+    for (unsigned w = core_id; w < kWork; w += kBlockDim) {
+        const unsigned mIter = w / kQRopeNIter;
+        const unsigned nIter = w % kQRopeNIter;     // == head index
+        const size_t mOffset = static_cast<size_t>(mIter) * kTileM;
         const size_t nOffset = static_cast<size_t>(nIter) * kInnerN;
 
         for (unsigned kIter = 0; kIter < kHiddenKIter; ++kIter) {
             const size_t kOffset = static_cast<size_t>(kIter) * kInnerK;
 
-            GlobalDataA aGlobal(x        + kOffset);
+            GlobalDataA aGlobal(x        + mOffset * kHidden + kOffset);
             GlobalDataB bGlobal(w_q_rope + kOffset * kQRopeWidth + nOffset);
 
             TLOAD(aMatTile, aGlobal);
@@ -691,8 +741,9 @@ __global__ AICORE void runQRopeProjection(__gm__ uint8_t *q_rope_raw,
             }
         }
 
-        // Head-major output: this tile is head nIter's [S, kRopeDim] block.
-        GlobalDataC cGlobal(q_rope + static_cast<size_t>(nIter) * kSeqLen * kRopeDim);
+        // Head-major output: head nIter's [S, kRopeDim] block, this M-chunk.
+        GlobalDataC cGlobal(q_rope + static_cast<size_t>(nIter) * kSeqLen * kRopeDim
+                                   + mOffset * kRopeDim);
         TSTORE<AccTile, GlobalDataC,
                AtomicType::AtomicNone,
                ReluPreMode::NoRelu>(cGlobal, cTile);
@@ -744,31 +795,35 @@ __global__ AICORE void runKRopeProjection(__gm__ uint8_t *k_rope_raw,
     RightTile    bTile;
     AccTile      cTile;
 
-    // Single output tile (M=128, N=kRopeDim=64, K shared with all heads). Only core 0.
-    if (get_block_idx() != 0) return;
+    // Multi-core: M-chunks of kTileM rows, strided across cores.
+    const unsigned core_id = get_block_idx();
 
-    for (unsigned kIter = 0; kIter < kHiddenKIter; ++kIter) {
-        const size_t kOffset = static_cast<size_t>(kIter) * kInnerK;
+    for (unsigned mIter = core_id; mIter < kSeqMIter; mIter += kBlockDim) {
+        const size_t mOffset = static_cast<size_t>(mIter) * kTileM;
 
-        GlobalDataA aGlobal(x        + kOffset);
-        GlobalDataB bGlobal(w_k_rope + kOffset * kRopeDim);
+        for (unsigned kIter = 0; kIter < kHiddenKIter; ++kIter) {
+            const size_t kOffset = static_cast<size_t>(kIter) * kInnerK;
 
-        TLOAD(aMatTile, aGlobal);
-        TLOAD(bMatTile, bGlobal);
-        TMOV (aTile, aMatTile);
-        TMOV (bTile, bMatTile);
+            GlobalDataA aGlobal(x        + mOffset * kHidden + kOffset);
+            GlobalDataB bGlobal(w_k_rope + kOffset * kRopeDim);
 
-        if (kIter == 0) {
-            TMATMUL    (cTile, aTile, bTile);
-        } else {
-            TMATMUL_ACC(cTile, aTile, bTile);
+            TLOAD(aMatTile, aGlobal);
+            TLOAD(bMatTile, bGlobal);
+            TMOV (aTile, aMatTile);
+            TMOV (bTile, bMatTile);
+
+            if (kIter == 0) {
+                TMATMUL    (cTile, aTile, bTile);
+            } else {
+                TMATMUL_ACC(cTile, aTile, bTile);
+            }
         }
-    }
 
-    GlobalDataC cGlobal(k_rope);
-    TSTORE<AccTile, GlobalDataC,
-           AtomicType::AtomicNone,
-           ReluPreMode::NoRelu>(cGlobal, cTile);
+        GlobalDataC cGlobal(k_rope + mOffset * kRopeDim);
+        TSTORE<AccTile, GlobalDataC,
+               AtomicType::AtomicNone,
+               ReluPreMode::NoRelu>(cGlobal, cTile);
+    }
 }
 
 // =============================================================================
@@ -823,20 +878,25 @@ __global__ AICORE void runAttnQKRope(__gm__ uint8_t *scores_raw,
     RightTile    bTile;
     AccTile      cTile;
 
-    // Multi-core: flatten (h, nIter) — each work item is one score_rope tile.
+    // Multi-core: flatten (h, mIter, nIter) — each work item is one
+    // [kTileM, kInnerN] scores_rope sub-tile.
     const unsigned core_id   = get_block_idx();
-    constexpr unsigned kWork = kNumHeads * kSeqNIter;   // 32 * 2 = 64
+    constexpr unsigned kWork = kNumHeads * kSeqMIter * kSeqNIter;
 
     for (unsigned w = core_id; w < kWork; w += kBlockDim) {
-        const unsigned h     = w / kSeqNIter;
-        const unsigned nIter = w % kSeqNIter;
+        const unsigned h     = w / (kSeqMIter * kSeqNIter);
+        const unsigned rem   = w % (kSeqMIter * kSeqNIter);
+        const unsigned mIter = rem / kSeqNIter;
+        const unsigned nIter = rem % kSeqNIter;
 
         const size_t qBase      = static_cast<size_t>(h) * kSeqLen * kRopeDim;
         const size_t scoresBase = static_cast<size_t>(h) * kSeqLen * kSeqLen;
+        const size_t mOffset    = static_cast<size_t>(mIter) * kTileM;
         const size_t nOffset    = static_cast<size_t>(nIter) * kInnerN;
 
-        // Single K iter (kRopeDim == kInnerN == 64).
-        GlobalDataA  aGlobal(q_rope + qBase);
+        // Single K iter (kRopeDim == kInnerN == 64). A is the [kTileM, kRopeDim]
+        // slice of Q_rope_rot for head h starting at row mOffset.
+        GlobalDataA  aGlobal(q_rope + qBase + mOffset * kRopeDim);
         GlobalDataBT bGlobal(k_rope + nOffset * kRopeDim);
 
         TLOAD(aMatTile, aGlobal);
@@ -846,7 +906,7 @@ __global__ AICORE void runAttnQKRope(__gm__ uint8_t *scores_raw,
 
         TMATMUL(cTile, aTile, bTile);
 
-        GlobalDataC cGlobal(scores + scoresBase + nOffset);
+        GlobalDataC cGlobal(scores + scoresBase + mOffset * kSeqLen + nOffset);
         TSTORE<AccTile, GlobalDataC,
                AtomicType::AtomicNone,
                ReluPreMode::NoRelu>(cGlobal, cTile);

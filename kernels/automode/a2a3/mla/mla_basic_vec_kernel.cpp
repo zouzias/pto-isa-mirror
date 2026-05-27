@@ -40,20 +40,23 @@
 #include <pto/pto-inst.hpp>
 #include "generated_cases.h"
 
+#include "generated_cases.h"   // emitted by scripts/generate_cases.py
+
 using namespace pto;
 
 namespace mla_basic_cfg_vec {
 
 // Mirror of mla_basic_cube_kernel.cpp's namespace. The two TUs compile
-// independently so we cannot share a header without adding plumbing.
+// independently so we cannot share a header without adding plumbing; both
+// pull the active case from build/generated_cases.h.
 constexpr unsigned kBatch    = 1;
-constexpr unsigned kSeqLen   = 128;
-constexpr unsigned kHidden   = 4096;
-constexpr unsigned kNumHeads = 32;
-constexpr unsigned kHeadDim  = 128;
-constexpr unsigned kLatent   = 64;
-constexpr unsigned kRopeDim  = 64;
-constexpr unsigned kRopeHalf = kRopeDim / 2;  // 32
+constexpr unsigned kSeqLen   = kMlaSeqLen;
+constexpr unsigned kHidden   = kMlaHidden;
+constexpr unsigned kNumHeads = kMlaNumHeads;
+constexpr unsigned kHeadDim  = kMlaHeadDim;
+constexpr unsigned kLatent   = kMlaLatent;
+constexpr unsigned kRopeDim  = kMlaRopeDim;
+constexpr unsigned kRopeHalf = kRopeDim / 2;
 
 // Vec-side M-chunk sizes. Per-row softmax / RoPE / cache copy are independent
 // along M (sequence axis), so we process the S rows in fixed-size sub-tiles.
