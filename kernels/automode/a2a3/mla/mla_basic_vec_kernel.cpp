@@ -38,7 +38,6 @@
 
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
-#include "generated_cases.h"
 
 #include "generated_cases.h"   // emitted by scripts/generate_cases.py
 

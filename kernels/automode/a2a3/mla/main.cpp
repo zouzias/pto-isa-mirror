@@ -337,19 +337,30 @@ int main(int argc, char **argv)
         // flags (--sys_cnt_multiple etc.) without us tracking them all.
     }
 
-    if (!filterCase.empty() && filterCase != kMlaCaseName) {
-        // Treat numeric tuples like "128,4096,32,128,64,64,64" as a request
-        // to verify the bake-in matches.
-        if (filterCase.find(',') != std::string::npos) {
-            // Reconstruct the expected case name from kMla* and compare.
+    // Sanity-check: if the user passed a numeric tuple via --case/--cases,
+    // confirm it matches the case the binary was actually compiled against.
+    // Compare *value* form (e.g. "128,4096,32,128,64,64,64") rather than the
+    // case-name slug, since run.sh forwards the raw tuple.
+    if (!filterCase.empty() && filterCase.find(',') != std::string::npos) {
+        char expected[128];
+        std::snprintf(expected, sizeof(expected), "%u,%u,%u,%u,%u,%u,%u",
+                      kMlaSeqLen, kMlaHidden, kMlaNumHeads, kMlaHeadDim,
+                      kMlaLatent, kMlaQLatent, kMlaRopeDim);
+        // Tolerate whitespace in user input.
+        std::string normalized;
+        normalized.reserve(filterCase.size());
+        for (char c : filterCase) {
+            if (c != ' ' && c != '\t') normalized.push_back(c);
+        }
+        if (normalized != expected) {
             std::cerr << "[main] requested case='" << filterCase
-                      << "' but this build is '" << kMlaCaseName
-                      << "'. Re-run scripts/generate_cases.py + rebuild "
+                      << "' but this build is '" << expected
+                      << "' (active=" << kMlaCaseName
+                      << "). Re-run scripts/generate_cases.py + rebuild "
                       << "to switch cases.\n";
             return 2;
         }
     }
-    (void)npuId;        // honoured by aclrtSetDevice below
     (void)intermediate; // ValidateStage already prints per-stage info
 
     printf("[main] active case: %s\n", kMlaCaseName);
