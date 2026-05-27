@@ -991,11 +991,8 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     TileQKData qkAccTile;
 
     // Define tile types for second PV matmul
-    // DN layout version
-    // For DN, P is stored in GM as (Cube_S1, Cube_S0). Consume it as P^T with shape (Cube_S0, Cube_S1)
-    // to align with Left(M??K) for TMATMUL(Cube_S0, Cube_S1, HEAD_SIZE).
     using TileMatPData =
-        Tile<TileType::Mat, half, Cube_S0, Cube_S1, BLayout::RowMajor, Cube_S0, Cube_S1, SLayout::ColMajor, 512>;
+        Tile<TileType::Mat, half, Cube_S1, Cube_S0, BLayout::RowMajor, Cube_S1, Cube_S0, SLayout::ColMajor, 512>;
     using TileMatVData =
         Tile<TileType::Mat, half, Cube_S1, HEAD_SIZE, BLayout::ColMajor, Cube_S1, HEAD_SIZE, SLayout::RowMajor, 512>;
     using TilePVData = TileAcc<float, Cube_S0, HEAD_SIZE, Cube_S0, HEAD_SIZE>;

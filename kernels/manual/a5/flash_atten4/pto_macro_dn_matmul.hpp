@@ -143,10 +143,12 @@ AICORE inline MatmulCallConfig resolve_acc_mode(AccMode mode, bool isFirstSlice,
     return MatmulCallConfig{!isFirstSlice, AccPhase::Partial};
 }
 
-template <unsigned Cube_M, unsigned Tile_K, unsigned Cube_N, bool L1LoadBFirst = false, layout_t LAYOUT = layout_t::NONE, typename TileDataA,
-          typename TileDataB, typename TileDataC, typename OpHook = NoOpMatmulHook, typename OpHook2 = NoOpMatmulHook, typename OpHook3 = NoOpMatmulHook>
+template <unsigned Cube_M, unsigned Tile_K, unsigned Cube_N, bool L1LoadBFirst = false,
+          layout_t LAYOUT = layout_t::NONE, typename TileDataA, typename TileDataB, typename TileDataC,
+          typename OpHook = NoOpMatmulHook, typename OpHook2 = NoOpMatmulHook, typename OpHook3 = NoOpMatmulHook>
 AICORE inline void pto_macro_matmul(TileDataA &aMatTile, TileDataB &bMatTile, TileDataC &cAccTile,
-                                    AccMode accMode = AccMode::Init, int stamp_id = 0, OpHook preATExtOpHook = OpHook(), OpHook2 preBTExtOpHook = OpHook2(), OpHook3 postTExtOpHook = OpHook3())
+                                    AccMode accMode = AccMode::Init, int stamp_id = 0, OpHook preATExtOpHook = OpHook(),
+                                    OpHook2 preBTExtOpHook = OpHook2(), OpHook3 postTExtOpHook = OpHook3())
 {
     constexpr layout_t layout = deduce_layout<TileDataA, TileDataB>();
 
@@ -180,6 +182,9 @@ AICORE inline void pto_macro_matmul(TileDataA &aMatTile, TileDataB &bMatTile, Ti
         if constexpr (layout == layout_t::NT) {
             TASSIGN(aMatTile, (uint64_t)aMatTile.data() + k * Cube_K * Cube_M * sizeof(typename TileDataA::DType));
             TASSIGN(bMatTile, (uint64_t)bMatTile.data() + k * Cube_K * Cube_N * sizeof(typename TileDataB::DType));
+        } else if constexpr (layout == layout_t::TN) {
+            TASSIGN(aMatTile, (uint64_t)aMatTile.data() + k * Cube_K * 16 * sizeof(typename TileDataA::DType));
+            TASSIGN(bMatTile, (uint64_t)bMatTile.data() + k * Cube_K * 16 * sizeof(typename TileDataB::DType));
         }
 
         // TEXTRACT slices the current Cube_K panel into L0A/L0B.
