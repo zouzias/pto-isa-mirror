@@ -15,22 +15,58 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <algorithm>
 #include <pto/common/constants.hpp>
 #include "pto/cpu/tile_offsets.hpp"
+#include "nz_utils.hpp"
 
 namespace pto {
 template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 {
     assert(src.GetValidRow() == dst.GetValidRow() && src.GetValidCol() == dst.GetValidCol());
-    
-    for (size_t r = 0; r < src.GetValidRow(); r++) {
+
+    if constexpr (SrcTileData::SFractal != SLayout::NoneBox && DstTileData::SFractal != SLayout::NoneBox) {
+        int totalRows = src.GetValidRow();
+        int totalCols = src.GetValidCol();
+        
+        ForEachNZElement<SrcTileData>(
+            totalRows, totalCols,
+            [&](size_t r, size_t c, size_t srcTileIdx, size_t gd_idx) {
+                (void)gd_idx;
+                size_t dstTileIdx = GetTileElementOffset<DstTileData>(r, c);
+                dst.data()[dstTileIdx] = static_cast<typename DstTileData::DType>(src.data()[srcTileIdx]);
+            });
+    }
+    else {
         for (size_t c = 0; c < src.GetValidCol(); c++) {
-            size_t srcTileIdx = GetTileElementOffset<SrcTileData>(r, c);
-            size_t dstTileIdx = GetTileElementOffset<DstTileData>(r, c);
-            dst.data()[dstTileIdx] = static_cast<typename DstTileData::DType>(src.data()[srcTileIdx]);
+            size_t subTileSrcC = c / SrcTileData::InnerCols;
+            size_t innerSrcC = c % SrcTileData::InnerCols;
+            size_t subTileDstC = c / DstTileData::InnerCols;
+            size_t innerDstC = c % DstTileData::InnerCols;
+
+            for (size_t r = 0; r < src.GetValidRow(); r++) {
+                size_t srcTileIdx;
+                size_t dstTileIdx;
+                if constexpr (SrcTileData::SFractal == SLayout::NoneBox) {
+                    srcTileIdx = GetTileElementOffsetPlain<SrcTileData>(r, c);
+                } else {
+                    size_t subTileR = r / SrcTileData::InnerRows;
+                    size_t innerR = r % SrcTileData::InnerRows;
+                    srcTileIdx = GetTileElementOffsetSubfractals<SrcTileData>(subTileR, innerR, subTileSrcC, innerSrcC);
+                }
+
+                if constexpr (DstTileData::SFractal == SLayout::NoneBox) {
+                    dstTileIdx = GetTileElementOffsetPlain<DstTileData>(r, c);
+                } else {
+                    size_t subTileR = r / DstTileData::InnerRows;
+                    size_t innerR = r % DstTileData::InnerRows;
+                    dstTileIdx = GetTileElementOffsetSubfractals<DstTileData>(subTileR, innerR, subTileDstC, innerDstC);
+                }
+                dst.data()[dstTileIdx] = src.data()[srcTileIdx];
+            }
         }
     }
 }
 
+// ВСЕ ОСТАЛЬНЫЕ ПЕРЕГРУЗКИ ОСТАЮТСЯ БЕЗ ИЗМЕНЕНИЙ
 template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 {
