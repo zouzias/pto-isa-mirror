@@ -112,7 +112,7 @@ __global__ AICORE void runTGATHER(__gm__ dstT __out__ *out, __gm__ srcT __in__ *
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    TGATHER<DstTileData, TileData, maskPattern>(dstTile, srcTile);
+    TGATHER<maskPattern>(dstTile, srcTile);
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
