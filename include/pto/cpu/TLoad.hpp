@@ -149,7 +149,7 @@ __tf__ AICORE void TLoad(
         pto::Layout::NZ) {
 
         ForEachNZElement<TileData>(
-            gShape3,
+            gShape0 * gShape1 * gShape2 * gShape3,
             gShape4,
             [&](size_t r,
                 size_t c,

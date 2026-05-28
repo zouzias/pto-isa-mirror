@@ -25,22 +25,22 @@ PTO_INLINE size_t GetNZGlobalOffset(size_t r, size_t c, size_t gShape4)
 
 template <typename TileData, typename Func>
 PTO_INLINE void ForEachNZElement(
-    int gShape3,
-    int gShape4,
+    int totalRows,
+    int totalCols,
     Func &&func)
 {
-    for (size_t r = 0; r < static_cast<std::size_t>(gShape3); r++) {
+    for (size_t r = 0; r < static_cast<std::size_t>(totalRows); r++) {
         size_t subTileR = r / TileData::InnerRows;
         size_t innerR = r % TileData::InnerRows;
         
-        for (size_t c = 0; c < static_cast<std::size_t>(gShape4); c++) {
+        for (size_t c = 0; c < static_cast<std::size_t>(totalCols); c++) {
             size_t subTileC = c / TileData::InnerCols;
             size_t innerC = c % TileData::InnerCols;
             
             size_t tile_idx = GetTileElementOffsetSubfractals<TileData>(
                 subTileR, innerR, subTileC, innerC);
             
-            size_t gd_idx = GetNZGlobalOffset(r, c, gShape4);
+            size_t gd_idx = GetNZGlobalOffset(r, c, totalCols);
             
             func(r, c, tile_idx, gd_idx);
         }

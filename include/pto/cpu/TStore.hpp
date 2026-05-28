@@ -174,7 +174,7 @@ __tf__ PTO_INLINE void TStore(
         using S = typename TileData::DType;
 
         ForEachNZElement<TileData>(
-            gShape3,
+            gShape0 * gShape1 * gShape2 * gShape3,
             gShape4,
             [&](size_t r,
                 size_t c,
