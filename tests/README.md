@@ -30,6 +30,7 @@ Common test entry points:
   - `a5/src/st/`: A5 compute ST
   - `a5/src/common/`: A5 shared test resources
   - `a5/comm/st/`: A5 communication ST
+  - `a1/src/st/`: A1 compute ST
   - `kirin9030/src/st/`: Kirin9030 compute ST
   - `kirin9030/src/common/`: Kirin9030 shared test resources
 - `costmodel/`: Cost model tests

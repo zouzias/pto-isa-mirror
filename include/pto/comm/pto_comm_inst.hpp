@@ -94,6 +94,7 @@ PTO_INST RecordEvent TGET(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
     return {};
 }
 
+#ifndef PTO_NPU_ARCH_A1
 // ============================================================================
 // TNOTIFY: Send flag notification to remote NPU
 // Signal type must be int32_t
@@ -341,6 +342,8 @@ PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcG
     WaitAllEvents(events...);
     return ::pto::comm::TGET_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
 }
+
+#endif
 
 } // namespace comm
 } // namespace pto

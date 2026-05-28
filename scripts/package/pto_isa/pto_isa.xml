@@ -33,6 +33,7 @@
         <file value="pto-inst.hpp" install_mod="550" entity="true"/>
     </file_info>
     <file_info copy_type="source" src_path="" dst_path="$(TARGET_ENV)/include/pto/npu" install_path="$(TARGET_ENV)/include/pto/npu" install_type="all">
+        <file value="a1" install_mod="550" entity="true"/>
         <file value="a2a3" install_mod="550" entity="true"/>
         <file value="a5" install_mod="550" entity="true"/>
     </file_info>
@@ -51,6 +52,7 @@
         <path value="$(TARGET_ENV)/include/pto/npu"/>
         <path value="$(TARGET_ENV)/include/pto/npu/a2a3"/>
         <path value="$(TARGET_ENV)/include/pto/npu/a5"/>
+        <path value="$(TARGET_ENV)/include/pto/npu/a1"/>
         <path value="$(TARGET_ENV)/include/pto/cpu"/>
     </dir_info>
 </config>

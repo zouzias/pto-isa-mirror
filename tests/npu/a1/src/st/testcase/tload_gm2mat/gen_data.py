@@ -1,0 +1,211 @@
+#!/usr/bin/python3
+# coding=utf-8
+# --------------------------------------------------------------------------------
+# Copyright (c) 2025 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+# --------------------------------------------------------------------------------
+
+import os
+import struct
+import ctypes
+import numpy as np
+
+np.random.seed(19)
+
+
+def nchw_to_nc1hwc0(nchw_tensor: np.ndarray, c0: int = 16) -> np.ndarray:
+    if nchw_tensor.ndim != 4:
+        raise ValueError(f"The input must be a 4-dimensional NCHW tensor, current dim : {nchw_tensor.ndim}")
+    if (c0 & (c0 - 1)) != 0 and c0 != 1:
+        raise ValueError(f"C0 should be 8/16/32, now is : {c0}")
+
+    n, c, h, w = nchw_tensor.shape
+    c1 = (c + c0 - 1) // c0
+    pad_c = c1 * c0 - c
+    if pad_c > 0:
+        pad_width = ((0, 0), (0, pad_c), (0, 0), (0, 0))
+        nchw_padded = np.pad(nchw_tensor, pad_width, mode="constant", constant_values=0)
+    else:
+        nchw_padded = nchw_tensor
+
+    nc1c0hw_tensor = nchw_padded.reshape(n, c1, c0, h, w)
+
+    # NC1C0HW → NC1HWC0
+    # origin index：0(n),1(c1),2(C0),3(h),4(w) → new index ：0,1,3,4,2
+    nc1hwc0_tensor = np.transpose(nc1c0hw_tensor, axes=(0, 1, 3, 4, 2))
+
+    return nc1hwc0_tensor
+
+
+def nchw_to_c1hw_n16_16_c0(nchw_tensor: np.ndarray, c0: int = 16) -> np.ndarray:
+    if nchw_tensor.ndim != 4:
+        raise ValueError(f"The input must be a 4-dimensional NCHW tensor, current dim :{nchw_tensor.ndim}")
+    if (c0 & (c0 - 1)) != 0 and c0 != 1:
+        raise ValueError(f"C0 should be 8/16/32, now is :{c0}")
+
+    n_ori, c_ori, h, w = nchw_tensor.shape
+    n_pad = ((n_ori + 15) // 16) * 16
+    n_div_16 = n_pad // 16
+    c_pad = ((c_ori + c0 - 1) // c0) * c0
+    c1 = c_pad // c0
+    c1hw = c1 * h * w
+    pad_width = ((0, n_pad - n_ori), (0, c_pad - c_ori), (0, 0), (0, 0))
+    nchw_padded = np.pad(nchw_tensor, pad_width, mode="constant", constant_values=0)
+    nc1c0hw = nchw_padded.reshape(n_pad, c1, c0, h, w)
+    n16_c1c0hw = nc1c0hw.reshape(n_div_16, 16, c1, c0, h, w)
+
+    # (n_div_16),1(16),2(c1),3(C0),4(h),5(w) -> (c1),4(h),5(w),0(n_div_16),1(16),3(C0)
+    rearranged = np.transpose(n16_c1c0hw, axes=(2, 4, 5, 0, 1, 3))
+
+    # [c1hw, N/16, 16, C0]
+    final_tensor = rearranged.reshape(c1hw, n_div_16, 16, c0)
+
+    return final_tensor
+
+
+def gen_golden_data(case_name, gInfo):
+    data_type = gInfo.datatype
+    gShape0 = gInfo.gShape0
+    gShape1 = gInfo.gShape1
+    gShape2 = gInfo.gShape2
+    gShape3 = gInfo.gShape3
+    gShape4 = gInfo.gShape4
+    gWholeShape0 = gInfo.gWholeShape0
+    gWholeShape1 = gInfo.gWholeShape1
+    gWholeShape2 = gInfo.gWholeShape2
+    gWholeShape3 = gInfo.gWholeShape3
+    gWholeShape4 = gInfo.gWholeShape4
+    consecutive_formats = {"ND", "NZ", "NC1HWC02NC1HWC0", "FZ2FZ", "FZ4D2FZ4D"}
+    if gInfo.format in consecutive_formats:
+        input_arr = np.random.randint(-5, 5, size=(gWholeShape0, gWholeShape1,
+                                    gWholeShape2, gWholeShape3, gWholeShape4)).astype(data_type)
+        output_arr = np.zeros(shape=(gShape0, gShape1, gShape2, gShape3, gShape4), dtype=data_type)
+        output_arr = input_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape3, 0:gShape4]
+    elif gInfo.format == "DN":
+        input_arr = np.random.randint(-5, 5, size=(gWholeShape0, gWholeShape1,
+                                    gWholeShape2, gWholeShape4, gWholeShape3)).astype(data_type)
+        output_arr = np.zeros(shape=(gShape0, gShape1, gShape2, gShape4, gShape3), dtype=data_type)
+        output_arr = input_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape4, 0:gShape3]
+    elif gInfo.format == "ND2NZ":
+        input_arr = np.random.randint(-5, 5, size=(gWholeShape0, gWholeShape1,
+                                    gWholeShape2, gWholeShape3, gWholeShape4)).astype(data_type)
+        c0_size = 32 // np.dtype(data_type).itemsize
+        g_shape4_align = (gShape4 + c0_size - 1) // c0_size * c0_size
+        output_arr = np.zeros(
+            shape=(gShape0, gShape1, gShape2, gShape3, g_shape4_align), dtype=data_type)
+        output_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape3,
+                   0:gShape4] = input_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape3, 0:gShape4]
+        output_arr = output_arr.reshape(gShape0, gShape1, gShape2, gShape3,
+            g_shape4_align // c0_size, c0_size).transpose(4, 0, 1, 2, 3, 5)
+    elif gInfo.format == "DN2ZN":
+        input_arr = np.random.randint(-5, 5, size=(gWholeShape0, gWholeShape1,
+                                    gWholeShape2, gWholeShape4, gWholeShape3)).astype(data_type)
+        c0_size = 32 // np.dtype(data_type).itemsize
+        g_shape3_align = (gShape3 + c0_size - 1) // c0_size * c0_size
+        output_arr = np.zeros(
+            shape=(gShape0, gShape1, gShape2, gShape4, g_shape3_align), dtype=data_type)
+        output_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape4,
+                   0:gShape3] = input_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape4, 0:gShape3]
+        output_arr = output_arr.reshape(gShape0, gShape1, gShape2, gShape4,
+            g_shape3_align // c0_size, c0_size).transpose(0, 1, 2, 4, 3, 5)
+    elif gInfo.format == "NCHW2NC1HWC0":
+        input_arr = np.random.randint(-5, 5, size=(gWholeShape1,
+                                    gWholeShape2, gWholeShape3, gWholeShape4)).astype(data_type)
+        c0_size = 32 // np.dtype(data_type).itemsize
+        golden_nchw = np.zeros(shape=(gShape1, gShape2, gShape3, gShape4), dtype=np.dtype(data_type))
+        golden_nchw = input_arr[0:gShape1, 0:gShape2, 0:gShape3, 0:gShape4]
+        output_arr = nchw_to_nc1hwc0(golden_nchw, c0=c0_size)
+    elif gInfo.format == "NCHW2FZ":
+        input_arr = np.random.randint(-5, 5, size=(gWholeShape1,
+                                    gWholeShape2, gWholeShape3, gWholeShape4)).astype(data_type)
+        c0_size = 32 // np.dtype(data_type).itemsize
+        golden_fz = np.zeros(shape=(gShape1, gShape2, gShape3, gShape4), dtype=np.dtype(data_type))
+        golden_fz = input_arr[0:gShape1, 0:gShape2, 0:gShape3, 0:gShape4]
+        output_arr = nchw_to_c1hw_n16_16_c0(golden_fz, c0=c0_size)
+
+    input_arr.tofile("./input.bin")
+    output_arr.tofile("./golden.bin")
+
+
+class GlobalTensorInfo:
+    def __init__(self, datatype, format, gShape0, gShape1, gShape2, gShape3, gShape4,
+                 gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape3, gWholeShape4):
+        self.datatype = datatype
+        # 0:ND2ND, 1:DN2DN, 2:NZ2NZ, 3:ND2NZ, 4:DN2ZN 5:NC1HWC02NC1HWC0 6:FZ2FZ 7:NCHW2NC1HWC0 8:NCHW2FZ
+        self.format = format
+        self.gShape0 = gShape0
+        self.gShape1 = gShape1
+        self.gShape2 = gShape2
+        self.gShape3 = gShape3
+        self.gShape4 = gShape4
+        self.gWholeShape0 = gWholeShape0
+        self.gWholeShape1 = gWholeShape1
+        self.gWholeShape2 = gWholeShape2
+        self.gWholeShape3 = gWholeShape3
+        self.gWholeShape4 = gWholeShape4
+
+if __name__ == "__main__":
+    # 用例名称
+    case_name_list = [
+        "TLoadGM2L1Test.ND_float_1_1_1_3_128_3_3_3_32_128",
+        "TLoadGM2L1Test.ND_int16_t_2_2_1_2_32_3_3_3_111_64",
+        "TLoadGM2L1Test.ND_int8_t_1_2_1_11_32_1_3_2_93_32",
+        "TLoadGM2L1Test.ND_int8_t_1_1_1_1_201_1_1_1_1_201",
+        "TLoadGM2L1Test.ND_float16_t_1_1_1_128_128_1_1_1_256_256",
+        "TLoadGM2L1Test.ND_int64_1_1_1_3_128_3_3_3_32_128",
+        "TLoadGM2L1Test.ND_uint64_2_2_1_2_32_3_3_3_111_64",
+        "TLoadGM2L1Test.ND_int64_1_2_1_11_32_1_3_2_93_32",
+
+        "TLoadGM2L1Test.DN_float_1_1_1_128_3_3_3_3_128_32",
+        "TLoadGM2L1Test.DN_int16_t_2_2_1_32_2_3_3_3_64_111",
+        "TLoadGM2L1Test.DN_int8_t_1_2_1_32_11_1_3_2_32_93",
+        "TLoadGM2L1Test.DN_float_1_1_1_156_1_1_1_1_156_1",
+        "TLoadGM2L1Test.DN_float16_t_1_2_2_64_311_4_3_3_256_400",
+        "TLoadGM2L1Test.DN_uint64_1_1_1_128_3_3_3_3_128_32",
+        "TLoadGM2L1Test.DN_int64_2_2_1_32_2_3_3_3_64_111",
+        "TLoadGM2L1Test.DN_uint64_1_2_1_32_11_1_3_2_32_93",
+
+        "TLoadGM2L1Test.NZ_float_1_5_21_16_8_1_5_21_16_8",
+        "TLoadGM2L1Test.NZ_int16_t_2_16_11_16_16_3_23_13_16_16",
+        "TLoadGM2L1Test.NZ_int8_t_1_16_32_16_32_1_32_32_16_32",
+        "TLoadGM2L1Test.NZ_float16_t_2_4_5_16_16_7_7_7_16_16",
+
+    ]
+
+    case_params_list = [
+        GlobalTensorInfo(np.float32, "ND", 1, 1, 1, 3, 128, 3, 3, 3, 32, 128),
+        GlobalTensorInfo(np.int16, "ND", 2, 2, 1, 2, 32, 3, 3, 3, 111, 64),
+        GlobalTensorInfo(np.int8, "ND", 1, 2, 1, 11, 32, 1, 3, 2, 93, 32),
+        GlobalTensorInfo(np.int8, "ND", 1, 1, 1, 1, 201, 1, 1, 1, 1, 201),
+        GlobalTensorInfo(np.float16, "ND", 1, 1, 1, 128, 128, 1, 1, 1, 256, 256),
+        GlobalTensorInfo(np.int64, "ND", 1, 1, 1, 3, 128, 3, 3, 3, 32, 128),
+        GlobalTensorInfo(np.uint64, "ND", 2, 2, 1, 2, 32, 3, 3, 3, 111, 64),
+        GlobalTensorInfo(np.int64, "ND", 1, 2, 1, 11, 32, 1, 3, 2, 93, 32),
+
+        GlobalTensorInfo(np.float32, "DN", 1, 1, 1, 128, 3, 3, 3, 3, 128, 32),
+        GlobalTensorInfo(np.int16, "DN", 2, 2, 1, 32, 2, 3, 3, 3, 64, 111),
+        GlobalTensorInfo(np.int8, "DN", 1, 2, 1, 32, 11, 1, 3, 2, 32, 93),
+        GlobalTensorInfo(np.float32, "DN", 1, 1, 1, 156, 1, 1, 1, 1, 156, 1),
+        GlobalTensorInfo(np.float16, "DN", 1, 2, 2, 64, 311, 4, 3, 3, 256, 400),
+        GlobalTensorInfo(np.uint64, "DN", 1, 1, 1, 128, 3, 3, 3, 3, 128, 32),
+        GlobalTensorInfo(np.int64, "DN", 2, 2, 1, 32, 2, 3, 3, 3, 64, 111),
+        GlobalTensorInfo(np.uint64, "DN", 1, 2, 1, 32, 11, 1, 3, 2, 32, 93),
+
+        GlobalTensorInfo(np.float32, "NZ", 1, 5, 21, 16, 8, 1, 5, 21, 16, 8),
+        GlobalTensorInfo(np.int16, "NZ", 2, 15, 11, 16, 16, 3, 23, 13, 16, 16),
+        GlobalTensorInfo(np.int8, "NZ", 1, 16, 32, 16, 32, 1, 32, 32, 16, 32),
+        GlobalTensorInfo(np.float16, "NZ", 2, 4, 5, 16, 16, 7, 7, 7, 16, 16),
+    ]
+
+    for i, case_name in enumerate(case_name_list):
+        if not os.path.exists(case_name):
+            os.makedirs(case_name)
+        original_dir = os.getcwd()
+        os.chdir(case_name)
+        gen_golden_data(case_name, case_params_list[i])
+        os.chdir(original_dir)

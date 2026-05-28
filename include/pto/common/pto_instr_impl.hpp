@@ -16,6 +16,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/event.hpp>
 #include <pto/common/arch_cce_intrinsic.hpp>
 
+#ifdef PTO_NPU_ARCH_A1
+#include "pto/npu/a1/header.hpp"
+#endif
+
 #ifdef PTO_NPU_ARCH_A2A3
 #ifdef __COSTMODEL
 #include "pto/npu/a2a3/TAssign.hpp"

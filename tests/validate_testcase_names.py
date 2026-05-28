@@ -42,6 +42,7 @@ VERSION_PATHS: Dict[str, str] = {
     "a3": "tests/npu/a2a3/src/st/testcase",
     "a5": "tests/npu/a5/src/st/testcase",
     "kirin9030": "tests/npu/kirin9030/src/st/testcase",
+    "a1": "tests/npu/a1/src/st/testcase",
 }
 
 # Scripts to validate
@@ -60,7 +61,7 @@ def get_test_dir(version: str, testname: str) -> Optional[Path]:
     Follows symlinks to resolve the actual directory location.
 
     Args:
-        version: Version flag (e.g., "a3", "a5", "kirin9030")
+        version: Version flag (e.g., "a3", "a5", "kirin9030", "a1")
         testname: Test operation name (e.g., "trowsum", "tadd")
 
     Returns:

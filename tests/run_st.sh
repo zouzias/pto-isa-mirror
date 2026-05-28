@@ -13,6 +13,7 @@ set -e
 
 ENABLE_A3=false
 ENABLE_A5=false
+ENABLE_A1=false
 ENABLE_KIRIN9030=false
 ENABLE_KIRINX90=false
 ENABLE_SIMPLE=false
@@ -43,6 +44,10 @@ checkopts() {
         ;;
       --kirinX90)
         ENABLE_KIRINX90=true
+        shift
+        ;;
+      --a1)
+        ENABLE_A1=true
         shift
         ;;
       --sim)
@@ -267,7 +272,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
 
     if [ "$IS_AUTO_MODE" = "false" ]; then
       # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
-      # besides, auto-sync doesn't work with CCE intrisics      
+      # besides, auto-sync doesn't work with CCE intrisics
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_cv -g TPushPopCvTest.case1_half_single_tile
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_vc -g TPushPopVcTest.case1_int8_single_k_tile
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_cv_nosplit -g TPushPopCvNoSplitTest.case1_half_single_tile
@@ -525,7 +530,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t ttri -g TTRITest.case_float_128x128_upper_diag_0
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tconcat -g TCONCATTest.case_half_16x128_16x64_16x64_16x63_16x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram -g THISTOGRAMTest.case_8x128_b1
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram -g THISTOGRAMTest.case_u32_6x912_b1_k64 
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram -g THISTOGRAMTest.case_u32_6x912_b1_k64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_acc2mat_1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nd_1
@@ -726,6 +731,19 @@ if [ "$ENABLE_KIRIN9030" = "true" ]; then
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmov_vect
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmuls
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsel
+fi
+
+if [ "$ENABLE_A1" = "true" ]; then
+  python3 tests/script/build_st.py $ARGS  -v a1 -t all
+  python3 tests/script/run_st.py $ARGS -w -v a1 -t tadd
+  python3 tests/script/run_st.py $ARGS -w -v a1 -t tadds
+  python3 tests/script/run_st.py $ARGS -w -v a1 -t tdiv
+  python3 tests/script/run_st.py $ARGS -w -v a1 -t tdivs
+  python3 tests/script/run_st.py $ARGS -w -v a1 -t tload
+  python3 tests/script/run_st.py $ARGS -w -v a1 -t tload_gm2mat
+  python3 tests/script/run_st.py $ARGS -w -v a1 -t tmul
+  python3 tests/script/run_st.py $ARGS -w -v a1 -t tstore
+  python3 tests/script/run_st.py $ARGS -w -v a1 -t tsub
 fi
 
 if [ "$ENABLE_COMM" = "true" ]; then
