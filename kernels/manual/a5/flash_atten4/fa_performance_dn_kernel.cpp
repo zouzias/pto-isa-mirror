@@ -361,7 +361,8 @@ template <int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1, 
 AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm__ half *q, __gm__ half *k,
                               __gm__ float *qk_tile_fifo, TileMatQData &qMatTile, TileMatKData &kMatTile,
                               TileQKData &qkAccTile, TileQKVecData &qkVecTile, uint64_t qkMatTileEventId,
-                              int accTileEvtID, TSyncQK2SM &qk2smSync, TSyncUBBuf &ubBufSync, int blk_idx)
+                              int accTileEvtID, TSyncQK2SM &qk2smSync, TSyncUBBuf &ubBufSync, int blk_idx,
+                              int ubDrainCarryCount)
 {
     if constexpr (DAV_CUBE) {
         constexpr uint32_t Cube_S0 = CUBE_S0;
@@ -450,7 +451,12 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm
         TileDataF_Sub qkVecTileSubDN;
         TASSIGN(qkVecTileSubDN, (uint64_t)qkVecTile.data() + col_byte_offset);
 
-        if (sub_tile_id == 0 && tile_id >= static_cast<int>(SRC_VEC_TN_BUFFERS)) {
+        // When one physical core processes multiple logical blocks, the tail drains for the previous block can be
+        // deferred and paid by the first few tiles of the next block right before UB reuse actually happens.
+        const bool should_wait_ub_reuse =
+            sub_tile_id == 0 &&
+            (tile_id < ubDrainCarryCount || tile_id >= static_cast<int>(SRC_VEC_TN_BUFFERS));
+        if (should_wait_ub_reuse) {
             ubBufSync.allocate();
         }
 
@@ -1088,6 +1094,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     }
     const int physical_comm_slot = use_cv_comm ? pto::TSYNC_CVID(physical_block_idx, cv_comm_buf) : physical_block_idx;
 
+    int deferredUbBufDrains = 0;
     for (int logical_block_idx = physical_block_idx; logical_block_idx < static_cast<int>(logical_block_count);
          logical_block_idx += static_cast<int>(launch_block_count)) {
         const uint64_t tStart = get_sys_cnt();
@@ -1136,6 +1143,10 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         int pv_src_pingpong_id = 0;   // separate ping-pong for P V tiles
 
         int qkAccTileEvtID = 0;
+        const bool has_next_logical_block =
+            logical_block_idx + static_cast<int>(launch_block_count) < static_cast<int>(logical_block_count);
+        const int ubDrainCarryCount = deferredUbBufDrains;
+        deferredUbBufDrains = 0;
 
         // QK and P pre-computation (tile_id based)
         for (int preload_tile = 0; preload_tile < static_cast<int>(qkPreloadNum) && preload_tile < num_tiles_s1;
@@ -1148,7 +1159,8 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                                CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK, srcVecTNBuffers>(
                         preload_tile, sub_tile, tile_buf_idx, q_block, k, qk_tile_fifo_block, qMatTile[0],
                         kMatTile[k_src_pingpong_id % kMatTNBuffers], qkAccTile, qkVecTile[tile_buf_idx],
-                        k_src_pingpong_id % kMatTNBuffers, qkAccTileEvtID, qk2smSync, ubBufSync, logical_block_idx);
+                        k_src_pingpong_id % kMatTNBuffers, qkAccTileEvtID, qk2smSync, ubBufSync, logical_block_idx,
+                        ubDrainCarryCount);
 
                     k_src_pingpong_id++;
                 }
@@ -1183,7 +1195,8 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                                CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK, srcVecTNBuffers>(
                         next_qk_tile, sub_tile, tile_buf_idx, q_block, k, qk_tile_fifo_block, qMatTile[0],
                         kMatTile[k_src_pingpong_id % kMatTNBuffers], qkAccTile, qkVecTile[tile_buf_idx],
-                        k_src_pingpong_id % kMatTNBuffers, qkAccTileEvtID, qk2smSync, ubBufSync, logical_block_idx);
+                        k_src_pingpong_id % kMatTNBuffers, qkAccTileEvtID, qk2smSync, ubBufSync, logical_block_idx,
+                        ubDrainCarryCount);
 
                     k_src_pingpong_id++;
                 }
@@ -1277,8 +1290,12 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
             {
                 const int ub_drain_count =
                     (num_tiles_s1 < static_cast<int>(srcVecTNBuffers)) ? num_tiles_s1 : static_cast<int>(srcVecTNBuffers);
-                for (int i = 0; i < ub_drain_count; ++i)
-                    ubBufSync.allocate();
+                if (has_next_logical_block) {
+                    deferredUbBufDrains = ub_drain_count;
+                } else {
+                    for (int i = 0; i < ub_drain_count; ++i)
+                        ubBufSync.allocate();
+                }
             }
             {
 #if skip_rescale
@@ -1337,7 +1354,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
         wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
     }
-    pipe_barrier(PIPE_ALL);
+    // pipe_barrier(PIPE_ALL);
 }
 
 // Empty kernel to warm up cores
