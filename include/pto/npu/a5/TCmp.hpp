@@ -60,7 +60,8 @@ __tf__ PTO_INTERNAL OP_NAME(TCMP)
     __ubuf__ TIN *src0 = (__ubuf__ TIN *)__cce_get_tile_ptr(src0Data);
     __ubuf__ TIN *src1 = (__ubuf__ TIN *)__cce_get_tile_ptr(src1Data);
     __ubuf__ uint32_t *dst = (__ubuf__ uint32_t *)__cce_get_tile_ptr(dstData);
-
+    constexpr uint32_t repeatElm = CCE_VL / sizeof(TIN);
+    uint16_t repeatTimes = CeilDivision(validCol, repeatElm);
     __VEC_SCOPE__
     {
         RegTensor<TIN> src0Reg;
@@ -70,15 +71,12 @@ __tf__ PTO_INTERNAL OP_NAME(TCMP)
         MaskReg dstReg;
         using DistType = std::conditional_t<sizeof(TIN) == 2, decltype(PK), decltype(NORM)>;
         constexpr DistType distValue{};
-        constexpr uint32_t repeatElm = CCE_VL / sizeof(TIN);
         constexpr int32_t dstRepeatStride = repeatElm / CMP_BITS_PER_INDEX;
         constexpr uint32_t dstStride = DstTile::RowStride * sizeof(TOUT) / sizeof(uint32_t);
-        uint16_t repeatTimes = CeilDivision(validCol, repeatElm);
         for (uint16_t i = 0; i < (uint16_t)(validRow); ++i) {
             sReg = validCol;
             for (uint16_t j = 0; j < (uint16_t)(repeatTimes); ++j) {
                 pReg = CreatePredicate<TIN>(sReg);
-
                 vlds(src0Reg, src0, i * SrcTile::RowStride + j * repeatElm, NORM);
                 vlds(src1Reg, src1, i * SrcTile::RowStride + j * repeatElm, NORM);
                 CmpCall(dstReg, src0Reg, src1Reg, mode, pReg);
@@ -100,7 +98,8 @@ __tf__ PTO_INTERNAL OP_NAME(TCMP)
     __ubuf__ TIN *src0 = (__ubuf__ TIN *)__cce_get_tile_ptr(src0Data);
     __ubuf__ TIN *src1 = (__ubuf__ TIN *)__cce_get_tile_ptr(src1Data);
     __ubuf__ uint32_t *dst = (__ubuf__ uint32_t *)__cce_get_tile_ptr(dstData);
-
+    constexpr uint32_t repeatElm = CCE_VL / sizeof(uint32_t);
+    unsigned repeatTimes = (CeilDivision(validCol, repeatElm) + 1) / 2;
     __VEC_SCOPE__
     {
         uint32_t sReg;
@@ -113,13 +112,10 @@ __tf__ PTO_INTERNAL OP_NAME(TCMP)
         MaskReg tmpMask1;
         MaskReg dstReg;
         MaskReg tmpMask2;
-        constexpr uint32_t repeatElm = CCE_VL / sizeof(uint32_t);
         constexpr uint32_t dstStride = DstTile::RowStride * sizeof(TOUT) / sizeof(uint32_t);
-        uint16_t repeatTimes = CeilDivision(validCol, repeatElm) + 1;
-
         for (uint16_t i = 0; i < (uint16_t)(validRow); ++i) {
             sReg = validCol;
-            for (uint16_t j = 0; j < (uint16_t)(repeatTimes / 2); ++j) {
+            for (uint16_t j = 0; j < (uint16_t)(repeatTimes); ++j) {
                 vlds(src0Reg0, src0, i * SrcTile::RowStride + j * 2 * repeatElm, NORM);
                 vlds(src1Reg0, src1, i * SrcTile::RowStride + j * 2 * repeatElm, NORM);
                 vlds(src0Reg1, src0, i * SrcTile::RowStride + (j * 2 + 1) * repeatElm, NORM);
