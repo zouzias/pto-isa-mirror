@@ -255,6 +255,9 @@ __tf__ AICORE void MScatterRowImpl(__gm__ T *tablePtr, typename SrcTile::TileDTy
             __gm__ T *dstRow = tablePtr + static_cast<uint64_t>(safeIdx) * tableRowStride;
             __ubuf__ T *srcRow = srcPtr + r * kRowStride;
             MScatterRowDma<T>(dstRow, srcRow, lenBytes);
+            if constexpr (Atomic == ScatterAtomicOp::None) {
+                PtoSetWaitFlag<PIPE_MTE3, PIPE_S>();
+            }
         }
     }
 
@@ -313,6 +316,9 @@ __tf__ AICORE void MScatterRowNzImpl(__gm__ T *tablePtr, typename SrcTile::TileD
                                       (int64_t)srcBlockRow * (int64_t)kFRow * (int64_t)kC0 +
                                       (int64_t)srcRowInBlock * (int64_t)kC0;
                 MScatterRowMultiDma<T>(dstAddr, srcAddr, (uint16_t)gShape1, kFractalRowBytes, ubGapBlocks, gmGapBytes);
+            }
+            if constexpr (Atomic == ScatterAtomicOp::None) {
+                PtoSetWaitFlag<PIPE_MTE3, PIPE_S>();
             }
         }
     }
