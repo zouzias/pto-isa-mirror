@@ -22,6 +22,17 @@ namespace pto {
 
 namespace tquant_detail {
 
+constexpr int16_t kF32StorageBits = 32;
+constexpr int16_t kF32MantissaBits = 23;
+constexpr uint32_t kF32PositiveInfBits = 0x7F800000u;
+constexpr int16_t kBf16StorageBits = 16;
+constexpr int16_t kBf16MantissaBits = 7;
+constexpr uint16_t kBf16PositiveInfBits = 0x7F80u;
+constexpr int16_t kIeee754ExponentBits = 8;
+constexpr int16_t kFp4CodeBits = 4;
+constexpr int16_t kPackedByteBits = 8;
+constexpr int16_t kVectorLaneBits = 32;
+
 /*
  * Floating-point bit fields used by the vector bit operations below.
  *
@@ -55,8 +66,10 @@ struct FloatBitFieldLayout {
     static constexpr BitsT positiveInfBits = PositiveInfBits;
 };
 
-using F32BitFieldLayout = FloatBitFieldLayout<uint32_t, 32, 8, 23, 0x7F800000u>;
-using Bf16BitFieldLayout = FloatBitFieldLayout<uint16_t, 16, 8, 7, 0x7F80u>;
+using F32BitFieldLayout =
+    FloatBitFieldLayout<uint32_t, kF32StorageBits, kIeee754ExponentBits, kF32MantissaBits, kF32PositiveInfBits>;
+using Bf16BitFieldLayout =
+    FloatBitFieldLayout<uint16_t, kBf16StorageBits, kIeee754ExponentBits, kBf16MantissaBits, kBf16PositiveInfBits>;
 
 /*
  * FP4 values are packed as two 4-bit codes per byte.
@@ -71,7 +84,7 @@ using Bf16BitFieldLayout = FloatBitFieldLayout<uint16_t, 16, 8, 7, 0x7F80u>;
  * lowCodeShift extracts the low code bits; right by highCodeShift moves
  * the odd code into byte bits [7:4].
  */
-template <int16_t CodeBits, int16_t PackedByteBits = 8, int16_t VectorLaneBits = 32>
+template <int16_t CodeBits, int16_t PackedByteBits = kPackedByteBits, int16_t VectorLaneBits = kVectorLaneBits>
 struct PackedSubBytePairLayout {
     static constexpr int16_t codeBits = CodeBits;
     static constexpr int16_t packedByteBits = PackedByteBits;
@@ -80,7 +93,7 @@ struct PackedSubBytePairLayout {
     static constexpr int16_t highCodeShift = vectorLaneBits - packedByteBits;
 };
 
-using Fp4PackedPairLayout = PackedSubBytePairLayout<4>;
+using Fp4PackedPairLayout = PackedSubBytePairLayout<kFp4CodeBits>;
 
 /*
  * E2M1 code layout used after source values have been scaled to FP32 lanes.
