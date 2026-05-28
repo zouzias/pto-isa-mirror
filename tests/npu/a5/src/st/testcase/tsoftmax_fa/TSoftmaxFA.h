@@ -296,11 +296,11 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
         // for (uint16_t i0 = 0; i0 < uint16_t(ubN / 2) ; ++i0) {    
         // less unroll, just 1 vdintlv + 1 vsts, performance worse
         for (uint16_t i0 = 0; i0 < uint16_t(ubN / 4) ; ++i0) { //128,64
-            vector_address areg_x_1 = vag_b32(128);
-            vld(vreg_x_f32_a, input_x_Ptr, areg_x_1, NORM);
-            vld(vreg_x_f32_b, ((__ubuf__ float *) input_x_Ptr + 64), areg_x_1, NORM);
-            vld(vreg_x_f32_1_a, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2), areg_x_1, NORM);
-            vld(vreg_x_f32_1_b, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2 + 64), areg_x_1, NORM);
+            // vector_address areg_x_1 = vag_b32(128);
+            vld(vreg_x_f32_a, input_x_Ptr, vag_b32(128), NORM);
+            vld(vreg_x_f32_b, ((__ubuf__ float *) input_x_Ptr + 64), vag_b32(128), NORM);
+            vld(vreg_x_f32_1_a, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2), vag_b32(128), NORM);
+            vld(vreg_x_f32_1_b, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2 + 64), vag_b32(128), NORM);
 
             //NZ+1 output
             // vector_address areg_x_1 = vag_b32(64);
@@ -428,7 +428,8 @@ __tf__ AICORE void TSOFTMAX_DN_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x,
 
     __ubuf__ typename TileDataD2::DType *x_exp_Ptr = (__ubuf__ typename TileDataD2::DType *)__cce_get_tile_ptr(x_exp.data());
     __ubuf__ typename TileDataS1::DType *input_x_Ptr = (__ubuf__ typename TileDataS1::DType *)__cce_get_tile_ptr(input_x.data());
-    __ubuf__ typename TileDataD1::DType *local_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_max.data());
+    // __ubuf__ typename TileDataD1::DType *local_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_max.data());
+    __ubuf__ typename TileDataD1::DType *local_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_max.data());    //aligned to golden check
     __ubuf__ typename TileDataD1::DType *local_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_sum.data());
     __ubuf__ typename TileDataD1::DType *new_global_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_max.data());
     __ubuf__ typename TileDataD1::DType *new_global_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_sum.data());
@@ -598,7 +599,7 @@ __tf__ AICORE void TSOFTMAX_DN_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x,
                 for (uint16_t j = 0; j < uint16_t(1); j++) {
                     preg1 = CreatePredicate<T1>(sreg);
                     preg2 = CreatePredicate<T2>(sreg2);
-                    vlds(input_reg,  input_x_Ptr,  i * ubM_ + j * elementsPerRepeat, NORM);
+                    vlds(vreg_x_exp,  input_x_Ptr,  i * ubM_ + j * elementsPerRepeat, NORM);
                     vmulscvt(vreg_x_exp_f16, vreg_x_exp, keepProb, preg2, PART_EVEN);
                     vsts(vreg_x_exp_f16, ((__ubuf__ half *&)input_x_Ptr), i * ubM_*2 + j * elementsPerRepeat*2, NORM_B16, preg2);
                 }
@@ -881,20 +882,21 @@ __tf__ AICORE void TSOFTMAX_DN_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x,
 
             //ND output to align
             for (uint16_t i0 = 0; i0 < uint16_t(ubN_ / 2) ; ++i0) {
-                vector_address areg_x_2 = vag_b16(256);
-                vld(vreg_x_exp_even_f16, ((__ubuf__ half *)input_x_Ptr), areg_x_2, NORM);
-                vld(vreg_x_exp_odd_f16,  ((__ubuf__ half *)input_x_Ptr + 128), areg_x_2, NORM);
+                // vector_address areg_x_2 = vag_b16(256);
+                vld(vreg_x_exp_even_f16, ((__ubuf__ half *)input_x_Ptr), vag_b16(256), NORM);
+                vld(vreg_x_exp_odd_f16,  ((__ubuf__ half *)input_x_Ptr + 128), vag_b16(256), NORM);
 
                 vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg_x_exp_even_f16, vreg_x_exp_odd_f16);
 
-                vsts(vreg_x_exp_f16_pack, ((__ubuf__ half *) x_exp_Ptr + i0*128), 0, NORM_B16, preg_136);
+                vsts(vreg_x_exp_f16_pack, ((__ubuf__ half *) x_exp_Ptr + i0*128), 0, NORM_B16, preg_136);    //ND golden pass, stop here
             }
         }
 
         // test performance drop for membar
         // mem_bar(VST_VLD);
         {
-            __ubuf__ half *x_exp_1 = (__ubuf__ half *)x_exp_Ptr + (ubN_/2 *16 / 2);
+            __ubuf__ half *x_exp_1 = (__ubuf__ half *)x_exp_Ptr + ubN_*ubM_;
+            __ubuf__ half *x_exp_2 = (__ubuf__ half *)x_exp_1 + (ubN_/2 *16 / 2);
             vector_f16 vreg_x_exp_even_f16;
             vector_f16 vreg_x_exp_odd_f16;
             vector_f16 vreg_x_exp_even_f16_1;
@@ -905,38 +907,16 @@ __tf__ AICORE void TSOFTMAX_DN_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x,
             vector_f16 vreg_x_exp_f16_1_pack;
             vector_f16 vreg_x_exp_f16_1_packa;
             //NZ output
-            for (uint16_t i0 = 0; i0 < uint16_t(ubN_ / 4) ; ++i0) {
-                vector_address areg_x_2 = vag_b16(128);
-                vld(vreg_x_exp_even_f16, ((__ubuf__ half *)input_x_Ptr), areg_x_2, NORM);
-                vld(vreg_x_exp_odd_f16,  ((__ubuf__ half *)input_x_Ptr+ ubN_*ubM_), areg_x_2, NORM);
-                vld(vreg_x_exp_even_f16_1,((__ubuf__ half *)input_x_Ptr + ubN_*ubM_/2), areg_x_2, NORM);
-                vld(vreg_x_exp_odd_f16_1, ((__ubuf__ half *)input_x_Ptr+ ubN_*ubM_ + ubN_*ubM_/2), areg_x_2, NORM);
-                
-                vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg_x_exp_even_f16, vreg_x_exp_odd_f16);
-                vdintlv(vreg_x_exp_f16_1_pack, vreg_x_exp_f16_1_packa, vreg_x_exp_even_f16_1, vreg_x_exp_odd_f16_1);
-                
-                vsstb(vreg_x_exp_f16_pack, ((__ubuf__ half *&) x_exp_Ptr),
-                        0x810001,                                                             
-                        preg_136,                                                                 
-                        POST_UPDATE);                                                             
-                vsstb(vreg_x_exp_f16_1_pack, ((__ubuf__ half *&) x_exp_1),
-                        0x810001,                                                                 
-                        preg_136,                                                                
-                        POST_UPDATE); 
-            }
+            vector_bool preg_low_half = pset_b16(PAT_VL64);
+            for (uint16_t i0 = 0; i0 < uint16_t(ubN_) ; ++i0) {
+                vector_address areg_x_2 = vag_b16(64);
+                vld(vreg_x_exp_even_f16, ((__ubuf__ half *)x_exp_Ptr), areg_x_2, NORM);
 
-            // for (uint16_t i0 = 0; i0 < uint16_t(ubN_ / 2) ; ++i0) {
-            //     vector_address areg_x_2 = vag_b16(128);
-            //     vld(vreg_x_exp_even_f16, ((__ubuf__ half *)input_x_Ptr), areg_x_2, NORM);
-            //     vld(vreg_x_exp_odd_f16,  ((__ubuf__ half *)input_x_Ptr+ ubN_*ubM_), areg_x_2, NORM);
-                
-            //     vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg_x_exp_even_f16, vreg_x_exp_odd_f16);
-                
-            //     vsstb(vreg_x_exp_f16_pack, ((__ubuf__ half *&) x_exp_Ptr),
-            //             0x810001,                                                             
-            //             preg_136,                                                                 
-            //             POST_UPDATE);
-            // }
+                vsstb(vreg_x_exp_even_f16, ((__ubuf__ half *&) x_exp_1),
+                        0x810001,                                                             
+                        preg_low_half,                                                                 
+                        POST_UPDATE);
+            }
         }
 
 
@@ -1401,20 +1381,20 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
             // test performance drop for mem_bar
             mem_bar(VST_VLD);
             __ubuf__ half *x_exp_Ptr_tmp= (__ubuf__ half *)x_exp_Ptr + (ubM * ubN);
-            // for (uint16_t i = 0; i < uint16_t(ubM) ; ++i) {
-            //     for (uint16_t j = 0; j < (uint16_t)(repeatTimes2); ++j) {
-            //         vlds(vreg2_f16, x_exp_Ptr, elementsPerRepeat2, NORM, POST_UPDATE);
-            //         //NZ output
-            //         vsstb(vreg2_f16, ((__ubuf__ half *&) x_exp_Ptr_tmp), 0x810001, preg_b16_all, POST_UPDATE);
-            //     }
-            // }
-            for (uint16_t i = 0; i < uint16_t(ubM / 2) ; ++i) {
-                vector_address areg_x_2 = vag_b16(128);
-                vld(vreg2_f16, ((__ubuf__ half *)x_exp_Ptr), areg_x_2, NORM);
-                vld(vreg4_f16,  ((__ubuf__ half *)x_exp_Ptr + ubM*ubN/2), areg_x_2, NORM);
-                vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg2_f16, vreg4_f16);
-                vsstb(vreg_x_exp_f16_pack, ((__ubuf__ half *&) x_exp_Ptr_tmp), 0x810001, preg_b16_all, POST_UPDATE);
+            for (uint16_t i = 0; i < uint16_t(ubM) ; ++i) {
+                for (uint16_t j = 0; j < (uint16_t)(repeatTimes2); ++j) {
+                    vlds(vreg2_f16, x_exp_Ptr, elementsPerRepeat2, NORM, POST_UPDATE);
+                    //NZ output
+                    vsstb(vreg2_f16, ((__ubuf__ half *&) x_exp_Ptr_tmp), 0x810001, preg_b16_all, POST_UPDATE);
+                }
             }
+            // for (uint16_t i = 0; i < uint16_t(ubM / 2) ; ++i) {
+            //     vector_address areg_x_2 = vag_b16(128);
+            //     vld(vreg2_f16, ((__ubuf__ half *)x_exp_Ptr), areg_x_2, NORM);
+            //     vld(vreg4_f16,  ((__ubuf__ half *)x_exp_Ptr + ubM*ubN/2), areg_x_2, NORM);
+            //     vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg2_f16, vreg4_f16);
+            //     vsstb(vreg_x_exp_f16_pack, ((__ubuf__ half *&) x_exp_Ptr_tmp), 0x810001, preg_b16_all, POST_UPDATE);
+            // }
         }
         else {
 
