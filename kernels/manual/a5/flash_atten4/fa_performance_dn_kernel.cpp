@@ -787,14 +787,22 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         for (int sub_col = 0; sub_col < static_cast<int>(kTileFactor); ++sub_col) {
             if constexpr (INTERMEDIATE_CHECK) {
                 constexpr uint32_t NzBufRows = Cube_S1 + 1;
-                // nzConvBuffer is NZ+1 (row-plus-one). Move by NzBufRows to dump each sub-col correctly.
-                const uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * NzBufRows * Vec_S0 * sizeof(half));
+                constexpr uint32_t VecChunks = Vec_S0 / 16;
                 __gm__ half *p_ptr_sub =
                     p_ptr + static_cast<size_t>(sub_col) * static_cast<size_t>(Cube_S1) * static_cast<size_t>(Cube_S0);
-                GlobalPTileHalfSub pTileHalfSub((__gm__ half *)(p_ptr_sub));
-                TileDataH_Sub xExpSub;
-                TASSIGN(xExpSub, (uint64_t)nzConvBuffer.data() + col_byte_offset);
-                TSTORE(pTileHalfSub, xExpSub);
+                for (uint32_t vec_chunk = 0; vec_chunk < VecChunks; ++vec_chunk) {
+                    using GlobalPTileChunk =
+                        GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, 16>, pto::Stride<1, 1, 1, 16, 1>>;
+                    using TileChunkH = Tile<TileType::Vec, half, Cube_S1, 16, BLayout::RowMajor, Cube_S1, 16>;
+                    size_t gm_offset = static_cast<size_t>(vec_chunk) * static_cast<size_t>(Cube_S1) * 16;
+                    __gm__ half *p_chunk_gm = p_ptr_sub + gm_offset;
+                    GlobalPTileChunk pTileChunk(p_chunk_gm);
+                    TileChunkH chunkTile;
+                    uint64_t nz_buf_byte_offset =
+                        static_cast<uint64_t>(vec_chunk) * static_cast<uint64_t>(NzBufRows) * 16 * sizeof(half);
+                    TASSIGN(chunkTile, (uint64_t)nzConvBuffer.data() + nz_buf_byte_offset);
+                    TSTORE(pTileChunk, chunkTile);
+                }
                 set_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
                 wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
             }

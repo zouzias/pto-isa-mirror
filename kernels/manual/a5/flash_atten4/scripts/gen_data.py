@@ -36,54 +36,13 @@ NUM_VEC_CORES = 2
 VEC_CORE_SIZE = WARP_SIZE // NUM_VEC_CORES
 
 
-def nd_to_nzplus1_readback(nd_fp16: np.ndarray) -> np.ndarray:
-    """Mimic reading an ND tile back from NZ+1 raw memory."""
+def nd2nz(nd_fp16):
+    c0 = 16
     rows, cols = nd_fp16.shape
-    assert cols % 16 == 0, "Vec width must be 16-aligned for NZ packing"
-    blocks_per_row = cols // 16
-    nd_blocks = nd_fp16.reshape(rows, blocks_per_row, 16)
-    nz_logical = nd_blocks.transpose(1, 0, 2)  # [blocks_per_row, rows, 16]
-    pad = np.zeros((blocks_per_row, 1, 16), dtype=nd_fp16.dtype)
-    nz_plus_one = np.concatenate([nz_logical, pad], axis=1)
-    raw = nz_plus_one.reshape(-1)
-    return raw[: rows * cols].reshape(rows, cols)
-
-
-def build_p_nz(
-    soft_fp16: np.ndarray, s0: int, s1: int, cube_s0: int, cube_s1: int, tile_s1: int, vec_cores: int
-) -> np.ndarray:
-    """Build p_nz with the same logical [S0, S1] indexing used by host checks."""
-    assert s0 % cube_s0 == 0, "S0 must be divisible by CUBE_S0"
-    assert s1 % tile_s1 == 0, "S1 must be divisible by TILE_S1"
-    assert tile_s1 % cube_s1 == 0, "TILE_S1 must be divisible by CUBE_S1"
-    tile_factor = tile_s1 // cube_s1
-    vec_s0 = cube_s0 // vec_cores // tile_factor
-    assert cube_s0 % (vec_cores * tile_factor) == 0, "Vec rows must divide CUBE_S0"
-
-    p_nz = np.zeros_like(soft_fp16, dtype=np.float16)
-    num_blocks = s0 // cube_s0
-    num_tiles = s1 // tile_s1
-
-    for b in range(num_blocks):
-        block_base = b * cube_s0
-        for ti in range(num_tiles):
-            tile_base = ti * tile_s1
-            for sub_col in range(tile_factor):
-                c_base = tile_base + sub_col * cube_s1
-                for vec_core in range(vec_cores):
-                    for row_slice in range(tile_factor):
-                        row_off = vec_core * (cube_s0 // vec_cores) + row_slice * vec_s0
-                        src = soft_fp16[
-                            block_base + row_off : block_base + row_off + vec_s0,
-                            c_base : c_base + cube_s1,
-                        ].T.copy()
-                        nz_readback = nd_to_nzplus1_readback(src)
-                        p_nz[
-                            block_base + row_off : block_base + row_off + vec_s0,
-                            c_base : c_base + cube_s1,
-                        ] = nz_readback.T
-
-    return p_nz
+    assert cols % c0 == 0, "Number of columns must be divisible by 16 for nd2nz conversion"
+    c1 = cols // c0
+    nz_fp16 = nd_fp16.reshape(rows, c1, c0).transpose(1, 0, 2).reshape(c1, rows * c0)
+    return nz_fp16
 
 
 def gen_case(
@@ -194,7 +153,7 @@ def gen_case(
     # p saved as FP16 (store raw exponentials per tile as half)
     soft = (full_exp).astype(np.float16)
     soft.tofile(os.path.join(path, 'p.bin'))
-    p_nz = build_p_nz(soft, s0, s1, cube_s0, cube_s1, tile_s1, NUM_VEC_CORES)
+    p_nz = nd2nz(soft)
     p_nz.tofile(os.path.join(path, 'p_nz.bin'))
     tmp_float_exp.tofile(os.path.join(path, 'p_fp32.bin'))
 
