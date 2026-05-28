@@ -98,7 +98,7 @@ __tf__ PTO_INLINE void LoadSubfractalMatrix(typename GlobalData::DType __out__ *
                                             int gStride3, int gStride4, int validRow, int validCol)
 {
     cpu::parallel_for_1d(
-        0, static_cast<std::size_t>(gShape4), static_cast<std::size_t>(gShape3) * gShape4, [&](std::size_t c) {
+        0, static_cast<std::size_t>(gShape3), static_cast<std::size_t>(gShape3) * gShape4, [&](std::size_t c) {
             size_t subTileC = c / TileData::InnerCols;
             size_t innerC = c % TileData::InnerCols;
             for (size_t r = 0; r < static_cast<std::size_t>(gShape3); r++) {
