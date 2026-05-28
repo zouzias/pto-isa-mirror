@@ -16,7 +16,7 @@ using namespace std;
 using namespace PtoTestCommon;
 
 template <uint32_t caseId>
-void launchTROWSUMTestCase(void *out, void *src, aclrtStream stream);
+void launchTROWMINTestCase(void *out, void *src, aclrtStream stream);
 
 std::string GetGoldenDir()
 {
@@ -27,7 +27,7 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-class TROWSUMTest : public testing::Test {
+class TROWMINTest : public testing::Test {
 public:
     aclrtStream stream;
     void *dstHost;
@@ -65,7 +65,7 @@ protected:
     }
 
     template <uint32_t caseId, typename T, int row, int vaildRow, int srcCol, int srcVaildCol, int dstCol>
-    bool TRowSumTestFramework()
+    bool TRowMinTestFramework()
     {
         size_t dstByteSize = row * dstCol * sizeof(T);
         size_t srcByteSize = row * srcCol * sizeof(T);
@@ -79,7 +79,7 @@ protected:
         aclrtMemcpy(dstDevice, dstByteSize, dstHost, dstByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
         aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-        launchTROWSUMTestCase<caseId>(dstDevice, srcDevice, stream);
+        launchTROWMINTestCase<caseId>(dstDevice, srcDevice, stream);
         aclrtSynchronizeStream(stream);
 
         aclrtMemcpy(dstHost, dstByteSize, dstDevice, dstByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -94,87 +94,89 @@ protected:
     }
 };
 
-TEST_F(TROWSUMTest, case1)
+TEST_F(TROWMINTest, case1)
 {
-    bool ret = TRowSumTestFramework<1, float, 127, 127, 64, 63, 1>();
+    bool ret = TRowMinTestFramework<1, float, 127, 127, 64, 63, 1>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TROWSUMTest, case2)
+TEST_F(TROWMINTest, case2)
 {
-    bool ret = TRowSumTestFramework<2, float, 63, 63, 64, 64, 1>();
+    bool ret = TRowMinTestFramework<2, float, 63, 63, 64, 64, 1>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TROWSUMTest, case3)
+TEST_F(TROWMINTest, case3)
 {
-    bool ret = TRowSumTestFramework<3, float, 31, 31, 128, 127, 1>();
+    bool ret = TRowMinTestFramework<3, float, 31, 31, 128, 127, 1>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TROWSUMTest, case4)
+TEST_F(TROWMINTest, case4)
 {
-    bool ret = TRowSumTestFramework<4, float, 15, 15, 192, 192, 1>();
+    bool ret = TRowMinTestFramework<4, float, 15, 15, 192, 192, 1>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TROWSUMTest, case5)
+TEST_F(TROWMINTest, case5)
 {
-    bool ret = TRowSumTestFramework<5, float, 7, 7, 448, 448, 1>();
+    bool ret = TRowMinTestFramework<5, float, 7, 7, 448, 448, 1>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TROWSUMTest, case6)
+TEST_F(TROWMINTest, case6)
 {
-    bool ret = TRowSumTestFramework<6, aclFloat16, 256, 256, 16, 15, 1>();
+    bool ret = TRowMinTestFramework<6, aclFloat16, 256, 256, 16, 15, 1>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TROWSUMTest, case7)
+TEST_F(TROWMINTest, case7)
 {
-    bool ret = TRowSumTestFramework<7, float, 64, 64, 128, 128, 1>();
+    bool ret = TRowMinTestFramework<7, float, 64, 64, 128, 128, 1>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TROWSUMTest, case8)
+TEST_F(TROWMINTest, case8)
 {
-    bool ret = TRowSumTestFramework<8, float, 32, 32, 256, 256, 1>();
+    bool ret = TRowMinTestFramework<8, float, 32, 32, 256, 256, 1>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TROWSUMTest, case9)
+TEST_F(TROWMINTest, case9)
 {
-    bool ret = TRowSumTestFramework<9, float, 16, 16, 512, 512, 1>();
+    bool ret = TRowMinTestFramework<9, float, 16, 16, 512, 512, 1>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TROWSUMTest, case10)
+TEST_F(TROWMINTest, case10)
 {
-    bool ret = TRowSumTestFramework<10, float, 8, 8, 1024, 1024, 1>();
+    bool ret = TRowMinTestFramework<10, float, 8, 8, 1024, 1024, 1>();
     EXPECT_TRUE(ret);
 }
-TEST_F(TROWSUMTest, case11)
+
+TEST_F(TROWMINTest, case11)
 {
-    bool ret = TRowSumTestFramework<11, int32_t, 63, 63, 64, 64, 1>();
+    bool ret = TRowMinTestFramework<11, int32_t, 63, 63, 64, 64, 1>();
     EXPECT_TRUE(ret);
 }
-TEST_F(TROWSUMTest, case12)
+
+TEST_F(TROWMINTest, case12)
 {
-    bool ret = TRowSumTestFramework<12, int16_t, 15, 15, 192, 192, 1>();
+    bool ret = TRowMinTestFramework<12, int16_t, 15, 15, 192, 192, 1>();
     EXPECT_TRUE(ret);
 }
-TEST_F(TROWSUMTest, case13)
+TEST_F(TROWMINTest, case13)
 {
-    bool ret = TRowSumTestFramework<13, aclFloat16, 64, 64, 128, 128, 1>();
+    bool ret = TRowMinTestFramework<13, aclFloat16, 64, 64, 128, 128, 1>();
     EXPECT_TRUE(ret);
 }
-TEST_F(TROWSUMTest, case14)
+TEST_F(TROWMINTest, case14)
 {
-    bool ret = TRowSumTestFramework<14, int32_t, 32, 32, 256, 256, 1>();
+    bool ret = TRowMinTestFramework<14, int32_t, 32, 32, 256, 256, 1>();
     EXPECT_TRUE(ret);
 }
-TEST_F(TROWSUMTest, case15)
+TEST_F(TROWMINTest, case15)
 {
-    bool ret = TRowSumTestFramework<15, int16_t, 16, 16, 512, 512, 1>();
+    bool ret = TRowMinTestFramework<15, int16_t, 16, 16, 512, 512, 1>();
     EXPECT_TRUE(ret);
 }

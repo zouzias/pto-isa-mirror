@@ -24,18 +24,14 @@ def gen_golden_data(param):
     valid_col = param.valid_col
 
     input_arr = np.random.uniform(low=-1, high=1, size=(row, col)).astype(data_type)
-    output_arr = np.zeros((row))
-    for i in range(valid_row):
-        for j in range(valid_col):
-            output_arr[i] += input_arr[i, j]
+    output_arr = np.zeros((row), dtype=data_type)
+    output_arr = np.min(input_arr[:, :valid_col], axis=1)
 
-    # 先计算, 再强转类型, 保证结果精度不裂化
-    output_arr = output_arr.astype(data_type)
     input_arr.tofile("input.bin")
     output_arr.tofile("golden.bin")
 
 
-class TRowSumParams:
+class TRowMinParams:
     def __init__(self, name, data_type, row, valid_row, col, valid_col):
         self.name = name
         self.data_type = data_type
@@ -47,21 +43,21 @@ class TRowSumParams:
 
 if __name__ == "__main__":
     case_params_list = [
-        TRowSumParams("TROWSUMTest.case1", np.float32, 127, 127, 64, 64 - 1),
-        TRowSumParams("TROWSUMTest.case2", np.float32, 63, 63, 64, 64),
-        TRowSumParams("TROWSUMTest.case3", np.float32, 31, 31, 64 * 2, 64 * 2 - 1),
-        TRowSumParams("TROWSUMTest.case4", np.float32, 15, 15, 64 * 3, 64 * 3),
-        TRowSumParams("TROWSUMTest.case5", np.float32, 7, 7, 64 * 7, 64 * 7 - 1),
-        TRowSumParams("TROWSUMTest.case6", np.float16, 256, 256, 16, 16 - 1),
-        TRowSumParams("TROWSUMTest.case7", np.float32, 64, 64, 128, 128),
-        TRowSumParams("TROWSUMTest.case8", np.float32, 32, 32, 256, 256),
-        TRowSumParams("TROWSUMTest.case9", np.float32, 16, 16, 512, 512),
-        TRowSumParams("TROWSUMTest.case10", np.float32, 8, 8, 1024, 1024),
-        TRowSumParams("TROWSUMTest.case11", np.int32, 63, 63, 64, 64),
-        TRowSumParams("TROWSUMTest.case12", np.int16, 15, 15, 192, 192),
-        TRowSumParams("TROWSUMTest.case13", np.float16, 64, 64, 128, 128),
-        TRowSumParams("TROWSUMTest.case14", np.int32, 32, 32, 256, 256),
-        TRowSumParams("TROWSUMTest.case15", np.int16, 16, 16, 512, 512),
+        TRowMinParams("TROWMINTest.case1", np.float32, 127, 127, 64, 64 - 1),
+        TRowMinParams("TROWMINTest.case2", np.float32, 63, 63, 64, 64),
+        TRowMinParams("TROWMINTest.case3", np.float32, 31, 31, 64 * 2, 64 * 2 - 1),
+        TRowMinParams("TROWMINTest.case4", np.float32, 15, 15, 64 * 3, 64 * 3),
+        TRowMinParams("TROWMINTest.case5", np.float32, 7, 7, 64 * 7, 64 * 7 - 1),
+        TRowMinParams("TROWMINTest.case6", np.float16, 256, 256, 16, 16 - 1),
+        TRowMinParams("TROWMINTest.case7", np.float32, 64, 64, 128, 128),
+        TRowMinParams("TROWMINTest.case8", np.float32, 32, 32, 256, 256),
+        TRowMinParams("TROWMINTest.case9", np.float32, 16, 16, 512, 512),
+        TRowMinParams("TROWMINTest.case10", np.float32, 8, 8, 1024, 1024),
+        TRowMinParams("TROWMINTest.case11", np.int32, 63, 63, 64, 64),
+        TRowMinParams("TROWMINTest.case12", np.int16, 15, 15, 192, 192),
+        TRowMinParams("TROWMINTest.case13", np.float16, 64, 64, 128, 128),
+        TRowMinParams("TROWMINTest.case14", np.int32, 32, 32, 256, 256),
+        TRowMinParams("TROWMINTest.case15", np.int16, 16, 16, 512, 512),
     ]
 
     for _, case in enumerate(case_params_list):
