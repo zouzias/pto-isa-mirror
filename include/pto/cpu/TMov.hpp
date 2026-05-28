@@ -22,19 +22,22 @@ template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 {
     assert(src.GetValidRow() == dst.GetValidRow() && src.GetValidCol() == dst.GetValidCol());
-
     if constexpr (SrcTileData::SFractal != SLayout::NoneBox && DstTileData::SFractal != SLayout::NoneBox) {
         int totalRows = src.GetValidRow();
         int totalCols = src.GetValidCol();
-        
         ForEachNZElement<SrcTileData>(
             totalRows, totalCols,
             [&](size_t r, size_t c, size_t srcTileIdx, size_t gd_idx) {
                 (void)gd_idx;
-                size_t dstTileIdx = GetTileElementOffset<DstTileData>(r, c);
+                size_t subTileR = r / DstTileData::InnerRows;
+                size_t innerR = r % DstTileData::InnerRows;
+                size_t subTileC = c / DstTileData::InnerCols;
+                size_t innerC = c % DstTileData::InnerCols;
+                size_t dstTileIdx = GetTileElementOffsetSubfractals<DstTileData>(
+                    subTileR, innerR, subTileC, innerC);
                 dst.data()[dstTileIdx] = static_cast<typename DstTileData::DType>(src.data()[srcTileIdx]);
             });
-    }
+    } 
     else {
         for (size_t c = 0; c < src.GetValidCol(); c++) {
             size_t subTileSrcC = c / SrcTileData::InnerCols;
@@ -66,7 +69,6 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
     }
 }
 
-// ВСЕ ОСТАЛЬНЫЕ ПЕРЕГРУЗКИ ОСТАЮТСЯ БЕЗ ИЗМЕНЕНИЙ
 template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 {
