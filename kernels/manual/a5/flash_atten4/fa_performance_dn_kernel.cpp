@@ -1015,12 +1015,15 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     TileMatVData vMatTile[vMatTNBuffers];
     TilePVData pvAccPendTile;
     TilePVData pvAccCurrTile;
+    TilePVData pvAccTailCurrTile;
 
     allocate_cube_tile_buffers(qMatTile, kMatTile, pMatTile, vMatTile);
 
-    // Keep QK, pending PV, and current PV in distinct L0C regions.
+    // Keep QK, pending PV, and steady-state current PV in distinct L0C regions.
+    // The tail reclaims the second QK L0C slot at 0x10000u for current-PV ping-pong.
     TASSIGN(pvAccPendTile, 0x20000u);
     TASSIGN(pvAccCurrTile, 0x30000u);
+    TASSIGN(pvAccTailCurrTile, 0x10000u);
 
     // Define tile types for FA softmax P computation. UB offsets for softmax tiles
     // Define per-tile vector tiles sized to Cube_S1
@@ -1081,6 +1084,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     constexpr bool use_cv_comm =
         (!INTERMEDIATE_CHECK) && (launch_block_count >= static_cast<uint32_t>(kFaLaunchCoreCount));
     constexpr int pvAccTileEvtID = EVENT_ID2;
+    constexpr int pvAccTailTileEvtID = EVENT_ID1;
     const int physical_block_idx = block_idx;
     if constexpr (DAV_CUBE) {
         set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
@@ -1250,14 +1254,21 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         for (int tile_id = steady_tile_end; tile_id < num_tiles_s1; ++tile_id) {
             for (int sub_tile = 0; sub_tile < static_cast<int>(kTileFactor); ++sub_tile) {
                 if constexpr (DAV_CUBE) {
+                    const int tail_phase = tile_id - steady_tile_end;
+                    const bool has_prior_curr_pv = (steady_tile_end > 0) || (tail_phase > 0);
+                    TilePVData &pvAccActiveTile =
+                        (has_prior_curr_pv && ((tail_phase & 1) == 0)) ? pvAccTailCurrTile : pvAccCurrTile;
+                    const int pvAccActiveTileEvtID =
+                        (has_prior_curr_pv && ((tail_phase & 1) == 0)) ? pvAccTailTileEvtID : pvAccTileEvtID;
                     TileOutGuT &pvPendTile = pvVecTile[(tile_id + 1) % outOTileNBuffers];
                     compute_pv<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size, pv_tile_fifo_size,
                                CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK, outOTileNBuffers>(
                         tile_id, sub_tile, tile_id % outOTileNBuffers, p_tile_fifo_block, v, pv_tile_fifo_block,
                         pv_pend_tile_fifo_block, pMatTile[pv_src_pingpong_id % pMatTNBuffers],
-                        vMatTile[pv_src_pingpong_id % vMatTNBuffers], pvAccCurrTile, pvAccPendTile, runningOTile,
-                        pvPendTile, pvVecTile, pv_src_pingpong_id % vMatTNBuffers + PV_EVENT_ID0, pvAccTileEvtID,
-                        sm2pvSync, pv2guSync, pvUbBufSync, logical_block_idx);
+                        vMatTile[pv_src_pingpong_id % vMatTNBuffers], pvAccActiveTile, pvAccPendTile,
+                        runningOTile, pvPendTile, pvVecTile, pv_src_pingpong_id % vMatTNBuffers + PV_EVENT_ID0,
+                        pvAccActiveTileEvtID, sm2pvSync, pv2guSync, pvUbBufSync,
+                        logical_block_idx);
                     pv_src_pingpong_id++;
                 }
             }
