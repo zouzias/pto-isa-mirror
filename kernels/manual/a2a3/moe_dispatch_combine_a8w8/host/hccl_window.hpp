@@ -24,6 +24,15 @@ struct HcclWindowPlan {
     uint64_t requestedWindowBytes = 0;
 };
 
+struct RankWindowBootstrap {
+    uint32_t rankId = 0;
+    uint32_t rankNum = 0;
+    uint64_t localWindowBase = 0;
+    uint64_t localPeerWindowOffset = 0;
+    uint64_t peerWindowBytes = 0;
+    uint64_t requestedWindowBytes = 0;
+};
+
 inline HcclWindowPlan MakeHcclWindowPlan(const PeerWindowLayout &layout, uint64_t hcclBuffSizeMb)
 {
     constexpr uint64_t kMiB = 1024ULL * 1024ULL;
@@ -45,6 +54,28 @@ inline void PrintHcclWindowPlan(std::ostream &os, const HcclWindowPlan &plan)
     os << "[HcclWindowPlan]\n";
     os << "  peer_window_bytes=" << plan.peerWindowBytes << "\n";
     os << "  requested_window_bytes=" << plan.requestedWindowBytes << "\n";
+}
+
+inline RankWindowBootstrap MakeRankWindowBootstrap(const RankConfig &rank, const HcclWindowPlan &plan)
+{
+    RankWindowBootstrap bootstrap;
+    bootstrap.rankId = rank.rankId;
+    bootstrap.rankNum = rank.rankNum;
+    bootstrap.localWindowBase = plan.requestedWindowBytes * rank.rankId;
+    bootstrap.localPeerWindowOffset = 0;
+    bootstrap.peerWindowBytes = plan.peerWindowBytes;
+    bootstrap.requestedWindowBytes = plan.requestedWindowBytes;
+    return bootstrap;
+}
+
+inline void PrintRankWindowBootstrap(std::ostream &os, const RankWindowBootstrap &bootstrap)
+{
+    os << "[RankWindowBootstrap]\n";
+    os << "  rankId=" << bootstrap.rankId << " rankNum=" << bootstrap.rankNum << "\n";
+    os << "  local_window_base=" << bootstrap.localWindowBase << "\n";
+    os << "  local_peer_window_offset=" << bootstrap.localPeerWindowOffset << "\n";
+    os << "  peer_window_bytes=" << bootstrap.peerWindowBytes << "\n";
+    os << "  requested_window_bytes=" << bootstrap.requestedWindowBytes << "\n";
 }
 
 } // namespace moe_dispatch_combine_a8w8

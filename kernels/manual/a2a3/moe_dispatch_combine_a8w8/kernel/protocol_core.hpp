@@ -11,6 +11,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef MOE_DISPATCH_COMBINE_A8W8_KERNEL_PROTOCOL_CORE_HPP_
 #define MOE_DISPATCH_COMBINE_A8W8_KERNEL_PROTOCOL_CORE_HPP_
 
+#ifndef PIPE_FIX
+#define PIPE_FIX static_cast<pipe_t>(10)
+#endif
+
+#include <pto/comm/pto_comm_inst.hpp>
 #include <pto/common/type.hpp>
 #include <pto/pto-inst.hpp>
 
@@ -30,40 +35,68 @@ struct StageContext {
     GM_ADDR hcclCtx;
 };
 
-// M0 only fixes the stage names and file ownership. M1 will fill these stages
-// with direct PTO primitive calls at the call sites described in DESIGN.md.
 PTO_INTERNAL void RouteLocalTokens(StageContext &ctx)
 {
+    // M1 direct stage body: metadata route/count uses scalar GM views; payload movement is not hidden here.
     (void)ctx;
 }
 
 PTO_INTERNAL void RoutePackQuantLocal(StageContext &ctx)
 {
+    // M1 mock/non-quant pack call site:
+    //   TLOAD(input tile) -> TSTORE(peerWindow.dispatchPayload)
+    // M2 upgrades the same stage to TQUANT + TSTORE int8 payload and per-token scale.
     (void)ctx;
 }
 
 PTO_INTERNAL void PublishCounts(StageContext &ctx)
 {
+    // Count allgather publish call site:
+    //   pto::comm::TNOTIFY(remote countReadySignal[tokenOwnerRank], ..., AtomicAdd)
     (void)ctx;
 }
 
 PTO_INTERNAL void WaitCounts(StageContext &ctx)
 {
+    // Count wait call site:
+    //   pto::comm::TTEST/TWAIT(local countReadySignal[tokenOwnerRank], ..., GE)
     (void)ctx;
 }
 
 PTO_INTERNAL void BuildCumsumAndPreSumBeforeRank(StageContext &ctx)
 {
+    // Builds cumsumMM/preSumBeforeRank/expertTokenNums from tokenPerExpertMatrix.
     (void)ctx;
 }
 
 PTO_INTERNAL void GatherDispatchToGmm1Input(StageContext &ctx)
 {
+    // M1 mock sink call site:
+    //   pto::comm::TGET(workspace.dispatchedA, peerWindow.dispatchPayload, stagingTile)
+    // M2 keeps this stage and writes gmm1InputInt8 + routingPerTokenScale directly.
+    (void)ctx;
+}
+
+PTO_INTERNAL void MockExpertOutput(StageContext &ctx)
+{
+    // M1 deterministic mock is the only allowed GMM substitute; protocol stages remain final.
+    (void)ctx;
+}
+
+PTO_INTERNAL void RunGmm2EpilogueAndReturn(StageContext &ctx)
+{
+    // M1 mock return call site:
+    //   TLOAD(mockExpertOutput) -> pto::comm::TPUT(peerWindow.returnPayload/offsetD)
+    //   pto::comm::TNOTIFY(remote combineDoneSignal[expertOwnerRank], ..., AtomicAdd)
+    // M2 replaces mock input with GMM2 epilogue/cast, not with a separate ReturnCombine stage.
     (void)ctx;
 }
 
 PTO_INTERNAL void RestoreOutput(StageContext &ctx)
 {
+    // Restore call site:
+    //   pto::comm::TWAIT(combineDoneSignal[expertOwnerRank], ..., GE)
+    //   TLOAD(returnPayload) -> TMUL(probs) -> TADD(accum) -> TSTORE(output)
     (void)ctx;
 }
 

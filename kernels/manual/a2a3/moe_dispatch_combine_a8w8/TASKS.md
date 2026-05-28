@@ -29,7 +29,7 @@
 | Stage | Scope | Required close condition | State | Report |
 | --- | --- | --- | --- | --- |
 | M0 | 工程初始化、脚本、layout、host smoke | M0.1-M0.6 全部 `accepted`，无 open `needs_user_decision` | in_progress | none |
-| M1 | protocol mock 闭环 | M1.0-M1.11 全部 `accepted`，无 open `needs_user_decision` | not_started | none |
+| M1 | protocol mock 闭环 | M1.0-M1.11 全部 `accepted`，无 open `needs_user_decision`；只能 mock 中间 GMM block，dispatch/combine 必须真实 device path 且 2 卡实跑 | in_progress | reports/M1.11.md |
 | M2 | A3 int8_int8 backend + MegaMoE-ready data path | M2.1-M2.8 全部 `accepted`，包含 M2.2a/M2.2b/M2.2c/M2.7a，dispatch route/pack/quant、Dispatch-GMM soft-sync ledger、Swiglu sync-group metadata、combine epilogue/return 和 tile-split return map 已合并到最终布局，int32 accumulator 精确对齐，epilogue/final output 按 tolerance 对齐，无 open `needs_user_decision` | not_started | none |
 | M3 | overlap skeleton 与 timeline | M3.0-M3.9 全部 `accepted` 或明确 `blocked` 且不影响 M4 最小回归；只在 M2 固定的 edge/layout/signal 上启用或验证 async，无 open `needs_user_decision` | not_started | none |
 | M4 | 最终 PTO 化收口 | M4.1-M4.2 全部 `accepted`，无 open `needs_user_decision` | not_started | none |
@@ -44,23 +44,23 @@
 | M0.4 | review_ready | codex/current-session | reports/M0.4.md | DCL-58: workspace/window layout dump interfaces implemented |
 | M0.5 | review_ready | codex/current-session | reports/M0.5.md | DCL-58: deterministic data and correctness-report skeleton implemented |
 | M0.6 | review_ready | codex/current-session | reports/M0.6.md | DCL-58: host executable dry-run stdout proof implemented |
-| M1.0 | not_started | unassigned | none | DCL-48: verify protocol invariants, do not redesign protocol |
-| M1.1 | not_started | unassigned | none | initial |
-| M1.2 | not_started | unassigned | none | initial |
-| M1.3 | not_started | unassigned | none | initial |
-| M1.4 | not_started | unassigned | none | initial |
-| M1.5 | not_started | unassigned | none | initial |
-| M1.6 | not_started | unassigned | none | initial |
-| M1.6a | not_started | unassigned | none | initial |
-| M1.7 | not_started | unassigned | none | initial |
-| M1.8 | not_started | unassigned | none | initial |
-| M1.9 | not_started | unassigned | none | initial |
-| M1.10 | not_started | unassigned | none | initial |
-| M1.11 | not_started | unassigned | none | DCL-48: depends on M1.0-M1.10 |
+| M1.0 | review_ready | codex/current-session | reports/M1.0.md | DCL-62: M1 protocol metadata host reference and invariant report delivered; DCL-60 keeps no hard M0.6 gate |
+| M1.1 | review_ready | codex/current-session | reports/M1.1.md | DCL-62: typed metadata views extend existing M0 skeleton; DCL-61 boundary preserved |
+| M1.2 | review_ready | codex/current-session | reports/M1.2.md | DCL-62: direct PTO stage/backend call-site skeleton documented; no payload wrapper added |
+| M1.3 | review_ready | codex/current-session | reports/M1.3.md | DCL-64: device route/count path delivered in `m1_runtime`; 2-card suite pass |
+| M1.4 | review_ready | codex/current-session | reports/M1.4.md | DCL-64: device pack to peer-visible payload delivered in `m1_runtime`; 2-card suite pass |
+| M1.5 | review_ready | codex/current-session | reports/M1.5.md | DCL-64: true HCCL window/context launch delivered on devices 4-5 |
+| M1.6 | review_ready | codex/current-session | reports/M1.6.md | DCL-64: count publish/wait uses device `TPUT/TNOTIFY/TTEST/TWAIT`; 2-card suite pass |
+| M1.6a | review_ready | codex/current-session | reports/M1.6a.md | DCL-64: prefix metadata produced/consumed by device path and verified on 2 cards |
+| M1.7 | review_ready | codex/current-session | reports/M1.7.md | DCL-64: final `GatherDispatchToGmm1Input` stage executes real `TGET`; `dispatchedA` remains M1 mock target |
+| M1.8 | review_ready | codex/current-session | reports/M1.8.md | DCL-64: identity mock expert output bridges real dispatch and real combine only |
+| M1.9 | review_ready | codex/current-session | reports/M1.9.md | DCL-64: final return stage executes real `TPUT/TNOTIFY/TTEST/TWAIT`; only GMM block remains mock |
+| M1.10 | review_ready | codex/current-session | reports/M1.10.md | DCL-64: restore consumes device return payload; final output verification passes |
+| M1.11 | review_ready | codex/current-session | reports/M1.11.md | DCL-64: M1 suite real NPU/mpirun pass from device 4; structured reports emitted |
 | M2.1 | not_started | unassigned | none | DCL-47: reserve control/sync/Sub-Tile/timeline fields |
 | M2.2 | not_started | unassigned | none | initial |
 | M2.2a | not_started | unassigned | none | initial |
-| M2.2b | not_started | unassigned | none | initial |
+| M2.2b | not_started | unassigned | none | DCL-59: upgrades M1.7 payload target without changing protocol edges |
 | M2.2c | not_started | unassigned | none | initial |
 | M2.3 | not_started | unassigned | none | initial |
 | M2.4 | not_started | unassigned | none | initial |
@@ -167,6 +167,12 @@ Type:
 | DCL-2026-05-28-56 | user-readyqueue-as-backup | `DESIGN.md`, `TASKS.md` | M2.7a, M3.8 | coordinator-authored | Completed the MegaMoE design confirmation pass, tightened GMM2 ready projection to expert/tile/sub-tile return segments, made `subTileReady` a required M2/M3 field, and downgraded ready queue to an optional local AIC/AIV handoff candidate rather than a required path. |
 | DCL-2026-05-28-57 | user-request-m0-design-fix | `DESIGN.md`, `TASKS.md` | M0.2-M0.6, dependency scans | coordinator-authored | Fixed M0 design review gaps: M0.2 now requires a single fused mixed-kernel arch instead of vec-only, M0.3 depends on M0.2 and derives rank from MPI by default, M0.4/M0.5 expose dump/report interfaces while M0.6 owns executable stdout proof, and dependency scan wording excludes pure CANN SDK search paths from AscendC interface violations. |
 | DCL-2026-05-28-58 | m0-implementation-handoff | `TASKS.md`, `reports/M0.2.md`, `reports/M0.3.md`, `reports/M0.4.md`, `reports/M0.5.md`, `reports/M0.6.md` | M0.2-M0.6 | task-owner-authored | Recorded M0 implementation handoff: M0.2-M0.6 are delivered as `review_ready` with lightweight reports, while M0 stage remains `in_progress` until reviewer acceptance. |
+| DCL-2026-05-28-59 | user-decision-m1-gather-mock-sink | `DESIGN.md`, `TASKS.md` | M1.7, M2.2b | user-confirmed | M1.7 uses the final `GatherDispatchToGmm1Input` stage boundary while writing M1 mock payload to `workspace.dispatchedA`; M2.2b may switch the payload target to `gmm1InputInt8 + routingPerTokenScale` but must not change source offsets, row order, ready signals, producer/consumer edges, or add a second reorder stage. |
+| DCL-2026-05-28-60 | user-decision-m1-0-no-m0-6-hard-dep | `DESIGN.md`, `TASKS.md` | M1.0, M1.11 | user-confirmed | M1.0 hard-depends only on M0.4 layout and M0.5 host reference; M0.6 executable stdout proof is reusable but not a M1.0 acceptance gate, and M1 four-case executable regression remains owned by M1.11. |
+| DCL-2026-05-28-61 | m1-design-review-fixes | `DESIGN.md`, `TASKS.md` | M1.1, M1.4, M1.6, M1.9, M2.2a, M2.7 | task-owner-authored | Closed remaining M1 design review gaps: M1.1 now extends the existing metadata skeleton, M1.4/M1.9 use final stage boundaries with M1 mock payloads, M1.6 depends on count production and PTO call convention, and M2 handoff is constrained to payload/numeric upgrades without protocol rewrites. |
+| DCL-2026-05-28-62 | m1-protocol-mock-implementation | `host/reference.hpp`, `host/main.cpp`, `host/hccl_window.hpp`, `kernel/control_metadata.hpp`, `kernel/protocol_core.hpp`, `kernel/a3_int8_backend.hpp`, `scripts/run_a3.sh`, `reports/M1.*.md`, `TASKS.md` | M1.0-M1.11 | task-owner-authored | Delivered M1 protocol mock reference and dry-run regression: host reference now emits route/count/prefix/dispatch/mock-return/restore checksums, final stage boundaries are fixed for M2 payload upgrades, `--m1-suite` runs small/balanced/skewed/zero-token direct-host dry-runs, and M1 task reports are review-ready. |
+| DCL-2026-05-28-63 | user-correction-m1-real-dispatch-combine | `DESIGN.md`, `TASKS.md`, `reports/M1.*.md` | M1.3-M1.11 | user-confirmed | Corrected M1 acceptance: only the middle `GMM1 -> SwiGLU/Quant -> GMM2` block may be mocked. Dispatch/combine, including route/count/prefix, `TGET`, `TPUT`, `TNOTIFY`, `TWAIT/TTEST`, and restore, must run in the device kernel and pass a real 2-card NPU/mpirun case. Prior DCL-62 host-reference/direct-host dry-run evidence is downgraded to precheck only and does not close M1. |
+| DCL-2026-05-28-64 | m1-real-device-runtime-delivery | `CMakeLists.txt`, `m1_runtime/*`, `scripts/run_a3.sh`, `TASKS.md`, `reports/M1.*.md` | M1.3-M1.11 | task-owner-authored | Delivered the M1 real device runtime bridge by reusing the proven A2/A3 `dispatch_combine_tile` implementation: routing, pack, count publish/wait, prefix, dispatch `TGET`, identity mock expert payload, combine `TPUT`, notify/wait/test, and restore execute in the device path. `--m1-suite 1` now runs real NPU/mpirun cases from device 4 and emits structured `[CorrectnessReport]` / `[PerfReport]`; the only remaining mock is the middle GMM block. |
 
 ### Handoff Rules
 

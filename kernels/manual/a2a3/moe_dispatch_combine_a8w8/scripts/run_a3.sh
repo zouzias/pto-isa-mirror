@@ -11,6 +11,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+SCRIPT_PATH="${SCRIPT_DIR}/run_a3.sh"
 
 print_help() {
     cat <<'EOF'
@@ -32,8 +33,8 @@ Shape:
 Runtime:
   -r, --run-mode npu|sim
   -v, --soc-version NAME
-  --first-device N
-  --ndevices N
+  --first-device N          default 4 on this A3 host
+  --ndevices N              default 8 on this A3 host
   --rank-from-mpi 0|1    default 1; MPI rank is the default rankId source
   --rank N               debug override; use with --rank-from-mpi 0
   --case-name NAME       label only: small, balanced, skewed, zero-token
@@ -44,6 +45,7 @@ Runtime:
   --dry-run 0|1
   --skip-kernel-launch 0|1
   --hccl-buffsize-mb N
+  --m1-suite 0|1       build once, then run explicit M1 real dispatch/combine cases with mock GMM payload
 
 Build:
   --skip-run 0|1
@@ -87,8 +89,8 @@ PAYLOAD_TILE_COLS=64
 GMM_BLOCK_M=16
 GMM_BLOCK_N=16
 GMM_BLOCK_K=32
-DEVICE_BASE=0
-NDEVICES=""
+DEVICE_BASE=4
+NDEVICES=8
 RANK_FROM_MPI=1
 RANK=""
 CASE_NAME=small
@@ -103,6 +105,7 @@ SKIP_RUN=0
 SKIP_BUILD=0
 CLEAN_BUILD=1
 MPI_BIN=""
+M1_SUITE=0
 
 align_up() {
     local value=$1
@@ -138,6 +141,7 @@ while [[ $# -gt 0 ]]; do
         --dry-run) DRY_RUN="$2"; shift 2 ;;
         --skip-kernel-launch) SKIP_KERNEL_LAUNCH="$2"; shift 2 ;;
         --hccl-buffsize-mb) HCCL_BUFFSIZE_MB="$2"; shift 2 ;;
+        --m1-suite) M1_SUITE="$2"; shift 2 ;;
         --skip-run) SKIP_RUN="$2"; shift 2 ;;
         --skip-build) SKIP_BUILD="$2"; shift 2 ;;
         --clean-build) CLEAN_BUILD="$2"; shift 2 ;;
@@ -173,7 +177,7 @@ if [ "${HIDDEN_SIZE}" -le 0 ] || [ "${INTERMEDIATE_SIZE}" -le 0 ] || [ "${PAYLOA
     exit 1
 fi
 if [ $(( HIDDEN_SIZE % PAYLOAD_TILE_COLS )) -ne 0 ]; then
-    echo "[ERROR] hiddenSize must be divisible by payloadTileCols in M0"
+    echo "[ERROR] hiddenSize must be divisible by payloadTileCols"
     exit 1
 fi
 
@@ -216,7 +220,8 @@ export LD_LIBRARY_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib:${LD_LIBRARY_PATH
 export MPI_LIB_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib/libmpi.so
 
 USE_DIRECT_HOST=0
-if [ "${PES}" -eq 1 ] && { [ "${DRY_RUN}" = "1" ] || [ "${SKIP_KERNEL_LAUNCH}" = "1" ]; }; then
+if { [ "${PES}" -eq 1 ] || { [ "${RANK_FROM_MPI}" = "0" ] && [ -n "${RANK}" ]; }; } &&
+    { [ "${DRY_RUN}" = "1" ] || [ "${SKIP_KERNEL_LAUNCH}" = "1" ]; }; then
     USE_DIRECT_HOST=1
 fi
 
@@ -235,7 +240,7 @@ fi
 rm -rf /dev/shm/sem.hccl* 2>/dev/null || true
 ipcrm -a 2>/dev/null || true
 
-echo "=== moe_dispatch_combine_a8w8 M0 scaffold ==="
+echo "=== moe_dispatch_combine_a8w8 M1 real dispatch/combine, mock GMM ==="
 echo "RUN_MODE=${RUN_MODE} SOC_VERSION=${SOC_VERSION}"
 echo "PES=${PES} DEVICE_BASE=${DEVICE_BASE} NDEVICES=${NDEVICES}"
 echo "M=${M} HIDDEN_SIZE=${HIDDEN_SIZE} INTERMEDIATE_SIZE=${INTERMEDIATE_SIZE} TOPK=${TOPK} EXPERT_PER_PE=${EXPERT_PER_PE}"
@@ -258,11 +263,28 @@ cd "${PROJECT_DIR}/build"
 export LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib:${LD_LIBRARY_PATH:-}
 
 if [ "${SKIP_BUILD}" != "1" ]; then
-    cmake -DRUN_MODE="${RUN_MODE}" -DSOC_VERSION="${SOC_VERSION}" -DFUSED_KERNEL_ARCH=dav-c220 ..
+    cmake -DRUN_MODE="${RUN_MODE}" -DSOC_VERSION="${SOC_VERSION}" -DFUSED_KERNEL_ARCH=dav-c220-vec ..
     make -j16
 fi
 
 if [ "${SKIP_RUN}" = "1" ]; then
+    exit 0
+fi
+
+if [ "${M1_SUITE}" = "1" ]; then
+    echo "=== Running M1 real dispatch/combine suite ==="
+    bash "${SCRIPT_PATH}" --m1-suite 0 --skip-build 1 --clean-build 0 --dry-run 0 --skip-kernel-launch 0 \
+        --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
+        --case-name small -pes 1 -M 8 -K 64 -N 32 -topK 1 -expertPerPe 1 --max-tokens-per-expert 8
+    bash "${SCRIPT_PATH}" --m1-suite 0 --skip-build 1 --clean-build 0 --dry-run 0 --skip-kernel-launch 0 \
+        --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
+        --case-name balanced -pes 2 -M 16 -K 64 -N 32 -topK 2 -expertPerPe 2 --max-tokens-per-expert 32
+    bash "${SCRIPT_PATH}" --m1-suite 0 --skip-build 1 --clean-build 0 --dry-run 0 --skip-kernel-launch 0 \
+        --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
+        --case-name skewed -pes 2 -M 16 -K 64 -N 32 -topK 2 -expertPerPe 2 --max-tokens-per-expert 32
+    bash "${SCRIPT_PATH}" --m1-suite 0 --skip-build 1 --clean-build 0 --dry-run 0 --skip-kernel-launch 0 \
+        --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
+        --case-name zero-token -pes 2 -M 16 -K 64 -N 32 -topK 2 -expertPerPe 2 --max-tokens-per-expert 32
     exit 0
 fi
 

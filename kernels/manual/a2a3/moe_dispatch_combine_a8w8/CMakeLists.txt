@@ -34,7 +34,7 @@ else()
     set(ASCEND_DRIVER_PATH /usr/local/Ascend/driver)
 endif()
 
-set(FUSED_KERNEL_ARCH "dav-c220" CACHE STRING "A2/A3 fused AIC/AIV kernel architecture.")
+set(FUSED_KERNEL_ARCH "dav-c220-vec" CACHE STRING "A2/A3 M1 AIV communication kernel architecture.")
 
 add_compile_options(
     -D_FORTIFY_SOURCE=2
@@ -54,7 +54,7 @@ set(CMAKE_CCE_COMPILE_OPTIONS
     "SHELL:-mllvm -cce-aicore-function-stack-size=0x8000"
     "SHELL:-mllvm -cce-aicore-record-overflow=true"
     "SHELL:-mllvm -cce-aicore-addr-transform"
-    "SHELL:-mllvm -cce-aicore-dcci-insert-for-scalar=false"
+    "SHELL:-mllvm -cce-aicore-dcci-insert-for-scalar=true"
 )
 
 if(DEBUG_MODE)
@@ -71,10 +71,19 @@ set(CMAKE_CPP_COMPILE_OPTIONS
 include_directories(
     ${PROJECT_SOURCE_DIR}/../../../../include
     ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/m1_runtime
     ${PROJECT_SOURCE_DIR}/host
     ${PROJECT_SOURCE_DIR}/kernel
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_HOME_PATH}/include/hccl
+    $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc
+    $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc/include
+    $ENV{ASCEND_HOME_PATH}/aarch64-linux/ascendc/include/basic_api
+    $ENV{ASCEND_HOME_PATH}/aarch64-linux/include/ascendc/basic_api
+    $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc/impl/basic_api
+    $ENV{ASCEND_HOME_PATH}/aarch64-linux/ascendc/include/basic_api/impl
+    $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc/include/interface
+    $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc/include/utils
     ${ASCEND_DRIVER_PATH}/kernel/inc
     ${ASCEND_HOME_PATH}/pkg_inc
     ${ASCEND_HOME_PATH}/pkg_inc/profiling
@@ -84,6 +93,7 @@ include_directories(
 set(KERNEL_INCLUDE_DIRS
     ${PROJECT_SOURCE_DIR}/../../../../include
     ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/m1_runtime
     ${PROJECT_SOURCE_DIR}/kernel
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_HOME_PATH}/include/hccl
@@ -96,6 +106,7 @@ set(KERNEL_INCLUDE_DIRS
 set(HOST_INCLUDE_DIRS
     ${PROJECT_SOURCE_DIR}/../../../../include
     ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/m1_runtime
     ${PROJECT_SOURCE_DIR}/host
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_HOME_PATH}/include/hccl
@@ -107,7 +118,7 @@ set(HOST_LINK_DIRS
     ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
 )
 
-add_library(moe_dispatch_combine_a8w8_kernel SHARED kernel/moe_dispatch_combine_a8w8_kernel.cpp)
+add_library(moe_dispatch_combine_a8w8_kernel SHARED m1_runtime/dispatch_combine_tile_kernel.cpp)
 target_compile_options(moe_dispatch_combine_a8w8_kernel PRIVATE
     ${CMAKE_CCE_COMPILE_OPTIONS}
     --cce-aicore-arch=${FUSED_KERNEL_ARCH}
@@ -116,8 +127,9 @@ target_compile_options(moe_dispatch_combine_a8w8_kernel PRIVATE
 target_include_directories(moe_dispatch_combine_a8w8_kernel PRIVATE ${KERNEL_INCLUDE_DIRS})
 target_link_directories(moe_dispatch_combine_a8w8_kernel PRIVATE ${ASCEND_HOME_PATH}/lib64)
 target_link_libraries(moe_dispatch_combine_a8w8_kernel PRIVATE runtime)
+target_link_options(moe_dispatch_combine_a8w8_kernel PRIVATE --cce-fatobj-link)
 
-add_executable(moe_dispatch_combine_a8w8 host/main.cpp)
+add_executable(moe_dispatch_combine_a8w8 m1_runtime/main.cpp)
 target_compile_options(moe_dispatch_combine_a8w8 PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
 target_include_directories(moe_dispatch_combine_a8w8 PRIVATE ${HOST_INCLUDE_DIRS})
 target_link_directories(moe_dispatch_combine_a8w8 PUBLIC ${HOST_LINK_DIRS})

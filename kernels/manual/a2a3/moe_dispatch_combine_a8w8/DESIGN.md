@@ -179,11 +179,11 @@ MegaMoE 文章事实依据：
 | `w1/w2` | INT8，当前实现固定一种显式布局 | 只生成 int8 weight；其他 layout fail-fast，不做静默转换 |
 | `scale1/scale2` | `DT_INT64` 输入，kernel 侧按 `uint64_t` deq-scale view 使用 | reference 和 kernel 使用同一 decode/等价浮点语义；dump bit pattern、checksum 和 float 解释；不把它们当 bias |
 | routing quant payload | 生成 int8 dispatch payload 和 float per-token scale，并把结果放进 peer-visible window | M2 起 `RoutePackQuantLocal` 把 route/pack/quant 合并，直接写 peer-visible int8 dispatch payload 和 routing per-token scale |
-| Dispatch gather -> GMM1 input | 前同步后从各 token owner peer window 远端读，写入本 rank contiguous `gmA`/GMM1 input | M2 起 `GatherDispatchToGmm1Input` 用 `TGET` 直接写入 `gmm1InputInt8/gmA`，不经过二次 reorder workspace |
+| Dispatch gather -> GMM1 input | 前同步后从各 token owner peer window 远端读，写入本 rank contiguous dispatch/GMM1-input 语义 buffer | M1 必须用真实 `TGET` 写 `workspace.dispatchedA` mock payload target；M2 只把同一 stage 的 target 切到 `gmm1InputInt8/gmA`，不经过二次 reorder workspace |
 | GMM1 | int8 A x int8 W1，输出 int32 accumulator | PTO `TMATMUL` 先得到 int32，再显式做等价 per-channel dequant/cast 到 C workspace |
 | GMM1 epilogue | C workspace 乘 per-token scale，SwiGLU，dynamic quant 到 int8 D1，生成 float per-token scale2 | `RunActivationAndQuant` 输出 int8 GMM2 input 和 float per-token scale2 |
 | GMM2 | int8 D1 x int8 W2，输出 int32 accumulator | PTO `TMATMUL` 先得到 int32，再显式做等价 per-channel dequant/cast |
-| GMM2 epilogue + combine return | C2 workspace 乘 per-token scale2，cast 到 FP16/BF16 后按 `preSumBeforeRank` 写回 token owner `offsetD` | M2 起 `RunGmm2EpilogueAndReturn` 合并 epilogue 和 `TPUT` remote return，`gmm2Out` 只能是 debug mirror |
+| GMM2 epilogue + combine return | C2 workspace 乘 per-token scale2，cast 到 FP16/BF16 后按 `preSumBeforeRank` 写回 token owner `offsetD` | M1 必须用真实 `TPUT` 写回 mock expert output；M2 只把 producer 换成 GMM2 epilogue/cast payload，`gmm2Out` 只能是 debug mirror |
 | restore/unpermute | token owner 从 `offsetD` return payload 读取；`probs` 为 float，加权 topK restore | final restore 使用 float probs，输出 FP16/BF16；不输出 int8 |
 | bias | int8 主路径接口没有 bias | 禁止把 bias 纳入 correctness |
 
@@ -1221,7 +1221,7 @@ state、owner、report、Issue Log 和 Design Change Log；领取任务后必须
 | 阶段 | 完成什么 | 关闭口径 |
 | --- | --- | --- |
 | M0 | 工程骨架、脚本、layout、host smoke。从 `gemm_ar` 裁剪 CMake/run.sh/main.cpp，不从空目录手写。 | M0.1-M0.6 全部 accepted；dry-run/smoke 路径可用；依赖扫描无禁用接口、build helper 或 fallback。 |
-| M1 | PTO dispatch/combine protocol mock 闭环。GMM 数值可 mock，但 routing、count、prefix、dispatch、return、restore 必须走真实协议。 | M1.0-M1.11 全部 accepted；metadata、row order、signal、restore 正确；mock 只替代 expert compute。 |
+| M1 | PTO dispatch/combine protocol 闭环。只能把中间 `GMM1 -> SwiGLU/Quant -> GMM2` 专家计算整体 mock；routing、count、prefix、dispatch `TGET`、combine `TPUT`、signal、restore 必须真实落到 device path。 | M1.0-M1.11 全部 accepted；2 卡 NPU/mpirun 实跑通过；metadata、row order、signal、restore 正确；mock 只替代 expert compute。dry-run/reference-only 不能关闭 M1。 |
 | M2 | A3 int8_int8 全路径功能，并前置 MegaMoE 必需数据布局：dispatch 融合、GMM1 contiguous input、GMM2 epilogue+combine return、soft-sync ledger、Swiglu sync-group metadata、tile-split return map。 | M2.1-M2.8 全部 accepted；dispatch/activation/combine 合并点、soft-sync ledger、`swigluSyncGroups/dequantSum` 和 tile-split return map 已在最终布局中验收；accumulator 精确对齐，epilogue/final output 按 tolerance 对齐；M3 不需要重写 row/order/layout/stage graph。 |
 | M3 | 在 M2 已固定的依赖边上打开或验证 runtime overlap、scoreboard、Sub-Tile remote write 和 timeline。 | M3.0-M3.9 accepted 或明确 primitive-gap blocked；timeline/counter 能解释 overlap、等待空泡或阻断原因。 |
 | M4 | 最终 PTO 化回归与文档状态收口。 | M4.1-M4.2 全部 accepted；状态、report、设计一致，无 open `needs_user_decision`。 |
@@ -1240,13 +1240,13 @@ state、owner、report、Issue Log 和 Design Change Log；领取任务后必须
 | M1.1 | 建 control metadata typed views。 |
 | M1.2 | 固化 PTO primitive 直接调用约定，不做隐藏 PTO 调用的 helper wrapper。 |
 | M1.3 | 实现 `RouteLocalTokens`，生成 count、`expandedRowIdx`、`dispatchOffset`。 |
-| M1.4 | 实现 `PackLocalDispatch`，写本 rank peer-visible dispatch payload。 |
+| M1.4 | 实现 `RoutePackQuantLocal` 的 M1 mock/non-quant pack 形态，写本 rank peer-visible dispatch payload。 |
 | M1.5 | host 侧 HCCL window bootstrap，把 window/context 传入 kernel。 |
 | M1.6 | 实现 `PublishCounts` 和 `WaitCounts`。 |
 | M1.6a | 构建 `cumsumMM`、`preSumBeforeRank`、`expertTokenNums`。 |
-| M1.7 | 实现 `GatherDispatch`，expert owner 远端读 dispatch payload。 |
+| M1.7 | 实现 `GatherDispatchToGmm1Input` 的真实 `TGET` 形态，expert owner 远端读 dispatch payload 到 M1 mock payload target。 |
 | M1.8 | mock expert output，只替代 GMM 数值，不替代协议。 |
-| M1.9 | 实现 `ReturnCombine`，expert owner 远端写 return payload。 |
+| M1.9 | 实现 `RunGmm2EpilogueAndReturn` 的真实 `TPUT` return 形态，expert owner 把 mock expert output 远端写回 return payload。 |
 | M1.10 | 实现 `RestoreOutput`，按 `expandedRowIdx + probs` 加权恢复。 |
 | M1.11 | M1 四类 case 集成回归，输出 correctness/perf 控制台摘要。 |
 | M2.1 | 定义 A3 int8 backend layout/interface 和主路径 dtype。 |
@@ -1524,7 +1524,7 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 
 #### M1.0 MegaMoE 主路径协议不变量核验
 
-依赖任务：M0.4、M0.5。
+依赖任务：M0.4、M0.5；不硬依赖 M0.6。
 
 文件范围：
 
@@ -1546,6 +1546,8 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - 在 host reference 中固定 metadata 不变量：`tokenPerExpertMatrix[tokenOwnerRank][expertOwnerRank][localExpert]`、
   `cumsumMM[tokenOwnerRankPrefix][localExpert]`、`preSumBeforeRank[tokenOwnerRank][localExpert]`、
   `expandedRowIdx[token, topK]`。
+- M1.0 的验收只要求 host reference 能构造/打印上述 metadata；M0.6 host main/run script 是可复用的
+  executable proof 能力，但不是 M1.0 的硬门槛。M1 四类 case 的可执行 stdout 回归由 M1.11 负责。
 - 明确 capacity 策略：M1/M2 默认 fail fast；M3 原始等价路径必须支持 `maxOutputSize` clamp 或在 `DESIGN.md` 中明确
   仍未等价。
 
@@ -1554,7 +1556,8 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - `DESIGN.md` 有“MegaMoE 主路径子目标 -> PTO stage/backend”的表格，且每个子目标都有列入/不列入理由。
 - `DESIGN.md` 明确 small shape 只做 correctness smoke，不作为独立性能目标。
 - `DESIGN.md` 有“MegaMoE 文章通信策略 -> PTO stage”的表格，并明确 Dispatch 是 remote read、Combine 是 remote write。
-- host reference 能打印 small case 的 `tokenPerExpertMatrix`、`cumsumMM`、`preSumBeforeRank`。
+- host reference 能构造/打印 small case 的 `tokenPerExpertMatrix`、`cumsumMM`、`preSumBeforeRank`；本项不要求
+  host main/run script executable stdout proof。
 - 任一后续 agent 能只读该表判断自己的任务是否破坏原协议。
 - 依赖扫描无输出。
 
@@ -1564,7 +1567,7 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 
 文件范围：
 
-- 创建 `kernel/control_metadata.hpp`
+- 修改/扩展 `kernel/control_metadata.hpp`
 - 修改 `include/moe_dispatch_combine_a8w8_layout.hpp`
 
 任务：
@@ -1630,7 +1633,7 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - zero-token expert case 不写越界。
 - 依赖扫描无输出。
 
-#### M1.4 PackLocalDispatch
+#### M1.4 RoutePackQuantLocal mock/non-quant pack
 
 依赖任务：M1.2、M1.3。
 
@@ -1641,18 +1644,23 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 
 任务：
 
-- 把本 rank token 按 `expertOwnerRank/localExpert/row` 打包到本 rank peer-visible dispatch payload；row offset 必须能由
-  `preSumBeforeRank[tokenOwnerRank=rankId][localExpert]` 或等价 local dispatch prefix 解释。
-- 本任务不要求读取尚未由 M1.6a 固化的全局 `preSumBeforeRank`；允许先实现 local dispatch prefix，但 row 顺序必须能在
-  M1.6a 中无损映射到 `preSumBeforeRank`。
-- 本地 pack 在 `PackLocalDispatch` 主流程中直接调用 `TLOAD/TSTORE`。
+- 在最终 stage `RoutePackQuantLocal` 中，把本 rank token 按 `expertOwnerRank/localExpert/row` 打包到本 rank
+  peer-visible dispatch payload。M1 暂不做 dynamic quant；payload 可以保持 mock/FP 形态或当前 M1 约定形态。
+- row offset 必须使用与 M1.6a `preSumBeforeRank[tokenOwnerRank=rankId][localExpert]` 同源的 global-expert-order
+  prefix 语义；M1.4 可以先生成 local source-row ledger，但该 ledger 必须能被 M1.6a 无损校验和映射，不能引入另一套
+  local-only row order。
+- 本地 pack 在 `RoutePackQuantLocal` 主流程中直接调用 `TLOAD/TSTORE`。
+- M2.2a 只能把同一 stage 的 payload 形态升级为 int8 dispatch payload + routing per-token scale；不能改变 row
+  order、source ledger、ready signal 或新增独立 pack/quant/reorder stage。
 - host reference 生成相同 packed layout。
 
 验收标准：
 
 - single-rank case 下 packed payload 与 host reference bitwise 一致。
 - two-rank dry reference 下，每个 expert owner rank 的 row count 与 `tokenPerExpert` 一致。
-- 代码/注释能看出该 stage 不向目标 rank 远端写 dispatch payload；目标 rank 后续通过 `GatherDispatch` `TGET` 读取。
+- 代码/注释能看出该 stage 不向目标 rank 远端写 dispatch payload；目标 rank 后续通过
+  `GatherDispatchToGmm1Input` `TGET` 读取。
+- source-row ledger 能用 M1.6a 的 `preSumBeforeRank` 语义解释；M2.2a 只升级 payload dtype/scale，不改变协议边。
 - 依赖扫描无输出。
 
 #### M1.5 HCCL window host bootstrap
@@ -1679,7 +1687,7 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 
 #### M1.6 PublishCounts 与 WaitCounts
 
-依赖任务：M1.1、M1.5。
+依赖任务：M1.1、M1.2、M1.3、M1.5。
 
 文件范围：
 
@@ -1725,12 +1733,12 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 
 - two-rank balanced/skewed case 下 `cumsumMM`、`preSumBeforeRank`、`expertTokenNums` 与 host reference 一致。
 - `cumsumMM[rankNum - 1][localExpert]` 等于该 local expert 从所有 token owner rank 收到的 row 总数。
-- `preSumBeforeRank` 能解释 Dispatch 源 row range 和 ReturnCombine 的每一个 destination row offset。
+- `preSumBeforeRank` 能解释 Dispatch 源 row range 和 `RunGmm2EpilogueAndReturn` 的每一个 destination row offset。
 - 依赖扫描无输出。
 
-#### M1.7 GatherDispatch
+#### M1.7 GatherDispatchToGmm1Input mock sink
 
-依赖任务：M1.2、M1.6a。
+依赖任务：M1.2、M1.4、M1.6a。
 
 文件范围：
 
@@ -1739,17 +1747,27 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 
 任务：
 
-- 当前 rank 等待 count row 和 prefix metadata 后，按 local expert/token owner rank 用 `TGET` 拉取 dispatch payload。
-- 写入 `workspace.dispatchedA`。
+- 当前 rank 等待 count row 和 prefix metadata 后，在最终 stage `GatherDispatchToGmm1Input` 中按
+  local expert/token owner rank 用 `TGET` 拉取 dispatch payload。
+- `TGET`、count/prefix wait 和 `dispatchGroupReady` 必须在 device kernel 中真实执行；host reference/dry-run
+  只能作为 precheck，不能替代 M1.7 验收。
+- M1 允许先写入 `workspace.dispatchedA`，但它只表示 M1 mock payload target / debug mirror；不是新的
+  `GatherDispatch` stage，也不是 M2 可以保留的二次 reorder buffer。
 - 记录 `tokenOwnerRankOffsets` 供 mock expert 和后续 GMM 使用。
 - 每个 local expert 的 row 排列必须与 `cumsumMM` 的 token-owner-rank 累加顺序一致。
 - zero-token expert 的 row range 必须显式跳过，不发布无效 `TGET` 或 payload wait。
+- M2.2b 只能在同一 stage 中把 payload target 扩展或切换为 `gmm1InputInt8 + routingPerTokenScale`；
+  不能改变 source offset、row order、ready signal、producer/consumer 边，也不能新增独立 reorder stage。
+- M1.7 task report 必须记录：`dispatchedA` is M1 mock sink/debug mirror, not a second reorder buffer.
 
 验收标准：
 
+- two-rank NPU/mpirun case 必须真实 launch kernel，并在 device path 中执行 `TWAIT/TTEST + TGET`。
 - two-rank balanced case 下 `dispatchedA` 与 host reference bitwise 一致。
 - skewed experts case 下 row offsets 单调且不越界。
 - zero-token expert case 不发无效 `TGET`，timeout counter 保持为 0。
+- 代码和 report 能证明 M1.7 使用最终 `GatherDispatchToGmm1Input` stage 边界；M2.2b 只替换 payload dtype/buffer，
+  不替换协议和数据流。
 - 依赖扫描无输出。
 
 #### M1.8 MockExpertOutput
@@ -1773,7 +1791,7 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - empty expert segment 不产生输出 payload。
 - 依赖扫描无输出。
 
-#### M1.9 ReturnCombine
+#### M1.9 RunGmm2EpilogueAndReturn mock return
 
 依赖任务：M1.2、M1.6a、M1.8。
 
@@ -1784,16 +1802,27 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 
 任务：
 
-- 按 token owner rank 把 mock expert output 用 `TPUT` 写回 token owner peer window return payload。
+- 在最终 stage `RunGmm2EpilogueAndReturn` 中，按 token owner rank 把 mock expert output 用 `TPUT` 写回
+  token owner peer window return payload。M1 暂不做真实 GMM2 epilogue；mock output 是该 stage 的 M1 input。
+- `TPUT`、`TNOTIFY` 和 token owner rank 的 `TWAIT` 必须在 device kernel 中真实执行；host reference/dry-run
+  只能作为 precheck，不能替代 M1.9 验收。
 - 写回 offset 必须由 `tokenPerExpertMatrix[tokenOwnerRank][expertOwnerRank=rankId][localExpert]` 和
   `preSumBeforeRank[tokenOwnerRank][localExpert]` 推导，不能按当前本地 row 顺序硬编码。
 - 写完某 owner segment 后发布 `combineDoneSignal`。
+- M2.7 只能在同一 stage 中把 mock output input 替换为 GMM2 accumulator epilogue/cast 后的 payload；不能新增
+  独立 `ReturnCombine` copy stage，也不能先全量写 `gmm2Out` 再二次搬运。
+- M1.9 的 owner segment 是 token-owner rank 维度的连续 return row segment，用来证明真实 remote-write combine
+  协议闭环；它不声称实现 GMM-Combine Sub-Tile/stride 通信。Sub-Tile owner mapping 属于 M2.7a，stride 或
+  多段 `TPUT` 能力验证属于 M3.8。
 
 验收标准：
 
+- two-rank NPU/mpirun case 必须真实 launch kernel，并在 device path 中执行 `TPUT/TNOTIFY/TWAIT`。
 - two-rank balanced case 下 token owner rank 能收到所有 return segment。
 - return payload row offset 与 host reference 的 `preSumBeforeRank` 映射一致。
 - signal producer count 与 expected expert owner rank count 一致。
+- 代码和 report 能证明 M1.9 使用最终 `RunGmm2EpilogueAndReturn` stage 边界；M2.7 只替换 numeric payload
+  producer，不替换 return protocol。
 - 依赖扫描无输出。
 
 #### M1.10 RestoreOutput
@@ -1829,12 +1858,16 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 任务：
 
 - 把 M1 small、balanced、skewed、zero-token 四类用例串到 run script。
+- M1.11 的通过命令必须包含真实 2 卡 NPU/mpirun launch；`--dry-run 1`、`--rank-from-mpi 0` 的 direct-host
+  reference suite 只允许作为 build/precheck，不能让 M1.11 到 `review_ready`。
 - 每个用例打印 `[CorrectnessReport]` 和 `[PerfReport]`；M1 的 GMM checksum 字段允许为 `null`，protocol checksum 必须非空。
 - 若实际验收命令或输出字段与本章设计不一致，先按 issue/DCL 流程修正 `DESIGN.md`，不能只在 `TASKS.md`
   追加说明。
 
 验收标准：
 
+- 至少 balanced 2 卡 NPU/mpirun case 真实实跑通过，且 dispatch/combine primitive counters 或 white-box dump
+  能证明 `TGET/TPUT/TNOTIFY/TWAIT` 在 device path 中执行。
 - M1 四类用例全部通过。
 - 四类用例的 `[CorrectnessReport]` 中 `pass=true`，`[PerfReport]` 中 `correctness_pass=true`，E2E samples 非空。
 - 任一失败能定位到 stage 和 rank。
@@ -1921,7 +1954,8 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 
 任务：
 
-- 实现 `RoutePackQuantLocal`，把 M1 的 `RouteLocalTokens + PackLocalDispatch` 扩展为 MegaMoE 输入侧合并路径：
+- 实现 `RoutePackQuantLocal`，把 M1 的 `RouteLocalTokens + RoutePackQuantLocal mock/non-quant pack`
+  扩展为 MegaMoE 输入侧合并路径：
   读取原始 `x/expertIdx/probs`，生成 `expandedRowIdx`、本 rank count row、peer-visible int8 dispatch payload 和
   `routingPerTokenScale`。
 - 对齐主路径 routing dynamic quant 语义：按 expanded row 做 `reduceMax(abs(row))/127.0f`，
@@ -1960,8 +1994,10 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - 同一个 stage 同步读取/落位 `routingPerTokenScale` 到本 rank GMM1 epilogue 可消费的 per-token scale layout。
 - rowStart 必须来自 `cumsumMM[tokenOwnerRankPrefix][localExpert]`，owner 源 offset 必须来自
   `preSumBeforeRank[tokenOwnerRank][localExpert]` 或 M2.2a 记录的等价 source row ledger。
-- 不能把远端 payload 先拉到 `dispatchedA`，再由后续二次 GMM1-input stage 做 reorder；`dispatchedA` 只能作为
-  M1 mock/debug mirror。
+- M2.2b 是 M1.7 `GatherDispatchToGmm1Input` 的 payload 形态升级：允许复用 M1 已固定的 row order、source offset、
+  ready signal 和 producer/consumer 边，但必须把主 payload 直接落到 `gmm1InputInt8 + routingPerTokenScale`。
+  不能把远端 payload 先拉到 `dispatchedA`，再由后续二次 GMM1-input stage 做 reorder；`dispatchedA` 只能作为
+  M1 mock sink / debug mirror。
 
 验收标准：
 

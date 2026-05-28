@@ -34,21 +34,25 @@ struct OwnerSegment {
 struct A3Int8Backend {
     PTO_INTERNAL void RunGmm1(ExpertSegment segment)
     {
+        // M2 call site: TMATMUL/TMATMUL_ACC int8 x int8 -> int32 accumulator.
         (void)segment;
     }
 
     PTO_INTERNAL void RunActivationAndQuant(ExpertSegment segment)
     {
+        // M2 call site: TCVT/TMUL/TADD for dequant/SwiGLU prep, then TQUANT to int8.
         (void)segment;
     }
 
     PTO_INTERNAL void RunGmm2(ExpertSegment segment)
     {
+        // M2 call site: TMATMUL/TMATMUL_ACC over gmm2InputInt8 and int8 W2.
         (void)segment;
     }
 
     PTO_INTERNAL void RunGmm2EpilogueAndReturn(ExpertSegment segment, OwnerSegment owner)
     {
+        // M2/M3 call site: TCVT/TMUL output cast followed by direct TPUT + TNOTIFY return.
         (void)segment;
         (void)owner;
     }
