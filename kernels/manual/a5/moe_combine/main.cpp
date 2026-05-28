@@ -11,7 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "args.h"
 #include "comm_mpi.h"
 #include "golden.h"
-#include "comm_context.h"
+#include "hccl_context.h"
 #include "kernel_launchers.h"
 #include "layout.h"
 
@@ -132,7 +132,7 @@ struct RuntimeState {
     uint32_t device = 0;
     aclrtStream computeStream = nullptr;
     rtStream_t hcclStream = nullptr;
-    CommWindowContext hccl;
+    HcclWindowContext hccl;
     bool hcclActive = false;
     HostInputData inputs;
     CpuGoldenData golden;

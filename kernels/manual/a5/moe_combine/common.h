@@ -55,7 +55,7 @@ struct PeerWindowLayout {
     uint64_t totalBytes;
 };
 
-struct CommDeviceContext {
+struct HcclDeviceContext {
     uint64_t workSpace;
     uint64_t workSpaceSize;
     uint32_t rankId;
