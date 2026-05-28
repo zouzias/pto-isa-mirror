@@ -791,7 +791,8 @@ PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents &... events)
     return {};
 }
 
-template <typename DstTileData, typename SrcTileData, MaskPattern maskPattern, typename... WaitEvents>
+template <MaskPattern maskPattern = MaskPattern::P1111, auto gatherType = GatherAxis::GATHER_ROW, typename DstTileData,
+          typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TGATHER(DstTileData &dst, SrcTileData &src, WaitEvents &... events)
 {
     TSYNC(events...);
