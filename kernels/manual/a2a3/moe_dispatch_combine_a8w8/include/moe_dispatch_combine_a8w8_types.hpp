@@ -1,0 +1,138 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
+#ifndef MOE_DISPATCH_COMBINE_A8W8_TYPES_HPP_
+#define MOE_DISPATCH_COMBINE_A8W8_TYPES_HPP_
+
+#include <cstdint>
+
+namespace moe_dispatch_combine_a8w8 {
+
+constexpr uint32_t kPeerWindowMagic = 0x4D443841U; // "MD8A"
+constexpr uint32_t kPeerWindowVersion = 1;
+constexpr uint32_t kCacheLineBytes = 64;
+constexpr uint32_t kPeerWindowHeaderBytes = 256;
+constexpr uint32_t kWarmupIters = 3;
+constexpr uint32_t kMeasureIters = 5;
+constexpr uint32_t kMaxRankNum = 64;
+
+enum class DType : uint32_t {
+    kFp16 = 1,
+    kBf16 = 2,
+    kInt8 = 3,
+    kFloat = 4,
+};
+
+struct ShapeConfig {
+    uint32_t rankNum = 2;
+    uint32_t expertPerRank = 2;
+    uint32_t topK = 2;
+    uint32_t m = 16;
+    uint32_t hiddenSize = 64;
+    uint32_t intermediateSize = 32;
+    uint32_t maxTokensPerExpert = 64;
+    uint32_t payloadTileCols = 64;
+    uint32_t gmmBlockM = 16;
+    uint32_t gmmBlockN = 16;
+    uint32_t gmmBlockK = 32;
+    uint32_t dtypeIn = static_cast<uint32_t>(DType::kFp16);
+    uint32_t dtypeOut = static_cast<uint32_t>(DType::kFp16);
+};
+
+struct RankConfig {
+    uint32_t rankNum = 2;
+    uint32_t rankId = 0;
+    uint32_t rankFromMpi = 1;
+    uint32_t deviceBase = 0;
+    uint32_t ndevices = 2;
+};
+
+struct FieldLayout {
+    uint64_t offset = 0;
+    uint64_t bytes = 0;
+    uint64_t alignment = kCacheLineBytes;
+};
+
+struct WorkspaceLayout {
+    FieldLayout tokenPerExpertMatrix;
+    FieldLayout blockTokenPerExpert;
+    FieldLayout blockPrefixPerExpert;
+    FieldLayout expandedRowIdx;
+    FieldLayout dispatchOffset;
+    FieldLayout cumsumMM;
+    FieldLayout preSumBeforeRank;
+    FieldLayout expertTokenNums;
+    FieldLayout tokenOwnerRankOffsets;
+    FieldLayout dispatchedA;
+    FieldLayout dispatchedScale;
+    FieldLayout gmm1InputInt8;
+    FieldLayout gmm1WeightInt8;
+    FieldLayout scale1Uint64;
+    FieldLayout gmm1AccInt32;
+    FieldLayout gmm1Out;
+    FieldLayout swigluOut;
+    FieldLayout gmm2InputInt8;
+    FieldLayout gmm2PerTokenScale;
+    FieldLayout gmm2WeightInt8;
+    FieldLayout scale2Uint64;
+    FieldLayout gmm2AccInt32;
+    FieldLayout gmm2Out;
+    FieldLayout readyCounters;
+    FieldLayout dispatchGroupReady;
+    FieldLayout gmm1SyncGroupReady;
+    FieldLayout activationSyncGroupReady;
+    FieldLayout gmm2GroupReady;
+    FieldLayout stageStatus;
+    FieldLayout swigluSyncGroups;
+    FieldLayout dequantSum;
+    FieldLayout scoreboardTaskMap;
+    FieldLayout producerStatus;
+    FieldLayout scoreboardMinStatus;
+    FieldLayout workerWaitCounters;
+    FieldLayout scoreboardTimeoutCounters;
+    FieldLayout subTileReturnPlan;
+    FieldLayout subTileOwnerSegments;
+    FieldLayout subTileReady;
+    FieldLayout timelineScratch;
+    uint64_t totalBytes = 0;
+};
+
+struct PeerWindowLayout {
+    FieldLayout header;
+    FieldLayout tokenPerExpertMatrix;
+    FieldLayout countReadySignal;
+    FieldLayout dispatchPayload;
+    FieldLayout dispatchScale;
+    FieldLayout returnPayload;
+    FieldLayout combineDoneSignal;
+    FieldLayout returnSegmentCounters;
+    FieldLayout debugCounters;
+    FieldLayout timeline;
+    uint64_t dispatchPayloadRowBytes = 0;
+    uint64_t returnPayloadRowBytes = 0;
+    uint64_t totalBytes = 0;
+};
+
+struct PeerWindowHeader {
+    uint32_t magic = kPeerWindowMagic;
+    uint32_t version = kPeerWindowVersion;
+    uint32_t rankNum = 0;
+    uint32_t rankId = 0;
+    uint32_t expertPerRank = 0;
+    uint32_t topK = 0;
+    uint32_t dtypeIn = 0;
+    uint32_t dtypeOut = 0;
+    uint64_t dispatchPayloadRowBytes = 0;
+    uint64_t returnPayloadRowBytes = 0;
+};
+
+} // namespace moe_dispatch_combine_a8w8
+
+#endif // MOE_DISPATCH_COMBINE_A8W8_TYPES_HPP_
