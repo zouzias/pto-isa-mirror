@@ -8,31 +8,21 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef MSCATTER_COMMON_H
-#define MSCATTER_COMMON_H
+#ifndef PTO_COSTMODEL_STUBS_PTO_PREFETCH_HPP
+#define PTO_COSTMODEL_STUBS_PTO_PREFETCH_HPP
 
 #include <cstdint>
+#include <pto/pto-inst.hpp>
 
-enum class ScatterAtomicOp : uint8_t
+namespace pto {
+
+template <bool UseSdma = true, int AivCores = -1>
+inline void PTO_PREFETCH(__gm__ void *, uint64_t, aclrtStream)
 {
-    None = 0,
-    Add = 1,
-    Max = 2,
-    Min = 3
-};
+    (void)UseSdma;
+    (void)AivCores;
+}
 
-enum class ScatterOOB : uint8_t
-{
-    Undefined = 0,
-    Skip = 1,
-    Clamp = 2,
-    Wrap = 3
-};
+} // namespace pto
 
-enum class ScatterConflict : uint8_t
-{
-    Last = 0,
-    Default = 1
-};
-
-#endif // MSCATTER_COMMON_H
+#endif // PTO_COSTMODEL_STUBS_PTO_PREFETCH_HPP
