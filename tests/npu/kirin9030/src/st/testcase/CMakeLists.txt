@@ -254,8 +254,9 @@ set(ALL_TESTCASES
     tconcatidx
     tconcat
     thistogram
-    # tinsert
-    # tinsert_acc2vec
+    tinsert
+    tinsert_acc2vec
+    tinsert_vec
     textract_nd_vec
     textract_vec
     # tmov_zz

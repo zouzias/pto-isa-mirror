@@ -153,3 +153,83 @@ TEST_F(TMINTest, case_int32_16x32_16x64_16x32_16x31)
 {
     test_tmin<int32_t, 16, 32, 16, 64, 16, 32, 16, 31>();
 }
+TEST_F(TMINTest, case_uint32_64x64_64x64_64x64_64x64)
+{
+    test_tmin<uint32_t, 64, 64, 64, 64, 64, 64, 64, 64>();
+}
+TEST_F(TMINTest, case_uint32_16x32_16x64_16x32_16x32)
+{
+    test_tmin<uint32_t, 16, 32, 16, 64, 16, 32, 16, 32>();
+}
+TEST_F(TMINTest, case_uint32_16x32_16x64_16x32_16x31)
+{
+    test_tmin<uint32_t, 16, 32, 16, 64, 16, 32, 16, 31>();
+}
+TEST_F(TMINTest, case_uint16_64x64_64x64_64x64_64x64)
+{
+    test_tmin<uint16_t, 64, 64, 64, 64, 64, 64, 64, 64>();
+}
+TEST_F(TMINTest, case_uint16_32x128_32x128_32x256_32x128)
+{
+    test_tmin<uint16_t, 32, 128, 32, 128, 32, 256, 32, 128>();
+}
+TEST_F(TMINTest, case_uint16_32x128_32x128_32x256_32x127)
+{
+    test_tmin<uint16_t, 32, 128, 32, 128, 32, 256, 32, 127>();
+}
+TEST_F(TMINTest, case_int8_64x64_64x64_64x64_64x64)
+{
+    test_tmin<int8_t, 64, 64, 64, 64, 64, 64, 64, 64>();
+}
+TEST_F(TMINTest, case_int8_32x256_32x256_32x512_32x256)
+{
+    test_tmin<int8_t, 32, 256, 32, 256, 32, 512, 32, 256>();
+}
+TEST_F(TMINTest, case_int8_32x256_32x256_32x512_32x255)
+{
+    test_tmin<int8_t, 32, 256, 32, 256, 32, 512, 32, 255>();
+}
+TEST_F(TMINTest, case_uint8_64x64_64x64_64x64_64x64)
+{
+    test_tmin<uint8_t, 64, 64, 64, 64, 64, 64, 64, 64>();
+}
+TEST_F(TMINTest, case_uint8_32x256_32x256_32x512_32x256)
+{
+    test_tmin<uint8_t, 32, 256, 32, 256, 32, 512, 32, 256>();
+}
+TEST_F(TMINTest, case_uint8_32x256_32x256_32x512_32x255)
+{
+    test_tmin<uint8_t, 32, 256, 32, 256, 32, 512, 32, 255>();
+}
+TEST_F(TMINTest, case_float_16x16_16x48_16x16_16x15)
+{
+    test_tmin<float, 16, 16, 16, 48, 16, 16, 16, 15>();
+}
+TEST_F(TMINTest, case_int32_16x16_16x48_16x16_16x15)
+{
+    test_tmin<int32_t, 16, 16, 16, 48, 16, 16, 16, 15>();
+}
+TEST_F(TMINTest, case_uint32_16x16_16x48_16x16_16x15)
+{
+    test_tmin<uint32_t, 16, 16, 16, 48, 16, 16, 16, 15>();
+}
+TEST_F(TMINTest, case_half_16x32_16x96_16x32_16x31)
+{
+    test_tmin<aclFloat16, 16, 32, 16, 96, 16, 32, 16, 31, true>();
+}
+TEST_F(TMINTest, case_int16_16x32_16x96_16x32_16x31)
+{
+    test_tmin<int16_t, 16, 32, 16, 96, 16, 32, 16, 31>();
+}
+TEST_F(TMINTest, case_uint16_16x32_16x96_16x32_16x31)
+{
+    test_tmin<uint16_t, 16, 32, 16, 96, 16, 32, 16, 31>();
+}
+TEST_F(TMINTest, case_int8_32x128_32x160_32x128_32x127)
+{
+    test_tmin<int8_t, 32, 128, 32, 160, 32, 128, 32, 127>();
+}
+TEST_F(TMINTest, case_uint8_32x128_32x160_32x128_32x127)
+{
+    test_tmin<uint8_t, 32, 128, 32, 160, 32, 128, 32, 127>();
+}
