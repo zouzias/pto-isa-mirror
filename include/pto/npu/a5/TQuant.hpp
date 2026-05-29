@@ -1709,6 +1709,15 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataPara &
     }
 }
 
+// Tmp-aware overload to keep the INT8 SYM/ASYM interface identical to A2/A3.
+// A5 broadcasts scale/offset natively (vlds BRC_B32) and needs no scratch tile, so tmp is unused.
+template <QuantType quant_type, typename TileDataOut, typename TileDataSrc, typename TileDataPara, typename TileDataTmp>
+PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataPara &scale,
+                              [[maybe_unused]] TileDataTmp &tmp, TileDataPara *offset = nullptr)
+{
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
+}
+
 // TQuant Interface for FP32/BF16/FP16->MXFP8 (ND mode)
 // E8M0, max, and scaling tiles may be passed as 2D; TQuant reshapes them to 1D internally.
 template <QuantType quant_type, QuantScaleAlg scale_alg, typename TileDataOut, typename TileDataSrc,
