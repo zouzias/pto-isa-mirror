@@ -2231,6 +2231,17 @@ PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataPara &sc
     return {};
 }
 
+// Tmp-aware overload (A2/A3): the row-wise scale/offset broadcast needs an explicit scratch tile.
+template <auto quant_type, typename TileDataOut, typename TileDataSrc, typename TileDataPara, typename TileDataTmp,
+          typename... WaitEvents>
+PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataPara &scale, TileDataTmp &tmp,
+                            TileDataPara *offset = nullptr, WaitEvents &...events)
+{
+    TSYNC(events...);
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara, TileDataTmp>(dst, src, scale, tmp, offset);
+    return {};
+}
+
 template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
 PTO_INST RecordEvent TGET_SCALE_ADDR(TileDataOut &dst, TileDataIn &src, WaitEvents &...events)
 {
