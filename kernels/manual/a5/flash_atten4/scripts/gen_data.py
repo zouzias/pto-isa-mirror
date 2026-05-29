@@ -153,6 +153,7 @@ def gen_case(
     # p saved as FP16 (store raw exponentials per tile as half)
     soft = (full_exp).astype(np.float16)
     soft.tofile(os.path.join(path, 'p.bin'))
+    nd2nz(copy.deepcopy(soft.T)).tofile(os.path.join(path, 'p_t_nz.bin'))
     p_nz = nd2nz(soft)
     p_nz.tofile(os.path.join(path, 'p_nz.bin'))
     tmp_float_exp.tofile(os.path.join(path, 'p_fp32.bin'))
@@ -219,8 +220,11 @@ def gen_case(
 
     v.tofile(os.path.join(path, 'v.bin'))
     vt = v.T.astype(np.float16)    
-    vt.tofile(os.path.join(path, 'vt.bin'))       
+    vt.tofile(os.path.join(path, 'vt.bin'))  
+    nd2nz(copy.deepcopy(v)).tofile(os.path.join(path, 'v_nz.bin'))
+    nd2nz(copy.deepcopy(vt.T)).tofile(os.path.join(path, 'v_t_nz.bin'))
     pv.tofile(os.path.join(path, 'pv.bin'))
+    nd2nz(copy.deepcopy(pv)).tofile(os.path.join(path, 'pv_nz.bin'))
     # write per-tile partials as pv_tile_fifo0.bin, pv_tile_fifo1.bin
     for idx, part in enumerate(pv_tile_fifo_parts):
         part.tofile(os.path.join(path, f'pv_tile_fifo{idx}.bin'))
