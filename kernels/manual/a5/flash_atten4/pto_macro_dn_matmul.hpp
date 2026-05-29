@@ -150,58 +150,41 @@ AICORE inline void pto_macro_matmul(TileDataA &aMatTile, TileDataB &bMatTile, Ti
                                     AccMode accMode = AccMode::Init, int stamp_id = 0, OpHook preATExtOpHook = OpHook(),
                                     OpHook2 preBTExtOpHook = OpHook2(), OpHook3 postTExtOpHook = OpHook3())
 {
-    constexpr layout_t layout = deduce_layout<TileDataA, TileDataB>();
-
-    static_assert(layout != layout_t::NONE, "Deduced layout is NONE, check tile SLayouts");
-    // Assert that template LAYOUT matches deduced layout if LAYOUT is not NONE
-    if constexpr (LAYOUT != layout_t::NONE) {
-        static_assert(LAYOUT == layout,
-                      "Layout mismatch: template LAYOUT does not match deduced layout from tile SLayouts. "
-                      "Check SLayout of TileDataA and TileDataB.");
-    }
-
     // Ping-pong is used to overlap TEXTRACT (L1->L0) with TMATMUL on alternating buffers.
     uint64_t pingpong = getPingPong(0);
     constexpr uint32_t fittingCubeK = calculateFittingCubeK<Cube_M, Cube_N>();
     const uint64_t Cube_K = fittingCubeK > Tile_K ? Tile_K : fittingCubeK;
     const uint64_t kSegments = (uint64_t)(Tile_K / Cube_K);
+    using LeftTile = TileLeft<half, Cube_M, Cube_K, Cube_M, Cube_K>;
+    using RightTile = TileRight<half, Cube_K, Cube_N, Cube_K, Cube_N>;
+    LeftTile al0Tiles[2] = {LeftTile(), LeftTile()};
+    RightTile bl0Tiles[2] = {RightTile(), RightTile()};
+
+    TASSIGN(al0Tiles[0], (uint64_t)L0A_BUF0);
+    TASSIGN(al0Tiles[1], (uint64_t)L0A_BUF1);
+    TASSIGN(bl0Tiles[0], (uint64_t)L0B_BUF0);
+    TASSIGN(bl0Tiles[1], (uint64_t)L0B_BUF1);
+
     for (uint64_t k = 0; k < kSegments; k++) {
-        using LeftTile = TileLeft<half, Cube_M, Cube_K, Cube_M, Cube_K>;
-        LeftTile al0Tiles[2] = {LeftTile(), LeftTile()};
-        using RightTile = TileRight<half, Cube_K, Cube_N, Cube_K, Cube_N>;
-        RightTile bl0Tiles[2] = {RightTile(), RightTile()};
-
-        TASSIGN(al0Tiles[0], (uint64_t)L0A_BUF0);
-        TASSIGN(al0Tiles[1], (uint64_t)L0A_BUF1);
-        TASSIGN(bl0Tiles[0], (uint64_t)L0B_BUF0);
-        TASSIGN(bl0Tiles[1], (uint64_t)L0B_BUF1);
-
         // Wait until previous TMATMUL finishes using this L0 buffer before overwriting it via TEXTRACT.
         wait_flag(PIPE_M, PIPE_MTE1, pingpong);
 
-        if constexpr (layout == layout_t::NT) {
-            TASSIGN(aMatTile, (uint64_t)aMatTile.data() + k * Cube_K * Cube_M * sizeof(typename TileDataA::DType));
-            TASSIGN(bMatTile, (uint64_t)bMatTile.data() + k * Cube_K * Cube_N * sizeof(typename TileDataB::DType));
-        } else if constexpr (layout == layout_t::TN) {
-            TASSIGN(aMatTile, (uint64_t)aMatTile.data() + k * Cube_K * 16 * sizeof(typename TileDataA::DType));
-            TASSIGN(bMatTile, (uint64_t)bMatTile.data() + k * Cube_K * 16 * sizeof(typename TileDataB::DType));
-        }
-
+        uint64_t kOffset = k * Cube_K;
         // TEXTRACT slices the current Cube_K panel into L0A/L0B.
         if constexpr (L1LoadBFirst) {
             if (k == 0)
                 preBTExtOpHook();
-            TEXTRACT(bl0Tiles[pingpong], bMatTile, 0, 0);
+            TEXTRACT(bl0Tiles[pingpong], bMatTile, kOffset, 0);
             if (k == 0)
                 preATExtOpHook();
-            TEXTRACT(al0Tiles[pingpong], aMatTile, 0, 0);
+            TEXTRACT(al0Tiles[pingpong], aMatTile, 0, kOffset);
         } else {
             if (k == 0)
                 preATExtOpHook();
-            TEXTRACT(al0Tiles[pingpong], aMatTile, 0, 0);
+            TEXTRACT(al0Tiles[pingpong], aMatTile, 0, kOffset);
             if (k == 0)
                 preBTExtOpHook();
-            TEXTRACT(bl0Tiles[pingpong], bMatTile, 0, 0);
+            TEXTRACT(bl0Tiles[pingpong], bMatTile, kOffset, 0);
         }
 
 #if defined MARK_STAMP_DATA_PIPE

@@ -35,6 +35,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_ASSERT(condition, message) ((void)0)
 #endif
 
+inline[aicore] void set_mark(uint64_t v)
+{
+    __asm__ __volatile__("");
+    asm volatile("MOV COND, %0\n" : "+l"(v));
+    __asm__ __volatile__("");
+}
+
 #if defined(__CPU_SIM) || defined(__COSTMODEL)
 #include <algorithm>
 #include <climits>
