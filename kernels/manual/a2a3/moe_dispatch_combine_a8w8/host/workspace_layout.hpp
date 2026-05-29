@@ -52,6 +52,7 @@ inline void PrintWorkspaceLayout(std::ostream &os, const WorkspaceLayout &layout
     PrintField(os, "scale2Uint64", layout.scale2Uint64);
     PrintField(os, "gmm2AccInt32", layout.gmm2AccInt32);
     PrintField(os, "gmm2Out", layout.gmm2Out);
+    PrintField(os, "returnSegmentStaging", layout.returnSegmentStaging);
     PrintField(os, "readyCounters", layout.readyCounters);
     PrintField(os, "dispatchGroupReady", layout.dispatchGroupReady);
     PrintField(os, "gmm1SyncGroupReady", layout.gmm1SyncGroupReady);
@@ -60,6 +61,9 @@ inline void PrintWorkspaceLayout(std::ostream &os, const WorkspaceLayout &layout
     PrintField(os, "stageStatus", layout.stageStatus);
     PrintField(os, "swigluSyncGroups", layout.swigluSyncGroups);
     PrintField(os, "dequantSum", layout.dequantSum);
+    PrintField(os, "swigluGroupDesc", layout.swigluGroupDesc);
+    PrintField(os, "gmm1TileTaskPlan", layout.gmm1TileTaskPlan);
+    PrintField(os, "gmm2TileTaskPlan", layout.gmm2TileTaskPlan);
     PrintField(os, "scoreboardTaskMap", layout.scoreboardTaskMap);
     PrintField(os, "producerStatus", layout.producerStatus);
     PrintField(os, "scoreboardMinStatus", layout.scoreboardMinStatus);

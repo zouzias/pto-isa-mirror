@@ -83,6 +83,9 @@ struct ControlMetadataView {
     GmArrayView<int32_t> gmm2GroupReady;
     GmArrayView<int32_t> swigluSyncGroups;
     GmArrayView<int32_t> dequantSum;
+    GmArrayView<int32_t> swigluGroupDesc;
+    GmArrayView<int32_t> gmm1TileTaskPlan;
+    GmArrayView<int32_t> gmm2TileTaskPlan;
     GmArrayView<int32_t> scoreboardTaskMap;
     GmArrayView<int32_t> producerStatus;
     GmArrayView<int32_t> scoreboardMinStatus;
@@ -118,6 +121,7 @@ struct M2DataPathView {
     GmArrayView<uint64_t> scale2Uint64;
     GmArrayView<int32_t> gmm2AccInt32;
     GmArrayView<uint8_t> gmm2OutDebug;
+    GmArrayView<uint8_t> returnSegmentStaging;
     GmArrayView<int8_t> peerDispatchPayload;
     GmArrayView<float> peerDispatchScale;
     GmArrayView<uint8_t> peerReturnPayload;
@@ -149,6 +153,9 @@ AICORE inline ControlMetadataView MakeControlMetadataView(GM_ADDR workspace, GM_
     view.gmm2GroupReady.ptr = I32Field(workspace, workspaceLayout.gmm2GroupReady);
     view.swigluSyncGroups.ptr = I32Field(workspace, workspaceLayout.swigluSyncGroups);
     view.dequantSum.ptr = I32Field(workspace, workspaceLayout.dequantSum);
+    view.swigluGroupDesc.ptr = I32Field(workspace, workspaceLayout.swigluGroupDesc);
+    view.gmm1TileTaskPlan.ptr = I32Field(workspace, workspaceLayout.gmm1TileTaskPlan);
+    view.gmm2TileTaskPlan.ptr = I32Field(workspace, workspaceLayout.gmm2TileTaskPlan);
     view.scoreboardTaskMap.ptr = I32Field(workspace, workspaceLayout.scoreboardTaskMap);
     view.producerStatus.ptr = I32Field(workspace, workspaceLayout.producerStatus);
     view.scoreboardMinStatus.ptr = I32Field(workspace, workspaceLayout.scoreboardMinStatus);
@@ -178,6 +185,7 @@ AICORE inline M2DataPathView MakeM2DataPathView(GM_ADDR workspace, GM_ADDR peerW
     view.scale2Uint64.ptr = TypedField<uint64_t>(workspace, workspaceLayout.scale2Uint64);
     view.gmm2AccInt32.ptr = TypedField<int32_t>(workspace, workspaceLayout.gmm2AccInt32);
     view.gmm2OutDebug.ptr = TypedField<uint8_t>(workspace, workspaceLayout.gmm2Out);
+    view.returnSegmentStaging.ptr = TypedField<uint8_t>(workspace, workspaceLayout.returnSegmentStaging);
     view.peerDispatchPayload.ptr = TypedField<int8_t>(peerWindow, peerWindowLayout.dispatchPayload);
     view.peerDispatchScale.ptr = TypedField<float>(peerWindow, peerWindowLayout.dispatchScale);
     view.peerReturnPayload.ptr = TypedField<uint8_t>(peerWindow, peerWindowLayout.returnPayload);

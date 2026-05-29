@@ -85,6 +85,7 @@ struct WorkspaceLayout {
     FieldLayout scale2Uint64;
     FieldLayout gmm2AccInt32;
     FieldLayout gmm2Out;
+    FieldLayout returnSegmentStaging;
     FieldLayout readyCounters;
     FieldLayout dispatchGroupReady;
     FieldLayout gmm1SyncGroupReady;
@@ -93,6 +94,9 @@ struct WorkspaceLayout {
     FieldLayout stageStatus;
     FieldLayout swigluSyncGroups;
     FieldLayout dequantSum;
+    FieldLayout swigluGroupDesc;
+    FieldLayout gmm1TileTaskPlan;
+    FieldLayout gmm2TileTaskPlan;
     FieldLayout scoreboardTaskMap;
     FieldLayout producerStatus;
     FieldLayout scoreboardMinStatus;

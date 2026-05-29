@@ -91,6 +91,54 @@ inline uint64_t ReturnPayloadRowBytes(const ShapeConfig &shape)
     return AlignUp(CheckedMul(shape.hiddenSize, DTypeBytes(shape.dtypeOut), "return row"), kCacheLineBytes);
 }
 
+inline uint64_t CeilDiv(uint64_t value, uint64_t divisor)
+{
+    if (divisor == 0) {
+        throw std::invalid_argument("divisor must be nonzero");
+    }
+    return (value + divisor - 1) / divisor;
+}
+
+inline uint64_t GmmMicroTileM()
+{
+    return 16;
+}
+
+inline uint64_t GmmMicroTileN()
+{
+    return 32;
+}
+
+inline uint64_t ReturnHiddenChunkCols(const ShapeConfig &shape)
+{
+    return shape.gmmBlockN == 0 ? GmmMicroTileN() : shape.gmmBlockN;
+}
+
+inline uint64_t GmmTileTaskCapacity(const ShapeConfig &shape)
+{
+    uint64_t rowTiles = CeilDiv(LocalExpertRows(shape), GmmMicroTileM());
+    uint64_t w1Cols = CheckedMul(shape.intermediateSize, 2, "w1 intermediate cols");
+    uint64_t gmm1NTiles = CeilDiv(w1Cols, GmmMicroTileN());
+    uint64_t gmm2NTiles = CeilDiv(shape.hiddenSize, GmmMicroTileN());
+    uint64_t nTiles = gmm1NTiles > gmm2NTiles ? gmm1NTiles : gmm2NTiles;
+    return CheckedMul(CheckedMul(shape.expertPerRank, rowTiles, "gmm row tiles"), nTiles, "gmm tile cap");
+}
+
+inline uint64_t ReturnSegmentCapacity(const ShapeConfig &shape)
+{
+    uint64_t rowTiles = CeilDiv(LocalExpertRows(shape), GmmMicroTileM());
+    uint64_t hiddenChunks = CeilDiv(shape.hiddenSize, ReturnHiddenChunkCols(shape));
+    uint64_t perExpert = CheckedMul(CheckedMul(rowTiles, hiddenChunks, "return tile chunks"), shape.rankNum,
+                                    "return owner segments");
+    return CheckedMul(shape.expertPerRank, perExpert, "return segment cap");
+}
+
+inline uint64_t ReturnSegmentStagingBytes(const ShapeConfig &shape)
+{
+    return CheckedMul(CheckedMul(GmmMicroTileM(), ReturnHiddenChunkCols(shape), "return staging elems"),
+                      DTypeBytes(shape.dtypeOut), "return staging bytes");
+}
+
 inline FieldLayout AppendField(uint64_t *offset, uint64_t bytes, uint64_t alignment = kCacheLineBytes)
 {
     uint64_t aligned = AlignUp(*offset, alignment);
@@ -112,7 +160,8 @@ inline WorkspaceLayout MakeWorkspaceLayout(const ShapeConfig &shape)
     uint64_t w1Cols = CheckedMul(shape.intermediateSize, 2, "w1 intermediate cols");
     uint64_t syncGroupCap = shape.expertPerRank + 1;
     uint64_t scoreboardTasks = CheckedMul(shape.rankNum, shape.expertPerRank, "scoreboard tasks");
-    uint64_t subTileCap = CheckedMul(shape.expertPerRank, 8, "sub tile cap");
+    uint64_t gmmTaskCap = GmmTileTaskCapacity(shape);
+    uint64_t subTileCap = ReturnSegmentCapacity(shape);
 
     layout.tokenPerExpertMatrix = AppendField(&offset, CheckedMul(matrixCount, sizeof(int32_t), "token matrix"));
     layout.blockTokenPerExpert = AppendField(&offset, CheckedMul(globalExpertNum, sizeof(int32_t), "block counts"));
@@ -147,6 +196,7 @@ inline WorkspaceLayout MakeWorkspaceLayout(const ShapeConfig &shape)
     layout.gmm2AccInt32 = AppendField(&offset, CheckedMul(CheckedMul(localRows, shape.hiddenSize, "gmm2 acc elems"),
                                                           sizeof(int32_t), "gmm2 acc"));
     layout.gmm2Out = AppendField(&offset, CheckedMul(localRows, returnRowBytes, "gmm2 out"));
+    layout.returnSegmentStaging = AppendField(&offset, ReturnSegmentStagingBytes(shape));
     layout.readyCounters = AppendField(&offset, CheckedMul(16, kCacheLineBytes, "ready counters"));
     layout.dispatchGroupReady = AppendField(&offset, CheckedMul(shape.expertPerRank, kCacheLineBytes, "dispatch ready"));
     layout.gmm1SyncGroupReady = AppendField(&offset, CheckedMul(syncGroupCap, kCacheLineBytes, "gmm1 ready"));
@@ -155,14 +205,17 @@ inline WorkspaceLayout MakeWorkspaceLayout(const ShapeConfig &shape)
     layout.stageStatus = AppendField(&offset, CheckedMul(16, kCacheLineBytes, "stage status"));
     layout.swigluSyncGroups = AppendField(&offset, CheckedMul(syncGroupCap, sizeof(int32_t), "swiglu groups"));
     layout.dequantSum = AppendField(&offset, CheckedMul(syncGroupCap + 1, sizeof(int32_t), "dequant sum"));
+    layout.swigluGroupDesc = AppendField(&offset, CheckedMul(syncGroupCap, 8 * sizeof(int32_t), "swiglu desc"));
+    layout.gmm1TileTaskPlan = AppendField(&offset, CheckedMul(gmmTaskCap, 8 * sizeof(int32_t), "gmm1 tasks"));
+    layout.gmm2TileTaskPlan = AppendField(&offset, CheckedMul(gmmTaskCap, 8 * sizeof(int32_t), "gmm2 tasks"));
     layout.scoreboardTaskMap = AppendField(&offset, CheckedMul(scoreboardTasks, 4 * sizeof(int32_t), "task map"));
     layout.producerStatus = AppendField(&offset, CheckedMul(scoreboardTasks, kCacheLineBytes, "producer status"));
     layout.scoreboardMinStatus = AppendField(&offset, CheckedMul(scoreboardTasks, kCacheLineBytes, "min status"));
     layout.workerWaitCounters = AppendField(&offset, CheckedMul(scoreboardTasks, kCacheLineBytes, "wait counters"));
     layout.scoreboardTimeoutCounters =
         AppendField(&offset, CheckedMul(scoreboardTasks, kCacheLineBytes, "timeout counters"));
-    layout.subTileReturnPlan = AppendField(&offset, CheckedMul(subTileCap, 6 * sizeof(int32_t), "sub tile plan"));
-    layout.subTileOwnerSegments = AppendField(&offset, CheckedMul(subTileCap, 6 * sizeof(int32_t), "owner segments"));
+    layout.subTileReturnPlan = AppendField(&offset, CheckedMul(subTileCap, 8 * sizeof(int32_t), "sub tile plan"));
+    layout.subTileOwnerSegments = AppendField(&offset, CheckedMul(subTileCap, 8 * sizeof(int32_t), "owner segments"));
     layout.subTileReady = AppendField(&offset, CheckedMul(subTileCap, kCacheLineBytes, "sub tile ready"));
     layout.timelineScratch = AppendField(&offset, CheckedMul(64, 4 * sizeof(uint64_t), "timeline scratch"));
     layout.totalBytes = AlignUp(offset, kCacheLineBytes);

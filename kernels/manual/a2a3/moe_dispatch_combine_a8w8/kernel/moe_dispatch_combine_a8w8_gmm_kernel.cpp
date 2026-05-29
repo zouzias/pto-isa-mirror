@@ -25,6 +25,10 @@ namespace {
 constexpr uint32_t kGmm1M = 16;
 constexpr uint32_t kGmm1BaseK = 32;
 constexpr uint32_t kGmm1N = 32;
+constexpr uint32_t kM2SwigluGroupFields = 8;
+constexpr uint32_t kM2GmmTileTaskFields = 8;
+constexpr uint32_t kM2ReturnPlanFields = 8;
+constexpr uint32_t kM2OwnerSegmentFields = 8;
 constexpr uint64_t kL1APing = 0x0;
 constexpr uint64_t kL1BPing = 0x20000;
 constexpr uint64_t kL0A = 0x0;
@@ -50,6 +54,14 @@ AICORE inline uint64_t Align64Device(uint64_t value)
     return ((value + 63U) / 64U) * 64U;
 }
 
+AICORE inline uint64_t M2CeilDivDevice(uint64_t value, uint64_t divisor)
+{
+    if (divisor == 0) {
+        return 0;
+    }
+    return (value + divisor - 1U) / divisor;
+}
+
 AICORE inline uint64_t M2DTypeBytes(uint32_t dtype)
 {
     if (dtype == static_cast<uint32_t>(moe_dispatch_combine_a8w8::DType::kInt8)) {
@@ -64,6 +76,11 @@ AICORE inline uint64_t M2DTypeBytes(uint32_t dtype)
 AICORE inline uint64_t M2GlobalExpertNum(moe_dispatch_combine_a8w8::ShapeConfig shape)
 {
     return static_cast<uint64_t>(shape.rankNum) * shape.expertPerRank;
+}
+
+AICORE inline uint64_t M2LocalRows(moe_dispatch_combine_a8w8::ShapeConfig shape)
+{
+    return static_cast<uint64_t>(shape.maxTokensPerExpert) * shape.expertPerRank;
 }
 
 AICORE inline uint64_t M2TokenPerExpertMatrixRowStride(moe_dispatch_combine_a8w8::ShapeConfig shape)
@@ -82,6 +99,28 @@ AICORE inline uint64_t M2DispatchPayloadRowBytes(moe_dispatch_combine_a8w8::Shap
 AICORE inline uint64_t M2ReturnPayloadRowBytes(moe_dispatch_combine_a8w8::ShapeConfig shape)
 {
     return Align64Device(static_cast<uint64_t>(shape.hiddenSize) * M2DTypeBytes(shape.dtypeOut));
+}
+
+AICORE inline uint64_t M2ReturnHiddenChunkCols(moe_dispatch_combine_a8w8::ShapeConfig shape)
+{
+    return shape.gmmBlockN == 0 ? kGmm1N : shape.gmmBlockN;
+}
+
+AICORE inline uint64_t M2GmmTileTaskCapacity(moe_dispatch_combine_a8w8::ShapeConfig shape)
+{
+    uint64_t rowTiles = M2CeilDivDevice(M2LocalRows(shape), kGmm1M);
+    uint64_t w1Cols = static_cast<uint64_t>(shape.intermediateSize) * 2U;
+    uint64_t gmm1NTiles = M2CeilDivDevice(w1Cols, kGmm1N);
+    uint64_t gmm2NTiles = M2CeilDivDevice(shape.hiddenSize, kGmm1N);
+    uint64_t nTiles = gmm1NTiles > gmm2NTiles ? gmm1NTiles : gmm2NTiles;
+    return static_cast<uint64_t>(shape.expertPerRank) * rowTiles * nTiles;
+}
+
+AICORE inline uint64_t M2ReturnSegmentCapacity(moe_dispatch_combine_a8w8::ShapeConfig shape)
+{
+    uint64_t rowTiles = M2CeilDivDevice(M2LocalRows(shape), kGmm1M);
+    uint64_t hiddenChunks = M2CeilDivDevice(shape.hiddenSize, M2ReturnHiddenChunkCols(shape));
+    return static_cast<uint64_t>(shape.expertPerRank) * rowTiles * hiddenChunks * shape.rankNum;
 }
 
 AICORE inline moe_dispatch_combine_a8w8::FieldLayout M2AppendFieldDevice(uint64_t &offset, uint64_t bytes)
@@ -106,7 +145,8 @@ AICORE inline moe_dispatch_combine_a8w8::WorkspaceLayout MakeM2WorkspaceLayoutDe
     uint64_t returnRowBytes = M2ReturnPayloadRowBytes(shape);
     uint64_t w1Cols = static_cast<uint64_t>(shape.intermediateSize) * 2U;
     uint64_t syncGroupCap = static_cast<uint64_t>(shape.expertPerRank) + 1U;
-    uint64_t subTileCap = static_cast<uint64_t>(shape.expertPerRank) * 8U;
+    uint64_t gmmTaskCap = M2GmmTileTaskCapacity(shape);
+    uint64_t subTileCap = M2ReturnSegmentCapacity(shape);
 
     layout.tokenPerExpertMatrix = M2AppendFieldDevice(offset, matrixCount * sizeof(int32_t));
     layout.blockTokenPerExpert = M2AppendFieldDevice(offset, globalExpertNum * sizeof(int32_t));
@@ -132,6 +172,8 @@ AICORE inline moe_dispatch_combine_a8w8::WorkspaceLayout MakeM2WorkspaceLayoutDe
     layout.scale2Uint64 = M2AppendFieldDevice(offset, shape.hiddenSize * sizeof(uint64_t));
     layout.gmm2AccInt32 = M2AppendFieldDevice(offset, localRows * shape.hiddenSize * sizeof(int32_t));
     layout.gmm2Out = M2AppendFieldDevice(offset, localRows * returnRowBytes);
+    layout.returnSegmentStaging =
+        M2AppendFieldDevice(offset, kGmm1M * M2ReturnHiddenChunkCols(shape) * M2DTypeBytes(shape.dtypeOut));
     layout.readyCounters = M2AppendFieldDevice(offset, 16U * 64U);
     layout.dispatchGroupReady = M2AppendFieldDevice(offset, shape.expertPerRank * 64U);
     layout.gmm1SyncGroupReady = M2AppendFieldDevice(offset, syncGroupCap * 64U);
@@ -140,13 +182,16 @@ AICORE inline moe_dispatch_combine_a8w8::WorkspaceLayout MakeM2WorkspaceLayoutDe
     layout.stageStatus = M2AppendFieldDevice(offset, 16U * 64U);
     layout.swigluSyncGroups = M2AppendFieldDevice(offset, syncGroupCap * sizeof(int32_t));
     layout.dequantSum = M2AppendFieldDevice(offset, (syncGroupCap + 1U) * sizeof(int32_t));
+    layout.swigluGroupDesc = M2AppendFieldDevice(offset, syncGroupCap * kM2SwigluGroupFields * sizeof(int32_t));
+    layout.gmm1TileTaskPlan = M2AppendFieldDevice(offset, gmmTaskCap * kM2GmmTileTaskFields * sizeof(int32_t));
+    layout.gmm2TileTaskPlan = M2AppendFieldDevice(offset, gmmTaskCap * kM2GmmTileTaskFields * sizeof(int32_t));
     layout.scoreboardTaskMap = M2AppendFieldDevice(offset, rankExpertCount * 4U * sizeof(int32_t));
     layout.producerStatus = M2AppendFieldDevice(offset, rankExpertCount * 64U);
     layout.scoreboardMinStatus = M2AppendFieldDevice(offset, rankExpertCount * 64U);
     layout.workerWaitCounters = M2AppendFieldDevice(offset, rankExpertCount * 64U);
     layout.scoreboardTimeoutCounters = M2AppendFieldDevice(offset, rankExpertCount * 64U);
-    layout.subTileReturnPlan = M2AppendFieldDevice(offset, subTileCap * 6U * sizeof(int32_t));
-    layout.subTileOwnerSegments = M2AppendFieldDevice(offset, subTileCap * 6U * sizeof(int32_t));
+    layout.subTileReturnPlan = M2AppendFieldDevice(offset, subTileCap * kM2ReturnPlanFields * sizeof(int32_t));
+    layout.subTileOwnerSegments = M2AppendFieldDevice(offset, subTileCap * kM2OwnerSegmentFields * sizeof(int32_t));
     layout.subTileReady = M2AppendFieldDevice(offset, subTileCap * 64U);
     layout.timelineScratch = M2AppendFieldDevice(offset, 64U * 4U * sizeof(uint64_t));
     layout.totalBytes = Align64Device(offset);
@@ -161,6 +206,46 @@ AICORE inline int32_t LoadScalarI32(__gm__ int32_t *ptr)
 AICORE inline void StoreScalarI32(__gm__ int32_t *ptr, int32_t value)
 {
     *ptr = value;
+}
+
+AICORE inline uint32_t BuildGmmTileTaskPlan(moe_dispatch_combine_a8w8::ShapeConfig shape, __gm__ int32_t *dispatchOffset,
+                                            __gm__ int32_t *expertTokenNums, __gm__ int32_t *taskPlan, uint32_t nCols,
+                                            uint32_t kSize, uint32_t stageId)
+{
+    uint32_t taskId = 0;
+    uint32_t maxTasks = static_cast<uint32_t>(M2GmmTileTaskCapacity(shape));
+    for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
+        int32_t rowBegin = LoadScalarI32(dispatchOffset + localExpert);
+        int32_t rowCount = LoadScalarI32(expertTokenNums + localExpert);
+        if (rowCount <= 0) {
+            continue;
+        }
+        for (uint32_t rowOffset = 0; rowOffset < static_cast<uint32_t>(rowCount); rowOffset += kGmm1M) {
+            uint32_t rows = static_cast<uint32_t>(rowCount) - rowOffset;
+            if (rows > kGmm1M) {
+                rows = kGmm1M;
+            }
+            for (uint32_t nBase = 0; nBase < nCols; nBase += kGmm1N) {
+                uint32_t cols = nCols - nBase;
+                if (cols > kGmm1N) {
+                    cols = kGmm1N;
+                }
+                if (taskId < maxTasks) {
+                    __gm__ int32_t *task = taskPlan + taskId * kM2GmmTileTaskFields;
+                    StoreScalarI32(task + 0U, static_cast<int32_t>(taskId));
+                    StoreScalarI32(task + 1U, static_cast<int32_t>(stageId));
+                    StoreScalarI32(task + 2U, static_cast<int32_t>(localExpert));
+                    StoreScalarI32(task + 3U, rowBegin + static_cast<int32_t>(rowOffset));
+                    StoreScalarI32(task + 4U, static_cast<int32_t>(rows));
+                    StoreScalarI32(task + 5U, static_cast<int32_t>(nBase));
+                    StoreScalarI32(task + 6U, static_cast<int32_t>(cols));
+                    StoreScalarI32(task + 7U, static_cast<int32_t>(kSize));
+                }
+                ++taskId;
+            }
+        }
+    }
+    return taskId;
 }
 
 AICORE inline void RunInt8GmmTile(__gm__ int8_t *input, __gm__ int8_t *weight, __gm__ int32_t *output, uint32_t mValid,
@@ -218,8 +303,10 @@ AICORE inline void RunInt8GmmTile(__gm__ int8_t *input, __gm__ int8_t *weight, _
 __global__ AICORE void M2Gmm1Int8(moe_dispatch_combine_a8w8::ShapeConfig shape,
                                   moe_dispatch_combine_a8w8::RankConfig rank, GM_ADDR workspace)
 {
-    if (get_block_idx() != 0 || shape.rankNum == 0 || shape.expertPerRank == 0 || shape.hiddenSize != 64U ||
-        shape.intermediateSize != 32U) {
+    uint32_t blockId = static_cast<uint32_t>(get_block_idx());
+    uint32_t blockNum = static_cast<uint32_t>(get_block_num());
+    if (shape.rankNum == 0 || shape.expertPerRank == 0 || shape.hiddenSize == 0U || shape.intermediateSize == 0U ||
+        shape.hiddenSize % kGmm1BaseK != 0U) {
         return;
     }
     auto layout = MakeM2WorkspaceLayoutDevice(shape);
@@ -230,39 +317,42 @@ __global__ AICORE void M2Gmm1Int8(moe_dispatch_combine_a8w8::ShapeConfig shape,
     __gm__ int32_t *gmm1Acc = reinterpret_cast<__gm__ int32_t *>(workspace + layout.gmm1AccInt32.offset);
     __gm__ int32_t *dispatchOffset = reinterpret_cast<__gm__ int32_t *>(workspace + layout.dispatchOffset.offset);
     __gm__ int32_t *expertTokenNums = reinterpret_cast<__gm__ int32_t *>(workspace + layout.expertTokenNums.offset);
+    __gm__ int32_t *gmm1TileTaskPlan =
+        reinterpret_cast<__gm__ int32_t *>(workspace + layout.gmm1TileTaskPlan.offset);
+    __gm__ int32_t *stageStatus = reinterpret_cast<__gm__ int32_t *>(workspace + layout.stageStatus.offset);
+    uint32_t taskCount =
+        BuildGmmTileTaskPlan(shape, dispatchOffset, expertTokenNums, gmm1TileTaskPlan, w1Cols, shape.hiddenSize, 1U);
+    if (blockId == 0) {
+        StoreScalarI32(stageStatus + 4U * 16U, static_cast<int32_t>(taskCount));
+        StoreScalarI32(stageStatus + 5U * 16U, static_cast<int32_t>(blockNum));
+    }
+    if (taskCount == 0) {
+        return;
+    }
 
-    for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
+    for (uint32_t taskId = blockId; taskId < taskCount; taskId += blockNum) {
+        __gm__ int32_t *task = gmm1TileTaskPlan + taskId * kM2GmmTileTaskFields;
+        uint32_t localExpert = static_cast<uint32_t>(LoadScalarI32(task + 2U));
         uint32_t globalExpert = rank.rankId * shape.expertPerRank + localExpert;
-        int32_t rowBegin = LoadScalarI32(dispatchOffset + localExpert);
-        int32_t rowCount = LoadScalarI32(expertTokenNums + localExpert);
-        if (rowCount <= 0) {
-            continue;
-        }
+        uint32_t rowBegin = static_cast<uint32_t>(LoadScalarI32(task + 3U));
+        uint32_t mValid = static_cast<uint32_t>(LoadScalarI32(task + 4U));
+        uint32_t nBase = static_cast<uint32_t>(LoadScalarI32(task + 5U));
+        uint32_t nValid = static_cast<uint32_t>(LoadScalarI32(task + 6U));
         __gm__ int8_t *expertWeight = weight1 + static_cast<uint64_t>(globalExpert) * shape.hiddenSize * w1Cols;
-        for (uint32_t row = 0; row < static_cast<uint32_t>(rowCount); row += kGmm1M) {
-            uint32_t mValid = static_cast<uint32_t>(rowCount) - row;
-            if (mValid > kGmm1M) {
-                mValid = kGmm1M;
-            }
-            __gm__ int8_t *tileInput = gmm1Input + static_cast<uint64_t>(rowBegin + row) * rowBytes;
-            __gm__ int32_t *tileOutput = gmm1Acc + static_cast<uint64_t>(rowBegin + row) * w1Cols;
-            for (uint32_t nBase = 0; nBase < w1Cols; nBase += kGmm1N) {
-                uint32_t nValid = w1Cols - nBase;
-                if (nValid > kGmm1N) {
-                    nValid = kGmm1N;
-                }
-                RunInt8GmmTile(tileInput, expertWeight + nBase, tileOutput + nBase, mValid, shape.hiddenSize, nValid,
-                               rowBytes, w1Cols, w1Cols);
-            }
-        }
+        __gm__ int8_t *tileInput = gmm1Input + static_cast<uint64_t>(rowBegin) * rowBytes;
+        __gm__ int32_t *tileOutput = gmm1Acc + static_cast<uint64_t>(rowBegin) * w1Cols;
+        RunInt8GmmTile(tileInput, expertWeight + nBase, tileOutput + nBase, mValid, shape.hiddenSize, nValid,
+                       rowBytes, w1Cols, w1Cols);
     }
 }
 
 __global__ AICORE void M2Gmm2Int8(moe_dispatch_combine_a8w8::ShapeConfig shape,
                                   moe_dispatch_combine_a8w8::RankConfig rank, GM_ADDR workspace)
 {
-    if (get_block_idx() != 0 || shape.rankNum == 0 || shape.expertPerRank == 0 || shape.hiddenSize != 64U ||
-        shape.intermediateSize != 32U) {
+    uint32_t blockId = static_cast<uint32_t>(get_block_idx());
+    uint32_t blockNum = static_cast<uint32_t>(get_block_num());
+    if (shape.rankNum == 0 || shape.expertPerRank == 0 || shape.hiddenSize == 0U || shape.intermediateSize == 0U ||
+        shape.intermediateSize % kGmm1BaseK != 0U) {
         return;
     }
     auto layout = MakeM2WorkspaceLayoutDevice(shape);
@@ -273,34 +363,47 @@ __global__ AICORE void M2Gmm2Int8(moe_dispatch_combine_a8w8::ShapeConfig shape,
     __gm__ int32_t *dispatchOffset = reinterpret_cast<__gm__ int32_t *>(workspace + layout.dispatchOffset.offset);
     __gm__ int32_t *expertTokenNums = reinterpret_cast<__gm__ int32_t *>(workspace + layout.expertTokenNums.offset);
     __gm__ int32_t *gmm2GroupReady = reinterpret_cast<__gm__ int32_t *>(workspace + layout.gmm2GroupReady.offset);
+    __gm__ int32_t *gmm2TileTaskPlan =
+        reinterpret_cast<__gm__ int32_t *>(workspace + layout.gmm2TileTaskPlan.offset);
+    __gm__ int32_t *stageStatus = reinterpret_cast<__gm__ int32_t *>(workspace + layout.stageStatus.offset);
+    uint32_t taskCount = BuildGmmTileTaskPlan(shape, dispatchOffset, expertTokenNums, gmm2TileTaskPlan,
+                                              shape.hiddenSize, shape.intermediateSize, 2U);
+    if (blockId == 0) {
+        StoreScalarI32(stageStatus + 6U * 16U, static_cast<int32_t>(taskCount));
+        StoreScalarI32(stageStatus + 7U * 16U, static_cast<int32_t>(blockNum));
+    }
 
     for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
-        uint32_t globalExpert = rank.rankId * shape.expertPerRank + localExpert;
-        int32_t rowBegin = LoadScalarI32(dispatchOffset + localExpert);
         int32_t rowCount = LoadScalarI32(expertTokenNums + localExpert);
         if (rowCount <= 0) {
             StoreScalarI32(gmm2GroupReady + localExpert * 16U, 1);
-            continue;
         }
+    }
+    if (taskCount == 0) {
+        return;
+    }
+
+    for (uint32_t taskId = blockId; taskId < taskCount; taskId += blockNum) {
+        __gm__ int32_t *task = gmm2TileTaskPlan + taskId * kM2GmmTileTaskFields;
+        uint32_t localExpert = static_cast<uint32_t>(LoadScalarI32(task + 2U));
+        uint32_t globalExpert = rank.rankId * shape.expertPerRank + localExpert;
+        uint32_t rowBegin = static_cast<uint32_t>(LoadScalarI32(task + 3U));
+        uint32_t mValid = static_cast<uint32_t>(LoadScalarI32(task + 4U));
+        uint32_t nBase = static_cast<uint32_t>(LoadScalarI32(task + 5U));
+        uint32_t nValid = static_cast<uint32_t>(LoadScalarI32(task + 6U));
         __gm__ int8_t *expertWeight =
             weight2 + static_cast<uint64_t>(globalExpert) * shape.intermediateSize * shape.hiddenSize;
-        for (uint32_t row = 0; row < static_cast<uint32_t>(rowCount); row += kGmm1M) {
-            uint32_t mValid = static_cast<uint32_t>(rowCount) - row;
-            if (mValid > kGmm1M) {
-                mValid = kGmm1M;
-            }
-            __gm__ int8_t *tileInput = gmm2Input + static_cast<uint64_t>(rowBegin + row) * rowBytes;
-            __gm__ int32_t *tileOutput = gmm2Acc + static_cast<uint64_t>(rowBegin + row) * shape.hiddenSize;
-            for (uint32_t nBase = 0; nBase < shape.hiddenSize; nBase += kGmm1N) {
-                uint32_t nValid = shape.hiddenSize - nBase;
-                if (nValid > kGmm1N) {
-                    nValid = kGmm1N;
-                }
-                RunInt8GmmTile(tileInput, expertWeight + nBase, tileOutput + nBase, mValid, shape.intermediateSize,
-                               nValid, rowBytes, shape.hiddenSize, shape.hiddenSize);
-            }
+        __gm__ int8_t *tileInput = gmm2Input + static_cast<uint64_t>(rowBegin) * rowBytes;
+        __gm__ int32_t *tileOutput = gmm2Acc + static_cast<uint64_t>(rowBegin) * shape.hiddenSize;
+        RunInt8GmmTile(tileInput, expertWeight + nBase, tileOutput + nBase, mValid, shape.intermediateSize, nValid,
+                       rowBytes, shape.hiddenSize, shape.hiddenSize);
+    }
+    pipe_barrier(PIPE_ALL);
+    dsb(DSB_DDR);
+    if (blockId == 0) {
+        for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
+            StoreScalarI32(gmm2GroupReady + localExpert * 16U, 1);
         }
-        StoreScalarI32(gmm2GroupReady + localExpert * 16U, 1);
     }
 }
 

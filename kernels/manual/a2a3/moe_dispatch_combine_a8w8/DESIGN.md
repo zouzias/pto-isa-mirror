@@ -76,8 +76,10 @@ MegaMoE 对齐结论：
   后段逐步变小以减少尾部 activation/quant 对 Combine 的阻塞。M2 必须固定 group plan 和连续 row range，
   M3 只能在这个既有分组上启用 `gmm1SyncGroupReady/activationSyncGroupReady`，不能重做 activation row layout。
 - 软同步：Dispatch-GMM 的多 producer / 多 consumer 不靠所有 worker 轮询所有 producer，也不靠全核 BSP 拉齐。
-  M2 固定 `scoreboardTaskMap/producerStatus/scoreboardMinStatus` 语义账本；M3.7 在同一账本上验证或启用
-  async scoreboard，让 worker 只看聚合状态并记录 wait/timeout counter。
+  M2 固定 `scoreboardTaskMap/producerStatus/scoreboardMinStatus` 语义账本、producer publish 时机和
+  consumer dependency domain；M3.7 在同一账本上验证或启用 async scoreboard，让 worker 只看本 expert/tile
+  依赖域的聚合状态并记录 wait/timeout counter。`scoreboardMinStatus` 不是全局最小 task id，不能让无关 expert
+  或 tile 被慢 producer 拉齐。
 - Sub-Tile 通信：GMM-Combine overlap 需要把一个 GMM2 tile 可能跨多个 token owner 的 return 拆成
   `OwnerSegment`，用 Sub-Tile、stride 或多段 `TPUT` 做非连续远端写。PTO 版必须在 M3.8 单独验证
   `GlobalTensor Shape/Stride + TPUT` 或多段 direct `TPUT` 是否覆盖 A3 能力；若必须依赖 AscendC `DataCopy`
@@ -508,7 +510,7 @@ MegaMoE 策略到本项目 stage 的对照：
 | --- | --- | --- |
 | routing/quant 输出放到 peer-visible window | `RoutePackQuantLocal` | M2.2a white-box dump |
 | Dispatch 前同步 + 远端读，形成 contiguous expert rows | `PublishCounts` / `BuildCumsumAndPreSumBeforeRank` / `GatherDispatchToGmm1Input` | M1.6-M2.2b counter、prefix 和 payload dump |
-| Dispatch-GMM 多生产者/多消费者 soft sync | M2 固定 `scoreboardTaskMap/producerStatus/scoreboardMinStatus` 语义账本，M3 验证或启用 async scoreboard 调度 | M2.2c white-box dump + M3.7 counter-log |
+| Dispatch-GMM 多生产者/多消费者 soft sync | M2 固定 `scoreboardTaskMap/producerStatus/scoreboardMinStatus`、producer publish 时机和 consumer dependency domain，M3 验证或启用 async scoreboard 调度 | M2.2c white-box dump + M3.7 counter-log |
 | AIC/AIV 同 kernel 并行推进 | single-kernel MPMD stage functions | M3.0-M3.6 black-box-run + counter-log |
 | `IsSyncTask/dequantSum` 粗粒度同步 | `gmm1SyncGroupReady` / `activationSyncGroupReady` | M2.5 固定 group row range，M3.1-M3.4 启用 signal/counter |
 | Swiglu/quant 前粗后细分组 | `swigluSyncGroups` + `dequantSum` | M2.5 group plan dump，M3.3-M3.4 counter-log |
@@ -530,10 +532,10 @@ M2 必须先固定五个点：
 2. Combine 输出侧合并：`RunGmm2EpilogueAndReturn` 把 GMM2 int32 accumulator 的 scale2 dequant、per-token scale2、
    output dtype cast 和 `TPUT` remote return 放在同一个 stage 主流程。写回目的地由
    `tokenPerExpertMatrix + preSumBeforeRank` 推导，直接落到 token owner `offsetD` return payload。
-3. Dispatch-GMM soft-sync 语义账本：M2 不要求真正异步 scoreboard 提速，但必须定义 task id 到 expert group 或
-   row/tile range 的映射，定义 producer status、`scoreboardMinStatus`、worker wait counter 和 timeout counter
-   的 layout/dump。M2 可在 BSP 或 soft-sync-off 模式执行，但 `GatherDispatchToGmm1Input -> GMM1` 的依赖必须能
-   被这个账本解释，不能到 M3 才重新发明 task 粒度。
+3. Dispatch-GMM soft-sync 语义账本：M2 不要求真正异步 scoreboard 提速，但必须定义 task id 到 token owner
+   segment、expert group 或 row/tile range 的映射，定义 producer status publish 时机、consumer dependency domain、
+   `scoreboardMinStatus`、worker wait counter 和 timeout counter 的 layout/dump。M2 可在 BSP 或 soft-sync-off
+   模式执行，但 `GatherDispatchToGmm1Input -> GMM1` 的依赖必须能被这个账本解释，不能到 M3 才重新发明 task 粒度。
 4. Swiglu/quant sync-group 元数据：M2 必须生成 `swigluSyncGroups/dequantSum`，并能把每个 group 映射到
    `cumsumMM[rankNum - 1][localExpert]` 推导出的连续 row range。M2 可按 `overlap_mode=off` 顺序执行
    activation/quant，但 row range 和 group plan 必须已经是 M3.3/M3.4 要启用的结构。
@@ -729,7 +731,8 @@ AIV combine/restore:
 - GMM2/Combine overlap 的语义由 `ReturnSegmentPlan`、`gmm2GroupReady` 和 `subTileReady` 给出；
   `RunGmm2EpilogueAndReturn` 对 ready 的 owner segment 直接 `TPUT`，不等整个 expert 或全量 `gmm2Out`。
 - `RestoreOutput` 可以分块消费已完成的 return segment，但某个 output token 的最终写出不能越过缺失的 topK return slot。
-- M2 必须已经 dump `scoreboardTaskMap/producerStatus/scoreboardMinStatus`、`swigluSyncGroups/dequantSum` 和
+- M2 必须已经 dump `scoreboardTaskMap/producerStatus/scoreboardMinStatus`、dependency domain、
+  `swigluSyncGroups/dequantSum` 和
   `subTileReturnPlan/subTileOwnerSegments`；M3.7/M3.8 只验证 scoreboard 和 Sub-Tile/stride remote write 能否异步执行，
   不能重新定义 row order、offset 或 segment。
 - timeline 里至少应能区分 `dispatch`、`GMM1`、`ActivationQuant`、`GMM2`、`RunGmm2EpilogueAndReturn`、
@@ -792,9 +795,10 @@ AIV consumer c:
    已完成的那部分数据。
 3. 中间阶段避免多次跨卡同步。跨 rank 同步只应出现在 dispatch communication 开始前和 combine communication
    结束后；其他依赖通过卡内 C/V signal、soft status 或 PTO readiness 表达。
-4. Dispatch-GMM 的多生产者/多消费者等待不能靠全核 BSP 拉齐。M2 必须先落 producer status、task id 映射和
-   `scoreboardMinStatus` 账本；M3.7 在同一账本上验证或启用 async scoreboard：producer 写 GM、AIV Ctrl
-   计算 `minStatus`、worker AIV/AIC 只轮询单个聚合状态。
+4. Dispatch-GMM 的多生产者/多消费者等待不能靠全核 BSP 拉齐。M2 必须先落 producer status、task id 映射、
+   producer publish 时机、consumer dependency domain 和 `scoreboardMinStatus` 账本；M3.7 在同一账本上验证或启用
+   async scoreboard：producer 在 segment payload/scale 可见后写 GM status，AIV Ctrl 按 expert 或 GMM tile 依赖域
+   计算聚合状态，worker AIV/AIC 只轮询自己要消费的聚合状态。
 5. GMM-Combine 的 return path 在 M2 必须先按 tile/sub-tile 规划 owner segment、source row range 和
    destination `offsetD` view；M3.8 再验证这些 segment 能否用 strided `TPUT` 或多段 `TPUT` 异步执行。
 6. `TGET/TPUT` 可作为本项目跨 rank payload 的 public PTO 表达；普通连续段必须在 M1/M2 使用 direct PTO
@@ -808,7 +812,7 @@ AIV consumer c:
   counter、row range 和 producer/consumer 边必须与 `6.1` 的运行视图一致。
 - M3.0-M3.6 验证 fused overlap skeleton：`dispatchGroupReady`、`gmm1SyncGroupReady`、
   `activationSyncGroupReady`、`gmm2GroupReady` 能驱动 single-kernel MPMD 或等价 device-side producer-consumer 调度。
-- M3.7/M3.8 在 M2 已验收的 `scoreboardTaskMap/producerStatus/scoreboardMinStatus` 和
+- M3.7/M3.8 在 M2 已验收的 `scoreboardTaskMap/producerStatus/scoreboardMinStatus` dependency domain 和
   `subTileReturnPlan/subTileOwnerSegments/subTileReady` 上验证 async scoreboard 与 Sub-Tile/stride return 能力；
   不能重新定义 row order、offset、task id 或 owner segment。
 - M3.9 用 timeline 证明 `dispatch`、`GMM1`、`ActivationQuant`、`GMM2`、`RunGmm2EpilogueAndReturn`、
@@ -929,7 +933,8 @@ offset 规则：
 6. layout 里必须显式记录 `dispatchPayloadRowBytes`，不能让不同 stage 临时 reinterpret row stride。
 7. `dispatchedA/dispatchedScale/gmm2Out` 是 mock/debug mirror。M2 之后主路径分别写 `gmm1InputInt8` 和
    `peerWindow.returnPayload/offsetD`；task report 摘要必须标注 debug mirror 不参与 accepted 主路径。
-8. `scoreboardTaskMap/producerStatus/scoreboardMinStatus` 和 `subTileReturnPlan/subTileOwnerSegments/subTileReady`
+8. `scoreboardTaskMap/producerStatus/scoreboardMinStatus`、scoreboard dependency domain 和
+   `subTileReturnPlan/subTileOwnerSegments/subTileReady`
    是 M2/M3 overlap 共享账本，不能在 M3 重新定义 offset、row range 或 owner segment 语义。
 9. `scale1Uint64/scale2Uint64/routingPerTokenScale/gmm2PerTokenScale` 必须有 typed view 或 layout dump；控制台输出
    承载 bit pattern、checksum 或 tolerance 证据，M2 report 只写结论摘要。
@@ -951,7 +956,7 @@ typed view 和 offset，但不能封装 copy、wait、notify、matmul 或 quant 
 | `RunGmm2EpilogueAndReturn` | `TLOAD/TCVT/TMUL/TSTORE + TPUT + TNOTIFY` | GMM2 epilogue 与 remote return 同 stage；`TPUT` 直接写 token owner `offsetD`，不能先全量写 `gmm2Out` 再 copy |
 | Sub-Tile/strided return | `GlobalTensor Shape/Stride + TPUT` or multiple direct `TPUT` calls | M2 固定 segment plan；M3.8 验证 A3 PTO remote stride/multi-segment async 能力。不足则 blocked，不引入 AscendC scatter fallback |
 | `RestoreOutput` | `TLOAD/TMUL/TADD/TSTORE` | 按 `expandedRowIdx + probs` 做 weighted restore；等待缺失 topK return slot，不能输出 int8 |
-| scoreboard/timeline/counter | raw GM typed view + explicit publish order | `scoreboardTaskMap/producerStatus/scoreboardMinStatus/subTileReady/timeline` 是控制面账本，不通过 helper 隐藏 readiness 或 remote copy |
+| scoreboard/timeline/counter | raw GM typed view + explicit publish order | `scoreboardTaskMap/producerStatus/scoreboardMinStatus/subTileReady/timeline` 是控制面账本；scoreboard 必须记录 producer publish 时机和 consumer dependency domain，不通过 helper 隐藏 readiness 或 remote copy |
 
 PTO 化判断：
 
@@ -1037,7 +1042,7 @@ SwiGLU/quant 的粗细粒度分组策略见第 11 章。
 | `gmm1SyncGroupReady[syncIdx]` | `GMM1` | `ActivationQuant` | `swigluSyncGroups` / `dequantSum` row range |
 | `activationSyncGroupReady[syncIdx]` | `ActivationQuant` | `GMM2` | `swigluSyncGroups` / `dequantSum` row range |
 | `gmm2GroupReady[expert]` | `GMM2` | `RunGmm2EpilogueAndReturn` | original expert group |
-| `scoreboardMinStatus[task]` | AIV Ctrl | worker AIV/AIC | Dispatch-GMM soft sync |
+| `scoreboardMinStatus[dependencyDomain]` | AIV Ctrl | worker AIV/AIC | Dispatch-GMM soft sync；按 local expert 或 GMM tile 聚合，不是全局 task min |
 | `subTileReady[aicTile]` | `GMM2` | `RunGmm2EpilogueAndReturn` | GMM-Combine Sub-Tile |
 | `combineDoneSignal[expertOwnerRank]` | `RunGmm2EpilogueAndReturn` | token owner `RestoreOutput` | expert owner return |
 
@@ -1064,35 +1069,111 @@ Swiglu 是必做计算，优化点不是减少计算量，而是避免 AIV 的 S
 在量化路径中，Swiglu 前后还有 per-token scale、dequant、requant、cast 等 AIV 工作；如果每个 expert 都独立同步，
 会消耗大量同步事件并打碎 AIV 调度；如果一次等待太多 expert，又会让前面已经 ready 的 row range 无法及时进入 GMM2。
 
-本项目采用两层粒度：
+本项目采用三层粒度：
 
 1. GMM/AlltoAll 仍按细粒度展开，因为这是融合收益来源：Dispatch-GMM 至少按 expert group ready，GMM-Combine
    在 M3.8 进一步按 tile/sub-tile ready。
 2. Swiglu/quant 按粗细结合的 sync group 展开：前段分组较大，用 AIC 正在跑后续 GMM 的窗口批量处理 AIV
    工作并节省同步事件；后段分组逐步变小，避免尾部 Swiglu/quant 阻塞已经 ready 的 GMM2/Combine。
+3. sync group 内部仍按 activation tile/sub-tile 给 AIV 分工；分工只影响本地执行，不改变 group ready 事件的
+   语义。也就是说，group 是同步边界，tile/sub-tile 是 AIV 工作切分边界。
 
-当前 host 生成 `swigluSyncGroups` 和 `dequantSum` 时使用幂指数递减策略。以 `expertPerRank=16` 为例：
+M2 必须生成以下 metadata，M3 只能启用信号或调度，不能重新定义这些字段：
+
+```text
+SwigluGroup {
+  syncIdx
+  expertBegin        // inclusive localExpert
+  expertEnd          // exclusive localExpert
+  rowBegin           // flattened expert-major row begin
+  rowEnd             // flattened expert-major row end
+  tileBegin          // activation tile id begin, optional but reserved
+  tileEnd            // activation tile id end, optional but reserved
+}
+
+swigluSyncGroups[syncIdx] = expertEnd - expertBegin
+dequantSum[syncIdx] = rowBegin
+dequantSum[syncIdx + 1] = rowEnd
+```
+
+`rowBegin/rowEnd` 的计算规则：
+
+```text
+expertRowStart[0] = 0
+expertRowStart[e + 1] = expertRowStart[e] + cumsumMM[rankNum - 1][e]
+
+rowBegin = expertRowStart[expertBegin]
+rowEnd   = expertRowStart[expertEnd]
+```
+
+因此每个 sync group 必须覆盖一段 contiguous flattened expert-major rows。zero-token expert 仍可以出现在 group 内，
+但不会增加 row count；如果一个 group 的 `rowBegin == rowEnd`，该 group 必须显式标记 empty，并且 producer/consumer
+counter 不得等待一个永远不会产生 payload 的事件。
+
+当前 host 生成 group size 使用幂指数递减策略。规则是：从 remaining experts 中取不超过当前一半的 2 的幂，
+直到尾部退化到 1；同时保证 group size 之和等于 `expertPerRank`。以 `expertPerRank=16` 为例：
 
 ```text
 swigluSyncGroups = {8, 4, 2, 1, 1}
 
-group0: expert 0..7   -> one ActivationQuant ready event
-group1: expert 8..11  -> one ActivationQuant ready event
-group2: expert 12..13 -> one ActivationQuant ready event
-group3: expert 14     -> one ActivationQuant ready event
-group4: expert 15     -> one ActivationQuant ready event
+group0: expert 0..7   -> one gmm1SyncGroupReady / activationSyncGroupReady event
+group1: expert 8..11  -> one gmm1SyncGroupReady / activationSyncGroupReady event
+group2: expert 12..13 -> one gmm1SyncGroupReady / activationSyncGroupReady event
+group3: expert 14     -> one gmm1SyncGroupReady / activationSyncGroupReady event
+group4: expert 15     -> one gmm1SyncGroupReady / activationSyncGroupReady event
 ```
 
+对非 2 的幂或较小 expert 数，必须使用同一规则生成可解释分组；例如 smoke `expertPerRank=2` 退化为 `{1,1}`。
+如果实现选择不同但等价的递减策略，必须先记录 design issue 并说明为什么不影响 sync 事件数量、row range 和
+GMM2/Combine 尾部阻塞。
+
 这不是分配 8 个 AIV，而是把 8 个 expert 的 Swiglu/quant row range 合成一个同步组。具体执行时，组内 row/tile
-仍可由多个 AIV core 并行处理。固定 smoke shape 如果 `expertPerRank=2`，该策略退化为 `{1, 1}`；实现必须同时
-支持 host synthetic dump `expertPerRank=16` 来证明 `{8,4,2,1,1}` 的分组、row range 和 sync event 数。
+由 AIV grid-stride 分摊：
+
+```text
+for tileId in [tileBegin + aivId, tileEnd) step aivCount:
+  rows = intersect(tileId, rowBegin..rowEnd)
+  load GMM1 dequant input + routing scale
+  apply routing scale, SwiGLU, dynamic quant
+  store gmm2InputInt8 + gmm2PerTokenScale
+```
+
+activation tile size 必须是 launch-time 或 layout 中可见的参数，例如 `activationTileRows` 和
+`activationTileCols/intermediateChunk`。M2 可以顺序执行所有 tile，但必须输出 `tileBegin/tileEnd` 或等价统计；
+M3.3 才启用 group 内 AIV 并行和 `gmm1SyncGroupReady` 消费。
+
+与 GMM2 的关系：
+
+- `activationSyncGroupReady[syncIdx]` 表示 `dequantSum[syncIdx]..dequantSum[syncIdx + 1]` 覆盖的所有 activation
+  tile 已经写入 `gmm2InputInt8/gmm2PerTokenScale`。
+- GMM2 scheduler 必须把这个 row range intersect 到 local expert/tile work item。不能为了方便让 GMM2 等全量
+  `gmm2InputInt8` 完成后再生成所有 GMM2 tile。
+- GMM2 完成后要再投影为 `gmm2GroupReady[expert]` 和 `subTileReady[aicTile]`；不能把
+  `activationSyncGroupReady` 直接当成 combine-ready。
+
+控制台结构化输出至少包含：
+
+```text
+swiglu_group_count=<...>
+swiglu_group_sizes=[...]
+swiglu_group_row_ranges=[{syncIdx,rowBegin,rowEnd,empty}, ...]
+swiglu_group_tile_ranges=[{syncIdx,tileBegin,tileEnd}, ...]
+activation_tile_rows=<...>
+activation_aiv_workers=<...>
+activation_empty_groups=<count>
+```
 
 验收口径：
 
 - `swigluSyncGroups` 的 group size 之和等于 `expertPerRank`，每个 expert 只属于一个 group。
 - `dequantSum` 必须能从 `cumsumMM[EP-1][localExpert]` 推导出每个 group 的连续 row range。
+- `dequantSum[0] == 0`，`dequantSum` 单调不降，最后一个元素等于本 rank 所有 local expert 的总 row 数。
+- 每个 non-empty group 的 activation tile range 覆盖 `rowBegin..rowEnd` 且无重复；empty group 必须 skip，不产生
+  永久等待。
 - `GMM1 -> ActivationQuant` 只等待当前 Swiglu group 覆盖的 expert rows ready，不等所有 GMM1。
 - `ActivationQuant -> GMM2` 按 Swiglu group 发布 ready，GMM2 可消费该 group 的 row range，不等全量 activation。
+- GMM2 消费的是 group row range 对应的 expert/tile work item；Combine 消费的是 GMM2 完成后的 expert/tile/sub-tile
+  ready，不能混用这两个 ready 语义。
 - timeline/counter 要能区分 `gmm1SyncGroupReady`、`activationSyncGroupReady`、`gmm2GroupReady`；如果后段
   Swiglu/quant 推迟了 Combine，task report 只写 overlap gap 摘要，而不是放宽 correctness。
 
@@ -1247,7 +1328,7 @@ state、owner、report、Issue Log 和 Design Change Log；领取任务后必须
 | --- | --- | --- |
 | M0 | 工程骨架、脚本、layout、host smoke。从 `gemm_ar` 裁剪 CMake/run.sh/main.cpp，不从空目录手写。 | M0.1-M0.6 全部 accepted；dry-run/smoke 路径可用；依赖扫描无禁用接口、build helper 或 fallback。 |
 | M1 | PTO dispatch/combine protocol 闭环。只能把中间 `GMM1 -> SwiGLU/Quant -> GMM2` 专家计算整体 mock；routing、count、prefix、dispatch `TGET`、combine `TPUT`、signal、restore 必须真实落到 device path。 | M1.0-M1.11 全部 accepted；2 卡 NPU/mpirun 实跑通过；metadata、row order、signal、restore 正确；mock 只替代 expert compute。dry-run/reference-only 不能关闭 M1。 |
-| M2 | A3 int8_int8 全路径功能，并前置 MegaMoE 必需数据布局：dispatch 融合、GMM1 contiguous input、GMM2 epilogue+combine return、soft-sync ledger、Swiglu sync-group metadata、tile-split return map。 | M2.0-M2.8 全部 accepted；active runtime 已归一到 `host/`、`kernel/`、`include/`，dispatch/activation/combine 合并点、soft-sync ledger、`swigluSyncGroups/dequantSum` 和 tile-split return map 已在最终布局中验收；accumulator 精确对齐，epilogue/final output 按 tolerance 对齐；M3 不需要重写 row/order/layout/stage graph。 |
+| M2 | A3 int8_int8 全路径功能，并前置 MegaMoE 必需数据布局：dispatch 融合、GMM1 contiguous input、runtime-shape GMM tile partition、GMM2 epilogue+combine return、soft-sync ledger、Swiglu sync-group metadata、tile-split return map 和 segment-driven return path。 | M2.0-M2.8 全部 accepted；active runtime 已归一到 `host/`、`kernel/`、`include/`，dispatch/activation/combine 合并点、GMM L1/L0 tile plan、multi-block work partition、soft-sync ledger、`swigluSyncGroups/dequantSum`、shape-derived tile-split return map 和 segment-driven return 已在最终布局中验收；accumulator 精确对齐，epilogue/final output 按 tolerance 对齐；M3 不需要重写 row/order/layout/stage graph。 |
 | M3 | 在 M2 已固定的依赖边上打开或验证 runtime overlap、scoreboard、Sub-Tile remote write 和 timeline。 | M3.0-M3.9 accepted 或明确 primitive-gap blocked；timeline/counter 能解释 overlap、等待空泡或阻断原因。 |
 | M4 | 最终 PTO 化回归与文档状态收口。 | M4.1-M4.2 全部 accepted；状态、report、设计一致，无 open `needs_user_decision`。 |
 
@@ -1280,18 +1361,18 @@ state、owner、report、Issue Log 和 Design Change Log；领取任务后必须
 | M2.2a | 实现 fused `RoutePackQuantLocal`，route/pack/quant 一次写 peer-visible payload。 |
 | M2.2b | 实现 `GatherDispatchToGmm1Input`，远端读后直接落 GMM1 contiguous input。 |
 | M2.2c | 固化 Dispatch-GMM soft-sync ledger、scoreboard task map 和 counter。 |
-| M2.3 | PTO `int8 x int8 -> int32` GMM1。 |
+| M2.3 | PTO `int8 x int8 -> int32` GMM1，包含 runtime shape work partition、L1/L0 tile 切分和双缓冲 pipeline。 |
 | M2.4 | GMM1 epilogue：scale dequant/cast，不加 bias。 |
-| M2.5 | SwiGLU + per-token requant，生成 GMM2 int8 input/scale，并固定 `swigluSyncGroups/dequantSum` row range。 |
-| M2.6 | PTO `int8 x int8 -> int32` GMM2。 |
+| M2.5 | SwiGLU + per-token requant，生成 GMM2 int8 input/scale，并固定 `swigluSyncGroups/dequantSum`、group descriptor 和 activation tile plan。 |
+| M2.6 | PTO `int8 x int8 -> int32` GMM2，复用同一 GMM tile/pipeline 契约并对接 activation row range。 |
 | M2.7 | GMM2 epilogue + fused combine remote return。 |
-| M2.7a | 固化 GMM-Combine tile/sub-tile return segment map。 |
+| M2.7a | 固化 GMM-Combine tile/sub-tile return segment map，并让 M2 return 主路径按 segment plan 驱动。 |
 | M2.8 | M2 全链路回归，证明 dispatch/combine 合并点和 correctness。 |
 | M3.0 | 打开 single-kernel MPMD 调度，AIV/AIC role 在同 kernel 内推进。 |
 | M3.1 | 启用/校验 M2 已固定的 overlap signal、counter 和 `swigluSyncGroups/dequantSum` 分组语义。 |
 | M3.2 | 打开/验证 Dispatch-GMM1 expert-group overlap。 |
-| M3.3 | 打开/验证 GMM1-Activation sync-group overlap。 |
-| M3.4 | 打开/验证 Activation-GMM2 sync-group overlap。 |
+| M3.3 | 基于 M2.5 group descriptor 打开/验证 GMM1-Activation sync-group overlap。 |
+| M3.4 | 基于 M2.5 group row/tile range 打开/验证 Activation-GMM2 sync-group overlap。 |
 | M3.5 | 打开/验证 GMM2-Combine expert/group 级 overlap。 |
 | M3.6 | 增加 timeout dump、overlap on/off 回归和 counter 证据。 |
 | M3.7 | 基于 M2.2c 账本打开真实 Dispatch-GMM scoreboard soft sync。 |
@@ -2117,12 +2198,19 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 
 - 在 M2 固定 Dispatch-GMM soft-sync 的语义账本，而不是等 M3.7 再设计依赖粒度。
 - 增加 `scoreboardTaskMap`、producer status、`scoreboardMinStatus`、worker wait counter、scoreboard timeout counter
-  的 layout 和 host/device typed view。
-- task id 必须能映射到 local expert group、token owner rank segment 或 row/tile range；不能只是无语义递增计数。
+  的 layout 和 host/device typed view。这里的 `scoreboardMinStatus` 表示 consumer dependency domain 的聚合 ready
+  状态，不是一个全局递增 task id 的最小值。
+- task id 必须能映射到 token owner rank segment、local expert group 或 row/tile range；不能只是无语义递增计数。
+- M2 必须定义 dependency domain：GMM1 consumer 实际等待的是一个 local expert 或 `GmmTileTask`，该 domain
+  依赖哪些 token owner segment 必须能从 `scoreboardTaskMap` 反查；zero-row segment 必须标记 skip/done，不能产生
+  永远不可完成的依赖。
+- producer status 的最终 publish 时机必须固定为：对应 segment 的 `TGET` payload 和 routing scale 已写入
+  `gmm1InputInt8/routingPerTokenScale`，且满足 GM 可见性后才能写 done。M2 ledger-only 可以顺序记录该语义，但不能把
+  `rows > 0` 本身当成最终 ready 条件。
 - M2 可以保持 `overlap_mode=off`、BSP wait 或 soft-sync ledger-only 执行，但 `GatherDispatchToGmm1Input` 到
   `RunGmm1` 的依赖必须能由账本解释，并且 call site、signal/counter、task id 映射就是 M3.7 要打开的最终结构。
-- 打印 small/balanced/skewed case 的 task map、producer status 初末值、`scoreboardMinStatus` 参考更新顺序和
-  worker wait plan；zero-token expert 必须有 skip 语义。
+- 打印 small/balanced/skewed case 的 task map、producer status 初末值、dependency domain 到 producer segment
+  的映射、`scoreboardMinStatus` 参考更新顺序和 worker wait plan；zero-token expert 必须有 skip 语义。
 - 若发现 PTO public sync primitive 不能支撑后续 async scoreboard，只能在本 task report 摘要里写 M3.7
   primitive-gap gate，不能改成 AscendC flag 或 host barrier。
 
@@ -2130,14 +2218,110 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 
 - white-box dump 能把每个 Dispatch-GMM task id 映射回 expert group 或 row/tile range。
 - producer status、`scoreboardMinStatus`、worker wait counter、timeout counter 的 layout 与 cache-line 隔离规则可见。
+- white-box dump 能证明每个 GMM1 consumer domain 只等待自身依赖的 producer segment；不能用全局 min task id
+  阻塞无关 expert/tile。
+- producer status 的说明必须区分 `rows > 0`、payload/scale copy done 和 skip/done；如果当前代码只是 ledger-only
+  mirror，report 摘要必须写明 M3.7 需要把 publish 移到 payload 可见之后。
 - counter-log 能说明 M2 当前是 `soft_sync_mode=off` 或 `soft_sync_mode=ledger_only`，并给出 M3.7 将要打开的
   scoreboard path；不能以另一套临时 barrier 代替该账本。
 - zero-token expert 不创建不可完成 task；skewed case 的 task range 不越界。
 - 依赖扫描无输出。
 
-#### M2.3 RunGmm1 PTO int8 matmul
+#### M2.GMM shared tile/pipeline contract
+
+本小节约束 M2.3 和 M2.6 的共同 GMM 实现方式。共享 scheduler/preflight 由 M2.3a 单独领取和验收；
+M2.3/M2.6 只能消费这套结构，不能各自实现一套 fixed-shape GMM path。
+
+MC2 W4A8 代码里 GMM 的有效经验是两层切分：外层按 expert 内的 L1 block 分配 AIC work，内层把一个 L1 block
+再切成 L0A/L0B/L0C 小矩阵，并用 L1/L0 ping-pong 覆盖搬运和 MMAD。当前 PTO A3 int8 版本不复制 Catlass/AscendC
+接口，但必须吸收这个设计原则，不能只做固定 smoke shape 的单次 `TMATMUL`。
+
+GMM tile plan 必须满足：
+
+- 外层 work item 由 runtime shape 推导：`GmmTileTask{whichGmm, localExpert, mBegin, mCount, nBegin, nCount,
+  kSize, tileId}`。`mBegin/mCount` 来自 `cumsumMM[rankNum - 1][localExpert]` 和 activation row range，
+  `nBegin/nCount` 来自 GMM1 intermediate 或 GMM2 hidden 维度，`kSize` 来自 hidden 或 intermediate 维度。
+- task 粒度按 L1 block 表达，建议首版使用 `gmmBlockM/gmmBlockN/gmmBlockK` 作为 launch-time 参数；固定 PTO
+  micro-tile 可以是底层实现细节，但外层 task 不能绑定某个固定 model shape。
+- 每个 AIC block 用 `blockIdx`/grid-stride 或等价方式遍历 `GmmTileTask`。不能用 `if (blockIdx != 0) return`
+  屏蔽多 AIC；zero-token expert 可以 skip，但必须在 task/counter 中可见。
+- L1 block 内按 K 维分块累加。参考形态是 `L1Tile(M,N,K1)` 再切 `L0Tile(M0,N0,K0)`，其中 K1 可以覆盖多个
+  K0；当前 PTO 实现可按 A3 `TMATMUL` 支持的 tile shape 选择具体值，但必须显式记录 `l1_tile_m/n/k`、
+  `l0_tile_m/n/k`、`l1_stages`、`l0a_stages`、`l0b_stages`、`l0c_stages`。
+- L1/L0 staging 必须有明确生命周期：GM -> L1/GM staging -> L0A/L0B -> `TMATMUL/TMATMUL_ACC` -> L0C/int32
+  accumulator -> GM accumulator。PTO primitive 必须在 GMM stage 主流程直接出现；不能通过通用 helper 隐藏
+  `TLOAD/TSTORE/TMATMUL`。
+- 双缓冲首版至少要在计划和状态机上成立：L1 A/B payload 使用 2-stage ping-pong 或明确 PTO primitive-gap；
+  L0A/L0B 使用 2-stage ping-pong 或明确 blocked；L0C 可以单 buffer 累加同一 output tile。若某个 PTO buffer
+  类型暂不能表达 L1/L0 分层，必须把 M2.3/M2.6 标成 `needs_fix` 或 `primitive-gap`，不能把单 buffer smoke
+  当成 accepted GMM。
+- tail 必须由 valid shape 控制。M tail、N tail、K tail 的 padding 不能污染 int32 accumulator checksum；
+  对 zero-token expert 不发无效 `TMATMUL`。
+- GMM1 和 GMM2 可以共用同一 tile scheduler/numeric launcher，但不能把 PTO 调用封装到看不见的 helper。允许
+  使用小的 typed struct 描述 task 和 tile shape；不允许做隐藏 Catlass/AscendC fallback 的 wrapper。
+- M2.GMM 当前只要求 correctness 和结构证据，不要求证明 L1/L0 双缓冲带来性能收益；性能 overlap 属于 M3。
+
+控制台结构化输出至少要包含以下 GMM 结构字段，report 只摘要 pass/fail 和关键数值：
+
+```text
+gmm_runtime_shape=true
+gmm_multiblock=true
+gmm_l1_tile_m/n/k=<...>
+gmm_l0_tile_m/n/k=<...>
+gmm_l1_stages=<...>
+gmm_l0a_stages=<...>
+gmm_l0b_stages=<...>
+gmm_l0c_stages=<...>
+gmm_tile_tasks=<count>
+gmm_active_aic_blocks=<count>
+gmm_tail_m/n/k=<covered|none>
+```
+
+M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
+
+- runtime shape 驱动 task 生成；
+- 多 expert 或多 tile case 下有多个 work item；
+- 至少一个 two-rank balanced 或 skewed case 下多个 AIC block 参与；
+- L1/L0 tile shape、stage 数和 tail 覆盖在控制台结构化输出中可见；
+- int32 accumulator 与 host reference 精确对齐。
+
+#### M2.3a GMM shared scheduler and primitive preflight
 
 依赖任务：M2.1、M2.2、M2.2b、M2.2c。
+
+文件范围：
+
+- 修改 `kernel/a3_int8_backend.hpp`
+- 修改 `kernel/kernel_launchers.hpp`
+- 修改 `host/main.cpp`
+- 修改 `host/reference.hpp`
+
+任务：
+
+- 定义 `GmmTileTask{whichGmm, localExpert, mBegin, mCount, nBegin, nCount, kSize, tileId}` 和共享
+  GMM tile config；M2.3/M2.6 必须通过该 task schema 生成 work，不得各自硬编码 fixed smoke shape。
+- 基于 runtime shape、`cumsumMM[rankNum - 1][localExpert]`、M2.5 activation group row range 和
+  launch-time `gmmBlockM/N/K` 生成 GMM1/GMM2 task preview。
+- 完成 PTO `TMATMUL<int32_t, int8_t, int8_t>` primitive preflight，记录可用 tile dtype、valid shape、
+  accumulator store 出口和 `dav-c220-cube` 或等价目标；失败时标 `primitive-gap`，不能引入 AscendC/Catlass fallback。
+- 定义 L1/L0 tile shape、stage 数和 ping-pong 状态字段，至少包括 `l1_tile_m/n/k`、`l0_tile_m/n/k`、
+  `l1_stages`、`l0a_stages`、`l0b_stages`、`l0c_stages`。
+- 定义 multi-AIC work partition 规则：每个 AIC block 用 `blockIdx`/grid-stride 或等价方式遍历
+  `GmmTileTask`；zero-token expert skip 必须可见。
+- 输出 host/device 共享 dump 字段，供 M2.3/M2.6/M2.8 证明 `gmm_runtime_shape=true` 和
+  `gmm_multiblock=true`。
+
+验收标准：
+
+- small、balanced、skewed case 均能生成 GMM1/GMM2 task preview，row/tile range 不越界。
+- 至少一个 case 的 task preview 包含多个 tile 或多个 expert work item。
+- preflight 指向实际编译过的 PTO `TMATMUL` call site 或明确 `primitive-gap`。
+- 结构化输出包含 shared contract 要求的 L1/L0 tile、stage、task count、active block 预算字段。
+- 依赖扫描无输出。
+
+#### M2.3 RunGmm1 PTO int8 matmul
+
+依赖任务：M2.1、M2.2、M2.2b、M2.2c、M2.3a。
 
 文件范围：
 
@@ -2156,6 +2340,15 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - 仓内 `dispatch_gmm_combine_v2` 的 `pto_gmm_block_int8.hpp` 只能作为 PTO tile/shape/`TMATMUL` 写法参考；其中
   AscendC flag/helper 不能复制进本项目。需要同步时使用本项目允许的 PTO/public flag/event 写法。
 - 支持 local expert-major segment。
+- 必须实现并使用 `M2.GMM shared tile/pipeline contract` 的 GMM tile scheduler。GMM1 work item 的 M 维来自
+  local expert row range，N 维来自 GMM1 output intermediate 维度，K 维来自 hidden size；不能只把当前
+  `hiddenSize/intermediateSize` 写死进 kernel。
+- GMM1 的 L1/L0 tile shape 和 stage 数必须由同一份 GMM config 暴露给 host dump 和 device path。建议首版
+  先使用 `gmmBlockM/N/K` 作为 L1 block 参数，再按 PTO `TMATMUL` valid shape 选择 L0 micro-tile；具体数值可随
+  primitive 能力调整，但必须在 report 摘要里记录。
+- GM -> tile staging -> `TMATMUL/TMATMUL_ACC` -> int32 accumulator store 的状态机必须体现 L1 A/B ping-pong、
+  L0A/L0B ping-pong 和 L0C 累加 buffer。如果 PTO 当前只能表达其中一部分，必须记录 primitive-gap，不能用
+  单次 fixed tile 关闭 M2.3。
 - 每个 expert group 的 `currentM` 来自 `cumsumMM[rankNum - 1][localExpert]`；M1/M2 如采用 fail-fast capacity，
   必须在超过 `maxOutputSize` 时报告错误，不允许静默截断。
 - `TMATMUL` 的 A/B/C tile dtype 必须显式是 `int8/int8/int32`，不能通过 helper 或 fallback 隐藏。
@@ -2173,6 +2366,10 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - two-rank balanced case 下每个 local expert 的 accumulator checksum 与 reference 一致。
 - 至少一个 two-rank case 的 GMM1 device path 证明多个 AIC block 参与并覆盖全部有效 tile；若只能单 block 运行，
   M2.3 只能作为 preflight，不得 `review_ready`。
+- `[CorrectnessReport]` 或等价结构化 stdout 必须打印 `gmm_runtime_shape=true`、`gmm_multiblock=true`、
+  L1/L0 tile shape、stage 数、tile task count、active AIC block count 和 tail 覆盖结果。
+- 至少一个 case 覆盖 N 或 K 方向超过单个 PTO micro-tile 的分块累加；如果当前 shape 做不到，必须新增 synthetic
+  shape 或把缺口记录为 `test-gap`，不能只用 small smoke。
 - tail shape 不越界。
 - preflight 记录必须指向实际编译过的 PTO `TMATMUL` call site 或仓内已验证 ST/reference；若失败，任务状态改为
   `blocked`/`primitive-gap`，不改用 AscendC/Catlass fallback。
@@ -2221,6 +2418,14 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
   `reduceMax(abs(row)) / 127.0f`，rounding/saturation 必须与 reference 固定。
 - 生成并 dump `swigluSyncGroups` 与 `dequantSum` row range：M2.5 可以在 `overlap_mode=off` 下顺序处理，但
   activation 的 row range 必须已经按第 11 章的 sync group 语义切分，供 M3.3/M3.4 直接启用 signal。
+- 生成第 11 章定义的 `SwigluGroup` descriptor：`syncIdx/expertBegin/expertEnd/rowBegin/rowEnd/tileBegin/tileEnd`。
+  `rowBegin/rowEnd` 必须由 `cumsumMM[rankNum - 1][localExpert]` 的 expert prefix 推导，不能根据当前执行顺序临时累计。
+- 定义并 dump activation tile plan：`activationTileRows`、可选 `activationTileCols/intermediateChunk`、
+  每个 group 的 `tileBegin/tileEnd`、empty group 数量和 AIV worker 分摊计划。M2 可以顺序执行，但 tile plan
+  必须已经能解释 M3.3 的 AIV grid-stride 分工。
+- 生成 GMM2 row range handoff metadata：每个 `activationSyncGroupReady[syncIdx]` 对应的
+  `dequantSum[syncIdx]..dequantSum[syncIdx + 1]` 必须能被 M2.GMM scheduler intersect 成 GMM2 tile tasks。
+  M2.5 不运行 GMM2，但必须把这个映射所需的 row range 固定下来。
 - PTO 实现进入 `TQUANT<INT8_*>` 前必须形成 FP32 Vec tile；如果改用等价 PTO Vec primitive 序列，task report
   只写策略摘要。
 
@@ -2231,12 +2436,18 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - saturation 计数可打印。
 - smoke shape 输出 `{1,1}` 分组 dump；host synthetic `expertPerRank=16` 输出 `{8,4,2,1,1}` 分组 dump；
   `dequantSum` 覆盖所有有效 expert rows 且不重复。
+- 控制台结构化输出包含 `swiglu_group_count`、`swiglu_group_sizes`、`swiglu_group_row_ranges`、
+  `swiglu_group_tile_ranges`、`activation_tile_rows`、`activation_aiv_workers` 和 `activation_empty_groups`。
+- `dequantSum[0] == 0`，`dequantSum` 单调不降，最后一个元素等于本 rank 所有 local expert 的有效 row 总数。
+- zero-token expert 可以出现在 group 内，但 empty group 必须可见并 skip；不能产生后续永远等待的 ready event。
+- M2.GMM scheduler 或 host reference 能用 M2.5 输出的 group row range 生成 GMM2 tile task preview；如果做不到，
+  M2.5 不能交付为 accepted，必须记录 `task-gap`。
 - zero row/zero-token expert 不产生 NaN/Inf scale。
 - 依赖扫描无输出。
 
 #### M2.6 RunGmm2 PTO int8 matmul
 
-依赖任务：M2.5。
+依赖任务：M2.5、M2.3a。
 
 文件范围：
 
@@ -2252,6 +2463,14 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - 如果 M2.3 采用独立 cube target，M2.6 必须复用同一 active numeric target/launcher 体系或新增同等约束的
   PTO-only cube target；不能让 GMM1 是 device PTO 而 GMM2 退回 host/mock。
 - 支持 local expert-major segment。
+- 必须复用 `M2.GMM shared tile/pipeline contract`，不能为 GMM2 另写一套 fixed-shape single-block path。
+  GMM2 work item 的 M 维来自 `RunActivationAndQuant` 输出的 expert-major row range 或 sync group row range，
+  N 维来自 output hidden size，K 维来自 SwiGLU 后 intermediate size。
+- GMM2 的 tile scheduler 必须能把 activation sync group row range 投影到 local expert/tile work item。
+  当前 M2 可顺序执行，但 task/row range 必须与 M3.4/M3.5 要打开的 `activationSyncGroupReady` 和
+  `gmm2GroupReady/subTileReady` 对齐。
+- GMM2 的 L1/L0 tile shape、stage 数、ping-pong 状态机和 tail 处理要求与 M2.3 相同；差异只能来自
+  `K=intermediateSize`、`N=hiddenSize` 和 return segment 投影，不能降低为单 block smoke。
 - `GMM2` 的 M 维 row range 必须与 `RunActivationAndQuant` 输出的 expert-major row range 一致。
 - `TMATMUL` 的 A/B/C tile dtype 必须显式是 `int8/int8/int32`，不能通过 helper 或 fallback 隐藏。
 - 固定 PTO `TMATMUL` micro-tile 尺寸可以复用 M2.3，但 accepted 主路径不能只覆盖固定
@@ -2268,6 +2487,10 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - skewed experts case 不越界。
 - 至少一个 two-rank skewed 或 balanced case 的 GMM2 device path 证明多个 AIC block 参与并覆盖全部有效 tile；若只能
   单 block 运行，M2.6 只能作为 preflight，不得 `review_ready`。
+- `[CorrectnessReport]` 或等价结构化 stdout 必须打印 GMM2 的 `gmm_runtime_shape=true`、`gmm_multiblock=true`、
+  L1/L0 tile shape、stage 数、tile task count、active AIC block count、activation row range 覆盖和 tail 覆盖结果。
+- 至少一个 case 覆盖 GMM2 K 或 N 方向超过单个 PTO micro-tile 的分块累加；如果当前 shape 做不到，必须新增
+  synthetic shape 或把缺口记录为 `test-gap`。
 - preflight 记录必须覆盖 GMM2 的 `intermediateSize x hiddenSize` shape 或明确 blocked。
 - 依赖扫描无输出。
 
@@ -2315,23 +2538,42 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - 修改 `host/reference.hpp`
 - 修改 `host/main.cpp`
 
+任务拆分：
+
+- `M2.7a.1`：定义 shape-derived `ReturnSegmentPlan/OwnerSegment` schema、row+hidden chunk 字段和
+  `subTileCap/ownerSegmentCap/subTileReady` 容量规则。
+- `M2.7a.2`：实现 tile/sub-tile 到 owner segment 的 plan builder、coalesce、overflow 检查和 host/device dump。
+- `M2.7a.3`：让 `RunGmm2EpilogueAndReturn` 消费 `ReturnSegmentPlan`，按 owner segment 直接发 PTO `TPUT`；
+  `gmm2Out` 只能作为 debug mirror 或 per-segment staging。
+- `M2.7a.4`：补齐 skewed row-tile 跨 owner、hidden/N chunk 拆分和 actual-write-from-plan 的验证。
+- `M2.7a` 是 roll-up 验收项，只有 M2.7a.1-M2.7a.4 全部通过后才能接受。
+
 任务：
 
 - 在 M2 固定 GMM-Combine Tile 切分通信的语义映射，而不是等 M3.8 再重做 combine offset。
-- 增加 tile/sub-tile owner mapping、source row range、destination `offsetD` segment view、multi-owner segment count、
-  owner segment counter 和 M2.1 已预留的 `subTileReady` typed view / layout。
+- 增加 tile/sub-tile owner mapping、source row range、N/hidden chunk range、destination `offsetD` segment view、
+  multi-owner segment count、owner segment counter 和 M2.1 已预留的 `subTileReady` typed view / layout。
 - `RunGmm2EpilogueAndReturn` 的 owner segment 必须由 `tokenPerExpertMatrix + preSumBeforeRank` 推导；如果一个
   GMM2 tile 跨多个 token owner rank，要拆成显式多段 segment plan。
-- 构造 `ReturnSegmentPlan`：用 tile/sub-tile row range intersect tokenOwnerRank row range，生成
-  `OwnerSegment{tokenOwnerRank, srcRowBegin, rowCount, dstOffsetD}`；相邻且 source/destination 都连续的 segment
-  必须 coalesce，避免退化成逐 row `TPUT`。
+- 构造 `ReturnSegmentPlan`：用 tile/sub-tile row range intersect tokenOwnerRank row range，再按 hidden/N chunk
+  切分，生成 `OwnerSegment{tokenOwnerRank, srcRowBegin, rowCount, srcColBegin, colCount, dstOffsetD, dstColBegin,
+  localExpert, tileId}`；相邻且 source/destination 的 row 和 col 都连续的 segment 必须 coalesce，避免退化成逐 row
+  或逐 col 小包。
+- `subTileCap`、`ownerSegmentCap`、`subTileReady` 容量必须由 shape 推导，至少覆盖
+  `ceil(expertRows / returnTileRows) * ceil(hiddenSize / returnTileCols) * possibleOwnerSegments`。不能固定成
+  `expertPerRank * 8` 后只靠 overflow counter 通过当前 small case。
 - 每个 owner segment 必须能形成 direct PTO `GlobalTensor Shape/Stride` source/destination view，并在
-  `RunGmm2EpilogueAndReturn` 主流程里直接 `TPUT`；多个离散目的地拆成多条 `TPUT`，不能引入 AscendC scatter
-  fallback，也不能通过通用 helper 隐藏 PTO 调用。
-- M2 可以先用连续段或 `overlap_mode=off` 顺序执行 return，但必须按 tile-split map 验证 return payload correctness，
-  并打印 mapping dump；不能先走一套全量 `gmm2Out` 或临时 combine copy 再等 M3 重写。
-- 若 A3 PTO `GlobalTensor Shape/Stride + TPUT` 或多段 `TPUT` 能力尚未验证，M2.7a 不声称 async combine 完成；
-  report 只记录 M3.8 gate、最小待验证 shape 和不能引入 AscendC fallback 的约束。
+  `RunGmm2EpilogueAndReturn` 主流程里按 `ReturnSegmentPlan -> OwnerSegment` 顺序直接 `TPUT`。多个离散目的地拆成
+  多条 `TPUT`，不能引入 AscendC scatter fallback，也不能通过通用 helper 隐藏 PTO 调用。
+- M2 可以 `overlap_mode=off` 顺序执行 segment return，但主路径必须已经由 segment plan 驱动；不能只生成
+  `subTileReturnPlan/subTileOwnerSegments` 做 white-box dump，而实际 return 仍绕过 plan 按 tokenOwner/localExpert
+  连续段循环写回。
+- `gmm2Out` 只能是当前 segment 或 debug mirror。M2.7a 不能要求先 materialize 全量 `gmm2Out` 再按 segment copy；
+  如果因为 PTO primitive 限制需要 segment staging buffer，必须在 report 摘要写清它是 per-segment staging，
+  不是全量 combine copy path。
+- 若 A3 PTO `GlobalTensor Shape/Stride + TPUT` 尚未验证，M2.7a 仍必须完成多段 direct `TPUT` 的 segment-driven
+  correctness；M3.8 只验证 strided/async `TPUT` 是否能提升为文章级 overlap。若连多段 direct `TPUT` 都无法表达，
+  M2.7a/M2.8 必须标 `primitive-gap`，不能推迟到 M3 才发现。
 
 验收标准：
 
@@ -2339,11 +2581,14 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
   destination `offsetD` segment。
 - skewed case 至少覆盖一个 tile 对多个 owner segment 的 mapping；若固定 shape 不能自然触发，task report 摘要必须说明
   使用的 synthetic mapping case。
-- white-box dump 记录 `segment_count`、`coalesced_segment_count`、每个 segment 的
-  `tokenOwnerRank/srcRowBegin/rowCount/dstOffsetD/hiddenChunk`，并能证明 segment 边界来自
+- white-box dump 记录 `tile_count`、`segment_count`、`coalesced_segment_count`、capacity、overflow、每个 segment 的
+  `tokenOwnerRank/srcRowBegin/rowCount/srcColBegin/colCount/dstOffsetD/dstColBegin/localExpert/tileId`，并能证明 segment 边界来自
   `tokenPerExpertMatrix + preSumBeforeRank`。
-- return payload 与 host reference 在 dtype tolerance 内一致；如果 M2 只用连续段执行，必须证明 segment plan
-  与实际写回 offset 一致。
+- return payload 与 host reference 在 dtype tolerance 内一致；actual return counter 必须按 owner segment 计数，
+  并能证明每个 written segment 来自 `ReturnSegmentPlan`，不是旁路连续段写回。
+- skewed case 至少覆盖 row tile 跨两个 tokenOwnerRank；另一个 synthetic 或 real case 至少覆盖 hidden/N chunk
+  拆分。如果固定 shape 做不到，M2.7a 不能 accepted，必须记录 `test-gap`。
+- `return_map_overflow` 必须为 0；容量不足是 M2 layout bug，不是 M3 async 问题。
 - primitive-gap gate 情况下，task report 摘要写清待 M3.8 验证的 PTO primitive、最小 shape、预期 direct PTO 调用位置。
 - 依赖扫描无输出。
 
@@ -2432,6 +2677,8 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - 校验 M2.5 已生成的 `swigluSyncGroups` 和 `syncGroupOffsets/dequantSum`：量化路径中
   `swigluSyncGroups` 是 `IsSyncTask(groupIdx, expertPerRank)` 的具体分组计划，`dequantSum` 给出每个 group
   覆盖的连续 row range。
+- 校验 M2.5 已生成的 `SwigluGroup` descriptor 和 activation tile plan：`syncIdx/expertBegin/expertEnd`、
+  `rowBegin/rowEnd`、`tileBegin/tileEnd`、`activationTileRows` 必须和第 11 章规则一致。
 - 固定 smoke shape 的 `expertPerRank=2` 分组应退化为 `{1,1}`；同时复用 M2.5 的 host synthetic dump 验证
   `expertPerRank=16` 时生成 `{8,4,2,1,1}`，该数字表示 expert group size，不表示 AIV core 数。
 - 每类 signal 有 producer counter、consumer counter、timeout counter；如果实现发现 M2 未预留对应字段，必须
@@ -2443,6 +2690,8 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - `swigluSyncGroups` 的 group size 之和等于 `expertPerRank`，每个 expert 只属于一个 group。
 - `dequantSum` 与 host reference 对同一 expert token 分布生成一致 row range，且能从
   `cumsumMM[rankNum - 1][localExpert]` 推导出来。
+- `SwigluGroup` descriptor 的 row range 和 tile range 单调、无重叠；empty group 不创建永久等待。
+- `activationSyncGroupReady` 的 row range 能被 GMM2 tile task preview 消费；不能只生成 activation 信号而无法映射到 GMM2。
 - M2 的 `overlap_mode=off` path 仍能运行。
 - 依赖扫描无输出。
 
@@ -2484,6 +2733,8 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
   `gmm1SyncGroupReady[syncIdx]`，而不是等全部 GMM1 完成。
 - Activation 消费 `dequantSum[syncIdx]..dequantSum[syncIdx+1]` row range，完成该 group 的 per-token
   scale、dequant、SwiGLU、requant 和 cast。
+- Activation 必须按 M2.5 固定的 `SwigluGroup.tileBegin/tileEnd` 或等价 tile plan 消费，组内 tile 可由多个 AIV
+  以 grid-stride 分摊；不能在 M3.3 重新按当前执行顺序生成 row range。
 - 组内 row/tile 可由多个 AIV 分摊，但同步事件按 `swigluSyncGroups` 发布；不能把 `{8,4,2,1,1}` 理解成
   AIV 数量分配。
 
@@ -2493,6 +2744,8 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - producer/consumer counter 一致。
 - `swigluSyncGroups` 与 `dequantSum` row range 覆盖所有有效 expert rows，且没有重复消费。
 - fixed smoke 输出 `{1,1}` 分组 dump；synthetic `expertPerRank=16` 输出 `{8,4,2,1,1}` 分组 dump。
+- counter 或 timeline 能显示每个 non-empty `syncIdx` 的 `activation_tile_begin/end`、worker tile count 和
+  empty group skip 计数。
 - sync event 数不超过 `swigluSyncGroups.size()`；若 event 资源或 PTO sync primitive 不足，按
   `primitive-gap`/`needs_user_decision` 规则处理，不能退回全量 activation barrier 后仍声称 M3.3 通过。
 - 依赖扫描无输出。
@@ -2512,6 +2765,11 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - Activation quant 完成某 `swigluSyncGroups[syncIdx]` 后发布 `activationSyncGroupReady[syncIdx]`。
 - GMM2 按 `activationSyncGroupReady[syncIdx]` 消费 `dequantSum[syncIdx]..dequantSum[syncIdx+1]`
   row range，不等全量 activation 完成。
+- GMM2 scheduler 必须把这个 sync group row range intersect 到 M2.GMM `GmmTileTask`；对跨 expert 的 group，
+  需要拆成一个或多个 expert/tile tasks，不能把整段 row range 当成无 expert 边界的平铺矩阵后丢失
+  `gmm2GroupReady/subTileReady` 投影。
+- `activationSyncGroupReady` 不能直接驱动 combine return；GMM2 完成后仍必须发布 `gmm2GroupReady[expert]`
+  或 `subTileReady[aicTile]`，供 M3.5/M3.8 消费。
 - 记录每个 group 的 `activation_start/activation_ready/gmm2_consume_start` counter；如果 shape 中只有一个
   非空 group，则必须在 report 写明为什么该 case 不能证明提前消费，并用 synthetic dump 补足分组证明。
 
@@ -2519,6 +2777,8 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 
 - M2 correctness 不退化。
 - producer/consumer counter 一致。
+- GMM2 tile task preview/actual dump 能从每个 consumed `syncIdx` 追溯到 `expertBegin/expertEnd`、
+  `rowBegin/rowEnd` 和 GMM2 tile id。
 - 对多 group 非空 case，counter 或 timeline 能证明 GMM2 第一组消费早于最后一组 activation ready；若被
   PTO sync/调度能力阻断，按 `primitive-gap` 或 blocked 记录最小复现，不能放宽为全量等待。
 - 后段 SwiGLU/quant 如果推迟了 Combine，必须在 task report 摘要记录为 overlap gap；correctness tolerance 不因此放宽。
@@ -2588,8 +2848,11 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 
 - 基于 M2.2c 已验收的 `scoreboardTaskMap`、producer status、`scoreboardMinStatus`、worker wait counter 和
   timeout counter 开启 async scoreboard 行为；本任务不能重新定义 Dispatch-GMM task 语义。
-- 保持 producer 完成 task 后直接写 GM status；增加一个 AIV Ctrl 角色轮询所有 producer status，计算最小完成 task id。
-- worker AIV/AIC 只轮询 `scoreboardMinStatus`，不能每个 worker 都轮询所有 producer。
+- 保持 producer 在 segment payload/scale 可见后直接写 GM status；增加一个 AIV Ctrl 角色轮询 producer status，
+  并按 M2.2c 固定的 local expert 或 GMM tile dependency domain 计算聚合 ready。
+- worker AIV/AIC 只轮询自己要消费的 `scoreboardMinStatus[dependencyDomain]`，不能每个 worker 都轮询所有 producer。
+- `scoreboardMinStatus` 不能实现为单个全局 min task id；人为慢 producer 只能阻塞依赖该 producer segment 的
+  expert/tile，不能把无关 expert/tile 拉齐。
 - Dispatch-GMM 的 task id 必须引用 M2.2c 已固定的 expert group 或 tile row range 映射，不能只做无语义递增计数。
 - 保留 M3.2 group-ready path 作为 fallback/debug，但 article-level 开关必须走 scoreboard path。
 - 如果需要新增计数器，只能放入 M2.2c 已定义的 scoreboard counter 区域；不能改变 task id、row range 或
@@ -2600,7 +2863,8 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - M2 四类 correctness 用例继续通过。
 - counter dump 至少包含 `producerPollCount`、`workerPollCount`、`scoreboardUpdateCount`、`scoreboardMinStatus`；
   结构上能证明 worker 不再逐个轮询所有 producer，不要求精确性能收益。
-- 人为制造慢 producer 时，快 worker 不被无关 worker 拉齐，只等待 `scoreboardMinStatus` 对应依赖。
+- 人为制造慢 producer 时，快 worker 不被无关 worker 或无关 producer 拉齐，只等待自身 dependency domain
+  对应的 `scoreboardMinStatus`。
 - timeout dump 包含 producer status 数组和 `scoreboardMinStatus`。
 - 不直接使用 `AscendC::CrossCoreWaitFlag` / `SyncAll` 实现该同步。
 - 依赖扫描无输出。
@@ -2619,14 +2883,17 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 
 任务：
 
-- 基于 M2.7a 已验收的 tile/sub-tile owner mapping、source row range 和 destination `offsetD` segment view 开启
-  Sub-Tile/stride remote write；本任务不能重新定义 combine offset 语义。
+- 基于 M2.7a 已验收的 tile/sub-tile owner mapping、source row/hidden chunk range 和 destination `offsetD`
+  segment view 开启 Sub-Tile/stride remote write；本任务不能重新定义 combine offset、segment schema、capacity
+  或 row/hidden chunk 语义。
 - 启用 M2.7a 已定义或预留的 `subTileReady[aicTile]`，作为 GMM2 tile 完成到
   `RunGmm2EpilogueAndReturn` 的细粒度 ready。
 - 验证 A3 PTO `GlobalTensor Shape/Stride + TPUT` 能否表达 `N x 256` 级带 stride 的远端写；PTO primitive 调用必须直接出现在
   `RunGmm2EpilogueAndReturn` 主流程中。
 - 如果一个 compute tile 覆盖多个 token owner rank 的 token slice，拆成显式多段 `TPUT` 或 strided `TPUT`，每段 offset
-  由 `tokenPerExpertMatrix + preSumBeforeRank` 推导。
+  由 M2.7a 的 `ReturnSegmentPlan/OwnerSegment` 提供。
+- 如果 M2.7a 已经使用多段 direct `TPUT` 顺序执行，M3.8 的工作是把同一 segment plan 切到 strided/async path
+  并证明能和 GMM2 overlap；不能把 M2.7a 未完成的 segment-driven return 主体搬到 M3.8。
 - 若 PTO A3 无法表达所需 stride/non-contiguous pattern，本任务以 `blocked` 交付，并保留 M3.5 连续段 correctness path；
   不允许引入 AscendC `DataCopy` fallback。
 - 如果需要新增观测计数器，只能放入 M2.7a 已定义的 Sub-Tile counter 区域；不能改变
@@ -2741,7 +3008,7 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 | Dispatch 算法退回后同步远端写 | GMM 前拿不到连续子矩阵，无法实现 MegaMoE overlap | 固定前同步 + 远端读；`RoutePackQuantLocal` 只写本 rank peer-visible window，`GatherDispatchToGmm1Input` 直接形成 GMM1 input |
 | M2 未前置 MegaMoE 合并点 | M3 需要重写 dispatch/combine 数据布局，overlap gap 过大 | M2 必须完成 route/pack/quant 合并、GMM1 contiguous input、GMM2 epilogue/return 合并；M3 只改调度和 ready 粒度 |
 | `swigluSyncGroups/dequantSum` 到 M3 才定义 | Activation/GMM2 overlap 需要重做 row range，M3.3/M3.4 无法只打开 signal | M2.1 预留字段，M2.5 固定 group plan 和 row range；M3.1-M3.4 只启用/校验 signal 和 counter |
-| Dispatch-GMM scoreboard 到 M3 才设计 | task id、producer status、worker wait 粒度后改会影响 GMM1 启动条件 | M2.2c 固定 `scoreboardTaskMap/producerStatus/scoreboardMinStatus` 语义账本；M3.7 只打开 async scoreboard 行为 |
+| Dispatch-GMM scoreboard 到 M3 才设计 | task id、producer status、worker wait 粒度后改会影响 GMM1 启动条件 | M2.2c 固定 `scoreboardTaskMap/producerStatus/scoreboardMinStatus`、producer publish 时机和 consumer dependency domain；M3.7 只打开 async scoreboard 行为 |
 | GMM-Combine owner segment 到 M3 才设计 | combine offset 或 return payload layout 被重写，M2 correctness 不能证明 M3 path | M2.7a 固定 `ReturnSegmentPlan/OwnerSegment/subTileReady` 语义；M3.8 只验证 stride/multi-segment remote write 能力 |
 | PTO A3 remote stride 能力不足 | 无法实现文章级 Sub-Tile 非连续 combine | M3 单独做 `GlobalTensor Shape/Stride + TPUT` 能力验证；不足则 blocked，不写 AscendC fallback |
 | timeline 改动污染 payload/control layout | 为观测新增字段时破坏 row/order/offset，导致 correctness 和 timeline 互相影响 | M0.4/M2.1 预留 timeline/timestamp 区域；M3.9 只使用或扩容该区域，不改 payload、scoreboard 或 Sub-Tile offset |
