@@ -3,39 +3,39 @@
 # --------------------------------------------------------------------------------
 # mla_basic - gen_data.py
 #
-# Multi-Head Latent Attention with DeepSeek-V2 style **decoupled RoPE**:
+# Multi-Head Latent Attention, DeepSeek-V2 architecture:
+#   * Query path is compressed too (W_dq -> W_uq), not a single W_q.
+#   * head_dim is partitioned: head_dim = nope_dim + rope_dim, both per-head.
+#     - Q_nope/K_nope per-head dim = nope_dim (64)
+#     - Q_rope/K_rope per-head dim = rope_dim (64)
+#     - V/Out per-head dim       = head_dim (128 = nope_dim + rope_dim)
+#   * Attention score adds nope and rope branches:
+#       score[h,i,j] = Q_nope_h[i,:]    · K_nope_h[j,:]
+#                   + Q_rope_rot_h[i,:] · K_rope_rot[j,:]
+#     scale = 1/sqrt(head_dim)
 #
-#   Q_nope     = X @ W_q                  (FP32 acc, FP16 GM) (existing)
-#   C_kv       = X @ W_dkv                (FP32 acc, FP16 GM) (existing)
-#   C_cache    = C_kv                                         (existing)
-#   K_nope     = C_cache @ W_uk           (FP32 acc, FP16 GM) (existing)
-#   V          = C_cache @ W_uv           (FP32 acc, FP16 GM) (existing)
-#   Q_rope     = X @ W_q_rope             (FP32 acc, FP16 GM) NEW   [Nh,S,Rd]
-#   K_rope     = X @ W_k_rope             (FP32 acc, FP16 GM) NEW   [S,Rd]
-#   Q_rope_rot = RoPE(Q_rope, cos, sin)                       NEW
-#   K_rope_rot = RoPE(K_rope, cos, sin)                       NEW
+# Pipeline mirrored by the kernel:
+#   C_q       = X @ W_dq                                 (compressed Q)
+#   Q_nope    = C_q @ W_uq            -> [S, Nh, nope_d]
+#   C_kv      = X @ W_dkv                                (compressed KV, unchanged)
+#   C_cache   = C_kv                                     (prefill identity)
+#   K_nope    = C_cache @ W_uk        -> [S, Nh, nope_d]
+#   V         = C_cache @ W_uv        -> [S, Nh, head_d]
+#   Q_rope    = X @ W_q_rope          -> [Nh, S, rope_d]
+#   K_rope    = X @ W_k_rope          -> [S, rope_d]   (shared across heads)
+#   Q_rope_rot= RoPE(Q_rope, cos, sin)
+#   K_rope_rot= RoPE(K_rope, cos, sin)
 #   per head h:
-#     scores_nope[h] = Q_nope_h @ K_nope_h^T                  (existing)
-#     scores_rope[h] = Q_rope_rot_h @ K_rope_rot^T  (K shared)NEW
+#     scores_nope[h] = Q_nope_h @ K_nope_h^T
+#     scores_rope[h] = Q_rope_rot_h @ K_rope_rot^T
 #     scores[h]      = scores_nope[h] + scores_rope[h]
-#     probs[h]       = softmax(scores[h] * scale)
+#     probs[h]       = softmax(scores[h] * (1/sqrt(head_dim)))
 #     out_h          = probs[h] @ V_h
 #
-#   scale = 1/sqrt(kHeadDim + kRopeDim) = 1/sqrt(192)
-#
-# Decoupled RoPE notes (matches DeepSeek-V2 reference):
-#   - kRopeDim = 64 (separate from kHeadDim = 128).
-#   - K_rope has NO heads dim: shape [S, Rd]. Broadcast across all heads.
-#   - Half-rotation variant: for x in [S, Rd],
-#       x1 = x[..., :Rd/2], x2 = x[..., Rd/2:]
-#       y[..., :Rd/2] = x1 * cos - x2 * sin
-#       y[..., Rd/2:] = x1 * sin + x2 * cos
-#   - cos/sin tables are host-precomputed [S, Rd/2] FP16 and uploaded as
-#     kernel inputs (no transcendentals on device).
-#
-# Q_rope storage layout: [Nh, S, Rd] (head-major). Chosen so the RoPE vec
-# kernel and the runAttnQKRope cube kernel can read each head's [S, Rd]
-# block contiguously, without GlobalTensor stride tricks.
+# Buffer layouts (chosen to avoid GlobalTensor stride tricks in the kernel):
+#   Q_nope, K_nope, V    : [S, Nh, *]            row stride = Nh*per_head_dim
+#   Q_rope, Q_rope_rot   : [Nh, S, rope_dim]     head-major; row stride = rope_dim
+#   K_rope, K_rope_rot   : [S, rope_dim]         shared single block
 # --------------------------------------------------------------------------------
 
 import math
@@ -47,15 +47,6 @@ import numpy as np
 np.random.seed(42)
 
 
-def load_generated_case():
-    case_path = Path(__file__).resolve().parent.parent / "build" / "generated_cases.json"
-    if not case_path.exists():
-        return {"seq_len": 128, "hidden": 4096, "num_heads": 32, "head_dim": 128, "latent": 64, "rope_dim": 64}
-    with case_path.open("r", encoding="utf-8") as f:
-        cases = json.load(f)
-    return cases[0]
-
-
 def small_uniform(shape, lo=-1.0, hi=1.0):
     return np.random.uniform(low=lo, high=hi, size=shape).astype(np.float16)
 
@@ -64,32 +55,22 @@ def build_rope_tables(kSeqLen, kRopeDim, base=10000.0):
     """Standard RoPE: theta_i = base^(-2i/Rd), angle = pos * theta_i.
     cos/sin shape [S, Rd/2], FP16."""
     half = kRopeDim // 2
-    inv_freq = 1.0 / (base ** (np.arange(0, half, dtype=np.float32) * 2.0 / kRopeDim))  # [half]
-    positions = np.arange(kSeqLen, dtype=np.float32)                                    # [S]
-    angles = np.outer(positions, inv_freq)                                              # [S, half]
+    inv_freq = 1.0 / (base ** (np.arange(0, half, dtype=np.float32) * 2.0 / kRopeDim))
+    positions = np.arange(kSeqLen, dtype=np.float32)
+    angles = np.outer(positions, inv_freq)
     cos = np.cos(angles).astype(np.float16)
     sin = np.sin(angles).astype(np.float16)
     return cos, sin
 
 
 def apply_rope_half(x_fp16, cos_fp16, sin_fp16):
-    """Half-rotation RoPE.
-    x:   [..., Rd]  FP16
-    cos: [S,   Rd/2] FP16
-    sin: [S,   Rd/2] FP16
-    The leading axes of x must broadcast such that x's S-axis aligns
-    with cos/sin's S-axis. For Q_rope shape [Nh, S, Rd] -> cos/sin
-    broadcast across heads via [None, S, half]. For K_rope shape
-    [S, Rd] -> cos/sin used directly.
-    Computation done in FP16 to mirror the kernel's FP16 vec math.
-    """
     half = x_fp16.shape[-1] // 2
     x1 = x_fp16[..., :half]
     x2 = x_fp16[..., half:]
-    if x_fp16.ndim == 3:  # [Nh, S, Rd]
-        c = cos_fp16[None, :, :]  # broadcast across heads
+    if x_fp16.ndim == 3:
+        c = cos_fp16[None, :, :]
         s = sin_fp16[None, :, :]
-    else:                  # [S, Rd]
+    else:
         c = cos_fp16
         s = sin_fp16
     out = np.empty_like(x_fp16)
@@ -98,81 +79,106 @@ def apply_rope_half(x_fp16, cos_fp16, sin_fp16):
     return out
 
 
-def gen_golden_data(kSeqLen, kHidden, kNumHeads, kHeadDim, kLatent, kRopeDim):
-    kQKVHidden = kNumHeads * kHeadDim
-    assert kQKVHidden == kHidden, "v1 assumes num_heads * head_dim == hidden"
-    assert kRopeDim % 2 == 0, "kRopeDim must be even (half-rotation)"
-    kQRopeWidth = kNumHeads * kRopeDim   # 32 * 64 = 2048
+def gen_golden_data(kSeqLen, kHidden, kNumHeads, kHeadDim, kLatent, kRopeDim,
+                    kNopeDim, kQLatent):
+    assert kNopeDim + kRopeDim == kHeadDim, "Must have nope_dim + rope_dim == head_dim"
+    assert kRopeDim % 2 == 0, "rope_dim must be even"
+
+    kQNopeWidth = kNumHeads * kNopeDim    # 32 * 64 = 2048
+    kVWidth     = kNumHeads * kHeadDim    # 32 * 128 = 4096
+    kQRopeWidth = kNumHeads * kRopeDim    # 32 * 64 = 2048
 
     # ---- Inputs / weights ------------------------------------------------
-    w_q_scale     = 1.0 / math.sqrt(kHidden)
+    # Xavier-style scales (1/sqrt(in_dim)).
+    w_dq_scale    = 1.0 / math.sqrt(kHidden)
+    w_uq_scale    = 1.0 / math.sqrt(kQLatent)
     w_dkv_scale   = 1.0 / math.sqrt(kHidden)
     w_uk_scale    = 1.0 / math.sqrt(kLatent)
     w_uv_scale    = 1.0 / math.sqrt(kLatent)
     w_q_rope_scl  = 1.0 / math.sqrt(kHidden)
     w_k_rope_scl  = 1.0 / math.sqrt(kHidden)
 
-    x        = small_uniform((kSeqLen, kHidden),               -1.0, 1.0)
-    w_q      = small_uniform((kHidden, kQKVHidden),    -w_q_scale,    w_q_scale)
-    w_dkv    = small_uniform((kHidden, kLatent),       -w_dkv_scale,  w_dkv_scale)
-    w_uk     = small_uniform((kLatent, kQKVHidden),    -w_uk_scale,   w_uk_scale)
-    w_uv     = small_uniform((kLatent, kQKVHidden),    -w_uv_scale,   w_uv_scale)
-    w_q_rope = small_uniform((kHidden, kQRopeWidth),   -w_q_rope_scl, w_q_rope_scl)
-    w_k_rope = small_uniform((kHidden, kRopeDim),      -w_k_rope_scl, w_k_rope_scl)
+    x        = small_uniform((kSeqLen, kHidden),            -1.0, 1.0)
+    w_dq     = small_uniform((kHidden,  kQLatent),    -w_dq_scale,    w_dq_scale)
+    w_uq     = small_uniform((kQLatent, kQNopeWidth), -w_uq_scale,    w_uq_scale)
+    w_dkv    = small_uniform((kHidden,  kLatent),     -w_dkv_scale,   w_dkv_scale)
+    w_uk     = small_uniform((kLatent,  kQNopeWidth), -w_uk_scale,    w_uk_scale)  # NOTE: width kQNopeWidth (was kVWidth)
+    w_uv     = small_uniform((kLatent,  kVWidth),     -w_uv_scale,    w_uv_scale)
+    w_q_rope = small_uniform((kHidden,  kQRopeWidth), -w_q_rope_scl,  w_q_rope_scl)
+    w_k_rope = small_uniform((kHidden,  kRopeDim),    -w_k_rope_scl,  w_k_rope_scl)
 
     cos_table, sin_table = build_rope_tables(kSeqLen, kRopeDim)
 
-    # ---- Existing nope/V/C path -----------------------------------------
-    q_nope_fp32 = x.astype(np.float32) @ w_q.astype(np.float32)
-    q_nope      = q_nope_fp32.astype(np.float16)
+    # ---- DeepSeek-V2 weight absorption (W_uq @ W_uk^T per head) ---------
+    # Rather than reconstruct Q_nope and K_nope and then form scores =
+    # Q_nope @ K_nope^T, we precompute  W_qk[h] = W_uq[h] @ W_uk[h]^T
+    # (shape [qL, L]) on the host. At inference time:
+    #   Q_absorbed = C_q @ W_qk_flat         (replaces Q reconstruction)
+    #   scores[h]  = Q_absorbed[h] @ C_kv^T  (no per-head K, C_kv shared)
+    # Mathematically identical to the original scores up to FP rounding.
+    w_uq_per_head = w_uq.astype(np.float32).reshape(kQLatent, kNumHeads, kNopeDim)
+    w_uk_per_head = w_uk.astype(np.float32).reshape(kLatent,  kNumHeads, kNopeDim)
+    # W_qk_per_head[h, q, l] = sum_d W_uq[q, h, d] * W_uk[l, h, d]
+    w_qk_per_head = np.einsum('qhd,lhd->hql', w_uq_per_head, w_uk_per_head)  # [Nh, qL, L]
+    # Flatten to [qL, Nh*L]  s.t.  flat[q, h*L + l] == W_qk_per_head[h, q, l]
+    w_qk = (w_qk_per_head.transpose(1, 0, 2)
+                          .reshape(kQLatent, kNumHeads * kLatent)
+                          .astype(np.float16))
 
+    # ---- Compressed Q path + absorbed up-projection ----------------------
+    c_q_fp32 = x.astype(np.float32) @ w_dq.astype(np.float32)
+    c_q      = c_q_fp32.astype(np.float16)
+
+    # Q_absorbed = C_q @ W_qk   — same shape as the OLD Q_nope (Nh*L == Nh*Nope = 2048)
+    # but different values (W_uk^T has been folded in).
+    q_absorbed_fp32 = c_q.astype(np.float32) @ w_qk.astype(np.float32)
+    q_absorbed      = q_absorbed_fp32.astype(np.float16)            # [S, Nh*L]
+
+    # ---- KV compression / V reconstruction ------------------------------
+    # K_nope is NO LONGER computed (its role is absorbed into W_qk above).
+    # V is still reconstructed since the attention output still needs it.
     c_kv_fp32 = x.astype(np.float32) @ w_dkv.astype(np.float32)
     c_kv      = c_kv_fp32.astype(np.float16)
     c_cache   = c_kv.copy()
 
-    k_nope_fp32 = c_cache.astype(np.float32) @ w_uk.astype(np.float32)
-    v_fp32      = c_cache.astype(np.float32) @ w_uv.astype(np.float32)
-    k_nope = k_nope_fp32.astype(np.float16)
-    v      = v_fp32.astype(np.float16)
+    v_fp32 = c_cache.astype(np.float32) @ w_uv.astype(np.float32)
+    v      = v_fp32.astype(np.float16)                               # [S, Nh*head_d]
 
-    # ---- Q_rope (head-major output layout) -------------------------------
-    # GEMM produces [S, Nh * Rd] in normal layout; the kernel writes it
-    # rearranged to [Nh, S, Rd] so RoPE can read each head contiguously.
-    q_rope_flat_fp32 = x.astype(np.float32) @ w_q_rope.astype(np.float32)        # [S, Nh*Rd]
-    q_rope_flat      = q_rope_flat_fp32.astype(np.float16)
-    q_rope = (q_rope_flat.reshape(kSeqLen, kNumHeads, kRopeDim)                  # [S, Nh, Rd]
-                          .transpose(1, 0, 2).copy())                            # [Nh, S, Rd]
+    # ---- Q_rope (head-major), K_rope (shared) ---------------------------
+    q_rope_flat_fp32 = x.astype(np.float32) @ w_q_rope.astype(np.float32)
+    q_rope_flat      = q_rope_flat_fp32.astype(np.float16)           # [S, Nh*rope_d]
+    q_rope = (q_rope_flat.reshape(kSeqLen, kNumHeads, kRopeDim)
+                          .transpose(1, 0, 2).copy())                # [Nh, S, rope_d]
 
-    # ---- K_rope (single shared head) -------------------------------------
-    k_rope_fp32 = x.astype(np.float32) @ w_k_rope.astype(np.float32)             # [S, Rd]
-    k_rope      = k_rope_fp32.astype(np.float16)
+    k_rope_fp32 = x.astype(np.float32) @ w_k_rope.astype(np.float32)
+    k_rope      = k_rope_fp32.astype(np.float16)                     # [S, rope_d]
 
-    # ---- RoPE rotation (FP16, mirrors the vec kernel) --------------------
-    q_rope_rot = apply_rope_half(q_rope, cos_table, sin_table)                   # [Nh, S, Rd]
-    k_rope_rot = apply_rope_half(k_rope, cos_table, sin_table)                   # [S, Rd]
+    q_rope_rot = apply_rope_half(q_rope, cos_table, sin_table)
+    k_rope_rot = apply_rope_half(k_rope, cos_table, sin_table)
 
     # ---- Attention -------------------------------------------------------
-    head_dim_total = kHeadDim + kRopeDim
-    scale = np.float16(1.0 / math.sqrt(float(head_dim_total)))
+    scale = np.float16(1.0 / math.sqrt(float(kHeadDim)))             # 1/sqrt(128)
 
     scores_nope = np.zeros((kNumHeads, kSeqLen, kSeqLen), dtype=np.float16)
     scores_rope = np.zeros((kNumHeads, kSeqLen, kSeqLen), dtype=np.float16)
     scores      = np.zeros((kNumHeads, kSeqLen, kSeqLen), dtype=np.float16)
     probs       = np.zeros((kNumHeads, kSeqLen, kSeqLen), dtype=np.float16)
-    out         = np.zeros((kSeqLen, kQKVHidden),        dtype=np.float16)
+    out         = np.zeros((kSeqLen, kVWidth),            dtype=np.float16)
 
-    q_nope_h = q_nope.reshape(kSeqLen, kNumHeads, kHeadDim)
-    k_nope_h = k_nope.reshape(kSeqLen, kNumHeads, kHeadDim)
-    v_h      = v.reshape(kSeqLen, kNumHeads, kHeadDim)
+    # Use the absorbed Q for nope-side scores, against the shared C_cache.
+    # (Mathematically equivalent to q_nope_h @ k_nope_h^T but matches the
+    # kernel's order of operations for closer FP agreement.)
+    q_absorbed_h = q_absorbed.reshape(kSeqLen, kNumHeads, kLatent)
+    v_h          = v.reshape(kSeqLen, kNumHeads, kHeadDim)
 
     for h in range(kNumHeads):
-        Q_n = q_nope_h[:, h, :]                                                  # [S, Hd]
-        K_n = k_nope_h[:, h, :]                                                  # [S, Hd]
-        V_h = v_h[:,    h, :]                                                    # [S, Hd]
-        Q_r = q_rope_rot[h]                                                      # [S, Rd]
-        K_r = k_rope_rot                                                         # [S, Rd]  shared
+        Q_a = q_absorbed_h[:, h, :]          # [S, L]
+        K_c = c_cache                        # [S, L]   shared across heads
+        V_h = v_h[:,    h, :]                # [S, head_d]
+        Q_r = q_rope_rot[h]                  # [S, rope_d]
+        K_r = k_rope_rot                     # [S, rope_d]  shared
 
-        s_n_fp32 = Q_n.astype(np.float32) @ K_n.astype(np.float32).T
+        s_n_fp32 = Q_a.astype(np.float32) @ K_c.astype(np.float32).T
         s_r_fp32 = Q_r.astype(np.float32) @ K_r.astype(np.float32).T
         s_n_fp16 = s_n_fp32.astype(np.float16)
         s_r_fp16 = s_r_fp32.astype(np.float16)
@@ -182,8 +188,6 @@ def gen_golden_data(kSeqLen, kHidden, kNumHeads, kHeadDim, kLatent, kRopeDim):
         s_sum = (s_n_fp16 + s_r_fp16).astype(np.float16)
         scores[h] = s_sum
 
-        # Softmax mirrors FP16 vec sequence (TMULS -> TROWMAX -> TSUB -> TEXP
-        # -> TROWSUM -> TDIV).
         scaled  = (s_sum * scale).astype(np.float16)
         row_max = scaled.max(axis=1, keepdims=True).astype(np.float16)
         shifted = (scaled - row_max).astype(np.float16)
@@ -200,33 +204,34 @@ def gen_golden_data(kSeqLen, kHidden, kNumHeads, kHeadDim, kLatent, kRopeDim):
     os.makedirs("output", exist_ok=True)
 
     x.tofile        ("./input/input_x.bin")
-    w_q.tofile      ("./input/input_w_q.bin")
+    w_dq.tofile     ("./input/input_w_dq.bin")
+    w_qk.tofile     ("./input/input_w_qk.bin")              # absorbed W_uq @ W_uk^T per head
     w_dkv.tofile    ("./input/input_w_dkv.bin")
-    w_uk.tofile     ("./input/input_w_uk.bin")
     w_uv.tofile     ("./input/input_w_uv.bin")
     w_q_rope.tofile ("./input/input_w_q_rope.bin")
     w_k_rope.tofile ("./input/input_w_k_rope.bin")
     cos_table.tofile("./input/input_cos.bin")
     sin_table.tofile("./input/input_sin.bin")
 
-    q_nope.tofile      ("./output/golden_q.bin")
+    c_q.tofile         ("./output/golden_c_q.bin")           # [S, kQLatent]
+    q_absorbed.tofile  ("./output/golden_q.bin")             # [S, Nh*L]  (replaces Q_nope)
     c_kv.tofile        ("./output/golden_c_kv.bin")
-    k_nope.tofile      ("./output/golden_k.bin")
-    v.tofile           ("./output/golden_v.bin")
-    q_rope.tofile      ("./output/golden_q_rope.bin")        # [Nh, S, Rd]
-    k_rope.tofile      ("./output/golden_k_rope.bin")        # [S, Rd]
+    v.tofile           ("./output/golden_v.bin")             # [S, Nh*head_d]
+    q_rope.tofile      ("./output/golden_q_rope.bin")
+    k_rope.tofile      ("./output/golden_k_rope.bin")
     q_rope_rot.tofile  ("./output/golden_q_rope_rot.bin")
     k_rope_rot.tofile  ("./output/golden_k_rope_rot.bin")
-    scores_nope.tofile ("./output/golden_scores_nope.bin")   # [Nh, S, S]
+    scores_nope.tofile ("./output/golden_scores_nope.bin")
     scores_rope.tofile ("./output/golden_scores_rope.bin")
-    scores.tofile      ("./output/golden_scores.bin")        # combined
+    scores.tofile      ("./output/golden_scores.bin")
     probs.tofile       ("./output/golden_probs.bin")
     out.tofile         ("./output/golden_out.bin")
 
     # ---- Debug summary ---------------------------------------------------
-    print(f"[gen_data] B=1  S={kSeqLen}  H={kHidden}  Nh={kNumHeads}  "
-          f"Hd={kHeadDim}  L={kLatent}  Rd={kRopeDim}")
-    print(f"[gen_data] head_dim_total = {head_dim_total}  scale = {float(scale):.6f}")
+    print(f"[gen_data] DeepSeek-V2 MLA  B=1  S={kSeqLen}  H={kHidden}  Nh={kNumHeads}")
+    print(f"           head_dim={kHeadDim}  nope_dim={kNopeDim}  rope_dim={kRopeDim}  "
+          f"q_latent={kQLatent}  kv_latent={kLatent}")
+    print(f"           scale=1/sqrt({kHeadDim})={float(scale):.6f}")
 
     def stats(name, arr):
         a = arr.astype(np.float32)
@@ -235,18 +240,15 @@ def gen_golden_data(kSeqLen, kHidden, kNumHeads, kHeadDim, kLatent, kRopeDim):
               f"mean={a.mean():+.4f} std={a.std():.4f}")
 
     stats("x",            x)
-    stats("w_q_rope",     w_q_rope)
-    stats("w_k_rope",     w_k_rope)
-    stats("cos",          cos_table)
-    stats("sin",          sin_table)
-    stats("q_nope",       q_nope)
+    stats("w_dq",         w_dq)
+    stats("w_qk",         w_qk)        # absorbed W_uq @ W_uk^T (replaces w_uq+w_uk for the kernel)
+    stats("w_uv",         w_uv)
+    stats("c_q",          c_q)
+    stats("q_absorbed",   q_absorbed)  # replaces q_nope (== Q_nope @ W_uk^T per head)
     stats("c_kv",         c_kv)
-    stats("k_nope",       k_nope)
     stats("v",            v)
     stats("q_rope",       q_rope)
     stats("k_rope",       k_rope)
-    stats("q_rope_rot",   q_rope_rot)
-    stats("k_rope_rot",   k_rope_rot)
     stats("scores_nope",  scores_nope)
     stats("scores_rope",  scores_rope)
     stats("scores",       scores)
@@ -257,12 +259,68 @@ def gen_golden_data(kSeqLen, kHidden, kNumHeads, kHeadDim, kLatent, kRopeDim):
           f"{probs[0, 0, :].astype(np.float32).sum():.4f} (should be ~1.0)")
 
 
+def _parse_case_string(raw: str):
+    """Parse 'S,H,Nh,Hd,L,qL,Rd' into a dict matching the manifest format."""
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    if len(parts) != 7:
+        raise ValueError(
+            f"Expected 7 comma-separated values (S,H,Nh,Hd,L,qL,Rd), got '{raw}'"
+        )
+    s, h, nh, hd, lat, qlat, rd = map(int, parts)
+    return {"S": s, "H": h, "Nh": nh, "Hd": hd, "L": lat, "qL": qlat, "Rd": rd}
+
+
+def _load_active_case_from_manifest():
+    """Read build/generated_cases.json (written by generate_cases.py) and
+    return the active case dict. Returns None if the manifest is missing."""
+    import json
+    here = os.path.dirname(os.path.abspath(__file__))
+    manifest_path = os.path.normpath(
+        os.path.join(here, "..", "build", "generated_cases.json")
+    )
+    if not os.path.isfile(manifest_path):
+        return None
+    with open(manifest_path, "r") as f:
+        payload = json.load(f)
+    cases = payload.get("cases", [])
+    idx = payload.get("active_index", 0)
+    if not cases:
+        return None
+    return cases[idx]
+
+
 if __name__ == "__main__":
-    case = load_generated_case()
-    kSeqLen   = case["seq_len"]
-    kHidden   = case["hidden"]
-    kNumHeads = case["num_heads"]
-    kHeadDim  = case["head_dim"]
-    kLatent   = case["latent"]
-    kRopeDim  = case["rope_dim"]
-    gen_golden_data(kSeqLen, kHidden, kNumHeads, kHeadDim, kLatent, kRopeDim)
+    import argparse
+    parser = argparse.ArgumentParser(description="Generate MLA inputs + golden")
+    parser.add_argument(
+        "--case",
+        default=None,
+        help="Case tuple S,H,Nh,Hd,L,qL,Rd. If omitted, read the active case "
+             "from build/generated_cases.json; if that is also missing, fall "
+             "back to the historical default 128,4096,32,128,64,64,64.",
+    )
+    args = parser.parse_args()
+
+    if args.case is not None:
+        case = _parse_case_string(args.case)
+    else:
+        case = _load_active_case_from_manifest()
+        if case is None:
+            print("[gen_data] no --case and no manifest found; using default "
+                  "128,4096,32,128,64,64,64")
+            case = {"S": 128, "H": 4096, "Nh": 32, "Hd": 128,
+                    "L": 64,  "qL": 64,  "Rd": 64}
+
+    kSeqLen   = case["S"]
+    kHidden   = case["H"]
+    kNumHeads = case["Nh"]
+    kHeadDim  = case["Hd"]
+    kLatent   = case["L"]
+    kRopeDim  = case["Rd"]
+    kQLatent  = case["qL"]
+    kNopeDim  = kHeadDim - kRopeDim
+    print(f"[gen_data] case = S={kSeqLen} H={kHidden} Nh={kNumHeads} "
+          f"Hd={kHeadDim} L={kLatent} qL={kQLatent} Rd={kRopeDim} "
+          f"(nope_dim={kNopeDim})")
+    gen_golden_data(kSeqLen, kHidden, kNumHeads, kHeadDim, kLatent, kRopeDim,
+                    kNopeDim, kQLatent)

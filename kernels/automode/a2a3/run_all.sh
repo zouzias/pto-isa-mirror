@@ -19,6 +19,7 @@
 #   bash run_all.sh -r npu -v Ascend910B1 --kernels MoE --moe-subkernels expert_ffn,gather
 #   bash run_all.sh -r npu -v Ascend910B1 --cases-moe "512,128,128,32,1"
 #   bash run_all.sh -r npu -v Ascend910B1 --cases-flash-atten "128,128,1024,128,256"
+#   bash run_all.sh -r npu -v Ascend910B1 --cases-mla "128,4096,32,128,64,64,64;256,4096,32,128,64,64,64"
 #   bash run_all.sh -r npu -v Ascend910B1 -p          # profile each kernel via msopprof
 #
 # -p/--profile: forwards -p to each kernel's run.sh, which wraps the kernel
@@ -35,6 +36,7 @@
 # Notes:
 #   - --cases-moe is passed to each MoE and MoEv2 sub-kernel via -a.
 #   - --cases-flash-atten is passed only to flash_atten's -a.
+#   - --cases-mla is passed only to mla's -a (case tuples joined by ';').
 #   - Each kernel writes its own report; this script aggregates pass/fail at
 #     the end (a kernel "passes" if its run.sh exits with status 0).
 # --------------------------------------------------------------------------------
@@ -56,6 +58,7 @@ KERNEL_FILTER=""
 MOE_SUBKERNEL_FILTER=""
 CASES_MOE=""
 CASES_FLASH_ATTEN=""
+CASES_MLA=""
 PROFILE_MODE=0
 RUN_LOG_DIR="${HERE}/run_log"
 
@@ -79,6 +82,8 @@ while [[ $# -gt 0 ]]; do
         --cases-moe=*)        CASES_MOE="${1#*=}"; shift;;
         --cases-flash-atten)  CASES_FLASH_ATTEN="$2"; shift 2;;
         --cases-flash-atten=*) CASES_FLASH_ATTEN="${1#*=}"; shift;;
+        --cases-mla)          CASES_MLA="$2"; shift 2;;
+        --cases-mla=*)        CASES_MLA="${1#*=}"; shift;;
         -p|--profile)         PROFILE_MODE=1; shift;;
         -h|--help)            print_usage; exit 0;;
         *) echo "[ERROR] Unknown argument: $1"; print_usage; exit 1;;
@@ -238,6 +243,13 @@ for kernel in "${KERNELS_TO_RUN[@]}"; do
         flash_atten)
             if [[ -n "${CASES_FLASH_ATTEN}" ]]; then
                 run_one "${kernel}" "${kernel_dir}" -a "${CASES_FLASH_ATTEN}"
+            else
+                run_one "${kernel}" "${kernel_dir}"
+            fi
+            ;;
+        mla)
+            if [[ -n "${CASES_MLA}" ]]; then
+                run_one "${kernel}" "${kernel_dir}" -a "${CASES_MLA}"
             else
                 run_one "${kernel}" "${kernel_dir}"
             fi

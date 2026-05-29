@@ -15,8 +15,8 @@ compresses K and V into a low-rank latent (here `latent_dim = 64`, vs the
 naive `num_heads * head_dim = 4096`), which dramatically shrinks the KV
 cache. The "very basic" v1 here:
 
-- single AICORE per kernel,
-- no `block_idx` work split,
+- multi-core via `<<<kBlockDim=24, ...>>>` + `get_block_idx()`, strided
+  work-item partition (each work item = one output tile),
 - no double / multi buffering,
 - no `TPipe` / `TPUSH` / `TPOP`,
 - no manual `set_flag` / `wait_flag` / `pipe_barrier` in kernel code,
@@ -42,8 +42,10 @@ sync (same recipe as §A18
 | 5b | Attention softmax | vec  | `dav-c220-vec`  | `probs[h] = softmax(scale * scores[h])` per head | `[128, 128]` FP16 vec ops × 32 heads |
 | 5c | Attention PV | cube | `dav-c220-cube` | `out_h = probs[h] @ V_h` per head | `M=128 K=128 N=128` × 32 heads |
 
-The clear stage separation is the v1 design goal — performance comes later by
-fusing across stages and adding the multi-core / pipelining infrastructure.
+The clear stage separation is the v1 design goal — multi-core is in place
+(every kernel partitions output tiles across 24 cube cores via
+`get_block_idx()`); further performance comes from fusing across stages and
+adding pipelining infrastructure (double buffering, FIFO staging, etc).
 
 ### Q · K^T without a physical transpose
 
@@ -76,20 +78,56 @@ FP16 step sequence to match the kernel byte-for-byte (modulo any vec-op
 rounding-mode differences). The driver tolerates `0.5` absolute + `5%`
 relative error on the final output to absorb the FP16-math fuzz.
 
-## Constants (must match between kernel, host, and Python)
+## Case-driven test harness
 
-```text
-batch       = 1
-seq_len     = 128        (single cube M tile)
-hidden      = 4096
-num_heads   = 32
-head_dim    = 128
-latent_dim  = 64
+The shape constants are NOT hardcoded — they are emitted into
+`build/generated_cases.h` by `scripts/generate_cases.py` and pulled into
+both kernel TUs (`mla_basic_cube_kernel.cpp`, `mla_basic_vec_kernel.cpp`) and
+the host (`main.cpp`) via `#include "generated_cases.h"`. The binary
+compiles against **one case at a time**; multi-case runs re-invoke
+`generate_cases.py` + rebuild per case, orchestrated by `run.sh`.
+
+### Case tuple format
+
+```
+S,H,Nh,Hd,L,qL,Rd
 ```
 
-The kernel TUs put these in `mla_basic_cfg` (cube) and `mla_basic_cfg_vec`
-(vec) namespaces, the host puts them in `main.cpp` top-level constants, and
-`gen_data.py` puts them in its `__main__` block. Change ALL THREE together.
+* `S`  — sequence length (`kSeqLen`); must be a multiple of `kTileM=128`, `kSoftmaxTileM=16`, and `kRopeTileM=kCacheTileM=64`
+* `H`  — hidden dim (`kHidden`); must equal `Nh * Hd`
+* `Nh` — number of heads
+* `Hd` — per-head dim total = `kNopeDim + kRopeDim`
+* `L`  — KV latent dim; current kernel assumes 64
+* `qL` — Q latent dim; current kernel assumes 64
+* `Rd` — rope per-head dim; current kernel assumes 64 (so `kNopeDim` is also 64)
+
+### default_cases
+
+When `bash run.sh -r ... -v ...` is invoked without `-c`/`-a`, two cases run:
+
+```
+128,4096,32,128,64,64,64    # canonical baseline
+256,4096,32,128,64,64,64    # exercises multi-chunk vec path (S>128)
+```
+
+### Building & running
+
+Requires the standard `ASCEND_HOME_PATH` env. Then:
+
+```bash
+bash run.sh -r npu -v Ascend910B1                                     # default cases
+bash run.sh -r npu -v Ascend910B1 -c "128,4096,32,128,64,64,64"       # single case
+bash run.sh -r npu -v Ascend910B1 -a "128,4096,32,128,64,64,64;256,4096,32,128,64,64,64"
+bash run.sh -r sim -v Ascend910B4 -d -i                                # sim, debug, intermediate dumps
+```
+
+`run.sh` accepts: `-r/--run-mode`, `-v/--soc-version`, `-C/--compiler`,
+`-n/--npu`, `-c/--case`, `-a/--cases`, `-i/--intermediate`, `-d/--debug`.
+
+Per case, it does: `generate_cases.py` → `cmake` → `make` → `gen_data.py` →
+`./mla_basic --case=<tuple>` → optional `compare_outputs.py`. Each case's
+exit code feeds into the final summary; `run.sh` exits non-zero if any
+case fails (per §7 of `docs_for_ai/kernel_test_guidance.md`).
 
 ## Layout
 
@@ -97,35 +135,15 @@ The kernel TUs put these in `mla_basic_cfg` (cube) and `mla_basic_cfg_vec`
 mla_basic/
 ├── CMakeLists.txt              builds two SHARED libs (cube + vec) + executable
 ├── README.md                   this file
-├── main.cpp                    host driver: read inputs, launch 7 kernels, compare
-├── mla_basic_cube_kernel.cpp   Q proj, KV compress, KV reconstruct, attn QK, attn PV
-├── mla_basic_vec_kernel.cpp    KV cache store, attn softmax
-├── run.sh                      `bash run.sh -r npu -v Ascend910B1`
+├── main.cpp                    host driver: read inputs, launch 13 kernels, per-stage validate
+├── mla_basic_cube_kernel.cpp   Q compress/reconstruct, KV compress/reconstruct, attn QK/QK_rope/PV, Q/K_rope proj
+├── mla_basic_vec_kernel.cpp    KV cache store, RoPE, attn softmax (nope+rope add inside)
+├── run.sh                      multi-case driver (see above)
 └── scripts/
-    └── gen_data.py             produces ./input and ./output goldens
+    ├── generate_cases.py       emits build/generated_cases.h + .json
+    ├── gen_data.py             produces ./input and ./output goldens for the active case
+    └── compare_outputs.py      post-mortem per-stage comparison (optional)
 ```
-
-## Building & running
-
-Requires the standard `ASCEND_HOME_PATH` env set up (run the platform's
-`set_env.sh` once per shell). Then:
-
-```bash
-bash run.sh -r npu -v Ascend910B1     # NPU
-bash run.sh -r sim -v Ascend910B4     # simulator
-```
-
-The shell script:
-
-1. Runs `python ./scripts/gen_data.py` (writes `input/` and `output/`).
-2. CMake-builds two SHARED libs + executable in `./build/`.
-3. Runs `./mla_basic`, which prints stage byte sizes, the softmax scale,
-   one poison check, and a final `test data success` / `test success` (or
-   `failed`).
-
-For a quick post-mortem when validation fails, compare any of the per-stage
-debug outputs (`output/output_q.bin` vs `output/golden_q.bin`, etc.) to
-narrow down where the divergence starts.
 
 ## How to compare against the Python reference
 
@@ -147,8 +165,6 @@ EOF
 
 ## Known limitations (v1)
 
-- **Single AICORE per kernel.** No `block_idx` work split. Production-quality
-  MLA splits Q-rows across cube cores and per-head work across vec cores.
 - **No KV cache append.** Stage 3 is a verbatim copy of the just-compressed
   latent. A decode-mode variant would index into `[S_max, latent_dim]` at
   `write_pos`.
@@ -206,8 +222,6 @@ per its §2 / §3 schema; cross-reference the assumption number above.
 This v1 is intended as the smallest correct MLA. Follow-up milestones
 already gated by other proven references:
 
-- multi-AICORE work split using `block_idx` (after §A11 → §A18 lineage adds
-  it for MoE),
 - KV cache append (decode mode),
 - causal mask,
 - output projection `W_o`,

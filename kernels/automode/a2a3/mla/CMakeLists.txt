@@ -38,8 +38,13 @@ endif()
 
 set(ASCEND_DRIVER_PATH /usr/local/Ascend/driver)
 
-set(CMAKE_COMPILER bisheng CACHE STRING "Compiler used for auto-mode kernel builds")
-set(CMAKE_C_COMPILER ${CMAKE_COMPILER})
+# Compiler: honour `-DCMAKE_COMPILER=/path/to/compiler` from the CLI / run.sh.
+# Fall back to plain `bisheng` (resolved from PATH) if nothing was passed.
+if(NOT DEFINED CMAKE_COMPILER OR CMAKE_COMPILER STREQUAL "")
+    set(CMAKE_COMPILER bisheng)
+endif()
+message(STATUS "Using compiler: ${CMAKE_COMPILER}")
+set(CMAKE_C_COMPILER   ${CMAKE_COMPILER})
 set(CMAKE_CXX_COMPILER ${CMAKE_COMPILER})
 
 add_compile_options(
@@ -94,9 +99,11 @@ function(pto_kernel_arch_auto NAME ARCH)
         --cce-enable-pto-passes
         -std=c++17
     )
+    # ${CMAKE_CURRENT_BINARY_DIR} == build/  — picks up generated_cases.h
+    # emitted by scripts/generate_cases.py before cmake configure.
     target_include_directories(${NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../include/
-        ${PROJECT_BINARY_DIR}
+        ${CMAKE_CURRENT_BINARY_DIR}
     )
     target_link_options(${NAME} PRIVATE --cce-fatobj-link)
 endfunction()
@@ -110,7 +117,7 @@ target_compile_options(mla_basic PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
 target_include_directories(mla_basic PRIVATE
     ${PROJECT_SOURCE_DIR}/../../../../include/
     ${PROJECT_SOURCE_DIR}/../../../../tests/common
-    ${PROJECT_BINARY_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 target_link_directories(mla_basic PUBLIC

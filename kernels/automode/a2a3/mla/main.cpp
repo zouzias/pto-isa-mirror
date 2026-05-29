@@ -19,16 +19,15 @@
  *
  * I/O contract (all raw little-endian, contiguous, no headers):
  *   ../input/input_x.bin       (S * H            FP16)
- *   ../input/input_w_q.bin     (H * Nh*Hd        FP16)
+ *   ../input/input_w_dq.bin    (H * qL           FP16)
+ *   ../input/input_w_qk.bin    (qL * Nh*L        FP16)  absorbed W_uq @ W_uk^T
  *   ../input/input_w_dkv.bin   (H * L            FP16)
- *   ../input/input_w_uk.bin    (L * Nh*Hd        FP16)
  *   ../input/input_w_uv.bin    (L * Nh*Hd        FP16)
  *   ../output/golden_out.bin   (S * Nh*Hd        FP16)
  *
- *   ../output/output_q.bin       (S * Nh*Hd      FP16)   debug
+ *   ../output/output_q.bin       (S * Nh*L       FP16)   debug — now Q_absorbed
  *   ../output/output_c_kv.bin    (S * L          FP16)   debug
  *   ../output/output_c_cache.bin (S * L          FP16)   debug
- *   ../output/output_k.bin       (S * Nh*Hd      FP16)   debug
  *   ../output/output_v.bin       (S * Nh*Hd      FP16)   debug
  *   ../output/output_scores.bin  (Nh * S * S     FP16)   debug
  *   ../output/output_probs.bin   (Nh * S * S     FP16)   debug
@@ -41,13 +40,15 @@
 
 #include "test_common.h"
 #include "acl/acl.h"
-#include "generated_cases.h"
+#include "generated_cases.h"   // emitted by scripts/generate_cases.py
 
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
+#include <string>
 #include <vector>
 
 using namespace std;
@@ -55,12 +56,14 @@ using namespace PtoTestCommon;
 
 // ----- Kernel launchers exposed by the two kernel TUs ----------------------
 
-extern "C" void launchMlaQProjectionFp16    (uint8_t *q, uint8_t *x, uint8_t *w_q, void *stream);
+extern "C" void launchMlaQCompressionFp16   (uint8_t *c_q, uint8_t *x, uint8_t *w_dq, void *stream);
+extern "C" void launchMlaQAbsorbFp16        (uint8_t *q_absorbed, uint8_t *c_q, uint8_t *w_qk, void *stream);
 extern "C" void launchMlaKVCompressionFp16  (uint8_t *c_kv, uint8_t *x, uint8_t *w_dkv, void *stream);
 extern "C" void launchMlaKVCacheStoreFp16   (uint8_t *c_cache, uint8_t *c_kv, void *stream);
-extern "C" void launchMlaKVReconstructionFp16(uint8_t *k, uint8_t *v, uint8_t *c_cache,
-                                              uint8_t *w_uk, uint8_t *w_uv, void *stream);
-extern "C" void launchMlaAttnQKFp16         (uint8_t *scores, uint8_t *q, uint8_t *k, void *stream);
+extern "C" void launchMlaVReconstructionFp16(uint8_t *v, uint8_t *c_cache,
+                                             uint8_t *w_uv, void *stream);
+// DeepSeek-V2 absorbed-weight attention: A=Q_absorbed (per-head), B=C_cache (shared).
+extern "C" void launchMlaAttnQKFp16         (uint8_t *scores, uint8_t *q_absorbed, uint8_t *c_cache, void *stream);
 extern "C" void launchMlaAttnSoftmaxFp16    (uint8_t *probs, uint8_t *scores_nope,
                                              uint8_t *scores_rope, float scale, void *stream);
 extern "C" void launchMlaAttnPVFp16         (uint8_t *out, uint8_t *probs, uint8_t *v, void *stream);
@@ -75,34 +78,44 @@ extern "C" void launchMlaRoPEFp16           (uint8_t *y, uint8_t *x,
 extern "C" void launchMlaAttnQKRopeFp16     (uint8_t *scores_rope, uint8_t *q_rope_rot,
                                              uint8_t *k_rope_rot, void *stream);
 
-// ----- MLA shapes; must match scripts/gen_data.py and the kernel namespaces.
-static constexpr int kBatch    = kMlaBatch;
-static constexpr int kSeqLen   = kMlaSeqLen;
-static constexpr int kHidden   = kMlaHidden;
-static constexpr int kNumHeads = kMlaNumHeads;
-static constexpr int kHeadDim  = kMlaHeadDim;
-static constexpr int kLatent   = kMlaLatent;
-static constexpr int kRopeDim  = kMlaRopeDim;
-static constexpr int kRopeHalf = kMlaRopeHalf;
-static constexpr int kQKVHidden  = kMlaQKVHidden;
-static constexpr int kQRopeWidth = kMlaQRopeWidth;
-static constexpr int kHeadDimTotal = kMlaHeadDimTotal;
+// ----- MLA shapes; sourced from the generated case header so main.cpp and
+//       both kernel TUs stay in lock-step. Re-run scripts/generate_cases.py
+//       to switch the active case.
+static constexpr int kBatch    = 1;
+static constexpr int kSeqLen   = static_cast<int>(kMlaSeqLen);
+static constexpr int kHidden   = static_cast<int>(kMlaHidden);
+static constexpr int kNumHeads = static_cast<int>(kMlaNumHeads);
+static constexpr int kHeadDim  = static_cast<int>(kMlaHeadDim);
+static constexpr int kLatent   = static_cast<int>(kMlaLatent);
+static constexpr int kNopeDim  = static_cast<int>(kMlaNopeDim);
+static constexpr int kRopeDim  = static_cast<int>(kMlaRopeDim);
+static constexpr int kRopeHalf = kRopeDim / 2;
+static constexpr int kQLatent  = static_cast<int>(kMlaQLatent);
+static constexpr int kQKVHidden  = kNumHeads * kHeadDim;
+static constexpr int kQNopeWidth = kNumHeads * kNopeDim;
+static constexpr int kQRopeWidth = kNumHeads * kRopeDim;
+static_assert(kNopeDim + kRopeDim == kHeadDim,
+              "DeepSeek-V2: head_dim must split into nope_dim + rope_dim");
 
 static constexpr size_t kHalfBytes = 2;
 
 // Per-buffer element counts.
-static constexpr size_t kXNumel        = static_cast<size_t>(kSeqLen) * kHidden;          // 128 * 4096
-static constexpr size_t kWqNumel       = static_cast<size_t>(kHidden) * kQKVHidden;       // 4096 * 4096
-static constexpr size_t kWdkvNumel     = static_cast<size_t>(kHidden) * kLatent;          // 4096 * 64
-static constexpr size_t kWukNumel      = static_cast<size_t>(kLatent) * kQKVHidden;       // 64 * 4096
-static constexpr size_t kWuvNumel      = static_cast<size_t>(kLatent) * kQKVHidden;       // 64 * 4096
-static constexpr size_t kQNumel        = static_cast<size_t>(kSeqLen) * kQKVHidden;       // 128 * 4096
-static constexpr size_t kCKvNumel      = static_cast<size_t>(kSeqLen) * kLatent;          // 128 * 64
-static constexpr size_t kKNumel        = kQNumel;
-static constexpr size_t kVNumel        = kQNumel;
-static constexpr size_t kScoresNumel   = static_cast<size_t>(kNumHeads) * kSeqLen * kSeqLen;  // 32 * 128 * 128
+static constexpr size_t kXNumel        = static_cast<size_t>(kSeqLen) * kHidden;          // S * H
+static constexpr size_t kWdqNumel      = static_cast<size_t>(kHidden) * kQLatent;         // H * qL
+// DeepSeek-V2 absorbed weight: W_qk[h] = W_uq[h] @ W_uk[h]^T, flattened to [qL, Nh*L].
+// Replaces W_uq + W_uk for the kernel. Shape equals what W_uq used to be.
+static constexpr size_t kWqkNumel      = static_cast<size_t>(kQLatent) * kQNopeWidth;     // qL * Nh*L
+static constexpr size_t kWdkvNumel     = static_cast<size_t>(kHidden) * kLatent;          // H * L
+static constexpr size_t kWuvNumel      = static_cast<size_t>(kLatent) * kQKVHidden;       // L * Nh*Hd
+static constexpr size_t kCQNumel       = static_cast<size_t>(kSeqLen) * kQLatent;         // S * qL
+// Q_absorbed replaces Q_nope; same shape [S, Nh*L] (== [S, 2048] in current cfg).
+static constexpr size_t kQNumel        = static_cast<size_t>(kSeqLen) * kQNopeWidth;
+static constexpr size_t kCKvNumel      = static_cast<size_t>(kSeqLen) * kLatent;          // S * L  (cache; also "K" input to attention)
+// K_nope is GONE — its role is absorbed into W_qk; attention reads C_cache directly.
+static constexpr size_t kVNumel        = static_cast<size_t>(kSeqLen) * kQKVHidden;       // S * Nh*Hd  (V unchanged)
+static constexpr size_t kScoresNumel   = static_cast<size_t>(kNumHeads) * kSeqLen * kSeqLen;
 static constexpr size_t kProbsNumel    = kScoresNumel;
-static constexpr size_t kOutNumel      = kQNumel;
+static constexpr size_t kOutNumel      = kVNumel;                                         // Out has V shape
 // RoPE buffers.
 static constexpr size_t kWqRopeNumel   = static_cast<size_t>(kHidden) * kQRopeWidth;  // 4096 * 2048
 static constexpr size_t kWkRopeNumel   = static_cast<size_t>(kHidden) * kRopeDim;     // 4096 * 64
@@ -114,13 +127,13 @@ static constexpr size_t kScoresRopeNumel = kScoresNumel;
 
 // Byte sizes.
 size_t kXBytes      = kXNumel      * kHalfBytes;
-size_t kWqBytes     = kWqNumel     * kHalfBytes;
+size_t kWdqBytes    = kWdqNumel    * kHalfBytes;
+size_t kWqkBytes    = kWqkNumel    * kHalfBytes;
 size_t kWdkvBytes   = kWdkvNumel   * kHalfBytes;
-size_t kWukBytes    = kWukNumel    * kHalfBytes;
 size_t kWuvBytes    = kWuvNumel    * kHalfBytes;
+static constexpr size_t kCQBytes     = kCQNumel     * kHalfBytes;
 static constexpr size_t kQBytes      = kQNumel      * kHalfBytes;
 static constexpr size_t kCKvBytes    = kCKvNumel    * kHalfBytes;
-static constexpr size_t kKBytes      = kKNumel      * kHalfBytes;
 static constexpr size_t kVBytes      = kVNumel      * kHalfBytes;
 static constexpr size_t kScoresBytes    = kScoresNumel    * kHalfBytes;
 static constexpr size_t kProbsBytes     = kProbsNumel     * kHalfBytes;
@@ -135,10 +148,10 @@ static constexpr size_t kScoresRopeBytes = kScoresRopeNumel * kHalfBytes;
 
 // Poison bytes (distinct per buffer so compare_outputs.py can name the
 // stage if a buffer is still poisoned post-launch).
-static constexpr uint8_t kPoisonQ        = 0xA1;
+static constexpr uint8_t kPoisonQ        = 0xA1;  // Q_absorbed
 static constexpr uint8_t kPoisonCKv      = 0xA2;
 static constexpr uint8_t kPoisonCCache   = 0xA3;
-static constexpr uint8_t kPoisonK        = 0xA4;
+// (no kPoisonK — K_nope is no longer reconstructed)
 static constexpr uint8_t kPoisonV        = 0xA5;
 static constexpr uint8_t kPoisonScores    = 0xA6;
 static constexpr uint8_t kPoisonProbs     = 0xA7;
@@ -149,6 +162,7 @@ static constexpr uint8_t kPoisonKRope     = 0xB2;
 static constexpr uint8_t kPoisonQRopeRot  = 0xB3;
 static constexpr uint8_t kPoisonKRopeRot  = 0xB4;
 static constexpr uint8_t kPoisonScoresRope= 0xB5;
+static constexpr uint8_t kPoisonCQ        = 0xC1;
 
 // Mirrors kernels/manual/a2a3/tget_bandwidth/tget_bandwidth_kernel.cpp:91-98.
 static bool CheckAcl(aclError ret, const char *op)
@@ -193,12 +207,6 @@ static size_t ReadFilePlain(const char *path, void *buf, size_t size)
     size_t n = fread(buf, 1, size, f);
     fclose(f);
     return n;
-}
-
-static bool ReadSizedFile(const std::string &path, size_t expectedSize, void *buffer)
-{
-    size_t fileSize = expectedSize;
-    return ReadFile(path, fileSize, buffer, expectedSize);
 }
 
 // Per-stage result checker. Reads golden and device output files from disk,
@@ -282,31 +290,84 @@ static bool ValidateStage(const char *name,
     return ok;
 }
 
-int main()
+int main(int argc, char **argv)
 {
-    printf("[main] MLA basic: B=%d S=%d H=%d Nh=%d Hd=%d L=%d\n",
-           kBatch, kSeqLen, kHidden, kNumHeads, kHeadDim, kLatent);
-    printf("[main] sizes (bytes): x=%zu  w_q=%zu  w_dkv=%zu  w_uk=%zu  w_uv=%zu\n",
-           kXBytes, kWqBytes, kWdkvBytes, kWukBytes, kWuvBytes);
-    printf("[main]                 q=%zu  c_kv=%zu  k=%zu  v=%zu\n",
-           kQBytes, kCKvBytes, kKBytes, kVBytes);
+    // CLI per kernel_test_guidance.md §3-§4. The active case is baked in at
+    // build time (see scripts/generate_cases.py), so --case / --cases are
+    // accepted only as a sanity check: if the user passes a tuple here we
+    // verify it matches the compile-time constants and fail fast otherwise.
+    int        npuId       = 0;
+    bool       intermediate = false;
+    std::string filterCase;
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--intermediate") {
+            intermediate = true;
+        } else if (arg.rfind("--npu=", 0) == 0) {
+            npuId = std::atoi(arg.c_str() + 6);
+        } else if (arg == "--npu" && (i + 1) < argc) {
+            npuId = std::atoi(argv[++i]);
+        } else if (arg.rfind("--case=", 0) == 0) {
+            filterCase = arg.substr(7);
+        } else if (arg.rfind("--cases=", 0) == 0) {
+            filterCase = arg.substr(8);
+        } else if ((arg == "--case" || arg == "--cases") && (i + 1) < argc) {
+            filterCase = argv[++i];
+        }
+        // Unknown args are silently ignored so run.sh can forward common
+        // flags (--sys_cnt_multiple etc.) without us tracking them all.
+    }
+
+    // Sanity-check: if the user passed a numeric tuple via --case/--cases,
+    // confirm it matches the case the binary was actually compiled against.
+    // Compare *value* form (e.g. "128,4096,32,128,64,64,64") rather than the
+    // case-name slug, since run.sh forwards the raw tuple.
+    if (!filterCase.empty() && filterCase.find(',') != std::string::npos) {
+        char expected[128];
+        std::snprintf(expected, sizeof(expected), "%u,%u,%u,%u,%u,%u,%u",
+                      kMlaSeqLen, kMlaHidden, kMlaNumHeads, kMlaHeadDim,
+                      kMlaLatent, kMlaQLatent, kMlaRopeDim);
+        // Tolerate whitespace in user input.
+        std::string normalized;
+        normalized.reserve(filterCase.size());
+        for (char c : filterCase) {
+            if (c != ' ' && c != '\t') normalized.push_back(c);
+        }
+        if (normalized != expected) {
+            std::cerr << "[main] requested case='" << filterCase
+                      << "' but this build is '" << expected
+                      << "' (active=" << kMlaCaseName
+                      << "). Re-run scripts/generate_cases.py + rebuild "
+                      << "to switch cases.\n";
+            return 2;
+        }
+    }
+    (void)intermediate; // ValidateStage already prints per-stage info
+
+    printf("[main] active case: %s\n", kMlaCaseName);
+    printf("[main] MLA DeepSeek-V2: B=%d S=%d H=%d Nh=%d Hd=%d (nope=%d rope=%d) L=%d qL=%d\n",
+           kBatch, kSeqLen, kHidden, kNumHeads, kHeadDim, kNopeDim, kRopeDim, kLatent, kQLatent);
+    printf("[main] sizes (bytes): x=%zu  w_dq=%zu  w_qk=%zu  w_dkv=%zu  w_uv=%zu\n",
+           kXBytes, kWdqBytes, kWqkBytes, kWdkvBytes, kWuvBytes);
+    printf("[main]                 c_q=%zu  q_absorbed=%zu  c_kv=%zu  v=%zu\n",
+           kCQBytes, kQBytes, kCKvBytes, kVBytes);
     printf("[main]                 scores=%zu  probs=%zu  out=%zu\n",
            kScoresBytes, kProbsBytes, kOutBytes);
 
-    if (!CheckAcl(aclInit(nullptr),         "aclInit"))         std::exit(3);
-    if (!CheckAcl(aclrtSetDevice(0),        "aclrtSetDevice"))  std::exit(3);
+    if (!CheckAcl(aclInit(nullptr),          "aclInit"))          std::exit(3);
+    if (!CheckAcl(aclrtSetDevice(npuId),     "aclrtSetDevice"))   std::exit(3);
     aclrtStream stream;
     if (!CheckAcl(aclrtCreateStream(&stream), "aclrtCreateStream")) std::exit(3);
 
     // ---- Host allocations ------------------------------------------------
-    uint8_t *xHost = nullptr, *wqHost = nullptr, *wdkvHost = nullptr;
-    uint8_t *wukHost = nullptr, *wuvHost = nullptr;
+    uint8_t *xHost = nullptr, *wdqHost = nullptr, *wqkHost = nullptr, *wdkvHost = nullptr;
+    uint8_t *wuvHost = nullptr;
+    uint8_t *cQHost   = nullptr;
     uint8_t *outHost = nullptr;
     // (Debug stage outputs)
-    uint8_t *qHost      = nullptr;
+    uint8_t *qHost      = nullptr;   // Q_absorbed
     uint8_t *ckvHost    = nullptr;
     uint8_t *ccacheHost = nullptr;
-    uint8_t *kHost      = nullptr;
     uint8_t *vHost      = nullptr;
     uint8_t *scoresHost = nullptr;
     uint8_t *probsHost  = nullptr;
@@ -322,15 +383,15 @@ int main()
     uint8_t *scoresRopeHost = nullptr;
 
     CheckAcl(aclrtMallocHost((void **)&xHost,      kXBytes),     "MallocHost(x)");
-    CheckAcl(aclrtMallocHost((void **)&wqHost,     kWqBytes),    "MallocHost(w_q)");
+    CheckAcl(aclrtMallocHost((void **)&wdqHost,    kWdqBytes),   "MallocHost(w_dq)");
+    CheckAcl(aclrtMallocHost((void **)&wqkHost,    kWqkBytes),   "MallocHost(w_qk)");
     CheckAcl(aclrtMallocHost((void **)&wdkvHost,   kWdkvBytes),  "MallocHost(w_dkv)");
-    CheckAcl(aclrtMallocHost((void **)&wukHost,    kWukBytes),   "MallocHost(w_uk)");
     CheckAcl(aclrtMallocHost((void **)&wuvHost,    kWuvBytes),   "MallocHost(w_uv)");
+    CheckAcl(aclrtMallocHost((void **)&cQHost,     kCQBytes),    "MallocHost(c_q)");
     CheckAcl(aclrtMallocHost((void **)&outHost,    kOutBytes),   "MallocHost(out)");
     CheckAcl(aclrtMallocHost((void **)&qHost,      kQBytes),     "MallocHost(q)");
     CheckAcl(aclrtMallocHost((void **)&ckvHost,    kCKvBytes),   "MallocHost(c_kv)");
     CheckAcl(aclrtMallocHost((void **)&ccacheHost, kCKvBytes),   "MallocHost(c_cache)");
-    CheckAcl(aclrtMallocHost((void **)&kHost,      kKBytes),     "MallocHost(k)");
     CheckAcl(aclrtMallocHost((void **)&vHost,      kVBytes),     "MallocHost(v)");
     CheckAcl(aclrtMallocHost((void **)&scoresHost, kScoresBytes),"MallocHost(scores)");
     CheckAcl(aclrtMallocHost((void **)&probsHost,  kProbsBytes), "MallocHost(probs)");
@@ -345,10 +406,11 @@ int main()
     CheckAcl(aclrtMallocHost((void **)&scoresRopeHost,kScoresRopeBytes), "MallocHost(scores_rope)");
 
     // ---- Device allocations ----------------------------------------------
-    uint8_t *xDev = nullptr, *wqDev = nullptr, *wdkvDev = nullptr;
-    uint8_t *wukDev = nullptr, *wuvDev = nullptr;
+    uint8_t *xDev = nullptr, *wdqDev = nullptr, *wqkDev = nullptr, *wdkvDev = nullptr;
+    uint8_t *wuvDev = nullptr;
+    uint8_t *cQDev = nullptr;
     uint8_t *qDev = nullptr, *ckvDev = nullptr, *ccacheDev = nullptr;
-    uint8_t *kDev = nullptr, *vDev = nullptr;
+    uint8_t *vDev = nullptr;
     uint8_t *scoresDev = nullptr, *probsDev = nullptr;
     uint8_t *outDev = nullptr;
     // RoPE device buffers.
@@ -363,14 +425,14 @@ int main()
     uint8_t *scoresRopeDev = nullptr;
 
     CheckAcl(aclrtMalloc((void **)&xDev,      kXBytes,      ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(x)");
-    CheckAcl(aclrtMalloc((void **)&wqDev,     kWqBytes,     ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_q)");
+    CheckAcl(aclrtMalloc((void **)&wdqDev,    kWdqBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_dq)");
+    CheckAcl(aclrtMalloc((void **)&wqkDev,    kWqkBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_qk)");
     CheckAcl(aclrtMalloc((void **)&wdkvDev,   kWdkvBytes,   ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_dkv)");
-    CheckAcl(aclrtMalloc((void **)&wukDev,    kWukBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_uk)");
     CheckAcl(aclrtMalloc((void **)&wuvDev,    kWuvBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(w_uv)");
+    CheckAcl(aclrtMalloc((void **)&cQDev,     kCQBytes,     ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(c_q)");
     CheckAcl(aclrtMalloc((void **)&qDev,      kQBytes,      ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(q)");
     CheckAcl(aclrtMalloc((void **)&ckvDev,    kCKvBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(c_kv)");
     CheckAcl(aclrtMalloc((void **)&ccacheDev, kCKvBytes,    ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(c_cache)");
-    CheckAcl(aclrtMalloc((void **)&kDev,      kKBytes,      ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(k)");
     CheckAcl(aclrtMalloc((void **)&vDev,      kVBytes,      ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(v)");
     CheckAcl(aclrtMalloc((void **)&scoresDev, kScoresBytes, ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(scores)");
     CheckAcl(aclrtMalloc((void **)&probsDev,  kProbsBytes,  ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(probs)");
@@ -386,21 +448,24 @@ int main()
     CheckAcl(aclrtMalloc((void **)&scoresRopeDev,kScoresRopeBytes, ACL_MEM_MALLOC_HUGE_FIRST), "Malloc(scores_rope)");
 
     // ---- Read inputs from disk -------------------------------------------
-    ReadSizedFile("../input/input_x.bin",        kXBytes,      xHost);
-    ReadSizedFile("../input/input_w_q.bin",      kWqBytes,     wqHost);
-    ReadSizedFile("../input/input_w_dkv.bin",    kWdkvBytes,   wdkvHost);
-    ReadSizedFile("../input/input_w_uk.bin",     kWukBytes,    wukHost);
-    ReadSizedFile("../input/input_w_uv.bin",     kWuvBytes,    wuvHost);
-    ReadSizedFile("../input/input_w_q_rope.bin", kWqRopeBytes, wqRopeHost);
-    ReadSizedFile("../input/input_w_k_rope.bin", kWkRopeBytes, wkRopeHost);
-    ReadSizedFile("../input/input_cos.bin",      kCosBytes,    cosHost);
-    ReadSizedFile("../input/input_sin.bin",      kSinBytes,    sinHost);
+    // ReadFile's second arg is `size_t&` (out-param for actual file size),
+    // so it cannot bind to constexpr byte-size constants. Use a local.
+    size_t actualSize = 0;
+    ReadFile("../input/input_x.bin",        actualSize, xHost,      kXBytes);
+    ReadFile("../input/input_w_dq.bin",     actualSize, wdqHost,    kWdqBytes);
+    ReadFile("../input/input_w_qk.bin",     actualSize, wqkHost,    kWqkBytes);
+    ReadFile("../input/input_w_dkv.bin",    actualSize, wdkvHost,   kWdkvBytes);
+    ReadFile("../input/input_w_uv.bin",     actualSize, wuvHost,    kWuvBytes);
+    ReadFile("../input/input_w_q_rope.bin", actualSize, wqRopeHost, kWqRopeBytes);
+    ReadFile("../input/input_w_k_rope.bin", actualSize, wkRopeHost, kWkRopeBytes);
+    ReadFile("../input/input_cos.bin",      actualSize, cosHost,    kCosBytes);
+    ReadFile("../input/input_sin.bin",      actualSize, sinHost,    kSinBytes);
 
     // ---- Upload inputs ----------------------------------------------------
     CheckAcl(aclrtMemcpy(xDev,        kXBytes,      xHost,      kXBytes,      ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(x)");
-    CheckAcl(aclrtMemcpy(wqDev,       kWqBytes,     wqHost,     kWqBytes,     ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_q)");
+    CheckAcl(aclrtMemcpy(wdqDev,      kWdqBytes,    wdqHost,    kWdqBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_dq)");
+    CheckAcl(aclrtMemcpy(wqkDev,      kWqkBytes,    wqkHost,    kWqkBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_qk)");
     CheckAcl(aclrtMemcpy(wdkvDev,     kWdkvBytes,   wdkvHost,   kWdkvBytes,   ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_dkv)");
-    CheckAcl(aclrtMemcpy(wukDev,      kWukBytes,    wukHost,    kWukBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_uk)");
     CheckAcl(aclrtMemcpy(wuvDev,      kWuvBytes,    wuvHost,    kWuvBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_uv)");
     CheckAcl(aclrtMemcpy(wqRopeDev,   kWqRopeBytes, wqRopeHost, kWqRopeBytes, ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_q_rope)");
     CheckAcl(aclrtMemcpy(wkRopeDev,   kWkRopeBytes, wkRopeHost, kWkRopeBytes, ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(w_k_rope)");
@@ -408,10 +473,10 @@ int main()
     CheckAcl(aclrtMemcpy(sinDev,      kSinBytes,    sinHost,    kSinBytes,    ACL_MEMCPY_HOST_TO_DEVICE), "Memcpy(sin)");
 
     // ---- Poison every device output buffer -------------------------------
+    CheckAcl(aclrtMemset(cQDev,         kCQBytes,        kPoisonCQ,        kCQBytes),        "Memset(c_q)");
     CheckAcl(aclrtMemset(qDev,          kQBytes,         kPoisonQ,         kQBytes),         "Memset(q)");
     CheckAcl(aclrtMemset(ckvDev,        kCKvBytes,       kPoisonCKv,       kCKvBytes),       "Memset(c_kv)");
     CheckAcl(aclrtMemset(ccacheDev,     kCKvBytes,       kPoisonCCache,    kCKvBytes),       "Memset(c_cache)");
-    CheckAcl(aclrtMemset(kDev,          kKBytes,         kPoisonK,         kKBytes),         "Memset(k)");
     CheckAcl(aclrtMemset(vDev,          kVBytes,         kPoisonV,         kVBytes),         "Memset(v)");
     CheckAcl(aclrtMemset(scoresDev,     kScoresBytes,    kPoisonScores,    kScoresBytes),    "Memset(scores)");
     CheckAcl(aclrtMemset(probsDev,      kProbsBytes,     kPoisonProbs,     kProbsBytes),     "Memset(probs)");
@@ -422,16 +487,19 @@ int main()
     CheckAcl(aclrtMemset(kRopeRotDev,   kKRopeBytes,     kPoisonKRopeRot,  kKRopeBytes),     "Memset(k_rope_rot)");
     CheckAcl(aclrtMemset(scoresRopeDev, kScoresRopeBytes,kPoisonScoresRope,kScoresRopeBytes),"Memset(scores_rope)");
 
-    const float scale = 1.0f / std::sqrt(static_cast<float>(kHeadDimTotal));
-    printf("[main] softmax scale = 1/sqrt(%d) = %.6f\n", kHeadDimTotal, scale);
+    // DeepSeek-V2 softmax scale = 1/sqrt(head_dim) = 1/sqrt(128).
+    const float scale = 1.0f / std::sqrt(static_cast<float>(kHeadDim));
+    printf("[main] softmax scale = 1/sqrt(%d) = %.6f\n", kHeadDim, scale);
 
-    // ---- Pipeline launches (all on the same stream; ACL stream-order) ----
+    // ---- Pipeline launches -----------------------------------------------
     // nope path
-    launchMlaQProjectionFp16    (qDev, xDev, wqDev, stream);
+    launchMlaQCompressionFp16   (cQDev, xDev, wdqDev, stream);
+    launchMlaQAbsorbFp16        (qDev, cQDev, wqkDev, stream);
     launchMlaKVCompressionFp16  (ckvDev, xDev, wdkvDev, stream);
     launchMlaKVCacheStoreFp16   (ccacheDev, ckvDev, stream);
-    launchMlaKVReconstructionFp16(kDev, vDev, ccacheDev, wukDev, wuvDev, stream);
-    launchMlaAttnQKFp16         (scoresDev, qDev, kDev, stream);
+    launchMlaVReconstructionFp16(vDev, ccacheDev, wuvDev, stream);
+    // Absorbed attention: A=Q_absorbed (per-head), B=C_cache (shared across heads).
+    launchMlaAttnQKFp16         (scoresDev, qDev, ccacheDev, stream);
     // rope path
     launchMlaQRopeProjectionFp16(qRopeDev, xDev, wqRopeDev, stream);
     launchMlaKRopeProjectionFp16(kRopeDev, xDev, wkRopeDev, stream);
@@ -441,16 +509,13 @@ int main()
     // combine + softmax + PV
     launchMlaAttnSoftmaxFp16    (probsDev, scoresDev, scoresRopeDev, scale, stream);
     launchMlaAttnPVFp16         (outDev, probsDev, vDev, stream);
-
-    if (!CheckAcl(aclrtSynchronizeStream(stream), "SynchronizeStream")) {
-        std::cerr << "[main] stream sync failed — kernel likely crashed or never ran.\n";
-    }
+    aclrtSynchronizeStream(stream);
 
     // ---- Copy every output back for debug + main validation ---------------
-    CheckAcl(aclrtMemcpy(qHost,      kQBytes,      qDev,      kQBytes,      ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(q)");
+    CheckAcl(aclrtMemcpy(cQHost,     kCQBytes,     cQDev,     kCQBytes,     ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(c_q)");
+    CheckAcl(aclrtMemcpy(qHost,      kQBytes,      qDev,      kQBytes,      ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(q_nope)");
     CheckAcl(aclrtMemcpy(ckvHost,    kCKvBytes,    ckvDev,    kCKvBytes,    ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(c_kv)");
     CheckAcl(aclrtMemcpy(ccacheHost, kCKvBytes,    ccacheDev, kCKvBytes,    ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(c_cache)");
-    CheckAcl(aclrtMemcpy(kHost,      kKBytes,      kDev,      kKBytes,      ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(k)");
     CheckAcl(aclrtMemcpy(vHost,      kVBytes,      vDev,      kVBytes,      ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(v)");
     CheckAcl(aclrtMemcpy(scoresHost, kScoresBytes, scoresDev, kScoresBytes, ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(scores)");
     CheckAcl(aclrtMemcpy(probsHost,  kProbsBytes,  probsDev,  kProbsBytes,  ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(probs)");
@@ -461,10 +526,10 @@ int main()
     CheckAcl(aclrtMemcpy(kRopeRotHost,   kKRopeBytes,     kRopeRotDev,   kKRopeBytes,     ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(k_rope_rot)");
     CheckAcl(aclrtMemcpy(scoresRopeHost, kScoresRopeBytes,scoresRopeDev, kScoresRopeBytes,ACL_MEMCPY_DEVICE_TO_HOST), "DtoH(scores_rope)");
 
+    WriteFile("../output/output_c_q.bin",        cQHost,         kCQBytes);
     WriteFile("../output/output_q.bin",          qHost,          kQBytes);
     WriteFile("../output/output_c_kv.bin",       ckvHost,        kCKvBytes);
     WriteFile("../output/output_c_cache.bin",    ccacheHost,     kCKvBytes);
-    WriteFile("../output/output_k.bin",          kHost,          kKBytes);
     WriteFile("../output/output_q_rope.bin",     qRopeHost,      kQRopeBytes);
     WriteFile("../output/output_k_rope.bin",     kRopeHost,      kKRopeBytes);
     WriteFile("../output/output_q_rope_rot.bin", qRopeRotHost,   kQRopeBytes);
@@ -486,7 +551,10 @@ int main()
     // output_c_cache.bin against golden_c_kv.bin.
     printf("\n[main] ===== per-stage validation =====\n");
     bool allOk = true;
-    allOk &= ValidateStage("Q",
+    allOk &= ValidateStage("C_q",
+        "../output/golden_c_q.bin",    "../output/output_c_q.bin",
+        kCQBytes,     0.05f, 0.02f, kPoisonCQ);
+    allOk &= ValidateStage("Q_absorbed",
         "../output/golden_q.bin",      "../output/output_q.bin",
         kQBytes,      0.1f, 0.02f, kPoisonQ);
     allOk &= ValidateStage("C_kv",
@@ -495,9 +563,7 @@ int main()
     allOk &= ValidateStage("C_cache",
         "../output/golden_c_kv.bin",   "../output/output_c_cache.bin",
         kCKvBytes,    0.1f, 0.02f, kPoisonCCache);
-    allOk &= ValidateStage("K",
-        "../output/golden_k.bin",      "../output/output_k.bin",
-        kKBytes,      0.1f, 0.02f, kPoisonK);
+    // K_nope is no longer reconstructed (absorbed into W_qk).
     allOk &= ValidateStage("V",
         "../output/golden_v.bin",      "../output/output_v.bin",
         kVBytes,      0.1f, 0.02f, kPoisonV);
@@ -543,14 +609,14 @@ int main()
     aclrtFree(probsDev);
     aclrtFree(scoresDev);
     aclrtFree(vDev);
-    aclrtFree(kDev);
     aclrtFree(ccacheDev);
     aclrtFree(ckvDev);
     aclrtFree(qDev);
+    aclrtFree(cQDev);
     aclrtFree(wuvDev);
-    aclrtFree(wukDev);
     aclrtFree(wdkvDev);
-    aclrtFree(wqDev);
+    aclrtFree(wqkDev);
+    aclrtFree(wdqDev);
     aclrtFree(xDev);
     aclrtFreeHost(scoresRopeHost);
     aclrtFreeHost(kRopeRotHost);
@@ -564,26 +630,27 @@ int main()
     aclrtFreeHost(probsHost);
     aclrtFreeHost(scoresHost);
     aclrtFreeHost(vHost);
-    aclrtFreeHost(kHost);
     aclrtFreeHost(ccacheHost);
     aclrtFreeHost(ckvHost);
     aclrtFreeHost(qHost);
     aclrtFreeHost(outHost);
+    aclrtFreeHost(cQHost);
     aclrtFreeHost(wuvHost);
-    aclrtFreeHost(wukHost);
     aclrtFreeHost(wdkvHost);
-    aclrtFreeHost(wqHost);
+    aclrtFreeHost(wqkHost);
+    aclrtFreeHost(wdqHost);
     aclrtFreeHost(xHost);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(npuId);
     aclFinalize();
 
     if (allOk) {
         printf("test data success\n");
         printf("test success\n");
+        return 0;
     } else {
         printf("test data failed\n");
         printf("test failed\n");
+        return 1;   // §7 of kernel_test_guidance.md — non-zero on validation failure.
     }
-    return allOk ? 0 : 1;
 }
