@@ -304,11 +304,9 @@ PTO_INTERNAL void GenCastCallFp32ToBf16(__ubuf__ typename TileDataD::DType *dst,
 }
 
 // FP16 -> INT32 conversion
-template <typename TileDataD, typename TileDataS>
-PTO_INTERNAL void GenCastCallFp16ToInt32(__ubuf__ typename TileDataD::DType *dst,
-                                         __ubuf__ typename TileDataS::DType *src, uint8_t repeatNum, RoundMode mode,
-                                         uint16_t dstBlockStride, uint16_t srcBlockStride, uint16_t dstRepeatStride,
-                                         uint16_t srcRepeatStride)
+PTO_INTERNAL void GenCastCallFp16ToInt32ByRoundMode(__ubuf__ int32_t *dst, __ubuf__ half *src, uint8_t repeatNum,
+                                                    RoundMode mode, uint16_t dstBlockStride, uint16_t srcBlockStride,
+                                                    uint16_t dstRepeatStride, uint16_t srcRepeatStride)
 {
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
@@ -324,12 +322,20 @@ PTO_INTERNAL void GenCastCallFp16ToInt32(__ubuf__ typename TileDataD::DType *dst
             vconv_f162s32c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_TRUNC:
-            vconv_f162s32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
-            break;
         default:
             vconv_f162s32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
     }
+}
+
+template <typename TileDataD, typename TileDataS>
+PTO_INTERNAL void GenCastCallFp16ToInt32(__ubuf__ typename TileDataD::DType *dst,
+                                         __ubuf__ typename TileDataS::DType *src, uint8_t repeatNum, RoundMode mode,
+                                         uint16_t dstBlockStride, uint16_t srcBlockStride, uint16_t dstRepeatStride,
+                                         uint16_t srcRepeatStride)
+{
+    GenCastCallFp16ToInt32ByRoundMode((__ubuf__ int32_t *)dst, (__ubuf__ half *)src, repeatNum, mode, dstBlockStride,
+                                      srcBlockStride, dstRepeatStride, srcRepeatStride);
 }
 
 // FP16 -> INT16 conversion
@@ -409,24 +415,7 @@ PTO_INTERNAL void GenCastCallFp16ToInt16_NonSatTorch(__ubuf__ typename TileDataD
 
             // Step 1: fp16 -> int32 with saturation (clamps inf/overflow into int32 range).
             set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT));
-            switch (static_cast<RoundMode>(mode)) {
-                case RoundMode::CAST_RINT:
-                    vconv_f162s32r(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
-                    break;
-                case RoundMode::CAST_ROUND:
-                    vconv_f162s32a(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
-                    break;
-                case RoundMode::CAST_FLOOR:
-                    vconv_f162s32f(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
-                    break;
-                case RoundMode::CAST_CEIL:
-                    vconv_f162s32c(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
-                    break;
-                case RoundMode::CAST_TRUNC:
-                default:
-                    vconv_f162s32z(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
-                    break;
-            }
+            GenCastCallFp16ToInt32ByRoundMode(tempInt32Buf, chunkSrc, 1, mode, srcBlockStride, srcBlockStride, 8, 8);
             pipe_barrier(PIPE_V);
 
             // Step 2: int32 -> int16 (non-saturating wrap-around — PyTorch low-16-bit semantics).
@@ -536,24 +525,7 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
 
             // Step 1: fp16 -> int32 with saturation (clamps inf/overflow into int32 range).
             set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT));
-            switch (static_cast<RoundMode>(mode)) {
-                case RoundMode::CAST_RINT:
-                    vconv_f162s32r(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
-                    break;
-                case RoundMode::CAST_ROUND:
-                    vconv_f162s32a(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
-                    break;
-                case RoundMode::CAST_FLOOR:
-                    vconv_f162s32f(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
-                    break;
-                case RoundMode::CAST_CEIL:
-                    vconv_f162s32c(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
-                    break;
-                case RoundMode::CAST_TRUNC:
-                default:
-                    vconv_f162s32z(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
-                    break;
-            }
+            GenCastCallFp16ToInt32ByRoundMode(tempInt32Buf, chunkSrc, 1, mode, srcBlockStride, srcBlockStride, 8, 8);
             pipe_barrier(PIPE_V);
 
             // Switch to non-saturating (wrap-around) mode for the remaining narrowing stages —
