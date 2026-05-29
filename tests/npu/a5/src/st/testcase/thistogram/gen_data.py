@@ -210,12 +210,16 @@ if __name__ == "__main__":
         THISTOGRAMParams(8, 128, "MSB"),
         THISTOGRAMParams(1, 256, "MSB"),
         THISTOGRAMParams(4, 256, "MSB"),
+        # TopK Phase1 tile shape: 1×2048 MSB histogram (validCols=2048)
+        THISTOGRAMParams(1, 2048, "MSB"),
         THISTOGRAMParams(2, 100, "MSB"),
         THISTOGRAMParams(2, 128, "LSB", 108),
         THISTOGRAMParams(4, 64, "LSB", 52),
         THISTOGRAMParams(8, 128, "LSB", 104),
         THISTOGRAMParams(1, 256, "LSB", 210),
         THISTOGRAMParams(4, 256, "LSB", 220),
+        # TopK Phase3-style: 1×2048 LSB hist with per-row MSB filter idx
+        THISTOGRAMParams(1, 2048, "LSB", 128),
         THISTOGRAMParams(2, 100, "LSB", 82),
     ]
 

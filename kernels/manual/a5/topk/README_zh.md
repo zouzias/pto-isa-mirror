@@ -2,6 +2,8 @@
 
 本目录为 **Ascend A5** 上的 TopK 示例工程；**设备侧**写在 **`draft.cpp`**，与 `kernels/manual/a2a3/topk` 的排序归并路线不同。
 
+**Wiki（tiling 2048 经验）**：[`docs/coding/case-studies/a5-topk-hist-tiling-2048_zh.md`](../../../../docs/coding/case-studies/a5-topk-hist-tiling-2048_zh.md) — 含 `kHistChunkCols`/`kChunkCols` 分工、`TCMPS` 根因、dump 排障与性能对比。
+
 与 **`kernels/manual/a5/topk_ub`** 对齐：**共五个 `Phase*`**，所有 PTO 指令（含 `TASSIGN` / `TLOAD` 等）只出现在这些 Phase 中。本工程为 **分块从 GM 读入**（N = 8192，每块 2048 列，共 4 tile）；`topk_ub` 为 **整段 key 在 UB**、整段比较 `TGATHER`。
 
 ## 当前用例
@@ -81,7 +83,7 @@ done
 python3 scripts/gen_data.py --const 0x1234 && cd build && ./topk | grep RESULT
 ```
 
-单次仿真约 **6–10 min**（8K 为 32 tile）；应全部为 **`RESULT: PASS`**。
+单次仿真约 **3–5 min**（8K，4×2048 GM tile，`kHistChunkCols=2048`）；应全部为 **`RESULT: PASS`**。
 
 ## 性能（8K 仿真，seed `1241200609`）
 
@@ -89,34 +91,35 @@ python3 scripts/gen_data.py --const 0x1234 && cd build && ./topk | grep RESULT
 
 | 文件 | 说明 |
 |------|------|
-| `perf/trace_8k_seed1241200609_veccore0.json` | Chrome trace — **当前**（`kTileCols=2048`，256 列切片） |
-| `perf/phase_perf_8k_seed1241200609.json` | Phase VF / PMU 汇总 — **当前**（由 `build/` dump 解析） |
-| `perf/trace_*_tile256.json` | 归档 trace — `kTileCols=256`、32 个 GM tile（旧基线） |
-| `perf/phase_perf_*_tile256.json` | 上述 tile256 运行的 Phase 汇总 |
+| `perf/trace_8k_seed1241200609_veccore0.json` | Chrome trace — **当前**（`kHistChunkCols=2048`） |
+| `perf/phase_perf_8k_seed1241200609.json` | Phase VF / PMU 汇总 — **当前** |
+| `perf/*_hist256gm.*` | 归档 — 2048 GM tile + **256 列 hist 切片**（较慢） |
+| `perf/*_tile256.*` | 归档 — `kTileCols=256`、32 GM tile |
 
-`msprof` 后拷贝 trace 并解析（需 source CANN `set_env.sh` + 仿真器 `LD_LIBRARY_PATH`，见 `run.sh`）：
+`msprof` 后拷贝 trace 并解析（见 `run.sh`）：
 
 ```bash
 cp build/OPPROF_*/simulator/core0.veccore0/trace.json \
   perf/trace_8k_seed1241200609_veccore0.json
 python3 scripts/parse_phase_perf.py --build-dir build --seed 1241200609 \
-  --opprof-dir build/OPPROF_<latest> \
-  -o perf/phase_perf_8k_seed1241200609.json
+  --hist-chunk-cols 2048 -o perf/phase_perf_8k_seed1241200609.json
 ```
 
-当前数据：`OPPROF_20260529101806_EXOOUYLTJYJMATAY`（2048 GM 块 + 256 列切片）。
+### 分 Phase 汇总（`kHistChunkCols=2048`，`OPPROF_20260529142950`）
 
-### 分 Phase 汇总（`vf_real_execute_time`，单位 cycle）
+| 指标 | 数值 |
+|------|------|
+| kernel ticks | **52,207**（hist256gm 归档：**87,221**，约 **−40%**） |
+| MTE2 busy | 36,277 |
+| rvec busy | 27,565 |
+| msprof 墙钟 | **~28.7 µs**（core0.veccore0） |
 
-| Phase | VF 数 | vf_real | 占 rvec | 主要 PTO |
-|-------|------:|--------:|--------:|----------|
-| Phase1 初始化 | 1 | 520 | 1.5% | `TASSIGN` / `TEXPANDS` |
-| Phase1+3 直方图（4×8 切片×2 遍） | 224 | 14,569 | 42.2% | `TLOAD` + `THISTOGRAM` |
-| Phase2+4 控制 | 20 | 1,509 | 4.4% | `TCMPS` / `TSELS` / `TOR` |
-| Phase5（32 切片×3 模板） | 96 | 17,895 | 51.9% | `TGATHER` / `TCONCAT` / `TSTORE` |
+| Phase（VF 归类） | vf_real | 占 rvec |
+|------------------|--------:|--------:|
+| Phase1+3 直方图 | 1,394 | 5.1% |
+| Phase2+4 控制 | 2,055 | 7.5% |
+| Phase5（6 模板×32 tile） | 23,596 | 85.6% |
 
-**PMU**：kernel **87,221** tick；**MTE2 约 75.7%**（66,005 cyc）；**rvec 约 39.5%**；`msprof` 墙钟 **48.37 µs**。瓶颈仍在 GM `TLOAD` 与 `wait_flag`。
-
-**Phase5 热点**（每 256 列切片 `vf_real`）：`0x10d0e348` ~221；`0x10d0e310` ~188；`0x10d0e084` ~151 cyc。
+Phase5 仍按 256 列切片；直方图改为每 tile 一次 2048 宽 `THISTOGRAM`（`num_hist_slices_per_pass=4`）。
 
 **同步**：Phase2 `TSUB`、Phase4 `TOR` 之后的手写 `PIPE_V`/`PIPE_S` fence 已去掉；8K 仿真 3 seed + `--const` 仍 **PASS**。

@@ -3,7 +3,7 @@
  *
  * All pto-isa ops (including TASSIGN / TLOAD) live only in five `Phase*` functions — no callees that emit
  * T-instructions. `RunRadixTopKDraft` only constructs tile objects and calls the phases. Tiled N=8192 / 2048 GM blocks:
- * Phase1/3 stream `TLOAD`+`THISTOGRAM` in 256-col slices per block; Phase5 per-block `TGATHER` (256-col slices) + `TCONCAT_IMPL`.
+ * Phase1/3: one `TLOAD`+`THISTOGRAM` per 2048 GM tile (`kHistChunkCols=2048`); Phase5 `TGATHER` in 256-col slices + `TCONCAT_IMPL`.
  *
  * 1) **Phase1** — TASSIGN, tile `TLOAD` + `THISTOGRAM<BYTE_1>`, cumulative `chistMSB`
  * 2) **Phase2** — `TCMPS`/`TCI`/`TSELS`, raw MSB + `WinnerBinU8` path, `TGATHER`+`TSUB` remainK
@@ -30,8 +30,10 @@ namespace topk_radix_detail {
 
 constexpr int kN = 8192;
 constexpr int kTileCols = 2048;
-// Per-invocation width for uint16 THISTOGRAM / tiled TGATHER (A5 ST covers up to 256 cols).
+// Phase5 TGATHER/TCONCAT: 256-col slices per 2048 GM tile.
 constexpr int kChunkCols = 256;
+// Phase1/3: full-width THISTOGRAM per GM tile (requires upstream tile-tile TCMPS; ~40% fewer kernel ticks vs 256-col hist).
+constexpr int kHistChunkCols = 2048;
 constexpr int kBinNum = 256;
 #define PTO_DIV_ROUNDUP(x, y) (((x) + (y)-1) / (y))
 #define PTO_CEIL(x, y) (PTO_DIV_ROUNDUP(x, y) * (y))
@@ -80,7 +82,7 @@ using GatherConcatCountTile = Tile<TileType::Vec, uint32_t, kGatherConcatRows, 1
 
 // --- Five phases: no T-instruction callees below this line. ---
 
-AICORE inline void Phase1_LoadAndHistogramMsb(__gm__ uint16_t *src, InTileU16<kChunkCols> &inTile, HistTile &tileHist,
+AICORE inline void Phase1_LoadAndHistogramMsb(__gm__ uint16_t *src, InTileU16<kHistChunkCols> &inTile, HistTile &tileHist,
                                               HistTile &chistMSB, IdxFilterTile &idxFilter)
 {
     TASSIGN(inTile, 0x00000);
@@ -101,14 +103,14 @@ AICORE inline void Phase1_LoadAndHistogramMsb(__gm__ uint16_t *src, InTileU16<kC
             break;
         }
 
-        for (int sub = 0; sub < valid; sub += kChunkCols) {
-            int subValid = (sub + kChunkCols <= valid) ? kChunkCols : (valid - sub);
+        for (int sub = 0; sub < valid; sub += kHistChunkCols) {
+            int subValid = (sub + kHistChunkCols <= valid) ? kHistChunkCols : (valid - sub);
             if (needWaitMte2) {
                 wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID2);
             }
             inTile.SetValidCol(subValid);
-            using SrcGlobal = GlobalTensor<uint16_t, pto::Shape<1, 1, 1, 1, kChunkCols>,
-                                           pto::Stride<kChunkCols, kChunkCols, kChunkCols, kChunkCols, 1>>;
+            using SrcGlobal = GlobalTensor<uint16_t, pto::Shape<1, 1, 1, 1, kHistChunkCols>,
+                                           pto::Stride<kHistChunkCols, kHistChunkCols, kHistChunkCols, kHistChunkCols, 1>>;
             SrcGlobal srcGlobal(src + base + sub);
             TLOAD(inTile, srcGlobal);
             set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
@@ -260,7 +262,7 @@ AICORE inline void Phase2_WinnerMsbAndRemainK(HistTile &chistMSB, WinnerBinTile 
     }
 }
 
-AICORE inline void Phase3_HistogramLsb(__gm__ uint16_t *src, InTileU16<kChunkCols> &inTile, HistTile &tileHist,
+AICORE inline void Phase3_HistogramLsb(__gm__ uint16_t *src, InTileU16<kHistChunkCols> &inTile, HistTile &tileHist,
                                         HistTile &chistLSB, IdxFilterTile &idxFilter, WinnerBinTile &msbWinnerSaved)
 {
     TASSIGN(inTile, 0x00000);
@@ -286,12 +288,12 @@ AICORE inline void Phase3_HistogramLsb(__gm__ uint16_t *src, InTileU16<kChunkCol
             break;
         }
 
-        for (int sub = 0; sub < valid; sub += kChunkCols) {
-            int subValid = (sub + kChunkCols <= valid) ? kChunkCols : (valid - sub);
+        for (int sub = 0; sub < valid; sub += kHistChunkCols) {
+            int subValid = (sub + kHistChunkCols <= valid) ? kHistChunkCols : (valid - sub);
             wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID2);
             inTile.SetValidCol(subValid);
-            using SrcGlobal2 = GlobalTensor<uint16_t, pto::Shape<1, 1, 1, 1, kChunkCols>,
-                                            pto::Stride<kChunkCols, kChunkCols, kChunkCols, kChunkCols, 1>>;
+            using SrcGlobal2 = GlobalTensor<uint16_t, pto::Shape<1, 1, 1, 1, kHistChunkCols>,
+                                            pto::Stride<kHistChunkCols, kHistChunkCols, kHistChunkCols, kHistChunkCols, 1>>;
             SrcGlobal2 srcGlobal(src + base + sub);
             TLOAD(inTile, srcGlobal);
             set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
@@ -585,7 +587,8 @@ __global__ AICORE void RunRadixTopKDraft(__gm__ uint16_t *src, __gm__ uint32_t *
     static_assert(TopK > 0, "TopK must be positive.");
     static_assert(TopK <= kN, "TopK cannot exceed N.");
 
-    InTileU16<kChunkCols> inTile(1, kChunkCols);
+    constexpr int kInTileCols = (kHistChunkCols > kChunkCols) ? kHistChunkCols : kChunkCols;
+    InTileU16<kInTileCols> inTile(1, kInTileCols);
     HistTile tileHist(1, kBinNum);
     HistTile chistMSB(1, kBinNum);
     HistTile chistLSB(1, kBinNum);
@@ -600,6 +603,7 @@ __global__ AICORE void RunRadixTopKDraft(__gm__ uint16_t *src, __gm__ uint32_t *
     Phase2_WinnerMsbAndRemainK<TopK>(chistMSB, msbWinnerBin, remainKTile, msbWinnerSaved);
     Phase3_HistogramLsb(src, inTile, tileHist, chistLSB, idxFilter, msbWinnerSaved);
     Phase4_WinnerLsbRemainKAndPackedThresholdTor(chistLSB, remainKTile, lsbWinnerBin, msbWinnerSaved, packedThrU);
+    pipe_barrier(PIPE_ALL);
     Phase5_TgatherGtEqTconcatAndStore<TopK>(src, outIdx, packedThrU);
 }
 

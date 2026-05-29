@@ -80,12 +80,14 @@ template void LaunchTHistogramU16<2, 128, HistByte::BYTE_1>(uint16_t *src, uint3
 template void LaunchTHistogramU16<4, 64, HistByte::BYTE_1>(uint16_t *src, uint32_t *dst, void *stream, uint8_t *idx);
 template void LaunchTHistogramU16<8, 128, HistByte::BYTE_1>(uint16_t *src, uint32_t *dst, void *stream, uint8_t *idx);
 template void LaunchTHistogramU16<1, 256, HistByte::BYTE_1>(uint16_t *src, uint32_t *dst, void *stream, uint8_t *idx);
+template void LaunchTHistogramU16<1, 2048, HistByte::BYTE_1>(uint16_t *src, uint32_t *dst, void *stream, uint8_t *idx);
 template void LaunchTHistogramU16<4, 256, HistByte::BYTE_1>(uint16_t *src, uint32_t *dst, void *stream, uint8_t *idx);
 template void LaunchTHistogramU16<2, 100, HistByte::BYTE_1>(uint16_t *src, uint32_t *dst, void *stream, uint8_t *idx);
 template void LaunchTHistogramU16<2, 128, HistByte::BYTE_0>(uint16_t *src, uint32_t *dst, void *stream, uint8_t *idx);
 template void LaunchTHistogramU16<4, 64, HistByte::BYTE_0>(uint16_t *src, uint32_t *dst, void *stream, uint8_t *idx);
 template void LaunchTHistogramU16<8, 128, HistByte::BYTE_0>(uint16_t *src, uint32_t *dst, void *stream, uint8_t *idx);
 template void LaunchTHistogramU16<1, 256, HistByte::BYTE_0>(uint16_t *src, uint32_t *dst, void *stream, uint8_t *idx);
+template void LaunchTHistogramU16<1, 2048, HistByte::BYTE_0>(uint16_t *src, uint32_t *dst, void *stream, uint8_t *idx);
 template void LaunchTHistogramU16<4, 256, HistByte::BYTE_0>(uint16_t *src, uint32_t *dst, void *stream, uint8_t *idx);
 template void LaunchTHistogramU16<2, 100, HistByte::BYTE_0>(uint16_t *src, uint32_t *dst, void *stream, uint8_t *idx);
 

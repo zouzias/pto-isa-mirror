@@ -38,7 +38,7 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
-python3 scripts/gen_data.py
+python3 scripts/gen_data.py ${GEN_DATA_EXTRA_ARGS:-}
 
 rm -rf build
 mkdir build

@@ -55,7 +55,7 @@ def parse_summary(summary_log: Path) -> dict:
     return out
 
 
-def classify_pcs(vfs: list[dict], n_slices: int) -> dict[str, str]:
+def classify_pcs(vfs: list[dict], n_gather_slices: int, n_hist_slices: int) -> dict[str, str]:
     """Map push_pc -> phase label using per-PC VF counts (relink-stable heuristics)."""
     counts: dict[str, int] = defaultdict(int)
     real_sum: dict[str, int] = defaultdict(int)
@@ -71,12 +71,12 @@ def classify_pcs(vfs: list[dict], n_slices: int) -> dict[str, str]:
     for pc, cnt in counts.items():
         if pc == init_pc and cnt == 1:
             labels[pc] = "phase1_init"
-        elif cnt == n_slices:
-            per_tile = real_sum[pc] / cnt
-            # THISTOGRAM slices: ~45–97 vf_real per 256-col chunk; Phase5 TGATHER/TCONCAT: ~150+.
-            labels[pc] = "phase5_tile" if per_tile >= 120 else "phase1_3_hist_tile"
+        elif cnt == n_gather_slices:
+            labels[pc] = "phase5_tile"
         else:
-            labels[pc] = "phase2_4_ctrl"
+            per_tile = real_sum[pc] / cnt if cnt else 0
+            # THISTOGRAM: ~45–97 vf_real per 256-col chunk; wide 2048-col hist is higher but still < Phase5.
+            labels[pc] = "phase1_3_hist_tile" if per_tile < 120 else "phase2_4_ctrl"
     return labels
 
 
@@ -87,6 +87,7 @@ def build_report(
     topk: int,
     tile_cols: int = 2048,
     chunk_cols: int = CHUNK_COLS,
+    hist_chunk_cols: int = 2048,
 ) -> dict:
     instr = build_dir / "core0.veccore0.instr_log.dump"
     summary = build_dir / "core0_summary_log"
@@ -95,9 +96,11 @@ def build_report(
     vfs = parse_vf(instr)
     pmu = parse_summary(summary) if summary.is_file() else {}
     n_tiles = (n + tile_cols - 1) // tile_cols
-    chunks_per_tile = (tile_cols + chunk_cols - 1) // chunk_cols
-    n_slices = n_tiles * chunks_per_tile
-    pc_labels = classify_pcs(vfs, n_slices)
+    chunks_gather = (tile_cols + chunk_cols - 1) // chunk_cols
+    chunks_hist = (tile_cols + hist_chunk_cols - 1) // hist_chunk_cols
+    n_gather_slices = n_tiles * chunks_gather
+    n_hist_slices = n_tiles * chunks_hist
+    pc_labels = classify_pcs(vfs, n_gather_slices, n_hist_slices)
 
     by_phase: dict[str, dict] = defaultdict(
         lambda: {"vf_count": 0, "vf_execute_time": 0, "vf_real_execute_time": 0}
@@ -160,8 +163,10 @@ def build_report(
             "topk": topk,
             "tile_cols": tile_cols,
             "chunk_cols": chunk_cols,
+            "hist_chunk_cols": hist_chunk_cols,
             "num_tiles": n_tiles,
-            "num_slices_per_pass": n_slices,
+            "num_gather_slices_per_pass": n_gather_slices,
+            "num_hist_slices_per_pass": n_hist_slices,
             "seed": seed,
             "soc": "Ascend950PR_9599",
             "core": "core0.veccore0",
@@ -191,6 +196,7 @@ def main() -> None:
     parser.add_argument("--n", type=int, default=8192)
     parser.add_argument("--tile-cols", type=int, default=2048)
     parser.add_argument("--chunk-cols", type=int, default=CHUNK_COLS)
+    parser.add_argument("--hist-chunk-cols", type=int, default=2048)
     parser.add_argument("--topk", type=int, default=512)
     parser.add_argument("-o", "--output", type=Path, required=True)
     parser.add_argument("--opprof-dir", type=Path, default=None)
@@ -203,6 +209,7 @@ def main() -> None:
         args.topk,
         tile_cols=args.tile_cols,
         chunk_cols=args.chunk_cols,
+        hist_chunk_cols=args.hist_chunk_cols,
     )
     if args.opprof_dir is not None:
         report["opprof_dir"] = str(args.opprof_dir)

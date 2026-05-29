@@ -2,7 +2,9 @@
 
 Device-side code lives in **`draft.cpp`**: a **radix-select TopK** for **16-bit sortable keys**, using **`THISTOGRAM`** (`HistByte::BYTE_1` then filtered `BYTE_0`) and **compare `TGATHER`** (`CmpMode::GT` / `EQ`) to collect indices. This differs from the sort/merge style in `kernels/manual/a2a3/topk`.
 
-The structure matches **`kernels/manual/a5/topk_ub`**: **five `Phase*`** functions; all PTO instructions (`TASSIGN`, `TLOAD`, histogram, `TGATHER`, etc.) live in those phases. This directory uses **tiled `TLOAD`** (N = 8192, **2048 columns per GM tile**, 4 tiles). Each tile is processed in **256-column slices** for `THISTOGRAM` / `TGATHER` (A5 ST-valid width). `topk_ub` keeps full keys in UB and does full-width gathers.
+**Wiki (2048 histogram tiling):** [`docs/coding/case-studies/a5-topk-hist-tiling-2048.md`](../../../../docs/coding/case-studies/a5-topk-hist-tiling-2048.md)
+
+The structure matches **`kernels/manual/a5/topk_ub`**: **five `Phase*`** functions; all PTO instructions live in those phases. **Tiled GM load** (N = 8192, **2048 columns per tile**, 4 tiles). **Phase1/3:** one **2048-wide** `THISTOGRAM` per tile (`kHistChunkCols=2048`). **Phase5:** **256-column** `TGATHER` / `TCONCAT` slices (`kChunkCols=256`). `topk_ub` keeps full keys in UB.
 
 ## Current case
 
@@ -82,34 +84,33 @@ Dataset: `perf/` (from `msprof op simulator ./topk` on `Ascend950PR_9599`, `core
 
 | Artifact | Description |
 |----------|-------------|
-| `perf/trace_8k_seed1241200609_veccore0.json` | Chrome trace — **current** (`kTileCols=2048`, 256-col slices) |
-| `perf/phase_perf_8k_seed1241200609.json` | Phase VF / PMU summary — **current** (parsed from `build/` dumps) |
-| `perf/trace_*_tile256.json` | Archived trace — `kTileCols=256`, 32 GM tiles (May 2026 baseline) |
-| `perf/phase_perf_*_tile256.json` | Archived phase summary for the tile256 run |
+| `perf/trace_8k_seed1241200609_veccore0.json` | Chrome trace — **current** (`kHistChunkCols=2048`) |
+| `perf/phase_perf_8k_seed1241200609.json` | Phase VF / PMU summary — **current** |
+| `perf/*_hist256gm.*` | Archived — 2048 GM tile + **256-col hist slices** (slower) |
+| `perf/*_tile256.*` | Archived — `kTileCols=256`, 32 GM tiles |
 
-Regenerate after `msprof op simulator ./topk` (see `run.sh`; source CANN `set_env.sh` + simulator `LD_LIBRARY_PATH`):
+Regenerate after `msprof op simulator ./topk` (see `run.sh`):
 
 ```bash
 cp build/OPPROF_*/simulator/core0.veccore0/trace.json \
   perf/trace_8k_seed1241200609_veccore0.json
 python3 scripts/parse_phase_perf.py --build-dir build --seed 1241200609 \
-  --opprof-dir build/OPPROF_<latest> \
-  -o perf/phase_perf_8k_seed1241200609.json
+  --hist-chunk-cols 2048 -o perf/phase_perf_8k_seed1241200609.json
 ```
 
-Latest dataset: `OPPROF_20260529101806_EXOOUYLTJYJMATAY` (2048 GM tile + 256-col slices).
+### Phase summary (`kHistChunkCols=2048`, `OPPROF_20260529142950`)
 
-### Phase-level summary (`vf_real_execute_time`, cycles)
+| Metric | Value |
+|--------|------:|
+| kernel ticks | **52,207** (archived hist256gm: **87,221**, **~−40%**) |
+| MTE2 busy | 36,277 |
+| rvec busy | 27,565 |
+| msprof wall | **~28.7 µs** |
 
-| Phase | VFs | vf_real | % rvec | Main PTO |
-|-------|----:|--------:|-------:|----------|
-| Phase1 init | 1 | 520 | 1.5% | `TASSIGN` / `TEXPANDS` |
-| Phase1+3 hist (4×8 slices ×2 passes) | 224 | 14,569 | 42.2% | `TLOAD` + `THISTOGRAM` |
-| Phase2+4 control | 20 | 1,509 | 4.4% | `TCMPS` / `TSELS` / `TOR` |
-| Phase5 (32 slices ×3 templates) | 96 | 17,895 | 51.9% | `TGATHER` / `TCONCAT` / `TSTORE` |
+| Phase (VF buckets) | vf_real | % rvec |
+|--------------------|--------:|-------:|
+| Phase1+3 histogram | 1,394 | 5.1% |
+| Phase2+4 control | 2,055 | 7.5% |
+| Phase5 (6 templates × 32 tiles) | 23,596 | 85.6% |
 
-**PMU** (same run): kernel **87,221** ticks; **MTE2 75.7%** busy (66,005 cyc); **rvec 39.5%** (34,493); scalar **11.0%**. `msprof` wall **48.37 µs** on `core0.veccore0`. Bottleneck remains GM `TLOAD` + `wait_flag`.
-
-**Phase5 VF templates** (per 256-col slice, `vf_real` per slice): `0x10d0e348` ~221 cyc; `0x10d0e310` ~188 cyc; `0x10d0e084` ~151 cyc (`TGATHER`/`TCONCAT` GT path).
-
-**Sync note:** explicit `PIPE_V`/`PIPE_S` fences after Phase2 `TSUB` and Phase4 `TOR` are removed; 8K sim regression (3 seeds + `--const`) still **PASS**.
+Phase5 still uses 256-col slices; histogram is one 2048-wide `THISTOGRAM` per GM tile. Sim regression **PASS**.

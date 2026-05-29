@@ -16,6 +16,7 @@
 - [事件与同步模型](Event_zh.md)
 - [CPU_SIM 后端说明](cpu_sim_zh.md)
 - [标量值、类型助记符与枚举](Scalar_zh.md)
+- [算子开发案例（Wiki）](case-studies/README_zh.md)
 
 ## 相关文档
 

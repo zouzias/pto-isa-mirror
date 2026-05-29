@@ -127,8 +127,9 @@ Tiling 是一阶调优旋钮：
 - Flash Attention（分阶段 softmax、tiled QK/PV、逐阶段调优）：
   - [`kernels/manual/common/flash_atten/README_zh.md`](../../kernels/manual/common/flash_atten/README_zh.md)
   - Kernel code：`kernels/manual/common/flash_atten/fa_performance_kernel.cpp`
-  - [`kernels/manual/common/flash_atten/README_zh.md`](../../kernels/manual/common/flash_atten/README_zh.md)
-  - Kernel code：`kernels/manual/common/flash_atten/fa_performance_kernel.cpp`
+- A5 TopK（直方图 tiling 256→2048、`TCMPS` 排障、MTE2 收益）：
+  - [Wiki 案例：直方图 tiling 2048](case-studies/a5-topk-hist-tiling-2048_zh.md)
+  - 工程 README：[`kernels/manual/a5/topk/README_zh.md`](../../kernels/manual/a5/topk/README_zh.md)
 
 ## 8. 常见故障模式（以及处理方式）
 

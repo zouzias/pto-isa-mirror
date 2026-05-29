@@ -14,6 +14,7 @@ If you are looking for the *ISA reference*, start from [docs/isa/README.md](../i
 - [Global memory tensors (shape/stride/layout)](GlobalTensor.md)
 - [Events and synchronization model](Event.md)
 - [Scalar values, type mnemonics, and enums](Scalar.md)
+- [Operator case studies (Wiki)](case-studies/README.md)
 
 ## Related
 

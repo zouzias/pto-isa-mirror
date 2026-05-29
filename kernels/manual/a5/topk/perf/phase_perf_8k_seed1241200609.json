@@ -4,82 +4,105 @@
     "topk": 512,
     "tile_cols": 2048,
     "chunk_cols": 256,
+    "hist_chunk_cols": 2048,
     "num_tiles": 4,
-    "num_slices_per_pass": 32,
+    "num_gather_slices_per_pass": 32,
+    "num_hist_slices_per_pass": 4,
     "seed": 1241200609,
     "soc": "Ascend950PR_9599",
     "core": "core0.veccore0"
   },
   "pmu": {
-    "kernel_ticks": 87221,
-    "mte2_busy": 66005,
-    "rvec_busy": 34493,
-    "scalar_busy": 9554
+    "kernel_ticks": 52207,
+    "mte2_busy": 36277,
+    "rvec_busy": 27565,
+    "scalar_busy": 6708
   },
-  "vf_total": 341,
-  "vf_execute_time_sum": 46550,
-  "vf_real_execute_time_sum": 34493,
-  "icache_overhead_cycles": 12057,
+  "vf_total": 230,
+  "vf_execute_time_sum": 37141,
+  "vf_real_execute_time_sum": 27565,
+  "icache_overhead_cycles": 9576,
   "phases": [
     {
       "phase": "phase1_init",
       "vf_count": 1,
       "vf_execute_time": 520,
       "vf_real_execute_time": 520,
-      "pct_of_rvec_real": 1.51,
-      "pct_of_kernel_ticks": 0.6
+      "pct_of_rvec_real": 1.89,
+      "pct_of_kernel_ticks": 1.0
     },
     {
       "phase": "phase1_3_hist_tile",
-      "vf_count": 224,
-      "vf_execute_time": 19027,
-      "vf_real_execute_time": 14569,
-      "pct_of_rvec_real": 42.24,
-      "pct_of_kernel_ticks": 16.7
+      "vf_count": 26,
+      "vf_execute_time": 3145,
+      "vf_real_execute_time": 1394,
+      "pct_of_rvec_real": 5.06,
+      "pct_of_kernel_ticks": 2.67
     },
     {
       "phase": "phase2_4_ctrl",
-      "vf_count": 20,
-      "vf_execute_time": 2557,
-      "vf_real_execute_time": 1509,
-      "pct_of_rvec_real": 4.37,
-      "pct_of_kernel_ticks": 1.73
+      "vf_count": 11,
+      "vf_execute_time": 2216,
+      "vf_real_execute_time": 2055,
+      "pct_of_rvec_real": 7.46,
+      "pct_of_kernel_ticks": 3.94
     },
     {
       "phase": "phase5_tile",
-      "vf_count": 96,
-      "vf_execute_time": 24446,
-      "vf_real_execute_time": 17895,
-      "pct_of_rvec_real": 51.88,
-      "pct_of_kernel_ticks": 20.52
+      "vf_count": 192,
+      "vf_execute_time": 31260,
+      "vf_real_execute_time": 23596,
+      "pct_of_rvec_real": 85.6,
+      "pct_of_kernel_ticks": 45.2
     }
   ],
   "phase5_vf_templates": [
     {
-      "push_pc": "0x10d0e348",
+      "push_pc": "0x10d0df70",
       "vf_count": 32,
-      "vf_execute_time_total": 11616,
-      "vf_real_execute_time_total": 7056,
-      "vf_real_per_tile": 220.5
+      "vf_execute_time_total": 7952,
+      "vf_real_execute_time_total": 6192,
+      "vf_real_per_tile": 193.5
     },
     {
-      "push_pc": "0x10d0e310",
+      "push_pc": "0x10d0e210",
       "vf_count": 32,
-      "vf_execute_time_total": 6238,
-      "vf_real_execute_time_total": 6007,
-      "vf_real_per_tile": 187.7
+      "vf_execute_time_total": 6286,
+      "vf_real_execute_time_total": 6175,
+      "vf_real_per_tile": 193.0
     },
     {
-      "push_pc": "0x10d0e084",
+      "push_pc": "0x10d0e248",
       "vf_count": 32,
-      "vf_execute_time_total": 6592,
-      "vf_real_execute_time_total": 4832,
-      "vf_real_per_tile": 151.0
+      "vf_execute_time_total": 9662,
+      "vf_real_execute_time_total": 5021,
+      "vf_real_per_tile": 156.9
+    },
+    {
+      "push_pc": "0x10d0df30",
+      "vf_count": 32,
+      "vf_execute_time_total": 2976,
+      "vf_real_execute_time_total": 2976,
+      "vf_real_per_tile": 93.0
+    },
+    {
+      "push_pc": "0x10d0e294",
+      "vf_count": 32,
+      "vf_execute_time_total": 2368,
+      "vf_real_execute_time_total": 1792,
+      "vf_real_per_tile": 56.0
+    },
+    {
+      "push_pc": "0x10d0dfa8",
+      "vf_count": 32,
+      "vf_execute_time_total": 2016,
+      "vf_real_execute_time_total": 1440,
+      "vf_real_per_tile": 45.0
     }
   ],
-  "phase5_gt_cluster_vf_real": 17895,
-  "phase5_eq_cluster_vf_real": 0,
-  "opprof_dir": "build/OPPROF_20260529101806_EXOOUYLTJYJMATAY",
+  "phase5_gt_cluster_vf_real": 20364,
+  "phase5_eq_cluster_vf_real": 3232,
+  "opprof_dir": "build/OPPROF_20260529142950_PQVLLMTYWXCFZMJU",
   "notes": [
     "vf_real_execute_time matches rvec_veccore0_busy_cycle in core0_summary_log",
     "mte2_busy dominates wall time; phase vf_real is SIMD-only",

@@ -198,6 +198,10 @@ TEST_F(THISTOGRAMTest, case_1x256_b1)
 {
     test_thistogram<1, 256, HistByte::BYTE_1>();
 }
+TEST_F(THISTOGRAMTest, case_1x2048_b1)
+{
+    test_thistogram<1, 2048, HistByte::BYTE_1>();
+}
 TEST_F(THISTOGRAMTest, case_4x256_b1)
 {
     test_thistogram<4, 256, HistByte::BYTE_1>();
@@ -225,6 +229,11 @@ TEST_F(THISTOGRAMTest, case_8x128_b0_k104)
 TEST_F(THISTOGRAMTest, case_1x256_b0_k210)
 {
     test_thistogram<1, 256, HistByte::BYTE_0>();
+}
+
+TEST_F(THISTOGRAMTest, case_1x2048_b0_k128)
+{
+    test_thistogram<1, 2048, HistByte::BYTE_0>();
 }
 
 TEST_F(THISTOGRAMTest, case_4x256_b0_k220)

@@ -7,7 +7,7 @@
 - Flash-Attention kernel：[flash_atten](flash_atten/README_zh.md)
 - MXFP4 矩阵乘法性能 kernel：[matmul_mxfp4_performance](matmul_mxfp4_performance/README_zh.md)
 - MXFP8 矩阵乘法性能 kernel：[matmul_mxfp8_performance](matmul_mxfp8_performance/README_zh.md)
-- TopK 算子（占位框架，算法待实现）：[topk](topk/README_zh.md)
+- TopK（Radix-Select，`kHistChunkCols=2048`）：[topk](topk/README_zh.md) — Wiki：[直方图 tiling 2048](../../../docs/coding/case-studies/a5-topk-hist-tiling-2048_zh.md)
 
 ## 通用环境准备
 

@@ -1,0 +1,88 @@
+{
+  "case": {
+    "n": 8192,
+    "topk": 512,
+    "tile_cols": 2048,
+    "chunk_cols": 256,
+    "num_tiles": 4,
+    "num_slices_per_pass": 32,
+    "seed": 1241200609,
+    "soc": "Ascend950PR_9599",
+    "core": "core0.veccore0"
+  },
+  "pmu": {
+    "kernel_ticks": 87221,
+    "mte2_busy": 66005,
+    "rvec_busy": 34493,
+    "scalar_busy": 9554
+  },
+  "vf_total": 341,
+  "vf_execute_time_sum": 46550,
+  "vf_real_execute_time_sum": 34493,
+  "icache_overhead_cycles": 12057,
+  "phases": [
+    {
+      "phase": "phase1_init",
+      "vf_count": 1,
+      "vf_execute_time": 520,
+      "vf_real_execute_time": 520,
+      "pct_of_rvec_real": 1.51,
+      "pct_of_kernel_ticks": 0.6
+    },
+    {
+      "phase": "phase1_3_hist_tile",
+      "vf_count": 224,
+      "vf_execute_time": 19027,
+      "vf_real_execute_time": 14569,
+      "pct_of_rvec_real": 42.24,
+      "pct_of_kernel_ticks": 16.7
+    },
+    {
+      "phase": "phase2_4_ctrl",
+      "vf_count": 20,
+      "vf_execute_time": 2557,
+      "vf_real_execute_time": 1509,
+      "pct_of_rvec_real": 4.37,
+      "pct_of_kernel_ticks": 1.73
+    },
+    {
+      "phase": "phase5_tile",
+      "vf_count": 96,
+      "vf_execute_time": 24446,
+      "vf_real_execute_time": 17895,
+      "pct_of_rvec_real": 51.88,
+      "pct_of_kernel_ticks": 20.52
+    }
+  ],
+  "phase5_vf_templates": [
+    {
+      "push_pc": "0x10d0e348",
+      "vf_count": 32,
+      "vf_execute_time_total": 11616,
+      "vf_real_execute_time_total": 7056,
+      "vf_real_per_tile": 220.5
+    },
+    {
+      "push_pc": "0x10d0e310",
+      "vf_count": 32,
+      "vf_execute_time_total": 6238,
+      "vf_real_execute_time_total": 6007,
+      "vf_real_per_tile": 187.7
+    },
+    {
+      "push_pc": "0x10d0e084",
+      "vf_count": 32,
+      "vf_execute_time_total": 6592,
+      "vf_real_execute_time_total": 4832,
+      "vf_real_per_tile": 151.0
+    }
+  ],
+  "phase5_gt_cluster_vf_real": 17895,
+  "phase5_eq_cluster_vf_real": 0,
+  "opprof_dir": "build/OPPROF_20260529101806_EXOOUYLTJYJMATAY",
+  "notes": [
+    "vf_real_execute_time matches rvec_veccore0_busy_cycle in core0_summary_log",
+    "mte2_busy dominates wall time; phase vf_real is SIMD-only",
+    "draft.cpp: explicit PIPE_V/PIPE_S fences removed after Phase2 TSUB and Phase4 TOR"
+  ]
+}

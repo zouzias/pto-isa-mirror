@@ -127,8 +127,9 @@ These kernel folders contain the most complete “how to tune” notes, tied to 
 - Flash Attention (staged softmax, tiled QK/PV, per-stage tuning):
   - [`kernels/manual/common/flash_atten/README.md`](../../kernels/manual/common/flash_atten/README.md)
   - Kernel code: `kernels/manual/common/flash_atten/fa_performance_kernel.cpp`
-  - [`kernels/manual/common/flash_atten/README.md`](../../kernels/manual/common/flash_atten/README.md)
-  - Kernel code: `kernels/manual/common/flash_atten/fa_performance_kernel.cpp`
+- A5 TopK (histogram tiling 256→2048, `TCMPS` debugging, MTE2 wins):
+  - [Wiki case study](case-studies/a5-topk-hist-tiling-2048.md)
+  - Kernel README: [`kernels/manual/a5/topk/README.md`](../../kernels/manual/a5/topk/README.md)
 
 ## 8. Common failure modes (and what to do)
 

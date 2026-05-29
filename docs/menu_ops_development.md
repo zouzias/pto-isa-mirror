@@ -52,8 +52,12 @@
         - [矩阵乘法示例](../demos/baseline/gemm_basic/README_zh.md)
         - [Flash Attention示例](../demos/baseline/flash_atten/README_zh.md)
     - 高级算子
-        - [TopK算子](../kernels/manual/a2a3/topk/README_zh.md)
+        - [TopK算子（A2/A3）](../kernels/manual/a2a3/topk/README_zh.md)
+        - [TopK算子（A5 Radix）](../kernels/manual/a5/topk/README_zh.md)
         - [自定义算子开发](../kernels/custom/fused_add_relu_mul/README_zh.md)
+    - 算子开发案例（Wiki）
+        - [案例索引](coding/case-studies/README_zh.md)
+        - [A5 TopK：直方图 tiling 2048](coding/case-studies/a5-topk-hist-tiling-2048_zh.md)
     - 性能优化实践
         - [GEMM性能优化](../kernels/manual/a2a3/gemm_performance/README_zh.md)
         - [Flash Attention优化](../kernels/manual/common/flash_atten/README_zh.md)
