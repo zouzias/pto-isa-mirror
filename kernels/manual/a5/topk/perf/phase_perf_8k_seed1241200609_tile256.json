@@ -1,0 +1,120 @@
+{
+  "case": {
+    "n": 8192,
+    "topk": 512,
+    "tile_cols": 256,
+    "seed": 1241200609,
+    "soc": "Ascend950PR_9599",
+    "core": "core0.veccore0"
+  },
+  "pmu": {
+    "kernel_ticks": 76906,
+    "mte2_busy": 62448,
+    "rvec_busy": 31220,
+    "scalar_busy": 4754
+  },
+  "vf_total": 341,
+  "vf_execute_time_sum": 41333,
+  "vf_real_execute_time_sum": 31220,
+  "icache_overhead_cycles": 10113,
+  "phases": [
+    {
+      "phase": "phase1_init",
+      "vf_count": 1,
+      "vf_execute_time": 520,
+      "vf_real_execute_time": 520,
+      "pct_of_rvec_real": 1.67,
+      "pct_of_kernel_ticks": 0.68
+    },
+    {
+      "phase": "phase1_3_hist_tile",
+      "vf_count": 64,
+      "vf_execute_time": 5473,
+      "vf_real_execute_time": 3969,
+      "pct_of_rvec_real": 12.71,
+      "pct_of_kernel_ticks": 5.16
+    },
+    {
+      "phase": "phase2_4_ctrl",
+      "vf_count": 20,
+      "vf_execute_time": 3013,
+      "vf_real_execute_time": 1998,
+      "pct_of_rvec_real": 6.4,
+      "pct_of_kernel_ticks": 2.6
+    },
+    {
+      "phase": "phase5_tile",
+      "vf_count": 256,
+      "vf_execute_time": 32327,
+      "vf_real_execute_time": 24733,
+      "pct_of_rvec_real": 79.22,
+      "pct_of_kernel_ticks": 32.16
+    }
+  ],
+  "phase5_vf_templates": [
+    {
+      "push_pc": "0x10d0e0e0",
+      "vf_count": 32,
+      "vf_execute_time_total": 8816,
+      "vf_real_execute_time_total": 7056,
+      "vf_real_per_tile": 220.5
+    },
+    {
+      "push_pc": "0x10d0def4",
+      "vf_count": 32,
+      "vf_execute_time_total": 6592,
+      "vf_real_execute_time_total": 4832,
+      "vf_real_per_tile": 151.0
+    },
+    {
+      "push_pc": "0x10d0decc",
+      "vf_count": 32,
+      "vf_execute_time_total": 3020,
+      "vf_real_execute_time_total": 2957,
+      "vf_real_per_tile": 92.4
+    },
+    {
+      "push_pc": "0x10d0d824",
+      "vf_count": 32,
+      "vf_execute_time_total": 2696,
+      "vf_real_execute_time_total": 2669,
+      "vf_real_per_tile": 83.4
+    },
+    {
+      "push_pc": "0x10d0e08c",
+      "vf_count": 32,
+      "vf_execute_time_total": 3587,
+      "vf_real_execute_time_total": 2387,
+      "vf_real_per_tile": 74.6
+    },
+    {
+      "push_pc": "0x10d0e13c",
+      "vf_count": 32,
+      "vf_execute_time_total": 2528,
+      "vf_real_execute_time_total": 1952,
+      "vf_real_per_tile": 61.0
+    },
+    {
+      "push_pc": "0x10d0d848",
+      "vf_count": 32,
+      "vf_execute_time_total": 3072,
+      "vf_real_execute_time_total": 1440,
+      "vf_real_per_tile": 45.0
+    },
+    {
+      "push_pc": "0x10d0df1c",
+      "vf_count": 32,
+      "vf_execute_time_total": 2016,
+      "vf_real_execute_time_total": 1440,
+      "vf_real_per_tile": 45.0
+    }
+  ],
+  "phase5_gt_cluster_vf_real": 17514,
+  "phase5_eq_cluster_vf_real": 7219,
+  "opprof_dir": "OPPROF_20260520164720_FKQPRTBWPEABGYEA",
+  "notes": [
+    "vf_real_execute_time matches rvec_veccore0_busy_cycle in core0_summary_log",
+    "mte2_busy dominates wall time; phase vf_real is SIMD-only",
+    "draft.cpp: explicit PIPE_V/PIPE_S fences removed after Phase2 TSUB and Phase4 TOR"
+  ]
+}

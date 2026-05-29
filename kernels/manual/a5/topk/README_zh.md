@@ -89,8 +89,10 @@ python3 scripts/gen_data.py --const 0x1234 && cd build && ./topk | grep RESULT
 
 | 文件 | 说明 |
 |------|------|
-| `perf/trace_8k_seed1241200609_veccore0.json` | Chrome trace（`msprof` 时间线） |
-| `perf/phase_perf_8k_seed1241200609.json` | 按 Phase 的 VF / PMU 汇总（JSON） |
+| `perf/trace_8k_seed1241200609_veccore0.json` | Chrome trace — **当前**（`kTileCols=2048`，256 列切片） |
+| `perf/phase_perf_8k_seed1241200609.json` | Phase VF / PMU 汇总 — **当前**（由 `build/` dump 解析） |
+| `perf/trace_*_tile256.json` | 归档 trace — `kTileCols=256`、32 个 GM tile（旧基线） |
+| `perf/phase_perf_*_tile256.json` | 上述 tile256 运行的 Phase 汇总 |
 
 `msprof` 后拷贝 trace 并解析（需 source CANN `set_env.sh` + 仿真器 `LD_LIBRARY_PATH`，见 `run.sh`）：
 

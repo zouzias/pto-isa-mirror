@@ -82,8 +82,10 @@ Dataset: `perf/` (from `msprof op simulator ./topk` on `Ascend950PR_9599`, `core
 
 | Artifact | Description |
 |----------|-------------|
-| `perf/trace_8k_seed1241200609_veccore0.json` | Chrome trace (`msprof` simulator timeline) |
-| `perf/phase_perf_8k_seed1241200609.json` | Phase-level VF / PMU summary (machine-readable) |
+| `perf/trace_8k_seed1241200609_veccore0.json` | Chrome trace — **current** (`kTileCols=2048`, 256-col slices) |
+| `perf/phase_perf_8k_seed1241200609.json` | Phase VF / PMU summary — **current** (parsed from `build/` dumps) |
+| `perf/trace_*_tile256.json` | Archived trace — `kTileCols=256`, 32 GM tiles (May 2026 baseline) |
+| `perf/phase_perf_*_tile256.json` | Archived phase summary for the tile256 run |
 
 Regenerate after `msprof op simulator ./topk` (see `run.sh`; source CANN `set_env.sh` + simulator `LD_LIBRARY_PATH`):
 
