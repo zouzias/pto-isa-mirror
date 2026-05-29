@@ -2,7 +2,7 @@
 
 Device-side code lives in **`draft.cpp`**: a **radix-select TopK** for **16-bit sortable keys**, using **`THISTOGRAM`** (`HistByte::BYTE_1` then filtered `BYTE_0`) and **compare `TGATHER`** (`CmpMode::GT` / `EQ`) to collect indices. This differs from the sort/merge style in `kernels/manual/a2a3/topk`.
 
-The structure matches **`kernels/manual/a5/topk_ub`**: **five `Phase*`** functions; all PTO instructions (`TASSIGN`, `TLOAD`, histogram, `TGATHER`, etc.) live in those phases. This directory uses **tiled `TLOAD`** (N = 8192, 256 columns per tile, 32 tiles); `topk_ub` keeps full keys in UB and does full-width gathers.
+The structure matches **`kernels/manual/a5/topk_ub`**: **five `Phase*`** functions; all PTO instructions (`TASSIGN`, `TLOAD`, histogram, `TGATHER`, etc.) live in those phases. This directory uses **tiled `TLOAD`** (N = 8192, **2048 columns per GM tile**, 4 tiles). Each tile is processed in **256-column slices** for `THISTOGRAM` / `TGATHER` (A5 ST-valid width). `topk_ub` keeps full keys in UB and does full-width gathers.
 
 ## Current case
 
@@ -74,7 +74,7 @@ done
 python3 scripts/gen_data.py --const 0x1234 && cd build && ./topk | grep RESULT
 ```
 
-Expect **`RESULT: PASS`** for all runs (~6–10 min per sim run on 8K; 32 tiles vs 8 at 2K).
+Expect **`RESULT: PASS`** for all runs (~6–10 min per sim run on 8K; 4 tiles of 2048 cols).
 
 ## Performance (8K sim, seed `1241200609`)
 
@@ -85,24 +85,29 @@ Dataset: `perf/` (from `msprof op simulator ./topk` on `Ascend950PR_9599`, `core
 | `perf/trace_8k_seed1241200609_veccore0.json` | Chrome trace (`msprof` simulator timeline) |
 | `perf/phase_perf_8k_seed1241200609.json` | Phase-level VF / PMU summary (machine-readable) |
 
-Regenerate phase JSON after a sim run:
+Regenerate after `msprof op simulator ./topk` (see `run.sh`; source CANN `set_env.sh` + simulator `LD_LIBRARY_PATH`):
 
 ```bash
+cp build/OPPROF_*/simulator/core0.veccore0/trace.json \
+  perf/trace_8k_seed1241200609_veccore0.json
 python3 scripts/parse_phase_perf.py --build-dir build --seed 1241200609 \
+  --opprof-dir build/OPPROF_<latest> \
   -o perf/phase_perf_8k_seed1241200609.json
 ```
+
+Latest dataset: `OPPROF_20260529101806_EXOOUYLTJYJMATAY` (2048 GM tile + 256-col slices).
 
 ### Phase-level summary (`vf_real_execute_time`, cycles)
 
 | Phase | VFs | vf_real | % rvec | Main PTO |
 |-------|----:|--------:|-------:|----------|
-| Phase1 init | 1 | 520 | 1.7% | `TASSIGN` / `TEXPANDS` |
-| Phase1+3 hist (32 tiles ×2) | 64 | 3,969 | 12.7% | `TLOAD` + `THISTOGRAM` |
-| Phase2+4 control | 20 | 1,998 | 6.4% | `TCMPS` / `TSELS` / `TOR` |
-| Phase5 tiled (32×8 VF) | 256 | 24,733 | 79.2% | `TGATHER` / `TCONCAT` / `TSTORE` |
+| Phase1 init | 1 | 520 | 1.5% | `TASSIGN` / `TEXPANDS` |
+| Phase1+3 hist (4×8 slices ×2 passes) | 224 | 14,569 | 42.2% | `TLOAD` + `THISTOGRAM` |
+| Phase2+4 control | 20 | 1,509 | 4.4% | `TCMPS` / `TSELS` / `TOR` |
+| Phase5 (32 slices ×3 templates) | 96 | 17,895 | 51.9% | `TGATHER` / `TCONCAT` / `TSTORE` |
 
-**PMU** (same run): kernel **76,906** ticks; **MTE2 81.2%** busy; **rvec 40.6%**; scalar **6.2%**. Bottleneck is GM `TLOAD` + `wait_flag`, not raw SIMD.
+**PMU** (same run): kernel **87,221** ticks; **MTE2 75.7%** busy (66,005 cyc); **rvec 39.5%** (34,493); scalar **11.0%**. `msprof` wall **48.37 µs** on `core0.veccore0`. Bottleneck remains GM `TLOAD` + `wait_flag`.
 
-**Phase5 hotspots** (per tile `vf_real`): `TGATHER<GT>` ~221 cyc; `TCONCAT` GT ~151 cyc; EQ gather/concat ~45–92 cyc.
+**Phase5 VF templates** (per 256-col slice, `vf_real` per slice): `0x10d0e348` ~221 cyc; `0x10d0e310` ~188 cyc; `0x10d0e084` ~151 cyc (`TGATHER`/`TCONCAT` GT path).
 
 **Sync note:** explicit `PIPE_V`/`PIPE_S` fences after Phase2 `TSUB` and Phase4 `TOR` are removed; 8K sim regression (3 seeds + `--const`) still **PASS**.

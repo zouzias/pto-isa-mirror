@@ -2,7 +2,7 @@
 
 本目录为 **Ascend A5** 上的 TopK 示例工程；**设备侧**写在 **`draft.cpp`**，与 `kernels/manual/a2a3/topk` 的排序归并路线不同。
 
-与 **`kernels/manual/a5/topk_ub`** 对齐：**共五个 `Phase*`**，所有 PTO 指令（含 `TASSIGN` / `TLOAD` 等）只出现在这些 Phase 中。本工程为 **分块从 GM 读入**（N = 8192，每块 256 列，共 32 tile）；`topk_ub` 为 **整段 key 在 UB**、整段比较 `TGATHER`。
+与 **`kernels/manual/a5/topk_ub`** 对齐：**共五个 `Phase*`**，所有 PTO 指令（含 `TASSIGN` / `TLOAD` 等）只出现在这些 Phase 中。本工程为 **分块从 GM 读入**（N = 8192，每块 2048 列，共 4 tile）；`topk_ub` 为 **整段 key 在 UB**、整段比较 `TGATHER`。
 
 ## 当前用例
 
@@ -92,24 +92,29 @@ python3 scripts/gen_data.py --const 0x1234 && cd build && ./topk | grep RESULT
 | `perf/trace_8k_seed1241200609_veccore0.json` | Chrome trace（`msprof` 时间线） |
 | `perf/phase_perf_8k_seed1241200609.json` | 按 Phase 的 VF / PMU 汇总（JSON） |
 
-重新生成 Phase 汇总：
+`msprof` 后拷贝 trace 并解析（需 source CANN `set_env.sh` + 仿真器 `LD_LIBRARY_PATH`，见 `run.sh`）：
 
 ```bash
+cp build/OPPROF_*/simulator/core0.veccore0/trace.json \
+  perf/trace_8k_seed1241200609_veccore0.json
 python3 scripts/parse_phase_perf.py --build-dir build --seed 1241200609 \
+  --opprof-dir build/OPPROF_<latest> \
   -o perf/phase_perf_8k_seed1241200609.json
 ```
+
+当前数据：`OPPROF_20260529101806_EXOOUYLTJYJMATAY`（2048 GM 块 + 256 列切片）。
 
 ### 分 Phase 汇总（`vf_real_execute_time`，单位 cycle）
 
 | Phase | VF 数 | vf_real | 占 rvec | 主要 PTO |
 |-------|------:|--------:|--------:|----------|
-| Phase1 初始化 | 1 | 520 | 1.7% | `TASSIGN` / `TEXPANDS` |
-| Phase1+3 直方图（32 tile×2） | 64 | 3,969 | 12.7% | `TLOAD` + `THISTOGRAM` |
-| Phase2+4 控制 | 20 | 1,998 | 6.4% | `TCMPS` / `TSELS` / `TOR` |
-| Phase5 分块（32×8 VF） | 256 | 24,733 | 79.2% | `TGATHER` / `TCONCAT` / `TSTORE` |
+| Phase1 初始化 | 1 | 520 | 1.5% | `TASSIGN` / `TEXPANDS` |
+| Phase1+3 直方图（4×8 切片×2 遍） | 224 | 14,569 | 42.2% | `TLOAD` + `THISTOGRAM` |
+| Phase2+4 控制 | 20 | 1,509 | 4.4% | `TCMPS` / `TSELS` / `TOR` |
+| Phase5（32 切片×3 模板） | 96 | 17,895 | 51.9% | `TGATHER` / `TCONCAT` / `TSTORE` |
 
-**PMU**：kernel **76,906** tick；**MTE2 约 81%**；**rvec 约 41%**。瓶颈在 GM `TLOAD` 与流水线同步。
+**PMU**：kernel **87,221** tick；**MTE2 约 75.7%**（66,005 cyc）；**rvec 约 39.5%**；`msprof` 墙钟 **48.37 µs**。瓶颈仍在 GM `TLOAD` 与 `wait_flag`。
 
-**Phase5 热点**（每 tile `vf_real`）：`TGATHER<GT>` ~221 cyc；GT `TCONCAT` ~151 cyc。
+**Phase5 热点**（每 256 列切片 `vf_real`）：`0x10d0e348` ~221；`0x10d0e310` ~188；`0x10d0e084` ~151 cyc。
 
 **同步**：Phase2 `TSUB`、Phase4 `TOR` 之后的手写 `PIPE_V`/`PIPE_S` fence 已去掉；8K 仿真 3 seed + `--const` 仍 **PASS**。

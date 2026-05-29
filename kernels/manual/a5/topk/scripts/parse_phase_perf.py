@@ -20,14 +20,12 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
-HIST_PCS = {"0x10d0d158", "0x10d0d17c"}
-INIT_PC = "0x10d0d0bc"
-TILE_VF_COUNT = 32
+CHUNK_COLS = 256
 
 
 def parse_vf(instr_log: Path) -> list[dict]:
     pat = re.compile(
-        r"\[(\d+)\].*?PC: (0x[0-9a-f]+).*?ID: (\d+)\) VF\s*, "
+        r"\[(\d+)\].*?\(PC: (0x[0-9a-f]+)\) PUSHQ.*?ID: (\d+)\) VF\s*, "
         r"vf_execute_time: (\d+), vf_real_execute_time: (\d+)"
     )
     return [
@@ -57,33 +55,49 @@ def parse_summary(summary_log: Path) -> dict:
     return out
 
 
-def classify_pcs(vfs: list[dict], n_tiles: int) -> dict[str, str]:
-    """Map push_pc -> phase label using per-PC VF counts (stable across relinks)."""
+def classify_pcs(vfs: list[dict], n_slices: int) -> dict[str, str]:
+    """Map push_pc -> phase label using per-PC VF counts (relink-stable heuristics)."""
     counts: dict[str, int] = defaultdict(int)
+    real_sum: dict[str, int] = defaultdict(int)
+    min_retire: dict[str, int] = {}
     for v in vfs:
-        counts[v["push_pc"]] += 1
+        pc = v["push_pc"]
+        counts[pc] += 1
+        real_sum[pc] += v["vf_real_execute_time"]
+        min_retire[pc] = min(min_retire.get(pc, v["retire_cycle"]), v["retire_cycle"])
+
+    init_pc = min(min_retire, key=min_retire.get)
     labels: dict[str, str] = {}
     for pc, cnt in counts.items():
-        if pc == INIT_PC and cnt == 1:
+        if pc == init_pc and cnt == 1:
             labels[pc] = "phase1_init"
-        elif pc in HIST_PCS and cnt == n_tiles:
-            labels[pc] = "phase1_3_hist_tile"
-        elif cnt == n_tiles:
-            labels[pc] = "phase5_tile"
+        elif cnt == n_slices:
+            per_tile = real_sum[pc] / cnt
+            # THISTOGRAM slices: ~45–97 vf_real per 256-col chunk; Phase5 TGATHER/TCONCAT: ~150+.
+            labels[pc] = "phase5_tile" if per_tile >= 120 else "phase1_3_hist_tile"
         else:
             labels[pc] = "phase2_4_ctrl"
     return labels
 
 
-def build_report(build_dir: Path, seed: int | None, n: int, topk: int) -> dict:
+def build_report(
+    build_dir: Path,
+    seed: int | None,
+    n: int,
+    topk: int,
+    tile_cols: int = 2048,
+    chunk_cols: int = CHUNK_COLS,
+) -> dict:
     instr = build_dir / "core0.veccore0.instr_log.dump"
     summary = build_dir / "core0_summary_log"
     if not instr.is_file():
         raise FileNotFoundError(instr)
     vfs = parse_vf(instr)
     pmu = parse_summary(summary) if summary.is_file() else {}
-    n_tiles = (n + 256 - 1) // 256
-    pc_labels = classify_pcs(vfs, n_tiles)
+    n_tiles = (n + tile_cols - 1) // tile_cols
+    chunks_per_tile = (tile_cols + chunk_cols - 1) // chunk_cols
+    n_slices = n_tiles * chunks_per_tile
+    pc_labels = classify_pcs(vfs, n_slices)
 
     by_phase: dict[str, dict] = defaultdict(
         lambda: {"vf_count": 0, "vf_execute_time": 0, "vf_real_execute_time": 0}
@@ -144,7 +158,10 @@ def build_report(build_dir: Path, seed: int | None, n: int, topk: int) -> dict:
         "case": {
             "n": n,
             "topk": topk,
-            "tile_cols": 256,
+            "tile_cols": tile_cols,
+            "chunk_cols": chunk_cols,
+            "num_tiles": n_tiles,
+            "num_slices_per_pass": n_slices,
             "seed": seed,
             "soc": "Ascend950PR_9599",
             "core": "core0.veccore0",
@@ -172,12 +189,21 @@ def main() -> None:
     parser.add_argument("--build-dir", type=Path, default=Path("build"))
     parser.add_argument("--seed", type=int, default=1241200609)
     parser.add_argument("--n", type=int, default=8192)
+    parser.add_argument("--tile-cols", type=int, default=2048)
+    parser.add_argument("--chunk-cols", type=int, default=CHUNK_COLS)
     parser.add_argument("--topk", type=int, default=512)
     parser.add_argument("-o", "--output", type=Path, required=True)
     parser.add_argument("--opprof-dir", type=Path, default=None)
     args = parser.parse_args()
 
-    report = build_report(args.build_dir.resolve(), args.seed, args.n, args.topk)
+    report = build_report(
+        args.build_dir.resolve(),
+        args.seed,
+        args.n,
+        args.topk,
+        tile_cols=args.tile_cols,
+        chunk_cols=args.chunk_cols,
+    )
     if args.opprof_dir is not None:
         report["opprof_dir"] = str(args.opprof_dir)
     args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -2,8 +2,8 @@
  * Radix-select TopK (2-byte key) for Ascend A5 with pto-isa.
  *
  * All pto-isa ops (including TASSIGN / TLOAD) live only in five `Phase*` functions — no callees that emit
- * T-instructions. `RunRadixTopKDraft` only constructs tile objects and calls the phases. Tiled 8192 / 256:
- * Phase1/3 stream `TLOAD` + `THISTOGRAM`; Phase5 per-tile `TGATHER` + per-tile six-arg `TCONCAT_IMPL` into `gtSeg`/`eqSeg`.
+ * T-instructions. `RunRadixTopKDraft` only constructs tile objects and calls the phases. Tiled N=8192 / 2048 GM blocks:
+ * Phase1/3 stream `TLOAD`+`THISTOGRAM` in 256-col slices per block; Phase5 per-block `TGATHER` (256-col slices) + `TCONCAT_IMPL`.
  *
  * 1) **Phase1** — TASSIGN, tile `TLOAD` + `THISTOGRAM<BYTE_1>`, cumulative `chistMSB`
  * 2) **Phase2** — `TCMPS`/`TCI`/`TSELS`, raw MSB + `WinnerBinU8` path, `TGATHER`+`TSUB` remainK
@@ -29,7 +29,9 @@ using namespace pto;
 namespace topk_radix_detail {
 
 constexpr int kN = 8192;
-constexpr int kTileCols = 256;
+constexpr int kTileCols = 2048;
+// Per-invocation width for uint16 THISTOGRAM / tiled TGATHER (A5 ST covers up to 256 cols).
+constexpr int kChunkCols = 256;
 constexpr int kBinNum = 256;
 #define PTO_DIV_ROUNDUP(x, y) (((x) + (y)-1) / (y))
 #define PTO_CEIL(x, y) (PTO_DIV_ROUNDUP(x, y) * (y))
@@ -78,7 +80,7 @@ using GatherConcatCountTile = Tile<TileType::Vec, uint32_t, kGatherConcatRows, 1
 
 // --- Five phases: no T-instruction callees below this line. ---
 
-AICORE inline void Phase1_LoadAndHistogramMsb(__gm__ uint16_t *src, InTileU16<kTileCols> &inTile, HistTile &tileHist,
+AICORE inline void Phase1_LoadAndHistogramMsb(__gm__ uint16_t *src, InTileU16<kChunkCols> &inTile, HistTile &tileHist,
                                               HistTile &chistMSB, IdxFilterTile &idxFilter)
 {
     TASSIGN(inTile, 0x00000);
@@ -91,6 +93,7 @@ AICORE inline void Phase1_LoadAndHistogramMsb(__gm__ uint16_t *src, InTileU16<kT
     TEXPANDS(chistMSB, 0u);
 
     constexpr int kLoop = (kN + kTileCols - 1) / kTileCols;
+    bool needWaitMte2 = false;
     for (int i = 0; i < kLoop; ++i) {
         int base = i * kTileCols;
         int valid = (base + kTileCols <= kN) ? kTileCols : (kN - base);
@@ -98,20 +101,24 @@ AICORE inline void Phase1_LoadAndHistogramMsb(__gm__ uint16_t *src, InTileU16<kT
             break;
         }
 
-        if (i != 0) {
-            wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID2);
-        }
-        inTile.SetValidCol(valid);
-        using SrcGlobal = GlobalTensor<uint16_t, pto::Shape<1, 1, 1, 1, kTileCols>,
-                                       pto::Stride<kTileCols, kTileCols, kTileCols, kTileCols, 1>>;
-        SrcGlobal srcGlobal(src + base);
-        TLOAD(inTile, srcGlobal);
-        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        for (int sub = 0; sub < valid; sub += kChunkCols) {
+            int subValid = (sub + kChunkCols <= valid) ? kChunkCols : (valid - sub);
+            if (needWaitMte2) {
+                wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID2);
+            }
+            inTile.SetValidCol(subValid);
+            using SrcGlobal = GlobalTensor<uint16_t, pto::Shape<1, 1, 1, 1, kChunkCols>,
+                                           pto::Stride<kChunkCols, kChunkCols, kChunkCols, kChunkCols, 1>>;
+            SrcGlobal srcGlobal(src + base + sub);
+            TLOAD(inTile, srcGlobal);
+            set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+            wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-        THISTOGRAM<pto::HistByte::BYTE_1>(tileHist, inTile, idxFilter);
-        TADD(chistMSB, chistMSB, tileHist);
-        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID2);
+            THISTOGRAM<pto::HistByte::BYTE_1>(tileHist, inTile, idxFilter);
+            TADD(chistMSB, chistMSB, tileHist);
+            set_flag(PIPE_V, PIPE_MTE2, EVENT_ID2);
+            needWaitMte2 = true;
+        }
     }
 }
 
@@ -253,7 +260,7 @@ AICORE inline void Phase2_WinnerMsbAndRemainK(HistTile &chistMSB, WinnerBinTile 
     }
 }
 
-AICORE inline void Phase3_HistogramLsb(__gm__ uint16_t *src, InTileU16<kTileCols> &inTile, HistTile &tileHist,
+AICORE inline void Phase3_HistogramLsb(__gm__ uint16_t *src, InTileU16<kChunkCols> &inTile, HistTile &tileHist,
                                         HistTile &chistLSB, IdxFilterTile &idxFilter, WinnerBinTile &msbWinnerSaved)
 {
     TASSIGN(inTile, 0x00000);
@@ -279,18 +286,19 @@ AICORE inline void Phase3_HistogramLsb(__gm__ uint16_t *src, InTileU16<kTileCols
             break;
         }
 
-        wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID2);
-        inTile.SetValidCol(valid);
-        using SrcGlobal2 = GlobalTensor<uint16_t, pto::Shape<1, 1, 1, 1, kTileCols>,
-                                        pto::Stride<kTileCols, kTileCols, kTileCols, kTileCols, 1>>;
-        SrcGlobal2 srcGlobal(src + base);
-        TLOAD(inTile, srcGlobal);
-        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        for (int sub = 0; sub < valid; sub += kChunkCols) {
+            int subValid = (sub + kChunkCols <= valid) ? kChunkCols : (valid - sub);
+            wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID2);
+            inTile.SetValidCol(subValid);
+            using SrcGlobal2 = GlobalTensor<uint16_t, pto::Shape<1, 1, 1, 1, kChunkCols>,
+                                            pto::Stride<kChunkCols, kChunkCols, kChunkCols, kChunkCols, 1>>;
+            SrcGlobal2 srcGlobal(src + base + sub);
+            TLOAD(inTile, srcGlobal);
+            set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+            wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-        THISTOGRAM<pto::HistByte::BYTE_0>(tileHist, inTile, idxFilter);
-        TADD(chistLSB, chistLSB, tileHist);
-        if (i + 1 < kLoop) {
+            THISTOGRAM<pto::HistByte::BYTE_0>(tileHist, inTile, idxFilter);
+            TADD(chistLSB, chistLSB, tileHist);
             set_flag(PIPE_V, PIPE_MTE2, EVENT_ID2);
         }
     }
@@ -385,21 +393,23 @@ AICORE inline void Phase5_TgatherGtEqTconcatAndStore(__gm__ uint16_t *src, __gm_
                                                      PackedU16Tile &packedThrU)
 {
     constexpr int kLoop = (kN + kTileCols - 1) / kTileCols;
-    constexpr int cmpVCol = (kTileCols + 7) / 8;
+    constexpr int cmpVCol = (kChunkCols + 7) / 8;
     constexpr int cmpCol = (cmpVCol + 31) / 32 * 32;
-    using GatherSrcTile = GatherSrcI16<kTileCols>;
-    using GatherDstTile = Tile<TileType::Vec, uint32_t, 1, kTileCols, BLayout::RowMajor, -1, -1>;
+    using GatherSrcTile = GatherSrcI16<kChunkCols>;
+    using GatherDstTile = Tile<TileType::Vec, uint32_t, 1, TopK, BLayout::RowMajor, -1, -1>;
     using TmpCmpTile = Tile<TileType::Vec, uint8_t, 1, cmpCol, BLayout::RowMajor, -1, -1>;
     using ConcatTile = GatherConcatCountTile;
-    constexpr uint64_t kGatherTileSrcUbBytes = static_cast<uint64_t>(kTileCols) * sizeof(uint16_t);
-    constexpr uint64_t kGatherTileDstUbBytes = static_cast<uint64_t>(kTileCols) * sizeof(uint32_t);
-    constexpr uint64_t kGatherUbSrcGt = 0x20000;
+    constexpr uint64_t kGatherTileSrcUbBytes = static_cast<uint64_t>(kChunkCols) * sizeof(uint16_t);
+    constexpr uint64_t kGatherTileDstUbBytes = static_cast<uint64_t>(TopK) * sizeof(uint32_t);
+    // Per-tile gather buffers (2048 cols) sit above segment tiles @0x28000; winner scratch ends @0x25000.
+    constexpr uint64_t kGatherUbBase = 0x30000;
+    constexpr uint64_t kGatherUbSrcGt = kGatherUbBase;
     constexpr uint64_t kGatherUbSrcEq = kGatherUbSrcGt + kGatherTileSrcUbBytes;
     constexpr uint64_t kChunkGtDst = kGatherUbSrcEq + kGatherTileSrcUbBytes;
     constexpr uint64_t kChunkEqDst = kChunkGtDst + kGatherTileDstUbBytes;
     constexpr uint64_t kChunkConcatGt = kChunkEqDst + kGatherTileDstUbBytes;
     constexpr uint64_t kChunkConcatEq = kChunkConcatGt + 64u;
-    constexpr uint64_t kGatherUbTmpGt = 0x21880;
+    constexpr uint64_t kGatherUbTmpGt = kChunkConcatEq + 64u;
     constexpr uint64_t kGatherUbTmpEq = kGatherUbTmpGt + static_cast<uint64_t>(cmpCol);
 
     constexpr uint64_t kUbGtSeg = 0x28000;
@@ -459,12 +469,12 @@ AICORE inline void Phase5_TgatherGtEqTconcatAndStore(__gm__ uint16_t *src, __gm_
     idxGtAccBytes[0] = 0u;
     idxEqAccBytes[0] = 0u;
 
-    GatherSrcTile srcG(1, kTileCols);
-    GatherDstTile dstG(1, kTileCols);
+    GatherSrcTile srcG(1, kChunkCols);
+    GatherDstTile dstG(1, TopK);
     ConcatTile concatG(1, 1);
     TmpCmpTile tmpG(1, cmpVCol);
-    GatherSrcTile srcE(1, kTileCols);
-    GatherDstTile dstE(1, kTileCols);
+    GatherSrcTile srcE(1, kChunkCols);
+    GatherDstTile dstE(1, TopK);
     ConcatTile concatE(1, 1);
     TmpCmpTile tmpE(1, cmpVCol);
 
@@ -478,61 +488,83 @@ AICORE inline void Phase5_TgatherGtEqTconcatAndStore(__gm__ uint16_t *src, __gm_
     TASSIGN(tmpE, kGatherUbTmpEq);
 
     srcG.SetValidRow(1);
-    srcG.SetValidCol(kTileCols);
+    srcG.SetValidCol(kChunkCols);
     dstG.SetValidRow(1);
-    dstG.SetValidCol(kTileCols);
+    dstG.SetValidCol(TopK);
     concatG.SetValidRow(1);
     concatG.SetValidCol(1);
     tmpG.SetValidRow(1);
     tmpG.SetValidCol(cmpVCol);
     srcE.SetValidRow(1);
-    srcE.SetValidCol(kTileCols);
+    srcE.SetValidCol(kChunkCols);
     dstE.SetValidRow(1);
-    dstE.SetValidCol(kTileCols);
     concatE.SetValidRow(1);
     concatE.SetValidCol(1);
     tmpE.SetValidRow(1);
     tmpE.SetValidCol(cmpVCol);
     segTmp.SetValidCol(TopK);
 
-    using TileGm = GlobalTensor<int16_t, pto::Shape<1, 1, 1, 1, kTileCols>,
-                                pto::Stride<kTileCols, kTileCols, kTileCols, kTileCols, 1>>;
+    using TileGm = GlobalTensor<int16_t, pto::Shape<1, 1, 1, 1, kChunkCols>,
+                                pto::Stride<kChunkCols, kChunkCols, kChunkCols, kChunkCols, 1>>;
 
+    bool needWaitGt = false;
     for (int i = 0; i < kLoop; ++i) {
-        TileGm ggm(reinterpret_cast<__gm__ int16_t *>(src) + i * kTileCols);
-        if (i > 0) {
-            wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+        int base = i * kTileCols;
+        int valid = (base + kTileCols <= kN) ? kTileCols : (kN - base);
+        if (valid <= 0) {
+            break;
         }
-        TLOAD(srcG, ggm);
-        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-        TGATHER<GatherDstTile, GatherSrcTile, PackedU16Tile, ConcatTile, TmpCmpTile, CmpMode::GT>(
-            dstG, srcG, packedThrU, concatG, tmpG, i * kTileCols);
-        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
-        TCONCAT_IMPL(segTmp, gtSeg, dstG, idxGtOut, idxGtAcc, concatG);
-        TMOV(gtSeg, segTmp);
-        TMOV(idxGtAcc, idxGtOut);
+        for (int sub = 0; sub < valid; sub += kChunkCols) {
+            int subValid = (sub + kChunkCols <= valid) ? kChunkCols : (valid - sub);
+            if (needWaitGt) {
+                wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+            }
+            srcG.SetValidCol(subValid);
+            TileGm ggm(reinterpret_cast<__gm__ int16_t *>(src) + base + sub);
+            TLOAD(srcG, ggm);
+            set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+            wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+            TGATHER<GatherDstTile, GatherSrcTile, PackedU16Tile, ConcatTile, TmpCmpTile, CmpMode::GT>(
+                dstG, srcG, packedThrU, concatG, tmpG, base + sub);
+            TCONCAT_IMPL(segTmp, gtSeg, dstG, idxGtOut, idxGtAcc, concatG);
+            TMOV(gtSeg, segTmp);
+            TMOV(idxGtAcc, idxGtOut);
+            set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+            needWaitGt = true;
+        }
     }
 
     const uint32_t kTopKU = static_cast<uint32_t>(TopK);
     const uint32_t gtCount = idxGtAccBytes[0] / sizeof(uint32_t);
     const uint32_t eqCap = (kTopKU > gtCount) ? (kTopKU - gtCount) : 0u;
     segTmp.SetValidCol(static_cast<int>(eqCap));
+    dstE.SetValidCol(static_cast<int>(eqCap));
 
+    bool needWaitEq = false;
     for (int i = 0; i < kLoop; ++i) {
-        TileGm egm(reinterpret_cast<__gm__ int16_t *>(src) + i * kTileCols);
-        if (i > 0) {
-            wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+        int base = i * kTileCols;
+        int valid = (base + kTileCols <= kN) ? kTileCols : (kN - base);
+        if (valid <= 0) {
+            break;
         }
-        TLOAD(srcE, egm);
-        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-        TGATHER<GatherDstTile, GatherSrcTile, PackedU16Tile, ConcatTile, TmpCmpTile, CmpMode::EQ>(
-            dstE, srcE, packedThrU, concatE, tmpE, i * kTileCols);
-        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
-        TCONCAT_IMPL(segTmp, eqSeg, dstE, idxEqOut, idxEqAcc, concatE);
-        TMOV(eqSeg, segTmp);
-        TMOV(idxEqAcc, idxEqOut);
+        for (int sub = 0; sub < valid; sub += kChunkCols) {
+            int subValid = (sub + kChunkCols <= valid) ? kChunkCols : (valid - sub);
+            if (needWaitEq) {
+                wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+            }
+            srcE.SetValidCol(subValid);
+            TileGm egm(reinterpret_cast<__gm__ int16_t *>(src) + base + sub);
+            TLOAD(srcE, egm);
+            set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+            wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+            TGATHER<GatherDstTile, GatherSrcTile, PackedU16Tile, ConcatTile, TmpCmpTile, CmpMode::EQ>(
+                dstE, srcE, packedThrU, concatE, tmpE, base + sub);
+            TCONCAT_IMPL(segTmp, eqSeg, dstE, idxEqOut, idxEqAcc, concatE);
+            TMOV(eqSeg, segTmp);
+            TMOV(idxEqAcc, idxEqOut);
+            set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+            needWaitEq = true;
+        }
     }
 
     TCONCAT_IMPL(mergedIdx, gtSeg, eqSeg, idxGtAcc, idxEqAcc);
@@ -553,7 +585,7 @@ __global__ AICORE void RunRadixTopKDraft(__gm__ uint16_t *src, __gm__ uint32_t *
     static_assert(TopK > 0, "TopK must be positive.");
     static_assert(TopK <= kN, "TopK cannot exceed N.");
 
-    InTileU16<kTileCols> inTile(1, kTileCols);
+    InTileU16<kChunkCols> inTile(1, kChunkCols);
     HistTile tileHist(1, kBinNum);
     HistTile chistMSB(1, kBinNum);
     HistTile chistLSB(1, kBinNum);

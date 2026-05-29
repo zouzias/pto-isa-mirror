@@ -5,7 +5,7 @@ Cumulative histogram on the high 8 bits (MSB) of uint16 keys from keys.bin.
 C[b] = number of keys with (key >> 8) <= b, for b in 0..255.
 Same convention as tests/npu/a5/.../thistogram/gen_data.py (np.cumsum of bincount).
 
-Optional --split-tiles: same tiling as draft.cpp (kTileCols=256, kLoop = ceil(N/256)),
+Optional --split-tiles: same tiling as draft.cpp (kTileCols=2048, kLoop = ceil(N/2048)),
 run bincount on MSB for each tile only and print each tile's 256-bin counts.
 
 With --split-tiles --cumhist: print each tile's own ascending cumulative histogram
