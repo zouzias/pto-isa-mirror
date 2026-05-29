@@ -1,122 +1,153 @@
 #!/usr/bin/env python3
-# coding=utf-8
-# --------------------------------------------------------------------------------
-# HCA Compressor - generate_cases.py
-#
-# Generates build/generated_cases.h and build/generated_cases.json for the
-# HCA (Heavily Compressed Attention) Compressor kernel harness.
-#
-# Model: DeepSeek-V4-Flash only (d=4096, c=512).
-# Compress ratio is FIXED at 128 (m'=128); seq_len must be a multiple of 128.
-#
-# Usage:
-#   python3 scripts/generate_cases.py                   # default case
-#   python3 scripts/generate_cases.py --cases 1,256     # BATCH,SEQ_LEN
-# --------------------------------------------------------------------------------
+# -*- coding: utf-8 -*-
+"""
+Generate Compressor family case configuration. Mirrors the MoE family
+generator (kernels/automode/a2a3/MoE/scripts/generate_cases.py).
 
+Case format: B,S,DIM,HEAD_DIM,ROPE_DIM,COMPRESS_RATIO,OVERLAP
+  B               batch size                        (ModelArgs.max_batch_size default 4)
+  S               sequence length                   (ModelArgs.max_seq_len default 4096)
+  DIM             model hidden dim                  (ModelArgs.dim default 4096)
+  HEAD_DIM        compressed-cache head dim         (ModelArgs.head_dim default 512)
+  ROPE_DIM        rope sub-dim                      (ModelArgs.rope_head_dim default 64)
+  COMPRESS_RATIO  compression ratio                 (one of ModelArgs.compress_ratios, e.g. 4 or 128)
+  OVERLAP         0/1; auto-true when ratio==4      (Compressor.__init__ in model.py:291)
+
+Output: <Compressor>/build/generated_cases.{h,json}
+"""
 import argparse
 import json
 from pathlib import Path
+from typing import List, Dict
 
-# DeepSeek-V4-Flash model dimensions (fixed)
-_HIDDEN_DIM     = 4096
-_COMPRESS_DIM   = 512
-_COMPRESS_RATIO = 128
-
-DEFAULT_CASE = {
-    "batch":          1,
-    "seq_len":        128,
-    "hidden_dim":     _HIDDEN_DIM,
-    "compress_dim":   _COMPRESS_DIM,
-    "compress_ratio": _COMPRESS_RATIO,
-}
+# Tiny default — keeps prototype debug shape fast. Realistic model shape
+# (1, 128, 4096, 512, 64, 4, 1) is much larger; use --cases to opt in.
+DEFAULT_CASES = [
+    (1, 128, 128, 64, 16, 4, 1),
+]
 
 
-def parse_case(raw: str) -> dict:
-    parts = [p.strip() for p in raw.split(",") if p.strip()]
-    if len(parts) != 2:
-        raise ValueError(f"Expected BATCH,SEQ_LEN, got '{raw}'")
-    batch, seq_len = int(parts[0]), int(parts[1])
-    if batch <= 0 or seq_len <= 0:
-        raise ValueError("BATCH and SEQ_LEN must be positive")
-    if seq_len % _COMPRESS_RATIO != 0:
-        raise ValueError(
-            f"SEQ_LEN must be a multiple of COMPRESS_RATIO={_COMPRESS_RATIO}; "
-            f"got SEQ_LEN={seq_len}"
-        )
-    return {
-        "batch":          batch,
-        "seq_len":        seq_len,
-        "hidden_dim":     _HIDDEN_DIM,
-        "compress_dim":   _COMPRESS_DIM,
-        "compress_ratio": _COMPRESS_RATIO,
-    }
+def _parse_case_entry(raw: str) -> Dict[str, int]:
+    parts = [p.strip() for p in raw.split(',') if p.strip()]
+    if len(parts) != 7:
+        raise ValueError(f"Expected 7 comma-separated values "
+                         f"(B,S,DIM,HEAD_DIM,ROPE_DIM,COMPRESS_RATIO,OVERLAP), got '{raw}'")
+    b, s, dim, head_dim, rope_dim, ratio, overlap = map(int, parts)
+    if min(b, s, dim, head_dim, ratio) <= 0:
+        raise ValueError("B, S, DIM, HEAD_DIM, COMPRESS_RATIO must be positive")
+    if rope_dim < 0 or rope_dim >= head_dim:
+        raise ValueError("ROPE_DIM must be in [0, HEAD_DIM)")
+    if overlap not in (0, 1):
+        raise ValueError("OVERLAP must be 0 or 1")
+    # Per model.py:291 overlap is forced true when ratio == 4
+    if ratio == 4 and overlap == 0:
+        # Warn but allow override for diagnostic runs.
+        print("[WARN] COMPRESS_RATIO=4 with OVERLAP=0 disagrees with model default")
+    return {"b": b, "s": s, "dim": dim, "head_dim": head_dim,
+            "rope_dim": rope_dim, "compress_ratio": ratio, "overlap": overlap}
 
 
-def case_name(case: dict) -> str:
-    return (
-        f"dsv4flash_B{case['batch']}_S{case['seq_len']}"
-        f"_d{case['hidden_dim']}_c{case['compress_dim']}_r{case['compress_ratio']}"
-    )
+def _default_cases() -> List[Dict[str, int]]:
+    return [{"b": b, "s": s, "dim": dim, "head_dim": hd, "rope_dim": rd,
+             "compress_ratio": r, "overlap": o}
+            for (b, s, dim, hd, rd, r, o) in DEFAULT_CASES]
 
 
-def render_header(case: dict) -> str:
+def _case_name(c: Dict[str, int]) -> str:
+    return (f"case_B{c['b']}_S{c['s']}_D{c['dim']}_HD{c['head_dim']}"
+            f"_RD{c['rope_dim']}_R{c['compress_ratio']}_O{c['overlap']}")
+
+
+def _render_macro(cases: List[Dict[str, int]]) -> str:
+    lines = ["#define COMPRESSOR_FOR_EACH_CASE(MACRO) \\"]
+    for idx, c in enumerate(cases):
+        suffix = " \\" if idx + 1 != len(cases) else ""
+        line = (f"    MACRO({c['b']}, {c['s']}, {c['dim']}, {c['head_dim']}, "
+                f"{c['rope_dim']}, {c['compress_ratio']}, {c['overlap']}){suffix}")
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _render_header(cases: List[Dict[str, int]]) -> str:
+    macro_block = _render_macro(cases)
+    array_entries = []
+    for c in cases:
+        coff = 2 if c["overlap"] else 1
+        array_entries.append("    {" + ", ".join([
+            str(c["b"]), str(c["s"]), str(c["dim"]), str(c["head_dim"]),
+            str(c["rope_dim"]), str(c["compress_ratio"]), str(c["overlap"]),
+            str(coff), f'"{_case_name(c)}"',
+        ]) + "}")
+    array_block = ",\n".join(array_entries)
+
     return f"""#pragma once
 // Auto-generated by scripts/generate_cases.py. Do not edit manually.
 // clang-format off
+#include <cstddef>
 
-// DeepSeek-V4-Flash HCA Compressor test case.
-// compress_ratio is always 128; hidden_dim and compress_dim are model-fixed.
+{macro_block}
 
-static constexpr int kHcaBatch          = {case["batch"]};
-static constexpr int kHcaSeqLen         = {case["seq_len"]};
-static constexpr int kHcaHiddenDim      = {case["hidden_dim"]};
-static constexpr int kHcaCompressDim    = {case["compress_dim"]};
-static constexpr int kHcaCompressRatio  = {case["compress_ratio"]};
-static constexpr int kHcaNumBlocks      = kHcaSeqLen / kHcaCompressRatio;
-static constexpr const char *kHcaCaseName = "{case_name(case)}";
+struct GeneratedCompressorCase {{
+    int b;
+    int s;
+    int dim;
+    int head_dim;
+    int rope_dim;
+    int compress_ratio;
+    int overlap;
+    int coff;             // 1 or 2 (= 1 + overlap)
+    const char *name;
+}};
+
+static constexpr GeneratedCompressorCase kGeneratedCompressorCases[] = {{
+{array_block}
+}};
+static constexpr std::size_t kGeneratedCompressorCasesCount =
+    sizeof(kGeneratedCompressorCases) / sizeof(kGeneratedCompressorCases[0]);
+
+// Convenience aliases — leaf binaries compile against the first case.
+static constexpr int kCompB        = kGeneratedCompressorCases[0].b;
+static constexpr int kCompS        = kGeneratedCompressorCases[0].s;
+static constexpr int kCompDim      = kGeneratedCompressorCases[0].dim;
+static constexpr int kCompHeadDim  = kGeneratedCompressorCases[0].head_dim;
+static constexpr int kCompRopeDim  = kGeneratedCompressorCases[0].rope_dim;
+static constexpr int kCompRatio    = kGeneratedCompressorCases[0].compress_ratio;
+static constexpr int kCompOverlap  = kGeneratedCompressorCases[0].overlap;
+static constexpr int kCompCoff     = kGeneratedCompressorCases[0].coff;
+static constexpr const char *kCompCaseName = kGeneratedCompressorCases[0].name;
 
 // clang-format on
 """
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Generate HCA Compressor case header/JSON (DeepSeek-V4-Flash config)"
-    )
-    parser.add_argument(
-        "--cases",
-        default=None,
-        help="Single case: BATCH,SEQ_LEN  (SEQ_LEN must be a multiple of 128)",
-    )
-    parser.add_argument(
-        "--output-header",
-        default=str(
-            Path(__file__).resolve().parent.parent / "build" / "generated_cases.h"
-        ),
-    )
-    parser.add_argument(
-        "--output-json",
-        default=str(
-            Path(__file__).resolve().parent.parent / "build" / "generated_cases.json"
-        ),
-    )
+    parser = argparse.ArgumentParser(description="Generate Compressor family case header/JSON")
+    parser.add_argument("--cases", action="append", default=None,
+                        help="Case entry: B,S,DIM,HEAD_DIM,ROPE_DIM,COMPRESS_RATIO,OVERLAP")
+    parser.add_argument("--output-header",
+                        default=str((Path(__file__).resolve().parent.parent / "build" / "generated_cases.h")))
+    parser.add_argument("--output-json",
+                        default=str((Path(__file__).resolve().parent.parent / "build" / "generated_cases.json")))
     args = parser.parse_args()
 
-    case = parse_case(args.cases) if args.cases else dict(DEFAULT_CASE)
-    payload = {"name": case_name(case), **case}
+    if args.cases:
+        cases = [_parse_case_entry(entry) for entry in args.cases]
+    else:
+        cases = _default_cases()
 
     header_path = Path(args.output_header)
     header_path.parent.mkdir(parents=True, exist_ok=True)
-    header_path.write_text(render_header(case), encoding="utf-8")
+    header_path.write_text(_render_header(cases))
 
+    json_payload = [{"name": _case_name(c), **c, "coff": 2 if c["overlap"] else 1} for c in cases]
     json_path = Path(args.output_json)
     json_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(json.dumps([payload], indent=2), encoding="utf-8")
+    json_path.write_text(json.dumps(json_payload, indent=2))
 
     print(f"[INFO] Wrote {header_path}")
     print(f"[INFO] Wrote {json_path}")
-    print(f"[INFO] Case: {payload}")
+    for c in json_payload:
+        print(f"  - {c['name']}")
 
 
 if __name__ == "__main__":

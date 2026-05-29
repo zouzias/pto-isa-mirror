@@ -1,0 +1,131 @@
+# gate_logits — DeepSeek-V4 router GEMM (FP32)
+
+Auto-mode A3 **cube** kernel that produces the routed-expert logits at the
+entry of `Gate.forward`
+([deepseek/model.py:566](../../../../../deepseek/model.py)):
+
+```python
+scores = linear(x.float(), self.weight.float())
+# X: [T, DIM] float32,   W_gate: [N_ROUTED, DIM] float32
+# scores: [T, N_ROUTED] float32
+```
+
+This is the very first op in `Gate.forward`. Downstream:
+`gate_softmax → gate_score_topk` or `gate_softmax → gate_hash_routing`.
+
+> **Caveat — FP32 cube path.** The top-level
+> [MoE/router_matmul/](../../../MoE/router_matmul/) uses **FP16 inputs** with
+> an FP32 accumulator. DeepSeek-V4's `Gate.forward` explicitly casts to
+> `float()` for numerical stability (model.py:566). Auto-mode FP32 cube on
+> A3 may be slower or less mature than BF16/FP16 cube — verify with the
+> compiler team before committing to this dtype contract.
+
+## Reference (CUDA / TileLang)
+
+There is no dedicated TileLang kernel for the router; it goes through the
+generic `linear` dispatch in `deepseek/kernel.py` (model.py:109). The
+DeepSeek-V4 checkpoint stores `Gate.weight` as FP32 (model.py:558), and the
+input is force-cast to FP32 at the call site (model.py:566).
+
+## I/O
+
+| Name | Shape | dtype | Source line |
+|------|-------|-------|-------------|
+| `X` | `(T, DIM)` | FP32 | model.py:566 (`x.float()`) |
+| `W_gate` | `(N_ROUTED, DIM)` | FP32 | model.py:558, model.py:566 (`self.weight.float()`) |
+| `scores` | `(T, N_ROUTED)` | FP32 | model.py:566 |
+
+Shape constants (from `../build/generated_cases.h`):
+`kDsmoeT, kDsmoeDim, kDsmoeNRouted`.
+
+## Memory-budget-first plan
+
+Per [CLAUDE.md §Memory-budget-first kernel planning](../../../../../CLAUDE.md):
+
+```text
+Memory budgets:
+- L1 custom budget:    FP32 X panel + FP32 W panel + slack  (target ≤ 256 KB)
+- L0A custom budget:   one FP32 A fractal-tile [kTileT, kTileK]  (cube)
+- L0B custom budget:   one FP32 B fractal-tile [kTileE, kTileK]  (cube)
+- L0C custom budget:   one FP32 C fractal-tile [kTileT, kTileE]  (cube accumulator)
+- UB custom budget:    one FP32 C tile staged for write-back
+
+Live tiles by memory level:
+- L1:  Xtile (FP32, T_l1 × K_l1), Wtile (FP32, N_l1 × K_l1)
+- L0A: XTile (FP32, kTileT × kTileK fractal)
+- L0B: WTile (FP32, kTileE × kTileK fractal)
+- L0C: CTile (FP32, kTileT × kTileE fractal accumulator)
+- UB:  CTile_fp32 staged for GM write
+
+Smallest hardware operation:
+- cube operation shape: 16×16×16 fractal MMA (FP32 × FP32 → FP32)
+  Assumption: A3 cube supports FP32×FP32 fractal MMA. If not, the leaf
+  must fall back to BF16 inputs (with on-the-fly down-cast in scatter or
+  upstream) — see Risks below.
+- vector operation shape: N/A (no vector ops in this leaf)
+
+Loop tiling plan:
+- tile-and-loop dimensions: T tiled by kTileT=64, N_ROUTED reduced by
+  kTileE=8 (often a single tile since N_ROUTED=8), K tiled by kTileK=64
+- inferred tile sizes: kTileT=64, kTileE=8, kTileK=64
+  (Assumption — FP32 takes 2× the L0 bytes of BF16, so tiles shrink
+  relative to MoE/router_matmul.)
+- compile-time unroll/peel strategy: none for prototype (single AICORE)
+- tail handling only where needed: last T tile may shrink to remainder
+  when T % kTileT != 0; N_ROUTED tail when not divisible by kTileE
+
+Test-shape plan:
+- tiny debug shape:        T=64,  DIM=128,  N_ROUTED=8      (tiny default)
+- medium tiling shape:     T=128, DIM=512,  N_ROUTED=8      (multi-K-tile)
+- model-inspired realistic: T=256, DIM=4096, N_ROUTED=8      (full ModelArgs)
+- tail shape:              T=137, DIM=128,  N_ROUTED=8      (forces T tail)
+```
+
+## Auto-mode constraints
+
+- A3 only; cube path: `--cce-aicore-arch=dav-c220-cube`.
+- Single AICORE. No `block_idx` work split.
+- No `TASSIGN`, `TPipe`, `TPUSH`/`TPOP`, no raw `set_flag`/`wait_flag`,
+  no `Tile::data()` pointer casts.
+- Reason in 16×16 fractals in L0A/L0B/L0C; **do not** treat tiles as flat
+  row-major matrices.
+- Mirror the bMatTile-reload pattern from
+  [MoE/router_matmul/](../../../MoE/router_matmul/) — W is shared across
+  the T loop.
+
+## Risks (`Assumption` / `Unknown`)
+
+- `Assumption`: A3 cube supports FP32 × FP32 → FP32 MMA. The
+  `--cce-aicore-arch=dav-c220-cube` toolchain advertises a BF16/FP16 path
+  for `MoE/router_matmul`; an FP32 cube path is plausible but unverified
+  here. If unsupported, two fallbacks:
+  1. Downcast `X` and `W_gate` to BF16 in `gen_data.py` and pre-process,
+     accepting the precision drop the model deliberately avoids; or
+  2. Run gate_logits on the vector path (FP32 MAC over the small
+     `N_ROUTED=8` dimension), which may actually be cheap given the
+     narrow N.
+- `Unknown`: realistic shape sized at `T=256, DIM=4096, N_ROUTED=8`.
+  N_ROUTED=8 is a single fractal column tile width; this may degrade
+  cube utilization vs the top-level `MoE/router_matmul` (which sizes
+  `kE` in the tens or hundreds).
+
+## Build & run
+
+```bash
+bash run.sh -r npu -v Ascend910B1
+```
+
+The family case manifest at `../build/generated_cases.{h,json}` is
+regenerated by `../scripts/generate_cases.py` before each per-leaf build.
+
+## Comparison policy
+
+- Tolerance-based: relative ≤ `1e-3`, absolute ≤ `1e-4` on FP32 output
+  (FP32 × FP32 GEMM — small ULP drift expected vs numpy reference, but
+  no BF16 rounding loss).
+
+## Status
+
+`Unknown` whether this builds — kernel body is a pseudocode skeleton, not a
+real implementation. **No claim of compile / run success** until user runs
+`run.sh` on the compiler server and reports the output.
