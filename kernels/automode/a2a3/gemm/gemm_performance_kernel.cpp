@@ -58,7 +58,7 @@ AICORE inline void StoreResult(ResTile &cTile, __gm__ T *currentDst, uint32_t i,
     using GlobalDataOut = GlobalTensor<T, NDValidShapeC, NDWholeShapeC, Layout::ND>;
 
     GlobalDataOut dstGlobal(currentDst + i * baseM * n + j * baseN);
-    TSTORE(dstGlobal, cTile);
+    TSTORE<STPhase::Final>(dstGlobal, cTile);
 }
 
 template <typename T, typename U, typename S, typename B, uint32_t blockDim, int m, int k, int n, int validM,
@@ -117,16 +117,22 @@ AICORE inline void RunGemmE2E(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
                 inner_db.loop<Range<stepKa>>([&](auto inner_ctx) {
                     LeftTile aTile;
                     RightTile bTile;
-                    TEXTRACT(aTile, aMatTile, 0, (outer_iter % stepKa) * baseK);
-                    TEXTRACT(bTile, bMatTile, (outer_iter % stepKb) * baseK, 0);
                     int inner_iter = inner_ctx.iter;
                     int inner_buf = inner_ctx.bufferId;
+                    int general_iter = outer_iter * stepKa + inner_iter;
                     bool first = inner_iter == 0 && inner_buf == 0 && outer_iter == 0 && outer_buf == 0;
+                    bool last = inner_iter == stepKa - 1 && outer_iter == NumIters - 1 && inner_buf == BUFFER_NUM - 1 &&
+                                outer_buf == BUFFER_NUM - 1;
+
+                    TEXTRACT(aTile, aMatTile, 0, (general_iter % stepKa) * baseK);
+                    TEXTRACT(bTile, bMatTile, (general_iter % stepKb) * baseK, 0);
 
                     if (first) {
-                        TMATMUL(cTile, aTile, bTile);
-                    } else {
-                        TMATMUL_ACC(cTile, cTile, aTile, bTile);
+                        TMATMUL<AccPhase::Partial>(cTile, aTile, bTile);
+                    } else if (last){
+                        TMATMUL_ACC<AccPhase::Final>(cTile, cTile, aTile, bTile);
+                    }else {
+                        TMATMUL_ACC<AccPhase::Partial>(cTile, cTile, aTile, bTile);
                     }
                 });
             });
