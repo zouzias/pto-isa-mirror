@@ -17,6 +17,7 @@ Softmax/pv tiling follows TILE_S1 (default 256).
 """
 import argparse
 import json
+import copy
 import os
 import shutil
 from pathlib import Path
