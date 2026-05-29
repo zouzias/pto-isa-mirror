@@ -401,8 +401,8 @@ PTO_INTERNAL void GenCastCallFp16ToInt16_NonSatTorch(__ubuf__ typename TileDataD
         __ubuf__ int16_t *rowDst = dst + static_cast<uint32_t>(r) * dstRepeatStride * int16ElemsPerBlock;
 
         for (uint16_t c = 0; c < numSubChunks; c++) {
-            __ubuf__ half *chunkSrc = rowSrc + static_cast<uint32_t>(c) * maxChunkElems;
             __ubuf__ int16_t *chunkDst = rowDst + static_cast<uint32_t>(c) * maxChunkElems;
+            __ubuf__ half *chunkSrc = rowSrc + static_cast<uint32_t>(c) * maxChunkElems;
             const uint16_t chunkMask = (c + 1 == numSubChunks) ? lastChunkMask : maxChunkElems;
 
             SetContinuousMask(chunkMask);
