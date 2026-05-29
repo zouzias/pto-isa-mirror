@@ -38,14 +38,23 @@ Runtime:
   --rank-from-mpi 0|1    default 1; MPI rank is the default rankId source
   --rank N               debug override; use with --rank-from-mpi 0
   --case-name NAME       label only: small, balanced, skewed, zero-token
+  --backend NAME         m1-mock (default) or int8
   --seed N
   --data-dir DIR
   --timeline 0|1
   --debug 0|1
   --dry-run 0|1
   --skip-kernel-launch 0|1
+  --dispatch-metadata-only 0|1
+  --dispatch-only 0|1
+  --gmm1-only 0|1
+  --gmm1-epilogue-only 0|1
+  --activation-only 0|1
+  --gmm2-only 0|1
+  --combine-return-only 0|1
   --hccl-buffsize-mb N
   --m1-suite 0|1       build once, then run explicit M1 real dispatch/combine cases with mock GMM payload
+  --m2-suite 0|1       build once, then run explicit M2 int8 full-chain cases
 
 Build:
   --skip-run 0|1
@@ -94,6 +103,7 @@ NDEVICES=8
 RANK_FROM_MPI=1
 RANK=""
 CASE_NAME=small
+BACKEND=m1-mock
 SEED=1234
 DATA_DIR="${PROJECT_DIR}/out"
 TIMELINE=0
@@ -106,6 +116,14 @@ SKIP_BUILD=0
 CLEAN_BUILD=1
 MPI_BIN=""
 M1_SUITE=0
+M2_SUITE=0
+DISPATCH_METADATA_ONLY=0
+DISPATCH_ONLY=0
+GMM1_ONLY=0
+GMM1_EPILOGUE_ONLY=0
+ACTIVATION_ONLY=0
+GMM2_ONLY=0
+COMBINE_RETURN_ONLY=0
 
 align_up() {
     local value=$1
@@ -134,14 +152,23 @@ while [[ $# -gt 0 ]]; do
         --rank-from-mpi) RANK_FROM_MPI="$2"; shift 2 ;;
         --rank) RANK="$2"; shift 2 ;;
         --case-name) CASE_NAME="$2"; shift 2 ;;
+        --backend) BACKEND="$2"; shift 2 ;;
         --seed) SEED="$2"; shift 2 ;;
         --data-dir) DATA_DIR="$2"; shift 2 ;;
         --timeline) TIMELINE="$2"; shift 2 ;;
         --debug) DEBUG="$2"; shift 2 ;;
         --dry-run) DRY_RUN="$2"; shift 2 ;;
         --skip-kernel-launch) SKIP_KERNEL_LAUNCH="$2"; shift 2 ;;
+        --dispatch-metadata-only) DISPATCH_METADATA_ONLY="$2"; shift 2 ;;
+        --dispatch-only) DISPATCH_ONLY="$2"; shift 2 ;;
+        --gmm1-only) GMM1_ONLY="$2"; shift 2 ;;
+        --gmm1-epilogue-only) GMM1_EPILOGUE_ONLY="$2"; shift 2 ;;
+        --activation-only) ACTIVATION_ONLY="$2"; shift 2 ;;
+        --gmm2-only) GMM2_ONLY="$2"; shift 2 ;;
+        --combine-return-only) COMBINE_RETURN_ONLY="$2"; shift 2 ;;
         --hccl-buffsize-mb) HCCL_BUFFSIZE_MB="$2"; shift 2 ;;
         --m1-suite) M1_SUITE="$2"; shift 2 ;;
+        --m2-suite) M2_SUITE="$2"; shift 2 ;;
         --skip-run) SKIP_RUN="$2"; shift 2 ;;
         --skip-build) SKIP_BUILD="$2"; shift 2 ;;
         --clean-build) CLEAN_BUILD="$2"; shift 2 ;;
@@ -174,6 +201,10 @@ if [ $(( DEVICE_BASE + PES )) -gt "${NDEVICES}" ]; then
 fi
 if [ "${HIDDEN_SIZE}" -le 0 ] || [ "${INTERMEDIATE_SIZE}" -le 0 ] || [ "${PAYLOAD_TILE_COLS}" -le 0 ]; then
     echo "[ERROR] hidden/intermediate/payload tile sizes must be nonzero"
+    exit 1
+fi
+if [ "${BACKEND}" != "m1-mock" ] && [ "${BACKEND}" != "int8" ]; then
+    echo "[ERROR] --backend must be m1-mock or int8"
     exit 1
 fi
 if [ $(( HIDDEN_SIZE % PAYLOAD_TILE_COLS )) -ne 0 ]; then
@@ -240,10 +271,11 @@ fi
 rm -rf /dev/shm/sem.hccl* 2>/dev/null || true
 ipcrm -a 2>/dev/null || true
 
-echo "=== moe_dispatch_combine_a8w8 M1 real dispatch/combine, mock GMM ==="
+echo "=== moe_dispatch_combine_a8w8 fused dispatch/combine runtime ==="
 echo "RUN_MODE=${RUN_MODE} SOC_VERSION=${SOC_VERSION}"
 echo "PES=${PES} DEVICE_BASE=${DEVICE_BASE} NDEVICES=${NDEVICES}"
 echo "M=${M} HIDDEN_SIZE=${HIDDEN_SIZE} INTERMEDIATE_SIZE=${INTERMEDIATE_SIZE} TOPK=${TOPK} EXPERT_PER_PE=${EXPERT_PER_PE}"
+echo "BACKEND=${BACKEND}"
 echo "MAX_TOKENS_PER_EXPERT=${MAX_TOKENS_PER_EXPERT} PAYLOAD_TILE_COLS=${PAYLOAD_TILE_COLS}"
 echo "GMM_BLOCK_M=${GMM_BLOCK_M} GMM_BLOCK_N=${GMM_BLOCK_N} GMM_BLOCK_K=${GMM_BLOCK_K}"
 echo "rank_source=$([ "${RANK_FROM_MPI}" = "1" ] && echo mpi || echo manual)"
@@ -288,6 +320,23 @@ if [ "${M1_SUITE}" = "1" ]; then
     exit 0
 fi
 
+if [ "${M2_SUITE}" = "1" ]; then
+    echo "=== Running M2 int8 full-chain suite ==="
+    bash "${SCRIPT_PATH}" --m2-suite 0 --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 \
+        --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
+        --case-name small -pes 1 -M 8 -K 64 -N 32 -topK 1 -expertPerPe 1 --max-tokens-per-expert 8
+    bash "${SCRIPT_PATH}" --m2-suite 0 --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 \
+        --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
+        --case-name balanced -pes 2 -M 16 -K 64 -N 32 -topK 2 -expertPerPe 2 --max-tokens-per-expert 32
+    bash "${SCRIPT_PATH}" --m2-suite 0 --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 \
+        --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
+        --case-name skewed -pes 2 -M 16 -K 64 -N 32 -topK 2 -expertPerPe 2 --max-tokens-per-expert 32
+    bash "${SCRIPT_PATH}" --m2-suite 0 --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 \
+        --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
+        --case-name zero-token -pes 2 -M 16 -K 64 -N 32 -topK 2 -expertPerPe 2 --max-tokens-per-expert 32
+    exit 0
+fi
+
 HOST_ARGS=(
     --run-mode "${RUN_MODE}"
     --soc-version "${SOC_VERSION}"
@@ -306,12 +355,20 @@ HOST_ARGS=(
     --ndevices "${NDEVICES}"
     --rank-from-mpi "${RANK_FROM_MPI}"
     --case-name "${CASE_NAME}"
+    --backend "${BACKEND}"
     --seed "${SEED}"
     --data-dir "${DATA_DIR}"
     --timeline "${TIMELINE}"
     --debug "${DEBUG}"
     --dry-run "${DRY_RUN}"
     --skip-kernel-launch "${SKIP_KERNEL_LAUNCH}"
+    --dispatch-metadata-only "${DISPATCH_METADATA_ONLY}"
+    --dispatch-only "${DISPATCH_ONLY}"
+    --gmm1-only "${GMM1_ONLY}"
+    --gmm1-epilogue-only "${GMM1_EPILOGUE_ONLY}"
+    --activation-only "${ACTIVATION_ONLY}"
+    --gmm2-only "${GMM2_ONLY}"
+    --combine-return-only "${COMBINE_RETURN_ONLY}"
     --hccl-buffsize-mb "${HCCL_BUFFSIZE_MB}"
 )
 if [ -n "${RANK}" ]; then

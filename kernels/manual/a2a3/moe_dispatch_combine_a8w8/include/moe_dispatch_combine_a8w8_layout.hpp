@@ -58,6 +58,17 @@ inline uint64_t GlobalExpertNum(const ShapeConfig &shape)
     return CheckedMul(shape.rankNum, shape.expertPerRank, "global expert num");
 }
 
+inline uint64_t TokenPerExpertMatrixRowStride(const ShapeConfig &shape)
+{
+    constexpr uint64_t kI32PerCacheLine = kCacheLineBytes / sizeof(int32_t);
+    return AlignUp(GlobalExpertNum(shape), kI32PerCacheLine);
+}
+
+inline uint64_t TokenPerExpertMatrixStorageElements(const ShapeConfig &shape)
+{
+    return CheckedMul(shape.rankNum, TokenPerExpertMatrixRowStride(shape), "token matrix storage elems");
+}
+
 inline uint64_t DTypeBytes(uint32_t dtype)
 {
     if (dtype == static_cast<uint32_t>(DType::kInt8)) {
@@ -94,8 +105,7 @@ inline WorkspaceLayout MakeWorkspaceLayout(const ShapeConfig &shape)
     uint64_t expandedRows = ExpandedRows(shape);
     uint64_t localRows = LocalExpertRows(shape);
     uint64_t globalExpertNum = GlobalExpertNum(shape);
-    uint64_t matrixCount = CheckedMul(CheckedMul(shape.rankNum, shape.rankNum, "rank matrix"), shape.expertPerRank,
-                                      "tokenPerExpertMatrix elems");
+    uint64_t matrixCount = TokenPerExpertMatrixStorageElements(shape);
     uint64_t rankExpertCount = CheckedMul(shape.rankNum, shape.expertPerRank, "rank expert elems");
     uint64_t dispatchRowBytes = DispatchPayloadRowBytes(shape);
     uint64_t returnRowBytes = ReturnPayloadRowBytes(shape);
@@ -116,6 +126,7 @@ inline WorkspaceLayout MakeWorkspaceLayout(const ShapeConfig &shape)
     layout.dispatchedA = AppendField(&offset, CheckedMul(expandedRows, returnRowBytes, "dispatchedA"));
     layout.dispatchedScale = AppendField(&offset, CheckedMul(expandedRows, sizeof(float), "dispatchedScale"));
     layout.gmm1InputInt8 = AppendField(&offset, CheckedMul(localRows, dispatchRowBytes, "gmm1InputInt8"));
+    layout.routingPerTokenScale = AppendField(&offset, CheckedMul(localRows, sizeof(float), "routing scale"));
     layout.gmm1WeightInt8 =
         AppendField(&offset, CheckedMul(CheckedMul(globalExpertNum, shape.hiddenSize, "w1 hidden"), w1Cols, "w1"));
     layout.scale1Uint64 = AppendField(&offset, CheckedMul(w1Cols, sizeof(uint64_t), "scale1"));
@@ -163,8 +174,7 @@ inline PeerWindowLayout MakePeerWindowLayout(const ShapeConfig &shape)
     PeerWindowLayout layout;
     uint64_t offset = 0;
     uint64_t expandedRows = ExpandedRows(shape);
-    uint64_t matrixCount = CheckedMul(CheckedMul(shape.rankNum, shape.rankNum, "rank matrix"), shape.expertPerRank,
-                                      "peer token matrix elems");
+    uint64_t matrixCount = TokenPerExpertMatrixStorageElements(shape);
     layout.dispatchPayloadRowBytes = DispatchPayloadRowBytes(shape);
     layout.returnPayloadRowBytes = ReturnPayloadRowBytes(shape);
     layout.header = AppendField(&offset, kPeerWindowHeaderBytes);

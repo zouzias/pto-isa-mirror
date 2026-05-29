@@ -210,6 +210,23 @@ MegaMoE 文章事实依据：
    使用 M2.1/M2.8 固定的 dtype tolerance。最大误差、首个错误位置和相关 scale dump 由控制台结构化输出承载；
    task report 只写 pass/fail、tolerance 和关键误差摘要。
 
+M2.8 当前集成回归的固定口径：
+
+- 当前 A3 int8 主路径固定 `dtype_in=fp16`、`dtype_out=fp16`、`w1/w2=int8`、`scale1/scale2` 为
+  `uint64_lower32_float_bits` dequant scale view，默认 acceptance tolerance 为 `atol=1e-2, rtol=1e-2`。
+- 完整链路必须按
+  `RoutePackQuantLocal -> GatherDispatchToGmm1Input -> GMM1 -> ActivationQuant -> GMM2 -> RunGmm2EpilogueAndReturn -> RestoreOutput`
+  执行；`RoutePackQuantLocal` 直接写 peer-visible int8 payload 和 routing scale，
+  `GatherDispatchToGmm1Input` 直接形成 `gmm1InputInt8`，不走 `workspace.dispatchedA` 二次 reorder。
+- GMM1/GMM2 的 int32 accumulator checksum 必须精确对齐 host reference；GMM1 scale/dequant、
+  SwiGLU/requant、GMM2 scale/dequant+cast、return payload 和 final output 使用上述 dtype tolerance。
+- Combine 合并点固定在 `RunGmm2EpilogueAndReturn`：同一 stage 内完成 `scale2 * gmm2PerTokenScale`、FP16 cast
+  和 token-owner `offsetD/returnPayload` 写回；`gmm2Out` 仅为该 stage 内的 debug/staging mirror。
+- M2 final correctness report 必须同时出现 `dispatch_merge=true`、`combine_merge=true`、
+  `soft_sync_ledger=true`、`swiglu_sync_groups=true`、`tile_split_return_map=true` 和 `restore_from_offsetD=true`。
+  M2 使用 `overlap_mode=off`，E2E perf report 仍按固定 `warmup_iters=3`、`measure_iters=5` 输出
+  `samples/avg/min/max/stddev`；M3 才验证或启用 async overlap。
+
 ## 3. 约束
 
 本章定义当前任务池的实现边界和硬约束。实现如果需要越过这些边界，必须按 `TASKS.md` 的
@@ -335,13 +352,18 @@ moe_dispatch_combine_a8w8/
     main.cpp
     args.hpp
     reference.hpp
+    comm_mpi.hpp
+    hccl_context.hpp
     workspace_layout.hpp
     hccl_window.hpp
   include/
+    moe_dispatch_combine_a8w8_runtime_types.hpp
+    moe_dispatch_combine_a8w8_m1_layout.hpp
     moe_dispatch_combine_a8w8_types.hpp
     moe_dispatch_combine_a8w8_layout.hpp
   kernel/
     moe_dispatch_combine_a8w8_kernel.cpp
+    kernel_launchers.hpp
     protocol_core.hpp
     a3_int8_backend.hpp
     control_metadata.hpp
@@ -582,6 +604,8 @@ localExpert:
 ```text
 tokenPerExpertMatrix[tokenOwnerRank][expertOwnerRank][localExpert]
   tokenOwnerRank 有多少 token 要发给 expertOwnerRank.localExpert。
+  语义维度是 rankNum * rankNum * expertPerRank；A3 PTO count-row TPUT 的物理 layout 按
+  AlignUp(rankNum * expertPerRank, 16) 个 int32 作为 tokenOwner row stride，padding 元素必须保持 0。
 
 cumsumMM[tokenOwnerRankPrefix][localExpert]
   对当前 expertOwnerRank，沿 tokenOwnerRank 维度做 cumulative sum。
@@ -823,7 +847,8 @@ PeerWindow
     dispatchPayloadRowBytes
     returnPayloadRowBytes
   routingMetadata
-    int32 tokenPerExpert[rankNum][rankNum][expertPerRank]
+    int32 tokenPerExpert[rankNum][AlignUp(rankNum * expertPerRank, 16)]
+      valid view remains tokenPerExpert[tokenOwnerRank][expertOwnerRank][localExpert]
     cache-line aligned countReadySignal[rankNum]
   dispatchPayload
     int8 hidden payload produced by this token owner rank and read remotely by expert owner ranks
@@ -1222,7 +1247,7 @@ state、owner、report、Issue Log 和 Design Change Log；领取任务后必须
 | --- | --- | --- |
 | M0 | 工程骨架、脚本、layout、host smoke。从 `gemm_ar` 裁剪 CMake/run.sh/main.cpp，不从空目录手写。 | M0.1-M0.6 全部 accepted；dry-run/smoke 路径可用；依赖扫描无禁用接口、build helper 或 fallback。 |
 | M1 | PTO dispatch/combine protocol 闭环。只能把中间 `GMM1 -> SwiGLU/Quant -> GMM2` 专家计算整体 mock；routing、count、prefix、dispatch `TGET`、combine `TPUT`、signal、restore 必须真实落到 device path。 | M1.0-M1.11 全部 accepted；2 卡 NPU/mpirun 实跑通过；metadata、row order、signal、restore 正确；mock 只替代 expert compute。dry-run/reference-only 不能关闭 M1。 |
-| M2 | A3 int8_int8 全路径功能，并前置 MegaMoE 必需数据布局：dispatch 融合、GMM1 contiguous input、GMM2 epilogue+combine return、soft-sync ledger、Swiglu sync-group metadata、tile-split return map。 | M2.1-M2.8 全部 accepted；dispatch/activation/combine 合并点、soft-sync ledger、`swigluSyncGroups/dequantSum` 和 tile-split return map 已在最终布局中验收；accumulator 精确对齐，epilogue/final output 按 tolerance 对齐；M3 不需要重写 row/order/layout/stage graph。 |
+| M2 | A3 int8_int8 全路径功能，并前置 MegaMoE 必需数据布局：dispatch 融合、GMM1 contiguous input、GMM2 epilogue+combine return、soft-sync ledger、Swiglu sync-group metadata、tile-split return map。 | M2.0-M2.8 全部 accepted；active runtime 已归一到 `host/`、`kernel/`、`include/`，dispatch/activation/combine 合并点、soft-sync ledger、`swigluSyncGroups/dequantSum` 和 tile-split return map 已在最终布局中验收；accumulator 精确对齐，epilogue/final output 按 tolerance 对齐；M3 不需要重写 row/order/layout/stage graph。 |
 | M3 | 在 M2 已固定的依赖边上打开或验证 runtime overlap、scoreboard、Sub-Tile remote write 和 timeline。 | M3.0-M3.9 accepted 或明确 primitive-gap blocked；timeline/counter 能解释 overlap、等待空泡或阻断原因。 |
 | M4 | 最终 PTO 化回归与文档状态收口。 | M4.1-M4.2 全部 accepted；状态、report、设计一致，无 open `needs_user_decision`。 |
 
@@ -1249,6 +1274,7 @@ state、owner、report、Issue Log 和 Design Change Log；领取任务后必须
 | M1.9 | 实现 `RunGmm2EpilogueAndReturn` 的真实 `TPUT` return 形态，expert owner 把 mock expert output 远端写回 return payload。 |
 | M1.10 | 实现 `RestoreOutput`，按 `expandedRowIdx + probs` 加权恢复。 |
 | M1.11 | M1 四类 case 集成回归，输出 correctness/perf 控制台摘要。 |
+| M2.0 | 锁定 M2 active implementation baseline、路径迁移和 primitive/arch preflight。 |
 | M2.1 | 定义 A3 int8 backend layout/interface 和主路径 dtype。 |
 | M2.2 | host 侧 int8 weight、scale、reference accumulator。 |
 | M2.2a | 实现 fused `RoutePackQuantLocal`，route/pack/quant 一次写 peer-visible payload。 |
@@ -1313,10 +1339,10 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
   runtime link 组织，真正 window protocol 在 M1.5 落地。
 - 不能引入 Catlass/AscendC 接口、build helper 或 fallback。若从参考 CMake 复制了仅用于 CANN 编译器搜索的路径，
   也不能在本项目源码中 include/call/wrap `AscendC::`、`DataCopy`、Catlass 或 AscendC kernel helper。
-- single fused kernel target 的编译 arch 从 M0 起必须为后续 AIC/AIV mixed path 留出口径。默认使用
-  `--cce-aicore-arch=dav-c220` 或等价可承载 AIC/AIV MPMD 与后续 `TMATMUL` 的 mixed target；不能把
-  `dav-c220-vec` 占位 target 当成最终 accepted CMake 口径。若当前环境连空 mixed target 都无法构建，M0.2 必须
-  以 `blocked` 或 `primitive/env-gap` 记录，不能把 compile-arch 切换问题留到 M2.3 才暴露。
+- 当前 A3/CANN 8.5 实测 `dav-c220` mixed target 会让现有 PTO Vec/comm primitive 报 target feature 不支持；
+  因此 M1/M2 active dispatch/combine target 保持 `dav-c220-vec`。M2 的 GMM `TMATMUL` 必须先通过
+  M2.0/M2.3 cube primitive preflight 确认，再决定以 cube target、preflight-only gate 或后续 M3 mixed/MPMD
+  路径承载；不能把 `dav-c220` mixed target 当成 M2 accepted 前提。
 - M0.1 的 markdown bootstrap 已由设计 agent 在当前会话完成，开发 agent 不领取 M0.1；真正工程初始化从 M0.2 开始。
 
 #### M0.1 设计 bootstrap 与项目规则（已完成，非开发任务）
@@ -1352,9 +1378,9 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
   `moe_dispatch_combine_a8w8` host executable。
 - 保留 `bisheng`、`ASCEND_HOME_PATH`/`ASCEND_DRIVER_PATH` 探测、runtime output 目录、`RUN_MODE/SOC_VERSION`
   传参、host link dirs、`runtime/runtime_camodel` 条件链接等工程骨架。
-- 参考 `moe_dispatch` / `dispatch_combine_tile` 的单 kernel target 命名，但编译 arch 采用 `dav-c220` mixed target
-  或通过 `FUSED_KERNEL_ARCH` 默认到 `dav-c220`；本项目 M0 不复制 `gemm_ar` 的
-  `gemm_compute_kernel + comm_kernel` 双 target 拆分，也不把 `dav-c220-vec` 最小 target 固化为后续 GMM 路径。
+- 参考 `moe_dispatch` / `dispatch_combine_tile` 的单 kernel target 命名。M0/M1 active dispatch/combine target
+  可使用 `dav-c220-vec`；M2 必须通过 M2.0/M2.3 记录 GMM cube primitive preflight 和 mixed-target gate，
+  不能无证据地声称 `dav-c220` mixed target 已可承载 Vec/comm + `TMATMUL`。
 - CMake 使用 `bisheng + add_library(... SHARED ...)` 路线，不使用 `ascendc_library`、`ascendc.cmake`、
   `ascendc_kernel_cmake`、Catlass target 或外部融合算子 target。
 - kernel 文件只放最小 launch 入口或空实现骨架。
@@ -1368,8 +1394,9 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - CMake target 能被构建系统发现。
 - kernel 文件不包含禁用依赖。
 - CMake 不包含 `ascendc_library`、`ascendc.cmake`、`ascendc_kernel_cmake`、Catlass target 或外部融合算子 target。
-- CMake 中能看出它是 single fused mixed-kernel target，不是 `gemm_ar` 的 compute/comm 双 kernel 结构；compile arch
-  不能固定为只支持 vector path 的 `dav-c220-vec`。
+- CMake 中能看出 active M1 dispatch/combine target 是本项目 target，不是 `gemm_ar` 的 compute/comm 双 kernel
+  直接复制；如果当前 compile arch 仍是 `dav-c220-vec`，M2.0 必须记录 mixed target gate 和 GMM primitive
+  preflight 路线。
 - task report 只记录 target 是否接入/可发现/可编译的结论摘要；若当前仓构建脚本尚未接入该 target，交付状态只能是
   `blocked` 或“target created, build integration pending”，不能声称已编译通过；不要粘贴编译日志。
 - 依赖扫描无输出。
@@ -1875,9 +1902,54 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 
 ### 13.3 M2: A3 int8_int8 MegaMoE-ready data path
 
-#### M2.1 Int8 backend layout 与接口
+#### M2.0 Active runtime baseline 与 primitive preflight
 
 依赖任务：M1.11。
+
+文件范围：
+
+- 修改 `CMakeLists.txt`
+- 修改 `scripts/run_a3.sh`
+- 修改 `host/main.cpp`
+- 修改 `host/args.hpp`
+- 修改 `host/reference.hpp`
+- 修改 `host/comm_mpi.hpp`
+- 修改 `host/hccl_context.hpp`
+- 修改 `kernel/moe_dispatch_combine_a8w8_kernel.cpp`
+- 修改 `kernel/kernel_launchers.hpp`
+- 修改 `include/moe_dispatch_combine_a8w8_runtime_types.hpp`
+- 修改 `include/moe_dispatch_combine_a8w8_m1_layout.hpp`
+
+任务：
+
+- 把 M1 已实跑的真实 device runtime 归一到 M2 预期主路径：host 入口在 `host/main.cpp`，kernel 入口在
+  `kernel/moe_dispatch_combine_a8w8_kernel.cpp`，shared ABI/header 在 `include/`；`m1_runtime/` 不再作为 active
+  source tree。
+- CMake active target 必须编译上述 `host/`、`kernel/`、`include/` 文件；后续 M2 task 只能在这些 active path
+  上开发，不能新增一套不参与构建的 runtime。
+- 保持 M1 real dispatch/combine 行为不退化：routing、pack、count publish/wait、prefix、dispatch `TGET`、
+  identity mock expert bridge、combine `TPUT`、notify/wait/test、restore 仍在 device path 执行。
+- 记录 arch gate：当前 A3/CANN 8.5 下 `dav-c220` mixed target 会让 PTO Vec/comm primitive 编译失败，M2 不把
+  mixed target 作为 acceptance 前提；dispatch/combine target 仍使用 `dav-c220-vec`，GMM primitive 通过
+  M2.3/M2.6 cube preflight 或明确 `primitive-gap` 进入后续决策。
+- 记录 `TMATMUL int8 x int8 -> int32` preflight 来源：优先用仓内
+  `tests/npu/a2a3/src/st/testcase/tmatmul/tmatmul_kernel.cpp` 和
+  `kernels/manual/a2a3/dispatch_gmm_combine_v2/op_kernel/compute/pto_gmm_block_int8.hpp`，先确认 A3 PTO
+  tile dtype、valid shape、arch 和 `TSTORE`/`TSTORE_FP` 出口策略，再实现 M2.3/M2.6 主路径。
+
+验收标准：
+
+- `rg --files kernels/manual/a2a3/moe_dispatch_combine_a8w8/m1_runtime` 无 active 文件；非报告 markdown 中没有 active
+  `m1_runtime` 引用。
+- `CMakeLists.txt` 编译 `kernel/moe_dispatch_combine_a8w8_kernel.cpp` 和 `host/main.cpp`。
+- `scripts/run_a3.sh --m1-suite 1 --dry-run 0 --skip-kernel-launch 0` 从 device 4 跑通 small、balanced、skewed、
+  zero-token；两卡 case 的 `[CorrectnessReport]` 中 `two_rank_npu_run=true`、`pass=true`。
+- M2 task report 或 TASKS DCL 记录 mixed target gate 和 GMM primitive preflight 结论；如果 `TMATMUL` 或
+  `TSTORE_FP` 出口能力不足，M2.3/M2.6/M2.7 只能标 `primitive-gap`，不能引入 AscendC/Catlass fallback。
+
+#### M2.1 Int8 backend layout 与接口
+
+依赖任务：M2.0。
 
 文件范围：
 
@@ -1888,6 +1960,16 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 任务：
 
 - 定义 `A3Int8Backend` 接口和 M2 fused data path stage 名称。
+- `include/moe_dispatch_combine_a8w8_layout.hpp` 是 M2/M3 canonical layout；迁移保留的
+  `include/moe_dispatch_combine_a8w8_m1_layout.hpp` 只承载 M1 compatibility path。新增 M2 字段必须进入 canonical
+  layout，并在 host dump/device typed view 中使用，不能在两套 layout 中各自演进。
+- M2.1 必须在 active runtime 中建立明确的 backend/layout 选择边界：`m1-mock` 或默认兼容路径可以继续使用
+  `DispatchCombineTileShape + moe_dispatch_combine_a8w8_m1_layout.hpp`；`int8` 后端必须把
+  `DispatchCombineTileArgs` 映射到 `ShapeConfig/RankConfig`，并使用 `moe_dispatch_combine_a8w8_layout.hpp`
+  计算 workspace、peer window、HCCL_BUFFSIZE、host dump 和 device typed view。不能只新增一套未参与构建/运行的
+  canonical layout。
+- 如果 M2.1 引入 `--backend m1-mock|int8` 或等价开关，M1 compatibility path 必须保持当前四类 M1 regression 可跑；
+  M2.8 只负责把 `int8` 后端串成完整回归，不再重新定义 backend 选择语义。
 - 增加 `gmm1InputInt8`、`gmm1WeightInt8`、`gmm1AccInt32`、`gmm1Out`、`swigluOut`、
   `gmm2InputInt8`、`gmm2WeightInt8`、`gmm2AccInt32` layout；`gmm2Out` 只能作为 debug mirror，不能成为
   M2 主 combine path 的必经中间结果。
@@ -1909,6 +1991,8 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 
 - M1 mock backend 仍可编译运行。
 - 切换 backend 不影响 dispatch/combine protocol API。
+- `--backend int8` 或等价 runtime path 使用 canonical M2 layout 计算 workspace/window size；`--backend m1-mock`
+  或默认兼容路径仍能走迁移后的真实 dispatch/combine M1 suite。
 - layout dump 中能看见 peer-visible int8 dispatch payload、routing/GMM2 per-token scale、`offsetD` return payload、
   `scale1/scale2` typed view。
 - layout dump 中能看见 `dispatchGroupReady/gmm1SyncGroupReady/activationSyncGroupReady/gmm2GroupReady`、
@@ -1921,7 +2005,10 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 
 文件范围：
 
+- 修改 `host/args.hpp`
 - 修改 `host/reference.hpp`
+- 修改 `host/main.cpp`
+- 修改 `include/moe_dispatch_combine_a8w8_runtime_types.hpp`
 - 修改 `scripts/gen_data.py`
 
 任务：
@@ -1933,6 +2020,12 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
   zero row 的 scale/quant 策略必须固定。
 - 生成 GMM2 per-token scale reference，供 M2.5/M2.7 复用。
 - CPU reference 计算 GMM1/GMM2 int32 accumulator，并显式模拟 accumulator -> scale dequant -> cast。
+- `host/reference.hpp` 是 M2 runtime reference 真值；`scripts/gen_data.py` 只能生成同语义离线数据和白盒 dump。
+  两者的 seed、rounding、zero row、scale bit pattern 必须一致，不能出现 Python 一套、C++ runtime 一套。
+- active runtime 必须有 weight/scale 的显式 host 数据结构、device allocation/copy 生命周期和 checksum/report 字段；
+  不能只在 `scripts/gen_data.py` 生成离线文件后让 device path 仍无权重输入。
+- M2.2 固定的 weight/scale seed、rounding、zero-row 策略和 `uint64_t` scale bit pattern 必须被 `--backend int8`
+  runtime 与离线脚本共用；如果某个 shape/布局不支持，host parse/validate 要 fail-fast。
 
 验收标准：
 
@@ -2054,17 +2147,35 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 任务：
 
 - 用 PTO `TMATMUL` / `TMATMUL_ACC` 实现 GMM1 `int8 x int8 -> int32`。
+- 实现前必须完成 M2.0/M2.3 preflight：确认 A3 `TMATMUL<int32_t, int8_t, int8_t>` 的 tile dtype、valid shape、
+  `dav-c220-cube` 或等价 arch、以及 accumulator 出口策略。不能在 `dav-c220-vec` target 内直接加入
+  `TMATMUL` 后假定可编译。
+- 如果采用独立 cube target 承载 M2 numeric stage，该 target 必须属于本项目 CMake，使用 PTO-only
+  `dav-c220-cube` 编译，并由 active host runtime 以 overlap-off numeric stage 方式调用；dispatch/combine 仍保持
+  `dav-c220-vec` target。不能把它写成未接入主链路的 preflight demo，也不能退回 `dav-c220` mixed target。
+- 仓内 `dispatch_gmm_combine_v2` 的 `pto_gmm_block_int8.hpp` 只能作为 PTO tile/shape/`TMATMUL` 写法参考；其中
+  AscendC flag/helper 不能复制进本项目。需要同步时使用本项目允许的 PTO/public flag/event 写法。
 - 支持 local expert-major segment。
 - 每个 expert group 的 `currentM` 来自 `cumsumMM[rankNum - 1][localExpert]`；M1/M2 如采用 fail-fast capacity，
   必须在超过 `maxOutputSize` 时报告错误，不允许静默截断。
 - `TMATMUL` 的 A/B/C tile dtype 必须显式是 `int8/int8/int32`，不能通过 helper 或 fallback 隐藏。
 - 处理 M/K/N tail valid region。
+- 固定 PTO `TMATMUL` micro-tile 尺寸可以作为底层实现选择，但 accepted 主路径不能退化为固定
+  `hiddenSize/intermediateSize` smoke shape 或单 AIC block demo；GMM1 的 M/K/N 必须由 runtime shape 与 expert row
+  range 驱动。
+- 多 block launch 不能被 `get_block_idx() != 0` 之类 guard 直接屏蔽。M2.3 accepted 口径至少要按 expert/tile
+  维度把 GMM1 work partition 到可用 AIC blocks；若 PTO primitive 或编译目标暂时无法支持，必须把 M2.3/M2 stage
+  标成 `needs_fix` 或 `primitive-gap`，不能用单 block correctness smoke 关闭任务。
 
 验收标准：
 
 - single-rank small shape 下 GMM1 int32 accumulator 与 CPU reference 完全一致。
 - two-rank balanced case 下每个 local expert 的 accumulator checksum 与 reference 一致。
+- 至少一个 two-rank case 的 GMM1 device path 证明多个 AIC block 参与并覆盖全部有效 tile；若只能单 block 运行，
+  M2.3 只能作为 preflight，不得 `review_ready`。
 - tail shape 不越界。
+- preflight 记录必须指向实际编译过的 PTO `TMATMUL` call site 或仓内已验证 ST/reference；若失败，任务状态改为
+  `blocked`/`primitive-gap`，不改用 AscendC/Catlass fallback。
 - 依赖扫描无输出。
 
 #### M2.4 GMM1 epilogue
@@ -2136,9 +2247,18 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 任务：
 
 - 用 PTO `TMATMUL` / `TMATMUL_ACC` 实现 GMM2 `int8 x int8 -> int32`。
+- 复用 M2.3 的 `TMATMUL` preflight 结论；若 GMM2 K/N shape 与 GMM1 不同，必须补一个 GMM2 shape preflight，
+  不能只凭 GMM1 编译成功推断。
+- 如果 M2.3 采用独立 cube target，M2.6 必须复用同一 active numeric target/launcher 体系或新增同等约束的
+  PTO-only cube target；不能让 GMM1 是 device PTO 而 GMM2 退回 host/mock。
 - 支持 local expert-major segment。
 - `GMM2` 的 M 维 row range 必须与 `RunActivationAndQuant` 输出的 expert-major row range 一致。
 - `TMATMUL` 的 A/B/C tile dtype 必须显式是 `int8/int8/int32`，不能通过 helper 或 fallback 隐藏。
+- 固定 PTO `TMATMUL` micro-tile 尺寸可以复用 M2.3，但 accepted 主路径不能只覆盖固定
+  `intermediateSize=32/hiddenSize=64` smoke shape 或单 AIC block demo；GMM2 的 M/K/N 必须由 runtime shape、
+  activation row range 和 output hidden size 驱动。
+- 多 block launch 必须按 expert/tile 维度分摊 GMM2 work，不能屏蔽除 block0 外的 AIC block；若暂时无法做到，
+  M2.6/M2 stage 必须标成 `needs_fix` 或 `primitive-gap`。
 - host reference 计算 GMM2 accumulator。
 
 验收标准：
@@ -2146,6 +2266,9 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - single-rank small shape 下 GMM2 int32 accumulator 与 CPU reference 完全一致。
 - two-rank balanced case 下每个 local expert 的 GMM2 accumulator checksum 与 reference 一致。
 - skewed experts case 不越界。
+- 至少一个 two-rank skewed 或 balanced case 的 GMM2 device path 证明多个 AIC block 参与并覆盖全部有效 tile；若只能
+  单 block 运行，M2.6 只能作为 preflight，不得 `review_ready`。
+- preflight 记录必须覆盖 GMM2 的 `intermediateSize x hiddenSize` shape 或明确 blocked。
 - 依赖扫描无输出。
 
 #### M2.7 GMM2 epilogue 与 fused combine return
@@ -2243,11 +2366,19 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - 每个 M2 回归用例打印 final output correctness report 和 overlap-off E2E perf report。
 - `DESIGN.md` 记录 M2 tolerance、scale/dequant 顺序、dispatch/quant 合并点、combine/epilogue 合并点、
   Dispatch-GMM soft-sync ledger、GMM-Combine tile-split return map，以及当前 A8W8/int8 主路径的精度边界。
+- 若 M2.3/M2.6 的 cube primitive preflight 失败，M2.8 不允许以 host numeric、identity mock、旧 M1
+  `workspace.dispatchedA` mock payload 或跳过 GMM 的方式交付；必须把受影响任务和 M2 stage 标成
+  `blocked`/`primitive-gap`，并在 report 记录最小失败形态。
+- 若 GMM1/GMM2 仍是固定 smoke shape、单 AIC block、无 runtime-shape work partition 的实现，M2.8 不允许交付为
+  `review_ready`。这类实现只能作为 `TMATMUL` primitive preflight 或 debug path，不能作为 M2 full-chain
+  acceptance path。
 
 验收标准：
 
 - small、balanced、skewed、zero-token 四类用例全部通过。
 - GMM accumulator checksum 与 reference 精确对齐；scale/dequant checksum 和 final output 按 M2.8 记录的 tolerance 对齐。
+- `[CorrectnessReport]` 或等价结构化输出必须证明 `gmm_runtime_shape=true`、`gmm_multiblock=true`；如果某 case
+  因零 token 退化为单 block，不得作为该证明来源。
 - `[CorrectnessReport]` 必须包含 `dispatch_merge=true`、`combine_merge=true` 或等价字段，证明 M2 没有走旧的
   “先二次 reorder，再单独 combine copy” 主路径。
 - `[CorrectnessReport]` 必须包含 `soft_sync_ledger=true`、`swiglu_sync_groups=true`、

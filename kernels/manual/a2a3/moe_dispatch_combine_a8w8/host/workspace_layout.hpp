@@ -40,6 +40,7 @@ inline void PrintWorkspaceLayout(std::ostream &os, const WorkspaceLayout &layout
     PrintField(os, "dispatchedA", layout.dispatchedA);
     PrintField(os, "dispatchedScale", layout.dispatchedScale);
     PrintField(os, "gmm1InputInt8", layout.gmm1InputInt8);
+    PrintField(os, "routingPerTokenScale", layout.routingPerTokenScale);
     PrintField(os, "gmm1WeightInt8", layout.gmm1WeightInt8);
     PrintField(os, "scale1Uint64", layout.scale1Uint64);
     PrintField(os, "gmm1AccInt32", layout.gmm1AccInt32);

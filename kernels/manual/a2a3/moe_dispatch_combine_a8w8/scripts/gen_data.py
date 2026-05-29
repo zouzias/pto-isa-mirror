@@ -9,6 +9,7 @@
 
 import argparse
 import json
+import struct
 from pathlib import Path
 
 
@@ -39,6 +40,57 @@ def checksum(values):
         hash_value ^= value & value_mask
         hash_value = (hash_value * 1099511628211) & value_mask
     return hash_value
+
+
+def fnv_bytes_with_size(data: bytes, size: int) -> int:
+    value_mask = (1 << 64) - 1
+    hash_value = 1469598103934665603
+    for byte in struct.pack("<Q", size) + data:
+        hash_value ^= byte
+        hash_value = (hash_value * 1099511628211) & value_mask
+    return hash_value
+
+
+def checksum_i8(values):
+    return fnv_bytes_with_size(bytes((value & 0xFF for value in values)), len(values))
+
+
+def checksum_u64(values):
+    return fnv_bytes_with_size(b"".join(struct.pack("<Q", value & ((1 << 64) - 1)) for value in values), len(values))
+
+
+def float_to_uint64_scale(value):
+    return struct.unpack("<I", struct.pack("<f", value))[0]
+
+
+def deterministic_i8(seed, index, salt):
+    mixed = seed * 1315423911 + index * 2654435761 + salt * 97531
+    return mixed % 255 - 127
+
+
+def deterministic_scale(index, salt):
+    return ((index % 7) + 1 + salt) / 4096.0
+
+
+def build_int8_reference_metadata(seed, rank_num, hidden_size, intermediate_size, expert_per_rank):
+    expert_num = rank_num * expert_per_rank
+    w1_cols = intermediate_size * 2
+    weight1 = [deterministic_i8(seed, idx, 1) for idx in range(expert_num * hidden_size * w1_cols)]
+    weight2 = [deterministic_i8(seed, idx, 2) for idx in range(expert_num * intermediate_size * hidden_size)]
+    scale1 = [float_to_uint64_scale(deterministic_scale(idx, 1)) for idx in range(w1_cols)]
+    scale2 = [float_to_uint64_scale(deterministic_scale(idx, 2)) for idx in range(hidden_size)]
+    return {
+        "weight_layout": "expert-major-row-major-int8",
+        "scale_layout": "uint64-lower-f32-bit-pattern",
+        "weight1_checksum": checksum_i8(weight1),
+        "weight2_checksum": checksum_i8(weight2),
+        "scale1_uint64_checksum": checksum_u64(scale1),
+        "scale2_uint64_checksum": checksum_u64(scale2),
+        "scale1_first_hex": f"0x{scale1[0]:x}" if scale1 else "0x0",
+        "scale1_first_float": deterministic_scale(0, 1),
+        "scale2_first_hex": f"0x{scale2[0]:x}" if scale2 else "0x0",
+        "scale2_first_float": deterministic_scale(0, 2),
+    }
 
 
 def build_routing_reference(rank, rank_num, m, topk, expert_per_rank, expert_id):
@@ -78,6 +130,7 @@ def main():
     parser.add_argument("--rank", type=int, default=0)
     parser.add_argument("--tokens", type=int, default=16)
     parser.add_argument("--hidden-size", type=int, default=64)
+    parser.add_argument("--intermediate-size", type=int, default=32)
     parser.add_argument("--topk", type=int, default=2)
     parser.add_argument("--experts-per-rank", type=int, default=2)
     parser.add_argument("--seed", type=int, default=1234)
@@ -120,6 +173,13 @@ def main():
         "expert_id": expert_id,
         "probs": probs,
         "routing_reference": routing_reference,
+        "int8_reference_metadata": build_int8_reference_metadata(
+            args.seed,
+            args.rank_num,
+            args.hidden_size,
+            args.intermediate_size,
+            args.experts_per_rank,
+        ),
     }
     output = out_dir / f"rank{args.rank}_{args.case_name}.json"
     output.write_text(json.dumps(payload, indent=2), encoding="utf-8")

@@ -73,6 +73,7 @@ struct WorkspaceLayout {
     FieldLayout dispatchedA;
     FieldLayout dispatchedScale;
     FieldLayout gmm1InputInt8;
+    FieldLayout routingPerTokenScale;
     FieldLayout gmm1WeightInt8;
     FieldLayout scale1Uint64;
     FieldLayout gmm1AccInt32;

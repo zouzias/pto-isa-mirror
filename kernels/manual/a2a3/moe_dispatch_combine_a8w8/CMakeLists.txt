@@ -34,7 +34,7 @@ else()
     set(ASCEND_DRIVER_PATH /usr/local/Ascend/driver)
 endif()
 
-set(FUSED_KERNEL_ARCH "dav-c220-vec" CACHE STRING "A2/A3 M1 AIV communication kernel architecture.")
+set(FUSED_KERNEL_ARCH "dav-c220-vec" CACHE STRING "A2/A3 dispatch/combine vector kernel architecture.")
 
 add_compile_options(
     -D_FORTIFY_SOURCE=2
@@ -71,7 +71,6 @@ set(CMAKE_CPP_COMPILE_OPTIONS
 include_directories(
     ${PROJECT_SOURCE_DIR}/../../../../include
     ${PROJECT_SOURCE_DIR}/include
-    ${PROJECT_SOURCE_DIR}/m1_runtime
     ${PROJECT_SOURCE_DIR}/host
     ${PROJECT_SOURCE_DIR}/kernel
     ${ASCEND_HOME_PATH}/include
@@ -93,7 +92,6 @@ include_directories(
 set(KERNEL_INCLUDE_DIRS
     ${PROJECT_SOURCE_DIR}/../../../../include
     ${PROJECT_SOURCE_DIR}/include
-    ${PROJECT_SOURCE_DIR}/m1_runtime
     ${PROJECT_SOURCE_DIR}/kernel
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_HOME_PATH}/include/hccl
@@ -106,7 +104,6 @@ set(KERNEL_INCLUDE_DIRS
 set(HOST_INCLUDE_DIRS
     ${PROJECT_SOURCE_DIR}/../../../../include
     ${PROJECT_SOURCE_DIR}/include
-    ${PROJECT_SOURCE_DIR}/m1_runtime
     ${PROJECT_SOURCE_DIR}/host
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_HOME_PATH}/include/hccl
@@ -118,7 +115,7 @@ set(HOST_LINK_DIRS
     ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
 )
 
-add_library(moe_dispatch_combine_a8w8_kernel SHARED m1_runtime/dispatch_combine_tile_kernel.cpp)
+add_library(moe_dispatch_combine_a8w8_kernel SHARED kernel/moe_dispatch_combine_a8w8_kernel.cpp)
 target_compile_options(moe_dispatch_combine_a8w8_kernel PRIVATE
     ${CMAKE_CCE_COMPILE_OPTIONS}
     --cce-aicore-arch=${FUSED_KERNEL_ARCH}
@@ -129,12 +126,24 @@ target_link_directories(moe_dispatch_combine_a8w8_kernel PRIVATE ${ASCEND_HOME_P
 target_link_libraries(moe_dispatch_combine_a8w8_kernel PRIVATE runtime)
 target_link_options(moe_dispatch_combine_a8w8_kernel PRIVATE --cce-fatobj-link)
 
-add_executable(moe_dispatch_combine_a8w8 m1_runtime/main.cpp)
+add_library(moe_dispatch_combine_a8w8_gmm_kernel SHARED kernel/moe_dispatch_combine_a8w8_gmm_kernel.cpp)
+target_compile_options(moe_dispatch_combine_a8w8_gmm_kernel PRIVATE
+    ${CMAKE_CCE_COMPILE_OPTIONS}
+    --cce-aicore-arch=dav-c220-cube
+    -DMEMORY_BASE -std=c++17
+)
+target_include_directories(moe_dispatch_combine_a8w8_gmm_kernel PRIVATE ${KERNEL_INCLUDE_DIRS})
+target_link_directories(moe_dispatch_combine_a8w8_gmm_kernel PRIVATE ${ASCEND_HOME_PATH}/lib64)
+target_link_libraries(moe_dispatch_combine_a8w8_gmm_kernel PRIVATE runtime)
+target_link_options(moe_dispatch_combine_a8w8_gmm_kernel PRIVATE --cce-fatobj-link)
+
+add_executable(moe_dispatch_combine_a8w8 host/main.cpp)
 target_compile_options(moe_dispatch_combine_a8w8 PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
 target_include_directories(moe_dispatch_combine_a8w8 PRIVATE ${HOST_INCLUDE_DIRS})
 target_link_directories(moe_dispatch_combine_a8w8 PUBLIC ${HOST_LINK_DIRS})
 target_link_libraries(moe_dispatch_combine_a8w8 PRIVATE
     moe_dispatch_combine_a8w8_kernel
+    moe_dispatch_combine_a8w8_gmm_kernel
     $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
     $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
     stdc++ ascendcl hcomm m tiling_api platform c_sec dl nnopbase pthread

@@ -29,6 +29,9 @@ struct DispatchCombineTileShape {
     uint32_t maxOutputSize;
     uint32_t aivBlocks;
     uint32_t tileCols;
+    uint32_t gmmBlockM;
+    uint32_t gmmBlockN;
+    uint32_t gmmBlockK;
     uint32_t rowChunk;
     uint32_t metadataPad;
     uint32_t signalValue;
@@ -89,6 +92,10 @@ struct DispatchCombineTileRuntimeConfig {
     uint32_t hostGoldenOnly;
     uint32_t dispatchMetadataOnly;
     uint32_t dispatchOnly;
+    uint32_t gmm1Only;
+    uint32_t gmm1EpilogueOnly;
+    uint32_t activationOnly;
+    uint32_t gmm2Only;
     uint32_t combineReturnOnly;
     uint32_t keepHcclShm;
     uint64_t hcclBuffSizeMb;
