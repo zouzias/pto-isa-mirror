@@ -31,6 +31,34 @@ constexpr uint32_t kGmmL0AStages = 2;
 constexpr uint32_t kGmmL0BStages = 2;
 constexpr uint32_t kGmmL0CStages = 1;
 constexpr uint32_t kReturnTileRows = 128;
+constexpr uint32_t kM2FusedFullConfigMagic = 0x4D328CFU;
+constexpr uint32_t kM2FusedFullConfigWords = 64;
+constexpr uint32_t kM2FusedFullConfigMagicSlot = 0;
+constexpr uint32_t kM2FusedFullShapeRankNumSlot = 1;
+constexpr uint32_t kM2FusedFullShapeExpertPerRankSlot = 2;
+constexpr uint32_t kM2FusedFullShapeTopKSlot = 3;
+constexpr uint32_t kM2FusedFullShapeMSlot = 4;
+constexpr uint32_t kM2FusedFullShapeHiddenSizeSlot = 5;
+constexpr uint32_t kM2FusedFullShapeIntermediateSizeSlot = 6;
+constexpr uint32_t kM2FusedFullShapeMaxTokensPerExpertSlot = 7;
+constexpr uint32_t kM2FusedFullShapePayloadTileColsSlot = 8;
+constexpr uint32_t kM2FusedFullShapeGmmBlockMSlot = 9;
+constexpr uint32_t kM2FusedFullShapeGmmBlockNSlot = 10;
+constexpr uint32_t kM2FusedFullShapeGmmBlockKSlot = 11;
+constexpr uint32_t kM2FusedFullShapeDtypeInSlot = 12;
+constexpr uint32_t kM2FusedFullShapeDtypeOutSlot = 13;
+constexpr uint32_t kM2FusedFullRankRankNumSlot = 14;
+constexpr uint32_t kM2FusedFullRankRankIdSlot = 15;
+constexpr uint32_t kM2FusedFullRankFromMpiSlot = 16;
+constexpr uint32_t kM2FusedFullRankDeviceBaseSlot = 17;
+constexpr uint32_t kM2FusedFullRankNdevicesSlot = 18;
+constexpr uint32_t kM2FusedFullPtrInputASlot = 19;
+constexpr uint32_t kM2FusedFullPtrExpertIdxSlot = 21;
+constexpr uint32_t kM2FusedFullPtrProbsSlot = 23;
+constexpr uint32_t kM2FusedFullPtrOutputCSlot = 25;
+constexpr uint32_t kM2FusedFullPtrPeerWindowSlot = 27;
+constexpr uint32_t kM2FusedFullPtrHcclCtxSlot = 29;
+constexpr uint32_t kM2FusedFullPtrWorkspaceSlot = 31;
 
 enum class DType : uint32_t
 {
@@ -62,6 +90,44 @@ struct RankConfig {
     uint32_t rankFromMpi = 1;
     uint32_t deviceBase = 0;
     uint32_t ndevices = 2;
+};
+
+struct M2FusedFullParams {
+    ShapeConfig shape;
+    RankConfig rank;
+    uint32_t debugStopStage = 0;
+};
+
+struct M2FusedFullLaunchArgs {
+    M2FusedFullParams params;
+    uint32_t debugStopStage = 0;
+    uint32_t reserved0 = 0;
+    uint64_t stageStatusAddr = 0;
+    uint32_t shapeRankNum = 0;
+    uint32_t shapeExpertPerRank = 0;
+    uint32_t shapeTopK = 0;
+    uint32_t shapeM = 0;
+    uint32_t shapeHiddenSize = 0;
+    uint32_t shapeIntermediateSize = 0;
+    uint32_t shapeMaxTokensPerExpert = 0;
+    uint32_t shapePayloadTileCols = 0;
+    uint32_t shapeGmmBlockM = 0;
+    uint32_t shapeGmmBlockN = 0;
+    uint32_t shapeGmmBlockK = 0;
+    uint32_t shapeDtypeIn = 0;
+    uint32_t shapeDtypeOut = 0;
+    uint32_t rankRankNum = 0;
+    uint32_t rankRankId = 0;
+    uint32_t rankFromMpi = 0;
+    uint32_t rankDeviceBase = 0;
+    uint32_t rankNdevices = 0;
+    uint64_t inputA = 0;
+    uint64_t expertIdx = 0;
+    uint64_t probs = 0;
+    uint64_t outputC = 0;
+    uint64_t peerWindow = 0;
+    uint64_t hcclCtx = 0;
+    uint64_t workspace = 0;
 };
 
 struct FieldLayout {

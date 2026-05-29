@@ -53,6 +53,13 @@ void LaunchM2RestoreOutput(moe_dispatch_combine_a8w8::ShapeConfig shape, moe_dis
                            uint8_t *probs, uint8_t *outputC, uint8_t *peerWindow, uint8_t *workspace, void *stream,
                            uint32_t launchBlockCount);
 
+void LaunchM2MixedSpike(uint8_t *workspace, uint32_t rank, uint32_t aicBlocks, uint32_t aivRatio, void *stream);
+
+void LaunchM2FusedSkeleton(uint8_t *workspace, uint32_t rank, uint32_t aicBlocks, uint32_t aivRatio, void *stream);
+
+void LaunchM2FusedFull(moe_dispatch_combine_a8w8::M2FusedFullLaunchArgs *launchArgsDevice, uint32_t aicBlocks,
+                       uint32_t aivRatio, void *stream);
+
 } // namespace dispatch_combine_tile
 
 #endif // DISPATCH_COMBINE_TILE_KERNEL_LAUNCHERS_H_

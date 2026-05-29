@@ -97,6 +97,11 @@ struct DispatchCombineTileRuntimeConfig {
     uint32_t activationOnly;
     uint32_t gmm2Only;
     uint32_t combineReturnOnly;
+    uint32_t m2MixedSpikeOnly;
+    uint32_t m2FusedSkeletonOnly;
+    uint32_t m2FusedFull;
+    uint32_t m2MultiLaunchDebug;
+    uint32_t m2FusedDebugStopStage;
     uint32_t keepHcclShm;
     uint64_t hcclBuffSizeMb;
 };

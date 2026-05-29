@@ -2437,13 +2437,17 @@ AICORE inline void AddWeightedRowHalf(__gm__ half *outputBase, __gm__ half *ptrD
         __gm__ half *ptrChunk = ptrDBase + static_cast<int64_t>(ptrDRow) * rowStride + col;
         InvalidateGmCacheLines(ptrChunk, static_cast<uint32_t>(cols) * sizeof(half));
         GlobalNd<half> ptrGlobal = MakeGlobal2D(ptrChunk, 1, cols, rowStride);
-        pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> ptrLoadToAxpy;
-        pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> outLoadToAxpy;
-        pto::Event<pto::Op::TAXPY, pto::Op::TSTORE_VEC> axpyToStore;
-        ptrLoadToAxpy = TLOAD(ptrTile, ptrGlobal);
-        outLoadToAxpy = TLOAD(outTile, outGlobal);
-        axpyToStore = TAXPY(outTile, ptrTile, prob, ptrLoadToAxpy, outLoadToAxpy);
-        TSTORE(outGlobal, outTile, axpyToStore);
+        TLOAD(ptrTile, ptrGlobal);
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        TLOAD(outTile, outGlobal);
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        TAXPY(outTile, ptrTile, prob);
+        pipe_barrier(PIPE_V);
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        TSTORE(outGlobal, outTile);
         WaitStoreTileReusable();
     }
 }
@@ -2520,13 +2524,17 @@ __global__ AICORE void M2RestoreOutput(moe_dispatch_combine_a8w8::ShapeConfig sh
                     localPeer.returnPayload + static_cast<int64_t>(ptrDRow) * returnRowStride + col;
                 InvalidateGmCacheLines(returnChunk, static_cast<uint32_t>(cols) * sizeof(half));
                 GlobalNd<half> returnGlobal = MakeGlobal2D(returnChunk, 1, cols, returnRowStride);
-                pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> ptrLoadToAxpy;
-                pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> outLoadToAxpy;
-                pto::Event<pto::Op::TAXPY, pto::Op::TSTORE_VEC> axpyToStore;
-                ptrLoadToAxpy = TLOAD(ptrTile, returnGlobal);
-                outLoadToAxpy = TLOAD(outTile, outGlobal);
-                axpyToStore = TAXPY(outTile, ptrTile, static_cast<half>(prob), ptrLoadToAxpy, outLoadToAxpy);
-                TSTORE(outGlobal, outTile, axpyToStore);
+                TLOAD(ptrTile, returnGlobal);
+                set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+                wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+                TLOAD(outTile, outGlobal);
+                set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+                wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+                TAXPY(outTile, ptrTile, static_cast<half>(prob));
+                pipe_barrier(PIPE_V);
+                set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                TSTORE(outGlobal, outTile);
                 WaitStoreTileReusable();
             }
         }
@@ -2539,6 +2547,7 @@ __global__ AICORE void M2RestoreOutput(moe_dispatch_combine_a8w8::ShapeConfig sh
 
 } // namespace
 
+#ifndef M2_FUSED_INCLUDE_DEVICE_BODY_ONLY
 __global__ AICORE void DispatchCombineTileDispatch(DispatchCombineTileShape shape, uint32_t myRank, GM_ADDR inputA,
                                                    GM_ADDR expertIdx, GM_ADDR peerWindow, GM_ADDR hcclCtx,
                                                    GM_ADDR workspace)
@@ -2658,3 +2667,4 @@ void LaunchM2RestoreOutput(moe_dispatch_combine_a8w8::ShapeConfig shape, moe_dis
 }
 
 } // namespace dispatch_combine_tile
+#endif // M2_FUSED_INCLUDE_DEVICE_BODY_ONLY

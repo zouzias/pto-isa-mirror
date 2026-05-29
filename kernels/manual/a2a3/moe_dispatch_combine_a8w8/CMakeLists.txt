@@ -13,6 +13,7 @@ set(CMAKE_C_COMPILER ${CMAKE_COMPILER})
 set(CMAKE_CXX_COMPILER ${CMAKE_COMPILER})
 
 project(pto_moe_dispatch_combine_a8w8)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -99,6 +100,7 @@ set(KERNEL_INCLUDE_DIRS
     ${ASCEND_HOME_PATH}/pkg_inc
     ${ASCEND_HOME_PATH}/pkg_inc/profiling
     ${ASCEND_HOME_PATH}/pkg_inc/runtime
+    ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
 )
 
 set(HOST_INCLUDE_DIRS
@@ -137,6 +139,85 @@ target_link_directories(moe_dispatch_combine_a8w8_gmm_kernel PRIVATE ${ASCEND_HO
 target_link_libraries(moe_dispatch_combine_a8w8_gmm_kernel PRIVATE runtime)
 target_link_options(moe_dispatch_combine_a8w8_gmm_kernel PRIVATE --cce-fatobj-link)
 
+function(pto_m2_mixed_spike_kernel TARGET SOURCE)
+    get_filename_component(SOURCE_NAME ${SOURCE} NAME)
+    set(AIC_OBJ ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_aic.dir/${SOURCE_NAME}.o)
+    set(AIV_OBJ ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_aiv.dir/${SOURCE_NAME}.o)
+    set(REGISTER_AIC_OBJ ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_register_aic.dir/${SOURCE_NAME}.o)
+    set(REGISTER_AIV_OBJ ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_register_aiv.dir/${SOURCE_NAME}.o)
+    set(REGISTER_ELF ${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_register.elf)
+    set(MIX_REGISTER_SCRIPT ${PROJECT_SOURCE_DIR}/../../../../tests/npu/a2a3/src/st/testcase/syncall/make_mix_register_elf.py)
+    set(M2_MIX_CCE_OPTIONS
+        -xcce
+        -fPIC
+        -Xhost-start -Xhost-end
+        -mllvm -cce-aicore-stack-size=0x8000
+        -mllvm -cce-aicore-function-stack-size=0x8000
+        -mllvm -cce-aicore-record-overflow=true
+        -mllvm -cce-aicore-addr-transform
+        -mllvm -cce-aicore-dcci-insert-for-scalar=true
+    )
+    set(M2_MIX_INCLUDE_OPTIONS
+        -I${PROJECT_SOURCE_DIR}/../../../../include
+        -I${PROJECT_SOURCE_DIR}/include
+        -I${PROJECT_SOURCE_DIR}/kernel
+        -I${ASCEND_HOME_PATH}/include
+        -I${ASCEND_DRIVER_PATH}/kernel/inc
+        -I${ASCEND_HOME_PATH}/pkg_inc/
+        -I${ASCEND_HOME_PATH}/pkg_inc/profiling/
+        -I${ASCEND_HOME_PATH}/pkg_inc/runtime
+        -I${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
+    )
+    add_custom_command(
+        OUTPUT ${AIC_OBJ}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_aic.dir
+        COMMAND ${CMAKE_CXX_COMPILER} ${M2_MIX_CCE_OPTIONS} --cce-aicore-arch=dav-c220-cube
+                -DMEMORY_BASE -std=c++17 -D__MIX_CORE_AIC_BLOCKS__=24 -D__MIX_CORE_AIV_RATIO__=1
+                -DM2_MIXED_SPIKE_BUILD_AIC -DM2_MIXED_SPIKE_REGISTER_OBJECT_PATH=\"${REGISTER_ELF}\"
+                ${M2_MIX_INCLUDE_OPTIONS} -xcce -o ${AIC_OBJ} -c ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
+        VERBATIM
+    )
+    add_custom_command(
+        OUTPUT ${AIV_OBJ}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_aiv.dir
+        COMMAND ${CMAKE_CXX_COMPILER} ${M2_MIX_CCE_OPTIONS} --cce-aicore-arch=dav-c220-vec
+                -DMEMORY_BASE -std=c++17 -D__MIX_CORE_AIC_BLOCKS__=24 -D__MIX_CORE_AIV_RATIO__=1
+                -DM2_MIXED_SPIKE_BUILD_AIV -DM2_MIXED_SPIKE_REGISTER_OBJECT_PATH=\"${REGISTER_ELF}\"
+                ${M2_MIX_INCLUDE_OPTIONS} -xcce -o ${AIV_OBJ} -c ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
+        VERBATIM
+    )
+    add_custom_command(
+        OUTPUT ${REGISTER_ELF}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_register_aic.dir
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_register_aiv.dir
+        COMMAND ${CMAKE_CXX_COMPILER} ${M2_MIX_CCE_OPTIONS} --cce-aicore-arch=dav-c220-cube
+                -DMEMORY_BASE -std=c++17 -D__MIX_CORE_AIC_BLOCKS__=24 -D__MIX_CORE_AIV_RATIO__=1
+                -DM2_MIXED_SPIKE_BUILD_AIC -DM2_MIXED_SPIKE_REGISTER_BUILD
+                ${M2_MIX_INCLUDE_OPTIONS} -xcce -o ${REGISTER_AIC_OBJ} -c ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
+        COMMAND ${CMAKE_CXX_COMPILER} ${M2_MIX_CCE_OPTIONS} --cce-aicore-arch=dav-c220-vec
+                -DMEMORY_BASE -std=c++17 -D__MIX_CORE_AIC_BLOCKS__=24 -D__MIX_CORE_AIV_RATIO__=1
+                -DM2_MIXED_SPIKE_BUILD_AIV -DM2_MIXED_SPIKE_REGISTER_BUILD
+                ${M2_MIX_INCLUDE_OPTIONS} -xcce -o ${REGISTER_AIV_OBJ} -c ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
+        COMMAND ${Python3_EXECUTABLE} ${MIX_REGISTER_SCRIPT} ${REGISTER_AIC_OBJ} ${REGISTER_AIV_OBJ} ${REGISTER_ELF}
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE} ${MIX_REGISTER_SCRIPT}
+        VERBATIM
+    )
+    add_custom_target(${TARGET}_register_obj DEPENDS ${REGISTER_ELF})
+    add_library(${TARGET} SHARED ${AIC_OBJ} ${AIV_OBJ})
+    add_dependencies(${TARGET} ${TARGET}_register_obj)
+    set_target_properties(${TARGET} PROPERTIES LINKER_LANGUAGE CXX)
+    set_source_files_properties(${AIC_OBJ} ${AIV_OBJ} PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE)
+    target_include_directories(${TARGET} PRIVATE ${KERNEL_INCLUDE_DIRS})
+    target_link_directories(${TARGET} PRIVATE ${ASCEND_HOME_PATH}/lib64)
+    target_link_libraries(${TARGET} PRIVATE runtime)
+    target_link_options(${TARGET} PRIVATE --cce-fatobj-link -Wl,--strip-debug)
+endfunction()
+
+pto_m2_mixed_spike_kernel(moe_dispatch_combine_a8w8_mixed_spike
+                          kernel/moe_dispatch_combine_a8w8_mixed_spike.cpp)
+
 add_executable(moe_dispatch_combine_a8w8 host/main.cpp)
 target_compile_options(moe_dispatch_combine_a8w8 PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
 target_include_directories(moe_dispatch_combine_a8w8 PRIVATE ${HOST_INCLUDE_DIRS})
@@ -144,6 +225,7 @@ target_link_directories(moe_dispatch_combine_a8w8 PUBLIC ${HOST_LINK_DIRS})
 target_link_libraries(moe_dispatch_combine_a8w8 PRIVATE
     moe_dispatch_combine_a8w8_kernel
     moe_dispatch_combine_a8w8_gmm_kernel
+    moe_dispatch_combine_a8w8_mixed_spike
     $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
     $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
     stdc++ ascendcl hcomm m tiling_api platform c_sec dl nnopbase pthread

@@ -354,6 +354,9 @@ AICORE inline void RunInt8GmmTile(__gm__ int8_t *input, __gm__ int8_t *weight, _
     wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
 }
 
+} // namespace
+
+#ifndef M2_FUSED_INCLUDE_DEVICE_BODY_ONLY
 __global__ AICORE void M2Gmm1Int8(moe_dispatch_combine_a8w8::ShapeConfig shape,
                                   moe_dispatch_combine_a8w8::RankConfig rank, GM_ADDR workspace)
 {
@@ -461,8 +464,6 @@ __global__ AICORE void M2Gmm2Int8(moe_dispatch_combine_a8w8::ShapeConfig shape,
     }
 }
 
-} // namespace
-
 namespace dispatch_combine_tile {
 
 void LaunchM2Gmm1Int8(moe_dispatch_combine_a8w8::ShapeConfig shape, moe_dispatch_combine_a8w8::RankConfig rank,
@@ -478,3 +479,4 @@ void LaunchM2Gmm2Int8(moe_dispatch_combine_a8w8::ShapeConfig shape, moe_dispatch
 }
 
 } // namespace dispatch_combine_tile
+#endif // M2_FUSED_INCLUDE_DEVICE_BODY_ONLY

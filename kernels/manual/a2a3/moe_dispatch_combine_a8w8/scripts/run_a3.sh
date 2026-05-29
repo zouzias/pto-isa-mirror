@@ -52,6 +52,11 @@ Runtime:
   --activation-only 0|1
   --gmm2-only 0|1
   --combine-return-only 0|1
+  --m2-mixed-spike-only 0|1
+  --m2-fused-skeleton-only 0|1
+  --m2-fused-full 0|1
+  --m2-multi-launch-debug 0|1
+  --m2-fused-debug-stop-stage N
   --hccl-buffsize-mb N
   --m1-suite 0|1       build once, then run explicit M1 real dispatch/combine cases with mock GMM payload
   --m2-suite 0|1       build once, then run explicit M2 int8 full-chain cases
@@ -124,6 +129,10 @@ GMM1_EPILOGUE_ONLY=0
 ACTIVATION_ONLY=0
 GMM2_ONLY=0
 COMBINE_RETURN_ONLY=0
+M2_MIXED_SPIKE_ONLY=0
+M2_FUSED_SKELETON_ONLY=0
+M2_FUSED_FULL=1
+M2_MULTI_LAUNCH_DEBUG=0
 
 align_up() {
     local value=$1
@@ -166,6 +175,11 @@ while [[ $# -gt 0 ]]; do
         --activation-only) ACTIVATION_ONLY="$2"; shift 2 ;;
         --gmm2-only) GMM2_ONLY="$2"; shift 2 ;;
         --combine-return-only) COMBINE_RETURN_ONLY="$2"; shift 2 ;;
+        --m2-mixed-spike-only) M2_MIXED_SPIKE_ONLY="$2"; shift 2 ;;
+        --m2-fused-skeleton-only) M2_FUSED_SKELETON_ONLY="$2"; shift 2 ;;
+        --m2-fused-full) M2_FUSED_FULL="$2"; shift 2 ;;
+        --m2-multi-launch-debug) M2_MULTI_LAUNCH_DEBUG="$2"; shift 2 ;;
+        --m2-fused-debug-stop-stage) M2_FUSED_DEBUG_STOP_STAGE="$2"; shift 2 ;;
         --hccl-buffsize-mb) HCCL_BUFFSIZE_MB="$2"; shift 2 ;;
         --m1-suite) M1_SUITE="$2"; shift 2 ;;
         --m2-suite) M2_SUITE="$2"; shift 2 ;;
@@ -379,6 +393,11 @@ HOST_ARGS=(
     --activation-only "${ACTIVATION_ONLY}"
     --gmm2-only "${GMM2_ONLY}"
     --combine-return-only "${COMBINE_RETURN_ONLY}"
+    --m2-mixed-spike-only "${M2_MIXED_SPIKE_ONLY}"
+    --m2-fused-skeleton-only "${M2_FUSED_SKELETON_ONLY}"
+    --m2-fused-full "${M2_FUSED_FULL}"
+    --m2-multi-launch-debug "${M2_MULTI_LAUNCH_DEBUG}"
+    --m2-fused-debug-stop-stage "${M2_FUSED_DEBUG_STOP_STAGE:-0}"
     --hccl-buffsize-mb "${HCCL_BUFFSIZE_MB}"
 )
 if [ -n "${RANK}" ]; then

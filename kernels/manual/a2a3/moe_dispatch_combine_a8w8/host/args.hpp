@@ -112,6 +112,11 @@ inline DispatchCombineTileArgs DefaultArgs()
     args.runtime.activationOnly = 0;
     args.runtime.gmm2Only = 0;
     args.runtime.combineReturnOnly = 0;
+    args.runtime.m2MixedSpikeOnly = 0;
+    args.runtime.m2FusedSkeletonOnly = 0;
+    args.runtime.m2FusedFull = 1;
+    args.runtime.m2MultiLaunchDebug = 0;
+    args.runtime.m2FusedDebugStopStage = 0;
     args.runtime.keepHcclShm = 0;
     args.runtime.hcclBuffSizeMb = 0;
     return args;
@@ -234,6 +239,16 @@ inline DispatchCombineTileArgs ParseArgs(int argc, char **argv)
             args.runtime.gmm2Only = ParseU32(value(key.c_str()), key.c_str());
         } else if (key == "--combine-return-only") {
             args.runtime.combineReturnOnly = ParseU32(value(key.c_str()), key.c_str());
+        } else if (key == "--m2-mixed-spike-only") {
+            args.runtime.m2MixedSpikeOnly = ParseU32(value(key.c_str()), key.c_str());
+        } else if (key == "--m2-fused-skeleton-only") {
+            args.runtime.m2FusedSkeletonOnly = ParseU32(value(key.c_str()), key.c_str());
+        } else if (key == "--m2-fused-full") {
+            args.runtime.m2FusedFull = ParseU32(value(key.c_str()), key.c_str());
+        } else if (key == "--m2-multi-launch-debug") {
+            args.runtime.m2MultiLaunchDebug = ParseU32(value(key.c_str()), key.c_str());
+        } else if (key == "--m2-fused-debug-stop-stage") {
+            args.runtime.m2FusedDebugStopStage = ParseU32(value(key.c_str()), key.c_str());
         } else {
             throw std::invalid_argument("unknown option: " + key);
         }

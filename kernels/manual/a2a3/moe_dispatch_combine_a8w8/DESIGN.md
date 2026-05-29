@@ -10,14 +10,14 @@
 | `TASKS.md` | 执行状态台账：stage/task state、owner、report、Issue Log、Design Change Log、handoff rules | task 状态、owner、report、issue、design change 或 handoff 状态变化时 | 架构长解释、任务实现细节、验收标准、一次性命令长日志 |
 | `reports/Mx.y.md` | 单个 task 的轻量交付结论、验收摘要、风险和下游提示 | 每个 task 交付时新增或更新一份 | 全局规则、替代 `DESIGN.md` / `TASKS.md` 的新要求、编译日志、stdout 原文、counter/timeline 原文 |
 
-当前不创建 `README.md`。项目入口直接使用 `DESIGN.md` 和 `TASKS.md`：前者读取设计边界和第 13 章任务细节，
+当前不创建 `README.md`。项目入口直接使用 `DESIGN.md` 和 `TASKS.md`：前者读取设计边界和第 14 章任务细节，
 后者领取任务、更新状态和记录 issue/DCL。后续如果确实要补入口文档，它只能写最小导航和运行命令，不能成为新的
 单一事实源。
 
 冲突优先级：
 
 1. 架构、精度、protocol、PTO-only 约束冲突时，以 `DESIGN.md` 为准。
-2. 任务边界、依赖、文件范围、验收证据和阶段门禁，以 `DESIGN.md` 第 13 章为准。
+2. 任务边界、依赖、文件范围、验收证据和阶段门禁，以 `DESIGN.md` 第 14 章为准。
 3. 当前状态、owner、open issue、blocked 原因和 design change 是否接受，以 `TASKS.md` 为准。
 4. 单个 task 的实际交付结论、验收摘要、blocked 原因和下游提示，以对应 `reports/Mx.y.md` 为准。
 5. 聊天上下文和临时笔记不能覆盖上述核心 markdown。
@@ -124,6 +124,8 @@ MegaMoE 对齐结论：
 | `/mnt/data/ntlab/zy/megamoe/昇腾高效支持MegaMoE融合算子，实现MoE计算通信深度融合_files/` | 文章配图资产 | 只在需要核对图示阶段编号或 timeline 形态时查看；不要把网页脚本当技术来源 |
 | `kernels/manual/a2a3/gemm_ar/main.cpp` | host 端 correctness/performance 记录参考 | `VerifyOutput`、`PerfStats`、warmup/measure、compute-only/sequential/pipelined timing、rank0 perf report |
 | `kernels/manual/a2a3/gemm_ar/run.sh` | build/run 脚本参考 | HCCL window sizing、MPI discovery、显式 run 参数、rank 启动 |
+| `/mnt/data/ntlab/zy/code/zhangyuan/vllm-ascend-zy/csrc/mc2/dispatch_ffn_combine` | mc2的 megamoe实现案例 |
+| `kernels/manual/a2a3/moe_dispatch_combine_a8w8/ffn.md` | FFN 融合算子切分与并发精读 | 五层切分、group/tile 正交、init_routing 多阶段、多 AIV dispatch、GMM tile scheduler、SwiGLU 分组、Combine V1/V2 与 Sub-Tile 同步取舍 |
 
 ## 1. 设计依据
 
@@ -207,7 +209,8 @@ MegaMoE 文章事实依据：
 6. `RunGmm2EpilogueAndReturn` 把 GMM2 epilogue 和 remote return 合并；主路径不能先写全量 `gmm2Out` 再 copy combine。
    debug mirror 允许存在，但 correctness 以 token owner 的 return payload 和 final restore 为准。
 7. `RestoreOutput` 使用 float `probs` 按 `expandedRowIdx` 对 topK return slot 加权还原。accumulation/cast 顺序必须和
-   host reference 一致；最终输出 dtype 只能是 M2.1 固定的 FP16/BF16 等 `dtype_out`，不能输出 int8。
+   host reference 一致；最终输出 dtype 只能是 M2.1 固定的 FP16/BF16 等 `dtype_out`，不能输出 int8。被 drop 的 slot
+   （`expandedRowIdx >= num_out_tokens`）按第 6.4 节跳过且不重新归一 probs。
 8. 验收分层：int8 payload 和 int32 accumulator 优先 bitwise/checksum 对齐；dequant、SwiGLU、cast 和 final output
    使用 M2.1/M2.8 固定的 dtype tolerance。最大误差、首个错误位置和相关 scale dump 由控制台结构化输出承载；
    task report 只写 pass/fail、tolerance 和关键误差摘要。
@@ -243,6 +246,10 @@ M2.8 当前集成回归的固定口径：
   payload 规划独立 L1/L0 双缓冲。
 - 不要求当前版本覆盖所有 shape、所有 topK、所有 expert count、所有 weight layout 或 small-shape 性能优化。
   small shape 只作为 correctness smoke 和风险记录，不作为独立性能目标。
+- 容量受限 drop 是 in-scope，且必须对齐参考实现 `dispatch_ffn_combine` 主 kernel 的做法：`maxOutputSize` 是本 rank
+  所有 local expert 合计的输出 row 预算，drop 采用位置序前缀和截断，restore 对 dropped slot 跳过且不重新归一。
+  具体语义、各 stage 截断公式、`expandedRowIdx` sentinel 和 golden 规则见第 6.4 节，**不允许**用 per-expert
+  capacity-padded 布局替换现有 compact `cumsumMM` 布局。
 - 不为了补 PTO primitive 缺口引入 Catlass/AscendC fallback。缺能力时只能补 PTO public primitive、标记 blocked
   或触发用户确认门禁。
 
@@ -380,7 +387,8 @@ host 侧职责：
 - 初始化 ACL/HCCL/MPI，绑定 rank/device。
 - 分配 ordinary GM workspace 和 HCCL peer window。
 - 初始化输入、expertId、probs、weights、scale1/scale2、per-token scale workspace 和 golden reference；当前 int8
-  主路径不生成 bias。
+  主路径不生成 bias。`xActiveMask[M]`（bool）为可选输入：传入时按其标记把 inactive token drop，不传时全部 active；
+  golden 必须按同一 mask 语义生成。
 - launch single fused kernel，回收输出，打印 correctness/perf/timeline stdout 报告。
 
 device 侧职责：
@@ -410,7 +418,10 @@ shape / tiling 约束：
 
 - `hiddenSize`、`intermediateSize` 必须满足 A3 PTO int8 matmul K/N alignment。
 - topK 先固定为主路径常用值；扩展 topK 前先验证 `expandedRowIdx` 和 combine weighted sum。
-- token capacity 超限时 fail fast，不静默截断。
+- `maxOutputSize` 是本 rank 所有 local expert 合计的输出 row 预算（workspace/window 按它预分配），不是 per-expert
+  capacity。token 总量超 `maxOutputSize` 时按第 6.4 节的位置序前缀和截断 drop，不 fail-fast、不静默改写其他 stage 的
+  offset 语义。当前 smoke/balanced shape 给足预算时不触发 drop，但截断公式、sentinel 和 no-renorm restore 必须就位
+  并由 golden 覆盖。
 - `rankNum * expertPerRank` 必须覆盖 expert id 范围；非法 expert id 进入 debug counter 并触发 host 检查失败。
 - 所有 peer-visible buffer 按 window layout 计算上限，host launch 前检查 `peerWindowOffset + bytes <= winSize`。
 
@@ -421,7 +432,7 @@ signal 和 counter 从 M1/M2 起就是最终 fused 结构；`overlap_mode=off` �
 
 | Stage | 主要 core | 职责 | PTO 化边界 |
 | --- | --- | --- | --- |
-| `RouteLocalTokens` | AIV | 读取 `expertId/probs`，统计 local token per expert，生成 per-block count | metadata raw GM，批量 compare/pack 直接用 PTO Vec primitive |
+| `RouteLocalTokens` | AIV | 读取 `expertId/probs`（存在 `xActiveMask` 时先把 inactive token 的 expertId 改写为越界 invalid），统计 local token per expert，生成 per-block count | metadata raw GM，批量 compare/pack 直接用 PTO Vec primitive |
 | `RoutePackQuantLocal` | AIV | 把 routing、local pack、dynamic quant 合并，直接写本 rank peer-visible int8 dispatch payload 和 per-token scale | payload 用 `GlobalTensor + Tile + TLOAD/TSTORE/TQUANT`，不生成主路径二次 reorder workspace |
 | `PublishCounts` | AIV | 发布 count matrix row，形成 dispatch 前同步 | `TPUT` 或 remote GM view + `TNOTIFY` |
 | `WaitCounts` | AIV | 等待所有 token owner count row 可见 | metadata raw GM + `TWAIT/TTEST` |
@@ -488,6 +499,40 @@ MegaMoE 主路径的核心不是单纯串联两个 GMM，而是一个 mixed AIC/
 多 launch 串行链。M3 通过时必须证明 single-kernel MPMD 或等价 device-side producer-consumer
 调度有效；否则只能称为 correctness 版本，不能称为 fused overlap 版本。
 
+#### 5.1.1 A3 fused 的 PTO mixed ELF 模型
+
+当前 A3 上 fused 能力的判断口径如下：
+
+- A3 fused mixed AIC/AIV 本身可行。参考 MC2 `dispatch_ffn_combine` 的 fused 形态依赖 mixed task metadata
+  (`KERNEL_TYPE_MIX_AIC_1_2`) 和 op-host tiling/registration；它不是把所有 Vec/Cube primitive 硬塞进一个
+  普通 `--cce-aicore-arch=dav-c220` target。
+- 本项目保持 PTO-only，不引入 `kernel_operator.h`、`AscendC::`、Catlass 或 custom-op host 注册接口。PTO 侧等价
+  抓手是 `include/pto/common/kernel_meta.hpp` 的 `.ascend.meta` metadata 宏，以及
+  `tests/npu/a2a3/src/st/testcase/syncall` 展示的 mixed ELF/registration 构建方式。
+- 直接设置 `FUSED_KERNEL_ARCH=dav-c220` 编译现有 Vec/comm kernel 失败，只能说明“单 raw mixed target”这条路
+  不成立；不能作为“A3 不能 fused”或“M2.8 不需要 single fused MPMD”的证据。
+- M2.8/M3.0 的正确实现路径是：AIC side 以 `dav-c220-cube` 编译，AIV side 以 `dav-c220-vec` 编译，通过
+  PTO `.ascend.meta` 和 registration ELF/handle launch 形成一个 single fused MPMD launch。
+
+M2.8 后续开发必须先做最小 mixed launch spike，再迁移主链：
+
+1. M2.8a 最小 PTO mixed launch：AIC/AIV 两侧共用同一 ABI，只写入各自 heartbeat/counter，host 通过
+   registration ELF 单次 launch 验证 AIC 和 AIV 都执行。
+2. M2.8b fused stage graph skeleton：保留现有 M2 workspace/layout/scoreboard 字段，构造单 launch 的
+   AIC/AIV stage orchestrator；先使用 `overlap_mode=off` 的 device-side wait，替代 host stage 间
+   `aclrtSynchronizeStream` / `MpiBarrier` 语义。
+3. M2.8c 全链迁移：AIV side 接入 dispatch、epilogue、activation/requant、return、restore，AIC side 接入
+   GMM1/GMM2；host 只发起 single fused launch，multi-launch 仅保留为 `multi_launch_debug` 回归路径。
+
+M2.8 系列的 stage 边界同步与 M3 的 overlap 同步是两套粒度，必须区分，不能混为一谈：
+
+- M2.8a/b/c 用卡内 `SYNCALL<SyncCoreType::Mix>` 全核栅栏即可做 overlap-off correctness，stage 之间硬同步是允许的。
+- 真正的 `GMM1↔SwiGLU↔GMM2` per-sync-group overlap 由第 10 章命名的 `pto::Event<...>::Init<CrossCoreId>() /
+  Wait<CrossCoreId>()`（`ffts_cross_core_sync`/`wait_flag_dev`）或 `TSYNC_CVID` 在 M3 打开，等价于 `ffn.md` 的
+  `CrossCoreSetFlag/WaitFlag<0x2>(flagId)`，**不是 primitive-gap**。
+- 因此 M3 把"每个 stage 一个 `SYNCALL<Mix>`"细化为"按 sync group/tile 放行的 per-`CrossCoreId` 握手"是设计内的
+  正常演进，不需要重写 protocol、layout 或 row order。
+
 ### 5.2 主路径策略到 PTO stage 对照
 
 MegaMoE 主路径到本项目 stage/backend 的对照：
@@ -517,13 +562,38 @@ MegaMoE 策略到本项目 stage 的对照：
 | GMM-Combine Sub-Tile/stride return | M2 固定 tile owner mapping/source row/destination `offsetD` segment plan，M3 验证 stride 或多段 `TPUT` async 执行能力 | M2.7a white-box dump + M3.8 enabled 或 blocked 证据 |
 | kernel 内 timestamp 转 timeline | `debugCounters` / `timeline` export | M3.9 timeline |
 
+### 5.2.1 FFN 五层切分与并发契约
+
+`ffn.md` 对本项目的直接约束是：FFN 融合不是把 dispatch、GMM、SwiGLU、combine 串到一个文件里，而是把
+空间切分和时间依赖拆开表达。M2/M3 后续实现必须遵守下面的五层契约：
+
+| 层级 | 本项目语义 | M2 必须固定 | M3 才打开或验证 |
+| --- | --- | --- | --- |
+| rank / expert ownership | `tokenOwnerRank` 与 `expertOwnerRank/localExpert` 决定 dispatch 读源、GMM group、combine 目的和 restore order | `tokenPerExpertMatrix/cumsumMM/preSumBeforeRank/expandedRowIdx` 同源，host/device dump 可追溯 | 不重排 owner 语义，只在已固定 owner segment 上打开 async |
+| core worker | AIV 负责 route/count/gather/activation/return/restore，AIC 负责 GMM1/GMM2 | M2.8c 如实打印每个 AIV stage worker facts；worker=1 不阻塞 M2 | M3.2/M3.3/M3.5/M3.8 把对应 payload stage 提升为多 AIV worker，并用 counter/timeline 证明 |
+| expert group / sync group | group 是 ready/sync 边界，不是“某个核负责某个 expert”的核分配单位 | `dispatchGroupReady`、`swigluSyncGroups/dequantSum`、`gmm2GroupReady` 的 row range 和 producer/consumer 边固定 | M3 只改变这些边的执行时序和 worker 分摊，不重新定义 group row order |
+| tile / sub-tile | AIC 负载按 GMM tile 分配；combine 可把 GMM2 tile 投影成 owner segment 或 sub-tile | GMM tile task、`ReturnSegmentPlan/OwnerSegment/subTileReady` schema 固定，segment correctness 已验证 | M3.5 做 continuous owner-segment 多 AIV return；M3.8 再验证 Sub-Tile/stride async |
+| L1/L0 / pipe | GMM 内部按 cache-level tile 和 ping-pong state 组织，epilogue/dispatch/return 内部用 Vec/comm pipe 排空 | M2.GMM 记录 L1/L0 tile shape、stage 数、tail、multi-AIC evidence；Vec epilogue/requant 有 PTO primitive 证据 | M3 可补 swizzle、L2 hint、preload/pipe overlap、SyncAll 空泡分析，但不能把 M2 GMM 降回 fixed smoke |
+
+由此得到三个硬性口径：
+
+- **group/tile 正交**：所有 AIC 都可以遍历所有 expert group；真正分给 AIC 的是 GMM tile。`dispatchGroupReady` 或
+  `gmm1SyncGroupReady` 放行的是 group/sync group 的数据依赖，不表示该 group 被某个固定 core 独占。
+- **并发证据分层**：`mixed_aiv_blocks>0` 只能证明 fused launch 中 AIV side 存在；只有 per-stage worker
+  processed/skipped counters、owned row/segment/tile range 和 timeline 才能证明 payload-level AIV 数据并行。
+- **访存局部性与同步微优化分层**：`ffn.md` §3.2/§5.2/§10 的 swizzle 遍历、L2 cache hint（冷门 expert 旁路 L2 防污染）、
+  preload drain（`SynchronizeBlock` 排空欠账）、`icache_preload` 和 count 同步的 DataAsFlag（数据兼到达信号，省一次
+  独立信号往返）属于访存局部性 / 同步微优化层，不影响 correctness、offset 语义和 ready 边。它们是 M3 可选项
+  （DataAsFlag 在 PTO 侧的等价表达是 payload `TPUT` 落地后用 `TTEST` 轮询 count 区）；M2 不要求实现，实现时也不得
+  改变已固定的 row order、offset 或 ready 语义。
+
 ### 5.3 M2 必须前置的 MegaMoE 合并点
 
 如果 M2 只做“协议 mock + 普通 int8 backend”，M3 再补 MegaMoE 的数据流合并，会把 dispatch row layout、
 GMM1 input layout、GMM2 output layout 和 combine return offset 全部重写一遍，overlap 阶段会留下过多 gap。
 因此 M2 的定位不是纯 backend correctness，而是 MegaMoE-ready correctness。
 
-M2 必须先固定五个点：
+M2 必须先固定六个点：
 
 1. Dispatch 输入侧合并：`RoutePackQuantLocal` 把 local routing、expanded row index、dynamic quant、local pack 合并，
    直接把 int8 hidden row 和 routing per-token scale 写入本 rank peer-visible window。`GatherDispatchToGmm1Input`
@@ -543,6 +613,10 @@ M2 必须先固定五个点：
    token owner rank 的分段映射、source row range、destination `offsetD` segment view 和 owner segment
    counter。M2 的 fused combine return 至少要按这个映射验证 payload correctness；如果某个 strided/multi-segment
    `TPUT` 形态需要 M3 才验证，M2 report 要把 primitive-gap gate 写清。
+6. FFN 切分证据：M2.8c 必须在结构化输出中记录第 5.2.1 节的五层切分事实，包括
+   `ffn_partition_model=rank_core_group_tile_l1l0`、`group_is_sync_boundary=true`、
+   `gmm_tile_is_aic_work_unit=true`、各 AIV stage worker 数和 `aiv_data_parallel_deferred_to_m3`。这些字段用于
+   防止把 single fused launch 误读为全阶段 payload 多核，也给 M3 timeline 提供基线。
 
 主路径只按 MegaMoE 数据流拆子目标，不按参考源文件数量拆任务：
 
@@ -631,9 +705,11 @@ expert 内部 row offset；它是按 token owner 的全局 expert 顺序 prefix�
 input x[M, hidden]
 expertId[M, topK]
 probs[M, topK]
+xActiveMask[M]            (optional, bool; absent => 全部 active)
   |
   v
 RouteLocalTokens
+  -> 若 xActiveMask 存在：inactive token 的 expertId 改写为越界 invalid expert，使其在路由阶段被 drop
   -> tokenPerExpertMatrix[tokenOwnerRank, expertOwnerRank, localExpert]
   -> expandedRowIdx[M * topK]
   -> dispatchOffset[M * topK]
@@ -681,10 +757,20 @@ RestoreOutput
 这张图只描述数据依赖顺序，不表示主路径必须按全量 stage 串行执行。MegaMoE 的实现目标是在同一套数据流和
 offset 语义下，让已经 ready 的 expert group、sync group 或 return segment 尽早被下游 stage 消费。
 
+关于 dispatch 排序：本项目**不实现** `ffn.md` init_routing 的 multi-core merge sort（VBS/VMS/SortOut）。token 的
+expert-major 有序性由 `RoutePackQuantLocal` 按 `globalExpert -> row` offset 直接 pack，再由
+`GatherDispatchToGmm1Input` 按 `cumsumMM/preSumBeforeRank` 远端读 gather 完成——这等价于 `ffn.md`"把通信后重排
+折叠进 gather 地址映射"的结论，offset-table 已经承担了排序职责，不需要独立 sort 子系统。因此 M3.2 的 dispatch
+多 AIV 只覆盖 route/count/pack/gather 的 worker 分摊，**不包含**排序；任何"补 sort 子系统"的要求都属于
+误读，需先走 design-bug / 用户确认门禁。
+
 ### 6.1 MegaMoE overlap 执行视图
 
 M1/M2 可以用 `overlap_mode=off` 做 correctness，但数据流必须已经按下面的 producer/consumer 边建模；M3 只验证或
 启用这些边的 async 执行能力。
+
+本视图按 `ffn.md` 的分层口径阅读：AIV/AIC role split 是执行角色，expert group 是 ready 边界，GMM tile 是
+AIC 工作分配单位，Sub-Tile/OwnerSegment 是 combine consumer 边界。不能把任意一个层级直接替代另一个层级。
 
 ```text
 time --->
@@ -835,6 +921,40 @@ dispatch/combine 维度约定：
   row offset；`GatherDispatchToGmm1Input`、`RunGmm2EpilogueAndReturn` 和 final restore 都依赖它。
 - combine return 以 `ownerToken -> topK slot -> hidden chunk` 还原，便于按 `probs` 做加权。
 
+### 6.4 容量受限 drop 语义（对齐参考实现）
+
+drop 模型直接对齐参考 `dispatch_ffn_combine` 主 kernel（`op_kernel/dispatch_ffn_combine_kernel.hpp` 的 GMM1/GMM2/
+dispatch gather/combine return 截断，以及 `op_kernel/unpermute/moe_token_unpermute.h` 的 restore）。要点如下，M2/M3
+实现和 host golden 必须一致：
+
+1. **`maxOutputSize` 是本 rank 合计预算**：它是本 rank 所有 local expert 输出 row 的总上限（= workspace/window 预分配
+   行数），不是 per-expert capacity。本项目继续用 compact `cumsumMM` 布局，**不**切换到 per-expert capacity-padded 布局。
+2. **位置序前缀和截断**（与参考一致）：按 local expert 顺序累计 `preCurrentmSum`，对每个 expert 的 `currentM`：
+   - `preCurrentmSum >= maxOutputSize` → `currentM = 0`（整段丢弃）；
+   - `preCurrentmSum + currentM > maxOutputSize` → `currentM = maxOutputSize - preCurrentmSum`（边界 expert 部分丢弃）；
+   - 否则全保留；随后 `preCurrentmSum += currentM`。被丢的是前缀顺序靠后的 token，不按 router score 选择。
+3. **全 stage 一致截断**：同一 `maxOutputSize` 公式必须统一应用在所有消费 `cumsumMM` 的 stage——`GatherDispatchToGmm1Input`
+   不远端读超额行（`rowStart >= maxOutputSize` 跳过，`rowStart + rows > maxOutputSize` 截断）、`Gmm1/Gmm2` 不计算被丢行、
+   `swigluSyncGroups/dequantSum` 同步截断、`RunGmm2EpilogueAndReturn` 不回写被丢行。任何 stage 漏截断都会让 row range 对不齐。
+4. **drop 标记走 `expandedRowIdx` sentinel**：被丢的 `(token, slot)` 在 `expandedRowIdx` 写一个 `>= num_out_tokens`
+   的 sentinel（`num_out_tokens` = 有效 return row 上界，即 `maxOutputSize`）。不新增独立 drop mask buffer。
+5. **restore 不重新归一**：`RestoreOutput` 对每个 output token 的 topK slot，若 `expandedRowIdx < num_out_tokens` 则按
+   原始 `probs[slot]` 加权累加，否则跳过该 slot（贡献 0）。**不**把剩余 slot 的 `probs` 重新归一到和为 1；首个 slot 若被丢，
+   累加器初始化为 0。这与参考 `moe_token_unpermute` 的 `cal_token_idx < num_out_tokens` 跳过语义逐字一致。
+6. **golden 同源**：host reference 必须用同一套截断 + sentinel + no-renorm 规则生成 expected output，否则 drop case
+   无法验收。
+7. **验收**：至少补一个 over-capacity skewed case（某 expert token 数 > 其在预算内可占额度），证明 drop 行被一致截断、
+   sentinel 正确、final output 与 golden 在 tolerance 内一致，且不死锁、不越界。balanced/smoke case 仍走相同代码路径但不触发截断。
+8. **`xActiveMask` 可选输入（drop 前端）**：`xActiveMask[M]`（bool）是可选输入，语义上只是 drop 的前端触发器，复用上面
+   同一条 drop 路径，不新增独立分支：
+   - `RouteLocalTokens` 在统计 count 前，对每个 inactive token（`xActiveMask[token] == false`）把其全部 topK
+     `expertId` 改写为越界 invalid expert（如 `rankNum * expertPerRank`），使这些 `(token, slot)` 不进入任何 expert
+     的 count/cumsum，自然在路由阶段被 drop，其 `expandedRowIdx` 写 sentinel。
+   - mask 不传（host 传空指针）时等价于全部 active，行为与无 mask 完全一致。
+   - host golden 必须用同一 mask 语义：inactive token 不参与 routing/GMM，对应 slot 在 restore 跳过且不重新归一。
+   - 它与第 2 项的容量截断是两个独立的 drop 来源（mask 在路由前、容量在预算边界），但都收敛到同一 sentinel +
+     no-renorm restore 口径。验收可在 over-capacity case 之外，另补一个含 inactive token 的 mask case。
+
 ## 7. Workspace 与 window layout
 
 所有 rank 的 HCCL window layout 必须一致。只要字段会被 peer rank 访问，就必须放在 peer-visible window 内；只被本 rank
@@ -955,6 +1075,7 @@ typed view 和 offset，但不能封装 copy、wait、notify、matmul 或 quant 
 | `ActivationQuant` | `TLOAD/TCVT/TMUL/TADD` etc., `TABS/TROWMAX/TMUL`, `TQUANT<INT8_*>`, `TSTORE` | 直接完成 scale1 dequant、routing scale、SwiGLU、requant、`gmm2PerTokenScale` 写回；当前主路径无 bias |
 | `RunGmm2EpilogueAndReturn` | `TLOAD/TCVT/TMUL/TSTORE + TPUT + TNOTIFY` | GMM2 epilogue 与 remote return 同 stage；`TPUT` 直接写 token owner `offsetD`，不能先全量写 `gmm2Out` 再 copy |
 | Sub-Tile/strided return | `GlobalTensor Shape/Stride + TPUT` or multiple direct `TPUT` calls | M2 固定 segment plan；M3.8 验证 A3 PTO remote stride/multi-segment async 能力。不足则 blocked，不引入 AscendC scatter fallback |
+| AIC↔AIV C/V handoff | `pto::Event<SrcOp, DstOp>::Init<CrossCoreId>() / Wait<CrossCoreId>()`（`ffts_cross_core_sync`/`wait_flag_dev`）或 `TSYNC_CVID`；卡内全核栅栏用 `SYNCALL<SyncCoreType::Mix>` | per-group/per-tile readiness 用 per-`CrossCoreId` 握手；`SYNCALL<Mix>` 仅 M2.8c overlap-off stage 边界。粒度层级与约束见第 10 章 |
 | `RestoreOutput` | `TLOAD/TMUL/TADD/TSTORE` | 按 `expandedRowIdx + probs` 做 weighted restore；等待缺失 topK return slot，不能输出 int8 |
 | scoreboard/timeline/counter | raw GM typed view + explicit publish order | `scoreboardTaskMap/producerStatus/scoreboardMinStatus/subTileReady/timeline` 是控制面账本；scoreboard 必须记录 producer publish 时机和 consumer dependency domain，不通过 helper 隐藏 readiness 或 remote copy |
 
@@ -1079,9 +1200,29 @@ payload read
 如果 PTO comm primitive 已经内建对应 ordering，stage 只直接调用 primitive；如果需要额外 fence，必须先进入
 PTO public primitive 或明确标记该 overlap 点 blocked，不能在本项目里绕开 PTO 自建通信封装。
 
-本项目不直接使用 `AscendC::CrossCoreWaitFlag` / `CrossCoreSetFlag`。C/V handoff 语义要么用
-PTO public sync primitive 表达，要么退化为 local GM signal + `TNOTIFY/TWAIT/TTEST`。如果 public PTO 层没有等价
-能力，该 overlap 点必须标记 blocked，不能把 AscendC flag API 藏进本项目代码。
+本项目不直接使用 `AscendC::CrossCoreWaitFlag` / `CrossCoreSetFlag`，但 AIC↔AIV 的 C/V handoff 不是
+primitive-gap。PTO 已提供等价的跨核同步能力，必须按下列层级使用，不能用一个全核栅栏替代所有粒度：
+
+| 同步范围 | PTO 原语 | 对应 `ffn.md` 机制 | 用在哪 |
+| --- | --- | --- | --- |
+| 卡内 AIC+AIV 全核栅栏 | `SYNCALL<SyncCoreType::Mix>` | `SyncAll<true>` 全核 + 阶段收口 | 仅 M2.8c overlap-off 的 stage 边界；M3 关键路径不得每个 stage 都用 |
+| AIC↔AIV per-group/per-tile 握手 | `pto::Event<SrcOp, DstOp>::Init<CrossCoreId>() / Wait<CrossCoreId>()`（封装 `ffts_cross_core_sync` / `wait_flag_dev`），或 `TSYNC_CVID` | `CrossCoreSetFlag/WaitFlag<0x2>(flagId)` | M3.0/M3.3/M3.4 的 `GMM1↔Activation↔GMM2` sync-group 放行 |
+| 跨 rank readiness | `TNOTIFY / TWAIT / TTEST` | DataAsFlag / `gm_signal_wait_until_ne` | dispatch 前 count 同步、combine 后 restore |
+
+约束：
+
+- FFTS cross-core event id 是 4-bit 字段，物理上只有 16 个 flag（0-15），是全平台共享的硬件上限，PTO 同步也受此限制。
+  PTO `SyncAll` 已占用 `SYNC_AIC_FLAG=11`、`SYNC_AIV_FLAG=12`、`SYNC_AIC_AIV_FLAG=13`、`SYNC_AIV_ONLY_ALL=14`
+  （见 `include/pto/common/type.hpp`），`TSYNC_CVID` 的 CV-comm 控制额外占用 12-15。因此当 fused kernel 同时使用
+  `SYNCALL` 时，用户 per-group/per-tile 握手的 `CrossCoreId` **安全区是 0-10**。
+- 物理 flag 数有限不限制 sync group 数：FFTS flag 是计数信号量（set N 次、wait 按序消费 N 次）。当逻辑 sync group 数
+  超过可用物理 flag 数时，按计数信号量 + 索引折叠复用同一物理 flag，例如 `flagId = syncGroupIdx % availableFlags`
+  或参考实现的 `flagId = syncGroupIdx / CROSS_CORE_FLAG_MAX_SET_COUNT(=15)` 滚动（每 15 次 set 换下一个物理 flag，
+  防计数器溢出）。复用映射规则必须在 report 记录，且不能让无关 group 因共享 flag 被错误放行。
+- `SYNCALL<SyncCoreType::Mix>` 是卡内 AIC+AIV 栅栏，既不是跨卡同步，也不是 per-group 放行。M2.8c 允许用它表达
+  stage 边界做 overlap-off correctness；但 M3.0 起，`GMM1 -> ActivationQuant -> GMM2` 等 overlap 边必须改用
+  per-`CrossCoreId` 的 `pto::Event` 握手或 `TSYNC_CVID`，否则属于"串行未 overlap"，不能声称 M3 overlap 完成。
+- 只有当某个 overlap 点确实超出上述 PTO 能力时，才标记 primitive-gap blocked，不能把 AscendC flag API 藏进本项目代码。
 
 ## 11. Swiglu/quant 粗细粒度同步策略
 
@@ -1199,7 +1340,7 @@ activation_empty_groups=<count>
 
 ## 12. 验证与观测策略
 
-本章只定义项目级验证口径。每个 agent step 的具体命令、文件范围和逐条验收标准，以第 13 章为单一事实源；
+本章只定义项目级验证口径。每个 agent step 的具体命令、文件范围和逐条验收标准，以第 14 章为单一事实源；
 状态流转、owner、report、Issue Log 和 DCL 以 `TASKS.md` 为准。
 
 正确性验证矩阵：
@@ -1334,7 +1475,167 @@ E2E 性能通过标准不是固定 speedup 数字。M3/M4 只要求：
 - overlap on/off 至少能解释等待空泡、time saved 或 blocked 原因；
 - small shape 退化时必须记录原因，不能把退化直接当 correctness 失败。
 
-## 13. 任务分解与阶段验收标准
+## 13. FFN 精读驱动的 M2/M3 PTO MegaMoE 实施导引
+
+本章把 `ffn.md` 的精读结论和前 0-12 章已有设计约束收束成后续 M2.8c、M3 的实施导引。它不是新的
+protocol，也不替代第 14 章逐任务验收标准；它的作用是防止开发时只盯某个 kernel 文件或某个 task，忘掉
+MegaMoE FFN 的切分层级、同步边界和观测证据。
+
+阅读顺序建议：
+
+1. 先读第 0 章目标和硬边界，确认当前只做 A3 A8W8/int8 PTO-only 主路径。
+2. 再读第 5-6 章 stage graph、五层切分和 overlap 执行视图，确认 producer/consumer 边不允许 M3 重写。
+3. 再读本章，把 `ffn.md` 的算法事实映射成 M2.8c/M3 的开发路线。
+4. 最后回第 14 章领取具体 task，按 `TASKS.md` 更新状态和 DCL。
+
+### 13.1 `ffn.md` 精读后必须固定的十个事实
+
+`ffn.md` 不是外部代码照搬清单，而是本项目判断“是否接近 PTO MegaMoE 目标形态”的语义依据。下面事实必须在
+M2/M3 的设计、代码和验收输出里保持可追溯：
+
+| `ffn.md` 事实 | 本项目绑定 | 不能误读成 |
+| --- | --- | --- |
+| AIC/AIV 角色分离：AIC 做 GMM1/GMM2，AIV 做 route、count、dispatch、SwiGLU、combine、restore | single fused MPMD launch 中保留 AIC/AIV 分支；M2.8c 先迁移全数据路径，M3 再打开更多 overlap | 把多 launch host 编排称为 fused，或把 AIV heartbeat 当成 payload 并行 |
+| 五层切分是 rank/core/group/tile/L1-L0 | `ffn_partition_model=rank_core_group_tile_l1l0` 必须出现在 M2.8c/M3 结构化输出 | 只按 expert 切核，或只按 tile 解释所有同步 |
+| group 是 ready/sync 边界，不是 core ownership | `dispatchGroupReady`、`gmm1SyncGroupReady`、`activationSyncGroupReady`、`gmm2GroupReady` 表达依赖边 | “AIC0 负责 expert0” 这类固定 expert-to-core 分配 |
+| GMM tile 是 AIC 工作单元 | GMM task scheduler、multi-AIC evidence、L1/L0 tile policy 证明 tile ownership | 用单 AIC block 或 smoke shape 证明 GMM 已达目标 |
+| init_routing 在 `ffn.md` 是 route/sort/count/srcToDst/gather+quant 子系统；本项目用 offset-table pack+gather 等价替代 sort | M3.2 的 dispatch 多 AIV 覆盖 route/count/pack/gather worker 分摊证据，不实现 multi-core merge sort | 把 PTO 简化误读成"必须补 sort 子系统"，或只把 `TGET` 循环并行化就声称 dispatch 多核 |
+| count 同步是 dispatch 的前置点对点协议 | `tokenPerExpertMatrix`、count ready、prefix/cumsum 必须先对齐，再 remote gather | 把 count/prefix 做成 host barrier 或临时 host copy |
+| SwiGLU 是 AIV 工作，按 sync group 粗细结合 | M2.5 固定 `swigluSyncGroups/dequantSum`，M3.3/M3.4 只打开 worker 分摊和 group overlap | 到 M3 重排 activation row layout |
+| epilogue pipe 有 prefill/drain 生命周期 | M3.3/M3.5/M3.9 要记录 SetFlag/Finalize 或等价 PTO pipe lifecycle evidence | 只看 final output pass，不证明 pipe 没有悬空/脏 flag |
+| Combine V1/V2 是同步成本取舍 | M3.5 先做 V1 continuous owner segment 多 AIV return；M3.8 再验证 V2 Sub-Tile/stride async | 把 Sub-Tile 理解成“DMA 越大越好”或 M2 必须完成 async stride |
+| final restore 是 topK reduce，不能被通信寻址折叠 | `RestoreOutput` 继续按 `expandedRowIdx + probs` 加权输出 | combine 写回后直接把 return payload 当 final output |
+
+### 13.2 目标形态和 M2/M3 边界
+
+最终目标形态是一个 PTO-only single fused MPMD kernel：AIV 分支推进 route/count/dispatch、activation/requant、
+combine return 和 restore，AIC 分支推进 GMM1/GMM2。host 只负责资源初始化、单次 fused launch、debug/preflight
+模式选择和结构化报告，不再用 stage 间 `aclrtSynchronizeStream` / `MpiBarrier` 构成 accepted 主路径。
+
+M2.8c 的边界是“全数据路径迁移到 single fused launch，overlap-off 可以接受”。它必须证明 active M2 full chain 已经
+在 single fused MPMD graph 中跑通，multi-launch 只保留为 `multi_launch_debug` preflight。M2.8c 不要求
+dispatch、activation、combine return 的 payload-level AIV 多 worker 分摊，但必须如实打印 worker facts，不能把
+`mixed_aiv_blocks>0`、AIV heartbeat 或 stage 参与数量当成“payload 已多核”的证据。
+
+M3 的边界是“只在 M2 固定的 edge/layout/signal 上打开并发”。M3 可以改变 worker partition、ready 触发时序、
+poll/wait 策略和 timeline 打点；不能改变 `tokenPerExpertMatrix/cumsumMM/preSumBeforeRank/expandedRowIdx`、
+`swigluSyncGroups/dequantSum`、`ReturnSegmentPlan/OwnerSegment`、GMM tile policy 或 final restore 语义。
+
+### 13.3 M2.8c 必须交付的 fused data-path 形态
+
+M2.8c 关闭 ISSUE-2026-05-29-07 的条件不是“mixed ELF 能 launch”，M2.8a/M2.8b 已经证明这个前提；M2.8c 要把当前
+active M2 full chain 从 host multi-launch 迁入 single fused MPMD stage graph。最小 accepted 形态如下：
+
+| 维度 | M2.8c 必须做到 | M2.8c 不要求 |
+| --- | --- | --- |
+| launch 形态 | `stage_graph_mode=single_fused_mpmd`，host 单次 fused handle launch，AIC/AIV side 都执行 active data path | overlap on 性能收益 |
+| 数据路径 | `RoutePackQuantLocal -> GatherDispatchToGmm1Input -> GMM1 -> ActivationQuant -> GMM2 -> RunGmm2EpilogueAndReturn -> RestoreOutput` 全链在 fused graph 内 | M3 级 async scoreboard 或 Sub-Tile async |
+| debug 路径 | multi-launch 只能作为 `multi_launch_debug=true` preflight，报告里标清不参与 accepted main path | 删除已有 multi-launch 调试能力 |
+| 同步模式 | 可以用卡内 hard `SYNCALL<SyncCoreType::Mix>`（AIC+AIV 全核栅栏，非跨卡）或 overlap-off device wait 表达 stage 边；跨卡同步仍只在 dispatch 前 count 同步和 combine 后 restore 两点 | host stage 间 barrier；M3 才把中间卡内栅栏细化为第 10 章的 per-`CrossCoreId` CV 握手 |
+| GMM | 沿用 M2 accepted 的 `gemm_ar` cache-level policy、multi-AIC task partition 和 accumulator exactness | 重做 tile size 或降回 small smoke |
+| AIV worker facts | 对 route/count/gather/activation/return/restore 打印 worker count、processed/skipped rows 或 segments | payload-level 多 AIV 分摊 |
+| FFN partition facts | 打印 rank/core/group/tile/L1-L0 五层事实、group/tile 正交事实和 AIV 并行延后事实 | 用单字段笼统说 “megamoe=true” |
+
+M2.8c 的结构化输出至少包含：
+
+```text
+stage_graph_mode=single_fused_mpmd
+single_fused_payload_migrated=true
+multi_launch_debug_only=true
+overlap_mode=off
+ffn_partition_model=rank_core_group_tile_l1l0
+group_is_sync_boundary=true
+gmm_tile_is_aic_work_unit=true
+aiv_data_parallel_deferred_to_m3=true
+dispatch_aiv_workers=<count>
+activation_aiv_workers=<count>
+combine_return_aiv_workers=<count>
+restore_aiv_workers=<count>
+dispatch_payload_parallel=false|true
+activation_payload_parallel=false|true
+combine_payload_parallel=false|true
+mixed_aiv_blocks=<count>
+mixed_aic_blocks=<count>
+```
+
+其中 `*_payload_parallel=false` 在 M2.8c 可以 accepted，但必须和 `aiv_data_parallel_deferred_to_m3=true` 同时出现。
+如果某段已经天然多 AIV，也必须用 processed rows/segments counter 证明，不能只靠 block 数推断。
+
+### 13.4 M3 打开并发的推荐顺序
+
+M3 的顺序必须从“先保证 fused graph 和信号可观测”到“逐段打开 payload worker 分摊”，最后用 timeline 证明等待空泡。
+推荐顺序如下，除非发现 primitive-gap 或 env-gap，否则不要跳过前置证据直接优化局部循环。
+
+| Task | 目标 | 关键证据 |
+| --- | --- | --- |
+| M3.0 | 在 M2.8c fused data path 上打开 M3 runtime 开关，确保所有 stage 在同一 launch 内可按信号推进 | `stage_graph_mode=single_fused_mpmd`、stage enter/exit counter、no host stage barrier |
+| M3.1 | 启用 `dispatchGroupReady/gmm1SyncGroupReady/activationSyncGroupReady/gmm2GroupReady` 计数和 wait dump | 每类 signal 的 producer/consumer count、timeout count、empty group skip |
+| M3.2 | 做 dispatch 多 AIV（route/count/pack/gather worker 分摊，不含 sort 子系统） | route rows、count rows、pack rows、gather source-rank rows 的 per-worker counter |
+| M3.3 | 做 Activation/SwiGLU/requant 多 AIV tile partition，并补 epilogue pipe prefill/drain evidence | `swiglu_group_tile_ranges`、activation tile processed/skipped、pipe prefill/drain/finalize counter |
+| M3.4 | 让 GMM2 消费 `activationSyncGroupReady` row range，不等全量 activation | sync-group row range 到 GMM2 tile task 的投影、GMM2 wait histogram |
+| M3.5 | 做 Combine V1-style continuous owner segment 多 AIV return，并证明 group/expert-level overlap | owner segment per-worker counter、continuous segment coalesce、SyncAll/CV wait 空泡 |
+| M3.6 | 补 timeout dump 和 overlap 回归，确保 blocked 原因能定位到 signal、worker 或 primitive | per-signal timeout、last producer/consumer、rank/expert/tile locator |
+| M3.7 | 在 M2.2c scoreboard ledger 上打开 async scoreboard，不重定义 task id 或 dependency domain | dependency-domain aggregation、worker poll/wait count、scoreboardMinStatus by domain |
+| M3.8 | 在 M2.7a segment schema 上验证 Combine V2 Sub-Tile/stride async 或明确 primitive-gap blocked | `subtile_rows`、strided/multi-segment `TPUT` evidence、subtile SyncAll reduction |
+| M3.9 | 输出 timeline，区分 launch-level participation 和 payload-level worker evidence | stage intervals、group/tile/sub-tile ownership、SyncAll/CV wait bubble、overlap on/off 对照 |
+
+M3.2、M3.3、M3.5 是 payload-level AIV 数据并行的主体；M3.7/M3.8 是更细同步和更细 return 的验证项；
+M3.9 是验收证据汇总项。M3.0/M3.1 只打开 graph/signal，不等于性能形态完成。
+
+### 13.5 Combine V1/V2 与 Sub-Tile 的本项目落点
+
+本项目已经在 M2 固定 `ReturnSegmentPlan/OwnerSegment/subTileReady` schema，因此 M3 不再重新设计 combine offset。
+后续只在同一 schema 上区分两类执行形态：
+
+| 形态 | 适用目标 | 本项目任务 | 验收重点 |
+| --- | --- | --- | --- |
+| V1 continuous owner segment | 大 shape / prefill 方向，尽量合并连续目的 rank、source rows、destination rows | M3.5 | 多 AIV 分摊连续 owner segment，减少单 worker return 尾巴，记录 SyncAll/CV wait 空泡 |
+| V2 Sub-Tile/stride | 小 shape / decode 方向，AIV consumer 与对应 AIC tile 对齐，降低全核同步空泡 | M3.8 | strided 或 multi-segment `TPUT` 是否能在 PTO A3 上表达；若不能，按 primitive-gap blocked |
+
+Sub-Tile 的价值是减少同步等待，不是追求更大的 DMA。若某个 shape 下 Sub-Tile 导致 segment 过碎，优先调
+sub-tile 粒度、coalesce 规则或回落 V1 continuous segment；不能把多个 token owner 混写到同一远端连续地址，也不能
+回到“先全量 `gmm2Out`，再 copy combine”的二阶段主路径。
+
+### 13.6 Evidence matrix
+
+M2/M3 的 accepted 不能只靠 final output pass。下面字段用于把 correctness、并发和 blocked 原因分开：
+
+| 能力 | 证明字段 |
+| --- | --- |
+| single fused 主路径 | `stage_graph_mode=single_fused_mpmd`、`single_fused_payload_migrated=true`、`multi_launch_debug_only=true` |
+| AIC tile ownership | `gmm_tile_is_aic_work_unit=true`、`gmm_tile_tasks`、`gmm_active_aic_blocks`、`gmm_l1/l0_tile_shape` |
+| group/tile 正交 | `group_is_sync_boundary=true`、`gmm_all_aic_visit_all_groups=true` 或等价 tile assignment dump |
+| dispatch payload 多 AIV | per-worker route/count/pack/gather rows、source rank ranges、processed/skipped counter |
+| activation payload 多 AIV | `swiglu_group_tile_ranges`、activation tile owner、requant processed rows、pipe prefill/drain |
+| combine payload 多 AIV | owner segment worker assignment、segment coalesce count、return `TPUT` count by worker |
+| scoreboard async | dependency-domain `scoreboardMinStatus`、poll count、wait count、timeout locator |
+| Sub-Tile/stride | `subtile_rows`、`subtile_owner_segments`、strided or multi-segment `TPUT` evidence、`subtile_syncall_count` |
+| timeline | per-stage begin/end、ready/wait intervals、SyncAll/CV wait bubble、overlap on/off deltas |
+| blocked 原因 | `primitive_gap=<name>`、`env_gap=<name>`、last producer/consumer/task id、affected rank/expert/tile |
+
+### 13.7 禁止路径
+
+后续 M2.8c/M3 开发禁止通过下面捷径“看起来完成”：
+
+- 禁止把 mixed launch heartbeat、`mixed_aiv_blocks` 或 AIV branch enter counter 当成 payload-level 多 AIV 证据。
+- 禁止把 expert group 固定绑定到某个 AIC/AIV core；group 是 ready 边界，tile/row/segment 才是 worker work item。
+- 禁止在 M3 重写 M2 已验收的 row order、offset、owner segment、SwiGLU group 或 GMM tile policy。
+- 禁止用 host multi-launch、host barrier 或 host copy/reorder 作为 accepted fused 主路径。
+- 禁止为了 Sub-Tile/stride remote write 引入 AscendC/Catlass fallback；PTO 表达不了就标 primitive-gap blocked。
+- 禁止用 small smoke shape 证明最终形态；small shape 只证明语义和风险，不证明调度效率。
+- 禁止把 final restore 折叠进 combine 通信；topK weighted reduce 仍由 `RestoreOutput` 负责。
+
+### 13.8 M2/M3 交接口径
+
+M2.8c accepted 表示：最终 protocol、layout、row/order/offset、GMM tile policy、return segment schema 和 single fused
+stage graph 已经固定，active full data path 能在 fused launch 内正确运行。它不表示：dispatch/activation/combine
+已经完成 payload-level AIV 数据并行，也不表示 runtime overlap 已经有性能收益。
+
+M3 accepted 表示：在 M2 固定边界上，至少按任务拆分证明了 async 或 worker 分摊的真实执行证据；无法完成的点有
+明确 primitive-gap/env-gap、locator 和不影响 M4 correctness 的回退口径。M3 的核心验收不是“打开开关”，而是能用
+counter/timeline 说明每个 group、tile、sub-tile 由谁生产、谁消费、等了多久、为什么等。
+
+## 14. 任务分解与阶段验收标准
 
 本章是 implementation agent 开发任务内容、依赖、文件范围和验收标准的单一事实源。`TASKS.md` 只跟踪
 state、owner、report、Issue Log 和 Design Change Log；领取任务后必须回到本章对应小节读取实现要求。
@@ -1348,8 +1649,8 @@ state、owner、report、Issue Log 和 Design Change Log；领取任务后必须
 | --- | --- | --- |
 | M0 | 工程骨架、脚本、layout、host smoke。从 `gemm_ar` 裁剪 CMake/run.sh/main.cpp，不从空目录手写。 | M0.1-M0.6 全部 accepted；dry-run/smoke 路径可用；依赖扫描无禁用接口、build helper 或 fallback。 |
 | M1 | PTO dispatch/combine protocol 闭环。只能把中间 `GMM1 -> SwiGLU/Quant -> GMM2` 专家计算整体 mock；routing、count、prefix、dispatch `TGET`、combine `TPUT`、signal、restore 必须真实落到 device path。 | M1.0-M1.11 全部 accepted；2 卡 NPU/mpirun 实跑通过；metadata、row order、signal、restore 正确；mock 只替代 expert compute。dry-run/reference-only 不能关闭 M1。 |
-| M2 | A3 int8_int8 全路径功能，并前置 MegaMoE 必需数据布局：dispatch 融合、GMM1 contiguous input、runtime-shape GMM tile partition、GMM2 epilogue+combine return、soft-sync ledger、Swiglu sync-group metadata、tile-split return map 和 segment-driven return path。 | M2.0-M2.8 全部 accepted；active runtime 已归一到 `host/`、`kernel/`、`include/`，dispatch/activation/combine 合并点、GMM L1/L0 tile plan、multi-block work partition、soft-sync ledger、`swigluSyncGroups/dequantSum`、shape-derived tile-split return map、segment-driven return 和 single fused MPMD stage graph 已在最终布局中验收；accumulator 精确对齐，epilogue/final output 按 tolerance 对齐；M3 不需要重写 row/order/layout/stage graph。 |
-| M3 | 在 M2 已固定的依赖边上打开或验证 runtime overlap、scoreboard、Sub-Tile remote write 和 timeline；若 M2.8 仍是 `multi_launch_debug`，M3.0 首先补齐 single fused MPMD stage graph，而不是只打开开关。 | M3.0-M3.9 accepted 或明确 primitive-gap blocked；timeline/counter 能解释 overlap、等待空泡或阻断原因。 |
+| M2 | A3 int8_int8 全路径功能，并前置 MegaMoE 必需数据布局和 `ffn.md` 五层切分事实：dispatch 融合、GMM1 contiguous input、runtime-shape GMM tile partition、GMM2 epilogue+combine return、soft-sync ledger、Swiglu sync-group metadata、tile-split return map 和 segment-driven return path。 | M2.0-M2.8 全部 accepted；active runtime 已归一到 `host/`、`kernel/`、`include/`，dispatch/activation/combine 合并点、GMM L1/L0 tile plan、multi-block work partition、soft-sync ledger、`swigluSyncGroups/dequantSum`、shape-derived tile-split return map、segment-driven return 和 single fused MPMD stage graph 已在最终布局中验收；accumulator 精确对齐，epilogue/final output 按 tolerance 对齐；M2 report 必须证明 group 是 sync boundary、GMM tile 是 AIC work unit，并如实记录各 AIV stage worker 事实；AIV 侧 dispatch/activation/return 数据并行不是 M2 硬门槛，不能把 `mixed_aiv_blocks>0` 误报为全阶段多核；M3 不需要重写 row/order/layout/stage graph。 |
+| M3 | 在 M2 已固定的依赖边上打开或验证 runtime overlap、AIV 数据并行、scoreboard、Sub-Tile remote write 和 timeline；若 M2.8 仍是 `multi_launch_debug`，M3.0 首先补齐 single fused MPMD stage graph，而不是只打开开关。 | M3.0-M3.9 accepted 或明确 primitive-gap blocked；timeline/counter 能解释 Dispatch-GMM、GMM1-SwiGLU、GMM2-Combine 的 overlap、AIV worker 分摊、group/tile/sub-tile ownership、等待空泡或阻断原因。 |
 | M4 | 最终 PTO 化回归与文档状态收口。 | M4.1-M4.2 全部 accepted；状态、report、设计一致，无 open `needs_user_decision`。 |
 
 任务导航：
@@ -1387,17 +1688,17 @@ state、owner、report、Issue Log 和 Design Change Log；领取任务后必须
 | M2.6 | PTO `int8 x int8 -> int32` GMM2，复用同一 GMM tile/pipeline 契约并对接 activation row range。 |
 | M2.7 | GMM2 epilogue + fused combine remote return。 |
 | M2.7a | 固化 GMM-Combine tile/sub-tile return segment map，并让 M2 return 主路径按 segment plan 驱动。 |
-| M2.8 | M2 全链路回归，证明 dispatch/combine 合并点和 correctness。 |
+| M2.8 | M2 全链路回归，证明 dispatch/combine 合并点、single fused correctness 和 AIV stage worker 事实；不要求 dispatch/activation/return 全量 AIV 数据并行。 |
 | M3.0 | 打开 single-kernel MPMD 调度，AIV/AIC role 在同 kernel 内推进。 |
 | M3.1 | 启用/校验 M2 已固定的 overlap signal、counter 和 `swigluSyncGroups/dequantSum` 分组语义。 |
-| M3.2 | 打开/验证 Dispatch-GMM1 expert-group overlap。 |
-| M3.3 | 基于 M2.5 group descriptor 打开/验证 GMM1-Activation sync-group overlap。 |
+| M3.2 | 打开/验证 Dispatch-GMM1 expert-group overlap，并把 init_routing-like route/count/pack/gather 从 M2 单 AIV correctness path 提升为多 AIV worker 分摊。 |
+| M3.3 | 基于 M2.5 group descriptor 打开/验证 GMM1-Activation sync-group overlap，并启用 activation/SwiGLU/requant group 内多 AIV tile 分摊和 epilogue pipe 排空证据。 |
 | M3.4 | 基于 M2.5 group row/tile range 打开/验证 Activation-GMM2 sync-group overlap。 |
-| M3.5 | 打开/验证 GMM2-Combine expert/group 级 overlap。 |
+| M3.5 | 打开/验证 GMM2-Combine expert/group 级 overlap，并把 GMM2 epilogue/continuous owner-segment return 从 M2 单 AIV correctness path 提升为多 AIV worker 分摊。 |
 | M3.6 | 增加 timeout dump、overlap on/off 回归和 counter 证据。 |
 | M3.7 | 基于 M2.2c 账本打开真实 Dispatch-GMM scoreboard soft sync。 |
-| M3.8 | 基于 M2.7a segment map 验证并打开 Sub-Tile/stride remote write；能力不足则 blocked。 |
-| M3.9 | 增加 kernel timestamp/timeline 输出，证明 overlap 或定位阻断原因。 |
+| M3.8 | 基于 M2.7a segment map 验证并打开 Combine V2 风格 Sub-Tile/stride remote write；能力不足则 blocked；可在同一 segment schema 上继续细化 return worker 分摊。 |
+| M3.9 | 增加 kernel timestamp/timeline 输出，证明 overlap、AIV worker 利用、group/tile/sub-tile ownership 或定位阻断原因。 |
 | M4.1 | 最小最终回归脚本。 |
 | M4.2 | 文档、`TASKS.md` 状态和 report 收口。 |
 
@@ -1417,7 +1718,7 @@ M3 时发现必须重写 dispatch row order、combine offset、`scoreboardTaskMa
   `reports/`，因为这些 markdown 需要记录禁用依赖名和设计决策。CMake 里仅用于 CANN SDK/编译器搜索的
   系统 include 路径不算 AscendC 接口依赖；扫描重点是禁用 API include/call/wrap、build helper、target 和 fallback。
 
-### 13.1 M0: 工程初始化
+### 14.1 M0: 工程初始化
 
 M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manual 工程裁剪出可维护骨架：
 
@@ -1440,10 +1741,9 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
   runtime link 组织，真正 window protocol 在 M1.5 落地。
 - 不能引入 Catlass/AscendC 接口、build helper 或 fallback。若从参考 CMake 复制了仅用于 CANN 编译器搜索的路径，
   也不能在本项目源码中 include/call/wrap `AscendC::`、`DataCopy`、Catlass 或 AscendC kernel helper。
-- 当前 A3/CANN 8.5 实测 `dav-c220` mixed target 会让现有 PTO Vec/comm primitive 报 target feature 不支持；
-  因此 M1/M2 active dispatch/combine target 保持 `dav-c220-vec`。M2 的 GMM `TMATMUL` 必须先通过
-  M2.0/M2.3 cube primitive preflight 确认，再决定以 cube target、preflight-only gate 或后续 M3 mixed/MPMD
-  路径承载；不能把 `dav-c220` mixed target 当成 M2 accepted 前提。
+- 当前 A3/CANN 8.5 实测单个 `dav-c220` raw mixed target 会让现有 PTO Vec/comm primitive 报 target feature
+  不支持；这个负证据只排除“单 raw mixed target”路线。M2.8 的 fused 路线必须改为 PTO mixed ELF/metadata：
+  AIC `dav-c220-cube` + AIV `dav-c220-vec` 分别编译，再通过 `.ascend.meta` / registration ELF 单 launch。
 - M0.1 的 markdown bootstrap 已由设计 agent 在当前会话完成，开发 agent 不领取 M0.1；真正工程初始化从 M0.2 开始。
 
 #### M0.1 设计 bootstrap 与项目规则（已完成，非开发任务）
@@ -1480,8 +1780,8 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - 保留 `bisheng`、`ASCEND_HOME_PATH`/`ASCEND_DRIVER_PATH` 探测、runtime output 目录、`RUN_MODE/SOC_VERSION`
   传参、host link dirs、`runtime/runtime_camodel` 条件链接等工程骨架。
 - 参考 `moe_dispatch` / `dispatch_combine_tile` 的单 kernel target 命名。M0/M1 active dispatch/combine target
-  可使用 `dav-c220-vec`；M2 必须通过 M2.0/M2.3 记录 GMM cube primitive preflight 和 mixed-target gate，
-  不能无证据地声称 `dav-c220` mixed target 已可承载 Vec/comm + `TMATMUL`。
+  可使用 `dav-c220-vec`；M2 必须通过 M2.0/M2.3 记录 GMM cube primitive preflight 和 single raw mixed-target
+  gate，M2.8 再通过 PTO mixed ELF/metadata spike 证明 single fused MPMD launch。
 - CMake 使用 `bisheng + add_library(... SHARED ...)` 路线，不使用 `ascendc_library`、`ascendc.cmake`、
   `ascendc_kernel_cmake`、Catlass target 或外部融合算子 target。
 - kernel 文件只放最小 launch 入口或空实现骨架。
@@ -1648,7 +1948,7 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - 若 kernel launch 已接入，最小 kernel 正常返回。
 - 依赖扫描无输出。
 
-### 13.2 M1: PTO dispatch/combine protocol mock
+### 14.2 M1: PTO dispatch/combine protocol mock
 
 #### M1.0 MegaMoE 主路径协议不变量核验
 
@@ -2001,7 +2301,7 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
 - 任一失败能定位到 stage 和 rank。
 - 依赖扫描无输出。
 
-### 13.3 M2: A3 int8_int8 MegaMoE-ready data path
+### 14.3 M2: A3 int8_int8 MegaMoE-ready data path
 
 #### M2.0 Active runtime baseline 与 primitive preflight
 
@@ -2030,9 +2330,9 @@ M0 的目标不是从空目录手写工程，而是从仓内已跑通过的 manu
   上开发，不能新增一套不参与构建的 runtime。
 - 保持 M1 real dispatch/combine 行为不退化：routing、pack、count publish/wait、prefix、dispatch `TGET`、
   identity mock expert bridge、combine `TPUT`、notify/wait/test、restore 仍在 device path 执行。
-- 记录 arch gate：当前 A3/CANN 8.5 下 `dav-c220` mixed target 会让 PTO Vec/comm primitive 编译失败，M2 不把
-  mixed target 作为 acceptance 前提；dispatch/combine target 仍使用 `dav-c220-vec`，GMM primitive 通过
-  M2.3/M2.6 cube preflight 或明确 `primitive-gap` 进入后续决策。
+- 记录 arch gate：当前 A3/CANN 8.5 下单个 `dav-c220` raw mixed target 会让 PTO Vec/comm primitive 编译失败，
+  因此 M2 不把这条构建方式作为 acceptance 前提；dispatch/combine target 仍使用 `dav-c220-vec`，GMM primitive
+  通过 M2.3/M2.6 cube target 进入主链。M2.8 的 single fused MPMD 必须走 PTO mixed ELF/metadata 双侧编译路线。
 - 记录 `TMATMUL int8 x int8 -> int32` preflight 来源：优先用仓内
   `tests/npu/a2a3/src/st/testcase/tmatmul/tmatmul_kernel.cpp` 和
   `kernels/manual/a2a3/dispatch_gmm_combine_v2/op_kernel/compute/pto_gmm_block_int8.hpp`，先确认 A3 PTO
@@ -2703,7 +3003,13 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 
 文件范围：
 
+- 修改 `CMakeLists.txt`
+- 创建 `scripts/make_m2_mixed_register_elf.py` 或复用同等本目录 helper
 - 修改 `scripts/run_a3.sh`
+- 修改 `host/main.cpp`
+- 修改 `kernel/kernel_launchers.hpp`
+- 修改 `kernel/moe_dispatch_combine_a8w8_kernel.cpp`
+- 修改 `kernel/moe_dispatch_combine_a8w8_gmm_kernel.cpp`
 - 修改 `DESIGN.md`
 
 任务：
@@ -2716,6 +3022,24 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 - M2.8 的 accepted 主路径必须是最终 single fused MPMD kernel stage graph，或明确输出
   `stage_graph_mode=multi_launch_debug` 并保持 `needs_fix`。当前 host 侧多 kernel launch + `MpiBarrier`
   只能作为 correctness preflight，不能作为 M2 关闭证据。
+- M2.8 single fused MPMD 的构建方式必须是 PTO mixed ELF/metadata 双侧编译：AIC side 用 `dav-c220-cube`
+  承载 GMM1/GMM2，AIV side 用 `dav-c220-vec` 承载 dispatch、epilogue、activation/requant、return、restore。
+  禁止再把 `FUSED_KERNEL_ARCH=dav-c220` 单 target 探测失败当成 accepted blocker 或 final route。
+- M2.8a 先交付 minimal mixed launch spike：同一 ABI、同一 launch handle、AIC/AIV heartbeat/counter 均可见，
+  并在 report 中记录 `mixed_elf_register=true`、`mixed_aic_heartbeat=true`、`mixed_aiv_heartbeat=true`。
+- M2.8b 再交付 fused stage graph skeleton：host 对 M2 主链只 launch 一次，stage 边界由 device-side ledger /
+  `SYNCALL` / scoreboard 表达；允许 overlap-off，但不允许 stage 间 host `aclrtSynchronizeStream` 或 `MpiBarrier`。
+- M2.8c 最后把现有 M2 full-chain data path 迁入 fused launch，保留 `--stage-graph multi_launch_debug` 或等价开关作为
+  对照回归路径。
+- M2.8c 的 AIV 口径是“fused graph 中 AIV side 参与并如实报告 worker 事实”，不是“所有 AIV stage 已经数据并行”。
+  `mixed_aiv_blocks>0` 只能证明 mixed ELF/metadata launch 中 AIV side 存在；不能据此声称
+  `RoutePackQuantLocal/GatherDispatchToGmm1Input`、GMM1 epilogue、ActivationQuant 或
+  `RunGmm2EpilogueAndReturn` 已由多个 AIV 共同处理 payload。若这些 stage 仍为 single-worker correctness path，
+  M2.8c 必须打印 `dispatch_aiv_workers=1`、`activation_aiv_workers=1`、
+  `combine_return_aiv_workers=1` 或等价字段，并标注 `aiv_data_parallel_deferred_to_m3=true`。
+  这些值为 1 不阻塞 M2.8c；M3.2/M3.3/M3.5/M3.8 才负责把对应 stage 提升为多 AIV worker 分摊。
+- RestoreOutput 若已按 token shard 使用多个 AIV，可以在 M2.8c 记录为 partial AIV data parallel；但硬编码 worker 数
+  不能作为最终能力声明，M3 需要按 runtime logical AIV count 和 token range 继续收口。
 - 每个 M2 回归用例打印 final output correctness report 和 overlap-off E2E perf report。
 - `DESIGN.md` 记录 M2 tolerance、scale/dequant 顺序、dispatch/quant 合并点、combine/epilogue 合并点、
   Dispatch-GMM soft-sync ledger、GMM-Combine tile-split return map，以及当前 A8W8/int8 主路径的精度边界。
@@ -2739,13 +3063,23 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
   和 GMM-Combine Tile 切分 return 映射。
 - `[CorrectnessReport]` 必须包含 `stage_graph_mode=single_fused_mpmd` 才能关闭 M2.8；如果输出
   `stage_graph_mode=multi_launch_debug`，即使 final output 正确也只能作为 preflight。
+- `[CorrectnessReport]` 必须包含 `mixed_elf_register=true`、`mixed_aic_blocks>0`、`mixed_aiv_blocks>0` 或等价字段，
+  证明 fused path 来自 PTO mixed ELF/metadata，而不是 host multi-launch 串联。
+- `[CorrectnessReport]` 必须包含 AIV stage worker 事实字段，例如 `dispatch_aiv_workers`、
+  `gmm1_epilogue_aiv_workers`、`activation_aiv_workers`、`combine_return_aiv_workers`、
+  `restore_aiv_workers` 和 `aiv_data_parallel_deferred_to_m3`。M2.8 不要求这些 worker 数都大于 1；
+  验收重点是不能把 launch-level `mixed_aiv_blocks` 误读成 payload-level 多 AIV 数据并行。
+- `[CorrectnessReport]` 必须包含 FFN 切分口径字段，例如 `ffn_partition_model=rank_core_group_tile_l1l0`、
+  `group_is_sync_boundary=true`、`gmm_tile_is_aic_work_unit=true`、`dispatch_ready_grain=expert_group`、
+  `activation_ready_grain=swiglu_sync_group`、`combine_ready_grain=owner_segment_or_group`。这些字段不要求
+  M2 打开 async overlap，但必须证明 M2/M3 共享同一切分语义。
 - `[CorrectnessReport]` 必须包含 `gmm1_epilogue_vec=true`、`activation_requant_vec=true`、
   `gmm2_epilogue_vec=true` 或等价字段，证明剩余 numeric epilogue/requant 不再由 scalar GM loop 主导。
 - `[CorrectnessReport]` 记录 GMM1/GMM2 accumulator checksum、scale/dequant checksum、final output checksum、tolerance/max_abs_diff/max_rel_diff，且 `pass=true`。
 - `[PerfReport]` 记录 overlap-off E2E `samples/avg/min/max/stddev`；M2 不要求 speedup。
 - 依赖扫描无输出。
 
-### 13.4 M3: overlap 与 ready queue 备选
+### 14.4 M3: overlap 与 ready queue 备选
 
 #### M3.0 Single-kernel MPMD 调度开关
 
@@ -2766,11 +3100,16 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
   producer/consumer edge、signal/counter 名称或 row range 粒度。
 - 本地 AIC/AIV handoff 使用 PTO public sync primitive 或 local GM signal + `TNOTIFY/TWAIT/TTEST`；不能直接用
   `AscendC::CrossCoreWaitFlag`。
+- 若 M2.8 已经交付 single fused overlap-off correctness，但 AIV side 的 dispatch、activation 或 combine return
+  仍是 single-worker correctness path，M3.0 不能把它误记为 blocked；后续 M3.2/M3.3/M3.5/M3.8 分别打开这些
+  stage 的多 AIV worker 分摊和 overlap 证据。
 
 验收标准：
 
 - overlap off 时，single-kernel path 与 M2 reference 结果一致。
 - kernel 中能清楚看到 AIC/AIV role split 或等价 stage 分支。
+- 控制台或 report 能区分 launch-level AIV participation 与 payload-level AIV worker 数；不能只用
+  `mixed_aiv_blocks>0` 证明 dispatch/activation/combine 已经多核。
 - 依赖扫描无输出。
 
 #### M3.1 Sync-group signal 与 counter 启用
@@ -2822,11 +3161,25 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
   `dispatchGroupReady[expert]`。
 - `RunGmm1` 按 group ready 消费，不等所有 expert group 的 dispatch 完成。
 - source-segment 级细化只允许作为后续优化，不是本任务验收口径。
+- 本任务不能只把最终 `TGET` loop 改成多核。按 `ffn.md` 的 init_routing 口径，route/count/pack/gather 至少要在
+  counter/timeline 上分开记录：route/pack/quant token shard、count publish/wait、prefix/cumsum 构建、
+  dispatch remote gather。若某个子阶段仍为 single-worker 或 BSP 收口，必须标为 preflight/gap，不能把
+  `dispatch_aiv_workers>1` 泛化成全 dispatch 子系统已多核。
+- 在不改变 M2.2a/M2.2b row order、source offset、count/prefix 语义和 scoreboard task map 的前提下，
+  将 dispatch AIV work 从 M2 single-worker path 提升为多 AIV worker 分摊：route/count/pack 可以按 token shard
+  或 block prefix 分工，`GatherDispatchToGmm1Input` 可以按 local expert、token owner segment 或 row tile 分工。
+  分工只改变 worker ownership，不改变 peer-visible dispatch layout 或 `gmm1InputInt8` contiguous layout。
+- 增加 `dispatch_aiv_workers`、每个 worker 处理的 token/segment/row 计数、skip 计数和 overlap wait 计数。
+  zero-token expert 和 empty segment 必须由 worker counter 证明 skip，不得产生永久等待。
 
 验收标准：
 
 - M2 correctness 不退化。
 - timeline 或 counter 能证明 GMM1 在全量 expert dispatch 完成前开始。
+- 对一个 4-rank balanced 或 skewed case，counter 能证明 dispatch payload work 至少由两个 AIV worker 处理；
+  若 PTO sync/调度能力不足，只能标 `primitive-gap` 或 blocked，不能继续报告 payload-level dispatch 多核已完成。
+- counter/timeline 能分别输出 `route_pack_workers`、`count_sync_workers`、`dispatch_gather_workers` 或等价字段；
+  其中任何字段为 1 时，report 必须说明该子阶段仍未完成多 AIV 化。
 - 依赖扫描无输出。
 
 #### M3.3 GMM1/Activation sync-group overlap
@@ -2849,6 +3202,12 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
   以 grid-stride 分摊；不能在 M3.3 重新按当前执行顺序生成 row range。
 - 组内 row/tile 可由多个 AIV 分摊，但同步事件按 `swigluSyncGroups` 发布；不能把 `{8,4,2,1,1}` 理解成
   AIV 数量分配。
+- 本任务负责把 M2.5 的 activation/SwiGLU/requant correctness path 提升为 payload-level 多 AIV worker 分摊。
+  worker 分摊只能消费 M2.5 已固定的 `SwigluGroup.tileBegin/tileEnd` 和 `dequantSum` row range，不能重排
+  `gmm2InputInt8/gmm2PerTokenScale` 或改变 dynamic requant 数值顺序。
+- Activation/SwiGLU/requant 内部若使用 UB ping-pong 或 event pipe，必须显式记录开场预置、尾部排空和 store
+  visibility 证据；不能在 `gmm1SyncGroupReady -> activationSyncGroupReady` 之间省略 `Finalize`/排空语义后
+  提前放行 GMM2。没有 pipe 化实现时，report 也要写明 `activation_pipe_stages=1`，避免误报 overlap。
 
 验收标准：
 
@@ -2858,6 +3217,10 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 - fixed smoke 输出 `{1,1}` 分组 dump；synthetic `expertPerRank=16` 输出 `{8,4,2,1,1}` 分组 dump。
 - counter 或 timeline 能显示每个 non-empty `syncIdx` 的 `activation_tile_begin/end`、worker tile count 和
   empty group skip 计数。
+- 对至少一个 multi-group 或 synthetic activation case，`activation_aiv_workers>1` 且各 worker tile range 无重叠、
+  无缺口；如果实际 shape 只有一个 worker 有效，report 必须说明该 case 不能证明 activation 多核。
+- counter 或 timeline 包含 `activation_pipe_stages`、`activation_pipe_prefill`、`activation_pipe_drain` 或等价字段；
+  若当前实现是单缓冲顺序路径，这些字段必须诚实记录为 1/false/false。
 - sync event 数不超过 `swigluSyncGroups.size()`；若 event 资源或 PTO sync primitive 不足，按
   `primitive-gap`/`needs_user_decision` 规则处理，不能退回全量 activation barrier 后仍声称 M3.3 通过。
 - 依赖扫描无输出。
@@ -2910,12 +3273,24 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 - GMM2 完成某 expert group 后发布 `gmm2GroupReady[expert]`。
 - `RunGmm2EpilogueAndReturn` 等待对应 expert group，按 `tokenPerExpertMatrix + preSumBeforeRank` 切分到各 token owner
   rank 并在 epilogue 后直接 `TPUT`。
-- 本任务仍是 expert-group 粒度 skeleton；不要求完成文章中的 Sub-Tile 非连续通信。
+- 本任务对应 `ffn.md` 的 Combine V1/continuous-owner-segment 方向：以 expert group ready 为输入，按 token owner
+  rank/owner segment 发送连续 payload。它不要求完成文章中的 Sub-Tile 非连续通信，但必须记录是否仍存在
+  all-AIV `SyncAll` 或等价全核栅栏；若仍存在，report 将其列为 M3.8/M3.9 的同步空泡证据，而不能声称已达到
+  Combine V2 小 shape 行为。
+- 在 M2.7a `ReturnSegmentPlan/OwnerSegment` schema 不变的前提下，把 GMM2 epilogue + continuous owner-segment
+  return 从 M2 single-worker correctness path 提升为多 AIV worker 分摊。worker ownership 可以按 expert、
+  owner segment 或 hidden chunk 切分，但每个 actual write 必须仍能追溯到 M2.7a segment plan。
+- 增加 `combine_return_aiv_workers`、每 worker segment count、actual write count 和 skipped segment count。
+  本任务只要求连续段/专家组级 overlap；Sub-Tile/stride async 能力仍归 M3.8。
 
 验收标准：
 
 - M2 correctness 不退化。
 - counter 能证明 `RunGmm2EpilogueAndReturn` 不等所有 expert 的 GMM2 完成。
+- 对一个 two-rank 或 4-rank skewed case，counter 能证明至少两个 AIV worker 处理 return segment 或 hidden chunk；
+  如果只完成 expert-group overlap 而 return 仍单 AIV，任务不能 `accepted`，只能作为 M3.5 preflight。
+- report 必须记录 `combine_mode=continuous_segment` 或等价字段、`combine_syncall_count`、`combine_cv_wait_count`
+  和 `combine_owner_segment_workers`；这些字段用于和 M3.8 的 Sub-Tile/stride path 区分。
 - task report 摘要明确：M3.5 不是文章级 GMM-Combine full async，只是连续段/专家组级 overlap。
 - 依赖扫描无输出。
 
@@ -2998,6 +3373,10 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 - 基于 M2.7a 已验收的 tile/sub-tile owner mapping、source row/hidden chunk range 和 destination `offsetD`
   segment view 开启 Sub-Tile/stride remote write；本任务不能重新定义 combine offset、segment schema、capacity
   或 row/hidden chunk 语义。
+- 本任务对应 `ffn.md` 的 Combine V2/small-shape 方向：目标不是让单条 DMA 更大，而是让 AIV consumer 尽量消费
+  自己对应 AIC tile/sub-tile，减少或消除 Combine V1 中因为生产者 tile 分散而引入的全 AIV `SyncAll` 空泡。
+  首版推荐以 16-row 或实现可证明的固定 row sub-tile 为最小 owner-segment refinement；若 shape 或 PTO primitive
+  只能支持多段 direct `TPUT`，也必须在同一 `OwnerSegment` schema 上表达。
 - 启用 M2.7a 已定义或预留的 `subTileReady[aicTile]`，作为 GMM2 tile 完成到
   `RunGmm2EpilogueAndReturn` 的细粒度 ready。
 - 验证 A3 PTO `GlobalTensor Shape/Stride + TPUT` 能否表达 `N x 256` 级带 stride 的远端写；PTO primitive 调用必须直接出现在
@@ -3006,6 +3385,8 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
   由 M2.7a 的 `ReturnSegmentPlan/OwnerSegment` 提供。
 - 如果 M2.7a 已经使用多段 direct `TPUT` 顺序执行，M3.8 的工作是把同一 segment plan 切到 strided/async path
   并证明能和 GMM2 overlap；不能把 M2.7a 未完成的 segment-driven return 主体搬到 M3.8。
+- 如果 M3.5 已经完成 continuous owner-segment 多 AIV return，M3.8 只能在同一 worker ownership / segment schema
+  上细化到 Sub-Tile 或 stride remote write；不能重新定义 `OwnerSegment` 字段、capacity 或 destination offset。
 - 若 PTO A3 无法表达所需 stride/non-contiguous pattern，本任务以 `blocked` 交付，并保留 M3.5 连续段 correctness path；
   不允许引入 AscendC `DataCopy` fallback。
 - 如果需要新增观测计数器，只能放入 M2.7a 已定义的 Sub-Tile counter 区域；不能改变
@@ -3015,6 +3396,11 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 
 - enabled 情况：two-rank skewed case 中同一个 GMM2 tile 可拆到至少两个 token owner rank，return payload 与 host reference 一致。
 - enabled 情况：counter/timeline 能证明 `RunGmm2EpilogueAndReturn` 消费对应 AIC tile，不等所有 AIC/GMM2 完成。
+- enabled 情况：counter/timeline 能区分 `combine_return_aiv_workers` 和 `subtile_return_workers`，并证明 worker
+  使用的是 M2.7a segment schema 而不是旁路 copy。
+- enabled 情况：报告 `combine_mode=subtile_stride` 或等价字段，并输出 `subtile_rows`、`subtile_stride_width`、
+  `subtile_syncall_count`、`subtile_cv_wait_count`。若 `subtile_syncall_count` 未低于 M3.5 continuous path，
+  只能称为 Sub-Tile correctness preflight，不能称为去同步空泡。
 - blocked 情况：`DESIGN.md` 和 task report 摘要写明缺失的 PTO primitive 能力、最小复现 shape、需要补的 public primitive，不声称 full async combine。
 - 依赖扫描无输出。
 
@@ -3040,6 +3426,13 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 - host 读取 timestamp buffer，向 stdout 输出 rank/core/stage 维度的 CSV 或 JSON-style timeline。
 - `SwiGLU/quant` timeline 行必须带 `syncIdx/groupId/rowBegin/rowEnd`，能和 `swigluSyncGroups`、
   `dequantSum` dump 对上。
+- dispatch、activation、combine return 和 restore 的 timeline 行必须带 `workerId/logicalAiv`、owned row/segment/tile
+  range、processed count 和 skipped count；这样才能区分 launch-level AIV participation、payload-level AIV 数据并行和
+  async overlap。
+- GMM timeline 行必须带 `groupIdx`、`tileId`、`mTile/nTile/kLoop`、logical AIC 和 wait source；dispatch/activation/
+  combine 行必须能追溯到相同的 group、sync group、tile 或 owner segment。timeline 不能只输出 stage 总耗时。
+- timeline 必须记录 `cross_rank_barrier_count`、`syncall_count`、`cv_wait_count` 或等价字段，用来解释
+  `ffn.md` 中 Combine V1/V2 的同步差异和小 shape 空泡。
 - run script 增加 `--timeline` 开关；本章写清如何对比 BSP、M3.6 skeleton、M3.7 scoreboard、M3.8 sub-tile；
   task report 只记录对比结论摘要。
 - timeline stdout 必须能用 `case_name/seed/shape/run_id` 关联同一轮 `[PerfReport]`。
@@ -3051,11 +3444,15 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 - timeline 中能看到 SwiGLU/quant group interval；没有多 group 非空 interval 时，必须打印 skipped reason 和
   对应 `swigluSyncGroups` dump。
 - overlap on/off 的 timeline 能看到至少两个阶段的时间区间重叠或等待空泡变化。
+- timeline 或 counter 能证明 M3 已打开的 AIV data-parallel stage 实际由多个 logical AIV 处理 payload；如果某 stage
+  仍是 single-worker，必须在 report 摘要中列为未完成或 blocked，不能用 `mixed_aiv_blocks` 代替 worker 证据。
+- timeline 能同时展示 group ready、AIC tile compute、SwiGLU sync group、owner segment return 四种粒度；若只能展示
+  stage-level 粗粒度，M3.9 不能 `accepted`。
 - `[Timeline]` 和 `[PerfReport]` 的 `case_name/seed/shape/run_id` 一致。
 - timeline 输出失败不能影响 correctness 回归；失败时有独立错误码/日志。
 - 依赖扫描无输出。
 
-### 13.5 M4: 最终 PTO 化收口
+### 14.5 M4: 最终 PTO 化收口
 
 #### M4.1 最小回归脚本
 
@@ -3103,7 +3500,7 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 - `Task 状态` 中所有 accepted task 都有 report；所有 blocked task 都有 issue ID。
 - 依赖扫描无输出。
 
-## 14. 风险与应对
+## 15. 风险与应对
 
 | 风险 | 影响 | 应对 |
 | --- | --- | --- |

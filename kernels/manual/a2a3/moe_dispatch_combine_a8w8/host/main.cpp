@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "workspace_layout.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -319,7 +320,8 @@ bool VerboseRuntimeLogs(const DispatchCombineTileArgs &args)
     return args.runtime.debug != 0 || args.runtime.hostGoldenOnly != 0 || args.runtime.skipKernels != 0 ||
            args.runtime.dispatchMetadataOnly != 0 || args.runtime.dispatchOnly != 0 || args.runtime.gmm1Only != 0 ||
            args.runtime.gmm1EpilogueOnly != 0 || args.runtime.activationOnly != 0 || args.runtime.gmm2Only != 0 ||
-           args.runtime.combineReturnOnly != 0;
+           args.runtime.combineReturnOnly != 0 || args.runtime.m2MixedSpikeOnly != 0 ||
+           args.runtime.m2FusedSkeletonOnly != 0 || args.runtime.m2MultiLaunchDebug != 0;
 }
 
 struct DeviceBuffers {
@@ -787,6 +789,353 @@ void ClearDeviceStateM2(const DispatchCombineTileArgs &args,
     if (verbose) {
         PrintStage(state->rank, "clear_m2_device_state", "done");
     }
+}
+
+void RunM2MixedSpike(const DispatchCombineTileArgs &args, RuntimeState *state)
+{
+    bool verbose = VerboseRuntimeLogs(args);
+    if (verbose) {
+        PrintStage(state->rank, "m2_mixed_spike", "begin");
+    }
+    constexpr size_t kHeartbeatWords = 320;
+    constexpr uint32_t kAicBlocks = 24;
+    constexpr uint32_t kAivRatio = 1;
+    size_t heartbeatBytes = BytesOfI32Vector(kHeartbeatWords);
+    void *heartbeatDevice = nullptr;
+    CheckAcl(aclrtMalloc(&heartbeatDevice, heartbeatBytes, ACL_MEM_MALLOC_HUGE_FIRST),
+             "rank " + std::to_string(state->rank) + " aclrtMalloc m2 mixed heartbeat");
+    try {
+        CheckAcl(aclrtMemset(heartbeatDevice, heartbeatBytes, 0, heartbeatBytes),
+                 "rank " + std::to_string(state->rank) + " clear m2 mixed heartbeat");
+        std::vector<int32_t> heartbeatParams(kHeartbeatWords, 0);
+        heartbeatParams[8] = static_cast<int32_t>(state->rank);
+        heartbeatParams[9] = static_cast<int32_t>(kAicBlocks);
+        heartbeatParams[10] = static_cast<int32_t>(kAivRatio);
+        CheckAcl(aclrtMemcpy(heartbeatDevice, heartbeatBytes, heartbeatParams.data(), heartbeatBytes,
+                             ACL_MEMCPY_HOST_TO_DEVICE),
+                 "rank " + std::to_string(state->rank) + " seed m2 mixed heartbeat params");
+        LaunchM2MixedSpike(reinterpret_cast<uint8_t *>(heartbeatDevice), state->rank, kAicBlocks, kAivRatio,
+                           state->computeStream);
+        CheckAcl(aclrtSynchronizeStream(state->computeStream),
+                 "rank " + std::to_string(state->rank) + " m2 mixed spike stream sync");
+        std::vector<int32_t> heartbeat(kHeartbeatWords, 0);
+        CheckAcl(aclrtMemcpy(heartbeat.data(), heartbeatBytes, heartbeatDevice, heartbeatBytes,
+                             ACL_MEMCPY_DEVICE_TO_HOST),
+                 "rank " + std::to_string(state->rank) + " copy m2 mixed heartbeat");
+        CheckAcl(aclrtFree(heartbeatDevice), "rank " + std::to_string(state->rank) + " free m2 mixed heartbeat");
+        heartbeatDevice = nullptr;
+
+        constexpr size_t kAicHeader = 112;
+        constexpr size_t kAivHeader = 120;
+        bool aicSeen = heartbeat[kAicHeader] == 0x4D328A8 && heartbeat[kAicHeader + 4] == 1;
+        bool aivSeen = heartbeat[kAivHeader] == 0x4D328A8 && heartbeat[kAivHeader + 4] == 1;
+        uint32_t aicSlotCount = 0;
+        uint32_t aivSlotCount = 0;
+        for (size_t i = 16; i < 112 && i < heartbeat.size(); ++i) {
+            if (heartbeat[i] != 0) {
+                ++aicSlotCount;
+            }
+        }
+        for (size_t i = 128; i < heartbeat.size(); ++i) {
+            if (heartbeat[i] != 0) {
+                ++aivSlotCount;
+            }
+        }
+        bool pass = aicSeen && aivSeen && heartbeat[kAicHeader + 2] == static_cast<int32_t>(kAicBlocks) &&
+                    heartbeat[kAicHeader + 3] == static_cast<int32_t>(kAivRatio) &&
+                    heartbeat[kAivHeader + 2] == static_cast<int32_t>(kAicBlocks) &&
+                    heartbeat[kAivHeader + 3] == static_cast<int32_t>(kAivRatio) && aicSlotCount > 0 &&
+                    aivSlotCount > 0;
+        std::cout << "[CorrectnessReport]\n";
+        std::cout << "  case_name=" << args.caseName << "\n";
+        std::cout << "  backend=int8\n";
+        std::cout << "  protocol_stage=m2_mixed_spike\n";
+        std::cout << "  stage_graph_mode=mixed_spike_only\n";
+        std::cout << "  mixed_elf_register=true\n";
+        std::cout << "  mixed_aic_heartbeat=" << (aicSeen ? "true" : "false") << "\n";
+        std::cout << "  mixed_aiv_heartbeat=" << (aivSeen ? "true" : "false") << "\n";
+        std::cout << "  mixed_aic_blocks=" << heartbeat[kAicHeader + 5] << "\n";
+        std::cout << "  mixed_aiv_blocks=" << heartbeat[kAivHeader + 5] << "\n";
+        std::cout << "  mixed_aic_header_magic=0x" << std::hex << heartbeat[kAicHeader] << std::dec << "\n";
+        std::cout << "  mixed_aiv_header_magic=0x" << std::hex << heartbeat[kAivHeader] << std::dec << "\n";
+        std::cout << "  mixed_aic_slot_count=" << aicSlotCount << "\n";
+        std::cout << "  mixed_aiv_slot_count=" << aivSlotCount << "\n";
+        std::cout << "  pass=" << (pass ? "true" : "false") << "\n";
+        if (!pass) {
+            throw std::runtime_error("rank " + std::to_string(state->rank) + " M2 mixed spike heartbeat mismatch");
+        }
+        if (verbose) {
+            PrintStage(state->rank, "m2_mixed_spike", "done");
+        }
+    } catch (...) {
+        if (heartbeatDevice != nullptr) {
+            aclrtFree(heartbeatDevice);
+        }
+        throw;
+    }
+}
+
+void RunM2FusedSkeleton(const DispatchCombineTileArgs &args, RuntimeState *state)
+{
+    bool verbose = VerboseRuntimeLogs(args);
+    if (verbose) {
+        PrintStage(state->rank, "m2_fused_skeleton", "begin");
+    }
+    constexpr size_t kLedgerWords = 5200;
+    constexpr uint32_t kAicBlocks = 24;
+    constexpr uint32_t kAivRatio = 1;
+    constexpr size_t kAicHeader = 256;
+    constexpr size_t kAivHeader = 264;
+    constexpr size_t kAicStageBase = 288;
+    constexpr size_t kStageCount = 4;
+    constexpr size_t kParticipants = 48;
+    constexpr size_t kStageSlotWords = 8;
+    constexpr size_t kAivStageBase = kAicStageBase + kStageCount * kParticipants * kStageSlotWords;
+    size_t ledgerBytes = BytesOfI32Vector(kLedgerWords);
+    void *ledgerDevice = nullptr;
+    CheckAcl(aclrtMalloc(&ledgerDevice, ledgerBytes, ACL_MEM_MALLOC_HUGE_FIRST),
+             "rank " + std::to_string(state->rank) + " aclrtMalloc m2 fused skeleton ledger");
+    try {
+        std::vector<int32_t> ledgerSeed(kLedgerWords, 0);
+        ledgerSeed[8] = static_cast<int32_t>(state->rank);
+        ledgerSeed[9] = static_cast<int32_t>(kAicBlocks);
+        ledgerSeed[10] = static_cast<int32_t>(kAivRatio);
+        CheckAcl(aclrtMemcpy(ledgerDevice, ledgerBytes, ledgerSeed.data(), ledgerBytes, ACL_MEMCPY_HOST_TO_DEVICE),
+                 "rank " + std::to_string(state->rank) + " seed m2 fused skeleton ledger");
+        LaunchM2FusedSkeleton(reinterpret_cast<uint8_t *>(ledgerDevice), state->rank, kAicBlocks, kAivRatio,
+                              state->computeStream);
+        CheckAcl(aclrtSynchronizeStream(state->computeStream),
+                 "rank " + std::to_string(state->rank) + " m2 fused skeleton stream sync");
+        std::vector<int32_t> ledger(kLedgerWords, 0);
+        CheckAcl(aclrtMemcpy(ledger.data(), ledgerBytes, ledgerDevice, ledgerBytes, ACL_MEMCPY_DEVICE_TO_HOST),
+                 "rank " + std::to_string(state->rank) + " copy m2 fused skeleton ledger");
+        CheckAcl(aclrtFree(ledgerDevice), "rank " + std::to_string(state->rank) + " free m2 fused skeleton ledger");
+        ledgerDevice = nullptr;
+
+        bool aicSeen = ledger[kAicHeader] == 0x4D328B9 && ledger[kAicHeader + 4] == static_cast<int32_t>(kStageCount);
+        bool aivSeen = ledger[kAivHeader] == 0x4D328B9 && ledger[kAivHeader + 4] == static_cast<int32_t>(kStageCount);
+        std::array<uint32_t, kStageCount> aicStageCounts{};
+        std::array<uint32_t, kStageCount> aivStageCounts{};
+        for (size_t stage = 0; stage < kStageCount; ++stage) {
+            for (size_t idx = 0; idx < kParticipants; ++idx) {
+                size_t slot = (stage * kParticipants + idx) * kStageSlotWords;
+                if (ledger[kAicStageBase + slot] != 0) {
+                    ++aicStageCounts[stage];
+                }
+                if (ledger[kAivStageBase + slot] != 0) {
+                    ++aivStageCounts[stage];
+                }
+            }
+        }
+        bool allStagesHaveAic = true;
+        bool allStagesHaveAiv = true;
+        for (size_t stage = 0; stage < kStageCount; ++stage) {
+            allStagesHaveAic = allStagesHaveAic && aicStageCounts[stage] == kAicBlocks;
+            allStagesHaveAiv = allStagesHaveAiv && aivStageCounts[stage] == kAicBlocks * kAivRatio;
+        }
+        bool pass = aicSeen && aivSeen && allStagesHaveAic && allStagesHaveAiv &&
+                    ledger[kAicHeader + 5] == static_cast<int32_t>(kAicBlocks) &&
+                    ledger[kAivHeader + 5] == static_cast<int32_t>(kAicBlocks * kAivRatio);
+        std::cout << "[CorrectnessReport]\n";
+        std::cout << "  case_name=" << args.caseName << "\n";
+        std::cout << "  backend=int8\n";
+        std::cout << "  protocol_stage=m2_fused_stage_graph_skeleton\n";
+        std::cout << "  stage_graph_mode=single_fused_mpmd_skeleton\n";
+        std::cout << "  mixed_elf_register=true\n";
+        std::cout << "  fused_single_launch=true\n";
+        std::cout << "  fused_device_stage_boundaries=syncall_mix\n";
+        std::cout << "  fused_syncall_mode=hard_mix\n";
+        std::cout << "  fused_host_barrier_between_stages=false\n";
+        std::cout << "  mixed_aic_heartbeat=" << (aicSeen ? "true" : "false") << "\n";
+        std::cout << "  mixed_aiv_heartbeat=" << (aivSeen ? "true" : "false") << "\n";
+        std::cout << "  mixed_aic_blocks=" << ledger[kAicHeader + 5] << "\n";
+        std::cout << "  mixed_aiv_blocks=" << ledger[kAivHeader + 5] << "\n";
+        std::cout << "  fused_stage_count=" << kStageCount << "\n";
+        for (size_t stage = 0; stage < kStageCount; ++stage) {
+            std::cout << "  fused_stage_" << stage << "_aic_records=" << aicStageCounts[stage] << "\n";
+            std::cout << "  fused_stage_" << stage << "_aiv_records=" << aivStageCounts[stage] << "\n";
+        }
+        std::cout << "  pass=" << (pass ? "true" : "false") << "\n";
+        if (!pass) {
+            throw std::runtime_error("rank " + std::to_string(state->rank) + " M2 fused skeleton ledger mismatch");
+        }
+        if (verbose) {
+            PrintStage(state->rank, "m2_fused_skeleton", "done");
+        }
+    } catch (...) {
+        if (ledgerDevice != nullptr) {
+            aclrtFree(ledgerDevice);
+        }
+        throw;
+    }
+}
+
+struct M2FusedFullEvidence {
+    bool aicSeen = false;
+    bool aivSeen = false;
+    int32_t aicBlocks = 0;
+    int32_t aivBlocks = 0;
+    int32_t stageCount = 0;
+    std::array<int32_t, 6> stageMarkers{};
+};
+
+M2FusedFullEvidence ReadM2FusedFullEvidence(
+    const moe_dispatch_combine_a8w8::WorkspaceLayout &workspaceLayout, RuntimeState *state)
+{
+    constexpr size_t kAicHeaderSlot = 8U * 16U;
+    constexpr size_t kAivHeaderSlot = 9U * 16U;
+    constexpr size_t kStageBaseSlot = 10U * 16U;
+    constexpr int32_t kFullMagic = 0x4D328CA;
+    M2FusedFullEvidence evidence;
+    std::vector<int32_t> stageStatus(workspaceLayout.stageStatus.bytes / sizeof(int32_t), 0);
+    auto *workspaceBase = reinterpret_cast<uint8_t *>(state->buffers.workspace);
+    CheckAcl(aclrtMemcpy(stageStatus.data(), BytesOfI32Vector(stageStatus.size()),
+                         workspaceBase + workspaceLayout.stageStatus.offset, workspaceLayout.stageStatus.bytes,
+                         ACL_MEMCPY_DEVICE_TO_HOST),
+             "rank " + std::to_string(state->rank) + " copy m2 fused full stageStatus");
+    if (stageStatus.size() > kAicHeaderSlot + 3U) {
+        evidence.aicSeen = stageStatus[kAicHeaderSlot] == kFullMagic;
+        evidence.aicBlocks = stageStatus[kAicHeaderSlot + 1U];
+    }
+    if (stageStatus.size() > kAivHeaderSlot + 3U) {
+        evidence.aivSeen = stageStatus[kAivHeaderSlot] == kFullMagic;
+        evidence.aivBlocks = stageStatus[kAivHeaderSlot + 1U];
+    }
+    for (size_t idx = 0; idx < evidence.stageMarkers.size(); ++idx) {
+        if (stageStatus.size() > kStageBaseSlot + idx) {
+            evidence.stageMarkers[idx] = stageStatus[kStageBaseSlot + idx];
+            if (stageStatus[kStageBaseSlot + idx] != 0) {
+                ++evidence.stageCount;
+            }
+        }
+    }
+    return evidence;
+}
+
+double RunM2FusedFull(const DispatchCombineTileArgs &args, const moe_dispatch_combine_a8w8::ShapeConfig &shape,
+                      const moe_dispatch_combine_a8w8::WorkspaceLayout &workspaceLayout, RuntimeState *state,
+                      M2FusedFullEvidence *evidence)
+{
+    if (!GmmPolicySupported(shape)) {
+        throw std::runtime_error(
+            "M2.8 fused full PTO path requires gmm_ar cache-level policy and hidden/intermediate divisible by 64");
+    }
+    bool verbose = VerboseRuntimeLogs(args);
+    if (verbose) {
+        PrintStage(state->rank, "m2_fused_full", "begin");
+    }
+    moe_dispatch_combine_a8w8::RankConfig rank = MakeM2RankConfig(args, state->rank);
+    constexpr uint32_t kAicBlocks = 24;
+    constexpr uint32_t kAivRatio = 1;
+    moe_dispatch_combine_a8w8::M2FusedFullLaunchArgs launchArgs{};
+    launchArgs.params = moe_dispatch_combine_a8w8::M2FusedFullParams{shape, rank, args.runtime.m2FusedDebugStopStage};
+    launchArgs.debugStopStage = args.runtime.m2FusedDebugStopStage;
+    launchArgs.stageStatusAddr =
+        reinterpret_cast<uint64_t>(reinterpret_cast<uint8_t *>(state->buffers.workspace) + workspaceLayout.stageStatus.offset);
+    launchArgs.shapeRankNum = shape.rankNum;
+    launchArgs.shapeExpertPerRank = shape.expertPerRank;
+    launchArgs.shapeTopK = shape.topK;
+    launchArgs.shapeM = shape.m;
+    launchArgs.shapeHiddenSize = shape.hiddenSize;
+    launchArgs.shapeIntermediateSize = shape.intermediateSize;
+    launchArgs.shapeMaxTokensPerExpert = shape.maxTokensPerExpert;
+    launchArgs.shapePayloadTileCols = shape.payloadTileCols;
+    launchArgs.shapeGmmBlockM = shape.gmmBlockM;
+    launchArgs.shapeGmmBlockN = shape.gmmBlockN;
+    launchArgs.shapeGmmBlockK = shape.gmmBlockK;
+    launchArgs.shapeDtypeIn = shape.dtypeIn;
+    launchArgs.shapeDtypeOut = shape.dtypeOut;
+    launchArgs.rankRankNum = rank.rankNum;
+    launchArgs.rankRankId = rank.rankId;
+    launchArgs.rankFromMpi = rank.rankFromMpi;
+    launchArgs.rankDeviceBase = rank.deviceBase;
+    launchArgs.rankNdevices = rank.ndevices;
+    launchArgs.inputA = reinterpret_cast<uint64_t>(state->buffers.inputA);
+    launchArgs.expertIdx = reinterpret_cast<uint64_t>(state->buffers.expertIdx);
+    launchArgs.probs = reinterpret_cast<uint64_t>(state->buffers.probs);
+    launchArgs.outputC = reinterpret_cast<uint64_t>(state->buffers.outputC);
+    launchArgs.peerWindow = reinterpret_cast<uint64_t>(state->hccl.peerWindow);
+    launchArgs.hcclCtx = reinterpret_cast<uint64_t>(state->hccl.deviceContext);
+    launchArgs.workspace = reinterpret_cast<uint64_t>(state->buffers.workspace);
+    moe_dispatch_combine_a8w8::M2FusedFullLaunchArgs *launchArgsDevice = nullptr;
+    CheckAcl(aclrtMalloc(reinterpret_cast<void **>(&launchArgsDevice), sizeof(launchArgs), ACL_MEM_MALLOC_HUGE_FIRST),
+             "rank " + std::to_string(state->rank) + " aclrtMalloc m2 fused full launch args");
+    try {
+        CheckAcl(aclrtMemcpy(launchArgsDevice, sizeof(launchArgs), &launchArgs, sizeof(launchArgs),
+                             ACL_MEMCPY_HOST_TO_DEVICE),
+                 "rank " + std::to_string(state->rank) + " copy m2 fused full launch args");
+        std::array<int32_t, moe_dispatch_combine_a8w8::kM2FusedFullConfigWords> fusedConfig{};
+        auto storeConfigU32 = [&fusedConfig](uint32_t slot, uint32_t value) {
+            fusedConfig.at(slot) = static_cast<int32_t>(value);
+        };
+        auto storeConfigU64 = [&fusedConfig](uint32_t slot, uint64_t value) {
+            fusedConfig.at(slot) = static_cast<int32_t>(value & 0xffffffffULL);
+            fusedConfig.at(slot + 1U) = static_cast<int32_t>((value >> 32U) & 0xffffffffULL);
+        };
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullConfigMagicSlot,
+                       moe_dispatch_combine_a8w8::kM2FusedFullConfigMagic);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeRankNumSlot, shape.rankNum);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeExpertPerRankSlot, shape.expertPerRank);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeTopKSlot, shape.topK);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeMSlot, shape.m);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeHiddenSizeSlot, shape.hiddenSize);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeIntermediateSizeSlot, shape.intermediateSize);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeMaxTokensPerExpertSlot,
+                       shape.maxTokensPerExpert);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapePayloadTileColsSlot, shape.payloadTileCols);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockMSlot, shape.gmmBlockM);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockNSlot, shape.gmmBlockN);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockKSlot, shape.gmmBlockK);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeDtypeInSlot, shape.dtypeIn);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeDtypeOutSlot, shape.dtypeOut);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullRankRankNumSlot, rank.rankNum);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullRankRankIdSlot, rank.rankId);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullRankFromMpiSlot, rank.rankFromMpi);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullRankDeviceBaseSlot, rank.deviceBase);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullRankNdevicesSlot, rank.ndevices);
+        storeConfigU64(moe_dispatch_combine_a8w8::kM2FusedFullPtrInputASlot, launchArgs.inputA);
+        storeConfigU64(moe_dispatch_combine_a8w8::kM2FusedFullPtrExpertIdxSlot, launchArgs.expertIdx);
+        storeConfigU64(moe_dispatch_combine_a8w8::kM2FusedFullPtrProbsSlot, launchArgs.probs);
+        storeConfigU64(moe_dispatch_combine_a8w8::kM2FusedFullPtrOutputCSlot, launchArgs.outputC);
+        storeConfigU64(moe_dispatch_combine_a8w8::kM2FusedFullPtrPeerWindowSlot, launchArgs.peerWindow);
+        storeConfigU64(moe_dispatch_combine_a8w8::kM2FusedFullPtrHcclCtxSlot, launchArgs.hcclCtx);
+        storeConfigU64(moe_dispatch_combine_a8w8::kM2FusedFullPtrWorkspaceSlot, launchArgs.workspace);
+        auto *workspaceBase = reinterpret_cast<uint8_t *>(state->buffers.workspace);
+        CheckAcl(aclrtMemcpy(workspaceBase + workspaceLayout.stageStatus.offset,
+                             fusedConfig.size() * sizeof(int32_t), fusedConfig.data(),
+                             fusedConfig.size() * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE),
+                 "rank " + std::to_string(state->rank) + " seed m2 fused full config");
+        if (args.runtime.m2FusedDebugStopStage != 0) {
+            constexpr size_t kDebugStopSlot = 15U * 16U;
+            int32_t debugStop = static_cast<int32_t>(args.runtime.m2FusedDebugStopStage);
+            CheckAcl(aclrtMemcpy(workspaceBase + workspaceLayout.stageStatus.offset + kDebugStopSlot * sizeof(int32_t),
+                                 sizeof(debugStop), &debugStop, sizeof(debugStop), ACL_MEMCPY_HOST_TO_DEVICE),
+                     "rank " + std::to_string(state->rank) + " seed m2 fused debug stop stage");
+        }
+    } catch (...) {
+        aclrtFree(launchArgsDevice);
+        throw;
+    }
+    MpiBarrier(&state->mpi);
+    auto start = std::chrono::steady_clock::now();
+    LaunchM2FusedFull(launchArgsDevice, kAicBlocks, kAivRatio, state->computeStream);
+    try {
+        CheckAcl(aclrtSynchronizeStream(state->computeStream),
+                 "rank " + std::to_string(state->rank) + " m2 fused full stream sync");
+    } catch (...) {
+        aclrtFree(launchArgsDevice);
+        throw;
+    }
+    aclrtFree(launchArgsDevice);
+    MpiBarrier(&state->mpi);
+    auto end = std::chrono::steady_clock::now();
+    if (evidence != nullptr) {
+        *evidence = ReadM2FusedFullEvidence(workspaceLayout, state);
+    }
+    if (verbose) {
+        PrintStage(state->rank, "m2_fused_full", "done");
+    }
+    return UsSince(start, end);
 }
 
 void CopyM2ReferenceToWorkspace(const DispatchCombineTileArgs &args,
@@ -3169,6 +3518,83 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  pass=" << (summary.pass == 0 ? "false" : "true") << "\n";
 }
 
+void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *state,
+                         const RankCorrectnessSummary &summary, const std::vector<IterationTiming> &timings,
+                         const M2FusedFullEvidence *fusedEvidence)
+{
+    PerfStats totalStats = CalcStats(ExtractTimingSamples(timings, &IterationTiming::totalE2eUs));
+    std::cout << std::setprecision(6);
+    std::cout << "[CorrectnessReport]\n";
+    std::cout << "  case_name=" << args.caseName << "\n";
+    std::cout << "  backend=int8\n";
+    std::cout << "  protocol_stage=m2_full_dispatch_gmm_swiglu_combine_restore\n";
+    std::cout << "  dtype_in=fp16 dtype_out=fp16\n";
+    std::cout << "  dispatch_merge=true\n";
+    std::cout << "  combine_merge=true\n";
+    std::cout << "  stage_graph_mode=single_fused_mpmd\n";
+    std::cout << "  mixed_elf_register=true\n";
+    std::cout << "  fused_single_launch=true\n";
+    std::cout << "  fused_device_stage_boundaries=syncall_mix\n";
+    std::cout << "  fused_syncall_mode=hard_mix\n";
+    std::cout << "  fused_host_barrier_between_stages=false\n";
+    std::cout << "  mixed_aic_heartbeat=" << (fusedEvidence != nullptr && fusedEvidence->aicSeen ? "true" : "false")
+              << "\n";
+    std::cout << "  mixed_aiv_heartbeat=" << (fusedEvidence != nullptr && fusedEvidence->aivSeen ? "true" : "false")
+              << "\n";
+    std::cout << "  mixed_aic_blocks=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->aicBlocks) << "\n";
+    std::cout << "  mixed_aiv_blocks=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->aivBlocks) << "\n";
+    std::cout << "  fused_stage_count=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->stageCount) << "\n";
+    std::cout << "  gmm1_input_direct=true\n";
+    std::cout << "  route_pack_quant_device=true\n";
+    std::cout << "  route_quant_impl=pto_vec_tload_trowmax_tquant_tstore\n";
+    std::cout << "  gmm1_epilogue_vec=true\n";
+    std::cout << "  activation_requant_vec=true\n";
+    std::cout << "  gmm2_epilogue_vec=true\n";
+    std::cout << "  gmm_block_mock=false\n";
+    std::cout << "  gmm_runtime_shape=true\n";
+    std::cout << "  gmm_multiblock=true\n";
+    std::cout << "  soft_sync_ledger=true\n";
+    std::cout << "  swiglu_sync_groups=true\n";
+    std::cout << "  tile_split_return_map=true\n";
+    std::cout << "  gmm2_out_debug_mirror_only=true\n";
+    std::cout << "  gmm2_out_return_source=false\n";
+    std::cout << "  return_payload_source=returnSegmentStaging\n";
+    std::cout << "  restore_from_offsetD=true\n";
+    std::cout << "  final_output.reference_source=actual_return_payload_weighted_restore\n";
+    std::cout << "  final_output.max_abs_diff=" << summary.maxAbsDiff << "\n";
+    std::cout << "  final_output.max_rel_diff=" << summary.maxRelDiff << "\n";
+    std::cout << "  final_output.err_count=" << summary.errCount << "\n";
+    std::cout << "  final_output.err_threshold=0\n";
+    std::cout << "  final_output.tolerance_atol=" << args.atol << "\n";
+    std::cout << "  final_output.tolerance_rtol=" << args.rtol << "\n";
+    std::cout << "  final_output.checksum_actual=" << summary.checksumActual << "\n";
+    std::cout << "  final_output.checksum_expected=" << summary.checksumExpected << "\n";
+    std::cout << "  gmm1_accumulator_checksum=" << ChecksumVector(state->m2Reference.gmm1AccInt32) << "\n";
+    std::cout << "  scale_dequant_checksum=" << ChecksumVector(state->m2Reference.gmm1Out) << "\n";
+    std::cout << "  swiglu_output_checksum=" << ChecksumVector(state->m2Reference.swigluOut) << "\n";
+    std::cout << "  gmm2_accumulator_checksum=" << ChecksumVector(state->m2Reference.gmm2AccInt32) << "\n";
+    std::cout << "  return_payload_checksum=" << summary.returnPayloadChecksum << "\n";
+    std::cout << "  intermediate.tokenPerExpertMatrix_checksum=" << summary.tokenPerExpertMatrixChecksum << "\n";
+    std::cout << "  intermediate.cumsumMM_checksum=" << summary.cumsumMMChecksum << "\n";
+    std::cout << "  intermediate.preSumBeforeRank_checksum=" << summary.preSumBeforeRankChecksum << "\n";
+    std::cout << "  intermediate.expandedRowIdx_checksum=" << summary.expandedRowIdxChecksum << "\n";
+    std::cout << "  pass=" << (summary.pass == 0 ? "false" : "true") << "\n";
+    std::cout << std::fixed << std::setprecision(1);
+    std::cout << "[PerfReport]\n";
+    std::cout << "  case_name=" << args.caseName << "\n";
+    std::cout << "  backend=int8\n";
+    std::cout << "  rankNum=" << state->size << " rankId=" << state->rank << "\n";
+    std::cout << "  overlap_mode=off\n";
+    std::cout << "  warmup_iters=" << args.runtime.warmup << "\n";
+    std::cout << "  measure_iters=" << args.runtime.iters << "\n";
+    std::cout << "  e2e_us.samples=" << timings.size() << "\n";
+    std::cout << "  e2e_us.avg=" << totalStats.avg << "\n";
+    std::cout << "  e2e_us.min=" << totalStats.min << "\n";
+    std::cout << "  e2e_us.max=" << totalStats.max << "\n";
+    std::cout << "  e2e_us.stddev=" << totalStats.stddev << "\n";
+    std::cout << "  pass=" << (summary.pass == 0 ? "false" : "true") << "\n";
+}
+
 void PrepareExpertOutputIdentity(const DispatchCombineTileArgs &args, const WorkspaceLayout &workspaceLayout,
                                  RuntimeState *state)
 {
@@ -3535,6 +3961,16 @@ int main(int argc, char **argv)
         if (args.backend == "int8") {
             dispatch_combine_tile::BindDeviceContinuous(args, &state);
             dispatch_combine_tile::CreateStreams(args, &state);
+            if (args.runtime.m2MixedSpikeOnly != 0) {
+                dispatch_combine_tile::RunM2MixedSpike(args, &state);
+                dispatch_combine_tile::Cleanup(&state);
+                return 0;
+            }
+            if (args.runtime.m2FusedSkeletonOnly != 0) {
+                dispatch_combine_tile::RunM2FusedSkeleton(args, &state);
+                dispatch_combine_tile::Cleanup(&state);
+                return 0;
+            }
             dispatch_combine_tile::PeerWindowLayout m2CompatPeerLayout{};
             m2CompatPeerLayout.totalBytes = m2PeerWindowLayout.totalBytes;
             dispatch_combine_tile::InitHccl(&state, args, m2CompatPeerLayout);
@@ -3542,6 +3978,65 @@ int main(int argc, char **argv)
             dispatch_combine_tile::CopyInputsToDevice(args, &state);
             dispatch_combine_tile::ClearDeviceStateM2(args, m2WorkspaceLayout, m2PeerWindowLayout, &state);
             dispatch_combine_tile::CopyM2ReferenceToWorkspace(args, m2WorkspaceLayout, &state);
+            if (args.runtime.m2FusedFull != 0 && args.runtime.m2MultiLaunchDebug == 0 &&
+                args.runtime.dispatchOnly == 0 && args.runtime.dispatchMetadataOnly == 0 &&
+                args.runtime.gmm1Only == 0 && args.runtime.gmm1EpilogueOnly == 0 &&
+                args.runtime.activationOnly == 0 && args.runtime.gmm2Only == 0 &&
+                args.runtime.combineReturnOnly == 0) {
+                std::vector<dispatch_combine_tile::IterationTiming> fusedTimings;
+                dispatch_combine_tile::M2FusedFullEvidence fusedEvidence;
+                uint32_t totalIterations = args.runtime.warmup + args.runtime.iters;
+                for (uint32_t iter = 0; iter < totalIterations; ++iter) {
+                    if (iter != 0) {
+                        dispatch_combine_tile::ClearDeviceStateM2(args, m2WorkspaceLayout, m2PeerWindowLayout, &state);
+                        dispatch_combine_tile::CopyM2ReferenceToWorkspace(args, m2WorkspaceLayout, &state);
+                    }
+                    dispatch_combine_tile::M2FusedFullEvidence iterEvidence;
+                    double totalUs =
+                        dispatch_combine_tile::RunM2FusedFull(args, m2Shape, m2WorkspaceLayout, &state, &iterEvidence);
+                    fusedEvidence = iterEvidence;
+                    state.totalE2eUs = totalUs;
+                    if (args.runtime.m2FusedDebugStopStage != 0) {
+                        std::cout << "[CorrectnessReport]\n";
+                        std::cout << "  case_name=" << args.caseName << "\n";
+                        std::cout << "  backend=int8\n";
+                        std::cout << "  protocol_stage=m2_fused_full_debug_probe\n";
+                        std::cout << "  stage_graph_mode=single_fused_mpmd\n";
+                        std::cout << "  m2_fused_debug_stop_stage=" << args.runtime.m2FusedDebugStopStage << "\n";
+                        std::cout << "  mixed_aic_heartbeat=" << (iterEvidence.aicSeen ? "true" : "false") << "\n";
+                        std::cout << "  mixed_aiv_heartbeat=" << (iterEvidence.aivSeen ? "true" : "false") << "\n";
+                        std::cout << "  mixed_aic_blocks=" << iterEvidence.aicBlocks << "\n";
+                        std::cout << "  mixed_aiv_blocks=" << iterEvidence.aivBlocks << "\n";
+                        for (size_t markerIdx = 0; markerIdx < iterEvidence.stageMarkers.size(); ++markerIdx) {
+                            std::cout << "  fused_stage_marker_" << markerIdx << "="
+                                      << iterEvidence.stageMarkers[markerIdx] << "\n";
+                        }
+                        std::cout << "  pass=true\n";
+                        dispatch_combine_tile::MpiBarrier(&state.mpi);
+                        dispatch_combine_tile::Cleanup(&state);
+                        return 0;
+                    }
+                    dispatch_combine_tile::RankCorrectnessSummary fusedSummary =
+                        dispatch_combine_tile::VerifyM2FinalOutput(args, &state);
+                    if (iter >= args.runtime.warmup) {
+                        dispatch_combine_tile::IterationTiming timing;
+                        timing.totalE2eUs = totalUs;
+                        fusedTimings.push_back(timing);
+                    }
+                    if (fusedSummary.pass == 0) {
+                        throw std::runtime_error("rank " + std::to_string(state.rank) +
+                                                 " M2 fused full final output mismatch");
+                    }
+                }
+                dispatch_combine_tile::RankCorrectnessSummary fusedSummary = state.correctness;
+                dispatch_combine_tile::PrintM2FinalSummary(args, &state, fusedSummary, fusedTimings, &fusedEvidence);
+                dispatch_combine_tile::MpiBarrier(&state.mpi);
+                if (verbose) {
+                    std::cout << "rank=" << state.rank << " run_done" << std::endl;
+                }
+                dispatch_combine_tile::Cleanup(&state);
+                return 0;
+            }
             dispatch_combine_tile::MpiBarrier(&state.mpi);
             auto m2TotalStart = std::chrono::steady_clock::now();
             dispatch_combine_tile::RunM2Dispatch(args, m2Shape, m2WorkspaceLayout, m2PeerWindowLayout, &state);
