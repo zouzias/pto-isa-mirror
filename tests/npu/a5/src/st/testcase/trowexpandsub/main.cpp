@@ -99,6 +99,7 @@ void test_trowexpandsub()
     EXPECT_TRUE(ret);
 }
 
+// 2D_NoPostUpdate
 TEST_F(TRowExpandSubTest, case_fp32_8_128)
 {
     test_trowexpandsub<float, 8, 128, 8, 1, true, false>();
@@ -115,18 +116,22 @@ TEST_F(TRowExpandSubTest, case_fp16_32_64)
 {
     test_trowexpandsub<aclFloat16, 32, 64, 32, 1, true, false>();
 }
+// 2D_NoPostUpdate2
 TEST_F(TRowExpandSubTest, case_fp32_24_64)
 {
     test_trowexpandsub<float, 24, 64, 24, 8, true, true>();
 }
+// 2D_NoPostUpdate
 TEST_F(TRowExpandSubTest, case_fp32_16_128)
 {
     test_trowexpandsub<float, 16, 128, 16, 1, false, false>();
 }
+// 2D_NoPostUpdate2
 TEST_F(TRowExpandSubTest, case_fp16_16_64)
 {
     test_trowexpandsub<aclFloat16, 16, 64, 16, 16, false, true>();
 }
+// 2D_NoPostUpdate
 TEST_F(TRowExpandSubTest, case_int32_16_32)
 {
     test_trowexpandsub<int32_t, 16, 32, 16, 1, true, false>();
