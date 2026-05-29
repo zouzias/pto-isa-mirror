@@ -18,10 +18,13 @@
 #   bash run.sh -r npu -v Ascend910B1 -c "128,4096,32,128,64,64,64"
 #   bash run.sh -r npu -v Ascend910B1 -a "128,4096,32,128,64,64,64;256,4096,32,128,64,64,64"
 #   bash run.sh -r sim -v Ascend910B4 -n 1 -d -i
+#   bash run.sh -r npu -v Ascend910B1 -p            # wrap binary in msopprof
 # --------------------------------------------------------------------------------
 
-SHORT=r:,v:,C:,n:,c:,a:,i,d
-LONG=run-mode:,soc-version:,compiler:,npu:,case:,cases:,intermediate,debug
+KERNEL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+SHORT=r:,v:,C:,n:,c:,a:,i,d,p
+LONG=run-mode:,soc-version:,compiler:,npu:,case:,cases:,intermediate,debug,profile
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 PROFILE_MODE=0
@@ -36,6 +39,7 @@ do
         (-a | --cases )       CASES_RAW="$2"; shift 2;;
         (-i | --intermediate) INTERMEDIATE=1; shift 1;;
         (-d | --debug )       DEBUG_BUILD=1; shift 1;;
+        (-p | --profile )     PROFILE_MODE=1; shift 1;;
         (--) shift; break;;
         (*) echo "[ERROR] Unexpected option: $1"; break;;
     esac
@@ -43,6 +47,10 @@ done
 
 : "${CMAKE_COMPILER:=bisheng}"
 : "${NPU_ID:=0}"
+
+# common.sh reads PROFILE_MODE and KERNEL_DIR; exposes run_bin() which wraps
+# the binary with `msopprof --output=<KERNEL_DIR>/prof` when PROFILE_MODE=1.
+source "${KERNEL_DIR}/../common.sh"
 
 pattern="^Ascend910B|^Ascend910_9599"
 if [[ ! "${SOC_VERSION:-}" =~ $pattern ]]; then
@@ -72,7 +80,7 @@ else
 fi
 
 echo "[RUN.SH] RUN_MODE=${RUN_MODE}  SOC=${SOC_VERSION}  NPU=${NPU_ID}"
-echo "[RUN.SH] DEBUG=${DEBUG_BUILD:-0}  INTERMEDIATE=${INTERMEDIATE:-0}"
+echo "[RUN.SH] DEBUG=${DEBUG_BUILD:-0}  INTERMEDIATE=${INTERMEDIATE:-0}  PROFILE=${PROFILE_MODE}"
 echo "[RUN.SH] cases to run (${#CASE_LIST[@]}):"
 for c in "${CASE_LIST[@]}"; do echo "          - $c"; done
 
@@ -148,7 +156,7 @@ for CASE in "${CASE_LIST[@]}"; do
         EXTRA_BIN_ARGS+=(--sys_cnt_multiple=1.0)
     fi
     set +e
-    time ./mla_basic "${EXTRA_BIN_ARGS[@]}"
+    time run_bin ./mla_basic "${EXTRA_BIN_ARGS[@]}"
     RC=$?
     set -e
     if [[ $RC -eq 0 ]]; then
