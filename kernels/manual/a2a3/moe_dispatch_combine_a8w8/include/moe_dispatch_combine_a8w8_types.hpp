@@ -59,6 +59,9 @@ constexpr uint32_t kM2FusedFullPtrOutputCSlot = 25;
 constexpr uint32_t kM2FusedFullPtrPeerWindowSlot = 27;
 constexpr uint32_t kM2FusedFullPtrHcclCtxSlot = 29;
 constexpr uint32_t kM2FusedFullPtrWorkspaceSlot = 31;
+constexpr uint32_t kM2FusedFullPtrXActiveMaskSlot = 33;
+constexpr uint32_t kM2FusedFullTimelineEnableSlot = 35;
+constexpr uint32_t kM2FusedFullOverlapModeSlot = 36;
 
 enum class DType : uint32_t
 {
@@ -123,11 +126,14 @@ struct M2FusedFullLaunchArgs {
     uint32_t rankNdevices = 0;
     uint64_t inputA = 0;
     uint64_t expertIdx = 0;
+    uint64_t xActiveMask = 0;
     uint64_t probs = 0;
     uint64_t outputC = 0;
     uint64_t peerWindow = 0;
     uint64_t hcclCtx = 0;
     uint64_t workspace = 0;
+    uint32_t timelineEnable = 0;
+    uint32_t overlapMode = 0;
 };
 
 struct FieldLayout {

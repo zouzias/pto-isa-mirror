@@ -33,6 +33,7 @@ struct HostInputData {
     std::vector<float> inputA;
     std::vector<int32_t> expertIdx;
     std::vector<float> probs;
+    std::vector<uint8_t> xActiveMask;
 };
 
 struct CpuGoldenData {
@@ -248,6 +249,9 @@ inline float Sigmoid(float value)
 inline int32_t SelectExpertForCase(const DispatchCombineTileArgs &args, uint32_t rank, uint32_t token, uint32_t slot)
 {
     const DispatchCombineTileShape &shape = args.shape;
+    if (args.caseName == "over-capacity") {
+        return 0;
+    }
     if (args.caseName == "zero-token") {
         uint32_t activeExperts = shape.expertNum / 2;
         activeExperts = activeExperts == 0 ? 1 : activeExperts;
@@ -263,6 +267,22 @@ inline int32_t SelectExpertForCase(const DispatchCombineTileArgs &args, uint32_t
     return static_cast<int32_t>(((token * shape.topK + slot) + rank) % shape.expertNum);
 }
 
+inline bool GeneratedTokenActive(const DispatchCombineTileArgs &args, uint32_t token)
+{
+    if (args.xActiveMaskMode == "alternate") {
+        return (token % 2U) == 0U;
+    }
+    if (args.xActiveMaskMode == "tail-half") {
+        return token < ((args.shape.m + 1U) / 2U);
+    }
+    return true;
+}
+
+inline bool TokenActive(const HostInputData &data, uint32_t token)
+{
+    return data.xActiveMask.empty() || data.xActiveMask[token] != 0U;
+}
+
 inline HostInputData GenerateDeterministicInputs(const DispatchCombineTileArgs &args, uint32_t rank)
 {
     const DispatchCombineTileShape &shape = args.shape;
@@ -270,8 +290,14 @@ inline HostInputData GenerateDeterministicInputs(const DispatchCombineTileArgs &
     data.inputA.resize(static_cast<size_t>(shape.m) * shape.k);
     data.expertIdx.resize(static_cast<size_t>(shape.m) * shape.topK);
     data.probs.resize(static_cast<size_t>(shape.m) * shape.topK);
+    if (args.xActiveMaskMode != "none") {
+        data.xActiveMask.resize(shape.m, 1U);
+    }
 
     for (uint32_t token = 0; token < shape.m; ++token) {
+        if (!data.xActiveMask.empty()) {
+            data.xActiveMask[token] = GeneratedTokenActive(args, token) ? 1U : 0U;
+        }
         for (uint32_t col = 0; col < shape.k; ++col) {
             uint32_t mixed = args.runtime.seed + rank * 131U + token * 17U + col * 3U;
             data.inputA[static_cast<size_t>(token) * shape.k + col] = static_cast<float>(mixed % 251U) / 32.0f;
@@ -301,6 +327,9 @@ inline HostInputData LoadInputs(const DispatchCombineTileArgs &args, uint32_t ra
     data.inputA = HalfVectorToFloat(ReadBinary<uint16_t>(RankFile(args, rank, "inputA"), inputElems));
     data.expertIdx = ReadBinary<int32_t>(RankFile(args, rank, "expertIdx"), routeElems);
     data.probs = ReadBinary<float>(RankFile(args, rank, "probs"), routeElems);
+    if (args.xActiveMaskMode != "none") {
+        data.xActiveMask = ReadBinary<uint8_t>(RankFile(args, rank, "xActiveMask"), shape.m);
+    }
     return data;
 }
 
@@ -310,6 +339,9 @@ inline void WriteInputs(const DispatchCombineTileArgs &args, uint32_t rank, cons
     WriteBinary(RankFile(args, rank, "inputA"), FloatVectorToHalf(data.inputA));
     WriteBinary(RankFile(args, rank, "expertIdx"), data.expertIdx);
     WriteBinary(RankFile(args, rank, "probs"), data.probs);
+    if (!data.xActiveMask.empty()) {
+        WriteBinary(RankFile(args, rank, "xActiveMask"), data.xActiveMask);
+    }
 }
 
 inline std::vector<HostInputData> LoadOrGenerateWorldInputs(const DispatchCombineTileArgs &args)
@@ -356,6 +388,10 @@ inline void BuildRoutes(const DispatchCombineTileArgs &args, const std::vector<H
         for (uint32_t token = 0; token < shape.m; ++token) {
             for (uint32_t slot = 0; slot < shape.topK; ++slot) {
                 ++(*totalRoutes);
+                if (!TokenActive(worldInputs[src], token)) {
+                    ++(*invalidRoutes);
+                    continue;
+                }
                 size_t routeIndex = static_cast<size_t>(token) * shape.topK + slot;
                 int32_t expert = worldInputs[src].expertIdx[routeIndex];
                 if (expert < 0 || static_cast<uint32_t>(expert) >= shape.expertNum) {
@@ -379,12 +415,20 @@ inline void BuildRoutes(const DispatchCombineTileArgs &args, const std::vector<H
         for (uint32_t token = 0; token < shape.m; ++token) {
             for (uint32_t slot = 0; slot < shape.topK; ++slot) {
                 size_t routeIndex = static_cast<size_t>(token) * shape.topK + slot;
+                if (!TokenActive(worldInputs[src], token)) {
+                    (*expandedBySrc)[src][routeIndex] = static_cast<int32_t>(shape.maxOutputSize);
+                    continue;
+                }
                 int32_t expert = worldInputs[src].expertIdx[routeIndex];
                 if (expert < 0 || static_cast<uint32_t>(expert) >= shape.expertNum) {
                     continue;
                 }
                 uint32_t expertId = static_cast<uint32_t>(expert);
                 uint32_t packedRow = expertBase[expertId] + cursor[expertId]++;
+                if (packedRow >= shape.maxOutputSize) {
+                    (*expandedBySrc)[src][routeIndex] = static_cast<int32_t>(shape.maxOutputSize);
+                    continue;
+                }
                 (*expandedBySrc)[src][routeIndex] = static_cast<int32_t>(packedRow);
                 (*routesBySrcExpert)[src][expertId].push_back(RouteRef{src, token, slot, expertId, packedRow});
                 for (uint32_t col = 0; col < shape.k; ++col) {
@@ -394,6 +438,31 @@ inline void BuildRoutes(const DispatchCombineTileArgs &args, const std::vector<H
             }
         }
     }
+}
+
+inline int32_t EffectiveRowsForTokenOwner(const DispatchCombineTileShape &shape, const CpuGoldenData &golden,
+                                          uint32_t tokenOwner, uint32_t expertOwner, uint32_t localExpert)
+{
+    uint32_t expertNumPadded = static_cast<uint32_t>(ExpertNumPadded(shape));
+    uint32_t globalExpert = expertOwner * shape.expertPerRank + localExpert;
+    int32_t cursor = 0;
+    int32_t cap = static_cast<int32_t>(shape.maxOutputSize);
+    for (uint32_t prevLocalExpert = 0; prevLocalExpert < shape.expertPerRank; ++prevLocalExpert) {
+        uint32_t currentGlobalExpert = expertOwner * shape.expertPerRank + prevLocalExpert;
+        for (uint32_t src = 0; src < shape.ep; ++src) {
+            int32_t rows = golden.peerTokenPerExpert[static_cast<size_t>(src) * expertNumPadded + currentGlobalExpert];
+            int32_t effective = 0;
+            if (cursor < cap && rows > 0) {
+                int32_t available = cap - cursor;
+                effective = rows < available ? rows : available;
+            }
+            if (currentGlobalExpert == globalExpert && src == tokenOwner) {
+                return effective;
+            }
+            cursor += effective;
+        }
+    }
+    return 0;
 }
 
 } // namespace golden_detail
@@ -464,7 +533,16 @@ inline CpuGoldenData ComputeCpuGolden(const DispatchCombineTileArgs &args, const
     for (uint32_t src = 0; src < shape.ep; ++src) {
         int32_t sum = 0;
         for (uint32_t expert = 0; expert < expertNumPadded; ++expert) {
-            sum += golden.peerTokenPerExpert[static_cast<size_t>(src) * expertNumPadded + expert];
+            int32_t rows = golden.peerTokenPerExpert[static_cast<size_t>(src) * expertNumPadded + expert];
+            if (sum >= static_cast<int32_t>(shape.maxOutputSize) || rows <= 0) {
+                rows = 0;
+            } else {
+                int32_t available = static_cast<int32_t>(shape.maxOutputSize) - sum;
+                if (rows > available) {
+                    rows = available;
+                }
+            }
+            sum += rows;
             golden.cumsumPerExpert[static_cast<size_t>(src) * expertNumPadded + expert] = sum;
         }
     }
@@ -556,7 +634,7 @@ inline CpuGoldenData ComputeCpuGolden(const DispatchCombineTileArgs &args, const
         for (uint32_t slot = 0; slot < shape.topK; ++slot) {
             size_t routeIndex = static_cast<size_t>(token) * shape.topK + slot;
             int32_t ptrDRow = golden.expandedRowIdx[routeIndex];
-            if (ptrDRow < 0) {
+            if (ptrDRow < 0 || static_cast<uint32_t>(ptrDRow) >= shape.maxOutputSize) {
                 continue;
             }
             float prob = worldInputs[myRank].probs[routeIndex];
@@ -702,7 +780,8 @@ inline CpuM2ReferenceData ComputeCpuM2Reference(const DispatchCombineTileArgs &a
             }
             for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
                 uint32_t globalExpert = expertOwner * shape.expertPerRank + localExpert;
-                int32_t rows = golden.peerTokenPerExpert[static_cast<size_t>(myRank) * expertNumPadded + globalExpert];
+                int32_t rows =
+                    golden_detail::EffectiveRowsForTokenOwner(shape, golden, myRank, expertOwner, localExpert);
                 if (rows <= 0) {
                     continue;
                 }
@@ -729,7 +808,7 @@ inline CpuM2ReferenceData ComputeCpuM2Reference(const DispatchCombineTileArgs &a
             for (uint32_t slot = 0; slot < shape.topK; ++slot) {
                 size_t routeIndex = static_cast<size_t>(token) * shape.topK + slot;
                 int32_t ptrDRow = golden.expandedRowIdx[routeIndex];
-                if (ptrDRow < 0) {
+                if (ptrDRow < 0 || static_cast<uint32_t>(ptrDRow) >= shape.maxOutputSize) {
                     continue;
                 }
                 float prob = worldInputs[myRank].probs[routeIndex];

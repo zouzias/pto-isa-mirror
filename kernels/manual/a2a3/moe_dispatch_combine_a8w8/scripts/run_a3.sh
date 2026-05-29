@@ -39,6 +39,8 @@ Runtime:
   --rank N               debug override; use with --rank-from-mpi 0
   --case-name NAME       label only: small, balanced, skewed, zero-token
   --backend NAME         m1-mock (default) or int8
+  --x-active-mask-mode none|alternate|tail-half
+  --overlap-mode off|on
   --seed N
   --data-dir DIR
   --timeline 0|1
@@ -60,6 +62,7 @@ Runtime:
   --hccl-buffsize-mb N
   --m1-suite 0|1       build once, then run explicit M1 real dispatch/combine cases with mock GMM payload
   --m2-suite 0|1       build once, then run explicit M2 int8 full-chain cases
+  --m3-suite 0|1       build once, then run M3 overlap off/on regression cases
 
 Build:
   --skip-run 0|1
@@ -80,6 +83,10 @@ Explicit templates:
     --case-name skewed -pes 4 -M 256 -K 256 -N 128 -topK 2 -expertPerPe 2 --max-tokens-per-expert 1024
   zero-token:
     --case-name zero-token -pes 4 -M 256 -K 256 -N 128 -topK 2 -expertPerPe 2 --max-tokens-per-expert 1024
+  over-capacity:
+    --case-name over-capacity -pes 1 -M 64 -K 64 -N 64 -topK 2 -expertPerPe 2 --max-tokens-per-expert 16
+  inactive-mask:
+    --case-name inactive-mask -pes 1 -M 64 -K 64 -N 64 -topK 1 -expertPerPe 1 --max-tokens-per-expert 128 --x-active-mask-mode alternate
 
 This project does not support hidden --case presets; pass explicit shape parameters.
 EOF
@@ -109,6 +116,8 @@ RANK_FROM_MPI=1
 RANK=""
 CASE_NAME=small
 BACKEND=m1-mock
+X_ACTIVE_MASK_MODE=none
+OVERLAP_MODE=off
 SEED=1234
 DATA_DIR="${PROJECT_DIR}/out"
 TIMELINE=0
@@ -122,6 +131,7 @@ CLEAN_BUILD=1
 MPI_BIN=""
 M1_SUITE=0
 M2_SUITE=0
+M3_SUITE=0
 DISPATCH_METADATA_ONLY=0
 DISPATCH_ONLY=0
 GMM1_ONLY=0
@@ -162,6 +172,8 @@ while [[ $# -gt 0 ]]; do
         --rank) RANK="$2"; shift 2 ;;
         --case-name) CASE_NAME="$2"; shift 2 ;;
         --backend) BACKEND="$2"; shift 2 ;;
+        --x-active-mask-mode|--x-active-mask) X_ACTIVE_MASK_MODE="$2"; shift 2 ;;
+        --overlap-mode) OVERLAP_MODE="$2"; shift 2 ;;
         --seed) SEED="$2"; shift 2 ;;
         --data-dir) DATA_DIR="$2"; shift 2 ;;
         --timeline) TIMELINE="$2"; shift 2 ;;
@@ -183,6 +195,7 @@ while [[ $# -gt 0 ]]; do
         --hccl-buffsize-mb) HCCL_BUFFSIZE_MB="$2"; shift 2 ;;
         --m1-suite) M1_SUITE="$2"; shift 2 ;;
         --m2-suite) M2_SUITE="$2"; shift 2 ;;
+        --m3-suite) M3_SUITE="$2"; shift 2 ;;
         --skip-run) SKIP_RUN="$2"; shift 2 ;;
         --skip-build) SKIP_BUILD="$2"; shift 2 ;;
         --clean-build) CLEAN_BUILD="$2"; shift 2 ;;
@@ -219,6 +232,10 @@ if [ "${HIDDEN_SIZE}" -le 0 ] || [ "${INTERMEDIATE_SIZE}" -le 0 ] || [ "${PAYLOA
 fi
 if [ "${BACKEND}" != "m1-mock" ] && [ "${BACKEND}" != "int8" ]; then
     echo "[ERROR] --backend must be m1-mock or int8"
+    exit 1
+fi
+if [ "${OVERLAP_MODE}" != "off" ] && [ "${OVERLAP_MODE}" != "on" ]; then
+    echo "[ERROR] --overlap-mode must be off or on"
     exit 1
 fi
 if [ $(( HIDDEN_SIZE % PAYLOAD_TILE_COLS )) -ne 0 ]; then
@@ -300,6 +317,8 @@ echo "RUN_MODE=${RUN_MODE} SOC_VERSION=${SOC_VERSION}"
 echo "PES=${PES} DEVICE_BASE=${DEVICE_BASE} NDEVICES=${NDEVICES}"
 echo "M=${M} HIDDEN_SIZE=${HIDDEN_SIZE} INTERMEDIATE_SIZE=${INTERMEDIATE_SIZE} TOPK=${TOPK} EXPERT_PER_PE=${EXPERT_PER_PE}"
 echo "BACKEND=${BACKEND}"
+echo "X_ACTIVE_MASK_MODE=${X_ACTIVE_MASK_MODE}"
+echo "OVERLAP_MODE=${OVERLAP_MODE}"
 echo "MAX_TOKENS_PER_EXPERT=${MAX_TOKENS_PER_EXPERT} PAYLOAD_TILE_COLS=${PAYLOAD_TILE_COLS}"
 echo "GMM_BLOCK_M=${GMM_BLOCK_M} GMM_BLOCK_N=${GMM_BLOCK_N} GMM_BLOCK_K=${GMM_BLOCK_K}"
 echo "rank_source=$([ "${RANK_FROM_MPI}" = "1" ] && echo mpi || echo manual)"
@@ -358,6 +377,36 @@ if [ "${M2_SUITE}" = "1" ]; then
     bash "${SCRIPT_PATH}" --m2-suite 0 --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 \
         --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
         --case-name zero-token -pes 4 -M 256 -K 256 -N 128 -topK 2 -expertPerPe 2 --max-tokens-per-expert 1024
+    bash "${SCRIPT_PATH}" --m2-suite 0 --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 \
+        --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
+        --case-name over-capacity -pes 1 -M 64 -K 64 -N 64 -topK 2 -expertPerPe 2 --max-tokens-per-expert 16
+    bash "${SCRIPT_PATH}" --m2-suite 0 --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 \
+        --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
+        --case-name inactive-mask -pes 1 -M 64 -K 64 -N 64 -topK 1 -expertPerPe 1 --max-tokens-per-expert 128 \
+        --x-active-mask-mode alternate
+    exit 0
+fi
+
+if [ "${M3_SUITE}" = "1" ]; then
+    echo "=== Running M3 fused overlap off/on regression suite ==="
+    for mode in off on; do
+        bash "${SCRIPT_PATH}" --m3-suite 0 --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 \
+            --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
+            --overlap-mode "${mode}" --timeline "${TIMELINE}" \
+            --case-name small -pes 1 -M 64 -K 64 -N 64 -topK 1 -expertPerPe 1 --max-tokens-per-expert 128
+        bash "${SCRIPT_PATH}" --m3-suite 0 --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 \
+            --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
+            --overlap-mode "${mode}" --timeline "${TIMELINE}" \
+            --case-name balanced -pes 4 -M 256 -K 256 -N 128 -topK 2 -expertPerPe 2 --max-tokens-per-expert 1024
+        bash "${SCRIPT_PATH}" --m3-suite 0 --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 \
+            --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
+            --overlap-mode "${mode}" --timeline "${TIMELINE}" \
+            --case-name skewed -pes 4 -M 256 -K 256 -N 128 -topK 2 -expertPerPe 2 --max-tokens-per-expert 1024
+        bash "${SCRIPT_PATH}" --m3-suite 0 --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 \
+            --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
+            --overlap-mode "${mode}" --timeline "${TIMELINE}" \
+            --case-name zero-token -pes 4 -M 256 -K 256 -N 128 -topK 2 -expertPerPe 2 --max-tokens-per-expert 1024
+    done
     exit 0
 fi
 
@@ -380,6 +429,8 @@ HOST_ARGS=(
     --rank-from-mpi "${RANK_FROM_MPI}"
     --case-name "${CASE_NAME}"
     --backend "${BACKEND}"
+    --x-active-mask-mode "${X_ACTIVE_MASK_MODE}"
+    --overlap-mode "${OVERLAP_MODE}"
     --seed "${SEED}"
     --data-dir "${DATA_DIR}"
     --timeline "${TIMELINE}"

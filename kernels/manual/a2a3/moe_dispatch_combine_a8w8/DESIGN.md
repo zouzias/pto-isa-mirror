@@ -587,6 +587,51 @@ MegaMoE 策略到本项目 stage 的对照：
   （DataAsFlag 在 PTO 侧的等价表达是 payload `TPUT` 落地后用 `TTEST` 轮询 count 区）；M2 不要求实现，实现时也不得
   改变已固定的 row order、offset 或 ready 语义。
 
+#### 5.2.1.1 参考实现的具体切分粒度（基线参考，非强制对齐）
+
+下表把参考工程 `dispatch_ffn_combine` 的具体切分数值抽出来，和本项目当前值并排，作为 M2.GMM / M3 调优的基线参考。
+本项目 canonical 值以 `include/moe_dispatch_combine_a8w8_types.hpp` 和 M2.3a 已验收实现为准；参考列只用于解释差异和提供
+perf 调优方向，**不作为强制对齐目标**。参考来源：`op_kernel/dispatch_ffn_combine.h`、`op_kernel/utils/const_args.hpp`、
+`op_kernel/utils/block_mmad_preload_async_fixpipe_quant.hpp`。
+
+| 切分维度 | 参考实现值 | 本项目当前值 | 说明 / 差异 |
+| --- | --- | --- | --- |
+| GMM tile (M×N) | `128 × 256` | `kGmmBaseM=128 × kGmmBaseN=256` | 一致；都是 AIC 的工作分配单位 |
+| L1 tile K（每次进 L1 的 K 宽） | `512`（`L1TileShape=GemmShape<128,256,512>`） | `kGmmBaseK*kGmmStepK = 64*4 = 256` | **差异**：参考 L1-K=512，本项目=256（一半）。两者都按 4 个 K-slice 组织 L1 panel，但绝对宽度不同，参考更利于摊薄 weight 读 |
+| L0 tile K（每次进 L0 的 K 宽） | `128`（`L0TileShape=GemmShape<128,256,128>`） | `kGmmBaseK = 64` | **差异**：参考 L0-K=128，本项目=64（一半） |
+| L1 ping-pong stages | `l1Stages=2` | `kGmmL1Stages=2` | 一致（双缓冲） |
+| L0A / L0B stages | `l0AStages=2 / l0BStages=2` | `kGmmL0AStages=2 / kGmmL0BStages=2` | 一致 |
+| L0C stages | `l0CStages=1` | `kGmmL0CStages=1` | 一致（accumulator 单缓冲） |
+| preload 异步级数 | `preloadStages=1` | 当前无显式 preload-async（M3 可评估） | 参考用 `MmadAtlasA2PreloadAsyncFixpipe`；本项目 preload/pipe overlap 列为 M3 可选 |
+| tile 遍历 swizzle | `GemmIdentityBlockSwizzle<9, 1>` | 暂无（行优先调度） | 参考用 swizzle 提升 weight L2 命中；本项目 swizzle 列为 M3 访存局部性可选项 |
+| int8 L1 占用（A/B，双缓冲） | A `128×512=64KB`、B `512×256=128KB`、合计双缓冲约 `388KB`（< 512KB） | A `128×256=32KB`、B `256×256=64KB`（更宽松） | 参考贴近 L1 上限以最大化 K 摊薄；本项目留更多余量 |
+| SwiGLU epilogue 分组粒度 | `epilogueGranularity = expertPerRank - 3`（`≤4` 时 `-1`），即两段 | `swigluSyncGroups` 幂指数 `{8,4,2,1,1}`（前粗后细） | 本项目用升级版多段分组，机制兼容、更细 |
+| 跨核 flag 复用上限 | `CROSS_CORE_FLAG_MAX_SET_COUNT = 15` | FFTS 物理 0-15，用户区 0-10（见 §10） | 见 §10 计数信号量 + 折叠 |
+| init_routing 量化列 loop 上限 | `MAX_COLS_ONE_LOOP_QUANT = 8192` | 由 `payloadTileCols` 控制 | 本项目无独立 init_routing 子系统（见 §6 无 sort 说明） |
+| 多核归并排序路数 | `MAX_MRGSORT_LIST = 4`（VBS/VMS/SortOut） | 不适用 | 本项目不实现 multi-core sort |
+| AIC:AIV mixed launch 比例 | AIV = 2 × AIC subblock（1:2）；`blockDim = CalcTschBlockDim(aivNum, aicNum, aivNum)` | `kAicBlocks=24`，AIV=48（`subblockdim=2`），即 1:2 | **固定 launch/硬件事实**：A3 每个 cube 核配 2 个 vector subblock，由 mixed ELF meta 决定，不是自由可调比例 |
+| 逐阶段核分配（如 epilogue/dispatch 用几核） | `epilogueCoreNum`、`aivNumInitRouting=2*BLOCK_NUM` 等可调参数 | M2 多为 worker=1，按 stage 上报 | **不在设计固定具体数值**：属 M3 调优量，由 runtime logical core count 推导，M2.8c 只如实上报 worker facts |
+
+关于核分工的两层区分（重要）：
+
+- **AIC:AIV 总比例（1:2）是固定 launch 事实**，和 tile 尺寸一样属于切分粒度，已列入上表；`kAicBlocks/kAivRatio` 是它的工程入口。
+- **各 stage 的 AIV worker 数不是设计常量**，而是 §5.2.1 core-worker 层和 M3.2/M3.3/M3.5 负责的调优量：M2 可以是 worker=1，
+  只需如实打印 `dispatch_aiv_workers/activation_aiv_workers/combine_return_aiv_workers/restore_aiv_workers` 等字段；M3 按
+  runtime logical core count 提升并用 counter/timeline 证明。设计不钉死这些数字，避免与"M2 worker=1 不阻塞、M3 调优"自相矛盾。
+
+由此给 M3 的两个可量化调优方向（仅参考，不阻塞 M2）：
+
+- **L1/L0 K 宽**：本项目当前 L1-K=256 / L0-K=64 是参考的一半。M3 性能阶段可评估提到 L1-K=512 / L0-K=128 是否在 PTO
+  `TMATMUL` + L1 预算下可行，以更好摊薄 weight 读；若 PTO tile 类型或 L1 余量不支持，记 `primitive-gap` 或保留当前值。
+- **swizzle / preload-async**：参考用 `GemmIdentityBlockSwizzle<9,1>` + `preloadStages=1` 提升 weight L2 命中和搬运掩盖；
+  本项目把它们列为 M3 访存局部性可选项，启用时不得改变 GMM tile task 的 row/order 语义。
+
+> **实现 tip**：写代码时若某处切分（tile 边界、K-loop 步进、group/sync-group row range、owner segment 拆分、core 分工）
+> 一时想不清楚，可对照参考实现 `/mnt/data/ntlab/zy/code/zhangyuan/vllm-ascend-zy/csrc/mc2/dispatch_ffn_combine`
+> （`op_kernel/dispatch_ffn_combine.h`、`block_mmad_preload_async_fixpipe_quant.hpp`、`dispatch_ffn_combine_kernel.hpp`）
+> 看它的切分**思路与数值**。这只是**只读参考**：禁止拷贝/include/链接 AscendC/Catlass 代码；本项目仍用 PTO primitive 重写，
+> 且 row order/offset/owner segment 语义以本设计为准，不能因为参考不同就改契约。
+
 ### 5.3 M2 必须前置的 MegaMoE 合并点
 
 如果 M2 只做“协议 mock + 普通 int8 backend”，M3 再补 MegaMoE 的数据流合并，会把 dispatch row layout、
@@ -3041,6 +3086,10 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 - RestoreOutput 若已按 token shard 使用多个 AIV，可以在 M2.8c 记录为 partial AIV data parallel；但硬编码 worker 数
   不能作为最终能力声明，M3 需要按 runtime logical AIV count 和 token range 继续收口。
 - 每个 M2 回归用例打印 final output correctness report 和 overlap-off E2E perf report。
+- 覆盖第 6.4 节的 drop 与 `xActiveMask` 语义：除 small/balanced/skewed/zero-token 外，必须新增
+  (a) 一个 over-capacity case（某 expert token 数超过其在 `maxOutputSize` 预算内可占额度，触发位置序前缀和截断）和
+  (b) 一个含 inactive token 的 `xActiveMask` case。两者的 host golden 必须用同一套截断/sentinel/no-renorm restore
+  规则生成；不传 mask 时行为与无 mask 完全一致。drop/mask 复用既有 routing + sentinel 路径，不新增独立分支。
 - `DESIGN.md` 记录 M2 tolerance、scale/dequant 顺序、dispatch/quant 合并点、combine/epilogue 合并点、
   Dispatch-GMM soft-sync ledger、GMM-Combine tile-split return map，以及当前 A8W8/int8 主路径的精度边界。
 - 若 M2.3/M2.6 的 cube primitive preflight 失败，M2.8 不允许以 host numeric、identity mock、旧 M1
@@ -3053,6 +3102,11 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 验收标准：
 
 - small、balanced、skewed、zero-token 四类用例全部通过。
+- over-capacity drop case 通过：被丢行在 gather/GMM1/SwiGLU/GMM2/return 一致截断，dropped `(token,slot)` 的
+  `expandedRowIdx >= num_out_tokens`，final output 与 golden 在 tolerance 内一致，不死锁、不越界；结构化输出含
+  `drop_triggered=true`、`dropped_rows=<n>` 或等价字段。
+- inactive `xActiveMask` case 通过：inactive token 在路由阶段被 drop（expertId 改写为越界 invalid），restore 跳过其
+  slot 且不重新归一，final output 与 golden 一致；不传 mask 的回归结果与无 mask 基线 bitwise 一致。
 - GMM accumulator checksum 与 reference 精确对齐；scale/dequant checksum 和 final output 按 M2.8 记录的 tolerance 对齐。
 - `[CorrectnessReport]` 或等价结构化输出必须证明 `gmm_runtime_shape=true`、`gmm_multiblock=true`；如果某 case
   因零 token 退化为单 block，不得作为该证明来源。

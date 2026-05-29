@@ -70,6 +70,7 @@ constexpr uint32_t kM2SwigluGroupFields = 8;
 constexpr uint32_t kM2GmmTileTaskFields = 8;
 constexpr uint32_t kM2ReturnPlanFields = 8;
 constexpr uint32_t kM2OwnerSegmentFields = 8;
+constexpr uint32_t kM3CounterBase = 24U * 16U;
 
 using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
 using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -543,6 +544,38 @@ AICORE inline int32_t M2LoadTokenPerExpert(moe_dispatch_combine_a8w8::ShapeConfi
 {
     return *(localPeer.tokenPerExpertMatrix +
              M2TokenPerExpertIndex(shape, tokenOwnerRank, expertOwnerRank, localExpert));
+}
+
+AICORE inline bool M2TokenIsActive(GM_ADDR xActiveMask, uint32_t token)
+{
+    if (xActiveMask == nullptr) {
+        return true;
+    }
+    __gm__ uint8_t *mask = reinterpret_cast<__gm__ uint8_t *>(xActiveMask);
+    return mask[token] != 0U;
+}
+
+AICORE inline int32_t M2EffectiveTokenOwnerRows(moe_dispatch_combine_a8w8::ShapeConfig shape,
+                                                M2PeerWindowViewDevice localPeer, uint32_t tokenOwnerRank,
+                                                uint32_t expertOwnerRank, uint32_t localExpert)
+{
+    int32_t cursor = 0;
+    int32_t cap = static_cast<int32_t>(M2LocalRows(shape));
+    for (uint32_t prevLocalExpert = 0; prevLocalExpert < shape.expertPerRank; ++prevLocalExpert) {
+        for (uint32_t src = 0; src < shape.rankNum; ++src) {
+            int32_t rows = M2LoadTokenPerExpert(shape, localPeer, src, expertOwnerRank, prevLocalExpert);
+            int32_t effective = 0;
+            if (cursor < cap && rows > 0) {
+                int32_t available = cap - cursor;
+                effective = rows < available ? rows : available;
+            }
+            if (prevLocalExpert == localExpert && src == tokenOwnerRank) {
+                return effective;
+            }
+            cursor += effective;
+        }
+    }
+    return 0;
 }
 
 AICORE inline uint32_t M2GlobalExpert(uint32_t expertOwnerRank, uint32_t localExpert,
@@ -1153,10 +1186,13 @@ AICORE inline void M2ClearDispatchState(moe_dispatch_combine_a8w8::ShapeConfig s
     for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
         StoreScalarI32(workspaceView.expertTokenNums + localExpert, 0);
         StoreScalarI32(workspaceView.dispatchGroupReady + localExpert * 16U, 0);
+        StoreScalarI32(workspaceView.gmm2GroupReady + localExpert * 16U, 0);
     }
     for (uint32_t idx = 0; idx < syncGroupCap; ++idx) {
         StoreScalarI32(workspaceView.swigluSyncGroups + idx, 0);
         StoreScalarI32(workspaceView.dequantSum + idx, 0);
+        StoreScalarI32(workspaceView.gmm1SyncGroupReady + idx * 16U, 0);
+        StoreScalarI32(workspaceView.activationSyncGroupReady + idx * 16U, 0);
         for (uint32_t field = 0; field < kM2SwigluGroupFields; ++field) {
             StoreScalarI32(workspaceView.swigluGroupDesc + idx * kM2SwigluGroupFields + field, 0);
         }
@@ -1189,11 +1225,16 @@ AICORE inline void M2ClearDispatchState(moe_dispatch_combine_a8w8::ShapeConfig s
 }
 
 AICORE inline void M2CountLocalRoutes(moe_dispatch_combine_a8w8::ShapeConfig shape, M2WorkspaceViewDevice workspaceView,
-                                      M2PeerWindowViewDevice localPeer, GM_ADDR expertIdx, uint32_t myRank)
+                                      M2PeerWindowViewDevice localPeer, GM_ADDR expertIdx, GM_ADDR xActiveMask,
+                                      uint32_t myRank)
 {
     __gm__ int32_t *expertIds = reinterpret_cast<__gm__ int32_t *>(expertIdx);
     uint32_t globalExpertNum = shape.rankNum * shape.expertPerRank;
     for (uint32_t routeIndex = 0; routeIndex < shape.m * shape.topK; ++routeIndex) {
+        uint32_t token = routeIndex / shape.topK;
+        if (!M2TokenIsActive(xActiveMask, token)) {
+            continue;
+        }
         int32_t expert = LoadScalarI32(expertIds + routeIndex);
         if (expert < 0 || static_cast<uint32_t>(expert) >= globalExpertNum) {
             continue;
@@ -1335,9 +1376,10 @@ AICORE inline void M2QuantizeRowToPeerPayload(moe_dispatch_combine_a8w8::ShapeCo
 
 AICORE inline void M2RoutePackQuantLocal(moe_dispatch_combine_a8w8::ShapeConfig shape,
                                          M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
-                                         GM_ADDR inputA, GM_ADDR expertIdx, uint32_t rowBytes)
+                                         GM_ADDR inputA, GM_ADDR expertIdx, GM_ADDR xActiveMask, uint32_t rowBytes)
 {
     uint32_t globalExpertNum = shape.rankNum * shape.expertPerRank;
+    uint32_t localRows = static_cast<uint32_t>(M2LocalRows(shape));
     __gm__ int32_t *expertIds = reinterpret_cast<__gm__ int32_t *>(expertIdx);
     for (uint32_t globalExpert = 0; globalExpert < globalExpertNum; ++globalExpert) {
         StoreScalarI32(workspaceView.tokenOwnerRankOffsets + globalExpert,
@@ -1346,6 +1388,10 @@ AICORE inline void M2RoutePackQuantLocal(moe_dispatch_combine_a8w8::ShapeConfig 
     for (uint32_t token = 0; token < shape.m; ++token) {
         for (uint32_t slot = 0; slot < shape.topK; ++slot) {
             uint32_t routeIndex = token * shape.topK + slot;
+            if (!M2TokenIsActive(xActiveMask, token)) {
+                StoreScalarI32(workspaceView.expandedRowIdx + routeIndex, static_cast<int32_t>(localRows));
+                continue;
+            }
             int32_t expert = LoadScalarI32(expertIds + routeIndex);
             if (expert < 0 || static_cast<uint32_t>(expert) >= globalExpertNum) {
                 StoreScalarI32(workspaceView.expandedRowIdx + routeIndex, -1);
@@ -1354,6 +1400,10 @@ AICORE inline void M2RoutePackQuantLocal(moe_dispatch_combine_a8w8::ShapeConfig 
             uint32_t globalExpert = static_cast<uint32_t>(expert);
             int32_t packedRow = LoadScalarI32(workspaceView.tokenOwnerRankOffsets + globalExpert);
             StoreScalarI32(workspaceView.tokenOwnerRankOffsets + globalExpert, packedRow + 1);
+            if (packedRow < 0 || static_cast<uint32_t>(packedRow) >= localRows) {
+                StoreScalarI32(workspaceView.expandedRowIdx + routeIndex, static_cast<int32_t>(localRows));
+                continue;
+            }
             StoreScalarI32(workspaceView.expandedRowIdx + routeIndex, packedRow);
             M2QuantizeRowToPeerPayload(shape, localPeer, inputA, token, static_cast<uint32_t>(packedRow), rowBytes);
         }
@@ -1397,17 +1447,26 @@ AICORE inline void M2BuildPrefixMetadata(moe_dispatch_combine_a8w8::ShapeConfig 
                                          uint32_t myRank)
 {
     int32_t dispatchCursor = 0;
+    int32_t localRowCap = static_cast<int32_t>(M2LocalRows(shape));
     for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
         StoreScalarI32(workspaceView.dispatchOffset + localExpert, dispatchCursor);
         int32_t before = 0;
         for (uint32_t tokenOwner = 0; tokenOwner < shape.rankNum; ++tokenOwner) {
             int32_t rows = M2LoadTokenPerExpert(shape, localPeer, tokenOwner, myRank, localExpert);
+            if (dispatchCursor >= localRowCap || rows <= 0) {
+                rows = 0;
+            } else {
+                int32_t available = localRowCap - dispatchCursor;
+                if (rows > available) {
+                    rows = available;
+                }
+            }
             StoreScalarI32(workspaceView.preSumBeforeRank + tokenOwner * shape.expertPerRank + localExpert, before);
             before += rows;
             StoreScalarI32(workspaceView.cumsumMM + tokenOwner * shape.expertPerRank + localExpert, before);
+            dispatchCursor += rows;
         }
         StoreScalarI32(workspaceView.expertTokenNums + localExpert, before);
-        dispatchCursor += before;
     }
     InvalidateGmCacheLines(workspaceView.dispatchOffset, static_cast<uint32_t>(shape.expertPerRank * sizeof(int32_t)));
     InvalidateGmCacheLines(workspaceView.preSumBeforeRank,
@@ -1555,7 +1614,12 @@ AICORE inline void M2GatherDispatchToGmm1Input(moe_dispatch_combine_a8w8::ShapeC
     for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
         uint32_t globalExpert = M2GlobalExpert(myRank, localExpert, shape);
         for (uint32_t tokenOwner = 0; tokenOwner < shape.rankNum; ++tokenOwner) {
-            int32_t rows = M2LoadTokenPerExpert(shape, localPeer, tokenOwner, myRank, localExpert);
+            int32_t current = LoadScalarI32(workspaceView.cumsumMM + tokenOwner * shape.expertPerRank + localExpert);
+            int32_t previous =
+                tokenOwner == 0U ?
+                    0 :
+                    LoadScalarI32(workspaceView.cumsumMM + (tokenOwner - 1U) * shape.expertPerRank + localExpert);
+            int32_t rows = current - previous;
             int32_t dstStart =
                 LoadScalarI32(workspaceView.dispatchOffset + localExpert) +
                 LoadScalarI32(workspaceView.preSumBeforeRank + tokenOwner * shape.expertPerRank + localExpert);
@@ -1564,6 +1628,18 @@ AICORE inline void M2GatherDispatchToGmm1Input(moe_dispatch_combine_a8w8::ShapeC
                 continue;
             }
             int32_t srcStart = M2SourceGlobalExpertRowBase(shape, localPeer, tokenOwner, globalExpert);
+            int32_t localRowCap = static_cast<int32_t>(M2LocalRows(shape));
+            if (srcStart >= localRowCap) {
+                M2PublishDispatchLedgerCopyDone(shape, workspaceView, tokenOwner, localExpert);
+                continue;
+            }
+            if (srcStart + rows > localRowCap) {
+                rows = localRowCap - srcStart;
+            }
+            if (rows <= 0) {
+                M2PublishDispatchLedgerCopyDone(shape, workspaceView, tokenOwner, localExpert);
+                continue;
+            }
             M2PeerWindowViewDevice remotePeer =
                 MakeM2RemotePeerWindowViewDevice(ctx, peerWindow, tokenOwner, peerWindowLayout);
             M2TGetRowsInt8(workspaceView.gmm1InputInt8, static_cast<int32_t>(rowBytes), dstStart,
@@ -1630,7 +1706,13 @@ AICORE inline void M2RunGmm1Epilogue(moe_dispatch_combine_a8w8::ShapeConfig shap
             }
         }
     }
-    StoreScalarI32(workspaceView.gmm1SyncGroupReady, 1);
+    uint32_t syncGroupCount = static_cast<uint32_t>(LoadScalarI32(workspaceView.swigluSyncGroups));
+    if (syncGroupCount == 0U || syncGroupCount > shape.expertPerRank) {
+        syncGroupCount = shape.expertPerRank;
+    }
+    for (uint32_t syncIdx = 0; syncIdx < syncGroupCount; ++syncIdx) {
+        StoreScalarI32(workspaceView.gmm1SyncGroupReady + syncIdx * 16U, 1);
+    }
     InvalidateGmCacheLines(workspaceView.gmm1Out, static_cast<uint32_t>(M2LocalRows(shape) * w1Cols * sizeof(float)));
     (void)myRank;
 }
@@ -1895,7 +1977,6 @@ AICORE inline void M2RunActivationQuant(moe_dispatch_combine_a8w8::ShapeConfig s
         int32_t rowBegin = LoadScalarI32(workspaceView.dispatchOffset + localExpert);
         int32_t rowCount = LoadScalarI32(workspaceView.expertTokenNums + localExpert);
         if (rowCount <= 0) {
-            StoreScalarI32(workspaceView.activationSyncGroupReady + localExpert * 16U, 1);
             continue;
         }
         for (uint32_t row = 0; row < static_cast<uint32_t>(rowCount); ++row) {
@@ -1906,9 +1987,15 @@ AICORE inline void M2RunActivationQuant(moe_dispatch_combine_a8w8::ShapeConfig s
                                    static_cast<uint32_t>(shape.intermediateSize * sizeof(float)));
             M2RequantizeSwigluRowPto(shape, workspaceView, globalRow, gmm2RowStride);
         }
-        StoreScalarI32(workspaceView.activationSyncGroupReady + localExpert * 16U, 1);
     }
     M2BuildSwigluSyncMetadata(shape, workspaceView);
+    uint32_t syncGroupCount = static_cast<uint32_t>(LoadScalarI32(workspaceView.swigluSyncGroups));
+    if (syncGroupCount == 0U || syncGroupCount > shape.expertPerRank) {
+        syncGroupCount = shape.expertPerRank;
+    }
+    for (uint32_t syncIdx = 0; syncIdx < syncGroupCount; ++syncIdx) {
+        StoreScalarI32(workspaceView.activationSyncGroupReady + syncIdx * 16U, 1);
+    }
     InvalidateGmCacheLines(workspaceView.swigluOut,
                            static_cast<uint32_t>(localRows * shape.intermediateSize * sizeof(float)));
     InvalidateGmCacheLines(workspaceView.gmm2InputInt8, static_cast<uint32_t>(localRows * gmm2RowStride));
@@ -1918,7 +2005,7 @@ AICORE inline void M2RunActivationQuant(moe_dispatch_combine_a8w8::ShapeConfig s
 
 __global__ AICORE void M2Int8Dispatch(moe_dispatch_combine_a8w8::ShapeConfig shape,
                                       moe_dispatch_combine_a8w8::RankConfig rank, GM_ADDR inputA, GM_ADDR expertIdx,
-                                      GM_ADDR peerWindow, GM_ADDR hcclCtx, GM_ADDR workspace)
+                                      GM_ADDR xActiveMask, GM_ADDR peerWindow, GM_ADDR hcclCtx, GM_ADDR workspace)
 {
     uint32_t blockId = static_cast<uint32_t>(get_block_idx());
     if (blockId != 0 || shape.rankNum == 0 || shape.m == 0 || shape.hiddenSize == 0 || shape.topK == 0 ||
@@ -1934,15 +2021,13 @@ __global__ AICORE void M2Int8Dispatch(moe_dispatch_combine_a8w8::ShapeConfig sha
     uint32_t myRank = rank.rankId;
 
     M2ClearDispatchState(shape, workspaceView, localPeer);
-    M2CountLocalRoutes(shape, workspaceView, localPeer, expertIdx, myRank);
-    M2RoutePackQuantLocal(shape, workspaceView, localPeer, inputA, expertIdx, rowBytes);
+    M2CountLocalRoutes(shape, workspaceView, localPeer, expertIdx, xActiveMask, myRank);
+    M2RoutePackQuantLocal(shape, workspaceView, localPeer, inputA, expertIdx, xActiveMask, rowBytes);
     M2PublishCountRows(shape, workspaceView, localPeer, ctx, peerWindow, myRank, peerWindowLayout);
     M2WaitCountRows(shape, localPeer);
     M2BuildPrefixMetadata(shape, workspaceView, localPeer, myRank);
     M2GatherDispatchToGmm1Input(shape, workspaceView, localPeer, ctx, peerWindow, myRank, rowBytes, peerWindowLayout);
-    StoreScalarI32(workspaceView.swigluSyncGroups, static_cast<int32_t>(shape.expertPerRank));
-    StoreScalarI32(workspaceView.dequantSum, 0);
-    StoreScalarI32(workspaceView.dequantSum + 1, LoadScalarI32(workspaceView.expertTokenNums));
+    M2BuildSwigluSyncMetadata(shape, workspaceView);
     StoreScalarI32(localPeer.debugCounters, 1);
 }
 
@@ -2114,7 +2199,13 @@ AICORE inline uint32_t M2BuildReturnSegmentMap(moe_dispatch_combine_a8w8::ShapeC
                 uint32_t firstSegment = segmentId;
                 uint32_t tileSegmentCount = 0;
                 for (uint32_t tokenOwner = 0; tokenOwner < shape.rankNum; ++tokenOwner) {
-                    int32_t ownerRows = M2LoadTokenPerExpert(shape, localPeer, tokenOwner, myRank, localExpert);
+                    int32_t current =
+                        LoadScalarI32(workspaceView.cumsumMM + tokenOwner * shape.expertPerRank + localExpert);
+                    int32_t previous = tokenOwner == 0U ?
+                                           0 :
+                                           LoadScalarI32(workspaceView.cumsumMM +
+                                                         (tokenOwner - 1U) * shape.expertPerRank + localExpert);
+                    int32_t ownerRows = current - previous;
                     if (ownerRows <= 0) {
                         continue;
                     }
@@ -2181,23 +2272,23 @@ AICORE inline int32_t M2ExpectedReturnSegmentCount(moe_dispatch_combine_a8w8::Sh
 {
     uint32_t tileRows = shape.gmmBlockM == 0 ? kM2ReturnTileRows : shape.gmmBlockM;
     uint32_t hiddenChunks = static_cast<uint32_t>(M2CeilDivDevice(shape.hiddenSize, M2ReturnHiddenChunkCols(shape)));
-    int32_t ownerRows = M2LoadTokenPerExpert(shape, localPeer, myRank, expertOwner, localExpert);
+    int32_t ownerRows = M2EffectiveTokenOwnerRows(shape, localPeer, myRank, expertOwner, localExpert);
     if (ownerRows <= 0) {
         return 0;
     }
     int32_t rowBegin = 0;
     for (uint32_t prevLocalExpert = 0; prevLocalExpert < localExpert; ++prevLocalExpert) {
         for (uint32_t tokenOwner = 0; tokenOwner < shape.rankNum; ++tokenOwner) {
-            rowBegin += M2LoadTokenPerExpert(shape, localPeer, tokenOwner, expertOwner, prevLocalExpert);
+            rowBegin += M2EffectiveTokenOwnerRows(shape, localPeer, tokenOwner, expertOwner, prevLocalExpert);
         }
     }
     int32_t ownerPrefix = 0;
     for (uint32_t tokenOwner = 0; tokenOwner < myRank; ++tokenOwner) {
-        ownerPrefix += M2LoadTokenPerExpert(shape, localPeer, tokenOwner, expertOwner, localExpert);
+        ownerPrefix += M2EffectiveTokenOwnerRows(shape, localPeer, tokenOwner, expertOwner, localExpert);
     }
     int32_t rowCount = 0;
     for (uint32_t tokenOwner = 0; tokenOwner < shape.rankNum; ++tokenOwner) {
-        rowCount += M2LoadTokenPerExpert(shape, localPeer, tokenOwner, expertOwner, localExpert);
+        rowCount += M2EffectiveTokenOwnerRows(shape, localPeer, tokenOwner, expertOwner, localExpert);
     }
     int32_t ownerStart = rowBegin + ownerPrefix;
     int32_t ownerEnd = ownerStart + ownerRows;
@@ -2465,7 +2556,7 @@ AICORE inline void RestoreOutputRows(DispatchCombineTileShape shape, LocalPeerWi
         for (uint32_t slot = 0; slot < shape.topK; ++slot) {
             uint32_t routeIndex = token * shape.topK + slot;
             int32_t ptrDRow = LoadScalarI32(localPeer.expandedRowIdx + routeIndex);
-            if (ptrDRow < 0) {
+            if (ptrDRow < 0 || static_cast<uint32_t>(ptrDRow) >= shape.maxOutputSize) {
                 continue;
             }
             float prob = probValues[routeIndex];
@@ -2505,7 +2596,7 @@ __global__ AICORE void M2RestoreOutput(moe_dispatch_combine_a8w8::ShapeConfig sh
         for (uint32_t slot = 0; slot < shape.topK; ++slot) {
             uint32_t routeIndex = token * shape.topK + slot;
             int32_t ptrDRow = LoadScalarI32(workspaceView.expandedRowIdx + routeIndex);
-            if (ptrDRow < 0) {
+            if (ptrDRow < 0 || static_cast<uint32_t>(ptrDRow) >= static_cast<uint32_t>(M2LocalRows(shape))) {
                 continue;
             }
             float prob = probValues[routeIndex];
@@ -2633,11 +2724,11 @@ void LaunchDispatchCombineTileCombine(DispatchCombineTileShape shape, uint32_t m
 }
 
 void LaunchM2Int8Dispatch(moe_dispatch_combine_a8w8::ShapeConfig shape, moe_dispatch_combine_a8w8::RankConfig rank,
-                          uint8_t *inputA, uint8_t *expertIdx, uint8_t *peerWindow, uint8_t *hcclCtx,
-                          uint8_t *workspace, void *stream, uint32_t launchBlockCount)
+                          uint8_t *inputA, uint8_t *expertIdx, uint8_t *xActiveMask, uint8_t *peerWindow,
+                          uint8_t *hcclCtx, uint8_t *workspace, void *stream, uint32_t launchBlockCount)
 {
-    M2Int8Dispatch<<<launchBlockCount, nullptr, stream>>>(shape, rank, inputA, expertIdx, peerWindow, hcclCtx,
-                                                          workspace);
+    M2Int8Dispatch<<<launchBlockCount, nullptr, stream>>>(shape, rank, inputA, expertIdx, xActiveMask, peerWindow,
+                                                          hcclCtx, workspace);
 }
 
 void LaunchM2Gmm1Epilogue(moe_dispatch_combine_a8w8::ShapeConfig shape, moe_dispatch_combine_a8w8::RankConfig rank,

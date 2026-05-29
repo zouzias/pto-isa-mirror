@@ -327,6 +327,7 @@ bool VerboseRuntimeLogs(const DispatchCombineTileArgs &args)
 struct DeviceBuffers {
     void *inputA = nullptr;
     void *expertIdx = nullptr;
+    void *xActiveMask = nullptr;
     void *probs = nullptr;
     void *outputC = nullptr;
     void *workspace = nullptr;
@@ -674,6 +675,7 @@ void AllocateLocalBuffers(const DispatchCombineTileArgs &args, const WorkspaceLa
     const DispatchCombineTileShape &shape = args.shape;
     size_t inputBytes = BytesOfHalfVector(static_cast<size_t>(shape.m) * shape.k);
     size_t expertIdxBytes = BytesOfI32Vector(static_cast<size_t>(shape.m) * shape.topK);
+    size_t activeMaskBytes = shape.m;
     size_t probsBytes = BytesOfFloatVector(static_cast<size_t>(shape.m) * shape.topK);
     size_t outputBytes = BytesOfHalfVector(static_cast<size_t>(shape.m) * shape.k);
     size_t expertOutputBytes = BytesOfHalfVector(static_cast<size_t>(shape.maxOutputSize) * shape.k);
@@ -681,6 +683,8 @@ void AllocateLocalBuffers(const DispatchCombineTileArgs &args, const WorkspaceLa
              "rank " + std::to_string(state->rank) + " aclrtMalloc inputA");
     CheckAcl(aclrtMalloc(&state->buffers.expertIdx, expertIdxBytes, ACL_MEM_MALLOC_HUGE_FIRST),
              "rank " + std::to_string(state->rank) + " aclrtMalloc expertIdx");
+    CheckAcl(aclrtMalloc(&state->buffers.xActiveMask, activeMaskBytes, ACL_MEM_MALLOC_HUGE_FIRST),
+             "rank " + std::to_string(state->rank) + " aclrtMalloc xActiveMask");
     CheckAcl(aclrtMalloc(&state->buffers.probs, probsBytes, ACL_MEM_MALLOC_HUGE_FIRST),
              "rank " + std::to_string(state->rank) + " aclrtMalloc probs");
     CheckAcl(aclrtMalloc(&state->buffers.outputC, outputBytes, ACL_MEM_MALLOC_HUGE_FIRST),
@@ -705,12 +709,15 @@ void AllocateLocalBuffersM2(const DispatchCombineTileArgs &args,
     const DispatchCombineTileShape &shape = args.shape;
     size_t inputBytes = BytesOfHalfVector(static_cast<size_t>(shape.m) * shape.k);
     size_t expertIdxBytes = BytesOfI32Vector(static_cast<size_t>(shape.m) * shape.topK);
+    size_t activeMaskBytes = shape.m;
     size_t probsBytes = BytesOfFloatVector(static_cast<size_t>(shape.m) * shape.topK);
     size_t outputBytes = BytesOfHalfVector(static_cast<size_t>(shape.m) * shape.k);
     CheckAcl(aclrtMalloc(&state->buffers.inputA, inputBytes, ACL_MEM_MALLOC_HUGE_FIRST),
              "rank " + std::to_string(state->rank) + " aclrtMalloc inputA");
     CheckAcl(aclrtMalloc(&state->buffers.expertIdx, expertIdxBytes, ACL_MEM_MALLOC_HUGE_FIRST),
              "rank " + std::to_string(state->rank) + " aclrtMalloc expertIdx");
+    CheckAcl(aclrtMalloc(&state->buffers.xActiveMask, activeMaskBytes, ACL_MEM_MALLOC_HUGE_FIRST),
+             "rank " + std::to_string(state->rank) + " aclrtMalloc xActiveMask");
     CheckAcl(aclrtMalloc(&state->buffers.probs, probsBytes, ACL_MEM_MALLOC_HUGE_FIRST),
              "rank " + std::to_string(state->rank) + " aclrtMalloc probs");
     CheckAcl(aclrtMalloc(&state->buffers.outputC, outputBytes, ACL_MEM_MALLOC_HUGE_FIRST),
@@ -737,6 +744,14 @@ void CopyInputsToDevice(const DispatchCombineTileArgs &args, RuntimeState *state
     size_t inputBytes = BytesOfHalfVector(inputHalf.size());
     size_t expertIdxBytes = BytesOfI32Vector(state->inputs.expertIdx.size());
     size_t probsBytes = BytesOfFloatVector(state->inputs.probs.size());
+    std::vector<uint8_t> allActive;
+    const uint8_t *activeMaskData = nullptr;
+    if (state->inputs.xActiveMask.empty()) {
+        allActive.assign(shape.m, 1U);
+        activeMaskData = allActive.data();
+    } else {
+        activeMaskData = state->inputs.xActiveMask.data();
+    }
     CheckAcl(aclrtMemcpy(state->buffers.inputA, inputBytes, inputHalf.data(), inputBytes, ACL_MEMCPY_HOST_TO_DEVICE),
              "rank " + std::to_string(state->rank) + " copy inputA");
     CheckAcl(aclrtMemcpy(state->buffers.expertIdx, expertIdxBytes, state->inputs.expertIdx.data(), expertIdxBytes,
@@ -745,6 +760,8 @@ void CopyInputsToDevice(const DispatchCombineTileArgs &args, RuntimeState *state
     CheckAcl(aclrtMemcpy(state->buffers.probs, probsBytes, state->inputs.probs.data(), probsBytes,
                          ACL_MEMCPY_HOST_TO_DEVICE),
              "rank " + std::to_string(state->rank) + " copy probs");
+    CheckAcl(aclrtMemcpy(state->buffers.xActiveMask, shape.m, activeMaskData, shape.m, ACL_MEMCPY_HOST_TO_DEVICE),
+             "rank " + std::to_string(state->rank) + " copy xActiveMask");
     CheckAcl(aclrtMemset(state->buffers.outputC, BytesOfHalfVector(static_cast<size_t>(shape.m) * shape.k), 0,
                          BytesOfHalfVector(static_cast<size_t>(shape.m) * shape.k)),
              "rank " + std::to_string(state->rank) + " clear outputC");
@@ -819,9 +836,9 @@ void RunM2MixedSpike(const DispatchCombineTileArgs &args, RuntimeState *state)
         CheckAcl(aclrtSynchronizeStream(state->computeStream),
                  "rank " + std::to_string(state->rank) + " m2 mixed spike stream sync");
         std::vector<int32_t> heartbeat(kHeartbeatWords, 0);
-        CheckAcl(aclrtMemcpy(heartbeat.data(), heartbeatBytes, heartbeatDevice, heartbeatBytes,
-                             ACL_MEMCPY_DEVICE_TO_HOST),
-                 "rank " + std::to_string(state->rank) + " copy m2 mixed heartbeat");
+        CheckAcl(
+            aclrtMemcpy(heartbeat.data(), heartbeatBytes, heartbeatDevice, heartbeatBytes, ACL_MEMCPY_DEVICE_TO_HOST),
+            "rank " + std::to_string(state->rank) + " copy m2 mixed heartbeat");
         CheckAcl(aclrtFree(heartbeatDevice), "rank " + std::to_string(state->rank) + " free m2 mixed heartbeat");
         heartbeatDevice = nullptr;
 
@@ -976,15 +993,64 @@ struct M2FusedFullEvidence {
     int32_t aicBlocks = 0;
     int32_t aivBlocks = 0;
     int32_t stageCount = 0;
+    int32_t dispatchGroupReadyCount = 0;
+    int32_t gmm1SyncGroupReadyCount = 0;
+    int32_t activationSyncGroupReadyCount = 0;
+    int32_t gmm2GroupReadyCount = 0;
+    int32_t swigluSyncGroupCount = 0;
+    int32_t swigluSyncGroupSizeSum = 0;
+    int32_t swigluEmptyGroups = 0;
+    int32_t dequantFinalRow = 0;
+    bool swigluGroupDescMonotonic = false;
+    std::array<int32_t, 16> m3Counters{};
     std::array<int32_t, 6> stageMarkers{};
 };
 
-M2FusedFullEvidence ReadM2FusedFullEvidence(
-    const moe_dispatch_combine_a8w8::WorkspaceLayout &workspaceLayout, RuntimeState *state)
+int32_t CountReadyCachelineSignals(const std::vector<int32_t> &raw)
+{
+    int32_t ready = 0;
+    for (size_t idx = 0; idx < raw.size(); idx += 16U) {
+        if (raw[idx] != 0) {
+            ++ready;
+        }
+    }
+    return ready;
+}
+
+std::vector<int32_t> CopyWorkspaceI32Field(const moe_dispatch_combine_a8w8::WorkspaceLayout &workspaceLayout,
+                                           const moe_dispatch_combine_a8w8::FieldLayout &field, RuntimeState *state,
+                                           const std::string &name)
+{
+    (void)workspaceLayout;
+    std::vector<int32_t> out(field.bytes / sizeof(int32_t), 0);
+    auto *workspaceBase = reinterpret_cast<uint8_t *>(state->buffers.workspace);
+    CheckAcl(aclrtMemcpy(out.data(), BytesOfI32Vector(out.size()), workspaceBase + field.offset, field.bytes,
+                         ACL_MEMCPY_DEVICE_TO_HOST),
+             "rank " + std::to_string(state->rank) + " copy " + name);
+    return out;
+}
+
+std::vector<int32_t> CopyPeerI32Field(const moe_dispatch_combine_a8w8::PeerWindowLayout &peerWindowLayout,
+                                      const moe_dispatch_combine_a8w8::FieldLayout &field, RuntimeState *state,
+                                      const std::string &name)
+{
+    (void)peerWindowLayout;
+    std::vector<int32_t> out(field.bytes / sizeof(int32_t), 0);
+    auto *peerBase = reinterpret_cast<uint8_t *>(state->hccl.peerWindow);
+    CheckAcl(aclrtMemcpy(out.data(), BytesOfI32Vector(out.size()), peerBase + field.offset, field.bytes,
+                         ACL_MEMCPY_DEVICE_TO_HOST),
+             "rank " + std::to_string(state->rank) + " copy " + name);
+    return out;
+}
+
+M2FusedFullEvidence ReadM2FusedFullEvidence(const moe_dispatch_combine_a8w8::WorkspaceLayout &workspaceLayout,
+                                            const moe_dispatch_combine_a8w8::PeerWindowLayout &peerWindowLayout,
+                                            RuntimeState *state)
 {
     constexpr size_t kAicHeaderSlot = 8U * 16U;
     constexpr size_t kAivHeaderSlot = 9U * 16U;
     constexpr size_t kStageBaseSlot = 10U * 16U;
+    constexpr size_t kM3CounterBase = 24U * 16U;
     constexpr int32_t kFullMagic = 0x4D328CA;
     M2FusedFullEvidence evidence;
     std::vector<int32_t> stageStatus(workspaceLayout.stageStatus.bytes / sizeof(int32_t), 0);
@@ -1009,6 +1075,62 @@ M2FusedFullEvidence ReadM2FusedFullEvidence(
             }
         }
     }
+    std::vector<int32_t> dispatchReady =
+        CopyWorkspaceI32Field(workspaceLayout, workspaceLayout.dispatchGroupReady, state, "m3 dispatchGroupReady");
+    std::vector<int32_t> gmm1Ready =
+        CopyWorkspaceI32Field(workspaceLayout, workspaceLayout.gmm1SyncGroupReady, state, "m3 gmm1SyncGroupReady");
+    std::vector<int32_t> activationReady = CopyWorkspaceI32Field(
+        workspaceLayout, workspaceLayout.activationSyncGroupReady, state, "m3 activationSyncGroupReady");
+    std::vector<int32_t> gmm2Ready =
+        CopyWorkspaceI32Field(workspaceLayout, workspaceLayout.gmm2GroupReady, state, "m3 gmm2GroupReady");
+    std::vector<int32_t> swigluGroups =
+        CopyWorkspaceI32Field(workspaceLayout, workspaceLayout.swigluSyncGroups, state, "m3 swigluSyncGroups");
+    std::vector<int32_t> dequantSum =
+        CopyWorkspaceI32Field(workspaceLayout, workspaceLayout.dequantSum, state, "m3 dequantSum");
+    std::vector<int32_t> swigluDesc =
+        CopyWorkspaceI32Field(workspaceLayout, workspaceLayout.swigluGroupDesc, state, "m3 swigluGroupDesc");
+    std::vector<int32_t> debugCounters =
+        CopyPeerI32Field(peerWindowLayout, peerWindowLayout.debugCounters, state, "m3 debugCounters");
+    evidence.dispatchGroupReadyCount = CountReadyCachelineSignals(dispatchReady);
+    evidence.gmm1SyncGroupReadyCount = CountReadyCachelineSignals(gmm1Ready);
+    evidence.activationSyncGroupReadyCount = CountReadyCachelineSignals(activationReady);
+    evidence.gmm2GroupReadyCount = CountReadyCachelineSignals(gmm2Ready);
+    if (!swigluGroups.empty()) {
+        evidence.swigluSyncGroupCount = swigluGroups[0];
+        for (int32_t idx = 0; idx < evidence.swigluSyncGroupCount &&
+                              static_cast<size_t>(idx + 1) < swigluGroups.size();
+             ++idx) {
+            evidence.swigluSyncGroupSizeSum += swigluGroups[static_cast<size_t>(idx) + 1U];
+        }
+    }
+    if (evidence.swigluSyncGroupCount >= 0 &&
+        static_cast<size_t>(evidence.swigluSyncGroupCount) < dequantSum.size()) {
+        evidence.dequantFinalRow = dequantSum[static_cast<size_t>(evidence.swigluSyncGroupCount)];
+    }
+    bool monotonic = true;
+    int32_t previousEnd = 0;
+    for (int32_t group = 0; group < evidence.swigluSyncGroupCount; ++group) {
+        size_t base = static_cast<size_t>(group) * 8U;
+        if (base + 7U >= swigluDesc.size()) {
+            monotonic = false;
+            break;
+        }
+        int32_t rowBegin = swigluDesc[base + 3U];
+        int32_t rowEnd = swigluDesc[base + 4U];
+        if (rowBegin < previousEnd || rowEnd < rowBegin) {
+            monotonic = false;
+        }
+        if (swigluDesc[base + 7U] != 0) {
+            ++evidence.swigluEmptyGroups;
+        }
+        previousEnd = rowEnd;
+    }
+    evidence.swigluGroupDescMonotonic = monotonic;
+    for (size_t idx = 0; idx < evidence.m3Counters.size(); ++idx) {
+        if (kM3CounterBase + idx < debugCounters.size()) {
+            evidence.m3Counters[idx] = debugCounters[kM3CounterBase + idx];
+        }
+    }
     return evidence;
 }
 
@@ -1026,12 +1148,12 @@ double RunM2FusedFull(const DispatchCombineTileArgs &args, const moe_dispatch_co
     }
     moe_dispatch_combine_a8w8::RankConfig rank = MakeM2RankConfig(args, state->rank);
     constexpr uint32_t kAicBlocks = 24;
-    constexpr uint32_t kAivRatio = 1;
+    constexpr uint32_t kAivRatio = 2;
     moe_dispatch_combine_a8w8::M2FusedFullLaunchArgs launchArgs{};
     launchArgs.params = moe_dispatch_combine_a8w8::M2FusedFullParams{shape, rank, args.runtime.m2FusedDebugStopStage};
     launchArgs.debugStopStage = args.runtime.m2FusedDebugStopStage;
-    launchArgs.stageStatusAddr =
-        reinterpret_cast<uint64_t>(reinterpret_cast<uint8_t *>(state->buffers.workspace) + workspaceLayout.stageStatus.offset);
+    launchArgs.stageStatusAddr = reinterpret_cast<uint64_t>(reinterpret_cast<uint8_t *>(state->buffers.workspace) +
+                                                            workspaceLayout.stageStatus.offset);
     launchArgs.shapeRankNum = shape.rankNum;
     launchArgs.shapeExpertPerRank = shape.expertPerRank;
     launchArgs.shapeTopK = shape.topK;
@@ -1052,11 +1174,15 @@ double RunM2FusedFull(const DispatchCombineTileArgs &args, const moe_dispatch_co
     launchArgs.rankNdevices = rank.ndevices;
     launchArgs.inputA = reinterpret_cast<uint64_t>(state->buffers.inputA);
     launchArgs.expertIdx = reinterpret_cast<uint64_t>(state->buffers.expertIdx);
+    launchArgs.xActiveMask =
+        args.xActiveMaskMode == "none" ? 0ULL : reinterpret_cast<uint64_t>(state->buffers.xActiveMask);
     launchArgs.probs = reinterpret_cast<uint64_t>(state->buffers.probs);
     launchArgs.outputC = reinterpret_cast<uint64_t>(state->buffers.outputC);
     launchArgs.peerWindow = reinterpret_cast<uint64_t>(state->hccl.peerWindow);
     launchArgs.hcclCtx = reinterpret_cast<uint64_t>(state->hccl.deviceContext);
     launchArgs.workspace = reinterpret_cast<uint64_t>(state->buffers.workspace);
+    launchArgs.timelineEnable = args.runtime.timeline;
+    launchArgs.overlapMode = args.runtime.overlapMode;
     moe_dispatch_combine_a8w8::M2FusedFullLaunchArgs *launchArgsDevice = nullptr;
     CheckAcl(aclrtMalloc(reinterpret_cast<void **>(&launchArgsDevice), sizeof(launchArgs), ACL_MEM_MALLOC_HUGE_FIRST),
              "rank " + std::to_string(state->rank) + " aclrtMalloc m2 fused full launch args");
@@ -1080,8 +1206,7 @@ double RunM2FusedFull(const DispatchCombineTileArgs &args, const moe_dispatch_co
         storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeMSlot, shape.m);
         storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeHiddenSizeSlot, shape.hiddenSize);
         storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeIntermediateSizeSlot, shape.intermediateSize);
-        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeMaxTokensPerExpertSlot,
-                       shape.maxTokensPerExpert);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeMaxTokensPerExpertSlot, shape.maxTokensPerExpert);
         storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapePayloadTileColsSlot, shape.payloadTileCols);
         storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockMSlot, shape.gmmBlockM);
         storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockNSlot, shape.gmmBlockN);
@@ -1095,15 +1220,17 @@ double RunM2FusedFull(const DispatchCombineTileArgs &args, const moe_dispatch_co
         storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullRankNdevicesSlot, rank.ndevices);
         storeConfigU64(moe_dispatch_combine_a8w8::kM2FusedFullPtrInputASlot, launchArgs.inputA);
         storeConfigU64(moe_dispatch_combine_a8w8::kM2FusedFullPtrExpertIdxSlot, launchArgs.expertIdx);
+        storeConfigU64(moe_dispatch_combine_a8w8::kM2FusedFullPtrXActiveMaskSlot, launchArgs.xActiveMask);
         storeConfigU64(moe_dispatch_combine_a8w8::kM2FusedFullPtrProbsSlot, launchArgs.probs);
         storeConfigU64(moe_dispatch_combine_a8w8::kM2FusedFullPtrOutputCSlot, launchArgs.outputC);
         storeConfigU64(moe_dispatch_combine_a8w8::kM2FusedFullPtrPeerWindowSlot, launchArgs.peerWindow);
         storeConfigU64(moe_dispatch_combine_a8w8::kM2FusedFullPtrHcclCtxSlot, launchArgs.hcclCtx);
         storeConfigU64(moe_dispatch_combine_a8w8::kM2FusedFullPtrWorkspaceSlot, launchArgs.workspace);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullTimelineEnableSlot, launchArgs.timelineEnable);
+        storeConfigU32(moe_dispatch_combine_a8w8::kM2FusedFullOverlapModeSlot, launchArgs.overlapMode);
         auto *workspaceBase = reinterpret_cast<uint8_t *>(state->buffers.workspace);
-        CheckAcl(aclrtMemcpy(workspaceBase + workspaceLayout.stageStatus.offset,
-                             fusedConfig.size() * sizeof(int32_t), fusedConfig.data(),
-                             fusedConfig.size() * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE),
+        CheckAcl(aclrtMemcpy(workspaceBase + workspaceLayout.stageStatus.offset, fusedConfig.size() * sizeof(int32_t),
+                             fusedConfig.data(), fusedConfig.size() * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE),
                  "rank " + std::to_string(state->rank) + " seed m2 fused full config");
         if (args.runtime.m2FusedDebugStopStage != 0) {
             constexpr size_t kDebugStopSlot = 15U * 16U;
@@ -1130,7 +1257,8 @@ double RunM2FusedFull(const DispatchCombineTileArgs &args, const moe_dispatch_co
     MpiBarrier(&state->mpi);
     auto end = std::chrono::steady_clock::now();
     if (evidence != nullptr) {
-        *evidence = ReadM2FusedFullEvidence(workspaceLayout, state);
+        *evidence = ReadM2FusedFullEvidence(workspaceLayout, moe_dispatch_combine_a8w8::MakePeerWindowLayout(shape),
+                                            state);
     }
     if (verbose) {
         PrintStage(state->rank, "m2_fused_full", "done");
@@ -1359,7 +1487,7 @@ std::vector<float> BuildM2RestoreExpectedFromPayload(const DispatchCombineTileAr
         for (uint32_t slot = 0; slot < shape.topK; ++slot) {
             size_t routeIndex = static_cast<size_t>(token) * shape.topK + slot;
             int32_t ptrDRow = state->golden.expandedRowIdx[routeIndex];
-            if (ptrDRow < 0) {
+            if (ptrDRow < 0 || static_cast<uint32_t>(ptrDRow) >= shape.maxOutputSize) {
                 continue;
             }
             float prob = RoundHalfNearestFloat(state->inputs.probs[routeIndex]);
@@ -1401,7 +1529,7 @@ void PrintM2OutputMismatchDetail(const DispatchCombineTileArgs &args, RuntimeSta
     for (uint32_t slot = 0; slot < shape.topK; ++slot) {
         size_t routeIndex = static_cast<size_t>(token) * shape.topK + slot;
         int32_t ptrDRow = state->golden.expandedRowIdx[routeIndex];
-        if (ptrDRow < 0) {
+        if (ptrDRow < 0 || static_cast<uint32_t>(ptrDRow) >= shape.maxOutputSize) {
             std::cout << "  slot=" << slot << " ptrDRow=" << ptrDRow << " skip=true\n";
             continue;
         }
@@ -1575,15 +1703,26 @@ void BuildExpectedM2Prefix(const DispatchCombineTileArgs &args, const std::vecto
     cumsum->assign(static_cast<size_t>(shape.ep) * shape.expertPerRank, 0);
     preSum->assign(static_cast<size_t>(shape.ep) * shape.expertPerRank, 0);
     expertTokenNums->assign(shape.expertPerRank, 0);
+    int32_t dispatchCursor = 0;
     for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
         int32_t before = 0;
         for (uint32_t tokenOwner = 0; tokenOwner < shape.ep; ++tokenOwner) {
             size_t matrixIndex = static_cast<size_t>(tokenOwner) * rowStride +
                                  static_cast<size_t>(expertOwnerRank) * shape.expertPerRank + localExpert;
             size_t index = static_cast<size_t>(tokenOwner) * shape.expertPerRank + localExpert;
+            int32_t rows = tokenMatrix[matrixIndex];
+            if (dispatchCursor >= static_cast<int32_t>(shape.maxOutputSize) || rows <= 0) {
+                rows = 0;
+            } else {
+                int32_t available = static_cast<int32_t>(shape.maxOutputSize) - dispatchCursor;
+                if (rows > available) {
+                    rows = available;
+                }
+            }
             (*preSum)[index] = before;
-            before += tokenMatrix[matrixIndex];
+            before += rows;
             (*cumsum)[index] = before;
+            dispatchCursor += rows;
         }
         (*expertTokenNums)[localExpert] = before;
     }
@@ -1617,7 +1756,14 @@ void BuildExpectedM2Scoreboard(const DispatchCombineTileArgs &args, const std::v
                                  static_cast<size_t>(expertOwnerRank) * shape.expertPerRank + localExpert;
             size_t prefixIndex = static_cast<size_t>(tokenOwner) * shape.expertPerRank + localExpert;
             uint32_t taskId = tokenOwner * shape.expertPerRank + localExpert;
-            int32_t rows = tokenMatrix[matrixIndex];
+            int32_t current = preSum[prefixIndex] + 0;
+            if (tokenOwner + 1U < shape.ep) {
+                size_t nextPrefixIndex = static_cast<size_t>(tokenOwner + 1U) * shape.expertPerRank + localExpert;
+                current = preSum[nextPrefixIndex];
+            } else {
+                current = expertTokenNums[localExpert];
+            }
+            int32_t rows = current - preSum[prefixIndex];
             int32_t dstStart = expertOffset + preSum[prefixIndex];
             size_t mapBase = static_cast<size_t>(taskId) * 4U;
             (*taskMap)[mapBase + 0U] = static_cast<int32_t>(tokenOwner);
@@ -1688,8 +1834,11 @@ void BuildExpectedLocalDispatchQuant(const DispatchCombineTileArgs &args, const 
     const DispatchCombineTileShape &shape = args.shape;
     uint32_t expandedRows = shape.m * shape.topK;
     payload->assign(static_cast<size_t>(expandedRows) * rowBytes, 0);
-    scale->assign(expandedRows, 1.0f);
+    scale->assign(expandedRows, 0.0f);
     for (uint32_t row = 0; row < expandedRows; ++row) {
+        if (row >= shape.maxOutputSize) {
+            continue;
+        }
         float maxAbs = 0.0f;
         for (uint32_t col = 0; col < shape.k; ++col) {
             float value = golden_detail::HalfToFloat(
@@ -2925,11 +3074,12 @@ void RunM2Dispatch(const DispatchCombineTileArgs &args, const moe_dispatch_combi
     moe_dispatch_combine_a8w8::RankConfig rank = MakeM2RankConfig(args, state->rank);
     MpiBarrier(&state->mpi);
     auto dispatchStart = std::chrono::steady_clock::now();
-    LaunchM2Int8Dispatch(shape, rank, reinterpret_cast<uint8_t *>(state->buffers.inputA),
-                         reinterpret_cast<uint8_t *>(state->buffers.expertIdx),
-                         reinterpret_cast<uint8_t *>(state->hccl.peerWindow),
-                         reinterpret_cast<uint8_t *>(state->hccl.deviceContext),
-                         reinterpret_cast<uint8_t *>(state->buffers.workspace), state->computeStream, 1);
+    LaunchM2Int8Dispatch(
+        shape, rank, reinterpret_cast<uint8_t *>(state->buffers.inputA),
+        reinterpret_cast<uint8_t *>(state->buffers.expertIdx),
+        args.xActiveMaskMode == "none" ? nullptr : reinterpret_cast<uint8_t *>(state->buffers.xActiveMask),
+        reinterpret_cast<uint8_t *>(state->hccl.peerWindow), reinterpret_cast<uint8_t *>(state->hccl.deviceContext),
+        reinterpret_cast<uint8_t *>(state->buffers.workspace), state->computeStream, 1);
     CheckAcl(aclrtSynchronizeStream(state->computeStream),
              "rank " + std::to_string(state->rank) + " m2 dispatch stream sync");
     MpiBarrier(&state->mpi);
@@ -3458,6 +3608,28 @@ RankCorrectnessSummary VerifyM2FinalOutput(const DispatchCombineTileArgs &args, 
     return summary;
 }
 
+uint64_t CountDroppedRoutes(const DispatchCombineTileArgs &args, RuntimeState *state)
+{
+    uint64_t dropped = 0;
+    for (int32_t row : state->golden.expandedRowIdx) {
+        if (row >= 0 && static_cast<uint32_t>(row) >= args.shape.maxOutputSize) {
+            ++dropped;
+        }
+    }
+    return dropped;
+}
+
+uint64_t CountInactiveTokens(RuntimeState *state)
+{
+    uint64_t inactive = 0;
+    for (uint8_t value : state->inputs.xActiveMask) {
+        if (value == 0U) {
+            ++inactive;
+        }
+    }
+    return inactive;
+}
+
 void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *state,
                          const RankCorrectnessSummary &summary, const std::vector<IterationTiming> &timings)
 {
@@ -3472,12 +3644,20 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  dispatch_merge=true\n";
     std::cout << "  combine_merge=true\n";
     std::cout << "  stage_graph_mode=multi_launch_debug\n";
+    std::cout << "  single_fused_payload_migrated=false\n";
+    std::cout << "  multi_launch_debug_only=false\n";
     std::cout << "  gmm1_input_direct=true\n";
     std::cout << "  route_pack_quant_device=true\n";
     std::cout << "  gmm_block_mock=false\n";
     std::cout << "  soft_sync_ledger=true\n";
     std::cout << "  swiglu_sync_groups=true\n";
     std::cout << "  tile_split_return_map=true\n";
+    uint64_t droppedRows = CountDroppedRoutes(args, state);
+    uint64_t inactiveTokens = CountInactiveTokens(state);
+    std::cout << "  drop_triggered=" << (droppedRows == 0 ? "false" : "true") << "\n";
+    std::cout << "  dropped_rows=" << droppedRows << "\n";
+    std::cout << "  x_active_mask_enabled=" << (state->inputs.xActiveMask.empty() ? "false" : "true") << "\n";
+    std::cout << "  inactive_tokens=" << inactiveTokens << "\n";
     std::cout << "  gmm2_out_debug_mirror_only=true\n";
     std::cout << "  gmm2_out_return_source=false\n";
     std::cout << "  return_payload_source=returnSegmentStaging\n";
@@ -3532,11 +3712,18 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  dispatch_merge=true\n";
     std::cout << "  combine_merge=true\n";
     std::cout << "  stage_graph_mode=single_fused_mpmd\n";
+    std::cout << "  single_fused_payload_migrated=true\n";
+    std::cout << "  multi_launch_debug_only=true\n";
     std::cout << "  mixed_elf_register=true\n";
     std::cout << "  fused_single_launch=true\n";
     std::cout << "  fused_device_stage_boundaries=syncall_mix\n";
     std::cout << "  fused_syncall_mode=hard_mix\n";
     std::cout << "  fused_host_barrier_between_stages=false\n";
+    std::cout << "  m3_single_kernel_mpmd=true\n";
+    std::cout << "  m3_overlap_requested=" << (args.runtime.overlapMode == 0 ? "false" : "true") << "\n";
+    std::cout << "  m3_overlap_execution=skeleton_shared_layout\n";
+    std::cout << "  m3_launch_level_aiv_participation=true\n";
+    std::cout << "  m3_payload_worker_evidence=partial\n";
     std::cout << "  mixed_aic_heartbeat=" << (fusedEvidence != nullptr && fusedEvidence->aicSeen ? "true" : "false")
               << "\n";
     std::cout << "  mixed_aiv_heartbeat=" << (fusedEvidence != nullptr && fusedEvidence->aivSeen ? "true" : "false")
@@ -3544,6 +3731,22 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  mixed_aic_blocks=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->aicBlocks) << "\n";
     std::cout << "  mixed_aiv_blocks=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->aivBlocks) << "\n";
     std::cout << "  fused_stage_count=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->stageCount) << "\n";
+    std::cout << "  ffn_partition_model=rank_core_group_tile_l1l0\n";
+    std::cout << "  group_is_sync_boundary=true\n";
+    std::cout << "  gmm_tile_is_aic_work_unit=true\n";
+    std::cout << "  dispatch_ready_grain=expert_group\n";
+    std::cout << "  activation_ready_grain=swiglu_sync_group\n";
+    std::cout << "  combine_ready_grain=owner_segment_or_group\n";
+    std::cout << "  aiv_data_parallel_deferred_to_m3=true\n";
+    std::cout << "  dispatch_aiv_workers=1\n";
+    std::cout << "  gmm1_epilogue_aiv_workers=1\n";
+    std::cout << "  activation_aiv_workers=1\n";
+    std::cout << "  combine_return_aiv_workers=1\n";
+    std::cout << "  restore_aiv_workers=8\n";
+    std::cout << "  dispatch_payload_parallel=false\n";
+    std::cout << "  activation_payload_parallel=false\n";
+    std::cout << "  combine_payload_parallel=false\n";
+    std::cout << "  restore_payload_parallel=partial_token_shard\n";
     std::cout << "  gmm1_input_direct=true\n";
     std::cout << "  route_pack_quant_device=true\n";
     std::cout << "  route_quant_impl=pto_vec_tload_trowmax_tquant_tstore\n";
@@ -3556,6 +3759,48 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  soft_sync_ledger=true\n";
     std::cout << "  swiglu_sync_groups=true\n";
     std::cout << "  tile_split_return_map=true\n";
+    std::cout << "  m3_signal_cacheline_aligned=true\n";
+    std::cout << "  dispatch_group_ready_count="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->dispatchGroupReadyCount) << "\n";
+    std::cout << "  gmm1_sync_group_ready_count="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->gmm1SyncGroupReadyCount) << "\n";
+    std::cout << "  activation_sync_group_ready_count="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->activationSyncGroupReadyCount) << "\n";
+    std::cout << "  gmm2_group_ready_count=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->gmm2GroupReadyCount)
+              << "\n";
+    std::cout << "  swiglu_sync_group_count="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->swigluSyncGroupCount) << "\n";
+    std::cout << "  swiglu_sync_group_size_sum="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->swigluSyncGroupSizeSum) << "\n";
+    std::cout << "  swiglu_empty_groups=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->swigluEmptyGroups)
+              << "\n";
+    std::cout << "  dequant_sum_final_row=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->dequantFinalRow)
+              << "\n";
+    std::cout << "  swiglu_group_desc_monotonic="
+              << (fusedEvidence != nullptr && fusedEvidence->swigluGroupDescMonotonic ? "true" : "false") << "\n";
+    std::cout << "  dispatch_signal_producer_counter="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[7]) << "\n";
+    std::cout << "  gmm1_signal_producer_counter="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[8]) << "\n";
+    std::cout << "  activation_signal_producer_counter="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[9]) << "\n";
+    std::cout << "  gmm2_signal_producer_counter="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[10]) << "\n";
+    std::cout << "  overlap_timeout_count=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[15])
+              << "\n";
+    std::cout << "  timeout_dump_fields=rank,expert,token_owner_rank,expert_owner_rank,stage,signal_id\n";
+    std::cout << "  scoreboard_async_enabled=false\n";
+    std::cout << "  subtile_stride_async_enabled=false\n";
+    std::cout << "  timeline_enabled=" << (args.runtime.timeline == 0 ? "false" : "true") << "\n";
+    std::cout << "  timeline_granularity=stage_signal_counter\n";
+    uint64_t droppedRows = CountDroppedRoutes(args, state);
+    uint64_t inactiveTokens = CountInactiveTokens(state);
+    std::cout << "  drop_triggered=" << (droppedRows == 0 ? "false" : "true") << "\n";
+    std::cout << "  dropped_rows=" << droppedRows << "\n";
+    std::cout << "  x_active_mask_enabled=" << (state->inputs.xActiveMask.empty() ? "false" : "true") << "\n";
+    std::cout << "  inactive_tokens=" << inactiveTokens << "\n";
+    std::cout << "  x_active_mask_no_mask_equiv=" << (state->inputs.xActiveMask.empty() ? "true" : "not_applicable")
+              << "\n";
     std::cout << "  gmm2_out_debug_mirror_only=true\n";
     std::cout << "  gmm2_out_return_source=false\n";
     std::cout << "  return_payload_source=returnSegmentStaging\n";
@@ -3584,7 +3829,9 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  case_name=" << args.caseName << "\n";
     std::cout << "  backend=int8\n";
     std::cout << "  rankNum=" << state->size << " rankId=" << state->rank << "\n";
-    std::cout << "  overlap_mode=off\n";
+    std::cout << "  overlap_mode=" << args.overlapMode << "\n";
+    std::cout << "  overlap_on_uses_same_fused_payload_layout=true\n";
+    std::cout << "  overlap_on_payload_async_claim=false\n";
     std::cout << "  warmup_iters=" << args.runtime.warmup << "\n";
     std::cout << "  measure_iters=" << args.runtime.iters << "\n";
     std::cout << "  e2e_us.samples=" << timings.size() << "\n";
@@ -3869,6 +4116,9 @@ void Cleanup(RuntimeState *state)
         if (state->buffers.expertIdx != nullptr) {
             aclrtFree(state->buffers.expertIdx);
         }
+        if (state->buffers.xActiveMask != nullptr) {
+            aclrtFree(state->buffers.xActiveMask);
+        }
         if (state->buffers.probs != nullptr) {
             aclrtFree(state->buffers.probs);
         }
@@ -3980,9 +4230,8 @@ int main(int argc, char **argv)
             dispatch_combine_tile::CopyM2ReferenceToWorkspace(args, m2WorkspaceLayout, &state);
             if (args.runtime.m2FusedFull != 0 && args.runtime.m2MultiLaunchDebug == 0 &&
                 args.runtime.dispatchOnly == 0 && args.runtime.dispatchMetadataOnly == 0 &&
-                args.runtime.gmm1Only == 0 && args.runtime.gmm1EpilogueOnly == 0 &&
-                args.runtime.activationOnly == 0 && args.runtime.gmm2Only == 0 &&
-                args.runtime.combineReturnOnly == 0) {
+                args.runtime.gmm1Only == 0 && args.runtime.gmm1EpilogueOnly == 0 && args.runtime.activationOnly == 0 &&
+                args.runtime.gmm2Only == 0 && args.runtime.combineReturnOnly == 0) {
                 std::vector<dispatch_combine_tile::IterationTiming> fusedTimings;
                 dispatch_combine_tile::M2FusedFullEvidence fusedEvidence;
                 uint32_t totalIterations = args.runtime.warmup + args.runtime.iters;

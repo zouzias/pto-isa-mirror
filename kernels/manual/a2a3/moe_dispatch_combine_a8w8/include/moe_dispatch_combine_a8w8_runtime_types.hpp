@@ -102,6 +102,8 @@ struct DispatchCombineTileRuntimeConfig {
     uint32_t m2FusedFull;
     uint32_t m2MultiLaunchDebug;
     uint32_t m2FusedDebugStopStage;
+    uint32_t timeline;
+    uint32_t overlapMode;
     uint32_t keepHcclShm;
     uint64_t hcclBuffSizeMb;
 };

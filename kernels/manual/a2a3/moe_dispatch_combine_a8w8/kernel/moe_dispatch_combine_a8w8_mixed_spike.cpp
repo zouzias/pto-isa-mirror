@@ -117,9 +117,9 @@ constexpr uint64_t kM2FusedSkeletonStoreUbAddr = 0x3000;
 constexpr uint64_t kM2FusedSkeletonStoreL1Addr = 0x3000;
 constexpr uint64_t kM2FusedVecProbeUbAddr = 0x8000;
 constexpr uint32_t kM2FusedSkeletonStageSlotWords = 8;
-constexpr uint32_t kM2FusedSkeletonAivStageBase =
-    kM2FusedSkeletonAicStageBase +
-    kM2FusedSkeletonStageCount * kM2FusedSkeletonParticipantCount * kM2FusedSkeletonStageSlotWords;
+constexpr uint32_t kM2FusedSkeletonAivStageBase = kM2FusedSkeletonAicStageBase + kM2FusedSkeletonStageCount *
+                                                                                     kM2FusedSkeletonParticipantCount *
+                                                                                     kM2FusedSkeletonStageSlotWords;
 constexpr uint32_t kM2FusedFullAicHeaderSlot = 8U * 16U;
 constexpr uint32_t kM2FusedFullAivHeaderSlot = 9U * 16U;
 constexpr uint32_t kM2FusedFullStageBaseSlot = 10U * 16U;
@@ -209,31 +209,23 @@ AICORE inline uint64_t M2FusedLoadConfigU64(__gm__ int32_t *config, uint32_t slo
 AICORE inline moe_dispatch_combine_a8w8::ShapeConfig M2FusedLoadShapeConfig(__gm__ int32_t *config)
 {
     return moe_dispatch_combine_a8w8::ShapeConfig{
-        static_cast<uint32_t>(
-            M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeRankNumSlot)),
+        static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeRankNumSlot)),
         static_cast<uint32_t>(
             M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeExpertPerRankSlot)),
-        static_cast<uint32_t>(
-            M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeTopKSlot)),
+        static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeTopKSlot)),
         static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeMSlot)),
-        static_cast<uint32_t>(
-            M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeHiddenSizeSlot)),
+        static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeHiddenSizeSlot)),
         static_cast<uint32_t>(
             M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeIntermediateSizeSlot)),
         static_cast<uint32_t>(
             M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeMaxTokensPerExpertSlot)),
         static_cast<uint32_t>(
             M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapePayloadTileColsSlot)),
-        static_cast<uint32_t>(
-            M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockMSlot)),
-        static_cast<uint32_t>(
-            M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockNSlot)),
-        static_cast<uint32_t>(
-            M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockKSlot)),
-        static_cast<uint32_t>(
-            M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeDtypeInSlot)),
-        static_cast<uint32_t>(
-            M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeDtypeOutSlot)),
+        static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockMSlot)),
+        static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockNSlot)),
+        static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockKSlot)),
+        static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeDtypeInSlot)),
+        static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_dispatch_combine_a8w8::kM2FusedFullShapeDtypeOutSlot)),
     };
 }
 
@@ -248,8 +240,7 @@ AICORE inline moe_dispatch_combine_a8w8::RankConfig M2FusedLoadRankConfig(__gm__
     };
 }
 
-AICORE inline uint32_t M2FusedLoadDebugStopStage(
-    __gm__ moe_dispatch_combine_a8w8::M2FusedFullLaunchArgs *launchArgs)
+AICORE inline uint32_t M2FusedLoadDebugStopStage(__gm__ moe_dispatch_combine_a8w8::M2FusedFullLaunchArgs *launchArgs)
 {
     return launchArgs->debugStopStage;
 }
@@ -371,8 +362,7 @@ AICORE inline void RunM2FusedSkeletonBody(__gm__ uint64_t *fftsAddr, __gm__ int3
     const int32_t participantIdx = pto::SYNCALL_GET_MIX_PARTICIPANT_IDX();
     const int32_t aicBlocks = *(ledger + kM2MixedSpikeParamAicBlocks);
     const bool isAic = participantIdx < aicBlocks;
-    const bool inRange = participantIdx >= 0 &&
-                         participantIdx < static_cast<int32_t>(kM2FusedSkeletonParticipantCount);
+    const bool inRange = participantIdx >= 0 && participantIdx < static_cast<int32_t>(kM2FusedSkeletonParticipantCount);
     for (uint32_t stage = 0; stage < kM2FusedSkeletonStageCount; ++stage) {
         if (inRange) {
             uint32_t base = isAic ? kM2FusedSkeletonAicStageBase : kM2FusedSkeletonAivStageBase;
@@ -389,9 +379,9 @@ AICORE inline void RunM2FusedSkeletonBody(__gm__ uint64_t *fftsAddr, __gm__ int3
 } // namespace
 
 #if defined(M2_MIXED_SPIKE_BUILD_AIC)
-PTO_SYNCALL_MIX_AIC_KERNEL_META(M2MixedSpike_2801_mix_aic, 1, 1);
-PTO_SYNCALL_MIX_AIC_KERNEL_META(M2FusedSkeleton_2802_mix_aic, 1, 1);
-PTO_SYNCALL_MIX_AIC_KERNEL_META(M2FusedFull_2803_mix_aic, 1, 1);
+PTO_SYNCALL_MIX_AIC_KERNEL_META(M2MixedSpike_2801_mix_aic, 1, 2);
+PTO_SYNCALL_MIX_AIC_KERNEL_META(M2FusedSkeleton_2802_mix_aic, 1, 2);
+PTO_SYNCALL_MIX_AIC_KERNEL_META(M2FusedFull_2803_mix_aic, 1, 2);
 
 extern "C" __global__ AICORE void M2MixedSpike_2801_mix_aic(__gm__ int32_t *heartbeat)
 {
@@ -461,7 +451,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
     }
     if (earlyDebugStopStage == 92U) {
         set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
-        int32_t rankNum = M2FusedLoadConfigI32(earlyStageStatus, moe_dispatch_combine_a8w8::kM2FusedFullShapeRankNumSlot);
+        int32_t rankNum =
+            M2FusedLoadConfigI32(earlyStageStatus, moe_dispatch_combine_a8w8::kM2FusedFullShapeRankNumSlot);
         int32_t hidden =
             M2FusedLoadConfigI32(earlyStageStatus, moe_dispatch_combine_a8w8::kM2FusedFullShapeHiddenSizeSlot);
         int32_t intermediate =
@@ -554,8 +545,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
     __gm__ int32_t *stageStatus = reinterpret_cast<__gm__ int32_t *>(launchArgs->stageStatusAddr);
     moe_dispatch_combine_a8w8::ShapeConfig shape = M2FusedLoadShapeConfig(stageStatus);
     moe_dispatch_combine_a8w8::RankConfig rank = M2FusedLoadRankConfig(stageStatus);
-    GM_ADDR workspace =
-        reinterpret_cast<GM_ADDR>(M2FusedLoadConfigU64(stageStatus, moe_dispatch_combine_a8w8::kM2FusedFullPtrWorkspaceSlot));
+    GM_ADDR workspace = reinterpret_cast<GM_ADDR>(
+        M2FusedLoadConfigU64(stageStatus, moe_dispatch_combine_a8w8::kM2FusedFullPtrWorkspaceSlot));
     auto layout = M2FusedGmmMakeWorkspaceLayoutDevice(shape);
     (void)layout;
     uint32_t debugStopStage = static_cast<uint32_t>(M2FusedGmmLoadScalarI32(stageStatus + kM2FusedFullDebugStopSlot));
@@ -606,8 +597,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
             __gm__ int8_t *expertWeight = weight1 + static_cast<uint64_t>(globalExpert) * shape.hiddenSize * w1Cols;
             __gm__ int8_t *tileInput = gmm1Input + static_cast<uint64_t>(rowBegin) * rowBytes;
             __gm__ int32_t *tileOutput = gmm1Acc + static_cast<uint64_t>(rowBegin) * w1Cols;
-            M2FusedRunInt8GmmTile(tileInput, expertWeight + nBase, tileOutput + nBase, mValid, shape.hiddenSize,
-                                  nValid, rowBytes, w1Cols, w1Cols);
+            M2FusedRunInt8GmmTile(tileInput, expertWeight + nBase, tileOutput + nBase, mValid, shape.hiddenSize, nValid,
+                                  rowBytes, w1Cols, w1Cols);
         }
     }
     pipe_barrier(PIPE_ALL);
@@ -690,9 +681,9 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
 #endif
 
 #if defined(M2_MIXED_SPIKE_BUILD_AIV)
-PTO_SYNCALL_MIX_AIC_KERNEL_META(M2MixedSpike_2801_mix_aiv, 1, 1);
-PTO_SYNCALL_MIX_AIC_KERNEL_META(M2FusedSkeleton_2802_mix_aiv, 1, 1);
-PTO_SYNCALL_MIX_AIC_KERNEL_META(M2FusedFull_2803_mix_aiv, 1, 1);
+PTO_SYNCALL_MIX_AIC_KERNEL_META(M2MixedSpike_2801_mix_aiv, 1, 2);
+PTO_SYNCALL_MIX_AIC_KERNEL_META(M2FusedSkeleton_2802_mix_aiv, 1, 2);
+PTO_SYNCALL_MIX_AIC_KERNEL_META(M2FusedFull_2803_mix_aiv, 1, 2);
 
 extern "C" __global__ AICORE void M2MixedSpike_2801_mix_aiv(__gm__ int32_t *heartbeat)
 {
@@ -771,7 +762,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     }
     if (earlyDebugStopStage == 92U) {
         set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
-        int32_t rankNum = M2FusedLoadConfigI32(earlyStageStatus, moe_dispatch_combine_a8w8::kM2FusedFullShapeRankNumSlot);
+        int32_t rankNum =
+            M2FusedLoadConfigI32(earlyStageStatus, moe_dispatch_combine_a8w8::kM2FusedFullShapeRankNumSlot);
         int32_t hidden =
             M2FusedLoadConfigI32(earlyStageStatus, moe_dispatch_combine_a8w8::kM2FusedFullShapeHiddenSizeSlot);
         int32_t intermediate =
@@ -879,12 +871,14 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     __gm__ int32_t *stageStatusBase = reinterpret_cast<__gm__ int32_t *>(launchArgs->stageStatusAddr);
     moe_dispatch_combine_a8w8::ShapeConfig shape = M2FusedLoadShapeConfig(stageStatusBase);
     moe_dispatch_combine_a8w8::RankConfig rank = M2FusedLoadRankConfig(stageStatusBase);
-    GM_ADDR inputA =
-        reinterpret_cast<GM_ADDR>(M2FusedLoadConfigU64(stageStatusBase, moe_dispatch_combine_a8w8::kM2FusedFullPtrInputASlot));
+    GM_ADDR inputA = reinterpret_cast<GM_ADDR>(
+        M2FusedLoadConfigU64(stageStatusBase, moe_dispatch_combine_a8w8::kM2FusedFullPtrInputASlot));
     GM_ADDR expertIdx = reinterpret_cast<GM_ADDR>(
         M2FusedLoadConfigU64(stageStatusBase, moe_dispatch_combine_a8w8::kM2FusedFullPtrExpertIdxSlot));
-    GM_ADDR probs =
-        reinterpret_cast<GM_ADDR>(M2FusedLoadConfigU64(stageStatusBase, moe_dispatch_combine_a8w8::kM2FusedFullPtrProbsSlot));
+    GM_ADDR xActiveMask = reinterpret_cast<GM_ADDR>(
+        M2FusedLoadConfigU64(stageStatusBase, moe_dispatch_combine_a8w8::kM2FusedFullPtrXActiveMaskSlot));
+    GM_ADDR probs = reinterpret_cast<GM_ADDR>(
+        M2FusedLoadConfigU64(stageStatusBase, moe_dispatch_combine_a8w8::kM2FusedFullPtrProbsSlot));
     GM_ADDR outputC = reinterpret_cast<GM_ADDR>(
         M2FusedLoadConfigU64(stageStatusBase, moe_dispatch_combine_a8w8::kM2FusedFullPtrOutputCSlot));
     GM_ADDR peerWindow = reinterpret_cast<GM_ADDR>(
@@ -903,6 +897,10 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     if (debugStopStage == 0U) {
         debugStopStage = M2FusedLoadDebugStopStage(launchArgs);
     }
+    uint32_t timelineEnable = static_cast<uint32_t>(
+        M2FusedLoadConfigI32(stageStatusBase, moe_dispatch_combine_a8w8::kM2FusedFullTimelineEnableSlot));
+    uint32_t overlapMode = static_cast<uint32_t>(
+        M2FusedLoadConfigI32(stageStatusBase, moe_dispatch_combine_a8w8::kM2FusedFullOverlapModeSlot));
     uint32_t logicalAiv = M2FusedLogicalAivId();
     if (IsM2FusedMainAiv()) {
         M2FusedRecordStage(stageStatus + kM2FusedFullAivHeaderSlot, 0U, kM2FusedFullMagic);
@@ -910,6 +908,14 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                            static_cast<int32_t>(get_block_num() * get_subblockdim()));
         M2FusedRecordStage(stageStatus + kM2FusedFullAivHeaderSlot, 2U, static_cast<int32_t>(rank.rankId));
         M2FusedRecordStage(stageStatus + kM2FusedFullAivHeaderSlot, 3U, static_cast<int32_t>(shape.rankNum));
+        StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 0U, static_cast<int32_t>(overlapMode));
+        StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 1U, static_cast<int32_t>(timelineEnable));
+        StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 2U, 1);
+        StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 3U, 1);
+        StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 4U, 1);
+        StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 5U, 6);
+        StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 6U, 0);
+        StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 15U, 0);
     }
     if (debugStopStage == 102303U) {
         if (IsM2FusedMainAiv()) {
@@ -937,7 +943,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
             M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 101);
         }
         if (debugStopStage != 100U && debugStopStage != 101U) {
-            M2CountLocalRoutes(shape, workspaceView, localPeer, expertIdx, rank.rankId);
+            M2CountLocalRoutes(shape, workspaceView, localPeer, expertIdx, xActiveMask, rank.rankId);
             M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 102);
         }
         if (debugStopStage != 100U && debugStopStage != 101U && debugStopStage != 102U) {
@@ -1028,7 +1034,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                 }
                 M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 1023);
             } else {
-                M2RoutePackQuantLocal(shape, workspaceView, localPeer, inputA, expertIdx, rowBytes);
+                M2RoutePackQuantLocal(shape, workspaceView, localPeer, inputA, expertIdx, xActiveMask, rowBytes);
                 M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 103);
             }
         }
@@ -1048,14 +1054,13 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
             M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 106);
         }
         if (debugStopStage < 1021U && debugStopStage != 100U && debugStopStage != 101U && debugStopStage != 102U &&
-            debugStopStage != 103U && debugStopStage != 104U && debugStopStage != 105U &&
-            debugStopStage != 106U) {
+            debugStopStage != 103U && debugStopStage != 104U && debugStopStage != 105U && debugStopStage != 106U) {
             M2GatherDispatchToGmm1Input(shape, workspaceView, localPeer, ctx, peerWindow, rank.rankId, rowBytes,
                                         peerWindowLayout);
-            StoreScalarI32(workspaceView.swigluSyncGroups, static_cast<int32_t>(shape.expertPerRank));
-            StoreScalarI32(workspaceView.dequantSum, 0);
-            StoreScalarI32(workspaceView.dequantSum + 1, LoadScalarI32(workspaceView.expertTokenNums));
+            M2BuildSwigluSyncMetadata(shape, workspaceView);
             StoreScalarI32(localPeer.debugCounters, 1);
+            StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 7U,
+                           static_cast<int32_t>(shape.expertPerRank));
             M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 107);
         }
     }
@@ -1073,6 +1078,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     if (IsM2FusedMainAiv()) {
         M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 1U, 1);
         M2RunGmm1Epilogue(shape, workspaceView, rank.rankId);
+        StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 8U,
+                       LoadScalarI32(workspaceView.swigluSyncGroups));
     }
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
@@ -1083,6 +1090,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     if (IsM2FusedMainAiv()) {
         M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 2U, 1);
         M2RunActivationQuant(shape, workspaceView, rank.rankId);
+        StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 9U,
+                       LoadScalarI32(workspaceView.swigluSyncGroups));
     }
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
@@ -1097,6 +1106,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     if (IsM2FusedMainAiv()) {
         M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 3U, 1);
         M2RunGmm2EpilogueAndReturn(shape, workspaceView, localPeer, ctx, peerWindow, rank.rankId, peerWindowLayout);
+        StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 10U,
+                       static_cast<int32_t>(shape.expertPerRank));
     }
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
@@ -1117,7 +1128,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
             for (uint32_t slot = 0; slot < shape.topK; ++slot) {
                 uint32_t routeIndex = token * shape.topK + slot;
                 int32_t ptrDRow = LoadScalarI32(workspaceView.expandedRowIdx + routeIndex);
-                if (ptrDRow < 0) {
+                if (ptrDRow < 0 || static_cast<uint32_t>(ptrDRow) >= static_cast<uint32_t>(M2LocalRows(shape))) {
                     continue;
                 }
                 float prob = probValues[routeIndex];
@@ -1130,9 +1141,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                     VecTile<half, kDefaultTileCols> ptrTile(1, cols);
                     TASSIGN(outTile, kPingUbAddr);
                     TASSIGN(ptrTile, kPongUbAddr);
-                    GlobalNd<half> outGlobal =
-                        MakeGlobal2D(output + static_cast<int64_t>(token) * outputRowStride + col, 1, cols,
-                                     outputRowStride);
+                    GlobalNd<half> outGlobal = MakeGlobal2D(
+                        output + static_cast<int64_t>(token) * outputRowStride + col, 1, cols, outputRowStride);
                     __gm__ half *returnChunk =
                         localPeer.returnPayload + static_cast<int64_t>(ptrDRow) * returnRowStride + col;
                     InvalidateGmCacheLines(returnChunk, static_cast<uint32_t>(cols) * sizeof(half));
@@ -1264,16 +1274,15 @@ void LaunchM2FusedSkeletonWithHandle(const void *anchor, uint8_t *ledger, uint32
     argsInfo.args = args;
     argsInfo.argsSize = sizeof(args);
     rtTaskCfgInfo_t cfgInfo{};
-    ret = rtKernelLaunchWithHandleV2(handle, kM2FusedSkeletonTilingKey, aicBlocks, &argsInfo, nullptr, stream,
-                                     &cfgInfo);
+    ret =
+        rtKernelLaunchWithHandleV2(handle, kM2FusedSkeletonTilingKey, aicBlocks, &argsInfo, nullptr, stream, &cfgInfo);
     if (ret != RT_ERROR_NONE) {
         std::fprintf(stderr, "rtKernelLaunchWithHandleV2 failed for M2 fused skeleton, ret=%d\n", ret);
         std::abort();
     }
 }
 
-void LaunchM2FusedFullWithHandle(const void *anchor,
-                                 moe_dispatch_combine_a8w8::M2FusedFullLaunchArgs *launchArgsDevice,
+void LaunchM2FusedFullWithHandle(const void *anchor, moe_dispatch_combine_a8w8::M2FusedFullLaunchArgs *launchArgsDevice,
                                  uint32_t aicBlocks, uint32_t aivRatio, void *stream)
 {
     const char *path = GetRegisterElfPath(anchor);

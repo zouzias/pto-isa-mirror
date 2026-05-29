@@ -30,6 +30,8 @@ struct DispatchCombineTileArgs {
     std::string dataDir = "./out";
     std::string caseName = "small";
     std::string backend = "m1-mock";
+    std::string xActiveMaskMode = "none";
+    std::string overlapMode = "off";
     uint32_t intermediateSize = 128;
     double rtol = 1e-2;
     double atol = 1e-2;
@@ -117,6 +119,8 @@ inline DispatchCombineTileArgs DefaultArgs()
     args.runtime.m2FusedFull = 1;
     args.runtime.m2MultiLaunchDebug = 0;
     args.runtime.m2FusedDebugStopStage = 0;
+    args.runtime.timeline = 0;
+    args.runtime.overlapMode = 0;
     args.runtime.keepHcclShm = 0;
     args.runtime.hcclBuffSizeMb = 0;
     return args;
@@ -197,6 +201,10 @@ inline DispatchCombineTileArgs ParseArgs(int argc, char **argv)
             args.caseName = value(key.c_str());
         } else if (key == "--backend") {
             args.backend = value(key.c_str());
+        } else if (key == "--x-active-mask-mode" || key == "--x-active-mask") {
+            args.xActiveMaskMode = value(key.c_str());
+        } else if (key == "--overlap-mode") {
+            args.overlapMode = value(key.c_str());
         } else if (key == "--data-dir") {
             args.dataDir = value(key.c_str());
         } else if (key == "--dry-run") {
@@ -204,7 +212,7 @@ inline DispatchCombineTileArgs ParseArgs(int argc, char **argv)
         } else if (key == "--skip-kernel-launch") {
             args.runtime.skipKernels = ParseU32(value(key.c_str()), key.c_str());
         } else if (key == "--timeline") {
-            (void)ParseU32(value(key.c_str()), key.c_str());
+            args.runtime.timeline = ParseU32(value(key.c_str()), key.c_str());
         } else if (key == "--dtype-in" || key == "--dtype-out") {
             (void)ParseU32(value(key.c_str()), key.c_str());
         } else if (key == "--gen-data") {
@@ -266,6 +274,7 @@ inline DispatchCombineTileArgs ParseArgs(int argc, char **argv)
     if (args.shape.aivBlocks == 0) {
         args.shape.aivBlocks = ChooseDefaultAivBlocks(args.shape);
     }
+    args.runtime.overlapMode = args.overlapMode == "on" ? 1U : 0U;
     return args;
 }
 
@@ -297,9 +306,17 @@ inline void ValidateArgs(const DispatchCombineTileArgs &args)
     if (shape.k % shape.tileCols != 0) {
         throw std::invalid_argument("K % tileCols must be 0");
     }
-    uint64_t requiredRows = static_cast<uint64_t>(shape.ep) * shape.m * shape.topK;
-    if (shape.maxOutputSize < requiredRows) {
-        throw std::invalid_argument("maxOutputSize is smaller than EP * M * topK; capacity/drop is unsupported");
+    if ((shape.maxOutputSize % shape.expertPerRank) != 0) {
+        throw std::invalid_argument("maxOutputSize must be divisible by expertPerRank for the current M2 ABI");
+    }
+    if (args.xActiveMaskMode != "none" && args.xActiveMaskMode != "alternate" && args.xActiveMaskMode != "tail-half") {
+        throw std::invalid_argument("xActiveMask mode must be none, alternate, or tail-half");
+    }
+    if (args.overlapMode != "off" && args.overlapMode != "on") {
+        throw std::invalid_argument("overlap mode must be off or on");
+    }
+    if (args.runtime.timeline > 1U) {
+        throw std::invalid_argument("timeline must be 0 or 1");
     }
     if (static_cast<uint64_t>(args.runtime.deviceBase) + shape.ep > args.runtime.ndevices) {
         throw std::invalid_argument("deviceBase + pes > ndevices");
@@ -313,6 +330,8 @@ inline void PrintRunSummary(const DispatchCombineTileArgs &args)
     std::cout << "SOC_VERSION=" << args.socVersion << "\n";
     std::cout << "CASE_NAME=" << args.caseName << "\n";
     std::cout << "BACKEND=" << args.backend << "\n";
+    std::cout << "X_ACTIVE_MASK_MODE=" << args.xActiveMaskMode << "\n";
+    std::cout << "OVERLAP_MODE=" << args.overlapMode << " TIMELINE=" << args.runtime.timeline << "\n";
     std::cout << "PES=" << shape.ep << " DEVICE_BASE=" << args.runtime.deviceBase
               << " NDEVICES=" << args.runtime.ndevices << "\n";
     std::cout << "M=" << shape.m << " K=" << shape.k << " INTERMEDIATE_SIZE=" << args.intermediateSize

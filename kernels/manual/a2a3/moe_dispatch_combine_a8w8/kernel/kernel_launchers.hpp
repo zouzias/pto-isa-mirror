@@ -30,8 +30,8 @@ void LaunchDispatchCombineTileCombine(DispatchCombineTileShape shape, uint32_t m
                                       uint8_t *workspace, void *stream, uint32_t launchBlockCount);
 
 void LaunchM2Int8Dispatch(moe_dispatch_combine_a8w8::ShapeConfig shape, moe_dispatch_combine_a8w8::RankConfig rank,
-                          uint8_t *inputA, uint8_t *expertIdx, uint8_t *peerWindow, uint8_t *hcclCtx,
-                          uint8_t *workspace, void *stream, uint32_t launchBlockCount);
+                          uint8_t *inputA, uint8_t *expertIdx, uint8_t *xActiveMask, uint8_t *peerWindow,
+                          uint8_t *hcclCtx, uint8_t *workspace, void *stream, uint32_t launchBlockCount);
 
 void LaunchM2Gmm1Int8(moe_dispatch_combine_a8w8::ShapeConfig shape, moe_dispatch_combine_a8w8::RankConfig rank,
                       uint8_t *workspace, void *stream, uint32_t launchBlockCount);
