@@ -354,6 +354,21 @@ struct QReadyHook {
     }
 };
 
+template <typename TileScratch, typename GlobalQ, typename GlobalK, typename GlobalV>
+AICORE inline void prefetch_first_qkv_tiles(TileScratch &scratchTile, GlobalQ &qGlobal, GlobalK &kGlobal, GlobalV &vGlobal)
+{
+    if constexpr (DAV_VEC) {
+        if (static_cast<size_t>(get_subblockid()) == 0U) {
+            TPREFETCH(scratchTile, qGlobal);
+            TPREFETCH(scratchTile, vGlobal);
+        } else {
+            TPREFETCH(scratchTile, kGlobal);
+        }
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    }
+}
+
 template <int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1, int QKP_CV_FIFO,
           int CV_FIFO_CONS_SYNC_PERIOD, bool INTERMEDIATE_CHECK, bool CAUSAL_MASK, int SRC_VEC_TN_BUFFERS,
           typename TileMatQData, typename TileMatKData, typename TileQKData, typename TileQKVecData,
@@ -961,6 +976,26 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     constexpr uint32_t Vec_S0 = Cube_S0 / VEC_CORES / kTileFactor;
     constexpr uint32_t VecGuRows = Cube_S0 / VEC_CORES;
     static_assert(Cube_S0 % (VEC_CORES * kTileFactor) == 0, "Vec rows must divide evenly across tile slices");
+
+    if constexpr (DAV_VEC && VECTOR_PREFETCH_QKV_TILE) {
+        constexpr uint32_t kPrefetchTileBytes = Cube_S0 * HEAD_SIZE * sizeof(half);
+        using PrefetchScratchTile =
+            Tile<TileType::Vec, uint8_t, 1, kPrefetchTileBytes, BLayout::RowMajor, 1, kPrefetchTileBytes>;
+        using PrefetchGlobalBytes =
+            GlobalTensor<uint8_t, pto::Shape<1, 1, 1, 1, kPrefetchTileBytes>,
+                            pto::Stride<1, 1, 1, kPrefetchTileBytes, 1>>;
+
+        PrefetchScratchTile startupScratch;
+        TASSIGN(startupScratch, 0u);
+
+        const int block_offset_rows = block_idx * static_cast<int>(Cube_S0);
+        __gm__ half *q_block = q + block_offset_rows * HEAD_SIZE;
+
+        PrefetchGlobalBytes qPrefetch(reinterpret_cast<__gm__ uint8_t *>(q_block));
+        PrefetchGlobalBytes kPrefetch(reinterpret_cast<__gm__ uint8_t *>(k));
+        PrefetchGlobalBytes vPrefetch(reinterpret_cast<__gm__ uint8_t *>(v));
+        prefetch_first_qkv_tiles(startupScratch, qPrefetch, kPrefetch, vPrefetch);
+    }
 
     // ------------------------------------------------------------------------------
     // Tuning knobs (pipeline)
