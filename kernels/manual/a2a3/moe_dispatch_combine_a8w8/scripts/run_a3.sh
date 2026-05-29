@@ -68,13 +68,13 @@ Fixed measurement policy:
 
 Explicit templates:
   small:
-    --case-name small -pes 1 -M 8 -K 64 -N 32 -topK 1 -expertPerPe 1 --max-tokens-per-expert 8
+    --case-name small -pes 1 -M 64 -K 64 -N 64 -topK 1 -expertPerPe 1 --max-tokens-per-expert 128
   balanced:
-    --case-name balanced -pes 2 -M 16 -K 64 -N 32 -topK 2 -expertPerPe 2 --max-tokens-per-expert 32
+    --case-name balanced -pes 4 -M 256 -K 256 -N 128 -topK 2 -expertPerPe 2 --max-tokens-per-expert 1024
   skewed:
-    --case-name skewed -pes 2 -M 16 -K 64 -N 32 -topK 2 -expertPerPe 2 --max-tokens-per-expert 32
+    --case-name skewed -pes 4 -M 256 -K 256 -N 128 -topK 2 -expertPerPe 2 --max-tokens-per-expert 1024
   zero-token:
-    --case-name zero-token -pes 2 -M 16 -K 64 -N 32 -topK 2 -expertPerPe 2 --max-tokens-per-expert 32
+    --case-name zero-token -pes 4 -M 256 -K 256 -N 128 -topK 2 -expertPerPe 2 --max-tokens-per-expert 1024
 
 This project does not support hidden --case presets; pass explicit shape parameters.
 EOF
@@ -87,17 +87,17 @@ fi
 
 RUN_MODE=npu
 SOC_VERSION=Ascend910B1
-PES=2
-M=16
-HIDDEN_SIZE=64
-INTERMEDIATE_SIZE=32
+PES=4
+M=256
+HIDDEN_SIZE=256
+INTERMEDIATE_SIZE=128
 TOPK=2
 EXPERT_PER_PE=2
-MAX_TOKENS_PER_EXPERT=64
+MAX_TOKENS_PER_EXPERT=1024
 PAYLOAD_TILE_COLS=64
-GMM_BLOCK_M=16
-GMM_BLOCK_N=16
-GMM_BLOCK_K=32
+GMM_BLOCK_M=128
+GMM_BLOCK_N=256
+GMM_BLOCK_K=64
 DEVICE_BASE=4
 NDEVICES=8
 RANK_FROM_MPI=1
@@ -210,6 +210,16 @@ fi
 if [ $(( HIDDEN_SIZE % PAYLOAD_TILE_COLS )) -ne 0 ]; then
     echo "[ERROR] hiddenSize must be divisible by payloadTileCols"
     exit 1
+fi
+if [ "${BACKEND}" = "int8" ]; then
+    if [ "${GMM_BLOCK_M}" -ne 128 ] || [ "${GMM_BLOCK_N}" -ne 256 ] || [ "${GMM_BLOCK_K}" -ne 64 ]; then
+        echo "[ERROR] int8 backend requires GMM_BLOCK_M=128 GMM_BLOCK_N=256 GMM_BLOCK_K=64"
+        exit 1
+    fi
+    if [ $(( HIDDEN_SIZE % 64 )) -ne 0 ] || [ $(( INTERMEDIATE_SIZE % 64 )) -ne 0 ]; then
+        echo "[ERROR] int8 backend requires hidden and intermediate sizes divisible by 64"
+        exit 1
+    fi
 fi
 
 DISPATCH_ROW_BYTES=$(align_up "${HIDDEN_SIZE}" 64)
@@ -324,16 +334,16 @@ if [ "${M2_SUITE}" = "1" ]; then
     echo "=== Running M2 int8 full-chain suite ==="
     bash "${SCRIPT_PATH}" --m2-suite 0 --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 \
         --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
-        --case-name small -pes 1 -M 8 -K 64 -N 32 -topK 1 -expertPerPe 1 --max-tokens-per-expert 8
+        --case-name small -pes 1 -M 64 -K 64 -N 64 -topK 1 -expertPerPe 1 --max-tokens-per-expert 128
     bash "${SCRIPT_PATH}" --m2-suite 0 --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 \
         --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
-        --case-name balanced -pes 2 -M 16 -K 64 -N 32 -topK 2 -expertPerPe 2 --max-tokens-per-expert 32
+        --case-name balanced -pes 4 -M 256 -K 256 -N 128 -topK 2 -expertPerPe 2 --max-tokens-per-expert 1024
     bash "${SCRIPT_PATH}" --m2-suite 0 --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 \
         --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
-        --case-name skewed -pes 2 -M 16 -K 64 -N 32 -topK 2 -expertPerPe 2 --max-tokens-per-expert 32
+        --case-name skewed -pes 4 -M 256 -K 256 -N 128 -topK 2 -expertPerPe 2 --max-tokens-per-expert 1024
     bash "${SCRIPT_PATH}" --m2-suite 0 --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 \
         --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
-        --case-name zero-token -pes 2 -M 16 -K 64 -N 32 -topK 2 -expertPerPe 2 --max-tokens-per-expert 32
+        --case-name zero-token -pes 4 -M 256 -K 256 -N 128 -topK 2 -expertPerPe 2 --max-tokens-per-expert 1024
     exit 0
 fi
 

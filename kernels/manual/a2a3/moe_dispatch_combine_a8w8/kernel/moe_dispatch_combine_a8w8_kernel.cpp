@@ -53,12 +53,19 @@ constexpr uint64_t kM2RouteChunkMaxTileOffset = 0x3D00;
 constexpr uint64_t kM2RouteScaleParamTileOffset = 0x3E00;
 constexpr uint64_t kM2RouteInvScaleParamTileOffset = 0x3F00;
 constexpr uint64_t kM2RouteScaleStoreTileOffset = 0x4000;
+constexpr int kM2EpilogueTileCols = 1024;
+constexpr uint64_t kM2EpilogueAccTileOffset = 0x0;
+constexpr uint64_t kM2EpilogueFloatTileOffset = 0x1000;
+constexpr uint64_t kM2EpilogueScaleTileOffset = 0x2400;
+constexpr uint64_t kM2EpilogueScaledTileOffset = 0x3800;
+constexpr uint64_t kM2EpilogueHalfTileOffset = 0x4C00;
 constexpr int32_t kM2ScoreboardStatusInit = 0;
 constexpr int32_t kM2ScoreboardStatusRowsPresent = 1;
 constexpr int32_t kM2ScoreboardStatusCopyDone = 2;
 constexpr int32_t kM2ScoreboardStatusSkipDone = 3;
-constexpr uint32_t kM2GmmMicroTileM = 16;
-constexpr uint32_t kM2GmmMicroTileN = 32;
+constexpr uint32_t kM2GmmBaseM = moe_dispatch_combine_a8w8::kGmmBaseM;
+constexpr uint32_t kM2GmmBaseN = moe_dispatch_combine_a8w8::kGmmBaseN;
+constexpr uint32_t kM2ReturnTileRows = moe_dispatch_combine_a8w8::kReturnTileRows;
 constexpr uint32_t kM2SwigluGroupFields = 8;
 constexpr uint32_t kM2GmmTileTaskFields = 8;
 constexpr uint32_t kM2ReturnPlanFields = 8;
@@ -79,12 +86,15 @@ using M2RouteFloatTile =
     pto::Tile<pto::TileType::Vec, float, 1, kM2RouteQuantTileCols, pto::BLayout::RowMajor, 1, pto::DYNAMIC>;
 using M2RouteQuantTile =
     pto::Tile<pto::TileType::Vec, int8_t, 1, kM2RouteQuantTileCols, pto::BLayout::RowMajor, 1, pto::DYNAMIC>;
-using M2RouteRowStatTile =
-    pto::Tile<pto::TileType::Vec, float, 1, 16, pto::BLayout::RowMajor, 1, 1>;
-using M2RouteParamTile =
-    pto::Tile<pto::TileType::Vec, float, 1, 8, pto::BLayout::RowMajor, 1, 8>;
-using M2RouteScaleStoreTile =
-    pto::Tile<pto::TileType::Vec, float, 1, 8, pto::BLayout::RowMajor, 1, 1>;
+using M2RouteRowStatTile = pto::Tile<pto::TileType::Vec, float, 1, 16, pto::BLayout::RowMajor, 1, 1>;
+using M2RouteParamTile = pto::Tile<pto::TileType::Vec, float, 1, 8, pto::BLayout::RowMajor, 1, 8>;
+using M2RouteScaleStoreTile = pto::Tile<pto::TileType::Vec, float, 1, 8, pto::BLayout::RowMajor, 1, 1>;
+using M2EpilogueAccTile =
+    pto::Tile<pto::TileType::Vec, int32_t, 1, kM2EpilogueTileCols, pto::BLayout::RowMajor, 1, pto::DYNAMIC>;
+using M2EpilogueFloatTile =
+    pto::Tile<pto::TileType::Vec, float, 1, kM2EpilogueTileCols, pto::BLayout::RowMajor, 1, pto::DYNAMIC>;
+using M2EpilogueHalfTile =
+    pto::Tile<pto::TileType::Vec, half, 1, kM2EpilogueTileCols, pto::BLayout::RowMajor, 1, pto::DYNAMIC>;
 
 AICORE inline uint64_t Align64Device(uint64_t value)
 {
@@ -276,22 +286,22 @@ AICORE inline uint64_t M2ReturnPayloadRowBytes(moe_dispatch_combine_a8w8::ShapeC
 
 AICORE inline uint64_t M2ReturnHiddenChunkCols(moe_dispatch_combine_a8w8::ShapeConfig shape)
 {
-    return shape.gmmBlockN == 0 ? kM2GmmMicroTileN : shape.gmmBlockN;
+    return shape.gmmBlockN == 0 ? kM2GmmBaseN : shape.gmmBlockN;
 }
 
 AICORE inline uint64_t M2GmmTileTaskCapacity(moe_dispatch_combine_a8w8::ShapeConfig shape)
 {
-    uint64_t rowTiles = M2CeilDivDevice(M2LocalRows(shape), kM2GmmMicroTileM);
+    uint64_t rowTiles = M2CeilDivDevice(M2LocalRows(shape), kM2GmmBaseM);
     uint64_t w1Cols = static_cast<uint64_t>(shape.intermediateSize) * 2U;
-    uint64_t gmm1NTiles = M2CeilDivDevice(w1Cols, kM2GmmMicroTileN);
-    uint64_t gmm2NTiles = M2CeilDivDevice(shape.hiddenSize, kM2GmmMicroTileN);
+    uint64_t gmm1NTiles = M2CeilDivDevice(w1Cols, kM2GmmBaseN);
+    uint64_t gmm2NTiles = M2CeilDivDevice(shape.hiddenSize, kM2GmmBaseN);
     uint64_t nTiles = gmm1NTiles > gmm2NTiles ? gmm1NTiles : gmm2NTiles;
     return static_cast<uint64_t>(shape.expertPerRank) * rowTiles * nTiles;
 }
 
 AICORE inline uint64_t M2ReturnSegmentCapacity(moe_dispatch_combine_a8w8::ShapeConfig shape)
 {
-    uint64_t rowTiles = M2CeilDivDevice(M2LocalRows(shape), kM2GmmMicroTileM);
+    uint64_t rowTiles = M2CeilDivDevice(M2LocalRows(shape), kM2ReturnTileRows);
     uint64_t hiddenChunks = M2CeilDivDevice(shape.hiddenSize, M2ReturnHiddenChunkCols(shape));
     return static_cast<uint64_t>(shape.expertPerRank) * rowTiles * hiddenChunks * shape.rankNum;
 }
@@ -340,7 +350,7 @@ AICORE inline moe_dispatch_combine_a8w8::WorkspaceLayout MakeM2WorkspaceLayoutDe
     layout.gmm2AccInt32 = M2AppendFieldDevice(offset, localRows * shape.hiddenSize * sizeof(int32_t));
     layout.gmm2Out = M2AppendFieldDevice(offset, localRows * returnRowBytes);
     layout.returnSegmentStaging =
-        M2AppendFieldDevice(offset, kM2GmmMicroTileM * M2ReturnHiddenChunkCols(shape) * M2DTypeBytes(shape.dtypeOut));
+        M2AppendFieldDevice(offset, kM2ReturnTileRows * M2ReturnHiddenChunkCols(shape) * M2DTypeBytes(shape.dtypeOut));
     layout.readyCounters = M2AppendFieldDevice(offset, 16U * 64U);
     layout.dispatchGroupReady = M2AppendFieldDevice(offset, shape.expertPerRank * 64U);
     layout.gmm1SyncGroupReady = M2AppendFieldDevice(offset, syncGroupCap * 64U);
@@ -1454,9 +1464,7 @@ AICORE inline void M2RecordDispatchLedger(moe_dispatch_combine_a8w8::ShapeConfig
     StoreScalarI32(workspaceView.scoreboardTaskMap + taskId * 4U + 2U, dstStart);
     StoreScalarI32(workspaceView.scoreboardTaskMap + taskId * 4U + 3U, rows);
     int32_t producerStatus = rows > 0 ? kM2ScoreboardStatusRowsPresent : kM2ScoreboardStatusSkipDone;
-    int32_t minStatus = rows > 0 ? kM2ScoreboardStatusInit : kM2ScoreboardStatusSkipDone;
     StoreScalarI32(workspaceView.producerStatus + taskId * 16U, producerStatus);
-    StoreScalarI32(workspaceView.scoreboardMinStatus + taskId * 16U, minStatus);
 }
 
 AICORE inline void M2PublishDispatchLedgerCopyDone(moe_dispatch_combine_a8w8::ShapeConfig shape,
@@ -1467,7 +1475,75 @@ AICORE inline void M2PublishDispatchLedgerCopyDone(moe_dispatch_combine_a8w8::Sh
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
     StoreScalarI32(workspaceView.producerStatus + taskId * 16U, kM2ScoreboardStatusCopyDone);
-    StoreScalarI32(workspaceView.scoreboardMinStatus + taskId * 16U, kM2ScoreboardStatusCopyDone);
+}
+
+AICORE inline void M2UpdateDispatchScoreboardDomain(moe_dispatch_combine_a8w8::ShapeConfig shape,
+                                                    M2WorkspaceViewDevice workspaceView, uint32_t localExpert)
+{
+    int32_t rowsTotal = 0;
+    int32_t activeSegments = 0;
+    int32_t completedSegments = 0;
+    int32_t skippedSegments = 0;
+    int32_t minProducerStatus = kM2ScoreboardStatusSkipDone;
+    for (uint32_t tokenOwner = 0; tokenOwner < shape.rankNum; ++tokenOwner) {
+        uint32_t taskId = tokenOwner * shape.expertPerRank + localExpert;
+        int32_t rows = LoadScalarI32(workspaceView.scoreboardTaskMap + taskId * 4U + 3U);
+        int32_t producerStatus = LoadScalarI32(workspaceView.producerStatus + taskId * 16U);
+        rowsTotal += rows > 0 ? rows : 0;
+        if (rows > 0) {
+            ++activeSegments;
+            if (producerStatus == kM2ScoreboardStatusCopyDone) {
+                ++completedSegments;
+            }
+            if (minProducerStatus == kM2ScoreboardStatusSkipDone || producerStatus < minProducerStatus) {
+                minProducerStatus = producerStatus;
+            }
+        } else {
+            ++skippedSegments;
+        }
+    }
+    int32_t domainStatus = activeSegments == 0 ?
+                               kM2ScoreboardStatusSkipDone :
+                               (completedSegments == activeSegments ? kM2ScoreboardStatusCopyDone : minProducerStatus);
+    uint32_t domainId = localExpert;
+    __gm__ int32_t *minStatus = workspaceView.scoreboardMinStatus + domainId * 16U;
+    __gm__ int32_t *waitPlan = workspaceView.workerWaitCounters + domainId * 16U;
+    __gm__ int32_t *timeout = workspaceView.scoreboardTimeoutCounters + domainId * 16U;
+    StoreScalarI32(minStatus + 0U, domainStatus);
+    StoreScalarI32(minStatus + 1U, 1);
+    StoreScalarI32(minStatus + 2U, static_cast<int32_t>(localExpert));
+    StoreScalarI32(minStatus + 3U, static_cast<int32_t>(localExpert));
+    StoreScalarI32(minStatus + 4U, static_cast<int32_t>(shape.expertPerRank));
+    StoreScalarI32(minStatus + 5U, static_cast<int32_t>(shape.rankNum));
+    StoreScalarI32(minStatus + 6U, rowsTotal);
+    StoreScalarI32(minStatus + 7U, activeSegments);
+    StoreScalarI32(minStatus + 8U, skippedSegments);
+    StoreScalarI32(minStatus + 9U, completedSegments);
+    StoreScalarI32(minStatus + 10U, activeSegments + skippedSegments);
+    StoreScalarI32(minStatus + 11U, static_cast<int32_t>(localExpert));
+    StoreScalarI32(minStatus + 12U, static_cast<int32_t>((shape.rankNum - 1U) * shape.expertPerRank + localExpert));
+    StoreScalarI32(minStatus + 13U, skippedSegments);
+    StoreScalarI32(minStatus + 14U, 0);
+    StoreScalarI32(minStatus + 15U, 1);
+
+    StoreScalarI32(waitPlan + 0U, 1);
+    StoreScalarI32(waitPlan + 1U, static_cast<int32_t>(localExpert));
+    StoreScalarI32(waitPlan + 2U, static_cast<int32_t>(shape.rankNum));
+    StoreScalarI32(waitPlan + 3U, activeSegments);
+    StoreScalarI32(waitPlan + 4U, completedSegments);
+    StoreScalarI32(waitPlan + 5U, skippedSegments);
+    StoreScalarI32(waitPlan + 6U, rowsTotal);
+    StoreScalarI32(waitPlan + 7U, static_cast<int32_t>(localExpert));
+    StoreScalarI32(waitPlan + 8U, static_cast<int32_t>(shape.expertPerRank));
+    StoreScalarI32(waitPlan + 9U, domainStatus);
+    StoreScalarI32(waitPlan + 10U, 0);
+    StoreScalarI32(waitPlan + 11U, 0);
+    StoreScalarI32(waitPlan + 12U, 0);
+    StoreScalarI32(waitPlan + 13U, 1);
+    StoreScalarI32(waitPlan + 14U, 1);
+    StoreScalarI32(waitPlan + 15U, 0);
+
+    StoreScalarI32(timeout + 0U, 0);
 }
 
 AICORE inline void M2GatherDispatchToGmm1Input(moe_dispatch_combine_a8w8::ShapeConfig shape,
@@ -1496,6 +1572,7 @@ AICORE inline void M2GatherDispatchToGmm1Input(moe_dispatch_combine_a8w8::ShapeC
             M2TGetRowsFloat(workspaceView.routingPerTokenScale, dstStart, remotePeer.dispatchScale, srcStart, rows);
             M2PublishDispatchLedgerCopyDone(shape, workspaceView, tokenOwner, localExpert);
         }
+        M2UpdateDispatchScoreboardDomain(shape, workspaceView, localExpert);
         StoreScalarI32(workspaceView.dispatchGroupReady + localExpert * 16U, 1);
     }
     InvalidateGmCacheLines(workspaceView.gmm1InputInt8, static_cast<uint32_t>(M2LocalRows(shape) * rowBytes));
@@ -1515,14 +1592,41 @@ AICORE inline void M2RunGmm1Epilogue(moe_dispatch_combine_a8w8::ShapeConfig shap
         }
         for (uint32_t row = 0; row < static_cast<uint32_t>(rowCount); ++row) {
             uint32_t globalRow = static_cast<uint32_t>(rowBegin) + row;
-            for (uint32_t col = 0; col < w1Cols; ++col) {
-                uint64_t index = static_cast<uint64_t>(globalRow) * w1Cols + col;
-                __gm__ uint32_t *scaleBits = reinterpret_cast<__gm__ uint32_t *>(workspaceView.scale1Uint64 + col);
-                union {
-                    uint32_t u;
-                    float f;
-                } bits{*scaleBits};
-                workspaceView.gmm1Out[index] = static_cast<float>(workspaceView.gmm1AccInt32[index]) * bits.f;
+            for (uint32_t colBegin = 0; colBegin < w1Cols; colBegin += kM2EpilogueTileCols) {
+                uint32_t cols = w1Cols - colBegin;
+                if (cols > kM2EpilogueTileCols) {
+                    cols = kM2EpilogueTileCols;
+                }
+                M2EpilogueAccTile accTile(cols);
+                M2EpilogueFloatTile fpTile(cols);
+                M2EpilogueFloatTile scaleTile(cols);
+                M2EpilogueFloatTile outTile(cols);
+                TASSIGN(accTile, kM2EpilogueAccTileOffset);
+                TASSIGN(fpTile, kM2EpilogueFloatTileOffset);
+                TASSIGN(scaleTile, kM2EpilogueScaleTileOffset);
+                TASSIGN(outTile, kM2EpilogueScaledTileOffset);
+
+                GlobalNd<int32_t> accGlobal =
+                    MakeGlobal2D(workspaceView.gmm1AccInt32 + static_cast<uint64_t>(globalRow) * w1Cols + colBegin, 1,
+                                 static_cast<int32_t>(cols), static_cast<int32_t>(w1Cols));
+                GlobalNd<float> outGlobal =
+                    MakeGlobal2D(workspaceView.gmm1Out + static_cast<uint64_t>(globalRow) * w1Cols + colBegin, 1,
+                                 static_cast<int32_t>(cols), static_cast<int32_t>(w1Cols));
+                for (uint32_t col = 0; col < cols; ++col) {
+                    scaleTile.SetValue(col, M2DecodeUint64Scale(workspaceView.scale1Uint64[colBegin + col]));
+                }
+                pipe_barrier(PIPE_ALL);
+                TLOAD(accTile, accGlobal);
+                set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+                wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+                TCVT(fpTile, accTile, pto::RoundMode::CAST_RINT);
+                pipe_barrier(PIPE_V);
+                TMUL(outTile, fpTile, scaleTile);
+                pipe_barrier(PIPE_V);
+                set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                TSTORE(outGlobal, outTile);
+                WaitStoreTileReusable();
             }
         }
     }
@@ -1551,15 +1655,15 @@ AICORE inline uint32_t M2BuildGmmTileTaskPlan(moe_dispatch_combine_a8w8::ShapeCo
         if (rowCount <= 0) {
             continue;
         }
-        for (uint32_t rowOffset = 0; rowOffset < static_cast<uint32_t>(rowCount); rowOffset += kM2GmmMicroTileM) {
+        for (uint32_t rowOffset = 0; rowOffset < static_cast<uint32_t>(rowCount); rowOffset += kM2GmmBaseM) {
             uint32_t rows = static_cast<uint32_t>(rowCount) - rowOffset;
-            if (rows > kM2GmmMicroTileM) {
-                rows = kM2GmmMicroTileM;
+            if (rows > kM2GmmBaseM) {
+                rows = kM2GmmBaseM;
             }
-            for (uint32_t nBase = 0; nBase < nCols; nBase += kM2GmmMicroTileN) {
+            for (uint32_t nBase = 0; nBase < nCols; nBase += kM2GmmBaseN) {
                 uint32_t cols = nCols - nBase;
-                if (cols > kM2GmmMicroTileN) {
-                    cols = kM2GmmMicroTileN;
+                if (cols > kM2GmmBaseN) {
+                    cols = kM2GmmBaseN;
                 }
                 if (taskId < maxTasks) {
                     __gm__ int32_t *task = taskPlan + taskId * kM2GmmTileTaskFields;
@@ -1596,8 +1700,8 @@ AICORE inline void M2BuildSwigluSyncMetadata(moe_dispatch_combine_a8w8::ShapeCon
             rowPrefix += LoadScalarI32(workspaceView.expertTokenNums + expert + idx);
         }
         uint32_t tileBegin = tilePrefix;
-        uint32_t tileEnd = tileBegin + static_cast<uint32_t>(M2CeilDivDevice(
-                                           static_cast<uint64_t>(rowPrefix - rowBegin), kM2GmmMicroTileM));
+        uint32_t tileEnd = tileBegin + static_cast<uint32_t>(
+                                           M2CeilDivDevice(static_cast<uint64_t>(rowPrefix - rowBegin), kM2GmmBaseM));
         __gm__ int32_t *group = workspaceView.swigluGroupDesc + groupCount * kM2SwigluGroupFields;
         StoreScalarI32(group + 0U, static_cast<int32_t>(groupCount));
         StoreScalarI32(group + 1U, static_cast<int32_t>(expert));
@@ -1613,8 +1717,8 @@ AICORE inline void M2BuildSwigluSyncMetadata(moe_dispatch_combine_a8w8::ShapeCon
         expert += groupSize;
     }
     StoreScalarI32(workspaceView.swigluSyncGroups, static_cast<int32_t>(groupCount));
-    uint32_t gmm2Tasks = M2BuildGmmTileTaskPlan(shape, workspaceView, workspaceView.gmm2TileTaskPlan,
-                                                shape.hiddenSize, shape.intermediateSize, 2U);
+    uint32_t gmm2Tasks = M2BuildGmmTileTaskPlan(shape, workspaceView, workspaceView.gmm2TileTaskPlan, shape.hiddenSize,
+                                                shape.intermediateSize, 2U);
     StoreScalarI32(workspaceView.stageStatus + 2U * 16U, static_cast<int32_t>(groupCount));
     StoreScalarI32(workspaceView.stageStatus + 3U * 16U, static_cast<int32_t>(gmm2Tasks));
 }
@@ -1622,54 +1726,161 @@ AICORE inline void M2BuildSwigluSyncMetadata(moe_dispatch_combine_a8w8::ShapeCon
 AICORE inline void M2ComputeSwigluRowPto(moe_dispatch_combine_a8w8::ShapeConfig shape,
                                          M2WorkspaceViewDevice workspaceView, uint32_t globalRow, float routingScale)
 {
-    constexpr int kSwiGluCols = 32;
+    constexpr int kSwiGluCols = 64;
     uint32_t w1Cols = shape.intermediateSize * 2U;
-    uint32_t cols = shape.intermediateSize;
-    VecTile<float, kSwiGluCols> gateTile(1, cols);
-    VecTile<float, kSwiGluCols> upTile(1, cols);
-    VecTile<float, kSwiGluCols> negGateTile(1, cols);
-    VecTile<float, kSwiGluCols> expTile(1, cols);
-    VecTile<float, kSwiGluCols> denomTile(1, cols);
-    VecTile<float, kSwiGluCols> sigmoidTile(1, cols);
-    VecTile<float, kSwiGluCols> scaledTile(1, cols);
-    TASSIGN(gateTile, 0x0);
-    TASSIGN(upTile, 0x400);
-    TASSIGN(negGateTile, 0x800);
-    TASSIGN(expTile, 0xC00);
-    TASSIGN(denomTile, 0x1000);
-    TASSIGN(sigmoidTile, 0x1400);
-    TASSIGN(scaledTile, 0x1800);
+    for (uint32_t colBegin = 0; colBegin < shape.intermediateSize; colBegin += kSwiGluCols) {
+        uint32_t cols = shape.intermediateSize - colBegin;
+        if (cols > kSwiGluCols) {
+            cols = kSwiGluCols;
+        }
+        VecTile<float, kSwiGluCols> gateTile(1, cols);
+        VecTile<float, kSwiGluCols> upTile(1, cols);
+        VecTile<float, kSwiGluCols> negGateTile(1, cols);
+        VecTile<float, kSwiGluCols> expTile(1, cols);
+        VecTile<float, kSwiGluCols> denomTile(1, cols);
+        VecTile<float, kSwiGluCols> sigmoidTile(1, cols);
+        VecTile<float, kSwiGluCols> scaledTile(1, cols);
+        TASSIGN(gateTile, 0x0);
+        TASSIGN(upTile, 0x400);
+        TASSIGN(negGateTile, 0x800);
+        TASSIGN(expTile, 0xC00);
+        TASSIGN(denomTile, 0x1000);
+        TASSIGN(sigmoidTile, 0x1400);
+        TASSIGN(scaledTile, 0x1800);
 
-    GlobalNd<float> gateGlobal = MakeGlobal2D(workspaceView.gmm1Out + static_cast<uint64_t>(globalRow) * w1Cols, 1,
-                                              static_cast<int32_t>(cols), static_cast<int32_t>(w1Cols));
-    GlobalNd<float> upGlobal =
-        MakeGlobal2D(workspaceView.gmm1Out + static_cast<uint64_t>(globalRow) * w1Cols + shape.intermediateSize, 1,
-                     static_cast<int32_t>(cols), static_cast<int32_t>(w1Cols));
-    GlobalNd<float> dstGlobal =
-        MakeGlobal2D(workspaceView.swigluOut + static_cast<uint64_t>(globalRow) * shape.intermediateSize, 1,
-                     static_cast<int32_t>(cols), static_cast<int32_t>(shape.intermediateSize));
-    TLOAD(gateTile, gateGlobal);
-    TLOAD(upTile, upGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TMULS(gateTile, gateTile, routingScale);
+        GlobalNd<float> gateGlobal =
+            MakeGlobal2D(workspaceView.gmm1Out + static_cast<uint64_t>(globalRow) * w1Cols + colBegin, 1,
+                         static_cast<int32_t>(cols), static_cast<int32_t>(w1Cols));
+        GlobalNd<float> upGlobal = MakeGlobal2D(
+            workspaceView.gmm1Out + static_cast<uint64_t>(globalRow) * w1Cols + shape.intermediateSize + colBegin, 1,
+            static_cast<int32_t>(cols), static_cast<int32_t>(w1Cols));
+        GlobalNd<float> dstGlobal =
+            MakeGlobal2D(workspaceView.swigluOut + static_cast<uint64_t>(globalRow) * shape.intermediateSize + colBegin,
+                         1, static_cast<int32_t>(cols), static_cast<int32_t>(shape.intermediateSize));
+        TLOAD(gateTile, gateGlobal);
+        TLOAD(upTile, upGlobal);
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        TMULS(gateTile, gateTile, routingScale);
+        pipe_barrier(PIPE_V);
+        TMULS(upTile, upTile, routingScale);
+        pipe_barrier(PIPE_V);
+        TMULS(negGateTile, gateTile, -1.0f);
+        pipe_barrier(PIPE_V);
+        TEXP(expTile, negGateTile);
+        pipe_barrier(PIPE_V);
+        TADDS(denomTile, expTile, 1.0f);
+        pipe_barrier(PIPE_V);
+        TDIVS(sigmoidTile, 1.0f, denomTile);
+        pipe_barrier(PIPE_V);
+        TMUL(scaledTile, sigmoidTile, upTile);
+        pipe_barrier(PIPE_V);
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        TSTORE(dstGlobal, scaledTile);
+        WaitStoreTileReusable();
+    }
+}
+
+AICORE inline void M2RequantizeSwigluRowPto(moe_dispatch_combine_a8w8::ShapeConfig shape,
+                                            M2WorkspaceViewDevice workspaceView, uint32_t globalRow,
+                                            uint32_t gmm2RowStride)
+{
+    M2RouteRowStatTile rowMaxTile;
+    M2RouteRowStatTile chunkMaxTile;
+    TASSIGN(rowMaxTile, kM2RouteRowMaxTileOffset);
+    TASSIGN(chunkMaxTile, kM2RouteChunkMaxTileOffset);
+    TEXPANDS(rowMaxTile, 0.0f);
     pipe_barrier(PIPE_V);
-    TMULS(upTile, upTile, routingScale);
+
+    for (uint32_t colBegin = 0; colBegin < shape.intermediateSize; colBegin += kM2RouteQuantTileCols) {
+        uint32_t cols = shape.intermediateSize - colBegin;
+        if (cols > kM2RouteQuantTileCols) {
+            cols = kM2RouteQuantTileCols;
+        }
+        M2RouteFloatTile fpTile(cols);
+        M2RouteFloatTile absTile(cols);
+        TASSIGN(fpTile, kM2RouteFloatTileOffset);
+        TASSIGN(absTile, kM2RouteAbsTileOffset);
+
+        GlobalNd<float> src =
+            MakeGlobal2D(workspaceView.swigluOut + static_cast<uint64_t>(globalRow) * shape.intermediateSize + colBegin,
+                         1, static_cast<int32_t>(cols), static_cast<int32_t>(shape.intermediateSize));
+        TLOAD(fpTile, src);
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        TABS(absTile, fpTile);
+        pipe_barrier(PIPE_V);
+        TROWMAX(chunkMaxTile, absTile, fpTile);
+        pipe_barrier(PIPE_V);
+        TMAX(rowMaxTile, rowMaxTile, chunkMaxTile);
+        pipe_barrier(PIPE_V);
+    }
+
+    pto::PtoSetWaitFlag<PIPE_V, PIPE_S>();
+    float maxAbs = rowMaxTile.GetValue(0);
+    pto::PtoSetWaitFlag<PIPE_S, PIPE_V>();
+    float scale = maxAbs == 0.0f ? 1.0f : maxAbs / 127.0f;
+    float invScale = maxAbs == 0.0f ? 1.0f : 1.0f / scale;
+
+    M2RouteScaleStoreTile scaleStoreTile;
+    M2RouteParamTile invScaleTile;
+    TASSIGN(scaleStoreTile, kM2RouteScaleStoreTileOffset);
+    TASSIGN(invScaleTile, kM2RouteInvScaleParamTileOffset);
+    TEXPANDS(scaleStoreTile, scale);
     pipe_barrier(PIPE_V);
-    TMULS(negGateTile, gateTile, -1.0f);
+    TEXPANDS(invScaleTile, invScale);
     pipe_barrier(PIPE_V);
-    TEXP(expTile, negGateTile);
-    pipe_barrier(PIPE_V);
-    TADDS(denomTile, expTile, 1.0f);
-    pipe_barrier(PIPE_V);
-    TDIVS(sigmoidTile, 1.0f, denomTile);
-    pipe_barrier(PIPE_V);
-    TMUL(scaledTile, sigmoidTile, upTile);
-    pipe_barrier(PIPE_V);
+
+    GlobalNd<float> scaleGlobal = MakeGlobal2D(workspaceView.gmm2PerTokenScale + globalRow, 1, 1, 1);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, scaledTile);
+    TSTORE(scaleGlobal, scaleStoreTile);
     WaitStoreTileReusable();
+
+    __gm__ int8_t *dst = workspaceView.gmm2InputInt8 + static_cast<uint64_t>(globalRow) * gmm2RowStride;
+    for (uint32_t colBegin = 0; colBegin < shape.intermediateSize; colBegin += kM2RouteQuantTileCols) {
+        uint32_t cols = shape.intermediateSize - colBegin;
+        if (cols > kM2RouteQuantTileCols) {
+            cols = kM2RouteQuantTileCols;
+        }
+        M2RouteFloatTile fpTile(cols);
+        M2RouteQuantTile quantTile(cols);
+        TASSIGN(fpTile, kM2RouteFloatTileOffset);
+        TASSIGN(quantTile, kM2RouteQuantTileOffset);
+
+        GlobalNd<float> src =
+            MakeGlobal2D(workspaceView.swigluOut + static_cast<uint64_t>(globalRow) * shape.intermediateSize + colBegin,
+                         1, static_cast<int32_t>(cols), static_cast<int32_t>(shape.intermediateSize));
+        GlobalNd<int8_t> quantDst =
+            MakeGlobal2D(dst + colBegin, 1, static_cast<int32_t>(cols), static_cast<int32_t>(gmm2RowStride));
+        TLOAD(fpTile, src);
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        pto::TQUANT<pto::QuantType::INT8_SYM>(quantTile, fpTile, invScaleTile);
+        pipe_barrier(PIPE_V);
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        TSTORE(quantDst, quantTile);
+        WaitStoreTileReusable();
+    }
+
+    for (uint32_t colBegin = shape.intermediateSize; colBegin < gmm2RowStride; colBegin += kM2RouteQuantTileCols) {
+        uint32_t cols = gmm2RowStride - colBegin;
+        if (cols > kM2RouteQuantTileCols) {
+            cols = kM2RouteQuantTileCols;
+        }
+        M2RouteQuantTile zeroTile(cols);
+        TASSIGN(zeroTile, kM2RouteQuantTileOffset);
+        TEXPANDS(zeroTile, static_cast<int8_t>(0));
+        pipe_barrier(PIPE_V);
+        GlobalNd<int8_t> padDst =
+            MakeGlobal2D(dst + colBegin, 1, static_cast<int32_t>(cols), static_cast<int32_t>(gmm2RowStride));
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        TSTORE(padDst, zeroTile);
+        WaitStoreTileReusable();
+    }
 }
 
 AICORE inline void M2RunActivationQuant(moe_dispatch_combine_a8w8::ShapeConfig shape,
@@ -1693,24 +1904,7 @@ AICORE inline void M2RunActivationQuant(moe_dispatch_combine_a8w8::ShapeConfig s
             M2ComputeSwigluRowPto(shape, workspaceView, globalRow, routingScale);
             InvalidateGmCacheLines(workspaceView.swigluOut + static_cast<uint64_t>(globalRow) * shape.intermediateSize,
                                    static_cast<uint32_t>(shape.intermediateSize * sizeof(float)));
-            float maxAbs = 0.0f;
-            for (uint32_t col = 0; col < shape.intermediateSize; ++col) {
-                float value = workspaceView.swigluOut[static_cast<uint64_t>(globalRow) * shape.intermediateSize + col];
-                float absValue = M2Abs(value);
-                if (absValue > maxAbs) {
-                    maxAbs = absValue;
-                }
-            }
-            float gmm2Scale = maxAbs == 0.0f ? 1.0f : maxAbs / 127.0f;
-            workspaceView.gmm2PerTokenScale[globalRow] = gmm2Scale;
-            __gm__ int8_t *dst = workspaceView.gmm2InputInt8 + static_cast<uint64_t>(globalRow) * gmm2RowStride;
-            for (uint32_t col = 0; col < shape.intermediateSize; ++col) {
-                float value = workspaceView.swigluOut[static_cast<uint64_t>(globalRow) * shape.intermediateSize + col];
-                dst[col] = M2QuantizeToInt8(value, gmm2Scale);
-            }
-            for (uint32_t col = shape.intermediateSize; col < gmm2RowStride; ++col) {
-                dst[col] = 0;
-            }
+            M2RequantizeSwigluRowPto(shape, workspaceView, globalRow, gmm2RowStride);
         }
         StoreScalarI32(workspaceView.activationSyncGroupReady + localExpert * 16U, 1);
     }
@@ -1784,10 +1978,44 @@ AICORE inline void M2MaterializeGmm2EpilogueRows(moe_dispatch_combine_a8w8::Shap
         int32_t srcRow = srcStart + row;
         float tokenScale = workspaceView.gmm2PerTokenScale[srcRow];
         __gm__ half *dst = workspaceView.gmm2Out + static_cast<int64_t>(srcRow) * returnRowStride;
-        for (uint32_t col = 0; col < shape.hiddenSize; ++col) {
-            int32_t acc = workspaceView.gmm2AccInt32[static_cast<uint64_t>(srcRow) * shape.hiddenSize + col];
-            float channelScale = M2DecodeUint64Scale(workspaceView.scale2Uint64[col]);
-            dst[col] = static_cast<half>(static_cast<float>(acc) * channelScale * tokenScale);
+        for (uint32_t colBegin = 0; colBegin < shape.hiddenSize; colBegin += kM2EpilogueTileCols) {
+            uint32_t cols = shape.hiddenSize - colBegin;
+            if (cols > kM2EpilogueTileCols) {
+                cols = kM2EpilogueTileCols;
+            }
+            M2EpilogueAccTile accTile(cols);
+            M2EpilogueFloatTile fpTile(cols);
+            M2EpilogueFloatTile scaleTile(cols);
+            M2EpilogueFloatTile scaledTile(cols);
+            M2EpilogueHalfTile halfTile(cols);
+            TASSIGN(accTile, kM2EpilogueAccTileOffset);
+            TASSIGN(fpTile, kM2EpilogueFloatTileOffset);
+            TASSIGN(scaleTile, kM2EpilogueScaleTileOffset);
+            TASSIGN(scaledTile, kM2EpilogueScaledTileOffset);
+            TASSIGN(halfTile, kM2EpilogueHalfTileOffset);
+
+            GlobalNd<int32_t> accGlobal =
+                MakeGlobal2D(workspaceView.gmm2AccInt32 + static_cast<uint64_t>(srcRow) * shape.hiddenSize + colBegin,
+                             1, static_cast<int32_t>(cols), static_cast<int32_t>(shape.hiddenSize));
+            GlobalNd<half> dstGlobal = MakeGlobal2D(dst + colBegin, 1, static_cast<int32_t>(cols), returnRowStride);
+            for (uint32_t col = 0; col < cols; ++col) {
+                float scale = M2DecodeUint64Scale(workspaceView.scale2Uint64[colBegin + col]) * tokenScale;
+                scaleTile.SetValue(col, scale);
+            }
+            pipe_barrier(PIPE_ALL);
+            TLOAD(accTile, accGlobal);
+            set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+            wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+            TCVT(fpTile, accTile, pto::RoundMode::CAST_RINT);
+            pipe_barrier(PIPE_V);
+            TMUL(scaledTile, fpTile, scaleTile);
+            pipe_barrier(PIPE_V);
+            TCVT(halfTile, scaledTile, pto::RoundMode::CAST_RINT);
+            pipe_barrier(PIPE_V);
+            set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+            wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+            TSTORE(dstGlobal, halfTile);
+            WaitStoreTileReusable();
         }
         for (int32_t col = static_cast<int32_t>(shape.hiddenSize); col < returnRowStride; ++col) {
             dst[col] = static_cast<half>(0.0);
@@ -1798,33 +2026,53 @@ AICORE inline void M2MaterializeGmm2EpilogueRows(moe_dispatch_combine_a8w8::Shap
 }
 
 AICORE inline void M2MaterializeGmm2EpilogueSegment(moe_dispatch_combine_a8w8::ShapeConfig shape,
-                                                    M2WorkspaceViewDevice workspaceView, int32_t srcStart,
-                                                    int32_t rows, int32_t hiddenBegin, int32_t hiddenCount,
-                                                    int32_t returnRowStride)
+                                                    M2WorkspaceViewDevice workspaceView, int32_t srcStart, int32_t rows,
+                                                    int32_t hiddenBegin, int32_t hiddenCount, int32_t returnRowStride)
 {
     for (int32_t row = 0; row < rows; ++row) {
         int32_t srcRow = srcStart + row;
         float tokenScale = workspaceView.gmm2PerTokenScale[srcRow];
-        VecTile<half, kDefaultTileCols> valueTile(1, hiddenCount);
-        TASSIGN(valueTile, kPingUbAddr);
-        for (int32_t col = 0; col < hiddenCount; ++col) {
-            int32_t hiddenCol = hiddenBegin + col;
-            int32_t acc = workspaceView.gmm2AccInt32[static_cast<uint64_t>(srcRow) * shape.hiddenSize + hiddenCol];
-            float channelScale = M2DecodeUint64Scale(workspaceView.scale2Uint64[hiddenCol]);
-            half value = static_cast<half>(static_cast<float>(acc) * channelScale * tokenScale);
-            valueTile.SetValue(static_cast<uint32_t>(col), value);
-        }
-        GlobalNd<half> stagingGlobal =
-            MakeGlobal2D(workspaceView.returnSegmentStaging + static_cast<int64_t>(row) * hiddenCount, 1, hiddenCount,
-                         hiddenCount);
+        M2EpilogueAccTile accTile(static_cast<uint32_t>(hiddenCount));
+        M2EpilogueFloatTile fpTile(static_cast<uint32_t>(hiddenCount));
+        M2EpilogueFloatTile scaleTile(static_cast<uint32_t>(hiddenCount));
+        M2EpilogueFloatTile scaledTile(static_cast<uint32_t>(hiddenCount));
+        M2EpilogueHalfTile halfTile(static_cast<uint32_t>(hiddenCount));
+        TASSIGN(accTile, kM2EpilogueAccTileOffset);
+        TASSIGN(fpTile, kM2EpilogueFloatTileOffset);
+        TASSIGN(scaleTile, kM2EpilogueScaleTileOffset);
+        TASSIGN(scaledTile, kM2EpilogueScaledTileOffset);
+        TASSIGN(halfTile, kM2EpilogueHalfTileOffset);
+
+        GlobalNd<int32_t> accGlobal =
+            MakeGlobal2D(workspaceView.gmm2AccInt32 + static_cast<uint64_t>(srcRow) * shape.hiddenSize + hiddenBegin, 1,
+                         hiddenCount, static_cast<int32_t>(shape.hiddenSize));
+        GlobalNd<half> stagingGlobal = MakeGlobal2D(
+            workspaceView.returnSegmentStaging + static_cast<int64_t>(row) * hiddenCount, 1, hiddenCount, hiddenCount);
         GlobalNd<half> gmm2OutGlobal =
             MakeGlobal2D(workspaceView.gmm2Out + static_cast<int64_t>(srcRow) * returnRowStride + hiddenBegin, 1,
                          hiddenCount, returnRowStride);
         pipe_barrier(PIPE_ALL);
-        TSTORE(stagingGlobal, valueTile);
+        for (int32_t col = 0; col < hiddenCount; ++col) {
+            int32_t hiddenCol = hiddenBegin + col;
+            float scale = M2DecodeUint64Scale(workspaceView.scale2Uint64[hiddenCol]) * tokenScale;
+            scaleTile.SetValue(static_cast<uint32_t>(col), scale);
+        }
+        pipe_barrier(PIPE_ALL);
+        TLOAD(accTile, accGlobal);
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        TCVT(fpTile, accTile, pto::RoundMode::CAST_RINT);
+        pipe_barrier(PIPE_V);
+        TMUL(scaledTile, fpTile, scaleTile);
+        pipe_barrier(PIPE_V);
+        TCVT(halfTile, scaledTile, pto::RoundMode::CAST_RINT);
+        pipe_barrier(PIPE_V);
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        TSTORE(stagingGlobal, halfTile);
         WaitStoreTileReusable();
         pipe_barrier(PIPE_ALL);
-        TSTORE(gmm2OutGlobal, valueTile);
+        TSTORE(gmm2OutGlobal, halfTile);
         WaitStoreTileReusable();
     }
     pipe_barrier(PIPE_ALL);
@@ -1837,7 +2085,7 @@ AICORE inline uint32_t M2BuildReturnSegmentMap(moe_dispatch_combine_a8w8::ShapeC
                                                M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
                                                uint32_t myRank)
 {
-    uint32_t tileRows = shape.gmmBlockM == 0 ? 16U : shape.gmmBlockM;
+    uint32_t tileRows = shape.gmmBlockM == 0 ? kM2ReturnTileRows : shape.gmmBlockM;
     uint32_t hiddenChunk = static_cast<uint32_t>(M2ReturnHiddenChunkCols(shape));
     uint32_t capacity = static_cast<uint32_t>(M2ReturnSegmentCapacity(shape));
     uint32_t tileId = 0;
@@ -1931,9 +2179,8 @@ AICORE inline int32_t M2ExpectedReturnSegmentCount(moe_dispatch_combine_a8w8::Sh
                                                    M2PeerWindowViewDevice localPeer, uint32_t myRank,
                                                    uint32_t expertOwner, uint32_t localExpert)
 {
-    uint32_t tileRows = shape.gmmBlockM == 0 ? 16U : shape.gmmBlockM;
-    uint32_t hiddenChunks =
-        static_cast<uint32_t>(M2CeilDivDevice(shape.hiddenSize, M2ReturnHiddenChunkCols(shape)));
+    uint32_t tileRows = shape.gmmBlockM == 0 ? kM2ReturnTileRows : shape.gmmBlockM;
+    uint32_t hiddenChunks = static_cast<uint32_t>(M2CeilDivDevice(shape.hiddenSize, M2ReturnHiddenChunkCols(shape)));
     int32_t ownerRows = M2LoadTokenPerExpert(shape, localPeer, myRank, expertOwner, localExpert);
     if (ownerRows <= 0) {
         return 0;
@@ -2190,11 +2437,12 @@ AICORE inline void AddWeightedRowHalf(__gm__ half *outputBase, __gm__ half *ptrD
         __gm__ half *ptrChunk = ptrDBase + static_cast<int64_t>(ptrDRow) * rowStride + col;
         InvalidateGmCacheLines(ptrChunk, static_cast<uint32_t>(cols) * sizeof(half));
         GlobalNd<half> ptrGlobal = MakeGlobal2D(ptrChunk, 1, cols, rowStride);
-        pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> loadToAxpy;
+        pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> ptrLoadToAxpy;
+        pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> outLoadToAxpy;
         pto::Event<pto::Op::TAXPY, pto::Op::TSTORE_VEC> axpyToStore;
-        TLOAD(ptrTile, ptrGlobal);
-        loadToAxpy = TLOAD(outTile, outGlobal);
-        axpyToStore = TAXPY(outTile, ptrTile, prob, loadToAxpy);
+        ptrLoadToAxpy = TLOAD(ptrTile, ptrGlobal);
+        outLoadToAxpy = TLOAD(outTile, outGlobal);
+        axpyToStore = TAXPY(outTile, ptrTile, prob, ptrLoadToAxpy, outLoadToAxpy);
         TSTORE(outGlobal, outTile, axpyToStore);
         WaitStoreTileReusable();
     }
@@ -2272,11 +2520,12 @@ __global__ AICORE void M2RestoreOutput(moe_dispatch_combine_a8w8::ShapeConfig sh
                     localPeer.returnPayload + static_cast<int64_t>(ptrDRow) * returnRowStride + col;
                 InvalidateGmCacheLines(returnChunk, static_cast<uint32_t>(cols) * sizeof(half));
                 GlobalNd<half> returnGlobal = MakeGlobal2D(returnChunk, 1, cols, returnRowStride);
-                pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> loadToAxpy;
+                pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> ptrLoadToAxpy;
+                pto::Event<pto::Op::TLOAD, pto::Op::TAXPY> outLoadToAxpy;
                 pto::Event<pto::Op::TAXPY, pto::Op::TSTORE_VEC> axpyToStore;
-                TLOAD(ptrTile, returnGlobal);
-                loadToAxpy = TLOAD(outTile, outGlobal);
-                axpyToStore = TAXPY(outTile, ptrTile, static_cast<half>(prob), loadToAxpy);
+                ptrLoadToAxpy = TLOAD(ptrTile, returnGlobal);
+                outLoadToAxpy = TLOAD(outTile, outGlobal);
+                axpyToStore = TAXPY(outTile, ptrTile, static_cast<half>(prob), ptrLoadToAxpy, outLoadToAxpy);
                 TSTORE(outGlobal, outTile, axpyToStore);
                 WaitStoreTileReusable();
             }

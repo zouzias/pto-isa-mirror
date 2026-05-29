@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef DISPATCH_COMBINE_TILE_ARGS_H_
 #define DISPATCH_COMBINE_TILE_ARGS_H_
 
+#include "moe_dispatch_combine_a8w8_types.hpp"
 #include "moe_dispatch_combine_a8w8_runtime_types.hpp"
 
 #include <cstdlib>
@@ -29,7 +30,7 @@ struct DispatchCombineTileArgs {
     std::string dataDir = "./out";
     std::string caseName = "small";
     std::string backend = "m1-mock";
-    uint32_t intermediateSize = 32;
+    uint32_t intermediateSize = 128;
     double rtol = 1e-2;
     double atol = 1e-2;
     bool rankSet = false;
@@ -82,9 +83,9 @@ inline DispatchCombineTileArgs DefaultArgs()
     args.shape.maxOutputSize = 0;
     args.shape.aivBlocks = 0;
     args.shape.tileCols = 1024;
-    args.shape.gmmBlockM = 16;
-    args.shape.gmmBlockN = 16;
-    args.shape.gmmBlockK = 32;
+    args.shape.gmmBlockM = moe_dispatch_combine_a8w8::kGmmBaseM;
+    args.shape.gmmBlockN = moe_dispatch_combine_a8w8::kGmmBaseN;
+    args.shape.gmmBlockK = moe_dispatch_combine_a8w8::kGmmBaseK;
     args.shape.rowChunk = 0;
     args.shape.metadataPad = 16;
     args.shape.signalValue = 1;
@@ -266,6 +267,17 @@ inline void ValidateArgs(const DispatchCombineTileArgs &args)
     }
     if (args.backend != "m1-mock" && args.backend != "int8") {
         throw std::invalid_argument("backend must be m1-mock or int8");
+    }
+    if (args.backend == "int8") {
+        if (shape.gmmBlockM != moe_dispatch_combine_a8w8::kGmmBaseM ||
+            shape.gmmBlockN != moe_dispatch_combine_a8w8::kGmmBaseN ||
+            shape.gmmBlockK != moe_dispatch_combine_a8w8::kGmmBaseK) {
+            throw std::invalid_argument("int8 backend requires GMM policy gmmBlockM=128 gmmBlockN=256 gmmBlockK=64");
+        }
+        if ((shape.k % moe_dispatch_combine_a8w8::kGmmBaseK) != 0 ||
+            (args.intermediateSize % moe_dispatch_combine_a8w8::kGmmBaseK) != 0) {
+            throw std::invalid_argument("int8 backend requires hiddenSize and intermediateSize divisible by 64");
+        }
     }
     if (shape.k % shape.tileCols != 0) {
         throw std::invalid_argument("K % tileCols must be 0");

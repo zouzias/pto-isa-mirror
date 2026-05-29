@@ -22,17 +22,27 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace {
 
-constexpr uint32_t kGmm1M = 16;
-constexpr uint32_t kGmm1BaseK = 32;
-constexpr uint32_t kGmm1N = 32;
+constexpr uint32_t kGmmBaseM = moe_dispatch_combine_a8w8::kGmmBaseM;
+constexpr uint32_t kGmmBaseN = moe_dispatch_combine_a8w8::kGmmBaseN;
+constexpr uint32_t kGmmBaseK = moe_dispatch_combine_a8w8::kGmmBaseK;
+constexpr uint32_t kGmmStepK = moe_dispatch_combine_a8w8::kGmmStepK;
+constexpr uint32_t kReturnTileRows = moe_dispatch_combine_a8w8::kReturnTileRows;
 constexpr uint32_t kM2SwigluGroupFields = 8;
 constexpr uint32_t kM2GmmTileTaskFields = 8;
 constexpr uint32_t kM2ReturnPlanFields = 8;
 constexpr uint32_t kM2OwnerSegmentFields = 8;
+constexpr uint64_t kGmmL1ASingleBytes = static_cast<uint64_t>(kGmmBaseM) * kGmmBaseK * kGmmStepK * sizeof(int8_t);
+constexpr uint64_t kGmmL1BSingleBytes = static_cast<uint64_t>(kGmmBaseK) * kGmmStepK * kGmmBaseN * sizeof(int8_t);
+constexpr uint64_t kGmmL0ASingleBytes = static_cast<uint64_t>(kGmmBaseM) * kGmmBaseK * sizeof(int8_t);
+constexpr uint64_t kGmmL0BSingleBytes = static_cast<uint64_t>(kGmmBaseK) * kGmmBaseN * sizeof(int8_t);
 constexpr uint64_t kL1APing = 0x0;
-constexpr uint64_t kL1BPing = 0x20000;
-constexpr uint64_t kL0A = 0x0;
-constexpr uint64_t kL0B = 0x0;
+constexpr uint64_t kL1APong = kL1APing + kGmmL1ASingleBytes;
+constexpr uint64_t kL1BPing = kL1APing + 2U * kGmmL1ASingleBytes;
+constexpr uint64_t kL1BPong = kL1BPing + kGmmL1BSingleBytes;
+constexpr uint64_t kL0APing = 0x0;
+constexpr uint64_t kL0APong = kL0APing + kGmmL0ASingleBytes;
+constexpr uint64_t kL0BPing = 0x0;
+constexpr uint64_t kL0BPong = kL0BPing + kGmmL0BSingleBytes;
 constexpr uint64_t kL0C = 0x0;
 
 using Shape2DDyn = pto::Shape<1, 1, 1, pto::DYNAMIC, pto::DYNAMIC>;
@@ -103,22 +113,22 @@ AICORE inline uint64_t M2ReturnPayloadRowBytes(moe_dispatch_combine_a8w8::ShapeC
 
 AICORE inline uint64_t M2ReturnHiddenChunkCols(moe_dispatch_combine_a8w8::ShapeConfig shape)
 {
-    return shape.gmmBlockN == 0 ? kGmm1N : shape.gmmBlockN;
+    return shape.gmmBlockN == 0 ? kGmmBaseN : shape.gmmBlockN;
 }
 
 AICORE inline uint64_t M2GmmTileTaskCapacity(moe_dispatch_combine_a8w8::ShapeConfig shape)
 {
-    uint64_t rowTiles = M2CeilDivDevice(M2LocalRows(shape), kGmm1M);
+    uint64_t rowTiles = M2CeilDivDevice(M2LocalRows(shape), kGmmBaseM);
     uint64_t w1Cols = static_cast<uint64_t>(shape.intermediateSize) * 2U;
-    uint64_t gmm1NTiles = M2CeilDivDevice(w1Cols, kGmm1N);
-    uint64_t gmm2NTiles = M2CeilDivDevice(shape.hiddenSize, kGmm1N);
+    uint64_t gmm1NTiles = M2CeilDivDevice(w1Cols, kGmmBaseN);
+    uint64_t gmm2NTiles = M2CeilDivDevice(shape.hiddenSize, kGmmBaseN);
     uint64_t nTiles = gmm1NTiles > gmm2NTiles ? gmm1NTiles : gmm2NTiles;
     return static_cast<uint64_t>(shape.expertPerRank) * rowTiles * nTiles;
 }
 
 AICORE inline uint64_t M2ReturnSegmentCapacity(moe_dispatch_combine_a8w8::ShapeConfig shape)
 {
-    uint64_t rowTiles = M2CeilDivDevice(M2LocalRows(shape), kGmm1M);
+    uint64_t rowTiles = M2CeilDivDevice(M2LocalRows(shape), kReturnTileRows);
     uint64_t hiddenChunks = M2CeilDivDevice(shape.hiddenSize, M2ReturnHiddenChunkCols(shape));
     return static_cast<uint64_t>(shape.expertPerRank) * rowTiles * hiddenChunks * shape.rankNum;
 }
@@ -173,7 +183,7 @@ AICORE inline moe_dispatch_combine_a8w8::WorkspaceLayout MakeM2WorkspaceLayoutDe
     layout.gmm2AccInt32 = M2AppendFieldDevice(offset, localRows * shape.hiddenSize * sizeof(int32_t));
     layout.gmm2Out = M2AppendFieldDevice(offset, localRows * returnRowBytes);
     layout.returnSegmentStaging =
-        M2AppendFieldDevice(offset, kGmm1M * M2ReturnHiddenChunkCols(shape) * M2DTypeBytes(shape.dtypeOut));
+        M2AppendFieldDevice(offset, kReturnTileRows * M2ReturnHiddenChunkCols(shape) * M2DTypeBytes(shape.dtypeOut));
     layout.readyCounters = M2AppendFieldDevice(offset, 16U * 64U);
     layout.dispatchGroupReady = M2AppendFieldDevice(offset, shape.expertPerRank * 64U);
     layout.gmm1SyncGroupReady = M2AppendFieldDevice(offset, syncGroupCap * 64U);
@@ -208,9 +218,9 @@ AICORE inline void StoreScalarI32(__gm__ int32_t *ptr, int32_t value)
     *ptr = value;
 }
 
-AICORE inline uint32_t BuildGmmTileTaskPlan(moe_dispatch_combine_a8w8::ShapeConfig shape, __gm__ int32_t *dispatchOffset,
-                                            __gm__ int32_t *expertTokenNums, __gm__ int32_t *taskPlan, uint32_t nCols,
-                                            uint32_t kSize, uint32_t stageId)
+AICORE inline uint32_t BuildGmmTileTaskPlan(moe_dispatch_combine_a8w8::ShapeConfig shape,
+                                            __gm__ int32_t *dispatchOffset, __gm__ int32_t *expertTokenNums,
+                                            __gm__ int32_t *taskPlan, uint32_t nCols, uint32_t kSize, uint32_t stageId)
 {
     uint32_t taskId = 0;
     uint32_t maxTasks = static_cast<uint32_t>(M2GmmTileTaskCapacity(shape));
@@ -220,15 +230,15 @@ AICORE inline uint32_t BuildGmmTileTaskPlan(moe_dispatch_combine_a8w8::ShapeConf
         if (rowCount <= 0) {
             continue;
         }
-        for (uint32_t rowOffset = 0; rowOffset < static_cast<uint32_t>(rowCount); rowOffset += kGmm1M) {
+        for (uint32_t rowOffset = 0; rowOffset < static_cast<uint32_t>(rowCount); rowOffset += kGmmBaseM) {
             uint32_t rows = static_cast<uint32_t>(rowCount) - rowOffset;
-            if (rows > kGmm1M) {
-                rows = kGmm1M;
+            if (rows > kGmmBaseM) {
+                rows = kGmmBaseM;
             }
-            for (uint32_t nBase = 0; nBase < nCols; nBase += kGmm1N) {
+            for (uint32_t nBase = 0; nBase < nCols; nBase += kGmmBaseN) {
                 uint32_t cols = nCols - nBase;
-                if (cols > kGmm1N) {
-                    cols = kGmm1N;
+                if (cols > kGmmBaseN) {
+                    cols = kGmmBaseN;
                 }
                 if (taskId < maxTasks) {
                     __gm__ int32_t *task = taskPlan + taskId * kM2GmmTileTaskFields;
@@ -252,52 +262,96 @@ AICORE inline void RunInt8GmmTile(__gm__ int8_t *input, __gm__ int8_t *weight, _
                                   uint32_t kSize, uint32_t nValid, uint32_t inputStride, uint32_t weightStride,
                                   uint32_t outputStride)
 {
-    using L1A = pto::Tile<pto::TileType::Mat, int8_t, kGmm1M, kGmm1BaseK, pto::BLayout::ColMajor, pto::DYNAMIC,
-                          pto::DYNAMIC, pto::SLayout::RowMajor>;
-    using L1B = pto::Tile<pto::TileType::Mat, int8_t, kGmm1BaseK, kGmm1N, pto::BLayout::ColMajor, pto::DYNAMIC,
-                          pto::DYNAMIC, pto::SLayout::RowMajor>;
-    using L0A = pto::TileLeft<int8_t, kGmm1M, kGmm1BaseK, pto::DYNAMIC, pto::DYNAMIC>;
-    using L0B = pto::TileRight<int8_t, kGmm1BaseK, kGmm1N, pto::DYNAMIC, pto::DYNAMIC>;
-    using L0C = pto::TileAcc<int32_t, kGmm1M, kGmm1N, pto::DYNAMIC, pto::DYNAMIC>;
+    using L1A = pto::Tile<pto::TileType::Mat, int8_t, kGmmBaseM, kGmmBaseK * kGmmStepK, pto::BLayout::ColMajor,
+                          pto::DYNAMIC, pto::DYNAMIC, pto::SLayout::RowMajor>;
+    using L1B = pto::Tile<pto::TileType::Mat, int8_t, kGmmBaseK * kGmmStepK, kGmmBaseN, pto::BLayout::ColMajor,
+                          pto::DYNAMIC, pto::DYNAMIC, pto::SLayout::RowMajor>;
+    using L0A = pto::TileLeftCompact<int8_t, kGmmBaseM, kGmmBaseK, pto::DYNAMIC, pto::DYNAMIC>;
+    using L0B = pto::TileRightCompact<int8_t, kGmmBaseK, kGmmBaseN, pto::DYNAMIC, pto::DYNAMIC>;
+    using L0C = pto::TileAccCompact<int32_t, kGmmBaseM, kGmmBaseN, pto::DYNAMIC, pto::DYNAMIC>;
 
-    L1A lhsMat(mValid, kGmm1BaseK);
-    L1B rhsMat(kGmm1BaseK, nValid);
-    L0A lhsTile(mValid, kGmm1BaseK);
-    L0B rhsTile(kGmm1BaseK, nValid);
+    L1A lhsMat[2] = {L1A(mValid, kGmmBaseK * kGmmStepK), L1A(mValid, kGmmBaseK * kGmmStepK)};
+    L1B rhsMat[2] = {L1B(kGmmBaseK * kGmmStepK, nValid), L1B(kGmmBaseK * kGmmStepK, nValid)};
+    L0A lhsTile[2] = {L0A(mValid, kGmmBaseK), L0A(mValid, kGmmBaseK)};
+    L0B rhsTile[2] = {L0B(kGmmBaseK, nValid), L0B(kGmmBaseK, nValid)};
     L0C accTile(mValid, nValid);
-    pto::TASSIGN(lhsMat, kL1APing);
-    pto::TASSIGN(rhsMat, kL1BPing);
-    pto::TASSIGN(lhsTile, kL0A);
-    pto::TASSIGN(rhsTile, kL0B);
+    pto::TASSIGN(lhsMat[0], kL1APing);
+    pto::TASSIGN(lhsMat[1], kL1APong);
+    pto::TASSIGN(rhsMat[0], kL1BPing);
+    pto::TASSIGN(rhsMat[1], kL1BPong);
+    pto::TASSIGN(lhsTile[0], kL0APing);
+    pto::TASSIGN(lhsTile[1], kL0APong);
+    pto::TASSIGN(rhsTile[0], kL0BPing);
+    pto::TASSIGN(rhsTile[1], kL0BPong);
     pto::TASSIGN(accTile, kL0C);
+    lhsTile[0].SetKAligned(false);
+    lhsTile[1].SetKAligned(false);
 
-    uint32_t kLoop = kSize / kGmm1BaseK;
-    for (uint32_t kBase = 0; kBase < kLoop; ++kBase) {
-        GlobalNd<int8_t> lhsGlobal =
-            MakeGlobal2D(input + static_cast<uint64_t>(kBase) * kGmm1BaseK, mValid, kGmm1BaseK, inputStride);
-        GlobalNd<int8_t> rhsGlobal = MakeGlobal2D(weight + static_cast<uint64_t>(kBase) * kGmm1BaseK * weightStride,
-                                                  kGmm1BaseK, nValid, weightStride);
-        pto::TLOAD(lhsMat, lhsGlobal);
-        pto::TLOAD(rhsMat, rhsGlobal);
-        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-        pto::TMOV(lhsTile, lhsMat);
-        pto::TMOV(rhsTile, rhsMat);
-        set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-        wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-        if (kBase == 0) {
-            pto::TMATMUL(accTile, lhsTile, rhsTile);
-        } else {
-            pto::TMATMUL_ACC(accTile, accTile, lhsTile, rhsTile);
+    set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+    set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+
+    uint8_t l1Stage = 0;
+    uint8_t l0Stage = 0;
+    uint32_t kLoop = kSize / kGmmBaseK;
+    for (uint32_t kIter = 0; kIter < kLoop; ++kIter) {
+        uint32_t kModStep = kIter % kGmmStepK;
+        if (kModStep == 0) {
+            wait_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(l1Stage));
+            uint32_t kPanelSlices = kLoop - kIter;
+            if (kPanelSlices > kGmmStepK) {
+                kPanelSlices = kGmmStepK;
+            }
+            uint32_t kPanel = kPanelSlices * kGmmBaseK;
+            GlobalNd<int8_t> lhsGlobal =
+                MakeGlobal2D(input + static_cast<uint64_t>(kIter) * kGmmBaseK, mValid, kPanel, inputStride);
+            GlobalNd<int8_t> rhsGlobal = MakeGlobal2D(weight + static_cast<uint64_t>(kIter) * kGmmBaseK * weightStride,
+                                                      kPanel, nValid, weightStride);
+            lhsMat[l1Stage].SetValidShape(mValid, kPanel);
+            rhsMat[l1Stage].SetValidShape(kPanel, nValid);
+            pto::TLOAD(lhsMat[l1Stage], lhsGlobal);
+            set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+            pto::TLOAD(rhsMat[l1Stage], rhsGlobal);
+            set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
+            l1Stage = l1Stage == 0 ? 1 : 0;
         }
-        set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+
+        uint8_t activeL1 = l1Stage == 0 ? 1 : 0;
+        wait_flag(PIPE_M, PIPE_MTE1, static_cast<event_t>(l0Stage));
+        if (kModStep == 0) {
+            wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        }
+        pto::TEXTRACT(lhsTile[l0Stage], lhsMat[activeL1], 0, kModStep * kGmmBaseK);
+        if (kModStep == 0) {
+            wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
+        }
+        pto::TEXTRACT(rhsTile[l0Stage], rhsMat[activeL1], kModStep * kGmmBaseK, 0);
+        if (((kIter + 1U) % kGmmStepK) == 0U || kIter + 1U == kLoop) {
+            set_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(activeL1));
+        }
+
+        set_flag(PIPE_MTE1, PIPE_M, static_cast<event_t>(l0Stage));
+        wait_flag(PIPE_MTE1, PIPE_M, static_cast<event_t>(l0Stage));
+        if (kIter == 0) {
+            pto::TMATMUL(accTile, lhsTile[l0Stage], rhsTile[l0Stage]);
+        } else {
+            pto::TMATMUL_ACC(accTile, accTile, lhsTile[l0Stage], rhsTile[l0Stage]);
+        }
+        set_flag(PIPE_M, PIPE_MTE1, static_cast<event_t>(l0Stage));
+        l0Stage = l0Stage == 0 ? 1 : 0;
     }
+    wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+    wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
 
     GlobalNd<int32_t> outGlobal = MakeGlobal2D(output, mValid, nValid, outputStride);
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     pto::TSTORE(outGlobal, accTile);
+    set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+    wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
 }
 
 __global__ AICORE void M2Gmm1Int8(moe_dispatch_combine_a8w8::ShapeConfig shape,
@@ -306,7 +360,8 @@ __global__ AICORE void M2Gmm1Int8(moe_dispatch_combine_a8w8::ShapeConfig shape,
     uint32_t blockId = static_cast<uint32_t>(get_block_idx());
     uint32_t blockNum = static_cast<uint32_t>(get_block_num());
     if (shape.rankNum == 0 || shape.expertPerRank == 0 || shape.hiddenSize == 0U || shape.intermediateSize == 0U ||
-        shape.hiddenSize % kGmm1BaseK != 0U) {
+        shape.gmmBlockM != kGmmBaseM || shape.gmmBlockN != kGmmBaseN || shape.gmmBlockK != kGmmBaseK ||
+        shape.hiddenSize % kGmmBaseK != 0U || shape.intermediateSize % kGmmBaseK != 0U) {
         return;
     }
     auto layout = MakeM2WorkspaceLayoutDevice(shape);
@@ -317,8 +372,7 @@ __global__ AICORE void M2Gmm1Int8(moe_dispatch_combine_a8w8::ShapeConfig shape,
     __gm__ int32_t *gmm1Acc = reinterpret_cast<__gm__ int32_t *>(workspace + layout.gmm1AccInt32.offset);
     __gm__ int32_t *dispatchOffset = reinterpret_cast<__gm__ int32_t *>(workspace + layout.dispatchOffset.offset);
     __gm__ int32_t *expertTokenNums = reinterpret_cast<__gm__ int32_t *>(workspace + layout.expertTokenNums.offset);
-    __gm__ int32_t *gmm1TileTaskPlan =
-        reinterpret_cast<__gm__ int32_t *>(workspace + layout.gmm1TileTaskPlan.offset);
+    __gm__ int32_t *gmm1TileTaskPlan = reinterpret_cast<__gm__ int32_t *>(workspace + layout.gmm1TileTaskPlan.offset);
     __gm__ int32_t *stageStatus = reinterpret_cast<__gm__ int32_t *>(workspace + layout.stageStatus.offset);
     uint32_t taskCount =
         BuildGmmTileTaskPlan(shape, dispatchOffset, expertTokenNums, gmm1TileTaskPlan, w1Cols, shape.hiddenSize, 1U);
@@ -341,8 +395,8 @@ __global__ AICORE void M2Gmm1Int8(moe_dispatch_combine_a8w8::ShapeConfig shape,
         __gm__ int8_t *expertWeight = weight1 + static_cast<uint64_t>(globalExpert) * shape.hiddenSize * w1Cols;
         __gm__ int8_t *tileInput = gmm1Input + static_cast<uint64_t>(rowBegin) * rowBytes;
         __gm__ int32_t *tileOutput = gmm1Acc + static_cast<uint64_t>(rowBegin) * w1Cols;
-        RunInt8GmmTile(tileInput, expertWeight + nBase, tileOutput + nBase, mValid, shape.hiddenSize, nValid,
-                       rowBytes, w1Cols, w1Cols);
+        RunInt8GmmTile(tileInput, expertWeight + nBase, tileOutput + nBase, mValid, shape.hiddenSize, nValid, rowBytes,
+                       w1Cols, w1Cols);
     }
 }
 
@@ -352,7 +406,8 @@ __global__ AICORE void M2Gmm2Int8(moe_dispatch_combine_a8w8::ShapeConfig shape,
     uint32_t blockId = static_cast<uint32_t>(get_block_idx());
     uint32_t blockNum = static_cast<uint32_t>(get_block_num());
     if (shape.rankNum == 0 || shape.expertPerRank == 0 || shape.hiddenSize == 0U || shape.intermediateSize == 0U ||
-        shape.intermediateSize % kGmm1BaseK != 0U) {
+        shape.gmmBlockM != kGmmBaseM || shape.gmmBlockN != kGmmBaseN || shape.gmmBlockK != kGmmBaseK ||
+        shape.hiddenSize % kGmmBaseK != 0U || shape.intermediateSize % kGmmBaseK != 0U) {
         return;
     }
     auto layout = MakeM2WorkspaceLayoutDevice(shape);
@@ -363,8 +418,7 @@ __global__ AICORE void M2Gmm2Int8(moe_dispatch_combine_a8w8::ShapeConfig shape,
     __gm__ int32_t *dispatchOffset = reinterpret_cast<__gm__ int32_t *>(workspace + layout.dispatchOffset.offset);
     __gm__ int32_t *expertTokenNums = reinterpret_cast<__gm__ int32_t *>(workspace + layout.expertTokenNums.offset);
     __gm__ int32_t *gmm2GroupReady = reinterpret_cast<__gm__ int32_t *>(workspace + layout.gmm2GroupReady.offset);
-    __gm__ int32_t *gmm2TileTaskPlan =
-        reinterpret_cast<__gm__ int32_t *>(workspace + layout.gmm2TileTaskPlan.offset);
+    __gm__ int32_t *gmm2TileTaskPlan = reinterpret_cast<__gm__ int32_t *>(workspace + layout.gmm2TileTaskPlan.offset);
     __gm__ int32_t *stageStatus = reinterpret_cast<__gm__ int32_t *>(workspace + layout.stageStatus.offset);
     uint32_t taskCount = BuildGmmTileTaskPlan(shape, dispatchOffset, expertTokenNums, gmm2TileTaskPlan,
                                               shape.hiddenSize, shape.intermediateSize, 2U);

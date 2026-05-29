@@ -22,8 +22,18 @@ constexpr uint32_t kPeerWindowHeaderBytes = 256;
 constexpr uint32_t kWarmupIters = 3;
 constexpr uint32_t kMeasureIters = 5;
 constexpr uint32_t kMaxRankNum = 64;
+constexpr uint32_t kGmmBaseM = 128;
+constexpr uint32_t kGmmBaseN = 256;
+constexpr uint32_t kGmmBaseK = 64;
+constexpr uint32_t kGmmStepK = 4;
+constexpr uint32_t kGmmL1Stages = 2;
+constexpr uint32_t kGmmL0AStages = 2;
+constexpr uint32_t kGmmL0BStages = 2;
+constexpr uint32_t kGmmL0CStages = 1;
+constexpr uint32_t kReturnTileRows = 128;
 
-enum class DType : uint32_t {
+enum class DType : uint32_t
+{
     kFp16 = 1,
     kBf16 = 2,
     kInt8 = 3,
@@ -39,9 +49,9 @@ struct ShapeConfig {
     uint32_t intermediateSize = 32;
     uint32_t maxTokensPerExpert = 64;
     uint32_t payloadTileCols = 64;
-    uint32_t gmmBlockM = 16;
-    uint32_t gmmBlockN = 16;
-    uint32_t gmmBlockK = 32;
+    uint32_t gmmBlockM = kGmmBaseM;
+    uint32_t gmmBlockN = kGmmBaseN;
+    uint32_t gmmBlockK = kGmmBaseK;
     uint32_t dtypeIn = static_cast<uint32_t>(DType::kFp16);
     uint32_t dtypeOut = static_cast<uint32_t>(DType::kFp16);
 };

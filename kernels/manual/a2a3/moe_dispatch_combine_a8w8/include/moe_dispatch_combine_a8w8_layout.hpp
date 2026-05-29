@@ -99,43 +99,58 @@ inline uint64_t CeilDiv(uint64_t value, uint64_t divisor)
     return (value + divisor - 1) / divisor;
 }
 
-inline uint64_t GmmMicroTileM()
+inline uint64_t GmmBaseM()
 {
-    return 16;
+    return kGmmBaseM;
 }
 
-inline uint64_t GmmMicroTileN()
+inline uint64_t GmmBaseN()
 {
-    return 32;
+    return kGmmBaseN;
+}
+
+inline uint64_t GmmBaseK()
+{
+    return kGmmBaseK;
+}
+
+inline uint64_t GmmStepK()
+{
+    return kGmmStepK;
+}
+
+inline uint64_t ReturnTileRows()
+{
+    return kReturnTileRows;
 }
 
 inline uint64_t ReturnHiddenChunkCols(const ShapeConfig &shape)
 {
-    return shape.gmmBlockN == 0 ? GmmMicroTileN() : shape.gmmBlockN;
+    return shape.gmmBlockN == 0 ? GmmBaseN() : shape.gmmBlockN;
 }
 
 inline uint64_t GmmTileTaskCapacity(const ShapeConfig &shape)
 {
-    uint64_t rowTiles = CeilDiv(LocalExpertRows(shape), GmmMicroTileM());
+    uint64_t rowTiles = CeilDiv(LocalExpertRows(shape), GmmBaseM());
     uint64_t w1Cols = CheckedMul(shape.intermediateSize, 2, "w1 intermediate cols");
-    uint64_t gmm1NTiles = CeilDiv(w1Cols, GmmMicroTileN());
-    uint64_t gmm2NTiles = CeilDiv(shape.hiddenSize, GmmMicroTileN());
+    uint64_t gmm1NTiles = CeilDiv(w1Cols, GmmBaseN());
+    uint64_t gmm2NTiles = CeilDiv(shape.hiddenSize, GmmBaseN());
     uint64_t nTiles = gmm1NTiles > gmm2NTiles ? gmm1NTiles : gmm2NTiles;
     return CheckedMul(CheckedMul(shape.expertPerRank, rowTiles, "gmm row tiles"), nTiles, "gmm tile cap");
 }
 
 inline uint64_t ReturnSegmentCapacity(const ShapeConfig &shape)
 {
-    uint64_t rowTiles = CeilDiv(LocalExpertRows(shape), GmmMicroTileM());
+    uint64_t rowTiles = CeilDiv(LocalExpertRows(shape), ReturnTileRows());
     uint64_t hiddenChunks = CeilDiv(shape.hiddenSize, ReturnHiddenChunkCols(shape));
-    uint64_t perExpert = CheckedMul(CheckedMul(rowTiles, hiddenChunks, "return tile chunks"), shape.rankNum,
-                                    "return owner segments");
+    uint64_t perExpert =
+        CheckedMul(CheckedMul(rowTiles, hiddenChunks, "return tile chunks"), shape.rankNum, "return owner segments");
     return CheckedMul(shape.expertPerRank, perExpert, "return segment cap");
 }
 
 inline uint64_t ReturnSegmentStagingBytes(const ShapeConfig &shape)
 {
-    return CheckedMul(CheckedMul(GmmMicroTileM(), ReturnHiddenChunkCols(shape), "return staging elems"),
+    return CheckedMul(CheckedMul(ReturnTileRows(), ReturnHiddenChunkCols(shape), "return staging elems"),
                       DTypeBytes(shape.dtypeOut), "return staging bytes");
 }
 
@@ -181,26 +196,27 @@ inline WorkspaceLayout MakeWorkspaceLayout(const ShapeConfig &shape)
     layout.scale1Uint64 = AppendField(&offset, CheckedMul(w1Cols, sizeof(uint64_t), "scale1"));
     layout.gmm1AccInt32 =
         AppendField(&offset, CheckedMul(CheckedMul(localRows, w1Cols, "gmm1 acc elems"), sizeof(int32_t), "gmm1 acc"));
-    layout.gmm1Out = AppendField(&offset, CheckedMul(localRows, CheckedMul(w1Cols, sizeof(float), "gmm1 out row"),
-                                                     "gmm1 out"));
-    layout.swigluOut = AppendField(&offset, CheckedMul(localRows, CheckedMul(shape.intermediateSize, sizeof(float),
-                                                                              "swiglu row"),
-                                                       "swiglu"));
+    layout.gmm1Out =
+        AppendField(&offset, CheckedMul(localRows, CheckedMul(w1Cols, sizeof(float), "gmm1 out row"), "gmm1 out"));
+    layout.swigluOut = AppendField(
+        &offset, CheckedMul(localRows, CheckedMul(shape.intermediateSize, sizeof(float), "swiglu row"), "swiglu"));
     layout.gmm2InputInt8 =
         AppendField(&offset, CheckedMul(localRows, AlignUp(shape.intermediateSize, kCacheLineBytes), "gmm2 input"));
     layout.gmm2PerTokenScale = AppendField(&offset, CheckedMul(localRows, sizeof(float), "gmm2 scale"));
-    layout.gmm2WeightInt8 = AppendField(&offset, CheckedMul(CheckedMul(globalExpertNum, shape.intermediateSize,
-                                                                        "w2 intermediate"),
-                                                            shape.hiddenSize, "w2"));
+    layout.gmm2WeightInt8 = AppendField(
+        &offset,
+        CheckedMul(CheckedMul(globalExpertNum, shape.intermediateSize, "w2 intermediate"), shape.hiddenSize, "w2"));
     layout.scale2Uint64 = AppendField(&offset, CheckedMul(shape.hiddenSize, sizeof(uint64_t), "scale2"));
-    layout.gmm2AccInt32 = AppendField(&offset, CheckedMul(CheckedMul(localRows, shape.hiddenSize, "gmm2 acc elems"),
-                                                          sizeof(int32_t), "gmm2 acc"));
+    layout.gmm2AccInt32 = AppendField(
+        &offset, CheckedMul(CheckedMul(localRows, shape.hiddenSize, "gmm2 acc elems"), sizeof(int32_t), "gmm2 acc"));
     layout.gmm2Out = AppendField(&offset, CheckedMul(localRows, returnRowBytes, "gmm2 out"));
     layout.returnSegmentStaging = AppendField(&offset, ReturnSegmentStagingBytes(shape));
     layout.readyCounters = AppendField(&offset, CheckedMul(16, kCacheLineBytes, "ready counters"));
-    layout.dispatchGroupReady = AppendField(&offset, CheckedMul(shape.expertPerRank, kCacheLineBytes, "dispatch ready"));
+    layout.dispatchGroupReady =
+        AppendField(&offset, CheckedMul(shape.expertPerRank, kCacheLineBytes, "dispatch ready"));
     layout.gmm1SyncGroupReady = AppendField(&offset, CheckedMul(syncGroupCap, kCacheLineBytes, "gmm1 ready"));
-    layout.activationSyncGroupReady = AppendField(&offset, CheckedMul(syncGroupCap, kCacheLineBytes, "activation ready"));
+    layout.activationSyncGroupReady =
+        AppendField(&offset, CheckedMul(syncGroupCap, kCacheLineBytes, "activation ready"));
     layout.gmm2GroupReady = AppendField(&offset, CheckedMul(shape.expertPerRank, kCacheLineBytes, "gmm2 ready"));
     layout.stageStatus = AppendField(&offset, CheckedMul(16, kCacheLineBytes, "stage status"));
     layout.swigluSyncGroups = AppendField(&offset, CheckedMul(syncGroupCap, sizeof(int32_t), "swiglu groups"));

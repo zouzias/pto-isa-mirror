@@ -67,6 +67,86 @@ size_t BytesOfU64Vector(size_t elements)
     return elements * sizeof(uint64_t);
 }
 
+std::string GmmShapeClass(const moe_dispatch_combine_a8w8::ShapeConfig &shape)
+{
+    if (shape.hiddenSize == 0U || shape.intermediateSize == 0U ||
+        shape.hiddenSize % moe_dispatch_combine_a8w8::kGmmBaseK != 0U ||
+        shape.intermediateSize % moe_dispatch_combine_a8w8::kGmmBaseK != 0U ||
+        shape.gmmBlockM != moe_dispatch_combine_a8w8::kGmmBaseM ||
+        shape.gmmBlockN != moe_dispatch_combine_a8w8::kGmmBaseN ||
+        shape.gmmBlockK != moe_dispatch_combine_a8w8::kGmmBaseK) {
+        return "unsupported";
+    }
+    if (shape.hiddenSize < moe_dispatch_combine_a8w8::kGmmBaseN ||
+        shape.intermediateSize < moe_dispatch_combine_a8w8::kGmmBaseK ||
+        shape.maxTokensPerExpert < moe_dispatch_combine_a8w8::kGmmBaseM) {
+        return "smoke_debug";
+    }
+    return "realistic_model_shape";
+}
+
+bool GmmPolicySupported(const moe_dispatch_combine_a8w8::ShapeConfig &shape)
+{
+    return GmmShapeClass(shape) != "unsupported";
+}
+
+uint64_t GmmL1ABytes()
+{
+    return static_cast<uint64_t>(moe_dispatch_combine_a8w8::kGmmL1Stages) * moe_dispatch_combine_a8w8::kGmmBaseM *
+           moe_dispatch_combine_a8w8::kGmmBaseK * moe_dispatch_combine_a8w8::kGmmStepK * sizeof(int8_t);
+}
+
+uint64_t GmmL1BBytes()
+{
+    return static_cast<uint64_t>(moe_dispatch_combine_a8w8::kGmmL1Stages) * moe_dispatch_combine_a8w8::kGmmBaseK *
+           moe_dispatch_combine_a8w8::kGmmStepK * moe_dispatch_combine_a8w8::kGmmBaseN * sizeof(int8_t);
+}
+
+uint64_t GmmL0ABytes()
+{
+    return static_cast<uint64_t>(moe_dispatch_combine_a8w8::kGmmL0AStages) * moe_dispatch_combine_a8w8::kGmmBaseM *
+           moe_dispatch_combine_a8w8::kGmmBaseK * sizeof(int8_t);
+}
+
+uint64_t GmmL0BBytes()
+{
+    return static_cast<uint64_t>(moe_dispatch_combine_a8w8::kGmmL0BStages) * moe_dispatch_combine_a8w8::kGmmBaseK *
+           moe_dispatch_combine_a8w8::kGmmBaseN * sizeof(int8_t);
+}
+
+uint64_t GmmL0CBytes()
+{
+    return static_cast<uint64_t>(moe_dispatch_combine_a8w8::kGmmL0CStages) * moe_dispatch_combine_a8w8::kGmmBaseM *
+           moe_dispatch_combine_a8w8::kGmmBaseN * sizeof(int32_t);
+}
+
+void PrintGmmPolicyReport(const moe_dispatch_combine_a8w8::ShapeConfig &shape, uint32_t expectedTaskCount,
+                          uint32_t launchBlocks)
+{
+    uint32_t activeBlocks = std::min<uint32_t>(launchBlocks, expectedTaskCount);
+    std::cout << "  gmm_tile_policy=gemm_ar_cache_level_int8\n";
+    std::cout << "  gmm_shape_class=" << GmmShapeClass(shape) << "\n";
+    std::cout << "  gmm_base_m=" << moe_dispatch_combine_a8w8::kGmmBaseM << "\n";
+    std::cout << "  gmm_base_n=" << moe_dispatch_combine_a8w8::kGmmBaseN << "\n";
+    std::cout << "  gmm_base_k=" << moe_dispatch_combine_a8w8::kGmmBaseK << "\n";
+    std::cout << "  gmm_step_k=" << moe_dispatch_combine_a8w8::kGmmStepK << "\n";
+    std::cout << "  gmm_l1_a_bytes=" << GmmL1ABytes() << "\n";
+    std::cout << "  gmm_l1_b_bytes=" << GmmL1BBytes() << "\n";
+    std::cout << "  gmm_l0a_bytes=" << GmmL0ABytes() << "\n";
+    std::cout << "  gmm_l0b_bytes=" << GmmL0BBytes() << "\n";
+    std::cout << "  gmm_l0c_bytes=" << GmmL0CBytes() << "\n";
+    std::cout << "  gmm_l1_stages=" << moe_dispatch_combine_a8w8::kGmmL1Stages << "\n";
+    std::cout << "  gmm_l0a_stages=" << moe_dispatch_combine_a8w8::kGmmL0AStages << "\n";
+    std::cout << "  gmm_l0b_stages=" << moe_dispatch_combine_a8w8::kGmmL0BStages << "\n";
+    std::cout << "  gmm_l0c_stages=" << moe_dispatch_combine_a8w8::kGmmL0CStages << "\n";
+    std::cout << "  gmm_tile_tasks=" << expectedTaskCount << "\n";
+    std::cout << "  gmm_active_aic_blocks=" << activeBlocks << "\n";
+    std::cout << "  gmm_tail_m=covered\n";
+    std::cout << "  gmm_tail_n=covered\n";
+    std::cout << "  gmm_tail_k=none\n";
+    std::cout << "  gmm_micro_tile_debug_only=false\n";
+}
+
 uint32_t GmmLaunchBlocks(const DispatchCombineTileArgs &args)
 {
     return std::max(1U, args.shape.aivBlocks);
@@ -846,6 +926,42 @@ float RoundHalfFloat(float value)
     return golden_detail::HalfToFloat(golden_detail::FloatToHalf(value));
 }
 
+uint16_t FloatToHalfNearestBits(float value)
+{
+    union {
+        float f;
+        uint32_t u;
+    } bits{};
+    bits.f = value;
+    uint32_t sign = (bits.u >> 16) & 0x8000U;
+    int32_t exp = static_cast<int32_t>((bits.u >> 23) & 0xFFU) - 127 + 15;
+    uint32_t mant = bits.u & 0x007FFFFFU;
+    if (exp <= 0) {
+        return static_cast<uint16_t>(sign);
+    }
+    if (exp >= 31) {
+        return static_cast<uint16_t>(sign | 0x7C00U);
+    }
+    uint32_t halfMant = mant >> 13;
+    uint32_t roundBits = mant & 0x1FFFU;
+    if (roundBits > 0x1000U || (roundBits == 0x1000U && (halfMant & 1U) != 0U)) {
+        ++halfMant;
+        if (halfMant == 0x400U) {
+            halfMant = 0;
+            ++exp;
+            if (exp >= 31) {
+                return static_cast<uint16_t>(sign | 0x7C00U);
+            }
+        }
+    }
+    return static_cast<uint16_t>(sign | (static_cast<uint32_t>(exp) << 10) | halfMant);
+}
+
+float RoundHalfNearestFloat(float value)
+{
+    return golden_detail::HalfToFloat(FloatToHalfNearestBits(value));
+}
+
 float CopyM2ReturnPayloadValue(const DispatchCombineTileArgs &args, RuntimeState *state, uint32_t row, uint32_t col)
 {
     moe_dispatch_combine_a8w8::ShapeConfig m2Shape = MakeM2ShapeConfig(args);
@@ -872,9 +988,8 @@ std::vector<float> CopyM2ReturnPayloadToHost(const DispatchCombineTileArgs &args
     size_t returnStrideElems = peerWindowLayout.returnPayloadRowBytes / sizeof(uint16_t);
     auto *peerBase = reinterpret_cast<uint8_t *>(state->hccl.peerWindow);
     std::vector<uint16_t> raw(expandedRows * returnStrideElems, 0);
-    CheckAcl(aclrtMemcpy(raw.data(), BytesOfHalfVector(raw.size()),
-                         peerBase + peerWindowLayout.returnPayload.offset, peerWindowLayout.returnPayload.bytes,
-                         ACL_MEMCPY_DEVICE_TO_HOST),
+    CheckAcl(aclrtMemcpy(raw.data(), BytesOfHalfVector(raw.size()), peerBase + peerWindowLayout.returnPayload.offset,
+                         peerWindowLayout.returnPayload.bytes, ACL_MEMCPY_DEVICE_TO_HOST),
              "rank " + std::to_string(state->rank) + " copy m2 return payload");
     std::vector<float> payload(expandedRows * shape.k, 0.0f);
     for (uint32_t row = 0; row < expandedRows; ++row) {
@@ -898,19 +1013,21 @@ std::vector<float> BuildM2RestoreExpectedFromPayload(const DispatchCombineTileAr
             if (ptrDRow < 0) {
                 continue;
             }
-            float prob = state->inputs.probs[routeIndex];
+            float prob = RoundHalfNearestFloat(state->inputs.probs[routeIndex]);
             for (uint32_t col = 0; col < shape.k; ++col) {
-                output[static_cast<size_t>(token) * shape.k + col] +=
-                    prob * returnPayload[static_cast<size_t>(ptrDRow) * shape.k + col];
+                size_t outIndex = static_cast<size_t>(token) * shape.k + col;
+                float product =
+                    RoundHalfNearestFloat(prob * returnPayload[static_cast<size_t>(ptrDRow) * shape.k + col]);
+                output[outIndex] = RoundHalfNearestFloat(output[outIndex] + product);
             }
         }
     }
-    return HalfBitsToFloatVector(FloatVectorToHalfBits(output));
+    return output;
 }
 
 void PrintM2OutputMismatchDetail(const DispatchCombineTileArgs &args, RuntimeState *state,
-                                 const std::vector<float> &actualOutputC,
-                                 const std::vector<float> &expectedOutputC, uint64_t firstMismatchIndex)
+                                 const std::vector<float> &actualOutputC, const std::vector<float> &expectedOutputC,
+                                 uint64_t firstMismatchIndex)
 {
     const DispatchCombineTileShape &shape = args.shape;
     if (shape.k == 0 || firstMismatchIndex >= actualOutputC.size() || firstMismatchIndex >= expectedOutputC.size()) {
@@ -949,22 +1066,17 @@ void PrintM2OutputMismatchDetail(const DispatchCombineTileArgs &args, RuntimeSta
         stepHalfProductAcc = RoundHalfFloat(stepHalfProductAcc + RoundHalfFloat(halfProb * ptrD));
         actualPayloadFloatAcc += prob * actualPtrD;
         actualPayloadStepHalfProbAcc = RoundHalfFloat(actualPayloadStepHalfProbAcc + halfProb * actualPtrD);
-        std::cout << "  slot=" << slot << " routeIndex=" << routeIndex << " ptrDRow=" << ptrDRow
-                  << " prob=" << prob << " halfProb=" << halfProb << " ptrD=" << ptrD
-                  << " actualPtrD=" << actualPtrD << " ptrDDiff=" << (actualPtrD - ptrD)
-                  << " floatAcc=" << floatAcc << " stepFloatProbAcc=" << stepFloatProbAcc
-                  << " stepHalfProbAcc=" << stepHalfProbAcc
-                  << " stepHalfProductAcc=" << stepHalfProductAcc
-                  << " actualPayloadFloatAcc=" << actualPayloadFloatAcc
+        std::cout << "  slot=" << slot << " routeIndex=" << routeIndex << " ptrDRow=" << ptrDRow << " prob=" << prob
+                  << " halfProb=" << halfProb << " ptrD=" << ptrD << " actualPtrD=" << actualPtrD
+                  << " ptrDDiff=" << (actualPtrD - ptrD) << " floatAcc=" << floatAcc
+                  << " stepFloatProbAcc=" << stepFloatProbAcc << " stepHalfProbAcc=" << stepHalfProbAcc
+                  << " stepHalfProductAcc=" << stepHalfProductAcc << " actualPayloadFloatAcc=" << actualPayloadFloatAcc
                   << " actualPayloadStepHalfProbAcc=" << actualPayloadStepHalfProbAcc << "\n";
     }
-    std::cout << "  finalRoundedFloatAcc=" << RoundHalfFloat(floatAcc)
-              << " finalStepFloatProbAcc=" << stepFloatProbAcc
-              << " finalStepHalfProbAcc=" << stepHalfProbAcc
-              << " finalStepHalfProductAcc=" << stepHalfProductAcc
+    std::cout << "  finalRoundedFloatAcc=" << RoundHalfFloat(floatAcc) << " finalStepFloatProbAcc=" << stepFloatProbAcc
+              << " finalStepHalfProbAcc=" << stepHalfProbAcc << " finalStepHalfProductAcc=" << stepHalfProductAcc
               << " finalActualPayloadRoundedFloatAcc=" << RoundHalfFloat(actualPayloadFloatAcc)
-              << " finalActualPayloadStepHalfProbAcc=" << actualPayloadStepHalfProbAcc << std::setprecision(1)
-              << "\n";
+              << " finalActualPayloadStepHalfProbAcc=" << actualPayloadStepHalfProbAcc << std::setprecision(1) << "\n";
 }
 
 uint64_t CompareI32Buffer(const std::string &name, const std::vector<int32_t> &actual,
@@ -1074,6 +1186,8 @@ struct M2DispatchDump {
     std::vector<int32_t> scoreboardTaskMap;
     std::vector<int32_t> producerStatus;
     std::vector<int32_t> scoreboardMinStatus;
+    std::vector<int32_t> workerWaitCounters;
+    std::vector<int32_t> scoreboardTimeoutCounters;
     std::vector<int8_t> dispatchPayload;
     std::vector<float> dispatchScale;
     std::vector<int8_t> gmm1InputInt8;
@@ -1129,7 +1243,9 @@ void BuildExpectedM2Prefix(const DispatchCombineTileArgs &args, const std::vecto
 void BuildExpectedM2Scoreboard(const DispatchCombineTileArgs &args, const std::vector<int32_t> &tokenMatrix,
                                const std::vector<int32_t> &preSum, const std::vector<int32_t> &expertTokenNums,
                                uint32_t expertOwnerRank, std::vector<int32_t> *taskMap,
-                               std::vector<int32_t> *producerStatus, std::vector<int32_t> *scoreboardMinStatus)
+                               std::vector<int32_t> *producerStatus, std::vector<int32_t> *scoreboardMinStatus,
+                               std::vector<int32_t> *workerWaitCounters,
+                               std::vector<int32_t> *scoreboardTimeoutCounters)
 {
     const DispatchCombineTileShape &shape = args.shape;
     size_t rowStride =
@@ -1138,10 +1254,15 @@ void BuildExpectedM2Scoreboard(const DispatchCombineTileArgs &args, const std::v
     taskMap->assign(static_cast<size_t>(rankExpertCount) * 4U, 0);
     producerStatus->assign(static_cast<size_t>(rankExpertCount) * 16U, 0);
     scoreboardMinStatus->assign(static_cast<size_t>(rankExpertCount) * 16U, 0);
+    workerWaitCounters->assign(static_cast<size_t>(rankExpertCount) * 16U, 0);
+    scoreboardTimeoutCounters->assign(static_cast<size_t>(rankExpertCount) * 16U, 0);
 
     int32_t dispatchOffset = 0;
     for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
         int32_t expertOffset = dispatchOffset;
+        int32_t activeSegments = 0;
+        int32_t skippedSegments = 0;
+        int32_t rowsTotal = 0;
         for (uint32_t tokenOwner = 0; tokenOwner < shape.ep; ++tokenOwner) {
             size_t matrixIndex = static_cast<size_t>(tokenOwner) * rowStride +
                                  static_cast<size_t>(expertOwnerRank) * shape.expertPerRank + localExpert;
@@ -1156,8 +1277,45 @@ void BuildExpectedM2Scoreboard(const DispatchCombineTileArgs &args, const std::v
             (*taskMap)[mapBase + 3U] = rows;
             int32_t finalStatus = rows > 0 ? kM2ScoreboardStatusCopyDone : kM2ScoreboardStatusSkipDone;
             (*producerStatus)[static_cast<size_t>(taskId) * 16U] = finalStatus;
-            (*scoreboardMinStatus)[static_cast<size_t>(taskId) * 16U] = finalStatus;
+            if (rows > 0) {
+                ++activeSegments;
+                rowsTotal += rows;
+            } else {
+                ++skippedSegments;
+            }
         }
+        size_t domainBase = static_cast<size_t>(localExpert) * 16U;
+        int32_t domainStatus = activeSegments == 0 ? kM2ScoreboardStatusSkipDone : kM2ScoreboardStatusCopyDone;
+        (*scoreboardMinStatus)[domainBase + 0U] = domainStatus;
+        (*scoreboardMinStatus)[domainBase + 1U] = 1;
+        (*scoreboardMinStatus)[domainBase + 2U] = static_cast<int32_t>(localExpert);
+        (*scoreboardMinStatus)[domainBase + 3U] = static_cast<int32_t>(localExpert);
+        (*scoreboardMinStatus)[domainBase + 4U] = static_cast<int32_t>(shape.expertPerRank);
+        (*scoreboardMinStatus)[domainBase + 5U] = static_cast<int32_t>(shape.ep);
+        (*scoreboardMinStatus)[domainBase + 6U] = rowsTotal;
+        (*scoreboardMinStatus)[domainBase + 7U] = activeSegments;
+        (*scoreboardMinStatus)[domainBase + 8U] = skippedSegments;
+        (*scoreboardMinStatus)[domainBase + 9U] = activeSegments;
+        (*scoreboardMinStatus)[domainBase + 10U] = activeSegments + skippedSegments;
+        (*scoreboardMinStatus)[domainBase + 11U] = static_cast<int32_t>(localExpert);
+        (*scoreboardMinStatus)[domainBase + 12U] =
+            static_cast<int32_t>((shape.ep - 1U) * shape.expertPerRank + localExpert);
+        (*scoreboardMinStatus)[domainBase + 13U] = skippedSegments;
+        (*scoreboardMinStatus)[domainBase + 14U] = 0;
+        (*scoreboardMinStatus)[domainBase + 15U] = 1;
+
+        (*workerWaitCounters)[domainBase + 0U] = 1;
+        (*workerWaitCounters)[domainBase + 1U] = static_cast<int32_t>(localExpert);
+        (*workerWaitCounters)[domainBase + 2U] = static_cast<int32_t>(shape.ep);
+        (*workerWaitCounters)[domainBase + 3U] = activeSegments;
+        (*workerWaitCounters)[domainBase + 4U] = activeSegments;
+        (*workerWaitCounters)[domainBase + 5U] = skippedSegments;
+        (*workerWaitCounters)[domainBase + 6U] = rowsTotal;
+        (*workerWaitCounters)[domainBase + 7U] = static_cast<int32_t>(localExpert);
+        (*workerWaitCounters)[domainBase + 8U] = static_cast<int32_t>(shape.expertPerRank);
+        (*workerWaitCounters)[domainBase + 9U] = domainStatus;
+        (*workerWaitCounters)[domainBase + 13U] = 1;
+        (*workerWaitCounters)[domainBase + 14U] = 1;
         dispatchOffset += expertTokenNums[localExpert];
     }
 }
@@ -1221,6 +1379,8 @@ void CopyM2DispatchToHost(const DispatchCombineTileArgs &args,
     dump->scoreboardTaskMap.assign(static_cast<size_t>(rankExpertCount) * 4U, 0);
     dump->producerStatus.assign(static_cast<size_t>(rankExpertCount) * 16U, 0);
     dump->scoreboardMinStatus.assign(static_cast<size_t>(rankExpertCount) * 16U, 0);
+    dump->workerWaitCounters.assign(static_cast<size_t>(rankExpertCount) * 16U, 0);
+    dump->scoreboardTimeoutCounters.assign(static_cast<size_t>(rankExpertCount) * 16U, 0);
     dump->dispatchPayload.assign(static_cast<size_t>(expandedRows) * rowBytes, 0);
     dump->dispatchScale.assign(expandedRows, 0.0f);
     dump->gmm1InputInt8.assign(static_cast<size_t>(localRows) * rowBytes, 0);
@@ -1270,6 +1430,15 @@ void CopyM2DispatchToHost(const DispatchCombineTileArgs &args,
                          workspaceBase + workspaceLayout.scoreboardMinStatus.offset,
                          BytesOfI32Vector(dump->scoreboardMinStatus.size()), ACL_MEMCPY_DEVICE_TO_HOST),
              "rank " + std::to_string(state->rank) + " copy m2 scoreboardMinStatus");
+    CheckAcl(aclrtMemcpy(dump->workerWaitCounters.data(), BytesOfI32Vector(dump->workerWaitCounters.size()),
+                         workspaceBase + workspaceLayout.workerWaitCounters.offset,
+                         BytesOfI32Vector(dump->workerWaitCounters.size()), ACL_MEMCPY_DEVICE_TO_HOST),
+             "rank " + std::to_string(state->rank) + " copy m2 workerWaitCounters");
+    CheckAcl(
+        aclrtMemcpy(dump->scoreboardTimeoutCounters.data(), BytesOfI32Vector(dump->scoreboardTimeoutCounters.size()),
+                    workspaceBase + workspaceLayout.scoreboardTimeoutCounters.offset,
+                    BytesOfI32Vector(dump->scoreboardTimeoutCounters.size()), ACL_MEMCPY_DEVICE_TO_HOST),
+        "rank " + std::to_string(state->rank) + " copy m2 scoreboardTimeoutCounters");
     CheckAcl(aclrtMemcpy(dump->gmm1InputInt8.data(), BytesOfI8Vector(dump->gmm1InputInt8.size()),
                          workspaceBase + workspaceLayout.gmm1InputInt8.offset,
                          BytesOfI8Vector(dump->gmm1InputInt8.size()), ACL_MEMCPY_DEVICE_TO_HOST),
@@ -1295,8 +1464,11 @@ uint64_t VerifyM2Dispatch(const DispatchCombineTileArgs &args,
     std::vector<int32_t> expectedScoreboardTaskMap;
     std::vector<int32_t> expectedProducerStatus;
     std::vector<int32_t> expectedScoreboardMinStatus;
+    std::vector<int32_t> expectedWorkerWaitCounters;
+    std::vector<int32_t> expectedScoreboardTimeoutCounters;
     BuildExpectedM2Scoreboard(args, expectedTokenMatrix, expectedPreSum, expectedExpertTokenNums, state->rank,
-                              &expectedScoreboardTaskMap, &expectedProducerStatus, &expectedScoreboardMinStatus);
+                              &expectedScoreboardTaskMap, &expectedProducerStatus, &expectedScoreboardMinStatus,
+                              &expectedWorkerWaitCounters, &expectedScoreboardTimeoutCounters);
     std::vector<int8_t> expectedDispatchPayload;
     std::vector<float> expectedDispatchScale;
     BuildExpectedLocalDispatchQuant(args, state->golden, rowBytes, &expectedDispatchPayload, &expectedDispatchScale);
@@ -1311,10 +1483,13 @@ uint64_t VerifyM2Dispatch(const DispatchCombineTileArgs &args,
     mismatches += CompareI32Buffer("m2.expertTokenNums", dump.expertTokenNums, expectedExpertTokenNums, state->rank);
     mismatches +=
         CompareI32Buffer("m2.scoreboardTaskMap", dump.scoreboardTaskMap, expectedScoreboardTaskMap, state->rank);
+    mismatches += CompareI32Buffer("m2.producerStatus", dump.producerStatus, expectedProducerStatus, state->rank);
     mismatches +=
-        CompareI32Buffer("m2.producerStatus", dump.producerStatus, expectedProducerStatus, state->rank);
-    mismatches += CompareI32Buffer("m2.scoreboardMinStatus", dump.scoreboardMinStatus, expectedScoreboardMinStatus,
-                                   state->rank);
+        CompareI32Buffer("m2.scoreboardMinStatus", dump.scoreboardMinStatus, expectedScoreboardMinStatus, state->rank);
+    mismatches +=
+        CompareI32Buffer("m2.workerWaitCounters", dump.workerWaitCounters, expectedWorkerWaitCounters, state->rank);
+    mismatches += CompareI32Buffer("m2.scoreboardTimeoutCounters", dump.scoreboardTimeoutCounters,
+                                   expectedScoreboardTimeoutCounters, state->rank);
     mismatches += CompareI8Buffer("m2.dispatchPayloadInt8", dump.dispatchPayload, expectedDispatchPayload, state->rank);
     mismatches += CompareFloatBuffer(args, "m2.dispatchScale", dump.dispatchScale, expectedDispatchScale, state->rank);
     mismatches += CompareI8Buffer("m2.gmm1InputInt8", dump.gmm1InputInt8, expectedGmm1Input, state->rank);
@@ -1348,8 +1523,8 @@ struct M2GmmTaskDump {
     std::vector<int32_t> tileTaskPlan;
 };
 
-M2GmmTaskDump CopyM2GmmTaskDump(const moe_dispatch_combine_a8w8::WorkspaceLayout &workspaceLayout,
-                                RuntimeState *state, bool gmm2)
+M2GmmTaskDump CopyM2GmmTaskDump(const moe_dispatch_combine_a8w8::WorkspaceLayout &workspaceLayout, RuntimeState *state,
+                                bool gmm2)
 {
     M2GmmTaskDump dump;
     auto *workspaceBase = reinterpret_cast<uint8_t *>(state->buffers.workspace);
@@ -1360,10 +1535,10 @@ M2GmmTaskDump CopyM2GmmTaskDump(const moe_dispatch_combine_a8w8::WorkspaceLayout
                          workspaceBase + workspaceLayout.stageStatus.offset, workspaceLayout.stageStatus.bytes,
                          ACL_MEMCPY_DEVICE_TO_HOST),
              "rank " + std::to_string(state->rank) + " copy m2 stageStatus");
-    CheckAcl(aclrtMemcpy(dump.tileTaskPlan.data(), BytesOfI32Vector(dump.tileTaskPlan.size()),
-                         workspaceBase + field.offset, field.bytes, ACL_MEMCPY_DEVICE_TO_HOST),
-             "rank " + std::to_string(state->rank) + (gmm2 ? " copy m2 gmm2TileTaskPlan" :
-                                                               " copy m2 gmm1TileTaskPlan"));
+    CheckAcl(
+        aclrtMemcpy(dump.tileTaskPlan.data(), BytesOfI32Vector(dump.tileTaskPlan.size()), workspaceBase + field.offset,
+                    field.bytes, ACL_MEMCPY_DEVICE_TO_HOST),
+        "rank " + std::to_string(state->rank) + (gmm2 ? " copy m2 gmm2TileTaskPlan" : " copy m2 gmm1TileTaskPlan"));
     return dump;
 }
 
@@ -1387,10 +1562,10 @@ std::vector<int32_t> BuildExpectedM2GmmTileTasks(const DispatchCombineTileArgs &
             rowCount += static_cast<uint32_t>(
                 state->golden.peerTokenPerExpert[static_cast<size_t>(tokenOwner) * expertNumPadded + globalExpert]);
         }
-        for (uint32_t rowOffset = 0; rowOffset < rowCount; rowOffset += moe_dispatch_combine_a8w8::GmmMicroTileM()) {
-            uint32_t rows = std::min<uint32_t>(rowCount - rowOffset, moe_dispatch_combine_a8w8::GmmMicroTileM());
-            for (uint32_t nBase = 0; nBase < nCols; nBase += moe_dispatch_combine_a8w8::GmmMicroTileN()) {
-                uint32_t cols = std::min<uint32_t>(nCols - nBase, moe_dispatch_combine_a8w8::GmmMicroTileN());
+        for (uint32_t rowOffset = 0; rowOffset < rowCount; rowOffset += moe_dispatch_combine_a8w8::kGmmBaseM) {
+            uint32_t rows = std::min<uint32_t>(rowCount - rowOffset, moe_dispatch_combine_a8w8::kGmmBaseM);
+            for (uint32_t nBase = 0; nBase < nCols; nBase += moe_dispatch_combine_a8w8::kGmmBaseN) {
+                uint32_t cols = std::min<uint32_t>(nCols - nBase, moe_dispatch_combine_a8w8::kGmmBaseN);
                 if (id < capacity) {
                     size_t base = static_cast<size_t>(id) * 8U;
                     expected[base + 0U] = static_cast<int32_t>(id);
@@ -1570,9 +1745,9 @@ std::vector<int32_t> BuildExpectedSwigluGroupDesc(const DispatchCombineTileArgs 
             rowPrefix += static_cast<int32_t>(rowEnd - rowStart);
         }
         uint32_t tileBegin = tilePrefix;
-        uint32_t tileEnd = tileBegin + static_cast<uint32_t>(moe_dispatch_combine_a8w8::CeilDiv(
-                                           static_cast<uint64_t>(rowPrefix - rowBegin),
-                                           moe_dispatch_combine_a8w8::GmmMicroTileM()));
+        uint32_t tileEnd =
+            tileBegin + static_cast<uint32_t>(moe_dispatch_combine_a8w8::CeilDiv(
+                            static_cast<uint64_t>(rowPrefix - rowBegin), moe_dispatch_combine_a8w8::GmmBaseM()));
         size_t base = groupId * 8U;
         expected[base + 0U] = static_cast<int32_t>(groupId);
         expected[base + 1U] = static_cast<int32_t>(expert);
@@ -1690,14 +1865,14 @@ uint64_t VerifyM2ActivationQuant(const DispatchCombineTileArgs &args, RuntimeSta
     mismatches += CompareI32Buffer("m2.swigluSyncGroups", dump.swigluSyncGroups, expectedGroups, state->rank);
     mismatches += CompareI32Buffer("m2.dequantSum", dump.dequantSum, expectedDequantSum, state->rank);
     mismatches += CompareI32Buffer("m2.swigluGroupDesc", dump.swigluGroupDesc, expectedGroupDesc, state->rank);
-    mismatches += CompareI32Buffer("m2.gmm2TileTaskPlan.preview", dump.gmm2TileTaskPlan, expectedGmm2Tasks,
-                                   state->rank);
+    mismatches +=
+        CompareI32Buffer("m2.gmm2TileTaskPlan.preview", dump.gmm2TileTaskPlan, expectedGmm2Tasks, state->rank);
     if (dump.stageStatus.size() > 3U * 16U) {
         std::vector<int32_t> actualCounts{dump.stageStatus[2U * 16U], dump.stageStatus[3U * 16U]};
         std::vector<int32_t> expectedCounts{expectedGroups.empty() ? 0 : expectedGroups[0],
                                             static_cast<int32_t>(expectedGmm2TaskCount)};
-        mismatches += CompareI32Buffer("m2.swigluGroupAndGmm2PreviewCounters", actualCounts, expectedCounts,
-                                       state->rank);
+        mismatches +=
+            CompareI32Buffer("m2.swigluGroupAndGmm2PreviewCounters", actualCounts, expectedCounts, state->rank);
     }
     return mismatches;
 }
@@ -1737,8 +1912,8 @@ std::vector<int32_t> BuildExpectedM2ReturnSegmentCounters(const DispatchCombineT
     const DispatchCombineTileShape &shape = args.shape;
     size_t expertNumPadded = ExpertNumPadded(shape);
     std::vector<int32_t> expected(static_cast<size_t>(shape.ep) * shape.expertPerRank, 0);
-    uint32_t tileRows = shape.gmmBlockM == 0 ? static_cast<uint32_t>(moe_dispatch_combine_a8w8::GmmMicroTileM()) :
-                                               shape.gmmBlockM;
+    uint32_t tileRows =
+        shape.gmmBlockM == 0 ? static_cast<uint32_t>(moe_dispatch_combine_a8w8::ReturnTileRows()) : shape.gmmBlockM;
     uint32_t hiddenChunks = static_cast<uint32_t>(moe_dispatch_combine_a8w8::CeilDiv(
         shape.k, moe_dispatch_combine_a8w8::ReturnHiddenChunkCols(MakeM2ShapeConfig(args))));
     for (uint32_t expertOwner = 0; expertOwner < shape.ep; ++expertOwner) {
@@ -1753,14 +1928,15 @@ std::vector<int32_t> BuildExpectedM2ReturnSegmentCounters(const DispatchCombineT
             for (uint32_t prevLocalExpert = 0; prevLocalExpert < localExpert; ++prevLocalExpert) {
                 uint32_t prevGlobalExpert = expertOwner * shape.expertPerRank + prevLocalExpert;
                 for (uint32_t tokenOwner = 0; tokenOwner < shape.ep; ++tokenOwner) {
-                    rowBegin += state->golden.peerTokenPerExpert[static_cast<size_t>(tokenOwner) * expertNumPadded +
-                                                                 prevGlobalExpert];
+                    rowBegin +=
+                        state->golden
+                            .peerTokenPerExpert[static_cast<size_t>(tokenOwner) * expertNumPadded + prevGlobalExpert];
                 }
             }
             int32_t ownerPrefix = 0;
             for (uint32_t tokenOwner = 0; tokenOwner < static_cast<uint32_t>(state->rank); ++tokenOwner) {
-                ownerPrefix += state->golden.peerTokenPerExpert[static_cast<size_t>(tokenOwner) * expertNumPadded +
-                                                                globalExpert];
+                ownerPrefix +=
+                    state->golden.peerTokenPerExpert[static_cast<size_t>(tokenOwner) * expertNumPadded + globalExpert];
             }
             int32_t ownerStart = rowBegin + ownerPrefix;
             int32_t ownerEnd = ownerStart + ownerRows;
@@ -1821,9 +1997,9 @@ struct M2IncomingSegmentDebug {
 };
 
 M2IncomingSegmentDebug FindExpectedM2IncomingReturnSegment(const DispatchCombineTileArgs &args, RuntimeState *state,
-                                                          const M2CombineReturnDump &dump,
-                                                          const std::vector<int32_t> &expectedCounters, uint32_t row,
-                                                          uint32_t col)
+                                                           const M2CombineReturnDump &dump,
+                                                           const std::vector<int32_t> &expectedCounters, uint32_t row,
+                                                           uint32_t col)
 {
     const DispatchCombineTileShape &shape = args.shape;
     size_t expertNumPadded = ExpertNumPadded(shape);
@@ -1844,7 +2020,7 @@ M2IncomingSegmentDebug FindExpectedM2IncomingReturnSegment(const DispatchCombine
     uint32_t senderRank = globalExpert / shape.expertPerRank;
     uint32_t localExpert = globalExpert % shape.expertPerRank;
     moe_dispatch_combine_a8w8::ShapeConfig m2Shape = MakeM2ShapeConfig(args);
-    int32_t tileRows = shape.gmmBlockM == 0 ? static_cast<int32_t>(moe_dispatch_combine_a8w8::GmmMicroTileM()) :
+    int32_t tileRows = shape.gmmBlockM == 0 ? static_cast<int32_t>(moe_dispatch_combine_a8w8::ReturnTileRows()) :
                                               static_cast<int32_t>(shape.gmmBlockM);
     uint32_t hiddenChunk = static_cast<uint32_t>(moe_dispatch_combine_a8w8::ReturnHiddenChunkCols(m2Shape));
     int32_t targetHiddenBegin = static_cast<int32_t>((col / hiddenChunk) * hiddenChunk);
@@ -1877,8 +2053,7 @@ M2IncomingSegmentDebug FindExpectedM2IncomingReturnSegment(const DispatchCombine
             for (uint32_t hiddenBegin = 0; hiddenBegin < shape.k; hiddenBegin += hiddenChunk) {
                 uint32_t hiddenCount = std::min<uint32_t>(shape.k - hiddenBegin, hiddenChunk);
                 for (uint32_t tokenOwner = 0; tokenOwner < shape.ep; ++tokenOwner) {
-                    int32_t ownerRows =
-                        M2GoldenTokenRows(shape, state, expertNumPadded, tokenOwner, loopGlobalExpert);
+                    int32_t ownerRows = M2GoldenTokenRows(shape, state, expertNumPadded, tokenOwner, loopGlobalExpert);
                     if (ownerRows <= 0) {
                         continue;
                     }
@@ -1907,9 +2082,9 @@ M2IncomingSegmentDebug FindExpectedM2IncomingReturnSegment(const DispatchCombine
                         trace.dstStart = rowBase + segmentStart - ownerStart;
                         trace.hiddenBegin = static_cast<int32_t>(hiddenBegin);
                         trace.hiddenCount = static_cast<int32_t>(hiddenCount);
-                        trace.actualCounter =
-                            counterIndex < dump.returnSegmentCounters.size() ? dump.returnSegmentCounters[counterIndex] :
-                                                                               0;
+                        trace.actualCounter = counterIndex < dump.returnSegmentCounters.size() ?
+                                                  dump.returnSegmentCounters[counterIndex] :
+                                                  0;
                         trace.expectedCounter =
                             counterIndex < expectedCounters.size() ? expectedCounters[counterIndex] : 0;
                         return trace;
@@ -1941,8 +2116,7 @@ void PrintM2ReturnSendTrace(const DispatchCombineTileArgs &args, RuntimeState *s
                 continue;
             }
             std::cout << "rank=" << state->rank << " return_send_trace"
-                      << " receiver=" << receiverRank << " localExpert=" << localExpert
-                      << " count=" << count
+                      << " receiver=" << receiverRank << " localExpert=" << localExpert << " count=" << count
                       << " firstSegment=" << M2DebugCounterAt(dump.debugCounters, traceSlot + 1U)
                       << " firstTile=" << M2DebugCounterAt(dump.debugCounters, traceSlot + 2U)
                       << " firstSrcStart=" << M2DebugCounterAt(dump.debugCounters, traceSlot + 3U)
@@ -1978,7 +2152,8 @@ M2ReturnMapExpected BuildExpectedM2ReturnMap(const DispatchCombineTileArgs &args
 {
     const DispatchCombineTileShape &shape = args.shape;
     size_t expertNumPadded = ExpertNumPadded(shape);
-    uint32_t tileRows = shape.gmmBlockM == 0 ? 16U : shape.gmmBlockM;
+    uint32_t tileRows =
+        shape.gmmBlockM == 0 ? static_cast<uint32_t>(moe_dispatch_combine_a8w8::ReturnTileRows()) : shape.gmmBlockM;
     moe_dispatch_combine_a8w8::ShapeConfig m2Shape = MakeM2ShapeConfig(args);
     uint32_t hiddenChunk = static_cast<uint32_t>(moe_dispatch_combine_a8w8::ReturnHiddenChunkCols(m2Shape));
     size_t capacity = moe_dispatch_combine_a8w8::ReturnSegmentCapacity(m2Shape);
@@ -2008,8 +2183,9 @@ M2ReturnMapExpected BuildExpectedM2ReturnMap(const DispatchCombineTileArgs &args
                 int32_t firstSegment = expected.segmentCount;
                 int32_t tileSegmentCount = 0;
                 for (uint32_t tokenOwner = 0; tokenOwner < shape.ep; ++tokenOwner) {
-                    int32_t ownerRows = state->golden
-                        .peerTokenPerExpert[static_cast<size_t>(tokenOwner) * expertNumPadded + globalExpert];
+                    int32_t ownerRows =
+                        state->golden
+                            .peerTokenPerExpert[static_cast<size_t>(tokenOwner) * expertNumPadded + globalExpert];
                     if (ownerRows <= 0) {
                         continue;
                     }
@@ -2156,14 +2332,12 @@ uint64_t VerifyM2Gmm2EpilogueReturn(const DispatchCombineTileArgs &args,
                                    expectedMap.subTileOwnerSegments, state->rank);
     mismatches += CompareI32Buffer("m2.subTileReady", dump.subTileReady, expectedMap.subTileReady, state->rank);
     if (ptrDMismatches != 0 || counterMismatches != 0) {
-        WriteBinaryFile(RankBinaryFile(args, state->rank, "actual_m2_returnPayload"),
-                        FloatVectorToHalfBits(dump.ptrD));
+        WriteBinaryFile(RankBinaryFile(args, state->rank, "actual_m2_returnPayload"), FloatVectorToHalfBits(dump.ptrD));
         WriteBinaryFile(RankBinaryFile(args, state->rank, "expected_m2_returnPayload"),
                         FloatVectorToHalfBits(state->m2Reference.ptrD));
         WriteBinaryFile(RankBinaryFile(args, state->rank, "actual_m2_returnSegmentCounters"),
                         dump.returnSegmentCounters);
-        WriteBinaryFile(RankBinaryFile(args, state->rank, "expected_m2_returnSegmentCounters"),
-                        expectedCounters);
+        WriteBinaryFile(RankBinaryFile(args, state->rank, "expected_m2_returnSegmentCounters"), expectedCounters);
         const DispatchCombineTileShape &shape = args.shape;
         size_t expertNumPadded = ExpertNumPadded(shape);
         uint32_t printed = 0;
@@ -2180,8 +2354,8 @@ uint64_t VerifyM2Gmm2EpilogueReturn(const DispatchCombineTileArgs &args,
             uint32_t globalExpert = 0;
             int32_t rowBase = 0;
             for (; globalExpert < shape.expertNum; ++globalExpert) {
-                int32_t rows = state->golden.peerTokenPerExpert[static_cast<size_t>(state->rank) * expertNumPadded +
-                                                                globalExpert];
+                int32_t rows =
+                    state->golden.peerTokenPerExpert[static_cast<size_t>(state->rank) * expertNumPadded + globalExpert];
                 if (static_cast<int32_t>(row) < rowBase + rows) {
                     break;
                 }
@@ -2193,16 +2367,14 @@ uint64_t VerifyM2Gmm2EpilogueReturn(const DispatchCombineTileArgs &args,
                 FindExpectedM2IncomingReturnSegment(args, state, dump, expectedCounters, row, col);
             std::cout << "rank=" << state->rank << " m2_return_mismatch_detail"
                       << " row=" << row << " col=" << col << " globalExpert=" << globalExpert
-                      << " expertOwner=" << expertOwner << " localExpert=" << localExpert
-                      << " rowBase=" << rowBase << " actual=" << actual << " expected=" << expected;
+                      << " expertOwner=" << expertOwner << " localExpert=" << localExpert << " rowBase=" << rowBase
+                      << " actual=" << actual << " expected=" << expected;
             if (incoming.valid) {
-                std::cout << " expectedSender=" << incoming.senderRank
-                          << " expectedSegment=" << incoming.segmentId << " expectedTile=" << incoming.tileId
-                          << " senderRow=" << incoming.senderRow
-                          << " segmentStart=" << incoming.segmentStart
-                          << " segmentRows=" << incoming.segmentRows << " dstStart=" << incoming.dstStart
-                          << " hiddenBegin=" << incoming.hiddenBegin << " hiddenCount=" << incoming.hiddenCount
-                          << " actualCounter=" << incoming.actualCounter
+                std::cout << " expectedSender=" << incoming.senderRank << " expectedSegment=" << incoming.segmentId
+                          << " expectedTile=" << incoming.tileId << " senderRow=" << incoming.senderRow
+                          << " segmentStart=" << incoming.segmentStart << " segmentRows=" << incoming.segmentRows
+                          << " dstStart=" << incoming.dstStart << " hiddenBegin=" << incoming.hiddenBegin
+                          << " hiddenCount=" << incoming.hiddenCount << " actualCounter=" << incoming.actualCounter
                           << " expectedCounter=" << incoming.expectedCounter;
             }
             std::cout << "\n";
@@ -2216,8 +2388,7 @@ uint64_t VerifyM2Gmm2EpilogueReturn(const DispatchCombineTileArgs &args,
             uint32_t localExpert = static_cast<uint32_t>(idx % shape.expertPerRank);
             std::cout << "rank=" << state->rank << " m2_return_counter_detail"
                       << " expertOwner=" << expertOwner << " localExpert=" << localExpert
-                      << " actual=" << dump.returnSegmentCounters[idx] << " expected=" << expectedCounters[idx]
-                      << "\n";
+                      << " actual=" << dump.returnSegmentCounters[idx] << " expected=" << expectedCounters[idx] << "\n";
         }
     }
     return mismatches;
@@ -2436,7 +2607,16 @@ void RunM2Dispatch(const DispatchCombineTileArgs &args, const moe_dispatch_combi
     std::cout << "  dispatch_tget_real=true\n";
     std::cout << "  scoreboard_ledger=true\n";
     std::cout << "  scoreboard_publish_after_tget=true\n";
-    std::cout << "  scoreboard_dependency_domain=token_owner_local_expert\n";
+    std::cout << "  producer_status_domain=token_owner_local_expert\n";
+    std::cout << "  scoreboard_dependency_domain=local_expert_consumer_domain\n";
+    std::cout << "  scoreboard_dependency_domain_aggregation=true\n";
+    std::cout << "  scoreboard_global_min_task_id=false\n";
+    std::cout << "  scoreboard_worker_wait_plan=true\n";
+    std::cout << "  scoreboard_worker_wait_plan_domain=local_expert\n";
+    std::cout << "  scoreboard_domain_count=" << shape.expertPerRank << "\n";
+    std::cout << "  scoreboard_domain_stride_i32=16\n";
+    std::cout << "  scoreboard_zero_row_skip_semantics=true\n";
+    std::cout << "  soft_sync_mode=ledger_only\n";
     std::cout << "  scoreboard_copy_done_status=" << kM2ScoreboardStatusCopyDone << "\n";
     std::cout << "  scoreboard_skip_done_status=" << kM2ScoreboardStatusSkipDone << "\n";
     std::cout << "  routing_per_token_scale_checksum=" << ChecksumVector(dump.routingPerTokenScale) << "\n";
@@ -2445,6 +2625,8 @@ void RunM2Dispatch(const DispatchCombineTileArgs &args, const moe_dispatch_combi
     std::cout << "  scoreboard_task_map_checksum=" << ChecksumVector(dump.scoreboardTaskMap) << "\n";
     std::cout << "  producer_status_checksum=" << ChecksumVector(dump.producerStatus) << "\n";
     std::cout << "  scoreboard_min_status_checksum=" << ChecksumVector(dump.scoreboardMinStatus) << "\n";
+    std::cout << "  worker_wait_counters_checksum=" << ChecksumVector(dump.workerWaitCounters) << "\n";
+    std::cout << "  scoreboard_timeout_counters_checksum=" << ChecksumVector(dump.scoreboardTimeoutCounters) << "\n";
     std::cout << "  gmm_block_mock=false\n";
     std::cout << "  m2_numeric_stage=gmm1_tmatmul_ready\n";
     std::cout << "  pass=true\n";
@@ -2462,8 +2644,9 @@ void RunM2Dispatch(const DispatchCombineTileArgs &args, const moe_dispatch_combi
 void RunM2Gmm1(const DispatchCombineTileArgs &args, const moe_dispatch_combine_a8w8::ShapeConfig &shape,
                const moe_dispatch_combine_a8w8::WorkspaceLayout &workspaceLayout, RuntimeState *state)
 {
-    if (shape.hiddenSize == 0U || shape.intermediateSize == 0U || shape.hiddenSize % moe_dispatch_combine_a8w8::GmmMicroTileN() != 0U) {
-        throw std::runtime_error("M2.3 GMM1 PTO cube path requires nonzero shapes and hiddenSize divisible by 32");
+    if (!GmmPolicySupported(shape)) {
+        throw std::runtime_error(
+            "M2.3 GMM1 PTO cube path requires gmm_ar cache-level policy and hidden/intermediate divisible by 64");
     }
     bool verbose = VerboseRuntimeLogs(args);
     if (verbose) {
@@ -2510,14 +2693,15 @@ void RunM2Gmm1(const DispatchCombineTileArgs &args, const moe_dispatch_combine_a
     std::cout << "  gmm_shape_m_max=" << shape.maxTokensPerExpert << "\n";
     std::cout << "  gmm_shape_k=" << shape.hiddenSize << "\n";
     std::cout << "  gmm_shape_n=" << (shape.intermediateSize * 2U) << "\n";
-    std::cout << "  gmm_l1_tile_shape=" << moe_dispatch_combine_a8w8::GmmMicroTileM() << "x"
-              << moe_dispatch_combine_a8w8::GmmMicroTileN() << "\n";
-    std::cout << "  gmm_l0_tile_shape=" << moe_dispatch_combine_a8w8::GmmMicroTileM() << "x"
-              << moe_dispatch_combine_a8w8::GmmMicroTileN() << "\n";
-    std::cout << "  gmm_k_tile=" << moe_dispatch_combine_a8w8::GmmMicroTileN() << "\n";
-    std::cout << "  gmm_pipeline_stages=1\n";
-    std::cout << "  gmm_tail_m=true\n";
-    std::cout << "  gmm_tail_n=true\n";
+    std::cout << "  gmm_l1_tile_shape=" << moe_dispatch_combine_a8w8::kGmmBaseM << "x"
+              << (moe_dispatch_combine_a8w8::kGmmBaseK * moe_dispatch_combine_a8w8::kGmmStepK) << ","
+              << (moe_dispatch_combine_a8w8::kGmmBaseK * moe_dispatch_combine_a8w8::kGmmStepK) << "x"
+              << moe_dispatch_combine_a8w8::kGmmBaseN << "\n";
+    std::cout << "  gmm_l0_tile_shape=" << moe_dispatch_combine_a8w8::kGmmBaseM << "x"
+              << moe_dispatch_combine_a8w8::kGmmBaseK << "," << moe_dispatch_combine_a8w8::kGmmBaseK << "x"
+              << moe_dispatch_combine_a8w8::kGmmBaseN << "\n";
+    std::cout << "  gmm_k_tile=" << moe_dispatch_combine_a8w8::kGmmBaseK << "\n";
+    PrintGmmPolicyReport(shape, expectedTaskCount, launchBlocks);
     std::cout << "  gmm_tile_task_count=" << expectedTaskCount << "\n";
     std::cout << "  gmm_launch_blocks=" << launchBlocks << "\n";
     std::cout << "  gmm_tile_task_plan_checksum=" << ChecksumVector(taskDump.tileTaskPlan) << "\n";
@@ -2570,6 +2754,9 @@ void RunM2Gmm1Epilogue(const DispatchCombineTileArgs &args, const moe_dispatch_c
     std::cout << "  bias=false\n";
     std::cout << "  routing_scale_applied=false\n";
     std::cout << "  routing_scale_stage=m2_5_activation_quant\n";
+    std::cout << "  gmm1_epilogue_vec=true\n";
+    std::cout << "  gmm1_epilogue_impl=pto_vec_tload_tcvt_tmul_tstore\n";
+    std::cout << "  gmm1_epilogue_scalar_payload_loop=false\n";
     std::cout << "  gmm1_out_checksum_actual=" << ChecksumVector(gmm1Out) << "\n";
     std::cout << "  gmm1_out_checksum_expected=" << ChecksumVector(state->m2Reference.gmm1Out) << "\n";
     std::cout << "  scale_dequant_checksum_actual=" << ChecksumVector(gmm1Out) << "\n";
@@ -2627,6 +2814,10 @@ void RunM2ActivationQuant(const DispatchCombineTileArgs &args, const moe_dispatc
     std::cout << "  routing_scale_applied=true\n";
     std::cout << "  bias=false\n";
     std::cout << "  quant_strategy=dynamic_per_token_reduce_max_abs_div_127\n";
+    std::cout << "  activation_swiglu_vec=true\n";
+    std::cout << "  activation_requant_vec=true\n";
+    std::cout << "  activation_requant_impl=pto_vec_tload_tabs_trowmax_tquant_tstore\n";
+    std::cout << "  activation_requant_scalar_payload_loop=false\n";
     std::cout << "  swiglu_sync_groups=true\n";
     std::cout << "  swiglu_sync_group_count=" << (dump.swigluSyncGroups.empty() ? 0 : dump.swigluSyncGroups[0]) << "\n";
     std::cout << "  swiglu_output_tolerance_mismatches=0\n";
@@ -2661,9 +2852,9 @@ void RunM2ActivationQuant(const DispatchCombineTileArgs &args, const moe_dispatc
 void RunM2Gmm2(const DispatchCombineTileArgs &args, const moe_dispatch_combine_a8w8::ShapeConfig &shape,
                const moe_dispatch_combine_a8w8::WorkspaceLayout &workspaceLayout, RuntimeState *state)
 {
-    if (shape.hiddenSize == 0U || shape.intermediateSize == 0U ||
-        shape.intermediateSize % moe_dispatch_combine_a8w8::GmmMicroTileN() != 0U) {
-        throw std::runtime_error("M2.6 GMM2 PTO cube path requires nonzero shapes and intermediateSize divisible by 32");
+    if (!GmmPolicySupported(shape)) {
+        throw std::runtime_error(
+            "M2.6 GMM2 PTO cube path requires gmm_ar cache-level policy and hidden/intermediate divisible by 64");
     }
     bool verbose = VerboseRuntimeLogs(args);
     if (verbose) {
@@ -2710,14 +2901,15 @@ void RunM2Gmm2(const DispatchCombineTileArgs &args, const moe_dispatch_combine_a
     std::cout << "  gmm_shape_m_max=" << shape.maxTokensPerExpert << "\n";
     std::cout << "  gmm_shape_k=" << shape.intermediateSize << "\n";
     std::cout << "  gmm_shape_n=" << shape.hiddenSize << "\n";
-    std::cout << "  gmm_l1_tile_shape=" << moe_dispatch_combine_a8w8::GmmMicroTileM() << "x"
-              << moe_dispatch_combine_a8w8::GmmMicroTileN() << "\n";
-    std::cout << "  gmm_l0_tile_shape=" << moe_dispatch_combine_a8w8::GmmMicroTileM() << "x"
-              << moe_dispatch_combine_a8w8::GmmMicroTileN() << "\n";
-    std::cout << "  gmm_k_tile=" << moe_dispatch_combine_a8w8::GmmMicroTileN() << "\n";
-    std::cout << "  gmm_pipeline_stages=1\n";
-    std::cout << "  gmm_tail_m=true\n";
-    std::cout << "  gmm_tail_n=true\n";
+    std::cout << "  gmm_l1_tile_shape=" << moe_dispatch_combine_a8w8::kGmmBaseM << "x"
+              << (moe_dispatch_combine_a8w8::kGmmBaseK * moe_dispatch_combine_a8w8::kGmmStepK) << ","
+              << (moe_dispatch_combine_a8w8::kGmmBaseK * moe_dispatch_combine_a8w8::kGmmStepK) << "x"
+              << moe_dispatch_combine_a8w8::kGmmBaseN << "\n";
+    std::cout << "  gmm_l0_tile_shape=" << moe_dispatch_combine_a8w8::kGmmBaseM << "x"
+              << moe_dispatch_combine_a8w8::kGmmBaseK << "," << moe_dispatch_combine_a8w8::kGmmBaseK << "x"
+              << moe_dispatch_combine_a8w8::kGmmBaseN << "\n";
+    std::cout << "  gmm_k_tile=" << moe_dispatch_combine_a8w8::kGmmBaseK << "\n";
+    PrintGmmPolicyReport(shape, expectedTaskCount, launchBlocks);
     std::cout << "  gmm_tile_task_count=" << expectedTaskCount << "\n";
     std::cout << "  gmm_launch_blocks=" << launchBlocks << "\n";
     std::cout << "  gmm_tile_task_plan_checksum=" << ChecksumVector(taskDump.tileTaskPlan) << "\n";
@@ -2783,11 +2975,16 @@ void RunM2Gmm2EpilogueAndReturn(const DispatchCombineTileArgs &args,
     std::cout << "  protocol_stage=m2_gmm2_epilogue_fused_return\n";
     std::cout << "  combine_merge=true\n";
     std::cout << "  gmm2_out_debug_mirror_only=true\n";
+    std::cout << "  gmm2_out_return_source=false\n";
+    std::cout << "  return_payload_source=returnSegmentStaging\n";
     std::cout << "  return_payload_target=peerWindow.returnPayload.offsetD\n";
     std::cout << "  scale2_layout=uint64_lower32_float_bits\n";
     std::cout << "  scale_list_len=1\n";
     std::cout << "  bias=false\n";
     std::cout << "  payload_dtype=fp16\n";
+    std::cout << "  gmm2_epilogue_vec=true\n";
+    std::cout << "  gmm2_epilogue_impl=pto_vec_tload_tcvt_tmul_tcvt_tstore\n";
+    std::cout << "  gmm2_epilogue_scalar_payload_loop=false\n";
     std::cout << "  return_tput_callsite=true\n";
     std::cout << "  remote_return_tput_real=" << (shape.rankNum > 1 ? "true" : "false") << "\n";
     std::cout << "  tile_split_return_map=true\n";
@@ -2896,8 +3093,8 @@ RankCorrectnessSummary VerifyM2FinalOutput(const DispatchCombineTileArgs &args, 
     std::cout << "rank=" << state->rank << " buffer=m2.outputC elements=" << actualOutputC.size()
               << " mismatches=" << summary.errCount;
     if (summary.errCount != 0) {
-        std::cout << std::setprecision(8) << " first_index=" << summary.firstMismatchIndex
-                  << " actual=" << firstActual << " expected=" << firstExpected << std::setprecision(1);
+        std::cout << std::setprecision(8) << " first_index=" << summary.firstMismatchIndex << " actual=" << firstActual
+                  << " expected=" << firstExpected << std::setprecision(1);
     }
     std::cout << std::endl;
     if (summary.errCount != 0) {
@@ -2925,12 +3122,16 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  dtype_in=fp16 dtype_out=fp16\n";
     std::cout << "  dispatch_merge=true\n";
     std::cout << "  combine_merge=true\n";
+    std::cout << "  stage_graph_mode=multi_launch_debug\n";
     std::cout << "  gmm1_input_direct=true\n";
     std::cout << "  route_pack_quant_device=true\n";
     std::cout << "  gmm_block_mock=false\n";
     std::cout << "  soft_sync_ledger=true\n";
     std::cout << "  swiglu_sync_groups=true\n";
     std::cout << "  tile_split_return_map=true\n";
+    std::cout << "  gmm2_out_debug_mirror_only=true\n";
+    std::cout << "  gmm2_out_return_source=false\n";
+    std::cout << "  return_payload_source=returnSegmentStaging\n";
     std::cout << "  restore_from_offsetD=true\n";
     std::cout << "  final_output.reference_source=actual_return_payload_weighted_restore\n";
     std::cout << "  final_output.max_abs_diff=" << summary.maxAbsDiff << "\n";

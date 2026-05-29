@@ -958,6 +958,18 @@ typed view 和 offset，但不能封装 copy、wait、notify、matmul 或 quant 
 | `RestoreOutput` | `TLOAD/TMUL/TADD/TSTORE` | 按 `expandedRowIdx + probs` 做 weighted restore；等待缺失 topK return slot，不能输出 int8 |
 | scoreboard/timeline/counter | raw GM typed view + explicit publish order | `scoreboardTaskMap/producerStatus/scoreboardMinStatus/subTileReady/timeline` 是控制面账本；scoreboard 必须记录 producer publish 时机和 consumer dependency domain，不通过 helper 隐藏 readiness 或 remote copy |
 
+当前 M2 review 口径：
+
+- `RoutePackQuantLocal` 的主 payload quant 已要求并允许用 PTO Vec `TCVT/TABS/TROWMAX/TQUANT/TSTORE`
+  表达；若当前代码已经直接使用这些 primitive，不能再把 M2.2a 归为“标量 route/quant”缺口。
+- 仍未完成的 PTO Vec data-plane 缺口集中在 GMM1 epilogue、SwiGLU 后 requant、GMM2 epilogue/cast：
+  scalar GM loop 可以作为 correctness preflight，但不能关闭 M2 data-plane PTO 化验收。
+- `RunGmm2EpilogueAndReturn` 可以在同 stage 写 `gmm2Out` debug mirror 或 per-segment staging；验收关注点是
+  return payload 的 source 不能是全量 `gmm2Out` 二次 combine copy，结构化输出必须能证明 `TPUT` 消费的是
+  per-segment epilogue payload 或等价 direct tile。
+- `swigluSyncGroups/dequantSum/SwigluGroup` 和 GMM2 task preview 属于 M2.5 metadata handoff。若代码已经生成并
+  host 比对这些字段，不能继续把 ISSUE-06 当作未落地；剩余 activation 数值 PTO 化缺口归入上面的 Vec issue。
+
 PTO 化判断：
 
 ```text
@@ -983,6 +995,14 @@ A3 int8 numeric stage set 的文件/函数边界。这里的 `PrecisionBackend` 
 PTO 指令必须直接写在对应 stage 主流程里：`RunGmm1/RunGmm2` 内直接调用 `TMATMUL/TMATMUL_ACC`，
 `RunActivationAndQuant` 内直接调用 `TQUANT` 或等价 PTO Vec primitive 序列，`RunGmm2EpilogueAndReturn`
 内直接调用 `TPUT`。不能再引入隐藏 `TLOAD/TSTORE/TGET/TPUT/TMATMUL/TQUANT` 的二次封装。
+
+M2 active runtime 迁移后的文件口径：
+
+- 当前 active host 入口是 `host/main.cpp`。
+- 当前 active AIV/comm/activation/return kernel 入口是 `kernel/moe_dispatch_combine_a8w8_kernel.cpp`。
+- 当前 active AIC GMM kernel 入口是 `kernel/moe_dispatch_combine_a8w8_gmm_kernel.cpp`。
+- `kernel/a3_int8_backend.hpp`、`kernel/protocol_core.hpp` 和 `kernel/control_metadata.hpp` 仍是 stage 边界、
+  typed view 和未来拆分目标的设计文件，但 review 当前实现时必须以 active runtime 文件为准。
 
 当前 stage 接口：
 
@@ -1328,8 +1348,8 @@ state、owner、report、Issue Log 和 Design Change Log；领取任务后必须
 | --- | --- | --- |
 | M0 | 工程骨架、脚本、layout、host smoke。从 `gemm_ar` 裁剪 CMake/run.sh/main.cpp，不从空目录手写。 | M0.1-M0.6 全部 accepted；dry-run/smoke 路径可用；依赖扫描无禁用接口、build helper 或 fallback。 |
 | M1 | PTO dispatch/combine protocol 闭环。只能把中间 `GMM1 -> SwiGLU/Quant -> GMM2` 专家计算整体 mock；routing、count、prefix、dispatch `TGET`、combine `TPUT`、signal、restore 必须真实落到 device path。 | M1.0-M1.11 全部 accepted；2 卡 NPU/mpirun 实跑通过；metadata、row order、signal、restore 正确；mock 只替代 expert compute。dry-run/reference-only 不能关闭 M1。 |
-| M2 | A3 int8_int8 全路径功能，并前置 MegaMoE 必需数据布局：dispatch 融合、GMM1 contiguous input、runtime-shape GMM tile partition、GMM2 epilogue+combine return、soft-sync ledger、Swiglu sync-group metadata、tile-split return map 和 segment-driven return path。 | M2.0-M2.8 全部 accepted；active runtime 已归一到 `host/`、`kernel/`、`include/`，dispatch/activation/combine 合并点、GMM L1/L0 tile plan、multi-block work partition、soft-sync ledger、`swigluSyncGroups/dequantSum`、shape-derived tile-split return map 和 segment-driven return 已在最终布局中验收；accumulator 精确对齐，epilogue/final output 按 tolerance 对齐；M3 不需要重写 row/order/layout/stage graph。 |
-| M3 | 在 M2 已固定的依赖边上打开或验证 runtime overlap、scoreboard、Sub-Tile remote write 和 timeline。 | M3.0-M3.9 accepted 或明确 primitive-gap blocked；timeline/counter 能解释 overlap、等待空泡或阻断原因。 |
+| M2 | A3 int8_int8 全路径功能，并前置 MegaMoE 必需数据布局：dispatch 融合、GMM1 contiguous input、runtime-shape GMM tile partition、GMM2 epilogue+combine return、soft-sync ledger、Swiglu sync-group metadata、tile-split return map 和 segment-driven return path。 | M2.0-M2.8 全部 accepted；active runtime 已归一到 `host/`、`kernel/`、`include/`，dispatch/activation/combine 合并点、GMM L1/L0 tile plan、multi-block work partition、soft-sync ledger、`swigluSyncGroups/dequantSum`、shape-derived tile-split return map、segment-driven return 和 single fused MPMD stage graph 已在最终布局中验收；accumulator 精确对齐，epilogue/final output 按 tolerance 对齐；M3 不需要重写 row/order/layout/stage graph。 |
+| M3 | 在 M2 已固定的依赖边上打开或验证 runtime overlap、scoreboard、Sub-Tile remote write 和 timeline；若 M2.8 仍是 `multi_launch_debug`，M3.0 首先补齐 single fused MPMD stage graph，而不是只打开开关。 | M3.0-M3.9 accepted 或明确 primitive-gap blocked；timeline/counter 能解释 overlap、等待空泡或阻断原因。 |
 | M4 | 最终 PTO 化回归与文档状态收口。 | M4.1-M4.2 全部 accepted；状态、report、设计一致，无 open `needs_user_decision`。 |
 
 任务导航：
@@ -2236,27 +2256,78 @@ MC2 W4A8 代码里 GMM 的有效经验是两层切分：外层按 expert 内的 
 再切成 L0A/L0B/L0C 小矩阵，并用 L1/L0 ping-pong 覆盖搬运和 MMAD。当前 PTO A3 int8 版本不复制 Catlass/AscendC
 接口，但必须吸收这个设计原则，不能只做固定 smoke shape 的单次 `TMATMUL`。
 
+本项目的 M2 GMM 不是 arbitrary-shape GEMM library。M2 只服务 MegaMoE A8W8/int8 realistic model shapes，
+不为极端小 K/N、非对齐 hidden size 或任意 odd shape 消耗主路径复杂度。small shape 只保留为 smoke/debug，
+不能作为 M2.GMM cache-level tile/pipeline 验收依据。
+
+M2.GMM 主切分必须基于 `kernels/manual/a2a3/gemm_ar` 的 cache-aware 规则，而不是临时 PTO micro-tile：
+
+```text
+gmm_tile_policy=gemm_ar_cache_level_int8
+baseM=128
+baseN=256
+baseK=64
+stepK=4
+```
+
+这些值的含义：
+
+- 外层 AIC work item 是一个 `baseM x baseN` output tile，M/N tail 用 valid shape 控制。
+- K 维以 `baseK=64` 为 L0 slice，L1 一次缓存 `stepK=4` 个 slice。
+- L1 A panel 是 `baseM x (baseK * stepK)`；L1 B panel 是 `(baseK * stepK) x baseN`。
+- L0A/L0B 分别是 `baseM x baseK` 和 `baseK x baseN`，二者都要 ping-pong。
+- L0C 是 `baseM x baseN` int32 accumulator，A2/A3 下 `128 x 256 x 4 = 128 KiB`，刚好贴 L0C 可见容量，
+  因此 L0C 主路径单 buffer 累加，不能再要求 L0C double buffer。
+
+基于当前知识库的 PTO 可见容量表，A2/A3 下 `Mat/L1=512 KiB`、`Left/L0A=64 KiB`、`Right/L0B=64 KiB`、
+`Acc/L0C=128 KiB`。int8 主路径预算为：
+
+```text
+L0A single = 128 * 64 * 1  = 8 KiB
+L0B single = 64 * 256 * 1  = 16 KiB
+L0A/L0B double buffer stays within their 64 KiB spaces
+L0C single = 128 * 256 * 4 = 128 KiB
+L1 A ping/pong = 2 * 128 * (64 * 4) * 1 = 64 KiB
+L1 B ping/pong = 2 * (64 * 4) * 256 * 1 = 128 KiB
+L1 total = 192 KiB <= 512 KiB
+```
+
+实现如果继续保留 `16x32x32` 或其他小 tile，只能作为 PTO `TMATMUL` primitive preflight、debug fallback 或
+micro-tile probe，不能作为 M2 accepted GMM tile。accepted GMM 必须报告并使用上述 cache-level tile policy。
+
+M2.GMM shape 约束：
+
+- `hiddenSize` 必须是 `baseK=64` 的整数倍。
+- `intermediateSize` 必须是 `baseK=64` 的整数倍。
+- GMM1 的 `N = 2 * intermediateSize`，GMM2 的 `N = hiddenSize` 可以按 `baseN=256` 做 N-tail，但正式验收
+  不以过小 N 作为主证据。
+- M-tail 来自 expert rows，可以小于 `baseM=128`；这是 MoE row distribution 的正常 tail，必须用 valid shape 处理。
+- 不支持的 hidden/intermediate shape 必须 fail-fast 并在结构化输出里标明 `gmm_shape_class=unsupported`，
+  不能静默切到临时小 tile。
+
 GMM tile plan 必须满足：
 
 - 外层 work item 由 runtime shape 推导：`GmmTileTask{whichGmm, localExpert, mBegin, mCount, nBegin, nCount,
   kSize, tileId}`。`mBegin/mCount` 来自 `cumsumMM[rankNum - 1][localExpert]` 和 activation row range，
   `nBegin/nCount` 来自 GMM1 intermediate 或 GMM2 hidden 维度，`kSize` 来自 hidden 或 intermediate 维度。
-- task 粒度按 L1 block 表达，建议首版使用 `gmmBlockM/gmmBlockN/gmmBlockK` 作为 launch-time 参数；固定 PTO
-  micro-tile 可以是底层实现细节，但外层 task 不能绑定某个固定 model shape。
+- task 粒度按 `baseM=128/baseN=256` 的 cache-level output tile 表达。`gmmBlockM/N/K` 只能作为 requested
+  policy 入参，device path 必须打印 requested/effective policy；若入参不匹配 M2 policy，则 fail-fast 或明确标成
+  unsupported，不能让用户误以为 arbitrary block size 已受支持。
 - 每个 AIC block 用 `blockIdx`/grid-stride 或等价方式遍历 `GmmTileTask`。不能用 `if (blockIdx != 0) return`
   屏蔽多 AIC；zero-token expert 可以 skip，但必须在 task/counter 中可见。
-- L1 block 内按 K 维分块累加。参考形态是 `L1Tile(M,N,K1)` 再切 `L0Tile(M0,N0,K0)`，其中 K1 可以覆盖多个
-  K0；当前 PTO 实现可按 A3 `TMATMUL` 支持的 tile shape 选择具体值，但必须显式记录 `l1_tile_m/n/k`、
-  `l0_tile_m/n/k`、`l1_stages`、`l0a_stages`、`l0b_stages`、`l0c_stages`。
+- L1 block 内按 K 维分块累加。参考 `gemm_ar` 的 `stepKa=stepKb=4` 形态：每 `stepK` 个 K-slice 做一次
+  GM -> L1 `TLOAD`，后续逐 slice `TEXTRACT/TMOV` 到 L0A/L0B，再执行 `TMATMUL/TMATMUL_ACC`。
+  结构化输出必须显式记录 `baseM/baseN/baseK/stepK`、L1/L0 bytes、`l1_stages`、`l0a_stages`、
+  `l0b_stages`、`l0c_stages`。
 - L1/L0 staging 必须有明确生命周期：GM -> L1/GM staging -> L0A/L0B -> `TMATMUL/TMATMUL_ACC` -> L0C/int32
   accumulator -> GM accumulator。PTO primitive 必须在 GMM stage 主流程直接出现；不能通过通用 helper 隐藏
   `TLOAD/TSTORE/TMATMUL`。
-- 双缓冲首版至少要在计划和状态机上成立：L1 A/B payload 使用 2-stage ping-pong 或明确 PTO primitive-gap；
-  L0A/L0B 使用 2-stage ping-pong 或明确 blocked；L0C 可以单 buffer 累加同一 output tile。若某个 PTO buffer
-  类型暂不能表达 L1/L0 分层，必须把 M2.3/M2.6 标成 `needs_fix` 或 `primitive-gap`，不能把单 buffer smoke
-  当成 accepted GMM。
+- 双缓冲首版至少要在计划和状态机上成立：L1 A/B payload 使用 2-stage ping-pong；L0A/L0B 使用 2-stage
+  ping-pong；L0C 单 buffer 累加同一 output tile。若 PTO 当前只能表达其中一部分，必须把 M2.3/M2.6 标成
+  `primitive-gap` 或保留 `needs_fix`，不能把单 buffer smoke 当成 accepted GMM。
 - tail 必须由 valid shape 控制。M tail、N tail、K tail 的 padding 不能污染 int32 accumulator checksum；
-  对 zero-token expert 不发无效 `TMATMUL`。
+  对 zero-token expert 不发无效 `TMATMUL`。K tail 不作为 M2 realistic-shape 主目标；hidden/intermediate 不满足
+  `baseK=64` 对齐时 fail-fast。
 - GMM1 和 GMM2 可以共用同一 tile scheduler/numeric launcher，但不能把 PTO 调用封装到看不见的 helper。允许
   使用小的 typed struct 描述 task 和 tile shape；不允许做隐藏 Catlass/AscendC fallback 的 wrapper。
 - M2.GMM 当前只要求 correctness 和结构证据，不要求证明 L1/L0 双缓冲带来性能收益；性能 overlap 属于 M3。
@@ -2264,25 +2335,35 @@ GMM tile plan 必须满足：
 控制台结构化输出至少要包含以下 GMM 结构字段，report 只摘要 pass/fail 和关键数值：
 
 ```text
+gmm_tile_policy=gemm_ar_cache_level_int8
 gmm_runtime_shape=true
 gmm_multiblock=true
-gmm_l1_tile_m/n/k=<...>
-gmm_l0_tile_m/n/k=<...>
-gmm_l1_stages=<...>
-gmm_l0a_stages=<...>
-gmm_l0b_stages=<...>
-gmm_l0c_stages=<...>
+gmm_shape_class=realistic_model_shape|smoke_debug|unsupported
+gmm_base_m=128
+gmm_base_n=256
+gmm_base_k=64
+gmm_step_k=4
+gmm_l1_a_bytes=<...>
+gmm_l1_b_bytes=<...>
+gmm_l0a_bytes=<...>
+gmm_l0b_bytes=<...>
+gmm_l0c_bytes=<...>
+gmm_l1_stages=2
+gmm_l0a_stages=2
+gmm_l0b_stages=2
+gmm_l0c_stages=1
 gmm_tile_tasks=<count>
 gmm_active_aic_blocks=<count>
 gmm_tail_m/n/k=<covered|none>
+gmm_micro_tile_debug_only=<true|false>
 ```
 
 M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 
 - runtime shape 驱动 task 生成；
 - 多 expert 或多 tile case 下有多个 work item；
-- 至少一个 two-rank balanced 或 skewed case 下多个 AIC block 参与；
-- L1/L0 tile shape、stage 数和 tail 覆盖在控制台结构化输出中可见；
+- 至少一个 4-rank realistic-shape balanced 或 skewed case 下多个 AIC block 参与；
+- L1/L0 cache-level tile shape、bytes、stage 数和 tail 覆盖在控制台结构化输出中可见；
 - int32 accumulator 与 host reference 精确对齐。
 
 #### M2.3a GMM shared scheduler and primitive preflight
@@ -2301,10 +2382,12 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 - 定义 `GmmTileTask{whichGmm, localExpert, mBegin, mCount, nBegin, nCount, kSize, tileId}` 和共享
   GMM tile config；M2.3/M2.6 必须通过该 task schema 生成 work，不得各自硬编码 fixed smoke shape。
 - 基于 runtime shape、`cumsumMM[rankNum - 1][localExpert]`、M2.5 activation group row range 和
-  launch-time `gmmBlockM/N/K` 生成 GMM1/GMM2 task preview。
+  `gemm_ar` cache-level policy (`baseM=128/baseN=256/baseK=64/stepK=4`) 生成 GMM1/GMM2 task preview。
+  `gmmBlockM/N/K` 作为 requested policy 只允许匹配该主策略；不匹配时必须 fail-fast 或报告 unsupported。
 - 完成 PTO `TMATMUL<int32_t, int8_t, int8_t>` primitive preflight，记录可用 tile dtype、valid shape、
   accumulator store 出口和 `dav-c220-cube` 或等价目标；失败时标 `primitive-gap`，不能引入 AscendC/Catlass fallback。
-- 定义 L1/L0 tile shape、stage 数和 ping-pong 状态字段，至少包括 `l1_tile_m/n/k`、`l0_tile_m/n/k`、
+- 定义 L1/L0 cache-level tile shape、bytes、stage 数和 ping-pong 状态字段，至少包括
+  `baseM/baseN/baseK/stepK`、`l1_a_bytes/l1_b_bytes`、`l0a_bytes/l0b_bytes/l0c_bytes`、
   `l1_stages`、`l0a_stages`、`l0b_stages`、`l0c_stages`。
 - 定义 multi-AIC work partition 规则：每个 AIC block 用 `blockIdx`/grid-stride 或等价方式遍历
   `GmmTileTask`；zero-token expert skip 必须可见。
@@ -2313,10 +2396,12 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 
 验收标准：
 
-- small、balanced、skewed case 均能生成 GMM1/GMM2 task preview，row/tile range 不越界。
-- 至少一个 case 的 task preview 包含多个 tile 或多个 expert work item。
+- small case 只作为 smoke/debug；M2.3a accepted 证据必须包含至少一个 realistic-shape 4-rank case 的
+  GMM1/GMM2 task preview，row/tile range 不越界。
+- 至少一个 realistic-shape case 的 task preview 包含多个 cache-level tile 或多个 expert work item。
 - preflight 指向实际编译过的 PTO `TMATMUL` call site 或明确 `primitive-gap`。
-- 结构化输出包含 shared contract 要求的 L1/L0 tile、stage、task count、active block 预算字段。
+- 结构化输出包含 shared contract 要求的 cache-level tile policy、L1/L0 bytes、stage、task count、active block
+  预算字段。
 - 依赖扫描无输出。
 
 #### M2.3 RunGmm1 PTO int8 matmul
@@ -2343,33 +2428,35 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 - 必须实现并使用 `M2.GMM shared tile/pipeline contract` 的 GMM tile scheduler。GMM1 work item 的 M 维来自
   local expert row range，N 维来自 GMM1 output intermediate 维度，K 维来自 hidden size；不能只把当前
   `hiddenSize/intermediateSize` 写死进 kernel。
-- GMM1 的 L1/L0 tile shape 和 stage 数必须由同一份 GMM config 暴露给 host dump 和 device path。建议首版
-  先使用 `gmmBlockM/N/K` 作为 L1 block 参数，再按 PTO `TMATMUL` valid shape 选择 L0 micro-tile；具体数值可随
-  primitive 能力调整，但必须在 report 摘要里记录。
+- GMM1 的 L1/L0 tile shape、bytes 和 stage 数必须由同一份 GMM config 暴露给 host dump 和 device path。
+  M2 主策略固定为 `gemm_ar` cache-level policy (`baseM=128/baseN=256/baseK=64/stepK=4`)；PTO micro-tile
+  只能是该策略内部的 primitive 实现细节，不能替代外层 cache-level task。
 - GM -> tile staging -> `TMATMUL/TMATMUL_ACC` -> int32 accumulator store 的状态机必须体现 L1 A/B ping-pong、
   L0A/L0B ping-pong 和 L0C 累加 buffer。如果 PTO 当前只能表达其中一部分，必须记录 primitive-gap，不能用
   单次 fixed tile 关闭 M2.3。
 - 每个 expert group 的 `currentM` 来自 `cumsumMM[rankNum - 1][localExpert]`；M1/M2 如采用 fail-fast capacity，
   必须在超过 `maxOutputSize` 时报告错误，不允许静默截断。
 - `TMATMUL` 的 A/B/C tile dtype 必须显式是 `int8/int8/int32`，不能通过 helper 或 fallback 隐藏。
-- 处理 M/K/N tail valid region。
+- 处理 M/N tail valid region；K 维 realistic shape 必须满足 `hiddenSize % 64 == 0`，不满足时 fail-fast。
 - 固定 PTO `TMATMUL` micro-tile 尺寸可以作为底层实现选择，但 accepted 主路径不能退化为固定
-  `hiddenSize/intermediateSize` smoke shape 或单 AIC block demo；GMM1 的 M/K/N 必须由 runtime shape 与 expert row
-  range 驱动。
+  `hiddenSize/intermediateSize` smoke shape、小 micro-tile fallback 或单 AIC block demo；GMM1 的 M/K/N 必须由
+  runtime shape 与 expert row range 驱动。
 - 多 block launch 不能被 `get_block_idx() != 0` 之类 guard 直接屏蔽。M2.3 accepted 口径至少要按 expert/tile
   维度把 GMM1 work partition 到可用 AIC blocks；若 PTO primitive 或编译目标暂时无法支持，必须把 M2.3/M2 stage
   标成 `needs_fix` 或 `primitive-gap`，不能用单 block correctness smoke 关闭任务。
 
 验收标准：
 
-- single-rank small shape 下 GMM1 int32 accumulator 与 CPU reference 完全一致。
-- two-rank balanced case 下每个 local expert 的 accumulator checksum 与 reference 一致。
-- 至少一个 two-rank case 的 GMM1 device path 证明多个 AIC block 参与并覆盖全部有效 tile；若只能单 block 运行，
+- single-rank small shape 下 GMM1 int32 accumulator 与 CPU reference 完全一致，但它只作为 smoke/debug。
+- 4-rank realistic-shape balanced/skewed case 下每个 local expert 的 accumulator checksum 与 reference 一致。
+- 至少一个 4-rank realistic-shape case 的 GMM1 device path 证明多个 AIC block 参与并覆盖全部有效 cache-level
+  tile；若只能单 block 运行，
   M2.3 只能作为 preflight，不得 `review_ready`。
 - `[CorrectnessReport]` 或等价结构化 stdout 必须打印 `gmm_runtime_shape=true`、`gmm_multiblock=true`、
-  L1/L0 tile shape、stage 数、tile task count、active AIC block count 和 tail 覆盖结果。
-- 至少一个 case 覆盖 N 或 K 方向超过单个 PTO micro-tile 的分块累加；如果当前 shape 做不到，必须新增 synthetic
-  shape 或把缺口记录为 `test-gap`，不能只用 small smoke。
+  `gmm_tile_policy=gemm_ar_cache_level_int8`、base tile、L1/L0 bytes、stage 数、tile task count、active AIC
+  block count、shape class 和 tail 覆盖结果。
+- 至少一个 realistic-shape case 覆盖 N 或 K 方向超过单个 cache-level tile/stepK panel 的分块累加；不能只用
+  small smoke。
 - tail shape 不越界。
 - preflight 记录必须指向实际编译过的 PTO `TMATMUL` call site 或仓内已验证 ST/reference；若失败，任务状态改为
   `blocked`/`primitive-gap`，不改用 AscendC/Catlass fallback。
@@ -2390,6 +2477,9 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 - 对 GMM1 int32 accumulator 按 `scale1` 做等价 dequant、cast 到 activation workspace；当前 int8 主路径不加 bias。
 - scale index 必须对齐 A8W8 scale view：`arrayGroupIdx = listLen == 1 ? 0 : localExpert`，scale offset 随 GMM1 N tile
   移动；当前若只支持 `listLen == 1` 必须 fail-fast 并写进 report。
+- device 主路径必须用 PTO Vec 表达 scale-dequant/cast：`TLOAD` int32 accumulator 和 scale tile，`TCVT/TMUL`
+  或等价 PTO Vec 序列生成 FP32 activation workspace，再 `TSTORE`。逐元素 scalar GM loop 只能作为 correctness
+  preflight/debug path，不能关闭 M2.4/M2.8 的 PTO data-plane gate。
 - host reference 实现同样 epilogue。
 
 验收标准：
@@ -2397,6 +2487,8 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 - GMM1 epilogue output 与 host reference 在 dtype tolerance 内一致。
 - scale 为 1 或 2 的 sanity case bitwise 或近似一致；reference 不生成 bias。
 - `[CorrectnessReport]` 打印 `scale_dequant_checksum` 和首个 mismatch 的 expert/tile/row/col。
+- `[CorrectnessReport]` 打印 `gmm1_epilogue_vec=true` 或等价字段；若只能 scalar preflight，M2.4 必须保持
+  `needs_fix` 或标 `primitive-gap`。
 - 依赖扫描无输出。
 
 #### M2.5 SwiGLU 与 int8 requant
@@ -2428,6 +2520,10 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
   M2.5 不运行 GMM2，但必须把这个映射所需的 row range 固定下来。
 - PTO 实现进入 `TQUANT<INT8_*>` 前必须形成 FP32 Vec tile；如果改用等价 PTO Vec primitive 序列，task report
   只写策略摘要。
+- M2.5 验收拆成两类证据：
+  - metadata handoff：`swigluSyncGroups/dequantSum/SwigluGroup/gmm2TileTaskPlan` 必须生成并 host 比对；
+  - numeric PTO path：SwiGLU 和 requant 必须由 PTO Vec primitive 直接表达。若 SwiGLU 已 Vec 化但 requant 仍用
+    scalar rowmax/quant loop，M2.5 只能作为 metadata + correctness preflight，不能 accepted。
 
 验收标准：
 
@@ -2438,6 +2534,8 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
   `dequantSum` 覆盖所有有效 expert rows 且不重复。
 - 控制台结构化输出包含 `swiglu_group_count`、`swiglu_group_sizes`、`swiglu_group_row_ranges`、
   `swiglu_group_tile_ranges`、`activation_tile_rows`、`activation_aiv_workers` 和 `activation_empty_groups`。
+- 控制台结构化输出包含 `activation_swiglu_vec=true` 和 `activation_requant_vec=true` 或等价字段；若 requant
+  未走 `TABS/TROWMAX/TQUANT/TSTORE`，必须显式输出 `activation_requant_vec=false`，task 保持 `needs_fix`。
 - `dequantSum[0] == 0`，`dequantSum` 单调不降，最后一个元素等于本 rank 所有 local expert 的有效 row 总数。
 - zero-token expert 可以出现在 group 内，但 empty group 必须可见并 skip；不能产生后续永远等待的 ready event。
 - M2.GMM scheduler 或 host reference 能用 M2.5 输出的 group row range 生成 GMM2 tile task preview；如果做不到，
@@ -2474,23 +2572,23 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 - `GMM2` 的 M 维 row range 必须与 `RunActivationAndQuant` 输出的 expert-major row range 一致。
 - `TMATMUL` 的 A/B/C tile dtype 必须显式是 `int8/int8/int32`，不能通过 helper 或 fallback 隐藏。
 - 固定 PTO `TMATMUL` micro-tile 尺寸可以复用 M2.3，但 accepted 主路径不能只覆盖固定
-  `intermediateSize=32/hiddenSize=64` smoke shape 或单 AIC block demo；GMM2 的 M/K/N 必须由 runtime shape、
-  activation row range 和 output hidden size 驱动。
+  `intermediateSize=32/hiddenSize=64` smoke shape、小 micro-tile fallback 或单 AIC block demo；GMM2 的 M/K/N
+  必须由 runtime shape、activation row range 和 output hidden size 驱动，且 `intermediateSize % 64 == 0`。
 - 多 block launch 必须按 expert/tile 维度分摊 GMM2 work，不能屏蔽除 block0 外的 AIC block；若暂时无法做到，
   M2.6/M2 stage 必须标成 `needs_fix` 或 `primitive-gap`。
 - host reference 计算 GMM2 accumulator。
 
 验收标准：
 
-- single-rank small shape 下 GMM2 int32 accumulator 与 CPU reference 完全一致。
-- two-rank balanced case 下每个 local expert 的 GMM2 accumulator checksum 与 reference 一致。
+- single-rank small shape 下 GMM2 int32 accumulator 与 CPU reference 完全一致，但它只作为 smoke/debug。
+- 4-rank realistic-shape balanced/skewed case 下每个 local expert 的 GMM2 accumulator checksum 与 reference 一致。
 - skewed experts case 不越界。
-- 至少一个 two-rank skewed 或 balanced case 的 GMM2 device path 证明多个 AIC block 参与并覆盖全部有效 tile；若只能
-  单 block 运行，M2.6 只能作为 preflight，不得 `review_ready`。
+- 至少一个 4-rank realistic-shape skewed 或 balanced case 的 GMM2 device path 证明多个 AIC block 参与并覆盖全部
+  有效 cache-level tile；若只能单 block 运行，M2.6 只能作为 preflight，不得 `review_ready`。
 - `[CorrectnessReport]` 或等价结构化 stdout 必须打印 GMM2 的 `gmm_runtime_shape=true`、`gmm_multiblock=true`、
-  L1/L0 tile shape、stage 数、tile task count、active AIC block count、activation row range 覆盖和 tail 覆盖结果。
-- 至少一个 case 覆盖 GMM2 K 或 N 方向超过单个 PTO micro-tile 的分块累加；如果当前 shape 做不到，必须新增
-  synthetic shape 或把缺口记录为 `test-gap`。
+  `gmm_tile_policy=gemm_ar_cache_level_int8`、base tile、L1/L0 bytes、stage 数、tile task count、active AIC
+  block count、shape class、activation row range 覆盖和 tail 覆盖结果。
+- 至少一个 realistic-shape case 覆盖 GMM2 K 或 N 方向超过单个 cache-level tile/stepK panel 的分块累加。
 - preflight 记录必须覆盖 GMM2 的 `intermediateSize x hiddenSize` shape 或明确 blocked。
 - 依赖扫描无输出。
 
@@ -2510,10 +2608,14 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
   主路径不加 bias。
 - scale index 必须对齐 A8W8 scale view：`arrayGroupIdx = listLen == 1 ? 0 : localExpert`，scale offset 随 GMM2 N tile
   移动；当前若只支持 `listLen == 1` 必须 fail-fast 并写进 report。
+- epilogue/cast 必须用 PTO Vec `TLOAD/TCVT/TMUL/TSTORE` 或等价序列表达，输出 per-segment return payload。
+  scalar loop 逐元素 decode scale、cast half 只能作为 correctness preflight/debug，不能关闭 M2.7/M2.8。
 - `RunGmm2EpilogueAndReturn` 在同一个 stage 中完成 epilogue 和 `TPUT` remote return：按
   `tokenPerExpertMatrix[tokenOwnerRank][expertOwnerRank][localExpert] + preSumBeforeRank[tokenOwnerRank][localExpert]`
   把结果写到 token owner rank 的 `offsetD` return payload。
 - 主路径不能先把全量 expert output 写到 `gmm2Out` 再由独立 `ReturnCombine` 二次搬运；`gmm2Out` 只能作为 debug mirror。
+- 允许 `returnSegmentStaging` 或等价 per-segment GM staging 作为 `TPUT` source；如果同 stage 同时写 `gmm2Out`
+  mirror，必须证明 `gmm2Out` 不是 `TPUT/CopyRowHalf` 的 source，也不是 correctness verifier 的唯一数据源。
 - 每个 owner segment 写完后发布 combine signal；M2 可以用 `overlap_mode=off` 或 BSP wait，但 signal/counter 语义
   和 call site 必须就是 M3 overlap 要用的最终结构。
 
@@ -2523,6 +2625,9 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 - RestoreOutput 可直接消费 `offsetD + expandedRowIdx + probs`，不需要额外 combine reorder。
 - counter-log 能看出 producer count 等于实际写回的 owner segment 数。
 - payload dtype 是 M2.1 固定的 `dtype_out`，不能输出 int8。
+- `[CorrectnessReport]` 打印 `gmm2_epilogue_vec=true`、`gmm2_out_debug_mirror_only=true`、
+  `gmm2_out_return_source=false` 或等价字段；若 mirror 强制写入但不参与 return，最多记录 P2 cleanup，
+  不能误报为“全量 gmm2Out 二次 combine 主路径”。
 - 依赖扫描无输出。
 
 #### M2.7a GMM-Combine tile-split return map
@@ -2608,6 +2713,9 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
   `RoutePackQuantLocal -> GatherDispatchToGmm1Input -> GMM1 -> ActivationQuant -> GMM2 -> RunGmm2EpilogueAndReturn -> RestoreOutput`。
 - 同时汇总 M2.2c 的 soft-sync ledger dump 和 M2.7a 的 tile-split return map dump；M2 不要求 async speedup，
   但这些结构必须已经是 M3.7/M3.8 要消费的结构。
+- M2.8 的 accepted 主路径必须是最终 single fused MPMD kernel stage graph，或明确输出
+  `stage_graph_mode=multi_launch_debug` 并保持 `needs_fix`。当前 host 侧多 kernel launch + `MpiBarrier`
+  只能作为 correctness preflight，不能作为 M2 关闭证据。
 - 每个 M2 回归用例打印 final output correctness report 和 overlap-off E2E perf report。
 - `DESIGN.md` 记录 M2 tolerance、scale/dequant 顺序、dispatch/quant 合并点、combine/epilogue 合并点、
   Dispatch-GMM soft-sync ledger、GMM-Combine tile-split return map，以及当前 A8W8/int8 主路径的精度边界。
@@ -2629,6 +2737,10 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 - `[CorrectnessReport]` 必须包含 `soft_sync_ledger=true`、`swiglu_sync_groups=true`、
   `tile_split_return_map=true` 或等价字段，证明 M2 已经前置 Dispatch-GMM soft-sync 账本、Swiglu sync group row range
   和 GMM-Combine Tile 切分 return 映射。
+- `[CorrectnessReport]` 必须包含 `stage_graph_mode=single_fused_mpmd` 才能关闭 M2.8；如果输出
+  `stage_graph_mode=multi_launch_debug`，即使 final output 正确也只能作为 preflight。
+- `[CorrectnessReport]` 必须包含 `gmm1_epilogue_vec=true`、`activation_requant_vec=true`、
+  `gmm2_epilogue_vec=true` 或等价字段，证明剩余 numeric epilogue/requant 不再由 scalar GM loop 主导。
 - `[CorrectnessReport]` 记录 GMM1/GMM2 accumulator checksum、scale/dequant checksum、final output checksum、tolerance/max_abs_diff/max_rel_diff，且 `pass=true`。
 - `[PerfReport]` 记录 overlap-off E2E `samples/avg/min/max/stddev`；M2 不要求 speedup。
 - 依赖扫描无输出。
