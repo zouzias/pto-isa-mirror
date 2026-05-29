@@ -20,6 +20,11 @@
 #   bash run_all.sh -r npu -v Ascend910B1 --cases-moe "512,128,128,32,1"
 #   bash run_all.sh -r npu -v Ascend910B1 --cases-flash-atten "128,128,1024,128,256"
 #   bash run_all.sh -r npu -v Ascend910B1 --cases-mla "128,4096,32,128,64,64,64;256,4096,32,128,64,64,64"
+#   bash run_all.sh -r npu -v Ascend910B1 -p          # profile each kernel via msopprof
+#
+# -p/--profile: forwards -p to each kernel's run.sh, which wraps the kernel
+# binary in `msopprof --output=<kernel_dir>/prof <bin> ...`. Each kernel writes
+# its profile artifacts under its own prof/ subdirectory.
 #
 # Available top-level kernels (default = all):
 #   add_tile_array, topk, topkv2, router_topk_small, gemm, mla,
@@ -54,6 +59,7 @@ MOE_SUBKERNEL_FILTER=""
 CASES_MOE=""
 CASES_FLASH_ATTEN=""
 CASES_MLA=""
+PROFILE_MODE=0
 RUN_LOG_DIR="${HERE}/run_log"
 
 # ----- Arg parsing ----------------------------------------------------------
@@ -78,6 +84,7 @@ while [[ $# -gt 0 ]]; do
         --cases-flash-atten=*) CASES_FLASH_ATTEN="${1#*=}"; shift;;
         --cases-mla)          CASES_MLA="$2"; shift 2;;
         --cases-mla=*)        CASES_MLA="${1#*=}"; shift;;
+        -p|--profile)         PROFILE_MODE=1; shift;;
         -h|--help)            print_usage; exit 0;;
         *) echo "[ERROR] Unknown argument: $1"; print_usage; exit 1;;
     esac
