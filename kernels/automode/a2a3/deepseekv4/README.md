@@ -51,6 +51,88 @@ The **sparse_attn FlashAttention kernel** (kernel.py:277) is the heart of CSA;
 it has been split into its hardware-distinct stages (cube vs vector) per the
 "one-by-one not fused" directive.
 
+## Cube vs vector per leaf
+
+Authoritative classification (from each leaf's `CMakeLists.txt` —
+`pto_example_cube_auto` vs `pto_example_vec_auto`). **9 cube, 19 vector,
+28 total.**
+
+### CSA — 2 cube / 3 vector
+
+| Leaf | HW | Op |
+|------|----|----|
+| [CSA/qk_matmul/](CSA/qk_matmul/) | **cube** | `acc_s = Q @ K^T * scale` (BF16×BF16 → FP32) |
+| [CSA/pv_matmul/](CSA/pv_matmul/) | **cube** | `acc_o += acc_s_cast @ V` (BF16×BF16 → FP32 RMW) |
+| [CSA/gather_kv/](CSA/gather_kv/) | vector | indexed gather of KV rows by `topk_idx` |
+| [CSA/online_softmax/](CSA/online_softmax/) | vector | FlashAttention running max / exp / rescale / sum |
+| [CSA/output_rescale/](CSA/output_rescale/) | vector | `acc_o /= sum_exp` + `attn_sink` tail |
+
+### HCA/Compressor — 2 cube / 4 vector
+
+| Leaf | HW | Op |
+|------|----|----|
+| [HCA/Compressor/z_gemm/](HCA/Compressor/z_gemm/) | **cube** | `kv = X @ Wkv^T` |
+| [HCA/Compressor/c_gemm/](HCA/Compressor/c_gemm/) | **cube** | `score = X @ Wgate^T` |
+| [HCA/Compressor/biased_softmax/](HCA/Compressor/biased_softmax/) | vector | `score + ape` then softmax over ratio axis |
+| [HCA/Compressor/c_comp/](HCA/Compressor/c_comp/) | vector | `kv_comp = sum(kv * softmax_score, dim=ratio)` |
+| [HCA/Compressor/rope/](HCA/Compressor/rope/) | vector | `apply_rotary_emb` on last `rope_head_dim` |
+| [HCA/Compressor/rms_norm/](HCA/Compressor/rms_norm/) | vector | `x * rsqrt(mean(x²) + eps) * weight` |
+
+### HCA/Indexer — 2 cube / 1 vector
+
+| Leaf | HW | Op |
+|------|----|----|
+| [HCA/Indexer/wq_b_gemm/](HCA/Indexer/wq_b_gemm/) | **cube** | `q = qr @ Wq_b^T` low-rank expansion |
+| [HCA/Indexer/weights_proj_gemm/](HCA/Indexer/weights_proj_gemm/) | **cube** | `weights = (X @ W_wproj^T) * scale` |
+| [HCA/Indexer/index_score/](HCA/Indexer/index_score/) | vector | `relu(einsum) * weights` reduced over heads |
+
+### HCA/quant — 0 cube / 2 vector
+
+| Leaf | HW | Op |
+|------|----|----|
+| [HCA/quant/act_quant_fp8/](HCA/quant/act_quant_fp8/) | vector | block-wise FP8 (E4M3) quant, BF16 inplace |
+| [HCA/quant/act_quant_fp4/](HCA/quant/act_quant_fp4/) | vector | block-wise FP4 quant, BF16 inplace, E8M0 scale |
+
+### HC — 1 cube / 3 vector
+
+| Leaf | HW | Op |
+|------|----|----|
+| [HC/hc_mix_gemm/](HC/hc_mix_gemm/) | **cube** | `mixes = (x_flat @ hc_fn^T) * rsqrt` (FP32 GEMM) |
+| [HC/hc_sinkhorn/](HC/hc_sinkhorn/) | vector | sigmoid + softmax + N Sinkhorn iters on 4×4 comb |
+| [HC/hc_pre_reduce/](HC/hc_pre_reduce/) | vector | `y = sum(pre * x, dim=hc_axis)` |
+| [HC/hc_post_combine/](HC/hc_post_combine/) | vector | `y = post*x + sum(comb * residual, dim=hc_axis)` |
+
+### MoE — 3 cube / 5 vector
+
+| Leaf | HW | Op |
+|------|----|----|
+| [MoE/gate_logits/](MoE/gate_logits/) | **cube** | `scores = X @ W^T` (FP32 — model.py:566) |
+| [MoE/expert_ffn/](MoE/expert_ffn/) | **cube** | per-expert SwiGLU FFN (W1/W3/W2 GEMMs dominate) |
+| [MoE/shared_expert_ffn/](MoE/shared_expert_ffn/) | **cube** | single-expert SwiGLU FFN over all tokens |
+| [MoE/gate_softmax/](MoE/gate_softmax/) | vector | softmax / sigmoid / sqrt(softplus) activation |
+| [MoE/gate_score_topk/](MoE/gate_score_topk/) | vector | `+ bias → topk → gather → normalize → scale` |
+| [MoE/gate_hash_routing/](MoE/gate_hash_routing/) | vector | `tid2eid[input_ids]` lookup, no sort |
+| [MoE/scatter/](MoE/scatter/) | vector | token → expert reorder |
+| [MoE/gather/](MoE/gather/) | vector | expert output → token recombine (weighted scatter-add) |
+
+### Cube/vector caveats
+
+- **`MoE/expert_ffn` and `MoE/shared_expert_ffn`** are SwiGLU
+  (`W1·x → silu·* → W2·(…)`). They contain vector ops (silu, elementwise
+  mul, optional `swiglu_limit` clamp), but the kernel is built against the
+  **cube AICORE pipe** (`--cce-aicore-arch=dav-c220-cube`) because the
+  three GEMMs dominate. This mirrors the existing top-level
+  [MoEv2/expert_ffn/](../MoEv2/expert_ffn/) pattern. If a pure split is
+  preferred, refactor into `expert_w1w3_gemm` (cube), `expert_swiglu`
+  (vector), `expert_w2_gemm` (cube).
+- **`HCA/Indexer/index_score`** is scaffolded as vector, but the underlying
+  einsum `bshd,btd→bsht` is cube-heavy. Its README documents this as an
+  `Assumption` with a follow-up to split into `einsum_cube + reduce_vector`
+  if profiling shows the inner product is the bottleneck.
+- **`HC/hc_mix_gemm`** is built cube but has a `* rsqrt` epilogue that's
+  vector — the scaffold takes `rsqrt` precomputed from the host to keep
+  this leaf cube-only.
+
 ## MoE — hash vs score routing
 
 DeepSeek-V4's `Gate` (model.py:547) supports **two routing modes**:
