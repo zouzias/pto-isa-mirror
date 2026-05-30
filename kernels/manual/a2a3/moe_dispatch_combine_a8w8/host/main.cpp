@@ -77,6 +77,9 @@ constexpr size_t kM3N9TimeoutDumpExpertOwnerRankSlot = 4U;
 constexpr size_t kM3N9TimeoutDumpStageSlot = 5U;
 constexpr size_t kM3N9TimeoutDumpSignalIdSlot = 6U;
 constexpr size_t kM3N9TimeoutDumpDebugStopStageSlot = 7U;
+constexpr size_t kM3N10TimeoutDumpProducerStatusBaseSlot = 8U;
+constexpr size_t kM3N10TimeoutDumpScoreboardMinStatusSlot = 14U;
+constexpr size_t kM3N10TimeoutDumpScoreboardDomainSlot = 15U;
 constexpr int32_t kM3N9TimeoutStageDispatchToGmm1 = 1;
 
 const char *M3N9TimeoutStageName(int32_t stage)
@@ -1036,7 +1039,10 @@ struct M2FusedFullEvidence {
     std::array<int32_t, 16> m3nCombineCounters{};
     std::array<int32_t, 16> m3nGmm2Counters{};
     std::array<int32_t, 16> m3n8CombineCounters{};
+    std::array<int32_t, 16> m3n10ScoreboardCounters{};
     std::array<int32_t, 16> m3n9TimeoutDump{};
+    uint64_t m3n10ProducerStatusChecksum = 0;
+    uint64_t m3n10ScoreboardMinStatusChecksum = 0;
     std::string swigluGroupTileRanges;
     std::array<int32_t, 6> stageMarkers{};
 };
@@ -1090,6 +1096,8 @@ M2FusedFullEvidence ReadM2FusedFullEvidence(const moe_dispatch_combine_a8w8::Wor
     constexpr size_t kM3NActivationCounterBase = kM3CounterBase + 32U;
     constexpr size_t kM3NCombineCounterBase = kM3CounterBase + 48U;
     constexpr size_t kM3NGmm2CounterBase = kM3CounterBase + 64U;
+    constexpr size_t kM3N10ScoreboardCounterBase = moe_dispatch_combine_a8w8::kM3N10ScoreboardCounterBase;
+    constexpr size_t kM3N10ScoreboardWorkerCounterBase = moe_dispatch_combine_a8w8::kM3N10ScoreboardWorkerCounterBase;
     constexpr int32_t kFullMagic = 0x4D328CA;
     M2FusedFullEvidence evidence;
     std::vector<int32_t> stageStatus(workspaceLayout.stageStatus.bytes / sizeof(int32_t), 0);
@@ -1227,6 +1235,22 @@ M2FusedFullEvidence ReadM2FusedFullEvidence(const moe_dispatch_combine_a8w8::Wor
     if (evidence.m3n8CombineCounters[5] != 0) {
         evidence.m3n8CombineStartBeforeLastGmm2Ready = 1;
     }
+    for (size_t idx = 0; idx < evidence.m3n10ScoreboardCounters.size(); ++idx) {
+        if (kM3N10ScoreboardCounterBase + idx < debugCounters.size()) {
+            evidence.m3n10ScoreboardCounters[idx] = debugCounters[kM3N10ScoreboardCounterBase + idx];
+        }
+    }
+    if (kM3N10ScoreboardWorkerCounterBase + 2U < debugCounters.size()) {
+        evidence.m3n10ScoreboardCounters[2] = debugCounters[kM3N10ScoreboardWorkerCounterBase + 0U];
+        evidence.m3n10ScoreboardCounters[10] = debugCounters[kM3N10ScoreboardWorkerCounterBase + 1U];
+        evidence.m3n10ScoreboardCounters[11] = debugCounters[kM3N10ScoreboardWorkerCounterBase + 2U];
+    }
+    std::vector<int32_t> producerStatus =
+        CopyWorkspaceI32Field(workspaceLayout, workspaceLayout.producerStatus, state, "m3n10 producerStatus");
+    std::vector<int32_t> scoreboardMinStatus =
+        CopyWorkspaceI32Field(workspaceLayout, workspaceLayout.scoreboardMinStatus, state, "m3n10 scoreboardMinStatus");
+    evidence.m3n10ProducerStatusChecksum = ChecksumVector(producerStatus);
+    evidence.m3n10ScoreboardMinStatusChecksum = ChecksumVector(scoreboardMinStatus);
     std::vector<int32_t> timeoutDump = CopyWorkspaceI32Field(workspaceLayout, workspaceLayout.scoreboardTimeoutCounters,
                                                              state, "m3n9 scoreboardTimeoutCounters");
     for (size_t idx = 0; idx < evidence.m3n9TimeoutDump.size() && idx < timeoutDump.size(); ++idx) {
@@ -1253,6 +1277,19 @@ void PrintM3N9TimeoutDump(const M2FusedFullEvidence &evidence)
               << "\n";
     std::cout << "  timeout_dump_debug_stop_stage="
               << (present ? evidence.m3n9TimeoutDump[kM3N9TimeoutDumpDebugStopStageSlot] : -1) << "\n";
+    std::ostringstream producerStatuses;
+    for (size_t slot = kM3N10TimeoutDumpProducerStatusBaseSlot; slot < kM3N10TimeoutDumpScoreboardMinStatusSlot;
+         ++slot) {
+        if (slot != kM3N10TimeoutDumpProducerStatusBaseSlot) {
+            producerStatuses << ",";
+        }
+        producerStatuses << (present ? evidence.m3n9TimeoutDump[slot] : -1);
+    }
+    std::cout << "  timeout_dump_producer_status_array=" << producerStatuses.str() << "\n";
+    std::cout << "  timeout_dump_scoreboard_min_status="
+              << (present ? evidence.m3n9TimeoutDump[kM3N10TimeoutDumpScoreboardMinStatusSlot] : -1) << "\n";
+    std::cout << "  timeout_dump_scoreboard_domain="
+              << (present ? evidence.m3n9TimeoutDump[kM3N10TimeoutDumpScoreboardDomainSlot] : -1) << "\n";
     std::cout << "  timeout_dump_source=device_scoreboard_timeout_counters\n";
 }
 
@@ -3860,6 +3897,8 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     int32_t m3n4SyncallCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[13];
     int32_t m3n4CvWaitCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[14];
     bool m3n5DispatchGmm1Overlap = fusedEvidence != nullptr && fusedEvidence->m3nDispatchCounters[12] != 0;
+    bool m3n10ScoreboardAsync = fusedEvidence != nullptr && fusedEvidence->m3n10ScoreboardCounters[0] != 0;
+    bool dispatchGmm1Overlap = m3n5DispatchGmm1Overlap || m3n10ScoreboardAsync;
     int32_t m3n5DispatchExpertReadyCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3nDispatchCounters[13];
     int32_t m3n5ZeroTokenExpertSkipCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3nDispatchCounters[14];
     bool m3n5Gmm1StartBeforeLastDispatchReady =
@@ -3918,11 +3957,16 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  exec_model=" << (m3n4StreamEnabled ? "aic_aiv_stream" : "bsp_syncall") << "\n";
     std::cout << "  fused_device_stage_boundaries="
               << (m3n8Gmm2CombineOverlap ?
-                      "pto_event_dispatch_expert_gmm1_sync_group_plus_gm_activation_and_gmm2_expert_ready" :
+                      (m3n10ScoreboardAsync ?
+                           "scoreboard_dispatch_domain_plus_gmm1_sync_group_plus_gm_activation_and_gmm2_expert_ready" :
+                           "pto_event_dispatch_expert_gmm1_sync_group_plus_gm_activation_and_gmm2_expert_ready") :
                       (m3n7ActivationGmm2Overlap ?
-                           "pto_event_dispatch_expert_gmm1_sync_group_plus_gm_activation_sync_group_ready" :
+                           (m3n10ScoreboardAsync ?
+                                "scoreboard_dispatch_domain_plus_gmm1_sync_group_plus_gm_activation_sync_group_ready" :
+                                "pto_event_dispatch_expert_gmm1_sync_group_plus_gm_activation_sync_group_ready") :
                            (m3n6Gmm1ActivationOverlap ?
-                                "pto_event_dispatch_expert_and_gmm1_sync_group_signals" :
+                                (m3n10ScoreboardAsync ? "scoreboard_dispatch_domain_plus_gmm1_sync_group_signals" :
+                                                        "pto_event_dispatch_expert_and_gmm1_sync_group_signals") :
                                 (m3n5DispatchGmm1Overlap ?
                                      "pto_event_dispatch_expert_signals" :
                                      (m3n4StreamEnabled ? "pto_event_full_open_signals" : "syncall_mix")))))
@@ -3938,9 +3982,9 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
                            "activation_gmm2_sync_group_rotation_stream" :
                            (m3n6Gmm1ActivationOverlap ?
                                 "gmm1_activation_sync_group_rotation_stream" :
-                                (m3n5DispatchGmm1Overlap ? "dispatch_expert_rotation_stream" :
-                                                           (m3n4StreamEnabled ? "signal_full_open_stream_skeleton" :
-                                                                                "skeleton_shared_layout")))))
+                                (dispatchGmm1Overlap ? "dispatch_scoreboard_domain_rotation_stream" :
+                                                       (m3n4StreamEnabled ? "signal_full_open_stream_skeleton" :
+                                                                            "skeleton_shared_layout")))))
               << "\n";
     std::cout << "  m3n4_stream_skeleton_enabled=" << (m3n4StreamEnabled ? "true" : "false") << "\n";
     std::cout << "  m3n4_signal_all_open=" << (m3n4SignalAllOpen ? "true" : "false") << "\n";
@@ -3949,7 +3993,8 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  syncall_count=" << m3n4SyncallCount << "\n";
     std::cout << "  cv_wait_count=" << m3n4CvWaitCount << "\n";
     std::cout << "  m3n5_dispatch_gmm1_overlap_enabled=" << (m3n5DispatchGmm1Overlap ? "true" : "false") << "\n";
-    std::cout << "  dispatch_overlap_granularity=" << (m3n5DispatchGmm1Overlap ? "expert" : "none") << "\n";
+    std::cout << "  dispatch_overlap_granularity="
+              << (m3n10ScoreboardAsync ? "dependency_domain" : (m3n5DispatchGmm1Overlap ? "expert" : "none")) << "\n";
     std::cout << "  m3n5_dispatch_expert_ready_count=" << m3n5DispatchExpertReadyCount << "\n";
     std::cout << "  m3n5_zero_token_expert_skip_count=" << m3n5ZeroTokenExpertSkipCount << "\n";
     std::cout << "  m3n5_gmm1_start_before_last_dispatch_ready="
@@ -4046,7 +4091,7 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  dispatch_worker_ranges_nonoverlap="
               << (fusedEvidence != nullptr && fusedEvidence->m3nDispatchCounters[8] != 0 ? "true" : "false") << "\n";
     std::cout << "  dispatch_gather_split=local_expert_grid_stride\n";
-    std::cout << "  dispatch_stage_overlap_enabled=" << (m3n5DispatchGmm1Overlap ? "true" : "false") << "\n";
+    std::cout << "  dispatch_stage_overlap_enabled=" << (dispatchGmm1Overlap ? "true" : "false") << "\n";
     std::cout << "  gmm1_epilogue_aiv_workers=1\n";
     std::cout << "  activation_aiv_workers=" << activationAivWorkers << "\n";
     std::cout << "  swiglu_group_tile_ranges="
@@ -4115,11 +4160,39 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  gmm2_signal_producer_counter=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[10])
               << "\n";
     std::cout << "  overlap_timeout_count=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[15]) << "\n";
-    std::cout << "  timeout_dump_fields=rank,expert,token_owner_rank,expert_owner_rank,stage,signal_id\n";
+    std::cout << "  timeout_dump_fields=rank,expert,token_owner_rank,expert_owner_rank,stage,signal_id,"
+                 "producer_status_array,scoreboard_min_status\n";
     if (fusedEvidence != nullptr) {
         PrintM3N9TimeoutDump(*fusedEvidence);
     }
-    std::cout << "  scoreboard_async_enabled=false\n";
+    bool scoreboardAsyncEnabled = m3n10ScoreboardAsync;
+    std::cout << "  scoreboard_async_enabled=" << (scoreboardAsyncEnabled ? "true" : "false") << "\n";
+    std::cout << "  scoreboard_async_transport=gm_poll_scoreboard\n";
+    std::cout << "  scoreboard_producer_poll_count="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3n10ScoreboardCounters[1]) << "\n";
+    std::cout << "  scoreboard_worker_poll_count="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3n10ScoreboardCounters[2]) << "\n";
+    std::cout << "  scoreboard_update_count="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3n10ScoreboardCounters[3]) << "\n";
+    std::cout << "  scoreboard_min_status_last="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3n10ScoreboardCounters[4]) << "\n";
+    std::cout << "  scoreboard_async_domain_count="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3n10ScoreboardCounters[5]) << "\n";
+    std::cout << "  scoreboard_worker_ready_domain_count="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3n10ScoreboardCounters[7]) << "\n";
+    std::cout << "  scoreboard_worker_poll_scope=scoreboardMinStatus[dependencyDomain]\n";
+    std::cout << "  scoreboard_worker_polls_all_producers=false\n";
+    std::cout << "  scoreboard_async_dependency_domain=local_expert_gmm_tile\n";
+    std::cout << "  scoreboard_async_global_min_task_id=false\n";
+    std::cout << "  scoreboard_async_fallback=m3n5_expert_ready_path\n";
+    std::cout << "  scoreboard_first_ready_domain="
+              << (fusedEvidence == nullptr ? -1 : fusedEvidence->m3n10ScoreboardCounters[12]) << "\n";
+    std::cout << "  scoreboard_last_ready_domain="
+              << (fusedEvidence == nullptr ? -1 : fusedEvidence->m3n10ScoreboardCounters[13]) << "\n";
+    std::cout << "  producer_status_checksum="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3n10ProducerStatusChecksum) << "\n";
+    std::cout << "  scoreboard_min_status_checksum="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3n10ScoreboardMinStatusChecksum) << "\n";
     std::cout << "  subtile_stride_async_enabled=false\n";
     std::cout << "  timeline_enabled=" << (args.runtime.timeline == 0 ? "false" : "true") << "\n";
     std::cout << "  timeline_granularity=stage_signal_counter\n";
@@ -4595,7 +4668,7 @@ int main(int argc, char **argv)
                             std::cout << "  overlap_timeout_count=" << iterEvidence.m3Counters[15] << "\n";
                             std::cout << "  "
                                          "timeout_dump_fields=rank,expert,token_owner_rank,expert_owner_rank,stage,"
-                                         "signal_id\n";
+                                         "signal_id,producer_status_array,scoreboard_min_status\n";
                             dispatch_combine_tile::PrintM3N9TimeoutDump(iterEvidence);
                         }
                         if (args.runtime.m2FusedDebugStopStage == 1U) {

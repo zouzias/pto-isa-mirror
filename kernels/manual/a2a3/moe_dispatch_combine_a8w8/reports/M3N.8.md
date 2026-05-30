@@ -4,7 +4,7 @@
 
 - Task: M3N.8 GMM2 to combine expert-granularity rotation
 - Owner: codex/current-session
-- End state: review_ready
+- End state: accepted (reviewer code-level review, DCL-2026-05-30-120; re-applied after concurrent revert)
 - Related issue: DCL-115 flag-id reuse risk follow-up
 
 ## Changes

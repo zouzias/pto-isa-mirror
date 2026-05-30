@@ -1240,10 +1240,12 @@ AICORE inline void M2ClearDispatchState(moe_dispatch_combine_a8w8::ShapeConfig s
         StoreScalarI32(workspaceView.scoreboardTaskMap + idx * 4U + 1U, 0);
         StoreScalarI32(workspaceView.scoreboardTaskMap + idx * 4U + 2U, 0);
         StoreScalarI32(workspaceView.scoreboardTaskMap + idx * 4U + 3U, 0);
-        StoreScalarI32(workspaceView.producerStatus + idx * 16U, 0);
-        StoreScalarI32(workspaceView.scoreboardMinStatus + idx * 16U, 0);
-        StoreScalarI32(workspaceView.workerWaitCounters + idx * 16U, 0);
-        StoreScalarI32(workspaceView.scoreboardTimeoutCounters + idx * 16U, 0);
+        for (uint32_t slot = 0; slot < 16U; ++slot) {
+            StoreScalarI32(workspaceView.producerStatus + idx * 16U + slot, 0);
+            StoreScalarI32(workspaceView.scoreboardMinStatus + idx * 16U + slot, 0);
+            StoreScalarI32(workspaceView.workerWaitCounters + idx * 16U + slot, 0);
+            StoreScalarI32(workspaceView.scoreboardTimeoutCounters + idx * 16U + slot, 0);
+        }
     }
     for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
         StoreScalarI32(workspaceView.expertTokenNums + localExpert, 0);

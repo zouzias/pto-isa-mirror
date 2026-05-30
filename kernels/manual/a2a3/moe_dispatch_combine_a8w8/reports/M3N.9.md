@@ -4,7 +4,7 @@
 
 - Task: M3N.9 timeout dump and overlap off/on regression
 - Owner: codex/current-session
-- End state: review_ready
+- End state: accepted (reviewer code-level review, DCL-2026-05-30-121)
 - Related issue: DCL-115 flag-id reuse risk follow-up
 
 ## Changes

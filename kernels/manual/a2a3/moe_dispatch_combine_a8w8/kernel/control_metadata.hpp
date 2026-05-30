@@ -30,6 +30,9 @@ constexpr uint32_t kM3N9TimeoutDumpExpertOwnerRankSlot = 4U;
 constexpr uint32_t kM3N9TimeoutDumpStageSlot = 5U;
 constexpr uint32_t kM3N9TimeoutDumpSignalIdSlot = 6U;
 constexpr uint32_t kM3N9TimeoutDumpDebugStopStageSlot = 7U;
+constexpr uint32_t kM3N10TimeoutDumpProducerStatusBaseSlot = 8U;
+constexpr uint32_t kM3N10TimeoutDumpScoreboardMinStatusSlot = 14U;
+constexpr uint32_t kM3N10TimeoutDumpScoreboardDomainSlot = 15U;
 constexpr uint32_t kM3N9TimeoutStageDispatchToGmm1 = 1U;
 
 template <typename T>

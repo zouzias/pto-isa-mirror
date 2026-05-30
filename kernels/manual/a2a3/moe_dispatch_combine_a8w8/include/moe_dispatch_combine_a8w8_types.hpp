@@ -62,6 +62,9 @@ constexpr uint32_t kM2FusedFullPtrWorkspaceSlot = 31;
 constexpr uint32_t kM2FusedFullPtrXActiveMaskSlot = 33;
 constexpr uint32_t kM2FusedFullTimelineEnableSlot = 35;
 constexpr uint32_t kM2FusedFullOverlapModeSlot = 36;
+constexpr uint32_t kM3N10ScoreboardCounterBase = 24U * 16U + 96U;
+constexpr uint32_t kM3N10ScoreboardCounterSlots = 16U;
+constexpr uint32_t kM3N10ScoreboardWorkerCounterBase = kM3N10ScoreboardCounterBase + kM3N10ScoreboardCounterSlots;
 
 enum class DType : uint32_t
 {
