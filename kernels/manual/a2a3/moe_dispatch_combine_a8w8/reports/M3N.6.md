@@ -4,7 +4,7 @@
 
 - Task: M3N.6 GMM1 to SwiGLU sync-group rotation
 - Owner: codex/current-session
-- End state: review_ready
+- End state: accepted (reviewer code-level review, DCL-2026-05-30-115)
 - Related issue: none
 
 ## Changes

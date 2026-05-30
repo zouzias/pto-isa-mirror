@@ -74,10 +74,11 @@ constexpr uint32_t kM3CounterBase = 24U * 16U;
 constexpr uint32_t kM3NDispatchCounterBase = kM3CounterBase + 16U;
 constexpr uint32_t kM3NActivationCounterBase = kM3CounterBase + 32U;
 constexpr uint32_t kM3NCombineCounterBase = kM3CounterBase + 48U;
+constexpr uint32_t kM3NGmm2CounterBase = kM3CounterBase + 64U;
 constexpr uint32_t kM3NDispatchScratchBase = 32U * 16U;
 constexpr uint32_t kM3NDispatchScratchLimit = 40U * 16U;
 constexpr uint32_t kM3NDispatchMaxWorkers = 8U;
-constexpr uint32_t kM3NCombineWorkerScratchBase = 64U * 16U;
+constexpr uint32_t kM3NCombineWorkerScratchBase = 72U * 16U;
 constexpr uint32_t kM3NCombineWorkerScratchStride = 16U;
 
 using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -403,7 +404,7 @@ AICORE inline moe_dispatch_combine_a8w8::PeerWindowLayout MakeM2PeerWindowLayout
     layout.combineDoneSignal = M2AppendFieldDevice(offset, shape.rankNum * 64U);
     layout.returnSegmentCounters =
         M2AppendFieldDevice(offset, static_cast<uint64_t>(shape.rankNum) * shape.expertPerRank * 64U);
-    layout.debugCounters = M2AppendFieldDevice(offset, 72U * 64U);
+    layout.debugCounters = M2AppendFieldDevice(offset, 80U * 64U);
     layout.timeline = M2AppendFieldDevice(offset, 64U * 4U * sizeof(uint64_t));
     layout.totalBytes = Align64Device(offset);
     return layout;

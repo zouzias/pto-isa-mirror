@@ -3719,7 +3719,9 @@ ffn.md 的同步手段在本 PTO 项目用以下等价接口表达；轮动任�
 依赖任务：M3N.6。
 
 **轮动粒度（冻结）**：**sync-group 粒度**，ready = `activationSyncGroupReady[syncIdx]`。
-**同步接口**：activation（AIV）完成某 syncIdx 后 `pto::Event`/`TSYNC_CVID` 发布；GMM2（AIC）`Wait` 对应 syncIdx。
+**同步接口**：activation（AIV）完成某 syncIdx 后发布 `activationSyncGroupReady[syncIdx]`。由于 DCL-115
+已登记 M3N.5/M3N.6 共用 cross-core flag id 6-10，M3N.7 首版用 GM-poll ready 消费该槽，避免第三条边继续复用
+同一 flag id；后续若扩展物理 flag 资源或改成可证明无 stale flag 的序号协议，再切回 `pto::Event`/`TSYNC_CVID`。
 
 文件范围：修改 `kernel/control_metadata.hpp`、`kernel/protocol_core.hpp`、`kernel/a3_int8_backend.hpp`。
 

@@ -258,7 +258,7 @@ inline PeerWindowLayout MakePeerWindowLayout(const ShapeConfig &shape)
     layout.returnSegmentCounters =
         AppendField(&offset, CheckedMul(CheckedMul(shape.rankNum, shape.expertPerRank, "segment counters"),
                                         kCacheLineBytes, "segment counters bytes"));
-    layout.debugCounters = AppendField(&offset, CheckedMul(72, kCacheLineBytes, "debug counters"));
+    layout.debugCounters = AppendField(&offset, CheckedMul(80, kCacheLineBytes, "debug counters"));
     layout.timeline = AppendField(&offset, CheckedMul(64, 4 * sizeof(uint64_t), "timeline"));
     layout.totalBytes = AlignUp(offset, kCacheLineBytes);
     return layout;

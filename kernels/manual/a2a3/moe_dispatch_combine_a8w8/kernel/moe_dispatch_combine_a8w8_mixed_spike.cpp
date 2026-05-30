@@ -128,7 +128,9 @@ constexpr uint32_t kM2FusedFullAicStageBaseSlot = 11U * 16U;
 constexpr uint32_t kM2FusedFullAivStageBaseSlot = 12U * 16U;
 constexpr uint32_t kM2FusedFullM3N5AicEvidenceSlot = 14U * 16U;
 constexpr uint32_t kM2FusedFullM3N6EvidenceSlot = kM2FusedFullM3N5AicEvidenceSlot + 2U;
+constexpr uint32_t kM2FusedFullM3N7EvidenceSlot = kM2FusedFullM3N6EvidenceSlot + 3U;
 constexpr uint32_t kM2FusedFullDebugStopSlot = 15U * 16U;
+constexpr uint32_t kM2FusedFullM3N7Gmm2CounterBase = 24U * 16U + 64U;
 constexpr uint32_t kM2FusedFullStageCount = 7U;
 constexpr uint32_t kM3NFusedDispatchScratchBase = 32U * 16U;
 constexpr uint32_t kM3NFusedDispatchScratchLimit = 40U * 16U;
@@ -209,6 +211,12 @@ AICORE inline bool M3N6Gmm1ActivationOverlapEnabled(uint32_t debugStopStage,
 {
     return debugStopStage < 100U && M3NFusedDispatchScratchFits(shape) &&
            moe_dispatch_combine_a8w8::M3N6Gmm1SyncGroupFlagsSupported(shape);
+}
+
+AICORE inline bool M3N7ActivationGmm2OverlapEnabled(uint32_t debugStopStage,
+                                                    moe_dispatch_combine_a8w8::ShapeConfig shape)
+{
+    return M3N6Gmm1ActivationOverlapEnabled(debugStopStage, shape);
 }
 
 AICORE inline void M3NDispatchAicWaitForAivSubphases(uint32_t debugStopStage,
@@ -300,6 +308,130 @@ AICORE inline void M3N6RecordGmm1SyncGroupReady(__gm__ int32_t *stageStatus,
     if (syncIdx + 1U == syncGroupCount) {
         M2FusedGmmStoreScalarI32(stageStatus + kM2FusedFullM3N6EvidenceSlot + 1U, 1);
     }
+    pipe_barrier(PIPE_ALL);
+    dsb(DSB_DDR);
+}
+
+AICORE inline uint64_t M3NFusedPeerAppendOffset(uint64_t *offset, uint64_t bytes)
+{
+    *offset = M2FusedGmmAlign64Device(*offset);
+    uint64_t field = *offset;
+    *offset += bytes;
+    return field;
+}
+
+AICORE inline __gm__ int32_t *M3NFusedPeerDebugCounters(GM_ADDR peerWindow,
+                                                        moe_dispatch_combine_a8w8::ShapeConfig shape)
+{
+    uint64_t offset = 0;
+    uint64_t expandedRows = static_cast<uint64_t>(shape.m) * shape.topK;
+    uint64_t tokenMatrixCount = static_cast<uint64_t>(shape.rankNum) * M2FusedGmmTokenPerExpertMatrixRowStride(shape);
+    (void)M3NFusedPeerAppendOffset(&offset, moe_dispatch_combine_a8w8::kPeerWindowHeaderBytes);
+    (void)M3NFusedPeerAppendOffset(&offset, tokenMatrixCount * sizeof(int32_t));
+    (void)M3NFusedPeerAppendOffset(&offset, static_cast<uint64_t>(shape.rankNum) * 64U);
+    (void)M3NFusedPeerAppendOffset(&offset, expandedRows * M2FusedGmmDispatchPayloadRowBytes(shape));
+    (void)M3NFusedPeerAppendOffset(&offset, expandedRows * sizeof(float));
+    (void)M3NFusedPeerAppendOffset(&offset, expandedRows * M2FusedGmmReturnPayloadRowBytes(shape));
+    (void)M3NFusedPeerAppendOffset(&offset, static_cast<uint64_t>(shape.rankNum) * 64U);
+    (void)M3NFusedPeerAppendOffset(&offset, static_cast<uint64_t>(shape.rankNum) * shape.expertPerRank * 64U);
+    uint64_t debugOffset = M3NFusedPeerAppendOffset(&offset, 80U * 64U);
+    return reinterpret_cast<__gm__ int32_t *>(peerWindow + debugOffset);
+}
+
+AICORE inline bool M3N7Gmm2TaskIntersectsSyncGroup(__gm__ int32_t *task, __gm__ int32_t *group)
+{
+    int32_t expertBegin = M2FusedGmmLoadScalarI32(group + 1U);
+    int32_t expertEnd = M2FusedGmmLoadScalarI32(group + 2U);
+    int32_t rowBegin = M2FusedGmmLoadScalarI32(group + 3U);
+    int32_t rowEnd = M2FusedGmmLoadScalarI32(group + 4U);
+    int32_t localExpert = M2FusedGmmLoadScalarI32(task + 2U);
+    int32_t taskRowBegin = M2FusedGmmLoadScalarI32(task + 3U);
+    int32_t taskRows = M2FusedGmmLoadScalarI32(task + 4U);
+    int32_t taskRowEnd = taskRowBegin + taskRows;
+    return localExpert >= expertBegin && localExpert < expertEnd && taskRows > 0 && taskRowBegin < rowEnd &&
+           taskRowEnd > rowBegin;
+}
+
+AICORE inline uint32_t M3N7CountGmm2SyncGroupTasks(__gm__ int32_t *taskPlan, uint32_t taskCount, __gm__ int32_t *group,
+                                                   int32_t *firstTaskId, int32_t *firstTaskExpert,
+                                                   int32_t *firstTaskRowBegin)
+{
+    uint32_t intersectTaskCount = 0;
+    *firstTaskId = -1;
+    *firstTaskExpert = -1;
+    *firstTaskRowBegin = -1;
+    for (uint32_t taskId = 0; taskId < taskCount; ++taskId) {
+        __gm__ int32_t *task = taskPlan + taskId * kM2GmmTileTaskFields;
+        if (!M3N7Gmm2TaskIntersectsSyncGroup(task, group)) {
+            continue;
+        }
+        if (intersectTaskCount == 0U) {
+            *firstTaskId = static_cast<int32_t>(taskId);
+            *firstTaskExpert = M2FusedGmmLoadScalarI32(task + 2U);
+            *firstTaskRowBegin = M2FusedGmmLoadScalarI32(task + 3U);
+        }
+        ++intersectTaskCount;
+    }
+    return intersectTaskCount;
+}
+
+AICORE inline void M3N7InitGmm2Counters(__gm__ int32_t *debugCounters, uint32_t syncGroupCount)
+{
+    for (uint32_t idx = 0; idx < 16U; ++idx) {
+        M2FusedGmmStoreScalarI32(debugCounters + kM2FusedFullM3N7Gmm2CounterBase + idx, 0);
+    }
+    M2FusedGmmStoreScalarI32(debugCounters + kM2FusedFullM3N7Gmm2CounterBase + 0U, 1);
+    M2FusedGmmStoreScalarI32(debugCounters + kM2FusedFullM3N7Gmm2CounterBase + 1U,
+                             static_cast<int32_t>(syncGroupCount));
+    pipe_barrier(PIPE_ALL);
+    dsb(DSB_DDR);
+}
+
+AICORE inline void M3N7WaitActivationSyncGroupReadyGm(__gm__ int32_t *activationSyncGroupReady, uint32_t syncIdx)
+{
+    __gm__ int32_t *ready = activationSyncGroupReady + syncIdx * 16U;
+    while (true) {
+        pipe_barrier(PIPE_ALL);
+        dcci(static_cast<__gm__ void *>(ready), SINGLE_CACHE_LINE);
+        dsb(DSB_DDR);
+        if (M2FusedGmmLoadScalarI32(ready) != 0) {
+            return;
+        }
+    }
+}
+
+AICORE inline void M3N7RecordGmm2SyncGroupConsumed(__gm__ int32_t *stageStatus, __gm__ int32_t *debugCounters,
+                                                   uint32_t syncIdx, uint32_t syncGroupCount, __gm__ int32_t *group,
+                                                   uint32_t intersectTaskCount, int32_t firstTaskId,
+                                                   int32_t firstTaskExpert, int32_t firstTaskRowBegin)
+{
+    int32_t previousTasks = M2FusedGmmLoadScalarI32(debugCounters + kM2FusedFullM3N7Gmm2CounterBase + 3U);
+    M2FusedGmmStoreScalarI32(debugCounters + kM2FusedFullM3N7Gmm2CounterBase + 3U,
+                             previousTasks + static_cast<int32_t>(intersectTaskCount));
+    int32_t consumed = M2FusedGmmLoadScalarI32(debugCounters + kM2FusedFullM3N7Gmm2CounterBase + 4U) + 1;
+    M2FusedGmmStoreScalarI32(debugCounters + kM2FusedFullM3N7Gmm2CounterBase + 4U, consumed);
+    M2FusedGmmStoreScalarI32(debugCounters + kM2FusedFullM3N7Gmm2CounterBase + 5U, static_cast<int32_t>(syncIdx));
+    M2FusedGmmStoreScalarI32(debugCounters + kM2FusedFullM3N7Gmm2CounterBase + 6U, M2FusedGmmLoadScalarI32(group + 1U));
+    M2FusedGmmStoreScalarI32(debugCounters + kM2FusedFullM3N7Gmm2CounterBase + 7U, M2FusedGmmLoadScalarI32(group + 2U));
+    M2FusedGmmStoreScalarI32(debugCounters + kM2FusedFullM3N7Gmm2CounterBase + 8U, M2FusedGmmLoadScalarI32(group + 3U));
+    M2FusedGmmStoreScalarI32(debugCounters + kM2FusedFullM3N7Gmm2CounterBase + 9U, M2FusedGmmLoadScalarI32(group + 4U));
+    M2FusedGmmStoreScalarI32(debugCounters + kM2FusedFullM3N7Gmm2CounterBase + 10U,
+                             M2FusedGmmLoadScalarI32(group + 5U));
+    M2FusedGmmStoreScalarI32(debugCounters + kM2FusedFullM3N7Gmm2CounterBase + 11U,
+                             M2FusedGmmLoadScalarI32(group + 6U));
+    if (previousTasks == 0 && intersectTaskCount > 0U) {
+        M2FusedGmmStoreScalarI32(debugCounters + kM2FusedFullM3N7Gmm2CounterBase + 12U, firstTaskId);
+        M2FusedGmmStoreScalarI32(debugCounters + kM2FusedFullM3N7Gmm2CounterBase + 13U, firstTaskExpert);
+        M2FusedGmmStoreScalarI32(debugCounters + kM2FusedFullM3N7Gmm2CounterBase + 15U, firstTaskRowBegin);
+    }
+    if (syncIdx == 0U && syncGroupCount > 1U) {
+        M2FusedGmmStoreScalarI32(debugCounters + kM2FusedFullM3N7Gmm2CounterBase + 14U, 1);
+        M2FusedGmmStoreScalarI32(stageStatus + kM2FusedFullM3N7EvidenceSlot, 1);
+    }
+    if (syncIdx + 1U == syncGroupCount) {
+        M2FusedGmmStoreScalarI32(stageStatus + kM2FusedFullM3N7EvidenceSlot + 1U, 1);
+    }
+    M2FusedGmmStoreScalarI32(stageStatus + kM2FusedFullM3N7EvidenceSlot + 2U, static_cast<int32_t>(intersectTaskCount));
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
 }
@@ -976,8 +1108,10 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
     moe_dispatch_combine_a8w8::RankConfig rank = M2FusedLoadRankConfig(stageStatus);
     GM_ADDR workspace = reinterpret_cast<GM_ADDR>(
         M2FusedLoadConfigU64(stageStatus, moe_dispatch_combine_a8w8::kM2FusedFullPtrWorkspaceSlot));
+    GM_ADDR peerWindow = reinterpret_cast<GM_ADDR>(
+        M2FusedLoadConfigU64(stageStatus, moe_dispatch_combine_a8w8::kM2FusedFullPtrPeerWindowSlot));
     auto layout = M2FusedGmmMakeWorkspaceLayoutDevice(shape);
-    (void)layout;
+    __gm__ int32_t *debugCounters = M3NFusedPeerDebugCounters(peerWindow, shape);
     uint32_t debugStopStage = static_cast<uint32_t>(M2FusedGmmLoadScalarI32(stageStatus + kM2FusedFullDebugStopSlot));
     if (debugStopStage == 0U) {
         debugStopStage = M2FusedLoadDebugStopStage(launchArgs);
@@ -992,11 +1126,15 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
         M2FusedRecordStage(stageStatus + kM2FusedFullM3N6EvidenceSlot + 0U, 0U, 0);
         M2FusedRecordStage(stageStatus + kM2FusedFullM3N6EvidenceSlot + 1U, 0U, 0);
         M2FusedRecordStage(stageStatus + kM2FusedFullM3N6EvidenceSlot + 2U, 0U, 0);
+        M2FusedRecordStage(stageStatus + kM2FusedFullM3N7EvidenceSlot + 0U, 0U, 0);
+        M2FusedRecordStage(stageStatus + kM2FusedFullM3N7EvidenceSlot + 1U, 0U, 0);
+        M2FusedRecordStage(stageStatus + kM2FusedFullM3N7EvidenceSlot + 2U, 0U, 0);
         pipe_barrier(PIPE_ALL);
         dsb(DSB_DDR);
     }
     bool m3n5DispatchGmm1Overlap = M3N5DispatchGmm1OverlapEnabled(debugStopStage, shape);
     bool m3n6Gmm1ActivationOverlap = M3N6Gmm1ActivationOverlapEnabled(debugStopStage, shape);
+    bool m3n7ActivationGmm2Overlap = M3N7ActivationGmm2OverlapEnabled(debugStopStage, shape);
     M3NDispatchAicWaitForAivSubphases(debugStopStage, shape);
     if (debugStopStage >= 100U) {
         pto::SYNCALL<pto::SyncCoreType::Mix>();
@@ -1130,8 +1268,18 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
     if (!m3n6Gmm1ActivationOverlap) {
         M3NActivationAicWaitForAivSubphases(debugStopStage, shape);
     }
-    moe_dispatch_combine_a8w8::M3N4WaitV2C<moe_dispatch_combine_a8w8::kM3N4ActivationToGmm2Flag>();
+    if (!m3n7ActivationGmm2Overlap) {
+        moe_dispatch_combine_a8w8::M3N4WaitV2C<moe_dispatch_combine_a8w8::kM3N4ActivationToGmm2Flag>();
+    }
     if (debugStopStage == 4U) {
+        if (m3n7ActivationGmm2Overlap) {
+            __gm__ int32_t *activationSyncGroupReady =
+                reinterpret_cast<__gm__ int32_t *>(workspace + layout.activationSyncGroupReady.offset);
+            uint32_t syncGroupCount = moe_dispatch_combine_a8w8::M3N6SwigluSyncGroupCount(shape);
+            for (uint32_t syncIdx = 0; syncIdx < syncGroupCount; ++syncIdx) {
+                M3N7WaitActivationSyncGroupReadyGm(activationSyncGroupReady, syncIdx);
+            }
+        }
         return;
     }
     M2FusedRecordStage(stageStatus + kM2FusedFullAicStageBaseSlot, static_cast<uint32_t>(get_block_idx()), 200);
@@ -1148,6 +1296,9 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
         __gm__ int32_t *dispatchOffset = reinterpret_cast<__gm__ int32_t *>(workspace + layout.dispatchOffset.offset);
         __gm__ int32_t *expertTokenNums = reinterpret_cast<__gm__ int32_t *>(workspace + layout.expertTokenNums.offset);
         __gm__ int32_t *gmm2GroupReady = reinterpret_cast<__gm__ int32_t *>(workspace + layout.gmm2GroupReady.offset);
+        __gm__ int32_t *activationSyncGroupReady =
+            reinterpret_cast<__gm__ int32_t *>(workspace + layout.activationSyncGroupReady.offset);
+        __gm__ int32_t *swigluGroupDesc = reinterpret_cast<__gm__ int32_t *>(workspace + layout.swigluGroupDesc.offset);
         __gm__ int32_t *gmm2TileTaskPlan =
             reinterpret_cast<__gm__ int32_t *>(workspace + layout.gmm2TileTaskPlan.offset);
         uint32_t taskCount = M2FusedGmmBuildTileTaskPlan(shape, dispatchOffset, expertTokenNums, gmm2TileTaskPlan,
@@ -1155,6 +1306,9 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
         if (get_block_idx() == 0) {
             M2FusedGmmStoreScalarI32(stageStatus + 6U * 16U, static_cast<int32_t>(taskCount));
             M2FusedGmmStoreScalarI32(stageStatus + 7U * 16U, static_cast<int32_t>(get_block_num()));
+            if (m3n7ActivationGmm2Overlap) {
+                M3N7InitGmm2Counters(debugCounters, moe_dispatch_combine_a8w8::M3N6SwigluSyncGroupCount(shape));
+            }
         }
         for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
             int32_t rowCount = M2FusedGmmLoadScalarI32(expertTokenNums + localExpert);
@@ -1162,28 +1316,81 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
                 M2FusedGmmStoreScalarI32(gmm2GroupReady + localExpert * 16U, 1);
             }
         }
-        for (uint32_t taskId = static_cast<uint32_t>(get_block_idx()); taskId < taskCount;
-             taskId += static_cast<uint32_t>(get_block_num())) {
-            __gm__ int32_t *task = gmm2TileTaskPlan + taskId * kM2GmmTileTaskFields;
-            uint32_t localExpert = static_cast<uint32_t>(M2FusedGmmLoadScalarI32(task + 2U));
-            uint32_t globalExpert = rank.rankId * shape.expertPerRank + localExpert;
-            uint32_t rowBegin = static_cast<uint32_t>(M2FusedGmmLoadScalarI32(task + 3U));
-            uint32_t mValid = static_cast<uint32_t>(M2FusedGmmLoadScalarI32(task + 4U));
-            uint32_t nBase = static_cast<uint32_t>(M2FusedGmmLoadScalarI32(task + 5U));
-            uint32_t nValid = static_cast<uint32_t>(M2FusedGmmLoadScalarI32(task + 6U));
-            __gm__ int8_t *expertWeight =
-                weight2 + static_cast<uint64_t>(globalExpert) * shape.intermediateSize * shape.hiddenSize;
-            __gm__ int8_t *tileInput = gmm2Input + static_cast<uint64_t>(rowBegin) * rowBytes;
-            __gm__ int32_t *tileOutput = gmm2Acc + static_cast<uint64_t>(rowBegin) * shape.hiddenSize;
-            M2FusedRunInt8GmmTile(tileInput, expertWeight + nBase, tileOutput + nBase, mValid, shape.intermediateSize,
-                                  nValid, rowBytes, shape.hiddenSize, shape.hiddenSize);
+        if (m3n7ActivationGmm2Overlap) {
+            uint32_t syncGroupCount = moe_dispatch_combine_a8w8::M3N6SwigluSyncGroupCount(shape);
+            for (uint32_t syncIdx = 0; syncIdx < syncGroupCount; ++syncIdx) {
+                M3N7WaitActivationSyncGroupReadyGm(activationSyncGroupReady, syncIdx);
+                __gm__ int32_t *group = swigluGroupDesc + syncIdx * kM2SwigluGroupFields;
+                if (get_block_idx() == 0) {
+                    int32_t firstTaskId = -1;
+                    int32_t firstTaskExpert = -1;
+                    int32_t firstTaskRowBegin = -1;
+                    uint32_t intersectTaskCount = M3N7CountGmm2SyncGroupTasks(
+                        gmm2TileTaskPlan, taskCount, group, &firstTaskId, &firstTaskExpert, &firstTaskRowBegin);
+                    M3N7RecordGmm2SyncGroupConsumed(stageStatus, debugCounters, syncIdx, syncGroupCount, group,
+                                                    intersectTaskCount, firstTaskId, firstTaskExpert,
+                                                    firstTaskRowBegin);
+                }
+                for (uint32_t taskId = static_cast<uint32_t>(get_block_idx()); taskId < taskCount;
+                     taskId += static_cast<uint32_t>(get_block_num())) {
+                    __gm__ int32_t *task = gmm2TileTaskPlan + taskId * kM2GmmTileTaskFields;
+                    if (!M3N7Gmm2TaskIntersectsSyncGroup(task, group)) {
+                        continue;
+                    }
+                    uint32_t localExpert = static_cast<uint32_t>(M2FusedGmmLoadScalarI32(task + 2U));
+                    uint32_t globalExpert = rank.rankId * shape.expertPerRank + localExpert;
+                    uint32_t rowBegin = static_cast<uint32_t>(M2FusedGmmLoadScalarI32(task + 3U));
+                    uint32_t mValid = static_cast<uint32_t>(M2FusedGmmLoadScalarI32(task + 4U));
+                    uint32_t nBase = static_cast<uint32_t>(M2FusedGmmLoadScalarI32(task + 5U));
+                    uint32_t nValid = static_cast<uint32_t>(M2FusedGmmLoadScalarI32(task + 6U));
+                    __gm__ int8_t *expertWeight =
+                        weight2 + static_cast<uint64_t>(globalExpert) * shape.intermediateSize * shape.hiddenSize;
+                    __gm__ int8_t *tileInput = gmm2Input + static_cast<uint64_t>(rowBegin) * rowBytes;
+                    __gm__ int32_t *tileOutput = gmm2Acc + static_cast<uint64_t>(rowBegin) * shape.hiddenSize;
+                    M2FusedRunInt8GmmTile(tileInput, expertWeight + nBase, tileOutput + nBase, mValid,
+                                          shape.intermediateSize, nValid, rowBytes, shape.hiddenSize, shape.hiddenSize);
+                }
+                moe_dispatch_combine_a8w8::M3N4AicAllDoneCoarseSync();
+                if (get_block_idx() == 0) {
+                    int32_t expertBeginI32 = M2FusedGmmLoadScalarI32(group + 1U);
+                    int32_t expertEndI32 = M2FusedGmmLoadScalarI32(group + 2U);
+                    uint32_t expertBegin = expertBeginI32 > 0 ? static_cast<uint32_t>(expertBeginI32) : 0U;
+                    uint32_t expertEnd = expertEndI32 > 0 ? static_cast<uint32_t>(expertEndI32) : 0U;
+                    if (expertEnd > shape.expertPerRank) {
+                        expertEnd = shape.expertPerRank;
+                    }
+                    for (uint32_t localExpert = expertBegin; localExpert < expertEnd; ++localExpert) {
+                        M2FusedGmmStoreScalarI32(gmm2GroupReady + localExpert * 16U, 1);
+                    }
+                    pipe_barrier(PIPE_ALL);
+                    dsb(DSB_DDR);
+                }
+            }
+        } else {
+            for (uint32_t taskId = static_cast<uint32_t>(get_block_idx()); taskId < taskCount;
+                 taskId += static_cast<uint32_t>(get_block_num())) {
+                __gm__ int32_t *task = gmm2TileTaskPlan + taskId * kM2GmmTileTaskFields;
+                uint32_t localExpert = static_cast<uint32_t>(M2FusedGmmLoadScalarI32(task + 2U));
+                uint32_t globalExpert = rank.rankId * shape.expertPerRank + localExpert;
+                uint32_t rowBegin = static_cast<uint32_t>(M2FusedGmmLoadScalarI32(task + 3U));
+                uint32_t mValid = static_cast<uint32_t>(M2FusedGmmLoadScalarI32(task + 4U));
+                uint32_t nBase = static_cast<uint32_t>(M2FusedGmmLoadScalarI32(task + 5U));
+                uint32_t nValid = static_cast<uint32_t>(M2FusedGmmLoadScalarI32(task + 6U));
+                __gm__ int8_t *expertWeight =
+                    weight2 + static_cast<uint64_t>(globalExpert) * shape.intermediateSize * shape.hiddenSize;
+                __gm__ int8_t *tileInput = gmm2Input + static_cast<uint64_t>(rowBegin) * rowBytes;
+                __gm__ int32_t *tileOutput = gmm2Acc + static_cast<uint64_t>(rowBegin) * shape.hiddenSize;
+                M2FusedRunInt8GmmTile(tileInput, expertWeight + nBase, tileOutput + nBase, mValid,
+                                      shape.intermediateSize, nValid, rowBytes, shape.hiddenSize, shape.hiddenSize);
+            }
         }
     }
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
     moe_dispatch_combine_a8w8::M3N4AicAllDoneCoarseSync();
-    if (get_block_idx() == 0 && shape.rankNum != 0 && shape.expertPerRank != 0 && shape.hiddenSize != 0U &&
-        shape.intermediateSize != 0U && shape.gmmBlockM == moe_dispatch_combine_a8w8::kGmmBaseM &&
+    if (get_block_idx() == 0 && !m3n7ActivationGmm2Overlap && shape.rankNum != 0 && shape.expertPerRank != 0 &&
+        shape.hiddenSize != 0U && shape.intermediateSize != 0U &&
+        shape.gmmBlockM == moe_dispatch_combine_a8w8::kGmmBaseM &&
         shape.gmmBlockN == moe_dispatch_combine_a8w8::kGmmBaseN &&
         shape.gmmBlockK == moe_dispatch_combine_a8w8::kGmmBaseK &&
         shape.hiddenSize % moe_dispatch_combine_a8w8::kGmmBaseK == 0U &&
@@ -1434,6 +1641,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     uint32_t rawAivSlot = M2FusedRawAivSlot();
     bool m3n5DispatchGmm1Overlap = M3N5DispatchGmm1OverlapEnabled(debugStopStage, shape);
     bool m3n6Gmm1ActivationOverlap = M3N6Gmm1ActivationOverlapEnabled(debugStopStage, shape);
+    bool m3n7ActivationGmm2Overlap = M3N7ActivationGmm2OverlapEnabled(debugStopStage, shape);
     uint32_t m3n6SyncGroupCount = moe_dispatch_combine_a8w8::M3N6SwigluSyncGroupCount(shape);
     M3NRecordAivLaneDebug(localPeer, rawAivSlot);
     if (IsM2FusedMainAiv()) {
@@ -1446,6 +1654,10 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         if (m3n6Gmm1ActivationOverlap) {
             m3nHandshakeSites = m3nHandshakeSites - 2U + m3n6SyncGroupCount;
             m3nCvWaitCount = m3nCvWaitCount - 2U + m3n6SyncGroupCount;
+        }
+        if (m3n7ActivationGmm2Overlap) {
+            m3nHandshakeSites = m3nHandshakeSites - 1U + m3n6SyncGroupCount;
+            m3nCvWaitCount = m3nCvWaitCount - 1U + m3n6SyncGroupCount;
         }
         M2FusedRecordStage(stageStatus + kM2FusedFullAivHeaderSlot, 0U, kM2FusedFullMagic);
         M2FusedRecordStage(stageStatus + kM2FusedFullAivHeaderSlot, 1U,
@@ -1469,6 +1681,12 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 14U, static_cast<int32_t>(m3nCvWaitCount));
         StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 15U, 0);
         StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 8U, m3n6Gmm1ActivationOverlap ? 1 : 0);
+        for (uint32_t idx = 0; idx < 16U; ++idx) {
+            StoreScalarI32(localPeer.debugCounters + kM3NGmm2CounterBase + idx, 0);
+        }
+        StoreScalarI32(localPeer.debugCounters + kM3NGmm2CounterBase + 0U, m3n7ActivationGmm2Overlap ? 1 : 0);
+        StoreScalarI32(localPeer.debugCounters + kM3NGmm2CounterBase + 1U, static_cast<int32_t>(m3n6SyncGroupCount));
+        StoreScalarI32(localPeer.debugCounters + kM3NGmm2CounterBase + 2U, 0);
     }
     if (debugStopStage == 102303U) {
         if (IsM2FusedMainAiv()) {
@@ -1772,6 +1990,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                 StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 9U,
                                LoadScalarI32(localPeer.debugCounters + kM3CounterBase + 9U) + 1);
             }
+            moe_dispatch_combine_a8w8::M3N4AivAllDoneCoarseSync();
         }
         if (debugStopStage == 3U) {
             return;
@@ -1846,7 +2065,9 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     }
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
-    moe_dispatch_combine_a8w8::M3N4SignalV2C<moe_dispatch_combine_a8w8::kM3N4ActivationToGmm2Flag>();
+    if (!m3n7ActivationGmm2Overlap) {
+        moe_dispatch_combine_a8w8::M3N4SignalV2C<moe_dispatch_combine_a8w8::kM3N4ActivationToGmm2Flag>();
+    }
     if (debugStopStage == 4U) {
         return;
     }
