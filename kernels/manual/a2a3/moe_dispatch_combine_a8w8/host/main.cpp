@@ -3761,6 +3761,11 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     int32_t combineActualWriteCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3nCombineCounters[2];
     int32_t combineSkippedSegmentCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3nCombineCounters[3];
     bool combineRangesNonoverlap = fusedEvidence != nullptr && fusedEvidence->m3nCombineCounters[7] != 0;
+    bool m3n4StreamEnabled = fusedEvidence != nullptr && fusedEvidence->m3Counters[6] != 0;
+    bool m3n4SignalAllOpen = fusedEvidence != nullptr && fusedEvidence->m3Counters[11] != 0;
+    int32_t m3n4HandshakeSites = fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[12];
+    int32_t m3n4SyncallCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[13];
+    int32_t m3n4CvWaitCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[14];
     std::ostringstream combineWorkerSegments;
     for (int32_t worker = 0; worker < 8; ++worker) {
         if (worker != 0) {
@@ -3791,12 +3796,22 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  multi_launch_debug_only=true\n";
     std::cout << "  mixed_elf_register=true\n";
     std::cout << "  fused_single_launch=true\n";
-    std::cout << "  fused_device_stage_boundaries=syncall_mix\n";
-    std::cout << "  fused_syncall_mode=hard_mix\n";
+    std::cout << "  exec_model=" << (m3n4StreamEnabled ? "aic_aiv_stream" : "bsp_syncall") << "\n";
+    std::cout << "  fused_device_stage_boundaries="
+              << (m3n4StreamEnabled ? "pto_event_full_open_signals" : "syncall_mix") << "\n";
+    std::cout << "  fused_syncall_mode=" << (m3n4StreamEnabled ? "coarse_internal_only_counted" : "hard_mix") << "\n";
     std::cout << "  fused_host_barrier_between_stages=false\n";
     std::cout << "  m3_single_kernel_mpmd=true\n";
     std::cout << "  m3_overlap_requested=" << (args.runtime.overlapMode == 0 ? "false" : "true") << "\n";
-    std::cout << "  m3_overlap_execution=skeleton_shared_layout\n";
+    std::cout << "  m3_overlap_execution="
+              << (m3n4StreamEnabled ? "signal_full_open_stream_skeleton" : "skeleton_shared_layout") << "\n";
+    std::cout << "  m3n4_stream_skeleton_enabled=" << (m3n4StreamEnabled ? "true" : "false") << "\n";
+    std::cout << "  m3n4_signal_all_open=" << (m3n4SignalAllOpen ? "true" : "false") << "\n";
+    std::cout << "  m3n4_handshake_mode=pto_event_cross_core_full_open\n";
+    std::cout << "  m3n4_handshake_site_count=" << m3n4HandshakeSites << "\n";
+    std::cout << "  syncall_count=" << m3n4SyncallCount << "\n";
+    std::cout << "  cv_wait_count=" << m3n4CvWaitCount << "\n";
+    std::cout << "  overlap_on_payload_async_claim=false\n";
     std::cout << "  m3_launch_level_aiv_participation=true\n";
     std::cout << "  m3_payload_worker_evidence=partial\n";
     std::cout << "  mixed_aic_heartbeat=" << (fusedEvidence != nullptr && fusedEvidence->aicSeen ? "true" : "false")

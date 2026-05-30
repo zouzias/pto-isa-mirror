@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 
 #include "moe_dispatch_combine_a8w8_types.hpp"
+#include "protocol_core.hpp"
 
 #ifndef GM_ADDR
 #define GM_ADDR __gm__ uint8_t *
@@ -767,8 +768,12 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
         M2FusedRecordStage(stageStatus + kM2FusedFullAicHeaderSlot, 3U, static_cast<int32_t>(shape.rankNum));
     }
     M3NDispatchAicWaitForAivSubphases(debugStopStage, shape);
-    pto::SYNCALL<pto::SyncCoreType::Mix>();
-    if (debugStopStage == 1U || debugStopStage >= 100U) {
+    if (debugStopStage >= 100U) {
+        pto::SYNCALL<pto::SyncCoreType::Mix>();
+        return;
+    }
+    moe_dispatch_combine_a8w8::M3N4WaitV2C<moe_dispatch_combine_a8w8::kM3N4DispatchToGmm1Flag>();
+    if (debugStopStage == 1U) {
         return;
     }
     M2FusedRecordStage(stageStatus + kM2FusedFullAicStageBaseSlot, static_cast<uint32_t>(get_block_idx()), 100);
@@ -811,16 +816,17 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
     }
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
-    pto::SYNCALL<pto::SyncCoreType::Mix>();
+    moe_dispatch_combine_a8w8::M3N4AicAllDoneCoarseSync();
+    moe_dispatch_combine_a8w8::M3N4SignalC2V<moe_dispatch_combine_a8w8::kM3N4Gmm1ToEpilogueFlag>();
     if (debugStopStage == 2U) {
         return;
     }
-    pto::SYNCALL<pto::SyncCoreType::Mix>();
+    moe_dispatch_combine_a8w8::M3N4WaitV2C<moe_dispatch_combine_a8w8::kM3N4Gmm1EpilogueToActivationFlag>();
     if (debugStopStage == 3U) {
         return;
     }
     M3NActivationAicWaitForAivSubphases(debugStopStage, shape);
-    pto::SYNCALL<pto::SyncCoreType::Mix>();
+    moe_dispatch_combine_a8w8::M3N4WaitV2C<moe_dispatch_combine_a8w8::kM3N4ActivationToGmm2Flag>();
     if (debugStopStage == 4U) {
         return;
     }
@@ -868,24 +874,31 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
             M2FusedRunInt8GmmTile(tileInput, expertWeight + nBase, tileOutput + nBase, mValid, shape.intermediateSize,
                                   nValid, rowBytes, shape.hiddenSize, shape.hiddenSize);
         }
-        pipe_barrier(PIPE_ALL);
-        dsb(DSB_DDR);
-        if (get_block_idx() == 0) {
-            for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
-                M2FusedGmmStoreScalarI32(gmm2GroupReady + localExpert * 16U, 1);
-            }
+    }
+    pipe_barrier(PIPE_ALL);
+    dsb(DSB_DDR);
+    moe_dispatch_combine_a8w8::M3N4AicAllDoneCoarseSync();
+    if (get_block_idx() == 0 && shape.rankNum != 0 && shape.expertPerRank != 0 && shape.hiddenSize != 0U &&
+        shape.intermediateSize != 0U && shape.gmmBlockM == moe_dispatch_combine_a8w8::kGmmBaseM &&
+        shape.gmmBlockN == moe_dispatch_combine_a8w8::kGmmBaseN &&
+        shape.gmmBlockK == moe_dispatch_combine_a8w8::kGmmBaseK &&
+        shape.hiddenSize % moe_dispatch_combine_a8w8::kGmmBaseK == 0U &&
+        shape.intermediateSize % moe_dispatch_combine_a8w8::kGmmBaseK == 0U) {
+        __gm__ int32_t *gmm2GroupReady = reinterpret_cast<__gm__ int32_t *>(workspace + layout.gmm2GroupReady.offset);
+        for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
+            M2FusedGmmStoreScalarI32(gmm2GroupReady + localExpert * 16U, 1);
         }
     }
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
-    pto::SYNCALL<pto::SyncCoreType::Mix>();
+    moe_dispatch_combine_a8w8::M3N4SignalC2V<moe_dispatch_combine_a8w8::kM3N4Gmm2ToCombineFlag>();
     if (debugStopStage == 5U) {
         return;
     }
     if (M3NCombineAicWaitForAivSubphases(debugStopStage, shape)) {
         return;
     }
-    pto::SYNCALL<pto::SyncCoreType::Mix>();
+    moe_dispatch_combine_a8w8::M3N4WaitV2C<moe_dispatch_combine_a8w8::kM3N4CombineToRestoreFlag>();
     if (debugStopStage == 6U) {
         return;
     }
@@ -1128,7 +1141,16 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 3U, 1);
         StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 4U, 1);
         StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 5U, 6);
-        StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 6U, 0);
+        StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 6U, 1);
+        StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 11U, 1);
+        StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 12U,
+                       static_cast<int32_t>(moe_dispatch_combine_a8w8::kM3N4StreamHandshakeSites));
+        StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 13U,
+                       static_cast<int32_t>(moe_dispatch_combine_a8w8::kM3N4CoarseMixSyncallCount +
+                                            moe_dispatch_combine_a8w8::kM3N4AicOnlySyncCount +
+                                            moe_dispatch_combine_a8w8::kM3N4AivOnlySyncCount));
+        StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 14U,
+                       static_cast<int32_t>(moe_dispatch_combine_a8w8::kM3N4FullOpenCvWaitCount));
         StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 15U, 0);
     }
     if (debugStopStage == 102303U) {
@@ -1360,11 +1382,15 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     }
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
-    pto::SYNCALL<pto::SyncCoreType::Mix>();
-    if (debugStopStage == 1U || debugStopStage >= 100U) {
+    if (debugStopStage >= 100U) {
+        pto::SYNCALL<pto::SyncCoreType::Mix>();
         return;
     }
-    pto::SYNCALL<pto::SyncCoreType::Mix>();
+    moe_dispatch_combine_a8w8::M3N4SignalV2C<moe_dispatch_combine_a8w8::kM3N4DispatchToGmm1Flag>();
+    if (debugStopStage == 1U) {
+        return;
+    }
+    moe_dispatch_combine_a8w8::M3N4WaitC2V<moe_dispatch_combine_a8w8::kM3N4Gmm1ToEpilogueFlag>();
     if (debugStopStage == 2U) {
         return;
     }
@@ -1375,7 +1401,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     }
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
-    pto::SYNCALL<pto::SyncCoreType::Mix>();
+    moe_dispatch_combine_a8w8::M3N4AivAllDoneCoarseSync();
+    moe_dispatch_combine_a8w8::M3N4SignalV2C<moe_dispatch_combine_a8w8::kM3N4Gmm1EpilogueToActivationFlag>();
     if (debugStopStage == 3U) {
         return;
     }
@@ -1429,11 +1456,11 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     }
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
-    pto::SYNCALL<pto::SyncCoreType::Mix>();
+    moe_dispatch_combine_a8w8::M3N4SignalV2C<moe_dispatch_combine_a8w8::kM3N4ActivationToGmm2Flag>();
     if (debugStopStage == 4U) {
         return;
     }
-    pto::SYNCALL<pto::SyncCoreType::Mix>();
+    moe_dispatch_combine_a8w8::M3N4WaitC2V<moe_dispatch_combine_a8w8::kM3N4Gmm2ToCombineFlag>();
     if (debugStopStage == 5U) {
         return;
     }
@@ -1476,7 +1503,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     }
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
-    pto::SYNCALL<pto::SyncCoreType::Mix>();
+    moe_dispatch_combine_a8w8::M3N4AivAllDoneCoarseSync();
+    moe_dispatch_combine_a8w8::M3N4SignalV2C<moe_dispatch_combine_a8w8::kM3N4CombineToRestoreFlag>();
     if (debugStopStage == 6U) {
         return;
     }

@@ -60,7 +60,8 @@ struct Event {
     PTO_INTERNAL static constexpr bool IsCrossCoreEvent()
     {
         return ((srcOp == Op::TMOV_A2V) && (GetPipeByOp<dstOp>() == PIPE_V)) || // dstOp为搬运到GM的MTE3是否需要考虑
-               ((srcOp == Op::TMOV_V2M || srcOp == Op::TEXTRACT_V2M) && (GetPipeByOp<dstOp>() == PIPE_MTE1));
+               ((srcOp == Op::TMOV_V2M || srcOp == Op::TEXTRACT_V2M) && (GetPipeByOp<dstOp>() == PIPE_MTE1)) ||
+               ((srcOp == Op::TSTORE_VEC || srcOp == Op::TSTORE_ACC) && (dstOp == Op::TLOAD));
     }
 
     static constexpr bool IsCrossCore = IsCrossCoreEvent();
@@ -110,7 +111,7 @@ struct Event {
         if constexpr (IsCrossCore) {
             PTO_STATIC_ASSERT(CrossCoreId != 0xff,
                               "Fix: The cross-core id must be assigned by user when the event is a cross-core event.");
-            ffts_cross_core_sync(srcPipe, getFFTSMsg(FFTS_MODE_VAL, CrossCoreId));
+            ffts_cross_core_sync((pipe_t)srcPipe, getFFTSMsg(FFTS_MODE_VAL, CrossCoreId));
         } else {
 #ifdef PTO_FLAG_TEST
             token = __pto_set_flag((pipe_t)srcPipe, (pipe_t)dstPipe);
@@ -141,12 +142,10 @@ struct Event {
 };
 
 template <typename T>
-struct is_event : std::false_type {
-};
+struct is_event : std::false_type {};
 
 template <Op SrcOp, Op DstOp, bool AutoToken, event_t EventID>
-struct is_event<Event<SrcOp, DstOp, AutoToken, EventID>> : std::true_type {
-};
+struct is_event<Event<SrcOp, DstOp, AutoToken, EventID>> : std::true_type {};
 
 template <typename... Ts>
 inline constexpr bool all_events_v = (is_event<Ts>::value && ...);

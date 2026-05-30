@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/comm/pto_comm_inst.hpp>
 #include <pto/common/type.hpp>
+#include <pto/npu/a2a3/TSync.hpp>
 #include <pto/pto-inst.hpp>
 
 #include "moe_dispatch_combine_a8w8_types.hpp"
@@ -34,6 +35,68 @@ struct StageContext {
     GM_ADDR peerWindow;
     GM_ADDR hcclCtx;
 };
+
+constexpr uint8_t kM3N4MaxUserCrossCoreId = 10;
+constexpr uint8_t kM3N4DispatchToGmm1Flag = 0;
+constexpr uint8_t kM3N4Gmm1ToEpilogueFlag = 1;
+constexpr uint8_t kM3N4Gmm1EpilogueToActivationFlag = 2;
+constexpr uint8_t kM3N4ActivationToGmm2Flag = 3;
+constexpr uint8_t kM3N4Gmm2ToCombineFlag = 4;
+constexpr uint8_t kM3N4CombineToRestoreFlag = 5;
+constexpr uint32_t kM3N4StreamHandshakeSites = 6;
+constexpr uint32_t kM3N4FullOpenCvWaitCount = 6;
+constexpr uint32_t kM3N4CoarseMixSyncallCount = 16;
+constexpr uint32_t kM3N4AicOnlySyncCount = 2;
+constexpr uint32_t kM3N4AivOnlySyncCount = 2;
+
+using M3N4V2CEvent = pto::Event<pto::Op::TSTORE_VEC, pto::Op::TLOAD, false, EVENT_ID0>;
+using M3N4C2VEvent = pto::Event<pto::Op::TSTORE_ACC, pto::Op::TLOAD, false, EVENT_ID0>;
+
+template <uint8_t CrossCoreId>
+PTO_INTERNAL void M3N4SignalV2C()
+{
+    PTO_STATIC_ASSERT(CrossCoreId <= kM3N4MaxUserCrossCoreId, "M3N4 cross-core flag id exceeds user range");
+    M3N4V2CEvent event;
+    event.Init<CrossCoreId>();
+}
+
+template <uint8_t CrossCoreId>
+PTO_INTERNAL void M3N4WaitV2C()
+{
+    PTO_STATIC_ASSERT(CrossCoreId <= kM3N4MaxUserCrossCoreId, "M3N4 cross-core flag id exceeds user range");
+    M3N4V2CEvent event;
+    event.Wait<CrossCoreId>();
+}
+
+template <uint8_t CrossCoreId>
+PTO_INTERNAL void M3N4SignalC2V()
+{
+    PTO_STATIC_ASSERT(CrossCoreId <= kM3N4MaxUserCrossCoreId, "M3N4 cross-core flag id exceeds user range");
+    M3N4C2VEvent event;
+    event.Init<CrossCoreId>();
+}
+
+template <uint8_t CrossCoreId>
+PTO_INTERNAL void M3N4WaitC2V()
+{
+    PTO_STATIC_ASSERT(CrossCoreId <= kM3N4MaxUserCrossCoreId, "M3N4 cross-core flag id exceeds user range");
+    M3N4C2VEvent event;
+    event.Wait<CrossCoreId>();
+}
+
+PTO_INTERNAL void M3N4AicAllDoneCoarseSync()
+{
+    pipe_barrier(PIPE_ALL);
+    dsb(DSB_DDR);
+    pto::SYNCALL<pto::SyncCoreType::AICOnly>();
+}
+
+PTO_INTERNAL void M3N4AivAllDoneCoarseSync()
+{
+    pipe_barrier(PIPE_ALL);
+    dsb(DSB_DDR);
+    pto::SYNCALL<pto::SyncCoreType::AIVOnly>();
+}
 
 PTO_INTERNAL void RouteLocalTokens(StageContext &ctx)
 {
