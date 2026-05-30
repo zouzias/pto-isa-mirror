@@ -1067,8 +1067,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
                 moe_dispatch_combine_a8w8::M3N4AicAllDoneCoarseSync();
                 if (get_block_idx() == 0) {
                     M3N6RecordGmm1SyncGroupReady(stageStatus, layout, workspace, syncIdx, syncGroupCount);
-                    moe_dispatch_combine_a8w8::M3N6SignalGmm1SyncGroupReady(syncIdx);
                 }
+                moe_dispatch_combine_a8w8::M3N6SignalGmm1SyncGroupReady(syncIdx);
             }
         } else if (m3n5DispatchGmm1Overlap) {
             for (uint32_t currentExpert = 0; currentExpert < shape.expertPerRank; ++currentExpert) {
@@ -1740,6 +1740,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
             for (uint32_t idx = 0; idx < 16U; ++idx) {
                 StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + idx, 0);
             }
+            StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 8U, 1);
         }
         if (activeActivationWorker) {
             M3NRecordActivationLaneDebug(localPeer, rawAivSlot, 0U, syncGroupCount, false);
@@ -1750,13 +1751,13 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
             moe_dispatch_combine_a8w8::M3N6WaitGmm1SyncGroupReady(syncIdx);
             if (IsM2FusedMainAiv()) {
                 M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 1U, 1);
+                M3N6RecordActivationStartedBeforeLastGmm1Ready(stageStatus, localPeer, syncIdx, syncGroupCount);
                 M3N6RunGmm1EpilogueSyncGroup(shape, workspaceView, syncIdx);
                 StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 8U,
                                LoadScalarI32(localPeer.debugCounters + kM3CounterBase + 8U) + 1);
             }
             moe_dispatch_combine_a8w8::M3N4AivAllDoneCoarseSync();
             if (activeActivationWorker) {
-                M3N6RecordActivationStartedBeforeLastGmm1Ready(stageStatus, localPeer, syncIdx, syncGroupCount);
                 uint32_t rowsProcessed = M3NRunActivationQuantSyncGroupShard(
                     shape, workspaceView, syncIdx, activationAssignment.workerId, activationWorkerCount);
                 M3NRecordActivationLaneDebug(localPeer, rawAivSlot, rowsProcessed, syncGroupCount, true);
