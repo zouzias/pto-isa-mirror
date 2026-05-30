@@ -107,6 +107,8 @@ struct ControlMetadataView {
     GmArrayView<int32_t> subTileReturnPlan;
     GmArrayView<int32_t> subTileOwnerSegments;
     GmArrayView<int32_t> subTileReady;
+    GmArrayView<uint64_t> timelineScratch;
+    GmArrayView<uint64_t> timeline;
 };
 
 AICORE inline __gm__ int32_t *I32Field(GM_ADDR base, const FieldLayout &field)
@@ -176,6 +178,8 @@ AICORE inline ControlMetadataView MakeControlMetadataView(GM_ADDR workspace, GM_
     view.subTileReturnPlan.ptr = I32Field(workspace, workspaceLayout.subTileReturnPlan);
     view.subTileOwnerSegments.ptr = I32Field(workspace, workspaceLayout.subTileOwnerSegments);
     view.subTileReady.ptr = I32Field(workspace, workspaceLayout.subTileReady);
+    view.timelineScratch.ptr = TypedField<uint64_t>(workspace, workspaceLayout.timelineScratch);
+    view.timeline.ptr = TypedField<uint64_t>(peerWindow, peerWindowLayout.timeline);
     return view;
 }
 

@@ -1042,6 +1042,9 @@ struct M2FusedFullEvidence {
     std::array<int32_t, 16> m3n10ScoreboardCounters{};
     std::array<int32_t, 16> m3n11SubtileCounters{};
     std::array<int32_t, 16> m3n9TimeoutDump{};
+    std::array<uint64_t, moe_dispatch_combine_a8w8::kM3N12TimelineRecordCount *
+                             moe_dispatch_combine_a8w8::kM3N12TimelineRecordWords>
+        m3n12TimelineScratch{};
     uint64_t m3n10ProducerStatusChecksum = 0;
     uint64_t m3n10ScoreboardMinStatusChecksum = 0;
     std::string swigluGroupTileRanges;
@@ -1067,6 +1070,19 @@ std::vector<int32_t> CopyWorkspaceI32Field(const moe_dispatch_combine_a8w8::Work
     std::vector<int32_t> out(field.bytes / sizeof(int32_t), 0);
     auto *workspaceBase = reinterpret_cast<uint8_t *>(state->buffers.workspace);
     CheckAcl(aclrtMemcpy(out.data(), BytesOfI32Vector(out.size()), workspaceBase + field.offset, field.bytes,
+                         ACL_MEMCPY_DEVICE_TO_HOST),
+             "rank " + std::to_string(state->rank) + " copy " + name);
+    return out;
+}
+
+std::vector<uint64_t> CopyWorkspaceU64Field(const moe_dispatch_combine_a8w8::WorkspaceLayout &workspaceLayout,
+                                            const moe_dispatch_combine_a8w8::FieldLayout &field, RuntimeState *state,
+                                            const std::string &name)
+{
+    (void)workspaceLayout;
+    std::vector<uint64_t> out(field.bytes / sizeof(uint64_t), 0);
+    auto *workspaceBase = reinterpret_cast<uint8_t *>(state->buffers.workspace);
+    CheckAcl(aclrtMemcpy(out.data(), BytesOfU64Vector(out.size()), workspaceBase + field.offset, field.bytes,
                          ACL_MEMCPY_DEVICE_TO_HOST),
              "rank " + std::to_string(state->rank) + " copy " + name);
     return out;
@@ -1263,6 +1279,11 @@ M2FusedFullEvidence ReadM2FusedFullEvidence(const moe_dispatch_combine_a8w8::Wor
     for (size_t idx = 0; idx < evidence.m3n9TimeoutDump.size() && idx < timeoutDump.size(); ++idx) {
         evidence.m3n9TimeoutDump[idx] = timeoutDump[idx];
     }
+    std::vector<uint64_t> timelineScratch =
+        CopyWorkspaceU64Field(workspaceLayout, workspaceLayout.timelineScratch, state, "m3n12 timelineScratch");
+    for (size_t idx = 0; idx < evidence.m3n12TimelineScratch.size() && idx < timelineScratch.size(); ++idx) {
+        evidence.m3n12TimelineScratch[idx] = timelineScratch[idx];
+    }
     return evidence;
 }
 
@@ -1298,6 +1319,192 @@ void PrintM3N9TimeoutDump(const M2FusedFullEvidence &evidence)
     std::cout << "  timeout_dump_scoreboard_domain="
               << (present ? evidence.m3n9TimeoutDump[kM3N10TimeoutDumpScoreboardDomainSlot] : -1) << "\n";
     std::cout << "  timeout_dump_source=device_scoreboard_timeout_counters\n";
+}
+
+std::string MakeM3N12RunId(const DispatchCombineTileArgs &args)
+{
+    std::ostringstream os;
+    os << args.caseName << "_seed" << args.runtime.seed << "_m" << args.shape.m << "_k" << args.shape.k << "_i"
+       << args.intermediateSize << "_topk" << args.shape.topK << "_ep" << args.shape.ep << "_epr"
+       << args.shape.expertPerRank << "_ov" << args.overlapMode;
+    return os.str();
+}
+
+const char *M3N12KindName(uint32_t kind)
+{
+    switch (static_cast<moe_dispatch_combine_a8w8::M3N12TimelineKind>(kind)) {
+        case moe_dispatch_combine_a8w8::M3N12TimelineKind::kRoute:
+            return "route";
+        case moe_dispatch_combine_a8w8::M3N12TimelineKind::kCountSync:
+            return "count_sync";
+        case moe_dispatch_combine_a8w8::M3N12TimelineKind::kDispatchGather:
+            return "dispatch_gather";
+        case moe_dispatch_combine_a8w8::M3N12TimelineKind::kGmm1Tile:
+            return "gmm1";
+        case moe_dispatch_combine_a8w8::M3N12TimelineKind::kSwigluGroup:
+            return "swiglu_quant";
+        case moe_dispatch_combine_a8w8::M3N12TimelineKind::kGmm2Tile:
+            return "gmm2";
+        case moe_dispatch_combine_a8w8::M3N12TimelineKind::kCombineOwnerSegment:
+            return "combine";
+        case moe_dispatch_combine_a8w8::M3N12TimelineKind::kRestore:
+            return "restore";
+        default:
+            return "none";
+    }
+}
+
+const char *M3N12RowKind(uint32_t kind)
+{
+    switch (static_cast<moe_dispatch_combine_a8w8::M3N12TimelineKind>(kind)) {
+        case moe_dispatch_combine_a8w8::M3N12TimelineKind::kGmm1Tile:
+        case moe_dispatch_combine_a8w8::M3N12TimelineKind::kGmm2Tile:
+            return "gmm_tile";
+        case moe_dispatch_combine_a8w8::M3N12TimelineKind::kSwigluGroup:
+            return "swiglu_group";
+        case moe_dispatch_combine_a8w8::M3N12TimelineKind::kCombineOwnerSegment:
+            return "owner_segment";
+        default:
+            return "stage";
+    }
+}
+
+const char *M3N12CoreTypeName(uint32_t coreType)
+{
+    switch (static_cast<moe_dispatch_combine_a8w8::M3N12TimelineCoreType>(coreType)) {
+        case moe_dispatch_combine_a8w8::M3N12TimelineCoreType::kAic:
+            return "aic";
+        case moe_dispatch_combine_a8w8::M3N12TimelineCoreType::kAiv:
+            return "aiv";
+        default:
+            return "unknown";
+    }
+}
+
+const char *M3N12StatusName(uint32_t status)
+{
+    switch (static_cast<moe_dispatch_combine_a8w8::M3N12TimelineStatus>(status)) {
+        case moe_dispatch_combine_a8w8::M3N12TimelineStatus::kProcessed:
+            return "processed";
+        case moe_dispatch_combine_a8w8::M3N12TimelineStatus::kSkipped:
+            return "skipped";
+        default:
+            return "empty";
+    }
+}
+
+const char *M3N12WaitSourceName(uint32_t waitSource)
+{
+    switch (static_cast<moe_dispatch_combine_a8w8::M3N12TimelineWaitSource>(waitSource)) {
+        case moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kPtoEvent:
+            return "pto_event";
+        case moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kGmPoll:
+            return "gm_poll";
+        case moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kScoreboard:
+            return "scoreboard";
+        case moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kSyncAll:
+            return "syncall";
+        default:
+            return "none";
+    }
+}
+
+uint32_t M3N12MetaField(uint64_t value, uint32_t shift, uint32_t mask)
+{
+    return static_cast<uint32_t>((value >> shift) & mask);
+}
+
+void PrintM3N12TimelineRecord(const M2FusedFullEvidence &evidence, uint32_t slot,
+                              moe_dispatch_combine_a8w8::M3N12TimelineKind fallbackKind)
+{
+    constexpr uint32_t kWords = moe_dispatch_combine_a8w8::kM3N12TimelineRecordWords;
+    size_t base = static_cast<size_t>(slot) * kWords;
+    uint64_t begin = base + 0U < evidence.m3n12TimelineScratch.size() ? evidence.m3n12TimelineScratch[base + 0U] : 0U;
+    uint64_t end = base + 1U < evidence.m3n12TimelineScratch.size() ? evidence.m3n12TimelineScratch[base + 1U] : 0U;
+    uint64_t meta0 = base + 2U < evidence.m3n12TimelineScratch.size() ? evidence.m3n12TimelineScratch[base + 2U] : 0U;
+    uint64_t meta1 = base + 3U < evidence.m3n12TimelineScratch.size() ? evidence.m3n12TimelineScratch[base + 3U] : 0U;
+    uint32_t kind = M3N12MetaField(meta0, 0U, 0xffU);
+    uint32_t coreType = M3N12MetaField(meta0, 8U, 0xffU);
+    uint32_t coreId = M3N12MetaField(meta0, 16U, 0xffU);
+    uint32_t status = M3N12MetaField(meta0, 24U, 0xffU);
+    uint32_t aux0 = M3N12MetaField(meta0, 32U, 0xffffU);
+    uint32_t aux1 = M3N12MetaField(meta0, 48U, 0xffffU);
+    uint32_t value0 = M3N12MetaField(meta1, 0U, 0xffffU);
+    uint32_t value1 = M3N12MetaField(meta1, 16U, 0xffffU);
+    uint32_t value2 = M3N12MetaField(meta1, 32U, 0xffffU);
+    uint32_t value3 = M3N12MetaField(meta1, 48U, 0xffffU);
+    if (kind == 0U) {
+        kind = static_cast<uint32_t>(fallbackKind);
+        status = static_cast<uint32_t>(moe_dispatch_combine_a8w8::M3N12TimelineStatus::kSkipped);
+    }
+    std::cout << "  timeline_row_kind=" << M3N12RowKind(kind) << " stage=" << M3N12KindName(kind) << " slot=" << slot
+              << " core_type=" << M3N12CoreTypeName(coreType) << " core_id=" << coreId << " t_begin=" << begin
+              << " t_end=" << end << " status=" << M3N12StatusName(status);
+    switch (static_cast<moe_dispatch_combine_a8w8::M3N12TimelineKind>(kind)) {
+        case moe_dispatch_combine_a8w8::M3N12TimelineKind::kGmm1Tile:
+        case moe_dispatch_combine_a8w8::M3N12TimelineKind::kGmm2Tile:
+            std::cout << " groupIdx=" << aux0 << " tileId=" << aux1 << " mTile=" << value0 << " nTile=" << value1
+                      << " kLoop=" << value2 << " logicalAic=" << coreId
+                      << " waitSource=" << M3N12WaitSourceName(value3);
+            break;
+        case moe_dispatch_combine_a8w8::M3N12TimelineKind::kSwigluGroup:
+            std::cout << " syncIdx=" << aux0 << " groupId=" << aux1 << " rowBegin=" << value0 << " rowEnd=" << value1
+                      << " expertBegin=" << value2 << " expertEnd=" << value3 << " ready_signal=gmm1_sync_group_ready";
+            break;
+        case moe_dispatch_combine_a8w8::M3N12TimelineKind::kCombineOwnerSegment:
+            std::cout << " workerId=" << aux0 << " logicalAiv=" << aux1 << " segmentBegin=" << value0
+                      << " segmentEnd=" << value1 << " processed=" << value2 << " skipped=" << value3
+                      << " ready_signal=gmm2_or_subtile_ready";
+            break;
+        default:
+            std::cout << " workerId=" << aux0 << " logicalAiv=" << aux1 << " rowBegin=" << value0
+                      << " rowEnd=" << value1 << " processed=" << value2 << " skipped=" << value3;
+            break;
+    }
+    std::cout << "\n";
+}
+
+void PrintM3N12Timeline(const DispatchCombineTileArgs &args, RuntimeState *state, const M2FusedFullEvidence &evidence)
+{
+    if (args.runtime.timeline == 0U) {
+        return;
+    }
+    std::cout << "[Timeline]\n";
+    std::cout << "  case_name=" << args.caseName << "\n";
+    std::cout << "  seed=" << args.runtime.seed << "\n";
+    std::cout << "  run_id=" << MakeM3N12RunId(args) << "\n";
+    std::cout << "  shape=m" << args.shape.m << "_k" << args.shape.k << "_i" << args.intermediateSize << "_topk"
+              << args.shape.topK << "_ep" << args.shape.ep << "_epr" << args.shape.expertPerRank << "\n";
+    std::cout << "  shape_m=" << args.shape.m << " shape_k=" << args.shape.k
+              << " shape_intermediate=" << args.intermediateSize << " shape_topK=" << args.shape.topK
+              << " shape_expertPerRank=" << args.shape.expertPerRank << "\n";
+    std::cout << "  rank=" << state->rank << " rankNum=" << state->size << "\n";
+    std::cout << "  timeline_granularity=stage_group_tile_subtile\n";
+    std::cout << "  cross_rank_barrier_count=0\n";
+    std::cout << "  syncall_count=" << evidence.m3Counters[13] << "\n";
+    std::cout << "  cv_wait_count=" << evidence.m3Counters[14] << "\n";
+    PrintM3N12TimelineRecord(evidence, moe_dispatch_combine_a8w8::kM3N12TimelineSlotRoute,
+                             moe_dispatch_combine_a8w8::M3N12TimelineKind::kRoute);
+    PrintM3N12TimelineRecord(evidence, moe_dispatch_combine_a8w8::kM3N12TimelineSlotCountSync,
+                             moe_dispatch_combine_a8w8::M3N12TimelineKind::kCountSync);
+    PrintM3N12TimelineRecord(evidence, moe_dispatch_combine_a8w8::kM3N12TimelineSlotDispatchGather,
+                             moe_dispatch_combine_a8w8::M3N12TimelineKind::kDispatchGather);
+    PrintM3N12TimelineRecord(evidence, moe_dispatch_combine_a8w8::kM3N12TimelineSlotGmm1,
+                             moe_dispatch_combine_a8w8::M3N12TimelineKind::kGmm1Tile);
+    uint32_t swigluRows = evidence.swigluSyncGroupCount > 0 ?
+                              std::min<uint32_t>(static_cast<uint32_t>(evidence.swigluSyncGroupCount),
+                                                 moe_dispatch_combine_a8w8::kM3N12TimelineSwigluSlotCount) :
+                              1U;
+    for (uint32_t idx = 0; idx < swigluRows; ++idx) {
+        PrintM3N12TimelineRecord(evidence, moe_dispatch_combine_a8w8::kM3N12TimelineSlotSwigluBase + idx,
+                                 moe_dispatch_combine_a8w8::M3N12TimelineKind::kSwigluGroup);
+    }
+    PrintM3N12TimelineRecord(evidence, moe_dispatch_combine_a8w8::kM3N12TimelineSlotGmm2,
+                             moe_dispatch_combine_a8w8::M3N12TimelineKind::kGmm2Tile);
+    PrintM3N12TimelineRecord(evidence, moe_dispatch_combine_a8w8::kM3N12TimelineSlotCombine,
+                             moe_dispatch_combine_a8w8::M3N12TimelineKind::kCombineOwnerSegment);
+    PrintM3N12TimelineRecord(evidence, moe_dispatch_combine_a8w8::kM3N12TimelineSlotRestore,
+                             moe_dispatch_combine_a8w8::M3N12TimelineKind::kRestore);
 }
 
 double RunM2FusedFull(const DispatchCombineTileArgs &args, const moe_dispatch_combine_a8w8::ShapeConfig &shape,
@@ -4235,7 +4442,7 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  tput_async_stride_blocked_locator=TPUT_ASYNC requires flat-contiguous-1d\n";
     std::cout << "  full_async_combine_claim=false\n";
     std::cout << "  timeline_enabled=" << (args.runtime.timeline == 0 ? "false" : "true") << "\n";
-    std::cout << "  timeline_granularity=stage_signal_counter\n";
+    std::cout << "  timeline_granularity=stage_group_tile_subtile\n";
     uint64_t droppedRows = CountDroppedRoutes(args, state);
     uint64_t inactiveTokens = CountInactiveTokens(state);
     std::cout << "  drop_triggered=" << (droppedRows == 0 ? "false" : "true") << "\n";
@@ -4268,9 +4475,19 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  intermediate.preSumBeforeRank_checksum=" << summary.preSumBeforeRankChecksum << "\n";
     std::cout << "  intermediate.expandedRowIdx_checksum=" << summary.expandedRowIdxChecksum << "\n";
     std::cout << "  pass=" << (summary.pass == 0 ? "false" : "true") << "\n";
+    if (fusedEvidence != nullptr) {
+        PrintM3N12Timeline(args, state, *fusedEvidence);
+    }
     std::cout << std::fixed << std::setprecision(1);
     std::cout << "[PerfReport]\n";
     std::cout << "  case_name=" << args.caseName << "\n";
+    std::cout << "  seed=" << args.runtime.seed << "\n";
+    std::cout << "  run_id=" << MakeM3N12RunId(args) << "\n";
+    std::cout << "  shape=m" << args.shape.m << "_k" << args.shape.k << "_i" << args.intermediateSize << "_topk"
+              << args.shape.topK << "_ep" << args.shape.ep << "_epr" << args.shape.expertPerRank << "\n";
+    std::cout << "  shape_m=" << args.shape.m << " shape_k=" << args.shape.k
+              << " shape_intermediate=" << args.intermediateSize << " shape_topK=" << args.shape.topK
+              << " shape_expertPerRank=" << args.shape.expertPerRank << "\n";
     std::cout << "  backend=int8\n";
     std::cout << "  rankNum=" << state->size << " rankId=" << state->rank << "\n";
     std::cout << "  overlap_mode=" << args.overlapMode << "\n";

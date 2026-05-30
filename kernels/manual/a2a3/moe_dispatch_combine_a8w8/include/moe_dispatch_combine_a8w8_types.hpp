@@ -68,6 +68,53 @@ constexpr uint32_t kM3N10ScoreboardWorkerCounterBase = kM3N10ScoreboardCounterBa
 constexpr uint32_t kM3N11SubtileRows = 16U;
 constexpr uint32_t kM3N11SubtileCounterBase = 24U * 16U + 128U;
 constexpr uint32_t kM3N11SubtileCounterSlots = 16U;
+constexpr uint32_t kM3N12TimelineRecordWords = 4U;
+constexpr uint32_t kM3N12TimelineRecordCount = 64U;
+constexpr uint32_t kM3N12TimelineSlotRoute = 0U;
+constexpr uint32_t kM3N12TimelineSlotCountSync = 1U;
+constexpr uint32_t kM3N12TimelineSlotDispatchGather = 2U;
+constexpr uint32_t kM3N12TimelineSlotGmm1 = 3U;
+constexpr uint32_t kM3N12TimelineSlotGmm2 = 4U;
+constexpr uint32_t kM3N12TimelineSlotCombine = 5U;
+constexpr uint32_t kM3N12TimelineSlotRestore = 6U;
+constexpr uint32_t kM3N12TimelineSlotSwigluBase = 8U;
+constexpr uint32_t kM3N12TimelineSwigluSlotCount = 8U;
+
+enum class M3N12TimelineKind : uint32_t
+{
+    kNone = 0,
+    kRoute = 1,
+    kCountSync = 2,
+    kDispatchGather = 3,
+    kGmm1Tile = 4,
+    kSwigluGroup = 5,
+    kGmm2Tile = 6,
+    kCombineOwnerSegment = 7,
+    kRestore = 8,
+};
+
+enum class M3N12TimelineCoreType : uint32_t
+{
+    kUnknown = 0,
+    kAic = 1,
+    kAiv = 2,
+};
+
+enum class M3N12TimelineStatus : uint32_t
+{
+    kEmpty = 0,
+    kProcessed = 1,
+    kSkipped = 2,
+};
+
+enum class M3N12TimelineWaitSource : uint32_t
+{
+    kNone = 0,
+    kPtoEvent = 1,
+    kGmPoll = 2,
+    kScoreboard = 3,
+    kSyncAll = 4,
+};
 
 enum class DType : uint32_t
 {

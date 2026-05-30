@@ -132,6 +132,68 @@ constexpr uint32_t kM2FusedFullM3N7EvidenceSlot = kM2FusedFullM3N6EvidenceSlot +
 constexpr uint32_t kM2FusedFullM3N8EvidenceSlot = kM2FusedFullM3N7EvidenceSlot + 3U;
 constexpr uint32_t kM2FusedFullDebugStopSlot = 15U * 16U;
 constexpr uint32_t kM2FusedFullM3N7Gmm2CounterBase = 24U * 16U + 64U;
+
+AICORE inline uint64_t M3N12GetSysCnt()
+{
+    uint64_t syscnt = 0;
+    asm volatile("MOV %0, SYS_CNT\n" : "+l"(syscnt));
+    return syscnt;
+}
+
+AICORE inline uint64_t M3N12PackMeta0(moe_dispatch_combine_a8w8::M3N12TimelineKind kind,
+                                      moe_dispatch_combine_a8w8::M3N12TimelineCoreType coreType, uint32_t coreId,
+                                      moe_dispatch_combine_a8w8::M3N12TimelineStatus status, uint32_t aux0,
+                                      uint32_t aux1)
+{
+    return static_cast<uint64_t>(static_cast<uint32_t>(kind) & 0xffU) |
+           (static_cast<uint64_t>(static_cast<uint32_t>(coreType) & 0xffU) << 8U) |
+           (static_cast<uint64_t>(coreId & 0xffU) << 16U) |
+           (static_cast<uint64_t>(static_cast<uint32_t>(status) & 0xffU) << 24U) |
+           (static_cast<uint64_t>(aux0 & 0xffffU) << 32U) | (static_cast<uint64_t>(aux1 & 0xffffU) << 48U);
+}
+
+AICORE inline uint64_t M3N12PackMeta1(uint32_t value0, uint32_t value1, uint32_t value2, uint32_t value3)
+{
+    return static_cast<uint64_t>(value0 & 0xffffU) | (static_cast<uint64_t>(value1 & 0xffffU) << 16U) |
+           (static_cast<uint64_t>(value2 & 0xffffU) << 32U) | (static_cast<uint64_t>(value3 & 0xffffU) << 48U);
+}
+
+AICORE inline void M3N12RecordTimeline(__gm__ uint64_t *timeline, uint32_t slot, uint64_t begin, uint64_t end,
+                                       uint64_t meta0, uint64_t meta1)
+{
+    if (slot >= moe_dispatch_combine_a8w8::kM3N12TimelineRecordCount) {
+        return;
+    }
+    uint32_t base = slot * moe_dispatch_combine_a8w8::kM3N12TimelineRecordWords;
+    timeline[base + 0U] = begin;
+    timeline[base + 1U] = end;
+    timeline[base + 2U] = meta0;
+    timeline[base + 3U] = meta1;
+    pipe_barrier(PIPE_ALL);
+    dsb(DSB_DDR);
+}
+
+AICORE inline void M3N12RecordAivRange(__gm__ uint64_t *timeline, uint32_t slot,
+                                       moe_dispatch_combine_a8w8::M3N12TimelineKind kind, uint32_t logicalAiv,
+                                       uint32_t workerId, uint32_t rangeBegin, uint32_t rangeEnd, uint32_t processed,
+                                       uint32_t skipped, uint64_t begin, uint64_t end)
+{
+    M3N12RecordTimeline(
+        timeline, slot, begin, end,
+        M3N12PackMeta0(kind, moe_dispatch_combine_a8w8::M3N12TimelineCoreType::kAiv, logicalAiv,
+                       moe_dispatch_combine_a8w8::M3N12TimelineStatus::kProcessed, workerId, logicalAiv),
+        M3N12PackMeta1(rangeBegin, rangeEnd, processed, skipped));
+}
+
+AICORE inline void M3N12RecordSkipped(__gm__ uint64_t *timeline, uint32_t slot,
+                                      moe_dispatch_combine_a8w8::M3N12TimelineKind kind,
+                                      moe_dispatch_combine_a8w8::M3N12TimelineCoreType coreType, uint32_t coreId)
+{
+    uint64_t stamp = M3N12GetSysCnt();
+    M3N12RecordTimeline(
+        timeline, slot, stamp, stamp,
+        M3N12PackMeta0(kind, coreType, coreId, moe_dispatch_combine_a8w8::M3N12TimelineStatus::kSkipped, 0U, 0U), 0U);
+}
 constexpr uint32_t kM2FusedFullStageCount = 7U;
 constexpr uint32_t kM3NFusedDispatchScratchBase = 32U * 16U;
 constexpr uint32_t kM3NFusedDispatchScratchLimit = 40U * 16U;
@@ -1411,6 +1473,9 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
     }
     uint32_t overlapMode = static_cast<uint32_t>(
         M2FusedLoadConfigI32(stageStatus, moe_dispatch_combine_a8w8::kM2FusedFullOverlapModeSlot));
+    uint32_t timelineEnable = static_cast<uint32_t>(
+        M2FusedLoadConfigI32(stageStatus, moe_dispatch_combine_a8w8::kM2FusedFullTimelineEnableSlot));
+    __gm__ uint64_t *timelineScratch = reinterpret_cast<__gm__ uint64_t *>(workspace + layout.timelineScratch.offset);
     if (get_block_idx() == 0) {
         M2FusedRecordStage(stageStatus + kM2FusedFullAicHeaderSlot, 0U, kM2FusedFullMagic);
         M2FusedRecordStage(stageStatus + kM2FusedFullAicHeaderSlot, 1U, static_cast<int32_t>(get_block_num()));
@@ -1477,6 +1542,14 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
             M2FusedGmmStoreScalarI32(stageStatus + 4U * 16U, static_cast<int32_t>(taskCount));
             M2FusedGmmStoreScalarI32(stageStatus + 5U * 16U, static_cast<int32_t>(get_block_num()));
         }
+        bool m3n12Gmm1TileRecorded = false;
+        if (timelineEnable != 0U && get_block_idx() == 0 && taskCount == 0U) {
+            M3N12RecordSkipped(timelineScratch, moe_dispatch_combine_a8w8::kM3N12TimelineSlotGmm1,
+                               moe_dispatch_combine_a8w8::M3N12TimelineKind::kGmm1Tile,
+                               moe_dispatch_combine_a8w8::M3N12TimelineCoreType::kAic,
+                               static_cast<uint32_t>(get_block_idx()));
+            m3n12Gmm1TileRecorded = true;
+        }
         if (m3n6Gmm1ActivationOverlap) {
             uint32_t syncGroupCount = moe_dispatch_combine_a8w8::M3N6SwigluSyncGroupCount(shape);
             for (uint32_t syncIdx = 0; syncIdx < syncGroupCount; ++syncIdx) {
@@ -1506,8 +1579,30 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
                             weight1 + static_cast<uint64_t>(globalExpert) * shape.hiddenSize * w1Cols;
                         __gm__ int8_t *tileInput = gmm1Input + static_cast<uint64_t>(rowBegin) * rowBytes;
                         __gm__ int32_t *tileOutput = gmm1Acc + static_cast<uint64_t>(rowBegin) * w1Cols;
+                        bool recordTile = timelineEnable != 0U && get_block_idx() == 0 && !m3n12Gmm1TileRecorded;
+                        uint64_t tileBegin = recordTile ? M3N12GetSysCnt() : 0U;
                         M2FusedRunInt8GmmTile(tileInput, expertWeight + nBase, tileOutput + nBase, mValid,
                                               shape.hiddenSize, nValid, rowBytes, w1Cols, w1Cols);
+                        if (recordTile) {
+                            uint32_t waitSource =
+                                m3n10ScoreboardAsync ?
+                                    static_cast<uint32_t>(
+                                        moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kScoreboard) :
+                                    static_cast<uint32_t>(
+                                        moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kPtoEvent);
+                            M3N12RecordTimeline(
+                                timelineScratch, moe_dispatch_combine_a8w8::kM3N12TimelineSlotGmm1, tileBegin,
+                                M3N12GetSysCnt(),
+                                M3N12PackMeta0(moe_dispatch_combine_a8w8::M3N12TimelineKind::kGmm1Tile,
+                                               moe_dispatch_combine_a8w8::M3N12TimelineCoreType::kAic,
+                                               static_cast<uint32_t>(get_block_idx()),
+                                               moe_dispatch_combine_a8w8::M3N12TimelineStatus::kProcessed, syncIdx,
+                                               taskId),
+                                M3N12PackMeta1(rowBegin / moe_dispatch_combine_a8w8::kGmmBaseM,
+                                               nBase / moe_dispatch_combine_a8w8::kGmmBaseN,
+                                               shape.hiddenSize / moe_dispatch_combine_a8w8::kGmmBaseK, waitSource));
+                            m3n12Gmm1TileRecorded = true;
+                        }
                     }
                 }
                 moe_dispatch_combine_a8w8::M3N4AicAllDoneCoarseSync();
@@ -1540,8 +1635,28 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
                         weight1 + static_cast<uint64_t>(globalExpert) * shape.hiddenSize * w1Cols;
                     __gm__ int8_t *tileInput = gmm1Input + static_cast<uint64_t>(rowBegin) * rowBytes;
                     __gm__ int32_t *tileOutput = gmm1Acc + static_cast<uint64_t>(rowBegin) * w1Cols;
+                    bool recordTile = timelineEnable != 0U && get_block_idx() == 0 && !m3n12Gmm1TileRecorded;
+                    uint64_t tileBegin = recordTile ? M3N12GetSysCnt() : 0U;
                     M2FusedRunInt8GmmTile(tileInput, expertWeight + nBase, tileOutput + nBase, mValid, shape.hiddenSize,
                                           nValid, rowBytes, w1Cols, w1Cols);
+                    if (recordTile) {
+                        uint32_t waitSource =
+                            m3n10ScoreboardAsync ?
+                                static_cast<uint32_t>(moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kScoreboard) :
+                                static_cast<uint32_t>(moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kPtoEvent);
+                        M3N12RecordTimeline(
+                            timelineScratch, moe_dispatch_combine_a8w8::kM3N12TimelineSlotGmm1, tileBegin,
+                            M3N12GetSysCnt(),
+                            M3N12PackMeta0(moe_dispatch_combine_a8w8::M3N12TimelineKind::kGmm1Tile,
+                                           moe_dispatch_combine_a8w8::M3N12TimelineCoreType::kAic,
+                                           static_cast<uint32_t>(get_block_idx()),
+                                           moe_dispatch_combine_a8w8::M3N12TimelineStatus::kProcessed, currentExpert,
+                                           taskId),
+                            M3N12PackMeta1(rowBegin / moe_dispatch_combine_a8w8::kGmmBaseM,
+                                           nBase / moe_dispatch_combine_a8w8::kGmmBaseN,
+                                           shape.hiddenSize / moe_dispatch_combine_a8w8::kGmmBaseK, waitSource));
+                        m3n12Gmm1TileRecorded = true;
+                    }
                 }
             }
         } else {
@@ -1557,8 +1672,24 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
                 __gm__ int8_t *expertWeight = weight1 + static_cast<uint64_t>(globalExpert) * shape.hiddenSize * w1Cols;
                 __gm__ int8_t *tileInput = gmm1Input + static_cast<uint64_t>(rowBegin) * rowBytes;
                 __gm__ int32_t *tileOutput = gmm1Acc + static_cast<uint64_t>(rowBegin) * w1Cols;
+                bool recordTile = timelineEnable != 0U && get_block_idx() == 0 && !m3n12Gmm1TileRecorded;
+                uint64_t tileBegin = recordTile ? M3N12GetSysCnt() : 0U;
                 M2FusedRunInt8GmmTile(tileInput, expertWeight + nBase, tileOutput + nBase, mValid, shape.hiddenSize,
                                       nValid, rowBytes, w1Cols, w1Cols);
+                if (recordTile) {
+                    M3N12RecordTimeline(
+                        timelineScratch, moe_dispatch_combine_a8w8::kM3N12TimelineSlotGmm1, tileBegin, M3N12GetSysCnt(),
+                        M3N12PackMeta0(moe_dispatch_combine_a8w8::M3N12TimelineKind::kGmm1Tile,
+                                       moe_dispatch_combine_a8w8::M3N12TimelineCoreType::kAic,
+                                       static_cast<uint32_t>(get_block_idx()),
+                                       moe_dispatch_combine_a8w8::M3N12TimelineStatus::kProcessed, 0U, taskId),
+                        M3N12PackMeta1(
+                            rowBegin / moe_dispatch_combine_a8w8::kGmmBaseM,
+                            nBase / moe_dispatch_combine_a8w8::kGmmBaseN,
+                            shape.hiddenSize / moe_dispatch_combine_a8w8::kGmmBaseK,
+                            static_cast<uint32_t>(moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kSyncAll)));
+                    m3n12Gmm1TileRecorded = true;
+                }
             }
         }
     }
@@ -1622,6 +1753,14 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
                 M3N7InitGmm2Counters(debugCounters, moe_dispatch_combine_a8w8::M3N6SwigluSyncGroupCount(shape));
             }
         }
+        bool m3n12Gmm2TileRecorded = false;
+        if (timelineEnable != 0U && get_block_idx() == 0 && taskCount == 0U) {
+            M3N12RecordSkipped(timelineScratch, moe_dispatch_combine_a8w8::kM3N12TimelineSlotGmm2,
+                               moe_dispatch_combine_a8w8::M3N12TimelineKind::kGmm2Tile,
+                               moe_dispatch_combine_a8w8::M3N12TimelineCoreType::kAic,
+                               static_cast<uint32_t>(get_block_idx()));
+            m3n12Gmm2TileRecorded = true;
+        }
         for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
             int32_t rowCount = M2FusedGmmLoadScalarI32(expertTokenNums + localExpert);
             if (rowCount <= 0) {
@@ -1659,8 +1798,25 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
                         weight2 + static_cast<uint64_t>(globalExpert) * shape.intermediateSize * shape.hiddenSize;
                     __gm__ int8_t *tileInput = gmm2Input + static_cast<uint64_t>(rowBegin) * rowBytes;
                     __gm__ int32_t *tileOutput = gmm2Acc + static_cast<uint64_t>(rowBegin) * shape.hiddenSize;
+                    bool recordTile = timelineEnable != 0U && get_block_idx() == 0 && !m3n12Gmm2TileRecorded;
+                    uint64_t tileBegin = recordTile ? M3N12GetSysCnt() : 0U;
                     M2FusedRunInt8GmmTile(tileInput, expertWeight + nBase, tileOutput + nBase, mValid,
                                           shape.intermediateSize, nValid, rowBytes, shape.hiddenSize, shape.hiddenSize);
+                    if (recordTile) {
+                        M3N12RecordTimeline(
+                            timelineScratch, moe_dispatch_combine_a8w8::kM3N12TimelineSlotGmm2, tileBegin,
+                            M3N12GetSysCnt(),
+                            M3N12PackMeta0(moe_dispatch_combine_a8w8::M3N12TimelineKind::kGmm2Tile,
+                                           moe_dispatch_combine_a8w8::M3N12TimelineCoreType::kAic,
+                                           static_cast<uint32_t>(get_block_idx()),
+                                           moe_dispatch_combine_a8w8::M3N12TimelineStatus::kProcessed, syncIdx, taskId),
+                            M3N12PackMeta1(
+                                rowBegin / moe_dispatch_combine_a8w8::kGmmBaseM,
+                                nBase / moe_dispatch_combine_a8w8::kGmmBaseN,
+                                shape.intermediateSize / moe_dispatch_combine_a8w8::kGmmBaseK,
+                                static_cast<uint32_t>(moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kGmPoll)));
+                        m3n12Gmm2TileRecorded = true;
+                    }
                 }
                 moe_dispatch_combine_a8w8::M3N4AicAllDoneCoarseSync();
                 if (get_block_idx() == 0) {
@@ -1692,8 +1848,24 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
                     weight2 + static_cast<uint64_t>(globalExpert) * shape.intermediateSize * shape.hiddenSize;
                 __gm__ int8_t *tileInput = gmm2Input + static_cast<uint64_t>(rowBegin) * rowBytes;
                 __gm__ int32_t *tileOutput = gmm2Acc + static_cast<uint64_t>(rowBegin) * shape.hiddenSize;
+                bool recordTile = timelineEnable != 0U && get_block_idx() == 0 && !m3n12Gmm2TileRecorded;
+                uint64_t tileBegin = recordTile ? M3N12GetSysCnt() : 0U;
                 M2FusedRunInt8GmmTile(tileInput, expertWeight + nBase, tileOutput + nBase, mValid,
                                       shape.intermediateSize, nValid, rowBytes, shape.hiddenSize, shape.hiddenSize);
+                if (recordTile) {
+                    M3N12RecordTimeline(
+                        timelineScratch, moe_dispatch_combine_a8w8::kM3N12TimelineSlotGmm2, tileBegin, M3N12GetSysCnt(),
+                        M3N12PackMeta0(moe_dispatch_combine_a8w8::M3N12TimelineKind::kGmm2Tile,
+                                       moe_dispatch_combine_a8w8::M3N12TimelineCoreType::kAic,
+                                       static_cast<uint32_t>(get_block_idx()),
+                                       moe_dispatch_combine_a8w8::M3N12TimelineStatus::kProcessed, 0U, taskId),
+                        M3N12PackMeta1(
+                            rowBegin / moe_dispatch_combine_a8w8::kGmmBaseM,
+                            nBase / moe_dispatch_combine_a8w8::kGmmBaseN,
+                            shape.intermediateSize / moe_dispatch_combine_a8w8::kGmmBaseK,
+                            static_cast<uint32_t>(moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kSyncAll)));
+                    m3n12Gmm2TileRecorded = true;
+                }
             }
         }
     }
@@ -2052,6 +2224,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         uint32_t dispatchWorkerId = dispatchAssignment.workerId;
         dispatchWorkerCount = dispatchAssignment.workerCount;
         bool activeDispatchWorker = dispatchAssignment.active;
+        uint64_t countTimelineBegin = 0U;
         if (IsM2FusedMainAiv()) {
             M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 100);
             M2ClearDispatchState(shape, workspaceView, localPeer);
@@ -2072,11 +2245,23 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         }
         M3NDispatchHardPhaseSync();
         if (activeDispatchWorker) {
+            uint32_t tokenBegin = TokenShardBegin(shape.m, dispatchWorkerId, dispatchWorkerCount);
+            uint32_t tokenEnd = TokenShardEnd(shape.m, dispatchWorkerId, dispatchWorkerCount);
+            bool recordRoute = timelineEnable != 0U && dispatchWorkerId == 0U;
+            uint64_t routeBegin = recordRoute ? M3N12GetSysCnt() : 0U;
             M3NRoutePackQuantLocalShard(shape, workspaceView, localPeer, inputA, expertIdx, xActiveMask, rowBytes,
                                         dispatchWorkerId, dispatchWorkerCount);
+            if (recordRoute) {
+                M3N12RecordAivRange(workspaceView.timelineScratch, moe_dispatch_combine_a8w8::kM3N12TimelineSlotRoute,
+                                    moe_dispatch_combine_a8w8::M3N12TimelineKind::kRoute, logicalAiv, dispatchWorkerId,
+                                    tokenBegin, tokenEnd, tokenEnd - tokenBegin, 0U, routeBegin, M3N12GetSysCnt());
+            }
         }
         M3NDispatchHardPhaseSync();
         if (activeDispatchWorker) {
+            if (timelineEnable != 0U && dispatchWorkerId == 0U) {
+                countTimelineBegin = M3N12GetSysCnt();
+            }
             M3NPublishCountRowsShard(shape, workspaceView, ctx, peerWindow, rank.rankId, peerWindowLayout,
                                      dispatchWorkerId, dispatchWorkerCount);
         }
@@ -2088,6 +2273,12 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         M3NDispatchHardPhaseSync();
         if (activeDispatchWorker) {
             M3NWaitCountRowsShard(shape, localPeer, dispatchWorkerId, dispatchWorkerCount);
+            if (timelineEnable != 0U && dispatchWorkerId == 0U) {
+                M3N12RecordAivRange(
+                    workspaceView.timelineScratch, moe_dispatch_combine_a8w8::kM3N12TimelineSlotCountSync,
+                    moe_dispatch_combine_a8w8::M3N12TimelineKind::kCountSync, logicalAiv, dispatchWorkerId, 0U,
+                    shape.rankNum, shape.rankNum, 0U, countTimelineBegin, M3N12GetSysCnt());
+            }
         }
         M3NDispatchHardPhaseSync();
         if (IsM2FusedMainAiv()) {
@@ -2096,17 +2287,50 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         }
         M3NDispatchHardPhaseSync();
         if (m3n10ScoreboardAsync) {
+            bool recordGather = timelineEnable != 0U && activeDispatchWorker && dispatchWorkerId == 0U;
+            uint64_t gatherBegin = recordGather ? M3N12GetSysCnt() : 0U;
             M3N10GatherDispatchToGmm1InputShardByScoreboard(
                 shape, workspaceView, localPeer, ctx, peerWindow, rank.rankId, rowBytes, peerWindowLayout,
                 dispatchWorkerId, dispatchWorkerCount, activeDispatchWorker, IsM2FusedMainAiv());
+            if (recordGather) {
+                uint32_t expertEnd = dispatchWorkerCount == 0U ?
+                                         0U :
+                                         (shape.expertPerRank + dispatchWorkerCount - 1U) / dispatchWorkerCount;
+                M3N12RecordAivRange(workspaceView.timelineScratch,
+                                    moe_dispatch_combine_a8w8::kM3N12TimelineSlotDispatchGather,
+                                    moe_dispatch_combine_a8w8::M3N12TimelineKind::kDispatchGather, logicalAiv,
+                                    dispatchWorkerId, 0U, expertEnd, expertEnd, 0U, gatherBegin, M3N12GetSysCnt());
+            }
         } else if (m3n5DispatchGmm1Overlap) {
             bool requireAicStartAck = debugStopStage != 1U;
+            bool recordGather = timelineEnable != 0U && activeDispatchWorker && dispatchWorkerId == 0U;
+            uint64_t gatherBegin = recordGather ? M3N12GetSysCnt() : 0U;
             M3N5GatherDispatchToGmm1InputShardByExpert(
                 shape, workspaceView, localPeer, ctx, peerWindow, rank.rankId, rowBytes, peerWindowLayout,
                 dispatchWorkerId, dispatchWorkerCount, activeDispatchWorker, stageStatus, requireAicStartAck);
+            if (recordGather) {
+                uint32_t expertEnd = dispatchWorkerCount == 0U ?
+                                         0U :
+                                         (shape.expertPerRank + dispatchWorkerCount - 1U) / dispatchWorkerCount;
+                M3N12RecordAivRange(workspaceView.timelineScratch,
+                                    moe_dispatch_combine_a8w8::kM3N12TimelineSlotDispatchGather,
+                                    moe_dispatch_combine_a8w8::M3N12TimelineKind::kDispatchGather, logicalAiv,
+                                    dispatchWorkerId, 0U, expertEnd, expertEnd, 0U, gatherBegin, M3N12GetSysCnt());
+            }
         } else if (activeDispatchWorker) {
+            bool recordGather = timelineEnable != 0U && dispatchWorkerId == 0U;
+            uint64_t gatherBegin = recordGather ? M3N12GetSysCnt() : 0U;
             M3NGatherDispatchToGmm1InputShard(shape, workspaceView, localPeer, ctx, peerWindow, rank.rankId, rowBytes,
                                               peerWindowLayout, dispatchWorkerId, dispatchWorkerCount);
+            if (recordGather) {
+                uint32_t expertEnd = dispatchWorkerCount == 0U ?
+                                         0U :
+                                         (shape.expertPerRank + dispatchWorkerCount - 1U) / dispatchWorkerCount;
+                M3N12RecordAivRange(workspaceView.timelineScratch,
+                                    moe_dispatch_combine_a8w8::kM3N12TimelineSlotDispatchGather,
+                                    moe_dispatch_combine_a8w8::M3N12TimelineKind::kDispatchGather, logicalAiv,
+                                    dispatchWorkerId, 0U, expertEnd, expertEnd, 0U, gatherBegin, M3N12GetSysCnt());
+            }
         }
         if (m3n5DispatchGmm1Overlap) {
             M3NDispatchAivOnlyPhaseSync();
@@ -2312,6 +2536,9 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         }
         moe_dispatch_combine_a8w8::M3N4AivAllDoneCoarseSync();
         for (uint32_t syncIdx = 0; syncIdx < syncGroupCount; ++syncIdx) {
+            bool recordSwiglu = timelineEnable != 0U && IsM2FusedMainAiv() &&
+                                syncIdx < moe_dispatch_combine_a8w8::kM3N12TimelineSwigluSlotCount;
+            uint64_t swigluBegin = recordSwiglu ? M3N12GetSysCnt() : 0U;
             moe_dispatch_combine_a8w8::M3N6WaitGmm1SyncGroupReady(syncIdx);
             if (IsM2FusedMainAiv()) {
                 M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 1U, 1);
@@ -2335,6 +2562,26 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                     activationSummary.rowsProcessed, syncIdx == 0U, syncIdx + 1U == syncGroupCount);
                 StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 9U,
                                LoadScalarI32(localPeer.debugCounters + kM3CounterBase + 9U) + 1);
+                if (recordSwiglu) {
+                    __gm__ int32_t *group = workspaceView.swigluGroupDesc + syncIdx * kM2SwigluGroupFields;
+                    int32_t groupId = LoadScalarI32(group + 0U);
+                    int32_t expertBegin = LoadScalarI32(group + 1U);
+                    int32_t expertEnd = LoadScalarI32(group + 2U);
+                    int32_t rowBegin = LoadScalarI32(group + 3U);
+                    int32_t rowEnd = LoadScalarI32(group + 4U);
+                    M3N12RecordTimeline(
+                        workspaceView.timelineScratch,
+                        moe_dispatch_combine_a8w8::kM3N12TimelineSlotSwigluBase + syncIdx, swigluBegin,
+                        M3N12GetSysCnt(),
+                        M3N12PackMeta0(moe_dispatch_combine_a8w8::M3N12TimelineKind::kSwigluGroup,
+                                       moe_dispatch_combine_a8w8::M3N12TimelineCoreType::kAiv, logicalAiv,
+                                       moe_dispatch_combine_a8w8::M3N12TimelineStatus::kProcessed, syncIdx,
+                                       static_cast<uint32_t>(groupId < 0 ? 0 : groupId)),
+                        M3N12PackMeta1(static_cast<uint32_t>(rowBegin < 0 ? 0 : rowBegin),
+                                       static_cast<uint32_t>(rowEnd < 0 ? 0 : rowEnd),
+                                       static_cast<uint32_t>(expertBegin < 0 ? 0 : expertBegin),
+                                       static_cast<uint32_t>(expertEnd < 0 ? 0 : expertEnd)));
+                }
             }
             moe_dispatch_combine_a8w8::M3N4AivAllDoneCoarseSync();
         }
@@ -2453,6 +2700,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         bool materializeEnabled = debugStopStage != 56U;
         bool transferEnabled = debugStopStage != 53U;
         bool notifyEnabled = debugStopStage != 53U && debugStopStage != 54U;
+        bool recordCombine = timelineEnable != 0U && activeCombineWorker && combineAssignment.workerId == 0U;
+        uint64_t combineBegin = recordCombine ? M3N12GetSysCnt() : 0U;
         if (m3n8Gmm2CombineOverlap) {
             M3N8RunGmm2EpilogueAndReturnByExpert(shape, workspaceView, localPeer, ctx, peerWindow, rank.rankId,
                                                  peerWindowLayout, combineAssignment.workerId, combineWorkerCount,
@@ -2462,11 +2711,25 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                 StoreScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 11U,
                                LoadScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 11U) + 1);
             }
+            if (recordCombine) {
+                uint32_t segmentCap = static_cast<uint32_t>(M2ReturnSegmentCapacity(shape));
+                M3N12RecordAivRange(workspaceView.timelineScratch, moe_dispatch_combine_a8w8::kM3N12TimelineSlotCombine,
+                                    moe_dispatch_combine_a8w8::M3N12TimelineKind::kCombineOwnerSegment, logicalAiv,
+                                    combineAssignment.workerId, 0U, segmentCap, 1U, 0U, combineBegin, M3N12GetSysCnt());
+            }
             M3N8AivOnlyPhaseSync();
         } else if (activeCombineWorker) {
             M3NCombineShardStats combineStats = M3NRunGmm2EpilogueAndReturnShard(
                 shape, workspaceView, localPeer, ctx, peerWindow, rank.rankId, peerWindowLayout,
                 combineAssignment.workerId, combineWorkerCount, materializeEnabled, transferEnabled, notifyEnabled);
+            if (recordCombine) {
+                uint32_t segmentCap = static_cast<uint32_t>(M2ReturnSegmentCapacity(shape));
+                M3N12RecordAivRange(
+                    workspaceView.timelineScratch, moe_dispatch_combine_a8w8::kM3N12TimelineSlotCombine,
+                    moe_dispatch_combine_a8w8::M3N12TimelineKind::kCombineOwnerSegment, logicalAiv,
+                    combineAssignment.workerId, 0U, segmentCap, static_cast<uint32_t>(combineStats.segmentCount),
+                    static_cast<uint32_t>(combineStats.skippedSegmentCount), combineBegin, M3N12GetSysCnt());
+            }
             (void)combineStats;
         }
         if (!m3n8Gmm2CombineOverlap) {
@@ -2503,6 +2766,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     if (logicalAiv < 8U) {
         uint32_t tokenBegin = TokenShardBegin(shape.m, logicalAiv, 8U);
         uint32_t tokenEnd = TokenShardEnd(shape.m, logicalAiv, 8U);
+        bool recordRestore = timelineEnable != 0U && logicalAiv == 0U;
+        uint64_t restoreBegin = recordRestore ? M3N12GetSysCnt() : 0U;
         __gm__ float *probValues = reinterpret_cast<__gm__ float *>(probs);
         __gm__ half *output = reinterpret_cast<__gm__ half *>(outputC);
         int32_t outputRowStride = static_cast<int32_t>(shape.hiddenSize);
@@ -2546,6 +2811,12 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                     WaitStoreTileReusable();
                 }
             }
+        }
+        if (recordRestore) {
+            M3N12RecordAivRange(workspaceView.timelineScratch, moe_dispatch_combine_a8w8::kM3N12TimelineSlotRestore,
+                                moe_dispatch_combine_a8w8::M3N12TimelineKind::kRestore, logicalAiv, logicalAiv,
+                                tokenBegin, tokenEnd, tokenEnd - tokenBegin, shape.m - (tokenEnd - tokenBegin),
+                                restoreBegin, M3N12GetSysCnt());
         }
     }
     if (IsM2FusedMainAiv()) {

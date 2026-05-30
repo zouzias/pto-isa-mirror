@@ -454,6 +454,7 @@ struct M2WorkspaceViewDevice {
     __gm__ int32_t *subTileReturnPlan;
     __gm__ int32_t *subTileOwnerSegments;
     __gm__ int32_t *subTileReady;
+    __gm__ uint64_t *timelineScratch;
 };
 
 struct M2PeerWindowViewDevice {
@@ -466,6 +467,7 @@ struct M2PeerWindowViewDevice {
     __gm__ int32_t *combineDoneSignal;
     __gm__ int32_t *returnSegmentCounters;
     __gm__ int32_t *debugCounters;
+    __gm__ uint64_t *timeline;
 };
 
 AICORE inline M2WorkspaceViewDevice MakeM2WorkspaceViewDevice(GM_ADDR workspaceBase,
@@ -515,6 +517,7 @@ AICORE inline M2WorkspaceViewDevice MakeM2WorkspaceViewDevice(GM_ADDR workspaceB
     view.subTileReturnPlan = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.subTileReturnPlan.offset);
     view.subTileOwnerSegments = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.subTileOwnerSegments.offset);
     view.subTileReady = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.subTileReady.offset);
+    view.timelineScratch = reinterpret_cast<__gm__ uint64_t *>(workspaceBase + layout.timelineScratch.offset);
     return view;
 }
 
@@ -532,6 +535,7 @@ AICORE inline M2PeerWindowViewDevice MakeM2PeerWindowViewDevice(
     view.returnSegmentCounters =
         reinterpret_cast<__gm__ int32_t *>(peerWindowBase + layout.returnSegmentCounters.offset);
     view.debugCounters = reinterpret_cast<__gm__ int32_t *>(peerWindowBase + layout.debugCounters.offset);
+    view.timeline = reinterpret_cast<__gm__ uint64_t *>(peerWindowBase + layout.timeline.offset);
     return view;
 }
 
