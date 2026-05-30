@@ -65,6 +65,9 @@ constexpr uint32_t kM2FusedFullOverlapModeSlot = 36;
 constexpr uint32_t kM3N10ScoreboardCounterBase = 24U * 16U + 96U;
 constexpr uint32_t kM3N10ScoreboardCounterSlots = 16U;
 constexpr uint32_t kM3N10ScoreboardWorkerCounterBase = kM3N10ScoreboardCounterBase + kM3N10ScoreboardCounterSlots;
+constexpr uint32_t kM3N11SubtileRows = 16U;
+constexpr uint32_t kM3N11SubtileCounterBase = 24U * 16U + 128U;
+constexpr uint32_t kM3N11SubtileCounterSlots = 16U;
 
 enum class DType : uint32_t
 {

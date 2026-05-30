@@ -1040,6 +1040,7 @@ struct M2FusedFullEvidence {
     std::array<int32_t, 16> m3nGmm2Counters{};
     std::array<int32_t, 16> m3n8CombineCounters{};
     std::array<int32_t, 16> m3n10ScoreboardCounters{};
+    std::array<int32_t, 16> m3n11SubtileCounters{};
     std::array<int32_t, 16> m3n9TimeoutDump{};
     uint64_t m3n10ProducerStatusChecksum = 0;
     uint64_t m3n10ScoreboardMinStatusChecksum = 0;
@@ -1098,6 +1099,7 @@ M2FusedFullEvidence ReadM2FusedFullEvidence(const moe_dispatch_combine_a8w8::Wor
     constexpr size_t kM3NGmm2CounterBase = kM3CounterBase + 64U;
     constexpr size_t kM3N10ScoreboardCounterBase = moe_dispatch_combine_a8w8::kM3N10ScoreboardCounterBase;
     constexpr size_t kM3N10ScoreboardWorkerCounterBase = moe_dispatch_combine_a8w8::kM3N10ScoreboardWorkerCounterBase;
+    constexpr size_t kM3N11SubtileCounterBase = moe_dispatch_combine_a8w8::kM3N11SubtileCounterBase;
     constexpr int32_t kFullMagic = 0x4D328CA;
     M2FusedFullEvidence evidence;
     std::vector<int32_t> stageStatus(workspaceLayout.stageStatus.bytes / sizeof(int32_t), 0);
@@ -1244,6 +1246,11 @@ M2FusedFullEvidence ReadM2FusedFullEvidence(const moe_dispatch_combine_a8w8::Wor
         evidence.m3n10ScoreboardCounters[2] = debugCounters[kM3N10ScoreboardWorkerCounterBase + 0U];
         evidence.m3n10ScoreboardCounters[10] = debugCounters[kM3N10ScoreboardWorkerCounterBase + 1U];
         evidence.m3n10ScoreboardCounters[11] = debugCounters[kM3N10ScoreboardWorkerCounterBase + 2U];
+    }
+    for (size_t idx = 0; idx < evidence.m3n11SubtileCounters.size(); ++idx) {
+        if (kM3N11SubtileCounterBase + idx < debugCounters.size()) {
+            evidence.m3n11SubtileCounters[idx] = debugCounters[kM3N11SubtileCounterBase + idx];
+        }
     }
     std::vector<int32_t> producerStatus =
         CopyWorkspaceI32Field(workspaceLayout, workspaceLayout.producerStatus, state, "m3n10 producerStatus");
@@ -3898,6 +3905,7 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     int32_t m3n4CvWaitCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[14];
     bool m3n5DispatchGmm1Overlap = fusedEvidence != nullptr && fusedEvidence->m3nDispatchCounters[12] != 0;
     bool m3n10ScoreboardAsync = fusedEvidence != nullptr && fusedEvidence->m3n10ScoreboardCounters[0] != 0;
+    bool m3n11SubtileStride = fusedEvidence != nullptr && fusedEvidence->m3n11SubtileCounters[0] != 0;
     bool dispatchGmm1Overlap = m3n5DispatchGmm1Overlap || m3n10ScoreboardAsync;
     int32_t m3n5DispatchExpertReadyCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3nDispatchCounters[13];
     int32_t m3n5ZeroTokenExpertSkipCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3nDispatchCounters[14];
@@ -3921,6 +3929,17 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     int32_t m3n8LastConsumedExpert = fusedEvidence == nullptr ? -1 : fusedEvidence->m3n8CombineCounters[4];
     int32_t m3n8FirstEarlyExpert = fusedEvidence == nullptr ? -1 : fusedEvidence->m3n8CombineCounters[6];
     int32_t m3n8OwnerSegmentWorkers = fusedEvidence == nullptr ? 0 : fusedEvidence->m3n8CombineCounters[7];
+    int32_t subtileRows = fusedEvidence == nullptr ? 0 : fusedEvidence->m3n11SubtileCounters[1];
+    int32_t subtileStrideWidth = fusedEvidence == nullptr ? 0 : fusedEvidence->m3n11SubtileCounters[2];
+    int32_t subtileTransferCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3n11SubtileCounters[3];
+    int32_t subtileSegmentCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3n11SubtileCounters[4];
+    int32_t subtileRemoteTputCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3n11SubtileCounters[5];
+    int32_t subtileLocalCopyCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3n11SubtileCounters[6];
+    int32_t subtileReadyWaitCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3n11SubtileCounters[7];
+    int32_t subtileReadyTileCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3n11SubtileCounters[8];
+    int32_t subtileMappedSegments = fusedEvidence == nullptr ? 0 : fusedEvidence->m3n11SubtileCounters[9];
+    int32_t subtileSyncallCount = m3n8Gmm2CombineOverlap ? 2 * static_cast<int32_t>(args.shape.expertPerRank) + 2 : 2;
+    int32_t subtileCvWaitCount = m3n8Gmm2CombineOverlap ? 0 : 1;
     std::ostringstream combineWorkerSegments;
     for (int32_t worker = 0; worker < 8; ++worker) {
         if (worker != 0) {
@@ -4079,7 +4098,9 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  gmm_tile_is_aic_work_unit=true\n";
     std::cout << "  dispatch_ready_grain=expert_group\n";
     std::cout << "  activation_ready_grain=swiglu_sync_group\n";
-    std::cout << "  combine_ready_grain=" << (m3n8Gmm2CombineOverlap ? "expert_group" : "owner_segment_or_group")
+    std::cout << "  combine_ready_grain="
+              << (m3n11SubtileStride ? "sub_tile" :
+                                       (m3n8Gmm2CombineOverlap ? "expert_group" : "owner_segment_or_group"))
               << "\n";
     std::cout << "  aiv_data_parallel_deferred_to_m3=false\n";
     std::cout << "  aiv_data_parallel_scope=dispatch_m3n1_activation_m3n2_combine_m3n3\n";
@@ -4112,10 +4133,26 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  combine_actual_write_count=" << combineActualWriteCount << "\n";
     std::cout << "  combine_skipped_segment_count=" << combineSkippedSegmentCount << "\n";
     std::cout << "  combine_worker_ranges_nonoverlap=" << (combineRangesNonoverlap ? "true" : "false") << "\n";
-    std::cout << "  combine_mode=" << (m3n8Gmm2CombineOverlap ? "continuous_segment" : "owner_segment_continuous")
-              << "\n";
+    if (m3n11SubtileStride) {
+        std::cout << "  combine_mode=subtile_stride\n";
+    } else {
+        std::cout << "  combine_mode=" << (m3n8Gmm2CombineOverlap ? "continuous_segment" : "owner_segment_continuous")
+                  << "\n";
+    }
     std::cout << "  combine_syncall_count=" << (m3n8Gmm2CombineOverlap ? 2 * args.shape.expertPerRank + 2 : 2) << "\n";
     std::cout << "  combine_cv_wait_count=" << (m3n8Gmm2CombineOverlap ? 0 : 1) << "\n";
+    std::cout << "  subtile_stride_sync_tput_enabled=" << (m3n11SubtileStride ? "true" : "false") << "\n";
+    std::cout << "  subtile_rows=" << subtileRows << "\n";
+    std::cout << "  subtile_stride_width=" << subtileStrideWidth << "\n";
+    std::cout << "  subtile_transfer_count=" << subtileTransferCount << "\n";
+    std::cout << "  subtile_segment_count=" << subtileSegmentCount << "\n";
+    std::cout << "  subtile_remote_tput_count=" << subtileRemoteTputCount << "\n";
+    std::cout << "  subtile_local_copy_count=" << subtileLocalCopyCount << "\n";
+    std::cout << "  subtile_ready_wait_count=" << subtileReadyWaitCount << "\n";
+    std::cout << "  subtile_ready_tile_count=" << subtileReadyTileCount << "\n";
+    std::cout << "  subtile_mapped_segment_count=" << subtileMappedSegments << "\n";
+    std::cout << "  subtile_syncall_count=" << subtileSyncallCount << "\n";
+    std::cout << "  subtile_cv_wait_count=" << subtileCvWaitCount << "\n";
     std::cout << "  combine_stage_overlap_enabled=" << (m3n8Gmm2CombineOverlap ? "true" : "false") << "\n";
     std::cout << "  restore_aiv_workers=8\n";
     std::cout << "  dispatch_payload_parallel=" << (dispatchAivWorkers > 1 ? "true" : "false") << "\n";
@@ -4194,6 +4231,9 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  scoreboard_min_status_checksum="
               << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3n10ScoreboardMinStatusChecksum) << "\n";
     std::cout << "  subtile_stride_async_enabled=false\n";
+    std::cout << "  primitive_gap=TPUT_ASYNC_flat_contiguous_1d\n";
+    std::cout << "  tput_async_stride_blocked_locator=TPUT_ASYNC requires flat-contiguous-1d\n";
+    std::cout << "  full_async_combine_claim=false\n";
     std::cout << "  timeline_enabled=" << (args.runtime.timeline == 0 ? "false" : "true") << "\n";
     std::cout << "  timeline_granularity=stage_signal_counter\n";
     uint64_t droppedRows = CountDroppedRoutes(args, state);

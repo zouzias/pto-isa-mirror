@@ -81,6 +81,8 @@ constexpr uint32_t kM3NDispatchMaxWorkers = 8U;
 constexpr uint32_t kM3NCombineWorkerScratchBase = 72U * 16U;
 constexpr uint32_t kM3NCombineWorkerScratchStride = 16U;
 constexpr uint32_t kM3N8CombineCounterBase = kM3CounterBase + 80U;
+constexpr uint32_t kM3N11SubtileRows = moe_dispatch_combine_a8w8::kM3N11SubtileRows;
+constexpr uint32_t kM3N11SubtileCounterBase = moe_dispatch_combine_a8w8::kM3N11SubtileCounterBase;
 
 using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
 using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -3223,6 +3225,10 @@ AICORE inline void M2RunGmm2EpilogueAndReturn(moe_dispatch_combine_a8w8::ShapeCo
 struct M3NCombineShardStats {
     int32_t segmentCount;
     int32_t skippedSegmentCount;
+    int32_t subtileCount;
+    int32_t remoteSubtileCount;
+    int32_t localSubtileCount;
+    int32_t readyWaitCount;
 };
 
 AICORE inline __gm__ int32_t *M3NCombineWorkerScratch(M2PeerWindowViewDevice localPeer, uint32_t workerId)
@@ -3234,17 +3240,20 @@ AICORE inline void M3NInitCombineCounters(M2PeerWindowViewDevice localPeer, uint
 {
     for (uint32_t idx = 0; idx < 16U; ++idx) {
         StoreScalarI32(localPeer.debugCounters + kM3NCombineCounterBase + idx, 0);
+        StoreScalarI32(localPeer.debugCounters + kM3N11SubtileCounterBase + idx, 0);
     }
     for (uint32_t worker = 0; worker < kM3NDispatchMaxWorkers; ++worker) {
         __gm__ int32_t *scratch = M3NCombineWorkerScratch(localPeer, worker);
-        StoreScalarI32(scratch + 0U, 0);
-        StoreScalarI32(scratch + 1U, 0);
+        for (uint32_t slot = 0; slot < kM3NCombineWorkerScratchStride; ++slot) {
+            StoreScalarI32(scratch + slot, 0);
+        }
         StoreScalarI32(scratch + 2U, static_cast<int32_t>(worker));
-        StoreScalarI32(scratch + 3U, 0);
         InvalidateGmCacheLines(scratch, 64U);
     }
     StoreScalarI32(localPeer.debugCounters + kM3NCombineCounterBase + 0U, static_cast<int32_t>(workerCount));
     StoreScalarI32(localPeer.debugCounters + kM3NCombineCounterBase + 7U, 1);
+    StoreScalarI32(localPeer.debugCounters + kM3N11SubtileCounterBase + 0U, 1);
+    StoreScalarI32(localPeer.debugCounters + kM3N11SubtileCounterBase + 1U, static_cast<int32_t>(kM3N11SubtileRows));
 }
 
 AICORE inline void M3N8AivOnlyPhaseSync()
@@ -3254,13 +3263,50 @@ AICORE inline void M3N8AivOnlyPhaseSync()
     pto::SYNCALL<pto::SyncCoreType::AIVOnly>();
 }
 
+AICORE inline void M3N11WaitSubTileReadyGm(M2WorkspaceViewDevice workspaceView, uint32_t tileId)
+{
+    __gm__ int32_t *ready = workspaceView.subTileReady + tileId * 16U;
+    while (true) {
+        pipe_barrier(PIPE_ALL);
+        dcci(static_cast<__gm__ void *>(ready), SINGLE_CACHE_LINE);
+        dsb(DSB_DDR);
+        if (LoadScalarI32(ready) != 0) {
+            return;
+        }
+    }
+}
+
+AICORE inline int32_t M3N11TransferHalfSubtileStride(__gm__ half *dstBase, int32_t dstRowStride, int32_t dstRow,
+                                                     __gm__ half *srcBase, int32_t srcRowStride, int32_t srcRow,
+                                                     int32_t rows, int32_t cols, bool remote)
+{
+    int32_t subtileCount = 0;
+    for (int32_t rowOffset = 0; rowOffset < rows; rowOffset += static_cast<int32_t>(kM3N11SubtileRows)) {
+        int32_t subtileRows = rows - rowOffset;
+        if (subtileRows > static_cast<int32_t>(kM3N11SubtileRows)) {
+            subtileRows = static_cast<int32_t>(kM3N11SubtileRows);
+        }
+        if (remote) {
+            TPutRowsHalf(dstBase, dstRowStride, dstRow + rowOffset, srcBase, srcRowStride, srcRow + rowOffset,
+                         subtileRows, cols);
+        } else {
+            for (int32_t row = 0; row < subtileRows; ++row) {
+                CopyRowHalf(dstBase, dstRowStride, dstRow + rowOffset + row, srcBase, srcRowStride,
+                            srcRow + rowOffset + row, cols);
+            }
+        }
+        ++subtileCount;
+    }
+    return subtileCount;
+}
+
 AICORE inline M3NCombineShardStats M3NRunGmm2EpilogueAndReturnShard(
     moe_dispatch_combine_a8w8::ShapeConfig shape, M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
     __gm__ HcclDeviceContext *ctx, GM_ADDR peerWindow, uint32_t myRank,
     const moe_dispatch_combine_a8w8::PeerWindowLayout &peerWindowLayout, uint32_t workerId, uint32_t workerCount,
     bool materializeEnabled, bool transferEnabled, bool notifyEnabled)
 {
-    M3NCombineShardStats stats{0, 0};
+    M3NCombineShardStats stats{0, 0, 0, 0, 0, 0};
     if (workerCount == 0U || workerId >= workerCount) {
         return stats;
     }
@@ -3289,10 +3335,13 @@ AICORE inline M3NCombineShardStats M3NRunGmm2EpilogueAndReturnShard(
             int32_t hiddenBegin = LoadScalarI32(segment + 4U);
             int32_t hiddenCount = LoadScalarI32(segment + 5U);
             uint32_t localExpert = static_cast<uint32_t>(LoadScalarI32(segment + 6U));
+            uint32_t tileId = static_cast<uint32_t>(LoadScalarI32(segment + 7U));
             if (rows <= 0 || hiddenCount <= 0 || tokenOwner >= shape.rankNum) {
                 ++stats.skippedSegmentCount;
                 continue;
             }
+            M3N11WaitSubTileReadyGm(workspaceView, tileId);
+            ++stats.readyWaitCount;
             if (!materializeEnabled) {
                 ++stats.segmentCount;
                 continue;
@@ -3310,14 +3359,17 @@ AICORE inline M3NCombineShardStats M3NRunGmm2EpilogueAndReturnShard(
             M2PeerWindowViewDevice remotePeer =
                 MakeM2RemotePeerWindowViewDevice(ctx, peerWindow, tokenOwner, peerWindowLayout);
             if (tokenOwner == myRank) {
-                for (int32_t row = 0; row < rows; ++row) {
-                    CopyRowHalf(localPeer.returnPayload + hiddenBegin, returnRowStride, dstStart + row,
-                                workspaceView.gmm2Out + hiddenBegin, returnRowStride, srcStart + row, hiddenCount);
-                }
+                int32_t subtileCount = M3N11TransferHalfSubtileStride(
+                    localPeer.returnPayload + hiddenBegin, returnRowStride, dstStart,
+                    workspaceView.gmm2Out + hiddenBegin, returnRowStride, srcStart, rows, hiddenCount, false);
+                stats.subtileCount += subtileCount;
+                stats.localSubtileCount += subtileCount;
             } else {
-                TPutRowsHalfContiguous(remotePeer.returnPayload + hiddenBegin, returnRowStride, dstStart,
-                                       workspaceView.gmm2Out + hiddenBegin, returnRowStride, srcStart, rows,
-                                       hiddenCount);
+                int32_t subtileCount = M3N11TransferHalfSubtileStride(
+                    remotePeer.returnPayload + hiddenBegin, returnRowStride, dstStart,
+                    workspaceView.gmm2Out + hiddenBegin, returnRowStride, srcStart, rows, hiddenCount, true);
+                stats.subtileCount += subtileCount;
+                stats.remoteSubtileCount += subtileCount;
             }
             if (notifyEnabled) {
                 NotifySignal(remotePeer.returnSegmentCounters +
@@ -3333,6 +3385,11 @@ AICORE inline M3NCombineShardStats M3NRunGmm2EpilogueAndReturnShard(
         StoreScalarI32(scratch + 1U, stats.skippedSegmentCount);
         StoreScalarI32(scratch + 2U, static_cast<int32_t>(workerId));
         StoreScalarI32(scratch + 3U, static_cast<int32_t>(mappedSegments));
+        StoreScalarI32(scratch + 4U, stats.subtileCount);
+        StoreScalarI32(scratch + 5U, stats.segmentCount);
+        StoreScalarI32(scratch + 6U, stats.remoteSubtileCount);
+        StoreScalarI32(scratch + 7U, stats.localSubtileCount);
+        StoreScalarI32(scratch + 8U, stats.readyWaitCount);
         InvalidateGmCacheLines(scratch, 64U);
     }
     return stats;
@@ -3345,7 +3402,7 @@ AICORE inline M3NCombineShardStats M3N8RunGmm2EpilogueAndReturnExpertShard(
     uint32_t segmentCount, uint32_t workerId, uint32_t workerCount, bool materializeEnabled, bool transferEnabled,
     bool notifyEnabled)
 {
-    M3NCombineShardStats stats{0, 0};
+    M3NCombineShardStats stats{0, 0, 0, 0, 0, 0};
     if (workerCount == 0U || workerId >= workerCount) {
         return stats;
     }
@@ -3370,6 +3427,8 @@ AICORE inline M3NCombineShardStats M3N8RunGmm2EpilogueAndReturnExpertShard(
             ++stats.skippedSegmentCount;
             continue;
         }
+        M3N11WaitSubTileReadyGm(workspaceView, tileId);
+        ++stats.readyWaitCount;
         if (!materializeEnabled) {
             ++stats.segmentCount;
             continue;
@@ -3387,13 +3446,17 @@ AICORE inline M3NCombineShardStats M3N8RunGmm2EpilogueAndReturnExpertShard(
         M2PeerWindowViewDevice remotePeer =
             MakeM2RemotePeerWindowViewDevice(ctx, peerWindow, tokenOwner, peerWindowLayout);
         if (tokenOwner == myRank) {
-            for (int32_t row = 0; row < rows; ++row) {
-                CopyRowHalf(localPeer.returnPayload + hiddenBegin, returnRowStride, dstStart + row,
-                            workspaceView.gmm2Out + hiddenBegin, returnRowStride, srcStart + row, hiddenCount);
-            }
+            int32_t subtileCount = M3N11TransferHalfSubtileStride(
+                localPeer.returnPayload + hiddenBegin, returnRowStride, dstStart, workspaceView.gmm2Out + hiddenBegin,
+                returnRowStride, srcStart, rows, hiddenCount, false);
+            stats.subtileCount += subtileCount;
+            stats.localSubtileCount += subtileCount;
         } else {
-            TPutRowsHalfContiguous(remotePeer.returnPayload + hiddenBegin, returnRowStride, dstStart,
-                                   workspaceView.gmm2Out + hiddenBegin, returnRowStride, srcStart, rows, hiddenCount);
+            int32_t subtileCount = M3N11TransferHalfSubtileStride(
+                remotePeer.returnPayload + hiddenBegin, returnRowStride, dstStart, workspaceView.gmm2Out + hiddenBegin,
+                returnRowStride, srcStart, rows, hiddenCount, true);
+            stats.subtileCount += subtileCount;
+            stats.remoteSubtileCount += subtileCount;
         }
         if (notifyEnabled) {
             NotifySignal(remotePeer.returnSegmentCounters +
@@ -3418,6 +3481,11 @@ AICORE inline void M3N8AccumulateCombineWorkerScratch(M2PeerWindowViewDevice loc
     StoreScalarI32(scratch + 1U, oldSkipped + stats.skippedSegmentCount);
     StoreScalarI32(scratch + 2U, static_cast<int32_t>(workerId));
     StoreScalarI32(scratch + 3U, static_cast<int32_t>(mappedSegments));
+    StoreScalarI32(scratch + 4U, LoadScalarI32(scratch + 4U) + stats.subtileCount);
+    StoreScalarI32(scratch + 5U, LoadScalarI32(scratch + 5U) + stats.segmentCount);
+    StoreScalarI32(scratch + 6U, LoadScalarI32(scratch + 6U) + stats.remoteSubtileCount);
+    StoreScalarI32(scratch + 7U, LoadScalarI32(scratch + 7U) + stats.localSubtileCount);
+    StoreScalarI32(scratch + 8U, LoadScalarI32(scratch + 8U) + stats.readyWaitCount);
     InvalidateGmCacheLines(scratch, 64U);
 }
 
@@ -3534,12 +3602,22 @@ AICORE inline void M3NFinalizeGmm2EpilogueAndReturn(moe_dispatch_combine_a8w8::S
 {
     int32_t totalSegments = 0;
     int32_t activeWorkerMask = 0;
+    int32_t totalSubtiles = 0;
+    int32_t totalSubtileSegments = 0;
+    int32_t remoteSubtiles = 0;
+    int32_t localSubtiles = 0;
+    int32_t subTileReadyWaits = 0;
     for (uint32_t worker = 0; worker < workerCount && worker < kM3NDispatchMaxWorkers; ++worker) {
         __gm__ int32_t *scratch = M3NCombineWorkerScratch(localPeer, worker);
         InvalidateGmCacheLines(scratch, 64U);
         int32_t workerSegments = LoadScalarI32(scratch);
         StoreScalarI32(localPeer.debugCounters + kM3NCombineCounterBase + 8U + worker, workerSegments);
         totalSegments += workerSegments;
+        totalSubtiles += LoadScalarI32(scratch + 4U);
+        totalSubtileSegments += LoadScalarI32(scratch + 5U);
+        remoteSubtiles += LoadScalarI32(scratch + 6U);
+        localSubtiles += LoadScalarI32(scratch + 7U);
+        subTileReadyWaits += LoadScalarI32(scratch + 8U);
         if (workerSegments > 0 && worker < 31U) {
             activeWorkerMask |= static_cast<int32_t>(1U << worker);
         }
@@ -3553,6 +3631,19 @@ AICORE inline void M3NFinalizeGmm2EpilogueAndReturn(moe_dispatch_combine_a8w8::S
     StoreScalarI32(localPeer.debugCounters + kM3NCombineCounterBase + 5U,
                    LoadScalarI32(localPeer.debugCounters + 2U * 16U));
     StoreScalarI32(localPeer.debugCounters + kM3NCombineCounterBase + 6U, 1);
+    int32_t returnRowStride = static_cast<int32_t>(peerWindowLayout.returnPayloadRowBytes / sizeof(half));
+    StoreScalarI32(localPeer.debugCounters + kM3N11SubtileCounterBase + 0U, 1);
+    StoreScalarI32(localPeer.debugCounters + kM3N11SubtileCounterBase + 1U, static_cast<int32_t>(kM3N11SubtileRows));
+    StoreScalarI32(localPeer.debugCounters + kM3N11SubtileCounterBase + 2U, returnRowStride);
+    StoreScalarI32(localPeer.debugCounters + kM3N11SubtileCounterBase + 3U, totalSubtiles);
+    StoreScalarI32(localPeer.debugCounters + kM3N11SubtileCounterBase + 4U, totalSubtileSegments);
+    StoreScalarI32(localPeer.debugCounters + kM3N11SubtileCounterBase + 5U, remoteSubtiles);
+    StoreScalarI32(localPeer.debugCounters + kM3N11SubtileCounterBase + 6U, localSubtiles);
+    StoreScalarI32(localPeer.debugCounters + kM3N11SubtileCounterBase + 7U, subTileReadyWaits);
+    StoreScalarI32(localPeer.debugCounters + kM3N11SubtileCounterBase + 8U,
+                   LoadScalarI32(localPeer.debugCounters + 2U * 16U));
+    StoreScalarI32(localPeer.debugCounters + kM3N11SubtileCounterBase + 9U, mappedSegments);
+    StoreScalarI32(localPeer.debugCounters + kM3N11SubtileCounterBase + 10U, 1);
 
     for (uint32_t tokenOwner = 0; tokenOwner < shape.rankNum; ++tokenOwner) {
         M2PeerWindowViewDevice remotePeer =
@@ -3562,7 +3653,6 @@ AICORE inline void M3NFinalizeGmm2EpilogueAndReturn(moe_dispatch_combine_a8w8::S
     for (uint32_t peer = 0; peer < shape.rankNum; ++peer) {
         WaitSignal(localPeer.combineDoneSignal + peer * 16U, 1);
     }
-    int32_t returnRowStride = static_cast<int32_t>(peerWindowLayout.returnPayloadRowBytes / sizeof(half));
     int32_t expectedReturnSegments = M2WaitReturnSegmentCounters(shape, localPeer, myRank);
     InvalidateGmCacheLines(localPeer.returnPayload,
                            static_cast<uint32_t>(shape.m * shape.topK * returnRowStride * sizeof(half)));
