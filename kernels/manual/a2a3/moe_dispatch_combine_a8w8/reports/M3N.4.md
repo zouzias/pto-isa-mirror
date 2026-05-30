@@ -4,7 +4,7 @@
 
 - Task: M3N.4 BSP to stream execution skeleton
 - Owner: codex/current-session
-- End state: review_ready
+- End state: accepted (reviewer code-level review, DCL-2026-05-30-113)
 - Related issue: none
 
 ## Changes
