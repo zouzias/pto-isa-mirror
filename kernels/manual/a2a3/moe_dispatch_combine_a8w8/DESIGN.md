@@ -81,14 +81,20 @@ MegaMoE 对齐结论：
   依赖域的聚合状态并记录 wait/timeout counter。`scoreboardMinStatus` 不是全局最小 task id，不能让无关 expert
   或 tile 被慢 producer 拉齐。
 - Sub-Tile 通信：GMM-Combine overlap 需要把一个 GMM2 tile 可能跨多个 token owner 的 return 拆成
-  `OwnerSegment`，用 Sub-Tile、stride 或多段 `TPUT` 做非连续远端写。PTO 版必须在 M3.8 单独验证
-  `GlobalTensor Shape/Stride + TPUT` 或多段 direct `TPUT` 是否覆盖 A3 能力；若必须依赖 AscendC `DataCopy`
-  才能实现，该能力只能标记 blocked，不能引入 fallback。
+  `OwnerSegment`，用 Sub-Tile、stride 或多段 `TPUT` 做非连续远端写。已从 PTO primitive 实现确认（见 §11、M3N.11）：
+  **同步 `TPUT`（`TPut.hpp`，src/dst 各自 5 维独立 stride + `AtomicAdd`）可表达 strided/多段 sub-tile 远端写**，
+  因此 sub-tile/stride return 的**功能形态可 enabled 交付**，不会整条 blocked；唯一 blocked 的是**异步 SDMA + stride**
+  （`TPUT_ASYNC` 在 A3 硬性要求 flat-contiguous-1D，见 `TPutAsyncCommonDetail.hpp`），即"sub-tile return 与 GMM2 计算异步重叠"
+  是真实 primitive-gap，按 blocked 记录、locator `TPUT_ASYNC requires flat-contiguous-1d`，不引入 AscendC `DataCopy` fallback。
 - 观测与验证：必须有 counter 和 timeline。counter 覆盖 producer、consumer、timeout、scoreboard、subTile；
   timeline 覆盖 dispatch、GMM1、ActivationQuant、GMM2、RunGmm2EpilogueAndReturn、RestoreOutput，用来证明
   overlap 形态、等待空泡和 blocked 原因。不能只看 E2E 数字。
 - 性能风险：small shape 可能因为前同步和首个 expert token transfer 无法隐藏而更慢；compute/comm 并行可能抢
   MTE/带宽并拉长 GMM 本身耗时。因此验收必须同时看 correctness、timeline、等待空泡、stage 膨胀和 E2E。
+- 性能门槛口径：M3/M3N 的首要目标是**对标 `ffn.md` 把五层切分与并发"形态"做出来**（功能正确 + group/tile/sub-tile
+  ownership 切分到位 + counter/timeline 证据完整），**不把"overlap on 的 E2E 必须快于 off"作为 accept 硬门**。
+  E2E delta 是必须如实记录可对照的量（可正/负/平），性能调优（K width、preload/swizzle、worker 数、sub-tile 粒度）
+  是形态完成后的后续迭代，不阻塞 M3N/M4。若要把某具体 shape 的性能为正设成门槛，需走 issue/DCL 单独追加。
 - 当前边界：correctness baseline 固定为 A3 A8W8/int8 主路径；M3.0-M3.6 只能证明 fused overlap skeleton；
   M3.7-M3.9 的 scoreboard async、Sub-Tile/stride combine 和 timeline 通过或明确 blocked 后，才可以声称接近
   文章级 async overlap。外部实现只作为行为、协议、精度和性能对照，不能把 Catlass/AscendC 或外部融合算子依赖搬进
@@ -1119,7 +1125,8 @@ typed view 和 offset，但不能封装 copy、wait、notify、matmul 或 quant 
 | `Gmm1` / `Gmm2` | `TMATMUL` / `TMATMUL_ACC` | A3 `int8 x int8 -> int32`；`TMATMUL` 必须直接出现在 GMM stage 主流程 |
 | `ActivationQuant` | `TLOAD/TCVT/TMUL/TADD` etc., `TABS/TROWMAX/TMUL`, `TQUANT<INT8_*>`, `TSTORE` | 直接完成 scale1 dequant、routing scale、SwiGLU、requant、`gmm2PerTokenScale` 写回；当前主路径无 bias |
 | `RunGmm2EpilogueAndReturn` | `TLOAD/TCVT/TMUL/TSTORE + TPUT + TNOTIFY` | GMM2 epilogue 与 remote return 同 stage；`TPUT` 直接写 token owner `offsetD`，不能先全量写 `gmm2Out` 再 copy |
-| Sub-Tile/strided return | `GlobalTensor Shape/Stride + TPUT` or multiple direct `TPUT` calls | M2 固定 segment plan；M3.8 验证 A3 PTO remote stride/multi-segment async 能力。不足则 blocked，不引入 AscendC scatter fallback |
+| Sub-Tile/strided return（功能） | 同步 `GlobalTensor Shape/Stride + TPUT` or multiple direct `TPUT` calls | M2 固定 segment plan；同步 `TPUT` 已确认支持 strided/多段非连续远端写（`TPut.hpp` 5 维独立 stride + `AtomicAdd`），M3N.11 功能形态可 enabled accepted |
+| Sub-Tile return 异步重叠（性能） | `TPUT_ASYNC` (SDMA) | A3 `TPUT_ASYNC` 只接受 flat-contiguous-1D（`TPutAsyncCommonDetail.hpp` 硬性 assert），无法表达 strided/多段，故"sub-tile return 与 GMM2 异步 overlap"按 primitive-gap blocked，不引入 AscendC scatter fallback |
 | AIC↔AIV C/V handoff | `pto::Event<SrcOp, DstOp>::Init<CrossCoreId>() / Wait<CrossCoreId>()`（`ffts_cross_core_sync`/`wait_flag_dev`）或 `TSYNC_CVID`；卡内全核栅栏用 `SYNCALL<SyncCoreType::Mix>` | per-group/per-tile readiness 用 per-`CrossCoreId` 握手；`SYNCALL<Mix>` 仅 M2.8c overlap-off stage 边界。粒度层级与约束见第 10 章 |
 | `RestoreOutput` | `TLOAD/TMUL/TADD/TSTORE` | 按 `expandedRowIdx + probs` 做 weighted restore；等待缺失 topK return slot，不能输出 int8 |
 | scoreboard/timeline/counter | raw GM typed view + explicit publish order | `scoreboardTaskMap/producerStatus/scoreboardMinStatus/subTileReady/timeline` 是控制面账本；scoreboard 必须记录 producer publish 时机和 consumer dependency domain，不通过 helper 隐藏 readiness 或 remote copy |
@@ -1548,7 +1555,7 @@ M2/M3 的设计、代码和验收输出里保持可追溯：
 | count 同步是 dispatch 的前置点对点协议 | `tokenPerExpertMatrix`、count ready、prefix/cumsum 必须先对齐，再 remote gather | 把 count/prefix 做成 host barrier 或临时 host copy |
 | SwiGLU 是 AIV 工作，按 sync group 粗细结合 | M2.5 固定 `swigluSyncGroups/dequantSum`，M3.3/M3.4 只打开 worker 分摊和 group overlap | 到 M3 重排 activation row layout |
 | epilogue pipe 有 prefill/drain 生命周期 | M3.3/M3.5/M3.9 要记录 SetFlag/Finalize 或等价 PTO pipe lifecycle evidence | 只看 final output pass，不证明 pipe 没有悬空/脏 flag |
-| Combine V1/V2 是同步成本取舍 | M3.5 先做 V1 continuous owner segment 多 AIV return；M3.8 再验证 V2 Sub-Tile/stride async | 把 Sub-Tile 理解成“DMA 越大越好”或 M2 必须完成 async stride |
+| Combine V1/V2 是同步成本取舍 | M3N.8 做 V1 continuous owner segment 轮动 + M3N.3 切分；M3N.11 用同步 `TPUT` 做 V2 Sub-Tile/stride（异步 SDMA stride 为 primitive-gap） | 把 Sub-Tile 理解成“DMA 越大越好”或以为同步 sub-tile return 做不了 |
 | final restore 是 topK reduce，不能被通信寻址折叠 | `RestoreOutput` 继续按 `expandedRowIdx + probs` 加权输出 | combine 写回后直接把 return payload 当 final output |
 
 ### 13.2 目标形态和 M2/M3 边界
@@ -1621,7 +1628,7 @@ M3 的顺序必须从“先保证 fused graph 和信号可观测”到“逐段�
 | M3.5 | 做 Combine V1-style continuous owner segment 多 AIV return，并证明 group/expert-level overlap | owner segment per-worker counter、continuous segment coalesce、SyncAll/CV wait 空泡 |
 | M3.6 | 补 timeout dump 和 overlap 回归，确保 blocked 原因能定位到 signal、worker 或 primitive | per-signal timeout、last producer/consumer、rank/expert/tile locator |
 | M3.7 | 在 M2.2c scoreboard ledger 上打开 async scoreboard，不重定义 task id 或 dependency domain | dependency-domain aggregation、worker poll/wait count、scoreboardMinStatus by domain |
-| M3.8 | 在 M2.7a segment schema 上验证 Combine V2 Sub-Tile/stride async 或明确 primitive-gap blocked | `subtile_rows`、strided/multi-segment `TPUT` evidence、subtile SyncAll reduction |
+| M3.8（→M3N.11） | 在 M2.7a segment schema 上用**同步 `TPUT`** 做 Combine V2 Sub-Tile/stride return（功能可 enabled，`TPut.hpp` 5 维 stride 已确认）；仅"异步 SDMA stride overlap"是 primitive-gap blocked | `subtile_rows`、strided/multi-segment 同步 `TPUT` evidence、subtile SyncAll reduction；异步 overlap 标 `primitive_gap=TPUT_ASYNC_flat_contiguous_1d` |
 | M3.9 | 输出 timeline，区分 launch-level participation 和 payload-level worker evidence | stage intervals、group/tile/sub-tile ownership、SyncAll/CV wait bubble、overlap on/off 对照 |
 
 M3.2、M3.3、M3.5 是 payload-level AIV 数据并行的主体；M3.7/M3.8 是更细同步和更细 return 的验证项；
@@ -1635,7 +1642,7 @@ M3.9 是验收证据汇总项。M3.0/M3.1 只打开 graph/signal，不等于性�
 | 形态 | 适用目标 | 本项目任务 | 验收重点 |
 | --- | --- | --- | --- |
 | V1 continuous owner segment | 大 shape / prefill 方向，尽量合并连续目的 rank、source rows、destination rows | M3.5 | 多 AIV 分摊连续 owner segment，减少单 worker return 尾巴，记录 SyncAll/CV wait 空泡 |
-| V2 Sub-Tile/stride | 小 shape / decode 方向，AIV consumer 与对应 AIC tile 对齐，降低全核同步空泡 | M3.8 | strided 或 multi-segment `TPUT` 是否能在 PTO A3 上表达；若不能，按 primitive-gap blocked |
+| V2 Sub-Tile/stride | 小 shape / decode 方向，AIV consumer 与对应 AIC tile 对齐，降低全核同步空泡 | M3.8（→M3N.11） | 同步 strided/multi-segment `TPUT` 已确认可在 A3 表达，功能可 enabled；仅"异步 SDMA stride overlap"是 primitive-gap blocked |
 
 Sub-Tile 的价值是减少同步等待，不是追求更大的 DMA。若某个 shape 下 Sub-Tile 导致 segment 过碎，优先调
 sub-tile 粒度、coalesce 规则或回落 V1 continuous segment；不能把多个 token owner 混写到同一远端连续地址，也不能
@@ -1678,7 +1685,9 @@ stage graph 已经固定，active full data path 能在 fused launch 内正确�
 
 M3 accepted 表示：在 M2 固定边界上，至少按任务拆分证明了 async 或 worker 分摊的真实执行证据；无法完成的点有
 明确 primitive-gap/env-gap、locator 和不影响 M4 correctness 的回退口径。M3 的核心验收不是“打开开关”，而是能用
-counter/timeline 说明每个 group、tile、sub-tile 由谁生产、谁消费、等了多久、为什么等。
+counter/timeline 说明每个 group、tile、sub-tile 由谁生产、谁消费、等了多久、为什么等。M3/M3N accepted **不要求** overlap on
+的 E2E 性能优于 off：首要目标是对标 `ffn.md` 把切分与并发形态做正确、证据完整；E2E delta 只需如实记录可对照，性能为正是
+后续优化迭代目标而非 accept 门槛（见第 0 章性能门槛口径）。M3 的逐边/分段执行以 §14.4N 的 M3N 设计为准。
 
 ## 14. 任务分解与阶段验收标准
 
@@ -3135,6 +3144,12 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 
 ### 14.4 M3: overlap 与 ready queue 备选
 
+> **执行口径（2026-05-30 重构，以此为准）**：本节 `M3.0`/`M3.1` 已 `accepted` 并继续复用；下面的 `M3.2`-`M3.9`
+> 是最初"逐边 overlap + 多 AIV 捆绑"的线性设计，已被 **§14.4N 的 M3N 分段设计（先切分、再执行骨架、后逐边轮动）取代**。
+> 后续执行**一律以 M3N 为准**，`M3.2`-`M3.9` 仅作历史保留、不再领取。旧 `M3.x` 与 `M3N.x` 的概念对应见 §14.4N 开头的对照表。
+> M3N 把每条 overlap 边的"切分（stage 内部多 AIV）"和"轮动（stage 间时序重叠）"拆开，并在两者之间插入独立的
+> "BSP→流水执行骨架"任务，使分段开发、分段验证更均匀。
+
 #### M3.0 Single-kernel MPMD 调度开关
 
 依赖任务：M2.8。
@@ -3506,11 +3521,323 @@ M2.3/M2.6 的验收不能只看 accumulator 数值。必须同时证明：
 - timeline 输出失败不能影响 correctness 回归；失败时有独立错误码/日志。
 - 依赖扫描无输出。
 
+### 14.4N M3N: overlap 先切分后轮动分段设计
+
+本节取代 §14.4 的 `M3.2`-`M3.9`。`M3.0`（single fused MPMD 调度）与 `M3.1`（signal/counter 启用）已 `accepted`，
+M3N 直接复用其 fused launch、`--overlap-mode off|on` / `--timeline` 开关，以及 M3.1 已在 device 侧发布的
+`dispatchGroupReady/gmm1SyncGroupReady/activationSyncGroupReady/gmm2GroupReady` 信号槽，不重做。
+
+**总目标**：在 M2 已固定的 row order / offset / group plan / GMM tile / return segment schema 上，把 FFN 五层切分的
+"形态"做出来——先让每个 stage 内部用满多 AIV（切分），再把 stage 之间从 BSP 全栅栏改成按 signal 推进的流水（轮动）。
+M3N 首要交付"对标 `ffn.md` 的切分与并发形态 + counter/timeline 证据"。
+
+**三段式 + 推荐执行顺序**：
+
+- **Phase 1 切分（M3N.1-M3N.3）**：在当前 `SYNCALL<Mix>` 硬栅栏框架**内**，把 dispatch / activation / combine 三个 stage
+  内部从 single-worker 提升为多 AIV。三者相互独立、可并行开发，correctness 基线 = M2 worker=1 结果（数值不变）。
+  GMM1/GMM2 的 AIC tile 切分已在 M2.3/M2.6 固定，不在 M3N 重做。
+- **Phase 2 骨架 + 逐边轮动（M3N.4-M3N.8）**：先用 M3N.4 把"stage 顺序 + 全栅栏"的 BSP 执行模型重构为"AIC 流 / AIV 流
+  各自按 signal 推进"的循环骨架（signal 先全开 = 等价 BSP，correctness 不变、不声称性能）；再用 M3N.5-M3N.8 逐边把某条边的
+  signal 等待范围从"等全部"缩成"等本 group/syncIdx"，建立真正的 compute/comm 错峰。
+- **Phase 3 收口（M3N.9-M3N.12）**：timeout/回归、scoreboard async、Combine V2 Sub-Tile/stride、timeline。
+
+推荐顺序：`M3N.1 ∥ M3N.2 ∥ M3N.3`（可并行）→ `M3N.4`（骨架，必须先于所有轮动）→
+`M3N.5 → M3N.6 → M3N.7 → M3N.8`（逐边轮动，串行、共享骨架）→ `M3N.9` → `M3N.10 ∥ M3N.11` → `M3N.12`。
+
+**性能门槛口径**：M3N accept = correctness 不退化 + 切分/worker/segment 证据正确 + counter/timeline 证明形态。
+**不要求 overlap on 的 E2E 快于 off**；E2E delta 只需如实记录可对照（可正/负/平），性能调优（K width、preload/swizzle、
+worker 数、sub-tile 粒度）是形态完成后的后续迭代，不阻塞 M3N/M4。若要把某具体 shape 的性能为正设成门槛，需走 issue/DCL 追加。
+
+#### M3N 旧 M3.x → M3N 概念对照（交叉引用按此映射）
+
+文档其它章节（§5.2.1、§8、§10、§13.x 等）仍以旧 `M3.x` 编号引用 overlap 工作，读者按下表映射到 M3N 任务：
+
+| 旧 M3.x | 语义 | M3N 对应 |
+| --- | --- | --- |
+| M3.2 | Dispatch/GMM1 overlap + dispatch 多 AIV | 切分→**M3N.1**；轮动→**M3N.5** |
+| M3.3 | GMM1/Activation overlap + activation 多 AIV | 切分→**M3N.2**；轮动→**M3N.6** |
+| M3.4 | Activation/GMM2 overlap | 轮动→**M3N.7** |
+| M3.5 | GMM2/Combine overlap + combine 多 AIV | 切分→**M3N.3**；轮动→**M3N.8** |
+| M3.6 | timeout dump + overlap 回归 | **M3N.9** |
+| M3.7 | Dispatch-GMM scoreboard async | **M3N.10** |
+| M3.8 | Combine V2 Sub-Tile/stride | **M3N.11** |
+| M3.9 | timeline | **M3N.12** |
+| （新增）| BSP→流水执行骨架 | **M3N.4** |
+
+#### M3N PTO 同步接口映射（轮动统一使用）
+
+ffn.md 的同步手段在本 PTO 项目用以下等价接口表达；轮动任务（M3N.5-M3N.8）的同步必须直接调用这些 PTO primitive，
+不得包装隐藏，也不得引入 AscendC `CrossCoreWaitFlag`/`SyncAll` 之外的 fallback：
+
+| ffn.md 同步手段 | PTO 等价接口 | 用途 |
+| --- | --- | --- |
+| `CrossCoreSetFlag/WaitFlag<0x2>`（AIC↔AIV 组级握手）| `pto::Event<SrcOp,DstOp>::Init<CrossCoreId>() / Wait<CrossCoreId>()`（封装 `ffts_cross_core_sync` / `wait_flag_dev`）或 `TSYNC_CVID` | M3N.5-M3N.8 四条边的轮动放行 |
+| `SetFlag()/Finalize()`（epilogue UB pipe 开场/排空）| PTO Vec pipe `set_flag/wait_flag` + 显式 prefill/drain 记录 | M3N.2/M3N.3 内部 pipe 生命周期 |
+| `SyncAll`（同核全核栅栏）| `SYNCALL<SyncCoreType::Mix>` | M3N.4 骨架的粗栅栏 / overlap-off correctness 基线 |
+| 跨卡 `DataAsFlag` / 计数到达 | payload `TPUT` 落地后 `TTEST` 轮询 count 区 | dispatch 前跨卡就绪（可选微优化）|
+
+**FFTS flag 约束**：物理 flag id 0-15，PTO `SYNCALL` 占 11-14，用户安全区 0-10；多 group/syncIdx 同时在飞超过物理 flag
+数时，用计数信号量 + 序号折叠（`flagId = idx % N`）复用，见 §10。
+
+**轮动粒度冻结（贯穿 M3N.5-M3N.8 的硬约束）**：
+
+- dispatch→GMM1（M3N.5）、GMM2→combine（M3N.8）= **expert 粒度**（`dispatchGroupReady[expert]` / `gmm2GroupReady[expert]`）。
+- GMM1→SwiGLU（M3N.6）、SwiGLU→GMM2（M3N.7）= **sync-group 粒度**（`gmm1SyncGroupReady[syncIdx]` /
+  `activationSyncGroupReady[syncIdx]`，按 `swigluSyncGroups` 前粗后细分组，**不是 per-expert**）。
+- ready 粒度由轮动任务建立后**冻结**；Phase 1 切分任务只在每个粒度单位**内部**加 worker，不改 signal 的数量/粒度/row range。
+  ready 粒度 ⊥ 多 AIV 切分粒度（group 是 sync 边界，tile/row/segment 才是 worker work item，见 §5.2.1 group/tile 正交）。
+
+#### M3N.1 Dispatch 内部多 AIV 切分
+
+依赖任务：M3.1。可与 M3N.2/M3N.3 并行。
+
+文件范围：修改 `kernel/protocol_core.hpp`、`kernel/a3_int8_backend.hpp`。
+
+任务：
+
+- 在当前 `SYNCALL<Mix>` 硬栅栏框架内，把 dispatch 从 single-worker correctness path 提升为多 AIV worker 分摊；
+  本任务不打开 stage 间 overlap（那是 M3N.5）。
+- 按 `ffn.md` init_routing 口径分别记录 route/pack/quant token shard、count publish/wait、prefix/cumsum 构建、
+  dispatch remote gather 的 per-worker counter；某子阶段仍 single-worker 必须标 preflight/gap。
+- worker ownership 可按 token shard / block prefix / local expert / token owner segment / row tile 切分；
+  只改 worker ownership，不改 M2.2a/M2.2b row order、source offset、count/prefix 语义、scoreboard task map、
+  peer-visible dispatch layout 和 `gmm1InputInt8` contiguous layout。
+
+验收标准：
+
+- M2 correctness 不退化（与 worker=1 逐位一致）。
+- 4-rank balanced 或 skewed case 下，counter 证明 dispatch payload 至少两个 AIV worker 处理，各 worker row/segment range 无重叠无缺口。
+- 输出 `route_pack_workers`、`count_sync_workers`、`dispatch_gather_workers` 或等价字段；为 1 时说明该子阶段未多核化。
+- 不实现 multi-core merge sort（offset-table pack+gather 已等价替代，见 §6）。依赖扫描无输出。
+
+#### M3N.2 Activation/SwiGLU/requant 内部多 AIV 切分 + pipe
+
+依赖任务：M3.1。可与 M3N.1/M3N.3 并行。
+
+文件范围：修改 `kernel/control_metadata.hpp`、`kernel/protocol_core.hpp`、`kernel/a3_int8_backend.hpp`。
+
+任务：
+
+- 在硬栅栏框架内，把 M2.5 的 activation/SwiGLU/requant correctness path 提升为组内多 AIV tile 分摊（grid-stride）；
+  本任务不打开 stage 间 overlap（那是 M3N.6/M3N.7）。
+- worker 只消费 M2.5 已固定的 `SwigluGroup.tileBegin/tileEnd` 和 `dequantSum` row range，不重排
+  `gmm2InputInt8/gmm2PerTokenScale`，不改 dynamic requant 数值顺序，不把 `{8,4,2,1,1}` 当 AIV 数量。
+- activation/SwiGLU/requant 内部 UB ping-pong / event pipe 必须显式记录开场预置、尾部排空、store visibility；
+  无 pipe 化实现时 report 写明 `activation_pipe_stages=1`。
+
+验收标准：
+
+- M2 correctness 不退化。
+- multi-group 或 synthetic case 下 `activation_aiv_workers>1`，各 worker tile range 无重叠无缺口；单 worker 有效时 report 说明。
+- 输出 `swiglu_group_tile_ranges`、activation tile processed/skipped、`activation_pipe_stages/prefill/drain` 或等价字段（单缓冲则诚实记 1/false/false）。依赖扫描无输出。
+
+#### M3N.3 Combine 内部多 AIV owner-segment 切分（V1 continuous）
+
+依赖任务：M3.1。可与 M3N.1/M3N.2 并行。
+
+文件范围：修改 `kernel/a3_int8_backend.hpp`、`kernel/protocol_core.hpp`。
+
+任务：
+
+- 在硬栅栏框架内，把 `RunGmm2EpilogueAndReturn` 的 GMM2 epilogue + continuous owner-segment return 从 single-worker
+  提升为多 AIV worker 分摊；本任务不打开 GMM2/combine stage 间 overlap（那是 M3N.8），也不做 Sub-Tile/stride（M3N.11）。
+- worker ownership 可按 expert / owner segment / hidden chunk 切分，但每个 actual write 必须追溯到 M2.7a
+  `ReturnSegmentPlan/OwnerSegment` schema，不改 capacity、destination offset 或 row/hidden chunk 语义。
+
+验收标准：
+
+- M2 correctness 不退化。
+- two-rank / 4-rank skewed case 下 counter 证明至少两个 AIV worker 处理 return segment 或 hidden chunk，无重叠无缺口。
+- 输出 `combine_return_aiv_workers`、per-worker segment count、actual write count、skipped segment count。依赖扫描无输出。
+
+#### M3N.4 BSP→流水执行骨架（signal 全开 = 等价 BSP）
+
+依赖任务：M3N.1、M3N.2、M3N.3（三个 stage 已多核后再转骨架，避免转换后再回头改分活）。
+
+文件范围：修改 `kernel/moe_dispatch_combine_a8w8_mixed_spike.cpp`、`kernel/protocol_core.hpp`、`host/main.cpp`。
+
+任务：
+
+- 把当前"所有核做完一个 stage 一起过 `SYNCALL<Mix>` 全栅栏、再一起做下一个 stage"的 BSP 结构，重构为
+  "AIC 流 / AIV 流各自按 per-group/per-syncIdx signal 推进"的循环骨架：AIC 主循环负责 GMM1/GMM2，AIV 主循环负责
+  route/gather/activation/return/restore，stage 间用 §"PTO 同步接口映射"中的 `pto::Event<CrossCoreId>` / `TSYNC_CVID` 握手位点。
+- **本任务 signal 先全开（等价 BSP）**：每个握手位点等待"全部上游 group 完成"，使行为与 overlap-off 逐位一致；
+  只搭好"按 signal 推进"的结构和握手位点，不缩小等待范围（缩范围是 M3N.5-M3N.8）。
+- 不改 M2 固定的 row order / offset / group plan / GMM tile / return segment；不改 M3N.1-M3N.3 的 stage 内部 worker 分活逻辑，
+  只改 stage 间调度结构。
+
+验收标准：
+
+- M2 correctness 不退化（overlap-off 与 overlap-on=全开 signal 两种路径都逐位一致）。
+- 结构证据：report 打印 `exec_model=aic_aiv_stream`（区别于 `bsp_syncall`），握手位点用 `pto::Event`/`TSYNC_CVID` 而非全核 `SYNCALL<Mix>` 分隔相邻 stage；保留的 `SYNCALL<Mix>` 仅作粗栅栏/基线并计数上报。
+- 不声称任何性能收益（`overlap_on_payload_async_claim=false`，signal 全开）。依赖扫描无输出。
+
+#### M3N.5 dispatch→GMM1 轮动（expert 粒度）
+
+依赖任务：M3N.4。
+
+**轮动粒度（冻结）**：**expert 粒度**，ready = `dispatchGroupReady[expert]`。
+**同步接口**：`GatherDispatchToGmm1Input` 完成某 expert 的 payload 后用 `pto::Event`/`TSYNC_CVID` 发布；GMM1 侧 `Wait` 对应 expert。
+
+文件范围：修改 `kernel/protocol_core.hpp`、`kernel/a3_int8_backend.hpp`。
+
+任务：
+
+- 在 M3N.4 骨架上，把 dispatch→GMM1 握手位点的等待范围从"等全部 expert dispatch"缩成"等本 expert"：
+  `GatherDispatchToGmm1Input` 完成某 expert group 后发布 `dispatchGroupReady[expert]`，`RunGmm1` 按 expert ready 提前消费。
+- 不改 M3N.1 的 dispatch worker 分活；不改 expert ready 粒度/row range。
+
+验收标准：
+
+- M2 correctness 不退化。
+- timeline/counter 证明至少一个 expert 的 GMM1 早于最后一个 expert 的 dispatch ready（真错峰，非假开关）。
+- `dispatch_overlap_granularity=expert`；zero-token expert 由 counter 证明 skip 无永久等待。依赖扫描无输出。
+
+#### M3N.6 GMM1→SwiGLU 轮动（sync-group 粒度）
+
+依赖任务：M3N.5。
+
+**轮动粒度（冻结）**：**sync-group 粒度**，ready = `gmm1SyncGroupReady[syncIdx]`（按 `swigluSyncGroups`，非 per-expert）。
+**同步接口**：GMM1（AIC）完成某 syncIdx 覆盖的 expert rows 后用 `pto::Event`/`TSYNC_CVID` 发布；activation（AIV）`Wait` 对应 syncIdx。
+
+文件范围：修改 `kernel/control_metadata.hpp`、`kernel/protocol_core.hpp`、`kernel/a3_int8_backend.hpp`。
+
+任务：
+
+- 把 GMM1→activation 握手等待范围从"等全部 GMM1"缩成"等本 syncIdx"：GMM1 完成 `swigluSyncGroups[syncIdx]` 覆盖的
+  expert rows 后发布 `gmm1SyncGroupReady[syncIdx]`，activation 按该 syncIdx 消费 `dequantSum[syncIdx]..dequantSum[syncIdx+1]`。
+- 不改 M3N.2 的 activation 组内 worker 分活；不改 sync-group ready 粒度；sync event 数不超过 `swigluSyncGroups.size()`。
+
+验收标准：
+
+- M2 correctness 不退化；producer/consumer counter 一致。
+- 多 group 非空 case 下 counter/timeline 证明 activation 第一组消费早于最后一组 GMM1 ready。
+- `gmm1_activation_overlap_granularity=sync_group`；event 不足按 primitive-gap 处理，不退回全量 barrier。依赖扫描无输出。
+
+#### M3N.7 SwiGLU→GMM2 轮动（sync-group 粒度 + intersect 回 GMM2 tile）
+
+依赖任务：M3N.6。
+
+**轮动粒度（冻结）**：**sync-group 粒度**，ready = `activationSyncGroupReady[syncIdx]`。
+**同步接口**：activation（AIV）完成某 syncIdx 后 `pto::Event`/`TSYNC_CVID` 发布；GMM2（AIC）`Wait` 对应 syncIdx。
+
+文件范围：修改 `kernel/control_metadata.hpp`、`kernel/protocol_core.hpp`、`kernel/a3_int8_backend.hpp`。
+
+任务：
+
+- activation 完成某 `swigluSyncGroups[syncIdx]` 后发布 `activationSyncGroupReady[syncIdx]`；GMM2 按该 syncIdx 消费
+  对应 row range，不等全量 activation。
+- **关键**：GMM2 scheduler 必须把 sync-group row range intersect 回 M2.GMM `GmmTileTask`；跨 expert 的 group 拆成
+  一个或多个 expert/tile task，GMM2 完成后仍发布 `gmm2GroupReady[expert]` / `subTileReady[aicTile]` 供 M3N.8/M3N.11 消费，
+  不能把整段 row range 当无 expert 边界的平铺矩阵后丢失投影。
+
+验收标准：
+
+- M2 correctness 不退化；GMM2 tile task preview/actual dump 能从每个 consumed syncIdx 追溯到 expertBegin/End、rowBegin/End、tile id。
+- 多 group 非空 case 下 counter/timeline 证明 GMM2 第一组消费早于最后一组 activation ready；被 PTO 调度阻断按 primitive-gap 记录。
+- 后段 SwiGLU 推迟 Combine 的部分在 report 记为 overlap gap，tolerance 不放宽。依赖扫描无输出。
+
+#### M3N.8 GMM2→combine 轮动（expert 粒度）
+
+依赖任务：M3N.7。
+
+**轮动粒度（冻结）**：**expert 粒度**，ready = `gmm2GroupReady[expert]`。
+**同步接口**：GMM2（AIC）完成某 expert 后 `pto::Event`/`TSYNC_CVID` 发布；`RunGmm2EpilogueAndReturn`（AIV）`Wait` 对应 expert。
+
+文件范围：修改 `kernel/a3_int8_backend.hpp`、`kernel/protocol_core.hpp`。
+
+任务：
+
+- GMM2 完成某 expert group 后发布 `gmm2GroupReady[expert]`；`RunGmm2EpilogueAndReturn` 等对应 expert，按
+  `tokenPerExpertMatrix + preSumBeforeRank` 切到各 token owner rank 后直接 `TPUT`（Combine V1 continuous owner-segment 方向）。
+- 不改 M3N.3 的 combine worker 分活；不改 expert ready 粒度。记录是否仍存在 all-AIV `SyncAll` 空泡，若有列为 M3N.11/M3N.12 证据。
+
+验收标准：
+
+- M2 correctness 不退化；counter 证明 return 不等所有 expert 的 GMM2 完成。
+- `combine_mode=continuous_segment`、`combine_syncall_count`、`combine_cv_wait_count`、`combine_owner_segment_workers` 等字段输出。
+- report 摘要明确：M3N.8 只是连续段/专家组级 overlap，非文章级 full async。依赖扫描无输出。
+
+#### M3N.9 Timeout dump 与 overlap 回归
+
+依赖任务：M3N.5 至 M3N.8。
+
+文件范围：修改 `kernel/control_metadata.hpp`、`host/main.cpp`、`scripts/run_a3.sh`、`DESIGN.md`。
+
+任务：增加 timeout dump；run script 增加 overlap on/off 开关与 E2E bench（复用 `[PerfReport]`）；overlap 验收口径若变先走 issue/DCL。
+
+验收标准：
+
+- overlap off/on 都通过 M2 四类用例，`[CorrectnessReport]` 都 `pass=true`，`[PerfReport]` 都有 E2E samples、可对比。
+- 人为触发 timeout 能打印 rank、expert、token owner rank、expert owner rank、stage、signal id。
+- 完成后只能声称"fused overlap skeleton"；仍依赖 host 多 launch 则不通过。依赖扫描无输出。
+
+#### M3N.10 Dispatch-GMM scoreboard async
+
+依赖任务：M3N.9。
+
+文件范围：修改 `kernel/control_metadata.hpp`、`kernel/protocol_core.hpp`、`kernel/a3_int8_backend.hpp`、`host/reference.hpp`。
+
+任务：
+
+- 在 M2.2c 已固定的 `scoreboardTaskMap/producerStatus/scoreboardMinStatus`、producer publish 时机和 consumer
+  dependency domain 上开启 async scoreboard；不重定义 task 语义。增加 AIV Ctrl 角色轮询 producer status，按 local expert /
+  GMM tile dependency domain 聚合 ready；worker 只轮询自身 `scoreboardMinStatus[dependencyDomain]`。
+- `scoreboardMinStatus` 不能实现为全局 min task id；保留 M3N.5 expert-ready path 作 fallback/debug。
+
+验收标准：
+
+- M2 四类 correctness 通过；counter 含 `producerPollCount/workerPollCount/scoreboardUpdateCount/scoreboardMinStatus`，结构证明 worker 不再轮询所有 producer。
+- 人为慢 producer 时快 worker 不被无关 expert/tile 拉齐；timeout dump 含 producer status 数组和 `scoreboardMinStatus`。
+- 不用 `AscendC::CrossCoreWaitFlag`/`SyncAll` 实现该同步。依赖扫描无输出。
+
+#### M3N.11 Combine V2 Sub-Tile/stride remote write
+
+依赖任务：M3N.9。可与 M3N.10 并行。
+
+文件范围：修改 `kernel/control_metadata.hpp`、`kernel/protocol_core.hpp`、`kernel/a3_int8_backend.hpp`、`host/reference.hpp`、`DESIGN.md`。
+
+任务：
+
+- 在 M2.7a segment schema 与 M3N.3/M3N.8 的 owner-segment return 上，用**同步 `TPUT`** 做 Sub-Tile/stride return：
+  已从 `TPut.hpp` 确认 src/dst 各自 5 维独立 stride 可表达 strided/多段非连续远端写（多 owner 写同一行用 `AtomicType::AtomicAdd`），
+  故 sub-tile/stride return **功能形态可 enabled 交付**，PTO primitive 直接出现在 `RunGmm2EpilogueAndReturn` 主流程。
+- 启用 `subTileReady[aicTile]` 作为 GMM2 tile→return 的细粒度 ready；首版以 16-row 固定 sub-tile 为最小 refinement，
+  不改 `OwnerSegment` 字段/capacity/destination offset。
+- **唯一 primitive-gap（blocked）**：sub-tile return 与 GMM2 计算的**异步 SDMA overlap**——`TPUT_ASYNC` 在 A3 硬性要求
+  flat-contiguous-1D（`TPutAsyncCommonDetail.hpp`），无法承载 strided/多段；该子能力以 `blocked` 记录、
+  locator 写 `TPUT_ASYNC requires flat-contiguous-1d`，保留同步 sub-tile return 与 M3N.8 连续段 path，不引入 AscendC `DataCopy` fallback。
+
+验收标准：
+
+- enabled：two-rank skewed case 中一个 GMM2 tile 可拆到至少两个 token owner rank，return payload 与 host reference 一致；
+  counter 证明消费对应 AIC tile 不等所有 GMM2 完成；输出 `combine_mode=subtile_stride`、`subtile_rows`、`subtile_stride_width`、`subtile_syncall_count`、`subtile_cv_wait_count`。
+- 异步 overlap：标 `primitive_gap=TPUT_ASYNC_flat_contiguous_1d`，不声称 full async combine，不放宽 correctness。依赖扫描无输出。
+
+#### M3N.12 Kernel timestamp 与 timeline 输出
+
+依赖任务：M3N.9，且 M3N.10/M3N.11 已完成或明确 blocked。
+
+文件范围：修改 `include/moe_dispatch_combine_a8w8_layout.hpp`、`kernel/control_metadata.hpp`、`kernel/protocol_core.hpp`、`host/main.cpp`、`scripts/run_a3.sh`、`DESIGN.md`。
+
+任务：
+
+- 为 route、count sync、dispatch gather、GMM1、SwiGLU/quant group、GMM2、combine、restore 设 timestamp slot（只用 M0.4/M2.1 预留 timeline 区域）。
+- host 输出 rank/core/stage 维度 timeline；SwiGLU 行带 `syncIdx/groupId/rowBegin/rowEnd`；dispatch/activation/combine/restore 行带
+  `workerId/logicalAiv`、owned row/segment/tile range、processed/skipped；GMM 行带 `groupIdx/tileId/mTile/nTile/kLoop/logicalAic/waitSource`。
+- 记录 `cross_rank_barrier_count/syncall_count/cv_wait_count` 解释 V1/V2 同步差异；run script 加 `--timeline`，对比 BSP / M3N.4 骨架 / M3N.10 scoreboard / M3N.11 sub-tile。
+
+验收标准：
+
+- small case 每 stage 非零 timestamp 或明确 skipped；overlap on/off timeline 能看到至少两阶段重叠或等待空泡变化。
+- timeline 能同时展示 group ready、AIC tile compute、SwiGLU sync group、owner segment return 四种粒度；只能 stage-level 粗粒度则不 accepted。
+- `[Timeline]` 与 `[PerfReport]` 的 `case_name/seed/shape/run_id` 一致；timeline 失败不影响 correctness 回归。依赖扫描无输出。
+
 ### 14.5 M4: 最终 PTO 化收口
 
 #### M4.1 最小回归脚本
 
-依赖任务：M3.9，且 M3.7/M3.8 已完成或明确 blocked。
+依赖任务：M3N.12（timeline），且 M3N.10/M3N.11 已完成或明确 blocked。
 
 文件范围：
 
