@@ -197,12 +197,14 @@ PTO_INTERNAL void TRowReduceCheck(uint32_t srcValidRows, uint32_t srcValidCols, 
 template <typename ReduceOp, typename TileDataOut, typename TileDataIn, unsigned elementsPerRepeat,
           bool postUpdate = true>
 PTO_INTERNAL void TRowReduceProc(__ubuf__ typename TileDataOut::DType *dstPtr,
-                                 __ubuf__ typename TileDataOut::DType *srcPtr, uint32_t rows, uint32_t cols,
-                                 uint16_t repeatTimes, int32_t srcRowAdjust)
+                                 __ubuf__ typename TileDataOut::DType *srcPtr, uint32_t rows, uint32_t cols)
 {
     using TIN = typename ReduceOp::TIN;       ///< 输入数据类型
     using TOUT = typename ReduceOp::TOUT;     ///< 归约中间结果类型
     using TDST = typename TileDataOut::DType; ///< 最终输出类型
+    uint16_t repeatTimes = CeilDivision(cols, elementsPerRepeat);
+    int32_t srcRowAdjust =
+        postUpdate ? static_cast<int32_t>(TileDataIn::RowStride) - repeatTimes * elementsPerRepeat : 0;
     __VEC_SCOPE__
     {
         // 寄存器分配
@@ -274,7 +276,6 @@ PTO_INTERNAL void TRowReduceImpl(__ubuf__ typename TileDataOut::DType *dstPtr,
     constexpr bool needsNonSatMode = std::is_same_v<TOUT, int32_t> && std::is_same_v<TDST, int16_t>;
     bool originalCtrl60 = false;
     bool originalCtrl59 = false;
-    uint16_t repeatTimes = CeilDivision(cols, elementsPerRepeat);
 
     if constexpr (needsNonSatMode) {
         uint64_t originalCtrl = get_ctrl();
@@ -285,13 +286,9 @@ PTO_INTERNAL void TRowReduceImpl(__ubuf__ typename TileDataOut::DType *dstPtr,
     }
 
     if (version == VFIMPL_2D_NO_POST_UPDATE) {
-        TRowReduceProc<ReduceOp, TileDataOut, TileDataIn, elementsPerRepeat, false>(dstPtr, srcPtr, rows, cols,
-                                                                                    repeatTimes, 0);
+        TRowReduceProc<ReduceOp, TileDataOut, TileDataIn, elementsPerRepeat, false>(dstPtr, srcPtr, rows, cols);
     } else {
-        int32_t srcRowAdjust =
-            static_cast<int32_t>(TileDataIn::RowStride) - static_cast<int32_t>(repeatTimes) * elementsPerRepeat;
-        TRowReduceProc<ReduceOp, TileDataOut, TileDataIn, elementsPerRepeat, true>(dstPtr, srcPtr, rows, cols,
-                                                                                   repeatTimes, srcRowAdjust);
+        TRowReduceProc<ReduceOp, TileDataOut, TileDataIn, elementsPerRepeat, true>(dstPtr, srcPtr, rows, cols);
     }
 
     // 恢复原始CTRL寄存器状态
