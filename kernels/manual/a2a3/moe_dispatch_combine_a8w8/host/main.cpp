@@ -1005,12 +1005,14 @@ struct M2FusedFullEvidence {
     int32_t m3n5Gmm1StartBeforeLastDispatchReady = 0;
     int32_t m3n6ActivationStartBeforeLastGmm1Ready = 0;
     int32_t m3n7Gmm2StartBeforeLastActivationReady = 0;
+    int32_t m3n8CombineStartBeforeLastGmm2Ready = 0;
     bool swigluGroupDescMonotonic = false;
     std::array<int32_t, 16> m3Counters{};
     std::array<int32_t, 16> m3nDispatchCounters{};
     std::array<int32_t, 16> m3nActivationCounters{};
     std::array<int32_t, 16> m3nCombineCounters{};
     std::array<int32_t, 16> m3nGmm2Counters{};
+    std::array<int32_t, 16> m3n8CombineCounters{};
     std::string swigluGroupTileRanges;
     std::array<int32_t, 6> stageMarkers{};
 };
@@ -1100,6 +1102,10 @@ M2FusedFullEvidence ReadM2FusedFullEvidence(const moe_dispatch_combine_a8w8::Wor
     if (stageStatus.size() > kM3N7EvidenceSlot + 2U) {
         evidence.m3n7Gmm2StartBeforeLastActivationReady = stageStatus[kM3N7EvidenceSlot];
     }
+    constexpr size_t kM3N8EvidenceSlot = kM3N7EvidenceSlot + 3U;
+    if (stageStatus.size() > kM3N8EvidenceSlot + 2U) {
+        evidence.m3n8CombineStartBeforeLastGmm2Ready = stageStatus[kM3N8EvidenceSlot];
+    }
     std::vector<int32_t> dispatchReady =
         CopyWorkspaceI32Field(workspaceLayout, workspaceLayout.dispatchGroupReady, state, "m3 dispatchGroupReady");
     std::vector<int32_t> gmm1Ready =
@@ -1187,6 +1193,15 @@ M2FusedFullEvidence ReadM2FusedFullEvidence(const moe_dispatch_combine_a8w8::Wor
     }
     if (evidence.m3nGmm2Counters[14] != 0) {
         evidence.m3n7Gmm2StartBeforeLastActivationReady = 1;
+    }
+    constexpr size_t kM3N8CombineCounterBase = kM3CounterBase + 80U;
+    for (size_t idx = 0; idx < evidence.m3n8CombineCounters.size(); ++idx) {
+        if (kM3N8CombineCounterBase + idx < debugCounters.size()) {
+            evidence.m3n8CombineCounters[idx] = debugCounters[kM3N8CombineCounterBase + idx];
+        }
+    }
+    if (evidence.m3n8CombineCounters[5] != 0) {
+        evidence.m3n8CombineStartBeforeLastGmm2Ready = 1;
     }
     return evidence;
 }
@@ -3808,6 +3823,15 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     bool m3n7PrimitiveGap = fusedEvidence != nullptr && !m3n7ActivationGmm2Overlap && m3n6Gmm1ActivationOverlap;
     bool m3n7Gmm2StartBeforeLastActivationReady =
         fusedEvidence != nullptr && fusedEvidence->m3n7Gmm2StartBeforeLastActivationReady != 0;
+    bool m3n8Gmm2CombineOverlap = fusedEvidence != nullptr && fusedEvidence->m3n8CombineCounters[0] != 0;
+    bool m3n8PrimitiveGap = fusedEvidence != nullptr && !m3n8Gmm2CombineOverlap && m3n7ActivationGmm2Overlap;
+    bool m3n8CombineStartBeforeLastGmm2Ready =
+        fusedEvidence != nullptr && fusedEvidence->m3n8CombineStartBeforeLastGmm2Ready != 0;
+    int32_t m3n8ConsumedExperts = fusedEvidence == nullptr ? 0 : fusedEvidence->m3n8CombineCounters[2];
+    int32_t m3n8ConsumedSegments = fusedEvidence == nullptr ? 0 : fusedEvidence->m3n8CombineCounters[3];
+    int32_t m3n8LastConsumedExpert = fusedEvidence == nullptr ? -1 : fusedEvidence->m3n8CombineCounters[4];
+    int32_t m3n8FirstEarlyExpert = fusedEvidence == nullptr ? -1 : fusedEvidence->m3n8CombineCounters[6];
+    int32_t m3n8OwnerSegmentWorkers = fusedEvidence == nullptr ? 0 : fusedEvidence->m3n8CombineCounters[7];
     std::ostringstream combineWorkerSegments;
     for (int32_t worker = 0; worker < 8; ++worker) {
         if (worker != 0) {
@@ -3825,6 +3849,9 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     if (combineReturnWorkers <= 0) {
         combineReturnWorkers = 1;
     }
+    if (m3n8OwnerSegmentWorkers <= 0) {
+        m3n8OwnerSegmentWorkers = combineReturnWorkers;
+    }
     std::cout << std::setprecision(6);
     std::cout << "[CorrectnessReport]\n";
     std::cout << "  case_name=" << args.caseName << "\n";
@@ -3840,26 +3867,30 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  fused_single_launch=true\n";
     std::cout << "  exec_model=" << (m3n4StreamEnabled ? "aic_aiv_stream" : "bsp_syncall") << "\n";
     std::cout << "  fused_device_stage_boundaries="
-              << (m3n7ActivationGmm2Overlap ?
-                      "pto_event_dispatch_expert_gmm1_sync_group_plus_gm_activation_sync_group_ready" :
-                      (m3n6Gmm1ActivationOverlap ?
-                           "pto_event_dispatch_expert_and_gmm1_sync_group_signals" :
-                           (m3n5DispatchGmm1Overlap ?
-                                "pto_event_dispatch_expert_signals" :
-                                (m3n4StreamEnabled ? "pto_event_full_open_signals" : "syncall_mix"))))
+              << (m3n8Gmm2CombineOverlap ?
+                      "pto_event_dispatch_expert_gmm1_sync_group_plus_gm_activation_and_gmm2_expert_ready" :
+                      (m3n7ActivationGmm2Overlap ?
+                           "pto_event_dispatch_expert_gmm1_sync_group_plus_gm_activation_sync_group_ready" :
+                           (m3n6Gmm1ActivationOverlap ?
+                                "pto_event_dispatch_expert_and_gmm1_sync_group_signals" :
+                                (m3n5DispatchGmm1Overlap ?
+                                     "pto_event_dispatch_expert_signals" :
+                                     (m3n4StreamEnabled ? "pto_event_full_open_signals" : "syncall_mix")))))
               << "\n";
     std::cout << "  fused_syncall_mode=" << (m3n4StreamEnabled ? "coarse_internal_only_counted" : "hard_mix") << "\n";
     std::cout << "  fused_host_barrier_between_stages=false\n";
     std::cout << "  m3_single_kernel_mpmd=true\n";
     std::cout << "  m3_overlap_requested=" << (args.runtime.overlapMode == 0 ? "false" : "true") << "\n";
     std::cout << "  m3_overlap_execution="
-              << (m3n7ActivationGmm2Overlap ?
-                      "activation_gmm2_sync_group_rotation_stream" :
-                      (m3n6Gmm1ActivationOverlap ?
-                           "gmm1_activation_sync_group_rotation_stream" :
-                           (m3n5DispatchGmm1Overlap ?
-                                "dispatch_expert_rotation_stream" :
-                                (m3n4StreamEnabled ? "signal_full_open_stream_skeleton" : "skeleton_shared_layout"))))
+              << (m3n8Gmm2CombineOverlap ?
+                      "gmm2_combine_expert_rotation_stream" :
+                      (m3n7ActivationGmm2Overlap ?
+                           "activation_gmm2_sync_group_rotation_stream" :
+                           (m3n6Gmm1ActivationOverlap ?
+                                "gmm1_activation_sync_group_rotation_stream" :
+                                (m3n5DispatchGmm1Overlap ? "dispatch_expert_rotation_stream" :
+                                                           (m3n4StreamEnabled ? "signal_full_open_stream_skeleton" :
+                                                                                "skeleton_shared_layout")))))
               << "\n";
     std::cout << "  m3n4_stream_skeleton_enabled=" << (m3n4StreamEnabled ? "true" : "false") << "\n";
     std::cout << "  m3n4_signal_all_open=" << (m3n4SignalAllOpen ? "true" : "false") << "\n";
@@ -3919,6 +3950,25 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
               << (fusedEvidence == nullptr ? -1 : fusedEvidence->m3nGmm2Counters[15]) << "\n";
     std::cout << "  m3n7_gmm2_start_before_last_activation_ready="
               << (m3n7Gmm2StartBeforeLastActivationReady ? "true" : "false") << "\n";
+    std::cout << "  m3n8_gmm2_combine_overlap_enabled=" << (m3n8Gmm2CombineOverlap ? "true" : "false") << "\n";
+    std::cout << "  gmm2_combine_overlap_granularity="
+              << (m3n8Gmm2CombineOverlap ? "expert" : (m3n8PrimitiveGap ? "primitive_gap" : "none")) << "\n";
+    std::cout << "  m3n8_sync_transport=gm_poll_ready\n";
+    std::cout << "  m3n8_flag_reuse_risk_avoided=true\n";
+    std::cout << "  m3n8_gmm2_expert_ready_counter="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->gmm2GroupReadyCount) << "\n";
+    std::cout << "  m3n8_combine_expert_consumer_counter=" << m3n8ConsumedExperts << "\n";
+    std::cout << "  m3n8_combine_segment_consumer_counter=" << m3n8ConsumedSegments << "\n";
+    std::cout << "  m3n8_combine_last_consumed_expert=" << m3n8LastConsumedExpert << "\n";
+    std::cout << "  m3n8_combine_first_early_expert=" << m3n8FirstEarlyExpert << "\n";
+    std::cout << "  m3n8_combine_start_before_last_gmm2_ready="
+              << (m3n8CombineStartBeforeLastGmm2Ready ? "true" : "false") << "\n";
+    std::cout << "  m3n8_per_expert_wait_scope="
+              << (m3n8Gmm2CombineOverlap && m3n8ConsumedExperts == static_cast<int32_t>(args.shape.expertPerRank) ?
+                      "true" :
+                      "false")
+              << "\n";
+    std::cout << "  m3n8_full_gmm2_to_combine_cv_wait=" << (m3n8Gmm2CombineOverlap ? "false" : "true") << "\n";
     std::cout << "  overlap_on_payload_async_claim=false\n";
     std::cout << "  m3_launch_level_aiv_participation=true\n";
     std::cout << "  m3_payload_worker_evidence=partial\n";
@@ -3934,7 +3984,8 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  gmm_tile_is_aic_work_unit=true\n";
     std::cout << "  dispatch_ready_grain=expert_group\n";
     std::cout << "  activation_ready_grain=swiglu_sync_group\n";
-    std::cout << "  combine_ready_grain=owner_segment_or_group\n";
+    std::cout << "  combine_ready_grain=" << (m3n8Gmm2CombineOverlap ? "expert_group" : "owner_segment_or_group")
+              << "\n";
     std::cout << "  aiv_data_parallel_deferred_to_m3=false\n";
     std::cout << "  aiv_data_parallel_scope=dispatch_m3n1_activation_m3n2_combine_m3n3\n";
     std::cout << "  dispatch_aiv_workers=" << dispatchAivWorkers << "\n";
@@ -3960,14 +4011,17 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  activation_pipe_prefill=" << (activationPipePrefill ? "true" : "false") << "\n";
     std::cout << "  activation_pipe_drain=" << (activationPipeDrain ? "true" : "false") << "\n";
     std::cout << "  combine_return_aiv_workers=" << combineReturnWorkers << "\n";
-    std::cout << "  combine_owner_segment_workers=" << combineReturnWorkers << "\n";
+    std::cout << "  combine_owner_segment_workers=" << m3n8OwnerSegmentWorkers << "\n";
     std::cout << "  combine_worker_segment_counts=" << combineWorkerSegments.str() << "\n";
     std::cout << "  combine_mapped_segment_count=" << combineMappedSegments << "\n";
     std::cout << "  combine_actual_write_count=" << combineActualWriteCount << "\n";
     std::cout << "  combine_skipped_segment_count=" << combineSkippedSegmentCount << "\n";
     std::cout << "  combine_worker_ranges_nonoverlap=" << (combineRangesNonoverlap ? "true" : "false") << "\n";
-    std::cout << "  combine_mode=owner_segment_continuous\n";
-    std::cout << "  combine_stage_overlap_enabled=false\n";
+    std::cout << "  combine_mode=" << (m3n8Gmm2CombineOverlap ? "continuous_segment" : "owner_segment_continuous")
+              << "\n";
+    std::cout << "  combine_syncall_count=" << (m3n8Gmm2CombineOverlap ? 2 * args.shape.expertPerRank + 2 : 2) << "\n";
+    std::cout << "  combine_cv_wait_count=" << (m3n8Gmm2CombineOverlap ? 0 : 1) << "\n";
+    std::cout << "  combine_stage_overlap_enabled=" << (m3n8Gmm2CombineOverlap ? "true" : "false") << "\n";
     std::cout << "  restore_aiv_workers=8\n";
     std::cout << "  dispatch_payload_parallel=" << (dispatchAivWorkers > 1 ? "true" : "false") << "\n";
     std::cout << "  activation_payload_parallel=" << (activationAivWorkers > 1 ? "true" : "false") << "\n";

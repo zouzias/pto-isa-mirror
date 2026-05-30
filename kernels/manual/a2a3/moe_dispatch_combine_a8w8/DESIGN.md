@@ -3744,7 +3744,9 @@ ffn.md 的同步手段在本 PTO 项目用以下等价接口表达；轮动任�
 依赖任务：M3N.7。
 
 **轮动粒度（冻结）**：**expert 粒度**，ready = `gmm2GroupReady[expert]`。
-**同步接口**：GMM2（AIC）完成某 expert 后 `pto::Event`/`TSYNC_CVID` 发布；`RunGmm2EpilogueAndReturn`（AIV）`Wait` 对应 expert。
+**同步接口**：GMM2（AIC）完成某 expert 后发布 `gmm2GroupReady[expert]`；由于 DCL-115/DCL-117 已确认
+cross-core flag id 6-10 不能再新增独立边，M3N.8 首版必须沿用 M3N.7 的 GM-poll ready 路线消费该槽，而不是新增
+`pto::Event`/`TSYNC_CVID` 边。后续若扩展物理 flag 资源或引入可证明无 stale flag 的序号协议，再切回 event。
 
 文件范围：修改 `kernel/a3_int8_backend.hpp`、`kernel/protocol_core.hpp`。
 
@@ -3758,6 +3760,7 @@ ffn.md 的同步手段在本 PTO 项目用以下等价接口表达；轮动任�
 
 - M2 correctness 不退化；counter 证明 return 不等所有 expert 的 GMM2 完成。
 - `combine_mode=continuous_segment`、`combine_syncall_count`、`combine_cv_wait_count`、`combine_owner_segment_workers` 等字段输出。
+- 必须输出 `m3n8_sync_transport=gm_poll_ready`、`m3n8_flag_reuse_risk_avoided=true`，并说明 DCL-115 flag-id 复用风险没有扩大。
 - report 摘要明确：M3N.8 只是连续段/专家组级 overlap，非文章级 full async。依赖扫描无输出。
 
 #### M3N.9 Timeout dump 与 overlap 回归

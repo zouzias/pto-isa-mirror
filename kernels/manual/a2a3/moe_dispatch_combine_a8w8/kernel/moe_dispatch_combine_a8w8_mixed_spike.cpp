@@ -129,6 +129,7 @@ constexpr uint32_t kM2FusedFullAivStageBaseSlot = 12U * 16U;
 constexpr uint32_t kM2FusedFullM3N5AicEvidenceSlot = 14U * 16U;
 constexpr uint32_t kM2FusedFullM3N6EvidenceSlot = kM2FusedFullM3N5AicEvidenceSlot + 2U;
 constexpr uint32_t kM2FusedFullM3N7EvidenceSlot = kM2FusedFullM3N6EvidenceSlot + 3U;
+constexpr uint32_t kM2FusedFullM3N8EvidenceSlot = kM2FusedFullM3N7EvidenceSlot + 3U;
 constexpr uint32_t kM2FusedFullDebugStopSlot = 15U * 16U;
 constexpr uint32_t kM2FusedFullM3N7Gmm2CounterBase = 24U * 16U + 64U;
 constexpr uint32_t kM2FusedFullStageCount = 7U;
@@ -217,6 +218,11 @@ AICORE inline bool M3N7ActivationGmm2OverlapEnabled(uint32_t debugStopStage,
                                                     moe_dispatch_combine_a8w8::ShapeConfig shape)
 {
     return M3N6Gmm1ActivationOverlapEnabled(debugStopStage, shape);
+}
+
+AICORE inline bool M3N8Gmm2CombineOverlapEnabled(uint32_t debugStopStage, moe_dispatch_combine_a8w8::ShapeConfig shape)
+{
+    return M3N7ActivationGmm2OverlapEnabled(debugStopStage, shape);
 }
 
 AICORE inline void M3NDispatchAicWaitForAivSubphases(uint32_t debugStopStage,
@@ -1129,12 +1135,16 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
         M2FusedRecordStage(stageStatus + kM2FusedFullM3N7EvidenceSlot + 0U, 0U, 0);
         M2FusedRecordStage(stageStatus + kM2FusedFullM3N7EvidenceSlot + 1U, 0U, 0);
         M2FusedRecordStage(stageStatus + kM2FusedFullM3N7EvidenceSlot + 2U, 0U, 0);
+        M2FusedRecordStage(stageStatus + kM2FusedFullM3N8EvidenceSlot + 0U, 0U, 0);
+        M2FusedRecordStage(stageStatus + kM2FusedFullM3N8EvidenceSlot + 1U, 0U, 0);
+        M2FusedRecordStage(stageStatus + kM2FusedFullM3N8EvidenceSlot + 2U, 0U, 0);
         pipe_barrier(PIPE_ALL);
         dsb(DSB_DDR);
     }
     bool m3n5DispatchGmm1Overlap = M3N5DispatchGmm1OverlapEnabled(debugStopStage, shape);
     bool m3n6Gmm1ActivationOverlap = M3N6Gmm1ActivationOverlapEnabled(debugStopStage, shape);
     bool m3n7ActivationGmm2Overlap = M3N7ActivationGmm2OverlapEnabled(debugStopStage, shape);
+    bool m3n8Gmm2CombineOverlap = M3N8Gmm2CombineOverlapEnabled(debugStopStage, shape);
     M3NDispatchAicWaitForAivSubphases(debugStopStage, shape);
     if (debugStopStage >= 100U) {
         pto::SYNCALL<pto::SyncCoreType::Mix>();
@@ -1402,11 +1412,17 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
     }
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
-    moe_dispatch_combine_a8w8::M3N4SignalC2V<moe_dispatch_combine_a8w8::kM3N4Gmm2ToCombineFlag>();
+    if (!m3n8Gmm2CombineOverlap) {
+        moe_dispatch_combine_a8w8::M3N4SignalC2V<moe_dispatch_combine_a8w8::kM3N4Gmm2ToCombineFlag>();
+    }
     if (debugStopStage == 5U) {
         return;
     }
-    if (M3NCombineAicWaitForAivSubphases(debugStopStage, shape)) {
+    if (!m3n8Gmm2CombineOverlap && M3NCombineAicWaitForAivSubphases(debugStopStage, shape)) {
+        return;
+    }
+    if (m3n8Gmm2CombineOverlap && (debugStopStage == 51U || debugStopStage == 52U || debugStopStage == 53U ||
+                                   debugStopStage == 54U || debugStopStage == 56U)) {
         return;
     }
     moe_dispatch_combine_a8w8::M3N4WaitV2C<moe_dispatch_combine_a8w8::kM3N4CombineToRestoreFlag>();
@@ -1642,6 +1658,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     bool m3n5DispatchGmm1Overlap = M3N5DispatchGmm1OverlapEnabled(debugStopStage, shape);
     bool m3n6Gmm1ActivationOverlap = M3N6Gmm1ActivationOverlapEnabled(debugStopStage, shape);
     bool m3n7ActivationGmm2Overlap = M3N7ActivationGmm2OverlapEnabled(debugStopStage, shape);
+    bool m3n8Gmm2CombineOverlap = M3N8Gmm2CombineOverlapEnabled(debugStopStage, shape);
     uint32_t m3n6SyncGroupCount = moe_dispatch_combine_a8w8::M3N6SwigluSyncGroupCount(shape);
     M3NRecordAivLaneDebug(localPeer, rawAivSlot);
     if (IsM2FusedMainAiv()) {
@@ -1658,6 +1675,10 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         if (m3n7ActivationGmm2Overlap) {
             m3nHandshakeSites = m3nHandshakeSites - 1U + m3n6SyncGroupCount;
             m3nCvWaitCount = m3nCvWaitCount - 1U + m3n6SyncGroupCount;
+        }
+        if (m3n8Gmm2CombineOverlap) {
+            --m3nHandshakeSites;
+            --m3nCvWaitCount;
         }
         M2FusedRecordStage(stageStatus + kM2FusedFullAivHeaderSlot, 0U, kM2FusedFullMagic);
         M2FusedRecordStage(stageStatus + kM2FusedFullAivHeaderSlot, 1U,
@@ -2071,8 +2092,15 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     if (debugStopStage == 4U) {
         return;
     }
-    moe_dispatch_combine_a8w8::M3N4WaitC2V<moe_dispatch_combine_a8w8::kM3N4Gmm2ToCombineFlag>();
+    if (!m3n8Gmm2CombineOverlap) {
+        moe_dispatch_combine_a8w8::M3N4WaitC2V<moe_dispatch_combine_a8w8::kM3N4Gmm2ToCombineFlag>();
+    }
     if (debugStopStage == 5U) {
+        if (m3n8Gmm2CombineOverlap && IsM2FusedMainAiv()) {
+            for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
+                M3N8WaitGmm2ExpertReadyGm(workspaceView, localExpert);
+            }
+        }
         return;
     }
     bool m3nCombineEnabled = debugStopStage < 100U && M3NFusedDispatchScratchFits(shape);
@@ -2082,23 +2110,43 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         bool activeCombineWorker = combineAssignment.active;
         if (IsM2FusedMainAiv()) {
             M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 3U, 1);
-            M3NInitCombineCounters(localPeer, combineWorkerCount);
-            M2BuildReturnSegmentMap(shape, workspaceView, localPeer, rank.rankId);
+            if (m3n8Gmm2CombineOverlap) {
+                M3N8InitCombineCounters(localPeer, combineWorkerCount, shape.expertPerRank);
+            } else {
+                M3NInitCombineCounters(localPeer, combineWorkerCount);
+                M2BuildReturnSegmentMap(shape, workspaceView, localPeer, rank.rankId);
+            }
         }
-        M3NDispatchHardPhaseSync();
+        if (!m3n8Gmm2CombineOverlap) {
+            M3NDispatchHardPhaseSync();
+        } else {
+            M3N8AivOnlyPhaseSync();
+        }
         if (debugStopStage == 51U) {
             return;
         }
-        if (activeCombineWorker) {
-            bool materializeEnabled = debugStopStage != 56U;
-            bool transferEnabled = debugStopStage != 53U;
-            bool notifyEnabled = debugStopStage != 53U && debugStopStage != 54U;
+        bool materializeEnabled = debugStopStage != 56U;
+        bool transferEnabled = debugStopStage != 53U;
+        bool notifyEnabled = debugStopStage != 53U && debugStopStage != 54U;
+        if (m3n8Gmm2CombineOverlap) {
+            M3N8RunGmm2EpilogueAndReturnByExpert(shape, workspaceView, localPeer, ctx, peerWindow, rank.rankId,
+                                                 peerWindowLayout, combineAssignment.workerId, combineWorkerCount,
+                                                 activeCombineWorker, IsM2FusedMainAiv(), materializeEnabled,
+                                                 transferEnabled, notifyEnabled);
+            if (activeCombineWorker) {
+                StoreScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 11U,
+                               LoadScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 11U) + 1);
+            }
+            M3N8AivOnlyPhaseSync();
+        } else if (activeCombineWorker) {
             M3NCombineShardStats combineStats = M3NRunGmm2EpilogueAndReturnShard(
                 shape, workspaceView, localPeer, ctx, peerWindow, rank.rankId, peerWindowLayout,
                 combineAssignment.workerId, combineWorkerCount, materializeEnabled, transferEnabled, notifyEnabled);
             (void)combineStats;
         }
-        M3NDispatchHardPhaseSync();
+        if (!m3n8Gmm2CombineOverlap) {
+            M3NDispatchHardPhaseSync();
+        }
         if (debugStopStage == 52U || debugStopStage == 53U || debugStopStage == 54U || debugStopStage == 56U) {
             return;
         }
@@ -2106,6 +2154,14 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
             M3NFinalizeGmm2EpilogueAndReturn(shape, localPeer, ctx, peerWindow, rank.rankId, peerWindowLayout,
                                              combineWorkerCount);
             StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 10U, static_cast<int32_t>(shape.expertPerRank));
+            if (m3n8Gmm2CombineOverlap) {
+                M2FusedRecordStage(stageStatus + kM2FusedFullM3N8EvidenceSlot, 0U,
+                                   LoadScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 5U));
+                M2FusedRecordStage(stageStatus + kM2FusedFullM3N8EvidenceSlot, 1U,
+                                   LoadScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 2U));
+                M2FusedRecordStage(stageStatus + kM2FusedFullM3N8EvidenceSlot, 2U,
+                                   LoadScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 6U));
+            }
         }
     } else if (IsM2FusedMainAiv()) {
         M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 3U, 1);

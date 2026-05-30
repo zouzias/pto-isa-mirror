@@ -80,6 +80,7 @@ constexpr uint32_t kM3NDispatchScratchLimit = 40U * 16U;
 constexpr uint32_t kM3NDispatchMaxWorkers = 8U;
 constexpr uint32_t kM3NCombineWorkerScratchBase = 72U * 16U;
 constexpr uint32_t kM3NCombineWorkerScratchStride = 16U;
+constexpr uint32_t kM3N8CombineCounterBase = kM3CounterBase + 80U;
 
 using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
 using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -2929,6 +2930,110 @@ AICORE inline uint32_t M2BuildReturnSegmentMap(moe_dispatch_combine_a8w8::ShapeC
     return segmentId;
 }
 
+AICORE inline void M3N8WaitGmm2ExpertReadyGm(M2WorkspaceViewDevice workspaceView, uint32_t localExpert)
+{
+    __gm__ int32_t *ready = workspaceView.gmm2GroupReady + localExpert * 16U;
+    while (true) {
+        pipe_barrier(PIPE_ALL);
+        dcci(static_cast<__gm__ void *>(ready), SINGLE_CACHE_LINE);
+        dsb(DSB_DDR);
+        if (LoadScalarI32(ready) != 0) {
+            return;
+        }
+    }
+}
+
+AICORE inline uint32_t M3N8BuildReturnSegmentMapForExpert(moe_dispatch_combine_a8w8::ShapeConfig shape,
+                                                          M2WorkspaceViewDevice workspaceView,
+                                                          M2PeerWindowViewDevice localPeer, uint32_t myRank,
+                                                          uint32_t localExpert, uint32_t *tileId, uint32_t *segmentId,
+                                                          uint32_t *maxSegmentsPerTile, uint32_t *overflow)
+{
+    uint32_t tileRows = shape.gmmBlockM == 0 ? kM2ReturnTileRows : shape.gmmBlockM;
+    uint32_t hiddenChunk = static_cast<uint32_t>(M2ReturnHiddenChunkCols(shape));
+    uint32_t capacity = static_cast<uint32_t>(M2ReturnSegmentCapacity(shape));
+    uint32_t firstExpertSegment = *segmentId;
+    uint32_t globalExpert = M2GlobalExpert(myRank, localExpert, shape);
+    int32_t rowBegin = LoadScalarI32(workspaceView.dispatchOffset + localExpert);
+    int32_t rowCount = LoadScalarI32(workspaceView.expertTokenNums + localExpert);
+    if (rowCount <= 0) {
+        return 0;
+    }
+    for (int32_t tileOffset = 0; tileOffset < rowCount; tileOffset += static_cast<int32_t>(tileRows)) {
+        int32_t tileStart = rowBegin + tileOffset;
+        int32_t tileCount = rowCount - tileOffset;
+        if (tileCount > static_cast<int32_t>(tileRows)) {
+            tileCount = static_cast<int32_t>(tileRows);
+        }
+        for (uint32_t hiddenBegin = 0; hiddenBegin < shape.hiddenSize; hiddenBegin += hiddenChunk) {
+            uint32_t hiddenCount = shape.hiddenSize - hiddenBegin;
+            if (hiddenCount > hiddenChunk) {
+                hiddenCount = hiddenChunk;
+            }
+            uint32_t firstSegment = *segmentId;
+            uint32_t tileSegmentCount = 0;
+            for (uint32_t tokenOwner = 0; tokenOwner < shape.rankNum; ++tokenOwner) {
+                int32_t current =
+                    LoadScalarI32(workspaceView.cumsumMM + tokenOwner * shape.expertPerRank + localExpert);
+                int32_t previous =
+                    tokenOwner == 0U ?
+                        0 :
+                        LoadScalarI32(workspaceView.cumsumMM + (tokenOwner - 1U) * shape.expertPerRank + localExpert);
+                int32_t ownerRows = current - previous;
+                if (ownerRows <= 0) {
+                    continue;
+                }
+                int32_t ownerStart =
+                    LoadScalarI32(workspaceView.dispatchOffset + localExpert) +
+                    LoadScalarI32(workspaceView.preSumBeforeRank + tokenOwner * shape.expertPerRank + localExpert);
+                int32_t ownerEnd = ownerStart + ownerRows;
+                int32_t tileEnd = tileStart + tileCount;
+                int32_t segmentStart = tileStart > ownerStart ? tileStart : ownerStart;
+                int32_t segmentEnd = tileEnd < ownerEnd ? tileEnd : ownerEnd;
+                if (segmentEnd <= segmentStart) {
+                    continue;
+                }
+                int32_t dstStart =
+                    M2SourceGlobalExpertRowBase(shape, localPeer, tokenOwner, globalExpert) + segmentStart - ownerStart;
+                if (*segmentId < capacity) {
+                    __gm__ int32_t *segment = workspaceView.subTileOwnerSegments + *segmentId * kM2OwnerSegmentFields;
+                    StoreScalarI32(segment + 0U, static_cast<int32_t>(tokenOwner));
+                    StoreScalarI32(segment + 1U, segmentStart);
+                    StoreScalarI32(segment + 2U, segmentEnd - segmentStart);
+                    StoreScalarI32(segment + 3U, dstStart);
+                    StoreScalarI32(segment + 4U, static_cast<int32_t>(hiddenBegin));
+                    StoreScalarI32(segment + 5U, static_cast<int32_t>(hiddenCount));
+                    StoreScalarI32(segment + 6U, static_cast<int32_t>(localExpert));
+                    StoreScalarI32(segment + 7U, static_cast<int32_t>(*tileId));
+                } else {
+                    ++(*overflow);
+                }
+                ++(*segmentId);
+                ++tileSegmentCount;
+            }
+            if (*tileId < capacity) {
+                __gm__ int32_t *plan = workspaceView.subTileReturnPlan + *tileId * kM2ReturnPlanFields;
+                StoreScalarI32(plan + 0U, static_cast<int32_t>(*tileId));
+                StoreScalarI32(plan + 1U, static_cast<int32_t>(localExpert));
+                StoreScalarI32(plan + 2U, tileStart);
+                StoreScalarI32(plan + 3U, tileCount);
+                StoreScalarI32(plan + 4U, static_cast<int32_t>(hiddenBegin));
+                StoreScalarI32(plan + 5U, static_cast<int32_t>(hiddenCount));
+                StoreScalarI32(plan + 6U, static_cast<int32_t>(firstSegment));
+                StoreScalarI32(plan + 7U, static_cast<int32_t>(tileSegmentCount));
+                StoreScalarI32(workspaceView.subTileReady + *tileId * 16U, 1);
+            } else {
+                ++(*overflow);
+            }
+            if (tileSegmentCount > *maxSegmentsPerTile) {
+                *maxSegmentsPerTile = tileSegmentCount;
+            }
+            ++(*tileId);
+        }
+    }
+    return *segmentId - firstExpertSegment;
+}
+
 AICORE inline int32_t M2ExpectedReturnSegmentCount(moe_dispatch_combine_a8w8::ShapeConfig shape,
                                                    M2PeerWindowViewDevice localPeer, uint32_t myRank,
                                                    uint32_t expertOwner, uint32_t localExpert)
@@ -3122,6 +3227,13 @@ AICORE inline void M3NInitCombineCounters(M2PeerWindowViewDevice localPeer, uint
     StoreScalarI32(localPeer.debugCounters + kM3NCombineCounterBase + 7U, 1);
 }
 
+AICORE inline void M3N8AivOnlyPhaseSync()
+{
+    pipe_barrier(PIPE_ALL);
+    dsb(DSB_DDR);
+    pto::SYNCALL<pto::SyncCoreType::AIVOnly>();
+}
+
 AICORE inline M3NCombineShardStats M3NRunGmm2EpilogueAndReturnShard(
     moe_dispatch_combine_a8w8::ShapeConfig shape, M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
     __gm__ HcclDeviceContext *ctx, GM_ADDR peerWindow, uint32_t myRank,
@@ -3204,6 +3316,194 @@ AICORE inline M3NCombineShardStats M3NRunGmm2EpilogueAndReturnShard(
         InvalidateGmCacheLines(scratch, 64U);
     }
     return stats;
+}
+
+AICORE inline M3NCombineShardStats M3N8RunGmm2EpilogueAndReturnExpertShard(
+    moe_dispatch_combine_a8w8::ShapeConfig shape, M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
+    __gm__ HcclDeviceContext *ctx, GM_ADDR peerWindow, uint32_t myRank,
+    const moe_dispatch_combine_a8w8::PeerWindowLayout &peerWindowLayout, uint32_t localExpert, uint32_t firstSegment,
+    uint32_t segmentCount, uint32_t workerId, uint32_t workerCount, bool materializeEnabled, bool transferEnabled,
+    bool notifyEnabled)
+{
+    M3NCombineShardStats stats{0, 0};
+    if (workerCount == 0U || workerId >= workerCount) {
+        return stats;
+    }
+    int32_t returnRowStride = static_cast<int32_t>(peerWindowLayout.returnPayloadRowBytes / sizeof(half));
+    uint32_t capacity = static_cast<uint32_t>(M2ReturnSegmentCapacity(shape));
+    uint32_t segmentEnd = firstSegment + segmentCount;
+    for (uint32_t segmentId = firstSegment + workerId; segmentId < segmentEnd; segmentId += workerCount) {
+        if (segmentId >= capacity) {
+            ++stats.skippedSegmentCount;
+            continue;
+        }
+        __gm__ int32_t *segment = workspaceView.subTileOwnerSegments + segmentId * kM2OwnerSegmentFields;
+        uint32_t tokenOwner = static_cast<uint32_t>(LoadScalarI32(segment + 0U));
+        int32_t srcStart = LoadScalarI32(segment + 1U);
+        int32_t rows = LoadScalarI32(segment + 2U);
+        int32_t dstStart = LoadScalarI32(segment + 3U);
+        int32_t hiddenBegin = LoadScalarI32(segment + 4U);
+        int32_t hiddenCount = LoadScalarI32(segment + 5U);
+        uint32_t segmentLocalExpert = static_cast<uint32_t>(LoadScalarI32(segment + 6U));
+        uint32_t tileId = static_cast<uint32_t>(LoadScalarI32(segment + 7U));
+        if (rows <= 0 || hiddenCount <= 0 || tokenOwner >= shape.rankNum || segmentLocalExpert != localExpert) {
+            ++stats.skippedSegmentCount;
+            continue;
+        }
+        if (!materializeEnabled) {
+            ++stats.segmentCount;
+            continue;
+        }
+        M3NMaterializeGmm2EpilogueSegmentToGmm2Out(shape, workspaceView, srcStart, rows, hiddenBegin, hiddenCount,
+                                                   returnRowStride);
+        if (!transferEnabled) {
+            ++stats.segmentCount;
+            continue;
+        }
+        __gm__ half *segmentSource =
+            workspaceView.gmm2Out + static_cast<int64_t>(srcStart) * returnRowStride + hiddenBegin;
+        M2RecordReturnSendTrace(shape, workspaceView, localPeer, tokenOwner, localExpert, segmentId, tileId, srcStart,
+                                rows, dstStart, hiddenBegin, hiddenCount, segmentSource);
+        M2PeerWindowViewDevice remotePeer =
+            MakeM2RemotePeerWindowViewDevice(ctx, peerWindow, tokenOwner, peerWindowLayout);
+        if (tokenOwner == myRank) {
+            for (int32_t row = 0; row < rows; ++row) {
+                CopyRowHalf(localPeer.returnPayload + hiddenBegin, returnRowStride, dstStart + row,
+                            workspaceView.gmm2Out + hiddenBegin, returnRowStride, srcStart + row, hiddenCount);
+            }
+        } else {
+            TPutRowsHalfContiguous(remotePeer.returnPayload + hiddenBegin, returnRowStride, dstStart,
+                                   workspaceView.gmm2Out + hiddenBegin, returnRowStride, srcStart, rows, hiddenCount);
+        }
+        if (notifyEnabled) {
+            NotifySignal(remotePeer.returnSegmentCounters +
+                             (static_cast<uint64_t>(myRank) * shape.expertPerRank + localExpert) * 16U,
+                         1);
+        }
+        ++stats.segmentCount;
+    }
+    return stats;
+}
+
+AICORE inline void M3N8AccumulateCombineWorkerScratch(M2PeerWindowViewDevice localPeer, uint32_t workerId,
+                                                      M3NCombineShardStats stats, uint32_t mappedSegments)
+{
+    if (workerId >= kM3NDispatchMaxWorkers) {
+        return;
+    }
+    __gm__ int32_t *scratch = M3NCombineWorkerScratch(localPeer, workerId);
+    int32_t oldSegments = LoadScalarI32(scratch + 0U);
+    int32_t oldSkipped = LoadScalarI32(scratch + 1U);
+    StoreScalarI32(scratch + 0U, oldSegments + stats.segmentCount);
+    StoreScalarI32(scratch + 1U, oldSkipped + stats.skippedSegmentCount);
+    StoreScalarI32(scratch + 2U, static_cast<int32_t>(workerId));
+    StoreScalarI32(scratch + 3U, static_cast<int32_t>(mappedSegments));
+    InvalidateGmCacheLines(scratch, 64U);
+}
+
+AICORE inline void M3N8InitCombineCounters(M2PeerWindowViewDevice localPeer, uint32_t workerCount,
+                                           uint32_t expertPerRank)
+{
+    M3NInitCombineCounters(localPeer, workerCount);
+    StoreScalarI32(localPeer.debugCounters + 2U * 16U, 0);
+    StoreScalarI32(localPeer.debugCounters + 3U * 16U, 0);
+    StoreScalarI32(localPeer.debugCounters + 4U * 16U, 0);
+    StoreScalarI32(localPeer.debugCounters + 5U * 16U, 0);
+    for (uint32_t idx = 0; idx < 16U; ++idx) {
+        StoreScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + idx, 0);
+    }
+    StoreScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 0U, 1);
+    StoreScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 1U, static_cast<int32_t>(expertPerRank));
+    StoreScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 4U, -1);
+    StoreScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 6U, -1);
+    StoreScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 7U, static_cast<int32_t>(workerCount));
+    StoreScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 11U, 0);
+}
+
+AICORE inline bool M3N8HasLaterUnreadyGmm2Expert(M2WorkspaceViewDevice workspaceView, uint32_t nextExpert,
+                                                 uint32_t expertPerRank)
+{
+    for (uint32_t expert = nextExpert; expert < expertPerRank; ++expert) {
+        __gm__ int32_t *ready = workspaceView.gmm2GroupReady + expert * 16U;
+        pipe_barrier(PIPE_ALL);
+        dcci(static_cast<__gm__ void *>(ready), SINGLE_CACHE_LINE);
+        dsb(DSB_DDR);
+        if (LoadScalarI32(ready) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+AICORE inline void M3N8RecordExpertConsumed(M2PeerWindowViewDevice localPeer, uint32_t localExpert,
+                                            uint32_t expertSegmentCount, bool laterExpertWasUnready)
+{
+    int32_t consumed = LoadScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 2U) + 1;
+    StoreScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 2U, consumed);
+    StoreScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 3U,
+                   LoadScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 3U) +
+                       static_cast<int32_t>(expertSegmentCount));
+    StoreScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 4U, static_cast<int32_t>(localExpert));
+    StoreScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 10U,
+                   LoadScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 10U) + 1);
+    if (expertSegmentCount > 0U && laterExpertWasUnready) {
+        StoreScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 5U, 1);
+        if (LoadScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 6U) < 0) {
+            StoreScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 6U, static_cast<int32_t>(localExpert));
+        }
+    }
+}
+
+AICORE inline void M3N8RunGmm2EpilogueAndReturnByExpert(
+    moe_dispatch_combine_a8w8::ShapeConfig shape, M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
+    __gm__ HcclDeviceContext *ctx, GM_ADDR peerWindow, uint32_t myRank,
+    const moe_dispatch_combine_a8w8::PeerWindowLayout &peerWindowLayout, uint32_t workerId, uint32_t workerCount,
+    bool activeWorker, bool mainAiv, bool materializeEnabled, bool transferEnabled, bool notifyEnabled)
+{
+    uint32_t tileId = 0;
+    uint32_t segmentId = 0;
+    uint32_t maxSegmentsPerTile = 0;
+    uint32_t overflow = 0;
+    for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
+        bool laterExpertWasUnready = false;
+        if (mainAiv && localExpert + 1U < shape.expertPerRank) {
+            laterExpertWasUnready = M3N8HasLaterUnreadyGmm2Expert(workspaceView, localExpert + 1U, shape.expertPerRank);
+        }
+        M3N8WaitGmm2ExpertReadyGm(workspaceView, localExpert);
+        if (mainAiv) {
+            uint32_t firstExpertSegment = static_cast<uint32_t>(LoadScalarI32(localPeer.debugCounters + 3U * 16U));
+            uint32_t expertSegmentCount = 0;
+            tileId = static_cast<uint32_t>(LoadScalarI32(localPeer.debugCounters + 2U * 16U));
+            segmentId = firstExpertSegment;
+            expertSegmentCount =
+                M3N8BuildReturnSegmentMapForExpert(shape, workspaceView, localPeer, myRank, localExpert, &tileId,
+                                                   &segmentId, &maxSegmentsPerTile, &overflow);
+            StoreScalarI32(localPeer.debugCounters + 2U * 16U, static_cast<int32_t>(tileId));
+            StoreScalarI32(localPeer.debugCounters + 3U * 16U, static_cast<int32_t>(segmentId));
+            StoreScalarI32(localPeer.debugCounters + 4U * 16U, static_cast<int32_t>(maxSegmentsPerTile));
+            StoreScalarI32(localPeer.debugCounters + 5U * 16U, static_cast<int32_t>(overflow));
+            M3N8RecordExpertConsumed(localPeer, localExpert, expertSegmentCount, laterExpertWasUnready);
+            StoreScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 8U,
+                           static_cast<int32_t>(firstExpertSegment));
+            StoreScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 9U,
+                           static_cast<int32_t>(expertSegmentCount));
+        }
+        M3N8AivOnlyPhaseSync();
+        InvalidateGmCacheLines(localPeer.debugCounters + kM3N8CombineCounterBase, 64U);
+        uint32_t firstExpertSegment =
+            static_cast<uint32_t>(LoadScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 8U));
+        uint32_t publishedExpertSegments =
+            static_cast<uint32_t>(LoadScalarI32(localPeer.debugCounters + kM3N8CombineCounterBase + 9U));
+        uint32_t publishedSegmentId = firstExpertSegment + publishedExpertSegments;
+        if (activeWorker) {
+            M3NCombineShardStats stats = M3N8RunGmm2EpilogueAndReturnExpertShard(
+                shape, workspaceView, localPeer, ctx, peerWindow, myRank, peerWindowLayout, localExpert,
+                firstExpertSegment, publishedExpertSegments, workerId, workerCount, materializeEnabled, transferEnabled,
+                notifyEnabled);
+            M3N8AccumulateCombineWorkerScratch(localPeer, workerId, stats, publishedSegmentId);
+        }
+        M3N8AivOnlyPhaseSync();
+    }
 }
 
 AICORE inline void M3NFinalizeGmm2EpilogueAndReturn(moe_dispatch_combine_a8w8::ShapeConfig shape,
