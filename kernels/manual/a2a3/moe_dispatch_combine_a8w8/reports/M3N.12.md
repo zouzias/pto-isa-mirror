@@ -3,8 +3,8 @@
 ## Header
 
 - Task: M3N.12 Kernel timestamp and timeline output
-- Owner: codex/current-session
-- End state: review_ready
+- Owner: reviewer/coordinator
+- End state: accepted
 - Related issue: DCL-115 flag-id reuse risk boundary
 
 ## Changes
@@ -17,7 +17,7 @@
 ## Acceptance
 
 - Acceptance source: `DESIGN.md` section 14.4N, subsection `M3N.12 Kernel timestamp 与 timeline 输出`
-- Acceptance result: review_ready
+- Acceptance result: accepted
 - Verification summary: the fused kernel now records diagnostic timestamp rows into the pre-reserved
   `workspace.timelineScratch` area when `--timeline 1` is enabled. Host-side output prints `[Timeline]` records with
   the same `case_name`, `seed`, `run_id`, and shape fields as `[PerfReport]`, and uses
@@ -30,7 +30,7 @@
   timeline disabled.
 - Perf/timeline observation: pass for structural timeline evidence. Rows cover stage, GMM tile, SwiGLU group, and owner
   segment granularities; no performance win is claimed.
-- Blocked reason, if any: none for M3N.12 delivery.
+- Blocked reason, if any: none for M3N.12 acceptance.
 
 ## Evidence
 
@@ -40,6 +40,7 @@
 - Small overlap-off timeline run: pass, with syncall wait-source evidence and explicit skipped rows for unavailable
   work.
 - Full M3 suite: exit 0 for the fused small, balanced, skewed, and zero-token regression set with timeline disabled.
+- Fresh acceptance audit: full M3 suite exited 0, timeout probe exited 0, and small timeline on/off runs exited 0.
 - Dependency scan found no new M3N.12 `set_flag`/`wait_flag`/cross-core event edge; `waitSource=kPtoEvent` is only a
   timeline label for existing paths.
 
@@ -49,6 +50,6 @@
   wait-source labels but adds no new cross-core flag/event edge. Later timeline expansion should continue using the
   pre-reserved timeline area rather than changing payload, scoreboard, or Sub-Tile segment layout.
 - User decision needed: no.
-- Downstream notes: M4.1 can consume `--timeline 1` as the minimal timestamp-dump switch after reviewer acceptance.
-  M3N.12 does not change the M3N.11 async SDMA-stride primitive gap.
-- Next task: reviewer code-level review of M3N.10-M3N.12, then M4.1.
+- Downstream notes: M4.1 can consume `--timeline 1` as the minimal timestamp-dump switch. M3N.12 does not change the
+  M3N.11 async SDMA-stride primitive gap.
+- Next task: M4.1.

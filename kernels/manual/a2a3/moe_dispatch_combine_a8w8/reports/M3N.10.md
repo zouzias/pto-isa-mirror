@@ -3,8 +3,8 @@
 ## Header
 
 - Task: M3N.10 Dispatch-GMM scoreboard async
-- Owner: codex/current-session
-- End state: review_ready
+- Owner: reviewer/coordinator
+- End state: accepted
 - Related issue: DCL-115 flag-id reuse risk follow-up
 
 ## Changes
@@ -17,7 +17,7 @@
 ## Acceptance
 
 - Acceptance source: `DESIGN.md` section 14.4N, subsection `M3N.10 Dispatch-GMM scoreboard async`
-- Acceptance result: review_ready
+- Acceptance result: accepted
 - Verification summary: Dispatch->GMM1 no longer uses the M3N.5 expert `pto::Event` path when overlap is on.
   AIV dispatch workers fill the existing M2.2c `scoreboardTaskMap/producerStatus` ledger by local-expert dependency
   domain, a main-AIV control role aggregates each domain into `scoreboardMinStatus[localExpert]`, and AIC GMM1 workers
@@ -30,7 +30,8 @@
 - Correctness: pass for the A3/CANN 8.5 M3 fused off/on regression suite (`small`, `balanced`, `skewed`, `zero-token`)
   and the timeout-dump probe.
 - Perf/timeline observation: structural/counter evidence only; no performance win is claimed.
-- Blocked reason, if any: none for M3N.10 delivery. Formal accepted state still needs reviewer code-level review.
+- Blocked reason, if any: none for M3N.10 acceptance. The wait domain is still per-expert; baseM row-block pipelining
+  is recorded as a separate follow-up direction rather than an M3N.10 acceptance gate.
 
 ## Evidence
 
@@ -41,6 +42,8 @@
 - Full M3 off/on suite: 26 `[CorrectnessReport]` and 26 `[PerfReport]` sections; failure scan found no `pass=false`,
   final-output error, timeout failure, or nonzero semantic mismatch. The suite contains 13 scoreboard-disabled reports
   for overlap off and 13 scoreboard-enabled reports for overlap on.
+- Fresh acceptance audit: full M3 suite exited 0, timeout probe exited 0, and forbidden dependency scan found no
+  M3N.10 event/CrossCore/CATLASS/CUTLASS additions.
 - Timeout probe: stage 109 still records `m3n9_timeout_dump_present=true`,
   `timeout_dump_stage_name=dispatch_to_gmm1`, `timeout_dump_debug_stop_stage=109`,
   `timeout_dump_producer_status_array=2,0,0,0,0,0`, `timeout_dump_scoreboard_min_status=2`, and
@@ -53,6 +56,6 @@
   flag-id 6-10 expert-ready edge with GM-poll scoreboard domains when overlap is on. M3N.5 expert-ready remains a
   fallback/debug path for overlap-off or unsupported scoreboard paths.
 - User decision needed: no.
-- Downstream notes: M3N.11 can build on the current M3N.8 GMM2->combine expert GM-poll path. M3N.10 does not implement
-  Sub-Tile/stride return or timeline timestamps.
-- Next task: M3N.11.
+- Downstream notes: M3N.11/M3N.12 are also accepted. M3N.10 does not implement Sub-Tile/stride return or timeline
+  timestamps.
+- Next task: M4.1.
