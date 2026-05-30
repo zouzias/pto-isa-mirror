@@ -48,6 +48,8 @@ constexpr uint32_t kM3N4FullOpenCvWaitCount = 6;
 constexpr uint32_t kM3N4CoarseMixSyncallCount = 16;
 constexpr uint32_t kM3N4AicOnlySyncCount = 2;
 constexpr uint32_t kM3N4AivOnlySyncCount = 2;
+constexpr uint8_t kM3N5DispatchExpertFlagBase = 6;
+constexpr uint32_t kM3N5DispatchExpertFlagCapacity = 5;
 
 using M3N4V2CEvent = pto::Event<pto::Op::TSTORE_VEC, pto::Op::TLOAD, false, EVENT_ID0>;
 using M3N4C2VEvent = pto::Event<pto::Op::TSTORE_ACC, pto::Op::TLOAD, false, EVENT_ID0>;
@@ -96,6 +98,57 @@ PTO_INTERNAL void M3N4AivAllDoneCoarseSync()
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
     pto::SYNCALL<pto::SyncCoreType::AIVOnly>();
+}
+
+PTO_INTERNAL bool M3N5DispatchExpertFlagsSupported(const ShapeConfig &shape)
+{
+    return shape.expertPerRank > 0U && shape.expertPerRank <= kM3N5DispatchExpertFlagCapacity;
+}
+
+PTO_INTERNAL void M3N5SignalDispatchExpertReady(uint32_t localExpert)
+{
+    switch (localExpert) {
+        case 0U:
+            M3N4SignalV2C<kM3N5DispatchExpertFlagBase + 0U>();
+            break;
+        case 1U:
+            M3N4SignalV2C<kM3N5DispatchExpertFlagBase + 1U>();
+            break;
+        case 2U:
+            M3N4SignalV2C<kM3N5DispatchExpertFlagBase + 2U>();
+            break;
+        case 3U:
+            M3N4SignalV2C<kM3N5DispatchExpertFlagBase + 3U>();
+            break;
+        case 4U:
+            M3N4SignalV2C<kM3N5DispatchExpertFlagBase + 4U>();
+            break;
+        default:
+            break;
+    }
+}
+
+PTO_INTERNAL void M3N5WaitDispatchExpertReady(uint32_t localExpert)
+{
+    switch (localExpert) {
+        case 0U:
+            M3N4WaitV2C<kM3N5DispatchExpertFlagBase + 0U>();
+            break;
+        case 1U:
+            M3N4WaitV2C<kM3N5DispatchExpertFlagBase + 1U>();
+            break;
+        case 2U:
+            M3N4WaitV2C<kM3N5DispatchExpertFlagBase + 2U>();
+            break;
+        case 3U:
+            M3N4WaitV2C<kM3N5DispatchExpertFlagBase + 3U>();
+            break;
+        case 4U:
+            M3N4WaitV2C<kM3N5DispatchExpertFlagBase + 4U>();
+            break;
+        default:
+            break;
+    }
 }
 
 PTO_INTERNAL void RouteLocalTokens(StageContext &ctx)
