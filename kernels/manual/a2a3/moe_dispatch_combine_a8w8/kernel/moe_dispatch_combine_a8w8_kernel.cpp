@@ -2058,6 +2058,74 @@ AICORE inline void M2RunGmm1Epilogue(moe_dispatch_combine_a8w8::ShapeConfig shap
     (void)myRank;
 }
 
+AICORE inline void M3N6RunGmm1EpilogueSyncGroup(moe_dispatch_combine_a8w8::ShapeConfig shape,
+                                                M2WorkspaceViewDevice workspaceView, uint32_t syncIdx)
+{
+    uint32_t syncGroupCount = static_cast<uint32_t>(LoadScalarI32(workspaceView.swigluSyncGroups));
+    if (syncGroupCount == 0U || syncGroupCount > shape.expertPerRank || syncIdx >= syncGroupCount) {
+        return;
+    }
+    __gm__ int32_t *group = workspaceView.swigluGroupDesc + syncIdx * kM2SwigluGroupFields;
+    int32_t expertBeginI32 = LoadScalarI32(group + 1U);
+    int32_t expertEndI32 = LoadScalarI32(group + 2U);
+    if (expertBeginI32 < 0 || expertEndI32 <= expertBeginI32) {
+        return;
+    }
+    uint32_t expertBegin = static_cast<uint32_t>(expertBeginI32);
+    uint32_t expertEnd = static_cast<uint32_t>(expertEndI32);
+    if (expertEnd > shape.expertPerRank) {
+        expertEnd = shape.expertPerRank;
+    }
+    uint32_t w1Cols = shape.intermediateSize * 2U;
+    for (uint32_t localExpert = expertBegin; localExpert < expertEnd; ++localExpert) {
+        int32_t rowBegin = LoadScalarI32(workspaceView.dispatchOffset + localExpert);
+        int32_t rowCount = LoadScalarI32(workspaceView.expertTokenNums + localExpert);
+        if (rowCount <= 0) {
+            continue;
+        }
+        for (uint32_t row = 0; row < static_cast<uint32_t>(rowCount); ++row) {
+            uint32_t globalRow = static_cast<uint32_t>(rowBegin) + row;
+            for (uint32_t colBegin = 0; colBegin < w1Cols; colBegin += kM2EpilogueTileCols) {
+                uint32_t cols = w1Cols - colBegin;
+                if (cols > kM2EpilogueTileCols) {
+                    cols = kM2EpilogueTileCols;
+                }
+                M2EpilogueAccTile accTile(cols);
+                M2EpilogueFloatTile fpTile(cols);
+                M2EpilogueFloatTile scaleTile(cols);
+                M2EpilogueFloatTile outTile(cols);
+                TASSIGN(accTile, kM2EpilogueAccTileOffset);
+                TASSIGN(fpTile, kM2EpilogueFloatTileOffset);
+                TASSIGN(scaleTile, kM2EpilogueScaleTileOffset);
+                TASSIGN(outTile, kM2EpilogueScaledTileOffset);
+
+                GlobalNd<int32_t> accGlobal =
+                    MakeGlobal2D(workspaceView.gmm1AccInt32 + static_cast<uint64_t>(globalRow) * w1Cols + colBegin, 1,
+                                 static_cast<int32_t>(cols), static_cast<int32_t>(w1Cols));
+                GlobalNd<float> outGlobal =
+                    MakeGlobal2D(workspaceView.gmm1Out + static_cast<uint64_t>(globalRow) * w1Cols + colBegin, 1,
+                                 static_cast<int32_t>(cols), static_cast<int32_t>(w1Cols));
+                for (uint32_t col = 0; col < cols; ++col) {
+                    scaleTile.SetValue(col, M2DecodeUint64Scale(workspaceView.scale1Uint64[colBegin + col]));
+                }
+                pipe_barrier(PIPE_ALL);
+                TLOAD(accTile, accGlobal);
+                set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+                wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+                TCVT(fpTile, accTile, pto::RoundMode::CAST_RINT);
+                pipe_barrier(PIPE_V);
+                TMUL(outTile, fpTile, scaleTile);
+                pipe_barrier(PIPE_V);
+                set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                TSTORE(outGlobal, outTile);
+                WaitStoreTileReusable();
+            }
+        }
+    }
+    InvalidateGmCacheLines(workspaceView.gmm1Out, static_cast<uint32_t>(M2LocalRows(shape) * w1Cols * sizeof(float)));
+}
+
 AICORE inline uint32_t M2NextSwigluGroupSize(uint32_t remainingExperts)
 {
     if (remainingExperts <= 1U) {
@@ -2349,6 +2417,38 @@ AICORE inline uint32_t M3NRunActivationQuantShard(moe_dispatch_combine_a8w8::Sha
     return rowsProcessed;
 }
 
+AICORE inline uint32_t M3NRunActivationQuantSyncGroupShard(moe_dispatch_combine_a8w8::ShapeConfig shape,
+                                                           M2WorkspaceViewDevice workspaceView, uint32_t syncIdx,
+                                                           uint32_t workerId, uint32_t workerCount)
+{
+    if (workerCount == 0U) {
+        return 0U;
+    }
+    uint32_t gmm2RowStride = static_cast<uint32_t>(Align64Device(shape.intermediateSize));
+    uint32_t syncGroupCount = static_cast<uint32_t>(LoadScalarI32(workspaceView.swigluSyncGroups));
+    if (syncGroupCount == 0U || syncGroupCount > shape.expertPerRank || syncIdx >= syncGroupCount) {
+        return 0U;
+    }
+    __gm__ int32_t *group = workspaceView.swigluGroupDesc + syncIdx * kM2SwigluGroupFields;
+    int32_t rowBeginI32 = LoadScalarI32(group + 3U);
+    int32_t rowEndI32 = LoadScalarI32(group + 4U);
+    if (rowBeginI32 < 0 || rowEndI32 <= rowBeginI32) {
+        return 0U;
+    }
+    uint32_t rowBegin = static_cast<uint32_t>(rowBeginI32);
+    uint32_t rowEnd = static_cast<uint32_t>(rowEndI32);
+    uint32_t rowsProcessed = 0;
+    for (uint32_t globalRow = rowBegin + workerId; globalRow < rowEnd; globalRow += workerCount) {
+        float routingScale = workspaceView.routingPerTokenScale[globalRow];
+        M2ComputeSwigluRowPto(shape, workspaceView, globalRow, routingScale);
+        InvalidateGmCacheLines(workspaceView.swigluOut + static_cast<uint64_t>(globalRow) * shape.intermediateSize,
+                               static_cast<uint32_t>(shape.intermediateSize * sizeof(float)));
+        M2RequantizeSwigluRowPto(shape, workspaceView, globalRow, gmm2RowStride);
+        ++rowsProcessed;
+    }
+    return rowsProcessed;
+}
+
 AICORE inline void M3NFinalizeActivationQuant(moe_dispatch_combine_a8w8::ShapeConfig shape,
                                               M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
                                               uint32_t workerCount, uint32_t activeWorkerMask, uint32_t rowsProcessed)
@@ -2409,6 +2509,70 @@ AICORE inline void M3NFinalizeActivationQuant(moe_dispatch_combine_a8w8::ShapeCo
                            static_cast<uint32_t>(localRows * shape.intermediateSize * sizeof(float)));
     InvalidateGmCacheLines(workspaceView.gmm2InputInt8, static_cast<uint32_t>(localRows * gmm2RowStride));
     InvalidateGmCacheLines(workspaceView.gmm2PerTokenScale, static_cast<uint32_t>(localRows * sizeof(float)));
+}
+
+AICORE inline void M3N6FinalizeActivationQuantSyncGroup(moe_dispatch_combine_a8w8::ShapeConfig shape,
+                                                        M2WorkspaceViewDevice workspaceView,
+                                                        M2PeerWindowViewDevice localPeer, uint32_t syncIdx,
+                                                        uint32_t workerCount, uint32_t activeWorkerMask,
+                                                        uint32_t rowsProcessed, bool firstGroup, bool lastGroup)
+{
+    uint32_t syncGroupCount = static_cast<uint32_t>(LoadScalarI32(workspaceView.swigluSyncGroups));
+    if (syncGroupCount == 0U || syncGroupCount > shape.expertPerRank || syncIdx >= syncGroupCount) {
+        return;
+    }
+    __gm__ int32_t *group = workspaceView.swigluGroupDesc + syncIdx * kM2SwigluGroupFields;
+    int32_t rowBegin = LoadScalarI32(group + 3U);
+    int32_t rowEnd = LoadScalarI32(group + 4U);
+    int32_t tileBegin = LoadScalarI32(group + 5U);
+    int32_t tileEnd = LoadScalarI32(group + 6U);
+    uint32_t tileCount = 0;
+    if (tileEnd > tileBegin) {
+        tileCount = static_cast<uint32_t>(tileEnd - tileBegin);
+    }
+    if (firstGroup) {
+        StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 0U, static_cast<int32_t>(workerCount));
+        StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 1U, 0);
+        StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 2U, 0);
+        StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 3U, 0);
+        StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 4U, 1);
+        StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 5U, 0);
+        StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 6U, 0);
+        StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 7U, 1);
+        StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 9U, static_cast<int32_t>(syncGroupCount));
+        StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 10U,
+                       static_cast<int32_t>(activeWorkerMask));
+        StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 12U,
+                       tileBegin > 0 ? static_cast<int32_t>(tileBegin) : 0);
+        StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 14U,
+                       rowBegin > 0 ? static_cast<int32_t>(rowBegin) : 0);
+    }
+    StoreScalarI32(
+        localPeer.debugCounters + kM3NActivationCounterBase + 1U,
+        LoadScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 1U) + static_cast<int32_t>(rowsProcessed));
+    StoreScalarI32(
+        localPeer.debugCounters + kM3NActivationCounterBase + 2U,
+        LoadScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 2U) + static_cast<int32_t>(tileCount));
+    if (rowEnd <= rowBegin) {
+        StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 3U,
+                       LoadScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 3U) + 1);
+    }
+    StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 11U,
+                   rowEnd > 0 ? static_cast<int32_t>(rowEnd) : 0);
+    StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 13U,
+                   tileEnd > 0 ? static_cast<int32_t>(tileEnd) : 0);
+    StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 15U, static_cast<int32_t>(workerCount));
+    StoreScalarI32(workspaceView.activationSyncGroupReady + syncIdx * 16U, 1);
+    if (lastGroup) {
+        uint32_t gmm2RowStride = static_cast<uint32_t>(Align64Device(shape.intermediateSize));
+        uint32_t localRows = static_cast<uint32_t>(M2LocalRows(shape));
+        InvalidateGmCacheLines(workspaceView.activationSyncGroupReady,
+                               static_cast<uint32_t>(syncGroupCount * 16U * sizeof(int32_t)));
+        InvalidateGmCacheLines(workspaceView.swigluOut,
+                               static_cast<uint32_t>(localRows * shape.intermediateSize * sizeof(float)));
+        InvalidateGmCacheLines(workspaceView.gmm2InputInt8, static_cast<uint32_t>(localRows * gmm2RowStride));
+        InvalidateGmCacheLines(workspaceView.gmm2PerTokenScale, static_cast<uint32_t>(localRows * sizeof(float)));
+    }
 }
 
 AICORE inline void M2RunActivationQuant(moe_dispatch_combine_a8w8::ShapeConfig shape,

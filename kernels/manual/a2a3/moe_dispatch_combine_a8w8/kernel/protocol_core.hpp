@@ -50,6 +50,8 @@ constexpr uint32_t kM3N4AicOnlySyncCount = 2;
 constexpr uint32_t kM3N4AivOnlySyncCount = 2;
 constexpr uint8_t kM3N5DispatchExpertFlagBase = 6;
 constexpr uint32_t kM3N5DispatchExpertFlagCapacity = 5;
+constexpr uint8_t kM3N6Gmm1SyncGroupFlagBase = kM3N5DispatchExpertFlagBase;
+constexpr uint32_t kM3N6Gmm1SyncGroupFlagCapacity = kM3N5DispatchExpertFlagCapacity;
 
 using M3N4V2CEvent = pto::Event<pto::Op::TSTORE_VEC, pto::Op::TLOAD, false, EVENT_ID0>;
 using M3N4C2VEvent = pto::Event<pto::Op::TSTORE_ACC, pto::Op::TLOAD, false, EVENT_ID0>;
@@ -105,6 +107,32 @@ PTO_INTERNAL bool M3N5DispatchExpertFlagsSupported(const ShapeConfig &shape)
     return shape.expertPerRank > 0U && shape.expertPerRank <= kM3N5DispatchExpertFlagCapacity;
 }
 
+PTO_INTERNAL uint32_t M3N6NextSwigluGroupSize(uint32_t remainingExperts)
+{
+    if (remainingExperts <= 1U) {
+        return 1U;
+    }
+    return remainingExperts / 2U;
+}
+
+PTO_INTERNAL uint32_t M3N6SwigluSyncGroupCount(const ShapeConfig &shape)
+{
+    uint32_t groupCount = 0;
+    uint32_t expert = 0;
+    while (expert < shape.expertPerRank) {
+        uint32_t groupSize = M3N6NextSwigluGroupSize(shape.expertPerRank - expert);
+        expert += groupSize;
+        ++groupCount;
+    }
+    return groupCount;
+}
+
+PTO_INTERNAL bool M3N6Gmm1SyncGroupFlagsSupported(const ShapeConfig &shape)
+{
+    uint32_t groupCount = M3N6SwigluSyncGroupCount(shape);
+    return groupCount > 0U && groupCount <= kM3N6Gmm1SyncGroupFlagCapacity;
+}
+
 PTO_INTERNAL void M3N5SignalDispatchExpertReady(uint32_t localExpert)
 {
     switch (localExpert) {
@@ -145,6 +173,52 @@ PTO_INTERNAL void M3N5WaitDispatchExpertReady(uint32_t localExpert)
             break;
         case 4U:
             M3N4WaitV2C<kM3N5DispatchExpertFlagBase + 4U>();
+            break;
+        default:
+            break;
+    }
+}
+
+PTO_INTERNAL void M3N6SignalGmm1SyncGroupReady(uint32_t syncIdx)
+{
+    switch (syncIdx) {
+        case 0U:
+            M3N4SignalC2V<kM3N6Gmm1SyncGroupFlagBase + 0U>();
+            break;
+        case 1U:
+            M3N4SignalC2V<kM3N6Gmm1SyncGroupFlagBase + 1U>();
+            break;
+        case 2U:
+            M3N4SignalC2V<kM3N6Gmm1SyncGroupFlagBase + 2U>();
+            break;
+        case 3U:
+            M3N4SignalC2V<kM3N6Gmm1SyncGroupFlagBase + 3U>();
+            break;
+        case 4U:
+            M3N4SignalC2V<kM3N6Gmm1SyncGroupFlagBase + 4U>();
+            break;
+        default:
+            break;
+    }
+}
+
+PTO_INTERNAL void M3N6WaitGmm1SyncGroupReady(uint32_t syncIdx)
+{
+    switch (syncIdx) {
+        case 0U:
+            M3N4WaitC2V<kM3N6Gmm1SyncGroupFlagBase + 0U>();
+            break;
+        case 1U:
+            M3N4WaitC2V<kM3N6Gmm1SyncGroupFlagBase + 1U>();
+            break;
+        case 2U:
+            M3N4WaitC2V<kM3N6Gmm1SyncGroupFlagBase + 2U>();
+            break;
+        case 3U:
+            M3N4WaitC2V<kM3N6Gmm1SyncGroupFlagBase + 3U>();
+            break;
+        case 4U:
+            M3N4WaitC2V<kM3N6Gmm1SyncGroupFlagBase + 4U>();
             break;
         default:
             break;

@@ -1003,6 +1003,7 @@ struct M2FusedFullEvidence {
     int32_t swigluEmptyGroups = 0;
     int32_t dequantFinalRow = 0;
     int32_t m3n5Gmm1StartBeforeLastDispatchReady = 0;
+    int32_t m3n6ActivationStartBeforeLastGmm1Ready = 0;
     bool swigluGroupDescMonotonic = false;
     std::array<int32_t, 16> m3Counters{};
     std::array<int32_t, 16> m3nDispatchCounters{};
@@ -1087,6 +1088,10 @@ M2FusedFullEvidence ReadM2FusedFullEvidence(const moe_dispatch_combine_a8w8::Wor
     constexpr size_t kM3N5AicEvidenceSlot = 14U * 16U;
     if (stageStatus.size() > kM3N5AicEvidenceSlot) {
         evidence.m3n5Gmm1StartBeforeLastDispatchReady = stageStatus[kM3N5AicEvidenceSlot];
+    }
+    constexpr size_t kM3N6EvidenceSlot = kM3N5AicEvidenceSlot + 2U;
+    if (stageStatus.size() > kM3N6EvidenceSlot + 2U) {
+        evidence.m3n6ActivationStartBeforeLastGmm1Ready = stageStatus[kM3N6EvidenceSlot + 2U];
     }
     std::vector<int32_t> dispatchReady =
         CopyWorkspaceI32Field(workspaceLayout, workspaceLayout.dispatchGroupReady, state, "m3 dispatchGroupReady");
@@ -3779,6 +3784,11 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     int32_t m3n5ZeroTokenExpertSkipCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3nDispatchCounters[14];
     bool m3n5Gmm1StartBeforeLastDispatchReady =
         fusedEvidence != nullptr && fusedEvidence->m3n5Gmm1StartBeforeLastDispatchReady != 0;
+    bool m3n6Gmm1ActivationOverlap = fusedEvidence != nullptr && fusedEvidence->m3nActivationCounters[8] != 0;
+    bool m3n6ActivationStartBeforeLastGmm1Ready =
+        fusedEvidence != nullptr && fusedEvidence->m3n6ActivationStartBeforeLastGmm1Ready != 0;
+    bool m3n6PrimitiveGap =
+        fusedEvidence != nullptr && fusedEvidence->swigluSyncGroupCount > 5 && !m3n6Gmm1ActivationOverlap;
     std::ostringstream combineWorkerSegments;
     for (int32_t worker = 0; worker < 8; ++worker) {
         if (worker != 0) {
@@ -3811,17 +3821,21 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  fused_single_launch=true\n";
     std::cout << "  exec_model=" << (m3n4StreamEnabled ? "aic_aiv_stream" : "bsp_syncall") << "\n";
     std::cout << "  fused_device_stage_boundaries="
-              << (m3n5DispatchGmm1Overlap ? "pto_event_dispatch_expert_signals" :
-                                            (m3n4StreamEnabled ? "pto_event_full_open_signals" : "syncall_mix"))
+              << (m3n6Gmm1ActivationOverlap ?
+                      "pto_event_dispatch_expert_and_gmm1_sync_group_signals" :
+                      (m3n5DispatchGmm1Overlap ? "pto_event_dispatch_expert_signals" :
+                                                 (m3n4StreamEnabled ? "pto_event_full_open_signals" : "syncall_mix")))
               << "\n";
     std::cout << "  fused_syncall_mode=" << (m3n4StreamEnabled ? "coarse_internal_only_counted" : "hard_mix") << "\n";
     std::cout << "  fused_host_barrier_between_stages=false\n";
     std::cout << "  m3_single_kernel_mpmd=true\n";
     std::cout << "  m3_overlap_requested=" << (args.runtime.overlapMode == 0 ? "false" : "true") << "\n";
     std::cout << "  m3_overlap_execution="
-              << (m3n5DispatchGmm1Overlap ?
-                      "dispatch_expert_rotation_stream" :
-                      (m3n4StreamEnabled ? "signal_full_open_stream_skeleton" : "skeleton_shared_layout"))
+              << (m3n6Gmm1ActivationOverlap ?
+                      "gmm1_activation_sync_group_rotation_stream" :
+                      (m3n5DispatchGmm1Overlap ?
+                           "dispatch_expert_rotation_stream" :
+                           (m3n4StreamEnabled ? "signal_full_open_stream_skeleton" : "skeleton_shared_layout")))
               << "\n";
     std::cout << "  m3n4_stream_skeleton_enabled=" << (m3n4StreamEnabled ? "true" : "false") << "\n";
     std::cout << "  m3n4_signal_all_open=" << (m3n4SignalAllOpen ? "true" : "false") << "\n";
@@ -3835,6 +3849,17 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  m3n5_zero_token_expert_skip_count=" << m3n5ZeroTokenExpertSkipCount << "\n";
     std::cout << "  m3n5_gmm1_start_before_last_dispatch_ready="
               << (m3n5Gmm1StartBeforeLastDispatchReady ? "true" : "false") << "\n";
+    std::cout << "  m3n6_gmm1_activation_overlap_enabled=" << (m3n6Gmm1ActivationOverlap ? "true" : "false") << "\n";
+    std::cout << "  gmm1_activation_overlap_granularity="
+              << (m3n6Gmm1ActivationOverlap ? "sync_group" : (m3n6PrimitiveGap ? "primitive_gap" : "none")) << "\n";
+    std::cout << "  m3n6_event_capacity=" << 5 << "\n";
+    std::cout << "  m3n6_event_insufficient_primitive_gap=" << (m3n6PrimitiveGap ? "true" : "false") << "\n";
+    std::cout << "  m3n6_gmm1_sync_group_producer_counter="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[8]) << "\n";
+    std::cout << "  m3n6_activation_sync_group_consumer_counter="
+              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[9]) << "\n";
+    std::cout << "  m3n6_activation_start_before_last_gmm1_ready="
+              << (m3n6ActivationStartBeforeLastGmm1Ready ? "true" : "false") << "\n";
     std::cout << "  overlap_on_payload_async_claim=false\n";
     std::cout << "  m3_launch_level_aiv_participation=true\n";
     std::cout << "  m3_payload_worker_evidence=partial\n";
