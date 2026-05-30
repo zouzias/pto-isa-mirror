@@ -589,7 +589,8 @@ PTO_INTERNAL void TInsertVecToMatImpl(DstTileData &dst, SrcTileData &src, uint16
         TInsertNDImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, dstCols, indexRow,
                                                    indexCol);
     } else if constexpr (!SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::RowMajor)) {
-        constexpr uint16_t dstRow = static_cast<uint16_t>(DstTileData::Rows);
+        constexpr uint16_t dstRow =
+            static_cast<uint16_t>(DstTileData::BFractal == BLayout::ColMajor ? DstTileData::Rows : DstTileData::Cols);
         PTO_ASSERT(indexRow + validRow <= dstRow, "TINSERT NZ : indexRow + validRow exceeds destination rows!");
         TInsertImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, dstRow, indexRow,
                                                  indexCol);

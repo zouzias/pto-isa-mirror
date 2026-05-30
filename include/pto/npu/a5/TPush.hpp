@@ -246,7 +246,7 @@ struct TPipe {
             constexpr uint32_t splitNum = 2;
             constexpr int ConsM = (Split == TileSplitAxis::TILE_UP_DOWN) ? ProdM * splitNum : ProdM;
             constexpr int ConsN = (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? ProdN * splitNum : ProdN;
-            Tile<TileType::Mat, T, ConsM, ConsN, BLayout::RowMajor, ConsM, ConsN> matTile;
+            Tile<TileType::Mat, T, ConsM, ConsN, BLayout::ColMajor, ConsM, ConsN> matTile;
             uint64_t entryBase = (tileIndex % RingFiFo::SLOT_NUM) * RingFiFo::SLOT_SIZE; // ConsM * ConsN * sizeof(T);
             TASSIGN_IMPL(matTile, (uint64_t)(fifo.V2C_CONSUMER_BUF + entryBase + entryOffset));
             if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
