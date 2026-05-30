@@ -63,6 +63,8 @@ Runtime:
   --m1-suite 0|1       build once, then run explicit M1 real dispatch/combine cases with mock GMM payload
   --m2-suite 0|1       build once, then run explicit M2 int8 full-chain cases
   --m3-suite 0|1       build once, then run M3 overlap off/on regression cases
+  --m3-timeout-probe 0|1
+                       build once, then run the M3N.9 device timeout dump probe
 
 Build:
   --skip-run 0|1
@@ -132,6 +134,7 @@ MPI_BIN=""
 M1_SUITE=0
 M2_SUITE=0
 M3_SUITE=0
+M3_TIMEOUT_PROBE=0
 DISPATCH_METADATA_ONLY=0
 DISPATCH_ONLY=0
 GMM1_ONLY=0
@@ -196,6 +199,7 @@ while [[ $# -gt 0 ]]; do
         --m1-suite) M1_SUITE="$2"; shift 2 ;;
         --m2-suite) M2_SUITE="$2"; shift 2 ;;
         --m3-suite) M3_SUITE="$2"; shift 2 ;;
+        --m3-timeout-probe) M3_TIMEOUT_PROBE="$2"; shift 2 ;;
         --skip-run) SKIP_RUN="$2"; shift 2 ;;
         --skip-build) SKIP_BUILD="$2"; shift 2 ;;
         --clean-build) CLEAN_BUILD="$2"; shift 2 ;;
@@ -407,6 +411,16 @@ if [ "${M3_SUITE}" = "1" ]; then
             --overlap-mode "${mode}" --timeline "${TIMELINE}" \
             --case-name zero-token -pes 4 -M 256 -K 256 -N 128 -topK 2 -expertPerPe 2 --max-tokens-per-expert 1024
     done
+    exit 0
+fi
+
+if [ "${M3_TIMEOUT_PROBE}" = "1" ]; then
+    echo "=== Running M3N.9 timeout dump probe ==="
+    bash "${SCRIPT_PATH}" --m3-timeout-probe 0 --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 \
+        --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
+        --overlap-mode on --m2-fused-debug-stop-stage 109 \
+        --case-name m3n9-timeout-probe -pes 1 -M 64 -K 64 -N 64 -topK 1 -expertPerPe 1 \
+        --max-tokens-per-expert 128
     exit 0
 fi
 

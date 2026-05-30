@@ -201,37 +201,39 @@ AICORE inline bool M3NFusedDispatchScratchFits(moe_dispatch_combine_a8w8::ShapeC
     return globalExpertNum > 0U && globalExpertNum <= kM3NFusedDispatchScratchLimit - kM3NFusedDispatchScratchBase;
 }
 
-AICORE inline bool M3N5DispatchGmm1OverlapEnabled(uint32_t debugStopStage, moe_dispatch_combine_a8w8::ShapeConfig shape)
+AICORE inline bool M3N5DispatchGmm1OverlapEnabled(uint32_t debugStopStage, uint32_t overlapMode,
+                                                  moe_dispatch_combine_a8w8::ShapeConfig shape)
 {
-    return debugStopStage < 100U && M3NFusedDispatchScratchFits(shape) &&
+    return overlapMode != 0U && debugStopStage < 100U && M3NFusedDispatchScratchFits(shape) &&
            moe_dispatch_combine_a8w8::M3N5DispatchExpertFlagsSupported(shape);
 }
 
-AICORE inline bool M3N6Gmm1ActivationOverlapEnabled(uint32_t debugStopStage,
+AICORE inline bool M3N6Gmm1ActivationOverlapEnabled(uint32_t debugStopStage, uint32_t overlapMode,
                                                     moe_dispatch_combine_a8w8::ShapeConfig shape)
 {
-    return debugStopStage < 100U && M3NFusedDispatchScratchFits(shape) &&
+    return overlapMode != 0U && debugStopStage < 100U && M3NFusedDispatchScratchFits(shape) &&
            moe_dispatch_combine_a8w8::M3N6Gmm1SyncGroupFlagsSupported(shape);
 }
 
-AICORE inline bool M3N7ActivationGmm2OverlapEnabled(uint32_t debugStopStage,
+AICORE inline bool M3N7ActivationGmm2OverlapEnabled(uint32_t debugStopStage, uint32_t overlapMode,
                                                     moe_dispatch_combine_a8w8::ShapeConfig shape)
 {
-    return M3N6Gmm1ActivationOverlapEnabled(debugStopStage, shape);
+    return M3N6Gmm1ActivationOverlapEnabled(debugStopStage, overlapMode, shape);
 }
 
-AICORE inline bool M3N8Gmm2CombineOverlapEnabled(uint32_t debugStopStage, moe_dispatch_combine_a8w8::ShapeConfig shape)
+AICORE inline bool M3N8Gmm2CombineOverlapEnabled(uint32_t debugStopStage, uint32_t overlapMode,
+                                                 moe_dispatch_combine_a8w8::ShapeConfig shape)
 {
-    return M3N7ActivationGmm2OverlapEnabled(debugStopStage, shape);
+    return M3N7ActivationGmm2OverlapEnabled(debugStopStage, overlapMode, shape);
 }
 
-AICORE inline void M3NDispatchAicWaitForAivSubphases(uint32_t debugStopStage,
+AICORE inline void M3NDispatchAicWaitForAivSubphases(uint32_t debugStopStage, bool m3n5DispatchGmm1Overlap,
                                                      moe_dispatch_combine_a8w8::ShapeConfig shape)
 {
     if (debugStopStage >= 100U || !M3NFusedDispatchScratchFits(shape)) {
         return;
     }
-    uint32_t dispatchSubphaseSyncs = M3N5DispatchGmm1OverlapEnabled(debugStopStage, shape) ? 10U : 11U;
+    uint32_t dispatchSubphaseSyncs = m3n5DispatchGmm1Overlap ? 10U : 11U;
     for (uint32_t sync = 0; sync < dispatchSubphaseSyncs; ++sync) {
         M3NDispatchHardPhaseSync();
     }
@@ -650,6 +652,40 @@ AICORE inline void M3NRecordAivLaneDebug(M2PeerWindowViewDevice localPeer, uint3
     (void)localPeer;
     (void)rawAivSlot;
 #endif
+}
+
+AICORE inline void M3N9RecordTimeoutDump(M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
+                                         moe_dispatch_combine_a8w8::RankConfig rank,
+                                         moe_dispatch_combine_a8w8::ShapeConfig shape, uint32_t localExpert,
+                                         uint32_t tokenOwnerRank, uint32_t stage, uint32_t signalId,
+                                         uint32_t debugStopStage)
+{
+    if (shape.expertPerRank == 0U) {
+        return;
+    }
+    if (localExpert >= shape.expertPerRank) {
+        localExpert = 0U;
+    }
+    if (tokenOwnerRank >= shape.rankNum) {
+        tokenOwnerRank = 0U;
+    }
+    __gm__ int32_t *dump =
+        workspaceView.scoreboardTimeoutCounters + localExpert * moe_dispatch_combine_a8w8::kM3N9TimeoutDumpStride;
+    StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N9TimeoutDumpPresentSlot, 1);
+    StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N9TimeoutDumpRankSlot, static_cast<int32_t>(rank.rankId));
+    StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N9TimeoutDumpExpertSlot, static_cast<int32_t>(localExpert));
+    StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N9TimeoutDumpTokenOwnerRankSlot,
+                   static_cast<int32_t>(tokenOwnerRank));
+    StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N9TimeoutDumpExpertOwnerRankSlot,
+                   static_cast<int32_t>(rank.rankId));
+    StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N9TimeoutDumpStageSlot, static_cast<int32_t>(stage));
+    StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N9TimeoutDumpSignalIdSlot, static_cast<int32_t>(signalId));
+    StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N9TimeoutDumpDebugStopStageSlot,
+                   static_cast<int32_t>(debugStopStage));
+    StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 15U,
+                   LoadScalarI32(localPeer.debugCounters + kM3CounterBase + 15U) + 1);
+    pipe_barrier(PIPE_ALL);
+    dsb(DSB_DDR);
 }
 
 AICORE inline uint32_t M3NAssignDispatchWorkers(moe_dispatch_combine_a8w8::ShapeConfig shape,
@@ -1122,6 +1158,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
     if (debugStopStage == 0U) {
         debugStopStage = M2FusedLoadDebugStopStage(launchArgs);
     }
+    uint32_t overlapMode = static_cast<uint32_t>(
+        M2FusedLoadConfigI32(stageStatus, moe_dispatch_combine_a8w8::kM2FusedFullOverlapModeSlot));
     if (get_block_idx() == 0) {
         M2FusedRecordStage(stageStatus + kM2FusedFullAicHeaderSlot, 0U, kM2FusedFullMagic);
         M2FusedRecordStage(stageStatus + kM2FusedFullAicHeaderSlot, 1U, static_cast<int32_t>(get_block_num()));
@@ -1141,11 +1179,11 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
         pipe_barrier(PIPE_ALL);
         dsb(DSB_DDR);
     }
-    bool m3n5DispatchGmm1Overlap = M3N5DispatchGmm1OverlapEnabled(debugStopStage, shape);
-    bool m3n6Gmm1ActivationOverlap = M3N6Gmm1ActivationOverlapEnabled(debugStopStage, shape);
-    bool m3n7ActivationGmm2Overlap = M3N7ActivationGmm2OverlapEnabled(debugStopStage, shape);
-    bool m3n8Gmm2CombineOverlap = M3N8Gmm2CombineOverlapEnabled(debugStopStage, shape);
-    M3NDispatchAicWaitForAivSubphases(debugStopStage, shape);
+    bool m3n5DispatchGmm1Overlap = M3N5DispatchGmm1OverlapEnabled(debugStopStage, overlapMode, shape);
+    bool m3n6Gmm1ActivationOverlap = M3N6Gmm1ActivationOverlapEnabled(debugStopStage, overlapMode, shape);
+    bool m3n7ActivationGmm2Overlap = M3N7ActivationGmm2OverlapEnabled(debugStopStage, overlapMode, shape);
+    bool m3n8Gmm2CombineOverlap = M3N8Gmm2CombineOverlapEnabled(debugStopStage, overlapMode, shape);
+    M3NDispatchAicWaitForAivSubphases(debugStopStage, m3n5DispatchGmm1Overlap, shape);
     if (debugStopStage >= 100U) {
         pto::SYNCALL<pto::SyncCoreType::Mix>();
         return;
@@ -1655,10 +1693,10 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         M2FusedLoadConfigI32(stageStatusBase, moe_dispatch_combine_a8w8::kM2FusedFullOverlapModeSlot));
     uint32_t logicalAiv = M2FusedLogicalAivId();
     uint32_t rawAivSlot = M2FusedRawAivSlot();
-    bool m3n5DispatchGmm1Overlap = M3N5DispatchGmm1OverlapEnabled(debugStopStage, shape);
-    bool m3n6Gmm1ActivationOverlap = M3N6Gmm1ActivationOverlapEnabled(debugStopStage, shape);
-    bool m3n7ActivationGmm2Overlap = M3N7ActivationGmm2OverlapEnabled(debugStopStage, shape);
-    bool m3n8Gmm2CombineOverlap = M3N8Gmm2CombineOverlapEnabled(debugStopStage, shape);
+    bool m3n5DispatchGmm1Overlap = M3N5DispatchGmm1OverlapEnabled(debugStopStage, overlapMode, shape);
+    bool m3n6Gmm1ActivationOverlap = M3N6Gmm1ActivationOverlapEnabled(debugStopStage, overlapMode, shape);
+    bool m3n7ActivationGmm2Overlap = M3N7ActivationGmm2OverlapEnabled(debugStopStage, overlapMode, shape);
+    bool m3n8Gmm2CombineOverlap = M3N8Gmm2CombineOverlapEnabled(debugStopStage, overlapMode, shape);
     uint32_t m3n6SyncGroupCount = moe_dispatch_combine_a8w8::M3N6SwigluSyncGroupCount(shape);
     M3NRecordAivLaneDebug(localPeer, rawAivSlot);
     if (IsM2FusedMainAiv()) {
@@ -1950,6 +1988,16 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     }
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
+    if (debugStopStage == 109U) {
+        if (IsM2FusedMainAiv()) {
+            M3N9RecordTimeoutDump(workspaceView, localPeer, rank, shape, 0U, 0U,
+                                  moe_dispatch_combine_a8w8::kM3N9TimeoutStageDispatchToGmm1,
+                                  moe_dispatch_combine_a8w8::kM3N4DispatchToGmm1Flag, debugStopStage);
+            M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 109);
+        }
+        pto::SYNCALL<pto::SyncCoreType::Mix>();
+        return;
+    }
     if (debugStopStage >= 100U) {
         pto::SYNCALL<pto::SyncCoreType::Mix>();
         return;

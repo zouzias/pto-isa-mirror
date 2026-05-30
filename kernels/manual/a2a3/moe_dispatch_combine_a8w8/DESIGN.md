@@ -3767,7 +3767,8 @@ cross-core flag id 6-10 不能再新增独立边，M3N.8 首版必须沿用 M3N.
 
 依赖任务：M3N.5 至 M3N.8。
 
-文件范围：修改 `kernel/control_metadata.hpp`、`host/main.cpp`、`scripts/run_a3.sh`、`DESIGN.md`。
+文件范围：修改 `kernel/control_metadata.hpp`、`kernel/moe_dispatch_combine_a8w8_kernel.cpp`、
+`kernel/moe_dispatch_combine_a8w8_mixed_spike.cpp`、`host/main.cpp`、`scripts/run_a3.sh`、`DESIGN.md`。
 
 任务：增加 timeout dump；run script 增加 overlap on/off 开关与 E2E bench（复用 `[PerfReport]`）；overlap 验收口径若变先走 issue/DCL。
 
@@ -3775,6 +3776,8 @@ cross-core flag id 6-10 不能再新增独立边，M3N.8 首版必须沿用 M3N.
 
 - overlap off/on 都通过 M2 四类用例，`[CorrectnessReport]` 都 `pass=true`，`[PerfReport]` 都有 E2E samples、可对比。
 - 人为触发 timeout 能打印 rank、expert、token owner rank、expert owner rank、stage、signal id。
+- 回归必须覆盖 DCL-115：M3N.9 不新增 cross-core flag id 6-10 的 `pto::Event` 边；M3N.7/M3N.8 仍使用
+  GM-poll ready，`--overlap-mode off` 必须禁用 M3N.5-M3N.8 轮动并回到 M3N.4 full-open 骨架。
 - 完成后只能声称"fused overlap skeleton"；仍依赖 host 多 launch 则不通过。依赖扫描无输出。
 
 #### M3N.10 Dispatch-GMM scoreboard async

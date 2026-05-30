@@ -69,6 +69,26 @@ size_t BytesOfU64Vector(size_t elements)
     return elements * sizeof(uint64_t);
 }
 
+constexpr size_t kM3N9TimeoutDumpPresentSlot = 0U;
+constexpr size_t kM3N9TimeoutDumpRankSlot = 1U;
+constexpr size_t kM3N9TimeoutDumpExpertSlot = 2U;
+constexpr size_t kM3N9TimeoutDumpTokenOwnerRankSlot = 3U;
+constexpr size_t kM3N9TimeoutDumpExpertOwnerRankSlot = 4U;
+constexpr size_t kM3N9TimeoutDumpStageSlot = 5U;
+constexpr size_t kM3N9TimeoutDumpSignalIdSlot = 6U;
+constexpr size_t kM3N9TimeoutDumpDebugStopStageSlot = 7U;
+constexpr int32_t kM3N9TimeoutStageDispatchToGmm1 = 1;
+
+const char *M3N9TimeoutStageName(int32_t stage)
+{
+    switch (stage) {
+        case kM3N9TimeoutStageDispatchToGmm1:
+            return "dispatch_to_gmm1";
+        default:
+            return "unknown";
+    }
+}
+
 std::string GmmShapeClass(const moe_dispatch_combine_a8w8::ShapeConfig &shape)
 {
     if (shape.hiddenSize == 0U || shape.intermediateSize == 0U ||
@@ -803,6 +823,9 @@ void ClearDeviceStateM2(const DispatchCombineTileArgs &args,
              "rank " + std::to_string(state->rank) + " clear m2 workspace");
     CheckAcl(aclrtMemset(state->hccl.peerWindow, peerWindowLayout.totalBytes, 0, peerWindowLayout.totalBytes),
              "rank " + std::to_string(state->rank) + " clear m2 peerWindow");
+    CheckAcl(aclrtMemset(state->buffers.outputC, BytesOfHalfVector(static_cast<size_t>(args.shape.m) * args.shape.k), 0,
+                         BytesOfHalfVector(static_cast<size_t>(args.shape.m) * args.shape.k)),
+             "rank " + std::to_string(state->rank) + " clear m2 outputC");
     CheckAcl(aclrtSynchronizeStream(state->computeStream), "rank " + std::to_string(state->rank) + " sync m2 clear");
     if (verbose) {
         PrintStage(state->rank, "clear_m2_device_state", "done");
@@ -1013,6 +1036,7 @@ struct M2FusedFullEvidence {
     std::array<int32_t, 16> m3nCombineCounters{};
     std::array<int32_t, 16> m3nGmm2Counters{};
     std::array<int32_t, 16> m3n8CombineCounters{};
+    std::array<int32_t, 16> m3n9TimeoutDump{};
     std::string swigluGroupTileRanges;
     std::array<int32_t, 6> stageMarkers{};
 };
@@ -1203,7 +1227,33 @@ M2FusedFullEvidence ReadM2FusedFullEvidence(const moe_dispatch_combine_a8w8::Wor
     if (evidence.m3n8CombineCounters[5] != 0) {
         evidence.m3n8CombineStartBeforeLastGmm2Ready = 1;
     }
+    std::vector<int32_t> timeoutDump = CopyWorkspaceI32Field(workspaceLayout, workspaceLayout.scoreboardTimeoutCounters,
+                                                             state, "m3n9 scoreboardTimeoutCounters");
+    for (size_t idx = 0; idx < evidence.m3n9TimeoutDump.size() && idx < timeoutDump.size(); ++idx) {
+        evidence.m3n9TimeoutDump[idx] = timeoutDump[idx];
+    }
     return evidence;
+}
+
+void PrintM3N9TimeoutDump(const M2FusedFullEvidence &evidence)
+{
+    bool present = evidence.m3n9TimeoutDump[kM3N9TimeoutDumpPresentSlot] != 0;
+    int32_t stage = evidence.m3n9TimeoutDump[kM3N9TimeoutDumpStageSlot];
+    std::cout << "  m3n9_timeout_dump_present=" << (present ? "true" : "false") << "\n";
+    std::cout << "  timeout_dump_rank=" << (present ? evidence.m3n9TimeoutDump[kM3N9TimeoutDumpRankSlot] : -1) << "\n";
+    std::cout << "  timeout_dump_expert=" << (present ? evidence.m3n9TimeoutDump[kM3N9TimeoutDumpExpertSlot] : -1)
+              << "\n";
+    std::cout << "  timeout_dump_token_owner_rank="
+              << (present ? evidence.m3n9TimeoutDump[kM3N9TimeoutDumpTokenOwnerRankSlot] : -1) << "\n";
+    std::cout << "  timeout_dump_expert_owner_rank="
+              << (present ? evidence.m3n9TimeoutDump[kM3N9TimeoutDumpExpertOwnerRankSlot] : -1) << "\n";
+    std::cout << "  timeout_dump_stage=" << (present ? stage : -1) << "\n";
+    std::cout << "  timeout_dump_stage_name=" << (present ? M3N9TimeoutStageName(stage) : "none") << "\n";
+    std::cout << "  timeout_dump_signal_id=" << (present ? evidence.m3n9TimeoutDump[kM3N9TimeoutDumpSignalIdSlot] : -1)
+              << "\n";
+    std::cout << "  timeout_dump_debug_stop_stage="
+              << (present ? evidence.m3n9TimeoutDump[kM3N9TimeoutDumpDebugStopStageSlot] : -1) << "\n";
+    std::cout << "  timeout_dump_source=device_scoreboard_timeout_counters\n";
 }
 
 double RunM2FusedFull(const DispatchCombineTileArgs &args, const moe_dispatch_combine_a8w8::ShapeConfig &shape,
@@ -4066,6 +4116,9 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
               << "\n";
     std::cout << "  overlap_timeout_count=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[15]) << "\n";
     std::cout << "  timeout_dump_fields=rank,expert,token_owner_rank,expert_owner_rank,stage,signal_id\n";
+    if (fusedEvidence != nullptr) {
+        PrintM3N9TimeoutDump(*fusedEvidence);
+    }
     std::cout << "  scoreboard_async_enabled=false\n";
     std::cout << "  subtile_stride_async_enabled=false\n";
     std::cout << "  timeline_enabled=" << (args.runtime.timeline == 0 ? "false" : "true") << "\n";
@@ -4537,6 +4590,13 @@ int main(int argc, char **argv)
                         for (size_t markerIdx = 0; markerIdx < iterEvidence.stageMarkers.size(); ++markerIdx) {
                             std::cout << "  fused_stage_marker_" << markerIdx << "="
                                       << iterEvidence.stageMarkers[markerIdx] << "\n";
+                        }
+                        if (args.runtime.m2FusedDebugStopStage == 109U) {
+                            std::cout << "  overlap_timeout_count=" << iterEvidence.m3Counters[15] << "\n";
+                            std::cout << "  "
+                                         "timeout_dump_fields=rank,expert,token_owner_rank,expert_owner_rank,stage,"
+                                         "signal_id\n";
+                            dispatch_combine_tile::PrintM3N9TimeoutDump(iterEvidence);
                         }
                         if (args.runtime.m2FusedDebugStopStage == 1U) {
                             std::cout << "  fused_m3n_route_pack_workers=" << iterEvidence.m3nDispatchCounters[0]

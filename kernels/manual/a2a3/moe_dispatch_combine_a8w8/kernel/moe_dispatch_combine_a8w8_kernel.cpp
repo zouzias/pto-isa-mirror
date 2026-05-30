@@ -800,6 +800,22 @@ AICORE inline uint32_t M3NDispatchWorkerScratchStride(uint32_t globalExpertNum)
     return ((globalExpertNum + kI32PerCacheLine - 1U) / kI32PerCacheLine) * kI32PerCacheLine;
 }
 
+AICORE inline bool M3NDispatchRouteShardBoundariesAligned(moe_dispatch_combine_a8w8::ShapeConfig shape,
+                                                          uint32_t workerCount)
+{
+    constexpr uint32_t kI32PerCacheLine = 16U;
+    if (workerCount <= 1U || shape.topK == 0U) {
+        return true;
+    }
+    for (uint32_t worker = 1U; worker < workerCount; ++worker) {
+        uint32_t routeBegin = TokenShardBegin(shape.m, worker, workerCount) * shape.topK;
+        if (routeBegin % kI32PerCacheLine != 0U) {
+            return false;
+        }
+    }
+    return true;
+}
+
 AICORE inline uint32_t M3NDispatchWorkerCount(moe_dispatch_combine_a8w8::ShapeConfig shape, uint32_t logicalAivCount)
 {
     uint32_t globalExpertNum = shape.rankNum * shape.expertPerRank;
@@ -817,6 +833,9 @@ AICORE inline uint32_t M3NDispatchWorkerCount(moe_dispatch_combine_a8w8::ShapeCo
     }
     if (workers > maxWorkersByScratch) {
         workers = maxWorkersByScratch;
+    }
+    while (workers > 1U && !M3NDispatchRouteShardBoundariesAligned(shape, workers)) {
+        --workers;
     }
     return workers == 0U ? 1U : workers;
 }
@@ -1573,6 +1592,8 @@ AICORE inline void M2QuantizeRowToPeerPayload(moe_dispatch_combine_a8w8::ShapeCo
         TSTORE(padDst, zeroTile);
         WaitStoreTileReusable();
     }
+    InvalidateGmCacheLines(dst, rowBytes);
+    InvalidateGmCacheLines(localPeer.dispatchScale + packedRow, sizeof(float));
 }
 
 AICORE inline void M2RoutePackQuantLocal(moe_dispatch_combine_a8w8::ShapeConfig shape,
@@ -1610,8 +1631,6 @@ AICORE inline void M2RoutePackQuantLocal(moe_dispatch_combine_a8w8::ShapeConfig 
         }
     }
     InvalidateGmCacheLines(workspaceView.expandedRowIdx, static_cast<uint32_t>(shape.m * shape.topK * sizeof(int32_t)));
-    InvalidateGmCacheLines(localPeer.dispatchPayload, static_cast<uint32_t>(M2ExpandedRows(shape) * rowBytes));
-    InvalidateGmCacheLines(localPeer.dispatchScale, static_cast<uint32_t>(M2ExpandedRows(shape) * sizeof(float)));
 }
 
 AICORE inline void M3NRoutePackQuantLocalShard(moe_dispatch_combine_a8w8::ShapeConfig shape,
@@ -1652,9 +1671,8 @@ AICORE inline void M3NRoutePackQuantLocalShard(moe_dispatch_combine_a8w8::ShapeC
             M2QuantizeRowToPeerPayload(shape, localPeer, inputA, token, static_cast<uint32_t>(packedRow), rowBytes);
         }
     }
-    InvalidateGmCacheLines(workspaceView.expandedRowIdx, static_cast<uint32_t>(shape.m * shape.topK * sizeof(int32_t)));
-    InvalidateGmCacheLines(localPeer.dispatchPayload, static_cast<uint32_t>(M2ExpandedRows(shape) * rowBytes));
-    InvalidateGmCacheLines(localPeer.dispatchScale, static_cast<uint32_t>(M2ExpandedRows(shape) * sizeof(float)));
+    InvalidateGmCacheLines(workspaceView.expandedRowIdx + tokenBegin * shape.topK,
+                           static_cast<uint32_t>((tokenEnd - tokenBegin) * shape.topK * sizeof(int32_t)));
 }
 
 AICORE inline void M2PublishCountRows(moe_dispatch_combine_a8w8::ShapeConfig shape, M2WorkspaceViewDevice workspaceView,

@@ -16,7 +16,7 @@
 ## Acceptance
 
 - Acceptance source: `DESIGN.md` section 14.4N, subsection `M3N.6 GMM1->SwiGLU 轮动（sync-group 粒度）`
-- Acceptance result: review_ready
+- Acceptance result: accepted
 - Verification summary: GMM1 to activation now rotates at `swigluSyncGroups` sync-group granularity. AIC runs GMM1 for
   the experts covered by the current sync group, stores `gmm1SyncGroupReady[syncIdx]`, and signals a PTO C2V event.
   AIV waits the matching syncIdx, runs GMM1 epilogue for that sync group, then shards activation/requant only over the
@@ -50,8 +50,11 @@
 
 ## Delta And Handoff
 
-- Design/task issue found: no.
+- Design/task issue found: yes. The reviewer recorded DCL-115: M3N.5 V2C and M3N.6 C2V reuse cross-core flag ids
+  6-10, and `wait_flag_dev` keys by id rather than direction. M3N.6 remains accepted because it consumes all M3N.5
+  V2C signals, crosses the coarse AIC sync, then produces M3N.6 C2V signals. M3N.7 and M3N.8 avoid expanding this risk
+  by using GM-poll ready rather than adding another `pto::Event` edge on ids 6-10.
 - User decision needed: no.
-- Downstream notes: M3N.6 intentionally keeps the Activation->GMM2 full-open event. M3N.7 must replace that edge with
-  `activationSyncGroupReady[syncIdx]` wait/signal and intersect each sync-group row range back to M2.GMM tile tasks.
+- Downstream notes: M3N.7 replaced the Activation->GMM2 edge with GM-poll ready on
+  `activationSyncGroupReady[syncIdx]` and intersects each sync-group row range back to M2.GMM tile tasks.
 - Next task: M3N.7.

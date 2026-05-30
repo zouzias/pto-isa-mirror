@@ -21,6 +21,17 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace moe_dispatch_combine_a8w8 {
 
+constexpr uint32_t kM3N9TimeoutDumpStride = 16U;
+constexpr uint32_t kM3N9TimeoutDumpPresentSlot = 0U;
+constexpr uint32_t kM3N9TimeoutDumpRankSlot = 1U;
+constexpr uint32_t kM3N9TimeoutDumpExpertSlot = 2U;
+constexpr uint32_t kM3N9TimeoutDumpTokenOwnerRankSlot = 3U;
+constexpr uint32_t kM3N9TimeoutDumpExpertOwnerRankSlot = 4U;
+constexpr uint32_t kM3N9TimeoutDumpStageSlot = 5U;
+constexpr uint32_t kM3N9TimeoutDumpSignalIdSlot = 6U;
+constexpr uint32_t kM3N9TimeoutDumpDebugStopStageSlot = 7U;
+constexpr uint32_t kM3N9TimeoutStageDispatchToGmm1 = 1U;
+
 template <typename T>
 struct GmArrayView {
     __gm__ T *ptr = nullptr;
@@ -43,8 +54,7 @@ struct TokenPerExpertView {
                static_cast<uint64_t>(expertOwnerRank) * expertPerRank + localExpert;
     }
 
-    AICORE inline __gm__ int32_t *At(uint32_t tokenOwnerRank, uint32_t expertOwnerRank,
-                                     uint32_t localExpert) const
+    AICORE inline __gm__ int32_t *At(uint32_t tokenOwnerRank, uint32_t expertOwnerRank, uint32_t localExpert) const
     {
         return ptr + Index(tokenOwnerRank, expertOwnerRank, localExpert);
     }
@@ -134,15 +144,14 @@ AICORE inline ControlMetadataView MakeControlMetadataView(GM_ADDR workspace, GM_
 {
     ControlMetadataView view;
     uint32_t tokenMatrixRowStride = ((shape.rankNum * shape.expertPerRank + 15U) / 16U) * 16U;
-    view.tokenPerExpert = TokenPerExpertView{I32Field(peerWindow, peerWindowLayout.tokenPerExpertMatrix),
-                                             shape.rankNum, shape.expertPerRank, tokenMatrixRowStride};
+    view.tokenPerExpert = TokenPerExpertView{I32Field(peerWindow, peerWindowLayout.tokenPerExpertMatrix), shape.rankNum,
+                                             shape.expertPerRank, tokenMatrixRowStride};
     view.blockTokenPerExpert.ptr = I32Field(workspace, workspaceLayout.blockTokenPerExpert);
     view.blockPrefixPerExpert.ptr = I32Field(workspace, workspaceLayout.blockPrefixPerExpert);
     view.expandedRowIdx.ptr = I32Field(workspace, workspaceLayout.expandedRowIdx);
     view.dispatchOffset.ptr = I32Field(workspace, workspaceLayout.dispatchOffset);
     view.cumsumMM = RankExpertView{I32Field(workspace, workspaceLayout.cumsumMM), shape.expertPerRank};
-    view.preSumBeforeRank = RankExpertView{I32Field(workspace, workspaceLayout.preSumBeforeRank),
-                                           shape.expertPerRank};
+    view.preSumBeforeRank = RankExpertView{I32Field(workspace, workspaceLayout.preSumBeforeRank), shape.expertPerRank};
     view.expertTokenNums.ptr = I32Field(workspace, workspaceLayout.expertTokenNums);
     view.countReadySignal.ptr = I32Field(peerWindow, peerWindowLayout.countReadySignal);
     view.combineDoneSignal.ptr = I32Field(peerWindow, peerWindowLayout.combineDoneSignal);
