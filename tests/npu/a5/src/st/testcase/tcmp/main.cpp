@@ -36,14 +36,15 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename T, int Row, int Col, int ValidRow, int ValidCol, CmpMode cmpMode>
+template <typename T, int DstRows, int DstCols, int Src0Rows, int Src0Cols, int Src1Rows, int Src1Cols, int ValidRows, int ValidCols, CmpMode cmpMode, bool isHalf = false>
 void LaunchTCmp(uint8_t *out, T *src0, T *src1, void *stream);
 
-template <typename T, int Row, int Col, int ValidRow, int ValidCol, CmpMode cmpMode>
+template <typename T, int DstRows, int DstCols, int Src0Rows, int Src0Cols, int Src1Rows, int Src1Cols, int ValidRows, int ValidCols, CmpMode cmpMode, bool isHalf = false>
 void test_tcmp()
 {
-    size_t fileSize = Row * Col * sizeof(T);
-    size_t dstFileSize = Row * ((Col + 7) / 8);
+    size_t src0FileSize = Src0Rows * Src0Cols * sizeof(T);
+    size_t src1FileSize = Src1Rows * Src1Cols * sizeof(T);
+    size_t dstFileSize = DstRows * DstCols * sizeof(uint8_t);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -55,20 +56,20 @@ void test_tcmp()
 
     uint8_t *dstHost, *dstDevice;
     aclrtMallocHost((void **)(&dstHost), dstFileSize);
-    aclrtMallocHost((void **)(&src0Host), fileSize);
-    aclrtMallocHost((void **)(&src1Host), fileSize);
+    aclrtMallocHost((void **)(&src0Host), src0FileSize);
+    aclrtMallocHost((void **)(&src1Host), src1FileSize);
 
     aclrtMalloc((void **)&dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src0Device, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src1Device, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&src0Device, src0FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&src1Device, src1FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    ReadFile(GetGoldenDir() + "/input1.bin", fileSize, src0Host, fileSize);
-    ReadFile(GetGoldenDir() + "/input2.bin", fileSize, src1Host, fileSize);
+    ReadFile(GetGoldenDir() + "/input1.bin", src0FileSize, src0Host, src0FileSize);
+    ReadFile(GetGoldenDir() + "/input2.bin", src1FileSize, src1Host, src1FileSize);
 
-    aclrtMemcpy(src0Device, fileSize, src0Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(src1Device, fileSize, src1Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(src0Device, src0FileSize, src0Host, src0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(src1Device, src1FileSize, src1Host, src1FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    LaunchTCmp<T, Row, Col, ValidRow, ValidCol, cmpMode>(dstDevice, src0Device, src1Device, stream);
+    LaunchTCmp<T, DstRows, DstCols, Src0Rows, Src0Cols, Src1Rows, Src1Cols, ValidRows, ValidCols, cmpMode, isHalf>(dstDevice, src0Device, src1Device, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -86,8 +87,8 @@ void test_tcmp()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<uint8_t> golden(Row * ((Col + 7) / 8));
-    std::vector<uint8_t> devFinal(Row * ((Col + 7) / 8));
+    std::vector<uint8_t> golden(dstFileSize);
+    std::vector<uint8_t> devFinal(dstFileSize);
     ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstFileSize, devFinal.data(), dstFileSize);
 
@@ -96,47 +97,51 @@ void test_tcmp()
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TCMPTest, case_half_32x32_32x32)
+TEST_F(TCMPTest, case_half_32x32_32x32_32x32_32x32)
 {
-    test_tcmp<aclFloat16, 32, 32, 32, 32, CmpMode::EQ>();
+    test_tcmp<aclFloat16, 32, 32, 32, 32, 32, 32, 32, 32, CmpMode::EQ, true>();
 }
-TEST_F(TCMPTest, case_float_8x64_8x64)
+TEST_F(TCMPTest, case_float_8x64_8x64_8x64_8x64)
 {
-    test_tcmp<float, 8, 64, 8, 64, CmpMode::GT>();
+    test_tcmp<float, 8, 64, 8, 64, 8, 64, 8, 64, CmpMode::GT>();
 }
-TEST_F(TCMPTest, case_int32_4x64_4x64)
+TEST_F(TCMPTest, case_int32_4x64_4x64_4x64_4x64)
 {
-    test_tcmp<int32_t, 4, 64, 4, 64, CmpMode::NE>();
+    test_tcmp<int32_t, 4, 64, 4, 64, 4, 64, 4, 64, CmpMode::NE>();
 }
-TEST_F(TCMPTest, case_int32_128x128_64x64)
+TEST_F(TCMPTest, case_int32_128x128_128x128_128x128_64x64)
 {
-    test_tcmp<int32_t, 128, 128, 64, 64, CmpMode::LT>();
+    test_tcmp<int32_t, 128, 128, 128, 128, 128, 128, 64, 64, CmpMode::LT>();
 }
-TEST_F(TCMPTest, case_int32_64x64_32x32)
+TEST_F(TCMPTest, case_int32_64x64_64x64_64x64_32x32)
 {
-    test_tcmp<int32_t, 64, 64, 32, 32, CmpMode::EQ>();
+    test_tcmp<int32_t, 64, 64, 64, 64, 64, 64, 32, 32, CmpMode::EQ>();
 }
-TEST_F(TCMPTest, case_int32_16x32_16x32)
+TEST_F(TCMPTest, case_int32_16x32_16x32_16x32_16x32)
 {
-    test_tcmp<int32_t, 16, 32, 16, 32, CmpMode::EQ>();
+    test_tcmp<int32_t, 16, 32, 16, 32, 16, 32, 16, 32, CmpMode::EQ>();
 }
-TEST_F(TCMPTest, case_float_128x128_64x64)
+TEST_F(TCMPTest, case_float_128x128_128x128_128x128_64x64)
 {
-    test_tcmp<float, 128, 128, 64, 64, CmpMode::LE>();
+    test_tcmp<float, 128, 128, 128, 128, 128, 128, 64, 64, CmpMode::LE>();
 }
-TEST_F(TCMPTest, case_int32_77x80_32x32)
+TEST_F(TCMPTest, case_int32_77x32_77x80_77x80_32x32)
 {
-    test_tcmp<int32_t, 77, 80, 32, 32, CmpMode::EQ>();
+    test_tcmp<int32_t, 77, 32, 77, 80, 77, 80, 32, 32, CmpMode::EQ>();
 }
-TEST_F(TCMPTest, case_int32_32x32_32x32)
+TEST_F(TCMPTest, case_int32_32x32_32x32_32x32_32x32)
 {
-    test_tcmp<int32_t, 32, 32, 32, 32, CmpMode::EQ>();
+    test_tcmp<int32_t, 32, 32, 32, 32, 32, 32, 32, 32, CmpMode::EQ>();
 }
-TEST_F(TCMPTest, case_int16_32x32_16x322)
+TEST_F(TCMPTest, case_int16_32x32_32x32_32x32_16x32)
 {
-    test_tcmp<int16_t, 32, 32, 16, 32, CmpMode::EQ>();
+    test_tcmp<int16_t, 32, 32, 32, 32, 32, 32, 16, 32, CmpMode::EQ>();
 }
-TEST_F(TCMPTest, case_int16_77x80_32x32)
+TEST_F(TCMPTest, case_int16_77x32_77x80_77x80_32x32)
 {
-    test_tcmp<int16_t, 77, 80, 32, 32, CmpMode::LE>();
+    test_tcmp<int16_t, 77, 32, 77, 80, 77, 80, 32, 32, CmpMode::LE>();
+}
+TEST_F(TCMPTest, case_int32_66x32_66x88_66x80_66x79)
+{
+    test_tcmp<int32_t, 66, 32, 66, 88, 66, 80, 66, 79, CmpMode::EQ>();
 }
