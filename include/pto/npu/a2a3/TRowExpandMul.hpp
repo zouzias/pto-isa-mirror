@@ -46,12 +46,7 @@ PTO_INTERNAL void TROWEXPANDMUL_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileD
     unsigned src0ValidCol = src0.GetValidCol();
     unsigned src1ValidRow = src1.GetValidRow();
     unsigned src1ValidCol = src1.GetValidCol();
-<<<<<<< HEAD
     bool src0eqdst = (validRow == src0ValidRow) && (validCol == src0ValidCol);
-=======
-    #ifndef __PTO_AUTO__
-    bool src0eqdst = (validRow == src0ValidRow) && (validCol == src0ValidCol) && (src1ValidCol == TileDataSrc1::Cols);
->>>>>>> bfe3cefd (Added changes needed to make FA automode work)
     bool src1eqdst = (validRow == src1ValidRow) && (validCol == src1ValidCol);
     if (src0eqdst && src1eqdst) {
         src0eqdst = (TileDataSrc0::RowStride >= TileDataSrc1::RowStride);
