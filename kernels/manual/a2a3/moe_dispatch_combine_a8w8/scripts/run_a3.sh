@@ -24,6 +24,7 @@ Shape:
   -N, --intermediate-size N
   -topK, --topk N
   -expertPerPe, --experts-per-rank N
+  --max-output-size N
   --max-tokens-per-expert N
   --payload-tile-cols N
   --gmm-block-m N
@@ -89,6 +90,10 @@ Explicit templates:
     --case-name over-capacity -pes 1 -M 64 -K 64 -N 64 -topK 2 -expertPerPe 2 --max-tokens-per-expert 16
   inactive-mask:
     --case-name inactive-mask -pes 1 -M 64 -K 64 -N 64 -topK 1 -expertPerPe 1 --max-tokens-per-expert 128 --x-active-mask-mode alternate
+  ffn-v3-small:
+    --case-name ffn-v3-small -pes 2 -M 16 -K 128 -N 128 -topK 2 -expertPerPe 2 --max-output-size 32
+  ffn-v3-4097:
+    --case-name ffn-v3-4097 -pes 2 -M 4097 -K 128 -N 128 -topK 2 -expertPerPe 2 --max-output-size 8194
 
 This project does not support hidden --case presets; pass explicit shape parameters.
 EOF
@@ -107,6 +112,7 @@ HIDDEN_SIZE=256
 INTERMEDIATE_SIZE=128
 TOPK=2
 EXPERT_PER_PE=2
+MAX_OUTPUT_SIZE=0
 MAX_TOKENS_PER_EXPERT=1024
 PAYLOAD_TILE_COLS=64
 GMM_BLOCK_M=128
@@ -164,6 +170,7 @@ while [[ $# -gt 0 ]]; do
         -N|--intermediate|--intermediate-size) INTERMEDIATE_SIZE="$2"; shift 2 ;;
         -topK|--topk) TOPK="$2"; shift 2 ;;
         -expertPerPe|--experts-per-rank) EXPERT_PER_PE="$2"; shift 2 ;;
+        --max-output-size) MAX_OUTPUT_SIZE="$2"; shift 2 ;;
         --max-tokens-per-expert) MAX_TOKENS_PER_EXPERT="$2"; shift 2 ;;
         --payload-tile-cols|-tileCols) PAYLOAD_TILE_COLS="$2"; shift 2 ;;
         --gmm-block-m) GMM_BLOCK_M="$2"; shift 2 ;;
@@ -233,6 +240,15 @@ fi
 if [ "${HIDDEN_SIZE}" -le 0 ] || [ "${INTERMEDIATE_SIZE}" -le 0 ] || [ "${PAYLOAD_TILE_COLS}" -le 0 ]; then
     echo "[ERROR] hidden/intermediate/payload tile sizes must be nonzero"
     exit 1
+fi
+if [ "${MAX_OUTPUT_SIZE}" -ne 0 ]; then
+    if [ $(( MAX_OUTPUT_SIZE % EXPERT_PER_PE )) -ne 0 ]; then
+        echo "[ERROR] maxOutputSize must be divisible by expertPerPe"
+        exit 1
+    fi
+    MAX_TOKENS_PER_EXPERT=$(( MAX_OUTPUT_SIZE / EXPERT_PER_PE ))
+else
+    MAX_OUTPUT_SIZE=$(( EXPERT_PER_PE * MAX_TOKENS_PER_EXPERT ))
 fi
 if [ "${BACKEND}" != "m1-mock" ] && [ "${BACKEND}" != "int8" ]; then
     echo "[ERROR] --backend must be m1-mock or int8"
@@ -323,6 +339,7 @@ echo "M=${M} HIDDEN_SIZE=${HIDDEN_SIZE} INTERMEDIATE_SIZE=${INTERMEDIATE_SIZE} T
 echo "BACKEND=${BACKEND}"
 echo "X_ACTIVE_MASK_MODE=${X_ACTIVE_MASK_MODE}"
 echo "OVERLAP_MODE=${OVERLAP_MODE}"
+echo "MAX_OUTPUT_SIZE=${MAX_OUTPUT_SIZE}"
 echo "MAX_TOKENS_PER_EXPERT=${MAX_TOKENS_PER_EXPERT} PAYLOAD_TILE_COLS=${PAYLOAD_TILE_COLS}"
 echo "GMM_BLOCK_M=${GMM_BLOCK_M} GMM_BLOCK_N=${GMM_BLOCK_N} GMM_BLOCK_K=${GMM_BLOCK_K}"
 echo "rank_source=$([ "${RANK_FROM_MPI}" = "1" ] && echo mpi || echo manual)"
@@ -410,6 +427,14 @@ if [ "${M3_SUITE}" = "1" ]; then
             --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
             --overlap-mode "${mode}" --timeline "${TIMELINE}" \
             --case-name zero-token -pes 4 -M 256 -K 256 -N 128 -topK 2 -expertPerPe 2 --max-tokens-per-expert 1024
+        bash "${SCRIPT_PATH}" --m3-suite 0 --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 \
+            --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
+            --overlap-mode "${mode}" --timeline "${TIMELINE}" \
+            --case-name ffn-v3-small -pes 2 -M 16 -K 128 -N 128 -topK 2 -expertPerPe 2 --max-output-size 32
+        bash "${SCRIPT_PATH}" --m3-suite 0 --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 \
+            --skip-kernel-launch 0 --first-device "${DEVICE_BASE}" --ndevices "${NDEVICES}" \
+            --overlap-mode "${mode}" --timeline "${TIMELINE}" \
+            --case-name ffn-v3-4097 -pes 2 -M 4097 -K 128 -N 128 -topK 2 -expertPerPe 2 --max-output-size 8194
     done
     exit 0
 fi

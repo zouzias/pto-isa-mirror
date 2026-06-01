@@ -283,6 +283,15 @@ inline bool TokenActive(const HostInputData &data, uint32_t token)
     return data.xActiveMask.empty() || data.xActiveMask[token] != 0U;
 }
 
+inline uint32_t ClampRowsToCapacity(uint32_t cursor, uint32_t rows, uint32_t cap)
+{
+    if (cursor >= cap || rows == 0U) {
+        return 0U;
+    }
+    uint32_t available = cap - cursor;
+    return rows < available ? rows : available;
+}
+
 inline HostInputData GenerateDeterministicInputs(const DispatchCombineTileArgs &args, uint32_t rank)
 {
     const DispatchCombineTileShape &shape = args.shape;
@@ -438,6 +447,24 @@ inline void BuildRoutes(const DispatchCombineTileArgs &args, const std::vector<H
             }
         }
     }
+
+    for (uint32_t expertOwner = 0; expertOwner < shape.ep; ++expertOwner) {
+        uint32_t dispatchCursor = 0;
+        for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
+            uint32_t globalExpert = expertOwner * shape.expertPerRank + localExpert;
+            for (uint32_t src = 0; src < shape.ep; ++src) {
+                auto &routes = (*routesBySrcExpert)[src][globalExpert];
+                uint32_t effectiveRows =
+                    ClampRowsToCapacity(dispatchCursor, static_cast<uint32_t>(routes.size()), shape.maxOutputSize);
+                for (uint32_t row = effectiveRows; row < routes.size(); ++row) {
+                    const RouteRef &route = routes[row];
+                    (*expandedBySrc)[src][static_cast<size_t>(route.token) * shape.topK + route.slot] =
+                        static_cast<int32_t>(shape.maxOutputSize);
+                }
+                dispatchCursor += effectiveRows;
+            }
+        }
+    }
 }
 
 inline int32_t EffectiveRowsForTokenOwner(const DispatchCombineTileShape &shape, const CpuGoldenData &golden,
@@ -567,7 +594,9 @@ inline CpuGoldenData ComputeCpuGolden(const DispatchCombineTileArgs &args, const
         for (uint32_t src = 0; src < shape.ep; ++src) {
             golden.prevSumBeforeRank[static_cast<size_t>(src) * shape.expertPerRank + localExpert] =
                 static_cast<int32_t>(beforeRank);
-            uint32_t rows = static_cast<uint32_t>(routesBySrcExpert[src][globalExpert].size());
+            uint32_t rows = golden_detail::ClampRowsToCapacity(
+                dispatchCursor, static_cast<uint32_t>(routesBySrcExpert[src][globalExpert].size()),
+                shape.maxOutputSize);
             beforeRank += rows;
             dispatchCursor += rows;
         }
@@ -585,7 +614,10 @@ inline CpuGoldenData ComputeCpuGolden(const DispatchCombineTileArgs &args, const
                 static_cast<uint32_t>(
                     golden.prevSumBeforeRank[static_cast<size_t>(src) * shape.expertPerRank + localExpert]);
             const auto &routes = routesBySrcExpert[src][globalExpert];
-            for (uint32_t row = 0; row < routes.size(); ++row) {
+            uint32_t rows = dstStart >= shape.maxOutputSize ?
+                                0U :
+                                std::min(static_cast<uint32_t>(routes.size()), shape.maxOutputSize - dstStart);
+            for (uint32_t row = 0; row < rows; ++row) {
                 uint32_t outRow = dstStart + row;
                 uint32_t packedRow = routes[row].packedRow;
                 for (uint32_t col = 0; col < shape.k; ++col) {
@@ -605,7 +637,9 @@ inline CpuGoldenData ComputeCpuGolden(const DispatchCombineTileArgs &args, const
             uint32_t globalExpert = dst * shape.expertPerRank + localExpert;
             for (uint32_t src = 0; src < shape.ep; ++src) {
                 const auto &routes = routesBySrcExpert[src][globalExpert];
-                for (uint32_t row = 0; row < routes.size(); ++row) {
+                uint32_t rows = golden_detail::ClampRowsToCapacity(
+                    dstDispatchCursor, static_cast<uint32_t>(routes.size()), shape.maxOutputSize);
+                for (uint32_t row = 0; row < rows; ++row) {
                     const golden_detail::RouteRef &route = routes[row];
                     int32_t dstPackedRow =
                         expandedBySrc[src][static_cast<size_t>(route.token) * shape.topK + route.slot];
@@ -623,7 +657,7 @@ inline CpuGoldenData ComputeCpuGolden(const DispatchCombineTileArgs &args, const
                         ptrDBySrc[src][static_cast<size_t>(dstPackedRow) * shape.k + col] = value;
                     }
                 }
-                dstDispatchCursor += routes.size();
+                dstDispatchCursor += rows;
             }
         }
     }
