@@ -33,6 +33,10 @@
   skipped route counts, and non-overlap evidence.
 - Activation evidence: blocked. The valid path still reports `activation_active_aiv_workers=1`; this does not satisfy the
   M3O.4 activation worker acceptance requirement.
+- Additional diagnosis: a non-overlap completion-edge experiment that made AIC wait
+  `kM3N4ActivationToGmm2Flag` after AIV activation did not resolve the hang. Both the scalar row probe path and the
+  existing PTO vector activation helper path timed out before completion, so the blocker is earlier than the
+  activation-to-GMM2 consumer edge.
 
 ## Evidence
 
@@ -53,6 +57,18 @@
 - Activation probe summary: debug-stop 41 and 42 passed, while later probes around the real row loop / post-compute sync
   path hung or were unsafe. Probe 44, which skips activation compute, and probe 46, which limits to the zero-quant path,
   passed. The current source keeps the correctness path on coarse scalar activation.
+- Follow-up diagnosis on June 1, 2026:
+  - Red signal: `/tmp/m3o4-red-small-20260601-140016.log` exited 42 because correctness passed but
+    `activation_active_aiv_workers=1`, proving the acceptance failure remains observable.
+  - Non-overlap AIV activation plus `ActivationToGmm2` wait experiment:
+    `/tmp/m3o4-small-aiv-shard-20260601-140732.log` timed out with exit 124.
+  - Scalar activation probes: debug-stop 45 (`/tmp/m3o4-probe-45-20260601-141214.log`) and debug-stop 47
+    (`/tmp/m3o4-probe-47-20260601-141409.log`) timed out, while 41/42/44/46 returned 0.
+  - PTO helper experiment: full small (`/tmp/m3o4-small-pto-shard-20260601-141807.log`) and debug-stop 43
+    (`/tmp/m3o4-probe-43-pto-20260601-142346.log`) timed out. The current source was restored to the coarse
+    activation path afterward.
+  - Recovery sanity: rebuild exited 0 and `/tmp/m3o4-small-recovered-sanity-20260601-142734.log` exited 0 with
+    `final_output.err_count=0` and `activation_active_aiv_workers=1`.
 
 ## Delta And Handoff
 

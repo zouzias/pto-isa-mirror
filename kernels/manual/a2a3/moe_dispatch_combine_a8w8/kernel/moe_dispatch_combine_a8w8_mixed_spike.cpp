@@ -323,6 +323,11 @@ AICORE inline bool M3NDispatchDebugProbeEnabled(uint32_t debugStopStage)
     return (debugStopStage >= 11U && debugStopStage <= 17U) || (debugStopStage >= 18U && debugStopStage <= 21U);
 }
 
+AICORE inline bool M3OActivationShardDebugProbeEnabled(uint32_t debugStopStage)
+{
+    return debugStopStage >= 41U && debugStopStage <= 56U;
+}
+
 AICORE inline void M3NActivationAicWaitForAivSubphases(uint32_t debugStopStage,
                                                        moe_dispatch_combine_a8w8::ShapeConfig shape)
 {
@@ -1979,6 +1984,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
     bool m3n6Gmm1ActivationOverlap = M3N6Gmm1ActivationOverlapEnabled(debugStopStage, overlapMode, shape);
     bool m3n7ActivationGmm2Overlap = M3N7ActivationGmm2OverlapEnabled(debugStopStage, overlapMode, shape);
     bool m3n8Gmm2CombineOverlap = M3N8Gmm2CombineOverlapEnabled(debugStopStage, overlapMode, shape);
+    bool m3oActivationShardDebugProbe = M3OActivationShardDebugProbeEnabled(debugStopStage);
     M3NDispatchAicWaitForAivSubphases(debugStopStage, m3n5DispatchGmm1Overlap, shape);
     if (M3NDispatchDebugProbeEnabled(debugStopStage)) {
         pto::SYNCALL<pto::SyncCoreType::Mix>();
@@ -2200,6 +2206,13 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
     if (!m3n6Gmm1ActivationOverlap) {
         moe_dispatch_combine_a8w8::M3N4WaitV2C<moe_dispatch_combine_a8w8::kM3N4Gmm1EpilogueToActivationFlag>();
         M3N6WaitAllGmm1SyncGroupsReadyGm(shape, workspace, layout);
+        if (m3oActivationShardDebugProbe) {
+            if (get_block_idx() == 0) {
+                M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 4U,
+                                   static_cast<int32_t>(debugStopStage));
+            }
+            return;
+        }
     }
     if (debugStopStage == 3U) {
         return;
@@ -2560,33 +2573,28 @@ AICORE inline int8_t M2FusedQuantizeToInt8Scalar(float value, float scale)
     return static_cast<int8_t>(quant);
 }
 
-AICORE inline void M2FusedRunActivationQuantRowScalar(moe_dispatch_combine_a8w8::ShapeConfig shape,
-                                                      M2WorkspaceViewDevice workspaceView, uint32_t globalRow,
-                                                      float routingScale, uint32_t gmm2RowStride)
+AICORE inline void M2FusedComputeSwigluRowScalar(moe_dispatch_combine_a8w8::ShapeConfig shape,
+                                                 M2WorkspaceViewDevice workspaceView, uint32_t globalRow,
+                                                 float routingScale)
 {
     uint32_t w1Cols = shape.intermediateSize * 2U;
-    float maxAbs = 0.0f;
     for (uint32_t col = 0; col < shape.intermediateSize; ++col) {
         float gate = workspaceView.gmm1Out[static_cast<uint64_t>(globalRow) * w1Cols + col] * routingScale;
         float up = workspaceView.gmm1Out[static_cast<uint64_t>(globalRow) * w1Cols + shape.intermediateSize + col] *
                    routingScale;
         float value = M2FusedSigmoidScalar(gate) * up;
         workspaceView.swigluOut[static_cast<uint64_t>(globalRow) * shape.intermediateSize + col] = value;
-        float absValue = M2FusedAbsFloat(value);
-        if (absValue > maxAbs) {
-            maxAbs = absValue;
-        }
     }
-    float scale = maxAbs == 0.0f ? 1.0f : maxAbs / 127.0f;
-    workspaceView.gmm2PerTokenScale[globalRow] = scale;
-    __gm__ int8_t *dst = workspaceView.gmm2InputInt8 + static_cast<uint64_t>(globalRow) * gmm2RowStride;
-    for (uint32_t col = 0; col < shape.intermediateSize; ++col) {
-        float value = workspaceView.swigluOut[static_cast<uint64_t>(globalRow) * shape.intermediateSize + col];
-        dst[col] = M2FusedQuantizeToInt8Scalar(value, scale);
-    }
-    for (uint32_t col = shape.intermediateSize; col < gmm2RowStride; ++col) {
-        dst[col] = 0;
-    }
+}
+
+AICORE inline void M2FusedRunActivationQuantRowScalar(moe_dispatch_combine_a8w8::ShapeConfig shape,
+                                                      M2WorkspaceViewDevice workspaceView, uint32_t globalRow,
+                                                      float routingScale, uint32_t gmm2RowStride)
+{
+    M2FusedComputeSwigluRowScalar(shape, workspaceView, globalRow, routingScale);
+    InvalidateGmCacheLines(workspaceView.swigluOut + static_cast<uint64_t>(globalRow) * shape.intermediateSize,
+                           static_cast<uint32_t>(shape.intermediateSize * sizeof(float)));
+    M2RequantizeSwigluRowPto(shape, workspaceView, globalRow, gmm2RowStride);
 }
 
 AICORE inline void M2FusedRunActivationQuantRowScalarProbe(moe_dispatch_combine_a8w8::ShapeConfig shape,
@@ -2605,6 +2613,38 @@ AICORE inline void M2FusedRunActivationQuantRowScalarProbe(moe_dispatch_combine_
         for (uint32_t col = shape.intermediateSize; col < gmm2RowStride; ++col) {
             dst[col] = 0;
         }
+        return;
+    }
+    if (probeMode >= 4U && probeMode <= 8U) {
+        for (uint32_t col = 0; col < shape.intermediateSize; ++col) {
+            float gate = workspaceView.gmm1Out[static_cast<uint64_t>(globalRow) * w1Cols + col];
+            float up = workspaceView.gmm1Out[static_cast<uint64_t>(globalRow) * w1Cols + shape.intermediateSize + col];
+            float value = routingScale;
+            if (probeMode == 5U) {
+                value = gate;
+            } else if (probeMode == 6U) {
+                value = gate * routingScale;
+            } else if (probeMode == 7U) {
+                value = up;
+            } else if (probeMode == 8U) {
+                value = gate + up;
+            }
+            workspaceView.swigluOut[static_cast<uint64_t>(globalRow) * shape.intermediateSize + col] = value;
+        }
+        return;
+    }
+    if (probeMode == 9U) {
+        M2FusedComputeSwigluRowScalar(shape, workspaceView, globalRow, routingScale);
+        return;
+    }
+    if (probeMode == 10U || probeMode == 11U) {
+        for (uint32_t col = 0; col < shape.intermediateSize; ++col) {
+            float value = probeMode == 10U ? 0.0f : routingScale;
+            workspaceView.swigluOut[static_cast<uint64_t>(globalRow) * shape.intermediateSize + col] = value;
+        }
+        InvalidateGmCacheLines(workspaceView.swigluOut + static_cast<uint64_t>(globalRow) * shape.intermediateSize,
+                               static_cast<uint32_t>(shape.intermediateSize * sizeof(float)));
+        M2RequantizeSwigluRowPto(shape, workspaceView, globalRow, gmm2RowStride);
         return;
     }
     float maxAbs = 0.0f;
@@ -3369,7 +3409,9 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         return;
     }
     bool m3nActivationEnabled = debugStopStage < 100U && M3NFusedDispatchScratchFits(shape);
-    bool m3nAicActivationScalar = m3nActivationEnabled && !m3n6Gmm1ActivationOverlap;
+    bool m3oActivationShardDebugProbe = M3OActivationShardDebugProbeEnabled(debugStopStage);
+    bool m3nAicActivationScalar =
+        m3nActivationEnabled && !m3n6Gmm1ActivationOverlap && !m3oActivationShardDebugProbe;
     if (m3n6Gmm1ActivationOverlap) {
         if (debugStopStage == 2U) {
             return;
@@ -3505,7 +3547,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
             if (activeActivationWorker && debugStopStage != 44U) {
                 uint32_t activationMaxRows = debugStopStage == 45U ? 1U : 0xFFFFFFFFU;
                 uint32_t activationProbeMode = 0U;
-                if (debugStopStage >= 46U && debugStopStage <= 48U) {
+                if (debugStopStage >= 46U && debugStopStage <= 56U) {
                     activationMaxRows = 1U;
                     activationProbeMode = debugStopStage - 45U;
                 }
@@ -3516,7 +3558,19 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                                              syncGroupCount, true);
             }
             M3NDispatchAivOnlyPhaseSync();
-            if (debugStopStage >= 43U && debugStopStage <= 48U) {
+            if (debugStopStage >= 43U && debugStopStage <= 56U) {
+                if (IsM2FusedMainAiv()) {
+                    M3NActivationLaneSummary activationSummary =
+                        M3NAggregateActivationLaneDebug(localPeer, logicalAivCount);
+                    StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 0U,
+                                   static_cast<int32_t>(activationSummary.activeWorkers));
+                    StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 1U,
+                                   static_cast<int32_t>(activationSummary.rowsProcessed));
+                    StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 7U,
+                                   activationSummary.activeWorkers > 0U ? 1 : 0);
+                    StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 15U,
+                                   static_cast<int32_t>(activationSummary.activeWorkerMask));
+                }
                 return;
             }
             if (IsM2FusedMainAiv()) {

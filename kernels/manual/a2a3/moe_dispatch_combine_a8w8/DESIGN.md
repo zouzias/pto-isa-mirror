@@ -1792,6 +1792,29 @@ counter/timeline 说明每个 expert、sync-group、tile、sub-tile 由谁生产
 - activation ready 只能在对应 row/sync group 全完成后发布；未打开 overlap 时也要如实记录 coarse/barrier path。
 - restore 保持 8 AIV token shard，但新增 per-worker token count、route count、skipped route count 和 non-overlap 证据。
 
+当前定位记录（2026-06-01，issue `M3O4-ACTIVATION-SHARD-HANG`）：
+
+- RED 信号已复现：required small case correctness pass 且 `final_output.err_count=0`，但
+  `activation_active_aiv_workers=1`，所以失败点是 activation 多 AIV worker 验收，不是输出正确性。
+- 早期 `--aiv-blocks` 直接探测证据无效：正常非 overlap 路径下
+  `m3nAicActivationScalar = m3nActivationEnabled && !m3n6Gmm1ActivationOverlap`，而
+  `M3N6Gmm1ActivationOverlapEnabled(...)` 返回 false，导致 AIV activation shard 分支不可达。
+- 已加 debug-only gate 强制进入 AIV activation shard 并让 AIC 在 GMM1 完成后提前返回，用于隔离 AIC scalar
+  activation、GMM2 和 restore 干扰；41/42/44/46 通过，说明外层等待、skip-compute shell 和 counter 聚合可达。
+- 43 full shard compute、45 单行 full activation、47 单行 gate/up + scalar maxAbs、48 单行 sigmoid 相关路径均 timeout；
+  49 routingScale、50 read gate、51 gate*routingScale、52 read up、53 gate+up 通过；54 sigmoid*up、55/56 PTO
+  requant 边界 timeout。
+- 已尝试并排除：补 `ActivationToGmm2` completion edge 不能解 hang；改从 `gmm1AccInt32 + scale1Uint64`
+  直接计算不能解 hang；PTO vector activation helper / hybrid scalar SwiGLU + PTO requant 也 timeout。
+- 当前排除项：不是 Catlass/AscendC fallback；不是 coarse scalar correctness；不是 restore/combine worker policy；
+  不是 `gmm1Out` 完全不可读；不是 routingScale/gate/up 基础读写；不是单纯缺少 activation 到 GMM2 的 consumer
+  同步边。
+- 当前最可疑点：AIV shard 多 logical worker 进入 scalar sigmoid、row max/reduction、quant 或 PTO requant helper
+  后触发资源/同步冲突；下一步应在 debug-only 模式下强制只让 logical activation worker 0 执行，区分“多 worker
+  并发冲突”和“单 worker 内部 scalar/PTO 序列本身挂”。
+- 在该 issue 关闭前，M3O.4 只能保持 coarse scalar activation 正确性路径，`activation_active_aiv_workers=1`
+  不满足 activation 验收；M3O.6 不得重新打开 GMM1 -> activation 或 activation -> GMM2 overlap。
+
 验收：
 
 - 统一 small/large 两个 case 都 correctness pass。
