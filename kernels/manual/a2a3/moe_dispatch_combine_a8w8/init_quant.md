@@ -7,7 +7,8 @@
 FFN 4097 的 active 多 AIV init-quant 路线。
 
 **Architecture:** 前重排采用 count + prefix + direct expert-major scatter。当前只对齐 FFN init-routing 的
-metadata/payload contract，不追踪 FFN 内部重排实现。
+metadata/payload contract，不追踪 FFN 内部重排实现。VBS/VMS/SortOut 不进入 a8w8 active 方案、任务拆分或验收门禁；
+保留它们只作为 FFN 参考资料里的历史实现说明。
 该路线必须产出等价的 metadata 和 payload：`expandedRowIdx`、
 `tokenPerExpertMatrix`、`cumsumMM`、`preSumBeforeRank`、`dispatchPayload`、`dispatchScale`、
 `gmm1InputInt8`、`routingPerTokenScale`。性能收口聚焦 direct scatter 多 AIV 和 PTO Vec quant。
@@ -142,7 +143,7 @@ dispatchScale[packedRow]
 - expert id 范围有限，count + prefix + direct scatter 是 O(M * topK)，避免先构造独立 order table 再二次搬运。
 - 最初慢点来自 active worker=1 和 scalar quant；checkpoint 后 active worker 已打开，当前剩余主风险是 scalar
   quant 和串行控制面，不是 direct scatter 语义本身。
-- FFN 内部重排细节不是 MegaMoE 必须语义；a8w8 当前任务中不实现、不评估。
+- FFN 内部 VBS/VMS/SortOut 不是 MegaMoE 必须语义；a8w8 当前任务中不实现、不评估、不设置决策门。
 
 ## 7. Implementation Tasks
 
@@ -313,8 +314,8 @@ fused direct-pack PTO Vec quant。raw `vector_dup` 低 UB probe 已能返回，�
 | 102301 | route probe before Vec/UB work | pass | 进入 route probe 本身可返回 |
 | 87 | no-sync / no-Vec early return | pass | mixed kernel 不做最终 `SyncAll` 也可返回；no-sync 本身不是 timeout 原因 |
 | 82 | no-sync raw `vector_dup` low UB | pass | raw UB + vector_dup 可返回；不是所有 vector 指令都卡死 |
-| 83 | no-sync PTO Tile `TASSIGN` only | timeout / exit 124 | 仅引入 PTO Tile/TASSIGN 就无法返回 |
-| 86 | no-sync PTO Tile `SetValue` low UB | timeout / exit 124 | direct UB 写经 PTO Tile wrapper 仍无法返回 |
+| 83 | no-sync PTO Tile `TASSIGN` only | pass after `Tile::assignData` uses `PTO_INTERNAL` | PTO Tile/TASSIGN 最小卡点已解除 |
+| 86 | no-sync PTO Tile `SetValue` low UB | pass after `Tile` small methods use `PTO_INTERNAL` | direct UB 写经 PTO Tile wrapper 的最小卡点已解除 |
 | 88 | no-sync basic PTO Vec `TEXPANDS/TSTORE` | timeout / exit 124 | 去掉最终 mixed `SyncAll` 后仍卡住 |
 | 89 | early basic Vec probe | timeout / signal 15 cleanup | 只加基础 Vec store probe 仍会卡住 |
 | 102305 | `TEXPANDS` + UB Vec op on main AIV | timeout / signal 15 cleanup | 去掉 route quant 主体后仍会卡住 |
@@ -323,9 +324,9 @@ fused direct-pack PTO Vec quant。raw `vector_dup` 低 UB probe 已能返回，�
 | 102313 | all-lane basic Vec probe | timeout / signal 15 cleanup | 不是 main AIV 单 lane 特例 |
 | 102305 | raw `vector_dup` 替换 `TEXPANDS` | timeout / signal 15 cleanup | raw macro 也不能解除卡住，临时代码已撤回 |
 
-结论：刚才的“卡住”还没有解决；当前证据进一步指向 fused mixed AIV 早期路径里的 PTO
-`Tile`/`TASSIGN` wrapper，而不是精度错误、peer-window `TSTORE`、高 UB 地址、main AIV 单 lane 或 no-sync 返回机制。
-当前可用 correctness 路径仍是 scalar fallback。
+结论：刚才的“卡住”解决了 PTO Tile 构造、`TASSIGN` 和 `SetValue` 最小层，没有解决完整 PTO Vec route quant。当前证据进一步指向
+fused mixed AIV 早期路径里的 PTO Vec `TEXPANDS/TSTORE` 或其 wrapper/codegen 路径，而不是精度错误、peer-window
+`TSTORE`、高 UB 地址、main AIV 单 lane 或 no-sync 返回机制。当前可用 correctness 路径仍是 scalar fallback。
 
 目标 helper 语义：
 
@@ -515,7 +516,8 @@ M3O 前重排收口必须同时满足：
 
 ## 10. Handoff Notes
 
-- 不追踪 FFN 内部重排实现。先把 direct scatter 的 active worker 和 vector quant 做实。
+- 不追踪 FFN 内部重排实现；VBS/VMS/SortOut 不作为 a8w8 前重排任务。先把 direct scatter 的 active worker 和
+  vector quant 做实。
 - 不要把 FFN 的具体 `BLOCK_NUM=20`、`aivNumInitRouting=40`、UB 常量硬搬到 a8w8。
 - 不要用 launch AIV 数证明 active 并行；必须由 worker counter / worker mask / processed rows 证明。
 - 前重排单阶段验证不应受 M3O.4 activation shard hang 影响；使用 debug-stop 11/12/15/16/17 截断。

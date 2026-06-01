@@ -1631,7 +1631,7 @@ AICORE inline void M3NRoutePackQuantLocalShardScalar(moe_dispatch_combine_a8w8::
                            static_cast<uint32_t>(shape.m * shape.topK * sizeof(int32_t)));
 }
 
-AICORE inline void M2FusedBasicVecProbe(__gm__ int32_t *stageStatus, uint32_t slot, int32_t value)
+PTO_INTERNAL void M2FusedBasicVecProbe(__gm__ int32_t *stageStatus, uint32_t slot, int32_t value)
 {
     using ProbeTile = pto::Tile<pto::TileType::Vec, int32_t, 1, 16, pto::BLayout::RowMajor, 1, 16>;
     ProbeTile probeTile;
@@ -1644,7 +1644,7 @@ AICORE inline void M2FusedBasicVecProbe(__gm__ int32_t *stageStatus, uint32_t sl
     WaitStoreTileReusable();
 }
 
-AICORE inline void M2FusedSetValueProbe(__gm__ int32_t *stageStatus, uint32_t slot, int32_t value, uint64_t ubAddr)
+PTO_INTERNAL void M2FusedSetValueProbe(__gm__ int32_t *stageStatus, uint32_t slot, int32_t value, uint64_t ubAddr)
 {
     M2RouteRowStatTile probeTile;
     TASSIGN(probeTile, ubAddr);
@@ -1653,7 +1653,7 @@ AICORE inline void M2FusedSetValueProbe(__gm__ int32_t *stageStatus, uint32_t sl
     M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, slot, value);
 }
 
-AICORE inline void M2FusedExpandOnlyProbe(__gm__ int32_t *stageStatus, uint32_t slot, int32_t value, uint64_t ubAddr)
+PTO_INTERNAL void M2FusedExpandOnlyProbe(__gm__ int32_t *stageStatus, uint32_t slot, int32_t value, uint64_t ubAddr)
 {
     using ProbeTile = pto::Tile<pto::TileType::Vec, int32_t, 1, 16, pto::BLayout::RowMajor, 1, 16>;
     ProbeTile probeTile;
@@ -1663,11 +1663,33 @@ AICORE inline void M2FusedExpandOnlyProbe(__gm__ int32_t *stageStatus, uint32_t 
     M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, slot, value);
 }
 
-AICORE inline void M2FusedAssignOnlyProbe(__gm__ int32_t *stageStatus, uint32_t slot, int32_t value, uint64_t ubAddr)
+PTO_INTERNAL void M2FusedAssignOnlyProbe(__gm__ int32_t *stageStatus, uint32_t slot, int32_t value, uint64_t ubAddr)
 {
     M2RouteRowStatTile probeTile;
     TASSIGN(probeTile, ubAddr);
     M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, slot, value);
+}
+
+PTO_INTERNAL void M2FusedTileConstructOnlyProbe(__gm__ int32_t *stageStatus, uint32_t slot, int32_t value)
+{
+    M2RouteRowStatTile probeTile;
+    probeTile.SetKAligned(true);
+    int32_t recorded = probeTile.GetKAligned() ? value : -value;
+    M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, slot, recorded);
+}
+
+struct M2FusedPlainVecTileLike {
+    __ubuf__ float *data;
+    bool isKAligned;
+};
+
+PTO_INTERNAL void M2FusedPlainVecTileLikeProbe(__gm__ int32_t *stageStatus, uint32_t slot, int32_t value)
+{
+    M2FusedPlainVecTileLike probe;
+    probe.data = reinterpret_cast<__ubuf__ float *>(kM2FusedVecProbeUbAddr);
+    probe.isKAligned = true;
+    int32_t recorded = (probe.data != nullptr && probe.isKAligned) ? value : -value;
+    M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, slot, recorded);
 }
 
 AICORE inline void M2FusedRawVectorDupProbe(__gm__ int32_t *stageStatus, uint32_t slot, int32_t value, uint64_t ubAddr)
@@ -2040,7 +2062,17 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
         }
         return;
     }
-    if (earlyDebugStopStage >= 82U && earlyDebugStopStage <= 86U) {
+    if (earlyDebugStopStage == 77U || earlyDebugStopStage == 78U) {
+        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
+        if (get_block_idx() == 0) {
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 0U, kM2FusedFullMagic);
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 1U, static_cast<int32_t>(get_block_num()));
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 2U,
+                               static_cast<int32_t>(earlyDebugStopStage));
+        }
+        return;
+    }
+    if (earlyDebugStopStage >= 80U && earlyDebugStopStage <= 86U) {
         set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
         if (get_block_idx() == 0) {
             M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 0U, kM2FusedFullMagic);
@@ -3090,7 +3122,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         dsb(DSB_DDR);
         return;
     }
-    if (earlyDebugStopStage >= 82U && earlyDebugStopStage <= 86U) {
+    if (earlyDebugStopStage == 77U || earlyDebugStopStage == 78U) {
         set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
         if (IsM2FusedMainAiv()) {
             M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 0U, kM2FusedFullMagic);
@@ -3098,7 +3130,29 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                                static_cast<int32_t>(get_block_num() * get_subblockdim()));
             M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 2U,
                                static_cast<int32_t>(earlyDebugStopStage));
-            if (earlyDebugStopStage == 86U) {
+        }
+        if (earlyDebugStopStage == 77U) {
+            M2FusedPlainVecTileLikeProbe(earlyStageStatus, 5U + M2FusedLogicalAivId(), 77);
+        } else {
+            M2FusedTileConstructOnlyProbe(earlyStageStatus, 5U + M2FusedLogicalAivId(), 78);
+        }
+        pipe_barrier(PIPE_ALL);
+        dsb(DSB_DDR);
+        return;
+    }
+    if (earlyDebugStopStage >= 80U && earlyDebugStopStage <= 86U) {
+        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
+        if (IsM2FusedMainAiv()) {
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 0U, kM2FusedFullMagic);
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 1U,
+                               static_cast<int32_t>(get_block_num() * get_subblockdim()));
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 2U,
+                               static_cast<int32_t>(earlyDebugStopStage));
+            if (earlyDebugStopStage == 80U) {
+                M2FusedAssignOnlyProbe(earlyStageStatus, 5U, 80, kM2FusedVecProbeUbAddr);
+            } else if (earlyDebugStopStage == 81U) {
+                M2FusedTileConstructOnlyProbe(earlyStageStatus, 5U, 81);
+            } else if (earlyDebugStopStage == 86U) {
                 M2FusedSetValueProbe(earlyStageStatus, 5U, 86, kM2FusedVecProbeLowUbAddr);
             } else if (earlyDebugStopStage == 85U) {
                 M2FusedExpandOnlyProbe(earlyStageStatus, 5U, 85, kM2FusedVecProbeLowUbAddr);

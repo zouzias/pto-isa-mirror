@@ -805,8 +805,9 @@ offset 语义下，让已经 ready 的 expert group、sync group 或 return segm
 
 关于 dispatch 重排：token 的 expert-major 有序性由 `RoutePackQuantLocal` 按 `globalExpert -> row` offset
 直接 pack，再由 `GatherDispatchToGmm1Input` 按 `cumsumMM/preSumBeforeRank` 远端读 gather 完成。offset-table
-承担 row mapping 职责，当前不单独追踪 FFN 内部重排实现。因此 M3O.2 的 dispatch 多 AIV 只覆盖
-route/count/pack/gather 的 worker 分摊；任何要求补 FFN 内部重排实现的变更，都需先走 design-bug / 用户确认门禁。
+承担 row mapping 职责，当前不单独追踪 FFN 内部重排实现。FFN VBS/VMS/SortOut 只保留为参考资料中的实现事实，
+不进入 a8w8 active 方案、任务拆分或验收门禁。因此 M3O.2 的 dispatch 多 AIV 只覆盖 route/count/pack/gather
+的 worker 分摊。
 
 ### 6.1 MegaMoE overlap 执行视图
 
@@ -1538,7 +1539,7 @@ M2/M3 的设计、代码和验收输出里保持可追溯：
 | 五层切分是 rank/core/group/tile/L1-L0 | `ffn_partition_model=rank_core_group_tile_l1l0` 必须出现在 M2.8c/M3 结构化输出 | 只按 expert 切核，或只按 tile 解释所有同步 |
 | group 是 ready/sync 边界，不是 core ownership | `dispatchGroupReady`、`gmm1SyncGroupReady`、`activationSyncGroupReady`、`gmm2GroupReady` 表达依赖边 | “AIC0 负责 expert0” 这类固定 expert-to-core 分配 |
 | GMM tile 是 AIC 工作单元 | GMM task scheduler、multi-AIC evidence、L1/L0 tile policy 证明 tile ownership | 用单 AIC block 或 smoke shape 证明 GMM 已达目标 |
-| init_routing 在 `ffn.md` 是 route/row mapping/count/srcToDst/gather+quant 子系统；本项目用 offset-table pack+gather 承担 row mapping | M3O.2 的 dispatch 多 AIV 覆盖 route/count/pack/gather worker 分摊证据，不追踪 FFN 内部重排实现 | 把 PTO 简化误读成"必须补 FFN 内部重排"，或只把 `TGET` 循环并行化就声称 dispatch 多核 |
+| init_routing 在 `ffn.md` 是 route/row mapping/count/srcToDst/gather+quant 子系统；本项目用 offset-table pack+gather 承担 row mapping | M3O.2 的 dispatch 多 AIV 覆盖 route/count/pack/gather worker 分摊证据，不追踪 FFN 内部 VBS/VMS/SortOut | 把 PTO 简化误读成"必须补 FFN 内部重排"，或只把 `TGET` 循环并行化就声称 dispatch 多核 |
 | count 同步是 dispatch 的前置点对点协议 | `tokenPerExpertMatrix`、count ready、prefix/cumsum 必须先对齐，再 remote gather | 把 count/prefix 做成 host barrier 或临时 host copy |
 | SwiGLU 是 AIV 工作，按 sync group 粗细结合 | M2.5 固定 `swigluSyncGroups/dequantSum`，M3O.4/M3O.6 只打开 worker 分摊和 group overlap | 到 M3O 重排 activation row layout |
 | epilogue pipe 有 prefill/drain 生命周期 | M3O.4/M3O.5/M3O.7 要记录 SetFlag/Finalize 或等价 PTO pipe lifecycle evidence | 只看 final output pass，不证明 pipe 没有悬空/脏 flag |

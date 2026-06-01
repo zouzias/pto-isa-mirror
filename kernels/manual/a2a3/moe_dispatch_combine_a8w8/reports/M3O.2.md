@@ -90,11 +90,33 @@
   - debug-stop 102301 returned with `pass=true`.
   - debug-stop 87 (no-sync/no-Vec early return) returned with `pass=true`.
   - debug-stop 82 (raw `vector_dup` on low UB, no PTO Tile wrapper) returned with `pass=true`.
-- Negative controls:
-  - debug-stop 83 (PTO Tile `TASSIGN` only) timed out with external exit 124.
-  - debug-stop 86 (PTO Tile `SetValue` on low UB) timed out with external exit 124.
+  - debug-stop 83 (PTO Tile `TASSIGN` only) returned with `pass=true` after changing `Tile::assignData` to
+    `PTO_INTERNAL`.
+  - debug-stop 86 (PTO Tile `SetValue` on low UB) returned with `pass=true` after changing `Tile` constructors,
+    `assignData`, `SetValue`, and `GetValue` to `PTO_INTERNAL`.
+- Remaining / older negative controls:
   - debug-stop 88 (PTO `TEXPANDS/TSTORE` basic probe without final mixed `SyncAll`) timed out with exit 124.
   - debug-stop 102314 (low-UB `SetValue` plus final mixed `SyncAll`) timed out with exit 124.
 - Regression guard: `ffn-v3-small` debug-stop 12 returned with `pass=true`; route count, source-local
   `expandedRowIdx`, dispatch payload sample, and dispatch scale checks still match. Current valid quant path remains
   `route_quant_path=scalar`.
+
+## VBS/VMS Decision Update
+
+- User decision: do not use VBS/VMS for a8w8 init quant at this stage.
+- Scope update: VBS/VMS/SortOut remains documented only in FFN reference notes; it is not an a8w8 task, decision
+  gate, or acceptance condition.
+- Active direction remains count + prefix + direct expert-major scatter, with performance work focused on
+  multi-worker direct pack and PTO Vec route quant.
+
+## Init Quant PTO Vec Follow-up Probe
+
+- Fresh run: 2026-06-01 19:23-19:27 with `--first-device 4 --ndevices 7`.
+- Build: `ASCEND_HOME_PATH=/usr/local/Ascend/cann-8.5.0 cmake --build kernels/manual/a2a3/moe_dispatch_combine_a8w8/build --target moe_dispatch_combine_a8w8 --clean-first -j16`
+  exited 0.
+- `ffn-v3-small` debug-stop 86 exited 0 and reported `pass=true`, proving the minimal PTO Tile `SetValue` probe no
+  longer hangs.
+- `ffn-v3-small` debug-stop 88 timed out with external exit 124, so the full basic PTO Vec `TEXPANDS/TSTORE` probe is
+  still blocked. Do not enable `route_quant_path=pto_vec` yet.
+- `ffn-v3-small` debug-stop 83 and 12 both exited 0 with `pass=true`; debug-stop 12 still reports
+  `route_quant_path=scalar` and `route_quant_scalar_fallback_reason=mixed_fused_direct_pack_pto_vec_probe_timeout`.

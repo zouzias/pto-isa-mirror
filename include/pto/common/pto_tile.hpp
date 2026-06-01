@@ -1349,7 +1349,7 @@ public:
     }
 #endif
 private:
-    AICORE void assignData(TileDType data)
+    PTO_INTERNAL void assignData(TileDType data)
     {
         data_ = data;
     }
@@ -1431,21 +1431,21 @@ public:
     static constexpr auto PadVal = PadVal_;
     static constexpr CompactMode Compact = Compact_;
 
-    __tf__ AICORE void SetValue(const uint32_t offset, const DType val)
+    __tf__ PTO_INTERNAL void SetValue(const uint32_t offset, const DType val)
     {
         static_assert(Loc == TileType::Vec, "Location of tile must be Location::Vec.");
         __ubuf__ DType *ptr = (__ubuf__ DType *)__cce_get_tile_ptr(data_);
         *(ptr + offset) = val;
     }
 
-    __tf__ AICORE DType GetValue(const uint32_t offset)
+    __tf__ PTO_INTERNAL DType GetValue(const uint32_t offset)
     {
         static_assert(Loc == TileType::Vec, "Location of tile must be Location::Vec.");
         __ubuf__ DType *ptr = (__ubuf__ DType *)__cce_get_tile_ptr(data_);
         return *(ptr + offset);
     }
     // constructor for static shape
-    AICORE Tile()
+    PTO_INTERNAL Tile()
     {
 #if defined(__PTO_AUTO__) && !defined(__CPU_SIM)
         // we need to dummy-initialize the data_ member,
@@ -1457,8 +1457,8 @@ public:
 
     // constructor for both dimensions are runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
-    AICORE Tile(std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, unsigned> VR,
-                std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, unsigned> VC)
+    PTO_INTERNAL Tile(std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, unsigned> VR,
+                      std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, unsigned> VC)
     {
 #if defined(__PTO_AUTO__) && !defined(__CPU_SIM)
         data_ = __cce_tinit(data_);
@@ -1469,7 +1469,7 @@ public:
 
     // constructor for row dimension is runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
-    AICORE Tile(std::enable_if_t<(RowMask == DYNAMIC) && (ColMask > 0), unsigned> VR)
+    PTO_INTERNAL Tile(std::enable_if_t<(RowMask == DYNAMIC) && (ColMask > 0), unsigned> VR)
     {
 #ifdef __PTO_AUTO__
         data_ = __cce_tinit(data_);
@@ -1479,7 +1479,7 @@ public:
 
     // constructor for col dimension is runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
-    AICORE Tile(std::enable_if_t<(RowMask > 0) && (ColMask == DYNAMIC), unsigned> VC)
+    PTO_INTERNAL Tile(std::enable_if_t<(RowMask > 0) && (ColMask == DYNAMIC), unsigned> VC)
     {
 #ifdef __PTO_AUTO__
         data_ = __cce_tinit(data_);
@@ -1664,7 +1664,7 @@ public:
     }
 #endif
 private:
-    AICORE void assignData(TileDType data)
+    PTO_INTERNAL void assignData(TileDType data)
     {
         data_ = data;
     }
