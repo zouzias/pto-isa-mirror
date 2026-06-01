@@ -16,8 +16,6 @@ Address(`dst`) = Address(`src`) >> `SHIFT_MX_ADDR`
 
 ## Assembly Syntax
 
-PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
-
 ### IR Level 1 (SSA)
 
 TODO

@@ -22,8 +22,6 @@
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
-
 Tile/标量形式：
 
 ```text

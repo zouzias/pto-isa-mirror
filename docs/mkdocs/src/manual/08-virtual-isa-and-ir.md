@@ -1,11 +1,11 @@
-# 9. Virtual ISA and AS
+# 8. Virtual ISA and AS
 
-## 9.1 Scope and normative terms
+## 8.1 Scope and normative terms
 
 This chapter defines the contract between PTO Virtual ISA semantics and PTO AS/lowering pipelines.
 The terms `MUST`, `MUST NOT`, `SHOULD`, and `MAY` are normative.
 
-## 9.2 Layering model
+## 8.2 Layering model
 
 PTO uses a three-layer contract:
 
@@ -15,7 +15,7 @@ PTO uses a three-layer contract:
 
 Backend specialization MUST preserve Virtual ISA-observable behavior.
 
-## 9.3 AS object model
+## 8.3 AS object model
 
 A conforming PTO AS model SHOULD define:
 
@@ -25,7 +25,7 @@ A conforming PTO AS model SHOULD define:
 - operation schema (name, operands, results, attributes, effects)
 - explicit synchronization and memory effects
 
-## 9.4 Verifier boundary
+## 8.4 Verifier boundary
 
 Verification is split into two levels:
 
@@ -37,7 +37,7 @@ Verification is split into two levels:
 - MUST validate dtype/layout/location/shape tuples for selected backend profile.
 - MUST produce deterministic diagnostics for unsupported tuples.
 
-## 9.5 Lowering invariants
+## 8.5 Lowering invariants
 
 Lowering MUST preserve:
 
@@ -47,22 +47,21 @@ Lowering MUST preserve:
 
 Lowering MUST NOT silently reinterpret implementation-defined behavior as architecture-defined behavior.
 
-## 9.6 Source alignment rules
+## 8.6 Source alignment rules
 
 AS contracts MUST stay synchronized with:
 
 - `docs/isa/*.md` for semantic intent
 - `include/pto/common/pto_instr.hpp` for API-level shape
-- `docs/assembly/PTO-AS.md` for textual assembly-facing forms
 
-## 9.7 Compatibility policy
+## 8.7 Compatibility policy
 
 - Additive AS changes SHOULD be preferred.
 - Breaking AS contract changes MUST include versioning and migration notes.
 - Unknown required fields MUST fail verification.
 - Deprecated constructs SHOULD remain parseable for at least one compatibility window.
 
-## 9.8 Diagnostics requirements
+## 8.8 Diagnostics requirements
 
 AS/verifier diagnostics MUST include:
 
@@ -70,11 +69,11 @@ AS/verifier diagnostics MUST include:
 - expected vs actual contract dimensions
 - deterministic error class suitable for CI regression
 
-## 9.9 Minimum conformance scenarios
+## 8.9 Minimum conformance scenarios
 
 Conformance validation SHOULD include:
 
 - legal and illegal structural verifier tests
 - backend legality pass/fail matrix by profile
-- round-trip checks through PTO-AS and bytecode forms
+- round-trip checks through IR and bytecode forms
 - differential checks against per-instruction semantics

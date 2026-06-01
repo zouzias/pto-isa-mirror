@@ -1,11 +1,11 @@
-# 7. Instruction families and contracts
+# 6. Instruction families and contracts
 
-## 7.1 Scope
+## 6.1 Scope
 
 This chapter defines family-level normative contracts.
 Per-op normative details remain in `docs/isa/*.md`.
 
-## 7.2 Family taxonomy
+## 6.2 Family taxonomy
 
 PTO instruction families:
 
@@ -20,7 +20,7 @@ PTO instruction families:
 
 The source-synchronized inventory is maintained by `docs/isa/manifest.yaml`.
 
-## 7.3 Common family contract
+## 6.3 Common family contract
 
 Every instruction family MUST define:
 
@@ -31,7 +31,7 @@ Every instruction family MUST define:
 - diagnostics behavior for illegal use
 - implementation-defined boundaries
 
-## 7.4 Valid-region-first rule
+## 6.4 Valid-region-first rule
 
 Unless a specific instruction states otherwise:
 
@@ -39,44 +39,44 @@ Unless a specific instruction states otherwise:
 - out-of-domain results are unspecified
 - family contracts MUST state domain-composition rules for multi-input operations
 
-## 7.5 Family-level summaries
+## 6.5 Family-level summaries
 
-### 7.5.1 Synchronization and resource binding
+### 6.5.1 Synchronization and resource binding
 
 Includes `TSYNC`, `TASSIGN`, mode/config instructions.
 These operations define ordering or state-configuration effects and MUST preserve architecture ordering semantics.
 
-### 7.5.2 Elementwise and scalar variants
+### 6.5.2 Elementwise and scalar variants
 
 Includes arithmetic, bitwise, compare, select, unary math, and scalar-fused forms.
 Operations MUST define per-element behavior and mode-specific constraints.
 
-### 7.5.3 Reduce/expand families
+### 6.5.3 Reduce/expand families
 
 Includes row/column reductions and broadcast-like expansions.
 Operations MUST define axis semantics and domain compatibility.
 
-### 7.5.4 Memory families
+### 6.5.4 Memory families
 
 Includes load/store/prefetch and indexed gather/scatter forms.
 Operations MUST define mapping between tile domains and memory domains.
 
-### 7.5.5 Matrix families
+### 6.5.5 Matrix families
 
 Includes `TMATMUL*` and `TGEMV*` families.
 Contracts MUST define accumulation domain, operand-role legality, and precision-mode interactions.
 
-### 7.5.6 Movement/layout families
+### 6.5.6 Movement/layout families
 
 Includes extract/insert/reshape/transpose/fillpad-like transforms.
 Contracts MUST define index mapping and domain preservation rules.
 
-### 7.5.7 Complex/irregular families
+### 6.5.7 Complex/irregular families
 
 Includes sort/quant/partial/gather variants and other special operations.
 Contracts MUST explicitly identify implementation-defined portions.
 
-## 7.6 Documentation contract for per-op pages
+## 6.6 Documentation contract for per-op pages
 
 Each per-instruction page SHOULD follow Appendix B template sections:
 
@@ -88,7 +88,7 @@ Each per-instruction page SHOULD follow Appendix B template sections:
 - Implementation-defined behavior
 - Compatibility notes
 
-## 7.7 Coverage and synchronization policy
+## 6.7 Coverage and synchronization policy
 
 Family and instruction indexes MUST stay synchronized with:
 
