@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/parallel.hpp"
 #include "common.hpp"
 #include "nz_utils.hpp"
+#include <iostream>
 
 namespace pto {
 
@@ -154,19 +155,42 @@ __tf__ PTO_INLINE void TStore(typename GlobalData::DType __out__ *dst, typename 
         using D = typename GlobalData::DType;
         using S = typename TileData::DType;
 
-        ForEachNZElement<TileData>(validRow, validCol, [&](size_t r, size_t c, size_t tile_idx, size_t gd_idx) {
-            if constexpr (quantMode != QuantModeCPU_t::NoQuant) {
-                size_t scalarIndex = TileData::isRowMajor ? c : r;
-                uint64_t scalar = scalars[scalarIndex];
-                dst[gd_idx] = quantize_element<D, S, quantMode, applyRelu>(src[tile_idx], scalar);
-            } else {
-                S val = src[tile_idx];
-                if constexpr (applyRelu) {
-                    val = ReLU(val);
+        for (size_t r = 0; r < static_cast<size_t>(validRow); ++r) {
+            size_t i2 = r / static_cast<size_t>(gShape3);
+            size_t i3 = r % static_cast<size_t>(gShape3);
+
+            size_t subTileR = r / TileData::InnerRows;
+            size_t innerR = r % TileData::InnerRows;
+
+            for (size_t c = 0; c < static_cast<size_t>(validCol); ++c) {
+                size_t outerCol = c / static_cast<size_t>(gShape4);
+                size_t i0 = outerCol / static_cast<size_t>(gShape1);
+                size_t i1 = outerCol % static_cast<size_t>(gShape1);
+                size_t i4 = c % static_cast<size_t>(gShape4);
+
+                size_t subTileC = c / TileData::InnerCols;
+                size_t innerC = c % TileData::InnerCols;
+
+                size_t tile_idx = GetTileElementOffsetSubfractals<TileData>(subTileR, innerR, subTileC, innerC);
+                size_t gd_idx = i0 * static_cast<size_t>(gStride0) +
+                            i1 * static_cast<size_t>(gStride1) +
+                            i2 * static_cast<size_t>(gStride2) +
+                            i3 * static_cast<size_t>(gStride3) +
+                            i4 * static_cast<size_t>(gStride4);
+
+                if constexpr (quantMode != QuantModeCPU_t::NoQuant) {
+                    size_t scalarIndex = TileData::isRowMajor ? c : r;
+                    uint64_t scalar = scalars[scalarIndex];
+                    dst[gd_idx] = quantize_element<D, S, quantMode, applyRelu>(src[tile_idx], scalar);
+                } else {
+                    S val = src[tile_idx];
+                    if constexpr (applyRelu) {
+                        val = ReLU(val);
+                    }
+                    dst[gd_idx] = static_cast<D>(val);
                 }
-                dst[gd_idx] = static_cast<D>(val);
             }
-        });
+        }
     } else if (TileData::SFractal == SLayout::NoneBox) {
         StorePlain<GlobalData, TileData, quantMode, applyRelu>(dst, src, scalars, gShape0, gShape1, gShape2, gShape3,
                                                                gShape4, gStride0, gStride1, gStride2, gStride3,

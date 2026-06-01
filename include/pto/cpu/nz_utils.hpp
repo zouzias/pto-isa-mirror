@@ -2,6 +2,7 @@
 #define PTO_CPU_NZ_UTILS_HPP
 
 #include <cstddef>
+#include <iostream>
 
 namespace pto {
 
@@ -17,6 +18,19 @@ PTO_INLINE size_t GetNZGlobalOffset(size_t r, size_t c, size_t gShape4)
     size_t numBlocksCol = (gShape4 + NZ_INNER_COLS - 1) / NZ_INNER_COLS;
     size_t blockOffset = (blockRow * numBlocksCol + blockCol) * NZ_INNER_ROWS * NZ_INNER_COLS;
     size_t innerOffset = innerRow * NZ_INNER_COLS + innerCol;
+    if (r == 0 && c == 32) {
+        std::cout
+            << "offset(0,32)="
+            << blockOffset + innerOffset
+            << std::endl;
+    }
+
+    if (r == 16 && c == 0) {
+        std::cout
+            << "offset(16,0)="
+            << blockOffset + innerOffset
+            << std::endl;
+    }
     return blockOffset + innerOffset;
 }
 
@@ -30,6 +44,9 @@ PTO_INLINE void ForEachNZElement(int totalRows, int totalCols, Func &&func)
             size_t subTileC = c / TileData::InnerCols;
             size_t innerC = c % TileData::InnerCols;
             size_t tile_idx = GetTileElementOffsetSubfractals<TileData>(subTileR, innerR, subTileC, innerC);
+            if (r == 0 && c == 0) {
+                std::cout << "NZ totalCols = " << totalCols << std::endl;
+            }
             size_t gd_idx = GetNZGlobalOffset(r, c, totalCols);
             func(r, c, tile_idx, gd_idx);
         }

@@ -130,9 +130,32 @@ __tf__ AICORE void TLoad(typename TileData::TileDType __out__ dst, typename Glob
 
     // Filling data
     if constexpr (GlobalData::layout == pto::Layout::NZ) {
-        ForEachNZElement<TileData>(validRow, validCol, [&](size_t r, size_t c, size_t tile_idx, size_t gd_idx) {
-            dst[tile_idx] = getProperDataPart(src, gd_idx);
-        });
+        for (size_t r = 0; r < static_cast<size_t>(validRow); ++r) {
+            size_t i2 = r / static_cast<size_t>(gShape3);
+            size_t i3 = r % static_cast<size_t>(gShape3);
+
+            size_t subTileR = r / TileData::InnerRows;
+            size_t innerR = r % TileData::InnerRows;
+
+            for (size_t c = 0; c < static_cast<size_t>(validCol); ++c) {
+                size_t outerCol = c / static_cast<size_t>(gShape4);
+                size_t i0 = outerCol / static_cast<size_t>(gShape1);
+                size_t i1 = outerCol % static_cast<size_t>(gShape1);
+                size_t i4 = c % static_cast<size_t>(gShape4);
+
+                size_t subTileC = c / TileData::InnerCols;
+                size_t innerC = c % TileData::InnerCols;
+
+                size_t tile_idx = GetTileElementOffsetSubfractals<TileData>(subTileR, innerR, subTileC, innerC);
+                size_t gd_idx = i0 * static_cast<size_t>(gStride0) +
+                            i1 * static_cast<size_t>(gStride1) +
+                            i2 * static_cast<size_t>(gStride2) +
+                            i3 * static_cast<size_t>(gStride3) +
+                            i4 * static_cast<size_t>(gStride4);
+
+                dst[tile_idx] = getProperDataPart(src, gd_idx);
+            }
+        }
     } else if (TileData::SFractal == SLayout::NoneBox) {
         LoadPlain<GlobalData, TileData>(dst, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1,
                                         gStride2, gStride3, gStride4, validRow, validCol);
