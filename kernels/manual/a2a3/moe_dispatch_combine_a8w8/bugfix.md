@@ -13,7 +13,7 @@
 
 - `OVERLAP_MODE=on` cases could appear to hang after dispatch/GMM stages.
 - `on/skewed` and `on/zero-token` could have long periods without new log output.
-- A false hang can happen because `scripts/run_a3.sh` fixes `warmup_iters=3` and `measure_iters=5`; each fused iteration and verify step can take seconds, and logs only flush at stage or verify boundaries.
+- A false hang used to happen because `scripts/run_a3.sh` fixed `warmup_iters=3` and `measure_iters=5`; each fused iteration and verify step can take seconds, and logs only flush at stage or verify boundaries. The current run-script policy is `warmup_iters=0`, `measure_iters=1` for faster large-case validation.
 - A true hang risk is usually a rank waiting forever in a GM poll loop or at an MPI/HCCL barrier after another rank fails to advance.
 
 ### Key root-cause areas
@@ -121,7 +121,7 @@ When execution looks stuck:
   bash scripts/run_a3.sh --backend int8 --skip-build 1 --clean-build 0 --dry-run 0 --skip-kernel-launch 0 --overlap-mode on --case-name ffn-v3-4097 -pes 2 -M 4097 -K 128 -N 128 -topK 2 -expertPerPe 2 --max-output-size 8194
   ```
 
-- The process can look stuck for several minutes because `run_a3.sh` fixes `warmup_iters=3` and `measure_iters=5`, while each large fused iteration takes about 51 seconds on the current scalar/block0 GMM path.
+- Before the run-script policy change, the process could look stuck for several minutes because `run_a3.sh` fixed `warmup_iters=3` and `measure_iters=5`, while each large fused iteration takes about 51 seconds on the current scalar/block0 GMM path.
 - During the apparent hang, `ps` showed two rank processes at high CPU, not a sleeping `mpirun`/barrier wait.
 
 ### Evidence
@@ -131,12 +131,20 @@ When execution looks stuck:
   - `ffn-v3-4097`, `maxOutputSize=8194`, overlap on
   - both ranks `pass=true`
   - `e2e_us.avg` about `51,459,882 us`
-- Full `run_a3.sh` large on run passed:
+- Legacy full `run_a3.sh` large on run passed before the policy change:
   - `warmup_iters=3`, `measure_iters=5`
   - both ranks `pass=true`
   - rank0 `e2e_us.avg=50,875,830.3`
   - rank1 `e2e_us.avg=50,875,833.0`
   - rank1 reported `drop_triggered=true`, `dropped_rows=1`, which is the expected capacity-boundary behavior for `maxOutputSize=8194`.
+- Current `run_a3.sh` policy:
+  - `warmup_iters=0`, `measure_iters=1`
+- Current one-iteration `run_a3.sh` large on run passed after the policy change:
+  - `warmup_iters=0`, `measure_iters=1`
+  - both ranks `pass=true`
+  - rank0 `e2e_us.avg=51,709,331.3`
+  - rank1 `e2e_us.avg=51,709,336.7`
+  - rank1 reported `drop_triggered=true`, `dropped_rows=1`, expected for the `maxOutputSize=8194` boundary.
 
 ### Conclusion
 

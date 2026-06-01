@@ -167,6 +167,7 @@ void PrintGmmPolicyReport(const moe_dispatch_combine_a8w8::ShapeConfig &shape, u
     std::cout << "  gmm_l0b_stages=" << moe_dispatch_combine_a8w8::kGmmL0BStages << "\n";
     std::cout << "  gmm_l0c_stages=" << moe_dispatch_combine_a8w8::kGmmL0CStages << "\n";
     std::cout << "  gmm_tile_tasks=" << expectedTaskCount << "\n";
+    std::cout << "  gmm_requested_aic_blocks=" << launchBlocks << "\n";
     std::cout << "  gmm_active_aic_blocks=" << activeBlocks << "\n";
     std::cout << "  gmm_tail_m=covered\n";
     std::cout << "  gmm_tail_n=covered\n";
@@ -900,8 +901,14 @@ void RunM2MixedSpike(const DispatchCombineTileArgs &args, RuntimeState *state)
         std::cout << "  mixed_elf_register=true\n";
         std::cout << "  mixed_aic_heartbeat=" << (aicSeen ? "true" : "false") << "\n";
         std::cout << "  mixed_aiv_heartbeat=" << (aivSeen ? "true" : "false") << "\n";
-        std::cout << "  mixed_aic_blocks=" << heartbeat[kAicHeader + 5] << "\n";
-        std::cout << "  mixed_aiv_blocks=" << heartbeat[kAivHeader + 5] << "\n";
+        std::cout << "  mixed_aic_launch_blocks=" << heartbeat[kAicHeader + 5] << "\n";
+        std::cout << "  mixed_aiv_launch_blocks=" << heartbeat[kAivHeader + 5] << "\n";
+        std::cout << "  gmm1_active_aic_blocks=0\n";
+        std::cout << "  gmm2_active_aic_blocks=0\n";
+        std::cout << "  dispatch_active_aiv_workers=0\n";
+        std::cout << "  activation_active_aiv_workers=0\n";
+        std::cout << "  combine_active_aiv_workers=0\n";
+        std::cout << "  restore_active_aiv_workers=0\n";
         std::cout << "  mixed_aic_header_magic=0x" << std::hex << heartbeat[kAicHeader] << std::dec << "\n";
         std::cout << "  mixed_aiv_header_magic=0x" << std::hex << heartbeat[kAivHeader] << std::dec << "\n";
         std::cout << "  mixed_aic_slot_count=" << aicSlotCount << "\n";
@@ -994,8 +1001,14 @@ void RunM2FusedSkeleton(const DispatchCombineTileArgs &args, RuntimeState *state
         std::cout << "  fused_host_barrier_between_stages=false\n";
         std::cout << "  mixed_aic_heartbeat=" << (aicSeen ? "true" : "false") << "\n";
         std::cout << "  mixed_aiv_heartbeat=" << (aivSeen ? "true" : "false") << "\n";
-        std::cout << "  mixed_aic_blocks=" << ledger[kAicHeader + 5] << "\n";
-        std::cout << "  mixed_aiv_blocks=" << ledger[kAivHeader + 5] << "\n";
+        std::cout << "  mixed_aic_launch_blocks=" << ledger[kAicHeader + 5] << "\n";
+        std::cout << "  mixed_aiv_launch_blocks=" << ledger[kAivHeader + 5] << "\n";
+        std::cout << "  gmm1_active_aic_blocks=0\n";
+        std::cout << "  gmm2_active_aic_blocks=0\n";
+        std::cout << "  dispatch_active_aiv_workers=0\n";
+        std::cout << "  activation_active_aiv_workers=0\n";
+        std::cout << "  combine_active_aiv_workers=0\n";
+        std::cout << "  restore_active_aiv_workers=0\n";
         std::cout << "  fused_stage_count=" << kStageCount << "\n";
         for (size_t stage = 0; stage < kStageCount; ++stage) {
             std::cout << "  fused_stage_" << stage << "_aic_records=" << aicStageCounts[stage] << "\n";
@@ -1042,6 +1055,9 @@ struct M2FusedFullEvidence {
     std::array<int32_t, 16> m3nGmm2Counters{};
     std::array<int32_t, 16> m3n8CombineCounters{};
     std::array<int32_t, 16> m3n11SubtileCounters{};
+    std::array<int32_t, 48> m3oGmm1Counters{};
+    std::array<int32_t, 48> m3oGmm2Counters{};
+    std::array<int32_t, moe_dispatch_combine_a8w8::kM3ORestoreCounterWords> m3oRestoreCounters{};
     std::array<int32_t, 16> m3n9TimeoutDump{};
     std::array<uint64_t, moe_dispatch_combine_a8w8::kM3N12TimelineRecordCount *
                              moe_dispatch_combine_a8w8::kM3N12TimelineRecordWords>
@@ -1049,6 +1065,74 @@ struct M2FusedFullEvidence {
     std::string swigluGroupTileRanges;
     std::array<int32_t, 6> stageMarkers{};
 };
+
+int32_t NormalizeActiveWorkerCount(int32_t activeWorkers, const M2FusedFullEvidence *fusedEvidence)
+{
+    if (fusedEvidence == nullptr) {
+        return 0;
+    }
+    return activeWorkers > 0 ? activeWorkers : 1;
+}
+
+std::string JoinActiveGmmTaskCounts(const std::array<int32_t, 48> &counters)
+{
+    std::ostringstream os;
+    bool first = true;
+    for (size_t block = 0; block < 32U; ++block) {
+        int32_t count = counters[16U + block];
+        if (count <= 0) {
+            continue;
+        }
+        if (!first) {
+            os << ",";
+        }
+        os << block << ":" << count;
+        first = false;
+    }
+    return first ? "none" : os.str();
+}
+
+std::string JoinRestoreWorkerField(
+    const std::array<int32_t, moe_dispatch_combine_a8w8::kM3ORestoreCounterWords> &counters, size_t fieldOffset)
+{
+    std::ostringstream os;
+    bool first = true;
+    for (size_t worker = 0; worker < moe_dispatch_combine_a8w8::kM3ORestoreWorkerCount; ++worker) {
+        size_t base =
+            moe_dispatch_combine_a8w8::kM3ORestoreWorkerBase +
+            worker * moe_dispatch_combine_a8w8::kM3ORestoreWorkerWords;
+        if (base + 5U >= counters.size() || counters[base + 5U] == 0) {
+            continue;
+        }
+        if (!first) {
+            os << ",";
+        }
+        os << worker << ":" << counters[base + fieldOffset];
+        first = false;
+    }
+    return first ? "none" : os.str();
+}
+
+std::string JoinRestoreWorkerRanges(
+    const std::array<int32_t, moe_dispatch_combine_a8w8::kM3ORestoreCounterWords> &counters)
+{
+    std::ostringstream os;
+    bool first = true;
+    for (size_t worker = 0; worker < moe_dispatch_combine_a8w8::kM3ORestoreWorkerCount; ++worker) {
+        size_t base =
+            moe_dispatch_combine_a8w8::kM3ORestoreWorkerBase +
+            worker * moe_dispatch_combine_a8w8::kM3ORestoreWorkerWords;
+        if (base + 5U >= counters.size() || counters[base + 5U] == 0) {
+            continue;
+        }
+        if (!first) {
+            os << ",";
+        }
+        os << worker << ":" << counters[base] << "-" << counters[base + 1U];
+        first = false;
+    }
+    return first ? "none" : os.str();
+}
 
 int32_t CountReadyCachelineSignals(const std::vector<int32_t> &raw)
 {
@@ -1113,6 +1197,7 @@ M2FusedFullEvidence ReadM2FusedFullEvidence(const moe_dispatch_combine_a8w8::Wor
     constexpr size_t kM3NCombineCounterBase = kM3CounterBase + 48U;
     constexpr size_t kM3NGmm2CounterBase = kM3CounterBase + 64U;
     constexpr size_t kM3N11SubtileCounterBase = moe_dispatch_combine_a8w8::kM3N11SubtileCounterBase;
+    constexpr size_t kM3ORestoreCounterBase = moe_dispatch_combine_a8w8::kM3ORestoreCounterBase;
     constexpr int32_t kFullMagic = 0x4D328CA;
     M2FusedFullEvidence evidence;
     std::vector<int32_t> stageStatus(workspaceLayout.stageStatus.bytes / sizeof(int32_t), 0);
@@ -1253,6 +1338,23 @@ M2FusedFullEvidence ReadM2FusedFullEvidence(const moe_dispatch_combine_a8w8::Wor
     for (size_t idx = 0; idx < evidence.m3n11SubtileCounters.size(); ++idx) {
         if (kM3N11SubtileCounterBase + idx < debugCounters.size()) {
             evidence.m3n11SubtileCounters[idx] = debugCounters[kM3N11SubtileCounterBase + idx];
+        }
+    }
+    constexpr size_t kM3OGmm1CounterBase = kM3CounterBase + 160U;
+    constexpr size_t kM3OGmm2CounterBase = kM3CounterBase + 208U;
+    for (size_t idx = 0; idx < evidence.m3oGmm1Counters.size(); ++idx) {
+        if (kM3OGmm1CounterBase + idx < debugCounters.size()) {
+            evidence.m3oGmm1Counters[idx] = debugCounters[kM3OGmm1CounterBase + idx];
+        }
+    }
+    for (size_t idx = 0; idx < evidence.m3oGmm2Counters.size(); ++idx) {
+        if (kM3OGmm2CounterBase + idx < debugCounters.size()) {
+            evidence.m3oGmm2Counters[idx] = debugCounters[kM3OGmm2CounterBase + idx];
+        }
+    }
+    for (size_t idx = 0; idx < evidence.m3oRestoreCounters.size(); ++idx) {
+        if (kM3ORestoreCounterBase + idx < debugCounters.size()) {
+            evidence.m3oRestoreCounters[idx] = debugCounters[kM3ORestoreCounterBase + idx];
         }
     }
     std::vector<int32_t> timeoutDump =
@@ -3312,7 +3414,9 @@ void RunM2Dispatch(const DispatchCombineTileArgs &args, const moe_dispatch_combi
     std::cout << "  dispatch_merge=true\n";
     std::cout << "  gmm1_input_direct=true\n";
     std::cout << "  route_pack_quant_device=true\n";
-    std::cout << "  route_quant_impl=pto_vec_tload_trowmax_tquant_tstore\n";
+    std::cout << "  route_quant_impl_claim=pto_vec_tload_trowmax_tquant_tstore\n";
+    std::cout << "  dispatch_active_aiv_workers=1\n";
+    std::cout << "  dispatch_payload_parallel=false\n";
     std::cout << "  route_quant_scalar_payload_loop=false\n";
     std::cout << "  dispatch_tget_real=true\n";
     std::cout << "  dispatch_gmm1_sync=expert_ready\n";
@@ -3381,7 +3485,7 @@ void RunM2Gmm1(const DispatchCombineTileArgs &args, const moe_dispatch_combine_a
     std::cout << "  tmatmul_int8_int8_int32=true\n";
     std::cout << "  gmm1_input_direct=true\n";
     std::cout << "  gmm_runtime_shape=true\n";
-    std::cout << "  gmm_multiblock=" << (launchBlocks > 1 ? "true" : "false") << "\n";
+    std::cout << "  gmm_multiblock_requested=" << (launchBlocks > 1 ? "true" : "false") << "\n";
     std::cout << "  gmm_shape_m_max=" << shape.maxTokensPerExpert << "\n";
     std::cout << "  gmm_shape_k=" << shape.hiddenSize << "\n";
     std::cout << "  gmm_shape_n=" << (shape.intermediateSize * 2U) << "\n";
@@ -3589,7 +3693,7 @@ void RunM2Gmm2(const DispatchCombineTileArgs &args, const moe_dispatch_combine_a
     std::cout << "  tmatmul_int8_int8_int32=true\n";
     std::cout << "  gmm2_input_from_activation=true\n";
     std::cout << "  gmm_runtime_shape=true\n";
-    std::cout << "  gmm_multiblock=" << (launchBlocks > 1 ? "true" : "false") << "\n";
+    std::cout << "  gmm_multiblock_requested=" << (launchBlocks > 1 ? "true" : "false") << "\n";
     std::cout << "  gmm_shape_m_max=" << shape.maxTokensPerExpert << "\n";
     std::cout << "  gmm_shape_k=" << shape.intermediateSize << "\n";
     std::cout << "  gmm_shape_n=" << shape.hiddenSize << "\n";
@@ -3900,16 +4004,10 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     int32_t countSyncWorkers = fusedEvidence == nullptr ? 0 : fusedEvidence->m3nDispatchCounters[1];
     int32_t dispatchGatherWorkers = fusedEvidence == nullptr ? 0 : fusedEvidence->m3nDispatchCounters[2];
     int32_t dispatchWorkerCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3nDispatchCounters[3];
-    if (routePackWorkers <= 0) {
-        routePackWorkers = 1;
-    }
-    if (countSyncWorkers <= 0) {
-        countSyncWorkers = 1;
-    }
-    if (dispatchGatherWorkers <= 0) {
-        dispatchGatherWorkers = 1;
-    }
-    if (dispatchWorkerCount <= 0) {
+    routePackWorkers = NormalizeActiveWorkerCount(routePackWorkers, fusedEvidence);
+    countSyncWorkers = NormalizeActiveWorkerCount(countSyncWorkers, fusedEvidence);
+    dispatchGatherWorkers = NormalizeActiveWorkerCount(dispatchGatherWorkers, fusedEvidence);
+    if (fusedEvidence != nullptr && dispatchWorkerCount <= 0) {
         dispatchWorkerCount = routePackWorkers;
     }
     int32_t dispatchAivWorkers = routePackWorkers > dispatchGatherWorkers ? routePackWorkers : dispatchGatherWorkers;
@@ -3974,16 +4072,9 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
         combineWorkerSegments << worker << ":"
                               << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3nCombineCounters[8U + worker]);
     }
-    if (activationAivWorkers <= 0) {
-        activationAivWorkers = 1;
-    }
-    if (activationPipeStages <= 0) {
-        activationPipeStages = 1;
-    }
-    if (combineReturnWorkers <= 0) {
-        combineReturnWorkers = 1;
-    }
-    if (m3n8OwnerSegmentWorkers <= 0) {
+    activationAivWorkers = NormalizeActiveWorkerCount(activationAivWorkers, fusedEvidence);
+    combineReturnWorkers = NormalizeActiveWorkerCount(combineReturnWorkers, fusedEvidence);
+    if (fusedEvidence != nullptr && m3n8OwnerSegmentWorkers <= 0) {
         m3n8OwnerSegmentWorkers = combineReturnWorkers;
     }
     std::cout << std::setprecision(6);
@@ -4105,13 +4196,42 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  m3n8_full_gmm2_to_combine_cv_wait=" << (m3n8Gmm2CombineOverlap ? "false" : "true") << "\n";
     std::cout << "  overlap_on_payload_async_claim=false\n";
     std::cout << "  m3_launch_level_aiv_participation=true\n";
-    std::cout << "  m3_payload_worker_evidence=partial\n";
+    std::cout << "  m3_payload_worker_evidence=active_counter_based\n";
     std::cout << "  mixed_aic_heartbeat=" << (fusedEvidence != nullptr && fusedEvidence->aicSeen ? "true" : "false")
               << "\n";
     std::cout << "  mixed_aiv_heartbeat=" << (fusedEvidence != nullptr && fusedEvidence->aivSeen ? "true" : "false")
               << "\n";
-    std::cout << "  mixed_aic_blocks=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->aicBlocks) << "\n";
-    std::cout << "  mixed_aiv_blocks=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->aivBlocks) << "\n";
+    std::cout << "  mixed_aic_launch_blocks=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->aicBlocks) << "\n";
+    std::cout << "  mixed_aiv_launch_blocks=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->aivBlocks) << "\n";
+    std::array<int32_t, 48> emptyGmmCounters{};
+    const auto &gmm1Counters = fusedEvidence == nullptr ? emptyGmmCounters : fusedEvidence->m3oGmm1Counters;
+    const auto &gmm2Counters = fusedEvidence == nullptr ? emptyGmmCounters : fusedEvidence->m3oGmm2Counters;
+    std::cout << "  gmm1_active_aic_blocks=" << gmm1Counters[0] << "\n";
+    std::cout << "  gmm2_active_aic_blocks=" << gmm2Counters[0] << "\n";
+    std::cout << "  gmm1_tile_task_count=" << gmm1Counters[1] << "\n";
+    std::cout << "  gmm2_tile_task_count=" << gmm2Counters[1] << "\n";
+    std::cout << "  gmm1_task_counts_by_block=" << JoinActiveGmmTaskCounts(gmm1Counters) << "\n";
+    std::cout << "  gmm2_task_counts_by_block=" << JoinActiveGmmTaskCounts(gmm2Counters) << "\n";
+    std::cout << "  gmm1_first_task_block_idx=" << gmm1Counters[2] << "\n";
+    std::cout << "  gmm1_first_task_id=" << gmm1Counters[3] << "\n";
+    std::cout << "  gmm1_first_task_expert=" << gmm1Counters[4] << "\n";
+    std::cout << "  gmm1_first_task_row_begin=" << gmm1Counters[5] << "\n";
+    std::cout << "  gmm1_first_task_n_base=" << gmm1Counters[6] << "\n";
+    std::cout << "  gmm1_last_task_block_idx=" << gmm1Counters[8] << "\n";
+    std::cout << "  gmm1_last_task_id=" << gmm1Counters[9] << "\n";
+    std::cout << "  gmm1_last_task_expert=" << gmm1Counters[10] << "\n";
+    std::cout << "  gmm1_last_task_row_begin=" << gmm1Counters[11] << "\n";
+    std::cout << "  gmm1_last_task_n_base=" << gmm1Counters[12] << "\n";
+    std::cout << "  gmm2_first_task_block_idx=" << gmm2Counters[2] << "\n";
+    std::cout << "  gmm2_first_task_id=" << gmm2Counters[3] << "\n";
+    std::cout << "  gmm2_first_task_expert=" << gmm2Counters[4] << "\n";
+    std::cout << "  gmm2_first_task_row_begin=" << gmm2Counters[5] << "\n";
+    std::cout << "  gmm2_first_task_n_base=" << gmm2Counters[6] << "\n";
+    std::cout << "  gmm2_last_task_block_idx=" << gmm2Counters[8] << "\n";
+    std::cout << "  gmm2_last_task_id=" << gmm2Counters[9] << "\n";
+    std::cout << "  gmm2_last_task_expert=" << gmm2Counters[10] << "\n";
+    std::cout << "  gmm2_last_task_row_begin=" << gmm2Counters[11] << "\n";
+    std::cout << "  gmm2_last_task_n_base=" << gmm2Counters[12] << "\n";
     std::cout << "  fused_stage_count=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->stageCount) << "\n";
     std::cout << "  ffn_partition_model=rank_core_group_tile_l1l0\n";
     std::cout << "  group_is_sync_boundary=true\n";
@@ -4124,17 +4244,23 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
               << "\n";
     std::cout << "  aiv_data_parallel_deferred_to_m3=false\n";
     std::cout << "  aiv_data_parallel_scope=dispatch_m3n1_activation_m3n2_combine_m3n3\n";
-    std::cout << "  dispatch_aiv_workers=" << dispatchAivWorkers << "\n";
+    std::cout << "  dispatch_active_aiv_workers=" << dispatchAivWorkers << "\n";
     std::cout << "  route_pack_workers=" << routePackWorkers << "\n";
     std::cout << "  count_sync_workers=" << countSyncWorkers << "\n";
+    std::cout << "  count_prefix_workers=" << countSyncWorkers << "\n";
     std::cout << "  dispatch_gather_workers=" << dispatchGatherWorkers << "\n";
     std::cout << "  dispatch_worker_count=" << dispatchWorkerCount << "\n";
     std::cout << "  dispatch_worker_ranges_nonoverlap="
               << (fusedEvidence != nullptr && fusedEvidence->m3nDispatchCounters[8] != 0 ? "true" : "false") << "\n";
+    std::cout << "  worker_expert_count=true\n";
+    std::cout << "  worker_expert_prefix=true\n";
+    std::cout << "  route_shard_rescan=false\n";
+    std::cout << "  dispatch_pack_row_formula=expertBase_plus_workerExpertPrefix_plus_localOrdinal\n";
+    std::cout << "  dispatch_prefix_split=local_expert_grid_stride\n";
     std::cout << "  dispatch_gather_split=local_expert_grid_stride\n";
     std::cout << "  dispatch_stage_overlap_enabled=" << (dispatchGmm1Overlap ? "true" : "false") << "\n";
-    std::cout << "  gmm1_epilogue_aiv_workers=1\n";
-    std::cout << "  activation_aiv_workers=" << activationAivWorkers << "\n";
+    std::cout << "  gmm1_epilogue_active_aiv_workers=1\n";
+    std::cout << "  activation_active_aiv_workers=" << activationAivWorkers << "\n";
     std::cout << "  swiglu_group_tile_ranges="
               << (fusedEvidence == nullptr || fusedEvidence->swigluGroupTileRanges.empty() ?
                       "none" :
@@ -4146,7 +4272,7 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  activation_pipe_stages=" << activationPipeStages << "\n";
     std::cout << "  activation_pipe_prefill=" << (activationPipePrefill ? "true" : "false") << "\n";
     std::cout << "  activation_pipe_drain=" << (activationPipeDrain ? "true" : "false") << "\n";
-    std::cout << "  combine_return_aiv_workers=" << combineReturnWorkers << "\n";
+    std::cout << "  combine_active_aiv_workers=" << combineReturnWorkers << "\n";
     std::cout << "  combine_owner_segment_workers=" << m3n8OwnerSegmentWorkers << "\n";
     std::cout << "  combine_worker_segment_counts=" << combineWorkerSegments.str() << "\n";
     std::cout << "  combine_mapped_segment_count=" << combineMappedSegments << "\n";
@@ -4174,20 +4300,32 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  subtile_syncall_count=" << subtileSyncallCount << "\n";
     std::cout << "  subtile_cv_wait_count=" << subtileCvWaitCount << "\n";
     std::cout << "  combine_stage_overlap_enabled=" << (m3n8Gmm2CombineOverlap ? "true" : "false") << "\n";
-    std::cout << "  restore_aiv_workers=8\n";
+    std::array<int32_t, moe_dispatch_combine_a8w8::kM3ORestoreCounterWords> emptyRestoreCounters{};
+    const auto &restoreCounters =
+        fusedEvidence == nullptr ? emptyRestoreCounters : fusedEvidence->m3oRestoreCounters;
+    std::cout << "  restore_active_aiv_workers=" << restoreCounters[0] << "\n";
+    std::cout << "  restore_total_token_count=" << restoreCounters[1] << "\n";
+    std::cout << "  restore_total_route_count=" << restoreCounters[2] << "\n";
+    std::cout << "  restore_total_skipped_route_count=" << restoreCounters[3] << "\n";
+    std::cout << "  restore_worker_ranges=" << JoinRestoreWorkerRanges(restoreCounters) << "\n";
+    std::cout << "  restore_worker_token_counts=" << JoinRestoreWorkerField(restoreCounters, 2U) << "\n";
+    std::cout << "  restore_worker_route_counts=" << JoinRestoreWorkerField(restoreCounters, 3U) << "\n";
+    std::cout << "  restore_worker_skipped_route_counts=" << JoinRestoreWorkerField(restoreCounters, 4U) << "\n";
+    std::cout << "  restore_worker_ranges_nonoverlap=" << (restoreCounters[4] != 0 ? "true" : "false") << "\n";
+    std::cout << "  restore_worker_count_requested=" << restoreCounters[5] << "\n";
     std::cout << "  dispatch_payload_parallel=" << (dispatchAivWorkers > 1 ? "true" : "false") << "\n";
     std::cout << "  activation_payload_parallel=" << (activationAivWorkers > 1 ? "true" : "false") << "\n";
     std::cout << "  combine_payload_parallel=" << (combineReturnWorkers > 1 ? "true" : "false") << "\n";
     std::cout << "  restore_payload_parallel=partial_token_shard\n";
     std::cout << "  gmm1_input_direct=true\n";
     std::cout << "  route_pack_quant_device=true\n";
-    std::cout << "  route_quant_impl=pto_vec_tload_trowmax_tquant_tstore\n";
+    std::cout << "  route_quant_impl_claim=pto_vec_tload_trowmax_tquant_tstore\n";
     std::cout << "  gmm1_epilogue_vec=true\n";
     std::cout << "  activation_requant_vec=true\n";
     std::cout << "  gmm2_epilogue_vec=true\n";
     std::cout << "  gmm_block_mock=false\n";
     std::cout << "  gmm_runtime_shape=true\n";
-    std::cout << "  gmm_multiblock=true\n";
+    std::cout << "  gmm_multiblock_requested=true\n";
     std::cout << "  dispatch_gmm1_sync=expert_ready\n";
     std::cout << "  swiglu_sync_groups=true\n";
     std::cout << "  tile_split_return_map=true\n";
@@ -4700,8 +4838,22 @@ int main(int argc, char **argv)
                         std::cout << "  m2_fused_debug_stop_stage=" << args.runtime.m2FusedDebugStopStage << "\n";
                         std::cout << "  mixed_aic_heartbeat=" << (iterEvidence.aicSeen ? "true" : "false") << "\n";
                         std::cout << "  mixed_aiv_heartbeat=" << (iterEvidence.aivSeen ? "true" : "false") << "\n";
-                        std::cout << "  mixed_aic_blocks=" << iterEvidence.aicBlocks << "\n";
-                        std::cout << "  mixed_aiv_blocks=" << iterEvidence.aivBlocks << "\n";
+                        std::cout << "  mixed_aic_launch_blocks=" << iterEvidence.aicBlocks << "\n";
+                        std::cout << "  mixed_aiv_launch_blocks=" << iterEvidence.aivBlocks << "\n";
+                        std::cout << "  gmm1_active_aic_blocks=" << iterEvidence.m3oGmm1Counters[0] << "\n";
+                        std::cout << "  gmm2_active_aic_blocks=" << iterEvidence.m3oGmm2Counters[0] << "\n";
+                        std::cout << "  gmm1_tile_task_count=" << iterEvidence.m3oGmm1Counters[1] << "\n";
+                        std::cout << "  gmm2_tile_task_count=" << iterEvidence.m3oGmm2Counters[1] << "\n";
+                        std::cout << "  dispatch_active_aiv_workers="
+                                  << NormalizeActiveWorkerCount(iterEvidence.m3nDispatchCounters[0], &iterEvidence)
+                                  << "\n";
+                        std::cout << "  activation_active_aiv_workers="
+                                  << NormalizeActiveWorkerCount(iterEvidence.m3nActivationCounters[0], &iterEvidence)
+                                  << "\n";
+                        std::cout << "  combine_active_aiv_workers="
+                                  << NormalizeActiveWorkerCount(iterEvidence.m3nCombineCounters[0], &iterEvidence)
+                                  << "\n";
+                        std::cout << "  restore_active_aiv_workers=8\n";
                         for (size_t markerIdx = 0; markerIdx < iterEvidence.stageMarkers.size(); ++markerIdx) {
                             std::cout << "  fused_stage_marker_" << markerIdx << "="
                                       << iterEvidence.stageMarkers[markerIdx] << "\n";
@@ -4754,7 +4906,14 @@ int main(int argc, char **argv)
                     }
                 }
                 dispatch_combine_tile::RankCorrectnessSummary fusedSummary = state.correctness;
-                dispatch_combine_tile::PrintM2FinalSummary(args, &state, fusedSummary, fusedTimings, &fusedEvidence);
+                for (uint32_t printRank = 0; printRank < state.size; ++printRank) {
+                    dispatch_combine_tile::MpiBarrier(&state.mpi);
+                    if (state.rank == printRank) {
+                        dispatch_combine_tile::PrintM2FinalSummary(args, &state, fusedSummary, fusedTimings,
+                                                                    &fusedEvidence);
+                        std::cout << std::flush;
+                    }
+                }
                 dispatch_combine_tile::MpiBarrier(&state.mpi);
                 if (verbose) {
                     std::cout << "rank=" << state.rank << " run_done" << std::endl;

@@ -74,7 +74,7 @@ Build:
   --mpi-bin DIR
 
 Fixed measurement policy:
-  warmup_iters=3 and measure_iters=5 are fixed and are not command-line options.
+  warmup_iters=0 and measure_iters=1 are fixed and are not command-line options.
   Correctness, perf, and timeline reports print to stdout by default.
 
 Explicit templates:
@@ -152,6 +152,8 @@ M2_MIXED_SPIKE_ONLY=0
 M2_FUSED_SKELETON_ONLY=0
 M2_FUSED_FULL=1
 M2_MULTI_LAUNCH_DEBUG=0
+WARMUP_ITERS=0
+MEASURE_ITERS=1
 
 align_up() {
     local value=$1
@@ -212,7 +214,7 @@ while [[ $# -gt 0 ]]; do
         --clean-build) CLEAN_BUILD="$2"; shift 2 ;;
         --mpi-bin) MPI_BIN="$2"; shift 2 ;;
         --warmup|--measure-iters|--iters)
-            echo "[ERROR] warmup_iters=3 and measure_iters=5 are fixed"
+            echo "[ERROR] warmup_iters=${WARMUP_ITERS} and measure_iters=${MEASURE_ITERS} are fixed"
             exit 1
             ;;
         --case|--case-all)
@@ -346,7 +348,7 @@ echo "rank_source=$([ "${RANK_FROM_MPI}" = "1" ] && echo mpi || echo manual)"
 echo "workspace_bytes_estimate=${WORKSPACE_BYTES}"
 echo "peer_window_bytes_estimate=${PEER_WINDOW_BYTES}"
 echo "HCCL_BUFFSIZE=${HCCL_BUFFSIZE}"
-echo "warmup_iters=3 measure_iters=5"
+echo "warmup_iters=${WARMUP_ITERS} measure_iters=${MEASURE_ITERS}"
 echo "skip_run=${SKIP_RUN} dry_run=${DRY_RUN} timeline=${TIMELINE}"
 echo "launcher=$([ "${USE_DIRECT_HOST}" = "1" ] && echo direct-host || echo mpirun)"
 
@@ -489,6 +491,8 @@ HOST_ARGS=(
     --m2-multi-launch-debug "${M2_MULTI_LAUNCH_DEBUG}"
     --m2-fused-debug-stop-stage "${M2_FUSED_DEBUG_STOP_STAGE:-0}"
     --hccl-buffsize-mb "${HCCL_BUFFSIZE_MB}"
+    --warmup "${WARMUP_ITERS}"
+    --iters "${MEASURE_ITERS}"
 )
 if [ -n "${RANK}" ]; then
     HOST_ARGS+=(--rank "${RANK}")

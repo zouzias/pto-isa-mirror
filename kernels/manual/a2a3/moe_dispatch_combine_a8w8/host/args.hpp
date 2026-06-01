@@ -97,8 +97,8 @@ inline DispatchCombineTileArgs DefaultArgs()
     args.runtime.rank = 0;
     args.runtime.nranks = args.shape.ep;
     args.runtime.debug = 0;
-    args.runtime.iters = 5;
-    args.runtime.warmup = 3;
+    args.runtime.iters = moe_dispatch_combine_a8w8::kMeasureIters;
+    args.runtime.warmup = moe_dispatch_combine_a8w8::kWarmupIters;
     args.runtime.seed = 1234;
     args.runtime.genData = 1;
     args.runtime.verify = 1;
