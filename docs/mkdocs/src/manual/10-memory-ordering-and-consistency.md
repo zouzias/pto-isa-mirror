@@ -1,10 +1,10 @@
-# 11. Memory Ordering and Consistency
+# 10. Memory Ordering and Consistency
 
-## 11.1 Scope
+## 10.1 Scope
 
 This chapter defines architecture-visible memory ordering and visibility guarantees for PTO Virtual ISA operations.
 
-## 11.2 Memory objects and domains
+## 10.2 Memory objects and domains
 
 Architecture-visible memory domains include:
 
@@ -14,7 +14,7 @@ Architecture-visible memory domains include:
 
 Backend-private caches/buffers are implementation-defined, but MUST respect architecture-visible ordering outcomes.
 
-## 11.3 Consistency baseline
+## 10.3 Consistency baseline
 
 The baseline model is dependency-ordered consistency:
 
@@ -22,7 +22,7 @@ The baseline model is dependency-ordered consistency:
 - independent operations MAY be reordered internally
 - required synchronization points MUST establish visibility as specified
 
-## 11.4 Ordering guarantees
+## 10.4 Ordering guarantees
 
 A conforming implementation MUST ensure:
 
@@ -30,7 +30,7 @@ A conforming implementation MUST ensure:
 - memory operations participating in explicit dependency chains preserve those chains
 - semantics defined by `TSYNC` and event dependencies are reflected in memory visibility
 
-## 11.5 Unspecified and implementation-defined behavior
+## 10.5 Unspecified and implementation-defined behavior
 
 The following are architecture-restricted:
 
@@ -38,7 +38,7 @@ The following are architecture-restricted:
 - timing and cache policy details are implementation-defined
 - backend-specific memory optimizations are allowed only when they preserve required visible behavior
 
-## 11.6 Programming requirements
+## 10.6 Programming requirements
 
 Programs SHOULD:
 
@@ -48,7 +48,7 @@ Programs SHOULD:
 
 Manual mode programmers MUST ensure required ordering when tool-managed synchronization is not used.
 
-## 11.7 Diagnostics and conformance tests
+## 10.7 Diagnostics and conformance tests
 
 Backends SHOULD provide diagnostics for:
 
