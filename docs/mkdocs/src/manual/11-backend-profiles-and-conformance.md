@@ -1,10 +1,10 @@
-# 12. Backend Profiles and Conformance
+# 11. Backend Profiles and Conformance
 
-## 12.1 Scope
+## 11.1 Scope
 
 This chapter defines how backend capability subsets are described and how conformance levels are evaluated.
 
-## 12.2 Backend profile model
+## 11.2 Backend profile model
 
 A backend profile MUST document:
 
@@ -16,7 +16,7 @@ A backend profile MUST document:
 
 Profiles MAY correspond to concrete targets (for example A2/A3/A5/CPU simulator).
 
-## 12.3 Capability gating
+## 11.3 Capability gating
 
 Toolchains MUST gate backend-specific specialization by declared profile capability.
 If requested behavior is outside profile support:
@@ -24,7 +24,7 @@ If requested behavior is outside profile support:
 - compilation/legalization MUST fail deterministically, or
 - an explicitly defined fallback path MUST be selected.
 
-## 12.4 Conformance dimensions
+## 11.4 Conformance dimensions
 
 Conformance is evaluated along these dimensions:
 
@@ -33,7 +33,7 @@ Conformance is evaluated along these dimensions:
 3. ordering conformance (sync and memory visibility)
 4. diagnostic conformance (deterministic actionable errors)
 
-## 12.5 Conformance levels
+## 11.5 Conformance levels
 
 Recommended levels:
 
@@ -44,7 +44,7 @@ Recommended levels:
 
 A backend SHOULD publish the highest validated level and known gaps.
 
-## 12.6 Required test matrix
+## 11.6 Required test matrix
 
 A profile conformance suite SHOULD include:
 
@@ -54,7 +54,7 @@ A profile conformance suite SHOULD include:
 - round-trip toolchain tests (text/AS/bytecode)
 - deterministic diagnostics snapshots
 
-## 12.7 Change management
+## 11.7 Change management
 
 When backend behavior changes:
 

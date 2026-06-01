@@ -1,21 +1,20 @@
-# 10. Bytecode and toolchain
+# 9. Bytecode and toolchain
 
-## 10.1 Scope
+## 9.1 Scope
 
-This chapter defines the practical interchange and validation contract for PTO-AS, PTO IR, and bytecode forms.
+This chapter defines the practical interchange and validation contract for PTO IR and bytecode forms.
 
-## 10.2 Representation layers
+## 9.2 Representation layers
 
 PTO representation layers:
 
 1. Virtual ISA semantics
-2. PTO-AS textual form
-3. PTO IR structured form
-4. bytecode serialized interchange form
+2. PTO IR structured form
+3. bytecode serialized interchange form
 
 Layer transitions MUST preserve architecture-observable meaning.
 
-## 10.3 Bytecode module contract (v1)
+## 9.3 Bytecode module contract (v1)
 
 A conforming v1 module MUST preserve:
 
@@ -27,11 +26,11 @@ A conforming v1 module MUST preserve:
 
 If lossless preservation is impossible, serialization MUST fail deterministically.
 
-## 10.4 Validation pipeline
+## 9.4 Validation pipeline
 
 Recommended pipeline:
 
-1. parse PTO-AS to IR
+1. produce PTO IR from the frontend
 2. run structural verifier
 3. serialize IR to bytecode
 4. deserialize bytecode to IR
@@ -40,7 +39,7 @@ Recommended pipeline:
 
 CI SHOULD enforce steps 1-5.
 
-## 10.5 Diagnostics contract
+## 9.5 Diagnostics contract
 
 Diagnostics MUST be:
 
@@ -55,7 +54,7 @@ Minimum error classes:
 - bytecode format/compatibility error
 - target legality error
 
-## 10.6 Compatibility policy
+## 9.6 Compatibility policy
 
 Evolution policy MUST define:
 
@@ -69,7 +68,7 @@ Default policy:
 - unknown optional fields: reject unless explicit compatibility mode permits
 - unknown operations: reject with deterministic unsupported-op diagnostics
 
-## 10.7 Round-trip guarantees
+## 9.7 Round-trip guarantees
 
 For supported features, `text -> IR -> bytecode -> IR -> text` SHOULD preserve:
 
@@ -79,7 +78,7 @@ For supported features, `text -> IR -> bytecode -> IR -> text` SHOULD preserve:
 
 Byte-for-byte textual formatting equivalence is not required.
 
-## 10.8 Operational acceptance checklist
+## 9.8 Operational acceptance checklist
 
 Each release SHOULD validate:
 
