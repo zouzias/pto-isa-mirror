@@ -610,8 +610,7 @@ perf 调优方向，**不作为强制对齐目标**。参考来源：`op_kernel/
 | int8 L1 占用（A/B，双缓冲） | A `128×512=64KB`、B `512×256=128KB`、合计双缓冲约 `388KB`（< 512KB） | A `128×256=32KB`、B `256×256=64KB`（更宽松） | 参考贴近 L1 上限以最大化 K 摊薄；本项目留更多余量 |
 | SwiGLU epilogue 分组粒度 | `epilogueGranularity = expertPerRank - 3`（`≤4` 时 `-1`），即两段 | `swigluSyncGroups` 幂指数 `{8,4,2,1,1}`（前粗后细） | 本项目用升级版多段分组，机制兼容、更细 |
 | 跨核 flag 复用上限 | `CROSS_CORE_FLAG_MAX_SET_COUNT = 15` | FFTS 物理 0-15，用户区 0-10（见 §10） | 见 §10 计数信号量 + 折叠 |
-| init_routing 量化列 loop 上限 | `MAX_COLS_ONE_LOOP_QUANT = 8192` | 由 `payloadTileCols` 控制 | 本项目无独立 init_routing 子系统（见 §6 无 sort 说明） |
-| 多核归并排序路数 | `MAX_MRGSORT_LIST = 4`（FFN multi-core sort 内部常量） | 不适用 | 本项目不实现 multi-core sort |
+| init_routing 量化列 loop 上限 | `MAX_COLS_ONE_LOOP_QUANT = 8192` | 由 `payloadTileCols` 控制 | 本项目只对齐 init-routing metadata/payload contract（见 §6 direct scatter 说明） |
 | AIC:AIV mixed launch 比例 | AIV = 2 × AIC subblock（1:2）；`blockDim = CalcTschBlockDim(aivNum, aicNum, aivNum)` | `kAicBlocks=24`，AIV=48（`subblockdim=2`），即 1:2 | **固定 launch/硬件事实**：A3 每个 cube 核配 2 个 vector subblock，由 mixed ELF meta 决定，不是自由可调比例 |
 | 逐阶段核分配（如 epilogue/dispatch 用几核） | `epilogueCoreNum`、`aivNumInitRouting=2*BLOCK_NUM` 等可调参数 | M2 多为 worker=1，按 stage 上报 | **不在设计固定具体数值**：属 M3 调优量，由 runtime logical core count 推导，M2.8c 只如实上报 worker facts |
 
@@ -669,7 +668,7 @@ M2 必须先固定六个点：
 
 | 子目标 | 列入理由 | 不列入的相邻内容 |
 | --- | --- | --- |
-| `RoutingMetadata` | expert routing 的 row order、`expandedRowIdx`、expert count/cumsum 是 dispatch、GMM 和 restore 的共同 offset contract；没有它无法判断后续 payload 是否写到正确 token/expert 位置 | 不单独做 one-core/multi-core sort 形态；这些是实现方式，验收只看 metadata contract |
+| `RoutingMetadata` | expert routing 的 row order、`expandedRowIdx`、expert count/cumsum 是 dispatch、GMM 和 restore 的共同 offset contract；没有它无法判断后续 payload 是否写到正确 token/expert 位置 | 不单独追踪 FFN 内部重排形态；验收只看 metadata contract |
 | `RoutePackQuantLocal` | 输入侧必须在一次主路径中完成 route、pack、dynamic quant，并直接落入 peer-visible dispatch payload；这是 Dispatch-GMM overlap 的数据入口 | 不做 fixed scale/offset quant、不做 non-quant gather、不做独立 expanded FP payload 再二次转换 |
 | `GatherDispatchToGmm1Input` | expert owner 前同步后远端读，直接形成 local expert-major contiguous GMM1 input；这是 GMM1 能按 expert row range 消费的前提 | 不做先远端写到临时 dispatch buffer、再二次 reorder 的主路径 |
 | `RunActivationAndQuant` | GMM1 后的 scale dequant、SwiGLU、dynamic requant 和 per-token scale2 是 A8W8 两段 GMM 之间的精度边界 | 不把 activation/requant 延后成全量 barrier；debug mirror 不能成为主路径 |
@@ -804,12 +803,10 @@ RestoreOutput
 这张图只描述数据依赖顺序，不表示主路径必须按全量 stage 串行执行。MegaMoE 的实现目标是在同一套数据流和
 offset 语义下，让已经 ready 的 expert group、sync group 或 return segment 尽早被下游 stage 消费。
 
-关于 dispatch 排序：本项目**不实现** `ffn.md` init_routing 的 multi-core merge sort。token 的
-expert-major 有序性由 `RoutePackQuantLocal` 按 `globalExpert -> row` offset 直接 pack，再由
-`GatherDispatchToGmm1Input` 按 `cumsumMM/preSumBeforeRank` 远端读 gather 完成——这等价于 `ffn.md`"把通信后重排
-折叠进 gather 地址映射"的结论，offset-table 已经承担了排序职责，不需要独立 sort 子系统。因此 M3O.2 的 dispatch
-多 AIV 只覆盖 route/count/pack/gather 的 worker 分摊，**不包含**排序；任何"补 sort 子系统"的要求都属于
-误读，需先走 design-bug / 用户确认门禁。
+关于 dispatch 重排：token 的 expert-major 有序性由 `RoutePackQuantLocal` 按 `globalExpert -> row` offset
+直接 pack，再由 `GatherDispatchToGmm1Input` 按 `cumsumMM/preSumBeforeRank` 远端读 gather 完成。offset-table
+承担 row mapping 职责，当前不单独追踪 FFN 内部重排实现。因此 M3O.2 的 dispatch 多 AIV 只覆盖
+route/count/pack/gather 的 worker 分摊；任何要求补 FFN 内部重排实现的变更，都需先走 design-bug / 用户确认门禁。
 
 ### 6.1 MegaMoE overlap 执行视图
 
@@ -1541,7 +1538,7 @@ M2/M3 的设计、代码和验收输出里保持可追溯：
 | 五层切分是 rank/core/group/tile/L1-L0 | `ffn_partition_model=rank_core_group_tile_l1l0` 必须出现在 M2.8c/M3 结构化输出 | 只按 expert 切核，或只按 tile 解释所有同步 |
 | group 是 ready/sync 边界，不是 core ownership | `dispatchGroupReady`、`gmm1SyncGroupReady`、`activationSyncGroupReady`、`gmm2GroupReady` 表达依赖边 | “AIC0 负责 expert0” 这类固定 expert-to-core 分配 |
 | GMM tile 是 AIC 工作单元 | GMM task scheduler、multi-AIC evidence、L1/L0 tile policy 证明 tile ownership | 用单 AIC block 或 smoke shape 证明 GMM 已达目标 |
-| init_routing 在 `ffn.md` 是 route/sort/count/srcToDst/gather+quant 子系统；本项目用 offset-table pack+gather 等价替代 sort | M3O.2 的 dispatch 多 AIV 覆盖 route/count/pack/gather worker 分摊证据，不实现 multi-core merge sort | 把 PTO 简化误读成"必须补 sort 子系统"，或只把 `TGET` 循环并行化就声称 dispatch 多核 |
+| init_routing 在 `ffn.md` 是 route/row mapping/count/srcToDst/gather+quant 子系统；本项目用 offset-table pack+gather 承担 row mapping | M3O.2 的 dispatch 多 AIV 覆盖 route/count/pack/gather worker 分摊证据，不追踪 FFN 内部重排实现 | 把 PTO 简化误读成"必须补 FFN 内部重排"，或只把 `TGET` 循环并行化就声称 dispatch 多核 |
 | count 同步是 dispatch 的前置点对点协议 | `tokenPerExpertMatrix`、count ready、prefix/cumsum 必须先对齐，再 remote gather | 把 count/prefix 做成 host barrier 或临时 host copy |
 | SwiGLU 是 AIV 工作，按 sync group 粗细结合 | M2.5 固定 `swigluSyncGroups/dequantSum`，M3O.4/M3O.6 只打开 worker 分摊和 group overlap | 到 M3O 重排 activation row layout |
 | epilogue pipe 有 prefill/drain 生命周期 | M3O.4/M3O.5/M3O.7 要记录 SetFlag/Finalize 或等价 PTO pipe lifecycle evidence | 只看 final output pass，不证明 pipe 没有悬空/脏 flag |

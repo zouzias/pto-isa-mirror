@@ -80,3 +80,21 @@
 - Current blocker: fused direct-pack PTO Vec quant is not enabled. A direct PTO Vec attempt and a scalar-max +
   PTO Vec quant/store attempt both timed out on `ffn-v3-small` debug-stop 12, so the verified path keeps scalar
   quant and prints `route_quant_scalar_fallback_reason=mixed_fused_direct_pack_pto_vec_probe_timeout`.
+
+## Init Quant PTO Tile Probe Update
+
+- Fresh run: 2026-06-01 18:28, logs under `/tmp/a8w8_vec_probe_current_20260601_182850`.
+- Build: `cmake --build kernels/manual/a2a3/moe_dispatch_combine_a8w8/build --target moe_dispatch_combine_a8w8 -j16`
+  exited 0 after adding diagnostic cutpoints.
+- Positive controls:
+  - debug-stop 102301 returned with `pass=true`.
+  - debug-stop 87 (no-sync/no-Vec early return) returned with `pass=true`.
+  - debug-stop 82 (raw `vector_dup` on low UB, no PTO Tile wrapper) returned with `pass=true`.
+- Negative controls:
+  - debug-stop 83 (PTO Tile `TASSIGN` only) timed out with external exit 124.
+  - debug-stop 86 (PTO Tile `SetValue` on low UB) timed out with external exit 124.
+  - debug-stop 88 (PTO `TEXPANDS/TSTORE` basic probe without final mixed `SyncAll`) timed out with exit 124.
+  - debug-stop 102314 (low-UB `SetValue` plus final mixed `SyncAll`) timed out with exit 124.
+- Regression guard: `ffn-v3-small` debug-stop 12 returned with `pass=true`; route count, source-local
+  `expandedRowIdx`, dispatch payload sample, and dispatch scale checks still match. Current valid quant path remains
+  `route_quant_path=scalar`.

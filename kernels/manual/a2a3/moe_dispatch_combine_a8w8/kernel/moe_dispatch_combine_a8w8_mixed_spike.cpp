@@ -116,6 +116,7 @@ constexpr uint32_t kM2FusedSkeletonStageCount = 4;
 constexpr uint32_t kM2FusedSkeletonParticipantCount = 48;
 constexpr uint64_t kM2FusedSkeletonStoreUbAddr = 0x3000;
 constexpr uint64_t kM2FusedSkeletonStoreL1Addr = 0x3000;
+constexpr uint64_t kM2FusedVecProbeLowUbAddr = 0x0;
 constexpr uint64_t kM2FusedVecProbeUbAddr = 0x8000;
 constexpr uint32_t kM2FusedSkeletonStageSlotWords = 8;
 constexpr uint32_t kM2FusedSkeletonAivStageBase = kM2FusedSkeletonAicStageBase + kM2FusedSkeletonStageCount *
@@ -1643,6 +1644,44 @@ AICORE inline void M2FusedBasicVecProbe(__gm__ int32_t *stageStatus, uint32_t sl
     WaitStoreTileReusable();
 }
 
+AICORE inline void M2FusedSetValueProbe(__gm__ int32_t *stageStatus, uint32_t slot, int32_t value, uint64_t ubAddr)
+{
+    M2RouteRowStatTile probeTile;
+    TASSIGN(probeTile, ubAddr);
+    probeTile.SetValue(0, static_cast<float>(value));
+    pipe_barrier(PIPE_ALL);
+    M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, slot, value);
+}
+
+AICORE inline void M2FusedExpandOnlyProbe(__gm__ int32_t *stageStatus, uint32_t slot, int32_t value, uint64_t ubAddr)
+{
+    using ProbeTile = pto::Tile<pto::TileType::Vec, int32_t, 1, 16, pto::BLayout::RowMajor, 1, 16>;
+    ProbeTile probeTile;
+    TASSIGN(probeTile, ubAddr);
+    TEXPANDS(probeTile, value);
+    pipe_barrier(PIPE_V);
+    M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, slot, value);
+}
+
+AICORE inline void M2FusedAssignOnlyProbe(__gm__ int32_t *stageStatus, uint32_t slot, int32_t value, uint64_t ubAddr)
+{
+    M2RouteRowStatTile probeTile;
+    TASSIGN(probeTile, ubAddr);
+    M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, slot, value);
+}
+
+AICORE inline void M2FusedRawVectorDupProbe(__gm__ int32_t *stageStatus, uint32_t slot, int32_t value, uint64_t ubAddr)
+{
+    __ubuf__ int32_t *ub = reinterpret_cast<__ubuf__ int32_t *>(ubAddr);
+    set_mask_count();
+    pto::SetVectorCount(16);
+    vector_dup(ub, value, 0, 1, 1, 8, 8);
+    set_mask_norm();
+    pto::SetFullVecMaskByDType<int32_t>();
+    pipe_barrier(PIPE_V);
+    M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, slot, value);
+}
+
 AICORE inline void M2FusedRouteUbProbe(__gm__ int32_t *stageStatus, uint32_t probeStage, uint64_t ubAddr)
 {
     M2RouteRowStatTile probeTile;
@@ -1703,6 +1742,10 @@ AICORE inline void M2FusedRouteQuantProbe(moe_dispatch_combine_a8w8::ShapeConfig
     }
     if (probeStage == 102312U) {
         M2FusedRouteUbProbe(stageStatus, probeStage, 0x3C00);
+        return;
+    }
+    if (probeStage == 102314U) {
+        M2FusedRouteUbProbe(stageStatus, probeStage, kM2FusedVecProbeLowUbAddr);
         return;
     }
     __gm__ half *input = reinterpret_cast<__gm__ half *>(inputA);
@@ -1977,6 +2020,34 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
     if (earlyDebugStopStage == 89U) {
         set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
         pto::SYNCALL<pto::SyncCoreType::Mix>();
+        return;
+    }
+    if (earlyDebugStopStage == 88U) {
+        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
+        if (get_block_idx() == 0) {
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 0U, kM2FusedFullMagic);
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 1U, static_cast<int32_t>(get_block_num()));
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 2U, 88);
+        }
+        return;
+    }
+    if (earlyDebugStopStage == 87U) {
+        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
+        if (get_block_idx() == 0) {
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 0U, kM2FusedFullMagic);
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 1U, static_cast<int32_t>(get_block_num()));
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 2U, 87);
+        }
+        return;
+    }
+    if (earlyDebugStopStage >= 82U && earlyDebugStopStage <= 86U) {
+        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
+        if (get_block_idx() == 0) {
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 0U, kM2FusedFullMagic);
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 1U, static_cast<int32_t>(get_block_num()));
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 2U,
+                               static_cast<int32_t>(earlyDebugStopStage));
+        }
         return;
     }
     set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
@@ -2993,6 +3064,56 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         pto::SYNCALL<pto::SyncCoreType::Mix>();
         return;
     }
+    if (earlyDebugStopStage == 88U) {
+        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
+        if (IsM2FusedMainAiv()) {
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 0U, kM2FusedFullMagic);
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 1U,
+                               static_cast<int32_t>(get_block_num() * get_subblockdim()));
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 2U, 88);
+            M2FusedBasicVecProbe(earlyStageStatus + kM2FusedFullStageBaseSlot, 5U, 88);
+        }
+        pipe_barrier(PIPE_ALL);
+        dsb(DSB_DDR);
+        return;
+    }
+    if (earlyDebugStopStage == 87U) {
+        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
+        if (IsM2FusedMainAiv()) {
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 0U, kM2FusedFullMagic);
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 1U,
+                               static_cast<int32_t>(get_block_num() * get_subblockdim()));
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 2U, 87);
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullStageBaseSlot, 5U, 87);
+        }
+        pipe_barrier(PIPE_ALL);
+        dsb(DSB_DDR);
+        return;
+    }
+    if (earlyDebugStopStage >= 82U && earlyDebugStopStage <= 86U) {
+        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
+        if (IsM2FusedMainAiv()) {
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 0U, kM2FusedFullMagic);
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 1U,
+                               static_cast<int32_t>(get_block_num() * get_subblockdim()));
+            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 2U,
+                               static_cast<int32_t>(earlyDebugStopStage));
+            if (earlyDebugStopStage == 86U) {
+                M2FusedSetValueProbe(earlyStageStatus, 5U, 86, kM2FusedVecProbeLowUbAddr);
+            } else if (earlyDebugStopStage == 85U) {
+                M2FusedExpandOnlyProbe(earlyStageStatus, 5U, 85, kM2FusedVecProbeLowUbAddr);
+            } else if (earlyDebugStopStage == 84U) {
+                M2FusedExpandOnlyProbe(earlyStageStatus, 5U, 84, kM2FusedVecProbeUbAddr);
+            } else if (earlyDebugStopStage == 83U) {
+                M2FusedAssignOnlyProbe(earlyStageStatus, 5U, 83, kM2FusedVecProbeLowUbAddr);
+            } else {
+                M2FusedRawVectorDupProbe(earlyStageStatus, 5U, 82, kM2FusedVecProbeLowUbAddr);
+            }
+        }
+        pipe_barrier(PIPE_ALL);
+        dsb(DSB_DDR);
+        return;
+    }
     set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
     __gm__ int32_t *stageStatusBase = reinterpret_cast<__gm__ int32_t *>(launchArgs->stageStatusAddr);
     moe_dispatch_combine_a8w8::ShapeConfig shape = M2FusedLoadShapeConfig(stageStatusBase);
@@ -3342,7 +3463,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                 }
                 M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 1022);
             } else if ((debugStopStage >= 10230U && debugStopStage <= 10236U) ||
-                       (debugStopStage >= 102301U && debugStopStage <= 102312U)) {
+                       (debugStopStage >= 102301U && debugStopStage <= 102314U)) {
                 uint32_t globalExpertNum = shape.rankNum * shape.expertPerRank;
                 __gm__ int32_t *expertIds = reinterpret_cast<__gm__ int32_t *>(expertIdx);
                 for (uint32_t globalExpert = 0; globalExpert < globalExpertNum; ++globalExpert) {
