@@ -231,6 +231,8 @@ syncall
 set(OPT_IN_TESTCASES
 # Device-side async L2 prefetch: correctness + focused perf comparison
 tprefetch_async
+# Tilelang SYNCALL misuse reproducer (expected FAIL on NPU; opt-in only)
+syncall_tilelang_repro
 )
 
 if (AUTO_MODE)
