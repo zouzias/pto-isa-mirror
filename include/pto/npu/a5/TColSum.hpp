@@ -28,14 +28,13 @@ struct TColSumOp {
 
 template <typename T, unsigned TmpStride>
 PTO_INTERNAL void TColSum_Binary_TmpProc(RegTensor<T> &src0VReg, RegTensor<T> &src1VReg, RegTensor<T> &dstVReg,
-                                         MaskReg &pReg, __ubuf__ T *tmp, uint16_t nLoop)
+                                         MaskReg &pReg, __ubuf__ T *tmp, uint16_t nLoop, uint16_t BinaryAccLoopTimes)
 {
     bool remain;
     constexpr auto distValue =
         std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
 
     // 获取nLoop的 最高比特位-1 为循环次数, 等价于while(nLoop > 1)
-    uint16_t BinaryAccLoopTimes = (nLoop > 0) ? 31 - __builtin_clz((uint32_t)nLoop) : 0;
     for (int i = 0; i < BinaryAccLoopTimes; ++i) {
         remain = nLoop % 2;
         nLoop /= 2;
@@ -63,6 +62,10 @@ PTO_INTERNAL void TColSum_Binary(__ubuf__ T *dst, __ubuf__ T *src, __ubuf__ T *t
                                  unsigned validCol)
 {
     uint16_t repeatTimes = CeilDivision(validCol, elmPerRpt);
+    uint16_t nLoop = validRow / 2;
+    bool remain = validRow % 2;
+    uint16_t remainAddLine = (remain && (nLoop > 0)) ? (nLoop - 1) : 0;
+    uint16_t BinaryAccLoopTimes = (nLoop > 0) ? 31 - __builtin_clz((uint32_t)nLoop) : 0;
     __VEC_SCOPE__
     {
         RegTensor<T> src0VReg;
@@ -72,9 +75,6 @@ PTO_INTERNAL void TColSum_Binary(__ubuf__ T *dst, __ubuf__ T *src, __ubuf__ T *t
         uint32_t sreg = validCol;
         uint16_t i, j;
         // 相邻两行相加放入temp, nLoop为tmp有效数据行数
-        uint16_t nLoop = validRow / 2;
-        bool remain = validRow % 2;
-        uint16_t remainAddLine = (remain && (nLoop > 0)) ? (nLoop - 1) : 0;
         constexpr auto distValue =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
 
@@ -97,8 +97,104 @@ PTO_INTERNAL void TColSum_Binary(__ubuf__ T *dst, __ubuf__ T *src, __ubuf__ T *t
                 vadd(dstVReg, src0VReg, dstVReg, pReg, MODE_ZEROING);
                 vsts(dstVReg, tmp, remainAddLine * TmpStride, distValue, pReg);
             }
-            TColSum_Binary_TmpProc<T, TmpStride>(src0VReg, src1VReg, dstVReg, pReg, tmp, nLoop);
+            TColSum_Binary_TmpProc<T, TmpStride>(src0VReg, src1VReg, dstVReg, pReg, tmp, nLoop, BinaryAccLoopTimes);
             // 最后一步vsts(dstVReg, tmp)其实无作用, dstVReg已经保存最终结果
+            vsts(dstVReg, dst, i * elmPerRpt, distValue, pReg);
+        }
+    } // end VF
+}
+
+
+
+template <typename T, unsigned TmpStride, unsigned elmPerRpt>
+PTO_INTERNAL void TColSumBinRCTmp(MaskReg &pReg, __ubuf__ T *tmp, unsigned validCol, uint16_t nLoop, uint16_t BinaryAccLoopTimes, uint16_t repeatTimes)
+{
+    RegTensor<T> src0VReg, RegTensor<T> src1VReg, RegTensor<T> dstVReg;
+
+    bool remain;
+    constexpr auto distValue =
+        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+    uint16_t row, col;
+    MaskReg pReg;
+
+    // 获取nLoop的 最高比特位-1 为循环次数, 等价于while(nLoop > 1)
+    for (int b = 0; b < BinaryAccLoopTimes; ++b) {
+        remain = nLoop % 2;
+        nLoop /= 2;
+        
+        uint32_t sreg = validCol;
+        pReg = CreatePredicate<T>(sreg);
+
+        // 依赖上一次循环的数据, 设置同步vlds等vsts
+        mem_bar(VST_VLD);
+        for (row = 0; row < nLoop; ++row) {
+            for (col = 0; col < repeatTimes; col++) {
+                vlds(src0VReg, tmp, (2 * row) * TmpStride + col * elmPerRpt, NORM);
+                vlds(src1VReg, tmp, (2 * row + 1) * TmpStride + col * elmPerRpt, NORM);
+                vadd(dstVReg, src0VReg, src1VReg, pReg, MODE_ZEROING);
+                vsts(dstVReg, tmp, row * TmpStride + col * elmPerRpt, distValue, pReg);
+            }
+        }
+
+        if (remain) {
+            // 最后剩余奇数行加入tmp最后一行
+            for (col = 0; col < repeatTimes; col++) {
+                vlds(src0VReg, tmp, (2 * nLoop) * TmpStride + col * elmPerRpt, NORM);
+                vadd(dstVReg, src0VReg, dstVReg, pReg, MODE_ZEROING);
+                vsts(dstVReg, tmp, (nLoop - 1) * TmpStride + col * elmPerRpt, distValue, pReg);
+            }
+        }
+    }
+}
+
+template <typename T, unsigned SrcStride, unsigned TmpStride, unsigned elmPerRpt>
+PTO_INTERNAL void TColSumBinRC(__ubuf__ T *dst, __ubuf__ T *src, __ubuf__ T *tmp, unsigned validRow,
+                               unsigned validCol)
+{
+    uint16_t repeatTimes = CeilDivision(validCol, elmPerRpt);
+    uint16_t nLoop = validRow / 2;
+    bool remain = validRow % 2;
+    uint16_t remainAddLine = (remain && (nLoop > 0)) ? (nLoop - 1) : 0;
+    uint16_t BinaryAccLoopTimes = (nLoop > 0) ? 31 - __builtin_clz((uint32_t)nLoop) : 0;
+    __VEC_SCOPE__
+    {
+        RegTensor<T> src0VReg;
+        RegTensor<T> src1VReg;
+        RegTensor<T> dstVReg;
+        MaskReg pReg, pregRemain;
+        uint32_t sreg = validCol;
+        uint16_t i, j;
+        // 相邻两行相加放入temp, nLoop为tmp有效数据行数
+        constexpr auto distValue =
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+
+        for (i = 0; i < nLoop; i++) {
+            // 将src数据进行初步运算并存入tmp
+            for (j = 0; j < repeatTimes; j++) {
+                pReg = CreatePredicate<T>(sreg);
+                vlds(src0VReg, src, j * elmPerRpt + (2 * i) * SrcStride, NORM);
+                vlds(src1VReg, src, j * elmPerRpt + (2 * i + 1) * SrcStride, NORM);
+                vadd(dstVReg, src0VReg, src1VReg, pReg, MODE_ZEROING);
+                vsts(dstVReg, tmp, i * TmpStride + j * elmPerRpt, distValue, pReg);
+            }
+        }
+
+        if (remain) {
+            // 最后剩余奇数行加入tmp最后一行
+            sreg = validCol;
+            for (j = 0; j < repeatTimes; j++) {
+                pReg = CreatePredicate<T>(sreg);
+                vlds(src0VReg, src, j * elmPerRpt + (validRow - 1) * SrcStride, NORM);
+                vadd(dstVReg, src0VReg, dstVReg, pReg, MODE_ZEROING);
+                vsts(dstVReg, tmp, remainAddLine * TmpStride + j * elmPerRpt, distValue, pReg);
+            }
+        }
+        TColSumBinRCTmp<T, TmpStride, elmPerRpt>(tmp, nLoop, validCol, BinaryAccLoopTimes, repeatTimes);
+        mem_bar(VST_VLD);
+        sreg = validCol;
+        for (i = 0; i < repeatTimes; i++) {
+            pReg = CreatePredicate<T>(sreg);
+            vlds(dstVReg, tmp, i * elmPerRpt, NORM);
             vsts(dstVReg, dst, i * elmPerRpt, distValue, pReg);
         }
     } // end VF
@@ -118,7 +214,8 @@ __tf__ PTO_INTERNAL OP_NAME(TCOLSUM)
         __ubuf__ T *tmp = (__ubuf__ T *)__cce_get_tile_ptr(tmpData);
         constexpr unsigned elmPerRpt = CCE_VL / sizeof(T); // 每次repeat涉及多少个元素
         constexpr int tmpStride = TileDataTmp::RowStride * sizeof(typename TileDataTmp::DType) / sizeof(T);
-        TColSum_Binary<T, TileDataIn::Cols, tmpStride, elmPerRpt>(dst, src, tmp, validRow, validCol);
+        // TColSum_Binary<T, TileDataIn::Cols, tmpStride, elmPerRpt>(dst, src, tmp, validRow, validCol);
+        TColSumBinRC<T, TileDataIn::Cols, tmpStride, elmPerRpt>(dst, src, tmp, validRow, validCol);
     } else {
         TColReduceInstr<TColSumOp<T>, T, TileDataIn>(dst, src, validRow, validCol, version);
     }
