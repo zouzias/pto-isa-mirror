@@ -6,11 +6,10 @@
 **Goal:** 把 a8w8 的前重排从当前 correctness-first direct-pack 路线推进到可单阶段验证、可解释性能、可对标
 FFN 4097 的 active 多 AIV init-quant 路线。
 
-**Architecture:** 前重排继续优先采用 count + prefix + direct expert-major scatter，不先照搬 FFN 的
+**Architecture:** 前重排采用 count + prefix + direct expert-major scatter，a8w8 当前不引入 FFN 的排序链路
 VBS/VMS/SortOut。该路线必须产出与 FFN init-routing 等价的 metadata 和 payload：`expandedRowIdx`、
 `tokenPerExpertMatrix`、`cumsumMM`、`preSumBeforeRank`、`dispatchPayload`、`dispatchScale`、
-`gmm1InputInt8`、`routingPerTokenScale`。如果 direct scatter 多 AIV + PTO Vec quant 后仍无法接近 FFN 性能，
-再评估引入 VBS/VMS。
+`gmm1InputInt8`、`routingPerTokenScale`。性能收口聚焦 direct scatter 多 AIV 和 PTO Vec quant。
 
 **Tech Stack:** PTO manual A3 mixed AIC/AIV kernel, C++20, CANN runtime, MPI/HCCL peer window, existing
 `scripts/run_a3.sh` verification path. No Catlass/AscendC fallback.
@@ -53,7 +52,7 @@ count/prefix 后做全 AIV 同步，然后按 expert group 搬运并局部放行
 
 ## 3. Current A8W8 Facts
 
-当前 a8w8 没有实现 FFN 的 VBS/VMS/SortOut，而是使用 counting-sort/direct-scatter 思路：
+当前 a8w8 不实现 FFN 的 VBS/VMS/SortOut，而是使用 counting-sort/direct-scatter 思路：
 
 ```text
 M3NCountLocalRoutesShard
@@ -77,23 +76,25 @@ dispatchPayload[packedRow]
 dispatchScale[packedRow]
 ```
 
-当前主要差距：
+已完成 checkpoint 后的当前状态：
 
-- `M3NAssignDispatchWorkers()` 里 `targetWorkers = 1U`，所以正常路径实际不是 active 多 AIV。
+- `M3NAssignDispatchWorkers()` 已放开 shape-aware 多 worker；`ffn-v3-4097` debug-stop 11 已验证
+  `dispatch_active_aiv_workers=4`、`init_quant_worker_mask=15`。
 - dynamic quant 是 scalar row loop，hidden 维没有 PTO Vec tile。
 - `M3NMergeLocalRouteCounts()` 在 main AIV 串行 merge worker counts / prefix。
 - `M3NGatherDispatchToGmm1InputShard()` 按 localExpert modulo worker 切分，inner tokenOwner 串行。
-- 当前 M3O.2 证明了 no-rescan row formula 和 correctness，没有证明 FFN 4097 前重排多核性能对标。
+- 当前 checkpoint 证明了 no-rescan row formula、多 worker correctness 和 debug-stop 16/17 非 overlap gather；
+  还没有证明 FFN 4097 前重排性能对标。
 
 ## 4. FFN vs A8W8 子阶段对比
 
 | 子阶段 | FFN 参考实现 | 当前 a8w8 实现 | 当前判断 |
 | --- | --- | --- | --- |
-| sort / expert-major reorder | 按 `M * topK` route element 多 AIV sort；4097 走 multi-core sort，包含 VBS/VMS/SortOut | 不实现 FFN sort；用 count + prefix + packed row 公式直接写 expert-major | 语义可等价，但不是 FFN 的排序实现；性能需要 direct scatter 多核化后再判断 |
-| route count | `MoeV2ExpertTokenOut` 基于 sorted route 生成 expert token count/cumsum | `M3NCountLocalRoutesShard` 按 token range 统计 worker/expert count | 结构可对齐，但当前 active worker 被 `targetWorkers=1` 限住 |
+| sort / expert-major reorder | 按 `M * topK` route element 多 AIV sort；4097 走 multi-core sort，包含 VBS/VMS/SortOut | 不实现 FFN sort；用 count + prefix + packed row 公式直接写 expert-major | a8w8 固定走 direct scatter 路线，不把 VBS/VMS 作为当前实现目标 |
+| route count | `MoeV2ExpertTokenOut` 基于 sorted route 生成 expert token count/cumsum | `M3NCountLocalRoutesShard` 按 token range 统计 worker/expert count | 结构可对齐；4097 debug-stop 11 已验证 active 多 worker |
 | worker/expert prefix | FFN 通过 expert token/cumsum 和后续 `srcToDst` 建立 row 映射 | `M3NMergeLocalRouteCounts` 在 main AIV 串行生成 `blockPrefixPerExpert` 和 `workerExpertPrefix` | correctness 路线可用；大 shape 可能有串行控制面成本 |
 | srcToDst | 独立 `MoeV2SrcToDstOp`，按 route rows 多 AIV 生成 source-to-destination 映射 | 没有独立 srcToDst；`expandedRowIdx` / packed row 直接承担映射语义 | 只要 restore/gather contract 一致就不必机械补；若要复用 FFN contract 再评估 |
-| gather + dynamic quant | `MoeV2GatherDynamicQuant` 按 route rows + UB tile 多 AIV，hidden 维 tile/vector 化 | `M3NRoutePackQuantLocalShardScalar` 按 token shard；worker 内 token/topK 串行，row quant 是 scalar loop | 性能差距最大；优先改 PTO Vec quant，而不是先补 VBS/VMS |
+| gather + dynamic quant | `MoeV2GatherDynamicQuant` 按 route rows + UB tile 多 AIV，hidden 维 tile/vector 化 | `M3NRoutePackQuantLocalShardScalar` 按 token shard；worker 内 token/topK 串行，row quant 是 scalar loop | 性能差距最大；当前只推进 PTO Vec quant |
 | count publish / wait | 跨 rank `tokenPerExpert` all-gather，按 `dstEpIdx = coreIdx; dstEpIdx < EP; dstEpIdx += coreNum` 切分 | `M3NPublishCountRowsShard` / `M3NWaitCountRowsShardScalar` 按 rank modulo workerCount 切分 | 语义接近；需要 worker>1 后验证 active 分摊和信号可见性 |
 | cumsum / preSumBeforeRank | `CrossRankSyncAndlocalTokenPerExpertAllGatherAndGetSumPreRankV2` + `GetCumsumForMMAIV` | `M2BuildPrefixMetadata` 构造 `cumsumMM` / `preSumBeforeRank` | 语义必须对齐；当前偏 serial，需要 timeline 判断是否成为瓶颈 |
 | dispatch gather to GMM input | 按 local expert group 搬 peermem 到 `gmA/gmPerTokenScale1`，每组 ready 后放行 GMM1 | `M3NGatherDispatchToGmm1InputShard` 按 localExpert modulo worker；overlap path `M3N5...ByExpert` 可按 expert ready | ready 粒度方向对齐；需要多 worker 和 debug-stop 16/17 证明 |
@@ -101,8 +102,9 @@ dispatchScale[packedRow]
 4097 对标结论：
 
 - FFN: `M=4097, topK=2` 时 `totalLength=8194`，走 multi-core sort + srcToDst + gather dynamic quant。
-- a8w8: 当前走 direct scatter，但正常路径 active dispatch worker 仍为 1，且 quant 是 scalar。
-- 因此当前不是“缺少 VBS/VMS 导致语义不对”，而是“替代路线还没有做到 FFN 4097 所需的多 AIV 和 vector quant 性能形态”。
+- a8w8: 当前走 direct scatter，多 worker 已通过单阶段验证，但 quant 仍是 scalar。
+- 因此当前不是“缺少 VBS/VMS 导致语义不对”，而是“direct scatter 路线还没有做到 FFN 4097 所需的 vector quant
+  性能形态”。
 
 ## 5. Requirements
 
@@ -127,27 +129,21 @@ dispatchScale[packedRow]
 
 ### Performance Requirements
 
-- `ffn-v3-4097` 不应长期停留在 single active dispatch worker。
+- `ffn-v3-4097` 必须保持 active dispatch worker > 1 的 evidence。
 - route count / pack quant 至少按 token shard 多 AIV active。
 - dynamic quant 应改为 PTO Vec tile，避免每 row hidden 维 scalar 两遍扫描成为主瓶颈。
 - report 必须打印 requested / available / active 三层事实，不能用 launch AIV 数冒充 active worker。
 
 ## 6. Design Direction
 
-优先路线：保留 direct scatter，不先实现 VBS/VMS。
+路线：保留 direct scatter，不实现 VBS/VMS。
 
 理由：
 
 - expert id 范围有限，count + prefix + direct scatter 是 O(M * topK)，理论上比 comparison/merge sort 更适合。
-- 当前慢点主要来自 active worker=1 和 scalar quant，不是 direct scatter 语义本身。
-- VBS/VMS 是 FFN 的一种高性能排序实现，不是 MegaMoE 必须语义。
-
-VBS/VMS 评估门槛：
-
-- direct scatter 多 AIV + PTO Vec quant 后，4097 timeline 仍显示前重排明显慢于 FFN 路线；
-- direct scatter 产生严重 GM 随机写/冲突，带宽利用差；
-- expert 分布极端不均导致 token-shard worker 负载失衡；
-- 必须复用 FFN 的 `expandDstToSrcRow` / `srcToDst` contract。
+- 最初慢点来自 active worker=1 和 scalar quant；checkpoint 后 active worker 已打开，当前剩余主风险是 scalar
+  quant 和串行控制面，不是 direct scatter 语义本身。
+- VBS/VMS 是 FFN 的一种高性能排序实现，不是 MegaMoE 必须语义；a8w8 当前任务中不实现、不评估。
 
 ## 7. Implementation Tasks
 
@@ -309,6 +305,20 @@ route_quant_scalar_fallback_reason=mixed_fused_direct_pack_pto_vec_probe_timeout
 下一步需要先做 all-participant-safe 的 mixed AIV Vec microprobe，确认 AIC/AIV `SyncAll` 参与者、event
 pair 和 peer-window `TSTORE` 能单独返回，再重新打开 fused direct-pack PTO Vec quant。
 
+2026-06-01 最新 probe 证据：
+
+| Stage | Probe | Result | Meaning |
+| --- | --- | --- | --- |
+| 99 | no-Vec mixed `SyncAll` baseline | pass | mixed full-kernel debug-stop 基础同步可返回 |
+| 102301 | route probe before Vec/UB work | pass | 进入 route probe 本身可返回 |
+| 89 | early basic Vec probe | timeout / signal 15 cleanup | 只加基础 Vec store probe 仍会卡住 |
+| 102305 | `TEXPANDS` + UB Vec op on main AIV | timeout / signal 15 cleanup | 去掉 route quant 主体后仍会卡住 |
+| 102307 | route UB `SetValue` / barrier probe | timeout / signal 15 cleanup | 不限于 peer-window `TSTORE` 对齐问题 |
+| 102313 | all-lane basic Vec probe | timeout / signal 15 cleanup | 不是 main AIV 单 lane 特例 |
+
+结论：刚才的“卡住”还没有解决；当前证据指向 fused mixed AIV 路径里的 PTO Vec/UB op probe 或其同步参与条件。
+这不是已观测到的精度错误，当前可用 correctness 路径仍是 scalar fallback。
+
 目标 helper 语义：
 
 ```text
@@ -370,7 +380,7 @@ init_quant_gmm1_input_match=true
 dispatch_ready_experts=<expertPerRank>
 ```
 
-### Task 5: 性能采样与 VBS/VMS 决策门
+### Task 5: 性能采样与 direct-scatter 收口
 
 **Files:**
 
@@ -406,15 +416,15 @@ dispatch_active_aiv_workers>1
 route_quant_path=pto_vec
 ```
 
-- [ ] **Step 3: VBS/VMS 决策**
+- [ ] **Step 3: direct-scatter 性能结论**
 
-只有满足以下任一条件，才打开 VBS/VMS 设计任务：
+记录 4097 前重排耗时结论：
 
 ```text
-direct scatter multi-worker + PTO Vec quant 后 init_quant 仍是 large case 主瓶颈
-direct scatter GM random write 带宽利用差且无法通过 worker policy 改善
-expert 分布不均导致 token-shard direct scatter 负载失衡
-后续必须复用 FFN expandDstToSrcRow/srcToDst contract
+direct scatter multi-worker active evidence
+PTO Vec quant path/fallback evidence
+init_quant 子阶段 timeline
+是否满足当前 a8w8 前重排性能目标
 ```
 
 ## 8. Task Acceptance
@@ -435,7 +445,7 @@ expert 分布不均导致 token-shard direct scatter 负载失衡
 - Task 4 验收：debug-stop 16 验证 `gmm1InputInt8` / `routingPerTokenScale` 与 reference 一致；debug-stop 17
   验证 local expert ready 只在对应 expert gather 完后置位；multi-worker 不重复写、不漏写。
 - Task 5 验收：4097 full run correctness pass；report 至少拆出 count、merge/prefix、pack/quant、count sync、
-  prefix、gather 子阶段耗时；只有达到第 6 节 VBS/VMS 评估门槛才新开排序实现任务。
+  prefix、gather 子阶段耗时；给出 direct-scatter 路线性能结论。
 
 失败判定：
 
@@ -479,6 +489,8 @@ route_quant_path=scalar
 route_quant_scalar_fallback_reason=mixed_fused_direct_pack_pto_vec_probe_timeout
 ```
 
+2026-06-01 的 Vec probe 尝试没有修复 timeout。临时 `102313` all-lane probe 只作为诊断证据记录，不进入提交路线。
+
 ## 9. Overall Acceptance
 
 M3O 前重排收口必须同时满足：
@@ -493,7 +505,7 @@ M3O 前重排收口必须同时满足：
 
 ## 10. Handoff Notes
 
-- 不要先实现 VBS/VMS。先把 direct scatter 的 active worker 和 vector quant 做实。
+- 不实现 VBS/VMS。先把 direct scatter 的 active worker 和 vector quant 做实。
 - 不要把 FFN 的具体 `BLOCK_NUM=20`、`aivNumInitRouting=40`、UB 常量硬搬到 a8w8。
 - 不要用 launch AIV 数证明 active 并行；必须由 worker counter / worker mask / processed rows 证明。
 - 前重排单阶段验证不应受 M3O.4 activation shard hang 影响；使用 debug-stop 11/12/15/16/17 截断。
