@@ -82,4 +82,4 @@ comm/
 
 - 指令语义与示例：`docs/isa/`
 - CPU 仿真 stubs：`pto/cpu/comm/`
-- NPU 异步后端：`pto/npu/comm/async/`
+- NPU 异步后端：`pto/comm/async/`
