@@ -32,6 +32,7 @@ inline void PrintWorkspaceLayout(std::ostream &os, const WorkspaceLayout &layout
     PrintField(os, "blockTokenPerExpert", layout.blockTokenPerExpert);
     PrintField(os, "blockPrefixPerExpert", layout.blockPrefixPerExpert);
     PrintField(os, "expandedRowIdx", layout.expandedRowIdx);
+    PrintField(os, "packedRowToRouteIndex", layout.packedRowToRouteIndex);
     PrintField(os, "dispatchOffset", layout.dispatchOffset);
     PrintField(os, "cumsumMM", layout.cumsumMM);
     PrintField(os, "preSumBeforeRank", layout.preSumBeforeRank);

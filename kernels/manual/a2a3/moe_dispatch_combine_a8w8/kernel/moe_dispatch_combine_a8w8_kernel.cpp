@@ -337,6 +337,7 @@ AICORE inline moe_dispatch_combine_a8w8::WorkspaceLayout MakeM2WorkspaceLayoutDe
     layout.blockTokenPerExpert = M2AppendFieldDevice(offset, globalExpertNum * sizeof(int32_t));
     layout.blockPrefixPerExpert = M2AppendFieldDevice(offset, globalExpertNum * sizeof(int32_t));
     layout.expandedRowIdx = M2AppendFieldDevice(offset, expandedRows * sizeof(int32_t));
+    layout.packedRowToRouteIndex = M2AppendFieldDevice(offset, expandedRows * sizeof(int32_t));
     layout.dispatchOffset = M2AppendFieldDevice(offset, expandedRows * sizeof(int32_t));
     layout.cumsumMM = M2AppendFieldDevice(offset, rankExpertCount * sizeof(int32_t));
     layout.preSumBeforeRank = M2AppendFieldDevice(offset, rankExpertCount * sizeof(int32_t));
@@ -410,6 +411,7 @@ struct M2WorkspaceViewDevice {
     __gm__ int32_t *blockTokenPerExpert;
     __gm__ int32_t *blockPrefixPerExpert;
     __gm__ int32_t *expandedRowIdx;
+    __gm__ int32_t *packedRowToRouteIndex;
     __gm__ int32_t *dispatchOffset;
     __gm__ int32_t *cumsumMM;
     __gm__ int32_t *preSumBeforeRank;
@@ -466,6 +468,8 @@ AICORE inline M2WorkspaceViewDevice MakeM2WorkspaceViewDevice(GM_ADDR workspaceB
     view.blockTokenPerExpert = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.blockTokenPerExpert.offset);
     view.blockPrefixPerExpert = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.blockPrefixPerExpert.offset);
     view.expandedRowIdx = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.expandedRowIdx.offset);
+    view.packedRowToRouteIndex =
+        reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.packedRowToRouteIndex.offset);
     view.dispatchOffset = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.dispatchOffset.offset);
     view.cumsumMM = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.cumsumMM.offset);
     view.preSumBeforeRank = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.preSumBeforeRank.offset);
@@ -1220,6 +1224,7 @@ AICORE inline void M2ClearDispatchState(moe_dispatch_combine_a8w8::ShapeConfig s
     }
     for (uint32_t idx = 0; idx < expandedRows; ++idx) {
         StoreScalarI32(workspaceView.expandedRowIdx + idx, -1);
+        StoreScalarI32(workspaceView.packedRowToRouteIndex + idx, -1);
     }
     for (uint32_t idx = 0; idx < rankExpertCount; ++idx) {
         StoreScalarI32(workspaceView.cumsumMM + idx, 0);
@@ -1388,6 +1393,7 @@ AICORE inline void M3NClearDispatchWorkerScratch(moe_dispatch_combine_a8w8::Shap
         }
         StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 3U, static_cast<int32_t>(workerCount));
         StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 7U, 1);
+        StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 11U, static_cast<int32_t>(workerCount));
     }
 }
 
@@ -1479,6 +1485,7 @@ AICORE inline void M3NMergeLocalRouteCounts(moe_dispatch_combine_a8w8::ShapeConf
     StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 4U, running);
     StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 7U, 1);
     StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 8U, 1);
+    StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 11U, static_cast<int32_t>(workerCount));
     InvalidateGmCacheLines(workspaceView.blockTokenPerExpert, static_cast<uint32_t>(globalExpertNum * sizeof(int32_t)));
     InvalidateGmCacheLines(workspaceView.blockPrefixPerExpert,
                            static_cast<uint32_t>(globalExpertNum * sizeof(int32_t)));
@@ -1650,10 +1657,14 @@ AICORE inline void M2RoutePackQuantLocal(moe_dispatch_combine_a8w8::ShapeConfig 
                 continue;
             }
             StoreScalarI32(workspaceView.expandedRowIdx + routeIndex, packedRow);
+            StoreScalarI32(workspaceView.packedRowToRouteIndex + static_cast<uint32_t>(packedRow),
+                           static_cast<int32_t>(routeIndex));
             M2QuantizeRowToPeerPayload(shape, localPeer, inputA, token, static_cast<uint32_t>(packedRow), rowBytes);
         }
     }
     InvalidateGmCacheLines(workspaceView.expandedRowIdx, static_cast<uint32_t>(shape.m * shape.topK * sizeof(int32_t)));
+    InvalidateGmCacheLines(workspaceView.packedRowToRouteIndex,
+                           static_cast<uint32_t>(shape.m * shape.topK * sizeof(int32_t)));
 }
 
 AICORE inline void M3NRoutePackQuantLocalShard(moe_dispatch_combine_a8w8::ShapeConfig shape,
@@ -1699,11 +1710,15 @@ AICORE inline void M3NRoutePackQuantLocalShard(moe_dispatch_combine_a8w8::ShapeC
                 continue;
             }
             StoreScalarI32(workspaceView.expandedRowIdx + routeIndex, packedRow);
+            StoreScalarI32(workspaceView.packedRowToRouteIndex + static_cast<uint32_t>(packedRow),
+                           static_cast<int32_t>(routeIndex));
             M2QuantizeRowToPeerPayload(shape, localPeer, inputA, token, static_cast<uint32_t>(packedRow), rowBytes);
         }
     }
     InvalidateGmCacheLines(workspaceView.expandedRowIdx + tokenBegin * shape.topK,
                            static_cast<uint32_t>((tokenEnd - tokenBegin) * shape.topK * sizeof(int32_t)));
+    InvalidateGmCacheLines(workspaceView.packedRowToRouteIndex,
+                           static_cast<uint32_t>(shape.m * shape.topK * sizeof(int32_t)));
 }
 
 AICORE inline void M2PublishCountRows(moe_dispatch_combine_a8w8::ShapeConfig shape, M2WorkspaceViewDevice workspaceView,
@@ -1845,6 +1860,58 @@ AICORE inline void M3NWaitCountRowsShardScalar(moe_dispatch_combine_a8w8::ShapeC
             localPeer.tokenPerExpertMatrix + static_cast<uint64_t>(src) * M2TokenPerExpertMatrixRowStride(shape);
         InvalidateGmCacheLines(localRow, rowElems * sizeof(int32_t));
     }
+}
+
+AICORE inline uint32_t M3NClampRowsToCapacity(uint32_t cursor, uint32_t rows, uint32_t cap)
+{
+    if (cursor >= cap || rows == 0U) {
+        return 0U;
+    }
+    uint32_t available = cap - cursor;
+    return rows < available ? rows : available;
+}
+
+AICORE inline void M3NApplyDispatchCapacityClip(moe_dispatch_combine_a8w8::ShapeConfig shape,
+                                                M2WorkspaceViewDevice workspaceView,
+                                                M2PeerWindowViewDevice localPeer, uint32_t myRank)
+{
+    uint32_t localRows = static_cast<uint32_t>(M2LocalRows(shape));
+    uint32_t rowStride = static_cast<uint32_t>(M2TokenPerExpertMatrixRowStride(shape));
+    InvalidateGmCacheLines(localPeer.tokenPerExpertMatrix,
+                           static_cast<uint32_t>(shape.rankNum * rowStride * sizeof(int32_t)));
+    InvalidateGmCacheLines(workspaceView.blockPrefixPerExpert,
+                           static_cast<uint32_t>(M2GlobalExpertNum(shape) * sizeof(int32_t)));
+    InvalidateGmCacheLines(workspaceView.packedRowToRouteIndex,
+                           static_cast<uint32_t>(shape.m * shape.topK * sizeof(int32_t)));
+    for (uint32_t expertOwner = 0; expertOwner < shape.rankNum; ++expertOwner) {
+        uint32_t dispatchCursor = 0U;
+        for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
+            uint32_t globalExpert = expertOwner * shape.expertPerRank + localExpert;
+            int32_t blockPrefix = LoadScalarI32(workspaceView.blockPrefixPerExpert + globalExpert);
+            for (uint32_t src = 0; src < shape.rankNum; ++src) {
+                int32_t rowsI32 =
+                    LoadScalarI32(localPeer.tokenPerExpertMatrix + M2TokenPerExpertIndex(shape, src, expertOwner,
+                                                                                         localExpert));
+                uint32_t rows = rowsI32 > 0 ? static_cast<uint32_t>(rowsI32) : 0U;
+                uint32_t effectiveRows = M3NClampRowsToCapacity(dispatchCursor, rows, localRows);
+                if (src == myRank && effectiveRows < rows && blockPrefix >= 0) {
+                    for (uint32_t row = effectiveRows; row < rows; ++row) {
+                        uint32_t packedRow = static_cast<uint32_t>(blockPrefix) + row;
+                        if (packedRow >= localRows) {
+                            continue;
+                        }
+                        int32_t routeIndex = LoadScalarI32(workspaceView.packedRowToRouteIndex + packedRow);
+                        if (routeIndex >= 0 && static_cast<uint32_t>(routeIndex) < shape.m * shape.topK) {
+                            StoreScalarI32(workspaceView.expandedRowIdx + static_cast<uint32_t>(routeIndex),
+                                           static_cast<int32_t>(localRows));
+                        }
+                    }
+                }
+                dispatchCursor += effectiveRows;
+            }
+        }
+    }
+    InvalidateGmCacheLines(workspaceView.expandedRowIdx, static_cast<uint32_t>(shape.m * shape.topK * sizeof(int32_t)));
 }
 
 AICORE inline void M3NFetchCountRowsShard(moe_dispatch_combine_a8w8::ShapeConfig shape,

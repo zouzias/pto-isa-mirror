@@ -162,6 +162,7 @@ AICORE inline moe_dispatch_combine_a8w8::WorkspaceLayout MakeM2WorkspaceLayoutDe
     layout.blockTokenPerExpert = M2AppendFieldDevice(offset, globalExpertNum * sizeof(int32_t));
     layout.blockPrefixPerExpert = M2AppendFieldDevice(offset, globalExpertNum * sizeof(int32_t));
     layout.expandedRowIdx = M2AppendFieldDevice(offset, expandedRows * sizeof(int32_t));
+    layout.packedRowToRouteIndex = M2AppendFieldDevice(offset, expandedRows * sizeof(int32_t));
     layout.dispatchOffset = M2AppendFieldDevice(offset, expandedRows * sizeof(int32_t));
     layout.cumsumMM = M2AppendFieldDevice(offset, rankExpertCount * sizeof(int32_t));
     layout.preSumBeforeRank = M2AppendFieldDevice(offset, rankExpertCount * sizeof(int32_t));

@@ -1221,8 +1221,37 @@ AICORE inline void M3N9RecordTimeoutDump(M2WorkspaceViewDevice workspaceView, M2
 AICORE inline uint32_t M3NAssignDispatchWorkers(moe_dispatch_combine_a8w8::ShapeConfig shape,
                                                 M2PeerWindowViewDevice localPeer, uint32_t logicalAivCount)
 {
-    (void)shape;
-    uint32_t targetWorkers = 1U;
+    uint32_t targetWorkers = logicalAivCount;
+    if (targetWorkers > kM3NFusedDispatchMaxLaneSlots) {
+        targetWorkers = kM3NFusedDispatchMaxLaneSlots;
+    }
+    if (targetWorkers > kM3NDispatchMaxWorkers) {
+        targetWorkers = kM3NDispatchMaxWorkers;
+    }
+    uint32_t globalExpertNum = shape.rankNum * shape.expertPerRank;
+    if (logicalAivCount == 0U || globalExpertNum == 0U || !M3NDispatchScratchFits(shape)) {
+        targetWorkers = 1U;
+    } else {
+        uint32_t workerStride = M3NDispatchWorkerScratchStride(globalExpertNum);
+        uint32_t maxWorkersByScratch = (kM3NDispatchScratchLimit - kM3NDispatchScratchBase) / (workerStride * 2U);
+        if (maxWorkersByScratch == 0U) {
+            targetWorkers = 1U;
+        } else if (targetWorkers > maxWorkersByScratch) {
+            targetWorkers = maxWorkersByScratch;
+        }
+        constexpr uint32_t kMinRoutesPerDispatchWorker = 64U;
+        uint32_t routeCount = shape.m * shape.topK;
+        uint32_t maxUsefulWorkers = (routeCount + kMinRoutesPerDispatchWorker - 1U) / kMinRoutesPerDispatchWorker;
+        if (maxUsefulWorkers == 0U) {
+            maxUsefulWorkers = 1U;
+        }
+        if (targetWorkers > maxUsefulWorkers) {
+            targetWorkers = maxUsefulWorkers;
+        }
+    }
+    if (targetWorkers == 0U) {
+        targetWorkers = 1U;
+    }
     uint32_t scanSlots = logicalAivCount;
     if (scanSlots > kM3NFusedDispatchMaxLaneSlots) {
         scanSlots = kM3NFusedDispatchMaxLaneSlots;
@@ -1534,11 +1563,15 @@ AICORE inline void M2RoutePackQuantLocalScalar(moe_dispatch_combine_a8w8::ShapeC
                 continue;
             }
             StoreScalarI32(workspaceView.expandedRowIdx + routeIndex, packedRow);
+            StoreScalarI32(workspaceView.packedRowToRouteIndex + static_cast<uint32_t>(packedRow),
+                           static_cast<int32_t>(routeIndex));
             M2QuantizeRowToPeerPayloadScalar(shape, localPeer, inputA, token, static_cast<uint32_t>(packedRow),
                                              rowBytes);
         }
     }
     InvalidateGmCacheLines(workspaceView.expandedRowIdx, static_cast<uint32_t>(shape.m * shape.topK * sizeof(int32_t)));
+    InvalidateGmCacheLines(workspaceView.packedRowToRouteIndex,
+                           static_cast<uint32_t>(shape.m * shape.topK * sizeof(int32_t)));
 }
 
 AICORE inline void M3NRoutePackQuantLocalShardScalar(moe_dispatch_combine_a8w8::ShapeConfig shape,
@@ -1585,12 +1618,16 @@ AICORE inline void M3NRoutePackQuantLocalShardScalar(moe_dispatch_combine_a8w8::
                 continue;
             }
             StoreScalarI32(workspaceView.expandedRowIdx + routeIndex, packedRow);
+            StoreScalarI32(workspaceView.packedRowToRouteIndex + static_cast<uint32_t>(packedRow),
+                           static_cast<int32_t>(routeIndex));
             M2QuantizeRowToPeerPayloadScalar(shape, localPeer, inputA, token, static_cast<uint32_t>(packedRow),
                                              rowBytes);
         }
     }
     InvalidateGmCacheLines(workspaceView.expandedRowIdx + tokenBegin * shape.topK,
                            static_cast<uint32_t>((tokenEnd - tokenBegin) * shape.topK * sizeof(int32_t)));
+    InvalidateGmCacheLines(workspaceView.packedRowToRouteIndex,
+                           static_cast<uint32_t>(shape.m * shape.topK * sizeof(int32_t)));
 }
 
 AICORE inline void M2FusedBasicVecProbe(__gm__ int32_t *stageStatus, uint32_t slot, int32_t value)
@@ -3164,6 +3201,9 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
             }
         }
         M3NDispatchHardPhaseSync();
+        if (IsM2FusedMainAiv()) {
+            M3NApplyDispatchCapacityClip(shape, workspaceView, localPeer, rank.rankId);
+        }
         if (debugStopStage == 14U) {
             if (IsM2FusedMainAiv()) {
                 M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 14);

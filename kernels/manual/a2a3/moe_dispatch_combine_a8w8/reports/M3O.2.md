@@ -62,3 +62,21 @@
 - Downstream notes: M3O.2 removes the shard route rescan hotspot and reports the worker/expert count-prefix path.
   Current fused GMM active AIC evidence remains block0-only; M3O.3 must address real multi-AIC tile scheduling.
 - Next task: M3O.3.
+
+## Init Quant Checkpoint
+
+- Scope: follow-up checkpoint for `init_quant.md` Task 1/2 and debug-stop 16/17 boundary verification.
+- Fresh run: 2026-06-01 17:17, logs under `/tmp/a8w8_init_quant_verify_20260601_171712`.
+- Build: `cmake --build kernels/manual/a2a3/moe_dispatch_combine_a8w8/build --target moe_dispatch_combine_a8w8 --clean-first -j16`
+  exited 0.
+- Verified on devices 4-7:
+  - `ffn-v3-small` debug-stop 12: pass, route count / source-local expanded row / payload sample match.
+  - `ffn-v3-4097` debug-stop 11/12/13/14/15/16/17: pass.
+  - Large debug-stop 11 reports `dispatch_active_aiv_workers=4`, `init_quant_worker_mask=15`.
+  - Large debug-stop 14 reports `init_quant_expanded_row_contract=capacity_clipped`,
+    `init_quant_token_matrix_full_match=true`, `init_quant_expanded_row_match=true`.
+  - Large debug-stop 16/17 reports `init_quant_gmm1_input_match=true` and
+    `init_quant_dispatch_ready_match=true`.
+- Current blocker: fused direct-pack PTO Vec quant is not enabled. A direct PTO Vec attempt and a scalar-max +
+  PTO Vec quant/store attempt both timed out on `ffn-v3-small` debug-stop 12, so the verified path keeps scalar
+  quant and prints `route_quant_scalar_fallback_reason=mixed_fused_direct_pack_pto_vec_probe_timeout`.

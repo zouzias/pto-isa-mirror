@@ -181,6 +181,8 @@ inline WorkspaceLayout MakeWorkspaceLayout(const ShapeConfig &shape)
     layout.blockTokenPerExpert = AppendField(&offset, CheckedMul(globalExpertNum, sizeof(int32_t), "block counts"));
     layout.blockPrefixPerExpert = AppendField(&offset, CheckedMul(globalExpertNum, sizeof(int32_t), "block prefix"));
     layout.expandedRowIdx = AppendField(&offset, CheckedMul(expandedRows, sizeof(int32_t), "expanded row idx"));
+    layout.packedRowToRouteIndex =
+        AppendField(&offset, CheckedMul(expandedRows, sizeof(int32_t), "packed row route index"));
     layout.dispatchOffset = AppendField(&offset, CheckedMul(expandedRows, sizeof(int32_t), "dispatch offset"));
     layout.cumsumMM = AppendField(&offset, CheckedMul(rankExpertCount, sizeof(int32_t), "cumsumMM"));
     layout.preSumBeforeRank = AppendField(&offset, CheckedMul(rankExpertCount, sizeof(int32_t), "preSumBeforeRank"));

@@ -203,6 +203,7 @@ struct WorkspaceLayout {
     FieldLayout blockTokenPerExpert;
     FieldLayout blockPrefixPerExpert;
     FieldLayout expandedRowIdx;
+    FieldLayout packedRowToRouteIndex;
     FieldLayout dispatchOffset;
     FieldLayout cumsumMM;
     FieldLayout preSumBeforeRank;
