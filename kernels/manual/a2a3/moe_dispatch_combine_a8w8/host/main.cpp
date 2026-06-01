@@ -77,9 +77,11 @@ constexpr size_t kM3N9TimeoutDumpExpertOwnerRankSlot = 4U;
 constexpr size_t kM3N9TimeoutDumpStageSlot = 5U;
 constexpr size_t kM3N9TimeoutDumpSignalIdSlot = 6U;
 constexpr size_t kM3N9TimeoutDumpDebugStopStageSlot = 7U;
-constexpr size_t kM3N10TimeoutDumpProducerStatusBaseSlot = 8U;
-constexpr size_t kM3N10TimeoutDumpScoreboardMinStatusSlot = 14U;
-constexpr size_t kM3N10TimeoutDumpScoreboardDomainSlot = 15U;
+constexpr size_t kM3N9TimeoutDumpDispatchReadySlot = 8U;
+constexpr size_t kM3N9TimeoutDumpGmm1ReadySlot = 9U;
+constexpr size_t kM3N9TimeoutDumpActivationReadySlot = 10U;
+constexpr size_t kM3N9TimeoutDumpGmm2ReadySlot = 11U;
+constexpr size_t kM3N9TimeoutDumpReadyExpertSlot = 12U;
 constexpr int32_t kM3N9TimeoutStageDispatchToGmm1 = 1;
 
 const char *M3N9TimeoutStageName(int32_t stage)
@@ -1039,14 +1041,11 @@ struct M2FusedFullEvidence {
     std::array<int32_t, 16> m3nCombineCounters{};
     std::array<int32_t, 16> m3nGmm2Counters{};
     std::array<int32_t, 16> m3n8CombineCounters{};
-    std::array<int32_t, 16> m3n10ScoreboardCounters{};
     std::array<int32_t, 16> m3n11SubtileCounters{};
     std::array<int32_t, 16> m3n9TimeoutDump{};
     std::array<uint64_t, moe_dispatch_combine_a8w8::kM3N12TimelineRecordCount *
                              moe_dispatch_combine_a8w8::kM3N12TimelineRecordWords>
         m3n12TimelineScratch{};
-    uint64_t m3n10ProducerStatusChecksum = 0;
-    uint64_t m3n10ScoreboardMinStatusChecksum = 0;
     std::string swigluGroupTileRanges;
     std::array<int32_t, 6> stageMarkers{};
 };
@@ -1113,8 +1112,6 @@ M2FusedFullEvidence ReadM2FusedFullEvidence(const moe_dispatch_combine_a8w8::Wor
     constexpr size_t kM3NActivationCounterBase = kM3CounterBase + 32U;
     constexpr size_t kM3NCombineCounterBase = kM3CounterBase + 48U;
     constexpr size_t kM3NGmm2CounterBase = kM3CounterBase + 64U;
-    constexpr size_t kM3N10ScoreboardCounterBase = moe_dispatch_combine_a8w8::kM3N10ScoreboardCounterBase;
-    constexpr size_t kM3N10ScoreboardWorkerCounterBase = moe_dispatch_combine_a8w8::kM3N10ScoreboardWorkerCounterBase;
     constexpr size_t kM3N11SubtileCounterBase = moe_dispatch_combine_a8w8::kM3N11SubtileCounterBase;
     constexpr int32_t kFullMagic = 0x4D328CA;
     M2FusedFullEvidence evidence;
@@ -1253,29 +1250,13 @@ M2FusedFullEvidence ReadM2FusedFullEvidence(const moe_dispatch_combine_a8w8::Wor
     if (evidence.m3n8CombineCounters[5] != 0) {
         evidence.m3n8CombineStartBeforeLastGmm2Ready = 1;
     }
-    for (size_t idx = 0; idx < evidence.m3n10ScoreboardCounters.size(); ++idx) {
-        if (kM3N10ScoreboardCounterBase + idx < debugCounters.size()) {
-            evidence.m3n10ScoreboardCounters[idx] = debugCounters[kM3N10ScoreboardCounterBase + idx];
-        }
-    }
-    if (kM3N10ScoreboardWorkerCounterBase + 2U < debugCounters.size()) {
-        evidence.m3n10ScoreboardCounters[2] = debugCounters[kM3N10ScoreboardWorkerCounterBase + 0U];
-        evidence.m3n10ScoreboardCounters[10] = debugCounters[kM3N10ScoreboardWorkerCounterBase + 1U];
-        evidence.m3n10ScoreboardCounters[11] = debugCounters[kM3N10ScoreboardWorkerCounterBase + 2U];
-    }
     for (size_t idx = 0; idx < evidence.m3n11SubtileCounters.size(); ++idx) {
         if (kM3N11SubtileCounterBase + idx < debugCounters.size()) {
             evidence.m3n11SubtileCounters[idx] = debugCounters[kM3N11SubtileCounterBase + idx];
         }
     }
-    std::vector<int32_t> producerStatus =
-        CopyWorkspaceI32Field(workspaceLayout, workspaceLayout.producerStatus, state, "m3n10 producerStatus");
-    std::vector<int32_t> scoreboardMinStatus =
-        CopyWorkspaceI32Field(workspaceLayout, workspaceLayout.scoreboardMinStatus, state, "m3n10 scoreboardMinStatus");
-    evidence.m3n10ProducerStatusChecksum = ChecksumVector(producerStatus);
-    evidence.m3n10ScoreboardMinStatusChecksum = ChecksumVector(scoreboardMinStatus);
-    std::vector<int32_t> timeoutDump = CopyWorkspaceI32Field(workspaceLayout, workspaceLayout.scoreboardTimeoutCounters,
-                                                             state, "m3n9 scoreboardTimeoutCounters");
+    std::vector<int32_t> timeoutDump =
+        CopyWorkspaceI32Field(workspaceLayout, workspaceLayout.timeoutDump, state, "m3n9 timeoutDump");
     for (size_t idx = 0; idx < evidence.m3n9TimeoutDump.size() && idx < timeoutDump.size(); ++idx) {
         evidence.m3n9TimeoutDump[idx] = timeoutDump[idx];
     }
@@ -1305,20 +1286,17 @@ void PrintM3N9TimeoutDump(const M2FusedFullEvidence &evidence)
               << "\n";
     std::cout << "  timeout_dump_debug_stop_stage="
               << (present ? evidence.m3n9TimeoutDump[kM3N9TimeoutDumpDebugStopStageSlot] : -1) << "\n";
-    std::ostringstream producerStatuses;
-    for (size_t slot = kM3N10TimeoutDumpProducerStatusBaseSlot; slot < kM3N10TimeoutDumpScoreboardMinStatusSlot;
-         ++slot) {
-        if (slot != kM3N10TimeoutDumpProducerStatusBaseSlot) {
-            producerStatuses << ",";
-        }
-        producerStatuses << (present ? evidence.m3n9TimeoutDump[slot] : -1);
-    }
-    std::cout << "  timeout_dump_producer_status_array=" << producerStatuses.str() << "\n";
-    std::cout << "  timeout_dump_scoreboard_min_status="
-              << (present ? evidence.m3n9TimeoutDump[kM3N10TimeoutDumpScoreboardMinStatusSlot] : -1) << "\n";
-    std::cout << "  timeout_dump_scoreboard_domain="
-              << (present ? evidence.m3n9TimeoutDump[kM3N10TimeoutDumpScoreboardDomainSlot] : -1) << "\n";
-    std::cout << "  timeout_dump_source=device_scoreboard_timeout_counters\n";
+    std::cout << "  timeout_dump_dispatch_ready="
+              << (present ? evidence.m3n9TimeoutDump[kM3N9TimeoutDumpDispatchReadySlot] : -1) << "\n";
+    std::cout << "  timeout_dump_gmm1_ready="
+              << (present ? evidence.m3n9TimeoutDump[kM3N9TimeoutDumpGmm1ReadySlot] : -1) << "\n";
+    std::cout << "  timeout_dump_activation_ready="
+              << (present ? evidence.m3n9TimeoutDump[kM3N9TimeoutDumpActivationReadySlot] : -1) << "\n";
+    std::cout << "  timeout_dump_gmm2_ready="
+              << (present ? evidence.m3n9TimeoutDump[kM3N9TimeoutDumpGmm2ReadySlot] : -1) << "\n";
+    std::cout << "  timeout_dump_ready_expert="
+              << (present ? evidence.m3n9TimeoutDump[kM3N9TimeoutDumpReadyExpertSlot] : -1) << "\n";
+    std::cout << "  timeout_dump_source=device_timeout_dump\n";
 }
 
 std::string MakeM3N12RunId(const DispatchCombineTileArgs &args)
@@ -1400,8 +1378,6 @@ const char *M3N12WaitSourceName(uint32_t waitSource)
             return "pto_event";
         case moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kGmPoll:
             return "gm_poll";
-        case moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kScoreboard:
-            return "scoreboard";
         case moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kSyncAll:
             return "syncall";
         default:
@@ -2033,19 +2009,11 @@ struct M2DispatchDump {
     std::vector<int32_t> preSumBeforeRank;
     std::vector<int32_t> expertTokenNums;
     std::vector<int32_t> dispatchGroupReady;
-    std::vector<int32_t> scoreboardTaskMap;
-    std::vector<int32_t> producerStatus;
-    std::vector<int32_t> scoreboardMinStatus;
-    std::vector<int32_t> workerWaitCounters;
-    std::vector<int32_t> scoreboardTimeoutCounters;
     std::vector<int8_t> dispatchPayload;
     std::vector<float> dispatchScale;
     std::vector<int8_t> gmm1InputInt8;
     std::vector<float> routingPerTokenScale;
 };
-
-constexpr int32_t kM2ScoreboardStatusCopyDone = 2;
-constexpr int32_t kM2ScoreboardStatusSkipDone = 3;
 
 std::vector<int32_t> BuildExpectedM2TokenMatrix(const DispatchCombineTileArgs &args, const CpuGoldenData &golden)
 {
@@ -2098,93 +2066,6 @@ void BuildExpectedM2Prefix(const DispatchCombineTileArgs &args, const std::vecto
             dispatchCursor += rows;
         }
         (*expertTokenNums)[localExpert] = before;
-    }
-}
-
-void BuildExpectedM2Scoreboard(const DispatchCombineTileArgs &args, const std::vector<int32_t> &tokenMatrix,
-                               const std::vector<int32_t> &preSum, const std::vector<int32_t> &expertTokenNums,
-                               uint32_t expertOwnerRank, std::vector<int32_t> *taskMap,
-                               std::vector<int32_t> *producerStatus, std::vector<int32_t> *scoreboardMinStatus,
-                               std::vector<int32_t> *workerWaitCounters,
-                               std::vector<int32_t> *scoreboardTimeoutCounters)
-{
-    const DispatchCombineTileShape &shape = args.shape;
-    size_t rowStride =
-        static_cast<size_t>(moe_dispatch_combine_a8w8::TokenPerExpertMatrixRowStride(MakeM2ShapeConfig(args)));
-    uint32_t rankExpertCount = shape.ep * shape.expertPerRank;
-    taskMap->assign(static_cast<size_t>(rankExpertCount) * 4U, 0);
-    producerStatus->assign(static_cast<size_t>(rankExpertCount) * 16U, 0);
-    scoreboardMinStatus->assign(static_cast<size_t>(rankExpertCount) * 16U, 0);
-    workerWaitCounters->assign(static_cast<size_t>(rankExpertCount) * 16U, 0);
-    scoreboardTimeoutCounters->assign(static_cast<size_t>(rankExpertCount) * 16U, 0);
-
-    int32_t dispatchOffset = 0;
-    for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
-        int32_t expertOffset = dispatchOffset;
-        int32_t activeSegments = 0;
-        int32_t skippedSegments = 0;
-        int32_t rowsTotal = 0;
-        for (uint32_t tokenOwner = 0; tokenOwner < shape.ep; ++tokenOwner) {
-            size_t matrixIndex = static_cast<size_t>(tokenOwner) * rowStride +
-                                 static_cast<size_t>(expertOwnerRank) * shape.expertPerRank + localExpert;
-            size_t prefixIndex = static_cast<size_t>(tokenOwner) * shape.expertPerRank + localExpert;
-            uint32_t taskId = tokenOwner * shape.expertPerRank + localExpert;
-            int32_t current = preSum[prefixIndex] + 0;
-            if (tokenOwner + 1U < shape.ep) {
-                size_t nextPrefixIndex = static_cast<size_t>(tokenOwner + 1U) * shape.expertPerRank + localExpert;
-                current = preSum[nextPrefixIndex];
-            } else {
-                current = expertTokenNums[localExpert];
-            }
-            int32_t rows = current - preSum[prefixIndex];
-            int32_t dstStart = expertOffset + preSum[prefixIndex];
-            size_t mapBase = static_cast<size_t>(taskId) * 4U;
-            (*taskMap)[mapBase + 0U] = static_cast<int32_t>(tokenOwner);
-            (*taskMap)[mapBase + 1U] = static_cast<int32_t>(localExpert);
-            (*taskMap)[mapBase + 2U] = dstStart;
-            (*taskMap)[mapBase + 3U] = rows;
-            int32_t finalStatus = rows > 0 ? kM2ScoreboardStatusCopyDone : kM2ScoreboardStatusSkipDone;
-            (*producerStatus)[static_cast<size_t>(taskId) * 16U] = finalStatus;
-            if (rows > 0) {
-                ++activeSegments;
-                rowsTotal += rows;
-            } else {
-                ++skippedSegments;
-            }
-        }
-        size_t domainBase = static_cast<size_t>(localExpert) * 16U;
-        int32_t domainStatus = activeSegments == 0 ? kM2ScoreboardStatusSkipDone : kM2ScoreboardStatusCopyDone;
-        (*scoreboardMinStatus)[domainBase + 0U] = domainStatus;
-        (*scoreboardMinStatus)[domainBase + 1U] = 1;
-        (*scoreboardMinStatus)[domainBase + 2U] = static_cast<int32_t>(localExpert);
-        (*scoreboardMinStatus)[domainBase + 3U] = static_cast<int32_t>(localExpert);
-        (*scoreboardMinStatus)[domainBase + 4U] = static_cast<int32_t>(shape.expertPerRank);
-        (*scoreboardMinStatus)[domainBase + 5U] = static_cast<int32_t>(shape.ep);
-        (*scoreboardMinStatus)[domainBase + 6U] = rowsTotal;
-        (*scoreboardMinStatus)[domainBase + 7U] = activeSegments;
-        (*scoreboardMinStatus)[domainBase + 8U] = skippedSegments;
-        (*scoreboardMinStatus)[domainBase + 9U] = activeSegments;
-        (*scoreboardMinStatus)[domainBase + 10U] = activeSegments + skippedSegments;
-        (*scoreboardMinStatus)[domainBase + 11U] = static_cast<int32_t>(localExpert);
-        (*scoreboardMinStatus)[domainBase + 12U] =
-            static_cast<int32_t>((shape.ep - 1U) * shape.expertPerRank + localExpert);
-        (*scoreboardMinStatus)[domainBase + 13U] = skippedSegments;
-        (*scoreboardMinStatus)[domainBase + 14U] = 0;
-        (*scoreboardMinStatus)[domainBase + 15U] = 1;
-
-        (*workerWaitCounters)[domainBase + 0U] = 1;
-        (*workerWaitCounters)[domainBase + 1U] = static_cast<int32_t>(localExpert);
-        (*workerWaitCounters)[domainBase + 2U] = static_cast<int32_t>(shape.ep);
-        (*workerWaitCounters)[domainBase + 3U] = activeSegments;
-        (*workerWaitCounters)[domainBase + 4U] = activeSegments;
-        (*workerWaitCounters)[domainBase + 5U] = skippedSegments;
-        (*workerWaitCounters)[domainBase + 6U] = rowsTotal;
-        (*workerWaitCounters)[domainBase + 7U] = static_cast<int32_t>(localExpert);
-        (*workerWaitCounters)[domainBase + 8U] = static_cast<int32_t>(shape.expertPerRank);
-        (*workerWaitCounters)[domainBase + 9U] = domainStatus;
-        (*workerWaitCounters)[domainBase + 13U] = 1;
-        (*workerWaitCounters)[domainBase + 14U] = 1;
-        dispatchOffset += expertTokenNums[localExpert];
     }
 }
 
@@ -2247,11 +2128,6 @@ void CopyM2DispatchToHost(const DispatchCombineTileArgs &args,
     dump->preSumBeforeRank.assign(rankExpertCount, 0);
     dump->expertTokenNums.assign(shape.expertPerRank, 0);
     dump->dispatchGroupReady.assign(static_cast<size_t>(shape.expertPerRank) * 16U, 0);
-    dump->scoreboardTaskMap.assign(static_cast<size_t>(rankExpertCount) * 4U, 0);
-    dump->producerStatus.assign(static_cast<size_t>(rankExpertCount) * 16U, 0);
-    dump->scoreboardMinStatus.assign(static_cast<size_t>(rankExpertCount) * 16U, 0);
-    dump->workerWaitCounters.assign(static_cast<size_t>(rankExpertCount) * 16U, 0);
-    dump->scoreboardTimeoutCounters.assign(static_cast<size_t>(rankExpertCount) * 16U, 0);
     dump->dispatchPayload.assign(static_cast<size_t>(expandedRows) * rowBytes, 0);
     dump->dispatchScale.assign(expandedRows, 0.0f);
     dump->gmm1InputInt8.assign(static_cast<size_t>(localRows) * rowBytes, 0);
@@ -2289,27 +2165,6 @@ void CopyM2DispatchToHost(const DispatchCombineTileArgs &args,
                          workspaceBase + workspaceLayout.dispatchGroupReady.offset,
                          BytesOfI32Vector(dump->dispatchGroupReady.size()), ACL_MEMCPY_DEVICE_TO_HOST),
              "rank " + std::to_string(state->rank) + " copy m2 dispatchGroupReady");
-    CheckAcl(aclrtMemcpy(dump->scoreboardTaskMap.data(), BytesOfI32Vector(dump->scoreboardTaskMap.size()),
-                         workspaceBase + workspaceLayout.scoreboardTaskMap.offset,
-                         BytesOfI32Vector(dump->scoreboardTaskMap.size()), ACL_MEMCPY_DEVICE_TO_HOST),
-             "rank " + std::to_string(state->rank) + " copy m2 scoreboardTaskMap");
-    CheckAcl(aclrtMemcpy(dump->producerStatus.data(), BytesOfI32Vector(dump->producerStatus.size()),
-                         workspaceBase + workspaceLayout.producerStatus.offset,
-                         BytesOfI32Vector(dump->producerStatus.size()), ACL_MEMCPY_DEVICE_TO_HOST),
-             "rank " + std::to_string(state->rank) + " copy m2 producerStatus");
-    CheckAcl(aclrtMemcpy(dump->scoreboardMinStatus.data(), BytesOfI32Vector(dump->scoreboardMinStatus.size()),
-                         workspaceBase + workspaceLayout.scoreboardMinStatus.offset,
-                         BytesOfI32Vector(dump->scoreboardMinStatus.size()), ACL_MEMCPY_DEVICE_TO_HOST),
-             "rank " + std::to_string(state->rank) + " copy m2 scoreboardMinStatus");
-    CheckAcl(aclrtMemcpy(dump->workerWaitCounters.data(), BytesOfI32Vector(dump->workerWaitCounters.size()),
-                         workspaceBase + workspaceLayout.workerWaitCounters.offset,
-                         BytesOfI32Vector(dump->workerWaitCounters.size()), ACL_MEMCPY_DEVICE_TO_HOST),
-             "rank " + std::to_string(state->rank) + " copy m2 workerWaitCounters");
-    CheckAcl(
-        aclrtMemcpy(dump->scoreboardTimeoutCounters.data(), BytesOfI32Vector(dump->scoreboardTimeoutCounters.size()),
-                    workspaceBase + workspaceLayout.scoreboardTimeoutCounters.offset,
-                    BytesOfI32Vector(dump->scoreboardTimeoutCounters.size()), ACL_MEMCPY_DEVICE_TO_HOST),
-        "rank " + std::to_string(state->rank) + " copy m2 scoreboardTimeoutCounters");
     CheckAcl(aclrtMemcpy(dump->gmm1InputInt8.data(), BytesOfI8Vector(dump->gmm1InputInt8.size()),
                          workspaceBase + workspaceLayout.gmm1InputInt8.offset,
                          BytesOfI8Vector(dump->gmm1InputInt8.size()), ACL_MEMCPY_DEVICE_TO_HOST),
@@ -2332,14 +2187,6 @@ uint64_t VerifyM2Dispatch(const DispatchCombineTileArgs &args,
     std::vector<int32_t> expectedExpertTokenNums;
     BuildExpectedM2Prefix(args, expectedTokenMatrix, state->rank, &expectedCumsum, &expectedPreSum,
                           &expectedExpertTokenNums);
-    std::vector<int32_t> expectedScoreboardTaskMap;
-    std::vector<int32_t> expectedProducerStatus;
-    std::vector<int32_t> expectedScoreboardMinStatus;
-    std::vector<int32_t> expectedWorkerWaitCounters;
-    std::vector<int32_t> expectedScoreboardTimeoutCounters;
-    BuildExpectedM2Scoreboard(args, expectedTokenMatrix, expectedPreSum, expectedExpertTokenNums, state->rank,
-                              &expectedScoreboardTaskMap, &expectedProducerStatus, &expectedScoreboardMinStatus,
-                              &expectedWorkerWaitCounters, &expectedScoreboardTimeoutCounters);
     std::vector<int8_t> expectedDispatchPayload;
     std::vector<float> expectedDispatchScale;
     BuildExpectedLocalDispatchQuant(args, state->golden, rowBytes, &expectedDispatchPayload, &expectedDispatchScale);
@@ -2352,15 +2199,6 @@ uint64_t VerifyM2Dispatch(const DispatchCombineTileArgs &args,
     mismatches += CompareI32Buffer("m2.cumsumMM", dump.cumsumMM, expectedCumsum, state->rank);
     mismatches += CompareI32Buffer("m2.preSumBeforeRank", dump.preSumBeforeRank, expectedPreSum, state->rank);
     mismatches += CompareI32Buffer("m2.expertTokenNums", dump.expertTokenNums, expectedExpertTokenNums, state->rank);
-    mismatches +=
-        CompareI32Buffer("m2.scoreboardTaskMap", dump.scoreboardTaskMap, expectedScoreboardTaskMap, state->rank);
-    mismatches += CompareI32Buffer("m2.producerStatus", dump.producerStatus, expectedProducerStatus, state->rank);
-    mismatches +=
-        CompareI32Buffer("m2.scoreboardMinStatus", dump.scoreboardMinStatus, expectedScoreboardMinStatus, state->rank);
-    mismatches +=
-        CompareI32Buffer("m2.workerWaitCounters", dump.workerWaitCounters, expectedWorkerWaitCounters, state->rank);
-    mismatches += CompareI32Buffer("m2.scoreboardTimeoutCounters", dump.scoreboardTimeoutCounters,
-                                   expectedScoreboardTimeoutCounters, state->rank);
     mismatches += CompareI8Buffer("m2.dispatchPayloadInt8", dump.dispatchPayload, expectedDispatchPayload, state->rank);
     mismatches += CompareFloatBuffer(args, "m2.dispatchScale", dump.dispatchScale, expectedDispatchScale, state->rank);
     mismatches += CompareI8Buffer("m2.gmm1InputInt8", dump.gmm1InputInt8, expectedGmm1Input, state->rank);
@@ -3477,28 +3315,10 @@ void RunM2Dispatch(const DispatchCombineTileArgs &args, const moe_dispatch_combi
     std::cout << "  route_quant_impl=pto_vec_tload_trowmax_tquant_tstore\n";
     std::cout << "  route_quant_scalar_payload_loop=false\n";
     std::cout << "  dispatch_tget_real=true\n";
-    std::cout << "  scoreboard_ledger=true\n";
-    std::cout << "  scoreboard_publish_after_tget=true\n";
-    std::cout << "  producer_status_domain=token_owner_local_expert\n";
-    std::cout << "  scoreboard_dependency_domain=local_expert_consumer_domain\n";
-    std::cout << "  scoreboard_dependency_domain_aggregation=true\n";
-    std::cout << "  scoreboard_global_min_task_id=false\n";
-    std::cout << "  scoreboard_worker_wait_plan=true\n";
-    std::cout << "  scoreboard_worker_wait_plan_domain=local_expert\n";
-    std::cout << "  scoreboard_domain_count=" << shape.expertPerRank << "\n";
-    std::cout << "  scoreboard_domain_stride_i32=16\n";
-    std::cout << "  scoreboard_zero_row_skip_semantics=true\n";
-    std::cout << "  soft_sync_mode=ledger_only\n";
-    std::cout << "  scoreboard_copy_done_status=" << kM2ScoreboardStatusCopyDone << "\n";
-    std::cout << "  scoreboard_skip_done_status=" << kM2ScoreboardStatusSkipDone << "\n";
+    std::cout << "  dispatch_gmm1_sync=expert_ready\n";
     std::cout << "  routing_per_token_scale_checksum=" << ChecksumVector(dump.routingPerTokenScale) << "\n";
     std::cout << "  dispatch_payload_int8_checksum=" << ChecksumVector(dump.dispatchPayload) << "\n";
     std::cout << "  gmm1_input_int8_checksum=" << ChecksumVector(dump.gmm1InputInt8) << "\n";
-    std::cout << "  scoreboard_task_map_checksum=" << ChecksumVector(dump.scoreboardTaskMap) << "\n";
-    std::cout << "  producer_status_checksum=" << ChecksumVector(dump.producerStatus) << "\n";
-    std::cout << "  scoreboard_min_status_checksum=" << ChecksumVector(dump.scoreboardMinStatus) << "\n";
-    std::cout << "  worker_wait_counters_checksum=" << ChecksumVector(dump.workerWaitCounters) << "\n";
-    std::cout << "  scoreboard_timeout_counters_checksum=" << ChecksumVector(dump.scoreboardTimeoutCounters) << "\n";
     std::cout << "  gmm_block_mock=false\n";
     std::cout << "  m2_numeric_stage=gmm1_tmatmul_ready\n";
     std::cout << "  pass=true\n";
@@ -4022,7 +3842,7 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  gmm1_input_direct=true\n";
     std::cout << "  route_pack_quant_device=true\n";
     std::cout << "  gmm_block_mock=false\n";
-    std::cout << "  soft_sync_ledger=true\n";
+    std::cout << "  dispatch_gmm1_sync=expert_ready\n";
     std::cout << "  swiglu_sync_groups=true\n";
     std::cout << "  tile_split_return_map=true\n";
     uint64_t droppedRows = CountDroppedRoutes(args, state);
@@ -4111,9 +3931,8 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     int32_t m3n4SyncallCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[13];
     int32_t m3n4CvWaitCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[14];
     bool m3n5DispatchGmm1Overlap = fusedEvidence != nullptr && fusedEvidence->m3nDispatchCounters[12] != 0;
-    bool m3n10ScoreboardAsync = fusedEvidence != nullptr && fusedEvidence->m3n10ScoreboardCounters[0] != 0;
     bool m3n11SubtileStride = fusedEvidence != nullptr && fusedEvidence->m3n11SubtileCounters[0] != 0;
-    bool dispatchGmm1Overlap = m3n5DispatchGmm1Overlap || m3n10ScoreboardAsync;
+    bool dispatchGmm1Overlap = m3n5DispatchGmm1Overlap;
     int32_t m3n5DispatchExpertReadyCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3nDispatchCounters[13];
     int32_t m3n5ZeroTokenExpertSkipCount = fusedEvidence == nullptr ? 0 : fusedEvidence->m3nDispatchCounters[14];
     bool m3n5Gmm1StartBeforeLastDispatchReady =
@@ -4183,16 +4002,11 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  exec_model=" << (m3n4StreamEnabled ? "aic_aiv_stream" : "bsp_syncall") << "\n";
     std::cout << "  fused_device_stage_boundaries="
               << (m3n8Gmm2CombineOverlap ?
-                      (m3n10ScoreboardAsync ?
-                           "scoreboard_dispatch_domain_plus_gmm1_sync_group_plus_gm_activation_and_gmm2_expert_ready" :
-                           "pto_event_dispatch_expert_gmm1_sync_group_plus_gm_activation_and_gmm2_expert_ready") :
+                      "pto_event_dispatch_expert_gmm1_sync_group_plus_gm_activation_and_gmm2_expert_ready" :
                       (m3n7ActivationGmm2Overlap ?
-                           (m3n10ScoreboardAsync ?
-                                "scoreboard_dispatch_domain_plus_gmm1_sync_group_plus_gm_activation_sync_group_ready" :
-                                "pto_event_dispatch_expert_gmm1_sync_group_plus_gm_activation_sync_group_ready") :
+                           "pto_event_dispatch_expert_gmm1_sync_group_plus_gm_activation_sync_group_ready" :
                            (m3n6Gmm1ActivationOverlap ?
-                                (m3n10ScoreboardAsync ? "scoreboard_dispatch_domain_plus_gmm1_sync_group_signals" :
-                                                        "pto_event_dispatch_expert_and_gmm1_sync_group_signals") :
+                                "pto_event_dispatch_expert_and_gmm1_sync_group_signals" :
                                 (m3n5DispatchGmm1Overlap ?
                                      "pto_event_dispatch_expert_signals" :
                                      (m3n4StreamEnabled ? "pto_event_full_open_signals" : "syncall_mix")))))
@@ -4208,7 +4022,7 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
                            "activation_gmm2_sync_group_rotation_stream" :
                            (m3n6Gmm1ActivationOverlap ?
                                 "gmm1_activation_sync_group_rotation_stream" :
-                                (dispatchGmm1Overlap ? "dispatch_scoreboard_domain_rotation_stream" :
+                                (dispatchGmm1Overlap ? "dispatch_expert_rotation_stream" :
                                                        (m3n4StreamEnabled ? "signal_full_open_stream_skeleton" :
                                                                             "skeleton_shared_layout")))))
               << "\n";
@@ -4219,8 +4033,7 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  syncall_count=" << m3n4SyncallCount << "\n";
     std::cout << "  cv_wait_count=" << m3n4CvWaitCount << "\n";
     std::cout << "  m3n5_dispatch_gmm1_overlap_enabled=" << (m3n5DispatchGmm1Overlap ? "true" : "false") << "\n";
-    std::cout << "  dispatch_overlap_granularity="
-              << (m3n10ScoreboardAsync ? "dependency_domain" : (m3n5DispatchGmm1Overlap ? "expert" : "none")) << "\n";
+    std::cout << "  dispatch_overlap_granularity=" << (m3n5DispatchGmm1Overlap ? "expert" : "none") << "\n";
     std::cout << "  m3n5_dispatch_expert_ready_count=" << m3n5DispatchExpertReadyCount << "\n";
     std::cout << "  m3n5_zero_token_expert_skip_count=" << m3n5ZeroTokenExpertSkipCount << "\n";
     std::cout << "  m3n5_gmm1_start_before_last_dispatch_ready="
@@ -4375,7 +4188,7 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  gmm_block_mock=false\n";
     std::cout << "  gmm_runtime_shape=true\n";
     std::cout << "  gmm_multiblock=true\n";
-    std::cout << "  soft_sync_ledger=true\n";
+    std::cout << "  dispatch_gmm1_sync=expert_ready\n";
     std::cout << "  swiglu_sync_groups=true\n";
     std::cout << "  tile_split_return_map=true\n";
     std::cout << "  m3_signal_cacheline_aligned=true\n";
@@ -4405,38 +4218,10 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
               << "\n";
     std::cout << "  overlap_timeout_count=" << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3Counters[15]) << "\n";
     std::cout << "  timeout_dump_fields=rank,expert,token_owner_rank,expert_owner_rank,stage,signal_id,"
-                 "producer_status_array,scoreboard_min_status\n";
+                 "dispatch_ready,gmm1_ready,activation_ready,gmm2_ready,ready_expert\n";
     if (fusedEvidence != nullptr) {
         PrintM3N9TimeoutDump(*fusedEvidence);
     }
-    bool scoreboardAsyncEnabled = m3n10ScoreboardAsync;
-    std::cout << "  scoreboard_async_enabled=" << (scoreboardAsyncEnabled ? "true" : "false") << "\n";
-    std::cout << "  scoreboard_async_transport=gm_poll_scoreboard\n";
-    std::cout << "  scoreboard_producer_poll_count="
-              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3n10ScoreboardCounters[1]) << "\n";
-    std::cout << "  scoreboard_worker_poll_count="
-              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3n10ScoreboardCounters[2]) << "\n";
-    std::cout << "  scoreboard_update_count="
-              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3n10ScoreboardCounters[3]) << "\n";
-    std::cout << "  scoreboard_min_status_last="
-              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3n10ScoreboardCounters[4]) << "\n";
-    std::cout << "  scoreboard_async_domain_count="
-              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3n10ScoreboardCounters[5]) << "\n";
-    std::cout << "  scoreboard_worker_ready_domain_count="
-              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3n10ScoreboardCounters[7]) << "\n";
-    std::cout << "  scoreboard_worker_poll_scope=scoreboardMinStatus[dependencyDomain]\n";
-    std::cout << "  scoreboard_worker_polls_all_producers=false\n";
-    std::cout << "  scoreboard_async_dependency_domain=local_expert_gmm_tile\n";
-    std::cout << "  scoreboard_async_global_min_task_id=false\n";
-    std::cout << "  scoreboard_async_fallback=m3n5_expert_ready_path\n";
-    std::cout << "  scoreboard_first_ready_domain="
-              << (fusedEvidence == nullptr ? -1 : fusedEvidence->m3n10ScoreboardCounters[12]) << "\n";
-    std::cout << "  scoreboard_last_ready_domain="
-              << (fusedEvidence == nullptr ? -1 : fusedEvidence->m3n10ScoreboardCounters[13]) << "\n";
-    std::cout << "  producer_status_checksum="
-              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3n10ProducerStatusChecksum) << "\n";
-    std::cout << "  scoreboard_min_status_checksum="
-              << (fusedEvidence == nullptr ? 0 : fusedEvidence->m3n10ScoreboardMinStatusChecksum) << "\n";
     std::cout << "  subtile_stride_async_enabled=false\n";
     std::cout << "  primitive_gap=TPUT_ASYNC_flat_contiguous_1d\n";
     std::cout << "  tput_async_stride_blocked_locator=TPUT_ASYNC requires flat-contiguous-1d\n";
@@ -4925,7 +4710,8 @@ int main(int argc, char **argv)
                             std::cout << "  overlap_timeout_count=" << iterEvidence.m3Counters[15] << "\n";
                             std::cout << "  "
                                          "timeout_dump_fields=rank,expert,token_owner_rank,expert_owner_rank,stage,"
-                                         "signal_id,producer_status_array,scoreboard_min_status\n";
+                                         "signal_id,dispatch_ready,gmm1_ready,activation_ready,gmm2_ready,"
+                                         "ready_expert\n";
                             dispatch_combine_tile::PrintM3N9TimeoutDump(iterEvidence);
                         }
                         if (args.runtime.m2FusedDebugStopStage == 1U) {

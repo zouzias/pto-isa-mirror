@@ -64,11 +64,7 @@ inline void PrintWorkspaceLayout(std::ostream &os, const WorkspaceLayout &layout
     PrintField(os, "swigluGroupDesc", layout.swigluGroupDesc);
     PrintField(os, "gmm1TileTaskPlan", layout.gmm1TileTaskPlan);
     PrintField(os, "gmm2TileTaskPlan", layout.gmm2TileTaskPlan);
-    PrintField(os, "scoreboardTaskMap", layout.scoreboardTaskMap);
-    PrintField(os, "producerStatus", layout.producerStatus);
-    PrintField(os, "scoreboardMinStatus", layout.scoreboardMinStatus);
-    PrintField(os, "workerWaitCounters", layout.workerWaitCounters);
-    PrintField(os, "scoreboardTimeoutCounters", layout.scoreboardTimeoutCounters);
+    PrintField(os, "timeoutDump", layout.timeoutDump);
     PrintField(os, "subTileReturnPlan", layout.subTileReturnPlan);
     PrintField(os, "subTileOwnerSegments", layout.subTileOwnerSegments);
     PrintField(os, "subTileReady", layout.subTileReady);

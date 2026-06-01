@@ -174,7 +174,6 @@ inline WorkspaceLayout MakeWorkspaceLayout(const ShapeConfig &shape)
     uint64_t returnRowBytes = ReturnPayloadRowBytes(shape);
     uint64_t w1Cols = CheckedMul(shape.intermediateSize, 2, "w1 intermediate cols");
     uint64_t syncGroupCap = shape.expertPerRank + 1;
-    uint64_t scoreboardTasks = CheckedMul(shape.rankNum, shape.expertPerRank, "scoreboard tasks");
     uint64_t gmmTaskCap = GmmTileTaskCapacity(shape);
     uint64_t subTileCap = ReturnSegmentCapacity(shape);
 
@@ -224,12 +223,7 @@ inline WorkspaceLayout MakeWorkspaceLayout(const ShapeConfig &shape)
     layout.swigluGroupDesc = AppendField(&offset, CheckedMul(syncGroupCap, 8 * sizeof(int32_t), "swiglu desc"));
     layout.gmm1TileTaskPlan = AppendField(&offset, CheckedMul(gmmTaskCap, 8 * sizeof(int32_t), "gmm1 tasks"));
     layout.gmm2TileTaskPlan = AppendField(&offset, CheckedMul(gmmTaskCap, 8 * sizeof(int32_t), "gmm2 tasks"));
-    layout.scoreboardTaskMap = AppendField(&offset, CheckedMul(scoreboardTasks, 4 * sizeof(int32_t), "task map"));
-    layout.producerStatus = AppendField(&offset, CheckedMul(scoreboardTasks, kCacheLineBytes, "producer status"));
-    layout.scoreboardMinStatus = AppendField(&offset, CheckedMul(scoreboardTasks, kCacheLineBytes, "min status"));
-    layout.workerWaitCounters = AppendField(&offset, CheckedMul(scoreboardTasks, kCacheLineBytes, "wait counters"));
-    layout.scoreboardTimeoutCounters =
-        AppendField(&offset, CheckedMul(scoreboardTasks, kCacheLineBytes, "timeout counters"));
+    layout.timeoutDump = AppendField(&offset, CheckedMul(shape.expertPerRank, kCacheLineBytes, "timeout dump"));
     layout.subTileReturnPlan = AppendField(&offset, CheckedMul(subTileCap, 8 * sizeof(int32_t), "sub tile plan"));
     layout.subTileOwnerSegments = AppendField(&offset, CheckedMul(subTileCap, 8 * sizeof(int32_t), "owner segments"));
     layout.subTileReady = AppendField(&offset, CheckedMul(subTileCap, kCacheLineBytes, "sub tile ready"));

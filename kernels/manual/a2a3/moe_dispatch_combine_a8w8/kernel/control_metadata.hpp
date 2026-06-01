@@ -30,9 +30,11 @@ constexpr uint32_t kM3N9TimeoutDumpExpertOwnerRankSlot = 4U;
 constexpr uint32_t kM3N9TimeoutDumpStageSlot = 5U;
 constexpr uint32_t kM3N9TimeoutDumpSignalIdSlot = 6U;
 constexpr uint32_t kM3N9TimeoutDumpDebugStopStageSlot = 7U;
-constexpr uint32_t kM3N10TimeoutDumpProducerStatusBaseSlot = 8U;
-constexpr uint32_t kM3N10TimeoutDumpScoreboardMinStatusSlot = 14U;
-constexpr uint32_t kM3N10TimeoutDumpScoreboardDomainSlot = 15U;
+constexpr uint32_t kM3N9TimeoutDumpDispatchReadySlot = 8U;
+constexpr uint32_t kM3N9TimeoutDumpGmm1ReadySlot = 9U;
+constexpr uint32_t kM3N9TimeoutDumpActivationReadySlot = 10U;
+constexpr uint32_t kM3N9TimeoutDumpGmm2ReadySlot = 11U;
+constexpr uint32_t kM3N9TimeoutDumpReadyExpertSlot = 12U;
 constexpr uint32_t kM3N9TimeoutStageDispatchToGmm1 = 1U;
 
 template <typename T>
@@ -99,11 +101,7 @@ struct ControlMetadataView {
     GmArrayView<int32_t> swigluGroupDesc;
     GmArrayView<int32_t> gmm1TileTaskPlan;
     GmArrayView<int32_t> gmm2TileTaskPlan;
-    GmArrayView<int32_t> scoreboardTaskMap;
-    GmArrayView<int32_t> producerStatus;
-    GmArrayView<int32_t> scoreboardMinStatus;
-    GmArrayView<int32_t> workerWaitCounters;
-    GmArrayView<int32_t> scoreboardTimeoutCounters;
+    GmArrayView<int32_t> timeoutDump;
     GmArrayView<int32_t> subTileReturnPlan;
     GmArrayView<int32_t> subTileOwnerSegments;
     GmArrayView<int32_t> subTileReady;
@@ -170,11 +168,7 @@ AICORE inline ControlMetadataView MakeControlMetadataView(GM_ADDR workspace, GM_
     view.swigluGroupDesc.ptr = I32Field(workspace, workspaceLayout.swigluGroupDesc);
     view.gmm1TileTaskPlan.ptr = I32Field(workspace, workspaceLayout.gmm1TileTaskPlan);
     view.gmm2TileTaskPlan.ptr = I32Field(workspace, workspaceLayout.gmm2TileTaskPlan);
-    view.scoreboardTaskMap.ptr = I32Field(workspace, workspaceLayout.scoreboardTaskMap);
-    view.producerStatus.ptr = I32Field(workspace, workspaceLayout.producerStatus);
-    view.scoreboardMinStatus.ptr = I32Field(workspace, workspaceLayout.scoreboardMinStatus);
-    view.workerWaitCounters.ptr = I32Field(workspace, workspaceLayout.workerWaitCounters);
-    view.scoreboardTimeoutCounters.ptr = I32Field(workspace, workspaceLayout.scoreboardTimeoutCounters);
+    view.timeoutDump.ptr = I32Field(workspace, workspaceLayout.timeoutDump);
     view.subTileReturnPlan.ptr = I32Field(workspace, workspaceLayout.subTileReturnPlan);
     view.subTileOwnerSegments.ptr = I32Field(workspace, workspaceLayout.subTileOwnerSegments);
     view.subTileReady.ptr = I32Field(workspace, workspaceLayout.subTileReady);

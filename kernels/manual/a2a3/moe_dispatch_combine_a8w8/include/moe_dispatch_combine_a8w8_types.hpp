@@ -62,9 +62,6 @@ constexpr uint32_t kM2FusedFullPtrWorkspaceSlot = 31;
 constexpr uint32_t kM2FusedFullPtrXActiveMaskSlot = 33;
 constexpr uint32_t kM2FusedFullTimelineEnableSlot = 35;
 constexpr uint32_t kM2FusedFullOverlapModeSlot = 36;
-constexpr uint32_t kM3N10ScoreboardCounterBase = 24U * 16U + 96U;
-constexpr uint32_t kM3N10ScoreboardCounterSlots = 16U;
-constexpr uint32_t kM3N10ScoreboardWorkerCounterBase = kM3N10ScoreboardCounterBase + kM3N10ScoreboardCounterSlots;
 constexpr uint32_t kM3N11SubtileRows = 16U;
 constexpr uint32_t kM3N11SubtileCounterBase = 24U * 16U + 128U;
 constexpr uint32_t kM3N11SubtileCounterSlots = 16U;
@@ -112,7 +109,6 @@ enum class M3N12TimelineWaitSource : uint32_t
     kNone = 0,
     kPtoEvent = 1,
     kGmPoll = 2,
-    kScoreboard = 3,
     kSyncAll = 4,
 };
 
@@ -232,11 +228,7 @@ struct WorkspaceLayout {
     FieldLayout swigluGroupDesc;
     FieldLayout gmm1TileTaskPlan;
     FieldLayout gmm2TileTaskPlan;
-    FieldLayout scoreboardTaskMap;
-    FieldLayout producerStatus;
-    FieldLayout scoreboardMinStatus;
-    FieldLayout workerWaitCounters;
-    FieldLayout scoreboardTimeoutCounters;
+    FieldLayout timeoutDump;
     FieldLayout subTileReturnPlan;
     FieldLayout subTileOwnerSegments;
     FieldLayout subTileReady;

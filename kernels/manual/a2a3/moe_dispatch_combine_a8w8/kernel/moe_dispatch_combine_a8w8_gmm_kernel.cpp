@@ -195,11 +195,7 @@ AICORE inline moe_dispatch_combine_a8w8::WorkspaceLayout MakeM2WorkspaceLayoutDe
     layout.swigluGroupDesc = M2AppendFieldDevice(offset, syncGroupCap * kM2SwigluGroupFields * sizeof(int32_t));
     layout.gmm1TileTaskPlan = M2AppendFieldDevice(offset, gmmTaskCap * kM2GmmTileTaskFields * sizeof(int32_t));
     layout.gmm2TileTaskPlan = M2AppendFieldDevice(offset, gmmTaskCap * kM2GmmTileTaskFields * sizeof(int32_t));
-    layout.scoreboardTaskMap = M2AppendFieldDevice(offset, rankExpertCount * 4U * sizeof(int32_t));
-    layout.producerStatus = M2AppendFieldDevice(offset, rankExpertCount * 64U);
-    layout.scoreboardMinStatus = M2AppendFieldDevice(offset, rankExpertCount * 64U);
-    layout.workerWaitCounters = M2AppendFieldDevice(offset, rankExpertCount * 64U);
-    layout.scoreboardTimeoutCounters = M2AppendFieldDevice(offset, rankExpertCount * 64U);
+    layout.timeoutDump = M2AppendFieldDevice(offset, shape.expertPerRank * 64U);
     layout.subTileReturnPlan = M2AppendFieldDevice(offset, subTileCap * kM2ReturnPlanFields * sizeof(int32_t));
     layout.subTileOwnerSegments = M2AppendFieldDevice(offset, subTileCap * kM2OwnerSegmentFields * sizeof(int32_t));
     layout.subTileReady = M2AppendFieldDevice(offset, subTileCap * 64U);

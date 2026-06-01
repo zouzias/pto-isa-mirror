@@ -3539,10 +3539,11 @@ M3N 首要交付"对标 `ffn.md` 的切分与并发形态 + counter/timeline 证
 - **Phase 2 骨架 + 逐边轮动（M3N.4-M3N.8）**：先用 M3N.4 把"stage 顺序 + 全栅栏"的 BSP 执行模型重构为"AIC 流 / AIV 流
   各自按 signal 推进"的循环骨架（signal 先全开 = 等价 BSP，correctness 不变、不声称性能）；再用 M3N.5-M3N.8 逐边把某条边的
   signal 等待范围从"等全部"缩成"等本 group/syncIdx"，建立真正的 compute/comm 错峰。
-- **Phase 3 收口（M3N.9-M3N.12）**：timeout/回归、scoreboard async、Combine V2 Sub-Tile/stride、timeline。
+- **Phase 3 收口（M3N.9-M3N.12）**：timeout/回归、Combine V2 Sub-Tile/stride、timeline。M3N.10
+  scoreboard async 已废弃，不再作为 active path。
 
 推荐顺序：`M3N.1 ∥ M3N.2 ∥ M3N.3`（可并行）→ `M3N.4`（骨架，必须先于所有轮动）→
-`M3N.5 → M3N.6 → M3N.7 → M3N.8`（逐边轮动，串行、共享骨架）→ `M3N.9` → `M3N.10 ∥ M3N.11` → `M3N.12`。
+`M3N.5 → M3N.6 → M3N.7 → M3N.8`（逐边轮动，串行、共享骨架）→ `M3N.9` → `M3N.11` → `M3N.12`。
 
 **性能门槛口径**：M3N accept = correctness 不退化 + 切分/worker/segment 证据正确 + counter/timeline 证明形态。
 **不要求 overlap on 的 E2E 快于 off**；E2E delta 只需如实记录可对照（可正/负/平），性能调优（K width、preload/swizzle、
@@ -3559,7 +3560,7 @@ worker 数、sub-tile 粒度）是形态完成后的后续迭代，不阻塞 M3N
 | M3.4 | Activation/GMM2 overlap | 轮动→**M3N.7** |
 | M3.5 | GMM2/Combine overlap + combine 多 AIV | 切分→**M3N.3**；轮动→**M3N.8** |
 | M3.6 | timeout dump + overlap 回归 | **M3N.9** |
-| M3.7 | Dispatch-GMM scoreboard async | **M3N.10** |
+| M3.7 | Dispatch-GMM scoreboard async | **M3N.10 已废弃** |
 | M3.8 | Combine V2 Sub-Tile/stride | **M3N.11** |
 | M3.9 | timeline | **M3N.12** |
 | （新增）| BSP→流水执行骨架 | **M3N.4** |
@@ -3780,28 +3781,27 @@ cross-core flag id 6-10 不能再新增独立边，M3N.8 首版必须沿用 M3N.
   GM-poll ready，`--overlap-mode off` 必须禁用 M3N.5-M3N.8 轮动并回到 M3N.4 full-open 骨架。
 - 完成后只能声称"fused overlap skeleton"；仍依赖 host 多 launch 则不通过。依赖扫描无输出。
 
-#### M3N.10 Dispatch-GMM scoreboard async
+#### M3N.10 Dispatch-GMM scoreboard async（已废弃，不实现）
 
-依赖任务：M3N.9。
+依赖任务：无。该任务已被 runtime 决策丢弃，不作为 M3/M4 验收前置条件。
 
-文件范围：修改 `kernel/control_metadata.hpp`、`kernel/protocol_core.hpp`、`kernel/a3_int8_backend.hpp`、`host/reference.hpp`。
+文件范围：无新增实现；当前代码只保留 M3N.5 expert-ready path。
 
 任务：
 
-- 在 M2.2c 已固定的 `scoreboardTaskMap/producerStatus/scoreboardMinStatus`、producer publish 时机和 consumer
-  dependency domain 上开启 async scoreboard；不重定义 task 语义。增加 AIV Ctrl 角色轮询 producer status，按 local expert /
-  GMM tile dependency domain 聚合 ready；worker 只轮询自身 `scoreboardMinStatus[dependencyDomain]`。
-- `scoreboardMinStatus` 不能实现为全局 min task id；保留 M3N.5 expert-ready path 作 fallback/debug。
+- 不恢复 scoreboard task map、producer status、min-status、worker wait counter 或 timeout counter layout。
+- 不新增 AIV Ctrl scoreboard 轮询路径；dispatch→GMM1 只使用 `dispatchGroupReady[expert]`。
+- timeout dump 只记录 rank/expert/stage/signal 与各 stage ready 信号。
 
 验收标准：
 
-- M2 四类 correctness 通过；counter 含 `producerPollCount/workerPollCount/scoreboardUpdateCount/scoreboardMinStatus`，结构证明 worker 不再轮询所有 producer。
-- 人为慢 producer 时快 worker 不被无关 expert/tile 拉齐；timeout dump 含 producer status 数组和 `scoreboardMinStatus`。
-- 不用 `AscendC::CrossCoreWaitFlag`/`SyncAll` 实现该同步。依赖扫描无输出。
+- 源码中的 host/include/kernel 路径扫描不到 scoreboard/M3N10 运行时代码。
+- small/large case correctness 仍通过，报告显示 dispatch→GMM1 为 expert 粒度同步。
+- M3R/M3S 实验路径不恢复。
 
 #### M3N.11 Combine V2 Sub-Tile/stride remote write
 
-依赖任务：M3N.9。可与 M3N.10 并行。
+依赖任务：M3N.9。
 
 文件范围：修改 `kernel/control_metadata.hpp`、`kernel/protocol_core.hpp`、`kernel/a3_int8_backend.hpp`、`host/reference.hpp`、`DESIGN.md`。
 
@@ -3824,7 +3824,7 @@ cross-core flag id 6-10 不能再新增独立边，M3N.8 首版必须沿用 M3N.
 
 #### M3N.12 Kernel timestamp 与 timeline 输出
 
-依赖任务：M3N.9，且 M3N.10/M3N.11 已完成或明确 blocked。
+依赖任务：M3N.9，且 M3N.11 已完成或明确 blocked；M3N.10 已废弃，不再阻塞 timeline。
 
 文件范围：修改 `include/moe_dispatch_combine_a8w8_layout.hpp`、`kernel/control_metadata.hpp`、`kernel/protocol_core.hpp`、`host/main.cpp`、`scripts/run_a3.sh`、`DESIGN.md`。
 
@@ -3833,7 +3833,8 @@ cross-core flag id 6-10 不能再新增独立边，M3N.8 首版必须沿用 M3N.
 - 为 route、count sync、dispatch gather、GMM1、SwiGLU/quant group、GMM2、combine、restore 设 timestamp slot（只用 M0.4/M2.1 预留 timeline 区域）。
 - host 输出 rank/core/stage 维度 timeline；SwiGLU 行带 `syncIdx/groupId/rowBegin/rowEnd`；dispatch/activation/combine/restore 行带
   `workerId/logicalAiv`、owned row/segment/tile range、processed/skipped；GMM 行带 `groupIdx/tileId/mTile/nTile/kLoop/logicalAic/waitSource`。
-- 记录 `cross_rank_barrier_count/syncall_count/cv_wait_count` 解释 V1/V2 同步差异；run script 加 `--timeline`，对比 BSP / M3N.4 骨架 / M3N.10 scoreboard / M3N.11 sub-tile。
+- 记录 `cross_rank_barrier_count/syncall_count/cv_wait_count` 解释 V1/V2 同步差异；run script 加 `--timeline`，
+  对比 BSP / M3N.4 骨架 / M3N.5 expert-ready / M3N.11 sub-tile。
 
 验收标准：
 
@@ -3841,11 +3842,302 @@ cross-core flag id 6-10 不能再新增独立边，M3N.8 首版必须沿用 M3N.
 - timeline 能同时展示 group ready、AIC tile compute、SwiGLU sync group、owner segment return 四种粒度；只能 stage-level 粗粒度则不 accepted。
 - `[Timeline]` 与 `[PerfReport]` 的 `case_name/seed/shape/run_id` 一致；timeline 失败不影响 correctness 回归。依赖扫描无输出。
 
-### 14.5 M4: 最终 PTO 化收口
+### 14.5 M3O: a8w8 多核切分与 overlap 优化收口设计
+
+本节是在 M3 runtime 已按 correctness-first 方向跑通后，对照 `ffn.md` 的真实 FFN 执行模板，系统梳理
+`moe_dispatch_combine_a8w8` 当前多核切分与同步粒度的实际状态，并定义下一轮优化任务。M3O 是优化收口任务，
+不改变 M2/M3 已固定的 row order、capacity/drop、expert ready 语义和 host reference 语义。
+
+**硬约束**：
+
+- M3R/M3S 两条实验路径已丢弃，不作为设计基线，不恢复其 row-block/stage 代码或 check 脚本。
+- M3N.10 scoreboard async 已被 runtime 决策废弃；本节不把 scoreboard async 作为优化路线。当前实现已删除
+  scoreboard task map、producer status、min-status、worker wait counter、timeout counter 的 layout、kernel path 和 host report
+  字段；timeout dump 只保留 ready signal 诊断。
+- dispatch→GMM1 保持 FFN 原始口径的 **expert 粒度**同步即可；后续优化只改善该粒度内的 worker 切分、
+  GMM tile 分发和报表真实性，不重新引入更细 scoreboard 依赖。
+- M3O accept 仍以 correctness 为第一门槛；性能数据必须在 correctness pass 后采信，且要区分功能 enabled、
+  多核实际生效、E2E 收益三种状态。
+
+#### M3O.0 当前阶段切分/同步现状总表
+
+`ffn.md` 的模板要点是：rank 是跨卡边界，core 是执行资源，group/expert 是 ready/overlap 边界，
+tile/row/segment 才是 worker work item。a8w8 当前代码形态已经有这些名词和部分 counter，但很多地方仍是
+single-worker / block0 scalar correctness path。
+
+| 阶段 | ffn.md 模板 | a8w8 当前实际 | 主要差距 / 风险 | 优化方向 |
+| --- | --- | --- | --- | --- |
+| A. route/pack/quant | init_routing 四段：sort → count → srcToDst → gather+quant；大数据多核归并，stage 内行/列切分 + UB pipe | token shard + per-expert count/prefix correctness path；`M3NDispatchWorkerCount` 有估算逻辑，但当前 runtime assignment 折成 1 个 worker | large case route/quant 基本串行；`M3NCountPreviousRoutesInShard` 对 shard 内前序 route 线性回扫，可能形成 O(rows^2) 热点；report 中 launch AIV 数和实际 worker 数容易混淆 | 抽出 stage-local dispatch worker policy；保留 scale false-sharing 保护；用 per-worker per-expert local ordinal/prefix 替代前序 route 回扫 |
+| B. count allgather / prefix | count 矩阵跨卡 DataAsFlag，到达后各核分片算 prefix/cumsum | publish/wait 有 shard 接口，但 worker=1；prefix/cumsum 仍由 main AIV 串行收口，周围多次 hard sync | count/prefix 是串行收口点；跨卡信号正确但并行度不足 | count publish/wait 按 dst/src rank 分片；prefix 分 expert/localExpert 分片，最后只保留一次可解释的收口 |
+| C. dispatch gather → GMM1 input | 按 expert group 搬完即发布 ready；GMM1 等本 expert，dispatch 与 GMM1 错峰 | M3N5 expert-ready path 是当前最接近 FFN 的部分；scoreboard runtime/layout/report 已删除；gather worker 仍受 dispatch worker=1 限制 | 同步粒度正确，但搬运分活不足；empty expert/zero-token 仍需保留显式 ready | 保持 expert ready；改为 localExpert/tokenOwner/row tile 多 worker gather；zero-token expert 发布 ready 不变 |
+| D. GMM1 | expert 是 ready 粒度；AIC 多核按 GMM tile 分发，tile 才是计算 work item，跨 expert 做 core 接力 | 构建了 tile task plan，但实际 `blockIdx != 0` 直接跳过，底层 scalar GMM 也只允许 block0 执行 | `mixed_aic_blocks` 不等于实际 GMM 多核；large case 性能被 block0 scalar GMM 限死 | 实现 `taskId = blockIdx; taskId < taskCount; taskId += blockNum` 的基础 tile 分发，再补 swizzle/startCoreIdx |
+| E. GMM1 epilogue / SwiGLU / requant | SwiGLU 按 group/sync-group 错峰；内部有 UB ping-pong prefill/drain | M3N6/M3N7/M3N8 当前 runtime 返回 false；false 路径中 activation/requant 走 AIC scalar path，仍基本 block0 | M3N.2 多 AIV activation 和 M3N.6 sync-group overlap 未实际打开；`activation_aiv_workers` 报表不能代表有效 payload 并行 | 先把 activation 从 AIC scalar path 迁回 AIV stage-local workers，再按 sync-group 粒度打开 GMM1→activation |
+| F. GMM2 | 同 GMM1，GMM2 tile 多 AIC 分发；完成后按 expert/group 给 combine ready | GMM2 同样有 task plan，但当前 block0 scalar 执行；M3N7 sync-group overlap disabled | 无真实 AIC tile 并行；sync-group intersect 回 tile 的路径没有 active 证据 | 复用 GMM tile scheduler；在 activation ready 后按 syncIdx intersect 到 tile task，保证 expert/tile 投影可追溯 |
+| G. combine return | V1 continuous 适合大 shape；V2 sub-tile/stride 适合小 shape，目标是减少 SyncAll 空泡 | M3N11 同步 sub-tile/stride 功能形态存在；M3N8 overlap disabled；combine workerCount 仍跟 dispatch assignment 绑定，当前常为 1 | 有 sub-tile 功能，但没有 full async combine；`TPUT_ASYNC` flat-contiguous-1D 限制仍是 primitive gap；多 AIV return 没有效生效 | 拆出 combine stage-local worker policy；V1 continuous 与 V2 sub-tile 都按 owner segment/tile 分 worker；继续标 `full_async_combine_claim=false` |
+| H. restore / unpermute | combine 后全卡 barrier，再 unpermute/reduce；按 token 切分 | 当前 restore 使用 8 个 AIV 按 token shard 做 scalar weighted add | restore 是少数明确多 AIV 切分的阶段，但只覆盖末端 reduce，不能抵消前面主路径串行 | 保持 8 AIV token shard；补充 per-worker token/route counters 和 restore stage timing |
+| report / evidence | counter/timeline 必须证明 stage 内 worker range、ready 粒度和 overlap 事实 | 部分字段是配置/意图字段，可能高估实际并行；mpirun stdout 会 interleave | `gmm_multiblock=true`、`mixed_aiv_blocks=48` 不能代表 payload worker 生效；日志 interleave 使部分字段不可机器判读 | report 分离 requested/available/active 三类字段；增加 structured rank-local report 文件或单行 JSON |
+
+当前已跑通的 FFN v3 cases 证明 correctness 可过，但也暴露性能与并行缺口：
+
+- `ffn-v3-small` / `ffn-v3-4097` on-mode correctness pass；report 不再输出 scoreboard async 字段，dispatch→GMM1
+  只报告 expert-ready 同步。
+- 最近 clean suite 日志中 `ffn-v3-4097` E2E 约 51.56 s，说明当前路径主要是 correctness 骨架，不是性能收口。
+- `maxOutputSize=8194` 的 large case capacity 语义正确：rank1 会 drop 1 row，属于容量边界，不是越界。
+
+#### M3O.1 overlap 同步粒度现状表
+
+| 边 | 设计/FFN 粒度 | 当前 runtime 状态 | 后续要求 |
+| --- | --- | --- | --- |
+| dispatch → GMM1 | expert 粒度，`dispatchGroupReady[expert]` | 保留并通过；scoreboard runtime/layout/report 已删除 | 保持 expert 粒度，不恢复 scoreboard；只优化 expert 内 dispatch/gather worker 和 GMM tile 多核 |
+| GMM1 → SwiGLU | sync-group 粒度，`gmm1SyncGroupReady[syncIdx]` | 当前 active path disabled，回退为 coarse/full-open 行为 | 先完成 activation stage-local 多 AIV，再打开 sync-group ready；event 不足用 GM poll/primitive-gap 说明，不能假报 overlap |
+| SwiGLU → GMM2 | sync-group 粒度，`activationSyncGroupReady[syncIdx]`，并 intersect 回 GMM tile | 当前跟随 M3N6 disabled | 必须把 consumed syncIdx 映射到 expert/tile task；counter/timeline 能追溯 `syncIdx -> expert range -> tile id` |
+| GMM2 → combine | expert 粒度，`gmm2GroupReady[expert]`；sub-tile 是 tile 内 return refinement | 当前 M3N8 disabled；M3N11 同步 sub-tile 功能存在但不 full async | 大 shape 优先 V1 continuous/owner segment；小 shape 可用 V2 sub-tile；不声称 `TPUT_ASYNC` overlap |
+| combine → restore | rank/peer 完成信号 + return segment counter | 当前 restore 前仍依赖 combine done / return counter 等跨 rank GM 信号 | 保持 correctness 信号；优化只改 restore token shard 证据和局部 pipe，不弱化跨 rank 完成条件 |
+
+#### M3O.2 优化任务总顺序
+
+推荐任务顺序：
+
+`M3O.3 report 真实性` → `M3O.4 stage-local worker policy` →
+`M3O.5 dispatch ordinal/prefix 优化` → `M3O.6 AIC GMM tile 多核` →
+`M3O.7 activation/restore AIV 切分修正` → `M3O.8 combine stage-local 多 worker` →
+`M3O.9 sync-group / combine overlap 重新打开`。
+
+原则：
+
+- 先让 report 能证明真实执行，再优化并行，否则无法判断收益来自哪里。
+- 先做 stage 内切分，再打开更细 overlap；否则同步 bug 会和分活 bug 叠在一起。
+- 任何优化都必须同时覆盖 small 与 large case，且 large 的 `maxOutputSize` 固定为 8194，不能改小规避容量边界。
+
+统一阶段验收门禁：
+
+- M3O.3-M3O.9 每个任务阶段的验收都必须包含以下两个 case；只跑 synthetic、balanced、skewed 或单一 large/small
+  都不能 accepted。
+- `ffn-v3-small`: `m=16, k=128, n=128, topk=2, experts=2, maxOutputSize=32`。
+- `ffn-v3-4097`: `m=4097, k=128, n=128, topk=2, experts=2, maxOutputSize=8194`。
+- 两个 case 都必须 correctness pass；性能、counter、timeline、active worker 等本阶段证据只能在 correctness pass 后采信。
+- 如果该阶段有 on/off 或 feature flag，两个 case 都要记录 on/off；如果没有独立开关，记录当前 active path 和对应 stage
+  report/timeline。
+
+#### M3O.3 Report 真实性与回归护栏
+
+依赖任务：当前 M3 runtime pass。
+
+文件范围：`host/main.cpp`、`scripts/run_a3.sh`、必要时 `include/moe_dispatch_combine_a8w8_layout.hpp`。
+
+任务：
+
+- 把 report 字段拆成三类：
+  - `*_requested`：host/launch 请求的 blocks/workers/mode。
+  - `*_available`：shape、scratch、flag、primitive 能支持的上限。
+  - `*_active`：device counter 证明实际处理 payload 的 worker/block 数。
+- `mixed_aic_blocks`、`mixed_aiv_blocks` 只表示 launch resource；新增 `gmm1_active_aic_blocks`、
+  `gmm2_active_aic_blocks`、`dispatch_active_aiv_workers`、`activation_active_aiv_workers`、
+  `combine_active_aiv_workers`。
+- 输出 rank-local structured report，至少保证每个 rank 的 `[CorrectnessReport]` 字段不被 mpirun interleave 打乱；
+  stdout 可以保留 human-readable 摘要。
+- 对旧字段做兼容，但如果字段只是意图而非事实，必须改名或追加 `_claim=false/_evidence=partial`。
+
+验收标准：
+
+- 本阶段验收必须包含统一阶段验收门禁的 `ffn-v3-small` 与 `ffn-v3-4097(maxOutputSize=8194)`。
+- `ffn-v3-small` 与 `ffn-v3-4097` on/off 都能输出结构化 report。
+- 当 GMM 仍只有 block0 时，`gmm*_active_aic_blocks=1`，不能只因 launch 24 个 AIC 就报 multi-block active。
+- 当 workerCount 被降到 1 时，`dispatch_payload_parallel=false`、`activation_payload_parallel=false`、
+  `combine_payload_parallel=false` 与 active counter 一致。
+- 依赖扫描无输出；M3R/M3S 脚本不纳入回归。
+
+#### M3O.4 Stage-local worker policy
+
+依赖任务：M3O.3。
+
+文件范围：`kernel/moe_dispatch_combine_a8w8_mixed_spike.cpp`、`kernel/moe_dispatch_combine_a8w8_kernel.cpp`、
+`host/main.cpp`。
+
+问题：
+
+当前 dispatch、activation、combine 复用 `M3NDispatchWorkerAssignment`。runtime 为规避 dispatch scale false sharing，
+把 assignment 折成 1 个 worker，结果 activation/combine 也一起被拖成 1。这个 Module 的 Interface 太浅：
+调用方拿到的不是“本 stage 该如何分活”，而是“dispatch 的保守 worker 结果”。
+
+设计：
+
+- 新增 stage-local worker policy：
+  - `M3ODispatchWorkerPolicy`：默认保守，可按 shape/scale-store mode 决定 1 或多 worker。
+  - `M3OActivationWorkerPolicy`：按 row/sync-group tile 分配，不受 dispatch scale false sharing 限制。
+  - `M3OCombineWorkerPolicy`：按 owner segment / subTile tile / hidden chunk 分配，不受 dispatch scale 限制。
+  - `M3ORestoreWorkerPolicy`：保持 token shard，记录 active worker。
+- 每个 policy 都输出 `workerId/workerCount/active/rangeBegin/rangeEnd`，并写入独立 counter base，避免复用
+  `kM3NDispatchCounterBase` 表示所有 stage。
+- 保留 dispatch 单 worker 的安全 fallback，但该 fallback 只影响 dispatch route/scale path。
+
+验收标准：
+
+- 本阶段验收必须包含统一阶段验收门禁的 `ffn-v3-small` 与 `ffn-v3-4097(maxOutputSize=8194)`。
+- 在 dispatch worker=1 时，activation/combine 仍可在 synthetic 或 small case 中显示 active workers > 1。
+- 各 stage worker range 无重叠无缺口；zero-token/empty segment worker 可以 skipped，但不能造成永久等待。
+- report 明确显示 `dispatch_worker_policy=scale_safe_single` 或 `dispatch_worker_policy=multi_worker_enabled`。
+
+#### M3O.5 Dispatch ordinal/prefix 与 scale store 优化
+
+依赖任务：M3O.4。
+
+文件范围：`kernel/moe_dispatch_combine_a8w8_kernel.cpp`、`kernel/moe_dispatch_combine_a8w8_mixed_spike.cpp`、
+`host/reference.hpp`。
+
+问题：
+
+`M3NRoutePackQuantLocalShardScalar` 当前用 `M3NDispatchPreviousWorkerRows + M3NCountPreviousRoutesInShard`
+计算 packed row。前者依赖 worker count scratch，后者在 shard 内回扫前序 routes。worker=1 时 correctness 简单，
+但 large shape 下回扫会显著放大成本；多 worker 打开后还会让 ordinal 计算与 scale false sharing 同时变复杂。
+
+设计：
+
+- route count 阶段为每个 worker、每个 globalExpert 生成 `workerExpertCount[worker][expert]`。
+- main AIV 或 per-expert reducer 生成 `workerExpertPrefix[worker][expert]`，使每个 worker 的 packed row =
+  `blockPrefixPerExpert[expert] + workerExpertPrefix[worker][expert] + localOrdinalInWorkerExpert`。
+- worker 内 `localOrdinalInWorkerExpert` 用本 worker 的 rolling counter 更新，不再回扫 expertIdx。
+- scale/payload 写入按 packed row 唯一 owner 保证单写；scale store 继续使用 scalar bit-preserving path，只有在 cacheline 对齐/分片
+  可证明时才允许多 worker 写相邻 scale。
+- 对 route invalid / inactive / over-capacity 的 expandedRowIdx 写入保持原语义。
+
+验收标准：
+
+- 本阶段验收必须包含统一阶段验收门禁的 `ffn-v3-small` 与 `ffn-v3-4097(maxOutputSize=8194)`。
+- `ffn-v3-4097` large case 中 route/pack 阶段不再包含 shard 内前序 route 回扫。
+- worker=1 与 multi-worker 的 `expandedRowIdx`、`tokenPerExpertMatrix`、`dispatchPayload`、`dispatchScale` 与 reference 一致。
+- skewed、zero-token、inactive-mask、over-capacity 都 pass；capacity drop 数与 host reference 一致。
+
+#### M3O.6 AIC GMM tile 多核化
+
+依赖任务：M3O.3；可与 M3O.5 并行。
+
+文件范围：`kernel/moe_dispatch_combine_a8w8_mixed_spike.cpp`、`kernel/moe_dispatch_combine_a8w8_kernel.cpp`。
+
+问题：
+
+当前 GMM1/GMM2 构建了 tile task plan，但 `M2FusedRunInt8GmmTileScalar` 和调用处都把实际计算限制在 block0。
+这与 `ffn.md` 中“group 是 ready 边界，tile 是 AIC work item”的模型不一致，也是 large case E2E 过高的主因之一。
+
+设计：
+
+- 第一阶段只实现基础 round-robin：
+  - GMM1：`for (taskId = blockIdx; taskId < gmm1TaskCount; taskId += blockNum)`。
+  - GMM2：`for (taskId = blockIdx; taskId < gmm2TaskCount; taskId += blockNum)`。
+- `M2FusedRunInt8GmmTileScalar` 不再内部过滤 `blockIdx != 0`；过滤逻辑移到 scheduler。
+- 每个 task 写唯一 `gmm*AccInt32` tile，避免原子；task plan 保留 expert、rowBegin、mValid、nBase、nValid。
+- sync/ready 发布仍由 group owner/main AIC 汇总：
+  - dispatch→GMM1 继续等 expert ready。
+  - GMM1 sync-group ready 必须等该 syncIdx 下所有 tile task 完成后发布。
+  - GMM2 expert ready 必须等该 expert 所有 tile task 完成后发布。
+- 第二阶段再补 FFN 风格 swizzle 和 startCoreIdx 接力；第一阶段验收只要求正确的多 AIC active。
+
+验收标准：
+
+- 本阶段验收必须包含统一阶段验收门禁的 `ffn-v3-small` 与 `ffn-v3-4097(maxOutputSize=8194)`。
+- multi-tile case 中 `gmm1_active_aic_blocks>1` 或 `gmm2_active_aic_blocks>1`。
+- tile task 无重复写、无遗漏；timeline 至少能 dump 首个/最后一个 task 的 `blockIdx, taskId, expert, rowBegin, nBase`。
+- `ffn-v3-small` 和 `ffn-v3-4097` correctness pass；large E2E 只记录，不作为第一阶段 pass/fail。
+
+#### M3O.7 Activation/SwiGLU/requant AIV 化与 restore 证据
+
+依赖任务：M3O.4；建议在 M3O.6 第一阶段后打开。
+
+文件范围：`kernel/moe_dispatch_combine_a8w8_mixed_spike.cpp`、`kernel/moe_dispatch_combine_a8w8_kernel.cpp`、
+`host/main.cpp`。
+
+任务：
+
+- 将 activation/requant 的 active path 从 AIC scalar fallback 迁回 AIV stage-local workers。
+- AIV worker 只消费 `swigluGroupDesc[syncIdx].rowBegin/rowEnd`，用 grid-stride 分 row；不改变
+  `gmm2InputInt8/gmm2PerTokenScale/swigluOut` layout。
+- pipe 状态先如实记录：
+  - scalar path：`activation_pipe_stages=1`、`prefill=false`、`drain=false`。
+  - 后续 PTO Vec pipe 化后再改成 `>1/true/true`。
+- restore 保持 8 AIV token shard，但新增 per-worker token count、route count、skipped route count。
+
+验收标准：
+
+- 本阶段验收必须包含统一阶段验收门禁的 `ffn-v3-small` 与 `ffn-v3-4097(maxOutputSize=8194)`。
+- activation active workers 与 worker range 可由 counter 证明；不能再只靠 `activation_aiv_workers=1` 兜底。
+- `activationSyncGroupReady` 只在该 syncIdx 的 row 全部完成后发布。
+- restore report 包含 `restore_active_aiv_workers`、`restore_token_ranges_nonoverlap`、`restore_routes_processed`。
+
+#### M3O.8 Combine stage-local 多 worker 与 V1/V2 选择
+
+依赖任务：M3O.4、M3O.6。
+
+文件范围：`kernel/moe_dispatch_combine_a8w8_kernel.cpp`、`kernel/moe_dispatch_combine_a8w8_mixed_spike.cpp`、
+`host/main.cpp`。
+
+任务：
+
+- combine worker policy 独立于 dispatch：
+  - V1 large/default：按 `OwnerSegment` 或 `(expert, tokenOwner, hidden chunk)` 分 worker。
+  - V2 small/sub-tile：按 `subTileReturnPlan.tileId` 或 `subTileOwnerSegments.segmentId` 分 worker。
+- `M3N11TransferHalfSubtileStride` 继续是同步 GM copy/TPUT 语义；`TPUT_ASYNC` 限制仍记录为 primitive gap，
+  不引入 AscendC fallback。
+- combine notify 保持跨 rank 完成语义：payload/segment counter visibility 后再 notify，不能为性能提前发 done。
+
+验收标准：
+
+- 本阶段验收必须包含统一阶段验收门禁的 `ffn-v3-small` 与 `ffn-v3-4097(maxOutputSize=8194)`。
+- small 或 synthetic case 中 `combine_active_aiv_workers>1`，per-worker segment counts 非全落在 worker0。
+- large case 若 policy 选择 V1，report 写 `combine_mode=continuous_segment` 或 `segment_stride`；若选择 V2，
+  report 写 `combine_mode=subtile_stride`，并解释选择原因。
+- `combine_done_signal_checksum`、`return_segment_counters_checksum` 与 correctness report 一致。
+
+#### M3O.9 重新打开 sync-group / combine overlap
+
+依赖任务：M3O.6、M3O.7、M3O.8。
+
+文件范围：`kernel/protocol_core.hpp`、`kernel/moe_dispatch_combine_a8w8_mixed_spike.cpp`、`host/main.cpp`。
+
+任务：
+
+- 在 stage 内多核证据稳定后，按以下顺序重新打开 overlap：
+  1. GMM1→activation：sync-group 粒度，先 GM-poll ready，再视 flag 资源切回 `pto::Event`。
+  2. activation→GMM2：sync-group 粒度，必须 intersect 回 GMM2 tile task。
+  3. GMM2→combine：expert 粒度；combine 可用 V1 owner segment 或 V2 sub-tile refinement。
+- dispatch→GMM1 不改粒度，继续 expert ready。
+- 每条边开启时必须同时输出 producer/consumer counter、first-consume-before-last-ready 证据和 timeout dump 信息。
+
+验收标准：
+
+- 本阶段验收必须包含统一阶段验收门禁的 `ffn-v3-small` 与 `ffn-v3-4097(maxOutputSize=8194)`。
+- 开启任一边前，上一阶段多核 active counter 必须可信。
+- `m3n6_gmm1_activation_overlap_enabled=true` 时，`gmm1_activation_overlap_granularity=sync_group`，不能报 `row_block`。
+- `m3n7_activation_gmm2_overlap_enabled=true` 时，timeline 能追溯 `syncIdx -> tile task`。
+- `m3n8_gmm2_combine_overlap_enabled=true` 时，report 明确 `full_async_combine_claim=false`，并记录 primitive gap。
+
+#### M3O.10 回归矩阵与性能口径
+
+依赖任务：M3O.3-M3O.9 按需递进。
+
+必跑 correctness cases：
+
+- `small`
+- `balanced`
+- `skewed`
+- `zero-token`
+- `inactive-mask`
+- `over-capacity`
+- `ffn-v3-small`: `m=16, k=128, n=128, topk=2, experts=2, maxOutputSize=32`
+- `ffn-v3-4097`: `m=4097, k=128, n=128, topk=2, experts=2, maxOutputSize=8194`
+
+性能口径：
+
+- 每个优化任务记录 `stage_us` 或 timeline delta，不只看 E2E。
+- E2E 只在 correctness pass 后采信；on/off 都要记录。
+- large case 若仍为秒级，必须用 timeline 拆出 route、GMM1、activation、GMM2、combine、restore 的主耗时。
+- 性能收益不是 M3O.3-M3O.8 的唯一 accept 门槛；但 M3O.9 打开 overlap 后必须能证明至少一个边有真实
+  producer/consumer 错峰，不接受只开 boolean。
+
+### 14.6 M4: 最终 PTO 化收口
 
 #### M4.1 最小回归脚本
 
-依赖任务：M3N.12（timeline），且 M3N.10/M3N.11 已完成或明确 blocked。
+依赖任务：M3N.12（timeline），且 M3N.11 已完成或明确 blocked；M3N.10 已废弃。
 
 文件范围：
 
@@ -3877,8 +4169,8 @@ cross-core flag id 6-10 不能再新增独立边，M3N.8 首版必须沿用 M3N.
 任务：
 
 - 标注 A3 A8W8 backend 当前状态。
-- 标注每个 MegaMoE article-level overlap 点当前状态：Dispatch remote read、scoreboard soft sync、Sub-Tile/stride
-  combine、timeline。
+- 标注每个 MegaMoE article-level overlap 点当前状态：Dispatch remote read、Dispatch-GMM expert-ready 同步、
+  Sub-Tile/stride combine、timeline。
 - 清理已过期任务描述。
 - 保留最终验收命令和已知限制。
 - 关闭或转交 `Issue Log` 中所有 open P0/P1 issue。
@@ -3906,10 +4198,10 @@ cross-core flag id 6-10 不能再新增独立边，M3N.8 首版必须沿用 M3N.
 | Dispatch 算法退回后同步远端写 | GMM 前拿不到连续子矩阵，无法实现 MegaMoE overlap | 固定前同步 + 远端读；`RoutePackQuantLocal` 只写本 rank peer-visible window，`GatherDispatchToGmm1Input` 直接形成 GMM1 input |
 | M2 未前置 MegaMoE 合并点 | M3 需要重写 dispatch/combine 数据布局，overlap gap 过大 | M2 必须完成 route/pack/quant 合并、GMM1 contiguous input、GMM2 epilogue/return 合并；M3 只改调度和 ready 粒度 |
 | `swigluSyncGroups/dequantSum` 到 M3 才定义 | Activation/GMM2 overlap 需要重做 row range，M3.3/M3.4 无法只打开 signal | M2.1 预留字段，M2.5 固定 group plan 和 row range；M3.1-M3.4 只启用/校验 signal 和 counter |
-| Dispatch-GMM scoreboard 到 M3 才设计 | task id、producer status、worker wait 粒度后改会影响 GMM1 启动条件 | M2.2c 固定 `scoreboardTaskMap/producerStatus/scoreboardMinStatus`、producer publish 时机和 consumer dependency domain；M3.7 只打开 async scoreboard 行为 |
+| Dispatch-GMM 同步粒度后改 | 若在优化中恢复细粒度依赖，会影响 GMM1 启动条件和 timeout 定位 | 当前固定为 `dispatchGroupReady[expert]` expert-ready 语义；scoreboard runtime/layout/report 不恢复 |
 | GMM-Combine owner segment 到 M3 才设计 | combine offset 或 return payload layout 被重写，M2 correctness 不能证明 M3 path | M2.7a 固定 `ReturnSegmentPlan/OwnerSegment/subTileReady` 语义；M3.8 只验证 stride/multi-segment remote write 能力 |
 | PTO A3 remote stride 能力不足 | 无法实现文章级 Sub-Tile 非连续 combine | M3 单独做 `GlobalTensor Shape/Stride + TPUT` 能力验证；不足则 blocked，不写 AscendC fallback |
-| timeline 改动污染 payload/control layout | 为观测新增字段时破坏 row/order/offset，导致 correctness 和 timeline 互相影响 | M0.4/M2.1 预留 timeline/timestamp 区域；M3.9 只使用或扩容该区域，不改 payload、scoreboard 或 Sub-Tile offset |
+| timeline 改动污染 payload/control layout | 为观测新增字段时破坏 row/order/offset，导致 correctness 和 timeline 互相影响 | M0.4/M2.1 预留 timeline/timestamp 区域；M3.9 只使用或扩容该区域，不改 payload 或 Sub-Tile offset |
 | small shape 前同步开销 | 性能可能差于独立通信加计算的基线 | 验收区分 correctness/overlap/性能；small shape 不作为性能收益门槛 |
 | MTE/带宽抢占 | compute/comm 并行时 GMM 耗时膨胀 | timeline 打点拆解，记录 standalone 与 overlap 耗时差 |
 | capacity overflow | 写越界或 combine 丢 token | host precheck + device counter + fail fast |

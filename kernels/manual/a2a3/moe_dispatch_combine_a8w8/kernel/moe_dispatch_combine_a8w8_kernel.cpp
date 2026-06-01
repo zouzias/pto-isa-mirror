@@ -59,10 +59,6 @@ constexpr uint64_t kM2EpilogueFloatTileOffset = 0x1000;
 constexpr uint64_t kM2EpilogueScaleTileOffset = 0x2400;
 constexpr uint64_t kM2EpilogueScaledTileOffset = 0x3800;
 constexpr uint64_t kM2EpilogueHalfTileOffset = 0x4C00;
-constexpr int32_t kM2ScoreboardStatusInit = 0;
-constexpr int32_t kM2ScoreboardStatusRowsPresent = 1;
-constexpr int32_t kM2ScoreboardStatusCopyDone = 2;
-constexpr int32_t kM2ScoreboardStatusSkipDone = 3;
 constexpr uint32_t kM2GmmBaseM = moe_dispatch_combine_a8w8::kGmmBaseM;
 constexpr uint32_t kM2GmmBaseN = moe_dispatch_combine_a8w8::kGmmBaseN;
 constexpr uint32_t kM2ReturnTileRows = moe_dispatch_combine_a8w8::kReturnTileRows;
@@ -334,7 +330,6 @@ AICORE inline moe_dispatch_combine_a8w8::WorkspaceLayout MakeM2WorkspaceLayoutDe
     uint64_t returnRowBytes = M2ReturnPayloadRowBytes(shape);
     uint64_t w1Cols = static_cast<uint64_t>(shape.intermediateSize) * 2U;
     uint64_t syncGroupCap = static_cast<uint64_t>(shape.expertPerRank) + 1U;
-    uint64_t scoreboardTasks = rankExpertCount;
     uint64_t gmmTaskCap = M2GmmTileTaskCapacity(shape);
     uint64_t subTileCap = M2ReturnSegmentCapacity(shape);
 
@@ -375,11 +370,7 @@ AICORE inline moe_dispatch_combine_a8w8::WorkspaceLayout MakeM2WorkspaceLayoutDe
     layout.swigluGroupDesc = M2AppendFieldDevice(offset, syncGroupCap * kM2SwigluGroupFields * sizeof(int32_t));
     layout.gmm1TileTaskPlan = M2AppendFieldDevice(offset, gmmTaskCap * kM2GmmTileTaskFields * sizeof(int32_t));
     layout.gmm2TileTaskPlan = M2AppendFieldDevice(offset, gmmTaskCap * kM2GmmTileTaskFields * sizeof(int32_t));
-    layout.scoreboardTaskMap = M2AppendFieldDevice(offset, scoreboardTasks * 4U * sizeof(int32_t));
-    layout.producerStatus = M2AppendFieldDevice(offset, scoreboardTasks * 64U);
-    layout.scoreboardMinStatus = M2AppendFieldDevice(offset, scoreboardTasks * 64U);
-    layout.workerWaitCounters = M2AppendFieldDevice(offset, scoreboardTasks * 64U);
-    layout.scoreboardTimeoutCounters = M2AppendFieldDevice(offset, scoreboardTasks * 64U);
+    layout.timeoutDump = M2AppendFieldDevice(offset, shape.expertPerRank * 64U);
     layout.subTileReturnPlan = M2AppendFieldDevice(offset, subTileCap * kM2ReturnPlanFields * sizeof(int32_t));
     layout.subTileOwnerSegments = M2AppendFieldDevice(offset, subTileCap * kM2OwnerSegmentFields * sizeof(int32_t));
     layout.subTileReady = M2AppendFieldDevice(offset, subTileCap * 64U);
@@ -446,11 +437,7 @@ struct M2WorkspaceViewDevice {
     __gm__ int32_t *swigluGroupDesc;
     __gm__ int32_t *gmm1TileTaskPlan;
     __gm__ int32_t *gmm2TileTaskPlan;
-    __gm__ int32_t *scoreboardTaskMap;
-    __gm__ int32_t *producerStatus;
-    __gm__ int32_t *scoreboardMinStatus;
-    __gm__ int32_t *workerWaitCounters;
-    __gm__ int32_t *scoreboardTimeoutCounters;
+    __gm__ int32_t *timeoutDump;
     __gm__ int32_t *subTileReturnPlan;
     __gm__ int32_t *subTileOwnerSegments;
     __gm__ int32_t *subTileReady;
@@ -508,12 +495,7 @@ AICORE inline M2WorkspaceViewDevice MakeM2WorkspaceViewDevice(GM_ADDR workspaceB
     view.swigluGroupDesc = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.swigluGroupDesc.offset);
     view.gmm1TileTaskPlan = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.gmm1TileTaskPlan.offset);
     view.gmm2TileTaskPlan = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.gmm2TileTaskPlan.offset);
-    view.scoreboardTaskMap = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.scoreboardTaskMap.offset);
-    view.producerStatus = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.producerStatus.offset);
-    view.scoreboardMinStatus = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.scoreboardMinStatus.offset);
-    view.workerWaitCounters = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.workerWaitCounters.offset);
-    view.scoreboardTimeoutCounters =
-        reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.scoreboardTimeoutCounters.offset);
+    view.timeoutDump = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.timeoutDump.offset);
     view.subTileReturnPlan = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.subTileReturnPlan.offset);
     view.subTileOwnerSegments = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.subTileOwnerSegments.offset);
     view.subTileReady = reinterpret_cast<__gm__ int32_t *>(workspaceBase + layout.subTileReady.offset);
@@ -1242,21 +1224,14 @@ AICORE inline void M2ClearDispatchState(moe_dispatch_combine_a8w8::ShapeConfig s
     for (uint32_t idx = 0; idx < rankExpertCount; ++idx) {
         StoreScalarI32(workspaceView.cumsumMM + idx, 0);
         StoreScalarI32(workspaceView.preSumBeforeRank + idx, 0);
-        StoreScalarI32(workspaceView.scoreboardTaskMap + idx * 4U + 0U, 0);
-        StoreScalarI32(workspaceView.scoreboardTaskMap + idx * 4U + 1U, 0);
-        StoreScalarI32(workspaceView.scoreboardTaskMap + idx * 4U + 2U, 0);
-        StoreScalarI32(workspaceView.scoreboardTaskMap + idx * 4U + 3U, 0);
-        for (uint32_t slot = 0; slot < 16U; ++slot) {
-            StoreScalarI32(workspaceView.producerStatus + idx * 16U + slot, 0);
-            StoreScalarI32(workspaceView.scoreboardMinStatus + idx * 16U + slot, 0);
-            StoreScalarI32(workspaceView.workerWaitCounters + idx * 16U + slot, 0);
-            StoreScalarI32(workspaceView.scoreboardTimeoutCounters + idx * 16U + slot, 0);
-        }
     }
     for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
         StoreScalarI32(workspaceView.expertTokenNums + localExpert, 0);
         StoreScalarI32(workspaceView.dispatchGroupReady + localExpert * 16U, 0);
         StoreScalarI32(workspaceView.gmm2GroupReady + localExpert * 16U, 0);
+        for (uint32_t slot = 0; slot < 16U; ++slot) {
+            StoreScalarI32(workspaceView.timeoutDump + localExpert * 16U + slot, 0);
+        }
     }
     for (uint32_t idx = 0; idx < syncGroupCap; ++idx) {
         StoreScalarI32(workspaceView.swigluSyncGroups + idx, 0);
@@ -1923,98 +1898,6 @@ AICORE inline void M2TGetRowsFloat(__gm__ float *dstBase, int32_t dstRow, __gm__
     TGetRows<float, kMetaTileCols>(dst, src);
 }
 
-AICORE inline void M2RecordDispatchLedger(moe_dispatch_combine_a8w8::ShapeConfig shape,
-                                          M2WorkspaceViewDevice workspaceView, uint32_t tokenOwner,
-                                          uint32_t localExpert, int32_t dstStart, int32_t rows)
-{
-    uint32_t taskId = tokenOwner * shape.expertPerRank + localExpert;
-    StoreScalarI32(workspaceView.scoreboardTaskMap + taskId * 4U + 0U, static_cast<int32_t>(tokenOwner));
-    StoreScalarI32(workspaceView.scoreboardTaskMap + taskId * 4U + 1U, static_cast<int32_t>(localExpert));
-    StoreScalarI32(workspaceView.scoreboardTaskMap + taskId * 4U + 2U, dstStart);
-    StoreScalarI32(workspaceView.scoreboardTaskMap + taskId * 4U + 3U, rows);
-    int32_t producerStatus = rows > 0 ? kM2ScoreboardStatusRowsPresent : kM2ScoreboardStatusSkipDone;
-    StoreScalarI32(workspaceView.producerStatus + taskId * 16U, producerStatus);
-}
-
-AICORE inline void M2PublishDispatchLedgerCopyDone(moe_dispatch_combine_a8w8::ShapeConfig shape,
-                                                   M2WorkspaceViewDevice workspaceView, uint32_t tokenOwner,
-                                                   uint32_t localExpert)
-{
-    uint32_t taskId = tokenOwner * shape.expertPerRank + localExpert;
-    pipe_barrier(PIPE_ALL);
-    dsb(DSB_DDR);
-    StoreScalarI32(workspaceView.producerStatus + taskId * 16U, kM2ScoreboardStatusCopyDone);
-}
-
-AICORE inline void M2UpdateDispatchScoreboardDomain(moe_dispatch_combine_a8w8::ShapeConfig shape,
-                                                    M2WorkspaceViewDevice workspaceView, uint32_t localExpert)
-{
-    int32_t rowsTotal = 0;
-    int32_t activeSegments = 0;
-    int32_t completedSegments = 0;
-    int32_t skippedSegments = 0;
-    int32_t minProducerStatus = kM2ScoreboardStatusSkipDone;
-    for (uint32_t tokenOwner = 0; tokenOwner < shape.rankNum; ++tokenOwner) {
-        uint32_t taskId = tokenOwner * shape.expertPerRank + localExpert;
-        int32_t rows = LoadScalarI32(workspaceView.scoreboardTaskMap + taskId * 4U + 3U);
-        int32_t producerStatus = LoadScalarI32(workspaceView.producerStatus + taskId * 16U);
-        rowsTotal += rows > 0 ? rows : 0;
-        if (rows > 0) {
-            ++activeSegments;
-            if (producerStatus == kM2ScoreboardStatusCopyDone) {
-                ++completedSegments;
-            }
-            if (minProducerStatus == kM2ScoreboardStatusSkipDone || producerStatus < minProducerStatus) {
-                minProducerStatus = producerStatus;
-            }
-        } else {
-            ++skippedSegments;
-        }
-    }
-    int32_t domainStatus = activeSegments == 0 ?
-                               kM2ScoreboardStatusSkipDone :
-                               (completedSegments == activeSegments ? kM2ScoreboardStatusCopyDone : minProducerStatus);
-    uint32_t domainId = localExpert;
-    __gm__ int32_t *minStatus = workspaceView.scoreboardMinStatus + domainId * 16U;
-    __gm__ int32_t *waitPlan = workspaceView.workerWaitCounters + domainId * 16U;
-    __gm__ int32_t *timeout = workspaceView.scoreboardTimeoutCounters + domainId * 16U;
-    StoreScalarI32(minStatus + 0U, domainStatus);
-    StoreScalarI32(minStatus + 1U, 1);
-    StoreScalarI32(minStatus + 2U, static_cast<int32_t>(localExpert));
-    StoreScalarI32(minStatus + 3U, static_cast<int32_t>(localExpert));
-    StoreScalarI32(minStatus + 4U, static_cast<int32_t>(shape.expertPerRank));
-    StoreScalarI32(minStatus + 5U, static_cast<int32_t>(shape.rankNum));
-    StoreScalarI32(minStatus + 6U, rowsTotal);
-    StoreScalarI32(minStatus + 7U, activeSegments);
-    StoreScalarI32(minStatus + 8U, skippedSegments);
-    StoreScalarI32(minStatus + 9U, completedSegments);
-    StoreScalarI32(minStatus + 10U, activeSegments + skippedSegments);
-    StoreScalarI32(minStatus + 11U, static_cast<int32_t>(localExpert));
-    StoreScalarI32(minStatus + 12U, static_cast<int32_t>((shape.rankNum - 1U) * shape.expertPerRank + localExpert));
-    StoreScalarI32(minStatus + 13U, skippedSegments);
-    StoreScalarI32(minStatus + 14U, 0);
-    StoreScalarI32(minStatus + 15U, 1);
-
-    StoreScalarI32(waitPlan + 0U, 1);
-    StoreScalarI32(waitPlan + 1U, static_cast<int32_t>(localExpert));
-    StoreScalarI32(waitPlan + 2U, static_cast<int32_t>(shape.rankNum));
-    StoreScalarI32(waitPlan + 3U, activeSegments);
-    StoreScalarI32(waitPlan + 4U, completedSegments);
-    StoreScalarI32(waitPlan + 5U, skippedSegments);
-    StoreScalarI32(waitPlan + 6U, rowsTotal);
-    StoreScalarI32(waitPlan + 7U, static_cast<int32_t>(localExpert));
-    StoreScalarI32(waitPlan + 8U, static_cast<int32_t>(shape.expertPerRank));
-    StoreScalarI32(waitPlan + 9U, domainStatus);
-    StoreScalarI32(waitPlan + 10U, 0);
-    StoreScalarI32(waitPlan + 11U, 0);
-    StoreScalarI32(waitPlan + 12U, 0);
-    StoreScalarI32(waitPlan + 13U, 1);
-    StoreScalarI32(waitPlan + 14U, 1);
-    StoreScalarI32(waitPlan + 15U, 0);
-
-    StoreScalarI32(timeout + 0U, 0);
-}
-
 AICORE inline void M2CopyLocalDispatchRowsToGmm1(__gm__ int8_t *dstPayload, uint32_t dstRowBytes,
                                                  __gm__ float *dstScale, M2PeerWindowViewDevice localPeer,
                                                  uint32_t srcRowBytes, int32_t dstStart, int32_t srcStart, int32_t rows)
@@ -2069,21 +1952,18 @@ AICORE inline void M2GatherDispatchToGmm1Input(moe_dispatch_combine_a8w8::ShapeC
             int32_t dstStart =
                 LoadScalarI32(workspaceView.dispatchOffset + localExpert) +
                 LoadScalarI32(workspaceView.preSumBeforeRank + tokenOwner * shape.expertPerRank + localExpert);
-            M2RecordDispatchLedger(shape, workspaceView, tokenOwner, localExpert, dstStart, rows);
             if (rows <= 0) {
                 continue;
             }
             int32_t srcStart = M2SourceGlobalExpertRowBase(shape, localPeer, tokenOwner, globalExpert);
             int32_t localRowCap = static_cast<int32_t>(M2LocalRows(shape));
             if (srcStart >= localRowCap) {
-                M2PublishDispatchLedgerCopyDone(shape, workspaceView, tokenOwner, localExpert);
                 continue;
             }
             if (srcStart + rows > localRowCap) {
                 rows = localRowCap - srcStart;
             }
             if (rows <= 0) {
-                M2PublishDispatchLedgerCopyDone(shape, workspaceView, tokenOwner, localExpert);
                 continue;
             }
             if (tokenOwner == myRank) {
@@ -2096,9 +1976,7 @@ AICORE inline void M2GatherDispatchToGmm1Input(moe_dispatch_combine_a8w8::ShapeC
                                                      workspaceView.routingPerTokenScale, remotePeer, rowBytes, dstStart,
                                                      srcStart, rows);
             }
-            M2PublishDispatchLedgerCopyDone(shape, workspaceView, tokenOwner, localExpert);
         }
-        M2UpdateDispatchScoreboardDomain(shape, workspaceView, localExpert);
         StoreScalarI32(workspaceView.dispatchGroupReady + localExpert * 16U, 1);
     }
     InvalidateGmCacheLines(workspaceView.gmm1InputInt8, static_cast<uint32_t>(M2LocalRows(shape) * rowBytes));
@@ -2150,26 +2028,10 @@ AICORE inline void M3NGatherDispatchToGmm1InputShard(
     InvalidateGmCacheLines(workspaceView.gmm1InputInt8, static_cast<uint32_t>(M2LocalRows(shape) * rowBytes));
 }
 
-AICORE inline void M3NFinalizeDispatchLedgerAfterGather(moe_dispatch_combine_a8w8::ShapeConfig shape,
-                                                        M2WorkspaceViewDevice workspaceView)
+AICORE inline void M3NPublishAllDispatchExpertsReadyAfterGather(moe_dispatch_combine_a8w8::ShapeConfig shape,
+                                                                M2WorkspaceViewDevice workspaceView)
 {
     for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
-        for (uint32_t tokenOwner = 0; tokenOwner < shape.rankNum; ++tokenOwner) {
-            int32_t current = LoadScalarI32(workspaceView.cumsumMM + tokenOwner * shape.expertPerRank + localExpert);
-            int32_t previous =
-                tokenOwner == 0U ?
-                    0 :
-                    LoadScalarI32(workspaceView.cumsumMM + (tokenOwner - 1U) * shape.expertPerRank + localExpert);
-            int32_t rows = current - previous;
-            int32_t dstStart =
-                LoadScalarI32(workspaceView.dispatchOffset + localExpert) +
-                LoadScalarI32(workspaceView.preSumBeforeRank + tokenOwner * shape.expertPerRank + localExpert);
-            M2RecordDispatchLedger(shape, workspaceView, tokenOwner, localExpert, dstStart, rows);
-            if (rows > 0) {
-                M2PublishDispatchLedgerCopyDone(shape, workspaceView, tokenOwner, localExpert);
-            }
-        }
-        M2UpdateDispatchScoreboardDomain(shape, workspaceView, localExpert);
         StoreScalarI32(workspaceView.dispatchGroupReady + localExpert * 16U, 1);
     }
 }

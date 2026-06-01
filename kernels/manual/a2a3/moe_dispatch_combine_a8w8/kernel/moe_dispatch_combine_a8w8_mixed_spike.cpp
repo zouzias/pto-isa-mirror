@@ -293,15 +293,6 @@ AICORE inline bool M3N8Gmm2CombineOverlapEnabled(uint32_t debugStopStage, uint32
     return M3N7ActivationGmm2OverlapEnabled(debugStopStage, overlapMode, shape);
 }
 
-AICORE inline bool M3N10ScoreboardAsyncEnabled(uint32_t debugStopStage, uint32_t overlapMode,
-                                               moe_dispatch_combine_a8w8::ShapeConfig shape)
-{
-    (void)debugStopStage;
-    (void)overlapMode;
-    (void)shape;
-    return false;
-}
-
 AICORE inline void M3NDispatchAicWaitForAivSubphases(uint32_t debugStopStage, bool m3n5DispatchGmm1Overlap,
                                                      moe_dispatch_combine_a8w8::ShapeConfig shape)
 {
@@ -392,55 +383,6 @@ AICORE inline void M3N5RecordGmm1StartBeforeLastDispatchReady(moe_dispatch_combi
     M2FusedGmmStoreScalarI32(stageStatus + kM2FusedFullM3N5AicEvidenceSlot + 1U, 1);
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
-}
-
-AICORE inline void M3N10InvalidateScoreboardLine(__gm__ int32_t *ptr)
-{
-    pipe_barrier(PIPE_ALL);
-    dcci(static_cast<__gm__ void *>(ptr), SINGLE_CACHE_LINE);
-    dsb(DSB_DDR);
-}
-
-AICORE inline void M3N10RecordWorkerPolls(__gm__ int32_t *debugCounters, uint32_t localExpert, uint32_t polls)
-{
-    if (get_block_idx() != 0) {
-        return;
-    }
-    __gm__ int32_t *counters = debugCounters + moe_dispatch_combine_a8w8::kM3N10ScoreboardWorkerCounterBase;
-    M3N10InvalidateScoreboardLine(counters);
-    M2FusedGmmStoreScalarI32(counters + 0U, M2FusedGmmLoadScalarI32(counters) + static_cast<int32_t>(polls));
-    M2FusedGmmStoreScalarI32(counters + 1U, 1);
-    M2FusedGmmStoreScalarI32(counters + 2U, static_cast<int32_t>(localExpert));
-    pipe_barrier(PIPE_ALL);
-    dcci(static_cast<__gm__ void *>(counters), SINGLE_CACHE_LINE);
-    dsb(DSB_DDR);
-}
-
-AICORE inline void M3N10WaitDispatchScoreboardDomainReady(__gm__ int32_t *scoreboardMinStatus,
-                                                          __gm__ int32_t *debugCounters, uint32_t localExpert)
-{
-    constexpr int32_t kScoreboardCopyDone = 2;
-    constexpr int32_t kScoreboardSkipDone = 3;
-    __gm__ int32_t *domain = scoreboardMinStatus + localExpert * 16U;
-    uint32_t polls = 0;
-    while (true) {
-        M3N10InvalidateScoreboardLine(domain);
-        int32_t status = M2FusedGmmLoadScalarI32(domain);
-        ++polls;
-        if (status == kScoreboardCopyDone || status == kScoreboardSkipDone) {
-            break;
-        }
-    }
-    M3N10RecordWorkerPolls(debugCounters, localExpert, polls);
-}
-
-AICORE inline void M3N10WaitAllDispatchScoreboardDomainsReady(moe_dispatch_combine_a8w8::ShapeConfig shape,
-                                                              __gm__ int32_t *scoreboardMinStatus,
-                                                              __gm__ int32_t *debugCounters)
-{
-    for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
-        M3N10WaitDispatchScoreboardDomainReady(scoreboardMinStatus, debugCounters, localExpert);
-    }
 }
 
 AICORE inline void M3N6RecordGmm1SyncGroupReady(__gm__ int32_t *stageStatus,
@@ -989,21 +931,18 @@ AICORE inline void M3N5GatherOneDispatchExpert(moe_dispatch_combine_a8w8::ShapeC
         int32_t dstStart =
             LoadScalarI32(workspaceView.dispatchOffset + localExpert) +
             LoadScalarI32(workspaceView.preSumBeforeRank + tokenOwner * shape.expertPerRank + localExpert);
-        M2RecordDispatchLedger(shape, workspaceView, tokenOwner, localExpert, dstStart, rows);
         if (rows <= 0) {
             continue;
         }
         int32_t srcStart = M2SourceGlobalExpertRowBase(shape, localPeer, tokenOwner, globalExpert);
         int32_t localRowCap = static_cast<int32_t>(M2LocalRows(shape));
         if (srcStart >= localRowCap) {
-            M2PublishDispatchLedgerCopyDone(shape, workspaceView, tokenOwner, localExpert);
             continue;
         }
         if (srcStart + rows > localRowCap) {
             rows = localRowCap - srcStart;
         }
         if (rows <= 0) {
-            M2PublishDispatchLedgerCopyDone(shape, workspaceView, tokenOwner, localExpert);
             continue;
         }
         if (tokenOwner == myRank) {
@@ -1016,196 +955,10 @@ AICORE inline void M3N5GatherOneDispatchExpert(moe_dispatch_combine_a8w8::ShapeC
                                                  workspaceView.routingPerTokenScale, remotePeer, rowBytes, dstStart,
                                                  srcStart, rows);
         }
-        M2PublishDispatchLedgerCopyDone(shape, workspaceView, tokenOwner, localExpert);
     }
-    M2UpdateDispatchScoreboardDomain(shape, workspaceView, localExpert);
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
     StoreScalarI32(workspaceView.dispatchGroupReady + localExpert * 16U, 1);
-}
-
-struct M3N10ScoreboardCtrlState {
-    uint32_t producerPolls;
-    uint32_t updates;
-    uint32_t readyDomains;
-    int32_t firstReadyDomain;
-    int32_t lastReadyDomain;
-    int32_t lastMinStatus;
-};
-
-AICORE inline __gm__ int32_t *M3N10ScoreboardCounters(M2PeerWindowViewDevice localPeer)
-{
-    return localPeer.debugCounters + moe_dispatch_combine_a8w8::kM3N10ScoreboardCounterBase;
-}
-
-AICORE inline void M3N10InitScoreboardCounters(moe_dispatch_combine_a8w8::ShapeConfig shape,
-                                               M2PeerWindowViewDevice localPeer)
-{
-    __gm__ int32_t *counters = M3N10ScoreboardCounters(localPeer);
-    __gm__ int32_t *workerCounters =
-        localPeer.debugCounters + moe_dispatch_combine_a8w8::kM3N10ScoreboardWorkerCounterBase;
-    for (uint32_t slot = 0; slot < moe_dispatch_combine_a8w8::kM3N10ScoreboardCounterSlots; ++slot) {
-        StoreScalarI32(counters + slot, 0);
-        StoreScalarI32(workerCounters + slot, 0);
-    }
-    StoreScalarI32(counters + 0U, 1);
-    StoreScalarI32(counters + 5U, static_cast<int32_t>(shape.expertPerRank));
-    StoreScalarI32(counters + 6U, static_cast<int32_t>(shape.rankNum));
-    StoreScalarI32(counters + 8U, 1);
-    StoreScalarI32(counters + 9U, 0);
-    StoreScalarI32(counters + 12U, -1);
-    StoreScalarI32(counters + 13U, -1);
-    InvalidateGmCacheLines(counters, 64U);
-    InvalidateGmCacheLines(workerCounters, 64U);
-}
-
-AICORE inline void M3N10PrepareDispatchLedgerDomain(moe_dispatch_combine_a8w8::ShapeConfig shape,
-                                                    M2WorkspaceViewDevice workspaceView, uint32_t localExpert)
-{
-    for (uint32_t tokenOwner = 0; tokenOwner < shape.rankNum; ++tokenOwner) {
-        int32_t current = LoadScalarI32(workspaceView.cumsumMM + tokenOwner * shape.expertPerRank + localExpert);
-        int32_t previous =
-            tokenOwner == 0U ?
-                0 :
-                LoadScalarI32(workspaceView.cumsumMM + (tokenOwner - 1U) * shape.expertPerRank + localExpert);
-        int32_t rows = current - previous;
-        int32_t dstStart =
-            LoadScalarI32(workspaceView.dispatchOffset + localExpert) +
-            LoadScalarI32(workspaceView.preSumBeforeRank + tokenOwner * shape.expertPerRank + localExpert);
-        M2RecordDispatchLedger(shape, workspaceView, tokenOwner, localExpert, dstStart, rows);
-        InvalidateGmCacheLines(workspaceView.producerStatus + (tokenOwner * shape.expertPerRank + localExpert) * 16U,
-                               64U);
-    }
-    StoreScalarI32(workspaceView.scoreboardMinStatus + localExpert * 16U + 15U, 1);
-    InvalidateGmCacheLines(workspaceView.scoreboardTaskMap,
-                           static_cast<uint32_t>(shape.rankNum * shape.expertPerRank * 4U * sizeof(int32_t)));
-    InvalidateGmCacheLines(workspaceView.scoreboardMinStatus + localExpert * 16U, 64U);
-}
-
-AICORE inline void M3N10CopyDispatchLedgerDomain(moe_dispatch_combine_a8w8::ShapeConfig shape,
-                                                 M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
-                                                 __gm__ HcclDeviceContext *ctx, GM_ADDR peerWindow, uint32_t myRank,
-                                                 uint32_t rowBytes,
-                                                 const moe_dispatch_combine_a8w8::PeerWindowLayout &peerWindowLayout,
-                                                 uint32_t localExpert)
-{
-    uint32_t globalExpert = M2GlobalExpert(myRank, localExpert, shape);
-    for (uint32_t tokenOwner = 0; tokenOwner < shape.rankNum; ++tokenOwner) {
-        int32_t rows =
-            LoadScalarI32(workspaceView.scoreboardTaskMap + (tokenOwner * shape.expertPerRank + localExpert) * 4U + 3U);
-        if (rows <= 0) {
-            continue;
-        }
-        int32_t dstStart =
-            LoadScalarI32(workspaceView.scoreboardTaskMap + (tokenOwner * shape.expertPerRank + localExpert) * 4U + 2U);
-        int32_t srcStart = M2SourceGlobalExpertRowBase(shape, localPeer, tokenOwner, globalExpert);
-        int32_t localRowCap = static_cast<int32_t>(M2LocalRows(shape));
-        if (srcStart >= localRowCap) {
-            M2PublishDispatchLedgerCopyDone(shape, workspaceView, tokenOwner, localExpert);
-            continue;
-        }
-        if (srcStart + rows > localRowCap) {
-            rows = localRowCap - srcStart;
-        }
-        if (rows <= 0) {
-            M2PublishDispatchLedgerCopyDone(shape, workspaceView, tokenOwner, localExpert);
-            continue;
-        }
-        if (tokenOwner == myRank) {
-            M2CopyLocalDispatchRowsToGmm1(workspaceView.gmm1InputInt8, rowBytes, workspaceView.routingPerTokenScale,
-                                          localPeer, rowBytes, dstStart, srcStart, rows);
-        } else {
-            M2PeerWindowViewDevice remotePeer =
-                MakeM2RemotePeerWindowViewDevice(ctx, peerWindow, tokenOwner, peerWindowLayout);
-            M2CopyRemoteDispatchRowsToGmm1Scalar(workspaceView.gmm1InputInt8, rowBytes,
-                                                 workspaceView.routingPerTokenScale, remotePeer, rowBytes, dstStart,
-                                                 srcStart, rows);
-        }
-        M2PublishDispatchLedgerCopyDone(shape, workspaceView, tokenOwner, localExpert);
-        InvalidateGmCacheLines(workspaceView.producerStatus + (tokenOwner * shape.expertPerRank + localExpert) * 16U,
-                               64U);
-    }
-}
-
-AICORE inline void M3N10UpdateReadyDomainsOnce(moe_dispatch_combine_a8w8::ShapeConfig shape,
-                                               M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
-                                               M3N10ScoreboardCtrlState *state)
-{
-    for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
-        __gm__ int32_t *ready = workspaceView.dispatchGroupReady + localExpert * 16U;
-        InvalidateGmCacheLines(ready, 64U);
-        if (LoadScalarI32(ready) != 0) {
-            continue;
-        }
-        __gm__ int32_t *minStatus = workspaceView.scoreboardMinStatus + localExpert * 16U;
-        InvalidateGmCacheLines(minStatus, 64U);
-        if (LoadScalarI32(minStatus + 15U) == 0) {
-            continue;
-        }
-        M2UpdateDispatchScoreboardDomain(shape, workspaceView, localExpert);
-        ++state->updates;
-        state->producerPolls += shape.rankNum;
-        InvalidateGmCacheLines(minStatus, 64U);
-        int32_t domainStatus = LoadScalarI32(minStatus);
-        state->lastMinStatus = domainStatus;
-        if (domainStatus == kM2ScoreboardStatusCopyDone || domainStatus == kM2ScoreboardStatusSkipDone) {
-            StoreScalarI32(ready, 1);
-            InvalidateGmCacheLines(ready, 64U);
-            ++state->readyDomains;
-            state->lastReadyDomain = static_cast<int32_t>(localExpert);
-            if (state->firstReadyDomain < 0) {
-                state->firstReadyDomain = static_cast<int32_t>(localExpert);
-            }
-        }
-    }
-    __gm__ int32_t *counters = M3N10ScoreboardCounters(localPeer);
-    StoreScalarI32(counters + 1U, static_cast<int32_t>(state->producerPolls));
-    StoreScalarI32(counters + 3U, static_cast<int32_t>(state->updates));
-    StoreScalarI32(counters + 4U, static_cast<int32_t>(state->lastMinStatus));
-    StoreScalarI32(counters + 7U, static_cast<int32_t>(state->readyDomains));
-    StoreScalarI32(counters + 12U, state->firstReadyDomain);
-    StoreScalarI32(counters + 13U, state->lastReadyDomain);
-    InvalidateGmCacheLines(counters, 64U);
-}
-
-AICORE inline void M3N10WaitAllScoreboardDomainsReady(moe_dispatch_combine_a8w8::ShapeConfig shape,
-                                                      M2WorkspaceViewDevice workspaceView,
-                                                      M2PeerWindowViewDevice localPeer, M3N10ScoreboardCtrlState *state)
-{
-    while (state->readyDomains < shape.expertPerRank) {
-        uint32_t before = state->readyDomains;
-        M3N10UpdateReadyDomainsOnce(shape, workspaceView, localPeer, state);
-        if (state->readyDomains == before) {
-            pipe_barrier(PIPE_ALL);
-            dsb(DSB_DDR);
-        }
-    }
-}
-
-AICORE inline void M3N10GatherDispatchToGmm1InputShardByScoreboard(
-    moe_dispatch_combine_a8w8::ShapeConfig shape, M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
-    __gm__ HcclDeviceContext *ctx, GM_ADDR peerWindow, uint32_t myRank, uint32_t rowBytes,
-    const moe_dispatch_combine_a8w8::PeerWindowLayout &peerWindowLayout, uint32_t workerId, uint32_t workerCount,
-    bool activeWorker, bool ctrlWorker)
-{
-    M3N10ScoreboardCtrlState ctrlState{0U, 0U, 0U, -1, -1, kM2ScoreboardStatusInit};
-    if (ctrlWorker) {
-        M3N10InitScoreboardCounters(shape, localPeer);
-    }
-    for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
-        if (activeWorker && workerCount != 0U && (localExpert % workerCount) == workerId) {
-            M3N10PrepareDispatchLedgerDomain(shape, workspaceView, localExpert);
-            M3N10CopyDispatchLedgerDomain(shape, workspaceView, localPeer, ctx, peerWindow, myRank, rowBytes,
-                                          peerWindowLayout, localExpert);
-        }
-        if (ctrlWorker) {
-            M3N10UpdateReadyDomainsOnce(shape, workspaceView, localPeer, &ctrlState);
-        }
-    }
-    if (ctrlWorker) {
-        M3N10WaitAllScoreboardDomainsReady(shape, workspaceView, localPeer, &ctrlState);
-    }
-    InvalidateGmCacheLines(workspaceView.gmm1InputInt8, static_cast<uint32_t>(M2LocalRows(shape) * rowBytes));
 }
 
 AICORE inline void M3N5GatherDispatchToGmm1InputShardByExpert(
@@ -1329,8 +1082,7 @@ AICORE inline void M3N9RecordTimeoutDump(M2WorkspaceViewDevice workspaceView, M2
     if (tokenOwnerRank >= shape.rankNum) {
         tokenOwnerRank = 0U;
     }
-    __gm__ int32_t *dump =
-        workspaceView.scoreboardTimeoutCounters + localExpert * moe_dispatch_combine_a8w8::kM3N9TimeoutDumpStride;
+    __gm__ int32_t *dump = workspaceView.timeoutDump + localExpert * moe_dispatch_combine_a8w8::kM3N9TimeoutDumpStride;
     StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N9TimeoutDumpPresentSlot, 1);
     StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N9TimeoutDumpRankSlot, static_cast<int32_t>(rank.rankId));
     StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N9TimeoutDumpExpertSlot, static_cast<int32_t>(localExpert));
@@ -1342,19 +1094,15 @@ AICORE inline void M3N9RecordTimeoutDump(M2WorkspaceViewDevice workspaceView, M2
     StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N9TimeoutDumpSignalIdSlot, static_cast<int32_t>(signalId));
     StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N9TimeoutDumpDebugStopStageSlot,
                    static_cast<int32_t>(debugStopStage));
-    uint32_t producerSlots = moe_dispatch_combine_a8w8::kM3N10TimeoutDumpScoreboardMinStatusSlot -
-                             moe_dispatch_combine_a8w8::kM3N10TimeoutDumpProducerStatusBaseSlot;
-    if (producerSlots > shape.rankNum) {
-        producerSlots = shape.rankNum;
-    }
-    for (uint32_t tokenOwner = 0; tokenOwner < producerSlots; ++tokenOwner) {
-        uint32_t taskId = tokenOwner * shape.expertPerRank + localExpert;
-        StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N10TimeoutDumpProducerStatusBaseSlot + tokenOwner,
-                       LoadScalarI32(workspaceView.producerStatus + taskId * 16U));
-    }
-    StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N10TimeoutDumpScoreboardMinStatusSlot,
-                   LoadScalarI32(workspaceView.scoreboardMinStatus + localExpert * 16U));
-    StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N10TimeoutDumpScoreboardDomainSlot,
+    StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N9TimeoutDumpDispatchReadySlot,
+                   LoadScalarI32(workspaceView.dispatchGroupReady + localExpert * 16U));
+    StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N9TimeoutDumpGmm1ReadySlot,
+                   LoadScalarI32(workspaceView.gmm1SyncGroupReady));
+    StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N9TimeoutDumpActivationReadySlot,
+                   LoadScalarI32(workspaceView.activationSyncGroupReady));
+    StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N9TimeoutDumpGmm2ReadySlot,
+                   LoadScalarI32(workspaceView.gmm2GroupReady + localExpert * 16U));
+    StoreScalarI32(dump + moe_dispatch_combine_a8w8::kM3N9TimeoutDumpReadyExpertSlot,
                    static_cast<int32_t>(localExpert));
     StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 15U,
                    LoadScalarI32(localPeer.debugCounters + kM3CounterBase + 15U) + 1);
@@ -2041,7 +1789,6 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
     bool m3n6Gmm1ActivationOverlap = M3N6Gmm1ActivationOverlapEnabled(debugStopStage, overlapMode, shape);
     bool m3n7ActivationGmm2Overlap = M3N7ActivationGmm2OverlapEnabled(debugStopStage, overlapMode, shape);
     bool m3n8Gmm2CombineOverlap = M3N8Gmm2CombineOverlapEnabled(debugStopStage, overlapMode, shape);
-    bool m3n10ScoreboardAsync = M3N10ScoreboardAsyncEnabled(debugStopStage, overlapMode, shape);
     M3NDispatchAicWaitForAivSubphases(debugStopStage, m3n5DispatchGmm1Overlap, shape);
     if (M3NDispatchDebugProbeEnabled(debugStopStage)) {
         pto::SYNCALL<pto::SyncCoreType::Mix>();
@@ -2055,11 +1802,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
         moe_dispatch_combine_a8w8::M3N4WaitV2C<moe_dispatch_combine_a8w8::kM3N4DispatchToGmm1Flag>();
     }
     if (debugStopStage == 1U) {
-        if (m3n10ScoreboardAsync) {
-            __gm__ int32_t *scoreboardMinStatus =
-                reinterpret_cast<__gm__ int32_t *>(workspace + layout.scoreboardMinStatus.offset);
-            M3N10WaitAllDispatchScoreboardDomainsReady(shape, scoreboardMinStatus, debugCounters);
-        } else if (m3n5DispatchGmm1Overlap) {
+        if (m3n5DispatchGmm1Overlap) {
             M3N5WaitAllDispatchExpertsReady(shape);
         }
         return;
@@ -2078,8 +1821,6 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
         __gm__ int32_t *gmm1Acc = reinterpret_cast<__gm__ int32_t *>(workspace + layout.gmm1AccInt32.offset);
         __gm__ int32_t *dispatchOffset = reinterpret_cast<__gm__ int32_t *>(workspace + layout.dispatchOffset.offset);
         __gm__ int32_t *expertTokenNums = reinterpret_cast<__gm__ int32_t *>(workspace + layout.expertTokenNums.offset);
-        __gm__ int32_t *scoreboardMinStatus =
-            reinterpret_cast<__gm__ int32_t *>(workspace + layout.scoreboardMinStatus.offset);
         __gm__ int32_t *gmm1TileTaskPlan =
             reinterpret_cast<__gm__ int32_t *>(workspace + layout.gmm1TileTaskPlan.offset);
         uint32_t taskCount = M2FusedGmmBuildTileTaskPlan(shape, dispatchOffset, expertTokenNums, gmm1TileTaskPlan,
@@ -2109,9 +1850,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
                 uint32_t expertEnd = 0;
                 M3N6SyncGroupExpertRange(shape, syncIdx, &expertBegin, &expertEnd);
                 for (uint32_t currentExpert = expertBegin; currentExpert < expertEnd; ++currentExpert) {
-                    if (m3n10ScoreboardAsync) {
-                        M3N10WaitDispatchScoreboardDomainReady(scoreboardMinStatus, debugCounters, currentExpert);
-                    } else if (m3n5DispatchGmm1Overlap) {
+                    if (m3n5DispatchGmm1Overlap) {
                         moe_dispatch_combine_a8w8::M3N5WaitDispatchExpertReady(currentExpert);
                     }
                     M3N5RecordGmm1StartBeforeLastDispatchReady(shape, stageStatus, currentExpert);
@@ -2139,11 +1878,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
                                                     shape.hiddenSize, nValid, rowBytes, w1Cols, w1Cols);
                         if (recordTile) {
                             uint32_t waitSource =
-                                m3n10ScoreboardAsync ?
-                                    static_cast<uint32_t>(
-                                        moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kScoreboard) :
-                                    static_cast<uint32_t>(
-                                        moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kPtoEvent);
+                                static_cast<uint32_t>(moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kPtoEvent);
                             M3N12RecordTimeline(
                                 timelineScratch, moe_dispatch_combine_a8w8::kM3N12TimelineSlotGmm1, tileBegin,
                                 M3N12GetSysCnt(),
@@ -2167,11 +1902,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
             }
         } else if (m3n5DispatchGmm1Overlap) {
             for (uint32_t currentExpert = 0; currentExpert < shape.expertPerRank; ++currentExpert) {
-                if (m3n10ScoreboardAsync) {
-                    M3N10WaitDispatchScoreboardDomainReady(scoreboardMinStatus, debugCounters, currentExpert);
-                } else {
-                    moe_dispatch_combine_a8w8::M3N5WaitDispatchExpertReady(currentExpert);
-                }
+                moe_dispatch_combine_a8w8::M3N5WaitDispatchExpertReady(currentExpert);
                 M3N5RecordGmm1StartBeforeLastDispatchReady(shape, stageStatus, currentExpert);
                 for (uint32_t taskId = 0; taskId < taskCount; ++taskId) {
                     if (static_cast<uint32_t>(get_block_idx()) != 0U) {
@@ -2197,9 +1928,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
                                                 shape.hiddenSize, nValid, rowBytes, w1Cols, w1Cols);
                     if (recordTile) {
                         uint32_t waitSource =
-                            m3n10ScoreboardAsync ?
-                                static_cast<uint32_t>(moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kScoreboard) :
-                                static_cast<uint32_t>(moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kPtoEvent);
+                            static_cast<uint32_t>(moe_dispatch_combine_a8w8::M3N12TimelineWaitSource::kPtoEvent);
                         M3N12RecordTimeline(
                             timelineScratch, moe_dispatch_combine_a8w8::kM3N12TimelineSlotGmm1, tileBegin,
                             M3N12GetSysCnt(),
@@ -3029,16 +2758,12 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     bool m3n6Gmm1ActivationOverlap = M3N6Gmm1ActivationOverlapEnabled(debugStopStage, overlapMode, shape);
     bool m3n7ActivationGmm2Overlap = M3N7ActivationGmm2OverlapEnabled(debugStopStage, overlapMode, shape);
     bool m3n8Gmm2CombineOverlap = M3N8Gmm2CombineOverlapEnabled(debugStopStage, overlapMode, shape);
-    bool m3n10ScoreboardAsync = M3N10ScoreboardAsyncEnabled(debugStopStage, overlapMode, shape);
     uint32_t m3n6SyncGroupCount = moe_dispatch_combine_a8w8::M3N6SwigluSyncGroupCount(shape);
     M3NRecordAivLaneDebug(localPeer, rawAivSlot);
     if (IsM2FusedMainAiv()) {
         uint32_t m3nHandshakeSites = moe_dispatch_combine_a8w8::kM3N4StreamHandshakeSites;
         uint32_t m3nCvWaitCount = moe_dispatch_combine_a8w8::kM3N4FullOpenCvWaitCount;
-        if (m3n10ScoreboardAsync) {
-            --m3nHandshakeSites;
-            --m3nCvWaitCount;
-        } else if (m3n5DispatchGmm1Overlap) {
+        if (m3n5DispatchGmm1Overlap) {
             m3nHandshakeSites = m3nHandshakeSites - 1U + shape.expertPerRank;
             m3nCvWaitCount = m3nCvWaitCount - 1U + shape.expertPerRank;
         }
@@ -3076,11 +2801,6 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 14U, static_cast<int32_t>(m3nCvWaitCount));
         StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 15U, 0);
         StoreScalarI32(localPeer.debugCounters + kM3NActivationCounterBase + 8U, m3n6Gmm1ActivationOverlap ? 1 : 0);
-        for (uint32_t idx = 0; idx < moe_dispatch_combine_a8w8::kM3N10ScoreboardCounterSlots; ++idx) {
-            StoreScalarI32(localPeer.debugCounters + moe_dispatch_combine_a8w8::kM3N10ScoreboardCounterBase + idx, 0);
-            StoreScalarI32(localPeer.debugCounters + moe_dispatch_combine_a8w8::kM3N10ScoreboardWorkerCounterBase + idx,
-                           0);
-        }
         for (uint32_t idx = 0; idx < 16U; ++idx) {
             StoreScalarI32(localPeer.debugCounters + kM3NGmm2CounterBase + idx, 0);
         }
@@ -3225,22 +2945,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
             pto::SYNCALL<pto::SyncCoreType::Mix>();
             return;
         }
-        if (m3n10ScoreboardAsync) {
-            bool recordGather = timelineEnable != 0U && activeDispatchWorker && dispatchWorkerId == 0U;
-            uint64_t gatherBegin = recordGather ? M3N12GetSysCnt() : 0U;
-            M3N10GatherDispatchToGmm1InputShardByScoreboard(
-                shape, workspaceView, localPeer, ctx, peerWindow, rank.rankId, rowBytes, peerWindowLayout,
-                dispatchWorkerId, dispatchWorkerCount, activeDispatchWorker, IsM2FusedMainAiv());
-            if (recordGather) {
-                uint32_t expertEnd = dispatchWorkerCount == 0U ?
-                                         0U :
-                                         (shape.expertPerRank + dispatchWorkerCount - 1U) / dispatchWorkerCount;
-                M3N12RecordAivRange(workspaceView.timelineScratch,
-                                    moe_dispatch_combine_a8w8::kM3N12TimelineSlotDispatchGather,
-                                    moe_dispatch_combine_a8w8::M3N12TimelineKind::kDispatchGather, logicalAiv,
-                                    dispatchWorkerId, 0U, expertEnd, expertEnd, 0U, gatherBegin, M3N12GetSysCnt());
-            }
-        } else if (m3n5DispatchGmm1Overlap) {
+        if (m3n5DispatchGmm1Overlap) {
             bool requireAicStartAck = debugStopStage != 1U;
             bool recordGather = timelineEnable != 0U && activeDispatchWorker && dispatchWorkerId == 0U;
             uint64_t gatherBegin = recordGather ? M3N12GetSysCnt() : 0U;
@@ -3284,7 +2989,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
             return;
         }
         if (IsM2FusedMainAiv()) {
-            M3NFinalizeDispatchLedgerAfterGather(shape, workspaceView);
+            M3NPublishAllDispatchExpertsReadyAfterGather(shape, workspaceView);
             M2BuildSwigluSyncMetadata(shape, workspaceView);
             uint32_t gatherWorkers =
                 dispatchWorkerCount < shape.expertPerRank ? dispatchWorkerCount : shape.expertPerRank;
