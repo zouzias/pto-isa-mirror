@@ -88,29 +88,52 @@ python3 scripts/plot_bw_compare.py
 ### 前置条件
 
 - CANN Toolkit >= 8.5.0（TGET 同步指令）；>= 9.0.0（TGET_ASYNC 异步指令）
-- MPI >= 3.2.1（如 OpenMPI）
+- **MPICH**（推荐；Host 侧通过 `comm_mpi.h` 动态加载 `libmpi.so`，communicator handle 与 MPICH 一致）
 - 2 张及以上 Ascend NPU
+
+#### MPI 安装（推荐 MPICH）
+
+```bash
+# Ubuntu / Debian
+sudo apt install mpich libmpich-dev
+
+# 或用户目录安装（无 root）
+# 见 tests/README_zh.md「从源码安装 MPICH」
+export PATH=$HOME/mpich/bin:$PATH
+export MPI_LIB_PATH=$HOME/mpich/lib/libmpi.so
+```
+
+`run.sh` 会自动搜索常见 MPICH 路径并设置 `MPI_LIB_PATH`。也可通过 `MPI_SEARCH_DIRS`（空格分隔的 `bin/` 目录列表）覆盖搜索路径。
+
+> **说明**：本示例**不支持 OpenMPI**。`comm_mpi.h` 使用 MPICH 的 `MPI_COMM_WORLD` handle 编码；OpenMPI 的 communicator 表示不同，运行时 `MPI_Bcast` 等调用可能失败。`--allow-run-as-root` 为 OpenMPI 专用参数，MPICH 不支持。
 
 ### 步骤
 
 1. 配置 Ascend CANN 环境：
 
 ```bash
-source ${ASCEND_INSTALL_PATH}/bin/setenv.bash
+source ${ASCEND_HOME_PATH}/bin/setenv.bash
+# 或 source <workspace>/set_env_new.sh
 ```
 
-2. 运行示例（默认 2 卡）：
+2. 运行示例（默认 2 卡）。`run.sh` 会自动切换到本目录，可从仓库根或本目录执行：
 
 ```bash
+# 方式 A：先进入示例目录
 cd ${git_clone_path}/kernels/manual/a2a3/tget_bandwidth
-bash run.sh -r npu -v Ascend910B1
+bash run.sh -r npu -v a3
+
+# 方式 B：在 pto-isa-main 根目录下
+bash kernels/manual/a2a3/tget_bandwidth/run.sh -r npu -v a3
 ```
 
 可通过 `-n` 参数指定 rank 数（默认为 2）：
 
 ```bash
-bash run.sh -r npu -v Ascend910B1 -n 2
+bash run.sh -r npu -v a3 -n 2
 ```
+
+`-v a3` 与 ST 测试脚本一致，内部映射为 CMake 的 `SOC_VERSION=Ascend910B1`（A2/A3 平台）。
 
 成功时输出：
 
@@ -127,4 +150,5 @@ test success
 
 | 日期       | 变更 |
 | ---------- | ------ |
+| 2026-06-01 | 文档与 `run.sh` 对齐 MPICH；移除 OpenMPI 专用 `mpirun` 参数 |
 | 2026-04-02 | 从 ST 测试迁移为独立性能示例 |
