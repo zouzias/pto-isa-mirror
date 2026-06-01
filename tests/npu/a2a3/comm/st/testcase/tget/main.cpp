@@ -186,6 +186,12 @@ TEST(TGet, PingPong_Irregular_Float_65x104_tile16x32)
     SKIP_IF_RANKS_LT(2);
     ASSERT_TRUE((RunGetRingPingPong<float, 65, 104, 16, 32>(2, 2, 0, 0)));
 }
+// Regression for pypto AllReduce: shape [7,10], tile (5,7), 4 chunks with partial col 5x3
+TEST(TGet, PingPong_Float_7x10_tile5x7_PyptoAllReduceShape)
+{
+    SKIP_IF_RANKS_LT(2);
+    ASSERT_TRUE((RunGetRingPingPong<float, 7, 10, 5, 7>(2, 2, 0, 0)));
+}
 int main(int argc, char **argv)
 {
     CommMpiInit(&argc, &argv);
