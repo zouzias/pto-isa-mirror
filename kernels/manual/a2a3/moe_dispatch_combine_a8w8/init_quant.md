@@ -6,8 +6,8 @@
 **Goal:** 把 a8w8 的前重排从当前 correctness-first direct-pack 路线推进到可单阶段验证、可解释性能、可对标
 FFN 4097 的 active 多 AIV init-quant 路线。
 
-**Architecture:** 前重排采用 count + prefix + direct expert-major scatter，a8w8 当前不引入 FFN 的排序链路
-VBS/VMS/SortOut。该路线必须产出与 FFN init-routing 等价的 metadata 和 payload：`expandedRowIdx`、
+**Architecture:** 前重排采用 count + prefix + direct expert-major scatter，a8w8 当前不引入 FFN 的多核 sort 子系统。
+该路线必须产出与 FFN init-routing 等价的 metadata 和 payload：`expandedRowIdx`、
 `tokenPerExpertMatrix`、`cumsumMM`、`preSumBeforeRank`、`dispatchPayload`、`dispatchScale`、
 `gmm1InputInt8`、`routingPerTokenScale`。性能收口聚焦 direct scatter 多 AIV 和 PTO Vec quant。
 
@@ -45,14 +45,13 @@ count/prefix 后做全 AIV 同步，然后按 expert group 搬运并局部放行
 - `moe_init_routing_quant_v2()` 负责 sort、expert token count/cumsum、`srcToDst`、gather dynamic quant。
 - `M=4097, topK=2` 时 `totalLength=8194`，大于参考实现的 `sortLoopMaxElement`，不会走 full-load dynamic
   quant 快路径；会走 multi-core sort + srcToDst + gather dynamic quant 路线。
-- VBS/VMS 不是二分排序，而是分块排序 + 多路归并：VBS 做每 AIV 局部 sort，VMS 做多路 merge，SortOut 产出全局
-  expert-major order。
+- FFN multi-core sort 是分块局部排序 + 多路归并 + 输出的完整排序子系统，产出全局 expert-major order。
 - FFN 的 init-routing 内部多个子阶段使用全 AIV `SyncAll`；跨 rank count/prefix 后也有全 AIV 同步。
 - FFN 的 dispatch 到 GMM input 阶段按 local expert group 局部放行 GMM1，不等所有 expert gather 完。
 
 ## 3. Current A8W8 Facts
 
-当前 a8w8 不实现 FFN 的 VBS/VMS/SortOut，而是使用 counting-sort/direct-scatter 思路：
+当前 a8w8 不实现 FFN 的多核 sort 子系统，而是使用 counting-sort/direct-scatter 思路：
 
 ```text
 M3NCountLocalRoutesShard
@@ -90,7 +89,7 @@ dispatchScale[packedRow]
 
 | 子阶段 | FFN 参考实现 | 当前 a8w8 实现 | 当前判断 |
 | --- | --- | --- | --- |
-| sort / expert-major reorder | 按 `M * topK` route element 多 AIV sort；4097 走 multi-core sort，包含 VBS/VMS/SortOut | 不实现 FFN sort；用 count + prefix + packed row 公式直接写 expert-major | a8w8 固定走 direct scatter 路线，不把 VBS/VMS 作为当前实现目标 |
+| sort / expert-major reorder | 按 `M * topK` route element 多 AIV sort；4097 走 multi-core sort | 不实现 FFN sort；用 count + prefix + packed row 公式直接写 expert-major | a8w8 固定走 direct scatter 路线，不把 FFN sort 子系统作为当前实现目标 |
 | route count | `MoeV2ExpertTokenOut` 基于 sorted route 生成 expert token count/cumsum | `M3NCountLocalRoutesShard` 按 token range 统计 worker/expert count | 结构可对齐；4097 debug-stop 11 已验证 active 多 worker |
 | worker/expert prefix | FFN 通过 expert token/cumsum 和后续 `srcToDst` 建立 row 映射 | `M3NMergeLocalRouteCounts` 在 main AIV 串行生成 `blockPrefixPerExpert` 和 `workerExpertPrefix` | correctness 路线可用；大 shape 可能有串行控制面成本 |
 | srcToDst | 独立 `MoeV2SrcToDstOp`，按 route rows 多 AIV 生成 source-to-destination 映射 | 没有独立 srcToDst；`expandedRowIdx` / packed row 直接承担映射语义 | 只要 restore/gather contract 一致就不必机械补；若要复用 FFN contract 再评估 |
@@ -103,7 +102,7 @@ dispatchScale[packedRow]
 
 - FFN: `M=4097, topK=2` 时 `totalLength=8194`，走 multi-core sort + srcToDst + gather dynamic quant。
 - a8w8: 当前走 direct scatter，多 worker 已通过单阶段验证，但 quant 仍是 scalar。
-- 因此当前不是“缺少 VBS/VMS 导致语义不对”，而是“direct scatter 路线还没有做到 FFN 4097 所需的 vector quant
+- 因此当前不是“缺少 FFN sort 子系统导致语义不对”，而是“direct scatter 路线还没有做到 FFN 4097 所需的 vector quant
   性能形态”。
 
 ## 5. Requirements
@@ -136,14 +135,14 @@ dispatchScale[packedRow]
 
 ## 6. Design Direction
 
-路线：保留 direct scatter，不实现 VBS/VMS。
+路线：保留 direct scatter，不实现 FFN multi-core sort。
 
 理由：
 
 - expert id 范围有限，count + prefix + direct scatter 是 O(M * topK)，理论上比 comparison/merge sort 更适合。
 - 最初慢点来自 active worker=1 和 scalar quant；checkpoint 后 active worker 已打开，当前剩余主风险是 scalar
   quant 和串行控制面，不是 direct scatter 语义本身。
-- VBS/VMS 是 FFN 的一种高性能排序实现，不是 MegaMoE 必须语义；a8w8 当前任务中不实现、不评估。
+- FFN multi-core sort 不是 MegaMoE 必须语义；a8w8 当前任务中不实现、不评估。
 
 ## 7. Implementation Tasks
 
@@ -315,6 +314,7 @@ pair 和 peer-window `TSTORE` 能单独返回，再重新打开 fused direct-pac
 | 102305 | `TEXPANDS` + UB Vec op on main AIV | timeout / signal 15 cleanup | 去掉 route quant 主体后仍会卡住 |
 | 102307 | route UB `SetValue` / barrier probe | timeout / signal 15 cleanup | 不限于 peer-window `TSTORE` 对齐问题 |
 | 102313 | all-lane basic Vec probe | timeout / signal 15 cleanup | 不是 main AIV 单 lane 特例 |
+| 102305 | raw `vector_dup` 替换 `TEXPANDS` | timeout / signal 15 cleanup | raw macro 也不能解除卡住，临时代码已撤回 |
 
 结论：刚才的“卡住”还没有解决；当前证据指向 fused mixed AIV 路径里的 PTO Vec/UB op probe 或其同步参与条件。
 这不是已观测到的精度错误，当前可用 correctness 路径仍是 scalar fallback。
@@ -489,7 +489,8 @@ route_quant_path=scalar
 route_quant_scalar_fallback_reason=mixed_fused_direct_pack_pto_vec_probe_timeout
 ```
 
-2026-06-01 的 Vec probe 尝试没有修复 timeout。临时 `102313` all-lane probe 只作为诊断证据记录，不进入提交路线。
+2026-06-01 的 Vec probe 尝试没有修复 timeout。临时 `102313` all-lane probe 和 18:14 raw `vector_dup`
+替换尝试只作为诊断证据记录，不进入提交路线。
 
 ## 9. Overall Acceptance
 
@@ -505,7 +506,7 @@ M3O 前重排收口必须同时满足：
 
 ## 10. Handoff Notes
 
-- 不实现 VBS/VMS。先把 direct scatter 的 active worker 和 vector quant 做实。
+- 不实现 FFN multi-core sort。先把 direct scatter 的 active worker 和 vector quant 做实。
 - 不要把 FFN 的具体 `BLOCK_NUM=20`、`aivNumInitRouting=40`、UB 常量硬搬到 a8w8。
 - 不要用 launch AIV 数证明 active 并行；必须由 worker counter / worker mask / processed rows 证明。
 - 前重排单阶段验证不应受 M3O.4 activation shard hang 影响；使用 debug-stop 11/12/15/16/17 截断。

@@ -611,7 +611,7 @@ perf 调优方向，**不作为强制对齐目标**。参考来源：`op_kernel/
 | SwiGLU epilogue 分组粒度 | `epilogueGranularity = expertPerRank - 3`（`≤4` 时 `-1`），即两段 | `swigluSyncGroups` 幂指数 `{8,4,2,1,1}`（前粗后细） | 本项目用升级版多段分组，机制兼容、更细 |
 | 跨核 flag 复用上限 | `CROSS_CORE_FLAG_MAX_SET_COUNT = 15` | FFTS 物理 0-15，用户区 0-10（见 §10） | 见 §10 计数信号量 + 折叠 |
 | init_routing 量化列 loop 上限 | `MAX_COLS_ONE_LOOP_QUANT = 8192` | 由 `payloadTileCols` 控制 | 本项目无独立 init_routing 子系统（见 §6 无 sort 说明） |
-| 多核归并排序路数 | `MAX_MRGSORT_LIST = 4`（VBS/VMS/SortOut） | 不适用 | 本项目不实现 multi-core sort |
+| 多核归并排序路数 | `MAX_MRGSORT_LIST = 4`（FFN multi-core sort 内部常量） | 不适用 | 本项目不实现 multi-core sort |
 | AIC:AIV mixed launch 比例 | AIV = 2 × AIC subblock（1:2）；`blockDim = CalcTschBlockDim(aivNum, aicNum, aivNum)` | `kAicBlocks=24`，AIV=48（`subblockdim=2`），即 1:2 | **固定 launch/硬件事实**：A3 每个 cube 核配 2 个 vector subblock，由 mixed ELF meta 决定，不是自由可调比例 |
 | 逐阶段核分配（如 epilogue/dispatch 用几核） | `epilogueCoreNum`、`aivNumInitRouting=2*BLOCK_NUM` 等可调参数 | M2 多为 worker=1，按 stage 上报 | **不在设计固定具体数值**：属 M3 调优量，由 runtime logical core count 推导，M2.8c 只如实上报 worker facts |
 
@@ -804,7 +804,7 @@ RestoreOutput
 这张图只描述数据依赖顺序，不表示主路径必须按全量 stage 串行执行。MegaMoE 的实现目标是在同一套数据流和
 offset 语义下，让已经 ready 的 expert group、sync group 或 return segment 尽早被下游 stage 消费。
 
-关于 dispatch 排序：本项目**不实现** `ffn.md` init_routing 的 multi-core merge sort（VBS/VMS/SortOut）。token 的
+关于 dispatch 排序：本项目**不实现** `ffn.md` init_routing 的 multi-core merge sort。token 的
 expert-major 有序性由 `RoutePackQuantLocal` 按 `globalExpert -> row` offset 直接 pack，再由
 `GatherDispatchToGmm1Input` 按 `cumsumMM/preSumBeforeRank` 远端读 gather 完成——这等价于 `ffn.md`"把通信后重排
 折叠进 gather 地址映射"的结论，offset-table 已经承担了排序职责，不需要独立 sort 子系统。因此 M3O.2 的 dispatch
