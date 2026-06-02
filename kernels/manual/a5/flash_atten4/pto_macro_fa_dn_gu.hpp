@@ -169,6 +169,8 @@ __tf__ AICORE inline void pto_macro_fa_gu(svTileData __out__ prev_sv_tile, svTil
                 vector_align ureg_1;
                 constexpr auto distValue =
                     std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+                // MaskReg preg_all;
+                // preg_all = pset_b32(PAT_ALL);
                 if constexpr (svTileData::Cols == 2 * (REPEAT_BYTE / sizeof(T))) {
                     uint32_t sreg0 = elementsPerRepeat;
                     uint32_t sreg1 = elementsPerRepeat;
@@ -181,6 +183,12 @@ __tf__ AICORE inline void pto_macro_fa_gu(svTileData __out__ prev_sv_tile, svTil
                         vlds(vreg0, prev_row_ptr, 0, NORM);
                         vlds(vreg3, est_row_ptr, 0, NORM);
                         vlds(vreg2, prev_row_ptr, elementsPerRepeat, NORM);
+
+                        // costmodel team version
+                        // vlds(vreg1, (__ubuf__ T *)(exp_max_Ptr), i * stride, BRC_B32);
+                        // vlds(vreg0, prev_sv_tile_Ptr, 0, NORM, POST_UPDATE);
+                        // vlds(vreg3, est_sv_tile_Ptr, elementsPerRepeat, NORM, POST_UPDATE);
+                        
 #if skip_rescale
                         if (skip_cond) {
                             __ubuf__ T *pv_pend_row_ptr = pv_pend_tile_Ptr + i * rowStride;
@@ -198,6 +206,14 @@ __tf__ AICORE inline void pto_macro_fa_gu(svTileData __out__ prev_sv_tile, svTil
                         vmadd(vreg2, vreg1, vreg5, preg1, MODE_ZEROING);
                         vsts(vreg0, prev_row_ptr, 0, distValue, preg0);
                         vsts(vreg2, prev_row_ptr, elementsPerRepeat, distValue, preg1);
+
+                        // costmodel team version
+                        // vmula(vreg3, vreg0, vreg1, preg_all);
+                        // vsts(vreg3, prev_sv_tile_Ptr, elementsPerRepeat, NORM_B32, preg_all, POST_UPDATE);
+                        // vlds(vreg0, prev_sv_tile_Ptr, 0, NORM, POST_UPDATE);
+                        // vlds(vreg3, est_sv_tile_Ptr, elementsPerRepeat, NORM, POST_UPDATE);
+                        // vmula(vreg3, vreg0, vreg1, preg_all);
+                        // vsts(vreg3, prev_sv_tile_Ptr, elementsPerRepeat, NORM_B32, preg_all, POST_UPDATE);
                     }
                 } else {
                     for (uint16_t i = 0; i < (uint16_t)(ubM); ++i) {
@@ -400,6 +416,10 @@ __tf__ AICORE inline void pto_macro_fa_gu_last(svTileData __out__ prev_sv_tile, 
                 vector_align ureg_2;
                 constexpr auto distValue =
                     std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+                // RegTensor<T> vreg_one;
+                // MaskReg preg_all;
+                // preg_all = pset_b32(PAT_ALL);
+                // vdup(vreg_one, (T)1.0, preg_all, MODE_ZEROING);
                 if constexpr (svTileData::Cols == 2 * (REPEAT_BYTE / sizeof(T))) {
                     uint32_t sreg0 = elementsPerRepeat;
                     uint32_t sreg1 = elementsPerRepeat;
@@ -414,6 +434,14 @@ __tf__ AICORE inline void pto_macro_fa_gu_last(svTileData __out__ prev_sv_tile, 
                         vlds(vreg0, prev_row_ptr, 0, NORM);
                         vlds(vreg3, est_row_ptr, 0, NORM);
                         vlds(vreg2, prev_row_ptr, elementsPerRepeat, NORM);
+
+                        // costmodel team version
+                        // vlds(vreg1, (__ubuf__ T *)(exp_max_Ptr), i * stride, BRC_B32);
+
+                        // vlds(vreg4, (__ubuf__ T *)(new_global_sum_Ptr), i * stride, BRC_B32);
+                        // vdiv(vreg4, vreg_one, vreg4, preg_all);
+                        // vlds(vreg0, prev_sv_tile_Ptr, 0, NORM, POST_UPDATE);
+                        // vlds(vreg3, est_sv_tile_Ptr, elementsPerRepeat, NORM, POST_UPDATE);
 
 #if skip_rescale
                         if (skip_cond) {
@@ -435,6 +463,17 @@ __tf__ AICORE inline void pto_macro_fa_gu_last(svTileData __out__ prev_sv_tile, 
                         vdiv(vreg2, vreg2, vreg4, preg1, MODE_ZEROING);
                         vsts(vreg0, prev_row_ptr, 0, distValue, preg0);
                         vsts(vreg2, prev_row_ptr, elementsPerRepeat, distValue, preg1);
+
+                        // costmodel team version
+                        // vmula(vreg3, vreg0, vreg1, preg_all);
+                        // vmul(vreg3, vreg3, vreg4, preg_all);
+                        // vsts(vreg3, prev_sv_tile_Ptr, elementsPerRepeat, NORM_B32, preg_all, POST_UPDATE);
+
+                        // vlds(vreg0, prev_sv_tile_Ptr, 0, NORM, POST_UPDATE);
+                        // vlds(vreg3, est_sv_tile_Ptr, elementsPerRepeat, NORM, POST_UPDATE);
+                        // vmula(vreg3, vreg0, vreg1, preg_all);
+                        // vmul(vreg3, vreg3, vreg4, preg_all);
+                        // vsts(vreg3, prev_sv_tile_Ptr, elementsPerRepeat, NORM_B32, preg_all, POST_UPDATE);
                     }
                 } else {
                     for (uint16_t i = 0; i < (uint16_t)(ubM); ++i) {
