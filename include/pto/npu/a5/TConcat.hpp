@@ -51,12 +51,13 @@ __tf__ PTO_INTERNAL OP_NAME(TCONCAT)
     {
         RegTensor<T> vreg_0;
         RegTensor<T> vreg_1;
+        uint32_t sreg0, sreg1;
         MaskReg preg;
         constexpr auto distValue =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
 
         for (uint16_t i = 0; i < (uint16_t)validRows; ++i) {
-            uint32_t sreg0 = validCols0;
+            sreg0 = validCols0;
             for (uint16_t j = 0; j < (uint16_t)repeatTimes0; ++j) {
                 preg = CreatePredicate<T>(sreg0);
                 vlds(vreg_0, src0Ptr, i * TileDataSrc0::RowStride + j * ElementsPerRepeat, NORM);
@@ -64,7 +65,7 @@ __tf__ PTO_INTERNAL OP_NAME(TCONCAT)
             }
 
             mem_bar(VST_VLD);
-            uint32_t sreg1 = validCols1;
+            sreg1 = validCols1;
             for (uint16_t j = 0; j < (uint16_t)repeatTimes1; ++j) {
                 preg = CreatePredicate<T>(sreg1);
                 vlds(vreg_1, src1Ptr, i * TileDataSrc1::RowStride + j * ElementsPerRepeat, NORM);
@@ -144,12 +145,14 @@ __tf__ PTO_INTERNAL void TConcatIdx(typename TileDst::TileDType __out__ dst, typ
         typename IndexConcat<dataType>::type vreg_idx;
         using UnsignedIndexScalar = typename std::make_unsigned<IndexScalar>::type;
         MaskReg preg0, preg1;
+        unsigned idx0Num, idx1Num, sreg0, sreg1, src1Col, src1Offset;
+        uint16_t repeatTimes0, repeatTimes1;
         constexpr auto distValue =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<dataType, DistVST::DIST_NORM>())>();
 
         for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
-            unsigned idx0Num = *(idx0Ptr + i * idx0Stride) / sizeof(idxType);
-            unsigned idx1Num = *(idx1Ptr + i * idx1Stride) / sizeof(idxType);
+            idx0Num = *(idx0Ptr + i * idx0Stride) / sizeof(idxType);
+            idx1Num = *(idx1Ptr + i * idx1Stride) / sizeof(idxType);
 
             if constexpr (NeetCntDstIdx) {
                 idxType dstIdxNum = ((idxType)(idx0Num + idx1Num));
@@ -157,12 +160,12 @@ __tf__ PTO_INTERNAL void TConcatIdx(typename TileDst::TileDType __out__ dst, typ
                 *(dstIdxPtr + i * dstIdxStride) = dstIdxNum * sizeof(idxType);
             }
 
-            unsigned sreg0 = idx0Num < dstValidCol ? idx0Num : dstValidCol;
-            unsigned src1Col = dstValidCol > sreg0 ? dstValidCol - sreg0 : 0;
-            unsigned sreg1 = idx1Num < src1Col ? idx1Num : src1Col;
-            unsigned src1Offset = i * dstStride + sreg0;
-            uint16_t repeatTimes0 = CeilDivision(sreg0, elementsPerRepeat);
-            uint16_t repeatTimes1 = CeilDivision(sreg1, elementsPerRepeat);
+            sreg0 = idx0Num < dstValidCol ? idx0Num : dstValidCol;
+            src1Col = dstValidCol > sreg0 ? dstValidCol - sreg0 : 0;
+            sreg1 = idx1Num < src1Col ? idx1Num : src1Col;
+            src1Offset = i * dstStride + sreg0;
+            repeatTimes0 = CeilDivision(sreg0, elementsPerRepeat);
+            repeatTimes1 = CeilDivision(sreg1, elementsPerRepeat);
 
             for (uint16_t j = 0; j < repeatTimes0; ++j) {
                 preg0 = CreatePredicate<dataType>(sreg0);
