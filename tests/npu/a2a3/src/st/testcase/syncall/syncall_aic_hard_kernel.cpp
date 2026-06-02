@@ -23,7 +23,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
-constexpr int32_t kAicHardBlockCount = 24;
 constexpr int32_t kAicHardInt32PerLine = 8;
 constexpr uint64_t kAicHardFlagL1 = 0x0;
 constexpr uint64_t kAicHardOutL1 = 0x1000;
@@ -60,13 +59,14 @@ extern "C" __global__ AICORE void RunHardSyncAllAIC_2001_mix_aic(__gm__ uint64_t
 {
     set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
     const int32_t idx = block_idx;
+    const int32_t totalBlocks = static_cast<int32_t>(get_block_num());
 
     AicStoreL1(flags + idx * kAicHardInt32PerLine, idx + 1, kAicHardFlagL1);
     SYNCALL<SyncCoreType::AICOnly>();
 
-    AicInvalidateLines(flags, kAicHardBlockCount);
+    AicInvalidateLines(flags, totalBlocks);
     int32_t allVisible = 1;
-    for (int32_t i = 0; i < kAicHardBlockCount; ++i) {
+    for (int32_t i = 0; i < totalBlocks; ++i) {
         __gm__ int32_t *flag = flags + i * kAicHardInt32PerLine;
         dcci(static_cast<__gm__ void *>(flag), SINGLE_CACHE_LINE);
         dsb(DSB_DDR);
@@ -130,7 +130,7 @@ std::vector<char> ReadBinaryFile(const char *path)
 }
 } // namespace
 
-void LaunchHardSyncAllAIC(uint8_t *ffts, int32_t *out, int32_t *flags, void *stream)
+void LaunchHardSyncAllAIC(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t launchBlocks, void *stream)
 {
     const char *path = GetRegisterElfPath(reinterpret_cast<const void *>(&LaunchHardSyncAllAIC));
     static const std::vector<char> kernelBin = ReadBinaryFile(path);
@@ -152,7 +152,8 @@ void LaunchHardSyncAllAIC(uint8_t *ffts, int32_t *out, int32_t *flags, void *str
     argsInfo.args = args;
     argsInfo.argsSize = sizeof(args);
     rtTaskCfgInfo_t cfgInfo{};
-    ret = rtKernelLaunchWithHandleV2(handle, kAicHardTilingKey, 24, &argsInfo, nullptr, stream, &cfgInfo);
+    ret = rtKernelLaunchWithHandleV2(handle, kAicHardTilingKey, static_cast<uint32_t>(launchBlocks), &argsInfo, nullptr,
+                                     stream, &cfgInfo);
     if (ret != RT_ERROR_NONE) {
         std::fprintf(stderr, "rtKernelLaunchWithHandleV2 failed for AIC-only hard, ret=%d\n", ret);
         std::abort();
