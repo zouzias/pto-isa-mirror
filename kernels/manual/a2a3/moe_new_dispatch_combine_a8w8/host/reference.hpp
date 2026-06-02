@@ -561,27 +561,25 @@ inline CpuGoldenData ComputeCpuGolden(const DispatchCombineTileArgs &args, const
         int32_t sum = 0;
         for (uint32_t expert = 0; expert < expertNumPadded; ++expert) {
             int32_t rows = golden.peerTokenPerExpert[static_cast<size_t>(src) * expertNumPadded + expert];
-            if (sum >= static_cast<int32_t>(shape.maxOutputSize) || rows <= 0) {
-                rows = 0;
-            } else {
-                int32_t available = static_cast<int32_t>(shape.maxOutputSize) - sum;
-                if (rows > available) {
-                    rows = available;
-                }
+            if (rows > 0) {
+                sum += rows;
             }
-            sum += rows;
             golden.cumsumPerExpert[static_cast<size_t>(src) * expertNumPadded + expert] = sum;
         }
     }
 
     golden.ownerRows.assign(shape.ep, 0);
     for (uint32_t owner = 0; owner < shape.ep; ++owner) {
+        uint32_t dispatchCursor = 0;
         for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
             uint32_t globalExpert = owner * shape.expertPerRank + localExpert;
             for (uint32_t src = 0; src < shape.ep; ++src) {
-                golden.ownerRows[owner] += routesBySrcExpert[src][globalExpert].size();
+                uint32_t rows = static_cast<uint32_t>(
+                    golden.peerTokenPerExpert[static_cast<size_t>(src) * expertNumPadded + globalExpert]);
+                dispatchCursor += golden_detail::ClampRowsToCapacity(dispatchCursor, rows, shape.maxOutputSize);
             }
         }
+        golden.ownerRows[owner] = dispatchCursor;
     }
 
     golden.dispatchOffset.assign(shape.expertPerRank, 0);
@@ -590,16 +588,21 @@ inline CpuGoldenData ComputeCpuGolden(const DispatchCombineTileArgs &args, const
     for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
         uint32_t globalExpert = myRank * shape.expertPerRank + localExpert;
         golden.dispatchOffset[localExpert] = static_cast<int32_t>(dispatchCursor);
-        uint32_t beforeRank = 0;
+        uint32_t expertRows = 0;
         for (uint32_t src = 0; src < shape.ep; ++src) {
+            uint32_t sourcePrefix =
+                globalExpert == 0 ?
+                    0U :
+                    static_cast<uint32_t>(
+                        golden.cumsumPerExpert[static_cast<size_t>(src) * expertNumPadded + globalExpert - 1U]);
             golden.prevSumBeforeRank[static_cast<size_t>(src) * shape.expertPerRank + localExpert] =
-                static_cast<int32_t>(beforeRank);
-            uint32_t rows = golden_detail::ClampRowsToCapacity(
-                dispatchCursor, static_cast<uint32_t>(routesBySrcExpert[src][globalExpert].size()),
-                shape.maxOutputSize);
-            beforeRank += rows;
-            dispatchCursor += rows;
+                static_cast<int32_t>(sourcePrefix);
+            uint32_t rows = static_cast<uint32_t>(
+                golden.peerTokenPerExpert[static_cast<size_t>(src) * expertNumPadded + globalExpert]);
+            rows = golden_detail::ClampRowsToCapacity(dispatchCursor + expertRows, rows, shape.maxOutputSize);
+            expertRows += rows;
         }
+        dispatchCursor += expertRows;
     }
     if (dispatchCursor > shape.maxOutputSize) {
         throw std::runtime_error("CPU golden dispatched rows exceed maxOutputSize");
@@ -608,23 +611,26 @@ inline CpuGoldenData ComputeCpuGolden(const DispatchCombineTileArgs &args, const
     golden.dispatchedA.assign(static_cast<size_t>(shape.maxOutputSize) * shape.k, 0.0f);
     for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
         uint32_t globalExpert = myRank * shape.expertPerRank + localExpert;
+        uint32_t expertRows = 0;
         for (uint32_t src = 0; src < shape.ep; ++src) {
-            uint32_t dstStart =
-                static_cast<uint32_t>(golden.dispatchOffset[localExpert]) +
-                static_cast<uint32_t>(
-                    golden.prevSumBeforeRank[static_cast<size_t>(src) * shape.expertPerRank + localExpert]);
-            const auto &routes = routesBySrcExpert[src][globalExpert];
-            uint32_t rows = dstStart >= shape.maxOutputSize ?
-                                0U :
-                                std::min(static_cast<uint32_t>(routes.size()), shape.maxOutputSize - dstStart);
+            uint32_t dstStart = static_cast<uint32_t>(golden.dispatchOffset[localExpert]) + expertRows;
+            uint32_t rawRows = static_cast<uint32_t>(
+                golden.peerTokenPerExpert[static_cast<size_t>(src) * expertNumPadded + globalExpert]);
+            uint32_t rows = golden_detail::ClampRowsToCapacity(dstStart, rawRows, shape.maxOutputSize);
+            uint32_t srcStart = static_cast<uint32_t>(
+                golden.prevSumBeforeRank[static_cast<size_t>(src) * shape.expertPerRank + localExpert]);
             for (uint32_t row = 0; row < rows; ++row) {
+                uint32_t packedRow = srcStart + row;
+                if (packedRow >= shape.maxOutputSize) {
+                    continue;
+                }
                 uint32_t outRow = dstStart + row;
-                uint32_t packedRow = routes[row].packedRow;
                 for (uint32_t col = 0; col < shape.k; ++col) {
                     golden.dispatchedA[static_cast<size_t>(outRow) * shape.k + col] =
                         packedBySrc[src][static_cast<size_t>(packedRow) * shape.k + col];
                 }
             }
+            expertRows += rows;
         }
     }
     golden.expertOutput = golden.dispatchedA;
@@ -637,9 +643,13 @@ inline CpuGoldenData ComputeCpuGolden(const DispatchCombineTileArgs &args, const
             uint32_t globalExpert = dst * shape.expertPerRank + localExpert;
             for (uint32_t src = 0; src < shape.ep; ++src) {
                 const auto &routes = routesBySrcExpert[src][globalExpert];
-                uint32_t rows = golden_detail::ClampRowsToCapacity(
-                    dstDispatchCursor, static_cast<uint32_t>(routes.size()), shape.maxOutputSize);
+                uint32_t rawRows = static_cast<uint32_t>(
+                    golden.peerTokenPerExpert[static_cast<size_t>(src) * expertNumPadded + globalExpert]);
+                uint32_t rows = golden_detail::ClampRowsToCapacity(dstDispatchCursor, rawRows, shape.maxOutputSize);
                 for (uint32_t row = 0; row < rows; ++row) {
+                    if (row >= routes.size()) {
+                        continue;
+                    }
                     const golden_detail::RouteRef &route = routes[row];
                     int32_t dstPackedRow =
                         expandedBySrc[src][static_cast<size_t>(route.token) * shape.topK + route.slot];
@@ -686,6 +696,18 @@ inline CpuGoldenData ComputeCpuGolden(const DispatchCombineTileArgs &args, const
         golden_detail::WriteDebugFiles(args, myRank, golden);
     }
     return golden;
+}
+
+inline int32_t DispatchOwnerStart(const DispatchCombineTileArgs &args, const CpuGoldenData &golden,
+                                  uint32_t expertOwnerRank, uint32_t tokenOwnerRank, uint32_t localExpert)
+{
+    const DispatchCombineTileShape &shape = args.shape;
+    int32_t prefix = 0;
+    for (uint32_t prevTokenOwner = 0; prevTokenOwner < tokenOwnerRank; ++prevTokenOwner) {
+        prefix +=
+            golden_detail::EffectiveRowsForTokenOwner(shape, golden, prevTokenOwner, expertOwnerRank, localExpert);
+    }
+    return golden.dispatchOffset[localExpert] + prefix;
 }
 
 inline CpuM2ReferenceData ComputeCpuM2Reference(const DispatchCombineTileArgs &args, const CpuGoldenData &golden,
@@ -819,9 +841,7 @@ inline CpuM2ReferenceData ComputeCpuM2Reference(const DispatchCombineTileArgs &a
                 if (rows <= 0) {
                     continue;
                 }
-                int32_t srcStart =
-                    ownerGolden.dispatchOffset[localExpert] +
-                    ownerGolden.prevSumBeforeRank[static_cast<size_t>(myRank) * shape.expertPerRank + localExpert];
+                int32_t srcStart = DispatchOwnerStart(args, ownerGolden, expertOwner, myRank, localExpert);
                 int32_t dstStart =
                     globalExpert == 0 ?
                         0 :

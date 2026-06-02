@@ -619,7 +619,7 @@ AICORE inline moe_new_dispatch_combine_a8w8::PeerWindowLayout MakeM2PeerWindowLa
     layout.combineDoneSignal = M2AppendFieldDevice(offset, shape.rankNum * 64U);
     layout.returnSegmentCounters =
         M2AppendFieldDevice(offset, static_cast<uint64_t>(shape.rankNum) * shape.expertPerRank * 64U);
-    layout.debugCounters = M2AppendFieldDevice(offset, 80U * 64U);
+    layout.debugCounters = M2AppendFieldDevice(offset, 256U * 64U);
     layout.timeline = M2AppendFieldDevice(offset, 64U * 4U * sizeof(uint64_t));
     layout.totalBytes = Align64Device(offset);
     return layout;
@@ -757,6 +757,23 @@ AICORE inline M2PeerWindowViewDevice MakeM2RemotePeerWindowViewDevice(
 {
     GM_ADDR remoteBase = RemotePtr<uint8_t>(ctx, localPeerWindowBase, peerRank);
     return MakeM2PeerWindowViewDevice(remoteBase, layout);
+}
+
+AICORE inline uint64_t M2GetSysCnt()
+{
+    uint64_t syscnt = 0;
+    asm volatile("MOV %0, SYS_CNT\n" : "+l"(syscnt));
+    return syscnt;
+}
+
+AICORE inline void M2RecordDispatchE2eTimeline(__gm__ uint64_t *timeline, uint64_t begin, uint64_t end)
+{
+    timeline[0U] = begin;
+    timeline[1U] = end;
+    timeline[2U] = 0U;
+    timeline[3U] = 0U;
+    pipe_barrier(PIPE_ALL);
+    dsb(DSB_DDR);
 }
 
 AICORE inline uint64_t M2TokenPerExpertIndex(moe_new_dispatch_combine_a8w8::ShapeConfig shape, uint32_t tokenOwnerRank,
@@ -1574,6 +1591,7 @@ AICORE inline void M2ClearDispatchState(moe_new_dispatch_combine_a8w8::ShapeConf
         }
         StoreScalarI32(workspaceView.subTileReady + idx * 16U, 0);
     }
+    M2RecordDispatchE2eTimeline(localPeer.timeline, 0U, 0U);
 }
 
 AICORE inline void M2ClearInitQuantState(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
@@ -2794,23 +2812,39 @@ AICORE inline void M2BuildPrefixMetadata(moe_new_dispatch_combine_a8w8::ShapeCon
     int32_t localRowCap = static_cast<int32_t>(M2LocalRows(shape));
     for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
         StoreScalarI32(workspaceView.dispatchOffset + localExpert, dispatchCursor);
-        int32_t before = 0;
+        int32_t expertRows = 0;
         for (uint32_t tokenOwner = 0; tokenOwner < shape.rankNum; ++tokenOwner) {
             int32_t rows = M2LoadTokenPerExpert(shape, localPeer, tokenOwner, myRank, localExpert);
-            if (dispatchCursor >= localRowCap || rows <= 0) {
+            int32_t dstCursor = dispatchCursor + expertRows;
+            if (dstCursor >= localRowCap || rows <= 0) {
                 rows = 0;
             } else {
-                int32_t available = localRowCap - dispatchCursor;
+                int32_t available = localRowCap - dstCursor;
                 if (rows > available) {
                     rows = available;
                 }
             }
-            StoreScalarI32(workspaceView.preSumBeforeRank + tokenOwner * shape.expertPerRank + localExpert, before);
-            before += rows;
-            StoreScalarI32(workspaceView.cumsumMM + tokenOwner * shape.expertPerRank + localExpert, before);
-            dispatchCursor += rows;
+            expertRows += rows;
+            StoreScalarI32(workspaceView.cumsumMM + tokenOwner * shape.expertPerRank + localExpert, expertRows);
         }
-        StoreScalarI32(workspaceView.expertTokenNums + localExpert, before);
+        StoreScalarI32(workspaceView.expertTokenNums + localExpert, expertRows);
+        dispatchCursor += expertRows;
+    }
+    uint32_t globalExpertNum = M2GlobalExpertNum(shape);
+    for (uint32_t tokenOwner = 0; tokenOwner < shape.rankNum; ++tokenOwner) {
+        int32_t sourcePrefix = 0;
+        for (uint32_t globalExpert = 0; globalExpert < globalExpertNum; ++globalExpert) {
+            uint32_t expertOwner = M2ExpertOwnerRank(globalExpert, shape);
+            uint32_t localExpert = M2LocalExpert(globalExpert, shape);
+            if (expertOwner == myRank) {
+                StoreScalarI32(workspaceView.preSumBeforeRank + tokenOwner * shape.expertPerRank + localExpert,
+                               sourcePrefix);
+            }
+            int32_t rows = M2LoadTokenPerExpert(shape, localPeer, tokenOwner, expertOwner, localExpert);
+            if (rows > 0) {
+                sourcePrefix += rows;
+            }
+        }
     }
     M2ClearRoutingScaleTail(shape, workspaceView, dispatchCursor);
     InvalidateGmCacheLines(workspaceView.dispatchOffset, static_cast<uint32_t>(shape.expertPerRank * sizeof(int32_t)));
@@ -2858,40 +2892,49 @@ AICORE inline void M2TGetRowsFloat(__gm__ float *dstBase, int32_t dstRow, __gm__
     TGetRows<float, kMetaTileCols>(dst, src);
 }
 
+template <typename T, int kCols = kDefaultTileCols>
+AICORE inline void M2CopyRowsLocalPto(__gm__ T *dstBase, int32_t dstRowStride, int32_t dstRow, __gm__ T *srcBase,
+                                      int32_t srcRowStride, int32_t srcRow, int32_t rows, int32_t cols)
+{
+    if (rows <= 0 || cols <= 0) {
+        return;
+    }
+    for (int32_t row = 0; row < rows; ++row) {
+        for (int32_t col = 0; col < cols; col += kCols) {
+            int32_t colCount = cols - col < kCols ? cols - col : kCols;
+            VecTile<T, kCols> tile(1, colCount);
+            TASSIGN(tile, kPingUbAddr);
+            GlobalNd<T> src = MakeGlobal2D(srcBase + static_cast<int64_t>(srcRow + row) * srcRowStride + col, 1,
+                                           colCount, srcRowStride);
+            GlobalNd<T> dst = MakeGlobal2D(dstBase + static_cast<int64_t>(dstRow + row) * dstRowStride + col, 1,
+                                           colCount, dstRowStride);
+            TLOAD(tile, src);
+            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            TSTORE(dst, tile);
+            WaitStoreTileReusable();
+        }
+    }
+}
+
 AICORE inline void M2CopyLocalDispatchRowsToGmm1(__gm__ int8_t *dstPayload, uint32_t dstRowBytes,
                                                  __gm__ float *dstScale, M2PeerWindowViewDevice localPeer,
                                                  uint32_t srcRowBytes, int32_t dstStart, int32_t srcStart, int32_t rows)
 {
-    for (int32_t row = 0; row < rows; ++row) {
-        __gm__ int8_t *dst = dstPayload + static_cast<int64_t>(dstStart + row) * dstRowBytes;
-        __gm__ int8_t *src = localPeer.dispatchPayload + static_cast<int64_t>(srcStart + row) * srcRowBytes;
-        for (uint32_t col = 0; col < srcRowBytes; ++col) {
-            dst[col] = src[col];
-        }
-        __gm__ int32_t *dstScaleBits = reinterpret_cast<__gm__ int32_t *>(dstScale + dstStart + row);
-        __gm__ int32_t *srcScaleBits = reinterpret_cast<__gm__ int32_t *>(localPeer.dispatchScale + srcStart + row);
-        StoreScalarI32(dstScaleBits, LoadScalarI32(srcScaleBits));
-    }
+    M2CopyRowsLocalPto<int8_t, kDefaultTileCols>(dstPayload, static_cast<int32_t>(dstRowBytes), dstStart,
+                                                 localPeer.dispatchPayload, static_cast<int32_t>(srcRowBytes), srcStart,
+                                                 rows, static_cast<int32_t>(srcRowBytes));
+    M2CopyRowsLocalPto<float, kMetaTileCols>(dstScale, 1, dstStart, localPeer.dispatchScale, 1, srcStart, rows, 1);
 }
 
-AICORE inline void M2CopyRemoteDispatchRowsToGmm1Scalar(__gm__ int8_t *dstPayload, uint32_t dstRowBytes,
-                                                        __gm__ float *dstScale, M2PeerWindowViewDevice remotePeer,
-                                                        uint32_t srcRowBytes, int32_t dstStart, int32_t srcStart,
-                                                        int32_t rows)
+AICORE inline void M2CopyRemoteDispatchRowsToGmm1Pto(__gm__ int8_t *dstPayload, uint32_t dstRowBytes,
+                                                     __gm__ float *dstScale, M2PeerWindowViewDevice remotePeer,
+                                                     uint32_t srcRowBytes, int32_t dstStart, int32_t srcStart,
+                                                     int32_t rows)
 {
-    for (int32_t row = 0; row < rows; ++row) {
-        __gm__ int8_t *dst = dstPayload + static_cast<int64_t>(dstStart + row) * dstRowBytes;
-        __gm__ int8_t *src = remotePeer.dispatchPayload + static_cast<int64_t>(srcStart + row) * srcRowBytes;
-        InvalidateGmCacheLines(src, srcRowBytes);
-        for (uint32_t col = 0; col < srcRowBytes; ++col) {
-            dst[col] = src[col];
-        }
-        __gm__ int32_t *dstScaleBits = reinterpret_cast<__gm__ int32_t *>(dstScale + dstStart + row);
-        __gm__ int32_t *srcScaleBits = reinterpret_cast<__gm__ int32_t *>(remotePeer.dispatchScale + srcStart + row);
-        InvalidateGmCacheLines(srcScaleBits, sizeof(int32_t));
-        StoreScalarI32(dstScaleBits, LoadScalarI32(srcScaleBits));
-        InvalidateGmCacheLines(dst, dstRowBytes);
-    }
+    M2TGetRowsInt8(dstPayload, static_cast<int32_t>(dstRowBytes), dstStart, remotePeer.dispatchPayload,
+                   static_cast<int32_t>(srcRowBytes), srcStart, rows, static_cast<int32_t>(srcRowBytes));
+    M2TGetRowsFloat(dstScale, dstStart, remotePeer.dispatchScale, srcStart, rows);
 }
 
 AICORE inline void M2GatherDispatchToGmm1Input(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
@@ -2909,14 +2952,19 @@ AICORE inline void M2GatherDispatchToGmm1Input(moe_new_dispatch_combine_a8w8::Sh
                     0 :
                     LoadScalarI32(workspaceView.cumsumMM + (tokenOwner - 1U) * shape.expertPerRank + localExpert);
             int32_t rows = current - previous;
-            int32_t dstStart =
-                LoadScalarI32(workspaceView.dispatchOffset + localExpert) +
-                LoadScalarI32(workspaceView.preSumBeforeRank + tokenOwner * shape.expertPerRank + localExpert);
+            int32_t dstStart = LoadScalarI32(workspaceView.dispatchOffset + localExpert) + previous;
             if (rows <= 0) {
                 continue;
             }
-            int32_t srcStart = M2SourceGlobalExpertRowBase(shape, localPeer, tokenOwner, globalExpert);
+            int32_t srcStart =
+                LoadScalarI32(workspaceView.preSumBeforeRank + tokenOwner * shape.expertPerRank + localExpert);
             int32_t localRowCap = static_cast<int32_t>(M2LocalRows(shape));
+            if (dstStart >= localRowCap) {
+                continue;
+            }
+            if (dstStart + rows > localRowCap) {
+                rows = localRowCap - dstStart;
+            }
             if (srcStart >= localRowCap) {
                 continue;
             }
@@ -2932,9 +2980,9 @@ AICORE inline void M2GatherDispatchToGmm1Input(moe_new_dispatch_combine_a8w8::Sh
             } else {
                 M2PeerWindowViewDevice remotePeer =
                     MakeM2RemotePeerWindowViewDevice(ctx, peerWindow, tokenOwner, peerWindowLayout);
-                M2CopyRemoteDispatchRowsToGmm1Scalar(workspaceView.gmm1InputInt8, rowBytes,
-                                                     workspaceView.routingPerTokenScale, remotePeer, rowBytes, dstStart,
-                                                     srcStart, rows);
+                M2CopyRemoteDispatchRowsToGmm1Pto(workspaceView.gmm1InputInt8, rowBytes,
+                                                  workspaceView.routingPerTokenScale, remotePeer, rowBytes, dstStart,
+                                                  srcStart, rows);
             }
         }
         StoreScalarI32(workspaceView.dispatchGroupReady + localExpert * 16U, 1);
@@ -2957,14 +3005,19 @@ AICORE inline void M3NGatherDispatchToGmm1InputShard(
                     0 :
                     LoadScalarI32(workspaceView.cumsumMM + (tokenOwner - 1U) * shape.expertPerRank + localExpert);
             int32_t rows = current - previous;
-            int32_t dstStart =
-                LoadScalarI32(workspaceView.dispatchOffset + localExpert) +
-                LoadScalarI32(workspaceView.preSumBeforeRank + tokenOwner * shape.expertPerRank + localExpert);
+            int32_t dstStart = LoadScalarI32(workspaceView.dispatchOffset + localExpert) + previous;
             if (rows <= 0) {
                 continue;
             }
-            int32_t srcStart = M2SourceGlobalExpertRowBase(shape, localPeer, tokenOwner, globalExpert);
+            int32_t srcStart =
+                LoadScalarI32(workspaceView.preSumBeforeRank + tokenOwner * shape.expertPerRank + localExpert);
             int32_t localRowCap = static_cast<int32_t>(M2LocalRows(shape));
+            if (dstStart >= localRowCap) {
+                continue;
+            }
+            if (dstStart + rows > localRowCap) {
+                rows = localRowCap - dstStart;
+            }
             if (srcStart >= localRowCap) {
                 continue;
             }
@@ -2980,9 +3033,9 @@ AICORE inline void M3NGatherDispatchToGmm1InputShard(
             } else {
                 M2PeerWindowViewDevice remotePeer =
                     MakeM2RemotePeerWindowViewDevice(ctx, peerWindow, tokenOwner, peerWindowLayout);
-                M2CopyRemoteDispatchRowsToGmm1Scalar(workspaceView.gmm1InputInt8, rowBytes,
-                                                     workspaceView.routingPerTokenScale, remotePeer, rowBytes, dstStart,
-                                                     srcStart, rows);
+                M2CopyRemoteDispatchRowsToGmm1Pto(workspaceView.gmm1InputInt8, rowBytes,
+                                                  workspaceView.routingPerTokenScale, remotePeer, rowBytes, dstStart,
+                                                  srcStart, rows);
             }
         }
     }
@@ -3627,10 +3680,13 @@ __global__ AICORE void M2Int8Dispatch(moe_new_dispatch_combine_a8w8::ShapeConfig
     M2ClearDispatchState(shape, workspaceView, localPeer);
     M2CountLocalRoutes(shape, workspaceView, localPeer, expertIdx, xActiveMask, myRank);
     M2RoutePackQuantLocal(shape, workspaceView, localPeer, inputA, expertIdx, xActiveMask, rowBytes);
+    uint64_t dispatchE2eBegin = M2GetSysCnt();
     M2PublishCountRows(shape, workspaceView, localPeer, ctx, peerWindow, myRank, peerWindowLayout);
     M2WaitCountRows(shape, localPeer, myRank);
+    M3NApplyDispatchCapacityClip(shape, workspaceView, localPeer, myRank);
     M2BuildPrefixMetadata(shape, workspaceView, localPeer, myRank);
     M2GatherDispatchToGmm1Input(shape, workspaceView, localPeer, ctx, peerWindow, myRank, rowBytes, peerWindowLayout);
+    M2RecordDispatchE2eTimeline(localPeer.timeline, dispatchE2eBegin, M2GetSysCnt());
     M2BuildSwigluSyncMetadata(shape, workspaceView);
     StoreScalarI32(localPeer.debugCounters, 1);
 }
@@ -3857,9 +3913,7 @@ AICORE inline uint32_t M2BuildReturnSegmentMap(moe_new_dispatch_combine_a8w8::Sh
                     if (ownerRows <= 0) {
                         continue;
                     }
-                    int32_t ownerStart =
-                        LoadScalarI32(workspaceView.dispatchOffset + localExpert) +
-                        LoadScalarI32(workspaceView.preSumBeforeRank + tokenOwner * shape.expertPerRank + localExpert);
+                    int32_t ownerStart = LoadScalarI32(workspaceView.dispatchOffset + localExpert) + previous;
                     int32_t ownerEnd = ownerStart + ownerRows;
                     int32_t tileEnd = tileStart + tileCount;
                     int32_t segmentStart = tileStart > ownerStart ? tileStart : ownerStart;
@@ -3867,8 +3921,9 @@ AICORE inline uint32_t M2BuildReturnSegmentMap(moe_new_dispatch_combine_a8w8::Sh
                     if (segmentEnd <= segmentStart) {
                         continue;
                     }
-                    int32_t dstStart = M2SourceGlobalExpertRowBase(shape, localPeer, tokenOwner, globalExpert) +
-                                       segmentStart - ownerStart;
+                    int32_t dstStart =
+                        LoadScalarI32(workspaceView.preSumBeforeRank + tokenOwner * shape.expertPerRank + localExpert) +
+                        segmentStart - ownerStart;
                     if (segmentId < capacity) {
                         __gm__ int32_t *segment =
                             workspaceView.subTileOwnerSegments + segmentId * kM2OwnerSegmentFields;
@@ -4040,9 +4095,7 @@ AICORE inline uint32_t M3N8BuildReturnSegmentMapForExpert(moe_new_dispatch_combi
                 if (ownerRows <= 0) {
                     continue;
                 }
-                int32_t ownerStart =
-                    LoadScalarI32(workspaceView.dispatchOffset + localExpert) +
-                    LoadScalarI32(workspaceView.preSumBeforeRank + tokenOwner * shape.expertPerRank + localExpert);
+                int32_t ownerStart = LoadScalarI32(workspaceView.dispatchOffset + localExpert) + previous;
                 int32_t ownerEnd = ownerStart + ownerRows;
                 int32_t tileEnd = tileStart + tileCount;
                 int32_t segmentStart = tileStart > ownerStart ? tileStart : ownerStart;
@@ -4051,7 +4104,8 @@ AICORE inline uint32_t M3N8BuildReturnSegmentMapForExpert(moe_new_dispatch_combi
                     continue;
                 }
                 int32_t dstStart =
-                    M2SourceGlobalExpertRowBase(shape, localPeer, tokenOwner, globalExpert) + segmentStart - ownerStart;
+                    LoadScalarI32(workspaceView.preSumBeforeRank + tokenOwner * shape.expertPerRank + localExpert) +
+                    segmentStart - ownerStart;
                 if (*segmentId < capacity) {
                     __gm__ int32_t *segment = workspaceView.subTileOwnerSegments + *segmentId * kM2OwnerSegmentFields;
                     StoreScalarI32(segment + 0U, static_cast<int32_t>(tokenOwner));
