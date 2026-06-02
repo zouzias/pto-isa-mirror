@@ -2238,6 +2238,12 @@ AICORE inline void M3NInvalidateExpandedRowIdxShard(moe_new_dispatch_combine_a8w
                            static_cast<uint32_t>((tokenEnd - tokenBegin) * shape.topK * sizeof(int32_t)));
 }
 
+AICORE inline void M2RoutePackStoreFence()
+{
+    pipe_barrier(PIPE_ALL);
+    dsb(DSB_DDR);
+}
+
 AICORE inline void M2RoutePackQuantLocal(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
                                          M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
                                          GM_ADDR inputA, GM_ADDR expertIdx, GM_ADDR xActiveMask, uint32_t rowBytes)
@@ -2276,6 +2282,7 @@ AICORE inline void M2RoutePackQuantLocal(moe_new_dispatch_combine_a8w8::ShapeCon
         }
         M2QuantizeTokenToPackedRowsWithCache(shape, workspaceView, localPeer, inputA, token, rowBytes, packedRows);
     }
+    M2RoutePackStoreFence();
     InvalidateGmCacheLines(workspaceView.expandedRowIdx, static_cast<uint32_t>(shape.m * shape.topK * sizeof(int32_t)));
     M2InvalidatePackedRowToRouteIndexByExpert(shape, workspaceView);
 }
@@ -2354,6 +2361,7 @@ AICORE inline void M2RunInitQuantFullLoadPtoVec(moe_new_dispatch_combine_a8w8::S
         M2QuantizeTokenToPackedRowsWithCache(shape, workspaceView, localPeer, inputA, token, rowBytes, packedRows);
     }
 
+    M2RoutePackStoreFence();
     InvalidateGmCacheLines(workspaceView.blockTokenPerExpert, static_cast<uint32_t>(globalExpertNum * sizeof(int32_t)));
     InvalidateGmCacheLines(workspaceView.blockPrefixPerExpert,
                            static_cast<uint32_t>(globalExpertNum * sizeof(int32_t)));
@@ -2422,6 +2430,7 @@ AICORE inline void M3NRoutePackQuantLocalShard(moe_new_dispatch_combine_a8w8::Sh
         }
         M2QuantizeTokenToPackedRowsWithCache(shape, workspaceView, localPeer, inputA, token, rowBytes, packedRows);
     }
+    M2RoutePackStoreFence();
     InvalidateGmCacheLines(workspaceView.expandedRowIdx + tokenBegin * shape.topK,
                            static_cast<uint32_t>((tokenEnd - tokenBegin) * shape.topK * sizeof(int32_t)));
     M3NInvalidatePackedRowToRouteIndexShard(shape, workspaceView, workerId);

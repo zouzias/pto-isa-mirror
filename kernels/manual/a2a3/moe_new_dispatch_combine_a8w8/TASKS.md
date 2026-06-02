@@ -57,7 +57,7 @@
 | T21 | `accepted` | Codex | T17 | worker/cache 调度 | 根据 M/topK/K/专家分布调优 worker 数、UB resident metadata 和批量 GM 写回，避免固定 token shard 负载倾斜 | `reports/T21.md`；large、`M=8192`、`topK=8`、skew topK4、more experts stop17 PASS | selector 按 `M/topK/K/globalExpertNum/logicalAIV` 选 worker；route-pack expert base/localOrdinal 进 UB cache；T23 继续处理 metadata GM 批量化 |
 | T22 | `accepted` | Codex | T17 | swizzle/L1/L0 边界确认 | 明确原 FFN 中 swizzle/L1/L0/preload 属于 GMM/Catlass 阶段，并给后续 GMM PTO `TMATMUL` tiling、L1/L0 cache、swizzle 替代任务 | `reports/T22.md`；design.md 边界清晰，GMM 阶段单独拆任务验收 | 不能把 GMM 的 L1/L0/swizzle 误计入前重排完成项；GMM 设计继承 `M/topK/K/currentM` 参数族 |
 | T23 | `accepted` | Codex | T17,T21 | metadata GM 批量化 | scatter 同步生成当前 token packed-row UB cache，quant 直接吃 cache；`packedRowToRouteIndex` 按 expert/worker 连续段 flush，删除 worker 级全 `R` flush | `reports/T23.md`；small/large、`M=8192/16384` token scale、topK sweep、skew 和 more experts stop17 PASS；常规日志无中间 dump | 解决 tok/topK 更多时 metadata GM store/flush 放大；capacity clip 的稀疏 expanded-row 更新仍保留最终全量 flush |
-| T24 | `not_started` | - | T20,T23 | 大 K 行/列 tiling | quant 支持大 K column chunk、row tile/ping-pong，不能因整行放不下 UB 退成单核或 per-route 重复量化 | `K=1024/7168` large K 与 `topK=4` case payload/scale pass，route_quant_path=`pto_vec` | 对标 FFN gather dynamic quant 的 row/col tiling；大 K 不能退 scalar fallback |
+| T24 | `accepted` | Codex | T20,T23 | 大 K 行/列 tiling | quant 支持大 K column chunk、row tile/ping-pong，不能因整行放不下 UB 退成单核或 per-route 重复量化 | `reports/T24.md`；`K=1024/7168,topK=4` pass，small/large、`M=16384`、`topK=8` 回归 pass，route_quant_path=`pto_vec` | 对标 FFN gather dynamic quant 的 row/col tiling；新增 metadata store fence 只处理写后可见性，不做 shape 特化 |
 | T25 | `not_started` | - | T22 | GMM PTO 性能设计 | 后续 GMM1/GMM2 用 PTO `TMATMUL`、L1/L0 ping-pong、preload、swizzle 替代 Catlass/Catcoc 的设计任务 | 新 GMM design/task 拆分完成；不把 initquant pass 当整体商用性能完成；覆盖 `M=8192/16384`、`topK>2`、large K 和 skew | PTO 重写整体性能闭环任务，不按 small/large anchor 估算 GMM tile |
 | T26 | `not_started` | - | T19,T20,T21,T23,T24 | 参数化非特化验收矩阵 | stop17 脚本支持 token/topK/K/distribution sweep，并做 device 非特化代码审计 | `M={16,512,2048,4097,8192,16384}`、`topK={1,2,4,8}`、`K={128,1024,7168}`、skew、capacity clip 均 pass；device 主路径无 small/large/topK==2 写死 | 作为 T19-T24 的共享验收门禁，不新增中间日志；性能结论按参数族输出 |
 
@@ -91,6 +91,7 @@
 | 2026-06-02 | T21 accepted：worker selector 改为按 `M/topK/K/globalExpertNum/logicalAIV/lane slot` 参数化；fused 与直调 route-pack scatter 均使用 UB expert-base/localOrdinal cache。large、`M=8192`、`topK=8`、skew topK4、more experts stop17 PASS。 | T21,T23 |
 | 2026-06-02 | T22 accepted：明确 L1/L0/swizzle/preload 属于 GMM1/GMM2 Catlass 阶段，不能计入 initquant 完成项；T25 GMM PTO 设计继承 `M/topK/K/currentM` 参数族和 skew/capacity clip 分布。 | T22,T25,T26 |
 | 2026-06-02 | T23 accepted：route scatter 生成当前 token packed-row UB cache，token-centric quant 不再立即回读 `expandedRowIdx`；`packedRowToRouteIndex` flush 收敛为 full-load expert 段或 multi-worker expert/worker 段。small/large、`M=8192/16384`、`topK=8`、skew topK4、more experts stop17 PASS。 | T23,T24,T26 |
+| 2026-06-02 | T24 accepted：large-K column chunk 路径在 `K=1024/7168,topK=4` 下保持 PTO Vec，无 scalar fallback；补充 route-pack metadata store fence 解决长列切分后 `expandedRowIdx/packedRowToRouteIndex` 可见性风险，同时回归 small/large、`M=16384` 和 `topK=8`。 | T24,T26 |
 
 ### Handoff Rules
 

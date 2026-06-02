@@ -1108,6 +1108,11 @@ bash scripts/run_a3.sh --backend int8 --m2-fused-full 1 --m2-fused-debug-stop-st
 bash scripts/run_a3.sh --backend int8 --m2-fused-full 1 --m2-fused-debug-stop-stage 17 \
   --case-name large-k -pes 2 -M 1024 -K 1024 -N 128 -topK 4 -expertPerPe 2 \
   --max-output-size 4096 --dry-run 0 --skip-kernel-launch 0
+
+# very large K: 验证整行无法常驻 UB 时仍按 column chunk 走 PTO Vec
+bash scripts/run_a3.sh --backend int8 --m2-fused-full 1 --m2-fused-debug-stop-stage 17 \
+  --case-name large-k-7168 -pes 2 -M 1024 -K 7168 -N 128 -topK 4 -expertPerPe 2 \
+  --max-output-size 4096 --dry-run 0 --skip-kernel-launch 0
 ```
 
 这些扩展 case 的期望字段和 small/large 一致：结构体匹配为 true、`route_quant_path=pto_vec`、
@@ -1190,7 +1195,7 @@ Stage A/B/C 中间 dump。
 | T21 | worker/cache 调度 | T17 | 根据 `M/topK/K/globalExpertNum/route distribution` 选择 worker 数，正式 worker scratch 支持到 40 | skew route、`M>4097` more-token、topK sweep/more experts case activeWorkers 有效，metadata 不成为主瓶颈 |
 | T22 | GMM cache 边界 | T17 | 明确 L1/L0/swizzle/preload 属于后续 GMM PTO 化，不计入 initquant 完成项 | design.md 边界清晰，GMM 阶段单独拆任务 |
 | T23 | metadata GM 批量化 | T17,T21 | `expandedRowIdx`、`packedRowToRouteIndex`、count/prefix 写回按连续 route/expert tile 批量化 | small/large、`M=8192/16384` token scale、topK sweep 和 more experts case stop17 pass；无中间 dump 日志 |
-| T24 | 大 K 行/列 tiling | T20,T23 | quant 支持大 K column chunk、row tile/ping-pong，不能因整行放不下 UB 退成单核 | `K=1024/7168` large K 与 `topK=4` case payload/scale pass，`route_quant_path=pto_vec` |
+| T24 | 大 K 行/列 tiling | T20,T23 | quant 支持大 K column chunk、row tile/ping-pong，不能因整行放不下 UB 退成单核 | `K=1024/7168` large K 与 `topK=4` case payload/scale pass；small/large、`M=16384`、`topK=8` 回归 pass；`route_quant_path=pto_vec` |
 | T25 | GMM PTO 性能设计 | T22 | GMM1/GMM2 用 PTO `TMATMUL`、L1/L0 ping-pong、preload、swizzle 替代 Catlass/Catcoc 的任务设计 | 新 GMM design/task 拆分完成；不把 initquant pass 当整体商用性能完成 |
 | T26 | 参数化非特化验收矩阵 | T19,T20,T21,T23,T24 | stop17 脚本支持 token/topK/K/distribution sweep，并做 device 非特化代码审计 | `M={16,512,2048,4097,8192,16384}`、`topK={1,2,4,8}`、`K={128,1024,7168}`、skew、capacity clip 均 pass；device 主路径无 small/large/topK==2 写死 |
 

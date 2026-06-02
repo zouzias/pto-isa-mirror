@@ -1551,6 +1551,7 @@ AICORE inline void M2RoutePackQuantLocalPtoVec(moe_new_dispatch_combine_a8w8::Sh
         }
         M2QuantizeTokenToPackedRowsWithCache(shape, workspaceView, localPeer, inputA, token, rowBytes, packedRows);
     }
+    M2RoutePackStoreFence();
     InvalidateGmCacheLines(workspaceView.expandedRowIdx, static_cast<uint32_t>(shape.m * shape.topK * sizeof(int32_t)));
     M2InvalidatePackedRowToRouteIndexByExpert(shape, workspaceView);
 }
@@ -1609,6 +1610,7 @@ AICORE inline void M3NRoutePackQuantLocalShardPtoVec(moe_new_dispatch_combine_a8
         }
         M2QuantizeTokenToPackedRowsWithCache(shape, workspaceView, localPeer, inputA, token, rowBytes, packedRows);
     }
+    M2RoutePackStoreFence();
     InvalidateGmCacheLines(workspaceView.expandedRowIdx + tokenBegin * shape.topK,
                            static_cast<uint32_t>((tokenEnd - tokenBegin) * shape.topK * sizeof(int32_t)));
     M3NInvalidatePackedRowToRouteIndexShard(shape, workspaceView, workerId);
