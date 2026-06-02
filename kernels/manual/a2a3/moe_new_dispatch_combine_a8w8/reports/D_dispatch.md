@@ -62,5 +62,10 @@ Device note: `npu-smi info` showed devices 4 and 5 in `Alarm`, so NPU correctnes
 
 ## Residual Work
 
-- D10 hot expert rowBlock parallelism is still a performance follow-up and does not block dispatch correctness.
-- Device e2e timing is currently for standalone M2 dispatch-only acceptance; fused overlap timing should be revisited when GMM1 overlap is enabled.
+- This report only proves dispatch correctness and standalone D0-D4 timing. It does not prove commercial FFN-level
+  performance.
+- Production acceptance still requires FFN dispatch baseline, multi-AIV gather, hot expert rowBlock, and GMM1 overlap.
+- Default production gate: `PTO_dispatch_e2e <= 1.1 * FFN_dispatch_e2e` on the same shape, rank count, devices, and data
+  distribution.
+- Device e2e timing is currently for standalone M2 dispatch-only acceptance; fused overlap timing must be revisited when
+  GMM1 overlap is enabled.

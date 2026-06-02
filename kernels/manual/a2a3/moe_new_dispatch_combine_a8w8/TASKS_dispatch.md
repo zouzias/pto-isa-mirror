@@ -7,6 +7,11 @@
 dispatch 的业务就是本 rank 的 AIV worker 遍历本地 expert，从各 token owner rank 的 packed buffer 拉
 payload/scale rows，直接写成本 rank 的 GMM1 输入。
 
+性能目标：dispatch 不是 toy correctness kernel。small/large mismatch 全 0 只说明功能语义通过；最终硬目标是
+对标 FFN `dispatch_ffn_combine` 的商用性能。必须建立同 shape、同 rank、同设备、同数据分布的 FFN dispatch
+baseline，PTO dispatch e2e 默认不得超过 FFN baseline 的 1.1x。没有完成多 AIV gather、hot expert rowBlock、
+GMM1 overlap 和 FFN baseline 对比，不能声明 dispatch 性能完成。
+
 ## 状态枚举
 
 | State | 含义 | 谁可以写 |
@@ -35,10 +40,14 @@ payload/scale rows，直接写成本 rank 的 GMM1 输入。
 | D7 | `accepted` | Codex | D1-D6 | Correctness acceptance | 跑 dispatch-only small/large 验收 | metadata、payload、scale、ready mismatch 全为 0；常规日志只保留 summary/first mismatch/e2e | 不加 token/row 级大 dump |
 | D8 | `accepted` | Codex | D7 | Code review | 检视字段语义、TGET 路径、ready 顺序、e2e 口径和无 debug 膨胀 | 无 remote scalar copy 调用；无源端/目的端 prefix 混用；无 ready 早置 | 见 `reports/D_dispatch.md` |
 | D9 | `accepted` | Codex | D8 | Report/commit | 生成轻量交付报告并只提交 dispatch 相关文件 | report 记录命令、case、结果和未覆盖风险；git stage 不包含无关脏改 | report 已生成；本阶段提交只包含 dispatch 相关文件 |
-| D10 | `not_started` | - | D7 | Hot expert rowBlock 优化 | 把 `(localExpert, tokenOwnerRank)` 继续切成 rowBlock task，提高 hot expert 并行度 | 不改变 row order；skew case correctness pass；ready 仍晚于全部 rowBlock 完成 | 性能优化项，不阻塞 dispatch correctness |
+| D10 | `not_started` | - | D7 | FFN 性能 baseline | 建立同 shape/同 rank/同设备的 FFN dispatch e2e baseline | 输出 FFN dispatch D0-D4 e2e；记录计时口径、设备、case | 商用性能硬依赖，不阻塞 correctness，但阻塞 production acceptance |
+| D11 | `not_started` | - | D10 | 多 AIV gather | dispatch gather 不再固定单 AIV，按 `(localExpert, tokenOwnerRank)` 分配 worker | 输出 active worker 数、worker rows 分布、small/large correctness pass | 对标 FFN 并行调度能力 |
+| D12 | `not_started` | - | D11 | Hot expert rowBlock | 把大 rows 的 `(localExpert, tokenOwnerRank)` 切成 rowBlock task | 不改变 row order；skew case correctness pass；ready 仍晚于全部 rowBlock 完成 | 消除 hot expert 长尾 |
+| D13 | `not_started` | - | D12 | GMM1 overlap 性能路径 | 删除 correctness 临时全同步，用 expert-ready 驱动 GMM1 overlap | fused path correctness pass；dispatch/GMM1 e2e 不明显劣化 | overlap 是商用性能路径，不是可选装饰 |
+| D14 | `not_started` | - | D10-D13 | 商用性能验收 | PTO dispatch 对比 FFN baseline | 默认 `PTO_dispatch_e2e <= 1.1 * FFN_dispatch_e2e`；若超限，提交瓶颈归因和优化计划 | 通过后才能声明 dispatch 性能完成 |
 
-第一轮开发顺序：D1 -> D2 -> D3/D4 -> D5 -> D6 -> D7 -> D8 -> D9。D10 是后续优化，不阻塞第一版
-dispatch correctness。
+第一轮 correctness 顺序：D1 -> D2 -> D3/D4 -> D5 -> D6 -> D7 -> D8 -> D9。D10-D14 是商用性能硬目标，
+不阻塞 correctness 提交，但阻塞“对标 FFN 性能能力已补齐”的结论。
 
 ## 验收矩阵
 
@@ -47,6 +56,8 @@ dispatch correctness。
 | small | `ffn-v3-small`, `M=16`, `K=128`, `N=128`, `topK=2`, `expertPerPe=2`, `maxOutputSize=32`, `dispatch-only=1` | count、metadata、payload、scale、ready、e2e |
 | large | `ffn-v3-4097`, `M=4097`, `K=128`, `N=128`, `topK=2`, `expertPerPe=2`, `maxOutputSize=8194`, `dispatch-only=1` | count、metadata、payload、scale、ready、capacity clip、e2e |
 | follow-up sweep | `M/topK/K/expertPerPe/distribution` 参数族扩展 | 非 small/large 特化、hot expert rowBlock、tail row-block |
+| FFN perf baseline | 与 PTO case 同 shape、同 rank、同设备、同数据分布 | FFN dispatch D0-D4 e2e，作为 PTO 性能硬门槛 |
+| production perf | PTO 多 AIV + rowBlock + overlap | PTO dispatch e2e 默认不超过 FFN baseline 1.1x |
 
 常规验收日志只保留：
 
@@ -73,7 +84,12 @@ dispatch 只允许围绕必要同步点定位问题，不允许为了定位卡�
 - 顺序：远端写后 notify、wait 后读、rows 写完后 ready。
 - 可见性：`TPUT/TGET` 完成、必要 event/barrier、GM cache invalidate 是否在正确位置。
 
-临时日志只允许同步点前后的摘要计数、signal 值或 timeout summary；不用 token/row 级 dump。
+卡住定位必须先画同步信号关系，再动实现。同步信号关系至少列出 signal 名称、producer、consumer、地址来源、
+等待值、数据写和 signal 写的顺序、wait 后读取的地址。没有这个审计，不允许通过改串行、关 worker、随机挪 barrier、
+随机加 sleep 来试结果。
+
+临时日志只允许同步点前后的摘要计数、signal 值、stage id、ready count、timeout summary 或 worker rowBlock 汇总；
+不用 token/row 级 dump。
 
 ## Issue Log
 
@@ -81,6 +97,7 @@ dispatch 只允许围绕必要同步点定位问题，不允许为了定位卡�
 | --- | --- | --- | --- | --- | --- |
 | DISPATCH-SYNC-RULE | P1 | closed | D1-D7 | 定位 dispatch 卡住时不得通过串行化 AIV worker 或关闭并发来试结果 | 本轮按地址协议定位并修复 host/device peer timeline offset；未做串行降级实验 |
 | DISPATCH-SCALAR-REMOTE-COPY | P1 | closed | D3,D4,D8 | remote payload/scale 不接受 scalar byte copy 作为验收路径 | 已使用 PTO row-block `TGET`；D8 源码扫描确认无旧 scalar remote copy 调用 |
+| DISPATCH-SIGNAL-GRAPH-FIRST | P1 | open | D10-D14 | 后续多 AIV、rowBlock、overlap 阶段若卡住，必须先做同步信号关系审计 | 输出 signal 图和 producer/consumer/address/value/order/visibility 结论后再改代码；禁止随机试验 |
 
 ## Handoff Rules
 
@@ -90,3 +107,4 @@ dispatch 只允许围绕必要同步点定位问题，不允许为了定位卡�
 4. reviewer 验收通过后把 state 改为 `accepted`；未通过改为 `needs_fix` 并在 Issue Log 增加问题。
 5. 任何 `P0/P1` issue 未关闭前，受影响下游 task 不得从 `not_started` 进入 `claimed`。
 6. 任何会改变 FFN 语义、PTO-only 约束或 e2e 计时口径的实现，必须进入 `needs_user_decision`。
+7. 任何卡住/timeout 定位，先补同步信号关系审计；审计缺失时不得进入改代码或跑降级实验。

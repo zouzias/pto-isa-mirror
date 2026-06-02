@@ -7,6 +7,31 @@
 设计原则是按 FFN `dispatch_ffn_combine` 的业务语义重写，不搬 AscendC 类和临时串行实现。PTO 版本只替换数据搬运、
 metadata 构造和同步表达方式。
 
+## 0. 性能定位和硬目标
+
+dispatch 阶段不是 demo/toy correctness kernel。`dispatch-only` small/large 全 0 mismatch 只是进入下一轮开发的
+最低门槛，不能作为生产化完成标准。最终目标是对标 FFN `dispatch_ffn_combine` 的商用性能能力：同 shape、同 rank
+数、同设备、同数据分布下，PTO dispatch 的 D0-D4 e2e 不能出现明显劣化，并且要具备 FFN dispatch 的并行调度能力。
+
+商用性能验收必须同时满足：
+
+- 建立 FFN baseline：用 FFN 原实现或等价 stop stage 记录同口径 dispatch e2e，包含 count publish/wait、
+  metadata、payload/scale gather、expert ready。
+- PTO dispatch e2e 对标 FFN：默认硬门槛是 `PTO_dispatch_e2e <= 1.1 * FFN_dispatch_e2e`；如果 FFN 没有独立
+  dispatch 计时，必须先补 baseline 计时或用同一 stop stage 派生，不能用 correctness 时间替代。
+- 多 AIV gather 是生产化要求：不能长期停留在单 AIV 遍历所有 expert/tokenOwner 的路径。
+- hot expert 必须 rowBlock 化：`task = (localExpert, tokenOwnerRank, rowBlock)`，避免单个大 expert 把 dispatch
+  拖成串行长尾。
+- D3 payload/scale 搬运必须保持 PTO row-block `TGET`/local tile copy，不能为了通过性能或定位问题退回 scalar
+  byte loop。
+- GMM1 overlap 是性能路径的一部分：correctness 阶段允许 D4 后临时全同步收口计时；商用性能验收时必须删除这个
+  临时全同步，用 expert-ready 或等价分组 ready 驱动 GMM1 消费。
+- 常规日志只保留 summary、first mismatch 和 e2e；性能定位只看同步点摘要、worker 分工、rowBlock 负载和带宽，
+  不加 token/row 级 dump。
+
+因此，本文后续的 D0-D4 correctness 设计只说明业务正确性落点；性能完成必须额外关闭“单 AIV / 无 rowBlock /
+无 overlap / 无 FFN baseline”的缺口。
+
 ## 1. 阶段边界
 
 ### 1.1 输入
@@ -255,6 +280,14 @@ task = (localExpert, tokenOwnerRank, rowBlock)
 
 这不是改业务逻辑，只是避免某个 expert rows 很大时单个 AIV 拉太久。
 
+生产化路径不得停留在“第一版可以”。实际验收时必须根据 FFN baseline 和本项目 AIV 数量打开多 worker：
+
+- 基础分工：`(localExpert, tokenOwnerRank)` 粒度覆盖所有 owner/expert。
+- 大 rows 分工：当 `rows` 超过 rowBlock 阈值时，继续拆成 `(localExpert, tokenOwnerRank, rowBlock)`。
+- ready 协议：rowBlock 并行后必须用 per-expert 完成计数或 AIV-only 收口，确保最后一个 rowBlock 完成后再置 ready。
+- 负载均衡：任务分配要按 rows 或 rowBlock 数均衡，不能只按 expert 个数平均导致 hot expert 长尾。
+- 性能报告：输出 active worker 数、rowBlock 数、最大/最小 worker rows、dispatch e2e，并和 FFN baseline 对比。
+
 ### 4.4 D4 ready 和 e2e timing
 
 每个 `localExpert` 的所有 `(tokenOwnerRank, rowBlock)` 都完成后，才能置：
@@ -294,6 +327,28 @@ dispatch 只有三个必要同步点：
 
 定位时只加同步点前后的摘要计数或 timeout summary，不加 token/row 级大 dump。卡住时看哪一个同步点的 producer
 和 consumer 对不上，而不是改执行并发模式试结果。
+
+卡住定位必须先做同步信号关系审计，再改代码。审计内容至少包括：
+
+- 信号图：列出 `countReadySignal[tokenOwner]`、metadata AIV-only sync、`dispatchGroupReady[localExpert]`、
+  GMM1 consume wait 之间的依赖方向。
+- 生产者：哪个 rank、哪个 worker、在什么条件下写数据和置 signal。
+- 消费者：哪个 rank、哪个 worker、等待哪个 signal 值，wait 后读取哪些地址。
+- 地址关系：local peer window、remote peer window、workspace 字段 offset 是否由同一 layout 计算，host/device
+  offset 是否一致。
+- 值协议：初值、目标值、是否每轮递增、是否可能读到上一轮旧值。
+- 顺序关系：数据写完成 -> 可见性 fence/event -> signal；signal wait 完成 -> invalidate/读数据；rows 完成 ->
+  expert ready。
+- 并发关系：哪些 worker 可以同时执行，哪些同步是 AIV-only，哪些同步跨 AIC/AIV 或跨 rank。
+
+禁止的定位方式：
+
+- 为了看是否不卡，把多 AIV 改成单 AIV、把并行改串行、关闭某个 worker 分支。
+- 随机加 sleep、随机换 signal 值、随机挪 barrier。
+- 加 token/row 级大 dump，用日志量掩盖同步问题。
+
+允许的临时信息只有同步点摘要：producer/consumer id、signal 地址和值、stage id、ready count、timeout summary、
+worker rowBlock 汇总。任何临时日志都必须能对应上面的同步信号图。
 
 ## 6. FFN 到 PTO 的实现映射
 
@@ -340,11 +395,14 @@ row-block 完成。
 - 每个 local expert 的 ready 只在该 expert 所有 rows 搬完后置位。
 - GMM1 只消费 ready expert 的 row range。
 
-### 7.4 e2e timing
+### 7.4 e2e timing 和性能验收
 
 - 输出 dispatch start/end/cycles，覆盖 D0 开始到 D4 结束。
 - 每 rank 一个 owner core 记录，不接受每个核多份 e2e 混在一起。
 - 当前验收版允许 D4 后临时全同步，报告中标明该同步是 dispatch 计时收口同步。
+- 商用性能验收必须和 FFN 同口径 baseline 对比，默认要求 `PTO_dispatch_e2e <= 1.1 * FFN_dispatch_e2e`。
+- 商用性能验收必须打开多 AIV gather、hot expert rowBlock 和 GMM1 overlap；只跑 standalone 单 AIV dispatch
+  不能声明 dispatch 性能完成。
 
 ### 7.5 日志
 
@@ -370,7 +428,11 @@ row-block 完成。
 | D3.2 | 加 dispatch e2e timing，D4 后临时全同步收口 | 报告 dispatch start/end/cycles |
 | D4.1 | small/large correctness 验收 | metadata、payload、scale、ready 全 pass |
 | D4.2 | 同步问题定位标准落地 | 若卡住，报告具体同步点、producer/consumer、signal 地址和值，不做串行降级实验 |
-| D5.1 | hot expert rowBlock 分工优化 | 不改变业务 row order，提升大 rows 并行度 |
+| D5.1 | 建立 FFN dispatch baseline | 同 shape/同 rank/同设备输出 FFN dispatch e2e，形成对比表 |
+| D5.2 | 多 AIV gather 分工 | active AIV 不再固定为 1；worker rows 分布可解释，无长尾 |
+| D5.3 | hot expert rowBlock 分工 | 不改变业务 row order，提升大 rows 并行度，ready 晚于所有 rowBlock 完成 |
+| D5.4 | GMM1 overlap 性能路径 | 删除 correctness 临时全同步，用 expert-ready 驱动 GMM1，e2e 不明显劣化 |
+| D5.5 | 商用性能验收 | PTO dispatch e2e 默认不超过 FFN baseline 1.1x；若超过，必须给出瓶颈和优化计划 |
 
-第一轮开发顺序按 D0.1 -> D0.2 -> D1.1 -> D2.1/D2.2 -> D3.1 -> D3.2 -> D4.1。D5.1 是性能优化，
-不阻塞 dispatch correctness。
+第一轮开发顺序按 D0.1 -> D0.2 -> D1.1 -> D2.1/D2.2 -> D3.1 -> D3.2 -> D4.1。D5.* 不阻塞
+dispatch correctness，但阻塞“对标 FFN 商用性能完成”的结论。没有 D5.* 验收，不能把 dispatch 阶段描述成生产化完成。
