@@ -58,8 +58,24 @@
 | T22 | `accepted` | Codex | T17 | swizzle/L1/L0 边界确认 | 明确原 FFN 中 swizzle/L1/L0/preload 属于 GMM/Catlass 阶段，并给后续 GMM PTO `TMATMUL` tiling、L1/L0 cache、swizzle 替代任务 | `reports/T22.md`；design.md 边界清晰，GMM 阶段单独拆任务验收 | 不能把 GMM 的 L1/L0/swizzle 误计入前重排完成项；GMM 设计继承 `M/topK/K/currentM` 参数族 |
 | T23 | `accepted` | Codex | T17,T21 | metadata GM 批量化 | scatter 同步生成当前 token packed-row UB cache，quant 直接吃 cache；`packedRowToRouteIndex` 按 expert/worker 连续段 flush，删除 worker 级全 `R` flush | `reports/T23.md`；small/large、`M=8192/16384` token scale、topK sweep、skew 和 more experts stop17 PASS；常规日志无中间 dump | 解决 tok/topK 更多时 metadata GM store/flush 放大；capacity clip 的稀疏 expanded-row 更新仍保留最终全量 flush |
 | T24 | `accepted` | Codex | T20,T23 | 大 K 行/列 tiling | quant 支持大 K column chunk、row tile/ping-pong，不能因整行放不下 UB 退成单核或 per-route 重复量化 | `reports/T24.md`；`K=1024/7168,topK=4` pass，small/large、`M=16384`、`topK=8` 回归 pass，route_quant_path=`pto_vec` | 对标 FFN gather dynamic quant 的 row/col tiling；新增 metadata store fence 只处理写后可见性，不做 shape 特化 |
-| T25 | `not_started` | - | T22 | GMM PTO 性能设计 | 后续 GMM1/GMM2 用 PTO `TMATMUL`、L1/L0 ping-pong、preload、swizzle 替代 Catlass/Catcoc 的设计任务 | 新 GMM design/task 拆分完成；不把 initquant pass 当整体商用性能完成；覆盖 `M=8192/16384`、`topK>2`、large K 和 skew | PTO 重写整体性能闭环任务，不按 small/large anchor 估算 GMM tile |
+| T25 | `accepted` | Codex | T22 | GMM PTO 性能设计 | 后续 GMM1/GMM2 用 PTO `TMATMUL`、L1/L0 ping-pong、preload、swizzle 替代 Catlass/Catcoc 的设计任务 | `reports/T25.md`；GMM design/task 拆分完成；不把 initquant pass 当整体商用性能完成 | 继承 `M/topK/K/currentM` 参数族；明确当前 PTO GMM 雏形 L1/L0 K 与原 FFN 差异，后续实现不能按 small/large anchor 估算 tile |
 | T26 | `not_started` | - | T19,T20,T21,T23,T24 | 参数化非特化验收矩阵 | stop17 脚本支持 token/topK/K/distribution sweep，并做 device 非特化代码审计 | `M={16,512,2048,4097,8192,16384}`、`topK={1,2,4,8}`、`K={128,1024,7168}`、skew、capacity clip 均 pass；device 主路径无 small/large/topK==2 写死 | 作为 T19-T24 的共享验收门禁，不新增中间日志；性能结论按参数族输出 |
+
+### Follow-up GMM PTO Tasks From T25
+
+这些任务是 T25 的设计输出，后续实现时再逐项领取；当前 T17-T25 目标只要求完成设计和拆分。
+
+| ID | State | 依赖 | 阶段 | 交付物 | 验收/Report | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| GMM-P0 | `not_started` | T25 | shape/contract | 基于 `dispatchOffset/expertTokenNums/cumsumMM/maxOutputSize` 生成 GMM1/GMM2 problem shape 和 task plan | balanced/skew/capacity clip 下 `currentM/rowBegin/taskCount` 与 host golden 一致 | 不按 `M=16`、`M=4097` 或 `topK=2` 估算 |
+| GMM-P1 | `not_started` | GMM-P0 | AIC scheduler | PTO tile scheduler 支持 `loopIdx += aicCount` 和 `startCoreIdx` 跨 expert 接力 | hot expert/more-token 下 active AIC 分布不固定到低号核 | group ready 不是 core ownership |
+| GMM-P2 | `not_started` | GMM-P1 | swizzle/cache | PTO N 聚簇或等价 swizzle；按 `currentM` 冷热 expert 记录 cache policy | hot expert 多 M tile 时 swizzle policy 可审计；冷 expert 不污染 L2 或记录 primitive gap | 不退回 Catlass `GemmIdentityBlockSwizzle` |
+| GMM-P3 | `not_started` | GMM-P1 | L1/L0 TMATMUL | PTO `TMATMUL/TMATMUL_ACC` int8 GMM tile；L1/L0 ping-pong 和 K panel sizing | `K={128,1024,7168}`、`N={128,4096}` correctness pass；`gmm*_path=pto_tmatmul` | 原 FFN L1-K=512/L0-K=128；当前 PTO 雏形若保持 256/64 需报告差异 |
+| GMM-P4 | `not_started` | GMM-P3 | preload/drain | PTO preload pipeline 和 `GmmDrainPreload` helper | 发布 ready 前 `gmm_preload_drained=true`；无下游读半成品 | 对应原 FFN `SynchronizeBlock()` |
+| GMM-P5 | `not_started` | GMM-P4 | AIC/AIV handoff | `dispatchGroupReady/gmm1SyncGroupReady/activationSyncGroupReady/gmm2GroupReady/subTileReady` 的 PTO event/GM ready 实现 | 不用全局 `SYNCALL<Mix>` 等所有 expert；group/sync group 粒度可审计 | 只保留最终验收摘要 |
+| GMM-P6 | `not_started` | GMM-P5 | epilogue/activation | GMM1 int32 dequant + SwiGLU + requant，生成 GMM2 input/scale | `gmm1 -> activation -> gmm2` sync group correctness pass | AIV Vec 路径，不恢复 Catlass epilogue |
+| GMM-P7 | `not_started` | GMM-P5 | GMM2 return | GMM2 tile/sub-tile ready 与 return owner segment 衔接 | return payload 直接消费 GMM2 result，不先全量 copy 再 combine | strided async gap 只记录为 primitive gap |
+| GMM-P8 | `not_started` | GMM-P3,GMM-P6,GMM-P7 | baseline/sweep | GMM PTO 参数化 sweep 和原 FFN baseline 对比 | token/topK/K/N/distribution 矩阵和 original FFN baseline 报告 | 有 baseline 前不能宣称商用性能达标 |
 
 ### Issue Log
 
@@ -92,6 +108,7 @@
 | 2026-06-02 | T22 accepted：明确 L1/L0/swizzle/preload 属于 GMM1/GMM2 Catlass 阶段，不能计入 initquant 完成项；T25 GMM PTO 设计继承 `M/topK/K/currentM` 参数族和 skew/capacity clip 分布。 | T22,T25,T26 |
 | 2026-06-02 | T23 accepted：route scatter 生成当前 token packed-row UB cache，token-centric quant 不再立即回读 `expandedRowIdx`；`packedRowToRouteIndex` flush 收敛为 full-load expert 段或 multi-worker expert/worker 段。small/large、`M=8192/16384`、`topK=8`、skew topK4、more experts stop17 PASS。 | T23,T24,T26 |
 | 2026-06-02 | T24 accepted：large-K column chunk 路径在 `K=1024/7168,topK=4` 下保持 PTO Vec，无 scalar fallback；补充 route-pack metadata store fence 解决长列切分后 `expandedRowIdx/packedRowToRouteIndex` 可见性风险，同时回归 small/large、`M=16384` 和 `topK=8`。 | T24,T26 |
+| 2026-06-02 | T25 accepted：详细设计 GMM PTO 化，记录原 FFN L1/L0、swizzle、preload drain、cache hint、startCoreIdx 接力和 AIC/AIV handoff；新增 GMM-P0..GMM-P8 后续实施任务。 | T25,T26,GMM-P0..GMM-P8 |
 
 ### Handoff Rules
 

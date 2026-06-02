@@ -575,27 +575,154 @@ capacity clip 都通过，才能说该阶段没有做 anchor 特化。
 single shape 的 pass 推导“已对标所有 FFN 生产 shape”。如果某个参数族暂时不能跑通，报告要写清楚瓶颈是
 同步、worker 调度、metadata store、row/col tiling 还是 PTO primitive gap。
 
-### 2.1.7 后续 GMM PTO 性能任务草案
+### 2.1.7 后续 GMM PTO 性能设计
 
-T25 只做设计，不把 Catlass 代码拷进来改。后续 GMM1/GMM2 的 PTO 化需要参考原 FFN 的并发和缓存设计，
-但 device 主路径用 PTO `TMATMUL`、PTO Vec epilogue 和 PTO cross-core event 重写。
+T25 只做设计和任务拆分，不把 Catlass 代码拷进来改。后续 GMM1/GMM2 的 PTO 化需要参考原 FFN 的并发、
+缓存和同步设计，但 device 主路径用 PTO `TMATMUL`、PTO Vec epilogue 和 PTO cross-core event 重写。
 
-| 子任务 | 原 FFN 优化 | PTO 设计要求 | 非特化验收 |
-| --- | --- | --- | --- |
-| GMM shape/contract | `currentM` 由 `cumsumMM/maxOutputSize` 动态决定 | 从 initquant 的 `tokenPerExpertMatrix/blockPrefixPerExpert/dispatchOffset` 生成每 expert problem shape | 覆盖 balanced/skew/capacity clip，`currentM` 不按 small/large 写死 |
-| AIC tile scheduler | 每个 expert 被切成 M/N tile，`startCoreIdx` 跨 expert 接力 | PTO scheduler 外层遍历 expert，内层按 `coreLoops` 轮转分配 tile，继承 worker 负载均衡 | `M=8192/16384`、topK sweep 下 tile 分配仍随 `currentM` 扩展 |
-| swizzle | `GemmIdentityBlockSwizzle<9,1>` 让相邻 tile 复用 weight L2 | PTO scheduler 提供 N 聚簇或等价 swizzle order，避免简单 row-major 造成 weight 重复读 | hot expert 多 M tile 时相邻 tile 的 N 方向局部性可审计 |
-| L1/L0 tile | int8 GMM 用 L1 双缓冲容纳 A/B/scale | 用 PTO `TileLeft/TileRight/TileAcc` 和 `TMATMUL/TMATMUL_ACC` 规划 L1/L0，tile shape 由 `M/N/K` 和 L1 容量选择 | `K=128/1024/7168` 都有 tile 方案，不退 Catlass |
-| preload/ping-pong | `PRELOAD_STAGES` 隐藏 GM->L1 延迟，结束前 `SynchronizeBlock()` 排空 | PTO 侧用双缓冲或多 stage preload，发布下游 flag 前 drain outstanding tile | 任意 expert 结束前所有 delayed tile 已写出 |
-| cache policy | 小 `currentM` group 禁 L2，热 expert 保留复用 | PTO GMM 设计保留按 `currentM` 的 cache hint 策略；若 PTO primitive 暂缺，记录为 primitive gap | 冷热 expert 分布不共用单一 cache 策略 |
-| AIC/AIV handoff | dispatch 每 expert ready 后通知 GMM1，GMM/SwiGLU/GMM2 分段流水 | 用 PTO cross-core event 表达 per-expert/per-segment ready，不用全局 `SYNCALL<Mix>` 代替 | group 粒度流水可审计，不能等所有 expert 完成才启动下游 |
+#### 2.1.7.1 原 FFN GMM 事实
 
-GMM 性能报告也要使用参数族而不是 anchor 结论。最低覆盖：
+原 FFN GMM 配置来自 `dispatch_ffn_combine.h` 和 `dispatch_ffn_combine_kernel.hpp`：
+
+| 维度 | 原 FFN 事实 | PTO 设计含义 |
+| --- | --- | --- |
+| L1 tile | `L1TileShape = GemmShape<128, 256, 512>` | GMM tile 的分配单位是 `M=128,N=256`，L1 一次预取 512 个 K 元素 |
+| L0 tile | `L0TileShape = GemmShape<128, 256, 128>` | L1 tile 内继续按 K=128 做 L0A/L0B/TMATMUL 分片 |
+| stages | `preloadStages=1,l1Stages=2,l0A/BStages=2,l0CStages=1` | A/B L1 与 L0 需要 ping-pong，结束前必须 drain outstanding preload |
+| scheduler | `GemmIdentityBlockSwizzle<9,1>` | tile 遍历不是简单 row-major；hot expert 多 M tile 时要提高 weight L2 复用 |
+| group shape | `currentM = cumsumMM[...]`，再按 `preCurrentmSum/maxOutputSize` 截断 | GMM shape 来自 initquant/dispatch 的真实 expert rows，不由 small/large anchor 推导 |
+| core assignment | `startLoopIdx=((coreIdx<startCoreIdx)?coreIdx+coreNum:coreIdx)-startCoreIdx`，`loopIdx+=coreNum` | 所有 AIC 都遍历 expert，真正分给 AIC 的是 tile，不是固定 expert-to-core |
+| cross-expert balance | `startCoreIdx=(startCoreIdx+coreLoops)%coreNum` | 下一个 expert 从上一个 expert 结束位置继续轮转，避免每个 expert 都从 AIC0 起步 |
+| cache hint | `currentM <= L1TileShape::M` 时禁 L2 cache | 冷 expert 只读一次 weight，旁路 L2；hot expert 保留复用 |
+| preload drain | `BlockMmad::SynchronizeBlock()` 在 `Finalize` 前执行 | 发布 `GMM1 -> SwiGLU` 或 `GMM2 -> combine` ready 前，所有 delayed tile 必须已经写出 |
+| AIC/AIV sync | `CrossCoreWaitFlag/SetFlag<0x2>` | group ready 是 producer-consumer 语义，不能用全局 `SYNCALL<Mix>` 代替 |
+
+当前新工程的 `moe_new_dispatch_combine_a8w8_gmm_kernel.cpp` 已有 PTO GMM 雏形：`kGmmBaseM=128`、
+`kGmmBaseN=256`、`kGmmBaseK=64`、`kGmmStepK=4`，即 L1-K=256、L0-K=64，并使用
+`TLOAD/TEXTRACT/TMATMUL/TMATMUL_ACC/TSTORE`。这证明 PTO TMATMUL 路径可承接 GMM，但它还不是原 FFN
+L1-K=512/L0-K=128 的性能等价实现；T25 后续任务必须把该差异作为 tile sizing 或 primitive gap 明确记录。
+
+#### 2.1.7.2 PTO GMM shape 和 task contract
+
+GMM1/GMM2 的 shape 只来自前重排和 dispatch 产出的正式结构：
+
+```text
+localExpertRows[expert] = expertTokenNums[expert]
+rowBegin[expert] = dispatchOffset[expert]
+gmm1:
+  A = gmm1InputInt8[rowBegin, hiddenSize]
+  B = gmm1WeightInt8[globalExpert, hiddenSize, 2 * intermediateSize]
+  C = gmm1AccInt32[rowBegin, 2 * intermediateSize]
+gmm2:
+  A = gmm2InputInt8[rowBegin, intermediateSize]
+  B = gmm2WeightInt8[globalExpert, intermediateSize, hiddenSize]
+  C = gmm2AccInt32[rowBegin, hiddenSize]
+```
+
+capacity clip 必须在同一位置序上保持一致：若 `dispatchOffset + expertTokenNums` 超过 `maxOutputSize`，
+后续 GMM/activation/return 都只能消费被保留的 row range。不能让某个 stage 自行重新截断或重新排序。
+
+task plan 不按 `M=16`、`M=4097` 或 `topK=2` 决定，而按每个 local expert 的 `currentM`、`N`、`K` 和
+tile 容量生成：
+
+```text
+for localExpert in expertPerRank:
+  rowBegin = dispatchOffset[localExpert]
+  currentM = expertTokenNums[localExpert]
+  for mTile in ceil(currentM / tileM):
+    for nTile in swizzled_n_order(ceil(N / tileN)):
+      task = {stage, expert, rowBegin + mTile * tileM, mValid, nBase, nValid, kSize, syncGroup}
+```
+
+`syncGroup` 对 GMM1 来自 `swigluSyncGroups/dequantSum` 对 expert row range 的覆盖；对 GMM2 来自
+`activationSyncGroupReady[syncIdx]` 对 row range 的放行。GMM task 可以按 tile 细分，但 ready 边界仍是
+expert group 或 sync group，不能把 tile ownership 误写成 group ownership。
+
+#### 2.1.7.3 PTO AIC scheduler 和 swizzle
+
+PTO scheduler 需要保留原 FFN 的两层调度：
+
+- 外层遍历 local expert group，等待本 expert 的 `dispatchGroupReady[expert]` 后才可跑 GMM1；
+- 内层按 `tileM x tileN` 生成 tile work item，AIC 通过 `loopIdx += aicCount` 轮转消费；
+- 每个 expert 结束后更新 `startCoreIdx=(startCoreIdx+coreLoops)%aicCount`，让下一 expert 接力；
+- tile 坐标映射使用 N 聚簇 swizzle 或等价顺序，避免简单 row-major 造成同一 weight tile 反复从 GM 读取。
+
+验收时需要记录结构化调度摘要，而不是中间日志 dump：
+
+```text
+gmm_stage=1/2
+gmm_tile_task_count=<n>
+gmm_active_aic_workers=<n>
+gmm_start_core_carry=true
+gmm_swizzle_policy=n_cluster_or_equivalent
+gmm_zero_row_experts=<n>
+```
+
+这些字段只作为最终验收摘要，不在常规路径打印每个 tile 的原始 counter。
+
+#### 2.1.7.4 PTO L1/L0 和 preload 设计
+
+目标路径使用 PTO tile 表达 Catlass `BlockMmad` 的片上缓存层级：
+
+| 层级 | PTO 对应 | 要求 |
+| --- | --- | --- |
+| GM -> L1 | `TLOAD` 到 `Tile<TileType::Mat,int8>` A/B panel | A/B L1 至少双缓冲；K panel 优先对齐原 FFN 512，若 PTO/L1 容量不支持则记录 gap |
+| L1 -> L0 | `TEXTRACT/TMOV` 到 `TileLeft/TileRight` | L0 K 优先对齐原 FFN 128；当前 `kGmmBaseK=64` 只能作为保守 bring-up |
+| L0 compute | `TMATMUL/TMATMUL_ACC` | int8 x int8 -> int32，K loop 首次清 acc，后续累加 |
+| L0C -> GM | `TSTORE` 或 PTO fixpipe/epilogue store | GMM1/GMM2 publish ready 前必须等待 store 完成 |
+| preload drain | PTO helper `GmmDrainPreload()` | 对应 `SynchronizeBlock()`，drain 后才能发布 `gmm1SyncGroupReady/gmm2GroupReady` |
+
+preload pipeline 的设计原则：
+
+```text
+issue TLOAD for K panel i + preloadDepth
+compute K panel i
+advance ping/pong stage
+on expert/sync-group boundary:
+  drain outstanding panels
+  wait final C store
+  publish ready
+```
+
+裸 `set_flag/wait_flag/pipe_barrier/dsb` 只能出现在 PTO GMM helper 内；业务主流程通过 `GmmLoadPanel`、
+`GmmComputePanel`、`GmmStoreTile`、`GmmDrainPreload` 表达语义。若 PTO 目前缺少 L2 cache hint 或更大 L1-K
+tile 能力，报告为 primitive/capacity gap，不恢复 AscendC/Catlass fallback。
+
+#### 2.1.7.5 GMM 和 AIV epilogue 的同步接口
+
+GMM 的同步对象固定为当前 workspace 已有账本：
+
+| Producer | Consumer | Ready object | 粒度 | 发布前条件 |
+| --- | --- | --- | --- | --- |
+| dispatch gather | GMM1 | `dispatchGroupReady[expert]` | local expert | `gmm1InputInt8/routingPerTokenScale` 对该 expert 连续 row range 全部可见 |
+| GMM1 | activation/SwiGLU | `gmm1SyncGroupReady[syncIdx]` | `swigluSyncGroups/dequantSum` 覆盖的 row range | sync group 内所有 GMM1 tile 已 drain/store |
+| activation/SwiGLU/quant | GMM2 | `activationSyncGroupReady[syncIdx]` | 同一 sync group row range | `gmm2InputInt8/gmm2PerTokenScale` 已写完 |
+| GMM2 | return/combine | `gmm2GroupReady[expert]` 或 `subTileReady[tile]` | expert 或 return sub-tile | GMM2 tile/segment 已 drain/store |
+
+PTO 实现应使用 cross-core event 或封装的 GM ready helper。`SYNCALL<Mix>` 只允许在 overlap-off bring-up 或 debug
+stop 收口中出现；生产路径不能等所有 expert 完成后再启动 activation/GMM2/return。
+
+#### 2.1.7.6 非特化验收和 baseline
+
+GMM 性能报告必须使用参数族，而不是 anchor 结论。最低覆盖：
 
 ```text
 token scale: M in {2048, 4097, 8192, 16384}, topK in {2, 4}
 K/N scale: K in {128, 1024, 7168}, N in {128, 4096}
 distribution: balanced + skewed + capacity_clip
+```
+
+未来 GMM PTO 实现的验收字段至少包括：
+
+```text
+gmm1_path=pto_tmatmul
+gmm2_path=pto_tmatmul
+gmm_tile_task_count>0 for nonempty experts
+gmm_active_aic_workers>=2 for large/hot expert cases
+gmm_swizzle_policy!=row_major_default for hot expert cases
+gmm_preload_drained=true before ready publish
+gmm_ready_scope=expert_or_sync_group
+gmm_no_catlass_fallback=true
 ```
 
 只有 T23/T24/T25/T26 都通过，并且有原 FFN baseline 对比，才能讨论“PTO 重写对标 FFN 商用性能”。
