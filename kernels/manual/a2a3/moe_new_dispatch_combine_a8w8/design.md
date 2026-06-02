@@ -475,10 +475,15 @@ T27 已落地的 large anchor 优化结论：
   expert/worker packed-row segment batch publish。
 - `prepare` 阶段不再清完整 `gmm1InputInt8`。该 buffer 由 dispatch gather 按有效 row 覆盖；前重排只保留
   `routingPerTokenScale` 默认值和 initquant 控制面轻量 clear。
+- `routingPerTokenScale` 默认值不再在前重排入口按 `localRows` 全量清理；prefix 生成本 rank 有效输出行数后，只清
+  `[validRows, localRows)` tail，并在后续 prefix/dispatch 元数据发布前保证可见。
 - production/stop17 的 dispatch worker assignment 改为每个 AIV 本地 dense assignment，去掉 debug lane-slot
   `dcci+dsb` 和对应两轮 mixed sync；历史 debug stop 继续保留旧 lane-slot 分配路径。
+- `expandedRowIdx` 的正确性边界保持 64-token batch publish。阶段末一次性 publish 和 128-token batch 在 large
+  anchor 中会出现 stale/mismatch；去掉每批 final dsb 的实验没有稳定收益，因此不作为正式路径保留。
 - stop17 常规输出新增四个阶段边界耗时字段，但不增加 token/row 级 timeline 或 counter dump。
-- small stop17 e2e 约 3us；large stop17 e2e 约 26.5-28.8us，其中 large `route_pack_quant` 约 17-19.5us。
+- small stop17 e2e 约 3.2us；large stop17 e2e 约 20.5-22.8us，其中 large `prepare` 约 0.6us，
+  `route_pack_quant` 约 15.5-17.7us。
 
 large-token 路径验收：
 

@@ -1582,7 +1582,6 @@ AICORE inline void M2ClearInitQuantState(moe_new_dispatch_combine_a8w8::ShapeCon
     uint32_t globalExpertNum = shape.rankNum * shape.expertPerRank;
     uint32_t rankExpertCount = shape.rankNum * shape.expertPerRank;
     uint32_t tokenMatrixStorageCount = static_cast<uint32_t>(shape.rankNum * M2TokenPerExpertMatrixRowStride(shape));
-    uint32_t localRows = static_cast<uint32_t>(M2LocalRows(shape));
     for (uint32_t idx = 0; idx < globalExpertNum; ++idx) {
         StoreScalarI32(workspaceView.blockTokenPerExpert + idx, 0);
         StoreScalarI32(workspaceView.blockPrefixPerExpert + idx, 0);
@@ -1599,9 +1598,24 @@ AICORE inline void M2ClearInitQuantState(moe_new_dispatch_combine_a8w8::ShapeCon
         StoreScalarI32(workspaceView.expertTokenNums + localExpert, 0);
         StoreScalarI32(workspaceView.dispatchGroupReady + localExpert * 16U, 0);
     }
-    for (uint32_t row = 0; row < localRows; ++row) {
+}
+
+AICORE inline void M2ClearRoutingScaleTail(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
+                                           M2WorkspaceViewDevice workspaceView, int32_t validRows)
+{
+    uint32_t localRows = static_cast<uint32_t>(M2LocalRows(shape));
+    uint32_t begin = validRows > 0 ? static_cast<uint32_t>(validRows) : 0U;
+    if (begin > localRows) {
+        begin = localRows;
+    }
+    if (begin >= localRows) {
+        return;
+    }
+    for (uint32_t row = begin; row < localRows; ++row) {
         workspaceView.routingPerTokenScale[row] = 1.0f;
     }
+    InvalidateGmCacheLines(workspaceView.routingPerTokenScale + begin,
+                           static_cast<uint32_t>((localRows - begin) * sizeof(float)));
 }
 
 AICORE inline void M2CountLocalRoutes(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
@@ -2798,6 +2812,7 @@ AICORE inline void M2BuildPrefixMetadata(moe_new_dispatch_combine_a8w8::ShapeCon
         }
         StoreScalarI32(workspaceView.expertTokenNums + localExpert, before);
     }
+    M2ClearRoutingScaleTail(shape, workspaceView, dispatchCursor);
     InvalidateGmCacheLines(workspaceView.dispatchOffset, static_cast<uint32_t>(shape.expertPerRank * sizeof(int32_t)));
     InvalidateGmCacheLines(workspaceView.preSumBeforeRank,
                            static_cast<uint32_t>(shape.rankNum * shape.expertPerRank * sizeof(int32_t)));
