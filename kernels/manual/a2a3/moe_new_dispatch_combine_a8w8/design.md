@@ -329,6 +329,20 @@ large quant pipeline：
   packed row；
 - 复用 tile 前只等待对应 store event，不做全核同步。
 
+T20 已落地的第一版 large-token quant pipeline：
+
+- token-centric quant 主路径不再对 `validRowCount == 1` 退回单 packed row helper；任意 `topK` 都先收集本 token 的
+  有效 packed row，再对 source token row 量化一次。
+- 有效 packed row 写入 UB cache，容量为 256 个 route；常见 topK sweep 不再在 scale store、payload chunk store
+  和 cache invalidation 阶段反复从 GM 读取 `expandedRowIdx`。超过 UB cache 容量时回退到循环扫描 `topK`，语义不变。
+- row quant 使用 ping/pong 两套 UB buffer：`half/fp32/abs/int8` 各两组；`M2RawFloatToInt8` 使用独立 s32/f16
+  scratch，避免覆盖 ping/pong 的预取输入。
+- 当前实现按 column chunk 预取下一块 GM->UB load，再处理当前块。`K=128` 是单 chunk；更大 K 仍按
+  `kM2RouteQuantTileCols` 切列，不要求整行常驻 UB。完整 large-K 验收留给 T24。
+- 新增的 store 成对同步使用 PTO `PtoSetWaitFlag`，延迟预取的 load-ready record/wait 使用 PTO
+  `Event<Op::TLOAD, Op::VECTOR>`。raw copy helper 后续仍应继续向 `TLOAD/TSTORE` 收敛，但本任务没有新增
+  AscendC/Catlass API 依赖。
+
 large metadata 优化：
 
 - `expertBase`、`workerPrefix`、`localOrdinal` 缓存在 UB；

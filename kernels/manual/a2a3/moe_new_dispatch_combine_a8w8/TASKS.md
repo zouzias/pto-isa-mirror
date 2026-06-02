@@ -53,7 +53,7 @@
 | T17 | `accepted` | Codex | T15 | baseline 对标 | `scripts/run_initquant_baseline_compare.sh` | `reports/T17.md`；small/large 记录 PTO `init_quant_e2e_us`；原 FFN 命令缺失时 `original_status=missing_command` | 脚本和报告可作为后续依赖；没有 baseline 前不能宣称商用性能达标 |
 | T18 | `accepted` | Codex | T17 | sync 优化 | 仅将 count/prefix/scatter 三个 initquant phase barrier 收敛为 AIV-only；后置/final 继续 hard/mix 配对 | `reports/T18.md`；small/large stop17 acceptance PASS | 未新增中间日志；stop13/18-21 调试 stop 保持原 mixed 轮次 |
 | T19 | `accepted` | Codex | T17 | UB-fits fast path | full-load/UB-fits 路径按 UB resident count/prefix/scatter 和 token-centric quant 融合，减少 GM 中间结果和同步 | `reports/T19.md`；small anchor、UB-fits `topK=4` expansion、large regression stop17 PASS | 对标原 FFN `tilingKey=21000`；保守阈值由 `R/K/globalExpertNum/UB fit` 决定，不按 case name 或固定 topK |
-| T20 | `not_started` | - | T17 | large-token quant pipeline | `R=M*topK` 较大路径 row quant 做任意 topK token-centric 复用和 UB 双缓冲/ping-pong，重叠 GM load、Vec compute、GM store | large anchor、`M=8192/16384` token scale、`topK=4/8` sweep stop17 pass；`init_quant_e2e_us` 相比 T15 基线下降或瓶颈解释清楚；不得每 route 重复 quant | 对标 FFN gather dynamic quant 的 `BUFFER_NUM=2` row/col pipeline；当前仍需补完整流水 |
+| T20 | `accepted` | Codex | T17 | large-token quant pipeline | `R=M*topK` 较大路径 row quant 做任意 topK token-centric 复用和 UB 双缓冲/ping-pong，重叠 GM load、Vec compute、GM store | `reports/T20.md`；large anchor、`M=8192/16384` token scale、`topK=4/8` sweep stop17 PASS | 主路径任意 topK token-centric；UB packed row cache + ping/pong quant buffer；完整 large-K 性能验收留给 T24 |
 | T21 | `not_started` | - | T17 | worker/cache 调度 | 根据 M/topK/K/专家分布调优 worker 数、UB resident metadata 和批量 GM 写回，避免固定 token shard 负载倾斜 | skew route、`M>4097` more-token、topK sweep/more experts case activeWorkers 有效，metadata 不成为主瓶颈，stop17 pass | worker 数不能固定为 4；应随 `R/topK/K/validRoute/globalExpertNum` 接近 logical AIV/kInitQuantMaxDispatchWorkers |
 | T22 | `not_started` | - | T17 | swizzle/L1/L0 边界确认 | 明确原 FFN 中 swizzle/L1/L0/preload 属于 GMM/Catlass 阶段，并给后续 GMM PTO `TMATMUL` tiling、L1/L0 cache、swizzle 替代任务 | design.md 更新边界，GMM 阶段拆新任务验收 | 不能把 GMM 的 L1/L0/swizzle 误计入前重排完成项 |
 | T23 | `not_started` | - | T17,T21 | metadata GM 批量化 | `expandedRowIdx`、`packedRowToRouteIndex`、count/prefix 写回按连续 route/expert tile 批量化，删除 per-route cache flush 依赖 | small/large、`M=8192/16384` token scale、topK sweep 和 more experts case stop17 pass；常规日志不新增中间 dump | 解决 tok/topK 更多时 metadata GM store 成为瓶颈 |
@@ -87,6 +87,7 @@
 | 2026-06-02 | 收紧 T19-T26 more-token 门禁：`M>4097`、`topK>2`、large K、skew 和 capacity clip 均作为生产性能 hardening 的参数族，不允许 worker 数、full-load 选择或 quant 逻辑围绕 small/large anchor 特化。 | T19-T26 |
 | 2026-06-02 | T19 accepted：新增 PTO full-load/UB-fits fast path，按 `R/K/globalExpertNum/capacity` 保守选择，单 AIV 融合 count/prefix/scatter 和 token-centric quant，去掉内部三次 initquant phase sync；small、`topK=4` UB-fits expansion 和 large regression stop17 PASS。 | T19 |
 | 2026-06-02 | 强化 T20-T25 非 anchor 交付门禁：每个性能任务报告都必须覆盖至少一个超出 large anchor 的 token/topK/K 参数族，T26 只作为共享脚本化矩阵，不能把 more-token 泛化延后补测。 | T20-T26 |
+| 2026-06-02 | T20 accepted：large-token quant 主路径去掉单 route 量化分支，任意 `topK` 先 UB cache packed rows，再单次 token quant 写多个 packed rows；row quant 增加 ping/pong UB buffer 和独立量化 scratch，新增 store 同步使用 PTO `PtoSetWaitFlag`。large、`M=8192/16384`、`topK=4/8` stop17 PASS。 | T20,T24 |
 
 ### Handoff Rules
 

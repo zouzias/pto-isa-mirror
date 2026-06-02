@@ -53,6 +53,14 @@ constexpr uint64_t kM2RouteChunkMaxTileOffset = 0x3D00;
 constexpr uint64_t kM2RouteScaleParamTileOffset = 0x3E00;
 constexpr uint64_t kM2RouteInvScaleParamTileOffset = 0x3F00;
 constexpr uint64_t kM2RouteScaleStoreTileOffset = 0x4000;
+constexpr uint64_t kM2RoutePongHalfTileOffset = 0x7000;
+constexpr uint64_t kM2RoutePongFloatTileOffset = 0x8000;
+constexpr uint64_t kM2RoutePongAbsTileOffset = 0x9400;
+constexpr uint64_t kM2RoutePongQuantTileOffset = 0xA800;
+constexpr uint64_t kM2RouteQuantS32ScratchOffset = 0xB000;
+constexpr uint64_t kM2RouteQuantF16ScratchOffset = 0xC000;
+constexpr uint64_t kM2RoutePackedRowsUbAddr = 0xD000;
+constexpr uint32_t kM2RoutePackedRowsUbCapacity = 256U;
 constexpr int kM2EpilogueTileCols = 1024;
 constexpr uint64_t kM2EpilogueAccTileOffset = 0x0;
 constexpr uint64_t kM2EpilogueFloatTileOffset = 0x1000;
@@ -255,12 +263,13 @@ AICORE inline void M2RawMulFloat(uint64_t ubAddr, float scale, uint32_t elemCoun
     pto::SetFullVecMaskByDType<float>();
 }
 
-AICORE inline void M2RawFloatToInt8(uint64_t dstAddr, uint64_t srcAddr, uint32_t elemCount)
+AICORE inline void M2RawFloatToInt8(uint64_t dstAddr, uint64_t srcAddr, uint64_t s32ScratchAddr,
+                                    uint64_t f16ScratchAddr, uint32_t elemCount)
 {
     __ubuf__ int8_t *dst = reinterpret_cast<__ubuf__ int8_t *>(dstAddr);
     __ubuf__ float *src = reinterpret_cast<__ubuf__ float *>(srcAddr);
-    __ubuf__ int32_t *tmpS32 = reinterpret_cast<__ubuf__ int32_t *>(kM2RouteAbsTileOffset);
-    __ubuf__ half *tmpF16 = reinterpret_cast<__ubuf__ half *>(kM2RouteHalfTileOffset);
+    __ubuf__ int32_t *tmpS32 = reinterpret_cast<__ubuf__ int32_t *>(s32ScratchAddr);
+    __ubuf__ half *tmpF16 = reinterpret_cast<__ubuf__ half *>(f16ScratchAddr);
     constexpr uint32_t kFp32ElemsPerRepeat = 64U;
     uint32_t fp32Repeats = elemCount / kFp32ElemsPerRepeat;
     uint32_t fp32Remain = elemCount % kFp32ElemsPerRepeat;
@@ -301,6 +310,11 @@ AICORE inline void M2RawFloatToInt8(uint64_t dstAddr, uint64_t srcAddr, uint32_t
                       8);
         pto::SetFullVecMaskByDType<half>();
     }
+}
+
+AICORE inline void M2RawFloatToInt8(uint64_t dstAddr, uint64_t srcAddr, uint32_t elemCount)
+{
+    M2RawFloatToInt8(dstAddr, srcAddr, kM2RouteQuantS32ScratchOffset, kM2RouteQuantF16ScratchOffset, elemCount);
 }
 
 AICORE inline uint64_t Align64Device(uint64_t value)
@@ -873,6 +887,12 @@ AICORE inline void WaitStoreTileReusable()
     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
     set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
     wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+}
+
+AICORE inline void M2WaitRouteQuantStoreReusable()
+{
+    pto::PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>(EVENT_ID2, EVENT_ID2);
+    pto::PtoSetWaitFlag<PIPE_MTE3, PIPE_V>(EVENT_ID3, EVENT_ID3);
 }
 
 template <int kCols = kDefaultTileCols>
@@ -1604,8 +1624,8 @@ AICORE inline void M3NClearDispatchWorkerScratch(moe_new_dispatch_combine_a8w8::
 }
 
 AICORE inline void M3NCountLocalRoutesShard(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
-                                            M2WorkspaceViewDevice workspaceView, GM_ADDR expertIdx,
-                                            GM_ADDR xActiveMask, uint32_t workerId, uint32_t workerCount)
+                                            M2WorkspaceViewDevice workspaceView, GM_ADDR expertIdx, GM_ADDR xActiveMask,
+                                            uint32_t workerId, uint32_t workerCount)
 {
     uint32_t globalExpertNum = shape.rankNum * shape.expertPerRank;
     uint32_t workerStride = M3NDispatchWorkerScratchStride(globalExpertNum);
@@ -1756,10 +1776,9 @@ AICORE inline void M2QuantizeRowToPeerPayload(moe_new_dispatch_combine_a8w8::Sha
     M2RawVecDup<float>(kM2RouteScaleStoreTileOffset, scale, 1U);
     M2RawVecDup<float>(kM2RouteInvScaleParamTileOffset, invScale, 8U);
 
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    pto::PtoSetWaitFlag<PIPE_V, PIPE_MTE3>(EVENT_ID2, EVENT_ID2);
     M2RawVecStore<float>(localPeer.dispatchScale + packedRow, kM2RouteScaleStoreTileOffset, 1U);
-    WaitStoreTileReusable();
+    M2WaitRouteQuantStoreReusable();
 
     __gm__ int8_t *dst = localPeer.dispatchPayload + static_cast<uint64_t>(packedRow) * rowBytes;
     for (uint32_t colBegin = 0; colBegin < shape.hiddenSize; colBegin += kM2RouteQuantTileCols) {
@@ -1798,51 +1817,205 @@ AICORE inline void M2QuantizeRowToPeerPayload(moe_new_dispatch_combine_a8w8::Sha
     InvalidateGmCacheLines(localPeer.dispatchScale + packedRow, sizeof(float));
 }
 
+struct M2RoutePackedRowsCache {
+    uint32_t validRows;
+    uint32_t cachedRows;
+    bool overflow;
+};
+
+struct M2RouteQuantBuffer {
+    uint64_t halfAddr;
+    uint64_t floatAddr;
+    uint64_t absAddr;
+    uint64_t quantAddr;
+    uint32_t lane;
+};
+
+AICORE inline M2RouteQuantBuffer M2RouteQuantBufferByLane(uint32_t lane)
+{
+    if ((lane & 1U) == 0U) {
+        return M2RouteQuantBuffer{kM2RouteHalfTileOffset, kM2RouteFloatTileOffset, kM2RouteAbsTileOffset,
+                                  kM2RouteQuantTileOffset, 0U};
+    }
+    return M2RouteQuantBuffer{kM2RoutePongHalfTileOffset, kM2RoutePongFloatTileOffset, kM2RoutePongAbsTileOffset,
+                              kM2RoutePongQuantTileOffset, 1U};
+}
+
+AICORE inline uint32_t M2RouteQuantChunkCols(moe_new_dispatch_combine_a8w8::ShapeConfig shape, uint32_t colBegin)
+{
+    uint32_t cols = shape.hiddenSize - colBegin;
+    return cols > kM2RouteQuantTileCols ? kM2RouteQuantTileCols : cols;
+}
+
+AICORE inline void M2RouteQuantLoadChunk(const M2RouteQuantBuffer &buffer, __gm__ half *input, uint32_t token,
+                                         uint32_t hiddenSize, uint32_t colBegin, uint32_t cols)
+{
+    M2RawVecLoad<half>(buffer.halfAddr, input + static_cast<uint64_t>(token) * hiddenSize + colBegin, cols);
+    if ((buffer.lane & 1U) == 0U) {
+        pto::Event<pto::Op::TLOAD, pto::Op::VECTOR, false, EVENT_ID0> loadReady;
+        loadReady.Record();
+    } else {
+        pto::Event<pto::Op::TLOAD, pto::Op::VECTOR, false, EVENT_ID1> loadReady;
+        loadReady.Record();
+    }
+}
+
+AICORE inline void M2RouteQuantWaitLoadReady(const M2RouteQuantBuffer &buffer)
+{
+    if ((buffer.lane & 1U) == 0U) {
+        pto::Event<pto::Op::TLOAD, pto::Op::VECTOR, false, EVENT_ID0> loadReady;
+        loadReady.Wait();
+    } else {
+        pto::Event<pto::Op::TLOAD, pto::Op::VECTOR, false, EVENT_ID1> loadReady;
+        loadReady.Wait();
+    }
+}
+
+AICORE inline M2RoutePackedRowsCache M2CollectRoutePackedRows(M2WorkspaceViewDevice workspaceView, uint32_t routeBase,
+                                                              uint32_t topK, uint32_t localRows)
+{
+    M2RoutePackedRowsCache cache{0U, 0U, false};
+    for (uint32_t slot = 0; slot < topK; ++slot) {
+        int32_t packedRow = LoadScalarI32(workspaceView.expandedRowIdx + routeBase + slot);
+        if (packedRow < 0 || static_cast<uint32_t>(packedRow) >= localRows) {
+            continue;
+        }
+        if (cache.cachedRows < kM2RoutePackedRowsUbCapacity) {
+            M2RawUbStoreI32(kM2RoutePackedRowsUbAddr, cache.cachedRows, packedRow);
+            ++cache.cachedRows;
+        } else {
+            cache.overflow = true;
+        }
+        ++cache.validRows;
+    }
+    return cache;
+}
+
+AICORE inline void M2StoreScaleToPackedRows(M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
+                                            uint32_t routeBase, uint32_t topK, uint32_t localRows,
+                                            const M2RoutePackedRowsCache &cache)
+{
+    if (cache.validRows == 0U) {
+        return;
+    }
+    pto::PtoSetWaitFlag<PIPE_V, PIPE_MTE3>(EVENT_ID2, EVENT_ID2);
+    if (!cache.overflow) {
+        for (uint32_t idx = 0; idx < cache.cachedRows; ++idx) {
+            uint32_t packedRow = static_cast<uint32_t>(M2RawUbLoadI32(kM2RoutePackedRowsUbAddr, idx));
+            M2RawVecStore<float>(localPeer.dispatchScale + packedRow, kM2RouteScaleStoreTileOffset, 1U);
+        }
+    } else {
+        for (uint32_t slot = 0; slot < topK; ++slot) {
+            int32_t packedRow = LoadScalarI32(workspaceView.expandedRowIdx + routeBase + slot);
+            if (packedRow < 0 || static_cast<uint32_t>(packedRow) >= localRows) {
+                continue;
+            }
+            M2RawVecStore<float>(localPeer.dispatchScale + static_cast<uint32_t>(packedRow),
+                                 kM2RouteScaleStoreTileOffset, 1U);
+        }
+    }
+    M2WaitRouteQuantStoreReusable();
+}
+
+AICORE inline void M2StoreQuantChunkToPackedRows(M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
+                                                 uint32_t routeBase, uint32_t topK, uint32_t localRows,
+                                                 const M2RoutePackedRowsCache &cache, const M2RouteQuantBuffer &buffer,
+                                                 uint32_t rowBytes, uint32_t colBegin, uint32_t cols)
+{
+    if (cache.validRows == 0U) {
+        return;
+    }
+    pto::PtoSetWaitFlag<PIPE_V, PIPE_MTE3>(EVENT_ID2, EVENT_ID2);
+    if (!cache.overflow) {
+        for (uint32_t idx = 0; idx < cache.cachedRows; ++idx) {
+            uint32_t packedRow = static_cast<uint32_t>(M2RawUbLoadI32(kM2RoutePackedRowsUbAddr, idx));
+            __gm__ int8_t *dst = localPeer.dispatchPayload + static_cast<uint64_t>(packedRow) * rowBytes;
+            M2RawVecStore<int8_t>(dst + colBegin, buffer.quantAddr, cols);
+        }
+    } else {
+        for (uint32_t slot = 0; slot < topK; ++slot) {
+            int32_t packedRow = LoadScalarI32(workspaceView.expandedRowIdx + routeBase + slot);
+            if (packedRow < 0 || static_cast<uint32_t>(packedRow) >= localRows) {
+                continue;
+            }
+            __gm__ int8_t *dst =
+                localPeer.dispatchPayload + static_cast<uint64_t>(static_cast<uint32_t>(packedRow)) * rowBytes;
+            M2RawVecStore<int8_t>(dst + colBegin, buffer.quantAddr, cols);
+        }
+    }
+    M2WaitRouteQuantStoreReusable();
+}
+
+AICORE inline void M2StoreZeroPadToPackedRows(M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
+                                              uint32_t routeBase, uint32_t topK, uint32_t localRows,
+                                              const M2RoutePackedRowsCache &cache, uint32_t rowBytes, uint32_t colBegin,
+                                              uint32_t cols)
+{
+    M2RawZeroI8Tile(kM2RouteQuantTileOffset, cols);
+    M2RouteQuantBuffer buffer = M2RouteQuantBufferByLane(0U);
+    M2StoreQuantChunkToPackedRows(workspaceView, localPeer, routeBase, topK, localRows, cache, buffer, rowBytes,
+                                  colBegin, cols);
+}
+
+AICORE inline void M2InvalidatePackedRows(M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
+                                          uint32_t routeBase, uint32_t topK, uint32_t localRows,
+                                          const M2RoutePackedRowsCache &cache, uint32_t rowBytes)
+{
+    if (!cache.overflow) {
+        for (uint32_t idx = 0; idx < cache.cachedRows; ++idx) {
+            uint32_t packedRow = static_cast<uint32_t>(M2RawUbLoadI32(kM2RoutePackedRowsUbAddr, idx));
+            __gm__ int8_t *dst = localPeer.dispatchPayload + static_cast<uint64_t>(packedRow) * rowBytes;
+            InvalidateGmCacheLines(dst, rowBytes);
+            InvalidateGmCacheLines(localPeer.dispatchScale + packedRow, sizeof(float));
+        }
+        return;
+    }
+    for (uint32_t slot = 0; slot < topK; ++slot) {
+        int32_t packedRow = LoadScalarI32(workspaceView.expandedRowIdx + routeBase + slot);
+        if (packedRow < 0 || static_cast<uint32_t>(packedRow) >= localRows) {
+            continue;
+        }
+        __gm__ int8_t *dst =
+            localPeer.dispatchPayload + static_cast<uint64_t>(static_cast<uint32_t>(packedRow)) * rowBytes;
+        InvalidateGmCacheLines(dst, rowBytes);
+        InvalidateGmCacheLines(localPeer.dispatchScale + static_cast<uint32_t>(packedRow), sizeof(float));
+    }
+}
+
 AICORE inline void M2QuantizeTokenToPackedRows(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
                                                M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
                                                GM_ADDR inputA, uint32_t token, uint32_t rowBytes)
 {
     uint32_t localRows = static_cast<uint32_t>(M2LocalRows(shape));
-    uint32_t validRowCount = 0U;
     uint32_t routeBase = token * shape.topK;
-    for (uint32_t slot = 0; slot < shape.topK; ++slot) {
-        int32_t packedRow = LoadScalarI32(workspaceView.expandedRowIdx + routeBase + slot);
-        if (packedRow >= 0 && static_cast<uint32_t>(packedRow) < localRows) {
-            ++validRowCount;
-        }
-    }
-    if (validRowCount == 0U) {
-        return;
-    }
-    if (validRowCount == 1U) {
-        for (uint32_t slot = 0; slot < shape.topK; ++slot) {
-            int32_t packedRow = LoadScalarI32(workspaceView.expandedRowIdx + routeBase + slot);
-            if (packedRow >= 0 && static_cast<uint32_t>(packedRow) < localRows) {
-                M2QuantizeRowToPeerPayload(shape, localPeer, inputA, token, static_cast<uint32_t>(packedRow),
-                                           rowBytes);
-                return;
-            }
-        }
+    M2RoutePackedRowsCache packedRows = M2CollectRoutePackedRows(workspaceView, routeBase, shape.topK, localRows);
+    if (packedRows.validRows == 0U) {
         return;
     }
 
     __gm__ half *input = reinterpret_cast<__gm__ half *>(inputA);
     M2RawVecDup<float>(kM2RouteRowMaxTileOffset, 0.0f, 1U);
 
-    for (uint32_t colBegin = 0; colBegin < shape.hiddenSize; colBegin += kM2RouteQuantTileCols) {
-        uint32_t cols = shape.hiddenSize - colBegin;
-        if (cols > kM2RouteQuantTileCols) {
-            cols = kM2RouteQuantTileCols;
+    if (shape.hiddenSize > 0U) {
+        M2RouteQuantBuffer firstBuffer = M2RouteQuantBufferByLane(0U);
+        uint32_t firstCols = M2RouteQuantChunkCols(shape, 0U);
+        M2RouteQuantLoadChunk(firstBuffer, input, token, shape.hiddenSize, 0U, firstCols);
+    }
+    for (uint32_t colBegin = 0, chunk = 0; colBegin < shape.hiddenSize; colBegin += kM2RouteQuantTileCols, ++chunk) {
+        M2RouteQuantBuffer buffer = M2RouteQuantBufferByLane(chunk);
+        uint32_t cols = M2RouteQuantChunkCols(shape, colBegin);
+        M2RouteQuantWaitLoadReady(buffer);
+        uint32_t nextColBegin = colBegin + kM2RouteQuantTileCols;
+        if (nextColBegin < shape.hiddenSize) {
+            M2RouteQuantBuffer nextBuffer = M2RouteQuantBufferByLane(chunk + 1U);
+            uint32_t nextCols = M2RouteQuantChunkCols(shape, nextColBegin);
+            M2RouteQuantLoadChunk(nextBuffer, input, token, shape.hiddenSize, nextColBegin, nextCols);
         }
-        M2RawVecLoad<half>(kM2RouteHalfTileOffset, input + static_cast<uint64_t>(token) * shape.hiddenSize + colBegin,
-                           cols);
-        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-        M2RawHalfToFloat(kM2RouteFloatTileOffset, kM2RouteHalfTileOffset, cols);
+        M2RawHalfToFloat(buffer.floatAddr, buffer.halfAddr, cols);
         pipe_barrier(PIPE_V);
-        M2RawAbsFloat(kM2RouteAbsTileOffset, kM2RouteFloatTileOffset, cols);
+        M2RawAbsFloat(buffer.absAddr, buffer.floatAddr, cols);
         pipe_barrier(PIPE_V);
-        M2RawRowMaxFloat(kM2RouteChunkMaxTileOffset, kM2RouteAbsTileOffset, kM2RouteFloatTileOffset, cols);
+        M2RawRowMaxFloat(kM2RouteChunkMaxTileOffset, buffer.absAddr, buffer.floatAddr, cols);
         pipe_barrier(PIPE_V);
         M2RawUpdateRowMax(kM2RouteRowMaxTileOffset, kM2RouteChunkMaxTileOffset);
     }
@@ -1854,46 +2027,31 @@ AICORE inline void M2QuantizeTokenToPackedRows(moe_new_dispatch_combine_a8w8::Sh
     float invScale = maxAbs == 0.0f ? 1.0f : 1.0f / scale;
     M2RawVecDup<float>(kM2RouteScaleStoreTileOffset, scale, 1U);
     M2RawVecDup<float>(kM2RouteInvScaleParamTileOffset, invScale, 8U);
+    M2StoreScaleToPackedRows(workspaceView, localPeer, routeBase, shape.topK, localRows, packedRows);
 
-    for (uint32_t slot = 0; slot < shape.topK; ++slot) {
-        int32_t packedRow = LoadScalarI32(workspaceView.expandedRowIdx + routeBase + slot);
-        if (packedRow < 0 || static_cast<uint32_t>(packedRow) >= localRows) {
-            continue;
-        }
-        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-        M2RawVecStore<float>(localPeer.dispatchScale + static_cast<uint32_t>(packedRow),
-                             kM2RouteScaleStoreTileOffset, 1U);
-        WaitStoreTileReusable();
+    if (shape.hiddenSize > 0U) {
+        M2RouteQuantBuffer firstBuffer = M2RouteQuantBufferByLane(0U);
+        uint32_t firstCols = M2RouteQuantChunkCols(shape, 0U);
+        M2RouteQuantLoadChunk(firstBuffer, input, token, shape.hiddenSize, 0U, firstCols);
     }
-
-    for (uint32_t colBegin = 0; colBegin < shape.hiddenSize; colBegin += kM2RouteQuantTileCols) {
-        uint32_t cols = shape.hiddenSize - colBegin;
-        if (cols > kM2RouteQuantTileCols) {
-            cols = kM2RouteQuantTileCols;
+    for (uint32_t colBegin = 0, chunk = 0; colBegin < shape.hiddenSize; colBegin += kM2RouteQuantTileCols, ++chunk) {
+        M2RouteQuantBuffer buffer = M2RouteQuantBufferByLane(chunk);
+        uint32_t cols = M2RouteQuantChunkCols(shape, colBegin);
+        M2RouteQuantWaitLoadReady(buffer);
+        uint32_t nextColBegin = colBegin + kM2RouteQuantTileCols;
+        if (nextColBegin < shape.hiddenSize) {
+            M2RouteQuantBuffer nextBuffer = M2RouteQuantBufferByLane(chunk + 1U);
+            uint32_t nextCols = M2RouteQuantChunkCols(shape, nextColBegin);
+            M2RouteQuantLoadChunk(nextBuffer, input, token, shape.hiddenSize, nextColBegin, nextCols);
         }
-        M2RawVecLoad<half>(kM2RouteHalfTileOffset, input + static_cast<uint64_t>(token) * shape.hiddenSize + colBegin,
-                           cols);
-        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-        M2RawHalfToFloat(kM2RouteFloatTileOffset, kM2RouteHalfTileOffset, cols);
+        M2RawHalfToFloat(buffer.floatAddr, buffer.halfAddr, cols);
         pipe_barrier(PIPE_V);
-        M2RawMulFloat(kM2RouteFloatTileOffset, invScale, cols);
+        M2RawMulFloat(buffer.floatAddr, invScale, cols);
         pipe_barrier(PIPE_V);
-        M2RawFloatToInt8(kM2RouteQuantTileOffset, kM2RouteFloatTileOffset, cols);
+        M2RawFloatToInt8(buffer.quantAddr, buffer.floatAddr, cols);
         pipe_barrier(PIPE_V);
-        for (uint32_t slot = 0; slot < shape.topK; ++slot) {
-            int32_t packedRow = LoadScalarI32(workspaceView.expandedRowIdx + routeBase + slot);
-            if (packedRow < 0 || static_cast<uint32_t>(packedRow) >= localRows) {
-                continue;
-            }
-            __gm__ int8_t *dst =
-                localPeer.dispatchPayload + static_cast<uint64_t>(static_cast<uint32_t>(packedRow)) * rowBytes;
-            set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-            wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-            M2RawVecStore<int8_t>(dst + colBegin, kM2RouteQuantTileOffset, cols);
-            WaitStoreTileReusable();
-        }
+        M2StoreQuantChunkToPackedRows(workspaceView, localPeer, routeBase, shape.topK, localRows, packedRows, buffer,
+                                      rowBytes, colBegin, cols);
     }
 
     for (uint32_t colBegin = shape.hiddenSize; colBegin < rowBytes; colBegin += kM2RouteQuantTileCols) {
@@ -1901,31 +2059,11 @@ AICORE inline void M2QuantizeTokenToPackedRows(moe_new_dispatch_combine_a8w8::Sh
         if (cols > kM2RouteQuantTileCols) {
             cols = kM2RouteQuantTileCols;
         }
-        M2RawZeroI8Tile(kM2RouteQuantTileOffset, cols);
-        for (uint32_t slot = 0; slot < shape.topK; ++slot) {
-            int32_t packedRow = LoadScalarI32(workspaceView.expandedRowIdx + routeBase + slot);
-            if (packedRow < 0 || static_cast<uint32_t>(packedRow) >= localRows) {
-                continue;
-            }
-            __gm__ int8_t *dst =
-                localPeer.dispatchPayload + static_cast<uint64_t>(static_cast<uint32_t>(packedRow)) * rowBytes;
-            set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-            wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-            M2RawVecStore<int8_t>(dst + colBegin, kM2RouteQuantTileOffset, cols);
-            WaitStoreTileReusable();
-        }
+        M2StoreZeroPadToPackedRows(workspaceView, localPeer, routeBase, shape.topK, localRows, packedRows, rowBytes,
+                                   colBegin, cols);
     }
 
-    for (uint32_t slot = 0; slot < shape.topK; ++slot) {
-        int32_t packedRow = LoadScalarI32(workspaceView.expandedRowIdx + routeBase + slot);
-        if (packedRow < 0 || static_cast<uint32_t>(packedRow) >= localRows) {
-            continue;
-        }
-        __gm__ int8_t *dst =
-            localPeer.dispatchPayload + static_cast<uint64_t>(static_cast<uint32_t>(packedRow)) * rowBytes;
-        InvalidateGmCacheLines(dst, rowBytes);
-        InvalidateGmCacheLines(localPeer.dispatchScale + static_cast<uint32_t>(packedRow), sizeof(float));
-    }
+    M2InvalidatePackedRows(workspaceView, localPeer, routeBase, shape.topK, localRows, packedRows, rowBytes);
 }
 
 AICORE inline void M2RoutePackQuantLocal(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
@@ -1970,9 +2108,9 @@ AICORE inline void M2RoutePackQuantLocal(moe_new_dispatch_combine_a8w8::ShapeCon
 }
 
 AICORE inline void M2RunInitQuantFullLoadPtoVec(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
-                                                M2WorkspaceViewDevice workspaceView,
-                                                M2PeerWindowViewDevice localPeer, GM_ADDR inputA, GM_ADDR expertIdx,
-                                                GM_ADDR xActiveMask, uint32_t myRank, uint32_t rowBytes)
+                                                M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
+                                                GM_ADDR inputA, GM_ADDR expertIdx, GM_ADDR xActiveMask, uint32_t myRank,
+                                                uint32_t rowBytes)
 {
     uint32_t globalExpertNum = shape.rankNum * shape.expertPerRank;
     uint32_t localRows = static_cast<uint32_t>(M2LocalRows(shape));
