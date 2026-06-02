@@ -365,6 +365,18 @@ T21 已落地第一版 worker/cache 调度优化：
 - T23 继续负责 `expandedRowIdx`、`packedRowToRouteIndex` 以及 payload/scale 可见性收口的更大粒度批量化；T21
   只移除 per-expert base/cursor 的 GM 热点，不新增中间日志。
 
+T23 已落地 metadata GM 批量化第一版：
+
+- route scatter 写 `expandedRowIdx/packedRowToRouteIndex` 时，同步把当前 token 的 valid packed row push 到 UB
+  cache；后续 token-centric quant 直接使用该 cache，不再在同一 token 内刚写 `expandedRowIdx` 后又从 GM 读回。
+- `packedRowToRouteIndex` 的可见性按 expert 连续段收口：full-load/单 worker 按
+  `blockPrefixPerExpert + blockTokenPerExpert` 分段 flush；multi-worker 按
+  `blockPrefixPerExpert + initQuantWorkerPrefixPerExpert[worker, expert]` 和
+  `initQuantWorkerTokenPerExpert[worker, expert]` 分段 flush，不再每个 worker flush 全 `R`。
+- `expandedRowIdx` 仍按 token shard 连续范围 flush；capacity clip 的非连续 route 更新保留最终全量 flush，避免为
+  稀疏 clip 路径增加长期 debug/索引膨胀。
+- T23 没有增加中间日志或 debug stop。验收仍只看 stop17 最终结构体摘要和 `init_quant_e2e_us`。
+
 large-token 路径验收：
 
 ```text
