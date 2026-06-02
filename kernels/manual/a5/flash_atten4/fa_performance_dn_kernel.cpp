@@ -238,22 +238,27 @@ AICORE inline void allocate_vec_tile_buffers(TileDataF_T (&srcTiles)[SrcBuffers]
 {
     constexpr std::size_t float_tile_bytes = tile_storage_bytes<TileDataF_T>();
     constexpr std::size_t reduce_tile_bytes = tile_storage_bytes<ReduceTileF_T>();
+    constexpr std::size_t xexp_bytes = tile_buffer_total_bytes<TileDataH_T, XexpBuffers>();
     constexpr std::size_t out_tile_bytes = tile_storage_bytes<TileOutT>();
-    constexpr std::size_t union_stride = (tile_storage_bytes<TileDataF_T>() > tile_storage_bytes<TileOutT>()) ?
-                                             tile_storage_bytes<TileDataF_T>() :
-                                             tile_storage_bytes<TileOutT>();
-    static_assert(SrcBuffers == pvVecBuffers, "src/pv buffer counts must match for union allocation");
-    constexpr std::size_t union_bytes = union_stride * SrcBuffers;
-    constexpr std::size_t pNzPlusOne_bytes = (tile_storage_bytes<TileDataH_NZ_T>() * XexpBuffers);
-    constexpr std::size_t total_bytes = union_bytes + + pNzPlusOne_bytes + (reduce_tile_bytes * (3U + ExpMaxBuffers)) +
-                                        (float_tile_bytes * 1U) + out_tile_bytes;
+    static_assert(SrcBuffers == pvVecBuffers, "src/pv buffer counts must match");
+
+    // Mode 1 enabled: With TMOV L0C->UB path for QK, qkVecTile data stays in UB longer
+    // and can conflict with pvVecTile TLOAD.
+    // Use SEPARATE allocations (not union) since A5 has 256KB UB (vs 192KB on A2/A3).
+    constexpr std::size_t src_bytes = tile_buffer_total_bytes<TileDataF_T, SrcBuffers>();
+    constexpr std::size_t pv_bytes = tile_buffer_total_bytes<TileOutT, pvVecBuffers>();
+    constexpr std::size_t p_nz_bytes = tile_buffer_total_bytes<TileDataH_NZ_T, XexpBuffers>();
+    constexpr std::size_t total_bytes =
+        src_bytes + p_nz_bytes + pv_bytes + (reduce_tile_bytes * (3U + ExpMaxBuffers)) + (float_tile_bytes * 1U) + out_tile_bytes;
     static_assert(total_bytes <= MAX_VEC_UB_BYTES, "Vec tile UB allocation exceeds 256KB");
 
     uint32_t offset = 0;
+    // Allocate qkVecTile (srcTiles) first
+    offset = assign_tile_buffers(srcTiles, offset); // qkVecTile
+    offset = assign_tile_buffers(pvTile, offset); // pvVecTile
+    offset = assign_tile_buffers(nzConvBuffer, offset);
     TASSIGN(runningOTile, offset);
     offset += out_tile_bytes;
-
-    offset = assign_tile_buffers_union(srcTiles, pvTile, offset);
 
     TASSIGN(m1_local_max, offset);
     offset += static_cast<uint32_t>(reduce_tile_bytes);
