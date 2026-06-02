@@ -72,6 +72,8 @@ set(PTO_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/../../../../include)
 set(COMM_TESTCASE_DIR ${PROJECT_SOURCE_DIR}/../../../../tests/npu/a2a3/comm/st/testcase)
 
 include_directories(
+    ${PTO_INCLUDE_DIR}
+    ${COMM_TESTCASE_DIR}
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_HOME_PATH}/include/hccl
     ${ASCEND_DRIVER_PATH}/kernel/inc

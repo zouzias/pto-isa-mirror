@@ -9,6 +9,42 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 
+# TGET bandwidth example — build and run (HCCL + MPICH)
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SCRIPT_DIR}"
+
+# Ascend CANN environment: keep an already-sourced env; otherwise auto-detect.
+if [ -z "${ASCEND_HOME_PATH:-}" ]; then
+    : "${ASCEND_CANN_PATH:=$(ls -1d /usr/local/Ascend/cann-*/set_env.sh 2>/dev/null | sort -V | tail -1)}"
+    if [ -n "${ASCEND_CANN_PATH}" ] && [ -f "${ASCEND_CANN_PATH}" ]; then
+        # shellcheck disable=SC1090
+        source "${ASCEND_CANN_PATH}"
+    fi
+fi
+
+# MPI setup: search common MPICH install locations.
+# Override with MPI_SEARCH_DIRS (space-separated list of bin/ directories).
+if [ -z "${MPI_SEARCH_DIRS:-}" ]; then
+    MPI_SEARCH_DIRS="/usr/local/mpich/bin /home/mpich/bin /usr/lib64/mpich/bin"
+    for candidate in /home/*/mpich/bin /home/*/*/mpich/bin; do
+        [ -d "$candidate" ] && MPI_SEARCH_DIRS="$MPI_SEARCH_DIRS $candidate"
+    done
+fi
+for d in ${MPI_SEARCH_DIRS}; do
+    if [ -x "$d/mpirun" ]; then
+        export PATH="$d:$PATH"
+        MPI_LIB_DIR="$(dirname "$d")/lib"
+        export LD_LIBRARY_PATH="$MPI_LIB_DIR:${LD_LIBRARY_PATH:-}"
+        export MPI_LIB_PATH="$MPI_LIB_DIR/libmpi.so"
+        break
+    fi
+done
+
+if ! command -v mpirun >/dev/null 2>&1; then
+    echo "[ERROR] mpirun not found. Install MPICH or set MPI_SEARCH_DIRS / MPI_HOME."
+    exit 1
+fi
 
 SHORT=r:,v:,n:,
 LONG=run-mode:,soc-version:,nranks:,
@@ -39,8 +75,12 @@ do
     esac
 done
 
+if [[ "${SOC_VERSION}" == "a3" || "${SOC_VERSION}" == "A3" ]]; then
+    SOC_VERSION="Ascend910B1"
+fi
+
 if [[ ! "${SOC_VERSION}" =~ ^Ascend ]]; then
-    echo "[ERROR] Unsupported SocVersion: ${SOC_VERSION}"
+    echo "[ERROR] Unsupported SocVersion: ${SOC_VERSION} (use a3 or an Ascend* SoC string)"
     exit 1
 fi
 
@@ -54,4 +94,5 @@ set -euo pipefail
 cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} ..
 make -j16
 
-mpirun --allow-run-as-root -n ${NRANKS} ./tget_bandwidth
+echo "=== Running TGET bandwidth (MPICH, mpirun -n ${NRANKS}) ==="
+mpirun -n "${NRANKS}" ./tget_bandwidth
