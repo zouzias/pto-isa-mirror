@@ -32,6 +32,7 @@ __tf__ PTO_INTERNAL void TPartArgImpl(
     __ubuf__ U *src0IdxPtr = (__ubuf__ U *)__cce_get_tile_ptr(src0Idx);
     __ubuf__ U *src1IdxPtr = (__ubuf__ U *)__cce_get_tile_ptr(src1Idx);
     __ubuf__ U *dstIdxPtr = (__ubuf__ U *)__cce_get_tile_ptr(dstIdx);
+    uint32_t repeatTimes = CeilDivision(dstValidCol, elementsPerRepeat);
     __VEC_SCOPE__
     {
         MaskReg dstMask, src0Mask, src1Mask, selMask;
@@ -41,13 +42,12 @@ __tf__ PTO_INTERNAL void TPartArgImpl(
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
         constexpr auto distIndex =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<U, DistVST::DIST_NORM>())>();
-        uint32_t repeatTimes = CeilDivision(dstValidCol, elementsPerRepeat);
         vbr((RegTensor<typename Padding<T>::Type> &)padValReg, Op::PadVal);
         vbr((RegTensor<typename Padding<U>::Type> &)padIdxReg, Op::PadIdx);
         for (uint16_t i = 0; i < (uint16_t)dstValidRow; i++) {
             uint32_t dstSReg = dstValidCol;
-            uint32_t src0SReg = i < src0ValidRow ? src0ValidCol : 0;
-            uint32_t src1SReg = i < src1ValidRow ? src1ValidCol : 0;
+            uint32_t src0SReg = static_cast<uint32_t>(i < src0ValidRow) * src0ValidCol;
+            uint32_t src1SReg = static_cast<uint32_t>(i < src1ValidRow) * src1ValidCol;
             for (uint16_t j = 0; j < (uint16_t)repeatTimes; j++) {
                 dstMask = CreatePredicate<T>(dstSReg);
                 src0Mask = CreatePredicate<T>(src0SReg);

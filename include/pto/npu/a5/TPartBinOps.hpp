@@ -77,6 +77,7 @@ __tf__ PTO_INTERNAL void TCopyPadOp(typename DstTileData::TileDType __out__ dst,
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
+    uint32_t repeatTimes = CeilDivision(DstvalidCol, elementsPerRepeat);
     __VEC_SCOPE__
     {
         constexpr auto distValue =
@@ -85,7 +86,6 @@ __tf__ PTO_INTERNAL void TCopyPadOp(typename DstTileData::TileDType __out__ dst,
         RegTensor<T> src0Reg;
         RegTensor<T> src1Reg;
         RegTensor<T> dstReg;
-        uint16_t repeatTimes = CeilDivision(DstvalidCol, elementsPerRepeat);
         for (uint16_t i = 0; i < (uint16_t)DstvalidRow; ++i) {
             uint32_t dstSReg = DstvalidCol;
             uint32_t src0SReg = static_cast<uint32_t>(i < Src0validRow) * Src0validCol;
@@ -95,11 +95,11 @@ __tf__ PTO_INTERNAL void TCopyPadOp(typename DstTileData::TileDType __out__ dst,
                 src0Mask = CreatePredicate<T>(src0SReg);
                 src1Mask = CreatePredicate<T>(src1SReg);
                 vdup((RegTensor<typename Padding<T>::Type> &)dstReg, Op::PadVal, dstMask, MODE_ZEROING);
-                vlds(src0Reg, src0Ptr + i * src0Stride, j * elementsPerRepeat, NORM);
-                vlds(src1Reg, src1Ptr + i * src1Stride, j * elementsPerRepeat, NORM);
+                vlds(src0Reg, src0Ptr, i * src0Stride + j * elementsPerRepeat, NORM);
+                vlds(src1Reg, src1Ptr, i * src1Stride + j * elementsPerRepeat, NORM);
                 Op::BinInstr(dstReg, dstReg, src0Reg, src0Mask);
                 Op::BinInstr(dstReg, dstReg, src1Reg, src1Mask);
-                vsts(dstReg, dstPtr + i * dstStride, j * elementsPerRepeat, distValue, dstMask);
+                vsts(dstReg, dstPtr, i * dstStride + j * elementsPerRepeat, distValue, dstMask);
             }
         }
     }
