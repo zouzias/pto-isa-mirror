@@ -37,7 +37,7 @@ PTO_INTERNAL void TColReduceCheck(int srcValidRow, int srcValidCol, int dstValid
 }
 
 template <typename InstrOp, typename T, unsigned SrcStride>
-PTO_INTERNAL void TColReduceInstr_PostUpdate(__ubuf__ T *dst, __ubuf__ T *src, uint16_t validRow, int validCol)
+PTO_INTERNAL void TColReduceInstr_PostUpdate(__ubuf__ T *dst, __ubuf__ T *src, unsigned validRow, unsigned validCol)
 {
     constexpr unsigned elmPerRpt = CCE_VL / sizeof(T); // 每次repeat涉及多少个元素
     constexpr auto distValue =
@@ -86,7 +86,7 @@ PTO_INTERNAL void TColReduceInstr_PostUpdate(__ubuf__ T *dst, __ubuf__ T *src, u
 }
 
 template <typename InstrOp, typename T, unsigned SrcStride>
-PTO_INTERNAL void TColReduceInstr_NoPostUpdate(__ubuf__ T *dst, __ubuf__ T *src, uint16_t validRow, int validCol)
+PTO_INTERNAL void TColReduceInstr_NoPostUpdate(__ubuf__ T *dst, __ubuf__ T *src, unsigned validRow, unsigned validCol)
 {
     constexpr unsigned elmPerRpt = CCE_VL / sizeof(T); // 每次repeat涉及多少个元素
     constexpr auto distValue =
@@ -105,24 +105,25 @@ PTO_INTERNAL void TColReduceInstr_NoPostUpdate(__ubuf__ T *dst, __ubuf__ T *src,
         uint32_t sReg = validCol;
         for (uint16_t i = 0; i < rptTimes; ++i) {
             preg = CreatePredicate<T>(sReg);
-            vlds(dstVReg, src, i * elmPerRpt, NORM);
+            vlds(dstVReg, src + i * elmPerRpt, 0, NORM);
             for (uint16_t j = 0; j < nLoop; ++j) {
-                vlds(src0VReg, src, i * elmPerRpt + (2 * j + 1) * SrcStride, NORM);
-                vlds(src1VReg, src, i * elmPerRpt + (2 * j + 2) * SrcStride, NORM);
+                vlds(src0VReg, src + i * elmPerRpt, (2 * j + 1) * SrcStride, NORM);
+                vlds(src1VReg, src + i * elmPerRpt, (2 * j + 2) * SrcStride, NORM);
                 InstrOp::ReduceInstr(tmpVReg, src0VReg, src1VReg, preg);
                 InstrOp::ReduceInstr(dstVReg, dstVReg, tmpVReg, preg);
             }
             if (remain) {
-                vlds(src0VReg, src, i * elmPerRpt + (2 * nLoop) * SrcStride, NORM);
+                vlds(src0VReg, src + i * elmPerRpt, (2 * nLoop + 1) * SrcStride, NORM);
                 InstrOp::ReduceInstr(dstVReg, dstVReg, src0VReg, preg);
             }
-            vsts(dstVReg, dst, i * elmPerRpt, distValue, preg);
+            vsts(dstVReg, dst + i * elmPerRpt, 0, distValue, preg);
         }
     }
 }
 
 template <typename InstrOp, typename T, typename TileDataIn>
-PTO_INTERNAL void TColReduceInstr(__ubuf__ T *dst, __ubuf__ T *src, int validRow, int validCol, unsigned version)
+PTO_INTERNAL void TColReduceInstr(__ubuf__ T *dst, __ubuf__ T *src, unsigned validRow, unsigned validCol,
+                                  unsigned version)
 {
     switch (version) {
         case VFImplKind::VFIMPL_1D_NO_POST_UPDATE:
