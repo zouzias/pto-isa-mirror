@@ -52,3 +52,23 @@ template void LaunchTAnds<uint32_t, 8, 8, 8, 8>(uint32_t *out, uint32_t *src0, u
 template void LaunchTAnds<int8_t, 32, 32, 32, 32>(int8_t *out, int8_t *src0, int8_t src1, void *stream);
 template void LaunchTAnds<int16_t, 16, 16, 16, 16>(int16_t *out, int16_t *src0, int16_t src1, void *stream);
 template void LaunchTAnds<int32_t, 8, 8, 8, 8>(int32_t *out, int32_t *src0, int32_t src1, void *stream);
+
+// Group A: uint16 (block_size=128, align_unit=16) - 8 systematic cases
+template void LaunchTAnds<uint16_t, 8, 64, 8, 64>(uint16_t *out, uint16_t *src0, uint16_t src1, void *stream);
+template void LaunchTAnds<uint16_t, 8, 64, 8, 48>(uint16_t *out, uint16_t *src0, uint16_t src1, void *stream);
+template void LaunchTAnds<uint16_t, 8, 64, 8, 33>(uint16_t *out, uint16_t *src0, uint16_t src1, void *stream);
+template void LaunchTAnds<uint16_t, 12, 64, 8, 48>(uint16_t *out, uint16_t *src0, uint16_t src1, void *stream);
+template void LaunchTAnds<uint16_t, 4, 144, 4, 144>(uint16_t *out, uint16_t *src0, uint16_t src1, void *stream);
+template void LaunchTAnds<uint16_t, 4, 144, 4, 128>(uint16_t *out, uint16_t *src0, uint16_t src1, void *stream);
+template void LaunchTAnds<uint16_t, 4, 144, 4, 129>(uint16_t *out, uint16_t *src0, uint16_t src1, void *stream);
+template void LaunchTAnds<uint16_t, 8, 144, 4, 129>(uint16_t *out, uint16_t *src0, uint16_t src1, void *stream);
+
+// Group B: uint32 (block_size=64, align_unit=8) - 8 systematic cases
+template void LaunchTAnds<uint32_t, 8, 64, 8, 64>(uint32_t *out, uint32_t *src0, uint32_t src1, void *stream);
+template void LaunchTAnds<uint32_t, 8, 64, 8, 48>(uint32_t *out, uint32_t *src0, uint32_t src1, void *stream);
+template void LaunchTAnds<uint32_t, 8, 64, 8, 63>(uint32_t *out, uint32_t *src0, uint32_t src1, void *stream);
+template void LaunchTAnds<uint32_t, 12, 64, 8, 48>(uint32_t *out, uint32_t *src0, uint32_t src1, void *stream);
+template void LaunchTAnds<uint32_t, 4, 96, 4, 96>(uint32_t *out, uint32_t *src0, uint32_t src1, void *stream);
+template void LaunchTAnds<uint32_t, 4, 96, 4, 72>(uint32_t *out, uint32_t *src0, uint32_t src1, void *stream);
+template void LaunchTAnds<uint32_t, 4, 96, 4, 65>(uint32_t *out, uint32_t *src0, uint32_t src1, void *stream);
+template void LaunchTAnds<uint32_t, 8, 96, 4, 65>(uint32_t *out, uint32_t *src0, uint32_t src1, void *stream);

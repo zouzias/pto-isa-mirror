@@ -118,3 +118,87 @@ TEST_F(TLRELUTest, case4)
     bool ret = TLReluTestFramework<4, float, 256, 32, 256, 256, 16, 16>();
     EXPECT_TRUE(ret);
 }
+
+// Group A: FP32 (block_size=64, align_unit=8) - 8 systematic cases, col 32B aligned
+TEST_F(TLRELUTest, case5)
+{
+    bool ret = TLReluTestFramework<5, float, 8, 64, 8, 8, 64, 64>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TLRELUTest, case6)
+{
+    bool ret = TLReluTestFramework<6, float, 8, 64, 8, 8, 48, 48>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TLRELUTest, case7)
+{
+    bool ret = TLReluTestFramework<7, float, 8, 64, 8, 8, 56, 56>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TLRELUTest, case8)
+{
+    bool ret = TLReluTestFramework<8, float, 12, 64, 12, 8, 48, 48>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TLRELUTest, case9)
+{
+    bool ret = TLReluTestFramework<9, float, 4, 96, 4, 4, 96, 96>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TLRELUTest, case10)
+{
+    bool ret = TLReluTestFramework<10, float, 4, 96, 4, 4, 72, 72>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TLRELUTest, case11)
+{
+    bool ret = TLReluTestFramework<11, float, 4, 96, 4, 4, 80, 80>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TLRELUTest, case12)
+{
+    bool ret = TLReluTestFramework<12, float, 8, 96, 8, 4, 80, 80>();
+    EXPECT_TRUE(ret);
+}
+
+// Group B: FP16 (block_size=128, align_unit=16) - 8 systematic cases, col 32B aligned
+TEST_F(TLRELUTest, case13)
+{
+    bool ret = TLReluTestFramework<13, aclFloat16, 8, 64, 8, 8, 64, 64>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TLRELUTest, case14)
+{
+    bool ret = TLReluTestFramework<14, aclFloat16, 8, 64, 8, 8, 48, 48>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TLRELUTest, case15)
+{
+    bool ret = TLReluTestFramework<15, aclFloat16, 8, 64, 8, 8, 32, 32>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TLRELUTest, case16)
+{
+    bool ret = TLReluTestFramework<16, aclFloat16, 12, 64, 12, 8, 48, 48>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TLRELUTest, case17)
+{
+    bool ret = TLReluTestFramework<17, aclFloat16, 2, 144, 2, 2, 144, 144>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TLRELUTest, case18)
+{
+    bool ret = TLReluTestFramework<18, aclFloat16, 2, 144, 2, 2, 128, 128>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TLRELUTest, case19)
+{
+    bool ret = TLReluTestFramework<19, aclFloat16, 2, 144, 2, 2, 112, 112>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TLRELUTest, case20)
+{
+    bool ret = TLReluTestFramework<20, aclFloat16, 4, 144, 4, 2, 112, 112>();
+    EXPECT_TRUE(ret);
+}

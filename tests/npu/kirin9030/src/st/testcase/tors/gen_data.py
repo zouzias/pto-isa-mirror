@@ -74,6 +74,22 @@ if __name__ == "__main__":
         TORSParams("TORSTest.case7", np.int8, 32, 32, 32, 32),
         TORSParams("TORSTest.case8", np.int16, 16, 16, 16, 16),
         TORSParams("TORSTest.case9", np.int32, 8, 8, 8, 8),
+        TORSParams("TORSTest.case10", np.uint32, 8, 64, 8, 64),
+        TORSParams("TORSTest.case11", np.uint32, 4, 64, 4, 48),
+        TORSParams("TORSTest.case12", np.int32, 4, 64, 4, 63),
+        TORSParams("TORSTest.case13", np.uint32, 8, 64, 4, 48),
+        TORSParams("TORSTest.case14", np.uint32, 4, 96, 4, 96),
+        TORSParams("TORSTest.case15", np.uint32, 4, 96, 4, 72),
+        TORSParams("TORSTest.case16", np.int32, 4, 96, 4, 65),
+        TORSParams("TORSTest.case17", np.int32, 8, 96, 4, 65),
+        TORSParams("TORSTest.case18", np.uint16, 8, 64, 8, 64),
+        TORSParams("TORSTest.case19", np.uint16, 8, 64, 8, 48),
+        TORSParams("TORSTest.case20", np.int16, 8, 48, 8, 33),
+        TORSParams("TORSTest.case21", np.uint16, 12, 64, 8, 48),
+        TORSParams("TORSTest.case22", np.uint16, 2, 144, 2, 144),
+        TORSParams("TORSTest.case23", np.uint16, 2, 144, 2, 128),
+        TORSParams("TORSTest.case24", np.uint16, 2, 144, 2, 129),
+        TORSParams("TORSTest.case25", np.uint16, 4, 144, 2, 129),
     ]
 
     for param in case_params_list:

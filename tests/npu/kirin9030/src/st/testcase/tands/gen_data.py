@@ -74,6 +74,24 @@ if __name__ == "__main__":
         TAndSParams("TANDSTest.case7", np.int8, 32, 32, 32, 32),
         TAndSParams("TANDSTest.case8", np.int16, 16, 16, 16, 16),
         TAndSParams("TANDSTest.case9", np.int32, 8, 8, 8, 8),
+        # Group A: uint16 (block_size=128, align_unit=16) - 8 systematic cases
+        TAndSParams("TANDSTest.case10", np.uint16, 8, 64, 8, 64),
+        TAndSParams("TANDSTest.case11", np.uint16, 8, 64, 8, 48),
+        TAndSParams("TANDSTest.case12", np.uint16, 8, 64, 8, 33),
+        TAndSParams("TANDSTest.case13", np.uint16, 12, 64, 8, 48),
+        TAndSParams("TANDSTest.case14", np.uint16, 4, 144, 4, 144),
+        TAndSParams("TANDSTest.case15", np.uint16, 4, 144, 4, 128),
+        TAndSParams("TANDSTest.case16", np.uint16, 4, 144, 4, 129),
+        TAndSParams("TANDSTest.case17", np.uint16, 8, 144, 4, 129),
+        # Group B: uint32 (block_size=64, align_unit=8) - 8 systematic cases
+        TAndSParams("TANDSTest.case18", np.uint32, 8, 64, 8, 64),
+        TAndSParams("TANDSTest.case19", np.uint32, 8, 64, 8, 48),
+        TAndSParams("TANDSTest.case20", np.uint32, 8, 64, 8, 63),
+        TAndSParams("TANDSTest.case21", np.uint32, 12, 64, 8, 48),
+        TAndSParams("TANDSTest.case22", np.uint32, 4, 96, 4, 96),
+        TAndSParams("TANDSTest.case23", np.uint32, 4, 96, 4, 72),
+        TAndSParams("TANDSTest.case24", np.uint32, 4, 96, 4, 65),
+        TAndSParams("TANDSTest.case25", np.uint32, 8, 96, 4, 65),
     ]
 
     for param in case_params_list:

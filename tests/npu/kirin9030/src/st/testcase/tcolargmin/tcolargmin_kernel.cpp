@@ -144,6 +144,74 @@ extern "C" __global__ AICORE void launchTCOLCMINCase73(__gm__ uint32_t *out, __g
     runTColCMin<uint32_t, 16, 15, 1, 256, 255>(out, src, false);
 }
 
+// Group A: FP32 (block_size=64, align_unit=8) - 8 systematic cases
+extern "C" __global__ AICORE void launchTCOLCMINCase81(__gm__ uint32_t *out, __gm__ float *src)
+{
+    runTColCMin<float, 8, 8, 1, 64, 64>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMINCase82(__gm__ uint32_t *out, __gm__ float *src)
+{
+    runTColCMin<float, 8, 8, 1, 64, 48>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMINCase83(__gm__ uint32_t *out, __gm__ float *src)
+{
+    runTColCMin<float, 8, 8, 1, 64, 63>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMINCase84(__gm__ uint32_t *out, __gm__ float *src)
+{
+    runTColCMin<float, 12, 8, 1, 64, 48>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMINCase85(__gm__ uint32_t *out, __gm__ float *src)
+{
+    runTColCMin<float, 4, 4, 1, 96, 96>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMINCase86(__gm__ uint32_t *out, __gm__ float *src)
+{
+    runTColCMin<float, 4, 4, 1, 96, 72>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMINCase87(__gm__ uint32_t *out, __gm__ float *src)
+{
+    runTColCMin<float, 4, 4, 1, 96, 65>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMINCase88(__gm__ uint32_t *out, __gm__ float *src)
+{
+    runTColCMin<float, 8, 4, 1, 96, 65>(out, src, false);
+}
+
+// Group B: FP16 (block_size=128, align_unit=16) - 8 systematic cases
+extern "C" __global__ AICORE void launchTCOLCMINCase91(__gm__ uint32_t *out, __gm__ half *src)
+{
+    runTColCMin<half, 8, 8, 1, 64, 64>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMINCase92(__gm__ uint32_t *out, __gm__ half *src)
+{
+    runTColCMin<half, 8, 8, 1, 64, 48>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMINCase93(__gm__ uint32_t *out, __gm__ half *src)
+{
+    runTColCMin<half, 8, 8, 1, 64, 33>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMINCase94(__gm__ uint32_t *out, __gm__ half *src)
+{
+    runTColCMin<half, 12, 8, 1, 64, 48>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMINCase95(__gm__ uint32_t *out, __gm__ half *src)
+{
+    runTColCMin<half, 2, 2, 1, 144, 144>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMINCase96(__gm__ uint32_t *out, __gm__ half *src)
+{
+    runTColCMin<half, 2, 2, 1, 144, 128>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMINCase97(__gm__ uint32_t *out, __gm__ half *src)
+{
+    runTColCMin<half, 2, 2, 1, 144, 129>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMINCase98(__gm__ uint32_t *out, __gm__ half *src)
+{
+    runTColCMin<half, 4, 2, 1, 144, 129>(out, src, false);
+}
+
 template <uint32_t caseId>
 void launchTCOLCMINTestCase(void *out, void *src, aclrtStream stream)
 {
@@ -244,6 +312,72 @@ void launchTCOLCMINTestCase(void *out, void *src, aclrtStream stream)
             launchTCOLCMINCase73<<<1, nullptr, stream>>>((uint32_t *)out, (uint32_t *)src);
             break;
         }
+        // Group A: FP32
+        case 81: {
+            launchTCOLCMINCase81<<<1, nullptr, stream>>>((uint32_t *)out, (float *)src);
+            break;
+        }
+        case 82: {
+            launchTCOLCMINCase82<<<1, nullptr, stream>>>((uint32_t *)out, (float *)src);
+            break;
+        }
+        case 83: {
+            launchTCOLCMINCase83<<<1, nullptr, stream>>>((uint32_t *)out, (float *)src);
+            break;
+        }
+        case 84: {
+            launchTCOLCMINCase84<<<1, nullptr, stream>>>((uint32_t *)out, (float *)src);
+            break;
+        }
+        case 85: {
+            launchTCOLCMINCase85<<<1, nullptr, stream>>>((uint32_t *)out, (float *)src);
+            break;
+        }
+        case 86: {
+            launchTCOLCMINCase86<<<1, nullptr, stream>>>((uint32_t *)out, (float *)src);
+            break;
+        }
+        case 87: {
+            launchTCOLCMINCase87<<<1, nullptr, stream>>>((uint32_t *)out, (float *)src);
+            break;
+        }
+        case 88: {
+            launchTCOLCMINCase88<<<1, nullptr, stream>>>((uint32_t *)out, (float *)src);
+            break;
+        }
+        // Group B: FP16
+        case 91: {
+            launchTCOLCMINCase91<<<1, nullptr, stream>>>((uint32_t *)out, (half *)src);
+            break;
+        }
+        case 92: {
+            launchTCOLCMINCase92<<<1, nullptr, stream>>>((uint32_t *)out, (half *)src);
+            break;
+        }
+        case 93: {
+            launchTCOLCMINCase93<<<1, nullptr, stream>>>((uint32_t *)out, (half *)src);
+            break;
+        }
+        case 94: {
+            launchTCOLCMINCase94<<<1, nullptr, stream>>>((uint32_t *)out, (half *)src);
+            break;
+        }
+        case 95: {
+            launchTCOLCMINCase95<<<1, nullptr, stream>>>((uint32_t *)out, (half *)src);
+            break;
+        }
+        case 96: {
+            launchTCOLCMINCase96<<<1, nullptr, stream>>>((uint32_t *)out, (half *)src);
+            break;
+        }
+        case 97: {
+            launchTCOLCMINCase97<<<1, nullptr, stream>>>((uint32_t *)out, (half *)src);
+            break;
+        }
+        case 98: {
+            launchTCOLCMINCase98<<<1, nullptr, stream>>>((uint32_t *)out, (half *)src);
+            break;
+        }
         default: {
         }
     }
@@ -273,3 +407,23 @@ template void launchTCOLCMINTestCase<63>(void *out, void *src, aclrtStream strea
 template void launchTCOLCMINTestCase<71>(void *out, void *src, aclrtStream stream);
 template void launchTCOLCMINTestCase<72>(void *out, void *src, aclrtStream stream);
 template void launchTCOLCMINTestCase<73>(void *out, void *src, aclrtStream stream);
+
+// Group A: FP32
+template void launchTCOLCMINTestCase<81>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMINTestCase<82>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMINTestCase<83>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMINTestCase<84>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMINTestCase<85>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMINTestCase<86>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMINTestCase<87>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMINTestCase<88>(void *out, void *src, aclrtStream stream);
+
+// Group B: FP16
+template void launchTCOLCMINTestCase<91>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMINTestCase<92>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMINTestCase<93>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMINTestCase<94>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMINTestCase<95>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMINTestCase<96>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMINTestCase<97>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMINTestCase<98>(void *out, void *src, aclrtStream stream);

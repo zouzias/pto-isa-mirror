@@ -146,3 +146,67 @@ TEST_F(TPARTARGMAXTest, case_fp16_5x33_5x33_5x30)
 {
     test_tpartargmax<aclFloat16, uint16_t, 5, 33, 5, 33, 5, 30, 8, 48, 5, 48, 6, 48, true>();
 }
+// TEST_F(TPARTARGMAXTest, case_fp32_8x48_8x32_4x41)
+// {
+//     test_tpartargmax<float, uint32_t, 8, 48, 8, 32, 4, 41, 8, 48, 8, 48, 4, 96>();
+// }
+TEST_F(TPARTARGMAXTest, case_fp32_4x48_4x48_2x48)
+{
+    test_tpartargmax<float, uint32_t, 4, 48, 4, 48, 2, 48, 4, 64, 4, 48, 2, 96>();
+}
+TEST_F(TPARTARGMAXTest, case_fp32_4x57_4x57_2x48)
+{
+    test_tpartargmax<float, uint32_t, 4, 57, 4, 57, 2, 48, 4, 64, 4, 64, 2, 64>();
+}
+TEST_F(TPARTARGMAXTest, case_fp32_4x48_4x48_2x41)
+{
+    test_tpartargmax<float, uint32_t, 4, 48, 4, 48, 2, 41, 8, 64, 8, 64, 4, 64>();
+}
+// TEST_F(TPARTARGMAXTest, case_fp32_4x96_4x72_2x48)
+// {
+//     test_tpartargmax<float, uint32_t, 4, 96, 4, 72, 2, 48, 4, 96, 4, 96, 2, 64>();
+// }
+TEST_F(TPARTARGMAXTest, case_fp32_4x72_4x72_2x48)
+{
+    test_tpartargmax<float, uint32_t, 4, 72, 4, 72, 2, 48, 4, 96, 4, 96, 2, 64>();
+}
+TEST_F(TPARTARGMAXTest, case_fp32_4x65_4x65_2x48)
+{
+    test_tpartargmax<float, int32_t, 4, 65, 4, 65, 2, 48, 4, 96, 4, 96, 2, 64>();
+}
+TEST_F(TPARTARGMAXTest, case_fp32_4x65_4x65_2x40)
+{
+    test_tpartargmax<float, int32_t, 4, 65, 4, 65, 2, 40, 8, 96, 8, 96, 4, 64>();
+}
+TEST_F(TPARTARGMAXTest, case_fp16_8x64_8x48_4x48)
+{
+    test_tpartargmax<aclFloat16, uint16_t, 8, 48, 8, 48, 4, 48, 8, 64, 8, 64, 4, 144, true>();
+}
+TEST_F(TPARTARGMAXTest, case_fp16_4x48_4x48_2x48)
+{
+    test_tpartargmax<aclFloat16, uint16_t, 4, 48, 4, 48, 2, 48, 4, 64, 4, 48, 2, 144, true>();
+}
+TEST_F(TPARTARGMAXTest, case_fp16_4x49_4x49_2x33)
+{
+    test_tpartargmax<aclFloat16, int16_t, 4, 49, 4, 49, 2, 33, 4, 64, 4, 64, 2, 48, true>();
+}
+TEST_F(TPARTARGMAXTest, case_fp16_4x48_4x48_2x33)
+{
+    test_tpartargmax<aclFloat16, uint16_t, 4, 48, 4, 48, 2, 33, 8, 64, 8, 64, 4, 64, true>();
+}
+// TEST_F(TPARTARGMAXTest, case_fp16_2x144_2x128_2x64)
+// {
+//     test_tpartargmax<aclFloat16, uint16_t, 2, 144, 2, 128, 2, 64, 2, 144, 2, 144, 2, 64, true>();
+// }
+TEST_F(TPARTARGMAXTest, case_fp16_2x128_2x128_2x64)
+{
+    test_tpartargmax<aclFloat16, uint16_t, 2, 128, 2, 128, 2, 64, 2, 144, 2, 144, 2, 64, true>();
+}
+TEST_F(TPARTARGMAXTest, case_fp16_2x129_2x129_2x64)
+{
+    test_tpartargmax<aclFloat16, int16_t, 2, 129, 2, 129, 2, 64, 2, 144, 2, 144, 2, 64, true>();
+}
+// TEST_F(TPARTARGMAXTest, case_fp16_2x129_2x129_2x48)
+// {
+//     test_tpartargmax<aclFloat16, uint16_t, 2, 129, 2, 129, 2, 48, 4, 144, 4, 144, 4, 64, true>();
+// }

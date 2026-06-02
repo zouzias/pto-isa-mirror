@@ -515,3 +515,92 @@ TEST_F(TCOLCMAXTest, case093)
     bool ret = TCOLCMAXTestFramework<93, uint16_t, int16_t, 4, 4, 1, 48, 34>();
     EXPECT_TRUE(ret);
 }
+
+// =============================================================================
+// Systematic design principle coverage (new 16 cases)
+// Pure index mode: FP32, 8 cases
+// =============================================================================
+TEST_F(TCOLCMAXTest, case101)
+{
+    bool ret = TCOLCMAXTestFramework<101, float, 8, 8, 1, 64, 64>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMAXTest, case102)
+{
+    bool ret = TCOLCMAXTestFramework<102, float, 8, 8, 1, 64, 48>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMAXTest, case103)
+{
+    bool ret = TCOLCMAXTestFramework<103, float, 8, 8, 1, 64, 56>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMAXTest, case104)
+{
+    bool ret = TCOLCMAXTestFramework<104, float, 12, 8, 1, 64, 48>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMAXTest, case105)
+{
+    bool ret = TCOLCMAXTestFramework<105, float, 4, 4, 1, 96, 96>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMAXTest, case106)
+{
+    bool ret = TCOLCMAXTestFramework<106, float, 4, 4, 1, 96, 72>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMAXTest, case107)
+{
+    bool ret = TCOLCMAXTestFramework<107, float, 4, 4, 1, 96, 80>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMAXTest, case108)
+{
+    bool ret = TCOLCMAXTestFramework<108, float, 8, 4, 1, 96, 80>();
+    EXPECT_TRUE(ret);
+}
+
+// =============================================================================
+// Value + index mode: FP16, 8 cases
+// =============================================================================
+TEST_F(TCOLCMAXTest, case201)
+{
+    bool ret = TCOLCMAXTestFramework<201, aclFloat16, int16_t, 8, 8, 1, 64, 64>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMAXTest, case202)
+{
+    bool ret = TCOLCMAXTestFramework<202, aclFloat16, int16_t, 8, 8, 1, 64, 48>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMAXTest, case203)
+{
+    bool ret = TCOLCMAXTestFramework<203, aclFloat16, int16_t, 8, 8, 1, 64, 32>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMAXTest, case204)
+{
+    bool ret = TCOLCMAXTestFramework<204, aclFloat16, int16_t, 12, 8, 1, 64, 48>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMAXTest, case205)
+{
+    bool ret = TCOLCMAXTestFramework<205, aclFloat16, int16_t, 2, 2, 1, 144, 144>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMAXTest, case206)
+{
+    bool ret = TCOLCMAXTestFramework<206, aclFloat16, int16_t, 2, 2, 1, 144, 128>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMAXTest, case207)
+{
+    bool ret = TCOLCMAXTestFramework<207, aclFloat16, int16_t, 2, 2, 1, 144, 112>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMAXTest, case208)
+{
+    bool ret = TCOLCMAXTestFramework<208, aclFloat16, int16_t, 4, 2, 1, 144, 112>();
+    EXPECT_TRUE(ret);
+}

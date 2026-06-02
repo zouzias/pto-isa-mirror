@@ -429,9 +429,90 @@ extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase092(__gm__ half *outVal
     runTColIdxValMax<half, int16_t, 16, 16, 1, 96, 88>(outVal, outIdx, src);
 }
 extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase093(__gm__ uint16_t *outVal, __gm__ int16_t *outIdx,
-                                                             __gm__ uint16_t *src)
+                                                              __gm__ uint16_t *src)
 {
     runTColIdxValMax<uint16_t, int16_t, 4, 4, 1, 48, 34>(outVal, outIdx, src);
+}
+
+// =============================================================================
+// Systematic design principle coverage (new 16 cases)
+// Pure index mode: FP32, 8 cases
+// =============================================================================
+extern "C" __global__ AICORE void launchTCOLCMAXCase101(__gm__ uint32_t *out, __gm__ float *src)
+{
+    runTColCMax<float, 8, 8, 1, 64, 64>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMAXCase102(__gm__ uint32_t *out, __gm__ float *src)
+{
+    runTColCMax<float, 8, 8, 1, 64, 48>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMAXCase103(__gm__ uint32_t *out, __gm__ float *src)
+{
+    runTColCMax<float, 8, 8, 1, 64, 56>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMAXCase104(__gm__ uint32_t *out, __gm__ float *src)
+{
+    runTColCMax<float, 12, 8, 1, 64, 48>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMAXCase105(__gm__ uint32_t *out, __gm__ float *src)
+{
+    runTColCMax<float, 4, 4, 1, 96, 96>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMAXCase106(__gm__ uint32_t *out, __gm__ float *src)
+{
+    runTColCMax<float, 4, 4, 1, 96, 72>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMAXCase107(__gm__ uint32_t *out, __gm__ float *src)
+{
+    runTColCMax<float, 4, 4, 1, 96, 80>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMAXCase108(__gm__ uint32_t *out, __gm__ float *src)
+{
+    runTColCMax<float, 8, 4, 1, 96, 80>(out, src, false);
+}
+
+// =============================================================================
+// Value + index mode: FP16, 8 cases
+// =============================================================================
+extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase201(__gm__ half *outVal, __gm__ int16_t *outIdx,
+                                                              __gm__ half *src)
+{
+    runTColIdxValMax<half, int16_t, 8, 8, 1, 64, 64>(outVal, outIdx, src);
+}
+extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase202(__gm__ half *outVal, __gm__ int16_t *outIdx,
+                                                              __gm__ half *src)
+{
+    runTColIdxValMax<half, int16_t, 8, 8, 1, 64, 48>(outVal, outIdx, src);
+}
+extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase203(__gm__ half *outVal, __gm__ int16_t *outIdx,
+                                                              __gm__ half *src)
+{
+    runTColIdxValMax<half, int16_t, 8, 8, 1, 64, 32>(outVal, outIdx, src);
+}
+extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase204(__gm__ half *outVal, __gm__ int16_t *outIdx,
+                                                              __gm__ half *src)
+{
+    runTColIdxValMax<half, int16_t, 12, 8, 1, 64, 48>(outVal, outIdx, src);
+}
+extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase205(__gm__ half *outVal, __gm__ int16_t *outIdx,
+                                                              __gm__ half *src)
+{
+    runTColIdxValMax<half, int16_t, 2, 2, 1, 144, 144>(outVal, outIdx, src);
+}
+extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase206(__gm__ half *outVal, __gm__ int16_t *outIdx,
+                                                              __gm__ half *src)
+{
+    runTColIdxValMax<half, int16_t, 2, 2, 1, 144, 128>(outVal, outIdx, src);
+}
+extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase207(__gm__ half *outVal, __gm__ int16_t *outIdx,
+                                                              __gm__ half *src)
+{
+    runTColIdxValMax<half, int16_t, 2, 2, 1, 144, 112>(outVal, outIdx, src);
+}
+extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase208(__gm__ half *outVal, __gm__ int16_t *outIdx,
+                                                              __gm__ half *src)
+{
+    runTColIdxValMax<half, int16_t, 4, 2, 1, 144, 112>(outVal, outIdx, src);
 }
 
 // =============================================================================
@@ -581,6 +662,39 @@ void launchTCOLCMAXTestCase(void *out, void *src, aclrtStream stream)
             launchTCOLCMAXCase93<<<1, nullptr, stream>>>((uint32_t *)out, (uint16_t *)src);
             break;
         }
+        // Systematic design principle coverage (pure index)
+        case 101: {
+            launchTCOLCMAXCase101<<<1, nullptr, stream>>>((uint32_t *)out, (float *)src);
+            break;
+        }
+        case 102: {
+            launchTCOLCMAXCase102<<<1, nullptr, stream>>>((uint32_t *)out, (float *)src);
+            break;
+        }
+        case 103: {
+            launchTCOLCMAXCase103<<<1, nullptr, stream>>>((uint32_t *)out, (float *)src);
+            break;
+        }
+        case 104: {
+            launchTCOLCMAXCase104<<<1, nullptr, stream>>>((uint32_t *)out, (float *)src);
+            break;
+        }
+        case 105: {
+            launchTCOLCMAXCase105<<<1, nullptr, stream>>>((uint32_t *)out, (float *)src);
+            break;
+        }
+        case 106: {
+            launchTCOLCMAXCase106<<<1, nullptr, stream>>>((uint32_t *)out, (float *)src);
+            break;
+        }
+        case 107: {
+            launchTCOLCMAXCase107<<<1, nullptr, stream>>>((uint32_t *)out, (float *)src);
+            break;
+        }
+        case 108: {
+            launchTCOLCMAXCase108<<<1, nullptr, stream>>>((uint32_t *)out, (float *)src);
+            break;
+        }
         default: {
         }
     }
@@ -701,6 +815,39 @@ void launchTCOLIDXVALMAXCase(void *outVal, void *outIdx, void *src, aclrtStream 
             launchTCOLIDXVALMAXCase093<<<1, nullptr, stream>>>((uint16_t *)outVal, (int16_t *)outIdx, (uint16_t *)src);
             break;
         }
+        // Systematic design principle coverage (value + index)
+        case 201: {
+            launchTCOLIDXVALMAXCase201<<<1, nullptr, stream>>>((half *)outVal, (int16_t *)outIdx, (half *)src);
+            break;
+        }
+        case 202: {
+            launchTCOLIDXVALMAXCase202<<<1, nullptr, stream>>>((half *)outVal, (int16_t *)outIdx, (half *)src);
+            break;
+        }
+        case 203: {
+            launchTCOLIDXVALMAXCase203<<<1, nullptr, stream>>>((half *)outVal, (int16_t *)outIdx, (half *)src);
+            break;
+        }
+        case 204: {
+            launchTCOLIDXVALMAXCase204<<<1, nullptr, stream>>>((half *)outVal, (int16_t *)outIdx, (half *)src);
+            break;
+        }
+        case 205: {
+            launchTCOLIDXVALMAXCase205<<<1, nullptr, stream>>>((half *)outVal, (int16_t *)outIdx, (half *)src);
+            break;
+        }
+        case 206: {
+            launchTCOLIDXVALMAXCase206<<<1, nullptr, stream>>>((half *)outVal, (int16_t *)outIdx, (half *)src);
+            break;
+        }
+        case 207: {
+            launchTCOLIDXVALMAXCase207<<<1, nullptr, stream>>>((half *)outVal, (int16_t *)outIdx, (half *)src);
+            break;
+        }
+        case 208: {
+            launchTCOLIDXVALMAXCase208<<<1, nullptr, stream>>>((half *)outVal, (int16_t *)outIdx, (half *)src);
+            break;
+        }
         default: {
         }
     }
@@ -745,6 +892,16 @@ template void launchTCOLCMAXTestCase<91>(void *out, void *src, aclrtStream strea
 template void launchTCOLCMAXTestCase<92>(void *out, void *src, aclrtStream stream);
 template void launchTCOLCMAXTestCase<93>(void *out, void *src, aclrtStream stream);
 
+// Systematic design principle coverage (pure index)
+template void launchTCOLCMAXTestCase<101>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMAXTestCase<102>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMAXTestCase<103>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMAXTestCase<104>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMAXTestCase<105>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMAXTestCase<106>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMAXTestCase<107>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMAXTestCase<108>(void *out, void *src, aclrtStream stream);
+
 // =============================================================================
 // Value + index template instantiations
 // =============================================================================
@@ -775,3 +932,13 @@ template void launchTCOLIDXVALMAXCase<86>(void *outVal, void *outIdx, void *src,
 template void launchTCOLIDXVALMAXCase<91>(void *outVal, void *outIdx, void *src, aclrtStream stream);
 template void launchTCOLIDXVALMAXCase<92>(void *outVal, void *outIdx, void *src, aclrtStream stream);
 template void launchTCOLIDXVALMAXCase<93>(void *outVal, void *outIdx, void *src, aclrtStream stream);
+
+// Systematic design principle coverage (value + index)
+template void launchTCOLIDXVALMAXCase<201>(void *outVal, void *outIdx, void *src, aclrtStream stream);
+template void launchTCOLIDXVALMAXCase<202>(void *outVal, void *outIdx, void *src, aclrtStream stream);
+template void launchTCOLIDXVALMAXCase<203>(void *outVal, void *outIdx, void *src, aclrtStream stream);
+template void launchTCOLIDXVALMAXCase<204>(void *outVal, void *outIdx, void *src, aclrtStream stream);
+template void launchTCOLIDXVALMAXCase<205>(void *outVal, void *outIdx, void *src, aclrtStream stream);
+template void launchTCOLIDXVALMAXCase<206>(void *outVal, void *outIdx, void *src, aclrtStream stream);
+template void launchTCOLIDXVALMAXCase<207>(void *outVal, void *outIdx, void *src, aclrtStream stream);
+template void launchTCOLIDXVALMAXCase<208>(void *outVal, void *outIdx, void *src, aclrtStream stream);

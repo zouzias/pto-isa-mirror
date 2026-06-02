@@ -135,3 +135,71 @@ TEST_F(TANDSTest, case9)
 {
     test_tands<int32_t, 8, 8, 8, 8>();
 }
+
+// Group A: uint16 (block_size=128, align_unit=16) - 8 systematic cases
+TEST_F(TANDSTest, case10)
+{
+    test_tands<uint16_t, 8, 64, 8, 64>();
+}
+TEST_F(TANDSTest, case11)
+{
+    test_tands<uint16_t, 8, 64, 8, 48>();
+}
+TEST_F(TANDSTest, case12)
+{
+    test_tands<uint16_t, 8, 64, 8, 33>();
+}
+TEST_F(TANDSTest, case13)
+{
+    test_tands<uint16_t, 12, 64, 8, 48>();
+}
+TEST_F(TANDSTest, case14)
+{
+    test_tands<uint16_t, 4, 144, 4, 144>();
+}
+TEST_F(TANDSTest, case15)
+{
+    test_tands<uint16_t, 4, 144, 4, 128>();
+}
+TEST_F(TANDSTest, case16)
+{
+    test_tands<uint16_t, 4, 144, 4, 129>();
+}
+TEST_F(TANDSTest, case17)
+{
+    test_tands<uint16_t, 8, 144, 4, 129>();
+}
+
+// Group B: uint32 (block_size=64, align_unit=8) - 8 systematic cases
+TEST_F(TANDSTest, case18)
+{
+    test_tands<uint32_t, 8, 64, 8, 64>();
+}
+TEST_F(TANDSTest, case19)
+{
+    test_tands<uint32_t, 8, 64, 8, 48>();
+}
+TEST_F(TANDSTest, case20)
+{
+    test_tands<uint32_t, 8, 64, 8, 63>();
+}
+TEST_F(TANDSTest, case21)
+{
+    test_tands<uint32_t, 12, 64, 8, 48>();
+}
+TEST_F(TANDSTest, case22)
+{
+    test_tands<uint32_t, 4, 96, 4, 96>();
+}
+TEST_F(TANDSTest, case23)
+{
+    test_tands<uint32_t, 4, 96, 4, 72>();
+}
+TEST_F(TANDSTest, case24)
+{
+    test_tands<uint32_t, 4, 96, 4, 65>();
+}
+TEST_F(TANDSTest, case25)
+{
+    test_tands<uint32_t, 8, 96, 4, 65>();
+}

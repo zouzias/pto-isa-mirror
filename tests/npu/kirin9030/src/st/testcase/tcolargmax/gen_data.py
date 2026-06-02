@@ -165,6 +165,29 @@ if __name__ == "__main__":
         TColCMaxParams("TCOLCMAXTest.case091", np.uint16, 16, 16, 128, 120, True),
         TColCMaxParams("TCOLCMAXTest.case092", np.float16, 16, 16, 96, 88, True),
         TColCMaxParams("TCOLCMAXTest.case093", np.uint16, 4, 4, 48, 34, True),
+        # =========================================================================
+        # Systematic design principle coverage (new 16 cases)
+        # Pure index mode: FP32, 8 cases covering all principle branches
+        # =========================================================================
+        TColCMaxParams("TCOLCMAXTest.case101", np.float32, 8, 8, 64, 64),
+        TColCMaxParams("TCOLCMAXTest.case102", np.float32, 8, 8, 64, 48),
+        TColCMaxParams("TCOLCMAXTest.case103", np.float32, 8, 8, 64, 56),
+        TColCMaxParams("TCOLCMAXTest.case104", np.float32, 12, 8, 64, 48),
+        TColCMaxParams("TCOLCMAXTest.case105", np.float32, 4, 4, 96, 96),
+        TColCMaxParams("TCOLCMAXTest.case106", np.float32, 4, 4, 96, 72),
+        TColCMaxParams("TCOLCMAXTest.case107", np.float32, 4, 4, 96, 80),
+        TColCMaxParams("TCOLCMAXTest.case108", np.float32, 8, 4, 96, 80),
+        # =========================================================================
+        # Value + index mode: FP16, 8 cases covering all principle branches
+        # =========================================================================
+        TColCMaxParams("TCOLCMAXTest.case201", np.float16, 8, 8, 64, 64, True),
+        TColCMaxParams("TCOLCMAXTest.case202", np.float16, 8, 8, 64, 48, True),
+        TColCMaxParams("TCOLCMAXTest.case203", np.float16, 8, 8, 64, 32, True),
+        TColCMaxParams("TCOLCMAXTest.case204", np.float16, 12, 8, 64, 48, True),
+        TColCMaxParams("TCOLCMAXTest.case205", np.float16, 2, 2, 144, 144, True),
+        TColCMaxParams("TCOLCMAXTest.case206", np.float16, 2, 2, 144, 128, True),
+        TColCMaxParams("TCOLCMAXTest.case207", np.float16, 2, 2, 144, 112, True),
+        TColCMaxParams("TCOLCMAXTest.case208", np.float16, 4, 2, 144, 112, True),
     ]
 
     for _, case in enumerate(case_params_list):

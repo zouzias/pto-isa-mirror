@@ -73,6 +73,24 @@ if __name__ == "__main__":
         TColCMinParams("TCOLCMINTest.case71", np.uint32, 1, 1, 256, 255),
         TColCMinParams("TCOLCMINTest.case72", np.uint32, 16, 16, 128, 127),
         TColCMinParams("TCOLCMINTest.case73", np.uint32, 16, 15, 256, 255),
+        # Group A: FP32 (block_size=64, align_unit=8) - 8 systematic cases
+        TColCMinParams("TCOLCMINTest.case81", np.float32, 8, 8, 64, 64),
+        TColCMinParams("TCOLCMINTest.case82", np.float32, 8, 8, 64, 48),
+        TColCMinParams("TCOLCMINTest.case83", np.float32, 8, 8, 64, 63),
+        TColCMinParams("TCOLCMINTest.case84", np.float32, 12, 8, 64, 48),
+        TColCMinParams("TCOLCMINTest.case85", np.float32, 4, 4, 96, 96),
+        TColCMinParams("TCOLCMINTest.case86", np.float32, 4, 4, 96, 72),
+        TColCMinParams("TCOLCMINTest.case87", np.float32, 4, 4, 96, 65),
+        TColCMinParams("TCOLCMINTest.case88", np.float32, 8, 4, 96, 65),
+        # Group B: FP16 (block_size=128, align_unit=16) - 8 systematic cases
+        TColCMinParams("TCOLCMINTest.case91", np.float16, 8, 8, 64, 64),
+        TColCMinParams("TCOLCMINTest.case92", np.float16, 8, 8, 64, 48),
+        TColCMinParams("TCOLCMINTest.case93", np.float16, 8, 8, 64, 33),
+        TColCMinParams("TCOLCMINTest.case94", np.float16, 12, 8, 64, 48),
+        TColCMinParams("TCOLCMINTest.case95", np.float16, 2, 2, 144, 144),
+        TColCMinParams("TCOLCMINTest.case96", np.float16, 2, 2, 144, 128),
+        TColCMinParams("TCOLCMINTest.case97", np.float16, 2, 2, 144, 129),
+        TColCMinParams("TCOLCMINTest.case98", np.float16, 4, 2, 144, 129),
     ]
 
     for _, case in enumerate(case_params_list):

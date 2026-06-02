@@ -216,3 +216,87 @@ TEST_F(TCOLCMINTest, case73)
     bool ret = TCOLCMINTestFramework<73, uint32_t, 16, 15, 1, 256, 255>();
     EXPECT_TRUE(ret);
 }
+
+// Group A: FP32 (block_size=64, align_unit=8) - 8 systematic cases
+TEST_F(TCOLCMINTest, case81)
+{
+    bool ret = TCOLCMINTestFramework<81, float, 8, 8, 1, 64, 64>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMINTest, case82)
+{
+    bool ret = TCOLCMINTestFramework<82, float, 8, 8, 1, 64, 48>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMINTest, case83)
+{
+    bool ret = TCOLCMINTestFramework<83, float, 8, 8, 1, 64, 63>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMINTest, case84)
+{
+    bool ret = TCOLCMINTestFramework<84, float, 12, 8, 1, 64, 48>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMINTest, case85)
+{
+    bool ret = TCOLCMINTestFramework<85, float, 4, 4, 1, 96, 96>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMINTest, case86)
+{
+    bool ret = TCOLCMINTestFramework<86, float, 4, 4, 1, 96, 72>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMINTest, case87)
+{
+    bool ret = TCOLCMINTestFramework<87, float, 4, 4, 1, 96, 65>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMINTest, case88)
+{
+    bool ret = TCOLCMINTestFramework<88, float, 8, 4, 1, 96, 65>();
+    EXPECT_TRUE(ret);
+}
+
+// Group B: FP16 (block_size=128, align_unit=16) - 8 systematic cases
+TEST_F(TCOLCMINTest, case91)
+{
+    bool ret = TCOLCMINTestFramework<91, aclFloat16, 8, 8, 1, 64, 64>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMINTest, case92)
+{
+    bool ret = TCOLCMINTestFramework<92, aclFloat16, 8, 8, 1, 64, 48>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMINTest, case93)
+{
+    bool ret = TCOLCMINTestFramework<93, aclFloat16, 8, 8, 1, 64, 33>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMINTest, case94)
+{
+    bool ret = TCOLCMINTestFramework<94, aclFloat16, 12, 8, 1, 64, 48>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMINTest, case95)
+{
+    bool ret = TCOLCMINTestFramework<95, aclFloat16, 2, 2, 1, 144, 144>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMINTest, case96)
+{
+    bool ret = TCOLCMINTestFramework<96, aclFloat16, 2, 2, 1, 144, 128>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMINTest, case97)
+{
+    bool ret = TCOLCMINTestFramework<97, aclFloat16, 2, 2, 1, 144, 129>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMINTest, case98)
+{
+    bool ret = TCOLCMINTestFramework<98, aclFloat16, 4, 2, 1, 144, 129>();
+    EXPECT_TRUE(ret);
+}

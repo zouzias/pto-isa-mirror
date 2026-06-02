@@ -132,7 +132,8 @@ void LaunchTRowArgMinHalf(aclFloat16 *outVal, TIdx *outIdx, aclFloat16 *src, voi
         <<<1, nullptr, stream>>>((half *)outVal, outIdx, (half *)src);
 }
 
-// Dest column must be 32b aligned, rows should always be 1
+// If dest columns is 1, dest layout will be colMajor, so dest rows must be 32B aligned.
+// Else if dest columns is not 1, dest layout will be rowMajor, so dest columns must be 32B aligned.
 template void LaunchTRowArgMin<uint32_t, float, 8, 1, 8, 8, 8, 8>(uint32_t *out, float *src, void *stream);
 template void LaunchTRowArgMin<uint32_t, float, 1024, 1, 1024, 8, 1024, 8>(uint32_t *out, float *src, void *stream);
 template void LaunchTRowArgMin<uint32_t, float, 16, 1, 13, 16, 13, 13>(uint32_t *out, float *src, void *stream);

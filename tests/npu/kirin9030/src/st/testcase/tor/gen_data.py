@@ -66,6 +66,40 @@ if __name__ == "__main__":
         TOrParams("TORTest.case7", np.int8, 32, 32, 32, 32),
         TOrParams("TORTest.case8", np.int16, 16, 16, 16, 16),
         TOrParams("TORTest.case9", np.int32, 8, 8, 8, 8),
+        # Group A: uint16 (block_size=128, align_unit=16) - 8 systematic cases
+        # Case 10: Baseline - VC=TC, TC<=128, VR=TR, aligned
+        TOrParams("TORTest.case10", np.uint16, 8, 64, 8, 64),
+        # Case 11: validCol<Col - VC<TC, TC<=128, VR=TR, aligned
+        TOrParams("TORTest.case11", np.uint16, 8, 64, 8, 48),
+        # Case 12: no_align - VC<TC, TC<=128, VR=TR, no_align
+        TOrParams("TORTest.case12", np.uint16, 8, 64, 8, 33),
+        # Case 13: validRow<Row - VC<TC, TC<=128, VR<TR, aligned
+        TOrParams("TORTest.case13", np.uint16, 12, 64, 8, 48),
+        # Case 14: stride>rep, full - VC=TC, TC>128, VR=TR, aligned
+        TOrParams("TORTest.case14", np.uint16, 4, 144, 4, 144),
+        # Case 15: stride>rep + VC<TC - VC<TC, TC>128, VR=TR, aligned
+        TOrParams("TORTest.case15", np.uint16, 4, 144, 4, 128),
+        # Case 16: stride>rep + no_align - VC<TC, TC>128, VR=TR, no_align
+        TOrParams("TORTest.case16", np.uint16, 4, 144, 4, 129),
+        # Case 17: All edge conditions - VC<TC, TC>128, VR<TR, no_align
+        TOrParams("TORTest.case17", np.uint16, 8, 144, 4, 129),
+        # Group B: uint32 (block_size=64, align_unit=8) - 8 systematic cases
+        # Case 18: Baseline - VC=TC, TC<=64, VR=TR, aligned
+        TOrParams("TORTest.case18", np.uint32, 8, 64, 8, 64),
+        # Case 19: validCol<Col - VC<TC, TC<=64, VR=TR, aligned
+        TOrParams("TORTest.case19", np.uint32, 8, 64, 8, 48),
+        # Case 20: no_align - VC<TC, TC<=64, VR=TR, no_align
+        TOrParams("TORTest.case20", np.uint32, 8, 64, 8, 63),
+        # Case 21: validRow<Row - VC<TC, TC<=64, VR<TR, aligned
+        TOrParams("TORTest.case21", np.uint32, 12, 64, 8, 48),
+        # Case 22: stride>rep, full - VC=TC, TC>64, VR=TR, aligned
+        TOrParams("TORTest.case22", np.uint32, 4, 96, 4, 96),
+        # Case 23: stride>rep + VC<TC - VC<TC, TC>64, VR=TR, aligned
+        TOrParams("TORTest.case23", np.uint32, 4, 96, 4, 72),
+        # Case 24: stride>rep + no_align - VC<TC, TC>64, VR=TR, no_align
+        TOrParams("TORTest.case24", np.uint32, 4, 96, 4, 65),
+        # Case 25: All edge conditions - VC<TC, TC>64, VR<TR, no_align
+        TOrParams("TORTest.case25", np.uint32, 8, 96, 4, 65),
     ]
 
     for param in case_params_list:

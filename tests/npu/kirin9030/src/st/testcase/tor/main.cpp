@@ -130,3 +130,87 @@ TEST_F(TORTest, case9)
 {
     test_tor<int32_t, 8, 8, 8, 8>();
 }
+
+// Group A: uint16 (block_size=128, align_unit=16) - 8 systematic cases
+// Case 10: Baseline - VC=TC, TC<=128, VR=TR, aligned
+TEST_F(TORTest, case10)
+{
+    test_tor<uint16_t, 8, 64, 8, 64>();
+}
+// Case 11: validCol<Col - VC<TC, TC<=128, VR=TR, aligned
+TEST_F(TORTest, case11)
+{
+    test_tor<uint16_t, 8, 64, 8, 48>();
+}
+// Case 12: no_align - VC<TC, TC<=128, VR=TR, no_align
+TEST_F(TORTest, case12)
+{
+    test_tor<uint16_t, 8, 64, 8, 33>();
+}
+// Case 13: validRow<Row - VC<TC, TC<=128, VR<TR, aligned
+TEST_F(TORTest, case13)
+{
+    test_tor<uint16_t, 12, 64, 8, 48>();
+}
+// Case 14: stride>rep, full - VC=TC, TC>128, VR=TR, aligned
+TEST_F(TORTest, case14)
+{
+    test_tor<uint16_t, 4, 144, 4, 144>();
+}
+// Case 15: stride>rep + VC<TC - VC<TC, TC>128, VR=TR, aligned
+TEST_F(TORTest, case15)
+{
+    test_tor<uint16_t, 4, 144, 4, 128>();
+}
+// Case 16: stride>rep + no_align - VC<TC, TC>128, VR=TR, no_align
+TEST_F(TORTest, case16)
+{
+    test_tor<uint16_t, 4, 144, 4, 129>();
+}
+// Case 17: All edge conditions - VC<TC, TC>128, VR<TR, no_align
+TEST_F(TORTest, case17)
+{
+    test_tor<uint16_t, 8, 144, 4, 129>();
+}
+
+// Group B: uint32 (block_size=64, align_unit=8) - 8 systematic cases
+// Case 18: Baseline - VC=TC, TC<=64, VR=TR, aligned
+TEST_F(TORTest, case18)
+{
+    test_tor<uint32_t, 8, 64, 8, 64>();
+}
+// Case 19: validCol<Col - VC<TC, TC<=64, VR=TR, aligned
+TEST_F(TORTest, case19)
+{
+    test_tor<uint32_t, 8, 64, 8, 48>();
+}
+// Case 20: no_align - VC<TC, TC<=64, VR=TR, no_align
+TEST_F(TORTest, case20)
+{
+    test_tor<uint32_t, 8, 64, 8, 63>();
+}
+// Case 21: validRow<Row - VC<TC, TC<=64, VR<TR, aligned
+TEST_F(TORTest, case21)
+{
+    test_tor<uint32_t, 12, 64, 8, 48>();
+}
+// Case 22: stride>rep, full - VC=TC, TC>64, VR=TR, aligned
+TEST_F(TORTest, case22)
+{
+    test_tor<uint32_t, 4, 96, 4, 96>();
+}
+// Case 23: stride>rep + VC<TC - VC<TC, TC>64, VR=TR, aligned
+TEST_F(TORTest, case23)
+{
+    test_tor<uint32_t, 4, 96, 4, 72>();
+}
+// Case 24: stride>rep + no_align - VC<TC, TC>64, VR=TR, no_align
+TEST_F(TORTest, case24)
+{
+    test_tor<uint32_t, 4, 96, 4, 65>();
+}
+// Case 25: All edge conditions - VC<TC, TC>64, VR<TR, no_align
+TEST_F(TORTest, case25)
+{
+    test_tor<uint32_t, 8, 96, 4, 65>();
+}

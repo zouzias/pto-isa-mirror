@@ -135,3 +135,68 @@ TEST_F(TORSTest, case9)
 {
     test_tors<int32_t, 8, 8, 8, 8>();
 }
+
+TEST_F(TORSTest, case10)
+{
+    test_tors<uint32_t, 8, 64, 8, 64>();
+}
+TEST_F(TORSTest, case11)
+{
+    test_tors<uint32_t, 4, 64, 4, 48>();
+}
+TEST_F(TORSTest, case12)
+{
+    test_tors<int32_t, 4, 64, 4, 63>();
+}
+TEST_F(TORSTest, case13)
+{
+    test_tors<uint32_t, 8, 64, 4, 48>();
+}
+TEST_F(TORSTest, case14)
+{
+    test_tors<uint32_t, 4, 96, 4, 96>();
+}
+TEST_F(TORSTest, case15)
+{
+    test_tors<uint32_t, 4, 96, 4, 72>();
+}
+TEST_F(TORSTest, case16)
+{
+    test_tors<int32_t, 4, 96, 4, 65>();
+}
+TEST_F(TORSTest, case17)
+{
+    test_tors<int32_t, 8, 96, 4, 65>();
+}
+TEST_F(TORSTest, case18)
+{
+    test_tors<uint16_t, 8, 64, 8, 64>();
+}
+TEST_F(TORSTest, case19)
+{
+    test_tors<uint16_t, 8, 64, 8, 48>();
+}
+TEST_F(TORSTest, case20)
+{
+    test_tors<int16_t, 8, 48, 8, 33>();
+}
+TEST_F(TORSTest, case21)
+{
+    test_tors<uint16_t, 12, 64, 8, 48>();
+}
+TEST_F(TORSTest, case22)
+{
+    test_tors<uint16_t, 2, 144, 2, 144>();
+}
+TEST_F(TORSTest, case23)
+{
+    test_tors<uint16_t, 2, 144, 2, 128>();
+}
+TEST_F(TORSTest, case24)
+{
+    test_tors<uint16_t, 2, 144, 2, 129>();
+}
+TEST_F(TORSTest, case25)
+{
+    test_tors<uint16_t, 4, 144, 2, 129>();
+}

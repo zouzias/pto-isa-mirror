@@ -134,6 +134,22 @@ if __name__ == "__main__":
         TPartArgMinParams(np.float32, np.uint32, 12, 63, 12, 63, 6, 60, 12, 64, 12, 64, 6, 64),
         TPartArgMinParams(np.float16, np.int16, 10, 31, 8, 16, 10, 31, 10, 32, 8, 32, 12, 32),
         TPartArgMinParams(np.float16, np.uint16, 5, 33, 5, 33, 5, 30, 8, 48, 5, 48, 6, 48),
+        # TPartArgMinParams(np.float32, np.uint32, 8, 48, 8, 32, 4, 41, 8, 48, 8, 48, 4, 96),
+        TPartArgMinParams(np.float32, np.uint32, 4, 48, 4, 48, 2, 48, 4, 64, 4, 48, 2, 96),
+        TPartArgMinParams(np.float32, np.uint32, 4, 57, 4, 57, 2, 48, 4, 64, 4, 64, 2, 64),
+        TPartArgMinParams(np.float32, np.uint32, 4, 48, 4, 48, 2, 41, 8, 64, 8, 64, 4, 64),
+        # TPartArgMinParams(np.float32, np.uint32, 4, 96, 4, 72, 2, 48, 4, 96, 4, 96, 2, 64),
+        TPartArgMinParams(np.float32, np.uint32, 4, 72, 4, 72, 2, 48, 4, 96, 4, 96, 2, 64),
+        TPartArgMinParams(np.float32, np.int32, 4, 65, 4, 65, 2, 48, 4, 96, 4, 96, 2, 64),
+        TPartArgMinParams(np.float32, np.int32, 4, 65, 4, 65, 2, 40, 8, 96, 8, 96, 4, 64),
+        TPartArgMinParams(np.float16, np.uint16, 8, 48, 8, 48, 4, 48, 8, 64, 8, 64, 4, 144),
+        TPartArgMinParams(np.float16, np.uint16, 4, 48, 4, 48, 2, 48, 4, 64, 4, 48, 2, 144),
+        TPartArgMinParams(np.float16, np.int16, 4, 49, 4, 49, 2, 33, 4, 64, 4, 64, 2, 48),
+        TPartArgMinParams(np.float16, np.uint16, 4, 48, 4, 48, 2, 33, 8, 64, 8, 64, 4, 64),
+        # TPartArgMinParams(np.float16, np.uint16, 2, 144, 2, 128, 2, 64, 2, 144, 2, 144, 2, 64),
+        TPartArgMinParams(np.float16, np.uint16, 2, 128, 2, 128, 2, 64, 2, 144, 2, 144, 2, 64),
+        TPartArgMinParams(np.float16, np.int16, 2, 129, 2, 129, 2, 64, 2, 144, 2, 144, 2, 64),
+        # TPartArgMinParams(np.float16, np.uint16, 2, 129, 2, 129, 2, 48, 4, 144, 4, 144, 4, 64),
     ]
 
     for param in case_params_list:

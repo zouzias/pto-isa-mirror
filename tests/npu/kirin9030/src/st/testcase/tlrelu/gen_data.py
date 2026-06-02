@@ -54,7 +54,25 @@ if __name__ == "__main__":
         TLReluParams("TLRELUTest.case1", np.float32, 32, 128, 32, 64),
         TLReluParams("TLRELUTest.case2", np.float16, 63, 128, 63, 64),
         TLReluParams("TLRELUTest.case3", np.float32, 7, 512, 7, 64 * 7),
-        TLReluParams("TLRELUTest.case4", np.float32, 256, 32, 256, 16)
+        TLReluParams("TLRELUTest.case4", np.float32, 256, 32, 256, 16),
+        # Group A: FP32 (block_size=64, align_unit=8) - 8 systematic cases, col 32B aligned (multiple of 8)
+        TLReluParams("TLRELUTest.case5", np.float32, 8, 64, 8, 64),
+        TLReluParams("TLRELUTest.case6", np.float32, 8, 64, 8, 48),
+        TLReluParams("TLRELUTest.case7", np.float32, 8, 64, 8, 56),
+        TLReluParams("TLRELUTest.case8", np.float32, 12, 64, 8, 48),
+        TLReluParams("TLRELUTest.case9", np.float32, 4, 96, 4, 96),
+        TLReluParams("TLRELUTest.case10", np.float32, 4, 96, 4, 72),
+        TLReluParams("TLRELUTest.case11", np.float32, 4, 96, 4, 80),
+        TLReluParams("TLRELUTest.case12", np.float32, 8, 96, 4, 80),
+        # Group B: FP16 (block_size=128, align_unit=16) - 8 systematic cases, col 32B aligned (multiple of 16)
+        TLReluParams("TLRELUTest.case13", np.float16, 8, 64, 8, 64),
+        TLReluParams("TLRELUTest.case14", np.float16, 8, 64, 8, 48),
+        TLReluParams("TLRELUTest.case15", np.float16, 8, 64, 8, 32),
+        TLReluParams("TLRELUTest.case16", np.float16, 12, 64, 8, 48),
+        TLReluParams("TLRELUTest.case17", np.float16, 2, 144, 2, 144),
+        TLReluParams("TLRELUTest.case18", np.float16, 2, 144, 2, 128),
+        TLReluParams("TLRELUTest.case19", np.float16, 2, 144, 2, 112),
+        TLReluParams("TLRELUTest.case20", np.float16, 4, 144, 2, 112),
     ]
 
     for _, case in enumerate(case_params_list):

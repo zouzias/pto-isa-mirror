@@ -66,6 +66,22 @@ if __name__ == "__main__":
         TAndParams("TANDTest.case7", np.int8, 32, 32, 32, 32),
         TAndParams("TANDTest.case8", np.int16, 16, 16, 16, 16),
         TAndParams("TANDTest.case9", np.int32, 8, 8, 8, 8),
+        TAndParams("TANDTest.case10", np.uint32, 8, 64, 8, 64),
+        TAndParams("TANDTest.case11", np.uint32, 4, 64, 4, 48),
+        TAndParams("TANDTest.case12", np.int32, 4, 64, 4, 63),
+        TAndParams("TANDTest.case13", np.uint32, 8, 64, 4, 48),
+        TAndParams("TANDTest.case14", np.uint32, 4, 96, 4, 96),
+        TAndParams("TANDTest.case15", np.uint32, 4, 96, 4, 72),
+        TAndParams("TANDTest.case16", np.int32, 4, 96, 4, 65),
+        TAndParams("TANDTest.case17", np.int32, 8, 96, 4, 65),
+        TAndParams("TANDTest.case18", np.uint16, 8, 64, 8, 64),
+        TAndParams("TANDTest.case19", np.uint16, 8, 64, 8, 48),
+        TAndParams("TANDTest.case20", np.int16, 8, 48, 8, 33),
+        TAndParams("TANDTest.case21", np.uint16, 12, 64, 8, 48),
+        TAndParams("TANDTest.case22", np.uint16, 2, 144, 2, 144),
+        TAndParams("TANDTest.case23", np.uint16, 2, 144, 2, 128),
+        TAndParams("TANDTest.case24", np.int16, 2, 144, 2, 129),
+        TAndParams("TANDTest.case25", np.uint16, 4, 144, 2, 129),
     ]
 
     for param in case_params_list:
