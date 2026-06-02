@@ -48,6 +48,7 @@ PTO_INTERNAL void TputTransferOnce(DstGT &dst, SrcGT &src, TileData &tile)
     TLOAD(tile, src);
     set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    pipe_barrier(PIPE_ALL);
     TSTORE_IMPL<TileData, DstGT, atomicType>(dst, tile);
     set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
@@ -319,6 +320,7 @@ PTO_INTERNAL void TputPingPongProcessChunk(GlobalDstData &dstGlobalData, GlobalS
         TileData &storeTile = pp.usePing ? pongTile : pingTile;
         event_t prevEvent = pp.usePing ? EVENT_ID1 : EVENT_ID0;
         wait_flag(PIPE_MTE2, PIPE_MTE3, prevEvent);
+        pipe_barrier(PIPE_ALL);
         DynShape pendShape(1, 1, 1, pp.pendingRows, pp.pendingCols);
         DstViewT pendView(dstGlobalData.data() + pp.pendingDstOffset, pendShape, dstChunkStride);
         TSTORE_IMPL<TileData, DstViewT, atomicType>(pendView, storeTile);
@@ -353,6 +355,7 @@ PTO_INTERNAL void TputPingPongFlush(GlobalDstData &dstGlobalData, TileData &ping
     TileData &lastTile = pp.usePing ? pongTile : pingTile;
     event_t lastEvent = pp.usePing ? EVENT_ID1 : EVENT_ID0;
     wait_flag(PIPE_MTE2, PIPE_MTE3, lastEvent);
+    pipe_barrier(PIPE_ALL);
     DynShape lastShape(1, 1, 1, pp.pendingRows, pp.pendingCols);
     DstViewT lastView(dstGlobalData.data() + pp.pendingDstOffset, lastShape, dstChunkStride);
     TSTORE_IMPL<TileData, DstViewT, atomicType>(lastView, lastTile);
