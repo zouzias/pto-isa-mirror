@@ -61,6 +61,7 @@ constexpr uint64_t kM2RouteQuantS32ScratchOffset = 0xB000;
 constexpr uint64_t kM2RouteQuantF16ScratchOffset = 0xC000;
 constexpr uint64_t kM2RoutePackedRowsUbAddr = 0xD000;
 constexpr uint32_t kM2RoutePackedRowsUbCapacity = 256U;
+constexpr uint32_t kM2RouteQuantReuseFloatCols = 512U;
 constexpr int kM2EpilogueTileCols = 1024;
 constexpr uint64_t kM2EpilogueAccTileOffset = 0x0;
 constexpr uint64_t kM2EpilogueFloatTileOffset = 0x1000;
@@ -969,15 +970,31 @@ AICORE inline void StoreScalarI32(__gm__ int32_t *ptr, int32_t value)
     *ptr = value;
 }
 
-AICORE inline void InvalidateGmCacheLines(__gm__ void *ptr, uint32_t bytes)
+AICORE inline void PtoGmStoreDrain()
 {
     pipe_barrier(PIPE_ALL);
+    dsb(DSB_DDR);
+}
+
+AICORE inline void PtoGmPublishRangeNoFinalDsb(__gm__ void *ptr, uint32_t bytes)
+{
     uint64_t start = reinterpret_cast<uint64_t>(ptr) & ~static_cast<uint64_t>(63);
     uint64_t end = (reinterpret_cast<uint64_t>(ptr) + bytes + 63) & ~static_cast<uint64_t>(63);
     for (uint64_t addr = start; addr < end; addr += 64) {
         dcci(reinterpret_cast<__gm__ void *>(addr), SINGLE_CACHE_LINE);
     }
+}
+
+AICORE inline void PtoGmPublishBatchFinish()
+{
     dsb(DSB_DDR);
+}
+
+AICORE inline void InvalidateGmCacheLines(__gm__ void *ptr, uint32_t bytes)
+{
+    PtoGmStoreDrain();
+    PtoGmPublishRangeNoFinalDsb(ptr, bytes);
+    PtoGmPublishBatchFinish();
 }
 
 AICORE inline uint32_t ExpertNumPaddedDevice(DispatchCombineTileShape shape)
@@ -1496,7 +1513,6 @@ AICORE inline void M2ClearDispatchState(moe_new_dispatch_combine_a8w8::ShapeConf
     uint32_t expandedRows = shape.m * shape.topK;
     uint32_t rankExpertCount = shape.rankNum * shape.expertPerRank;
     uint32_t tokenMatrixStorageCount = static_cast<uint32_t>(shape.rankNum * M2TokenPerExpertMatrixRowStride(shape));
-    uint32_t rowBytes = static_cast<uint32_t>(M2DispatchPayloadRowBytes(shape));
     uint32_t localRows = static_cast<uint32_t>(M2LocalRows(shape));
     uint32_t syncGroupCap = shape.expertPerRank + 1U;
     uint32_t gmmTaskCap = static_cast<uint32_t>(M2GmmTileTaskCapacity(shape));
@@ -1543,10 +1559,9 @@ AICORE inline void M2ClearDispatchState(moe_new_dispatch_combine_a8w8::ShapeConf
     }
     for (uint32_t row = 0; row < localRows; ++row) {
         workspaceView.routingPerTokenScale[row] = 1.0f;
-        for (uint32_t col = 0; col < rowBytes; ++col) {
-            workspaceView.gmm1InputInt8[static_cast<uint64_t>(row) * rowBytes + col] = 0;
-        }
     }
+    // gmm1InputInt8 is produced by dispatch gather. Clearing the full row buffer here would serialize a large GM memset
+    // into the front-reorder prepare path.
     // Peer-visible count matrix and ready signals are cleared by the host before
     // the cross-rank launch. Clearing them inside the kernel races with peer
     // ranks that may already have published their count rows.
@@ -1558,6 +1573,34 @@ AICORE inline void M2ClearDispatchState(moe_new_dispatch_combine_a8w8::ShapeConf
             StoreScalarI32(workspaceView.subTileOwnerSegments + idx * kM2OwnerSegmentFields + field, 0);
         }
         StoreScalarI32(workspaceView.subTileReady + idx * 16U, 0);
+    }
+}
+
+AICORE inline void M2ClearInitQuantState(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
+                                         M2WorkspaceViewDevice workspaceView)
+{
+    uint32_t globalExpertNum = shape.rankNum * shape.expertPerRank;
+    uint32_t rankExpertCount = shape.rankNum * shape.expertPerRank;
+    uint32_t tokenMatrixStorageCount = static_cast<uint32_t>(shape.rankNum * M2TokenPerExpertMatrixRowStride(shape));
+    uint32_t localRows = static_cast<uint32_t>(M2LocalRows(shape));
+    for (uint32_t idx = 0; idx < globalExpertNum; ++idx) {
+        StoreScalarI32(workspaceView.blockTokenPerExpert + idx, 0);
+        StoreScalarI32(workspaceView.blockPrefixPerExpert + idx, 0);
+        StoreScalarI32(workspaceView.tokenOwnerRankOffsets + idx, 0);
+    }
+    for (uint32_t idx = 0; idx < tokenMatrixStorageCount; ++idx) {
+        StoreScalarI32(workspaceView.tokenPerExpertMatrix + idx, 0);
+    }
+    for (uint32_t idx = 0; idx < rankExpertCount; ++idx) {
+        StoreScalarI32(workspaceView.cumsumMM + idx, 0);
+        StoreScalarI32(workspaceView.preSumBeforeRank + idx, 0);
+    }
+    for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {
+        StoreScalarI32(workspaceView.expertTokenNums + localExpert, 0);
+        StoreScalarI32(workspaceView.dispatchGroupReady + localExpert * 16U, 0);
+    }
+    for (uint32_t row = 0; row < localRows; ++row) {
+        workspaceView.routingPerTokenScale[row] = 1.0f;
     }
 }
 
@@ -1758,7 +1801,11 @@ AICORE inline int32_t M3NCountActiveDispatchWorkers(moe_new_dispatch_combine_a8w
         }
         if (workerRows > 0) {
             ++activeWorkers;
-            activeWorkerMask |= static_cast<int32_t>(1U << worker);
+            if (worker < 31U && activeWorkerMask >= 0) {
+                activeWorkerMask |= static_cast<int32_t>(1U << worker);
+            } else {
+                activeWorkerMask = -1;
+            }
         }
     }
     StoreScalarI32(activeWorkerMaskOut, activeWorkerMask);
@@ -2059,28 +2106,51 @@ AICORE inline void M2StoreZeroPadToPackedRows(M2WorkspaceViewDevice workspaceVie
                                   colBegin, cols);
 }
 
-AICORE inline void M2InvalidatePackedRows(M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
-                                          uint32_t routeBase, uint32_t topK, uint32_t localRows,
-                                          const M2RoutePackedRowsCache &cache, uint32_t rowBytes)
+AICORE inline void M2QuantizeTokenToPackedRowsReuseFloat(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
+                                                         M2WorkspaceViewDevice workspaceView,
+                                                         M2PeerWindowViewDevice localPeer, GM_ADDR inputA,
+                                                         uint32_t token, uint32_t rowBytes,
+                                                         const M2RoutePackedRowsCache &packedRows)
 {
-    if (!cache.overflow) {
-        for (uint32_t idx = 0; idx < cache.cachedRows; ++idx) {
-            uint32_t packedRow = static_cast<uint32_t>(M2RawUbLoadI32(kM2RoutePackedRowsUbAddr, idx));
-            __gm__ int8_t *dst = localPeer.dispatchPayload + static_cast<uint64_t>(packedRow) * rowBytes;
-            InvalidateGmCacheLines(dst, rowBytes);
-            InvalidateGmCacheLines(localPeer.dispatchScale + packedRow, sizeof(float));
+    uint32_t localRows = static_cast<uint32_t>(M2LocalRows(shape));
+    uint32_t routeBase = token * shape.topK;
+    uint32_t cols = shape.hiddenSize;
+    __gm__ half *input = reinterpret_cast<__gm__ half *>(inputA);
+    M2RouteQuantBuffer buffer = M2RouteQuantBufferByLane(0U);
+
+    M2RawVecDup<float>(kM2RouteRowMaxTileOffset, 0.0f, 1U);
+    M2RouteQuantLoadChunk(buffer, input, token, shape.hiddenSize, 0U, cols);
+    M2RouteQuantWaitLoadReady(buffer);
+    M2RawHalfToFloat(buffer.floatAddr, buffer.halfAddr, cols);
+    pipe_barrier(PIPE_V);
+    M2RawAbsFloat(buffer.absAddr, buffer.floatAddr, cols);
+    pipe_barrier(PIPE_V);
+    M2RawRowMaxFloat(kM2RouteChunkMaxTileOffset, buffer.absAddr, buffer.halfAddr, cols);
+    pipe_barrier(PIPE_V);
+    M2RawUpdateRowMax(kM2RouteRowMaxTileOffset, kM2RouteChunkMaxTileOffset);
+
+    pto::PtoSetWaitFlag<PIPE_V, PIPE_S>();
+    float maxAbs = M2RawUbScalarLoad<float>(kM2RouteRowMaxTileOffset);
+    pto::PtoSetWaitFlag<PIPE_S, PIPE_V>();
+    float scale = maxAbs == 0.0f ? 1.0f : maxAbs / 127.0f;
+    float invScale = maxAbs == 0.0f ? 1.0f : 1.0f / scale;
+    M2RawVecDup<float>(kM2RouteScaleStoreTileOffset, scale, 1U);
+    M2StoreScaleToPackedRows(workspaceView, localPeer, routeBase, shape.topK, localRows, packedRows);
+
+    M2RawMulFloat(buffer.floatAddr, invScale, cols);
+    pipe_barrier(PIPE_V);
+    M2RawFloatToInt8(buffer.quantAddr, buffer.floatAddr, cols);
+    pipe_barrier(PIPE_V);
+    M2StoreQuantChunkToPackedRows(workspaceView, localPeer, routeBase, shape.topK, localRows, packedRows, buffer,
+                                  rowBytes, 0U, cols);
+
+    for (uint32_t colBegin = shape.hiddenSize; colBegin < rowBytes; colBegin += kM2RouteQuantTileCols) {
+        uint32_t tailCols = rowBytes - colBegin;
+        if (tailCols > kM2RouteQuantTileCols) {
+            tailCols = kM2RouteQuantTileCols;
         }
-        return;
-    }
-    for (uint32_t slot = 0; slot < topK; ++slot) {
-        int32_t packedRow = LoadScalarI32(workspaceView.expandedRowIdx + routeBase + slot);
-        if (packedRow < 0 || static_cast<uint32_t>(packedRow) >= localRows) {
-            continue;
-        }
-        __gm__ int8_t *dst =
-            localPeer.dispatchPayload + static_cast<uint64_t>(static_cast<uint32_t>(packedRow)) * rowBytes;
-        InvalidateGmCacheLines(dst, rowBytes);
-        InvalidateGmCacheLines(localPeer.dispatchScale + static_cast<uint32_t>(packedRow), sizeof(float));
+        M2StoreZeroPadToPackedRows(workspaceView, localPeer, routeBase, shape.topK, localRows, packedRows, rowBytes,
+                                   colBegin, tailCols);
     }
 }
 
@@ -2093,6 +2163,10 @@ AICORE inline void M2QuantizeTokenToPackedRowsWithCache(moe_new_dispatch_combine
     uint32_t localRows = static_cast<uint32_t>(M2LocalRows(shape));
     uint32_t routeBase = token * shape.topK;
     if (packedRows.validRows == 0U) {
+        return;
+    }
+    if (shape.hiddenSize > 0U && shape.hiddenSize <= kM2RouteQuantReuseFloatCols) {
+        M2QuantizeTokenToPackedRowsReuseFloat(shape, workspaceView, localPeer, inputA, token, rowBytes, packedRows);
         return;
     }
 
@@ -2165,8 +2239,6 @@ AICORE inline void M2QuantizeTokenToPackedRowsWithCache(moe_new_dispatch_combine
         M2StoreZeroPadToPackedRows(workspaceView, localPeer, routeBase, shape.topK, localRows, packedRows, rowBytes,
                                    colBegin, cols);
     }
-
-    M2InvalidatePackedRows(workspaceView, localPeer, routeBase, shape.topK, localRows, packedRows, rowBytes);
 }
 
 AICORE inline void M2QuantizeTokenToPackedRows(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
@@ -2179,8 +2251,8 @@ AICORE inline void M2QuantizeTokenToPackedRows(moe_new_dispatch_combine_a8w8::Sh
     M2QuantizeTokenToPackedRowsWithCache(shape, workspaceView, localPeer, inputA, token, rowBytes, packedRows);
 }
 
-AICORE inline void M2InvalidatePackedRowToRouteIndexRange(__gm__ int32_t *basePtr, int32_t base, int32_t rows,
-                                                          uint32_t localRows)
+AICORE inline void M2PublishPackedRowToRouteIndexRangeNoFinalDsb(__gm__ int32_t *basePtr, int32_t base, int32_t rows,
+                                                                 uint32_t localRows)
 {
     if (base < 0 || rows <= 0) {
         return;
@@ -2194,23 +2266,32 @@ AICORE inline void M2InvalidatePackedRowToRouteIndexRange(__gm__ int32_t *basePt
     if (effectiveRows == 0U) {
         return;
     }
-    InvalidateGmCacheLines(basePtr + begin, effectiveRows * sizeof(int32_t));
+    PtoGmPublishRangeNoFinalDsb(basePtr + begin, effectiveRows * sizeof(int32_t));
 }
 
-AICORE inline void M2InvalidatePackedRowToRouteIndexByExpert(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
-                                                             M2WorkspaceViewDevice workspaceView)
+AICORE inline void M2PublishPackedRowToRouteIndexByExpertNoFinalDsb(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
+                                                                    M2WorkspaceViewDevice workspaceView)
 {
     uint32_t globalExpertNum = shape.rankNum * shape.expertPerRank;
     uint32_t localRows = static_cast<uint32_t>(M2LocalRows(shape));
     for (uint32_t globalExpert = 0; globalExpert < globalExpertNum; ++globalExpert) {
         int32_t base = LoadScalarI32(workspaceView.blockPrefixPerExpert + globalExpert);
         int32_t rows = LoadScalarI32(workspaceView.blockTokenPerExpert + globalExpert);
-        M2InvalidatePackedRowToRouteIndexRange(workspaceView.packedRowToRouteIndex, base, rows, localRows);
+        M2PublishPackedRowToRouteIndexRangeNoFinalDsb(workspaceView.packedRowToRouteIndex, base, rows, localRows);
     }
 }
 
-AICORE inline void M3NInvalidatePackedRowToRouteIndexShard(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
-                                                           M2WorkspaceViewDevice workspaceView, uint32_t workerId)
+AICORE inline void M2PublishPackedRowToRouteIndexByExpert(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
+                                                          M2WorkspaceViewDevice workspaceView)
+{
+    PtoGmStoreDrain();
+    M2PublishPackedRowToRouteIndexByExpertNoFinalDsb(shape, workspaceView);
+    PtoGmPublishBatchFinish();
+}
+
+AICORE inline void M3NPublishPackedRowToRouteIndexShardNoFinalDsb(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
+                                                                  M2WorkspaceViewDevice workspaceView,
+                                                                  uint32_t workerId)
 {
     uint32_t globalExpertNum = shape.rankNum * shape.expertPerRank;
     uint32_t workerStride = M3NDispatchWorkerScratchStride(globalExpertNum);
@@ -2223,8 +2304,8 @@ AICORE inline void M3NInvalidatePackedRowToRouteIndexShard(moe_new_dispatch_comb
         int32_t expertBase = LoadScalarI32(workspaceView.blockPrefixPerExpert + globalExpert);
         int32_t workerBase = LoadScalarI32(workerPrefixes + globalExpert);
         int32_t rows = LoadScalarI32(workerCounts + globalExpert);
-        M2InvalidatePackedRowToRouteIndexRange(workspaceView.packedRowToRouteIndex, expertBase + workerBase, rows,
-                                               localRows);
+        M2PublishPackedRowToRouteIndexRangeNoFinalDsb(workspaceView.packedRowToRouteIndex, expertBase + workerBase,
+                                                      rows, localRows);
     }
 }
 
@@ -2238,10 +2319,33 @@ AICORE inline void M3NInvalidateExpandedRowIdxShard(moe_new_dispatch_combine_a8w
                            static_cast<uint32_t>((tokenEnd - tokenBegin) * shape.topK * sizeof(int32_t)));
 }
 
+constexpr uint32_t kM2ExpandedRowIdxPublishBatchTokens = 64U;
+
+AICORE inline void M2PublishExpandedRowIdxTokenRange(M2WorkspaceViewDevice workspaceView, uint32_t tokenBegin,
+                                                     uint32_t tokenEnd, uint32_t topK)
+{
+    if (tokenEnd <= tokenBegin || topK == 0U) {
+        return;
+    }
+    InvalidateGmCacheLines(workspaceView.expandedRowIdx + static_cast<uint64_t>(tokenBegin) * topK,
+                           static_cast<uint32_t>((tokenEnd - tokenBegin) * topK * sizeof(int32_t)));
+}
+
+AICORE inline uint32_t M2MaybePublishExpandedRowIdxBatch(M2WorkspaceViewDevice workspaceView,
+                                                         uint32_t publishBeginToken, uint32_t currentToken,
+                                                         uint32_t topK)
+{
+    uint32_t publishEndToken = currentToken + 1U;
+    if (publishEndToken - publishBeginToken < kM2ExpandedRowIdxPublishBatchTokens) {
+        return publishBeginToken;
+    }
+    M2PublishExpandedRowIdxTokenRange(workspaceView, publishBeginToken, publishEndToken, topK);
+    return publishEndToken;
+}
+
 AICORE inline void M2RoutePackStoreFence()
 {
-    pipe_barrier(PIPE_ALL);
-    dsb(DSB_DDR);
+    PtoGmStoreDrain();
 }
 
 AICORE inline void M2RoutePackQuantLocal(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
@@ -2255,6 +2359,7 @@ AICORE inline void M2RoutePackQuantLocal(moe_new_dispatch_combine_a8w8::ShapeCon
         StoreScalarI32(workspaceView.tokenOwnerRankOffsets + globalExpert,
                        LoadScalarI32(workspaceView.blockPrefixPerExpert + globalExpert));
     }
+    uint32_t expandedPublishBegin = 0U;
     for (uint32_t token = 0; token < shape.m; ++token) {
         M2RoutePackedRowsCache packedRows = M2RoutePackedRowsCacheEmpty();
         for (uint32_t slot = 0; slot < shape.topK; ++slot) {
@@ -2281,10 +2386,13 @@ AICORE inline void M2RoutePackQuantLocal(moe_new_dispatch_combine_a8w8::ShapeCon
             M2RoutePackedRowsCachePush(packedRows, packedRow, localRows);
         }
         M2QuantizeTokenToPackedRowsWithCache(shape, workspaceView, localPeer, inputA, token, rowBytes, packedRows);
+        expandedPublishBegin =
+            M2MaybePublishExpandedRowIdxBatch(workspaceView, expandedPublishBegin, token, shape.topK);
     }
     M2RoutePackStoreFence();
-    InvalidateGmCacheLines(workspaceView.expandedRowIdx, static_cast<uint32_t>(shape.m * shape.topK * sizeof(int32_t)));
-    M2InvalidatePackedRowToRouteIndexByExpert(shape, workspaceView);
+    M2PublishExpandedRowIdxTokenRange(workspaceView, expandedPublishBegin, shape.m, shape.topK);
+    M2PublishPackedRowToRouteIndexByExpertNoFinalDsb(shape, workspaceView);
+    PtoGmPublishBatchFinish();
 }
 
 AICORE inline void M2RunInitQuantFullLoadPtoVec(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
@@ -2331,6 +2439,7 @@ AICORE inline void M2RunInitQuantFullLoadPtoVec(moe_new_dispatch_combine_a8w8::S
         running += rows;
     }
 
+    uint32_t expandedPublishBegin = 0U;
     for (uint32_t token = 0; token < shape.m; ++token) {
         M2RoutePackedRowsCache packedRows = M2RoutePackedRowsCacheEmpty();
         for (uint32_t slot = 0; slot < shape.topK; ++slot) {
@@ -2359,22 +2468,26 @@ AICORE inline void M2RunInitQuantFullLoadPtoVec(moe_new_dispatch_combine_a8w8::S
             M2RoutePackedRowsCachePush(packedRows, packedRow, localRows);
         }
         M2QuantizeTokenToPackedRowsWithCache(shape, workspaceView, localPeer, inputA, token, rowBytes, packedRows);
+        expandedPublishBegin =
+            M2MaybePublishExpandedRowIdxBatch(workspaceView, expandedPublishBegin, token, shape.topK);
     }
 
     M2RoutePackStoreFence();
-    InvalidateGmCacheLines(workspaceView.blockTokenPerExpert, static_cast<uint32_t>(globalExpertNum * sizeof(int32_t)));
-    InvalidateGmCacheLines(workspaceView.blockPrefixPerExpert,
-                           static_cast<uint32_t>(globalExpertNum * sizeof(int32_t)));
-    InvalidateGmCacheLines(workspaceView.tokenOwnerRankOffsets,
-                           static_cast<uint32_t>(globalExpertNum * sizeof(int32_t)));
-    InvalidateGmCacheLines(workspaceView.expandedRowIdx, static_cast<uint32_t>(shape.m * shape.topK * sizeof(int32_t)));
-    M2InvalidatePackedRowToRouteIndexByExpert(shape, workspaceView);
-    InvalidateGmCacheLines(
+    PtoGmPublishRangeNoFinalDsb(workspaceView.blockTokenPerExpert,
+                                static_cast<uint32_t>(globalExpertNum * sizeof(int32_t)));
+    PtoGmPublishRangeNoFinalDsb(workspaceView.blockPrefixPerExpert,
+                                static_cast<uint32_t>(globalExpertNum * sizeof(int32_t)));
+    PtoGmPublishRangeNoFinalDsb(workspaceView.tokenOwnerRankOffsets,
+                                static_cast<uint32_t>(globalExpertNum * sizeof(int32_t)));
+    M2PublishExpandedRowIdxTokenRange(workspaceView, expandedPublishBegin, shape.m, shape.topK);
+    M2PublishPackedRowToRouteIndexByExpertNoFinalDsb(shape, workspaceView);
+    PtoGmPublishRangeNoFinalDsb(
         workspaceView.tokenPerExpertMatrix,
         static_cast<uint32_t>(shape.rankNum * M2TokenPerExpertMatrixRowStride(shape) * sizeof(int32_t)));
-    InvalidateGmCacheLines(
+    PtoGmPublishRangeNoFinalDsb(
         localPeer.tokenPerExpertMatrix,
         static_cast<uint32_t>(shape.rankNum * M2TokenPerExpertMatrixRowStride(shape) * sizeof(int32_t)));
+    PtoGmPublishBatchFinish();
 }
 
 AICORE inline void M3NRoutePackQuantLocalShard(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
@@ -2402,6 +2515,7 @@ AICORE inline void M3NRoutePackQuantLocalShard(moe_new_dispatch_combine_a8w8::Sh
     }
     uint32_t tokenBegin = TokenShardBegin(shape.m, workerId, workerCount);
     uint32_t tokenEnd = TokenShardEnd(shape.m, workerId, workerCount);
+    uint32_t expandedPublishBegin = tokenBegin;
     for (uint32_t token = tokenBegin; token < tokenEnd; ++token) {
         M2RoutePackedRowsCache packedRows = M2RoutePackedRowsCacheEmpty();
         for (uint32_t slot = 0; slot < shape.topK; ++slot) {
@@ -2429,11 +2543,13 @@ AICORE inline void M3NRoutePackQuantLocalShard(moe_new_dispatch_combine_a8w8::Sh
             M2RoutePackedRowsCachePush(packedRows, packedRow, localRows);
         }
         M2QuantizeTokenToPackedRowsWithCache(shape, workspaceView, localPeer, inputA, token, rowBytes, packedRows);
+        expandedPublishBegin =
+            M2MaybePublishExpandedRowIdxBatch(workspaceView, expandedPublishBegin, token, shape.topK);
     }
     M2RoutePackStoreFence();
-    InvalidateGmCacheLines(workspaceView.expandedRowIdx + tokenBegin * shape.topK,
-                           static_cast<uint32_t>((tokenEnd - tokenBegin) * shape.topK * sizeof(int32_t)));
-    M3NInvalidatePackedRowToRouteIndexShard(shape, workspaceView, workerId);
+    M2PublishExpandedRowIdxTokenRange(workspaceView, expandedPublishBegin, tokenEnd, shape.topK);
+    M3NPublishPackedRowToRouteIndexShardNoFinalDsb(shape, workspaceView, workerId);
+    PtoGmPublishBatchFinish();
 }
 
 AICORE inline void M2PublishCountRows(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
@@ -2597,7 +2713,7 @@ AICORE inline void M3NApplyDispatchCapacityClip(moe_new_dispatch_combine_a8w8::S
                            static_cast<uint32_t>(shape.rankNum * rowStride * sizeof(int32_t)));
     InvalidateGmCacheLines(workspaceView.blockPrefixPerExpert,
                            static_cast<uint32_t>(M2GlobalExpertNum(shape) * sizeof(int32_t)));
-    M2InvalidatePackedRowToRouteIndexByExpert(shape, workspaceView);
+    M2PublishPackedRowToRouteIndexByExpert(shape, workspaceView);
     for (uint32_t expertOwner = 0; expertOwner < shape.rankNum; ++expertOwner) {
         uint32_t dispatchCursor = 0U;
         for (uint32_t localExpert = 0; localExpert < shape.expertPerRank; ++localExpert) {

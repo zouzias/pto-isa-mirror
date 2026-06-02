@@ -377,6 +377,109 @@ T23 已落地 metadata GM 批量化第一版：
   稀疏 clip 路径增加长期 debug/索引膨胀。
 - T23 没有增加中间日志或 debug stop。验收仍只看 stop17 最终结构体摘要和 `init_quant_e2e_us`。
 
+### 2.1.3.1 前重排 fence / GM 可见性优化设计
+
+当前 large anchor 的前重排耗时约 580us，和 small 差距异常大。主要嫌疑不是三次 AIV phase sync，而是
+route quant 热循环在每个 packed row 后调用 `InvalidateGmCacheLines(dispatchPayload row)` 和
+`InvalidateGmCacheLines(dispatchScale row)`。该 helper 内部包含 `pipe_barrier(PIPE_ALL)`、逐 cache line `dcci`
+和 `dsb(DSB_DDR)`；large 有 8194 个 packed row，`K=128` 时会放大成数千次 heavy fence。
+
+fence 优化必须先定义输出可见性合同，不能简单删除 `dcci/dsb`：
+
+- `SYNCALL` 只解决 AIV 间阶段顺序，不保证 scalar/MTE3 GM store 已经对 host、其他 AIV 或远端 rank 可见。
+- 前重排输出分两类处理：
+  - metadata：`expandedRowIdx`、`packedRowToRouteIndex`、`blockTokenPerExpert`、`blockPrefixPerExpert`、
+    `initQuantWorker*`、`tokenPerExpertMatrix` 等由 scalar GM store 或小块 store 写入，发布前需要按连续 range 做
+    cache-line publish；
+  - payload/scale：`dispatchPayload`、`dispatchScale` 由 route quant 的 MTE3/TSTORE 类路径写入，热循环内只需要
+    用 PTO event/flag 保证 UB buffer 可复用；阶段末先做一次 store drain，随后按硬件可见性需求做 segment 级
+    publish，不能在每个 packed row 后 `dsb`。
+- ready/count publish 只能发生在 metadata 和 payload/scale 都完成可见性收口之后。之前 naive batch flush 曾出现
+  `expandedRowIdx` stale/mismatch，说明 metadata 发布顺序不能被 payload fence 优化绕开。
+
+建议把现有单一 `InvalidateGmCacheLines` 拆成三个 PTO helper，底层 `dcci/dsb` 只允许在 helper 内出现：
+
+```text
+PtoGmStoreDrain()
+  pipe_barrier(PIPE_ALL) + dsb(DSB_DDR)
+  目的：排空本核已发出的 scalar/MTE3 GM store，不遍历 cache line。
+
+PtoGmPublishRangeNoFinalDsb(ptr, bytes)
+  只按 64B 对齐 range 做 dcci，不做 pipe_barrier/dsb。
+  目的：同一个阶段批量登记多个 metadata/payload range。
+
+PtoGmPublishBatchFinish()
+  dsb(DSB_DDR)
+  目的：一次性提交本批 range publish。
+```
+
+业务流程只调用更高层的 front-reorder helper：
+
+```text
+PtoPublishInitQuantMetadataShard(workerId):
+  publish expandedRowIdx[tokenBegin * topK, (tokenEnd-tokenBegin) * topK]
+  publish packedRowToRouteIndex[expertBase + workerPrefix, workerRows] for each expert
+  publish worker count/prefix rows when the current phase produced them
+  batch finish once
+
+PtoPublishInitQuantPayloadShard(workerId):
+  for each expert with workerRows > 0:
+    rowBegin = blockPrefixPerExpert[expert] + initQuantWorkerPrefixPerExpert[workerId, expert]
+    rows = initQuantWorkerTokenPerExpert[workerId, expert]
+    drain/publish dispatchPayload[rowBegin, rows, rowBytes]
+    drain/publish dispatchScale[rowBegin, rows]
+  batch finish once
+```
+
+large-token Stage C 的目标顺序：
+
+```text
+for each worker:
+  token loop:
+    scatter metadata scalar stores
+    quant payload/scale stores
+    only wait per-buffer PTO event before reusing UB ping/pong buffer
+    no dcci, no dsb, no full pipe barrier for every packed row
+
+  PtoGmStoreDrain()
+  PtoPublishInitQuantMetadataShard(workerId)
+  PtoPublishInitQuantPayloadShard(workerId)
+
+AIV-only phase_sync_scatter_done
+record init_quant_e2e end
+```
+
+payload/scale 的实现分两档推进：
+
+- 首选路径：MTE3/TSTORE payload/scale 在 `PtoGmStoreDrain()` 后视为 DDR 可见，不额外逐行 `dcci`；只保留
+  metadata range publish。该路径最接近 20us 目标。
+- 如果 stop17 或后续 dispatch gather 证明远端读取 payload/scale 仍可能 stale，则只给 payload/scale 增加
+  expert/worker 连续 segment 级 publish，并且所有 segment 共用一次 batch finish；禁止恢复 per-row
+  `InvalidateGmCacheLines`。
+
+full-load path 使用同一合同：单 AIV 写完后 `PtoGmStoreDrain()`，metadata 按 full expert 连续段 publish，
+payload/scale 按 `blockPrefixPerExpert + blockTokenPerExpert` 连续段处理。small case 不允许新增额外 debug 日志。
+
+验收和性能门禁：
+
+- `scripts/run_initquant_acceptance.sh` small/large stop17 必须 pass，尤其是 `expandedRowIdx`、
+  `packedRowToRouteIndex`、payload sample、scale、GMM1 input 和 dispatch ready。
+- large anchor 的 `init_quant_e2e_us` 目标先压到 30us 内，stretch 目标 20us 量级；若未达到，需要在 report 中用
+  coarse device cycles 说明剩余耗时来自 quant 计算、range publish 还是 phase sync。coarse 计数不进入常规日志。
+- T26 参数化矩阵中 `M>4097`、`topK>2`、`K=1024/7168` 继续 pass，证明不是 large anchor 特化。
+- 常规输出仍只保留 stop17 最终摘要、first mismatch 和 `init_quant_e2e_us`；临时 fence counter/probe 用完删除。
+
+T27 已落地的 large anchor 优化结论：
+
+- route quant 热循环不再对每个 packed row 做 payload/scale `dcci+dsb`；metadata 按 token range 和
+  expert/worker packed-row segment batch publish。
+- `prepare` 阶段不再清完整 `gmm1InputInt8`。该 buffer 由 dispatch gather 按有效 row 覆盖；前重排只保留
+  `routingPerTokenScale` 默认值和 initquant 控制面轻量 clear。
+- production/stop17 的 dispatch worker assignment 改为每个 AIV 本地 dense assignment，去掉 debug lane-slot
+  `dcci+dsb` 和对应两轮 mixed sync；历史 debug stop 继续保留旧 lane-slot 分配路径。
+- stop17 常规输出新增四个阶段边界耗时字段，但不增加 token/row 级 timeline 或 counter dump。
+- small stop17 e2e 约 3us；large stop17 e2e 约 26.5-28.8us，其中 large `route_pack_quant` 约 17-19.5us。
+
 large-token 路径验收：
 
 ```text
@@ -1114,7 +1217,8 @@ stop18-stop21 等调试停止路径保持原 mixed 轮次，避免再次出现 A
 | 17 | 前重排 ready flag 后 | local route count、capacity-clipped `expandedRowIdx`、dispatch payload/scale、full `tokenPerExpertMatrix`、`cumsumMM`、`preSumBeforeRank`、`expertTokenNums`、`gmm1InputInt8`、`routingPerTokenScale`、`dispatchGroupReady` |
 
 stop17 的结构体验收点在 dispatch ready 后；`init_quant_e2e_us` 的结束点在 dispatch 阶段之前，
-即前重排 route-pack/quant 最终同步之后。host 只输出最终 `init_quant_e2e_us`，不打印中间阶段 timeline 明细。
+即前重排 route-pack/quant 最终同步之后。host 只输出最终结构体验收摘要、前重排 e2e 和阶段边界耗时，
+不打印中间 token/row timeline 明细。
 
 ### 7.2 必须打印的日志字段
 
@@ -1123,6 +1227,14 @@ host 在 `[CorrectnessReport]` 下打印必要汇总字段，不为了日志完�
 ```text
 init_quant_final_stop=17
 init_quant_e2e_us=<device_cycles_converted_to_us>
+init_quant_prepare_us=<device_cycles_converted_to_us>
+init_quant_count_us=<device_cycles_converted_to_us>
+init_quant_prefix_us=<device_cycles_converted_to_us>
+init_quant_route_pack_quant_us=<device_cycles_converted_to_us>
+init_quant_e2e_after_prepare_us=<device_cycles_converted_to_us>
+init_quant_e2e_after_count_us=<device_cycles_converted_to_us>
+init_quant_e2e_after_prefix_us=<device_cycles_converted_to_us>
+init_quant_e2e_after_route_pack_quant_us=<device_cycles_converted_to_us>
 init_quant_worker_count=<workerCount>
 init_quant_active_workers=<activeWorkers>
 init_quant_worker_mask=<bitmask>
@@ -1157,8 +1269,12 @@ buffer=init_quant.dispatchScale mismatches=<n> first_index=<row> actual=<a> expe
 - begin：进入前重排主入口后，第一次前重排同步前；
 - end：route-pack/quant 完成后的最后一次前重排同步之后；后续 count publish/wait、prefix metadata、
   dispatch gather 和 stop17 final mix sync 不计入 `init_quant_e2e_us`；
+- stage boundary：同一计时窗口内额外记录 `prepare/count/prefix/route_pack_quant` 四个粗粒度耗时。large 路径中
+  `count` 覆盖 worker route count 到 count phase sync 完成，`prefix` 覆盖 count merge/prefix 到 prefix phase
+  sync 完成，`route_pack_quant` 覆盖 scatter+dynamic quant 到最终前重排 phase sync 完成；full-load 路径把融合的
+  count/prefix/scatter+quant 记录在 `route_pack_quant`，`count/prefix` 可为 0。
 - host：从 workspace 固定 slot 读取 begin/end，按 A3 `timeline_syscnt_cycles_per_us=1850` 换算并打印
-  `init_quant_e2e_us`。
+  `init_quant_e2e_us`、单阶段耗时和 `init_quant_e2e_after_*_us` 阶段边界累计耗时。
 
 ### 7.3 样例验收命令
 

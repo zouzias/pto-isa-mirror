@@ -60,6 +60,7 @@
 | T24 | `accepted` | Codex | T20,T23 | 大 K 行/列 tiling | quant 支持大 K column chunk、row tile/ping-pong，不能因整行放不下 UB 退成单核或 per-route 重复量化 | `reports/T24.md`；`K=1024/7168,topK=4` pass，small/large、`M=16384`、`topK=8` 回归 pass，route_quant_path=`pto_vec` | 对标 FFN gather dynamic quant 的 row/col tiling；新增 metadata store fence 只处理写后可见性，不做 shape 特化 |
 | T25 | `accepted` | Codex | T22 | GMM PTO 性能设计 | 后续 GMM1/GMM2 用 PTO `TMATMUL`、L1/L0 ping-pong、preload、swizzle 替代 Catlass/Catcoc 的设计任务 | `reports/T25.md`；GMM design/task 拆分完成；不把 initquant pass 当整体商用性能完成 | 继承 `M/topK/K/currentM` 参数族；明确当前 PTO GMM 雏形 L1/L0 K 与原 FFN 差异，后续实现不能按 small/large anchor 估算 tile |
 | T26 | `not_started` | - | T19,T20,T21,T23,T24 | 参数化非特化验收矩阵 | stop17 脚本支持 token/topK/K/distribution sweep，并做 device 非特化代码审计 | `M={16,512,2048,4097,8192,16384}`、`topK={1,2,4,8}`、`K={128,1024,7168}`、skew、capacity clip 均 pass；device 主路径无 small/large/topK==2 写死 | 作为 T19-T24 的共享验收门禁，不新增中间日志；性能结论按参数族输出 |
+| T27 | `in_progress` | Codex | T20,T23,T24 | front-reorder fence/perf | 拆分 store drain 与 cache-line publish，删除 route quant 热循环中的 per-packed-row `dcci+dsb`；metadata 按 token shard/expert-worker 连续段 publish，payload/scale 按 drain-only 或 expert-worker segment publish | `reports/T27.md`；small/large stop17 PASS；large `init_quant_e2e_us` 26.5-28.8us；T26 参数族回归未跑完 | 禁止恢复 per-row fence；ready/count publish 必须在 metadata 与 payload/scale 可见性收口后；若 payload/scale 需要 dcci，只能 segment 级批量 publish |
 
 ### Follow-up GMM PTO Tasks From T25
 
@@ -82,6 +83,7 @@
 | ID | Severity | State | Affected Tasks | Description | Decision/Next Step |
 | --- | --- | --- | --- | --- | --- |
 | IQ-SYNC-001 | P1 | closed | T18 | AIV-only 批量替换会破坏 stop17 AIC/AIV `SYNCALL<Mix>` 配对 | T18 已按配对表只替换 count/prefix/scatter 三个内部 phase；后置/final 继续 hard/mix，small/large stop17 pass |
+| IQ-PERF-001 | P1 | closed | T27 | large front-reorder `init_quant_e2e_us` 约 580us，疑似由 per-packed-row `InvalidateGmCacheLines(dispatchPayload/dispatchScale)` 放大；naive batch 曾暴露 `expandedRowIdx` stale 风险 | T27 删除热循环 per-row fence，并去掉前重排 prepare 的全量 GMM1 buffer clear；small/large stop17 pass，large 27-28us。T26 参数族回归另行跟踪 |
 
 ### Design Change Log
 
@@ -110,6 +112,9 @@
 | 2026-06-02 | T24 accepted：large-K column chunk 路径在 `K=1024/7168,topK=4` 下保持 PTO Vec，无 scalar fallback；补充 route-pack metadata store fence 解决长列切分后 `expandedRowIdx/packedRowToRouteIndex` 可见性风险，同时回归 small/large、`M=16384` 和 `topK=8`。 | T24,T26 |
 | 2026-06-02 | T25 accepted：详细设计 GMM PTO 化，记录原 FFN L1/L0、swizzle、preload drain、cache hint、startCoreIdx 接力和 AIC/AIV handoff；新增 GMM-P0..GMM-P8 后续实施任务。 | T25,T26,GMM-P0..GMM-P8 |
 | 2026-06-02 | 修正 `init_quant_e2e_us` 计时口径：结束点提前到前重排 route-pack/quant 最终同步后，后续 count publish/wait、prefix metadata、dispatch gather 和 stop17 final mix sync 不再计入前重排 e2e。 | T15,T17-T24 |
+| 2026-06-02 | 新增 T27 fence/perf 设计：large 前重排按 store drain、metadata range publish、payload/scale segment publish 分层，目标删除 route quant 热循环 per-packed-row `dcci+dsb`，避免 debug 日志膨胀并把 large e2e 压到 20-30us 量级。 | T20,T23,T24,T26,T27 |
+| 2026-06-02 | T27 补充前重排阶段边界耗时：stop17 汇总打印 `prepare/count/prefix/route_pack_quant` 单阶段耗时和 `e2e_after_*` 累计边界耗时，定位 large 慢段；不新增 token/row 级 debug 日志。 | T27 |
+| 2026-06-02 | T27 large 性能收敛：删除 per-row payload/scale fence，metadata batch publish；prepare 从全量 GMM1 清零和 lane debug assignment 收敛为 initquant 轻量 clear + dense worker assignment。small/large stop17 pass，large 26.5-28.8us；T26 参数族回归待跑。 | T27,T26 |
 
 ### Handoff Rules
 

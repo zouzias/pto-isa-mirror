@@ -1439,6 +1439,14 @@ const char *M3N12KindName(uint32_t kind)
             return "prefix";
         case moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kInitQuantE2E:
             return "init_quant_e2e";
+        case moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kInitQuantPrepare:
+            return "init_quant_prepare";
+        case moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kInitQuantCount:
+            return "init_quant_count";
+        case moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kInitQuantPrefix:
+            return "init_quant_prefix";
+        case moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kInitQuantRoutePackQuant:
+            return "init_quant_route_pack_quant";
         default:
             return "none";
     }
@@ -1508,10 +1516,10 @@ double M3N12CyclesToUs(uint64_t cycles)
     return static_cast<double>(cycles) / kA3SyscntCyclesPerUs;
 }
 
-double InitQuantE2eUs(const M2FusedFullEvidence &evidence)
+double M3N12TimelineSlotUs(const M2FusedFullEvidence &evidence, uint32_t slot)
 {
     constexpr uint32_t kWords = moe_new_dispatch_combine_a8w8::kM3N12TimelineRecordWords;
-    size_t base = static_cast<size_t>(moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantE2E) * kWords;
+    size_t base = static_cast<size_t>(slot) * kWords;
     if (base + 1U >= evidence.m3n12TimelineScratch.size()) {
         return 0.0;
     }
@@ -1521,6 +1529,27 @@ double InitQuantE2eUs(const M2FusedFullEvidence &evidence)
         return 0.0;
     }
     return M3N12CyclesToUs(end - begin);
+}
+
+double M3N12TimelineE2eAfterSlotUs(const M2FusedFullEvidence &evidence, uint32_t slot)
+{
+    constexpr uint32_t kWords = moe_new_dispatch_combine_a8w8::kM3N12TimelineRecordWords;
+    size_t e2eBase = static_cast<size_t>(moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantE2E) * kWords;
+    size_t slotBase = static_cast<size_t>(slot) * kWords;
+    if (e2eBase >= evidence.m3n12TimelineScratch.size() || slotBase + 1U >= evidence.m3n12TimelineScratch.size()) {
+        return 0.0;
+    }
+    uint64_t begin = evidence.m3n12TimelineScratch[e2eBase + 0U];
+    uint64_t end = evidence.m3n12TimelineScratch[slotBase + 1U];
+    if (begin == 0U || end < begin) {
+        return 0.0;
+    }
+    return M3N12CyclesToUs(end - begin);
+}
+
+double InitQuantE2eUs(const M2FusedFullEvidence &evidence)
+{
+    return M3N12TimelineSlotUs(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantE2E);
 }
 
 void PrintM3N12TimelineRecord(const M2FusedFullEvidence &evidence, uint32_t slot,
@@ -1597,6 +1626,14 @@ void PrintM3N12Timeline(const DispatchCombineTileArgs &args, RuntimeState *state
     std::cout << "  cv_wait_count=" << evidence.m3Counters[14] << "\n";
     PrintM3N12TimelineRecord(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotRouteCount,
                              moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kRouteCount);
+    PrintM3N12TimelineRecord(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantPrepare,
+                             moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kInitQuantPrepare);
+    PrintM3N12TimelineRecord(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantCount,
+                             moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kInitQuantCount);
+    PrintM3N12TimelineRecord(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantPrefix,
+                             moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kInitQuantPrefix);
+    PrintM3N12TimelineRecord(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantRoutePackQuant,
+                             moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kInitQuantRoutePackQuant);
     PrintM3N12TimelineRecord(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotRoute,
                              moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kRoute);
     PrintM3N12TimelineRecord(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotCountSync,
@@ -2572,8 +2609,8 @@ InitQuantVerifySummary VerifyInitQuantDebugStop(const DispatchCombineTileArgs &a
     summary.payloadSampleMatch = summary.payloadSampleMismatches == 0;
 
     summary.tokenMatrixFullChecked = true;
-    summary.tokenMatrixFullMismatches =
-        CompareI32Buffer("init_quant.tokenPerExpertMatrix", dump.tokenPerExpertMatrix, expectedTokenMatrix, state->rank);
+    summary.tokenMatrixFullMismatches = CompareI32Buffer("init_quant.tokenPerExpertMatrix", dump.tokenPerExpertMatrix,
+                                                         expectedTokenMatrix, state->rank);
     summary.tokenMatrixFullMatch = summary.tokenMatrixFullMismatches == 0;
 
     summary.prefixChecked = true;
@@ -2594,9 +2631,9 @@ InitQuantVerifySummary VerifyInitQuantDebugStop(const DispatchCombineTileArgs &a
         BuildExpectedPaddedRows(state->m2Reference.gmm1InputInt8, args.shape.maxOutputSize, args.shape.k, rowBytes);
     summary.gmm1InputMismatches =
         CompareI8Buffer("init_quant.gmm1InputInt8", dump.gmm1InputInt8, expectedGmm1Input, state->rank);
-    summary.gmm1InputMismatches += CompareFloatBuffer(args, "init_quant.routingPerTokenScale",
-                                                      dump.routingPerTokenScale,
-                                                      state->m2Reference.routingPerTokenScale, state->rank);
+    summary.gmm1InputMismatches +=
+        CompareFloatBuffer(args, "init_quant.routingPerTokenScale", dump.routingPerTokenScale,
+                           state->m2Reference.routingPerTokenScale, state->rank);
     summary.gmm1InputMatch = summary.gmm1InputMismatches == 0;
 
     summary.dispatchReadyChecked = true;
@@ -2611,6 +2648,29 @@ void PrintInitQuantDebugStopReport(const DispatchCombineTileArgs &args, const M2
     std::ostringstream report;
     report << "  init_quant_final_stop=" << args.runtime.m2FusedDebugStopStage << "\n";
     report << "  init_quant_e2e_us=" << InitQuantE2eUs(evidence) << "\n";
+    report << "  init_quant_prepare_us="
+           << M3N12TimelineSlotUs(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantPrepare) << "\n";
+    report << "  init_quant_count_us="
+           << M3N12TimelineSlotUs(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantCount) << "\n";
+    report << "  init_quant_prefix_us="
+           << M3N12TimelineSlotUs(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantPrefix) << "\n";
+    report << "  init_quant_route_pack_quant_us="
+           << M3N12TimelineSlotUs(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantRoutePackQuant)
+           << "\n";
+    report << "  init_quant_e2e_after_prepare_us="
+           << M3N12TimelineE2eAfterSlotUs(evidence,
+                                          moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantPrepare)
+           << "\n";
+    report << "  init_quant_e2e_after_count_us="
+           << M3N12TimelineE2eAfterSlotUs(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantCount)
+           << "\n";
+    report << "  init_quant_e2e_after_prefix_us="
+           << M3N12TimelineE2eAfterSlotUs(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantPrefix)
+           << "\n";
+    report << "  init_quant_e2e_after_route_pack_quant_us="
+           << M3N12TimelineE2eAfterSlotUs(
+                  evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantRoutePackQuant)
+           << "\n";
     report << "  init_quant_worker_count=" << evidence.m3nDispatchCounters[3] << "\n";
     report << "  init_quant_assigned_workers=" << evidence.m3nDispatchCounters[11] << "\n";
     report << "  init_quant_active_workers=" << evidence.m3nDispatchCounters[0] << "\n";
@@ -2622,8 +2682,7 @@ void PrintInitQuantDebugStopReport(const DispatchCombineTileArgs &args, const M2
     report << "  init_quant_route_count_match=" << CheckedBool(summary.routeCountChecked, summary.routeCountMatch)
            << "\n";
     report << "  init_quant_route_count_mismatches=" << summary.routeCountMismatches << "\n";
-    report << "  init_quant_token_matrix_full_checked=" << (summary.tokenMatrixFullChecked ? "true" : "false")
-           << "\n";
+    report << "  init_quant_token_matrix_full_checked=" << (summary.tokenMatrixFullChecked ? "true" : "false") << "\n";
     report << "  init_quant_token_matrix_full_match="
            << CheckedBool(summary.tokenMatrixFullChecked, summary.tokenMatrixFullMatch) << "\n";
     report << "  init_quant_token_matrix_full_mismatches=" << summary.tokenMatrixFullMismatches << "\n";
@@ -2640,8 +2699,7 @@ void PrintInitQuantDebugStopReport(const DispatchCombineTileArgs &args, const M2
     report << "  init_quant_prefix_match=" << CheckedBool(summary.prefixChecked, summary.prefixMatch) << "\n";
     report << "  init_quant_prefix_mismatches=" << summary.prefixMismatches << "\n";
     report << "  init_quant_gmm1_input_checked=" << (summary.gmm1InputChecked ? "true" : "false") << "\n";
-    report << "  init_quant_gmm1_input_match=" << CheckedBool(summary.gmm1InputChecked, summary.gmm1InputMatch)
-           << "\n";
+    report << "  init_quant_gmm1_input_match=" << CheckedBool(summary.gmm1InputChecked, summary.gmm1InputMatch) << "\n";
     report << "  init_quant_gmm1_input_mismatches=" << summary.gmm1InputMismatches << "\n";
     report << "  init_quant_dispatch_ready_checked=" << (summary.dispatchReadyChecked ? "true" : "false") << "\n";
     report << "  init_quant_dispatch_ready_match="
