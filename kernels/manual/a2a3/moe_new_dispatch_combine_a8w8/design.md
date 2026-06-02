@@ -482,8 +482,8 @@ T27 已落地的 large anchor 优化结论：
 - `expandedRowIdx` 的正确性边界保持 64-token batch publish。阶段末一次性 publish 和 128-token batch 在 large
   anchor 中会出现 stale/mismatch；去掉每批 final dsb 的实验没有稳定收益，因此不作为正式路径保留。
 - stop17 常规输出新增四个阶段边界耗时字段，但不增加 token/row 级 timeline 或 counter dump。
-- small stop17 e2e 约 3.2us；large stop17 e2e 约 20.5-22.8us，其中 large `prepare` 约 0.6us，
-  `route_pack_quant` 约 15.5-17.7us。
+- small stop17 e2e 约 3.2us；large stop17 e2e 约 20.4-25.1us，其中 large `prepare` 约 0.6us，
+  `route_pack_quant` 约 15.4-20.1us。
 
 large-token 路径验收：
 
