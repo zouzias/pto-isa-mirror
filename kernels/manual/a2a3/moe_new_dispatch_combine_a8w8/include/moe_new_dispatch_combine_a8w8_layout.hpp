@@ -183,7 +183,7 @@ inline WorkspaceLayout MakeWorkspaceLayout(const ShapeConfig &shape)
     layout.expandedRowIdx = AppendField(&offset, CheckedMul(expandedRows, sizeof(int32_t), "expanded row idx"));
     layout.packedRowToRouteIndex =
         AppendField(&offset, CheckedMul(expandedRows, sizeof(int32_t), "packed row route index"));
-    layout.dispatchOffset = AppendField(&offset, CheckedMul(expandedRows, sizeof(int32_t), "dispatch offset"));
+    layout.dispatchOffset = AppendField(&offset, CheckedMul(shape.expertPerRank, sizeof(int32_t), "dispatch offset"));
     layout.cumsumMM = AppendField(&offset, CheckedMul(rankExpertCount, sizeof(int32_t), "cumsumMM"));
     layout.preSumBeforeRank = AppendField(&offset, CheckedMul(rankExpertCount, sizeof(int32_t), "preSumBeforeRank"));
     layout.expertTokenNums = AppendField(&offset, CheckedMul(shape.expertPerRank, sizeof(int32_t), "expert nums"));

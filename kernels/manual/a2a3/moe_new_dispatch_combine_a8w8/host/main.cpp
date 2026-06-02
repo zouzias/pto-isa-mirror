@@ -119,32 +119,34 @@ bool GmmPolicySupported(const moe_new_dispatch_combine_a8w8::ShapeConfig &shape)
 
 uint64_t GmmL1ABytes()
 {
-    return static_cast<uint64_t>(moe_new_dispatch_combine_a8w8::kGmmL1Stages) * moe_new_dispatch_combine_a8w8::kGmmBaseM *
-           moe_new_dispatch_combine_a8w8::kGmmBaseK * moe_new_dispatch_combine_a8w8::kGmmStepK * sizeof(int8_t);
+    return static_cast<uint64_t>(moe_new_dispatch_combine_a8w8::kGmmL1Stages) *
+           moe_new_dispatch_combine_a8w8::kGmmBaseM * moe_new_dispatch_combine_a8w8::kGmmBaseK *
+           moe_new_dispatch_combine_a8w8::kGmmStepK * sizeof(int8_t);
 }
 
 uint64_t GmmL1BBytes()
 {
-    return static_cast<uint64_t>(moe_new_dispatch_combine_a8w8::kGmmL1Stages) * moe_new_dispatch_combine_a8w8::kGmmBaseK *
-           moe_new_dispatch_combine_a8w8::kGmmStepK * moe_new_dispatch_combine_a8w8::kGmmBaseN * sizeof(int8_t);
+    return static_cast<uint64_t>(moe_new_dispatch_combine_a8w8::kGmmL1Stages) *
+           moe_new_dispatch_combine_a8w8::kGmmBaseK * moe_new_dispatch_combine_a8w8::kGmmStepK *
+           moe_new_dispatch_combine_a8w8::kGmmBaseN * sizeof(int8_t);
 }
 
 uint64_t GmmL0ABytes()
 {
-    return static_cast<uint64_t>(moe_new_dispatch_combine_a8w8::kGmmL0AStages) * moe_new_dispatch_combine_a8w8::kGmmBaseM *
-           moe_new_dispatch_combine_a8w8::kGmmBaseK * sizeof(int8_t);
+    return static_cast<uint64_t>(moe_new_dispatch_combine_a8w8::kGmmL0AStages) *
+           moe_new_dispatch_combine_a8w8::kGmmBaseM * moe_new_dispatch_combine_a8w8::kGmmBaseK * sizeof(int8_t);
 }
 
 uint64_t GmmL0BBytes()
 {
-    return static_cast<uint64_t>(moe_new_dispatch_combine_a8w8::kGmmL0BStages) * moe_new_dispatch_combine_a8w8::kGmmBaseK *
-           moe_new_dispatch_combine_a8w8::kGmmBaseN * sizeof(int8_t);
+    return static_cast<uint64_t>(moe_new_dispatch_combine_a8w8::kGmmL0BStages) *
+           moe_new_dispatch_combine_a8w8::kGmmBaseK * moe_new_dispatch_combine_a8w8::kGmmBaseN * sizeof(int8_t);
 }
 
 uint64_t GmmL0CBytes()
 {
-    return static_cast<uint64_t>(moe_new_dispatch_combine_a8w8::kGmmL0CStages) * moe_new_dispatch_combine_a8w8::kGmmBaseM *
-           moe_new_dispatch_combine_a8w8::kGmmBaseN * sizeof(int32_t);
+    return static_cast<uint64_t>(moe_new_dispatch_combine_a8w8::kGmmL0CStages) *
+           moe_new_dispatch_combine_a8w8::kGmmBaseM * moe_new_dispatch_combine_a8w8::kGmmBaseN * sizeof(int32_t);
 }
 
 void PrintGmmPolicyReport(const moe_new_dispatch_combine_a8w8::ShapeConfig &shape, uint32_t expectedTaskCount,
@@ -584,7 +586,9 @@ void RunHostGoldenOnly(const DispatchCombineTileArgs &args, RuntimeState *state)
     CpuGoldenData golden = ComputeCpuGolden(args, inputs, state->rank);
     if (args.backend == "int8") {
         CpuM2ReferenceData m2Reference = ComputeCpuM2Reference(args, golden, state->rank);
-        PrintM2ReferenceSummary(args, state->rank, m2Reference);
+        if (VerboseRuntimeLogs(args)) {
+            PrintM2ReferenceSummary(args, state->rank, m2Reference);
+        }
     }
     CompareResult compare = CompareOutputs(args, golden, golden.outputC, state->rank);
 
@@ -618,7 +622,9 @@ void PrepareHostData(const DispatchCombineTileArgs &args, RuntimeState *state)
     if (args.backend == "int8") {
         state->m2Reference = ComputeCpuM2Reference(args, state->golden, state->rank);
         state->m2ReferenceReady = true;
-        PrintM2ReferenceSummary(args, state->rank, state->m2Reference);
+        if (verbose) {
+            PrintM2ReferenceSummary(args, state->rank, state->m2Reference);
+        }
     }
     state->dataReady = true;
     if (verbose) {
@@ -1098,9 +1104,8 @@ std::string JoinRestoreWorkerField(
     std::ostringstream os;
     bool first = true;
     for (size_t worker = 0; worker < moe_new_dispatch_combine_a8w8::kM3ORestoreWorkerCount; ++worker) {
-        size_t base =
-            moe_new_dispatch_combine_a8w8::kM3ORestoreWorkerBase +
-            worker * moe_new_dispatch_combine_a8w8::kM3ORestoreWorkerWords;
+        size_t base = moe_new_dispatch_combine_a8w8::kM3ORestoreWorkerBase +
+                      worker * moe_new_dispatch_combine_a8w8::kM3ORestoreWorkerWords;
         if (base + 5U >= counters.size() || counters[base + 5U] == 0) {
             continue;
         }
@@ -1119,9 +1124,8 @@ std::string JoinRestoreWorkerRanges(
     std::ostringstream os;
     bool first = true;
     for (size_t worker = 0; worker < moe_new_dispatch_combine_a8w8::kM3ORestoreWorkerCount; ++worker) {
-        size_t base =
-            moe_new_dispatch_combine_a8w8::kM3ORestoreWorkerBase +
-            worker * moe_new_dispatch_combine_a8w8::kM3ORestoreWorkerWords;
+        size_t base = moe_new_dispatch_combine_a8w8::kM3ORestoreWorkerBase +
+                      worker * moe_new_dispatch_combine_a8w8::kM3ORestoreWorkerWords;
         if (base + 5U >= counters.size() || counters[base + 5U] == 0) {
             continue;
         }
@@ -1159,8 +1163,8 @@ std::vector<int32_t> CopyWorkspaceI32Field(const moe_new_dispatch_combine_a8w8::
 }
 
 std::vector<uint64_t> CopyWorkspaceU64Field(const moe_new_dispatch_combine_a8w8::WorkspaceLayout &workspaceLayout,
-                                            const moe_new_dispatch_combine_a8w8::FieldLayout &field, RuntimeState *state,
-                                            const std::string &name)
+                                            const moe_new_dispatch_combine_a8w8::FieldLayout &field,
+                                            RuntimeState *state, const std::string &name)
 {
     (void)workspaceLayout;
     std::vector<uint64_t> out(field.bytes / sizeof(uint64_t), 0);
@@ -1414,7 +1418,7 @@ const char *M3N12KindName(uint32_t kind)
 {
     switch (static_cast<moe_new_dispatch_combine_a8w8::M3N12TimelineKind>(kind)) {
         case moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kRoute:
-            return "route";
+            return "scatter_quant";
         case moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kCountSync:
             return "count_sync";
         case moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kDispatchGather:
@@ -1429,6 +1433,12 @@ const char *M3N12KindName(uint32_t kind)
             return "combine";
         case moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kRestore:
             return "restore";
+        case moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kRouteCount:
+            return "route_count";
+        case moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kPrefix:
+            return "prefix";
+        case moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kInitQuantE2E:
+            return "init_quant_e2e";
         default:
             return "none";
     }
@@ -1492,6 +1502,27 @@ uint32_t M3N12MetaField(uint64_t value, uint32_t shift, uint32_t mask)
     return static_cast<uint32_t>((value >> shift) & mask);
 }
 
+double M3N12CyclesToUs(uint64_t cycles)
+{
+    constexpr double kA3SyscntCyclesPerUs = 1850.0;
+    return static_cast<double>(cycles) / kA3SyscntCyclesPerUs;
+}
+
+double InitQuantE2eUs(const M2FusedFullEvidence &evidence)
+{
+    constexpr uint32_t kWords = moe_new_dispatch_combine_a8w8::kM3N12TimelineRecordWords;
+    size_t base = static_cast<size_t>(moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantE2E) * kWords;
+    if (base + 1U >= evidence.m3n12TimelineScratch.size()) {
+        return 0.0;
+    }
+    uint64_t begin = evidence.m3n12TimelineScratch[base + 0U];
+    uint64_t end = evidence.m3n12TimelineScratch[base + 1U];
+    if (begin == 0U || end < begin) {
+        return 0.0;
+    }
+    return M3N12CyclesToUs(end - begin);
+}
+
 void PrintM3N12TimelineRecord(const M2FusedFullEvidence &evidence, uint32_t slot,
                               moe_new_dispatch_combine_a8w8::M3N12TimelineKind fallbackKind)
 {
@@ -1515,9 +1546,11 @@ void PrintM3N12TimelineRecord(const M2FusedFullEvidence &evidence, uint32_t slot
         kind = static_cast<uint32_t>(fallbackKind);
         status = static_cast<uint32_t>(moe_new_dispatch_combine_a8w8::M3N12TimelineStatus::kSkipped);
     }
+    uint64_t elapsed = end >= begin ? end - begin : 0U;
     std::cout << "  timeline_row_kind=" << M3N12RowKind(kind) << " stage=" << M3N12KindName(kind) << " slot=" << slot
               << " core_type=" << M3N12CoreTypeName(coreType) << " core_id=" << coreId << " t_begin=" << begin
-              << " t_end=" << end << " status=" << M3N12StatusName(status);
+              << " t_end=" << end << " elapsed_cycles=" << elapsed << " elapsed_us_est=" << M3N12CyclesToUs(elapsed)
+              << " status=" << M3N12StatusName(status);
     switch (static_cast<moe_new_dispatch_combine_a8w8::M3N12TimelineKind>(kind)) {
         case moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kGmm1Tile:
         case moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kGmm2Tile:
@@ -1558,13 +1591,18 @@ void PrintM3N12Timeline(const DispatchCombineTileArgs &args, RuntimeState *state
               << " shape_expertPerRank=" << args.shape.expertPerRank << "\n";
     std::cout << "  rank=" << state->rank << " rankNum=" << state->size << "\n";
     std::cout << "  timeline_granularity=stage_group_tile_subtile\n";
+    std::cout << "  timeline_syscnt_cycles_per_us=1850\n";
     std::cout << "  cross_rank_barrier_count=0\n";
     std::cout << "  syncall_count=" << evidence.m3Counters[13] << "\n";
     std::cout << "  cv_wait_count=" << evidence.m3Counters[14] << "\n";
+    PrintM3N12TimelineRecord(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotRouteCount,
+                             moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kRouteCount);
     PrintM3N12TimelineRecord(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotRoute,
                              moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kRoute);
     PrintM3N12TimelineRecord(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotCountSync,
                              moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kCountSync);
+    PrintM3N12TimelineRecord(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotPrefix,
+                             moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kPrefix);
     PrintM3N12TimelineRecord(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotDispatchGather,
                              moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kDispatchGather);
     PrintM3N12TimelineRecord(evidence, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotGmm1,
@@ -1601,7 +1639,8 @@ double RunM2FusedFull(const DispatchCombineTileArgs &args, const moe_new_dispatc
     constexpr uint32_t kAicBlocks = 24;
     constexpr uint32_t kAivRatio = 2;
     moe_new_dispatch_combine_a8w8::M2FusedFullLaunchArgs launchArgs{};
-    launchArgs.params = moe_new_dispatch_combine_a8w8::M2FusedFullParams{shape, rank, args.runtime.m2FusedDebugStopStage};
+    launchArgs.params =
+        moe_new_dispatch_combine_a8w8::M2FusedFullParams{shape, rank, args.runtime.m2FusedDebugStopStage};
     launchArgs.debugStopStage = args.runtime.m2FusedDebugStopStage;
     launchArgs.stageStatusAddr = reinterpret_cast<uint64_t>(reinterpret_cast<uint8_t *>(state->buffers.workspace) +
                                                             workspaceLayout.stageStatus.offset);
@@ -1657,7 +1696,8 @@ double RunM2FusedFull(const DispatchCombineTileArgs &args, const moe_new_dispatc
         storeConfigU32(moe_new_dispatch_combine_a8w8::kM2FusedFullShapeMSlot, shape.m);
         storeConfigU32(moe_new_dispatch_combine_a8w8::kM2FusedFullShapeHiddenSizeSlot, shape.hiddenSize);
         storeConfigU32(moe_new_dispatch_combine_a8w8::kM2FusedFullShapeIntermediateSizeSlot, shape.intermediateSize);
-        storeConfigU32(moe_new_dispatch_combine_a8w8::kM2FusedFullShapeMaxTokensPerExpertSlot, shape.maxTokensPerExpert);
+        storeConfigU32(moe_new_dispatch_combine_a8w8::kM2FusedFullShapeMaxTokensPerExpertSlot,
+                       shape.maxTokensPerExpert);
         storeConfigU32(moe_new_dispatch_combine_a8w8::kM2FusedFullShapePayloadTileColsSlot, shape.payloadTileCols);
         storeConfigU32(moe_new_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockMSlot, shape.gmmBlockM);
         storeConfigU32(moe_new_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockNSlot, shape.gmmBlockN);
@@ -1718,7 +1758,8 @@ double RunM2FusedFull(const DispatchCombineTileArgs &args, const moe_new_dispatc
 }
 
 void CopyM2ReferenceToWorkspace(const DispatchCombineTileArgs &args,
-                                const moe_new_dispatch_combine_a8w8::WorkspaceLayout &workspaceLayout, RuntimeState *state)
+                                const moe_new_dispatch_combine_a8w8::WorkspaceLayout &workspaceLayout,
+                                RuntimeState *state)
 {
     if (!state->m2ReferenceReady) {
         throw std::runtime_error("M2 reference is not ready before device copy");
@@ -2179,7 +2220,7 @@ std::vector<int32_t> BuildExpectedM2PreCountSyncExpandedRowIdx(const DispatchCom
             uint32_t expertId = static_cast<uint32_t>(expert);
             uint32_t packedRow = expertBase[expertId] + cursor[expertId]++;
             expected[routeIndex] = packedRow >= shape.maxOutputSize ? static_cast<int32_t>(shape.maxOutputSize) :
-                                                                       static_cast<int32_t>(packedRow);
+                                                                      static_cast<int32_t>(packedRow);
         }
     }
     return expected;
@@ -2390,13 +2431,37 @@ struct InitQuantVerifySummary {
 
 bool IsInitQuantDebugStopStage(uint32_t debugStopStage)
 {
-    return debugStopStage >= 11U && debugStopStage <= 17U;
+    return debugStopStage == 17U;
+}
+
+bool InitQuantDispatchScratchFits(const DispatchCombineTileArgs &args)
+{
+    constexpr uint32_t kScratchBase = 32U * 16U;
+    constexpr uint32_t kScratchLimit = 40U * 16U;
+    uint32_t globalExpertNum = args.shape.ep * args.shape.expertPerRank;
+    return globalExpertNum > 0U && globalExpertNum * 2U <= kScratchLimit - kScratchBase;
+}
+
+const char *InitQuantDispatchParallelPath(const DispatchCombineTileArgs &args)
+{
+    if (!InitQuantDispatchScratchFits(args)) {
+        return "pto_main_aiv";
+    }
+    return "m3n_multi_worker";
+}
+
+const char *InitQuantDispatchParallelFallbackReason(const DispatchCombineTileArgs &args)
+{
+    if (!InitQuantDispatchScratchFits(args)) {
+        return "global_expert_scratch_limit";
+    }
+    return "none";
 }
 
 bool InitQuantUsesPtoVecRouteQuant(const DispatchCombineTileArgs &args)
 {
     (void)args;
-    return false;
+    return true;
 }
 
 const char *InitQuantRouteQuantPath(const DispatchCombineTileArgs &args)
@@ -2409,7 +2474,7 @@ const char *InitQuantRouteQuantFallbackReason(const DispatchCombineTileArgs &arg
     if (InitQuantUsesPtoVecRouteQuant(args)) {
         return "none";
     }
-    return "mixed_fused_direct_pack_pto_vec_probe_timeout";
+    return "unknown";
 }
 
 const char *CheckedBool(bool checked, bool match)
@@ -2418,8 +2483,7 @@ const char *CheckedBool(bool checked, bool match)
 }
 
 uint64_t CompareInitQuantLocalRouteCount(const DispatchCombineTileArgs &args, RuntimeState *state,
-                                         const M2DispatchDump &dump,
-                                         const std::vector<int32_t> &expectedTokenMatrix)
+                                         const M2DispatchDump &dump, const std::vector<int32_t> &expectedTokenMatrix)
 {
     uint32_t rank = state->rank;
     size_t rowStride =
@@ -2457,8 +2521,8 @@ uint64_t CompareInitQuantDispatchReady(const DispatchCombineTileArgs &args, Runt
             ++mismatches;
         }
     }
-    std::cout << "rank=" << state->rank << " buffer=init_quant.dispatchGroupReady experts="
-              << args.shape.expertPerRank << " mismatches=" << mismatches;
+    std::cout << "rank=" << state->rank << " buffer=init_quant.dispatchGroupReady experts=" << args.shape.expertPerRank
+              << " mismatches=" << mismatches;
     if (mismatches != 0) {
         std::cout << " first_expert=" << firstMismatch << " actual=" << firstActual << " expected_nonzero=1";
     }
@@ -2471,99 +2535,87 @@ InitQuantVerifySummary VerifyInitQuantDebugStop(const DispatchCombineTileArgs &a
                                                 RuntimeState *state, const M2DispatchDump &dump)
 {
     InitQuantVerifySummary summary;
-    uint32_t debugStopStage = args.runtime.m2FusedDebugStopStage;
     uint32_t rowBytes = static_cast<uint32_t>(peerWindowLayout.dispatchPayloadRowBytes);
     std::vector<int32_t> expectedTokenMatrix = BuildExpectedM2TokenMatrix(args, state->golden);
 
-    if (debugStopStage >= 11U) {
-        summary.routeCountChecked = true;
-        summary.routeCountMismatches = CompareInitQuantLocalRouteCount(args, state, dump, expectedTokenMatrix);
-        summary.routeCountMatch = summary.routeCountMismatches == 0;
-    }
-    if (debugStopStage >= 12U) {
-        summary.expandedRowChecked = true;
-        std::vector<int32_t> expectedExpandedRowIdx =
-            debugStopStage < 14U ? BuildExpectedM2PreCountSyncExpandedRowIdx(args, state->inputs) :
-                                   state->golden.expandedRowIdx;
-        summary.expandedRowMismatches =
-            CompareI32Buffer("init_quant.expandedRowIdx", dump.expandedRowIdx, expectedExpandedRowIdx, state->rank);
-        summary.expandedRowMatch = summary.expandedRowMismatches == 0;
+    summary.routeCountChecked = true;
+    summary.routeCountMismatches = CompareInitQuantLocalRouteCount(args, state, dump, expectedTokenMatrix);
+    summary.routeCountMatch = summary.routeCountMismatches == 0;
 
-        summary.payloadSampleChecked = true;
-        std::vector<int8_t> expectedDispatchPayload;
-        std::vector<float> expectedDispatchScale;
-        BuildExpectedLocalDispatchQuant(args, state->golden, rowBytes, &expectedDispatchPayload, &expectedDispatchScale);
-        summary.payloadSampleMismatches =
-            CompareI8Buffer("init_quant.dispatchPayloadInt8", dump.dispatchPayload, expectedDispatchPayload,
-                            state->rank);
-        summary.payloadSampleMismatches +=
-            CompareFloatBuffer(args, "init_quant.dispatchScale", dump.dispatchScale, expectedDispatchScale, state->rank);
-        summary.payloadSampleMatch = summary.payloadSampleMismatches == 0;
-    }
-    if (debugStopStage >= 14U) {
-        summary.tokenMatrixFullChecked = true;
-        summary.tokenMatrixFullMismatches =
-            CompareI32Buffer("init_quant.tokenPerExpertMatrix", dump.tokenPerExpertMatrix, expectedTokenMatrix,
-                             state->rank);
-        summary.tokenMatrixFullMatch = summary.tokenMatrixFullMismatches == 0;
-    }
-    if (debugStopStage >= 15U) {
-        summary.prefixChecked = true;
-        std::vector<int32_t> expectedCumsum;
-        std::vector<int32_t> expectedPreSum;
-        std::vector<int32_t> expectedExpertTokenNums;
-        BuildExpectedM2Prefix(args, expectedTokenMatrix, state->rank, &expectedCumsum, &expectedPreSum,
-                              &expectedExpertTokenNums);
-        summary.prefixMismatches =
-            CompareI32Buffer("init_quant.cumsumMM", dump.cumsumMM, expectedCumsum, state->rank);
-        summary.prefixMismatches +=
-            CompareI32Buffer("init_quant.preSumBeforeRank", dump.preSumBeforeRank, expectedPreSum, state->rank);
-        summary.prefixMismatches +=
-            CompareI32Buffer("init_quant.expertTokenNums", dump.expertTokenNums, expectedExpertTokenNums, state->rank);
-        summary.prefixMatch = summary.prefixMismatches == 0;
-    }
-    if (debugStopStage >= 16U) {
-        summary.gmm1InputChecked = true;
-        std::vector<int8_t> expectedGmm1Input =
-            BuildExpectedPaddedRows(state->m2Reference.gmm1InputInt8, args.shape.maxOutputSize, args.shape.k, rowBytes);
-        summary.gmm1InputMismatches =
-            CompareI8Buffer("init_quant.gmm1InputInt8", dump.gmm1InputInt8, expectedGmm1Input, state->rank);
-        summary.gmm1InputMismatches +=
-            CompareFloatBuffer(args, "init_quant.routingPerTokenScale", dump.routingPerTokenScale,
-                               state->m2Reference.routingPerTokenScale, state->rank);
-        summary.gmm1InputMatch = summary.gmm1InputMismatches == 0;
-    }
-    if (debugStopStage >= 17U) {
-        summary.dispatchReadyChecked = true;
-        summary.dispatchReadyMismatches = CompareInitQuantDispatchReady(args, state, dump);
-        summary.dispatchReadyMatch = summary.dispatchReadyMismatches == 0;
-    }
+    summary.expandedRowChecked = true;
+    summary.expandedRowMismatches =
+        CompareI32Buffer("init_quant.expandedRowIdx", dump.expandedRowIdx, state->golden.expandedRowIdx, state->rank);
+    summary.expandedRowMatch = summary.expandedRowMismatches == 0;
+
+    summary.payloadSampleChecked = true;
+    std::vector<int8_t> expectedDispatchPayload;
+    std::vector<float> expectedDispatchScale;
+    BuildExpectedLocalDispatchQuant(args, state->golden, rowBytes, &expectedDispatchPayload, &expectedDispatchScale);
+    summary.payloadSampleMismatches =
+        CompareI8Buffer("init_quant.dispatchPayloadInt8", dump.dispatchPayload, expectedDispatchPayload, state->rank);
+    summary.payloadSampleMismatches +=
+        CompareFloatBuffer(args, "init_quant.dispatchScale", dump.dispatchScale, expectedDispatchScale, state->rank);
+    summary.payloadSampleMatch = summary.payloadSampleMismatches == 0;
+
+    summary.tokenMatrixFullChecked = true;
+    summary.tokenMatrixFullMismatches =
+        CompareI32Buffer("init_quant.tokenPerExpertMatrix", dump.tokenPerExpertMatrix, expectedTokenMatrix, state->rank);
+    summary.tokenMatrixFullMatch = summary.tokenMatrixFullMismatches == 0;
+
+    summary.prefixChecked = true;
+    std::vector<int32_t> expectedCumsum;
+    std::vector<int32_t> expectedPreSum;
+    std::vector<int32_t> expectedExpertTokenNums;
+    BuildExpectedM2Prefix(args, expectedTokenMatrix, state->rank, &expectedCumsum, &expectedPreSum,
+                          &expectedExpertTokenNums);
+    summary.prefixMismatches = CompareI32Buffer("init_quant.cumsumMM", dump.cumsumMM, expectedCumsum, state->rank);
+    summary.prefixMismatches +=
+        CompareI32Buffer("init_quant.preSumBeforeRank", dump.preSumBeforeRank, expectedPreSum, state->rank);
+    summary.prefixMismatches +=
+        CompareI32Buffer("init_quant.expertTokenNums", dump.expertTokenNums, expectedExpertTokenNums, state->rank);
+    summary.prefixMatch = summary.prefixMismatches == 0;
+
+    summary.gmm1InputChecked = true;
+    std::vector<int8_t> expectedGmm1Input =
+        BuildExpectedPaddedRows(state->m2Reference.gmm1InputInt8, args.shape.maxOutputSize, args.shape.k, rowBytes);
+    summary.gmm1InputMismatches =
+        CompareI8Buffer("init_quant.gmm1InputInt8", dump.gmm1InputInt8, expectedGmm1Input, state->rank);
+    summary.gmm1InputMismatches += CompareFloatBuffer(args, "init_quant.routingPerTokenScale",
+                                                      dump.routingPerTokenScale,
+                                                      state->m2Reference.routingPerTokenScale, state->rank);
+    summary.gmm1InputMatch = summary.gmm1InputMismatches == 0;
+
+    summary.dispatchReadyChecked = true;
+    summary.dispatchReadyMismatches = CompareInitQuantDispatchReady(args, state, dump);
+    summary.dispatchReadyMatch = summary.dispatchReadyMismatches == 0;
     return summary;
 }
 
 void PrintInitQuantDebugStopReport(const DispatchCombineTileArgs &args, const M2FusedFullEvidence &evidence,
                                    const InitQuantVerifySummary &summary)
 {
-    std::cout << "  init_quant_debug_stop=" << args.runtime.m2FusedDebugStopStage << "\n";
+    std::cout << "  init_quant_final_stop=" << args.runtime.m2FusedDebugStopStage << "\n";
+    std::cout << "  init_quant_e2e_us=" << InitQuantE2eUs(evidence) << "\n";
     std::cout << "  init_quant_worker_count=" << evidence.m3nDispatchCounters[3] << "\n";
     std::cout << "  init_quant_assigned_workers=" << evidence.m3nDispatchCounters[11] << "\n";
     std::cout << "  init_quant_active_workers=" << evidence.m3nDispatchCounters[0] << "\n";
     std::cout << "  init_quant_worker_mask=" << evidence.m3nDispatchCounters[10] << "\n";
+    std::cout << "  init_quant_dispatch_parallel_path=" << InitQuantDispatchParallelPath(args) << "\n";
+    std::cout << "  init_quant_dispatch_parallel_fallback_reason=" << InitQuantDispatchParallelFallbackReason(args)
+              << "\n";
     std::cout << "  init_quant_route_count_checked=" << (summary.routeCountChecked ? "true" : "false") << "\n";
-    std::cout << "  init_quant_route_count_match="
-              << CheckedBool(summary.routeCountChecked, summary.routeCountMatch) << "\n";
+    std::cout << "  init_quant_route_count_match=" << CheckedBool(summary.routeCountChecked, summary.routeCountMatch)
+              << "\n";
     std::cout << "  init_quant_route_count_mismatches=" << summary.routeCountMismatches << "\n";
-    std::cout << "  init_quant_token_matrix_full_checked="
-              << (summary.tokenMatrixFullChecked ? "true" : "false") << "\n";
+    std::cout << "  init_quant_token_matrix_full_checked=" << (summary.tokenMatrixFullChecked ? "true" : "false")
+              << "\n";
     std::cout << "  init_quant_token_matrix_full_match="
               << CheckedBool(summary.tokenMatrixFullChecked, summary.tokenMatrixFullMatch) << "\n";
     std::cout << "  init_quant_token_matrix_full_mismatches=" << summary.tokenMatrixFullMismatches << "\n";
     std::cout << "  init_quant_expanded_row_checked=" << (summary.expandedRowChecked ? "true" : "false") << "\n";
-    std::cout << "  init_quant_expanded_row_contract="
-              << (args.runtime.m2FusedDebugStopStage < 14U ? "source_local_pre_count_sync" : "capacity_clipped")
+    std::cout << "  init_quant_expanded_row_contract=capacity_clipped\n";
+    std::cout << "  init_quant_expanded_row_match=" << CheckedBool(summary.expandedRowChecked, summary.expandedRowMatch)
               << "\n";
-    std::cout << "  init_quant_expanded_row_match="
-              << CheckedBool(summary.expandedRowChecked, summary.expandedRowMatch) << "\n";
     std::cout << "  init_quant_expanded_row_mismatches=" << summary.expandedRowMismatches << "\n";
     std::cout << "  init_quant_payload_sample_checked=" << (summary.payloadSampleChecked ? "true" : "false") << "\n";
     std::cout << "  init_quant_payload_sample_match="
@@ -2573,8 +2625,8 @@ void PrintInitQuantDebugStopReport(const DispatchCombineTileArgs &args, const M2
     std::cout << "  init_quant_prefix_match=" << CheckedBool(summary.prefixChecked, summary.prefixMatch) << "\n";
     std::cout << "  init_quant_prefix_mismatches=" << summary.prefixMismatches << "\n";
     std::cout << "  init_quant_gmm1_input_checked=" << (summary.gmm1InputChecked ? "true" : "false") << "\n";
-    std::cout << "  init_quant_gmm1_input_match="
-              << CheckedBool(summary.gmm1InputChecked, summary.gmm1InputMatch) << "\n";
+    std::cout << "  init_quant_gmm1_input_match=" << CheckedBool(summary.gmm1InputChecked, summary.gmm1InputMatch)
+              << "\n";
     std::cout << "  init_quant_gmm1_input_mismatches=" << summary.gmm1InputMismatches << "\n";
     std::cout << "  init_quant_dispatch_ready_checked=" << (summary.dispatchReadyChecked ? "true" : "false") << "\n";
     std::cout << "  init_quant_dispatch_ready_match="
@@ -2609,8 +2661,8 @@ struct M2GmmTaskDump {
     std::vector<int32_t> tileTaskPlan;
 };
 
-M2GmmTaskDump CopyM2GmmTaskDump(const moe_new_dispatch_combine_a8w8::WorkspaceLayout &workspaceLayout, RuntimeState *state,
-                                bool gmm2)
+M2GmmTaskDump CopyM2GmmTaskDump(const moe_new_dispatch_combine_a8w8::WorkspaceLayout &workspaceLayout,
+                                RuntimeState *state, bool gmm2)
 {
     M2GmmTaskDump dump;
     auto *workspaceBase = reinterpret_cast<uint8_t *>(state->buffers.workspace);
@@ -3331,8 +3383,8 @@ M2ReturnMapExpected BuildExpectedM2ReturnMap(const DispatchCombineTileArgs &args
 
 void CopyM2CombineReturnToHost(const DispatchCombineTileArgs &args,
                                const moe_new_dispatch_combine_a8w8::WorkspaceLayout &workspaceLayout,
-                               const moe_new_dispatch_combine_a8w8::PeerWindowLayout &peerWindowLayout, RuntimeState *state,
-                               M2CombineReturnDump *dump)
+                               const moe_new_dispatch_combine_a8w8::PeerWindowLayout &peerWindowLayout,
+                               RuntimeState *state, M2CombineReturnDump *dump)
 {
     const DispatchCombineTileShape &shape = args.shape;
     size_t expandedRows = static_cast<size_t>(shape.m) * shape.topK;
@@ -4525,6 +4577,9 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  count_prefix_workers=" << countSyncWorkers << "\n";
     std::cout << "  dispatch_gather_workers=" << dispatchGatherWorkers << "\n";
     std::cout << "  dispatch_worker_count=" << dispatchWorkerCount << "\n";
+    std::cout << "  init_quant_dispatch_parallel_path=" << InitQuantDispatchParallelPath(args) << "\n";
+    std::cout << "  init_quant_dispatch_parallel_fallback_reason=" << InitQuantDispatchParallelFallbackReason(args)
+              << "\n";
     std::cout << "  dispatch_worker_ranges_nonoverlap="
               << (fusedEvidence != nullptr && fusedEvidence->m3nDispatchCounters[8] != 0 ? "true" : "false") << "\n";
     std::cout << "  worker_expert_count=true\n";
@@ -4576,8 +4631,7 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  subtile_cv_wait_count=" << subtileCvWaitCount << "\n";
     std::cout << "  combine_stage_overlap_enabled=" << (m3n8Gmm2CombineOverlap ? "true" : "false") << "\n";
     std::array<int32_t, moe_new_dispatch_combine_a8w8::kM3ORestoreCounterWords> emptyRestoreCounters{};
-    const auto &restoreCounters =
-        fusedEvidence == nullptr ? emptyRestoreCounters : fusedEvidence->m3oRestoreCounters;
+    const auto &restoreCounters = fusedEvidence == nullptr ? emptyRestoreCounters : fusedEvidence->m3oRestoreCounters;
     std::cout << "  restore_active_aiv_workers=" << restoreCounters[0] << "\n";
     std::cout << "  restore_total_token_count=" << restoreCounters[1] << "\n";
     std::cout << "  restore_total_route_count=" << restoreCounters[2] << "\n";
@@ -4597,7 +4651,8 @@ void PrintM2FinalSummary(const DispatchCombineTileArgs &args, RuntimeState *stat
     std::cout << "  route_quant_path=" << InitQuantRouteQuantPath(args) << "\n";
     std::cout << "  route_quant_scalar_fallback_reason=" << InitQuantRouteQuantFallbackReason(args) << "\n";
     std::cout << "  route_quant_impl_claim="
-              << (InitQuantUsesPtoVecRouteQuant(args) ? "pto_vec_tload_trowmax_tquant_tstore" : "scalar_row_loop")
+              << (InitQuantUsesPtoVecRouteQuant(args) ? "pto_vec_fixed_ub_lowered_load_rowmax_quant_store" :
+                                                        "scalar_row_loop")
               << "\n";
     std::cout << "  gmm1_epilogue_vec=true\n";
     std::cout << "  activation_requant_vec=true\n";
@@ -5052,10 +5107,11 @@ int main(int argc, char **argv)
             std::cout << "rank=" << state.rank << " size=" << state.size << " device=" << state.device << " start"
                       << std::endl;
         }
-        if (args.backend == "int8") {
-            moe_new_dispatch_combine_a8w8::RankConfig m2Rank = dispatch_combine_tile::MakeM2RankConfig(args, state.rank);
+        if (args.backend == "int8" && verbose) {
+            moe_new_dispatch_combine_a8w8::RankConfig m2Rank =
+                dispatch_combine_tile::MakeM2RankConfig(args, state.rank);
             moe_new_dispatch_combine_a8w8::PrintLayoutDump(std::cout, m2Shape, m2Rank, m2WorkspaceLayout,
-                                                       m2PeerWindowLayout);
+                                                           m2PeerWindowLayout);
         }
 
         if (args.runtime.hostGoldenOnly != 0) {
@@ -5116,8 +5172,8 @@ int main(int argc, char **argv)
                         if (initQuantDebugStop) {
                             dispatch_combine_tile::CopyM2DispatchToHost(args, m2WorkspaceLayout, m2PeerWindowLayout,
                                                                         &state, &initQuantDump);
-                            initQuantSummary = dispatch_combine_tile::VerifyInitQuantDebugStop(
-                                args, m2PeerWindowLayout, &state, initQuantDump);
+                            initQuantSummary = dispatch_combine_tile::VerifyInitQuantDebugStop(args, m2PeerWindowLayout,
+                                                                                               &state, initQuantDump);
                         }
                         std::cout << "[CorrectnessReport]\n";
                         std::cout << "  case_name=" << args.caseName << "\n";
@@ -5125,58 +5181,9 @@ int main(int argc, char **argv)
                         std::cout << "  protocol_stage=m2_fused_full_debug_probe\n";
                         std::cout << "  stage_graph_mode=single_fused_mpmd\n";
                         std::cout << "  m2_fused_debug_stop_stage=" << args.runtime.m2FusedDebugStopStage << "\n";
-                        std::cout << "  mixed_aic_heartbeat=" << (iterEvidence.aicSeen ? "true" : "false") << "\n";
-                        std::cout << "  mixed_aiv_heartbeat=" << (iterEvidence.aivSeen ? "true" : "false") << "\n";
-                        std::cout << "  mixed_aic_launch_blocks=" << iterEvidence.aicBlocks << "\n";
-                        std::cout << "  mixed_aiv_launch_blocks=" << iterEvidence.aivBlocks << "\n";
-                        std::cout << "  gmm1_active_aic_blocks=" << iterEvidence.m3oGmm1Counters[0] << "\n";
-                        std::cout << "  gmm2_active_aic_blocks=" << iterEvidence.m3oGmm2Counters[0] << "\n";
-                        std::cout << "  gmm1_tile_task_count=" << iterEvidence.m3oGmm1Counters[1] << "\n";
-                        std::cout << "  gmm2_tile_task_count=" << iterEvidence.m3oGmm2Counters[1] << "\n";
                         std::cout << "  dispatch_active_aiv_workers="
                                   << NormalizeActiveWorkerCount(iterEvidence.m3nDispatchCounters[0], &iterEvidence)
                                   << "\n";
-                        std::cout << "  activation_active_aiv_workers="
-                                  << NormalizeActiveWorkerCount(iterEvidence.m3nActivationCounters[0], &iterEvidence)
-                                  << "\n";
-                        std::cout << "  combine_active_aiv_workers="
-                                  << NormalizeActiveWorkerCount(iterEvidence.m3nCombineCounters[0], &iterEvidence)
-                                  << "\n";
-                        std::cout << "  restore_active_aiv_workers=8\n";
-                        for (size_t markerIdx = 0; markerIdx < iterEvidence.stageMarkers.size(); ++markerIdx) {
-                            std::cout << "  fused_stage_marker_" << markerIdx << "="
-                                      << iterEvidence.stageMarkers[markerIdx] << "\n";
-                        }
-                        if (args.runtime.m2FusedDebugStopStage == 109U) {
-                            std::cout << "  overlap_timeout_count=" << iterEvidence.m3Counters[15] << "\n";
-                            std::cout << "  "
-                                         "timeout_dump_fields=rank,expert,token_owner_rank,expert_owner_rank,stage,"
-                                         "signal_id,dispatch_ready,gmm1_ready,activation_ready,gmm2_ready,"
-                                         "ready_expert\n";
-                            dispatch_combine_tile::PrintM3N9TimeoutDump(iterEvidence);
-                        }
-                        if (args.runtime.m2FusedDebugStopStage == 1U) {
-                            std::cout << "  fused_m3n_route_pack_workers=" << iterEvidence.m3nDispatchCounters[0]
-                                      << "\n";
-                            std::cout << "  fused_m3n_count_sync_workers=" << iterEvidence.m3nDispatchCounters[1]
-                                      << "\n";
-                            std::cout << "  fused_m3n_gather_workers=" << iterEvidence.m3nDispatchCounters[2] << "\n";
-                            std::cout << "  fused_m3n_worker_count=" << iterEvidence.m3nDispatchCounters[3] << "\n";
-                            std::cout << "  fused_m3n_total_counted_rows=" << iterEvidence.m3nDispatchCounters[4]
-                                      << "\n";
-                            std::cout << "  fused_m3n_active_worker_mask=" << iterEvidence.m3nDispatchCounters[10]
-                                      << "\n";
-                            dispatch_combine_tile::M2DispatchDump dispatchDump;
-                            dispatch_combine_tile::CopyM2DispatchToHost(args, m2WorkspaceLayout, m2PeerWindowLayout,
-                                                                        &state, &dispatchDump);
-                            uint64_t dispatchMismatches =
-                                dispatch_combine_tile::VerifyM2Dispatch(args, m2PeerWindowLayout, &state, dispatchDump);
-                            std::cout << "  fused_dispatch_mismatches=" << dispatchMismatches << "\n";
-                            if (dispatchMismatches != 0) {
-                                throw std::runtime_error("rank " + std::to_string(state.rank) +
-                                                         " M2 fused dispatch mismatch");
-                            }
-                        }
                         if (initQuantDebugStop) {
                             dispatch_combine_tile::PrintInitQuantDebugStopReport(args, iterEvidence, initQuantSummary);
                             if (!initQuantSummary.Pass()) {
@@ -5206,7 +5213,7 @@ int main(int argc, char **argv)
                     dispatch_combine_tile::MpiBarrier(&state.mpi);
                     if (state.rank == printRank) {
                         dispatch_combine_tile::PrintM2FinalSummary(args, &state, fusedSummary, fusedTimings,
-                                                                    &fusedEvidence);
+                                                                   &fusedEvidence);
                         std::cout << std::flush;
                     }
                 }

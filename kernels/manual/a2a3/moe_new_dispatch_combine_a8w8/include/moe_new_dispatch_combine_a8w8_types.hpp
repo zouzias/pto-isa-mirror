@@ -81,8 +81,11 @@ constexpr uint32_t kM3N12TimelineSlotGmm1 = 3U;
 constexpr uint32_t kM3N12TimelineSlotGmm2 = 4U;
 constexpr uint32_t kM3N12TimelineSlotCombine = 5U;
 constexpr uint32_t kM3N12TimelineSlotRestore = 6U;
+constexpr uint32_t kM3N12TimelineSlotRouteCount = 7U;
 constexpr uint32_t kM3N12TimelineSlotSwigluBase = 8U;
 constexpr uint32_t kM3N12TimelineSwigluSlotCount = 8U;
+constexpr uint32_t kM3N12TimelineSlotPrefix = 16U;
+constexpr uint32_t kM3N12TimelineSlotInitQuantE2E = 17U;
 
 enum class M3N12TimelineKind : uint32_t
 {
@@ -95,6 +98,9 @@ enum class M3N12TimelineKind : uint32_t
     kGmm2Tile = 6,
     kCombineOwnerSegment = 7,
     kRestore = 8,
+    kRouteCount = 9,
+    kPrefix = 10,
+    kInitQuantE2E = 11,
 };
 
 enum class M3N12TimelineCoreType : uint32_t

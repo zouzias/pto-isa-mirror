@@ -203,7 +203,8 @@ AICORE inline void M3N12RecordSkipped(__gm__ uint64_t *timeline, uint32_t slot,
     uint64_t stamp = M3N12GetSysCnt();
     M3N12RecordTimeline(
         timeline, slot, stamp, stamp,
-        M3N12PackMeta0(kind, coreType, coreId, moe_new_dispatch_combine_a8w8::M3N12TimelineStatus::kSkipped, 0U, 0U), 0U);
+        M3N12PackMeta0(kind, coreType, coreId, moe_new_dispatch_combine_a8w8::M3N12TimelineStatus::kSkipped, 0U, 0U),
+        0U);
 }
 constexpr uint32_t kM2FusedFullStageCount = 7U;
 constexpr uint32_t kM3NFusedDispatchScratchBase = 32U * 16U;
@@ -400,8 +401,8 @@ AICORE inline void M3N5RecordGmm1StartBeforeLastDispatchReady(moe_new_dispatch_c
 }
 
 AICORE inline void M3N6RecordGmm1SyncGroupReady(__gm__ int32_t *stageStatus,
-                                                moe_new_dispatch_combine_a8w8::WorkspaceLayout layout, GM_ADDR workspace,
-                                                uint32_t syncIdx, uint32_t syncGroupCount)
+                                                moe_new_dispatch_combine_a8w8::WorkspaceLayout layout,
+                                                GM_ADDR workspace, uint32_t syncIdx, uint32_t syncGroupCount)
 {
     __gm__ int32_t *gmm1SyncGroupReady =
         reinterpret_cast<__gm__ int32_t *>(workspace + layout.gmm1SyncGroupReady.offset);
@@ -1071,10 +1072,10 @@ AICORE inline void M3N5GatherOneDispatchExpert(moe_new_dispatch_combine_a8w8::Sh
 }
 
 AICORE inline void M3N5GatherDispatchToGmm1InputShardByExpert(
-    moe_new_dispatch_combine_a8w8::ShapeConfig shape, M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
-    __gm__ HcclDeviceContext *ctx, GM_ADDR peerWindow, uint32_t myRank, uint32_t rowBytes,
-    const moe_new_dispatch_combine_a8w8::PeerWindowLayout &peerWindowLayout, uint32_t workerId, uint32_t workerCount,
-    bool activeWorker, __gm__ int32_t *stageStatus, bool requireAicStartAck)
+    moe_new_dispatch_combine_a8w8::ShapeConfig shape, M2WorkspaceViewDevice workspaceView,
+    M2PeerWindowViewDevice localPeer, __gm__ HcclDeviceContext *ctx, GM_ADDR peerWindow, uint32_t myRank,
+    uint32_t rowBytes, const moe_new_dispatch_combine_a8w8::PeerWindowLayout &peerWindowLayout, uint32_t workerId,
+    uint32_t workerCount, bool activeWorker, __gm__ int32_t *stageStatus, bool requireAicStartAck)
 {
     if (IsM2FusedMainAiv()) {
         StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 12U, 1);
@@ -1191,7 +1192,8 @@ AICORE inline void M3N9RecordTimeoutDump(M2WorkspaceViewDevice workspaceView, M2
     if (tokenOwnerRank >= shape.rankNum) {
         tokenOwnerRank = 0U;
     }
-    __gm__ int32_t *dump = workspaceView.timeoutDump + localExpert * moe_new_dispatch_combine_a8w8::kM3N9TimeoutDumpStride;
+    __gm__ int32_t *dump =
+        workspaceView.timeoutDump + localExpert * moe_new_dispatch_combine_a8w8::kM3N9TimeoutDumpStride;
     StoreScalarI32(dump + moe_new_dispatch_combine_a8w8::kM3N9TimeoutDumpPresentSlot, 1);
     StoreScalarI32(dump + moe_new_dispatch_combine_a8w8::kM3N9TimeoutDumpRankSlot, static_cast<int32_t>(rank.rankId));
     StoreScalarI32(dump + moe_new_dispatch_combine_a8w8::kM3N9TimeoutDumpExpertSlot, static_cast<int32_t>(localExpert));
@@ -1405,9 +1407,8 @@ AICORE inline void M3ORecordRestoreWorker(M2PeerWindowViewDevice localPeer, uint
     if (workerId >= moe_new_dispatch_combine_a8w8::kM3ORestoreWorkerCount) {
         return;
     }
-    uint32_t base =
-        kM2FusedFullM3ORestoreCounterBase + kM2FusedFullM3ORestoreWorkerBase +
-        workerId * kM2FusedFullM3ORestoreWorkerWords;
+    uint32_t base = kM2FusedFullM3ORestoreCounterBase + kM2FusedFullM3ORestoreWorkerBase +
+                    workerId * kM2FusedFullM3ORestoreWorkerWords;
     StoreScalarI32(localPeer.debugCounters + base + 0U, static_cast<int32_t>(tokenBegin));
     StoreScalarI32(localPeer.debugCounters + base + 1U, static_cast<int32_t>(tokenEnd));
     StoreScalarI32(localPeer.debugCounters + base + 2U, static_cast<int32_t>(stats.tokenCount));
@@ -1423,10 +1424,8 @@ AICORE inline void M3OFinalizeRestoreCounters(M2PeerWindowViewDevice localPeer, 
 {
     StoreScalarI32(localPeer.debugCounters + kM2FusedFullM3ORestoreCounterBase + 0U,
                    static_cast<int32_t>(activeWorkerCount));
-    StoreScalarI32(localPeer.debugCounters + kM2FusedFullM3ORestoreCounterBase + 1U,
-                   static_cast<int32_t>(totalTokens));
-    StoreScalarI32(localPeer.debugCounters + kM2FusedFullM3ORestoreCounterBase + 2U,
-                   static_cast<int32_t>(totalRoutes));
+    StoreScalarI32(localPeer.debugCounters + kM2FusedFullM3ORestoreCounterBase + 1U, static_cast<int32_t>(totalTokens));
+    StoreScalarI32(localPeer.debugCounters + kM2FusedFullM3ORestoreCounterBase + 2U, static_cast<int32_t>(totalRoutes));
     StoreScalarI32(localPeer.debugCounters + kM2FusedFullM3ORestoreCounterBase + 3U,
                    static_cast<int32_t>(skippedRoutes));
     StoreScalarI32(localPeer.debugCounters + kM2FusedFullM3ORestoreCounterBase + 4U, 1);
@@ -1452,23 +1451,30 @@ AICORE inline uint64_t M2FusedLoadConfigU64(__gm__ int32_t *config, uint32_t slo
 AICORE inline moe_new_dispatch_combine_a8w8::ShapeConfig M2FusedLoadShapeConfig(__gm__ int32_t *config)
 {
     return moe_new_dispatch_combine_a8w8::ShapeConfig{
-        static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeRankNumSlot)),
+        static_cast<uint32_t>(
+            M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeRankNumSlot)),
         static_cast<uint32_t>(
             M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeExpertPerRankSlot)),
         static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeTopKSlot)),
         static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeMSlot)),
-        static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeHiddenSizeSlot)),
+        static_cast<uint32_t>(
+            M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeHiddenSizeSlot)),
         static_cast<uint32_t>(
             M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeIntermediateSizeSlot)),
         static_cast<uint32_t>(
             M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeMaxTokensPerExpertSlot)),
         static_cast<uint32_t>(
             M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapePayloadTileColsSlot)),
-        static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockMSlot)),
-        static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockNSlot)),
-        static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockKSlot)),
-        static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeDtypeInSlot)),
-        static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeDtypeOutSlot)),
+        static_cast<uint32_t>(
+            M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockMSlot)),
+        static_cast<uint32_t>(
+            M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockNSlot)),
+        static_cast<uint32_t>(
+            M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockKSlot)),
+        static_cast<uint32_t>(
+            M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeDtypeInSlot)),
+        static_cast<uint32_t>(
+            M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeDtypeOutSlot)),
     };
 }
 
@@ -1478,12 +1484,15 @@ AICORE inline moe_new_dispatch_combine_a8w8::RankConfig M2FusedLoadRankConfig(__
         static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullRankRankNumSlot)),
         static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullRankRankIdSlot)),
         static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullRankFromMpiSlot)),
-        static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullRankDeviceBaseSlot)),
-        static_cast<uint32_t>(M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullRankNdevicesSlot)),
+        static_cast<uint32_t>(
+            M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullRankDeviceBaseSlot)),
+        static_cast<uint32_t>(
+            M2FusedLoadConfigI32(config, moe_new_dispatch_combine_a8w8::kM2FusedFullRankNdevicesSlot)),
     };
 }
 
-AICORE inline uint32_t M2FusedLoadDebugStopStage(__gm__ moe_new_dispatch_combine_a8w8::M2FusedFullLaunchArgs *launchArgs)
+AICORE inline uint32_t M2FusedLoadDebugStopStage(
+    __gm__ moe_new_dispatch_combine_a8w8::M2FusedFullLaunchArgs *launchArgs)
 {
     return launchArgs->debugStopStage;
 }
@@ -1503,36 +1512,7 @@ AICORE inline void M2FusedStoreFloatScalar(__gm__ float *ptr, float value)
     StoreScalarI32(reinterpret_cast<__gm__ int32_t *>(ptr), M2FusedFloatToBits(value));
 }
 
-AICORE inline void M2QuantizeRowToPeerPayloadScalar(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
-                                                    M2PeerWindowViewDevice localPeer, GM_ADDR inputA, uint32_t token,
-                                                    uint32_t packedRow, uint32_t rowBytes)
-{
-    __gm__ half *input = reinterpret_cast<__gm__ half *>(inputA);
-    __gm__ int8_t *dst = localPeer.dispatchPayload + static_cast<uint64_t>(packedRow) * rowBytes;
-    uint64_t inputBase = static_cast<uint64_t>(token) * shape.hiddenSize;
-    float maxAbs = 0.0f;
-    for (uint32_t col = 0; col < shape.hiddenSize; ++col) {
-        float value = static_cast<float>(input[inputBase + col]);
-        float absValue = M2Abs(value);
-        if (absValue > maxAbs) {
-            maxAbs = absValue;
-        }
-    }
-    float scale = maxAbs == 0.0f ? 1.0f : maxAbs / 127.0f;
-    for (uint32_t col = 0; col < shape.hiddenSize; ++col) {
-        float value = static_cast<float>(input[inputBase + col]);
-        dst[col] = M2QuantizeToInt8(value, scale);
-    }
-    for (uint32_t col = shape.hiddenSize; col < rowBytes; ++col) {
-        dst[col] = 0;
-    }
-    InvalidateGmCacheLines(dst, rowBytes);
-    M2FusedStoreFloatScalar(localPeer.dispatchScale + packedRow, scale);
-    pipe_barrier(PIPE_ALL);
-    dsb(DSB_DDR);
-}
-
-AICORE inline void M2RoutePackQuantLocalScalar(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
+AICORE inline void M2RoutePackQuantLocalPtoVec(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
                                                M2WorkspaceViewDevice workspaceView, M2PeerWindowViewDevice localPeer,
                                                GM_ADDR inputA, GM_ADDR expertIdx, GM_ADDR xActiveMask,
                                                uint32_t rowBytes)
@@ -1566,8 +1546,7 @@ AICORE inline void M2RoutePackQuantLocalScalar(moe_new_dispatch_combine_a8w8::Sh
             StoreScalarI32(workspaceView.expandedRowIdx + routeIndex, packedRow);
             StoreScalarI32(workspaceView.packedRowToRouteIndex + static_cast<uint32_t>(packedRow),
                            static_cast<int32_t>(routeIndex));
-            M2QuantizeRowToPeerPayloadScalar(shape, localPeer, inputA, token, static_cast<uint32_t>(packedRow),
-                                             rowBytes);
+            M2QuantizeRowToPeerPayload(shape, localPeer, inputA, token, static_cast<uint32_t>(packedRow), rowBytes);
         }
     }
     InvalidateGmCacheLines(workspaceView.expandedRowIdx, static_cast<uint32_t>(shape.m * shape.topK * sizeof(int32_t)));
@@ -1575,7 +1554,7 @@ AICORE inline void M2RoutePackQuantLocalScalar(moe_new_dispatch_combine_a8w8::Sh
                            static_cast<uint32_t>(shape.m * shape.topK * sizeof(int32_t)));
 }
 
-AICORE inline void M3NRoutePackQuantLocalShardScalar(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
+AICORE inline void M3NRoutePackQuantLocalShardPtoVec(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
                                                      M2WorkspaceViewDevice workspaceView,
                                                      M2PeerWindowViewDevice localPeer, GM_ADDR inputA,
                                                      GM_ADDR expertIdx, GM_ADDR xActiveMask, uint32_t rowBytes,
@@ -1609,10 +1588,9 @@ AICORE inline void M3NRoutePackQuantLocalShardScalar(moe_new_dispatch_combine_a8
                 continue;
             }
             uint32_t globalExpert = static_cast<uint32_t>(expert);
-            int32_t packedRow =
-                LoadScalarI32(workspaceView.blockPrefixPerExpert + globalExpert) +
-                M3NDispatchLoadWorkerExpertPrefix(shape, localPeer, workerId, globalExpert) +
-                LoadScalarI32(localOrdinalCursor + globalExpert);
+            int32_t packedRow = LoadScalarI32(workspaceView.blockPrefixPerExpert + globalExpert) +
+                                M3NDispatchLoadWorkerExpertPrefix(shape, localPeer, workerId, globalExpert) +
+                                LoadScalarI32(localOrdinalCursor + globalExpert);
             StoreScalarI32(localOrdinalCursor + globalExpert, LoadScalarI32(localOrdinalCursor + globalExpert) + 1);
             if (packedRow < 0 || static_cast<uint32_t>(packedRow) >= localRows) {
                 StoreScalarI32(workspaceView.expandedRowIdx + routeIndex, static_cast<int32_t>(localRows));
@@ -1621,8 +1599,7 @@ AICORE inline void M3NRoutePackQuantLocalShardScalar(moe_new_dispatch_combine_a8
             StoreScalarI32(workspaceView.expandedRowIdx + routeIndex, packedRow);
             StoreScalarI32(workspaceView.packedRowToRouteIndex + static_cast<uint32_t>(packedRow),
                            static_cast<int32_t>(routeIndex));
-            M2QuantizeRowToPeerPayloadScalar(shape, localPeer, inputA, token, static_cast<uint32_t>(packedRow),
-                                             rowBytes);
+            M2QuantizeRowToPeerPayload(shape, localPeer, inputA, token, static_cast<uint32_t>(packedRow), rowBytes);
         }
     }
     InvalidateGmCacheLines(workspaceView.expandedRowIdx + tokenBegin * shape.topK,
@@ -1748,159 +1725,6 @@ PTO_INTERNAL void M2FusedTileRawVectorDupByRefProbe(__gm__ int32_t *stageStatus,
     M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, slot, value);
 }
 
-AICORE inline void M2FusedRouteUbProbe(__gm__ int32_t *stageStatus, uint32_t probeStage, uint64_t ubAddr)
-{
-    M2RouteRowStatTile probeTile;
-    TASSIGN(probeTile, ubAddr);
-    probeTile.SetValue(0, 0.0f);
-    pipe_barrier(PIPE_ALL);
-    M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, static_cast<int32_t>(probeStage));
-}
-
-AICORE inline void M2FusedRouteQuantProbe(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
-                                          M2PeerWindowViewDevice localPeer, GM_ADDR inputA, uint32_t packedRow,
-                                          uint32_t rowBytes, __gm__ int32_t *stageStatus, uint32_t probeStage)
-{
-    if (probeStage == 102301U) {
-        M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 102301);
-        return;
-    }
-    if (probeStage == 102305U) {
-        using FloatProbeTile = pto::Tile<pto::TileType::Vec, float, 1, 16, pto::BLayout::RowMajor, 1, 16>;
-        FloatProbeTile probeTile;
-        TASSIGN(probeTile, kM2FusedVecProbeUbAddr);
-        TEXPANDS(probeTile, 0.0f);
-        pipe_barrier(PIPE_V);
-        M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 102305);
-        return;
-    }
-    if (probeStage == 102306U) {
-        M2RouteRowStatTile probeTile;
-        TASSIGN(probeTile, kM2FusedVecProbeUbAddr);
-        TEXPANDS(probeTile, 0.0f);
-        pipe_barrier(PIPE_V);
-        M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 102306);
-        return;
-    }
-    if (probeStage == 102307U) {
-        M2RouteRowStatTile probeTile;
-        TASSIGN(probeTile, kM2RouteRowMaxTileOffset);
-        probeTile.SetValue(0, 0.0f);
-        pipe_barrier(PIPE_ALL);
-        M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 102307);
-        return;
-    }
-    if (probeStage == 102308U) {
-        M2FusedRouteUbProbe(stageStatus, probeStage, 0x3000);
-        return;
-    }
-    if (probeStage == 102309U) {
-        M2FusedRouteUbProbe(stageStatus, probeStage, 0x3400);
-        return;
-    }
-    if (probeStage == 102310U) {
-        M2FusedRouteUbProbe(stageStatus, probeStage, 0x3800);
-        return;
-    }
-    if (probeStage == 102311U) {
-        M2FusedRouteUbProbe(stageStatus, probeStage, 0x3A00);
-        return;
-    }
-    if (probeStage == 102312U) {
-        M2FusedRouteUbProbe(stageStatus, probeStage, 0x3C00);
-        return;
-    }
-    if (probeStage == 102314U) {
-        M2FusedRouteUbProbe(stageStatus, probeStage, kM2FusedVecProbeLowUbAddr);
-        return;
-    }
-    __gm__ half *input = reinterpret_cast<__gm__ half *>(inputA);
-    M2RouteRowStatTile rowMaxTile;
-    M2RouteRowStatTile chunkMaxTile;
-    TASSIGN(rowMaxTile, kM2RouteRowMaxTileOffset);
-    TASSIGN(chunkMaxTile, kM2RouteChunkMaxTileOffset);
-    TEXPANDS(rowMaxTile, 0.0f);
-    pipe_barrier(PIPE_V);
-    if (probeStage == 102302U) {
-        return;
-    }
-    if (probeStage == 10231U) {
-        M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 10231);
-        return;
-    }
-
-    uint32_t cols = shape.hiddenSize;
-    if (cols > kM2RouteQuantTileCols) {
-        cols = kM2RouteQuantTileCols;
-    }
-    M2RouteHalfTile halfTile(cols);
-    M2RouteFloatTile fpTile(cols);
-    M2RouteFloatTile absTile(cols);
-    TASSIGN(halfTile, kM2RouteHalfTileOffset);
-    TASSIGN(fpTile, kM2RouteFloatTileOffset);
-    TASSIGN(absTile, kM2RouteAbsTileOffset);
-    GlobalNd<half> src = MakeGlobal2D(input, 1, static_cast<int32_t>(cols), static_cast<int32_t>(shape.hiddenSize));
-    TLOAD(halfTile, src);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    if (probeStage == 10232U) {
-        M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 10232);
-        return;
-    }
-
-    TCVT(fpTile, halfTile, pto::RoundMode::CAST_RINT);
-    pipe_barrier(PIPE_V);
-    TABS(absTile, fpTile);
-    pipe_barrier(PIPE_V);
-    TROWMAX(chunkMaxTile, absTile, fpTile);
-    pipe_barrier(PIPE_V);
-    TMAX(rowMaxTile, rowMaxTile, chunkMaxTile);
-    pipe_barrier(PIPE_V);
-    if (probeStage == 10233U) {
-        M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 10233);
-        return;
-    }
-
-    pto::PtoSetWaitFlag<PIPE_V, PIPE_S>();
-    float maxAbs = rowMaxTile.GetValue(0);
-    pto::PtoSetWaitFlag<PIPE_S, PIPE_V>();
-    float scale = maxAbs == 0.0f ? 1.0f : maxAbs / 127.0f;
-    float invScale = maxAbs == 0.0f ? 1.0f : 1.0f / scale;
-    if (probeStage == 10234U) {
-        M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 10234);
-        return;
-    }
-
-    M2RouteScaleStoreTile scaleStoreTile;
-    M2RouteParamTile invScaleTile;
-    TASSIGN(scaleStoreTile, kM2RouteScaleStoreTileOffset);
-    TASSIGN(invScaleTile, kM2RouteInvScaleParamTileOffset);
-    TEXPANDS(scaleStoreTile, scale);
-    pipe_barrier(PIPE_V);
-    TEXPANDS(invScaleTile, invScale);
-    pipe_barrier(PIPE_V);
-    GlobalNd<float> scaleGlobal = MakeGlobal2D(localPeer.dispatchScale + packedRow, 1, 1, 1);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(scaleGlobal, scaleStoreTile);
-    WaitStoreTileReusable();
-    if (probeStage == 10235U) {
-        M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 10235);
-        return;
-    }
-
-    M2RouteQuantTile quantTile(cols);
-    TASSIGN(quantTile, kM2RouteQuantTileOffset);
-    __gm__ int8_t *dst = localPeer.dispatchPayload + static_cast<uint64_t>(packedRow) * rowBytes;
-    GlobalNd<int8_t> quantDst = MakeGlobal2D(dst, 1, static_cast<int32_t>(cols), static_cast<int32_t>(rowBytes));
-    pto::TQUANT<pto::QuantType::INT8_SYM>(quantTile, fpTile, invScaleTile);
-    pipe_barrier(PIPE_V);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(quantDst, quantTile);
-    WaitStoreTileReusable();
-    M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 10236);
-}
 #endif
 
 AICORE inline void RunM2FusedSkeletonBody(__gm__ uint64_t *fftsAddr, __gm__ int32_t *ledger)
@@ -2002,8 +1826,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
             M2FusedLoadConfigI32(earlyStageStatus, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeRankNumSlot);
         int32_t hidden =
             M2FusedLoadConfigI32(earlyStageStatus, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeHiddenSizeSlot);
-        int32_t intermediate =
-            M2FusedLoadConfigI32(earlyStageStatus, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeIntermediateSizeSlot);
+        int32_t intermediate = M2FusedLoadConfigI32(
+            earlyStageStatus, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeIntermediateSizeSlot);
         int32_t blockK =
             M2FusedLoadConfigI32(earlyStageStatus, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockKSlot);
         if (get_block_idx() == 0) {
@@ -2083,50 +1907,6 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
         pto::SYNCALL<pto::SyncCoreType::Mix>();
         return;
     }
-    if (earlyDebugStopStage == 89U) {
-        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
-        pto::SYNCALL<pto::SyncCoreType::Mix>();
-        return;
-    }
-    if (earlyDebugStopStage == 88U) {
-        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
-        if (get_block_idx() == 0) {
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 0U, kM2FusedFullMagic);
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 1U, static_cast<int32_t>(get_block_num()));
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 2U, 88);
-        }
-        return;
-    }
-    if (earlyDebugStopStage == 87U) {
-        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
-        if (get_block_idx() == 0) {
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 0U, kM2FusedFullMagic);
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 1U, static_cast<int32_t>(get_block_num()));
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 2U, 87);
-        }
-        return;
-    }
-    if (earlyDebugStopStage == 76U || earlyDebugStopStage == 77U || earlyDebugStopStage == 78U ||
-        earlyDebugStopStage == 79U) {
-        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
-        if (get_block_idx() == 0) {
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 0U, kM2FusedFullMagic);
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 1U, static_cast<int32_t>(get_block_num()));
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 2U,
-                               static_cast<int32_t>(earlyDebugStopStage));
-        }
-        return;
-    }
-    if (earlyDebugStopStage >= 80U && earlyDebugStopStage <= 86U) {
-        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
-        if (get_block_idx() == 0) {
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 0U, kM2FusedFullMagic);
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 1U, static_cast<int32_t>(get_block_num()));
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAicHeaderSlot, 2U,
-                               static_cast<int32_t>(earlyDebugStopStage));
-        }
-        return;
-    }
     set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
     __gm__ int32_t *stageStatus = reinterpret_cast<__gm__ int32_t *>(launchArgs->stageStatusAddr);
     moe_new_dispatch_combine_a8w8::ShapeConfig shape = M2FusedLoadShapeConfig(stageStatus);
@@ -2171,11 +1951,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
     bool m3n8Gmm2CombineOverlap = M3N8Gmm2CombineOverlapEnabled(debugStopStage, overlapMode, shape);
     bool m3oActivationShardDebugProbe = M3OActivationShardDebugProbeEnabled(debugStopStage);
     M3NDispatchAicWaitForAivSubphases(debugStopStage, m3n5DispatchGmm1Overlap, shape);
-    if (M3NDispatchDebugProbeEnabled(debugStopStage)) {
-        pto::SYNCALL<pto::SyncCoreType::Mix>();
-        return;
-    }
-    if (debugStopStage >= 100U) {
+    if (debugStopStage == 17U) {
         pto::SYNCALL<pto::SyncCoreType::Mix>();
         return;
     }
@@ -2211,12 +1987,6 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
             M2FusedGmmStoreScalarI32(stageStatus + 5U * 16U, static_cast<int32_t>(get_block_num()));
         }
         M2FusedClearGmmTaskEvidence(debugCounters, kM2FusedFullM3OGmm1CounterBase, taskCount);
-        if (debugStopStage == 21U) {
-            if (get_block_idx() == 0) {
-                M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 4U, 21);
-            }
-            return;
-        }
         bool m3n12Gmm1TileRecorded = false;
         if (timelineEnable != 0U && get_block_idx() == 0 && taskCount == 0U) {
             M3N12RecordSkipped(timelineScratch, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotGmm1,
@@ -2257,8 +2027,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
                         M2FusedRunInt8GmmTileScalar(tileInput, expertWeight + nBase, tileOutput + nBase, mValid,
                                                     shape.hiddenSize, nValid, rowBytes, w1Cols, w1Cols);
                         if (recordTile) {
-                            uint32_t waitSource =
-                                static_cast<uint32_t>(moe_new_dispatch_combine_a8w8::M3N12TimelineWaitSource::kPtoEvent);
+                            uint32_t waitSource = static_cast<uint32_t>(
+                                moe_new_dispatch_combine_a8w8::M3N12TimelineWaitSource::kPtoEvent);
                             M3N12RecordTimeline(
                                 timelineScratch, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotGmm1, tileBegin,
                                 M3N12GetSysCnt(),
@@ -2269,7 +2039,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
                                                taskId),
                                 M3N12PackMeta1(rowBegin / moe_new_dispatch_combine_a8w8::kGmmBaseM,
                                                nBase / moe_new_dispatch_combine_a8w8::kGmmBaseN,
-                                               shape.hiddenSize / moe_new_dispatch_combine_a8w8::kGmmBaseK, waitSource));
+                                               shape.hiddenSize / moe_new_dispatch_combine_a8w8::kGmmBaseK,
+                                               waitSource));
                             m3n12Gmm1TileRecorded = true;
                         }
                     }
@@ -2313,8 +2084,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
                             M3N12PackMeta0(moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kGmm1Tile,
                                            moe_new_dispatch_combine_a8w8::M3N12TimelineCoreType::kAic,
                                            static_cast<uint32_t>(get_block_idx()),
-                                           moe_new_dispatch_combine_a8w8::M3N12TimelineStatus::kProcessed, currentExpert,
-                                           taskId),
+                                           moe_new_dispatch_combine_a8w8::M3N12TimelineStatus::kProcessed,
+                                           currentExpert, taskId),
                             M3N12PackMeta1(rowBegin / moe_new_dispatch_combine_a8w8::kGmmBaseM,
                                            nBase / moe_new_dispatch_combine_a8w8::kGmmBaseN,
                                            shape.hiddenSize / moe_new_dispatch_combine_a8w8::kGmmBaseK, waitSource));
@@ -2341,7 +2112,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
                                             shape.hiddenSize, nValid, rowBytes, w1Cols, w1Cols);
                 if (recordTile) {
                     M3N12RecordTimeline(
-                        timelineScratch, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotGmm1, tileBegin, M3N12GetSysCnt(),
+                        timelineScratch, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotGmm1, tileBegin,
+                        M3N12GetSysCnt(),
                         M3N12PackMeta0(moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kGmm1Tile,
                                        moe_new_dispatch_combine_a8w8::M3N12TimelineCoreType::kAic,
                                        static_cast<uint32_t>(get_block_idx()),
@@ -2393,8 +2165,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
         M3N6WaitAllGmm1SyncGroupsReadyGm(shape, workspace, layout);
         if (m3oActivationShardDebugProbe) {
             if (get_block_idx() == 0) {
-                M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 4U,
-                                   static_cast<int32_t>(debugStopStage));
+                M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 4U, static_cast<int32_t>(debugStopStage));
             }
             return;
         }
@@ -2506,12 +2277,13 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
                             M3N12PackMeta0(moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kGmm2Tile,
                                            moe_new_dispatch_combine_a8w8::M3N12TimelineCoreType::kAic,
                                            static_cast<uint32_t>(get_block_idx()),
-                                           moe_new_dispatch_combine_a8w8::M3N12TimelineStatus::kProcessed, syncIdx, taskId),
-                            M3N12PackMeta1(
-                                rowBegin / moe_new_dispatch_combine_a8w8::kGmmBaseM,
-                                nBase / moe_new_dispatch_combine_a8w8::kGmmBaseN,
-                                shape.intermediateSize / moe_new_dispatch_combine_a8w8::kGmmBaseK,
-                                static_cast<uint32_t>(moe_new_dispatch_combine_a8w8::M3N12TimelineWaitSource::kGmPoll)));
+                                           moe_new_dispatch_combine_a8w8::M3N12TimelineStatus::kProcessed, syncIdx,
+                                           taskId),
+                            M3N12PackMeta1(rowBegin / moe_new_dispatch_combine_a8w8::kGmmBaseM,
+                                           nBase / moe_new_dispatch_combine_a8w8::kGmmBaseN,
+                                           shape.intermediateSize / moe_new_dispatch_combine_a8w8::kGmmBaseK,
+                                           static_cast<uint32_t>(
+                                               moe_new_dispatch_combine_a8w8::M3N12TimelineWaitSource::kGmPoll)));
                         m3n12Gmm2TileRecorded = true;
                     }
                 }
@@ -2552,7 +2324,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aic(
                                             shape.hiddenSize);
                 if (recordTile) {
                     M3N12RecordTimeline(
-                        timelineScratch, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotGmm2, tileBegin, M3N12GetSysCnt(),
+                        timelineScratch, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotGmm2, tileBegin,
+                        M3N12GetSysCnt(),
                         M3N12PackMeta0(moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kGmm2Tile,
                                        moe_new_dispatch_combine_a8w8::M3N12TimelineCoreType::kAic,
                                        static_cast<uint32_t>(get_block_idx()),
@@ -3040,8 +2813,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
             M2FusedLoadConfigI32(earlyStageStatus, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeRankNumSlot);
         int32_t hidden =
             M2FusedLoadConfigI32(earlyStageStatus, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeHiddenSizeSlot);
-        int32_t intermediate =
-            M2FusedLoadConfigI32(earlyStageStatus, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeIntermediateSizeSlot);
+        int32_t intermediate = M2FusedLoadConfigI32(
+            earlyStageStatus, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeIntermediateSizeSlot);
         int32_t blockK =
             M2FusedLoadConfigI32(earlyStageStatus, moe_new_dispatch_combine_a8w8::kM2FusedFullShapeGmmBlockKSlot);
         if (IsM2FusedMainAiv()) {
@@ -3131,95 +2904,6 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
             M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 98);
         }
         pto::SYNCALL<pto::SyncCoreType::Mix>();
-        return;
-    }
-    if (earlyDebugStopStage == 89U) {
-        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
-        if (IsM2FusedMainAiv()) {
-            M2FusedBasicVecProbe(earlyStageStatus + kM2FusedFullStageBaseSlot, 5U, 89);
-        }
-        pto::SYNCALL<pto::SyncCoreType::Mix>();
-        return;
-    }
-    if (earlyDebugStopStage == 88U) {
-        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
-        if (IsM2FusedMainAiv()) {
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 0U, kM2FusedFullMagic);
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 1U,
-                               static_cast<int32_t>(get_block_num() * get_subblockdim()));
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 2U, 88);
-            M2FusedBasicVecProbe(earlyStageStatus + kM2FusedFullStageBaseSlot, 5U, 88);
-        }
-        pipe_barrier(PIPE_ALL);
-        dsb(DSB_DDR);
-        return;
-    }
-    if (earlyDebugStopStage == 87U) {
-        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
-        if (IsM2FusedMainAiv()) {
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 0U, kM2FusedFullMagic);
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 1U,
-                               static_cast<int32_t>(get_block_num() * get_subblockdim()));
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 2U, 87);
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullStageBaseSlot, 5U, 87);
-        }
-        pipe_barrier(PIPE_ALL);
-        dsb(DSB_DDR);
-        return;
-    }
-    if (earlyDebugStopStage == 76U || earlyDebugStopStage == 77U || earlyDebugStopStage == 78U ||
-        earlyDebugStopStage == 79U) {
-        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
-        if (IsM2FusedMainAiv()) {
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 0U, kM2FusedFullMagic);
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 1U,
-                               static_cast<int32_t>(get_block_num() * get_subblockdim()));
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 2U,
-                               static_cast<int32_t>(earlyDebugStopStage));
-        }
-        if (earlyDebugStopStage == 76U) {
-            if (IsM2FusedMainAiv()) {
-                M2FusedTileRawVectorDupByRefProbe(earlyStageStatus, 5U, 76, kM2FusedVecProbeLowUbAddr);
-            }
-        } else if (earlyDebugStopStage == 77U) {
-            M2FusedPlainVecTileLikeProbe(earlyStageStatus, 5U + M2FusedLogicalAivId(), 77);
-        } else if (earlyDebugStopStage == 79U) {
-            if (IsM2FusedMainAiv()) {
-                M2FusedTileRawVectorDupProbe(earlyStageStatus, 5U, 79, kM2FusedVecProbeLowUbAddr);
-            }
-        } else {
-            M2FusedTileConstructOnlyProbe(earlyStageStatus, 5U + M2FusedLogicalAivId(), 78);
-        }
-        pipe_barrier(PIPE_ALL);
-        dsb(DSB_DDR);
-        return;
-    }
-    if (earlyDebugStopStage >= 80U && earlyDebugStopStage <= 86U) {
-        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
-        if (IsM2FusedMainAiv()) {
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 0U, kM2FusedFullMagic);
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 1U,
-                               static_cast<int32_t>(get_block_num() * get_subblockdim()));
-            M2FusedRecordStage(earlyStageStatus + kM2FusedFullAivHeaderSlot, 2U,
-                               static_cast<int32_t>(earlyDebugStopStage));
-            if (earlyDebugStopStage == 80U) {
-                M2FusedAssignOnlyProbe(earlyStageStatus, 5U, 80, kM2FusedVecProbeUbAddr);
-            } else if (earlyDebugStopStage == 81U) {
-                M2FusedTileConstructOnlyProbe(earlyStageStatus, 5U, 81);
-            } else if (earlyDebugStopStage == 86U) {
-                M2FusedSetValueProbe(earlyStageStatus, 5U, 86, kM2FusedVecProbeLowUbAddr);
-            } else if (earlyDebugStopStage == 85U) {
-                M2FusedExpandOnlyProbe(earlyStageStatus, 5U, 85, kM2FusedVecProbeLowUbAddr);
-            } else if (earlyDebugStopStage == 84U) {
-                M2FusedExpandOnlyProbe(earlyStageStatus, 5U, 84, kM2FusedVecProbeUbAddr);
-            } else if (earlyDebugStopStage == 83U) {
-                M2FusedAssignOnlyProbe(earlyStageStatus, 5U, 83, kM2FusedVecProbeLowUbAddr);
-            } else {
-                M2FusedRawVectorDupProbe(earlyStageStatus, 5U, 82, kM2FusedVecProbeLowUbAddr);
-            }
-        }
-        pipe_barrier(PIPE_ALL);
-        dsb(DSB_DDR);
         return;
     }
     set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
@@ -3335,6 +3019,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     uint32_t dispatchWorkerCount = M3NDispatchWorkerCount(shape, logicalAivCount);
     bool m3nDispatchEnabled = debugStopStage < 100U && M3NFusedDispatchScratchFits(shape);
     if (m3nDispatchEnabled) {
+        pipe_barrier(PIPE_ALL);
+        uint64_t initQuantE2eBegin = IsM2FusedMainAiv() ? M3N12GetSysCnt() : 0U;
         M3NDispatchHardPhaseSync();
         if (IsM2FusedMainAiv()) {
             dispatchWorkerCount = M3NAssignDispatchWorkers(shape, localPeer, logicalAivCount);
@@ -3356,7 +3042,17 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         }
         M3NDispatchHardPhaseSync();
         if (activeDispatchWorker) {
+            uint32_t tokenBegin = TokenShardBegin(shape.m, dispatchWorkerId, dispatchWorkerCount);
+            uint32_t tokenEnd = TokenShardEnd(shape.m, dispatchWorkerId, dispatchWorkerCount);
+            bool recordCount = timelineEnable != 0U && dispatchWorkerId == 0U;
+            uint64_t countBegin = recordCount ? M3N12GetSysCnt() : 0U;
             M3NCountLocalRoutesShard(shape, localPeer, expertIdx, xActiveMask, dispatchWorkerId, dispatchWorkerCount);
+            if (recordCount) {
+                M3N12RecordAivRange(
+                    workspaceView.timelineScratch, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotRouteCount,
+                    moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kRouteCount, logicalAiv, dispatchWorkerId,
+                    tokenBegin, tokenEnd, tokenEnd - tokenBegin, 0U, countBegin, M3N12GetSysCnt());
+            }
         }
         M3NDispatchHardPhaseSync();
         if (IsM2FusedMainAiv()) {
@@ -3364,34 +3060,21 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
             M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 102);
         }
         M3NDispatchHardPhaseSync();
-        if (debugStopStage == 11U) {
-            if (IsM2FusedMainAiv()) {
-                M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 11);
-            }
-            pto::SYNCALL<pto::SyncCoreType::Mix>();
-            return;
-        }
         if (activeDispatchWorker) {
             uint32_t tokenBegin = TokenShardBegin(shape.m, dispatchWorkerId, dispatchWorkerCount);
             uint32_t tokenEnd = TokenShardEnd(shape.m, dispatchWorkerId, dispatchWorkerCount);
             bool recordRoute = timelineEnable != 0U && dispatchWorkerId == 0U;
             uint64_t routeBegin = recordRoute ? M3N12GetSysCnt() : 0U;
-            M3NRoutePackQuantLocalShardScalar(shape, workspaceView, localPeer, inputA, expertIdx, xActiveMask, rowBytes,
+            M3NRoutePackQuantLocalShardPtoVec(shape, workspaceView, localPeer, inputA, expertIdx, xActiveMask, rowBytes,
                                               dispatchWorkerId, dispatchWorkerCount);
             if (recordRoute) {
-                M3N12RecordAivRange(workspaceView.timelineScratch, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotRoute,
-                                    moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kRoute, logicalAiv, dispatchWorkerId,
-                                    tokenBegin, tokenEnd, tokenEnd - tokenBegin, 0U, routeBegin, M3N12GetSysCnt());
+                M3N12RecordAivRange(
+                    workspaceView.timelineScratch, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotRoute,
+                    moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kRoute, logicalAiv, dispatchWorkerId, tokenBegin,
+                    tokenEnd, tokenEnd - tokenBegin, 0U, routeBegin, M3N12GetSysCnt());
             }
         }
         M3NDispatchHardPhaseSync();
-        if (debugStopStage == 12U) {
-            if (IsM2FusedMainAiv()) {
-                M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 12);
-            }
-            pto::SYNCALL<pto::SyncCoreType::Mix>();
-            return;
-        }
         if (activeDispatchWorker && debugStopStage != 18U) {
             if (timelineEnable != 0U && dispatchWorkerId == 0U) {
                 countTimelineBegin = M3N12GetSysCnt();
@@ -3433,25 +3116,18 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         if (IsM2FusedMainAiv()) {
             M3NApplyDispatchCapacityClip(shape, workspaceView, localPeer, rank.rankId);
         }
-        if (debugStopStage == 14U) {
-            if (IsM2FusedMainAiv()) {
-                M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 14);
-            }
-            pto::SYNCALL<pto::SyncCoreType::Mix>();
-            return;
-        }
         if (IsM2FusedMainAiv()) {
+            uint64_t prefixBegin = timelineEnable != 0U ? M3N12GetSysCnt() : 0U;
             M2BuildPrefixMetadata(shape, workspaceView, localPeer, rank.rankId);
+            if (timelineEnable != 0U) {
+                M3N12RecordAivRange(workspaceView.timelineScratch,
+                                    moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotPrefix,
+                                    moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kPrefix, logicalAiv, 0U, 0U,
+                                    shape.expertPerRank, shape.expertPerRank, 0U, prefixBegin, M3N12GetSysCnt());
+            }
             M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 106);
         }
         M3NDispatchHardPhaseSync();
-        if (debugStopStage == 15U) {
-            if (IsM2FusedMainAiv()) {
-                M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 15);
-            }
-            pto::SYNCALL<pto::SyncCoreType::Mix>();
-            return;
-        }
         if (m3n5DispatchGmm1Overlap) {
             bool requireAicStartAck = debugStopStage != 1U;
             bool recordGather = timelineEnable != 0U && activeDispatchWorker && dispatchWorkerId == 0U;
@@ -3488,13 +3164,6 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         } else {
             M3NDispatchHardPhaseSync();
         }
-        if (debugStopStage == 16U) {
-            if (IsM2FusedMainAiv()) {
-                M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 16);
-            }
-            pto::SYNCALL<pto::SyncCoreType::Mix>();
-            return;
-        }
         if (IsM2FusedMainAiv()) {
             M3NPublishAllDispatchExpertsReadyAfterGather(shape, workspaceView);
             M2BuildSwigluSyncMetadata(shape, workspaceView);
@@ -3514,6 +3183,15 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                 M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 17);
             }
             pto::SYNCALL<pto::SyncCoreType::Mix>();
+            if (IsM2FusedMainAiv()) {
+                M3N12RecordTimeline(
+                    workspaceView.timelineScratch, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantE2E,
+                    initQuantE2eBegin, M3N12GetSysCnt(),
+                    M3N12PackMeta0(moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kInitQuantE2E,
+                                   moe_new_dispatch_combine_a8w8::M3N12TimelineCoreType::kAiv, logicalAiv,
+                                   moe_new_dispatch_combine_a8w8::M3N12TimelineStatus::kProcessed, 0U, logicalAiv),
+                    M3N12PackMeta1(0U, shape.m, shape.m * shape.topK, 0U));
+            }
             return;
         }
         if (m3n6Gmm1ActivationOverlap) {
@@ -3570,31 +3248,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                     InvalidateGmCacheLines(localPeer.dispatchScale, sizeof(float));
                 }
                 M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 1022);
-            } else if ((debugStopStage >= 10230U && debugStopStage <= 10236U) ||
-                       (debugStopStage >= 102301U && debugStopStage <= 102314U)) {
-                uint32_t globalExpertNum = shape.rankNum * shape.expertPerRank;
-                __gm__ int32_t *expertIds = reinterpret_cast<__gm__ int32_t *>(expertIdx);
-                for (uint32_t globalExpert = 0; globalExpert < globalExpertNum; ++globalExpert) {
-                    StoreScalarI32(workspaceView.tokenOwnerRankOffsets + globalExpert,
-                                   LoadScalarI32(workspaceView.blockPrefixPerExpert + globalExpert));
-                }
-                int32_t expert = LoadScalarI32(expertIds);
-                if (expert >= 0 && static_cast<uint32_t>(expert) < globalExpertNum) {
-                    uint32_t globalExpert = static_cast<uint32_t>(expert);
-                    int32_t packedRow = LoadScalarI32(workspaceView.tokenOwnerRankOffsets + globalExpert);
-                    StoreScalarI32(workspaceView.tokenOwnerRankOffsets + globalExpert, packedRow + 1);
-                    StoreScalarI32(workspaceView.expandedRowIdx, packedRow);
-                    if (debugStopStage == 10230U) {
-                        M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 10230);
-                    } else {
-                        M2FusedRouteQuantProbe(shape, localPeer, inputA, static_cast<uint32_t>(packedRow), rowBytes,
-                                               stageStatus, debugStopStage);
-                    }
-                    InvalidateGmCacheLines(workspaceView.expandedRowIdx, sizeof(int32_t));
-                    InvalidateGmCacheLines(localPeer.dispatchPayload + static_cast<uint64_t>(packedRow) * rowBytes,
-                                           rowBytes);
-                    InvalidateGmCacheLines(localPeer.dispatchScale + packedRow, sizeof(float));
-                }
+            } else if (debugStopStage == 10230U) {
+                M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 10230);
             } else if (debugStopStage == 1023U) {
                 uint32_t globalExpertNum = shape.rankNum * shape.expertPerRank;
                 __gm__ int32_t *expertIds = reinterpret_cast<__gm__ int32_t *>(expertIdx);
@@ -3608,8 +3263,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                     int32_t packedRow = LoadScalarI32(workspaceView.tokenOwnerRankOffsets + globalExpert);
                     StoreScalarI32(workspaceView.tokenOwnerRankOffsets + globalExpert, packedRow + 1);
                     StoreScalarI32(workspaceView.expandedRowIdx, packedRow);
-                    M2QuantizeRowToPeerPayloadScalar(shape, localPeer, inputA, 0U, static_cast<uint32_t>(packedRow),
-                                                     rowBytes);
+                    M2QuantizeRowToPeerPayload(shape, localPeer, inputA, 0U, static_cast<uint32_t>(packedRow),
+                                               rowBytes);
                     InvalidateGmCacheLines(workspaceView.expandedRowIdx, sizeof(int32_t));
                     InvalidateGmCacheLines(localPeer.dispatchPayload + static_cast<uint64_t>(packedRow) * rowBytes,
                                            rowBytes);
@@ -3617,18 +3272,18 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                 }
                 M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 1023);
             } else {
-                M2RoutePackQuantLocalScalar(shape, workspaceView, localPeer, inputA, expertIdx, xActiveMask, rowBytes);
+                M2RoutePackQuantLocalPtoVec(shape, workspaceView, localPeer, inputA, expertIdx, xActiveMask, rowBytes);
                 M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 103);
             }
         }
         if (debugStopStage < 1021U && debugStopStage != 100U && debugStopStage != 101U && debugStopStage != 102U &&
             debugStopStage != 103U) {
-            M2PublishCountRows(shape, workspaceView, localPeer, ctx, peerWindow, rank.rankId, peerWindowLayout);
+            M3NPublishCountRowsShard(shape, workspaceView, ctx, peerWindow, rank.rankId, peerWindowLayout, 0U, 1U, 3U);
             M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 104);
         }
         if (debugStopStage < 1021U && debugStopStage != 100U && debugStopStage != 101U && debugStopStage != 102U &&
             debugStopStage != 103U && debugStopStage != 104U) {
-            M2WaitCountRows(shape, localPeer, rank.rankId);
+            M3NWaitCountRowsShardScalar(shape, localPeer, rank.rankId, 0U, 1U);
             M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 105);
         }
         if (debugStopStage < 1021U && debugStopStage != 100U && debugStopStage != 101U && debugStopStage != 102U &&
@@ -3638,14 +3293,18 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         }
         if (debugStopStage < 1021U && debugStopStage != 100U && debugStopStage != 101U && debugStopStage != 102U &&
             debugStopStage != 103U && debugStopStage != 104U && debugStopStage != 105U && debugStopStage != 106U) {
-            M2GatherDispatchToGmm1Input(shape, workspaceView, localPeer, ctx, peerWindow, rank.rankId, rowBytes,
-                                        peerWindowLayout);
+            M3NGatherDispatchToGmm1InputShard(shape, workspaceView, localPeer, ctx, peerWindow, rank.rankId, rowBytes,
+                                              peerWindowLayout, 0U, 1U);
+            M3NPublishAllDispatchExpertsReadyAfterGather(shape, workspaceView);
             M2BuildSwigluSyncMetadata(shape, workspaceView);
             StoreScalarI32(localPeer.debugCounters, 1);
             StoreScalarI32(localPeer.debugCounters + kM3CounterBase + 7U, static_cast<int32_t>(shape.expertPerRank));
             StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 0U, 1);
             StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 1U, 1);
             StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 2U, 1);
+            StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 3U, 1);
+            StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 10U, 1);
+            StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 11U, 1);
             M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 107);
         }
     }
@@ -3679,8 +3338,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     }
     bool m3nActivationEnabled = debugStopStage < 100U && M3NFusedDispatchScratchFits(shape);
     bool m3oActivationShardDebugProbe = M3OActivationShardDebugProbeEnabled(debugStopStage);
-    bool m3nAicActivationScalar =
-        m3nActivationEnabled && !m3n6Gmm1ActivationOverlap && !m3oActivationShardDebugProbe;
+    bool m3nAicActivationScalar = m3nActivationEnabled && !m3n6Gmm1ActivationOverlap && !m3oActivationShardDebugProbe;
     if (m3n6Gmm1ActivationOverlap) {
         if (debugStopStage == 2U) {
             return;
@@ -3779,7 +3437,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         pipe_barrier(PIPE_ALL);
         dsb(DSB_DDR);
         moe_new_dispatch_combine_a8w8::M3N4AivAllDoneCoarseSync();
-        moe_new_dispatch_combine_a8w8::M3N4SignalV2C<moe_new_dispatch_combine_a8w8::kM3N4Gmm1EpilogueToActivationFlag>();
+        moe_new_dispatch_combine_a8w8::M3N4SignalV2C<
+            moe_new_dispatch_combine_a8w8::kM3N4Gmm1EpilogueToActivationFlag>();
         if (debugStopStage == 3U) {
             return;
         }
@@ -3937,7 +3596,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
             }
             if (recordCombine) {
                 uint32_t segmentCap = static_cast<uint32_t>(M2ReturnSegmentCapacity(shape));
-                M3N12RecordAivRange(workspaceView.timelineScratch, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotCombine,
+                M3N12RecordAivRange(workspaceView.timelineScratch,
+                                    moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotCombine,
                                     moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kCombineOwnerSegment, logicalAiv,
                                     combineAssignment.workerId, 0U, segmentCap, 1U, 0U, combineBegin, M3N12GetSysCnt());
             }
@@ -4025,8 +3685,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         if (recordRestore) {
             M3N12RecordAivRange(workspaceView.timelineScratch, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotRestore,
                                 moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kRestore, logicalAiv, logicalAiv,
-                                tokenBegin, tokenEnd, restoreStats.routeCount, restoreStats.skippedRouteCount, restoreBegin,
-                                M3N12GetSysCnt());
+                                tokenBegin, tokenEnd, restoreStats.routeCount, restoreStats.skippedRouteCount,
+                                restoreBegin, M3N12GetSysCnt());
         }
     }
     moe_new_dispatch_combine_a8w8::M3N4AivAllDoneCoarseSync();
@@ -4036,9 +3696,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         uint32_t totalSkippedRoutes = 0U;
         uint32_t activeRestoreWorkers = 0U;
         for (uint32_t worker = 0; worker < moe_new_dispatch_combine_a8w8::kM3ORestoreWorkerCount; ++worker) {
-            uint32_t base =
-                kM2FusedFullM3ORestoreCounterBase + kM2FusedFullM3ORestoreWorkerBase +
-                worker * kM2FusedFullM3ORestoreWorkerWords;
+            uint32_t base = kM2FusedFullM3ORestoreCounterBase + kM2FusedFullM3ORestoreWorkerBase +
+                            worker * kM2FusedFullM3ORestoreWorkerWords;
             InvalidateGmCacheLines(localPeer.debugCounters + base, 64U);
             int32_t active = LoadScalarI32(localPeer.debugCounters + base + 5U);
             if (active == 0) {
@@ -4168,7 +3827,8 @@ void LaunchM2FusedSkeletonWithHandle(const void *anchor, uint8_t *ledger, uint32
     }
 }
 
-void LaunchM2FusedFullWithHandle(const void *anchor, moe_new_dispatch_combine_a8w8::M2FusedFullLaunchArgs *launchArgsDevice,
+void LaunchM2FusedFullWithHandle(const void *anchor,
+                                 moe_new_dispatch_combine_a8w8::M2FusedFullLaunchArgs *launchArgsDevice,
                                  uint32_t aicBlocks, uint32_t aivRatio, void *stream)
 {
     const char *path = GetRegisterElfPath(anchor);
