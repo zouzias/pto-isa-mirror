@@ -2440,10 +2440,26 @@ bool InitQuantDispatchScratchFits(const DispatchCombineTileArgs &args)
     return globalExpertNum > 0U;
 }
 
+bool InitQuantFullLoadFits(const DispatchCombineTileArgs &args)
+{
+    constexpr uint32_t kFullLoadRouteThreshold = 128U;
+    constexpr uint32_t kFullLoadColsThreshold = 1024U;
+    constexpr uint32_t kFullLoadExpertThreshold = 16U;
+    uint32_t globalExpertNum = args.shape.ep * args.shape.expertPerRank;
+    uint32_t localRows = (args.shape.maxOutputSize / args.shape.expertPerRank) * args.shape.expertPerRank;
+    uint64_t routeCount = static_cast<uint64_t>(args.shape.m) * args.shape.topK;
+    return globalExpertNum > 0U && routeCount > 0U && routeCount <= kFullLoadRouteThreshold &&
+           args.shape.k <= kFullLoadColsThreshold && globalExpertNum <= kFullLoadExpertThreshold &&
+           localRows >= routeCount;
+}
+
 const char *InitQuantDispatchParallelPath(const DispatchCombineTileArgs &args)
 {
     if (!InitQuantDispatchScratchFits(args)) {
         return "pto_main_aiv";
+    }
+    if (InitQuantFullLoadFits(args)) {
+        return "pto_full_load";
     }
     return "m3n_multi_worker";
 }

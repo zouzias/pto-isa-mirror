@@ -3040,16 +3040,23 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
     uint32_t rowBytes = static_cast<uint32_t>(peerWindowLayout.dispatchPayloadRowBytes);
     uint32_t logicalAivCount = M2FusedLogicalAivCount();
     uint32_t dispatchWorkerCount = M3NDispatchWorkerCount(shape, logicalAivCount);
+    bool initQuantFullLoad = M3NInitQuantFullLoadFits(shape);
     bool m3nDispatchEnabled = debugStopStage < 100U && M3NFusedDispatchScratchFits(shape);
     if (m3nDispatchEnabled) {
         pipe_barrier(PIPE_ALL);
         uint64_t initQuantE2eBegin = IsM2FusedMainAiv() ? M3N12GetSysCnt() : 0U;
         M3NDispatchHardPhaseSync();
         if (IsM2FusedMainAiv()) {
-            dispatchWorkerCount = M3NAssignDispatchWorkers(shape, localPeer, logicalAivCount);
+            dispatchWorkerCount = initQuantFullLoad ? 1U : M3NAssignDispatchWorkers(shape, localPeer, logicalAivCount);
+            if (initQuantFullLoad) {
+                StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 3U, 1);
+                StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 11U, 1);
+            }
         }
         M3NDispatchHardPhaseSync();
-        M3NDispatchWorkerAssignment dispatchAssignment = M3NLoadDispatchWorkerAssignment(localPeer, rawAivSlot);
+        M3NDispatchWorkerAssignment dispatchAssignment =
+            initQuantFullLoad ? M3NDispatchWorkerAssignment{0U, 1U, IsM2FusedMainAiv()} :
+                                M3NLoadDispatchWorkerAssignment(localPeer, rawAivSlot);
         uint32_t dispatchWorkerId = dispatchAssignment.workerId;
         dispatchWorkerCount = dispatchAssignment.workerCount;
         bool activeDispatchWorker = dispatchAssignment.active;
@@ -3060,11 +3067,39 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
             M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 101);
         }
         M3NDispatchHardPhaseSync();
-        if (activeDispatchWorker) {
+        if (activeDispatchWorker && !initQuantFullLoad) {
             M3NClearDispatchWorkerScratch(shape, workspaceView, localPeer, dispatchWorkerId, dispatchWorkerCount);
         }
         M3NDispatchHardPhaseSync();
-        if (activeDispatchWorker) {
+        if (initQuantFullLoad) {
+            if (IsM2FusedMainAiv()) {
+                uint64_t countBegin = timelineEnable != 0U ? M3N12GetSysCnt() : 0U;
+                M2RunInitQuantFullLoadPtoVec(shape, workspaceView, localPeer, inputA, expertIdx, xActiveMask,
+                                             rank.rankId, rowBytes);
+                if (timelineEnable != 0U) {
+                    M3N12RecordAivRange(
+                        workspaceView.timelineScratch, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotRouteCount,
+                        moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kRouteCount, logicalAiv, 0U, 0U, shape.m,
+                        shape.m, 0U, countBegin, M3N12GetSysCnt());
+                }
+                M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 102);
+                if (timelineEnable != 0U) {
+                    M3N12RecordAivRange(
+                        workspaceView.timelineScratch, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotRoute,
+                        moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kRoute, logicalAiv, 0U, 0U, shape.m,
+                        shape.m, 0U, countBegin, M3N12GetSysCnt());
+                }
+                StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 0U, 1);
+                StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 1U, 1);
+                StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 3U, 1);
+                StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 4U,
+                               static_cast<int32_t>(shape.m * shape.topK));
+                StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 7U, 1);
+                StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 8U, 1);
+                StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 10U, 1);
+                StoreScalarI32(localPeer.debugCounters + kM3NDispatchCounterBase + 11U, 1);
+            }
+        } else if (activeDispatchWorker) {
             uint32_t tokenBegin = TokenShardBegin(shape.m, dispatchWorkerId, dispatchWorkerCount);
             uint32_t tokenEnd = TokenShardEnd(shape.m, dispatchWorkerId, dispatchWorkerCount);
             bool recordCount = timelineEnable != 0U && dispatchWorkerId == 0U;
@@ -3078,13 +3113,15 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                     tokenBegin, tokenEnd, tokenEnd - tokenBegin, 0U, countBegin, M3N12GetSysCnt());
             }
         }
-        M3NDispatchInitQuantPhaseSync(debugStopStage);
-        if (IsM2FusedMainAiv()) {
-            M3NMergeLocalRouteCounts(shape, workspaceView, localPeer, rank.rankId, dispatchWorkerCount);
-            M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 102);
+        if (!initQuantFullLoad) {
+            M3NDispatchInitQuantPhaseSync(debugStopStage);
+            if (IsM2FusedMainAiv()) {
+                M3NMergeLocalRouteCounts(shape, workspaceView, localPeer, rank.rankId, dispatchWorkerCount);
+                M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 102);
+            }
+            M3NDispatchInitQuantPhaseSync(debugStopStage);
         }
-        M3NDispatchInitQuantPhaseSync(debugStopStage);
-        if (activeDispatchWorker) {
+        if (activeDispatchWorker && !initQuantFullLoad) {
             uint32_t tokenBegin = TokenShardBegin(shape.m, dispatchWorkerId, dispatchWorkerCount);
             uint32_t tokenEnd = TokenShardEnd(shape.m, dispatchWorkerId, dispatchWorkerCount);
             bool recordRoute = timelineEnable != 0U && dispatchWorkerId == 0U;
@@ -3098,7 +3135,9 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                     tokenEnd, tokenEnd - tokenBegin, 0U, routeBegin, M3N12GetSysCnt());
             }
         }
-        M3NDispatchInitQuantPhaseSync(debugStopStage);
+        if (!initQuantFullLoad) {
+            M3NDispatchInitQuantPhaseSync(debugStopStage);
+        }
         if (activeDispatchWorker && debugStopStage != 18U) {
             if (timelineEnable != 0U && dispatchWorkerId == 0U) {
                 countTimelineBegin = M3N12GetSysCnt();

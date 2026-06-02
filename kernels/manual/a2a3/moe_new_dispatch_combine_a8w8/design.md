@@ -241,6 +241,18 @@ full-load 输出合同与通用路径一致：
 - `dispatchPayload`、`dispatchScale`；
 - stop17 最终验收字段不增加。
 
+T19 已落地的第一版实现采用保守 UB-fit 阈值：
+
+```text
+R <= 128, K <= 1024, globalExpertNum <= 16, localRows >= R
+```
+
+进入条件只读 shape/capacity，不读 `caseName` 或固定 `topK`。实现为 main AIV full-load fused path：
+UB 中保留 `count[expert]` 和 `cursor[expert]`，一次生成 count/prefix/scatter 元数据，随后用
+`M2QuantizeTokenToPackedRows` 对每个 token 做一次 PTO Vec quant 并写多个有效 packed row。该路径不使用
+per-worker count/prefix scratch，不经过 count/prefix/scatter 三个 AIV phase sync；后置 count publish/wait、
+prefix/gather 和 stop17 final sync 仍复用现有同步合同。
+
 ### 2.1.3 PTO large-token 优化路径设计
 
 large-token path 面向 `R=M*topK` 较大、full-load 不再合适的通用场景，不是只面向
@@ -452,6 +464,46 @@ Catlass/Catcoc 的片上缓存和 swizzle 设计。实现和验收按下面的�
 - UB-fits path 要像原 FFN full-load 一样减少 GM 中间结果和阶段同步。
 - large-token path 要像原 FFN large path 一样用多 AIV 和流水，而不是 correctness 版长期停留。
 - 任何性能声明必须带原 FFN baseline、PTO e2e、worker 数、sync scope 和 route quant path；没有 baseline 不宣称商用达标。
+
+### 2.1.6 更多 token 的扩展设计
+
+后续优化不能只对 `small` 和 `large` 两个 anchor 做特化。原 FFN 的 initquant tiling 由
+`totalLength = M * topK` 驱动，token 数继续增大后仍按同一套规则扩展：
+
+- full-load 只由 `R <= sortLoopMaxElement`、`K <= MAX_COLS_ONE_LOOP_QUANT`、dropless 和 UB fit 决定；
+- sort large path 的 VBS worker 由 `ceil(R / sortLoopMaxElement)` 决定，并向 4 的幂次对齐后受 AIV 数上限约束；
+- VMS 只有当 VBS list 数超过 4 时才进入中间归并；
+- `srcToDst` 和 `gather dynamic quant` 的 worker 由 `perCoreRows = ceil(R / aivNum)` 推到接近 AIV 数；
+- row loop 和 col loop 由 `perCoreRows`、`K`、UB 中 row metadata/quant tile/scale buffer 的 fit 情况决定；
+- dynamic quant 使用 `BUFFER_NUM=2` 队列化 GM load、Vec compute 和 GM store，`topK` 增大时应复用同一 source token
+  的 row quant 结果。
+
+PTO 路径的扩展规则必须对应这些生产分支，但不复刻原 FFN 的 AscendC sort 类：
+
+```text
+routeCount = M * topK
+fullLoadFits = dropless && dynamicQuant && ubFits(R, K, globalExpertNum)
+
+if fullLoadFits:
+    use UB resident count/prefix/scatter + token-centric quant
+else:
+    workerCount = select_by(routeCount, topK, K, validRouteEstimate, logicalAivCount, kInitQuantMaxDispatchWorkers)
+    use count -> prefix -> stable scatter
+    use row/col tiled PTO Vec quant with ping-pong buffers
+```
+
+`large` 的 `M=4097` 只是非 2 次幂 anchor。`M=8192/16384`、更大的 `topK`、更多 expert 和倾斜分布必须使用同一
+worker/cache/metadata 策略：
+
+- worker 数不能固定为 4。`R` 足够大且 workspace fit 时应继续提升到 logical AIV 上限或
+  `kInitQuantMaxDispatchWorkers`；
+- token shard 仍按完整 token 切分，避免一个 token 的 `topK` route 分到多个 worker 后重复量化；
+- `topK` 较大时 packed row 列表可分批处理，但 quant 只对 `inputA[token, :]` 做一次；
+- metadata 写回量随 `R` 线性增长，必须按连续 route/expert tile 批量写回，不能用 per-route flush 或中间日志维持正确性；
+- 大 `K` 下 worker 选择要考虑每 token quant 成本，不能只按 route 数切分；row/col tile 和 ping-pong 是生产路径要求。
+
+验收结论也按参数族给出：small/large pass 只能证明 anchor 正确；只有 token scale、topK scale、large K、skew 和
+capacity clip 都通过，才能说该阶段没有做 anchor 特化。
 
 ### 2.2 PTO 重写边界
 
@@ -1038,14 +1090,14 @@ Stage A/B/C 中间 dump。
 | T16 | PTO fallback 决策 | T15 | 明确异常 shape/workspace 条件下 fallback 到 `pto_main_aiv`；count publish/wait/gather 与 ready flag 仍走 PTO helper | fallback 日志包含原因，不静默走非 PTO |
 | T17 | baseline 对标脚本 | T15 | 同 shape/seed 下 PTO stop17 与原 FFN initquant e2e 对比脚本；原 FFN 命令缺失时显式报告 `missing_command` | small/large 记录 PTO `init_quant_e2e_us`、worker 数、path/reason；不宣称无 baseline 的商用达标 |
 | T18 | sync 优化 | T17 | 将前重排 hard sync 收敛为必要 AIV-only phase sync，审计 count/prefix/scatter 三个阶段 | stop17 pass，sync 点数量和 scope 可审计；不新增中间验收日志 |
-| T19 | UB-fits fast path | T17 | full-load/UB-fits 路径使用 UB resident count/prefix/scatter 和任意 topK token-centric quant | small anchor 与 UB-fits non-small/topK expansion stop17 pass；不得按 case name 或 `topK==2` 特化 |
-| T20 | large-token quant pipeline | T17 | `R=M*topK` 大场景使用 token-centric quant、UB ping-pong，重叠 load/compute/store | large anchor、token scale sweep、topK sweep stop17 pass；不得每 route 重复 quant |
-| T21 | worker/cache 调度 | T17 | 根据 `M/topK/K/globalExpertNum/route distribution` 选择 worker 数，正式 worker scratch 支持到 40 | skew route、token scale sweep、topK sweep/more experts case activeWorkers 有效，metadata 不成为主瓶颈 |
+| T19 | UB-fits fast path | T17 | full-load/UB-fits 路径使用 UB resident count/prefix/scatter 和任意 topK token-centric quant | small anchor、UB-fits non-small、UB-fits `topK>2` stop17 pass；不得按 case name、`M==16` 或 `topK==2` 特化 |
+| T20 | large-token quant pipeline | T17 | `R=M*topK` 大场景使用 token-centric quant、UB ping-pong，重叠 load/compute/store | large anchor、`M=8192/16384` token scale、`topK=4/8` sweep stop17 pass；不得每 route 重复 quant |
+| T21 | worker/cache 调度 | T17 | 根据 `M/topK/K/globalExpertNum/route distribution` 选择 worker 数，正式 worker scratch 支持到 40 | skew route、`M>4097` more-token、topK sweep/more experts case activeWorkers 有效，metadata 不成为主瓶颈 |
 | T22 | GMM cache 边界 | T17 | 明确 L1/L0/swizzle/preload 属于后续 GMM PTO 化，不计入 initquant 完成项 | design.md 边界清晰，GMM 阶段单独拆任务 |
-| T23 | metadata GM 批量化 | T17,T21 | `expandedRowIdx`、`packedRowToRouteIndex`、count/prefix 写回按连续 route/expert tile 批量化 | small/large、token scale sweep、topK sweep 和 more experts case stop17 pass；无中间 dump 日志 |
-| T24 | 大 K 行/列 tiling | T20,T23 | quant 支持大 K column chunk、row tile/ping-pong，不能因整行放不下 UB 退成单核 | large K 与 topK sweep case payload/scale pass，`route_quant_path=pto_vec` |
+| T23 | metadata GM 批量化 | T17,T21 | `expandedRowIdx`、`packedRowToRouteIndex`、count/prefix 写回按连续 route/expert tile 批量化 | small/large、`M=8192/16384` token scale、topK sweep 和 more experts case stop17 pass；无中间 dump 日志 |
+| T24 | 大 K 行/列 tiling | T20,T23 | quant 支持大 K column chunk、row tile/ping-pong，不能因整行放不下 UB 退成单核 | `K=1024/7168` large K 与 `topK=4` case payload/scale pass，`route_quant_path=pto_vec` |
 | T25 | GMM PTO 性能设计 | T22 | GMM1/GMM2 用 PTO `TMATMUL`、L1/L0 ping-pong、preload、swizzle 替代 Catlass/Catcoc 的任务设计 | 新 GMM design/task 拆分完成；不把 initquant pass 当整体商用性能完成 |
-| T26 | 参数化非特化验收矩阵 | T19,T20,T21,T23,T24 | stop17 脚本支持 token/topK/K/distribution sweep，并做 device 非特化代码审计 | token scale、topK scale、large K、skew、capacity clip 均 pass；device 主路径无 small/large/topK==2 写死 |
+| T26 | 参数化非特化验收矩阵 | T19,T20,T21,T23,T24 | stop17 脚本支持 token/topK/K/distribution sweep，并做 device 非特化代码审计 | `M={16,512,2048,4097,8192,16384}`、`topK={1,2,4,8}`、`K={128,1024,7168}`、skew、capacity clip 均 pass；device 主路径无 small/large/topK==2 写死 |
 
 推荐提交顺序：
 
@@ -1081,13 +1133,13 @@ Stage A/B/C 中间 dump。
 | T17 baseline 对标脚本 | 全阶段性能验收 | 建立原 FFN 与 PTO 的 e2e 对比口径 |
 | T18 sync 优化 | Stage A/B/C 共用同步 | 收敛为必要 AIV-only phase sync |
 | T19 UB-fits fast path | Stage A/B/C 融合路径 | 对标原 FFN full-load，减少小/UB-fits 场景固定开销 |
-| T20 large-token quant pipeline | Stage C-2: production quant | `R=M*topK` 大场景下任意 topK token-centric quant 和 ping-pong |
-| T21 worker/cache 调度 | Stage A/B/C 共用 | 按 `M/topK/K/专家分布` 动态选择 worker 和缓存策略 |
+| T20 large-token quant pipeline | Stage C-2: production quant | `R=M*topK` 大场景下任意 topK token-centric quant 和 ping-pong，覆盖 `M>4097` |
+| T21 worker/cache 调度 | Stage A/B/C 共用 | 按 `M/topK/K/专家分布` 动态选择 worker 和缓存策略，worker 数不能固定为 large anchor 的 4 |
 | T22 GMM cache 边界 | 后续 GMM 前置设计 | 明确 L1/L0/swizzle/preload 不属于 initquant |
-| T23 metadata GM 批量化 | Stage A/B/C metadata | tok/topK 更多时减少 metadata GM store/flush 开销 |
-| T24 大 K 行/列 tiling | Stage C-2: production quant | hiddenSize 较大时按 column chunk 和 row tile 保持 PTO Vec 主路径 |
+| T23 metadata GM 批量化 | Stage A/B/C metadata | tok/topK 更多时减少 metadata GM store/flush 开销，覆盖 `M=8192/16384` |
+| T24 大 K 行/列 tiling | Stage C-2: production quant | hiddenSize 较大时按 column chunk 和 row tile 保持 PTO Vec 主路径，覆盖 `K=1024/7168` |
 | T25 GMM PTO 性能设计 | 后续 GMM PTO 化 | 设计 TMATMUL、L1/L0、preload、swizzle 替代 Catlass/Catcoc |
-| T26 参数化非特化验收矩阵 | 全阶段生产验收 | 用 token/topK/K/distribution sweep 约束 T19-T24 不能按 anchor case 特化 |
+| T26 参数化非特化验收矩阵 | 全阶段生产验收 | 用 token/topK/K/distribution sweep 约束 T19-T24 不能按 anchor case 特化，small/large 只作为 anchor |
 
 按阶段推进：
 
