@@ -505,6 +505,21 @@ worker/cache/metadata 策略：
 验收结论也按参数族给出：small/large pass 只能证明 anchor 正确；只有 token scale、topK scale、large K、skew 和
 capacity clip 都通过，才能说该阶段没有做 anchor 特化。
 
+从 T20 开始，每个性能 hardening 任务交付时都必须带一个超出 large anchor 的参数族验证，不能把 T26 当成最后
+补测。T26 是共享矩阵和脚本化门禁，T20-T24 自己的报告也要证明实现没有围绕 `M=4097,topK=2,K=128` 做特化。
+
+| 任务 | 必带的非 anchor 验证 | 设计约束 |
+| --- | --- | --- |
+| T20 large-token quant pipeline | `M>4097` token scale 至少一个；`topK=4/8` 至少一个 | quant 按 token row 复用，`topK` 增大只增加 payload/scale store，不重复 row absmax/quant |
+| T21 worker/cache 调度 | `M=8192/16384`、skew、more experts 至少覆盖两类 | worker 数由 `R/topK/K/validRoute/globalExpertNum` 选择，不能固定在 large anchor 的 4 核 |
+| T23 metadata GM 批量化 | `M>4097` 和 `topK>2` 都要覆盖 | metadata 写回按连续 route/expert tile 批量化，不用 per-route flush 或中间日志维持正确性 |
+| T24 大 K 行/列 tiling | `K>=1024` 且包含 `topK>2` | row/col tiling 仍走 PTO Vec 主路径，不因整行放不下 UB 退回 scalar 或单核 |
+| T25 GMM PTO 性能设计 | 设计中继承 `M/topK/K` 参数族 | GMM 设计使用 initquant 的真实 packed row 规模，不只按 small/large 输出规模估算 |
+
+报告里的性能描述必须使用参数族表述，例如“token scale 到 `M=16384` 时 worker 选择仍随 `R` 扩展”，而不是用
+single shape 的 pass 推导“已对标所有 FFN 生产 shape”。如果某个参数族暂时不能跑通，报告要写清楚瓶颈是
+同步、worker 调度、metadata store、row/col tiling 还是 PTO primitive gap。
+
 ### 2.2 PTO 重写边界
 
 前重排阶段的实现文件可以复用当前工程已有 host/test/log 框架，但 device 侧入口和 helper 需要按 PTO 风格重写：
