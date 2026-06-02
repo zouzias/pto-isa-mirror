@@ -109,6 +109,7 @@
 | 2026-06-02 | T23 accepted：route scatter 生成当前 token packed-row UB cache，token-centric quant 不再立即回读 `expandedRowIdx`；`packedRowToRouteIndex` flush 收敛为 full-load expert 段或 multi-worker expert/worker 段。small/large、`M=8192/16384`、`topK=8`、skew topK4、more experts stop17 PASS。 | T23,T24,T26 |
 | 2026-06-02 | T24 accepted：large-K column chunk 路径在 `K=1024/7168,topK=4` 下保持 PTO Vec，无 scalar fallback；补充 route-pack metadata store fence 解决长列切分后 `expandedRowIdx/packedRowToRouteIndex` 可见性风险，同时回归 small/large、`M=16384` 和 `topK=8`。 | T24,T26 |
 | 2026-06-02 | T25 accepted：详细设计 GMM PTO 化，记录原 FFN L1/L0、swizzle、preload drain、cache hint、startCoreIdx 接力和 AIC/AIV handoff；新增 GMM-P0..GMM-P8 后续实施任务。 | T25,T26,GMM-P0..GMM-P8 |
+| 2026-06-02 | 修正 `init_quant_e2e_us` 计时口径：结束点提前到前重排 route-pack/quant 最终同步后，后续 count publish/wait、prefix metadata、dispatch gather 和 stop17 final mix sync 不再计入前重排 e2e。 | T15,T17-T24 |
 
 ### Handoff Rules
 

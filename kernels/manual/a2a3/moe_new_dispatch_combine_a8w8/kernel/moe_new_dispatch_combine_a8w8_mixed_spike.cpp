@@ -3120,11 +3120,19 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                     tokenEnd, tokenEnd - tokenBegin, 0U, routeBegin, M3N12GetSysCnt());
             }
         }
-        if (!initQuantFullLoad) {
+        if (initQuantFullLoad) {
+            M3NDispatchAivOnlyPhaseSync();
+        } else {
             M3NDispatchInitQuantPhaseSync(debugStopStage);
-            if (activeDispatchWorker) {
-                M3NInvalidateExpandedRowIdxShard(shape, workspaceView, dispatchWorkerId, dispatchWorkerCount);
-            }
+        }
+        if (IsM2FusedMainAiv()) {
+            M3N12RecordTimeline(
+                workspaceView.timelineScratch, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantE2E,
+                initQuantE2eBegin, M3N12GetSysCnt(),
+                M3N12PackMeta0(moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kInitQuantE2E,
+                               moe_new_dispatch_combine_a8w8::M3N12TimelineCoreType::kAiv, logicalAiv,
+                               moe_new_dispatch_combine_a8w8::M3N12TimelineStatus::kProcessed, 0U, logicalAiv),
+                M3N12PackMeta1(0U, shape.m, shape.m * shape.topK, 0U));
         }
         if (activeDispatchWorker && debugStopStage != 18U) {
             if (timelineEnable != 0U && dispatchWorkerId == 0U) {
@@ -3234,15 +3242,6 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                 M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 17);
             }
             pto::SYNCALL<pto::SyncCoreType::Mix>();
-            if (IsM2FusedMainAiv()) {
-                M3N12RecordTimeline(
-                    workspaceView.timelineScratch, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotInitQuantE2E,
-                    initQuantE2eBegin, M3N12GetSysCnt(),
-                    M3N12PackMeta0(moe_new_dispatch_combine_a8w8::M3N12TimelineKind::kInitQuantE2E,
-                                   moe_new_dispatch_combine_a8w8::M3N12TimelineCoreType::kAiv, logicalAiv,
-                                   moe_new_dispatch_combine_a8w8::M3N12TimelineStatus::kProcessed, 0U, logicalAiv),
-                    M3N12PackMeta1(0U, shape.m, shape.m * shape.topK, 0U));
-            }
             return;
         }
         if (m3n6Gmm1ActivationOverlap) {

@@ -1113,8 +1113,8 @@ stop18-stop21 等调试停止路径保持原 mixed 轮次，避免再次出现 A
 | --- | --- | --- |
 | 17 | 前重排 ready flag 后 | local route count、capacity-clipped `expandedRowIdx`、dispatch payload/scale、full `tokenPerExpertMatrix`、`cumsumMM`、`preSumBeforeRank`、`expertTokenNums`、`gmm1InputInt8`、`routingPerTokenScale`、`dispatchGroupReady` |
 
-stop17 的开始时间在前重排入口函数记录，结束时间在最后一次前重排全量同步之后记录。host 只输出最终
-`init_quant_e2e_us`，不打印中间阶段 timeline 明细。
+stop17 的结构体验收点在 dispatch ready 后；`init_quant_e2e_us` 的结束点在 dispatch 阶段之前，
+即前重排 route-pack/quant 最终同步之后。host 只输出最终 `init_quant_e2e_us`，不打印中间阶段 timeline 明细。
 
 ### 7.2 必须打印的日志字段
 
@@ -1155,7 +1155,8 @@ buffer=init_quant.dispatchScale mismatches=<n> first_index=<row> actual=<a> expe
 前重排 e2e 使用 device 侧 syscnt 记录，不使用 host launch/sync 时间替代：
 
 - begin：进入前重排主入口后，第一次前重排同步前；
-- end：ready flag 发布后的最后一次前重排全量同步之后；
+- end：route-pack/quant 完成后的最后一次前重排同步之后；后续 count publish/wait、prefix metadata、
+  dispatch gather 和 stop17 final mix sync 不计入 `init_quant_e2e_us`；
 - host：从 workspace 固定 slot 读取 begin/end，按 A3 `timeline_syscnt_cycles_per_us=1850` 换算并打印
   `init_quant_e2e_us`。
 
