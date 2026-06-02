@@ -272,7 +272,7 @@ AICORE inline void M3NDispatchAivOnlyPhaseSync()
 AICORE inline bool M3NFusedDispatchScratchFits(moe_new_dispatch_combine_a8w8::ShapeConfig shape)
 {
     uint32_t globalExpertNum = shape.rankNum * shape.expertPerRank;
-    return globalExpertNum > 0U && globalExpertNum * 2U <= kM3NFusedDispatchScratchLimit - kM3NFusedDispatchScratchBase;
+    return globalExpertNum > 0U;
 }
 
 AICORE inline bool M3N5DispatchGmm1OverlapEnabled(uint32_t debugStopStage, uint32_t overlapMode,
@@ -1235,13 +1235,6 @@ AICORE inline uint32_t M3NAssignDispatchWorkers(moe_new_dispatch_combine_a8w8::S
     if (logicalAivCount == 0U || globalExpertNum == 0U || !M3NDispatchScratchFits(shape)) {
         targetWorkers = 1U;
     } else {
-        uint32_t workerStride = M3NDispatchWorkerScratchStride(globalExpertNum);
-        uint32_t maxWorkersByScratch = (kM3NDispatchScratchLimit - kM3NDispatchScratchBase) / (workerStride * 2U);
-        if (maxWorkersByScratch == 0U) {
-            targetWorkers = 1U;
-        } else if (targetWorkers > maxWorkersByScratch) {
-            targetWorkers = maxWorkersByScratch;
-        }
         constexpr uint32_t kMinRoutesPerDispatchWorker = 64U;
         uint32_t routeCount = shape.m * shape.topK;
         uint32_t maxUsefulWorkers = (routeCount + kMinRoutesPerDispatchWorker - 1U) / kMinRoutesPerDispatchWorker;
@@ -1564,12 +1557,12 @@ AICORE inline void M3NRoutePackQuantLocalShardPtoVec(moe_new_dispatch_combine_a8
     uint32_t workerStride = M3NDispatchWorkerScratchStride(globalExpertNum);
     uint32_t localRows = static_cast<uint32_t>(M2LocalRows(shape));
     __gm__ int32_t *expertIds = reinterpret_cast<__gm__ int32_t *>(expertIdx);
-    InvalidateGmCacheLines(M3NDispatchWorkerCountScratch(localPeer),
+    InvalidateGmCacheLines(M3NDispatchWorkerCountScratch(workspaceView),
                            static_cast<uint32_t>(workerCount * workerStride * sizeof(int32_t)));
-    InvalidateGmCacheLines(M3NDispatchWorkerPrefixScratch(shape, localPeer),
+    InvalidateGmCacheLines(M3NDispatchWorkerPrefixScratch(workspaceView),
                            static_cast<uint32_t>(workerCount * workerStride * sizeof(int32_t)));
     __gm__ int32_t *localOrdinalCursor =
-        M3NDispatchWorkerCountScratch(localPeer) + static_cast<uint64_t>(workerId) * workerStride;
+        M3NDispatchWorkerCountScratch(workspaceView) + static_cast<uint64_t>(workerId) * workerStride;
     for (uint32_t idx = 0; idx < workerStride; ++idx) {
         StoreScalarI32(localOrdinalCursor + idx, 0);
     }
@@ -1589,7 +1582,7 @@ AICORE inline void M3NRoutePackQuantLocalShardPtoVec(moe_new_dispatch_combine_a8
             }
             uint32_t globalExpert = static_cast<uint32_t>(expert);
             int32_t packedRow = LoadScalarI32(workspaceView.blockPrefixPerExpert + globalExpert) +
-                                M3NDispatchLoadWorkerExpertPrefix(shape, localPeer, workerId, globalExpert) +
+                                M3NDispatchLoadWorkerExpertPrefix(shape, workspaceView, workerId, globalExpert) +
                                 LoadScalarI32(localOrdinalCursor + globalExpert);
             StoreScalarI32(localOrdinalCursor + globalExpert, LoadScalarI32(localOrdinalCursor + globalExpert) + 1);
             if (packedRow < 0 || static_cast<uint32_t>(packedRow) >= localRows) {
@@ -1599,8 +1592,8 @@ AICORE inline void M3NRoutePackQuantLocalShardPtoVec(moe_new_dispatch_combine_a8
             StoreScalarI32(workspaceView.expandedRowIdx + routeIndex, packedRow);
             StoreScalarI32(workspaceView.packedRowToRouteIndex + static_cast<uint32_t>(packedRow),
                            static_cast<int32_t>(routeIndex));
-            M2QuantizeRowToPeerPayload(shape, localPeer, inputA, token, static_cast<uint32_t>(packedRow), rowBytes);
         }
+        M2QuantizeTokenToPackedRows(shape, workspaceView, localPeer, inputA, token, rowBytes);
     }
     InvalidateGmCacheLines(workspaceView.expandedRowIdx + tokenBegin * shape.topK,
                            static_cast<uint32_t>((tokenEnd - tokenBegin) * shape.topK * sizeof(int32_t)));
@@ -3038,7 +3031,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
         }
         M3NDispatchHardPhaseSync();
         if (activeDispatchWorker) {
-            M3NClearDispatchWorkerScratch(shape, localPeer, dispatchWorkerId, dispatchWorkerCount);
+            M3NClearDispatchWorkerScratch(shape, workspaceView, localPeer, dispatchWorkerId, dispatchWorkerCount);
         }
         M3NDispatchHardPhaseSync();
         if (activeDispatchWorker) {
@@ -3046,7 +3039,8 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
             uint32_t tokenEnd = TokenShardEnd(shape.m, dispatchWorkerId, dispatchWorkerCount);
             bool recordCount = timelineEnable != 0U && dispatchWorkerId == 0U;
             uint64_t countBegin = recordCount ? M3N12GetSysCnt() : 0U;
-            M3NCountLocalRoutesShard(shape, localPeer, expertIdx, xActiveMask, dispatchWorkerId, dispatchWorkerCount);
+            M3NCountLocalRoutesShard(shape, workspaceView, expertIdx, xActiveMask, dispatchWorkerId,
+                                     dispatchWorkerCount);
             if (recordCount) {
                 M3N12RecordAivRange(
                     workspaceView.timelineScratch, moe_new_dispatch_combine_a8w8::kM3N12TimelineSlotRouteCount,

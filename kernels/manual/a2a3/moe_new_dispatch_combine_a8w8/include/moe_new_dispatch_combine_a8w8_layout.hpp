@@ -69,6 +69,17 @@ inline uint64_t TokenPerExpertMatrixStorageElements(const ShapeConfig &shape)
     return CheckedMul(shape.rankNum, TokenPerExpertMatrixRowStride(shape), "token matrix storage elems");
 }
 
+inline uint64_t InitQuantWorkerExpertStride(const ShapeConfig &shape)
+{
+    return TokenPerExpertMatrixRowStride(shape);
+}
+
+inline uint64_t InitQuantWorkerExpertStorageElements(const ShapeConfig &shape)
+{
+    return CheckedMul(kInitQuantMaxDispatchWorkers, InitQuantWorkerExpertStride(shape),
+                      "initquant worker expert elems");
+}
+
 inline uint64_t DTypeBytes(uint32_t dtype)
 {
     if (dtype == static_cast<uint32_t>(DType::kInt8)) {
@@ -180,6 +191,12 @@ inline WorkspaceLayout MakeWorkspaceLayout(const ShapeConfig &shape)
     layout.tokenPerExpertMatrix = AppendField(&offset, CheckedMul(matrixCount, sizeof(int32_t), "token matrix"));
     layout.blockTokenPerExpert = AppendField(&offset, CheckedMul(globalExpertNum, sizeof(int32_t), "block counts"));
     layout.blockPrefixPerExpert = AppendField(&offset, CheckedMul(globalExpertNum, sizeof(int32_t), "block prefix"));
+    layout.initQuantWorkerTokenPerExpert =
+        AppendField(&offset, CheckedMul(InitQuantWorkerExpertStorageElements(shape), sizeof(int32_t),
+                                        "initquant worker counts"));
+    layout.initQuantWorkerPrefixPerExpert =
+        AppendField(&offset, CheckedMul(InitQuantWorkerExpertStorageElements(shape), sizeof(int32_t),
+                                        "initquant worker prefix"));
     layout.expandedRowIdx = AppendField(&offset, CheckedMul(expandedRows, sizeof(int32_t), "expanded row idx"));
     layout.packedRowToRouteIndex =
         AppendField(&offset, CheckedMul(expandedRows, sizeof(int32_t), "packed row route index"));

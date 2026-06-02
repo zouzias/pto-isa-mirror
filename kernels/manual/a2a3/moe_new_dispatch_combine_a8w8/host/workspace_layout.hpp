@@ -31,6 +31,8 @@ inline void PrintWorkspaceLayout(std::ostream &os, const WorkspaceLayout &layout
     PrintField(os, "tokenPerExpertMatrix", layout.tokenPerExpertMatrix);
     PrintField(os, "blockTokenPerExpert", layout.blockTokenPerExpert);
     PrintField(os, "blockPrefixPerExpert", layout.blockPrefixPerExpert);
+    PrintField(os, "initQuantWorkerTokenPerExpert", layout.initQuantWorkerTokenPerExpert);
+    PrintField(os, "initQuantWorkerPrefixPerExpert", layout.initQuantWorkerPrefixPerExpert);
     PrintField(os, "expandedRowIdx", layout.expandedRowIdx);
     PrintField(os, "packedRowToRouteIndex", layout.packedRowToRouteIndex);
     PrintField(os, "dispatchOffset", layout.dispatchOffset);

@@ -33,6 +33,9 @@ dispatch/GMM1 需要的密排 token、计数和映射元数据。
 - route 计数、前缀、scatter+quant 都按 AIV 多核切分。
 - 主路径避免对 `M * topK` 做全量 comparison sort。MoE expert 数通常远小于 route 数，前重排按 expert 分桶更适合
   `count -> prefix -> stable scatter`。
+- 片上缓存和搬运流水必须按生产 FFN 的思路设计：UB 能容纳的场景使用 UB resident/full-load 融合，`R=M*topK`
+  较大的场景使用多 AIV 分片、UB 双缓冲/ping-pong、token-centric quant 和批量化 metadata 写回。small/large
+  只是验收锚点，不能在实现里特化成只支持这两个 shape 或固定 `topK=2`。
 - 每个 stage 只做必要同步。跨 AIV 全局同步控制在 3 次以内：
   1. local count 完成后同步；
   2. prefix/cursor 初始化完成后同步；
@@ -82,6 +85,285 @@ Stage C: stable scatter + dynamic quant
 在 expert 数很大、`globalExpertNum` 超过 debug scratch/UB 分片能力，或后续要求完全复刻 CANN 排序顺序时，
 可以保留 VBS/VMS/SortOut 的算法形态作为 fallback，但实现也必须 PTO 化，不能直接搬原 AscendC 类。第一版优先
 实现分桶主路径。
+
+### 2.1.1 small/large 验收 case 的原 FFN 实际分支
+
+原 FFN host tiling 对当前 A8W8/int8 路径固定使用：
+
+```text
+quantMode = 1                  // dynamic quant
+dropPadMode = 0                // dropless
+scaleDim0 = 0                  // no smooth
+expertTokensCountOrCumsumFlag = 2
+aivNumInitRouting = 2 * BLOCK_NUM = 40
+ubSize = 196352
+sortLoopMaxElement = floor(196352 / (sizeof(int32) * 2 * 4) / 32) * 32 = 6112
+```
+
+small case:
+
+```text
+worldSize=2, M=16, K=128, N=128, topK=2, experts=2, maxOutputSize=32
+R = M * topK = 32
+```
+
+满足原 FFN full-load dynamic quant 条件：
+
+- `R <= sortLoopMaxElement`；
+- `K <= MAX_COLS_ONE_LOOP_QUANT(8192)`；
+- dropless；
+- sort、expert count、dynamic quant 所需 UB 空间能放下。
+
+因此原 FFN `initRoutingQuantTilingKey=21000`，走 `MoeV2FullLoadDynamicQuant`。该路径把 sort、
+`expandedRowIdx`、expert cumsum、dynamic quant 和输出写回放在一个 full-load kernel path 内完成，不再走独立的
+`SortMultiCore -> ExpertTokenOut -> SrcToDst -> GatherDynamicQuant`。它的主要收益是减少 GM 中间结果和阶段级
+`SyncAll`；代价是为了服务 per-row quant 分片，小 shape 下部分元数据计算会在多个 AIV 上重复，但 `R=32` 时成本很小。
+
+large case:
+
+```text
+worldSize=2, M=4097, K=128, N=128, topK=2, experts=2, maxOutputSize=8194
+R = M * topK = 8194
+```
+
+`R > sortLoopMaxElement`，所以不走 full-load。原 FFN `initRoutingQuantTilingKey=11010`，含义是：
+
+```text
+dropless + dynamic quant + sort multi-core
+```
+
+large 的原 FFN 关键 tiling：
+
+```text
+VBS sort needCoreNum = ceil(8194 / 6112) -> 2 -> round_up_pow4 -> 4
+VBS perCoreElements = 2048
+VBS lastCoreElements = 2050
+VMS middle needCoreNum = 0       // 4 个 list 可由最终 SortOut 直接归并
+SortOut = core0 final 4-way merge
+srcToDst/gather needCoreNum = 40
+srcToDst/gather perCoreRows = ceil(8194 / 40) = 205
+srcToDst/gather lastCoreRows = 199
+gather dynamic quant colLoops = 1 // K=128 整行进 UB，不触发列切分
+```
+
+实际优化点是：
+
+- 4 个 AIV 做 VBS UB sort；
+- 4 路最终归并，无中间 VMS 多轮 GM ping-pong；
+- 40 个 AIV 做 `srcToDst` 和 `gather dynamic quant`；
+- `K=128` 走 no-smooth 1H 路径，按 source token row 量化一次，再写到同一 token 的多个 route packed row；
+- gather dynamic quant 配了 `BUFFER_NUM=2`，但这个 case 每核 row-loop 很少，双缓冲收益受限；
+- 多阶段之间有若干 `SyncAll`，最后 caller 在 initquant 后还有一次全量同步。
+
+L1/L0/swizzle/preload 属于后续 Catlass GMM 路径，不属于 `moe_init_routing_quant_v2` 前重排本身。前重排的性能
+对标重点是 full-load 融合、sort/分桶策略、多 AIV row quant、GM 中间结果和同步次数。
+
+### 2.1.2 PTO full-load fast path 设计
+
+PTO 不直接复刻原 full-load 里的 AscendC sort 类。small/full-load path 使用和主路径一致的分桶语义，但在 UB 内
+融合 count、prefix、scatter 元数据和 row quant，目标是降低小 shape 的固定同步和 GM workspace 成本。
+
+进入 full-load fast path 的建议条件：
+
+```text
+dropless
+dynamic quant
+R = M * topK <= fullLoadRouteThreshold
+K <= fullLoadColsThreshold
+globalExpertNum <= fullLoadExpertThreshold
+UB fits:
+  count[globalExpertNum]
+  prefix[globalExpertNum]
+  localOrdinal[globalExpertNum]
+  routePackedRow[R] or route cursor scratch if needed
+  one/two row quant tiles: half + fp32 + abs + int8 + scale
+```
+
+第一版阈值先取保守值，但选择条件仍按 `R`、`K`、`globalExpertNum` 和 UB fits 判断，不按 case name 或固定
+`topK` 判断：
+
+```text
+fullLoadRouteThreshold = 64 or 128
+fullLoadColsThreshold = 1024
+fullLoadExpertThreshold = 16
+```
+
+后续可按原 FFN 条件扩展到：
+
+```text
+R <= 6112
+K <= 8192
+fullLoadUbFits == true
+```
+
+PTO full-load 流程：
+
+```text
+main AIV:
+  zero count/localOrdinal in UB
+  pass0 over token/topK:
+    validate active/expert
+    count[expert]++
+  prefix in UB:
+    expertBase[expert], effectiveCount[expert], tokenPerExpertMatrix[rankId, expert]
+  pass1 over token/topK:
+    validate active/expert
+    packedRow = expertBase[expert] + localOrdinal[expert]++
+    expandedRowIdx[route] = packedRow or maxOutputSize
+    packedRowToRouteIndex[packedRow] = route
+    collect token's valid packed rows
+    quantize inputA[token, :] once
+    store quant payload/scale to all valid packed rows for this token
+```
+
+任意 `topK` 下都必须保持 token-centric quant：同一个 `inputA[token, :]` 不应为多个有效 route 重复做
+`load -> absmax -> quant`。实现先遍历 `slot in [0, topK)` 得到所有有效 packed row，再量化一次，并把同一份
+payload/scale 写到该 token 的所有有效 packed row。
+
+full-load 同步策略：
+
+- 单 AIV full-load：前重排内部不需要 AIV phase sync，只在 ready flag 前做最终可见性收口。
+- 多 AIV full-load：仍按 `count done -> prefix done -> scatter done` 三个 AIV-only phase sync，但只有当
+  `R` 大到单 AIV quant 不是最低延迟时才启用。
+- 不使用 `SYNCALL<Mix>`，不引入中间 stop 日志。
+
+full-load 输出合同与通用路径一致：
+
+- `tokenPerExpertMatrix[rankId,*]`；
+- capacity-clipped `expandedRowIdx`；
+- `packedRowToRouteIndex`；
+- `dispatchPayload`、`dispatchScale`；
+- stop17 最终验收字段不增加。
+
+### 2.1.3 PTO large-token 优化路径设计
+
+large-token path 面向 `R=M*topK` 较大、full-load 不再合适的通用场景，不是只面向
+`M=4097,K=128,topK=2,maxOutputSize=8194`。PTO 不走原 FFN 的全量 sort，而使用
+`count -> prefix -> stable scatter`，复杂度从 sort 的 `O(R log R)` 变成 `O(R + E * W)`。这里
+`E=globalExpertNum`，`W=workerCount`。
+
+large-token path 的优化目标不是仅让某个验收 case 的 4 个 worker 可用，而是根据 `R`、`topK`、`K`、专家数和
+路由分布把 quant/scatter 并发度拉到接近 AIV 数，同时保持 prefix 和 packed row 顺序确定。
+
+推荐分层 worker：
+
+```text
+workerCount:
+  不应被 debug counter scratch 限制
+  使用 workspace 正式字段 initQuantWorkerTokenPerExpert/initQuantWorkerPrefixPerExpert 保存 per-worker count/prefix
+  上限为 kInitQuantMaxDispatchWorkers(40)，再按 R/topK/K/route shard alignment/有效 route 数动态收敛
+  K=128/R=8194 只是其中一个覆盖点，目标是接近 logicalAivCount，而不是固定 4 worker
+```
+
+如果 count/scatter worker 数不同，必须重新定义 prefix：
+
+```text
+prefixBase[quantWorker, expert] =
+  sum_{worker < quantWorker} countByQuantWorker[worker, expert]
+```
+
+因此生产方案保留 `blockTokenPerExpert` 和 `blockPrefixPerExpert` 作为 per-expert 汇总输出，并新增正式
+`initQuantWorkerTokenPerExpert/initQuantWorkerPrefixPerExpert` workspace，布局为
+`[kInitQuantMaxDispatchWorkers, align_up(globalExpertNum, 16)]`。count、scatter、quant 使用同一组
+`workerCount`。debug counter 只记录摘要，不能作为 worker scratch 容量上限。
+
+large Stage A 优化：
+
+- 每个 AIV worker 按 token shard 遍历；
+- `globalExpertNum` 小时，`count[expert]` 常驻 UB，结束后一次连续写 GM；
+- `xActiveMask` 和 `expertIdx` 按 token/topK 连续读，避免每 route 反复读取 token 级状态；
+- 不用 atomic，worker 独占 `initQuantWorkerTokenPerExpert[worker,*]`。
+
+large Stage B 优化：
+
+- main AIV 对 `E * W` 做 prefix，large case 为 `4 * W`，成本很低；
+- 写 `tokenPerExpertMatrix`、`expertBase`、`blockPrefixPerExpert`；
+- 同步后 worker 只读自己的 prefix row；
+- 后续可把 prefix 计算扩成 int32 tile load/store，减少 scalar GM 指令。
+
+large Stage C 优化：
+
+```text
+for token in worker token range:
+  packedRows[0:topK] = compute packed row for each valid route
+  if no valid packed row:
+      continue
+  quantize inputA[token, :] once
+  for each valid packed row:
+      store same int8 row and scale
+```
+
+这与原 FFN no-smooth 1H gather dynamic quant 的核心优化一致：按 source token row 量化一次，而不是按 route
+重复量化。`topK` 增大时计算量应按 token 数增长，payload/scale store 才按有效 route 数增长；不能用固定长度数组
+或 `topK==2` 分支做特化。
+
+large quant pipeline：
+
+- `K=128` 时整行一个 tile，无列切分；
+- 使用两个 UB buffer 组做 ping-pong：
+  - `halfTile[2]`
+  - `fp32Tile[2]`
+  - `absTile[2]`
+  - `int8Tile[2]`
+  - `scaleTile[2]`
+- loop i 处理当前 token 时，提前发起 token i+1 的 GM->UB load；
+- 当前 tile 完成 `half2float -> abs -> rowmax -> scale -> int8` 后，MTE3 store payload/scale 到一个或多个
+  packed row；
+- 复用 tile 前只等待对应 store event，不做全核同步。
+
+large metadata 优化：
+
+- `expertBase`、`workerPrefix`、`localOrdinal` 缓存在 UB；
+- `expandedRowIdx` 和 `packedRowToRouteIndex` 可按 route 连续范围批量写，不能每写一个元素都做 cache line flush；
+- `dispatchPayload`/`dispatchScale` store 后只在发布 ready 前做必要 GM 可见性收口；
+- count/prefix/scatter 三个 AIV phase sync 之外不增加中间验收日志。
+
+large-token 路径验收：
+
+```text
+large stop17:
+  init_quant_active_workers >= 2    // 验收下限，实际 worker 数由 R/topK/K/route shard alignment 决定
+  target: active_workers 接近 logicalAivCount 和 kInitQuantMaxDispatchWorkers 上限
+  init_quant_route_count_match=true
+  init_quant_expanded_row_match=true
+  init_quant_payload_sample_match=true
+  init_quant_token_matrix_full_match=true
+  init_quant_prefix_match=true
+  init_quant_gmm1_input_match=true
+  init_quant_dispatch_ready_match=true
+  route_quant_path=pto_vec
+  route_quant_scalar_fallback_reason=none
+  init_quant_e2e_us=<nonzero>
+```
+
+性能验收必须加原 FFN baseline。没有同 shape/seed 的原 FFN `moe_init_routing_quant_v2` e2e 对比前，只能说
+large-token path 已具备多核分桶和 PTO Vec quant 正确性，不能宣称达到商用性能。
+
+### 2.1.4 商用性能对标门禁
+
+本阶段不能只按 correctness bring-up 设计。前重排要对标原 FFN initquant 的商用优化方式，后续 GMM 阶段还要对标
+Catlass/Catcoc 的片上缓存和 swizzle 设计。实现和验收按下面的门禁推进。
+
+| FFN 商用优化点 | 原 FFN 使用位置 | PTO 使用要求 | 验收口径 |
+| --- | --- | --- | --- |
+| full-load fast path | small/UB fits 场景 `MoeV2FullLoadDynamicQuant` | UB fits shape 用 UB resident count/prefix/scatter，token-centric quant 一次服务多个 topK route | small stop17 pass，`init_quant_e2e_us` 对比原 FFN baseline 不显著退化 |
+| UB resident metadata | full-load sort/count、gather tiling | `count/prefix/localOrdinal/expertBase` 优先驻留 UB，结束后批量写 GM | large metadata 阶段不能成为 e2e 主瓶颈；无 per-route cache flush |
+| 多 AIV 分片 | large VBS 4 核 sort、srcToDst/gather 40 核 | count/scatter/quant 使用正式 workspace 支持更多 worker，不能被 debug scratch 限死 | active workers 按 `R/topK/K` 动态扩展，large stop17 仍 pass |
+| 4 路归并/分桶并发 | VBS/VMS/SortOut | PTO 主路径用 `count -> prefix -> stable scatter` 替换全量 sort，但必须保持 expert 分桶确定性 | `expandedRowIdx`、count matrix、GMM1 input 与 host golden 一致 |
+| token-centric quant | no-smooth 1H gather dynamic quant | 同一 token 的多个有效 topK route 只做一次 absmax/quant，payload store 多份 | 增大 `topK` 时 quant 计算量不随 route 数线性翻倍 |
+| UB ping-pong | `BUFFER_NUM=2` queue、gather quant pipeline | row quant 用双 buffer 交叠 GM load、Vec compute、GM store；复用 tile 前只等对应 event | large `init_quant_e2e_us` 较当前 T15 基线下降或瓶颈解释清楚 |
+| 行/列 tiling | gather dynamic quant 的 row/col tiling | `K=128` 整行 tile；大 K 走 column chunk，不能退成单核或整行超 UB | K 扩展 case 不触发 fallback，payload/scale pass |
+| 同步收敛 | VBS/VMS/SortOut、srcToDst 后 SyncAll | 前重排只保留 count/prefix/scatter 三个 AIV-only phase sync；禁止中间 debug sync 长期保留 | sync 点数量、scope 可审计；卡顿定位 probe 用完删除 |
+| GM workspace ping-pong | sort workspace 0/1 | 前重排主路径避免 sort workspace；必要 workspace 只存正式 per-worker count/prefix 和 payload | workspace layout 不覆盖，GM traffic 有明确用途 |
+| L1/L0/swizzle/preload | 后续 Catlass GMM，不属于 initquant | PTO 重写整体必须在 GMM1/GMM2 阶段用 PTO `TMATMUL` tiling、L1/L0 tile、preload 和 swizzle 替代 | GMM 设计任务单独验收，不能把 initquant pass 当成整体商用性能完成 |
+
+关键判断：
+
+- initquant 的片上缓存核心是 UB，不是 L1/L0。原 FFN 的 L1/L0/swizzle 出现在 GMM/Catlass 计算阶段，PTO
+  重写整体必须考虑，但不能误算到前重排完成项里。
+- UB-fits path 要像原 FFN full-load 一样减少 GM 中间结果和阶段同步。
+- large-token path 要像原 FFN large path 一样用多 AIV 和流水，而不是 correctness 版长期停留。
+- 任何性能声明必须带原 FFN baseline、PTO e2e、worker 数、sync scope 和 route quant path；没有 baseline 不宣称商用达标。
 
 ### 2.2 PTO 重写边界
 
@@ -158,7 +440,7 @@ Stage C: stable scatter + dynamic quant
 
 | Phase | Producer | Consumer | PTO 同步 |
 | --- | --- | --- | --- |
-| count done | 每个 AIV worker 写 `blockTokenPerExpert[worker,*]` | main AIV merge count | `SYNCALL<Soft, AIVOnly>(..., activeWorkers)` |
+| count done | 每个 AIV worker 写 `initQuantWorkerTokenPerExpert[worker,*]` | main AIV merge count | `SYNCALL<Soft, AIVOnly>(..., activeWorkers)` |
 | prefix done | main AIV 写 `tokenPerExpertMatrix`、`expertBase`、`blockPrefixPerExpert` | 每个 AIV worker scatter | `SYNCALL<Soft, AIVOnly>(..., activeWorkers)` |
 | scatter+quant done | 每个 AIV worker 写 `expandedRowIdx/payload/scale` | 后续 count sync / debug stop | `SYNCALL<Soft, AIVOnly>(..., activeWorkers)` |
 
@@ -214,8 +496,10 @@ capacity = maxOutputSize
 | 字段 | 用途 |
 | --- | --- |
 | `tokenPerExpertMatrix` | 本 rank 的 local count 写到 `rankId` 行；后续 count sync 扩展到所有 rank |
-| `blockTokenPerExpert` | 每 worker 的局部 count，布局为 `[workerCount, globalExpertNum]` |
-| `blockPrefixPerExpert` | 每 worker 在每个 expert 内的 scatter base |
+| `blockTokenPerExpert` | 每个 global expert 的汇总 count，供 prefix/GMM metadata 使用 |
+| `blockPrefixPerExpert` | 每个 global expert 的 packed row 起点，供 scatter 和后续 metadata 使用 |
+| `initQuantWorkerTokenPerExpert` | 每 worker 的局部 count，布局为 `[kInitQuantMaxDispatchWorkers, align_up(globalExpertNum, 16)]` |
+| `initQuantWorkerPrefixPerExpert` | 每 worker 在每个 expert 内的 scatter base，布局同 worker count |
 | `expandedRowIdx` | route index 到 packed row 的映射 |
 | `packedRowToRouteIndex` | packed row 到 route index 的映射 |
 | `dispatchOffset` | `[expertPerRank]`，本地 expert 在 `gmm1InputInt8` 中的 row 起点，供 GMM task plan 和后续 gather 使用 |
@@ -248,12 +532,13 @@ packedRow = expertBase[globalExpert] + perWorkerBase[worker, globalExpert] + loc
 AIV 逻辑 worker 数：
 
 ```text
-workerCount = min(logicalAivCount, 8)
-workerCount <= floor(dispatchScratchSlots / (2 * align_up(globalExpertNum, 16)))
+workerCount = min(logicalAivCount, kInitQuantMaxDispatchWorkers)
+workerCount <= ceil(R / minRoutesPerWorker)
+workerCount satisfies route-shard cacheline alignment when required
 ```
 
-现有 `M3NDispatchWorkerCount` 已经使用类似约束。前重排第一版沿用最多 8 个 AIV worker，避免 debug counter 和
-scratch 扩容过大。每个 worker 处理一段完整 token：
+`kInitQuantMaxDispatchWorkers` 当前为 40，对标原 FFN `aivNumInitRouting=40`。debug counter 不再作为 worker
+scratch 容量上限；per-worker count/prefix 使用正式 workspace。每个 worker 处理一段完整 token：
 
 ```text
 tokenBegin = floor(M * workerId / workerCount)
@@ -276,13 +561,14 @@ if expert not in [0, globalExpertNum): skip
 localCount[expert]++
 ```
 
-`globalExpertNum` 小时使用 UB resident `localCount`，结束后一次写 `blockTokenPerExpert[worker, expert]`。
+`globalExpertNum` 小时使用 UB resident `localCount`，结束后一次写
+`initQuantWorkerTokenPerExpert[worker, expert]`。
 `globalExpertNum` 大时使用 GM scratch 的 cache-line 对齐 counter，worker 独占行，无原子冲突。
 
 Stage A 结束后做一次 AIV phase sync。main AIV 归并：
 
 ```text
-count[expert] = sum_worker blockTokenPerExpert[worker, expert]
+count[expert] = sum_worker initQuantWorkerTokenPerExpert[worker, expert]
 tokenPerExpertMatrix[rankId, expert] = count[expert]
 ```
 
@@ -312,16 +598,18 @@ for expert in [0, globalExpertNum):
 ```text
 workerRunning = 0
 for worker in [0, workerCount):
-    blockPrefixPerExpert[worker, expert] = workerRunning
-    workerRunning += blockTokenPerExpert[worker, expert]
+    initQuantWorkerPrefixPerExpert[worker, expert] = workerRunning
+    workerRunning += initQuantWorkerTokenPerExpert[worker, expert]
 ```
 
 capacity clip 在 Stage C 生效。若 `expertBase + workerBase + localOrdinal >= capacity`，该 route 丢弃。
 
 Stage B 输出：
 
-- `blockPrefixPerExpert[worker, expert]`
-- `blockTokenPerExpert[worker, expert]`
+- `initQuantWorkerPrefixPerExpert[worker, expert]`
+- `initQuantWorkerTokenPerExpert[worker, expert]`
+- `blockPrefixPerExpert[expert]`
+- `blockTokenPerExpert[expert]`
 - `tokenOwnerRankOffsets[expert] = expertBase[expert]`
 
 Stage B 后做第二次 AIV phase sync，保证所有 worker 能读到 prefix。
@@ -335,7 +623,8 @@ localOrdinal[expert] = 0
 for token in token range:
   for slot in topK:
     validate route
-    packedRow = expertBase[expert] + blockPrefixPerExpert[worker, expert] + localOrdinal[expert]++
+    packedRow = blockPrefixPerExpert[expert] + initQuantWorkerPrefixPerExpert[worker, expert] +
+                localOrdinal[expert]++
     if packedRow >= capacity:
         expandedRowIdx[route] = maxOutputSize
         continue
@@ -412,14 +701,16 @@ col chunk，避免多 row tile 带来的动态 packed row scatter 复杂度。�
 
 第一版不新增大块 workspace。需要新增或复用：
 
-- `blockTokenPerExpert`: `[workerCount, globalExpertNum] int32`
-- `blockPrefixPerExpert`: `[workerCount, globalExpertNum] int32`
+- `blockTokenPerExpert`: `[globalExpertNum] int32`，per-expert 汇总 count
+- `blockPrefixPerExpert`: `[globalExpertNum] int32`，per-expert packed row base
+- `initQuantWorkerTokenPerExpert`: `[kInitQuantMaxDispatchWorkers, align_up(globalExpertNum, 16)] int32`
+- `initQuantWorkerPrefixPerExpert`: `[kInitQuantMaxDispatchWorkers, align_up(globalExpertNum, 16)] int32`
 - `tokenOwnerRankOffsets`: `[globalExpertNum] int32`，作为 expert base
 - `dispatchOffset`: `[expertPerRank] int32`，保存本地 expert 的 row 起点。旧实现若按 `R/expandedRows` 分配，会和后续
   workspace 字段的 host/device layout 不一致；本阶段按实际消费方收敛为本地 expert 数。
 
-如果现有 `blockTokenPerExpert` 和 `blockPrefixPerExpert` 当前只按 `globalExpertNum` 分配，需要扩成
-`maxDispatchWorkers * globalExpertNum`，否则多 worker count 会互相覆盖。这是实现前必须检查的 layout 改动点。
+如果 per-worker scratch 继续复用 debug counter 或 `blockTokenPerExpert/blockPrefixPerExpert` 汇总字段，多 worker
+count 会互相覆盖或被 debug scratch 上限限制。这是实现和 review 必须检查的 layout 改动点。
 
 ## 6. 同步设计
 
@@ -478,7 +769,7 @@ init_quant_dispatch_ready_match=true
 route_quant_path=pto_vec
 route_quant_scalar_fallback_reason=none
 init_quant_dispatch_parallel_path=m3n_multi_worker|pto_main_aiv
-init_quant_dispatch_parallel_fallback_reason=none|global_expert_scratch_limit
+init_quant_dispatch_parallel_fallback_reason=none|invalid_global_expert_num
 ```
 
 失败时必须同时打印 first mismatch：
@@ -565,13 +856,14 @@ bash scripts/run_initquant_acceptance.sh
 | 某 expert 0 token | count 为 0，prefix 不留空洞 |
 | `K` 非 64 对齐 | payload row 按 64B 对齐，尾部填 0 |
 | `M < workerCount` | worker 自动 inactive，active mask 不应误报 |
-| `globalExpertNum` 超出 scratch | fallback 到 `pto_main_aiv`，count publish/wait/gather 仍使用 PTO 侧 scalar GM/Shard helper，不退回 AscendC/Catlass |
+| `globalExpertNum` 较大 | 使用正式 per-worker workspace，worker 数按 `kInitQuantMaxDispatchWorkers` 和有效 work 收敛；不因 debug scratch 超限 fallback |
 
 ## 9. 实施切片
 
 ### Slice 1: host 和 layout 准备
 
-- 扩容 `blockTokenPerExpert` 和 `blockPrefixPerExpert` 到 `[maxWorkers, globalExpertNum]`。
+- 新增正式 `initQuantWorkerTokenPerExpert/initQuantWorkerPrefixPerExpert` worker scratch；
+  `blockTokenPerExpert/blockPrefixPerExpert` 保留 per-expert 汇总语义。
 - host `PrintInitQuantDebugStopReport` 只保留 stop17 最终匹配摘要、first mismatch 和 `init_quant_e2e_us`。
 - 增加 device API 审计脚本或 `rg` 检查，确保新前重排文件不包含 `AscendC::`、`Catlass::`、`catlass/`、
   `TQue`、`TPipe`、`TBuf`、`LocalTensor`、`DataCopyPad`。
@@ -607,11 +899,11 @@ bash scripts/run_initquant_acceptance.sh
 | ID | 任务 | 依赖 | 主要产物 | 验收 |
 | --- | --- | --- | --- | --- |
 | T0 | 固化 API 审计规则 | 无 | host 脚本或 README 命令，扫描新前重排 device 文件中的非 PTO API | `rg` 扫描返回空；日志可打印 `device_api_family=pto` |
-| T1 | layout/workspace 扩容 | T0 | `blockTokenPerExpert`、`blockPrefixPerExpert` 扩成 `[maxWorkers, globalExpertNum]`；host/device size 同步 | dry-run 打印 workspace offsets 不重叠；多 worker case 不覆盖 counter |
+| T1 | layout/workspace 扩容 | T0 | 新增 `initQuantWorkerTokenPerExpert/initQuantWorkerPrefixPerExpert` 正式 worker scratch；host/AIV/AIC layout 同步 | dry-run 打印 workspace offsets 不重叠；多 worker case 不覆盖 counter |
 | T2 | initquant 验收摘要 | T1 | final stop17 输出匹配摘要和 first mismatch | stop17 日志字段完整，常规输出无中间阶段 dump |
 | T3 | host golden 稳定分桶 | T1 | host 侧按 worker token range 拼接的 expected count、expandedRowIdx、packedRowToRouteIndex | 单 rank `expanded_row_match=true` |
 | T4 | PTO AIV worker 调度 | T1 | `workerCount/activeWorkers/tokenBegin/tokenEnd` helper | `M < workerCount`、`M >= workerCount` 日志符合预期 |
-| T5 | Stage A PTO count | T2,T4 | worker local count 写 `blockTokenPerExpert[worker, expert]` | stop17: `init_quant_route_count_match=true` |
+| T5 | Stage A PTO count | T2,T4 | worker local count 写 `initQuantWorkerTokenPerExpert[worker, expert]`，汇总写 `blockTokenPerExpert[expert]` | stop17: `init_quant_route_count_match=true` |
 | T6 | Stage B prefix/cursor | T5 | main AIV 归并 `tokenPerExpertMatrix[rankId]`，生成 expert base 和 per-worker base | stop17: count 矩阵无 mismatch |
 | T7 | AIV-only PTO phase sync | T5,T6 | count/prefix/scatter 三个 phase sync helper，优先 `pto::SYNCALL<Soft, AIVOnly>` | 多 worker 不随机错；sync 次数日志为 3 |
 | T8 | Stage C stable scatter 元数据 | T6,T7 | `expandedRowIdx`、`packedRowToRouteIndex`、invalid/clipped 哨兵写入 | stop17: `init_quant_expanded_row_match=true` |
@@ -622,7 +914,16 @@ bash scripts/run_initquant_acceptance.sh
 | T13 | 多 rank count matrix 集成 | T12 | 本 rank count 与后续 count sync/dispatch 元数据衔接 | stop17: `init_quant_token_matrix_full_match=true` |
 | T14 | 后续阶段回归 | T13 | 继续接 prefix、gather、ready flag | stop17: prefix/GMM1 input/ready 均 `pass=true` |
 | T15 | 性能基线日志 | T10,T13 | 前重排入口和最后全量同步后记录 e2e cycles/us | 大 shape 下 activeWorkers >= 2，stop17 打印 `init_quant_e2e_us` |
-| T16 | PTO fallback 决策 | T15 | 明确 `globalExpertNum` 超出 scratch 时 fallback 到 `pto_main_aiv`；count publish/wait/gather 与 ready flag 仍走 PTO helper | fallback 日志包含原因，不静默走非 PTO |
+| T16 | PTO fallback 决策 | T15 | 明确异常 shape/workspace 条件下 fallback 到 `pto_main_aiv`；count publish/wait/gather 与 ready flag 仍走 PTO helper | fallback 日志包含原因，不静默走非 PTO |
+| T17 | baseline 对标脚本 | T15 | 同 shape/seed 下 PTO stop17 与原 FFN initquant e2e 对比脚本；原 FFN 命令缺失时显式报告 `missing_command` | small/large 记录 PTO `init_quant_e2e_us`、worker 数、path/reason；不宣称无 baseline 的商用达标 |
+| T18 | sync 优化 | T17 | 将前重排 hard sync 收敛为必要 AIV-only phase sync，审计 count/prefix/scatter 三个阶段 | stop17 pass，sync 点数量和 scope 可审计；不新增中间验收日志 |
+| T19 | UB-fits fast path | T17 | full-load/UB-fits 路径使用 UB resident count/prefix/scatter 和任意 topK token-centric quant | small stop17 pass；不得按 case name 或 `topK==2` 特化 |
+| T20 | large-token quant pipeline | T17 | `R=M*topK` 大场景使用 token-centric quant、UB ping-pong，重叠 load/compute/store | large stop17 pass；topK 扩展 case 不退化为每 route 重复 quant |
+| T21 | worker/cache 调度 | T17 | 根据 `M/topK/K/globalExpertNum/route distribution` 选择 worker 数，正式 worker scratch 支持到 40 | skew route 和更大 topK case activeWorkers 有效，metadata 不成为主瓶颈 |
+| T22 | GMM cache 边界 | T17 | 明确 L1/L0/swizzle/preload 属于后续 GMM PTO 化，不计入 initquant 完成项 | design.md 边界清晰，GMM 阶段单独拆任务 |
+| T23 | metadata GM 批量化 | T17,T21 | `expandedRowIdx`、`packedRowToRouteIndex`、count/prefix 写回按连续 route/expert tile 批量化 | small/large 和 topK 扩展 case stop17 pass；无中间 dump 日志 |
+| T24 | 大 K 行/列 tiling | T20,T23 | quant 支持大 K column chunk、row tile/ping-pong，不能因整行放不下 UB 退成单核 | K 扩展 case payload/scale pass，`route_quant_path=pto_vec` |
+| T25 | GMM PTO 性能设计 | T22 | GMM1/GMM2 用 PTO `TMATMUL`、L1/L0 ping-pong、preload、swizzle 替代 Catlass/Catcoc 的任务设计 | 新 GMM design/task 拆分完成；不把 initquant pass 当整体商用性能完成 |
 
 推荐提交顺序：
 
@@ -630,6 +931,7 @@ bash scripts/run_initquant_acceptance.sh
 2. `T4-T8`：完成多核稳定分桶，不做高性能量化也能先验收 mapping。
 3. `T9-T12`：补齐 PTO quant、padding 和 capacity。
 4. `T13-T16`：接入多 rank 和后续阶段，再看性能基线。
+5. `T17-T25`：生产性能 hardening，覆盖 baseline、sync、UB/full-load、large-token、大 `topK`、大 `K` 和后续 GMM 边界。
 
 阶段开发时可以短期增加局部定位点，但交付前必须删除中间验收日志。前重排主验收统一跑 stop17。
 
@@ -653,7 +955,16 @@ bash scripts/run_initquant_acceptance.sh
 | T13 多 rank count matrix 集成 | initquant 后置衔接 | 把本地 count 接到后续 count sync |
 | T14 后续阶段回归 | initquant 后置衔接 | 验证不破坏 prefix/GMM1 ready 等后续阶段 |
 | T15 性能基线日志 | 全阶段性能验收 | 验证多 worker 和生产性能方向；stop17 打印前重排 e2e 时间 |
-| T16 PTO fallback 决策 | 全局异常路径 | 明确超出 scratch/shape 时仍走 `pto_main_aiv` fallback |
+| T16 PTO fallback 决策 | 全局异常路径 | 明确异常 shape/workspace 条件下仍走 `pto_main_aiv` fallback |
+| T17 baseline 对标脚本 | 全阶段性能验收 | 建立原 FFN 与 PTO 的 e2e 对比口径 |
+| T18 sync 优化 | Stage A/B/C 共用同步 | 收敛为必要 AIV-only phase sync |
+| T19 UB-fits fast path | Stage A/B/C 融合路径 | 对标原 FFN full-load，减少小/UB-fits 场景固定开销 |
+| T20 large-token quant pipeline | Stage C-2: production quant | `R=M*topK` 大场景下任意 topK token-centric quant 和 ping-pong |
+| T21 worker/cache 调度 | Stage A/B/C 共用 | 按 `M/topK/K/专家分布` 动态选择 worker 和缓存策略 |
+| T22 GMM cache 边界 | 后续 GMM 前置设计 | 明确 L1/L0/swizzle/preload 不属于 initquant |
+| T23 metadata GM 批量化 | Stage A/B/C metadata | tok/topK 更多时减少 metadata GM store/flush 开销 |
+| T24 大 K 行/列 tiling | Stage C-2: production quant | hiddenSize 较大时按 column chunk 和 row tile 保持 PTO Vec 主路径 |
+| T25 GMM PTO 性能设计 | 后续 GMM PTO 化 | 设计 TMATMUL、L1/L0、preload、swizzle 替代 Catlass/Catcoc |
 
 按阶段推进：
 
@@ -674,7 +985,7 @@ Stage C: stable scatter + dynamic quant
   T13, T14
 
 性能与异常路径:
-  T15, T16
+  T15, T16, T17, T18, T19, T20, T21, T22, T23, T24, T25
 ```
 
 与原始 FFN initquant 子阶段的对应：

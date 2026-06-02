@@ -149,7 +149,10 @@ AICORE inline moe_new_dispatch_combine_a8w8::WorkspaceLayout MakeM2WorkspaceLayo
     uint64_t expandedRows = static_cast<uint64_t>(shape.m) * shape.topK;
     uint64_t localRows = static_cast<uint64_t>(shape.maxTokensPerExpert) * shape.expertPerRank;
     uint64_t globalExpertNum = M2GlobalExpertNum(shape);
-    uint64_t matrixCount = static_cast<uint64_t>(shape.rankNum) * M2TokenPerExpertMatrixRowStride(shape);
+    uint64_t tokenMatrixRowStride = M2TokenPerExpertMatrixRowStride(shape);
+    uint64_t matrixCount = static_cast<uint64_t>(shape.rankNum) * tokenMatrixRowStride;
+    uint64_t initQuantWorkerElems =
+        static_cast<uint64_t>(moe_new_dispatch_combine_a8w8::kInitQuantMaxDispatchWorkers) * tokenMatrixRowStride;
     uint64_t rankExpertCount = static_cast<uint64_t>(shape.rankNum) * shape.expertPerRank;
     uint64_t dispatchRowBytes = M2DispatchPayloadRowBytes(shape);
     uint64_t returnRowBytes = M2ReturnPayloadRowBytes(shape);
@@ -161,9 +164,11 @@ AICORE inline moe_new_dispatch_combine_a8w8::WorkspaceLayout MakeM2WorkspaceLayo
     layout.tokenPerExpertMatrix = M2AppendFieldDevice(offset, matrixCount * sizeof(int32_t));
     layout.blockTokenPerExpert = M2AppendFieldDevice(offset, globalExpertNum * sizeof(int32_t));
     layout.blockPrefixPerExpert = M2AppendFieldDevice(offset, globalExpertNum * sizeof(int32_t));
+    layout.initQuantWorkerTokenPerExpert = M2AppendFieldDevice(offset, initQuantWorkerElems * sizeof(int32_t));
+    layout.initQuantWorkerPrefixPerExpert = M2AppendFieldDevice(offset, initQuantWorkerElems * sizeof(int32_t));
     layout.expandedRowIdx = M2AppendFieldDevice(offset, expandedRows * sizeof(int32_t));
     layout.packedRowToRouteIndex = M2AppendFieldDevice(offset, expandedRows * sizeof(int32_t));
-    layout.dispatchOffset = M2AppendFieldDevice(offset, expandedRows * sizeof(int32_t));
+    layout.dispatchOffset = M2AppendFieldDevice(offset, shape.expertPerRank * sizeof(int32_t));
     layout.cumsumMM = M2AppendFieldDevice(offset, rankExpertCount * sizeof(int32_t));
     layout.preSumBeforeRank = M2AppendFieldDevice(offset, rankExpertCount * sizeof(int32_t));
     layout.expertTokenNums = M2AppendFieldDevice(offset, shape.expertPerRank * sizeof(int32_t));

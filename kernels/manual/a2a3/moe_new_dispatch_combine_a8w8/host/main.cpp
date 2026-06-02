@@ -2436,10 +2436,8 @@ bool IsInitQuantDebugStopStage(uint32_t debugStopStage)
 
 bool InitQuantDispatchScratchFits(const DispatchCombineTileArgs &args)
 {
-    constexpr uint32_t kScratchBase = 32U * 16U;
-    constexpr uint32_t kScratchLimit = 40U * 16U;
     uint32_t globalExpertNum = args.shape.ep * args.shape.expertPerRank;
-    return globalExpertNum > 0U && globalExpertNum * 2U <= kScratchLimit - kScratchBase;
+    return globalExpertNum > 0U;
 }
 
 const char *InitQuantDispatchParallelPath(const DispatchCombineTileArgs &args)
@@ -2453,7 +2451,7 @@ const char *InitQuantDispatchParallelPath(const DispatchCombineTileArgs &args)
 const char *InitQuantDispatchParallelFallbackReason(const DispatchCombineTileArgs &args)
 {
     if (!InitQuantDispatchScratchFits(args)) {
-        return "global_expert_scratch_limit";
+        return "invalid_global_expert_num";
     }
     return "none";
 }
@@ -2594,46 +2592,48 @@ InitQuantVerifySummary VerifyInitQuantDebugStop(const DispatchCombineTileArgs &a
 void PrintInitQuantDebugStopReport(const DispatchCombineTileArgs &args, const M2FusedFullEvidence &evidence,
                                    const InitQuantVerifySummary &summary)
 {
-    std::cout << "  init_quant_final_stop=" << args.runtime.m2FusedDebugStopStage << "\n";
-    std::cout << "  init_quant_e2e_us=" << InitQuantE2eUs(evidence) << "\n";
-    std::cout << "  init_quant_worker_count=" << evidence.m3nDispatchCounters[3] << "\n";
-    std::cout << "  init_quant_assigned_workers=" << evidence.m3nDispatchCounters[11] << "\n";
-    std::cout << "  init_quant_active_workers=" << evidence.m3nDispatchCounters[0] << "\n";
-    std::cout << "  init_quant_worker_mask=" << evidence.m3nDispatchCounters[10] << "\n";
-    std::cout << "  init_quant_dispatch_parallel_path=" << InitQuantDispatchParallelPath(args) << "\n";
-    std::cout << "  init_quant_dispatch_parallel_fallback_reason=" << InitQuantDispatchParallelFallbackReason(args)
-              << "\n";
-    std::cout << "  init_quant_route_count_checked=" << (summary.routeCountChecked ? "true" : "false") << "\n";
-    std::cout << "  init_quant_route_count_match=" << CheckedBool(summary.routeCountChecked, summary.routeCountMatch)
-              << "\n";
-    std::cout << "  init_quant_route_count_mismatches=" << summary.routeCountMismatches << "\n";
-    std::cout << "  init_quant_token_matrix_full_checked=" << (summary.tokenMatrixFullChecked ? "true" : "false")
-              << "\n";
-    std::cout << "  init_quant_token_matrix_full_match="
-              << CheckedBool(summary.tokenMatrixFullChecked, summary.tokenMatrixFullMatch) << "\n";
-    std::cout << "  init_quant_token_matrix_full_mismatches=" << summary.tokenMatrixFullMismatches << "\n";
-    std::cout << "  init_quant_expanded_row_checked=" << (summary.expandedRowChecked ? "true" : "false") << "\n";
-    std::cout << "  init_quant_expanded_row_contract=capacity_clipped\n";
-    std::cout << "  init_quant_expanded_row_match=" << CheckedBool(summary.expandedRowChecked, summary.expandedRowMatch)
-              << "\n";
-    std::cout << "  init_quant_expanded_row_mismatches=" << summary.expandedRowMismatches << "\n";
-    std::cout << "  init_quant_payload_sample_checked=" << (summary.payloadSampleChecked ? "true" : "false") << "\n";
-    std::cout << "  init_quant_payload_sample_match="
-              << CheckedBool(summary.payloadSampleChecked, summary.payloadSampleMatch) << "\n";
-    std::cout << "  init_quant_payload_sample_mismatches=" << summary.payloadSampleMismatches << "\n";
-    std::cout << "  init_quant_prefix_checked=" << (summary.prefixChecked ? "true" : "false") << "\n";
-    std::cout << "  init_quant_prefix_match=" << CheckedBool(summary.prefixChecked, summary.prefixMatch) << "\n";
-    std::cout << "  init_quant_prefix_mismatches=" << summary.prefixMismatches << "\n";
-    std::cout << "  init_quant_gmm1_input_checked=" << (summary.gmm1InputChecked ? "true" : "false") << "\n";
-    std::cout << "  init_quant_gmm1_input_match=" << CheckedBool(summary.gmm1InputChecked, summary.gmm1InputMatch)
-              << "\n";
-    std::cout << "  init_quant_gmm1_input_mismatches=" << summary.gmm1InputMismatches << "\n";
-    std::cout << "  init_quant_dispatch_ready_checked=" << (summary.dispatchReadyChecked ? "true" : "false") << "\n";
-    std::cout << "  init_quant_dispatch_ready_match="
-              << CheckedBool(summary.dispatchReadyChecked, summary.dispatchReadyMatch) << "\n";
-    std::cout << "  init_quant_dispatch_ready_mismatches=" << summary.dispatchReadyMismatches << "\n";
-    std::cout << "  route_quant_path=" << InitQuantRouteQuantPath(args) << "\n";
-    std::cout << "  route_quant_scalar_fallback_reason=" << InitQuantRouteQuantFallbackReason(args) << "\n";
+    std::ostringstream report;
+    report << "  init_quant_final_stop=" << args.runtime.m2FusedDebugStopStage << "\n";
+    report << "  init_quant_e2e_us=" << InitQuantE2eUs(evidence) << "\n";
+    report << "  init_quant_worker_count=" << evidence.m3nDispatchCounters[3] << "\n";
+    report << "  init_quant_assigned_workers=" << evidence.m3nDispatchCounters[11] << "\n";
+    report << "  init_quant_active_workers=" << evidence.m3nDispatchCounters[0] << "\n";
+    report << "  init_quant_worker_mask=" << evidence.m3nDispatchCounters[10] << "\n";
+    report << "  init_quant_dispatch_parallel_path=" << InitQuantDispatchParallelPath(args) << "\n";
+    report << "  init_quant_dispatch_parallel_fallback_reason=" << InitQuantDispatchParallelFallbackReason(args)
+           << "\n";
+    report << "  init_quant_route_count_checked=" << (summary.routeCountChecked ? "true" : "false") << "\n";
+    report << "  init_quant_route_count_match=" << CheckedBool(summary.routeCountChecked, summary.routeCountMatch)
+           << "\n";
+    report << "  init_quant_route_count_mismatches=" << summary.routeCountMismatches << "\n";
+    report << "  init_quant_token_matrix_full_checked=" << (summary.tokenMatrixFullChecked ? "true" : "false")
+           << "\n";
+    report << "  init_quant_token_matrix_full_match="
+           << CheckedBool(summary.tokenMatrixFullChecked, summary.tokenMatrixFullMatch) << "\n";
+    report << "  init_quant_token_matrix_full_mismatches=" << summary.tokenMatrixFullMismatches << "\n";
+    report << "  init_quant_expanded_row_checked=" << (summary.expandedRowChecked ? "true" : "false") << "\n";
+    report << "  init_quant_expanded_row_contract=capacity_clipped\n";
+    report << "  init_quant_expanded_row_match=" << CheckedBool(summary.expandedRowChecked, summary.expandedRowMatch)
+           << "\n";
+    report << "  init_quant_expanded_row_mismatches=" << summary.expandedRowMismatches << "\n";
+    report << "  init_quant_payload_sample_checked=" << (summary.payloadSampleChecked ? "true" : "false") << "\n";
+    report << "  init_quant_payload_sample_match="
+           << CheckedBool(summary.payloadSampleChecked, summary.payloadSampleMatch) << "\n";
+    report << "  init_quant_payload_sample_mismatches=" << summary.payloadSampleMismatches << "\n";
+    report << "  init_quant_prefix_checked=" << (summary.prefixChecked ? "true" : "false") << "\n";
+    report << "  init_quant_prefix_match=" << CheckedBool(summary.prefixChecked, summary.prefixMatch) << "\n";
+    report << "  init_quant_prefix_mismatches=" << summary.prefixMismatches << "\n";
+    report << "  init_quant_gmm1_input_checked=" << (summary.gmm1InputChecked ? "true" : "false") << "\n";
+    report << "  init_quant_gmm1_input_match=" << CheckedBool(summary.gmm1InputChecked, summary.gmm1InputMatch)
+           << "\n";
+    report << "  init_quant_gmm1_input_mismatches=" << summary.gmm1InputMismatches << "\n";
+    report << "  init_quant_dispatch_ready_checked=" << (summary.dispatchReadyChecked ? "true" : "false") << "\n";
+    report << "  init_quant_dispatch_ready_match="
+           << CheckedBool(summary.dispatchReadyChecked, summary.dispatchReadyMatch) << "\n";
+    report << "  init_quant_dispatch_ready_mismatches=" << summary.dispatchReadyMismatches << "\n";
+    report << "  route_quant_path=" << InitQuantRouteQuantPath(args) << "\n";
+    report << "  route_quant_scalar_fallback_reason=" << InitQuantRouteQuantFallbackReason(args) << "\n";
+    std::cout << report.str();
 }
 
 std::vector<int32_t> CopyM2Gmm1AccToHost(const DispatchCombineTileArgs &args,

@@ -63,6 +63,7 @@ constexpr uint32_t kM2FusedFullPtrXActiveMaskSlot = 33;
 constexpr uint32_t kM2FusedFullTimelineEnableSlot = 35;
 constexpr uint32_t kM2FusedFullOverlapModeSlot = 36;
 constexpr uint32_t kM3N11SubtileRows = 16U;
+constexpr uint32_t kInitQuantMaxDispatchWorkers = 40U;
 constexpr uint32_t kM3N11SubtileCounterBase = 24U * 16U + 128U;
 constexpr uint32_t kM3N11SubtileCounterSlots = 16U;
 constexpr uint32_t kM3OCombineProbeCounterBase = 24U * 16U + 304U;
@@ -208,6 +209,8 @@ struct WorkspaceLayout {
     FieldLayout tokenPerExpertMatrix;
     FieldLayout blockTokenPerExpert;
     FieldLayout blockPrefixPerExpert;
+    FieldLayout initQuantWorkerTokenPerExpert;
+    FieldLayout initQuantWorkerPrefixPerExpert;
     FieldLayout expandedRowIdx;
     FieldLayout packedRowToRouteIndex;
     FieldLayout dispatchOffset;
