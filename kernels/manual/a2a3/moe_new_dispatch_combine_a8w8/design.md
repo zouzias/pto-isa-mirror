@@ -352,13 +352,16 @@ large metadata 优化：
 
 T21 已落地第一版 worker/cache 调度优化：
 
+- worker 选择收敛到共享 `M3NDispatchTargetWorkerCount`：输入为 `M/topK/K/globalExpertNum`、logical AIV 数和
+  fused lane slot 上限。selector 同时考虑 token-centric quant 的 token 侧工作量、`M*topK` 的 route store fanout
+  和 `globalExpertNum * workerCount` 的 prefix merge 成本，避免 worker 数固定为验收 large 的 4 核。
 - large-token scatter 进入每个 worker 后，按 `globalExpertNum` 初始化 UB expert cache。cache 中保存
   `blockPrefixPerExpert[expert] + initQuantWorkerPrefixPerExpert[worker, expert]` 和
   `localOrdinal[expert]`，后续每个 valid route 只做 UB cursor 更新，不再在 route 热循环里反复读写 GM cursor。
 - UB expert cache 容量按 expert 数控制，当前支持到 1024 个 global expert。超过容量时保留 GM cursor fallback，
   输出合同不变，仍不退 AscendC/Catlass。
-- worker 数继续由 `M/topK/K/globalExpertNum`、logical AIV 和 lane slot 选择，large/more-token/topK/skew/
-  more-expert case 均保持 `m3n_multi_worker`，没有按 `small/large`、固定 `M` 或固定 `topK` 分支。
+- large/more-token/topK/skew/more-expert case 均保持 `m3n_multi_worker`，没有按 `small/large`、固定 `M` 或固定
+  `topK` 分支。
 - T23 继续负责 `expandedRowIdx`、`packedRowToRouteIndex` 以及 payload/scale 可见性收口的更大粒度批量化；T21
   只移除 per-expert base/cursor 的 GM 热点，不新增中间日志。
 
