@@ -36,6 +36,8 @@ dispatch/GMM1 需要的密排 token、计数和映射元数据。
 - 片上缓存和搬运流水必须按生产 FFN 的思路设计：UB 能容纳的场景使用 UB resident/full-load 融合，`R=M*topK`
   较大的场景使用多 AIV 分片、UB 双缓冲/ping-pong、token-centric quant 和批量化 metadata 写回。small/large
   只是验收锚点，不能在实现里特化成只支持这两个 shape 或固定 `topK=2`。
+- worker 数、full-load 进入条件、large-token 路径和 row/column tiling 都必须由 `M/topK/K/globalExpertNum`、
+  route 分布和 UB 容量共同决定，不能由 `caseName`、固定 `M=4097`、固定 `topK=2` 或验收脚本名称决定。
 - 每个 stage 只做必要同步。跨 AIV 全局同步控制在 3 次以内：
   1. local count 完成后同步；
   2. prefix/cursor 初始化完成后同步；
@@ -196,6 +198,10 @@ K <= 8192
 fullLoadUbFits == true
 ```
 
+full-load 是 UB fits 参数化路径，不是 small case 的专用分支。`topK` 增大后只要 `R`、`K`、`globalExpertNum`
+和 quant tile scratch 仍满足 UB fits，就继续走 full-load；超过阈值时自然进入 large-token 路径。device 侧不能判断
+`caseName == small`、`M == 16` 或 `topK == 2` 来选择路径。
+
 PTO full-load 流程：
 
 ```text
@@ -339,7 +345,89 @@ large stop17:
 性能验收必须加原 FFN baseline。没有同 shape/seed 的原 FFN `moe_init_routing_quant_v2` e2e 对比前，只能说
 large-token path 已具备多核分桶和 PTO Vec quant 正确性，不能宣称达到商用性能。
 
-### 2.1.4 商用性能对标门禁
+### 2.1.4 非特化扩展设计
+
+small/large 是固定验收锚点，但不能覆盖生产 shape 空间。后续 T19-T24 的实现和报告必须额外覆盖下面的参数族，
+以证明路径是对标 FFN 的通用设计，而不是针对两个 case 的特化优化。
+
+| 参数族 | 推荐 shape | 覆盖目的 | 任务门禁 |
+| --- | --- | --- | --- |
+| `anchor_small` | `M=16,K=128,topK=2,globalExpertNum=4,maxOutputSize=32` | 对标原 FFN full-load dynamic quant | T19 必跑，stop17 pass，`init_quant_e2e_us` 非 0 |
+| `anchor_large` | `M=4097,K=128,topK=2,globalExpertNum=4,maxOutputSize=8194` | 对标原 FFN large sort+gather dynamic quant | T20/T21 必跑，active workers >= 2，stop17 pass |
+| `token_scale_sweep` | `M=512/2048/4097/8192/16384,K=128,topK=2,globalExpertNum=4,maxOutputSize=M*topK` | 验证 token 数量连续扩展，不只适配 small/large 两个点 | T20/T21/T23 必跑至少一个大于 large 的点和一个非 2 次幂点 |
+| `more_tokens` | `M=16384,K=128,topK=2,globalExpertNum=4,maxOutputSize=32768` | 验证 worker 数随 token 数扩展，metadata store 不成为瓶颈 | T20/T21/T23 必跑，worker 不被 4 核或 debug scratch 限死 |
+| `topk_sweep` | `M=1024/2048,K=128,topK=1/2/4/8,globalExpertNum>=4,maxOutputSize=M*topK` | 验证任意 `topK` 下 token-centric quant，只量化 token row 一次 | T20/T21/T24 必跑，代码不得出现 `slot < 2` 或固定 packed row 数组 |
+| `topk_expand` | `M=2048,K=128,topK=4 或 8,globalExpertNum>=4,maxOutputSize=M*topK` | 覆盖比 anchor 更大的 route fanout | T20/T21 必跑，代码不得出现 `topK==2` 特化 |
+| `skew_topk` | `M=4097,K=128,topK=4,caseName=skewed,maxOutputSize=M*topK` | 验证专家倾斜时 per-worker prefix 和 capacity 仍确定 | T21/T23 必跑，count/prefix/expanded row 全匹配 |
+| `large_k` | `M=1024,K=1024 或 7168,topK=2/4,maxOutputSize=M*topK` | 验证大 K column chunk、row tile、ping-pong，不退 scalar fallback | T24 必跑，`route_quant_path=pto_vec` |
+| `capacity_clip` | `maxOutputSize < M*topK`，专家倾斜或 over-capacity | 验证 clip 哨兵和 packed row 上界 | T12/T23 回归必跑，clipped route 与 golden 一致 |
+
+参数族使用显式 shape 参数驱动。`caseName` 只允许作为 host 数据生成模式，例如 balanced/skewed/zero-token/
+over-capacity；device 侧路径选择只能读取 shape、workspace capacity、worker count 和 runtime config。
+
+禁止作为性能路径选择条件的信号：
+
+```text
+case_name == small|large
+M == 16
+M == 4097
+topK == 2
+slot < 2
+固定长度 packedRows[2]
+```
+
+实现要求：
+
+- 所有 `slot` 循环都使用 `slot < shape.topK`，中间 packed row 缓存需要按 `topK` tile 或可循环 flush，不能写死 2。
+- token-centric quant 的复杂度目标是 `O(activeToken * K + validRoute * storeBytes)`；`topK` 增大时不能退化成
+  `O(validRoute * K)` 的重复 row quant。
+- worker 调度按 token range 切分，但 worker 数要随 `R=M*topK`、`K`、有效 route 数和专家倾斜调整；更多 token
+  时应接近 `logicalAivCount/kInitQuantMaxDispatchWorkers`，不能停在验收 large 的 4 worker。
+- metadata 写回按 route/expert 连续片段批量化。更多 token 或更大 `topK` 时，不允许每 route 增加独立 cache flush
+  或中间日志。
+- full-load、large-token、large-K 三条路径共享同一输出合同和 stop17 验收字段，不能为了扩展 case 增加新的常规
+  中间 dump。
+
+共享验收脚本需要支持参数化矩阵，而不是在脚本里写死 small/large。最小矩阵：
+
+```text
+token scale: M in {16, 512, 2048, 4097, 8192, 16384}, topK=2, K=128
+topK scale:  M in {1024, 2048}, topK in {1, 2, 4, 8}, K=128
+K scale:     K in {128, 1024, 7168}, topK in {2, 4}
+distribution: balanced + skewed + capacity_clip
+```
+
+报告必须打印每个 case 的 `M/topK/K/maxOutputSize/activeWorkers/e2e_us/path/reason/pass` 汇总。性能结论按
+参数族给出，不允许用单个 `caseName` 推导通用结论。
+
+交付前做 device 侧非特化审计。下面的模式在前重排 device 主路径中应返回空，host 数据生成脚本可使用
+`caseName` 选择数据分布，但不能把它传入 device 性能分支：
+
+```bash
+rg -n "caseName|case_name|M == 16|M == 4097|topK == 2|slot < 2|packedRows\\[2\\]" \
+  kernels/manual/a2a3/moe_new_dispatch_combine_a8w8/kernel
+```
+
+每个扩展 shape 的常规验收仍只读 stop17 最终摘要：
+
+```text
+init_quant_route_count_match=true
+init_quant_expanded_row_match=true
+init_quant_payload_sample_match=true
+init_quant_token_matrix_full_match=true
+init_quant_prefix_match=true
+init_quant_gmm1_input_match=true
+init_quant_dispatch_ready_match=true
+route_quant_path=pto_vec
+route_quant_scalar_fallback_reason=none
+init_quant_e2e_us=<nonzero>
+pass=true
+```
+
+性能结论必须按参数族表达。例如只能说“topK expansion 下仍保持 token-centric PTO Vec 主路径”，不能用 small/large
+两个 anchor 推导“任意 token/topK 已达到 FFN 商用性能”。
+
+### 2.1.5 商用性能对标门禁
 
 本阶段不能只按 correctness bring-up 设计。前重排要对标原 FFN initquant 的商用优化方式，后续 GMM 阶段还要对标
 Catlass/Catcoc 的片上缓存和 swizzle 设计。实现和验收按下面的门禁推进。
@@ -846,6 +934,34 @@ pass=true
 bash scripts/run_initquant_acceptance.sh
 ```
 
+small/large 只是 anchor。生产 hardening 任务还要跑参数族扩展 case，命令仍使用显式 shape 参数，不新增中间日志：
+
+```bash
+# more tokens: 验证 worker 数和 metadata 写回随 R 扩展
+bash scripts/run_a3.sh --backend int8 --m2-fused-full 1 --m2-fused-debug-stop-stage 17 \
+  --case-name more-tokens -pes 2 -M 16384 -K 128 -N 128 -topK 2 -expertPerPe 2 \
+  --max-output-size 32768 --dry-run 0 --skip-kernel-launch 0
+
+# topK expansion: 验证任意 topK token-centric quant，不做 topK=2 特化
+bash scripts/run_a3.sh --backend int8 --m2-fused-full 1 --m2-fused-debug-stop-stage 17 \
+  --case-name topk-expansion -pes 2 -M 2048 -K 128 -N 128 -topK 4 -expertPerPe 2 \
+  --max-output-size 8192 --dry-run 0 --skip-kernel-launch 0
+
+# skew + topK: 验证专家倾斜下 per-worker prefix/capacity 仍确定
+bash scripts/run_a3.sh --backend int8 --m2-fused-full 1 --m2-fused-debug-stop-stage 17 \
+  --case-name skewed -pes 2 -M 4097 -K 128 -N 128 -topK 4 -expertPerPe 2 \
+  --max-output-size 16388 --dry-run 0 --skip-kernel-launch 0
+
+# large K: 验证 column chunk/row tile，不退 scalar fallback
+bash scripts/run_a3.sh --backend int8 --m2-fused-full 1 --m2-fused-debug-stop-stage 17 \
+  --case-name large-k -pes 2 -M 1024 -K 1024 -N 128 -topK 4 -expertPerPe 2 \
+  --max-output-size 4096 --dry-run 0 --skip-kernel-launch 0
+```
+
+这些扩展 case 的期望字段和 small/large 一致：结构体匹配为 true、`route_quant_path=pto_vec`、
+`route_quant_scalar_fallback_reason=none`、`init_quant_e2e_us` 非 0。验收脚本可以汇总这些字段，但不得增加
+Stage A/B/C 中间 dump。
+
 ## 8. 边界场景
 
 | 场景 | 处理 |
@@ -917,13 +1033,14 @@ bash scripts/run_initquant_acceptance.sh
 | T16 | PTO fallback 决策 | T15 | 明确异常 shape/workspace 条件下 fallback 到 `pto_main_aiv`；count publish/wait/gather 与 ready flag 仍走 PTO helper | fallback 日志包含原因，不静默走非 PTO |
 | T17 | baseline 对标脚本 | T15 | 同 shape/seed 下 PTO stop17 与原 FFN initquant e2e 对比脚本；原 FFN 命令缺失时显式报告 `missing_command` | small/large 记录 PTO `init_quant_e2e_us`、worker 数、path/reason；不宣称无 baseline 的商用达标 |
 | T18 | sync 优化 | T17 | 将前重排 hard sync 收敛为必要 AIV-only phase sync，审计 count/prefix/scatter 三个阶段 | stop17 pass，sync 点数量和 scope 可审计；不新增中间验收日志 |
-| T19 | UB-fits fast path | T17 | full-load/UB-fits 路径使用 UB resident count/prefix/scatter 和任意 topK token-centric quant | small stop17 pass；不得按 case name 或 `topK==2` 特化 |
-| T20 | large-token quant pipeline | T17 | `R=M*topK` 大场景使用 token-centric quant、UB ping-pong，重叠 load/compute/store | large stop17 pass；topK 扩展 case 不退化为每 route 重复 quant |
-| T21 | worker/cache 调度 | T17 | 根据 `M/topK/K/globalExpertNum/route distribution` 选择 worker 数，正式 worker scratch 支持到 40 | skew route 和更大 topK case activeWorkers 有效，metadata 不成为主瓶颈 |
+| T19 | UB-fits fast path | T17 | full-load/UB-fits 路径使用 UB resident count/prefix/scatter 和任意 topK token-centric quant | small anchor 与 UB-fits non-small/topK expansion stop17 pass；不得按 case name 或 `topK==2` 特化 |
+| T20 | large-token quant pipeline | T17 | `R=M*topK` 大场景使用 token-centric quant、UB ping-pong，重叠 load/compute/store | large anchor、token scale sweep、topK sweep stop17 pass；不得每 route 重复 quant |
+| T21 | worker/cache 调度 | T17 | 根据 `M/topK/K/globalExpertNum/route distribution` 选择 worker 数，正式 worker scratch 支持到 40 | skew route、token scale sweep、topK sweep/more experts case activeWorkers 有效，metadata 不成为主瓶颈 |
 | T22 | GMM cache 边界 | T17 | 明确 L1/L0/swizzle/preload 属于后续 GMM PTO 化，不计入 initquant 完成项 | design.md 边界清晰，GMM 阶段单独拆任务 |
-| T23 | metadata GM 批量化 | T17,T21 | `expandedRowIdx`、`packedRowToRouteIndex`、count/prefix 写回按连续 route/expert tile 批量化 | small/large 和 topK 扩展 case stop17 pass；无中间 dump 日志 |
-| T24 | 大 K 行/列 tiling | T20,T23 | quant 支持大 K column chunk、row tile/ping-pong，不能因整行放不下 UB 退成单核 | K 扩展 case payload/scale pass，`route_quant_path=pto_vec` |
+| T23 | metadata GM 批量化 | T17,T21 | `expandedRowIdx`、`packedRowToRouteIndex`、count/prefix 写回按连续 route/expert tile 批量化 | small/large、token scale sweep、topK sweep 和 more experts case stop17 pass；无中间 dump 日志 |
+| T24 | 大 K 行/列 tiling | T20,T23 | quant 支持大 K column chunk、row tile/ping-pong，不能因整行放不下 UB 退成单核 | large K 与 topK sweep case payload/scale pass，`route_quant_path=pto_vec` |
 | T25 | GMM PTO 性能设计 | T22 | GMM1/GMM2 用 PTO `TMATMUL`、L1/L0 ping-pong、preload、swizzle 替代 Catlass/Catcoc 的任务设计 | 新 GMM design/task 拆分完成；不把 initquant pass 当整体商用性能完成 |
+| T26 | 参数化非特化验收矩阵 | T19,T20,T21,T23,T24 | stop17 脚本支持 token/topK/K/distribution sweep，并做 device 非特化代码审计 | token scale、topK scale、large K、skew、capacity clip 均 pass；device 主路径无 small/large/topK==2 写死 |
 
 推荐提交顺序：
 
@@ -931,7 +1048,7 @@ bash scripts/run_initquant_acceptance.sh
 2. `T4-T8`：完成多核稳定分桶，不做高性能量化也能先验收 mapping。
 3. `T9-T12`：补齐 PTO quant、padding 和 capacity。
 4. `T13-T16`：接入多 rank 和后续阶段，再看性能基线。
-5. `T17-T25`：生产性能 hardening，覆盖 baseline、sync、UB/full-load、large-token、大 `topK`、大 `K` 和后续 GMM 边界。
+5. `T17-T26`：生产性能 hardening，覆盖 baseline、sync、UB/full-load、large-token、大 `topK`、大 `K`、参数矩阵和后续 GMM 边界。
 
 阶段开发时可以短期增加局部定位点，但交付前必须删除中间验收日志。前重排主验收统一跑 stop17。
 
@@ -965,6 +1082,7 @@ bash scripts/run_initquant_acceptance.sh
 | T23 metadata GM 批量化 | Stage A/B/C metadata | tok/topK 更多时减少 metadata GM store/flush 开销 |
 | T24 大 K 行/列 tiling | Stage C-2: production quant | hiddenSize 较大时按 column chunk 和 row tile 保持 PTO Vec 主路径 |
 | T25 GMM PTO 性能设计 | 后续 GMM PTO 化 | 设计 TMATMUL、L1/L0、preload、swizzle 替代 Catlass/Catcoc |
+| T26 参数化非特化验收矩阵 | 全阶段生产验收 | 用 token/topK/K/distribution sweep 约束 T19-T24 不能按 anchor case 特化 |
 
 按阶段推进：
 
@@ -985,7 +1103,7 @@ Stage C: stable scatter + dynamic quant
   T13, T14
 
 性能与异常路径:
-  T15, T16, T17, T18, T19, T20, T21, T22, T23, T24, T25
+  T15, T16, T17, T18, T19, T20, T21, T22, T23, T24, T25, T26
 ```
 
 与原始 FFN initquant 子阶段的对应：
