@@ -97,6 +97,8 @@ template void LaunchTMins<float, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX>(float
                                                                            void *stream);
 template void LaunchTMins<aclFloat16, 16, 256, 20, 224, 16, 200, PAD_VALUE_MAX>(aclFloat16 *out, aclFloat16 *src0,
                                                                                 aclFloat16 *scalar, void *stream);
+template void LaunchTMins<aclFloat16, 1, 256, 1, 224, 1, 200, PAD_VALUE_MAX>(aclFloat16 *out, aclFloat16 *src0,
+                                                                             aclFloat16 *scalar, void *stream);
 
 template void LaunchTMins<int32_t, 32, 32, 32, 32, 32, 32, PAD_VALUE_NULL>(int32_t *out, int32_t *src0, int32_t *scalar,
                                                                            void *stream);
