@@ -33,7 +33,7 @@ PTO_INTERNAL int32_t GetMixLogicalIdx()
 #if defined(__MIX_CORE_AIC_BLOCKS__)
         __MIX_CORE_AIC_BLOCKS__;
 #else
-        24;
+        20; // 910B4 AIC blocks (910B1 uses 24)
 #endif
     return static_cast<int32_t>(aicBlocks + get_block_idx() * get_subblockdim() + get_subblockid());
 #else

@@ -15,7 +15,8 @@ using namespace pto;
 
 PTO_SYNCALL_AIV_KERNEL_META(RunSyncAll_mix_aiv);
 
-constexpr int32_t kBlockCount = 48;
+// 910B4: 40 AIV blocks (910B1 full die uses 48).
+constexpr int32_t kBlockCount = 40;
 constexpr int32_t kInt32PerCacheLine = 8;
 constexpr uint64_t kFlagUbAddr = 0x0;
 constexpr uint64_t kReadUbAddr = 0x1000;
@@ -55,5 +56,5 @@ extern "C" __global__ AICORE void RunSyncAll_mix_aiv(__gm__ uint64_t __in__ *fft
 
 void LaunchSyncAll(uint8_t *ffts, int32_t *out, int32_t *flags, void *stream)
 {
-    RunSyncAll_mix_aiv<<<48, nullptr, stream>>>(reinterpret_cast<uint64_t *>(ffts), out, flags);
+    RunSyncAll_mix_aiv<<<40, nullptr, stream>>>(reinterpret_cast<uint64_t *>(ffts), out, flags);
 }

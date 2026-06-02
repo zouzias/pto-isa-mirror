@@ -21,13 +21,15 @@ if __name__ == "__main__":
         "SYNCALLTest.case_mix_1_1_all_blocks",
         "SYNCALLTest.case_soft_mix_1_1_all_blocks",
     ):
-        golden = np.ones(48, dtype=np.int32)
+        # 910B4 participant count (910B1 uses 48).
+        golden = np.ones(40, dtype=np.int32)
         os.makedirs(case_name, exist_ok=True)
         golden.tofile(os.path.join(case_name, "golden.bin"))
     for case_name in (
         "SYNCALLTest.case_mix_1_2_all_blocks",
         "SYNCALLTest.case_soft_mix_1_2_all_blocks",
     ):
-        golden = np.ones(72, dtype=np.int32)
+        # 910B4: 20 AIC x (1+2) = 60 (910B1 uses 72).
+        golden = np.ones(60, dtype=np.int32)
         os.makedirs(case_name, exist_ok=True)
         golden.tofile(os.path.join(case_name, "golden.bin"))

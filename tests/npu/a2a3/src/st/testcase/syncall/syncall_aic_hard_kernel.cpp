@@ -23,7 +23,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
-constexpr int32_t kAicHardBlockCount = 24;
+// 910B4: 20 AIC blocks (910B1 full die uses 24).
+constexpr int32_t kAicHardBlockCount = 20;
 constexpr int32_t kAicHardInt32PerLine = 8;
 constexpr uint64_t kAicHardFlagL1 = 0x0;
 constexpr uint64_t kAicHardOutL1 = 0x1000;
@@ -152,7 +153,7 @@ void LaunchHardSyncAllAIC(uint8_t *ffts, int32_t *out, int32_t *flags, void *str
     argsInfo.args = args;
     argsInfo.argsSize = sizeof(args);
     rtTaskCfgInfo_t cfgInfo{};
-    ret = rtKernelLaunchWithHandleV2(handle, kAicHardTilingKey, 24, &argsInfo, nullptr, stream, &cfgInfo);
+    ret = rtKernelLaunchWithHandleV2(handle, kAicHardTilingKey, 20, &argsInfo, nullptr, stream, &cfgInfo);
     if (ret != RT_ERROR_NONE) {
         std::fprintf(stderr, "rtKernelLaunchWithHandleV2 failed for AIC-only hard, ret=%d\n", ret);
         std::abort();

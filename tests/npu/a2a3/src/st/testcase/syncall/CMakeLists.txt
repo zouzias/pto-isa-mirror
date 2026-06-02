@@ -42,7 +42,7 @@ function(pto_syncall_mix_kernel TARGET SOURCE RATIO_DEF)
         OUTPUT ${AIC_OBJ}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_aic.dir
         COMMAND ${CMAKE_CXX_COMPILER} ${SYNCALL_MIX_CCE_OPTIONS} --cce-aicore-arch=dav-c220-cube
-                -DMEMORY_BASE -std=c++17 -D__MIX_CORE_AIC_BLOCKS__=24 ${RATIO_DEF} -DSYNCALL_MIX_BUILD_AIC
+                -DMEMORY_BASE -std=c++17 -D__MIX_CORE_AIC_BLOCKS__=20 ${RATIO_DEF} -DSYNCALL_MIX_BUILD_AIC
                 -DSYNCALL_MIX_REGISTER_OBJECT_PATH=\"${REGISTER_ELF}\"
                 -I${PROJECT_SOURCE_DIR}/../../../../../include
                 -I${ASCEND_HOME_PATH}/include
@@ -59,7 +59,7 @@ function(pto_syncall_mix_kernel TARGET SOURCE RATIO_DEF)
         OUTPUT ${AIV_OBJ}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_aiv.dir
         COMMAND ${CMAKE_CXX_COMPILER} ${SYNCALL_MIX_CCE_OPTIONS} --cce-aicore-arch=dav-c220-vec
-                -DMEMORY_BASE -std=c++17 -D__MIX_CORE_AIC_BLOCKS__=24 ${RATIO_DEF} -DSYNCALL_MIX_BUILD_AIV
+                -DMEMORY_BASE -std=c++17 -D__MIX_CORE_AIC_BLOCKS__=20 ${RATIO_DEF} -DSYNCALL_MIX_BUILD_AIV
                 -DSYNCALL_MIX_REGISTER_OBJECT_PATH=\"${REGISTER_ELF}\"
                 -I${PROJECT_SOURCE_DIR}/../../../../../include
                 -I${ASCEND_HOME_PATH}/include
@@ -77,7 +77,7 @@ function(pto_syncall_mix_kernel TARGET SOURCE RATIO_DEF)
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_register_aic.dir
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_register_aiv.dir
         COMMAND ${CMAKE_CXX_COMPILER} ${SYNCALL_MIX_CCE_OPTIONS} --cce-aicore-arch=dav-c220-cube
-                -DMEMORY_BASE -std=c++17 -D__MIX_CORE_AIC_BLOCKS__=24 ${RATIO_DEF} -DSYNCALL_MIX_BUILD_AIC
+                -DMEMORY_BASE -std=c++17 -D__MIX_CORE_AIC_BLOCKS__=20 ${RATIO_DEF} -DSYNCALL_MIX_BUILD_AIC
                 -DSYNCALL_MIX_REGISTER_BUILD
                 -I${PROJECT_SOURCE_DIR}/../../../../../include
                 -I${ASCEND_HOME_PATH}/include
@@ -88,7 +88,7 @@ function(pto_syncall_mix_kernel TARGET SOURCE RATIO_DEF)
                 -I${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
                 -xcce -o ${REGISTER_AIC_OBJ} -c ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
         COMMAND ${CMAKE_CXX_COMPILER} ${SYNCALL_MIX_CCE_OPTIONS} --cce-aicore-arch=dav-c220-vec
-                -DMEMORY_BASE -std=c++17 -D__MIX_CORE_AIC_BLOCKS__=24 ${RATIO_DEF} -DSYNCALL_MIX_BUILD_AIV
+                -DMEMORY_BASE -std=c++17 -D__MIX_CORE_AIC_BLOCKS__=20 ${RATIO_DEF} -DSYNCALL_MIX_BUILD_AIV
                 -DSYNCALL_MIX_REGISTER_BUILD
                 -I${PROJECT_SOURCE_DIR}/../../../../../include
                 -I${ASCEND_HOME_PATH}/include

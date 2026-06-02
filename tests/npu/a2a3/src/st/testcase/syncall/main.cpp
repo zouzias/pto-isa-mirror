@@ -142,7 +142,8 @@ void RunMixCase(LaunchFn launchFn, const char *label)
 
 TEST_F(SYNCALLTest, case_aiv_only_all_blocks)
 {
-    constexpr size_t blockCount = 48;
+    // 910B4: 40 AIV blocks; 910B1 full die uses 48.
+    constexpr size_t blockCount = 40;
     constexpr size_t int32PerCacheLine = 8;
     constexpr size_t elementCount = blockCount * int32PerCacheLine;
     constexpr size_t byteSize = elementCount * sizeof(int32_t);
@@ -210,7 +211,8 @@ TEST_F(SYNCALLTest, case_aiv_only_all_blocks)
 
 TEST_F(SYNCALLTest, case_soft_aiv_only_all_blocks)
 {
-    constexpr size_t blockCount = 48;
+    // 910B4: 40 AIV blocks; 910B1 full die uses 48.
+    constexpr size_t blockCount = 40;
     constexpr size_t int32PerCacheLine = 8;
     constexpr size_t elementCount = blockCount * int32PerCacheLine;
     constexpr size_t byteSize = elementCount * sizeof(int32_t);
@@ -277,27 +279,28 @@ TEST_F(SYNCALLTest, case_soft_aiv_only_all_blocks)
 
 TEST_F(SYNCALLTest, case_mix_1_1_all_blocks)
 {
-    RunMixCase<48, false>(LaunchSyncAllMix11, "mix_1_1");
+    RunMixCase<40, false>(LaunchSyncAllMix11, "mix_1_1");
 }
 
 TEST_F(SYNCALLTest, case_mix_1_2_all_blocks)
 {
-    RunMixCase<72, false>(LaunchSyncAllMix12, "mix_1_2");
+    RunMixCase<60, false>(LaunchSyncAllMix12, "mix_1_2");
 }
 
 TEST_F(SYNCALLTest, case_soft_mix_1_1_all_blocks)
 {
-    RunMixCase<48, true>(LaunchSoftSyncAllMix11, "soft_mix_1_1");
+    RunMixCase<40, true>(LaunchSoftSyncAllMix11, "soft_mix_1_1");
 }
 
 TEST_F(SYNCALLTest, case_soft_mix_1_2_all_blocks)
 {
-    RunMixCase<72, true>(LaunchSoftSyncAllMix12, "soft_mix_1_2");
+    RunMixCase<60, true>(LaunchSoftSyncAllMix12, "soft_mix_1_2");
 }
 
 TEST_F(SYNCALLTest, case_hard_aic_only_all_blocks)
 {
-    constexpr size_t blockCount = 24;
+    // 910B4: 20 AIC blocks; 910B1 full die uses 24.
+    constexpr size_t blockCount = 20;
     constexpr size_t int32PerCacheLine = 8;
     constexpr size_t elementCount = blockCount * int32PerCacheLine;
     constexpr size_t byteSize = elementCount * sizeof(int32_t);
@@ -365,7 +368,8 @@ TEST_F(SYNCALLTest, case_hard_aic_only_all_blocks)
 
 TEST_F(SYNCALLTest, case_soft_aic_only_all_blocks)
 {
-    constexpr size_t blockCount = 24;
+    // 910B4: 20 AIC blocks; 910B1 full die uses 24.
+    constexpr size_t blockCount = 20;
     constexpr size_t int32PerCacheLine = 8;
     constexpr size_t elementCount = blockCount * int32PerCacheLine;
     constexpr size_t byteSize = elementCount * sizeof(int32_t);

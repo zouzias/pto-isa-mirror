@@ -20,8 +20,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <vector>
 #endif
 
-constexpr int32_t kMix12HardParticipants = 72;
-constexpr int32_t kMix12SoftParticipants = 72;
+// 910B4: 20 AIC x (1+2) = 60 participants (910B1: 24x3=72).
+constexpr int32_t kMix12HardParticipants = 60;
+constexpr int32_t kMix12SoftParticipants = 60;
 constexpr uint64_t kMix12HardTilingKey = 1201;
 
 #if defined(SYNCALL_MIX_BUILD_AIC) && !defined(SYNCALL_MIX_REGISTER_BUILD)
@@ -133,7 +134,7 @@ void LaunchHardMixKernel(const void *anchor, uint64_t tilingKey, uint8_t *ffts, 
     argsInfo.args = args;
     argsInfo.argsSize = sizeof(args);
     rtTaskCfgInfo_t cfgInfo{};
-    ret = rtKernelLaunchWithHandleV2(handle, tilingKey, 24, &argsInfo, nullptr, stream, &cfgInfo);
+    ret = rtKernelLaunchWithHandleV2(handle, tilingKey, 20, &argsInfo, nullptr, stream, &cfgInfo);
     if (ret != RT_ERROR_NONE) {
         std::fprintf(stderr, "rtKernelLaunchWithHandleV2 failed for SYNCALL mix 1:2, ret=%d\n", ret);
         std::abort();
@@ -151,9 +152,9 @@ void LaunchSoftSyncAllMix12(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t
 {
     aclrtStream aivStream;
     (void)aclrtCreateStream(&aivStream);
-    RunSoftSyncAllMix12_1202_mix_aic<<<24, nullptr, stream>>>(reinterpret_cast<uint64_t *>(ffts), out, flags,
+    RunSoftSyncAllMix12_1202_mix_aic<<<20, nullptr, stream>>>(reinterpret_cast<uint64_t *>(ffts), out, flags,
                                                               syncWorkspace);
-    RunSoftSyncAllMix12_1202_mix_aiv<<<48, nullptr, aivStream>>>(reinterpret_cast<uint64_t *>(ffts), out, flags,
+    RunSoftSyncAllMix12_1202_mix_aiv<<<40, nullptr, aivStream>>>(reinterpret_cast<uint64_t *>(ffts), out, flags,
                                                                  syncWorkspace);
     (void)aclrtSynchronizeStream(aivStream);
     (void)aclrtDestroyStream(aivStream);

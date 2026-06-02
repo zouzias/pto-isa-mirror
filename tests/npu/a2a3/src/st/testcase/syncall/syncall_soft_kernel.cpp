@@ -13,7 +13,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
-constexpr int32_t kBlockCount = 48;
+// 910B4: 20 Cube x 2 Vector = 40 AIV blocks (910B1 full die uses 48).
+constexpr int32_t kBlockCount = 40;
 constexpr int32_t kInt32PerCacheLine = 8;
 constexpr uint64_t kFlagUbAddr = 0x0;
 constexpr uint64_t kReadUbAddr = 0x1000;
@@ -85,5 +86,5 @@ extern "C" __global__ AICORE void RunSoftSyncAll(__gm__ int32_t __out__ *out, __
 
 void LaunchSoftSyncAll(int32_t *out, int32_t *flags, int32_t *syncWorkspace, void *stream)
 {
-    RunSoftSyncAll<<<48, nullptr, stream>>>(out, flags, syncWorkspace);
+    RunSoftSyncAll<<<40, nullptr, stream>>>(out, flags, syncWorkspace);
 }

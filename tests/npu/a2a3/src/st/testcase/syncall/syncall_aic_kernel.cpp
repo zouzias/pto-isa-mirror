@@ -15,7 +15,8 @@ using namespace pto;
 
 PTO_SYNCALL_AIC_KERNEL_META(RunSoftSyncAllAIC);
 
-constexpr int32_t kBlockCount = 24;
+// 910B4: 20 AIC blocks (910B1 full die uses 24).
+constexpr int32_t kBlockCount = 20;
 constexpr int32_t kInt32PerCacheLine = 8;
 constexpr uint64_t kFlagL1Addr = 0x0;
 constexpr uint64_t kOutL1Addr = 0x1000;
@@ -71,5 +72,5 @@ extern "C" __global__ AICORE void RunSoftSyncAllAIC(__gm__ int32_t __out__ *out,
 
 void LaunchSoftSyncAllAIC(int32_t *out, int32_t *flags, int32_t *syncWorkspace, void *stream)
 {
-    RunSoftSyncAllAIC<<<24, nullptr, stream>>>(out, flags, syncWorkspace);
+    RunSoftSyncAllAIC<<<20, nullptr, stream>>>(out, flags, syncWorkspace);
 }
