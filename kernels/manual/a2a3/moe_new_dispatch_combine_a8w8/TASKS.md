@@ -51,7 +51,7 @@
 | ID | State | Owner | 依赖 | 阶段 | 交付物 | 验收/Report | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | T17 | `accepted` | Codex | T15 | baseline 对标 | `scripts/run_initquant_baseline_compare.sh` | `reports/T17.md`；small/large 记录 PTO `init_quant_e2e_us`；原 FFN 命令缺失时 `original_status=missing_command` | 脚本和报告可作为后续依赖；没有 baseline 前不能宣称商用性能达标 |
-| T18 | `needs_fix` | Codex | T17 | sync 优化 | 同步配对审计报告；失败实现已撤回，未改生产代码 | `reports/T18.md`；small stop17 在 AIV-only 尝试中卡住 | 需要先建立 AIC/AIV mixed sync 配对表，再逐点替换 |
+| T18 | `accepted` | Codex | T17 | sync 优化 | 仅将 count/prefix/scatter 三个 initquant phase barrier 收敛为 AIV-only；后置/final 继续 hard/mix 配对 | `reports/T18.md`；small/large stop17 acceptance PASS | 未新增中间日志；stop13/18-21 调试 stop 保持原 mixed 轮次 |
 | T19 | `not_started` | - | T17 | UB-fits fast path | full-load/UB-fits 路径按 UB resident count/prefix/scatter 和 token-centric quant 融合，减少 GM 中间结果和同步 | small anchor 与 UB-fits non-small/topK expansion stop17 pass；`init_quant_e2e_us` 相比 T15 基线下降或瓶颈解释清楚；不得按 case name 或 `topK==2` 特化 | 对标原 FFN `tilingKey=21000`，不拷贝 AscendC full-load 类 |
 | T20 | `not_started` | - | T17 | large-token quant pipeline | `R=M*topK` 较大路径 row quant 做任意 topK token-centric 复用和 UB 双缓冲/ping-pong，重叠 GM load、Vec compute、GM store | large anchor、token scale sweep、topK sweep stop17 pass；`init_quant_e2e_us` 相比 T15 基线下降或瓶颈解释清楚；不得每 route 重复 quant | 当前是单 tile 两遍 row 扫描，不是完整流水 |
 | T21 | `not_started` | - | T17 | worker/cache 调度 | 根据 M/topK/K/专家分布调优 worker 数、UB resident metadata 和批量 GM 写回，避免固定 token shard 负载倾斜 | skew route、token scale sweep、topK sweep/more experts case activeWorkers 有效，metadata 不成为主瓶颈，stop17 pass | 当前 small/large 只证明基本多核，不证明负载均衡最优 |
@@ -65,7 +65,7 @@
 
 | ID | Severity | State | Affected Tasks | Description | Decision/Next Step |
 | --- | --- | --- | --- | --- | --- |
-| IQ-SYNC-001 | P1 | open | T18,T19,T20,T21 | AIV-only 替换尝试在 small stop17 卡住；当前 mixed kernel 仍依赖 AIC/AIV `SYNCALL<Mix>` 配对 | 先建立 stop17/non-stop 同步配对表，再逐点替换；禁止批量把 AIV 侧 hard sync 改成 AIV-only |
+| IQ-SYNC-001 | P1 | closed | T18 | AIV-only 批量替换会破坏 stop17 AIC/AIV `SYNCALL<Mix>` 配对 | T18 已按配对表只替换 count/prefix/scatter 三个内部 phase；后置/final 继续 hard/mix，small/large stop17 pass |
 
 ### Design Change Log
 
@@ -83,6 +83,7 @@
 | 2026-06-02 | 将 T17 标为 accepted 作为后续 hardening 依赖；补充 T19-T24 非特化验收矩阵，more tokens/topK expansion/skew/more experts/large K 作为参数族覆盖，small/large 只作为 anchor。 | T17-T24 |
 | 2026-06-02 | T18 AIV-only 同步替换尝试在 small stop17 卡住，失败实现已撤回；记录为同步配对问题，后续需先建立 AIC/AIV mixed sync 配对表再改代码。 | T18 |
 | 2026-06-02 | 增加 token/topK/K 参数化 sweep 和 device 非特化代码审计门禁；新增 T26 作为 T19-T24 的共享验收矩阵，避免只针对 small/large anchor 优化。 | T19-T26 |
+| 2026-06-02 | T18 accepted：仅 count/prefix/scatter 三个 initquant phase 改 AIV-only；AIC stop17 等待轮次同步扣减，后置/final mixed 配对保留，small/large stop17 acceptance PASS。 | T18 |
 
 ### Handoff Rules
 

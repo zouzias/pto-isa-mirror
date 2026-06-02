@@ -269,6 +269,35 @@ AICORE inline void M3NDispatchAivOnlyPhaseSync()
     moe_new_dispatch_combine_a8w8::M3N4AivAllDoneCoarseSync();
 }
 
+AICORE inline bool M3NDispatchUseInitQuantAivOnlySync(uint32_t debugStopStage)
+{
+    return debugStopStage == 0U || debugStopStage == 17U;
+}
+
+AICORE inline void M3NDispatchInitQuantPhaseSync(uint32_t debugStopStage)
+{
+    if (!M3NDispatchUseInitQuantAivOnlySync(debugStopStage)) {
+        M3NDispatchHardPhaseSync();
+        return;
+    }
+    M3NDispatchAivOnlyPhaseSync();
+}
+
+AICORE inline uint32_t M3NDispatchMixedSyncsWithInitQuantAivOnly(uint32_t debugStopStage, uint32_t mixedSyncs)
+{
+    if (!M3NDispatchUseInitQuantAivOnlySync(debugStopStage)) {
+        return mixedSyncs;
+    }
+    if (mixedSyncs <= 4U) {
+        return mixedSyncs;
+    }
+    uint32_t initQuantInternalSyncs = mixedSyncs - 4U;
+    if (initQuantInternalSyncs > 3U) {
+        initQuantInternalSyncs = 3U;
+    }
+    return mixedSyncs - initQuantInternalSyncs;
+}
+
 AICORE inline bool M3NFusedDispatchScratchFits(moe_new_dispatch_combine_a8w8::ShapeConfig shape)
 {
     uint32_t globalExpertNum = shape.rankNum * shape.expertPerRank;
@@ -315,6 +344,7 @@ AICORE inline void M3NDispatchAicWaitForAivSubphases(uint32_t debugStopStage, bo
     } else if (debugStopStage >= 18U && debugStopStage <= 21U) {
         dispatchSubphaseSyncs = 8U;
     }
+    dispatchSubphaseSyncs = M3NDispatchMixedSyncsWithInitQuantAivOnly(debugStopStage, dispatchSubphaseSyncs);
     for (uint32_t sync = 0; sync < dispatchSubphaseSyncs; ++sync) {
         M3NDispatchHardPhaseSync();
     }
@@ -3048,12 +3078,12 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                     tokenBegin, tokenEnd, tokenEnd - tokenBegin, 0U, countBegin, M3N12GetSysCnt());
             }
         }
-        M3NDispatchHardPhaseSync();
+        M3NDispatchInitQuantPhaseSync(debugStopStage);
         if (IsM2FusedMainAiv()) {
             M3NMergeLocalRouteCounts(shape, workspaceView, localPeer, rank.rankId, dispatchWorkerCount);
             M2FusedRecordStage(stageStatus + kM2FusedFullStageBaseSlot, 5U, 102);
         }
-        M3NDispatchHardPhaseSync();
+        M3NDispatchInitQuantPhaseSync(debugStopStage);
         if (activeDispatchWorker) {
             uint32_t tokenBegin = TokenShardBegin(shape.m, dispatchWorkerId, dispatchWorkerCount);
             uint32_t tokenEnd = TokenShardEnd(shape.m, dispatchWorkerId, dispatchWorkerCount);
@@ -3068,7 +3098,7 @@ extern "C" __global__ AICORE void M2FusedFull_2803_mix_aiv(
                     tokenEnd, tokenEnd - tokenBegin, 0U, routeBegin, M3N12GetSysCnt());
             }
         }
-        M3NDispatchHardPhaseSync();
+        M3NDispatchInitQuantPhaseSync(debugStopStage);
         if (activeDispatchWorker && debugStopStage != 18U) {
             if (timelineEnable != 0U && dispatchWorkerId == 0U) {
                 countTimelineBegin = M3N12GetSysCnt();

@@ -819,6 +819,11 @@ pto::SYNCALL<pto::SyncAllMode::Soft, pto::SyncCoreType::AIVOnly>(syncWorkspaceGl
 如果第一版为了接入现有 mixed kernel 暂时复用 `M3NDispatchHardPhaseSync()`，该 helper 必须收敛成 PTO wrapper，
 调用点不能直接出现 `AscendC::SyncAll()`。后续要拆成 AIV-only soft sync，减少 AIC 等待。
 
+当前 mixed kernel 的 T18 实现只替换这三个 phase sync 为 AIV-only。worker assignment、state clear、worker
+scratch clear、count publish/wait、prefix/gather 和 stop17 final sync 仍保留 hard/mix 配对。AIC 侧
+`M3NDispatchAicWaitForAivSubphases` 只在 production/stop17 路径扣减这 3 个 AIV-only phase；stop13、
+stop18-stop21 等调试停止路径保持原 mixed 轮次，避免再次出现 AIC/AIV `SYNCALL<Mix>` 配对不一致。
+
 - Stage A/B/C 只需要 AIV side 可见性，不使用 Catlass/AscendC 的 mixed barrier。
 - PTO 指令依赖优先用 `RecordEvent` 串接和 `TSYNC(event)` 表达；显式 fence 只允许出现在 PTO helper 内。
 - 不使用跨 AIC/AIV flag。该阶段完成后才发布给后续 dispatch/GMM1。
