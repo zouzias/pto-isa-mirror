@@ -355,8 +355,7 @@ __tf__ AICORE void TGather_float_gt(typename TileDataD::TileDType __out__ dst,
                 // f32->s32
                 vcvt(score_s32, score, preg_b32, ROUND_R, RS_DISABLE);
 
-                uint32_t count = (cols > elementsPerRepeat) ? elementsPerRepeat : cols;
-                preg = CreatePredicate<typename TileDataS::DType>(count);
+                preg = CreatePredicate<typename TileDataS::DType>(cols);
 
                 vector_bool pout_ge;
                 vector_s32 sqz_index_out;
@@ -364,7 +363,6 @@ __tf__ AICORE void TGather_float_gt(typename TileDataD::TileDType __out__ dst,
                 vsqz(sqz_index_out, index, pout_ge, MODE_STORED);
                 vstur(align_index, (vector_u32)sqz_index_out, (__ubuf__ uint32_t *)dstPtr, POST_UPDATE);
                 vadd(index, index, add_offset, preg_b32, MODE_ZEROING);
-                cols -= elementsPerRepeat;
             }
             vstar(align_index, (__ubuf__ uint32_t *)dstPtr);
             sprsts(SPR_AR, cdstPtr, i * sizeof(typename TileDataC::DType));
@@ -463,8 +461,7 @@ __tf__ AICORE void TGather_b32_gt(typename TileDataD::TileDType __out__ dst, typ
                 RegTensor<typename TileDataS::DType> score;
                 vlds(score, src0Ptr, (i * TileDataS::Cols + j * elementsPerRepeat), NORM);
 
-                uint32_t count = (cols > elementsPerRepeat) ? elementsPerRepeat : cols;
-                preg = CreatePredicate<typename TileDataS::DType>(count);
+                preg = CreatePredicate<typename TileDataS::DType>(cols);
 
                 vector_bool pout_ge;
                 vector_s32 sqz_index_out;
@@ -472,7 +469,6 @@ __tf__ AICORE void TGather_b32_gt(typename TileDataD::TileDType __out__ dst, typ
                 vsqz(sqz_index_out, index1, pout_ge, MODE_STORED);
                 vstur(align_index1, (vector_u32)sqz_index_out, (__ubuf__ uint32_t *)dstPtr, POST_UPDATE);
                 vadd(index1, index1, add_offset, preg_b32, MODE_ZEROING);
-                cols -= elementsPerRepeat;
             }
             vstar(align_index1, (__ubuf__ uint32_t *)dstPtr);
             sprsts(SPR_AR, cdstPtr, i * sizeof(typename TileDataC::DType));
@@ -515,8 +511,7 @@ __tf__ AICORE void TGather_b32_eq(typename TileDataD::TileDType __out__ dst, typ
                 RegTensor<typename TileDataS::DType> score;
                 vlds(score, src0Ptr, (i * TileDataS::Cols + j * elementsPerRepeat), NORM);
 
-                uint32_t count = (cols > elementsPerRepeat) ? elementsPerRepeat : cols;
-                preg = CreatePredicate<typename TileDataS::DType>(count);
+                preg = CreatePredicate<typename TileDataS::DType>(cols);
 
                 vector_bool pout_eq;
                 vector_s32 sqz_index_out;
@@ -524,7 +519,6 @@ __tf__ AICORE void TGather_b32_eq(typename TileDataD::TileDType __out__ dst, typ
                 vsqz(sqz_index_out, index2, pout_eq, MODE_STORED);
                 vadd(index2, index2, add_offset, preg_b32, MODE_ZEROING);
                 vstur(align_index2, (vector_u32)sqz_index_out, (__ubuf__ uint32_t *)dstPtr, POST_UPDATE);
-                cols -= elementsPerRepeat;
             }
             vstar(align_index2, (__ubuf__ uint32_t *)dstPtr);
             sprsts(SPR_AR, cdstPtr, i * sizeof(typename TileDataC::DType));

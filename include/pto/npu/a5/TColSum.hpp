@@ -127,8 +127,8 @@ __tf__ PTO_INTERNAL OP_NAME(TCOLSUM)
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
 PTO_INTERNAL void TCOLSUM_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, bool isBinary)
 {
-    int32_t validCol = src.GetValidCol();
-    int32_t validRow = src.GetValidRow();
+    unsigned validCol = src.GetValidCol();
+    unsigned validRow = src.GetValidRow();
     TColReduceCheck<TileDataOut, TileDataIn>(validRow, validCol, dst.GetValidCol());
     if (validCol == 0 || validRow == 0) {
         return;
