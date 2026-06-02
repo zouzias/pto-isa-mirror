@@ -87,6 +87,9 @@ constexpr uint32_t kM3NInitQuantFullLoadColsThreshold = 1024U;
 constexpr uint32_t kM3NInitQuantFullLoadExpertThreshold = 16U;
 constexpr uint64_t kM3NInitQuantFullLoadCountUbAddr = 0x6000;
 constexpr uint64_t kM3NInitQuantFullLoadCursorUbAddr = 0x6100;
+constexpr uint64_t kM3NRoutePackExpertBaseUbAddr = 0xE000;
+constexpr uint64_t kM3NRoutePackLocalOrdinalUbAddr = 0xF000;
+constexpr uint32_t kM3NRoutePackExpertUbCapacity = 1024U;
 constexpr uint32_t kM3NCombineWorkerScratchBase = 72U * 16U;
 constexpr uint32_t kM3NCombineWorkerScratchStride = 16U;
 constexpr uint32_t kM3N8CombineCounterBase = kM3CounterBase + 80U;
@@ -1029,37 +1032,91 @@ AICORE inline uint32_t M3NDispatchWorkerScratchStride(uint32_t globalExpertNum)
     return ((globalExpertNum + kI32PerCacheLine - 1U) / kI32PerCacheLine) * kI32PerCacheLine;
 }
 
-AICORE inline bool M3NDispatchRouteShardBoundariesAligned(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
-                                                          uint32_t workerCount)
+AICORE inline uint32_t M3NDispatchMinU32(uint32_t lhs, uint32_t rhs)
 {
-    constexpr uint32_t kI32PerCacheLine = 16U;
-    if (workerCount <= 1U || shape.topK == 0U) {
-        return true;
+    return lhs < rhs ? lhs : rhs;
+}
+
+AICORE inline uint32_t M3NDispatchMaxU32(uint32_t lhs, uint32_t rhs)
+{
+    return lhs > rhs ? lhs : rhs;
+}
+
+AICORE inline uint32_t M3NDispatchCeilDivU64(uint64_t value, uint32_t divisor)
+{
+    if (divisor == 0U || value == 0U) {
+        return 0U;
     }
-    for (uint32_t worker = 1U; worker < workerCount; ++worker) {
-        uint32_t routeBegin = TokenShardBegin(shape.m, worker, workerCount) * shape.topK;
-        if (routeBegin % kI32PerCacheLine != 0U) {
-            return false;
-        }
+    uint64_t result = ((value - 1U) / divisor) + 1U;
+    constexpr uint64_t kMaxU32 = static_cast<uint64_t>(0xffffffffU);
+    return result > kMaxU32 ? 0xffffffffU : static_cast<uint32_t>(result);
+}
+
+AICORE inline uint32_t M3NDispatchMinTokensPerWorker(moe_new_dispatch_combine_a8w8::ShapeConfig shape)
+{
+    uint32_t minTokens = 64U;
+    if (shape.hiddenSize >= 4096U) {
+        minTokens = 8U;
+    } else if (shape.hiddenSize >= 1024U) {
+        minTokens = 16U;
+    } else if (shape.hiddenSize >= 512U) {
+        minTokens = 32U;
     }
-    return true;
+
+    uint32_t fanout = shape.topK == 0U ? 1U : shape.topK;
+    if (fanout > 8U) {
+        fanout = 8U;
+    }
+    if (fanout >= 4U) {
+        uint32_t divisor = fanout / 2U;
+        minTokens = M3NDispatchMaxU32(8U, minTokens / divisor);
+    }
+    return minTokens == 0U ? 1U : minTokens;
+}
+
+AICORE inline uint32_t M3NDispatchPrefixWorkerCap(uint32_t globalExpertNum)
+{
+    constexpr uint32_t kMaxWorkerExpertPrefixOps = 4096U;
+    if (globalExpertNum == 0U) {
+        return 1U;
+    }
+    uint32_t cap = kMaxWorkerExpertPrefixOps / globalExpertNum;
+    if (cap == 0U) {
+        cap = 1U;
+    }
+    return cap > kM3NDispatchMaxWorkers ? kM3NDispatchMaxWorkers : cap;
+}
+
+AICORE inline uint32_t M3NDispatchTargetWorkerCount(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
+                                                    uint32_t logicalAivCount, uint32_t laneSlotLimit)
+{
+    uint32_t globalExpertNum = shape.rankNum * shape.expertPerRank;
+    if (logicalAivCount == 0U || globalExpertNum == 0U || shape.m == 0U || shape.topK == 0U ||
+        !M3NDispatchScratchFits(shape)) {
+        return 1U;
+    }
+
+    uint32_t availableWorkers = M3NDispatchMinU32(logicalAivCount, laneSlotLimit);
+    availableWorkers = M3NDispatchMinU32(availableWorkers, kM3NDispatchMaxWorkers);
+    availableWorkers = M3NDispatchMinU32(availableWorkers, shape.m);
+    if (availableWorkers == 0U) {
+        return 1U;
+    }
+
+    constexpr uint32_t kMinRoutesPerWorker = 64U;
+    uint64_t routeCount = static_cast<uint64_t>(shape.m) * shape.topK;
+    uint32_t tokenUsefulWorkers = M3NDispatchCeilDivU64(shape.m, M3NDispatchMinTokensPerWorker(shape));
+    uint32_t routeUsefulWorkers = M3NDispatchCeilDivU64(routeCount, kMinRoutesPerWorker);
+    uint32_t usefulWorkers = M3NDispatchMaxU32(tokenUsefulWorkers, routeUsefulWorkers);
+    usefulWorkers = M3NDispatchMinU32(usefulWorkers, M3NDispatchPrefixWorkerCap(globalExpertNum));
+    usefulWorkers = M3NDispatchMinU32(usefulWorkers, availableWorkers);
+    return usefulWorkers == 0U ? 1U : usefulWorkers;
 }
 
 AICORE inline uint32_t M3NDispatchWorkerCount(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
                                               uint32_t logicalAivCount)
 {
-    uint32_t globalExpertNum = shape.rankNum * shape.expertPerRank;
-    if (logicalAivCount == 0U || globalExpertNum == 0U || !M3NDispatchScratchFits(shape)) {
-        return 1U;
-    }
-    uint32_t workers = logicalAivCount;
-    if (workers > kM3NDispatchMaxWorkers) {
-        workers = kM3NDispatchMaxWorkers;
-    }
-    while (workers > 1U && !M3NDispatchRouteShardBoundariesAligned(shape, workers)) {
-        --workers;
-    }
-    return workers == 0U ? 1U : workers;
+    return M3NDispatchTargetWorkerCount(shape, logicalAivCount, kM3NDispatchMaxWorkers);
 }
 
 AICORE inline void SoftSyncAiv(__gm__ int32_t *gmWorkspace, uint32_t blockNum)
@@ -1572,6 +1629,41 @@ AICORE inline int32_t M3NDispatchLoadWorkerExpertPrefix(moe_new_dispatch_combine
     uint32_t workerStride = M3NDispatchWorkerScratchStride(globalExpertNum);
     return LoadScalarI32(M3NDispatchWorkerPrefixScratch(workspaceView) +
                          static_cast<uint64_t>(workerId) * workerStride + globalExpert);
+}
+
+AICORE inline bool M3NRoutePackExpertCacheFits(uint32_t globalExpertNum)
+{
+    return globalExpertNum <= kM3NRoutePackExpertUbCapacity;
+}
+
+AICORE inline void M3NPrepareRoutePackExpertCache(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
+                                                  M2WorkspaceViewDevice workspaceView, uint32_t workerId,
+                                                  uint32_t globalExpertNum)
+{
+    for (uint32_t globalExpert = 0; globalExpert < globalExpertNum; ++globalExpert) {
+        int32_t expertBase = LoadScalarI32(workspaceView.blockPrefixPerExpert + globalExpert) +
+                             M3NDispatchLoadWorkerExpertPrefix(shape, workspaceView, workerId, globalExpert);
+        M2RawUbStoreI32(kM3NRoutePackExpertBaseUbAddr, globalExpert, expertBase);
+        M2RawUbStoreI32(kM3NRoutePackLocalOrdinalUbAddr, globalExpert, 0);
+    }
+}
+
+AICORE inline int32_t M3NNextPackedRowFromExpertCache(uint32_t globalExpert)
+{
+    int32_t localOrdinal = M2RawUbLoadI32(kM3NRoutePackLocalOrdinalUbAddr, globalExpert);
+    M2RawUbStoreI32(kM3NRoutePackLocalOrdinalUbAddr, globalExpert, localOrdinal + 1);
+    return M2RawUbLoadI32(kM3NRoutePackExpertBaseUbAddr, globalExpert) + localOrdinal;
+}
+
+AICORE inline int32_t M3NNextPackedRowFromGmCursor(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
+                                                  M2WorkspaceViewDevice workspaceView,
+                                                  __gm__ int32_t *localOrdinalCursor, uint32_t workerId,
+                                                  uint32_t globalExpert)
+{
+    int32_t localOrdinal = LoadScalarI32(localOrdinalCursor + globalExpert);
+    StoreScalarI32(localOrdinalCursor + globalExpert, localOrdinal + 1);
+    return LoadScalarI32(workspaceView.blockPrefixPerExpert + globalExpert) +
+           M3NDispatchLoadWorkerExpertPrefix(shape, workspaceView, workerId, globalExpert) + localOrdinal;
 }
 
 AICORE inline int32_t M3NSumWorkerExpertCount(moe_new_dispatch_combine_a8w8::ShapeConfig shape,
@@ -2210,8 +2302,13 @@ AICORE inline void M3NRoutePackQuantLocalShard(moe_new_dispatch_combine_a8w8::Sh
                            static_cast<uint32_t>(workerCount * workerStride * sizeof(int32_t)));
     __gm__ int32_t *localOrdinalCursor =
         M3NDispatchWorkerCountScratch(workspaceView) + static_cast<uint64_t>(workerId) * workerStride;
-    for (uint32_t idx = 0; idx < workerStride; ++idx) {
-        StoreScalarI32(localOrdinalCursor + idx, 0);
+    bool useExpertCache = M3NRoutePackExpertCacheFits(globalExpertNum);
+    if (useExpertCache) {
+        M3NPrepareRoutePackExpertCache(shape, workspaceView, workerId, globalExpertNum);
+    } else {
+        for (uint32_t idx = 0; idx < workerStride; ++idx) {
+            StoreScalarI32(localOrdinalCursor + idx, 0);
+        }
     }
     uint32_t tokenBegin = TokenShardBegin(shape.m, workerId, workerCount);
     uint32_t tokenEnd = TokenShardEnd(shape.m, workerId, workerCount);
@@ -2228,10 +2325,10 @@ AICORE inline void M3NRoutePackQuantLocalShard(moe_new_dispatch_combine_a8w8::Sh
                 continue;
             }
             uint32_t globalExpert = static_cast<uint32_t>(expert);
-            int32_t packedRow = LoadScalarI32(workspaceView.blockPrefixPerExpert + globalExpert) +
-                                M3NDispatchLoadWorkerExpertPrefix(shape, workspaceView, workerId, globalExpert) +
-                                LoadScalarI32(localOrdinalCursor + globalExpert);
-            StoreScalarI32(localOrdinalCursor + globalExpert, LoadScalarI32(localOrdinalCursor + globalExpert) + 1);
+            int32_t packedRow = useExpertCache ?
+                                    M3NNextPackedRowFromExpertCache(globalExpert) :
+                                    M3NNextPackedRowFromGmCursor(shape, workspaceView, localOrdinalCursor, workerId,
+                                                                 globalExpert);
             if (packedRow < 0 || static_cast<uint32_t>(packedRow) >= localRows) {
                 StoreScalarI32(workspaceView.expandedRowIdx + routeIndex, static_cast<int32_t>(localRows));
                 continue;
