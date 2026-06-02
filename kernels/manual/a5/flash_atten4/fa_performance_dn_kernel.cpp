@@ -31,6 +31,10 @@ using namespace pto;
 #define FIFO_MODE 1
 #endif
 
+#ifndef REUSE_QK_PV_BUFFERS
+#define REUSE_QK_PV_BUFFERS 0
+#endif
+
 #ifndef FFTS_BUFFER_FLAG_ENUM
 #define FFTS_BUFFER_FLAG_ENUM
 // -----------------------------------------------------------------------------
@@ -236,23 +240,40 @@ AICORE inline void allocate_vec_tile_buffers(TileDataF_T (&srcTiles)[SrcBuffers]
                                              TileDataH_T (&x_expT)[XexpBuffers], TileOutT (&pvTile)[pvVecBuffers],
                                              TileOutT &runningOTile, TileDataH_NZ_T (&nzConvBuffer)[XexpBuffers])
 {
+#if REUSE_QK_PV_BUFFERS
+    constexpr std::size_t union_stride = (tile_storage_bytes<TileDataF_T>() > tile_storage_bytes<TileOutT>()) ?
+                                             tile_storage_bytes<TileDataF_T>() :
+                                             tile_storage_bytes<TileOutT>();
+    constexpr std::size_t union_bytes = union_stride * SrcBuffers;
+    static_assert(SrcBuffers == pvVecBuffers, "src/pv buffer counts must match");
+
+    constexpr std::size_t p_nz_bytes = tile_buffer_total_bytes<TileDataH_NZ_T, XexpBuffers>();
+    constexpr std::size_t reduce_tile_bytes = tile_storage_bytes<ReduceTileF_T>();
+    constexpr std::size_t out_tile_bytes = tile_storage_bytes<TileOutT>();
+
+    constexpr std::size_t total_bytes = union_bytes + p_nz_bytes + (reduce_tile_bytes * (3U + ExpMaxBuffers)) + out_tile_bytes;
+    static_assert(total_bytes <= MAX_VEC_UB_BYTES, "Vec tile UB allocation exceeds 256KB");
+
+    uint32_t offset = 0;
+    offset = assign_tile_buffers_union(srcTiles, pvTile, offset);
+#else
     constexpr std::size_t float_tile_bytes = tile_storage_bytes<TileDataF_T>();
     constexpr std::size_t src_bytes = tile_buffer_total_bytes<TileDataF_T, SrcBuffers>();
     constexpr std::size_t pv_bytes = tile_buffer_total_bytes<TileOutT, pvVecBuffers>();
+    constexpr std::size_t p_nz_bytes = tile_buffer_total_bytes<TileDataH_NZ_T, XexpBuffers>();
     constexpr std::size_t reduce_tile_bytes = tile_storage_bytes<ReduceTileF_T>();
     constexpr std::size_t out_tile_bytes = tile_storage_bytes<TileOutT>();
-    constexpr std::size_t total_bytes = src_bytes + pv_bytes + (reduce_tile_bytes * (3U + ExpMaxBuffers)) +
-                                        (float_tile_bytes * 1U) + out_tile_bytes;
+    constexpr std::size_t total_bytes = src_bytes + pv_bytes + p_nz_bytes + (reduce_tile_bytes * (3U + ExpMaxBuffers)) + out_tile_bytes;
     static_assert(total_bytes <= MAX_VEC_UB_BYTES, "Vec tile UB allocation exceeds 256KB");
 
     uint32_t offset = 0;
     // Allocate qkVecTile (srcTiles) first
     offset = assign_tile_buffers(srcTiles, offset);
+    offset = assign_tile_buffers(pvTile, offset);
     // Allocate pvVecTile separately (no union - avoids TLOAD overwriting QK data)
+#endif
     TASSIGN(runningOTile, offset);
     offset += out_tile_bytes;
-
-    offset = assign_tile_buffers(pvTile, offset);
 
     TASSIGN(m1_local_max, offset);
     offset += static_cast<uint32_t>(reduce_tile_bytes);
@@ -269,6 +290,7 @@ AICORE inline void allocate_vec_tile_buffers(TileDataF_T (&srcTiles)[SrcBuffers]
     offset = assign_tile_buffers(l1_exp_max, offset);
     uint32_t tail_offset = assign_tile_buffers(nzConvBuffer, offset);
 }
+
 
 // Helper to assign an accumulator tile to one of two ping-pong UB addresses (0x0 / 0x10000).
 // Keeps a per-type static running index that toggles on every call. Caller may pass
@@ -1036,10 +1058,10 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     // softmax decides the skip status.
     constexpr uint32_t softmaxScratchOffset = 254U * 1024U;
     static_assert(softmaxScratchOffset >= 2U * nzBufSize, "NZ conversion buffers overlap softmax scratch");
-    if constexpr (DAV_VEC) {
-        TASSIGN(nzConvBuffer[0], softmaxScratchOffset - 2U * nzBufSize);
-        TASSIGN(nzConvBuffer[1], softmaxScratchOffset - nzBufSize);
-    }
+    // if constexpr (DAV_VEC) {
+    //     TASSIGN(nzConvBuffer[0], softmaxScratchOffset - 2U * nzBufSize);
+    //     TASSIGN(nzConvBuffer[1], softmaxScratchOffset - nzBufSize);
+    // }
     
     constexpr size_t p_fifo_block_stride =
         static_cast<size_t>(qkp_tile_fifo_size) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(Tile_S1);
