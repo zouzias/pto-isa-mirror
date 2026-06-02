@@ -494,6 +494,20 @@ Catlass/Catcoc 的片上缓存和 swizzle 设计。实现和验收按下面的�
 - large-token path 要像原 FFN large path 一样用多 AIV 和流水，而不是 correctness 版长期停留。
 - 任何性能声明必须带原 FFN baseline、PTO e2e、worker 数、sync scope 和 route quant path；没有 baseline 不宣称商用达标。
 
+T22 边界结论：
+
+- 前重排的商用性能门禁只覆盖 initquant 子系统：UB resident、AIV worker、AIV-only phase sync、
+  token-centric quant、metadata 批量化和 row/column tiled quant。
+- 原 FFN 中 `GemmIdentityBlockSwizzle`、L1/L0 tile、preload async、`SynchronizeBlock()` 排空、
+  小 group L2 cache hint 都属于 GMM1/GMM2 的 Catlass 路径。PTO 重写必须在后续 GMM 任务里用
+  `TMATMUL`、PTO tile scheduler 和 cross-core event 替代，不能把 stop17 initquant pass 当成整算子
+  商用性能完成。
+- GMM 设计必须继承 initquant 的真实输出规模：`packedRows <= maxOutputSize`、每 expert 的
+  `currentM`、capacity clip、skew 分布，以及 `M/topK/K/globalExpertNum` 参数族。不能只按
+  `M=16` 或 `M=4097,topK=2,K=128` 两个 anchor 估算 tile 和 worker。
+- T23/T24 是前重排内继续对标 FFN initquant 的任务；T25 才开始承接 FFN GMM 的 L1/L0/swizzle/preload
+  性能设计。
+
 ### 2.1.6 更多 token 的扩展设计
 
 后续优化不能只对 `small` 和 `large` 两个 anchor 做特化。原 FFN 的 initquant tiling 由
@@ -548,6 +562,31 @@ capacity clip 都通过，才能说该阶段没有做 anchor 特化。
 报告里的性能描述必须使用参数族表述，例如“token scale 到 `M=16384` 时 worker 选择仍随 `R` 扩展”，而不是用
 single shape 的 pass 推导“已对标所有 FFN 生产 shape”。如果某个参数族暂时不能跑通，报告要写清楚瓶颈是
 同步、worker 调度、metadata store、row/col tiling 还是 PTO primitive gap。
+
+### 2.1.7 后续 GMM PTO 性能任务草案
+
+T25 只做设计，不把 Catlass 代码拷进来改。后续 GMM1/GMM2 的 PTO 化需要参考原 FFN 的并发和缓存设计，
+但 device 主路径用 PTO `TMATMUL`、PTO Vec epilogue 和 PTO cross-core event 重写。
+
+| 子任务 | 原 FFN 优化 | PTO 设计要求 | 非特化验收 |
+| --- | --- | --- | --- |
+| GMM shape/contract | `currentM` 由 `cumsumMM/maxOutputSize` 动态决定 | 从 initquant 的 `tokenPerExpertMatrix/blockPrefixPerExpert/dispatchOffset` 生成每 expert problem shape | 覆盖 balanced/skew/capacity clip，`currentM` 不按 small/large 写死 |
+| AIC tile scheduler | 每个 expert 被切成 M/N tile，`startCoreIdx` 跨 expert 接力 | PTO scheduler 外层遍历 expert，内层按 `coreLoops` 轮转分配 tile，继承 worker 负载均衡 | `M=8192/16384`、topK sweep 下 tile 分配仍随 `currentM` 扩展 |
+| swizzle | `GemmIdentityBlockSwizzle<9,1>` 让相邻 tile 复用 weight L2 | PTO scheduler 提供 N 聚簇或等价 swizzle order，避免简单 row-major 造成 weight 重复读 | hot expert 多 M tile 时相邻 tile 的 N 方向局部性可审计 |
+| L1/L0 tile | int8 GMM 用 L1 双缓冲容纳 A/B/scale | 用 PTO `TileLeft/TileRight/TileAcc` 和 `TMATMUL/TMATMUL_ACC` 规划 L1/L0，tile shape 由 `M/N/K` 和 L1 容量选择 | `K=128/1024/7168` 都有 tile 方案，不退 Catlass |
+| preload/ping-pong | `PRELOAD_STAGES` 隐藏 GM->L1 延迟，结束前 `SynchronizeBlock()` 排空 | PTO 侧用双缓冲或多 stage preload，发布下游 flag 前 drain outstanding tile | 任意 expert 结束前所有 delayed tile 已写出 |
+| cache policy | 小 `currentM` group 禁 L2，热 expert 保留复用 | PTO GMM 设计保留按 `currentM` 的 cache hint 策略；若 PTO primitive 暂缺，记录为 primitive gap | 冷热 expert 分布不共用单一 cache 策略 |
+| AIC/AIV handoff | dispatch 每 expert ready 后通知 GMM1，GMM/SwiGLU/GMM2 分段流水 | 用 PTO cross-core event 表达 per-expert/per-segment ready，不用全局 `SYNCALL<Mix>` 代替 | group 粒度流水可审计，不能等所有 expert 完成才启动下游 |
+
+GMM 性能报告也要使用参数族而不是 anchor 结论。最低覆盖：
+
+```text
+token scale: M in {2048, 4097, 8192, 16384}, topK in {2, 4}
+K/N scale: K in {128, 1024, 7168}, N in {128, 4096}
+distribution: balanced + skewed + capacity_clip
+```
+
+只有 T23/T24/T25/T26 都通过，并且有原 FFN baseline 对比，才能讨论“PTO 重写对标 FFN 商用性能”。
 
 ### 2.2 PTO 重写边界
 
