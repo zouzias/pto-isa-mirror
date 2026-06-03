@@ -35,24 +35,6 @@ using namespace pto;
 #define REUSE_QK_PV_BUFFERS 0
 #endif
 
-#ifndef FFTS_BUFFER_FLAG_ENUM
-#define FFTS_BUFFER_FLAG_ENUM
-// -----------------------------------------------------------------------------
-// Buffer flag values for FFTS pipeline coordination
-// Each TSync object uses TWO consecutive flags (flag_id and flag_id+1)
-// for forward (record/wait) and backward (allocate/free) dependencies.
-// Therefore, flag IDs must be spaced by 2 to avoid collisions.
-// -----------------------------------------------------------------------------
-enum FftsBufferFlag : uint32_t
-{
-    BUF0_QK_READY = 0,   // qk2smSync: uses flags 0, 1 (+ 16, 17 for dual core)
-    BUF1_SM_READY = 2,   // sm2pvSync: uses flags 2, 3 (+ 18, 19 for dual core)
-    UPDATE_READY = 4,    // pv2guSync: uses flags 4, 5 (+ 20, 21 for dual core)
-    CV_BLOCK_END = 10,   // CV comm slot block end (CV_COMM_CTRL reserved in TSyncCVID)
-    SS_BUF_READY = 12,
-};
-#endif
-
 enum CoreEvtID : uint32_t
 {
     QK_EVENT_ID0,
@@ -118,6 +100,32 @@ AICORE inline bool should_notify_consumption(int sync_iter)
     constexpr int period = (SyncPeriod > 0) ? SyncPeriod : 1;
     static_assert(period >= 1, "CV FIFO consume sync period must be >= 1");
     return ((sync_iter + 1) % period) == 0; // notify one tile earlier than the wait check
+}
+
+// Drains the outstanding backward credits for a fixed-size producer ring.
+AICORE inline int pending_ring_events(int tiles_processed, int ring_size)
+{
+    if (tiles_processed <= 0 || ring_size <= 0)
+        return 0;
+    return (tiles_processed < ring_size) ? tiles_processed : ring_size;
+}
+
+AICORE inline void wait_mte3_to_v_pingpong(uint64_t event_id)
+{
+    if (event_id == EVENT_ID0) {
+        wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID4);
+    } else {
+        wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID5);
+    }
+}
+
+AICORE inline void set_mte3_to_v_pingpong(uint64_t event_id)
+{
+    if (event_id == EVENT_ID0) {
+        set_flag(PIPE_MTE3, PIPE_V, EVENT_ID4);
+    } else {
+        set_flag(PIPE_MTE3, PIPE_V, EVENT_ID5);
+    }
 }
 
 // Compute how many consumption notifications have not been waited on yet so we can drain them at kernel tail.
@@ -291,19 +299,18 @@ AICORE inline void allocate_vec_tile_buffers(TileDataF_T (&srcTiles)[SrcBuffers]
     uint32_t tail_offset = assign_tile_buffers(nzConvBuffer, offset);
 }
 
-
-// Helper to assign an accumulator tile to one of two ping-pong UB addresses (0x0 / 0x10000).
+// Helper to assign an accumulator tile to one of two ping-pong L0C addresses separated by slot_bytes.
 // Keeps a per-type static running index that toggles on every call. Caller may pass
 // `initial_id` (0 or 1) to set the starting buffer index on the first call for that tile type.
 template <typename AccTileT>
-AICORE inline int assign_running_acc_tile(AccTileT &accTile, int initial_id = -1)
+AICORE inline int assign_running_acc_tile(AccTileT &accTile, uint32_t slot_bytes, int initial_id = -1)
 {
     static int running_tile_buffer_idx = 0; // per-instantiation running buffer index: 0 -> base0, 1 -> base1
     if (initial_id == 0 || initial_id == 1) {
         running_tile_buffer_idx = initial_id;
     }
     const int id = running_tile_buffer_idx;
-    const uint32_t base_addr = (id == 0) ? 0x0u : 0x10000u;
+    const uint32_t base_addr = static_cast<uint32_t>(id) * slot_bytes;
     TASSIGN(accTile, base_addr);
     running_tile_buffer_idx ^= 1; // toggle for next call
     return id;
@@ -383,7 +390,7 @@ template <int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1, 
 AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm__ half *q, __gm__ half *k,
                               __gm__ float *qk_tile_fifo, TileMatQData &qMatTile, TileMatKData &kMatTile,
                               TileQKData &qkAccTile, TileQKVecData &qkVecTile, uint64_t qkMatTileEventId,
-                              int accTileEvtID, TSyncQK2SM &qk2smSync, int blk_idx)
+                              int accTileEvtID, TSyncQK2SM &qk2smSync, int blk_idx, int qkDrainCarryCount)
 {
     if constexpr (DAV_CUBE) {
         constexpr uint32_t Cube_S0 = CUBE_S0;
@@ -396,11 +403,9 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm
 
         const int s0_index = blk_idx * CUBE_S0;
         const int s1_index = tile_id * static_cast<int>(Tile_S1) + sub_tile_id * static_cast<int>(Cube_S1);
-        const int sync_iter = tile_id;
-        const bool should_wait_consume = should_wait_consumption<QKP_CV_FIFO, CV_FIFO_CONS_SYNC_PERIOD>(sync_iter);
         if constexpr (CAUSAL_MASK) {
             if (s1_index > s0_index) {
-                if (sub_tile_id == 0 && should_wait_consume)
+                if (sub_tile_id == 0 && tile_id >= static_cast<int>(SRC_VEC_TN_BUFFERS))
                     qk2smSync.allocate(); // wait for SM consume data
                 if (sub_tile_id == static_cast<int>(kTileFactor) - 1)
                     qk2smSync.record(); // notify for QK produce data
@@ -443,9 +448,6 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm
         set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
         wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
 
-        if (sub_tile_id == 0 && should_wait_consume)
-            qk2smSync.allocate(); // wait for SM consume data
-
         if constexpr (INTERMEDIATE_CHECK) {
             // When ND_LAYOUT=1: matmul is (Cube_S0, HEAD, Cube_S1) → L0C is Cube_S0×Cube_S1, store ND shape.
             // When ND_LAYOUT=0: matmul is (Cube_S1, HEAD, Cube_S0) → L0C is Cube_S1×Cube_S0, store DN shape.
@@ -461,8 +463,8 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm
                 GlobalTensor<float, pto::Shape<1, 1, 1, Cube_S1, Cube_S0>, pto::Stride<1, 1, 1, Cube_S0, 1>>;
             GlobalDataQK qkGlobalTile(qk_tile_fifo + base_elems);
             TSTORE(qkGlobalTile, qkAccTile);
-            set_flag(PIPE_FIX, PIPE_M, accTileEvtID);
-            wait_flag(PIPE_FIX, PIPE_M, accTileEvtID);
+            // set_flag(PIPE_FIX, PIPE_M, accTileEvtID);
+            // wait_flag(PIPE_FIX, PIPE_M, accTileEvtID);
         }
 
         constexpr uint32_t Vec_S0 = Cube_S0 / VEC_CORES / kTileFactor;
@@ -472,6 +474,13 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm
         using TileDataF_Sub = Tile<TileType::Vec, float, Tile_S1, Vec_S0, BLayout::RowMajor, Tile_S1, Vec_S0>;
         TileDataF_Sub qkVecTileSubDN;
         TASSIGN(qkVecTileSubDN, (uint64_t)qkVecTile.data() + col_byte_offset);
+
+        // qk2smSync is the credit semaphore for qkVecTile[] reuse on the UB path.
+        const bool should_wait_ub_reuse =
+            sub_tile_id == 0 && (tile_id < qkDrainCarryCount || tile_id >= static_cast<int>(SRC_VEC_TN_BUFFERS));
+        if (should_wait_ub_reuse) {
+            qk2smSync.allocate();
+        }
 
         TMOV<TileDataF_Sub, TileQKData, AccToVecMode::DualModeSplitN>(qkVecTileSubDN, qkAccTile);
 #if defined MARK_STAMP_DATA_PIPE
@@ -508,7 +517,6 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
     const int s0_index = blk_idx * Cube_S0;
     const int s1_index = tile_id * static_cast<int>(Tile_S1) + sub_tile_id * static_cast<int>(Cube_S1);
     const int sync_iter = tile_id;
-    const bool should_wait_consume = should_wait_consumption<QKP_CV_FIFO, CV_FIFO_CONS_SYNC_PERIOD>(sync_iter);
     const bool next_will_be_skipped = (s1_index + static_cast<int>(Cube_S1)) > s0_index && CAUSAL_MASK;
 
     if constexpr (DAV_CUBE) {
@@ -516,9 +524,7 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
             if (s1_index > s0_index) {
                 if (sub_tile_id == 0)
                     sm2pvSync.wait(); // wait for softmax produce data
-                const bool should_notify_consume =
-                    should_notify_consumption<QKP_CV_FIFO, CV_FIFO_CONS_SYNC_PERIOD>(sync_iter);
-                if (sub_tile_id == static_cast<int>(kTileFactor) - 1 && should_notify_consume)
+                if (sub_tile_id == static_cast<int>(kTileFactor) - 1)
                     sm2pvSync.free(); // notify SV consume data
                 return;
             }
@@ -570,9 +576,7 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
 
         set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
 
-        if (sub_tile_id == 0) {
-            wait_flag(PIPE_FIX, PIPE_M, accTileEvtID);
-        }
+        wait_flag(PIPE_FIX, PIPE_M, accTileEvtID);
 
         PreBTExtOpReadyHook preBTExtOpReadyHook;
 
@@ -601,10 +605,10 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
             set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
             wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
 
-            if (should_wait_consume)
-                pv2guSync.allocate();
-
 #if skip_rescale
+            if (tile_id >= static_cast<int>(1)) {
+                pv2guSync.allocate();
+            }
             if (cond4_non_skip_after_skip) {
                 TMOV<TileOutT, TilePVData, AccToVecMode::DualModeSplitM>(pvPendTile, pvAccPendTile);
                 TMOV<TileOutT, TilePVData, AccToVecMode::DualModeSplitM>(pvVecTile[pv_ub_buf_idx], pvAccTile);
@@ -649,6 +653,10 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
 
             pv2guSync.record();
 #else
+
+            if (tile_id >= static_cast<int>(OUT_O_TILE_NBUFFERS)) {
+                pv2guSync.allocate();
+            }
 
             if (tile_id == 0) {
                 wait_intra_block(PIPE_FIX, RUNNING_O_AVALIABLE);
@@ -708,9 +716,7 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         const int s1_index = tile_id * static_cast<int>(Tile_S1);
         const int sync_iter = tile_id;
         const bool last_tile = (tile_id == num_tiles - 1);
-        const bool should_notify_consume = should_notify_consumption<QKP_CV_FIFO, CV_FIFO_CONS_SYNC_PERIOD>(sync_iter);
 
-        wait_flag(PIPE_V, PIPE_MTE2, pTileEventId);
         if (row_slice == 0)
             qk2smSync.wait(); // wait for QK produce data
 
@@ -739,7 +745,7 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         TASSIGN(l2_global_sum_slice, (uint64_t)l2_global_sum.data() + reduce_row_byte_offset);
         TASSIGN(l1_exp_max_slice, (uint64_t)l1_exp_max_ififo.data() + reduce_row_byte_offset);
 
-        wait_flag(PIPE_MTE3, PIPE_V, pTileEventId);
+        wait_mte3_to_v_pingpong(pTileEventId);
         if (initFlag) {
             pto_macro_fa_softmax_dn<true, HEAD_SIZE, CAUSAL_MASK, ReduceTileF_T, TileDataH_T, TileDataF_T,
                                     TileDataH_NZ_T, FIFO_MODE>(
@@ -757,10 +763,9 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         bisheng::cce::mark_stamp<PIPE_V>(P_DONE * 1000 + tile_id);
 #endif
 
-        if (row_slice == static_cast<int>(kTileFactor) - 1 && should_notify_consume)
+        if (row_slice == static_cast<int>(kTileFactor) - 1)
             qk2smSync.free();
 
-        set_flag(PIPE_V, PIPE_MTE2, pTileEventId);
         set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
         wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
@@ -827,7 +832,7 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         if (row_slice == static_cast<int>(kTileFactor) - 1)
             sm2pvSync.record();
 
-        set_flag(PIPE_MTE3, PIPE_V, pTileEventId);
+        set_mte3_to_v_pingpong(pTileEventId);
     }
 }
 
@@ -846,7 +851,6 @@ AICORE inline void compute_gu(int tile_id, int num_tiles, __gm__ float *pv_tile_
         GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
 
     if constexpr (DAV_VEC) {
-        const bool should_notify_consume = should_notify_consumption<PV_CV_FIFO, CV_FIFO_CONS_SYNC_PERIOD>(tile_id);
 #if skip_rescale
         uint32_t vec0_cur_skip = read_skip_status_slot(tile_id, false);
         uint32_t vec1_cur_skip = read_skip_status_slot(tile_id, true);
@@ -854,8 +858,7 @@ AICORE inline void compute_gu(int tile_id, int num_tiles, __gm__ float *pv_tile_
         uint32_t vec1_prev_skip = (tile_id == 0) ? 0 : read_skip_status_slot(tile_id - 1, true);
         if (vec0_cur_skip && vec1_cur_skip) {
             pv2guSync.wait();
-            if (should_notify_consume)
-                pv2guSync.free();
+            pv2guSync.free();
             return;
         }
 
@@ -877,8 +880,6 @@ AICORE inline void compute_gu(int tile_id, int num_tiles, __gm__ float *pv_tile_
 
         pv2guSync.wait();
 
-        wait_flag(PIPE_V, PIPE_MTE2, guEventId);
-
         if (tile_id > 0) {
             if (tile_id < num_tiles - 1) {
                 pto_macro_fa_gu<ReduceTileF_T, TileOutT>(runningOTile, pvVecTile, l1_exp_max_ififo, pvPendTile,
@@ -897,9 +898,7 @@ AICORE inline void compute_gu(int tile_id, int num_tiles, __gm__ float *pv_tile_
         bisheng::cce::mark_stamp<PIPE_V>(GU_DONE * 1000 + tile_id);
 #endif
 
-        set_flag(PIPE_V, PIPE_MTE2, guEventId);
-        if (should_notify_consume)
-            pv2guSync.free();
+        pv2guSync.free();
 
         if (tile_id == num_tiles - 1) {
             set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -980,6 +979,8 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     constexpr uint32_t kMatTNBuffers = 2;
     constexpr uint32_t pMatTNBuffers = 2;
     constexpr uint32_t vMatTNBuffers = 2;
+    // These stay at CV_FIFO_SIZE so intermediate-check dumps and delayed GU reduce data keep the 8-slot layout.
+    // QK/PV cross-core sync below uses the actual UB ring depths: srcVecTNBuffers and outOTileNBuffers.
     constexpr uint32_t qkp_tile_fifo_size = CV_FIFO_SIZE;
     constexpr uint32_t pv_tile_fifo_size = CV_FIFO_SIZE;
     static_assert(qkPreloadNum >= 1, "qkPreloadNum must be >= 1");
@@ -1016,11 +1017,28 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
 
     allocate_cube_tile_buffers(qMatTile, kMatTile, pMatTile, vMatTile);
 
-    // Keep QK, pending PV, and steady-state current PV in distinct L0C regions.
-    // The tail reclaims the second QK L0C slot at 0x10000u for current-PV ping-pong.
-    TASSIGN(pvAccPendTile, 0x20000u);
-    TASSIGN(pvAccCurrTile, 0x30000u);
-    TASSIGN(pvAccTailCurrTile, 0x10000u);
+    constexpr uint32_t l0cAlignBytes = 0x8000U;
+    constexpr uint32_t qkAccBytes =
+        ((static_cast<uint32_t>(Cube_S1 * Cube_S0 * sizeof(float)) + l0cAlignBytes - 1U) / l0cAlignBytes) *
+        l0cAlignBytes;
+    constexpr uint32_t pvAccBytes =
+        ((static_cast<uint32_t>(Cube_S0 * HEAD_SIZE * sizeof(float)) + l0cAlignBytes - 1U) / l0cAlignBytes) *
+        l0cAlignBytes;
+    constexpr uint32_t sharedAccSlotBytes = (qkAccBytes > pvAccBytes) ? qkAccBytes : pvAccBytes;
+    constexpr uint32_t qkAccSlotBytes = skip_rescale ? qkAccBytes : sharedAccSlotBytes;
+    constexpr uint32_t l0cCapacityBytes = 0x40000U;
+    static_assert(2U * sharedAccSlotBytes <= l0cCapacityBytes,
+                  "QK/PV shared L0C ping-pong slots exceed L0C capacity");
+
+    if constexpr (skip_rescale) {
+        constexpr uint32_t pvPackedBase = 2U * qkAccBytes;
+        TASSIGN(pvAccPendTile, pvPackedBase);
+        TASSIGN(pvAccCurrTile, pvPackedBase + pvAccBytes);
+        TASSIGN(pvAccTailCurrTile, pvPackedBase + 2U * pvAccBytes);
+    } else {
+        assign_running_acc_tile(qkAccTile, sharedAccSlotBytes, 0);
+        assign_running_acc_tile(pvAccCurrTile, sharedAccSlotBytes, 1);
+    }
 
     // Define tile types for FA softmax P computation. UB offsets for softmax tiles
     // Define per-tile vector tiles sized to Cube_S1
@@ -1076,7 +1094,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     constexpr TSync_Custom<SyncOpType::TMOV_C2UB, SyncOpType::TLOAD> pv2guSync = {UPDATE_READY};
     constexpr bool use_cv_comm =
         (!INTERMEDIATE_CHECK) && (launch_block_count >= static_cast<uint32_t>(kFaLaunchCoreCount));
-    constexpr int pvAccTileEvtID = EVENT_ID2;
+    int pvAccTileEvtID = EVENT_ID2;
     constexpr int pvAccTailTileEvtID = EVENT_ID1;
     const int physical_block_idx = block_idx;
     if constexpr (DAV_CUBE) {
@@ -1091,19 +1109,18 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         set_flag(PIPE_FIX, PIPE_M, EVENT_ID2);
     }
     if constexpr (DAV_VEC) {
-        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
-        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
-        set_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
-        set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+        set_flag(PIPE_MTE3, PIPE_V, EVENT_ID4);
+        set_flag(PIPE_MTE3, PIPE_V, EVENT_ID5);
         set_intra_block(PIPE_MTE3, RUNNING_O_AVALIABLE);
     }
     const int physical_comm_slot = use_cv_comm ? pto::TSYNC_CVID(physical_block_idx, cv_comm_buf) : physical_block_idx;
 
+    int deferredQkUbDrains = 0;
     for (int logical_block_idx = physical_block_idx; logical_block_idx < static_cast<int>(logical_block_count);
          logical_block_idx += static_cast<int>(launch_block_count)) {
         const uint64_t tStart = get_sys_cnt();
 
-        assign_running_acc_tile(qkAccTile, 0);
+        assign_running_acc_tile(qkAccTile, qkAccSlotBytes, 0);
 
         if constexpr (DAV_VEC && skip_rescale) {
             const bool is_vec1 = static_cast<size_t>(get_subblockid());
@@ -1149,20 +1166,22 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         int qkAccTileEvtID = 0;
         const bool has_next_logical_block =
             logical_block_idx + static_cast<int>(launch_block_count) < static_cast<int>(logical_block_count);
+        const int qkDrainCarryCount = deferredQkUbDrains;
+        deferredQkUbDrains = 0;
 
         // QK and P pre-computation (tile_id based)
         for (int preload_tile = 0; preload_tile < static_cast<int>(qkPreloadNum) && preload_tile < num_tiles_s1;
              ++preload_tile) {
             if constexpr (DAV_CUBE) {
                 for (int sub_tile = 0; sub_tile < static_cast<int>(kTileFactor); ++sub_tile) {
-                    qkAccTileEvtID = assign_running_acc_tile(qkAccTile);
+                    qkAccTileEvtID = assign_running_acc_tile(qkAccTile, qkAccSlotBytes);
                     const int tile_buf_idx = preload_tile % srcVecTNBuffers;
                     compute_qk<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size,
                                CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK, srcVecTNBuffers>(
                         preload_tile, sub_tile, tile_buf_idx, q_block, k, qk_tile_fifo_block, qMatTile[0],
                         kMatTile[k_src_pingpong_id % kMatTNBuffers], qkAccTile, qkVecTile[tile_buf_idx],
-                        k_src_pingpong_id % kMatTNBuffers, qkAccTileEvtID, qk2smSync, logical_block_idx);
-
+                        k_src_pingpong_id % kMatTNBuffers, qkAccTileEvtID, qk2smSync, logical_block_idx,
+                        qkDrainCarryCount);
                     k_src_pingpong_id++;
                 }
             }
@@ -1186,7 +1205,10 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
             (num_tiles_s1 > static_cast<int>(qkPreloadNum)) ? (num_tiles_s1 - static_cast<int>(qkPreloadNum)) : 0;
         for (int tile_id = 0; tile_id < steady_tile_end; ++tile_id) {
             const int next_qk_tile = tile_id + static_cast<int>(qkPreloadNum);
-            qkAccTileEvtID = assign_running_acc_tile(qkAccTile);
+            qkAccTileEvtID = assign_running_acc_tile(qkAccTile, qkAccSlotBytes);
+            if constexpr (!skip_rescale) {
+                pvAccTileEvtID = assign_running_acc_tile(pvAccCurrTile, sharedAccSlotBytes);
+            }
             for (int sub_tile = 0; sub_tile < static_cast<int>(kTileFactor); ++sub_tile) {
                 if constexpr (DAV_CUBE) {
                     const int tile_buf_idx = next_qk_tile % srcVecTNBuffers;
@@ -1194,8 +1216,8 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                                CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK, srcVecTNBuffers>(
                         next_qk_tile, sub_tile, tile_buf_idx, q_block, k, qk_tile_fifo_block, qMatTile[0],
                         kMatTile[k_src_pingpong_id % kMatTNBuffers], qkAccTile, qkVecTile[tile_buf_idx],
-                        k_src_pingpong_id % kMatTNBuffers, qkAccTileEvtID, qk2smSync, logical_block_idx);
-
+                        k_src_pingpong_id % kMatTNBuffers, qkAccTileEvtID, qk2smSync, logical_block_idx,
+                        qkDrainCarryCount);
                     k_src_pingpong_id++;
                 }
 
@@ -1240,20 +1262,33 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         for (int tile_id = steady_tile_end; tile_id < num_tiles_s1; ++tile_id) {
             for (int sub_tile = 0; sub_tile < static_cast<int>(kTileFactor); ++sub_tile) {
                 if constexpr (DAV_CUBE) {
-                    const int tail_phase = tile_id - steady_tile_end;
-                    const bool has_prior_curr_pv = (steady_tile_end > 0) || (tail_phase > 0);
-                    TilePVData &pvAccActiveTile =
-                        (has_prior_curr_pv && ((tail_phase & 1) == 0)) ? pvAccTailCurrTile : pvAccCurrTile;
-                    const int pvAccActiveTileEvtID =
-                        (has_prior_curr_pv && ((tail_phase & 1) == 0)) ? pvAccTailTileEvtID : pvAccTileEvtID;
                     TileOutGuT &pvPendTile = pvVecTile[(tile_id + 1) % outOTileNBuffers];
-compute_pv<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size, pv_tile_fifo_size,
-                                CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK, outOTileNBuffers>(
-                        tile_id, sub_tile, tile_id % outOTileNBuffers, p_tile_fifo_block, v, pv_tile_fifo_block,
-                        pv_pend_tile_fifo_block, pMatTile[pv_src_pingpong_id % pMatTNBuffers],
-                        vMatTile[pv_src_pingpong_id % vMatTNBuffers], pvAccActiveTile, pvAccPendTile, runningOTile,
-                        pvPendTile, pvVecTile, pv_src_pingpong_id % vMatTNBuffers + PV_EVENT_ID0, pvAccActiveTileEvtID,
-                        sm2pvSync, pv2guSync, logical_block_idx);
+                    if constexpr (skip_rescale) {
+                        const int tail_phase = tile_id - steady_tile_end;
+                        const bool has_prior_curr_pv = (steady_tile_end > 0) || (tail_phase > 0);
+                        TilePVData &pvAccActiveTile =
+                            (has_prior_curr_pv && ((tail_phase & 1) == 0)) ? pvAccTailCurrTile : pvAccCurrTile;
+                        const int pvAccActiveTileEvtID =
+                            (has_prior_curr_pv && ((tail_phase & 1) == 0)) ? pvAccTailTileEvtID : pvAccTileEvtID;
+                        compute_pv<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size,
+                                   pv_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK,
+                                   outOTileNBuffers>(
+                            tile_id, sub_tile, tile_id % outOTileNBuffers, p_tile_fifo_block, v, pv_tile_fifo_block,
+                            pv_pend_tile_fifo_block, pMatTile[pv_src_pingpong_id % pMatTNBuffers],
+                            vMatTile[pv_src_pingpong_id % vMatTNBuffers], pvAccActiveTile, pvAccPendTile, runningOTile,
+                            pvPendTile, pvVecTile, pv_src_pingpong_id % vMatTNBuffers + PV_EVENT_ID0,
+                            pvAccActiveTileEvtID, sm2pvSync, pv2guSync, logical_block_idx);
+                    } else {
+                        pvAccTileEvtID = assign_running_acc_tile(pvAccCurrTile, sharedAccSlotBytes);
+                        compute_pv<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size,
+                                   pv_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK,
+                                   outOTileNBuffers>(
+                            tile_id, sub_tile, tile_id % outOTileNBuffers, p_tile_fifo_block, v, pv_tile_fifo_block,
+                            pv_pend_tile_fifo_block, pMatTile[pv_src_pingpong_id % pMatTNBuffers],
+                            vMatTile[pv_src_pingpong_id % vMatTNBuffers], pvAccCurrTile, pvAccPendTile, runningOTile,
+                            pvPendTile, pvVecTile, pv_src_pingpong_id % vMatTNBuffers + PV_EVENT_ID0, pvAccTileEvtID,
+                            sm2pvSync, pv2guSync, logical_block_idx);
+                    }
                     pv_src_pingpong_id++;
                 }
             }
@@ -1270,26 +1305,29 @@ compute_pv<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size, pv_
             }
         }
 
-        int pending_qk_sm_consumed = 0;
-        int pending_update_consumed = 0;
-        if constexpr (CAUSAL_MASK) {
-            pending_qk_sm_consumed = pending_consumption_events(num_tiles_s1, static_cast<int>(qkp_tile_fifo_size),
-                                                                CV_FIFO_CONS_SYNC_PERIOD);
-            pending_update_consumed = pending_consumption_events(num_tiles_s1, static_cast<int>(qkp_tile_fifo_size),
-                                                                 CV_FIFO_CONS_SYNC_PERIOD);
-        } else {
-            constexpr int num_tiles_s1_const = S1 / Tile_S1;
-            pending_qk_sm_consumed =
-                pending_consumption_events_const<num_tiles_s1_const, qkp_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD>();
-            pending_update_consumed =
-                pending_consumption_events_const<num_tiles_s1_const, qkp_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD>();
-        }
-        const int pending_sv_consumed = pending_qk_sm_consumed; // same schedule and FIFO settings
+        const int paid_qk_carry =
+            (qkDrainCarryCount < num_tiles_s1) ? qkDrainCarryCount : num_tiles_s1;
+        const int remaining_qk_carry = qkDrainCarryCount - paid_qk_carry;
+        const int pending_qk_ub_consumed =
+            remaining_qk_carry + pending_ring_events(num_tiles_s1, static_cast<int>(srcVecTNBuffers));
+#if skip_rescale
+        const int pending_pv_ub_consumed =
+            pending_ring_events(num_tiles_s1, static_cast<int>(1));
+#else
+        const int pending_pv_ub_consumed =
+            pending_ring_events(num_tiles_s1, static_cast<int>(outOTileNBuffers));
+#endif
+        const int pending_sv_consumed =
+            pending_ring_events(num_tiles_s1, static_cast<int>(pMatTNBuffers));
 
         if constexpr (DAV_CUBE) {
-            for (int i = 0; i < pending_qk_sm_consumed; ++i)
-                qk2smSync.allocate();
-            for (int i = 0; i < pending_update_consumed; ++i)
+            if (has_next_logical_block) {
+                deferredQkUbDrains = pending_qk_ub_consumed;
+            } else {
+                for (int i = 0; i < pending_qk_ub_consumed; ++i)
+                    qk2smSync.allocate();
+            }
+            for (int i = 0; i < pending_pv_ub_consumed; ++i)
                 pv2guSync.allocate();
         }
 
@@ -1332,10 +1370,8 @@ compute_pv<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size, pv_
         wait_intra_block(PIPE_FIX, RUNNING_O_AVALIABLE + 16);
     }
     if constexpr (DAV_VEC) {
-        wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
-        wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
-        wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+        wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID4);
+        wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID5);
     }
     // pipe_barrier(PIPE_ALL);
 }
