@@ -160,23 +160,35 @@ PTO_INTERNAL void TPartArgCheck(DstValTileData &dstVal, Src0ValTileData &src0Val
     PTO_ASSERT((dstValidRow == src0ValidRow && dstValidCol == src0ValidCol) ||
                    (dstValidRow == src1ValidRow && dstValidCol == src1ValidCol),
                "Fix: TPARTARG output tile dstVal valid shape mismatch with input tile src0Val or src1Val valid shape");
+    PTO_ASSERT(max(src0ValidRow, src1ValidRow) == dstValidRow && max(src0ValidCol, src1ValidCol) == dstValidCol,
+               "Fix: TPARTARG src validrow/validcol must smaller or equal to dst.");
 }
 
 template <typename Op, typename DstValTileData, typename Src0ValTileData, typename Src1ValTileData,
           typename DstIdxTileData, typename Src0IdxTileData, typename Src1IdxTileData>
-PTO_INTERNAL void TPartArgImpl(
-    typename DstValTileData::TileDType __out__ dstVal, typename Src0ValTileData::TileDType __in__ src0Val,
-    typename Src1ValTileData::TileDType __in__ src1Val, typename DstIdxTileData::TileDType __out__ dstIdx,
-    typename Src0IdxTileData::TileDType __in__ src0Idx, typename Src1IdxTileData::TileDType __in__ src1Idx,
-    uint32_t dstValidRow, uint32_t dstValidCol, uint32_t src0ValidRow, uint32_t src0ValidCol, uint32_t src1ValidRow,
-    uint32_t src1ValidCol, VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
+PTO_INTERNAL void TPartArgImpl(DstValTileData &dstVal, Src0ValTileData &src0Val, Src1ValTileData &src1Val,
+                               DstIdxTileData &dstIdx, Src0IdxTileData &src0Idx, Src1IdxTileData &src1Idx)
 {
-    if (((dstValidRow == src0ValidRow && dstValidCol == src0ValidCol) ||
-         (dstValidRow == src1ValidRow && dstValidCol == src1ValidCol)) &&
-        (max(src0ValidRow, src1ValidRow) == dstValidRow && max(src0ValidCol, src1ValidCol) == dstValidCol)) {
+    TPartArgCheck(dstVal, src0Val, src1Val, dstIdx, src0Idx, src1Idx);
+    unsigned src0ValidRow = src0Val.GetValidRow();
+    unsigned src0ValidCol = src0Val.GetValidCol();
+    unsigned src1ValidRow = src1Val.GetValidRow();
+    unsigned src1ValidCol = src1Val.GetValidCol();
+    unsigned dstValidRow = dstVal.GetValidRow();
+    unsigned dstValidCol = dstVal.GetValidCol();
+    if (dstValidRow == 0 || dstValidCol == 0) {
+        return;
+    } else if (src0ValidRow == 0 || src0ValidCol == 0) {
+        TMOV_IMPL(dstVal, src1Val);
+        TMOV_IMPL(dstIdx, src1Idx);
+    } else if (src1ValidRow == 0 || src1ValidCol == 0) {
+        TMOV_IMPL(dstVal, src0Val);
+        TMOV_IMPL(dstIdx, src0Idx);
+    } else {
         TPartArgProc<Op, DstValTileData, Src0ValTileData, Src1ValTileData, DstIdxTileData, Src0IdxTileData,
-                     Src1IdxTileData>(dstVal, src0Val, src1Val, dstIdx, src0Idx, src1Idx, dstValidRow, dstValidCol,
-                                      src0ValidRow, src0ValidCol, src1ValidRow, src1ValidCol);
+                     Src1IdxTileData>(dstVal.data(), src0Val.data(), src1Val.data(), dstIdx.data(), src0Idx.data(),
+                                      src1Idx.data(), dstVal.GetValidRow(), dstVal.GetValidCol(), src0Val.GetValidRow(),
+                                      src0Val.GetValidCol(), src1Val.GetValidRow(), src1Val.GetValidCol());
     }
 }
 } // namespace pto

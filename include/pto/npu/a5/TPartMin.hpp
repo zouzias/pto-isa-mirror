@@ -17,7 +17,7 @@ namespace pto {
 
 template <typename T>
 struct TPartMinOp {
-    PTO_INTERNAL static void PartInstr(RegTensor<T> &dst, RegTensor<T> &src0, RegTensor<T> &src1, MaskReg preg)
+    PTO_INTERNAL static void BinInstr(RegTensor<T> &dst, RegTensor<T> &src0, RegTensor<T> &src1, MaskReg preg)
     {
         vmin(dst, src0, src1, preg, MODE_ZEROING);
     }
