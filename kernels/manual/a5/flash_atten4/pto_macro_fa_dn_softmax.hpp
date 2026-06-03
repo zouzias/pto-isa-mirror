@@ -87,6 +87,7 @@ AICORE inline bool aiv_should_wait_consumption(int sync_iter)
 }
 
 #define USE_MANUAL 1
+#define HEADSIZE_128 1
 
 template <int HEAD_SIZE, bool CAUSAL_MASK, typename ReduceTileD1, typename TileDataD2, typename TileDataS1, typename TileDataH_NZ_T, int MODE>
 __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter, TileDataD2 __out__ x_exp,
@@ -113,10 +114,15 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter
     unsigned ubM = TileDataD2::Cols;
     unsigned ubN = TileDataD2::Rows;
 
-    __ubuf__ half *nz_buffer_Ptr2 = nz_buffer_Ptr + 16;
-    __ubuf__ half *nz_buffer_Ptr3 = nz_buffer_Ptr + ubN/2*16;
-    __ubuf__ half *nz_buffer_Ptr4 = nz_buffer_Ptr + ubN/2*16 + 16;
-    uint64_t VSSTB_CONFIG = ((ubN + 1) << 16) | 2u;
+    #if HEADSIZE_128
+        __ubuf__ half *nz_buffer_Ptr2 = nz_buffer_Ptr + 16;
+        __ubuf__ half *nz_buffer_Ptr3 = nz_buffer_Ptr + ubN/2*16;
+        __ubuf__ half *nz_buffer_Ptr4 = nz_buffer_Ptr + ubN/2*16 + 16;
+        uint64_t VSSTB_CONFIG = ((ubN + 1) << 16) | 2u;
+    #else
+        __ubuf__ half *nz_buffer_Ptr2 = nz_buffer_Ptr + ubN/4*16;
+        uint64_t VSSTB_CONFIG = ((ubN/2 + 1) << 16) | 1u;
+    #endif
 
     __VEC_SCOPE__{
         // vector_f32 vreg_x_even;
@@ -161,10 +167,10 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter
         // vector_f32 vreg_x_sum3;
         // vector_f32 vreg_x_max_f32_a;
         // vector_f32 vreg_x_max_f32_b;
-        // vector_f16 vreg_x_exp_f16_pack;
-        // vector_f16 vreg_x_exp_f16_1_pack;
-        // vector_f16 vreg_x_exp_f16_packa;
-        // vector_f16 vreg_x_exp_f16_1_packa;
+        vector_f16 vreg_x_exp_f16_pack;
+        vector_f16 vreg_x_exp_f16_1_pack;
+        vector_f16 vreg_x_exp_f16_packa;
+        vector_f16 vreg_x_exp_f16_1_packa;
         // vector_u16 vreg_x_exp_u16_pack;
         // vector_u16 vreg_x_exp_u16_1_pack;
         // vector_u16 vreg_x_exp_u16_packa;
@@ -281,10 +287,17 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter
 
         for (uint16_t i0 = 0; i0 < uint16_t(ubN / 4) ; ++i0) { //128,64
             // vector_address areg_x_1 = vag_b32(128);
-            vld(vreg_x_f32_a, input_x_Ptr, vag_b32(128), NORM);
-            vld(vreg_x_f32_b, ((__ubuf__ float *) input_x_Ptr + 64), vag_b32(128), NORM);
-            vld(vreg_x_f32_1_a, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2), vag_b32(128), NORM);
-            vld(vreg_x_f32_1_b, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2 + 64), vag_b32(128), NORM);
+            #if HEADSIZE_128
+                vld(vreg_x_f32_a, input_x_Ptr, vag_b32(128), NORM);
+                vld(vreg_x_f32_b, ((__ubuf__ float *) input_x_Ptr + 64), vag_b32(128), NORM);
+                vld(vreg_x_f32_1_a, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2), vag_b32(128), NORM);
+                vld(vreg_x_f32_1_b, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2 + 64), vag_b32(128), NORM);
+            #else
+                vld(vreg_x_f32_a, input_x_Ptr, vag_b32(64), NORM);
+                vld(vreg_x_f32_b, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/4), vag_b32(64), NORM);
+                vld(vreg_x_f32_1_a, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2), vag_b32(64), NORM);
+                vld(vreg_x_f32_1_b, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2 + ubN*ubM/4), vag_b32(64), NORM);
+            #endif
 
             vmuls(vreg_x_f32_a, vreg_x_f32_a, scale, preg_108);
             vmuls(vreg_x_f32_b, vreg_x_f32_b, scale, preg_108);
@@ -317,14 +330,21 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter
             // vsts(vreg_x_exp_f16_pack, ((__ubuf__ half *) x_exp_Ptr + i0*128), 0, NORM_B16, preg_108);
             // vsts(vreg_x_exp_f16_1_pack, ((__ubuf__ half *) x_exp_Ptr + ubN*ubM/2 + i0*128), 0, NORM_B16, preg_108);
         
-            vpack((vector_u16&)vreg_x_exp_even_f16, (vector_u32&)vreg_x_exp_even_f16, LOWER);
-            vsstb(vreg_x_exp_even_f16, ((__ubuf__ half *&) nz_buffer_Ptr), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
-            vpack((vector_u16&)vreg_x_exp_odd_f16, (vector_u32&)vreg_x_exp_odd_f16, LOWER);
-            vsstb(vreg_x_exp_odd_f16, ((__ubuf__ half *&) nz_buffer_Ptr2), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
-            vpack((vector_u16&)vreg_x_exp_even_f16_1, (vector_u32&)vreg_x_exp_even_f16_1, LOWER);
-            vsstb(vreg_x_exp_even_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr3), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
-            vpack((vector_u16&)vreg_x_exp_odd_f16_1, (vector_u32&)vreg_x_exp_odd_f16_1, LOWER);
-            vsstb(vreg_x_exp_odd_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr4), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
+            #if HEADSIZE_128
+                vpack((vector_u16&)vreg_x_exp_even_f16, (vector_u32&)vreg_x_exp_even_f16, LOWER);
+                vsstb(vreg_x_exp_even_f16, ((__ubuf__ half *&) nz_buffer_Ptr), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
+                vpack((vector_u16&)vreg_x_exp_odd_f16, (vector_u32&)vreg_x_exp_odd_f16, LOWER);
+                vsstb(vreg_x_exp_odd_f16, ((__ubuf__ half *&) nz_buffer_Ptr2), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
+                vpack((vector_u16&)vreg_x_exp_even_f16_1, (vector_u32&)vreg_x_exp_even_f16_1, LOWER);
+                vsstb(vreg_x_exp_even_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr3), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
+                vpack((vector_u16&)vreg_x_exp_odd_f16_1, (vector_u32&)vreg_x_exp_odd_f16_1, LOWER);
+                vsstb(vreg_x_exp_odd_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr4), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
+            #else
+                vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg_x_exp_even_f16, vreg_x_exp_odd_f16);
+                vdintlv(vreg_x_exp_f16_1_pack, vreg_x_exp_f16_1_packa, vreg_x_exp_even_f16_1, vreg_x_exp_odd_f16_1);
+                vsstb(vreg_x_exp_f16_pack, ((__ubuf__ half *&) nz_buffer_Ptr), VSSTB_CONFIG, preg_108, POST_UPDATE);
+                vsstb(vreg_x_exp_f16_1_pack, ((__ubuf__ half *&) nz_buffer_Ptr2), VSSTB_CONFIG, preg_108, POST_UPDATE);
+            #endif
 
             // vsstb(vreg_x_exp_even_f16, ((__ubuf__ half *&) nz_buffer_Ptr), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
             // vsstb(vreg_x_exp_odd_f16, ((__ubuf__ half *&) nz_buffer_Ptr2), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
@@ -676,10 +696,15 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
     unsigned ubM = TileDataD2::Cols;
     unsigned ubN = TileDataD2::Rows;
 
-    __ubuf__ half *nz_buffer_Ptr2 = nz_buffer_Ptr + 16;
-    __ubuf__ half *nz_buffer_Ptr3 = nz_buffer_Ptr + ubN/2*16;
-    __ubuf__ half *nz_buffer_Ptr4 = nz_buffer_Ptr + ubN/2*16 + 16;
-    uint64_t VSSTB_CONFIG = ((ubN + 1) << 16) | 2u;
+    #if HEADSIZE_128
+        __ubuf__ half *nz_buffer_Ptr2 = nz_buffer_Ptr + 16;
+        __ubuf__ half *nz_buffer_Ptr3 = nz_buffer_Ptr + ubN/2*16;
+        __ubuf__ half *nz_buffer_Ptr4 = nz_buffer_Ptr + ubN/2*16 + 16;
+        uint64_t VSSTB_CONFIG = ((ubN + 1) << 16) | 2u;
+    #else
+        __ubuf__ half *nz_buffer_Ptr2 = nz_buffer_Ptr + ubN/4*16;
+        uint64_t VSSTB_CONFIG = ((ubN/2 + 1) << 16) | 1u;
+    #endif
 
     __VEC_SCOPE__{
         // vector_f32 vreg_x_even;
@@ -724,10 +749,10 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
         // vector_f32 vreg_x_sum3;
         // vector_f32 vreg_x_max_f32_a;
         vector_f32 vreg_x_max_f32_b;
-        // vector_f16 vreg_x_exp_f16_pack;
-        // vector_f16 vreg_x_exp_f16_1_pack;
-        // vector_f16 vreg_x_exp_f16_packa;
-        // vector_f16 vreg_x_exp_f16_1_packa;
+        vector_f16 vreg_x_exp_f16_pack;
+        vector_f16 vreg_x_exp_f16_1_pack;
+        vector_f16 vreg_x_exp_f16_packa;
+        vector_f16 vreg_x_exp_f16_1_packa;
         // vector_u16 vreg_x_exp_u16_pack;
         // vector_u16 vreg_x_exp_u16_1_pack;
         // vector_u16 vreg_x_exp_u16_packa;
@@ -858,10 +883,17 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
         // vdup(vreg_x_sum_1_odd, 0, preg_134, MODE_ZEROING);
 
         for (uint16_t i0 = 0; i0 < uint16_t(ubN / 4) ; ++i0) { //128,64
-            vld(vreg_x_f32_a, input_x_Ptr, vag_b32(128), NORM);
-            vld(vreg_x_f32_b, ((__ubuf__ float *) input_x_Ptr + 64), vag_b32(128), NORM);
-            vld(vreg_x_f32_1_a, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2), vag_b32(128), NORM);
-            vld(vreg_x_f32_1_b, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2 + 64), vag_b32(128), NORM);
+            #if HEADSIZE_128
+                vld(vreg_x_f32_a, input_x_Ptr, vag_b32(128), NORM);
+                vld(vreg_x_f32_b, ((__ubuf__ float *) input_x_Ptr + 64), vag_b32(128), NORM);
+                vld(vreg_x_f32_1_a, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2), vag_b32(128), NORM);
+                vld(vreg_x_f32_1_b, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2 + 64), vag_b32(128), NORM);
+            #else
+                vld(vreg_x_f32_a, input_x_Ptr, vag_b32(64), NORM);
+                vld(vreg_x_f32_b, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/4), vag_b32(64), NORM);
+                vld(vreg_x_f32_1_a, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2), vag_b32(64), NORM);
+                vld(vreg_x_f32_1_b, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2 + ubN*ubM/4), vag_b32(64), NORM);
+            #endif
 
             vmuls(vreg_x_f32_a, vreg_x_f32_a, scale, preg_108);
             vmuls(vreg_x_f32_b, vreg_x_f32_b, scale, preg_108);
@@ -878,19 +910,29 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
             vadd(vreg_x_sum_even, vreg_x_exp_even_1, vreg_x_sum_even, preg_134, MODE_ZEROING);
             vadd(vreg_x_sum_odd, vreg_x_exp_odd_1, vreg_x_sum_odd, preg_134, MODE_ZEROING);
 
-            vmulscvt(vreg_x_exp_even_f16, vreg_x_exp_even, 1.0f, preg_100, PART_EVEN);
-            vpack((vector_u16&)vreg_x_exp_even_f16, (vector_u32&)vreg_x_exp_even_f16, LOWER);
-            vsstb(vreg_x_exp_even_f16, ((__ubuf__ half *&) nz_buffer_Ptr), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
-            vmulscvt(vreg_x_exp_odd_f16, vreg_x_exp_odd, 1.0f, preg_101, PART_EVEN);
-            vpack((vector_u16&)vreg_x_exp_odd_f16, (vector_u32&)vreg_x_exp_odd_f16, LOWER);
-            vsstb(vreg_x_exp_odd_f16, ((__ubuf__ half *&) nz_buffer_Ptr2), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
-            vmulscvt(vreg_x_exp_even_f16_1, vreg_x_exp_even_1, 1.0f, preg_135, PART_EVEN);
-            vpack((vector_u16&)vreg_x_exp_even_f16_1, (vector_u32&)vreg_x_exp_even_f16_1, LOWER);
-            vsstb(vreg_x_exp_even_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr3), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
-            vmulscvt(vreg_x_exp_odd_f16_1, vreg_x_exp_odd_1, 1.0f, preg_136, PART_EVEN);
-            vpack((vector_u16&)vreg_x_exp_odd_f16_1, (vector_u32&)vreg_x_exp_odd_f16_1, LOWER);
-            vsstb(vreg_x_exp_odd_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr4), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
-
+            #if HEADSIZE_128
+                vmulscvt(vreg_x_exp_even_f16, vreg_x_exp_even, 1.0f, preg_100, PART_EVEN);
+                vpack((vector_u16&)vreg_x_exp_even_f16, (vector_u32&)vreg_x_exp_even_f16, LOWER);
+                vsstb(vreg_x_exp_even_f16, ((__ubuf__ half *&) nz_buffer_Ptr), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
+                vmulscvt(vreg_x_exp_odd_f16, vreg_x_exp_odd, 1.0f, preg_101, PART_EVEN);
+                vpack((vector_u16&)vreg_x_exp_odd_f16, (vector_u32&)vreg_x_exp_odd_f16, LOWER);
+                vsstb(vreg_x_exp_odd_f16, ((__ubuf__ half *&) nz_buffer_Ptr2), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
+                vmulscvt(vreg_x_exp_even_f16_1, vreg_x_exp_even_1, 1.0f, preg_135, PART_EVEN);
+                vpack((vector_u16&)vreg_x_exp_even_f16_1, (vector_u32&)vreg_x_exp_even_f16_1, LOWER);
+                vsstb(vreg_x_exp_even_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr3), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
+                vmulscvt(vreg_x_exp_odd_f16_1, vreg_x_exp_odd_1, 1.0f, preg_136, PART_EVEN);
+                vpack((vector_u16&)vreg_x_exp_odd_f16_1, (vector_u32&)vreg_x_exp_odd_f16_1, LOWER);
+                vsstb(vreg_x_exp_odd_f16_1, ((__ubuf__ half *&) nz_buffer_Ptr4), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
+            #else
+                vmulscvt(vreg_x_exp_even_f16, vreg_x_exp_even, 1.0f, preg_100, PART_EVEN);
+                vmulscvt(vreg_x_exp_odd_f16, vreg_x_exp_odd, 1.0f, preg_101, PART_EVEN);
+                vmulscvt(vreg_x_exp_even_f16_1, vreg_x_exp_even_1, 1.0f, preg_135, PART_EVEN);
+                vmulscvt(vreg_x_exp_odd_f16_1, vreg_x_exp_odd_1, 1.0f, preg_136, PART_EVEN);
+                vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg_x_exp_even_f16, vreg_x_exp_odd_f16);
+                vdintlv(vreg_x_exp_f16_1_pack, vreg_x_exp_f16_1_packa, vreg_x_exp_even_f16_1, vreg_x_exp_odd_f16_1);
+                vsstb(vreg_x_exp_f16_pack, ((__ubuf__ half *&) nz_buffer_Ptr), VSSTB_CONFIG, preg_108, POST_UPDATE);
+                vsstb(vreg_x_exp_f16_1_pack, ((__ubuf__ half *&) nz_buffer_Ptr2), VSSTB_CONFIG, preg_108, POST_UPDATE);
+            #endif
             
             // vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg_x_exp_even_f16, vreg_x_exp_odd_f16);
             // vdintlv(vreg_x_exp_f16_1_pack, vreg_x_exp_f16_1_packa, vreg_x_exp_even_f16_1, vreg_x_exp_odd_f16_1);
