@@ -69,6 +69,11 @@ PTO_INST RecordEvent TTRANS(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp
     - The implementation operates over the static tile shape (`TileDataSrc::Rows/Cols`) and does not consult `GetValidRow/GetValidCol`.
 - **Temporary tile**:
     - The C++ API requires `tmp`, but some implementations may not use it.
+    - RowStride: b8: 32, b16/b32: 16
+    - ElemPerBlock: 32/sizeof(T)
+    - [H, W]->[W, H]: $W * \text{ceil}(H, RowStride) * \text{sizeof(DType)}$ 
+    - [N, C, H, W] -> [N, C1, H, W, C0]: $H*W* \text{ceil}(C0, \text{RowStride}) * \text{sizeof(DType)}$
+    - [N,C,D,H,W] -> [D,C1,H,W,N1,N0,C0]: $\text{ceil}((D+1*N*C1*C0*H*W + H * W * \text{RowStride}), \text{ElemPerBlock})$
 - **ConvTile**:
     - Transpose of ConvTile for `TileType::Vec` is supported。 Element size must be `1`、`2` or `4` bytes. Supported element types are `uint32_t`、`int32_t`、`float`、`uint16_t`、`int16_t`、`half`、`bfloat16_t`、`uint8_t`、`int8_t`.
     - Format transformation from `NCHW` to `NC1HWC0` is supported, while `C1 == (C + C0 - 1)/C0`，HW matches alignment constraint，which means `H*W*sizeof(T)==0`. C0 means `c0_size`, which `C0 * sizeof(T) == 32`。C0 can also be 4.

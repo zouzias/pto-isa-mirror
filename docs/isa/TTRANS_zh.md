@@ -68,7 +68,12 @@ PTO_INST RecordEvent TTRANS(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp
     - 1 字节：`uint8_t`、`int8_t`
     - 实现在静态 Tile 形状（`TileDataSrc::Rows/Cols`）上运算，不参考 `GetValidRow/GetValidCol`。
 - **临时 Tile**:
-    - C++ API 需要 `tmp`，但某些实现可能不使用它。
+    - C++ API 需要 `tmp`， 需要的tmp空间大小计算公式如下：
+    - RowStride: b8: 32, b16/b32: 16
+    - ElemPerBlock: 32/sizeof(T)
+    - [H, W]->[W, H]: $W * \text{ceil}(H, RowStride) * \text{sizeof(DType)}$ 
+    - [N, C, H, W] -> [N, C1, H, W, C0]: $H*W* \text{ceil}(C0, \text{RowStride}) * \text{sizeof(DType)}$
+    - [N,C,D,H,W] -> [D,C1,H,W,N1,N0,C0]: $\text{ceil}((D+1*N*C1*C0*H*W + H * W * \text{RowStride}), \text{ElemPerBlock})$
 - **ConvTile**:
     - 支持在`TileType::Vec`上的ConvTile的格式转换。其元素大小必须是 `1`、`2` 或 `4` 字节。元素类型限制为`uint32_t`、`int32_t`、`float`、`uint16_t`、`int16_t`、`half`、`bfloat16_t`、`uint8_t`、`int8_t`。
     - 支持ConvTile从`NCHW`到`NC1HWC0`的变换，其中`C1 == (C + C0 - 1)/C0`，HW满足对齐要求，即`H*W*sizeof(T)==0`. C0对应`c0_size`, 即`C0 * sizeof(T) == 32`。C0也可以为4。
