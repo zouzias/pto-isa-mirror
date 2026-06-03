@@ -1,3 +1,4 @@
+
 # --------------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
@@ -21,3 +22,4 @@ include(version.cmake)
 check_cann_pkg_build_deps("pto-isa")
 add_cann_version_info_targets()
 pack_built_in()
+
