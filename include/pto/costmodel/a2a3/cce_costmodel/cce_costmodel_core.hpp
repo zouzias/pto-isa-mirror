@@ -21,7 +21,7 @@ enum QuantMode_t
     F322BF16 = 16,
     DEQF16 = 5,
     VDEQF16 = 4,
-    QF322B8_PRE = 24,
+    QF322FP8_PRE = 24,
     QF322HIF8_PRE = 25,
     QF322FP8_PRE = 26,
     QF322F32_PRE = 27,
